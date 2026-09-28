@@ -15076,3 +15076,62 @@ mode-only. One PC id is PENDING, `PC-S313-EMIT-REPORT-E2-IS-A-FOURTH-POOL-FLAKE-
 open upstream by its own text. The banked ruling stands: report the gap and write no runbook. The
 consumer's porcelain read 12 at the close, from its own pull and session.
 
+**BATCH 157 SHIPPED `v0.643.0` (`f4b1e2c2`, #865) AND CLOSED `BL-318`, WHICH DISCHARGES
+`PC-S346-ARTIFACT-DERIVATIONS-ROW-NAMES-A-CLEAR-NO-CONSUMER-CORPUS-CAN-REACH`.** It was invoked by
+peer handoff. The opening sweep matched batch 156 on every figure and control: live 25, unfiled
+13, a PC-backed worklist of 5, and ledger md5 `5f401bf7…`. `f4b1e2c2` is the only commit on
+`origin/main` naming the id, `VERSION` there reads 0.643.0, and an impossible-id control reads 0.
+Live **76 -> 75** (`BL-318` filed and closed), archive **241 -> 242**. The exit-0 receipt set is
+batch 156's nine, compared by id.
+
+**THE `artifact-derivations` ROW NOW NAMES A CLEAR A PULL CAN REACH.** It points at
+`reconcile/derivation-differential.sh`. That helper holds the artifact text fixed, runs one
+validator binary against the pre-pull tree and the applied tree, and clears on zero NEWLY-FAILING.
+On a scratch clone of the consumer it reads 0 of 783 on the 0.633.0 -> 0.641.0 pull. On the next
+pull's range it names one real break: a `grep -n` citation of `ai-dlc-pause.sh` whose four hits
+moved by five lines.
+
+**FOUR ADVERSARY ROUNDS EACH FOUND A SILENT FALSE CLEAR ON A GREEN BRANCH, AND THE LAST THREE WERE
+IN THE PREVIOUS ROUND'S FIX.**
+- The contract's stamp-equality control fired on every correct use, because the WORKLIST row
+  itself withholds the re-stamp. The validator also exits 1, not 2, on a missing root.
+- The walk for the base root landed on step 2's self-update commit, which carries `commit: <base>`
+  and theirs' machinery. Requiring `skill_commit` to equal `<base>` then refused 32 of graph's 123
+  stamp points, because `skill_commit` lags after any pull with no self-update. The shipped rule
+  accepts a `skill_commit` that is absent, equal to `<base>`, or an ancestor of it: 118 of 123.
+- The validator scored a derivation that never ran (a fork failure or a kill) as STALE, which on
+  the base side is a silent clear. A marker written after `eval` fixed that. Its first form made
+  a bare unbound `$VAR` read as UNRUN, and the capture hook treated the resulting exit 2 as clean.
+  The validator now brackets the eval with `set +u`, and the hook shows UNRUN.
+
+**THE FIRST GATE WENT RED ON THREE FIXTURES NO HAND COULD SEE FAIL.** `git push` runs its hooks with
+SIGPIPE ignored, so a near-miss that pinned a pipe's 141 exited 1 under the gate and 0 everywhere
+else. A fixture that started building a scratch repo missed the git-env seam. The fork budget rose
+3275 -> 3289, attributed site by site to one new reconcile script and one new `.dist-only`
+fixture. The release triple then failed per commit, so the branch was squashed to one commit whose
+tree is byte-identical to the gated tip, and it re-gated green on all 22 phases.
+
+**ONE FIRST-RUN FAILURE WAS NEVER EXPLAINED.** The first run of the new fixture read a derivation
+as `base=PASS consumer=STALE`, and 98 later runs did not repeat it. Forcing a derivation not to run
+on the consumer side reproduces it byte for byte. That class now refuses with exit 2 instead of
+reporting NEWLY-FAILING, but what triggered it on that run is not established.
+
+**THE OPERATOR RAN THE READ-SET TRACE TWICE**, the second time for `artifact-derivations` alone,
+because a fix landed mid-trace. Only the traced fixtures' rows moved, no `.claude/worktrees` row
+was added, and the map ships in this close. **No read-set trace is owed.**
+
+**THE CONSUMER PULLED 0.641.0 -> 0.642.0 DURING THE BATCH AND FILED ONE CANDIDATE AT ITS S313
+RETRO, UNCOMMITTED.** Its stamp reads 0.642.0 (`f4dd5172`), with `ai-dlc/retro/sprint-313`
+checked out. The ledger md5 moved to `99072171…`. The working-tree ledger holds 26 live ids against
+HEAD's 25, and the one addition is `PC-S313-FOLDIN-NEVER-RETAKES-ARCHITECTURE-ASSESSMENT`. It
+has 0 commits under `git log --all -S`, and it is cited by no backlog entry, the archive or this
+plan, against a control of 1 for `PC-S346-…` in the archive.
+- **The claim:** `core/skills/ai-dlc/steps/bug-investigation.md` makes a mid-sprint fold-in load
+  the architecture docs but never re-take the sprint's already-issued `architecture-assessment.md`.
+  In S313 a `capital_path: true` story merged under a NO-CHANGES assessment.
+- **Routing:** the consumer records `core-paths.sh --is-core` as exit 0 on that path, with a
+  not-core control.
+
+Batch 157's next-work list and delivery gap are spent: batch 158's block above replaces both.
+`PC-S346-…` reached the consumer with its 0.643.0 pull.
+

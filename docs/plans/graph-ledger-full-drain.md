@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 604..674. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 607..665. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,68 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 166 SHIPPED `v0.657.0` (`91671ae8`, #889) AND CLOSED `BL-358`. IT DISCHARGES NO CONSUMER
+CANDIDATE.** It was invoked by peer handoff. The opening sweep matched batch 165 on every figure:
+live 25 on five qualifying refs, unfiled 12 (the same ids and dates), worklist 5, TERMINAL 147,
+DISCHARGED 7, PENDING 1 (`PC-S314-H2-ATTESTATION-…`, first named at 0.648.0), ledger md5
+`ded61c90…` on the consumer's `ai-dlc/carry-over/telv3-upgrade` (its `main` reads `3c80ea9a…`).
+The consumer moved nothing this program reads: porcelain 38 -> 44 from its own sprint 314 (the one
+distribution-adjacent path is an untracked `ai-dlc-update/scratch-*` directory), working-tree ledger
+byte-identical to HEAD, `pending.md` absent. Live **100 -> 100** (`BL-358` closed, `BL-359` filed),
+archive **257 -> 258**.
+
+**`BL-358`: EVERY ROW-WRITING STDOUT SITE IN `layer-drift.sh` COUNTS ITS STATUS, AND ONE `ld_finish`
+REFUSES.** `emit`, `emit_raw` (the writer of every `HARD-LAYER-ADJUDICATION-MISSING` row, which the
+first contract missed), the contradiction awk and the `--list-adjudications` listing count into
+`ld_emit_ok`/`ld_emit_failed`; every writer returns without writing after one failure; the three
+outer loops break; `ld_finish` exits 2 with `layer-drift: REFUSED — a row could not be written to
+stdout after N row(s) were; …`, which `apply.sh` already renders as `DECISION layer-drift-refused`.
+The double-shadow block is restaged out of its `| while | while` subshells with both producers'
+statuses read. Healthy output byte-identical to `a0a9c556` in both modes on both consumer ranges.
+
+**THE CONTRACT ADVERSARY REFUTED THE FORCING: `ulimit -f` CANNOT ISOLATE STDOUT ON THIS SCRIPT.**
+bash 3.2 stages every here-string to a temp file under the same limit, and `layer-contract.yaml`
+(78 KB) is fed by `<<<` — larger than the whole output — so any limit that truncates stdout fails
+that here-string first, `ADJ_CODES` reads empty, adjudication disarms, 8 `OVERRIDE-OK` rows flip,
+all at rc 0 with zero `write error` lines. A contract-literal fix read rc 0 / 54 rows / 0 HARD at
+every `ulimit -f` >= 12 and would have shipped. Real-corpus forcing is a truncating pipe reader
+with SIGPIPE ignored; the fixture's EFBIG worlds keep every here-string under the limit and carry
+a precondition arm that reports `FIXTURE BROKEN` on `cannot create temp file for here document`.
+The disarm itself is `BL-359` (DEFECT), with two tip-adversary findings folded into it for the
+ceiling: `emit-report.sh` prints `0 HARD blockers.` beside a layer-drift refusal (pre-existing,
+DEFECT-tier, split it out at the next close), and two refusal paths have no fixture cell.
+
+**THE FIRST GATE WENT RED ON A FIXTURE NO HAND OWNED, AGAIN.** `procsub-staged-refusal`'s spelling
+arm (r1: `done <<< "$( )"` discards a producer's status) caught the restaged double-shadow block's
+per-entry split, which the fix hand, the fixture hand and the tip adversary all passed over. Staged
+with its own `ld_refuse`, mutant re-anchored, both fixtures green alone, byte-identity re-measured.
+**A restage that removes a subshell can reintroduce the other forbidden shape; run
+`procsub-staged-refusal` alone on any `reconcile/` change before the gate.** Second gate: 22 phases
+PASS, 1 SKIP (pole, no fresh full-suite measurement), 213 ok, 0 FAIL, both changed fixtures `ok` by
+name against an impossible-name control of 0, squash tree identical to the gated tip `a9083485`,
+`ls-remote` matching.
+
+**TWO READ-SET TRACES ARE OWED**: `procsub-staged-refusal-boot` now reads `a0a9c556`'s
+`layer-drift.sh` through `git show` (batch 165's owed trace for it was never run either), and
+`preclassify-rename-row` from batch 165. `sudo bash core/scripts/derive-fixture-readsets.sh --list
+"procsub-staged-refusal-boot preclassify-rename-row"` on a checkout of `origin/main`.
+
+**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
+- The unfiled set holds no new core filing. `BL-359` (DEFECT: a failed here-string disarms
+  adjudication at rc 0) is the strongest distribution-internal entry and continues this thread;
+  `BL-356` is next.
+- `BL-230` needs a mechanism for E1, E2 and E9.
+
+**THE DELIVERY GAP IS FOUR RELEASES.** The consumer is at 0.653.0 against `VERSION` 0.657.0.
+Nine bootstrapping files changed in `d1c72fa9..origin/main` (`apply.sh`, `lib.sh`,
+`layer-drift.sh`, `unregistered-drift.sh`, `self-update-gate.sh`, `retired-tokens.sh`,
+`retired-layer-contract.sh`, `predicate-differential.sh` and the update `SKILL.md`; 0 mode-only
+rows), so **the pull that delivers them runs under the installed 0.653.0
+engine and their refusals protect only the pull after it.** PENDING is 1 and below the installed
+version. The banked ruling stands: report the gap and write no runbook.
+
+Batch 165's next-work list and delivery gap are spent: batch 166's block above replaces both.
 
 **BATCH 165 SHIPPED `v0.656.0` (`8b025e69`, #887) AND CLOSED `BL-357`. IT DISCHARGES NO CONSUMER
 CANDIDATE.** It was invoked by peer handoff. The opening sweep matched batch 164 on every figure:
@@ -541,65 +603,6 @@ records `core-paths.sh --is-core` exit 0 for both hook files. Ten core hooks nam
 `7b32fb1a..origin/main`: `apply.sh`, `preclassify.sh`, `ledger-reverify.sh` and the update skill
 have 0 commits; there are 21 raw `core/` rows, 0 mode-only; one PC id is PENDING,
 `PC-S313-FOLDIN-…`. The banked ruling stands: report the gap and write no runbook.
-
-**BATCH 157 SHIPPED `v0.643.0` (`f4b1e2c2`, #865) AND CLOSED `BL-318`, WHICH DISCHARGES
-`PC-S346-ARTIFACT-DERIVATIONS-ROW-NAMES-A-CLEAR-NO-CONSUMER-CORPUS-CAN-REACH`.** It was invoked by
-peer handoff. The opening sweep matched batch 156 on every figure and control: live 25, unfiled
-13, a PC-backed worklist of 5, and ledger md5 `5f401bf7…`. `f4b1e2c2` is the only commit on
-`origin/main` naming the id, `VERSION` there reads 0.643.0, and an impossible-id control reads 0.
-Live **76 -> 75** (`BL-318` filed and closed), archive **241 -> 242**. The exit-0 receipt set is
-batch 156's nine, compared by id.
-
-**THE `artifact-derivations` ROW NOW NAMES A CLEAR A PULL CAN REACH.** It points at
-`reconcile/derivation-differential.sh`. That helper holds the artifact text fixed, runs one
-validator binary against the pre-pull tree and the applied tree, and clears on zero NEWLY-FAILING.
-On a scratch clone of the consumer it reads 0 of 783 on the 0.633.0 -> 0.641.0 pull. On the next
-pull's range it names one real break: a `grep -n` citation of `ai-dlc-pause.sh` whose four hits
-moved by five lines.
-
-**FOUR ADVERSARY ROUNDS EACH FOUND A SILENT FALSE CLEAR ON A GREEN BRANCH, AND THE LAST THREE WERE
-IN THE PREVIOUS ROUND'S FIX.**
-- The contract's stamp-equality control fired on every correct use, because the WORKLIST row
-  itself withholds the re-stamp. The validator also exits 1, not 2, on a missing root.
-- The walk for the base root landed on step 2's self-update commit, which carries `commit: <base>`
-  and theirs' machinery. Requiring `skill_commit` to equal `<base>` then refused 32 of graph's 123
-  stamp points, because `skill_commit` lags after any pull with no self-update. The shipped rule
-  accepts a `skill_commit` that is absent, equal to `<base>`, or an ancestor of it: 118 of 123.
-- The validator scored a derivation that never ran (a fork failure or a kill) as STALE, which on
-  the base side is a silent clear. A marker written after `eval` fixed that. Its first form made
-  a bare unbound `$VAR` read as UNRUN, and the capture hook treated the resulting exit 2 as clean.
-  The validator now brackets the eval with `set +u`, and the hook shows UNRUN.
-
-**THE FIRST GATE WENT RED ON THREE FIXTURES NO HAND COULD SEE FAIL.** `git push` runs its hooks with
-SIGPIPE ignored, so a near-miss that pinned a pipe's 141 exited 1 under the gate and 0 everywhere
-else. A fixture that started building a scratch repo missed the git-env seam. The fork budget rose
-3275 -> 3289, attributed site by site to one new reconcile script and one new `.dist-only`
-fixture. The release triple then failed per commit, so the branch was squashed to one commit whose
-tree is byte-identical to the gated tip, and it re-gated green on all 22 phases.
-
-**ONE FIRST-RUN FAILURE WAS NEVER EXPLAINED.** The first run of the new fixture read a derivation
-as `base=PASS consumer=STALE`, and 98 later runs did not repeat it. Forcing a derivation not to run
-on the consumer side reproduces it byte for byte. That class now refuses with exit 2 instead of
-reporting NEWLY-FAILING, but what triggered it on that run is not established.
-
-**THE OPERATOR RAN THE READ-SET TRACE TWICE**, the second time for `artifact-derivations` alone,
-because a fix landed mid-trace. Only the traced fixtures' rows moved, no `.claude/worktrees` row
-was added, and the map ships in this close. **No read-set trace is owed.**
-
-**THE CONSUMER PULLED 0.641.0 -> 0.642.0 DURING THE BATCH AND FILED ONE CANDIDATE AT ITS S313
-RETRO, UNCOMMITTED.** Its stamp reads 0.642.0 (`f4dd5172`), with `ai-dlc/retro/sprint-313`
-checked out. The ledger md5 moved to `99072171…`. The working-tree ledger holds 26 live ids against
-HEAD's 25, and the one addition is `PC-S313-FOLDIN-NEVER-RETAKES-ARCHITECTURE-ASSESSMENT`. It
-has 0 commits under `git log --all -S`, and it is cited by no backlog entry, the archive or this
-plan, against a control of 1 for `PC-S346-…` in the archive.
-- **The claim:** `core/skills/ai-dlc/steps/bug-investigation.md` makes a mid-sprint fold-in load
-  the architecture docs but never re-take the sprint's already-issued `architecture-assessment.md`.
-  In S313 a `capital_path: true` story merged under a NO-CHANGES assessment.
-- **Routing:** the consumer records `core-paths.sh --is-core` as exit 0 on that path, with a
-  not-core control.
-
-Batch 157's next-work list and delivery gap are spent: batch 158's block above replaces both.
-`PC-S346-…` reached the consumer with its 0.643.0 pull.
 
 ### Derive the state; do not trust the numbers below
 
