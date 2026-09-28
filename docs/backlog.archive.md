@@ -20492,3 +20492,40 @@ seven at 0.650.0.
 
 verify: sh git grep -qF 'pipefail' -- 'core/*.sh' ':(exclude)core/fixtures/**' || exit 9; A='{ l = $0; sub(/^[^:]*:[0-9]+:/, "", l); if (l ~ /^[[:blank:]]*#/) next; if (l ~ /^[[:blank:]]*echo /) next; if (l ~ /\047<\(/) next; n++ } END { print n + 0 }'; p="$(printf '%s\n' 'x.sh:1:  done < <(find . -type f | sort)' 'x.sh:2:  r="$(comm -23 <(printf x) <(printf y))"' "x.sh:3:RE='<([^>]*-)?id>'" 'x.sh:4:  # was <(norm)' 'x.sh:5:  echo "full: diff <(git show)"' | awk "$A")"; [ "$p" = 2 ] || exit 9; n="$(git grep -nE '<\(' -- 'core/*.sh' ':(exclude)core/fixtures/**' | awk "$A")"; [ -n "$n" ] || exit 9; [ "$n" -eq 0 ]
 
+## BL-353 — the three escalation validators read an unreadable `pending.md` as clean, so Check 2 passes on a file nobody read
+
+**LANDED (v0.654.0, verified 3c606fe2).**
+
+**DEFECT.** Found by the batch-163 tip adversary on 0.653.0; present before it, identically. It
+discharges no consumer candidate.
+
+`validate-escalation-status-vocabulary.sh:151`, `validate-escalation-resolution.sh:260` (gate
+mode) and `validate-suppression-lifetime.sh:175` probe the escalations file with
+`grep -q '[^[:space:]]' "$ESCALATIONS" 2>/dev/null`. On an unreadable file that probe exits 2, the
+branch reads it as "not blank", and the later `awk` read failure (`can't open file`) is swallowed.
+Measured with an out-of-vocabulary `FILED` entry and an uncited this-sprint `RESOLVED` entry: readable,
+two of the scripts exit 1; after `chmod 000`, all three exit 0 with an ordinary OK line
+(`n=[]`, `entries_scanned=0`, "no S5 … requires an operator citation"). Check 2 then passes.
+0.653.0's pass wording does not cover this case, because no `EXAMINED NOTHING` line is printed.
+
+A directory at the `pending.md` path prints "no escalations file", which 0.653.0's "absent or
+empty" wording would read as a pass. Exotic, and the same remedy covers it.
+
+**Remedy:** in all three, refuse with exit 2 when the probe's status is 2, when the path exists and
+is not a regular file, or when it is not readable. The fixture half: `escalation-status-vocabulary`
+asserts only the literal `is not a pass` is absent from Checks 2 and 2a, so a sentence appending
+"treat that line as a FAIL" survives it, and nothing guards Checks 26, 33 and 35 still saying "not a
+pass". Add one cell for each.
+
+**Receipt.** It stages an out-of-vocabulary `FILED` entry and an uncited this-sprint `RESOLVED`
+entry, proves both readable scripts exit 1 on it, then `chmod 000`s it and also builds a directory
+at a second path. All four invocations (vocabulary, resolution in gate mode, lifetime, lifetime
+`--in-force`) must exit 2 with `REFUSED:` on stderr and empty stdout, on both paths. It exits 9 as
+root, when the file stays readable after `chmod 000`, when a script is absent, or when the readable
+control does not exit 1. Scored in extracted trees: 0.654.0 tip 0; 0.653.0 1; a 0.653.0 copy of
+any one of the three scripts 1 each; dropping only the unreadable block from one script 1; dropping
+only the non-regular guard from one script 1; a reworded fix using `-ne 0 && -ne 1` 0; `FILED`
+added to the vocabulary 9; a script moved away 9.
+
+verify: sh [ "$(id -u)" -ne 0 ] || exit 9; V=core/scripts/validate-escalation-status-vocabulary.sh; R=core/scripts/validate-escalation-resolution.sh; L=core/scripts/validate-suppression-lifetime.sh; for s in "$V" "$R" "$L"; do [ -f "$s" ] || exit 9; done; d=$(mktemp -d) || exit 9; p="$d/pending.md"; printf '%s\n' '## S1 - probe one' '' '**Status:** FILED' '' '## S1 - probe two' '' '**Status:** RESOLVED' > "$p" || exit 9; bash "$V" "$p" >/dev/null 2>&1; a=$?; bash "$R" --escalations "$p" --sprint 1 >/dev/null 2>&1; b=$?; if [ "$a" -ne 1 ] || [ "$b" -ne 1 ]; then rm -f "$p"; rmdir "$d"; exit 9; fi; chmod 000 "$p" || exit 9; if [ -r "$p" ]; then chmod 600 "$p"; rm -f "$p"; rmdir "$d"; exit 9; fi; mkdir "$d/dir.md" || exit 9; f=0; for q in "$p" "$d/dir.md"; do for m in V R L I; do o=""; case $m in V) e=$(bash "$V" "$q" 2>&1 >/dev/null); c=$? ;; R) e=$(bash "$R" --escalations "$q" --sprint 1 2>&1 >/dev/null); c=$? ;; L) e=$(bash "$L" --escalations "$q" 2>&1 >/dev/null); c=$? ;; I) o=$(bash "$L" --in-force --escalations "$q" 2>"$d/err"); c=$?; e=$(cat "$d/err") ;; esac; [ "$c" -eq 2 ] || f=1; [ -z "$o" ] || f=1; case "$e" in *REFUSED:*) ;; *) f=1 ;; esac; done; done; chmod 600 "$p"; rm -f "$p" "$d/err"; rmdir "$d/dir.md" "$d"; exit $f
+

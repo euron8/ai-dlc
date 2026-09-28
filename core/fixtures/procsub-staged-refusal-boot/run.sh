@@ -24,6 +24,23 @@
 #                        -> SELF-UPDATE-OK, record `# verdict: OK`
 #   S2  self-update-gate GATING grep -Fxf         grep's exit 2 swallowed by `|| true`
 #                        -> SELF-UPDATE-OK, record `# verdict: OK`
+#   S3  self-update-gate changed-script git diff  a failed diff = "changes no core/scripts/ path"
+#                        -> SELF-UPDATE-OK, record `# verdict: OK`
+#   U1  unregistered-drift  empty scan set        grep's 1 for "no .md/.sh/.json" became the
+#                        script's exit -> rc 1, which emit-report renders DETECTOR-REFUSED
+#   U2  unregistered-drift  both listings fail    rc 1 with no row, where the contract is 0 always
+#                        and a named HARD-DRIFT-SCAN-UNAVAILABLE row
+#   U3  unregistered-drift  file-type grep exit 2 rc 2 with no row
+#   U4  unregistered-drift  prefix grep exit 2    the base FELL BACK to the direct listing and
+#                        scanned; the staged spelling refuses instead (safe direction, same shape
+#                        at base and tip on U2b below, so U4's base shape is SCANNED)
+#   U2b unregistered-drift  memo listing alone fails -- the NEAR-MISS for U2: the direct listing
+#                        still answers, so the scan must still run. A refusal keyed on the memo's
+#                        failure alone would pass U2 and fail here.
+#   A*  apply.sh         each of the four detectors it consults, and the scan-unavailable row:
+#                        a refusal (exit 2, reason on stderr) read as "found nothing" -> no row.
+#                        Now a `DECISION <detector>-refused` row carrying the exit and the first
+#                        stderr line; for retired-tokens the `WORKLIST semantic-merge` stands.
 #
 # EACH ARM IS FORCED WITH A PATH STUB, NEVER SAMPLED. The stub fails ONE call shape and execs
 # the real binary for every other call, and it appends a line to its own FIRED file per call it
@@ -69,7 +86,8 @@ TREE_TOP="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 RECON="$TREE_TOP/core/skills/ai-dlc-update/reconcile"
 [ -n "$TREE_TOP" ] && [ -f "$RECON/ledger-reverify.sh" ] \
   || { echo "FIXTURE ERROR: core/skills/ai-dlc-update/reconcile/ledger-reverify.sh not found — this fixture is distribution-only" >&2; exit 2; }
-for _s in ledger-reverify.sh preclassify.sh emit-report.sh self-update-gate.sh lib.sh; do
+for _s in ledger-reverify.sh preclassify.sh emit-report.sh self-update-gate.sh lib.sh apply.sh \
+          unregistered-drift.sh retired-tokens.sh retired-layer-passage.sh layer-drift.sh; do
   [ -f "$RECON/$_s" ] || { echo "FIXTURE ERROR: reconcile/$_s is missing beside ledger-reverify.sh" >&2; exit 2; }
 done
 SIB="$HERE/../reconcile-emit-report"
@@ -77,8 +95,9 @@ SIB="$HERE/../reconcile-emit-report"
 
 REAL_TR="$(command -v tr)"; REAL_GIT="$(command -v git)"; REAL_FIND="$(command -v find)"
 REAL_SED="$(command -v sed)"; REAL_COMM="$(command -v comm)"; REAL_GREP="$(command -v grep)"
-for _b in "$REAL_TR" "$REAL_GIT" "$REAL_FIND" "$REAL_SED" "$REAL_COMM" "$REAL_GREP"; do
-  case "$_b" in /*) ;; *) echo "FIXTURE ERROR: tr/git/find/sed/comm/grep must resolve to binaries on PATH (got '$_b'), or no stub can pass through" >&2; exit 2 ;; esac
+REAL_BASH="$(command -v bash)"
+for _b in "$REAL_TR" "$REAL_GIT" "$REAL_FIND" "$REAL_SED" "$REAL_COMM" "$REAL_GREP" "$REAL_BASH"; do
+  case "$_b" in /*) ;; *) echo "FIXTURE ERROR: tr/git/find/sed/comm/grep/bash must resolve to binaries on PATH (got '$_b'), or no stub can pass through" >&2; exit 2 ;; esac
 done
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/psb-boot.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
@@ -118,7 +137,29 @@ mkstub_for() {
              "t=\"\$(mktemp)\" || exit 3; cat > \"\$t\"; if \"$REAL_GREP\" -q ZZ-PSB-HAND-EDIT \"\$t\"; then \"$REAL_SED\" \"\$@\" < \"\$t\"; r=\$?; rm -f \"\$t\"; exit \$r; fi; rm -f \"\$t\"; $LOGF; exit 2" ;;
     S1)    stub "$2" comm "$REAL_COMM" "'-23 '*" "$LOGF; echo 'comm: forced failure' >&2; exit 2" ;;
     S2)    stub "$2" grep "$REAL_GREP" "'-Fxf '*" "$LOGF; echo 'grep: forced failure' >&2; exit 2" ;;
+    S3)    stub "$2" git "$REAL_GIT" "*' diff --name-only '*' -- core/scripts/'" "$LOGF; echo 'fatal: forced failure' >&2; exit 2" ;;
+    # U1 FAILS NOTHING: its discriminating input is the WORLD. The stub only logs the listing and
+    # passes through, so FIRED > 0 proves the run reached the scan rather than dying before it.
+    U1)    stub "$2" git "$REAL_GIT" "*' ls-tree '*" "$LOGF" ;;
+    U2)    stub "$2" git "$REAL_GIT" "*' ls-tree '*" "$LOGF; echo 'fatal: forced failure' >&2; exit 128" ;;
+    # The memo's call shape alone: the full listing ENDS at the ref, the direct one carries ` -- `.
+    U2b)   stub "$2" git "$REAL_GIT" "*' ls-tree -r --name-only $(cat "$UW_OK/B")'" "$LOGF; echo 'fatal: forced failure' >&2; exit 128" ;;
+    U3)    stub "$2" grep "$REAL_GREP" "*'(md|sh|json)'*" "$LOGF; echo 'grep: forced failure' >&2; exit 2" ;;
+    U4)    stub "$2" grep "$REAL_GREP" "*'core/team-roles/|core/hooks/'*" "$LOGF; echo 'grep: forced failure' >&2; exit 2" ;;
+    # U5 fails nothing either: its forcing input is the CLOSED STDOUT ud_shape runs it under.
+    U5)    stub "$2" git "$REAL_GIT" "*' ls-tree '*" "$LOGF" ;;
+    Aud)   ap_stub "$2" unregistered-drift ;;
+    Art)   ap_stub "$2" retired-tokens ;;
+    Arlp)  ap_stub "$2" retired-layer-passage ;;
+    Ald)   ap_stub "$2" layer-drift ;;
+    Ana)   stub "$2" bash "$REAL_BASH" "*'/unregistered-drift.sh '*" \
+             "$LOGF; printf 'HARD-DRIFT-SCAN-UNAVAILABLE\\tcore/\\tZZ-PSB-NA-DETAIL forced\\n'; exit 0" ;;
   esac
+}
+# ap_stub <dir> <detector>: `bash <reconcile>/<detector>.sh …` refuses the way a detector does --
+# exit 2, empty stdout, the reason on stderr -- and every other `bash` call passes through.
+ap_stub() {
+  stub "$1" bash "$REAL_BASH" "*'/$2.sh '*" "$LOGF; echo 'ZZ-PSB-STDERR-$2 forced refusal' >&2; exit 2"
 }
 
 gi() { git -C "$1" -c user.email=f@f -c user.name=fixture -c commit.gpgsign=false "${@:2}"; }
@@ -301,13 +342,129 @@ sg_shape() { # <recon> <arm S1|S2> <stub-dir or ->
   n_ok="$(awk -F'\t' '$1=="SELF-UPDATE-OK"' <<<"$out" | "$REAL_GREP" -c .)" || n_ok=0
   n_def="$(awk -F'\t' '$1=="SELF-UPDATE-DEFER"' <<<"$out" | "$REAL_GREP" -c .)" || n_def=0
   n_und="$(awk -F'\t' '$1=="SELF-UPDATE-UNDECIDED"' <<<"$out" | "$REAL_GREP" -c .)" || n_und=0
-  und_row="$(awk -F'\t' '$1=="SELF-UPDATE-UNDECIDED" && $3 ~ /could not be computed/' <<<"$out" | "$REAL_GREP" -c .)" || und_row=0
+  # S3's row must also NAME the diff's exit: `could not be computed` alone is S2's spelling too.
+  if [ "$2" = S3 ]; then
+    und_row="$(awk -F'\t' '$1=="SELF-UPDATE-UNDECIDED" && $3 ~ /could not be computed/ && $3 ~ /core\/scripts\/ exited 2/' <<<"$out" | "$REAL_GREP" -c .)" || und_row=0
+  else
+    und_row="$(awk -F'\t' '$1=="SELF-UPDATE-UNDECIDED" && $3 ~ /could not be computed/' <<<"$out" | "$REAL_GREP" -c .)" || und_row=0
+  fi
   if [ "$rc" -ne 0 ] || [ -z "$v" ]; then echo "OTHER(rc=$rc,record=${v:-none})"
   elif [ "$v" = OK ] && [ "$n_ok" -gt 0 ] && [ "$n_def" -eq 0 ] && [ "$n_und" -eq 0 ]; then echo OK
   elif [ "$v" != OK ] && [ "$und_row" -gt 0 ] && [ "$n_ok" -eq 0 ]; then echo "UNDECIDED-UNCOMPUTED/$v"
   elif [ "$v" = DEFER ] && [ "$n_und" -eq 0 ] && [ "$n_ok" -eq 0 ]; then echo DEFER
   else echo "OTHER(record=$v,ok=$n_ok,defer=$n_def,undecided=$n_und)"
   fi
+}
+
+# === WORLDS ud: unregistered-drift ================================================================
+#   ne  the scan-set subtrees hold NO .md/.sh/.json file (one .txt): an empty scan set, which the
+#       base spelling exited 1 on through `pipefail` -- grep's "no match" as the script's status.
+#   ok  one .md, consumer copy byte-identical to base: one CORE-OK row, the positive conjunct that
+#       separates a scan that ran from a copy that never did.
+#   hu  one .md the consumer edited in place: one HARD-UNREGISTERED-CORE-DRIFT row, the one emit in
+#       the loop with no `continue` after it, so it is the loop's last command. U5 runs it with
+#       STDOUT CLOSED: the emit fails, and without the explicit `exit 0` that failure is the loop's
+#       status and the script's (measured: rc 1 at d1c72fa9 and with the `exit 0` deleted, rc 0 on
+#       tip). U1 CANNOT see that line: once the scan set is staged, an empty one runs the loop zero
+#       times and exits 0 without it -- the `exit 0` guards a failing LAST WRITE, nothing else.
+mk_ud_world() { # <dir> <ne|ok|hu>
+  local D="$1/dist" C="$1/consumer"
+  mkdir -p "$D/core/skills/ai-dlc/steps" "$C/.claude/skills/ai-dlc/steps"
+  printf '0.1.0\n' > "$D/VERSION"
+  if [ "$2" = ne ]; then
+    printf 'n\n' > "$D/core/skills/ai-dlc/notes.txt"; printf 'n\n' > "$C/.claude/skills/ai-dlc/notes.txt"
+  elif [ "$2" = hu ]; then
+    printf '# One step\n\nThe lead reads this file at the top of the one phase.\n' > "$D/core/skills/ai-dlc/steps/one.md"
+    cp "$D/core/skills/ai-dlc/steps/one.md" "$C/.claude/skills/ai-dlc/steps/one.md"
+    printf 'The consumer added this long line to the one phase in place.\n' >> "$C/.claude/skills/ai-dlc/steps/one.md"
+  else
+    printf '# one\n' > "$D/core/skills/ai-dlc/steps/one.md"; cp "$D/core/skills/ai-dlc/steps/one.md" "$C/.claude/skills/ai-dlc/steps/one.md"
+  fi
+  { gi "$D" init -q && gi "$D" add -A && gi "$D" commit -qm base; } >/dev/null 2>&1 || return 1
+  git -C "$D" rev-parse HEAD > "$1/B"
+  printf '0.2.0\n' > "$D/VERSION"
+  { gi "$D" add -A && gi "$D" commit -qm theirs; } >/dev/null 2>&1 || return 1
+  git -C "$D" rev-parse HEAD > "$1/T"
+  printf 'version: 0.1.0\ncommit: %s\n' "$(cat "$1/B")" > "$C/.claude/.ai-dlc-version"
+}
+UW_NE="$WORK/uw-ne"; UW_OK="$WORK/uw-ok"; UW_HU="$WORK/uw-hu"
+mk_ud_world "$UW_NE" ne || { echo "FIXTURE ERROR: ud ne world" >&2; exit 2; }
+mk_ud_world "$UW_OK" ok || { echo "FIXTURE ERROR: ud ok world" >&2; exit 2; }
+mk_ud_world "$UW_HU" hu || { echo "FIXTURE ERROR: ud hu world" >&2; exit 2; }
+_n="$(git -C "$UW_NE/dist" ls-tree -r --name-only "$(cat "$UW_NE/B")" -- core/skills/ai-dlc | "$REAL_GREP" -cE '\.(md|sh|json)$')" || _n=0
+_c="$(git -C "$UW_NE/dist" ls-tree -r --name-only "$(cat "$UW_NE/B")" -- core/skills/ai-dlc | "$REAL_GREP" -c .)" || _c=0
+[ "$_n" -eq 0 ] && [ "$_c" -ge 1 ] \
+  || { echo "FIXTURE ERROR: ud ne world: its scan subtree lists $_c path(s), $_n of them .md/.sh/.json (want >= 1 and 0), so U1 cannot express an EMPTY scan set" >&2; exit 2; }
+ud_shape() { # <recon> <arm> <stub-dir or ->
+  local W p="$PATH" out rc n nun nok nhu det
+  case "$2" in U1) W="$UW_NE" ;; U5) W="$UW_HU" ;; *) W="$UW_OK" ;; esac
+  [ "$3" = - ] || p="$3:$PATH"
+  if [ "$2" = U5 ] && [ "$3" != - ]; then
+    PATH="$p" "$REAL_BASH" "$1/unregistered-drift.sh" "$W/dist" "$(cat "$W/B")" "$W/consumer" "$(cat "$W/T")" >&- 2>/dev/null
+    echo "CLOSED-RC$?"; return 0
+  fi
+  out="$(PATH="$p" "$REAL_BASH" "$1/unregistered-drift.sh" "$W/dist" "$(cat "$W/B")" "$W/consumer" "$(cat "$W/T")" 2>/dev/null)"; rc=$?
+  n="$("$REAL_GREP" -c . <<<"$out")" || n=0
+  nun="$(awk -F'\t' '$1=="HARD-DRIFT-SCAN-UNAVAILABLE"' <<<"$out" | "$REAL_GREP" -c .)" || nun=0
+  nok="$(awk -F'\t' '$1=="CORE-OK"' <<<"$out" | "$REAL_GREP" -c .)" || nok=0
+  nhu="$(awk -F'\t' '$1=="HARD-UNREGISTERED-CORE-DRIFT"' <<<"$out" | "$REAL_GREP" -c .)" || nhu=0
+  det="$(awk -F'\t' '$1=="HARD-DRIFT-SCAN-UNAVAILABLE" {print $3; exit}' <<<"$out")"
+  if [ "$rc" -eq 0 ] && [ "$n" -eq 1 ] && [ "$nun" -eq 1 ]; then
+    case "$det" in
+      *"memo_ls_tree exited 128, git ls-tree exited 128"*) echo UNAVAILABLE-LISTING ;;
+      *"the file-type filter over the tree listing exited 2"*) echo UNAVAILABLE-EXT ;;
+      *"the scan-set prefix filter over the cached tree listing exited 2"*) echo UNAVAILABLE-PREFIX ;;
+      *) echo "OTHER(unavailable-unnamed)" ;;
+    esac
+  elif [ "$rc" -eq 0 ] && [ "$n" -eq 1 ] && [ "$nok" -eq 1 ]; then echo SCANNED
+  elif [ "$rc" -eq 0 ] && [ "$n" -eq 1 ] && [ "$nhu" -eq 1 ]; then echo HARD-UNREG
+  elif [ "$rc" -eq 0 ] && [ "$n" -eq 0 ]; then echo EMPTY
+  elif [ "$n" -eq 0 ]; then echo "RC${rc}-NOROW"
+  else echo "OTHER(rc=$rc,rows=$n)"
+  fi
+}
+
+# === WORLD ap: apply.sh ===========================================================================
+# One core step both sides moved (BOTH-CHANGED->CLASSIFY), so the run reaches all four detectors
+# and retired-tokens runs for a real path. Healthy, every detector exits 0 on it and the run emits
+# `WORKLIST semantic-merge skills/ai-dlc/steps/m.md` -- the positive conjunct every shape keys on,
+# so an apply.sh copy that never ran reads OTHER, never a clean pass.
+AW="$WORK/aw"; AD="$AW/dist"; AC="$AW/consumer"
+mkdir -p "$AD/core/skills/ai-dlc/steps" "$AC/.claude/skills/ai-dlc/steps"
+printf '0.1.0\n' > "$AD/VERSION"
+printf '# M step\n\nThe lead reads this file at the top of the m phase.\n' > "$AD/core/skills/ai-dlc/steps/m.md"
+{ gi "$AD" init -q && gi "$AD" add -A && gi "$AD" commit -qm base; } >/dev/null 2>&1 || { echo "FIXTURE ERROR: ap dist base" >&2; exit 2; }
+git -C "$AD" rev-parse HEAD > "$AW/B"
+printf '0.2.0\n' > "$AD/VERSION"
+printf 'Upstream added this long line to the m phase for the pull.\n' >> "$AD/core/skills/ai-dlc/steps/m.md"
+{ gi "$AD" add -A && gi "$AD" commit -qm theirs; } >/dev/null 2>&1 || { echo "FIXTURE ERROR: ap dist theirs" >&2; exit 2; }
+git -C "$AD" rev-parse HEAD > "$AW/T"
+git -C "$AD" show "$(cat "$AW/B"):core/skills/ai-dlc/steps/m.md" > "$AC/.claude/skills/ai-dlc/steps/m.md"
+printf 'The consumer added this long line to the m phase in place.\n' >> "$AC/.claude/skills/ai-dlc/steps/m.md"
+printf 'version: 0.1.0\ncommit: %s\n' "$(cat "$AW/B")" > "$AC/.claude/.ai-dlc-version"
+ap_det() { case "$1" in Aud|Ana) echo unregistered-drift ;; Art) echo retired-tokens ;; Arlp) echo retired-layer-passage ;; Ald) echo layer-drift ;; esac; }
+# ONE FRESH CONSUMER COPY PER RUN, for the reason sg_shape states: apply.sh writes the consumer.
+ap_shape() { # <recon> <arm> <stub-dir or ->
+  local p="$PATH" run out rc nref nmerge row path det d
+  [ "$3" = - ] || p="$3:$PATH"
+  d="$(ap_det "$2")"
+  run="$(mktemp -d "$WORK/ap-run.XXXXXX")" || { echo "OTHER(mktemp)"; return 0; }
+  cp -R "$AC/." "$run/" || { echo "OTHER(copy)"; return 0; }
+  out="$(PATH="$p" "$REAL_BASH" "$1/apply.sh" "$AD" "$(cat "$AW/B")" "$run" "$(cat "$AW/T")" 2>/dev/null)"; rc=$?
+  nref="$(awk -F'\t' '$1=="DECISION" && $2 ~ /-refused$/' <<<"$out" | "$REAL_GREP" -c .)" || nref=0
+  nmerge="$(awk -F'\t' '$1=="WORKLIST" && $2=="semantic-merge" && $3=="skills/ai-dlc/steps/m.md"' <<<"$out" | "$REAL_GREP" -c .)" || nmerge=0
+  row="$(awk -F'\t' '$1=="DECISION" && $2 ~ /-refused$/ {print $2; exit}' <<<"$out")"
+  path="$(awk -F'\t' '$1=="DECISION" && $2 ~ /-refused$/ {print $3; exit}' <<<"$out")"
+  det="$(awk -F'\t' '$1=="DECISION" && $2 ~ /-refused$/ {print $4; exit}' <<<"$out")"
+  if [ "$rc" -ne 0 ]; then echo "OTHER(rc=$rc)"; return 0; fi
+  if [ "$nref" -eq 0 ] && [ "$nmerge" -ge 1 ]; then echo NO-REFUSAL; return 0; fi
+  if [ "$nref" -ne 1 ] || [ "$row" != "$d-refused" ]; then echo "OTHER(refused=$nref,row=${row:-none},merge=$nmerge)"; return 0; fi
+  case "$2" in
+    Ana) case "$det" in *"emitted HARD-DRIFT-SCAN-UNAVAILABLE"*"ZZ-PSB-NA-DETAIL forced"*) ;; *) echo "OTHER(na-detail)"; return 0 ;; esac ;;
+    *)   case "$det" in "DETECTOR-REFUSED: $d.sh exited 2 "*"stderr: ZZ-PSB-STDERR-$d forced refusal") ;; *) echo "OTHER(detail)"; return 0 ;; esac ;;
+  esac
+  if [ "$2" = Art ] && [ "$path" != skills/ai-dlc/steps/m.md ]; then echo "OTHER(path=$path)"; return 0; fi
+  if [ "$nmerge" -eq 0 ]; then echo REFUSED-NOMERGE; else echo REFUSED; fi
 }
 
 # === ONE ARM ======================================================================================
@@ -317,7 +474,9 @@ arm_shape() {
     L1|L2|L3) lr_shape "$2" "$1" "$3" ;;
     P1) pc_shape "$2" "$3" ;;
     E1) er_shape "$2" "$3" ;;
-    S1|S2) sg_shape "$2" "$1" "$3" ;;
+    S1|S2|S3) sg_shape "$2" "$1" "$3" ;;
+    U1|U2|U2b|U3|U4|U5) ud_shape "$2" "$1" "$3" ;;
+    Aud|Art|Arlp|Ald|Ana) ap_shape "$2" "$1" "$3" ;;
   esac
 }
 # THE EXPECTATION TABLE. <arm> <key> <control shape> <tip shape> <base shape>
@@ -327,7 +486,19 @@ L3 lr NEEDS-REVIEW-UNFALSIFIABLE STILL-LIVE-LSTREE-FAILED STILL-LIVE-CONSUMER-OW
 P1 pc ORPHAN-ROWS REFUSED NO-ORPHAN-ROWS
 E1 er UNDECIDED-DIFF UNDECIDED-UNCOMPUTED BLOCKERS-RESOLVED
 S1 sg DEFER UNDECIDED-UNCOMPUTED/DEFER OK
-S2 sg DEFER UNDECIDED-UNCOMPUTED/UNDECIDED OK'
+S2 sg DEFER UNDECIDED-UNCOMPUTED/UNDECIDED OK
+S3 sg DEFER UNDECIDED-UNCOMPUTED/UNDECIDED OK
+U1 ud EMPTY EMPTY RC1-NOROW
+U2 ud SCANNED UNAVAILABLE-LISTING RC1-NOROW
+U2b ud SCANNED SCANNED SCANNED
+U3 ud SCANNED UNAVAILABLE-EXT RC2-NOROW
+U4 ud SCANNED UNAVAILABLE-PREFIX SCANNED
+U5 ud HARD-UNREG CLOSED-RC0 CLOSED-RC1
+Aud ap NO-REFUSAL REFUSED NO-REFUSAL
+Art ap NO-REFUSAL REFUSED NO-REFUSAL
+Arlp ap NO-REFUSAL REFUSED NO-REFUSAL
+Ald ap NO-REFUSAL REFUSED NO-REFUSAL
+Ana ap NO-REFUSAL REFUSED NO-REFUSAL'
 col() { awk -v a="$1" -v c="$2" '$1==a {print $c}' <<<"$EXPECT"; }
 arms_of() { awk -v k="$1" '$2==k {print $1}' <<<"$EXPECT"; }
 
@@ -340,7 +511,7 @@ forced() {
 }
 
 # --- CONTROLS AND FORCED ARMS ON THE SHIPPED SCRIPTS ----------------------------------------------
-for A in L1 L2 L3 P1 E1 S1 S2; do
+for A in $(awk '{print $1}' <<<"$EXPECT"); do
   c="$(arm_shape "$A" "$RECON" -)"
   if [ "$c" = "$(col "$A" 3)" ]; then
     ok "$A control (no stub): $c -- the world expresses the healthy verdict"
@@ -349,7 +520,7 @@ for A in L1 L2 L3 P1 E1 S1 S2; do
   fi
   set -- $(forced "$A" "$RECON" tip)
   if [ "${2:-0}" -gt 0 ] && [ "$1" = "$(col "$A" 4)" ]; then
-    ok "$A forced (stub fired ${2}x): $1 -- the failed producer is refused, never read as empty (base spelling reads $(col "$A" 5))"
+    ok "$A forced (stub fired ${2}x): $1 -- the tip shape (base spelling reads $(col "$A" 5))"
   elif [ "${2:-0}" -eq 0 ]; then
     bad "$A FIXTURE BROKEN: the stub never fired, so its shape ($1) says nothing about the site"
   else
@@ -385,8 +556,12 @@ mut() {
   bash -n "$d/$s" 2>/dev/null || { mutbad "MUTANT DID NOT APPLY [$n]: the mutant does not parse"; return 1; }
   h="$("$REAL_GREP" -cxF -- "$base_line" "$d/$s")" || h=0
   [ "$h" -eq 1 ] || { mutbad "MUTANT DID NOT APPLY [$n]: the base spelling is present $h time(s), not 1"; return 1; }
-  h="$("$REAL_GREP" -cF -- "$staged" "$d/$s")" || h=0
-  [ "$h" -eq 0 ] || { mutbad "MUTANT PARTIAL [$n]: the staged spelling '$staged' survives $h time(s) -- a partial revert proves the layer left in place"; return 1; }
+  # `-` for a mutant that DELETES a line with no staged counterpart (M-Art-merge): its anchors and
+  # its base line still bind it, and `cmp -s` proves it applied.
+  if [ "$staged" != - ]; then
+    h="$("$REAL_GREP" -cF -- "$staged" "$d/$s")" || h=0
+    [ "$h" -eq 0 ] || { mutbad "MUTANT PARTIAL [$n]: the staged spelling '$staged' survives $h time(s) -- a partial revert proves the layer left in place"; return 1; }
+  fi
   [ -f "$d/lib.sh" ] || { mutbad "MUTANT HARNESS [$n]: lib.sh is not beside the mutant"; return 1; }
   printf '%s\n' "$d"
 }
@@ -411,8 +586,37 @@ score() {
       [ "${2:-0}" -gt 0 ] && [ "$1" = "$(col "$A" 4)" ] || { others_ok=0; detail="$detail $A=$1"; }
     fi
   done
+  report_score "$m" "$own" "$k" "$got_own" "$others_ok" "$detail" "$(col "$own" 5)"
+  return 0
+}
+# score_as <mutant-name> <key> <recon-copy> <arm=shape>... -- for a mutant whose own arm lands on a
+# shape OTHER than the base spelling's (M-U2a reads EMPTY, the silent clear, where the whole base
+# pipeline read rc 1), or that two arms genuinely both own. Every arm NOT named must stay at its
+# tip shape, so an undeclared move is still ENTANGLED.
+score_as() {
+  local m="$1" k="$2" d="$3" A want got fails="" others_ok=1 detail="" named=""
+  shift 3
+  for A in $(arms_of "$k"); do
+    want=""
+    for _p in "$@"; do [ "${_p%%=*}" = "$A" ] && want="${_p#*=}"; done
+    set -- $(forced "$A" "$d" "$m") "$@"
+    got="$1"; local fired="${2:-0}"; shift 2
+    if [ -n "$want" ]; then
+      named="$named $A=$got"
+      [ "$fired" -gt 0 ] && [ "$got" = "$want" ] || fails="$fails $A=$got(want $want,fired=$fired)"
+    else
+      [ "$fired" -gt 0 ] && [ "$got" = "$(col "$A" 4)" ] || { others_ok=0; detail="$detail $A=$got"; }
+    fi
+  done
+  if [ -n "$fails" ]; then bad "MUTANT SURVIVED [$m]:$fails -- the arm cannot see its own site revert"
+  elif [ "$others_ok" -eq 1 ]; then ok "MUTANT KILLED [$m]:$named, every other $k arm stays at its tip shape"
+  else bad "MUTANT ENTANGLED [$m]:$named but undeclared arm(s) moved too:$detail"; fi
+  return 0
+}
+report_score() { # <m> <own> <k> <got_own> <others_ok> <detail> <base-shape>
+  local m="$1" own="$2" k="$3" got_own="$4" others_ok="$5" detail="$6"
   case "$got_own" in
-    '!'*) bad "MUTANT SURVIVED [$m]: arm $own read ${got_own#!}, expected the base shape $(col "$own" 5) -- the arm cannot see its own site revert" ;;
+    '!'*) bad "MUTANT SURVIVED [$m]: arm $own read ${got_own#!}, expected the base shape $7 -- the arm cannot see its own site revert" ;;
     *) if [ "$others_ok" -eq 1 ]; then
          ok "MUTANT KILLED [$m]: $own reads $got_own (the base shape), every other $k arm stays at its tip shape"
        else
@@ -477,6 +681,114 @@ er_sets_why=\"\"" \
        mut M-S2 self-update-gate.sh "$BLOCK" "$S_B2" 'gating-changed' 'gating_why=""')" \
     && score M-S2 S2 "$d" \
     || mutreport M-S2
+  # S3: the staging block and its refusal, through the sed that reads the staged file, become the
+  # base two-line pipeline again -- every layer in one copy.
+  S_B3='CHANGED="$(git -C "$DIST" diff --name-only "${BASE}..${THEIRS}" -- core/scripts/ 2>/dev/null \'
+  S_B3b='            | sed '"'"'s|.*/||'"'"' | sort -u)"'
+  d="$(START='changed_why=""' END='CHANGED="$(sed '"'"'s|.*/||'"'"' "$TMP/changed-raw" | sort -u)"' NFI=1 NEW="$S_B3
+$S_B3b" \
+       mut M-S3 self-update-gate.sh "$BLOCK" "$S_B3" 'changed-raw' 'changed_why=""' \
+         'CHANGED="$(sed '"'"'s|.*/||'"'"' "$TMP/changed-raw" | sort -u)"')" \
+    && { score M-S3 S3 "$d"
+         # THE HEALTHY PATH IS BYTE-IDENTICAL TO THE BASE SPELLING on the world S3 forces: same
+         # stdout rows from the staged diff and from the pipeline it replaced, sides shown to differ.
+         _o() { local r; r="$(mktemp -d "$WORK/sg-bi.XXXXXX")" && cp -R "$WORK/gw-gt/consumer/." "$r/" \
+                  && "$REAL_BASH" "$1/self-update-gate.sh" "$WORK/gw-gt/dist" "$(cat "$WORK/gw-gt/B")" "$(cat "$WORK/gw-gt/T")" "$r" 2>/dev/null; }
+         _a="$(_o "$RECON")"; _b="$(_o "$d")"
+         if cmp -s "$RECON/self-update-gate.sh" "$d/self-update-gate.sh"; then bad "S3 healthy differential: the two gate copies are identical"
+         elif [ -n "$_a" ] && [ "$_a" = "$_b" ]; then ok "S3 healthy: the staged diff prints byte-identical rows to the base pipeline ($(cut -f1 <<<"$_a" | sort | uniq -c | tr -s ' ' | tr '\n' ';'))"
+         else bad "S3 healthy: the staged diff and the base pipeline disagree on a readable range"; fi; } \
+    || mutreport M-S3
+
+UD=unregistered-drift.sh
+N0='ZZ-PSB-NONE'
+# M-U-base: THE WHOLE BASE LISTING PIPELINE RESTORED, which makes the copy byte-identical to
+# unregistered-drift.sh at the parent release apart from its comments. It is the in-fixture form of
+# "the parent's copy exits 1 on an empty scan set": every U arm must read its base shape at once.
+# WRITTEN STRAIGHT TO A FILE, never through `$( )` or ENVIRON: bash 3.2 mis-scans the body's
+# unbalanced `(` inside a heredoc in a command substitution, and BSD awk joins a backslash-newline
+# inside an ENVIRON value. Measured both ways: the base-line count read 0 each time.
+U_BASE_F="$MUTROOT/u-base-head.txt"
+cat > "$U_BASE_F" <<'EOB' || { echo "FIXTURE ERROR: could not write $U_BASE_F" >&2; exit 2; }
+{ { command -v memo_ls_tree >/dev/null 2>&1 \
+    && memo_ls_tree "$DIST" "$BASE" \
+       | grep -E '^(core/skills/ai-dlc/|core/skills/ai-dlc-setup/|core/team-roles/|core/hooks/|core/schemas/)'; } \
+  || git -C "$DIST" ls-tree -r --name-only "$BASE" -- \
+      core/skills/ai-dlc core/skills/ai-dlc-setup core/team-roles core/hooks core/schemas 2>/dev/null; } \
+  | grep -E '\.(md|sh|json)$' \
+  | while IFS= read -r cp; do
+EOB
+_h="$("$REAL_GREP" -c . "$U_BASE_F")" || _h=0
+[ "$_h" -eq 7 ] || { echo "FIXTURE ERROR: the base listing block is $_h line(s), not 7" >&2; exit 2; }
+U_BASE_PROG='!inb && $0==ENVIRON["START"] {inb=1; while ((getline l < ENVIRON["NEWF"]) > 0) print l; next}
+  inb { if ($0==ENVIRON["END"]) inb=0; next }
+  $0==ENVIRON["DONE_T"] {print "    done"; tail=1; next}
+  tail && ($0 ~ /^#/ || $0=="exit 0") {next}
+  {print}'
+  d="$(START='ud_scan_why=""' END='while IFS= read -r cp; do' NEWF="$U_BASE_F" DONE_T='    done < "$UD_DIFF_TMP/scan-set"' \
+       mut M-U-base "$UD" "$U_BASE_PROG" "  | grep -E '\\.(md|sh|json)\$' \\" 'ud_scan_why' \
+         'ud_scan_why=""' 'while IFS= read -r cp; do' '    done < "$UD_DIFF_TMP/scan-set"' 'exit 0')" \
+    && { score_as M-U-base ud "$d" U1=RC1-NOROW U2=RC1-NOROW U2b=SCANNED U3=RC2-NOROW U4=SCANNED U5=CLOSED-RC1
+         # THE HEALTHY PATH IS BYTE-IDENTICAL TO THE BASE SPELLING, on both worlds that scan a file.
+         # The two sides are asserted to DIFFER first, or the comparison reads the same program twice.
+         for _w in "$UW_OK" "$UW_HU"; do
+           _a="$("$REAL_BASH" "$RECON/$UD" "$_w/dist" "$(cat "$_w/B")" "$_w/consumer" "$(cat "$_w/T")" 2>/dev/null)"
+           _b="$("$REAL_BASH" "$d/$UD" "$_w/dist" "$(cat "$_w/B")" "$_w/consumer" "$(cat "$_w/T")" 2>/dev/null)"
+           if cmp -s "$RECON/$UD" "$d/$UD"; then bad "U healthy differential: the two unregistered-drift.sh copies are identical, so the comparison reads one program twice"
+           elif [ -n "$_a" ] && [ "$_a" = "$_b" ]; then ok "U healthy ($(basename "$_w")): the staged listing prints byte-identical rows to the base pipeline ($(cut -f1 <<<"$_a" | tr '\n' ' '))"
+           else bad "U healthy ($(basename "$_w")): the staged listing and the base pipeline disagree on a world both can scan (tip [$(cut -f1 <<<"$_a" | tr '\n' ' ')] base [$(cut -f1 <<<"$_b" | tr '\n' ' ')])"; fi
+         done; } \
+    || mutreport M-U-base
+# M-U-exit: the explicit `exit 0` deleted. U1 CANNOT kill it -- a staged empty scan set runs the
+# loop zero times and exits 0 without that line -- so its killer is U5, the failed last write.
+  d="$(mut M-U-exit "$UD" '$0=="exit 0" {next} {print}' '    done < "$UD_DIFF_TMP/scan-set"' - 'exit 0')" \
+    && score M-U-exit U5 "$d" \
+    || mutreport M-U-exit
+# M-U-memo: the memo branch's status unread, so a failed memo listing is taken as an empty one and
+# the direct listing is never tried. U2 reads EMPTY -- the silent clear, not the base's rc 1 -- and
+# U2b, the near-miss whose direct listing WOULD have answered, reads EMPTY too: both own it.
+  d="$(DROP1="$N0" DROP2="$N0" OLD='    ud_memo_rc=$?' NEW='    ud_memo_rc=0' \
+       mut M-U-memo "$UD" "$SWAP" '    ud_memo_rc=0' 'ud_memo_rc=$?' '    ud_memo_rc=$?')" \
+    && score_as M-U-memo ud "$d" U2=EMPTY U2b=EMPTY \
+    || mutreport M-U-memo
+# M-U-ext / M-U-pfx: a grep status >1 accepted as "no match", one filter each.
+  d="$(DROP1="$N0" DROP2="$N0" OLD='    [ "$ud_rc" -le 1 ] || ud_scan_why="the file-type filter over the tree listing exited ${ud_rc}"' NEW='    : ZZ-PSB-M-UEXT' \
+       mut M-U-ext "$UD" "$SWAP" '    : ZZ-PSB-M-UEXT' 'the file-type filter over the tree listing exited' \
+         '    [ "$ud_rc" -le 1 ] || ud_scan_why="the file-type filter over the tree listing exited ${ud_rc}"')" \
+    && score_as M-U-ext ud "$d" U3=EMPTY \
+    || mutreport M-U-ext
+  d="$(DROP1="$N0" DROP2="$N0" OLD='      [ "$ud_rc" -le 1 ] || ud_scan_why="the scan-set prefix filter over the cached tree listing exited ${ud_rc}"' NEW='      : ZZ-PSB-M-UPFX' \
+       mut M-U-pfx "$UD" "$SWAP" '      : ZZ-PSB-M-UPFX' 'the scan-set prefix filter over the cached tree listing exited' \
+         '      [ "$ud_rc" -le 1 ] || ud_scan_why="the scan-set prefix filter over the cached tree listing exited ${ud_rc}"')" \
+    && score_as M-U-pfx ud "$d" U4=EMPTY \
+    || mutreport M-U-pfx
+
+# apply.sh: each site's exit read turned off, one copy per site. The other four A arms must stay
+# REFUSED, so a mutant cannot be killed by an arm that watches a different detector.
+AP=apply.sh
+ap_off() { # <mutant> <own-arm> <indent> <line-literal> <staged-token>
+  local d
+  d="$(DROP1="$N0" DROP2="$N0" OLD="$3$4" NEW="${3}if false; then" \
+       mut "$1" "$AP" "$SWAP" "${3}if false; then" "$5" "$3$4")" \
+    && score "$1" "$2" "$d" \
+    || mutreport "$1"
+}
+ap_off M-Aud  Aud  ''       'if [ "$UD_RC" -ne 0 ]; then'         'UD_RC" -ne 0'
+ap_off M-Art  Art  '      ' 'if [ "$rt_rc" -ne 0 ]; then'         'rt_rc" -ne 0'
+ap_off M-Arlp Arlp ''       'if [ "${RLP_RC:-0}" -ne 0 ]; then'   'RLP_RC:-0}" -ne 0'
+ap_off M-Ald  Ald  ''       'if [ "$LD_RC" -ne 0 ]; then'         'LD_RC" -ne 0'
+ap_off M-Ana  Ana  '  '     'if [ -n "$UD_NA" ]; then'            'if [ -n "$UD_NA" ]; then'
+# M-Art-merge: the refusal branch stops emitting the merge row. The row is spelled identically in the
+# refusal branch and the plain branch, so the mutation anchors on what SEPARATES them: the line
+# directly after the refusal test.
+  d="$(mut M-Art-merge "$AP" '{ if (skip && $0=="        say WORKLIST semantic-merge \"$rel\"") { skip=0; next } skip=0 }
+       $0=="      if [ \"$rt_rc\" -ne 0 ]; then" {skip=1} {print}' \
+         '        detector_refused retired-tokens retired-tokens.sh "$rel" "$rt_rc" rt' - \
+         '      if [ "$rt_rc" -ne 0 ]; then' '        detector_refused retired-tokens retired-tokens.sh "$rel" "$rt_rc" rt')" \
+    && { _h="$("$REAL_GREP" -cxF '        say WORKLIST semantic-merge "$rel"' "$d/$AP")" || _h=0
+         if [ "$_h" -eq 1 ]; then score_as M-Art-merge ap "$d" Art=REFUSED-NOMERGE
+         else bad "MUTANT DID NOT APPLY [M-Art-merge]: the plain merge row is present $_h time(s) in the copy, want 1 (the refusal branch's removed, the plain branch's kept)"; fi; } \
+    || mutreport M-Art-merge
 
 echo
 if [ "$fails" -eq 0 ]; then
