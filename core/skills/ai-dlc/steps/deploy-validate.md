@@ -184,10 +184,12 @@ as transient. Every other failure is persistent, including one that
 went green only after the lead acted: that is a fix, and the test is
 recorded under `persistent_failures` with the fix that cleared it.
 `first_run_failures` equals the transient count plus the persistent
-count; a record where it does not is incomplete. A non-empty
-`persistent_failures` is a red smoke run and enters the loop below and,
-when the loop is exhausted, its HARD_BLOCK path. Transient failures do
-not enter the loop, and they are never folded into a pass count.
+count; a record where it does not is incomplete. Every test in
+`persistent_failures` makes the smoke run red and enters the loop below;
+the verdict turns PASSED only on the re-run that follows the loop's fix,
+and when the loop is exhausted its HARD_BLOCK path applies. Transient
+failures do not enter the loop, and they are never folded into a pass
+count.
 
 **Minimum mechanism (Rule 26(c)).** Failure caught: a flat verdict that
 reports a run whose first-run failures were all transient and a run

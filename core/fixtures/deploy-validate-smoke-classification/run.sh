@@ -67,7 +67,7 @@ check() {
   case "$fl" in *"$DEF"*) : ;; *) echo "DEFINITION: the no-action-by-the-lead transient definition is absent from §3" ;; esac
   case "$fl" in *"$INRUN"*) : ;; *) echo "INRUN: the value '$INRUN' is absent from §3" ;; esac
   case "$fl" in *'Every other failure is persistent'*) : ;; *) echo "PERSISTENT: §3 does not route every non-transient failure to persistent" ;; esac
-  case "$fl" in *'persistent_failures` is a red smoke run and enters the loop below'*) : ;; *) echo "LOOP: §3 does not send persistent failures into the fix loop" ;; esac
+  case "$fl" in *'Every test in `persistent_failures` makes the smoke run red and enters the loop below'*) : ;; *) echo "LOOP: §3 does not send persistent failures into the fix loop" ;; esac
   blk="$(deploy_block "$f")"
   for n in 'First-run failures:' 'Transient, cleared on retry:' 'Persistent:'; do
     grep -qF -- "- Smoke tests:" <<<"$blk" || { echo "CHECKPOINT: no Smoke tests line in the Deployment block"; break; }
@@ -136,6 +136,14 @@ mutant "any-retry" \
 mutant "no-inrun" \
   '{ gsub(/in-run retry, same output/, "in-run retry"); print }' \
   "INRUN:" "dropping the in-run retry value is caught"
+
+mutant "no-persistent-routing" \
+  '{ gsub(/Every other failure is persistent,/, "Other failures are judged case by case,"); print }' \
+  "PERSISTENT:" "dropping the every-other-failure-is-persistent rule is caught"
+
+mutant "no-loop-entry" \
+  '{ sub(/^`persistent_failures` makes the smoke run red and enters the loop below;$/, "`persistent_failures` is noted in the gate log;"); print }' \
+  "LOOP:" "cutting persistent failures loose from the fix loop is caught"
 
 mutant "checkpoint-persistent" \
   '/^  - Persistent: \[persistent_failures/{next} {print}' \
