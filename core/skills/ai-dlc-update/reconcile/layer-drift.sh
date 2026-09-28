@@ -21,10 +21,13 @@
 #   consumer-root  the consumer project root (contains .claude/)
 #
 # Output: TSV to stdout — STATUS<TAB>ENTRY<TAB>TARGET<TAB>DETAIL
-# Exit:   0 always (a classifier, not a gate). The CALLER decides; statuses
-#         prefixed HARD- must block `apply` until the operator adjudicates.
-#         Non-zero only when it REFUSED -- usage (2), or an input it could not read (1,
-#         with the reason on stderr) -- never as a finding.
+# Exit:   0 whenever every row was written (a classifier, not a gate). The CALLER decides;
+#         statuses prefixed HARD- must block `apply` until the operator adjudicates.
+#         Non-zero only when it REFUSED -- usage (2), an input it could not read (1, with
+#         the reason on stderr), or a row it could not WRITE (2, with a line carrying
+#         `layer-drift: REFUSED` on stderr; see ld_finish) -- never as a finding. A lost
+#         row is a refusal and not a short clean sheet, because the row lost is as likely
+#         to be the HARD- one as any other.
 #
 # Statuses
 #   HARD-OVERRIDE-BASE-CONSUMER-SHA  base_sha resolves in the CONSUMER repo, so it
@@ -298,14 +301,74 @@ ld_refuse() { # ld_refuse <what did not run> <its exit status>
   exit 1
 }
 
+# EVERY ROW'S WRITE IS COUNTED, AND THE SCRIPT'S EXIT IS DECIDED BY THE COUNT. The row writers
+# used to discard printf's status and the script fell off its last line (list mode: an explicit
+# `exit 0`), so a row that could not be written -- stdout closed, EFBIG on the regular file
+# `apply.sh` stages it to, EPIPE with SIGPIPE ignored -- vanished with rc 0, and `apply.sh` read
+# the truncated `ld.out` as a layer with no HARD- row. Measured on a consumer clone over one
+# pull's range (59 rows healthy, 5 of them HARD-LAYER-ADJUDICATION-MISSING): stdout closed gave
+# rc 0 and 51 `write error` lines with no refusal, and a `head -c` reader cut at 1000..12000
+# bytes gave rc 0 with 2 to 5 of the 5 HARD rows lost every time. The shape is the one
+# `unregistered-drift.sh` ships (its `emit` / `ud_finish`), which is where the reasoning for a
+# COUNTER rather than a flag or a pre-flight probe of stdout is written down: a write that fails
+# MID-STREAM is the case a probe at start cannot see.
+#
+# FOUR WRITERS, AND EVERY ONE OF THEM COUNTS, because a writer that does not is a row that can
+# vanish at rc 0 with the rest of this block in place. W1 `emit` (classify rows; skipped in list
+# mode). W2 `emit_raw`, which writes every HARD-LAYER-ADJUDICATION-MISSING row -- the rows that
+# block `apply`, so an uncounted W2 is the worst of the four. W3 `adj_register_contradictions`'
+# awk, the HARD-REGISTER-CONTRADICTION rows. W4 the --list-adjudications listing, which is the
+# writer in that mode, so the N in its refusal is real there too. Each records into
+# `ld_emit_ok` / `ld_emit_failed` IN THE MAIN SHELL: an increment inside `$( )` or a `| while`
+# counts into a copy that is thrown away, which is why the OVERRIDE-DOUBLE-SHADOW block below
+# is staged to a file rather than piped. `--adjudicated-codes` is not a writer here -- its only
+# reader captures it with `$( )` -- and it exits before any of this runs.
+#
+# THE FIRST FAILED WRITE ENDS THE SCAN. After a failed printf, bash 3.2 keeps the unflushed row
+# in its stdout buffer and that buffer LEAKS into every later `$( )` in this process (measured
+# on `unregistered-drift.sh`, whose `cons="$(consumer_path ...)"` came back holding the leaked
+# row and skipped every remaining file unscanned). So nothing after a failed write is trusted:
+# every writer returns without writing once one has failed, and the two outer per-entry loops
+# and the listing loop open with a break on the count. The refusal then counts the rows whose
+# write SUCCEEDED -- a writer-side count, so a reader that truncates mid-row, as `head -c` does,
+# can hold one row fewer whole than it says.
+ld_emit_ok=0
+ld_emit_failed=0
+# ld_wrote <status> -- the one place a writer's status becomes the count.
+ld_wrote() {
+  if [ "$1" -eq 0 ]; then ld_emit_ok=$(( ld_emit_ok + 1 ))
+  else ld_emit_failed=$(( ld_emit_failed + 1 )); fi
+}
+# ld_finish -- the ONLY healthy-path exit of classify mode and of --list-adjudications (the
+# `exit 1` input refusals and the usage `exit 2`s above keep their own). Every row written: 0,
+# whatever was found. A row lost: the named line on stderr and 2, which `apply.sh`'s
+# `detector_run` reads as a refusal (`DECISION layer-drift-refused`, re-stamp withheld). The line
+# OPENS WITH A NEWLINE because bash's own `printf: write error: ...` precedes it on stderr and a
+# leaked stdout buffer has been measured flushing into fd 2 ahead of it, so the refusal could
+# otherwise land mid-line. A reader keys on the `layer-drift: REFUSED` prefix UNANCHORED
+# (`apply.sh`'s `grep -m1 ': REFUSED'` already does), never on "write error" and never on line 1.
+ld_finish() {
+  if [ "$ld_emit_failed" -gt 0 ]; then
+    printf '\nlayer-drift: REFUSED — a row could not be written to stdout after %s row(s) were; the scan stopped there and its output is INCOMPLETE. Re-run layer-drift.sh.\n' "$ld_emit_ok" >&2
+    exit 2
+  fi
+  exit 0
+}
+
 # emit() is also where the layer conformance adjudication is applied — see the ADJUDICATION
 # block below for why the duty lives HERE and not at the two drift call sites.
 # In list mode the classification row is SUPPRESSED and adj_check still runs: the pass is what
 # produces the subjects, and the listing is the only thing that mode prints. Suppressing here
 # rather than filtering downstream keeps one producer — a `grep -v` over this stream would be a
 # second statement of which rows are keyed, which is the duplication the mode exists to avoid.
+# After a failed write it returns before adj_check too: the duty adj_check would add is a row,
+# and there is no stdout left to carry it.
 emit() {
-  [ "$MODE" = list ] || printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4"
+  [ "$ld_emit_failed" -eq 0 ] || return 0
+  if [ "$MODE" != list ]; then
+    printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4"; ld_wrote $?
+    [ "$ld_emit_failed" -eq 0 ] || return 0
+  fi
   adj_check "$1" "$2" "$3"
 }
 
@@ -885,26 +948,59 @@ adj_check() { # $1 status, $2 entry, $3 target
 }
 
 # The raw printer, for rows adj_check itself emits: routing those back through emit() would
-# recurse, and a blocking row is never itself adjudicable.
-emit_raw() { printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4"; }
+# recurse, and a blocking row is never itself adjudicable. Counted like emit (W2 above): every
+# HARD-LAYER-ADJUDICATION-MISSING row is written here, so this is the writer whose lost row is an
+# `apply` that proceeds.
+emit_raw() {
+  [ "$ld_emit_failed" -eq 0 ] || return 0
+  printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4"; ld_wrote $?
+}
 
 # A contradiction is a property of the REGISTER, not of a row, so it is checked once. Records
 # are compared in FILE ORDER: the later of two differing verdicts under one key is the one that
 # must declare what it overturns.
+#
+# W3 above: the awk writes its rows straight to stdout, so its EXIT is the write status, and
+# `/usr/bin/awk` exits 2 on a closed stdout and on EPIPE with SIGPIPE ignored (measured, both).
+# A FAILED awk counts as ONE failure unit, because how many rows it printed before its write
+# failed is not recoverable from here; N in the refusal is therefore a floor when this writer is
+# the one that failed. A clean awk adds the rows it printed, not one unit -- the usual register
+# has no contradiction, and a unit per run would put a row into every N that no row earned. The
+# awk's OWN status is read, from PIPESTATUS,
+# and not the pipeline's: under pipefail the pipeline answers with the rightmost non-zero stage,
+# so an unparseable register (jq non-zero, awk clean) would read as a lost row, and jq failing
+# on the EPIPE the awk's failure causes upstream says nothing the awk has not already said. What
+# a failed jq means for the register is unchanged by this. The call site is in the main shell,
+# which is what makes the count land.
 adj_register_contradictions() {
+  [ "$ld_emit_failed" -eq 0 ] || return 0
   adj_active || return 0
   [ -f "$ADJ_REGISTER" ] || return 0
   command -v jq >/dev/null 2>&1 || return 0
+  local _rc=0 _n=0
   jq -r '[(.clause // ""), (.entry // ""), (.subject_digest // ""), (.verdict // ""), (.supersedes // ""), (.reason // "")] | @tsv' \
     "$ADJ_REGISTER" 2>/dev/null \
-  | awk -F'\t' -v OFS='\t' '
+  | awk -F'\t' -v OFS='\t' -v ldn="$LD_T/contradiction-rows" '
       { key = $1 "\x01" $2 "\x01" $3 }
       seen[key] && prev[key] != $4 && ($5 == "" || $6 == "") {
         print "HARD-REGISTER-CONTRADICTION", $2, $1,
           "the register states two different verdicts under one key (" prev[key] " then " $4 ") and the later record declares no supersedes plus reason. Undeclared, a lookup answers with whichever record is read and the blocking half of this tier depends on file order. Retraction is available; declare it."
+        nrow++
       }
       { seen[key] = 1; prev[key] = $4 }
+      END { print nrow + 0 > ldn }
     '
+  _rc="${PIPESTATUS[1]}"
+  # A clean awk adds the rows it printed (its END writes the count beside the other staged files),
+  # so N stays "rows whose write returned 0"; a failed one is the single failure unit above. An
+  # unreadable count on a clean exit adds nothing, which can only make N a floor.
+  if [ "$_rc" -eq 0 ]; then
+    _n="$(cat "$LD_T/contradiction-rows" 2>/dev/null)" || _n=0
+    case "$_n" in ''|*[!0-9]*) _n=0 ;; esac
+    ld_emit_ok=$(( ld_emit_ok + _n ))
+  else
+    ld_wrote "$_rc"
+  fi
 }
 # Not in list mode: it prints a HARD- row in the classifier's four-field shape, and the listing
 # is a five-field stream with one producer. The contradiction is a property of the register and
@@ -1269,6 +1365,9 @@ _lw_rc=0
 layer_files "$OVR_DIR" > "$LD_T/overrides" || _lw_rc=$?
 [ "$_lw_rc" -eq 0 ] || ld_refuse "the walk of $OVR_DIR" "$_lw_rc"
 while IFS= read -r f; do
+  # A failed write ends the scan here -- see ld_emit_failed. An entry scanned after it would run
+  # its `$( )` captures against a leaked stdout buffer, and emit nothing anyway.
+  [ "$ld_emit_failed" -eq 0 ] || break
   [ -n "$f" ] || continue
   entry="$(rel "$f")"
   shadows="$(fm "$f" shadows)"; base_sha="$(fm "$f" base_sha)"
@@ -1633,18 +1732,30 @@ if [ -n "$shadow_keys" ]; then
   # `sort -u` first: one entry declaring the same anchor twice is a different (and harmless)
   # shape, and counting it as a collision with itself would be a false positive nothing could act
   # on. The duplicate must be across two DIFFERENT entries.
+  #
+  # STAGED, AND BOTH LOOPS RUN IN THE MAIN SHELL. This block used to read `| while | while`, so
+  # its emit ran in a subshell and its write status counted into a copy that was thrown away --
+  # a lost OVERRIDE-DOUBLE-SHADOW row exited 0 with every other writer counted. The pairs are
+  # staged under $LD_T and the per-entry split reads a here-string, so no emit in this block can
+  # run where ld_emit_failed cannot see it. The producer's status is read, as at every other
+  # staged site: a grouping that did not run reads as "no collision", the same output a clean
+  # layer produces.
+  _ds_rc=0
   printf '%s' "$shadow_keys" | sort -u | awk -F'\t' '
     { if (k[$1]) { k[$1] = k[$1] ", " $2 } else { k[$1] = $2; lbl[$1] = $3 }; n[$1]++ }
     END { for (key in n) if (n[key] > 1) printf "%s\t%s\t%d\n", lbl[key], k[key], n[key] }
-  ' | sort | while IFS="$TAB" read -r label entries cnt; do
+  ' | sort > "$LD_T/double-shadow" || _ds_rc=$?
+  [ "$_ds_rc" -eq 0 ] || ld_refuse "the grouping of shadow targets for OVERRIDE-DOUBLE-SHADOW" "$_ds_rc"
+  while IFS="$TAB" read -r label entries cnt; do
+    [ "$ld_emit_failed" -eq 0 ] || break
     # One row PER PARTICIPATING ENTRY: the report is read per entry, and a single row filed under
     # one of the two leaves the other reading clean on the very finding it is half of.
-    printf '%s\n' "$entries" | tr ',' '\n' | sed 's/^ *//' | while IFS= read -r one; do
+    while IFS= read -r one; do
       [ -n "$one" ] || continue
       emit OVERRIDE-DOUBLE-SHADOW "$one" "${label%%#*}" \
         "${cnt} override entries declare the same shadow target '${label}': ${entries}. At load time both bodies claim that span and precedence picks one silently, so which body governs is an ordering accident no entry declares. Every upstream commit touching the span also invalidates BOTH base_sha stamps, and reconciling one of them looks complete. Narrow one entry's shadows: to the sub-heading it actually rewrites, or merge the two. Report-only -- a deliberate split can be correct, but it has to be stated in the bodies."
-    done
-  done
+    done <<< "$(printf '%s\n' "$entries" | tr ',' '\n' | sed 's/^ *//')"
+  done < "$LD_T/double-shadow"
 fi
 
 # ---------------------------------------------------------------------------
@@ -1672,6 +1783,7 @@ _lw_rc=0
 layer_files "$EXT_DIR" > "$LD_T/extensions" || _lw_rc=$?
 [ "$_lw_rc" -eq 0 ] || ld_refuse "the walk of $EXT_DIR" "$_lw_rc"
 while IFS= read -r f; do
+  [ "$ld_emit_failed" -eq 0 ] || break   # as in the overrides loop
   [ -n "$f" ] || continue
   entry="$(rel "$f")"
   hooks="$(fm "$f" hooks | awk '{print $1}')"
@@ -2044,11 +2156,15 @@ if [ "$MODE" = list ]; then
     rm -f "$ADJ_LIST_FILE"
     ld_refuse "the subject dedupe of the adjudication listing" "$_al_rc"
   fi
+  # W4: this mode's writer, counted like the classify rows, so the N in its refusal is real. A
+  # failed row ends the listing -- the break, and the count line below is withheld: a count of
+  # subjects LISTED beside a listing that is missing some is the short-reads-as-complete shape.
   while IFS="$TAB" read -r _e _t _d _c; do
+    [ "$ld_emit_failed" -eq 0 ] || break
     [ -n "$_e" ] || continue
     _n=$((_n + 1))
     if [ "$_d" = "-" ]; then
-      printf 'ADJUDICABLE\t%s\t%s\t(unkeyable: entry or target unreadable)\t(none)\t%s\n' "$_e" "$_t" "${_c:-(unmapped)}"
+      printf 'ADJUDICABLE\t%s\t%s\t(unkeyable: entry or target unreadable)\t(none)\t%s\n' "$_e" "$_t" "${_c:-(unmapped)}"; ld_wrote $?
       _without=$((_without + 1)); continue
     fi
     _v="$(adj_verdict "$_d")"; _rc=$?
@@ -2065,7 +2181,7 @@ if [ "$MODE" = list ]; then
       # a contradiction when it is a duplicate line.
       _v="$(printf '%s\n' "$_v" | sort -u | grep -v '^$' | tr '\n' ',' | sed 's/,$//')"; _withv=$((_withv + 1))
     fi
-    printf 'ADJUDICABLE\t%s\t%s\t%s\t%s\t%s\n' "$_e" "$_t" "$_d" "$_v" "${_c:-(unmapped)}"
+    printf 'ADJUDICABLE\t%s\t%s\t%s\t%s\t%s\n' "$_e" "$_t" "$_d" "$_v" "${_c:-(unmapped)}"; ld_wrote $?
     # THE DEDUPE KEY IS THE SUBJECT, NOT THE WHOLE LINE, AND THAT IS A CORRECTION THIS CHANGE
     # FORCED. `sort -u` over the accumulated rows was a subject dedupe only while every column
     # was a property of the subject. The clause is a property of the ROW: one entry can be keyed
@@ -2077,6 +2193,7 @@ if [ "$MODE" = list ]; then
     # is: showing one of two would hide the thing the operator opened the listing to find.
   done < "$LD_T/adj-list-subjects"
   rm -f "$ADJ_LIST_FILE"
-  echo "layer-drift --list-adjudications: ${_n} keyed subject(s) in ${BASE}..${THEIRS} — ${_withv} with a recorded verdict, ${_without} without. A subject is any row this pass asked adj_digest to key; ZERO means the pass produced no keyed row, not that the layer is clean." >&2
-  exit 0
+  [ "$ld_emit_failed" -eq 0 ] && echo "layer-drift --list-adjudications: ${_n} keyed subject(s) in ${BASE}..${THEIRS} — ${_withv} with a recorded verdict, ${_without} without. A subject is any row this pass asked adj_digest to key; ZERO means the pass produced no keyed row, not that the layer is clean." >&2
+  ld_finish
 fi
+ld_finish
