@@ -62,6 +62,13 @@ and `BL-358`'s write counter could not see it, because no row write failed.
   already renders that detector's refusal in its own section, and two fixture arms pin the
   region's count (`reconcile-blocking-list` Assertion 6, `reconcile-emit-report` V-D). This was
   the first of the two findings `BL-359` carried, and it closes here rather than being filed.
+- **The override anchor and title reads run in the C locale.** Once their status was read, a
+  single Latin-1 byte ahead of the match made awk abort with rc 2 in a UTF-8 locale, so the run
+  refused where 0.657.0 had quietly misclassified. `anchor_arm` takes `LC_ALL=C` at its
+  `layer-drift.sh` call site, because I40 binds its body byte-identical to
+  `validate-layer-entries.sh`'s copy. `heading_text_for` carries it inside. `section_of` and
+  `span_of` already ran under it. None of the reference consumer's 128 core `.md` blobs aborts
+  either way.
 - **Healthy output is byte-identical to 0.657.0.** That covers classify, `--list-adjudications`,
   `--adjudicated-codes` and the full `emit-report.sh` render, including stdout, stderr and rc,
   over two consumer ranges, d1c72fa9..c16d83ce and 7b32fb1a..d1c72fa9.
@@ -85,6 +92,24 @@ and `BL-358`'s write counter could not see it, because no row write failed.
   spelling of the fix that stages the contract to a file in place of the pipe. It does
   not observe the per-override sites or the `hard-blockers.sh` half; the
   `procsub-staged-refusal-boot` fixture carries those.
+- **`procsub-staged-refusal-boot` gains nine cells, each run against both engines.** Every cell
+  runs on this tree and on `a0a9c556`'s engine in the same invocation. The cells cover:
+  - the contract over the limit in classify mode, with a cold memo and with a warm one;
+  - the contract over the limit in `--adjudicated-codes` mode, with a cold memo;
+  - a shadow target over the limit, cold and warm;
+  - `section_of`'s own mktemp failing;
+  - an `awk` stub that empties only the code set;
+  - `hard-blockers.sh` given `--ld-rows` with `--ld-rc 2`, and given `--ud-rows` with
+    `--ud-rc 2`.
+
+  Seven mutants each die on a named cell. The cells that could not otherwise fire at all
+  are the warm-memo and `section_of` ones. A cold memo refuses at the read, before any
+  staging write or `section_of` call. A spelling arm holds the file at zero non-comment `<<<`
+  lines; it fires on a seeded offender and stays quiet on a commented one. A cell reads
+  INCONCLUSIVE only when the base engine did not hit a here-string failure. It never keys on the
+  bash version. `L5-pre`'s tip shape is now the contract refusal, and `layer-adjudication-tier`'s
+  `M10A` mutant is re-anchored on the new `adj_clause_of` line. The fixture's loaded cost rose
+  about 16%.
 
 Two things `BL-359` carried are not closed here. The W3 contradiction-awk count and the
 double-shadow grouping `sort` refusal still have no fixture cell. The same here-string class
