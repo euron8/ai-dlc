@@ -4459,6 +4459,21 @@ verify: manual
 
 ## BL-358 — `layer-drift.sh` discards every row write's status and exits 0, so a truncated staged `ld.out` reads as a clean layer to `apply.sh`
 
+**LANDED (v0.657.0, verified 4592eda6).**
+Every stdout writer counts its status, one `ld_finish` exits 2 with a `layer-drift: REFUSED` line on
+a lost row, and `apply.sh` renders that as `DECISION layer-drift-refused`. The receipt below
+builds a two-row world whose LAST row is `HARD-LAYER-ADJUDICATION-MISSING` (written by `emit_raw`)
+and cuts stdout 40 bytes short of row 1's end with SIGPIPE ignored. The reader exits on row 1's
+bytes, so the write that fails is the HARD row's; the tip's refusal reads `after 1 row(s)`. A cut
+INSIDE the HARD row does not fault: the whole 1197-byte output fits the pipe buffer before the
+reader exits, and the tip exits 0. The receipt scores 0 on `4592eda6`, 1 on `a0a9c556`, 1 on a
+pre-flight stdout probe with the per-write count removed, and 1 on an `emit_raw` that does not
+count its write, 20 of 20 reps each. A reworded refusal keeping the `layer-drift: REFUSED` prefix
+scores 0, and one that drops the prefix scores 1. It does not observe the loop breaks or the
+double-shadow restaging; `procsub-staged-refusal-boot` carries those. Losing the timing only turns
+a fixed tree STILL-LIVE, never a broken one closed. It uses no `ulimit -f`, because the engine's
+here-strings share that limit.
+
 **DEFECT.** Found by the batch 165 contract adversary on the `BL-357` fix; out of that release by
 its recommendation. It discharges no consumer candidate. The class `BL-357` closed for
 `unregistered-drift.sh` is live in its sibling: `emit()` at
@@ -4492,4 +4507,4 @@ so the two change together); on the consumer's current range the re-stamp is wit
 outstanding WORKLIST rows on both engines, so the stamp cannot discriminate a refusal from a clean
 run there — the `DECISION <detector>-refused` row is the signal.
 
-verify: manual
+verify: sh s=core/skills/ai-dlc-update/reconcile/layer-drift.sh; [ -f "$s" ] || exit 9; w="$(mktemp -d)" || exit 9; D="$w/d"; C="$w/c"; K=core/skills/ai-dlc; E="$C/.claude/skills/ai-dlc/extensions"; mkdir -p "$D/$K/steps" "$D/core/schemas" "$E" "$C/.claude/skills/ai-dlc/steps" || exit 9; printf 'clauses:\n  - id: LC-E4\n    level: ADJUDICATED\n    code: EXTENSION-HOOK-DRIFT\n' > "$D/$K/layer-contract.yaml"; printf '{\n  "properties": {\n    "verdict": {\n      "enum": [\n        "still-additive",\n        "contradicts-core",\n        "retire"\n      ]\n    }\n  }\n}\n' > "$D/core/schemas/layer-adjudication-register.json"; printf '# Demo\n\n## Gamma\n\nbase body\n' > "$D/$K/steps/demo.md"; g() { git -C "$D" -c user.email=r@r -c user.name=r -c commit.gpgsign=false "$@"; }; { g init -q && g add -A && g commit -qm b; } >/dev/null 2>&1 || exit 9; B="$(git -C "$D" rev-parse HEAD)"; cp "$D/$K/steps/demo.md" "$C/.claude/skills/ai-dlc/steps/demo.md"; printf 'theirs body\n' >> "$D/$K/steps/demo.md"; { g add -A && g commit -qm t; } >/dev/null 2>&1 || exit 9; T="$(git -C "$D" rev-parse HEAD)"; printf -- '---\nkind: check\nhooks: steps/demo.md\nreason: r\n---\n\n### 901. [ext:x] X.\n\nBody.\n' > "$E/x.md"; bash "$s" "$D" "$B" "$T" "$C" > "$w/open" 2>/dev/null || exit 1; [ "$(awk -F'\t' 'END{print $1}' "$w/open")" = HARD-LAYER-ADJUDICATION-MISSING ] && [ "$(wc -l < "$w/open" | tr -d ' ')" = 2 ] || exit 9; n=$(( $(head -n 1 "$w/open" | wc -c) - 40 )); ( trap '' PIPE; bash "$s" "$D" "$B" "$T" "$C" 2> "$w/err" | head -c "$n" > "$w/cut"; exit "${PIPESTATUS[0]}" ); rc=$?; [ "$(wc -c < "$w/cut" | tr -d ' ')" = "$n" ] || exit 9; [ "$rc" -eq 2 ] && grep -q ': REFUSED' "$w/err"

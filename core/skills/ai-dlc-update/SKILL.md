@@ -888,6 +888,12 @@ prose is itself generated rather than composed.
      key and the later record declares no `supersedes` plus `reason`. **Blocks `apply`**,
      because a lookup would otherwise answer with whichever record was read last.
    - `EXTENSION-HOOK-MISSING`, `OVERRIDE-OK`, `EXTENSION-OK` → as named.
+   - **Exit 2 with `layer-drift: REFUSED — a row could not be written to stdout after N row(s)
+     were`** → the scan stopped at that write, and every entry after it went unscanned. The rows
+     you have are NOT the result, and a missing `HARD-` row is not an absence. Re-run it with a
+     writable stdout. `apply.sh` renders this exit as `DECISION layer-drift-refused`. Exit 2 with
+     a `usage:` line, or exit 1 with a reason, is a refusal to start. Any other run exits 0,
+     whatever it found.
 
 3d. **Unregistered core drift — the layer system's blind spot.** `layer-drift.sh`
    walks `overrides/` and `extensions/`. A core file edited **in place** appears in
@@ -1451,6 +1457,9 @@ prose is itself generated rather than composed.
    accepts the risk per entry. `apply` authorizes writes; it does not authorize
    proceeding on an undecidable override — the same distinction the deletion gate
    below draws. Never infer that an unresolvable base means "unchanged."
+   A layer-drift run that exited non-zero reported no `HARD-` status because it did not finish,
+   not because there is none: exit 2 with a `layer-drift: REFUSED` line means a row could not be
+   written. Re-run it before reading this gate as clear.
 
    **Mechanical union gate — the driver, not memory.** `apply` may write only after BOTH hold:
    (1) `reconcile/emit-report.sh --verify <report> <dist> <base> <consumer> <theirs>` exits 0 — the
@@ -1660,7 +1669,8 @@ prose is itself generated rather than composed.
    conflict markers remain, so a stamp cannot outrun the merge.
 
    Then **re-run `layer-drift.sh` and `unregistered-drift.sh` and require ZERO `HARD-*`
-   rows.** Do not carry forward your memory of having discussed them: the re-run is the
+   rows from runs that both exited 0.** Either one exits 2 with a `: REFUSED` line when a row
+   could not be written, and its short output is then not a zero. Do not carry forward your memory of having discussed them: the re-run is the
    evidence, and re-stamping is what makes it pass. A `HARD-` status that clears because
    you decided it was fine is the check-that-cannot-fail defect, in the tool built to
    prevent it.
