@@ -15,6 +15,85 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.659.0] - 2026-09-28
+
+Three gaps the reference consumer filed from sprint 314 are closed. A story that closes `done`
+while it still owes acceptance criteria to deploy-validate now says so in `sprint-status.yaml`,
+and `sprint-status.sh close` refuses to close the sprint over it. A smoke run's evidence now
+separates failures that cleared on an unchanged retry from failures that stayed red. And a scope
+split that the operator ratifies at `route.md` Step 6 is written to the carry-over backlog in the
+same session, where Check 34 can resolve it.
+
+### `PC-S314-SPRINT-STATUS-NO-DEFERRED-ACS-MARKER-EXISTENTIAL-ACS-INVISIBLE-AT-DONE` — `deferred_acs` marks a `done` story that still owes ACs, and `close` refuses over it
+
+`sprint-status.yaml` had no field for an acceptance criterion deferred to deploy-validate §4b, so
+a story that closed gate-3 `done` with two such ACs open read exactly like a fully closed story.
+On the consumer's sprint 314 this was true of three stories, not the one the filing named; the
+gate log discharged only one of them.
+
+- **`deferred_acs` is an optional story field with ONE spelling**, a single-line inline list:
+  `deferred_acs: [AC5, AC6]`. `[]` and an absent field both mean nothing is owed. The shipped
+  story grammar reads a block list (`deferred_acs:` then `- AC5` lines) as an empty value and a
+  multi-line flow list as `[AC5,`, so `check-stories` reports either shape as a FINDING rather
+  than letting it read as "nothing owed".
+- **`check-stories` compares `deferred_acs` across the two canonical views** the way it compares
+  `status`, prints a `DEFERRED` line for each story that owes ids, and REPORTS, without changing
+  its exit, a `done` story whose story file declares `live_ops` or `manual_operator` ACs in
+  `layered_ac_count` while its entry carries no `deferred_acs` field. That is the writer-forgot
+  state, and it is a report because some such ACs are satisfied at dev time.
+- **`sprint-status.sh close` exits 3 while any story in any view owes or carries a malformed
+  `deferred_acs`**, and it checks every view before its write loop, so a refusal writes neither
+  view.
+- **The writers are named.** `code-reviewer.md` writes the field in both views when it writes
+  `done`, from QA's recorded deferral predicates. deploy-validate §4b clears an id when its
+  predicate runs green. A re-deferral files the AC as a `CO-S<N>-<descriptor>` carry-over item,
+  records that id under `deferred_ac_discharge`, and only then clears it — so the sanctioned
+  re-deferral path cannot wedge `close`.
+- **The consumer's live state is unaffected.** Its two views and its sprint-314 stories give the
+  same `check-stories` PASS line before and after (8 comparisons, 0 findings), plus three REPORT
+  lines for stories 1.2, 1.3 and 1.4; `close` on a legacy envelope exits 0 both ways.
+
+### `PC-S314-DEPLOY-VALIDATE-SMOKE-EVIDENCE-NO-TRANSIENT-PERSISTENT-CLASSIFICATION` — smoke evidence splits first-run failures into transient and persistent
+
+`deploy-validate.md` §3 recorded one flat smoke verdict, so 67 failures that cleared on a retry
+while a rollout finished, plus one that stayed red, read the same as one real failure.
+
+- **The `smoke_run_evidence` record carries three fields**: `first_run_failures`,
+  `transient_failures_cleared_on_retry` (the count, the test ids or a path to them, and where the
+  clearing retry is recorded — `in-run retry, same output` when the harness retries inside the
+  run), and `persistent_failures` (the ids, verbatim).
+- **A failure is transient only when a retry cleared it with no action by the lead between the
+  runs.** Environment settling counts. Every other failure, including one that went green only
+  after the lead acted, is persistent, makes the run red, and enters the existing fix loop and
+  its HARD_BLOCK path.
+- **The Production Validation Checkpoint's `Deployment` block reports the split**, and
+  gate-validation Check 8 names the three fields.
+- **The new `deploy-validate-smoke-classification` fixture pins the section** in both install
+  layouts, and exits 2 when the step file is absent.
+
+### `PC-S314-ROUTE-STEP6-RATIFIES-PHASE-SPLIT-WITHOUT-DURABLE-BACKLOG-WRITE` — Step 6 files every deferred part of the ask, and Check 34 resolves it
+
+`route.md` Step 6 asks the operator about any part of the ask not taken this sprint, but the only
+record of the answer was the lead's own question text, which no hash covers and no later step
+reads. The deferred phase of the consumer's sprint-314 phased split was filed nowhere until
+sprint review noticed.
+
+- **Step 6 appends each deferred part to `carry-over-backlog.md` as its own
+  `### CO-S<N>-<DESCRIPTOR>` item before leaving the step**, in the format
+  `carry-over-evaluation.md` owns, and records `scope_deferred_items: none | [ids]` in the
+  routing record.
+- **`validate-scope-confirmation.sh` (Check 34) resolves every listed id** to a `### <id>`
+  heading in the live backlog or `carry-over-backlog-archive.md` whose status is anything but
+  CLOSED, in either status spelling. It reads the whole value with its own extractor, because the
+  existing `field_of` keeps only the first id of a list. It takes a new `--backlog` flag.
+- **An absent `scope_deferred_items` is legacy only by a date no agent writes.** The capture
+  hook's timestamp on the answer that `scope_confirmed_cite` resolves to is compared with the
+  first consumer commit stamping 0.659.0 or later. An older answer, or no such commit, is PENDING;
+  a newer answer with the field absent FAILS. A recurring answer hash is dated by its newest entry.
+- **The arm cannot verify that `none` is honest.** Whether a part of the ask was deferred is
+  intent, recorded only in the lead's question text, and no act separates the two.
+- **The consumer's archived sprint-314 record reads PENDING under the new arm, not FAIL.**
+
 ## [0.658.0] - 2026-09-28
 
 `layer-drift.sh` no longer uses a here-string anywhere, and it refuses when an input it reads
