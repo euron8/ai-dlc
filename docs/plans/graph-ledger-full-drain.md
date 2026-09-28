@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 608..652. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 605..681. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,67 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 164 SHIPPED `v0.654.0` (`3c606fe2`, #884) AND `v0.655.0` (`c16d83ce`, #885), CLOSING `BL-353`
+AND `BL-354`. NEITHER DISCHARGES A CONSUMER CANDIDATE.** It was invoked by the operator, who chose
+the subject on a marked recommendation. The opening sweep matched batch 163 on every figure: live 25
+on five qualifying refs, unfiled 12 (the same ids and dates), worklist 5, TERMINAL 147, ledger md5
+`ded61c90…`, every control at its expected value. **The consumer pulled 0.643.0 -> 0.653.0 during
+the batch's opening** (reconcile `16203baf`, #1119, on `ai-dlc/carry-over/telv3-upgrade`), so the
+gap opened at ZERO and PENDING is empty. Live **100 -> 100** (two closed, `BL-356` and `BL-357`
+filed), archive **254 -> 256**.
+
+**`BL-353`: AN UNREADABLE OR NON-REGULAR `pending.md` REFUSES AT CHECKS 2 AND 2A.** All three
+escalation validators, `--in-force` included, refuse with `REFUSED:` on stderr and exit 2; at
+0.653.0 all four invocations exited 0 with an ordinary OK line on a chmod-000 file carrying an
+out-of-vocabulary entry. Healthy output is byte-identical on the consumer's real 418 KB
+`pending.md`. Every caller already read a non-zero exit as a refusal. The contract adversary found
+the fixtures' mutant anchors on the exact lines being changed, the `is not a pass` prose cell that
+the new sentence had to avoid, and that `git cat-file -e` returns 128 for absent, bad-ref and
+no-repo alike, so the retired-tokens split moved to `ls-tree`.
+
+**`BL-354`: THE CENSUS REFUTED THE BUILD ORDER BEFORE IT STARTED.** Instrumenting `apply.sh`'s four
+detector calls across the ten fixtures that drive it showed `unregistered-drift.sh` exiting 1 on 96
+of 128 healthy invocations: its scan pipeline ends in `grep | while` under `pipefail` with no exit
+line, so an empty scan set became the script's exit. An rc-keyed refusal row would have fired on
+most of the suite. Release B fixed that producer first, then read every detector's exit as
+`DECISION <detector>-refused`. Healthy `apply.sh` output is byte-identical over three real consumer
+ranges. **Measure what the existing population already returns before keying a new row on it.**
+
+**THE RELEASE B TIP ADVERSARY FOUND THE CLASS THE FIX OPENED**, filed as `BL-357`: staging stdout
+to a file adds a WRITE that nothing reads, and the explicit `exit 0` blesses a failed one. Forced
+with `ulimit -f`, base's pipe kept the HARD drift row and tip lost it. Fixture arm U5 pins that
+shape as correct. `BL-356` carries the three exit-0 refusals left in the detectors.
+
+Both gates ran at `AI_DLC_FIXTURE_NO_SKIP=1`: 22 phases, 0 FAIL, 213 ok, the changed fixtures ok
+by name against an impossible-name control of 0, `ls-remote` matching, and each squash tree
+identical to its gated tip. **A read-set trace may be owed**: the five Release A fixtures now stage
+pre-fix copies from `git show d1c72fa9:…`; `procsub-staged-refusal-boot` already lists its six
+engine files. Run `sudo bash core/scripts/derive-fixture-readsets.sh --list "<name>"` for
+`escalation-status-vocabulary`, `escalation-citation`, `suppression-lifetime`,
+`retired-layer-contract` and `procsub-staged-refusal` on a checkout of `origin/main`, and confirm
+only their rows moved.
+
+**THE IMPOSSIBLE-ID CONTROL `PC-S999-NEVER` IS SPENT.** It prints `0.440.0`, not `UNNAMED`, because
+this repo's own prose about it has been committed since. Pick a token, prove it absent, then trust
+the zero beside it.
+
+**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
+- The unfiled set holds no new core filing. `BL-357` (DEFECT: a failed staged write reads as a
+  clean scan) is the strongest distribution-internal entry and continues this batch's thread;
+  `BL-356` is next.
+- `BL-230` needs a mechanism for E1, E2 and E9.
+
+**THE DELIVERY GAP IS TWO RELEASES.** The consumer is at 0.653.0 against `VERSION` 0.655.0. Five
+bootstrapping files changed in `d1c72fa9..origin/main` (`apply.sh`, `self-update-gate.sh`,
+`unregistered-drift.sh`, `retired-tokens.sh`, `retired-layer-contract.sh`), so **the pull that
+delivers them runs under the installed 0.653.0 engine and their refusals protect only the pull
+after it.** 0 of 17 `core/` rows are mode-only. PENDING is empty: the one discharged id still live
+upstream was first named at 0.648.0, below the installed version. The banked ruling stands: report
+the gap and write no runbook. The consumer's porcelain moved 7 -> 19 from its own sprint 314; its
+ledger md5 did not move.
+
+Batch 163's next-work list and delivery gap are spent: batch 164's block above replaces both.
 
 **BATCH 163 SHIPPED FOUR RELEASES AND CLOSED `BL-348` AND `BL-311`. NONE DISCHARGES A CONSUMER
 CANDIDATE.** `v0.650.0` (`07b4ed39`, #878), `v0.651.0` (`88415ab2`, #879), `v0.652.0` (`1d2a0efa`,
@@ -540,83 +601,6 @@ so the fix ships alone.
 mode-only. One PC id is PENDING, `PC-S313-EMIT-REPORT-E2-IS-A-FOURTH-POOL-FLAKE-ARM`, and it stays
 open upstream by its own text. The banked ruling stands: report the gap and write no runbook. The
 consumer's porcelain read 12 at the close, from its own pull and session.
-
-**BATCH 155 SHIPPED `v0.640.0` (`7089ccb8`, #859) AND `v0.641.0` (`36c3a35b`, #860), CLOSING
-`BL-313`, `BL-314`, `BL-315` AND `BL-317`, AND FILING `BL-316`.** It was invoked by peer
-handoff. The consumer had filed nothing since 2026-09-23, and the ledger md5 stayed `3e62c07e…`.
-The one id ahead of the consumer's `main` is `PC-S313-EMIT-REPORT-E2-IS-A-FOURTH-POOL-FLAKE-ARM`,
-which `BL-230` already owns. The PC-backed worklist had 6 rows. `BL-312` joined it, and the other
-five still disqualify themselves or need the pool.
-
-**THE UNFILED SET WAS SCORED, AND NONE OF IT IS UPSTREAM WORK.** 13 live ids are cited by no
-entry. Two were already settled. The other 11 carried `NOT-UPSTREAM` from 0.373.0 and had never
-been re-scored. An opus hand re-derived each against today's tree, routing every named path
-through `core-paths.sh --is-core` under consumer spelling, with core and not-core controls in the
-same run. An adversary then attacked the verdicts and refuted none. One id,
-`PC-S297-FFCLUSTER-SHA-STALE`, has an upstream half that 0.571.0 (`BL-022`) had already fixed, so
-it is cited ALREADY-FIXED in `v0.640.0`'s release commit. That fix is a prose mandate. No script
-counts the fix-forward cluster, and no live entry tracks the step's "Remove when" clause.
-
-**THE ADVERSARY FOUND A CLASS WHILE LOOKING FOR THE SAME DEFECT IN CORE.** An `eval` inside a
-`while read … done < file` loop inherits the loop's input, so a command that reads stdin swallows
-everything after it. The contract adversary then found two more sites and a BLOCKER in my own
-design: the site-A fix would have broken mutant M2 in `trunk-audit-mutants`, which anchors on that
-exact line. It also found that `</dev/null` alone would let `grep -c X` derive 0 from nothing. So
-site B gained a `READS-STDIN` refusal that EXECUTES the command, which is 21 of 22 correct, with
-`diff f.txt -` as the known miss.
-- `v0.640.0`: `--audit-trunk` (`BL-313`), `validate-artifact-derivations.sh` (`BL-314`),
-  `backlog-reverify.sh` (`BL-315`).
-- `v0.641.0`, alone because it is bootstrapping: `ledger-reverify.sh` at both receipt sites
-  (`BL-317`). An fd-3 copy matched the fixed engine byte for byte on 111 rows, so the loop has no
-  third reader.
-None is reachable on the consumer today.
-
-**MY FIRST 0.640.0 PUSH WAS BLOCKED BY THE RELEASE TRIPLE**, because a hand's CHANGELOG commit
-added the `0.640.0` heading while `VERSION` read 0.639.1. I folded it into the release commit.
-The re-push ran at `AI_DLC_FIXTURE_NO_SKIP=1`: 21 phases PASS and 1 SKIP (the pole, pool width 4
-against a baseline of 12), 203 ok and 0 FAIL. The four changed fixtures read `ok` by name against
-an impossible-name control of 0, and `ls-remote` matched.
-`v0.641.0` shipped alone, gated the same way: 21 PASS and 1 SKIP, 203 ok and 0 FAIL, with
-`ledger-reverify` read `ok` by name at a loaded cost of 292s. Each squash tree was byte-identical
-to its gated commit. The exit-0 receipt set is 9 before and 9 after, compared by identity. Live
-**75 -> 76** (five filed, four closed), and the archive moved **236 -> 240**.
-
-**`BL-316` (DEFECT) WAS FILED FROM A HARNESS OVERRIDE THE OPERATOR SAW IN THE CONSUMER.** Claude
-Code ended a turn because a Stop hook had blocked it 9 times. `ai-dlc-continue.sh` counts a block
-toward its back-off only when the previous block was less than 30s earlier. A lead doing real work
-between stop attempts is therefore never released. The consumer's log reads `BLOCKED` 34 and
-`BACKOFF` 0. Reproduced with a shimmed clock: at 5s and 22s spacing the hook backs off, and at 45s
-and 89s it blocks every stop. The receipt exits 1 at base and 1 on a 120s window. It exits 0 on the
-`stop_hook_active` design the hook's header rejected, so a green receipt is a floor. **The fix
-needs its own contract adversary before a builder.**
-
-**`BL-230`'S POOL DIED PARTWAY, AND ITS NULL CANNOT DISCRIMINATE.** The operator cleared the
-disk, so the pool ran. Its hand stalled after 66 of 156 runs (44 tip, 22 base), and all 66 passed.
-At batch 151's rates that predicts 0.46 failures at base and 0.8 at tip, both below one, so it is
-evidence of nothing. It is recorded in the entry, and the entry stays live. The full run takes
-about 2.5 hours at the observed 359s per run.
-
-**THE OPERATOR RAN THE OWED READ-SET TRACE** (nine fixtures, control PASS, no `.claude/worktrees`
-row added), and it shipped in `v0.640.0`.
-Five fixtures changed after that trace. The operator re-traced all five on the close branch
-(control PASS, only those five fixtures' rows moved, no `.claude/worktrees` row added), and the
-map shipped in the batch 155 close. **No read-set trace is owed.**
-
-**NEXT WORK.** Re-derive the sweep; a new consumer filing outranks everything below.
-- `BL-316` is the strongest subject: a DEFECT with a reproduction and a receipt. Write the
-  contract, run the adversary, then build. Its fix touches a hook, not a bootstrapping file.
-- `BL-230` needs the full 156-run pool. Run it as a lead-owned background job with a sentinel,
-  never inside a hand, because this batch's hand stalled on the watchdog.
-- `BL-311` waits on the operator.
-
-**THE DELIVERY GAP IS EIGHT RELEASES.** The consumer is at 0.633.0 against `VERSION` 0.641.0,
-past five, so the range is WIDE. `ledger-reverify.sh` is bootstrapping and in range. Three PC ids
-are PENDING, against an impossible-id control of 0:
-- `PC-S313-EMIT-REPORT-E2-IS-A-FOURTH-POOL-FLAKE-ARM` (0.637.0)
-- `PC-S340-RETRO-AUDIT-SCANS-FIXTURE-FAILS-ONCE-AND-PASSES-ON-RETRY` (0.639.1)
-- `PC-S297-FFCLUSTER-SHA-STALE` (0.640.0) The banked ruling stands: report the gap and
-write no runbook. The consumer's porcelain moved from 0 to 1 on its own continuation log, which
-its Stop hook writes, and the ledger md5 did not move.
 
 ### Derive the state; do not trust the numbers below
 
