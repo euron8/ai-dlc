@@ -262,6 +262,7 @@ checks:
     adjudication: llm
     enforcer: []
     ci_workflow: ~
+    fixtures: [tests/fixtures/deploy-validate-smoke-classification]
 
   - id: "9"
     title: Visual verification?

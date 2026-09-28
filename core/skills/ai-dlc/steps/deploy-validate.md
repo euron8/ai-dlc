@@ -145,7 +145,8 @@ deploy" does NOT exempt the sprint from smoke verification — scripts
 modifying smoke-test infrastructure, thresholds, or operational
 behavior MUST be verified against live infrastructure. A deploy-validate
 gate log entry without `smoke_run_evidence` (the tee'd output path or
-CI run ID) FAILS the gate unconditionally.
+CI run ID) FAILS the gate unconditionally. The same entry without the
+three classification fields below FAILS the gate the same way.
 
 If live infrastructure is unreachable (VPN down, SSM broken, cloud
 outage), file HARD_BLOCK — do NOT present PVC without smoke evidence.
@@ -161,6 +162,43 @@ Run live smoke tests and **capture output**:
 ```bash
 {smoke_test_command} 2>&1 | tee test-results/smoke-test-output.txt
 ```
+
+**Classify every first-run failure before reading the verdict.** The
+`smoke_run_evidence` record carries three fields beside the output path,
+and each is written even when its value is zero or `none`:
+
+- `first_run_failures` — the count of tests that failed on the first run.
+- `transient_failures_cleared_on_retry` — the count, the test ids (or
+  the path of a file listing them), and WHERE the clearing retry is
+  recorded: the tee'd output path of the re-run, or the value
+  `in-run retry, same output` when the smoke harness retries inside the
+  run and the retry is in the same captured output.
+- `persistent_failures` — the ids of every test still red, verbatim as
+  the runner printed them.
+
+**A failure is transient ONLY when a retry cleared it with NO ACTION BY
+THE LEAD between the runs** — no redeploy, no code change, no config or
+infrastructure change, no dispatch of a teammate. Environment settling
+on its own (a rollout finishing, a service restart completing) counts
+as transient. Every other failure is persistent, including one that
+went green only after the lead acted: that is a fix, and the test is
+recorded under `persistent_failures` with the fix that cleared it.
+`first_run_failures` equals the transient count plus the persistent
+count; a record where it does not is incomplete. A non-empty
+`persistent_failures` is a red smoke run and enters the loop below and,
+when the loop is exhausted, its HARD_BLOCK path. Transient failures do
+not enter the loop, and they are never folded into a pass count.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: a flat verdict that
+reports a run whose first-run failures were all transient and a run
+with one real failure in the same words, so the reader of the gate log
+cannot tell which classes were in the run, and a failure the lead
+cleared by acting is presented as one that cleared by itself.
+False-positive cost: three lines in one gate log entry per smoke run,
+and a harness that prints no per-test ids forces the lead to capture
+them. Removal condition: retire once the smoke harness emits the
+first-run / retry split as structured output that a script reads into
+the gate log.
 
 **Smoke tests MUST pass.** If any smoke test fails:
 1. Do NOT proceed to the Production Validation Checkpoint.
@@ -335,6 +373,10 @@ Present to the human:
 ### Deployment
 - Services deployed: [list]
 - Smoke tests: PASSED / FAILED
+  - First-run failures: [first_run_failures]
+  - Transient, cleared on retry: [count; test ids or path; where the
+    clearing retry is recorded]
+  - Persistent: [persistent_failures, ids verbatim, or none]
 - Function verification: PASSED / FAILED
 - Visual verification: PASSED / N/A
 

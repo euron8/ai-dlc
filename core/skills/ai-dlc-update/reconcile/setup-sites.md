@@ -196,6 +196,7 @@ core_manifest:
   - core/fixtures/preclassify-mode-bucket/**
   - core/fixtures/predicate-reclassification/**
   - core/fixtures/derivation-differential/**
+  - core/fixtures/deploy-validate-smoke-classification/**
   - core/fixtures/provenance-flagless-default/**
   - core/fixtures/provenance-not-accessible/**
   - core/fixtures/reconcile-blocking-list/**
