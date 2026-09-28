@@ -923,6 +923,10 @@ sd_answers early   2026-09-26T07:29:05Z
 sd_answers late    2026-09-29T00:00:00Z
 sd_answers tzgap   2026-09-28T17:00:00Z
 sd_answers between 2026-10-02T00:00:00Z
+# The hash covers the answer body alone, so a short answer recurs. The reference consumer's
+# live cite resolves to three entries whose body is `Confirmed`. Here the same entry appears
+# twice: first before the release stamp, then after it. The NEWEST entry dates the answer.
+{ cat "$SD/answers-early.md"; echo; sed -n '/^## /,$p' "$SD/answers-late.md"; } > "$SD/answers-dup.md"
 
 # sd_repo <name> <version@committer-date> ... -- one commit per stamp, oldest first.
 sd_repo() {
@@ -968,7 +972,7 @@ REPO_STD="$SD/repo-std"
 # sd_verdicts <validator> -> one token per arm, in a fixed order. Every arm below reads its
 # own position, and every mutant is scored against the same vector, so a mutant that moves
 # a cell it does not own is visible as entanglement rather than hidden as a kill.
-SD_CELLS="none one spell2 two second malformed closed live reopened archived archclosed prefix nostatus emptylist unclosed bold block absent-early absent-late nogit nostamp tzgap lex first absentnone"
+SD_CELLS="none one spell2 two second malformed closed live reopened archived archclosed prefix nostatus emptylist unclosed bold block absent-early absent-late nogit nostamp tzgap lex first absentnone duphash"
 sd_verdicts() {
   local v="$1" out=""
   sd_cell() { out="$out $1=$SD_RC"; }
@@ -1004,10 +1008,11 @@ sd_verdicts() {
   sd_run "$v" absent "$SD/answers-early.md" "$SD/repo-lex"; sd_cell lex
   sd_run "$v" absent "$SD/answers-between.md" "$SD/repo-two"; sd_cell first
   sd_run "$v" absentnone "$ANSWERS_EMPTY" "$REPO_STD"; sd_cell absentnone
+  sd_run "$v" absent "$SD/answers-dup.md" "$REPO_STD"; sd_cell duphash
   printf '%s\n' "${out# }"
 }
 # The expected vector. An `x` suffix means the rc was right but the owning message was not.
-SD_EXPECT="none=0 one=0 spell2=0 two=0 second=1 malformed=1 closed=1 live=0 reopened=0 archived=0 archclosed=1 prefix=1 nostatus=1 emptylist=1 unclosed=1 bold=0 block=1 absent-early=3 absent-late=1 nogit=3 nostamp=3 tzgap=3 lex=3 first=1 absentnone=3"
+SD_EXPECT="none=0 one=0 spell2=0 two=0 second=1 malformed=1 closed=1 live=0 reopened=0 archived=0 archclosed=1 prefix=1 nostatus=1 emptylist=1 unclosed=1 bold=0 block=1 absent-early=3 absent-late=1 nogit=3 nostamp=3 tzgap=3 lex=3 first=1 absentnone=3 duphash=1"
 sd_cell_of() { tr ' ' '\n' <<<"$1" | awk -F= -v k="$2" '$1==k{print $2}'; }
 
 sd_why() {
@@ -1031,6 +1036,7 @@ sd_why() {
     lex)         echo "0.7.0 is older than 0.659.0; a string compare dates the release to the wrong commit" ;;
     first)       echo "the FIRST commit stamping the release decides; a later one reads a post-release answer as legacy" ;;
     absentnone)  echo "a 'none' cite carries no answer timestamp, so an absent field beside it is PENDING" ;;
+    duphash)     echo "a recurring answer hash was dated by its OLDEST entry, reading a post-release skipped write as legacy" ;;
   esac
 }
 
@@ -1113,8 +1119,9 @@ if [ "$SD_CTL_GOT" = "$SD_EXPECT" ]; then
     'SDI_RAW="$(v="$(field_of scope_deferred_items "$SNAPSHOT" | tr -d "[],")"; if [ "$v" = none ]; then echo "@none"; elif [ -n "$v" ]; then echo "@[$v]"; fi)"' \
     1 "two second unclosed bold"
   # REGRESSION 2 — the absent field read as PENDING unconditionally: the FAIL branch
-  # reports PENDING instead, so only the post-release cells can see it.
-  sd_mut absentpending 'which owes it." >&2' 'which owes it." >&2; exit 3' 1 "absent-late first"
+  # reports PENDING instead, so every post-release cell sees it. `duphash` is one of them
+  # by construction; `oldestanswer` below is what isolates it.
+  sd_mut absentpending 'which owes it." >&2' 'which owes it." >&2; exit 3' 1 "absent-late first duphash"
   # `two` and `bold` each carry a second-spelling id, so they are owned here too — the
   # corpus being faithful, not the arms being entangled: `spell2` isolates the spelling.
   sd_mut spelling 'found && index($0, "**Status: ")' 'found && 0 && index($0, "**Status: ")' 1 "spell2 two bold"
@@ -1125,14 +1132,15 @@ if [ "$SD_CTL_GOT" = "$SD_EXPECT" ]; then
   sd_mut emptyok '    if [ "$SDI_N" -eq 0 ]; then' '    if false; then' 1 "emptylist"
   sd_mut strversion 'ge(v, rel) && (best' '(v >= rel) && (best' 1 "lex"
   sd_mut laststamp '(best == "" || t < best)' '(best == "" || t > best)' 1 "first"
+  sd_mut oldestanswer '$0 == c { t = h } END { print t }' '$0 == c { print h; exit }' 1 "duphash"
   if TZ=UTC date -j -u -f '%Y-%m-%dT%H:%M:%SZ' 2026-01-01T00:00:00Z +%s >/dev/null 2>&1; then
     # BSD date only: GNU `date -d` honours the trailing Z whatever TZ says, so this mutant
     # cannot express the defect there and is not built.
     sd_mut localzone "TZ=UTC date -j -u -f" "date -j -f" 1 "tzgap"
-    SD_MUT_WANT=11
+    SD_MUT_WANT=12
   else
     ok "GNU date: the zone mutant is not built here — GNU parses the trailing Z itself, so the defect it seeds is unconstructible on this platform"
-    SD_MUT_WANT=10
+    SD_MUT_WANT=11
   fi
   if [ "$SD_MUT_KILLS" -eq "$SD_MUT_WANT" ]; then
     ok "all $SD_MUT_WANT deferred-items mutants killed against the resolved validator $VALIDATOR"

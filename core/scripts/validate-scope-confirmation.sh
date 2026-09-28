@@ -348,6 +348,10 @@ fi
 # `none` has no answer timestamp, so an absent field beside it is PENDING. (3) A Step 6
 # run after an upgrade's files landed but before its stamp commit reads as legacy.
 # (4) Only CLOSED is terminal here; an id resolving to another terminal spelling passes.
+# (5) A cited hash recurring on both sides of the release stamp is dated by its NEWEST
+# entry, so a legacy record whose answer body the operator repeats after the upgrade
+# FAILS. The remedy is one line (`scope_deferred_items: none` or the filed ids), and the
+# other reading fails open on every repeated one-word answer.
 SDI_RELEASE="0.659.0"
 
 deferred_items_of() {   # prints @<value> when the field is present, nothing when absent
@@ -408,7 +412,12 @@ if [ -z "$SDI_RAW" ]; then
   # --- absent: decide legacy from the timestamp join ------------------------
   ANS_TS=""
   if [ "$CITE" != "none" ]; then
-    ANS_TS="$(awk -v c="- SHA256: ${CITE}" '/^## / { h = $2 } $0 == c { print h; exit }' "$ANSWERS")"
+    # The NEWEST entry carrying the hash, not the first. The hash covers the answer body
+    # alone, so a short answer recurs: the reference consumer's live cite resolves to three
+    # entries whose body is `Confirmed`, dated 08-22, 08-27 and 09-28. Taking the first
+    # would date a post-release confirmation to a pre-release duplicate and read a skipped
+    # write as legacy -- the fail-open direction.
+    ANS_TS="$(awk -v c="- SHA256: ${CITE}" '/^## / { h = $2 } $0 == c { t = h } END { print t }' "$ANSWERS")"
   fi
   ANS_EPOCH=""
   case "$ANS_TS" in
