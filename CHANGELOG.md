@@ -44,6 +44,11 @@ gate log discharged only one of them.
 - **`sprint-status.sh close` exits 3 while any story in any view owes or carries a malformed
   `deferred_acs`**, and it checks every view before its write loop, so a refusal writes neither
   view.
+- **A `deferred_acs` line at an indent other than the entry's field indent is malformed, never
+  dropped.** The story grammar reads only the first field indent of an entry, so a line indented
+  two spaces deeper, or with a tab, used to vanish and let `close` stamp the sprint over it. No
+  other field's parsing changed: over the consumer's 58 `sprint-status*.yaml` files carrying a
+  `stories:` block, `check-stories` output is byte-identical before and after.
 - **The writers are named.** `code-reviewer.md` writes the field in both views when it writes
   `done`, from QA's recorded deferral predicates. deploy-validate §4b clears an id when its
   predicate runs green. A re-deferral files the AC as a `CO-S<N>-<descriptor>` carry-over item,
@@ -86,6 +91,10 @@ sprint review noticed.
   heading in the live backlog or `carry-over-backlog-archive.md` whose status is anything but
   CLOSED, in either status spelling. It reads the whole value with its own extractor, because the
   existing `field_of` keeps only the first id of a list. It takes a new `--backlog` flag.
+- **A carry-over backlog or archive that exists but cannot be read is a refusal (exit 2), never an
+  acquittal.** The lookup's awk exit is read, and only a status line it actually printed counts as
+  found; before this, an unreadable file came back as an empty status and passed a CLOSED or
+  never-filed id at rc 0.
 - **An absent `scope_deferred_items` is legacy only by a date no agent writes.** The capture
   hook's timestamp on the answer that `scope_confirmed_cite` resolves to is compared with the
   first consumer commit stamping 0.659.0 or later. An older answer, or no such commit, is PENDING;
