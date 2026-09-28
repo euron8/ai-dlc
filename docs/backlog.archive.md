@@ -20529,3 +20529,69 @@ added to the vocabulary 9; a script moved away 9.
 
 verify: sh [ "$(id -u)" -ne 0 ] || exit 9; V=core/scripts/validate-escalation-status-vocabulary.sh; R=core/scripts/validate-escalation-resolution.sh; L=core/scripts/validate-suppression-lifetime.sh; for s in "$V" "$R" "$L"; do [ -f "$s" ] || exit 9; done; d=$(mktemp -d) || exit 9; p="$d/pending.md"; printf '%s\n' '## S1 - probe one' '' '**Status:** FILED' '' '## S1 - probe two' '' '**Status:** RESOLVED' > "$p" || exit 9; bash "$V" "$p" >/dev/null 2>&1; a=$?; bash "$R" --escalations "$p" --sprint 1 >/dev/null 2>&1; b=$?; if [ "$a" -ne 1 ] || [ "$b" -ne 1 ]; then rm -f "$p"; rmdir "$d"; exit 9; fi; chmod 000 "$p" || exit 9; if [ -r "$p" ]; then chmod 600 "$p"; rm -f "$p"; rmdir "$d"; exit 9; fi; mkdir "$d/dir.md" || exit 9; f=0; for q in "$p" "$d/dir.md"; do for m in V R L I; do o=""; case $m in V) e=$(bash "$V" "$q" 2>&1 >/dev/null); c=$? ;; R) e=$(bash "$R" --escalations "$q" --sprint 1 2>&1 >/dev/null); c=$? ;; L) e=$(bash "$L" --escalations "$q" 2>&1 >/dev/null); c=$? ;; I) o=$(bash "$L" --in-force --escalations "$q" 2>"$d/err"); c=$?; e=$(cat "$d/err") ;; esac; [ "$c" -eq 2 ] || f=1; [ -z "$o" ] || f=1; case "$e" in *REFUSED:*) ;; *) f=1 ;; esac; done; done; chmod 600 "$p"; rm -f "$p" "$d/err"; rmdir "$d/dir.md" "$d"; exit $f
 
+## BL-354 — failure silences one step upstream of the staged sites, and `apply.sh` reads a detector refusal as "no worklist row"
+
+**LANDED (v0.655.0, verified c16d83ce).**
+
+**DEFECT.** Found by the batch-163 contract adversary (the upstream half) and the 0.651.0 tip
+adversary (the `apply.sh` half). Split from `BL-348`, which closed on the `<( )` sites alone. It
+discharges no consumer candidate.
+
+**CLOSED BY 0.655.0 ON ITS OWN CLAIMS.** 0.654.0 closed the two non-bootstrapping producers and
+0.655.0 closes the bootstrapping rest. Three further exit-0 refusals found while building 0.655.0
+are a different subject, filed as `BL-356`; this entry does not wait on them. Line numbers are
+0.653.0's unless marked.
+
+**Closed in 0.654.0:**
+- `retired-tokens.sh:170-171`: `git show … 2>/dev/null || true` read an unreadable ref side as an
+  empty file, and its tokens as retired or absent. Both refs are now verified as commits once. Per
+  path, an exact-line `ls-tree` listing decides presence: a failed listing refuses, an absent path
+  is the legitimate skip, and a failed `show` of a present path refuses. The empty-blob skip is
+  unchanged.
+- `retired-layer-contract.sh`, four silent paths rather than the one this entry first named: the
+  tree listing in `collect` (`_rlc_tree="$(memo_ls_tree …)"`, or its `git ls-tree` fallback);
+  every rulebook blob read in `collect` (`body=… || true`); the `shapes_of`/`tokens_of` statuses
+  that `all="$all$(shapes_of …)$(tokens_of …)"` discarded; and the unread tree listing in
+  `rulebook_set`, where a failed theirs listing read every base rulebook file as retired, so it
+  could emit a false `path:` row. `collect` and `rulebook_set` now stage to files and return a status,
+  and the main shell refuses on it with exit 2.
+
+**Closed in 0.655.0, all three files BOOTSTRAPPING:**
+- `apply.sh`'s four detector captures, `:565`/`:567` (`unregistered-drift.sh`), `:637`/`:640`
+  (`retired-tokens.sh`), `:705` (`retired-layer-passage.sh`) and `:925` (`layer-drift.sh`), kept
+  stdout only, with `2>/dev/null`, so a detector that refused with exit 1 or 2 and empty stdout read
+  as "nothing to report" and the manifest lost the row. Each now stages stdout and stderr under the
+  run's temp dir and reads the exit. A non-zero exit emits `DECISION <detector>-refused` carrying
+  `DETECTOR-REFUSED: <script> exited <rc>` and the first stderr line, which counts toward the
+  hand-back and withholds the re-stamp. A `retired-tokens.sh` refusal still emits its
+  `WORKLIST semantic-merge` row. Measured on `apply-drift-after-write`'s world with
+  `layer-drift.sh` replaced by a stub exiting 2: 0.654.0 emits 0 refusal rows, 0.655.0 emits 1.
+- `unregistered-drift.sh:348-350`'s `HARD-DRIFT-SCAN-UNAVAILABLE` row, exit 0 by contract, was
+  dropped by `apply.sh`'s awk, which kept only `HARD-UNREGISTERED-CORE-DRIFT`. It now draws the same
+  `DECISION unregistered-drift-refused` row.
+- `self-update-gate.sh:1114`: a failed `git diff --name-only` read as no changed script, and the
+  gate reported `SELF-UPDATE-OK`. The diff is staged with its status read, and a failure emits
+  `SELF-UPDATE-UNDECIDED`. Measured with a `git` shim failing only that diff, on a world that
+  reaches the site: 0.654.0 prints `SELF-UPDATE-OK`, 0.655.0 prints `SELF-UPDATE-UNDECIDED`, and
+  healthy output is byte-identical.
+- `unregistered-drift.sh` exited 1 on a scan set with no `.md`/`.sh`/`.json` file, because its last
+  statement was the scan pipeline under `pipefail` and `grep`'s "no match" became the script's exit.
+  Reading the exit in `apply.sh` would have turned every such run into a false refusal, so the
+  census that preceded the fix measured it first: 96 of 128 calls exited 1 across the 10 fixtures
+  that drive `apply.sh`, and the other three detectors exited 0 on every call. The listing is now
+  staged with each stage's status read (a failed listing emits `HARD-DRIFT-SCAN-UNAVAILABLE`,
+  `grep`'s 1 is an empty scan set) and an explicit `exit 0` ends the script. On the reference
+  consumer's range 7b32fb1a..d1c72fa9, 0.654.0 and 0.655.0 print the same 95 rows byte for byte.
+
+**The receipt** scores 0 on the 0.655.0 tree, 1 on d1c72fa9 and on 3c606fe2, and 9 with the seed it
+reuses removed. It scores 1 against each of these, built in a copy of the reconcile directory: the
+`layer-drift.sh` capture alone reverted, the refusal emitted as `WORKLIST`, the refusal emitted
+whatever the exit, the empty-scan filter reading `grep`'s 1 as a failure, `unregistered-drift.sh`
+reverted whole, and `self-update-gate.sh` reverted whole. A second spelling of the refusal row,
+with the same class, name, token and rc, scores 0. Removing only the final `exit 0` from
+`unregistered-drift.sh` also scores 0, and correctly so: the staged `done < file` loop already ends
+with status 0 on an empty set, so that mutant is equivalent at this tree. Its output matched
+0.655.0's on both the empty-scan world and the consumer's 95 rows.
+
+verify: sh R0=core/skills/ai-dlc-update/reconcile; S=core/fixtures/apply-drift-after-write/seed.sh; [ -f "$R0/apply.sh" ] && [ -f "$R0/unregistered-drift.sh" ] && [ -f "$R0/layer-drift.sh" ] && [ -f "$S" ] || exit 9; d="$(mktemp -d)" || exit 9; W1=""; W2=""; W3=""; trap 'rm -rf "$d" "$W1" "$W2" "$W3"' EXIT; g() { git -C "$d/u" -c user.name=r -c user.email=r@r -c commit.gpgsign=false "$@" >/dev/null 2>&1; }; mkdir -p "$d/u/core/skills/ai-dlc/steps" "$d/c/.claude/skills/ai-dlc/steps" && git init -q "$d/u" && printf 'not scanned, no md sh or json suffix\n' > "$d/u/core/skills/ai-dlc/notes.txt" && g add -A && g commit -qm e || exit 9; E="$(git -C "$d/u" rev-parse HEAD)" || exit 9; printf '# A\n\nThe lead reads this file at the top of the alpha phase.\n' > "$d/u/core/skills/ai-dlc/steps/a.md" && cp "$d/u/core/skills/ai-dlc/steps/a.md" "$d/c/.claude/skills/ai-dlc/steps/a.md" && g add -A && g commit -qm p || exit 9; P="$(git -C "$d/u" rev-parse HEAD)" || exit 9; po="$(bash "$R0/unregistered-drift.sh" "$d/u" "$P" "$d/c" 2>/dev/null)"; grep -q '^CORE-OK' <<<"$po" || exit 9; eo="$(bash "$R0/unregistered-drift.sh" "$d/u" "$E" "$d/c" 2>/dev/null)"; [ "$?" -eq 0 ] || exit 1; grep -q 'HARD-DRIFT-SCAN-UNAVAILABLE' <<<"$eo" && exit 1; R="$d/r"; cp -R "$R0" "$R" || exit 9; printf '#!/bin/sh\n: > "%s/ran"\necho "stub: layer-drift cannot read its inputs" >&2\nexit 2\n' "$d" > "$R/layer-drift.sh" || exit 9; W1="$(bash "$S")" || exit 9; ( . "$W1/env.sh" && bash "$R/apply.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" ) > "$d/stub.out" 2>/dev/null; [ -f "$d/ran" ] || exit 9; grep -q '^RESOLVED' "$d/stub.out" || exit 9; n="$(awk -F'\t' '$1=="DECISION" && $2=="layer-drift-refused" && /DETECTOR-REFUSED/ && /exited 2/ {c++} END{print c+0}' "$d/stub.out")"; [ "$n" -eq 1 ] || exit 1; W2="$(bash "$S")" || exit 9; ( . "$W2/env.sh" && bash "$R0/apply.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" ) > "$d/ok.out" 2>/dev/null; grep -q '^RESOLVED' "$d/ok.out" || exit 9; h="$(awk -F'\t' '$2 ~ /-refused$/ {c++} END{print c+0}' "$d/ok.out")"; [ "$h" -eq 0 ] || exit 1; G="$(command -v git)" || exit 9; mkdir -p "$d/bin" && printf '#!/bin/sh\ncase " $* " in *" diff "*"--name-only"*) echo "shim: diff refused" >&2; exit 128;; esac\nexec "%s" "$@"\n' "$G" > "$d/bin/git" && chmod +x "$d/bin/git" || exit 9; W3="$(bash "$S")" || exit 9; . "$W3/env.sh" || exit 9; mkdir -p "$CONSUMER/.githooks" && printf '#!/bin/sh\nbash scripts/ai-dlc/validate-nothing.sh\n' > "$CONSUMER/.githooks/pre-push" || exit 9; ho="$(bash "$R0/self-update-gate.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"; grep -q '^SELF-UPDATE-OK' <<<"$ho" || exit 9; so="$(PATH="$d/bin:$PATH" bash "$R0/self-update-gate.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"; grep -q '^SELF-UPDATE-OK' <<<"$so" && exit 1; grep -q '^SELF-UPDATE-UNDECIDED' <<<"$so" || exit 1; exit 0
+
