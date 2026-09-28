@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 607..665. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 613..669. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,69 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 167 SHIPPED `v0.658.0` (`9d1fe6c0`, #891) AND CLOSED `BL-359`. IT DISCHARGES NO CONSUMER
+CANDIDATE.** It was invoked by peer handoff. The opening sweep matched batch 166 on every figure:
+live 25 on five qualifying refs, unfiled 12 (the same ids and dates), worklist 5, TERMINAL 147,
+DISCHARGED 7, PENDING 1 (`PC-S314-H2-ATTESTATION-…`, first named at 0.648.0), ledger md5
+`ded61c90…` on the consumer's `ai-dlc/carry-over/telv3-upgrade`, every control at its expected
+value. The consumer moved nothing this program reads: porcelain 4 -> 9 from its own sprint 314,
+ledger byte-identical to HEAD throughout. Live **100 -> 100** (`BL-359` closed, `BL-360` filed),
+archive **258 -> 259**. The exit-0 receipt set is batch 166's nine plus `BL-359`, compared by id.
+
+**`BL-359`: `layer-drift.sh` CARRIES NO HERE-STRING.** Bash 3.2 stages every `<<<` to a temp file;
+when the write fails the command is NOT RUN and the site returns 1 in every shape the file used —
+`$( )`, `grep -q`, `done <<<`, a function on stdin — which is a miss or an empty input, and a
+negated site reads it as a HIT. All 34 sites converted: `ld_has_line` (a `case`) for membership,
+a status-read pipe or a file staged once for captures, `ld_stage` files for loops, every failure
+through `ld_refuse_staging`'s `layer-drift: REFUSED —` line. The contract read is checked before
+`--adjudicated-codes`, and an R2 post-condition refuses an empty code set beside a real
+`level: ADJUDICATED` clause. `hard-blockers.sh` no longer prints `0 HARD blockers.` beside a
+layer-drift or unregistered-drift refusal. Healthy output byte-identical on two consumer ranges;
+classify median 20.9s -> 16.4s and 191 fewer forks, both resolvable against their spread.
+
+**THE CONTRACT ADVERSARY FOUND THE CONSUMER'S REAL EXPOSURE WAS NOT THE ENTRY'S SUBJECT.** The
+78 KB contract is not the largest here-string: `steps/gate-validation.md` at theirs is 189 KB and
+feeds the per-override and extension sites, which fail ALONE at `ulimit -f` 80-160 with every HARD
+row kept and two `OVERRIDE-OK` rows flipped at rc 0. It also showed the first design's mutant was
+unkillable (the staging write fails before the here-string can), and that a naive
+"contains `level: ADJUDICATED`" post-condition refuses a legitimate contract, because two prose
+lines carry the phrase. **Measure every staged input's size on the real corpus before choosing
+the forcing — the entry names the input its author saw, not the largest one.**
+
+**`printf | grep -q` ON A LARGE HAYSTACK UNDER `pipefail` ANSWERS NOT-FOUND ON A MATCH**, 20 of 20
+at 206 KB with the match on line 1 — a size threshold, not a race. The regex sites use `grep -c`.
+The pipe-fed `grep -q` census over the reconcile scripts is 0 at tip and base.
+
+**THE MACHINE CRASHED MID-BATCH.** Two hands were stopped with uncommitted work; both worktrees
+survived intact and both hands resumed by AGENT ID (their names did not survive). The scratchpad
+did not: the adversary's `file://` clones, probe scripts and the contract were lost, and the
+contract was restored from the lead's copy. **Snapshot a hand's uncommitted diff to the scratchpad
+before resuming it, and keep the contract somewhere a crash does not take.** Gate on `f5109133`:
+22 phases, 24 PASS, 0 FAIL, 1 SKIP (pole, pool width 6), 213 ok, every changed fixture `ok` by
+name against an impossible-name control of 0, `ls-remote` matching, squash tree identical to the
+gated tip. **No read-set trace is owed**: the operator traced `procsub-staged-refusal-boot` (57 ->
+66) and `preclassify-rename-row` (49 -> 51) on the release branch; only those two moved and the
+map shipped in the release.
+
+**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
+- The unfiled set holds no new core filing. `BL-360` (DEFECT: 39 real `<<<` sites and the
+  `<<EOF` bodies in the other reconcile scripts, several reading empty as clean) continues this
+  thread; its carried finding — a bad `theirs` ref or missing contract blob disarms adjudication
+  at rc 0 — is DEFECT-tier alone and splits out at the next close. `BL-356` is next.
+- `BL-230` needs a mechanism for E1, E2 and E9.
+
+**THE DELIVERY GAP IS FIVE RELEASES.** The consumer is at 0.653.0 against `VERSION` 0.658.0. Ten
+bootstrapping files changed in `d1c72fa9..origin/main` (`apply.sh`, `lib.sh`, `layer-drift.sh`,
+`hard-blockers.sh`, `unregistered-drift.sh`, `self-update-gate.sh`, `retired-tokens.sh`,
+`retired-layer-contract.sh`, `predicate-differential.sh` and the update `SKILL.md`; 0 of 24 `core/`
+rows mode-only), so **the pull that delivers them runs under the installed 0.653.0 engine and their
+refusals protect only the pull after it** — measured this batch: the installed engine over
+`d1c72fa9..e52a87ff` returns rc 0 with two drifted override rows at `ulimit -f 120`, where the fixed
+engine refuses. PENDING is 1 and below the installed version. The banked ruling stands:
+report the gap and write no runbook.
+
+Batch 166's next-work list and delivery gap are spent: batch 167's block above replaces both.
 
 **BATCH 166 SHIPPED `v0.657.0` (`91671ae8`, #889) AND CLOSED `BL-358`. IT DISCHARGES NO CONSUMER
 CANDIDATE.** It was invoked by peer handoff. The opening sweep matched batch 165 on every figure:
@@ -546,63 +609,6 @@ and write no runbook. The consumer's porcelain moved 8 -> 41 from its own sprint
 did not move.
 
 Batch 158's next-work list and delivery gap are spent: batch 159's block above replaces both.
-
-**BATCH 158 SHIPPED `v0.644.0` (`2a69bb31`, #867) AND CLOSED `BL-319` AND `BL-320`, WHICH
-DISCHARGE `PC-S313-FOLDIN-NEVER-RETAKES-ARCHITECTURE-ASSESSMENT`.** It was invoked by peer handoff.
-The opening sweep matched batch 157 on every figure and control: live 25, unfiled 12, worklist 5,
-histogram 9/46/1, ledger md5 `99072171…`. The subject was that uncommitted filing, whose premise held
-against `bug-investigation.md` with controls. Live **77 -> 75**, archive **242 -> 244**. The exit-0
-receipt set is batch 157's nine, compared by id.
-
-**A FOLDED FIX STORY NOW REACHES AN ARCHITECT.** In every variant that runs an architecture step,
-`bug-investigation.md` §4 dispatches an `architect` after the one-shot. Check 17's fold architecture
-gate is ONE command, `validate-spawn-ledger.sh --fold-architect`. It resolves the variant from the
-snapshot, then `sprint-status.yaml`, and decides whether the fold is owed BEFORE it reads the
-residue. It joins the residue to an architect ledger row after the one-shot's own row, and requires
-the story's stamp to carry the one-shot's id. Check 17 now runs at implementation gates too
-(`BL-320`), without the cross-check. BL-319 states six residuals; the lead can still write the spine
-text and can re-point then re-stamp.
-
-**SIX ADVERSARY ROUNDS, AND FIVE FOUND A DEFECT IN THE PREVIOUS ROUND'S FIX.** The contract round
-refuted the first design outright: its waiver clause already held in S313. The last tip round found
-none blocking. The one that mattered most: the fold gate's residue check failed every `bug`-variant
-sprint on correct work, because the fixture ran the extracted gate commands only in carry-over
-worlds. **A fixture that extracts gate commands must execute them in every variant the gate
-reaches, not only the one the defect came from.**
-
-**THE FIRST GATE WENT RED ON `validator-fork-budget`: 3297 against 3289.** Four forks were I7
-re-reading two manifest rows; the other ten are attributed arm by arm above `FORK_BUDGET`, now 3299.
-The re-gate passed 209 ok, 0 FAIL, with the pole SKIPPED at pool width 8. **The three new mutant
-shards ran 358-375s LOADED against ~150s solo, second only to `ledger-reverify` at 492s.** Watch
-them; a busier box can make one the pole. The operator traced all four fold fixtures, and the map
-ships in the release.
-
-**THE CONSUMER PULLED 0.642.0 -> 0.643.0 DURING THE BATCH** (reconcile `8f7f5f2da`, #1118) and
-committed `PC-S313-FOLDIN-…` to its `main` with the S313 retro (#1116). It is on sprint 314,
-carry-over, in carry-over evaluation, with no `bug-fix-oneshot*` in `s314/` (0, against 2 in `s313/`),
-so 0.644.0's new gate has nothing to fire on at its next pull. It has run no gate since the pull.
-Porcelain 1; ledger md5 `94c3a4e2…`.
-
-**ONE NEW FILING, AND IT ROUTES CORE: `PC-S314-SNAPSHOT-SWAP-BLIND-WINDOW`,** filed 2026-09-26 in
-commit `2ae6f9335`. It is pushed on the consumer's `ai-dlc/carry-over/telv3-upgrade` and absent from
-its `main`, so the derive block's union sees it as the one filing ahead of main (live 27, which is
-25 plus `PC-S313-FOLDIN-…` plus this). The claim: `route.md` Step 6 swaps `pipeline-snapshot.md`, and
-the Stop hook and the pause hook both key on that file existing, so the swap blinds both. The consumer
-records `core-paths.sh --is-core` exit 0 for both hook files. Ten core hooks name the snapshot.
-
-**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
-- `PC-S314-SNAPSHOT-SWAP-BLIND-WINDOW` is the subject. Re-derive the premise against `route.md`
-  Step 6, `ai-dlc-continue.sh` and `ai-dlc-pause.sh`, measure the window on a scratch copy, write the
-  contract, run the adversary alone, then build. It is a hook fix, so the close is behavioural: drive
-  the hooks across the swap.
-- `BL-230` needs the full 156-run pool. Run it as a lead-owned background job with a sentinel,
-  never inside a hand, and never while a gate runs.
-- `BL-311` waits on the operator.
-
-**THE DELIVERY GAP IS ONE RELEASE.** The consumer is at 0.643.0 against `VERSION` 0.644.0. In
-`7b32fb1a..origin/main`: `apply.sh`, `preclassify.sh`, `ledger-reverify.sh` and the update skill
-have 0 commits; there are 21 raw `core/` rows, 0 mode-only; one PC id is PENDING,
-`PC-S313-FOLDIN-…`. The banked ruling stands: report the gap and write no runbook.
 
 ### Derive the state; do not trust the numbers below
 
