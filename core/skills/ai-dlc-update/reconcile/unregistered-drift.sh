@@ -526,15 +526,53 @@ is_unregistered() {
 # filters it locally by literal PREFIX -- byte-identical to git's own pathspec matching
 # (`tool-hazards.md`: `ls-tree` matches a pathspec by prefix, never a glob), so five
 # `-- <prefix>` arguments become five `grep -E '^prefix/'` alternatives against one cached read.
-# GROUPED so `||`'s short-circuit selects only the SOURCE of the tree listing, not the whole
-# downstream pipe: `A || B | C` would otherwise skip `| C` entirely whenever `A` succeeds.
-{ { command -v memo_ls_tree >/dev/null 2>&1 \
-    && memo_ls_tree "$DIST" "$BASE" \
-       | grep -E '^(core/skills/ai-dlc/|core/skills/ai-dlc-setup/|core/team-roles/|core/hooks/|core/schemas/)'; } \
-  || git -C "$DIST" ls-tree -r --name-only "$BASE" -- \
-      core/skills/ai-dlc core/skills/ai-dlc-setup core/team-roles core/hooks core/schemas 2>/dev/null; } \
-  | grep -E '\.(md|sh|json)$' \
-  | while IFS= read -r cp; do
+#
+# EVERY STAGE OF THE LISTING IS STAGED TO A FILE AND ITS STATUS READ, AND A FAILED ONE IS
+# HARD-DRIFT-SCAN-UNAVAILABLE. This was one pipeline, `{ memo | grep prefix || git ls-tree } | grep
+# ext | while`, with no exit after it, so three different things read the same: a listing that
+# failed (the fallback's empty answer, or `pipefail` carrying git's 128 out of a scan that printed
+# nothing), a filter that could not run, and a base whose scan-set subtrees simply hold no
+# .md/.sh/.json file -- where `grep`'s 1 for "no match" became this script's exit and every caller
+# that reads the exit (`emit-report.sh`, `hard-blockers.sh`) rendered a scan that completed
+# correctly as DETECTOR-REFUSED. Measured across the fixtures that drive `apply.sh`: 96 of 128
+# calls exited 1 that way. Now: a failed listing or filter emits the row and exits 0, as the
+# map_consumer refusal above does and as this script's "0 always" contract requires; `grep`'s 1 is
+# an empty scan set and prints nothing; the loop reads the staged file in the main shell.
+# The memo's failure is not taken as the answer: the direct listing is tried, and ITS status is
+# read -- a fallback that also fails refuses, naming both exits, rather than scanning nothing.
+ud_scan_why=""
+if [ -z "$UD_DIFF_TMP" ]; then
+  ud_scan_why="no staging directory could be created for the scan listing"
+else
+  ud_memo_rc="-"
+  if command -v memo_ls_tree >/dev/null 2>&1; then
+    memo_ls_tree "$DIST" "$BASE" > "$UD_DIFF_TMP/scan-tree"
+    ud_memo_rc=$?
+    if [ "$ud_memo_rc" -eq 0 ]; then
+      grep -E '^(core/skills/ai-dlc/|core/skills/ai-dlc-setup/|core/team-roles/|core/hooks/|core/schemas/)' \
+        "$UD_DIFF_TMP/scan-tree" > "$UD_DIFF_TMP/scan-sub"
+      ud_rc=$?
+      [ "$ud_rc" -le 1 ] || ud_scan_why="the scan-set prefix filter over the cached tree listing exited ${ud_rc}"
+    fi
+  fi
+  if [ "$ud_memo_rc" != 0 ]; then
+    git -C "$DIST" ls-tree -r --name-only "$BASE" -- \
+      core/skills/ai-dlc core/skills/ai-dlc-setup core/team-roles core/hooks core/schemas > "$UD_DIFF_TMP/scan-sub" 2>/dev/null
+    ud_rc=$?
+    [ "$ud_rc" -eq 0 ] || ud_scan_why="the tree listing of ${BASE} failed (memo_ls_tree exited ${ud_memo_rc}, git ls-tree exited ${ud_rc})"
+  fi
+  if [ -z "$ud_scan_why" ]; then
+    grep -E '\.(md|sh|json)$' "$UD_DIFF_TMP/scan-sub" > "$UD_DIFF_TMP/scan-set"
+    ud_rc=$?
+    [ "$ud_rc" -le 1 ] || ud_scan_why="the file-type filter over the tree listing exited ${ud_rc}"
+  fi
+fi
+if [ -n "$ud_scan_why" ]; then
+  emit HARD-DRIFT-SCAN-UNAVAILABLE "core/" \
+    "the scan set could not be listed (${ud_scan_why}) — nothing was scanned. A listing that failed prints the same empty result as a tree with no drift, so this is reported instead of that silence. Re-run unregistered-drift.sh."
+  exit 0
+fi
+while IFS= read -r cp; do
       rel="${cp#core/}"
       cons="$(consumer_path "$rel")" || continue
       [ -f "$cons" ] || continue
@@ -713,4 +751,7 @@ EOF
 
       emit HARD-UNREGISTERED-CORE-DRIFT "$rel" \
         "core file edited IN PLACE ($(( nl_c - nl_b )) lines vs ${BASE}) with no overrides/ entry. Rule 27: core is upstream-owned and \`apply\` OVERWRITES it — this text is deleted on the next pull. Refile the delta as an overrides/ entry with base_sha ${BASE}, or revert the file."
-    done
+    done < "$UD_DIFF_TMP/scan-set"
+# EXPLICIT, because the scan used to be this file's last statement and its status became the
+# script's: an empty scan set exited 1. A classifier exits 0 whatever it found.
+exit 0

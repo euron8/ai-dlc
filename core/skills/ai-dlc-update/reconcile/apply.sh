@@ -475,6 +475,36 @@ ap_pdiff() {
   return "$_d"
 }
 
+# THE DETECTOR STAGING, under the same directory and removed by the same EXIT handler. Every
+# detector this file consults used to be called as `$(bash <detector> … 2>/dev/null | …)`, which
+# keeps stdout and discards both the exit and the stderr, so a detector that REFUSED (exit 1 or
+# 2, empty stdout, its reason on stderr) read here as one that found nothing -- and the WORKLIST
+# lost the row with no trace. `emit-report.sh` renders the same refusal as `DETECTOR-REFUSED`;
+# this is that token at apply time.
+#
+# detector_run <key> <script> <args…> -- stdout to $DT_DIR/<key>.out, stderr to <key>.err,
+# returns the detector's exit. 126 with nothing run when no staging directory exists, which the
+# caller reports as a refusal: an uncaptured detector is not a clean one.
+# detector_refused <row-name> <script> <path|-> <rc> <key> -- the one spelling of the row. A
+# DECISION, so it counts toward `handback` and withholds the re-stamp, and `--finish` does not
+# gate on it (see the two counters above).
+DT_DIR=""
+if [ -n "$AP_TMP" ] && mkdir -p "$AP_TMP/detectors" 2>/dev/null; then DT_DIR="$AP_TMP/detectors"; fi
+detector_run() {
+  local _k="$1" _s="$2"
+  shift 2
+  [ -n "$DT_DIR" ] || return 126
+  bash "$SELF/$_s" "$@" > "$DT_DIR/$_k.out" 2> "$DT_DIR/$_k.err"
+}
+detector_refused() {
+  local _first="(not captured: no staging directory)"
+  if [ -n "$DT_DIR" ]; then
+    _first="$(sed -n '1p' "$DT_DIR/$5.err" 2>/dev/null | tr '\t' ' ')"
+    [ -n "$_first" ] || _first="(empty)"
+  fi
+  say DECISION "$1-refused" "$3" "DETECTOR-REFUSED: $2 exited $4 — this section is NOT a finding of 'none'; stderr: ${_first}"
+}
+
 # =============================================================================================
 # THE RESOLUTION PHASES. Everything to the matching `fi` -- phases 0 through the exec-bit audit
 # -- is what `--finish` SKIPS. That mode exists to advance a stamp this program deliberately
@@ -561,10 +591,27 @@ if [ -n "$UD_PC" ]; then
   printf '%s\n' "$PC" > "$UD_PC"
   UD_FLAG="--bucket-rows"
 fi
+# THE DETECTOR'S STDOUT, STDERR AND EXIT ARE STAGED AND READ, NOT PIPED PAST. This was
+# `$(bash unregistered-drift.sh … 2>/dev/null | awk …)`: a detector that exited non-zero with
+# empty stdout, or that emitted HARD-DRIFT-SCAN-UNAVAILABLE (its own "nothing was scanned" row,
+# which it emits with exit 0 by contract), handed the drift loop below an empty list -- read as
+# "no in-place core edit" -- and the run went on to overwrite core. Either now draws a DECISION
+# row, which withholds the re-stamp; `detector_refused` is the one spelling of it.
 if [ -n "$UD_FLAG" ]; then
-  UD="$(bash "$SELF/unregistered-drift.sh" "$UD_FLAG" "$UD_PC" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | awk -F'\t' '$1=="HARD-UNREGISTERED-CORE-DRIFT"{print $2}')"
+  detector_run ud unregistered-drift.sh "$UD_FLAG" "$UD_PC" "$DIST" "$BASE" "$CONSUMER" "$THEIRS"
 else
-  UD="$(bash "$SELF/unregistered-drift.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | awk -F'\t' '$1=="HARD-UNREGISTERED-CORE-DRIFT"{print $2}')"
+  detector_run ud unregistered-drift.sh "$DIST" "$BASE" "$CONSUMER" "$THEIRS"
+fi
+UD_RC=$?
+UD=""
+if [ "$UD_RC" -ne 0 ]; then
+  detector_refused unregistered-drift unregistered-drift.sh "-" "$UD_RC" ud
+else
+  UD="$(awk -F'\t' '$1=="HARD-UNREGISTERED-CORE-DRIFT"{print $2}' "$DT_DIR/ud.out")"
+  UD_NA="$(awk -F'\t' '$1=="HARD-DRIFT-SCAN-UNAVAILABLE"{print $3; exit}' "$DT_DIR/ud.out")"
+  if [ -n "$UD_NA" ]; then
+    say DECISION unregistered-drift-refused "-" "DETECTOR-REFUSED: unregistered-drift.sh emitted HARD-DRIFT-SCAN-UNAVAILABLE — this section is NOT a finding of 'none'; ${UD_NA}"
+  fi
 fi
 [ -n "$UD_PC" ] && rm -f "$UD_PC"
 
@@ -633,14 +680,20 @@ while IFS="$(printf '\t')" read -r kind path cons bucket; do
       # invisibly: consumer-only code inside this file still referencing a contract
       # upstream retired. Carried on the worklist item itself so the obligation
       # arrives with the work, not in a report section that can be skimmed.
+      # Staged and its exit read (see `detector_run`). A refusal does NOT cancel the merge: the
+      # file still needs merging, so the plain `semantic-merge` row is emitted as always, and the
+      # refusal row beside it says the token check behind it never ran.
       if [ -n "$RT_PC" ]; then
-        rt="$(bash "$SELF/retired-tokens.sh" --bucket-rows "$RT_PC" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" "$path" 2>/dev/null \
-              | awk -F'\t' '{print $3}' | paste -sd' ' -)"
+        detector_run rt retired-tokens.sh --bucket-rows "$RT_PC" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" "$path"
       else
-        rt="$(bash "$SELF/retired-tokens.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" "$path" 2>/dev/null \
-              | awk -F'\t' '{print $3}' | paste -sd' ' -)"
+        detector_run rt retired-tokens.sh "$DIST" "$BASE" "$THEIRS" "$CONSUMER" "$path"
       fi
-      if [ -n "${rt:-}" ]; then
+      rt_rc=$?
+      rt=""
+      if [ "$rt_rc" -ne 0 ]; then
+        say WORKLIST semantic-merge "$rel"
+        detector_refused retired-tokens retired-tokens.sh "$rel" "$rt_rc" rt
+      elif rt="$(awk -F'\t' '{print $3}' "$DT_DIR/rt.out" | paste -sd' ' -)" && [ -n "${rt:-}" ]; then
         say WORKLIST semantic-merge "$rel" "MUST ALSO re-point retired contract token(s): ${rt} — re-run retired-tokens.sh after merging; a non-empty result means the merge is NOT complete"
       else
         say WORKLIST semantic-merge "$rel"
@@ -702,7 +755,14 @@ EOF
 # directory's `*.sh` without its `*.md` produces zero rows and no row here, which reads exactly
 # like a clean corpus. The failure is in the safe direction (a missed row, never a false one) and
 # it is the fixture that must assert the corpus was readable, not this driver.
-RLP_OUT="$(bash "$SELF/retired-layer-passage.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"
+#
+# THE EXIT AND STDERR ARE NOW READ, and a non-zero exit is a DECISION row emitted after this block
+# (see `detector_refused`). The unreadable-`setup-sites.md` refusal above still exits 0 and is
+# still the residue described there. The capture stays one `$( )` of the bare detector, which
+# carries its status, and this line keeps its column-0 opening: apply-restamp-worklist's BL
+# mutants anchor on it, and on the FIRST column-0 `fi` after it, so the refusal check sits below
+# that `fi` and reads the status with a default for the mutants that move this block.
+RLP_OUT="$(bash "$SELF/retired-layer-passage.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>"${DT_DIR:-/nonexistent-apply-staging}/rlp.err")"; RLP_RC=$?
 RLP_N="$(printf '%s\n' "$RLP_OUT" | awk -F'\t' '$1=="RETIRED-LAYER-PASSAGE"{n++} END{print n+0}')"
 case "${RLP_N:-0}" in ''|*[!0-9]*) RLP_N=0 ;; esac
 if [ "$RLP_N" -gt 0 ]; then
@@ -715,6 +775,9 @@ if [ "$RLP_N" -gt 0 ]; then
   # a backslash continuation puts the class name on a line the anchor cannot reach, so the row
   # would exist and every grammar watching for it would read the same clean zero as its absence.
   say WORKLIST retired-layer-passage ".claude/skills/ai-dlc/" "${RLP_N} RETIRED-LAYER-PASSAGE row(s) across ${RLP_NF} layer file(s): each reproduces a rulebook line core carried at ${BASE} and no longer carries at ${THEIRS}. RE-POINT each one at the wording core carries now — measured on a re-siting release, every such row cited text that had MOVED to another rulebook file rather than been retired, so the remedy is a new citation and never a deletion. File(s): ${RLP_LIST}. Re-run \`reconcile/retired-layer-passage.sh <dist> ${BASE} ${THEIRS} <consumer>\` afterwards; an empty result is the clear, and read its stderr — a run that opened no layer file says so there and is not the same as finding none. This does NOT block the apply: a layer file is consumer-owned and this program never rewrites one."
+fi
+if [ "${RLP_RC:-0}" -ne 0 ]; then
+  detector_refused retired-layer-passage retired-layer-passage.sh "-" "$RLP_RC" rlp
 fi
 
 # --- 1c. RECORDED DERIVATIONS STRANDED BY THE SAME RELOCATION --------------------------------
@@ -922,7 +985,16 @@ $UD
 EOF
 
 # ---------------------------------------------------------------- 3. override readopt (hand to LLM)
-LD_OUT="$(bash "$SELF/layer-drift.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"
+# Staged and its exit read (see `detector_run`). A refusal leaves `LD_OUT` empty, so every
+# section below derives no row from it, and the DECISION row says why instead.
+detector_run ld layer-drift.sh "$DIST" "$BASE" "$THEIRS" "$CONSUMER"
+LD_RC=$?
+LD_OUT=""
+if [ "$LD_RC" -ne 0 ]; then
+  detector_refused layer-drift layer-drift.sh "-" "$LD_RC" ld
+else
+  LD_OUT="$(cat "$DT_DIR/ld.out")"
+fi
 LD_HARD="$(printf '%s\n' "$LD_OUT" | awk -F'\t' '$1=="HARD-OVERRIDE-DRIFT-SECTION"{print $2}')"
 while IFS= read -r ovr; do
   [ -n "$ovr" ] || continue

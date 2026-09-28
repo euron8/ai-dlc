@@ -15,6 +15,57 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.655.0] - 2026-09-27
+
+`apply.sh` now reads each detector's exit and hands a refusal back as a `DECISION` row instead of
+an empty section. `self-update-gate.sh` no longer reports `SELF-UPDATE-OK` when it could not compute
+the change set. Together with 0.654.0, this closes `BL-354`.
+
+### A detector refusal reaches the apply manifest (`BL-354`, closes)
+
+`apply.sh` called `unregistered-drift.sh`, `retired-tokens.sh`, `retired-layer-passage.sh` and
+`layer-drift.sh` as `$(bash … 2>/dev/null)` and kept stdout only. A detector that refused with a
+non-zero exit and empty stdout therefore read as one that found nothing, and the manifest lost the
+row. Measured on `apply-drift-after-write`'s world with `layer-drift.sh` replaced by a stub exiting
+2: at 0.654.0, `apply.sh` emits 0 refusal rows, and at 0.655.0 it emits 1.
+
+- Each of the four captures stages stdout and stderr under the run's temp dir and reads the exit.
+  A non-zero exit emits `DECISION <detector>-refused` with `DETECTOR-REFUSED: <script> exited <rc>`
+  and the first stderr line, which is the token `emit-report.sh` already renders at step 5. A
+  `DECISION` counts toward the hand-back, so the re-stamp is withheld. A `retired-tokens.sh`
+  refusal still emits its `WORKLIST semantic-merge` row, because the file still needs merging.
+- `unregistered-drift.sh`'s `HARD-DRIFT-SCAN-UNAVAILABLE` row, which it emits with exit 0 by
+  contract, used to be dropped by `apply.sh`'s filter. It now draws the same
+  `DECISION unregistered-drift-refused` row.
+- `unregistered-drift.sh` exited 1 on a healthy run whenever its scan set held no `.md`, `.sh` or
+  `.json` file. Its last statement was the scan pipeline under `pipefail`, so `grep`'s "no match"
+  became the script's exit. A census taken before `apply.sh` began reading exits found this on 96
+  of 128 invocations across the 10 fixtures that drive `apply.sh`, and the other three detectors
+  exited 0 on every call. Without this fix, every such run would have become a false refusal. The
+  listing is now staged with each stage's status read. A failed listing emits
+  `HARD-DRIFT-SCAN-UNAVAILABLE`, an empty scan set prints nothing, and an explicit `exit 0` ends the
+  script. On the reference consumer's range, 7b32fb1a..d1c72fa9, 0.654.0 and 0.655.0 print the same
+  95 rows byte for byte.
+- `self-update-gate.sh` computed the pull's changed `core/scripts/` paths with a `git diff` whose
+  status nothing read. A failed diff read as no changed script, and the gate emitted
+  `SELF-UPDATE-OK`. Measured with a `git` shim that fails only that diff, on a world that reaches
+  the site: at 0.654.0 the gate prints `SELF-UPDATE-OK`, and at 0.655.0 it prints
+  `SELF-UPDATE-UNDECIDED`, which step 2 treats as DEFER. Healthy output is byte-identical.
+- `BL-354` now has an `sh` receipt. It scores 0 on this tree, 1 on d1c72fa9 and on 0.654.0, and 1
+  on a copy that reverts only the `layer-drift.sh` capture, only `unregistered-drift.sh`, or only
+  `self-update-gate.sh`. A reworded refusal row with the same class, name, token and exit code
+  scores 0.
+
+All three files are BOOTSTRAPPING, which is why they ship alone. The pull that delivers 0.655.0 runs
+under the consumer's installed engine, 0.653.0 on the reference consumer, so these refusals do not
+protect that pull. They protect only the pull after it.
+
+Three detectors still refuse with exit 0: `retired-layer-passage.sh` and `retired-layer-contract.sh`
+when `setup-sites.md` cannot be read, and `retired-tokens.sh` on a quoted path. They are filed as
+`BL-356`.
+
+This discharges no consumer candidate.
+
 ## [0.654.0] - 2026-09-27
 
 An unreadable or non-regular escalations file now refuses at Checks 2 and 2a instead of passing,

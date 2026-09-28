@@ -2128,14 +2128,23 @@ if cmp -s "$GATE" "$VR_M5"; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-16s mutation matched nothing, so the arm it scores is unproven\n' "range-mut-refs"
 else
-  vr_m5_got="$(vr_range "$VR_M5" "$BASE" deadbeefcafe "$DIST")"
-  if [ "$vr_m5_got" = "und=1 f2=deadbeefcafe ok=1" ]; then
-    printf '  ok    %-16s KILLED (%s)\n' "range-mut-refs" \
-      "with the refusal defeated the OK RETURNS beside the row -- and a caller reading the verdict, as step 2 does, proceeds"
-  else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-16s SURVIVED: got=[%s] want=[und=1 f2=deadbeefcafe ok=1]\n' "range-mut-refs" "$vr_m5_got"
-  fi
+  # SCORED ON THE TREE, NOT ON `deadbeefcafe`, BECAUSE A LATER GUARD NOW COVERS THE BOGUS REF.
+  # The changed-script `git diff` is staged with its status read, and a diff over an unresolvable
+  # endpoint fails, so with this guard defeated a bogus THEIRS no longer falls through to OK: the
+  # diff guard answers UNDECIDED "-" instead (measured: und=2 f2=deadbeefcafe ok=0, where this arm
+  # used to read ok=1). Two guards covering one subject read exactly like a guard that does not
+  # work. The TREE is the subject only this guard can see -- `git diff <commit> <tree>` succeeds --
+  # so with the refusal defeated the whole verdict set, OK rows included, is computed off a range
+  # endpoint that is not a commit.
+  vr_m5_got="$(vr_range "$VR_M5" "$BASE" "$VR_TREE" "$DIST")"
+  case "$vr_m5_got" in
+    "und="*" f2=$VR_TREE ok="[1-9]*)
+      printf '  ok    %-16s KILLED (%s)\n' "range-mut-refs" \
+        "with the refusal defeated a TREE endpoint draws OK rows beside the row ($vr_m5_got) -- and a caller reading the verdict, as step 2 does, proceeds" ;;
+    *)
+      FAILURES=$((FAILURES + 1))
+      printf '  FAIL  %-16s SURVIVED: got=[%s] want=[und=* f2=%s ok>=1]\n' "range-mut-refs" "$vr_m5_got" "$VR_TREE" ;;
+  esac
 fi
 
 # THE SECOND GUARD HAS ITS OWN MUTANT BECAUSE ITS SUBJECT IS THE ONE THE FIRST CANNOT NAME. With

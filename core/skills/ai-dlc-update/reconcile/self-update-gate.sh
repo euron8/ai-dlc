@@ -1111,8 +1111,25 @@ if [ -z "${AI_DLC_GATE_IN_SAFE_STOP:-}" ] \
 fi
 
 # Core scripts this pull changes, by basename.
-CHANGED="$(git -C "$DIST" diff --name-only "${BASE}..${THEIRS}" -- core/scripts/ 2>/dev/null \
-            | sed 's|.*/||' | sort -u)"
+#
+# THE DIFF IS STAGED AND ITS STATUS READ. This was `$(git diff … 2>/dev/null | sed | sort -u)`,
+# which under `pipefail` still carried no reader for the status: a diff that failed printed
+# nothing, CHANGED came back empty, and the arm below emitted SELF-UPDATE-OK -- "this pull changes
+# no core/scripts/ path" -- for a pull whose script changes were never computed. A failed diff is
+# UNDECIDED, which step 2 treats as DEFER, exactly as the staged intersection below does.
+changed_why=""
+if [ -z "${TMP:-}" ] || [ ! -d "$TMP" ]; then
+  changed_why="no staging directory exists for this run"
+else
+  git -C "$DIST" diff --name-only "${BASE}..${THEIRS}" -- core/scripts/ > "$TMP/changed-raw" 2>/dev/null
+  changed_rc=$?
+  [ "$changed_rc" -eq 0 ] || changed_why="git diff --name-only ${BASE}..${THEIRS} -- core/scripts/ exited ${changed_rc}"
+fi
+if [ -n "$changed_why" ]; then
+  emit SELF-UPDATE-UNDECIDED "-" "which core/scripts/ paths this pull changes could not be computed (${changed_why}). An uncomputed change set reads as an empty one, which is the OK this gate exists to withhold; treat as DEFER and re-run."
+  exit 0
+fi
+CHANGED="$(sed 's|.*/||' "$TMP/changed-raw" | sort -u)"
 
 if [ -z "$CHANGED" ]; then
   emit SELF-UPDATE-OK "-" "this pull changes no core/scripts/ path, so nothing the pre-push invokes can be replaced by the self-update."
