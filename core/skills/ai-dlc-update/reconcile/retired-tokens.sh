@@ -63,8 +63,10 @@
 #   can reach that state (both call from inside a CLASSIFY case arm), so the by-hand
 #   run is its only reader. A run that produced rows says nothing on stderr: the rows
 #   are the answer.
-#   Both program callers (`apply.sh`, `emit-report.sh`) discard stderr and read the
-#   rows only; the NOTE is for the operator running step 3a-ii by hand.
+#   `emit-report.sh` discards stderr and reads the rows and the exit. `apply.sh` stages
+#   stderr beside the rows and, on a non-zero exit, quotes its first `: REFUSED` line
+#   (else its line 1) in `DECISION retired-tokens-refused`; on exit 0 it reads the rows
+#   only. The NOTE is for the operator running step 3a-ii by hand.
 #
 # EXIT
 #   0  always when it ran (a detector reports; the caller decides)

@@ -964,6 +964,11 @@ prose is itself generated rather than composed.
    - `HARD-DRIFT-SCAN-UNAVAILABLE` → **blocks `apply`**. The scan could not load its path
      mapper, so it scanned NOTHING and its empty output is not a clean tree. Restore
      `reconcile/preclassify.sh` beside `unregistered-drift.sh` and re-run.
+   - **Exit 2 with `unregistered-drift: REFUSED — a row could not be written to stdout after N
+     row(s) were`** → the scan stopped at that write, and every path after it went unscanned.
+     The rows you have are NOT the result, and a
+     missing HARD row is not an absence. Re-run it with a writable stdout. Any other run exits 0,
+     whatever it found.
 
 3e. **Consumer-catalog collisions.** Run `reconcile/relabel-extension-checks.sh
    <consumer-root> --dist <dist-repo> --theirs <theirs-ref>` (dry-run). Every extension
@@ -1510,6 +1515,11 @@ prose is itself generated rather than composed.
      the next gate then fails on a tree you just repaired. Each step states its own consequence.
    - `DECISION …` — a genuine operator call: an unknown drift's refile-vs-revert, a deletion, a
      token with no default. Ask ONE closed question per row.
+   - `DECISION <detector>-refused` (`unregistered-drift`, `retired-tokens`,
+     `retired-layer-passage`, `layer-drift`) — that detector refused, or could not write all of
+     its rows, so its section is **NOT a finding of "none"**. The detail carries its exit and its
+     own `REFUSED` line. Run the named script directly against this consumer, clear the cause
+     that line names, and re-run the apply. Never dispose of it as "no drift".
 
    Do NOT re-do a `RESOLVED` row by hand. Work only the `WORKLIST` and `DECISION` rows. **This is
    what makes the update end-to-end**: the operator runs it and it lands; you handle the semantic
