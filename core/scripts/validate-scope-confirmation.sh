@@ -57,7 +57,9 @@
 #   0  scope_confirmed present, well-formed, its cite resolves, and
 #      scope_deferred_items is `none` or lists only filed, not-CLOSED carry-over ids
 #   1  missing, malformed, or a cite / deferred id that resolves to nothing
-#   2  input unreadable -- no snapshot at the resolved path
+#   2  input unreadable -- no snapshot at the resolved path, or a scope_deferred_items
+#      list whose carry-over backlog or archive exists and cannot be read (or whose
+#      status lookup exits non-zero or returns no verdict). A FAIL, never a pass.
 #   3  PENDING: routing record predates the routing-record release, the capture
 #      hook is not installed, or scope_deferred_items is absent on a record whose
 #      scope answer predates the release that introduced it. Never a silent pass.
@@ -465,6 +467,24 @@ else
       SDI_RC=1 ;;
   esac
   if [ "$SDI_ISLIST" -eq 1 ]; then
+    # A CORPUS THAT CANNOT BE READ IS A REFUSAL, NEVER A LOOKUP THAT FOUND NOTHING. Three layers,
+    # each with a subject the others cannot see (core/fixtures/scope-confirmation, the
+    # unreadable-corpus cells):
+    #   1. here, before any lookup: a backlog or archive that EXISTS and is not a readable
+    #      regular file refuses, including an archive this list would never have reached;
+    #   2. the lookup's own exit status: awk that cannot open its file prints nothing and exits
+    #      non-zero WITHOUT running END, so its empty output is not a verdict;
+    #   3. the verdict case accepts `S <status>` as FOUND and nothing else -- the empty string
+    #      used to fall into a catch-all arm and was acquitted as "found, not CLOSED", so a
+    #      CLOSED id and an id never filed both passed at exit 0 against a mode-000 backlog.
+    for sdi_f in "$BACKLOG" "$ARCHIVE"; do
+      if [ -e "$sdi_f" ] && { [ ! -f "$sdi_f" ] || [ ! -r "$sdi_f" ]; }; then
+        echo "FAIL: cannot read the carry-over corpus -- not a readable regular file: $sdi_f" >&2
+        echo "      Exit 2 is a FAIL. A deferred id resolved against a file that could not be" >&2
+        echo "      read would be a verdict about nothing, in whichever direction it fell." >&2
+        exit 2
+      fi
+    done
     SDI_N=0
     set -f
     for tok in $(printf '%s' "$SDI_LIST" | tr ',' ' '); do
@@ -473,10 +493,15 @@ else
         echo "FAIL: scope_deferred_items token '${tok}' is malformed -- ids are CO-S<N>-<DESCRIPTOR>." >&2
         SDI_RC=1; continue
       fi
-      where="$BACKLOG"; st="NOHEAD"
-      [ -f "$BACKLOG" ] && st="$(status_of "$tok" "$BACKLOG")"
-      if [ "$st" = "NOHEAD" ] && [ -f "$ARCHIVE" ]; then
-        where="$ARCHIVE"; st="$(status_of "$tok" "$ARCHIVE")"
+      where="$BACKLOG"; st="NOHEAD"; sdi_lrc=0
+      if [ -f "$BACKLOG" ]; then st="$(status_of "$tok" "$BACKLOG")" || sdi_lrc=$?; fi
+      if [ "$sdi_lrc" -eq 0 ] && [ "$st" = "NOHEAD" ] && [ -f "$ARCHIVE" ]; then
+        where="$ARCHIVE"; st="$(status_of "$tok" "$ARCHIVE")" || sdi_lrc=$?
+      fi
+      if [ "$sdi_lrc" -ne 0 ]; then
+        echo "FAIL: cannot read the carry-over corpus -- the status lookup for '${tok}' exited ${sdi_lrc}: ${where}" >&2
+        echo "      Exit 2 is a FAIL. Its output ('${st}') is not a verdict." >&2
+        exit 2
       fi
       case "$st" in
         NOHEAD)
@@ -486,7 +511,7 @@ else
         NOSTATUS)
           echo "FAIL: '${tok}' in ${where} carries no status line (**Status:** OPEN at minimum)." >&2
           SDI_RC=1 ;;
-        *)
+        "S "*)
           st="${st#S }"; st="${st#"${st%%[![:space:]]*}"}"
           case "$st" in
             CLOSED*)
@@ -494,6 +519,11 @@ else
               echo "      A part deferred at this sprint's ratification cannot already be closed." >&2
               SDI_RC=1 ;;
           esac ;;
+        *)
+          echo "FAIL: cannot read the carry-over corpus -- the status lookup for '${tok}' returned" >&2
+          echo "      '${st}', which is no verdict: ${where}" >&2
+          echo "      Exit 2 is a FAIL. Only 'S <status>' is a found item; anything else is refused." >&2
+          exit 2 ;;
       esac
     done
     set +f

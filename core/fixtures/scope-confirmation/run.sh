@@ -1151,6 +1151,168 @@ else
   bad "CONTROL FAILED: an unmutated copy returned [$SD_CTL_GOT], expected [$SD_EXPECT] — every mutant verdict below would be uninterpretable"
 fi
 
+# =============================================================================
+# THE UNREADABLE CORPUS -- a backlog or archive that exists and cannot be read REFUSES (exit 2).
+# =============================================================================
+# THE DEFECT. status_of is awk over the file. Against a file awk cannot open it prints nothing and
+# exits before END, so `st` came back EMPTY, and the verdict case's catch-all arm acquitted the
+# empty string as "found, not CLOSED": a CLOSED id and an id never filed both passed at exit 0
+# against a mode-000 backlog. The fix is three layers, and each cell below is the subject of ONE
+# of them, because layers that reach the same subject cover each other and no mutant of either
+# can die:
+#   precheck  -- an existing, unreadable (or non-regular) backlog/archive refuses before any
+#                lookup. Its own subjects: the archive unreadable while the id resolves in the
+#                backlog (never looked up), and a backlog path that is a DIRECTORY (root-proof).
+#   lookuprc  -- the lookup's exit status. Subject: a stub awk that prints `S OPEN` and exits 2.
+#   verdict   -- only `S <status>` is FOUND. Subject: a stub awk that exits 0 printing nothing.
+# The mode-000 cells cannot express unreadable under root (or any host that reads a mode-000
+# file). They are then INCONCLUSIVE -- `S` in the vector, never `ok` -- and the directory and stub
+# cells still carry every mutant.
+UR="$SD/ur"; mkdir -p "$UR/ok" "$UR/b0" "$UR/a0" "$UR/dir" "$UR/stub"
+SD_ARCH="$SD/pa/carry-over-backlog-archive.md"
+for w in ok b0 a0; do cp "$SD_BL" "$UR/$w/carry-over-backlog.md"; cp "$SD_ARCH" "$UR/$w/carry-over-backlog-archive.md"; done
+mkdir -p "$UR/dir/carry-over-backlog.md"; cp "$SD_ARCH" "$UR/dir/carry-over-backlog-archive.md"
+chmod 000 "$UR/b0/carry-over-backlog.md" "$UR/a0/carry-over-backlog-archive.md"
+sd_snap unfiled "[CO-S315-NEVER-FILED]"
+UR_SKIP=""
+if [ "$(id -u)" -eq 0 ]; then UR_SKIP="running as root, which reads a mode-000 file"
+elif cat "$UR/b0/carry-over-backlog.md" >/dev/null 2>&1 || cat "$UR/a0/carry-over-backlog-archive.md" >/dev/null 2>&1; then
+  UR_SKIP="this host reads a mode-000 file, so the seed cannot express unreadable"
+fi
+[ -n "$UR_SKIP" ] && printf '  INCONCLUSIVE  unreadable-corpus mode-000 cells -- %s\n' "$UR_SKIP"
+UR_MODE000="bl-closed bl-unfiled bl-none ar-only ar-unreached"
+
+# The stub claims ONLY status_of (its argv carries `-v id=`), logs the claim, and execs the real
+# awk for everything else.
+UR_REALAWK="$(command -v awk)" || { echo "FIXTURE ERROR: awk is not on PATH" >&2; exit 2; }
+{
+  printf '#!/bin/sh\ncase " $* " in\n'
+  printf '  *" id="*) printf "x\\n" >> "%s/LOG"\n' "$UR/stub"
+  printf '    case "$UR_AWK_MODE" in failok) echo "S OPEN"; exit 2 ;; silent) exit 0 ;; esac ;;\n'
+  printf 'esac\nexec "%s" "$@"\n' "$UR_REALAWK"
+} > "$UR/stub/awk"
+chmod +x "$UR/stub/awk"
+
+UR_OUT=""; UR_RC=0
+ur_run() {   # $1 validator, $2 world, $3 snapshot name, [$4 stub mode]
+  : > "$UR/stub/LOG"
+  if [ -n "${4:-}" ]; then
+    UR_OUT="$(PATH="$UR/stub:$PATH" UR_AWK_MODE="$4" TZ=UTC bash "$1" --snapshot "$SD/snap-$3.md" \
+              --answers "$ANSWERS" --backlog "$UR/$2/carry-over-backlog.md" --repo "$REPO_STD" 2>&1)"; UR_RC=$?
+  else
+    UR_OUT="$(TZ=UTC bash "$1" --snapshot "$SD/snap-$3.md" --answers "$ANSWERS" \
+              --backlog "$UR/$2/carry-over-backlog.md" --repo "$REPO_STD" 2>&1)"; UR_RC=$?
+  fi
+}
+ur_refused() {   # $1 the file the refusal must name
+  grep -qF "cannot read the carry-over corpus" <<<"$UR_OUT" && grep -qF -- "$1" <<<"$UR_OUT"
+}
+UR_CELLS="ctl-closed ctl-archclosed bl-closed bl-unfiled bl-none ar-only ar-unreached dir stub-failok stub-silent"
+ur_verdicts() {
+  local v="$1" out="" c
+  ur_cell() { out="$out $1=$UR_RC"; }
+  ur_skip() { case " $UR_MODE000 " in *" $1 "*) [ -n "$UR_SKIP" ] && { out="$out $1=S"; return 0; } ;; esac; return 1; }
+  # Readable twins, same invocation: the SAME ids against the SAME bytes read CLOSED -> 1.
+  ur_run "$v" ok closed; ur_cell ctl-closed
+  ur_run "$v" ok archclosed; ur_cell ctl-archclosed
+  ur_skip bl-closed || { ur_run "$v" b0 closed; ur_refused "$UR/b0/carry-over-backlog.md" || UR_RC="${UR_RC}x"; ur_cell bl-closed; }
+  ur_skip bl-unfiled || { ur_run "$v" b0 unfiled; ur_refused "$UR/b0/carry-over-backlog.md" || UR_RC="${UR_RC}x"; ur_cell bl-unfiled; }
+  # Near-miss: `none` consults no corpus, so an unreadable one does not wedge it.
+  ur_skip bl-none || { ur_run "$v" b0 none; ur_cell bl-none; }
+  ur_skip ar-only || { ur_run "$v" a0 archclosed; ur_refused "$UR/a0/carry-over-backlog-archive.md" || UR_RC="${UR_RC}x"; ur_cell ar-only; }
+  ur_skip ar-unreached || { ur_run "$v" a0 one; ur_refused "$UR/a0/carry-over-backlog-archive.md" || UR_RC="${UR_RC}x"; ur_cell ar-unreached; }
+  ur_run "$v" dir one; ur_refused "$UR/dir/carry-over-backlog.md" || UR_RC="${UR_RC}x"; ur_cell dir
+  for c in failok silent; do
+    ur_run "$v" ok closed "$c"
+    [ -s "$UR/stub/LOG" ] || UR_RC="${UR_RC}n"     # the stub never ran: this cell observed nothing
+    ur_refused "$UR/ok/carry-over-backlog.md" || UR_RC="${UR_RC}x"; ur_cell "stub-$c"
+  done
+  printf '%s\n' "${out# }"
+}
+UR_EXPECT="ctl-closed=1 ctl-archclosed=1 bl-closed=2 bl-unfiled=2 bl-none=0 ar-only=2 ar-unreached=2 dir=2 stub-failok=2 stub-silent=2"
+if [ -n "$UR_SKIP" ]; then
+  for c in $UR_MODE000; do UR_EXPECT="$(sed "s/ $c=[0-9]*/ $c=S/" <<<" $UR_EXPECT")"; UR_EXPECT="${UR_EXPECT# }"; done
+fi
+
+UR_GOT="$(ur_verdicts "$VALIDATOR")"
+for c in $UR_CELLS; do
+  want="$(sd_cell_of "$UR_EXPECT" "$c")"; got="$(sd_cell_of "$UR_GOT" "$c")"
+  if [ "$want" = "S" ] && [ "$got" = "S" ]; then continue; fi
+  if [ "$want" = "$got" ]; then
+    ok "unreadable-corpus cell '$c': rc=$got as required"
+  else
+    bad "unreadable-corpus cell '$c': got '$got', expected '$want' — an id looked up in a corpus nobody could read was given a verdict (x: the refusal did not name the file; n: the stub awk never ran)"
+  fi
+done
+
+UR_MUT_KILLS=0; UR_MUT_WANT=0
+ur_mut() {   # $1 label, $2 owned cells, then anchor/replacement pairs; every anchor occurs exactly once
+  local label="$1" owned="" c prev out n got moved stray w g
+  for c in $2; do
+    case " $UR_MODE000 " in *" $c "*) [ -n "$UR_SKIP" ] && continue ;; esac
+    owned="$owned $c"
+  done
+  owned="${owned# }"; shift 2
+  UR_MUT_WANT=$((UR_MUT_WANT + 1))
+  out="$UR/mutant-$label.sh"; cp "$VALIDATOR" "$out"
+  while [ $# -ge 2 ]; do
+    n="$(grep -cF -- "$1" "$out")" || n=0
+    if [ "$n" != "1" ]; then
+      bad "FIXTURE STALE: unreadable-corpus mutant $label's anchor '$1' occurs $n times, not 1"; return
+    fi
+    prev="$out.prev"; cp "$out" "$prev"
+    awk -v a="$1" -v r="$2" '{ i = index($0, a); if (i) { $0 = substr($0, 1, i - 1) r substr($0, i + length(a)) } print }' "$prev" > "$out"
+    if cmp -s "$prev" "$out"; then
+      bad "FIXTURE STALE: unreadable-corpus mutant $label's substitution for '$1' matched nothing"; return
+    fi
+    shift 2
+  done
+  if ! bash -n "$out" 2>/dev/null; then
+    bad "FIXTURE BROKEN: unreadable-corpus mutant $label is not a valid shell script"; return
+  fi
+  got="$(ur_verdicts "$out")"
+  moved=""; stray=""
+  for c in $UR_CELLS; do
+    w="$(sd_cell_of "$UR_EXPECT" "$c")"; g="$(sd_cell_of "$got" "$c")"
+    case " $owned " in
+      *" $c "*) [ "$w" != "$g" ] && moved="$moved $c" ;;
+      *)        [ "$w" != "$g" ] && stray="$stray $c=$g" ;;
+    esac
+  done
+  if [ -n "$stray" ]; then
+    bad "unreadable-corpus mutant $label moved cells it does not own:$stray — the layers are entangled"
+  elif [ -z "$owned" ] || [ "$(echo $moved | wc -w)" -ne "$(echo $owned | wc -w)" ]; then
+    bad "UNREADABLE-CORPUS MUTANT $label SURVIVED on some of its own cells (moved:${moved:- none}; owned: ${owned:-none})"
+  else
+    UR_MUT_KILLS=$((UR_MUT_KILLS + 1))
+    ok "unreadable-corpus mutant $label killed on exactly its own cells:$moved"
+  fi
+}
+
+UR_CTL="$UR/control.sh"; cp "$VALIDATOR" "$UR_CTL"
+UR_CTL_GOT="$(ur_verdicts "$UR_CTL")"
+if [ "$UR_CTL_GOT" = "$UR_EXPECT" ]; then
+  ok "control: an unmutated copy reproduces every unreadable-corpus cell, the readable CLOSED twins at 1 included"
+  UR_A1='if [ -e "$sdi_f" ] && {'; UR_R1='if false && {'
+  UR_A2='      if [ "$sdi_lrc" -ne 0 ]; then'; UR_R2='      if false; then'
+  UR_A3='        "S "*)'; UR_R3='        *)'
+  ur_mut precheck "ar-unreached dir" "$UR_A1" "$UR_R1"
+  ur_mut lookuprc "stub-failok" "$UR_A2" "$UR_R2"
+  ur_mut verdict "stub-silent" "$UR_A3" "$UR_R3"
+  # The pre-fix shape: every layer reverted, so an unopenable file's empty answer falls through
+  # to the catch-all and is acquitted.
+  ur_mut fallthrough "bl-closed bl-unfiled ar-only ar-unreached dir stub-failok stub-silent" \
+    "$UR_A1" "$UR_R1" "$UR_A2" "$UR_R2" "$UR_A3" "$UR_R3"
+  if [ "$UR_MUT_KILLS" -eq "$UR_MUT_WANT" ] && [ "$UR_MUT_WANT" -eq 4 ]; then
+    ok "all 4 unreadable-corpus mutants killed against the resolved validator $VALIDATOR"
+  else
+    bad "only $UR_MUT_KILLS of $UR_MUT_WANT unreadable-corpus mutants were killed (4 expected)"
+  fi
+else
+  bad "CONTROL FAILED: an unmutated copy returned [$UR_CTL_GOT], expected [$UR_EXPECT] — every unreadable-corpus mutant verdict would be uninterpretable"
+fi
+chmod 644 "$UR/b0/carry-over-backlog.md" "$UR/a0/carry-over-backlog-archive.md" 2>/dev/null
+
 echo
 if [ "$fails" -eq 0 ]; then echo "scope-confirmation: PASS"; exit 0; fi
 echo "scope-confirmation: $fails assertion(s) FAILED" >&2
