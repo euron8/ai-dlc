@@ -1750,11 +1750,16 @@ if [ -n "$shadow_keys" ]; then
     [ "$ld_emit_failed" -eq 0 ] || break
     # One row PER PARTICIPATING ENTRY: the report is read per entry, and a single row filed under
     # one of the two leaves the other reading clean on the very finding it is half of.
+    # The entry split is staged with its status read, like the grouping above: a `done <<< "$( )"`
+    # would read a failed split as an empty one and file the collision under no entry at all.
+    _dse_rc=0
+    printf '%s\n' "$entries" | tr ',' '\n' | sed 's/^ *//' > "$LD_T/double-shadow-entries" || _dse_rc=$?
+    [ "$_dse_rc" -eq 0 ] || ld_refuse "the entry split for OVERRIDE-DOUBLE-SHADOW '${label}'" "$_dse_rc"
     while IFS= read -r one; do
       [ -n "$one" ] || continue
       emit OVERRIDE-DOUBLE-SHADOW "$one" "${label%%#*}" \
         "${cnt} override entries declare the same shadow target '${label}': ${entries}. At load time both bodies claim that span and precedence picks one silently, so which body governs is an ordering accident no entry declares. Every upstream commit touching the span also invalidates BOTH base_sha stamps, and reconciling one of them looks complete. Narrow one entry's shadows: to the sub-heading it actually rewrites, or merge the two. Report-only -- a deliberate split can be correct, but it has to be stated in the bodies."
-    done <<< "$(printf '%s\n' "$entries" | tr ',' '\n' | sed 's/^ *//')"
+    done < "$LD_T/double-shadow-entries"
   done < "$LD_T/double-shadow"
 fi
 

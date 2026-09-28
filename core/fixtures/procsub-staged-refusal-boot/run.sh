@@ -1304,17 +1304,23 @@ LD_DS1="  ' | sort > \"\$LD_T/double-shadow\" || _ds_rc=\$?"
 LD_DS2='  [ "$_ds_rc" -eq 0 ] || ld_refuse "the grouping of shadow targets for OVERRIDE-DOUBLE-SHADOW" "$_ds_rc"'
 LD_DS3='  while IFS="$TAB" read -r label entries cnt; do'
 LD_DS4='    while IFS= read -r one; do'
-LD_DS5="    done <<< \"\$(printf '%s\\n' \"\$entries\" | tr ',' '\\n' | sed 's/^ *//')\""
+LD_DS5='    done < "$LD_T/double-shadow-entries"'
 LD_DS6='  done < "$LD_T/double-shadow"'
+# The entry split is staged too (its own status read, its own ld_refuse): the mutant deletes those
+# three lines along with the grouping's, so the restored block is the pre-fix pipe and nothing else.
+LD_DS7='    _dse_rc=0'
+LD_DS8="    printf '%s\\n' \"\$entries\" | tr ',' '\\n' | sed 's/^ *//' > \"\$LD_T/double-shadow-entries\" || _dse_rc=\$?"
+LD_DS9='    [ "$_dse_rc" -eq 0 ] || ld_refuse "the entry split for OVERRIDE-DOUBLE-SHADOW '"'"'${label}'"'"'" "$_dse_rc"'
 LD_DS1B="  ' | sort | while IFS=\"\$TAB\" read -r label entries cnt; do"
 LD_DS4B="    printf '%s\\n' \"\$entries\" | tr ',' '\\n' | sed 's/^ *//' | while IFS= read -r one; do"
-  d="$(A1="$LD_DS1" A2="$LD_DS2" A3="$LD_DS3" A4="$LD_DS4" A5="$LD_DS5" A6="$LD_DS6" N1="$LD_DS1B" N4="$LD_DS4B" \
+  d="$(A1="$LD_DS1" A2="$LD_DS2" A3="$LD_DS3" A4="$LD_DS4" A5="$LD_DS5" A6="$LD_DS6" A7="$LD_DS7" A8="$LD_DS8" A9="$LD_DS9" N1="$LD_DS1B" N4="$LD_DS4B" \
        mut M-LD-ds-subshell "$LDS" '$0==ENVIRON["A1"] {print ENVIRON["N1"]; next}
          $0==ENVIRON["A2"] || $0==ENVIRON["A3"] {next}
+         $0==ENVIRON["A7"] || $0==ENVIRON["A8"] || $0==ENVIRON["A9"] {next}
          $0==ENVIRON["A4"] {print ENVIRON["N4"]; next}
          $0==ENVIRON["A5"] {print "    done"; next}
          $0==ENVIRON["A6"] {print "  done"; next} {print}' \
-         "$LD_DS4B" 'LD_T/double-shadow' "$LD_DS1" "$LD_DS2" "$LD_DS3" "$LD_DS4" "$LD_DS5" "$LD_DS6")" \
+         "$LD_DS4B" 'LD_T/double-shadow' "$LD_DS1" "$LD_DS2" "$LD_DS3" "$LD_DS4" "$LD_DS5" "$LD_DS6" "$LD_DS7" "$LD_DS8" "$LD_DS9")" \
     && { _h="$("$REAL_GREP" -cxF -- "$LD_DS1B" "$d/$LDS")" || _h=0
          if [ "$_h" -eq 1 ] && "$REAL_GREP" -qxF -- "$LD_DS1B" "$LD_BASE/$LDS" && "$REAL_GREP" -qxF -- "$LD_DS4B" "$LD_BASE/$LDS"; then
            score_as M-LD-ds-subshell ld "$d" L5d=XFSZ-RC0-LOST
