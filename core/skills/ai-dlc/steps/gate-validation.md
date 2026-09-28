@@ -2917,10 +2917,15 @@ the identifier proxy redundant.
 
 **Check.** Run `scripts/ai-dlc/validate-scope-confirmation.sh --snapshot
 _bmad-output/pipeline-snapshot.md --answers
-_bmad-output/operator-answers-history.md`; exit 0 required. The routing record's
+_bmad-output/operator-answers-history.md --backlog
+_bmad-output/planning-artifacts/carry-over-backlog.md`; exit 0 required. The routing record's
 `scope_confirmed` must read `confirmed` or `corrected`, and `scope_confirmed_cite`
 must resolve to a `SHA256:` entry the PostToolUse capture hook wrote — or be the
 literal `none` against a capture file holding no entries at all.
+`scope_deferred_items` must be `none` or a one-line bracketed list whose every id
+is well-formed and resolves to a `### <id>` item, not CLOSED, in the carry-over
+backlog or its archive — the part of the ask Step 6 deferred, filed where the
+next sprint's carry-over evaluation will read it.
 
 **What this catches.** A sprint that planned against a scope no operator ever saw.
 Rule 3(d) makes the sprint-scope pause point mandatory at `route.md` Step 6, and
@@ -2953,6 +2958,10 @@ lead for a missing hook. **"No `scope_confirmed` field" is NOT one of them** —
 reading is indistinguishable from a lead on the current release skipping the pause
 point, and it fails open on precisely the conduct this check exists to catch. Once
 the capture file exists the hook is live, and a missing field is the lead's.
+An ABSENT `scope_deferred_items` is decided the same way, from records no agent
+writes: the hook's timestamp on the cited answer against the commit that first
+stamped `.claude/.ai-dlc-version` at the release introducing the field. An answer
+given before that commit is PENDING; one given after it is a FAIL.
 
 **Exit 2 is a FAIL.** No snapshot at the resolved path means the verdict would be
 about nothing. `answers_entries_scanned:` prints on every path including PENDING,

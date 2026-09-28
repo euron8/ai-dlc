@@ -91,6 +91,10 @@ snap() {
     echo "- user_request_cite: 0000000000000000000000000000000000000000000000000000000000000000"
     [ -n "${1:-}" ] && echo "- scope_confirmed: $1"
     [ -n "${2:-}" ] && echo "- scope_confirmed_cite: $2"
+    # Every record carrying a scope confirmation also carries the deferred-items field the
+    # same Step 6 write owes; `none` is its honest empty value. run.sh strips it to seed
+    # the ABSENT case, so an absent field is never an accident of this helper.
+    [ -n "${1:-}" ] && echo "- scope_deferred_items: none"
   } > "$f"
   return 0
 }
@@ -123,6 +127,7 @@ cat > "$WORK/snap-inline.md" <<INLINE
   (CAP-1..10 memlog) — read one of those, never a paraphrase. \`bug_signal_present: no\`.
   \`carryover_or_sprint_signal_present: yes\`. \`clarification_asked: n-a\`.
   \`scope_confirmed_cite: $SHA\`. \`scope_confirmed: corrected\`.
+  \`scope_deferred_items: none\`.
 INLINE
 
 # --- THE GRAMMAR THE PRODUCER ACTUALLY EMITS ----------------------------------
@@ -158,6 +163,7 @@ prod() {
     echo '- **clarification_asked:** n-a — defect and carry-over signals co-occur, but the'
     echo '  operator pre-directed priority, discharging the Step 4 MUST-ASK.'
     for _l in "$@"; do printf '%s\n' "$_l"; done
+    echo '- **scope_deferred_items:** none'
     echo '- **user_request_verbatim:**'
     echo
     echo '```text'

@@ -616,8 +616,19 @@ flag here leaves a pause nobody clears. The same asymmetry is why
 `validate-steering-budget.sh` scores an AskUserQuestion answer as citable
 operator text but never as a steamroll.
 
-**Record the outcome in the routing record** (fields below): `scope_confirmed`
-and `scope_confirmed_cite`. Then proceed — a correction is not a re-route.
+**File every deferred part of the ask BEFORE leaving Step 6.** When the scope
+the operator confirmed or corrected defers any named part of the ask — a phase
+split included — append each deferred part to
+`_bmad-output/planning-artifacts/carry-over-backlog.md` as its own
+`### CO-S<N>-<DESCRIPTOR>` item, `<N>` being the `sprint_id` resolved above, in
+the format `carry-over-evaluation.md` requires of every newly filed item (its
+`Every new item filed` rule — status and id grammar are owned there, not here).
+The question you put to the operator is text you authored and no hash covers
+it, so a deferral recorded only there is lost with the context that holds it.
+One item per deferred part; never fold two into one heading.
+
+**Record the outcome in the routing record** (fields below): `scope_confirmed`,
+`scope_confirmed_cite` and `scope_deferred_items`. Then proceed — a correction is not a re-route.
 Fold what the operator corrected into the scope you carry forward; only
 re-run Step 3 if the correction changes the pipeline VARIANT, which is rare
 and which you must say out loud if you conclude it.
@@ -673,7 +684,15 @@ the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:
       dismissed the prompt — write `scope_confirmed_cite: none` and say which.
       `none` is a gap a later check can count; a fabricated hash is not. Do
       not compute this hash yourself: a hash the lead computed over text the
-      lead chose is the self-declaration hole this field exists to close)
+      lead chose is the self-declaration hole this field exists to close.
+    - `scope_deferred_items` — `none` when the confirmed scope takes the whole
+      ask; otherwise ONE line holding a bracketed list of the carry-over ids you
+      filed at the pause point above, e.g.
+      `scope_deferred_items: [CO-S315-PHASE-2-BACKFILL, CO-S315-PHASE-3-CUTOVER]`.
+      Never a multi-line list and never an id you did not file: Check 34
+      resolves every id to a `### <id>` heading in the live carry-over backlog
+      or `carry-over-backlog-archive.md`, and fails one that is missing, malformed
+      or CLOSED)
   - Sprint Context (`sprint_id` as resolved above — an integer, never
     `none`; remaining fields from `sprint-status.yaml` if it exists)
   - Recent Activity (empty — will be populated by `gate-validation.md`
