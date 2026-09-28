@@ -4457,54 +4457,50 @@ exits 0.
 
 verify: manual
 
-## BL-358 — `layer-drift.sh` discards every row write's status and exits 0, so a truncated staged `ld.out` reads as a clean layer to `apply.sh`
 
-**LANDED (v0.657.0, verified 4592eda6).**
-Every stdout writer counts its status, one `ld_finish` exits 2 with a `layer-drift: REFUSED` line on
-a lost row, and `apply.sh` renders that as `DECISION layer-drift-refused`. The receipt below
-builds a two-row world whose LAST row is `HARD-LAYER-ADJUDICATION-MISSING` (written by `emit_raw`)
-and cuts stdout 40 bytes short of row 1's end with SIGPIPE ignored. The reader exits on row 1's
-bytes, so the write that fails is the HARD row's; the tip's refusal reads `after 1 row(s)`. A cut
-INSIDE the HARD row does not fault: the whole 1197-byte output fits the pipe buffer before the
-reader exits, and the tip exits 0. The receipt scores 0 on `4592eda6`, 1 on `a0a9c556`, 1 on a
-pre-flight stdout probe with the per-write count removed, and 1 on an `emit_raw` that does not
-count its write, 20 of 20 reps each. A reworded refusal keeping the `layer-drift: REFUSED` prefix
-scores 0, and one that drops the prefix scores 1. It does not observe the loop breaks or the
-double-shadow restaging; `procsub-staged-refusal-boot` carries those. Losing the timing only turns
-a fixed tree STILL-LIVE, never a broken one closed. It uses no `ulimit -f`, because the engine's
-here-strings share that limit.
+## BL-359 — `layer-drift.sh` reads a here-string that failed to stage as EMPTY input, so adjudication disarms and classifications flip at rc 0
 
-**DEFECT.** Found by the batch 165 contract adversary on the `BL-357` fix; out of that release by
-its recommendation. It discharges no consumer candidate. The class `BL-357` closed for
-`unregistered-drift.sh` is live in its sibling: `emit()` at
-`core/skills/ai-dlc-update/reconcile/layer-drift.sh:307-310` discards `printf`'s status, and the
-main mode ends at the file's last line (`:2082`) with no status check. `--list-adjudications`
-exits 0 explicitly at `:2081`. `apply.sh` stages that stdout to `$DT_DIR/ld.out`
-(`apply.sh:994`), reads only the exit, and derives from `LD_OUT` the `HARD-OVERRIDE-DRIFT-SECTION`,
-`OVERRIDE-SUPERSEDED`, `EXTENSION-HOOK-DRIFT` and `EXTENSION-TITLE-MATCHES-CORE` verdicts
-(`apply.sh:992-1290`; readers at 1000, 1002, 1024, 1044, 1290).
+**DEFECT.** Found by the batch 166 adversary while measuring the `BL-358` fix; out of that release
+by the contract's own instruction. The same class as `BL-354` and `BL-357`: a producer failure is
+read as an empty input, and here the empty input is the CLEAN answer.
 
-Measured on a `file://` clone of the reference consumer, range `d1c72fa9 c16d83ce`, tip engine
-`c00e611f`. Control, stdout open: rc 0, 59 rows, 5 `HARD-LAYER-ADJUDICATION-MISSING`. Stdout
-closed: rc 0, 51 `write error` lines on stderr, no refusal line. `trap '' XFSZ; ulimit -f N` on
-the regular-file stdout: N=8 rc 0 with 32 of 59 rows, N=10 rc 0 with 41, N=12 rc 0 with 54;
-0 of 5 `HARD-LAYER-ADJUDICATION-MISSING` rows in every one. (The adversary's run read 33/42/54.)
-A HARD row lost this way is an `apply` that proceeds.
+Bash 3.2 stages every here-string and heredoc to a temp file. When that write fails, bash prints
+`cannot create temp file for here document` and runs the command with EMPTY stdin; the command's
+exit is its own and says nothing about the lost input. In `core/skills/ai-dlc-update/reconcile/layer-drift.sh`
+(numbering at `4592eda6`):
 
-**Remedy:** the `BL-357` shape: count failed writes in `emit` in the main shell, break the scan at
-the first one, and give the main mode and `--list-adjudications` one exit function that prints
-`layer-drift: REFUSED — a row could not be written to stdout after N row(s) were; …` and exits 2.
-`detector_run` already renders that as `DECISION layer-drift-refused`. Check first that every
-`emit` runs in the main shell and not inside a `$( )` or a `| while`. Fixture: a closed-stdout arm
-and a mid-stream `ulimit -f` arm with a HARD row last, with a pre-flight-probe and a no-break
-mutant, as `procsub-staged-refusal-boot` U5/U5b carry for `unregistered-drift.sh`.
+- `:639` — `ADJ_CODES="$(awk … <<<"$ADJ_CONTRACT_TEXT")"`. Empty `ADJ_CODES` makes `adj_active`
+  (`:700`) false, so `adj_check` never runs and NO `HARD-LAYER-ADJUDICATION-MISSING` row is
+  generated — the tier's blocking half switched off, rc 0.
+- `:660` — `ADJ_CLAUSE_MAP` from the same text; empty, every row's clause column is blank.
+- `:1623` and `:1628` — `anchor_arm` and `section_of` read an override's anchor text by
+  here-string; empty, the section resolves to nothing and the override reads as drifted or
+  unresolved rather than OK.
+- Every other `<<<` site in the file has the same shape (`grep -n '<<<'` over the file at
+  `4592eda6`; the ones that decide a row include `:712` `adj_is_adjudicated`, `:776`, `:869`,
+  `:1151`, `:1157`, `:1839`, `:1842`, `:1879`, `:1943`).
 
-**NOTEs carried here** (batch 165, no separate filing): `emit-report.sh` and `hard-blockers.sh`
-render an exit-2 detector as "exited N without classifying", which is inaccurate for a detector
-that classified and then lost its output; `detector_refused`'s row names no re-run command (the
-fixture at `core/fixtures/procsub-staged-refusal-boot/run.sh:464` anchors on that detail's tail,
-so the two change together); on the consumer's current range the re-stamp is withheld by six
-outstanding WORKLIST rows on both engines, so the stamp cannot discriminate a refusal from a clean
-run there — the `DECISION <detector>-refused` row is the signal.
+Measured by the adversary on a `file://` clone of the reference consumer, range
+`d1c72fa9..c16d83ce`, under `ulimit -f 12` (`ADJ_CONTRACT_TEXT` is the 78356-byte
+`layer-contract.yaml` at `c16d83ce`): stderr carries `cannot create temp file for here document`,
+`ADJ_CODES` comes back empty, no HARD-LAYER row is generated, and 8 `OVERRIDE-OK` rows flip to
+`OVERRIDE-DRIFT-FILE` / `OVERRIDE-ANCHOR-UNRESOLVED` — all at rc 0, with zero `printf: write error`
+lines, so `BL-358`'s write counter does not see it. A contract-literal fix measured rc 0 / 54 rows /
+0 HARD at every `ulimit -f` >= 12.
 
-verify: sh s=core/skills/ai-dlc-update/reconcile/layer-drift.sh; [ -f "$s" ] || exit 9; w="$(mktemp -d)" || exit 9; D="$w/d"; C="$w/c"; K=core/skills/ai-dlc; E="$C/.claude/skills/ai-dlc/extensions"; mkdir -p "$D/$K/steps" "$D/core/schemas" "$E" "$C/.claude/skills/ai-dlc/steps" || exit 9; printf 'clauses:\n  - id: LC-E4\n    level: ADJUDICATED\n    code: EXTENSION-HOOK-DRIFT\n' > "$D/$K/layer-contract.yaml"; printf '{\n  "properties": {\n    "verdict": {\n      "enum": [\n        "still-additive",\n        "contradicts-core",\n        "retire"\n      ]\n    }\n  }\n}\n' > "$D/core/schemas/layer-adjudication-register.json"; printf '# Demo\n\n## Gamma\n\nbase body\n' > "$D/$K/steps/demo.md"; g() { git -C "$D" -c user.email=r@r -c user.name=r -c commit.gpgsign=false "$@"; }; { g init -q && g add -A && g commit -qm b; } >/dev/null 2>&1 || exit 9; B="$(git -C "$D" rev-parse HEAD)"; cp "$D/$K/steps/demo.md" "$C/.claude/skills/ai-dlc/steps/demo.md"; printf 'theirs body\n' >> "$D/$K/steps/demo.md"; { g add -A && g commit -qm t; } >/dev/null 2>&1 || exit 9; T="$(git -C "$D" rev-parse HEAD)"; printf -- '---\nkind: check\nhooks: steps/demo.md\nreason: r\n---\n\n### 901. [ext:x] X.\n\nBody.\n' > "$E/x.md"; bash "$s" "$D" "$B" "$T" "$C" > "$w/open" 2>/dev/null || exit 1; [ "$(awk -F'\t' 'END{print $1}' "$w/open")" = HARD-LAYER-ADJUDICATION-MISSING ] && [ "$(wc -l < "$w/open" | tr -d ' ')" = 2 ] || exit 9; n=$(( $(head -n 1 "$w/open" | wc -c) - 40 )); ( trap '' PIPE; bash "$s" "$D" "$B" "$T" "$C" 2> "$w/err" | head -c "$n" > "$w/cut"; exit "${PIPESTATUS[0]}" ); rc=$?; [ "$(wc -c < "$w/cut" | tr -d ' ')" = "$n" ] || exit 9; [ "$rc" -eq 2 ] && grep -q ': REFUSED' "$w/err"
+Reach: `ulimit -f` is the forcing, not the only trigger — a full or read-only `$TMPDIR` fails the
+same staging. `apply.sh` reads the rc and the rows, so it proceeds on the disarmed output.
+
+**Remedy direction (not decided):** stage the contract text to a file under `$LD_T` once, read its
+write status, and have the awk readers take the file; or assert after `:639` that `ADJ_CODES` is
+non-empty whenever the contract text carries a `level: ADJUDICATED` line, and refuse (exit 1, as
+`ld_refuse` does) otherwise. The per-override `:1623`/`:1628` sites need the same treatment or a
+refusal keyed on the stderr line. Fixture: a small-`ulimit -f` arm whose world's contract text
+exceeds the limit, asserting a refusal and not an rc-0 run with zero HARD rows.
+
+
+**Findings carried here** (batch 166 tip adversary; the first is DEFECT-tier on its own and is held in this entry only because the live ceiling admitted one filing after the rotation — split it out at the next close):
+- `emit-report.sh` prints `0 HARD blockers.` beside a layer-drift refusal, because `hard-blockers.sh:266` suppresses its own DETECTOR-REFUSED when `--ld-rows` is supplied and `:286-287` then prints the affirmative line — the line `:234` calls the one the HARD- contract keys on. Forced with a stub exiting 2 after three non-HARD rows: `emit-report.sh` rc 0, line 48 `0 HARD blockers.`, the refusal only in the layer-drift section. With a partial 20-row set, six HARD rows rendered as if complete. The standalone `hard-blockers.sh` path is correct. Remedy: with `--ld-rc` non-zero, suppress the affirmative line and render the refusal in the blocking-layer region.
+- Two `layer-drift.sh` refusal paths have no fixture cell: the W3 contradiction-awk count (`adj_register_contradictions`, a mutant replacing its `PIPESTATUS[1]` read with `_rc=0` loses a `HARD-REGISTER-CONTRADICTION` row silently; `mk_ld_world` never writes the register, and the `BL-358` receipt world has none either) and the grouping refusal on the staged double-shadow `sort` (forced with a PATH `awk` stub: tip rc 1, base rc 0 with the pair lost; no cell forces the producer). Also surviving, lower consequence: the listing-loop break removed, the list-mode count line printed after a failure, an `emit_raw` guard moved after its printf. Missing cells: an L5f world with two conflicting register records and stdout closed; one stub cell for the grouping.
+
+verify: manual

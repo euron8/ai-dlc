@@ -20697,3 +20697,54 @@ there.
 
 verify: sh s=core/skills/ai-dlc-update/reconcile/unregistered-drift.sh; [ -f "$s" ] || exit 9; w="$(mktemp -d)" || exit 9; D="$w/d"; C="$w/c"; S=core/skills/ai-dlc/steps; mkdir -p "$D/$S" "$C/.claude/skills/ai-dlc/steps" || exit 9; for i in 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20; do printf '# ok %s\n' "$i" > "$D/$S/a$i.md"; cp "$D/$S/a$i.md" "$C/.claude/skills/ai-dlc/steps/"; done; printf '# z\n\nThe lead reads this.\n' > "$D/$S/zz.md"; cp "$D/$S/zz.md" "$C/.claude/skills/ai-dlc/steps/"; printf 'The consumer added this line in place.\n' >> "$C/.claude/skills/ai-dlc/steps/zz.md"; printf '0.1.0\n' > "$D/VERSION"; g() { git -C "$D" -c user.email=r@r -c user.name=r -c commit.gpgsign=false "$@"; }; { g init -q && g add -A && g commit -qm b; } >/dev/null 2>&1 || exit 9; B="$(git -C "$D" rev-parse HEAD)"; printf '0.2.0\n' > "$D/VERSION"; { g add -A && g commit -qm t; } >/dev/null 2>&1 || exit 9; T="$(git -C "$D" rev-parse HEAD)"; printf 'version: 0.1.0\ncommit: %s\n' "$B" > "$C/.claude/.ai-dlc-version"; bash "$s" "$D" "$B" "$C" "$T" > "$w/open" 2>/dev/null || exit 1; [ "$(awk -F'\t' '$1=="HARD-UNREGISTERED-CORE-DRIFT"' "$w/open" | wc -l | tr -d ' ')" = 1 ] && [ "$(awk -F'\t' '$1=="CORE-OK"' "$w/open" | wc -l | tr -d ' ')" = 20 ] && [ "$(wc -l < "$w/open" | tr -d ' ')" = 21 ] || exit 1; err="$(bash "$s" "$D" "$B" "$C" "$T" 2>&1 >&-)"; [ $? -eq 2 ] || exit 1; printf '%s\n' "$err" > "$w/e1"; grep -q '^unregistered-drift: REFUSED.*could not be written to stdout' "$w/e1" || exit 1; err="$( ( trap '' XFSZ; ulimit -f 1; exec bash "$s" "$D" "$B" "$C" "$T" > "$w/mid" ) 2>&1 )"; rc=$?; n="$(wc -l < "$w/mid" | tr -d ' ')"; [ "$n" -ge 1 ] && [ "$n" -lt 21 ] || exit 9; [ "$rc" -eq 2 ] || exit 1; printf '%s\n' "$err" > "$w/e2"; grep -q '^unregistered-drift: REFUSED.*could not be written to stdout' "$w/e2" || exit 1; M="$w/m"; mkdir "$M" || exit 9; AI_DLC_RECONCILE_MEMO="$M" bash "$s" "$D" "$B" "$C" "$T" >/dev/null 2>&1 || exit 1; k=0; for f in "$M"/t\ *.c; do [ -f "$f" ] && chmod 000 "$f" && k=$((k+1)); done; [ "$k" -ge 1 ] || exit 9; AI_DLC_RECONCILE_MEMO="$M" bash "$s" "$D" "$B" "$C" "$T" > "$w/hit" 2>/dev/null || exit 1; [ "$(wc -l < "$w/hit" | tr -d ' ')" = 21 ] && [ "$(awk -F'\t' '$1=="HARD-UNREGISTERED-CORE-DRIFT"' "$w/hit" | wc -l | tr -d ' ')" = 1 ]
 
+## BL-358 — `layer-drift.sh` discards every row write's status and exits 0, so a truncated staged `ld.out` reads as a clean layer to `apply.sh`
+
+**LANDED (v0.657.0, verified 4592eda6).**
+Every stdout writer counts its status, one `ld_finish` exits 2 with a `layer-drift: REFUSED` line on
+a lost row, and `apply.sh` renders that as `DECISION layer-drift-refused`. The receipt below
+builds a two-row world whose LAST row is `HARD-LAYER-ADJUDICATION-MISSING` (written by `emit_raw`)
+and cuts stdout 40 bytes short of row 1's end with SIGPIPE ignored. The reader exits on row 1's
+bytes, so the write that fails is the HARD row's; the tip's refusal reads `after 1 row(s)`. A cut
+INSIDE the HARD row does not fault: the whole 1197-byte output fits the pipe buffer before the
+reader exits, and the tip exits 0. The receipt scores 0 on `4592eda6`, 1 on `a0a9c556`, 1 on a
+pre-flight stdout probe with the per-write count removed, and 1 on an `emit_raw` that does not
+count its write, 20 of 20 reps each. A reworded refusal keeping the `layer-drift: REFUSED` prefix
+scores 0, and one that drops the prefix scores 1. It does not observe the loop breaks or the
+double-shadow restaging; `procsub-staged-refusal-boot` carries those. Losing the timing only turns
+a fixed tree STILL-LIVE, never a broken one closed. It uses no `ulimit -f`, because the engine's
+here-strings share that limit.
+
+**DEFECT.** Found by the batch 165 contract adversary on the `BL-357` fix; out of that release by
+its recommendation. It discharges no consumer candidate. The class `BL-357` closed for
+`unregistered-drift.sh` is live in its sibling: `emit()` at
+`core/skills/ai-dlc-update/reconcile/layer-drift.sh:307-310` discards `printf`'s status, and the
+main mode ends at the file's last line (`:2082`) with no status check. `--list-adjudications`
+exits 0 explicitly at `:2081`. `apply.sh` stages that stdout to `$DT_DIR/ld.out`
+(`apply.sh:994`), reads only the exit, and derives from `LD_OUT` the `HARD-OVERRIDE-DRIFT-SECTION`,
+`OVERRIDE-SUPERSEDED`, `EXTENSION-HOOK-DRIFT` and `EXTENSION-TITLE-MATCHES-CORE` verdicts
+(`apply.sh:992-1290`; readers at 1000, 1002, 1024, 1044, 1290).
+
+Measured on a `file://` clone of the reference consumer, range `d1c72fa9 c16d83ce`, tip engine
+`c00e611f`. Control, stdout open: rc 0, 59 rows, 5 `HARD-LAYER-ADJUDICATION-MISSING`. Stdout
+closed: rc 0, 51 `write error` lines on stderr, no refusal line. `trap '' XFSZ; ulimit -f N` on
+the regular-file stdout: N=8 rc 0 with 32 of 59 rows, N=10 rc 0 with 41, N=12 rc 0 with 54;
+0 of 5 `HARD-LAYER-ADJUDICATION-MISSING` rows in every one. (The adversary's run read 33/42/54.)
+A HARD row lost this way is an `apply` that proceeds.
+
+**Remedy:** the `BL-357` shape: count failed writes in `emit` in the main shell, break the scan at
+the first one, and give the main mode and `--list-adjudications` one exit function that prints
+`layer-drift: REFUSED — a row could not be written to stdout after N row(s) were; …` and exits 2.
+`detector_run` already renders that as `DECISION layer-drift-refused`. Check first that every
+`emit` runs in the main shell and not inside a `$( )` or a `| while`. Fixture: a closed-stdout arm
+and a mid-stream `ulimit -f` arm with a HARD row last, with a pre-flight-probe and a no-break
+mutant, as `procsub-staged-refusal-boot` U5/U5b carry for `unregistered-drift.sh`.
+
+**NOTEs carried here** (batch 165, no separate filing): `emit-report.sh` and `hard-blockers.sh`
+render an exit-2 detector as "exited N without classifying", which is inaccurate for a detector
+that classified and then lost its output; `detector_refused`'s row names no re-run command (the
+fixture at `core/fixtures/procsub-staged-refusal-boot/run.sh:464` anchors on that detail's tail,
+so the two change together); on the consumer's current range the re-stamp is withheld by six
+outstanding WORKLIST rows on both engines, so the stamp cannot discriminate a refusal from a clean
+run there — the `DECISION <detector>-refused` row is the signal.
+
+verify: sh s=core/skills/ai-dlc-update/reconcile/layer-drift.sh; [ -f "$s" ] || exit 9; w="$(mktemp -d)" || exit 9; D="$w/d"; C="$w/c"; K=core/skills/ai-dlc; E="$C/.claude/skills/ai-dlc/extensions"; mkdir -p "$D/$K/steps" "$D/core/schemas" "$E" "$C/.claude/skills/ai-dlc/steps" || exit 9; printf 'clauses:\n  - id: LC-E4\n    level: ADJUDICATED\n    code: EXTENSION-HOOK-DRIFT\n' > "$D/$K/layer-contract.yaml"; printf '{\n  "properties": {\n    "verdict": {\n      "enum": [\n        "still-additive",\n        "contradicts-core",\n        "retire"\n      ]\n    }\n  }\n}\n' > "$D/core/schemas/layer-adjudication-register.json"; printf '# Demo\n\n## Gamma\n\nbase body\n' > "$D/$K/steps/demo.md"; g() { git -C "$D" -c user.email=r@r -c user.name=r -c commit.gpgsign=false "$@"; }; { g init -q && g add -A && g commit -qm b; } >/dev/null 2>&1 || exit 9; B="$(git -C "$D" rev-parse HEAD)"; cp "$D/$K/steps/demo.md" "$C/.claude/skills/ai-dlc/steps/demo.md"; printf 'theirs body\n' >> "$D/$K/steps/demo.md"; { g add -A && g commit -qm t; } >/dev/null 2>&1 || exit 9; T="$(git -C "$D" rev-parse HEAD)"; printf -- '---\nkind: check\nhooks: steps/demo.md\nreason: r\n---\n\n### 901. [ext:x] X.\n\nBody.\n' > "$E/x.md"; bash "$s" "$D" "$B" "$T" "$C" > "$w/open" 2>/dev/null || exit 1; [ "$(awk -F'\t' 'END{print $1}' "$w/open")" = HARD-LAYER-ADJUDICATION-MISSING ] && [ "$(wc -l < "$w/open" | tr -d ' ')" = 2 ] || exit 9; n=$(( $(head -n 1 "$w/open" | wc -c) - 40 )); ( trap '' PIPE; bash "$s" "$D" "$B" "$T" "$C" 2> "$w/err" | head -c "$n" > "$w/cut"; exit "${PIPESTATUS[0]}" ); rc=$?; [ "$(wc -c < "$w/cut" | tr -d ' ')" = "$n" ] || exit 9; [ "$rc" -eq 2 ] && grep -q ': REFUSED' "$w/err"
