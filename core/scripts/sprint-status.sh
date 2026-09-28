@@ -239,6 +239,8 @@ STORIES_RE = re.compile(KEYS["stories_re"])
 STORY_KEY_RE   = re.compile(KEYS["story_key_re"])
 STORY_FIELD_RE = re.compile(KEYS["story_field_re"])
 DEFERRED_ID_RE = re.compile(KEYS["deferred_ac_id_re"])
+# Not a valid field name, so no reader keyed on a declared field can ever collide with it.
+DEFERRED_MISINDENT = "deferred_acs!misindented"
 
 SFILE         = schema["story_file"]
 # A TEMPLATE, NOT A PATH. The sprint slot moved out of the story FILENAME and into the DIRECTORY
@@ -591,6 +593,8 @@ def deferred_acs_of(fields):
     deferred" is how a deferral written in ordinary YAML would close silently. A bare YAML null
     is refused with it: the one spelling of "none" is `[]`, which is also what the reviewer
     writes to say every live-ops AC was verified at the gate."""
+    if DEFERRED_MISINDENT in fields:
+        return ("malformed", fields[DEFERRED_MISINDENT])
     if "deferred_acs" not in fields:
         return ("absent", [])
     v = fields["deferred_acs"]
@@ -695,6 +699,27 @@ def parse_story_entries(text):
             if km is None:
                 continue                           # not a bare key — keep looking for one
             entry_indent = indent
+        # `deferred_acs` IS NEVER DROPPED FOR ITS INDENT, and this is scoped to that one key. Every
+        # other field keeps the relative contract above: a line at a non-field indent is not a
+        # field. For this key that contract closed a sprint over an owed AC -- `deferred_acs: [AC5]`
+        # six spaces deep under four-space fields, or tab-indented, placed after `status:`, was
+        # skipped, and `check-stories` and `close` both exited 0. Inside an entry, a
+        # `deferred_acs:` line at any indent other than the entry's field indent is recorded as
+        # MISINDENTED, which deferred_acs_of reports as malformed: a FINDING in check-stories, a
+        # refusal in close. Two exemptions, both the existing grammar: a bare key at the ENTRY
+        # indent is an entry key, and the first field of an entry still DEFINES the field indent.
+        # Residue, loud rather than silent: a block-scalar continuation line that begins with
+        # `deferred_acs:` is refused too.
+        if cur is not None and not (indent == entry_indent and km is not None) \
+                and not (field_indent is None and indent > entry_indent):
+            dm = STORY_FIELD_RE.match(ln)
+            if dm is not None and dm.group(2) == "deferred_acs" and indent != field_indent:
+                cur[DEFERRED_MISINDENT] = (
+                    "`deferred_acs` on line %d sits at indent %d (%s), not this entry's field "
+                    "indent %s — a misindented or tab-indented field is refused, never dropped"
+                    % (start + off + 1, indent, "tab" if "\t" in dm.group(1) else "spaces",
+                       field_indent if field_indent is not None else "(none yet)"))
+                continue
         if indent == entry_indent:
             if km is None:
                 continue

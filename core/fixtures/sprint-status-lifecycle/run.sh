@@ -626,6 +626,32 @@ stories:
   cl_run "$T"
   if [ "$CL_RC" -eq 0 ] && grep -q '^status: done' "$CIMPL/sprint-status.yaml" \
      && grep -q '^status: done' "$CPLAN/sprint-status.yaml"; then echo "D9 PASS"; else echo "D9 FAIL"; fi
+
+  # D10/D11 — `deferred_acs` at a NON-FIELD indent, after `status:`. The relative-indent parser
+  # keeps only lines at the entry's first field indent, so this line was DROPPED: check-stories 0,
+  # close 0, the sprint stamped over an owed AC. Each is a FINDING in check-stories and a refusal in
+  # close with both views byte-unchanged. D10 is six spaces under four-space fields, D11 a tab; the
+  # second story is a clean entry, so a parser that stopped reading at the bad line shows up too.
+  local d n
+  for d in D10 D11; do
+    if [ "$d" = D10 ]; then n='      '; else n="$(printf '\t')"; fi
+    cs_reset; story_fm story-1 done; story_fm story-2 done
+    printf 'sprint: 291\nstatus: in_progress\nstories:\n  story-291-1:\n    file: stories/story-1.md\n    status: done\n%sdeferred_acs: [AC5]\n  story-291-2:\n    file: stories/story-2.md\n    status: done\n' "$n" \
+      > "$CIMPL/sprint-status.yaml"
+    cp "$CIMPL/sprint-status.yaml" "$CPLAN/sprint-status.yaml"
+    cp "$CIMPL/sprint-status.yaml" "$CS/impl.before"; cp "$CPLAN/sprint-status.yaml" "$CS/plan.before"
+    cs_run "$T"
+    local csok=0 clok=0
+    if [ "$CS_RC" -eq 1 ] \
+       && grep -q 'FINDING \[implementation/story-291-1\] `deferred_acs` is not one single-line inline list: `deferred_acs` on line 7 sits at indent' <<<"$CS_OUT" \
+       && grep -q 'FINDING \[planning/story-291-1\] `deferred_acs`' <<<"$CS_OUT" \
+       && grep -q '2 comparison(s) over 2 entries\|4 comparison(s) over 4 entries' <<<"$CS_OUT"; then csok=1; fi
+    cl_run "$T"
+    if [ "$CL_RC" -eq 3 ] && grep -q 'refusing to close:.*\[implementation/story-291-1\] `deferred_acs` unreadable' <<<"$CL_OUT" \
+       && cmp -s "$CIMPL/sprint-status.yaml" "$CS/impl.before" \
+       && cmp -s "$CPLAN/sprint-status.yaml" "$CS/plan.before"; then clok=1; fi
+    if [ "$csok$clok" = 11 ]; then echo "$d PASS"; else echo "$d FAIL"; fi
+  done
 }
 
 echo
@@ -638,10 +664,10 @@ DS_FAILED="$(printf '%s\n' "$DBATTERY" | awk '$2=="FAIL"{printf "%s ", $1}')"
 DS_COUNT="$(printf '%s\n' "$DBATTERY" | awk '$2=="PASS"{n++} END{print n+0}')"
 if [ -n "$DS_FAILED" ]; then
   bad "deferred_acs battery failed on the SHIPPING tool: $DS_FAILED"
-elif [ "$DS_COUNT" != "9" ]; then
-  bad "deferred_acs battery reported $DS_COUNT PASS lines, expected 9 — an arm produced no verdict"
+elif [ "$DS_COUNT" != "11" ]; then
+  bad "deferred_acs battery reported $DS_COUNT PASS lines, expected 11 — an arm produced no verdict"
 else
-  ok "deferred_acs: all 9 assertions pass on the shipping tool"
+  ok "deferred_acs: all 11 assertions pass on the shipping tool"
 fi
 
 dmutant() {                      # <expected-assertion> <label> <sed-program>
@@ -672,8 +698,17 @@ dmutant D6 "writer-forgot REPORT removed" 's/^                if owed_n:$/      
 # D7: the pre-write scan reads only the FIRST view — the shape of a refusal made inside the write
 # loop, which has stamped the implementation view before it reads the planning one.
 dmutant D7 "refusal reads the first view only" '/^    owed = \[\]$/,/^    if owed:$/s/in existing:$/in existing[:1]:/'
-dmutant D8 "close skips a malformed value" 's/^            if state == "malformed":$/            if False:/'
+# D8 owns D10 and D11's CLOSE half too, by design rather than entanglement: a misindented
+# `deferred_acs` reaches close as a malformed value, so skipping malformed values in close closes
+# over it as well. The parser guard D10/D11 exist for is isolated by their own three mutants below.
+dmutant "D8 D10 D11" "close skips a malformed value" 's/^            if state == "malformed":$/            if False:/'
 dmutant D9 "close refuses on [] and absent" 's/^            elif state == "ok" and ids:$/            elif True:/'
+# D10/D11: the misindented-key guard. The full revert restores the drop and must fail both; the two
+# partial fixes each handle one indent form, and each must fail only the other form's cell.
+DMI='            if dm is not None and dm.group(2) == "deferred_acs" and indent != field_indent:$'
+dmutant "D10 D11" "misindented deferred_acs dropped again" "s/^${DMI}/            if False:/"
+dmutant D10 "only a tab is caught, deeper spaces dropped" "s/^\\(${DMI%:\$}\\):\$/\\1 and \"\\\\t\" in dm.group(1):/"
+dmutant D11 "only deeper spaces are caught, a tab dropped" "s/^\\(${DMI%:\$}\\):\$/\\1 and \"\\\\t\" not in dm.group(1):/"
 
 # --- Unmutated control -------------------------------------------------------
 # A copy in the same directory as the mutants, mutated not at all. If the harness itself is what
