@@ -1313,6 +1313,56 @@ else
 fi
 chmod 644 "$UR/b0/carry-over-backlog.md" "$UR/a0/carry-over-backlog-archive.md" 2>/dev/null
 
+# --- A non-UTF-8 byte in a READABLE item is not an unreadable corpus ---------------------------
+# Once the lookup's awk exit is read, a UTF-8 locale makes BSD awk abort (`towc: multibyte
+# conversion failure`) on one Latin-1 byte inside the item's section, and that abort refused a
+# healthy OPEN item as "cannot read the carry-over corpus". The CLOSED twin is the same bytes one
+# status apart, so a subject that refuses or acquits everything fails one of the pair. The cells
+# run under a UTF-8 locale; a host without one cannot express the defect and says so.
+LB="$SD/latin1"; mkdir -p "$LB/open" "$LB/closed"
+printf '# Carry-over Backlog\n\n### CO-S315-LATIN1-ITEM\ncaf\351 note carried from a pasted email\n**Status:** OPEN\n' \
+  > "$LB/open/carry-over-backlog.md"
+printf '# Carry-over Backlog\n\n### CO-S315-LATIN1-ITEM\ncaf\351 note carried from a pasted email\n**Status:** CLOSED - delivered\n' \
+  > "$LB/closed/carry-over-backlog.md"
+sd_snap latin1 "[CO-S315-LATIN1-ITEM]"
+LB_LOC=""
+for l in en_US.UTF-8 C.UTF-8; do
+  if [ "$(LC_ALL="$l" locale charmap 2>/dev/null)" = "UTF-8" ]; then LB_LOC="$l"; break; fi
+done
+lb_run() {   # $1 validator, $2 world -> echoes rc
+  LC_ALL="$LB_LOC" LANG="$LB_LOC" TZ=UTC bash "$1" --snapshot "$SD/snap-latin1.md" --answers "$ANSWERS" \
+    --backlog "$LB/$2/carry-over-backlog.md" --repo "$REPO_STD" >/dev/null 2>&1
+  echo $?
+}
+if [ -z "$LB_LOC" ]; then
+  printf '  INCONCLUSIVE  latin1 cells -- this host has no UTF-8 locale, so it cannot express the abort\n'
+else
+  r_open="$(lb_run "$VALIDATOR" open)"; r_closed="$(lb_run "$VALIDATOR" closed)"
+  if [ "$r_open" = "0" ] && [ "$r_closed" = "1" ]; then
+    ok "a Latin-1 byte in a readable item under $LB_LOC: OPEN passes (0), its CLOSED twin fails (1)"
+  else
+    bad "a Latin-1 byte in a readable item under $LB_LOC: OPEN rc=$r_open (want 0), CLOSED rc=$r_closed (want 1) — an encoding read as an unreadable corpus, or a CLOSED item acquitted"
+  fi
+  LB_MUT="$LB/mutant-unpinned.sh"
+  n="$(grep -cF -- '  LC_ALL=C awk -v id="$1"' "$VALIDATOR")" || n=0
+  if [ "$n" != "1" ]; then
+    bad "FIXTURE STALE: the latin1 mutant's anchor occurs $n times in $VALIDATOR, not 1"
+  else
+    awk '{ i = index($0, "  LC_ALL=C awk -v id=\"$1\""); if (i) $0 = "  awk -v id=\"$1\"" substr($0, i + length("  LC_ALL=C awk -v id=\"$1\"")); print }' \
+      "$VALIDATOR" > "$LB_MUT"
+    if cmp -s "$VALIDATOR" "$LB_MUT"; then
+      bad "FIXTURE STALE: the latin1 mutant (locale pin removed) matched nothing"
+    else
+      m_open="$(lb_run "$LB_MUT" open)"; m_closed="$(lb_run "$LB_MUT" closed)"
+      if [ "$m_open" != "0" ] && [ "$m_closed" != "0" ]; then
+        ok "latin1 mutant (locale pin removed) killed: OPEN rc=$m_open under $LB_LOC"
+      else
+        bad "LATIN1 MUTANT SURVIVED: with the locale pin removed the OPEN item still passed (rc=$m_open) — the cell cannot see the abort"
+      fi
+    fi
+  fi
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "scope-confirmation: PASS"; exit 0; fi
 echo "scope-confirmation: $fails assertion(s) FAILED" >&2

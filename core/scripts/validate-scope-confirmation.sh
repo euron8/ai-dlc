@@ -364,8 +364,12 @@ deferred_items_of() {   # prints @<value> when the field is present, nothing whe
 }
 
 # status_of <id> <file> -> "NOHEAD" | "NOSTATUS" | "S <status text>"
+# The C locale is load-bearing now that the lookup's exit is read: under a UTF-8 locale BSD awk
+# aborts with `towc: multibyte conversion failure` on one non-UTF-8 byte inside the item's
+# section, and that abort would refuse a readable OPEN item as an unreadable corpus. The program
+# compares bytes only (`==`, `index`), so a byte locale does not change what it matches.
 status_of() {
-  awk -v id="$1" '
+  LC_ALL=C awk -v id="$1" '
     found && /^(# |## |### )/ { exit }
     !found && $1 == "###" && $2 == id { found = 1; next }
     found && index($0, "**Status:**") { print "S " substr($0, index($0, "**Status:**") + 11); done = 1; exit }
