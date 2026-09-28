@@ -160,8 +160,8 @@ self_replaced=0
 # (`semantic-merge` with no addendum) is byte-identical to what it printed before and no reader
 # gains a trailing tab it did not have.
 #
-# THE HAND-BACK COUNT IS TAKEN HERE, IN THE EMITTER, AND NOT AT THE CALL SITES. There are ten
-# `say WORKLIST` sites and twenty-one `say DECISION` sites today, and a counter incremented at
+# THE HAND-BACK COUNT IS TAKEN HERE, IN THE EMITTER, AND NOT AT THE CALL SITES. There are 22
+# `say WORKLIST` sites and 39 `say DECISION` sites today (non-comment lines), and a counter incremented at
 # each is a hand-list that the next row added silently falls out of -- the same shape as the
 # `mech_fail` list below, which is why that one had to be measured rather than trusted. Every row
 # reaches this function, so this is the one place the duty cannot be missed.
@@ -598,7 +598,8 @@ fi
 # THE DETECTOR'S STDOUT, STDERR AND EXIT ARE STAGED AND READ, NOT PIPED PAST. This was
 # `$(bash unregistered-drift.sh … 2>/dev/null | awk …)`: a detector that exited non-zero with
 # empty stdout, or that emitted HARD-DRIFT-SCAN-UNAVAILABLE (its own "nothing was scanned" row,
-# which it emits with exit 0 by contract), handed the drift loop below an empty list -- read as
+# which it emits with exit 0 by contract -- exit 2 when that row itself could not be written),
+# handed the drift loop below an empty list -- read as
 # "no in-place core edit" -- and the run went on to overwrite core. Either now draws a DECISION
 # row, which withholds the re-stamp; `detector_refused` is the one spelling of it.
 if [ -n "$UD_FLAG" ]; then

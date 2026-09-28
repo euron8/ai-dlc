@@ -28,8 +28,9 @@
 # Exit:   0 when every row it produced reached stdout -- whatever it found (a classifier, not a
 #         gate: the CALLER decides; HARD- blocks). 2 when ANY row could not be written (closed
 #         stdout, EFBIG on a staged file, EPIPE with SIGPIPE ignored), with the line
-#         `unregistered-drift: REFUSED — N row(s) could not be written to stdout; ...` on stderr:
-#         a truncated row set is not a finding of "no drift". See `ud_finish` below.
+#         `unregistered-drift: REFUSED — a row could not be written to stdout after N row(s)
+#         were; ...` on stderr, N the rows that DID land. The scan STOPS at the first failed
+#         write, so a truncated row set is not a finding of "no drift". See `ud_finish` below.
 #
 # Statuses
 #   HARD-CORE-DRIFT-ABSORBED      the consumer's in-place delta is NOW PRESENT UPSTREAM:
@@ -295,9 +296,24 @@ closest_ancestor_blob() {
 # the case a probe at start cannot see. It is incremented in the MAIN shell, which is why every
 # emit site -- the two refusals and the scan loop, which reads `done < file`, never `| while` --
 # runs there; an emit inside a subshell would count into a copy that is thrown away.
+#
+# THE FIRST FAILED WRITE ENDS THE SCAN, and the scan loop's first statement is that break. After a
+# failed printf, bash 3.2 keeps the unflushed row in its stdout buffer and that buffer LEAKS into
+# every later `$( )` in this process, so `cons="$(consumer_path ...)"` comes back holding the
+# leaked row, `[ -f "$cons" ]` fails, and every remaining file is skipped UNSCANNED. Measured on a
+# consumer clone (95 rows healthy) with stdout piped through `head -c 4500`, SIGPIPE ignored: 64
+# whole rows landed, and the old line said "1 row(s) could not be written ... the scan ran" while
+# 29 loop iterations ran after the failed write and emitted nothing. So nothing after a failed
+# write is trusted: the loop stops, and the refusal counts the rows whose printf SUCCEEDED
+# (`ud_emit_ok`). That is a writer-side count -- a reader that truncates mid-row, as `head -c`
+# does, can hold one row fewer whole than the count says.
 ud_emit_failed=0
-emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3" || ud_emit_failed=$(( ud_emit_failed + 1 )); }
-# ud_finish -- the ONLY way this script exits. Every row written: 0, whatever was found. Any row
+ud_emit_ok=0
+emit() {
+  if printf '%s\t%s\t%s\n' "$1" "$2" "$3"; then ud_emit_ok=$(( ud_emit_ok + 1 ))
+  else ud_emit_failed=$(( ud_emit_failed + 1 )); fi
+}
+# ud_finish -- the ONLY way this script exits. Every row written: 0, whatever was found. A row
 # lost: the named line on stderr and 2, which `apply.sh`'s `detector_run` reads as a refusal
 # (`DECISION unregistered-drift-refused`, re-stamp withheld) and `emit-report.sh` and
 # `hard-blockers.sh` render as DETECTOR-REFUSED. Bash's own `printf: write error: ...` precedes
@@ -305,7 +321,7 @@ emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3" || ud_emit_failed=$(( ud_emit_fail
 # "write error" and never on line 1.
 ud_finish() {
   if [ "$ud_emit_failed" -gt 0 ]; then
-    printf 'unregistered-drift: REFUSED — %s row(s) could not be written to stdout; the scan ran but its output is incomplete. Re-run unregistered-drift.sh.\n' "$ud_emit_failed" >&2
+    printf 'unregistered-drift: REFUSED — a row could not be written to stdout after %s row(s) were; the scan stopped there and its output is INCOMPLETE. Re-run unregistered-drift.sh.\n' "$ud_emit_ok" >&2
     exit 2
   fi
   exit 0
@@ -605,6 +621,9 @@ if [ -n "$ud_scan_why" ]; then
   ud_finish
 fi
 while IFS= read -r cp; do
+      # FIRST, and before any `$( )`: a failed write poisons every later command substitution
+      # (see `emit`), so nothing past it is scanned or reported.
+      [ "$ud_emit_failed" -eq 0 ] || break
       rel="${cp#core/}"
       cons="$(consumer_path "$rel")" || continue
       [ -f "$cons" ] || continue
