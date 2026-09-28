@@ -2950,21 +2950,26 @@ lead chooses which hash to copy and cannot author what it resolves to. **A lead
 must never compute this hash itself** — a hash computed over text the lead chose
 resolves perfectly and proves nothing.
 
-**Exit 3 is PENDING, and its two causes are deliberately narrow.** A snapshot with
+**Exit 3 is PENDING, and its three causes are deliberately narrow.** A snapshot with
 no routing record at all predates the release that created one. A consumer with no
 `operator-answers-history.md` has not installed the capture hook, so nothing could
 have recorded the answer whatever the lead did, and failing there would blame a
-lead for a missing hook. **"No `scope_confirmed` field" is NOT one of them** — that
-reading is indistinguishable from a lead on the current release skipping the pause
-point, and it fails open on precisely the conduct this check exists to catch. Once
-the capture file exists the hook is live, and a missing field is the lead's.
-An ABSENT `scope_deferred_items` is decided the same way, from records no agent
-writes: the hook's timestamp on the cited answer against the commit that first
-stamped `.claude/.ai-dlc-version` at the release introducing the field. An answer
-given before that commit is PENDING; one given after it is a FAIL.
+lead for a missing hook. An ABSENT `scope_deferred_items` on a record whose cited
+answer predates the release introducing the field is a legacy record. **"No
+`scope_confirmed` field" is NOT one of them** — that reading is indistinguishable
+from a lead on the current release skipping the pause point, and it fails open on
+precisely the conduct this check exists to catch. Once the capture file exists the
+hook is live, and a missing field is the lead's. The third cause is decided the
+same way, from records no agent writes: the hook's timestamp on the cited answer
+against the commit that first stamped `.claude/.ai-dlc-version` at the release
+introducing the field. An answer given before that commit is PENDING; one given
+after it is a FAIL. Where the date cannot be decided — a `none` cite carries no
+answer timestamp, or there is no git history or no stamping commit — it is PENDING.
 
 **Exit 2 is a FAIL.** No snapshot at the resolved path means the verdict would be
-about nothing. `answers_entries_scanned:` prints on every path including PENDING,
+about nothing. The same holds for a `scope_deferred_items` list whose carry-over
+backlog or archive exists and cannot be read: an id looked up in a file nobody
+could open is not a filed item, and it is refused rather than acquitted. `answers_entries_scanned:` prints on every path including PENDING,
 so a run that scanned an empty capture file cannot read like one that scanned
 forty healthy entries.
 
