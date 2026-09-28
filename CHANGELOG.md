@@ -94,7 +94,9 @@ sprint review noticed.
 - **A carry-over backlog or archive that exists but cannot be read is a refusal (exit 2), never an
   acquittal.** The lookup's awk exit is read, and only a status line it actually printed counts as
   found; before this, an unreadable file came back as an empty status and passed a CLOSED or
-  never-filed id at rc 0.
+  never-filed id at rc 0. The lookup runs in the C locale: under a UTF-8 locale awk aborts on one
+  non-UTF-8 byte inside an item, and with its exit now read that abort would refuse a readable
+  OPEN item as an unreadable corpus.
 - **An absent `scope_deferred_items` is legacy only by a date no agent writes.** The capture
   hook's timestamp on the answer that `scope_confirmed_cite` resolves to is compared with the
   first consumer commit stamping 0.659.0 or later. An older answer, or no such commit, is PENDING;
