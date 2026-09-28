@@ -15005,3 +15005,74 @@ are PENDING, against an impossible-id control of 0:
 write no runbook. The consumer's porcelain moved from 0 to 1 on its own continuation log, which
 its Stop hook writes, and the ledger md5 did not move.
 
+**BATCH 156 SHIPPED `v0.642.0` (`78cd7a65`, #863) AND CLOSED `BL-316`.** It was invoked by peer
+handoff. The opening sweep matched batch 155 on every figure and control, with the ledger md5
+still `3e62c07e…`, so the batch took `BL-316`, the ranked DEFECT. `BL-316` names no `PC-` id; it
+was diagnosed from the consumer's log. The gate ran at `AI_DLC_FIXTURE_NO_SKIP=1`: 22 phases PASS
+and 1 SKIP (the pole, at pool width 8 against a baseline of 12), 203 ok and 0 FAIL, and all gates
+green. The six changed fixtures each read `ok` by name against an impossible-name control of 0,
+`ls-remote` matched, and the squash tree was byte-identical to the gated commit. Live
+**76 -> 75**, archive **240 -> 241**. The exit-0 receipt set is batch 155's nine plus `BL-316`,
+compared by id. 56 live `sh` receipts remain against the pre-push floor of 56.
+
+**THE HARNESS COUNTS STOP-HOOK BLOCKS BY TOOL CALL, NOT BY TIME, AND THAT WAS MEASURED IN ITS
+BINARY.** In Claude Code 2.1.282 the query loop's `stopHookBlockingCount` resets to 0 on any
+tool-use recursion, and nowhere else relevant. `stop_hook_active` stays true across tool calls.
+The turn ends when the count passes `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP ?? 8`. The consumer's 21
+blocks at 22-89s were a lead answering in text only, and the harness ended the turn at the ninth.
+
+**THE CONTRACT ADVERSARY REFUTED MY FIRST DESIGN AND MY RECEIPT BEFORE ANY BUILD.** My draft
+counted tool calls alone. Arming a wait-beat is itself a Bash tool call, so beat churn read as
+progress and the sprint-305 stall came back. The shipped fixture would still have passed, because
+its drive sends `"transcript_path":""` and so tests only the time fallback. My receipt accepted
+that design and rejected the right one. The shipped rule continues a run on no new tool call OR
+under 30s, and resets only on both. That count is never below the old one, so the hook only
+releases earlier. `EFF_MAX` is `min(3, CAP)`, because `CAP-1` makes CAP=1 a hook that never blocks.
+Check 0 shares the helper. **Test a hook change on the transcript path, not only on the empty-path
+drive the old arms use.**
+
+**THE TIP ADVERSARY FOUND A DEFECT ON A GREEN BRANCH.** Check 0's backoff fell through to Check 3,
+which keeps its own state, so with the pause flag down a text-only handoff stall read
+`HHHbHHHbHHHb…` past the harness's ninth block. The release makes that backoff terminal, and arm
+8h pins it. The fix also staled `handoff-completion-assertion`'s mutant m9f, which anchored on a
+comment the fix rewrote. **Before editing a hook comment, grep the fixtures for mutation anchors
+on it.**
+
+Replayed on the consumer's transcripts, of 491 blocks across 264 sessions exactly 3 flip to allow,
+all in the stall session at harness counts 4, 4 and 8. A healthy 70-stop session is decided
+identically. The operator re-traced `implementation-join-yield` (24 -> 43 rows, no
+`.claude/worktrees` row, `ledger-reverify` unmoved at 51), and it shipped in the close. **No
+read-set trace is owed.**
+
+**THE CONSUMER PULLED 0.633.0 -> 0.641.0 DURING THE BATCH.** Its reconcile commit `e8f61f53b`
+(#1113) sits on `ai-dlc/carry-over/epic-crs-closure-fvs-advance`, ahead of its `main`, and its
+stamp reads 0.641.0 (`291c286a`). The ledger md5 moved to `5f401bf7…`. Consumer live is
+**26 -> 25**: `PC-S340-RETRO-AUDIT-SCANS-FIXTURE-FAILS-ONCE-AND-PASSES-ON-RETRY` and
+`PC-S297-FFCLUSTER-SHA-STALE` were archived, and one id entered. `PC-S313-EMIT-REPORT-E2-IS-A-FOURTH-POOL-FLAKE-ARM`
+stays open by its own text. The PC-backed worklist is **5 rows**: `BL-312` left it, because its id
+was archived.
+
+**ONE NEW CONSUMER FILING, AND IT ROUTES CORE.**
+`PC-S346-ARTIFACT-DERIVATIONS-ROW-NAMES-A-CLEAR-NO-CONSUMER-CORPUS-CAN-REACH`, filed 2026-09-25
+with that pull. `apply.sh` emits `WORKLIST artifact-derivations` with the remedy *"exit 0 is the
+clear"*. On a real corpus that clear is unreachable: the whole corpus reads 3304 FAIL of 5891, and
+the row's own 30 files read 426 of 783 FAIL both before and after the apply. The consumer's
+proposal is to make the clear "no derivation newly FAILs", base against theirs. `core-paths.sh
+--is-core .claude/skills/ai-dlc-update/reconcile/apply.sh` reads `core`, against a not-core control
+on `_bmad-output/spawn-ledger.jsonl`. It is cited by no backlog entry. `apply.sh` is bootstrapping,
+so the fix ships alone.
+
+**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
+- `PC-S346-…` is the subject: a new, core-routed consumer filing. File its entry, re-derive the
+  premise against `apply.sh` and `validate-artifact-derivations.sh`, write the contract, run the
+  adversary alone, then build. It ships alone.
+- `BL-230` needs the full 156-run pool. Run it as a lead-owned background job with a sentinel,
+  never inside a hand, and never while a gate runs. The disk held 910 GiB free this batch.
+- `BL-311` waits on the operator.
+
+**THE DELIVERY GAP IS ONE RELEASE.** The consumer is at 0.641.0 against `VERSION` 0.642.0. In
+`291c286a..78cd7a65` the four bootstrapping files have 0 commits, and 0 of 15 raw `core/` rows are
+mode-only. One PC id is PENDING, `PC-S313-EMIT-REPORT-E2-IS-A-FOURTH-POOL-FLAKE-ARM`, and it stays
+open upstream by its own text. The banked ruling stands: report the gap and write no runbook. The
+consumer's porcelain read 12 at the close, from its own pull and session.
+
