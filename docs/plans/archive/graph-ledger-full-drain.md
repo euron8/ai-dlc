@@ -15192,3 +15192,49 @@ records `core-paths.sh --is-core` exit 0 for both hook files. Ten core hooks nam
 have 0 commits; there are 21 raw `core/` rows, 0 mode-only; one PC id is PENDING,
 `PC-S313-FOLDIN-…`. The banked ruling stands: report the gap and write no runbook.
 
+**BATCH 159 SHIPPED `v0.645.0` (`e847c9dd`, #869) AND CLOSED `BL-321`, WHICH DISCHARGES
+`PC-S314-SNAPSHOT-SWAP-BLIND-WINDOW`.** It was invoked by peer handoff. The opening sweep matched
+batch 158 on every figure and control: live 27 on one qualifying ref, worklist 5, histogram 9/46/1,
+ledger md5 `94c3a4e2…`. The subject was the one filing ahead of the consumer's `main`. Live
+**75 -> 79** (`BL-321` filed and closed, four NOTEs filed), archive **244 -> 245**. The exit-0
+receipt set is batch 158's nine plus `BL-321`, compared by id.
+
+**THE FRESH-START SWAP NO LONGER BLINDS THE CONTROL HOOKS.** `--absorb` deleted
+`pipeline-snapshot.md`, and every control hook keys on that file existing. It now archives the
+snapshot in full and truncates it to 0 bytes, on every non-refusal path. The same call was a silent
+no-op on the no-history and at-the-floor paths, measured live on the consumer's own history. The
+history is rebuilt beside itself and renamed into place. `route.md` Step 6 stops on a non-zero exit.
+
+**TWELVE ADVERSARY ROUNDS, AND THE LAST FIVE FOUND NOTHING IN THE SHIPPED CODE.** Rounds 1-6 each
+found a line-loss path in the previous round's recovery code. Round 7 replaced the in-place
+write-back with a rename and that class went away. Rounds 8-12 found only fixture, receipt and
+prose gaps; five independent kill sweeps of the rotator lost no line. **The operator ruled at round
+12 that only a lost line in shipped code reopens a release; guard and prose findings file as NOTEs.**
+Round 12's four were filed as `BL-322`..`BL-325`. **Cap a subject's adversary loop the same way:
+once the shipped code is clean, stop rebuilding its guards inside the release.**
+
+The gate ran at `AI_DLC_FIXTURE_NO_SKIP=1` on the tree the squash carries: 22 phases PASS, 209 ok and
+0 FAIL, `snapshot-archive-rotate` `ok` by name against an impossible-name control of 0. That
+fixture's loaded cost rose from 12s to 118-126s, 20th of 209, against the `ledger-reverify` pole at
+346-373s. **A read-set trace is owed**: `sudo bash core/scripts/derive-fixture-readsets.sh --list
+"snapshot-archive-rotate"` on a checkout of `origin/main`; the fixture now reads `core/hooks/*.sh`.
+
+**THE SYSTEM TEMP DIRECTORY HOLDS ABOUT 518 LEAKED RECEIPT TREES, 5.9 GB**, from this batch's
+receipt runs before its cleanup landed, under `/var/folders/qr/v63hkc2n6s16yk44l131v9700000gn/T`.
+Each carries a `kb/_bmad-output` directory. The operator has not yet ruled on deleting them.
+
+**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
+- The PC-backed worklist is the same five self-disqualifying rows. With no new filing, take the
+  oldest unexamined core candidate from the unfiled set.
+- `BL-230` needs the full 156-run pool. Run it as a lead-owned background job with a sentinel, never
+  inside a hand, and never while a gate runs.
+- `BL-311` waits on the operator.
+
+**THE DELIVERY GAP IS TWO RELEASES.** The consumer is at 0.643.0 against `VERSION` 0.645.0. In
+`7b32fb1a..origin/main` the four bootstrapping files have 0 commits. Two PC ids are PENDING:
+`PC-S313-FOLDIN-…` and `PC-S314-SNAPSHOT-SWAP-BLIND-WINDOW`. The banked ruling stands: report the gap
+and write no runbook. The consumer's porcelain moved 8 -> 41 from its own sprint; its ledger md5
+did not move.
+
+Batch 158's next-work list and delivery gap are spent: batch 159's block above replaces both.
+

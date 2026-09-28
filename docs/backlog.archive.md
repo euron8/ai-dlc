@@ -20829,3 +20829,133 @@ neither the per-override `a_text`/`theirs_blob` sites nor the `hard-blockers.sh`
 `AI_DLC_FIXTURE_NO_SKIP=1` on the gated tip, whose tree the squash carries.
 
 verify: sh s=core/skills/ai-dlc-update/reconcile/layer-drift.sh; [ -f "$s" ] || exit 9; w="$(mktemp -d)" || exit 9; D="$w/d"; C="$w/c"; K=core/skills/ai-dlc; O="$C/.claude/skills/ai-dlc/overrides"; mkdir -p "$D/$K/steps" "$D/core/schemas" "$O" "$w/m" || exit 9; { printf 'clauses:\n  - id: LC-E4\n    level: ADJUDICATED\n    code: EXTENSION-HOOK-DRIFT\noverride_supersessions:\n'; i=0; while [ $i -lt 700 ]; do printf '  - shadows: steps/pad-%04d.md#Pad heading %04d\n    since_core_version: "0.1.0"\n' $i $i; i=$((i+1)); done; } > "$D/$K/layer-contract.yaml" || exit 9; printf '{\n  "properties": {\n    "verdict": {\n      "enum": [\n        "still-additive",\n        "contradicts-core",\n        "retire"\n      ]\n    }\n  }\n}\n' > "$D/core/schemas/layer-adjudication-register.json"; printf '# Demo\n\n## Gamma\n\nbase body\n' > "$D/$K/steps/demo.md"; g() { git -C "$D" -c user.email=r@r -c user.name=r -c commit.gpgsign=false "$@"; }; { g init -q && g add -A && g commit -qm b; } >/dev/null 2>&1 || exit 9; B="$(git -C "$D" rev-parse HEAD)"; printf '# Other\n' > "$D/$K/steps/other.md"; { g add -A && g commit -qm t; } >/dev/null 2>&1 || exit 9; T="$(git -C "$D" rev-parse HEAD)"; printf -- '---\nshadows: steps/demo.md#Gamma\nbase_sha: %s\nreason: r\n---\n\n## Gamma\n\nbase body\n' "$B" > "$O/steps__demo.md"; [ "$(wc -c < "$D/$K/layer-contract.yaml")" -gt 32768 ] || exit 9; [ "$(AI_DLC_RECONCILE_MEMO="$w/m" bash "$s" --adjudicated-codes "$D" "$T" 2>/dev/null)" = EXTENSION-HOOK-DRIFT ] || exit 9; AI_DLC_RECONCILE_MEMO="$w/m" bash "$s" "$D" "$B" "$T" "$C" > "$w/h" 2> "$w/he" || exit 9; grep -q 'REFUSED\|cannot create temp' "$w/he" && exit 9; [ "$(wc -l < "$w/h" | tr -d ' ')" -ge 1 ] || exit 9; ( trap '' XFSZ; ulimit -f 16; AI_DLC_RECONCILE_MEMO="$w/m" bash "$s" "$D" "$B" "$T" "$C" > "$w/o" 2> "$w/e" ); rc=$?; mkdir -p "$w/c2" "$w/m2" || exit 9; ( trap '' XFSZ; ulimit -f 16; AI_DLC_RECONCILE_MEMO="$w/m2" bash "$s" "$D" "$B" "$T" "$w/c2" > "$w/o2" 2> "$w/e2" ); rc2=$?; [ "$rc" -ne 0 ] && grep -q 'layer-drift: REFUSED — .*layer-contract\.yaml' "$w/e" && [ "$rc2" -ne 0 ] && grep -q 'layer-drift: REFUSED — reading core/skills/ai-dlc/layer-contract\.yaml' "$w/e2"
+## BL-361 — `sprint-status.yaml` had no marker for ACs deferred past `done`, so a story owing production-verified ACs read as closed and `close` stamped the sprint over it
+
+**DEFECT.** Discharges the reference consumer's PC-S314-SPRINT-STATUS-NO-DEFERRED-ACS-MARKER-EXISTENTIAL-ACS-INVISIBLE-AT-DONE.
+
+At `312c46ee`, `core/schemas/sprint-status.json` declared two story fields, `status` and `file`,
+and `grep -r deferred_acs core` returned 0 (control: `"status"` 2). A story that closed gate-3
+`done` with ACs deferred to deploy-validate §4b read exactly like a fully closed one. The filing
+named story 1.4; the contract adversary measured three sprint-314 stories closing with deferred
+ACs, and the gate log discharged only 1.4's.
+
+Claims, each shipped in v0.659.0:
+
+1. The schema declares an optional story field `deferred_acs` with ONE spelling, a single-line
+   inline list; `[]` and absent both mean nothing is owed.
+2. `check-stories` reports a block list, an unclosed `[`, or a `deferred_acs` line at a
+   non-field indent (spaces or tab) as a FINDING, never as empty. The shipped story grammar reads
+   the block form as `''` and keeps only the first field indent of an entry, which is why each of
+   those shapes had to be named.
+3. `check-stories` compares `deferred_acs` across the two views as it compares `status`, and
+   REPORTS, without changing its exit, a `done` story whose `layered_ac_count` has
+   live_ops + manual_operator > 0 and no `deferred_acs` field.
+4. `close` exits 3 while any story in any view owes or carries a malformed `deferred_acs`, and
+   writes neither view when it refuses.
+5. `code-reviewer.md` writes the field in both views at `done`; deploy-validate §4b clears an id
+   on green discharge, and on re-deferral files a `CO-S<N>-<descriptor>` item, records it under
+   `deferred_ac_discharge`, then clears it.
+
+The receipt keys on claims 2 (block form) and 4, with a cleared-close near-miss. Scored in
+`git archive` trees: tip 0; `312c46ee` 1; refusal inside the write loop 1; block form read as
+empty 1; `close` refusing a bare `[]` 3. It does NOT key on claim 3's cross-view join (a mutant
+removing it scores 0); `core/fixtures/sprint-status-lifecycle` arms D1-D11 carry claims 2-4.
+Cross-scored against the other two 0.659.0 fixes alone: exit 1 on each.
+
+**Residue (NOTE, not filed: the live backlog is at its ceiling).** A continuation line of a block
+scalar or nested map that BEGINS with `deferred_acs:` at a non-field indent now reads as
+malformed, so `close` refuses (loud, not silent; zero instances in the consumer's 62 envelopes).
+A duplicated story key lets the last entry's `deferred_acs` win.
+
+**LANDED (v0.659.0, verified 87043915).** Receipt exits 0 on `origin/main`; scored unannotated by `validate-backlog-receipts.sh` with the hook argv on a scratch ledger (rc 0, ALREADY-PASSING); the gate ran at `AI_DLC_FIXTURE_NO_SKIP=1` on the gated tip `ac1d8308`, whose tree the squash carries.
+
+verify: sh T=$(mktemp -d) && R=$T/_bmad-output && mkdir -p $R/implementation-artifacts $R/planning-artifacts/s9/stories && printf -- '---\nstatus: done\n---\n' > $R/planning-artifacts/s9/stories/story-1.md && E='sprint: 9\nstatus: in_progress\nstories:\n  story-9-1:\n    status: done\n' && printf "$E    deferred_acs: []\n" > $R/implementation-artifacts/sprint-status.yaml && printf "$E    deferred_acs: [AC5]\n" > $R/planning-artifacts/sprint-status.yaml && cp $R/implementation-artifacts/sprint-status.yaml $T/i && { bash core/scripts/sprint-status.sh close --evidence x --root $T >/dev/null 2>&1; [ $? -eq 3 ]; } && cmp -s $T/i $R/implementation-artifacts/sprint-status.yaml && printf "$E    deferred_acs:\n      - AC5\n" > $R/planning-artifacts/sprint-status.yaml && { bash core/scripts/sprint-status.sh check-stories --root $T > $T/o 2>&1; [ $? -eq 1 ]; } && grep -q 'FINDING \[planning/story-9-1\] `deferred_acs`' $T/o && printf "$E    deferred_acs: []\n" > $R/planning-artifacts/sprint-status.yaml && bash core/scripts/sprint-status.sh close --evidence x --root $T >/dev/null 2>&1 && grep -q '^status: done' $R/planning-artifacts/sprint-status.yaml
+
+
+## BL-362 — `deploy-validate.md` §3 recorded one flat smoke verdict, so retry-cleared transients and a real failure read the same
+
+**DEFECT.** Discharges the reference consumer's PC-S314-DEPLOY-VALIDATE-SMOKE-EVIDENCE-NO-TRANSIENT-PERSISTENT-CLASSIFICATION.
+
+At `312c46ee`, §3 named `smoke_run_evidence` once, as "the tee'd output path or CI run ID", and
+`grep -ciE 'transient|persistent_failures'` over the step file returned 0 (control:
+`smoke_run_evidence` 1). The fix loop's "Repeat until all smoke tests pass" read the same for a
+failure that cleared on an unchanged retry as for one the lead fixed. The consumer's sprint-314
+full smoke had 67 first-run failures cleared by its harness's in-run retry while a rollout
+finished, and 1 that stayed red (`test_portfolio_history_nonzero_il_usd`); the split lived only
+in gate-log prose.
+
+Claims, each shipped in v0.659.0:
+
+1. §3 requires `smoke_run_evidence` to carry `first_run_failures`,
+   `transient_failures_cleared_on_retry` (count, test ids or a path to them, and where the
+   clearing retry is recorded; `in-run retry, same output` is valid) and `persistent_failures`
+   (ids verbatim), each as a defining bullet inside §3.
+2. A failure is transient only when a retry cleared it with no action by the lead between the
+   runs. Every other failure is persistent and enters the existing fix loop and HARD_BLOCK path.
+3. The Production Validation Checkpoint `Deployment` block reports the split, and
+   gate-validation Check 8 names the three fields.
+4. `core/fixtures/deploy-validate-smoke-classification` pins claims 1-3 in both install layouts
+   and exits 2 when the subject is absent.
+
+The receipt keys on the §3 SECTION, never the whole file. Scored: tip 0; `312c46ee` 1; all three
+field bullets moved to §3b 1 (each alone, 1/1/1); transient redefined as any retry 1; a second
+competent spelling 0; the literals in a comment appended to the base file 1; file absent 9.
+Satisfied also by three bare bullets plus one sentence in §3 — the fixture rejects that stub, and
+the fixture is the durable guard. Cross-scored against the other two 0.659.0 fixes alone: exit 1.
+
+**Residue (NOTE, not filed: the live backlog is at its ceiling).** The unchanged "If any smoke
+test fails: 1. Do NOT proceed…" sits directly after "Transient failures do not enter the loop",
+so a reader can take a first-run transient as a failed smoke test. The consumer's gate log names
+the 67 transients only as `test_spread_volume_analysis_*, …, etc.`; the individual ids exist only
+in the tee'd output, which is why the field accepts a path.
+
+**LANDED (v0.659.0, verified 87043915).** Receipt exits 0 on `origin/main`; scored unannotated by `validate-backlog-receipts.sh` with the hook argv on a scratch ledger (rc 0, ALREADY-PASSING); the gate ran at `AI_DLC_FIXTURE_NO_SKIP=1` on the gated tip `ac1d8308`, whose tree the squash carries.
+
+verify: sh f=core/skills/ai-dlc/steps/deploy-validate.md; [ -f "$f" ] || exit 9; s=$(awk '/^### 3\. Smoke Tests/{on=1;next} on&&/^### /{exit} on' "$f" | sed 's/\*\*//g' | tr 'A-Z' 'a-z'); [ "$(printf '%s\n' "$s" | grep -c 'smoke_run_evidence')" -gt 0 ] || exit 9; for k in first_run_failures transient_failures_cleared_on_retry persistent_failures; do [ "$(printf '%s\n' "$s" | grep -cE "^[-*] \`$k\`")" -eq 1 ] || exit 1; done; [ "$(printf '%s\n' "$s" | tr '\n' ' ' | tr -s ' ' | grep -cE 'transient[^.]*(no|without( any)?) action (taken )?by the lead')" -gt 0 ] || exit 1
+
+
+## BL-363 — `route.md` Step 6 ratified a deferral of part of the ask without filing it anywhere durable
+
+**DEFECT.** Discharges the reference consumer's PC-S314-ROUTE-STEP6-RATIFIES-PHASE-SPLIT-WITHOUT-DURABLE-BACKLOG-WRITE.
+
+At `312c46ee`, Step 6's pause point asked the operator about "anything in the ask you are
+deliberately NOT taking this sprint" and recorded only `scope_confirmed` and
+`scope_confirmed_cite`; `route.md` named `carry-over-backlog` once, as a read. The answer's only
+record was the lead's question text, which no hash covers and no later step reads. The deferred
+phase of the consumer's sprint-314 phased split was filed nowhere until sprint review caught it.
+
+Claims, each shipped in v0.659.0:
+
+1. Step 6 appends each deferred part to `carry-over-backlog.md` as its own
+   `### CO-S<N>-<DESCRIPTOR>` item before leaving the step (format owned by
+   `carry-over-evaluation.md`), and records `scope_deferred_items: none | [ids]`.
+2. `validate-scope-confirmation.sh` (Check 34) resolves EVERY listed id — its own extractor,
+   because `field_of` keeps only the first id of a list — to a `### <id>` heading in the live
+   backlog or `carry-over-backlog-archive.md` whose status is not CLOSED, in either spelling.
+3. An absent field is legacy only by a date no agent writes: the capture hook's timestamp on the
+   answer `scope_confirmed_cite` resolves to (newest entry for a recurring hash) against the first
+   consumer commit stamping 0.659.0+. Older, or no such commit, is PENDING; newer is FAIL.
+4. A backlog or archive that exists but cannot be read refuses with exit 2; the lookup's awk exit
+   is read and runs in the C locale, so a non-UTF-8 byte in a readable item is not a refusal.
+
+The receipt drives the validator on a constructed world. Scored: tip 0; `312c46ee` 1; `field_of`
+reused, first id only 1; absent field read as PENDING unconditionally 1; own extractor checking
+only the first token 1; archive lookup removed 0 (the fixture owns it); no validator 9. The
+archive, CLOSED, malformed tokens, both spellings, time zones, version comparison, repeated
+hashes, the unreadable corpus and the Latin-1 byte are owned by `core/fixtures/scope-confirmation`
+and its mutants. Cross-scored against the other two 0.659.0 fixes alone: exit 1 on each.
+
+**Residue (NOTE, not filed: the live backlog is at its ceiling).** The arm cannot verify that
+`none` is honest. The id grammar `CO-S[0-9]+-[A-Z0-9-]+` refuses 5 of the consumer's 704 real
+headings (e.g. `CO-S270-AC3.7-SG-NARROW`), narrower than the owner's `CO-S<sprint>-<descriptor>`.
+Only `CLOSED*` is terminal: `DONE`, `RETIRED`, `WITHDRAWN`, `SUPERSEDED`, `RESOLVED`, `DELIVERED`
+and `APPLIED` items pass. `[CO-X,,]` passes because empty tokens vanish at word-split, and text
+after `]` is accepted. A legacy record flips PENDING to FAIL if the operator repeats the same
+one-word answer after the pull. Separately, the consumer's live sprint-315 record writes
+`scope_confirmed_cite: SHA256: <hex>`, which Check 34 already fails at 0.658.0.
+
+**LANDED (v0.659.0, verified 87043915).** Receipt exits 0 on `origin/main`; scored unannotated by `validate-backlog-receipts.sh` with the hook argv on a scratch ledger (rc 0, UNSCORABLE, 18 of 28 unscored); the gate ran at `AI_DLC_FIXTURE_NO_SKIP=1` on the gated tip `ac1d8308`, whose tree the squash carries.
+
+verify: sh v=core/scripts/validate-scope-confirmation.sh; [ -f "$v" ] || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; d=$(mktemp -d) || exit 9; h=$(printf c3 | shasum -a 256 | cut -c1-64); mkdir -p "$d/pa" "$d/r/.claude" && printf '### CO-S1-A\n**Status: OPEN.**\n' > "$d/pa/carry-over-backlog.md" && printf '## 2026-01-02T00:00:00Z -- AskUserQuestion\n- SHA256: %s\n' "$h" > "$d/late.md" && sed 's/2026-01-02/2025-12-31/' "$d/late.md" > "$d/early.md" && printf 'version: 0.659.0\n' > "$d/r/.claude/.ai-dlc-version" && git -C "$d/r" init -q && git -C "$d/r" add .claude && GIT_COMMITTER_DATE=2026-01-01T00:00:00Z GIT_AUTHOR_DATE=2026-01-01T00:00:00Z git -C "$d/r" -c user.name=r -c user.email=r@r -c commit.gpgsign=false commit -qm s || exit 9; s() { printf -- '- user_request_verbatim: x\n- scope_confirmed: confirmed\n- scope_confirmed_cite: %s\n%s\n' "$h" "$1" > "$d/s.md"; bash "$v" --snapshot "$d/s.md" --answers "$d/$2.md" --backlog "$d/pa/carry-over-backlog.md" --repo "$d/r" > "$d/o" 2>&1; echo $?; }; [ "$(s '- scope_deferred_items: [CO-S1-A]' late)" = 0 ] || exit 1; [ "$(s '- scope_deferred_items: [CO-S1-A, CO-S1-UNFILED]' late)" = 1 ] && grep -q CO-S1-UNFILED "$d/o" || exit 1; [ "$(s '' late)" = 1 ] || exit 1; [ "$(s '' early)" = 3 ] || exit 1; exit 0
+
+
