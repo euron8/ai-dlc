@@ -891,9 +891,17 @@ prose is itself generated rather than composed.
    - **Exit 2 with `layer-drift: REFUSED — a row could not be written to stdout after N row(s)
      were`** → the scan stopped at that write, and every entry after it went unscanned. The rows
      you have are NOT the result, and a missing `HARD-` row is not an absence. Re-run it with a
-     writable stdout. `apply.sh` renders this exit as `DECISION layer-drift-refused`. Exit 2 with
-     a `usage:` line, or exit 1 with a reason, is a refusal to start. Any other run exits 0,
-     whatever it found.
+     writable stdout. `apply.sh` renders this exit as `DECISION layer-drift-refused`.
+   - **Exit 1 with `layer-drift: REFUSED — <input> could not be staged`** → an input the scan
+     reads (the layer contract, a core file an override shadows, a producer's output) could not
+     be written to its staging file or did not run, so reading on would have treated it as EMPTY
+     and reported the layer cleaner than it is. **Exit 1 with `layer-drift: REFUSED — … carries N
+     clause(s) at level ADJUDICATED and the code set read out of it is EMPTY`** → the adjudication
+     tier would have been switched off. Both usually mean `ulimit -f` or a full or read-only
+     `$TMPDIR`; clear that and re-run. `--adjudicated-codes` refuses the same way, so its empty
+     output is an answer only when it exits 0. A contract ABSENT at theirs is not a refusal. Exit
+     2 with a `usage:` line, or exit 1 with any other reason, is a refusal to start. Any other run
+     exits 0, whatever it found.
 
 3d. **Unregistered core drift — the layer system's blind spot.** `layer-drift.sh`
    walks `overrides/` and `extensions/`. A core file edited **in place** appears in
@@ -1459,7 +1467,8 @@ prose is itself generated rather than composed.
    below draws. Never infer that an unresolvable base means "unchanged."
    A layer-drift run that exited non-zero reported no `HARD-` status because it did not finish,
    not because there is none: exit 2 with a `layer-drift: REFUSED` line means a row could not be
-   written. Re-run it before reading this gate as clear.
+   written, and exit 1 with one means an input could not be staged. Re-run it before reading this
+   gate as clear.
 
    **Mechanical union gate — the driver, not memory.** `apply` may write only after BOTH hold:
    (1) `reconcile/emit-report.sh --verify <report> <dist> <base> <consumer> <theirs>` exits 0 — the
@@ -1670,7 +1679,8 @@ prose is itself generated rather than composed.
 
    Then **re-run `layer-drift.sh` and `unregistered-drift.sh` and require ZERO `HARD-*`
    rows from runs that both exited 0.** Either one exits 2 with a `: REFUSED` line when a row
-   could not be written, and its short output is then not a zero. Do not carry forward your memory of having discussed them: the re-run is the
+   could not be written, and `layer-drift.sh` exits 1 with one when an input could not be staged;
+   its short output is then not a zero. Do not carry forward your memory of having discussed them: the re-run is the
    evidence, and re-stamping is what makes it pass. A `HARD-` status that clears because
    you decided it was fine is the check-that-cannot-fail defect, in the tool built to
    prevent it.
