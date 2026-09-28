@@ -1324,7 +1324,8 @@ skeleton_titles_of() {
 # Normalized heading TEXT for a given anchor, from a stream on stdin.
 # e.g. anchor "1a" in "### 1a. Prior-Decision Search (settled corpus)" -> "prior decision search settled corpus"
 heading_text_for() { # heading_text_for <anchor>  < stream
-  awk -v a="$1" '
+  # LC_ALL=C for the reason at the anchor_arm call site: a Latin-1 byte before the match aborts awk.
+  LC_ALL=C awk -v a="$1" '
     function nrm(s){ s=tolower(s); gsub(/[`*]/,"",s); gsub(/[^a-z0-9]+/," ",s); gsub(/^ +| +$/,"",s); return s }
     $0 ~ ("^#{2,4}[ \t]+(Check[ \t]+)?" a "(\\.|—)") || $0 ~ ("^\\*\\*(Check[ \t]+)?" a "\\.") {
       h=$0; sub(/^#+[ \t]+/,"",h); sub(/^\*\*/,"",h); sub(/^Check[ \t]+/,"",h)
@@ -1750,7 +1751,11 @@ while IFS= read -r f; do
     # LOOSE ANCHOR — resolves only by the REVERSE arm of the containment match, so it silently
     # widens the shadow to the whole section. The authoring linter errors on this (E7); the
     # authoring linter is consumer-run and skippable, and the pull is not.
-    arm="$(anchor_arm "$id" < "$LD_T/a_text")" || _at_rc=$?
+    # LC_ALL=C AT THE CALL, as span_of carries it inside lib.sh and section_of inherits it: in a
+    # UTF-8 locale awk aborts (rc 2, `illegal byte sequence`) on one Latin-1 byte ahead of the
+    # match, which used to misclassify silently and now refuses. Prefixed here rather than inside
+    # anchor_arm() because I40 binds that body byte-identical to validate-layer-entries.sh's copy.
+    arm="$(LC_ALL=C anchor_arm "$id" < "$LD_T/a_text")" || _at_rc=$?
     [ "$_at_rc" -eq 0 ] || ld_refuse_staging "anchor_arm for ${entry} #${id}" "$_at_rc"
     case "$arm" in
       REVERSE:*) loose="${loose:+$loose; }#${id} -> '${arm#REVERSE:}'" ;;

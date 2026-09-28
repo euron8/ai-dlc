@@ -275,7 +275,7 @@ REFUSALS=""
 # `layer-drift.sh` DETECTOR-REFUSED line in this region today (Assertion 6 and V-D below are both
 # unregistered-drift's), so the second copy in an emit-report render is new and deliberate.
 if [ "${LD_RC:-0}" -ne 0 ]; then
-  REFUSALS="$(printf '%-32s %s\n' "DETECTOR-REFUSED" "layer-drift.sh exited ${LD_RC} without classifying, so this list is NOT a clean sheet — the layer's HARD rows, if any, were never computed. Run it directly: reconcile/layer-drift.sh <dist> <base> <theirs> <consumer>")"
+  REFUSALS="$(printf '%-32s %s\n' "DETECTOR-REFUSED" "layer-drift.sh exited ${LD_RC} without classifying, so this list is NOT a clean sheet — the layer's HARD rows, if any, were never computed in full: any HARD row listed below is a PREFIX of the classification, the rows it reached before it stopped, never the set. Run it directly: reconcile/layer-drift.sh <dist> <base> <theirs> <consumer>")"
 fi
 # unregistered-drift.sh KEEPS THE OWNERSHIP RULE ABOVE, AND THE ASYMMETRY IS DELIBERATE -- do not
 # "fix" it to match the layer-drift arm. `emit-report.sh` renders this detector's refusal in its own
