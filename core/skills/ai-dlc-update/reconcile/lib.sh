@@ -936,14 +936,29 @@ fi
 # goes to a per-process temp and is renamed into place only when it is cacheable, so an uncached
 # failure never leaves bytes a later reader could mistake for an answer; the `.s` file is still
 # written LAST, so an interrupted fill reads as a miss rather than as a cached lie.
+#
+# A SERVE THAT FAILED RETURNS 125, NEVER GIT'S STATUS. Every memo hands its bytes to the caller
+# with a `cat` -- of `.c` on a hit, of the fill after it -- and that `cat` can fail on its own: a
+# write to the caller's staged file that hits EFBIG or a closed fd, a `.c` that cannot be read.
+# The cached status is then a lie about THIS call: `memo_ls_tree` served 0 with an empty listing
+# and `unregistered-drift.sh` scanned nothing and reported clean. 125 is the sentinel because it
+# is none of the memo'd subcommands' answers (0, 1, 128): cat's own 1 would have made
+# `memo_rev_parse` report a PRESENT path as ABSENT (`-q --verify`'s 1), turning a
+# `preclassify.sh` refusal into a MISSING bucket. So a caller that reads 0 and 1 as answers reads
+# 125 as a failure, as it reads 128. `_ai_dlc_memo_commit` and `_ai_dlc_memo_serve` return it for
+# the fill; each hit path returns it before reading `.s`. The `.c`/`.s` files are untouched by a
+# failed serve -- a failed READ is not evidence the cache is wrong, so it is neither deleted nor
+# rewritten, and the next call serves it again.
 _ai_dlc_memo_absent() { # <dist> <spec> -> 0 only when git itself says the spec does not resolve
   git -C "$1" rev-parse -q --verify "$2" >/dev/null 2>&1
   [ "$?" -eq 1 ]
 }
 _ai_dlc_memo_commit() { # <file-stem> <tmp> <status> -> cache the fill; always serves it
-  mv -f "$2" "$1.c" 2>/dev/null || { cat "$2"; rm -f "$2"; return 0; }
+  # 0 when the fill reached stdout, 125 when it did not (both branches) -- the caller then returns
+  # this in place of git's status. The uncached branch used to return 0 whatever its `cat` did.
+  mv -f "$2" "$1.c" 2>/dev/null || { _ai_dlc_memo_serve "$2"; return $?; }
   { printf '%s' "$3" > "$1.s"; } 2>/dev/null
-  cat "$1.c"
+  cat "$1.c" || return 125
 }
 
 # --- A MEMO FILE THAT CANNOT BE CREATED MUST NOT CHANGE THE ANSWER ---------------------------
@@ -980,8 +995,11 @@ _ai_dlc_memo_open() {
   _t="$_f.c.$$.$RANDOM"
   { : > "$_t"; } 2>/dev/null
 }
-_ai_dlc_memo_serve() { # <tmp> -> serve an uncacheable fill and discard it
-  cat "$1"; rm -f "$1"
+_ai_dlc_memo_serve() { # <tmp> -> serve an uncacheable fill and discard it; 125 when the serve failed
+  local _sv=0
+  cat "$1" || _sv=125
+  rm -f "$1"
+  return "$_sv"
 }
 
 # memo_show <dist> <ref> <path> -- the blob on stdout, git's own exit status preserved.
@@ -996,9 +1014,9 @@ memo_show() {
     git -C "$_dist" show "${_ref}:${_path}" > "$_t" 2>/dev/null
     _st=$?
     if [ "$_st" -eq 0 ] || { [ "$_st" -eq 128 ] && _ai_dlc_memo_absent "$_dist" "${_ref}:${_path}"; }; then
-      _ai_dlc_memo_commit "$_f" "$_t" "$_st"
+      _ai_dlc_memo_commit "$_f" "$_t" "$_st" || return 125
     else
-      _ai_dlc_memo_serve "$_t"
+      _ai_dlc_memo_serve "$_t" || return 125
     fi
     return "$_st"
   fi
@@ -1010,8 +1028,9 @@ memo_show() {
   # file -- is byte-identical either way, which is why the round trip reads correct.
   # unregistered-drift.sh pipes this straight into `cmp -s -`, where the spurious byte
   # reports a byte-identical consumer file as DRIFTED. One fork per hit is the price of
-  # serving bytes; the git call this replaces costs far more.
-  cat "$_f.c"
+  # serving bytes; the git call this replaces costs far more. A failed serve is 125, not the
+  # cached status (see the memo header above).
+  cat "$_f.c" || return 125
   _st="$(<"$_f.s")"
   return "$_st"
 }
@@ -1053,15 +1072,16 @@ memo_rev_parse() {
     _st=$?
     # 0 resolved, 1 does not resolve -- `-q --verify`'s two answers. Anything else is a failure.
     case "$_st" in
-      0|1) _ai_dlc_memo_commit "$_f" "$_t" "$_st" ;;
-      *)   _ai_dlc_memo_serve "$_t" ;;
+      0|1) _ai_dlc_memo_commit "$_f" "$_t" "$_st" || return 125 ;;
+      *)   _ai_dlc_memo_serve "$_t" || return 125 ;;
     esac
     return "$_st"
   fi
   # `cat` for the same reason memo_show uses it: a `$(<f)` round trip rewrites the trailing
   # newline count. A failed rev-parse writes an EMPTY file, which the printf form served as
-  # a bare newline rather than as nothing.
-  cat "$_f.c"
+  # a bare newline rather than as nothing. A failed serve is 125, never cat's own 1: here 1 is
+  # `-q --verify`'s ABSENT, and a present path must not read as missing.
+  cat "$_f.c" || return 125
   _st="$(<"$_f.s")"
   return "$_st"
 }
@@ -1084,10 +1104,11 @@ memo_ls_tree() {
   if [ -n "$_t" ]; then
     git -C "$_dist" ls-tree -r --name-only "$_ref" > "$_t" 2>/dev/null
     _st=$?
-    if [ "$_st" -eq 0 ]; then _ai_dlc_memo_commit "$_f" "$_t" "$_st"; else _ai_dlc_memo_serve "$_t"; fi
+    if [ "$_st" -eq 0 ]; then _ai_dlc_memo_commit "$_f" "$_t" "$_st" || return 125
+    else _ai_dlc_memo_serve "$_t" || return 125; fi
     return "$_st"
   fi
-  cat "$_f.c"
+  cat "$_f.c" || return 125
   _st="$(<"$_f.s")"
   return "$_st"
 }
@@ -1104,10 +1125,11 @@ memo_diff_name_status() {
   if [ -n "$_t" ]; then
     git -C "$_dist" diff --no-renames --name-status "$_base" "$_theirs" -- "$@" > "$_t" 2>/dev/null
     _st=$?
-    if [ "$_st" -eq 0 ]; then _ai_dlc_memo_commit "$_f" "$_t" "$_st"; else _ai_dlc_memo_serve "$_t"; fi
+    if [ "$_st" -eq 0 ]; then _ai_dlc_memo_commit "$_f" "$_t" "$_st" || return 125
+    else _ai_dlc_memo_serve "$_t" || return 125; fi
     return "$_st"
   fi
-  cat "$_f.c"
+  cat "$_f.c" || return 125
   _st="$(<"$_f.s")"
   return "$_st"
 }

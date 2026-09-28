@@ -487,7 +487,10 @@ ap_pdiff() {
 # caller reports as a refusal: an uncaptured detector is not a clean one.
 # detector_refused <row-name> <script> <path|-> <rc> <key> -- the one spelling of the row. A
 # DECISION, so it counts toward `handback` and withholds the re-stamp, and `--finish` does not
-# gate on it (see the two counters above).
+# gate on it (see the two counters above). The detail quotes the detector's own REFUSED line --
+# the first stderr line matching `: REFUSED` -- when it printed one, and stderr's line 1
+# otherwise. Line 1 alone is not the reason when a write failed: bash prints its own
+# `printf: write error: ...` for every lost row BEFORE the detector can name the refusal.
 DT_DIR=""
 if [ -n "$AP_TMP" ] && mkdir -p "$AP_TMP/detectors" 2>/dev/null; then DT_DIR="$AP_TMP/detectors"; fi
 detector_run() {
@@ -499,7 +502,8 @@ detector_run() {
 detector_refused() {
   local _first="(not captured: no staging directory)"
   if [ -n "$DT_DIR" ]; then
-    _first="$(sed -n '1p' "$DT_DIR/$5.err" 2>/dev/null | tr '\t' ' ')"
+    _first="$(grep -m1 ': REFUSED' "$DT_DIR/$5.err" 2>/dev/null | tr '\t' ' ')"
+    [ -n "$_first" ] || _first="$(sed -n '1p' "$DT_DIR/$5.err" 2>/dev/null | tr '\t' ' ')"
     [ -n "$_first" ] || _first="(empty)"
   fi
   say DECISION "$1-refused" "$3" "DETECTOR-REFUSED: $2 exited $4 — this section is NOT a finding of 'none'; stderr: ${_first}"

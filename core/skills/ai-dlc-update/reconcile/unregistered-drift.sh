@@ -25,7 +25,11 @@
 #                         `hard-blockers.sh`'s own `--ud-rows`: position-independent, before the
 #                         positional arguments.
 # Output: TSV — STATUS<TAB>FILE<TAB>DETAIL
-# Exit:   0 always (a classifier, not a gate). The CALLER decides; HARD- blocks.
+# Exit:   0 when every row it produced reached stdout -- whatever it found (a classifier, not a
+#         gate: the CALLER decides; HARD- blocks). 2 when ANY row could not be written (closed
+#         stdout, EFBIG on a staged file, EPIPE with SIGPIPE ignored), with the line
+#         `unregistered-drift: REFUSED — N row(s) could not be written to stdout; ...` on stderr:
+#         a truncated row set is not a finding of "no drift". See `ud_finish` below.
 #
 # Statuses
 #   HARD-CORE-DRIFT-ABSORBED      the consumer's in-place delta is NOW PRESENT UPSTREAM:
@@ -143,9 +147,10 @@ CONSUMER="${3:?}"
 THEIRS="${4:-}"
 
 # shellcheck source=lib.sh
-# NOT `|| exit 1`: this script's own contract is "0 always (a classifier, not a gate)", and
-# every git_show/git_tree call below falls back to a direct `git` call when the memo helpers
-# are unavailable, so an unsourceable lib.sh degrades this to its pre-cache behavior.
+# NOT `|| exit 1`: this script exits non-zero only when its own output could not be written
+# (`ud_finish`), never for what it found or failed to cache, and every git_show/git_tree call
+# below falls back to a direct `git` call when the memo helpers are unavailable, so an
+# unsourceable lib.sh degrades this to its pre-cache behavior.
 SELF="$(cd "$(dirname "$0")" && pwd)"
 . "$SELF/lib.sh" 2>/dev/null || true
 # git_show <ref> <path> -- this file's own spelling of the shared memo, so every existing
@@ -281,7 +286,30 @@ closest_ancestor_blob() {
     "$(git -C "$DIST" log -1 --format=%ad --date=short "$best_sha")" "$best_n" "$base_n"
 }
 
-emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3"; }
+# EVERY ROW'S WRITE IS COUNTED, AND THE SCRIPT'S EXIT IS DECIDED BY THE COUNT. `emit` used to
+# discard printf's status and the script ended in an unconditional `exit 0`, so a row that could
+# not be written -- stdout closed, EFBIG on the regular file `apply.sh` stages it to, EPIPE with
+# SIGPIPE ignored -- vanished with rc 0, and every caller read the truncated set as "no in-place
+# core edit" and went on to overwrite core. A COUNTER, not a flag and not a pre-flight probe of
+# stdout: a write that fails MID-STREAM (the first rows landed, the HARD row last did not) is
+# the case a probe at start cannot see. It is incremented in the MAIN shell, which is why every
+# emit site -- the two refusals and the scan loop, which reads `done < file`, never `| while` --
+# runs there; an emit inside a subshell would count into a copy that is thrown away.
+ud_emit_failed=0
+emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3" || ud_emit_failed=$(( ud_emit_failed + 1 )); }
+# ud_finish -- the ONLY way this script exits. Every row written: 0, whatever was found. Any row
+# lost: the named line on stderr and 2, which `apply.sh`'s `detector_run` reads as a refusal
+# (`DECISION unregistered-drift-refused`, re-stamp withheld) and `emit-report.sh` and
+# `hard-blockers.sh` render as DETECTOR-REFUSED. Bash's own `printf: write error: ...` precedes
+# this line on stderr, so a reader keys on the `unregistered-drift: REFUSED` prefix, never on
+# "write error" and never on line 1.
+ud_finish() {
+  if [ "$ud_emit_failed" -gt 0 ]; then
+    printf 'unregistered-drift: REFUSED — %s row(s) could not be written to stdout; the scan ran but its output is incomplete. Re-run unregistered-drift.sh.\n' "$ud_emit_failed" >&2
+    exit 2
+  fi
+  exit 0
+}
 
 # setup-sites.md is this script's SIBLING — ai-dlc-update is self-contained and never reads
 # pipeline files, so the drift check reads the SAME setup-site manifest gate-validation.md's
@@ -347,7 +375,7 @@ eval "$(awk '/^map_consumer\(\) \{/,/^\}/' "$(cd "$(dirname "$0")" && pwd)/precl
 if ! command -v map_consumer >/dev/null 2>&1; then
   emit HARD-DRIFT-SCAN-UNAVAILABLE "reconcile/preclassify.sh" \
     "could not load map_consumer() — nothing was scanned. Refusing to fall back to a private path table: it would map some subtrees, skip the rest, and print an empty result that reads as no drift."
-  exit 0
+  ud_finish
 fi
 consumer_path() { # <core-stripped rel> -> absolute consumer path
   local m; m="$(map_consumer "core/$1")"
@@ -535,11 +563,15 @@ is_unregistered() {
 # .md/.sh/.json file -- where `grep`'s 1 for "no match" became this script's exit and every caller
 # that reads the exit (`emit-report.sh`, `hard-blockers.sh`) rendered a scan that completed
 # correctly as DETECTOR-REFUSED. Measured across the fixtures that drive `apply.sh`: 96 of 128
-# calls exited 1 that way. Now: a failed listing or filter emits the row and exits 0, as the
-# map_consumer refusal above does and as this script's "0 always" contract requires; `grep`'s 1 is
-# an empty scan set and prints nothing; the loop reads the staged file in the main shell.
+# calls exited 1 that way. Now: a failed listing or filter emits the row and leaves through
+# `ud_finish`, as the map_consumer refusal above does -- 0 when that row reached stdout, 2 when it
+# could not be written, because a refusal nobody can read is itself a refusal; `grep`'s 1 is an
+# empty scan set and prints nothing; the loop reads the staged file in the main shell, so every
+# emit in it is counted where `ud_finish` can read the count.
 # The memo's failure is not taken as the answer: the direct listing is tried, and ITS status is
-# read -- a fallback that also fails refuses, naming both exits, rather than scanning nothing.
+# read -- a fallback that also fails refuses, naming both exits, rather than scanning nothing. A
+# memo whose cached listing could not be SERVED returns 125 (lib.sh's sentinel), never the cached
+# 0, so a truncated or empty `scan-tree` is not filtered as though it were the listing.
 ud_scan_why=""
 if [ -z "$UD_DIFF_TMP" ]; then
   ud_scan_why="no staging directory could be created for the scan listing"
@@ -570,7 +602,7 @@ fi
 if [ -n "$ud_scan_why" ]; then
   emit HARD-DRIFT-SCAN-UNAVAILABLE "core/" \
     "the scan set could not be listed (${ud_scan_why}) — nothing was scanned. A listing that failed prints the same empty result as a tree with no drift, so this is reported instead of that silence. Re-run unregistered-drift.sh."
-  exit 0
+  ud_finish
 fi
 while IFS= read -r cp; do
       rel="${cp#core/}"
@@ -753,5 +785,6 @@ EOF
         "core file edited IN PLACE ($(( nl_c - nl_b )) lines vs ${BASE}) with no overrides/ entry. Rule 27: core is upstream-owned and \`apply\` OVERWRITES it — this text is deleted on the next pull. Refile the delta as an overrides/ entry with base_sha ${BASE}, or revert the file."
     done < "$UD_DIFF_TMP/scan-set"
 # EXPLICIT, because the scan used to be this file's last statement and its status became the
-# script's: an empty scan set exited 1. A classifier exits 0 whatever it found.
-exit 0
+# script's: an empty scan set exited 1. A classifier exits 0 whatever it FOUND -- and 2 when what
+# it found did not all reach stdout, which only the emit counter can tell (`ud_finish`).
+ud_finish
