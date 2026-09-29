@@ -596,7 +596,22 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   `.dist-only` mutant shards in the packaging census), I57 +2 (two new bullets naming the exit
 #   code that decides them) and I9 +1 (the new `--fold-architect` invocation site). HIGH reading
 #   3293 plus the usual 6; the window 3293..4704 is open.
-FORK_BUDGET=3299
+#
+#   LOWERED TO 3152 FOR THE SHARDING RELEASE, AFTER A CUT THAT OUTWEIGHS ITS GROWTH. `--stable`
+#   by arm in ONE clean worktree at the same path, base `origin/main` 79546d70 then the release
+#   tip: base 3298 (spread 3296-3298), tip 3320 (spread 3320-3320), so +22 and all of it per-file:
+#   I75 +16 (`join-remediator-shards.sh` joins I75's root-consulting subject set, and I75 ran its
+#   chain pipeline TWICE per subject), I84 +4 and I83 +2 (the two new shipped core `.sh`,
+#   `merge-adversarial-shards.sh` and `join-remediator-shards.sh`, at 2 and 1 per file). The
+#   remediation-guard hook change, the adjudication-validator modes and the prose moved no arm.
+#   The cut: I75 hashed every subject's chain once for the modal count and then re-ran the same
+#   `awk | grep | sed | shasum | cut` pipeline per subject in the drift loop. It now hashes once
+#   into a `<hash> <file>` list that both readers consume, and a seeded drifting subject is still
+#   named by both the drift and the fails-closed arms. I75 494 -> 321, tip 3320 -> 3146 (spread
+#   3146-3146), every other arm within one. Whole-validator wall clock, interleaved, 3 reps:
+#   before 37.46/26.78/28.97s, after 35.04/28.34/26.46s. HIGH reading 3146 plus the usual 6;
+#   the window 3146..4494 is open.
+FORK_BUDGET=3152
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
@@ -5713,21 +5728,24 @@ i75_n="$(grep -c . <<<"$i75_subjects" || true)"
 if [ "$i75_n" -lt 5 ]; then
   err "I75's subject extractor found $i75_n script(s) consulting a project root. Fewer than five means the extractor stopped matching, not that the population shrank — and an empty subject set agrees with every requirement, so this fails closed."
 else
-  i75_modal="$(while IFS= read -r _f; do
+  # Each subject's chain is hashed ONCE, as `<hash> <file>`, and both the modal count and the
+  # drift loop below read that list. The drift loop used to re-run the chain pipeline per
+  # subject, which doubled this arm's per-subject cost for an identical value.
+  i75_hashed="$(while IFS= read -r _f; do
       [ -n "$_f" ] || continue
-      i75_chain "$_f" | { shasum -a 256 2>/dev/null || sha256sum; } | cut -d' ' -f1
-    done <<<"$i75_subjects" | sort | uniq -c | sort -rn | head -1 | awk '{print $2}')"
+      printf '%s %s\n' "$(i75_chain "$_f" | { shasum -a 256 2>/dev/null || sha256sum; } | cut -d' ' -f1)" "$_f"
+    done <<<"$i75_subjects")"
+  i75_modal="$(cut -d' ' -f1 <<<"$i75_hashed" | sort | uniq -c | sort -rn | head -1 | awk '{print $2}')"
   i75_empty="$(printf '' | { shasum -a 256 2>/dev/null || sha256sum; } | cut -d' ' -f1)"
   if [ -z "$i75_modal" ] || [ "$i75_modal" = "$i75_empty" ]; then
     err "I75 could not derive a canonical precedence chain: the most common chain across $i75_n subject script(s) is EMPTY, and an empty chain matches every subject. Failing closed rather than reporting an agreement it did not compute."
   else
     i75_drift=""; i75_open=""
-    while IFS= read -r _f; do
+    while IFS=' ' read -r _s _f; do
       [ -n "$_f" ] || continue
-      _s="$(i75_chain "$_f" | { shasum -a 256 2>/dev/null || sha256sum; } | cut -d' ' -f1)"
-      [ "$_s" = "$i75_modal" ]   || i75_drift="${i75_drift}$(basename "$_f") "
-      i75_failsclosed "$_f"      || i75_open="${i75_open}$(basename "$_f") "
-    done <<<"$i75_subjects"
+      [ "$_s" = "$i75_modal" ]   || i75_drift="${i75_drift}${_f##*/} "
+      i75_failsclosed "$_f"      || i75_open="${i75_open}${_f##*/} "
+    done <<<"$i75_hashed"
 
     # SELF-PROBES, written here rather than assumed. Without them, a run whose extractor
     # returns nothing for every subject prints the same clean line as a real pass.
