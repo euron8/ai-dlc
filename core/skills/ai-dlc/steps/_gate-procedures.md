@@ -572,7 +572,9 @@ document in place. Otherwise, in this order:
    its section file, that part's first-line offset from the map (a finding's document line `L` is
    line `L - first + 1` of the section file), and the part path `<that dir>/<ordinal>.md`. A shard
    edits ONLY its section file, never the document, and every `edit:` line cites that section
-   file by its full path.
+   file by its full path. A `derivation:` fence in the part names the DOCUMENT by its
+   project-relative path, never the section file, because assembly removes the section file
+   before the derivations validator re-runs the fence.
 3. **Join and assemble.** Beat-join every part, then run
    `scripts/ai-dlc/join-remediator-shards.sh --document <artifact path> <that dir> --since <ISO> --until <ISO>`.
    `--artifact-path` is refused in document mode: the section files under `<that dir>/sections/`

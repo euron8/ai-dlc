@@ -461,12 +461,103 @@ else
   bad "the same pair written into the real document exited $RC (expected 2) — the exemption reaches the document"
 fi
 
-# A31: the remediator's PART beside sections/ is never exempt.
+# A31: the remediator's PART beside sections/ carries the same exemption for the same pair. The
+# part's derivation is copied into the joined record the gate re-runs; a fence naming the section
+# file instead goes stale when the join's assembly removes the copies (A38 refuses that shape).
 sec_write "$REPDIR/2.md" "$PAIR_SELF"
-if [ "$RC" = 2 ] && grep -q 'is not backed by' "$ERR"; then
-  ok "the repair part <dir>/2.md, the same pair -> exit 2"
+if [ "$RC" = 0 ] && [ ! -s "$ERR" ] && seeded "$REPDIR/2.md" "$PAIR_SELF"; then
+  ok "the repair part <dir>/2.md, a pair deriving from the split document -> exit 0 (exempt until assembly)"
 else
-  bad "the same pair written into the repair part exited $RC (expected 2) — the exemption reaches the parts"
+  bad "a self-referencing pair in the repair part exited $RC — a section repair cannot record a derivation that survives the join"
+fi
+
+# A36: a pair in the part that does not name the document is witnessed as anywhere else.
+sec_write "$REPDIR/2.md" "$PAIR_GUESS"
+if [ "$RC" = 2 ] && grep -q 'is not backed by' "$ERR"; then
+  ok "repair part, a guessed pair that does not name the document -> exit 2"
+else
+  bad "a non-self-referencing guess in a repair part exited $RC (expected 2) — the exemption covers every command in a part"
+fi
+
+# A37: a leading `./` on the document path is the same token; `../` is not.
+PAIR_DOT="$(printf '```derived\n$ grep -c scope ./%s\n97\n```' "$SELF_REL")"
+PAIR_DOTDOT="$(printf '```derived\n$ grep -c scope ../%s\n97\n```' "$SELF_REL")"
+sec_write "$REPDIR/2.md" "$PAIR_DOT"
+if [ "$RC" = 0 ] && [ ! -s "$ERR" ] && seeded "$REPDIR/2.md" "$PAIR_DOT"; then
+  ok "repair part, the document spelled ./<path> -> exit 0 (the same token)"
+else
+  bad "a ./-prefixed document path in a repair part exited $RC — the leading ./ is not normalised"
+fi
+sec_write "$REPDIR/2.md" "$PAIR_DOTDOT"
+if [ "$RC" = 2 ] && grep -q 'is not backed by' "$ERR"; then
+  ok "repair part, the document spelled ../<path> -> exit 2 (a different file)"
+else
+  bad "a ../-prefixed document path in a repair part exited $RC (expected 2) — the ./ normalisation also swallows ../"
+fi
+
+# A38: a part pair that reads the SECTION COPY is refused at write time even though it reproduces
+# now -- the join's assembly removes that file, so the gate would fail the correct repair. Its
+# own control: the same pair reproduces under the real validator, so exit 2 here is the shape.
+SEC_REL="_bmad-output/planning-artifacts/s1/shards/prd-repair-p1/sections/2.md"
+SEC_N="$( ( cd "$CONSUMER" && grep -c 'scope item' "$SEC_REL" ) )" || SEC_N=0
+PAIR_SECFILE="$(printf '```derived\n$ grep -c %s %s\n%s\n```' "'scope item'" "$SEC_REL" "$SEC_N")"
+printf '# c\n\n%s\n' "$PAIR_SECFILE" > "$WORK/secfile-ctl.md"
+SFC="$( ( cd "$CONSUMER" && AI_DLC_PROJECT_ROOT="$CONSUMER" bash "$VALIDATOR" "$WORK/secfile-ctl.md" ) 2>&1 )"
+SFC_RC=$?
+sec_write "$REPDIR/2.md" "$PAIR_SECFILE"
+if [ "$SFC_RC" = 0 ] && [ "$SEC_N" -gt 0 ] && [ "$RC" = 2 ] && grep -q 'reads the section copy' "$ERR" \
+   && grep -q 'prd-repair-p1/2.md:' "$ERR"; then
+  ok "repair part, a REPRODUCING pair that reads sections/2.md -> exit 2 'reads the section copy' (validator rc 0 on the same pair)"
+else
+  bad "a part pair reading the section copy exited $RC (validator on it: rc $SFC_RC, count $SEC_N) — a derivation doomed at assembly is accepted"
+fi
+
+# A39: a part whose ordinal the manifest does not list is not a part.
+sec_write "$REPDIR/9.md" "$PAIR_SELF"
+if [ "$RC" = 2 ] && grep -q 'is not backed by' "$ERR"; then
+  ok "repair part 9.md beside a manifest that lists no part 9, the same pair -> exit 2"
+else
+  bad "an unlisted part ordinal exited $RC (expected 2) — any .md in a repair dir is exempt"
+fi
+
+# A40: a part-shaped file whose repair dir carries no split is a user file.
+sec_write "$CONSUMER/_bmad-output/planning-artifacts/s1/shards/notes-repair-p1/2.md" "$PAIR_SELF"
+if [ "$RC" = 2 ] && grep -q 'is not backed by' "$ERR"; then
+  ok "a part-shaped 2.md in a repair dir with no split manifest, the same pair -> exit 2"
+else
+  bad "a part-shaped file with no manifest exited $RC (expected 2) — the part exemption is keyed on the path alone"
+fi
+
+# A41: a `2.md` NESTED below a repair dir, beside its own copy of sections/, is not a part: the
+# case pattern's `*` crosses `/`. The nesting is `shards/nested/` so that the parent-is-shards
+# test passes and only the repair-dir name test keeps it out (A42 owns the other test).
+mkdir -p "$REPDIR/shards/nested"; cp -R "$REPDIR/sections" "$REPDIR/shards/nested/"
+sec_write "$REPDIR/shards/nested/2.md" "$PAIR_SELF"
+if [ "$RC" = 2 ] && grep -q 'is not backed by' "$ERR" && [ -f "$REPDIR/shards/nested/sections/.manifest" ]; then
+  ok "a 2.md nested below a repair dir beside a manifest copy, the same pair -> exit 2"
+else
+  bad "a nested part-shaped file exited $RC (expected 2) — the part path test is not keyed on the repair dir itself"
+fi
+
+# A42: a repair-named dir that does not sit directly under shards/ is not a repair dir.
+XDIR="$CONSUMER/_bmad-output/planning-artifacts/s1/shards/x/prd-repair-p1"
+mkdir -p "$XDIR"; cp -R "$REPDIR/sections" "$XDIR/"
+sec_write "$XDIR/2.md" "$PAIR_SELF"
+if [ "$RC" = 2 ] && grep -q 'is not backed by' "$ERR" && [ -f "$XDIR/sections/.manifest" ]; then
+  ok "a part in shards/x/prd-repair-p1/ (not directly under shards/), the same pair -> exit 2"
+else
+  bad "a part under a nested repair-named dir exited $RC (expected 2) — the repair dir's parent is not checked"
+fi
+
+# A43: once the manifest records `assembled`, the document holds the edit and the part is witnessed.
+ADIR="$CONSUMER/_bmad-output/planning-artifacts/s1/shards/prd-repair-p7"
+mkdir -p "$ADIR"; cp -R "$REPDIR/sections" "$ADIR/"
+printf 'assembled\t%064d\n' 0 >> "$ADIR/sections/.manifest"
+sec_write "$ADIR/2.md" "$PAIR_SELF"
+if [ "$RC" = 2 ] && grep -q 'is not backed by' "$ERR" && grep -q '^assembled' "$ADIR/sections/.manifest"; then
+  ok "a part beside an ASSEMBLED manifest, the same pair -> exit 2 (the exemption ends at assembly)"
+else
+  bad "a part after assembly exited $RC (expected 2) — the part exemption outlives the join"
 fi
 
 # A32: a matching path with NO manifest is a user file, not a section copy.

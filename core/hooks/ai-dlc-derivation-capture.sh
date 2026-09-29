@@ -140,16 +140,29 @@ grep -q '^[[:blank:]]*```derived' "$FILE" 2>/dev/null || exit 0
 # write time: it describes the document after assembly, which does not exist yet. That pair -- and
 # ONLY that pair -- is exempt here; the gate re-runs it against the assembled document.
 #
-# THE EXEMPTION IS NARROW ON FOUR AXES, each probed in derivation-capture:
-#   - the path is `*/shards/*-repair-p*/sections/<ordinal>.md`: never the real document, never
-#     the part `<repair-dir>/<i>.md` a remediator writes, never any other file;
-#   - `.manifest` sits beside it and lists that ordinal as a `part` -- a user file at a matching
-#     path with no split behind it is not a section copy;
-#   - the pair's `$ ` command names the manifest's `document` path, absolute or project-relative,
-#     as a whole path token (a longer path that merely contains it does not count);
-#   - every OTHER pair this edit wrote in the copy is witnessed exactly as anywhere else, so a
-#     guessed `grep -c` over some other file is still refused at write time.
-SELF_DOC=""; SELF_REL=""; SELF_LOG=""
+# THE REMEDIATOR'S PART `<repair-dir>/<ordinal>.md` IS EXEMPT FOR THE SAME PAIR, AND ONLY WHILE THE
+# DOCUMENT IS UNASSEMBLED. The part records the derivation of the edit, and the join copies it into
+# the one repair record the gate re-runs. A fence naming the section file passes here and goes
+# stale at the join, because `--assemble` removes the section copies by design; so the part must
+# name the DOCUMENT, which does not yet hold the edit. Measured on a graph copy: 0 derivation
+# failures over the sprint dir before the join, 2 after (the joined record and the part).
+#
+# THE EXEMPTION IS NARROW, each axis probed in derivation-capture:
+#   - the path is `*/shards/*-repair-p*/sections/<ordinal>.md` (a section copy) or
+#     `*/shards/*-repair-p*/<ordinal>.md` (its part): never the real document, never any other file;
+#   - the split's `.manifest` (beside the copy; under `sections/` beside the part) lists that
+#     ordinal as a `part` -- a user file at a matching path with no split behind it is neither;
+#   - for a part, the manifest carries no `assembled` line: once the join has assembled the
+#     document, a fence naming it reproduces or is wrong, and is witnessed as anywhere else;
+#   - the pair's `$ ` command names the manifest's `document` path, absolute or project-relative
+#     with or without a leading `./`, as a whole path token (a longer path that merely contains
+#     it does not count);
+#   - every OTHER pair this edit wrote is witnessed exactly as anywhere else, so a guessed
+#     `grep -c` over some other file is still refused at write time.
+#
+# AND A PART'S PAIR THAT NAMES THE SPLIT'S `sections/` DIR IS REFUSED OUTRIGHT, reproducing or not:
+# that file is removed at assembly, so the derivation is stale by construction at the gate.
+SELF_DOC=""; SELF_REL=""; SELF_LOG=""; SEC_DIR=""
 case "$FILE" in
   */shards/*-repair-p*/sections/*.md)
     SEC_MF="$(dirname "$FILE")/.manifest"
@@ -157,16 +170,36 @@ case "$FILE" in
     if [ -f "$SEC_MF" ] && awk -F'\t' -v o="$SEC_ORD" '$1 == "part" && $2 == o { f = 1 } END { exit !f }' "$SEC_MF" 2>/dev/null; then
       SELF_DOC="$(awk -F'\t' '$1 == "document" { print $2; exit }' "$SEC_MF" 2>/dev/null)"
     fi ;;
+  */shards/*-repair-p*/*.md)
+    # Only a file DIRECTLY in the repair dir: `*` crosses `/` in a case pattern.
+    PART_DIR="$(dirname "$FILE")"
+    case "$(basename "$PART_DIR")" in *-repair-p*) ;; *) PART_DIR="" ;; esac
+    [ "$(basename "$(dirname "${PART_DIR:-/}")")" = shards ] || PART_DIR=""
+    SEC_MF="${PART_DIR}/sections/.manifest"
+    SEC_ORD="$(basename "$FILE" .md)"
+    if [ -n "$PART_DIR" ] && [ -f "$SEC_MF" ] && awk -F'\t' -v o="$SEC_ORD" '$1 == "part" && $2 == o { f = 1 } $1 == "assembled" { a = 1 } END { exit !(f && !a) }' "$SEC_MF" 2>/dev/null; then
+      SELF_DOC="$(awk -F'\t' '$1 == "document" { print $2; exit }' "$SEC_MF" 2>/dev/null)"
+      SEC_DIR="${PART_DIR}/sections"
+    fi ;;
 esac
-if [ -n "$SELF_DOC" ]; then
-  PD_PHYS="$(cd "$PROJECT_DIR" 2>/dev/null && pwd -P)"
-  case "$SELF_DOC" in
-    "$PD_PHYS"/*) SELF_REL="${SELF_DOC#"$PD_PHYS"/}" ;;
-    "$PROJECT_DIR"/*) SELF_REL="${SELF_DOC#"$PROJECT_DIR"/}" ;;
-    *) SELF_REL="$SELF_DOC" ;;
+PD_PHYS="$(cd "$PROJECT_DIR" 2>/dev/null && pwd -P)"
+rel_of() { # <path> -> project-relative when under the project dir (physical or logical), else as given
+  case "$1" in
+    "$PD_PHYS"/*) printf '%s' "${1#"$PD_PHYS"/}" ;;
+    "$PROJECT_DIR"/*) printf '%s' "${1#"$PROJECT_DIR"/}" ;;
+    *) printf '%s' "$1" ;;
   esac
+}
+if [ -n "$SELF_DOC" ]; then
+  SELF_REL="$(rel_of "$SELF_DOC")"
   # The manifest stores the PHYSICAL path; an author spells the project dir as the harness does.
   SELF_LOG="${PROJECT_DIR%/}/${SELF_REL}"
+fi
+SEC_REL=""; SEC_LOG=""; SEC_PHYS=""
+if [ -n "$SEC_DIR" ]; then
+  SEC_PHYS="$(cd "$SEC_DIR" 2>/dev/null && pwd -P)"
+  SEC_REL="$(rel_of "${SEC_PHYS:-$SEC_DIR}")"
+  SEC_LOG="${PROJECT_DIR%/}/${SEC_REL}"
 fi
 
 # The text THIS tool call wrote. `content` for Write, `new_string` for Edit, every
@@ -193,7 +226,9 @@ printf '%s\n' "$PAYLOAD" > "$TMPD/payload.txt" 2>/dev/null || exit 0
 # (an edit that rewrote only the output). Empty lines are excluded from the payload
 # index because nearly every payload has one and it would touch every pair.
 MASK="$TMPD/$(basename "$FILE")"
-awk -v sa="$SELF_DOC" -v sr="$SELF_REL" -v sl="$SELF_LOG" '
+DOOMED="$TMPD/doomed"
+awk -v sa="$SELF_DOC" -v sr="$SELF_REL" -v sl="$SELF_LOG" \
+    -v da="${SEC_PHYS:+$SEC_PHYS/}" -v dr="${SEC_REL:+$SEC_REL/}" -v dl="${SEC_LOG:+$SEC_LOG/}" -v dout="$DOOMED" '
 # lead(s): the leading blanks of s. shed(s, ind): s with the block indent removed -- exactly
 # `ind` when s carries it, else whatever leading blanks s has. The same two rules the
 # validator applies inline in check_file; a line is a fence delimiter or a `$ ` command line
@@ -204,16 +239,38 @@ function shed(s, ind) {
   if (substr(s, 1, length(ind)) == ind) return substr(s, length(ind) + 1)
   return substr(s, length(lead(s)) + 1)
 }
-# names(s, p): s carries p as a whole path token -- the byte before and the byte after are not
-# path characters. Empty p names nothing, so outside a section copy no pair is ever exempt.
-function names(s, p,   i, r, pre, post) {
+# preok(s, i): a path token may START at byte i of s -- the byte before is not a path
+# character, or it is the `/` of a leading `./` that is itself preceded by none (so `./x`
+# counts and `../x` does not).
+function preok(s, i,   pre, pp) {
+  pre = (i > 1 ? substr(s, i - 1, 1) : "")
+  if (pre == "/" && i > 2 && substr(s, i - 2, 1) == ".") {
+    pp = (i > 3 ? substr(s, i - 3, 1) : "")
+    if (pp !~ /[A-Za-z0-9_.\/-]/) return 1
+  }
+  return pre !~ /[A-Za-z0-9_.\/-]/
+}
+# names(s, p): s carries p as a whole path token -- preok before it, and the byte after is not a
+# path character. Empty p names nothing, so outside a split no pair is ever exempt.
+function names(s, p,   i, off, post) {
   if (p == "") return 0
-  r = s
-  while ((i = index(r, p)) > 0) {
-    pre = (i > 1 ? substr(r, i - 1, 1) : "")
-    post = substr(r, i + length(p), 1)
-    if (pre !~ /[A-Za-z0-9_.\/-]/ && post !~ /[A-Za-z0-9_.\/-]/) return 1
-    r = substr(r, i + 1)
+  off = 0
+  while ((i = index(substr(s, off + 1), p)) > 0) {
+    i += off
+    post = substr(s, i + length(p), 1)
+    if (preok(s, i) && post !~ /[A-Za-z0-9_.\/-]/) return 1
+    off = i
+  }
+  return 0
+}
+# under(s, d): s carries a path token that begins with the directory prefix d (ending in `/`).
+function under(s, d,   i, off) {
+  if (d == "") return 0
+  off = 0
+  while ((i = index(substr(s, off + 1), d)) > 0) {
+    i += off
+    if (preok(s, i)) return 1
+    off = i
   }
   return 0
 }
@@ -237,6 +294,8 @@ END {
         pid[k]=cur
         if (cur>0 && (L[k] in PAY)) tch[cur]=1
       }
+      # A part pair naming the split sections/ dir is doomed at assembly: recorded, refused below.
+      for (k in tch) if (tch[k] && (under(L[k], da) || under(L[k], dr) || under(L[k], dl))) print k > dout
       # The section-copy exemption: a touched pair whose command names the split document.
       for (k in tch) if (tch[k] && (names(L[k], sa) || names(L[k], sr) || names(L[k], sl))) tch[k]=0
       any=0
@@ -252,6 +311,25 @@ END {
   }
 }
 ' "$TMPD/payload.txt" "$FILE" > "$MASK" 2>/dev/null || exit 0
+
+# A part's derivation over the section copy: refused whether or not it reproduces now.
+if [ -s "$DOOMED" ]; then
+  REL="${FILE#"$PROJECT_DIR"/}"
+  {
+    echo "AI/DLC derivation capture: a \`\`\`derived block this edit wrote in a section repair part"
+    echo "reads the section copy under ${SEC_REL}/, which the join's assembly removes -- so the"
+    echo "gate re-runs it against a file that no longer exists and fails the repair."
+    echo
+    sort -n -u "$DOOMED" | while IFS= read -r ln; do
+      printf '  %s:%s  %s\n' "$REL" "$ln" "$(sed -n "${ln}p" "$FILE")"
+    done
+    echo
+    echo "Name the DOCUMENT by its project-relative path, ${SELF_REL}, in the command instead."
+    echo "At write time the document does not hold your edit yet, so that pair is not re-run"
+    echo "here; the gate re-runs it against the assembled document after the join."
+  } >&2
+  exit 2
+fi
 
 # Nothing this edit wrote is a derivation -- the common case for an edit to prose in
 # a file that happens to carry fences elsewhere. Indent-tolerant for the reason above.
