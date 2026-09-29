@@ -1211,6 +1211,304 @@ else
 fi
 rm -rf "$SWAPDIST" "$E14CONS" "$M10DIR"
 
+# --- Part 11: an input the run cannot READ refuses; an input that is not THERE does not ------
+#
+# THE DEFECT. `have` was a bare `cat-file -e`, which answers non-zero for an absent path, for an
+# unresolvable ref and for a present tree entry whose object cannot be read, and the contract read
+# took every non-zero as "no contract at theirs". So a typo'd or unfetched THEIRS, or a damaged
+# object store, emptied the ADJUDICATED code set and switched the whole tier off at rc 0 -- the
+# output `--adjudicated-codes` documents as a LEGITIMATE answer. Classify and list mode had the
+# same exposure through BASE and THEIRS. The engine now refuses both at startup (an unresolvable
+# ref) and at `have` (a path the tree names that cannot be read).
+#
+# EVERY ARM ASSERTS rc AND A REFUSED LINE CARRYING THE INPUT THAT WAS REFUSED, never a row count:
+# the bad ref string on A-D (in C and D2 only BASE is bad, so the ref appearing names which input
+# refused), the contract path on E-F. A row count is what the defect already satisfied.
+#
+# G IS THE NEAR-MISS THAT MAKES E AND F MEAN SOMETHING. A contract genuinely absent at theirs must
+# keep today's meaning -- rc 0, an empty code set, no refusal -- so a `have` that refused on every
+# miss would pass E and F and fail only here. H is the healthy control, and it is PRESENCE-shaped:
+# a copy that never ran cannot print a code.
+#
+# F IS THE WORLD THE FIRST PROPOSED DISCRIMINATOR COULD NOT SEE. With the contract's parent SUBTREE
+# missing, `rev-parse <ref>:<path>` answers 1 exactly as for an absent path; the precondition below
+# asserts that shape, so F measures the ls-tree discriminator and not a coincidence.
+echo
+echo "Part 11 — an unresolvable ref or an unreadable contract refuses; an absent contract does not"
+
+P11W="$ROOT/p11"
+rm -rf "$P11W"; mkdir -p "$P11W"
+P11BAD="refs/heads/zz-bl370-absent-ref"
+P11REL="core/skills/ai-dlc/layer-contract.yaml"
+P11T="$(git -C "$DIST" rev-parse -q --verify "${THEIRS}^{commit}" 2>/dev/null)" || P11T=""
+P11B="$(git -C "$DIST" rev-parse -q --verify "${BASE}^{commit}" 2>/dev/null)" || P11B=""
+P11H="$(git -C "$DIST" rev-parse -q --verify HEAD 2>/dev/null)" || P11H=""
+p11_badrc=0; git -C "$DIST" rev-parse -q --verify "$P11BAD" >/dev/null 2>&1 || p11_badrc=$?
+p11_ready=yes
+if [ "$p11_badrc" -ne 1 ] || [ -z "$P11T" ] || [ -z "$P11B" ] || [ "$P11H" != "$P11T" ]; then
+  bad "FIXTURE ERROR: Part 11 precondition — the impossible ref answers rev-parse $p11_badrc (want 1), theirs='$P11T' base='$P11B', and the dist HEAD '$P11H' must BE theirs, because the E/F/G worlds are copied from it"
+  p11_ready=no
+fi
+
+# A loose object moved ASIDE, never deleted: a packed store has no such file, and a world whose
+# object was never removed reads exactly like an engine that read it fine.
+p11_hide_obj() { # <repo> <sha> -> 0 when the loose object existed and is now out of the store
+  local f="$1/.git/objects/${2:0:2}/${2:2}"
+  [ -n "$2" ] && [ -f "$f" ] || return 1
+  mv "$f" "$P11W/hidden-${2}" && [ ! -e "$f" ]
+}
+
+if [ "$p11_ready" = yes ]; then
+  # E -- the contract's BLOB is missing, its tree entry present.
+  P11E="$P11W/dist-blob"; cp -R "$DIST" "$P11E"
+  p11_blob="$(git -C "$P11E" rev-parse -q --verify "${P11T}:${P11REL}" 2>/dev/null)" || p11_blob=""
+  if p11_hide_obj "$P11E" "$p11_blob" \
+     && [ -n "$(git -C "$P11E" ls-tree --full-tree "$P11T" -- "$P11REL" 2>/dev/null)" ] \
+     && ! git -C "$P11E" cat-file -e "${P11T}:${P11REL}" 2>/dev/null; then
+    ok "Part 11 world E: the contract's tree entry is present at theirs and its blob cannot be read"
+  else
+    bad "FIXTURE ERROR: Part 11 world E could not be built (blob '$p11_blob' not loose, or the tree no longer names it, or it still reads), so arm E would measure a healthy store"
+    p11_ready=no
+  fi
+  # F -- the contract's parent SUBTREE is missing.
+  P11F="$P11W/dist-subtree"; cp -R "$DIST" "$P11F"
+  p11_sub="$(git -C "$P11F" rev-parse -q --verify "${P11T}:core/skills/ai-dlc" 2>/dev/null)" || p11_sub=""
+  p11_frc=0;
+  if p11_hide_obj "$P11F" "$p11_sub"; then
+    git -C "$P11F" rev-parse -q --verify "${P11T}:${P11REL}" >/dev/null 2>&1 || p11_frc=$?
+  else
+    p11_frc=x
+  fi
+  if [ "$p11_frc" = 1 ]; then
+    ok "Part 11 world F: the contract's parent subtree is missing, and rev-parse <theirs>:<path> answers 1 there — the SAME answer it gives an absent path, which is the shape only ls-tree separates"
+  else
+    bad "FIXTURE ERROR: Part 11 world F could not be built, or rev-parse answered '$p11_frc' rather than 1, so arm F is not the input that separates ls-tree from rev-parse"
+    p11_ready=no
+  fi
+  # G -- the contract genuinely ABSENT at a theirs that resolves.
+  P11G="$P11W/dist-absent"; cp -R "$DIST" "$P11G"
+  git -C "$P11G" rm -q "$P11REL" >/dev/null 2>&1
+  git -C "$P11G" commit -qm "no layer contract at this theirs" >/dev/null 2>&1
+  P11GT="$(git -C "$P11G" rev-parse -q --verify HEAD 2>/dev/null)" || P11GT=""
+  p11_grc=0; p11_gls="$(git -C "$P11G" ls-tree --full-tree "$P11GT" -- "$P11REL" 2>/dev/null)" || p11_grc=$?
+  if [ -n "$P11GT" ] && [ "$P11GT" != "$P11T" ] && [ "$p11_grc" -eq 0 ] && [ -z "$p11_gls" ] \
+     && git -C "$P11G" cat-file -e "${P11GT}:core/schemas/layer-adjudication-register.json" 2>/dev/null; then
+    ok "Part 11 world G: a resolvable theirs whose tree carries no contract — ls-tree exits 0 with no line, and the store is otherwise whole"
+  else
+    bad "FIXTURE ERROR: Part 11 world G is not a clean absence (theirs '$P11GT', ls-tree rc $p11_grc, line '$p11_gls'), so the near-miss discriminates nothing"
+    p11_ready=no
+  fi
+fi
+
+# p11_drive <engine> <tag> <args...> -- one run with a FRESH, EMPTY temp directory, so a temp file
+# the run leaves behind is countable. Sets p11_rc, p11_out, p11_err, p11_tmp.
+#
+# THE LISTING'S `mktemp` TAKES NO TEMPLATE, AND macOS's /usr/bin/mktemp THEN IGNORES TMPDIR -- it
+# writes under the per-user /var/folders directory whatever TMPDIR says. Measured while building this
+# arm: a mutant with the refusal moved below that mktemp left its file there and scored D ok, because
+# the directory being counted was never written. So a PATH stub sends a template-less call into the
+# drive's own directory and logs it; every other call passes through untouched. The stub's positive
+# control is the healthy list run below, which must log exactly the listing's call.
+mkdir -p "$P11W/bin"
+printf '%s\n' '#!/bin/sh' \
+  'echo "$#" >> "$P11_TD.calls"' \
+  '[ "$#" -eq 0 ] && exec /usr/bin/mktemp "$P11_TD/tmp.XXXXXX"' \
+  'exec /usr/bin/mktemp "$@"' > "$P11W/bin/mktemp"
+chmod +x "$P11W/bin/mktemp"
+p11_drive() {
+  local eng="$1" td="$P11W/tmp-$2"; shift 2
+  rm -rf "$td" "$td.calls"; mkdir -p "$td"
+  p11_out="$(PATH="$P11W/bin:$PATH" P11_TD="$td" TMPDIR="$td" bash "$eng" "$@" 2>"$P11W/stderr")"; p11_rc=$?
+  p11_err="$(cat "$P11W/stderr")"
+  p11_tmp="$(ls -A "$td" | grep -c .)" || p11_tmp=0
+}
+# A REFUSED line (the prefix `apply.sh`'s detector_refused keys on) that carries <needle>.
+p11_refline() { printf '%s\n' "$p11_err" | awk -v n="$1" 'index($0, "layer-drift: REFUSED") == 1 && index($0, n) { f = 1 } END { exit !f }'; }
+p11_anyref()  { printf '%s\n' "$p11_err" | awk 'index($0, "layer-drift: REFUSED") == 1 { f = 1 } END { exit !f }'; }
+p11_rows()    { printf '%s\n' "$p11_out" | grep -c .; }
+p11_arm() { # <arm> <ok|no> <detail when no>
+  p11_v="$p11_v $1=$2"
+  [ "$2" = ok ] || p11_d="$p11_d [$1: $3]"
+}
+p11_state() { printf 'rc=%s rows=%s tmp=%s refused=%s' "$p11_rc" "$(p11_rows)" "$p11_tmp" "$(printf '%s\n' "$p11_err" | grep -c 'layer-drift: REFUSED')"; }
+
+# p11_score <engine> -> sets p11_v, the whole arm vector ("A=ok B=no ..."), and p11_d, the details.
+p11_score() {
+  local e="$1" r
+  p11_v=""; p11_d=""
+  p11_drive "$e" A --adjudicated-codes "$DIST" "$P11BAD"
+  if [ "$p11_rc" -eq 1 ] && p11_refline "$P11BAD" && [ "$(p11_rows)" -eq 0 ]; then r=ok; else r=no; fi
+  p11_arm A "$r" "$(p11_state)"
+  p11_drive "$e" B "$DIST" "$P11B" "$P11BAD" "$CONS"
+  if [ "$p11_rc" -eq 1 ] && p11_refline "$P11BAD" && [ "$(p11_rows)" -eq 0 ]; then r=ok; else r=no; fi
+  p11_arm B "$r" "$(p11_state)"
+  p11_drive "$e" C "$DIST" "$P11BAD" "$P11T" "$CONS"
+  if [ "$p11_rc" -eq 1 ] && p11_refline "$P11BAD" && [ "$(p11_rows)" -eq 0 ]; then r=ok; else r=no; fi
+  p11_arm C "$r" "$(p11_state)"
+  p11_drive "$e" D --list-adjudications "$DIST" "$P11BAD" "$P11BAD" "$CONS"
+  if [ "$p11_rc" -eq 1 ] && p11_refline "$P11BAD" && [ "$(p11_rows)" -eq 0 ] && [ "$p11_tmp" -eq 0 ]; then r=ok; else r=no; fi
+  p11_arm D "$r" "$(p11_state)"
+  p11_drive "$e" D2 --list-adjudications "$DIST" "$P11BAD" "$P11T" "$CONS"
+  if [ "$p11_rc" -eq 1 ] && p11_refline "$P11BAD" && [ "$(p11_rows)" -eq 0 ] && [ "$p11_tmp" -eq 0 ]; then r=ok; else r=no; fi
+  p11_arm D2 "$r" "$(p11_state)"
+  p11_drive "$e" E --adjudicated-codes "$P11E" "$P11T"
+  if [ "$p11_rc" -eq 1 ] && p11_refline "$P11REL" && [ "$(p11_rows)" -eq 0 ]; then r=ok; else r=no; fi
+  p11_arm E "$r" "$(p11_state)"
+  p11_drive "$e" F --adjudicated-codes "$P11F" "$P11T"
+  if [ "$p11_rc" -eq 1 ] && p11_refline "$P11REL" && [ "$(p11_rows)" -eq 0 ]; then r=ok; else r=no; fi
+  p11_arm F "$r" "$(p11_state)"
+  p11_drive "$e" G --adjudicated-codes "$P11G" "$P11GT"
+  if [ "$p11_rc" -eq 0 ] && ! p11_anyref && [ "$(p11_rows)" -eq 0 ]; then r=ok; else r=no; fi
+  p11_arm G "$r" "$(p11_state)"
+  p11_drive "$e" H --adjudicated-codes "$DIST" "$P11T"
+  if [ "$p11_rc" -eq 0 ] && ! p11_anyref && printf '%s\n' "$p11_out" | awk '$0 == "EXTENSION-HOOK-DRIFT" { f = 1 } END { exit !f }'; then r=ok; else r=no; fi
+  p11_arm H "$r" "$(p11_state)"
+  p11_v="${p11_v# }"
+}
+P11ALLOK="A=ok B=ok C=ok D=ok D2=ok E=ok F=ok G=ok H=ok"
+
+if [ "$p11_ready" = yes ]; then
+  # STUB CONTROL: a HEALTHY list run through the stub makes exactly one template-less mktemp call
+  # (the listing's), the stub places it in the drive's directory, and the run removes it. Without
+  # this, D's "no temp file" is an absence nothing has shown the count can see.
+  p11_drive "$DRIFT" Lctl --list-adjudications "$DIST" "$P11B" "$P11T" "$CONS"
+  p11_nat="$(grep -cx 0 "$P11W/tmp-Lctl.calls" 2>/dev/null)" || p11_nat=0
+  if [ "$p11_rc" -eq 0 ] && [ "$p11_nat" -eq 1 ] && [ "$p11_tmp" -eq 0 ] && [ "$(p11_rows)" -ge 1 ]; then
+    ok "Part 11 stub control: a healthy list run makes 1 template-less mktemp call through the stub and cleans it up — D's temp-file count is watching the directory the listing writes"
+  else
+    bad "FIXTURE ERROR: Part 11 stub control — healthy list run rc=$p11_rc, $p11_nat template-less mktemp call(s) (want 1), $p11_tmp file(s) left, $(p11_rows) row(s); D's temp-file conjunct would count a directory nothing writes"
+    p11_ready=no
+  fi
+fi
+if [ "$p11_ready" = yes ]; then
+  p11_score "$DRIFT"
+  for p11_a in $p11_v; do
+    case "$p11_a" in
+      A=ok)  ok "Part 11 A: --adjudicated-codes with an unresolvable THEIRS exits 1 with a REFUSED line naming the ref, and prints no code" ;;
+      B=ok)  ok "Part 11 B: classify with an unresolvable THEIRS exits 1 with a REFUSED line naming the ref, and prints NO row" ;;
+      C=ok)  ok "Part 11 C: classify with an unresolvable BASE (theirs fine) exits 1 with a REFUSED line naming the base ref" ;;
+      D=ok)  ok "Part 11 D: --list-adjudications with base AND theirs unresolvable exits 1 with a REFUSED line, and leaves NO temp file — the refusal precedes the listing's mktemp" ;;
+      D2=ok) ok "Part 11 D2: --list-adjudications with only BASE unresolvable exits 1 with a REFUSED line naming it, and leaves no temp file" ;;
+      E=ok)  ok "Part 11 E: a contract whose tree entry is present and whose blob is missing exits 1 with a REFUSED line naming the contract — an unreadable path is not an absent one" ;;
+      F=ok)  ok "Part 11 F: a contract whose parent subtree is missing exits 1 with a REFUSED line naming the contract, where rev-parse would have read it as absent" ;;
+      G=ok)  ok "Part 11 G: a contract genuinely ABSENT at a resolvable theirs still exits 0 with an empty code set and no refusal — the no-tier meaning survives" ;;
+      H=ok)  ok "Part 11 H: the healthy dist exits 0 and prints the ADJUDICATED code set (EXTENSION-HOOK-DRIFT among it)" ;;
+      *)     bad "Part 11 ${p11_a%%=*}: arm failed on the engine under test — $(printf '%s' "$p11_d" | grep -o "\[${p11_a%%=*}: [^]]*\]")" ;;
+    esac
+  done
+fi
+
+# MUTANTS. Each is ONE layer of the fix undone in a copy of the whole reconcile/ directory (lib.sh
+# is sourced beside the engine; a lone copy dies at the source line and emits nothing), and each is
+# asserted by its EXACT failing arm set -- a mutant failing an arm it does not own means two arms
+# are entangled, and H staying ok on every mutant is the presence-shaped proof the copy ran. Every
+# anchor is counted before it is applied: zero is `FIXTURE STALE` (the fix moved and the mutant
+# must be re-anchored on the new site, never dropped), more than one is ambiguous.
+#
+#   M1  ld_resolve_ref never refuses                         -> C D D2, and ONLY those. The two
+#       layers COVER each other on THEIRS: `have`'s ls-tree exits 128 on an unresolvable ref, so the
+#       contract read still refuses A and B at rc 1. D dies on its temp-file conjunct alone -- that
+#       refusal comes after the listing's mktemp. Measured, not assumed, and it is why M13 exists:
+#       reverting one layer of a layered fix proves only the layer left standing.
+#   M13 both layers removed (M1 + M3)                        -> A B C D D2 E F
+#   M2  ld_resolve_ref waves BASE through (THEIRS only)      -> C D2
+#   M3  have() is memo_has_path alone (F2 removed)           -> E F
+#   M5  the startup refusal exits 2, not 1                   -> A B C D D2
+#   M6  the startup refusal moved BELOW the listing's mktemp -> D D2 (still rc 1 and REFUSED; the
+#                                                               only observable is the temp file)
+#   M7  have() refuses on EVERY memo miss                    -> G   (the near-miss's own mutant)
+#
+# NOT HERE: F2 spelled as a `$( )` capture of ls-tree instead of the staged "$LD_T/have-ls" file.
+# In every world of this part the capture and the file answer identically; they differ only when a
+# failed row write has left bytes in bash 3.2's stdout buffer and a `have` MISS follows, which is
+# procsub-staged-refusal-boot's EFBIG world. That fixture is where the capture form is killed.
+P11MD="$P11W/reconcile-mutants"
+rm -rf "$P11MD"; mkdir -p "$P11MD"
+cp "$(dirname "$DRIFT")"/* "$P11MD"/ 2>/dev/null
+p11_mut() { # <id> -> writes $P11MD/layer-drift-<id>.sh; prints OK, STALE or AMBIGUOUS
+  python3 - "$DRIFT" "$P11MD/layer-drift-$1.sh" "$1" <<'P11PY'
+import re, sys
+src, dst, mid = sys.argv[1], sys.argv[2], sys.argv[3]
+s = open(src).read()
+RES = re.compile(r'^ld_resolve_ref\(\) \{.*?^\}\n', re.M | re.S)
+HAVE = re.compile(r'^have\(\) \{.*?^\}\n', re.M | re.S)
+CALL = re.compile(r'^([^#\n]*\$\(ld_resolve_ref (?:theirs|base) [^\n]*?\|\| exit )1\b', re.M)
+def one(rx):
+    m = rx.findall(s)
+    if len(m) == 0: print("STALE"); sys.exit(0)
+    if len(m) > 1: print("AMBIGUOUS"); sys.exit(0)
+if mid == "m1":
+    one(RES)
+    s = RES.sub('ld_resolve_ref() { # MUTANT M1: never refuses\n  git -C "$DIST" rev-parse -q --verify "${2}^{commit}" 2>/dev/null\n  return 0\n}\n', s, count=1)
+elif mid == "m2":
+    one(RES)
+    s = RES.sub(lambda m: m.group(0).replace('\n', '\n  [ "$1" = base ] && { git -C "$DIST" rev-parse -q --verify "${2}^{commit}" 2>/dev/null; return 0; }\n', 1), s, count=1)
+elif mid == "m3":
+    one(HAVE)
+    s = HAVE.sub('have() { memo_has_path "$DIST" "$1" "$2"; }\n', s, count=1)
+elif mid == "m5":
+    n = len(CALL.findall(s))
+    if n == 0: print("STALE"); sys.exit(0)
+    if n != 2: print("AMBIGUOUS"); sys.exit(0)
+    s = CALL.sub(lambda m: m.group(1) + '2', s)
+elif mid == "m13":
+    one(RES); one(HAVE)
+    s = RES.sub('ld_resolve_ref() { # MUTANT M1\n  git -C "$DIST" rev-parse -q --verify "${2}^{commit}" 2>/dev/null\n  return 0\n}\n', s, count=1)
+    s = HAVE.sub('have() { memo_has_path "$DIST" "$1" "$2"; }\n', s, count=1)
+elif mid == "m6":
+    lines = s.split('\n')
+    calls = [i for i, l in enumerate(lines) if CALL.search(l)]
+    mk = [i for i, l in enumerate(lines) if not l.lstrip().startswith('#') and 'ADJ_LIST_FILE="$(mktemp' in l]
+    if len(calls) == 0 or len(mk) == 0: print("STALE"); sys.exit(0)
+    if len(calls) != 2 or len(mk) != 1 or not (calls[0] < calls[1] < mk[0]) or calls[1] - calls[0] > 3:
+        print("AMBIGUOUS"); sys.exit(0)
+    block = lines[calls[0]:calls[1] + 1]
+    rest = lines[:calls[0]] + lines[calls[1] + 1:]
+    at = [i for i, l in enumerate(rest) if not l.lstrip().startswith('#') and 'ADJ_LIST_FILE="$(mktemp' in l][0]
+    s = '\n'.join(rest[:at + 1] + block + rest[at + 1:])
+elif mid == "m7":
+    one(HAVE)
+    s = HAVE.sub('have() { memo_has_path "$DIST" "$1" "$2" && return 0; echo "layer-drift: REFUSED — $2 at $1 (MUTANT M7: every miss refuses)" >&2; exit 1; }\n', s, count=1)
+open(dst, "w").write(s)
+print("OK")
+P11PY
+}
+if [ "$p11_ready" = yes ]; then
+  cp "$DRIFT" "$P11MD/layer-drift-unmutated.sh"
+  p11_score "$P11MD/layer-drift-unmutated.sh"
+  if [ "$p11_v" != "$P11ALLOK" ]; then
+    bad "FIXTURE ERROR: the UNMUTATED copy in $P11MD scores '$p11_v', not all-ok, so the copied directory is not a working harness and no mutant verdict below is attributable —$p11_d"
+  else
+    ok "Part 11 CONTROL: an unmutated copy in the mutant directory scores every arm ok — the verdicts below are their edits, not the copy"
+    for p11_m in "m1:A=ok B=ok C=no D=no D2=no E=ok F=ok G=ok H=ok:the startup ref refusal removed (an unresolvable THEIRS is still refused by have, whose ls-tree exits 128 there, but only AFTER the listing's mktemp)" \
+                 "m13:A=no B=no C=no D=no D2=no E=no F=no G=ok H=ok:BOTH layers removed, the pre-fix engine's shape" \
+                 "m2:A=ok B=ok C=no D=ok D2=no E=ok F=ok G=ok H=ok:the startup refusal checking THEIRS only" \
+                 "m3:A=ok B=ok C=ok D=ok D2=ok E=no F=no G=ok H=ok:have() reduced to memo_has_path" \
+                 "m5:A=no B=no C=no D=no D2=no E=ok F=ok G=ok H=ok:the startup refusal exiting 2" \
+                 "m6:A=ok B=ok C=ok D=no D2=no E=ok F=ok G=ok H=ok:the startup refusal moved below the listing mktemp" \
+                 "m7:A=ok B=ok C=ok D=ok D2=ok E=ok F=ok G=no H=ok:have() refusing every memo miss"; do
+      p11_id="${p11_m%%:*}"; p11_rest="${p11_m#*:}"; p11_want="${p11_rest%%:*}"; p11_what="${p11_rest#*:}"
+      p11_ap="$(p11_mut "$p11_id")"
+      p11_f="$P11MD/layer-drift-$p11_id.sh"
+      if [ "$p11_ap" = STALE ]; then
+        bad "FIXTURE STALE: mutant $p11_id ($p11_what) found no anchor in layer-drift.sh — the fix moved; re-anchor the mutant on its new site, never drop it"
+      elif [ "$p11_ap" != OK ] || [ ! -s "$p11_f" ] || cmp -s "$DRIFT" "$p11_f"; then
+        bad "FIXTURE ERROR: mutant $p11_id ($p11_what) did not apply (python said '$p11_ap'), so its arms are unproven"
+      elif ! bash -n "$p11_f" 2>/dev/null; then
+        bad "FIXTURE ERROR: mutant $p11_id ($p11_what) does not parse, so any verdict would be a dead copy's"
+      else
+        p11_score "$p11_f"
+        if [ "$p11_v" = "$p11_want" ]; then
+          ok "Part 11 MUTANT $p11_id — $p11_what: KILLED by exactly the arms it owns ($(printf '%s' "$p11_v" | tr ' ' '\n' | grep '=no' | cut -d= -f1 | tr '\n' ' '| sed 's/ $//')), every other arm still ok"
+        else
+          bad "Part 11 MUTANT $p11_id — $p11_what: scored '$p11_v', want '$p11_want'. An owned arm left ok is a survivor; an extra failing arm is entanglement —$p11_d"
+        fi
+      fi
+    done
+  fi
+fi
+rm -rf "$P11W"
+
 echo
 if [ "$fails" -eq 0 ]; then
   echo "layer-adjudication-tier: PASS"
