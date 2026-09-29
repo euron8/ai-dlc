@@ -44,7 +44,9 @@
 # `ulimit -f 0` and must equal its unforced bytes; a scan holds lib.sh to zero heredoc openers.
 # `memo_diff_name_status` and preclassify's relocation listing read paths with
 # `core.quotePath=false`, and two seeded worlds holding a non-ASCII `core/scripts/caf\303\251.sh` drive the shipping
-# retired-tokens.sh and preclassify.sh to prove the row survives, beside an ASCII control row.
+# retired-tokens.sh and preclassify.sh to prove the row survives, beside an ASCII control row. A third
+# world holds a non-ASCII MACHINERY file and drives self-update-gate.sh, whose arm C joins those raw
+# rows against preclassify's `machinery_paths()` -- which must list with `core.quotePath=false` too.
 #
 # Usage: run.sh [<tree-root>]  -- drive the scripts of another tree (for example an extracted base
 #                                 commit). The spelling arm and the mutants run only on this tree.
@@ -427,6 +429,19 @@ for _q in plain "$QU"; do printf 'new\n' > "$QBD/core/scripts/$_q.sh"; done
 gitq -C "$QBD" add -A; gitq -C "$QBD" commit -qm theirs
 QB_THEIRS="$(git -C "$QBD" rev-parse HEAD)"
 for _q in plain "$QU"; do printf 'old\nlocal edit\n' > "$QBC/scripts/$_q.sh"; done
+# QC: two MACHINERY files (`core/skills/ai-dlc-update/**` in setup-sites.md) move v1 -> v2 while the
+# consumer holds local edits of both. self-update-gate.sh arm C joins preclassify's rows against
+# `machinery_paths()` with `grep -xF`, so the non-ASCII row is carried only when BOTH sides spell the
+# name raw. Every run gets a fresh copy of the consumer, because the gate writes its record into it.
+QC="$W/qc"; QCD="$QC/dist"; QCC="$QC/consumer"
+mkdir -p "$QCD/core/skills/ai-dlc-update" "$QCC/.claude/skills/ai-dlc-update"
+for _q in plain "$QU"; do printf 'v1\n' > "$QCD/core/skills/ai-dlc-update/$_q.md"; done
+gitq -C "$QCD" init -q; gitq -C "$QCD" add -A; gitq -C "$QCD" commit -qm base
+QC_BASE="$(git -C "$QCD" rev-parse HEAD)"
+for _q in plain "$QU"; do printf 'v2\n' > "$QCD/core/skills/ai-dlc-update/$_q.md"; done
+gitq -C "$QCD" add -A; gitq -C "$QCD" commit -qm theirs
+QC_THEIRS="$(git -C "$QCD" rev-parse HEAD)"
+for _q in plain "$QU"; do printf 'v1\nmy local edit\n' > "$QCC/.claude/skills/ai-dlc-update/$_q.md"; done
 
 # ================================================================================================
 # ARMS. Each takes a script path, returns 0 when the arm's assertion holds, and leaves ARM_WHY.
@@ -1155,6 +1170,18 @@ arm_qb_plain() { local rc=0; qb_run "$1" || rc=$?; qb_why "$rc"
   [ "$rc" -eq 0 ] && grep -qF "$(QB_ROW plain)" "$OUT"; }
 arm_qb_cafe() { local rc=0; qb_run "$1" || rc=$?; qb_why "$rc"
   [ "$rc" -eq 0 ] && grep -qF "$(QB_ROW plain)" "$OUT" && grep -qF "$(QB_ROW "$QU")" "$OUT"; }
+# QC drives self-update-gate.sh, which loads machinery_paths() out of the preclassify.sh BESIDE it and
+# runs that same file for the rows, so a subject here is a gate inside a directory copy. The CARRY row
+# must name the RAW core path AND the mapped consumer path: the base emitted a C-quoted row whose
+# consumer column was the quoted core path, which no step-2 slice filter can match.
+qc_run() { local c; c="$(mktemp -d "$W/qc-run.XXXXXX")" && cp -R "$QCC/." "$c/" \
+  && bash "$1" "$QCD" "$QC_BASE" "$QC_THEIRS" "$c" > "$OUT" 2> "$ERR"; }
+qc_why() { ARM_WHY="rc=$1 rows=[$(LC_ALL=C cut -f1,2 "$OUT" | LC_ALL=C cat -v | tr '\n\t' '| ')] $(grep -v '^$' "$ERR" | tail -1 | cut -c1-80)"; }
+QC_ROW() { printf "SELF-UPDATE-CARRY${NT}core/skills/ai-dlc-update/%s.md${NT}the consumer's copy at .claude/skills/ai-dlc-update/%s.md " "$1" "$1"; }
+arm_qc_plain() { local rc=0; qc_run "$1" || rc=$?; qc_why "$rc"
+  grep -qF "$(QC_ROW plain)" "$OUT"; }
+arm_qc_cafe() { local rc=0; qc_run "$1" || rc=$?; qc_why "$rc"
+  grep -qF "$(QC_ROW plain)" "$OUT" && grep -qF "$(QC_ROW "$QU")" "$OUT"; }
 
 # --- r5: NO NON-COMMENT HERE-STRING in a file this release converted ------------------------------
 # The seven files 2f598a86 converted, and only those: the bootstrapping files (apply.sh, lib.sh,
@@ -1350,6 +1377,9 @@ run_arm arm_qa_plain "$S_RT" "retired-tokens end to end (no --bucket-rows): the 
 run_arm arm_qa_cafe  "$S_RT" "retired-tokens end to end: the non-ASCII core/scripts/caf\\303\\251.sh row stands beside plain.sh's"
 run_arm arm_qb_plain "$S_PC" "preclassify, pre-relocation consumer: plain.sh's RELOCATE-MOVE+consumer-edited row stands"
 run_arm arm_qb_cafe  "$S_PC" "preclassify, pre-relocation consumer: caf\\303\\251.sh's RELOCATE-MOVE+consumer-edited disclosure stands beside plain.sh's"
+S_SUG="$RC_/self-update-gate.sh"
+run_arm arm_qc_plain "$S_SUG" "self-update-gate arm C: the consumer-edited ASCII machinery file plain.md is carried (SELF-UPDATE-CARRY, raw path)"
+run_arm arm_qc_cafe  "$S_SUG" "self-update-gate arm C: the consumer-edited machinery file caf\\303\\251.md is carried under its RAW path beside plain.md"
 
 if [ "$SELF_TREE" -ne 1 ]; then
   skip "spelling arm and mutants -- they run only against this fixture's own tree, not $TREE"
@@ -1583,6 +1613,8 @@ else
     bl_fail arm_qa_cafe   "$BLD/retired-tokens.sh" "the C-quoted name matched no consumer path and the row was lost"
     bl_pass arm_qb_plain  "$BLD/preclassify.sh" "the ASCII control row"
     bl_fail arm_qb_cafe   "$BLD/preclassify.sh" "no RELOCATE-MOVE+consumer-edited disclosure for the non-ASCII name"
+    bl_pass arm_qc_plain  "$BLD/self-update-gate.sh" "the ASCII control row"
+    bl_fail arm_qc_cafe   "$BLD/self-update-gate.sh" "the CARRY row named the C-quoted path, its consumer column the quoted core path"
   fi
 fi
 
@@ -1768,6 +1800,7 @@ if [ "$HL_OK" -eq 1 ]; then cp -R "$HL" "$MT/hl"; control hl warn-shadowed-local
 else bad "control hl/warn-shadowed-local-validators.sh: the heredoc lib.sh (HL) was not built"; fi
 control reconcile preclassify.sh                arm_qb_plain arm_qb_cafe
 libcontrol retired-tokens.sh        arm_qa_plain arm_qa_cafe
+libcontrol self-update-gate.sh      arm_qc_plain arm_qc_cafe
 control reconcile retired-tokens.sh             arm_fx_rt_healthy arm_fx_rt arm_r5 arm_nw_both arm_nw_theirs arm_nw_cmt arm_lw_c arm_lw_trstatus
 [ "$LW_UTF8" -eq 1 ] && control reconcile retired-tokens.sh arm_lw_utf8
 control reconcile readopt-override.sh           arm_ro_healthy arm_r5
@@ -2059,6 +2092,27 @@ libmutant QP-DIFF retired-tokens.sh arm_qa_plain "arm_qa_cafe" \
 mutant QP-LSTREE reconcile preclassify.sh arm_qb_plain "arm_qb_cafe" \
   'git -C "$DIST" -c core.quotePath=false ls-tree --name-only "$THEIRS" core/scripts/' \
   'git -C "$DIST" ls-tree --name-only "$THEIRS" core/scripts/'
+# pcmutant <id> <healthy-arm> "<arms>" <find> <replace>... -- mutate reconcile/preclassify.sh inside a
+# WHOLE copy of the directory and drive self-update-gate.sh from it: the gate loads machinery_paths()
+# out of "$(dirname "$0")/preclassify.sh", so a sibling `_m_` file would never be read.
+pcmutant() {
+  local id="$1" healthy="$2" arms="$3" d why a survived=""
+  shift 3
+  d="$MT/pc_$id"
+  cp -R "$MT/reconcile" "$d" || { bad "mutant $id DID NOT APPLY (could not copy reconcile/)"; return; }
+  if ! why="$(mkmut "$MT/reconcile/preclassify.sh" "$d/preclassify.sh" "$@")"; then bad "mutant $id DID NOT APPLY ($why)"; return; fi
+  if cmp -s "$MT/reconcile/preclassify.sh" "$d/preclassify.sh"; then bad "mutant $id DID NOT APPLY (preclassify.sh is byte-identical)"; return; fi
+  bash -n "$d/preclassify.sh" 2>/dev/null || { bad "mutant $id DID NOT APPLY (the mutated preclassify.sh does not parse)"; return; }
+  if ! "$healthy" "$d/self-update-gate.sh"; then bad "mutant $id: its healthy twin $healthy failed on the mutant, so no kill can be read -- $ARM_WHY"; return; fi
+  for a in $arms; do "$a" "$d/self-update-gate.sh" && survived="$survived $a"; done
+  if [ -z "$survived" ]; then ok "mutant $id (preclassify.sh, driven through self-update-gate.sh) killed by:$(printf ' %s' $arms)"
+  else bad "mutant $id SURVIVED$survived -- that arm cannot see its own site"; fi
+}
+# machinery_paths() lists the machinery set under the default core.quotePath again, on BOTH refs --
+# the 9783bd6e state, where the rows were raw and the set they join against was C-quoted.
+pcmutant QP-MACH arm_qc_plain "arm_qc_cafe" \
+  '_mb="$(git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$BASE"' '_mb="$(git -C "$DIST" ls-files --with-tree="$BASE"' \
+  '_mt="$(git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$THEIRS"' '_mt="$(git -C "$DIST" ls-files --with-tree="$THEIRS"'
 mutant DD-HERESTRING reconcile derivation-differential.sh arm_dd_usage "arm_r5" \
   '  case "$NL$1" in *"${NL}skill_commit:"*) ;; *) return 0 ;; esac' $'  awk \'/^skill_commit:/ { f = 1 } END { exit !f }\' <<<"$1" || return 0'
 
