@@ -448,18 +448,23 @@ at_key() { local f="${1:19}"; f="${f#.}"; f="${f%Z}"; f="${f}000000000"; AT_KEY=
 # hex letters of the stem NAMES with the shas: a record listing the same stories in another
 # order read as a different state (F4 "never saw"), so a sharded hard block could not be
 # resolved by a genuine revert. Sets SHA_KEY. Forks only for a list, to sort it.
+# The list is word-split UNQUOTED on purpose, so globbing is off for the split: a stem carrying
+# `*` or `?` would otherwise expand against the working directory. Restored on every return.
 sha_key() {
-  local v="$1" t
+  local v="$1" t glob_off=0
+  case "$-" in *f*) glob_off=1 ;; esac
+  set -f
   case "$v" in
     *=*)
       SHA_KEY=""
       for t in $v; do
-        case "$t" in [!=]*=[0-9a-fA-F]*) ;; *) SHA_KEY="$(printf '%s' "$v" | tr -cd '0-9a-fA-F')"; return 0 ;; esac
+        case "$t" in [!=]*=[0-9a-fA-F]*) ;; *) SHA_KEY="$(printf '%s' "$v" | tr -cd '0-9a-fA-F')"; [ "$glob_off" = 1 ] || set +f; return 0 ;; esac
       done
       SHA_KEY="$(printf '%s\n' $v | tr 'A-F' 'a-f' | LC_ALL=C sort | tr '\n' ' ')"
       SHA_KEY="${SHA_KEY% }" ;;
     *) SHA_KEY="$(printf '%s' "$v" | tr -cd '0-9a-fA-F')" ;;
   esac
+  [ "$glob_off" = 1 ] || set +f
 }
 
 PREV_CRIT=""

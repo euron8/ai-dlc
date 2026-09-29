@@ -41,7 +41,9 @@ source; do not infer either value from anywhere else.
    ONLY that section file, never the document itself: the assembler refuses a document that
    moved since the split. A finding's document line `L` is line `L - <first-line> + 1` of your
    section file. Every `edit:` line cites the section file by its FULL path, never a bare
-   basename. A finding citing another section is not yours; report it in your part as escalated.
+   basename. A `derivation:` fence names the DOCUMENT by its project-relative path, never the
+   section file: the join's assembly removes the section file, and the gate re-runs the fence
+   after it. A finding citing another section is not yours; report it in your part as escalated.
 2. **Repair every CRITICAL and MAJOR.** MINOR/NIT at your discretion; say which you
    skipped and why.
 3. **Write the repaired artifact in place**, and write a **repair record** to

@@ -198,8 +198,10 @@ mutate "only rc 1 read as a verdict" "an UNRUN-only Write|an UNRUN block beside 
 # This is the design the measurement rejected — 12 of the 40 fence-carrying files in the
 # reference consumer's active sprint already fail whole-file validation, so it refuses an
 # unrelated edit in 30% of them. Three arms present three different inputs it gets wrong.
+# The ./-document arm is a silent arm on the part after A36 wrote a stale guess into it, so it
+# reddens here for the same reason A5 does.
 mutate "payload index ignored (file grain)" \
-  "edit writing a reproducing pair|an edit that wrote no derivation|the reproducing pair of a mixed block|a prose-only edit to the indented file|indented FRESH pair|a prose-only edit to the prose-opener file|deeper-\$-output pair" \
+  "edit writing a reproducing pair|an edit that wrote no derivation|the reproducing pair of a mixed block|a prose-only edit to the indented file|indented FRESH pair|a prose-only edit to the prose-opener file|deeper-\$-output pair|a ./-prefixed document path in a repair part" \
   's/if (cur>0 \&\& (L\[k\] in PAY)) tch\[cur\]=1/if (cur>0) tch[cur]=1/'
 
 # --- 8. the markdown filter removed -------------------------------------------
@@ -249,29 +251,66 @@ mutate "shed strips all leading blanks" "deeper-\$-output pair" \
 
 # --- 14-18. THE SECTION-COPY EXEMPTION (BL-372), one mutant per narrowing ------------------
 # Each exemption guard has its own arm in the sibling, and each mutant below declares exactly the
-# arms whose input only that guard separates. The real document (A30) and the repair part (A31)
-# carry no mutant of their own: BOTH the path glob and the manifest-beside-the-file test keep
-# them out, so reverting either alone changes no verdict -- two guards covering one subject. The
-# glob gets its own subject in A35 (a manifest-carrying copy outside a repair dir) instead.
-mutate "section path glob widened to every markdown file" "a manifest-carrying copy outside a repair dir" \
+# arms whose input only that guard separates. The real document (A30) carries no mutant of its
+# own: BOTH case branches and the manifest test keep it out, so reverting any one alone changes
+# no verdict -- guards covering one subject. The sections glob gets its own subject in A35 (a
+# manifest-carrying copy outside a repair dir) instead.
+#
+# The exemption test itself is ONE line shared by the section copy and the part, so every mutant
+# of that line or of the token match reddens the arms of BOTH files that present its input: the
+# section arm and the part arm are the same input at two paths, not entangled assertions.
+# Widening the sections glob to `*.md` routes the part into the SECTIONS branch, where it finds
+# no manifest beside it -- so the part loses both its exemption (A31, the ./ arm) and its doomed
+# refusal (A38) along with A35.
+mutate "section path glob widened to every markdown file" \
+  "a manifest-carrying copy outside a repair dir|a self-referencing pair in the repair part|a ./-prefixed document path in a repair part|a part pair reading the section copy" \
   's|^  \*/shards/\*-repair-p\*/sections/\*\.md)$|  *.md)|'
 
-mutate "section exemption removed" "a self-referencing pair in a section copy" \
-  's/^      for (k in tch) if (tch\[k\] .*tch\[k\]=0$/      # MUTANT: no exemption/'
+mutate "section exemption removed" \
+  "a self-referencing pair in a section copy|a self-referencing pair in the repair part|a ./-prefixed document path in a repair part" \
+  's/^      for (k in tch) if (tch\[k\] \&\& (names.*tch\[k\]=0$/      # MUTANT: no exemption/'
 
 mutate "section exemption widened to every command" \
-  "a non-self-referencing guess in a section copy|a command naming a longer path" \
-  's/^      for (k in tch) if (tch\[k\] .*tch\[k\]=0$/      for (k in tch) if (tch[k] \&\& sa != "") tch[k]=0/'
+  "a non-self-referencing guess in a section copy|a command naming a longer path|a non-self-referencing guess in a repair part|a ../-prefixed document path" \
+  's/^      for (k in tch) if (tch\[k\] \&\& (names.*tch\[k\]=0$/      for (k in tch) if (tch[k] \&\& sa != "") tch[k]=0/'
 
 mutate "section exemption keyed on the path alone, no manifest" \
-  "a non-self-referencing guess in a section copy|a manifest-less file at a section path|an unlisted ordinal in a split dir|a command naming a longer path" \
-  's/^    if \[ -f "\$SEC_MF" \] .*; then$/    if true; then/; s/^      SELF_DOC="\$(awk .*$/      SELF_DOC=path-only/; s/^      for (k in tch) if (tch\[k\] .*tch\[k\]=0$/      for (k in tch) if (tch[k] \&\& sa != "") tch[k]=0/'
+  "a non-self-referencing guess in a section copy|a manifest-less file at a section path|an unlisted ordinal in a split dir|a command naming a longer path|a non-self-referencing guess in a repair part|a ../-prefixed document path" \
+  's/^    if \[ -f "\$SEC_MF" \] .*; then$/    if true; then/; s/^      SELF_DOC="\$(awk .*$/      SELF_DOC=path-only/; s/^      for (k in tch) if (tch\[k\] \&\& (names.*tch\[k\]=0$/      for (k in tch) if (tch[k] \&\& sa != "") tch[k]=0/'
 
 mutate "section ordinal not checked against the manifest" "an unlisted ordinal in a split dir" \
-  's/\$1 == "part" \&\& \$2 == o { f = 1 }/$1 == "part" { f = 1 }/'
+  's/\$1 == "part" \&\& \$2 == o { f = 1 } END/$1 == "part" { f = 1 } END/'
 
-mutate "document path matched as a substring" "a command naming a longer path" \
-  's/^    if (pre !~ .* return 1$/    return 1/'
+# A ../ prefix contains the document path as a substring, so the substring mutant acquits it too.
+mutate "document path matched as a substring" "a command naming a longer path|a ../-prefixed document path" \
+  's/^    if (preok(s, i) \&\& post .* return 1$/    return 1/'
+
+# --- 19-25. THE REPAIR-PART EXEMPTION AND ITS DOOMED-PAIR REFUSAL ---------------------------
+# The part branch: the exemption for a pair naming the document, the refusal of a pair naming
+# the section copy, and one guard per narrowing of the part path. A40 (a part-shaped file with
+# no manifest) carries no mutant: the manifest `-f` test and the awk that reads the manifest both
+# keep it out, and the awk fails closed on a missing file.
+mutate "part exemption removed (SELF_DOC never set for a part)" \
+  "a self-referencing pair in the repair part|a ./-prefixed document path in a repair part" \
+  's/^      SEC_DIR="\${PART_DIR}\/sections"$/      SEC_DIR="${PART_DIR}\/sections"; SELF_DOC=""/'
+
+mutate "doomed section-copy pair not refused" "a part pair reading the section copy" \
+  's/^if \[ -s "\$DOOMED" \]; then$/if false; then/'
+
+mutate "leading ./ not normalised" "a ./-prefixed document path in a repair part" \
+  's/^  if (pre == "\/" \&\& i > 2 .*{$/  if (0) {/'
+
+mutate "part ordinal not checked against the manifest" "an unlisted part ordinal" \
+  's/\$1 == "part" \&\& \$2 == o { f = 1 } \$1 == "assembled"/$1 == "part" { f = 1 } $1 == "assembled"/'
+
+mutate "part dir name not checked (a nested 2.md is a part)" "a nested part-shaped file" \
+  's/^    case "\$(basename "\$PART_DIR")" in .*esac$/    : MUTANT/'
+
+mutate "part dir parent not checked (any */x/*-repair-p*/ is a repair dir)" "a part under a nested repair-named dir" \
+  's/^    \[ "\$(basename "\$(dirname .* || PART_DIR=""$/    : MUTANT/'
+
+mutate "part exemption outlives assembly" "a part after assembly" \
+  's/ \$1 == "assembled" { a = 1 }//'
 
 if [ "$fails" -gt 0 ]; then
   printf '  %s mutation(s) did not behave\n' "$fails"
