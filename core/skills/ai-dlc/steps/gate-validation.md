@@ -758,6 +758,19 @@ Skip this check for planning phase gates. Required for Phase 4+ gates.
 
 Create or append to `_bmad-output/implementation-artifacts/gate-log.md`.
 
+**Append the entry at the END of the file. Never insert it at the top.** And put the gate's ISO
+`Timestamp:` (`YYYY-MM-DDTHH:MM[:SS]Z`) in the entry's HEADING BLOCK — the lines between its
+`## Gate Log:` heading and its first table row. A timestamp inside a table cell is not in the
+heading block.
+
+**That timestamp is Check 15's row selector, not decoration.** When the live log holds Check 14
+rows in more than one section, Check 15's budget-evidence arm audits the section whose
+heading-block timestamp is newest, and cross-checks it against the snapshot's
+`last_gate_passed`. It never picks a section by position: measured on the reference consumer,
+committed logs append, one sprint's log prepended, and backfilled logs put the newest section in
+the middle. A row-bearing section with no heading-block timestamp, or two sections tied on the
+newest one, FAILS Check 15 — so two entries written in the same minute need seconds precision.
+
 **Open the entry with a level-two heading that BEGINS `## Gate Log: Sprint <N>`**, where `<N>` is
 the sprint number followed by whitespace or the end of the line. **A trailing title is fine and
 conventional** — `## Gate Log: Sprint 288 — Sweep Tx Idempotency` isolates exactly as the bare form
@@ -786,7 +799,7 @@ own cannot be kept true.
 
 The gate log entry MUST include:
 - Gate name and phase
-- Timestamp
+- Timestamp, in the heading block (above)
 - Result for EACH numbered check above (PASSED/FAILED/SKIPPED with reason)
 - Evidence artifacts collected during checks
 - Any remediations performed
@@ -1140,6 +1153,24 @@ After Check 14 writes the snapshot, re-read
   Exit 1 → **Check 15 FAILS.** The budget check is the one part of Check
   14 that leaves no trace in the snapshot itself, so it is the one part
   Check 15 cannot verify any other way.
+
+  **The row it audits is the newest gate's, chosen by heading timestamp.**
+  With Check 14 rows in one section only, that section's last row. With
+  rows in several, the last row of the section whose heading-block
+  `Timestamp:` is newest (step 12). It also FAILS when:
+  - a row-bearing section has no heading-block timestamp;
+  - two sections tie on the newest timestamp;
+  - on the canonical live log, the snapshot's `last_gate_passed` names
+    a timestamp that is not in the selected section's heading block —
+    the snapshot is stale, or the newest entry is not this gate's. A
+    date-only key is compared against the selected section's date;
+  - the section whose heading carries that key logged no Check 14 row
+    at all — the gate the snapshot names never recorded its budget.
+
+  The selected row must carry the `tok` measurement in its own cell. A
+  cell reading `evidence line below` cites nothing and FAILS.
+  `validate-artifact-budget.sh`'s `THE EVIDENCE CELL` header owns the
+  selector's grammar.
 
 This check exists because Check 14 is an assertion ("update the
 snapshot"); Check 15 is a verification that the assertion took

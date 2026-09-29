@@ -729,7 +729,8 @@ at epoch/sprint boundaries into
 `artifact-path-grammar.md` owns, sprint-keyed by DIRECTORY, never dated in the
 basename, because the preamble above makes the directory the only sprint slot.
 The live log holds only the current epoch. Verifying an appended entry reads the
-**tail**, not the whole file.
+**tail**, not the whole file — except Check 15's budget-evidence arm, which
+selects by heading timestamp (`validate-artifact-budget.sh --check-evidence`).
 
 **ROTATION HAS TWO SITES AND NAMING ONLY THE FIRST IS WHAT DEADLOCKS A CONSUMER.**
 The scheduled rotation is `retro.md` §4b (`pipeline-continuation-log.md`,

@@ -75,9 +75,10 @@
 #
 #   --only NAME    check a single artifact by basename (gates use
 #                  `--only pipeline-snapshot.md`)
-#   --check-evidence   audit the gate log's LAST Check 14 row instead of measuring
-#                  artifacts. gate-validation.md Check 15 runs this. See "THE
-#                  EVIDENCE CELL" below. Optionally paired with --gate-log PATH.
+#   --check-evidence   audit the NEWEST gate's Check 14 row (selected by heading
+#                  timestamp, not position) instead of measuring artifacts.
+#                  gate-validation.md Check 15 runs this. See "THE EVIDENCE
+#                  CELL" below. Optionally paired with --gate-log PATH.
 #   --warn-only    report breaches but exit 0 (retro's Rule 25(d) posture: the
 #                  sprint is over, blocking it helps nobody). retro.md is its ONLY
 #                  caller. Gate Check 14 and the sub-step path deliberately do not
@@ -983,10 +984,22 @@ env_override() {
 # is the mistake this file's own budget table had to unwind once already. No
 # observed failure needed it: every real one cited no number at all.
 #
-# SCOPE IS THE LAST ROW ONLY. Gate logs are append-only and hold years of rows
-# written under older rules; indicting them retroactively would make this arm
-# unpassable on any real consumer and it would be disabled rather than obeyed.
-# The gate being logged right now is the one Check 15 is verifying.
+# SCOPE IS ONE ROW: THE NEWEST GATE'S. Older rows were written under older
+# rules; indicting them would make this arm unpassable on a real consumer and
+# it would be disabled rather than obeyed. WHICH row is newest is NOT
+# positional. The live log is rotated per sprint, so it holds one sprint's
+# sections, and measured on the reference consumer: its committed history APPENDS, one
+# sprint's log PREPENDS (newest section first, so `tail -1` read the oldest
+# gate's 3052 tok instead of the audited 5076), and backfill logs put the
+# newest section in the MIDDLE. Any positional rule is right on one of those
+# and wrong on another. The row is therefore chosen by each section's
+# HEADING-BLOCK timestamp (step 12's `Timestamp:`), and the arm refuses rather
+# than guess when a row-bearing section has none or two sections tie.
+#
+# The snapshot's `last_gate_passed` is a CROSS-CHECK, never the key. Searching
+# section bodies for it was measured and rejected: a stale snapshot names the
+# PREVIOUS gate, whose section then wins, so the artifact under audit chooses
+# its own evidence.
 # -----------------------------------------------------------------------------
 if [ "$CHECK_EVIDENCE" -eq 1 ]; then
   # DISCOVERY PREFERS THE CANONICAL LIVE PATH. The `find` below matches on
@@ -1022,15 +1035,142 @@ if [ "$CHECK_EVIDENCE" -eq 1 ]; then
   # short form appears in the compact per-check tables some gates append
   # (`| 14 | lead | <evidence> |`). Matching only the long one would pass the
   # short one vacuously.
-  ROW="$(grep -nE '^\|[[:space:]]*(\[core\][[:space:]]*)?14[[:space:]]*(\||—|-)' "$GATE_LOG" 2>/dev/null | tail -1)"
+  ROWLINES="$(grep -nE '^\|[[:space:]]*(\[core\][[:space:]]*)?14[[:space:]]*(\||—|-)' "$GATE_LOG" 2>/dev/null | cut -d: -f1 | tr '\n' ' ')"
 
-  if [ -z "$ROW" ]; then
+  if [ -z "${ROWLINES// /}" ]; then
     echo "FAIL: no Check 14 row found in ${GATE_LOG#"$ROOT"/}" >&2
     echo "      Check 15 cannot verify an assertion that was never recorded." >&2
     exit 1
   fi
 
+  # SECTION SELECTION. Partition on `## ` headings; a section heading block runs
+  # from its heading to its first table line. One row-bearing section needs no
+  # choice. Otherwise every row-bearing section must carry an ISO timestamp in
+  # its heading block (minute precision normalised to :00), and the greatest
+  # one must be unique. Output: ONE|NOTS|TIE|NEWEST, tab-separated.
+  SEL="$(LC_ALL=C awk -v rows="$ROWLINES" '
+    function stamps(s,   out, t) {
+      out = ""
+      while (match(s, /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9](:[0-9][0-9])?/)) {
+        t = substr(s, RSTART, RLENGTH)
+        if (RLENGTH == 16) t = t ":00"
+        out = out " " t
+        s = substr(s, RSTART + RLENGTH)
+      }
+      return out
+    }
+    BEGIN { k = split(rows, r, " "); for (i = 1; i <= k; i++) isrow[r[i]] = 1; sec = 0; inb = 1 }
+    /^## /          { sec = NR; inb = 1 }
+    inb && /^\|/    { inb = 0 }
+    inb             { ts[sec] = ts[sec] stamps($0) }
+    (NR in isrow)   { if (!(sec in last)) order[++n] = sec; last[sec] = NR }
+    END {
+      if (n == 1) { printf "ONE\t%s\t%s\n", order[1], last[order[1]]; exit }
+      best = ""; tie = ""
+      for (i = 1; i <= n; i++) {
+        s = order[i]; m = ""
+        c = split(ts[s], a, " ")
+        for (j = 1; j <= c; j++) if (a[j] > m) m = a[j]
+        if (m == "") { printf "NOTS\t%s\n", s; exit }
+        if (m > best) { best = m; bsec = s; tie = "" }
+        else if (m == best) tie = s
+      }
+      if (tie != "") { printf "TIE\t%s\t%s\t%s\n", bsec, tie, best; exit }
+      printf "NEWEST\t%s\t%s\t%s\t%s\n", bsec, last[bsec], best, ts[bsec]
+    }' "$GATE_LOG")"
+  IFS="$(printf '\t')" read -r SEL_KIND SEL_SEC SEL_ROW SEL_TS SEL_ALL <<<"$SEL"
+
+  case "$SEL_KIND" in
+    ONE|NEWEST) ;;
+    NOTS)
+      echo "FAIL: ${GATE_LOG#"$ROOT"/} holds Check 14 rows in more than one section, and the section at line ${SEL_SEC} carries no ISO timestamp in its heading block." >&2
+      echo "      Check 15 selects the newest gate by the heading block's Timestamp (gate-validation.md step 12) and will not pick a row by position." >&2
+      exit 1 ;;
+    TIE)
+      echo "FAIL: ${GATE_LOG#"$ROOT"/} sections at lines ${SEL_SEC} and ${SEL_ROW} tie on the newest heading timestamp ${SEL_TS}." >&2
+      echo "      Check 15 selects the newest gate by the heading block's Timestamp (gate-validation.md step 12) and will not pick a row by position." >&2
+      exit 1 ;;
+    *)
+      echo "FAIL: could not partition ${GATE_LOG#"$ROOT"/} into sections." >&2
+      exit 1 ;;
+  esac
+  ROW="${SEL_ROW}:$(sed -n "${SEL_ROW}p" "$GATE_LOG")"
+
+  # SNAPSHOT CROSS-CHECK, several row-bearing sections only. The key is the
+  # first ISO date in the `last_gate_passed` bullet and its indented
+  # continuation lines, with its time when one follows it, cut at `(prior)`,
+  # which introduces the previous gate.
+  # Applied only to the canonical live log: an archived-only or --gate-log
+  # elsewhere tree has no snapshot of its own gate and must keep passing.
+  if [ "$SEL_KIND" = "NEWEST" ]; then
+    SNAP_KEY="$(LC_ALL=C awk '
+      on && (/^[[:space:]]*$/ || /^[^[:space:]]/ || /^[[:space:]]*[-*][[:space:]]/) { exit }
+      !on && /^[[:space:]]*[-*][[:space:]].*last_gate_passed/ { on = 1 }
+      on { buf = buf " " $0 }
+      END {
+        i = index(buf, "(prior)"); if (i) buf = substr(buf, 1, i - 1)
+        if (match(buf, /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/)) {
+          t = substr(buf, RSTART, 10); rest = substr(buf, RSTART + 10)
+          if (match(rest, /^T[0-9][0-9]:[0-9][0-9](:[0-9][0-9])?/)) {
+            t = t substr(rest, 1, RLENGTH); if (RLENGTH == 6) t = t ":00"
+          }
+          print t
+        }
+      }' "$ROOT/_bmad-output/pipeline-snapshot.md" 2>/dev/null)"
+    LIVE_DIR="$ROOT/_bmad-output/implementation-artifacts"
+    if [ "$GATE_LOG" != "$LIVE_DIR/gate-log.md" ]; then
+      SNAP_NOTE="not checked: not the canonical live gate log"
+    elif [ -z "$SNAP_KEY" ]; then
+      SNAP_NOTE="absent"
+    else
+      SNAP_NOTE="$SNAP_KEY"
+      # A DATE-ONLY key (`2026-08-13`, no time) is still a key. Measured on a
+      # consumer snapshot written that way: read as absent, the cross-check
+      # was skipped and a row two days older passed. It matches the DATE of
+      # the selected section's newest heading timestamp, and nothing coarser.
+      SNAP_OK=0
+      if [ "${#SNAP_KEY}" -eq 10 ]; then
+        [ "$SNAP_KEY" = "${SEL_TS%%T*}" ] && SNAP_OK=1
+      else
+        case " $SEL_ALL " in *" $SNAP_KEY "*) SNAP_OK=1 ;; esac
+      fi
+      if [ "$SNAP_OK" -eq 0 ]; then
+        # WHICH gate the key names decides the message. Measured on a consumer
+        # state whose snapshot named an implementation gate-3: that section
+        # logged no Check 14 row at all, so "stale snapshot" sent the reader
+        # to the wrong file. Search every heading block for the key and name
+        # the newest section carrying it; the refusal stands either way.
+        KEY_HIT="$(LC_ALL=C awk -v rows="$ROWLINES" -v key="$SNAP_KEY" '
+          BEGIN { k = split(rows, r, " "); for (i = 1; i <= k; i++) isrow[r[i]] = 1; inb = 1 }
+          /^## /        { sec = NR; inb = 1 }
+          inb && /^\|/  { inb = 0 }
+          (NR in isrow) { has[sec] = 1 }
+          inb {
+            s = $0
+            while (match(s, /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9](:[0-9][0-9])?/)) {
+              t = substr(s, RSTART, RLENGTH); if (RLENGTH == 16) t = t ":00"
+              s = substr(s, RSTART + RLENGTH)
+              hit = (length(key) == 10) ? (substr(t, 1, 10) == key) : (t == key)
+              if (hit && t >= best) { best = t; bsec = sec }
+            }
+          }
+          END { if (bsec != "") printf "%s\t%s\n", bsec, (bsec in has) ? 1 : 0 }' "$GATE_LOG")"
+        IFS="$(printf '\t')" read -r HIT_SEC HIT_ROW <<<"$KEY_HIT"
+        if [ -n "$HIT_SEC" ] && [ "$HIT_ROW" = "0" ]; then
+          echo "FAIL: the snapshot's last_gate_passed names ${SNAP_KEY}, the gate whose section heads line ${HIT_SEC}: $(sed -n "${HIT_SEC}p" "$GATE_LOG" | cut -c1-120)" >&2
+          echo "      the gate the snapshot names logged no Check 14 row. Check 15 has no evidence cell for the gate under audit; the newest section that carries one is line ${SEL_SEC} (${SEL_TS})." >&2
+          exit 1
+        fi
+        echo "FAIL: the snapshot's last_gate_passed names ${SNAP_KEY}, which is not a heading timestamp of the newest gate section (line ${SEL_SEC}, ${SEL_TS})." >&2
+        echo "      The snapshot is stale or names a different gate than the newest entry in the canonical live gate log; Check 15 will not verify either against the other." >&2
+        exit 1
+      fi
+    fi
+  fi
+
   say "gate log            : ${GATE_LOG#"$ROOT"/}"
+  [ "$SEL_KIND" = "ONE" ] || \
+    say "selected section    : line ${SEL_SEC} (newest heading timestamp ${SEL_TS}; snapshot key ${SNAP_NOTE})"
   say "last Check 14 row   : line ${ROW%%:*}"
   say ""
 

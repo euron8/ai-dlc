@@ -1200,6 +1200,8 @@ non_catalog_units:
           where the snapshot measured 126% of budget before it and 212% after. The
           arm requires the cell to carry the measurement, which verdict.sh now puts
           in its PASS line and which cannot be transcribed out of the instruction.
+          WHICH row it audits is the script's selector (its THE EVIDENCE CELL
+          header), keyed on step 12's heading timestamp and never on position.
       - site: retro.md Close-Out Sweep
         posture: warn-only
         why: the sprint already paid; retro reports, it does not gate
