@@ -592,8 +592,8 @@ strategy. Steps 1a–2 below otherwise proceed.
    today. Do not synthesise `gate-decision.json` to arm it.
 2. `/bmad-review-adversarial-general` — review test strategy.
    Repair its findings through the **Adversarial repair dispatch** sub-routine
-   (`_gate-procedures.md`), which sets the remediator count and any file sharding
-   (Rule 28, "Split dispatch"); the lead owns the disposition, not the edit.
+   (`_gate-procedures.md`), which sets the remediator count and any file or section
+   sharding (Rule 28, "Split dispatch"); the lead owns the disposition, not the edit.
    **ONE-SHOT — the bmad skill is correct here and stays.** Nothing loops, no
    verdict is stamped, no gate counts this residue, so the skill's "find ≥10,
    HALT on zero" contract costs nothing and buys a cynical sweep. Do NOT convert

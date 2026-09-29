@@ -109,6 +109,15 @@ for your findings, and (d) a shared context block. You MUST:
    brief. Report a finding that cites another story only if you are the cross shard. Stamp your
    counts and verdict as usual. **Your verdict is advisory:** the merge sums every shard's counts
    and recomputes the pass verdict, so a MET you stamp does not make the pass MET.
+
+   **As a section shard** — your brief carries `shard: <ordinal>/<K> <heading>` or
+   `shard: cross/<K> cross` over ONE document (Rule 28, "Split dispatch": sections axis). Read
+   only your line range of the real document, read-only; as the cross shard, review only
+   interactions between sections. Every finding carries exactly one `sections: <ordinal>[, ...]`
+   line citing ordinals from the map in your brief — your own ordinal alone, or two or more if
+   you are the cross shard — and never a `stories:` line. `artifact:` names the whole document and
+   `artifact_sha` is the sha256 of the WHOLE document as it is on disk, not of your range: the
+   merge checks every shard's sha against the document and refuses a mismatch.
 6. **A finding whose repair ADDS mechanism must say why the simpler path fails**
    (Rule 26(d)). Removal and simplification findings are equal in standing to
    additions: propose them with the same directness, grade them on the same

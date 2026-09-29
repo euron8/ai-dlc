@@ -1451,8 +1451,9 @@ else
     case "$sh_k" in
       U) SH_WARN=$((SH_WARN + 1))
          echo "WARN: [${sh_a}] role '${sh_b}' is shardable and its brief carried no parseable 'shard:' line."
-         echo "      Rule 28: one agent per independent part, or 'shard: none (<1-4>)' naming the serial"
-         echo "      exception (grammar: ai-dlc-dispatch-guard.sh, THE SHARD LINE). Not a failure." ;;
+         echo "      Rule 28: one agent per independent part (files, or the sections partition-document.sh --map"
+         echo "      prints), or 'shard: none (<1-4>)' naming the serial exception -- 4 is a document the map"
+         echo "      reports SERIAL (grammar: ai-dlc-dispatch-guard.sh, THE SHARD LINE). Not a failure." ;;
       P) SH_PENDING=$((SH_PENDING + 1)) ;;
       S) SH_OK=$((SH_OK + 1)) ;;
       J) SH_JOINED=$((SH_JOINED + 1)) ;;
