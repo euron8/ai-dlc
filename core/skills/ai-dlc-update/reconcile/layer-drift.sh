@@ -255,6 +255,47 @@ else
   CONSUMER="$(cd "$CONSUMER" 2>/dev/null && pwd)" || { echo "layer-drift: consumer-root not a directory: ${4}" >&2; exit 2; }
 fi
 
+# EVERY REF THIS RUN READS MUST RESOLVE TO A COMMIT, OR THE RUN DOES NOT START. Before this, an
+# unresolvable THEIRS -- a typo, a ref the distribution clone never fetched, a consumer sha passed
+# where a distribution one belongs -- was indistinguishable from a distribution that carries no
+# layer contract: every `have "$THEIRS" ...` answered non-zero, the contract read as ABSENT, the
+# ADJUDICATED code set came back empty, and the adjudication tier switched itself off at rc 0.
+# Measured on this tree: `--adjudicated-codes "$PWD" HEAD` printed 4 codes and the same call with
+# a ref `rev-parse -q --verify` answers 1 for printed 0 bytes, rc 0 -- the output that mode
+# documents as a LEGITIMATE answer. Classify mode had the same exposure: 50 rows, rc 0, against a
+# THEIRS that did not exist. A gate reading an empty tier as "nothing to adjudicate" is this
+# repo's check-that-cannot-fire, arriving through the argument list.
+#
+# THEIRS IN ALL THREE MODES, BASE IN CLASSIFY AND LIST. `codes` takes no base. An unresolvable BASE
+# fails the other way -- every `git_show "$BASE"` read comes back empty, which reads as MORE drift,
+# not less -- but a run whose range names a commit that is not there has no range to classify, so
+# it refuses too rather than reporting drift against nothing. `^{commit}` also closes three shapes
+# that are not typos: DIST is not a git repository, a ref names a tree or blob, and an EMPTY ref,
+# which would make every `"${ref}:${path}"` read the INDEX.
+#
+# HERE, BEFORE ANYTHING IS CREATED OR READ -- ahead of `ADJ_LIST_FILE`'s mktemp, so a list-mode
+# refusal leaves no temp file, and ahead of `LD_T` and `ld_refuse`, which do not exist yet; the
+# line is printed directly. It carries the `layer-drift: REFUSED` prefix `apply.sh`'s
+# `detector_refused` keys on (`grep -m1 ': REFUSED'`), and emit-report.sh and hard-blockers.sh
+# render any non-zero rc as DETECTOR-REFUSED.
+#
+# EXIT 1, NOT 2. The update SKILL.md's exit table reserves 2 for a usage error and for a scan that
+# lost rows mid-stream (`ld_finish`); 1 is refusal to start, which is what this is and what every
+# other input refusal in this file already exits.
+#
+# RESOLVED ONCE. The DRIFT-RANGE-DEGENERATE block below compares these shas rather than re-asking
+# git, so it cannot disagree with the refusal about what the refs are.
+ld_resolve_ref() { # ld_resolve_ref <base|theirs> <ref> -> the commit sha on stdout, or REFUSE
+  local _sha _rr=0
+  _sha="$(git -C "$DIST" rev-parse -q --verify "${2}^{commit}" 2>/dev/null)" || _rr=$?
+  if [ "$_rr" -eq 0 ] && [ -n "$_sha" ]; then printf '%s' "$_sha"; return 0; fi
+  echo "layer-drift: REFUSED — $1 ref '$2' does not resolve to a commit in $DIST (rev-parse exit $_rr); refusing rather than reading an unresolvable ref as an empty contract and an empty layer" >&2
+  return 1
+}
+THEIRS_SHA="$(ld_resolve_ref theirs "$THEIRS")" || exit 1
+BASE_SHA=""
+if [ "$MODE" != codes ]; then BASE_SHA="$(ld_resolve_ref base "$BASE")" || exit 1; fi
+
 SKILL_DIR="$CONSUMER/.claude/skills/ai-dlc"
 EXT_DIR="$SKILL_DIR/extensions"
 OVR_DIR="$SKILL_DIR/overrides"
@@ -463,18 +504,15 @@ emit() {
 # LIST MODE CARRIES THE SAME WARNING, on stderr, because it has the same exposure and a worse
 # failure shape: its whole output is a listing, so a range that produces no drift-keyed rows
 # prints a SHORT listing rather than a visibly missing row, and short reads as complete.
-if [ "$MODE" = list ]; then
-  _b="$(git -C "$DIST" rev-parse --verify --quiet "${BASE}^{commit}" 2>/dev/null || true)"
-  _t="$(git -C "$DIST" rev-parse --verify --quiet "${THEIRS}^{commit}" 2>/dev/null || true)"
-  if [ -n "$_b" ] && [ "$_b" = "$_t" ]; then
-    echo "layer-drift --list-adjudications: base and theirs are the SAME commit ($_b), so every arm keyed on that range produced no row and its subjects are absent from the listing below. Re-run with the PULL's base." >&2
-  fi
+#
+# BOTH SHAS WERE RESOLVED AT STARTUP, where an unresolvable one already refused, so neither can be
+# empty here and the comparison needs no guard of its own.
+if [ "$MODE" = list ] && [ "$BASE_SHA" = "$THEIRS_SHA" ]; then
+  echo "layer-drift --list-adjudications: base and theirs are the SAME commit ($BASE_SHA), so every arm keyed on that range produced no row and its subjects are absent from the listing below. Re-run with the PULL's base." >&2
 fi
 if [ "$MODE" = classify ]; then
-  _b="$(git -C "$DIST" rev-parse --verify --quiet "${BASE}^{commit}" 2>/dev/null || true)"
-  _t="$(git -C "$DIST" rev-parse --verify --quiet "${THEIRS}^{commit}" 2>/dev/null || true)"
-  if [ -n "$_b" ] && [ "$_b" = "$_t" ]; then
-    emit DRIFT-RANGE-DEGENERATE "(this run)" "${BASE}..${THEIRS}" "base and theirs resolve to the SAME commit ($_b), so nothing can have drifted between them and EVERY arm keyed on that range is structurally unable to fire — including the ADJUDICATED clauses computed base..theirs, and therefore the HARD-LAYER-ADJUDICATION-MISSING duty demanded on their rows. Run \`layer-drift.sh --adjudicated-codes <dist> <theirs>\` for the clause codes this version holds you to; the ones NOT keyed on the range (LC-O15's OVERRIDE-SUPERSEDED compares a declaration at theirs against the entry on disk) are unaffected and their rows above are real. A clean sheet from THIS run is not evidence the adjudications are recorded; it is evidence the drift-keyed ones were never asked for. Re-run with the PULL's base to adjudicate the layer. Passing theirs as the base is correct for unregistered-drift.sh, whose statuses mean 'consumer edits vs base' — it is not correct here, and SKILL.md step 7 now says so per script."
+  if [ "$BASE_SHA" = "$THEIRS_SHA" ]; then
+    emit DRIFT-RANGE-DEGENERATE "(this run)" "${BASE}..${THEIRS}" "base and theirs resolve to the SAME commit ($BASE_SHA), so nothing can have drifted between them and EVERY arm keyed on that range is structurally unable to fire — including the ADJUDICATED clauses computed base..theirs, and therefore the HARD-LAYER-ADJUDICATION-MISSING duty demanded on their rows. Run \`layer-drift.sh --adjudicated-codes <dist> <theirs>\` for the clause codes this version holds you to; the ones NOT keyed on the range (LC-O15's OVERRIDE-SUPERSEDED compares a declaration at theirs against the entry on disk) are unaffected and their rows above are real. A clean sheet from THIS run is not evidence the adjudications are recorded; it is evidence the drift-keyed ones were never asked for. Re-run with the PULL's base to adjudicate the layer. Passing theirs as the base is correct for unregistered-drift.sh, whose statuses mean 'consumer edits vs base' — it is not correct here, and SKILL.md step 7 now says so per script."
   fi
 fi
 
@@ -590,7 +628,50 @@ rel() { printf '%s' "${1#"$CONSUMER"/}"; }
 # `git_show`/`have` are this file's own spellings so every existing call site (dozens) is
 # unchanged; only the two bodies below moved.
 git_show() { memo_show "$DIST" "$1" "$2"; }
-have()     { memo_has_path "$DIST" "$1" "$2"; }
+
+# have <ref> <path> -> 0 PRESENT, 1 ABSENT, and a path the tree NAMES but git cannot read REFUSES.
+#
+# WHY `have` CANNOT JUST BE `memo_has_path`. That is a `cat-file -e`, which answers 128 for a path
+# that is not there AND for one whose object cannot be read, so every caller below read a damaged
+# object store as an absent file. At the contract site that is the adjudication tier switching
+# itself off at rc 0 (see the startup ref check for the same outcome through a bad ref); at the
+# anchor and hook sites it is an OVERRIDE-ANCHOR-UNRESOLVED or EXTENSION-HOOK-MISSING row that
+# tells the operator to delete an entry whose target is in fact still shipped.
+#
+# THE DISCRIMINATOR IS `ls-tree --full-tree <ref> -- <path>`, ASKED ONLY WHEN THE MEMO SAYS NO, so
+# the healthy present path costs nothing new. Measured on this contract's own path, in depth-1
+# `file://` clones with every object unpacked loose and one object deleted by hand per state:
+#
+#   state                        cat-file -e   rev-parse -q --verify <ref>:<path>   ls-tree
+#   healthy                      0             0                                     0, one line
+#   blob missing                 1             0                                     0, one line
+#   the parent subtree missing   128           1                                     1, no line
+#   the root tree missing        128           1                                     128, no line
+#   genuinely absent             128           1                                     0, no line
+#   a PREFIX of a real path      128           1                                     0, no line
+#
+# `rev-parse <ref>:<path>` WAS THE FIRST PROPOSAL AND IT IS WRONG: it answers exactly as for an
+# absent path when the path's SUBTREE or the ROOT tree is the missing object, so the tier would
+# still switch off at rc 0 on those two rows. Only ls-tree separates them, and it matches the path
+# literally -- the prefix row is the absent answer, not a match. So: rc 0 and no line is ABSENT,
+# today's meaning; rc 0 with a line (the blob is what is missing) or any non-zero rc is a read
+# failure, and a read failure is never evidence of absence.
+#
+# STAGED TO A FILE, NEVER CAPTURED WITH `$( )`. Every call site runs in the MAIN shell, so an
+# `exit` here ends the run; and the leaked-stdout-buffer hazard recorded above `ld_emit_ok` means
+# a `$( )` after a failed row write can come back holding that row -- the capture shape let three
+# procsub-staged-refusal-boot mutants survive where this one kills them. `LD_T` exists before any
+# call site: it is created at startup, long above the contract read that is the first `have`.
+#
+# EXIT 1, the refusal-to-start code, like every other input refusal in this file.
+have() {
+  memo_has_path "$DIST" "$1" "$2" && return 0
+  local _lr=0
+  git -C "$DIST" ls-tree --full-tree "$1" -- "$2" > "$LD_T/have-ls" 2>/dev/null || _lr=$?
+  [ "$_lr" -eq 0 ] && [ ! -s "$LD_T/have-ls" ] && return 1
+  echo "layer-drift: REFUSED — $2 at $1 is named by the tree but could not be read (ls-tree exit $_lr); refusing rather than reading an unreadable path as an absent one" >&2
+  exit 1
+}
 
 # supersessions_of <ref> — TSV rows `shadows<TAB>since<TAB>settings_env_key` from core's
 # `override_supersessions:` block at that ref. PARSED, not sourced: the contract is data
