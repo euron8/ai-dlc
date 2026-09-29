@@ -236,6 +236,22 @@ Three wrong comparisons are committed mutants, and each moves a different cell
 stripped `- G G`, arm G off `- - -`. The unmutated copy is scored first, and its `G` cell is
 the positive control that stops a copy which ran nothing from scoring as a kill.
 
+## Arm F on a sharded series — `artifact_sha` compared per story
+
+A pass joined by `merge-adversarial-shards.sh` carries `artifact_sha: <stem>=<sha> ...`, and the
+resolution record the lead writes may list the stories in any order. The validator keys a list
+by its pairs sorted by stem (`sha_key`), so two lists are equal exactly when every story carries
+the same sha.
+
+| Case | Shape | Must |
+|---|---|---|
+| `sharded-revert-reordered` | REVERT_REPAIR back to p1's pairs, stories listed in reverse order | **PASS** |
+| `sharded-revert-partial` | story 1 reverted, story 2 lands on a sha no pass notarized | **FAIL** (F5); `--cycle-state` DIVERGENT/3 |
+
+The mutant restores the old `tr -cd '0-9a-fA-F'` read at all three sites. That reading glued the
+hex letters of the stem names onto the shas, so the reordered case flips to F4 "never saw" while
+the partial case still fails on F5, and the unmutated copy is the control.
+
 ## The `skill:` field in the seeded blocks is INERT — do not read it as coverage
 
 v0.58.0 changed the seeded blocks to `skill: ai-dlc-adversary-review`, because that is

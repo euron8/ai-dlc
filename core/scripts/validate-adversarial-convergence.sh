@@ -438,6 +438,30 @@ fi
 # `at_key() {` -- that line is what the merge extracts.
 at_key() { local f="${1:19}"; f="${f#.}"; f="${f%Z}"; f="${f}000000000"; AT_KEY="${1:0:19}.${f:0:9}"; }
 
+# THE COMPARISON KEY FOR AN `artifact_sha` VALUE (a pass's, or a resolution record's
+# before/after). Two shapes are legal: one sha, or -- for a pass merge-adversarial-shards.sh
+# joined from shards -- a list of `<stem>=<sha>` pairs, one per story. A list is keyed as its
+# pairs sorted by stem, so two lists are equal exactly when every stem carries the same sha,
+# whatever order each was written in. Anything else keeps the old hex-only reading, which
+# every single-file series was already compared on.
+# THE OLD READING WAS `tr -cd '0-9a-fA-F'` ON EVERY VALUE, and on a list it concatenated the
+# hex letters of the stem NAMES with the shas: a record listing the same stories in another
+# order read as a different state (F4 "never saw"), so a sharded hard block could not be
+# resolved by a genuine revert. Sets SHA_KEY. Forks only for a list, to sort it.
+sha_key() {
+  local v="$1" t
+  case "$v" in
+    *=*)
+      SHA_KEY=""
+      for t in $v; do
+        case "$t" in [!=]*=[0-9a-fA-F]*) ;; *) SHA_KEY="$(printf '%s' "$v" | tr -cd '0-9a-fA-F')"; return 0 ;; esac
+      done
+      SHA_KEY="$(printf '%s\n' $v | tr 'A-F' 'a-f' | LC_ALL=C sort | tr '\n' ' ')"
+      SHA_KEY="${SHA_KEY% }" ;;
+    *) SHA_KEY="$(printf '%s' "$v" | tr -cd '0-9a-fA-F')" ;;
+  esac
+}
+
 PREV_CRIT=""
 PREV_FILE=""
 PREV_MAJOR=""
@@ -538,7 +562,7 @@ for f in "${SORTED[@]}"; do
 
   P_FILE+=("$f")
   P_VERDICT+=("$verdict")
-  P_SHA+=("$(block_field "$f" 'artifact_sha' | tr -cd '0-9a-fA-F')")
+  sha_key "$(block_field "$f" 'artifact_sha')"; P_SHA+=("$SHA_KEY")
   P_RESOLVES+=("$(block_field "$f" 'resolves_divergence')")
   # invoked_at bounds the pause window: a resolution citation must point at an
   # operator message at or after the divergent pass that opened the block (arm F).
@@ -916,8 +940,8 @@ validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -
     return 1
   fi
 
-  sha_b="$(record_field "$rec" 'artifact_sha_before' | tr -cd '0-9a-fA-F')"
-  sha_a="$(record_field "$rec" 'artifact_sha_after'  | tr -cd '0-9a-fA-F')"
+  sha_key "$(record_field "$rec" 'artifact_sha_before')"; sha_b="$SHA_KEY"
+  sha_key "$(record_field "$rec" 'artifact_sha_after')";  sha_a="$SHA_KEY"
   b_b="$(record_field "$rec" 'artifact_bytes_before' | tr -cd '0-9')"
   b_a="$(record_field "$rec" 'artifact_bytes_after'  | tr -cd '0-9')"
   delta="$(record_field "$rec" 'scope_delta')"

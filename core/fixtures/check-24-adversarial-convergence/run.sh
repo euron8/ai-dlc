@@ -270,6 +270,57 @@ g_mutate chrono-raw-string '    if [[ "$invoked_at" < "$PREV_AT" ]]; then' "G - 
 g_mutate chrono-strip-z    '    if [[ "${invoked_at%Z}" < "${PREV_AT%Z}" ]]; then' "- G G"
 g_mutate chrono-arm-g-off  '    if false; then' "- - -"
 
+# --- F4/F5 on a SHARDED series: artifact_sha compared per stem, not as a hex smear -------
+expect sharded-revert-reordered 0 "a genuine revert of a sharded hard block, stories listed in another order -- RESOLVED" s1-adversarial-p
+expect sharded-revert-partial 1 "story 2 lands on a sha no pass notarized -- FAIL (F5)" s1-adversarial-p
+expect_says sharded-revert-partial s1-adversarial-p "F5-sharded-partial" "matches no" "earlier pass in this series"
+expect_state sharded-revert-partial s1-adversarial-p DIVERGENT 3 "a partial revert of a sharded pass is not a release -- deny"
+
+# MUTANT: restore the `tr -cd` read at all three sites (every layer of the fix). The reordered
+# case must flip to F4 "never saw"; the partial case must still fail on F5, so the mutant is
+# attributable to the reader and not to a validator that fails everything. Built in a directory
+# holding the steering validator too: F6 resolves it beside $0, and without it the citation
+# arm fails both cases for its own reason.
+SH_DIR="$ROOT/mut-sha-key"; mkdir -p "$SH_DIR"
+cp "$(dirname "$VALIDATOR")/validate-steering-budget.sh" "$SH_DIR/" 2>/dev/null
+cp "$VALIDATOR" "$SH_DIR/control.sh"
+python3 - "$VALIDATOR" "$SH_DIR/mutant.sh" <<'PY'
+import sys
+s = open(sys.argv[1]).read()
+subs = [
+  ('  sha_key "$(block_field "$f" \'artifact_sha\')"; P_SHA+=("$SHA_KEY")',
+   '  P_SHA+=("$(block_field "$f" \'artifact_sha\' | tr -cd \'0-9a-fA-F\')")'),
+  ('  sha_key "$(record_field "$rec" \'artifact_sha_before\')"; sha_b="$SHA_KEY"',
+   '  sha_b="$(record_field "$rec" \'artifact_sha_before\' | tr -cd \'0-9a-fA-F\')"'),
+  ('  sha_key "$(record_field "$rec" \'artifact_sha_after\')";  sha_a="$SHA_KEY"',
+   '  sha_a="$(record_field "$rec" \'artifact_sha_after\'  | tr -cd \'0-9a-fA-F\')"'),
+]
+for o, n in subs:
+    if s.count(o) != 1: sys.exit(3)
+    s = s.replace(o, n)
+open(sys.argv[2], "w").write(s)
+PY
+sh_rc=$?
+sh_run() {  # $1 script  $2 case -> PASS | NEVER-SAW | F5 | OTHER
+  local o
+  o="$(bash "$1" --series "$ROOT/$2/s1-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)" && { echo PASS; return; }
+  case "$o" in *"never saw"*) echo NEVER-SAW ;; *"matches no"*) echo F5 ;; *) echo OTHER ;; esac
+}
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ "$sh_rc" -ne 0 ] || [ ! -f "$SH_DIR/validate-steering-budget.sh" ] || cmp -s "$VALIDATOR" "$SH_DIR/mutant.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-28s FIXTURE STALE -- the three sha_key anchors are not each in the validator exactly once, or the sibling is missing\n' "MUTATION sha-key"
+else
+  c_row="$(sh_run "$SH_DIR/control.sh" sharded-revert-reordered) $(sh_run "$SH_DIR/control.sh" sharded-revert-partial)"
+  m_row="$(sh_run "$SH_DIR/mutant.sh" sharded-revert-reordered) $(sh_run "$SH_DIR/mutant.sh" sharded-revert-partial)"
+  if [ "$c_row" = "PASS F5" ] && [ "$m_row" = "NEVER-SAW F5" ]; then
+    printf '  ok    %-28s control [%s], tr -cd restored [%s]\n' "MUTATION sha-key" "$c_row" "$m_row"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s control [%s] want [PASS F5]; tr -cd restored [%s] want [NEVER-SAW F5]\n' "MUTATION sha-key" "$c_row" "$m_row"
+  fi
+fi
+
 # Arm A: the free bypass. Omit findings_major on one pass and arm E used to go dark.
 expect counts-omitted 1 "a verdict with no derivable MAJOR count turns arm E OFF -- FAIL (A)" s1-adversarial-p
 expect_says counts-omitted s1-adversarial-p "A-counts-required" \
