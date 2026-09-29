@@ -334,9 +334,7 @@ vle_layer_list() {
 # ai-dlc-update to reconcile/ — so neither may source the other's file, and the binding is an
 # assertion instead. Change one, change both; the build fails otherwise.
 nrm_awk() {
-  cat <<'AWK'
-function nrm(s){ s=tolower(s); gsub(/[`*]/,"",s); gsub(/[^a-z0-9]+/," ",s); gsub(/^ +| +$/,"",s); return s }
-AWK
+  printf '%s\n' 'function nrm(s){ s=tolower(s); gsub(/[`*]/,"",s); gsub(/[^a-z0-9]+/," ",s); gsub(/^ +| +$/,"",s); return s }'
 }
 NRM_FN="$(nrm_awk)"
 

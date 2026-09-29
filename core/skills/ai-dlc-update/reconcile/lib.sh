@@ -60,10 +60,14 @@
 # This was three spellings — two in validate-layer-entries.sh's awk programs and
 # one inline in span_of below — and the whole point of a normalizer is that there
 # is exactly one answer to "is this the same heading".
+#
+# EVERY AWK EMITTER IN THIS FILE IS A SINGLE-QUOTED `printf` LITERAL, NEVER A HEREDOC. bash 3.2
+# stages a heredoc body to a temp file, and a stage that fails (`ulimit -f`, a full disk) emits
+# NOTHING at rc 1 -- which every inline `awk "$(ledger_entry_awk)..."` caller discards, so the
+# program then runs with its shared functions missing. A literal has no staging step and no
+# failure channel. An apostrophe inside a body is spelled '\'' so the literal stays closed.
 nrm_awk() {
-  cat <<'AWK'
-function nrm(s){ s=tolower(s); gsub(/[`*]/,"",s); gsub(/[^a-z0-9]+/," ",s); gsub(/^ +| +$/,"",s); return s }
-AWK
+  printf '%s\n' 'function nrm(s){ s=tolower(s); gsub(/[`*]/,"",s); gsub(/[^a-z0-9]+/," ",s); gsub(/^ +| +$/,"",s); return s }'
 }
 
 # span_of is THE matcher; section_of is a slice of it. Splitting them this way rather than
@@ -345,9 +349,9 @@ unquote() { # unquote <value>
 # `ledger_entry_id()` LIVES IN THIS EMITTER NOW, because the shape rule reads it. It used to
 # be `ledger_entry_id_awk()` on its own, and every caller loaded both; that emitter is kept as
 # a no-op so those concatenations still parse, and its header says why.
+# A `printf` literal, not a heredoc -- see the emitter note above `nrm_awk`.
 ledger_entry_awk() {
-  cat <<'AWK'
-function ledger_entry_id(label) {
+  printf '%s\n' 'function ledger_entry_id(label) {
   if (match(label, /^`?(PC|BL)-[A-Za-z0-9_.-]+/))
     return substr(label, RSTART, RLENGTH)
   return ""
@@ -376,7 +380,7 @@ function ledger_entry_shape(l,   t, rest, sh, line) {
     # THE FLAG CLEARS ON THE NEXT ENTRY-SHAPED LINE, AND THAT IS A MEASURED CHOICE. After a
     # reset the tracker cannot tell an UNTERMINATED fence (the next bare delimiter is a real
     # opener) from a fence QUOTING headings (the next bare delimiter is its closer). Letting the
-    # flag survive entry-shaped lines serves the quoting case and, on the reference consumer's
+    # flag survive entry-shaped lines serves the quoting case and, on the reference consumer'\''s
     # archive, turned 2 true resets into 9 by eating the next real opener after each of its
     # unterminated fences. Clearing it here serves the unterminated case, which is the one that
     # exists on every corpus measured, and costs the quoting case ONE false row on the entry
@@ -396,8 +400,7 @@ function ledger_entry_shape(l,   t, rest, sh, line) {
   }
   __lef_shape = sh
   return sh
-}
-AWK
+}'
 }
 
 # WHICH BOUNDARY LINES CARRY AN ENTRY ID -- the second half of the boundary question, and it
@@ -442,9 +445,9 @@ AWK
 # Moved here so both readers load it. NOTE this does NOT unify rotate's and reverify's label rules
 # with each other -- that stays barred for the reason stated above, because it would change
 # rotate's `moved-names` output.
+# A `printf` literal, not a heredoc -- see the emitter note above `nrm_awk`.
 backlog_entry_label_awk() {
-  cat <<'AWK'
-function backlog_entry_label(l,   line, shape) {
+  printf '%s\n' 'function backlog_entry_label(l,   line, shape) {
   shape = ledger_entry_shape(l)
   if (shape == "") return ""
   line = l
@@ -452,8 +455,7 @@ function backlog_entry_label(l,   line, shape) {
   else                    { sub(/^- \*\*/, "", line); sub(/\*\*.*$/, "", line) }
   if (match(line, /^BL-[0-9]+/)) return substr(line, 1, RLENGTH)
   return ""
-}
-AWK
+}'
 }
 
 # A NO-OP, DELIBERATELY. `ledger_entry_id()` is emitted by `ledger_entry_awk()` above, because
@@ -1118,12 +1120,14 @@ memo_ls_tree() {
 # PATHSPEC is part of the key (unlike memo_ls_tree, git diff genuinely filters server-side
 # and there is exactly one call site of this shape today), so this does not need the
 # filter-the-full-answer-locally discipline memo_ls_tree uses.
+# `core.quotePath=false` on both calls: a non-ASCII path is otherwise C-quoted
+# (`"core/scripts/caf\303\251.sh"`) and every reader of the CLASSIFY rows drops it.
 memo_diff_name_status() {
   local _dist="$1" _base="$2" _theirs="$3" _k _f _st _t; shift 3
   _k="d $_dist $_base $_theirs $*"; _k="${_k//%/%25}"; _k="${_k//\//%2F}"; _k="${_k// /%20}"
-  _ai_dlc_memo_open "$_k" || { git -C "$_dist" diff --no-renames --name-status "$_base" "$_theirs" -- "$@" 2>/dev/null; return $?; }
+  _ai_dlc_memo_open "$_k" || { git -C "$_dist" -c core.quotePath=false diff --no-renames --name-status "$_base" "$_theirs" -- "$@" 2>/dev/null; return $?; }
   if [ -n "$_t" ]; then
-    git -C "$_dist" diff --no-renames --name-status "$_base" "$_theirs" -- "$@" > "$_t" 2>/dev/null
+    git -C "$_dist" -c core.quotePath=false diff --no-renames --name-status "$_base" "$_theirs" -- "$@" > "$_t" 2>/dev/null
     _st=$?
     if [ "$_st" -eq 0 ]; then _ai_dlc_memo_commit "$_f" "$_t" "$_st" || return 125
     else _ai_dlc_memo_serve "$_t" || return 125; fi
