@@ -149,9 +149,21 @@ rlc_refuse() { # rlc_refuse <what> <status>
   echo "retired-layer-contract: $1 did not run (exit $2); no verdict" >&2
   exit 2
 }
+# THE RULEBOOK GLOB LIST IS READ ONCE, IN THE MAIN SHELL, AND AN UNREADABLE OR EMPTY LIST REFUSES.
+# It was read inside every `for glob in $(rulebook_globs)` with `2>/dev/null` and no status read,
+# so a `setup-sites.md` that could not be opened read as a rulebook with no files: both `collect`
+# calls staged empty sets and the run took the empty-`BASE_SET` branch, exit 0 with 0 stdout bytes
+# (measured at mode 000), which `emit-report.sh` renders as "none". The declaration always lists at
+# least one glob, so an empty list is never a legitimate rulebook and refuses too. The function
+# keeps its name and prints the cached list, so its two callers are unchanged. The empty-`BASE_SET`
+# exit further down is NOT this case -- a rulebook that carries no contract shape is legitimate.
+_rlc_rc=0
+RLC_GLOBS="$(awk '/^rulebook:/{on=1;next} on && /^[a-z_]+:/{exit} on && /^  - /{sub(/^  - /,"");print}' \
+  "$SITES" 2>/dev/null)" || _rlc_rc=$?
+[ "$_rlc_rc" -eq 0 ] || rlc_refuse "reading the rulebook list from $SITES (refusing to report clean, because an unreadable rulebook list and a clean one are the same output)" "$_rlc_rc"
+[ -n "$RLC_GLOBS" ] || rlc_refuse "reading the rulebook list from $SITES, which yielded no glob (refusing to report clean, because an empty corpus and a clean one are the same output)" 1
 rulebook_globs() {
-  awk '/^rulebook:/{on=1;next} on && /^[a-z_]+:/{exit} on && /^  - /{sub(/^  - /,"");print}' \
-    "$SITES" 2>/dev/null
+  printf '%s\n' "$RLC_GLOBS"
 }
 
 # Contract shapes in a body: labelled directives (`- <Label>: `/<directive>`) and
