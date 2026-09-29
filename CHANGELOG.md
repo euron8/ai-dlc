@@ -15,6 +15,118 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.663.0] - 2026-09-29
+
+The lead no longer waits on one agent to review, repair, adjudicate or explore a whole
+multi-part subject. Rule 28 gains a general "Split dispatch" clause, and each of the four
+per-role sites the census found whole now dispatches one agent per derived part, joined by a
+program that refuses an incomplete or overlapping set and writes the single file every gate
+already reads. Readers do not change. Closes `BL-365`, `BL-366`, `BL-367`, `BL-368`.
+
+The census behind this is the census hand's extraction of the graph consumer's subagent
+transcripts (`~/.claude/projects/-Users-n8-git-graph/*/subagents/`, one `.meta.json` and one
+transcript per agent). Wall clock runs from each transcript's first to last timestamp; live time
+is the union of those intervals per lead session, and solo time is where exactly one agent is
+live. Recomputed from that extraction: 823 subagents over 87 lead sessions, 230.8h summed
+subagent wall clock (notes R38 and the entries round it to 230.7h), 180.2h with at least one
+agent live, 144.4h solo with the lead blocked, parallelism 1.28. The directory holds 817
+`.meta.json` files in 86 sessions today
+(`find ~/.claude/projects/-Users-n8-git-graph -name '*.meta.json' | wc -l`), so a re-run will
+not match exactly. Per-role hours in the entries do not reproduce under one role rule and are
+not restated here.
+
+### Rule 28 "Split dispatch", the `shard:` brief line, Check 22 and Check 24 arm K
+
+- `rule-bodies/rule-28.md` gains **Split dispatch: one agent per independent part**, after the
+  inverted burden of justification. Four axes (files, worklist items, surfaces, seats x parts),
+  the partition derived and never typed, the join a program, and serial only for a data
+  dependency, a convergence sequence, an ordered authoring chain, or a one-file scope. Sharding
+  one document by section is deferred to its own entry by operator ruling. The per-role sites in
+  `_gate-procedures.md`, `rule-24.md`, `_dispatch-protocol.md` and the role files cite the
+  clause and name their axis and join.
+- `ai-dlc-dispatch-guard.sh` parses one `shard: <i>/<N> <part-key>`, `shard: cross/<N> ...` or
+  `shard: none (<exception>)` line from a brief into a new spawn-ledger `shard` field. Record then
+  allow: there is no deny path, because scope versus context in a brief is intent.
+- `validate-spawn-ledger.sh` (Check 22) WARNs on a shardable-role row with `shard: null`, and on
+  a merged pass's `shard_tool_use_ids:` id with no guard-written row. A row with no `shard` key
+  predates the field and is PENDING. An unopenable pass file is its own WARN.
+- `validate-adversarial-convergence.sh` (Check 24) arm K fails a pass over an artifact directory
+  of two or more files that carries no `shard_tool_use_ids:`, once the series' first pass is at
+  or after the 0.663.0 install stamp. Earlier series and undatable passes print PENDING.
+- `validate-enforcement-map.sh` I75 hashes each subject chain once instead of twice.
+  `FORK_BUDGET` goes from 3299 to 3152 (`grep -n '^FORK_BUDGET=' scripts/validate-enforcement-map.sh`
+  on `origin/main` and on this release).
+
+### BL-365: one adversary per story ordinal, and party-mode seats per part
+
+`core/scripts/merge-adversarial-shards.sh` joins a sharded adversarial pass. The key is the
+story's ordinal in the `LC_ALL=C` listing of the artifact directory, printed by `--map`, never
+its slug. The merge refuses unless every ordinal and the cross-story shard delivered exactly
+once and each finding's `stories:` line respects the partition. It sums the counts and
+recomputes the verdict against the ceilings it reads from the convergence validator, so three
+shards that each honestly stamp MET with 2 blocking MAJOR merge to `EXIT_CONDITION_NOT_MET`,
+major=6. The party-mode round in "Validation cycle" dispatches one persona agent per (seat,
+ordinal) plus a cross-story round, and the lead counts the files; `/bmad-party-mode` internals are
+not ai-dlc's, so that count is the only join.
+
+### BL-366: one remediator per disjoint file set
+
+`ai-dlc-gate-remediation-guard.sh` appends every dispatched planning-artifact write to
+`.artifact-writes.jsonl`, record then allow, and a failed append never blocks the Edit.
+`core/scripts/join-remediator-shards.sh` joins the shard repair records only when that ledger
+shows each file under the artifact written by one agent in the repair window, and it keys each
+part on the files its `edit:` lines cite rather than on an agent id the part reports. The
+entry's remedy, section copies reassembled by a splice, was refuted because a copy falsifies the
+artifact's `derived` fences, so shards edit whole files in place. A single-file artifact stays
+one remediator. The rationale is notes R38; R35 is unchanged.
+
+### BL-367: gate-adjudicator worklist shards
+
+`validate-gate-adjudication.sh --expected <gate_type> --shard <i>/<N>` prints a contiguous,
+balanced slice of the derived worklist, and each shard derives its own. `--merge <gate_type>
+<verdict_path> <part>...` refuses (exit 2, nothing written) unless the
+`<nonce>.part-<i>of<N>.jsonl` parts are exactly 1..N under one nonce, no check_id repeats and the
+union equals `--expected`. It then writes the one v1 verdict and runs the coverage arms. The
+schema and Check 26 are unchanged. Parts end in `.jsonl` because `--series` refuses any
+non-verdict `.json` in that tree.
+
+### BL-368: one analyst per Section 0 surface
+
+The Rule 24 Dispatch contract gains "Shard by surface". When a Section 0 declares more than one
+independent surface, the lead derives the surface list from it and dispatches one analyst per
+surface, each writing `<area>/s<N>/<base>-parts/<surface>.md`. The join is
+`wait-for-deliverable.sh` over every part, a count equal to the surface count, and then the
+canonical draft as the lead's `cat` of the parts in surface order.
+
+### Receipts
+
+The four previous receipts keyed on the sentence each fix rewrote. Appending "Never shard it."
+closed all four, and a correct rewording that dropped the token exited 9 on three. The new
+receipts extract each section by its heading, reject a sentence that negates a split, and for
+BL-365, BL-366 and BL-367 drive the shipped program in a `mktemp -d` tree. Each was scored through
+`backlog-reverify.sh --closed-receipts` with this release's ledger, on a `git archive` of each
+tree; every mutated tree was checked with `cmp -s` to differ from the tip first.
+
+```text
+tree                              365  366  367  368
+origin/main 79546d70                1    1    1    1
+release tip f18f9bac                0    0    0    0
+D1 merge alone b0c1ff84             1    1    1    1
+D3 join alone 853cf155              1    1    1    1
+D4 --merge alone 3bdb1895           1    1    1    1
+prose alone 83d19477                1    1    1    0
+tip + "Never shard it."             1    1    1    1   (each on its own sections)
+tip, token-free reword A            0    0    0    0
+tip, token-free reword B            0    0    0    0
+tip, section heading renamed        9    9    9    9
+```
+
+The prose tree closes BL-368 alone, as it should, because that fix is prose. On `origin/main`
+each receipt exits 1, not 9, because the sections exist there and name no split.
+`BL-026`'s receipt still reads 1 on this release. It keys on a `### Rule 28` body in `SKILL.md`,
+which is now a stub pointing at `rule-bodies/rule-28.md`, so re-keying it waits for the
+post-merge close commit.
+
 ## [0.662.0] - 2026-09-29
 
 Check 15's budget-evidence arm now audits the NEWEST gate's Check 14 row, chosen by the heading
