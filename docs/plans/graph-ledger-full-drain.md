@@ -75,6 +75,9 @@ opening sweep matched batch 170 on every figure (live 28, unfiled 12, worklist 5
 ran**, visible only as a working-tree md5 (`bcbb3db1…`) and a one-id diff against `HEAD`; the
 consumer committed it on its carry-over branch (`4a2694b9c`) during the batch. **Diff the working
 ledger's id set against `HEAD` whenever the two md5s differ** — no ref-based join can see it.
+**Now that it is committed, the next sweep reads live 29 and 1 qualifying ref**
+(`ai-dlc/carry-over/phase-315-aggregator-ui-cutover`, adds 1 — that id, DISCHARGED by `BL-369`);
+unfiled 12, worklist 5 and TERMINAL 147 do not move. Measured by the fresh-resume check at `a2430ea4`.
 
 **THE FILING'S PREMISE WAS HALF WRONG, AND SO WAS THE LEAD'S FIRST DESIGN.** Committed s312-s314
 logs APPEND; only s315 prepends, so the proposed `head -1` misreads the whole history. The lead's
@@ -107,15 +110,17 @@ outranks everything below.
 - `BL-360`'s bootstrapping half follows, each file shipping alone; `BL-364` rides with its joins.
 - Filings owed when a close frees room: batch 169's and 170's lists, unchanged, then batch 171's
   NOTEs — a key naming a gate absent from the log gets the "stale" message where the cause is an
-  unlogged gate, a new refusal pre-empts base's own breach message at `837b7f256`, and
+  unlogged gate, a new refusal pre-empts base's own breach message at the consumer's committed state
+  `837b7f256`, and
   `core/hooks/ai-dlc-precompact.sh:98` still injects `tail -40` of a log that may be newest-first.
 - `BL-230` needs a mechanism for E1, E2 and E9.
 
 **THE DELIVERY GAP IS THREE RELEASES.** The consumer is at 0.659.0 against `VERSION` 0.662.0.
 0.662.0 touches no bootstrapping file. PENDING is 1 (this batch's id, first named at 0.662.0).
 **After the pull, the consumer's next Check 15 on a newest-first log refuses** unless each entry
-carries a heading-block `Timestamp:` — its s315 entries already do, and its live pair PASSes at tip
-citing 5076. The banked ruling stands: report the gap and write no runbook.
+carries a heading-block `Timestamp:` — its s315 entries already do, and its live `gate-log.md` plus
+`pipeline-snapshot.md` PASS at 0.662.0 citing the architecture gate's 5076 tok (0.659.0 cites the
+carry-over gate's 3052). The banked ruling stands: report the gap and write no runbook.
 
 Batch 170's next-work list and delivery gap are spent: batch 171's block above replaces both, and
 carries the operator priority forward.
