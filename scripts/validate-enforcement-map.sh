@@ -6762,6 +6762,9 @@ else
       printf '# X="${STATE_DIR}/.i95-probe-nearmiss"\n'
       printf 'Y="${STATE_DIR}/.wait-beats"\n'
     } > "$i95_probe/neg/core/hooks/probe.sh"
+    # (e)'s probe: the ledger is NAMED in a comment (offender) or BUILT on a live line (near-miss).
+    printf '# L="${LEDGER_DIR}/.i95-probe-ledger.jsonl"\n' > "$i95_probe/pos/core/hooks/ledger.sh"
+    printf 'L="${LEDGER_DIR}/.i95-probe-ledger.jsonl"\n' > "$i95_probe/neg/core/hooks/ledger.sh"
     i95_pos_root="$i95_probe/pos"; i95_neg_root="$i95_probe/neg"
   fi
 
@@ -6798,6 +6801,48 @@ def population(root):
                         if nm and nm != '_bmad-output':
                             found.setdefault(nm, '%s:%d' % (os.path.relpath(fp, root), i))
     return found
+
+
+def constructs_ledger(path, lname):
+    """(e): the producer builds `<dir>/<lname>` on a non-comment line."""
+    pat = re.compile(r'/' + re.escape(lname) + r'(?![A-Za-z0-9_.-])')
+    try:
+        raw = io.open(path, encoding='utf-8', errors='replace').read()
+    except Exception:
+        return False
+    return any(pat.search(l) for l in raw.splitlines() if not l.lstrip().startswith('#'))
+
+
+def ledger_findings(tag, root, entries):
+    """(e) NESTED LEDGERS. A ledger below a declared DIRECTORY is not a top-level name, so the
+    population grammar above cannot reach it and must not be widened to. It is declared on the
+    entry of its parent directory instead, and bound here to the line that builds it. No
+    apostrophe may appear in this heredoc: bash 3.2 scans it inside the command substitution."""
+    n = 0
+    for e in entries:
+        led = e.get('ledgers')
+        if led is None:
+            continue
+        pn = (e.get('name') or '').strip()
+        if not isinstance(led, list) or not led:
+            print('%s\tLEDGER\t%s\tledgers is not a non-empty list' % (tag, pn))
+            continue
+        if e.get('transient') is not False:
+            print('%s\tLEDGER\t%s\tledgers declared on a non-durable entry' % (tag, pn))
+        for l in led:
+            ln = (l.get('name') or '').strip() if isinstance(l, dict) else ''
+            lp = (l.get('producer') or '').strip() if isinstance(l, dict) else ''
+            if not ln or not lp or '/' in ln:
+                print('%s\tLEDGER\t%s\ta ledger needs a slash-free name and a producer' % (tag, pn))
+                continue
+            n += 1
+            pp = os.path.join(root, lp)
+            if not os.path.isfile(pp):
+                print('%s\tLEDGER\t%s/%s\t%s does not exist' % (tag, pn, ln, lp))
+            elif not constructs_ledger(pp, ln):
+                print('%s\tLEDGER\t%s/%s\t%s does not construct it on a non-comment line'
+                      % (tag, pn, ln, lp))
+    print('%s\tLEDGERS\t%d\t-' % (tag, n))
 
 
 def constructs(path, name):
@@ -6865,6 +6910,13 @@ for i in range(0, len(args), 3):
                 print('%s\tPRODUCER\t%s\t%s does not construct it on a non-comment line'
                       % (tag, nm, prod))
 
+    if tag == 'live':
+        ledger_findings(tag, root, decl.get('paths') or [])
+    else:
+        # The (e) probe, both directions, in the same process: ledger.sh in the probe tree names
+        # the ledger only in a COMMENT under pos and builds it on a live line under neg.
+        ledger_findings(tag, root, [{'name': 'probe-dir', 'transient': False, 'ledgers': [
+            {'name': '.i95-probe-ledger.jsonl', 'producer': 'core/hooks/ledger.sh'}]}])
     for nm in sorted(set(derived) - set(declared)):
         print('%s\tUNDECLARED\t%s\t%s' % (tag, nm, derived[nm]))
     if tag == 'live':
@@ -6881,9 +6933,15 @@ PY
     i95_pos_fired=0
     i95_neg_fired=0
     i95_live_pop=0
+    i95_led_pos=0; i95_led_neg=0; i95_led_n=""
     while IFS="$(printf '\t')" read -r _tag _kind _what _where; do
       [ -n "$_tag" ] || continue
       case "$_tag:$_kind" in
+        pos:LEDGER) i95_led_pos=1 ;;
+        neg:LEDGER) i95_led_neg=1 ;;
+        live:LEDGERS) i95_led_n="$_what" ;;
+        live:LEDGER)
+          err "I95(e): nested ledger $_what -- $_where. A ledger declared on its parent directory's entry is bound to the line that BUILDS it, so a name no shipped file writes, or one written only in a comment, is a declaration of nothing." ;;
         pos:UNDECLARED) [ "$_what" = ".i95-probe-undeclared" ] && i95_pos_fired=1 ;;
         neg:UNDECLARED) i95_neg_fired=1 ;;
         live:POP) i95_live_pop="$_what" ;;
@@ -6908,6 +6966,13 @@ EOF
 
     [ "$i95_pos_fired" -eq 0 ] && err "I95's POSITIVE probe was NOT reported: a seeded file constructing an undeclared path went unseen by the same reader the corpus arm runs, so a clean corpus result above establishes only that the reader executed. This fails closed."
     [ "$i95_neg_fired" -ne 0 ] && err "I95's NEGATIVE probe WAS reported: a path named only inside a COMMENT was treated as constructed. The grammar is not comment-blind, and every worked path example in core's prose is now in this arm's finding set."
+    [ "$i95_led_pos" -eq 0 ] && err "I95(e)'s POSITIVE probe was NOT reported: a ledger named only in a producer's COMMENT passed as built, so a clean nested-ledger result means nothing. This fails closed."
+    [ "$i95_led_neg" -ne 0 ] && err "I95(e)'s NEGATIVE probe WAS reported: a ledger its producer builds on a live line was flagged, so every declared ledger is now a finding."
+    if [ -z "$i95_led_n" ]; then
+      err "I95(e) printed no nested-ledger count for the live tree, so the sub-arm did not run over $i95_schema."
+    else
+      echo "  I95(e): $i95_led_n nested ledger(s) bound to the line that builds them."
+    fi
     [ "${i95_live_pop:-0}" -lt 2 ] && err "I95 derived ${i95_live_pop:-0} path(s) from the live tree. The probe trees derive one each by construction, so a live population that small means the corpus scan resolved to a probe-sized tree rather than to core/, and its set-compare is meaningless."
 
     # (c) THE READERS, keyed on the line that FEEDS the schema path to jq. A script that names

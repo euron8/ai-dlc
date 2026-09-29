@@ -64,6 +64,21 @@
             "type": "string",
             "minLength": 1,
             "description": "What writes this path and why it is on the side of the partition it is on. Required because a classification nobody can audit is the hand-written list this file replaces."
+          },
+          "ledgers": {
+            "type": "array",
+            "minItems": 1,
+            "description": "OPTIONAL, and only on a durable DIRECTORY entry: the append-only ledgers the machinery keeps directly inside it. A nested ledger is not a top-level name, so the population grammar cannot derive it and name cannot carry it; it is declared here, on its parent, and I95(e) binds each one to a non-comment line of its producer that builds `<dir>/<name>`. An entry without this field is validated exactly as before. NOTHING ROTATES THESE: no rotator exists for any .jsonl ledger in the distribution, so a declaration here classifies the file (durable, committed, inside a guarded root) and names who writes it -- it does not bound its growth.",
+            "items": {
+              "type": "object",
+              "required": ["name", "producer", "reason"],
+              "additionalProperties": false,
+              "properties": {
+                "name": {"type": "string", "minLength": 1, "pattern": "^[^/]+$", "description": "The file name inside the parent directory, no slash."},
+                "producer": {"type": "string", "minLength": 1, "description": "A shipped file that builds `<dir>/<name>` on a non-comment line; I95(e) checks it."},
+                "reason": {"type": "string", "minLength": 1, "description": "What the ledger records, and who reads it."}
+              }
+            }
           }
         }
       }
@@ -233,7 +248,14 @@
       "name": "gate-adjudication",
       "transient": false,
       "producer": "core/hooks/ai-dlc-gate-remediation-guard.sh",
-      "reason": "Per-gate adjudication verdicts. Committed evidence a later gate reads."
+      "reason": "Per-gate adjudication verdicts. Committed evidence a later gate reads.",
+      "ledgers": [
+        {
+          "name": ".verdict-writes.jsonl",
+          "producer": "core/hooks/ai-dlc-gate-remediation-guard.sh",
+          "reason": "One row per dispatched agent's verdict write (arm 7a). Read by that hook and by validate-gate-adjudication.sh. Not rotated: rotate-gate-adjudication.sh moves verdicts and their sidecars and leaves this file in place."
+        }
+      ]
     },
     {
       "name": ".gate-checkpoint",
@@ -306,7 +328,14 @@
       "name": "planning-artifacts",
       "transient": false,
       "producer": "core/hooks/ai-dlc-acknowledge.sh",
-      "reason": "Stories, gate repairs, sprint status, carry-over backlog -- the largest committed tree under root."
+      "reason": "Stories, gate repairs, sprint status, carry-over backlog -- the largest committed tree under root.",
+      "ledgers": [
+        {
+          "name": ".artifact-writes.jsonl",
+          "producer": "core/hooks/ai-dlc-gate-remediation-guard.sh",
+          "reason": "One row per dispatched agent's planning-artifact write (arm 2). Read only by join-remediator-shards.sh, by time window. Not rotated."
+        }
+      ]
     },
     {
       "name": "spawn-ledger.jsonl",

@@ -4821,8 +4821,22 @@ dispatched planning-artifact write to `_bmad-output/planning-artifacts/.artifact
 grows for the life of the project inside a committed tree. `join-remediator-shards.sh` reads it
 by time window, so growth costs read time, not correctness.
 
-The receipt reads the schema as JSON, through `jq` over `.paths[].name`, so a comment carrying the
-names cannot close it: appended to the file, it makes the JSON invalid and the receipt exits 9.
-Scored: live 1; the names appended as a comment 9; a `.paths` entry named `.artifact-writes.jsonl` 0.
+**A `.paths` entry cannot carry them.** `name` is the top-level component I95 derives, and both
+ledgers are nested: the hook builds `${ARTIFACT_LEDGER_DIR}/...` and `${GATE_DIR}/...`, whose
+parents `planning-artifacts` and `gate-adjudication` are already declared durable. Measured, two
+`.paths` entries named for the ledgers fail I95 four times (ORPHAN and PRODUCER for each).
 
-verify: sh P=core/schemas/pipeline-state-paths.json; [ -f "$P" ] || exit 9; n="$(jq -r '[.paths[]?.name] | map(select(. == "spawn-ledger.jsonl")) | length' "$P" 2>/dev/null)" || exit 9; [ "${n:-0}" -gt 0 ] || exit 9; a="$(jq -r '[.paths[]?.name] | map(select(. == ".artifact-writes.jsonl")) | length' "$P" 2>/dev/null)" || exit 9; [ "${a:-0}" -gt 0 ] && exit 0; echo BL373-ARTIFACT-LEDGER-UNDECLARED >&2; exit 1
+**Remedy.** Declare each ledger in an optional `ledgers` list on its parent's entry, and bind it
+with I95(e) to a non-comment line of its producer that builds `<dir>/<name>`. I95's population
+grammar stays as it is. An entry without the field validates exactly as before.
+
+**Rotation is not part of the close.** No rotator exists for any `.jsonl` ledger in the
+distribution, and `rotate-gate-adjudication.sh` leaves `.verdict-writes.jsonl` in place by
+design. The declaration classifies the two files and names their writer; it does not bound
+their growth.
+
+The receipt reads the declaration through `jq` and requires I95 to run the sub-arm and pass.
+Scored: origin/main 1; tip 0; the field naming a ledger no producer builds 1; the names appended
+as a comment 9; the sub-arm removed 1; the sub-arm made unable to flag, with a ledger renamed 1.
+
+verify: sh P=core/schemas/pipeline-state-paths.json; V=scripts/validate-enforcement-map.sh; [ -f "$P" ] && [ -f "$V" ] || exit 9; n="$(jq -r '[.paths[]? | select(.name == "spawn-ledger.jsonl")] | length' "$P" 2>/dev/null)" || exit 9; [ "${n:-0}" -gt 0 ] || exit 9; a="$(jq -r '[.paths[]? | select(.name == "planning-artifacts") | .ledgers[]?.name | select(. == ".artifact-writes.jsonl")] | length' "$P" 2>/dev/null)" || exit 9; g="$(jq -r '[.paths[]? | select(.name == "gate-adjudication") | .ledgers[]?.name | select(. == ".verdict-writes.jsonl")] | length' "$P" 2>/dev/null)" || exit 9; o="$(bash "$V" --arms I95 2>&1)"; r=$?; case "$o" in *'I95(e): '*' nested ledger(s) bound'*) ;; *) echo BL373-SUBARM-DID-NOT-RUN >&2; exit 1 ;; esac; [ "$r" -eq 0 ] || { echo BL373-I95-FAILS >&2; exit 1; }; [ "${a:-0}" -eq 1 ] && [ "${g:-0}" -eq 1 ] && exit 0; echo BL373-ARTIFACT-LEDGER-UNDECLARED >&2; exit 1
