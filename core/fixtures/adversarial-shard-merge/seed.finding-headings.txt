@@ -1,0 +1,10 @@
+### M1 — Stories 2.1 and 2.2 cite, as the precedent for their `useRef` self-guard, an idiom that is a `useState` read — the exact shape the same sentence forbids
+### M2 — Story 2.1 AC6 hands the lead a TWO-site list where the architecture corrected it to THREE, and explains in the same breath why a two-site list is the failure
+### M3 — Story 3.1 AC1 requires a byte-for-byte light-mode render baseline that AD-6 does not ask for, that no locked criterion needs, and for which no baseline exists (Rule 26)
+### M4 — Stories 2.1 and 2.2 assert a precise `+11` line shift that story 2.1's own acceptance criteria falsify, and enumerate it over an incomplete set
+### M5 — Story 3.1's per-occurrence AD-7 restatement drops `RebalancerPage.jsx:1185`, under a heading that says it must not narrow
+### N1 — `AuditLogPanel.jsx` is cited by bare filename in both stories 2.1 and 2.2
+### N2 — Story 1.2's cross-story pointers are both stale
+### N3 — Story 3.1 counts `PortfolioIlChart.css` references but calls them "name tokens"
+### N4 — Story 2.1 cites `portfolio.contract.test.js:25`, which carries no evidence for the claim
+### N5 — Story 2.1 is the sprint's only two-service story and records nothing about it

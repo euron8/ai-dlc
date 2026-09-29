@@ -177,7 +177,8 @@ verbatim or as close to verbatim as the source allows.
 
 ### 4b. Derive the Spec Kernel (dispatched)
 
-Dispatch ONE `pm-escalated` subagent, bound per Rule 19 (model +
+Dispatch ONE `pm-escalated` subagent (an ordered authoring chain, Rule 28
+"Split dispatch" serial exception 3), bound per Rule 19 (model +
 role-contract line), to invoke `bmad-spec` **headless** with the product brief
 and its `LOCKED_REQUIREMENTS` block as input and slug `<sprint-slug>` —
 **no sprint token in the slug**, because `bmad-spec` composes its output

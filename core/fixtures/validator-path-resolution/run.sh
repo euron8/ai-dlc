@@ -250,6 +250,11 @@ argv_for() {
     # assertions. The scope-correctness question is answered elsewhere — the script's
     # own rc=3 scoping-failure contract — not here.
     report-propagation-fanout.sh)   printf '%s' "HEAD~1" ;;
+    # Every flag is REQUIRED and parsed before the root block, so a bare run stops at a usage
+    # refusal that is byte-identical from any root. With a full argv it reaches the shard-dir
+    # read under the resolved root and its refusal names that path -- which proves the root is
+    # CONSULTED, the same floor as the entry above, not that a join is correct.
+    join-remediator-shards.sh)      printf '%s' "--sprint 1 --artifact stories --pass 1 --artifact-path _bmad-output/planning-artifacts/s1/stories --since 2026-01-01T00:00:00Z --until 2026-01-02T00:00:00Z" ;;
     *)                              printf '%s' "" ;;
   esac
 }

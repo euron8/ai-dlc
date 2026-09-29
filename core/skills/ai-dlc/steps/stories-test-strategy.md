@@ -54,7 +54,8 @@ Absent any routing tag, a story is dispatched to `dev` as usual.
   Rule 20.
 - `single_dev_serialized: true` — when set, lead orchestration
   MUST NOT spawn parallel teammates that touch the same
-  protected file; protected-path stories are dispatched one at a time.
+  protected file; protected-path stories are dispatched one at a time
+  (Rule 28, "Split dispatch", serial exception 1).
 
 **Model escalation** uses one frontmatter field:
 
@@ -492,7 +493,11 @@ Run the validation cycle (`_gate-procedures.md`, "Validation cycle") on the
 sprint's stories — its passes use the **Adversarial review dispatch** and
 **Adversarial repair dispatch** sub-routines. Parameters:
 - **party-mode seats / subject:** SM, Dev, Architect, TEA — every story: every
-  acceptance criterion, every edge case, every dependency.
+  acceptance criterion, every edge case, every dependency. `stories/` is a files-axis
+  subject (Rule 28, "Split dispatch"), so the round, each review pass and each repair are
+  sharded per story ordinal plus one cross-story part, as the "Validation cycle", "Adversarial
+  review dispatch" and "Adversarial repair dispatch" sub-routines say. Their joins are
+  `merge-adversarial-shards.sh` and `join-remediator-shards.sh`.
 - **source-fidelity check:** for each story derived from a carry-over item or user
   instruction, verify every AC preserves the specific details from the source.
 - **adversarial focus:** missing acceptance criteria, untestable criteria, scope
@@ -587,8 +592,8 @@ strategy. Steps 1a–2 below otherwise proceed.
    today. Do not synthesise `gate-decision.json` to arm it.
 2. `/bmad-review-adversarial-general` — review test strategy.
    Repair its findings through the **Adversarial repair dispatch** sub-routine
-   (`_gate-procedures.md`) — ONE `remediator` takes the whole finding set and
-   applies the edits; the lead owns the disposition, not the edit.
+   (`_gate-procedures.md`), which sets the remediator count and any file sharding
+   (Rule 28, "Split dispatch"); the lead owns the disposition, not the edit.
    **ONE-SHOT — the bmad skill is correct here and stays.** Nothing loops, no
    verdict is stamped, no gate counts this residue, so the skill's "find ≥10,
    HALT on zero" contract costs nothing and buys a cynical sweep. Do NOT convert

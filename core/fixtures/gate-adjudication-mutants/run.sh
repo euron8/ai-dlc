@@ -46,7 +46,7 @@ STEP_GP="$ROOT_DIR/core/skills/ai-dlc/steps/_gate-procedures.md"
 
 for p in "$CALLER" "$SIBLING" "$CONVERGENCE" "$STEER" "$SCHEMA" "$MAP" \
          "$STEP_GV" "$STEP_GP" \
-         "$FIXTURE/run.sh" "$FIXTURE/seed.sh"; do
+         "$FIXTURE/run.sh" "$FIXTURE/seed.sh" "$FIXTURE/seed.consumer-evidence.tsv"; do
   if [ ! -f "$p" ]; then
     echo "FIXTURE BROKEN: cannot locate $p from $DIR (root resolved to $ROOT_DIR)"
     exit 1
@@ -80,7 +80,10 @@ build_sandbox() {          # prints the sandbox root
   cp "$SCHEMA"  "$sb/core/schemas/"
   cp "$MAP"     "$sb/core/skills/ai-dlc/"
   cp "$STEP_GV" "$STEP_GP" "$sb/core/skills/ai-dlc/steps/"
-  cp "$FIXTURE/run.sh" "$FIXTURE/seed.sh" "$sb/core/fixtures/gate-adjudication/"
+  # The committed D4 evidence seed too: the fixture reports FIXTURE BROKEN without it, which is a
+  # labelled row every mutant would then "kill", the control included.
+  cp "$FIXTURE/run.sh" "$FIXTURE/seed.sh" "$FIXTURE/seed.consumer-evidence.tsv" \
+     "$sb/core/fixtures/gate-adjudication/"
   printf '%s\n' "$sb"
 }
 

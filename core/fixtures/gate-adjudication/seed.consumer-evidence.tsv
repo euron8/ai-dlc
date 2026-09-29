@@ -1,0 +1,15 @@
+1	Code Review and QA verdicts read from their own verdict lines: docs/reviews/s312/story-1-2-gate1-rereview-3.md:23 '## Verdict' / 'APPROVE', docs/reviews/s312/story-1-2-gate2-qa.md:3-5 '## Verdict' / '
+2	No unresolved HARD_BLOCK for this sprint: the only HARD_BLOCK-class entries touching S312 (S312-GATE3-CHECK22-RULE19B, S312-GATE3-CHECK22-RULE19B-CR4) both carry Status: OVERRIDDEN with verified opera
+3	Story carries a LOCKED_REQUIREMENTS block (story:338-341) citing LR-S312-5/6/7. Read locked-requirements.md:10-12 directly: LR-S312-5 (complete re-derivation of the 129-row population, sequenced CONFI
+4	grep -n 'TODO\|TBD\|<placeholder>\|XXX' against both the story file and the report file returns zero matches (run fresh).
+5	`scripts/ai-dlc/sprint-status.sh check-stories --sprint 312` (run fresh): 'PASS -- 6 comparison(s) over 6 entries, 0 finding(s)'. `derive-stories --check --sprint 312` (run fresh): 'PASS -- 0 drifted 
+6	Story is exempt: frontmatter capital_path:false (line 7), deploy_scope:[] (line 22), protected_paths:[] (line 24), architecture_refs:[] (line 27, 'architecture_impact: none for FR-S312-2'). Dev Agent 
+7	All planning artifacts this story references exist on disk and were read directly during this adjudication: locked-requirements.md, carry-over-backlog.md, carry-over-backlog-archive.md, population-wor
+8	Story is exempt from deployment evidence: deploy_scope:[] and capital_path:false (frontmatter lines 22, 7). No deployment claim appears anywhere in the story or its reviews. Its changed-file set (veri
+9	Self-skips: is_ui_epic == false per the sprint context given by the lead, and the story introduces no visual surface -- it is a markdown data-file edit only (carry-over-backlog.md/-archive.md status-f
+10	Self-skips: no schema/API/GraphQL path is touched. Story's own frontmatter states architecture_refs:[] and 'architecture_impact: none for FR-S312-2' (line 27); the checked changed-file set (check 6) c
+11	Story is exempt: it introduces no user-facing functionality. deploy_scope:[] and capital_path:false (frontmatter), and the Dev Agent Record states 'no code paths, no tests to run' -- pure internal bac
+11a	Self-skips: story is exempt from Check 11 (no smoke-test surface exists for a pure data-file artifact), so there is no live-against-production smoke path that could be gated by an envvar to evaluate h
+16	Story S312-2's own changed-file set (derived from `git log --name-only` over its authoring+rework commit range 85c4aa1af..cfd78b0e1): story-1-2-rederive-population-against-oracle.md, story-2-populatio
+19	Self-skips: this is a Gate 3 (story-completion/implementation) adjudication for story S312-2, not a Gate 2 (code-review) verdict -- Check 19's scope is explicitly 'every Gate 2 (code-review gate)'. Th
+22	Fresh run: `scripts/ai-dlc/validate-spawn-ledger.sh --ledger _bmad-output/spawn-ledger.jsonl --sprint 312 --probe _bmad-output/subagent-context.jsonl --settings .claude/settings.json` exits 1, COUNTS:

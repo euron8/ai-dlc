@@ -142,6 +142,31 @@
 #   guard is told to leave alone. The renderer cites this paragraph rather than restating
 #   the four names — one list, in the config, read by both.
 #
+#   THE SHARD LINE -- THE ONE DEFINITION OF ITS GRAMMAR. Rule 28 splits a dispatch into one
+#   agent per independent part, and each brief states which part it is, or which of the four
+#   serial exceptions it runs under, on ONE line of the prompt:
+#
+#     shard: <i>/<N> <part-key>      1 <= i <= N, both integers
+#     shard: cross/<N> <part-key>    the cross-part agent (Rule 28), N >= 1
+#     shard: none (<exception>)      exception 1 | 2 | 3 | 4, or its short name:
+#                                    1 data-dependency   2 pass-repair-pass
+#                                    3 authoring-chain   4 one-file
+#
+#   <part-key> is the rest of the line, non-empty: a story ordinal, a basename, a gate type, a
+#   surface, or the file paths a remediator shard edits, so it may carry `/`, `,` and blanks.
+#   The KEY may carry leading blanks, a `-`/`*` bullet and emphasis or backticks around
+#   `shard:`; the VALUE is strict. Lines inside a ``` or ~~~ fence are not read, so a brief
+#   may quote the grammar. Recorded in the spawn ledger as `shard`, canonicalised (blank runs
+#   collapsed to one space): `"<i>/<N> <part-key>"`, `"cross/<N> <part-key>"` or
+#   `"none (<1-4>)"`. ZERO matching lines, MORE THAN ONE, or one
+#   that does not parse all record `shard: null`. A row with no `shard` KEY at all was written
+#   by a guard older than this field, and `validate-spawn-ledger.sh` reads that absence as
+#   PENDING, not as an omission.
+#
+#   RECORD-THEN-ALLOW ONLY. Nothing here denies, corrects or annotates a dispatch on the shard
+#   line: whether a scope is ONE part or several is a judgment about intent, and no act at
+#   dispatch separates the two. The line is a record Check 22 reads at the gate.
+#
 # INSTALL: wired by templates/settings.json.template (PreToolUse matcher
 #   "Agent|Task"); upserted by reconcile/settings-merge.sh on pull.
 
@@ -532,6 +557,42 @@ SPAWN_NAME="$(printf '%s' "$INPUT" | jq -r '.tool_input.name // .tool_input.suba
 # the 0.557.0 CHANGELOG entry, which dates it; a figure quoted here would decay silently.
 SPAWN_TUI="$(printf '%s' "$INPUT" | jq -r '.tool_use_id // empty' 2>/dev/null || true)"
 
+# THE SHARD LINE, parsed per the grammar in the CONTRACT header. The prompt goes in on a PIPE,
+# never as an argument: a long brief in argv can fail the one `jq -nc` below and lose the whole
+# row, which would cost every other field for the sake of this one. Only the short canonical
+# result reaches jq. Any failure here is an empty SPAWN_SHARD, recorded as null, and the
+# dispatch proceeds exactly as before.
+SPAWN_SHARD="$(printf '%s\n' "$PROMPT" | awk '
+  /^[ \t]*(```|~~~)/ { fence = !fence; next }
+  fence { next }
+  {
+    line = $0
+    sub(/^[ \t]*([-*][ \t]+)?/, "", line)
+    if (line !~ /^[*_`]*shard[*_`]*:/) next
+    keys++
+    sub(/^[*_`]*shard[*_`]*:[*_`]*[ \t]*/, "", line)
+    sub(/[ \t]+$/, "", line)
+    val = ""
+    gsub(/[ \t]+/, " ", line)
+    if (line ~ /^[0-9]+\/[0-9]+ [^ ]/) {
+      pos = index(line, " "); k = substr(line, pos + 1); split(substr(line, 1, pos - 1), f, "/")
+      i = f[1] + 0; n = f[2] + 0
+      if (i >= 1 && n >= 1 && i <= n) val = i "/" n " " k
+    } else if (line ~ /^cross\/[0-9]+ [^ ]/) {
+      pos = index(line, " "); k = substr(line, pos + 1); n = substr(line, 7, pos - 7) + 0
+      if (n >= 1) val = "cross/" n " " k
+    } else if (line ~ /^none[ \t]*\([^)]*\)$/) {
+      e = line; sub(/^none[ \t]*\([ \t]*/, "", e); sub(/[ \t]*\)$/, "", e)
+      if (e == "1" || e == "data-dependency") val = "none (1)"
+      else if (e == "2" || e == "pass-repair-pass") val = "none (2)"
+      else if (e == "3" || e == "authoring-chain") val = "none (3)"
+      else if (e == "4" || e == "one-file") val = "none (4)"
+    }
+    if (val != "") { good++; out = val }
+  }
+  END { if (keys == 1 && good == 1) print out }
+' 2>/dev/null || true)"
+
 # THE DELETED NAME IS RECORDED, NEVER MERELY DROPPED. A lead reading the ledger back sees
 # `name` as the dispatch's identity across every sprint of history; a definition-bound row
 # whose name simply vanished would read as an unnamed dispatch rather than as a named one
@@ -582,6 +643,7 @@ jq -nc \
    --arg tui "${SPAWN_TUI:-}" \
    --arg stripped "${SPAWN_NAME_STRIPPED:-}" \
    --arg via "${CONTRACT_VIA:-}" \
+   --arg shard "${SPAWN_SHARD:-}" \
    --argjson cited "$ROLE_CONTRACT_CITED" \
    --argjson readable "$ROLE_FILE_READABLE" \
    --argjson defbound "$DEFINITION_BOUND" \
@@ -608,7 +670,10 @@ jq -nc \
      definition_bound: $defbound,
      definition_stale: $defstale,
      name_stripped: (if $stripped == "" then null else $stripped end),
-     tool_use_id: (if $tui == "" then null else $tui end)
+     tool_use_id: (if $tui == "" then null else $tui end),
+     # The brief shard line, canonicalised; null when absent, repeated or unparseable. The KEY
+     # is always written, because its absence is how Check 22 recognises an older guard row.
+     shard: (if $shard == "" then null else $shard end)
    }' >> "$SPAWN_LEDGER" 2>/dev/null || true
 # --- end SPAWN LEDGER ---------------------------------------------------------
 

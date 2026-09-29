@@ -119,7 +119,8 @@ Full rationale for this file's shape and the accumulation defect it fixes: `disc
 ### 4. Authoring Dispatch
 
 Dispatch ONE `pm-escalated` subagent, bound per Rule 19 (model + role-contract line), that
-runs the following in order:
+runs the following in order (an ordered authoring chain, Rule 28 "Split dispatch" serial
+exception 3):
 
 **(a) Update the product brief.** Per Rule 25(a) — integrate the new scope into the
 current-state sections and **move** superseded content and prior per-sprint narrative to
