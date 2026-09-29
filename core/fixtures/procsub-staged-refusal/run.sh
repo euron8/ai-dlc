@@ -166,6 +166,31 @@ for _nw in nul q h; do
   printf 'X\tcore/scripts/%s.sh\tscripts/ai-dlc/%s.sh\tCLASSIFY\nX\tcore/scripts/ctl.sh\tscripts/ai-dlc/ctl.sh\tCLASSIFY\n' "$_nw" "$_nw" > "$NW/rows-$_nw"
 done
 
+# --- LW: a theirs blob carrying ONE Latin-1 byte (invalid UTF-8) in a comment between two kept
+# tokens. BSD `tr` under a UTF-8 locale exits 1 on it ("Illegal byte sequence") after writing only
+# the bytes before it, so an unpinned NUL strip refused the file, and one whose status was dropped
+# read theirs as carrying `keep1` alone -- a FALSE `alat.sh -> keep2` row at rc 0. Nothing in alat.sh
+# is retired; ctl.sh (`old-c` retired, spoken) is the row proving the run reached the loop. alat.sh
+# is listed FIRST, so the NUL strips run base (1), theirs (2), ours (3) on it before ctl.sh.
+LW="$W/lw"; LWD="$LW/dist"; LWC="$LW/consumer"; mkdir -p "$LWD/core/scripts" "$LWC/scripts/ai-dlc"
+printf 'x=$ROOT/keep1\ny=$ROOT/keep2\n' > "$LWD/core/scripts/alat.sh"
+printf 'x=$ROOT/old-c\n' > "$LWD/core/scripts/ctl.sh"
+gitq -C "$LWD" init -q; gitq -C "$LWD" add -A; gitq -C "$LWD" commit -qm base
+LW_BASE="$(git -C "$LWD" rev-parse HEAD)"
+printf 'x=$ROOT/keep1\n# caf\351\ny=$ROOT/keep2\n' > "$LWD/core/scripts/alat.sh"
+printf 'x=$ROOT/new-c\n' > "$LWD/core/scripts/ctl.sh"
+gitq -C "$LWD" add -A; gitq -C "$LWD" commit -qm theirs
+LW_THEIRS="$(git -C "$LWD" rev-parse HEAD)"
+printf 'uses $ROOT/keep1 and $ROOT/keep2\n' > "$LWC/scripts/ai-dlc/alat.sh"
+printf 'uses $ROOT/old-c\n' > "$LWC/scripts/ai-dlc/ctl.sh"
+printf 'X\tcore/scripts/alat.sh\tscripts/ai-dlc/alat.sh\tCLASSIFY\nX\tcore/scripts/ctl.sh\tscripts/ai-dlc/ctl.sh\tCLASSIFY\n' > "$LW/rows"
+# The UTF-8 arm needs the locale. Absent, it and the mutant it kills print SKIP, never ok.
+LW_NL='
+'
+LW_LOCALES="$(locale -a 2>/dev/null)" || LW_LOCALES=""
+LW_UTF8=0
+case "$LW_NL$LW_LOCALES$LW_NL" in *"${LW_NL}en_US.UTF-8${LW_NL}"*) LW_UTF8=1 ;; esac
+
 # --- OW: an override copying a clause upstream rewrote, and one shadowing a file absent at both refs
 OW="$W/ow"; OWD="$OW/dist"; OWC="$OW/consumer"; mkdir -p "$OWD/core/skills/ai-dlc/steps"
 L_OLD="This is the original clause of the section, which upstream rewrites."
@@ -432,6 +457,32 @@ NW_CTL="RETIRED-CONTRACT-TOKEN${NT}core/scripts/ctl.sh${NT}\$ROOT/old-c"
 arm_nw_both()   { nw_arm "$1" nul "$NW_CTL|RETIRED-CONTRACT-TOKEN${NT}core/scripts/nul.sh${NT}\$ROOT/old-n"; }
 arm_nw_theirs() { nw_arm "$1" q "$NW_CTL"; }
 arm_nw_cmt()    { nw_arm "$1" h "$NW_CTL|RETIRED-CONTRACT-TOKEN${NT}core/scripts/h.sh${NT}\$ROOT/old-h"; }
+# lw_run <script> <locale> [stub-dir] -- the Latin-1 theirs world, under LC_ALL=<locale>. The WHOLE
+# stdout must be the ctl.sh row alone at rc 0: a refusal, a lost ctl row and a FALSE alat.sh row
+# (keep1 or keep2, from a theirs read short) each fail it.
+LW_WANT="RETIRED-CONTRACT-TOKEN${NT}core/scripts/ctl.sh${NT}\$ROOT/old-c"
+lw_run() { local p="$PATH"; [ -n "${3:-}" ] && p="$3:$PATH"
+  env -u LANG PATH="$p" LC_ALL="$2" bash "$1" --bucket-rows "$LW/rows" "$LWD" "$LW_BASE" "$LW_THEIRS" "$LWC" > "$OUT" 2> "$ERR"; }
+lw_why() { ARM_WHY="rc=$1 stdout=[$(tr '\n\t' '| ' < "$OUT")] want=[$(printf '%s' "$LW_WANT" | tr '\t' ' ')] $(grep -v '^$' "$ERR" | tail -1 | cut -c1-80)"; }
+arm_lw_c() { local rc=0; lw_run "$1" C || rc=$?; lw_why "$rc"; [ "$rc" -eq 0 ] && [ "$(cat "$OUT")" = "$LW_WANT" ]; }
+# The NO-STUB arm. Its precondition is measured outside the subject, in the same invocation: the
+# real `tr -d '\000'` must refuse the theirs blob under UTF-8 ("Illegal byte sequence") and accept
+# it under C. A host where that does not hold cannot express the failure, and the arm FAILS.
+lw_pre() { local u=0 c=0
+  env -u LANG LC_ALL=en_US.UTF-8 tr -d '\000' < "$LWD/core/scripts/alat.sh" > /dev/null 2> "$W/lwerr" || u=$?
+  env -u LANG LC_ALL=C tr -d '\000' < "$LWD/core/scripts/alat.sh" > /dev/null 2>&1 || c=$?
+  LW_PRE="utf8-tr rc=$u c-tr rc=$c"
+  [ "$u" -ne 0 ] && [ "$c" -eq 0 ] && grep -qi 'illegal byte sequence' "$W/lwerr"; }
+arm_lw_utf8() { local rc=0
+  if ! lw_pre; then ARM_WHY="precondition not met on this host ($LW_PRE), so the arm cannot express the failure"; return 1; fi
+  lw_run "$1" en_US.UTF-8 || rc=$?; lw_why "$rc"; ARM_WHY="$LW_PRE; $ARM_WHY"
+  [ "$rc" -eq 0 ] && [ "$(cat "$OUT")" = "$LW_WANT" ]; }
+# The STATUS arm. Pinned to C, the real `tr` never fails on this blob, so a dropped status has
+# nothing to drop there: the failure is FORCED on alat.sh's theirs strip (call 2), and a copy that
+# drops the status reads theirs as tokenless -- FALSE keep1 and keep2 rows at rc 0.
+arm_lw_trstatus() { local rc=0; mkstub tr '"-d "?000' 2 1; lw_run "$1" C "$STUB" || rc=$?
+  lw_why "$rc"; ARM_WHY="fired=$(fired) $ARM_WHY"
+  failed_call 2 && [ "$rc" -eq 2 ] && grep -q 'token scan of core/scripts/alat\.sh@' "$ERR" && [ ! -s "$OUT" ]; }
 
 # --- readopt-override ----------------------------------------------------------------------------
 ro_run() { # ro_run <script> <override> [stub-dir]
@@ -1074,6 +1125,13 @@ run_arm arm_rg_healthy  "$S_RLC" "retired-layer-contract: a rulebook path both r
 run_arm arm_nw_both     "$S_RT"  "retired-tokens: a blob with a NUL at BOTH refs keeps its true row (nul.sh -> old-n) beside the ctl.sh row"
 run_arm arm_nw_theirs   "$S_RT"  "retired-tokens: a NUL gained at theirs alone retires nothing (no FALSE q.sh row), the ctl.sh row stands"
 run_arm arm_nw_cmt      "$S_RT"  "retired-tokens: a NUL before a comment '#' leaves the commented token a comment (no FALSE h.sh -> cmt-h row)"
+run_arm arm_lw_c        "$S_RT"  "retired-tokens: a Latin-1 byte in a theirs blob under LC_ALL=C retires nothing, the ctl.sh row alone at rc 0"
+if [ "$LW_UTF8" -eq 1 ]; then
+  run_arm arm_lw_utf8   "$S_RT"  "retired-tokens: NO STUB, a Latin-1 theirs blob under a UTF-8 caller reads whole: the ctl.sh row alone at rc 0, no refusal, no FALSE alat.sh row"
+else
+  skip "arm_lw_utf8: locale en_US.UTF-8 is not installed (locale -a), so a UTF-8 tr cannot be driven here (this is not a pass)"
+fi
+run_arm arm_lw_trstatus "$S_RT"  "retired-tokens: the NUL strip (tr) of alat.sh's theirs blob fails -> exit 2 naming it, not FALSE keep rows at rc 0"
 
 echo "== forced producer failures (each stub must FIRE, each script must REFUSE) =="
 run_arm arm_ci_retro     "$S_CI"  "failed retro walk (find) -> exit 2, not '0 gates declared'"
@@ -1376,6 +1434,8 @@ else
     b3_fail arm_fx_ro         readopt-override.sh       "the id here-string failed to stage, no scan ran"
     if [ "$(id -u)" -ne 0 ]; then
       b3_fail arm_rlc_unread_layer retired-layer-contract.sh "the unreadable layer file read as empty, rc 0"
+    else
+      skip "322ef42c differential: arm_rlc_unread_layer -- running as root, which reads a mode-000 layer file, so the world is not expressible (this is not a pass)"
     fi
     for _b3 in relabel-extension-checks.sh retired-layer-contract.sh retired-tokens.sh readopt-override.sh derivation-differential.sh; do
       b3_fail arm_r5 "$_b3" "it carried non-comment here-strings"
@@ -1383,7 +1443,10 @@ else
     # The NUL worlds are the other direction: the base copy fed `toks` from `<<<"$b"`, whose `$( )`
     # had dropped every NUL, so it was CORRECT there and must pass. A conversion that is not
     # behaviour-preserving on them is a regression against this copy, not a fix.
-    for _nwa in arm_nw_both arm_nw_theirs arm_nw_cmt; do
+    # The Latin-1 worlds join them: the base copy ran no `tr`, so a Latin-1 theirs blob read whole.
+    # arm_lw_trstatus does not: the base has no `tr` for its stub to fail.
+    _lwa="arm_lw_c"; [ "$LW_UTF8" -eq 1 ] && _lwa="$_lwa arm_lw_utf8"
+    for _nwa in arm_nw_both arm_nw_theirs arm_nw_cmt $_lwa; do
       if "$_nwa" "$B3/retired-tokens.sh"; then ok "322ef42c differential: $_nwa PASSES against the base retired-tokens.sh, which read NUL-bearing blobs correctly -- $ARM_WHY"
       else bad "322ef42c differential: $_nwa FAILED against the base retired-tokens.sh, so the arm does not describe the base behaviour the fix must preserve -- $ARM_WHY"; fi
     done
@@ -1483,7 +1546,8 @@ control reconcile relabel-extension-checks.sh   arm_fx_rx_healthy arm_fx_rx arm_
 control reconcile retired-layer-contract.sh     arm_fx_rlc_healthy arm_fx_rlc arm_fx_rls_healthy arm_fx_rls arm_r5
 control reconcile readopt-override.sh           arm_fx_ro_healthy arm_fx_ro
 control reconcile warn-shadowed-local-validators.sh arm_fx_ws_healthy arm_fx_ws_closed arm_fx_ws6_healthy arm_fx_ws_emitter arm_r5
-control reconcile retired-tokens.sh             arm_fx_rt_healthy arm_fx_rt arm_r5 arm_nw_both arm_nw_theirs arm_nw_cmt
+control reconcile retired-tokens.sh             arm_fx_rt_healthy arm_fx_rt arm_r5 arm_nw_both arm_nw_theirs arm_nw_cmt arm_lw_c arm_lw_trstatus
+[ "$LW_UTF8" -eq 1 ] && control reconcile retired-tokens.sh arm_lw_utf8
 control reconcile readopt-override.sh           arm_ro_healthy arm_r5
 control reconcile derivation-differential.sh    arm_dd_usage arm_r5
 
@@ -1611,7 +1675,7 @@ mutant RT-TOKS reconcile retired-tokens.sh arm_rt_healthy "arm_rt_cmt_all arm_rt
 # grep answers `Binary file (standard input) matches`: the true nul.sh row is lost, and q.sh's NUL
 # at theirs alone reads its base tokens as retired.
 # Not `_raw="$(cat)"`: a `$( )` drops the NUL itself, and that mutant is the fix spelled again.
-RT_NUL_STRIP=$'  _raw="$(tr -d \'\\000\')" || return 2\n  [ -n "$_raw" ] || return 0\n'
+RT_NUL_STRIP=$'  _raw="$(LC_ALL=C tr -d \'\\000\')" || return 2\n  [ -n "$_raw" ] || return 0\n'
 mutant RT-NUL reconcile retired-tokens.sh arm_rt_healthy "arm_nw_both arm_nw_theirs" \
   "$RT_NUL_STRIP" '' \
   $'  _code="$(printf \'%s\\n\' "$_raw" | grep -vE' $'  _code="$(grep -vE'
@@ -1620,6 +1684,19 @@ mutant RT-NUL reconcile retired-tokens.sh arm_rt_healthy "arm_nw_both arm_nw_the
 mutant RT-NUL-GREPA reconcile retired-tokens.sh arm_rt_healthy "arm_nw_cmt" \
   "$RT_NUL_STRIP" '' \
   $'  _code="$(printf \'%s\\n\' "$_raw" | grep -vE' $'  _code="$(grep -avE'
+# retired-tokens: the NUL strip's status dropped. Pinned to C the real `tr` never fails on the
+# Latin-1 blob, so only the FORCED strip failure sees this: theirs reads tokenless, FALSE keep rows.
+RT_TR_LINE=$'  _raw="$(LC_ALL=C tr -d \'\\000\')" || return 2\n'
+mutant RT-TR-STATUS reconcile retired-tokens.sh arm_rt_healthy "arm_lw_trstatus" \
+  "$RT_TR_LINE" $'  _raw="$(LC_ALL=C tr -d \'\\000\')" || true\n'
+# retired-tokens: the NUL strip back in the caller's locale (b5e5b610's spelling). A UTF-8 caller's
+# `tr` refuses the Latin-1 theirs blob, so the detector refuses a file 322ef42c read correctly.
+if [ "$LW_UTF8" -eq 1 ]; then
+  mutant RT-TR-LOCALE reconcile retired-tokens.sh arm_rt_healthy "arm_lw_utf8" \
+    "$RT_TR_LINE" $'  _raw="$(tr -d \'\\000\')" || return 2\n'
+else
+  skip "mutant RT-TR-LOCALE: its killing cell needs locale en_US.UTF-8, which is not installed (this is not a pass)"
+fi
 # retired-layer-token: BOTH layers -- code_toks pipes into toks, and toks ends in a grep. Reverting
 # code_toks alone leaves toks returning 0 on empty input, and pipefail then reports the strip's 2.
 mutant RLT-CODETOKS reconcile retired-layer-token.sh arm_rlt_healthy "arm_rlt_cmt" \

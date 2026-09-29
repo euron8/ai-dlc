@@ -634,7 +634,9 @@ fi
 # THE STATUS READ ALONE DELETED: the awk's exit 2 is dropped, and the empty-list guard beneath it
 # then refuses with the OTHER message. U2 greps the unreadable-list words, so it kills this; U1's
 # directory never reached that line and must still pass.
-if [ "$RLC_ROOT" -eq 0 ] && rlcmut u2-status-dropped -e '/^\[ "\$_rlc_rc" -eq 0 \] || rlc_refuse "reading the rulebook list from /d'; then
+if [ "$RLC_ROOT" -eq 1 ]; then
+  echo "  SKIP  mutant [u2-status-dropped] -- running as root, which reads a mode-000 file, so U2 cannot kill it (this is not a pass)"
+elif rlcmut u2-status-dropped -e '/^\[ "\$_rlc_rc" -eq 0 \] || rlc_refuse "reading the rulebook list from /d'; then
   rlcctl u2-status-dropped "$RLC_MUT"
   if rlc_unreadable "$RLC_MUT" mode000; then
     bad "MUTANT SURVIVED [u2-status-dropped]: with the status read deleted, U2 still passed ($RLC_UWHY)"

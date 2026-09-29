@@ -107,10 +107,13 @@ SELF="$(cd "$(dirname "$0")" && pwd)"
 # `#` and a commented token is read as live, a false row the here-string never produced (measured).
 # Deleting the NUL is what the `$( )` did, so the token set is the here-string's. The consumer's
 # own file, fed from `< "$ours"` at base too, was read as binary there and is now read as text.
+# That `tr` alone runs under LC_ALL=C, because BSD `tr` in a UTF-8 locale exits 1 on invalid UTF-8
+# (one Latin-1 byte) and refused input the here-string read correctly, while `sort -u` stays in the
+# caller's locale since its collation feeds the caller's `comm`.
 toks() {
   local _raw _code _t _rc=0
   # A failed `tr` returns 2 whatever its own status, because the caller accepts a 1 as an empty set.
-  _raw="$(tr -d '\000')" || return 2
+  _raw="$(LC_ALL=C tr -d '\000')" || return 2
   [ -n "$_raw" ] || return 0
   _code="$(printf '%s\n' "$_raw" | grep -vE '^[[:space:]]*#')" || _rc=$?
   [ "$_rc" -le 1 ] || return "$_rc"

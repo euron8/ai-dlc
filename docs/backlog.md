@@ -4641,7 +4641,9 @@ These sites were NOT forced, and are tier A by reading: `retired-layer-contract.
 - `retired-tokens.sh:211-212` read the blobs `rt_blob` already staged. Every `rt_toks` call now
   refuses on a failed read, which covers `:218` too. The tip adversary found a regression in this
   conversion before merge, and it was fixed then: a NUL-bearing blob read as binary to BSD grep, so
-  it lost a true row and printed false ones at rc 0. `toks` now deletes NULs first.
+  it lost a true row and printed false ones at rc 0. `toks` now deletes NULs first. The second tip
+  adversary found that this NUL strip refused invalid UTF-8, because BSD `tr` in a UTF-8 locale exits
+  1 on a Latin-1 byte, so that one `tr` now runs under `LC_ALL=C`.
 - `warn-shadowed-local-validators.sh:118` captures the emitter once and reads its status, with no
   lib.sh change. `:155` and `:158` read staged files.
 - `readopt-override.sh:428` is a `case` whole-line test. `:446` and `:462` read ids staged by
