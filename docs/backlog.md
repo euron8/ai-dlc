@@ -4418,7 +4418,69 @@ verify: manual
 staging failure and `retired-layer-contract.sh`'s `collect` both use it), and read `ls-tree -z` or
 compare against the quoted form in `rt_blob`.
 
-verify: manual
+**Amended at batch 169 (v0.660.0): bullets 1 and 2 are fixed, and bullet 3 is NOT.** The entry
+stays live, because bullet 3 is blocked, not narrowed.
+
+- **Bullet 1, fixed.** `retired-layer-passage.sh` exits 2 when it cannot read the rulebook list.
+- **Bullet 2, fixed.** `retired-layer-contract.sh` reads the glob list once in the main shell, and
+  exits 2 when the read fails OR yields no glob. The empty-`BASE_SET` exit is unchanged, because a
+  rulebook carrying no contract shape is legitimate.
+- **Bullet 3 is a PRODUCER defect, and its premise was wrong.** `preclassify.sh:594` takes its
+  diff from lib.sh's `memo_diff_name_status`, a `git diff --name-status` under the default
+  `core.quotePath`. That C-quotes a non-ASCII path, so the CLASSIFY row carries
+  `"core/scripts/caf\303\251.sh"` in BOTH path columns. `retired-tokens.sh:198` (tip `:203`) then
+  finds no such consumer file and skips the row before `rt_blob` ever runs. That happens on base
+  and tip alike. "Base printed a row" held only for a synthetic `--bucket-rows` seed carrying the
+  raw path, which no producer writes. Measured end to end with no `--bucket-rows` at tip: rc 0, the
+  ASCII row present and the `café.sh` row absent; with `core.quotepath=false` injected through
+  `GIT_CONFIG_PARAMETERS`, both rows present. The `rt_blob` change in this release
+  (`-c core.quotePath=false` on its `ls-tree`) is hardening only. The fix belongs in
+  `memo_diff_name_status` or `preclassify.sh`, and both are bootstrapping.
+
+**The receipt keys on all three bullets, so it cannot exit 0 until the producer is fixed.** Exit
+1 means the entry is live, and the stderr tag names why: `BL356-BULLET-1-OR-2-REGRESSED`, or
+`BL356-BULLET-3-PRODUCER-REMAINS` when bullets 1 and 2 hold and bullet 3 still loses its row.
+**At this release it exits 1 with the second tag, which reads STILL-LIVE.**
+
+The receipt works on a `mktemp` copy of `reconcile/`, never the tree's own files. It drives both
+detectors on a seeded world twice:
+
+- with the copy's `setup-sites.md` at mode 000;
+- with its `rulebook:` list emptied.
+
+Each run must exit non-zero with 0 stdout bytes, and stderr must name `setup-sites`. The contract
+detector must also name the copy's own path, which proves the copy is the tree that was read. It
+then drives `retired-tokens.sh` with no `--bucket-rows` on a world with `plain.sh` and `café.sh`,
+and requires both rows.
+
+Exit 9 comes from the preconditions:
+
+- running as root, which reads mode 000;
+- a mode-000 file that is still readable;
+- each detector's unforced run producing no row;
+- the ASCII control row absent.
+
+Scored through `backlog-reverify.sh`'s own `eval` shape:
+
+| variant | exit | tag |
+|---|---|---|
+| tip (`afe58b5b`) | 1 | BULLET-3-PRODUCER-REMAINS |
+| base `322ef42c` | 1 | BULLET-1-OR-2-REGRESSED |
+| BL-360 fix alone (`2f598a86`) | 1 | BULLET-1-OR-2-REGRESSED |
+| BL-356 fix alone (applied to base) | 1 | BULLET-3-PRODUCER-REMAINS |
+| the detectors stubbed to `exit 0` | 9 | |
+| the detectors stubbed to a refusal (`exit 2`) | 9 | |
+| `retired-layer-passage.sh` refusal back to `exit 0` | 1 | BULLET-1-OR-2-REGRESSED |
+| `retired-layer-contract.sh`'s empty-list refusal removed | 1 | BULLET-1-OR-2-REGRESSED |
+| `retired-layer-contract.sh`'s read status dropped (`\|\| true`) | 1 | BULLET-3-PRODUCER-REMAINS |
+| second spelling (a `[ -r "$SITES" ]` refusal before the read) | 1 | BULLET-3-PRODUCER-REMAINS |
+| bullet 3 fixed at the producer (`-c core.quotePath=false` in `memo_diff_name_status`) | 0 | |
+
+The status-drop mutant survives, and that is correct. At mode 000 the empty-list guard refuses in
+its place, and the refusal is the same exit 2. The last row shows exit 0 is reachable, and that
+the producer, not `rt_blob`, is where bullet 3 closes.
+
+verify: sh R=core/skills/ai-dlc-update/reconcile; for f in retired-layer-passage retired-layer-contract lib; do [ -f "$R/$f.sh" ] || exit 9; done; [ -f "$R/setup-sites.md" ] || exit 9; [ "$(id -u)" -ne 0 ] || exit 9; w="$(mktemp -d)" || exit 9; cp -R "$R" "$w/r" || exit 9; g() { local d="$1"; shift; git -C "$d" -c user.email=r@r -c user.name=r -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }; D="$w/d"; mkdir -p "$D/core/skills/ai-dlc/steps" || exit 9; g "$D" init -q || exit 9; printf -- '- Label: /cmd\nuse {tok}\n1. The lead must always record the gate verdict in the story file before merge.\n' > "$D/core/skills/ai-dlc/steps/a.md"; printf 'small\n' > "$D/core/skills/ai-dlc/steps/b.md"; { g "$D" add -A && g "$D" commit -qm b; } >/dev/null 2>&1 || exit 9; B="$(git -C "$D" rev-parse HEAD)"; printf 'use {tok}\n' > "$D/core/skills/ai-dlc/steps/a.md"; { g "$D" rm -q core/skills/ai-dlc/steps/b.md && g "$D" add -A && g "$D" commit -qm t; } >/dev/null 2>&1 || exit 9; T="$(git -C "$D" rev-parse HEAD)"; C="$w/c"; mkdir -p "$C/.claude/skills/ai-dlc/extensions" || exit 9; printf -- 'see steps/b.md\n1. The lead must always record the gate verdict in the story file before merge.\n' > "$C/.claude/skills/ai-dlc/extensions/e.md"; run() { bash "$w/r/$1.sh" "$D" "$B" "$T" "$C"; }; run retired-layer-passage > "$w/ph" 2>/dev/null || exit 9; [ "$(grep -c '^RETIRED-LAYER-PASSAGE' "$w/ph")" -ge 1 ] || exit 9; run retired-layer-contract > "$w/ch" 2>/dev/null || exit 9; [ "$(grep -c '^RETIRED-LAYER-CONTRACT' "$w/ch")" -ge 1 ] || exit 9; S="$w/r/setup-sites.md"; cp "$S" "$w/sites" || exit 9; chmod 000 "$S" || exit 9; cat "$S" >/dev/null 2>&1 && { chmod 644 "$S"; exit 9; }; run retired-layer-passage > "$w/px" 2> "$w/pxe"; p=$?; run retired-layer-contract > "$w/cx" 2> "$w/cxe"; c=$?; chmod 644 "$S"; awk '/^rulebook:/{print; s=1; next} s && /^  - /{next} {s=0; print}' "$w/sites" > "$S" || exit 9; grep -q '^rulebook:' "$S" || exit 9; [ "$(awk '/^rulebook:/{on=1;next} on && /^[a-z_]+:/{exit} on && /^  - /{n++} END{print n+0}' "$S")" -eq 0 ] || exit 9; run retired-layer-passage > "$w/py" 2> "$w/pye"; q=$?; run retired-layer-contract > "$w/cy" 2> "$w/cye"; y=$?; [ "$p" -ne 0 ] && [ ! -s "$w/px" ] && grep -q 'setup-sites' "$w/pxe" && [ "$c" -ne 0 ] && [ ! -s "$w/cx" ] && grep -qF "$S" "$w/cxe" && [ "$q" -ne 0 ] && [ ! -s "$w/py" ] && [ "$y" -ne 0 ] && [ ! -s "$w/cy" ] && grep -qF "$S" "$w/cye" || { echo BL356-BULLET-1-OR-2-REGRESSED >&2; exit 1; }; cp "$w/sites" "$S" || exit 9; E="$w/e"; mkdir -p "$E/core/scripts" || exit 9; g "$E" init -q || exit 9; U="$(printf 'caf\303\251')"; for f in plain "$U"; do printf 'x=$ROOT/old-%s\n' "$f" > "$E/core/scripts/$f.sh"; done; { g "$E" add -A && g "$E" commit -qm b; } >/dev/null 2>&1 || exit 9; EB="$(git -C "$E" rev-parse HEAD)"; for f in plain "$U"; do printf 'x=$ROOT/new-%s\n' "$f" > "$E/core/scripts/$f.sh"; done; { g "$E" add -A && g "$E" commit -qm t; } >/dev/null 2>&1 || exit 9; ET="$(git -C "$E" rev-parse HEAD)"; K="$w/k"; mkdir -p "$K/scripts/ai-dlc" "$K/.claude" || exit 9; for f in plain "$U"; do printf 'x=$ROOT/old-%s\necho edited\n' "$f" > "$K/scripts/ai-dlc/$f.sh"; done; bash "$w/r/retired-tokens.sh" "$E" "$EB" "$ET" "$K" > "$w/to" 2>/dev/null || exit 9; grep -q '^RETIRED-CONTRACT-TOKEN[[:blank:]]core/scripts/plain\.sh[[:blank:]]' "$w/to" || exit 9; grep -q "^RETIRED-CONTRACT-TOKEN[[:blank:]]core/scripts/$U\.sh[[:blank:]]" "$w/to" || { echo BL356-BULLET-3-PRODUCER-REMAINS >&2; exit 1; }; exit 0
 
 ## BL-355 — `norm_lines` folds case byte-wise, so an accented capital no longer matches its lower-case form
 
@@ -4531,5 +4593,154 @@ spelling arm holding the non-comment `<<<` count at zero.
   -1` and `shadow_parts … | head -1`), status unread and inputs small, so no current risk; the
   v0.658.0 partition covered `<<<` sites only.
 
-verify: manual
+**Amended at batch 169 (v0.660.0): the non-bootstrapping half is converted, and this entry stays
+live for the bootstrapping half.** Line numbers are at `322ef42c` unless marked tip.
+
+**Three premise corrections**, each re-measured under `/bin/bash` 3.2.57 with the failing
+`ulimit -f 16` run as the same-invocation control:
+
+- **A read-only `$TMPDIR` does NOT force the failure.** A 20000-byte here-string in a mode-555
+  `TMPDIR` returned all 20001 bytes at rc 0; under `ulimit -f 16` the same run printed `cannot
+  create temp file for here document` and read nothing. Only `ulimit -f` or a full disk forces it.
+- **Under the default SIGXFSZ, a heredoc body over the limit kills the whole script with 153**,
+  which reaches a caller as a refusal, not a false clear. The here-string cases measured here did
+  not die: they printed `No space left on device` and ran on empty input at rc 0. The faithful
+  full-disk model is SIGXFSZ ignored (ENOSPC, no signal), and tier A rests on that model. A cell
+  that forces this class must `trap '' XFSZ` and say why.
+- **bash does not always report the error at the site line.** A heredoc feeding a `while` inside a
+  `for` reported the `for`'s opening line, and a heredoc inside a `$( )` reported the line that
+  closes the capture. A here-string reported its own line in every shape measured. Locate a site
+  from the code, not from the stderr line number.
+
+**The tier-A set the census forced is wider than the list above.** Each item was forced at
+`322ef42c` with SIGXFSZ ignored, and each exits 0:
+
+- `hard-blockers.sh:368` (`--check`): 200 omitted blockers read `(0 total)`.
+- `hard-blockers.sh:312` (print): no HARD row and no `0 HARD blockers.` line.
+- `relabel-extension-checks.sh:196` and `:227`: "no unlabelled core-number collisions." over a
+  live collision.
+- `warn-shadowed-local-validators.sh:158`: 0 rows where there were 2.
+- `warn-shadowed-local-validators.sh:118`: lib.sh's `ledger_entry_awk` emitter could not be
+  staged, and 0 rows resulted.
+- `retired-layer-contract.sh:446`: 2 rows where there were 3.
+- `retired-tokens.sh:211-212`: the previous path's token files were read as this path's, which
+  printed a FALSE row and lost the true one.
+
+These sites were NOT forced, and are tier A by reading: `retired-layer-contract.sh:448`, `:454`;
+`readopt-override.sh:446`, `:462`; `warn-shadowed-local-validators.sh:155`; and
+`derivation-differential.sh:197`, whose `|| return 0` acquitted the stamp.
+
+**Converted in v0.660.0**, in seven files, with the non-comment `<<<` count now zero in each:
+
+- `hard-blockers.sh:312`, `:368`. A failed staging write exits 1 with `hard-blockers: REFUSED —`,
+  because exit 2 already means "report not found".
+- `relabel-extension-checks.sh:196`, `:227`. Both anchor sets are staged before either pass, so
+  `--apply` moves nothing for an extension it refused on.
+- `retired-layer-contract.sh:446` is now a `case` substring test. `:448` and `:454` read files
+  staged once, and `:406`'s `cat … || true` now refuses.
+- `retired-tokens.sh:211-212` read the blobs `rt_blob` already staged. Every `rt_toks` call now
+  refuses on a failed read, which covers `:218` too.
+- `warn-shadowed-local-validators.sh:118` captures the emitter once and reads its status, with no
+  lib.sh change. `:155` and `:158` read staged files.
+- `readopt-override.sh:428` is a `case` whole-line test. `:446` and `:462` read ids staged by
+  `shadow_ids`, which returns 3 inside the `$( )` scans.
+- `derivation-differential.sh:197` is a `case` prefix test. **Its four stamp parses (tip `:208`,
+  `:223`, `:227`, `:246`) are `printf … | stamp_*` pipes on purpose.** They are captures, and each
+  parser reads to EOF before its own `head -1`, so no early-exiting reader sits on the pipe. They
+  need no staged file, and converting them to staging would add a failure channel that does not
+  exist today.
+
+**Remaining. This is why the entry stays live.** The bootstrapping files ship alone, each in its
+own release:
+
+- `apply.sh`: here-strings at tip `:1222`, `:1878`, `:2190`, and ten heredoc loops. **`apply.sh:1319`
+  runs `relabel-extension-checks.sh --apply … 2>/dev/null || true`, so relabel's new exit-2 refusal
+  is swallowed in `--apply` mode.** The refusal still moves no file, but the apply manifest shows
+  no row for it.
+- `preclassify.sh:183` (`<<<`) and `:344` (`<<EOF`).
+- `ledger-reverify.sh:2280` and three heredoc loops.
+- `self-update-gate.sh:828-833` and `:909-910`, plus five heredocs.
+- lib.sh's three `cat <<'AWK'` emitters: `nrm_awk` `:64`, `ledger_entry_awk` `:349`, and
+  `backlog_entry_label_awk` `:446`. `warn-shadowed-local-validators.sh` now refuses on an empty or
+  failed capture of one; every other caller is unguarded.
+- `self-update-fixtures.sh:655` (`GRINVLIST`, the required-input check is skipped) and `:961`
+  (`COVEOF`, the coverage join passes). Step 2 runs this file unattended.
+- `emit-report.sh:842`, where a preclassify refusal goes undetected, plus tip `:384`, `:444`,
+  `:844` and `:845`. `apply.sh:233`'s `--verify` write gate runs this file.
+- Outside the bootstrapping set, `readopt-override.sh` still has two heredoc loops. The `--merge`
+  span plan (`:558`, tip `:568`) refuses for a multi-anchor override; for a single-anchor one this
+  is unverified. The drift panel (`:824`, tip `:834`) is guarded at `:834` (tip `:844`), which
+  says the panel is silent because nothing was compared. The here-strings in `register-drift.sh`
+  (tip `:159`, `:238`, `:254`, `:386`, `:472`), `unregistered-drift.sh` (`:350`, `:352`, `:552`,
+  `:715`), `retired-layer-token.sh:278` and `settings-merge.sh:100` are also unconverted. Each of
+  these was tiered as already refusing or guarded, above, or as a NOTE by the census.
+
+**The receipt covers the converted half, and it cannot close this entry until the bootstrapping
+half is done too.** Exit 0 means both halves hold. Exit 1 means the entry is live, and the stderr
+tag names which half: `BL360-CONVERTED-HALF-REGRESSED` means a converted site regressed, and
+`BL360-BOOTSTRAP-HALF-REMAINS` means the converted half holds and the bootstrapping floor does not.
+**At this release it exits 1 with the second tag, which the engine reads as STILL-LIVE.** A
+receipt over the converted half alone would exit 0 here, and the rotator would archive an entry
+whose remaining half has no other home. A distinct exit 3 was tried first. It scored identically,
+but `validate-backlog-receipts.sh`'s R4 counts any base exit other than 0 or 1 as out of
+population, and the push gate's ceiling is 1.
+
+The first conjunct drives the shipping scripts on seeded worlds under `trap '' XFSZ; ulimit -f 16`:
+
+- `hard-blockers.sh --check` with 200 blockers;
+- relabel with 8000 anchors, colliding at 7999, past the point a truncated staging write reaches;
+- `warn-shadowed-local-validators.sh` with a 900-name closed entry;
+- `retired-layer-contract.sh` with a 20 KB layer file;
+- `retired-tokens.sh` with a 16384-byte blob, where the window is one byte.
+
+Each cell accepts either the complete healthy output or the script's own refusal line at non-zero
+exit, and fails on anything else. The receipt then holds the non-comment `<<<` count at zero in the
+seven converted files.
+
+Exit 9 comes from the preconditions:
+
+- a calibration probe, where a 20000-byte here-string must FAIL and an 8000-byte write must
+  succeed under the same limit;
+- the spelling scan's self-probe, in both directions, including a literal `<<<<<<<` and a
+  comment;
+- each cell's unforced run producing its expected rows.
+
+The bootstrapping floor is a SPELLING floor:
+
+- zero non-comment `<<<` in every `reconcile/*.sh`;
+- zero heredoc openers in the six bootstrapping files and lib.sh;
+- zero `done <<` in `readopt-override.sh`;
+- no `|| true` on `apply.sh`'s relabel call.
+
+The release that converts the bootstrapping half should replace this floor with forced cells. A
+spelling floor errs toward keeping the entry live.
+
+Scored through `backlog-reverify.sh`'s own `eval` shape, each variant a copy of `reconcile/` that
+differs from tip by `diff -rq`. The tag column drops the `BL360-` prefix:
+
+| variant | exit | tag |
+|---|---|---|
+| tip (`afe58b5b`) | 1 | BOOTSTRAP-HALF-REMAINS |
+| base `322ef42c` | 1 | CONVERTED-HALF-REGRESSED |
+| BL-360 fix alone (`2f598a86`) | 1 | BOOTSTRAP-HALF-REMAINS |
+| BL-356 fix alone | 1 | CONVERTED-HALF-REGRESSED |
+| the converted scripts stubbed to `exit 0` | 9 | |
+| the converted scripts stubbed to a refusal (`exit 2`) | 9 | |
+| `retired-tokens.sh` base here-string restored | 1 | CONVERTED-HALF-REGRESSED |
+| `hard-blockers.sh` staging status replaced by `\|\| true` | 1 | CONVERTED-HALF-REGRESSED |
+| `warn-shadowed-local-validators.sh` staging status replaced by `\|\| true` | 1 | CONVERTED-HALF-REGRESSED |
+| `retired-layer-contract.sh` base here-string restored | 1 | CONVERTED-HALF-REGRESSED |
+| `relabel-extension-checks.sh` staging status replaced by `\|\| true` | 1 | CONVERTED-HALF-REGRESSED |
+| `readopt-override.sh` base here-string restored | 1 | CONVERTED-HALF-REGRESSED |
+| second spelling (`retired-tokens.sh` fed by `< <(printf …)`) | 1 | BOOTSTRAP-HALF-REMAINS |
+| the bootstrapping floor satisfied (reachability, not a fix) | 0 | |
+
+The last row shows exit 0 is reachable. It was built by moving lib.sh's emitters to sidecar
+files, deleting the floor-matching lines the cells never execute, and dropping the `|| true`.
+`readopt-override.sh`, `derivation-differential.sh` and `hard-blockers.sh`'s print mode are held
+by the spelling conjunct only; the relabel collision was moved to 7999 after a collision at 24
+let the `|| true` mutant survive. Through `scripts/backlog-reverify.sh` on a scratch ledger, with
+an `exit 0` control entry reading CLOSE-CANDIDATE, this entry reads STILL-LIVE in about 30s.
+
+verify: sh R=core/skills/ai-dlc-update/reconcile; for f in hard-blockers relabel-extension-checks warn-shadowed-local-validators retired-layer-contract retired-tokens readopt-override derivation-differential; do [ -f "$R/$f.sh" ] || exit 9; done; w="$(mktemp -d)" || exit 9; F() { ( trap '' XFSZ; ulimit -f 16; "$@" ); }; c="$(F bash -c 'wc -c <<<"$1"' _ "$(printf '%020000d' 0)" 2>/dev/null)"; case "$c" in *[1-9]*) exit 9 ;; esac; F bash -c 'printf "%08000d" 0 > "$1"' _ "$w/cal" 2>/dev/null; [ "$(wc -c < "$w/cal" | tr -d ' ')" -eq 8000 ] || exit 9; A='/^[[:blank:]]*#/ {next} { l=$0; gsub(/<<<<+/, "", l); if (l ~ /<<</) n++ } END {print n+0}'; printf '%s\n' 'a <<<"$b"' '  # c <<<"$d"' 'echo "<<<<<<< x"' > "$w/sp"; [ "$(awk "$A" "$w/sp")" -eq 1 ] || exit 9; : > "$w/ld"; i=0; while [ $i -lt 200 ]; do printf 'HARD-UNREGISTERED-CORE-DRIFT\tskills/ai-dlc/steps/file-number-%04d-padding-padding.md\tx\n' $i; i=$((i+1)); done > "$w/ud"; echo '# report' > "$w/rep"; hb() { bash "$R/hard-blockers.sh" --check "$w/rep" --ld-rows "$w/ld" --ld-rc 0 --ud-rows "$w/ud" --ud-rc 0 "$w" base "$w" theirs; }; hb > "$w/hbh" 2>&1; [ "$(grep -c '^FAIL' "$w/hbh")" -eq 200 ] || exit 9; F hb > "$w/hbf" 2>&1; [ "$(grep -c '^FAIL' "$w/hbf")" -eq 200 ] || grep -q '^hard-blockers: REFUSED' "$w/hbf" || { echo BL360-CONVERTED-HALF-REGRESSED >&2; exit 1; }; C="$w/rx"; mkdir -p "$C/.claude/skills/ai-dlc/extensions" || exit 9; i=1; while [ $i -le 8000 ]; do printf '### %d. Check title\nbody\n' $i; i=$((i+1)); done > "$C/.claude/skills/ai-dlc/gate-validation.md"; printf -- '---\nkind: check\nid: mine\nhooks: gate-validation.md\n---\n\n### 7999. My check\ntext\n' > "$C/.claude/skills/ai-dlc/extensions/x.md"; bash "$R/relabel-extension-checks.sh" "$C" > "$w/rxh" 2>&1; grep -qF '[ext:mine]' "$w/rxh" || exit 9; F bash "$R/relabel-extension-checks.sh" "$C" > "$w/rxf" 2>&1; grep -qF '[ext:mine]' "$w/rxf" || grep -q '^relabel: REFUSED' "$w/rxf" || { echo BL360-CONVERTED-HALF-REGRESSED >&2; exit 1; }; C="$w/ws"; mkdir -p "$C/_bmad-output/ai-dlc-update" "$C/scripts/ai-dlc" "$C/scripts/ai-dlc-local/sub" "$C/.claude" || exit 9; echo 'echo core' > "$C/scripts/ai-dlc/validate-zz.sh"; echo 'echo fork' > "$C/scripts/ai-dlc-local/validate-zz.sh"; echo 'echo fork2' > "$C/scripts/ai-dlc-local/sub/validate-zz.sh"; { printf '# ledger\n\n## PC-S1-THING fork of validate-zz.sh\n\nADOPTED UPSTREAM in 0.1.0.\n\n'; i=0; while [ $i -lt 900 ]; do printf 'names aaaa-padding-name-%04d.sh\n' $i; i=$((i+1)); done; } > "$C/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; bash "$R/warn-shadowed-local-validators.sh" --root "$C" > "$w/wsh" 2>&1; [ "$(grep -c '^RETIRE-CANDIDATE' "$w/wsh")" -eq 2 ] || exit 9; F bash "$R/warn-shadowed-local-validators.sh" --root "$C" > "$w/wsf" 2>&1; [ "$(grep -c '^RETIRE-CANDIDATE' "$w/wsf")" -eq 2 ] || grep -q '^warn-shadowed-local-validators: REFUSED' "$w/wsf" || { echo BL360-CONVERTED-HALF-REGRESSED >&2; exit 1; }; g() { local d="$1"; shift; git -C "$d" -c user.email=r@r -c user.name=r -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }; D="$w/rd"; mkdir -p "$D/core/skills/ai-dlc/steps" || exit 9; g "$D" init -q || exit 9; printf -- '- Label: /cmd\nuse {tok}\n' > "$D/core/skills/ai-dlc/steps/a.md"; printf 'small\n' > "$D/core/skills/ai-dlc/steps/b.md"; printf 'small\n' > "$D/core/skills/ai-dlc/steps/c.md"; { g "$D" add -A && g "$D" commit -qm b; } >/dev/null 2>&1 || exit 9; B="$(git -C "$D" rev-parse HEAD)"; { g "$D" rm -q core/skills/ai-dlc/steps/b.md core/skills/ai-dlc/steps/c.md && g "$D" commit -qm t; } >/dev/null 2>&1 || exit 9; T="$(git -C "$D" rev-parse HEAD)"; C="$w/rc"; mkdir -p "$C/.claude/skills/ai-dlc/extensions" "$C/.claude/skills/ai-dlc/overrides" || exit 9; { echo 'see steps/b.md for the gate'; head -c 20000 /dev/zero | tr '\0' p; echo; } > "$C/.claude/skills/ai-dlc/extensions/e.md"; printf 'see .claude/skills/ai-dlc/steps/c.md and core/skills/ai-dlc/steps/b.md\n' > "$C/.claude/skills/ai-dlc/overrides/o.md"; printf 'nothing here\n' > "$C/.claude/skills/ai-dlc/extensions/n.md"; bash "$R/retired-layer-contract.sh" "$D" "$B" "$T" "$C" > "$w/rch" 2>/dev/null; [ "$(grep -c '^RETIRED-LAYER-CONTRACT' "$w/rch")" -eq 3 ] || exit 9; F bash "$R/retired-layer-contract.sh" "$D" "$B" "$T" "$C" > "$w/rcf" 2> "$w/rcfe"; rc=$?; cmp -s "$w/rch" "$w/rcf" || { [ "$rc" -ne 0 ] && grep -q '^retired-layer-contract: .*no verdict' "$w/rcfe"; } || { echo BL360-CONVERTED-HALF-REGRESSED >&2; exit 1; }; D="$w/td"; mkdir -p "$D/core/scripts" || exit 9; g "$D" init -q || exit 9; mb() { h="x=\$ROOT/$1"; printf '%s\n' "$h" > "$2"; head -c $((16384 - ${#h} - 1)) /dev/zero | tr '\0' p >> "$2"; }; mb old-z "$D/core/scripts/z.sh"; printf 'x=$ROOT/old-b\nsmall\n' > "$D/core/scripts/b.sh"; { g "$D" add -A && g "$D" commit -qm b; } >/dev/null 2>&1 || exit 9; B="$(git -C "$D" rev-parse HEAD)"; mb new-z "$D/core/scripts/z.sh"; printf 'x=$ROOT/new-b\nsmall\n' > "$D/core/scripts/b.sh"; { g "$D" add -A && g "$D" commit -qm t; } >/dev/null 2>&1 || exit 9; T="$(git -C "$D" rev-parse HEAD)"; [ "$(git -C "$D" cat-file -s "${B}:core/scripts/z.sh")" -eq 16384 ] || exit 9; C="$w/tc"; mkdir -p "$C/scripts/ai-dlc" || exit 9; git -C "$D" show "${B}:core/scripts/z.sh" > "$C/scripts/ai-dlc/z.sh"; git -C "$D" show "${B}:core/scripts/b.sh" > "$C/scripts/ai-dlc/b.sh"; echo 'uses $ROOT/old-b too' >> "$C/scripts/ai-dlc/z.sh"; printf 'X\tcore/scripts/b.sh\tscripts/ai-dlc/b.sh\tCLASSIFY\nX\tcore/scripts/z.sh\tscripts/ai-dlc/z.sh\tCLASSIFY\n' > "$w/rows"; bash "$R/retired-tokens.sh" --bucket-rows "$w/rows" "$D" "$B" "$T" "$C" > "$w/rth" 2>/dev/null; [ "$(cut -f2,3 "$w/rth" | tr '\t\n' ':;')" = 'core/scripts/b.sh:$ROOT/old-b;core/scripts/z.sh:$ROOT/old-z;' ] || exit 9; F bash "$R/retired-tokens.sh" --bucket-rows "$w/rows" "$D" "$B" "$T" "$C" > "$w/rtf" 2> "$w/rtfe"; rc=$?; cmp -s "$w/rth" "$w/rtf" || { [ "$rc" -ne 0 ] && grep -q '^retired-tokens: .*no verdict' "$w/rtfe"; } || { echo BL360-CONVERTED-HALF-REGRESSED >&2; exit 1; }; for f in hard-blockers relabel-extension-checks warn-shadowed-local-validators retired-layer-contract retired-tokens readopt-override derivation-differential; do [ "$(awk "$A" "$R/$f.sh")" -eq 0 ] || { echo BL360-CONVERTED-HALF-REGRESSED >&2; exit 1; }; done; for f in "$R"/*.sh; do [ "$(awk "$A" "$f")" -eq 0 ] || { echo BL360-BOOTSTRAP-HALF-REMAINS >&2; exit 1; }; done; H='/^[[:blank:]]*#/ {next} { l=$0; gsub(/<<<+/, "", l); if (l ~ /<<-?[\047"]?[A-Za-z_]/) n++ } END {print n+0}'; for f in apply preclassify ledger-reverify self-update-gate self-update-fixtures emit-report lib; do [ -f "$R/$f.sh" ] || exit 9; [ "$(awk "$H" "$R/$f.sh")" -eq 0 ] || { echo BL360-BOOTSTRAP-HALF-REMAINS >&2; exit 1; }; done; [ "$(awk '/^[[:blank:]]*#/ {next} /done <</ {n++} END {print n+0}' "$R/readopt-override.sh")" -eq 0 ] || { echo BL360-BOOTSTRAP-HALF-REMAINS >&2; exit 1; }; grep -q 'relabel-extension-checks\.sh.*|| true' "$R/apply.sh" && { echo BL360-BOOTSTRAP-HALF-REMAINS >&2; exit 1; }; exit 0
 
