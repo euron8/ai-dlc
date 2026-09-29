@@ -97,6 +97,9 @@ core/scripts/derive-fixture-readsets.sh --list "procsub-staged-refusal retired-l
 retired-layer-passage"` on a checkout of `origin/main`.
 
 **NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
+- **OPERATOR PRIORITY, SET 2026-09-29: `BL-365`..`BL-368` come BEFORE `BL-360`.** They shard the
+  adversary, party-mode, remediator, gate-adjudicator and analyst dispatches, which hold most of the
+  graph lead's 144h of solo subagent wait.
 - The unfiled set holds no new core filing. `BL-360`'s remaining half is the strongest
   distribution-internal work: `apply.sh`, `preclassify.sh`, `ledger-reverify.sh`,
   `self-update-gate.sh`, `self-update-fixtures.sh` (`:655`, `:961`) and `emit-report.sh` (`:842`) —

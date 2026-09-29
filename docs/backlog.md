@@ -4778,3 +4778,136 @@ four fixed ones. Scored through `backlog-reverify.sh`'s own `eval` shape, from t
 
 verify: sh R=core/skills/ai-dlc-update/reconcile; [ -f "$R/lib.sh" ] || exit 9; set -- "$R"/*.sh; [ "$#" -ge 20 ] || exit 9; w="$(mktemp -d)" || exit 9; P='/^[[:blank:]]*#/ {next} /git -C "[^"]*"/ && (/ ls-(tree|files)[[:blank:]]/ || (/ diff[[:blank:]]/ && /--name-(only|status)/)) { if (/core[.]quotePath=false/ || / -z[[:blank:]]/) f++; else u++ } END {print u+0, f+0}'; printf '%s\n' 'x="$(git -C "$D" ls-tree -r --name-only "$T")"' 'git -C "$D" -c core.quotePath=false diff --name-only "$B" "$T"' '  # git -C "$D" ls-tree --name-only "$T"' 'echo "git ls-tree exited"' 'git -C "$D" diff -U0 "$B"' > "$w/p.sh" || exit 9; [ "$(awk "$P" "$w/p.sh")" = "1 1" ] || exit 9; o="$(awk "$P" "$@")" || exit 9; u="${o% *}"; f="${o#* }"; [ "$f" -ge 1 ] && [ "$((u + f))" -ge 20 ] || exit 9; [ "$u" -eq 0 ] && exit 0; echo "BL364-UNQUOTED-LISTING-SITES $u of $((u + f))" >&2; exit 1
 
+## BL-365 — the adversary and every party-mode seat review a whole multi-story subject in one agent
+
+**DEFECT.** **Operator priority: HIGHEST (set 2026-09-29), together with `BL-366`..`BL-368`.** Filed
+from a measurement of the graph consumer's subagent transcripts. It discharges no consumer
+candidate. The general form of this gap, that Rule 28 has no split-dispatch rule, is `BL-026`. This
+entry and the three after it are the per-role sites that gap leaves whole.
+
+**The measurement.** The population is `~/.claude/projects/-Users-n8-git-graph/*/subagents/`: 823
+`.meta.json` files and 823 transcripts, all 823 parsed, across 87 lead sessions spanning
+2026-08-30 to 2026-09-29. Wall clock runs from the first to the last timestamp in the transcript.
+Tool time is the join from each `tool_use` to its `tool_result`.
+
+- **Tool execution is 5.4% of subagent wall clock** (12.4h of 230.7h). The adversary ran 32.1h
+  wall against 0.5h of tool time. The rest is model turns, a median of 87 per adversary. A faster
+  script cannot move this. A smaller brief can.
+- **The lead mostly waits on one agent.** Summed subagent time is 230.7h against 180.2h in which
+  at least one subagent was live, so achieved parallelism is 1.28. 144.4h of that is solo time,
+  when exactly one agent is live and the lead is blocked. The adversary accounts for 29.4h of it,
+  more than any other role.
+- **Wall clock grows with the stories named in the brief.** Median adversary wall is 793s with no
+  story path (n=52), 1216s at 1 (n=5), 1873s at 3 (n=12) and 2288s at 5 (n=3). TEA is 2385s at 3
+  and 2704s at 5, and the architect is 792s at 0 and 3526s at 3. Growth is sublinear: each agent
+  pays a fixed cost to load its role file and context, so expect roughly 2x from sharding a pass,
+  not 5x.
+- **Reachable share.** Briefs naming two or more stories hold 12.9h of the adversary's 32.1h, 6.4h
+  of the architect's 18.6h, and 5.3h of TEA's 7.8h. The rest are single-artifact passes, such as a
+  PRD, a spec or a carry-over evaluation, which story sharding does not reach.
+- Existing fan-outs lose little to stragglers: 97 fan-out groups carry 9.1h of max-minus-median
+  excess. The cost is in not fanning out.
+
+**The sites.** Both are in `core/skills/ai-dlc/steps/_gate-procedures.md`.
+`**Dispatch** ONE \`adversary\` per pass` sits at `:301`, and VERIFY dispatches one more at `:449`.
+The party-mode invocation at `:228` has "the step's seats … walk the step's subject", and it writes
+one file per seat. `steps/sprint-review.md:98` has every seat walk "the entire sprint
+implementation". The briefs the graph lead actually wrote say it outright: "SUBJECT (every story,
+every acceptance criterion, every edge case, every dependency)", followed by five story paths.
+
+**Remedy direction.** Dispatch one agent per (seat × story), plus one cross-story agent whose scope
+is limited to dependencies and interactions between stories. Each shard writes its own file under
+`_bmad-output/party-mode/s<N>/`. Check the new basename against `artifact-path-grammar.md` "Areas"
+before choosing it. The lead concatenates the shard files. Make the partition unconstructible
+rather than detected: derive the shard list from the story directory, and have the join assert
+that every story landed in exactly one shard. Adversarial passes stay serial (pass 1, then the
+remediator, then pass 2); sharding shortens each pass without removing the sequence.
+
+The receipt extracts the adversary dispatch paragraph and the party-mode step 1 item. It exits 1
+while either lacks a `shard` clause and names both counts in `BL365-WHOLE-SUBJECT-DISPATCH`. Its
+grammar is self-probed first. A seeded paragraph carrying the clause must be read as carrying it,
+and a seeded paragraph whose clause sits past its boundary must not be. It exits 9 if the probe
+fails or either extraction is empty. Scored through `backlog-reverify.sh`'s `eval` shape on a
+`git archive` of the three subject files: live tree 1, both sites given a shard clause 0, anchor
+line reworded 9.
+
+verify: sh F=core/skills/ai-dlc/steps/_gate-procedures.md; [ -f "$F" ] || exit 9; w="$(mktemp -d)" || exit 9; A='/^[*][*]Dispatch[*][*] ONE .adversary. per pass/ {f=1; print; next} f && (/^$/ || /^[0-9]+[.] /) {exit} f'; Q='/^1[.] .\/bmad-party-mode --mode subagent/ {f=1; print; next} f && (/^$/ || /^[0-9]+[.] /) {exit} f'; printf '%s\n' '**Dispatch** ONE `adversary` per pass, one shard per story.' '' 'x' '1. `/bmad-party-mode --mode subagent` seats, one shard per story' '2. y' > "$w/p" || exit 9; printf '%s\n' '**Dispatch** ONE `adversary` per pass.' '' 'shard' '1. `/bmad-party-mode --mode subagent` seats' '2. shard' > "$w/n" || exit 9; for s in "$A" "$Q"; do o="$(awk "$s" "$w/p")"; grep -qi 'shard' <<<"$o" || exit 9; o="$(awk "$s" "$w/n")"; [ -n "$o" ] || exit 9; grep -qi 'shard' <<<"$o" && exit 9; done; a="$(awk "$A" "$F")"; q="$(awk "$Q" "$F")"; [ -n "$a" ] && [ -n "$q" ] || exit 9; grep -qi 'shard' <<<"$a" && grep -qi 'shard' <<<"$q" && exit 0; echo "BL365-WHOLE-SUBJECT-DISPATCH adversary=$(grep -ci 'shard' <<<"$a") party-mode=$(grep -ci 'shard' <<<"$q")" >&2; exit 1
+
+## BL-366 — the remediator is forbidden to split, and the measurement behind the ban did not test splitting
+
+**DEFECT.** **Operator priority: HIGHEST (set 2026-09-29), together with `BL-365`, `BL-367`,
+`BL-368`.** It is filed from the same measurement as `BL-365`. The remediator carries 28.8h of solo
+lead-blocked time, second only to the adversary, over 104 dispatches. Its median is 115 turns,
+and it spends 1.2h in tools against 33.1h of wall clock.
+
+**The sites.** `core/skills/ai-dlc/steps/_gate-procedures.md:461` says "ONE `remediator` per pass —
+never per finding, and never a second remediator alongside the first; the artifact is one document
+and parallel editors contradict each other". Contract item 1 of `core/team-roles/remediator.md`
+says it again. It also said so in every brief the graph lead wrote: "You are the ONE remediator
+for this pass". Those briefs carry a median of 11 numbered findings.
+
+**The ban's evidence does not cover the ban.** It cites `docs/context-hardening-notes.md` R35, which
+measured something else. The LEAD authored repairs from a compacted context and got 7 of 7 claims
+false, while a fresh subagent was right each time. That result proves repair must be delegated. It
+says nothing about N remediators. The "parallel editors contradict each other" clause in R35 is
+reasoning, and no measurement in this repo backs it. The risk it names is real all the same: two
+writers editing overlapping bytes.
+
+**Remedy direction.** Keep one writer per REGION, not per document, so the contradiction becomes
+unconstructible. Partition the pass's findings by the artifact section each one cites. Each shard
+edits only its own section, taken from a copy. A deterministic splice script, not a model,
+reassembles the document and refuses when two shards touch the same region. Findings citing more
+than one section go to a final serial shard, which runs after the splice. Change the dispatch
+sentence and the role-contract item in the same release, and write the rationale into a new notes
+entry rather than editing R35.
+
+The receipt extracts both the dispatch paragraph and contract item 1. It exits 1 while either lacks
+a `shard` clause, and names both counts in `BL366-SINGLE-REMEDIATOR`. It uses the same
+self-probe and exit-9 guards as `BL-365`. Scored the same way: live 1, both sites given a shard
+clause 0, contract anchor reworded 9.
+
+verify: sh F=core/skills/ai-dlc/steps/_gate-procedures.md; R=core/team-roles/remediator.md; [ -f "$F" ] && [ -f "$R" ] || exit 9; w="$(mktemp -d)" || exit 9; A='/^[*][*]Dispatch[*][*] ONE .remediator. per pass/ {f=1; print; next} f && (/^$/ || /^[0-9]+[.] /) {exit} f'; Q='/^1[.] [*][*]One dispatch per adversarial pass/ {f=1; print; next} f && (/^$/ || /^[0-9]+[.] /) {exit} f'; printf '%s\n' '**Dispatch** ONE `remediator` per pass, one shard per region.' '' 'x' '1. **One dispatch per adversarial pass**, one shard per region' '2. y' > "$w/p" || exit 9; printf '%s\n' '**Dispatch** ONE `remediator` per pass.' '' 'shard' '1. **One dispatch per adversarial pass**' '2. shard' > "$w/n" || exit 9; for s in "$A" "$Q"; do o="$(awk "$s" "$w/p")"; grep -qi 'shard' <<<"$o" || exit 9; o="$(awk "$s" "$w/n")"; [ -n "$o" ] || exit 9; grep -qi 'shard' <<<"$o" && exit 9; done; a="$(awk "$A" "$F")"; q="$(awk "$Q" "$R")"; [ -n "$a" ] && [ -n "$q" ] || exit 9; grep -qi 'shard' <<<"$a" && grep -qi 'shard' <<<"$q" && exit 0; echo "BL366-SINGLE-REMEDIATOR procedure=$(grep -ci 'shard' <<<"$a") role-contract=$(grep -ci 'shard' <<<"$q")" >&2; exit 1
+
+## BL-367 — one gate-adjudicator judges the whole escalated-check worklist
+
+**NOTE.** **Operator priority: HIGHEST (set 2026-09-29), together with `BL-365`, `BL-366`,
+`BL-368`.** It is filed from the same measurement as `BL-365`. The gate-adjudicator carries 8.9h
+solo over 62 dispatches, with a median of 98 turns and 403s.
+
+**The site.** `core/skills/ai-dlc/steps/_gate-procedures.md:173` reads "**Dispatch** ONE
+`gate-adjudicator`". The agent derives its own worklist with
+`scripts/ai-dlc/validate-gate-adjudication.sh --expected <gate_type>` and writes one
+`GATE_ADJUDICATION_VERDICT v1` JSON. The worklist is already derived mechanically, which makes
+this the easiest partition of the four.
+
+**Remedy direction.** The lead runs `--expected` once and splits it into N shards. Each adjudicator
+writes a partial verdict. A merge script produces the single `v1` document and refuses unless the
+union of the partials equals `--expected` exactly, with nothing missing and nothing twice. The
+schema stays unchanged, so Check 26 reads the merged verdict as it reads today's.
+
+The receipt extracts the dispatch paragraph and exits 1 while it lacks a `shard` clause, with a
+self-probe in both directions. Scored the same way: live 1, fixed 0, anchor reworded 9.
+
+verify: sh F=core/skills/ai-dlc/steps/_gate-procedures.md; [ -f "$F" ] || exit 9; w="$(mktemp -d)" || exit 9; A='/^[*][*]Dispatch[*][*] ONE .gate-adjudicator./ {f=1; print; next} f && (/^$/ || /^[0-9]+[.] /) {exit} f'; printf '%s\n' '**Dispatch** ONE `gate-adjudicator` per worklist shard.' '' 'x' > "$w/p" || exit 9; printf '%s\n' '**Dispatch** ONE `gate-adjudicator`.' '' 'shard' > "$w/n" || exit 9; o="$(awk "$A" "$w/p")"; grep -qi 'shard' <<<"$o" || exit 9; o="$(awk "$A" "$w/n")"; [ -n "$o" ] || exit 9; grep -qi 'shard' <<<"$o" && exit 9; a="$(awk "$A" "$F")"; [ -n "$a" ] || exit 9; grep -qi 'shard' <<<"$a" && exit 0; echo "BL367-WHOLE-WORKLIST-ADJUDICATOR" >&2; exit 1
+
+## BL-368 — one analyst covers a step's whole exploration scope
+
+**NOTE.** **Operator priority: HIGHEST (set 2026-09-29), together with `BL-365`..`BL-367`.** Filed
+from the same measurement as `BL-365`. This is the smallest of the four: 3.4h solo over 49
+dispatches, with a median of 284s. It is filed for completeness, and the figure is stated so that
+it is not over-read.
+
+**The site.** In `core/skills/ai-dlc/rule-bodies/rule-24.md`, the **Dispatch contract** paragraph
+has each offloaded step's Section 0 define "the analyst's exploration scope". It dispatches one
+analyst per scope, and it has no split clause.
+
+**Remedy direction.** When a Section 0 scope names more than one independent surface (directories,
+repos, or question groups), dispatch one analyst per surface. Each writes its own part under the
+step's sprint-stamped area, and the lead reads their union. The existing
+`{artifact_path, summary, gaps}` return shape holds per shard.
+
+The receipt extracts the Dispatch contract paragraph and exits 1 while it lacks a `shard` clause,
+with a self-probe in both directions. Scored the same way: live 1, fixed 0, anchor reworded 9.
+
+verify: sh F=core/skills/ai-dlc/rule-bodies/rule-24.md; [ -f "$F" ] || exit 9; w="$(mktemp -d)" || exit 9; A='/^[*][*]Dispatch contract[.][*][*]/ {f=1; print; next} f && (/^$/ || /^[0-9]+[.] /) {exit} f'; printf '%s\n' '**Dispatch contract.** A multi-surface scope is split, one shard per surface.' '' 'x' > "$w/p" || exit 9; printf '%s\n' '**Dispatch contract.** One scope.' '' 'shard' > "$w/n" || exit 9; o="$(awk "$A" "$w/p")"; grep -qi 'shard' <<<"$o" || exit 9; o="$(awk "$A" "$w/n")"; [ -n "$o" ] || exit 9; grep -qi 'shard' <<<"$o" && exit 9; a="$(awk "$A" "$F")"; [ -n "$a" ] || exit 9; grep -qi 'shard' <<<"$a" && exit 0; echo "BL368-WHOLE-SCOPE-ANALYST" >&2; exit 1
+
