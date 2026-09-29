@@ -221,8 +221,7 @@ features. Do NOT create stories here — that happens in
 stories-test-strategy after the full planning cycle.
 
 The requirements step will:
-- Dispatch the `pm` to update the product brief with carry-over scope (one document, Rule 28
-  "Split dispatch" serial exception 4 when `partition-document.sh --map` reports it SERIAL)
+- Dispatch the `pm` to update the product brief with carry-over scope
 - Extract LOCKED_REQUIREMENTS from carry-over items
 - Dispatch the `pm` to update the PRD with carry-over requirements (reads the extracted
   LOCKED_REQUIREMENTS, so it follows them: serial exception 3)

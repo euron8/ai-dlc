@@ -118,9 +118,8 @@ Create a bug-fix story in `_bmad-output/planning-artifacts/s<N>/stories/`:
 
 Dispatch ONE `adversary` (Agent tool, bound to `.claude/team-roles/adversary.md`
 per SKILL.md Rule 19) to run `/bmad-review-adversarial-general` on the fix story, which is
-one document. It stays ONE agent even when `partition-document.sh --map` partitions the story:
-a one-shot stamps no `sections:` lines and `merge-adversarial-shards.sh --document` has nothing
-to join (Rule 28, "Split dispatch": record `shard: none (serial-document)`).
+one document. A bmad one-shot stamps no `sections:` lines, so no section join exists for it
+and it is one agent.
 **ONE-SHOT — the bmad skill is correct here and stays** (no loop, no verdict, no
 counted exit condition; the skill's ≥10 floor buys a cynical sweep and costs
 nothing). The native `adversary` review is for CONVERGENCE cycles only.
