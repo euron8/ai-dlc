@@ -4750,16 +4750,25 @@ missing-object case: with the contract blob removed from the object store, the s
 0, and classify returned 50 rows at rc 0 with a nonexistent `theirs`. Nothing in `layer-drift.sh`,
 `apply.sh` or `emit-report.sh` checks that `theirs` resolves before classifying.
 
-**Remedy direction.** Refuse at startup, exit 2 with a `REFUSED` line, unless `rev-parse -q
---verify` resolves both `"${BASE}^{commit}"` and `"${THEIRS}^{commit}"`. In `have`, treat "the path
-is in the tree but `cat-file -e` fails" as a refusal, not an absence. `layer-drift.sh` is
-BOOTSTRAPPING, so this ships alone.
+**Remedy direction.** Refuse at startup, exit 1 with a `layer-drift: REFUSED` line, unless `rev-parse
+-q --verify` resolves `"${THEIRS}^{commit}"` in all three modes and `"${BASE}^{commit}"` in classify
+and list mode (`--adjudicated-codes` takes no base). Exit 1, not 2: the update `SKILL.md`'s exit
+table reserves 2 for a usage error and for a scan that lost rows, and 1 is refusal to start. In
+`have`, when the memo answers no, ask `ls-tree --full-tree <ref> -- <path>`: rc 0 with no line is
+ABSENT, and rc 0 with a line or any non-zero rc is a read failure that refuses. `rev-parse
+"<ref>:<path>"` cannot be the discriminator, because it answers 1, exactly as for an absent path,
+when the path's SUBTREE or the ROOT tree is the missing object. `layer-drift.sh` is BOOTSTRAPPING,
+so this ships alone.
 
-The receipt drives `--adjudicated-codes` against `HEAD` (must be non-empty, else 9) and against a
-ref it first proves absent (else 9), and exits 0 only when the absent ref is refused. Scored: live
-1; a startup `rev-parse` refusal in a detached worktree copy 0.
+The receipt first requires `--adjudicated-codes` to be non-empty at `HEAD` and at `HEAD~1`, a
+classify run over `HEAD~1..HEAD` to exit 0, and the probe ref to be absent (else 9). It then drives
+an unresolvable THEIRS through codes, classify and list mode, and an unresolvable BASE through
+classify and list, and exits 0 only when all five exit 1 AND print a `layer-drift: REFUSED` line.
+Scored: origin/main before the fix 1; the fix 0; a build refusing every THEIRS that is not `HEAD` 9;
+the startup check in codes mode only 1; the startup check on THEIRS only 1; the startup refusal
+exiting 2 1; a script that refuses everything 9.
 
-verify: sh LD=core/skills/ai-dlc-update/reconcile/layer-drift.sh; [ -f "$LD" ] || exit 9; r=zz-bl370-absent-ref; git rev-parse -q --verify "refs/heads/$r" >/dev/null 2>&1 && exit 9; g="$(bash "$LD" --adjudicated-codes "$PWD" HEAD 2>/dev/null)"; [ -n "$g" ] || exit 9; b="$(bash "$LD" --adjudicated-codes "$PWD" "refs/heads/$r" 2>&1)"; rc=$?; [ "$rc" -ne 0 ] && exit 0; echo "BL370-BAD-THEIRS-READ-AS-EMPTY-CONTRACT rc=$rc bytes=${#b}" >&2; exit 1
+verify: sh LD=core/skills/ai-dlc-update/reconcile/layer-drift.sh; [ -f "$LD" ] || exit 9; r=refs/heads/zz-bl370-absent-ref; git rev-parse -q --verify "$r" >/dev/null 2>&1 && exit 9; h1="$(git rev-parse -q --verify "HEAD~1^{commit}")" || exit 9; c="$(mktemp -d)" || exit 9; [ -n "$(bash "$LD" --adjudicated-codes "$PWD" HEAD 2>/dev/null)" ] || exit 9; [ -n "$(bash "$LD" --adjudicated-codes "$PWD" "$h1" 2>/dev/null)" ] || exit 9; bash "$LD" "$PWD" "$h1" HEAD "$c" >/dev/null 2>&1 || exit 9; f=""; t() { e="$(bash "$LD" "$@" 2>&1 >/dev/null)"; rc=$?; [ "$rc" -eq 1 ] && case "$e" in *"layer-drift: REFUSED"*) return 0 ;; esac; f="$f $1:rc=$rc"; }; t --adjudicated-codes "$PWD" "$r"; t "$PWD" "$h1" "$r" "$c"; t "$PWD" "$r" HEAD "$c"; t --list-adjudications "$PWD" "$h1" "$r" "$c"; t --list-adjudications "$PWD" "$r" HEAD "$c"; [ -z "$f" ] && exit 0; echo "BL370-UNRESOLVED-REF-NOT-REFUSED$f" >&2; exit 1
 
 ## BL-371 — arm G reads a same-second pass carrying a fractional second as EARLIER than its predecessor
 
@@ -4826,3 +4835,34 @@ names cannot close it: appended to the file, it makes the JSON invalid and the r
 Scored: live 1; the names appended as a comment 9; a `.paths` entry named `.artifact-writes.jsonl` 0.
 
 verify: sh P=core/schemas/pipeline-state-paths.json; [ -f "$P" ] || exit 9; n="$(jq -r '[.paths[]?.name] | map(select(. == "spawn-ledger.jsonl")) | length' "$P" 2>/dev/null)" || exit 9; [ "${n:-0}" -gt 0 ] || exit 9; a="$(jq -r '[.paths[]?.name] | map(select(. == ".artifact-writes.jsonl")) | length' "$P" 2>/dev/null)" || exit 9; [ "${a:-0}" -gt 0 ] && exit 0; echo BL373-ARTIFACT-LEDGER-UNDECLARED >&2; exit 1
+
+## BL-374 — the shared reconcile memo caches a missing SUBTREE as an absent path, and serves that answer to later processes
+
+**DEFECT.** From the batch 173 adversary, found while attacking the `BL-370` fix. It discharges no
+consumer candidate.
+
+`memo_has_path` and `memo_show` in `reconcile/lib.sh` cache a git status of 128 only when
+`_ai_dlc_memo_absent` says the path is genuinely absent. That oracle is `rev-parse -q --verify
+<ref>:<path>` exiting 1, and `rev-parse` exits 1 in exactly that way when the path's SUBTREE or the
+ROOT tree is the missing object. So a read failure is written into the memo as an absence. The memo
+is shared across processes through `AI_DLC_RECONCILE_MEMO`, so every later reader in the same render
+gets the cached absence even after the object is back. The adversary measured it: process 1 cached
+128 while the subtree was missing, process 2 after the restore got the cached 128, and a no-memo
+control read 0. `preclassify.sh`'s `blob_hash` (`memo_rev_parse`) uses the same oracle to decide
+`MISSING`, so the same missing subtree buckets a present file as `MISSING` there.
+
+**Remedy direction.** Use the discriminator `layer-drift.sh`'s `have` adopted in `BL-370`: `ls-tree
+--full-tree <ref> -- <path>`, where rc 0 with no line is absent, and rc 0 with a line or any non-zero
+rc is a read failure that must stay uncached. Apply it to `_ai_dlc_memo_absent` and to
+`preclassify.sh`'s `MISSING` decision.
+
+The receipt builds a throwaway repo holding `a/b/f.txt` and `top.txt`. Through `lib.sh` with the
+memo pointed at its own `mktemp` directories, it first requires a present path to read 0 and an
+absent one non-zero in a fresh memo (else 9). It then moves the `a/b` tree object aside, requires
+`ls-tree` on the path to fail (the seed took, else 9), queries `a/b/f.txt` into memo `m`, restores
+the object, requires a fresh memo `n` to read 0 (the object is back, else 9), and queries memo `m`
+again. It exits 0 only when that second query reads 0. Scored on this tree: live 1 (`p1=128
+p2=128`); `_ai_dlc_memo_absent` rewritten to the `ls-tree` rule 0; `_ai_dlc_memo_absent` that never
+answers absent, so 128 is never cached, 0; a `lib.sh` that fails to source 9.
+
+verify: sh L="$PWD/core/skills/ai-dlc-update/reconcile/lib.sh"; [ -f "$L" ] || exit 9; w="$(mktemp -d)" || exit 9; g() { git -C "$w/r" -c user.name=r -c user.email=r@r "$@"; }; git init -q "$w/r" || exit 9; mkdir -p "$w/r/a/b" || exit 9; echo x > "$w/r/a/b/f.txt" || exit 9; echo y > "$w/r/top.txt" || exit 9; g add -A || exit 9; g commit -qm s || exit 9; t="$(g rev-parse HEAD:a/b)" || exit 9; o="$w/r/.git/objects/$(printf %s "$t" | cut -c1-2)/$(printf %s "$t" | cut -c3-)"; [ -f "$o" ] || exit 9; q() { AI_DLC_RECONCILE_MEMO="$1" bash -c '. "$1" >/dev/null 2>&1 || exit 9; memo_has_path "$2" HEAD "$3"; echo "$?"' _ "$L" "$w/r" "$2" 2>/dev/null; }; mkdir "$w/m" "$w/n" "$w/k" || exit 9; [ "$(q "$w/k" top.txt)" = 0 ] || exit 9; [ "$(q "$w/k" nope.txt)" = 0 ] && exit 9; mv "$o" "$w/obj" || exit 9; g ls-tree --full-tree HEAD -- a/b/f.txt >/dev/null 2>&1 && exit 9; p1="$(q "$w/m" a/b/f.txt)"; [ "$p1" = 0 ] && exit 9; mv "$w/obj" "$o" || exit 9; [ "$(q "$w/n" a/b/f.txt)" = 0 ] || exit 9; p2="$(q "$w/m" a/b/f.txt)"; [ "$p2" = 0 ] && exit 0; echo "BL374-MISSING-SUBTREE-CACHED-AS-ABSENT p1=$p1 p2=$p2" >&2; exit 1
