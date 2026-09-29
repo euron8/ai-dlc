@@ -131,7 +131,8 @@ unverified drafts to salvage by content, never as finished work:
   `BL-273`, each of which exited 0 on a non-fix; files `BL-379` and `BL-380`. It lowers the
   pre-push `--min-sh-receipts` floor from 54 to 52 to match.
 - `w1-e`, `w1-f`, `w1-g`, `w1-j`, `w2-o`, `b174-tracer` — partial non-PC fixes, stopped before their
-  own checks finished.
+  own checks finished. Eleven more hands left only uncommitted diffs, kept outside the tree at
+  `~/.claude/projects/-Users-n8-git-ai-dlc/b174-stopped-hands/` (one diff per branch).
 
 **THE DELIVERY GAP IS ONE RELEASE.** The consumer pulled twice during this batch, 0.662.0 ->
 0.663.0 and then 0.663.0 -> 0.664.0 once v0.664.0 merged, so its stamp reads 0.664.0 (`bf998dfb`)
@@ -1160,6 +1161,11 @@ every action below, and where an older paragraph reads narrower, this one wins.
   ownership-bound goes to the operator in the batch's FIRST ping as a choice with a marked
   recommendation — build the smallest measurable fix, close it upstream, or leave it — rather than
   being skipped batch after batch.
+- **Close faster than you open.** In the operator's words: "We should be able to close issues
+  faster than we open them." Every release closes more backlog entries and candidates than it files,
+  and the release commit and first ping state the net (closed minus filed). A finding inside the
+  release's files is fixed in the release, not filed. A release whose net is not negative says why
+  in its first ping.
 - **Fan out to the hand cap.** One hand per candidate or per disjoint file set, all in one spawn
   block; the lead only scopes, collects by content, cuts the release and pings.
 - **The bootstrapping rule in action 2 still holds**; candidates touching the same bootstrapping
