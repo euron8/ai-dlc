@@ -77,6 +77,32 @@
 #
 # NOT A MODE OF THE ADVERSARY MERGE. A separate program on purpose: the adversary-shard fix and
 # this one close different backlog entries, and a shared mode would let either close both.
+#
+# DOCUMENT MODE -- ONE DOCUMENT REPAIRED BY SECTION.
+#   join-remediator-shards.sh --document <path> <repair-dir> --since <ISO> --until <ISO>
+#   (--sprint/--artifact/--pass may replace or accompany <repair-dir>; when both are given the
+#   dir must be the one the flags name. Omitted flags are read off `s<N>/shards/<artifact>-repair-p<M>`.)
+#
+#   The lead has run `partition-document.sh --split <doc> <repair-dir>`, so the repair dir holds
+#   `sections/<ordinal>.md` (the copies each remediator edits) and `sections/.manifest`. Each
+#   remediator edits ONLY its `sections/<i>.md` and writes its part `<repair-dir>/<i>.md`, whose
+#   `edit:` lines cite the section file. What changes, and nothing else does:
+#   - THE FILE SET is the ledger rows under `<repair-dir>/sections/`. Files mode drops every row
+#     under `s<N>/shards/` (a shard's own record); here those section rows ARE the artifact writes,
+#     so the shards exclusion does not apply and `--artifact-path` is refused -- the sections dir
+#     is the path. Distinct-writer, UNWRITTEN, AMBIG, UNCITED, DOUBLE and SPAN are the same code.
+#   - PARTS stay `<repair-dir>/*.md`, non-recursive, so no section copy is ever read as a part.
+#   - `--document` must be the manifest's `document` (both resolved to a physical absolute path;
+#     a relative `--document` is taken under the project root). `<repair-dir>`, when given, must
+#     be the dir the flags name -- it is accepted so a caller can spell what it split into.
+#   - ASSEMBLY RUNS BEFORE THE RECORD IS WRITTEN. After every refusal above has cleared, the join
+#     runs the sibling `partition-document.sh --assemble <repair-dir>`; if that refuses (the
+#     document moved in place, a section is missing or foreign, a section lost its trailing
+#     newline) the join exits 2 with its line and writes NOTHING. A re-run after a record-write
+#     failure is safe: the assembler answers UNCHANGED for a document it already assembled.
+#   Files mode also refuses a repair dir that carries `sections/.manifest`: its section writes are
+#   under shards/ and would all be dropped, so a files-mode join would record a repair whose
+#   document was never assembled.
 
 set -u
 export LC_ALL=C
@@ -85,7 +111,7 @@ refuse_n=0
 refuse() { echo "REFUSED: $*" >&2; refuse_n=$((refuse_n + 1)); }
 die() { echo "REFUSED: $*" >&2; exit 2; }
 
-SPRINT=""; ARTIFACT=""; PASS=""; APATH=""; SINCE=""; UNTIL=""
+SPRINT=""; ARTIFACT=""; PASS=""; APATH=""; SINCE=""; UNTIL=""; DOCUMENT=""; REPDIR=""; DOCMODE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --sprint) SPRINT="${2:-}"; shift 2 ;;
@@ -94,16 +120,32 @@ while [ $# -gt 0 ]; do
     --artifact-path) APATH="${2:-}"; shift 2 ;;
     --since) SINCE="${2:-}"; shift 2 ;;
     --until) UNTIL="${2:-}"; shift 2 ;;
-    -h|--help) sed -n '2,79p' "$0"; exit 0 ;;
-    *) die "unknown argument '$1' (see --help)" ;;
+    --document) DOCUMENT="${2:-}"; DOCMODE=1; shift 2 ;;
+    -h|--help) sed -n '2,105p' "$0"; exit 0 ;;
+    -*) die "unknown argument '$1' (see --help)" ;;
+    *) [ "$DOCMODE" = 1 ] && [ -z "$REPDIR" ] || die "unknown argument '$1' (see --help)"
+       REPDIR="$1"; shift ;;
   esac
 done
 
+# Document mode may name the repair dir instead of the three flags: `.../s<N>/shards/<artifact>-repair-p<M>`.
+if [ "$DOCMODE" = 1 ] && [ -n "$REPDIR" ]; then
+  _rb="$(basename "${REPDIR%/}")"; _rs="$(basename "$(dirname "$(dirname "${REPDIR%/}")")")"
+  case "$_rb" in *-repair-p*) ;; *) die "the repair dir ${REPDIR} is not named <artifact>-repair-p<M>" ;; esac
+  [ -n "$ARTIFACT" ] || ARTIFACT="${_rb%-repair-p*}"
+  [ -n "$PASS" ] || PASS="${_rb##*-repair-p}"
+  [ -n "$SPRINT" ] || SPRINT="$_rs"
+fi
 SPRINT="${SPRINT#s}"
 case "$SPRINT" in ''|*[!0-9]*) die "--sprint must be a sprint number (got '${SPRINT}')" ;; esac
 case "$PASS" in ''|*[!0-9]*) die "--pass must be a pass number (got '${PASS}')" ;; esac
 case "$ARTIFACT" in ''|*/*) die "--artifact must be a bare artifact name (got '${ARTIFACT}')" ;; esac
-[ -n "$APATH" ] || die "--artifact-path is required"
+if [ "$DOCMODE" = 1 ]; then
+  [ -n "$DOCUMENT" ] || die "--document needs a path"
+  [ -z "$APATH" ] || die "--artifact-path does not apply with --document; the file set is the repair dir's sections/"
+else
+  [ -n "$APATH" ] || die "--artifact-path is required"
+fi
 APATH="${APATH%/}"
 ISO='[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z'
 # shellcheck disable=SC2254
@@ -148,6 +190,32 @@ OUT="${PA}/s${SPRINT}/${ARTIFACT}-repair-p${PASS}.md"
 # The shards root in the LEDGER's spelling: the hook writes `<basename of the state dir>/...`
 # (its STATE_DIR_NAME), so this is derived the same way, whether AI_DLC_STATE_DIR is absolute or not.
 SHARD_REL="${_STATE_DIR##*/}/planning-artifacts/s${SPRINT}/shards"
+MANIFEST="${SHARD_DIR}/sections/.manifest"
+phys() { # <path> -> physical absolute path of an existing file or dir, rc 1 if its parent is gone
+  local d b
+  if [ -d "$1" ]; then (cd "$1" 2>/dev/null && pwd -P); return; fi
+  d="$(cd "$(dirname "$1")" 2>/dev/null && pwd -P)" || return 1
+  b="$(basename "$1")"; printf '%s/%s\n' "$d" "$b"
+}
+if [ "$DOCMODE" = 1 ]; then
+  # The section copies are the file set, in the ledger's spelling.
+  APATH="${SHARD_REL}/${ARTIFACT}-repair-p${PASS}/sections"
+  PARTITION="${JR_SCRIPT_DIR}/partition-document.sh"
+  [ -f "$PARTITION" ] || die "partition-document.sh is not beside this script (${PARTITION}); reinstall ai-dlc"
+  [ -f "$MANIFEST" ] || die "no split manifest at ${MANIFEST}; run partition-document.sh --split <doc> ${SHARD_DIR} before dispatching the section remediators"
+  case "$DOCUMENT" in /*) ;; *) DOCUMENT="${JR_ROOT}/${DOCUMENT}" ;; esac
+  [ -f "$DOCUMENT" ] || die "--document ${DOCUMENT} is not a file"
+  DOC_ABS="$(phys "$DOCUMENT")" || die "cannot resolve --document ${DOCUMENT}"
+  MF_DOC="$(awk -F'\t' '$1 == "document" { print $2; exit }' "$MANIFEST")"
+  [ "$DOC_ABS" = "$MF_DOC" ] || die "--document ${DOC_ABS} is not the document ${MANIFEST} was split from (${MF_DOC:-none recorded})"
+  if [ -n "$REPDIR" ]; then
+    _rd="$(phys "$REPDIR")" || die "the repair dir ${REPDIR} does not exist"
+    _sd="$(phys "$SHARD_DIR")" || die "the repair dir ${SHARD_DIR} does not exist"
+    [ "$_rd" = "$_sd" ] || die "the repair dir ${REPDIR} is not ${SHARD_DIR}, the one --sprint/--artifact/--pass name"
+  fi
+else
+  [ -e "$MANIFEST" ] && die "${SHARD_DIR} was split by section (${MANIFEST}); join it with --document, or its document is never assembled"
+fi
 
 # Arm H's own predicate, from the sibling. Same dir in both layouts (core/scripts/ and
 # scripts/ai-dlc/ each hold both files), so no walk from one core file to another.
@@ -169,12 +237,12 @@ PARTS="$(printf '%s' "$PARTS" | sort)"
 
 # --- the ledger: per-file distinct writers inside the window, under the artifact path.
 [ -f "$LEDGER" ] || die "no write ledger at ${LEDGER}; disjointness cannot be proven"
-ROWS="$(jq -rn --arg since "$SINCE" --arg until "$UNTIL" --arg ap "$APATH" --arg sh "$SHARD_REL" '
+ROWS="$(jq -rn --arg since "$SINCE" --arg until "$UNTIL" --arg ap "$APATH" --arg sh "$SHARD_REL" --arg doc "$DOCMODE" '
   [inputs | select(type == "object") | select(.kind == "artifact-write")
    | select((.agent_id // "") != "") | select((.ts | type) == "string")
    | select(.ts >= $since and .ts <= $until)
    | select(.path == $ap or (.path | startswith($ap + "/")))
-   | select((.path | startswith($sh + "/")) | not)
+   | select($doc == "1" or ((.path | startswith($sh + "/")) | not))
    | [.path, .agent_id]] | unique | .[] | @tsv' "$LEDGER" 2>/dev/null)" \
   || die "the write ledger ${LEDGER} does not parse as JSON lines"
 [ -n "$ROWS" ] || die "the ledger records no dispatched write under ${APATH} in [${SINCE}, ${UNTIL}]; disjointness is unproven"
@@ -278,13 +346,28 @@ fi
 
 [ "$refuse_n" -eq 0 ] || exit 2
 
+# --- document mode: assemble BEFORE the record. A refusal here writes nothing -- the assembler
+# refuses without touching the document, and no record is written after it.
+ASM_LINE=""
+if [ "$DOCMODE" = 1 ]; then
+  ASM_LINE="$(bash "$PARTITION" --assemble "$SHARD_DIR" 2>&1)" || {
+    printf '%s\n' "$ASM_LINE" >&2
+    die "the sections of ${DOC_ABS} did not assemble; no repair record was written"
+  }
+fi
+
 # --- write the single record every reader globs for.
 TMP="${OUT}.join.$$"
 {
   echo "# ${ARTIFACT} repair — sprint ${SPRINT}, pass ${PASS} (joined from $(printf '%s\n' "$PARTS" | grep -c .) shard records)"
   echo ""
   echo "Joined by join-remediator-shards.sh from ${SHARD_DIR#"${JR_ROOT}"/}; window ${SINCE} .. ${UNTIL};"
-  echo "every file under ${APATH} outside ${SHARD_REL}/ was written by exactly one agent in that window."
+  if [ "$DOCMODE" = 1 ]; then
+    echo "every section under ${APATH} was written by exactly one agent in that window;"
+    echo "partition-document.sh: ${ASM_LINE}"
+  else
+    echo "every file under ${APATH} outside ${SHARD_REL}/ was written by exactly one agent in that window."
+  fi
   echo ""
   while IFS= read -r p; do
     [ -n "$p" ] || continue

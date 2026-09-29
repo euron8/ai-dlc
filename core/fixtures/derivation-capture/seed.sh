@@ -149,6 +149,50 @@ $ grep -c neverpresent VERSION
 ```
 OPENER
 
+# A fifth artifact and the SECTION SPLIT of it -- the BL-372 section-sharded repair. The split is
+# made by the REAL partition-document.sh when either layout carries it, so the manifest is the
+# producer's bytes; a tree without it (a consumer that has not pulled it) gets the manifest the
+# splitter's own header specifies, written here, and the run says which. The hook is the subject,
+# not the splitter.
+SPLIT_DOC="$CONSUMER/_bmad-output/planning-artifacts/s1/prd.md"
+cat > "$SPLIT_DOC" <<'SPLITDOC'
+# PRD
+
+## Goals
+The first goal of the product, stated in one line.
+The second goal of the product, stated in one line.
+The third goal of the product, stated in one line.
+
+## Scope
+The first scope item of the product, in one line.
+The second scope item of the product, in one line.
+The third scope item of the product, in one line.
+The fourth scope item of the product, in one line.
+
+## Risks
+The first risk of the product, stated in one line.
+The second risk of the product, stated in one line.
+SPLITDOC
+REPDIR="$CONSUMER/_bmad-output/planning-artifacts/s1/shards/prd-repair-p1"
+SRC_PART=""
+for _c in "$ROOT/core/scripts/partition-document.sh" "$ROOT/scripts/ai-dlc/partition-document.sh"; do
+  [ -f "$_c" ] && { SRC_PART="$_c"; break; }
+done
+if [ -n "$SRC_PART" ]; then
+  bash "$SRC_PART" --split "$SPLIT_DOC" "$REPDIR" >/dev/null 2>&1 \
+    || { echo "FIXTURE ERROR: partition-document.sh --split refused the seeded document" >&2; exit 2; }
+  SPLIT_BY="partition-document.sh"
+else
+  mkdir -p "$REPDIR/sections"
+  sed -n '1,7p' "$SPLIT_DOC" > "$REPDIR/sections/1.md"
+  sed -n '8,13p' "$SPLIT_DOC" > "$REPDIR/sections/2.md"
+  sed -n '14,16p' "$SPLIT_DOC" > "$REPDIR/sections/3.md"
+  { printf 'document\t%s/%s\n' "$(cd "$(dirname "$SPLIT_DOC")" && pwd -P)" "$(basename "$SPLIT_DOC")"
+    printf 'sha256\t%s\n' "$(shasum -a 256 "$SPLIT_DOC" | cut -d' ' -f1)"
+    printf 'part\t1\t1\t7\t## Goals\npart\t2\t8\t13\t## Scope\npart\t3\t14\t16\t## Risks\n'; } > "$REPDIR/sections/.manifest"
+  SPLIT_BY="the seed (no partition-document.sh in either layout)"
+fi
+
 cat > "$WORK/env.sh" <<EOF
 WORK="$WORK"
 CONSUMER="$CONSUMER"
@@ -158,6 +202,9 @@ ART="$ART"
 PROSE_ART="$CONSUMER/_bmad-output/planning-artifacts/s1/prose-only.md"
 IND_ART="$IND_ART"
 OPN_ART="$OPN_ART"
+SPLIT_DOC="$SPLIT_DOC"
+REPDIR="$REPDIR"
+SPLIT_BY="$SPLIT_BY"
 EOF
 
 printf '%s\n' "$WORK"
