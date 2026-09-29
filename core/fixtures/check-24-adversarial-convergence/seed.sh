@@ -1040,3 +1040,77 @@ k_world "$TARGET/shard-legacy"
 k_pass "$TARGET/shard-legacy/stories-adversarial-p1.md" 1 5 EXIT_CONDITION_NOT_MET 2026-09-29T09:00:00Z ""
 k_pass "$TARGET/shard-legacy/stories-adversarial-p2.md" 2 0 EXIT_CONDITION_MET     2026-09-29T12:00:00Z ""
 repair "$TARGET/shard-legacy/stories-repair-p1.md"
+
+# --- ARM K2: the SECTIONS arm -- one shardable document, reviewed whole ---------------------
+# Each case is its OWN git repository stamped at K2's release, for arm K's reason. The pass is
+# a single MET pass at zero counts, so no other arm has anything to say and every cell below is
+# K2's alone. `artifact:` names a FILE beside the pass, which arm K's directory resolver cannot
+# see, so arm K stays silent on every one of them. The shardable document has four balanced
+# `## ` sections; the SERIAL one has a single `## ` heading, which partition-document.sh maps
+# to exit 3. `artifact_sha` is the document's own sha256 except where the case moves it.
+k2_world() {  # $1 case dir  $2 serial|shardable -> a repo stamped at 0.665.0, 2026-09-29T10:00:00Z
+  mkdir -p "$1/.claude"
+  printf 'version: 0.665.0\n' > "$1/.claude/.ai-dlc-version"
+  if [ "$2" = serial ]; then
+    printf '# PRD\n\n## Only\n\none\ntwo\nthree\n' > "$1/prd.md"
+  else
+    printf '# PRD\n\n## One\n\nalpha alpha\n\n## Two\n\nbravo bravo\n\n## Three\n\ncharlie charlie\n\n## Four\n\ndelta delta\n' > "$1/prd.md"
+  fi
+  ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+    cd "$1" || exit 1
+    git init -q . >/dev/null
+    git add .claude/.ai-dlc-version
+    GIT_COMMITTER_DATE=2026-09-29T10:00:00Z GIT_AUTHOR_DATE=2026-09-29T10:00:00Z \
+      git -c user.email=fixture@example.invalid -c user.name=fixture -c commit.gpgsign=false \
+          -c core.hooksPath=/dev/null commit -q -m stamp >/dev/null
+  ) || { echo "seed.sh: k2_world could not build the stamped repo at $1" >&2; exit 1; }
+}
+k2_sha() {
+  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1
+  else sha256sum "$1" | cut -d' ' -f1; fi
+}
+k2_pass() {  # $1 case dir  $2 invoked_at  $3 artifact_sha  $4 shard ids ("" = whole-document)
+  {
+    printf '# prd -- adversarial pass 1\n\n'
+    printf '<!-- SKILL_INVOCATION_PROVENANCE v1\n'
+    printf 'skill: ai-dlc-adversary-review\n'
+    printf 'invoked_at: %s\n' "$2"
+    printf 'tool_use_id: toolu_fixture_k2\n'
+    [ -n "$4" ] && printf 'shard_tool_use_ids:%s\n' "$4"
+    printf 'mode: subagent\n'
+    printf 'lead_role: pm\n'
+    printf 'artifact: prd.md\n'
+    printf 'artifact_sha: %s\n' "$3"
+    printf 'findings_critical: 0\n'
+    printf 'findings_critical_prior_scope: 0\n'
+    printf 'findings_major: 0\n'
+    printf 'findings_major_underived: 0\n'
+    printf 'findings_minor: 0\n'
+    printf 'verdict: EXIT_CONDITION_MET\n'
+    printf 'SKILL_INVOCATION_PROVENANCE_END -->\n'
+  } > "$1/prd-adversarial-p1.md"
+}
+K2_IDS=' 1=toolu_fixture_d1 2=toolu_fixture_d2 cross=toolu_fixture_dx'
+
+# k2-shardable-post -- THE OFFENDER: a whole-document pass over a shardable document, the
+# series opened after the stamp, disk bytes == notarized bytes. Must FAIL (K2).
+k2_world "$TARGET/k2-shardable-post" shardable
+k2_pass "$TARGET/k2-shardable-post" 2026-09-29T11:00:00Z "$(k2_sha "$TARGET/k2-shardable-post/prd.md")" ""
+
+# k2-shardable-pre -- the same bytes, the series opened BEFORE the stamp. PENDING (Legacy).
+k2_world "$TARGET/k2-shardable-pre" shardable
+k2_pass "$TARGET/k2-shardable-pre" 2026-09-29T09:00:00Z "$(k2_sha "$TARGET/k2-shardable-pre/prd.md")" ""
+
+# k2-serial -- one `##` section, so the map says SERIAL: Rule 28's exception 4. Passes, silent.
+k2_world "$TARGET/k2-serial" serial
+k2_pass "$TARGET/k2-serial" 2026-09-29T11:00:00Z "$(k2_sha "$TARGET/k2-serial/prd.md")" ""
+
+# k2-sharded -- the offender with the merge's `shard_tool_use_ids:` line. Passes, silent.
+k2_world "$TARGET/k2-sharded" shardable
+k2_pass "$TARGET/k2-sharded" 2026-09-29T11:00:00Z "$(k2_sha "$TARGET/k2-sharded/prd.md")" "$K2_IDS"
+
+# k2-sha-moved -- the offender after a repair wrote the document: the pass notarized bytes
+# that are no longer on disk. PENDING, never judged on unreviewed bytes.
+k2_world "$TARGET/k2-sha-moved" shardable
+k2_pass "$TARGET/k2-sha-moved" 2026-09-29T11:00:00Z "$(k2_sha "$TARGET/k2-sha-moved/prd.md")" ""
+printf '\n## Five\n\necho echo\n' >> "$TARGET/k2-sha-moved/prd.md"
