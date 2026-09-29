@@ -48,7 +48,7 @@ set -u
 # set differently. v0.289.0 fixed three fixtures in exactly that state.
 #
 # NOTE what this does and does not establish: with the environment cleared, a probe that runs
-# the arm with no ceiling set proves the arm's compiled-in default is 100. Without the clearing
+# the arm with no ceiling set proves the arm's compiled-in default is 104. Without the clearing
 # it would only have proved that the variable was unset on this machine, which is a different
 # claim and one that passes against an arm whose default is anything at all.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
@@ -190,26 +190,26 @@ else
   exit 1
 fi
 
-# ===== THE BOUNDARY. No override, so these are the only probes that can see a typo in 100. =
+# ===== THE BOUNDARY. No override, so these are the only probes that can see a typo in 104. =
 
-# b01 -- PASSING side: exactly 100. "exceeds 100" means 100 is legal, and an off-by-one written
+# b01 -- PASSING side: exactly 104. "exceeds 104" means 104 is legal, and an off-by-one written
 # as `-ge` is green on b02 alone. This is the probe that catches it, and the amendment named
 # it the likeliest real defect.
 #
 # THESE TWO NUMBERS TRACK THE ARM'S COMPILED-IN DEFAULT AND ARE THE ONLY THING THAT CAN SEE IT
-# CHANGE. They were 75/76 until the operator raised the ceiling to 100; a raise that moved the
+# CHANGE. They were 75/76 until the operator raised the ceiling to 100, then 100/101 until the raise to 104; a raise that moved the
 # arm and not this pair would leave the fixture asserting a bound nothing enforces, which is
 # green and says nothing.
-seed "$TMP/b01" 100
-count_check "b01 exactly AT the ceiling (100) passes" "$TMP/b01" "" 100
+seed "$TMP/b01" 104
+count_check "b01 exactly AT the ceiling (104) passes" "$TMP/b01" "" 104
 
-# b02 -- FAILING side: 101.
-seed "$TMP/b02" 101
-kill_check "b02 one over the ceiling (101) fails" "$TMP/b02" "" 1 \
-  "carries 101 entries against a ceiling of 100"
+# b02 -- FAILING side: 105.
+seed "$TMP/b02" 105
+kill_check "b02 one over the ceiling (105) fails" "$TMP/b02" "" 1 \
+  "carries 105 entries against a ceiling of 104"
 
 # b03 -- the override must actually override, or every pinned probe below is silently testing
-# the shipped 100 against a tiny seed and passing vacuously.
+# the shipped 104 against a tiny seed and passing vacuously.
 seed "$TMP/b03"
 kill_check "b03 the ceiling override is live" "$TMP/b03" \
   "AI_DLC_BACKLOG_MAX_ENTRIES=$(( BL_K - 1 ))" 1 \

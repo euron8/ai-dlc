@@ -69,6 +69,9 @@
 # and the header already said so; it was nonetheless picked by a session. Recording the raise here
 # because the justification that shipped with 75 no longer describes the number in force.
 #
+# THE OPERATOR THEN RAISED IT TO 104, ASKED THIS TIME, to file four per-role entries (BL-365..
+# BL-368) against a ledger already at 100 -- choosing one entry per role over one census entry.
+#
 # THAT ORIGINAL JUSTIFICATION MEASURED THE WRONG THING, and this is the reusable part. It read:
 # across every commit touching this file the count had never exceeded 68, so a ceiling of 75 would
 # have fired zero times. True, and it set the bound seven entries above the historical high-water
@@ -115,7 +118,7 @@ DEFAULTED=0
 [ -n "$LEDGER" ] || { LEDGER="$ROOT/docs/backlog.md"; DEFAULTED=1; }
 [ -f "$LEDGER" ] || { echo "validate-backlog-size: FAIL -- $LEDGER is not a file" >&2; exit 2; }
 
-MAX="${AI_DLC_BACKLOG_MAX_ENTRIES:-100}"
+MAX="${AI_DLC_BACKLOG_MAX_ENTRIES:-104}"
 case "$MAX" in
   ''|*[!0-9]*) echo "validate-backlog-size: FAIL -- AI_DLC_BACKLOG_MAX_ENTRIES is not a non-negative integer: '$MAX'" >&2; exit 2 ;;
 esac
