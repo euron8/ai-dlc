@@ -120,17 +120,23 @@ trace** on the five changed fixtures; only their rows moved, and the map ships i
   because `layer-drift.sh` is bootstrapping. `BL-360`'s bootstrapping half follows, each file alone;
   `BL-364` rides with its joins. `BL-371` (arm G, same-second fraction) is small and can ride any
   release touching the convergence validator.
-- Filings owed when a close frees room: batch 169's, 170's and 171's lists unchanged; then this
-  batch's NOTEs — a merged pass's multi-value `artifact_sha` fails `validate-provenance-block.sh`
-  (not run on pass files today); `.verdict-writes.jsonl` is undeclared like `BL-373`'s ledger; the
-  Check 24 README's case list omits the three arm K cases.
+- Filings owed when a close frees room: the lists in the batch 169, 170 and 171 records below,
+  unchanged; then this batch's NOTEs — a merged pass's multi-value `artifact_sha` fails
+  `validate-provenance-block.sh` (not run on pass files today); `.verdict-writes.jsonl` is
+  undeclared like `BL-373`'s ledger; the Check 24 README's case list omits the three arm K cases;
+  and `validate-backlog-receipts.sh`'s compiled-in floors (`DEFAULT_MIN_SH=76`,
+  `DEFAULT_MIN_ENTRIES=88`) fail R5 on a bare run, including on `origin/main`, while the gate passes
+  its own `--min-sh-receipts 54 --min-entries 72`.
 - `BL-230` needs a mechanism for E1, E2 and E9.
 
-**THE DELIVERY GAP IS FOUR RELEASES.** The consumer is at 0.659.0 against `VERSION` 0.663.0; mid-batch
-it opened `ai-dlc-update/self-update-0.661.0-…` and returned to its carry-over branch with the stamp
-unmoved. v0.663.0 changes two HOOKS every consumer dispatch runs through (record-then-allow, measured
-identical on 817 real prompts). PENDING is 1 (`BL-369`'s id, first named at 0.662.0). The banked
-ruling stands: report the gap and write no runbook.
+**THE DELIVERY GAP IS ONE RELEASE.** The consumer pulled 0.659.0 -> 0.661.0 -> 0.662.0 on its
+carry-over branch while batch 172 ran (#1125 self-update, #1126 and #1127 reconciles, all dated
+2026-09-29), so its stamp reads 0.662.0 (`79546d70`) against `VERSION` 0.663.0. Measured by the
+fresh-resume check, which is the only reason this paragraph is right: the first draft said four
+releases. v0.663.0 changes two HOOKS every consumer dispatch runs through (record-then-allow,
+measured identical on 817 real prompts). PENDING is 1: `BL-369`'s id, first named at 0.662.0 and
+still live in the consumer's ledger after its pull. The banked ruling stands: report the gap and
+write no runbook.
 
 Batch 171's next-work list and delivery gap are spent: batch 172's block above replaces both, and
 carries the operator priority forward as `BL-372`.
