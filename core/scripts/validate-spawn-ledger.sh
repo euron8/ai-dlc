@@ -916,6 +916,7 @@ NL='
 # shard_scan <ledger> <sprint> <" role role ... "> <pass-dir> -> machine lines on stdout:
 #   U <name> <role>   S1 offender         P <name>   PENDING (pre-field row)
 #   S <name> <value>  shard recorded      N <pass> <id>   S2 offender     J <id>   joined
+#   E <pass>          a pass file listed and not openable (awk getline -1), never read as clean
 # ONE jq and ONE awk, whatever the row count. rc 2 when the ledger could not be read.
 shard_scan() {
   ss_rows="$(jq -rs --argjson s "$2" '
@@ -959,7 +960,7 @@ shard_scan() {
             if (v in id) print "J\t" v; else print "N\t" f "\t" v
           }
         }
-        if (r < 0) print "N\t" f "\t<unreadable pass file>"
+        if (r < 0) print "E\t" f
         close(f)
       }
     }'
@@ -1458,6 +1459,7 @@ else
       N) SH_ORPHAN=$((SH_ORPHAN + 1))
          echo "WARN: $(basename "$sh_a") credits shard ${sh_b} in shard_tool_use_ids:, and no dispatch-guard"
          echo "      row in ${LEDGER} carries that tool_use_id. The merge counted a shard no dispatch recorded." ;;
+      E) echo "WARN: $(basename "$sh_a") could not be read, so its shard_tool_use_ids: were not joined." ;;
     esac
   done <<EOF
 $SH_OUT
