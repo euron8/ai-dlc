@@ -176,7 +176,12 @@ for _rt_ref in "$BASE" "$THEIRS"; do
 done
 rt_blob() { # rt_blob <ref> <path> <out> -- 0 staged into <out>; 1 absent at <ref>; refuses otherwise
   local rc=0 l present=""
-  git -C "$DIST" ls-tree --name-only "$1" -- "$2" > "$3.ls" 2>/dev/null || rc=$?
+  # `core.quotePath=false` BECAUSE THE COMPARISON BELOW IS AGAINST THE RAW PATH. Under the default,
+  # ls-tree C-quotes a path carrying a non-ASCII byte (`"caf\303\251.sh"`), the exact-line test
+  # never matches, and the path reads as absent: its row was lost at rc 0. An ASCII path lists
+  # identically either way. This is hardening only -- the CLASSIFY rows this reads come from a
+  # producer that quotes such a path upstream, so that row is lost before it gets here.
+  git -C "$DIST" -c core.quotePath=false ls-tree --name-only "$1" -- "$2" > "$3.ls" 2>/dev/null || rc=$?
   [ "$rc" -eq 0 ] || rt_refuse "listing $2 at $1" "$rc"
   # ls-tree matches a pathspec by prefix, so presence is an EXACT line, never a non-empty file.
   while IFS= read -r l; do
