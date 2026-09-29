@@ -223,14 +223,12 @@ digits() { case "$1" in ""|*[!0-9]*) ;; *) printf '%s' "$1" ;; esac; }
 # Held in variables: bash 3.2 reads an unquoted `[[ =~ $var ]]` regex as ERE, fork-free.
 # invoked_at: to the second, optionally with a fraction -- the reference consumer stamps both.
 RE_ISO='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,9})?Z$'
-# The ordering KEY for an invoked_at RE_ISO accepted. The raw strings do not order across the two
-# forms: `.` sorts before `Z`, so `...:19.497Z` compares EARLIER than `...:19Z`. The key is the
-# seconds prefix plus the fraction right-padded to nine digits, so both forms order by time.
-at_key() { # sets AT_KEY; fork-free, called once per shard
-  local f="${1:19}"
-  f="${f#.}"; f="${f%Z}"; f="${f}000000000"
-  AT_KEY="${1:0:19}.${f:0:9}"
-}
+# The ordering KEY for an invoked_at RE_ISO accepted (sets AT_KEY). It is OWNED by the convergence
+# validator, whose arm G orders passes by the same key, and taken from it here as its one-line
+# definition -- never restated, so the merge's earliest-shard pick and arm G cannot disagree.
+n_fn="$(grep -c '^at_key() {' "$VALIDATOR")" || n_fn=0
+[ "$n_fn" = "1" ] || refuse "found ${n_fn} 'at_key() {' definitions in $VALIDATOR (want exactly 1)"
+eval "$(grep -m1 '^at_key() {' "$VALIDATOR")"
 RE_SHA='^[a-f0-9]{64}$'
 RE_CITED='^[0-9]+(,[0-9]+)*$'
 

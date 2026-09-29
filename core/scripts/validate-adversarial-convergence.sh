@@ -429,10 +429,20 @@ if [ -n "$DUPES" ]; then
       Any chaining is a guess. Give each pass a distinct number."
 fi
 
+# THE ORDERING KEY FOR `invoked_at`, owned here and EVAL'D by merge-adversarial-shards.sh
+# (count-guarded, the way join-remediator-shards.sh takes repair_field), so arm G and the
+# merge's earliest-shard pick order by one definition. The raw strings do not order across the
+# two stamped forms: `.` sorts before `Z`, so `...:19.497Z` compares EARLIER than `...:19Z`.
+# The key is the seconds prefix plus the fraction right-padded to nine digits, so both forms
+# order by time and `19Z` equals `19.000Z`. Fork-free; sets AT_KEY. Keep it ONE line beginning
+# `at_key() {` -- that line is what the merge extracts.
+at_key() { local f="${1:19}"; f="${f#.}"; f="${f%Z}"; f="${f}000000000"; AT_KEY="${1:0:19}.${f:0:9}"; }
+
 PREV_CRIT=""
 PREV_FILE=""
 PREV_MAJOR=""
 PREV_AT=""
+PREV_AT_KEY=""
 LAST_VERDICT=""
 LAST_FILE=""
 LAST_CRIT=""
@@ -591,8 +601,11 @@ for f in "${SORTED[@]}"; do
   #   the record the gate reads, and neither should pass.
   # Removal condition: retire when the restart path has run clean for two sprints AND
   #   the archive step is enforced somewhere earlier than here.
+  # Compared on at_key, never on the raw string: a pass written 497 ms after its predecessor
+  # stamps `19.497Z` against `19Z`, which the raw comparison read as a chronology break.
   if [ -n "$invoked_at" ] && [ -n "$PREV_AT" ] && [ -n "$PREV_FILE" ]; then
-    if [[ "$invoked_at" < "$PREV_AT" ]]; then
+    at_key "$invoked_at"
+    if [[ "$AT_KEY" < "$PREV_AT_KEY" ]]; then
       err "G -- CHRONOLOGY" "$f claims to follow $PREV_FILE, but it was written FIRST
       ($invoked_at, against $PREV_AT). A pass reviews the repair of the pass before it;
       one that predates its own predecessor reviewed something else.
@@ -750,7 +763,7 @@ for f in "${SORTED[@]}"; do
 
   if [ -n "$crit" ]; then PREV_CRIT="$crit"; PREV_FILE="$f"; fi
   if [ -n "$major" ]; then PREV_MAJOR="$major"; fi
-  [ -n "$invoked_at" ] && PREV_AT="$invoked_at"
+  if [ -n "$invoked_at" ]; then PREV_AT="$invoked_at"; at_key "$invoked_at"; PREV_AT_KEY="$AT_KEY"; fi
   LAST_VERDICT="$verdict"
   LAST_FILE="$f"
   LAST_CRIT="$crit"

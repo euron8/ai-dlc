@@ -498,6 +498,23 @@ pass "$TARGET/restart-cycle/s1-adversarial-p4.md" 4 1 2 1 EXIT_CONDITION_NOT_MET
 pass "$TARGET/restart-cycle/s1-adversarial-p5.md" 5 0 4 1 EXIT_CONDITION_NOT_MET 0 d55 "" 2026-07-12T10:00:00Z
 pass "$TARGET/restart-cycle/s1-adversarial-p6.md" 6 2 4 1 DIVERGENT_HARD_BLOCK   2 d66 "" 2026-07-12T11:00:00Z
 
+# --- chrono-fraction-*: arm G across the two stamped forms (BL-371) ---------------
+# The reference consumer stamps `invoked_at` to the second AND, on 4 of 317 real passes, with a
+# fractional second. Three two-pass series, each pair inside ONE second, so only the ordering KEY
+# separates them -- a different-second pair orders the same under every comparison:
+#   forward   19Z      then 19.497Z   497 ms later         G must be SILENT (raw string fires)
+#   backward  19.497Z  then 19Z       497 ms EARLIER       G must FIRE      (raw string is silent)
+#   equal     19.000Z  then 19Z       the SAME instant     G must be SILENT (stripped-Z fires)
+for _c in forward:2026-09-27T15:08:19Z:2026-09-27T15:08:19.497Z \
+          backward:2026-09-27T15:08:19.497Z:2026-09-27T15:08:19Z \
+          equal:2026-09-27T15:08:19.000Z:2026-09-27T15:08:19Z; do
+  _n="${_c%%:*}"; _r="${_c#*:}"; _a1="${_r%%Z:*}Z"; _a2="${_r#*Z:}"
+  mkdir -p "$TARGET/chrono-fraction-$_n"
+  pass "$TARGET/chrono-fraction-$_n/s1-adversarial-p1.md" 1 1 0 0 EXIT_CONDITION_NOT_MET "" NOSHA "" "$_a1"
+  pass "$TARGET/chrono-fraction-$_n/s1-adversarial-p2.md" 2 0 0 0 EXIT_CONDITION_MET     "" NOSHA "" "$_a2"
+  repair "$TARGET/chrono-fraction-$_n/s1-brief-repair-p1.md"
+done
+
 # --- counts-omitted: arm A, and arm E's free bypass -----------------------------
 # A pass that declares a verdict but no derivable MAJOR count. severity_count returns
 # empty, the empty count RESETS the stall run, and arm E goes DARK for the whole series --

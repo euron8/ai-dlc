@@ -202,6 +202,74 @@ expect_says restart-cycle s1-adversarial-p "G-chronology" \
   "G -- CHRONOLOGY" "DEAD CYCLE'S TAIL" "archive the abandoned series" \
   "A MIS-STAMPED" "Do not back-fit it to make"
 
+# --- G across the two stamped forms (BL-371): the ordering KEY, not the raw string ---------
+# Each pair sits inside ONE second, so a different-second comparison cannot separate them.
+expect chrono-fraction-forward 0 "19Z then 19.497Z: 497 ms LATER, so the chain is in order" s1-adversarial-p
+expect chrono-fraction-equal   0 "19.000Z then 19Z: the SAME instant, so nothing ran first" s1-adversarial-p
+expect chrono-fraction-backward 1 "19.497Z then 19Z: the second pass was written 497 ms FIRST -- FAIL (G)" s1-adversarial-p
+expect_says chrono-fraction-backward s1-adversarial-p "G-fraction-backward" "G -- CHRONOLOGY"
+expect_silent chrono-fraction-forward "G -- CHRONOLOGY" chrono-fraction-backward \
+  "a raw string comparison reads the fractional stamp as EARLIER, because '.' sorts before 'Z'"
+expect_silent chrono-fraction-equal "G -- CHRONOLOGY" chrono-fraction-backward \
+  "a comparison with the Z stripped reads '19' as earlier than '19.000', a prefix, not a time"
+
+# --- MUTATION: arm G's comparison, one wrong key per cell ---------------------------------
+# Three cells, four validators. Each wrong comparison is one an author would write, and each
+# moves a DIFFERENT cell, so the three cells together are what pin the key:
+#
+#                         forward  backward  equal
+#   shipped (at_key)      -        G         -
+#   raw string            G        -         -       <- the BL-371 defect
+#   Z stripped            -        G         G
+#   arm G removed         -        -         -
+G_ANCHOR='    if [[ "$AT_KEY" < "$PREV_AT_KEY" ]]; then'
+G_CASES="chrono-fraction-forward chrono-fraction-backward chrono-fraction-equal"
+g_fired() {  # $1 script  $2 case -> G or -
+  case "$(bash "$1" --series "$ROOT/$2/s1-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)" in
+    *"G -- CHRONOLOGY"*) printf 'G\n' ;;
+    *) printf -- '-\n' ;;
+  esac
+}
+g_score() {  # $1 label  $2 script  $3 expected row
+  local got="" c
+  ASSERTIONS=$((ASSERTIONS + 1))
+  for c in $G_CASES; do got="$got $(g_fired "$2" "$c")"; done
+  if [ "$(echo $got)" = "$3" ]; then
+    printf '  ok    %-28s [%s]\n' "$1" "$(echo $got)"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s got [%s] want [%s]\n' "$1" "$(echo $got)" "$3"
+  fi
+}
+ASSERTIONS=$((ASSERTIONS + 1))
+g_n="$(grep -cF -- "$G_ANCHOR" "$VALIDATOR")" || g_n=0
+g_ctl="$(grep -cF -- "$G_ANCHOR-no-such-line" "$VALIDATOR")" || g_ctl=0
+if [ "$g_n" -ne 1 ] || [ "$g_ctl" -ne 0 ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-28s the anchor matches %s line(s) (want 1; impossible-anchor control %s, want 0) -- the mutants below prove nothing\n' \
+    "MUTATION g-anchor" "$g_n" "$g_ctl"
+else
+  printf '  ok    %-28s the anchor is unique (impossible-anchor control: 0)\n' "MUTATION g-anchor"
+fi
+# THE UNMUTATED CONTROL carries a positive cell (backward = G), so a copy that died emitting
+# nothing reads [- - -] and fails here rather than scoring as a kill below.
+cp "$VALIDATOR" "$ROOT/control-chrono.sh"
+g_score "CONTROL chrono copy" "$ROOT/control-chrono.sh" "- G -"
+g_mutate() {  # $1 label  $2 replacement line  $3 expected row
+  local mut="$ROOT/mutant-$1.sh"
+  MUT_OLD="$G_ANCHOR" MUT_NEW="$2" python3 -c 'import os,sys; s=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(s.replace(os.environ["MUT_OLD"],os.environ["MUT_NEW"],1))' \
+    "$VALIDATOR" "$mut"
+  if cmp -s "$VALIDATOR" "$mut" || ! bash -n "$mut" 2>/dev/null; then
+    ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s the mutation matched nothing or is not valid shell -- this assertion proves nothing\n' "MUTATION $1"
+    return
+  fi
+  g_score "MUTATION $1" "$mut" "$3"
+}
+g_mutate chrono-raw-string '    if [[ "$invoked_at" < "$PREV_AT" ]]; then' "G - -"
+g_mutate chrono-strip-z    '    if [[ "${invoked_at%Z}" < "${PREV_AT%Z}" ]]; then' "- G G"
+g_mutate chrono-arm-g-off  '    if false; then' "- - -"
+
 # Arm A: the free bypass. Omit findings_major on one pass and arm E used to go dark.
 expect counts-omitted 1 "a verdict with no derivable MAJOR count turns arm E OFF -- FAIL (A)" s1-adversarial-p
 expect_says counts-omitted s1-adversarial-p "A-counts-required" \
