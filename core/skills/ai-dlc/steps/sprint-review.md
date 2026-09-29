@@ -96,7 +96,11 @@ not skipped, and gate-validation Check 20 resolves the sprint-review minimum by
 reading this gate.
 
 `/bmad-party-mode --mode subagent --non-interactive` — PM, Architect, Dev, TEA, QA (bound via the **Rule 20 role-manifest preamble** to their `.claude/team-roles/<role>.md`) walk through the
-entire sprint implementation:
+entire sprint implementation. The round is sharded per `_gate-procedures.md`, "Validation
+cycle" item 1 (Rule 28, "Split dispatch": seats x parts axis). That means one persona agent per
+(seat, story ordinal) from `merge-adversarial-shards.sh --map` over the sprint's stories, plus
+one cross-story round. The lead's join counts the per-seat files against that map before
+dispositioning.
 - Does the implementation match the requirements?
 - Are there cross-cutting concerns?
 - Is the test coverage adequate across the sprint as a whole?

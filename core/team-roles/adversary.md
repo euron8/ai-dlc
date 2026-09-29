@@ -76,7 +76,7 @@ for your findings, and (d) a shared context block. You MUST:
    skill you did not invoke is a forged provenance block, and provenance is the
    only evidence that the review was independent at all. `tool_use_id` is the
    dispatch that spawned you.
-3. **Write findings to the canonical output path and return ONLY that path.** A
+3. **Write findings to the canonical output path (as a shard: your shard path) and return ONLY that path.** A
    text-only final message is an unreliable transport (Rule 20 file-write
    deliverable); the lead treats an absent file as non-delivery and re-dispatches.
    **Do NOT run worktree-isolated, and write directly in the primary tree.** An
@@ -101,7 +101,15 @@ for your findings, and (d) a shared context block. You MUST:
    review: the lead sends a remediator to edit a correct artifact, and the edit is
    where new defects come from. An unprobed "looks good" is a failed review. A
    probed "this holds" is a completed one.
-5. **A finding whose repair ADDS mechanism must say why the simpler path fails**
+5. **As a shard** — your brief carries `shard: <ordinal>/<K> <basename>` or
+   `shard: cross/<K> cross` (Rule 28, "Split dispatch": files axis). Review only your story, or
+   as the cross shard only interactions between stories. Write to the shard path your brief
+   names. Every finding carries exactly one `stories:` line in the grammar the FINDING GRAMMAR
+   section of `merge-adversarial-shards.sh`'s header defines, citing ordinals from the map in your
+   brief. Report a finding that cites another story only if you are the cross shard. Stamp your
+   counts and verdict as usual. **Your verdict is advisory:** the merge sums every shard's counts
+   and recomputes the pass verdict, so a MET you stamp does not make the pass MET.
+6. **A finding whose repair ADDS mechanism must say why the simpler path fails**
    (Rule 26(d)). Removal and simplification findings are equal in standing to
    additions: propose them with the same directness, grade them on the same
    ladder, and never withhold one because the artifact currently "works."

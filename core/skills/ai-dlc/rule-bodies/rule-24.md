@@ -42,6 +42,18 @@ decision needs it (Rule 23(a)); an absent artifact at the returned path is
 non-delivery — the lead re-dispatches (a text-only summary is not a
 delivered draft). Build no detector for this; the lead's read of the
 expected path is the check (Rule 26: audit before adding mechanism).
+**Shard by surface (Rule 28, "Split dispatch": surfaces axis).** When a
+Section 0 scope declares more than one independent surface (directories,
+repos, or question groups), the lead derives the surface list from that
+Section 0 and dispatches one analyst per surface in ONE message, each
+brief carrying `shard: <i>/<N> <surface>`. Each writes its part to
+`<area>/s<N>/<base>-parts/<surface>.md`, where `<surface>` carries no
+sprint token, and returns the same `{artifact_path, summary, gaps}`. The
+join: one `scripts/ai-dlc/wait-for-deliverable.sh` call over every part
+path, then a count of the part files, which must equal the surface count,
+and only then the canonical `<area>/s<N>/<base>.md` as the lead's `cat`
+of the parts in surface order. A missing part is non-delivery of that
+surface alone. A single-surface scope stays one analyst.
 
 **Sprint-stamped drafts.** A per-sprint analyst draft is written to a
 sprint-stamped path — `<area>/s<N>/<base>.md`, where `<N>` is `sprint_id`

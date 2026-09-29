@@ -50,6 +50,60 @@ lead-conduct retro finding, even when the lead could have done it
 faster alone. The point is not speed; it is keeping production work in
 subagent context and the lead in orchestration (Rule 23).
 
+**Split dispatch: one agent per independent part.** Rule 28 decides
+WHETHER work is delegated; this clause decides the SHAPE of a
+delegation. When a dispatch's scope partitions along an independent
+axis, the lead dispatches one agent per part in ONE message, plus one
+cross-part agent where the axis says parts interact, and joins them all
+in one bounded-join beat (Rule 29). The axes:
+
+- **files** -- an artifact that is two or more files (`stories/`): one
+  agent per file plus one cross-part agent scoped to interactions
+  between files only. Every finding or edit names the parts it cites; a
+  per-part agent reports only findings citing its own part alone, the
+  cross-part agent only findings citing two or more.
+- **worklist items** -- a list a program derives
+  (`validate-gate-adjudication.sh --expected`): slices of the derived
+  order, no cross-part agent.
+- **surfaces** -- the surfaces a Rule 24 Section 0 declares: one analyst
+  per surface, no cross-part agent.
+- **seats x parts** -- a party-mode round over a files-axis subject: one
+  persona agent per (seat, part) plus one cross-part round.
+
+**The partition is derived, never listed.** The part set comes from a
+program or from the tree -- the artifact directory's listing, the
+`--expected` worklist, the Section 0 surface list -- and never from a
+list the lead types into a brief. **The join is a program.** It
+re-derives the same set, refuses unless every part delivered exactly
+once and every finding respects the partition, and only then writes
+the single file the gate already reads. Readers of that file do not
+change; a lead that assembles the file by hand has not joined.
+
+**What stays serial, and only this:** (1) a true data dependency as
+`_dispatch-protocol.md` defines it, and the protected-path
+one-at-a-time rule in `stories-test-strategy.md`; (2) a convergence
+sequence -- review pass, repair, next pass; sharding shortens a pass and
+never overlaps two; (3) an ordered authoring chain whose next step
+reads the previous one's output; (4) a scope that is one file -- a
+single document is not partitioned by section. A per-role site cites
+this clause and names its axis and its join; it does not restate them.
+
+The lead's written dispatch plan names, for every dispatch, its axis
+and part count or which of (1)-(4) keeps it whole. Every shard brief
+carries one line `shard: <i>/<N> <part-key>` (the cross-part agent:
+`shard: cross/<N> cross`) or `shard: none (<exception 1-4>)`.
+
+**Minimum mechanism (Rule 26(c)) -- split dispatch.** Failure caught:
+the lead blocked on one agent reviewing, repairing or adjudicating a
+whole multi-part subject while every other lane sits idle, with the
+agent's wall clock growing with the parts named in its brief. False-
+positive cost: one fixed per-agent load cost per extra part, one
+cross-part agent, and one join program run -- paid in spawn overhead,
+recovered in wall clock. Removal condition: retire once the harness
+parallelises a single agent's independent sub-scopes itself, or once
+the join programs report that parts routinely arrive no faster than
+one whole-subject agent.
+
 **`SendMessage` reaches a resident teammate; it does not create a context.**
 A teammate you can still message is NOT a blank slate: its original dispatch
 brief and every prior exchange remain in its context and OUTRANK anything sent

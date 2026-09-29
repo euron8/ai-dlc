@@ -1684,8 +1684,9 @@ for ((h = 0; h + 1 < N; h++)); do
     err "H -- REPAIR-RECORD" "$(basename "${P_FILE[$h]}")'s findings were repaired before
       $(basename "${P_FILE[$((h + 1))]}") (fell ${c0}C/${m0}M -> ${c1}C/${m1}M), but no repair
       record $dir/*-repair-p$M.md exists.
-      carry-over-evaluation.md §3a: 'the lead does not repair the artifact itself' -- ONE
-      remediator per pass writes the record the next pass verifies against. A missing record is
+      carry-over-evaluation.md §3a: 'the lead does not repair the artifact itself' -- a
+      dispatched remediator writes the record the next pass verifies against (a file-sharded
+      repair: the one record join-remediator-shards.sh writes). A missing record is
       the lead having repaired inline; the pass series alone cannot tell that from a delegated
       repair, which is why this arm reads the record, not the series."
   fi
