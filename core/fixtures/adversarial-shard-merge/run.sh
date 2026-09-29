@@ -23,6 +23,17 @@
 # titles. Only the severity word and the `stories:` line are added, because the real pass predates
 # the shard grammar (see arm R6, which runs a heading exactly as the real pass wrote it).
 #
+# SECTION MODE (--document, arms D0-D6). `seed.doc-test-strategy.md` is a real consumer
+# single-file artifact that partition-document.sh --map splits into three parts, and
+# `seed.doc-serial-epics.md` a real one it calls SERIAL; D0 reads both off --map rather than
+# assuming them. D2's seed is the one the receipt could not build: a finding carrying ONE
+# `sections:` line and a `stories:` line, so the one-citation count passes it and only the axis
+# guard refuses -- MX6b asserts that, with the guard gone, the same seed merges. D4's shard names a
+# byte-identical COPY of the document, so the sha check passes and only the path check refuses;
+# D3 is the mirror, the right path with other bytes' sha. `seed.files-b3-merged.expected` is the
+# B3 output of the merge BEFORE section mode existed (origin/main at dd7e40ad), so D6 holds files
+# mode to its old bytes rather than to whatever the current merge prints.
+#
 # THE MUTANTS AT THE END are copies of the merge (and the convergence validator it reads its
 # ceilings from, which must sit beside it), each scored against the SAME predicates the arms
 # assert, with the expected kill set compared for EQUALITY.
@@ -48,8 +59,13 @@ fi
 SRCDIR="$(cd "$(dirname "$MERGE")" && pwd)"
 CONV="$SRCDIR/validate-adversarial-convergence.sh"
 [ -f "$CONV" ] || { echo "FIXTURE ERROR: $CONV is not beside the merge; it reads its ceilings from there" >&2; exit 2; }
+# Section mode reads its ordinal set from this sibling. Absent, the D arms would all refuse for
+# THAT reason and the refusal arms would read as passing -- so its absence is an error, never a skip.
+PARTITION="$SRCDIR/partition-document.sh"
+[ -f "$PARTITION" ] || { echo "FIXTURE ERROR: $PARTITION is not beside the merge; section mode reads its --map" >&2; exit 2; }
 for _s in seed.192-ff-A-token-decimal-resolution.md seed.bug-192-il-accuracy.md \
-          seed.story-1-rebalancer-il-accuracy.md seed.finding-headings.txt; do
+          seed.story-1-rebalancer-il-accuracy.md seed.finding-headings.txt \
+          seed.doc-test-strategy.md seed.doc-serial-epics.md seed.files-b3-merged.expected; do
   [ -s "$HERE/$_s" ] || { echo "FIXTURE ERROR: seed $HERE/$_s is missing or empty" >&2; exit 2; }
 done
 echo "adversarial-shard-merge: resolved subject = $MERGE"
@@ -226,7 +242,115 @@ p_ms() { # a shard stamped with milliseconds merges, and the merged invoked_at i
   bash "$c" --series "$(dirname "$o")/stories-adversarial-p" --cycle-state > "$CO" 2>&1 || return 1
   has "$CO" "CONTINUE" || has "$CO" "CONVERGED"
 }
-P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms"
+
+# ------------------------------------------------------------------ section mode (--document)
+# A document world: s1/test-strategy.md is a real consumer single-file artifact that
+# partition-document.sh --map splits into three parts, and its shards sit in
+# s1/shards/test-strategy-p1/. Every shard names the document by the project-relative token a
+# real shard writes, so the merge must WALK UP to resolve it.
+DOC_TOKEN="_bmad-output/planning-artifacts/s1/test-strategy.md"
+new_doc_world() { # [seed] -> prints the shard dir of a fresh document world
+  local w pa seed="${1:-seed.doc-test-strategy.md}"
+  w="$(mktemp -d "$WORK/dw.XXXXXX")" || return 1
+  pa="$w/_bmad-output/planning-artifacts"
+  mkdir -p "$pa/s1/shards/test-strategy-p1" "$pa/s1/shards/test-strategy-repair-p1"
+  cp "$HERE/$seed" "$pa/s1/test-strategy.md"
+  printf -- '- **disposition:** repaired\n- **edit:** `test-strategy.md:9`\n' > "$pa/s1/shards/test-strategy-repair-p1/1.md"
+  printf '%s' "$pa/s1/shards/test-strategy-p1"
+}
+doc_of() { printf '%s' "$(dirname "$(dirname "$1")")/test-strategy.md"; }
+doc_out_of() { printf '%s' "$(dirname "$(dirname "$1")")/test-strategy-adversarial-p1.md"; }
+run_doc_merge() { # <merge-script> <shard-dir> -> RC, $MO
+  bash "$1" --document "$(doc_of "$2")" "$2" > "$MO" 2>&1; RC=$?
+}
+doc_refused_clean() { # <token> <shard-dir>
+  local o; o="$(doc_out_of "$2")"
+  [ "$RC" -eq 2 ] && has "$MO" "REFUSED:" && has "$MO" "$1" && [ ! -e "$o" ] \
+    && [ -z "$(find "$(dirname "$o")" -maxdepth 1 -name '*.merge-tmp.*' 2>/dev/null)" ]
+}
+
+# dshard <shard-dir> <key> <n-major> <verdict> <sections-cite> [sha] [artifact] [extra finding line]
+dshard() {
+  local d="$1" k="$2" n="$3" v="$4" cite="$5" sha="${6:-}" art="${7:-$DOC_TOKEN}" extra="${8:-}" i=0 at hn
+  [ -n "$sha" ] || sha="$(sha_of "$(doc_of "$d")")"
+  case "$k" in cross) at="2026-08-24T16:09:19Z" ;; *) at="2026-08-24T16:0${k}:19Z" ;; esac
+  {
+    printf '# test-strategy -- adversarial section shard %s\n\n## Findings\n\n' "$k"
+    while [ "$i" -lt "$n" ]; do
+      i=$((i + 1)); hn=$(( (i + ${k#cross}0) % 10 + 1 ))
+      printf '### M%s — MAJOR — %s\n\nsections: %s\n' "$i" "$(real_title "$hn")" "$cite"
+      [ -n "$extra" ] && printf '%s\n' "$extra"
+      printf '\nBody quoted from the real pass.\n\n'
+    done
+    printf '## Probed and found sound\n\nNothing further.\n\n'
+    printf '<!-- SKILL_INVOCATION_PROVENANCE v1\n'
+    printf 'skill: ai-dlc-adversary-review\ninvoked_at: %s\ntool_use_id: toolu_01DocShard9xQ%s\n' "$at" "$k"
+    printf 'mode: subagent\nlead_role: .claude/skills/ai-dlc/steps/stories-test-strategy.md\n'
+    printf 'artifact: %s\nartifact_sha: %s\n' "$art" "$sha"
+    printf 'findings_critical: 0\nfindings_critical_prior_scope: 0\nfindings_major: %s\n' "$n"
+    printf 'findings_major_underived: 0\nfindings_minor: 0\nverdict: %s\n' "$v"
+    printf 'SKILL_INVOCATION_PROVENANCE_END -->\n'
+  } > "$d/$k.md"
+}
+# The section-mode B3: three part shards of 2 MAJOR each, each stamped MET, and a clean cross.
+doc_b3_world() {
+  local d; d="$(new_doc_world)"
+  dshard "$d" 1 2 EXIT_CONDITION_MET 1
+  dshard "$d" 2 2 EXIT_CONDITION_MET 2
+  dshard "$d" 3 2 EXIT_CONDITION_MET 3
+  dshard "$d" cross 0 EXIT_CONDITION_MET "1, 3"
+  printf '%s' "$d"
+}
+
+p_doc_b3() { # sums, recomputes, ONE artifact_sha, a shard_wall entry per shard, validator reads 0/6
+  local m="$1" d o c sha n_sha n_wall
+  d="$(doc_b3_world)"; o="$(doc_out_of "$d")"; c="$(dirname "$m")/validate-adversarial-convergence.sh"
+  sha="$(sha_of "$(doc_of "$d")")"
+  run_doc_merge "$m" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "verdict=EXIT_CONDITION_NOT_MET shards=4" && has "$MO" "major=6" \
+    && [ -f "$o" ] && has "$o" "verdict: EXIT_CONDITION_NOT_MET" || return 1
+  n_sha="$(grep -c '^artifact_sha:' "$o")" || n_sha=0
+  [ "$n_sha" -eq 1 ] && [ "$(grep '^artifact_sha:' "$o")" = "artifact_sha: $sha" ] || return 1
+  n_wall="$(grep '^shard_wall:' "$o" | tr ' ' '\n' | grep -cE '^(1|2|3|cross)=[0-9T:.Z-]+/[0-9T:Z-]+$')" || n_wall=0
+  [ "$n_wall" -eq 4 ] || return 1
+  # The per-file line of the validator's report (not --cycle-state, whose exit is the cycle's).
+  bash "$c" --series "$(dirname "$o")/test-strategy-adversarial-p" > "$CO" 2>&1
+  has "$CO" "verdict=EXIT_CONDITION_NOT_MET critical=0 major=6"
+}
+p_doc_axis() { # one sections: line AND a stories: line on the same finding -> the axis guard refuses
+  local d; d="$(doc_b3_world)"
+  dshard "$d" 2 2 EXIT_CONDITION_MET 2 "" "" "stories: 2"
+  run_doc_merge "$1" "$d"
+  doc_refused_clean "carries a 'stories:' line" "$d"
+}
+p_doc_sha() { # the right path, other bytes' sha
+  local d; d="$(doc_b3_world)"
+  dshard "$d" 2 2 EXIT_CONDITION_MET 2 "$(sha_of "$HERE/seed.doc-serial-epics.md")"
+  run_doc_merge "$1" "$d"
+  doc_refused_clean "the shard reviewed other bytes" "$d"
+}
+p_doc_path() { # the right bytes (so the sha check passes), another path
+  local d cp_; d="$(doc_b3_world)"
+  cp_="$(dirname "$(doc_of "$d")")/test-strategy-copy.md"; cp "$(doc_of "$d")" "$cp_"
+  dshard "$d" 2 2 EXIT_CONDITION_MET 2 "" "_bmad-output/planning-artifacts/s1/test-strategy-copy.md"
+  run_doc_merge "$1" "$d"
+  doc_refused_clean "the shard reviewed another file" "$d"
+}
+p_doc_serial() { # a document partition-document.sh calls SERIAL is refused before any shard is read
+  local d; d="$(new_doc_world seed.doc-serial-epics.md)"
+  dshard "$d" 1 0 EXIT_CONDITION_MET 1
+  dshard "$d" 2 0 EXIT_CONDITION_MET 2
+  dshard "$d" cross 0 EXIT_CONDITION_MET "1, 2"
+  run_doc_merge "$1" "$d"
+  doc_refused_clean "does not partition (SERIAL:" "$d"
+}
+p_files_golden() { # files mode is byte-identical to the merge before section mode existed
+  local m="$1" d o
+  d="$(b3_world)"; o="$(out_of "$d")"
+  run_merge "$m" "$d"
+  [ "$RC" -eq 0 ] && cmp -s "$o" "$HERE/seed.files-b3-merged.expected"
+}
+P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms doc_b3 doc_axis doc_sha doc_path doc_serial files_golden"
 
 # ---------------------------------------------------------------------------------- the arms
 echo "adversarial-shard-merge:"
@@ -265,6 +389,29 @@ p_ms "$MERGE"         && ok "A4: shards stamped 15:00:19.497Z and 15:00:19Z merg
   || bad "A4: a millisecond-stamped shard did not merge to the true-earliest invoked_at (rc=$RC): $(cat "$MO") $(cat "$CO" 2>/dev/null)"
 p_sha "$MERGE"        && ok "R5: a shard notarizing another story's sha -> REFUSED 'reviewed other bytes', exit 2, nothing written" || bad "R5: a sha mismatch was not refused cleanly (rc=$RC): $(cat "$MO")"
 
+# ---- section mode. The seeds must reach the branches they are named for, or every D arm below
+# asserts about a world that cannot express its defect.
+DS0="$(new_doc_world)"; DS1="$(new_doc_world seed.doc-serial-epics.md)"
+n_parts="$(bash "$PARTITION" --map "$(doc_of "$DS0")" | grep -c .)" || n_parts=0
+bash "$PARTITION" --map "$(doc_of "$DS1")" > "$WORK/serial.map" 2>&1; r_serial=$?
+if [ "$n_parts" -eq 3 ] && [ "$r_serial" -eq 3 ] && has "$WORK/serial.map" "SERIAL:"; then
+  ok "D0: the document seed partitions into 3 parts and the SERIAL seed exits 3 with SERIAL: (both read from partition-document.sh --map, never assumed)"
+else
+  bad "D0: FIXTURE BROKEN -- the document seed maps to $n_parts part(s) (want 3) and the SERIAL seed exited $r_serial (want 3); the D arms cannot discriminate"
+fi
+p_doc_b3 "$MERGE" && ok "D1: three section shards x 2 MAJOR, each stamped MET, merge NOT_MET major=6; ONE artifact_sha equal to the document's; a shard_wall entry per shard; the convergence validator reads critical=0 major=6" \
+  || bad "D1: the section B3 did not merge to a recomputed NOT_MET with one artifact_sha read 0/6 by the validator (rc=$RC): $(cat "$MO") $(grep -m1 'major=' "$CO" 2>/dev/null)"
+p_doc_axis "$MERGE" && ok "D2: a finding carrying ONE sections: line AND a stories: line -> REFUSED by the axis guard (the one-citation count passes it), nothing written" \
+  || bad "D2: a finding citing both axes was not refused by the axis guard (rc=$RC): $(cat "$MO")"
+p_doc_sha "$MERGE" && ok "D3: a section shard notarizing other bytes at the right path -> REFUSED 'reviewed other bytes', nothing written" \
+  || bad "D3: a whole-document sha mismatch was not refused cleanly (rc=$RC): $(cat "$MO")"
+p_doc_path "$MERGE" && ok "D4: a section shard naming a byte-identical COPY of the document -> REFUSED 'reviewed another file' (the sha passes, the path does not), nothing written" \
+  || bad "D4: an artifact path other than --document was not refused cleanly (rc=$RC): $(cat "$MO")"
+p_doc_serial "$MERGE" && ok "D5: --document on a document partition-document.sh calls SERIAL -> REFUSED with its SERIAL: reason, nothing written" \
+  || bad "D5: a SERIAL document was not refused cleanly (rc=$RC): $(cat "$MO")"
+p_files_golden "$MERGE" && ok "D6: files mode on B3 is byte-identical to seed.files-b3-merged.expected, the output of the merge before section mode existed" \
+  || bad "D6: files-mode output moved from the pre-section-mode golden (rc=$RC): $(cat "$MO")"
+
 # R6: a finding heading EXACTLY as the real pass wrote it carries no severity word, so the heads
 # counted (0 MAJOR) disagree with findings_major -- refused, never counted as zero.
 d="$(b3_world)"
@@ -277,12 +424,77 @@ refused_clean "Findings section heads 0 CRITICAL / 0 MAJOR" "$d" \
   && ok "R6: a real-pass heading with no severity word -> REFUSED on the count, never merged as 0 MAJOR" \
   || bad "R6: a heading without a severity word was not refused on its count (rc=$RC): $(cat "$MO")"
 
+# P1: the merged pass is a provenance block the READER accepts. Its artifact_sha is the files-mode
+# list `<stem>=<sha> ...`, which the schema's single-sha pattern refused, so every sharded pass
+# failed validate-provenance-block.sh while the convergence validator passed it. The two
+# near-misses keep the widening honest: a list of ONE (a merge always has two or more stories)
+# and a list carrying a short sha are both refused, and a bare sha is the control that still passes.
+PB="$SRCDIR/validate-provenance-block.sh"
+if [ ! -f "$PB" ]; then
+  bad "P1: FIXTURE BROKEN -- validate-provenance-block.sh is not beside the merge at $SRCDIR"
+else
+  d="$(b3_world)"; o="$(out_of "$d")"; run_merge "$MERGE" "$d"
+  pb() { bash "$PB" "$1" --require-skill ai-dlc-adversary-review > "$WORK/pb.out" 2>&1; }
+  sha_line="$(grep '^artifact_sha:' "$o" 2>/dev/null)"
+  n_pairs="$(printf '%s' "${sha_line#artifact_sha:}" | wc -w | tr -d ' ')"
+  if [ "$RC" -ne 0 ] || [ "${n_pairs:-0}" -lt 2 ]; then
+    bad "P1: FIXTURE BROKEN -- the B3 merge did not write a multi-file artifact_sha (rc=$RC, pairs=${n_pairs:-0})"
+  else
+    one="$WORK/pb-one.md"; short="$WORK/pb-short.md"; bare="$WORK/pb-bare.md"
+    first="$(printf '%s' "${sha_line#artifact_sha: }" | cut -d' ' -f1)"
+    sed "s/^artifact_sha:.*/artifact_sha: $first/" "$o" > "$one"
+    sed -E 's/^(artifact_sha: [^ ]+=)[a-f0-9]{64}/\1abc123/' "$o" > "$short"
+    sed "s/^artifact_sha:.*/artifact_sha: ${first#*=}/" "$o" > "$bare"
+    pb "$o"; r_m=$?; pb "$one"; r_1=$?; pb "$short"; r_s=$?; pb "$bare"; r_b=$?
+    if [ "$r_m" -eq 0 ] && [ "$r_1" -ne 0 ] && [ "$r_s" -ne 0 ] && [ "$r_b" -eq 0 ]; then
+      ok "P1: the merged pass ($n_pairs <stem>=<sha> pairs) passes validate-provenance-block.sh; a one-pair list and a short sha are refused; a bare sha still passes"
+    else
+      bad "P1: provenance reader on the merged forms gave merged=$r_m one-pair=$r_1 short-sha=$r_s bare=$r_b (want 0 non-0 non-0 0)"
+    fi
+    # PM1: the schema reverted to the single-sha pattern -- the shipped defect on demand. Driven
+    # through AI_DLC_PROJECT_ROOT, whose core/schemas/ the reader tries FIRST, so the validator
+    # is the shipped one and only the schema differs. The bare-sha control must stay at 0, or the
+    # mutant tree failed for a reason of its own.
+    SCH=""
+    _d="$SRCDIR"
+    while [ -n "$_d" ] && [ "$_d" != "/" ]; do
+      for _c in "$_d/core/schemas/provenance-block.json" "$_d/.claude/schemas/provenance-block.json"; do
+        [ -f "$_c" ] && { SCH="$_c"; break 2; }
+      done
+      _d="$(dirname "$_d")"
+    done
+    mt="$(mktemp -d "$WORK/pm1.XXXXXX")"; mkdir -p "$mt/core/schemas"
+    if [ -z "$SCH" ]; then
+      bad "PM1: FIXTURE BROKEN -- provenance-block.json not found above $SRCDIR"
+    else
+      cp "$SCH" "$mt/core/schemas/provenance-block.json"
+      M_OLD='"pattern_ref": "artifact_sha"' M_NEW='"pattern_ref": "sha256"' python3 - "$mt/core/schemas/provenance-block.json" <<'PY'
+import os, sys
+p = sys.argv[1]; t = open(p, encoding="utf-8").read(); o = os.environ["M_OLD"]
+if t.count(o) != 1: sys.exit(3)
+open(p, "w", encoding="utf-8").write(t.replace(o, os.environ["M_NEW"]))
+PY
+      if cmp -s "$SCH" "$mt/core/schemas/provenance-block.json"; then
+        bad "PM1: FIXTURE STALE -- the pattern_ref anchor is not in the schema exactly once; re-anchor it, never relax P1"
+      else
+        AI_DLC_PROJECT_ROOT="$mt" bash "$PB" "$o" --require-skill ai-dlc-adversary-review > "$WORK/pb.out" 2>&1; m_m=$?
+        AI_DLC_PROJECT_ROOT="$mt" bash "$PB" "$bare" --require-skill ai-dlc-adversary-review > "$WORK/pb.out" 2>&1; m_b=$?
+        if [ "$m_m" -ne 0 ] && [ "$m_b" -eq 0 ]; then
+          ok "PM1: the schema reverted to the single-sha pattern refuses the merged pass (rc=$m_m) while the bare-sha control holds at 0 -- P1 watches the pattern"
+        else
+          bad "PM1: with the single-sha pattern the merged pass gave rc=$m_m and the bare control rc=$m_b (want non-0 and 0)"
+        fi
+      fi
+    fi
+  fi
+fi
+
 # ------------------------------------------------------------------------------ the mutants
 # A copy of the merge AND its sibling, one literal edit asserted to apply exactly once.
 mutdir() { # <name> -> a dir holding the merge and the siblings it and the predicates resolve
   local d s
   d="$(mktemp -d "$WORK/mut-$1.XXXXXX")" || return 1
-  for s in merge-adversarial-shards.sh validate-adversarial-convergence.sh validate-steering-budget.sh; do
+  for s in merge-adversarial-shards.sh validate-adversarial-convergence.sh validate-steering-budget.sh partition-document.sh; do
     [ -f "$SRCDIR/$s" ] && cp "$SRCDIR/$s" "$d/"
   done
   printf '%s' "$d"
@@ -321,16 +533,18 @@ mutant() { # <label> <expected> <old> <new> [<old2> <new2>]
 }
 
 C0="$(mutdir m0)"
-if [ -f "$C0/validate-adversarial-convergence.sh" ] && [ -f "$C0/merge-adversarial-shards.sh" ]; then
-  ok "MX-pre: the sandbox carries the merge and the convergence validator it reads its ceilings from"
+if [ -f "$C0/validate-adversarial-convergence.sh" ] && [ -f "$C0/merge-adversarial-shards.sh" ] && [ -f "$C0/partition-document.sh" ]; then
+  ok "MX-pre: the sandbox carries the merge, the convergence validator it reads its ceilings from, and the partition section mode reads its --map from"
   score "MX0 control (unmutated copy)" "$C0/merge-adversarial-shards.sh" NONE
 else
   bad "MX-pre: FIXTURE BROKEN -- the sandbox lacks the merge or its sibling"
 fi
 
 # Two worlds own this, by construction: B3 (every shard MET, residue 6) and its mirror (every
-# shard NOT_MET, residue at the ceiling). A worst-shard merge is wrong in both directions.
-mutant "MX1 verdict = worst shard verdict, not recomputed" "b3 clean" \
+# shard NOT_MET, residue at the ceiling). A worst-shard merge is wrong in both directions. The
+# section-mode B3 (D1) and the files-mode golden (D6) are the same property in the other mode and
+# in bytes, so they die with it.
+mutant "MX1 verdict = worst shard verdict, not recomputed" "b3 clean doc_b3 files_golden" \
   'elif [ "$S_CRIT" -le "$CRIT_CEIL" ] && [ "$BLOCKING" -le "$MAJOR_CEIL" ]; then VERDICT="EXIT_CONDITION_MET"' \
   'elif [ "${WORST_NOT_MET:-0}" -eq 0 ]; then VERDICT="EXIT_CONDITION_MET"' \
   '    EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET) ;;' \
@@ -348,7 +562,30 @@ mutant "MX4 earliest shard by raw string, not by time" "ms" \
 mutant "MX5 invoked_at fraction refused" "ms" \
   ':[0-9]{2}(\.[0-9]{1,9})?Z$' \
   ':[0-9]{2}Z$'
-
+# Section mode. D2's seed carries exactly one sections: line, so with the guard gone the finding
+# passes the one-citation count and the merge SUCCEEDS -- the kill is D2's alone.
+mutant "MX6 wrong-axis guard removed" "doc_axis" \
+  '[ "${wrong:-0}" = "0" ] || refuse' \
+  '[ "${wrong:-0}" = "0" ] || true'
+# MX6b: the kill above would ALSO be scored if some other rule refused D2's seed, so assert what
+# separates them: with the guard gone the same seed MERGES (exit 0), i.e. nothing else refuses it.
+M6="$(mutdir m6b)"
+if apply "$M6/merge-adversarial-shards.sh" '[ "${wrong:-0}" = "0" ] || refuse' '[ "${wrong:-0}" = "0" ] || true' 2>/dev/null \
+   && ! cmp -s "$MERGE" "$M6/merge-adversarial-shards.sh"; then
+  d="$(doc_b3_world)"; dshard "$d" 2 2 EXIT_CONDITION_MET 2 "" "" "stories: 2"
+  run_doc_merge "$M6/merge-adversarial-shards.sh" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" \
+    && ok "MX6b: without the axis guard D2's seed MERGES (exit 0) -- no other rule refuses it, so the guard alone owns the refusal" \
+    || bad "MX6b: without the axis guard D2's seed still did not merge (rc=$RC) -- another rule refuses it first and D2 cannot see the guard: $(cat "$MO")"
+else
+  bad "MX6b: FIXTURE STALE -- the axis-guard anchor is not in the merge exactly once"
+fi
+mutant "MX7 whole-document sha check removed" "doc_sha" \
+  '[ "$sha" = "$DOC_SHA" ] || refuse' \
+  '[ "$sha" = "$DOC_SHA" ] || true'
+mutant "MX8 artifact-path check removed" "doc_path" \
+  '[ "$ART_ABS" = "$DOCUMENT" ] \' \
+  'true || [ "$ART_ABS" = "$DOCUMENT" ] \'
 echo
 if [ "$fails" -eq 0 ]; then echo "adversarial-shard-merge: PASS"; exit 0; fi
 echo "adversarial-shard-merge: $fails assertion(s) FAILED" >&2

@@ -118,7 +118,8 @@ Create a bug-fix story in `_bmad-output/planning-artifacts/s<N>/stories/`:
 
 Dispatch ONE `adversary` (Agent tool, bound to `.claude/team-roles/adversary.md`
 per SKILL.md Rule 19) to run `/bmad-review-adversarial-general` on the fix story, which is
-one file (Rule 28, "Split dispatch", serial exception 4).
+one document. A bmad one-shot stamps no `sections:` lines, so no section join exists for it
+and it is one agent.
 **ONE-SHOT — the bmad skill is correct here and stays** (no loop, no verdict, no
 counted exit condition; the skill's ≥10 floor buys a cynical sweep and costs
 nothing). The native `adversary` review is for CONVERGENCE cycles only.
@@ -140,9 +141,10 @@ one-shot never stamps. That `artifact:` line is what routes the story to Check
 globs that prefix and a verdict-less pass swept into a series fails rung A.
 
 Apply all improvements through the **Adversarial repair dispatch** sub-routine
-(`_gate-procedures.md`). The fix story is one file, so one remediator takes the whole
-finding set (Rule 28, "Split dispatch", serial exception 4), applies the edits and appends
-the changelog to the story. The lead owns the disposition, not
+(`_gate-procedures.md`), which sets the remediator count and any section sharding (Rule 28,
+"Split dispatch": sections axis, or serial exception 4 when `partition-document.sh --map`
+reports the fix story SERIAL). The remediators apply the edits and append the changelog to
+the story. The lead owns the disposition, not
 the edit.
 
 **A one-shot finding that yields relief the operator can apply** — an existing

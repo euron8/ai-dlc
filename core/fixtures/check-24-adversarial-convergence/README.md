@@ -202,6 +202,56 @@ Measured: 0 occurrences in the validator, against a control of 1 for the single-
 absence that no input could ever produce. They now key on the single-line token, and
 `D-generic-at-pass1` is the positive control that the token appears at all.
 
+## Arm K — a sharded artifact's TERMINAL pass must be the sharded one
+
+Arm K reads only the terminal pass of a series over a multi-file artifact opened after the
+sharding stamp. Each case is a small git repo `seed.sh` stamps at 0.663.0, so the arm can date
+the series against the release that introduced sharding.
+
+| Case | Shape | Must |
+|---|---|---|
+| `shard-recovered` | unsharded p1, then the sharded MET p2 the remedy prescribes | **PASS** — terminal keying, not every-pass keying |
+| `shard-terminal-unsharded` | sharded p1, then a whole-subject TERMINAL p2 written after the stamp | **FAIL** (K), naming the terminal pass; `--cycle-state` stays `CONVERGED` (arm K is gate-only) |
+| `shard-legacy` | the series opened before the stamp | **PASS**, with `PENDING (K -- SHARD)` printed and not counted |
+
+`shard-recovered` is the cell that separates terminal keying from every-pass keying. Under the
+latter it exits 1 on p1 forever, which is a remedy the arm prints and the gate cannot accept.
+
+## Arm G across the two stamped forms of `invoked_at`
+
+The reference consumer stamps `invoked_at` to the second and, on a few passes, with a fractional
+second. Arm G orders passes by `at_key` — the seconds prefix plus the fraction right-padded to
+nine digits — which the validator owns and `merge-adversarial-shards.sh` evals from it. Each
+pair sits inside one second, because a different-second pair orders the same under every
+comparison and cannot discriminate.
+
+| Case | Shape | Must |
+|---|---|---|
+| `chrono-fraction-forward` | `19Z` then `19.497Z` | **PASS**, G silent |
+| `chrono-fraction-equal` | `19.000Z` then `19Z` — the same instant | **PASS**, G silent |
+| `chrono-fraction-backward` | `19.497Z` then `19Z` — written 497 ms first | **FAIL** (G) |
+
+Three wrong comparisons are committed mutants, and each moves a different cell
+(`forward backward equal`): shipped `- G -`, raw string `G - -` (the BL-371 defect), `Z`
+stripped `- G G`, arm G off `- - -`. The unmutated copy is scored first, and its `G` cell is
+the positive control that stops a copy which ran nothing from scoring as a kill.
+
+## Arm F on a sharded series — `artifact_sha` compared per story
+
+A pass joined by `merge-adversarial-shards.sh` carries `artifact_sha: <stem>=<sha> ...`, and the
+resolution record the lead writes may list the stories in any order. The validator keys a list
+by its pairs sorted by stem (`sha_key`), so two lists are equal exactly when every story carries
+the same sha.
+
+| Case | Shape | Must |
+|---|---|---|
+| `sharded-revert-reordered` | REVERT_REPAIR back to p1's pairs, stories listed in reverse order | **PASS** |
+| `sharded-revert-partial` | story 1 reverted, story 2 lands on a sha no pass notarized | **FAIL** (F5); `--cycle-state` DIVERGENT/3 |
+
+The mutant restores the old `tr -cd '0-9a-fA-F'` read at all three sites. That reading glued the
+hex letters of the stem names onto the shas, so the reordered case flips to F4 "never saw" while
+the partial case still fails on F5, and the unmutated copy is the control.
+
 ## The `skill:` field in the seeded blocks is INERT — do not read it as coverage
 
 v0.58.0 changed the seeded blocks to `skill: ai-dlc-adversary-review`, because that is

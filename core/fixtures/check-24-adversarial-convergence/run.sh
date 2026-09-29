@@ -202,6 +202,125 @@ expect_says restart-cycle s1-adversarial-p "G-chronology" \
   "G -- CHRONOLOGY" "DEAD CYCLE'S TAIL" "archive the abandoned series" \
   "A MIS-STAMPED" "Do not back-fit it to make"
 
+# --- G across the two stamped forms (BL-371): the ordering KEY, not the raw string ---------
+# Each pair sits inside ONE second, so a different-second comparison cannot separate them.
+expect chrono-fraction-forward 0 "19Z then 19.497Z: 497 ms LATER, so the chain is in order" s1-adversarial-p
+expect chrono-fraction-equal   0 "19.000Z then 19Z: the SAME instant, so nothing ran first" s1-adversarial-p
+expect chrono-fraction-backward 1 "19.497Z then 19Z: the second pass was written 497 ms FIRST -- FAIL (G)" s1-adversarial-p
+expect_says chrono-fraction-backward s1-adversarial-p "G-fraction-backward" "G -- CHRONOLOGY"
+expect_silent chrono-fraction-forward "G -- CHRONOLOGY" chrono-fraction-backward \
+  "a raw string comparison reads the fractional stamp as EARLIER, because '.' sorts before 'Z'"
+expect_silent chrono-fraction-equal "G -- CHRONOLOGY" chrono-fraction-backward \
+  "a comparison with the Z stripped reads '19' as earlier than '19.000', a prefix, not a time"
+
+# --- MUTATION: arm G's comparison, one wrong key per cell ---------------------------------
+# Three cells, four validators. Each wrong comparison is one an author would write, and each
+# moves a DIFFERENT cell, so the three cells together are what pin the key:
+#
+#                         forward  backward  equal
+#   shipped (at_key)      -        G         -
+#   raw string            G        -         -       <- the BL-371 defect
+#   Z stripped            -        G         G
+#   arm G removed         -        -         -
+G_ANCHOR='    if [[ "$AT_KEY" < "$PREV_AT_KEY" ]]; then'
+G_CASES="chrono-fraction-forward chrono-fraction-backward chrono-fraction-equal"
+g_fired() {  # $1 script  $2 case -> G or -
+  case "$(bash "$1" --series "$ROOT/$2/s1-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)" in
+    *"G -- CHRONOLOGY"*) printf 'G\n' ;;
+    *) printf -- '-\n' ;;
+  esac
+}
+g_score() {  # $1 label  $2 script  $3 expected row
+  local got="" c
+  ASSERTIONS=$((ASSERTIONS + 1))
+  for c in $G_CASES; do got="$got $(g_fired "$2" "$c")"; done
+  if [ "$(echo $got)" = "$3" ]; then
+    printf '  ok    %-28s [%s]\n' "$1" "$(echo $got)"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s got [%s] want [%s]\n' "$1" "$(echo $got)" "$3"
+  fi
+}
+ASSERTIONS=$((ASSERTIONS + 1))
+g_n="$(grep -cF -- "$G_ANCHOR" "$VALIDATOR")" || g_n=0
+g_ctl="$(grep -cF -- "$G_ANCHOR-no-such-line" "$VALIDATOR")" || g_ctl=0
+if [ "$g_n" -ne 1 ] || [ "$g_ctl" -ne 0 ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-28s the anchor matches %s line(s) (want 1; impossible-anchor control %s, want 0) -- the mutants below prove nothing\n' \
+    "MUTATION g-anchor" "$g_n" "$g_ctl"
+else
+  printf '  ok    %-28s the anchor is unique (impossible-anchor control: 0)\n' "MUTATION g-anchor"
+fi
+# THE UNMUTATED CONTROL carries a positive cell (backward = G), so a copy that died emitting
+# nothing reads [- - -] and fails here rather than scoring as a kill below.
+cp "$VALIDATOR" "$ROOT/control-chrono.sh"
+g_score "CONTROL chrono copy" "$ROOT/control-chrono.sh" "- G -"
+g_mutate() {  # $1 label  $2 replacement line  $3 expected row
+  local mut="$ROOT/mutant-$1.sh"
+  MUT_OLD="$G_ANCHOR" MUT_NEW="$2" python3 -c 'import os,sys; s=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(s.replace(os.environ["MUT_OLD"],os.environ["MUT_NEW"],1))' \
+    "$VALIDATOR" "$mut"
+  if cmp -s "$VALIDATOR" "$mut" || ! bash -n "$mut" 2>/dev/null; then
+    ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s the mutation matched nothing or is not valid shell -- this assertion proves nothing\n' "MUTATION $1"
+    return
+  fi
+  g_score "MUTATION $1" "$mut" "$3"
+}
+g_mutate chrono-raw-string '    if [[ "$invoked_at" < "$PREV_AT" ]]; then' "G - -"
+g_mutate chrono-strip-z    '    if [[ "${invoked_at%Z}" < "${PREV_AT%Z}" ]]; then' "- G G"
+g_mutate chrono-arm-g-off  '    if false; then' "- - -"
+
+# --- F4/F5 on a SHARDED series: artifact_sha compared per stem, not as a hex smear -------
+expect sharded-revert-reordered 0 "a genuine revert of a sharded hard block, stories listed in another order -- RESOLVED" s1-adversarial-p
+expect sharded-revert-partial 1 "story 2 lands on a sha no pass notarized -- FAIL (F5)" s1-adversarial-p
+expect_says sharded-revert-partial s1-adversarial-p "F5-sharded-partial" "matches no" "earlier pass in this series"
+expect_state sharded-revert-partial s1-adversarial-p DIVERGENT 3 "a partial revert of a sharded pass is not a release -- deny"
+
+# MUTANT: restore the `tr -cd` read at all three sites (every layer of the fix). The reordered
+# case must flip to F4 "never saw"; the partial case must still fail on F5, so the mutant is
+# attributable to the reader and not to a validator that fails everything. Built in a directory
+# holding the steering validator too: F6 resolves it beside $0, and without it the citation
+# arm fails both cases for its own reason.
+SH_DIR="$ROOT/mut-sha-key"; mkdir -p "$SH_DIR"
+cp "$(dirname "$VALIDATOR")/validate-steering-budget.sh" "$SH_DIR/" 2>/dev/null
+cp "$VALIDATOR" "$SH_DIR/control.sh"
+python3 - "$VALIDATOR" "$SH_DIR/mutant.sh" <<'PY'
+import sys
+s = open(sys.argv[1]).read()
+subs = [
+  ('  sha_key "$(block_field "$f" \'artifact_sha\')"; P_SHA+=("$SHA_KEY")',
+   '  P_SHA+=("$(block_field "$f" \'artifact_sha\' | tr -cd \'0-9a-fA-F\')")'),
+  ('  sha_key "$(record_field "$rec" \'artifact_sha_before\')"; sha_b="$SHA_KEY"',
+   '  sha_b="$(record_field "$rec" \'artifact_sha_before\' | tr -cd \'0-9a-fA-F\')"'),
+  ('  sha_key "$(record_field "$rec" \'artifact_sha_after\')";  sha_a="$SHA_KEY"',
+   '  sha_a="$(record_field "$rec" \'artifact_sha_after\'  | tr -cd \'0-9a-fA-F\')"'),
+]
+for o, n in subs:
+    if s.count(o) != 1: sys.exit(3)
+    s = s.replace(o, n)
+open(sys.argv[2], "w").write(s)
+PY
+sh_rc=$?
+sh_run() {  # $1 script  $2 case -> PASS | NEVER-SAW | F5 | OTHER
+  local o
+  o="$(bash "$1" --series "$ROOT/$2/s1-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)" && { echo PASS; return; }
+  case "$o" in *"never saw"*) echo NEVER-SAW ;; *"matches no"*) echo F5 ;; *) echo OTHER ;; esac
+}
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ "$sh_rc" -ne 0 ] || [ ! -f "$SH_DIR/validate-steering-budget.sh" ] || cmp -s "$VALIDATOR" "$SH_DIR/mutant.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-28s FIXTURE STALE -- the three sha_key anchors are not each in the validator exactly once, or the sibling is missing\n' "MUTATION sha-key"
+else
+  c_row="$(sh_run "$SH_DIR/control.sh" sharded-revert-reordered) $(sh_run "$SH_DIR/control.sh" sharded-revert-partial)"
+  m_row="$(sh_run "$SH_DIR/mutant.sh" sharded-revert-reordered) $(sh_run "$SH_DIR/mutant.sh" sharded-revert-partial)"
+  if [ "$c_row" = "PASS F5" ] && [ "$m_row" = "NEVER-SAW F5" ]; then
+    printf '  ok    %-28s control [%s], tr -cd restored [%s]\n' "MUTATION sha-key" "$c_row" "$m_row"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s control [%s] want [PASS F5]; tr -cd restored [%s] want [NEVER-SAW F5]\n' "MUTATION sha-key" "$c_row" "$m_row"
+  fi
+fi
+
 # Arm A: the free bypass. Omit findings_major on one pass and arm E used to go dark.
 expect counts-omitted 1 "a verdict with no derivable MAJOR count turns arm E OFF -- FAIL (A)" s1-adversarial-p
 expect_says counts-omitted s1-adversarial-p "A-counts-required" \
@@ -1038,6 +1157,151 @@ expect shard-legacy 0 \
   "the series opened before the stamp: PENDING, printed and not counted" stories-adversarial-p
 expect_says shard-legacy stories-adversarial-p "K-legacy-pending" \
   "PENDING (K -- SHARD): the terminal pass stories-adversarial-p2.md" "Legacy series."
+
+echo
+# --- ARM K2: one shardable DOCUMENT, reviewed whole -----------------------------------------
+# K2 asks partition-document.sh, a SIBLING of the validator, whether the document partitions.
+# That program is owned by another change and may be absent from a tree this fixture runs in;
+# a K2 cell scored against a validator with no partitioner reads PENDING everywhere and the
+# FAIL cell alone would say so -- but the SERIAL and sharded cells would pass for the wrong
+# reason. So its absence is refused HERE, loudly, before any K2 cell is read.
+K2_PD="$(cd "$(dirname "$VALIDATOR")" && pwd)/partition-document.sh"
+if [ ! -f "$K2_PD" ]; then
+  echo "FIXTURE BROKEN: partition-document.sh is not beside $VALIDATOR -- arm K2 cannot be scored"
+  exit 1
+fi
+K2_POST_MSG="FAIL (K2 -- SECTIONS): prd-adversarial-p1.md reviews"
+expect k2-shardable-post 1 \
+  "a whole-document pass over a 4-part document, series opened after the 0.665.0 stamp -- FAIL (K2)" prd-adversarial-p
+expect_says k2-shardable-post prd-adversarial-p "K2-names-document" \
+  "$K2_POST_MSG" "splits into" "4 parts" "merge-adversarial-shards.sh --document"
+expect_state k2-shardable-post prd-adversarial-p CONVERGED 0 \
+  "arm K2 is GATE-ONLY: the hooks' state is untouched by a missing shard line"
+expect k2-shardable-pre 0 \
+  "the same bytes, series opened before the stamp: PENDING, printed and not counted" prd-adversarial-p
+expect_says k2-shardable-pre prd-adversarial-p "K2-legacy-pending" \
+  "PENDING (K2 -- SECTIONS): the terminal pass prd-adversarial-p1.md" "Legacy series."
+expect k2-serial 0 "one ## section: the map says SERIAL, Rule 28 exception 4 -- one adversary is correct" prd-adversarial-p
+expect k2-sharded 0 "the offender with the merge's shard_tool_use_ids: line -- sectioned, passes" prd-adversarial-p
+expect k2-sha-moved 0 "the document moved after the pass notarized it: PENDING, never judged on unreviewed bytes" prd-adversarial-p
+expect_says k2-sha-moved prd-adversarial-p "K2-sha-moved-pending" \
+  "PENDING (K2 -- SECTIONS)" "is not the bytes it notarized"
+
+# THE SILENT CELLS, each against the offender as the control that K2 fires at all.
+k2_silent() {  # $1 case  $2 why
+  local out ctl
+  ASSERTIONS=$((ASSERTIONS + 1))
+  out="$(bash "$VALIDATOR" --series "$ROOT/$1/prd-adversarial-p" 2>&1)"
+  ctl="$(bash "$VALIDATOR" --series "$ROOT/k2-shardable-post/prd-adversarial-p" 2>&1)"
+  if grep -qF -- "K2 -- SECTIONS" <<<"$out"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s K2 spoke where it must be SILENT -- %s\n' "$1" "$2"
+  elif ! grep -qF -- "$K2_POST_MSG" <<<"$ctl"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s CONTROL: k2-shardable-post did not FAIL (K2) -- the silence is vacuous\n' "$1"
+  else
+    printf '  ok    %-28s K2 silent here, FAILs k2-shardable-post (control)\n' "$1"
+  fi
+}
+k2_silent k2-serial  "a SERIAL document is a correct whole-subject review, not a deferral"
+k2_silent k2-sharded "a merged pass carries shard_tool_use_ids: and is the dispatch K2 asks for"
+
+# THE PROGRAM ABSENT. A consumer may carry this validator before it carries the partitioner;
+# that must read PENDING, naming the program, never FAIL. The copy carries every OTHER sibling
+# the validator resolves, so the only thing it lacks is the program under test.
+K2_NOPROG="$ROOT/k2-noprog"; mkdir -p "$K2_NOPROG"
+cp "$VALIDATOR" "$K2_NOPROG/validate-adversarial-convergence.sh"
+cp "$(dirname "$VALIDATOR")/validate-steering-budget.sh" "$K2_NOPROG/validate-steering-budget.sh"
+ASSERTIONS=$((ASSERTIONS + 1))
+k2np_out="$(bash "$K2_NOPROG/validate-adversarial-convergence.sh" --series "$ROOT/k2-shardable-post/prd-adversarial-p" 2>&1)"
+k2np_rc=$?
+if [ -e "$K2_NOPROG/partition-document.sh" ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-28s the copy carries partition-document.sh -- this cell cannot see its absence\n' "k2-program-absent"
+elif [ "$k2np_rc" -eq 0 ] && grep -qF -- "is not installed beside this validator" <<<"$k2np_out" \
+     && ! grep -qF -- "FAIL (K2" <<<"$k2np_out"; then
+  printf '  ok    %-28s %s\n' "k2-program-absent" "the offender reads PENDING naming the missing program, exit 0"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-28s exit=%s -- an absent partitioner must be PENDING, never FAIL\n' "k2-program-absent" "$k2np_rc"
+  printf '%s\n' "$k2np_out" | sed 's/^/          | /'
+fi
+
+# --- MUTATION: the three gates that keep K2 off in-flight and legacy work -------------------
+# Each gate removed moves exactly ONE cell of five, and a different cell:
+#
+#                          post   pre      serial   sharded  sha-moved
+#   shipped                FAIL   PENDING  SILENT   SILENT   PENDING
+#   stamp gate removed     FAIL   FAIL     SILENT   SILENT   PENDING
+#   SERIAL check removed   FAIL   PENDING  FAIL     SILENT   PENDING
+#   sha gate removed       FAIL   PENDING  SILENT   SILENT   FAIL
+#
+# Built in a copy of the validator's directory carrying its siblings, with an unmutated control
+# from the same directory, so a copy that cannot resolve its partitioner reads as broken.
+K2_CASES="k2-shardable-post k2-shardable-pre k2-serial k2-sharded k2-sha-moved"
+K2_REAL="FAIL PENDING SILENT SILENT PENDING"
+K2_MUT="$ROOT/k2-mutants"; mkdir -p "$K2_MUT"
+cp "$(dirname "$VALIDATOR")/validate-steering-budget.sh" "$K2_MUT/validate-steering-budget.sh"
+cp "$K2_PD" "$K2_MUT/partition-document.sh"
+
+k2_cell() {  # $1 script  $2 case -> FAIL | PENDING | SILENT
+  local out
+  out="$(bash "$1" --series "$ROOT/$2/prd-adversarial-p" 2>&1)"
+  case "$out" in
+    *"FAIL (K2 -- SECTIONS)"*)    printf 'FAIL\n' ;;
+    *"PENDING (K2 -- SECTIONS)"*) printf 'PENDING\n' ;;
+    *)                            printf 'SILENT\n' ;;
+  esac
+}
+k2_score() {  # $1 label  $2 script  $3 expected row
+  local got="" c
+  ASSERTIONS=$((ASSERTIONS + 1))
+  for c in $K2_CASES; do got="$got $(k2_cell "$2" "$c")"; done
+  if [ "$(echo $got)" = "$(echo $3)" ]; then
+    printf '  ok    %-28s [%s]\n' "$1" "$(echo $got)"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s got [%s] want [%s]\n' "$1" "$(echo $got)" "$(echo $3)"
+  fi
+}
+cp "$VALIDATOR" "$K2_MUT/control.sh"
+k2_score "CONTROL k2 copy" "$K2_MUT/control.sh" "$K2_REAL"
+
+k2_mutate() {  # $1 label  $2 anchor line (must be unique)  $3 replacement  $4 expected row
+  local mut="$K2_MUT/mutant-$1.sh" n ctl
+  n="$(grep -cxF -- "$2" "$VALIDATOR")" || n=0
+  ctl="$(grep -cxF -- "$2 # no-such-line" "$VALIDATOR")" || ctl=0
+  if [ "$n" -ne 1 ] || [ "$ctl" -ne 0 ]; then
+    ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s the anchor matches %s line(s) (want 1; impossible-anchor control %s, want 0)\n' "MUTATION $1" "$n" "$ctl"
+    return
+  fi
+  MUT_OLD="$2" MUT_NEW="$3" python3 -c 'import os,sys; s=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(s.replace(os.environ["MUT_OLD"],os.environ["MUT_NEW"],1))' \
+    "$VALIDATOR" "$mut"
+  if cmp -s "$VALIDATOR" "$mut"; then
+    ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s the mutation DID NOT APPLY -- this assertion proves nothing\n' "MUTATION $1"
+    return
+  fi
+  if ! bash -n "$mut" 2>/dev/null; then
+    ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s the mutant is not a valid shell script -- its silence is not a kill\n' "MUTATION $1"
+    return
+  fi
+  k2_score "MUTATION $1" "$mut" "$4"
+}
+k2_mutate k2-stamp-gate \
+  '  elif [[ "$k2_at" < "$k2_stamp" ]]; then' \
+  '  elif false; then' \
+  "FAIL FAIL SILENT SILENT PENDING"
+k2_mutate k2-serial-check \
+  '          if [ "$k2rc" -eq 0 ]; then' \
+  '          if [ "$k2rc" -eq 0 ] || [ "$k2rc" -eq 3 ]; then' \
+  "FAIL PENDING FAIL SILENT PENDING"
+k2_mutate k2-sha-gate \
+  '      elif [ "$k2h_lc" != "$k2_disk" ]; then' \
+  '      elif false; then' \
+  "FAIL PENDING SILENT SILENT FAIL"
 
 echo
 # --- PASS 1 HAS NO PREVIOUS PASS -----------------------------------------------

@@ -1,0 +1,108 @@
+# stories -- adversarial pass 1 (merged from 4 shards)
+
+Verdict RECOMPUTED by merge-adversarial-shards.sh from the summed residue; shard verdicts are advisory.
+
+## Shard ordinal map
+
+```text
+1	192-ff-A-token-decimal-resolution.md
+2	bug-192-il-accuracy.md
+3	story-1-rebalancer-il-accuracy.md
+```
+
+## Shard: story 1
+
+# stories -- adversarial shard 1
+
+## Findings
+
+### M1 — MAJOR — Story 2.1 AC6 hands the lead a TWO-site list where the architecture corrected it to THREE, and explains in the same breath why a two-site list is the failure
+
+stories: 1
+
+Body quoted from the real pass.
+
+### M2 — MAJOR — Story 3.1 AC1 requires a byte-for-byte light-mode render baseline that AD-6 does not ask for, that no locked criterion needs, and for which no baseline exists (Rule 26)
+
+stories: 1
+
+Body quoted from the real pass.
+
+## Probed and found sound
+
+Nothing further.
+
+
+## Shard: story 2
+
+# stories -- adversarial shard 2
+
+## Findings
+
+### M1 — MAJOR — Story 2.1 AC6 hands the lead a TWO-site list where the architecture corrected it to THREE, and explains in the same breath why a two-site list is the failure
+
+stories: 2
+
+Body quoted from the real pass.
+
+### M2 — MAJOR — Story 3.1 AC1 requires a byte-for-byte light-mode render baseline that AD-6 does not ask for, that no locked criterion needs, and for which no baseline exists (Rule 26)
+
+stories: 2
+
+Body quoted from the real pass.
+
+## Probed and found sound
+
+Nothing further.
+
+
+## Shard: story 3
+
+# stories -- adversarial shard 3
+
+## Findings
+
+### M1 — MAJOR — Story 2.1 AC6 hands the lead a TWO-site list where the architecture corrected it to THREE, and explains in the same breath why a two-site list is the failure
+
+stories: 3
+
+Body quoted from the real pass.
+
+### M2 — MAJOR — Story 3.1 AC1 requires a byte-for-byte light-mode render baseline that AD-6 does not ask for, that no locked criterion needs, and for which no baseline exists (Rule 26)
+
+stories: 3
+
+Body quoted from the real pass.
+
+## Probed and found sound
+
+Nothing further.
+
+
+## Shard: cross-story
+
+# stories -- adversarial shard cross
+
+## Findings
+
+## Probed and found sound
+
+Nothing further.
+
+
+<!-- SKILL_INVOCATION_PROVENANCE v1
+skill: ai-dlc-adversary-review
+invoked_at: 2026-08-24T15:01:19Z
+tool_use_id: toolu_014KW7m9L81QQd5tmf3Jcross
+shard_tool_use_ids: 1=toolu_014KW7m9L81QQd5tmf3J1 2=toolu_014KW7m9L81QQd5tmf3J2 3=toolu_014KW7m9L81QQd5tmf3J3 cross=toolu_014KW7m9L81QQd5tmf3Jcross
+mode: subagent
+lead_role: .claude/skills/ai-dlc/steps/stories-test-strategy.md
+artifact: _bmad-output/planning-artifacts/s1/stories
+artifact_sha: 192-ff-A-token-decimal-resolution=200e48919182dc509c49202658487a9ae0cd8cbd74ce7d7670ef98551921d6d3 bug-192-il-accuracy=4aa754b7b07ddea2d48b6fa7f13fe8fcdb080e5dd1c55c5537646bde03ad708f story-1-rebalancer-il-accuracy=907bc9c3a69c34d31f27cf1fc1eb47761e389a5851c6a886eb06c9acf79af0ba
+findings_critical: 0
+findings_critical_prior_scope: 0
+findings_major: 6
+findings_major_underived: 0
+findings_minor: 0
+verdict: EXIT_CONDITION_NOT_MET
+SKILL_INVOCATION_PROVENANCE_END -->

@@ -54,6 +54,9 @@ fi
 SRCDIR="$(cd "$(dirname "$JOIN")" && pwd)"
 CONV="$SRCDIR/validate-adversarial-convergence.sh"
 [ -f "$CONV" ] || { echo "FIXTURE ERROR: $CONV is not beside the join; it extracts arm H's predicate from there" >&2; exit 2; }
+# Document mode assembles through the sibling splitter; the two ship in one release.
+PARTITION="$SRCDIR/partition-document.sh"
+[ -f "$PARTITION" ] || { echo "FIXTURE ERROR: $PARTITION is not beside the join; document mode assembles through it" >&2; exit 2; }
 S21=story-2.1-positions-on-demand.md; S22=story-2.2-lifetime-pnl-on-demand.md; S31=story-3.1-dark-theme.md
 for _s in "seed.$S21" "seed.$S22" "seed.$S31" seed.block-2.1.md seed.block-2.2.md seed.block-3.1.md seed.block-epics.md; do
   [ -s "$HERE/$_s" ] || { echo "FIXTURE ERROR: seed $HERE/$_s is missing or empty" >&2; exit 2; }
@@ -169,7 +172,137 @@ p_shardrow() { # each remediator's Write of its OWN part file is a ledger row un
   run_join "$1" "$w"
   [ "$RC" -eq 0 ] && has "$JO" "(3 parts, 3 writers)" && [ -f "$(out_of "$w")" ]
 }
-P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow"
+
+# ---- DOCUMENT MODE (BL-372): one document, split by partition-document.sh, repaired by section.
+# The split is the REAL splitter's; every section write is a ledger row the REAL hook recorded.
+DOCREL=_bmad-output/planning-artifacts/prd.md
+RDREL=$SLOT/shards/prd-repair-p1
+doc_world() { # -> a world whose prd.md is split into $RDREL/sections/
+  local w; w="$(new_world)" || return 1
+  { printf '# PRD\n\n## Goals\nThe first goal, in one line of prose.\nThe second goal, in one line of prose.\n\n'
+    printf '## Scope\nThe first scope item, in one line of prose.\nThe second scope item, in one line of prose.\n\n'
+    printf '## Risks\nThe first risk, in one line of prose.\nThe second risk, in one line of prose.\n'; } > "$w/$DOCREL"
+  bash "$PARTITION" --split "$w/$DOCREL" "$w/$RDREL" >/dev/null 2>&1 || return 1
+  [ -f "$w/$RDREL/sections/3.md" ] || return 1
+  printf '%s' "$w"
+}
+sec_edit() { # <world> <ordinal> <agent> -- the remediator edits its section copy; the hook records it
+  printf 'Repaired by the section %s remediator.\n' "$2" >> "$1/$RDREL/sections/$2.md"
+  drive "$1" Edit "$1/$RDREL/sections/$2.md" "$3"
+}
+docpart() { # <world> <ordinal> -- the part beside sections/, citing its section file by full path
+  printf -- '- **disposition:** repaired\n- **edit:** `%s/sections/%s.md:2`\n- **derivation:** the section %s finding, edited in its copy\n' \
+    "$RDREL" "$2" "$2" > "$1/$RDREL/$2.md"
+}
+doc_out() { printf '%s' "$1/$SLOT/prd-repair-p1.md"; }
+run_docjoin() { # <join-script> <world>
+  AI_DLC_PROJECT_ROOT="$2" bash "$1" --document "$DOCREL" "$2/$RDREL" \
+    --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1
+  RC=$?
+}
+doc_refused() { # <world> <token> -- exit 2, the token, no record, no staging file
+  [ "$RC" -eq 2 ] && has "$JO" "$2" && [ ! -e "$(doc_out "$1")" ] \
+    && [ -z "$(find "$1/$SLOT" -maxdepth 1 -name '*.join.*')" ]
+}
+p_docjoin() { # three section writers, three parts -> JOINED, the document ASSEMBLED with every edit
+  local w n; w="$(doc_world)" || return 1
+  sec_edit "$w" 1 "$AG1"; sec_edit "$w" 2 "$AG2"; sec_edit "$w" 3 "$AG3"
+  docpart "$w" 1; docpart "$w" 2; docpart "$w" 3
+  run_docjoin "$1" "$w"
+  n="$(grep -c 'Repaired by the section' "$w/$DOCREL")" || n=0
+  [ "$RC" -eq 0 ] && has "$JO" "(3 parts, 3 writers)" && [ -f "$(doc_out "$w")" ] && [ "$n" -eq 3 ] \
+    && has "$(doc_out "$w")" "ASSEMBLED: " && has "$w/$RDREL/sections/.manifest" "assembled	" \
+    && [ ! -e "$w/$RDREL/sections/2.md" ]
+}
+p_docoverlap() { # one section copy written by two agents -> REFUSED, the document not assembled
+  local w; w="$(doc_world)" || return 1
+  cp "$w/$DOCREL" "$w/prd.before"
+  sec_edit "$w" 1 "$AG1"; sec_edit "$w" 2 "$AG2"; sec_edit "$w" 2 "$AG3"
+  docpart "$w" 1; docpart "$w" 2
+  run_docjoin "$1" "$w"
+  doc_refused "$w" "$RDREL/sections/2.md was written by more than one agent in the window" \
+    && cmp -s "$w/$DOCREL" "$w/prd.before" && [ -f "$w/$RDREL/sections/2.md" ]
+}
+p_asmrefuse() { # a clean join whose document was written IN PLACE after the split -> the assembler
+  # refuses, the join exits 2 with its line, and NO record is written
+  local w; w="$(doc_world)" || return 1
+  sec_edit "$w" 1 "$AG1"; sec_edit "$w" 2 "$AG2"; sec_edit "$w" 3 "$AG3"
+  docpart "$w" 1; docpart "$w" 2; docpart "$w" 3
+  printf 'An in-place write while the sections were out.\n' >> "$w/$DOCREL"
+  cp "$w/$DOCREL" "$w/prd.before"
+  run_docjoin "$1" "$w"
+  doc_refused "$w" "partition-document: REFUSED" && has "$JO" "no repair record was written" \
+    && cmp -s "$w/$DOCREL" "$w/prd.before"
+}
+p_filesguard() { # the SAME split dir joined in FILES mode -> refused: its section rows sit under
+  # shards/, files mode drops them, and the document would never be assembled
+  local w; w="$(doc_world)" || return 1
+  sec_edit "$w" 1 "$AG1"; docpart "$w" 1
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --sprint 305 --artifact prd --pass 1 --artifact-path "$SLOT" \
+    --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1
+  RC=$?
+  doc_refused "$w" "was split by section" && [ -f "$w/$RDREL/sections/1.md" ]
+}
+P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard"
+
+# ---- A PART'S DERIVATION SURVIVES THE JOIN. The part's ```derived fence is copied into the joined
+# record, and the gate re-runs `validate-artifact-derivations.sh` over the sprint dir AFTER the
+# join, when the section copies are gone. So the fence names the DOCUMENT, which at write time
+# does not hold the edit yet; the REAL capture hook (`ai-dlc-derivation-capture.sh`) must accept
+# that part, and must refuse the part whose fence names the section file. Driven through a copy
+# of the hook so the mutant below can swap it.
+DHOOK=""; DVAL="$SRCDIR/validate-artifact-derivations.sh"
+_d="$HERE"
+while [ -n "$_d" ] && [ "$_d" != "/" ]; do
+  for _c in "$_d/core/hooks/ai-dlc-derivation-capture.sh" "$_d/.claude/hooks/ai-dlc-derivation-capture.sh"; do
+    [ -f "$_c" ] && { DHOOK="$_c"; break 2; }
+  done
+  _d="$(dirname "$_d")"
+done
+[ -n "$DHOOK" ] && [ -f "$DVAL" ] || { echo "FIXTURE ERROR: ai-dlc-derivation-capture.sh or $DVAL not found; the derivation arms cannot run" >&2; exit 2; }
+DV_OUT="$WORK/deriv.out"; CAP_ERR="$WORK/cap.err"
+deriv_world() { # -> a doc_world carrying the validator where the hook resolves it, section 2 edited
+  local w; w="$(doc_world)" || return 1
+  mkdir -p "$w/scripts/ai-dlc" && cp "$DVAL" "$w/scripts/ai-dlc/" || return 1
+  sec_edit "$w" 2 "$AG2"
+  printf '%s' "$w"
+}
+fence_part() { # <world> <path the fence reads> -- the part, its fence's output derived from the section copy
+  local n; n="$(grep -c 'Repaired by the section 2' "$1/$RDREL/sections/2.md")" || n=0
+  printf -- '- **disposition:** repaired\n- **edit:** `%s/sections/2.md:2`\n- **derivation:**\n\n```derived\n$ grep -c %s %s\n%s\n```\n' \
+    "$RDREL" "'Repaired by the section 2'" "$2" "$n" > "$1/$RDREL/2.md"
+}
+capture() { # <hook> <world> <file> -> CAP_RC; a Write of the file's whole content, as a PostToolUse payload
+  jq -nc --arg f "$3" --arg c "$(cat "$3")" '{tool_name:"Write",tool_input:{file_path:$f,content:$c}}' \
+    | CLAUDE_PROJECT_DIR="$2" bash "$1" >/dev/null 2>"$CAP_ERR"
+  CAP_RC=$?
+}
+gate_deriv() { # <world> -> DV_RC: the gate's derivations re-run over the sprint dir
+  ( cd "$1" && AI_DLC_PROJECT_ROOT="$1" bash "$1/scripts/ai-dlc/validate-artifact-derivations.sh" "$SLOT" ) > "$DV_OUT" 2>&1
+  DV_RC=$?
+}
+p_derivdoc() { # <hook> -- a part whose fence names the DOCUMENT: accepted at write time, green at the gate after the join
+  local w c; w="$(deriv_world)" || return 1
+  # Same-run control: the hook in THIS world refuses a stale pair outside any split, so its exit 0
+  # below is the exemption, not a hook that found no validator.
+  c="$w/_bmad-output/ctl.md"
+  printf '```derived\n$ grep -c Repaired %s\n5\n```\n' "$DOCREL" > "$c"
+  capture "$1" "$w" "$c"; [ "$CAP_RC" -eq 2 ] && has "$CAP_ERR" "is not backed by" || return 1
+  fence_part "$w" "$DOCREL"
+  capture "$1" "$w" "$w/$RDREL/2.md"; [ "$CAP_RC" -eq 0 ] && [ ! -s "$CAP_ERR" ] || return 1
+  run_docjoin "$JOIN" "$w"; [ "$RC" -eq 0 ] || return 1
+  gate_deriv "$w"
+  [ "$DV_RC" -eq 0 ] && has "$DV_OUT" "OK: 2 derivation(s)"
+}
+p_derivsec() { # <hook> -- a part whose fence names the SECTION FILE: refused at write time; written past
+  # the hook anyway, the gate fails it after the join (the defect's own shape, so rc 0 above discriminates)
+  local w; w="$(deriv_world)" || return 1
+  fence_part "$w" "$RDREL/sections/2.md"
+  capture "$1" "$w" "$w/$RDREL/2.md"; [ "$CAP_RC" -eq 2 ] && has "$CAP_ERR" "reads the section copy" || return 1
+  run_docjoin "$JOIN" "$w"; [ "$RC" -eq 0 ] || return 1
+  gate_deriv "$w"
+  [ "$DV_RC" -eq 1 ] && has "$DV_OUT" "FAIL: 2 stale or unrunnable derivation(s) of 2 checked"
+}
 
 # ---------------------------------------------------------------------------------- the arms
 echo "remediator-shard-join:"
@@ -217,6 +350,34 @@ p_shardrow "$JOIN"  && ok "J7: remediators' own part-file writes under s305/shar
   || bad "J7: a part-file write under shards/ was read as an artifact write (rc=$RC): $(cat "$JO")"
 p_bothdirs "$JOIN"  && ok "J5: shards/stories-p1/ (adversary) beside shards/stories-repair-p1/ for the same pass -> the join reads only its own dir, 3 parts" \
   || bad "J5: the join read the adversary shard dir of the same pass (rc=$RC): $(cat "$JO")"
+p_docjoin "$JOIN"    && ok "D1: --document, three section writers and three parts -> JOINED, 3 parts / 3 writers, the document ASSEMBLED with all three edits, sections/ cleared" \
+  || bad "D1: a disjoint section repair did not join and assemble (rc=$RC): $(cat "$JO")"
+p_docoverlap "$JOIN" && ok "D2: --document, one section copy written by two agents -> REFUSED 'more than one agent', no record, the document untouched" \
+  || bad "D2: two writers on one section were not refused, or the document moved (rc=$RC): $(cat "$JO")"
+p_asmrefuse "$JOIN"  && ok "D3: --document over a document written in place after the split -> the assembler's REFUSED line, exit 2, NO record written" \
+  || bad "D3: an assembly refusal did not stop the join before its record (rc=$RC): $(cat "$JO")"
+p_filesguard "$JOIN" && ok "D4: the same split dir joined WITHOUT --document -> REFUSED 'was split by section', nothing written" \
+  || bad "D4: a files-mode join accepted a section-split repair dir (rc=$RC): $(cat "$JO")"
+p_derivdoc "$DHOOK" && ok "D5: a part whose derivation names the DOCUMENT -> the capture hook accepts it (a stale control in the same world refused), the join assembles, the derivations re-run over the sprint dir -> rc 0, 2 reproduce" \
+  || bad "D5: a document-naming part derivation did not survive capture, join and the gate re-run (hook rc=${CAP_RC:-?}, join rc=$RC, derivations rc=${DV_RC:-?}): $(cat "$CAP_ERR" "$JO" "$DV_OUT" 2>/dev/null)"
+p_derivsec "$DHOOK" && ok "D6: a part whose derivation names the SECTION FILE -> the capture hook refuses it 'reads the section copy'; written past the hook, the gate re-run after the join -> rc 1, 2 stale" \
+  || bad "D6: a section-file part derivation was accepted at write time, or did not go stale at the join (hook rc=${CAP_RC:-?}, join rc=$RC, derivations rc=${DV_RC:-?}): $(cat "$CAP_ERR" "$JO" "$DV_OUT" 2>/dev/null)"
+
+# DX1: the part exemption removed from a copy of the capture hook -- a part whose fence names the
+# document is then refused at write time, so D5 must die and D6 must hold.
+DX="$(mktemp -d "$WORK/dx1.XXXXXX")" || exit 2
+sed 's/^      SEC_DIR="\${PART_DIR}\/sections"$/      SEC_DIR="${PART_DIR}\/sections"; SELF_DOC=""/' "$DHOOK" > "$DX/ai-dlc-derivation-capture.sh"
+if cmp -s "$DHOOK" "$DX/ai-dlc-derivation-capture.sh"; then
+  bad "DX1: FIXTURE STALE -- the part-exemption mutation matched nothing in $DHOOK; re-anchor it, never relax the assertion"
+else
+  dx5=ok; p_derivdoc "$DX/ai-dlc-derivation-capture.sh" || dx5=dead
+  dx6=ok; p_derivsec "$DX/ai-dlc-derivation-capture.sh" || dx6=dead
+  if [ "$dx5" = dead ] && [ "$dx6" = ok ]; then
+    ok "DX1 the capture hook's part exemption removed: KILLED by [D5] and nothing else"
+  else
+    bad "DX1 the capture hook's part exemption removed: D5 $dx5, D6 $dx6 (expected D5 dead, D6 ok)"
+  fi
+fi
 
 # H1/H2: arm H before and after the join, on a series the record repairs.
 w="$(new_world)"; three_writers "$w"
@@ -245,7 +406,7 @@ fi
 # ------------------------------------------------------------------------------ the mutants
 mutdir() { # <name> -> the join and the sibling it evals arm H's predicate out of
   local d; d="$(mktemp -d "$WORK/mut-$1.XXXXXX")" || return 1
-  cp "$JOIN" "$CONV" "$d/"
+  cp "$JOIN" "$CONV" "$PARTITION" "$d/"
   printf '%s' "$d"
 }
 apply() { # <file> <old> <new>
@@ -290,15 +451,29 @@ else
 fi
 # J2's world ALSO trips other refusals, so this mutant still exits 2 there; the kill is the
 # missing overlap SENTENCE, which is the only thing that names the defect to the lead.
-mutant "JX1 the >1-writer refusal removed" "overlap" \
+mutant "JX1 the >1-writer refusal removed" "overlap docoverlap" \
   'if [ -n "$OVERLAPS" ]; then' \
   'if false; then'
 mutant "JX2 the uncited-file refusal removed" "missing" \
   '      if (!(p in cov)) print "UNCITED\t" p "\t" wr[p]' \
   '      if (0) print "UNCITED\t" p "\t" wr[p]'
 mutant "JX3 the shards/ exclusion removed" "shardrow" \
-  '   | select((.path | startswith($sh + "/")) | not)' \
+  '   | select($doc == "1" or ((.path | startswith($sh + "/")) | not))' \
   '   | select(true)'
+# JX4 is the defect this mode exists to close: the files-mode filter applied in document mode drops
+# every section row, so the join sees no write at all.
+mutant "JX4 section rows dropped in document mode (the pre-BL-372 file set)" "docjoin docoverlap asmrefuse" \
+  '   | select($doc == "1" or ((.path | startswith($sh + "/")) | not))' \
+  '   | select((.path | startswith($sh + "/")) | not)'
+mutant "JX5 the assembly skipped" "docjoin asmrefuse" \
+  '  ASM_LINE="$(bash "$PARTITION" --assemble "$SHARD_DIR" 2>&1)" || {' \
+  '  ASM_LINE="skipped" || {'
+mutant "JX6 the assembler's refusal ignored" "asmrefuse" \
+  '  ASM_LINE="$(bash "$PARTITION" --assemble "$SHARD_DIR" 2>&1)" || {' \
+  '  ASM_LINE="$(bash "$PARTITION" --assemble "$SHARD_DIR" 2>&1)"; false && {'
+mutant "JX7 files mode accepts a section-split dir" "filesguard" \
+  '  [ -e "$MANIFEST" ] && die' \
+  '  false && die'
 
 echo
 if [ "$fails" -eq 0 ]; then echo "remediator-shard-join: PASS"; exit 0; fi

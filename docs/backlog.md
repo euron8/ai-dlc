@@ -4786,18 +4786,21 @@ across different seconds is unaffected.
 prefix plus the fraction padded to nine digits. Do not copy that code; lift it into a helper both
 callers source.
 
-The receipt seeds three two-pass series: a genuinely backward pair (arm G must fire, else 9), a
-forward pair a second apart (must not fire, else 9), and the same-second mixed pair. It exits 0
-only when the last does not fire. Scored: live 1; a stripped-`Z` comparison 0; arm G removed 9.
+The receipt seeds four two-pass series: a genuinely backward pair (arm G must fire, else 9), a
+forward pair a second apart (must not fire, else 9), the same-second mixed pair, and the
+same-INSTANT pair `19.000Z` then `19Z`. It exits 0 only when neither of the last two fires: the
+mixed pair kills the raw-string comparison, the equal pair kills a comparison with the `Z`
+stripped (which reads `19` as a prefix of `19.000`, so earlier). Scored: origin/main 1; tip 0;
+arm G removed 9; raw string 1; stripped-`Z` 1.
 
-verify: sh V=core/scripts/validate-adversarial-convergence.sh; [ -f "$V" ] || exit 9; w="$(mktemp -d)" || exit 9; mk() { mkdir -p "$w/$1" || exit 9; i=1; for at in "$2" "$3"; do printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\ninvoked_at: %s\ntool_use_id: toolu_0%s\nmode: subagent\nartifact: x.md\nartifact_sha: %064d\nfindings_critical: 0\nfindings_critical_prior_scope: 0\nfindings_major: 0\nfindings_major_underived: 0\nfindings_minor: 0\nverdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$at" "$i" "$i" > "$w/$1/x-adversarial-p$i.md" || exit 9; i=$((i+1)); done; }; g() { o="$(bash "$V" --series "$w/$1/x-adversarial-p" 2>&1)"; case "$o" in *'G -- CHRONOLOGY'*) echo 1 ;; *) echo 0 ;; esac; }; mk back 2026-09-27T15:08:19Z 2026-09-27T15:08:10.123Z; mk fwd 2026-09-27T15:08:19Z 2026-09-27T15:08:20Z; mk same 2026-09-27T15:08:19Z 2026-09-27T15:08:19.497Z; [ "$(g back)" = 1 ] || exit 9; [ "$(g fwd)" = 0 ] || exit 9; [ "$(g same)" = 0 ] && exit 0; echo BL371-SAME-SECOND-FRACTION-READ-AS-EARLIER >&2; exit 1
+verify: sh r="$PWD"; while [ ! -f "$r/VERSION" ]; do [ "$r" = / ] && exit 9; r="$(dirname "$r")"; done; cd "$r" || exit 9; V=core/scripts/validate-adversarial-convergence.sh; [ -f "$V" ] || exit 9; w="$(mktemp -d)" || exit 9; mk() { mkdir -p "$w/$1" || exit 9; i=1; for at in "$2" "$3"; do printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\ninvoked_at: %s\ntool_use_id: toolu_0%s\nmode: subagent\nartifact: x.md\nartifact_sha: %064d\nfindings_critical: 0\nfindings_critical_prior_scope: 0\nfindings_major: 0\nfindings_major_underived: 0\nfindings_minor: 0\nverdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$at" "$i" "$i" > "$w/$1/x-adversarial-p$i.md" || exit 9; i=$((i+1)); done; }; g() { o="$(bash "$V" --series "$w/$1/x-adversarial-p" 2>&1)"; case "$o" in *'G -- CHRONOLOGY'*) echo 1 ;; *) echo 0 ;; esac; }; mk back 2026-09-27T15:08:19Z 2026-09-27T15:08:10.123Z; mk fwd 2026-09-27T15:08:19Z 2026-09-27T15:08:20Z; mk same 2026-09-27T15:08:19Z 2026-09-27T15:08:19.497Z; mk equal 2026-09-27T15:08:19.000Z 2026-09-27T15:08:19Z; [ "$(g back)" = 1 ] || exit 9; [ "$(g fwd)" = 0 ] || exit 9; [ "$(g same)" = 0 ] && [ "$(g equal)" = 0 ] && exit 0; echo BL371-SAME-SECOND-FRACTION-READ-AS-EARLIER >&2; exit 1
 
 ## BL-372 — a single-document scope is still reviewed and repaired by one agent
 
-**DEFECT.** **Deferred out of v0.663.0 by operator ruling (option A, 2026-09-29).** It is the half of
-`BL-365`/`BL-366` that file-level sharding cannot reach, and it discharges no consumer candidate.
-Rule 28's split-dispatch clause keeps it serial by name: exception (4), "a scope that is one file
--- a single document is not partitioned by section".
+**DEFECT.** The operator lifted the deferral on 2026-09-29: the section-sharding feature ships
+whole in one release. It is the half of `BL-365`/`BL-366` that file-level sharding cannot reach,
+and it discharges no consumer candidate. Rule 28's split-dispatch clause kept it serial by name:
+exception (4), "a scope that is one file -- a single document is not partitioned by section".
 
 **Reach, measured at batch 172** over the graph subagent transcripts (definitions and caveats in
 the archived `BL-365`/`BL-366` close notes): about 17h of adversary solo time sits on single
@@ -4816,10 +4819,17 @@ repair is the bulk of remediator wall time (21.9h of 34.7h under the census hand
 - **The adversary** partitions by section plus one whole-document cross-section reviewer, with a
   section citation line so counts stay additive, as `merge-adversarial-shards.sh` does for files.
 
-The receipt exits 1 while exception (4) still reads that a single document is not partitioned by
-section, 9 if the clause is gone.
+The receipt drives the shipping programs over a synthetic sprint slot. It exits 1 while exception
+(4) still keeps every document whole or names no partition program; while `partition-document.sh`
+is absent, counts a fenced `##`, fails to report a one-section document SERIAL, fails an unedited
+round trip, or assembles over a document written in place or with a section missing; while
+`merge-adversarial-shards.sh --document` does not sum three MET section shards into a NOT_MET the
+convergence validator reads, or accepts `stories:` lines; while `join-remediator-shards.sh
+--document` does not join two section writers, assemble and clear the section copies, or does not
+refuse two writers on one section with nothing written. It exits 9 when no `VERSION` sits above
+the working directory, when a subject file is missing, or when the clause is gone.
 
-verify: sh R=core/skills/ai-dlc/rule-bodies/rule-28.md; [ -f "$R" ] || exit 9; b="$(LC_ALL=C awk '/^[*][*]What stays serial/{f=1} f&&/^$/{exit} f' "$R" | tr '\n' ' ')"; [ -n "$b" ] || exit 9; case "$b" in *'not partitioned by section'*) echo BL372-SINGLE-DOCUMENT-SERIAL >&2; exit 1 ;; esac; exit 0
+verify: sh r="$PWD"; while [ ! -f "$r/VERSION" ]; do [ "$r" = / ] && exit 9; r="$(dirname "$r")"; done; cd "$r" || exit 9; R=core/skills/ai-dlc/rule-bodies/rule-28.md; PD="$r/core/scripts/partition-document.sh"; M="$r/core/scripts/merge-adversarial-shards.sh"; C="$r/core/scripts/validate-adversarial-convergence.sh"; J="$r/core/scripts/join-remediator-shards.sh"; [ -f "$R" ] && [ -f "$M" ] && [ -f "$C" ] && [ -f "$J" ] || exit 9; b="$(LC_ALL=C awk '/^[*][*]What stays serial/{f=1} f&&/^$/{exit} f' "$R" | tr '\n' ' ')"; [ -n "$b" ] || exit 9; case "$b" in *'not partitioned by section'*) echo "BL372-SINGLE-DOCUMENT-SERIAL clause still keeps every document whole" >&2; exit 1 ;; esac; case "$b" in *'partition-document.sh'*) ;; *) echo "BL372-SINGLE-DOCUMENT-SERIAL exception (4) names no partition program" >&2; exit 1 ;; esac; [ -f "$PD" ] || { echo "BL372-SINGLE-DOCUMENT-SERIAL partition program absent" >&2; exit 1; }; w="$(mktemp -d)" || exit 9; s="$w/pa/s1"; mkdir -p "$s/shards/prd-p1" "$s/shards/prd-repair-p1" || exit 9; D="$s/prd.md"; mkd() { { printf '# PRD\nintro\n'; for i in 1 2 3; do printf '## Part %s\n' "$i"; printf '```\n## not a heading\n```\n'; j=0; while [ "$j" -lt 20 ]; do j=$((j+1)); printf 'line %s of part %s\n' "$j" "$i"; done; done; } > "$1"; }; mkd "$D" || exit 9; { printf '# One\n## Only\n'; j=0; while [ "$j" -lt 50 ]; do j=$((j+1)); printf 'x %s\n' "$j"; done; printf '## Tiny\ny\n'; } > "$w/one.md" || exit 9; n="$(bash "$PD" --map "$D" 2>&1 | grep -c '^[0-9]')" || n=0; [ "$n" = 3 ] || { echo "BL372-SINGLE-DOCUMENT-SERIAL a 3-section document mapped to $n parts (fenced ## must not count)" >&2; exit 1; }; o="$(bash "$PD" --map "$w/one.md" 2>&1)"; rc=$?; [ "$rc" = 3 ] && grep -q '^SERIAL' <<<"$o" || { echo "BL372-SINGLE-DOCUMENT-SERIAL a document dominated by one section was not reported SERIAL (rc $rc)" >&2; exit 1; }; cp "$D" "$w/orig" || exit 9; bash "$PD" --split "$D" "$s/shards/prd-repair-p1" >/dev/null 2>&1 || { echo "BL372-SINGLE-DOCUMENT-SERIAL split failed" >&2; exit 1; }; bash "$PD" --assemble "$s/shards/prd-repair-p1" >/dev/null 2>&1 && cmp -s "$D" "$w/orig" || { echo "BL372-SINGLE-DOCUMENT-SERIAL an unedited split did not reassemble byte-identical" >&2; exit 1; }; mkdir -p "$s/shards/prd-repair-p2" || exit 9; bash "$PD" --split "$D" "$s/shards/prd-repair-p2" >/dev/null 2>&1 || exit 9; printf 'EDITED\n' >> "$s/shards/prd-repair-p2/sections/2.md" || exit 9; printf 'in place\n' >> "$D" || exit 9; bash "$PD" --assemble "$s/shards/prd-repair-p2" >/dev/null 2>&1 && { echo "BL372-SINGLE-DOCUMENT-SERIAL assembled over a document written in place while the shards ran" >&2; exit 1; }; cp "$w/orig" "$D" || exit 9; mv "$s/shards/prd-repair-p2/sections/3.md" "$w/held-3.md" || exit 9; bash "$PD" --assemble "$s/shards/prd-repair-p2" >/dev/null 2>&1 && { echo "BL372-SINGLE-DOCUMENT-SERIAL assembled with a section missing" >&2; exit 1; }; cmp -s "$D" "$w/orig" || { echo "BL372-SINGLE-DOCUMENT-SERIAL a refused assembly wrote the document" >&2; exit 1; }; h="$(shasum -a 256 "$D")" || exit 9; h="${h%% *}"; mks() { { printf '## Findings\n'; j=0; while [ "$j" -lt "$2" ]; do j=$((j+1)); printf '### MAJOR m%s\n%s: %s\n' "$j" "$4" "$1"; done; printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\ninvoked_at: 2026-01-01T00:00:0%sZ\ntool_use_id: toolu_%s\nmode: subagent\nlead_role: lead\nartifact: s1/prd.md\nartifact_sha: %s\nfindings_critical: 0\nfindings_major: %s\nfindings_minor: 0\nverdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$3" "$3" "$h" "$2"; }; }; for i in 1 2 3; do mks "$i" 2 "$i" sections > "$s/shards/prd-p1/$i.md" || exit 9; done; mks "1,3" 0 9 sections > "$s/shards/prd-p1/cross.md" || exit 9; o="$(bash "$M" --document "$D" "$s/shards/prd-p1" 2>&1)"; grep -q 'verdict=EXIT_CONDITION_NOT_MET ' <<<"$o" || { echo "BL372-SINGLE-DOCUMENT-SERIAL three MET section shards of 2 blocking MAJOR each did not merge NOT_MET: $o" >&2; exit 1; }; o="$(bash "$C" "$s/prd-adversarial-p1.md" 2>&1)"; grep -q 'verdict=EXIT_CONDITION_NOT_MET critical=0 major=6' <<<"$o" || { echo "BL372-SINGLE-DOCUMENT-SERIAL the convergence validator did not read the merged residue: $o" >&2; exit 1; }; mkdir -p "$s/shards/prd-p2" || exit 9; for i in 1 2 3; do mks "$i" 1 "$i" stories > "$s/shards/prd-p2/$i.md" || exit 9; done; mks "1,3" 1 9 stories > "$s/shards/prd-p2/cross.md" || exit 9; bash "$M" --document "$D" "$s/shards/prd-p2" >/dev/null 2>&1 && { echo "BL372-SINGLE-DOCUMENT-SERIAL a section merge accepted stories: citation lines" >&2; exit 1; }; P="$w/j/_bmad-output/planning-artifacts"; E="$P/s1/prd.md"; mkdir -p "$P/s1/shards" || exit 9; mkd "$E" || exit 9; sl=_bmad-output/planning-artifacts/s1/shards; jn() { AI_DLC_PROJECT_ROOT="$w/j" bash "$J" --document "$E" "$P/s1/shards/prd-repair-p$1" --since 2026-01-01T00:00:00Z --until 2026-01-01T00:01:00Z 2>&1; }; row() { printf '{"kind":"artifact-write","agent_id":"%s","ts":"2026-01-01T00:00:1%sZ","path":"%s"}\n' "$1" "$2" "$sl/prd-repair-p$3/sections/$4.md" >> "$P/.artifact-writes.jsonl"; }; prt() { printf '## Finding %s\ndisposition: fixed\nedit: %s/prd-repair-p%s/sections/%s.md\nderivation: grep -c SECFIX-%s\n' "$2" "$sl" "$1" "$2" "$2" > "$P/s1/shards/prd-repair-p$1/$3.md"; }; bash "$PD" --split "$E" "$P/s1/shards/prd-repair-p3" >/dev/null 2>&1 || exit 9; printf 'SECFIX-1\n' >> "$P/s1/shards/prd-repair-p3/sections/1.md" && printf 'SECFIX-2\n' >> "$P/s1/shards/prd-repair-p3/sections/2.md" || exit 9; row agent-a 1 3 1; row agent-b 2 3 2; prt 3 1 1; prt 3 2 2; o="$(jn 3)"; rc=$?; [ "$rc" = 0 ] && [ -f "$P/s1/prd-repair-p3.md" ] && grep -q '^SECFIX-1$' "$E" && grep -q '^SECFIX-2$' "$E" && ! ls "$P/s1/shards/prd-repair-p3/sections/"*.md >/dev/null 2>&1 && grep -q '^assembled[[:blank:]]' "$P/s1/shards/prd-repair-p3/sections/.manifest" || { echo "BL372-SINGLE-DOCUMENT-SERIAL join --document over two section writers did not join, assemble and clear the sections (rc $rc): $o" >&2; exit 1; }; cp "$E" "$w/before-p4" || exit 9; bash "$PD" --split "$E" "$P/s1/shards/prd-repair-p4" >/dev/null 2>&1 || exit 9; printf 'SECFIX-9\n' >> "$P/s1/shards/prd-repair-p4/sections/1.md" || exit 9; row agent-c 3 4 1; row agent-d 4 4 1; prt 4 9 1; o="$(jn 4)"; rc=$?; [ "$rc" = 2 ] && grep -q 'more than one agent' <<<"$o" && cmp -s "$E" "$w/before-p4" && [ ! -e "$P/s1/prd-repair-p4.md" ] && [ -f "$P/s1/shards/prd-repair-p4/sections/1.md" ] || { echo "BL372-SINGLE-DOCUMENT-SERIAL join --document did not refuse two writers on one section, or wrote on the refusal (rc $rc): $o" >&2; exit 1; }; exit 0
 
 ## BL-373 — the planning-artifact write ledger is undeclared and never rotated
 
@@ -4830,11 +4840,25 @@ dispatched planning-artifact write to `_bmad-output/planning-artifacts/.artifact
 grows for the life of the project inside a committed tree. `join-remediator-shards.sh` reads it
 by time window, so growth costs read time, not correctness.
 
-The receipt reads the schema as JSON, through `jq` over `.paths[].name`, so a comment carrying the
-names cannot close it: appended to the file, it makes the JSON invalid and the receipt exits 9.
-Scored: live 1; the names appended as a comment 9; a `.paths` entry named `.artifact-writes.jsonl` 0.
+**A `.paths` entry cannot carry them.** `name` is the top-level component I95 derives, and both
+ledgers are nested: the hook builds `${ARTIFACT_LEDGER_DIR}/...` and `${GATE_DIR}/...`, whose
+parents `planning-artifacts` and `gate-adjudication` are already declared durable. Measured, two
+`.paths` entries named for the ledgers fail I95 four times (ORPHAN and PRODUCER for each).
 
-verify: sh P=core/schemas/pipeline-state-paths.json; [ -f "$P" ] || exit 9; n="$(jq -r '[.paths[]?.name] | map(select(. == "spawn-ledger.jsonl")) | length' "$P" 2>/dev/null)" || exit 9; [ "${n:-0}" -gt 0 ] || exit 9; a="$(jq -r '[.paths[]?.name] | map(select(. == ".artifact-writes.jsonl")) | length' "$P" 2>/dev/null)" || exit 9; [ "${a:-0}" -gt 0 ] && exit 0; echo BL373-ARTIFACT-LEDGER-UNDECLARED >&2; exit 1
+**Remedy.** Declare each ledger in an optional `ledgers` list on its parent's entry, and bind it
+with I95(e) to a non-comment line of its producer that builds `<dir>/<name>`. I95's population
+grammar stays as it is. An entry without the field validates exactly as before.
+
+**Rotation is not part of the close.** No rotator exists for any `.jsonl` ledger in the
+distribution, and `rotate-gate-adjudication.sh` leaves `.verdict-writes.jsonl` in place by
+design. The declaration classifies the two files and names their writer; it does not bound
+their growth.
+
+The receipt reads the declaration through `jq` and requires I95 to run the sub-arm and pass.
+Scored: origin/main 1; tip 0; the field naming a ledger no producer builds 1; the names appended
+as a comment 9; the sub-arm removed 1; the sub-arm made unable to flag, with a ledger renamed 1.
+
+verify: sh r="$PWD"; while [ ! -f "$r/VERSION" ]; do [ "$r" = / ] && exit 9; r="$(dirname "$r")"; done; cd "$r" || exit 9; P=core/schemas/pipeline-state-paths.json; V=scripts/validate-enforcement-map.sh; [ -f "$P" ] && [ -f "$V" ] || exit 9; n="$(jq -r '[.paths[]? | select(.name == "spawn-ledger.jsonl")] | length' "$P" 2>/dev/null)" || exit 9; [ "${n:-0}" -gt 0 ] || exit 9; a="$(jq -r '[.paths[]? | select(.name == "planning-artifacts") | .ledgers[]?.name | select(. == ".artifact-writes.jsonl")] | length' "$P" 2>/dev/null)" || exit 9; g="$(jq -r '[.paths[]? | select(.name == "gate-adjudication") | .ledgers[]?.name | select(. == ".verdict-writes.jsonl")] | length' "$P" 2>/dev/null)" || exit 9; o="$(bash "$V" --arms I95 2>&1)"; r=$?; case "$o" in *'I95(e): '*' nested ledger(s) bound'*) ;; *) echo BL373-SUBARM-DID-NOT-RUN >&2; exit 1 ;; esac; [ "$r" -eq 0 ] || { echo BL373-I95-FAILS >&2; exit 1; }; [ "${a:-0}" -eq 1 ] && [ "${g:-0}" -eq 1 ] && exit 0; echo BL373-ARTIFACT-LEDGER-UNDECLARED >&2; exit 1
 
 ## BL-374 — the shared reconcile memo caches a missing SUBTREE as an absent path, and serves that answer to later processes
 

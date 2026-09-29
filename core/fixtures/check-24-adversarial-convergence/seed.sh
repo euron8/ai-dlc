@@ -477,6 +477,35 @@ record "$TARGET/divergent-laundered-revert/s1-resolution-p2.md" \
   s1-adversarial-p2.md REVERT_REPAIR bbb2 zzz9 4200 4100 "reverted (allegedly)"
 pass "$TARGET/divergent-laundered-revert/s1-adversarial-p3.md" 3 0 0 2 EXIT_CONDITION_MET 0 zzz9 s1-resolution-p2.md
 
+# --- sharded-revert-*: F4/F5 on a SHARDED series ---------------------------------
+# A pass merge-adversarial-shards.sh joined carries `artifact_sha: <stem>=<sha> ...`, one pair
+# per story in ordinal order. The resolution record is written by the lead, who may list the
+# stories in any order. The old reader ran `tr -cd '0-9a-fA-F'` over the whole value, which
+# concatenates the hex letters of the stem NAMES with the shas, so a record listing the same
+# stories in another order read as a state the divergent pass never saw (F4), and a genuine
+# revert of a sharded hard block could not clear it.
+#   reordered   before/after list the SAME pairs as p2/p1, stories in reverse order  -> PASS
+#   partial     after reverts story 1 only; story 2 lands on a sha no pass notarized -> FAIL (F5)
+_s1a=$(printf 'a%.0s' $(seq 64)); _s2a=$(printf 'b%.0s' $(seq 64))
+_s1b=$(printf 'c%.0s' $(seq 64)); _s2b=$(printf 'd%.0s' $(seq 64)); _s2z=$(printf 'e%.0s' $(seq 64))
+for _c in reordered partial; do
+  mkdir -p "$TARGET/sharded-revert-$_c"
+  pass "$TARGET/sharded-revert-$_c/s1-adversarial-p1.md" 1 2 1 1 EXIT_CONDITION_NOT_MET 2 "story-1-a=$_s1a story-2-b=$_s2a"
+  pass "$TARGET/sharded-revert-$_c/s1-adversarial-p2.md" 2 3 1 2 DIVERGENT_HARD_BLOCK   3 "story-1-a=$_s1b story-2-b=$_s2b"
+  # partial lists `before` in ORDINAL order, so it reaches F5 under either reader and the
+  # tr -cd mutant stays attributable to the reordered case alone.
+  if [ "$_c" = reordered ]; then
+    _before="story-2-b=$_s2b story-1-a=$_s1b"; _after="story-2-b=$_s2a story-1-a=$_s1a"
+  else
+    _before="story-1-a=$_s1b story-2-b=$_s2b"; _after="story-1-a=$_s1a story-2-b=$_s2z"
+  fi
+  record "$TARGET/sharded-revert-$_c/s1-resolution-p2.md" \
+    s1-adversarial-p2.md REVERT_REPAIR "$_before" "$_after" 4200 4000 "reverted the p1->p2 repair wholesale" \
+    '2026-07-12T03:00:00Z | "revert the p1 to p2 repair wholesale"'
+  pass "$TARGET/sharded-revert-$_c/s1-adversarial-p3.md" 3 0 0 2 EXIT_CONDITION_MET 0 "$_after" s1-resolution-p2.md
+done
+unset _c _before _after _s1a _s2a _s1b _s2b _s2z
+
 # --- restart-cycle: D4, THE DEAD CYCLE'S TAIL -----------------------------------
 # Rule 8's own remedy for a moving artifact is "freeze scope, shrink the sprint, RESTART" --
 # and nothing implemented restart. A lead that restarts writes p1, p2, p3 over the dead
@@ -497,6 +526,23 @@ pass "$TARGET/restart-cycle/s1-adversarial-p3.md" 3 0 0 2 EXIT_CONDITION_MET    
 pass "$TARGET/restart-cycle/s1-adversarial-p4.md" 4 1 2 1 EXIT_CONDITION_NOT_MET 1 d44 "" 2026-07-12T09:00:00Z
 pass "$TARGET/restart-cycle/s1-adversarial-p5.md" 5 0 4 1 EXIT_CONDITION_NOT_MET 0 d55 "" 2026-07-12T10:00:00Z
 pass "$TARGET/restart-cycle/s1-adversarial-p6.md" 6 2 4 1 DIVERGENT_HARD_BLOCK   2 d66 "" 2026-07-12T11:00:00Z
+
+# --- chrono-fraction-*: arm G across the two stamped forms (BL-371) ---------------
+# The reference consumer stamps `invoked_at` to the second AND, on 4 of 317 real passes, with a
+# fractional second. Three two-pass series, each pair inside ONE second, so only the ordering KEY
+# separates them -- a different-second pair orders the same under every comparison:
+#   forward   19Z      then 19.497Z   497 ms later         G must be SILENT (raw string fires)
+#   backward  19.497Z  then 19Z       497 ms EARLIER       G must FIRE      (raw string is silent)
+#   equal     19.000Z  then 19Z       the SAME instant     G must be SILENT (stripped-Z fires)
+for _c in forward:2026-09-27T15:08:19Z:2026-09-27T15:08:19.497Z \
+          backward:2026-09-27T15:08:19.497Z:2026-09-27T15:08:19Z \
+          equal:2026-09-27T15:08:19.000Z:2026-09-27T15:08:19Z; do
+  _n="${_c%%:*}"; _r="${_c#*:}"; _a1="${_r%%Z:*}Z"; _a2="${_r#*Z:}"
+  mkdir -p "$TARGET/chrono-fraction-$_n"
+  pass "$TARGET/chrono-fraction-$_n/s1-adversarial-p1.md" 1 1 0 0 EXIT_CONDITION_NOT_MET "" NOSHA "" "$_a1"
+  pass "$TARGET/chrono-fraction-$_n/s1-adversarial-p2.md" 2 0 0 0 EXIT_CONDITION_MET     "" NOSHA "" "$_a2"
+  repair "$TARGET/chrono-fraction-$_n/s1-brief-repair-p1.md"
+done
 
 # --- counts-omitted: arm A, and arm E's free bypass -----------------------------
 # A pass that declares a verdict but no derivable MAJOR count. severity_count returns
@@ -1040,3 +1086,77 @@ k_world "$TARGET/shard-legacy"
 k_pass "$TARGET/shard-legacy/stories-adversarial-p1.md" 1 5 EXIT_CONDITION_NOT_MET 2026-09-29T09:00:00Z ""
 k_pass "$TARGET/shard-legacy/stories-adversarial-p2.md" 2 0 EXIT_CONDITION_MET     2026-09-29T12:00:00Z ""
 repair "$TARGET/shard-legacy/stories-repair-p1.md"
+
+# --- ARM K2: the SECTIONS arm -- one shardable document, reviewed whole ---------------------
+# Each case is its OWN git repository stamped at K2's release, for arm K's reason. The pass is
+# a single MET pass at zero counts, so no other arm has anything to say and every cell below is
+# K2's alone. `artifact:` names a FILE beside the pass, which arm K's directory resolver cannot
+# see, so arm K stays silent on every one of them. The shardable document has four balanced
+# `## ` sections; the SERIAL one has a single `## ` heading, which partition-document.sh maps
+# to exit 3. `artifact_sha` is the document's own sha256 except where the case moves it.
+k2_world() {  # $1 case dir  $2 serial|shardable -> a repo stamped at 0.665.0, 2026-09-29T10:00:00Z
+  mkdir -p "$1/.claude"
+  printf 'version: 0.665.0\n' > "$1/.claude/.ai-dlc-version"
+  if [ "$2" = serial ]; then
+    printf '# PRD\n\n## Only\n\none\ntwo\nthree\n' > "$1/prd.md"
+  else
+    printf '# PRD\n\n## One\n\nalpha alpha\n\n## Two\n\nbravo bravo\n\n## Three\n\ncharlie charlie\n\n## Four\n\ndelta delta\n' > "$1/prd.md"
+  fi
+  ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+    cd "$1" || exit 1
+    git init -q . >/dev/null
+    git add .claude/.ai-dlc-version
+    GIT_COMMITTER_DATE=2026-09-29T10:00:00Z GIT_AUTHOR_DATE=2026-09-29T10:00:00Z \
+      git -c user.email=fixture@example.invalid -c user.name=fixture -c commit.gpgsign=false \
+          -c core.hooksPath=/dev/null commit -q -m stamp >/dev/null
+  ) || { echo "seed.sh: k2_world could not build the stamped repo at $1" >&2; exit 1; }
+}
+k2_sha() {
+  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1
+  else sha256sum "$1" | cut -d' ' -f1; fi
+}
+k2_pass() {  # $1 case dir  $2 invoked_at  $3 artifact_sha  $4 shard ids ("" = whole-document)
+  {
+    printf '# prd -- adversarial pass 1\n\n'
+    printf '<!-- SKILL_INVOCATION_PROVENANCE v1\n'
+    printf 'skill: ai-dlc-adversary-review\n'
+    printf 'invoked_at: %s\n' "$2"
+    printf 'tool_use_id: toolu_fixture_k2\n'
+    [ -n "$4" ] && printf 'shard_tool_use_ids:%s\n' "$4"
+    printf 'mode: subagent\n'
+    printf 'lead_role: pm\n'
+    printf 'artifact: prd.md\n'
+    printf 'artifact_sha: %s\n' "$3"
+    printf 'findings_critical: 0\n'
+    printf 'findings_critical_prior_scope: 0\n'
+    printf 'findings_major: 0\n'
+    printf 'findings_major_underived: 0\n'
+    printf 'findings_minor: 0\n'
+    printf 'verdict: EXIT_CONDITION_MET\n'
+    printf 'SKILL_INVOCATION_PROVENANCE_END -->\n'
+  } > "$1/prd-adversarial-p1.md"
+}
+K2_IDS=' 1=toolu_fixture_d1 2=toolu_fixture_d2 cross=toolu_fixture_dx'
+
+# k2-shardable-post -- THE OFFENDER: a whole-document pass over a shardable document, the
+# series opened after the stamp, disk bytes == notarized bytes. Must FAIL (K2).
+k2_world "$TARGET/k2-shardable-post" shardable
+k2_pass "$TARGET/k2-shardable-post" 2026-09-29T11:00:00Z "$(k2_sha "$TARGET/k2-shardable-post/prd.md")" ""
+
+# k2-shardable-pre -- the same bytes, the series opened BEFORE the stamp. PENDING (Legacy).
+k2_world "$TARGET/k2-shardable-pre" shardable
+k2_pass "$TARGET/k2-shardable-pre" 2026-09-29T09:00:00Z "$(k2_sha "$TARGET/k2-shardable-pre/prd.md")" ""
+
+# k2-serial -- one `##` section, so the map says SERIAL: Rule 28's exception 4. Passes, silent.
+k2_world "$TARGET/k2-serial" serial
+k2_pass "$TARGET/k2-serial" 2026-09-29T11:00:00Z "$(k2_sha "$TARGET/k2-serial/prd.md")" ""
+
+# k2-sharded -- the offender with the merge's `shard_tool_use_ids:` line. Passes, silent.
+k2_world "$TARGET/k2-sharded" shardable
+k2_pass "$TARGET/k2-sharded" 2026-09-29T11:00:00Z "$(k2_sha "$TARGET/k2-sharded/prd.md")" "$K2_IDS"
+
+# k2-sha-moved -- the offender after a repair wrote the document: the pass notarized bytes
+# that are no longer on disk. PENDING, never judged on unreviewed bytes.
+k2_world "$TARGET/k2-sha-moved" shardable
+k2_pass "$TARGET/k2-sha-moved" 2026-09-29T11:00:00Z "$(k2_sha "$TARGET/k2-sha-moved/prd.md")" ""
+printf '\n## Five\n\necho echo\n' >> "$TARGET/k2-sha-moved/prd.md"

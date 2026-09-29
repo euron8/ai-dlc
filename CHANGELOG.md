@@ -15,6 +15,68 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.665.0] - 2026-09-29
+
+A single planning document is now reviewed and repaired one agent per section instead of one
+agent for the whole file. `partition-document.sh` splits a document at its `##` headings into at
+most 8 parts, or reports it SERIAL when fewer than 2 parts result or one part holds over half the
+bytes. Reviews and repairs join through programs, never by hand. Closes `BL-372`, `BL-371` and
+`BL-373`.
+
+### BL-372: section sharding of a single document
+
+- **Partition.** `core/scripts/partition-document.sh --map | --split [--expect-sha] | --assemble`
+  is the only speller of the heading grammar: `##` atoms outside fences, an over-half atom split at
+  its `###`, packed greedily into at most 8 parts. Over all 4854 `.md` files in the reference
+  consumer's `_bmad-output/`, 3712 sharded and 1142 stayed SERIAL, every sharded file reassembled
+  byte-identically, and none exceeded 8 parts.
+- **Review.** One adversary per section plus one cross-section reviewer. Each finding carries one
+  `sections:` line. `merge-adversarial-shards.sh --document` refuses an incomplete shard set, a
+  wrong-axis citation, a sha that is not the document's, or an `artifact:` naming another path. It
+  sums the counts, recomputes the verdict, and writes one `artifact_sha` and a `shard_wall:` line.
+- **Repair.** Each remediator edits its own copy of one section. Two concurrent read-modify-writes
+  to one file lost an update in 50 of 50 runs in an emulation, so the document is never edited in
+  place by shards. `join-remediator-shards.sh --document` joins on the section files' write-ledger
+  rows and runs `--assemble` before writing its record. The assembler refuses a moved document sha,
+  a missing section, a foreign entry or a section missing its trailing newline, then removes the
+  section copies. Findings citing two or more sections go to one remediator after assembly.
+- **Derivations.** A remediator's derivation fence names the DOCUMENT by its project-relative
+  path, never its section file, which assembly removes. `ai-dlc-derivation-capture.sh` exempts
+  such a pair in a section copy or an unassembled repair part only when its command names the
+  manifest's document, and refuses a part pair that reads the section copy. The gate re-runs
+  derivations on the assembled document. The release's tip adversary measured the need: a fence
+  over the section file passed at write time and went stale after assembly, 0 failures before the
+  join and 2 after; with the fence on the document the validator reads rc 0 after the join.
+- **Check 24 arm K2.** An unsharded pass over a document `--map` partitions FAILs once the series
+  opened after the 0.665.0 stamp, and is PENDING before it, when the partitioner is absent, or when
+  the document has moved since it was notarized. On the reference consumer's 114 series: 0 K2
+  failures, 0 changed exit codes. Validator cost +1.3s (+5%) on those series at low load.
+- **Rule 28.** Exception (4) now reads "a single document that `partition-document.sh --map`
+  reports SERIAL". The dispatch guard records `serial-document`, and keeps `one-file` as an alias.
+- The wall-clock gain of section sharding is unmeasured; it needs a consumer pull.
+
+### BL-371: arm G orders same-second passes by the time key
+
+Arm G compared `invoked_at` as a raw string, so `15:08:19.497Z` read as earlier than `15:08:19Z`.
+It now compares on the key `merge-adversarial-shards.sh` uses, read from one definition.
+
+### BL-373: the two gate-remediation ledgers are declared
+
+`pipeline-state-paths.json` gains an optional `ledgers` list on a durable directory entry, naming
+`.artifact-writes.jsonl` and `.verdict-writes.jsonl`. I95(e) binds each to the producer line that
+builds it. No rotator exists for any `.jsonl` ledger; the declaration classifies the files and does
+not bound their growth.
+
+### Sharded passes across the other readers
+
+- `provenance-block.json`'s `artifact_sha` accepts a bare sha256 or a list of two or more
+  `<stem>=<sha256>` pairs, so a files-mode merged pass validates.
+- Arms F4, F5 and J compare a `<stem>=<sha>` list per stem, order-independent, so a sharded revert
+  listed in another story order is no longer read as a state the divergent pass never saw.
+  `sha_key` disables globbing, so a stem carrying `*` is compared literally.
+- On the reference consumer, two hand-written sprint-314 passes carrying a `stem=sha` list without
+  shard ids failed `validate-provenance-block.sh` before this release and pass after it.
+
 ## [0.664.0] - 2026-09-29
 
 `layer-drift.sh` no longer reads an unresolvable ref, or a contract it cannot read, as a layer
