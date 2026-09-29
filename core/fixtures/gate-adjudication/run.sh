@@ -1218,6 +1218,178 @@ run "$VERDICT"
 [ "$RC" -eq 0 ] && ok "restored verdict after the --coverage arms → exit 0" || bad "the pristine verdict did not pass after the --coverage arms (rc=$RC)"
 
 # ============================================================================
+# B-artifact-row: THE VERDICT READER IGNORES A PLANNING-ARTIFACT WRITE ROW.
+# ============================================================================
+# The remediation guard now records dispatched planning-artifact writes as `kind:
+# "artifact-write"` rows with a `path` and NO `stem`, in a ledger of their own. If one ever
+# reaches `.verdict-writes.jsonl` by any route, the binding must not read it as a write of this
+# verdict. The pair is one property apart: the same row, ts after the nonce, harness agent_id --
+# without a stem it binds nothing (unbound), with `stem: <nonce>` it binds (the near-miss that
+# proves the reader reads rows at all).
+GA_ART_ROW='{"v":1,"kind":"artifact-write","ts":"2026-07-15T14:05:00Z","path":"_bmad-output/planning-artifacts/s305/stories/story-2.1-positions-on-demand.md","agent_id":"a16fddf14ea289491","session":"t","tool":"Edit"'
+ga_clean_ledgers; restore
+ga_ledger "2026-07-15T14:03:02Z"
+printf '%s}\n' "$GA_ART_ROW" > "$GA_WRITES"
+ga_run; GA_ART_RC=$RC; GA_ART_UNB=0; ga_unbound && GA_ART_UNB=1
+printf '%s,"stem":"%s"}\n' "$GA_ART_ROW" "$NONCE" > "$GA_WRITES"
+ga_run; GA_ART_TWIN=$RC
+ga_clean_ledgers
+if [ "$GA_ART_RC" -eq 1 ] && [ "$GA_ART_UNB" -eq 1 ] && [ "$GA_ART_TWIN" -eq 0 ]; then
+  ok "B-artifact-row: an artifact-write row (no stem) in .verdict-writes.jsonl binds nothing -- 'bound to NO dispatch' -- while the same row carrying this stem binds (exit 0)"
+else
+  bad "B-artifact-row: artifact row rc=$GA_ART_RC unbound-named=$GA_ART_UNB, stem twin rc=$GA_ART_TWIN -- expected 1/1/0; a planning-artifact write is binding a verdict, or the reader reads no rows at all"
+fi
+
+# ============================================================================
+# D4: SHARDED ADJUDICATION -- `--expected --shard i/N` and `--merge`.
+# ============================================================================
+# One adjudicator per slice of the escalated worklist, each deriving its own slice, and one
+# deterministic merge into the v1 verdict every reader already reads. The part lines carry the
+# REAL evidence strings of a reference-consumer implementation verdict (`seed.consumer-evidence.tsv`,
+# whitespace-folded and cut at 200 chars), whose check ids were exactly this derived set when it
+# was taken. A seed id the map no longer escalates simply goes unused, and an escalated id with no
+# seeded evidence gets a placeholder -- the arms key on the SET, which is derived, never on the seed.
+D4_EV="$HERE/seed.consumer-evidence.tsv"
+D4_OK=1
+[ -s "$D4_EV" ] || { bad "D4-pre: FIXTURE BROKEN -- $D4_EV is missing; the parts would carry no real evidence"; D4_OK=0; }
+d4_expect() { AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" bash "$1" --expected "$GATE_TYPE" "${@:2}"; }
+D4_N=3
+D4_OUT="$WORK/d4.out"
+# Parts are built from the REAL program's slices, so the arms test the merge against what the
+# shards would actually have been told to judge.
+d4_parts() { # <dir> -> writes <nonce>.part-<i>of3.jsonl for i=1..3
+  local dir="$1" i
+  mkdir -p "$dir"
+  for i in 1 2 3; do
+    d4_expect "$VALIDATOR" --shard "$i/$D4_N" | python3 -c '
+import json, sys
+ev = {}
+for line in open(sys.argv[1], encoding="utf-8"):
+    cid, _, text = line.rstrip("\n").partition("\t")
+    ev[cid] = text
+for cid in sys.stdin.read().split():
+    print(json.dumps({"gate_nonce": sys.argv[2], "gate_series_id": sys.argv[2], "catalog": "core",
+                      "adjudicator_agent_id": sys.argv[3], "check_id": cid, "verdict": "PASS",
+                      "evidence": ev.get(cid) or "fixture: no consumer evidence seeded for " + cid}))
+' "$D4_EV" "$NONCE" "a16fddf14ea28949$i" > "$dir/$NONCE.part-${i}of$D4_N.jsonl"
+  done
+}
+d4_merge() { # <validator> <dir> <part>... -> RC, $D4_OUT
+  local v="$1" dir="$2"; shift 2
+  AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
+    bash "$v" --merge "$GATE_TYPE" "$dir/$NONCE.verdict.json" "$@" > "$D4_OUT" 2>&1
+  RC=$?
+}
+d4_refused() { # <dir> <token> -- exit 2, the token, and NO verdict written
+  local n; n="$(grep -cF -- "$2" "$D4_OUT")" || n=0
+  [ "$RC" -eq 2 ] && [ "$n" -gt 0 ] && [ ! -e "$1/$NONCE.verdict.json" ]
+}
+d4_dir() { mktemp -d "$WORK/d4.XXXXXX"; }
+P1() { printf '%s' "$1/$NONCE.part-1of$D4_N.jsonl"; }
+P2() { printf '%s' "$1/$NONCE.part-2of$D4_N.jsonl"; }
+P3() { printf '%s' "$1/$NONCE.part-3of$D4_N.jsonl"; }
+
+# The four merge predicates, over a validator path, so the mutants below score the arm's own body.
+d4_p_merge() {
+  local d; d="$(d4_dir)"; d4_parts "$d"
+  d4_merge "$1" "$d" "$(P1 "$d")" "$(P2 "$d")" "$(P3 "$d")"
+  [ "$RC" -eq 0 ] && grep -q "MERGED ($d/$NONCE.verdict.json, 3 part(s)" "$D4_OUT" \
+    && grep -q 'COVERAGE-OK' "$D4_OUT" && [ -f "$d/$NONCE.verdict.json" ]
+}
+d4_p_missing() {
+  local d; d="$(d4_dir)"; d4_parts "$d"
+  d4_merge "$1" "$d" "$(P1 "$d")" "$(P3 "$d")"
+  d4_refused "$d" "are not exactly 1..3"
+}
+d4_p_dup() { # part 2 also carries part 1's first check: the union is still exact
+  local d; d="$(d4_dir)"; d4_parts "$d"
+  head -1 "$(P1 "$d")" >> "$(P2 "$d")"
+  d4_merge "$1" "$d" "$(P1 "$d")" "$(P2 "$d")" "$(P3 "$d")"
+  d4_refused "$d" "appear more than once across the parts"
+}
+d4_p_nonce() { # a correctly NAMED part whose line carries another pass's nonce
+  local d; d="$(d4_dir)"; d4_parts "$d"
+  sed 's/"gate_nonce": "[^"]*"/"gate_nonce": "implementation-20260716T090000Z"/' "$(P2 "$d")" > "$d/p2" && mv "$d/p2" "$(P2 "$d")"
+  d4_merge "$1" "$d" "$(P1 "$d")" "$(P2 "$d")" "$(P3 "$d")"
+  d4_refused "$d" "it is another gate pass's work"
+}
+d4_p_union() { # indices complete, part 3 one check short: only the union join sees it
+  local d; d="$(d4_dir)"; d4_parts "$d"
+  sed '$d' "$(P3 "$d")" > "$d/p3" && mv "$d/p3" "$(P3 "$d")"
+  d4_merge "$1" "$d" "$(P1 "$d")" "$(P2 "$d")" "$(P3 "$d")"
+  d4_refused "$d" "union is not --expected"
+}
+D4_PREDS="merge missing dup nonce union"
+
+if [ "$D4_OK" -eq 1 ]; then
+  # D4-shard: the N slices concatenate to the bare list, and each is non-empty.
+  D4_BARE="$(d4_expect "$VALIDATOR")"
+  D4_CAT="$(for i in 1 2 3; do d4_expect "$VALIDATOR" --shard "$i/$D4_N"; done)"
+  D4_EMPTY=0; for i in 1 2 3; do [ -n "$(d4_expect "$VALIDATOR" --shard "$i/$D4_N")" ] || D4_EMPTY=1; done
+  if [ -n "$D4_BARE" ] && [ "$D4_CAT" = "$D4_BARE" ] && [ "$D4_EMPTY" -eq 0 ]; then
+    ok "D4-shard: --shard 1/3..3/3 are each non-empty and concatenate, in order, to the bare --expected list"
+  else
+    bad "D4-shard: the three slices do not concatenate to --expected (or one is empty) -- a shard would judge a list nobody derived"
+  fi
+  d4_expect "$VALIDATOR" --shard "1/99" > "$D4_OUT" 2>&1; D4_RC=$?
+  if [ "$D4_RC" -eq 2 ] && grep -q 'REFUSED:' "$D4_OUT"; then
+    ok "D4-shard-over: N above the escalated count is REFUSED (exit 2), never an empty slice that reads as a non-delivered part"
+  else
+    bad "D4-shard-over: --shard 1/99 did not refuse (rc=$D4_RC)"
+  fi
+  d4_p_merge "$VALIDATOR"   && ok "D4-merge: three parts (real consumer evidence) merge into the v1 verdict and the --coverage arms pass on it (MERGED + COVERAGE-OK)" \
+    || bad "D4-merge: a complete 3-part split did not merge and pass coverage (rc=$RC): $(cat "$D4_OUT")"
+  d4_p_missing "$VALIDATOR" && ok "D4-missing: parts 1 and 3 of 3 -> REFUSED 'not exactly 1..3', exit 2, no verdict written" \
+    || bad "D4-missing: a missing slice was not refused cleanly (rc=$RC): $(cat "$D4_OUT")"
+  d4_p_dup "$VALIDATOR"     && ok "D4-dup: one check in two parts -> REFUSED 'appear more than once', exit 2, no verdict written" \
+    || bad "D4-dup: a duplicated check_id was not refused cleanly (rc=$RC): $(cat "$D4_OUT")"
+  d4_p_nonce "$VALIDATOR"   && ok "D4-nonce: a line carrying another pass's gate_nonce -> REFUSED 'another gate pass's work', exit 2, no verdict written" \
+    || bad "D4-nonce: a foreign nonce was not refused cleanly (rc=$RC): $(cat "$D4_OUT")"
+  d4_p_union "$VALIDATOR"   && ok "D4-union: indices 1..3 complete, one check short -> REFUSED 'union is not --expected', exit 2, no verdict written" \
+    || bad "D4-union: a short union was not refused cleanly (rc=$RC): $(cat "$D4_OUT")"
+
+  # D4-series: the stall rung reads a tree holding parts exactly as it reads one without them.
+  # The two trees are asserted to differ, and a stray non-verdict .json is the control that a
+  # difference in the tree IS visible to --series.
+  D4_SA="$(d4_dir)"; D4_SB="$(d4_dir)"
+  cp "$PRISTINE" "$D4_SA/$NONCE.verdict.json"; cp "$PRISTINE" "$D4_SB/$NONCE.verdict.json"
+  d4_parts "$D4_SB"
+  d4_series() { AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" bash "$VALIDATOR" --series "$1" 2>&1 | sed "s#$1#<TREE>#g"; }
+  D4_OA="$(d4_series "$D4_SA")"; D4_RA=$?
+  D4_OB="$(d4_series "$D4_SB")"
+  D4_NPART="$(find "$D4_SB" -name '*.part-*.jsonl' | grep -c .)" || D4_NPART=0
+  printf '{"x": 1}\n' > "$D4_SB/stray.json"
+  AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" bash "$VALIDATOR" --series "$D4_SB" > "$D4_OUT" 2>&1; D4_RC=$?
+  if [ "$D4_NPART" -eq 3 ] && [ -n "$D4_OA" ] && [ "$D4_OA" = "$D4_OB" ] && [ "$D4_RC" -eq 2 ]; then
+    ok "D4-series: --series over a tree holding 3 .part-*.jsonl reads byte-identical to the tree without them, while a stray .json in the same tree exits 2 (the control sees a difference)"
+  else
+    bad "D4-series: parts=$D4_NPART, outputs equal=$([ "$D4_OA" = "$D4_OB" ] && echo yes || echo no), stray-json rc=$D4_RC -- the parts disturb the stall rung, or the comparison cannot see a difference"
+  fi
+
+  # D4 mutants: a copy of the validator and its siblings (cv_mutdir), one literal edit each.
+  d4_score() { # <label> <validator> <expected dead>
+    local dead="" p
+    for p in $D4_PREDS; do "d4_p_$p" "$2" || dead="$dead $p"; done
+    dead="${dead# }"
+    if [ "$3" = "NONE" ]; then
+      [ -z "$dead" ] && ok "$1: all five merge predicates hold on the unmutated sandbox copy" \
+        || bad "$1: the UNMUTATED copy failed [$dead] -- every D4 mutant verdict is about a broken harness"
+    elif [ "$dead" = "$3" ]; then ok "$1: KILLED by [$3] and nothing else"
+    elif [ -z "$dead" ]; then bad "$1 SURVIVED -- no D4 arm watches the line it edits"
+    else bad "$1 killed [$dead], expected exactly [$3]"; fi
+  }
+  d4_score "D4-M0 control (unmutated copy)" "$(cv_mutdir d4m0)/validate-gate-adjudication.sh" NONE
+  D4_MU="$(cv_mutdir d4mu)"
+  if cv_apply "$D4_MU/validate-gate-adjudication.sh" '    if got != want:' '    if False:'; then
+    d4_score "D4-MU (the union-equality refusal removed)" "$D4_MU/validate-gate-adjudication.sh" union
+  else bad "D4-MU: FIXTURE STALE -- the union anchor is not in the validator exactly once"; fi
+  D4_MD="$(cv_mutdir d4md)"
+  if cv_apply "$D4_MD/validate-gate-adjudication.sh" '    if twice:' '    if False:'; then
+    d4_score "D4-MD (the duplicate-id refusal removed)" "$D4_MD/validate-gate-adjudication.sh" dup
+  else bad "D4-MD: FIXTURE STALE -- the duplicate anchor is not in the validator exactly once"; fi
+fi
+
+# ============================================================================
 # SCRIPT ARMS BEFORE THE ADJUDICATOR — the escalation preamble and the Gate
 # Failure re-run rule, asserted in the two step files that carry them.
 # ============================================================================
