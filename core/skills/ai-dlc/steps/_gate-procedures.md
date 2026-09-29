@@ -574,8 +574,9 @@ document in place. Otherwise, in this order:
    edits ONLY its section file, never the document, and every `edit:` line cites that section
    file by its full path.
 3. **Join and assemble.** Beat-join every part, then run
-   `scripts/ai-dlc/join-remediator-shards.sh --document <artifact path> --sprint <N> --artifact <name> --pass <M> --artifact-path _bmad-output/planning-artifacts/s<N> --since <ISO> --until <ISO>`.
-   In document mode the section files are the file set, so a section written by two agents, an
+   `scripts/ai-dlc/join-remediator-shards.sh --document <artifact path> <that dir> --since <ISO> --until <ISO>`.
+   `--artifact-path` is refused in document mode: the section files under `<that dir>/sections/`
+   are the file set, so a section written by two agents, an
    uncited section or a section cited by two parts refuses exactly as a file does. The join then
    runs `partition-document.sh --assemble <that dir>`, which refuses when the document moved since
    the split, a section is missing or a foreign file is present; on any refusal the join exits 2
