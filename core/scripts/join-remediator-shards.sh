@@ -32,11 +32,21 @@
 #   - an empty shard directory (a glob that matched nothing is not a join of zero parts);
 #   - no ledger, or no ledger row under the artifact in the window (disjointness unproven);
 #   - any file under the artifact written by two or more distinct agent_ids in the window;
-#   - a part with no `remediator_agent_id:` line, or two parts naming the same agent;
-#   - a WRITER with no part: an agent the ledger saw editing the artifact delivered no record
-#     (the missing-shard case -- the writer set is DERIVED from the ledger, never passed in);
+#   - a written file that no part's `edit:` lines cite (the missing shard -- the file set is
+#     DERIVED from the ledger, never passed in);
+#   - a file cited by two parts, or one part citing files written by two different agents;
+#   - a part citing a file no agent wrote in the window -- including a write whose ledger row
+#     was lost, because the hook's append is silent on failure and this is where that surfaces;
 #   - a part that arm H would not read as structured on its own (see below);
 #   - an existing `<artifact>-repair-p<M>.md` (a join never overwrites a record).
+#
+# PARTS ARE KEYED ON THE FILES THEY CITE, NEVER ON AN AGENT ID THEY REPORT. The ledger's
+# `agent_id` is the harness's attribution and no dispatched model is shown it, so the join
+# compares harness ids only with harness ids, and joins a part to a writer through the files the
+# part's `edit:` lines name. A cited token is a path-shaped run ending in a document extension
+# (`:<line>` suffixes and prose fall away), resolved to the written file it equals or is a
+# `/`-suffix of. Only the `edit:` line itself is read; a citation wrapped onto the next line is
+# not seen, and a file it names then reads as UNCITED -- a refusal, never an acquittal.
 #
 # "STRUCTURED IFF EVERY PART IS". Arm H of `validate-adversarial-convergence.sh` reads a record as
 # structured when each of `disposition:`, `edit:`, `derivation:` opens a line ANYWHERE in it, so a
@@ -46,8 +56,8 @@
 # `validate-gate-adjudication.sh` make -- so the predicate cannot drift from the gate's.
 #
 # WHAT IT CANNOT SEE. A remediator that edited nothing AND delivered no part is invisible: the
-# writer set is derived from edits, and an agent with none contributes nothing to it. A part from
-# an agent that wrote nothing is accepted (an all-escalated shard is legitimate). The ledger rows
+# file set is derived from edits, and an agent with none contributes nothing to it. A part that
+# cites no file at all is accepted (an all-escalated shard is legitimate). The ledger rows
 # are PreToolUse attempts, not completed writes, so an attempted overlap refuses -- the
 # conservative direction. Writes made through Bash reach no Edit matcher and no ledger row.
 #
@@ -163,31 +173,88 @@ OVEOF
 fi
 WRITERS="$(printf '%s\n' "$ROWS" | awk -F'\t' '{print $2}' | sort -u)"
 
-# --- each part: an agent id, unique, structured by arm H's own reading.
-PART_IDS=""
+# --- each part: structured by arm H's own reading, and the FILES its `edit:` lines cite.
+# The part is keyed on what it says it EDITED, never on an agent id it reports about itself:
+# the ledger's `agent_id` is the harness's attribution, which no dispatched model is shown, so a
+# self-reported id could only ever match it by luck (measured on the reference consumer: 1 of 29
+# verdict stems carried an `adjudicator_agent_id` equal to the harness id that wrote it).
+# A cited token is a path-shaped run ending in a document extension; a `:<line>` suffix, prose
+# and backticks around it fall away because the token grammar cannot spell them.
+CITES=""
 while IFS= read -r p; do
   [ -n "$p" ] || continue
-  rid="$(sed -n 's/^[[:space:]-]*[*_`]*remediator_agent_id[*_`]*:[[:space:]]*//p' "$p" | head -1 | sed 's/[`[:space:]]*$//')"
-  if [ -z "$rid" ]; then
-    refuse "$(basename "$p") carries no 'remediator_agent_id:' line; a part must name its writer"
-  else
-    PART_IDS="${PART_IDS}${rid}
-"
-  fi
   for fld in disposition edit derivation; do
     repair_field "$fld" "$p" || refuse "$(basename "$p") has no '${fld}:' field as arm H reads it; the joined record would read structured on another part's labels"
   done
+  _toks="$(awk '
+    /^[[:space:]-]*[*_`]*edit[*_`]*:/ {
+      line = $0; sub(/^[^:]*:/, "", line)
+      while (match(line, /[A-Za-z0-9_.\/-]+[.](md|json|jsonl|yaml|yml|txt|csv)/)) {
+        print substr(line, RSTART, RLENGTH); line = substr(line, RSTART + RLENGTH)
+      }
+    }' "$p" | sort -u)"
+  while IFS= read -r _t; do
+    [ -n "$_t" ] || continue
+    CITES="${CITES}C	$(basename "$p")	${_t}
+"
+  done <<TOKEOF
+$_toks
+TOKEOF
 done <<PAREOF
 $PARTS
 PAREOF
 
-DUPS="$(printf '%s' "$PART_IDS" | sort | uniq -d)"
-[ -z "$DUPS" ] || refuse "more than one part names remediator_agent_id: $(printf '%s' "$DUPS" | tr '\n' ' ')"
-MISSING="$(printf '%s\n' "$WRITERS" | while IFS= read -r a; do
-  [ -n "$a" ] || continue
-  grep -qxF -- "$a" <<<"$PART_IDS" || printf '%s\n' "$a"
-done)"
-[ -z "$MISSING" ] || refuse "agent(s) the ledger saw writing under ${APATH} delivered no shard record: $(printf '%s' "$MISSING" | tr '\n' ' ')"
+# THE COVERAGE JOIN. Ledger side: file -> writers (harness ids). Part side: part -> cited files.
+# A cited token resolves to the ledger path it equals or is a `/`-suffix of, so a bare basename,
+# a `stories/<file>` spelling and a full `_bmad-output/...` path all land on the same file.
+#   UNWRITTEN  a part cites a file no agent wrote under the artifact in the window. This is also
+#              how a LOST LEDGER ROW surfaces: the hook's append is silent on failure (it must
+#              never block the Edit), so a write it failed to record reads here as a claimed
+#              edit with no write, and the join refuses rather than acquits.
+#   AMBIG      a cited token matches more than one written file -- the citation names no file.
+#   UNCITED    a written file no part cites: its writer delivered no record (the missing shard).
+#   DOUBLE     one written file cited by two parts: two records claim one region.
+#   SPAN       one part cites files written by two different agents: the part is not one shard.
+JOINRES="$({ printf '%s\n' "$ROWS" | awk -F'\t' 'NF >= 2 { print "W\t" $1 "\t" $2 }'
+             printf '%s' "$CITES"; } | awk -F'\t' '
+  $1 == "W" { if (!($2 in wr)) { np++; P[np] = $2 }
+              if (!(($2, $3) in ws)) { ws[$2, $3] = 1; wr[$2] = ($2 in wr) ? wr[$2] " " $3 : $3 }
+              next }
+  $1 == "C" { part = $2; tok = $3; n = 0; hit = ""
+              for (i = 1; i <= np; i++) {
+                p = P[i]
+                if (p == tok || (length(p) > length(tok) && substr(p, length(p) - length(tok)) == "/" tok)) {
+                  n++; hit = (hit == "" ? p : hit " " p) }
+              }
+              if (n == 0) { print "UNWRITTEN\t" part "\t" tok; next }
+              if (n > 1)  { print "AMBIG\t" part "\t" tok "\t" hit; next }
+              if (!((hit, part) in cs)) { cs[hit, part] = 1; cov[hit] = (hit in cov) ? cov[hit] " " part : part; ncov[hit]++ }
+              k = split(wr[hit], a, " ")
+              for (j = 1; j <= k; j++) if (!((part, a[j]) in pw)) {
+                pw[part, a[j]] = 1; npw[part]++; pwl[part] = (part in pwl) ? pwl[part] " " a[j] : a[j] }
+              next }
+  END {
+    for (i = 1; i <= np; i++) {
+      p = P[i]
+      if (!(p in cov)) print "UNCITED\t" p "\t" wr[p]
+      else if (ncov[p] > 1) print "DOUBLE\t" p "\t" cov[p]
+    }
+    for (q in npw) if (npw[q] > 1) print "SPAN\t" q "\t" pwl[q]
+  }' | sort)"
+
+if [ -n "$JOINRES" ]; then
+  while IFS='	' read -r kind a b c; do
+    case "$kind" in
+      UNWRITTEN) refuse "${a} cites ${b}, which no dispatched agent wrote under ${APATH} in the window -- a claimed edit with no write (or a write the ledger failed to record)" ;;
+      AMBIG)     refuse "${a} cites ${b}, which matches more than one written file (${c}); cite the path, not the basename" ;;
+      UNCITED)   refuse "${a} was written in the window by ${b} and is cited by no shard record -- a missing shard" ;;
+      DOUBLE)    refuse "${a} is cited by more than one shard record (${b}); one file belongs to one shard" ;;
+      SPAN)      refuse "${a} cites files written by more than one agent (${b}); a shard record covers one writer's files" ;;
+    esac
+  done <<JREOF
+$JOINRES
+JREOF
+fi
 
 [ -e "$OUT" ] && refuse "${OUT} already exists; a join never overwrites a repair record"
 

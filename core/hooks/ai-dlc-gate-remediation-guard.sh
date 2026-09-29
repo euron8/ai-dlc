@@ -379,8 +379,12 @@ record_verdict_write() { # $1 file_path -- silent no-op unless this is a verdict
 # overlap, which is the conservative direction for a check whose subject is two writers.
 record_artifact_write() { # $1 file_path -- silent no-op unless this is a planning-artifact write
   case "$TOOL_NAME" in Edit|Write|MultiEdit) ;; *) return 0 ;; esac
+  # The LOG_DIR prefix first, so a directory under planning-artifacts that happens to share the
+  # state directory's name cannot move the cut; the generic form is the fallback for a payload
+  # spelled from somewhere else.
   case "$1" in
-    */${STATE_DIR_NAME}/planning-artifacts/*) _raw_rel="${STATE_DIR_NAME}/${1##*/${STATE_DIR_NAME}/}" ;;
+    "$LOG_DIR"/planning-artifacts/*) _raw_rel="${STATE_DIR_NAME}/${1#"$LOG_DIR"/}" ;;
+    */${STATE_DIR_NAME}/planning-artifacts/*) _raw_rel="${STATE_DIR_NAME}/${1#*/${STATE_DIR_NAME}/}" ;;
     ${STATE_DIR_NAME}/planning-artifacts/*) _raw_rel="$1" ;;
     *) return 0 ;;
   esac
