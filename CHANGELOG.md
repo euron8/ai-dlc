@@ -15,6 +15,60 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.664.0] - 2026-09-29
+
+`layer-drift.sh` no longer reads an unresolvable ref, or a contract it cannot read, as a layer
+with nothing to adjudicate. Closes `BL-370`; files `BL-374`. `layer-drift.sh` is a bootstrapping
+file, so this release ships alone, and the consumer's installed engine runs the pull that
+delivers it.
+
+### BL-370: an unresolvable ref or an unreadable contract refuses instead of disarming adjudication
+
+Before this release, `--adjudicated-codes` given a ref that does not exist printed nothing and
+exited 0. Classify mode given a bad `theirs` printed 50 rows at rc 0 on a consumer clone, and
+given a bad base it printed 80, 22 of them `HARD-LAYER-ADJUDICATION-MISSING` keyed to a base that
+does not exist. Callers rendered all of those runs as clean.
+
+- **Startup refusal.** `theirs` in all three modes, and `base` in classify and
+  `--list-adjudications`, must resolve to a commit in the distribution. Otherwise the script
+  prints a `layer-drift: REFUSED` line and exits 1, before any temp file is created.
+  `hard-blockers.sh` and `emit-report.sh` render the refusal as `DETECTOR-REFUSED`, and
+  `apply.sh` as `DECISION layer-drift-refused`. Exit 1 is the update skill's refusal-to-start
+  code; 2 stays reserved for usage errors and lost rows.
+- **An unreadable path refuses.** When the memoized existence probe says no, `have()` asks
+  `git ls-tree --full-tree`, staged to a file. A path the tree names but whose object cannot be
+  read now refuses, with a message naming which state it is: the tree names the path and its
+  object is missing, or a tree on its path could not be read. A path the tree does not name is
+  still absent, so a distribution with no contract keeps "no adjudication tier". `rev-parse
+  <ref>:<path>` was rejected because it answers "absent" for a missing subtree.
+- **A consumer's spelling is not a store fault.** `ls-tree` normalises its pathspec and the
+  existence probe does not, so `steps/./x.md`, `a//b` or `a/x/../b` found the canonical file
+  under another name. `have()` compares the path `ls-tree -z` printed with the one it was asked
+  for, and reads a mismatch as absent; a `..` spelling that climbs out of the tree is absent too.
+  Both give the advisory `EXTENSION-HOOK-MISSING` row they gave before this release, rather than a
+  refusal that re-fetching cannot clear. Measured on a consumer clone: the base engine refused a
+  `hooks: steps/./gate-validation.md` extension at rc 1, and this release reads it as 54 rows at
+  rc 0 with one `EXTENSION-HOOK-MISSING`.
+- **Healthy output is byte-identical.** 21 of 21 `cmp` comparisons matched on a consumer clone:
+  classify, list and codes modes over the 0.662.0 and 0.659.0 ranges, and `hard-blockers.sh` and
+  `emit-report.sh` over the 0.662.0 range. Classify wall clock was 19.83s against 19.79s over
+  5 interleaved reps, a difference smaller than the spread between reps. On those ranges the
+  fallback probe was never reached (77 calls, 0 misses).
+- **Fixture.** `layer-adjudication-tier` Part 11 gains eleven arms: bad theirs and bad base in
+  each mode, a missing blob, a missing subtree, a genuinely absent contract as the near-miss, a
+  non-canonical spelling, a tree-escaping `..` spelling, and a healthy control. The bad-theirs
+  arms require the startup message itself. Ten mutants are each killed by a named arm, including
+  one removing only the theirs check at startup. `layer-contract.yaml` LC-E3 now names this
+  fixture, because its arms emit `EXTENSION-HOOK-MISSING`.
+- **Update skill.** `SKILL.md`'s step 3c exit table and two later sentences name the new
+  refusal causes.
+
+### BL-374 filed
+
+`_ai_dlc_memo_absent` in `reconcile/lib.sh` uses `rev-parse` as its "absent" oracle, so a
+missing subtree is cached as absent in the shared memo and served to later processes. DEFECT,
+with a receipt that exits 1 on this tree.
+
 ## [0.663.0] - 2026-09-29
 
 The lead no longer waits on one agent to review, repair, adjudicate or explore a whole

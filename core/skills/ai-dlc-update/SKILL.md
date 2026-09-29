@@ -899,9 +899,18 @@ prose is itself generated rather than composed.
      clause(s) at level ADJUDICATED and the code set read out of it is EMPTY`** → the adjudication
      tier would have been switched off. Both usually mean `ulimit -f` or a full or read-only
      `$TMPDIR`; clear that and re-run. `--adjudicated-codes` refuses the same way, so its empty
-     output is an answer only when it exits 0. A contract ABSENT at theirs is not a refusal. Exit
-     2 with a `usage:` line, or exit 1 with any other reason, is a refusal to start. Any other run
-     exits 0, whatever it found.
+     output is an answer only when it exits 0.
+   - **Exit 1 with `layer-drift: REFUSED — <base|theirs> ref '<value>' does not resolve to a
+     commit`** → the ref names nothing in the distribution clone: a typo, a ref it never fetched,
+     or a consumer sha passed where a distribution one belongs. THEIRS is checked in all three
+     modes and BASE in classify and list mode, before anything is read. Fetch the ref or correct
+     it, and re-run. **Exit 1 with `layer-drift: REFUSED — <path> at <ref> could not be
+     read`** → an object the scan needs is missing from the distribution clone's
+     object store, and reading on would have treated a present file as an absent one. Repair the
+     clone (re-fetch, or re-clone) and re-run. A path genuinely ABSENT at theirs, which the
+     tree does not name, is not a refusal, and neither is a `hooks:` or `shadows:` path spelled
+     other than the tree spells it (`steps/./x.md`): that is the advisory absent row. Exit 2 with a `usage:` line, or exit 1 with any other
+     reason, is a refusal to start. Any other run exits 0, whatever it found.
 
 3d. **Unregistered core drift — the layer system's blind spot.** `layer-drift.sh`
    walks `overrides/` and `extensions/`. A core file edited **in place** appears in
@@ -1469,8 +1478,8 @@ prose is itself generated rather than composed.
    below draws. Never infer that an unresolvable base means "unchanged."
    A layer-drift run that exited non-zero reported no `HARD-` status because it did not finish,
    not because there is none: exit 2 with a `layer-drift: REFUSED` line means a row could not be
-   written, and exit 1 with one means an input could not be staged. Re-run it before reading this
-   gate as clear.
+   written, and exit 1 with one means an input could not be staged or read, or a base or theirs
+   ref does not resolve (step 3c lists each line). Re-run it before reading this gate as clear.
 
    **Mechanical union gate — the driver, not memory.** `apply` may write only after BOTH hold:
    (1) `reconcile/emit-report.sh --verify <report> <dist> <base> <consumer> <theirs>` exits 0 — the
@@ -1683,7 +1692,8 @@ prose is itself generated rather than composed.
 
    Then **re-run `layer-drift.sh` and `unregistered-drift.sh` and require ZERO `HARD-*`
    rows from runs that both exited 0.** Either one exits 2 with a `: REFUSED` line when a row
-   could not be written, and `layer-drift.sh` exits 1 with one when an input could not be staged;
+   could not be written, and `layer-drift.sh` exits 1 with one when an input could not be staged
+   or read, or a base or theirs ref does not resolve;
    its short output is then not a zero. Do not carry forward your memory of having discussed them: the re-run is the
    evidence, and re-stamping is what makes it pass. A `HARD-` status that clears because
    you decided it was fine is the check-that-cannot-fail defect, in the tool built to
