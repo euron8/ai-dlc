@@ -1550,6 +1550,177 @@ if [ "$CYCLE_STATE" -eq 1 ]; then
 fi
 
 # =============================================================================
+# K. SHARD -- a pass over a MULTI-FILE artifact is the merge of a sharded review.
+# =============================================================================
+# GATE ONLY, like H and D: the hooks call --cycle-state on every turn and this arm reads git.
+#
+# Rule 28 ("Split dispatch", files axis): an artifact of two or more files is reviewed by one
+# adversary per file plus one cross-file adversary, and `merge-adversarial-shards.sh` joins
+# them into the ONE pass file this series reads, writing `shard_tool_use_ids:` into its block.
+# A pass over such an artifact WITHOUT that line was written by one whole-subject reviewer.
+#
+#   candidate  the pass's `artifact:` (first token, trailing `/` dropped) resolves, walking up
+#              from the pass file's directory, to a DIRECTORY holding two or more `*.md`
+#              entries -- the SAME set the merge lists (`for f in "$STORIES_DIR"/*.md` with
+#              `[ -e ]`), so this arm never demands a merge the merge would refuse -- and its
+#              `shard_tool_use_ids:` carries no `<key>=toolu_...` token.
+#   FAIL       the series' FIRST pass is at or after the first commit stamping
+#              `.claude/.ai-dlc-version` at K_RELEASE or later.
+#   PENDING    no such stamp, no git work tree, or a first pass stamped before it, or an
+#              `invoked_at` that is not ISO 8601 UTC. Printed, never counted.
+#
+# A comma list in `artifact:` names files, not a directory, and resolves to nothing; such a
+# series is not a candidate. That is residue, not a pass: the arm cannot see a multi-file review
+# spelled as a list.
+#
+# FALSE-POSITIVE SET. On the reference consumer as pulled, every directory-artifact series
+# predates the stamp, so every candidate is PENDING and none fails; the narrowing is the stamp
+# date keyed on the series' FIRST pass (a series opened before the release finishes under the
+# rules it opened under). The stamp reader copies validate-scope-confirmation.sh's
+# `sdi_first_stamp_epoch` shape with this release and a UTC ISO date in place of an epoch, so
+# the comparison is a string compare and costs no `date` fork.
+K_RELEASE="0.663.0"
+
+k_count_md() {   # $1 dir -> K_COUNT, the merge's own story count. No subshell.
+  K_COUNT=0
+  for k_md in "$1"/*.md; do [ -e "$k_md" ] && K_COUNT=$((K_COUNT + 1)); done
+}
+k_has_ids() {    # $1 the shard_tool_use_ids: value -> 0 when it carries a <key>=toolu_ token
+  case " $1" in *=toolu_?*) return 0 ;; esac
+  return 1
+}
+k_resolve() {    # $1 pass file, $2 artifact token -> K_DIR (empty when no directory resolves)
+  K_DIR=""
+  kt="${2%/}"
+  [ -n "$kt" ] || return 0
+  case "$kt" in /*) [ -d "$kt" ] && K_DIR="$kt"; return 0 ;; esac
+  case "$1" in /*/*) kd="${1%/*}" ;; */*) kd="$PWD/${1%/*}" ;; *) kd="$PWD" ;; esac
+  while [ -n "$kd" ]; do
+    if [ -d "$kd/$kt" ]; then K_DIR="$kd/$kt"; return 0; fi
+    kd="${kd%/*}"
+  done
+  return 0
+}
+k_stamp_parse() {  # git log -p text on stdin -> earliest UTC ISO commit stamping >= K_RELEASE
+  awk -v rel="$K_RELEASE" '
+    function ge(a, b,   x, y, i) {
+      split(a, x, "."); split(b, y, ".")
+      for (i = 1; i <= 3; i++) {
+        if ((x[i] + 0) > (y[i] + 0)) return 1
+        if ((x[i] + 0) < (y[i] + 0)) return 0
+      }
+      return 1
+    }
+    /^C [0-9][0-9][0-9][0-9]-/ { t = $2; next }
+    /^\+version:/ {
+      v = $0; sub(/^\+version:[[:space:]]*/, "", v); sub(/[[:space:]].*$/, "", v)
+      if (v != "" && ge(v, rel) && (best == "" || t < best)) best = t
+    }
+    END { if (best != "") print best }'
+}
+
+# THE SELF-PROBE RUNS BEFORE THE CORPUS, both directions, fork-free for the three predicates.
+# The stamp parser is probed immediately before it reads the real history, below.
+if [ "$N" -gt 0 ]; then
+  : > "$AC_T/k-one.md" || { echo "validate-adversarial-convergence.sh: arm K self-probe could not stage; no verdict" >&2; exit 2; }
+  k_count_md "$AC_T"; kp1="$K_COUNT"
+  : > "$AC_T/k-two.md" || { echo "validate-adversarial-convergence.sh: arm K self-probe could not stage; no verdict" >&2; exit 2; }
+  k_count_md "$AC_T"; kp2="$K_COUNT"
+  # Walk-up resolve: from a pass two levels below the probe dir's PARENT, `<probe-dir name>/`
+  # must resolve to the probe dir; a FILE of that name must not resolve as a directory.
+  k_resolve "$AC_T/deep/p.md" "${AC_T##*/}/"; kp3="$K_DIR"
+  k_resolve "$AC_T/p.md" "k-one.md"; kp4="$K_DIR"
+  if [ "$kp1" != 1 ] || [ "$kp2" != 2 ] || [ "$kp3" != "${AC_T%/*}/${AC_T##*/}" ] || [ -n "$kp4" ] \
+     || ! k_has_ids " 01=toolu_a cross=toolu_b" || k_has_ids "" || k_has_ids " 01= cross=toolu_"; then
+    echo "validate-adversarial-convergence.sh: arm K self-probe failed (count 1->$kp1, 2->$kp2, resolve '$kp3', file-as-dir '$kp4'); no verdict" >&2
+    exit 2
+  fi
+fi
+
+K_CAND=""
+if [ "$N" -gt 0 ]; then
+  # ONE awk over every pass file: `<file>\t<artifact>\t<shard_tool_use_ids>` per pass.
+  k_rows="$(awk '
+    FNR == 1 { if (NR > 1) print f "\t" a "\t" s; f = FILENAME; a = ""; s = ""; inb = 0 }
+    /SKILL_INVOCATION_PROVENANCE v1/ { inb = 1; next }
+    /SKILL_INVOCATION_PROVENANCE_END/ { inb = 0; next }
+    inb && a == "" && /^artifact:/ { a = $0; sub(/^artifact:[ \t]*/, "", a); sub(/[ \t].*$/, "", a) }
+    inb && s == "" && /^shard_tool_use_ids:/ { s = $0; sub(/^shard_tool_use_ids:/, "", s); if (s == "") s = " " }
+    END { if (NR > 0) print f "\t" a "\t" s }' "${P_FILE[@]}")" || {
+    echo "validate-adversarial-convergence.sh: arm K could not read the pass files; no verdict" >&2
+    exit 2
+  }
+  while IFS="$(printf '\t')" read -r kf ka ks; do
+    [ -n "$kf" ] || continue
+    k_resolve "$kf" "$ka"
+    [ -n "$K_DIR" ] || continue
+    k_count_md "$K_DIR"
+    [ "$K_COUNT" -ge 2 ] || continue
+    k_has_ids "$ks" && continue
+    K_CAND="${K_CAND}${kf}	${K_DIR}	${K_COUNT}
+"
+  done <<EOF
+$k_rows
+EOF
+fi
+
+if [ -n "$K_CAND" ]; then
+  k_first="$(basename "${P_FILE[0]}")"
+  k_at="${P_AT[0]:-}"
+  k_root=""
+  k_walk="$(dirname "${P_FILE[0]}")"
+  k_walk="$(cd "$k_walk" 2>/dev/null && pwd)"
+  while [ -n "$k_walk" ]; do
+    if [ -f "$k_walk/.claude/.ai-dlc-version" ]; then k_root="$k_walk"; break; fi
+    k_walk="${k_walk%/*}"
+  done
+  k_probe="$(printf '%s\n' 'C 2026-01-02T00:00:00Z' '+version: 0.663.0' 'C 2026-01-01T00:00:00Z' '+version: 0.662.0' \
+             'C 2026-01-03T00:00:00Z' '+version: 0.700.0' | k_stamp_parse)"
+  k_probe_none="$(printf '%s\n' 'C 2026-01-01T00:00:00Z' '+version: 0.66.0' | k_stamp_parse)"
+  if [ "$k_probe" != "2026-01-02T00:00:00Z" ] || [ -n "$k_probe_none" ]; then
+    echo "validate-adversarial-convergence.sh: arm K stamp-parser self-probe failed (got '$k_probe', near-miss '$k_probe_none'); no verdict" >&2
+    exit 2
+  fi
+  k_stamp=""
+  if [ -n "$k_root" ] && command -v git >/dev/null 2>&1; then
+    # A git hook exports GIT_DIR/GIT_WORK_TREE, which would redirect `git -C` to the hook's own
+    # repository -- the distribution, under the suite. Unset, as validate-scope-confirmation.sh does.
+    k_stamp="$( ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+                  TZ=UTC0 git -C "$k_root" log --no-color --no-ext-diff -p \
+                    --date=format-local:%Y-%m-%dT%H:%M:%SZ --format='C %cd' \
+                    -- .claude/.ai-dlc-version 2>/dev/null ) | k_stamp_parse)"
+  fi
+  k_nc="$(printf '%s' "$K_CAND" | grep -c .)" || k_nc=0
+  case "$k_at" in
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) k_atok=1 ;;
+    *) k_atok=0 ;;
+  esac
+  if [ -z "$k_stamp" ]; then
+    echo "PENDING (K -- SHARD): ${k_nc} pass(es) over a multi-file artifact carry no shard_tool_use_ids:,"
+    echo "      and no commit${k_root:+ in $k_root} stamps .claude/.ai-dlc-version at ${K_RELEASE} or later -- not owed yet."
+  elif [ "$k_atok" -eq 0 ]; then
+    echo "PENDING (K -- SHARD): ${k_nc} pass(es) over a multi-file artifact carry no shard_tool_use_ids:,"
+    echo "      and the series' first pass ${k_first} has no ISO 8601 UTC invoked_at ('${k_at}') to date against ${k_stamp}."
+  elif [[ "$k_at" < "$k_stamp" ]]; then
+    echo "PENDING (K -- SHARD): ${k_nc} pass(es) over a multi-file artifact carry no shard_tool_use_ids:,"
+    echo "      and the series opened (${k_first}, ${k_at}) before ${K_RELEASE} was stamped (${k_stamp}). Legacy series."
+  else
+    while IFS="$(printf '\t')" read -r kf kdir kn; do
+      [ -n "$kf" ] || continue
+      err "K -- SHARD" "$(basename "$kf") reviews $kdir, a directory of $kn story files, and its
+      provenance block carries no 'shard_tool_use_ids:'. The series opened (${k_at}) after
+      ${K_RELEASE} was stamped (${k_stamp}), so Rule 28's files axis binds it: one adversary per
+      file plus one cross-file adversary, joined by scripts/ai-dlc/merge-adversarial-shards.sh,
+      which writes this pass file and that line. A whole-subject pass over ${kn} files is the
+      dispatch the split exists to replace. Re-run the pass sharded; the merge refuses to
+      overwrite a differing pass file, so write it as the next pass number."
+    done <<EOF
+$K_CAND
+EOF
+  fi
+fi
+
+# =============================================================================
 # H. REPAIR-RECORD -- the repair between two passes was delegated and recorded.
 # =============================================================================
 # GATE ONLY -- never in --cycle-state. A running cycle may sit between a repair
