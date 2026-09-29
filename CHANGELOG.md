@@ -62,6 +62,11 @@ the row at rc 0.
   pre-relocation consumer holding an edited `scripts/café.sh`, it replaced the
   `RELOCATE-MOVE+consumer-edited` disclosure with an inert `PRE-RELOCATION-NOOP`. With both
   changes the disclosure is back.
+- **preclassify's `machinery_paths()` passes it on both of its `ls-files --with-tree` calls.** The
+  tip adversary found that raw rows no longer joined that set, which was still C-quoted.
+  `self-update-gate.sh` arm C and `unregistered-drift.sh`'s `carried_bucket` join the two with
+  `grep -xF`, so a consumer-edited non-ASCII machinery file lost its `SELF-UPDATE-CARRY`. At
+  0.660.0 it was carried only because both sides were quoted alike.
 - `memo_ls_tree`, in the same file with the same quoting, is deliberately unchanged. Its readers
   each compare its lines against their own spelling of a path, and none of them has been audited.
 

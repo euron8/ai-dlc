@@ -4489,7 +4489,13 @@ pre-relocation consumer holding an edited `scripts/café.sh`, base shows a visib
 CLASSIFY row, while the name-status fix alone replaces it with an inert `PRE-RELOCATION-NOOP` and
 loses the `RELOCATE-MOVE+consumer-edited` disclosure. The cause is preclassify's relocation
 listing, `ls-tree --name-only "$THEIRS" core/scripts/` (base `:538`, tip `:539`), which still
-quoted the name. It now carries the same flag, and the disclosure is back. Both edits are the
+quoted the name. It now carries the same flag, and the disclosure is back. The tip adversary then
+found a third site. `machinery_paths()` in preclassify built its set from two `ls-files
+--with-tree` calls under the default quoting, and `self-update-gate.sh` arm C and
+`unregistered-drift.sh`'s `carried_bucket` join the now-raw rows against that set with `grep -xF`.
+With only the first two edits, a consumer-edited `core/skills/ai-dlc-update/café.md` lost its
+`SELF-UPDATE-CARRY`, while the ASCII control beside it kept its carry. Base carried it only because
+both sides were quoted alike. Both calls now carry the flag too. All three edits together are the
 producer fix this bullet named. `memo_ls_tree` in the same file has the same quoting and was
 deliberately left alone, because its readers each compare its lines against their own spelling of
 a path. It is the first row of the census of remaining listing sites, which is filed at the batch
@@ -4501,7 +4507,7 @@ extraction of each commit's `core/`:
 | tree | exit | tag |
 |---|---|---|
 | base `b0c310a3` (0 `core.quotePath=false diff` lines in lib.sh) | 1 | BULLET-3-PRODUCER-REMAINS |
-| tip `9b8d1afc` (2 such lines) | 0 | |
+| the 0.661.0 tree (2 such lines) | 0 | |
 
 verify: sh R=core/skills/ai-dlc-update/reconcile; for f in retired-layer-passage retired-layer-contract lib; do [ -f "$R/$f.sh" ] || exit 9; done; [ -f "$R/setup-sites.md" ] || exit 9; [ "$(id -u)" -ne 0 ] || exit 9; w="$(mktemp -d)" || exit 9; cp -R "$R" "$w/r" || exit 9; g() { local d="$1"; shift; git -C "$d" -c user.email=r@r -c user.name=r -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }; D="$w/d"; mkdir -p "$D/core/skills/ai-dlc/steps" || exit 9; g "$D" init -q || exit 9; printf -- '- Label: /cmd\nuse {tok}\n1. The lead must always record the gate verdict in the story file before merge.\n' > "$D/core/skills/ai-dlc/steps/a.md"; printf 'small\n' > "$D/core/skills/ai-dlc/steps/b.md"; { g "$D" add -A && g "$D" commit -qm b; } >/dev/null 2>&1 || exit 9; B="$(git -C "$D" rev-parse HEAD)"; printf 'use {tok}\n' > "$D/core/skills/ai-dlc/steps/a.md"; { g "$D" rm -q core/skills/ai-dlc/steps/b.md && g "$D" add -A && g "$D" commit -qm t; } >/dev/null 2>&1 || exit 9; T="$(git -C "$D" rev-parse HEAD)"; C="$w/c"; mkdir -p "$C/.claude/skills/ai-dlc/extensions" || exit 9; printf -- 'see steps/b.md\n1. The lead must always record the gate verdict in the story file before merge.\n' > "$C/.claude/skills/ai-dlc/extensions/e.md"; run() { bash "$w/r/$1.sh" "$D" "$B" "$T" "$C"; }; run retired-layer-passage > "$w/ph" 2>/dev/null || exit 9; [ "$(grep -c '^RETIRED-LAYER-PASSAGE' "$w/ph")" -ge 1 ] || exit 9; run retired-layer-contract > "$w/ch" 2>/dev/null || exit 9; [ "$(grep -c '^RETIRED-LAYER-CONTRACT' "$w/ch")" -ge 1 ] || exit 9; S="$w/r/setup-sites.md"; cp "$S" "$w/sites" || exit 9; chmod 000 "$S" || exit 9; cat "$S" >/dev/null 2>&1 && { chmod 644 "$S"; exit 9; }; run retired-layer-passage > "$w/px" 2> "$w/pxe"; p=$?; run retired-layer-contract > "$w/cx" 2> "$w/cxe"; c=$?; chmod 644 "$S"; awk '/^rulebook:/{print; s=1; next} s && /^  - /{next} {s=0; print}' "$w/sites" > "$S" || exit 9; grep -q '^rulebook:' "$S" || exit 9; [ "$(awk '/^rulebook:/{on=1;next} on && /^[a-z_]+:/{exit} on && /^  - /{n++} END{print n+0}' "$S")" -eq 0 ] || exit 9; run retired-layer-passage > "$w/py" 2> "$w/pye"; q=$?; run retired-layer-contract > "$w/cy" 2> "$w/cye"; y=$?; [ "$p" -ne 0 ] && [ ! -s "$w/px" ] && grep -q 'setup-sites' "$w/pxe" && [ "$c" -ne 0 ] && [ ! -s "$w/cx" ] && grep -qF "$S" "$w/cxe" && [ "$q" -ne 0 ] && [ ! -s "$w/py" ] && [ "$y" -ne 0 ] && [ ! -s "$w/cy" ] && grep -qF "$S" "$w/cye" || { echo BL356-BULLET-1-OR-2-REGRESSED >&2; exit 1; }; cp "$w/sites" "$S" || exit 9; E="$w/e"; mkdir -p "$E/core/scripts" || exit 9; g "$E" init -q || exit 9; U="$(printf 'caf\303\251')"; for f in plain "$U"; do printf 'x=$ROOT/old-%s\n' "$f" > "$E/core/scripts/$f.sh"; done; { g "$E" add -A && g "$E" commit -qm b; } >/dev/null 2>&1 || exit 9; EB="$(git -C "$E" rev-parse HEAD)"; for f in plain "$U"; do printf 'x=$ROOT/new-%s\n' "$f" > "$E/core/scripts/$f.sh"; done; { g "$E" add -A && g "$E" commit -qm t; } >/dev/null 2>&1 || exit 9; ET="$(git -C "$E" rev-parse HEAD)"; K="$w/k"; mkdir -p "$K/scripts/ai-dlc" "$K/.claude" || exit 9; for f in plain "$U"; do printf 'x=$ROOT/old-%s\necho edited\n' "$f" > "$K/scripts/ai-dlc/$f.sh"; done; bash "$w/r/retired-tokens.sh" "$E" "$EB" "$ET" "$K" > "$w/to" 2>/dev/null || exit 9; grep -q '^RETIRED-CONTRACT-TOKEN[[:blank:]]core/scripts/plain\.sh[[:blank:]]' "$w/to" || exit 9; grep -q "^RETIRED-CONTRACT-TOKEN[[:blank:]]core/scripts/$U\.sh[[:blank:]]" "$w/to" || { echo BL356-BULLET-3-PRODUCER-REMAINS >&2; exit 1; }; exit 0
 
@@ -4776,7 +4782,7 @@ I40 byte-binds it to lib.sh's copy. The callers are not edited. Once the emitter
 Measured under `/bin/bash` 3.2.57 with `trap '' XFSZ; ulimit -f 0`, capturing `x="$(emitter)"`
 under the limit and writing it to disk outside the limit:
 
-| emitter | base `b0c310a3` | tip `9b8d1afc` |
+| emitter | base `b0c310a3` | the 0.661.0 tree |
 |---|---|---|
 | `nrm_awk` | rc 1, 0 B | rc 0, 109 B |
 | `ledger_entry_awk` | rc 1, 0 B | rc 0, 2495 B |
@@ -4787,7 +4793,7 @@ output at tip is byte-identical to base (`cmp -s`, all three), so every awk prog
 feed is unchanged. lib.sh leaves the **Remaining** list above. Its heredoc-opener count is now 0.
 
 **The receipt CANNOT distinguish this release from base.** It exits 1 with
-`BL360-BOOTSTRAP-HALF-REMAINS` on both `b0c310a3` and `9b8d1afc`, run by `bash -c` from a
+`BL360-BOOTSTRAP-HALF-REMAINS` on both `b0c310a3` and the 0.661.0 tree, run by `bash -c` from a
 `git archive` extraction of each. Its here-string loop over every `reconcile/*.sh` fires first,
 on the here-strings still in the bootstrapping files, so the heredoc scan that names lib.sh never
 runs on either tree. The guard for this half is the `procsub-staged-refusal` fixture, whose
