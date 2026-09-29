@@ -37,6 +37,15 @@
 #   ai-dlc-continue.sh           its producers are `printf`, and a failed stage fails OPEN by design.
 #   derive-fixture-readsets.sh   it needs root to trace, which a fixture run does not have.
 #
+# LIB.SH'S AWK EMITTERS CANNOT FAIL, AND NON-ASCII PATHS REACH THE ROWS RAW. `nrm_awk`,
+# `ledger_entry_awk` and `backlog_entry_label_awk` were `cat <<'AWK'` heredocs, which bash 3.2
+# stages to a temp file: under a write limit the capture was EMPTY at rc 1, and every inline
+# `awk "$(ledger_entry_awk)..."` caller discarded that. Each emitter is captured under
+# `ulimit -f 0` and must equal its unforced bytes; a scan holds lib.sh to zero heredoc openers.
+# `memo_diff_name_status` and preclassify's relocation listing read paths with
+# `core.quotePath=false`, and two seeded worlds holding a non-ASCII `core/scripts/caf\303\251.sh` drive the shipping
+# retired-tokens.sh and preclassify.sh to prove the row survives, beside an ASCII control row.
+#
 # Usage: run.sh [<tree-root>]  -- drive the scripts of another tree (for example an extracted base
 #                                 commit). The spelling arm and the mutants run only on this tree.
 set -uo pipefail
@@ -55,7 +64,7 @@ RC_="$TREE/core/skills/ai-dlc-update/reconcile"
 LEX="$TREE/core/skills/ai-dlc/steps/stories-test-strategy.md"
 GRAMMAR="$TREE/core/skills/ai-dlc/artifact-path-grammar.md"
 LCON="$TREE/core/skills/ai-dlc/layer-contract.yaml"
-for _f in "$LEX" "$GRAMMAR" "$LCON" "$RC_/retired-tokens.sh" "$RC_/unregistered-drift.sh"; do
+for _f in "$LEX" "$GRAMMAR" "$LCON" "$RC_/retired-tokens.sh" "$RC_/unregistered-drift.sh" "$RC_/lib.sh" "$RC_/preclassify.sh"; do
   [ -f "$_f" ] || { echo "FIXTURE ERROR: $_f is missing" >&2; exit 2; }
 done
 echo "procsub-staged-refusal: subject tree = $TREE"
@@ -390,6 +399,34 @@ gitq -C "$RGD" add -A; gitq -C "$RGD" commit -qm theirs
 RG_THEIRS="$(git -C "$RGD" rev-parse HEAD)"
 printf -- '---\nshadows: team-roles/tea.md#Identity\n---\n- Personal: `/model claude-fixture-x`\n' > "$RGC/.claude/skills/ai-dlc/overrides/roles.md"
 printf -- '---\nhooks: steps/gone.md\n---\n# Ext\n\nAugments a step both refs ship.\n' > "$RGC/.claude/skills/ai-dlc/extensions/cites.md"
+
+# --- QA / QB: a NON-ASCII core path. Under git's default `core.quotePath` a name carrying a byte
+# above 0x7f is listed C-quoted (`"core/scripts/caf\303\251.sh"`), which matches no consumer path,
+# so the row for it is lost while the ASCII twin `plain.sh` beside it stands. The name is built from
+# octal escapes, never typed, so this file stays ASCII.
+QU="$(printf 'caf\303\251')"
+# QA: both files retire a token and a consumer holds edited copies at the installed path. retired-
+# tokens.sh runs preclassify itself (no --bucket-rows), so the path reaches it through
+# memo_diff_name_status.
+QA="$W/qa"; QAD="$QA/dist"; QAC="$QA/consumer"; mkdir -p "$QAD/core/scripts" "$QAC/scripts/ai-dlc" "$QAC/.claude"
+for _q in plain "$QU"; do printf 'x=$ROOT/old-%s\n' "$_q" > "$QAD/core/scripts/$_q.sh"; done
+gitq -C "$QAD" init -q; gitq -C "$QAD" add -A; gitq -C "$QAD" commit -qm base
+QA_BASE="$(git -C "$QAD" rev-parse HEAD)"
+for _q in plain "$QU"; do printf 'x=$ROOT/new-%s\n' "$_q" > "$QAD/core/scripts/$_q.sh"; done
+gitq -C "$QAD" add -A; gitq -C "$QAD" commit -qm theirs
+QA_THEIRS="$(git -C "$QAD" rev-parse HEAD)"
+for _q in plain "$QU"; do printf 'x=$ROOT/old-%s\necho edited\n' "$_q" > "$QAC/scripts/ai-dlc/$_q.sh"; done
+# QB: a PRE-RELOCATION consumer holding edited copies at `scripts/<name>` while upstream modifies
+# `core/scripts/<name>`. preclassify's relocation pass lists core/scripts/ at theirs, and the row it
+# owes each file is the RELOCATE-MOVE+consumer-edited disclosure.
+QB="$W/qb"; QBD="$QB/dist"; QBC="$QB/consumer"; mkdir -p "$QBD/core/scripts" "$QBC/scripts" "$QBC/.claude"
+for _q in plain "$QU"; do printf 'old\n' > "$QBD/core/scripts/$_q.sh"; done
+gitq -C "$QBD" init -q; gitq -C "$QBD" add -A; gitq -C "$QBD" commit -qm base
+QB_BASE="$(git -C "$QBD" rev-parse HEAD)"
+for _q in plain "$QU"; do printf 'new\n' > "$QBD/core/scripts/$_q.sh"; done
+gitq -C "$QBD" add -A; gitq -C "$QBD" commit -qm theirs
+QB_THEIRS="$(git -C "$QBD" rev-parse HEAD)"
+for _q in plain "$QU"; do printf 'old\nlocal edit\n' > "$QBC/scripts/$_q.sh"; done
 
 # ================================================================================================
 # ARMS. Each takes a script path, returns 0 when the arm's assertion holds, and leaves ARM_WHY.
@@ -1069,6 +1106,56 @@ arm_dd_usage() { local rc=0; bash "$1" > "$OUT" 2> "$ERR" || rc=$?
   ARM_WHY="rc=$rc: $(head -1 "$OUT" | cut -c1-80)"
   [ "$rc" -eq 2 ] && grep -q 'usage.*expected four arguments' "$OUT"; }
 
+# --- lib.sh's awk EMITTERS under a write limit. Each arm takes a lib.sh PATH. The capture runs in
+# /bin/bash with `trap '' XFSZ; ulimit -f 0` set AFTER lib.sh is sourced, as `x="$(emitter)"`, and
+# `$x` leaves through a PIPE: under the limit any regular-file write fails, and a printf redirected
+# to a file there truncates and leaks its unwritten buffer into the next `$( )`. Stderr rides the
+# same pipe, because a stderr file is a regular-file write too. The reference is the TREE's lib.sh,
+# unforced, captured the same way; each cell first proves its own lib emits the reference unforced,
+# so a copy that emits nothing, or other bytes, has no baseline and fails.
+em_run() { # em_run <lib> <fn> <limit-blocks, - = none> <out> -> EM_RC
+  EM_RC=0
+  "$FBASH" -c 'trap "" XFSZ; . "$1" >/dev/null 2>&1 || exit 96
+    if [ "$3" != - ]; then ulimit -f "$3" || exit 97; fi
+    x="$("$2")"; r=$?; printf "%s\n" "$x"; exit "$r"' _ "$1" "$2" "$3" 2>&1 | cat > "$4" || EM_RC=$?; }
+EM_READY=0
+em_ref() { # em_ref <fn> <presence> -- the tree's unforced bytes, into $FW/em-ref.<fn>
+  em_run "$RC_/lib.sh" "$1" - "$FW/em-ref.$1"
+  [ "$EM_RC" -eq 0 ] && grep -qF -- "$2" "$FW/em-ref.$1"; }
+em_cell() { # em_cell <lib> <fn>
+  [ "$EM_READY" -eq 1 ] || { ARM_WHY="the emitter calibration did not hold, so no emitter cell can be read"; return 1; }
+  em_run "$1" "$2" - "$FW/em-h.$2"
+  if ! { [ "$EM_RC" -eq 0 ] && cmp -s "$FW/em-h.$2" "$FW/em-ref.$2"; }; then
+    ARM_WHY="no healthy baseline: unforced rc=$EM_RC, $(wc -c < "$FW/em-h.$2" | tr -d ' ') B against the tree's $(wc -c < "$FW/em-ref.$2" | tr -d ' ') B"; return 1; fi
+  em_run "$1" "$2" 0 "$FW/em-f.$2"
+  ARM_WHY="forced rc=$EM_RC, $(wc -c < "$FW/em-f.$2" | tr -d ' ') B against $(wc -c < "$FW/em-ref.$2" | tr -d ' ') B unforced: $(head -1 "$FW/em-f.$2" | sed 's#.*/##' | cut -c1-90)"
+  [ "$EM_RC" -eq 0 ] && cmp -s "$FW/em-f.$2" "$FW/em-ref.$2"; }
+arm_em_nrm()    { em_cell "$1" nrm_awk; }
+arm_em_ledger() { em_cell "$1" ledger_entry_awk; }
+arm_em_label()  { em_cell "$1" backlog_entry_label_awk; }
+# Each emitter mutant's healthy twin: the OTHER two cells still pass on it, so a mutant that kills
+# its own cell and not its neighbours shows each cell sees its own emitter and no other.
+arm_em_hx_nrm()    { arm_em_ledger "$1" && arm_em_label "$1"; }
+arm_em_hx_ledger() { arm_em_nrm "$1" && arm_em_label "$1"; }
+arm_em_hx_label()  { arm_em_nrm "$1" && arm_em_ledger "$1"; }
+
+# --- the NON-ASCII path worlds. The ASCII row is the control, required in every run: a copy that
+# never reached its loop has no plain.sh row either, and fails the healthy arm.
+qa_run() { bash "$1" "$QAD" "$QA_BASE" "$QA_THEIRS" "$QAC" > "$OUT" 2> "$ERR"; }
+qa_why() { ARM_WHY="rc=$1 rows=[$(LC_ALL=C cut -f2 "$OUT" | LC_ALL=C cat -v | tr '\n' '|')] $(grep -v '^$' "$ERR" | tail -1 | cut -c1-80)"; }
+arm_qa_plain() { local rc=0; qa_run "$1" || rc=$?; qa_why "$rc"
+  [ "$rc" -eq 0 ] && grep -qF "RETIRED-CONTRACT-TOKEN${NT}core/scripts/plain.sh${NT}\$ROOT/old-plain" "$OUT"; }
+arm_qa_cafe() { local rc=0; qa_run "$1" || rc=$?; qa_why "$rc"
+  [ "$rc" -eq 0 ] && grep -qF "RETIRED-CONTRACT-TOKEN${NT}core/scripts/plain.sh${NT}" "$OUT" \
+    && grep -qF "RETIRED-CONTRACT-TOKEN${NT}core/scripts/${QU}.sh${NT}\$ROOT/old-caf" "$OUT"; }
+qb_run() { bash "$1" "$QBD" "$QB_BASE" "$QB_THEIRS" "$QBC" > "$OUT" 2> "$ERR"; }
+qb_why() { ARM_WHY="rc=$1 rows=[$(LC_ALL=C cut -f2,4 "$OUT" | LC_ALL=C cat -v | tr '\n\t' '| ')] $(grep -v '^$' "$ERR" | tail -1 | cut -c1-80)"; }
+QB_ROW() { printf 'R\tcore/scripts/%s.sh\tscripts/%s.sh\tRELOCATE-MOVE+consumer-edited' "$1" "$1"; }
+arm_qb_plain() { local rc=0; qb_run "$1" || rc=$?; qb_why "$rc"
+  [ "$rc" -eq 0 ] && grep -qF "$(QB_ROW plain)" "$OUT"; }
+arm_qb_cafe() { local rc=0; qb_run "$1" || rc=$?; qb_why "$rc"
+  [ "$rc" -eq 0 ] && grep -qF "$(QB_ROW plain)" "$OUT" && grep -qF "$(QB_ROW "$QU")" "$OUT"; }
+
 # --- r5: NO NON-COMMENT HERE-STRING in a file this release converted ------------------------------
 # The seven files 2f598a86 converted, and only those: the bootstrapping files (apply.sh, lib.sh,
 # preclassify.sh, emit-report.sh, self-update-fixtures.sh, ...) keep their sites and are not scoped.
@@ -1225,6 +1312,44 @@ if [ "$(id -u)" -eq 0 ]; then
 else
   run_arm arm_rlc_unread_layer "$S_RLC" "retired-layer-contract: a listed layer file cat cannot open refuses exit 2 naming it, no row"
 fi
+
+S_LIB="$RC_/lib.sh"; S_PC="$RC_/preclassify.sh"
+echo "== lib.sh's awk emitters under ulimit -f 0: the calibration, which never sources lib.sh =="
+# Both directions, in the capture shape the cells use: a heredoc captured under the limit FAILS with
+# bash's own line, and a printf literal captured under the same limit lands whole.
+_emc_h="$FW/em-cal-heredoc"; _emc_p="$FW/em-cal-printf"; _emc_hr=0; _emc_pr=0
+if [ -z "$FX_BV" ]; then
+  bad "FIXTURE BROKEN: the emitter cells need $FBASH, which did not run"
+else
+  "$FBASH" -c 'trap "" XFSZ; ulimit -f 0 || exit 97; x="$(cat <<EOF
+calibration-heredoc-body
+EOF
+)"; r=$?; printf "%s\n" "$x"; exit "$r"' 2>&1 | cat > "$_emc_h" || _emc_hr=$?
+  "$FBASH" -c 'trap "" XFSZ; ulimit -f 0 || exit 97; x="$(printf "%s\n" calibration-printf-body)"; r=$?; printf "%s\n" "$x"; exit "$r"' 2>&1 | cat > "$_emc_p" || _emc_pr=$?
+  if [ "$_emc_hr" -ne 0 ] && [ "$_emc_hr" -ne 97 ] && grep -q 'cannot create temp file for here document' "$_emc_h" \
+     && ! grep -q 'calibration-heredoc-body' "$_emc_h" \
+     && [ "$_emc_pr" -eq 0 ] && [ "$(cat "$_emc_p")" = calibration-printf-body ]; then
+    ok "calibration [lib emitters]: under ulimit -f 0 ($FBASH $FX_BV) a captured heredoc fails rc=$_emc_hr with no body, and a captured printf literal lands whole"
+    if em_ref nrm_awk 'function nrm(s)' && em_ref ledger_entry_awk 'function ledger_entry_shape(' \
+       && em_ref backlog_entry_label_awk 'function backlog_entry_label('; then
+      EM_READY=1
+      ok "calibration [lib emitters]: the tree's three emitters, unforced, emit $(wc -c < "$FW/em-ref.nrm_awk" | tr -d ' ') / $(wc -c < "$FW/em-ref.ledger_entry_awk" | tr -d ' ') / $(wc -c < "$FW/em-ref.backlog_entry_label_awk" | tr -d ' ') B, each carrying its function"
+    else
+      bad "FIXTURE BROKEN: an unforced emitter of the tree's lib.sh did not emit its function (rc=$EM_RC)"
+    fi
+  else
+    bad "FIXTURE BROKEN: calibration [lib emitters]: heredoc rc=$_emc_hr [$(head -1 "$_emc_h" | cut -c1-80)], printf rc=$_emc_pr [$(head -1 "$_emc_p" | cut -c1-40)] -- this host cannot express the defect"
+  fi
+fi
+echo "== lib.sh's awk emitters: each captured under ulimit -f 0 equals its unforced bytes, rc 0 =="
+run_arm arm_em_nrm    "$S_LIB" "nrm_awk under ulimit -f 0: rc 0 and byte-identical to the unforced emission"
+run_arm arm_em_ledger "$S_LIB" "ledger_entry_awk under ulimit -f 0: rc 0 and byte-identical, never an empty program"
+run_arm arm_em_label  "$S_LIB" "backlog_entry_label_awk under ulimit -f 0: rc 0 and byte-identical"
+echo "== non-ASCII core paths reach the rows raw (core.quotePath=false), beside an ASCII control row =="
+run_arm arm_qa_plain "$S_RT" "retired-tokens end to end (no --bucket-rows): the ASCII plain.sh row stands"
+run_arm arm_qa_cafe  "$S_RT" "retired-tokens end to end: the non-ASCII core/scripts/caf\\303\\251.sh row stands beside plain.sh's"
+run_arm arm_qb_plain "$S_PC" "preclassify, pre-relocation consumer: plain.sh's RELOCATE-MOVE+consumer-edited row stands"
+run_arm arm_qb_cafe  "$S_PC" "preclassify, pre-relocation consumer: caf\\303\\251.sh's RELOCATE-MOVE+consumer-edited disclosure stands beside plain.sh's"
 
 if [ "$SELF_TREE" -ne 1 ]; then
   skip "spelling arm and mutants -- they run only against this fixture's own tree, not $TREE"
@@ -1396,12 +1521,112 @@ fi
 for _r5 in $R5_FILES; do run_arm arm_r5 "$RC_/$_r5" "r5: $_r5 carries no non-comment here-string"; done
 
 # ================================================================================================
+# LH -- NO HEREDOC OPENER IN lib.sh. The emitters are literals; a `<<WORD`, `<<-WORD`, `<<'WORD'`
+# or `<< "WORD"` on a line that is not a whole-line comment reintroduces the staging write. Runs of
+# three or more `<` are removed first, so a here-string (`<<<`) and an echoed `<<<<<<<` are not
+# openers; an arithmetic `<<2` is not, because a delimiter opens with a letter or `_`. FP set,
+# measured on lib.sh at the tip: it carries no `<<` of any kind, so the grammar is wider than the
+# corpus needs and costs nothing there; at b0c310a3 it reads exactly the three `cat <<'AWK'` lines.
+# ================================================================================================
+LH_AWK='/^[[:blank:]]*#/ { next }
+  { n++; l = $0; gsub(/<<<+/, "", l); if (l ~ /<<-?[[:blank:]]*[\047"]?[A-Za-z_]/) { h++; at = at " " FNR } }
+  END { printf "%d %d%s\n", n, h, at }'
+lh_scan() { awk "$LH_AWK" "$1"; }
+arm_lh() { local r n h
+  r="$(lh_scan "$1")" || { ARM_WHY="awk could not scan $1"; return 1; }
+  n="${r%% *}"; h="${r#* }"; h="${h%% *}"
+  ARM_WHY="$n non-comment line(s) scanned, $h heredoc opener(s)$( [ "$h" -gt 0 ] && printf ' at%s' "${r#* * }" )"
+  [ "$n" -gt 0 ] && [ "$h" -eq 0 ]; }
+LHP="$W/lh-probe.sh"
+{ printf '%s\n' "  cat <<'AWK'" 'cat <<EOF' '  cat <<-EOF' 'cat << "X"'
+  printf '%s\n' "  # cat <<'AWK'" 'x <<<"$y"' 'echo "<<<<<<< x"' 'y=$((1<<2))'; } > "$LHP"
+LH_GOT="$(lh_scan "$LHP")"
+if [ "$LH_GOT" = "7 4 1 2 3 4" ]; then
+  ok "LH self-probe: <<'AWK', <<EOF, <<-EOF and << \"X\" each count (lines 1-4); a commented opener, a here-string, an echoed <<<<<<< and an arithmetic <<2 do not"
+else
+  bad "LH self-probe read '$LH_GOT', expected '7 4 1 2 3 4' -- the grammar cannot be trusted on lib.sh"
+fi
+run_arm arm_lh "$S_LIB" "LH: lib.sh carries no heredoc opener outside comments"
+
+# ================================================================================================
+# THE b0c310a3 DIFFERENTIAL. lib.sh and preclassify.sh at the base this release was cut from, staged
+# into a copy of reconcile/ beside the tree's other scripts. Every emitter cell, LH and both
+# non-ASCII cells MUST FAIL there; both ASCII controls MUST PASS there, so a failure is the
+# non-ASCII row's and not a copy that never ran.
+# ================================================================================================
+BL_PIN=b0c310a361b6cebf69c8d33ca21a05f028dbac45
+if ! git -C "$OWN" cat-file -e "${BL_PIN}^{commit}" 2>/dev/null; then
+  skip "b0c310a3 differential -- the pin ${BL_PIN} is not in this clone's history, so no base copy exists (this is not a pass)"
+else
+  BLD="$W/bl"; cp -R "$RC_" "$BLD" || { echo "FIXTURE BROKEN: could not copy reconcile/ for the b0c310a3 differential" >&2; exit 2; }
+  bl_ok=1
+  for _bl in lib.sh preclassify.sh; do
+    if ! git -C "$OWN" show "${BL_PIN}:core/skills/ai-dlc-update/reconcile/${_bl}" > "$BLD/$_bl" 2>/dev/null; then
+      bad "b0c310a3 differential: could not stage ${_bl} at the pin"; bl_ok=0
+    elif cmp -s "$RC_/$_bl" "$BLD/$_bl"; then
+      bad "b0c310a3 differential: ${_bl} at the pin is byte-identical to the tree's copy"; bl_ok=0
+    fi
+  done
+  if [ "$bl_ok" -eq 1 ]; then
+    ok "b0c310a3 differential: lib.sh and preclassify.sh staged at the pin beside the tree's scripts, each DIFFERS from the tree's copy (cmp -s)"
+    bl_fail() { # bl_fail <arm> <path> <what the base did>
+      if "$1" "$2"; then bad "b0c310a3 differential: $1 PASSED against the base, so it cannot tell the fix from its absence -- $ARM_WHY"
+      else ok "b0c310a3 differential: $1 FAILS against the base ($3) -- $ARM_WHY"; fi; }
+    bl_pass() { # bl_pass <arm> <path> <what>
+      if "$1" "$2"; then ok "b0c310a3 differential: $1 PASSES against the base ($3) -- $ARM_WHY"
+      else bad "b0c310a3 differential: $1 FAILED against the base, so the copy did not run as far as its loop -- $ARM_WHY"; fi; }
+    bl_fail arm_em_nrm    "$BLD/lib.sh" "the heredoc emitted nothing at rc 1"
+    bl_fail arm_em_ledger "$BLD/lib.sh" "the heredoc emitted nothing at rc 1"
+    bl_fail arm_em_label  "$BLD/lib.sh" "the heredoc emitted nothing at rc 1"
+    bl_fail arm_lh        "$BLD/lib.sh" "three cat <<'AWK' openers"
+    bl_pass arm_qa_plain  "$BLD/retired-tokens.sh" "the ASCII control row"
+    bl_fail arm_qa_cafe   "$BLD/retired-tokens.sh" "the C-quoted name matched no consumer path and the row was lost"
+    bl_pass arm_qb_plain  "$BLD/preclassify.sh" "the ASCII control row"
+    bl_fail arm_qb_cafe   "$BLD/preclassify.sh" "no RELOCATE-MOVE+consumer-edited disclosure for the non-ASCII name"
+  fi
+fi
+
+# ================================================================================================
 # THE 322ef42c DIFFERENTIAL. Every staging-write cell and r5 is PRESENCE- or count-shaped, and each
 # is scored here against the copy of its script at 322ef42c -- the base these cells were built
 # against -- staged beside the tree's lib.sh. Each MUST FAIL there, which is the proof it can fire.
 # hard-blockers.sh and warn-shadowed-local-validators.sh fed their loops from `<<EOF` heredocs, not
 # `<<<`, so r5 does not score them; their forced cells do.
 # ================================================================================================
+# mkmut <src> <dst> <find> <replace> [<find> <replace>]... -- every find must match EXACTLY once.
+mkmut() {
+  python3 - "$@" <<'PY'
+import sys
+src, dst, pairs = sys.argv[1], sys.argv[2], sys.argv[3:]
+s = open(src, encoding="utf-8").read()
+for i in range(0, len(pairs), 2):
+    f, r = pairs[i], pairs[i + 1]
+    n = s.count(f)
+    if n != 1:
+        print("anchor %d matched %d time(s)" % (i // 2 + 1, n)); sys.exit(1)
+    s = s.replace(f, r)
+open(dst, "w", encoding="utf-8").write(s)
+PY
+}
+# THE HEREDOC EMITTERS, restored one emitter at a time: the `printf` literal becomes `cat <<'AWK'`
+# again, and ledger_entry_awk's body apostrophe loses its `'\''` spelling. Used by the EM-* mutants
+# and, all three at once, to build HL -- a reconcile/ copy whose lib.sh can fail to emit, which is
+# the only place warn-shadowed-local-validators.sh's emitter refusal still has a subject.
+EM_NRM=( $'  printf \'%s\\n\' \'function nrm(s){' $'  cat <<\'AWK\'\nfunction nrm(s){'
+         $'return s }\'\n}' $'return s }\nAWK\n}' )
+EM_LEDGER=( $'  printf \'%s\\n\' \'function ledger_entry_id(label) {' $'  cat <<\'AWK\'\nfunction ledger_entry_id(label) {'
+            $'consumer\'\\\'\'s' $'consumer\'s'
+            $'  return sh\n}\'\n}' $'  return sh\n}\nAWK\n}' )
+EM_LABEL=( $'  printf \'%s\\n\' \'function backlog_entry_label(l,' $'  cat <<\'AWK\'\nfunction backlog_entry_label(l,'
+           $'  return ""\n}\'\n}' $'  return ""\n}\nAWK\n}' )
+HL="$W/hl"; HL_OK=0
+if cp -R "$RC_" "$HL" && _hl_why="$(mkmut "$RC_/lib.sh" "$HL/lib.sh" "${EM_NRM[@]}" "${EM_LEDGER[@]}" "${EM_LABEL[@]}")" \
+   && bash -n "$HL/lib.sh" && [ "$(lh_scan "$HL/lib.sh" | cut -d' ' -f2)" -eq 3 ]; then
+  HL_OK=1; ok "heredoc lib.sh (HL): all three emitters restored to cat <<'AWK', it parses, and LH reads exactly 3 openers in it"
+else
+  bad "heredoc lib.sh (HL) could not be built: ${_hl_why:-copy, parse or LH count failed}"
+fi
+
 B3_PIN=322ef42c43be0c11db74e937930e8810cf6b5492
 if ! git -C "$OWN" cat-file -e "${B3_PIN}^{commit}" 2>/dev/null; then
   skip "322ef42c differential -- the pin ${B3_PIN} is not in this clone's history, so no base copy exists (this is not a pass)"
@@ -1428,7 +1653,14 @@ else
     b3_fail arm_fx_rx_apply   relabel-extension-checks.sh "rc 0 and the heading never labelled"
     b3_fail arm_fx_rlc        retired-layer-contract.sh "the 20 KB layer file's row lost at rc 0"
     b3_fail arm_fx_ws_closed  warn-shadowed-local-validators.sh "0 rows at rc 0"
-    b3_fail arm_fx_ws_emitter warn-shadowed-local-validators.sh "awk died on an undefined function, 0 rows at rc 0"
+    # The emitter cell needs an emitter that CAN fail, and the tree's lib.sh emits a literal: this
+    # one base copy runs beside the HEREDOC lib.sh (HL, staged below), or the cell passes vacuously.
+    if [ "$HL_OK" -eq 1 ] && git -C "$OWN" show "${B3_PIN}:core/skills/ai-dlc-update/reconcile/warn-shadowed-local-validators.sh" > "$HL/_b3_ws.sh"; then
+      if arm_fx_ws_emitter "$HL/_b3_ws.sh"; then bad "322ef42c differential: arm_fx_ws_emitter PASSED against the base warn-shadowed-local-validators.sh beside the heredoc lib.sh -- $ARM_WHY"
+      else ok "322ef42c differential: arm_fx_ws_emitter FAILS against the base warn-shadowed-local-validators.sh beside the heredoc lib.sh (awk died on an undefined function, 0 rows at rc 0) -- $ARM_WHY"; fi
+    else
+      bad "322ef42c differential: arm_fx_ws_emitter has no heredoc lib.sh to run beside"
+    fi
     b3_fail arm_fx_rt         retired-tokens.sh         "a FALSE z -> old-b row and the true one lost"
     b3_fail arm_fx_rls        retired-layer-contract.sh "the spellings heredoc failed to stage, 0 rows at rc 0"
     b3_fail arm_fx_ro         readopt-override.sh       "the id here-string failed to stage, no scan ran"
@@ -1460,22 +1692,6 @@ fi
 MT="$W/mt"; mkdir -p "$MT"
 cp -R "$SC" "$MT/scripts" && cp -R "$RC_" "$MT/reconcile" && cp -R "$TREE/core/schemas" "$MT/schemas" \
   || { echo "FIXTURE BROKEN: could not copy the subject directories" >&2; exit 2; }
-
-# mkmut <src> <dst> <find> <replace> [<find> <replace>]... -- every find must match EXACTLY once.
-mkmut() {
-  python3 - "$@" <<'PY'
-import sys
-src, dst, pairs = sys.argv[1], sys.argv[2], sys.argv[3:]
-s = open(src, encoding="utf-8").read()
-for i in range(0, len(pairs), 2):
-    f, r = pairs[i], pairs[i + 1]
-    n = s.count(f)
-    if n != 1:
-        print("anchor %d matched %d time(s)" % (i // 2 + 1, n)); sys.exit(1)
-    s = s.replace(f, r)
-open(dst, "w", encoding="utf-8").write(s)
-PY
-}
 # mutant <id> <dir> <src-basename> <healthy-arm> "<arms it must FAIL>" <find> <replace> ...
 mutant() {
   local id="$1" dir="$2" src="$3" healthy="$4" arms="$5" m why a survived=""
@@ -1546,6 +1762,12 @@ control reconcile relabel-extension-checks.sh   arm_fx_rx_healthy arm_fx_rx arm_
 control reconcile retired-layer-contract.sh     arm_fx_rlc_healthy arm_fx_rlc arm_fx_rls_healthy arm_fx_rls arm_r5
 control reconcile readopt-override.sh           arm_fx_ro_healthy arm_fx_ro
 control reconcile warn-shadowed-local-validators.sh arm_fx_ws_healthy arm_fx_ws_closed arm_fx_ws6_healthy arm_fx_ws_emitter arm_r5
+# The emitter refusal's control and mutant run beside the HEREDOC lib.sh: beside the tree's literal
+# emitters that refusal has no subject, and the mutant dropping it survives by construction.
+if [ "$HL_OK" -eq 1 ]; then cp -R "$HL" "$MT/hl"; control hl warn-shadowed-local-validators.sh arm_fx_ws6_healthy arm_fx_ws_emitter
+else bad "control hl/warn-shadowed-local-validators.sh: the heredoc lib.sh (HL) was not built"; fi
+control reconcile preclassify.sh                arm_qb_plain arm_qb_cafe
+libcontrol retired-tokens.sh        arm_qa_plain arm_qa_cafe
 control reconcile retired-tokens.sh             arm_fx_rt_healthy arm_fx_rt arm_r5 arm_nw_both arm_nw_theirs arm_nw_cmt arm_lw_c arm_lw_trstatus
 [ "$LW_UTF8" -eq 1 ] && control reconcile retired-tokens.sh arm_lw_utf8
 control reconcile readopt-override.sh           arm_ro_healthy arm_r5
@@ -1764,7 +1986,7 @@ mutant WS-HEREDOC reconcile warn-shadowed-local-validators.sh arm_fx_ws_healthy 
   $'printf \'%s\\n\' "$closed_basenames" > "$WS_T/closed" || _ws_rc=$?\n[ "$_ws_rc" -eq 0 ] || ws_refuse_staging "the closed-entry basename set" "$_ws_rc"\n' '' \
   'done < "$WS_T/closed"' $'done <<EOF\n$closed_basenames\nEOF'
 # warn-shadowed: the lib emitter's capture and the closed-entry scan read no status again.
-mutant WS-EMITTER reconcile warn-shadowed-local-validators.sh arm_fx_ws6_healthy "arm_fx_ws_emitter" \
+mutant WS-EMITTER hl warn-shadowed-local-validators.sh arm_fx_ws6_healthy "arm_fx_ws_emitter" \
   'LEA="$(ledger_entry_awk)" || { echo' 'LEA="$(ledger_entry_awk)"; true || { echo' \
   '[ -n "$LEA" ] || { echo' 'true || { echo' \
   '[ "$_ws_rc" -eq 0 ] || { echo "warn-shadowed-local-validators: REFUSED — the closed-entry scan' 'true || { echo "warn-shadowed-local-validators: REFUSED — the closed-entry scan'
@@ -1808,6 +2030,35 @@ mutant RO-STATUS reconcile readopt-override.sh arm_fx_ro_healthy "arm_fx_ro" \
 # readopt-override and derivation-differential: r5 holds their one converted here-string site each.
 mutant RO-HERESTRING reconcile readopt-override.sh arm_ro_healthy "arm_r5" \
   'ro_has_line "$to_lines" "$line" && continue' 'grep -qxF -- "$line" <<<"$to_lines" && continue'
+echo "== mutants: lib.sh's emitters and the non-ASCII path readers =="
+# lmutant <id> <healthy-arm> "<arms>" <find> <replace>... -- mutate a COPY of reconcile/lib.sh and
+# drive the lib-path arms against that file.
+lmutant() {
+  local id="$1" healthy="$2" arms="$3" d="$MT/lm_$1" why a survived=""
+  shift 3
+  mkdir -p "$d"
+  if ! why="$(mkmut "$MT/reconcile/lib.sh" "$d/lib.sh" "$@")"; then bad "mutant $id DID NOT APPLY ($why)"; return; fi
+  if cmp -s "$MT/reconcile/lib.sh" "$d/lib.sh"; then bad "mutant $id DID NOT APPLY (lib.sh is byte-identical)"; return; fi
+  bash -n "$d/lib.sh" 2>/dev/null || { bad "mutant $id DID NOT APPLY (the mutated lib.sh does not parse)"; return; }
+  if ! "$healthy" "$d/lib.sh"; then bad "mutant $id: its healthy twin $healthy failed on the mutant, so no kill can be read -- $ARM_WHY"; return; fi
+  for a in $arms; do "$a" "$d/lib.sh" && survived="$survived $a"; done
+  if [ -z "$survived" ]; then ok "mutant $id (lib.sh) killed by:$(printf ' %s' $arms)"
+  else bad "mutant $id SURVIVED$survived -- that arm cannot see its own site"; fi
+}
+_lmc=""; for _a in arm_em_nrm arm_em_ledger arm_em_label arm_lh; do "$_a" "$MT/reconcile/lib.sh" || _lmc="$_lmc $_a"; done
+if [ -z "$_lmc" ]; then ok "control lib.sh copy: an unmutated copy passes arm_em_nrm arm_em_ledger arm_em_label arm_lh"
+else bad "control lib.sh copy: an UNMUTATED copy failed$_lmc -- the lib mutant harness is broken"; fi
+lmutant EM-NRM    arm_em_hx_nrm    "arm_em_nrm arm_lh"    "${EM_NRM[@]}"
+lmutant EM-LEDGER arm_em_hx_ledger "arm_em_ledger arm_lh" "${EM_LEDGER[@]}"
+lmutant EM-LABEL  arm_em_hx_label  "arm_em_label arm_lh"  "${EM_LABEL[@]}"
+# memo_diff_name_status reads names under the default core.quotePath again, on BOTH its git calls.
+libmutant QP-DIFF retired-tokens.sh arm_qa_plain "arm_qa_cafe" \
+  $'{ git -C "$_dist" -c core.quotePath=false diff' $'{ git -C "$_dist" diff' \
+  $'    git -C "$_dist" -c core.quotePath=false diff' $'    git -C "$_dist" diff'
+# preclassify's relocation listing reads names under the default core.quotePath again.
+mutant QP-LSTREE reconcile preclassify.sh arm_qb_plain "arm_qb_cafe" \
+  'git -C "$DIST" -c core.quotePath=false ls-tree --name-only "$THEIRS" core/scripts/' \
+  'git -C "$DIST" ls-tree --name-only "$THEIRS" core/scripts/'
 mutant DD-HERESTRING reconcile derivation-differential.sh arm_dd_usage "arm_r5" \
   '  case "$NL$1" in *"${NL}skill_commit:"*) ;; *) return 0 ;; esac' $'  awk \'/^skill_commit:/ { f = 1 } END { exit !f }\' <<<"$1" || return 0'
 
