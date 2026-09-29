@@ -695,6 +695,218 @@ arm_rlt_cmt() { local rc=0; mkstub grep "$CMTPAT" 0 2; lt_run "$1" "$STUB" || rc
   failed_call 0 && [ "$rc" -eq 2 ] && grep -q 'did not run' "$ERR" && [ ! -s "$OUT" ]; }
 
 # ================================================================================================
+# A STAGING WRITE THAT FAILS. bash 3.2 stages every `<<<` here-string and `<<EOF` heredoc to a temp
+# file, and when that write fails -- a full TMPDIR -- the command reads EMPTY input or does not run,
+# and the script carries on. Each cell forces it under /bin/bash with `trap '' XFSZ; ulimit -f N`:
+# RLIMIT_FSIZE fails the write with EFBIG and the ignored SIGXFSZ keeps the script alive, which is
+# the full-disk shape. Under the default disposition the script is killed instead, a different and
+# louder failure; a read-only TMPDIR does not force this at all on bash 3.2. Each world carries ONE
+# payload larger than the limit and every other staged input smaller, so the subject can read its
+# own staged copy whole or refuse, and nothing else.
+#
+# THE PRECONDITION IS A CALIBRATION THAT NEVER RUNS THE SUBJECT. The block is measured, not assumed;
+# a here-string of each payload must FAIL with bash's own "cannot create temp file" line; a write of
+# each other staged size must land whole. On a host where that does not hold -- a bash that feeds a
+# small here-string through a pipe -- the defect cannot be expressed, and the cells report FIXTURE
+# BROKEN rather than passing.
+#
+# A CELL ACCEPTS EXACTLY TWO OUTCOMES: the complete output, byte-identical to the same run without
+# the limit, or the script's refusal (its refusal exit, its refusal line, and no row). rc 0 with a
+# row missing or false is neither. The unforced run is part of the cell and must show its presence
+# row, so a subject that emits nothing fails. STDOUT LEAVES THROUGH A PIPE: the limit binds every
+# regular-file write the subject makes, its own stdout included, and a complete output larger than
+# the limit would otherwise be cut and read as a defect.
+# ================================================================================================
+FBASH=/bin/bash
+FW="$W/fx"; mkdir -p "$FW"
+FX_READY=0; FX_BV=""; FX_BLK=0; FX_N=16; FX_CAL_FAILS=0; FXA_N=0
+if [ -x "$FBASH" ]; then
+  FX_BV="$("$FBASH" -c 'printf %s "$BASH_VERSION"')"
+  # `ulimit -f` counts in BLOCKS; one block is what a limit of 1 lets through.
+  "$FBASH" -c 'trap "" XFSZ; ulimit -f 1; printf "%08192d" 0 > "$1"' _ "$FW/blk" 2>/dev/null
+  FX_BLK="$(wc -c < "$FW/blk" 2>/dev/null | tr -d ' ')"
+  case "$FX_BLK" in ''|*[!0-9]*) FX_BLK=0 ;; esac
+fi
+FX_L=$((FX_N * FX_BLK))
+
+# --- hard-blockers: 200 HARD rows supplied, and a report naming every one ------------------------
+# BOTH rows flags with rc 0, always: without either, a refusal pre-empts the loops on both sides.
+: > "$FW/hb-ld"
+awk 'BEGIN { for (i = 0; i < 200; i++) printf "HARD-UNREGISTERED-CORE-DRIFT\tskills/ai-dlc/steps/file-number-%04d-padding-padding.md\tx\n", i }' > "$FW/hb-ud"
+{ echo "# report naming every blocker"; cut -f2 "$FW/hb-ud"; } > "$FW/hb-report.md"
+cut -f1,2 "$FW/hb-ud" > "$FW/hb-payload"
+# --- relabel: 700 core check anchors, and separately 700 core rules; one colliding extension -----
+# Its OWN, lower limit: relabel greps the extension once per anchor, so a world big enough to pass
+# 16 blocks cost 14 s a run (measured, 4000 anchors) and this world is run by four cells, their
+# controls, a mutant and the base copy. 700 anchors are 2.6 KB, above a 2-block limit.
+FX_RX_N=2
+RXF="$FW/rx"; mkdir -p "$RXF/.claude/skills/ai-dlc/extensions"
+awk 'BEGIN { for (i = 1; i <= 700; i++) printf "### %d. Check title\nbody\n", i }' > "$RXF/.claude/skills/ai-dlc/gate-validation.md"
+printf -- '---\nkind: check\nid: mine\nhooks: gate-validation.md\n---\n\n### 24. My check\ntext\n' > "$RXF/.claude/skills/ai-dlc/extensions/x.md"
+RXR="$FW/rxr"; mkdir -p "$RXR/.claude/skills/ai-dlc/extensions"
+awk 'BEGIN { for (i = 1; i <= 700; i++) printf "### Rule %d -- Title\nbody\n", i }' > "$RXR/.claude/skills/ai-dlc/SKILL.md"
+printf -- '---\nkind: check\nid: mine\nhooks: SKILL.md\n---\n\n### Rule 24 -- Mine\ntext\n' > "$RXR/.claude/skills/ai-dlc/extensions/x.md"
+awk 'BEGIN { for (i = 1; i <= 700; i++) print i }' | sort -u > "$FW/rx-payload"
+# --- retired-layer-contract: a release retiring two rulebook paths; a 20 KB layer file citing one ---
+RFD="$FW/rlcd"; RFC="$FW/rlcc"; mkdir -p "$RFD/core/skills/ai-dlc/steps"
+printf -- '- Label: `/cmd\nuse {tok}\n' > "$RFD/core/skills/ai-dlc/steps/a.md"
+printf 'small\n' > "$RFD/core/skills/ai-dlc/steps/b.md"; printf 'small\n' > "$RFD/core/skills/ai-dlc/steps/c.md"
+gitq -C "$RFD" init -q; gitq -C "$RFD" add -A; gitq -C "$RFD" commit -qm base
+RF_BASE="$(git -C "$RFD" rev-parse HEAD)"
+gitq -C "$RFD" rm -q core/skills/ai-dlc/steps/b.md core/skills/ai-dlc/steps/c.md; gitq -C "$RFD" commit -qm theirs
+RF_THEIRS="$(git -C "$RFD" rev-parse HEAD)"
+mkdir -p "$RFC/.claude/skills/ai-dlc/extensions" "$RFC/.claude/skills/ai-dlc/overrides"
+{ echo "see steps/b.md for the gate"; head -c 20000 /dev/zero | tr '\0' p; echo; } > "$RFC/.claude/skills/ai-dlc/extensions/e.md"
+printf 'see .claude/skills/ai-dlc/steps/c.md and core/skills/ai-dlc/steps/b.md\n' > "$RFC/.claude/skills/ai-dlc/overrides/o.md"
+printf 'nothing here\n' > "$RFC/.claude/skills/ai-dlc/extensions/n.md"
+# --- warn-shadowed-local-validators: a closed entry naming 901 basenames; one naming a single one --
+ws_world() { # ws_world <dir> <padding names> -- a closed ledger entry for validate-zz.sh, forks under the home
+  mkdir -p "$1/_bmad-output/ai-dlc-update" "$1/scripts/ai-dlc" "$1/scripts/ai-dlc-local/sub" "$1/.claude"
+  echo 'echo core' > "$1/scripts/ai-dlc/validate-zz.sh"; echo 'echo fork' > "$1/scripts/ai-dlc-local/validate-zz.sh"
+  { printf '# ledger\n\n## FIXTURE-ENTRY — fork of validate-zz.sh\n\nADOPTED UPSTREAM in 0.1.0.\n\n'
+    awk -v n="$2" 'BEGIN { for (i = 0; i < n; i++) printf "names aaaa-padding-name-%04d.sh\n", i }'
+  } > "$1/_bmad-output/ai-dlc-update/push-candidate-ledger.md"
+}
+WSF="$FW/ws"; ws_world "$WSF" 900; echo 'echo fork2' > "$WSF/scripts/ai-dlc-local/sub/validate-zz.sh"
+grep -oE '[A-Za-z0-9._-]+\.sh' "$WSF/_bmad-output/ai-dlc-update/push-candidate-ledger.md" | sort -u > "$FW/ws-payload"
+WS6="$FW/ws6"; ws_world "$WS6" 0
+# The lib.sh emitter the script interpolates, read beside the subject without running the subject.
+( . "$RC_/lib.sh" >/dev/null 2>&1; ledger_entry_awk ) > "$FW/ws6-payload" 2>/dev/null
+# --- retired-tokens: TWO paths, b then z; z's blob is EXACTLY the limit, the one-byte window -------
+# `git show` writes the L-byte blob whole, and a here-string of it needs L+1. At base the failed
+# here-string ran no rt_toks, so z read b's token files: a FALSE row and the true one lost, rc 0.
+fx_blob() { # fx_blob <first-line> <bytes> <out> -- <first-line>, a newline, then `p` to exactly <bytes>
+  printf '%s\n' "$1" > "$3"; head -c "$(( $2 - ${#1} - 1 ))" /dev/zero | tr '\0' p >> "$3"; }
+RTD="$FW/rtd"; RTC="$FW/rtc"; FXRT_B=""; FXRT_T=""
+if [ "$FX_L" -gt 0 ]; then
+  mkdir -p "$RTD/core/scripts" "$RTC/scripts/ai-dlc"
+  fx_blob 'x=$ROOT/old-z' "$FX_L" "$RTD/core/scripts/z.sh"; printf 'x=$ROOT/old-b\nsmall\n' > "$RTD/core/scripts/b.sh"
+  gitq -C "$RTD" init -q; gitq -C "$RTD" add -A; gitq -C "$RTD" commit -qm base
+  FXRT_B="$(git -C "$RTD" rev-parse HEAD)"
+  fx_blob 'x=$ROOT/new-z' "$FX_L" "$RTD/core/scripts/z.sh"; printf 'x=$ROOT/new-b\nsmall\n' > "$RTD/core/scripts/b.sh"
+  gitq -C "$RTD" add -A; gitq -C "$RTD" commit -qm theirs
+  FXRT_T="$(git -C "$RTD" rev-parse HEAD)"
+  git -C "$RTD" show "${FXRT_B}:core/scripts/z.sh" > "$FW/rt-payload"
+  git -C "$RTD" show "${FXRT_B}:core/scripts/b.sh" > "$RTC/scripts/ai-dlc/b.sh"
+  { cat "$FW/rt-payload"; echo; echo 'uses $ROOT/old-b too'; } > "$RTC/scripts/ai-dlc/z.sh"
+  printf 'X\tcore/scripts/b.sh\tscripts/ai-dlc/b.sh\tCLASSIFY\nX\tcore/scripts/z.sh\tscripts/ai-dlc/z.sh\tCLASSIFY\n' > "$FW/rt-rows"
+fi
+
+# --- the calibration ---------------------------------------------------------------------------
+fx_hs_fails() { # fx_hs_fails <limit-blocks> <payload-file> -> 0 when a here-string of it cannot be staged
+  local r=0
+  "$FBASH" -c 'trap "" XFSZ; ulimit -f "$1" || exit 97; x="$(cat "$2")"; cat <<<"$x" > /dev/null' _ "$1" "$2" 2> "$FW/cal.err" || r=$?
+  [ "$r" -ne 0 ] && [ "$r" -ne 97 ] && grep -q 'cannot create temp file for here document' "$FW/cal.err"; }
+fx_writes() { # fx_writes <limit-blocks> <bytes> -> 0 when a write of exactly <bytes> lands whole
+  local r=0 got
+  "$FBASH" -c 'trap "" XFSZ; ulimit -f "$1" || exit 97; head -c "$2" /dev/zero > "$3"' _ "$1" "$2" "$FW/cal.w" 2>/dev/null || r=$?
+  got="$(wc -c < "$FW/cal.w" | tr -d ' ')"
+  [ "$r" -eq 0 ] && [ "$got" -eq "$2" ]; }
+fx_sz() { wc -c < "$1" | tr -d ' '; }
+fx_cal() { # fx_cal <cell> <limit-blocks> <payload-file> [<other staged size>...]
+  local c="$1" n="$2" p="$3" s miss=""
+  shift 3
+  if ! fx_hs_fails "$n" "$p"; then
+    bad "FIXTURE BROKEN: calibration [$c]: a here-string of the $(fx_sz "$p")-byte payload did NOT fail under ulimit -f $n ($FBASH $FX_BV, block $FX_BLK B), so this host cannot express the defect: $(head -1 "$FW/cal.err")"
+    FX_CAL_FAILS=$((FX_CAL_FAILS+1)); return; fi
+  for s in "$@"; do fx_writes "$n" "$s" || miss="$miss $s"; done
+  if [ -n "$miss" ]; then
+    bad "FIXTURE BROKEN: calibration [$c]: a write of$miss byte(s) did not land whole under ulimit -f $n, so the fixed script's own staging would fail there too"
+    FX_CAL_FAILS=$((FX_CAL_FAILS+1)); return; fi
+  s="$*"; [ -n "$s" ] || s="none"
+  ok "calibration [$c]: under ulimit -f $n ($(( n * FX_BLK )) B, $FBASH $FX_BV) a here-string of the $(fx_sz "$p")-byte payload fails; other staged size(s) land whole: $s"
+}
+
+# --- the cells ---------------------------------------------------------------------------------
+fx_ready() { [ "$FX_READY" -eq 1 ] || { ARM_WHY="the staging-write calibration did not hold, so no forced cell can be read"; return 1; }; }
+fx_run() { # fx_run <limit-blocks, 0 = none> <out> <err> <script> <args...> -> FX_RC
+  local n="$1" o="$2" e="$3"
+  shift 3
+  FX_RC=0
+  if [ "$n" -eq 0 ]; then "$FBASH" "$@" 2> "$e" | cat > "$o" || FX_RC=$?
+  else "$FBASH" -c 'trap "" XFSZ; ulimit -f "$1" || exit 97; shift; exec "$@"' _ "$n" "$FBASH" "$@" 2> "$e" | cat > "$o" || FX_RC=$?
+  fi
+}
+fx_healthy() { # fx_healthy <script> <rc> <presence-ERE> <args...> -- the unforced run, into $FW/h.out
+  local s="$1" hrc="$2" hpat="$3"
+  shift 3
+  fx_run 0 "$FW/h.out" "$FW/h.err" "$s" "$@"
+  ARM_WHY="unforced rc=$FX_RC (want $hrc), presence row $(grep -cE -- "$hpat" "$FW/h.out")"
+  [ "$FX_RC" -eq "$hrc" ] && grep -qE -- "$hpat" "$FW/h.out"; }
+fx_cell() { # fx_cell <script> <limit> <rc> <presence-ERE> <refusal-rc> <refusal-ERE> <args...>
+  local s="$1" n="$2" hrc="$3" hpat="$4" frc="$5" fpat="$6"
+  shift 6
+  fx_ready || return 1
+  fx_healthy "$s" "$hrc" "$hpat" "$@" || { ARM_WHY="no healthy baseline: $ARM_WHY"; return 1; }
+  fx_run "$n" "$OUT" "$ERR" "$s" "$@"
+  if [ "$FX_RC" -eq "$hrc" ] && cmp -s "$OUT" "$FW/h.out"; then
+    ARM_WHY="complete: rc=$FX_RC, stdout byte-identical to the unforced run ($(grep -c . "$OUT") line(s))"; return 0; fi
+  if [ "$FX_RC" -eq "$frc" ] && [ ! -s "$OUT" ] && grep -qE -- "$fpat" "$ERR"; then
+    ARM_WHY="refused: rc=$FX_RC, $(grep -E -- "$fpat" "$ERR" | head -1 | cut -c1-100)"; return 0; fi
+  ARM_WHY="rc=$FX_RC, $(grep -c . "$OUT") stdout line(s) against $(grep -c . "$FW/h.out") unforced -- neither the complete output nor a refusal: $(grep -v '^$' "$ERR" | tail -1 | sed 's#.*/##' | cut -c1-110)"
+  return 1; }
+HB_REF='^hard-blockers: REFUSED — '
+HB_PRINT_ROW='^HARD-UNREGISTERED-CORE-DRIFT +skills/ai-dlc/steps/file-number-0199-padding-padding\.md$'
+arm_fx_hb_healthy() { fx_healthy "$1" 0 '\(200 total\)' --check "$FW/hb-report.md" \
+  --ld-rows "$FW/hb-ld" --ld-rc 0 --ud-rows "$FW/hb-ud" --ud-rc 0 "$FW" base "$FW" theirs; }
+arm_fx_hb_check() { fx_cell "$1" "$FX_N" 0 '\(200 total\)' 1 "$HB_REF" --check "$FW/hb-report.md" \
+  --ld-rows "$FW/hb-ld" --ld-rc 0 --ud-rows "$FW/hb-ud" --ud-rc 0 "$FW" base "$FW" theirs; }
+arm_fx_hb_print() { fx_cell "$1" "$FX_N" 0 "$HB_PRINT_ROW" 1 "$HB_REF" \
+  --ld-rows "$FW/hb-ld" --ld-rc 0 --ud-rows "$FW/hb-ud" --ud-rc 0 "$FW" base "$FW" theirs; }
+RX_ROW='^  \+  ### 24\. \[ext:mine\] My check$'; RXR_ROW='^  \+  ### Rule 24 \[ext:mine\] -- Mine$'
+arm_fx_rx_healthy() { fx_healthy "$1" 1 "$RX_ROW" "$RXF"; }
+arm_fx_rx()  { fx_cell "$1" "$FX_RX_N" 1 "$RX_ROW" 2 '^relabel: REFUSED — ' "$RXF"; }
+arm_fx_rxr() { fx_cell "$1" "$FX_RX_N" 1 "$RXR_ROW" 2 '^relabel: REFUSED — ' "$RXR"; }
+# `--apply` writes the extension, so every run gets a fresh copy of the world. The refusal must leave
+# the extension byte-identical: it has to come BEFORE the first `mv` for that extension.
+arm_fx_rx_apply() { local d x ck
+  fx_ready || return 1
+  FXA_N=$((FXA_N+1)); d="$FW/rxa.$FXA_N"; x="$d/.claude/skills/ai-dlc/extensions/x.md"
+  cp -R "$RXF" "$d" || { ARM_WHY="could not copy the relabel world"; return 1; }
+  ck="$(cksum < "$x")"
+  fx_run "$FX_RX_N" "$OUT" "$ERR" "$1" "$d" --apply
+  if [ "$FX_RC" -eq 0 ] && grep -qx '### 24\. \[ext:mine\] My check' "$x"; then
+    ARM_WHY="complete: rc=0 and the heading was labelled"; return 0; fi
+  if [ "$FX_RC" -eq 2 ] && grep -qE '^relabel: REFUSED — ' "$ERR" && [ "$(cksum < "$x")" = "$ck" ]; then
+    ARM_WHY="refused: rc=2 and the extension is byte-identical"; return 0; fi
+  ARM_WHY="rc=$FX_RC, extension $([ "$(cksum < "$x")" = "$ck" ] && echo unchanged || echo CHANGED) and unlabelled: $(grep -v '^$' "$OUT" | tail -1 | cut -c1-90)"
+  return 1; }
+RLC_ROW='extensions/e\.md.path:core/skills/ai-dlc/steps/b\.md$'
+arm_fx_rlc_healthy() { fx_healthy "$1" 0 "$RLC_ROW" "$RFD" "$RF_BASE" "$RF_THEIRS" "$RFC"; }
+arm_fx_rlc() { fx_cell "$1" "$FX_N" 0 "$RLC_ROW" 2 '^retired-layer-contract: .*no verdict' "$RFD" "$RF_BASE" "$RF_THEIRS" "$RFC"; }
+WS_REF='^warn-shadowed-local-validators: REFUSED — '
+arm_fx_ws_healthy()  { fx_healthy "$1" 0 'RETIRE-CANDIDATE.scripts/ai-dlc-local/sub/validate-zz\.sh' --root "$WSF"; }
+arm_fx_ws_closed()   { fx_cell "$1" "$FX_N" 0 'RETIRE-CANDIDATE.scripts/ai-dlc-local/sub/validate-zz\.sh' 2 "$WS_REF" --root "$WSF"; }
+arm_fx_ws6_healthy() { fx_healthy "$1" 0 'RETIRE-CANDIDATE.scripts/ai-dlc-local/validate-zz\.sh' --root "$WS6"; }
+arm_fx_ws_emitter()  { fx_cell "$1" 2 0 'RETIRE-CANDIDATE.scripts/ai-dlc-local/validate-zz\.sh' 2 "$WS_REF" --root "$WS6"; }
+RT_ROW='core/scripts/z\.sh.\$ROOT/old-z$'
+arm_fx_rt_healthy() { fx_healthy "$1" 0 "$RT_ROW" --bucket-rows "$FW/rt-rows" "$RTD" "$FXRT_B" "$FXRT_T" "$RTC" \
+  && ! grep -q 'core/scripts/z\.sh.\$ROOT/old-b' "$FW/h.out"; }
+arm_fx_rt() { fx_cell "$1" "$FX_N" 0 "$RT_ROW" 2 '^retired-tokens: .*no verdict' --bucket-rows "$FW/rt-rows" "$RTD" "$FXRT_B" "$FXRT_T" "$RTC"; }
+# derivation-differential has no forced cell (its sites are held by r5 alone); this is the positive
+# conjunct its spelling mutant needs -- the copy parses and RUNS as far as its argument check.
+arm_dd_usage() { local rc=0; bash "$1" > "$OUT" 2> "$ERR" || rc=$?
+  ARM_WHY="rc=$rc: $(head -1 "$OUT" | cut -c1-80)"
+  [ "$rc" -eq 2 ] && grep -q 'usage.*expected four arguments' "$OUT"; }
+
+# --- r5: NO NON-COMMENT HERE-STRING in a file this release converted ------------------------------
+# The seven files 2f598a86 converted, and only those: the bootstrapping files (apply.sh, lib.sh,
+# preclassify.sh, emit-report.sh, self-update-fixtures.sh, ...) keep their sites and are not scoped.
+# A `<<<` with a non-`<` on both sides, on a line that is not a whole-line comment; the line is padded
+# with a space each side so a here-string at either end still has its neighbour. FP set, measured
+# over the seven at the tip: the one `<<<` substring left is readopt-override.sh's `<<<<<<<` inside
+# an echo, which the grammar excludes -- the self-probe below seeds that exact line. `<<EOF` loops
+# are not counted: readopt-override.sh keeps two in code this release did not touch.
+R5_FILES="hard-blockers.sh relabel-extension-checks.sh retired-layer-contract.sh retired-tokens.sh warn-shadowed-local-validators.sh readopt-override.sh derivation-differential.sh"
+r5_scan() { # r5_scan <file> -> "<non-comment lines> <here-string lines> [<line numbers>]"
+  awk '/^[[:blank:]]*#/ { next } { n++; if ((" " $0 " ") ~ /[^<]<<<[^<]/) { h++; at = at " " FNR } } END { printf "%d %d%s\n", n, h, at }' "$1"; }
+arm_r5() { local r n h
+  r="$(r5_scan "$1")" || { ARM_WHY="awk could not scan $1"; return 1; }
+  n="${r%% *}"; h="${r#* }"; h="${h%% *}"
+  ARM_WHY="$n non-comment line(s) scanned, $h here-string line(s)$( [ "$h" -gt 0 ] && printf ' at%s' "${r#* * }" )"
+  [ "$n" -gt 0 ] && [ "$h" -eq 0 ]; }
+
+# ================================================================================================
 # THE ARM TABLE: <arm> <script-path> <description>
 # ================================================================================================
 S_CI="$SC/validate-ci-gates.sh"; S_RX="$RC_/relabel-extension-checks.sh"
@@ -778,6 +990,37 @@ run_arm arm_wt_line      "$S_LE"  "validate-layer-entries W12: line_tokens' harv
 run_arm arm_rlc_shapes   "$S_RLC" "retired-layer-contract: shapes_of's grep exits 2 on a layer file -> exit 2, not a lost row"
 run_arm arm_rlc_tokens   "$S_RLC" "retired-layer-contract: tokens_of's grep exits 2 on a layer file -> exit 2, not a lost row"
 run_arm arm_ld_fxv       "$S_LD"  "layer-drift: sup_measure's grep -Fxv exits 2 -> exit 1 refusal, not '0 of yours appear nowhere'"
+
+S_HB="$RC_/hard-blockers.sh"; S_WS="$RC_/warn-shadowed-local-validators.sh"; S_DD="$RC_/derivation-differential.sh"
+echo "== a staging write that fails ($FBASH, trap '' XFSZ; ulimit -f): the calibration, which never runs a subject =="
+if [ -z "$FX_BV" ] || [ "$FX_BLK" -le 0 ] || [ -z "$FXRT_B" ] || [ -z "$FXRT_T" ]; then
+  bad "FIXTURE BROKEN: the staging-write cells need $FBASH (version '$FX_BV') and a measurable ulimit -f block (measured '$FX_BLK' B); every forced cell below is unreadable"
+else
+  _rtsz="$(fx_sz "$FW/rt-payload")"
+  if [ "$_rtsz" -ne "$FX_L" ]; then
+    bad "FIXTURE BROKEN: calibration [retired-tokens]: the z.sh blob is $_rtsz B, not exactly the $FX_L-byte limit, so the one-byte window (git show writes L, a here-string needs L+1) is not the one tested"
+    FX_CAL_FAILS=$((FX_CAL_FAILS+1))
+  else
+    ok "calibration [retired-tokens]: the z.sh blob is exactly the limit, $_rtsz B (wc -c) = $FX_N x $FX_BLK"
+  fi
+  fx_cal hard-blockers "$FX_N" "$FW/hb-payload"
+  fx_cal relabel "$FX_RX_N" "$FW/rx-payload" 2
+  fx_cal retired-layer-contract "$FX_N" "$RFC/.claude/skills/ai-dlc/extensions/e.md" 64
+  fx_cal warn-shadowed-closed "$FX_N" "$FW/ws-payload" "$(fx_sz "$FW/ws6-payload")"
+  fx_cal warn-shadowed-emitter 2 "$FW/ws6-payload" 16
+  fx_cal retired-tokens "$FX_N" "$FW/rt-payload" "$FX_L"
+  [ "$FX_CAL_FAILS" -eq 0 ] && FX_READY=1
+fi
+echo "== a staging write that fails: each cell prints the complete output or refuses, never rc 0 with a row missing or false =="
+run_arm arm_fx_hb_check  "$S_HB"  "hard-blockers --check, 200 blockers: '(200 total)' or REFUSED exit 1, never '(0 total)'"
+run_arm arm_fx_hb_print  "$S_HB"  "hard-blockers print, 200 blockers: every HARD row or REFUSED exit 1, never an empty region at rc 0"
+run_arm arm_fx_rx        "$S_RX"  "relabel check pass, 700 anchors: the collision (exit 1) or REFUSED exit 2, never 'no collisions'"
+run_arm arm_fx_rxr       "$S_RX"  "relabel rule pass, 700 rules: the collision (exit 1) or REFUSED exit 2, never 'no collisions'"
+run_arm arm_fx_rx_apply  "$S_RX"  "relabel --apply: the heading labelled, or REFUSED exit 2 with the extension byte-identical"
+run_arm arm_fx_rlc       "$S_RLC" "retired-layer-contract path arm, a 20 KB layer file: all 3 rows or refusal, never 2 rows at rc 0"
+run_arm arm_fx_ws_closed "$S_WS"  "warn-shadowed-local-validators, 901 closed basenames: both forks or REFUSED exit 2, never 0 rows"
+run_arm arm_fx_ws_emitter "$S_WS" "warn-shadowed-local-validators, lib.sh's entry emitter unstaged: the fork or REFUSED exit 2"
+run_arm arm_fx_rt        "$S_RT"  "retired-tokens, z.sh blob at exactly the limit after b.sh: z -> old-z or refusal, never a FALSE z -> old-b"
 
 if [ "$SELF_TREE" -ne 1 ]; then
   skip "spelling arm and mutants -- they run only against this fixture's own tree, not $TREE"
@@ -927,6 +1170,69 @@ else
 fi
 
 # ================================================================================================
+# r5 -- NO NON-COMMENT HERE-STRING IN A CONVERTED FILE. Self-probe first, both directions, on a
+# seeded file: a live `<<<` at a line's start, middle and end must each count, and a comment line
+# naming `<<<` and the literal `<<<<<<<` inside an echo -- readopt-override.sh's own line -- must not.
+# ================================================================================================
+R5P="$W/r5-probe.sh"
+cat > "$R5P" <<'R5_EOF'
+grep -qF -- "$x" <<< "$body" || continue
+done <<<"$ids"
+cat <<<x
+  # a comment: grep -qxF -- "$line" <<<"$to_lines"
+          echo "  Stamping now would ship <<<<<<< into the rulebook the lead reads." >&2
+done <<EOF
+R5_EOF
+R5_GOT="$(r5_scan "$R5P")"
+if [ "$R5_GOT" = "5 3 1 2 3" ]; then
+  ok "r5 self-probe: a here-string at a line's start, middle and end counts (lines 1-3); a comment, an echoed <<<<<<< and a <<EOF heredoc do not"
+else
+  bad "r5 self-probe read '$R5_GOT', expected '5 3 1 2 3' -- the grammar cannot be trusted on the converted files"
+fi
+for _r5 in $R5_FILES; do run_arm arm_r5 "$RC_/$_r5" "r5: $_r5 carries no non-comment here-string"; done
+
+# ================================================================================================
+# THE 322ef42c DIFFERENTIAL. Every staging-write cell and r5 is PRESENCE- or count-shaped, and each
+# is scored here against the copy of its script at 322ef42c -- the base these cells were built
+# against -- staged beside the tree's lib.sh. Each MUST FAIL there, which is the proof it can fire.
+# hard-blockers.sh and warn-shadowed-local-validators.sh fed their loops from `<<EOF` heredocs, not
+# `<<<`, so r5 does not score them; their forced cells do.
+# ================================================================================================
+B3_PIN=322ef42c43be0c11db74e937930e8810cf6b5492
+if ! git -C "$OWN" cat-file -e "${B3_PIN}^{commit}" 2>/dev/null; then
+  skip "322ef42c differential -- the pin ${B3_PIN} is not in this clone's history, so no base copy exists (this is not a pass)"
+else
+  B3="$W/b3"; cp -R "$RC_" "$B3" || { echo "FIXTURE BROKEN: could not copy reconcile/ for the 322ef42c differential" >&2; exit 2; }
+  b3_ok=1
+  for _b3 in $R5_FILES; do
+    if ! git -C "$OWN" show "${B3_PIN}:core/skills/ai-dlc-update/reconcile/${_b3}" > "$B3/$_b3" 2>/dev/null; then
+      bad "322ef42c differential: could not stage ${_b3} at the pin"; b3_ok=0
+    elif cmp -s "$RC_/$_b3" "$B3/$_b3"; then
+      bad "322ef42c differential: ${_b3} at the pin is byte-identical to the tree's copy"; b3_ok=0
+    fi
+  done
+  if [ "$b3_ok" -eq 1 ]; then
+    ok "322ef42c differential: the seven converted scripts staged at the pin beside lib.sh, each DIFFERS from the tree's copy (cmp -s)"
+    b3_fail() { # b3_fail <arm> <script-basename> <what the base copy did>
+      if "$1" "$B3/$2"; then bad "322ef42c differential: $1 PASSED against the base $2, so it cannot tell the fix from its absence -- $ARM_WHY"
+      else ok "322ef42c differential: $1 FAILS against the base $2 ($3) -- $ARM_WHY"; fi
+    }
+    b3_fail arm_fx_hb_check   hard-blockers.sh          "the failed heredoc read as '(0 total)'"
+    b3_fail arm_fx_hb_print   hard-blockers.sh          "an empty region with no '0 HARD blockers.' line"
+    b3_fail arm_fx_rx         relabel-extension-checks.sh "'no unlabelled core-number collisions.'"
+    b3_fail arm_fx_rxr        relabel-extension-checks.sh "'no unlabelled core-number collisions.' on the rule pass"
+    b3_fail arm_fx_rx_apply   relabel-extension-checks.sh "rc 0 and the heading never labelled"
+    b3_fail arm_fx_rlc        retired-layer-contract.sh "the 20 KB layer file's row lost at rc 0"
+    b3_fail arm_fx_ws_closed  warn-shadowed-local-validators.sh "0 rows at rc 0"
+    b3_fail arm_fx_ws_emitter warn-shadowed-local-validators.sh "awk died on an undefined function, 0 rows at rc 0"
+    b3_fail arm_fx_rt         retired-tokens.sh         "a FALSE z -> old-b row and the true one lost"
+    for _b3 in relabel-extension-checks.sh retired-layer-contract.sh retired-tokens.sh readopt-override.sh derivation-differential.sh; do
+      b3_fail arm_r5 "$_b3" "it carried non-comment here-strings"
+    done
+  fi
+fi
+
+# ================================================================================================
 # MUTANTS. One copy of each subject directory; each mutant is a sibling file in that copy, so the
 # script finds lib.sh, setup-sites.md, preclassify.sh and artifact-path-config.sh beside it.
 # ================================================================================================
@@ -1014,6 +1320,13 @@ control scripts   validate-layer-entries.sh     arm_le_healthy arm_le_census arm
 control reconcile layer-drift.sh                arm_ld_healthy arm_ld_walk arm_ld_sup arm_ld_fxv
 control scripts   validate-provenance-block.sh  arm_pb_healthy arm_pb_unreadable arm_pb_zero arm_pb_walk2 arm_pb_walk127
 control scripts   validate-adversarial-convergence.sh arm_cv_healthy arm_cv_sort
+control reconcile hard-blockers.sh              arm_fx_hb_healthy arm_fx_hb_check arm_fx_hb_print arm_r5
+control reconcile relabel-extension-checks.sh   arm_fx_rx_healthy arm_fx_rx arm_fx_rxr arm_fx_rx_apply arm_r5
+control reconcile retired-layer-contract.sh     arm_fx_rlc_healthy arm_fx_rlc arm_r5
+control reconcile warn-shadowed-local-validators.sh arm_fx_ws_healthy arm_fx_ws_closed arm_fx_ws6_healthy arm_fx_ws_emitter arm_r5
+control reconcile retired-tokens.sh             arm_fx_rt_healthy arm_fx_rt arm_r5
+control reconcile readopt-override.sh           arm_ro_healthy arm_r5
+control reconcile derivation-differential.sh    arm_dd_usage arm_r5
 
 echo "== mutants (each restores a discarded status at one site) =="
 mutant CI-RETRO scripts validate-ci-gates.sh arm_ci_healthy "arm_ci_retro" \
@@ -1036,13 +1349,17 @@ mutant RLC-WALK reconcile retired-layer-contract.sh arm_rlc_healthy "arm_rw_walk
   'find "$LAYERS/$dir" -type f \( -name '"'"'*.md'"'"' -o -name '"'"'*.json'"'"' \) 2>/dev/null > "$RLC_T/walk-$dir" || _rlc_rc=$?' ':' \
   'sort "$RLC_T/walk-$dir" > "$RLC_T/walk-$dir.sorted" || rlc_refuse "sorting the layer walk of $LAYERS/$dir" "$?"' ':' \
   'done < "$RLC_T/walk-$dir.sorted"' 'done < <(find "$LAYERS/$dir" -type f \( -name '"'"'*.md'"'"' -o -name '"'"'*.json'"'"' \) 2>/dev/null | sort)'
+# The three below anchor on the rt_toks feeds as the here-string conversion left them: each reads
+# the blob rt_blob staged, and refuses on a failed read. The observable is unchanged.
+RT_FEED_B='rt_toks "${cp}@${BASE}" "$RT_T/toks-base" < "$RT_T/blob-base" || rt_refuse "reading the staged base blob of $cp" "$?"'
+RT_FEED_T='rt_toks "${cp}@${THEIRS}" "$RT_T/toks-theirs" < "$RT_T/blob-theirs" || rt_refuse "reading the staged theirs blob of $cp" "$?"'
 mutant RT-SUBTRACT reconcile retired-tokens.sh arm_rt_healthy "arm_rt_all arm_rt_base" \
-  $'  rt_toks "${cp}@${BASE}" "$RT_T/toks-base" <<<"$b"\n  rt_toks "${cp}@${THEIRS}" "$RT_T/toks-theirs" <<<"$t"\n  retired="$(comm -23 "$RT_T/toks-base" "$RT_T/toks-theirs")" || rt_refuse "the retired-token subtraction for $cp" "$?"' \
+  "  $RT_FEED_B"$'\n'"  $RT_FEED_T"$'\n  retired="$(comm -23 "$RT_T/toks-base" "$RT_T/toks-theirs")" || rt_refuse "the retired-token subtraction for $cp" "$?"' \
   $'  retired="$(comm -23 <(printf \'%s\\n\' "$b" | toks) <(printf \'%s\\n\' "$t" | toks))"'
 mutant RT-PIPE reconcile retired-tokens.sh arm_rt_healthy "arm_rt_base" \
-  'rt_toks "${cp}@${BASE}" "$RT_T/toks-base" <<<"$b"' 'printf '"'"'%s\n'"'"' "$b" | rt_toks "${cp}@${BASE}" "$RT_T/toks-base"'
+  "$RT_FEED_B" 'printf '"'"'%s\n'"'"' "$b" | rt_toks "${cp}@${BASE}" "$RT_T/toks-base"'
 mutant RT-OURS reconcile retired-tokens.sh arm_rt_healthy "arm_rt_ours" \
-  $'  rt_toks "$cons" "$RT_T/toks-ours" < "$ours"\n  comm -12 "$RT_T/retired" "$RT_T/toks-ours" > "$RT_T/spoken" || rt_refuse "the consumer-token intersection for $cp" "$?"\n' '' \
+  $'  rt_toks "$cons" "$RT_T/toks-ours" < "$ours" || rt_refuse "reading $cons" "$?"\n  comm -12 "$RT_T/retired" "$RT_T/toks-ours" > "$RT_T/spoken" || rt_refuse "the consumer-token intersection for $cp" "$?"\n' '' \
   '  done < "$RT_T/spoken"' $'  done < <(comm -12 <(printf \'%s\\n\' "$retired") <(toks < "$ours"))'
 mutant RO-FROM reconcile readopt-override.sh arm_ro_healthy "arm_ro_sort arm_ro_git" \
   $'  section_lines "$1" "$3" "$4-from" > "$RO_T/$4-from-lines" || return 3\n' '' \
@@ -1156,7 +1473,9 @@ mutant RT-SHOW reconcile retired-tokens.sh arm_ta_healthy "arm_ta_show" \
 mutant RT-BLOBS-ALL reconcile retired-tokens.sh arm_ta_healthy "arm_ta_verify arm_ta_ls arm_ta_show" \
   '[ "$_rt_rc" -eq 0 ] || rt_refuse "resolving' 'true || rt_refuse "resolving' \
   $'  rt_blob "$BASE" "$cp" "$RT_T/blob-base" || continue\n  rt_blob "$THEIRS" "$cp" "$RT_T/blob-theirs" || continue\n  b="$(cat "$RT_T/blob-base")" || rt_refuse "reading the staged base blob of $cp" "$?"\n  t="$(cat "$RT_T/blob-theirs")" || rt_refuse "reading the staged theirs blob of $cp" "$?"\n' \
-  $'  b="$(git -C "$DIST" show "${BASE}:${cp}" 2>/dev/null || true)"\n  t="$(git -C "$DIST" show "${THEIRS}:${cp}" 2>/dev/null || true)"\n'
+  $'  b="$(git -C "$DIST" show "${BASE}:${cp}" 2>/dev/null || true)"\n  t="$(git -C "$DIST" show "${THEIRS}:${cp}" 2>/dev/null || true)"\n' \
+  "$RT_FEED_B" 'rt_toks "${cp}@${BASE}" "$RT_T/toks-base" <<<"$b"' \
+  "$RT_FEED_T" 'rt_toks "${cp}@${THEIRS}" "$RT_T/toks-theirs" <<<"$t"'
 # retired-layer-contract: the tree listing's status and the blob read's status, each dropped, and both.
 mutant RLC-TREE reconcile retired-layer-contract.sh arm_rg_healthy "arm_rg_theirs_ls" \
   '[ "$rc" -eq 0 ] || { RLC_WHY="the rulebook tree listing' 'true || { RLC_WHY="the rulebook tree listing'
@@ -1173,6 +1492,42 @@ mutant LD-FXV reconcile layer-drift.sh arm_ld_healthy "arm_ld_fxv" \
 libmutant RO-SECTIONOF readopt-override.sh arm_ro_healthy "arm_ro_span" \
   $'  local _t _s="" _rc=0\n  _t="$(mktemp)" || return 1\n  cat > "$_t" || _rc=$?\n  if [ "$_rc" -eq 0 ]; then _s="$(span_of "$1" < "$_t")" || _rc=$?; fi\n  if [ "$_rc" -eq 0 ] && [ -n "$_s" ]; then LC_ALL=C sed -n "${_s%% *},${_s##* }p" "$_t" || _rc=$?; fi\n  rm -f "$_t"\n  return "$_rc"\n' \
   $'  local _t _s\n  _t="$(mktemp)" || return 1\n  cat > "$_t"\n  _s="$(span_of "$1" < "$_t")"\n  [ -n "$_s" ] && LC_ALL=C sed -n "${_s%% *},${_s##* }p" "$_t"\n  rm -f "$_t"\n'
+
+echo "== mutants: one 322ef42c staging spelling per converted file (each restores a here-string or heredoc feed) =="
+# hard-blockers: the staged list and its refusal removed, both loops fed from the `<<EOF` heredoc again.
+mutant HB-HEREDOC reconcile hard-blockers.sh arm_fx_hb_healthy "arm_fx_hb_check arm_fx_hb_print" \
+  $'  printf \'%s\\n\' "$BLOCKERS" > "$HB_T/blockers" || _hb_rc=$?\n  [ "$_hb_rc" -eq 0 ] || hb_refuse_staging "the blocking list" "$_hb_rc"\n' '' \
+  $'      printf \'%-32s %s\\n\' "$st" "$path"\n    done < "$HB_T/blockers"' $'      printf \'%-32s %s\\n\' "$st" "$path"\n    done <<EOF\n$BLOCKERS\nEOF' \
+  $'      missing=1\n    fi\n  done < "$HB_T/blockers"' $'      missing=1\n    fi\n  done <<EOF\n$BLOCKERS\nEOF'
+# relabel: both anchor sets fed from `<<<` again, their staging and refusal removed.
+mutant RX-HERESTRING reconcile relabel-extension-checks.sh arm_fx_rx_healthy "arm_fx_rx arm_fx_rxr arm_fx_rx_apply arm_r5" \
+  $'  _rx_rc=0\n  printf \'%s\\n\' "$core_nums" > "$RX_T/core-nums" || _rx_rc=$?\n' '' \
+  $'  printf \'%s\\n\' "$core_rules" > "$RX_T/core-rules" || _rx_rc=$?\n' '' \
+  '[ "$_rx_rc" -eq 0 ] || { echo "relabel: REFUSED — the core check-anchor set' 'true || { echo "relabel: REFUSED — the core check-anchor set' \
+  '[ "$_rx_rc" -eq 0 ] || { echo "relabel: REFUSED — the core rule-number set' 'true || { echo "relabel: REFUSED — the core rule-number set' \
+  '  done < "$RX_T/core-nums"' '  done <<< "$core_nums"' \
+  '  done < "$RX_T/core-rules"' '  done <<< "$core_rules"'
+# retired-layer-contract: the path arm's substring test is the `grep -qF` here-string again.
+mutant RLC-HERESTRING reconcile retired-layer-contract.sh arm_fx_rlc_healthy "arm_fx_rlc arm_r5" \
+  '        case "$body" in *"$_sp"*) _hit=yes; break ;; esac' $'        grep -qF -- "$_sp" <<< "$body" || continue\n        _hit=yes; break'
+# warn-shadowed: the closed-basename loop is the `<<EOF` heredoc again, its staging removed.
+mutant WS-HEREDOC reconcile warn-shadowed-local-validators.sh arm_fx_ws_healthy "arm_fx_ws_closed" \
+  $'printf \'%s\\n\' "$closed_basenames" > "$WS_T/closed" || _ws_rc=$?\n[ "$_ws_rc" -eq 0 ] || ws_refuse_staging "the closed-entry basename set" "$_ws_rc"\n' '' \
+  'done < "$WS_T/closed"' $'done <<EOF\n$closed_basenames\nEOF'
+# warn-shadowed: the lib emitter's capture and the closed-entry scan read no status again.
+mutant WS-EMITTER reconcile warn-shadowed-local-validators.sh arm_fx_ws6_healthy "arm_fx_ws_emitter" \
+  'LEA="$(ledger_entry_awk)" || { echo' 'LEA="$(ledger_entry_awk)"; true || { echo' \
+  '[ -n "$LEA" ] || { echo' 'true || { echo' \
+  '[ "$_ws_rc" -eq 0 ] || { echo "warn-shadowed-local-validators: REFUSED — the closed-entry scan' 'true || { echo "warn-shadowed-local-validators: REFUSED — the closed-entry scan'
+# retired-tokens: the two rt_toks feeds are here-strings again, with no status read (322ef42c's spelling).
+mutant RT-HERESTRING reconcile retired-tokens.sh arm_fx_rt_healthy "arm_fx_rt arm_r5" \
+  "$RT_FEED_B" 'rt_toks "${cp}@${BASE}" "$RT_T/toks-base" <<<"$b"' \
+  "$RT_FEED_T" 'rt_toks "${cp}@${THEIRS}" "$RT_T/toks-theirs" <<<"$t"'
+# readopt-override and derivation-differential: no forced cell; r5 holds their one converted site each.
+mutant RO-HERESTRING reconcile readopt-override.sh arm_ro_healthy "arm_r5" \
+  'ro_has_line "$to_lines" "$line" && continue' 'grep -qxF -- "$line" <<<"$to_lines" && continue'
+mutant DD-HERESTRING reconcile derivation-differential.sh arm_dd_usage "arm_r5" \
+  '  case "$NL$1" in *"${NL}skill_commit:"*) ;; *) return 0 ;; esac' $'  awk \'/^skill_commit:/ { f = 1 } END { exit !f }\' <<<"$1" || return 0'
 
 echo
 if [ "$fails" -eq 0 ]; then echo "procsub-staged-refusal: PASS"; exit 0; fi

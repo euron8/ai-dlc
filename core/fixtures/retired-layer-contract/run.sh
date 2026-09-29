@@ -117,6 +117,8 @@ DENOMOUT="$(bash "$SCRIPT" "$DIST" "$BASE" "$THEIRS" "$EMPTYC" 2>/dev/null)"
   || bad "  the empty-consumer run emitted a finding — the denominator arm is not measuring a zero"
 
 # --- Assertion 6: an unreadable base WARNS, never reports clean ---------------
+# An unreadable setup-sites.md, the rulebook LIST rather than the base ref, is arm U1 below: it
+# needs the mutant harness, which is defined after the path arm.
 # 'no shapes found' and 'nothing was retired' are the same empty output. If the rulebook
 # cannot be read the detector must say so, or it passes vacuously on every release.
 ERRTXT="$(bash "$SCRIPT" "$DIST" deadbeefdeadbeefdeadbeef "$THEIRS" "$CONSUMER" 2>&1 >/dev/null)"
@@ -386,7 +388,11 @@ fi
 #      about to read as proof that the literal match is not load-bearing — which is the
 #      direction that deletes a correct guard. The corpus lacked the discriminating input;
 #      the repair was a new seed, not a relaxed assertion.
-if rlcmut m3-regex-not-literal -e 's@        grep -qF -- "\$_sp" <<< "\$body" || continue@        grep -qE -- "$_sp" <<< "$body" || continue@'; then
+#      ANCHORED ON THE `case` SUBSTRING TEST, which replaced the `grep -qF` here-string when
+#      the path arm stopped staging its inputs to temp files. The observable is unchanged: a
+#      regex match of `_sp` must flag route-md.bak. The replacement is an `if`, not `&&`,
+#      because an `&` in a sed replacement re-inserts the whole match.
+if rlcmut m3-regex-not-literal -e 's@^        case "\$body" in \*"\$_sp"\*) _hit=yes; break ;; esac$@        if grep -qE -- "$_sp" <<< "$body"; then _hit=yes; break; fi@'; then
   M3_OUT="$(rlcrun "$RLC_MUT")"
   if [ -n "$(awk -F'\t' '$2 ~ /path-dot-near-miss\.md/ && $3 ~ /^path:/' <<<"$M3_OUT")" ]; then
     ok "  mutant [m3] KILLED by 7d': matched as a regex, the retired path's '.' matches any character and route-md.bak is reported"
@@ -569,6 +575,59 @@ fx_mut f-tree-status 0 1 -e 's@  \[ "\$rc" -eq 0 \] || { RLC_WHY="the rulebook t
 fx_mut f-show-status 1 0 -e 's@      \[ "\$rc" -eq 0 \] || { RLC_WHY="reading \$f at \$ref"@      true || { RLC_WHY="reading $f at $ref"@'
 fx_mut f-reads-all   0 0 -e 's@  \[ "\$rc" -eq 0 \] || { RLC_WHY="the rulebook tree listing@  true || { RLC_WHY="the rulebook tree listing@' \
                          -e 's@      \[ "\$rc" -eq 0 \] || { RLC_WHY="reading \$f at \$ref"@      true || { RLC_WHY="reading $f at $ref"@'
+
+# =============================================================================
+# AN UNREADABLE setup-sites.md REFUSES, exit 2, AND PRINTS NO ROW
+#
+# Assertion 6 drives an unresolvable BASE ref, which refused before this arm existed; it says
+# nothing about the rulebook LIST. That list was read inside every `for glob in $(rulebook_globs)`
+# with `2>/dev/null` and no status read, so a setup-sites.md that could not be opened read as a
+# rulebook with no files and the run exited 0 with no row -- which emit-report.sh renders as
+# "none". The world is a DIRECTORY named setup-sites.md in a whole copy of the reconcile directory:
+# lib.sh sits beside it, and a directory is unreadable as a file for every user, root included,
+# where a mode-000 file is not. Each copy first proves it runs: with the list readable it must
+# emit the untouched SHAPE row (rlcctl), so a copy that never ran cannot score a refusal or a kill.
+# =============================================================================
+echo
+echo "  --- an unreadable rulebook list refuses ---"
+rlc_unreadable() { # rlc_unreadable <script-in-a-dir-copy> -> 0 when it refuses with exit 2 and no row
+  local d; d="$(dirname "$1")"
+  rm -f "$d/setup-sites.md"; mkdir "$d/setup-sites.md" || return 1
+  bash "$1" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" > "$FX/out" 2> "$FX/err"; FX_RC=$?
+  RLC_UWHY="rc=$FX_RC rows=$(grep -c . "$FX/out") err=$(head -1 "$FX/err" | cut -c1-110)"
+  [ "$FX_RC" -eq 2 ] && [ ! -s "$FX/out" ] && grep -q 'reading the rulebook list from .*setup-sites\.md' "$FX/err"
+}
+UNR="$WORK/unreadable-sites"; mkdir -p "$UNR"
+if cp -R "$RLC_SRC"/. "$UNR"/ 2>/dev/null && [ -f "$UNR/lib.sh" ]; then
+  rlcctl unreadable-sites "$UNR/retired-layer-contract.sh"
+  if rlc_unreadable "$UNR/retired-layer-contract.sh"; then
+    ok "U1 a setup-sites.md that exists and cannot be read refuses: exit 2, no row ($RLC_UWHY)"
+  else
+    bad "U1 a setup-sites.md that cannot be read did not refuse with exit 2 and no row ($RLC_UWHY) -- emit-report.sh renders exit 0 with no row as 'none'"
+  fi
+else
+  bad "MUTANT HARNESS BROKEN [unreadable-sites]: could not copy the reconcile directory"
+fi
+# THE MUTANT RESTORES THE BASE READ IN FULL: the cached, status-read list is deleted and
+# `rulebook_globs` goes back to reading the file itself with `2>/dev/null`. `rlc_refuse` is NOT
+# touched -- F1, F2 and the fx_mut series share it, and a mutant there would fail three arms.
+RLC_SITES_SED="$WORK/m-sites.sed"
+cat > "$RLC_SITES_SED" <<'SED_EOF'
+/^RLC_GLOBS="\$(awk /,/^\[ -n "\$RLC_GLOBS" \] || rlc_refuse /d
+s@^  printf '%s\\n' "\$RLC_GLOBS"$@  awk '/^rulebook:/{on=1;next} on \&\& /^[a-z_]+:/{exit} on \&\& /^  - /{sub(/^  - /,"");print}' "$SITES" 2>/dev/null@
+SED_EOF
+if rlcmut u1-sites-unread -f "$RLC_SITES_SED"; then
+  if grep -q 'RLC_GLOBS' "$RLC_MUT"; then
+    bad "FIXTURE STALE [u1-sites-unread]: the mutant still carries RLC_GLOBS, so only part of the read was reverted"
+  else
+    rlcctl u1-sites-unread "$RLC_MUT"
+    if rlc_unreadable "$RLC_MUT"; then
+      bad "MUTANT SURVIVED [u1-sites-unread]: with the base read restored, U1 still passed ($RLC_UWHY)"
+    else
+      ok "  mutant [u1-sites-unread] KILLED by U1: with the base read restored, an unreadable list reads as a clean run ($RLC_UWHY)"
+    fi
+  fi
+fi
 
 echo
 if [ "$fails" -eq 0 ]; then echo "retired-layer-contract: PASS"; exit 0; fi
