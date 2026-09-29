@@ -102,10 +102,36 @@ Gates: v0.664.0 on `ba0968f5`, 22 PASS, 0 FAIL, 1 SKIP (pole, 6-way), 216 ok; v0
 `77706f9f`, 22 PASS, 0 FAIL, 0 SKIP, 217 ok, every changed fixture `ok` by name against an
 impossible-name control of 0. Both squash trees identical to the gated tips.
 
-**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
-- `BL-375` (root-free read-set tracer) is operator-scheduled as the next release.
+**THE FRESH-RESUME SWEEP FOUND A NEW CONSUMER FILING, SO THE FIGURES ABOVE ARE THE BATCH-OPEN
+ONES.** Re-derived from `origin/main` at `dd8e8e65`, every control at its expected value: live
+**30** on **2** qualifying refs (`ai-dlc/carry-over/phase-315-aggregator-ui-cutover` and
+`ai-dlc-update/ledger-named-upstream-review-20260929`, each adding the same 2), unfiled **13**,
+worklist 5, TERMINAL 147, consumer HEAD ledger md5 `7dcc3d24…`. The new id is
+`PC-S315-AGENT-DEFINITION-RENDER-ENTANGLEMENT-ARM-FIRES-UNDER-THE-PRE-PUSH-POOL`, filed 2026-09-29
+during the consumer's 0.663.0 -> 0.664.0 pull: `agent-definition-render`'s `MUTANT
+check-is-presence-only` independence arm went red once under the consumer's 12-way push probe, 1 of
+190 units, and `self-update-gate.sh` scored `SELF-UPDATE-DEFER`. It did not reproduce in 3 serial and
+12 concurrent runs. `--is-core` routes it to core (exit 0; control exit 1).
+
+**NEXT WORK. OPERATOR RULING AT BATCH 173'S CLOSE: ONE RELEASE CARRIES ALL THREE BELOW, BUILT BY
+PARALLEL HANDS.** None touches a bootstrapping file.
+- The new filing above. PC-backed and newest, so it leads. The same class as `BL-230`'s pool-flake
+  arms: make the arm's mutant-independence scoring deterministic under pool load, or have the push
+  probe re-run a single red unit before scoring `DEFER`. Force the load; a sampled rerun proves
+  nothing, per the batch 160 record.
+- **Consumer branch hygiene. Core creates `ai-dlc/<kind>/` branches and deletes none** — 0
+  delete or prune sites in `core/` against 4 that create. The reference consumer holds 740 local
+  branches (260 `ai-dlc/*`, 337 `dev/*` that core does not create), 698 without a commit in 30
+  days, 52 reachable from `main` because it squash-merges. The route and retro steps delete a
+  sprint branch locally and on the remote once its PR is merged AND the branch tip equals the PR's
+  head sha, never by ancestry. A one-time sweep script lists the backlog and deletes only under an
+  explicit flag the operator runs in the consumer. The derive block's union loop reads each
+  distinct ledger blob once: 195 branches carry a ledger, 63 distinct ledger/archive blob pairs.
+  Unmerged branches do hold real filings, so no deletion keys on "not merged".
+- `BL-375` (root-free read-set tracer). Its switch-over still needs one operator `sudo` run tracing
+  all 218 fixtures with both tracers.
 - `BL-374` (the `lib.sh` memo caches a missing subtree as absent) is DEFECT and bootstrapping, so
-  it ships alone.
+  it ships alone, after.
 - `BL-360`'s bootstrapping half follows, each file alone; `BL-364` rides with its joins.
 - Filings owed when a close frees room: the lists in the batch 169, 170 and 171 records below;
   batch 172's `validate-backlog-receipts.sh` floors NOTE; and this batch's — I95(e) matches
