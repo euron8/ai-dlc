@@ -182,7 +182,9 @@ case "$FILE" in
       SEC_DIR="${PART_DIR}/sections"
     fi ;;
 esac
-PD_PHYS="$(cd "$PROJECT_DIR" 2>/dev/null && pwd -P)"
+# Resolved only inside a split: a write anywhere else pays no fork for it.
+PD_PHYS=""
+[ -n "$SELF_DOC$SEC_DIR" ] && PD_PHYS="$(cd "$PROJECT_DIR" 2>/dev/null && pwd -P)"
 rel_of() { # <path> -> project-relative when under the project dir (physical or logical), else as given
   case "$1" in
     "$PD_PHYS"/*) printf '%s' "${1#"$PD_PHYS"/}" ;;
@@ -320,9 +322,7 @@ if [ -s "$DOOMED" ]; then
     echo "reads the section copy under ${SEC_REL}/, which the join's assembly removes -- so the"
     echo "gate re-runs it against a file that no longer exists and fails the repair."
     echo
-    sort -n -u "$DOOMED" | while IFS= read -r ln; do
-      printf '  %s:%s  %s\n' "$REL" "$ln" "$(sed -n "${ln}p" "$FILE")"
-    done
+    awk -v r="$REL" 'FNR == NR { want[$1] = 1; next } FNR in want { printf "  %s:%s  %s\n", r, FNR, $0 }' "$DOOMED" "$FILE"
     echo
     echo "Name the DOCUMENT by its project-relative path, ${SELF_REL}, in the command instead."
     echo "At write time the document does not hold your edit yet, so that pair is not re-run"
