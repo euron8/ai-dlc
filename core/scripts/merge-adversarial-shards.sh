@@ -219,7 +219,11 @@ parse_shard() {
 field() { # $1 parse file, $2 key
   awk -v k="$2" '$1 == "F" && $2 == k { sub(/^F [^ ]+ ?/, ""); print; exit }' "$1"
 }
-digits() { printf '%s' "$1" | grep -E '^[0-9]+$' || true; }
+digits() { case "$1" in ""|*[!0-9]*) ;; *) printf '%s' "$1" ;; esac; }
+# Held in variables: bash 3.2 reads an unquoted `[[ =~ $var ]]` regex as ERE, fork-free.
+RE_ISO='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'
+RE_SHA='^[a-f0-9]{64}$'
+RE_CITED='^[0-9]+(,[0-9]+)*$'
 
 S_CRIT=0; S_PRIOR=0; S_MAJOR=0; S_UNDER=0; S_MINOR=0
 ANY_DIVERGENT=0; EARLIEST=""; SHA_LIST=""; ID_LIST=""; ALL_IDS=""; CROSS_ID=""; CROSS_ARTIFACT=""
@@ -255,8 +259,7 @@ for key in $ORDINALS cross; do
   esac
 
   at="$(field "$P" invoked_at)"
-  printf '%s' "$at" | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' \
-    || refuse "$sf invoked_at '${at:-<none>}' is not ISO 8601 UTC to the second"
+  [[ $at =~ $RE_ISO ]] || refuse "$sf invoked_at '${at:-<none>}' is not ISO 8601 UTC to the second"
   if [ -z "$EARLIEST" ] || [[ "$at" < "$EARLIEST" ]]; then EARLIEST="$at"; fi
 
   tid="$(field "$P" tool_use_id)"
@@ -286,7 +289,7 @@ for key in $ORDINALS cross; do
     [ -n "$CROSS_ARTIFACT" ] || refuse "$sf (cross-story) declares no artifact"
   else
     sha="$(field "$P" artifact_sha)"
-    printf '%s' "$sha" | grep -qE '^[a-f0-9]{64}$' || refuse "$sf artifact_sha '${sha:-<none>}' is not one sha256"
+    [[ $sha =~ $RE_SHA ]] || refuse "$sf artifact_sha '${sha:-<none>}' is not one sha256"
     sb="$(awk -F'\t' -v k="$key" '$1 == k { print $2; exit }' "$T/map")"
     disk="$(sha_of "$STORIES_DIR/$sb")" || refuse "story file $STORIES_DIR/$sb is unreadable"
     [ "$sha" = "$disk" ] || refuse "$sf notarizes $sha but $sb is $disk on disk; the shard reviewed other bytes"
@@ -300,8 +303,7 @@ for key in $ORDINALS cross; do
     [ "$s" = "CRITICAL" ] && n_crit_h=$((n_crit_h + 1))
     [ "$s" = "MAJOR" ] && n_major_h=$((n_major_h + 1))
     [ "$nlines" = "1" ] || refuse "$sf:$line finding carries $nlines stories: lines; each finding carries exactly one"
-    printf '%s' "$cited" | grep -qE '^[0-9]+(,[0-9]+)*$' \
-      || refuse "$sf:$line stories: '$cited' is not <ordinal>[, <ordinal>...]"
+    [[ $cited =~ $RE_CITED ]] || refuse "$sf:$line stories: '$cited' is not <ordinal>[, <ordinal>...]"
     distinct=""
     for c in $(printf '%s' "$cited" | tr ',' ' '); do
       o="$(norm_ord "$c")"
