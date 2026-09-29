@@ -874,6 +874,144 @@ matches_pin() {
 }
 # --- end shared ----------------------------------------------------------------
 
+# --- THE SHARD ARM (Rule 28 split dispatch). WARN ONLY; IT NEVER CHANGES THE EXIT. -------
+# Two questions about a record the dispatch guard writes and the lead does not:
+#
+#   S1  a SHARDABLE row whose dispatch carried no parseable `shard:` line (`shard: null`).
+#       The grammar is defined once, in ai-dlc-dispatch-guard.sh (THE SHARD LINE, in its
+#       CONTRACT header), and not restated here.
+#   S2  a merged adversarial pass under `<state>/planning-artifacts/s<N>/` whose
+#       `shard_tool_use_ids:` (written by merge-adversarial-shards.sh) names an id that NO
+#       spawn-ledger row carries -- a shard the merge credited that no dispatch recorded.
+#       Joined on `tool_use_id` for the reason the effort arm below is: it is the one key
+#       both records carry, written by two different programs. The id set is the WHOLE
+#       ledger, not this sprint, because a shard row with a null sprint is still a dispatch.
+#
+# THE SHARDABLE SET is the four roles named in SHARD_ROLES plus every PARTY SEAT, and the
+# seats are DERIVED, not listed: a party seat is a declared `aiDlcRoles` entry with no
+# `model` -- the definition ai-dlc-dispatch-guard.sh already uses (PARTY PERSONAS in its
+# header). A consumer adding a seat gets it here with no edit.
+#
+# WHY A WARNING AND NOT A FAILURE. Whether a scope is one part or several is a judgment about
+# intent; `shard: none (<exception>)` is the lead declaring it, and nothing at dispatch can
+# check the declaration. A missing line is therefore evidence for the adjudicator, never a
+# verdict. The deny is unconstructible for the same reason.
+#
+# PRE-RELEASE ROWS ARE PENDING, KEYED ON THE STAMPED GUARD ITSELF. Only a guard at or after
+# the release that introduced the field writes the `shard` KEY (always, null or not), so a
+# guard-written row WITHOUT the key was written before the install stamp moved to that
+# release. That is the stamp, read off the row the stamped guard wrote -- no git, no repo
+# path, and a ledger copied out of its repo answers identically. Such rows are counted
+# PENDING and never warned. A row the guard did not write (no `v`) is not in the population.
+#
+# FALSE-POSITIVE SET, and how it reached this size. Measured on the reference consumer ledger
+# as pulled: every guard-written row predates the field, so S1 is PENDING on all of them and
+# warns on none; S2 finds no `shard_tool_use_ids:` line and joins nothing. The narrowing is
+# the key-presence test above -- keyed on `shard == null` alone, every shardable row ever
+# written would warn.
+SHARD_ROLES="adversary remediator gate-adjudicator analyst"
+NL='
+'
+
+# shard_scan <ledger> <sprint> <" role role ... "> <pass-dir> -> machine lines on stdout:
+#   U <name> <role>   S1 offender         P <name>   PENDING (pre-field row)
+#   S <name> <value>  shard recorded      N <pass> <id>   S2 offender     J <id>   joined
+# ONE jq and ONE awk, whatever the row count. rc 2 when the ledger could not be read.
+shard_scan() {
+  ss_rows="$(jq -rs --argjson s "$2" '
+      [ .[] | select(type == "object") ] as $all
+      | ( $all[] | select((.v | type) == "number") | select((.sprint // null) == $s)
+          | "R\t" + ((.name // "<unnamed>") | tostring) + "\t" + ((.role // "") | tostring) + "\t"
+            + (if has("shard") | not then "__NOKEY__"
+               elif (.shard // "") == "" then "__NULL__"
+               else (.shard | tostring) end) ),
+        ( $all[] | select((.v | type) == "number") | select((.tool_use_id // "") != "")
+          | "I\t" + (.tool_use_id | tostring) )
+    ' "$1" 2>/dev/null)" || return 2
+  set --  "$3" "$4"
+  ss_files=""
+  for ss_f in "$2"/*-adversarial-p*.md; do
+    [ -f "$ss_f" ] && ss_files="${ss_files}F	${ss_f}${NL}"
+  done
+  # The pass-file list rides on stdin as `F` records: BSD awk refuses a newline in `-v`.
+  printf '%s\n%s' "$ss_rows" "$ss_files" | awk -F'\t' -v roles="$1" '
+    $1 == "I" { id[$2] = 1; next }
+    $1 == "F" { fl[++nf] = $2; next }
+    $1 == "R" {
+      if (index(roles, " " $3 " ") == 0) next
+      if ($4 == "__NOKEY__") print "P\t" $2
+      else if ($4 == "__NULL__") print "U\t" $2 "\t" $3
+      else print "S\t" $2 "\t" $4
+    }
+    END {
+      for (k = 1; k <= nf; k++) {
+        f = fl[k]; if (f == "") continue
+        inblk = 0
+        while ((r = (getline line < f)) > 0) {
+          if (line ~ /SKILL_INVOCATION_PROVENANCE v1/) { inblk = 1; continue }
+          if (line ~ /SKILL_INVOCATION_PROVENANCE_END/) { inblk = 0; continue }
+          if (!inblk || line !~ /^shard_tool_use_ids:/) continue
+          sub(/^shard_tool_use_ids:/, "", line)
+          nt = split(line, tok, /[ \t]+/)
+          for (t = 1; t <= nt; t++) {
+            v = tok[t]; if (v == "") continue
+            sub(/^[^=]*=/, "", v)
+            if (v in id) print "J\t" v; else print "N\t" f "\t" v
+          }
+        }
+        if (r < 0) print "N\t" f "\t<unreadable pass file>"
+        close(f)
+      }
+    }'
+}
+
+# THE SELF-PROBE RUNS BEFORE THE CORPUS, in both directions: a seeded offender of each kind
+# must be reported, and a seeded near-miss of each kind must not. Built under mktemp, never
+# the real ledger. A failure here is exit 2 -- a WARN arm that cannot fire reads exactly like
+# one that found nothing.
+shard_self_probe() {
+  sp_d="$(mktemp -d "${TMPDIR:-/tmp}/validate-spawn-ledger-shard.XXXXXX")" || return 1
+  mkdir -p "$sp_d/pl" || { rm -rf "$sp_d"; return 1; }
+  printf '%s\n' \
+    '{"v":1,"sprint":7,"name":"adv-a","role":"adversary","tool_use_id":"toolu_A","shard":null}' \
+    '{"v":1,"sprint":7,"name":"adv-b","role":"adversary","tool_use_id":"toolu_B","shard":"1/2 01"}' \
+    '{"v":1,"sprint":7,"name":"adv-c","role":"adversary","tool_use_id":"toolu_C"}' \
+    '{"v":1,"sprint":7,"name":"seat","role":"tea","tool_use_id":"toolu_D","shard":null}' \
+    '{"v":1,"sprint":7,"name":"dev-a","role":"dev","tool_use_id":"toolu_E","shard":null}' \
+    '{"sprint":7,"name":"hand","role":"adversary","tool_use_id":"toolu_F","shard":null}' \
+    '{"v":1,"sprint":null,"name":"adv-x","role":"adversary","tool_use_id":"toolu_X","shard":"2/2 02"}' \
+    > "$sp_d/l.jsonl" || { rm -rf "$sp_d"; return 1; }
+  printf '%s\n' '<!-- SKILL_INVOCATION_PROVENANCE v1' \
+    'shard_tool_use_ids: 01=toolu_B 02=toolu_X 03=toolu_F cross=toolu_GONE' \
+    'SKILL_INVOCATION_PROVENANCE_END -->' 'shard_tool_use_ids: 09=toolu_OUTSIDE' \
+    > "$sp_d/pl/stories-adversarial-p1.md" || { rm -rf "$sp_d"; return 1; }
+  sp_out="$(shard_scan "$sp_d/l.jsonl" 7 " adversary tea " "$sp_d/pl")" || { rm -rf "$sp_d"; return 1; }
+  rm -rf "$sp_d"
+  sp_bad=0
+  sp_want() { case "${NL}${sp_out}${NL}" in *"${NL}$1${NL}"*) ;; *) echo "FAIL: shard self-probe: expected '$2'." >&2; sp_bad=1 ;; esac; }
+  sp_not()  { case "${NL}${sp_out}${NL}" in *"$1"*) echo "FAIL: shard self-probe: '$2'." >&2; sp_bad=1 ;; esac; }
+  TAB="$(printf '\t')"
+  sp_want "U${TAB}adv-a${TAB}adversary" "a shardable row with shard:null to WARN"
+  sp_want "U${TAB}seat${TAB}tea" "a party seat with shard:null to WARN"
+  sp_want "P${TAB}adv-c" "a row with no shard KEY to read as PENDING"
+  sp_want "S${TAB}adv-b${TAB}1/2 01" "a recorded shard line to be read"
+  sp_want "N${TAB}${sp_d}/pl/stories-adversarial-p1.md${TAB}toolu_GONE" "a merged id with no ledger row to WARN"
+  sp_want "N${TAB}${sp_d}/pl/stories-adversarial-p1.md${TAB}toolu_F" "a merged id carried only by a row the guard did not write to WARN"
+  sp_want "J${TAB}toolu_B" "a merged id with a ledger row to join"
+  sp_want "J${TAB}toolu_X" "a merged id whose row has a null sprint to join (the id set is the whole ledger)"
+  sp_not "adv-c${TAB}adversary" "a pre-field row was WARNED -- the PENDING key is not being read"
+  sp_not "dev-a" "a non-shardable role was judged"
+  sp_not "hand" "a row the guard did not write was judged"
+  sp_not "toolu_OUTSIDE" "an id outside the provenance block was joined"
+  [ "$sp_bad" -eq 0 ]
+}
+
+shard_self_probe || {
+  echo "FAIL: the shard arm's self-probe did not hold, so its silence on the real ledger would" >&2
+  echo "      establish only that it ran. Exit 2, no verdict." >&2
+  exit 2
+}
+
 # An absent ledger and a ledger holding only other sprints' rows are ONE state, and
 # Check 22 says so: a consumer that pulls the guard mid-sprint gets a file whose first
 # row is the NEXT dispatch, so "the file exists" and "this sprint is covered" are
@@ -1296,6 +1434,38 @@ FOREIGN_LIST="${FOREIGN_LIST% }"
 echo "  ${OUTSCOPE} row(s) out of Rule 19 scope${OUTSCOPE_LIST:+ (roles: ${OUTSCOPE_LIST})},"
 echo "  ${SUSPECT} of them named after a declared role and NOTED above,"
 echo "  ${FOREIGN} row(s) the dispatch guard did not write${FOREIGN_LIST:+ (roles: ${FOREIGN_LIST})} -- not dispatch records."
+
+# THE SHARD ARM (header above shard_scan). Its lines are WARN/PENDING and one summary line;
+# nothing it finds reaches VIOL or the exit code.
+SHARD_PASSDIR="$(dirname "$LEDGER")/planning-artifacts/s${SPRINT_NUM}"
+SHARD_SET=" ${SHARD_ROLES} $(jq -r '.aiDlcRoles // {} | to_entries[] | select((.value.model // "") == "") | .key' "$SETTINGS" 2>/dev/null | tr '\n' ' ')"
+SH_OUT=""
+SH_RC=0
+SH_OUT="$(shard_scan "$LEDGER" "$SPRINT_NUM" "$SHARD_SET" "$SHARD_PASSDIR")" || SH_RC=$?
+SH_WARN=0; SH_PENDING=0; SH_OK=0; SH_JOINED=0; SH_ORPHAN=0
+if [ "$SH_RC" -ne 0 ]; then
+  echo "WARN: the shard arm could not read ${LEDGER} (rc=${SH_RC}); nothing was checked for Rule 28 split dispatch."
+else
+  while IFS="$(printf '\t')" read -r sh_k sh_a sh_b; do
+    case "$sh_k" in
+      U) SH_WARN=$((SH_WARN + 1))
+         echo "WARN: [${sh_a}] role '${sh_b}' is shardable and its brief carried no parseable 'shard:' line."
+         echo "      Rule 28: one agent per independent part, or 'shard: none (<1-4>)' naming the serial"
+         echo "      exception (grammar: ai-dlc-dispatch-guard.sh, THE SHARD LINE). Not a failure." ;;
+      P) SH_PENDING=$((SH_PENDING + 1)) ;;
+      S) SH_OK=$((SH_OK + 1)) ;;
+      J) SH_JOINED=$((SH_JOINED + 1)) ;;
+      N) SH_ORPHAN=$((SH_ORPHAN + 1))
+         echo "WARN: $(basename "$sh_a") credits shard ${sh_b} in shard_tool_use_ids:, and no dispatch-guard"
+         echo "      row in ${LEDGER} carries that tool_use_id. The merge counted a shard no dispatch recorded." ;;
+    esac
+  done <<EOF
+$SH_OUT
+EOF
+fi
+echo "  shard: ${SH_OK} shardable row(s) carry a shard line, ${SH_WARN} WARNED without one,"
+echo "  ${SH_PENDING} PENDING (written before the guard recorded the field); merged-pass ids: ${SH_JOINED} joined,"
+echo "  ${SH_ORPHAN} WARNED with no ledger row (passes read from ${SHARD_PASSDIR})."
 
 # EVERY IN-SPRINT ROW OUT OF SCOPE IS NOT A PASS, and it reaches this line by a different
 # route than PRE-LEDGER does: the ledger DOES cover this sprint, and nothing in it was a
