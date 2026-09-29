@@ -649,13 +649,32 @@ git_show() { memo_show "$DIST" "$1" "$2"; }
 #   the root tree missing        128           1                                     128, no line
 #   genuinely absent             128           1                                     0, no line
 #   a PREFIX of a real path      128           1                                     0, no line
+#   a NON-CANONICAL spelling     128           1                                     0, one line naming
+#     (`a/./b`, `a//b`, `a/x/../b`)                                                      the CANONICAL path
+#   a `..` spelling that climbs  128           1                                     128, no line
+#     OUT of the tree
 #
 # `rev-parse <ref>:<path>` WAS THE FIRST PROPOSAL AND IT IS WRONG: it answers exactly as for an
 # absent path when the path's SUBTREE or the ROOT tree is the missing object, so the tier would
 # still switch off at rc 0 on those two rows. Only ls-tree separates them, and it matches the path
 # literally -- the prefix row is the absent answer, not a match. So: rc 0 and no line is ABSENT,
-# today's meaning; rc 0 with a line (the blob is what is missing) or any non-zero rc is a read
-# failure, and a read failure is never evidence of absence.
+# today's meaning; rc 0 with a line naming EXACTLY the asked path (the blob is what is missing), or
+# a non-zero rc on a path that stays inside the tree, is a read failure, and a read failure is never
+# evidence of absence.
+#
+# THE LAST TWO ROWS ARE ABSENT, NOT REFUSALS, BECAUSE THE PATH COMES FROM THE CONSUMER. `hooks:` and
+# `shadows:` are hand-written frontmatter, and `ls-tree` NORMALISES its pathspec where `cat-file`
+# does not: `steps/./gate-validation.md` gets cat-file 128 and one ls-tree line naming
+# `core/skills/ai-dlc/steps/gate-validation.md`. Read as "named but unreadable", that REFUSED a
+# healthy clone and blocked the pull over a spelling -- measured on a consumer extension, rc 0 with
+# an advisory EXTENSION-HOOK-MISSING row before BL-370 and rc 1 after it. The line ls-tree prints
+# is compared against the path asked, field after the TAB, read with `-z` so `core.quotePath`
+# cannot octal-escape a non-ASCII name into a false mismatch; a mismatch means the caller's spelling
+# is not the tree's, and every later read of that spelling (`git show "${ref}:${path}"`) would miss
+# too, so it is the advisory absent row the pre-BL-370 engine gave. A `..` that climbs past the
+# root is refused by git as "outside repository" at 128 before any object is read, so it says
+# nothing about the store; a `..` component can never name a tree entry, so it is absent too. A
+# non-zero rc on a spelling with no `..` component keeps its refusal.
 #
 # STAGED TO A FILE, NEVER CAPTURED WITH `$( )`. Every call site runs in the MAIN shell, so an
 # `exit` here ends the run; and the leaked-stdout-buffer hazard recorded above `ld_emit_ok` means
@@ -664,12 +683,24 @@ git_show() { memo_show "$DIST" "$1" "$2"; }
 # call site: it is created at startup, long above the contract read that is the first `have`.
 #
 # EXIT 1, the refusal-to-start code, like every other input refusal in this file.
+#
+# THE MESSAGE NAMES WHICH OF THE TWO REFUSING STATES THIS IS, because only one of them is "named by
+# the tree": at exit 0 the tree listed the path and its object is what failed; at a non-zero exit a
+# tree on the way to it could not be read, and whether it names the path is unknown.
 have() {
   memo_has_path "$DIST" "$1" "$2" && return 0
-  local _lr=0
-  git -C "$DIST" ls-tree --full-tree "$1" -- "$2" > "$LD_T/have-ls" 2>/dev/null || _lr=$?
-  [ "$_lr" -eq 0 ] && [ ! -s "$LD_T/have-ls" ] && return 1
-  echo "layer-drift: REFUSED — $2 at $1 is named by the tree but could not be read (ls-tree exit $_lr); refusing rather than reading an unreadable path as an absent one" >&2
+  local _lr=0 _e="" _why
+  git -C "$DIST" ls-tree -z --full-tree "$1" -- "$2" > "$LD_T/have-ls" 2>/dev/null || _lr=$?
+  if [ "$_lr" -eq 0 ]; then
+    [ -s "$LD_T/have-ls" ] || return 1
+    IFS= read -r -d '' _e < "$LD_T/have-ls"
+    [ "${_e#*$'\t'}" = "$2" ] || return 1
+    _why="the tree names it and its object is missing"
+  else
+    case "/$2/" in */../*) return 1 ;; esac
+    _why="a tree on its path could not be read"
+  fi
+  echo "layer-drift: REFUSED — $2 at $1 could not be read: $_why (ls-tree exit $_lr); refusing rather than reading an unreadable path as an absent one" >&2
   exit 1
 }
 
