@@ -28,8 +28,10 @@
 # Output: TSV — STATUS<TAB>FORK-PATH<TAB>DETAIL, one RETIRE-CANDIDATE per shadowed fork.
 # Exit:   0 on every CLASSIFICATION, including "nothing to report" — this is a classifier, not a
 #         gate, and the signal never blocks on what it finds. 2 when it could not classify at all:
-#         a bad argument, an unresolvable root, an unsourceable lib.sh, or a close grammar
-#         `ledger_close_awk` refused to lift. That distinction is the contract — a caller must be
+#         a bad argument, an unresolvable root, an unsourceable lib.sh, a close grammar
+#         `ledger_close_awk` refused to lift, a lib.sh entry emitter that did not run or emitted
+#         nothing, a closed-entry scan that did not run, or a basename set or fork walk that could
+#         not be staged (each with a `REFUSED —` line on stderr). That distinction is the contract — a caller must be
 #         able to tell "no forks are shadowed" from "this never ran", and those are the same empty
 #         output. This line read `0 ALWAYS` while three `exit 2` paths already existed.
 set -uo pipefail
@@ -114,8 +116,19 @@ CLOSE_AWK="$(ledger_close_awk)" || exit 2
 # suppresses the RETIRE-CANDIDATE row -- a silent non-finding, in the direction that reads clean.
 CLOSE_AWK="${CLOSE_AWK}
 $(ledger_entry_line_close_awk)" || exit 2
-# Piped to a while-read loop (bash 3.2, no mapfile).
-closed_basenames="$(awk "$(ledger_entry_awk)${CLOSE_AWK}"'
+# THE ENTRY EMITTER IS CAPTURED ONCE, WITH ITS STATUS READ, AND AN EMPTY PROGRAM REFUSES. It was
+# interpolated inline as `$(ledger_entry_awk)`, whose status nothing read. That emitter is a
+# `cat <<'AWK'` heredoc in lib.sh, and bash 3.2 stages every heredoc to a temp file: when that
+# write fails -- `ulimit -f`, a full TMPDIR -- the emitter prints nothing, awk then died on an
+# undefined function, and this script exited 0 with no row (measured under `ulimit -f 2`, SIGXFSZ
+# ignored: rc 0 and 0 rows against 1 row above the emitter's size). lib.sh is bootstrapping and is
+# not changed here; its caller refuses instead.
+LEA="$(ledger_entry_awk)" || { echo "warn-shadowed-local-validators: REFUSED — lib.sh's ledger_entry_awk did not run (exit $?); no verdict" >&2; exit 2; }
+[ -n "$LEA" ] || { echo "warn-shadowed-local-validators: REFUSED — lib.sh's ledger_entry_awk emitted an empty program; no verdict" >&2; exit 2; }
+# THE CLOSED-BASENAME SET'S STATUS IS READ, and `pipefail` (set above) makes any stage's failure
+# the pipeline's. A dead awk used to read as "no closed entry names a .sh", which is `exit 0`.
+_ws_rc=0
+closed_basenames="$(awk "${LEA}${CLOSE_AWK}"'
   function flush(){ if (closed && names != "") printf "%s", names; closed=0; names="" }
   ledger_entry_shape($0) != "" { flush() }
   # TWO SCOPES, THE WAY reverify HAS THEM. A body line closes only on the ANCHORED rule; an ENTRY
@@ -131,9 +144,26 @@ closed_basenames="$(awk "$(ledger_entry_awk)${CLOSE_AWK}"'
     }
   }
   END { flush() }
-' "$LEDGER" | awk 'NF' | sort -u)"
+' "$LEDGER" | awk 'NF' | sort -u)" || _ws_rc=$?
+[ "$_ws_rc" -eq 0 ] || { echo "warn-shadowed-local-validators: REFUSED — the closed-entry scan of $LEDGER did not run (exit $_ws_rc); no verdict" >&2; exit 2; }
 
 [ -n "$closed_basenames" ] || exit 0
+
+# BOTH LOOP FEEDS ARE STAGED TO FILES WHOSE WRITE STATUS IS READ. They used to be `<<EOF` heredocs,
+# the inner one with a `$(find …)` body whose status was lost besides. bash 3.2 stages a heredoc
+# to a temp file, and when that write fails the loop runs ZERO times: measured with 900 closed
+# basenames under `ulimit -f 16`, SIGXFSZ ignored, rc 0 and 0 rows against 1 row without the
+# limit. A failed write, or a walk that did not run, now exits 2 -- the refusal this script's
+# header reserves for "this never ran". `printf '%s\n'` writes the bytes the heredoc fed.
+WS_T="$(mktemp -d "${TMPDIR:-/tmp}/warn-shadowed-local-validators.XXXXXX")" || {
+  echo "warn-shadowed-local-validators: REFUSED — could not create a staging directory; no verdict" >&2; exit 2; }
+trap 'rm -rf "$WS_T"' EXIT
+ws_refuse_staging() { # ws_refuse_staging <what> <its exit status>
+  echo "warn-shadowed-local-validators: REFUSED — $1 could not be staged (exit $2); no verdict" >&2
+  exit 2
+}
+printf '%s\n' "$closed_basenames" > "$WS_T/closed" || _ws_rc=$?
+[ "$_ws_rc" -eq 0 ] || ws_refuse_staging "the closed-entry basename set" "$_ws_rc"
 
 while IFS= read -r base; do
   [ -n "$base" ] || continue
@@ -148,15 +178,17 @@ while IFS= read -r base; do
   # like a home with no forks in it: the script exits 0 and prints nothing either way.
   # Walking the tree needs no subdirectory list, and a list core cannot enforce would be
   # one more restatement of a value that already has a home.
+  #
+  # The walk keeps the `2>/dev/null` and `sort` it always had; `pipefail` makes a find that DIED
+  # this pipeline's failure, where the heredoc body used to swallow it as "no fork found".
+  _ws_rc=0
+  find "$LOCAL_DIR" -type f -name "$base" 2>/dev/null | sort > "$WS_T/forks" || _ws_rc=$?
+  [ "$_ws_rc" -eq 0 ] || ws_refuse_staging "the fork walk of $LOCAL_DIR for $base" "$_ws_rc"
   while IFS= read -r fork; do
     [ -n "$fork" ] || continue
     emit RETIRE-CANDIDATE "${fork#"${ROOT}"/}" \
       "its push-candidate ledger entry is CLOSED (ADOPTED UPSTREAM) — the divergence is now in core/scripts/${base}. Re-evaluate: diff the fork against stock core. Retire it if core covers your case, or narrow it to the still-divergent remainder. This is a SIGNAL; confirm before deleting."
-  done <<FORKS
-$(find "$LOCAL_DIR" -type f -name "$base" 2>/dev/null | sort)
-FORKS
-done <<EOF
-$closed_basenames
-EOF
+  done < "$WS_T/forks"
+done < "$WS_T/closed"
 
 exit 0   # classifier — the signal never blocks

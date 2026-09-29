@@ -21,10 +21,14 @@
 #     --ld-rows <file> --ld-rc <n>    layer-drift.sh's rows and exit status, verbatim
 #     --ud-rows <file> --ud-rc <n>    unregistered-drift.sh's rows and exit status, verbatim
 # Exit:
-#   print : 0 always. An empty list prints "0 HARD blockers." (affirmative, not silence) — unless a
+#   print : 0 whenever the list was read (the staging refusal under `both` is the one exception).
+#           An empty list prints "0 HARD blockers." (affirmative, not silence) — unless a
 #           detector REFUSED, which renders as a DETECTOR-REFUSED row instead. See below.
 #   check : 0 = the report contains every HARD blocker's path; 1 = one or more MISSING (report
 #           unsound); 2 = usage / missing report / a rows flag supplied without its rc.
+#   both  : 1 with a `hard-blockers: REFUSED —` line when the blocking list could not be STAGED
+#           for reading. That is the detector-refusal code path, not a finding: no list was read,
+#           so neither `0 HARD blockers.` nor a check verdict can be given. See HB_T below.
 #
 # THE ROWS FLAGS EXIST BECAUSE THE SLOWEST DETECTOR IN THE SET WAS RUNNING TWICE PER RENDER.
 # `emit-report.sh` needs all three OUTPUTS and was deriving them from three PROCESSES: it invoked
@@ -226,6 +230,30 @@ collect() {
 
 BLOCKERS="$(collect | sort -u)"
 
+# THE BLOCKING LIST IS STAGED ONCE, TO A FILE WHOSE WRITE STATUS IS READ, AND BOTH LOOPS BELOW READ
+# THAT FILE. They used to read it from a `<<EOF` heredoc. bash 3.2 stages every heredoc to a temp
+# file, and when that write fails -- `ulimit -f`, a full TMPDIR -- it prints `cannot create temp
+# file for here document`, skips the loop, and carries on. Measured with 200 blockers under
+# `ulimit -f 16` and SIGXFSZ ignored (the full-disk model): `--check` printed `report contains every
+# HARD blocker (0 total).` at rc 0 against a report naming none of them, and print mode rendered a
+# region with no HARD row and no `0 HARD blockers.` line at rc 0. Staged here, in the main shell and
+# BEFORE either mode prints anything, a failed write refuses with exit 1 -- the code this script
+# already gives a refusing detector; exit 2 means "report not found" in check mode -- so no partial
+# region reaches `emit-report.sh`, which renders a non-zero exit as DETECTOR-REFUSED.
+# `printf '%s\n'` writes exactly the bytes the heredoc fed, so healthy output is byte-identical.
+HB_T=""
+hb_refuse_staging() { # hb_refuse_staging <what> <its exit status>
+  echo "hard-blockers: REFUSED — $1 could not be staged (exit $2); refusing rather than reading an empty input as clean" >&2
+  exit 1
+}
+if [ -n "$BLOCKERS" ]; then
+  _hb_rc=0
+  HB_T="$(mktemp -d "${TMPDIR:-/tmp}/hard-blockers.XXXXXX")" || hb_refuse_staging "the staging directory" "$?"
+  trap 'rm -rf "$HB_T"' EXIT
+  printf '%s\n' "$BLOCKERS" > "$HB_T/blockers" || _hb_rc=$?
+  [ "$_hb_rc" -eq 0 ] || hb_refuse_staging "the blocking list" "$_hb_rc"
+fi
+
 # A REFUSING DETECTOR MUST NOT RENDER AS A CLEAN SHEET, AND UNTIL NOW IT DID.
 #
 # Measured before this arm existed, in a sandbox copy of reconcile/ with an unmutated control
@@ -309,9 +337,7 @@ if [ "$MODE" = "print" ]; then
     while IFS="$(printf '\t')" read -r st path; do
       [ -n "$st" ] || continue
       printf '%-32s %s\n' "$st" "$path"
-    done <<EOF
-$BLOCKERS
-EOF
+    done < "$HB_T/blockers"
   fi
   # INSIDE THE GENERATED REGION, NOT ON STDERR, and that is the load-bearing choice. The one
   # programmatic reader of print mode is `emit-report.sh`, which invokes this script with
@@ -365,9 +391,7 @@ if [ -n "$BLOCKERS" ]; then
       echo "FAIL: reconcile report OMITS a HARD blocker the detectors emit: ${st}  ${path}" >&2
       missing=1
     fi
-  done <<EOF
-$BLOCKERS
-EOF
+  done < "$HB_T/blockers"
 fi
 
 if [ "$missing" -ne 0 ]; then

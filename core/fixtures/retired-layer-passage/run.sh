@@ -96,10 +96,66 @@ DENOUT="$(bash "$SCRIPT" "$DIST" "$BASE" "$THEIRS" "$EMPTYC" 2>/dev/null)"
 # the run would otherwise be indistinguishable from a release that deleted nothing.
 BADSCRIPT="$WORK/orphan.sh"
 cp "$SCRIPT" "$BADSCRIPT"          # a copy whose sibling setup-sites.md does not exist
-ORPHERR="$(bash "$BADSCRIPT" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>&1 >/dev/null)"
-grep -q 'refusing to report clean' <<<"$ORPHERR" \
-  && ok "an unreadable rulebook list warns loudly instead of reporting clean" \
-  || bad "an unreadable rulebook list produced no warning — the detector would pass vacuously"
+ORPHERR="$(bash "$BADSCRIPT" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>&1 >/dev/null)"; ORPHRC=$?
+# THE EXIT IS THE HALF THE DRIVER READS. `apply.sh` refuses on this detector's non-zero exit only,
+# so a refusal LINE beside exit 0 reached it as a clean run with no row -- the words were right and
+# the status contradicted them. Modelled on retired-layer-token's assertion 14.
+{ grep -q 'refusing to report clean' <<<"$ORPHERR" && [ "$ORPHRC" -eq 2 ]; } \
+  && ok "an unreadable rulebook list warns loudly instead of reporting clean, and exits 2" \
+  || bad "an unreadable rulebook list produced no warning or did not exit 2 (rc=$ORPHRC) — apply.sh would read it as a clean run"
+
+# --- Assertion 7b: a setup-sites.md that EXISTS and cannot be READ refuses, exit 2 -
+# The orphan above has NO file; this world has one the read fails on. It is a DIRECTORY named
+# setup-sites.md rather than a mode-000 file, because root reads a mode-000 file and the arm would
+# then drive the healthy path under another name; a directory is unreadable as a file for every
+# user. The copy is the WHOLE reconcile directory, so lib.sh sits beside it and the only thing
+# missing is a readable rulebook list.
+RLP_SRC="$(cd "$(dirname "$SCRIPT")" && pwd)"
+rlp_unreadable() { # rlp_unreadable <reconcile-dir-copy> -> 0 when the copy refuses with exit 2 and no row
+  local d="$1" out err rc
+  rm -f "$d/setup-sites.md"; mkdir "$d/setup-sites.md" || return 1
+  out="$(bash "$d/retired-layer-passage.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>"$WORK/rlp-unread.err")"; rc=$?
+  err="$(cat "$WORK/rlp-unread.err")"
+  RLP_WHY="rc=$rc rows=$(printf '%s' "$out" | grep -c .) err=$(printf '%s' "$err" | head -1 | cut -c1-100)"
+  [ "$rc" -eq 2 ] && [ -z "$out" ] && grep -q 'could not read the rulebook list from setup-sites.md' <<<"$err"
+}
+rlp_copy() { # rlp_copy <dir> -> a whole copy of the reconcile directory whose unmutated run still flags the row
+  mkdir -p "$1" && cp -R "$RLP_SRC"/. "$1"/ && [ -f "$1/lib.sh" ] && [ -f "$1/setup-sites.md" ]
+}
+UNR="$WORK/unreadable-sites"
+if ! rlp_copy "$UNR"; then
+  bad "FIXTURE BROKEN — could not copy the reconcile directory for the unreadable-setup-sites.md arm"
+elif ! grep -q 'extensions/restates.md' <<<"$(bash "$UNR/retired-layer-passage.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"; then
+  bad "FIXTURE BROKEN — the unmutated directory copy does not flag restates.md, so a refusal below would be the copy failing, not the read"
+elif rlp_unreadable "$UNR"; then
+  ok "a setup-sites.md that exists and cannot be read refuses with exit 2 and no row ($RLP_WHY)"
+else
+  bad "a setup-sites.md that cannot be read did not refuse with exit 2 and no row ($RLP_WHY) — apply.sh reads exit 0 as a clean run"
+fi
+
+# --- Mutant for 7/7b: the refusal's `exit 2` restored to the base `exit 0` -------
+# Both arms are EXIT-shaped, and the refusal line prints either way, so only a mutant shows the
+# exit is what they read. Built in a whole directory copy (lib.sh beside it), anchored on the
+# `exit` that follows the refusal line, guarded by `cmp -s` and `bash -n`, and given a PRESENCE
+# control: the mutant copy must still flag restates.md with a readable list, so a copy that never
+# ran cannot score the kill.
+MUT="$WORK/mut-exit0"
+if ! rlp_copy "$MUT"; then
+  bad "MUTANT HARNESS BROKEN [rlp-exit0]: could not copy the reconcile directory"
+elif ! sed '/could not read the rulebook list from setup-sites.md/{n;s/^  exit 2$/  exit 0/;}' \
+       "$RLP_SRC/retired-layer-passage.sh" > "$MUT/retired-layer-passage.sh"; then
+  bad "MUTANT DID NOT APPLY [rlp-exit0]: sed exited non-zero, so no mutant exists"
+elif cmp -s "$RLP_SRC/retired-layer-passage.sh" "$MUT/retired-layer-passage.sh"; then
+  bad "FIXTURE STALE [rlp-exit0]: the mutation matched nothing in retired-layer-passage.sh. Re-anchor on the exit after the refusal line, never relax the assertion"
+elif ! bash -n "$MUT/retired-layer-passage.sh" 2>/dev/null; then
+  bad "FIXTURE STALE [rlp-exit0]: the mutant does not parse"
+elif ! grep -q 'extensions/restates.md' <<<"$(bash "$MUT/retired-layer-passage.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"; then
+  bad "MUTANT HARNESS BROKEN [rlp-exit0]: the mutant copy does not flag restates.md with a readable list, so it is not running"
+elif rlp_unreadable "$MUT"; then
+  bad "MUTANT SURVIVED [rlp-exit0]: restoring exit 0 after the refusal line still passed 7b ($RLP_WHY), so the arm does not read the exit"
+else
+  ok "mutant [rlp-exit0] KILLED by 7b: with the base exit 0 restored, the unreadable list reads as a clean run ($RLP_WHY)"
+fi
 
 echo
 if [ "$fails" -eq 0 ]; then echo "retired-layer-passage: PASS"; exit 0; fi

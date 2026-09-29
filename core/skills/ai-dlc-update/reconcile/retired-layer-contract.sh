@@ -149,9 +149,21 @@ rlc_refuse() { # rlc_refuse <what> <status>
   echo "retired-layer-contract: $1 did not run (exit $2); no verdict" >&2
   exit 2
 }
+# THE RULEBOOK GLOB LIST IS READ ONCE, IN THE MAIN SHELL, AND AN UNREADABLE OR EMPTY LIST REFUSES.
+# It was read inside every `for glob in $(rulebook_globs)` with `2>/dev/null` and no status read,
+# so a `setup-sites.md` that could not be opened read as a rulebook with no files: both `collect`
+# calls staged empty sets and the run took the empty-`BASE_SET` branch, exit 0 with 0 stdout bytes
+# (measured at mode 000), which `emit-report.sh` renders as "none". The declaration always lists at
+# least one glob, so an empty list is never a legitimate rulebook and refuses too. The function
+# keeps its name and prints the cached list, so its two callers are unchanged. The empty-`BASE_SET`
+# exit further down is NOT this case -- a rulebook that carries no contract shape is legitimate.
+_rlc_rc=0
+RLC_GLOBS="$(awk '/^rulebook:/{on=1;next} on && /^[a-z_]+:/{exit} on && /^  - /{sub(/^  - /,"");print}' \
+  "$SITES" 2>/dev/null)" || _rlc_rc=$?
+[ "$_rlc_rc" -eq 0 ] || rlc_refuse "reading the rulebook list from $SITES (refusing to report clean, because an unreadable rulebook list and a clean one are the same output)" "$_rlc_rc"
+[ -n "$RLC_GLOBS" ] || rlc_refuse "reading the rulebook list from $SITES, which yielded no glob (refusing to report clean, because an empty corpus and a clean one are the same output)" 1
 rulebook_globs() {
-  awk '/^rulebook:/{on=1;next} on && /^[a-z_]+:/{exit} on && /^  - /{sub(/^  - /,"");print}' \
-    "$SITES" 2>/dev/null
+  printf '%s\n' "$RLC_GLOBS"
 }
 
 # Contract shapes in a body: labelled directives (`- <Label>: `/<directive>`) and
@@ -392,6 +404,25 @@ LAYERS="$CONSUMER/.claude/skills/ai-dlc"
 scanned=0
 rows=""
 printf '%s\n' "$RETIRED" > "$RLC_T/retired-shapes" || rlc_refuse "staging the retired shape set" "$?"
+
+# THE PATH ARM'S TWO INPUTS ARE STAGED HERE, ONCE, BEFORE ANY LAYER FILE IS OPENED. The arm used to
+# read the retired-path set from a `<<EOF` heredoc, and each path's spellings from a heredoc whose
+# body was `$(spellings_of …)`, re-staged for every (layer file, retired path) pair. bash 3.2 stages
+# every heredoc to a temp file, and when that write fails -- `ulimit -f`, a full TMPDIR -- it prints
+# `cannot create temp file for here document` and the loop runs ZERO times: the path arm then read
+# every layer file as citing no retired path. Now the set goes to `retired-paths` and path N's
+# spellings to `spellings-N`, each by one `printf` whose status is read, and a failed write refuses
+# with exit 2. `printf '%s\n'` writes exactly the bytes the heredocs fed, so healthy output is
+# byte-identical. The per-file loop below reads both files in the same order, counting only the
+# non-empty lines, so N names the same path on both sides.
+printf '%s\n' "$RETIRED_PATHS" > "$RLC_T/retired-paths" || rlc_refuse "staging the retired rulebook path set" "$?"
+_rlc_n=0
+while IFS= read -r _rp; do
+  [ -n "$_rp" ] || continue
+  _rlc_n=$((_rlc_n + 1))
+  _rlc_sps="$(spellings_of "$_rp")"
+  printf '%s\n' "$_rlc_sps" > "$RLC_T/spellings-$_rlc_n" || rlc_refuse "staging the spellings of $_rp" "$?"
+done < "$RLC_T/retired-paths"
 for dir in overrides extensions; do
   [ -d "$LAYERS/$dir" ] || continue
   # The walk is staged ALONE (no pipefail here), then sorted: a failed find refuses rather than
@@ -403,7 +434,11 @@ for dir in overrides extensions; do
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     scanned=$((scanned + 1))
-    body="$(cat "$f" 2>/dev/null || true)"
+    # A LISTED FILE THAT CANNOT BE READ IS A REFUSAL, NOT AN EMPTY FILE. This read `|| true`, so a
+    # layer file the walk found and `cat` could not open was skipped as though it carried nothing.
+    _rlc_rc=0
+    body="$(cat "$f")" || _rlc_rc=$?
+    [ "$_rlc_rc" -eq 0 ] || rlc_refuse "reading the layer file ${f#"$CONSUMER"/}" "$_rlc_rc"
     [ -n "$body" ] || continue
     _rlc_rc=0
     _sh="$(shapes_of "$body")" || _rlc_rc=$?
@@ -426,11 +461,16 @@ for dir in overrides extensions; do
     # path, because a path carries `.` and `*` and a built regex would match `retro-old.md`
     # for `retro.md` — the dynamic-string hazard this repo has shipped three times.
     #
-    # FED FROM A HERE-STRING, NEVER A PIPE. `grep -q` leaves at its first match while the
-    # writer is still pushing; under pipefail the pipeline then answers with the writer's
-    # EPIPE and reports NOT-FOUND on input that DOES contain the pattern, permanently, once
-    # the output after the match fills the pipe buffer. Here that would silently acquit the
-    # largest layer files — the ones most likely to carry a stale citation.
+    # A `case` SUBSTRING TEST, NEVER A PIPE AND NEVER A HERE-STRING. `grep -q` fed by a pipe leaves
+    # at its first match while the writer is still pushing; under pipefail the pipeline then
+    # answers with the writer's EPIPE and reports NOT-FOUND on input that DOES contain the
+    # pattern, permanently, once the output after the match fills the pipe buffer. The
+    # here-string that replaced the pipe is staged to a temp file by bash 3.2, and a failed
+    # staging write answered NOT-FOUND too: measured with a 20 KB layer file under `ulimit -f
+    # 16`, SIGXFSZ ignored, rc 0 and 0 rows against 1 row without the limit. Either way the
+    # largest layer files -- the ones most likely to carry a stale citation -- were acquitted.
+    # A spelling carries no newline, so a substring of the whole body is exactly a substring of
+    # one of its lines, which is what `grep -qF` tested; the `case` needs no file and no fork.
     #
     # ONE ROW PER (FILE, RETIRED PATH), NOT PER SPELLING. An entry that cites the same
     # retired file in two spellings — `steps/route.md` in its `hooks:` and the consumer
@@ -438,22 +478,19 @@ for dir in overrides extensions; do
     # reports it up to three times and inflates the count the operator triages by. The
     # row names the canonical distribution path, which is the one the operator can look up
     # in the release; the spelling that matched is not the finding.
+    _rlc_i=0
     while IFS= read -r _rp; do
       [ -n "$_rp" ] || continue
+      _rlc_i=$((_rlc_i + 1))
       _hit=""
       while IFS= read -r _sp; do
         [ -n "$_sp" ] || continue
-        grep -qF -- "$_sp" <<< "$body" || continue
-        _hit=yes; break
-      done <<EOF
-$(spellings_of "$_rp")
-EOF
+        case "$body" in *"$_sp"*) _hit=yes; break ;; esac
+      done < "$RLC_T/spellings-$_rlc_i"
       [ -n "$_hit" ] || continue
       rows="$rows$(printf 'RETIRED-LAYER-CONTRACT\t%s\t%s' "${f#"$CONSUMER"/}" "path:$_rp")
 "
-    done <<EOF
-$RETIRED_PATHS
-EOF
+    done < "$RLC_T/retired-paths"
   done < "$RLC_T/walk-$dir.sorted"
 done
 

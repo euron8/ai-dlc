@@ -81,8 +81,11 @@ rulebook_globs() {
 
 GLOBS="$(rulebook_globs)"
 if [ -z "$GLOBS" ]; then
+  # EXIT 2, THE REFUSAL CODE THIS SCRIPT'S HEADER DECLARES. It printed this line and exited 0,
+  # and `apply.sh` reads this detector's EXIT, so the refusal reached it as a clean run with no
+  # row. The words were right and the status contradicted them.
   echo "retired-layer-passage: could not read the rulebook list from setup-sites.md — refusing to report clean, because an empty corpus and a clean corpus are the same output" >&2
-  exit 0
+  exit 2
 fi
 
 # Normalisation is `norm_lines` from lib.sh, which is its ONE home (I21). A private copy

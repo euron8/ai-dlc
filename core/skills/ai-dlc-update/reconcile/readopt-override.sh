@@ -216,6 +216,18 @@ ro_section() {
   esac
   section_of "$2" < "$RO_T/$3.raw" > "$RO_T/$3.sec" || return 3
 }
+# NO HERE-STRING IN THIS FILE'S SCANS. bash 3.2 stages every `<<<` to a temp file, and when that
+# write fails -- `ulimit -f`, a full TMPDIR -- it prints `cannot create temp file for here
+# document` and the command reads EMPTY stdin: a `grep -qxF` answered "absent", and a
+# `done <<<` loop ran zero times, which read as a body with no stale line -- `--check` OK, rc 0.
+# A whole-line membership test is `ro_has_line`, a `case` with no file and no fork, so it cannot
+# fail; a loop reads a file staged by `shadow_ids`, whose status is read and returns 3.
+NL='
+'
+ro_has_line() { # ro_has_line <haystack> <needle> -> 0 when <needle> is a WHOLE line of <haystack>
+  case "$NL$1$NL" in *"$NL$2$NL"*) return 0 ;; esac
+  return 1
+}
 # shadow_ids <site> -- the anchor ids named in `shadows:`, one per line, staged to "$RO_T/<site>".
 shadow_ids() {
   printf '%s\n' "$SHADOWS" | tr ',' '\n' | sed -n 's/.*#//p' | sed 's/^ *//; s/ *$//' > "$RO_T/$1" || return 3
@@ -425,7 +437,7 @@ changed_lines() { # changed_lines <from-sha> <to-sha> <anchor> <site>
   rm -f "$RO_T/refused"
   while IFS= read -r line; do
     [ -n "$line" ] || continue
-    grep -qxF -- "$line" <<<"$to_lines" && continue
+    ro_has_line "$to_lines" "$line" && continue
     carries "$to_flat" "$line" && carried_in_context "$2" "$3" "$line" && continue
     printf '%s\n' "$line"
   done < "$RO_T/$4-from-lines"
@@ -433,9 +445,8 @@ changed_lines() { # changed_lines <from-sha> <to-sha> <anchor> <site>
 }
 
 stale_lines() {
-  local ids
-  ids="$(printf '%s' "$SHADOWS" | tr ',' '\n' | sed -n 's/.*#//p' | sed 's/^ *//; s/ *$//')"
   local id line
+  shadow_ids stale-ids || return 3
   while IFS= read -r id; do
     [ -n "$id" ] || continue
     changed_lines "$BASE_SHA" "$THEIRS" "$id" stale > "$RO_T/stale-changed" || return 3
@@ -443,15 +454,14 @@ stale_lines() {
       [ -n "$line" ] || continue
       body_carries "$line" && printf '%s\n' "$line"
     done < "$RO_T/stale-changed"
-  done <<< "$ids"
+  done < "$RO_T/stale-ids"
 }
 
 # The mirror. The two refs swapped, and the body test NEGATED: core gained this line
 # and the override does not have it.
 unadopted_lines() {
-  local ids
-  ids="$(printf '%s' "$SHADOWS" | tr ',' '\n' | sed -n 's/.*#//p' | sed 's/^ *//; s/ *$//')"
   local id line
+  shadow_ids unadopted-ids || return 3
   while IFS= read -r id; do
     [ -n "$id" ] || continue
     changed_lines "$THEIRS" "$BASE_SHA" "$id" unadopted > "$RO_T/unadopted-changed" || return 3
@@ -459,7 +469,7 @@ unadopted_lines() {
       [ -n "$line" ] || continue
       body_carries "$line" || printf '%s\n' "$line"
     done < "$RO_T/unadopted-changed"
-  done <<< "$ids"
+  done < "$RO_T/unadopted-ids"
 }
 
 # ONLY STATUS 3 IS A REFUSAL. Each scan's loop ends on a `body_carries … && printf`, so a clean

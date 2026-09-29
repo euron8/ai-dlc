@@ -97,9 +97,25 @@ SELF="$(cd "$(dirname "$0")" && pwd)"
 # accepting 0 or 1: a comment strip that DIED (2) handed the token grep empty input, whose 1
 # became the status, and the dead scan was accepted as "no token". Now a 1 from either grep is an
 # empty set (status 0), and anything above 1 -- or a failed sort -- is returned.
+#
+# EVERY NUL IS DELETED FIRST, BY ITS OWN STAGE WHOSE STATUS IS READ. The blob feeds are now the
+# staged `git show` output byte for byte, where they used to be `<<<"$b"` from a `$( )` capture
+# that had already dropped every NUL. BSD grep reads a NUL-bearing input as binary and prints only
+# `Binary file (standard input) matches`, so the token set came back EMPTY: a NUL at both refs lost
+# the true row at rc 0, and a NUL at theirs alone read every base token as retired -- FALSE rows.
+# `grep -a` is NOT the repair: it keeps the NUL in the line, so `\0# $ROOT/x` no longer opens with
+# `#` and a commented token is read as live, a false row the here-string never produced (measured).
+# Deleting the NUL is what the `$( )` did, so the token set is the here-string's. The consumer's
+# own file, fed from `< "$ours"` at base too, was read as binary there and is now read as text.
+# That `tr` alone runs under LC_ALL=C, because BSD `tr` in a UTF-8 locale exits 1 on invalid UTF-8
+# (one Latin-1 byte) and refused input the here-string read correctly, while `sort -u` stays in the
+# caller's locale since its collation feeds the caller's `comm`.
 toks() {
-  local _code _t _rc=0
-  _code="$(grep -vE '^[[:space:]]*#')" || _rc=$?
+  local _raw _code _t _rc=0
+  # A failed `tr` returns 2 whatever its own status, because the caller accepts a 1 as an empty set.
+  _raw="$(LC_ALL=C tr -d '\000')" || return 2
+  [ -n "$_raw" ] || return 0
+  _code="$(printf '%s\n' "$_raw" | grep -vE '^[[:space:]]*#')" || _rc=$?
   [ "$_rc" -le 1 ] || return "$_rc"
   [ -n "$_code" ] || return 0
   _t="$(printf '%s\n' "$_code" | grep -oE '\$[A-Za-z_][A-Za-z0-9_]*/[A-Za-z0-9._/-]+')" || _rc=$?
@@ -176,7 +192,12 @@ for _rt_ref in "$BASE" "$THEIRS"; do
 done
 rt_blob() { # rt_blob <ref> <path> <out> -- 0 staged into <out>; 1 absent at <ref>; refuses otherwise
   local rc=0 l present=""
-  git -C "$DIST" ls-tree --name-only "$1" -- "$2" > "$3.ls" 2>/dev/null || rc=$?
+  # `core.quotePath=false` BECAUSE THE COMPARISON BELOW IS AGAINST THE RAW PATH. Under the default,
+  # ls-tree C-quotes a path carrying a non-ASCII byte (`"caf\303\251.sh"`), the exact-line test
+  # never matches, and the path reads as absent: its row was lost at rc 0. An ASCII path lists
+  # identically either way. This is hardening only -- the CLASSIFY rows this reads come from a
+  # producer that quotes such a path upstream, so that row is lost before it gets here.
+  git -C "$DIST" -c core.quotePath=false ls-tree --name-only "$1" -- "$2" > "$3.ls" 2>/dev/null || rc=$?
   [ "$rc" -eq 0 ] || rt_refuse "listing $2 at $1" "$rc"
   # ls-tree matches a pathspec by prefix, so presence is an EXACT line, never a non-empty file.
   while IFS= read -r l; do
@@ -206,16 +227,25 @@ while IFS="$(printf '\t')" read -r cp cons; do
 
   # base tokens MINUS theirs tokens = what upstream retired.
   # Intersected with ours = what the consumer still speaks.
-  # HERE-STRINGS, NOT PIPES: rt_toks refuses with `exit`, which in a pipeline stage would end
-  # only that stage's subshell. `<<<` adds the one trailing newline `printf '%s\n'` did.
-  rt_toks "${cp}@${BASE}" "$RT_T/toks-base" <<<"$b"
-  rt_toks "${cp}@${THEIRS}" "$RT_T/toks-theirs" <<<"$t"
+  # FED FROM THE BLOBS `rt_blob` ALREADY STAGED, NEVER A PIPE AND NEVER A HERE-STRING. A pipe is
+  # wrong because rt_toks refuses with `exit`, which in a pipeline stage would end only that
+  # stage's subshell. A here-string is wrong because bash 3.2 stages it to a temp file, and when
+  # that write fails -- `ulimit -f`, a full TMPDIR -- the command does not run at all: rt_toks'
+  # redirect never truncates `toks-*`, so the PREVIOUS path's token files were read as this
+  # path's. Measured with a 16384-byte blob under `ulimit -f 16`, SIGXFSZ ignored: rc 0 with a
+  # FALSE row (the other path's retired token attributed here) and the true row lost. Reading the
+  # staged file yields the same token set `<<<"$b"` did: `toks` captures with `$( )`, which drops
+  # the trailing newlines the file keeps and `$b` lost, and `git show` wrote these bytes itself.
+  # `< file` failing to open is a redirect failure the command never runs past, so it refuses
+  # here too, with the same exit 2.
+  rt_toks "${cp}@${BASE}" "$RT_T/toks-base" < "$RT_T/blob-base" || rt_refuse "reading the staged base blob of $cp" "$?"
+  rt_toks "${cp}@${THEIRS}" "$RT_T/toks-theirs" < "$RT_T/blob-theirs" || rt_refuse "reading the staged theirs blob of $cp" "$?"
   retired="$(comm -23 "$RT_T/toks-base" "$RT_T/toks-theirs")" || rt_refuse "the retired-token subtraction for $cp" "$?"
   [ -n "$retired" ] || continue
   retiring=$((retiring + 1))
 
   printf '%s\n' "$retired" > "$RT_T/retired" || rt_refuse "staging the retired tokens of $cp" "$?"
-  rt_toks "$cons" "$RT_T/toks-ours" < "$ours"
+  rt_toks "$cons" "$RT_T/toks-ours" < "$ours" || rt_refuse "reading $cons" "$?"
   comm -12 "$RT_T/retired" "$RT_T/toks-ours" > "$RT_T/spoken" || rt_refuse "the consumer-token intersection for $cp" "$?"
   while IFS= read -r tok; do
     [ -n "$tok" ] || continue
