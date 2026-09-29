@@ -4911,3 +4911,4 @@ with a self-probe in both directions. Scored the same way: live 1, fixed 0, anch
 
 verify: sh F=core/skills/ai-dlc/rule-bodies/rule-24.md; [ -f "$F" ] || exit 9; w="$(mktemp -d)" || exit 9; A='/^[*][*]Dispatch contract[.][*][*]/ {f=1; print; next} f && (/^$/ || /^[0-9]+[.] /) {exit} f'; printf '%s\n' '**Dispatch contract.** A multi-surface scope is split, one shard per surface.' '' 'x' > "$w/p" || exit 9; printf '%s\n' '**Dispatch contract.** One scope.' '' 'shard' > "$w/n" || exit 9; o="$(awk "$A" "$w/p")"; grep -qi 'shard' <<<"$o" || exit 9; o="$(awk "$A" "$w/n")"; [ -n "$o" ] || exit 9; grep -qi 'shard' <<<"$o" && exit 9; a="$(awk "$A" "$F")"; [ -n "$a" ] || exit 9; grep -qi 'shard' <<<"$a" && exit 0; echo "BL368-WHOLE-SCOPE-ANALYST" >&2; exit 1
 
+
