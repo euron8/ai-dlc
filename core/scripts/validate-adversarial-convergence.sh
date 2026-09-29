@@ -1766,6 +1766,206 @@ EOF
 fi
 
 # =============================================================================
+# K2. SECTIONS -- a pass over ONE shardable document is the merge of a sectioned review.
+# =============================================================================
+# GATE ONLY, like K: --cycle-state has exited above, and this arm reads git.
+#
+# Rule 28 ("Split dispatch", sections axis): a single document that
+# `partition-document.sh --map` partitions is reviewed by one adversary per part plus one
+# cross-section adversary, and `merge-adversarial-shards.sh --document` joins them into the
+# ONE pass file this series reads, writing `shard_tool_use_ids:` into its block. A pass over
+# such a document WITHOUT that line was written by one whole-subject reviewer. A document the
+# map calls SERIAL is Rule 28's exception 4 -- one adversary is the dispatch, and this arm
+# passes it.
+#
+#   subject    the TERMINAL pass only, `$LAST_FILE`, for arm K's reason: the remedy below is
+#              a NEXT pass, and an arm reading every pass could never be cleared by it.
+#   candidate  in this order, each gate cheaper than the next --
+#              (1) `artifact:` (first token) resolves, walking up from the pass file's
+#                  directory, to a regular FILE (`k2_resolve_file`, the file-resolving sibling
+#                  of `k_resolve`; a directory is arm K's subject, not this one's);
+#              (2) `shard_tool_use_ids:` carries no `<key>=toolu_...` token (`k_has_ids`);
+#              (3) `partition-document.sh` sits beside this script -- the same resolution as
+#                  STEER_SCRIPT, which holds in the distribution layout (`core/scripts/`) and
+#                  the consumer layout (`scripts/ai-dlc/`) alike;
+#              (4) the file's bytes on disk ARE the bytes the pass notarized: its sha256 equals
+#                  the pass's `artifact_sha`. The map is a property of the CURRENT bytes, and a
+#                  repaired document may partition differently from the one reviewed;
+#              (5) `--map` exits 0. Exit 3 (`SERIAL:`) is exception 4 and passes, silently.
+#   FAIL       the series' FIRST pass is at or after the first commit stamping
+#              `.claude/.ai-dlc-version` at K2_RELEASE or later (`k_stamp_parse`).
+#   PENDING    printed, never counted: the program is absent, it answered with neither 0 nor
+#              3, the pass carries no single sha256 or the disk sha moved, no such stamp, no
+#              git work tree, a first pass opened before the stamp, or a first `invoked_at`
+#              that is not ISO 8601 UTC.
+#
+# THE PROGRAM IS A SIBLING, AND ITS ABSENCE IS NEVER A FAILURE. A consumer carries whatever it
+# last installed; a validator that arrived without its partitioner, or a hand-copied one,
+# would otherwise fail every single-document series for a reason that is about the install
+# and not about the review. A program that answers with anything but 0 or 3 is PENDING for
+# the same reason -- one odd document must not wedge a gate on an exit 2 about a sibling.
+# The map interface is self-probed before its first real use (a two-part document exits 0, a
+# one-part document exits 3); a program failing that probe is PENDING, named, for the run.
+#
+# FALSE-POSITIVE SET, and how it reached zero. The first cut keyed on "a file artifact with no
+# shard line" and would have named every whole-document pass the reference consumer ever ran
+# -- every one of them legitimate, because no release before this one offered a sectioned
+# review. Three narrowings bring it to zero, each measured on that consumer as pulled:
+# the MAP (a SERIAL document is a correct whole-subject review, never a finding); the SHA
+# gate (a document repaired after its terminal pass is judged by bytes nobody reviewed, so the
+# arm abstains rather than guess what the reviewer saw); and the STAMP keyed on the series'
+# FIRST pass, as arm K does -- no commit there stamps K2_RELEASE, so every surviving candidate
+# is PENDING and none fails. `K_RELEASE` is rebound for the one `k_stamp_parse` call rather
+# than the parser being copied; the probe below includes K_RELEASE's own successor as a
+# near-miss, so a rebinding that silently did not take reads as a probe failure, not a pass.
+K2_RELEASE="0.665.0"
+K2_PD="$(cd "$(dirname "$0")" && pwd)/partition-document.sh"
+
+k2_resolve_file() {  # $1 pass file, $2 artifact token -> K2_FILE (empty when no FILE resolves)
+  K2_FILE=""
+  kt="$2"
+  [ -n "$kt" ] || return 0
+  case "$kt" in */) return 0 ;; /*) [ -f "$kt" ] && K2_FILE="$kt"; return 0 ;; esac
+  case "$1" in /*/*) kd="${1%/*}" ;; */*) kd="$PWD/${1%/*}" ;; *) kd="$PWD" ;; esac
+  while [ -n "$kd" ]; do
+    if [ -f "$kd/$kt" ]; then K2_FILE="$kd/$kt"; return 0; fi
+    kd="${kd%/*}"
+  done
+  return 0
+}
+k2_sha() {  # $1 file -> sha256 hex on stdout; the merge's own spelling
+  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1
+  else sha256sum "$1" | cut -d' ' -f1; fi
+}
+
+# THE SELF-PROBE RUNS BEFORE THE CORPUS, both directions, fork-free: a FILE resolves by
+# walking up, a DIRECTORY of the same shape does not, and a trailing `/` never names a file.
+if [ "$N" -gt 0 ]; then
+  mkdir -p "$AC_T/k2-dir" && : > "$AC_T/k2-doc.md" || {
+    echo "validate-adversarial-convergence.sh: arm K2 self-probe could not stage; no verdict" >&2; exit 2; }
+  k2_resolve_file "$AC_T/deep/er/p.md" "k2-doc.md"; k2p1="$K2_FILE"
+  k2_resolve_file "$AC_T/deep/p.md" "k2-dir"; k2p2="$K2_FILE"
+  k2_resolve_file "$AC_T/p.md" "k2-doc.md/"; k2p3="$K2_FILE"
+  if [ "$k2p1" != "$AC_T/k2-doc.md" ] || [ -n "$k2p2" ] || [ -n "$k2p3" ]; then
+    echo "validate-adversarial-convergence.sh: arm K2 self-probe failed (file '$k2p1', dir-as-file '$k2p2', slash '$k2p3'); no verdict" >&2
+    exit 2
+  fi
+fi
+
+K2_CAND=""
+if [ "$N" -gt 0 ]; then
+  # ONE awk over the TERMINAL pass: `<artifact>\t<artifact_sha>\t<shard_tool_use_ids>`. The sha is
+  # read here rather than from P_SHA, whose hex filter would fold a files-mode `stem=sha` list
+  # into one run of hex -- a merged pass never reaches the sha step, but this arm owns its read.
+  k2_row="$(awk '
+    /SKILL_INVOCATION_PROVENANCE v1/ { inb = 1; next }
+    /SKILL_INVOCATION_PROVENANCE_END/ { inb = 0; next }
+    inb && !ha && /^artifact:/ { ha = 1; a = $0; sub(/^artifact:[ \t]*/, "", a); sub(/[ \t].*$/, "", a) }
+    inb && !hs && /^artifact_sha:/ { hs = 1; h = $0; sub(/^artifact_sha:[ \t]*/, "", h); sub(/[ \t].*$/, "", h) }
+    inb && !hi && /^shard_tool_use_ids:/ { hi = 1; s = $0; sub(/^shard_tool_use_ids:/, "", s) }
+    END { print a "\t" h "\t" s }' "$LAST_FILE")" || {
+    echo "validate-adversarial-convergence.sh: arm K2 could not read the terminal pass; no verdict" >&2
+    exit 2
+  }
+  IFS="$(printf '\t')" read -r k2a k2h k2s <<EOF
+$k2_row
+EOF
+  k2_term="${LAST_FILE##*/}"
+  k2_resolve_file "$LAST_FILE" "$k2a"
+  if [ -n "$K2_FILE" ] && ! k_has_ids "$k2s"; then
+    if [ ! -f "$K2_PD" ]; then
+      echo "PENDING (K2 -- SECTIONS): the terminal pass ${k2_term} reviews one document and carries no shard_tool_use_ids:,"
+      echo "      and ${K2_PD} is not installed beside this validator -- whether it partitions cannot be asked."
+    else
+      k2_disk="$(k2_sha "$K2_FILE")"
+      case "$k2h" in
+        [0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]*) k2hok=1 ;;
+        *) k2hok=0 ;;
+      esac
+      k2h_lc="$(printf '%s' "$k2h" | tr 'A-F' 'a-f')"
+      if [ "$k2hok" -eq 0 ] || [ "${#k2h}" -ne 64 ]; then
+        echo "PENDING (K2 -- SECTIONS): the terminal pass ${k2_term} reviews ${K2_FILE} and carries no shard_tool_use_ids:,"
+        echo "      but its artifact_sha ('${k2h}') is not one sha256, so the bytes it reviewed cannot be named."
+      elif [ "$k2h_lc" != "$k2_disk" ]; then
+        echo "PENDING (K2 -- SECTIONS): the terminal pass ${k2_term} reviews ${K2_FILE} and carries no shard_tool_use_ids:,"
+        echo "      but the document on disk (${k2_disk}) is not the bytes it notarized (${k2h_lc}) -- judged only on reviewed bytes."
+      else
+        # The map interface, probed once, immediately before its first real use.
+        printf '## a\nx\n## b\ny\n' > "$AC_T/k2-two.md" && printf '## a\nx\n' > "$AC_T/k2-one.md" || {
+          echo "validate-adversarial-convergence.sh: arm K2 map probe could not stage; no verdict" >&2; exit 2; }
+        bash "$K2_PD" --map "$AC_T/k2-two.md" >/dev/null 2>&1; k2q2=$?
+        bash "$K2_PD" --map "$AC_T/k2-one.md" >/dev/null 2>&1; k2q1=$?
+        if [ "$k2q2" -ne 0 ] || [ "$k2q1" -ne 3 ]; then
+          echo "PENDING (K2 -- SECTIONS): ${K2_PD} failed its map probe (two-part document exited ${k2q2}, want 0;"
+          echo "      one-part document exited ${k2q1}, want 3) -- its answer about ${K2_FILE} is not read."
+        else
+          k2_map="$(bash "$K2_PD" --map "$K2_FILE" 2>&1)"; k2rc=$?
+          if [ "$k2rc" -eq 0 ]; then
+            k2_parts="$(printf '%s\n' "$k2_map" | grep -c .)" || k2_parts=0
+            K2_CAND="${K2_FILE}	${k2_parts}"
+          elif [ "$k2rc" -ne 3 ]; then
+            echo "PENDING (K2 -- SECTIONS): ${K2_PD} --map ${K2_FILE} exited ${k2rc}, neither a map (0) nor SERIAL (3):"
+            echo "      $(printf '%s\n' "$k2_map" | head -1)"
+          fi
+        fi
+      fi
+    fi
+  fi
+fi
+
+if [ -n "$K2_CAND" ]; then
+  k2_doc="${K2_CAND%	*}"; k2_parts="${K2_CAND##*	}"
+  k2_first="$(basename "${P_FILE[0]}")"
+  k2_at="${P_AT[0]:-}"
+  k2_root=""
+  k2_walk="$(dirname "${P_FILE[0]}")"
+  k2_walk="$(cd "$k2_walk" 2>/dev/null && pwd)"
+  while [ -n "$k2_walk" ]; do
+    if [ -f "$k2_walk/.claude/.ai-dlc-version" ]; then k2_root="$k2_walk"; break; fi
+    k2_walk="${k2_walk%/*}"
+  done
+  # The rebinding is probed with K_RELEASE's successor as the near-miss: under a rebinding that
+  # did not take, 0.664.0 would satisfy K_RELEASE and this probe would report it.
+  k2_probe="$(printf '%s\n' 'C 2026-01-02T00:00:00Z' '+version: 0.665.0' 'C 2026-01-01T00:00:00Z' '+version: 0.664.0' \
+              'C 2026-01-03T00:00:00Z' '+version: 0.700.0' | K_RELEASE="$K2_RELEASE" k_stamp_parse)"
+  k2_probe_none="$(printf '%s\n' 'C 2026-01-01T00:00:00Z' '+version: 0.664.0' | K_RELEASE="$K2_RELEASE" k_stamp_parse)"
+  if [ "$k2_probe" != "2026-01-02T00:00:00Z" ] || [ -n "$k2_probe_none" ]; then
+    echo "validate-adversarial-convergence.sh: arm K2 stamp-parser self-probe failed (got '$k2_probe', near-miss '$k2_probe_none'); no verdict" >&2
+    exit 2
+  fi
+  k2_stamp=""
+  if [ -n "$k2_root" ] && command -v git >/dev/null 2>&1; then
+    # Unset the hook's git environment, as arm K does, or `git -C` answers about the hook's repo.
+    k2_stamp="$( ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+                   TZ=UTC0 git -C "$k2_root" log --no-color --no-ext-diff -p \
+                     --date=format-local:%Y-%m-%dT%H:%M:%SZ --format='C %cd' \
+                     -- .claude/.ai-dlc-version 2>/dev/null ) | K_RELEASE="$K2_RELEASE" k_stamp_parse)"
+  fi
+  case "$k2_at" in
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) k2_atok=1 ;;
+    *) k2_atok=0 ;;
+  esac
+  if [ -z "$k2_stamp" ]; then
+    echo "PENDING (K2 -- SECTIONS): the terminal pass ${k2_term} reviews ${k2_doc}, which partitions into ${k2_parts} parts,"
+    echo "      and no commit${k2_root:+ in $k2_root} stamps .claude/.ai-dlc-version at ${K2_RELEASE} or later -- not owed yet."
+  elif [ "$k2_atok" -eq 0 ]; then
+    echo "PENDING (K2 -- SECTIONS): the terminal pass ${k2_term} reviews ${k2_doc}, which partitions into ${k2_parts} parts,"
+    echo "      and the series' first pass ${k2_first} has no ISO 8601 UTC invoked_at ('${k2_at}') to date against ${k2_stamp}."
+  elif [[ "$k2_at" < "$k2_stamp" ]]; then
+    echo "PENDING (K2 -- SECTIONS): the terminal pass ${k2_term} reviews ${k2_doc}, which partitions into ${k2_parts} parts,"
+    echo "      and the series opened (${k2_first}, ${k2_at}) before ${K2_RELEASE} was stamped (${k2_stamp}). Legacy series."
+  else
+    err "K2 -- SECTIONS" "${k2_term} reviews ${k2_doc}, which partition-document.sh --map splits into
+      ${k2_parts} parts, and its provenance block carries no 'shard_tool_use_ids:'. The series opened
+      (${k2_at}) after ${K2_RELEASE} was stamped (${k2_stamp}), so Rule 28's sections axis binds it:
+      one adversary per part plus one cross-section adversary, joined by
+      scripts/ai-dlc/merge-adversarial-shards.sh --document, which writes this pass file and that
+      line. Re-run the pass sectioned and write it as the NEXT pass number. This arm reads only
+      the series' terminal pass, so a sectioned merged pass after this one clears it."
+  fi
+fi
+
+# =============================================================================
 # H. REPAIR-RECORD -- the repair between two passes was delegated and recorded.
 # =============================================================================
 # GATE ONLY -- never in --cycle-state. A running cycle may sit between a repair
