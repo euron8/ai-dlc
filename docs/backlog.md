@@ -4662,7 +4662,10 @@ own release:
 - `self-update-gate.sh:828-833` and `:909-910`, plus five heredocs.
 - lib.sh's three `cat <<'AWK'` emitters: `nrm_awk` `:64`, `ledger_entry_awk` `:349`, and
   `backlog_entry_label_awk` `:446`. `warn-shadowed-local-validators.sh` now refuses on an empty or
-  failed capture of one; every other caller is unguarded.
+  failed capture of one. The other callers interpolate the emitter inline as `"$(…_awk)"`:
+  `ledger-reverify.sh` (tip `:1627`, `:1646`, `:2269`, `:2484`, `:2626`), `ledger-rotate.sh`
+  (`:217`, `:313`), lib.sh's own `:78` and `:185`, and `core/scripts/validate-layer-entries.sh`
+  (`:341`, `:356`). Whether each of those reads a failed emitter was not audited here.
 - `self-update-fixtures.sh:655` (`GRINVLIST`, the required-input check is skipped) and `:961`
   (`COVEOF`, the coverage join passes). Step 2 runs this file unattended.
 - `emit-report.sh:842`, where a preclassify refusal goes undetected, plus tip `:384`, `:444`,

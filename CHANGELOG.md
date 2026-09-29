@@ -88,7 +88,7 @@ half on 0.659.0 and on each of six mutants that restore a base here-string or re
 status with `|| true`. It exits 9 on the converted scripts stubbed out, and tags the bootstrapping
 half on a second correct spelling.
 
-### Two detectors that printed a refusal and exited 0 now exit 2 (`BL-356`, bullets 1 and 2)
+### Two detectors that exited 0 on an unreadable rulebook list now exit 2 (`BL-356`, bullets 1 and 2)
 
 - **`retired-layer-passage.sh` exits 2 when it cannot read the rulebook list from
   `setup-sites.md`.** It printed "refusing to report clean" and exited 0, and `apply.sh` reads
