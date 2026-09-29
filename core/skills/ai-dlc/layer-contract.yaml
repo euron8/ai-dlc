@@ -704,7 +704,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: EXTENSION-HOOK-MISSING
-    fixture: none
+    fixture: layer-adjudication-tier
 
   - id: LC-E4
     subject: extension
