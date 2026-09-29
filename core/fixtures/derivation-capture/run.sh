@@ -410,6 +410,102 @@ else
   bad "an edit writing the prose-opener file's stale pair exited $RC (expected 2 citing :7)"
 fi
 
+# --- A28-A33: THE SECTION-COPY EXEMPTION (BL-372) -----------------------------------------
+# A section remediator edits `shards/prd-repair-p1/sections/<i>.md`, a copy, while prd.md stays at
+# its split bytes until the join assembles it. A fence in the copy that derives from prd.md
+# describes the ASSEMBLED document and cannot reproduce yet, so that pair alone is exempt. Every
+# arm below writes the SAME self-referencing stale pair unless it says otherwise, so the only
+# property that moves between A28 and A30-A33 is WHERE it is written.
+SELF_REL="_bmad-output/planning-artifacts/s1/prd.md"
+PAIR_SELF="$(printf '```derived\n$ grep -c scope %s\n97\n```' "$SELF_REL")"
+PAIR_GUESS="$(printf '```derived\n$ grep -c 0 VERSION\n9\n```')"
+PAIR_LONGER="$(printf '```derived\n$ grep -c scope %s.orig\n97\n```' "$SELF_REL")"
+sec_write() { # <file> <pair> -> append the pair to the file, then fire an Edit that wrote it
+  mkdir -p "$(dirname "$1")"; printf '\n%s\n' "$2" >> "$1"
+  fire "$(edit_json "$1" "$2")"
+}
+echo "  (section split made by $SPLIT_BY)"
+
+# CONTROL: the pair really is stale, so every exit 0 below is the exemption and not a match.
+printf '# c\n\n%s\n' "$PAIR_SELF" > "$WORK/self-ctl.md"
+SCTL="$( ( cd "$CONSUMER" && AI_DLC_PROJECT_ROOT="$CONSUMER" bash "$VALIDATOR" "$WORK/self-ctl.md" ) 2>&1 )"
+SCTL_RC=$?
+if [ "$SCTL_RC" = 1 ] && grep -q '1 stale or unrunnable derivation(s) of 1 checked' <<<"$SCTL" \
+   && [ -f "$REPDIR/sections/.manifest" ] && [ -f "$REPDIR/sections/2.md" ]; then
+  ok "control: the self-referencing pair is stale under the real validator, and the split carries sections/.manifest"
+else
+  bad "control: expected the self-referencing pair stale (rc 1) and a split manifest, got rc $SCTL_RC — every section arm below is vacuous"
+fi
+
+# A28: THE EXEMPTION. The self-referencing pair written into a listed section copy -> silent.
+sec_write "$REPDIR/sections/2.md" "$PAIR_SELF"
+if [ "$RC" = 0 ] && [ ! -s "$ERR" ] && seeded "$REPDIR/sections/2.md" "$PAIR_SELF"; then
+  ok "section copy, a pair deriving from the split document -> exit 0 (exempt until assembly)"
+else
+  bad "a self-referencing pair in a section copy exited $RC — the section-sharded repair cannot record a derivation of its own document"
+fi
+
+# A29: a pair in the SAME copy that does not name the document is witnessed as anywhere else.
+sec_write "$REPDIR/sections/2.md" "$PAIR_GUESS"
+if [ "$RC" = 2 ] && grep -q 'is not backed by' "$ERR"; then
+  ok "section copy, a guessed pair that does not name the document -> exit 2"
+else
+  bad "a non-self-referencing guess in a section copy exited $RC (expected 2) — the exemption covers every command in a section copy"
+fi
+
+# A30: the REAL document is never exempt.
+sec_write "$SPLIT_DOC" "$PAIR_SELF"
+if [ "$RC" = 2 ] && grep -q 'is not backed by' "$ERR"; then
+  ok "the split document itself, the same pair -> exit 2"
+else
+  bad "the same pair written into the real document exited $RC (expected 2) — the exemption reaches the document"
+fi
+
+# A31: the remediator's PART beside sections/ is never exempt.
+sec_write "$REPDIR/2.md" "$PAIR_SELF"
+if [ "$RC" = 2 ] && grep -q 'is not backed by' "$ERR"; then
+  ok "the repair part <dir>/2.md, the same pair -> exit 2"
+else
+  bad "the same pair written into the repair part exited $RC (expected 2) — the exemption reaches the parts"
+fi
+
+# A32: a matching path with NO manifest is a user file, not a section copy.
+sec_write "$CONSUMER/_bmad-output/planning-artifacts/s1/shards/notes-repair-p1/sections/2.md" "$PAIR_SELF"
+if [ "$RC" = 2 ] && grep -q 'is not backed by' "$ERR"; then
+  ok "a sections/2.md with no manifest beside it, the same pair -> exit 2"
+else
+  bad "a manifest-less file at a section path exited $RC (expected 2) — the exemption is keyed on the path alone"
+fi
+
+# A33: a file beside the manifest whose ordinal the manifest does not list.
+sec_write "$REPDIR/sections/9.md" "$PAIR_SELF"
+if [ "$RC" = 2 ] && grep -q 'is not backed by' "$ERR"; then
+  ok "sections/9.md beside a manifest that lists no part 9, the same pair -> exit 2"
+else
+  bad "an unlisted ordinal in a split dir exited $RC (expected 2) — any file beside a manifest is exempt"
+fi
+
+# A34: a command naming a LONGER path that merely contains the document path is not the document.
+sec_write "$REPDIR/sections/3.md" "$PAIR_LONGER"
+if [ "$RC" = 2 ] && grep -q 'is not backed by' "$ERR"; then
+  ok "section copy, a command naming prd.md.orig -> exit 2 (the document path is a whole token)"
+else
+  bad "a command naming a longer path exited $RC (expected 2) — the self-reference test is a substring match"
+fi
+
+# A35: a COPY of the split's sections/ (manifest included) outside `shards/*-repair-p*/` is not a
+# section copy. The one input only the path glob separates: A30 and A31 are also kept out by the
+# manifest test, so without this arm the glob could widen to every file with nothing reddening.
+mkdir -p "$CONSUMER/_bmad-output/planning-artifacts/s1/scratch"
+cp -R "$REPDIR/sections" "$CONSUMER/_bmad-output/planning-artifacts/s1/scratch/"
+sec_write "$CONSUMER/_bmad-output/planning-artifacts/s1/scratch/sections/2.md" "$PAIR_SELF"
+if [ "$RC" = 2 ] && grep -q 'is not backed by' "$ERR" \
+   && [ -f "$CONSUMER/_bmad-output/planning-artifacts/s1/scratch/sections/.manifest" ]; then
+  ok "a sections/2.md with a listing manifest but outside shards/*-repair-p*/, the same pair -> exit 2"
+else
+  bad "a manifest-carrying copy outside a repair dir exited $RC (expected 2) — the exemption is not keyed on the repair-dir path"
+fi
+
 # --- A14: the artifact is not modified by the hook ----------------------------
 # The rejected design overwrote the recorded output with the captured one. It must
 # stay rejected: a wrong COMMAND would then be silently paired with its own real

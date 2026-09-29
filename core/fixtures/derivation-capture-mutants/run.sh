@@ -65,6 +65,8 @@ TREE="$WORK/dist"
 mkdir -p "$TREE/core/hooks" "$TREE/core/scripts" "$TREE/core/fixtures/derivation-capture"
 cp "$ROOT/core/hooks/ai-dlc-derivation-capture.sh" "$TREE/core/hooks/"
 cp "$ROOT/core/scripts/validate-artifact-derivations.sh" "$TREE/core/scripts/"
+# The sibling's seed splits its section artifact with the real splitter when one is present.
+[ -f "$ROOT/core/scripts/partition-document.sh" ] && cp "$ROOT/core/scripts/partition-document.sh" "$TREE/core/scripts/"
 cp "$SIB/run.sh" "$SIB/seed.sh" "$TREE/core/fixtures/derivation-capture/"
 chmod +x "$TREE/core/fixtures/derivation-capture/run.sh" "$TREE/core/fixtures/derivation-capture/seed.sh"
 PRISTINE="$WORK/hook.pristine"
@@ -244,6 +246,32 @@ mutate "opener accepts trailing text" "prose-opener file's stale pair" \
 # green before A22 existed.
 mutate "shed strips all leading blanks" "deeper-\$-output pair" \
   's/^  if (substr(s, 1, length(ind)) == ind) return substr(s, length(ind) + 1)$/  return substr(s, length(lead(s)) + 1) # MUTANT/'
+
+# --- 14-18. THE SECTION-COPY EXEMPTION (BL-372), one mutant per narrowing ------------------
+# Each exemption guard has its own arm in the sibling, and each mutant below declares exactly the
+# arms whose input only that guard separates. The real document (A30) and the repair part (A31)
+# carry no mutant of their own: BOTH the path glob and the manifest-beside-the-file test keep
+# them out, so reverting either alone changes no verdict -- two guards covering one subject. The
+# glob gets its own subject in A35 (a manifest-carrying copy outside a repair dir) instead.
+mutate "section path glob widened to every markdown file" "a manifest-carrying copy outside a repair dir" \
+  's|^  \*/shards/\*-repair-p\*/sections/\*\.md)$|  *.md)|'
+
+mutate "section exemption removed" "a self-referencing pair in a section copy" \
+  's/^      for (k in tch) if (tch\[k\] .*tch\[k\]=0$/      # MUTANT: no exemption/'
+
+mutate "section exemption widened to every command" \
+  "a non-self-referencing guess in a section copy|a command naming a longer path" \
+  's/^      for (k in tch) if (tch\[k\] .*tch\[k\]=0$/      for (k in tch) if (tch[k] \&\& sa != "") tch[k]=0/'
+
+mutate "section exemption keyed on the path alone, no manifest" \
+  "a non-self-referencing guess in a section copy|a manifest-less file at a section path|an unlisted ordinal in a split dir|a command naming a longer path" \
+  's/^    if \[ -f "\$SEC_MF" \] .*; then$/    if true; then/; s/^      SELF_DOC="\$(awk .*$/      SELF_DOC=path-only/; s/^      for (k in tch) if (tch\[k\] .*tch\[k\]=0$/      for (k in tch) if (tch[k] \&\& sa != "") tch[k]=0/'
+
+mutate "section ordinal not checked against the manifest" "an unlisted ordinal in a split dir" \
+  's/\$1 == "part" \&\& \$2 == o { f = 1 }/$1 == "part" { f = 1 }/'
+
+mutate "document path matched as a substring" "a command naming a longer path" \
+  's/^    if (pre !~ .* return 1$/    return 1/'
 
 if [ "$fails" -gt 0 ]; then
   printf '  %s mutation(s) did not behave\n' "$fails"

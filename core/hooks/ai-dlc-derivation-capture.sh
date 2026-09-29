@@ -133,6 +133,42 @@ grep -q '^[[:blank:]]*```derived' "$FILE" 2>/dev/null || exit 0
 
 [ -r "$VALIDATOR" ] || exit 0
 
+# A SECTION COPY MAY CARRY A DERIVATION OF THE DOCUMENT IT WAS CUT FROM. A section-sharded repair
+# (`partition-document.sh --split <doc> s<N>/shards/<artifact>-repair-p<M>`) has each remediator
+# edit `sections/<i>.md`, a copy, while the real document stays at its split bytes until the join
+# assembles it. A fence in that copy whose command reads the DOCUMENT therefore cannot reproduce at
+# write time: it describes the document after assembly, which does not exist yet. That pair -- and
+# ONLY that pair -- is exempt here; the gate re-runs it against the assembled document.
+#
+# THE EXEMPTION IS NARROW ON FOUR AXES, each probed in derivation-capture:
+#   - the path is `*/shards/*-repair-p*/sections/<ordinal>.md`: never the real document, never
+#     the part `<repair-dir>/<i>.md` a remediator writes, never any other file;
+#   - `.manifest` sits beside it and lists that ordinal as a `part` -- a user file at a matching
+#     path with no split behind it is not a section copy;
+#   - the pair's `$ ` command names the manifest's `document` path, absolute or project-relative,
+#     as a whole path token (a longer path that merely contains it does not count);
+#   - every OTHER pair this edit wrote in the copy is witnessed exactly as anywhere else, so a
+#     guessed `grep -c` over some other file is still refused at write time.
+SELF_DOC=""; SELF_REL=""; SELF_LOG=""
+case "$FILE" in
+  */shards/*-repair-p*/sections/*.md)
+    SEC_MF="$(dirname "$FILE")/.manifest"
+    SEC_ORD="$(basename "$FILE" .md)"
+    if [ -f "$SEC_MF" ] && awk -F'\t' -v o="$SEC_ORD" '$1 == "part" && $2 == o { f = 1 } END { exit !f }' "$SEC_MF" 2>/dev/null; then
+      SELF_DOC="$(awk -F'\t' '$1 == "document" { print $2; exit }' "$SEC_MF" 2>/dev/null)"
+    fi ;;
+esac
+if [ -n "$SELF_DOC" ]; then
+  PD_PHYS="$(cd "$PROJECT_DIR" 2>/dev/null && pwd -P)"
+  case "$SELF_DOC" in
+    "$PD_PHYS"/*) SELF_REL="${SELF_DOC#"$PD_PHYS"/}" ;;
+    "$PROJECT_DIR"/*) SELF_REL="${SELF_DOC#"$PROJECT_DIR"/}" ;;
+    *) SELF_REL="$SELF_DOC" ;;
+  esac
+  # The manifest stores the PHYSICAL path; an author spells the project dir as the harness does.
+  SELF_LOG="${PROJECT_DIR%/}/${SELF_REL}"
+fi
+
 # The text THIS tool call wrote. `content` for Write, `new_string` for Edit, every
 # `edits[].new_string` for MultiEdit -- whichever the payload carries.
 PAYLOAD=$(jq -r '
@@ -157,7 +193,7 @@ printf '%s\n' "$PAYLOAD" > "$TMPD/payload.txt" 2>/dev/null || exit 0
 # (an edit that rewrote only the output). Empty lines are excluded from the payload
 # index because nearly every payload has one and it would touch every pair.
 MASK="$TMPD/$(basename "$FILE")"
-awk '
+awk -v sa="$SELF_DOC" -v sr="$SELF_REL" -v sl="$SELF_LOG" '
 # lead(s): the leading blanks of s. shed(s, ind): s with the block indent removed -- exactly
 # `ind` when s carries it, else whatever leading blanks s has. The same two rules the
 # validator applies inline in check_file; a line is a fence delimiter or a `$ ` command line
@@ -167,6 +203,19 @@ function shed(s, ind) {
   if (ind == "") return s
   if (substr(s, 1, length(ind)) == ind) return substr(s, length(ind) + 1)
   return substr(s, length(lead(s)) + 1)
+}
+# names(s, p): s carries p as a whole path token -- the byte before and the byte after are not
+# path characters. Empty p names nothing, so outside a section copy no pair is ever exempt.
+function names(s, p,   i, r, pre, post) {
+  if (p == "") return 0
+  r = s
+  while ((i = index(r, p)) > 0) {
+    pre = (i > 1 ? substr(r, i - 1, 1) : "")
+    post = substr(r, i + length(p), 1)
+    if (pre !~ /[A-Za-z0-9_.\/-]/ && post !~ /[A-Za-z0-9_.\/-]/) return 1
+    r = substr(r, i + 1)
+  }
+  return 0
 }
 FNR==NR { if ($0 != "") PAY[$0]=1; next }
 { L[FNR]=$0; N=FNR }
@@ -188,6 +237,8 @@ END {
         pid[k]=cur
         if (cur>0 && (L[k] in PAY)) tch[cur]=1
       }
+      # The section-copy exemption: a touched pair whose command names the split document.
+      for (k in tch) if (tch[k] && (names(L[k], sa) || names(L[k], sr) || names(L[k], sl))) tch[k]=0
       any=0
       for (k=i+1;k<j;k++) if (pid[k]>0 && tch[pid[k]]) any=1
       print (any ? L[i] : "")
