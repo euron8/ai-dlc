@@ -141,10 +141,12 @@ Whatever the row names, the **Adversarial Review must CONVERGE**: its pass count
 floor, not a target, and Party Mode dispatches per §3.
 
 - **Review passes:** `_gate-procedures.md`, "Adversarial review dispatch" — ai-dlc-native,
-  no Skill. The evaluation is one file, so one adversary per pass (Rule 28, "Split dispatch",
-  serial exception 4).
-- **Repair passes:** `_gate-procedures.md`, "Adversarial repair dispatch" — one remediator per
-  pass for this one-file artifact (exception 4). **The lead does not repair the artifact itself.**
+  no Skill. The evaluation is one document, so each pass is sharded by section, or is one
+  adversary when `partition-document.sh --map` reports it SERIAL (Rule 28, "Split dispatch":
+  sections axis, serial exception 4); that procedure's "Shard a single document" owns the split.
+- **Repair passes:** `_gate-procedures.md`, "Adversarial repair dispatch" — section shards joined
+  and assembled per its "Shard by section", or one remediator when the map reports the document
+  SERIAL (exception 4). **The lead does not repair the artifact itself.**
 - The series is `_bmad-output/planning-artifacts/s<N>/coe-adversarial-p<M>.md`; the
   terminating pass stamps `verdict: EXIT_CONDITION_MET`. **Gate Check 24 reads it.**
 
@@ -219,8 +221,8 @@ features. Do NOT create stories here — that happens in
 stories-test-strategy after the full planning cycle.
 
 The requirements step will:
-- Dispatch the `pm` to update the product brief with carry-over scope (one-file scope, Rule 28
-  "Split dispatch" serial exception 4)
+- Dispatch the `pm` to update the product brief with carry-over scope (one document, Rule 28
+  "Split dispatch" serial exception 4 when `partition-document.sh --map` reports it SERIAL)
 - Extract LOCKED_REQUIREMENTS from carry-over items
 - Dispatch the `pm` to update the PRD with carry-over requirements (reads the extracted
   LOCKED_REQUIREMENTS, so it follows them: serial exception 3)

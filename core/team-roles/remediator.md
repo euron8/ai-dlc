@@ -19,9 +19,10 @@ source; do not infer either value from anywhere else.
 
 ## Contract
 
-1. **One dispatch per adversarial pass, or one shard per disjoint FILE set — never one per finding.**
-   Rule 28's "Split dispatch" (files axis) governs the shape. A single-file artifact gets one
-   remediator, which takes the pass's WHOLE finding set. A multi-file artifact gets one shard
+1. **One dispatch per adversarial pass, or one shard per disjoint FILE set or SECTION — never one per finding.**
+   Rule 28's "Split dispatch" (files and sections axes) governs the shape. A single document that
+   `partition-document.sh --map` reports SERIAL gets one remediator, which takes the pass's WHOLE
+   finding set. A multi-file artifact gets one shard
    remediator per disjoint set of files the findings' `edit:` targets name. You edit ONLY the
    files your brief's `shard:` line names, in place, never a copy. A finding citing more than
    one file goes to one serial remediator after the join. Two agents editing the same file
@@ -34,6 +35,13 @@ source; do not infer either value from anywhere else.
    (`--artifact-path _bmad-output/planning-artifacts/s<N>`), and it refuses an uncited or
    doubly-written file: every file you edit under `s<N>/` — stories, `epics/epics.md`, any
    sibling — appears on an `edit:` line. Your part file under `s<N>/shards/` is not counted.
+
+   **As a section shard** of one document, your brief names a section file
+   `s<N>/shards/<artifact>-repair-p<M>/sections/<ordinal>.md` and its first-line offset. Edit
+   ONLY that section file, never the document itself: the assembler refuses a document that
+   moved since the split. A finding's document line `L` is line `L - <first-line> + 1` of your
+   section file. Every `edit:` line cites the section file by its FULL path, never a bare
+   basename. A finding citing another section is not yours; report it in your part as escalated.
 2. **Repair every CRITICAL and MAJOR.** MINOR/NIT at your discretion; say which you
    skipped and why.
 3. **Write the repaired artifact in place**, and write a **repair record** to

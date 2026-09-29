@@ -329,7 +329,9 @@ severity fields Check 24 reads. It remains correct for a ONE-SHOT cynical sweep,
 files that run one still invoke it.
 
 **Dispatch** ONE `adversary` per pass, or one shard per story plus a cross-story shard when the
-artifact is two or more files ("Shard a multi-file artifact" below). Agent tool, bound to `.claude/team-roles/adversary.md` per
+artifact is two or more files ("Shard a multi-file artifact" below), or one shard per section plus
+a cross-section shard when the artifact is one document that `partition-document.sh --map`
+partitions ("Shard a single document" below). Agent tool, bound to `.claude/team-roles/adversary.md` per
 SKILL.md Rule 19 (both bindings: `model` and the standing role-contract Read line). Give it: the
 artifact path under review, the canonical output path, the pass number, and — on pass 2+ — the
 PRIOR pass's findings and the repair record, because pass 2+ reviews the REPAIR, not the document
@@ -357,8 +359,28 @@ stories, and `<that dir>/cross.md`. Every finding carries one `stories:` line in
 written) unless every ordinal and the cross shard delivered exactly once and every finding
 respects the partition. It then sums the counts, recomputes the verdict (a shard's own verdict is
 advisory) and writes the one `<artifact>-adversarial-p<M>.md` above. Check 24 reads that file as
-it reads an unsharded pass. A single-file artifact keeps one adversary (Rule 28 exception 4), and
-passes stay serial (exception 2).
+it reads an unsharded pass. A single-file artifact is sharded by section (below), and passes stay
+serial (exception 2).
+
+**Shard a single document (Rule 28, "Split dispatch": sections axis).** When the artifact under
+review is one file, run `scripts/ai-dlc/partition-document.sh --map <artifact path>`. Exit 3 with a
+`SERIAL:` line means the document does not partition: dispatch ONE adversary whose brief carries
+`shard: none (serial-document)` (Rule 28 exception 4). Otherwise the map prints
+`<ordinal>\t<first-line>\t<last-line>\t<heading>` per part; create
+`_bmad-output/planning-artifacts/s<N>/shards/<artifact>-p<M>/` and dispatch, in ONE message, one
+`adversary` per part plus one cross-section shard. Each part shard gets its ordinal, its line
+range and heading, the line `shard: <ordinal>/<K> <heading>`, and the output path
+`<that dir>/<ordinal>.md`; it reads its line range of the REAL document, read-only, never a copy.
+The cross-section shard gets `shard: cross/<K> cross`, the whole map, a scope limited to
+interactions between sections, and `<that dir>/cross.md`. Every finding carries one `sections:`
+line citing map ordinals (a part shard only its own, the cross shard two or more), and every
+shard notarizes the WHOLE document's `artifact_sha` with `artifact:` naming the document. Beat-join
+every shard path, then run the join
+`scripts/ai-dlc/merge-adversarial-shards.sh --document <artifact path> <that dir>`. It re-derives
+the ordinal set from `--map`, refuses (exit 2, `REFUSED:`, nothing written) unless every ordinal
+and the cross shard delivered exactly once, every finding cites `sections:` within the partition,
+and every shard notarized the document's current sha, then writes the one
+`<artifact>-adversarial-p<M>.md` above.
 
 **Zero findings on a later pass is the EXPECTED outcome, not a suspicious one.** The cycle exists
 to reach it. An adversary that manufactures a finding to justify its pass sends the remediator to
@@ -495,7 +517,7 @@ PreToolUse hook denies every `Agent` / `Skill` / `Task` dispatch until step 3 ha
    `planning-artifacts/archive/<series>-cycle-<n>/`. Do not delete them; retro reads them.
 
 4. **VERIFY.** Dispatch **ONE** adversary pass (procedure above, sharded exactly as a review pass is
-   when the artifact is two or more files, and every shard carrying the declaration below) against the RESOLVED artifact, as the
+   when the artifact is two or more files or a document `--map` partitions, and every shard carrying the declaration below) against the RESOLVED artifact, as the
    **next pass number in the SAME series**, declaring `resolves_divergence: <the record>`. Do not
    open a new series: `--series` spans both, the pass numbers collide, and the gate then fails on
    a cycle that did nothing wrong. That pass is the terminal clean pass Check 24 requires.
@@ -508,7 +530,9 @@ artifact itself** — it is the most context-saturated agent in the pipeline and
 compacted summary, not the document. (Rationale + the measurement: notes R35.)
 
 **Dispatch** ONE `remediator` per pass, or one shard per disjoint FILE set when the artifact is
-two or more files ("Shard by file" below), and never one per finding. Agent tool, bound to
+two or more files ("Shard by file" below), or one shard per SECTION when the artifact is one
+document that `partition-document.sh --map` partitions ("Shard by section" below), and never one
+per finding. Agent tool, bound to
 `.claude/team-roles/remediator.md` per SKILL.md Rule 19 (both bindings: `model` and the
 standing role-contract Read line). Together the remediators take that pass's WHOLE set: every
 finding of the adversarial pass, or every FAILED check of the gate pass.
@@ -516,8 +540,8 @@ finding of the adversarial pass, or every FAILED check of the gate pass.
 **Shard by file (Rule 28, "Split dispatch": files axis).** Partition the findings by the files
 their `edit:` targets name. A finding touching one file goes to that file's shard, and each
 shard edits its files IN PLACE, never a copy. A finding citing more than one file goes to ONE
-serial remediator dispatched after the join. A single-file artifact stays one remediator (Rule 28
-exception 4). Each shard's brief carries `shard: <i>/<N> <files>` and the parts path
+serial remediator dispatched after the join. A single-file artifact is sharded by section
+(below). Each shard's brief carries `shard: <i>/<N> <files>` and the parts path
 `_bmad-output/planning-artifacts/s<N>/shards/<artifact>-repair-p<M>/<i>.md`. Every `edit:` line
 cites the full path of each file it edits, and a citation must not wrap onto the next line. Beat-join
 every part, then run the join
@@ -531,6 +555,35 @@ if a file is cited by two parts, or if any part is unstructured. Otherwise it wr
 repair record below. The serial cross-file remediator runs after that and APPENDS its entries
 to the joined record. The join never overwrites a record, so it is run before the serial
 remediator and never after it.
+
+**Shard by section (Rule 28, "Split dispatch": sections axis).** When the artifact is one
+document, run `scripts/ai-dlc/partition-document.sh --map <artifact path>`. Exit 3 with a `SERIAL:`
+line keeps ONE remediator with `shard: none (serial-document)` (Rule 28 exception 4), editing the
+document in place. Otherwise, in this order:
+
+1. **Split.** `scripts/ai-dlc/partition-document.sh --split <artifact path>
+   _bmad-output/planning-artifacts/s<N>/shards/<artifact>-repair-p<M>/ --expect-sha <artifact_sha>`,
+   where `<artifact_sha>` is the `artifact_sha` of the pass being repaired. It writes
+   `<that dir>/sections/<ordinal>.md` and `<that dir>/sections/.manifest`, and it refuses when the
+   document is not the bytes that pass reviewed or when `sections/` already exists.
+2. **Parts.** Partition the findings by their `sections:` line. A finding citing one section goes
+   to that section's shard; a finding citing two or more goes to ONE serial remediator after
+   assembly (step 4). Each shard's brief carries `shard: <ordinal>/<K> <heading>`, the full path of
+   its section file, that part's first-line offset from the map (a finding's document line `L` is
+   line `L - first + 1` of the section file), and the part path `<that dir>/<ordinal>.md`. A shard
+   edits ONLY its section file, never the document, and every `edit:` line cites that section
+   file by its full path.
+3. **Join and assemble.** Beat-join every part, then run
+   `scripts/ai-dlc/join-remediator-shards.sh --document <artifact path> --sprint <N> --artifact <name> --pass <M> --artifact-path _bmad-output/planning-artifacts/s<N> --since <ISO> --until <ISO>`.
+   In document mode the section files are the file set, so a section written by two agents, an
+   uncited section or a section cited by two parts refuses exactly as a file does. The join then
+   runs `partition-document.sh --assemble <that dir>`, which refuses when the document moved since
+   the split, a section is missing or a foreign file is present; on any refusal the join exits 2
+   and writes neither the document nor the record. Otherwise the document is written atomically
+   from the sections, the manifest records the assembled sha, the section copies are removed, and
+   the join writes the one repair record.
+4. **Cross-section.** The serial cross-section remediator then edits the ASSEMBLED document in
+   place and APPENDS its entries to the joined record.
 
 It writes the repaired artifact in place plus a **repair record** (`<M>` = the pass repaired) at
 `_bmad-output/planning-artifacts/s<N>/<artifact>-repair-p<M>.md` when the caller is an
@@ -546,8 +599,14 @@ verifies against that record; so does the gate's re-run of the failed checks.
 
 ```
 scripts/ai-dlc/validate-artifact-derivations.sh _bmad-output/planning-artifacts/s<N>/
+scripts/ai-dlc/validate-artifact-derivations.sh <assembled document path>
 scripts/ai-dlc/report-propagation-fanout.sh <base-ref>
 ```
+
+The second line applies to a section-sharded repair and names the ASSEMBLED document: a fenced
+command that reads its own file measured a section copy while the shard ran, so only the
+assembled bytes answer, and a line-number self-reference is falsified by any edit above it.
+Run it after the join and after the serial cross-section remediator.
 
 Exit 1 from `validate-artifact-derivations.sh` is a repair that falsified a
 derivation — most often not its own, but one

@@ -2052,8 +2052,8 @@ record was written to authorize — and it is suppressed entirely once the serie
 proves findings FELL, which proves a repair happened — but not that a `remediator` did
 it. `carry-over-evaluation.md` §3a fences repair to a subagent (*"the lead does not
 repair the artifact itself"*), delivered as `planning-artifacts/s<N>/<artifact>-repair-p<M>.md`
-that the next pass verifies against. A file-sharded repair reaches arm H as the one record
-`join-remediator-shards.sh` writes (`_gate-procedures.md`, "Adversarial repair dispatch").
+that the next pass verifies against. A file- or section-sharded repair reaches arm H as the one
+record `join-remediator-shards.sh` writes (`_gate-procedures.md`, "Adversarial repair dispatch").
 Arm H asserts that record exists and is structured
 (a `disposition:`, an `edit:` site, a `derivation:` per finding) for every pass whose
 findings a later pass measured as repaired. It proves the record EXISTS, not who authored
@@ -3079,7 +3079,7 @@ without moving.
 If any check fails:
 1. Dispatch the pass's repair per `_gate-procedures.md`
    **Adversarial repair dispatch** — the gate is that procedure's second caller,
-   and that procedure owns the remediator count and any file sharding (Rule 28,
+   and that procedure owns the remediator count and any file or section sharding (Rule 28,
    "Split dispatch"). It takes every FAILED check of this pass and writes its repair record to
    `_bmad-output/planning-artifacts/s<N>/gate-<type>-repair-p<M>.md`. The lead
    dispatches, joins, and adjudicates; it does not edit the artifact.

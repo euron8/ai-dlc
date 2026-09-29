@@ -150,7 +150,10 @@
 #     shard: cross/<N> <part-key>    the cross-part agent (Rule 28), N >= 1
 #     shard: none (<exception>)      exception 1 | 2 | 3 | 4, or its short name:
 #                                    1 data-dependency   2 pass-repair-pass
-#                                    3 authoring-chain   4 one-file
+#                                    3 authoring-chain   4 serial-document
+#                                    (`one-file`, the name exception 4 carried before it
+#                                    meant a document `partition-document.sh --map` reports
+#                                    SERIAL, is still accepted and records the same value)
 #
 #   <part-key> is the rest of the line, non-empty: a story ordinal, a basename, a gate type, a
 #   surface, or the file paths a remediator shard edits, so it may carry `/`, `,` and blanks.
@@ -586,7 +589,7 @@ SPAWN_SHARD="$(printf '%s\n' "$PROMPT" | awk '
       if (e == "1" || e == "data-dependency") val = "none (1)"
       else if (e == "2" || e == "pass-repair-pass") val = "none (2)"
       else if (e == "3" || e == "authoring-chain") val = "none (3)"
-      else if (e == "4" || e == "one-file") val = "none (4)"
+      else if (e == "4" || e == "serial-document" || e == "one-file") val = "none (4)"
     }
     if (val != "") { good++; out = val }
   }

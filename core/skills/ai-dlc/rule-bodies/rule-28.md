@@ -62,6 +62,15 @@ in one bounded-join beat (Rule 29). The axes:
   between files only. Every finding or edit names the parts it cites; a
   per-part agent reports only findings citing its own part alone, the
   cross-part agent only findings citing two or more.
+- **sections** -- a single document that `partition-document.sh --map`
+  partitions: one agent per part the map prints plus one cross-part
+  agent scoped to interactions between sections only, citing parts by
+  the same rule as the files axis. A review joins with
+  `merge-adversarial-shards.sh --document`; a repair shard edits only
+  its section file from `partition-document.sh --split`, and
+  `join-remediator-shards.sh --document` joins the parts and runs
+  `partition-document.sh --assemble`, which refuses unless the document
+  is still the bytes it was split from.
 - **worklist items** -- a list a program derives
   (`validate-gate-adjudication.sh --expected`): slices of the derived
   order, no cross-part agent.
@@ -72,7 +81,8 @@ in one bounded-join beat (Rule 29). The axes:
 
 **The partition is derived, never listed.** The part set comes from a
 program or from the tree -- the artifact directory's listing, the
-`--expected` worklist, the Section 0 surface list -- and never from a
+`--map` of a document, the `--expected` worklist, the Section 0 surface
+list -- and never from a
 list the lead types into a brief. **The join is a program.** It
 re-derives the same set, refuses unless every part delivered exactly
 once and every finding respects the partition, and only then writes
@@ -84,14 +94,17 @@ change; a lead that assembles the file by hand has not joined.
 one-at-a-time rule in `stories-test-strategy.md`; (2) a convergence
 sequence -- review pass, repair, next pass; sharding shortens a pass and
 never overlaps two; (3) an ordered authoring chain whose next step
-reads the previous one's output; (4) a scope that is one file -- a
-single document is not partitioned by section. A per-role site cites
+reads the previous one's output; (4) a single document that
+`partition-document.sh --map` reports SERIAL. A per-role site cites
 this clause and names its axis and its join; it does not restate them.
 
 The lead's written dispatch plan names, for every dispatch, its axis
 and part count or which of (1)-(4) keeps it whole. Every shard brief
 carries one line `shard: <i>/<N> <part-key>` (the cross-part agent:
-`shard: cross/<N> cross`) or `shard: none (<exception 1-4>)`.
+`shard: cross/<N> cross`) or `shard: none (<exception 1-4>)`. A
+sections-axis part key is the part's heading from the map, as in
+`shard: 2/5 ## Functional Requirements`; a document the map reports
+SERIAL is `shard: none (serial-document)`.
 
 **Minimum mechanism (Rule 26(c)) -- split dispatch.** Failure caught:
 the lead blocked on one agent reviewing, repairing or adjudicating a
