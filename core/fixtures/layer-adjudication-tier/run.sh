@@ -1221,9 +1221,11 @@ rm -rf "$SWAPDIST" "$E14CONS" "$M10DIR"
 # same exposure through BASE and THEIRS. The engine now refuses both at startup (an unresolvable
 # ref) and at `have` (a path the tree names that cannot be read).
 #
-# EVERY ARM ASSERTS rc AND A REFUSED LINE CARRYING THE INPUT THAT WAS REFUSED, never a row count:
-# the bad ref string on A-D (in C and D2 only BASE is bad, so the ref appearing names which input
-# refused), the contract path on E-F. A row count is what the defect already satisfied.
+# EVERY REFUSING ARM ASSERTS rc AND A REFUSED LINE CARRYING THE INPUT THAT WAS REFUSED, never a row
+# count alone: the bad ref string on A-D (in C and D2 only BASE is bad, so the ref appearing names
+# which input refused), plus the startup refusal's own words on A-B, and the contract path on E-F.
+# A row count is what the defect already satisfied. The non-refusing arms G-J are PRESENCE-shaped
+# instead: H demands a code, I and J one advisory row for the seeded entry.
 #
 # G IS THE NEAR-MISS THAT MAKES E AND F MEAN SOMETHING. A contract genuinely absent at theirs must
 # keep today's meaning -- rc 0, an empty code set, no refusal -- so a `have` that refused on every
