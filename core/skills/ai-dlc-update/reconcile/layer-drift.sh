@@ -262,8 +262,8 @@ fi
 # ADJUDICATED code set came back empty, and the adjudication tier switched itself off at rc 0.
 # Measured on this tree: `--adjudicated-codes "$PWD" HEAD` printed 4 codes and the same call with
 # a ref `rev-parse -q --verify` answers 1 for printed 0 bytes, rc 0 -- the output that mode
-# documents as a LEGITIMATE answer. Classify mode had the same exposure: 50 rows, rc 0, against a
-# THEIRS that did not exist. A gate reading an empty tier as "nothing to adjudicate" is this
+# documents as a LEGITIMATE answer. Classify mode had the same exposure: an earlier batch recorded
+# 50 rows, rc 0, against a THEIRS that did not exist. A gate reading an empty tier as "nothing to adjudicate" is this
 # repo's check-that-cannot-fire, arriving through the argument list.
 #
 # THEIRS IN ALL THREE MODES, BASE IN CLASSIFY AND LIST. `codes` takes no base. An unresolvable BASE

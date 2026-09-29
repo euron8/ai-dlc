@@ -811,7 +811,7 @@ MUT8DIR="$MUTDIR-degenerate"
 rm -rf "$MUT8DIR"; mkdir -p "$MUT8DIR"
 cp "$(dirname "$DRIFT")"/*.sh "$MUT8DIR/" 2>/dev/null
 MUT8="$MUT8DIR/layer-drift.sh"
-sed 's@^  if \[ -n "\$_b" \] && \[ "\$_b" = "\$_t" \]; then@  if [ -n "$BASE" ] \&\& [ "$BASE" = "$THEIRS" ]; then@' "$DRIFT" > "$MUT8"
+sed 's@^  if \[ "\$BASE_SHA" = "\$THEIRS_SHA" \]; then@  if [ "$BASE" = "$THEIRS" ]; then@' "$DRIFT" > "$MUT8"
 if cmp -s "$DRIFT" "$MUT8"; then
   bad "FIXTURE ERROR: the resolved-id mutation matched nothing, so the sha-vs-ref assertion is unproven"
 else
