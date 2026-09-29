@@ -1230,6 +1230,12 @@ rm -rf "$SWAPDIST" "$E14CONS" "$M10DIR"
 # miss would pass E and F and fail only here. H is the healthy control, and it is PRESENCE-shaped:
 # a copy that never ran cannot print a code.
 #
+# I AND J ARE THE NEAR-MISSES THE FIRST SHIPPED `have` REFUSED. A consumer's `hooks:` spelled
+# `steps/./demo.md` gets cat-file 128 and an ls-tree line naming the CANONICAL path; one whose `..`
+# climbs out of the tree gets ls-tree 128 before any object is read. Neither says anything about the
+# store, and both must keep the advisory EXTENSION-HOOK-MISSING row at rc 0. Measured: 15174445's
+# engine refused I at rc 1 on a healthy clone, blocking a pull over a spelling.
+#
 # F IS THE WORLD THE FIRST PROPOSED DISCRIMINATOR COULD NOT SEE. With the contract's parent SUBTREE
 # missing, `rev-parse <ref>:<path>` answers 1 exactly as for an absent path; the precondition below
 # asserts that shape, so F measures the ls-tree discriminator and not a coincidence.
@@ -1262,12 +1268,27 @@ if [ "$p11_ready" = yes ]; then
   # E -- the contract's BLOB is missing, its tree entry present.
   P11E="$P11W/dist-blob"; cp -R "$DIST" "$P11E"
   p11_blob="$(git -C "$P11E" rev-parse -q --verify "${P11T}:${P11REL}" 2>/dev/null)" || p11_blob=""
-  if p11_hide_obj "$P11E" "$p11_blob" \
-     && [ -n "$(git -C "$P11E" ls-tree --full-tree "$P11T" -- "$P11REL" 2>/dev/null)" ] \
-     && ! git -C "$P11E" cat-file -e "${P11T}:${P11REL}" 2>/dev/null; then
+  # Each way the build can fail is NAMED, because one message covering all of them ("not loose, or
+  # the tree no longer names it, or it still reads") cannot say which one a flake was: the copy
+  # incomplete, the sha empty, the object packed, or the object still readable after the move.
+  p11_ewhy=""
+  if [ -z "$p11_blob" ]; then
+    p11_ewhy="rev-parse ${P11T}:${P11REL} answered empty in the copy"
+  elif ! git -C "$P11E" cat-file -e "$p11_blob" 2>/dev/null; then
+    p11_ewhy="blob $p11_blob is not readable in the copy BEFORE hiding, so cp -R did not copy the store whole"
+  elif [ ! -f "$P11E/.git/objects/${p11_blob:0:2}/${p11_blob:2}" ]; then
+    p11_ewhy="blob $p11_blob is readable but not loose ($(git -C "$P11E" count-objects -v 2>/dev/null | awk '$1=="in-pack:"||$1=="packs:"' | tr '\n' ' ')), so something packed the store"
+  elif ! p11_hide_obj "$P11E" "$p11_blob"; then
+    p11_ewhy="blob $p11_blob is loose and could not be moved aside"
+  elif [ -z "$(git -C "$P11E" ls-tree --full-tree "$P11T" -- "$P11REL" 2>/dev/null)" ]; then
+    p11_ewhy="with the blob hidden the tree no longer names $P11REL"
+  elif git -C "$P11E" cat-file -e "${P11T}:${P11REL}" 2>/dev/null; then
+    p11_ewhy="with the blob hidden ${P11T}:${P11REL} still reads, so a second copy of it exists in the store"
+  fi
+  if [ -z "$p11_ewhy" ]; then
     ok "Part 11 world E: the contract's tree entry is present at theirs and its blob cannot be read"
   else
-    bad "FIXTURE ERROR: Part 11 world E could not be built (blob '$p11_blob' not loose, or the tree no longer names it, or it still reads), so arm E would measure a healthy store"
+    bad "FIXTURE ERROR: Part 11 world E could not be built — $p11_ewhy — so arm E would measure a healthy store"
     p11_ready=no
   fi
   # F -- the contract's parent SUBTREE is missing.
@@ -1296,6 +1317,36 @@ if [ "$p11_ready" = yes ]; then
     ok "Part 11 world G: a resolvable theirs whose tree carries no contract — ls-tree exits 0 with no line, and the store is otherwise whole"
   else
     bad "FIXTURE ERROR: Part 11 world G is not a clean absence (theirs '$P11GT', ls-tree rc $p11_grc, line '$p11_gls'), so the near-miss discriminates nothing"
+    p11_ready=no
+  fi
+  # I -- a consumer extension whose `hooks:` is a NON-CANONICAL spelling of a file the tree carries.
+  # ls-tree normalises its pathspec and cat-file does not, so this is the world where "ls-tree exit 0
+  # with a line" does NOT mean "named but unreadable". J -- a `hooks:` whose `..` climbs out of the
+  # tree, where ls-tree refuses the pathspec at 128 without reading any object. Each is its OWN
+  # consumer: in one tree, a refusal on the first entry would exit before the second was read, and
+  # the two mutants below could not be told apart.
+  p11_mkcons() { # <dir> <hooks value> -> 0 when the consumer copy carries that entry, committed
+    rm -rf "$1"; cp -R "$CONS" "$1" || return 1
+    printf -- '---\nkind: check\nhooks: %s\nreason: Part 11 seeded spelling\n---\n\n### 903. [ext:spelled] Consumer entry.\n\nBody.\n' "$2" \
+      > "$1/$P11XENTRY" || return 1
+    git -C "$1" add -A >/dev/null 2>&1 && git -C "$1" commit -qm "seed $2" >/dev/null 2>&1
+  }
+  P11XENTRY=".claude/skills/ai-dlc/extensions/spelled.md"
+  P11IHOOK="steps/./demo.md"; P11JHOOK="team-roles/../../../zz-bl370-outside.md"
+  P11CI="$P11W/cons-dotspell"; P11CJ="$P11W/cons-escape"
+  p11_irc=0; git -C "$DIST" cat-file -e "${P11T}:core/skills/ai-dlc/${P11IHOOK}" 2>/dev/null || p11_irc=$?
+  p11_iln="$(git -C "$DIST" ls-tree --full-tree "$P11T" -- "core/skills/ai-dlc/${P11IHOOK}" 2>/dev/null)"
+  if p11_mkcons "$P11CI" "$P11IHOOK" && [ "$p11_irc" -ne 0 ] && [ "${p11_iln#*$'\t'}" = "core/skills/ai-dlc/steps/demo.md" ]; then
+    ok "Part 11 world I: hooks: $P11IHOOK — cat-file answers $p11_irc for that spelling while ls-tree exits 0 naming the CANONICAL path, the shape the pre-compare have() read as unreadable"
+  else
+    bad "FIXTURE ERROR: Part 11 world I is not the normalisation shape (cat-file rc $p11_irc, ls-tree line '$p11_iln'), so arm I discriminates nothing"
+    p11_ready=no
+  fi
+  p11_jrc=0; git -C "$DIST" ls-tree --full-tree "$P11T" -- "core/${P11JHOOK}" >/dev/null 2>&1 || p11_jrc=$?
+  if p11_mkcons "$P11CJ" "$P11JHOOK" && [ "$p11_jrc" -eq 128 ]; then
+    ok "Part 11 world J: hooks: $P11JHOOK climbs out of the tree, and ls-tree refuses that pathspec at 128"
+  else
+    bad "FIXTURE ERROR: Part 11 world J is not the escape shape (ls-tree rc $p11_jrc, want 128), so arm J discriminates nothing"
     p11_ready=no
   fi
 fi
@@ -1331,16 +1382,23 @@ p11_arm() { # <arm> <ok|no> <detail when no>
   [ "$2" = ok ] || p11_d="$p11_d [$1: $3]"
 }
 p11_state() { printf 'rc=%s rows=%s tmp=%s refused=%s' "$p11_rc" "$(p11_rows)" "$p11_tmp" "$(printf '%s\n' "$p11_err" | grep -c 'layer-drift: REFUSED')"; }
+# The STARTUP refusal's own words. A and B key on it as well as on the ref, because `have`'s refusal
+# at the contract read ALSO carries the bad ref (`<path> at <ref>`): with only the ref as the needle,
+# deleting the THEIRS startup check left A and B ok, refused one layer later by `have`.
+P11START="does not resolve to a commit"
+# One EXTENSION-HOOK-MISSING row for the seeded spelling entry: the advisory absent row, PRESENCE-
+# shaped, so a copy that emitted nothing cannot pass the arms that also demand "no refusal".
+p11_hookmiss() { printf '%s\n' "$p11_out" | awk -F'\t' -v e="$P11XENTRY" '$1=="EXTENSION-HOOK-MISSING" && $2==e {c++} END {exit !(c==1)}'; }
 
 # p11_score <engine> -> sets p11_v, the whole arm vector ("A=ok B=no ..."), and p11_d, the details.
 p11_score() {
   local e="$1" r
   p11_v=""; p11_d=""
   p11_drive "$e" A --adjudicated-codes "$DIST" "$P11BAD"
-  if [ "$p11_rc" -eq 1 ] && p11_refline "$P11BAD" && [ "$(p11_rows)" -eq 0 ]; then r=ok; else r=no; fi
+  if [ "$p11_rc" -eq 1 ] && p11_refline "$P11BAD" && p11_refline "$P11START" && [ "$(p11_rows)" -eq 0 ]; then r=ok; else r=no; fi
   p11_arm A "$r" "$(p11_state)"
   p11_drive "$e" B "$DIST" "$P11B" "$P11BAD" "$CONS"
-  if [ "$p11_rc" -eq 1 ] && p11_refline "$P11BAD" && [ "$(p11_rows)" -eq 0 ]; then r=ok; else r=no; fi
+  if [ "$p11_rc" -eq 1 ] && p11_refline "$P11BAD" && p11_refline "$P11START" && [ "$(p11_rows)" -eq 0 ]; then r=ok; else r=no; fi
   p11_arm B "$r" "$(p11_state)"
   p11_drive "$e" C "$DIST" "$P11BAD" "$P11T" "$CONS"
   if [ "$p11_rc" -eq 1 ] && p11_refline "$P11BAD" && [ "$(p11_rows)" -eq 0 ]; then r=ok; else r=no; fi
@@ -1363,9 +1421,15 @@ p11_score() {
   p11_drive "$e" H --adjudicated-codes "$DIST" "$P11T"
   if [ "$p11_rc" -eq 0 ] && ! p11_anyref && printf '%s\n' "$p11_out" | awk '$0 == "EXTENSION-HOOK-DRIFT" { f = 1 } END { exit !f }'; then r=ok; else r=no; fi
   p11_arm H "$r" "$(p11_state)"
+  p11_drive "$e" I "$DIST" "$P11B" "$P11T" "$P11CI"
+  if [ "$p11_rc" -eq 0 ] && ! p11_anyref && p11_hookmiss; then r=ok; else r=no; fi
+  p11_arm I "$r" "$(p11_state)"
+  p11_drive "$e" J "$DIST" "$P11B" "$P11T" "$P11CJ"
+  if [ "$p11_rc" -eq 0 ] && ! p11_anyref && p11_hookmiss; then r=ok; else r=no; fi
+  p11_arm J "$r" "$(p11_state)"
   p11_v="${p11_v# }"
 }
-P11ALLOK="A=ok B=ok C=ok D=ok D2=ok E=ok F=ok G=ok H=ok"
+P11ALLOK="A=ok B=ok C=ok D=ok D2=ok E=ok F=ok G=ok H=ok I=ok J=ok"
 
 if [ "$p11_ready" = yes ]; then
   # STUB CONTROL: a HEALTHY list run through the stub makes exactly one template-less mktemp call
@@ -1393,6 +1457,8 @@ if [ "$p11_ready" = yes ]; then
       F=ok)  ok "Part 11 F: a contract whose parent subtree is missing exits 1 with a REFUSED line naming the contract, where rev-parse would have read it as absent" ;;
       G=ok)  ok "Part 11 G: a contract genuinely ABSENT at a resolvable theirs still exits 0 with an empty code set and no refusal — the no-tier meaning survives" ;;
       H=ok)  ok "Part 11 H: the healthy dist exits 0 and prints the ADJUDICATED code set (EXTENSION-HOOK-DRIFT among it)" ;;
+      I=ok)  ok "Part 11 I: hooks: $P11IHOOK on a healthy clone exits 0 with no refusal and ONE advisory EXTENSION-HOOK-MISSING row — a spelling the tree does not carry is absent, not unreadable" ;;
+      J=ok)  ok "Part 11 J: hooks: $P11JHOOK, which climbs out of the tree, exits 0 with no refusal and ONE advisory EXTENSION-HOOK-MISSING row — ls-tree's 128 on that pathspec read no object" ;;
       *)     bad "Part 11 ${p11_a%%=*}: arm failed on the engine under test — $(printf '%s' "$p11_d" | grep -o "\[${p11_a%%=*}: [^]]*\]")" ;;
     esac
   done
@@ -1405,10 +1471,12 @@ fi
 # anchor is counted before it is applied: zero is `FIXTURE STALE` (the fix moved and the mutant
 # must be re-anchored on the new site, never dropped), more than one is ambiguous.
 #
-#   M1  ld_resolve_ref never refuses                         -> C D D2, and ONLY those. The two
-#       layers COVER each other on THEIRS: `have`'s ls-tree exits 128 on an unresolvable ref, so the
-#       contract read still refuses A and B at rc 1. D dies on its temp-file conjunct alone -- that
-#       refusal comes after the listing's mktemp. Measured, not assumed, and it is why M13 exists:
+#   M1  ld_resolve_ref never refuses                         -> A B C D D2. On THEIRS the two
+#       layers still both REFUSE: `have`'s ls-tree exits 128 on an unresolvable ref, so the contract
+#       read refuses A and B at rc 1 with the ref in its line. A and B die only because they also
+#       demand the STARTUP refusal's words; keyed on the ref alone they stayed ok under this mutant,
+#       which is the survivor that conjunct was added for. D dies on its temp-file conjunct -- the
+#       `have` refusal comes after the listing's mktemp. M13 still reverts both layers, because
 #       reverting one layer of a layered fix proves only the layer left standing.
 #   M13 both layers removed (M1 + M3)                        -> A B C D D2 E F
 #   M2  ld_resolve_ref waves BASE through (THEIRS only)      -> C D2
@@ -1416,7 +1484,14 @@ fi
 #   M5  the startup refusal exits 2, not 1                   -> A B C D D2
 #   M6  the startup refusal moved BELOW the listing's mktemp -> D D2 (still rc 1 and REFUSED; the
 #                                                               only observable is the temp file)
-#   M7  have() refuses on EVERY memo miss                    -> G   (the near-miss's own mutant)
+#   M10 the THEIRS startup check alone removed               -> A B. The adversary's survivor: with
+#       the ref as A and B's only needle, `have`'s later refusal satisfied both and all arms read ok.
+#   M7  have() refuses on EVERY memo miss                    -> G I J. One property read three
+#       times: each of G, I and J is a memo miss that must stay absent, so this is not entanglement.
+#   M8  have()'s printed-path compare removed                -> I   (ls-tree's line is trusted as
+#       naming the asked path, so a non-canonical spelling refuses a healthy clone)
+#   M9  have()'s `..` exemption removed                      -> J   (a pathspec git refuses before
+#       reading any object refuses as though the store were damaged)
 #
 # NOT HERE: F2 spelled as a `$( )` capture of ls-tree instead of the staged "$LD_T/have-ls" file.
 # In every world of this part the capture and the file answer identically; they differ only when a
@@ -1469,6 +1544,20 @@ elif mid == "m6":
 elif mid == "m7":
     one(HAVE)
     s = HAVE.sub('have() { memo_has_path "$DIST" "$1" "$2" && return 0; echo "layer-drift: REFUSED — $2 at $1 (MUTANT M7: every miss refuses)" >&2; exit 1; }\n', s, count=1)
+elif mid == "m10":
+    T = re.compile(r'^THEIRS_SHA="\$\(ld_resolve_ref theirs "\$THEIRS"\)" \|\| exit 1$', re.M)
+    one(T)
+    s = T.sub('THEIRS_SHA="$(git -C "$DIST" rev-parse -q --verify "${THEIRS}^{commit}" 2>/dev/null)" # MUTANT M10', s, count=1)
+elif mid in ("m8", "m9"):
+    # Anchored INSIDE have()'s body, so the same text anywhere else in the file cannot be edited.
+    one(HAVE)
+    body = HAVE.search(s).group(0)
+    old = {"m8": "[ \"${_e#*$'\\t'}\" = \"$2\" ] || return 1",
+           "m9": "case \"/$2/\" in */../*) return 1 ;; esac"}[mid]
+    n = body.count(old)
+    if n == 0: print("STALE"); sys.exit(0)
+    if n > 1: print("AMBIGUOUS"); sys.exit(0)
+    s = s.replace(body, body.replace(old, ": # MUTANT " + mid.upper(), 1), 1)
 open(dst, "w").write(s)
 print("OK")
 P11PY
@@ -1480,13 +1569,16 @@ if [ "$p11_ready" = yes ]; then
     bad "FIXTURE ERROR: the UNMUTATED copy in $P11MD scores '$p11_v', not all-ok, so the copied directory is not a working harness and no mutant verdict below is attributable —$p11_d"
   else
     ok "Part 11 CONTROL: an unmutated copy in the mutant directory scores every arm ok — the verdicts below are their edits, not the copy"
-    for p11_m in "m1:A=ok B=ok C=no D=no D2=no E=ok F=ok G=ok H=ok:the startup ref refusal removed (an unresolvable THEIRS is still refused by have, whose ls-tree exits 128 there, but only AFTER the listing's mktemp)" \
-                 "m13:A=no B=no C=no D=no D2=no E=no F=no G=ok H=ok:BOTH layers removed, the pre-fix engine's shape" \
-                 "m2:A=ok B=ok C=no D=ok D2=no E=ok F=ok G=ok H=ok:the startup refusal checking THEIRS only" \
-                 "m3:A=ok B=ok C=ok D=ok D2=ok E=no F=no G=ok H=ok:have() reduced to memo_has_path" \
-                 "m5:A=no B=no C=no D=no D2=no E=ok F=ok G=ok H=ok:the startup refusal exiting 2" \
-                 "m6:A=ok B=ok C=ok D=no D2=no E=ok F=ok G=ok H=ok:the startup refusal moved below the listing mktemp" \
-                 "m7:A=ok B=ok C=ok D=ok D2=ok E=ok F=ok G=no H=ok:have() refusing every memo miss"; do
+    for p11_m in "m1:A=no B=no C=no D=no D2=no E=ok F=ok G=ok H=ok I=ok J=ok:the startup ref refusal removed (an unresolvable THEIRS is still refused by have, whose ls-tree exits 128 there, but without the startup words and only AFTER the listing's mktemp)" \
+                 "m13:A=no B=no C=no D=no D2=no E=no F=no G=ok H=ok I=ok J=ok:BOTH layers removed, the pre-fix engine's shape" \
+                 "m2:A=ok B=ok C=no D=ok D2=no E=ok F=ok G=ok H=ok I=ok J=ok:the startup refusal checking THEIRS only" \
+                 "m3:A=ok B=ok C=ok D=ok D2=ok E=no F=no G=ok H=ok I=ok J=ok:have() reduced to memo_has_path" \
+                 "m5:A=no B=no C=no D=no D2=no E=ok F=ok G=ok H=ok I=ok J=ok:the startup refusal exiting 2" \
+                 "m6:A=ok B=ok C=ok D=no D2=no E=ok F=ok G=ok H=ok I=ok J=ok:the startup refusal moved below the listing mktemp" \
+                 "m7:A=ok B=ok C=ok D=ok D2=ok E=ok F=ok G=no H=ok I=no J=no:have() refusing every memo miss" \
+                 "m10:A=no B=no C=ok D=ok D2=ok E=ok F=ok G=ok H=ok I=ok J=ok:the THEIRS startup check alone removed (BASE still checked)" \
+                 "m8:A=ok B=ok C=ok D=ok D2=ok E=ok F=ok G=ok H=ok I=no J=ok:have() trusting ls-tree's line without comparing the path it prints" \
+                 "m9:A=ok B=ok C=ok D=ok D2=ok E=ok F=ok G=ok H=ok I=ok J=no:have() refusing a .. spelling that climbs out of the tree"; do
       p11_id="${p11_m%%:*}"; p11_rest="${p11_m#*:}"; p11_want="${p11_rest%%:*}"; p11_what="${p11_rest#*:}"
       p11_ap="$(p11_mut "$p11_id")"
       p11_f="$P11MD/layer-drift-$p11_id.sh"

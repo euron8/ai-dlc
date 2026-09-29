@@ -904,11 +904,12 @@ prose is itself generated rather than composed.
      commit`** → the ref names nothing in the distribution clone: a typo, a ref it never fetched,
      or a consumer sha passed where a distribution one belongs. THEIRS is checked in all three
      modes and BASE in classify and list mode, before anything is read. Fetch the ref or correct
-     it, and re-run. **Exit 1 with `layer-drift: REFUSED — <path> at <ref> is named by the tree
-     but could not be read`** → an object the scan needs is missing from the distribution clone's
+     it, and re-run. **Exit 1 with `layer-drift: REFUSED — <path> at <ref> could not be
+     read`** → an object the scan needs is missing from the distribution clone's
      object store, and reading on would have treated a present file as an absent one. Repair the
-     clone (re-fetch, or re-clone) and re-run. A contract genuinely ABSENT at theirs, which the
-     tree does not name, is not a refusal. Exit 2 with a `usage:` line, or exit 1 with any other
+     clone (re-fetch, or re-clone) and re-run. A path genuinely ABSENT at theirs, which the
+     tree does not name, is not a refusal, and neither is a `hooks:` or `shadows:` path spelled
+     other than the tree spells it (`steps/./x.md`): that is the advisory absent row. Exit 2 with a `usage:` line, or exit 1 with any other
      reason, is a refusal to start. Any other run exits 0, whatever it found.
 
 3d. **Unregistered core drift — the layer system's blind spot.** `layer-drift.sh`
