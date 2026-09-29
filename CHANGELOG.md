@@ -15,6 +15,50 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.662.0] - 2026-09-29
+
+Check 15's budget-evidence arm now audits the NEWEST gate's Check 14 row, chosen by the heading
+timestamp step 12 requires, where it used to audit the gate log's last row. On a log written
+newest-first that was the oldest gate's row, and it produced a real false PASS. **Discharges
+`PC-S315-CHECK-15-BUDGET-EVIDENCE-VERIFIER-READS-OLDEST-ROW-OF-A-NEWEST-FIRST-GATE-LOG`.**
+
+### Check 15 selects the gate under audit by heading timestamp, never by position
+
+`validate-artifact-budget.sh --check-evidence` took `grep | tail -1`. The reference consumer's
+live s315 log is newest-first, so it audited the carry-over gate's 3052 tok in place of the
+architecture gate's 5076. Rebuilt at the requirements gate, it exited 0 on the carry-over row while
+the requirements row cited no tok. The consumer's committed logs append, and backfilled ones put
+the newest section in the middle, so no positional rule is right on all three shapes — including
+the `head -1` the filing proposed.
+
+- **One row-bearing section: its last row, as before.** With several, each must carry an ISO
+  timestamp in its heading block, the lines above its first table row, with minute precision
+  normalised. The newest must be unique. A missing timestamp or a tie FAILs.
+- **The snapshot's `last_gate_passed` is a cross-check on the canonical live log, never the
+  selection key.** It must match a heading timestamp of the selected section, or its date when the
+  key is a bare date. When the key heads a section that logged no Check 14 row, the FAIL says so;
+  otherwise it names the snapshot as stale. Keying the selection on the snapshot was measured and
+  rejected: a stale snapshot names the previous gate's section, so the artifact under audit would
+  choose its own evidence.
+- **Intended tightening:** a selected row whose tok sits outside its own cell, such as
+  `evidence line below`, now FAILs, which the cell rule has always required.
+- `gate-validation.md` step 12 now says an entry is appended at the end, never inserted at the
+  top, with its `Timestamp:` in the heading block. Check 15 names the selector and its FAIL modes.
+  `SKILL.md` Rule 25(c) and `enforcement-map.yaml` cite the script.
+- `snapshot-evidence-cell` gains 19 worlds and 13 mutants, every one killed; five of them only by
+  a single world, which is why each of those worlds exists.
+
+**Consumer-facing effect**, measured over 61 committed reference-consumer states, base against tip:
+29 byte-identical, 15 differing only by the new `selected section` line, 1 correction (s315, 3052
+to 5076), 8 new refusals where base passed, 8 that failed at base and still fail, 0 regressions. In
+every new refusal base's PASS cited a Check 14 row belonging to a different gate from the one the
+snapshot names. `validate-artifact-budget.sh` is not bootstrapping, so this is active at the first
+gate after the pull that delivers it. A consumer still writing entries at the top of the log
+without a heading-block `Timestamp:` gets a Check 15 FAIL naming step 12.
+
+The fixture read-set map carries the operator's trace of `procsub-staged-refusal`,
+`retired-layer-contract` and `retired-layer-passage`, owed since 0.660.0.
+
 ## [0.661.0] - 2026-09-29
 
 lib.sh's three awk emitters are now `printf` literals instead of heredocs, so a full disk can no

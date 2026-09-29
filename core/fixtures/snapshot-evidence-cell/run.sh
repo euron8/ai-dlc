@@ -53,20 +53,32 @@ fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
-# Seed a gate log whose LAST Check 14 row is the argument. The preceding rows are
-# deliberately older-format `-` cells: gate logs are append-only and hold years of
-# rows written under earlier rules, and indicting them retroactively would make
-# this arm unpassable on any real consumer.
-seed() { # seed <last-check-14-row>
+# Seed a gate log whose NEWEST gate section's Check 14 row is the argument. The
+# older section's rows are deliberately older-format `-` cells: they were written
+# under earlier rules, and indicting them retroactively would make this arm
+# unpassable on any real consumer. The arm picks the section by its heading-block
+# `Timestamp:` (step 12), so both sections carry one, and the snapshot's
+# `last_gate_passed` names the newest -- without both, assertion 1 would fail on
+# the SELECTION refusal and assertion 3 would pass for a reason it does not name.
+SNAPSHOT="$WORK/_bmad-output/pipeline-snapshot.md"
+seed() { # seed <newest-check-14-row>
   { printf '## Gate [planning] 2026-07-01\n\n'
+    printf -- '- Timestamp: 2026-07-01T10:00:00Z. Result: PASSED.\n\n'
     printf '| Check | Verdict | Evidence |\n|---|---|---|\n'
     printf '| [core] 14 — Update pipeline snapshot | done after this entry | — |\n'
     printf '| [core] 15 — Verify snapshot reflects gate | done after Check 14 | — |\n\n'
     printf '## Gate [story] 2026-07-22\n\n'
+    printf -- '- Timestamp: 2026-07-22T01:40:02Z. Result: PASSED.\n\n'
     printf '| Check | Verdict | Evidence |\n|---|---|---|\n'
     printf '%s\n' "$1"
   } > "$GATELOG"
+  { printf '# Pipeline Snapshot\n\n## Pipeline Position\n\n'
+    printf -- '- last_gate_passed: story at 2026-07-22T01:40:02Z\n'
+    printf -- '- branch: ai-dlc/story/s296\n'
+  } > "$SNAPSHOT"
 }
+# The heading line of the section every assertion below means to audit.
+seed_story_line() { grep -n '^## Gate \[story\]' "$GATELOG" | cut -d: -f1; }
 
 run_arm() {
   bash "$VALIDATOR" --root "$WORK" --check-evidence >"$WORK/out.txt" 2>&1
@@ -83,6 +95,14 @@ echo "snapshot-evidence-cell"
 # --- 1. A pasted verdict line with its measurement passes ----------------------
 seed '| [core] 14 — Update pipeline snapshot | PASS (lead) | `PASS  validate-artifact-budget.sh` / `  ok  _bmad-output/pipeline-snapshot.md   5432 tok  (budget   6000)` |'
 expect 0 "a cell carrying the measurement passes"
+# ...and it passes because the NEWEST section was audited, not by accident.
+if grep -q "^selected section    : line $(seed_story_line) " "$WORK/out.txt" \
+   && grep -q 'cites 5432 tok' "$WORK/out.txt"; then
+  ok "  and the audited row is the story section's, citing 5432 tok"
+else
+  bad "  the pass did not come from the story section's row"
+  sed 's/^/        /' "$WORK/out.txt"
+fi
 
 # --- 2. An empty cell fails ----------------------------------------------------
 # The population v0.118.0 measured: 12 consecutive rows reading `-`. An empty cell
@@ -641,6 +661,497 @@ if [ "$anchor_n" = "1" ]; then
 else
   bad "assertion 6's dispatch anchor matches $anchor_n times -- that mutation is no longer sound"
 fi
+
+# =============================================================================
+# SELECTION -- WHICH Check 14 row the arm audits, once the log is chosen.
+#
+# The arm used to take the LAST Check 14 row in the file, on the premise that
+# gate logs append. Measured on the reference consumer: its committed history
+# appends, one sprint's live log PREPENDS (newest section first, so the last row
+# was the oldest gate's 3052 tok instead of the audited 5076), and backfill logs
+# put the newest section in the MIDDLE. Every positional rule is right on one of
+# those and wrong on another, so the arm now picks the section whose heading
+# block carries the greatest ISO `Timestamp:`, refuses a tie or a row-bearing
+# section with none, and cross-checks the snapshot's `last_gate_passed` against
+# the selected section's heading timestamps on the canonical live log only.
+#
+# Every world below has TWO OR MORE row-bearing sections. With one, the arm takes
+# its fast path and never reaches the selector or the cross-check, so a world
+# with one section would score every selector mutant as a survivor for a reason
+# that has nothing to do with the selector.
+#
+# The verdict token is EXIT/CITED/CLASS. Several refusals share exit 1, and a
+# mutant that trades one refusal for another is killed only by the class.
+#
+# Seeds follow the producer's shape (`## Gate Log: Sprint N -- ... -- gate [g]
+# at <step>`, a `- Timestamp:` bullet, a compact `gate_nonce`). The nonce
+# `planning-20260929T051800Z` sits in EVERY heading block and is LATER than
+# every ISO timestamp here: a stamp grammar that ever parsed the compact form
+# would make it every section's maximum and turn every multi-section world into
+# a tie, loudly.
+# =============================================================================
+
+E="$WORK/selection"
+mkdir -p "$E" || exit 2
+E_LIVE="_bmad-output/implementation-artifacts/gate-log.md"
+T1="2026-08-10T09:00:00Z"; T2="2026-08-11T09:00:00Z"; T3="2026-08-12T09:00:00Z"
+
+e_cell() { # e_cell <tok>  -> the evidence cell the real Check 14 pastes
+  printf '`PASS  validate-artifact-budget.sh` `4:  ok  _bmad-output/pipeline-snapshot.md    %s tok  (budget   6000)`' "$1"
+}
+
+e_sec() { # e_sec <step> <timestamp|-> <row14-cell|-> [body-line]
+  local step="$1" ts="$2" cell="$3" body="${4:-}"
+  printf '## Gate Log: Sprint 400 — phase-400-fixture — gate [planning] at %s\n\n' "$step"
+  printf -- '- Gate: planning (%s), variant carry-over, `gate_nonce` planning-20260929T051800Z, HEAD 111cf45ae17c.\n' "$step"
+  [ "$ts" = "-" ] || printf -- '- Timestamp: %s. Result: PASSED.\n' "$ts"
+  printf '\n| Check | Result | Evidence |\n|---|---|---|\n'
+  printf '| [core] 13 — Artifacts committed | PASSED | HEAD 111cf45ae17c |\n'
+  [ "$cell" = "-" ] || printf '| [core] 14 — Snapshot updated | PASSED | %s |\n' "$cell"
+  printf '| [core] 15 — Snapshot verified | PASSED | see Check 14 |\n'
+  [ -z "$body" ] || printf '\n%s\n' "$body"
+  printf '\n'
+}
+
+e_root() { # e_root -> a fresh root holding only the live artifacts directory
+  local r
+  r="$(mktemp -d "$E/wXXXXXX")" || return 1
+  mkdir -p "$r/_bmad-output/implementation-artifacts" || return 1
+  printf '%s\n' "$r"
+}
+
+e_snap() { # e_snap <root> <last_gate_passed bullet, continuation lines included>
+  { printf '# Pipeline Snapshot\n\n## Pipeline Position\n\n'
+    printf '%s\n' "$2"
+    printf -- '- branch: ai-dlc/carry-over/phase-400-fixture\n'
+  } > "$1/_bmad-output/pipeline-snapshot.md"
+}
+
+# Line number of the heading of the section at <step> in <log>.
+e_line() { grep -n "gate \[planning\] at $2\$" "$1" | cut -d: -f1; }
+
+# Every builder writes the WHOLE world; nothing is shared between worlds.
+e_new() { # e_new <var-for-root>  -- sets the named variable; refuses an empty root
+  local r
+  r="$(e_root)" || r=""
+  [ -n "$r" ] && [ -d "$r" ] || { echo "FIXTURE ERROR: could not create a selection world" >&2; exit 2; }
+  printf -v "$1" '%s' "$r"
+}
+
+# W-A  APPENDED, newest section last. The committed-history shape.
+e_new WA
+{ printf '# Gate Log\n\n'
+  e_sec requirements "$T1" "$(e_cell 3100)"
+  e_sec architecture "$T2" "$(e_cell 4200)"
+  e_sec stories      "$T3" "$(e_cell 5076)"
+} > "$WA/$E_LIVE"
+e_snap "$WA" "- last_gate_passed: planning (stories) $T3"
+
+# W-B  PREPENDED, newest section first. The s315 live-log shape.
+e_new WB
+{ printf '# Gate Log\n\n'
+  e_sec stories      "$T3" "$(e_cell 5076)"
+  e_sec architecture "$T2" "$(e_cell 4200)"
+  e_sec requirements "$T1" "$(e_cell 3052)"
+} > "$WB/$E_LIVE"
+e_snap "$WB" "- last_gate_passed: planning (stories) $T3"
+
+# W-C  BACKFILL, newest section in the MIDDLE: its row is neither the first nor
+#      the last Check 14 row in the file, so no positional rule reaches it.
+e_new WC
+{ printf '# Gate Log\n\n'
+  e_sec requirements "$T1" "$(e_cell 4306)"
+  e_sec stories      "$T3" "$(e_cell 5492)"
+  e_sec architecture "$T2" "$(e_cell 3900)"
+} > "$WC/$E_LIVE"
+e_snap "$WC" "- last_gate_passed: planning (stories) $T3"
+
+# W-D  STALE snapshot: the key names the PREVIOUS section, and the current row
+#      cites nothing. Refused as stale; without the cross-check it is refused
+#      only as uncited, which is the class this world separates.
+e_new WD
+{ printf '# Gate Log\n\n'
+  e_sec architecture "$T2" "$(e_cell 4200)"
+  e_sec stories      "$T3" "evidence line below"
+} > "$WD/$E_LIVE"
+e_snap "$WD" "- last_gate_passed: planning (architecture) $T2"
+
+# W-D2 STALE snapshot, current row DOES cite. Without the cross-check this
+#      passes, so the kill is on the exit code and not only on the class.
+e_new WD2
+{ printf '# Gate Log\n\n'
+  e_sec architecture "$T2" "$(e_cell 4200)"
+  e_sec stories      "$T3" "$(e_cell 5076)"
+} > "$WD2/$E_LIVE"
+e_snap "$WD2" "- last_gate_passed: planning (architecture) $T2"
+
+# W-E  THE KEY QUOTED IN A LATER SECTION'S BODY (the 11bd10083 shape). The
+#      stale key $T2 is the architecture heading's; the newer stories section
+#      quotes it below its table. Heading-block search selects stories and
+#      refuses the stale key; a body search finds $T2 in stories and passes.
+e_new WE
+{ printf '# Gate Log\n\n'
+  e_sec architecture "$T2" "$(e_cell 4200)"
+  e_sec stories      "$T3" "$(e_cell 5076)" "- Carried the architecture gate's verdict of $T2 forward."
+} > "$WE/$E_LIVE"
+e_snap "$WE" "- last_gate_passed: planning (architecture) $T2"
+
+# W-E2 A BODY TIMESTAMP LATER THAN EVERY HEADING, in the OLDER section (a
+#      backfill annotation). A body search makes the older section newest.
+e_new WE2
+{ printf '# Gate Log\n\n'
+  e_sec requirements "$T1" "$(e_cell 3100)" "- Re-checked at 2026-08-13T07:00:00Z after the architecture gate."
+  e_sec architecture "$T2" "$(e_cell 5076)"
+} > "$WE2/$E_LIVE"
+e_snap "$WE2" "- last_gate_passed: planning (architecture) $T2"
+
+# W-F  The key sits ONLY on a continuation line, ahead of a `(prior)` stamp, and
+#      it is STALE. Reading the bullet line alone finds no key, skips the
+#      cross-check and passes.
+e_new WF
+{ printf '# Gate Log\n\n'
+  e_sec architecture "$T2" "$(e_cell 4200)"
+  e_sec stories      "$T3" "$(e_cell 5076)"
+} > "$WF/$E_LIVE"
+e_snap "$WF" "- last_gate_passed: planning (architecture)
+  at $T2 (prior) planning (requirements) $T1"
+
+# W-F2 The same continuation shape with the FRESH key: passes.
+e_new WF2
+{ printf '# Gate Log\n\n'
+  e_sec architecture "$T2" "$(e_cell 4200)"
+  e_sec stories      "$T3" "$(e_cell 5076)"
+} > "$WF2/$E_LIVE"
+e_snap "$WF2" "- last_gate_passed: planning (stories)
+  at $T3 (prior) planning (architecture) $T2"
+
+# W-F3 The only stamp follows `(prior)`: it names the previous gate and is not a
+#      key at all. Cut there, the key is absent and the newest-timestamp rule
+#      stands; uncut, it would read as stale.
+e_new WF3
+{ printf '# Gate Log\n\n'
+  e_sec architecture "$T2" "$(e_cell 4200)"
+  e_sec stories      "$T3" "$(e_cell 5076)"
+} > "$WF3/$E_LIVE"
+e_snap "$WF3" "- last_gate_passed: planning (stories) (prior) planning (architecture) $T2"
+
+# W-G  MINUTE-precision headings against a SECONDS key.
+e_new WG
+{ printf '# Gate Log\n\n'
+  e_sec architecture "2026-08-11T09:00Z" "$(e_cell 4200)"
+  e_sec stories      "2026-08-12T09:00Z" "$(e_cell 5076)"
+} > "$WG/$E_LIVE"
+e_snap "$WG" "- last_gate_passed: planning (stories) 2026-08-12T09:00:00Z"
+
+# W-H  NO snapshot key (the older `sprint-review,` form), prepended log: the
+#      newest-timestamp rule alone selects.
+e_new WH
+{ printf '# Gate Log\n\n'
+  e_sec stories      "$T3" "$(e_cell 5076)"
+  e_sec architecture "$T2" "$(e_cell 4200)"
+} > "$WH/$E_LIVE"
+e_snap "$WH" "- last_gate_passed: sprint-review,"
+
+# W-I  Two row-bearing sections TIE on the newest heading timestamp.
+e_new WI
+{ printf '# Gate Log\n\n'
+  e_sec architecture "$T2" "$(e_cell 4200)"
+  e_sec stories      "$T2" "$(e_cell 5076)"
+} > "$WI/$E_LIVE"
+e_snap "$WI" "- last_gate_passed: planning (stories) $T2"
+
+# W-J  A row-bearing section with NO heading timestamp -- only the compact
+#      nonce, which is not an ISO stamp. It is last in the file, so skipping it
+#      selects the other section and passes on the wrong row.
+e_new WJ
+{ printf '# Gate Log\n\n'
+  e_sec architecture "$T2" "$(e_cell 4200)"
+  e_sec stories      -     "$(e_cell 5076)"
+} > "$WJ/$E_LIVE"
+e_snap "$WJ" "- last_gate_passed: planning (architecture) $T2"
+
+# W-K  ARCHIVED-ONLY log beside a live snapshot whose key matches no section.
+#      The snapshot describes a different gate than this log's, so there is
+#      nothing to cross-check and the tree must keep passing.
+e_new WK
+mkdir -p "$WK/_bmad-output/planning-artifacts/s300/archive/cycle-1" || exit 2
+{ printf '# Gate Log\n\n'
+  e_sec architecture "$T2" "$(e_cell 4200)"
+  e_sec stories      "$T3" "$(e_cell 5076)"
+} > "$WK/_bmad-output/planning-artifacts/s300/archive/cycle-1/gate-log.md"
+rm -f "$WK/$E_LIVE"
+e_snap "$WK" "- last_gate_passed: implementation (gate-3) 2026-08-20T09:00:00Z"
+
+# W-L  The snapshot names a LATER gate whose section logged NO Check 14 row
+#      (the reference consumer's implementation gate-3 shape). The refusal must
+#      name that section, not call the snapshot stale.
+e_new WL
+{ printf '# Gate Log\n\n'
+  e_sec architecture "$T1" "$(e_cell 4200)"
+  e_sec stories      "$T2" "$(e_cell 5076)"
+  e_sec gate-3       "$T3" -
+} > "$WL/$E_LIVE"
+e_snap "$WL" "- last_gate_passed: implementation (gate-3) $T3"
+
+# W-M  A DATE-ONLY key hitting TWO row-less sections. The message names the
+#      NEWEST of them, which is deliberately NOT the last one in the file.
+e_new WM
+{ printf '# Gate Log\n\n'
+  e_sec architecture "2026-08-10T09:00:00Z" "$(e_cell 4200)"
+  e_sec stories      "2026-08-14T09:00:00Z" "$(e_cell 5076)"
+  e_sec gate-3b      "2026-08-13T15:00:00Z" -
+  e_sec gate-3a      "2026-08-13T08:00:00Z" -
+} > "$WM/$E_LIVE"
+e_snap "$WM" "- last_gate_passed: implementation (gate-3) 2026-08-13"
+
+# W-N  A DATE-ONLY key whose date is NOT the selected section's: refused.
+e_new WN
+{ printf '# Gate Log\n\n'
+  e_sec architecture "2026-08-13T09:00:00Z" "$(e_cell 4200)"
+  e_sec stories      "2026-08-14T09:00:00Z" "$(e_cell 5076)"
+} > "$WN/$E_LIVE"
+e_snap "$WN" "- last_gate_passed: planning (architecture) 2026-08-13"
+
+# W-O  The same log with a DATE-ONLY key that IS the selected section's date.
+e_new WO
+{ printf '# Gate Log\n\n'
+  e_sec architecture "2026-08-13T09:00:00Z" "$(e_cell 4200)"
+  e_sec stories      "2026-08-14T09:00:00Z" "$(e_cell 5076)"
+} > "$WO/$E_LIVE"
+e_snap "$WO" "- last_gate_passed: planning (stories) 2026-08-14"
+
+E_NAMES="W-A W-B W-C W-D W-D2 W-E W-E2 W-F W-F2 W-F3 W-G W-H W-I W-J W-K W-L W-M W-N W-O"
+E_ROOTS="$WA $WB $WC $WD $WD2 $WE $WE2 $WF $WF2 $WF3 $WG $WH $WI $WJ $WK $WL $WM $WN $WO"
+E_WANT="PASS/5076/- PASS/5076/- PASS/5492/- FAIL1/-/STALE FAIL1/-/STALE FAIL1/-/STALE PASS/5076/- FAIL1/-/STALE PASS/5076/- PASS/5076/- PASS/5076/- PASS/5076/- FAIL1/-/TIE FAIL1/-/NOTS PASS/5076/- FAIL1/-/NOROW@$(e_line "$WL/$E_LIVE" gate-3) FAIL1/-/NOROW@$(e_line "$WM/$E_LIVE" gate-3b) FAIL1/-/STALE PASS/5076/-"
+
+# EXIT/CITED/CLASS. The class is read from the refusal text, most specific first.
+e_verdict() { # e_verdict <script> <root>
+  local s="$1" r="$2" st n c
+  bash "$s" --root "$r" --check-evidence >"$E/out.txt" 2>&1
+  st=$?
+  n="$(grep -oE 'cites [0-9]+ tok' "$E/out.txt" | tail -1)" || n=""
+  n="${n#cites }"; n="${n% tok}"
+  [ -n "$n" ] || n="-"
+  # NOROW carries the line of the section it names, so a mutant naming the wrong
+  # row-less section is a different token.
+  if   grep -q 'logged no Check 14 row' "$E/out.txt"; then
+    c="$(grep -oE 'section heads line [0-9]+' "$E/out.txt" | head -1)" || c=""
+    c="NOROW@${c##* }"
+  elif grep -q 'The snapshot is stale or names a different gate' "$E/out.txt"; then c=STALE
+  elif grep -q 'carries no ISO timestamp in its heading block' "$E/out.txt";   then c=NOTS
+  elif grep -q 'tie on the newest heading timestamp' "$E/out.txt";      then c=TIE
+  elif grep -q 'cites no budget measurement' "$E/out.txt";              then c=NOCITE
+  elif grep -q 'past the [0-9]* ceiling' "$E/out.txt";                  then c=OVER
+  else c="-"; fi
+  if [ "$st" = "0" ]; then printf 'PASS/%s/%s\n' "$n" "$c"; else printf 'FAIL%s/%s/%s\n' "$st" "$n" "$c"; fi
+}
+
+e_vector() { # e_vector <script>
+  local r out=""
+  for r in $E_ROOTS; do out="$out $(e_verdict "$1" "$r")"; done
+  printf '%s\n' "${out# }"
+}
+
+echo ""
+echo "  -- selection --"
+
+# --- 13. THE SHAPES THE WORLDS DEPEND ON, ASSERTED BEFORE ANY VERDICT ----------
+e_rowlines() { grep -nE '^\|[[:space:]]*(\[core\][[:space:]]*)?14[[:space:]]*(\||—|-)' "$1" | cut -d: -f1; }
+wc_rows="$(e_rowlines "$WC/$E_LIVE" | tr '\n' ' ')"
+wc_first="$(printf '%s\n' $wc_rows | head -1)"
+wc_last="$(printf '%s\n' $wc_rows | tail -1)"
+wc_right="$(grep -n ' 5492 tok ' "$WC/$E_LIVE" | cut -d: -f1)"
+if [ -n "$wc_right" ] && [ -n "$wc_first" ] && [ "$wc_first" -lt "$wc_right" ] && [ "$wc_right" -lt "$wc_last" ]; then
+  ok "W-C the newest section's row (line $wc_right) is neither the first ($wc_first) nor the last ($wc_last) Check 14 row"
+else
+  bad "W-C row placement not established -- rows [$wc_rows], newest row at '$wc_right'"
+fi
+e_nsecs=0
+for r in $E_ROOTS; do
+  l="$r/$E_LIVE"; [ -f "$l" ] || l="$(find "$r/_bmad-output" -type f -name gate-log.md | head -1)"
+  n="$(LC_ALL=C awk '/^## /{s=NR} /^\| \[core\] 14 /{h[s]=1} END{c=0; for(k in h)c++; print c}' "$l")"
+  [ "$n" -ge 2 ] && e_nsecs=$((e_nsecs+1))
+done
+if [ "$e_nsecs" -eq 19 ]; then
+  ok "all 19 selection worlds carry two or more row-bearing sections (none takes the fast path)"
+else
+  bad "only $e_nsecs of 19 selection worlds carry two or more row-bearing sections"
+fi
+
+# --- 14. THE SHIPPED PROGRAM'S VERDICT IN EVERY WORLD -------------------------
+E_SHIPPED="$(e_vector "$VALIDATOR")"
+i=0
+for w in $E_NAMES; do
+  i=$((i+1))
+  got="$(printf '%s\n' "$E_SHIPPED" | cut -d' ' -f"$i")"
+  want="$(printf '%s\n' "$E_WANT" | cut -d' ' -f"$i")"
+  if [ "$got" = "$want" ]; then ok "$w -> $got"; else bad "$w -> got $got, expected $want"; fi
+done
+
+# The refusal and the selection NAME the right section, not merely some section.
+# Captured first and fed by a here-string: `grep -q` fed from a pipe under
+# pipefail answers with the writer's EPIPE and reads a present string as absent.
+e_has() { # e_has <label> <root> <fixed-string>
+  local msg
+  msg="$(bash "$VALIDATOR" --root "$2" --check-evidence 2>&1)"
+  if grep -qF -- "$3" <<<"$msg"; then ok "$1"; else bad "$1 -- no '$3' in:"; printf '%s\n' "$msg" | sed 's/^/        /'; fi
+}
+e_has "W-A selects the stories section by its heading timestamp" "$WA" \
+  "selected section    : line $(e_line "$WA/$E_LIVE" stories) (newest heading timestamp ${T3%Z}; snapshot key ${T3%Z})"
+e_has "W-C selects the middle section" "$WC" \
+  "selected section    : line $(e_line "$WC/$E_LIVE" stories) (newest heading timestamp ${T3%Z}"
+e_has "W-E refusal names the heading-timestamp section, not the body that quotes the key" "$WE" \
+  "(line $(e_line "$WE/$E_LIVE" stories), ${T3%Z})"
+e_has "W-H reports the snapshot key as absent" "$WH" "snapshot key absent)"
+e_has "W-K reports the cross-check as not applied off the canonical log" "$WK" \
+  "snapshot key not checked: not the canonical live gate log)"
+e_has "W-L names the gate-3 section that logged no Check 14 row" "$WL" \
+  "the gate whose section heads line $(e_line "$WL/$E_LIVE" gate-3):"
+e_has "W-M names the NEWEST row-less section carrying the date, not the last" "$WM" \
+  "the gate whose section heads line $(e_line "$WM/$E_LIVE" gate-3b):"
+
+# --- 15. SELECTOR MUTANTS -------------------------------------------------------
+# Each is a COPY of the validator with ONE predicate changed, built by an awk that
+# counts its own anchor hits. A hit count other than the one specified, a copy
+# byte-identical to the subject, or a copy that does not parse is reported as DID
+# NOT APPLY and scores nothing. Anchors reach awk through ENVIRON, never `-v`,
+# because several carry a literal `\t` that `-v` would turn into a tab.
+e_applied=0
+e_mut() { # e_mut <name> <line|sub> <anchor> <replacement> <want-hits>
+  local name="$1" mode="$2" out="$E/$1.sh" hits
+  hits="$(A="$3" R="$4" M="$mode" LC_ALL=C awk -v out="$out" '
+    BEGIN { a = ENVIRON["A"]; r = ENVIRON["R"]; m = ENVIRON["M"]; h = 0 }
+    {
+      if (m == "line" && $0 == a) { print r > out; h++; next }
+      if (m == "sub" && (i = index($0, a)) > 0) { print substr($0, 1, i - 1) r substr($0, i + length(a)) > out; h++; next }
+      print > out
+    }
+    END { close(out); print h }' "$VALIDATOR")" || hits="awk-failed"
+  if [ "$5" = "0" ]; then
+    if [ "$hits" = "0" ] && cmp -s "$VALIDATOR" "$out"; then
+      ok "MUTANT $name: DID NOT APPLY, and that is what this probe asserts"
+    else
+      bad "MUTANT $name: the no-op probe hit $hits line(s) -- the hit counter cannot be trusted"
+    fi
+    return 1
+  fi
+  if [ "$hits" != "$5" ]; then
+    bad "MUTANT $name: DID NOT APPLY -- anchor hit $hits line(s), want $5"; return 1
+  fi
+  if cmp -s "$VALIDATOR" "$out"; then
+    bad "MUTANT $name: DID NOT APPLY -- copy is byte-identical to the subject"; return 1
+  fi
+  if ! bash -n "$out" 2>"$E/$name.syn"; then
+    bad "MUTANT $name: does not parse -- a dead mutant is not a killed one"
+    sed 's/^/        /' "$E/$name.syn"; return 1
+  fi
+  e_applied=$((e_applied+1))
+  ok "MUTANT $name: applied at $hits site(s), parses"
+  return 0
+}
+
+e_mut enoop line 'ZZZ-THIS-LINE-CANNOT-EXIST-IN-THE-SUBJECT' 'x' 0 || true
+cat "$VALIDATOR" > "$E/ectl.sh" || exit 2
+# Positional selection, both directions: the fast path taken for ANY row count,
+# auditing the first (head) or the last (tail) row-bearing section.
+e_mut pfirst line \
+  '      if (n == 1) { printf "ONE\t%s\t%s\n", order[1], last[order[1]]; exit }' \
+  '      if (n >= 1) { printf "ONE\t%s\t%s\n", order[1], last[order[1]]; exit }' 1 || true
+e_mut plast line \
+  '      if (n == 1) { printf "ONE\t%s\t%s\n", order[1], last[order[1]]; exit }' \
+  '      if (n >= 1) { printf "ONE\t%s\t%s\n", order[n], last[order[n]]; exit }' 1 || true
+# The snapshot cross-check dropped: every key is accepted.
+e_mut noxcheck line '      SNAP_OK=0' '      SNAP_OK=1' 1 || true
+# Timestamps read from the whole section, body included.
+e_mut body line \
+  '    inb             { ts[sec] = ts[sec] stamps($0) }' \
+  '    1               { ts[sec] = ts[sec] stamps($0) }' 1 || true
+# The key read from the bullet line alone: stop at the first line after it.
+e_mut oneline line \
+  '      on && (/^[[:space:]]*$/ || /^[^[:space:]]/ || /^[[:space:]]*[-*][[:space:]]/) { exit }' \
+  '      on { exit }' 1 || true
+# No precision normalisation, at EVERY site that normalises (heading stamps,
+# snapshot key, key search) -- reverting one leaves the others to cover it.
+e_mut noprec sub 't = t ":00"' 't = t' 3 || true
+# A tie accepted: the first of the tied sections wins.
+e_mut tie line '        else if (m == best) tie = s' '        else if (m == best) tie = ""' 1 || true
+# A row-bearing section with no heading timestamp skipped instead of refused.
+e_mut skipnots line \
+  '        if (m == "") { printf "NOTS\t%s\n", s; exit }' \
+  '        if (m == "") continue' 1 || true
+# The cross-check applied to ANY log, canonical or not.
+e_mut xcanon line '    if [ "$GATE_LOG" != "$LIVE_DIR/gate-log.md" ]; then' '    if false; then' 1 || true
+# The no-Check-14-row message collapsed into the stale one.
+e_mut nohit line '        if [ -n "$HIT_SEC" ] && [ "$HIT_ROW" = "0" ]; then' '        if false; then' 1 || true
+# A date-only key treated as absent.
+e_mut dateabsent line '          print t' '          if (length(t) > 10) print t' 1 || true
+# The `(prior)` cut dropped: the previous gate's stamp is read as the key.
+e_mut noprior sub 'if (i) buf = substr(buf, 1, i - 1)' 'if (0) buf = substr(buf, 1, i - 1)' 1 || true
+# The key's section taken as the LAST in the file carrying it, not the newest.
+e_mut lasthit sub 'if (hit && t >= best) { best = t; bsec = sec }' 'if (hit) { best = t; bsec = sec }' 1 || true
+
+if [ "$e_applied" -eq 13 ]; then
+  ok "all thirteen selector mutants applied"
+else
+  bad "only $e_applied of 13 selector mutants applied -- the kill table below is incomplete"
+fi
+
+# --- 16. THE SELECTOR KILL TABLE -----------------------------------------------
+# A mutant is KILLED by a world when its token there differs from the shipped
+# program's. Each mutant must die in the world named for it; every killing world
+# is printed, so a kill that has moved to a different world is visible.
+printf '  %-10s %s\n' "worlds" "$E_NAMES"
+printf '  %-10s %s\n' "SHIPPED" "$E_SHIPPED"
+e_diff() { # e_diff <vec-a> <vec-b> -> names of the worlds where they differ
+  local i=0 w out=""
+  for w in $E_NAMES; do
+    i=$((i+1))
+    [ "$(printf '%s\n' "$1" | cut -d' ' -f"$i")" = "$(printf '%s\n' "$2" | cut -d' ' -f"$i")" ] || out="$out $w"
+  done
+  printf '%s\n' "${out# }"
+}
+e_score() { # e_score <name> <world-that-must-kill>...
+  local name="$1" vec diff w; shift
+  [ -f "$E/$name.sh" ] || { bad "KILL $name: no mutant on disk to score"; return; }
+  vec="$(e_vector "$E/$name.sh")"
+  printf '  %-10s %s\n' "$name" "$vec"
+  diff="$(e_diff "$E_SHIPPED" "$vec")"
+  if [ "$name" = "ectl" ]; then
+    if [ -n "$diff" ]; then
+      bad "CONTROL ectl: an UNMUTATED copy disagreed at [$diff] -- the harness is what moved"
+    else
+      case "$vec" in
+        *PASS/5492/-*) ok "CONTROL ectl: unmutated copy agrees, and DID run (a PASS/5492 row is present)" ;;
+        *) bad "CONTROL ectl: agrees but emitted no PASS/5492 row -- two inert runs compare equal" ;;
+      esac
+    fi
+    return
+  fi
+  for w in "$@"; do
+    case " $diff " in
+      *" $w "*) ok "KILL $name: killed by $w (all killing worlds: [$diff])" ;;
+      *) if [ -n "$diff" ]; then
+           bad "KILL $name: $w does not kill it -- killed only at [$diff]"
+         else
+           bad "KILL $name: SURVIVED every world -- no seed separates it from the shipped selector"
+         fi ;;
+    esac
+  done
+}
+e_score ectl
+e_score pfirst     W-A W-C
+e_score plast      W-B W-C
+e_score noxcheck   W-D W-D2
+e_score body       W-E
+e_score oneline    W-F
+e_score noprec     W-G
+e_score tie        W-I
+e_score skipnots   W-J
+e_score xcanon     W-K
+e_score nohit      W-L W-M
+e_score dateabsent W-N
+e_score noprior    W-F3
+e_score lasthit    W-M
 
 echo ""
 if [ "$fails" -eq 0 ]; then
