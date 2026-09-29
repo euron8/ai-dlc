@@ -4395,122 +4395,6 @@ The `BL-348` half was built and scored at batch 163: on the 10 remaining sites, 
 
 verify: manual
 
-## BL-356 — three detectors still refuse with exit 0, so `apply.sh` and `emit-report.sh` read the refusal as a clean section
-
-**DEFECT.** Found by the batch 164 tip and fix hands. It discharges no consumer candidate. Split from
-`BL-354`, which closed on reading each detector's exit; these three never set one.
-
-- `core/skills/ai-dlc-update/reconcile/retired-layer-passage.sh:83-85`: when `rulebook_globs`
-  cannot read the rulebook list from `setup-sites.md`, it prints "refusing to report clean" to
-  stderr and exits 0. `apply.sh` now reads that exit and sees 0, so no refusal row is emitted.
-- `core/skills/ai-dlc-update/reconcile/retired-layer-contract.sh`, `rulebook_globs`: it reads
-  `setup-sites.md` with `2>/dev/null` and its status is never read. It feeds
-  `for glob in $(rulebook_globs)` in `collect` and `rulebook_set`. With `setup-sites.md` at mode
-  000 the script exits 0 with 0 stdout bytes, and `emit-report.sh`'s `a0_render` shows rc 0 with
-  empty rows as "none". The empty-`BASE_SET` branch's stderr is the only trace.
-- `core/skills/ai-dlc-update/reconcile/retired-tokens.sh`, `rt_blob`: it compares the exact
-  `ls-tree --name-only` line against the input path. Under the default `core.quotePath` a non-ASCII
-  path is C-quoted, so the comparison fails and the row is lost silently: base printed a row, 0.654.0
-  prints none. Not reachable today, since 0 quoted or non-ASCII paths were found in the distribution
-  or the reference consumer. That zero was taken without a same-invocation positive control.
-
-**Remedy:** refuse with exit 2 where each script already refuses (`retired-layer-passage.sh`'s
-staging failure and `retired-layer-contract.sh`'s `collect` both use it), and read `ls-tree -z` or
-compare against the quoted form in `rt_blob`.
-
-**Amended at batch 169 (v0.660.0): bullets 1 and 2 are fixed, and bullet 3 is NOT.** The entry
-stays live, because bullet 3 is blocked, not narrowed.
-
-- **Bullet 1, fixed.** `retired-layer-passage.sh` exits 2 when it cannot read the rulebook list.
-- **Bullet 2, fixed.** `retired-layer-contract.sh` reads the glob list once in the main shell, and
-  exits 2 when the read fails OR yields no glob. The empty-`BASE_SET` exit is unchanged, because a
-  rulebook carrying no contract shape is legitimate.
-- **Bullet 3 is a PRODUCER defect, and its premise was wrong.** `preclassify.sh:594` takes its
-  diff from lib.sh's `memo_diff_name_status`, a `git diff --name-status` under the default
-  `core.quotePath`. That C-quotes a non-ASCII path, so the CLASSIFY row carries
-  `"core/scripts/caf\303\251.sh"` in BOTH path columns. `retired-tokens.sh:198` (tip `:203`) then
-  finds no such consumer file and skips the row before `rt_blob` ever runs. That happens on base
-  and tip alike. "Base printed a row" held only for a synthetic `--bucket-rows` seed carrying the
-  raw path, which no producer writes. Measured end to end with no `--bucket-rows` at tip: rc 0, the
-  ASCII row present and the `café.sh` row absent; with `core.quotepath=false` injected through
-  `GIT_CONFIG_PARAMETERS`, both rows present. The `rt_blob` change in this release
-  (`-c core.quotePath=false` on its `ls-tree`) is hardening only. The fix belongs in
-  `memo_diff_name_status` or `preclassify.sh`, and both are bootstrapping.
-
-**The receipt keys on all three bullets, so it cannot exit 0 until the producer is fixed.** Exit
-1 means the entry is live, and the stderr tag names why: `BL356-BULLET-1-OR-2-REGRESSED`, or
-`BL356-BULLET-3-PRODUCER-REMAINS` when bullets 1 and 2 hold and bullet 3 still loses its row.
-**At this release it exits 1 with the second tag, which reads STILL-LIVE.**
-
-The receipt works on a `mktemp` copy of `reconcile/`, never the tree's own files. It drives both
-detectors on a seeded world twice:
-
-- with the copy's `setup-sites.md` at mode 000;
-- with its `rulebook:` list emptied.
-
-Each run must exit non-zero with 0 stdout bytes, and stderr must name `setup-sites`. The contract
-detector must also name the copy's own path, which proves the copy is the tree that was read. It
-then drives `retired-tokens.sh` with no `--bucket-rows` on a world with `plain.sh` and `café.sh`,
-and requires both rows.
-
-Exit 9 comes from the preconditions:
-
-- running as root, which reads mode 000;
-- a mode-000 file that is still readable;
-- each detector's unforced run producing no row;
-- the ASCII control row absent.
-
-Scored through `backlog-reverify.sh`'s own `eval` shape:
-
-| variant | exit | tag |
-|---|---|---|
-| tip (`afe58b5b`) | 1 | BULLET-3-PRODUCER-REMAINS |
-| base `322ef42c` | 1 | BULLET-1-OR-2-REGRESSED |
-| BL-360 fix alone (`2f598a86`) | 1 | BULLET-1-OR-2-REGRESSED |
-| BL-356 fix alone (applied to base) | 1 | BULLET-3-PRODUCER-REMAINS |
-| the detectors stubbed to `exit 0` | 9 | |
-| the detectors stubbed to a refusal (`exit 2`) | 9 | |
-| `retired-layer-passage.sh` refusal back to `exit 0` | 1 | BULLET-1-OR-2-REGRESSED |
-| `retired-layer-contract.sh`'s empty-list refusal removed | 1 | BULLET-1-OR-2-REGRESSED |
-| `retired-layer-contract.sh`'s read status dropped (`\|\| true`) | 1 | BULLET-3-PRODUCER-REMAINS |
-| second spelling (a `[ -r "$SITES" ]` refusal before the read) | 1 | BULLET-3-PRODUCER-REMAINS |
-| bullet 3 fixed at the producer (`-c core.quotePath=false` in `memo_diff_name_status`) | 0 | |
-
-The status-drop mutant survives, and that is correct. At mode 000 the empty-list guard refuses in
-its place, and the refusal is the same exit 2. The last row shows exit 0 is reachable, and that
-the producer, not `rt_blob`, is where bullet 3 closes.
-
-**Amended at batch 170 (v0.661.0): bullet 3 is fixed at the producer, in two places.**
-`memo_diff_name_status` in lib.sh now passes `-c core.quotePath=false` on both of its `git diff`
-calls: the memo-miss fallback (`:1128`) and the memoised write (`:1130`). A non-ASCII path now
-reaches preclassify's CLASSIFY rows raw, so `retired-tokens.sh` finds the consumer file and
-prints the row. The contract adversary found that this change alone is not enough. On a
-pre-relocation consumer holding an edited `scripts/café.sh`, base shows a visible but wrong quoted
-CLASSIFY row, while the name-status fix alone replaces it with an inert `PRE-RELOCATION-NOOP` and
-loses the `RELOCATE-MOVE+consumer-edited` disclosure. The cause is preclassify's relocation
-listing, `ls-tree --name-only "$THEIRS" core/scripts/` (base `:538`, tip `:539`), which still
-quoted the name. It now carries the same flag, and the disclosure is back. The tip adversary then
-found a third site. `machinery_paths()` in preclassify built its set from two `ls-files
---with-tree` calls under the default quoting, and `self-update-gate.sh` arm C and
-`unregistered-drift.sh`'s `carried_bucket` join the now-raw rows against that set with `grep -xF`.
-With only the first two edits, a consumer-edited `core/skills/ai-dlc-update/café.md` lost its
-`SELF-UPDATE-CARRY`, while the ASCII control beside it kept its carry. Base carried it only because
-both sides were quoted alike. Both calls now carry the flag too. All three edits together are the
-producer fix this bullet named. `memo_ls_tree` in the same file has the same quoting and was
-deliberately left alone, because its readers each compare its lines against their own spelling of
-a path. It is the first row of the census of remaining listing sites, which is filed at the batch
-close.
-
-The receipt above was re-scored unchanged, run by `bash -c` from the root of a `git archive`
-extraction of each commit's `core/`:
-
-| tree | exit | tag |
-|---|---|---|
-| base `b0c310a3` (0 `core.quotePath=false diff` lines in lib.sh) | 1 | BULLET-3-PRODUCER-REMAINS |
-| the 0.661.0 tree (2 such lines) | 0 | |
-
-verify: sh R=core/skills/ai-dlc-update/reconcile; for f in retired-layer-passage retired-layer-contract lib; do [ -f "$R/$f.sh" ] || exit 9; done; [ -f "$R/setup-sites.md" ] || exit 9; [ "$(id -u)" -ne 0 ] || exit 9; w="$(mktemp -d)" || exit 9; cp -R "$R" "$w/r" || exit 9; g() { local d="$1"; shift; git -C "$d" -c user.email=r@r -c user.name=r -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }; D="$w/d"; mkdir -p "$D/core/skills/ai-dlc/steps" || exit 9; g "$D" init -q || exit 9; printf -- '- Label: /cmd\nuse {tok}\n1. The lead must always record the gate verdict in the story file before merge.\n' > "$D/core/skills/ai-dlc/steps/a.md"; printf 'small\n' > "$D/core/skills/ai-dlc/steps/b.md"; { g "$D" add -A && g "$D" commit -qm b; } >/dev/null 2>&1 || exit 9; B="$(git -C "$D" rev-parse HEAD)"; printf 'use {tok}\n' > "$D/core/skills/ai-dlc/steps/a.md"; { g "$D" rm -q core/skills/ai-dlc/steps/b.md && g "$D" add -A && g "$D" commit -qm t; } >/dev/null 2>&1 || exit 9; T="$(git -C "$D" rev-parse HEAD)"; C="$w/c"; mkdir -p "$C/.claude/skills/ai-dlc/extensions" || exit 9; printf -- 'see steps/b.md\n1. The lead must always record the gate verdict in the story file before merge.\n' > "$C/.claude/skills/ai-dlc/extensions/e.md"; run() { bash "$w/r/$1.sh" "$D" "$B" "$T" "$C"; }; run retired-layer-passage > "$w/ph" 2>/dev/null || exit 9; [ "$(grep -c '^RETIRED-LAYER-PASSAGE' "$w/ph")" -ge 1 ] || exit 9; run retired-layer-contract > "$w/ch" 2>/dev/null || exit 9; [ "$(grep -c '^RETIRED-LAYER-CONTRACT' "$w/ch")" -ge 1 ] || exit 9; S="$w/r/setup-sites.md"; cp "$S" "$w/sites" || exit 9; chmod 000 "$S" || exit 9; cat "$S" >/dev/null 2>&1 && { chmod 644 "$S"; exit 9; }; run retired-layer-passage > "$w/px" 2> "$w/pxe"; p=$?; run retired-layer-contract > "$w/cx" 2> "$w/cxe"; c=$?; chmod 644 "$S"; awk '/^rulebook:/{print; s=1; next} s && /^  - /{next} {s=0; print}' "$w/sites" > "$S" || exit 9; grep -q '^rulebook:' "$S" || exit 9; [ "$(awk '/^rulebook:/{on=1;next} on && /^[a-z_]+:/{exit} on && /^  - /{n++} END{print n+0}' "$S")" -eq 0 ] || exit 9; run retired-layer-passage > "$w/py" 2> "$w/pye"; q=$?; run retired-layer-contract > "$w/cy" 2> "$w/cye"; y=$?; [ "$p" -ne 0 ] && [ ! -s "$w/px" ] && grep -q 'setup-sites' "$w/pxe" && [ "$c" -ne 0 ] && [ ! -s "$w/cx" ] && grep -qF "$S" "$w/cxe" && [ "$q" -ne 0 ] && [ ! -s "$w/py" ] && [ "$y" -ne 0 ] && [ ! -s "$w/cy" ] && grep -qF "$S" "$w/cye" || { echo BL356-BULLET-1-OR-2-REGRESSED >&2; exit 1; }; cp "$w/sites" "$S" || exit 9; E="$w/e"; mkdir -p "$E/core/scripts" || exit 9; g "$E" init -q || exit 9; U="$(printf 'caf\303\251')"; for f in plain "$U"; do printf 'x=$ROOT/old-%s\n' "$f" > "$E/core/scripts/$f.sh"; done; { g "$E" add -A && g "$E" commit -qm b; } >/dev/null 2>&1 || exit 9; EB="$(git -C "$E" rev-parse HEAD)"; for f in plain "$U"; do printf 'x=$ROOT/new-%s\n' "$f" > "$E/core/scripts/$f.sh"; done; { g "$E" add -A && g "$E" commit -qm t; } >/dev/null 2>&1 || exit 9; ET="$(git -C "$E" rev-parse HEAD)"; K="$w/k"; mkdir -p "$K/scripts/ai-dlc" "$K/.claude" || exit 9; for f in plain "$U"; do printf 'x=$ROOT/old-%s\necho edited\n' "$f" > "$K/scripts/ai-dlc/$f.sh"; done; bash "$w/r/retired-tokens.sh" "$E" "$EB" "$ET" "$K" > "$w/to" 2>/dev/null || exit 9; grep -q '^RETIRED-CONTRACT-TOKEN[[:blank:]]core/scripts/plain\.sh[[:blank:]]' "$w/to" || exit 9; grep -q "^RETIRED-CONTRACT-TOKEN[[:blank:]]core/scripts/$U\.sh[[:blank:]]" "$w/to" || { echo BL356-BULLET-3-PRODUCER-REMAINS >&2; exit 1; }; exit 0
-
 ## BL-355 — `norm_lines` folds case byte-wise, so an accented capital no longer matches its lower-case form
 
 **DEFECT, latent.** Found by the 0.652.0 tip adversary; introduced by 0.652.0. It discharges no
@@ -4800,4 +4684,97 @@ runs on either tree. The guard for this half is the `procsub-staged-refusal` fix
 emitter cells force each emitter under the write limit.
 
 verify: sh R=core/skills/ai-dlc-update/reconcile; for f in hard-blockers relabel-extension-checks warn-shadowed-local-validators retired-layer-contract retired-tokens readopt-override derivation-differential; do [ -f "$R/$f.sh" ] || exit 9; done; w="$(mktemp -d)" || exit 9; F() { ( trap '' XFSZ; ulimit -f 16; "$@" ); }; c="$(F bash -c 'wc -c <<<"$1"' _ "$(printf '%020000d' 0)" 2>/dev/null)"; case "$c" in *[1-9]*) exit 9 ;; esac; F bash -c 'printf "%08000d" 0 > "$1"' _ "$w/cal" 2>/dev/null; [ "$(wc -c < "$w/cal" | tr -d ' ')" -eq 8000 ] || exit 9; A='/^[[:blank:]]*#/ {next} { l=$0; gsub(/<<<<+/, "", l); if (l ~ /<<</) n++ } END {print n+0}'; printf '%s\n' 'a <<<"$b"' '  # c <<<"$d"' 'echo "<<<<<<< x"' > "$w/sp"; [ "$(awk "$A" "$w/sp")" -eq 1 ] || exit 9; : > "$w/ld"; i=0; while [ $i -lt 200 ]; do printf 'HARD-UNREGISTERED-CORE-DRIFT\tskills/ai-dlc/steps/file-number-%04d-padding-padding.md\tx\n' $i; i=$((i+1)); done > "$w/ud"; echo '# report' > "$w/rep"; hb() { bash "$R/hard-blockers.sh" --check "$w/rep" --ld-rows "$w/ld" --ld-rc 0 --ud-rows "$w/ud" --ud-rc 0 "$w" base "$w" theirs; }; hb > "$w/hbh" 2>&1; [ "$(grep -c '^FAIL' "$w/hbh")" -eq 200 ] || exit 9; F hb > "$w/hbf" 2>&1; [ "$(grep -c '^FAIL' "$w/hbf")" -eq 200 ] || grep -q '^hard-blockers: REFUSED' "$w/hbf" || { echo BL360-CONVERTED-HALF-REGRESSED >&2; exit 1; }; C="$w/rx"; mkdir -p "$C/.claude/skills/ai-dlc/extensions" || exit 9; i=1; while [ $i -le 8000 ]; do printf '### %d. Check title\nbody\n' $i; i=$((i+1)); done > "$C/.claude/skills/ai-dlc/gate-validation.md"; printf -- '---\nkind: check\nid: mine\nhooks: gate-validation.md\n---\n\n### 7999. My check\ntext\n' > "$C/.claude/skills/ai-dlc/extensions/x.md"; bash "$R/relabel-extension-checks.sh" "$C" > "$w/rxh" 2>&1; grep -qF '[ext:mine]' "$w/rxh" || exit 9; F bash "$R/relabel-extension-checks.sh" "$C" > "$w/rxf" 2>&1; grep -qF '[ext:mine]' "$w/rxf" || grep -q '^relabel: REFUSED' "$w/rxf" || { echo BL360-CONVERTED-HALF-REGRESSED >&2; exit 1; }; C="$w/ws"; mkdir -p "$C/_bmad-output/ai-dlc-update" "$C/scripts/ai-dlc" "$C/scripts/ai-dlc-local/sub" "$C/.claude" || exit 9; echo 'echo core' > "$C/scripts/ai-dlc/validate-zz.sh"; echo 'echo fork' > "$C/scripts/ai-dlc-local/validate-zz.sh"; echo 'echo fork2' > "$C/scripts/ai-dlc-local/sub/validate-zz.sh"; { printf '# ledger\n\n## PC-S1-THING fork of validate-zz.sh\n\nADOPTED UPSTREAM in 0.1.0.\n\n'; i=0; while [ $i -lt 900 ]; do printf 'names aaaa-padding-name-%04d.sh\n' $i; i=$((i+1)); done; } > "$C/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; bash "$R/warn-shadowed-local-validators.sh" --root "$C" > "$w/wsh" 2>&1; [ "$(grep -c '^RETIRE-CANDIDATE' "$w/wsh")" -eq 2 ] || exit 9; F bash "$R/warn-shadowed-local-validators.sh" --root "$C" > "$w/wsf" 2>&1; [ "$(grep -c '^RETIRE-CANDIDATE' "$w/wsf")" -eq 2 ] || grep -q '^warn-shadowed-local-validators: REFUSED' "$w/wsf" || { echo BL360-CONVERTED-HALF-REGRESSED >&2; exit 1; }; g() { local d="$1"; shift; git -C "$d" -c user.email=r@r -c user.name=r -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }; D="$w/rd"; mkdir -p "$D/core/skills/ai-dlc/steps" || exit 9; g "$D" init -q || exit 9; printf -- '- Label: /cmd\nuse {tok}\n' > "$D/core/skills/ai-dlc/steps/a.md"; printf 'small\n' > "$D/core/skills/ai-dlc/steps/b.md"; printf 'small\n' > "$D/core/skills/ai-dlc/steps/c.md"; { g "$D" add -A && g "$D" commit -qm b; } >/dev/null 2>&1 || exit 9; B="$(git -C "$D" rev-parse HEAD)"; { g "$D" rm -q core/skills/ai-dlc/steps/b.md core/skills/ai-dlc/steps/c.md && g "$D" commit -qm t; } >/dev/null 2>&1 || exit 9; T="$(git -C "$D" rev-parse HEAD)"; C="$w/rc"; mkdir -p "$C/.claude/skills/ai-dlc/extensions" "$C/.claude/skills/ai-dlc/overrides" || exit 9; { echo 'see steps/b.md for the gate'; head -c 20000 /dev/zero | tr '\0' p; echo; } > "$C/.claude/skills/ai-dlc/extensions/e.md"; printf 'see .claude/skills/ai-dlc/steps/c.md and core/skills/ai-dlc/steps/b.md\n' > "$C/.claude/skills/ai-dlc/overrides/o.md"; printf 'nothing here\n' > "$C/.claude/skills/ai-dlc/extensions/n.md"; bash "$R/retired-layer-contract.sh" "$D" "$B" "$T" "$C" > "$w/rch" 2>/dev/null; [ "$(grep -c '^RETIRED-LAYER-CONTRACT' "$w/rch")" -eq 3 ] || exit 9; F bash "$R/retired-layer-contract.sh" "$D" "$B" "$T" "$C" > "$w/rcf" 2> "$w/rcfe"; rc=$?; cmp -s "$w/rch" "$w/rcf" || { [ "$rc" -ne 0 ] && grep -q '^retired-layer-contract: .*no verdict' "$w/rcfe"; } || { echo BL360-CONVERTED-HALF-REGRESSED >&2; exit 1; }; D="$w/td"; mkdir -p "$D/core/scripts" || exit 9; g "$D" init -q || exit 9; mb() { h="x=\$ROOT/$1"; printf '%s\n' "$h" > "$2"; head -c $((16384 - ${#h} - 1)) /dev/zero | tr '\0' p >> "$2"; }; mb old-z "$D/core/scripts/z.sh"; printf 'x=$ROOT/old-b\nsmall\n' > "$D/core/scripts/b.sh"; { g "$D" add -A && g "$D" commit -qm b; } >/dev/null 2>&1 || exit 9; B="$(git -C "$D" rev-parse HEAD)"; mb new-z "$D/core/scripts/z.sh"; printf 'x=$ROOT/new-b\nsmall\n' > "$D/core/scripts/b.sh"; { g "$D" add -A && g "$D" commit -qm t; } >/dev/null 2>&1 || exit 9; T="$(git -C "$D" rev-parse HEAD)"; [ "$(git -C "$D" cat-file -s "${B}:core/scripts/z.sh")" -eq 16384 ] || exit 9; C="$w/tc"; mkdir -p "$C/scripts/ai-dlc" || exit 9; git -C "$D" show "${B}:core/scripts/z.sh" > "$C/scripts/ai-dlc/z.sh"; git -C "$D" show "${B}:core/scripts/b.sh" > "$C/scripts/ai-dlc/b.sh"; echo 'uses $ROOT/old-b too' >> "$C/scripts/ai-dlc/z.sh"; printf 'X\tcore/scripts/b.sh\tscripts/ai-dlc/b.sh\tCLASSIFY\nX\tcore/scripts/z.sh\tscripts/ai-dlc/z.sh\tCLASSIFY\n' > "$w/rows"; bash "$R/retired-tokens.sh" --bucket-rows "$w/rows" "$D" "$B" "$T" "$C" > "$w/rth" 2>/dev/null; [ "$(cut -f2,3 "$w/rth" | tr '\t\n' ':;')" = 'core/scripts/b.sh:$ROOT/old-b;core/scripts/z.sh:$ROOT/old-z;' ] || exit 9; F bash "$R/retired-tokens.sh" --bucket-rows "$w/rows" "$D" "$B" "$T" "$C" > "$w/rtf" 2> "$w/rtfe"; rc=$?; cmp -s "$w/rth" "$w/rtf" || { [ "$rc" -ne 0 ] && grep -q '^retired-tokens: .*no verdict' "$w/rtfe"; } || { echo BL360-CONVERTED-HALF-REGRESSED >&2; exit 1; }; for f in hard-blockers relabel-extension-checks warn-shadowed-local-validators retired-layer-contract retired-tokens readopt-override derivation-differential; do [ "$(awk "$A" "$R/$f.sh")" -eq 0 ] || { echo BL360-CONVERTED-HALF-REGRESSED >&2; exit 1; }; done; for f in "$R"/*.sh; do [ "$(awk "$A" "$f")" -eq 0 ] || { echo BL360-BOOTSTRAP-HALF-REMAINS >&2; exit 1; }; done; H='/^[[:blank:]]*#/ {next} { l=$0; gsub(/<<<+/, "", l); if (l ~ /<<-?[\047"]?[A-Za-z_]/) n++ } END {print n+0}'; for f in apply preclassify ledger-reverify self-update-gate self-update-fixtures emit-report lib; do [ -f "$R/$f.sh" ] || exit 9; [ "$(awk "$H" "$R/$f.sh")" -eq 0 ] || { echo BL360-BOOTSTRAP-HALF-REMAINS >&2; exit 1; }; done; [ "$(awk '/^[[:blank:]]*#/ {next} /done <</ {n++} END {print n+0}' "$R/readopt-override.sh")" -eq 0 ] || { echo BL360-BOOTSTRAP-HALF-REMAINS >&2; exit 1; }; grep -q 'relabel-extension-checks\.sh.*|| true' "$R/apply.sh" && { echo BL360-BOOTSTRAP-HALF-REMAINS >&2; exit 1; }; exit 0
+
+## BL-364 — 29 path listings in `reconcile/` still run under the default `core.quotePath`, so a non-ASCII path reaches their readers C-quoted
+
+**DEFECT.** Filed at batch 170 by the contract adversary and the docs hand. It discharges no
+consumer candidate. `BL-356` bullet 3 was fixed at two producers in v0.661.0:
+`memo_diff_name_status` in lib.sh, and preclassify's relocation `ls-tree`. Every other
+`git ls-tree`, `git ls-files`, `git diff --name-only` or `git diff --name-status` call in
+`core/skills/ai-dlc-update/reconcile/` still lists paths under the default `core.quotePath`. Git
+C-quotes a non-ASCII name there, so `core/scripts/café.sh` arrives as
+`"core/scripts/caf\303\251.sh"`. A reader that compares that line against a raw path, maps it to a
+consumer path or shows it to git again treats the file as absent. `BL-356` measured the loss on one
+reader: its row disappears at rc 0.
+
+Reach today is zero, measured this batch. The distribution's 829 tracked paths and the reference
+consumer's 11882 include 0 quoted ones, against a same-invocation control repo holding `café.sh`
+that listed 1. That makes this a latent defect, not a live one. It stays DEFECT-tier because a
+non-ASCII path would be dropped silently, and the drop reads as a clean answer.
+
+**The census.** These are the sites at `4fff688e` (v0.661.0), one line per invocation, comment lines excluded.
+The receipt's own grammar enumerates the same 35 sites: 29 unflagged and 6 already carrying
+`core.quotePath=false`. A scan for `git -C … \` continuation lines found 0, against a control of
+207 continuation lines of any kind in the same files.
+
+- **`memo_ls_tree`, lib.sh `:1105` and `:1107`, the first row.** This is the shared memoised
+  `ls-tree -r --name-only`. It was deliberately left out of v0.661.0. Its readers each compare its
+  lines against their own spelling of a path, so flipping it changes all of their outputs at once,
+  unaudited, in a bootstrapping file. The readers are `layer-drift.sh:1297`,
+  `retired-layer-contract.sh:200` (fallback `:201`), `retired-layer-token.sh:168` (fallback
+  `:169`), `retired-fixtures.sh:85` (fallback `:86`) and `unregistered-drift.sh:597` (fallback
+  `:607`). Each fallback is its own unflagged `ls-tree` and has to change together with the memo.
+- **`apply.sh:1423`**, the manifest glob expansion `ls-tree --name-only "$THEIRS" -- core/scripts/`.
+  It has the same shape as preclassify's relocation listing, fixed in v0.661.0. It maps each name to
+  `scripts/ai-dlc/…` and has not been traced.
+- `apply.sh`: `:390` and `:1523` (mode lookups on one named path, where the path comes from the
+  caller), `:571` (a range emptiness test), `:850` (moved paths fed to `map_consumer`), `:1719`
+  (executable-bit listing fed to `consumer_path`), and `:2345` (a consumer `ls-files` count).
+- `emit-report.sh`: `:242` (range emptiness) and `:343` (an orientation read of one named path).
+- `ledger-reverify.sh`: `:1027` (range emptiness), `:1327` (the consumer-to-core map table),
+  `:1393` (`theirs_basename_matches`, a basename compare), and `:1480` (a consumer `ls-files`
+  presence test).
+- `preclassify.sh`: `:393`
+  (`mode_at_theirs`), and `:453` (the `core_manifest` glob expansion fed to `map_consumer`).
+- `predicate-differential.sh:112` (`ls-files --with-tree`, each name shown again with `git show`).
+- `retired-fixtures.sh:128` (a presence test on one named directory).
+- `retired-layer-token.sh:265` (the rename map, `diff -M --name-status`).
+- `self-update-fixtures.sh:931` (the diff-side coverage join).
+- `self-update-gate.sh`: `:766` (range emptiness), `:880` (the rulebook candidate set), and `:1125`
+  (the changed `core/scripts/` set).
+- `unregistered-drift.sh:468` (a range line count).
+
+Sites that only test whether the output is empty, or count its lines, cannot lose a row to quoting.
+Sites that list the paths of ONE named path already know the raw name and use the output only for
+mode or presence. Tier these by reading each reader before converting anything. The four already
+flagged are lib.sh `:1128` and `:1130`, `preclassify.sh:539`, and `retired-tokens.sh:200`.
+`apply.sh`, `preclassify.sh`, `ledger-reverify.sh`, `self-update-gate.sh`, `self-update-fixtures.sh`,
+`emit-report.sh` and lib.sh are BOOTSTRAPPING and ship alone.
+
+**Remedy direction:** add `-c core.quotePath=false` at the producer, or read `-z`. Convert per
+reader, each with a fixture cell on a world holding `plain.sh` and `café.sh`, on the model of
+`procsub-staged-refusal`'s quotePath cell.
+
+- **NOTE — the dist-only `{ ledger_entry_awk; …; cat <<'AWK' … } > "$AWKF"` writers now produce a
+  truncated program where they produced an empty one.** The writers are
+  `scripts/backlog-reverify.sh:112`, `scripts/backlog-rotate.sh:266`,
+  `scripts/validate-backlog-size.sh:129` and `scripts/validate-backlog-receipts.sh:625`. Measured on
+  that shape under `/bin/bash` 3.2.57 with `trap '' XFSZ; ulimit -f 1`: at base the group exited 0
+  and wrote 36 bytes, the trailing heredoc only, because the emitter's own heredoc failed to stage.
+  At tip it exited 1 and wrote 1024 bytes, a prefix of `ledger_entry_awk` that ends mid-program.
+  Each writer's status handling decides whether either shape reaches awk. That was not audited
+  here.
+
+The receipt counts the unflagged listing sites. It exits 1 while any remain and names the count in
+the `BL364-UNQUOTED-LISTING-SITES` tag. A site passes when its line carries `core.quotePath=false`
+or a `-z` flag. The grammar is self-probed on five seeded lines first: one unflagged `ls-tree`
+counts, one flagged `diff --name-only` passes, and a commented listing, an echoed `git ls-tree`
+and a `diff -U0` are ignored. It exits 9 if that probe fails, if the corpus holds fewer than 20
+files or 20 sites, or if no flagged site is found, which would mean the grammar cannot see the
+four fixed ones. Scored through `backlog-reverify.sh`'s own `eval` shape, from the root of a
+`git archive` extraction of `9b8d1afc`:
+
+| variant | exit | tag |
+|---|---|---|
+| base `b0c310a3` | 1 | UNQUOTED-LISTING-SITES 34 of 35 |
+| tip `9b8d1afc` (before `machinery_paths` was fixed) | 1 | UNQUOTED-LISTING-SITES 31 of 35 |
+| landed `4fff688e` | 1 | UNQUOTED-LISTING-SITES 29 of 35 |
+| every unflagged site given `-c core.quotePath=false` (31 changed lines) | 0 | |
+| the same, with `apply.sh:1423` restored | 1 | UNQUOTED-LISTING-SITES 1 of 35 |
+| the same, with `memo_ls_tree` read by `-z` instead of the flag | 0 | |
+| no `reconcile/` directory | 9 | |
+| a two-file corpus | 9 | |
+| `awk` stubbed to print nothing | 9 | |
+
+verify: sh R=core/skills/ai-dlc-update/reconcile; [ -f "$R/lib.sh" ] || exit 9; set -- "$R"/*.sh; [ "$#" -ge 20 ] || exit 9; w="$(mktemp -d)" || exit 9; P='/^[[:blank:]]*#/ {next} /git -C "[^"]*"/ && (/ ls-(tree|files)[[:blank:]]/ || (/ diff[[:blank:]]/ && /--name-(only|status)/)) { if (/core[.]quotePath=false/ || / -z[[:blank:]]/) f++; else u++ } END {print u+0, f+0}'; printf '%s\n' 'x="$(git -C "$D" ls-tree -r --name-only "$T")"' 'git -C "$D" -c core.quotePath=false diff --name-only "$B" "$T"' '  # git -C "$D" ls-tree --name-only "$T"' 'echo "git ls-tree exited"' 'git -C "$D" diff -U0 "$B"' > "$w/p.sh" || exit 9; [ "$(awk "$P" "$w/p.sh")" = "1 1" ] || exit 9; o="$(awk "$P" "$@")" || exit 9; u="${o% *}"; f="${o#* }"; [ "$f" -ge 1 ] && [ "$((u + f))" -ge 20 ] || exit 9; [ "$u" -eq 0 ] && exit 0; echo "BL364-UNQUOTED-LISTING-SITES $u of $((u + f))" >&2; exit 1
 
