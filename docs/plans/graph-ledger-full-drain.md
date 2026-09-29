@@ -98,9 +98,12 @@ operator: seven fixtures on v0.665.0, 0 unrelated rows moved each time. **`BL-37
 operator-scheduled next release**: a scoped `sandbox-exec` tracer measured as a root-free
 replacement for `fs_usage` on four fixtures, open on a 218-fixture comparison.
 
-**RUN THE GATE AT `AI_DLC_FIXTURE_JOBS=12`.** The operator's shell profile exports 6, which the hook
-reads over its default of 12, so both 6-way gates here skipped the pole phase. v0.665.0 at 12-way
-ran every phase, and the pole moved to `gate-adjudication-mutants` (490s); `BL-378` re-baselines.
+**THE POOL WIDTH.** The operator's shell profile exports `AI_DLC_FIXTURE_JOBS=6`, which the hook
+reads over its default of 12, and a gate at 6 skips the pole phase on the width mismatch with the
+baseline. For the rest of batch 173 only, the operator set 12; that setting does not carry to later
+sessions, so run the gate at whatever the environment gives unless the operator says otherwise.
+v0.665.0's 12-way gate ran every phase, and the pole moved to `gate-adjudication-mutants` (490s);
+`BL-378` re-baselines.
 
 Gates: v0.664.0 on `ba0968f5`, 22 PASS, 0 FAIL, 1 SKIP (pole, 6-way), 216 ok; v0.665.0 on
 `77706f9f`, 22 PASS, 0 FAIL, 0 SKIP, 217 ok, every changed fixture `ok` by name against an
