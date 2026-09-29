@@ -4777,11 +4777,14 @@ across different seconds is unaffected.
 prefix plus the fraction padded to nine digits. Do not copy that code; lift it into a helper both
 callers source.
 
-The receipt seeds three two-pass series: a genuinely backward pair (arm G must fire, else 9), a
-forward pair a second apart (must not fire, else 9), and the same-second mixed pair. It exits 0
-only when the last does not fire. Scored: live 1; a stripped-`Z` comparison 0; arm G removed 9.
+The receipt seeds four two-pass series: a genuinely backward pair (arm G must fire, else 9), a
+forward pair a second apart (must not fire, else 9), the same-second mixed pair, and the
+same-INSTANT pair `19.000Z` then `19Z`. It exits 0 only when neither of the last two fires: the
+mixed pair kills the raw-string comparison, the equal pair kills a comparison with the `Z`
+stripped (which reads `19` as a prefix of `19.000`, so earlier). Scored: origin/main 1; tip 0;
+arm G removed 9; raw string 1; stripped-`Z` 1.
 
-verify: sh V=core/scripts/validate-adversarial-convergence.sh; [ -f "$V" ] || exit 9; w="$(mktemp -d)" || exit 9; mk() { mkdir -p "$w/$1" || exit 9; i=1; for at in "$2" "$3"; do printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\ninvoked_at: %s\ntool_use_id: toolu_0%s\nmode: subagent\nartifact: x.md\nartifact_sha: %064d\nfindings_critical: 0\nfindings_critical_prior_scope: 0\nfindings_major: 0\nfindings_major_underived: 0\nfindings_minor: 0\nverdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$at" "$i" "$i" > "$w/$1/x-adversarial-p$i.md" || exit 9; i=$((i+1)); done; }; g() { o="$(bash "$V" --series "$w/$1/x-adversarial-p" 2>&1)"; case "$o" in *'G -- CHRONOLOGY'*) echo 1 ;; *) echo 0 ;; esac; }; mk back 2026-09-27T15:08:19Z 2026-09-27T15:08:10.123Z; mk fwd 2026-09-27T15:08:19Z 2026-09-27T15:08:20Z; mk same 2026-09-27T15:08:19Z 2026-09-27T15:08:19.497Z; [ "$(g back)" = 1 ] || exit 9; [ "$(g fwd)" = 0 ] || exit 9; [ "$(g same)" = 0 ] && exit 0; echo BL371-SAME-SECOND-FRACTION-READ-AS-EARLIER >&2; exit 1
+verify: sh V=core/scripts/validate-adversarial-convergence.sh; [ -f "$V" ] || exit 9; w="$(mktemp -d)" || exit 9; mk() { mkdir -p "$w/$1" || exit 9; i=1; for at in "$2" "$3"; do printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\ninvoked_at: %s\ntool_use_id: toolu_0%s\nmode: subagent\nartifact: x.md\nartifact_sha: %064d\nfindings_critical: 0\nfindings_critical_prior_scope: 0\nfindings_major: 0\nfindings_major_underived: 0\nfindings_minor: 0\nverdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$at" "$i" "$i" > "$w/$1/x-adversarial-p$i.md" || exit 9; i=$((i+1)); done; }; g() { o="$(bash "$V" --series "$w/$1/x-adversarial-p" 2>&1)"; case "$o" in *'G -- CHRONOLOGY'*) echo 1 ;; *) echo 0 ;; esac; }; mk back 2026-09-27T15:08:19Z 2026-09-27T15:08:10.123Z; mk fwd 2026-09-27T15:08:19Z 2026-09-27T15:08:20Z; mk same 2026-09-27T15:08:19Z 2026-09-27T15:08:19.497Z; mk equal 2026-09-27T15:08:19.000Z 2026-09-27T15:08:19Z; [ "$(g back)" = 1 ] || exit 9; [ "$(g fwd)" = 0 ] || exit 9; [ "$(g same)" = 0 ] && [ "$(g equal)" = 0 ] && exit 0; echo BL371-SAME-SECOND-FRACTION-READ-AS-EARLIER >&2; exit 1
 
 ## BL-372 — a single-document scope is still reviewed and repaired by one agent
 
