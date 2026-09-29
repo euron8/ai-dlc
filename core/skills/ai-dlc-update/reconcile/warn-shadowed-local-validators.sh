@@ -117,12 +117,13 @@ CLOSE_AWK="$(ledger_close_awk)" || exit 2
 CLOSE_AWK="${CLOSE_AWK}
 $(ledger_entry_line_close_awk)" || exit 2
 # THE ENTRY EMITTER IS CAPTURED ONCE, WITH ITS STATUS READ, AND AN EMPTY PROGRAM REFUSES. It was
-# interpolated inline as `$(ledger_entry_awk)`, whose status nothing read. That emitter is a
+# interpolated inline as `$(ledger_entry_awk)`, whose status nothing read. That emitter was a
 # `cat <<'AWK'` heredoc in lib.sh, and bash 3.2 stages every heredoc to a temp file: when that
-# write fails -- `ulimit -f`, a full TMPDIR -- the emitter prints nothing, awk then died on an
+# write failed -- `ulimit -f`, a full disk -- the emitter printed nothing, awk then died on an
 # undefined function, and this script exited 0 with no row (measured under `ulimit -f 2`, SIGXFSZ
-# ignored: rc 0 and 0 rows against 1 row above the emitter's size). lib.sh is bootstrapping and is
-# not changed here; its caller refuses instead.
+# ignored: rc 0 and 0 rows against 1 row above the emitter's size). Since 0.661.0 the emitter is a
+# `printf` literal with no staging step, so this refusal should not fire; it stays because it is
+# the one caller that reads the emitter's status.
 LEA="$(ledger_entry_awk)" || { echo "warn-shadowed-local-validators: REFUSED — lib.sh's ledger_entry_awk did not run (exit $?); no verdict" >&2; exit 2; }
 [ -n "$LEA" ] || { echo "warn-shadowed-local-validators: REFUSED — lib.sh's ledger_entry_awk emitted an empty program; no verdict" >&2; exit 2; }
 # THE CLOSED-BASENAME SET'S STATUS IS READ, and `pipefail` (set above) makes any stage's failure
