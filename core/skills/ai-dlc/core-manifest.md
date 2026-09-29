@@ -229,6 +229,7 @@ core_manifest:
   - fixtures/gate-repair-record/**
   - fixtures/adversarial-shard-merge/**
   - fixtures/remediator-shard-join/**
+  - fixtures/document-partition/**
   - fixtures/gate-series-rung/**
   - fixtures/gate-verdict-grep-shape/**
   - fixtures/h2-attest-scripts-dir/**
