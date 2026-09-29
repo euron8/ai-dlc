@@ -9,7 +9,7 @@
 # every other fixture's entries alone, so refreshing one fixture costs its own runtime
 # rather than a full re-derivation.
 #
-# fixtures mapped: 218    entries: 34732
+# fixtures mapped: 218    entries: 34740
 absorbed-specifics-survive	.git/HEAD
 absorbed-specifics-survive	.git/config
 absorbed-specifics-survive	.git/index
@@ -21849,26 +21849,32 @@ remediator-shard-join	.git/HEAD
 remediator-shard-join	.git/config
 remediator-shard-join	.git/index
 remediator-shard-join	.git/info/exclude
-remediator-shard-join	.git/logs/HEAD
-remediator-shard-join	.git/objects/40/1c5a14a1afa2682ebd879bcf36ceb6a82c8bbb
-remediator-shard-join	.git/objects/cf/54641b291c6c2b1ac9b061f3856f09086dbe99
+remediator-shard-join	.git/objects/25/c5928b91d8225159004494d69023dd1eb257e2
+remediator-shard-join	.git/objects/ba/118f20f853345ce9b9e7ab8ad7f77d23a0bcc6
 remediator-shard-join	.git/objects/info/commit-graphs/commit-graph-chain
 remediator-shard-join	.git/objects/info/commit-graphs/graph-93e6403e1d08d4a02b08f717afce6dcbebb27492.graph
 remediator-shard-join	.git/objects/info/commit-graphs/graph-c92ce01d2cbe64f1f1ba2ae351d08a9fea43dc48.graph
 remediator-shard-join	.git/objects/info/commit-graphs/graph-eb65dfaed5a06621ca1a162fd4f3ec597144a3b7.graph
 remediator-shard-join	.git/objects/pack/multi-pack-index
 remediator-shard-join	.git/packed-refs
+remediator-shard-join	.git/refs/heads/release/0.665.0
 remediator-shard-join	.gitignore
 remediator-shard-join	core
+remediator-shard-join	core/.claude/hooks/ai-dlc-derivation-capture.sh
 remediator-shard-join	core/.claude/hooks/ai-dlc-gate-remediation-guard.sh
+remediator-shard-join	core/core/hooks/ai-dlc-derivation-capture.sh
 remediator-shard-join	core/core/hooks/ai-dlc-gate-remediation-guard.sh
 remediator-shard-join	core/core/scripts/join-remediator-shards.sh
 remediator-shard-join	core/fixtures
+remediator-shard-join	core/fixtures/.claude/hooks/ai-dlc-derivation-capture.sh
 remediator-shard-join	core/fixtures/.claude/hooks/ai-dlc-gate-remediation-guard.sh
+remediator-shard-join	core/fixtures/core/hooks/ai-dlc-derivation-capture.sh
 remediator-shard-join	core/fixtures/core/hooks/ai-dlc-gate-remediation-guard.sh
 remediator-shard-join	core/fixtures/core/scripts/join-remediator-shards.sh
 remediator-shard-join	core/fixtures/remediator-shard-join
+remediator-shard-join	core/fixtures/remediator-shard-join/.claude/hooks/ai-dlc-derivation-capture.sh
 remediator-shard-join	core/fixtures/remediator-shard-join/.claude/hooks/ai-dlc-gate-remediation-guard.sh
+remediator-shard-join	core/fixtures/remediator-shard-join/core/hooks/ai-dlc-derivation-capture.sh
 remediator-shard-join	core/fixtures/remediator-shard-join/core/hooks/ai-dlc-gate-remediation-guard.sh
 remediator-shard-join	core/fixtures/remediator-shard-join/core/scripts/join-remediator-shards.sh
 remediator-shard-join	core/fixtures/remediator-shard-join/run.sh
@@ -21881,12 +21887,14 @@ remediator-shard-join	core/fixtures/remediator-shard-join/seed.story-2.1-positio
 remediator-shard-join	core/fixtures/remediator-shard-join/seed.story-2.2-lifetime-pnl-on-demand.md
 remediator-shard-join	core/fixtures/remediator-shard-join/seed.story-3.1-dark-theme.md
 remediator-shard-join	core/fixtures/scripts/ai-dlc/join-remediator-shards.sh
+remediator-shard-join	core/hooks/ai-dlc-derivation-capture.sh
 remediator-shard-join	core/hooks/ai-dlc-gate-remediation-guard.sh
 remediator-shard-join	core/scripts
 remediator-shard-join	core/scripts/ai-dlc/join-remediator-shards.sh
 remediator-shard-join	core/scripts/join-remediator-shards.sh
 remediator-shard-join	core/scripts/partition-document.sh
 remediator-shard-join	core/scripts/validate-adversarial-convergence.sh
+remediator-shard-join	core/scripts/validate-artifact-derivations.sh
 request-coverage	.git/HEAD
 request-coverage	.git/config
 request-coverage	.git/index
