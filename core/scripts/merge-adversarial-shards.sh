@@ -4,6 +4,8 @@
 #
 # USAGE
 #   merge-adversarial-shards.sh <shard-dir>
+#   merge-adversarial-shards.sh --map <shard-dir>   print `<ordinal>\t<basename>`, one per story,
+#                                                   for the lead to put in each shard brief
 #
 #   <shard-dir> is `<planning>/s<N>/shards/<artifact>-p<M>/`. Everything else is DERIVED from
 #   that one path, so the placement cannot be mis-spelled by a caller:
@@ -13,7 +15,7 @@
 #   beside this script (both layouts put the two in one directory).
 #
 # WHY IT EXISTS
-#   A multi-file artifact is reviewed by one adversary per story INDEX plus one cross-story
+#   A multi-file artifact is reviewed by one adversary per story ORDINAL plus one cross-story
 #   adversary. Each writes a shard; the convergence validator, the hooks and every other
 #   reader keep reading exactly one `<artifact>-adversarial-p<M>.md`. This script is the
 #   deterministic JOIN that writes it. Shard verdicts are ADVISORY: the merged verdict is
@@ -21,18 +23,27 @@
 #   may each honestly stamp EXIT_CONDITION_MET while the artifact holds 6.
 #
 # SHARD FILES (non-recursive, `<shard-dir>/*`)
-#   `<epic>-<n>.md` one per story index, `cross.md` once. Any other non-dot entry is
-#   REFUSED -- a re-dispatch written beside the original must not be silently ignored.
-#   The index set is derived from `<planning>/s<N>/<artifact>/*.md`, every one of which must
-#   be named `story-<epic>-<n>-<slug>.md`; indices are compared numerically (`01-1` = `1-1`).
+#   `<ordinal>.md` one per story, `cross.md` once. Any other non-dot entry is REFUSED -- a
+#   re-dispatch written beside the original must not be silently ignored.
+#   THE KEY IS THE ORDINAL, NEVER THE FILENAME. Every `*.md` directly in
+#   `<planning>/s<N>/<artifact>/` is a story whatever it is called (`story-<n>-`, `story-<e>-<n>-`,
+#   `bug-`, `hotfix-`, ...); its ordinal is its 1-based position in the `LC_ALL=C` sorted listing,
+#   zero-padded to the width of the story count K (`01.md` .. `12.md`). A slug never reaches a
+#   shard path, because a slug can carry a sprint token the consumer's push guard refuses.
+#   Ordinals compare numerically (`1.md` and `01.md` are the same shard, so both is a duplicate).
+#
+# REFUSED KEYS: a shard ordinal outside 1..K, a duplicate shard, a missing ordinal or cross
+#   shard, an unreadable story file, fewer than two story files (a one-file artifact is never
+#   sharded), and a shard-directory entry that is neither `<digits>.md` nor `cross.md`.
 #
 # FINDING GRAMMAR (the partition this script checks; `adversary.md` cites it, not restates it)
 #   A finding is a `### ` heading inside the shard `## Findings` section (up to the next
 #   `## ` heading); lines inside ``` or ~~~ fences are not headings. Its severity is the FIRST
 #   of CRITICAL / MAJOR / MINOR / NIT in the heading. Each finding carries EXACTLY ONE line
-#       stories: <epic>-<n>[, <epic>-<n>...]
-#   outside a fence. A per-index shard may cite ONLY its own index; the cross-story shard only
-#   findings citing two or more DISTINCT indices. Every cited index must be in the derived set.
+#       stories: <ordinal>[, <ordinal>...]          e.g. `stories: 03` or `stories: 01, 04`
+#   outside a fence, citing ordinals from `--map`. A per-ordinal shard may cite ONLY its own
+#   ordinal; the cross-story shard only findings citing two or more DISTINCT ordinals. Every
+#   cited ordinal must be within 1..K.
 #   Per shard, the CRITICAL-heading count must equal `findings_critical` and the MAJOR-heading
 #   count `findings_major` -- otherwise the partition is checked over findings that are not
 #   the ones the counts describe.
@@ -46,11 +57,12 @@
 #                            MAJOR (major - underived) <= MAJOR_EXIT_CEILING;
 #     EXIT_CONDITION_NOT_MET otherwise.
 #   Both ceilings are READ from validate-adversarial-convergence.sh, never restated here.
-#   artifact_sha is `story-<e>-<n>=<sha> ...` sorted by index (each per-index shard claim, and
-#   each is checked against the story bytes on disk); tool_use_id is the cross shard;
-#   shard_tool_use_ids lists every shard; invoked_at is the EARLIEST shard. The merged body is
-#   every shard body in index order, cross last, each with its own provenance block stripped,
-#   so the output carries exactly ONE provenance block.
+#   artifact_sha is `<basename-stem>=<sha> ...` in ordinal order (each per-ordinal shard claim,
+#   each checked against the story bytes on disk); tool_use_id is the cross shard;
+#   shard_tool_use_ids is `<ordinal>=<id> ... cross=<id>`; invoked_at is the EARLIEST shard. The
+#   merged body opens with the ordinal map (the `--map` output, fenced), then every shard body in
+#   ordinal order, cross last, each with its own provenance block stripped, so the output
+#   carries exactly ONE provenance block.
 #
 # EXIT
 #   0  merged (stdout `MERGED: ...`), or the output already exists byte-identical (`UNCHANGED:`)
@@ -61,8 +73,13 @@ export LC_ALL=C
 
 refuse() { printf 'REFUSED: %s\n' "$*"; exit 2; }
 
-[ $# -eq 1 ] || refuse "usage: merge-adversarial-shards.sh <planning>/s<N>/shards/<artifact>-p<M>"
-case "$1" in -h|--help) awk 'NR > 1 && /^set -u/ { exit } NR > 1' "$0"; exit 0 ;; esac
+USAGE="usage: merge-adversarial-shards.sh [--map] <planning>/s<N>/shards/<artifact>-p<M>"
+MAP_ONLY=0
+case "${1:-}" in
+  -h|--help) awk 'NR > 1 && /^set -u/ { exit } NR > 1' "$0"; exit 0 ;;
+  --map) MAP_ONLY=1; shift ;;
+esac
+[ $# -eq 1 ] || refuse "$USAGE"
 
 SHARD_DIR="${1%/}"
 [ -d "$SHARD_DIR" ] || refuse "shard directory $SHARD_DIR does not exist"
@@ -85,6 +102,39 @@ STORIES_DIR="$SPRINT_DIR/$ARTIFACT"
 OUT="$SPRINT_DIR/$ARTIFACT-adversarial-p$PASS.md"
 [ -d "$STORIES_DIR" ] || refuse "the artifact under review $STORIES_DIR is not a directory; a single-file artifact is never sharded"
 
+T="$(mktemp -d "${TMPDIR:-/tmp}/merge-adversarial-shards.XXXXXX")" || refuse "mktemp failed"
+trap 'rm -rf "$T"' EXIT
+
+# ---- the ordinal map, derived from the artifact directory ---------------------------------
+# The glob expands in the C collation (LC_ALL=C above); it is re-sorted explicitly anyway so the
+# order never depends on the shell's glob implementation.
+: > "$T/listing" || refuse "cannot stage the story listing"
+for f in "$STORIES_DIR"/*.md; do
+  [ -e "$f" ] || continue
+  printf '%s\n' "$(basename "$f")" >> "$T/listing" || refuse "cannot stage the story listing"
+done
+sort "$T/listing" > "$T/listing.sorted" || refuse "cannot order the story listing"
+K="$(wc -l < "$T/listing.sorted" | tr -d ' ')"
+[ "$K" -ge 2 ] || refuse "$STORIES_DIR holds $K story file(s); sharding applies to two or more"
+W=${#K}
+: > "$T/map" || refuse "cannot stage the ordinal map"
+i=0
+while IFS= read -r b; do
+  i=$((i + 1))
+  [ -f "$STORIES_DIR/$b" ] && [ -r "$STORIES_DIR/$b" ] || refuse "story file $STORIES_DIR/$b is unreadable"
+  printf '%0*d\t%s\n' "$W" "$i" "$b" >> "$T/map" || refuse "cannot stage the ordinal map"
+done < "$T/listing.sorted"
+[ "$i" -eq "$K" ] || refuse "read $i of $K story files"
+if [ "$MAP_ONLY" -eq 1 ]; then cat "$T/map"; exit 0; fi
+ORDINALS="$(cut -f1 "$T/map" | tr '\n' ' ')"
+ORDINALS="${ORDINALS% }"
+norm_ord() { # "003" -> 03 at width W; empty unless digits within 1..K
+  case "$1" in ""|*[!0-9]*) return 0 ;; esac
+  local n=$((10#$1))
+  [ "$n" -ge 1 ] && [ "$n" -le "$K" ] || return 0
+  printf '%0*d' "$W" "$n"
+}
+
 # ---- the exit ceilings, read from their one declaration ----------------------------------
 VALIDATOR="$(cd "$(dirname "$0")" && pwd)/validate-adversarial-convergence.sh"
 [ -f "$VALIDATOR" ] || refuse "cannot read the exit ceilings: $VALIDATOR is absent"
@@ -99,39 +149,10 @@ CRIT_CEIL="$(read_ceiling CRITICAL_EXIT_CEILING)"
 [ -n "$MAJOR_CEIL" ] && [ -n "$CRIT_CEIL" ] \
   || refuse "MAJOR_EXIT_CEILING / CRITICAL_EXIT_CEILING are not each declared exactly once as an integer in $VALIDATOR"
 
-T="$(mktemp -d "${TMPDIR:-/tmp}/merge-adversarial-shards.XXXXXX")" || refuse "mktemp failed"
-trap 'rm -rf "$T"' EXIT
-
 sha_of() {
   if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1
   else sha256sum "$1" | cut -d' ' -f1; fi
 }
-norm_index() { # "01-002" -> "1-2"; empty on a non-index
-  case "$1" in *[!0-9-]*|-*|*-|*-*-*|"") return 0 ;; esac
-  case "$1" in *-*) ;; *) return 0 ;; esac
-  printf '%s-%s' "$((10#${1%-*}))" "$((10#${1#*-}))"
-}
-
-# ---- the index set, derived from the artifact directory -----------------------------------
-: > "$T/index" || refuse "cannot stage the index set"
-n_md=0
-for f in "$STORIES_DIR"/*.md; do
-  [ -f "$f" ] || continue
-  n_md=$((n_md + 1))
-  b="$(basename "$f")"
-  raw="$(printf '%s' "$b" | sed -n 's/^story-\([0-9][0-9]*\)-\([0-9][0-9]*\)-..*\.md$/\1-\2/p')"
-  [ -n "$raw" ] || refuse "$f is not named story-<epic>-<n>-<slug>.md; its index cannot be derived, so it cannot be assigned a shard"
-  idx="$(norm_index "$raw")"
-  printf '%s\t%s\n' "$idx" "$f" >> "$T/index" || refuse "cannot stage the index set"
-done
-[ "$n_md" -ge 2 ] || refuse "$STORIES_DIR holds $n_md story file(s); sharding applies to two or more"
-sort -t- -k1,1n -k2,2n "$T/index" > "$T/index.sorted" || refuse "cannot order the index set"
-dup="$(cut -f1 "$T/index.sorted" | uniq -d | head -1)"
-[ -z "$dup" ] || refuse "two story files in $STORIES_DIR carry index $dup"
-INDICES=""
-while IFS="$(printf '\t')" read -r idx path; do INDICES="$INDICES $idx"; done < "$T/index.sorted"
-INDICES="${INDICES# }"
-in_set() { case " $INDICES " in *" $1 "*) return 0 ;; esac; return 1; }
 
 # ---- the shard set ------------------------------------------------------------------------
 : > "$T/shards" || refuse "cannot stage the shard set"
@@ -140,21 +161,21 @@ in_set() { case " $INDICES " in *" $1 "*) return 0 ;; esac; return 1; }
 for f in "$SHARD_DIR"/*; do
   [ -e "$f" ] || continue
   b="$(basename "$f")"
-  [ -f "$f" ] || refuse "$f is not a regular file; the shard directory holds only <epic>-<n>.md and cross.md"
+  [ -f "$f" ] || refuse "$f is not a regular file; the shard directory holds only <ordinal>.md and cross.md"
   case "$b" in
     cross.md) key="cross" ;;
     *.md)
-      key="$(norm_index "${b%.md}")"
-      [ -n "$key" ] || refuse "$f is not a shard name (<epic>-<n>.md or cross.md)"
-      in_set "$key" || refuse "$f names index $key, which no story file in $STORIES_DIR carries" ;;
-    *) refuse "$f is not a shard name (<epic>-<n>.md or cross.md)" ;;
+      case "${b%.md}" in ""|*[!0-9]*) refuse "$f is not a shard name (<ordinal>.md or cross.md)" ;; esac
+      key="$(norm_ord "${b%.md}")"
+      [ -n "$key" ] || refuse "$f names ordinal ${b%.md}, outside 1..$K (the story count of $STORIES_DIR)" ;;
+    *) refuse "$f is not a shard name (<ordinal>.md or cross.md)" ;;
   esac
   printf '%s\t%s\n' "$key" "$f" >> "$T/shards" || refuse "cannot stage the shard set"
 done
 dup="$(cut -f1 "$T/shards" | sort | uniq -d | head -1)"
 [ -z "$dup" ] || refuse "shard $dup was delivered more than once in $SHARD_DIR"
-for idx in $INDICES cross; do
-  [ -n "$(awk -F'\t' -v k="$idx" '$1 == k { print; exit }' "$T/shards")" ] || refuse "shard $idx is missing from $SHARD_DIR (expected: $INDICES and cross)"
+for idx in $ORDINALS cross; do
+  [ -n "$(awk -F'\t' -v k="$idx" '$1 == k { print; exit }' "$T/shards")" ] || refuse "shard $idx is missing from $SHARD_DIR (expected: $ORDINALS and cross)"
 done
 
 # ---- per-shard parse ----------------------------------------------------------------------
@@ -205,7 +226,7 @@ ANY_DIVERGENT=0; EARLIEST=""; SHA_LIST=""; ID_LIST=""; ALL_IDS=""; CROSS_ID=""; 
 SKILL=""; MODE=""; LEAD_ROLE=""; RESOLVES=""; RESOLVES_SET=0
 : > "$T/body" || refuse "cannot stage the merged body"
 
-for key in $INDICES cross; do
+for key in $ORDINALS cross; do
   sf="$(awk -F'\t' -v k="$key" '$1 == k { print $2; exit }' "$T/shards")"
   P="$T/parse.$key"
   parse_shard "$sf" > "$P" || refuse "parsing $sf did not run"
@@ -266,10 +287,10 @@ for key in $INDICES cross; do
   else
     sha="$(field "$P" artifact_sha)"
     printf '%s' "$sha" | grep -qE '^[a-f0-9]{64}$' || refuse "$sf artifact_sha '${sha:-<none>}' is not one sha256"
-    story="$(awk -F'\t' -v k="$key" '$1 == k { print $2; exit }' "$T/index.sorted")"
-    disk="$(sha_of "$story")"
-    [ "$sha" = "$disk" ] || refuse "$sf notarizes $sha but $(basename "$story") is $disk on disk; the shard reviewed other bytes"
-    SHA_LIST="$SHA_LIST story-$key=$sha"
+    sb="$(awk -F'\t' -v k="$key" '$1 == k { print $2; exit }' "$T/map")"
+    disk="$(sha_of "$STORIES_DIR/$sb")" || refuse "story file $STORIES_DIR/$sb is unreadable"
+    [ "$sha" = "$disk" ] || refuse "$sf notarizes $sha but $sb is $disk on disk; the shard reviewed other bytes"
+    SHA_LIST="$SHA_LIST ${sb%.md}=$sha"
   fi
 
   # --- the partition ---
@@ -279,20 +300,20 @@ for key in $INDICES cross; do
     [ "$s" = "CRITICAL" ] && n_crit_h=$((n_crit_h + 1))
     [ "$s" = "MAJOR" ] && n_major_h=$((n_major_h + 1))
     [ "$nlines" = "1" ] || refuse "$sf:$line finding carries $nlines stories: lines; each finding carries exactly one"
-    printf '%s' "$cited" | grep -qE '^[0-9]+-[0-9]+(,[0-9]+-[0-9]+)*$' \
-      || refuse "$sf:$line stories: '$cited' is not <epic>-<n>[, <epic>-<n>...]"
+    printf '%s' "$cited" | grep -qE '^[0-9]+(,[0-9]+)*$' \
+      || refuse "$sf:$line stories: '$cited' is not <ordinal>[, <ordinal>...]"
     distinct=""
     for c in $(printf '%s' "$cited" | tr ',' ' '); do
-      c="$(norm_index "$c")"
-      in_set "$c" || refuse "$sf:$line cites index $c, which no story file in $STORIES_DIR carries"
-      case " $distinct " in *" $c "*) ;; *) distinct="$distinct $c" ;; esac
+      o="$(norm_ord "$c")"
+      [ -n "$o" ] || refuse "$sf:$line cites ordinal $c, outside 1..$K"
+      case " $distinct " in *" $o "*) ;; *) distinct="$distinct $o" ;; esac
     done
     set -- $distinct
     if [ "$key" = "cross" ]; then
-      [ $# -ge 2 ] || refuse "$sf:$line (cross-story shard) cites only$distinct; a cross-story finding cites two or more indices, a single-story one belongs to that story shard"
+      [ $# -ge 2 ] || refuse "$sf:$line (cross-story shard) cites only$distinct; a cross-story finding cites two or more ordinals, a single-story one belongs to that story shard"
     else
       [ $# -eq 1 ] && [ "$1" = "$key" ] \
-        || refuse "$sf:$line (shard $key) cites$distinct; a per-index shard reports only findings citing its own index alone"
+        || refuse "$sf:$line (shard $key) cites$distinct; a per-ordinal shard reports only findings citing its own ordinal alone"
     fi
   done < "$P"
   [ "$n_crit_h" -eq "$crit" ] && [ "$n_major_h" -eq "$major" ] \
@@ -321,6 +342,9 @@ else VERDICT="EXIT_CONDITION_NOT_MET"; fi
 {
   printf '# %s -- adversarial pass %s (merged from %s shards)\n' "$ARTIFACT" "$PASS" "$(wc -l < "$T/shards" | tr -d ' ')"
   printf '\nVerdict RECOMPUTED by merge-adversarial-shards.sh from the summed residue; shard verdicts are advisory.\n'
+  printf '\n## Shard ordinal map\n\n```text\n'
+  cat "$T/map"
+  printf '```\n'
   cat "$T/body"
   printf '\n<!-- SKILL_INVOCATION_PROVENANCE v1\n'
   printf 'skill: %s\n' "$SKILL"
