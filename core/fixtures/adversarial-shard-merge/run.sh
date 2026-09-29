@@ -95,14 +95,15 @@ real_title() { # <n> -> the title text after "### X# — "
   sed -n "${1}p" "$HERE/seed.finding-headings.txt" | sed 's/^### [A-Z][0-9]* — //'
 }
 
-# shard <shard-dir> <key: ordinal|cross> <n-major> <verdict> <stories-cite> [sha-override]
+# shard <shard-dir> <key: ordinal|cross> <n-major> <verdict> <stories-cite> [sha-override] [invoked_at]
 shard() {
-  local d="$1" k="$2" n="$3" v="$4" cite="$5" sha="${6:-}" i=0 b at hn
+  local d="$1" k="$2" n="$3" v="$4" cite="$5" sha="${6:-}" at_o="${7:-}" i=0 b at hn
   if [ "$k" != "cross" ] && [ -z "$sha" ]; then
     b="$(bash "$MERGE" --map "$d" | awk -F'\t' -v k="$k" '$1 + 0 == k + 0 { print $2 }')"
     sha="$(sha_of "$(stories_of "$d")/$b")"
   fi
   case "$k" in cross) at="2026-08-24T15:09:19Z" ;; *) at="2026-08-24T15:0${k}:19Z" ;; esac
+  [ -n "$at_o" ] && at="$at_o"
   {
     printf '# stories -- adversarial shard %s\n\n## Findings\n\n' "$k"
     while [ "$i" -lt "$n" ]; do
@@ -210,7 +211,22 @@ p_sha() { # shard 3 notarized bytes that are not the story on disk
   run_merge "$1" "$d"
   refused_clean "the shard reviewed other bytes" "$d"
 }
-P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha"
+p_ms() { # a shard stamped with milliseconds merges, and the merged invoked_at is the TRUE earliest
+  # The discriminating pair is ONE second apart in neither direction: 15:00:19Z and 15:00:19.497Z.
+  # By time 19Z is earlier; by raw string `.` (0x2E) sorts before `Z` (0x5A), so a raw comparison
+  # picks 19.497Z. The consumer stamps both forms (4 of 317 real passes carry a fraction).
+  local m="$1" d o c
+  d="$(b3_world)"; o="$(out_of "$d")"; c="$(dirname "$m")/validate-adversarial-convergence.sh"
+  shard "$d" 1 2 EXIT_CONDITION_MET 1 "" "2026-08-24T15:00:19.497Z"
+  shard "$d" 2 2 EXIT_CONDITION_MET 2 "" "2026-08-24T15:00:19Z"
+  run_merge "$m" "$d"
+  [ "$RC" -eq 0 ] && has "$o" "invoked_at: 2026-08-24T15:00:19Z" || return 1
+  # The validator must ACCEPT the merged value; which state it reaches is A1/A2's property, not
+  # this cell's, so either healthy state passes here (asserting one entangled this cell with MX1).
+  bash "$c" --series "$(dirname "$o")/stories-adversarial-p" --cycle-state > "$CO" 2>&1 || return 1
+  has "$CO" "CONTINUE" || has "$CO" "CONVERGED"
+}
+P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms"
 
 # ---------------------------------------------------------------------------------- the arms
 echo "adversarial-shard-merge:"
@@ -245,6 +261,8 @@ p_miss_ord "$MERGE"   && ok "R1: ordinal 1 (a non-story- file) with no shard -> 
 p_miss_cross "$MERGE" && ok "R2: no cross.md -> REFUSED 'shard cross is missing', exit 2, nothing written" || bad "R2: a missing cross shard was not refused cleanly (rc=$RC): $(cat "$MO")"
 p_dup "$MERGE"        && ok "R3: 1.md beside 01.md -> REFUSED 'delivered more than once', exit 2, nothing written" || bad "R3: a duplicate shard was not refused cleanly (rc=$RC): $(cat "$MO")"
 p_partition "$MERGE"  && ok "R4: a per-ordinal finding citing two stories, and a cross finding citing one, each REFUSED, nothing written" || bad "R4: a partition violation was not refused cleanly (rc=$RC): $(cat "$MO")"
+p_ms "$MERGE"         && ok "A4: shards stamped 15:00:19.497Z and 15:00:19Z merge, the merged invoked_at is 15:00:19Z (the true earliest, not the raw-string least), and --cycle-state accepts it (exit 0)" \
+  || bad "A4: a millisecond-stamped shard did not merge to the true-earliest invoked_at (rc=$RC): $(cat "$MO") $(cat "$CO" 2>/dev/null)"
 p_sha "$MERGE"        && ok "R5: a shard notarizing another story's sha -> REFUSED 'reviewed other bytes', exit 2, nothing written" || bad "R5: a sha mismatch was not refused cleanly (rc=$RC): $(cat "$MO")"
 
 # R6: a finding heading EXACTLY as the real pass wrote it carries no severity word, so the heads
@@ -324,6 +342,12 @@ mutant "MX2 ceiling hard-coded, not read" "ceiling" \
 mutant "MX3 missing-shard check removed" "miss_ord miss_cross" \
   'for idx in $ORDINALS cross; do' \
   'for idx in ; do'
+mutant "MX4 earliest shard by raw string, not by time" "ms" \
+  'if [ -z "$EARLIEST" ] || [[ "$AT_KEY" < "$EARLIEST_KEY" ]]; then' \
+  'if [ -z "$EARLIEST" ] || [[ "$at" < "$EARLIEST" ]]; then'
+mutant "MX5 invoked_at fraction refused" "ms" \
+  ':[0-9]{2}(\.[0-9]{1,9})?Z$' \
+  ':[0-9]{2}Z$'
 
 echo
 if [ "$fails" -eq 0 ]; then echo "adversarial-shard-merge: PASS"; exit 0; fi
