@@ -20959,3 +20959,122 @@ one-word answer after the pull. Separately, the consumer's live sprint-315 recor
 verify: sh v=core/scripts/validate-scope-confirmation.sh; [ -f "$v" ] || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; d=$(mktemp -d) || exit 9; h=$(printf c3 | shasum -a 256 | cut -c1-64); mkdir -p "$d/pa" "$d/r/.claude" && printf '### CO-S1-A\n**Status: OPEN.**\n' > "$d/pa/carry-over-backlog.md" && printf '## 2026-01-02T00:00:00Z -- AskUserQuestion\n- SHA256: %s\n' "$h" > "$d/late.md" && sed 's/2026-01-02/2025-12-31/' "$d/late.md" > "$d/early.md" && printf 'version: 0.659.0\n' > "$d/r/.claude/.ai-dlc-version" && git -C "$d/r" init -q && git -C "$d/r" add .claude && GIT_COMMITTER_DATE=2026-01-01T00:00:00Z GIT_AUTHOR_DATE=2026-01-01T00:00:00Z git -C "$d/r" -c user.name=r -c user.email=r@r -c commit.gpgsign=false commit -qm s || exit 9; s() { printf -- '- user_request_verbatim: x\n- scope_confirmed: confirmed\n- scope_confirmed_cite: %s\n%s\n' "$h" "$1" > "$d/s.md"; bash "$v" --snapshot "$d/s.md" --answers "$d/$2.md" --backlog "$d/pa/carry-over-backlog.md" --repo "$d/r" > "$d/o" 2>&1; echo $?; }; [ "$(s '- scope_deferred_items: [CO-S1-A]' late)" = 0 ] || exit 1; [ "$(s '- scope_deferred_items: [CO-S1-A, CO-S1-UNFILED]' late)" = 1 ] && grep -q CO-S1-UNFILED "$d/o" || exit 1; [ "$(s '' late)" = 1 ] || exit 1; [ "$(s '' early)" = 3 ] || exit 1; exit 0
 
 
+## BL-356 — three detectors still refuse with exit 0, so `apply.sh` and `emit-report.sh` read the refusal as a clean section
+
+**DEFECT.** Found by the batch 164 tip and fix hands. It discharges no consumer candidate. Split from
+`BL-354`, which closed on reading each detector's exit; these three never set one.
+
+- `core/skills/ai-dlc-update/reconcile/retired-layer-passage.sh:83-85`: when `rulebook_globs`
+  cannot read the rulebook list from `setup-sites.md`, it prints "refusing to report clean" to
+  stderr and exits 0. `apply.sh` now reads that exit and sees 0, so no refusal row is emitted.
+- `core/skills/ai-dlc-update/reconcile/retired-layer-contract.sh`, `rulebook_globs`: it reads
+  `setup-sites.md` with `2>/dev/null` and its status is never read. It feeds
+  `for glob in $(rulebook_globs)` in `collect` and `rulebook_set`. With `setup-sites.md` at mode
+  000 the script exits 0 with 0 stdout bytes, and `emit-report.sh`'s `a0_render` shows rc 0 with
+  empty rows as "none". The empty-`BASE_SET` branch's stderr is the only trace.
+- `core/skills/ai-dlc-update/reconcile/retired-tokens.sh`, `rt_blob`: it compares the exact
+  `ls-tree --name-only` line against the input path. Under the default `core.quotePath` a non-ASCII
+  path is C-quoted, so the comparison fails and the row is lost silently: base printed a row, 0.654.0
+  prints none. Not reachable today, since 0 quoted or non-ASCII paths were found in the distribution
+  or the reference consumer. That zero was taken without a same-invocation positive control.
+
+**Remedy:** refuse with exit 2 where each script already refuses (`retired-layer-passage.sh`'s
+staging failure and `retired-layer-contract.sh`'s `collect` both use it), and read `ls-tree -z` or
+compare against the quoted form in `rt_blob`.
+
+**Amended at batch 169 (v0.660.0): bullets 1 and 2 are fixed, and bullet 3 is NOT.** The entry
+stays live, because bullet 3 is blocked, not narrowed.
+
+- **Bullet 1, fixed.** `retired-layer-passage.sh` exits 2 when it cannot read the rulebook list.
+- **Bullet 2, fixed.** `retired-layer-contract.sh` reads the glob list once in the main shell, and
+  exits 2 when the read fails OR yields no glob. The empty-`BASE_SET` exit is unchanged, because a
+  rulebook carrying no contract shape is legitimate.
+- **Bullet 3 is a PRODUCER defect, and its premise was wrong.** `preclassify.sh:594` takes its
+  diff from lib.sh's `memo_diff_name_status`, a `git diff --name-status` under the default
+  `core.quotePath`. That C-quotes a non-ASCII path, so the CLASSIFY row carries
+  `"core/scripts/caf\303\251.sh"` in BOTH path columns. `retired-tokens.sh:198` (tip `:203`) then
+  finds no such consumer file and skips the row before `rt_blob` ever runs. That happens on base
+  and tip alike. "Base printed a row" held only for a synthetic `--bucket-rows` seed carrying the
+  raw path, which no producer writes. Measured end to end with no `--bucket-rows` at tip: rc 0, the
+  ASCII row present and the `café.sh` row absent; with `core.quotepath=false` injected through
+  `GIT_CONFIG_PARAMETERS`, both rows present. The `rt_blob` change in this release
+  (`-c core.quotePath=false` on its `ls-tree`) is hardening only. The fix belongs in
+  `memo_diff_name_status` or `preclassify.sh`, and both are bootstrapping.
+
+**The receipt keys on all three bullets, so it cannot exit 0 until the producer is fixed.** Exit
+1 means the entry is live, and the stderr tag names why: `BL356-BULLET-1-OR-2-REGRESSED`, or
+`BL356-BULLET-3-PRODUCER-REMAINS` when bullets 1 and 2 hold and bullet 3 still loses its row.
+**At this release it exits 1 with the second tag, which reads STILL-LIVE.**
+
+The receipt works on a `mktemp` copy of `reconcile/`, never the tree's own files. It drives both
+detectors on a seeded world twice:
+
+- with the copy's `setup-sites.md` at mode 000;
+- with its `rulebook:` list emptied.
+
+Each run must exit non-zero with 0 stdout bytes, and stderr must name `setup-sites`. The contract
+detector must also name the copy's own path, which proves the copy is the tree that was read. It
+then drives `retired-tokens.sh` with no `--bucket-rows` on a world with `plain.sh` and `café.sh`,
+and requires both rows.
+
+Exit 9 comes from the preconditions:
+
+- running as root, which reads mode 000;
+- a mode-000 file that is still readable;
+- each detector's unforced run producing no row;
+- the ASCII control row absent.
+
+Scored through `backlog-reverify.sh`'s own `eval` shape:
+
+| variant | exit | tag |
+|---|---|---|
+| tip (`afe58b5b`) | 1 | BULLET-3-PRODUCER-REMAINS |
+| base `322ef42c` | 1 | BULLET-1-OR-2-REGRESSED |
+| BL-360 fix alone (`2f598a86`) | 1 | BULLET-1-OR-2-REGRESSED |
+| BL-356 fix alone (applied to base) | 1 | BULLET-3-PRODUCER-REMAINS |
+| the detectors stubbed to `exit 0` | 9 | |
+| the detectors stubbed to a refusal (`exit 2`) | 9 | |
+| `retired-layer-passage.sh` refusal back to `exit 0` | 1 | BULLET-1-OR-2-REGRESSED |
+| `retired-layer-contract.sh`'s empty-list refusal removed | 1 | BULLET-1-OR-2-REGRESSED |
+| `retired-layer-contract.sh`'s read status dropped (`\|\| true`) | 1 | BULLET-3-PRODUCER-REMAINS |
+| second spelling (a `[ -r "$SITES" ]` refusal before the read) | 1 | BULLET-3-PRODUCER-REMAINS |
+| bullet 3 fixed at the producer (`-c core.quotePath=false` in `memo_diff_name_status`) | 0 | |
+
+The status-drop mutant survives, and that is correct. At mode 000 the empty-list guard refuses in
+its place, and the refusal is the same exit 2. The last row shows exit 0 is reachable, and that
+the producer, not `rt_blob`, is where bullet 3 closes.
+
+**LANDED (v0.661.0, verified 4fff688e).** Receipt exits 0 on `origin/main`, and it exited 1 with
+`BL356-BULLET-3-PRODUCER-REMAINS` at 0.660.0.
+
+**Amended at batch 170 (v0.661.0): bullet 3 is fixed at the producer, in three places.**
+`memo_diff_name_status` in lib.sh now passes `-c core.quotePath=false` on both of its `git diff`
+calls: the memo-miss fallback (`:1128`) and the memoised write (`:1130`). A non-ASCII path now
+reaches preclassify's CLASSIFY rows raw, so `retired-tokens.sh` finds the consumer file and
+prints the row. The contract adversary found that this change alone is not enough. On a
+pre-relocation consumer holding an edited `scripts/café.sh`, base shows a visible but wrong quoted
+CLASSIFY row, while the name-status fix alone replaces it with an inert `PRE-RELOCATION-NOOP` and
+loses the `RELOCATE-MOVE+consumer-edited` disclosure. The cause is preclassify's relocation
+listing, `ls-tree --name-only "$THEIRS" core/scripts/` (base `:538`, tip `:539`), which still
+quoted the name. It now carries the same flag, and the disclosure is back. The tip adversary then
+found a third site. `machinery_paths()` in preclassify built its set from two `ls-files
+--with-tree` calls under the default quoting, and `self-update-gate.sh` arm C and
+`unregistered-drift.sh`'s `carried_bucket` join the now-raw rows against that set with `grep -xF`.
+With only the first two edits, a consumer-edited `core/skills/ai-dlc-update/café.md` lost its
+`SELF-UPDATE-CARRY`, while the ASCII control beside it kept its carry. Base carried it only because
+both sides were quoted alike. Both calls now carry the flag too. All three edits together are the
+producer fix this bullet named. `memo_ls_tree` in the same file has the same quoting and was
+deliberately left alone, because its readers each compare its lines against their own spelling of
+a path. It is the first row of the census of remaining listing sites, filed as `BL-364` at the batch
+close.
+
+The receipt above was re-scored unchanged, run by `bash -c` from the root of a `git archive`
+extraction of each commit's `core/`:
+
+| tree | exit | tag |
+|---|---|---|
+| base `b0c310a3` (0 `core.quotePath=false diff` lines in lib.sh) | 1 | BULLET-3-PRODUCER-REMAINS |
+| the 0.661.0 tree (2 such lines) | 0 | |
+
+verify: sh R=core/skills/ai-dlc-update/reconcile; for f in retired-layer-passage retired-layer-contract lib; do [ -f "$R/$f.sh" ] || exit 9; done; [ -f "$R/setup-sites.md" ] || exit 9; [ "$(id -u)" -ne 0 ] || exit 9; w="$(mktemp -d)" || exit 9; cp -R "$R" "$w/r" || exit 9; g() { local d="$1"; shift; git -C "$d" -c user.email=r@r -c user.name=r -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }; D="$w/d"; mkdir -p "$D/core/skills/ai-dlc/steps" || exit 9; g "$D" init -q || exit 9; printf -- '- Label: /cmd\nuse {tok}\n1. The lead must always record the gate verdict in the story file before merge.\n' > "$D/core/skills/ai-dlc/steps/a.md"; printf 'small\n' > "$D/core/skills/ai-dlc/steps/b.md"; { g "$D" add -A && g "$D" commit -qm b; } >/dev/null 2>&1 || exit 9; B="$(git -C "$D" rev-parse HEAD)"; printf 'use {tok}\n' > "$D/core/skills/ai-dlc/steps/a.md"; { g "$D" rm -q core/skills/ai-dlc/steps/b.md && g "$D" add -A && g "$D" commit -qm t; } >/dev/null 2>&1 || exit 9; T="$(git -C "$D" rev-parse HEAD)"; C="$w/c"; mkdir -p "$C/.claude/skills/ai-dlc/extensions" || exit 9; printf -- 'see steps/b.md\n1. The lead must always record the gate verdict in the story file before merge.\n' > "$C/.claude/skills/ai-dlc/extensions/e.md"; run() { bash "$w/r/$1.sh" "$D" "$B" "$T" "$C"; }; run retired-layer-passage > "$w/ph" 2>/dev/null || exit 9; [ "$(grep -c '^RETIRED-LAYER-PASSAGE' "$w/ph")" -ge 1 ] || exit 9; run retired-layer-contract > "$w/ch" 2>/dev/null || exit 9; [ "$(grep -c '^RETIRED-LAYER-CONTRACT' "$w/ch")" -ge 1 ] || exit 9; S="$w/r/setup-sites.md"; cp "$S" "$w/sites" || exit 9; chmod 000 "$S" || exit 9; cat "$S" >/dev/null 2>&1 && { chmod 644 "$S"; exit 9; }; run retired-layer-passage > "$w/px" 2> "$w/pxe"; p=$?; run retired-layer-contract > "$w/cx" 2> "$w/cxe"; c=$?; chmod 644 "$S"; awk '/^rulebook:/{print; s=1; next} s && /^  - /{next} {s=0; print}' "$w/sites" > "$S" || exit 9; grep -q '^rulebook:' "$S" || exit 9; [ "$(awk '/^rulebook:/{on=1;next} on && /^[a-z_]+:/{exit} on && /^  - /{n++} END{print n+0}' "$S")" -eq 0 ] || exit 9; run retired-layer-passage > "$w/py" 2> "$w/pye"; q=$?; run retired-layer-contract > "$w/cy" 2> "$w/cye"; y=$?; [ "$p" -ne 0 ] && [ ! -s "$w/px" ] && grep -q 'setup-sites' "$w/pxe" && [ "$c" -ne 0 ] && [ ! -s "$w/cx" ] && grep -qF "$S" "$w/cxe" && [ "$q" -ne 0 ] && [ ! -s "$w/py" ] && [ "$y" -ne 0 ] && [ ! -s "$w/cy" ] && grep -qF "$S" "$w/cye" || { echo BL356-BULLET-1-OR-2-REGRESSED >&2; exit 1; }; cp "$w/sites" "$S" || exit 9; E="$w/e"; mkdir -p "$E/core/scripts" || exit 9; g "$E" init -q || exit 9; U="$(printf 'caf\303\251')"; for f in plain "$U"; do printf 'x=$ROOT/old-%s\n' "$f" > "$E/core/scripts/$f.sh"; done; { g "$E" add -A && g "$E" commit -qm b; } >/dev/null 2>&1 || exit 9; EB="$(git -C "$E" rev-parse HEAD)"; for f in plain "$U"; do printf 'x=$ROOT/new-%s\n' "$f" > "$E/core/scripts/$f.sh"; done; { g "$E" add -A && g "$E" commit -qm t; } >/dev/null 2>&1 || exit 9; ET="$(git -C "$E" rev-parse HEAD)"; K="$w/k"; mkdir -p "$K/scripts/ai-dlc" "$K/.claude" || exit 9; for f in plain "$U"; do printf 'x=$ROOT/old-%s\necho edited\n' "$f" > "$K/scripts/ai-dlc/$f.sh"; done; bash "$w/r/retired-tokens.sh" "$E" "$EB" "$ET" "$K" > "$w/to" 2>/dev/null || exit 9; grep -q '^RETIRED-CONTRACT-TOKEN[[:blank:]]core/scripts/plain\.sh[[:blank:]]' "$w/to" || exit 9; grep -q "^RETIRED-CONTRACT-TOKEN[[:blank:]]core/scripts/$U\.sh[[:blank:]]" "$w/to" || { echo BL356-BULLET-3-PRODUCER-REMAINS >&2; exit 1; }; exit 0
+
