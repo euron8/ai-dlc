@@ -327,8 +327,10 @@ machinery_paths() { # -> one core-relative machinery path per line, resolved at 
     _mgnorm="$_mgnorm $_mg"
   done
   if [ -n "$_mgnorm" ]; then
-    _mb="$(git -C "$DIST" ls-files --with-tree="$BASE" -- $_mgnorm 2>/dev/null)"
-    _mt="$(git -C "$DIST" ls-files --with-tree="$THEIRS" -- $_mgnorm 2>/dev/null)"
+    # `core.quotePath=false`: the CLASSIFY rows carry raw paths, and arm C and `carried_bucket`
+    # join them against this set with `grep -xF` -- a C-quoted set matches no non-ASCII row.
+    _mb="$(git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$BASE" -- $_mgnorm 2>/dev/null)"
+    _mt="$(git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$THEIRS" -- $_mgnorm 2>/dev/null)"
     _mout="$_mb
 $_mt"
   fi
