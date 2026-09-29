@@ -521,8 +521,11 @@ exception 4). Each shard's brief carries `shard: <i>/<N> <files>` and the parts 
 `_bmad-output/planning-artifacts/s<N>/shards/<artifact>-repair-p<M>/<i>.md`. Every `edit:` line
 cites the full path of each file it edits, and a citation must not wrap onto the next line. Beat-join
 every part, then run the join
-`scripts/ai-dlc/join-remediator-shards.sh --sprint <N> --artifact <name> --pass <M> --artifact-path <path> --since <ISO> --until <ISO>`
-over the repair window. It reads the harness write ledger and refuses (exit 2, `REFUSED:`,
+`scripts/ai-dlc/join-remediator-shards.sh --sprint <N> --artifact <name> --pass <M> --artifact-path _bmad-output/planning-artifacts/s<N> --since <ISO> --until <ISO>`
+over the repair window. `--artifact-path` is the sprint slot `s<N>`, not `s<N>/stories`: a
+stories repair also edits `epics/epics.md` and other slot siblings, and every file a shard edits
+under the slot must be cited on its `edit:` lines. Writes under `s<N>/shards/` are the parts
+themselves and are not counted. It reads the harness write ledger and refuses (exit 2, `REFUSED:`,
 nothing written) if any file was written by two agents, if a written file is cited by no part,
 if a file is cited by two parts, or if any part is unstructured. Otherwise it writes the one
 repair record below. The serial cross-file remediator runs after that and APPENDS its entries

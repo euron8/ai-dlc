@@ -16,8 +16,14 @@
 #       --artifact-path <path under the project root> --since <ISO> --until <ISO>
 #
 #   --artifact        the artifact NAME, as in `<artifact>-repair-p<M>.md` (e.g. `stories`)
-#   --artifact-path   the file or directory under repair, relative to the project root, in the
-#                     ledger's own spelling (`_bmad-output/planning-artifacts/s172/stories`)
+#   --artifact-path   the SPRINT SLOT, relative to the project root, in the ledger's own spelling
+#                     (`_bmad-output/planning-artifacts/s172`). A stories repair edits the stories
+#                     AND their slot siblings -- `epics/epics.md` above all -- so the slot, not
+#                     `s<N>/stories`, is the set of files a repair may write. One directory the
+#                     ledger already spells, never a hand-listed set of paths: the file set stays
+#                     DERIVED from the ledger. Files outside the slot (`docs/`, a top-level
+#                     `planning-artifacts/prd.md`) are not a stories repair's to edit, and a part
+#                     citing one is refused as a claimed edit with no write.
 #   --since/--until   the repair window, `YYYY-MM-DDTHH:MM:SSZ`, inclusive both ends. Explicit
 #                     and required: an mtime or a "last N minutes" default is a window the
 #                     filesystem or the clock can move.
@@ -34,6 +40,9 @@
 # WHAT IT REFUSES, AND THE ORDER IS NOT SIGNIFICANT -- every reason is reported:
 #   - an empty shard directory (a glob that matched nothing is not a join of zero parts);
 #   - no ledger, or no ledger row under the artifact in the window (disjointness unproven);
+#     a row under `s<N>/shards/` is a shard's OWN record (a remediator writing its part, or an
+#     adversary its shard), never an artifact write, and is dropped from the file set first --
+#     otherwise every part a remediator writes reads as a written file no part cites;
 #   - any file under the artifact written by two or more distinct agent_ids in the window;
 #   - a written file that no part's `edit:` lines cite (the missing shard -- the file set is
 #     DERIVED from the ledger, never passed in);
@@ -63,6 +72,8 @@
 # cites no file at all is accepted (an all-escalated shard is legitimate). The ledger rows
 # are PreToolUse attempts, not completed writes, so an attempted overlap refuses -- the
 # conservative direction. Writes made through Bash reach no Edit matcher and no ledger row.
+# The slot is wide on purpose, so ANY other dispatched agent writing in it inside the window is
+# an uncited file and a refusal: the window must be the repair window alone.
 #
 # NOT A MODE OF THE ADVERSARY MERGE. A separate program on purpose: the adversary-shard fix and
 # this one close different backlog entries, and a shared mode would let either close both.
@@ -83,7 +94,7 @@ while [ $# -gt 0 ]; do
     --artifact-path) APATH="${2:-}"; shift 2 ;;
     --since) SINCE="${2:-}"; shift 2 ;;
     --until) UNTIL="${2:-}"; shift 2 ;;
-    -h|--help) sed -n '2,60p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,79p' "$0"; exit 0 ;;
     *) die "unknown argument '$1' (see --help)" ;;
   esac
 done
@@ -134,6 +145,9 @@ PA="${STATE}/planning-artifacts"
 LEDGER="${PA}/.artifact-writes.jsonl"
 SHARD_DIR="${PA}/s${SPRINT}/shards/${ARTIFACT}-repair-p${PASS}"
 OUT="${PA}/s${SPRINT}/${ARTIFACT}-repair-p${PASS}.md"
+# The shards root in the LEDGER's spelling: the hook writes `<basename of the state dir>/...`
+# (its STATE_DIR_NAME), so this is derived the same way, whether AI_DLC_STATE_DIR is absolute or not.
+SHARD_REL="${_STATE_DIR##*/}/planning-artifacts/s${SPRINT}/shards"
 
 # Arm H's own predicate, from the sibling. Same dir in both layouts (core/scripts/ and
 # scripts/ai-dlc/ each hold both files), so no walk from one core file to another.
@@ -155,11 +169,12 @@ PARTS="$(printf '%s' "$PARTS" | sort)"
 
 # --- the ledger: per-file distinct writers inside the window, under the artifact path.
 [ -f "$LEDGER" ] || die "no write ledger at ${LEDGER}; disjointness cannot be proven"
-ROWS="$(jq -rn --arg since "$SINCE" --arg until "$UNTIL" --arg ap "$APATH" '
+ROWS="$(jq -rn --arg since "$SINCE" --arg until "$UNTIL" --arg ap "$APATH" --arg sh "$SHARD_REL" '
   [inputs | select(type == "object") | select(.kind == "artifact-write")
    | select((.agent_id // "") != "") | select((.ts | type) == "string")
    | select(.ts >= $since and .ts <= $until)
    | select(.path == $ap or (.path | startswith($ap + "/")))
+   | select((.path | startswith($sh + "/")) | not)
    | [.path, .agent_id]] | unique | .[] | @tsv' "$LEDGER" 2>/dev/null)" \
   || die "the write ledger ${LEDGER} does not parse as JSON lines"
 [ -n "$ROWS" ] || die "the ledger records no dispatched write under ${APATH} in [${SINCE}, ${UNTIL}]; disjointness is unproven"
@@ -269,7 +284,7 @@ TMP="${OUT}.join.$$"
   echo "# ${ARTIFACT} repair — sprint ${SPRINT}, pass ${PASS} (joined from $(printf '%s\n' "$PARTS" | grep -c .) shard records)"
   echo ""
   echo "Joined by join-remediator-shards.sh from ${SHARD_DIR#"${JR_ROOT}"/}; window ${SINCE} .. ${UNTIL};"
-  echo "every file under ${APATH} was written by exactly one agent in that window."
+  echo "every file under ${APATH} outside ${SHARD_REL}/ was written by exactly one agent in that window."
   echo ""
   while IFS= read -r p; do
     [ -n "$p" ] || continue

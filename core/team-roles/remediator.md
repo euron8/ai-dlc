@@ -30,7 +30,10 @@ source; do not infer either value from anywhere else.
    `s<N>/shards/<artifact>-repair-p<M>/`, not to the record path in item 3. Every `edit:` line
    cites the FULL path of each file you edited, on that one line with no wrap onto the next. Ask
    for and report no agent id. The join `join-remediator-shards.sh` keys your part on those
-   citations against the harness write ledger, and it refuses an uncited or doubly-written file.
+   citations against the harness write ledger over the whole sprint slot
+   (`--artifact-path _bmad-output/planning-artifacts/s<N>`), and it refuses an uncited or
+   doubly-written file: every file you edit under `s<N>/` — stories, `epics/epics.md`, any
+   sibling — appears on an `edit:` line. Your part file under `s<N>/shards/` is not counted.
 2. **Repair every CRITICAL and MAJOR.** MINOR/NIT at your discretion; say which you
    skipped and why.
 3. **Write the repaired artifact in place**, and write a **repair record** to

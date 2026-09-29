@@ -18,6 +18,9 @@
 # stories of one reference-consumer sprint (s305), and `seed.block-*.md` are three finding blocks
 # of that sprint's real repair record, one per story, each ending at its `derivation:` label. The
 # worlds are built AS sprint 305, so every `edit:` path is the consumer's own spelling, verbatim.
+# `seed.block-epics.md` is a block of a DIFFERENT sprint's record (s310 stories pass 1, MINOR-1)
+# whose `edit:` line cites ONLY `epics/epics.md` -- the shape of 101 of the 174 `edit:` lines
+# in that consumer's stories repair records, and the reason `--artifact-path` is the sprint slot.
 #
 # THE MUTANTS AT THE END are copies of the join beside the sibling it extracts arm H's predicate
 # from, scored against the SAME predicates the arms assert, kill sets compared for EQUALITY.
@@ -52,7 +55,7 @@ SRCDIR="$(cd "$(dirname "$JOIN")" && pwd)"
 CONV="$SRCDIR/validate-adversarial-convergence.sh"
 [ -f "$CONV" ] || { echo "FIXTURE ERROR: $CONV is not beside the join; it extracts arm H's predicate from there" >&2; exit 2; }
 S21=story-2.1-positions-on-demand.md; S22=story-2.2-lifetime-pnl-on-demand.md; S31=story-3.1-dark-theme.md
-for _s in "seed.$S21" "seed.$S22" "seed.$S31" seed.block-2.1.md seed.block-2.2.md seed.block-3.1.md; do
+for _s in "seed.$S21" "seed.$S22" "seed.$S31" seed.block-2.1.md seed.block-2.2.md seed.block-3.1.md seed.block-epics.md; do
   [ -s "$HERE/$_s" ] || { echo "FIXTURE ERROR: seed $HERE/$_s is missing or empty" >&2; exit 2; }
 done
 echo "remediator-shard-join: resolved subjects = $JOIN, $HOOK"
@@ -66,15 +69,17 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
 has() { local n; n="$(grep -cF -- "$2" "$1")" || n=0; [ "$n" -gt 0 ]; }
 
 # Three harness-shaped agent ids -- the reference consumer's own verdict-write ledger shape.
-AG1=a16fddf14ea289491; AG2=acd81ddfb7c535037; AG3=a078671394c90dc56
-REL=_bmad-output/planning-artifacts/s305/stories
+AG1=a16fddf14ea289491; AG2=acd81ddfb7c535037; AG3=a078671394c90dc56; AG4=a5e0c4b21d9f3a870
+SLOT=_bmad-output/planning-artifacts/s305
+REL=$SLOT/stories
 
 new_world() { # -> a fresh project root (own mktemp: a counter bumped inside $( ) dies there)
   local w pa s
   w="$(mktemp -d "$WORK/w.XXXXXX")" || return 1
   pa="$w/_bmad-output/planning-artifacts"
-  mkdir -p "$pa/s305/stories" "$pa/s305/shards/stories-repair-p1" "$w/_bmad-output/gate-adjudication"
+  mkdir -p "$pa/s305/stories" "$pa/s305/epics" "$pa/s305/shards/stories-repair-p1" "$w/_bmad-output/gate-adjudication"
   printf '# Pipeline Snapshot\n' > "$w/_bmad-output/pipeline-snapshot.md"
+  printf '# Epics\n' > "$pa/s305/epics/epics.md"
   for s in "$S21" "$S22" "$S31"; do cp "$HERE/seed.$s" "$pa/s305/stories/$s"; done
   printf '%s' "$w"
 }
@@ -91,7 +96,7 @@ part() { # <world> <name> <block...> -- a remediator part: real repair blocks, n
 }
 JO="$WORK/join.out"
 run_join() { # <join-script> <world> -> RC, $JO
-  AI_DLC_PROJECT_ROOT="$2" bash "$1" --sprint 305 --artifact stories --pass 1 --artifact-path "$REL" \
+  AI_DLC_PROJECT_ROOT="$2" bash "$1" --sprint 305 --artifact stories --pass 1 --artifact-path "$SLOT" \
     --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1
   RC=$?
 }
@@ -147,7 +152,24 @@ p_bothdirs() { # the adversary shard dir of the SAME pass is beside the repair d
   run_join "$1" "$w"
   [ "$RC" -eq 0 ] && has "$JO" "(3 parts, 3 writers)"
 }
-P_ALL="disjoint overlap missing unwritten bothdirs"
+p_epics() { # a fourth shard whose part cites ONLY epics/epics.md (real s310 block), written by a fourth agent
+  local w; w="$(new_world)"; three_writers "$w"
+  drive "$w" Edit "$w/$SLOT/epics/epics.md" "$AG4"
+  part "$w" 01 2.1; part "$w" 02 2.2; part "$w" 03 3.1; part "$w" 04 epics
+  run_join "$1" "$w"
+  [ "$RC" -eq 0 ] && has "$JO" "(4 parts, 4 writers)" && [ -f "$(out_of "$w")" ]
+}
+p_shardrow() { # each remediator's Write of its OWN part file is a ledger row under shards/, never a missing shard
+  local w n; w="$(new_world)"; three_writers "$w"
+  part "$w" 01 2.1; part "$w" 02 2.2; part "$w" 03 3.1
+  drive "$w" Write "$w/$SLOT/shards/stories-repair-p1/01.md" "$AG1"
+  drive "$w" Write "$SLOT/shards/stories-repair-p1/02.md" "$AG2"
+  n="$(grep -c 'shards/stories-repair-p1/' "$w/_bmad-output/planning-artifacts/.artifact-writes.jsonl")" || n=0
+  [ "$n" -eq 2 ] || return 1   # the hook DID record them, so the join had to exclude them
+  run_join "$1" "$w"
+  [ "$RC" -eq 0 ] && has "$JO" "(3 parts, 3 writers)" && [ -f "$(out_of "$w")" ]
+}
+P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow"
 
 # ---------------------------------------------------------------------------------- the arms
 echo "remediator-shard-join:"
@@ -189,6 +211,10 @@ p_missing "$JOIN"   && ok "J3: a writer whose part never arrived -> REFUSED 'cit
   || bad "J3: a missing part was not refused (rc=$RC): $(cat "$JO")"
 p_unwritten "$JOIN" && ok "J4: a part citing a file no agent wrote -> REFUSED 'which no dispatched agent wrote', nothing written" \
   || bad "J4: a part citing an unwritten file was not refused (rc=$RC): $(cat "$JO")"
+p_epics "$JOIN"     && ok "J6: a shard whose part cites ONLY epics/epics.md (a real s310 block), with --artifact-path the sprint slot -> JOINED, 4 parts / 4 writers" \
+  || bad "J6: an epics-only shard did not join under the sprint slot (rc=$RC): $(cat "$JO")"
+p_shardrow "$JOIN"  && ok "J7: remediators' own part-file writes under s305/shards/ are ledger rows and are not read as a missing shard -> JOINED" \
+  || bad "J7: a part-file write under shards/ was read as an artifact write (rc=$RC): $(cat "$JO")"
 p_bothdirs "$JOIN"  && ok "J5: shards/stories-p1/ (adversary) beside shards/stories-repair-p1/ for the same pass -> the join reads only its own dir, 3 parts" \
   || bad "J5: the join read the adversary shard dir of the same pass (rc=$RC): $(cat "$JO")"
 
@@ -270,6 +296,9 @@ mutant "JX1 the >1-writer refusal removed" "overlap" \
 mutant "JX2 the uncited-file refusal removed" "missing" \
   '      if (!(p in cov)) print "UNCITED\t" p "\t" wr[p]' \
   '      if (0) print "UNCITED\t" p "\t" wr[p]'
+mutant "JX3 the shards/ exclusion removed" "shardrow" \
+  '   | select((.path | startswith($sh + "/")) | not)' \
+  '   | select(true)'
 
 echo
 if [ "$fails" -eq 0 ]; then echo "remediator-shard-join: PASS"; exit 0; fi
