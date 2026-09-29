@@ -21158,3 +21158,204 @@ Through `scripts/backlog-reverify.sh` on a scratch ledger it reads CLOSE-CANDIDA
 ceiling admitted no filing inside the release.
 
 verify: sh S=core/scripts/validate-artifact-budget.sh; [ -f "$S" ] && grep -q -e '--check-evidence' "$S" || exit 9; T="$(mktemp -d)" || exit 9; L=_bmad-output/implementation-artifacts/gate-log.md; tk(){ printf 'PASS  validate-artifact-budget.sh 4:  ok  _bmad-output/pipeline-snapshot.md    %s tok  (budget   6000)' "$1"; }; sec(){ printf '## Gate Log: Sprint 315 — gate [planning] at %s\n\n- Timestamp: %s. Result: PASSED.\n\n| Check | Result | Evidence |\n|---|---|---|\n| [core] 13 — Gate log | PASSED | appended |\n| [core] 14 — Snapshot updated | PASSED | %s |\n\n' "$1" "$2" "$3"; }; mk(){ mkdir -p "$T/$1/_bmad-output/implementation-artifacts" || exit 9; [ -z "$2" ] || printf -- '- last_gate_passed: planning %s\n- branch: b\n' "$2" > "$T/$1/_bmad-output/pipeline-snapshot.md" || exit 9; }; run(){ O="$(AI_DLC_PROJECT_ROOT="$T/$1" bash "$S" --check-evidence 2>&1)"; R=$?; C="$(printf '%s\n' "$O" | sed -n 's/.*cites \([0-9][0-9]*\) tok.*/\1/p' | tail -1)"; }; F=0; mk w0 ''; sec only 2026-09-01T00:00:00Z "$(tk 1234)" > "$T/w0/$L" || exit 9; run w0; [ "$R" = 0 ] && [ "$C" = 1234 ] || exit 9; mk w1 2026-09-29T08:31:00Z; { sec architecture 2026-09-29T08:31:00Z "$(tk 5076)"; sec requirements 2026-09-29T05:32:00Z 'evidence line below'; sec carry-over-evaluation 2026-09-29T02:09:00Z "$(tk 3052)"; } > "$T/w1/$L" || exit 9; run w1; [ "$R" = 0 ] && [ "$C" = 5076 ] || { echo "BL369-S315-PREPENDED rc=$R cites=$C" >&2; F=1; }; mk w2 2026-09-20T09:15:00Z; { sec carry-over-evaluation 2026-09-20T04:40Z "$(tk 4306)"; sec requirements 2026-09-20T06:02Z "$(tk 4871)"; sec architecture 2026-09-20T09:15Z "$(tk 5492)"; } > "$T/w2/$L" || exit 9; run w2; [ "$R" = 0 ] && [ "$C" = 5492 ] || { echo "BL369-APPENDED rc=$R cites=$C" >&2; F=1; }; mk w3 2026-09-29T05:32:00Z; { sec requirements 2026-09-29T05:32:00Z 'evidence line below'; sec carry-over-evaluation 2026-09-29T02:09:00Z "$(tk 3052)"; } > "$T/w3/$L" || exit 9; run w3; [ "$R" = 1 ] || { echo "BL369-REQUIREMENTS-INSTANT rc=$R cites=$C" >&2; F=1; }; mk w4 2026-09-28T01:00:00Z; { sec requirements 2026-09-28T01:00:00Z "$(tk 4000)"; sec architecture 2026-09-28T02:00:00Z "$(tk 4500)"; } > "$T/w4/$L" || exit 9; run w4; [ "$R" != 0 ] || { echo "BL369-STALE-SNAPSHOT rc=$R cites=$C" >&2; F=1; }; mk w5 2026-09-28T10:00:00Z; { printf '## Gate Log: Sprint 302 — gate [planning] at architecture\n\n- Timestamp: 2026-09-28T10:00:00Z. Result: PASSED.\n\n| Check | Result | Evidence |\n|---|---|---|\n| [core] 13 — Gate log | PASSED | appended |\n\n'; sec requirements 2026-09-26T08:00:00Z "$(tk 4100)"; sec carry-over-evaluation 2026-09-26T03:00:00Z "$(tk 3900)"; } > "$T/w5/$L" || exit 9; run w5; [ "$R" != 0 ] || { echo "BL369-NAMED-GATE-NO-ROW rc=$R cites=$C" >&2; F=1; }; mk w6 2026-09-27; { sec requirements 2026-09-27T01:00:00Z "$(tk 4000)"; sec architecture 2026-09-28T02:00:00Z "$(tk 4500)"; } > "$T/w6/$L" || exit 9; run w6; [ "$R" != 0 ] || { echo "BL369-DATE-KEY-STALE rc=$R cites=$C" >&2; F=1; }; mk w7 2026-09-28; cp "$T/w6/$L" "$T/w7/$L" || exit 9; run w7; [ "$R" = 0 ] && [ "$C" = 4500 ] || { echo "BL369-DATE-KEY-MATCH rc=$R cites=$C" >&2; F=1; }; mk w8 2026-08-13; { printf '## Gate Log: Sprint 298 — gate [implementation] gate-3\n\n- Timestamp: 2026-08-13T04:00:00Z. Result: PASSED.\n\n| Check | Result | Evidence |\n|---|---|---|\n| [core] 13 — Gate log | PASSED | appended |\n\n'; sec requirements 2026-08-11T02:00:00Z "$(tk 3800)"; sec architecture 2026-08-11T06:00:00Z "$(tk 3900)"; } > "$T/w8/$L" || exit 9; run w8; [ "$R" != 0 ] || { echo "BL369-DATE-KEY-NAMED-GATE-NO-ROW rc=$R cites=$C" >&2; F=1; }; exit "$F"
+## BL-365 — the adversary and every party-mode seat review a whole multi-story subject in one agent
+
+**LANDED (v0.663.0, verified f217daa0).** `core/scripts/merge-adversarial-shards.sh` joins a sharded adversarial pass: one adversary per story ORDINAL (the file's position in the `LC_ALL=C` listing, printed by `--map`) plus one cross-story adversary. The merge refuses unless every ordinal and the cross shard delivered once and every finding's `stories:` line respects the partition, sums the counts, and RECOMPUTES the verdict against the ceilings it reads from `validate-adversarial-convergence.sh`. Three shards each stamped MET with 2 blocking MAJOR merge to `EXIT_CONDITION_NOT_MET`, major=6, which the convergence validator reads. `_gate-procedures.md` "Adversarial review dispatch" and the party-mode item of "Validation cycle" now dispatch per ordinal (seats x parts for party mode) under Rule 28's new "Split dispatch" clause, and Check 24 arm K fails a post-stamp pass over a multi-file artifact that carries no `shard_tool_use_ids:`.
+
+**What differed from the filing.** The remedy keyed shards on the story slug, and the shipped key is the ordinal: by the contract hand's count on graph, 142 of 1045 story files match neither `story-<n>-` nor `story-<e>-<n>-`, and a slug can carry a sprint token the consumer's push guard refuses. The party-mode half is prose plus a lead-side file count, because `/bmad-party-mode` internals are not ai-dlc's; no program joins it. The census headline reproduces from the census hand's extraction of the graph subagent transcripts: 823 agents over 87 lead sessions, 230.8h summed subagent wall clock (this entry says 230.7h), 180.2h with at least one agent live, 144.4h solo, parallelism 1.28. The per-role figures do not reproduce under one role-classification rule, per the census hand; they are not re-derived here and should not be quoted. The live transcript directory now holds 817 `.meta.json` files, not 823, so the population has moved since the census (86 sessions today) and a re-run will not match it exactly.
+
+**Residue.** A single-file artifact keeps one adversary (Rule 28 exception 4). The party-mode join is a count the lead performs, not a program.
+
+**DEFECT.** **Operator priority: HIGHEST (set 2026-09-29), together with `BL-366`..`BL-368`.** Filed
+from a measurement of the graph consumer's subagent transcripts. It discharges no consumer
+candidate. The general form of this gap, that Rule 28 has no split-dispatch rule, is `BL-026`. This
+entry and the three after it are the per-role sites that gap leaves whole.
+
+**The measurement.** The population is `~/.claude/projects/-Users-n8-git-graph/*/subagents/`: 823
+`.meta.json` files and 823 transcripts, all 823 parsed, across 87 lead sessions spanning
+2026-08-30 to 2026-09-29. Wall clock runs from the first to the last timestamp in the transcript.
+Tool time is the join from each `tool_use` to its `tool_result`.
+
+- **Tool execution is 5.4% of subagent wall clock** (12.4h of 230.7h). The adversary ran 32.1h
+  wall against 0.5h of tool time. The rest is model turns, a median of 87 per adversary. A faster
+  script cannot move this. A smaller brief can.
+- **The lead mostly waits on one agent.** Summed subagent time is 230.7h against 180.2h in which
+  at least one subagent was live, so achieved parallelism is 1.28. 144.4h of that is solo time,
+  when exactly one agent is live and the lead is blocked. The adversary accounts for 29.4h of it,
+  more than any other role.
+- **Wall clock grows with the stories named in the brief.** Median adversary wall is 793s with no
+  story path (n=52), 1216s at 1 (n=5), 1873s at 3 (n=12) and 2288s at 5 (n=3). TEA is 2385s at 3
+  and 2704s at 5, and the architect is 792s at 0 and 3526s at 3. Growth is sublinear: each agent
+  pays a fixed cost to load its role file and context, so expect roughly 2x from sharding a pass,
+  not 5x.
+- **Reachable share.** Briefs naming two or more stories hold 12.9h of the adversary's 32.1h, 6.4h
+  of the architect's 18.6h, and 5.3h of TEA's 7.8h. The rest are single-artifact passes, such as a
+  PRD, a spec or a carry-over evaluation, which story sharding does not reach.
+- Existing fan-outs lose little to stragglers: 97 fan-out groups carry 9.1h of max-minus-median
+  excess. The cost is in not fanning out.
+
+**The sites.** Both are in `core/skills/ai-dlc/steps/_gate-procedures.md`.
+`**Dispatch** ONE \`adversary\` per pass` sits at `:301`, and VERIFY dispatches one more at `:449`.
+The party-mode invocation at `:228` has "the step's seats … walk the step's subject", and it writes
+one file per seat. `steps/sprint-review.md:98` has every seat walk "the entire sprint
+implementation". The briefs the graph lead actually wrote say it outright: "SUBJECT (every story,
+every acceptance criterion, every edge case, every dependency)", followed by five story paths.
+
+**Remedy direction.** Dispatch one agent per (seat × story), plus one cross-story agent whose scope
+is limited to dependencies and interactions between stories. Each shard writes its own file under
+`_bmad-output/party-mode/s<N>/`. Check the new basename against `artifact-path-grammar.md` "Areas"
+before choosing it. The lead concatenates the shard files. Make the partition unconstructible
+rather than detected: derive the shard list from the story directory, and have the join assert
+that every story landed in exactly one shard. Adversarial passes stay serial (pass 1, then the
+remediator, then pass 2); sharding shortens each pass without removing the sequence.
+
+The receipt extracts the `## Adversarial review dispatch` and `## Validation cycle` sections by HEADING, each through the next `## `. It exits 1 when a sentence there negates a split (`never|not|no|cannot|don't` before `shard|split|partition|fan-out|parallel`), when the review section names no `merge-adversarial-shards.sh`, when the party-mode text carries no un-negated per-(seat|story|ordinal|part|file) agent sentence and no un-negated `--map`/derived sentence, or when the program is absent. It then DRIVES the program in a `mktemp -d` tree: a clean 3-shard pass must merge MET and be accepted by `validate-adversarial-convergence.sh`, and three MET shards of 2 blocking MAJOR each must merge `EXIT_CONDITION_NOT_MET`, read by that validator as `critical=0 major=6`. Its grammars are self-probed first, in both directions; a failed probe or an empty extraction exits 9. Scored in the 0.663.0 CHANGELOG.
+
+verify: sh F=core/skills/ai-dlc/steps/_gate-procedures.md; M=core/scripts/merge-adversarial-shards.sh; [ -f "$F" ] || exit 9; U='agents? (per|for each|for every)[^a-z]*(seat|stor|ordinal|part|file)'; w="$(mktemp -d)" || exit 9; X='index($0,h)==1{f=1;next} f&&/^## /{exit} f'; N='{t=t" "tolower($0)} END{t=t" "; n=split(t,s,/[.!?] /); for(i=1;i<=n;i++) if (s[i] ~ /(^|[^a-z])(never|not|no|cannot|don.t)( be| one| a| an)? (shard|split|partition|fan-out|parallel)/) print s[i]}'; P='{t=t" "tolower($0)} END{t=t" "; n=split(t,s,/[.!?] /); for(i=1;i<=n;i++) if (s[i] ~ u && s[i] !~ /(^|[^a-z])(never|not|no|do not|don.t)([^a-z]|$)/) print s[i]}'; printf '%s\n' '## H (x)' 'alpha' '## Next' 'beta' > "$w/x" || exit 9; o="$(awk -v h='## H' "$X" "$w/x")"; grep -q alpha <<<"$o" || exit 9; grep -q beta <<<"$o" && exit 9; o="$(awk "$N" <<<'Dispatch one agent per story. Never shard it.')"; [ -n "$o" ] || exit 9; o="$(awk "$N" <<<'One shard per file set, never one per finding. The join never overwrites a record. It is not re-adjudication; the shards carry it.')"; [ -z "$o" ] || exit 9; o="$(awk -v u='agent per story' "$P" <<<'Dispatch one agent per story. Never dispatch one agent per story.')"; [ "$o" = ' dispatch one agent per story' ] || exit 9; a="$(awk -v h='## Adversarial review dispatch' "$X" "$F")"; q="$(awk -v h='## Validation cycle' "$X" "$F")"; [ -n "$a" ] && [ -n "$q" ] || exit 9; g="$(awk "$N" <<<"$a$q")"; [ -z "$g" ] || { echo "BL365-WHOLE-SUBJECT-DISPATCH a split is negated:$g" >&2; exit 1; }; grep -qF 'merge-adversarial-shards.sh' <<<"$a" || { echo "BL365-WHOLE-SUBJECT-DISPATCH the review section names no merge program" >&2; exit 1; }; [ -n "$(awk -v u="$U" "$P" <<<"$q")" ] && [ -n "$(awk -v u='(--map|deriv)' "$P" <<<"$q")" ] || { echo "BL365-WHOLE-SUBJECT-DISPATCH party-mode names no derived per-part dispatch" >&2; exit 1; }; [ -f "$M" ] || { echo "BL365-WHOLE-SUBJECT-DISPATCH merge program absent" >&2; exit 1; }; mk() { s="$w/$1/pa/s1"; mkdir -p "$s/stories" "$s/shards/stories-p1" || exit 9; for i in 1 2 3; do printf 'story %s\n' "$i" > "$s/stories/st-$i.md" || exit 9; h="$(shasum -a 256 "$s/stories/st-$i.md")" || exit 9; { printf '## Findings\n'; j=0; while [ "$j" -lt "$2" ]; do j=$((j+1)); printf '### MAJOR m%s\nstories: %s\n' "$j" "$i"; done; printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\ninvoked_at: 2026-01-01T00:00:0%sZ\ntool_use_id: toolu_%s\nmode: subagent\nlead_role: lead\nartifact_sha: %s\nfindings_critical: 0\nfindings_major: %s\nfindings_minor: 0\nverdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$i" "$i" "${h%% *}" "$2"; } > "$s/shards/stories-p1/$i.md" || exit 9; done; printf '## Findings\n<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\ninvoked_at: 2026-01-01T00:00:09Z\ntool_use_id: toolu_x\nmode: subagent\nlead_role: lead\nartifact: s1/stories\nfindings_critical: 0\nfindings_major: 0\nfindings_minor: 0\nverdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' > "$s/shards/stories-p1/cross.md" || exit 9; }; mk b 2; mk c 0; o="$(bash "$M" "$w/c/pa/s1/shards/stories-p1" 2>&1)"; grep -q 'verdict=EXIT_CONDITION_MET ' <<<"$o" || { echo "BL365-WHOLE-SUBJECT-DISPATCH control: a clean sharded pass did not merge MET: $o" >&2; exit 1; }; o="$(bash "$M" "$w/b/pa/s1/shards/stories-p1" 2>&1)"; grep -q 'verdict=EXIT_CONDITION_NOT_MET ' <<<"$o" && [ -f "$w/b/pa/s1/stories-adversarial-p1.md" ] || { echo "BL365-WHOLE-SUBJECT-DISPATCH three MET shards of 2 blocking MAJOR each did not merge NOT_MET: $o" >&2; exit 1; }; C=core/scripts/validate-adversarial-convergence.sh; bash "$C" "$w/c/pa/s1/stories-adversarial-p1.md" >/dev/null 2>&1 || { echo "BL365-WHOLE-SUBJECT-DISPATCH control: the convergence validator refused a clean merged pass" >&2; exit 1; }; o="$(bash "$C" "$w/b/pa/s1/stories-adversarial-p1.md" 2>&1)"; grep -q 'verdict=EXIT_CONDITION_NOT_MET critical=0 major=6' <<<"$o" || { echo "BL365-WHOLE-SUBJECT-DISPATCH the convergence validator did not read the merged residue: $o" >&2; exit 1; }; exit 0
+
+## BL-366 — the remediator is forbidden to split, and the measurement behind the ban did not test splitting
+
+**LANDED (v0.663.0, verified f217daa0).** The ban is lifted for multi-file artifacts. `ai-dlc-gate-remediation-guard.sh` now appends every dispatched planning-artifact write to `.artifact-writes.jsonl` (record-then-allow, no new deny), and `core/scripts/join-remediator-shards.sh` joins shard repair records only when that ledger shows every file under the artifact written by exactly one agent in the repair window. It refuses a doubly-written, uncited or doubly-cited file and keys each part on the files its `edit:` lines cite, never on a self-reported agent id. `_gate-procedures.md` "Adversarial repair dispatch" and `remediator.md` contract item 1 dispatch one remediator per disjoint FILE set; findings citing more than one file go to one serial remediator after the join. Rationale is notes R38; R35 is untouched.
+
+**What differed from the filing.** The remedy, one writer per SECTION taken from a copy and reassembled by a splice, was refuted: a copy falsifies the artifact's `derived` fences, so shards edit whole files in place instead. Sharding a single document by section is DEFERRED by operator ruling to its own entry, and a single-file artifact stays one remediator. The census headline reproduces from the census hand's extraction of the graph subagent transcripts: 823 agents over 87 lead sessions, 230.8h summed subagent wall clock (this entry says 230.7h), 180.2h with at least one agent live, 144.4h solo, parallelism 1.28. The per-role figures do not reproduce under one role-classification rule, per the census hand; they are not re-derived here and should not be quoted. The live transcript directory now holds 817 `.meta.json` files, not 823, so the population has moved since the census (86 sessions today) and a re-run will not match it exactly.
+
+**Residue.** Single-document sharding (deferred, unfiled here). A write made through Bash reaches no Edit matcher and leaves no ledger row, which the join's header states.
+
+**DEFECT.** **Operator priority: HIGHEST (set 2026-09-29), together with `BL-365`, `BL-367`,
+`BL-368`.** It is filed from the same measurement as `BL-365`. The remediator carries 28.8h of solo
+lead-blocked time, second only to the adversary, over 104 dispatches. Its median is 115 turns,
+and it spends 1.2h in tools against 33.1h of wall clock.
+
+**The sites.** `core/skills/ai-dlc/steps/_gate-procedures.md:461` says "ONE `remediator` per pass —
+never per finding, and never a second remediator alongside the first; the artifact is one document
+and parallel editors contradict each other". Contract item 1 of `core/team-roles/remediator.md`
+says it again. It also said so in every brief the graph lead wrote: "You are the ONE remediator
+for this pass". Those briefs carry a median of 11 numbered findings.
+
+**The ban's evidence does not cover the ban.** It cites `docs/context-hardening-notes.md` R35, which
+measured something else. The LEAD authored repairs from a compacted context and got 7 of 7 claims
+false, while a fresh subagent was right each time. That result proves repair must be delegated. It
+says nothing about N remediators. The "parallel editors contradict each other" clause in R35 is
+reasoning, and no measurement in this repo backs it. The risk it names is real all the same: two
+writers editing overlapping bytes.
+
+**Remedy direction.** Keep one writer per REGION, not per document, so the contradiction becomes
+unconstructible. Partition the pass's findings by the artifact section each one cites. Each shard
+edits only its own section, taken from a copy. A deterministic splice script, not a model,
+reassembles the document and refuses when two shards touch the same region. Findings citing more
+than one section go to a final serial shard, which runs after the splice. Change the dispatch
+sentence and the role-contract item in the same release, and write the rationale into a new notes
+entry rather than editing R35.
+
+The receipt extracts `## Adversarial repair dispatch` and `remediator.md`'s `## Contract` by HEADING. It exits 1 on a negated split, when the repair section names no `join-remediator-shards.sh`, or when the program is absent. It then DRIVES the join in two `mktemp -d` project roots (`AI_DLC_PROJECT_ROOT`): a ledger showing one file written by two agents must be refused with `written by more than one agent` and write nothing, and two parts over two files written by two agents must join into one record carrying two `<!-- shard:` markers. Same self-probes and exit-9 guards as `BL-365`.
+
+verify: sh F=core/skills/ai-dlc/steps/_gate-procedures.md; R=core/team-roles/remediator.md; J=core/scripts/join-remediator-shards.sh; [ -f "$F" ] && [ -f "$R" ] || exit 9; w="$(mktemp -d)" || exit 9; X='index($0,h)==1{f=1;next} f&&/^## /{exit} f'; N='{t=t" "tolower($0)} END{t=t" "; n=split(t,s,/[.!?] /); for(i=1;i<=n;i++) if (s[i] ~ /(^|[^a-z])(never|not|no|cannot|don.t)( be| one| a| an)? (shard|split|partition|fan-out|parallel)/) print s[i]}'; P='{t=t" "tolower($0)} END{t=t" "; n=split(t,s,/[.!?] /); for(i=1;i<=n;i++) if (s[i] ~ u && s[i] !~ /(^|[^a-z])(never|not|no|do not|don.t)([^a-z]|$)/) print s[i]}'; printf '%s\n' '## H (x)' 'alpha' '## Next' 'beta' > "$w/x" || exit 9; o="$(awk -v h='## H' "$X" "$w/x")"; grep -q alpha <<<"$o" || exit 9; grep -q beta <<<"$o" && exit 9; o="$(awk "$N" <<<'Dispatch one agent per story. Never shard it.')"; [ -n "$o" ] || exit 9; o="$(awk "$N" <<<'One shard per file set, never one per finding. The join never overwrites a record. It is not re-adjudication; the shards carry it.')"; [ -z "$o" ] || exit 9; o="$(awk -v u='agent per story' "$P" <<<'Dispatch one agent per story. Never dispatch one agent per story.')"; [ "$o" = ' dispatch one agent per story' ] || exit 9; a="$(awk -v h='## Adversarial repair dispatch' "$X" "$F")"; c="$(awk -v h='## Contract' "$X" "$R")"; [ -n "$a" ] && [ -n "$c" ] || exit 9; g="$(awk "$N" <<<"$a$c")"; [ -z "$g" ] || { echo "BL366-SINGLE-REMEDIATOR a split is negated:$g" >&2; exit 1; }; grep -qF 'join-remediator-shards.sh' <<<"$a" || { echo "BL366-SINGLE-REMEDIATOR the repair section names no join program" >&2; exit 1; }; [ -f "$J" ] || { echo "BL366-SINGLE-REMEDIATOR join program absent" >&2; exit 1; }; mk() { p="$w/$1/_bmad-output/planning-artifacts"; mkdir -p "$p/s1/shards/stories-repair-p1" || exit 9; printf '{"kind":"artifact-write","agent_id":"agA","ts":"2026-01-01T00:00:01Z","path":"_bmad-output/planning-artifacts/s1/stories/a.md"}\n{"kind":"artifact-write","agent_id":"%s","ts":"2026-01-01T00:00:02Z","path":"_bmad-output/planning-artifacts/s1/stories/%s.md"}\n' "$2" "$3" > "$p/.artifact-writes.jsonl" || exit 9; for k in a "$3"; do printf -- '- disposition: fixed\n- edit: _bmad-output/planning-artifacts/s1/stories/%s.md\n- derivation: none\n' "$k" > "$p/s1/shards/stories-repair-p1/$k.md" || exit 9; done; }; mk o agB a; mk d agB b; jr() { AI_DLC_PROJECT_ROOT="$w/$1" bash "$J" --sprint 1 --artifact stories --pass 1 --artifact-path _bmad-output/planning-artifacts/s1/stories --since 2026-01-01T00:00:00Z --until 2026-01-02T00:00:00Z 2>&1; }; o="$(jr o)"; grep -q 'written by more than one agent' <<<"$o" && [ ! -e "$w/o/_bmad-output/planning-artifacts/s1/stories-repair-p1.md" ] || { echo "BL366-SINGLE-REMEDIATOR a file written by two agents was not refused: $o" >&2; exit 1; }; o="$(jr d)"; n="$(grep -c '^<!-- shard: ' "$w/d/_bmad-output/planning-artifacts/s1/stories-repair-p1.md" 2>/dev/null)" || n=0; [ "$n" = 2 ] || { echo "BL366-SINGLE-REMEDIATOR two disjoint parts did not join ($n): $o" >&2; exit 1; }; exit 0
+
+## BL-367 — one gate-adjudicator judges the whole escalated-check worklist
+
+**LANDED (v0.663.0, verified f217daa0).** `core/scripts/validate-gate-adjudication.sh` gains `--expected <gate_type> --shard <i>/<N>`, a contiguous balanced slice of the derived worklist, and `--merge <gate_type> <verdict_path> <part>...`, which refuses (exit 2, nothing written) unless the `<nonce>.part-<i>of<N>.jsonl` parts are exactly 1..N under one nonce, no check_id appears twice and the union equals `--expected`; it then writes the one v1 verdict and runs the coverage arms. No new script and no schema change, so Check 26 reads a merged verdict as it reads an unsharded one. `_gate-procedures.md` "Gate-adjudication dispatch" and `gate-adjudicator.md` carry the sharded dispatch.
+
+**What differed from the filing.** The filing had the lead split the list; the shipped shape has each shard derive its own slice, so no shard is handed a typed list. Parts end in `.jsonl` because `--series` refuses any non-verdict `.json` in that tree.
+
+**Residue.** None.
+
+**NOTE.** **Operator priority: HIGHEST (set 2026-09-29), together with `BL-365`, `BL-366`,
+`BL-368`.** It is filed from the same measurement as `BL-365`. The gate-adjudicator carries 8.9h
+solo over 62 dispatches, with a median of 98 turns and 403s.
+
+**The site.** `core/skills/ai-dlc/steps/_gate-procedures.md:173` reads "**Dispatch** ONE
+`gate-adjudicator`". The agent derives its own worklist with
+`scripts/ai-dlc/validate-gate-adjudication.sh --expected <gate_type>` and writes one
+`GATE_ADJUDICATION_VERDICT v1` JSON. The worklist is already derived mechanically, which makes
+this the easiest partition of the four.
+
+**Remedy direction.** The lead runs `--expected` once and splits it into N shards. Each adjudicator
+writes a partial verdict. A merge script produces the single `v1` document and refuses unless the
+union of the partials equals `--expected` exactly, with nothing missing and nothing twice. The
+schema stays unchanged, so Check 26 reads the merged verdict as it reads today's.
+
+The receipt extracts `## Gate-adjudication dispatch` by HEADING. It exits 1 on a negated split, or when the section names neither `--shard` nor `--merge`. It then DRIVES the validator in a `mktemp -d` tree against the live `--expected implementation` worklist (exit 9 under two checks): each part is built from `--expected --shard <i>/2`, and `--merge` must refuse a missing slice (`not exactly 1..2`) and a duplicate check_id (`appear more than once`) with nothing written, and merge a correct split into a verdict whose `verdicts` count equals the worklist. Same self-probes and exit-9 guards as `BL-365`.
+
+verify: sh F=core/skills/ai-dlc/steps/_gate-procedures.md; V=core/scripts/validate-gate-adjudication.sh; [ -f "$F" ] && [ -f "$V" ] || exit 9; w="$(mktemp -d)" || exit 9; X='index($0,h)==1{f=1;next} f&&/^## /{exit} f'; N='{t=t" "tolower($0)} END{t=t" "; n=split(t,s,/[.!?] /); for(i=1;i<=n;i++) if (s[i] ~ /(^|[^a-z])(never|not|no|cannot|don.t)( be| one| a| an)? (shard|split|partition|fan-out|parallel)/) print s[i]}'; P='{t=t" "tolower($0)} END{t=t" "; n=split(t,s,/[.!?] /); for(i=1;i<=n;i++) if (s[i] ~ u && s[i] !~ /(^|[^a-z])(never|not|no|do not|don.t)([^a-z]|$)/) print s[i]}'; printf '%s\n' '## H (x)' 'alpha' '## Next' 'beta' > "$w/x" || exit 9; o="$(awk -v h='## H' "$X" "$w/x")"; grep -q alpha <<<"$o" || exit 9; grep -q beta <<<"$o" && exit 9; o="$(awk "$N" <<<'Dispatch one agent per story. Never shard it.')"; [ -n "$o" ] || exit 9; o="$(awk "$N" <<<'One shard per file set, never one per finding. The join never overwrites a record. It is not re-adjudication; the shards carry it.')"; [ -z "$o" ] || exit 9; o="$(awk -v u='agent per story' "$P" <<<'Dispatch one agent per story. Never dispatch one agent per story.')"; [ "$o" = ' dispatch one agent per story' ] || exit 9; a="$(awk -v h='## Gate-adjudication dispatch' "$X" "$F")"; [ -n "$a" ] || exit 9; g="$(awk "$N" <<<"$a")"; [ -z "$g" ] || { echo "BL367-WHOLE-WORKLIST-ADJUDICATOR a split is negated:$g" >&2; exit 1; }; grep -qF -- '--merge' <<<"$a" && grep -qF -- '--shard' <<<"$a" || { echo "BL367-WHOLE-WORKLIST-ADJUDICATOR the dispatch section names no --shard/--merge" >&2; exit 1; }; e="$(bash "$V" --expected implementation 2>/dev/null)"; ne="$(grep -c . <<<"$e")" || ne=0; [ "$ne" -ge 2 ] || exit 9; Z=implementation-20260101T000000Z; pt() { bash "$V" --expected implementation --shard "$1/2" 2>/dev/null | while IFS= read -r i; do printf '{"gate_nonce":"%s","gate_series_id":"s","catalog":"c","adjudicator_agent_id":"a%s","check_id":"%s","verdict":"PASS","evidence":"e"}\n' "$Z" "$1" "$i"; done; }; for d in m u k; do mkdir -p "$w/$d" || exit 9; done; pt 1 > "$w/m/$Z.part-1of2.jsonl"; pt 1 > "$w/u/$Z.part-1of2.jsonl"; pt 2 > "$w/u/$Z.part-2of2.jsonl"; pt 1 | head -1 >> "$w/u/$Z.part-2of2.jsonl"; pt 1 > "$w/k/$Z.part-1of2.jsonl"; pt 2 > "$w/k/$Z.part-2of2.jsonl"; [ -s "$w/k/$Z.part-1of2.jsonl" ] && [ -s "$w/k/$Z.part-2of2.jsonl" ] || { echo "BL367-WHOLE-WORKLIST-ADJUDICATOR --expected --shard derived no slice" >&2; exit 1; }; o="$(bash "$V" --merge implementation "$w/m/$Z.verdict.json" "$w/m/$Z.part-1of2.jsonl" 2>&1)"; grep -q 'not exactly 1\.\.2' <<<"$o" && [ ! -e "$w/m/$Z.verdict.json" ] || { echo "BL367-WHOLE-WORKLIST-ADJUDICATOR a missing slice was not refused: $o" >&2; exit 1; }; o="$(bash "$V" --merge implementation "$w/u/$Z.verdict.json" "$w/u/$Z.part-1of2.jsonl" "$w/u/$Z.part-2of2.jsonl" 2>&1)"; grep -q 'appear more than once' <<<"$o" && [ ! -e "$w/u/$Z.verdict.json" ] || { echo "BL367-WHOLE-WORKLIST-ADJUDICATOR a duplicate check_id was not refused: $o" >&2; exit 1; }; bash "$V" --merge implementation "$w/k/$Z.verdict.json" "$w/k/$Z.part-1of2.jsonl" "$w/k/$Z.part-2of2.jsonl" >/dev/null 2>&1; nv="$(jq '.verdicts | length' "$w/k/$Z.verdict.json" 2>/dev/null)" || nv=0; [ "$nv" = "$ne" ] || { echo "BL367-WHOLE-WORKLIST-ADJUDICATOR a correct split did not merge ($nv of $ne)" >&2; exit 1; }; exit 0
+
+## BL-368 — one analyst covers a step's whole exploration scope
+
+**LANDED (v0.663.0, verified f217daa0).** `rule-24.md`'s Dispatch contract gains "Shard by surface": when a Section 0 scope declares more than one independent surface, the lead derives the surface list from that Section 0 and dispatches one analyst per surface, each writing `<area>/s<N>/<base>-parts/<surface>.md`. The join is one `wait-for-deliverable.sh` over every part, a part-count equality, and the canonical draft as the lead's `cat` in surface order.
+
+**What differed from the filing.** Nothing in shape. The join is the lead's count and concatenation, not a program, because the surfaces are named in prose Section 0s no program parses.
+
+**Residue.** No mechanism checks the part count; the dispatch guard's `shard:` field and Check 22's WARN arm record whether a shard line was written, not whether the join ran.
+
+**NOTE.** **Operator priority: HIGHEST (set 2026-09-29), together with `BL-365`..`BL-367`.** Filed
+from the same measurement as `BL-365`. This is the smallest of the four: 3.4h solo over 49
+dispatches, with a median of 284s. It is filed for completeness, and the figure is stated so that
+it is not over-read.
+
+**The site.** In `core/skills/ai-dlc/rule-bodies/rule-24.md`, the **Dispatch contract** paragraph
+has each offloaded step's Section 0 define "the analyst's exploration scope". It dispatches one
+analyst per scope, and it has no split clause.
+
+**Remedy direction.** When a Section 0 scope names more than one independent surface (directories,
+repos, or question groups), dispatch one analyst per surface. Each writes its own part under the
+step's sprint-stamped area, and the lead reads their union. The existing
+`{artifact_path, summary, gaps}` return shape holds per shard.
+
+The receipt extracts Rule 24's body by its `### Rule 24 --` HEADING. It exits 1 on a negated split, when no sentence dispatches an analyst per (or for each) surface, or when no sentence derives the surface list; a sentence carrying `never|not|no|do not` is never credited. Same self-probes and exit-9 guards as `BL-365`.
+
+verify: sh F=core/skills/ai-dlc/rule-bodies/rule-24.md; [ -f "$F" ] || exit 9; U='analysts? (per|for each|for every) (independent )?surface'; w="$(mktemp -d)" || exit 9; X='index($0,h)==1{f=1;next} f&&/^## /{exit} f'; N='{t=t" "tolower($0)} END{t=t" "; n=split(t,s,/[.!?] /); for(i=1;i<=n;i++) if (s[i] ~ /(^|[^a-z])(never|not|no|cannot|don.t)( be| one| a| an)? (shard|split|partition|fan-out|parallel)/) print s[i]}'; P='{t=t" "tolower($0)} END{t=t" "; n=split(t,s,/[.!?] /); for(i=1;i<=n;i++) if (s[i] ~ u && s[i] !~ /(^|[^a-z])(never|not|no|do not|don.t)([^a-z]|$)/) print s[i]}'; printf '%s\n' '## H (x)' 'alpha' '## Next' 'beta' > "$w/x" || exit 9; o="$(awk -v h='## H' "$X" "$w/x")"; grep -q alpha <<<"$o" || exit 9; grep -q beta <<<"$o" && exit 9; o="$(awk "$N" <<<'Dispatch one agent per story. Never shard it.')"; [ -n "$o" ] || exit 9; o="$(awk "$N" <<<'One shard per file set, never one per finding. The join never overwrites a record. It is not re-adjudication; the shards carry it.')"; [ -z "$o" ] || exit 9; o="$(awk -v u='agent per story' "$P" <<<'Dispatch one agent per story. Never dispatch one agent per story.')"; [ "$o" = ' dispatch one agent per story' ] || exit 9; a="$(awk -v h='### Rule 24 --' "$X" "$F")"; [ -n "$a" ] || exit 9; g="$(awk "$N" <<<"$a")"; [ -z "$g" ] || { echo "BL368-WHOLE-SCOPE-ANALYST a split is negated:$g" >&2; exit 1; }; [ -n "$(awk -v u="$U" "$P" <<<"$a")" ] || { echo "BL368-WHOLE-SCOPE-ANALYST no un-negated per-surface analyst dispatch" >&2; exit 1; }; [ -n "$(awk -v u='deriv[a-z]* .*surface|surfaces? (list|set) [a-z ]*deriv' "$P" <<<"$a")" ] || { echo "BL368-WHOLE-SCOPE-ANALYST no un-negated derivation of the surface list" >&2; exit 1; }; exit 0
+
+
+## BL-026
+
+> **LEAD: this entry is an ADDITION the pin-262 ledger row does not name.** The row enumerates
+> six blocks; the file at `510e4d9f5` carries five, and this is the one live block missing from
+> the enumeration. Filed because dropping it would lose the measurement; drop or keep at your
+> discretion.
+
+**Core has no rule requiring an N-item independent dispatch to be split into N teammates, and
+the only occurrence of the pattern's name in `core/` is fixture seed data.**
+`core/skills/ai-dlc/SKILL.md` Rule 28 (`:1398`, *"Delegation is the default; inline execution is
+the exception"*) decides delegate-vs-inline and says nothing about the shape of a single
+dispatch: over its 82-line body, `parallel` = **0** and `split` = **0**, against controls
+`delegat` = **2** and `inline` = **5** in the same invocation. Core's Rule 29 is *"Steering
+budget: the operator must always be able to reach you"* (`:1481`) — the number collides with the
+consumer's `Rule 929` and the subject does not. Across all 31 `### Rule N --` headings in
+`SKILL.md`, none names parallel, split or sub-task dispatch.
+
+`grep -rl split-dispatch core/` returns two files, both
+`core/fixtures/layer-catalog-collision/` — `seed.sh:220` writes the literal heading
+`## Rule 29 -- Parallel independent-scope sub-task dispatch (split-dispatch pattern)` as a
+*collision probe*. That is a fixture manufacturing the string, not core carrying the rule, and it
+is exactly the "a grep hit inside a file is not a statement about that file" trap: a naive
+`grep -rl` over `core/` reports the concept present.
+
+**What the filing got wrong, and the direction: the enumeration is incomplete.** The ledger row
+lists `effort-SSOT; pending-approval author-side marking (S253); no-self-schedule re-entry ban;
+Rule 19 model-derivation; four-clause file-write convention; gate-log auto-rotation`. Measured
+against the file at `510e4d9f5` with a control in the same invocation: `pending-approval` = 0,
+`S253` = 0, `self-schedule` = 0, `re-entry` = 0 — two named blocks are gone — while
+`Effort level` = 1, `four-clause` = 2, `gate log` = 7, `Rule 19` = 4 confirm the search works on
+the same file. The row names two blocks that no longer exist and omits this one, which is both
+present and live.
+
+**Why the anchor is the anchor.** The predicate is a disjunction over the two places a fix can
+land — inside Rule 28's body, or as a new rule heading naming the pattern — so it does not
+presume a shape. It scopes to Rule 28's body rather than the file, because `parallel` and
+`split` both occur elsewhere in `SKILL.md` and a file-level grep closes on unrelated prose. The
+`delegat` control fires in the same invocation, so a renamed or renumbered Rule 28 reports
+STILL-LIVE instead of closing on an empty extraction.
+
+Discharges the consumer entry `extensions/steps-domain/SKILL-push.md` at pinned ledger line 262
+(the `Rule 929` split-dispatch block, unnamed in that row).
+
+**LANDED (v0.663.0, verified f217daa0).** `core/skills/ai-dlc/rule-bodies/rule-28.md` carries
+the `**Split dispatch: one agent per independent part.**` clause: four axes, a derived partition,
+a join that is a program, and four serial exceptions. **The receipt above this line expired before
+the fix landed**: Rule 28's body moved out of `SKILL.md`, whose `### Rule 28` span is now a pointer
+stub, so the old predicate read 1 on the fixed tree and could never close. It is re-keyed onto the
+rule body. It exits 9 when the file is gone or its first line no longer names `Delegation is the
+default`, 1 when the clause or any of its three load-bearing sentences is absent, and 0 otherwise.
+Scored: tip 0; `origin/main` before v0.663.0 1; the clause removed 1; `The join is never a
+program.` 1; heading renamed 9.
+
+verify: sh R=core/skills/ai-dlc/rule-bodies/rule-28.md; [ -f "$R" ] || exit 9; h="$(LC_ALL=C awk 'NR==1' "$R")"; case "$h" in *'Delegation is the default'*) ;; *) exit 9 ;; esac; b="$(LC_ALL=C awk '/^[*][*]Split dispatch/{f=1} f&&/^### /{exit} f' "$R")"; [ -n "$b" ] || exit 1; for k in 'partition is derived' 'join is a program' 'stays serial'; do case "$b" in *"$k"*) ;; *) exit 1 ;; esac; done; exit 0
