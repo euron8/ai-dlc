@@ -23,7 +23,10 @@
 #                     filesystem or the clock can move.
 #
 # READS   <state>/planning-artifacts/.artifact-writes.jsonl
-#         <state>/planning-artifacts/s<N>/shards/<artifact>-p<M>/*.md   (placement rule P1)
+#         <state>/planning-artifacts/s<N>/shards/<artifact>-repair-p<M>/*.md   (placement rule P1)
+#         NOT `shards/<artifact>-p<M>/`: that directory holds the ADVERSARY shards for the review
+#         of the same pass, and `merge-adversarial-shards.sh` refuses any entry in it that is not
+#         `<digits>.md` or `cross.md`. The two programs never share a directory.
 # WRITES  <state>/planning-artifacts/s<N>/<artifact>-repair-p<M>.md       (placement rule P5)
 #
 # EXIT  0 joined; 2 REFUSED (one `REFUSED:` line on stderr per reason, nothing written).
@@ -129,7 +132,7 @@ _STATE_DIR="${AI_DLC_STATE_DIR:-_bmad-output}"
 case "$_STATE_DIR" in /*) STATE="$_STATE_DIR" ;; *) STATE="${JR_ROOT}/${_STATE_DIR}" ;; esac
 PA="${STATE}/planning-artifacts"
 LEDGER="${PA}/.artifact-writes.jsonl"
-SHARD_DIR="${PA}/s${SPRINT}/shards/${ARTIFACT}-p${PASS}"
+SHARD_DIR="${PA}/s${SPRINT}/shards/${ARTIFACT}-repair-p${PASS}"
 OUT="${PA}/s${SPRINT}/${ARTIFACT}-repair-p${PASS}.md"
 
 # Arm H's own predicate, from the sibling. Same dir in both layouts (core/scripts/ and
