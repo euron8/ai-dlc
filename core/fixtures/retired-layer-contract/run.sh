@@ -588,25 +588,64 @@ fx_mut f-reads-all   0 0 -e 's@  \[ "\$rc" -eq 0 \] || { RLC_WHY="the rulebook t
 # where a mode-000 file is not. Each copy first proves it runs: with the list readable it must
 # emit the untouched SHAPE row (rlcctl), so a copy that never ran cannot score a refusal or a kill.
 # =============================================================================
+#
+# TWO WORLDS, TWO BRANCHES, EACH ASSERTED BY ITS OWN MESSAGE. BSD awk reads a DIRECTORY as an empty
+# file and exits 0, so U1's directory reaches the EMPTY-list refusal (`yielded no glob`), never the
+# status read. A mode-000 FILE is what makes awk exit 2 and reaches the status read (`an unreadable
+# rulebook list`); root reads it, so U2 announces a skip there. Each cell greps its own branch's
+# words, so a copy that loses one branch and falls through to the other does not pass.
+# =============================================================================
 echo
 echo "  --- an unreadable rulebook list refuses ---"
-rlc_unreadable() { # rlc_unreadable <script-in-a-dir-copy> -> 0 when it refuses with exit 2 and no row
-  local d; d="$(dirname "$1")"
-  rm -f "$d/setup-sites.md"; mkdir "$d/setup-sites.md" || return 1
+RLC_U_EMPTY='reading the rulebook list from .*setup-sites\.md, which yielded no glob'
+RLC_U_UNREAD='reading the rulebook list from .*setup-sites\.md \(refusing to report clean, because an unreadable rulebook list'
+rlc_unreadable() { # rlc_unreadable <script-in-a-dir-copy> <dir|mode000> -> 0 when it refuses with exit 2, no row, that branch's message
+  local d want; d="$(dirname "$1")"
+  chmod 644 "$d/setup-sites.md" 2>/dev/null
+  if [ -d "$d/setup-sites.md" ]; then rmdir "$d/setup-sites.md" || return 1; else rm -f "$d/setup-sites.md"; fi
+  case "$2" in
+    dir)     mkdir "$d/setup-sites.md" || return 1; want="$RLC_U_EMPTY" ;;
+    mode000) cp "$RLC_SRC/setup-sites.md" "$d/setup-sites.md" && chmod 000 "$d/setup-sites.md" || return 1; want="$RLC_U_UNREAD" ;;
+  esac
   bash "$1" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" > "$FX/out" 2> "$FX/err"; FX_RC=$?
-  RLC_UWHY="rc=$FX_RC rows=$(grep -c . "$FX/out") err=$(head -1 "$FX/err" | cut -c1-110)"
-  [ "$FX_RC" -eq 2 ] && [ ! -s "$FX/out" ] && grep -q 'reading the rulebook list from .*setup-sites\.md' "$FX/err"
+  chmod 644 "$d/setup-sites.md" 2>/dev/null
+  RLC_UWHY="rc=$FX_RC rows=$(grep -c . "$FX/out") err=$(head -1 "$FX/err" | cut -c1-140)"
+  [ "$FX_RC" -eq 2 ] && [ ! -s "$FX/out" ] && grep -qE "$want" "$FX/err"
 }
+RLC_ROOT=0; [ "$(id -u)" -eq 0 ] && RLC_ROOT=1
 UNR="$WORK/unreadable-sites"; mkdir -p "$UNR"
 if cp -R "$RLC_SRC"/. "$UNR"/ 2>/dev/null && [ -f "$UNR/lib.sh" ]; then
   rlcctl unreadable-sites "$UNR/retired-layer-contract.sh"
-  if rlc_unreadable "$UNR/retired-layer-contract.sh"; then
-    ok "U1 a setup-sites.md that exists and cannot be read refuses: exit 2, no row ($RLC_UWHY)"
+  if rlc_unreadable "$UNR/retired-layer-contract.sh" dir; then
+    ok "U1 a setup-sites.md that is a DIRECTORY (awk reads it empty, exit 0) refuses as an EMPTY list: exit 2, no row ($RLC_UWHY)"
   else
-    bad "U1 a setup-sites.md that cannot be read did not refuse with exit 2 and no row ($RLC_UWHY) -- emit-report.sh renders exit 0 with no row as 'none'"
+    bad "U1 a setup-sites.md that is a directory did not refuse with exit 2, no row and the empty-list message ($RLC_UWHY) -- emit-report.sh renders exit 0 with no row as 'none'"
+  fi
+  if [ "$RLC_ROOT" -eq 1 ]; then
+    echo "  SKIP  U2 -- running as root, which reads a mode-000 file, so the unreadable-list world is not expressible (this is not a pass)"
+  elif rlc_unreadable "$UNR/retired-layer-contract.sh" mode000; then
+    ok "U2 a mode-000 setup-sites.md (awk exits 2) refuses on the STATUS read: exit 2, no row ($RLC_UWHY)"
+  else
+    bad "U2 a mode-000 setup-sites.md did not refuse with exit 2, no row and the unreadable-list message ($RLC_UWHY)"
   fi
 else
   bad "MUTANT HARNESS BROKEN [unreadable-sites]: could not copy the reconcile directory"
+fi
+# THE STATUS READ ALONE DELETED: the awk's exit 2 is dropped, and the empty-list guard beneath it
+# then refuses with the OTHER message. U2 greps the unreadable-list words, so it kills this; U1's
+# directory never reached that line and must still pass.
+if [ "$RLC_ROOT" -eq 0 ] && rlcmut u2-status-dropped -e '/^\[ "\$_rlc_rc" -eq 0 \] || rlc_refuse "reading the rulebook list from /d'; then
+  rlcctl u2-status-dropped "$RLC_MUT"
+  if rlc_unreadable "$RLC_MUT" mode000; then
+    bad "MUTANT SURVIVED [u2-status-dropped]: with the status read deleted, U2 still passed ($RLC_UWHY)"
+  else
+    ok "  mutant [u2-status-dropped] KILLED by U2: the dropped status fell through to the empty-list refusal ($RLC_UWHY)"
+  fi
+  if rlc_unreadable "$RLC_MUT" dir; then
+    ok "  mutant [u2-status-dropped]: U1 still passes on it, so U1 and U2 hold different lines ($RLC_UWHY)"
+  else
+    bad "mutant [u2-status-dropped] also failed U1 ($RLC_UWHY) -- the two cells are entangled"
+  fi
 fi
 # THE MUTANT RESTORES THE BASE READ IN FULL: the cached, status-read list is deleted and
 # `rulebook_globs` goes back to reading the file itself with `2>/dev/null`. `rlc_refuse` is NOT
@@ -621,7 +660,7 @@ if rlcmut u1-sites-unread -f "$RLC_SITES_SED"; then
     bad "FIXTURE STALE [u1-sites-unread]: the mutant still carries RLC_GLOBS, so only part of the read was reverted"
   else
     rlcctl u1-sites-unread "$RLC_MUT"
-    if rlc_unreadable "$RLC_MUT"; then
+    if rlc_unreadable "$RLC_MUT" dir; then
       bad "MUTANT SURVIVED [u1-sites-unread]: with the base read restored, U1 still passed ($RLC_UWHY)"
     else
       ok "  mutant [u1-sites-unread] KILLED by U1: with the base read restored, an unreadable list reads as a clean run ($RLC_UWHY)"

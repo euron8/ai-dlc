@@ -97,9 +97,22 @@ SELF="$(cd "$(dirname "$0")" && pwd)"
 # accepting 0 or 1: a comment strip that DIED (2) handed the token grep empty input, whose 1
 # became the status, and the dead scan was accepted as "no token". Now a 1 from either grep is an
 # empty set (status 0), and anything above 1 -- or a failed sort -- is returned.
+#
+# EVERY NUL IS DELETED FIRST, BY ITS OWN STAGE WHOSE STATUS IS READ. The blob feeds are now the
+# staged `git show` output byte for byte, where they used to be `<<<"$b"` from a `$( )` capture
+# that had already dropped every NUL. BSD grep reads a NUL-bearing input as binary and prints only
+# `Binary file (standard input) matches`, so the token set came back EMPTY: a NUL at both refs lost
+# the true row at rc 0, and a NUL at theirs alone read every base token as retired -- FALSE rows.
+# `grep -a` is NOT the repair: it keeps the NUL in the line, so `\0# $ROOT/x` no longer opens with
+# `#` and a commented token is read as live, a false row the here-string never produced (measured).
+# Deleting the NUL is what the `$( )` did, so the token set is the here-string's. The consumer's
+# own file, fed from `< "$ours"` at base too, was read as binary there and is now read as text.
 toks() {
-  local _code _t _rc=0
-  _code="$(grep -vE '^[[:space:]]*#')" || _rc=$?
+  local _raw _code _t _rc=0
+  # A failed `tr` returns 2 whatever its own status, because the caller accepts a 1 as an empty set.
+  _raw="$(tr -d '\000')" || return 2
+  [ -n "$_raw" ] || return 0
+  _code="$(printf '%s\n' "$_raw" | grep -vE '^[[:space:]]*#')" || _rc=$?
   [ "$_rc" -le 1 ] || return "$_rc"
   [ -n "$_code" ] || return 0
   _t="$(printf '%s\n' "$_code" | grep -oE '\$[A-Za-z_][A-Za-z0-9_]*/[A-Za-z0-9._/-]+')" || _rc=$?

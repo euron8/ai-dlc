@@ -53,7 +53,10 @@ The fixes:
 - **`relabel-extension-checks.sh` stages both anchor sets before either pass**, so `--apply` moves
   no file for an extension it refused on. It exits 2.
 - **`retired-tokens.sh` reads the blobs `rt_blob` already staged**, and every `rt_toks` call
-  refuses on a failed read.
+  refuses on a failed read. The tip adversary found a regression in that conversion before merge:
+  the staged blob keeps a NUL byte that the old `$( )` capture had dropped, so BSD grep read the
+  blob as binary, lost a true row and printed false ones at rc 0. `toks` now deletes NULs first,
+  which gives the same output as 322ef42c on NUL-bearing blobs.
 - **`warn-shadowed-local-validators.sh` captures lib.sh's `ledger_entry_awk` once and reads its
   status**, and it refuses an empty program. It reads the closed-entry scan's status too. lib.sh is
   unchanged.

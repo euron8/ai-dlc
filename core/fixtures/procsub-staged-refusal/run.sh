@@ -139,6 +139,33 @@ gitq -C "$TWD" add -A; gitq -C "$TWD" commit -qm theirs
 TW_THEIRS="$(git -C "$TWD" rev-parse HEAD)"
 printf 'CHAN="$ROOT/.chan"\nprintf x >> "$ROOT/.chan"\npool() { :; }\n' > "$TWC/scripts/ai-dlc/validate-artifact-budget.sh"
 
+# --- NW: blobs carrying a NUL byte. `toks` reads the staged `git show` file, where it used to read
+# `<<<"$b"` from a `$( )` capture that had already dropped every NUL; BSD grep reads a NUL-bearing
+# stdin as binary. Three shapes, each beside ctl.sh (no NUL, `old-c` retired, spoken), whose row
+# proves the run reached the loop: nul.sh has a NUL at both refs (its `old-n` row must stand), q.sh
+# gains a NUL at theirs only (no token of it is retired), h.sh has a NUL immediately before a
+# comment `#` at base (the commented `cmt-h` must stay a comment -- a `grep -a` repair reads it live).
+NW="$W/nw"; NWD="$NW/dist"; NWC="$NW/consumer"; mkdir -p "$NWD/core/scripts" "$NWC/scripts/ai-dlc"
+printf 'x=$ROOT/old-n\n\000junk\ny=$ROOT/keep-n\n' > "$NWD/core/scripts/nul.sh"
+printf 'x=$ROOT/keep-a\ny=$ROOT/keep-b\n' > "$NWD/core/scripts/q.sh"
+printf 'x=$ROOT/old-h\n\000# $ROOT/cmt-h\n' > "$NWD/core/scripts/h.sh"
+printf 'x=$ROOT/old-c\n' > "$NWD/core/scripts/ctl.sh"
+gitq -C "$NWD" init -q; gitq -C "$NWD" add -A; gitq -C "$NWD" commit -qm base
+NW_BASE="$(git -C "$NWD" rev-parse HEAD)"
+printf 'x=$ROOT/new-n\n\000junk\ny=$ROOT/keep-n\n' > "$NWD/core/scripts/nul.sh"
+printf 'x=$ROOT/keep-a\n\000\ny=$ROOT/keep-b\n' > "$NWD/core/scripts/q.sh"
+printf 'x=$ROOT/new-h\n# $ROOT/cmt-h\n' > "$NWD/core/scripts/h.sh"
+printf 'x=$ROOT/new-c\n' > "$NWD/core/scripts/ctl.sh"
+gitq -C "$NWD" add -A; gitq -C "$NWD" commit -qm theirs
+NW_THEIRS="$(git -C "$NWD" rev-parse HEAD)"
+printf 'uses $ROOT/old-n and $ROOT/keep-n\n' > "$NWC/scripts/ai-dlc/nul.sh"
+printf 'uses $ROOT/keep-a and $ROOT/keep-b\n' > "$NWC/scripts/ai-dlc/q.sh"
+printf 'uses $ROOT/old-h and $ROOT/cmt-h\n' > "$NWC/scripts/ai-dlc/h.sh"
+printf 'uses $ROOT/old-c\n' > "$NWC/scripts/ai-dlc/ctl.sh"
+for _nw in nul q h; do
+  printf 'X\tcore/scripts/%s.sh\tscripts/ai-dlc/%s.sh\tCLASSIFY\nX\tcore/scripts/ctl.sh\tscripts/ai-dlc/ctl.sh\tCLASSIFY\n' "$_nw" "$_nw" > "$NW/rows-$_nw"
+done
+
 # --- OW: an override copying a clause upstream rewrote, and one shadowing a file absent at both refs
 OW="$W/ow"; OWD="$OW/dist"; OWC="$OW/consumer"; mkdir -p "$OWD/core/skills/ai-dlc/steps"
 L_OLD="This is the original clause of the section, which upstream rewrites."
@@ -392,6 +419,19 @@ rt_arm() { local rc=0; mkstub grep "$TOKPAT" "$2" 2; tw_run "$1" "$STUB" || rc=$
 arm_rt_all()   { rt_arm "$1" 0; }
 arm_rt_base()  { rt_arm "$1" 1; }
 arm_rt_ours()  { rt_arm "$1" 3; }
+# nw_arm <script> <world> <expected stdout, rows joined by |> -- the WHOLE stdout, rc 0. The ctl.sh
+# row is in every expectation, so a copy that never reached the loop cannot pass; exact equality
+# is what separates a lost true row from a FALSE one, and both from the correct set.
+NT="$(printf '\t')"
+nw_arm() { local rc=0 want got
+  bash "$1" --bucket-rows "$NW/rows-$2" "$NWD" "$NW_BASE" "$NW_THEIRS" "$NWC" > "$OUT" 2> "$ERR" || rc=$?
+  want="$(printf '%s' "$3" | tr '|' '\n')"; got="$(cat "$OUT")"
+  ARM_WHY="rc=$rc stdout=[$(printf '%s' "$got" | tr '\n\t' '| ')] want=[$(printf '%s' "$want" | tr '\n\t' '| ')] $(grep -v '^$' "$ERR" | tail -1 | cut -c1-80)"
+  [ "$rc" -eq 0 ] && [ "$got" = "$want" ]; }
+NW_CTL="RETIRED-CONTRACT-TOKEN${NT}core/scripts/ctl.sh${NT}\$ROOT/old-c"
+arm_nw_both()   { nw_arm "$1" nul "$NW_CTL|RETIRED-CONTRACT-TOKEN${NT}core/scripts/nul.sh${NT}\$ROOT/old-n"; }
+arm_nw_theirs() { nw_arm "$1" q "$NW_CTL"; }
+arm_nw_cmt()    { nw_arm "$1" h "$NW_CTL|RETIRED-CONTRACT-TOKEN${NT}core/scripts/h.sh${NT}\$ROOT/old-h"; }
 
 # --- readopt-override ----------------------------------------------------------------------------
 ro_run() { # ro_run <script> <override> [stub-dir]
@@ -791,6 +831,58 @@ if [ "$FX_L" -gt 0 ]; then
   { cat "$FW/rt-payload"; echo; echo 'uses $ROOT/old-b too'; } > "$RTC/scripts/ai-dlc/z.sh"
   printf 'X\tcore/scripts/b.sh\tscripts/ai-dlc/b.sh\tCLASSIFY\nX\tcore/scripts/z.sh\tscripts/ai-dlc/z.sh\tCLASSIFY\n' > "$FW/rt-rows"
 fi
+# --- retired-layer-contract, the path arm's OWN staging: ONE retired rulebook path whose name is 493
+# bytes. Its spellings file (three spellings, 1537 B) is then the one staged write above a 1-block
+# limit, while the retired-path set (513 B) and the tree listing it is a subset of stay below it. A
+# retired-path SET above the limit is not constructible: the base tree listing, a superset of it, is
+# written first, and the run refuses there on every copy. The file name exceeds NAME_MAX, so the
+# path exists only in git, added by plumbing. The consumer cites the THIRD spelling alone, so a
+# truncated spellings file (the first two, cut) cannot match it by a prefix.
+FX_RLS_N=1
+RLSD="$FW/rlsd"; RLSC="$FW/rlsc"; mkdir -p "$RLSD/core/skills/ai-dlc/steps" "$RLSC/.claude/skills/ai-dlc/extensions"
+RLS_NAME="$(head -c 493 /dev/zero | tr '\0' r)"
+RLS_P="core/team-roles/${RLS_NAME}.md"
+printf -- '- Label: `/cmd\n' > "$RLSD/core/skills/ai-dlc/steps/a.md"
+gitq -C "$RLSD" init -q; gitq -C "$RLSD" add -A
+_rls_b="$(printf 'x\n' | git -C "$RLSD" hash-object -w --stdin)"
+gitq -C "$RLSD" update-index --add --cacheinfo "100644,${_rls_b},${RLS_P}"; gitq -C "$RLSD" commit -qm base
+RLS_BASE="$(git -C "$RLSD" rev-parse HEAD)"
+gitq -C "$RLSD" update-index --force-remove -- "$RLS_P"; gitq -C "$RLSD" commit -qm theirs
+RLS_THEIRS="$(git -C "$RLSD" rev-parse HEAD)"
+printf 'see team-roles/%s.md\n' "$RLS_NAME" > "$RLSC/.claude/skills/ai-dlc/extensions/cites.md"
+printf '%s\n.claude/team-roles/%s.md\nteam-roles/%s.md\n' "$RLS_P" "$RLS_NAME" "$RLS_NAME" > "$FW/rls-payload"
+# --- retired-layer-contract: a LISTED layer file cat cannot open (mode 000; not expressible as root)
+RLUC="$FW/rluc"; mkdir -p "$RLUC/.claude/skills/ai-dlc/extensions"
+printf 'see steps/b.md for the gate\n' > "$RLUC/.claude/skills/ai-dlc/extensions/e.md"
+printf 'see steps/c.md too\n' > "$RLUC/.claude/skills/ai-dlc/extensions/z.md"; chmod 000 "$RLUC/.claude/skills/ai-dlc/extensions/z.md"
+# --- relabel --apply, ORDER: a check pass that WOULD relabel `### 24.`, then an oversize RULE set. The
+# check-anchor set is 30 numbers (small); the rule set is 700 (above the 2-block limit). A refusal
+# placed after the check pass moves the extension first.
+RXO="$FW/rxo"; mkdir -p "$RXO/.claude/skills/ai-dlc/extensions"
+awk 'BEGIN { for (i = 1; i <= 30; i++) printf "### %d. Check title\nbody\n", i; for (i = 1; i <= 700; i++) printf "### Rule %d -- Title\nbody\n", i }' > "$RXO/.claude/skills/ai-dlc/gate-validation.md"
+printf -- '---\nkind: check\nid: mine\nhooks: gate-validation.md\n---\n\n### 24. My check\ntext\n' > "$RXO/.claude/skills/ai-dlc/extensions/x.md"
+awk 'BEGIN { for (i = 1; i <= 30; i++) print i }' | sort -u > "$FW/rxo-nums"
+# --- readopt-override: a `shadows:` list whose anchor ids are the ONE staged write above the limit.
+# Six ids naming a 200-byte heading (1206 B), then `Two`, which a truncated id file loses. Every id
+# resolves, so the unforced run is STALE-CORE-TEXT with seven lines. All three `shadow_ids` writes
+# stage these same bytes, so the anchor-resolution check refuses too if the scans' status is
+# dropped -- the refusal MESSAGE is what says which read refused.
+FX_RO_N=1
+ROD="$FW/rod"; ROC="$FW/roc"; mkdir -p "$ROD/core/skills/ai-dlc/steps" "$ROC/.claude/skills/ai-dlc/overrides"
+RO_HEAD="Sec $(head -c 196 /dev/zero | tr '\0' q)"
+RO_L2="The second section clause that upstream rewrites in this release too."
+RO_L2N="The second section clause, rewritten upstream in this release instead."
+printf '# X\n\n## %s\n\n%s\n%s\n\n## Two\n\n%s\n' "$RO_HEAD" "$L_OLD" "$L_KEEP" "$RO_L2" > "$ROD/core/skills/ai-dlc/steps/x.md"
+gitq -C "$ROD" init -q; gitq -C "$ROD" add -A; gitq -C "$ROD" commit -qm base
+RO_BASE="$(git -C "$ROD" rev-parse HEAD)"
+printf '# X\n\n## %s\n\n%s\n%s\n\n## Two\n\n%s\n' "$RO_HEAD" "$L_NEW" "$L_KEEP" "$RO_L2N" > "$ROD/core/skills/ai-dlc/steps/x.md"
+gitq -C "$ROD" add -A; gitq -C "$ROD" commit -qm theirs
+RO_THEIRS="$(git -C "$ROD" rev-parse HEAD)"
+ROF="$ROC/.claude/skills/ai-dlc/overrides/steps__x.md"
+_ro_sh=""; for _i in 1 2 3 4 5 6; do _ro_sh="${_ro_sh}steps/x.md#${RO_HEAD}, "; done
+printf -- '---\nshadows: %ssteps/x.md#Two\nbase_sha: %s\nreason: fixture\n---\n\n## %s\n\n%s\n%s\n\n## Two\n\n%s\n' \
+  "$_ro_sh" "$RO_BASE" "$RO_HEAD" "$L_OLD" "$L_KEEP" "$RO_L2" > "$ROF"
+{ for _i in 1 2 3 4 5 6; do printf '%s\n' "$RO_HEAD"; done; echo Two; } > "$FW/ro-payload"
 
 # --- the calibration ---------------------------------------------------------------------------
 fx_hs_fails() { # fx_hs_fails <limit-blocks> <payload-file> -> 0 when a here-string of it cannot be staged
@@ -871,9 +963,46 @@ arm_fx_rx_apply() { local d x ck
     ARM_WHY="refused: rc=2 and the extension is byte-identical"; return 0; fi
   ARM_WHY="rc=$FX_RC, extension $([ "$(cksum < "$x")" = "$ck" ] && echo unchanged || echo CHANGED) and unlabelled: $(grep -v '^$' "$OUT" | tail -1 | cut -c1-90)"
   return 1; }
+# ORDER: the check pass WOULD relabel `### 24.`, and only the rule set is oversize. Refusing after
+# the check pass leaves rc 2 over a MOVED extension, which neither accepted outcome allows. The
+# unforced run must label the heading, so a copy that never reaches the pass cannot pass.
+arm_fx_rxo_apply() { local d x ck
+  fx_ready || return 1
+  FXA_N=$((FXA_N+1)); d="$FW/rxo.$FXA_N"; x="$d/.claude/skills/ai-dlc/extensions/x.md"
+  cp -R "$RXO" "$d" || { ARM_WHY="could not copy the relabel-order world"; return 1; }
+  fx_run 0 "$OUT" "$ERR" "$1" "$d" --apply
+  if ! { [ "$FX_RC" -eq 0 ] && grep -qx '### 24\. \[ext:mine\] My check' "$x"; }; then
+    ARM_WHY="no healthy baseline: unforced --apply rc=$FX_RC did not label the heading"; return 1; fi
+  rm -rf "$d"; cp -R "$RXO" "$d" || { ARM_WHY="could not re-copy the relabel-order world"; return 1; }
+  ck="$(cksum < "$x")"
+  fx_run "$FX_RX_N" "$OUT" "$ERR" "$1" "$d" --apply
+  if [ "$FX_RC" -eq 0 ] && grep -qx '### 24\. \[ext:mine\] My check' "$x"; then
+    ARM_WHY="complete: rc=0 and the heading was labelled"; return 0; fi
+  if [ "$FX_RC" -eq 2 ] && grep -qE '^relabel: REFUSED — the core rule-number set' "$ERR" && [ "$(cksum < "$x")" = "$ck" ]; then
+    ARM_WHY="refused: rc=2 on the rule set and the extension is byte-identical"; return 0; fi
+  ARM_WHY="rc=$FX_RC, extension $([ "$(cksum < "$x")" = "$ck" ] && echo unchanged || echo CHANGED): $(grep -v '^$' "$ERR" | tail -1 | cut -c1-90)"
+  return 1; }
+# readopt-override --check: the anchor-id staging is the one oversize write. The refusal ERE is the
+# SUPERSEDED-LINE scan's, the first reader of the ids; a copy whose scans ignore their staging status
+# refuses later, in the anchor-resolution check, and does not match.
+arm_fx_ro_healthy() { fx_healthy "$1" 1 '^STALE-CORE-TEXT ' "$ROD" "$RO_THEIRS" "$ROC" "$ROF" --check; }
+arm_fx_ro() { fx_cell "$1" "$FX_RO_N" 1 '^STALE-CORE-TEXT ' 2 '^readopt-override: the superseded-line scan ' \
+  "$ROD" "$RO_THEIRS" "$ROC" "$ROF" --check; }
 RLC_ROW='extensions/e\.md.path:core/skills/ai-dlc/steps/b\.md$'
 arm_fx_rlc_healthy() { fx_healthy "$1" 0 "$RLC_ROW" "$RFD" "$RF_BASE" "$RF_THEIRS" "$RFC"; }
 arm_fx_rlc() { fx_cell "$1" "$FX_N" 0 "$RLC_ROW" 2 '^retired-layer-contract: .*no verdict' "$RFD" "$RF_BASE" "$RF_THEIRS" "$RFC"; }
+# The path arm's own staging. The refusal ERE names the SPELLINGS write, so a copy that refuses
+# somewhere else under the limit is not read as this refusal.
+RLS_ROW='extensions/cites\.md.path:core/team-roles/r+\.md$'
+arm_fx_rls_healthy() { fx_healthy "$1" 0 "$RLS_ROW" "$RLSD" "$RLS_BASE" "$RLS_THEIRS" "$RLSC"; }
+arm_fx_rls() { fx_cell "$1" "$FX_RLS_N" 0 "$RLS_ROW" 2 '^retired-layer-contract: staging the spellings of core/team-roles/r+\.md did not run' \
+  "$RLSD" "$RLS_BASE" "$RLS_THEIRS" "$RLSC"; }
+# A listed layer file cat cannot open: exit 2 naming THAT file, no row. No limit; mode 000, so the
+# call sites skip it as root, where the file reads.
+arm_rlc_unread_layer() { local rc=0
+  "$FBASH" "$1" "$RFD" "$RF_BASE" "$RF_THEIRS" "$RLUC" > "$OUT" 2> "$ERR" || rc=$?
+  ARM_WHY="rc=$rc, $(grep -c . "$OUT") row(s): $(grep -v '^$' "$ERR" | tail -1 | cut -c1-110)"
+  [ "$rc" -eq 2 ] && [ ! -s "$OUT" ] && grep -q '^retired-layer-contract: reading the layer file \.claude/skills/ai-dlc/extensions/z\.md did not run' "$ERR"; }
 WS_REF='^warn-shadowed-local-validators: REFUSED — '
 arm_fx_ws_healthy()  { fx_healthy "$1" 0 'RETIRE-CANDIDATE.scripts/ai-dlc-local/sub/validate-zz\.sh' --root "$WSF"; }
 arm_fx_ws_closed()   { fx_cell "$1" "$FX_N" 0 'RETIRE-CANDIDATE.scripts/ai-dlc-local/sub/validate-zz\.sh' 2 "$WS_REF" --root "$WSF"; }
@@ -942,6 +1071,9 @@ run_arm arm_rlt_healthy "$S_RLT" "retired-layer-token reports DEFERRED, retired 
 run_arm arm_wt_healthy  "$S_LE"  "validate-layer-entries: a bare 'Check 12' on a line carrying the 912 heading's FX-4417 is W12 by tag"
 run_arm arm_ta_healthy  "$S_RT"  "retired-tokens: a path ABSENT at base and one ABSENT at theirs are skipped, not refused; the token row stands"
 run_arm arm_rg_healthy  "$S_RLC" "retired-layer-contract: a rulebook path both refs ship yields NO path: row; the shape row stands"
+run_arm arm_nw_both     "$S_RT"  "retired-tokens: a blob with a NUL at BOTH refs keeps its true row (nul.sh -> old-n) beside the ctl.sh row"
+run_arm arm_nw_theirs   "$S_RT"  "retired-tokens: a NUL gained at theirs alone retires nothing (no FALSE q.sh row), the ctl.sh row stands"
+run_arm arm_nw_cmt      "$S_RT"  "retired-tokens: a NUL before a comment '#' leaves the commented token a comment (no FALSE h.sh -> cmt-h row)"
 
 echo "== forced producer failures (each stub must FIRE, each script must REFUSE) =="
 run_arm arm_ci_retro     "$S_CI"  "failed retro walk (find) -> exit 2, not '0 gates declared'"
@@ -1009,6 +1141,12 @@ else
   fx_cal warn-shadowed-closed "$FX_N" "$FW/ws-payload" "$(fx_sz "$FW/ws6-payload")"
   fx_cal warn-shadowed-emitter 2 "$FW/ws6-payload" 16
   fx_cal retired-tokens "$FX_N" "$FW/rt-payload" "$FX_L"
+  # The spellings file is the payload; the retired-path set and the base tree listing (its superset)
+  # must land whole, or the copy refuses before the site under test.
+  fx_cal retired-layer-contract-spellings "$FX_RLS_N" "$FW/rls-payload" \
+    "$(( ${#RLS_P} + 1 ))" "$(git -C "$RLSD" ls-tree -r --name-only "$RLS_BASE" | wc -c | tr -d ' ')"
+  fx_cal relabel-order "$FX_RX_N" "$FW/rx-payload" "$(fx_sz "$FW/rxo-nums")"
+  fx_cal readopt-override "$FX_RO_N" "$FW/ro-payload" "$(git -C "$ROD" show "${RO_BASE}:core/skills/ai-dlc/steps/x.md" | wc -c | tr -d ' ')"
   [ "$FX_CAL_FAILS" -eq 0 ] && FX_READY=1
 fi
 echo "== a staging write that fails: each cell prints the complete output or refuses, never rc 0 with a row missing or false =="
@@ -1021,6 +1159,14 @@ run_arm arm_fx_rlc       "$S_RLC" "retired-layer-contract path arm, a 20 KB laye
 run_arm arm_fx_ws_closed "$S_WS"  "warn-shadowed-local-validators, 901 closed basenames: both forks or REFUSED exit 2, never 0 rows"
 run_arm arm_fx_ws_emitter "$S_WS" "warn-shadowed-local-validators, lib.sh's entry emitter unstaged: the fork or REFUSED exit 2"
 run_arm arm_fx_rt        "$S_RT"  "retired-tokens, z.sh blob at exactly the limit after b.sh: z -> old-z or refusal, never a FALSE z -> old-b"
+run_arm arm_fx_rls       "$S_RLC" "retired-layer-contract path arm, a 1.5 KB spellings file: the path: row or the SPELLINGS refusal, never 0 rows at rc 0"
+run_arm arm_fx_rxo_apply "$S_RX"  "relabel --apply, a relabel due in the check pass and an oversize rule set: labelled, or REFUSED exit 2 with the extension byte-identical"
+run_arm arm_fx_ro        "$S_RO"  "readopt-override --check, an oversize anchor-id list: STALE-CORE-TEXT, or the superseded-line scan's refusal"
+if [ "$(id -u)" -eq 0 ]; then
+  skip "arm_rlc_unread_layer: running as root, which reads a mode-000 layer file, so the world is not expressible (this is not a pass)"
+else
+  run_arm arm_rlc_unread_layer "$S_RLC" "retired-layer-contract: a listed layer file cat cannot open refuses exit 2 naming it, no row"
+fi
 
 if [ "$SELF_TREE" -ne 1 ]; then
   skip "spelling arm and mutants -- they run only against this fixture's own tree, not $TREE"
@@ -1226,8 +1372,20 @@ else
     b3_fail arm_fx_ws_closed  warn-shadowed-local-validators.sh "0 rows at rc 0"
     b3_fail arm_fx_ws_emitter warn-shadowed-local-validators.sh "awk died on an undefined function, 0 rows at rc 0"
     b3_fail arm_fx_rt         retired-tokens.sh         "a FALSE z -> old-b row and the true one lost"
+    b3_fail arm_fx_rls        retired-layer-contract.sh "the spellings heredoc failed to stage, 0 rows at rc 0"
+    b3_fail arm_fx_ro         readopt-override.sh       "the id here-string failed to stage, no scan ran"
+    if [ "$(id -u)" -ne 0 ]; then
+      b3_fail arm_rlc_unread_layer retired-layer-contract.sh "the unreadable layer file read as empty, rc 0"
+    fi
     for _b3 in relabel-extension-checks.sh retired-layer-contract.sh retired-tokens.sh readopt-override.sh derivation-differential.sh; do
       b3_fail arm_r5 "$_b3" "it carried non-comment here-strings"
+    done
+    # The NUL worlds are the other direction: the base copy fed `toks` from `<<<"$b"`, whose `$( )`
+    # had dropped every NUL, so it was CORRECT there and must pass. A conversion that is not
+    # behaviour-preserving on them is a regression against this copy, not a fix.
+    for _nwa in arm_nw_both arm_nw_theirs arm_nw_cmt; do
+      if "$_nwa" "$B3/retired-tokens.sh"; then ok "322ef42c differential: $_nwa PASSES against the base retired-tokens.sh, which read NUL-bearing blobs correctly -- $ARM_WHY"
+      else bad "322ef42c differential: $_nwa FAILED against the base retired-tokens.sh, so the arm does not describe the base behaviour the fix must preserve -- $ARM_WHY"; fi
     done
   fi
 fi
@@ -1321,10 +1479,11 @@ control reconcile layer-drift.sh                arm_ld_healthy arm_ld_walk arm_l
 control scripts   validate-provenance-block.sh  arm_pb_healthy arm_pb_unreadable arm_pb_zero arm_pb_walk2 arm_pb_walk127
 control scripts   validate-adversarial-convergence.sh arm_cv_healthy arm_cv_sort
 control reconcile hard-blockers.sh              arm_fx_hb_healthy arm_fx_hb_check arm_fx_hb_print arm_r5
-control reconcile relabel-extension-checks.sh   arm_fx_rx_healthy arm_fx_rx arm_fx_rxr arm_fx_rx_apply arm_r5
-control reconcile retired-layer-contract.sh     arm_fx_rlc_healthy arm_fx_rlc arm_r5
+control reconcile relabel-extension-checks.sh   arm_fx_rx_healthy arm_fx_rx arm_fx_rxr arm_fx_rx_apply arm_fx_rxo_apply arm_r5
+control reconcile retired-layer-contract.sh     arm_fx_rlc_healthy arm_fx_rlc arm_fx_rls_healthy arm_fx_rls arm_r5
+control reconcile readopt-override.sh           arm_fx_ro_healthy arm_fx_ro
 control reconcile warn-shadowed-local-validators.sh arm_fx_ws_healthy arm_fx_ws_closed arm_fx_ws6_healthy arm_fx_ws_emitter arm_r5
-control reconcile retired-tokens.sh             arm_fx_rt_healthy arm_fx_rt arm_r5
+control reconcile retired-tokens.sh             arm_fx_rt_healthy arm_fx_rt arm_r5 arm_nw_both arm_nw_theirs arm_nw_cmt
 control reconcile readopt-override.sh           arm_ro_healthy arm_r5
 control reconcile derivation-differential.sh    arm_dd_usage arm_r5
 
@@ -1446,8 +1605,21 @@ mutant LE-LINE scripts validate-layer-entries.sh arm_wt_healthy "arm_wt_line" \
   $'line_tokens() {\n  printf \'%s\\n\' "$1" | grep -oE \'[A-Za-z0-9]+(-[A-Za-z0-9]+)*\' 2>/dev/null \\\n    | grep -E \'[A-Z]\' | grep -E \'[0-9]\' | awk \'length($0) >= 3\' | sort -u\n}'
 # retired-tokens' toks is one pipeline again.
 mutant RT-TOKS reconcile retired-tokens.sh arm_rt_healthy "arm_rt_cmt_all arm_rt_cmt_ours" \
-  $'  local _code _t _rc=0\n  _code="$(grep -vE \'^[[:space:]]*#\')" || _rc=$?\n  [ "$_rc" -le 1 ] || return "$_rc"\n  [ -n "$_code" ] || return 0\n  _t="$(printf \'%s\\n\' "$_code" | grep -oE \'\\$[A-Za-z_][A-Za-z0-9_]*/[A-Za-z0-9._/-]+\')" || _rc=$?\n  [ "$_rc" -le 1 ] || return "$_rc"\n  [ -n "$_t" ] || return 0\n  printf \'%s\\n\' "$_t" | sort -u\n' \
-  $'  grep -vE \'^[[:space:]]*#\' \\\n  | grep -oE \'\\$[A-Za-z_][A-Za-z0-9_]*/[A-Za-z0-9._/-]+\' \\\n  | sort -u\n'
+  $'  _code="$(printf \'%s\\n\' "$_raw" | grep -vE \'^[[:space:]]*#\')" || _rc=$?\n  [ "$_rc" -le 1 ] || return "$_rc"\n  [ -n "$_code" ] || return 0\n  _t="$(printf \'%s\\n\' "$_code" | grep -oE \'\\$[A-Za-z_][A-Za-z0-9_]*/[A-Za-z0-9._/-]+\')" || _rc=$?\n  [ "$_rc" -le 1 ] || return "$_rc"\n  [ -n "$_t" ] || return 0\n  printf \'%s\\n\' "$_t" | sort -u\n' \
+  $'  printf \'%s\\n\' "$_raw" | grep -vE \'^[[:space:]]*#\' \\\n  | grep -oE \'\\$[A-Za-z_][A-Za-z0-9_]*/[A-Za-z0-9._/-]+\' \\\n  | sort -u\n'
+# retired-tokens: the NUL strip removed, so the comment strip reads the staged blob raw again and BSD
+# grep answers `Binary file (standard input) matches`: the true nul.sh row is lost, and q.sh's NUL
+# at theirs alone reads its base tokens as retired.
+# Not `_raw="$(cat)"`: a `$( )` drops the NUL itself, and that mutant is the fix spelled again.
+RT_NUL_STRIP=$'  _raw="$(tr -d \'\\000\')" || return 2\n  [ -n "$_raw" ] || return 0\n'
+mutant RT-NUL reconcile retired-tokens.sh arm_rt_healthy "arm_nw_both arm_nw_theirs" \
+  "$RT_NUL_STRIP" '' \
+  $'  _code="$(printf \'%s\\n\' "$_raw" | grep -vE' $'  _code="$(grep -vE'
+# The `grep -a` repair the tip adversary proposed: it recovers both rows above, and reads a NUL
+# before a comment `#` as a live line, so h.sh's commented token becomes a FALSE row.
+mutant RT-NUL-GREPA reconcile retired-tokens.sh arm_rt_healthy "arm_nw_cmt" \
+  "$RT_NUL_STRIP" '' \
+  $'  _code="$(printf \'%s\\n\' "$_raw" | grep -vE' $'  _code="$(grep -avE'
 # retired-layer-token: BOTH layers -- code_toks pipes into toks, and toks ends in a grep. Reverting
 # code_toks alone leaves toks returning 0 on empty input, and pipefail then reports the strip's 2.
 mutant RLT-CODETOKS reconcile retired-layer-token.sh arm_rlt_healthy "arm_rlt_cmt" \
@@ -1523,7 +1695,40 @@ mutant WS-EMITTER reconcile warn-shadowed-local-validators.sh arm_fx_ws6_healthy
 mutant RT-HERESTRING reconcile retired-tokens.sh arm_fx_rt_healthy "arm_fx_rt arm_r5" \
   "$RT_FEED_B" 'rt_toks "${cp}@${BASE}" "$RT_T/toks-base" <<<"$b"' \
   "$RT_FEED_T" 'rt_toks "${cp}@${THEIRS}" "$RT_T/toks-theirs" <<<"$t"'
-# readopt-override and derivation-differential: no forced cell; r5 holds their one converted site each.
+# retired-layer-contract's path arm, its own staging. RLC-STATUS keeps both writes and drops both
+# statuses; RLC-HEREDOC is the 322ef42c spelling in full -- the staging block removed and both loops
+# fed from heredocs again, the spellings one with a `$(spellings_of …)` body; RLC-CAT reads a layer
+# file `|| true` again.
+RLC_STAGE_RP='printf '"'"'%s\n'"'"' "$RETIRED_PATHS" > "$RLC_T/retired-paths" || rlc_refuse "staging the retired rulebook path set" "$?"'
+RLC_STAGE_SP='  printf '"'"'%s\n'"'"' "$_rlc_sps" > "$RLC_T/spellings-$_rlc_n" || rlc_refuse "staging the spellings of $_rp" "$?"'
+mutant RLC-STATUS reconcile retired-layer-contract.sh arm_fx_rls_healthy "arm_fx_rls" \
+  "$RLC_STAGE_RP" 'printf '"'"'%s\n'"'"' "$RETIRED_PATHS" > "$RLC_T/retired-paths" || true' \
+  "$RLC_STAGE_SP" '  printf '"'"'%s\n'"'"' "$_rlc_sps" > "$RLC_T/spellings-$_rlc_n" || true'
+# Not arm_fx_rlc: its oversize payload is the layer body, which is no longer staged, so under its
+# limit both heredocs land whole and it passes this mutant (measured).
+mutant RLC-HEREDOC reconcile retired-layer-contract.sh arm_fx_rls_healthy "arm_fx_rls" \
+  "$RLC_STAGE_RP"$'\n_rlc_n=0\nwhile IFS= read -r _rp; do\n  [ -n "$_rp" ] || continue\n  _rlc_n=$((_rlc_n + 1))\n  _rlc_sps="$(spellings_of "$_rp")"\n'"$RLC_STAGE_SP"$'\ndone < "$RLC_T/retired-paths"\n' '' \
+  $'    _rlc_i=0\n    while IFS= read -r _rp; do\n      [ -n "$_rp" ] || continue\n      _rlc_i=$((_rlc_i + 1))\n' \
+  $'    while IFS= read -r _rp; do\n      [ -n "$_rp" ] || continue\n' \
+  $'      done < "$RLC_T/spellings-$_rlc_i"\n' $'      done <<EOF\n$(spellings_of "$_rp")\nEOF\n' \
+  $'    done < "$RLC_T/retired-paths"\n' $'    done <<EOF\n$RETIRED_PATHS\nEOF\n'
+if [ "$(id -u)" -eq 0 ]; then
+  skip "mutant RLC-CAT: its killing cell needs a mode-000 file root can read (this is not a pass)"
+else
+  mutant RLC-CAT reconcile retired-layer-contract.sh arm_fx_rlc_healthy "arm_rlc_unread_layer" \
+    'body="$(cat "$f")" || _rlc_rc=$?' 'body="$(cat "$f" 2>/dev/null || true)"'
+fi
+# relabel: the rule-set staging and its refusal moved AFTER the check pass, which may already have
+# moved the extension. The refusal line is unchanged, so only the extension's bytes can kill it.
+RX_STAGE_RULES=$'  printf \'%s\\n\' "$core_rules" > "$RX_T/core-rules" || _rx_rc=$?\n  [ "$_rx_rc" -eq 0 ] || { echo "relabel: REFUSED — the core rule-number set for ${ext#$CONSUMER/} could not be staged (exit $_rx_rc); no verdict" >&2; exit 2; }\n'
+mutant RX-ORDER reconcile relabel-extension-checks.sh arm_fx_rx_healthy "arm_fx_rxo_apply" \
+  "$RX_STAGE_RULES" '' \
+  $'  done < "$RX_T/core-nums"\n' $'  done < "$RX_T/core-nums"\n'"$RX_STAGE_RULES"
+# readopt-override: the two scans' id staging keeps its write and loses its status.
+mutant RO-STATUS reconcile readopt-override.sh arm_fx_ro_healthy "arm_fx_ro" \
+  '  shadow_ids stale-ids || return 3' '  shadow_ids stale-ids || true' \
+  '  shadow_ids unadopted-ids || return 3' '  shadow_ids unadopted-ids || true'
+# readopt-override and derivation-differential: r5 holds their one converted here-string site each.
 mutant RO-HERESTRING reconcile readopt-override.sh arm_ro_healthy "arm_r5" \
   'ro_has_line "$to_lines" "$line" && continue' 'grep -qxF -- "$line" <<<"$to_lines" && continue'
 mutant DD-HERESTRING reconcile derivation-differential.sh arm_dd_usage "arm_r5" \
