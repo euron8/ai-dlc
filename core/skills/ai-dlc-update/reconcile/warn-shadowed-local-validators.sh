@@ -28,8 +28,10 @@
 # Output: TSV — STATUS<TAB>FORK-PATH<TAB>DETAIL, one RETIRE-CANDIDATE per shadowed fork.
 # Exit:   0 on every CLASSIFICATION, including "nothing to report" — this is a classifier, not a
 #         gate, and the signal never blocks on what it finds. 2 when it could not classify at all:
-#         a bad argument, an unresolvable root, an unsourceable lib.sh, or a close grammar
-#         `ledger_close_awk` refused to lift. That distinction is the contract — a caller must be
+#         a bad argument, an unresolvable root, an unsourceable lib.sh, a close grammar
+#         `ledger_close_awk` refused to lift, a lib.sh entry emitter that did not run or emitted
+#         nothing, a closed-entry scan that did not run, or a basename set or fork walk that could
+#         not be staged (each with a `REFUSED —` line on stderr). That distinction is the contract — a caller must be
 #         able to tell "no forks are shadowed" from "this never ran", and those are the same empty
 #         output. This line read `0 ALWAYS` while three `exit 2` paths already existed.
 set -uo pipefail

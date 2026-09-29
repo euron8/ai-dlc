@@ -15,6 +15,100 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.660.0] - 2026-09-28
+
+Seven reconcile scripts no longer use a here-string, and several no longer feed a loop from a
+heredoc. Each one now refuses when an input could not be staged, where it used to read that input
+as empty and report a clean result at rc 0. Two detectors that printed a refusal and exited 0 now
+exit 2. **Neither backlog entry closes.** `BL-360`'s bootstrapping half remains. `BL-356`'s third
+bullet turned out to be a producer defect in a bootstrapping file. Both entries are amended and
+stay live.
+
+### A reconcile input that could not be staged is a refusal, not an empty input (`BL-360`, non-bootstrapping half)
+
+Bash 3.2 writes every `<<<` here-string and heredoc to a temp file. When that write fails with
+ENOSPC, it prints `cannot create temp file for here document` and runs the command on empty input
+or skips it. Forced at 0.659.0 under `ulimit -f` with SIGXFSZ ignored, the full-disk model, each
+of these exited 0:
+
+- `hard-blockers.sh --check` read 200 omitted blockers as `(0 total)`.
+- `hard-blockers.sh` print mode rendered no HARD row and no `0 HARD blockers.` line.
+- `relabel-extension-checks.sh` said "no unlabelled core-number collisions." over a live
+  collision.
+- `warn-shadowed-local-validators.sh` gave 0 rows where there were 2.
+- `retired-layer-contract.sh`'s path arm dropped a row.
+- `retired-tokens.sh` printed another path's retired token as this path's and lost the true row.
+
+The fixes:
+
+- **The non-comment `<<<` count is zero in `hard-blockers.sh`, `relabel-extension-checks.sh`,
+  `retired-layer-contract.sh`, `retired-tokens.sh`, `warn-shadowed-local-validators.sh`,
+  `readopt-override.sh` and `derivation-differential.sh`.** A membership test is a `case`, which
+  needs no file: whole-line, substring or prefix, matching what the old `grep` tested. A loop
+  reads a file written once by `printf '%s\n'` with its write status read. A failed write refuses
+  through the script's existing refusal path.
+- **`hard-blockers.sh` refuses with exit 1 and a `hard-blockers: REFUSED —` line**, the code it
+  already gives a refusing detector, because exit 2 means "report not found" in check mode. It
+  stages the list before either mode prints, so no partial region reaches `emit-report.sh`.
+- **`relabel-extension-checks.sh` stages both anchor sets before either pass**, so `--apply` moves
+  no file for an extension it refused on. It exits 2.
+- **`retired-tokens.sh` reads the blobs `rt_blob` already staged**, and every `rt_toks` call
+  refuses on a failed read.
+- **`warn-shadowed-local-validators.sh` captures lib.sh's `ledger_entry_awk` once and reads its
+  status**, and it refuses an empty program. It reads the closed-entry scan's status too. lib.sh is
+  unchanged.
+- **`retired-layer-contract.sh` refuses a layer file it cannot read.** It was `cat … || true`.
+- **`readopt-override.sh`'s scans return 3 on a staging failure**, the one status its caller
+  reads as a refusal.
+- **`derivation-differential.sh`'s `skill_commit:` presence test is a `case` prefix match.** It
+  was `awk … <<<"$1" || return 0`, which acquitted the stamp when staging failed. Its stamp parses
+  are `printf | stamp_*` pipes, because each parser reads to EOF before its own `head -1`.
+- **Healthy output is byte-identical to 0.659.0** on a seeded world for each forced cell.
+- `SKILL.md` step 3e says a relabel exit 2 is no verdict. The step 7 blocking-list clause says a
+  `hard-blockers: REFUSED —` exit 1 is neither clean nor a blocker. The relabel offer says an
+  exit 2 moved no file. The exit headers of `hard-blockers.sh` and
+  `warn-shadowed-local-validators.sh` name the new refusals.
+- **Three premises in `BL-360` were wrong, and the entry now says so.** A read-only `$TMPDIR` does
+  not force this failure; only `ulimit -f` or a full disk does. Under the default SIGXFSZ a heredoc
+  over the limit kills the script with 153, which reaches a caller as a refusal. bash can report
+  the error at a line other than the site.
+
+**Not fixed here: the bootstrapping files.** These are `apply.sh`, `preclassify.sh`,
+`ledger-reverify.sh`, `self-update-gate.sh`, lib.sh's three `cat <<'AWK'` emitters,
+`self-update-fixtures.sh` and `emit-report.sh`, which ship alone. `apply.sh:1319` still runs
+relabel with `|| true`, so its new refusal is swallowed in `--apply` mode, although it moves no
+file. `readopt-override.sh`'s two remaining heredoc loops are also unconverted. `BL-360` lists
+every remaining site.
+
+`BL-360` now has an `sh` receipt. It forces five cells under `ulimit -f 16` with XFSZ ignored,
+holds the seven files at zero `<<<`, and adds a spelling floor over the bootstrapping half. It
+exits 0 only when both halves hold. Otherwise it exits 1, and a stderr tag names which half
+failed. On this tree it tags the bootstrapping half, which reads STILL-LIVE. It tags the converted
+half on 0.659.0 and on each of six mutants that restore a base here-string or replace a staging
+status with `|| true`. It exits 9 on the converted scripts stubbed out, and tags the bootstrapping
+half on a second correct spelling.
+
+### Two detectors that printed a refusal and exited 0 now exit 2 (`BL-356`, bullets 1 and 2)
+
+- **`retired-layer-passage.sh` exits 2 when it cannot read the rulebook list from
+  `setup-sites.md`.** It printed "refusing to report clean" and exited 0, and `apply.sh` reads
+  the exit.
+- **`retired-layer-contract.sh` reads the glob list once and exits 2 when the read fails or
+  yields no glob.** With `setup-sites.md` at mode 000 it exited 0 with no output, which
+  `emit-report.sh` rendered as "none". A rulebook with no contract shape still exits 0.
+- **`retired-tokens.sh`'s `rt_blob` lists with `-c core.quotePath=false`.** This is hardening
+  only. The third bullet does not close: `preclassify.sh` takes its diff from lib.sh's
+  `memo_diff_name_status` under the default `core.quotePath`, so a non-ASCII path is C-quoted in
+  both columns of its CLASSIFY row. `retired-tokens.sh` then skips the row before `rt_blob` runs,
+  on 0.659.0 and on this tree alike. Both files are bootstrapping.
+
+`BL-356` now has an `sh` receipt that keys on all three bullets. On this tree it exits 1 tagged
+for bullet 3. On 0.659.0 it exits 1 tagged for bullets 1 and 2. It exits 0 once
+`-c core.quotePath=false` is added inside `memo_diff_name_status`.
+
+This discharges no consumer candidate. The pull that delivers 0.660.0 runs under the consumer's
+installed engine, so these refusals protect only the pull after it.
+
 ## [0.659.0] - 2026-09-28
 
 Three gaps the reference consumer filed from sprint 314 are closed. A story that closes `done`

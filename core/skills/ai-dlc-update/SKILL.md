@@ -992,7 +992,9 @@ prose is itself generated rather than composed.
    while an extension already carries it) is invisible to a plain dry-run — the installed
    core does not carry the new number yet — so without theirs the tool reports "none"
    while the needs-confirmation list flags it, and the operator gets no relabel preview at
-   the one moment they can decide it. **Report-only here; it never blocks `apply`** — a
+   the one moment they can decide it. An exit 2 with a `relabel: REFUSED —` line means an
+   anchor set could not be staged for reading, and it is no verdict, not "none". **Report-only
+   here; it never blocks `apply`** — a
    collision is decidable and consumer-fixable, and a consumer must never be unable to take
    a fix because its own catalog needs relabelling. The updater OFFERS the rewrite at step
    7. The integer never moves; only the label is added, so existing gate history maps by
@@ -1478,7 +1480,9 @@ prose is itself generated rather than composed.
    clause (2) says what to do; and
    (2) re-running the blocking list, every `HARD-*` is resolved —
    `reconcile/hard-blockers.sh <dist> <base> <consumer> <theirs>` prints `0 HARD blockers.`, or the
-   operator has explicitly accepted each remaining one per-path. This is the gap that shipped a
+   operator has explicitly accepted each remaining one per-path. An exit 1 with a
+   `hard-blockers: REFUSED —` line is neither: the blocking list could not be staged for reading,
+   so no list was checked. Clear the cause it names (usually a full `$TMPDIR`) and re-run. This is the gap that shipped a
    data-loss drift past two reports: the detector caught it, the narrated report did not.
 
    **Resolving a blocker rewrites the region clause (1) verifies, so clause (1) is re-run AFTER
@@ -1821,7 +1825,9 @@ prose is itself generated rather than composed.
 
    **Offer the catalog relabel (step 3e).** Run `reconcile/relabel-extension-checks.sh
    <consumer-root> --apply` once core is in place, since the collision set is defined
-   against the NEW core. Then run `scripts/ai-dlc/validate-layer-entries.sh` and report its
+   against the NEW core. An exit 2 with a `relabel: REFUSED —` line moved no file for the
+   extension it names, and it is not "nothing to label": clear its cause and re-run it.
+   Then run `scripts/ai-dlc/validate-layer-entries.sh` and report its
    errors/warnings in the apply summary. This never blocks the apply.
 
    **Offer the extension-check adoption (step 3ea).** Run

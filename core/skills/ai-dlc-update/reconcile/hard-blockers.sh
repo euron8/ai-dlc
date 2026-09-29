@@ -21,7 +21,8 @@
 #     --ld-rows <file> --ld-rc <n>    layer-drift.sh's rows and exit status, verbatim
 #     --ud-rows <file> --ud-rc <n>    unregistered-drift.sh's rows and exit status, verbatim
 # Exit:
-#   print : 0 always. An empty list prints "0 HARD blockers." (affirmative, not silence) — unless a
+#   print : 0 whenever the list was read (the staging refusal under `both` is the one exception).
+#           An empty list prints "0 HARD blockers." (affirmative, not silence) — unless a
 #           detector REFUSED, which renders as a DETECTOR-REFUSED row instead. See below.
 #   check : 0 = the report contains every HARD blocker's path; 1 = one or more MISSING (report
 #           unsound); 2 = usage / missing report / a rows flag supplied without its rc.
