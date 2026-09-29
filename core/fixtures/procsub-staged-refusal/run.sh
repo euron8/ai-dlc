@@ -1559,7 +1559,8 @@ for _r5 in $R5_FILES; do run_arm arm_r5 "$RC_/$_r5" "r5: $_r5 carries no non-com
 # corpus needs and costs nothing there; at b0c310a3 it reads exactly the three `cat <<'AWK'` lines.
 # ================================================================================================
 LH_AWK='/^[[:blank:]]*#/ { next }
-  { n++; l = $0; gsub(/<<<+/, "", l); if (l ~ /<<-?[[:blank:]]*[\047"]?[A-Za-z_]/) { h++; at = at " " FNR } }
+  { n++; l = $0; gsub(/<<<+/, "", l)
+    if (l ~ /<<-?[[:blank:]]*[\047"]?[A-Za-z_]/) { h++; at = at " " FNR } }
   END { printf "%d %d%s\n", n, h, at }'
 lh_scan() { awk "$LH_AWK" "$1"; }
 arm_lh() { local r n h
