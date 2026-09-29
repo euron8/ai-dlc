@@ -78,7 +78,8 @@ returns `{artifact_path, summary, gaps}`.
 
 ### 2. Draft the consolidated split
 
-Dispatch an `analyst` (Rule 24) to produce two drafts, written to disk
+Dispatch an `analyst` (Rule 24; one source document, Rule 28 "Split dispatch" serial
+exception 4) to produce two drafts, written to disk
 (NOT returned inline) **at these paths** — the step used to name none, and an
 unprescribed path is how eleven drafts landed in the durable area root:
 - **Consolidated live draft** —

@@ -19,9 +19,21 @@ source; do not infer either value from anywhere else.
 
 ## Contract
 
-1. **One dispatch per adversarial pass, not per finding.** You take that pass's WHOLE
-   finding set. The artifact is one document: N agents editing it in parallel produce a
-   document that contradicts itself, which is the defect you were called to remove.
+1. **One dispatch per adversarial pass, or one shard per disjoint FILE set — never one per finding.**
+   Rule 28's "Split dispatch" (files axis) governs the shape. A single-file artifact gets one
+   remediator, which takes the pass's WHOLE finding set. A multi-file artifact gets one shard
+   remediator per disjoint set of files the findings' `edit:` targets name. You edit ONLY the
+   files your brief's `shard:` line names, in place, never a copy. A finding citing more than
+   one file goes to one serial remediator after the join. Two agents editing the same file
+   produce a document that contradicts itself, which is the defect you were called to remove.
+   As a shard, you write your record to the part path your brief names under
+   `s<N>/shards/<artifact>-repair-p<M>/`, not to the record path in item 3. Every `edit:` line
+   cites the FULL path of each file you edited, on that one line with no wrap onto the next. Ask
+   for and report no agent id. The join `join-remediator-shards.sh` keys your part on those
+   citations against the harness write ledger over the whole sprint slot
+   (`--artifact-path _bmad-output/planning-artifacts/s<N>`), and it refuses an uncited or
+   doubly-written file: every file you edit under `s<N>/` — stories, `epics/epics.md`, any
+   sibling — appears on an `edit:` line. Your part file under `s<N>/shards/` is not counted.
 2. **Repair every CRITICAL and MAJOR.** MINOR/NIT at your discretion; say which you
    skipped and why.
 3. **Write the repaired artifact in place**, and write a **repair record** to
@@ -160,7 +172,7 @@ unchecked claim about the code into the artifact, so repairs injected defects at
 rate review removed them and the MAJOR count could not reach zero. Measured: 13 passes, ~12
 hours, no convergence; 7 of 7 repair-authored claims false.
 
-*False-positive cost:* one extra subagent dispatch per adversarial pass, and a repair record
+*False-positive cost:* one extra subagent dispatch per adversarial pass (one per file set when sharded), and a repair record
 to read. Against a cycle that ran thirteen passes, this is not close.
 
 *Removed when:* two consecutive sprints record zero repair-introduced false claims in prior

@@ -117,7 +117,8 @@ Create a bug-fix story in `_bmad-output/planning-artifacts/s<N>/stories/`:
 ### 4. Validation
 
 Dispatch ONE `adversary` (Agent tool, bound to `.claude/team-roles/adversary.md`
-per SKILL.md Rule 19) to run `/bmad-review-adversarial-general` on the fix story.
+per SKILL.md Rule 19) to run `/bmad-review-adversarial-general` on the fix story, which is
+one file (Rule 28, "Split dispatch", serial exception 4).
 **ONE-SHOT — the bmad skill is correct here and stays** (no loop, no verdict, no
 counted exit condition; the skill's ≥10 floor buys a cynical sweep and costs
 nothing). The native `adversary` review is for CONVERGENCE cycles only.
@@ -139,8 +140,9 @@ one-shot never stamps. That `artifact:` line is what routes the story to Check
 globs that prefix and a verdict-less pass swept into a series fails rung A.
 
 Apply all improvements through the **Adversarial repair dispatch** sub-routine
-(`_gate-procedures.md`): ONE `remediator` takes the whole finding set, applies the
-edits and appends the changelog to the story. The lead owns the disposition, not
+(`_gate-procedures.md`). The fix story is one file, so one remediator takes the whole
+finding set (Rule 28, "Split dispatch", serial exception 4), applies the edits and appends
+the changelog to the story. The lead owns the disposition, not
 the edit.
 
 **A one-shot finding that yields relief the operator can apply** — an existing
@@ -151,7 +153,7 @@ operator through section 2b's question WHEN IT IS FOUND, not after the dispositi
 `stories-test-strategy.md` §3a or `route.md` Step 4) and that sprint's
 `pipeline_variant` runs an architecture step in `route.md`'s variant table, the
 sprint's architecture assessment predates the fold and says nothing about it.
-After the remediation above lands, dispatch ONE `architect` (Agent tool, bound to
+After the remediation above lands (serial exception 3: it reads the repaired story), dispatch ONE `architect` (Agent tool, bound to
 `.claude/team-roles/architect.md` per SKILL.md Rule 19) over the fix story and
 the files it changes. The architect:
 1. Runs `/bmad-review-adversarial-general` on the fix story, scoped to

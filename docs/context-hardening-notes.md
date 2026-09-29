@@ -1889,3 +1889,54 @@ has already emitted stop records, say so. It would have to be **advisory** — f
 above means a stop is not proof of death, and an automatic verdict there would re-dispatch
 live teammates, which is the failure this whole mechanism exists to prevent. Not shipped
 here. The carry-over stays open, and nothing in this release should be read as closing it.
+
+## R38 — the lead waited on one agent per subject, and nothing told it to split
+
+**The measurement.** It was taken over the graph consumer's subagent transcripts: 823
+subagents, all parsed, across 87 lead sessions. Summed subagent time was 230.7h, and at least
+one subagent was live for 180.2h, so achieved parallelism was **1.28**. **144.4h** of that was
+solo, with exactly one agent live and the lead blocked on it. Tool execution was 5.4% of
+subagent wall clock. The rest was model turns, which a faster script cannot move and a smaller
+brief can. Adversary wall clock grew with the number of stories named in its brief: a median of
+793s with none, 1873s at three and 2288s at five. Growth was sublinear, because each agent pays
+a fixed load cost, so sharding a pass buys roughly 2x and not 5x.
+
+**Per-role reach.** Solo lead-blocked time fell on a few roles: the adversary 29.4h, the
+remediator 28.8h, the gate-adjudicator 8.9h and the analyst 3.4h. Briefs naming two or more
+stories held 12.9h of the adversary's 32.1h, 6.4h of the architect's 18.6h and 5.3h of TEA's
+7.8h. The rest are single-document passes, which story sharding does not reach.
+
+**Why the rule is a Rule 28 clause and four joins, not a deny.** A generic guard would have
+to decide from a brief whether its scope partitions. That judgment lives in the brief's
+prose: whether "every story" names a scope to split or context to read. That is intent, not an
+act, and this repo's mechanisms deny acts. So the general clause is prose, and each per-role
+site gets a join PROGRAM that re-derives the part set and refuses a short or overlapping union:
+`merge-adversarial-shards.sh`, `join-remediator-shards.sh`, `validate-gate-adjudication.sh
+--merge`, and Rule 24's surface-count join. The `shard:` brief line makes the lead's choice
+recordable after the fact without being deniable before it.
+
+**Why a single document is not split by section.** Sharding one document by section would reach the
+remaining single-artifact time. By operator ruling it is deferred to its own entry, because
+a section-level splice reopens the contradiction risk the file axis avoids by construction. The
+clause names it as serial exception 4 rather than leaving it silent.
+
+**Why the remediator ban did not decide this.** "One remediator per pass; parallel editors
+contradict each other" cited R35. R35 measured something else: the LEAD repairing from a
+compacted context (7 of 7 claims false) against a fresh subagent. It proves repair must be
+delegated and says nothing about N remediators. The contradiction clause was reasoning. The
+risk it names is real, two writers on overlapping bytes, and it is now made unconstructible
+rather than argued. Remediators split on disjoint FILE sets, edited in place. Copies were
+rejected, because a `derived` fence records the file it measured, and a derivation run against a
+copy certifies bytes that never land. The harness write ledger that
+`ai-dlc-gate-remediation-guard.sh` appends is record-then-allow. A ledger failure never blocks
+an Edit, since the ledger is evidence for the join, not a gate on the writer. A lost row does not
+acquit: it surfaces at the join as a part citing a file no agent wrote, which is a refusal. The
+join keys parts on the files their `edit:` lines cite and never on a self-reported agent id,
+because no dispatched model is shown its own harness id. R35 is left as written.
+
+**Why the adversary merge recomputes the verdict.** Three shards each holding two blocking
+MAJORs can each honestly stamp `EXIT_CONDITION_MET` while the artifact holds six. A shard's
+verdict is therefore advisory, and the merge reads its exit ceilings from the convergence
+validator rather than restating them. Shards are keyed on a story's ordinal in the sorted
+listing, never its slug. A slug-derived key refused most of the consumer's real story names,
+and a slug can carry a sprint token the consumer's push guard blocks.

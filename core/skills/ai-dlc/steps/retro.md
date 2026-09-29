@@ -189,7 +189,9 @@ directory runs them locally only.
 
 ### 3. Write Retro Document
 
-**Doc split (Dispatch A — Rule 24).** Dispatch an `analyst` to read the sprint
+**Doc split (Dispatch A — Rule 24).** Dispatch analysts sharded by surface per Rule 24's
+Dispatch contract (Rule 28, "Split dispatch": surfaces axis). Each read-source group below is
+one surface, and the join is that contract's part count plus `cat`. Dispatch an `analyst` to read the sprint
 corpus and draft the **descriptive/analytical** sections only — the sprint
 summary, `hard_block_count` + `hard_block_class[]`, and the **Agent-findings
 summary**. It reads:
@@ -474,7 +476,8 @@ the backstop: it catches items that slipped past inline closure and
 ensures no sprint ends with stale OPEN/IN_SPRINT state.
 
 **Close-Out gather (Dispatch B).** Dispatch an `analyst` to RUN and MATCH —
-never to dispose. It writes its tables to
+never to dispose. Each table below is one surface (Rule 28, "Split dispatch": surfaces axis,
+joined per Rule 24's Dispatch contract into the one tables file). It writes its tables to
 `_bmad-output/retro-artifacts/s<N>/closeout-tables.md`:
 - **Deferral reconciliation.** For each deferral / re-affirmed deferral /
   passive monitor, the analyst RUNS the live condition (the cited test,
@@ -1273,7 +1276,9 @@ follow their audit, these must follow the merge.
 Issued AFTER the 7a merge (no dispatch before Step 5 can cover post-merge
 inputs, §2 blocker 2). Dispatch an `analyst` —
 **Dispatch C** — to gather all six input classes below (including the
-relatedness analysis in input 6) and write the structured bundle to
+relatedness analysis in input 6). Inputs 1-5 are surfaces, one analyst each (Rule 28, "Split
+dispatch": surfaces axis, joined per Rule 24's Dispatch contract). Input 6 needs input 1's
+current-epic state, so it runs after the join (serial exception 3). Write the structured bundle to
 `_bmad-output/retro-artifacts/s<N>/next-inputs.md`. The lead derives
 the theme (7c) and authors the paste-able prompt (7d) from that bundle
 **plus its own retained retro findings** — the Step-3 improvements and

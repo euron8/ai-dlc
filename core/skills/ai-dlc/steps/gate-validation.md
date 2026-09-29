@@ -2052,7 +2052,9 @@ record was written to authorize — and it is suppressed entirely once the serie
 proves findings FELL, which proves a repair happened — but not that a `remediator` did
 it. `carry-over-evaluation.md` §3a fences repair to a subagent (*"the lead does not
 repair the artifact itself"*), delivered as `planning-artifacts/s<N>/<artifact>-repair-p<M>.md`
-that the next pass verifies against. Arm H asserts that record exists and is structured
+that the next pass verifies against. A file-sharded repair reaches arm H as the one record
+`join-remediator-shards.sh` writes (`_gate-procedures.md`, "Adversarial repair dispatch").
+Arm H asserts that record exists and is structured
 (a `disposition:`, an `edit:` site, a `derivation:` per finding) for every pass whose
 findings a later pass measured as repaired. It proves the record EXISTS, not who authored
 it — a subagent leaves no transcript and the provenance id is shape-only, so existence +
@@ -3075,9 +3077,10 @@ without moving.
 <!-- CHECK_LOADED: failure -->
 
 If any check fails:
-1. Dispatch ONE `remediator` for the pass, per `_gate-procedures.md`
-   **Adversarial repair dispatch** — the gate is that procedure's second caller.
-   It takes every FAILED check of this pass and writes its repair record to
+1. Dispatch the pass's repair per `_gate-procedures.md`
+   **Adversarial repair dispatch** — the gate is that procedure's second caller,
+   and that procedure owns the remediator count and any file sharding (Rule 28,
+   "Split dispatch"). It takes every FAILED check of this pass and writes its repair record to
    `_bmad-output/planning-artifacts/s<N>/gate-<type>-repair-p<M>.md`. The lead
    dispatches, joins, and adjudicates; it does not edit the artifact.
    **One exemption, and it is the only one:** a FAIL whose subject is
@@ -3089,7 +3092,7 @@ If any check fails:
    write is already permitted there. Rule 28(c) routes a repair to the remediator
    because the lead would otherwise rebuild a planning ARTIFACT from a compacted
    summary; a state record the lead already owns and the guard already permits is
-   not that case. Every other FAIL goes to ONE `remediator` per pass.
+   not that case. Every other FAIL goes to that procedure's remediator dispatch.
 2. Re-run the failed check. What that costs depends on where the FAIL came from.
    A script-arm FAIL found before the dispatch is re-run as that script alone, and
    no adjudicator is involved. A FAIL inside the adjudicator's verdict is a whole

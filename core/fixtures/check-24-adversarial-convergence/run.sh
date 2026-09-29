@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # Exercise validate-adversarial-convergence.sh against the check-24 fixture.
 #
 # Exit 0 iff the validator returns the correct verdict on every seeded series.
@@ -1018,6 +1019,25 @@ expect_silent ceiling-plateau-below "E -- STALL" stalled \
   "E and B's MET half are reading two different ceilings"
 expect_silent ceiling-plateau-below "B -- CONSISTENCY" ceiling-above-limit \
   "the biconditional is back and every consumer's mid-cycle NOT_MET is retroactively an error"
+
+# --- ARM K: the shard arm reads the TERMINAL pass --------------------------------------------
+# Each case is a stamped git repo built by seed.sh. The recovery cell is the one that separates
+# terminal keying from every-pass keying: under the latter it exits 1 on p1 forever, which is
+# a remedy the arm prints and the gate cannot accept. The offender cell asserts the MESSAGE,
+# because arm K's exit is shared with every other arm.
+expect shard-recovered 0 \
+  "unsharded p1, then the sharded MET p2 the remedy prescribes: the series CLEARS" stories-adversarial-p
+expect shard-terminal-unsharded 1 \
+  "sharded p1, whole-subject TERMINAL p2 after the stamp -- FAIL (K)" stories-adversarial-p
+expect_says shard-terminal-unsharded stories-adversarial-p "K-names-terminal" \
+  "FAIL (K -- SHARD): stories-adversarial-p2.md reviews" "write it as the NEXT" \
+  "This arm reads only"
+expect_state shard-terminal-unsharded stories-adversarial-p CONVERGED 0 \
+  "arm K is GATE-ONLY: the hooks' state is untouched by a missing shard line"
+expect shard-legacy 0 \
+  "the series opened before the stamp: PENDING, printed and not counted" stories-adversarial-p
+expect_says shard-legacy stories-adversarial-p "K-legacy-pending" \
+  "PENDING (K -- SHARD): the terminal pass stories-adversarial-p2.md" "Legacy series."
 
 echo
 # --- PASS 1 HAS NO PREVIOUS PASS -----------------------------------------------
