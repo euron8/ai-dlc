@@ -58,7 +58,7 @@
 # DECISION ORDER (first match wins)
 #   0. jq absent                     -> allow (nothing can be parsed; see posture)
 #   1. no pipeline snapshot          -> allow (not an ai-dlc session)
-#   2. payload carries agent_id      -> RECORD the write, then allow (a dispatched teammate;
+#   2. payload carries agent_id      -> RECORD the write (verdict, planning artifact), then allow (a dispatched teammate;
 #                                       THE remediator, and the only event that names a writer)
 #   3. tool is not an edit           -> allow
 #   4. no conforming verdict file    -> allow (no gate has ever run here)
@@ -180,6 +180,8 @@
 # - Appends to: _bmad-output/gate-adjudication/.verdict-writes.jsonl (arm 7a's own record;
 #   durable, because it is evidence about a pass and is read by
 #   `validate-gate-adjudication.sh` at the gate as well as by this hook)
+# - Appends to: _bmad-output/planning-artifacts/.artifact-writes.jsonl (arm 2's record of a
+#   dispatched agent's planning-artifact write; read only by `join-remediator-shards.sh`)
 # - Rewrites: _bmad-output/.gate-remediation-in-force (arm 7b's one-line-keyed cache;
 #   declared transient in schemas/pipeline-state-paths.json, so it renders into the
 #   consumer's .gitignore and is never committed)
@@ -297,6 +299,10 @@ STEER_SCRIPT="${PROJECT_DIR}/scripts/ai-dlc/validate-steering-budget.sh"
 # artifact this guard reads, and that limit is the guard's, not this arm's.
 WRITE_LEDGER="${GATE_DIR}/.verdict-writes.jsonl"
 SPAWN_LEDGER="${LOG_DIR}/spawn-ledger.jsonl"
+# Inside the first guarded root (arm 7), so a denied lead cannot rewrite it through Write or Edit
+# to erase an overlap; `join-remediator-shards.sh` is its only reader.
+ARTIFACT_LEDGER_DIR="${LOG_DIR}/planning-artifacts"
+ARTIFACT_LEDGER="${ARTIFACT_LEDGER_DIR}/.artifact-writes.jsonl"
 # Seconds. The B2 arm's only constant, picked by measurement (see arm 7a) and a HARD CONSTANT
 # in this file for the reason validate-gate-adjudication.sh gives for its stall threshold K: a
 # window the environment can widen is an opt-out shipped inside the mechanism. Measured: with
@@ -348,6 +354,41 @@ record_verdict_write() { # $1 file_path -- silent no-op unless this is a verdict
          --arg session "${SESSION_ID:-}" --arg tool "$TOOL_NAME" \
      '{v: 1, ts: $ts, stem: $stem, agent_id: $agent, session: $session, tool: $tool}' \
      >> "$WRITE_LEDGER" 2>/dev/null || true
+}
+
+# THE PLANNING-ARTIFACT WRITE LEDGER -- which dispatched agent asked to write which artifact file.
+# It exists for the sharded repair: N remediators may run on one pass only if no file was written
+# by two of them, and `join-remediator-shards.sh` refuses the join on exactly that. Nothing else
+# in the harness names an agent and a file path in the same event, so the record is taken here,
+# on the arm-2 allow, and never decides anything in this hook. RECORD-THEN-ALLOW ONLY: there is no
+# deny path behind it, and a failed append changes no outcome -- same posture, and the same
+# silence, as `record_verdict_write` above.
+#
+# A SEPARATE FILE, AND THE `kind` FIELD, FOR TWO DIFFERENT READERS. The verdict reader above
+# (BIND_PROG) and `validate-gate-adjudication.sh`'s `dispatch_binding` both take the EARLIEST `ts`
+# of every row in `.verdict-writes.jsonl` as the pre-migration epoch, with no filter on stem, so a
+# row of any other kind in that file moves the epoch and changes which passes read `exempt`.
+# These rows therefore never enter that file. They carry `kind: "artifact-write"` and no `stem` all
+# the same, so a row that reaches a verdict reader by any route matches no stem.
+#
+# `path` IS NORMALIZED to the suffix from the state directory's name onward, because payload paths
+# arrive both absolute and relative (see PROJECT_DIR above) and the join counts distinct writers
+# PER FILE -- one file under two spellings would split its writers and acquit the overlap.
+#
+# PreToolUse fires BEFORE the write, so a row is an ATTEMPT. The join refuses on an attempted
+# overlap, which is the conservative direction for a check whose subject is two writers.
+record_artifact_write() { # $1 file_path -- silent no-op unless this is a planning-artifact write
+  case "$TOOL_NAME" in Edit|Write|MultiEdit) ;; *) return 0 ;; esac
+  case "$1" in
+    */${STATE_DIR_NAME}/planning-artifacts/*) _raw_rel="${STATE_DIR_NAME}/${1##*/${STATE_DIR_NAME}/}" ;;
+    ${STATE_DIR_NAME}/planning-artifacts/*) _raw_rel="$1" ;;
+    *) return 0 ;;
+  esac
+  mkdir -p "$ARTIFACT_LEDGER_DIR" 2>/dev/null || return 0
+  jq -nc --arg ts "$TIMESTAMP" --arg path "$_raw_rel" --arg agent "$AGENT_ID" \
+         --arg session "${SESSION_ID:-}" --arg tool "$TOOL_NAME" \
+     '{v: 1, kind: "artifact-write", ts: $ts, path: $path, agent_id: $agent, session: $session, tool: $tool}' \
+     >> "$ARTIFACT_LEDGER" 2>/dev/null || true
 }
 
 # THE BINDING QUERY. One jq invocation answers both questions arm 7a asks -- the live stem's
@@ -418,6 +459,7 @@ FP=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
 # harness that names an agent and a file path in the same payload.
 if [ -n "$AGENT_ID" ]; then
   record_verdict_write "$FP"
+  record_artifact_write "$FP"
   exit 0
 fi
 
