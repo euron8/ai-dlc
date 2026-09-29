@@ -21,7 +21,7 @@
 #   may each honestly stamp EXIT_CONDITION_MET while the artifact holds 6.
 #
 # SHARD FILES (non-recursive, `<shard-dir>/*`)
-#   `<epic>-<n>.md` one per story index, `cross.md` once. Anything else in the directory is
+#   `<epic>-<n>.md` one per story index, `cross.md` once. Any other non-dot entry is
 #   REFUSED -- a re-dispatch written beside the original must not be silently ignored.
 #   The index set is derived from `<planning>/s<N>/<artifact>/*.md`, every one of which must
 #   be named `story-<epic>-<n>-<slug>.md`; indices are compared numerically (`01-1` = `1-1`).
@@ -62,7 +62,7 @@ export LC_ALL=C
 refuse() { printf 'REFUSED: %s\n' "$*"; exit 2; }
 
 [ $# -eq 1 ] || refuse "usage: merge-adversarial-shards.sh <planning>/s<N>/shards/<artifact>-p<M>"
-case "$1" in -h|--help) sed -n '2,60p' "$0"; exit 0 ;; esac
+case "$1" in -h|--help) awk 'NR > 1 && /^set -u/ { exit } NR > 1' "$0"; exit 0 ;; esac
 
 SHARD_DIR="${1%/}"
 [ -d "$SHARD_DIR" ] || refuse "shard directory $SHARD_DIR does not exist"
@@ -135,7 +135,9 @@ in_set() { case " $INDICES " in *" $1 "*) return 0 ;; esac; return 1; }
 
 # ---- the shard set ------------------------------------------------------------------------
 : > "$T/shards" || refuse "cannot stage the shard set"
-for f in "$SHARD_DIR"/* "$SHARD_DIR"/.[!.]*; do
+# Dotfiles are not walked: no shard name begins with a dot, and a Finder `.DS_Store` (one exists
+# in the reference consumer's _bmad-output) would otherwise refuse a healthy shard set.
+for f in "$SHARD_DIR"/*; do
   [ -e "$f" ] || continue
   b="$(basename "$f")"
   [ -f "$f" ] || refuse "$f is not a regular file; the shard directory holds only <epic>-<n>.md and cross.md"
