@@ -7,6 +7,15 @@
 #        → prints the derived escalated check_ids (one per line) for that gate type.
 #          This is the adjudicator's worklist AND the completeness check's expected set,
 #          from ONE derivation, so the two can never disagree.
+#   ./scripts/ai-dlc/validate-gate-adjudication.sh --expected <gate_type> --shard <i>/<N>
+#        → shard i of N of that same list: a contiguous, balanced slice, disjoint from every
+#          other shard, the N slices concatenating to the bare output. Refuses (exit 2,
+#          `REFUSED:`) a malformed i/N, i > N, or N above the list's length. See "SHARDING".
+#   ./scripts/ai-dlc/validate-gate-adjudication.sh --merge <gate_type> <verdict_path> <part>...
+#        → joins the shards' parts into the ONE verdict at <verdict_path>, then runs the
+#          --coverage arms on it and returns their exit. Refuses (exit 2, `REFUSED:`, nothing
+#          written) unless the parts are exactly this nonce's 1..N, every line carries this
+#          nonce, no check_id appears twice, and the union equals --expected. See "SHARDING".
 #   ./scripts/ai-dlc/validate-gate-adjudication.sh <gate_type> <verdict_path> \
 #        [--transcript PATH] [--transcript-dir DIR]
 #        → completeness adjudication of the verdict at <verdict_path>. The transcript
@@ -62,6 +71,21 @@
 # so the path in the PASS line IS the nonce that was checked, and a lead holding the dispatch's
 # nonce can read one against the other. The role file closes the rest by naming the path
 # verbatim.
+#
+# SHARDING (--expected --shard, --merge). One adjudicator judging the whole worklist is the
+# gate's longest serial step. A sharded gate dispatches N adjudicators under ONE nonce; each
+# derives its own slice with --shard, so no shard is handed a list someone typed, and writes
+#   <gate_nonce>.part-<i>of<N>.jsonl
+# beside the verdict path — one JSON object per line, per check judged, carrying the v1
+# per-check fields (check_id, verdict, evidence) plus gate_nonce, gate_series_id, catalog and
+# adjudicator_agent_id. The extension is `.jsonl` BECAUSE --series walks this directory
+# recursively and exits 2 on any `.json` that is not a verdict. The lead then runs --merge,
+# which writes the single v1 verdict every reader already reads — the schema, the path and
+# Check 26 are unchanged — and refuses rather than writes on an incomplete or overlapping
+# union, since a merge that accepts a short union reads exactly like a passing gate. The
+# merged adjudicator_agent_id lists every shard's id, and its generated_at is the merge time.
+# No write-ledger row is ever produced for a merged file, so it binds through the spawn
+# ledger's dispatch window alone.
 #
 # THE SET IS DERIVED, NOT LISTED. The escalated set is
 #   escalate(check, gate_type) := check.adjudication == escalated_class
@@ -181,7 +205,8 @@
 #   1  — a defect: malformed/mismatched envelope, coverage gap, a FAIL verdict, or (--series)
 #        a stalled check / a gate_series_id spanning two gate_types or a duplicated pass
 #   2  — usage error, or a derivation-layer failure (unknown adjudication value, absent verdict,
-#        unreadable --series path, unparseable verdict under --series)
+#        unreadable --series path, unparseable verdict under --series), or a `REFUSED:` shard
+#        spec or merge
 #
 # The lead runs the adjudicate form through verdict.sh so the exit code is not swallowed by a
 # pipe. Compatible with bash 3.2+ and Python 3 stdlib (no PyYAML — the map is regex-parsed).
@@ -192,15 +217,37 @@ MODE=""
 GATE_TYPE=""
 VERDICT_PATH=""
 SERIES_PATHS=()
+MERGE_PARTS=()
+GA_SHARD=""
 
 case "${1:-}" in
     --expected)
         MODE="expected"
         GATE_TYPE="${2:-}"
         if [ -z "$GATE_TYPE" ]; then
-            echo "usage: $0 --expected <gate_type>" >&2
+            echo "usage: $0 --expected <gate_type> [--shard <i>/<N>]" >&2
             exit 2
         fi
+        if [ "$#" -gt 2 ]; then
+            # `--shard` is the ONLY word accepted after the gate type. An unknown one used to be
+            # ignored, and a mistyped shard flag then printed the WHOLE worklist to every shard.
+            if [ "${3:-}" != "--shard" ] || [ "$#" -ne 4 ] || [ -z "${4:-}" ]; then
+                echo "usage: $0 --expected <gate_type> [--shard <i>/<N>]" >&2
+                exit 2
+            fi
+            GA_SHARD="$4"
+        fi
+        ;;
+    --merge)
+        MODE="merge"
+        GATE_TYPE="${2:-}"
+        VERDICT_PATH="${3:-}"
+        if [ -z "$GATE_TYPE" ] || [ -z "$VERDICT_PATH" ] || [ "$#" -lt 4 ]; then
+            echo "usage: $0 --merge <gate_type> <verdict_path> <part>..." >&2
+            exit 2
+        fi
+        shift 3
+        MERGE_PARTS=("$@")
         ;;
     --coverage)
         MODE="coverage"
@@ -228,6 +275,8 @@ case "${1:-}" in
         ;;
     "" )
         echo "usage: $0 --expected <gate_type>   |   $0 <gate_type> <verdict_path>" >&2
+        echo "       $0 --expected <gate_type> --shard <i>/<N>" >&2
+        echo "       $0 --merge <gate_type> <verdict_path> <part>..." >&2
         echo "       $0 --coverage <gate_type> <verdict_path>" >&2
         echo "       $0 --series <dir|verdict>..." >&2
         exit 2
@@ -600,8 +649,10 @@ GAROWEOF
     fi
 fi
 export GA_IN_FORCE GA_IN_FORCE_STATUS GA_UNVERIFIED_CITES GA_VERIFIER_ERRORS GA_UNBOUNDED_CITES
+export GA_SHARD
 
-python3 - "$MODE" "$GATE_TYPE" "$VERDICT_PATH" "$SCHEMA" "$MAP" "$SIBLING" ${SERIES_PATHS+"${SERIES_PATHS[@]}"} <<'PYEOF'
+# At most one of the two arrays is non-empty, and each is read only by its own mode.
+python3 - "$MODE" "$GATE_TYPE" "$VERDICT_PATH" "$SCHEMA" "$MAP" "$SIBLING" ${SERIES_PATHS+"${SERIES_PATHS[@]}"} ${MERGE_PARTS+"${MERGE_PARTS[@]}"} <<'PYEOF'
 import calendar
 import glob
 import json
@@ -1180,6 +1231,34 @@ if mode == "series":
 
 E = escalated_for(gate_type)
 
+
+def refuse(msg):
+    sys.stderr.write(f"REFUSED: {msg}\n")
+    sys.exit(2)
+
+
+# --------------------------------------------------------------- one shard of the worklist
+# A CONTIGUOUS, BALANCED SLICE of the list the bare mode prints, in that list's order: shard i
+# of N is E[(i-1)*L//N : i*L//N]. Every shard runs this same line over the same E, so the N
+# slices are disjoint and their concatenation in index order IS the bare output — no shard
+# depends on another having run. N above L is refused rather than answered with an empty
+# slice: an empty shard dispatches an adjudicator with nothing to judge, and its empty part
+# is exactly what a non-delivered part looks like.
+if mode == "expected" and os.environ.get("GA_SHARD", ""):
+    spec = os.environ["GA_SHARD"]
+    m = re.match(r"^([1-9][0-9]*)/([1-9][0-9]*)$", spec)
+    if not m:
+        refuse(f"--shard {spec!r} is not <i>/<N> with 1 <= i <= N.")
+    si, sn = int(m.group(1)), int(m.group(2))
+    if si > sn:
+        refuse(f"--shard {spec!r}: index {si} is above the shard count {sn}.")
+    if sn > len(E):
+        refuse(f"--shard {spec!r}: {sn} shard(s) over {len(E)} escalated check(s) for "
+               f"{gate_type} leaves a shard with nothing to judge. Use N <= {len(E)}.")
+    for cid in E[(si - 1) * len(E) // sn: si * len(E) // sn]:
+        print(cid)
+    sys.exit(0)
+
 if mode == "expected":
     if not E:
         print(f"0 escalated checks for {gate_type}")
@@ -1187,6 +1266,139 @@ if mode == "expected":
         for cid in E:
             print(cid)
     sys.exit(0)
+
+
+# ------------------------------------------------------- merge shard parts into one verdict
+# THE JOIN THAT MAKES A SHARDED GATE READ AS ONE VERDICT. Every shard writes
+# <nonce>.part-<i>of<N>.jsonl beside the verdict path, one JSON object per line and one line
+# per check it judged. A line is the v1 per-check object plus the four envelope values a
+# merged file needs and a shard is the only one to know:
+#   {"gate_nonce", "gate_series_id", "catalog", "adjudicator_agent_id",
+#    "check_id", "verdict", "evidence"}
+# `.jsonl` and never `.json`: --series walks gate-adjudication/ recursively and exits 2 on any
+# `.json` that is not a verdict, so a part named `.json` would stop the stall rung on every
+# sharded pass.
+#
+# EVERY REFUSAL IS EXIT 2 AND WRITES NOTHING. The union is checked before the file exists, so a
+# refused merge leaves the nonce path empty and the gate reads it as non-delivery, exactly as
+# it reads a dispatch that never returned. The refusals: a verdict path that is not
+# <nonce>.verdict.json for this gate type, or that already exists (a merge never overwrites a
+# verdict — overwriting is the hand-assembled-verdict shape the binding arm exists for); a part
+# whose filename does not carry this nonce, or a part set whose indices are not exactly 1..N
+# under one N; any line whose gate_nonce is not the verdict path's stem; gate_series_id or
+# catalog differing between lines; a line missing a field; any check_id appearing twice; and a
+# union that is not exactly `--expected <gate_type>`. The per-check fields are read against
+# the schema's own item_fields, so the part cannot pass a shape the coverage arms then refuse.
+#
+# THEN IT IS --coverage. The merged file is written with O_EXCL and this program falls through
+# into the envelope arms and `coverage_arms()` as `--coverage` runs them, and returns their
+# verdict. The dispatch binding is not run here, for the reason the coverage mode gives; the
+# lead's full run decides the gate.
+if mode == "merge":
+    merge_parts = sys.argv[7:]
+    vbase = os.path.basename(verdict_path)
+    if not vbase.endswith(".verdict.json"):
+        refuse(f"--merge: verdict path {verdict_path} does not end in .verdict.json.")
+    mnonce = vbase[: -len(".verdict.json")]
+    if not re.match(PATTERNS["gate_nonce"], mnonce) or mnonce.rsplit("-", 1)[0] != gate_type:
+        refuse(f"--merge: verdict path stem {mnonce!r} is not a {gate_type} gate_nonce.")
+    if os.path.lexists(verdict_path):
+        refuse(f"--merge: {verdict_path} already exists. A merge writes a verdict once and "
+               f"never overwrites one.")
+    if not os.path.isdir(os.path.dirname(os.path.abspath(verdict_path))):
+        refuse(f"--merge: the directory of {verdict_path} does not exist.")
+    part_re = re.compile("^" + re.escape(mnonce) + r"\.part-([1-9][0-9]*)of([1-9][0-9]*)\.jsonl$")
+    counts, indices = set(), []
+    for p in merge_parts:
+        pm = part_re.match(os.path.basename(p))
+        if not pm:
+            refuse(f"--merge: part {p} is not named {mnonce}.part-<i>of<N>.jsonl — a part "
+                   f"carrying another nonce is another gate pass's work.")
+        indices.append(int(pm.group(1)))
+        counts.add(int(pm.group(2)))
+    if len(counts) != 1:
+        refuse(f"--merge: parts disagree on the shard count: {sorted(counts)}.")
+    pn = counts.pop()
+    if sorted(indices) != list(range(1, pn + 1)):
+        refuse(f"--merge: part indices {sorted(indices)} are not exactly 1..{pn} — a slice is "
+               f"missing or named twice.")
+    if pn > len(E):
+        refuse(f"--merge: {pn} part(s) over {len(E)} escalated check(s) for {gate_type}; "
+               f"--expected --shard refuses that count, so no shard derived its worklist.")
+    item_fields = next(f for f in S["fields"] if f["name"] == "verdicts")["item_fields"]
+    env_keys = ("gate_nonce", "gate_series_id", "catalog", "adjudicator_agent_id")
+    line_keys = set(env_keys) | {f["name"] for f in item_fields}
+    rows, agents, shared = [], [], {}
+    for idx, p in sorted(zip(indices, merge_parts)):
+        try:
+            with open(p, "r", encoding="utf-8") as fh:
+                lines = fh.read().splitlines()
+        except (OSError, ValueError) as exc:
+            refuse(f"--merge: part {p} cannot be read ({exc}).")
+        for n, raw in enumerate(lines, 1):
+            if not raw.strip():
+                continue
+            try:
+                row = json.loads(raw)
+            except ValueError as exc:
+                refuse(f"--merge: {p}:{n} is not a JSON object ({exc}).")
+            if not isinstance(row, dict):
+                refuse(f"--merge: {p}:{n} is not a JSON object.")
+            if set(row) != line_keys:
+                refuse(f"--merge: {p}:{n} carries fields {sorted(row)}, not exactly "
+                       f"{sorted(line_keys)}.")
+            if row["gate_nonce"] != mnonce:
+                refuse(f"--merge: {p}:{n} carries gate_nonce {row['gate_nonce']!r}, not this "
+                       f"verdict's {mnonce!r} — it is another gate pass's work.")
+            for k in env_keys[1:]:
+                if not isinstance(row[k], str) or not row[k].strip():
+                    refuse(f"--merge: {p}:{n} has a missing or empty {k}.")
+            for k in ("gate_series_id", "catalog"):
+                if shared.setdefault(k, row[k]) != row[k]:
+                    refuse(f"--merge: {p}:{n} carries {k} {row[k]!r} where an earlier line "
+                           f"carries {shared[k]!r}; the parts are not one gate pass.")
+            for f in item_fields:
+                val = row[f["name"]]
+                if f.get("non_empty") and (val is None or not str(val).strip()):
+                    refuse(f"--merge: {p}:{n} has an empty {f['name']}.")
+                if "enum" in f and val not in f["enum"]:
+                    refuse(f"--merge: {p}:{n} has {f['name']} {val!r}, not one of {f['enum']}.")
+            if row["adjudicator_agent_id"] not in agents:
+                agents.append(row["adjudicator_agent_id"])
+            rows.append((str(row["check_id"]), p,
+                         {f["name"]: row[f["name"]] for f in item_fields}))
+    seen_at = {}
+    for cid, p, _ in rows:
+        seen_at.setdefault(cid, []).append(p)
+    twice = sorted((c for c in seen_at if len(seen_at[c]) > 1), key=lambda x: (len(x), x))
+    if twice:
+        refuse(f"--merge: check_id(s) {twice} appear more than once across the parts "
+               f"({', '.join(f'{c}: {seen_at[c]}' for c in twice)}).")
+    got, want = set(seen_at), set(E)
+    if got != want:
+        refuse(f"--merge: the parts' union is not --expected {gate_type}: missing "
+               f"{sorted(want - got, key=lambda x: (len(x), x))}, unexpected "
+               f"{sorted(got - want, key=lambda x: (len(x), x))}.")
+    by_id = {cid: entry for cid, _, entry in rows}
+    merged = {
+        "schema_id": MARKER,
+        "gate_type": gate_type,
+        "gate_series_id": shared["gate_series_id"],
+        "gate_nonce": mnonce,
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "adjudicator_agent_id": ", ".join(agents),
+        "catalog": shared["catalog"],
+        "verdicts": [by_id[cid] for cid in E],
+    }
+    try:
+        fd = os.open(verdict_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    except OSError as exc:
+        refuse(f"--merge: cannot create {verdict_path} ({exc}).")
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(merged, indent=2) + "\n")
+    print(f"VALIDATE-GATE-ADJUDICATION: MERGED ({verdict_path}, {pn} part(s), "
+          f"{len(E)} escalated check(s) for {gate_type})")
+    mode = "coverage"
 
 
 # --------------------------------------------------------------------- adjudicate a verdict
