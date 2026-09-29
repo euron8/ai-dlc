@@ -145,7 +145,9 @@ operator cannot be heard. `scripts/ai-dlc/validate-steering-budget.sh` fails
 the gate on it.
 
 **Bounded-join ≠ serial execution.** The beat governs HOW the lead
-waits on a dev, NOT how MANY run at once. Independent stories MUST be
+waits on a dev, NOT how MANY run at once. This is Rule 28's "Split
+dispatch" files axis applied to dev work; the real dependency defined
+below is that clause's serial exception 1. Independent stories MUST be
 dispatched in parallel — in ONE message, each in its own worktree, then
 beat-joined on all results. Parallelism comes from per-story worktrees
 plus the join. The lead SHALL serialize two stories ONLY on a

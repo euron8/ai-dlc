@@ -66,7 +66,9 @@ operator back-and-forth, so subagent dispatch does not break an interactive loop
 
 **(iii) Native convergence review (`ai-dlc-adversary-review`).** The Rule 8 cycle
 invokes **no Skill at all**. The lead dispatches ONE `adversary` per pass (same
-Rule 19 binding as (ii)); the METHOD is `team-roles/adversary.md` itself.
+Rule 19 binding as (ii)), sharded per file with one cross-file shard when the artifact is two or
+more files, and joined by `merge-adversarial-shards.sh` (Rule 28, "Split dispatch": files
+axis); the METHOD is `team-roles/adversary.md` itself.
 Procedure: `_gate-procedures.md`, "Adversarial review dispatch".
 **Why it is not a sub-skill:** the bmad review skill demands *at least ten
 findings*, *HALTs on zero*, and emits *no severity or ranking* -- so a loop whose
@@ -77,8 +79,10 @@ ONE-SHOT reviews (`bug-investigation`, `sprint-review`, the test-strategy sweep)
 where nothing loops and no verdict is counted.
 
 **(iv) Gate-check adjudication (`gate-adjudicator`, native — no provenance block).** At
-every gate the lead dispatches ONE `gate-adjudicator` (Rule 19 binding to
-`.claude/team-roles/gate-adjudicator.md`) that evaluates every `adjudication: llm` check for
+every gate the lead dispatches `gate-adjudicator` shards under ONE nonce, sliced by
+`validate-gate-adjudication.sh --expected <gate_type> --shard <i>/<N>` and joined by `--merge`
+(Rule 28, "Split dispatch": worklist-items axis; N may be 1). Each is bound per Rule 19 to
+`.claude/team-roles/gate-adjudicator.md`, and together they evaluate every `adjudication: llm` check for
 the gate type in a fresh Opus context and delivers a `GATE_ADJUDICATION_VERDICT v1` file (its
 own schema, `.claude/schemas/gate-adjudication-verdict.json`). This is NOT one of the five validation
 sub-skills: no Skill runs, and it emits no `SKILL_INVOCATION_PROVENANCE` block — it is off the

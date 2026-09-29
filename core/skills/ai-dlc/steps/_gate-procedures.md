@@ -170,7 +170,7 @@ The nonce makes a stale verdict live at a different path: the bounded-join canno
 gate's verdict, and Check 26 refuses one whose `gate_nonce` field is not this path's stem. That
 closes the "absent verdict reads as pass" hole.
 
-**Dispatch** ONE `gate-adjudicator`, `Agent` tool, `run_in_background: true` (Rule 29 — it must
+**Dispatch** ONE `gate-adjudicator` (or N worklist shards, "Shard the worklist" below), `Agent` tool, `run_in_background: true` (Rule 29 — it must
 not block the operator), bound to `.claude/team-roles/gate-adjudicator.md` per SKILL.md Rule 19
 (both bindings: `model` and the standing role-contract Read line). Give it: the `gate_type`, the
 `gate_nonce`, the verdict output path, and the artifact roots it may read. It derives its own
@@ -182,6 +182,22 @@ the native path with its own schema. Before returning that path it runs
 just wrote — its own role file governs what a non-zero exit obliges it to do, and that mode decides
 nothing about the gate.
 
+**Shard the worklist (Rule 28, "Split dispatch": worklist-items axis).** When `--expected
+<gate_type>` prints more than one check, dispatch N `gate-adjudicator` shards in ONE message
+instead of one, with N no greater than that count (`--shard` refuses a larger N). All N share this
+ONE `gate_nonce`. Each shard derives its own slice with
+`scripts/ai-dlc/validate-gate-adjudication.sh --expected <gate_type> --shard <i>/<N>` and writes
+`<gate_nonce>.part-<i>of<N>.jsonl` beside the verdict path, never a `.json` (`--series` walks
+that directory and refuses any `.json` that is not a verdict). Its brief carries
+`shard: <i>/<N> <gate_type>`. Dispatch the shards right after minting the nonce: a merged verdict
+is written by the validator, gets no verdict-write ledger row, and binds only through a
+`gate-adjudicator` spawn-ledger row within 900s of the nonce. The join is the program: beat-join
+every part path, then run
+`scripts/ai-dlc/validate-gate-adjudication.sh --merge <gate_type> <verdict_path> <part>...`,
+which refuses (exit 2, `REFUSED:`, nothing written) unless the parts are exactly this nonce's
+1..N, no check_id appears twice, and their union equals `--expected`; it then writes the one v1
+verdict and runs the coverage arms on it. Check 26 reads that file as it reads an unsharded one.
+
 **A re-dispatch is a whole new dispatch.** The escalation preamble at the top of
 `gate-validation.md` governs: a fresh `gate_nonce`, every escalated check re-derived from current
 state, and no verdict carried forward, cited or merged from a superseded dispatch. There is no
@@ -189,8 +205,13 @@ partial or targeted re-adjudication, and a verdict file assembled by hand is not
 verdict. `scripts/ai-dlc/validate-gate-adjudication.sh` is what makes that binding rather than
 advisory: it refuses any verdict whose covered set differs from the escalated set (the schema's
 `coverage_exact` rule), so a verdict covering only the checks that failed cannot be adopted.
+`--merge` joins the parts of ONE dispatch under ONE nonce, and it is not a carry-forward. Re-dispatching a
+single shard that did not deliver, under the same nonce, same `<i>/<N>` and same slice, is
+non-delivery handling and not re-adjudication; the shards dispatched at minting already carry
+the binding.
 
-**Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh <verdict_path>`.
+**Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh <verdict_path>`
+(sharded: every `<part>` path, then `--merge`).
 
 **While it runs, the lead evaluates ONLY the remaining `project` / `lead` checks** — the
 `script` checks ran before the dispatch and are already decided.
@@ -229,11 +250,20 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    via the Rule 20 role-manifest preamble to their `.claude/team-roles/<role>.md`)
    walk the step's subject and
    apply every improvement; run the step's source-fidelity check if it names one.
+   **When the subject is two or more files** (`stories/`), the round is sharded (Rule 28,
+   "Split dispatch": seats x parts axis). The invocation brief asks for one persona agent per
+   (seat, story ordinal) plus one cross-story round scoped to interactions between stories. The
+   ordinals are the ones `scripts/ai-dlc/merge-adversarial-shards.sh --map <shards-dir>` prints
+   (`<shards-dir>` is the next review pass's `s<N>/shards/<artifact>-p<M>/`, which must exist),
+   and each agent's brief carries its `shard:` line. The lead's join COUNTS the files against
+   seats x the `--map` line count, plus one cross file per seat, before it proceeds.
+   `/bmad-party-mode` internals are not ai-dlc's, so that count is the only check available.
    **Both flags are load-bearing and neither is optional — SKILL.md Rule 20 (i)
    owns why.**
    **Every per-seat deliverable this invocation produces is written under
    `_bmad-output/party-mode/s<N>/`**, one file per seat, named
-   `<step>-<seat>.md`. That directory is the declared area for it
+   `<step>-<seat>.md`, or when sharded one per (seat, ordinal), named `<step>-<seat>-<ordinal>.md`
+   and `<step>-<seat>-cross.md`. That directory is the declared area for it
    (`artifact-path-grammar.md`, "Areas"); anything written elsewhere blocks the
    consumer's push at `validate-artifact-paths.sh`, because a sprint token in
    any other position is outside the reserved slot. The retro TRANSCRIPT is a
@@ -298,7 +328,8 @@ no fixed point in a loop whose exit criteria are a bounded severity residue, and
 severity fields Check 24 reads. It remains correct for a ONE-SHOT cynical sweep, and the step
 files that run one still invoke it.
 
-**Dispatch** ONE `adversary` per pass. Agent tool, bound to `.claude/team-roles/adversary.md` per
+**Dispatch** ONE `adversary` per pass, or one shard per story plus a cross-story shard when the
+artifact is two or more files ("Shard a multi-file artifact" below). Agent tool, bound to `.claude/team-roles/adversary.md` per
 SKILL.md Rule 19 (both bindings: `model` and the standing role-contract Read line). Give it: the
 artifact path under review, the canonical output path, the pass number, and — on pass 2+ — the
 PRIOR pass's findings and the repair record, because pass 2+ reviews the REPAIR, not the document
@@ -311,6 +342,23 @@ carrying a `SKILL_INVOCATION_PROVENANCE v1` block with `skill: ai-dlc-adversary-
 series by the `p<M>` token.
 
 **Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh <findings_path>`.
+
+**Shard a multi-file artifact (Rule 28, "Split dispatch": files axis).** When the artifact under
+review is two or more files (`stories/`), dispatch one `adversary` shard per story plus one
+cross-story shard, all in ONE message. The part set is derived: create
+`_bmad-output/planning-artifacts/s<N>/shards/<artifact>-p<M>/`, then run
+`scripts/ai-dlc/merge-adversarial-shards.sh --map <that dir>`, which prints
+`<ordinal>\t<basename>` per story. Each per-story shard gets its ordinal and basename, the line
+`shard: <ordinal>/<K> <basename>`, and the output path `<that dir>/<ordinal>.md`. The cross-story
+shard gets `shard: cross/<K> cross`, the whole map, a scope limited to interactions between
+stories, and `<that dir>/cross.md`. Every finding carries one `stories:` line in the grammar
+`merge-adversarial-shards.sh` defines. Beat-join every shard path, then run the join
+`scripts/ai-dlc/merge-adversarial-shards.sh <that dir>`. It refuses (exit 2, `REFUSED:`, nothing
+written) unless every ordinal and the cross shard delivered exactly once and every finding
+respects the partition. It then sums the counts, recomputes the verdict (a shard's own verdict is
+advisory) and writes the one `<artifact>-adversarial-p<M>.md` above. Check 24 reads that file as
+it reads an unsharded pass. A single-file artifact keeps one adversary (Rule 28 exception 4), and
+passes stay serial (exception 2).
 
 **Zero findings on a later pass is the EXPECTED outcome, not a suspicious one.** The cycle exists
 to reach it. An adversary that manufactures a finding to justify its pass sends the remediator to
@@ -446,7 +494,8 @@ PreToolUse hook denies every `Agent` / `Skill` / `Task` dispatch until step 3 ha
    the glob chains them onto the new series, and the gate adjudicates the corpse. `git mv` them to
    `planning-artifacts/archive/<series>-cycle-<n>/`. Do not delete them; retro reads them.
 
-4. **VERIFY.** Dispatch **ONE** adversary (procedure above) against the RESOLVED artifact, as the
+4. **VERIFY.** Dispatch **ONE** adversary pass (procedure above, sharded exactly as a review pass is
+   when the artifact is two or more files, and every shard carrying the declaration below) against the RESOLVED artifact, as the
    **next pass number in the SAME series**, declaring `resolves_divergence: <the record>`. Do not
    open a new series: `--series` spans both, the pass numbers collide, and the gate then fails on
    a cycle that did nothing wrong. That pass is the terminal clean pass Check 24 requires.
@@ -458,12 +507,27 @@ pass, and `gate-validation.md` "Gate Failure" after a check fails. **The lead do
 artifact itself** — it is the most context-saturated agent in the pipeline and repairs from a
 compacted summary, not the document. (Rationale + the measurement: notes R35.)
 
-**Dispatch** ONE `remediator` per pass — never per finding, and never a second remediator
-alongside the first; the artifact is one document and parallel editors contradict each other.
-Agent tool, bound to
+**Dispatch** ONE `remediator` per pass, or one shard per disjoint FILE set when the artifact is
+two or more files ("Shard by file" below), and never one per finding. Agent tool, bound to
 `.claude/team-roles/remediator.md` per SKILL.md Rule 19 (both bindings: `model` and the
-standing role-contract Read line). It takes that pass's WHOLE set: every finding of the
-adversarial pass, or every FAILED check of the gate pass.
+standing role-contract Read line). Together the remediators take that pass's WHOLE set: every
+finding of the adversarial pass, or every FAILED check of the gate pass.
+
+**Shard by file (Rule 28, "Split dispatch": files axis).** Partition the findings by the files
+their `edit:` targets name. A finding touching one file goes to that file's shard, and each
+shard edits its files IN PLACE, never a copy. A finding citing more than one file goes to ONE
+serial remediator dispatched after the join. A single-file artifact stays one remediator (Rule 28
+exception 4). Each shard's brief carries `shard: <i>/<N> <files>` and the parts path
+`_bmad-output/planning-artifacts/s<N>/shards/<artifact>-repair-p<M>/<i>.md`. Every `edit:` line
+cites the full path of each file it edits, and a citation must not wrap onto the next line. Beat-join
+every part, then run the join
+`scripts/ai-dlc/join-remediator-shards.sh --sprint <N> --artifact <name> --pass <M> --artifact-path <path> --since <ISO> --until <ISO>`
+over the repair window. It reads the harness write ledger and refuses (exit 2, `REFUSED:`,
+nothing written) if any file was written by two agents, if a written file is cited by no part,
+if a file is cited by two parts, or if any part is unstructured. Otherwise it writes the one
+repair record below. The serial cross-file remediator runs after that and APPENDS its entries
+to the joined record. The join never overwrites a record, so it is run before the serial
+remediator and never after it.
 
 It writes the repaired artifact in place plus a **repair record** (`<M>` = the pass repaired) at
 `_bmad-output/planning-artifacts/s<N>/<artifact>-repair-p<M>.md` when the caller is an
