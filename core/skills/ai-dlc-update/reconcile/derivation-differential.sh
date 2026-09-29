@@ -192,10 +192,20 @@ resolves_to_base() { # <stamp-commit> -> 0 when it names the same object as <bas
   o="$(git -C "$DIST" rev-parse --verify -q "${1}^{commit}" 2>/dev/null)" || return 1
   [ "$o" = "$BASE_OBJ" ]
 }
+# NO HERE-STRING IN THIS FILE. bash 3.2 stages every `<<<` to a temp file, and when that write
+# fails -- `ulimit -f`, a full TMPDIR -- the command reads EMPTY stdin. The presence test below
+# was `awk … <<<"$1" || return 0`, so a failed staging read as "the stamp carries no
+# skill_commit:" and ACQUITTED the stamp: exactly the self-update root the header says must be
+# refused. The presence test is now a `case` prefix match (no file, no fork), and every stamp
+# parse is fed by a pipe from `printf`, which nothing stages. `printf '%s\n'` feeds the bytes
+# `<<<` did, and each parser reads to EOF before its own `head -1`, so no early-exiting reader
+# sits on the pipe.
+NL='
+'
 skill_commit_ok() { # <stamp text> -> 0 when its machinery is no newer than <base> (see the header)
   local v o
-  awk '/^skill_commit:/ { f = 1 } END { exit !f }' <<<"$1" || return 0
-  v="$(stamp_skill_commit <<<"$1")"
+  case "$NL$1" in *"${NL}skill_commit:"*) ;; *) return 0 ;; esac
+  v="$(printf '%s\n' "$1" | stamp_skill_commit)"
   [ -n "$v" ] || return 1
   o="$(git -C "$DIST" rev-parse --verify -q "${v}^{commit}" 2>/dev/null)" || return 1
   [ "$o" = "$BASE_OBJ" ] && return 0
@@ -210,11 +220,11 @@ if [ "$BASE_ROOT_SET" -eq 1 ]; then
   git -C "$BR" rev-parse --verify -q HEAD >/dev/null 2>&1 \
     || refuse base-root "--base-root $BR is not a git work tree with a HEAD. Derivations run git; a root without a repository fails them all for a reason neither side owns."
   _bst="$(cat "$BR/.claude/.ai-dlc-version" 2>/dev/null)"
-  _bs="$(stamp_commit <<<"$_bst")"
+  _bs="$(printf '%s\n' "$_bst" | stamp_commit)"
   resolves_to_base "$_bs" \
     || refuse base-root "--base-root $BR carries stamp commit '${_bs:-<none>}', which does not resolve in $DIST to <base> ${BASE}. That root is not the tree this pull started from."
   skill_commit_ok "$_bst" \
-    || refuse base-root "--base-root $BR carries skill_commit '$(stamp_skill_commit <<<"$_bst")', which is empty, unresolvable in $DIST, or not <base> ${BASE} or an ancestor of it. That root already carries machinery past <base> (a step-2 self-update commit, which HEAD is at hand-back after one), so a derivation this range broke would read stale on both sides. Pass a checkout of the commit BELOW the self-update commit."
+    || refuse base-root "--base-root $BR carries skill_commit '$(printf '%s\n' "$_bst" | stamp_skill_commit)', which is empty, unresolvable in $DIST, or not <base> ${BASE} or an ancestor of it. That root already carries machinery past <base> (a step-2 self-update commit, which HEAD is at hand-back after one), so a derivation this range broke would read stale on both sides. Pass a checkout of the commit BELOW the self-update commit."
   BASE_DESC="--base-root $BR"
 else
   # The first-parent chain, each commit's stamp BLOB in one cat-file pass; a blob is resolved
@@ -233,7 +243,7 @@ else
     case "$_good" in *" $_b "*) BASE_COMMIT="$_c"; break ;; esac
     case "$_bad"  in *" $_b "*) continue ;; esac
     _st="$(git -C "$CONSUMER" cat-file -p "$_b" 2>/dev/null)"
-    _sc="$(stamp_commit <<<"$_st")"
+    _sc="$(printf '%s\n' "$_st" | stamp_commit)"
     if resolves_to_base "$_sc" && skill_commit_ok "$_st"; then BASE_COMMIT="$_c"; break; fi
     _bad="$_bad$_b "
   done < "$TMP/pairs"

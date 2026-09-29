@@ -31,7 +31,8 @@
 #        (default: dry-run — print the rewrites it WOULD make)
 # Exit:  0 = nothing to do, or --apply succeeded
 #        1 = collisions found and NOT applied (dry-run with work outstanding)
-#        2 = usage error, or the extension walk did not run (a refusal, no verdict)
+#        2 = usage error, or the extension walk did not run, or an anchor set could not be
+#            staged for reading (a refusal, no verdict)
 set -uo pipefail
 
 CONSUMER=""
@@ -151,6 +152,20 @@ while IFS= read -r ext; do
   # entry that collides in either namespace, or the rule pass can never fire.
   [ -n "$core_nums" ] || [ -n "$core_rules" ] || continue
 
+  # BOTH ANCHOR SETS ARE STAGED HERE, BEFORE EITHER PASS, TO FILES WHOSE WRITE STATUS IS READ. The
+  # two loops below used to read them from `<<<` here-strings. bash 3.2 stages a here-string to a
+  # temp file, and when that write fails -- `ulimit -f`, a full TMPDIR -- it prints `cannot create
+  # temp file for here document` and the loop runs ZERO times. Measured with an 8000-anchor core
+  # file under `ulimit -f 16`, SIGXFSZ ignored: rc 0 and "no unlabelled core-number collisions."
+  # over a live collision that the same run found without the limit. A failed write now exits 2,
+  # the refusal code, and it happens BEFORE the first pass, so `--apply` never moves a file for an
+  # extension whose sets were not both read. `printf '%s\n'` writes the bytes the here-string fed.
+  _rx_rc=0
+  printf '%s\n' "$core_nums" > "$RX_T/core-nums" || _rx_rc=$?
+  [ "$_rx_rc" -eq 0 ] || { echo "relabel: REFUSED — the core check-anchor set for ${ext#$CONSUMER/} could not be staged (exit $_rx_rc); no verdict" >&2; exit 2; }
+  printf '%s\n' "$core_rules" > "$RX_T/core-rules" || _rx_rc=$?
+  [ "$_rx_rc" -eq 0 ] || { echo "relabel: REFUSED — the core rule-number set for ${ext#$CONSUMER/} could not be staged (exit $_rx_rc); no verdict" >&2; exit 2; }
+
   while IFS= read -r n; do
     [ -n "$n" ] || continue
     # This extension's heading at that anchor, if any, and not already labelled. The
@@ -193,7 +208,7 @@ while IFS= read -r ext; do
       mv "$tmp" "$ext"
       applied=$((applied+1))
     fi
-  done <<< "$core_nums"
+  done < "$RX_T/core-nums"
 
   # --- the same rewrite, one namespace over -------------------------------------
   # The label goes BEFORE the separator (`## Rule 29 [ext:id] -- Title`), not after
@@ -224,7 +239,7 @@ while IFS= read -r ext; do
       mv "$tmp" "$ext"
       applied=$((applied+1))
     fi
-  done <<< "$core_rules"
+  done < "$RX_T/core-rules"
 done < "$RX_T/ext-walk"
 
 echo ""
