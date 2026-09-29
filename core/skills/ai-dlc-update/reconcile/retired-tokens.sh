@@ -206,16 +206,25 @@ while IFS="$(printf '\t')" read -r cp cons; do
 
   # base tokens MINUS theirs tokens = what upstream retired.
   # Intersected with ours = what the consumer still speaks.
-  # HERE-STRINGS, NOT PIPES: rt_toks refuses with `exit`, which in a pipeline stage would end
-  # only that stage's subshell. `<<<` adds the one trailing newline `printf '%s\n'` did.
-  rt_toks "${cp}@${BASE}" "$RT_T/toks-base" <<<"$b"
-  rt_toks "${cp}@${THEIRS}" "$RT_T/toks-theirs" <<<"$t"
+  # FED FROM THE BLOBS `rt_blob` ALREADY STAGED, NEVER A PIPE AND NEVER A HERE-STRING. A pipe is
+  # wrong because rt_toks refuses with `exit`, which in a pipeline stage would end only that
+  # stage's subshell. A here-string is wrong because bash 3.2 stages it to a temp file, and when
+  # that write fails -- `ulimit -f`, a full TMPDIR -- the command does not run at all: rt_toks'
+  # redirect never truncates `toks-*`, so the PREVIOUS path's token files were read as this
+  # path's. Measured with a 16384-byte blob under `ulimit -f 16`, SIGXFSZ ignored: rc 0 with a
+  # FALSE row (the other path's retired token attributed here) and the true row lost. Reading the
+  # staged file yields the same token set `<<<"$b"` did: `toks` captures with `$( )`, which drops
+  # the trailing newlines the file keeps and `$b` lost, and `git show` wrote these bytes itself.
+  # `< file` failing to open is a redirect failure the command never runs past, so it refuses
+  # here too, with the same exit 2.
+  rt_toks "${cp}@${BASE}" "$RT_T/toks-base" < "$RT_T/blob-base" || rt_refuse "reading the staged base blob of $cp" "$?"
+  rt_toks "${cp}@${THEIRS}" "$RT_T/toks-theirs" < "$RT_T/blob-theirs" || rt_refuse "reading the staged theirs blob of $cp" "$?"
   retired="$(comm -23 "$RT_T/toks-base" "$RT_T/toks-theirs")" || rt_refuse "the retired-token subtraction for $cp" "$?"
   [ -n "$retired" ] || continue
   retiring=$((retiring + 1))
 
   printf '%s\n' "$retired" > "$RT_T/retired" || rt_refuse "staging the retired tokens of $cp" "$?"
-  rt_toks "$cons" "$RT_T/toks-ours" < "$ours"
+  rt_toks "$cons" "$RT_T/toks-ours" < "$ours" || rt_refuse "reading $cons" "$?"
   comm -12 "$RT_T/retired" "$RT_T/toks-ours" > "$RT_T/spoken" || rt_refuse "the consumer-token intersection for $cp" "$?"
   while IFS= read -r tok; do
     [ -n "$tok" ] || continue
