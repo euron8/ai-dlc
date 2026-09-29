@@ -967,3 +967,76 @@ pass "$TARGET/ceiling-plateau-below/s1-adversarial-p5.md" 5 2 0 1 DIVERGENT_HARD
 # nothing to do with the ceiling, which is the entanglement `fixture-mutants.md` forbids.
 repair "$TARGET/ceiling-plateau-below/s1-brief-repair-p1.md"
 repair "$TARGET/ceiling-plateau-below/s1-brief-repair-p4.md"
+
+# --- ARM K: the SHARD arm keys on the TERMINAL pass ---------------------------------------
+# Arm K first shipped reading EVERY pass of a post-stamp series, so one whole-subject pass
+# failed its series forever: its own remedy -- re-run sharded, written as the next pass
+# number -- added a sharded pass and left the unsharded one on disk to be re-read. These three
+# cases pin the terminal keying from both sides and the legacy PENDING branch beside them.
+#
+# Each case is its OWN git repository, because arm K dates the series against the first
+# commit stamping `.claude/.ai-dlc-version` at its release, walking up from the pass file.
+# The git environment a hook exports is unset first, exactly as the validator does, or the
+# stamp commit would land in whatever repository is running this seed. `pass()` hardcodes a
+# single-file artifact, so the block below is written here, shaped on what
+# merge-adversarial-shards.sh emits (`shard_tool_use_ids:` with no space, then
+# ` <ordinal>=<id> ... cross=<id>`).
+k_world() {  # $1 case dir -> a repo stamped at 0.663.0, 2026-09-29T10:00:00Z, two stories
+  mkdir -p "$1/.claude" "$1/stories"
+  printf 'version: 0.663.0\n' > "$1/.claude/.ai-dlc-version"
+  printf 'a\n' > "$1/stories/story-1-a.md"
+  printf 'b\n' > "$1/stories/story-2-b.md"
+  ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+    cd "$1" || exit 1
+    git init -q . >/dev/null
+    git add .claude/.ai-dlc-version
+    GIT_COMMITTER_DATE=2026-09-29T10:00:00Z GIT_AUTHOR_DATE=2026-09-29T10:00:00Z \
+      git -c user.email=fixture@example.invalid -c user.name=fixture -c commit.gpgsign=false \
+          -c core.hooksPath=/dev/null commit -q -m stamp >/dev/null
+  ) || { echo "seed.sh: k_world could not build the stamped repo at $1" >&2; exit 1; }
+}
+k_pass() {  # $1 file  $2 n  $3 major  $4 verdict  $5 invoked_at  $6 shard ids ("" = unsharded)
+  {
+    printf '# stories -- adversarial pass %s\n\n' "$2"
+    printf '<!-- SKILL_INVOCATION_PROVENANCE v1\n'
+    printf 'skill: ai-dlc-adversary-review\n'
+    printf 'invoked_at: %s\n' "$5"
+    printf 'tool_use_id: toolu_fixture_k%s\n' "$2"
+    [ -n "$6" ] && printf 'shard_tool_use_ids:%s\n' "$6"
+    printf 'mode: subagent\n'
+    printf 'lead_role: architect\n'
+    printf 'artifact: stories/\n'
+    printf 'findings_critical: 0\n'
+    printf 'findings_critical_prior_scope: 0\n'
+    printf 'findings_major: %s\n' "$3"
+    printf 'findings_major_underived: 0\n'
+    printf 'findings_minor: 0\n'
+    printf 'verdict: %s\n' "$4"
+    printf 'SKILL_INVOCATION_PROVENANCE_END -->\n'
+  } > "$1"
+}
+K_IDS=' 1=toolu_fixture_s1 2=toolu_fixture_s2 cross=toolu_fixture_x'
+
+# shard-recovered -- THE RECOVERY. p1 is a whole-subject pass after the stamp; p2 is the
+# sharded merge the remedy prescribes, MET, with the repair record arm H owes for the fall
+# from 5 MAJOR to 0. Must PASS. Under every-pass keying it fails on p1 forever.
+k_world "$TARGET/shard-recovered"
+k_pass "$TARGET/shard-recovered/stories-adversarial-p1.md" 1 5 EXIT_CONDITION_NOT_MET 2026-09-29T11:00:00Z ""
+k_pass "$TARGET/shard-recovered/stories-adversarial-p2.md" 2 0 EXIT_CONDITION_MET     2026-09-29T12:00:00Z "$K_IDS"
+repair "$TARGET/shard-recovered/stories-repair-p1.md"
+
+# shard-terminal-unsharded -- THE OFFENDER, one property from the case above: the sharding is
+# on p1 and the TERMINAL pass is the whole-subject one. Must FAIL (K). A validator keyed on the
+# FIRST pass, or on "any pass is sharded", passes it.
+k_world "$TARGET/shard-terminal-unsharded"
+k_pass "$TARGET/shard-terminal-unsharded/stories-adversarial-p1.md" 1 5 EXIT_CONDITION_NOT_MET 2026-09-29T11:00:00Z "$K_IDS"
+k_pass "$TARGET/shard-terminal-unsharded/stories-adversarial-p2.md" 2 0 EXIT_CONDITION_MET     2026-09-29T12:00:00Z ""
+repair "$TARGET/shard-terminal-unsharded/stories-repair-p1.md"
+
+# shard-legacy -- the series OPENED before the stamp (09:00 < 10:00), both passes unsharded.
+# PENDING, printed and not counted: the date branch, not the no-stamp branch, because the
+# repo carries the stamp.
+k_world "$TARGET/shard-legacy"
+k_pass "$TARGET/shard-legacy/stories-adversarial-p1.md" 1 5 EXIT_CONDITION_NOT_MET 2026-09-29T09:00:00Z ""
+k_pass "$TARGET/shard-legacy/stories-adversarial-p2.md" 2 0 EXIT_CONDITION_MET     2026-09-29T12:00:00Z ""
+repair "$TARGET/shard-legacy/stories-repair-p1.md"

@@ -1559,6 +1559,11 @@ fi
 # them into the ONE pass file this series reads, writing `shard_tool_use_ids:` into its block.
 # A pass over such an artifact WITHOUT that line was written by one whole-subject reviewer.
 #
+#   subject    the TERMINAL pass only -- `$LAST_FILE`, the same pass arm D reads. An earlier
+#              unsharded pass followed by a sharded terminal pass is RECOVERED: the remedy this
+#              arm prints (re-run sharded, written as the next pass number) is only satisfiable
+#              if the arm stops reading the pass it superseded. Keyed on every pass, one
+#              whole-subject pass failed its series forever and no action could clear it.
 #   candidate  the pass's `artifact:` (first token, trailing `/` dropped) resolves, walking up
 #              from the pass file's directory, to a DIRECTORY holding two or more `*.md`
 #              entries -- the SAME set the merge lists (`for f in "$STORIES_DIR"/*.md` with
@@ -1639,14 +1644,15 @@ fi
 
 K_CAND=""
 if [ "$N" -gt 0 ]; then
-  # ONE awk over every pass file: `<file>\t<artifact>\t<shard_tool_use_ids>` per pass.
+  # ONE awk over the TERMINAL pass file: `<file>\t<artifact>\t<shard_tool_use_ids>`. Not every
+  # pass -- see `subject` above; an earlier whole-subject pass is superseded, not a finding.
   k_rows="$(awk '
     FNR == 1 { if (NR > 1) print f "\t" a "\t" s; f = FILENAME; a = ""; s = ""; inb = 0 }
     /SKILL_INVOCATION_PROVENANCE v1/ { inb = 1; next }
     /SKILL_INVOCATION_PROVENANCE_END/ { inb = 0; next }
     inb && a == "" && /^artifact:/ { a = $0; sub(/^artifact:[ \t]*/, "", a); sub(/[ \t].*$/, "", a) }
     inb && s == "" && /^shard_tool_use_ids:/ { s = $0; sub(/^shard_tool_use_ids:/, "", s); if (s == "") s = " " }
-    END { if (NR > 0) print f "\t" a "\t" s }' "${P_FILE[@]}")" || {
+    END { if (NR > 0) print f "\t" a "\t" s }' "$LAST_FILE")" || {
     echo "validate-adversarial-convergence.sh: arm K could not read the pass files; no verdict" >&2
     exit 2
   }
@@ -1690,19 +1696,19 @@ if [ -n "$K_CAND" ]; then
                     --date=format-local:%Y-%m-%dT%H:%M:%SZ --format='C %cd' \
                     -- .claude/.ai-dlc-version 2>/dev/null ) | k_stamp_parse)"
   fi
-  k_nc="$(printf '%s' "$K_CAND" | grep -c .)" || k_nc=0
+  k_term="${LAST_FILE##*/}"
   case "$k_at" in
     [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) k_atok=1 ;;
     *) k_atok=0 ;;
   esac
   if [ -z "$k_stamp" ]; then
-    echo "PENDING (K -- SHARD): ${k_nc} pass(es) over a multi-file artifact carry no shard_tool_use_ids:,"
+    echo "PENDING (K -- SHARD): the terminal pass ${k_term} reviews a multi-file artifact and carries no shard_tool_use_ids:,"
     echo "      and no commit${k_root:+ in $k_root} stamps .claude/.ai-dlc-version at ${K_RELEASE} or later -- not owed yet."
   elif [ "$k_atok" -eq 0 ]; then
-    echo "PENDING (K -- SHARD): ${k_nc} pass(es) over a multi-file artifact carry no shard_tool_use_ids:,"
+    echo "PENDING (K -- SHARD): the terminal pass ${k_term} reviews a multi-file artifact and carries no shard_tool_use_ids:,"
     echo "      and the series' first pass ${k_first} has no ISO 8601 UTC invoked_at ('${k_at}') to date against ${k_stamp}."
   elif [[ "$k_at" < "$k_stamp" ]]; then
-    echo "PENDING (K -- SHARD): ${k_nc} pass(es) over a multi-file artifact carry no shard_tool_use_ids:,"
+    echo "PENDING (K -- SHARD): the terminal pass ${k_term} reviews a multi-file artifact and carries no shard_tool_use_ids:,"
     echo "      and the series opened (${k_first}, ${k_at}) before ${K_RELEASE} was stamped (${k_stamp}). Legacy series."
   else
     while IFS="$(printf '\t')" read -r kf kdir kn; do
@@ -1712,8 +1718,10 @@ if [ -n "$K_CAND" ]; then
       ${K_RELEASE} was stamped (${k_stamp}), so Rule 28's files axis binds it: one adversary per
       file plus one cross-file adversary, joined by scripts/ai-dlc/merge-adversarial-shards.sh,
       which writes this pass file and that line. A whole-subject pass over ${kn} files is the
-      dispatch the split exists to replace. Re-run the pass sharded; the merge refuses to
-      overwrite a differing pass file, so write it as the next pass number."
+      dispatch the split exists to replace. Re-run the pass sharded and write it as the NEXT
+      pass number -- the merge refuses to overwrite a differing pass file. This arm reads only
+      the series' terminal pass, so a sharded merged pass after this one clears it; the earlier
+      whole-subject pass stays on disk and is superseded, not re-read."
     done <<EOF
 $K_CAND
 EOF
