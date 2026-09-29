@@ -221,12 +221,21 @@ field() { # $1 parse file, $2 key
 }
 digits() { case "$1" in ""|*[!0-9]*) ;; *) printf '%s' "$1" ;; esac; }
 # Held in variables: bash 3.2 reads an unquoted `[[ =~ $var ]]` regex as ERE, fork-free.
-RE_ISO='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'
+# invoked_at: to the second, optionally with a fraction -- the reference consumer stamps both.
+RE_ISO='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,9})?Z$'
+# The ordering KEY for an invoked_at RE_ISO accepted. The raw strings do not order across the two
+# forms: `.` sorts before `Z`, so `...:19.497Z` compares EARLIER than `...:19Z`. The key is the
+# seconds prefix plus the fraction right-padded to nine digits, so both forms order by time.
+at_key() { # sets AT_KEY; fork-free, called once per shard
+  local f="${1:19}"
+  f="${f#.}"; f="${f%Z}"; f="${f}000000000"
+  AT_KEY="${1:0:19}.${f:0:9}"
+}
 RE_SHA='^[a-f0-9]{64}$'
 RE_CITED='^[0-9]+(,[0-9]+)*$'
 
 S_CRIT=0; S_PRIOR=0; S_MAJOR=0; S_UNDER=0; S_MINOR=0
-ANY_DIVERGENT=0; EARLIEST=""; SHA_LIST=""; ID_LIST=""; ALL_IDS=""; CROSS_ID=""; CROSS_ARTIFACT=""
+ANY_DIVERGENT=0; EARLIEST=""; EARLIEST_KEY=""; SHA_LIST=""; ID_LIST=""; ALL_IDS=""; CROSS_ID=""; CROSS_ARTIFACT=""
 SKILL=""; MODE=""; LEAD_ROLE=""; RESOLVES=""; RESOLVES_SET=0
 : > "$T/body" || refuse "cannot stage the merged body"
 
@@ -259,8 +268,9 @@ for key in $ORDINALS cross; do
   esac
 
   at="$(field "$P" invoked_at)"
-  [[ $at =~ $RE_ISO ]] || refuse "$sf invoked_at '${at:-<none>}' is not ISO 8601 UTC to the second"
-  if [ -z "$EARLIEST" ] || [[ "$at" < "$EARLIEST" ]]; then EARLIEST="$at"; fi
+  [[ $at =~ $RE_ISO ]] || refuse "$sf invoked_at '${at:-<none>}' is not ISO 8601 UTC to the second (an optional .<fraction> before Z is accepted)"
+  at_key "$at"
+  if [ -z "$EARLIEST" ] || [[ "$AT_KEY" < "$EARLIEST_KEY" ]]; then EARLIEST="$at"; EARLIEST_KEY="$AT_KEY"; fi
 
   tid="$(field "$P" tool_use_id)"
   case "$tid" in toolu_?*) ;; *) refuse "$sf tool_use_id '${tid:-<none>}' is not a toolu_ id" ;; esac
