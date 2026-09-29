@@ -21078,3 +21078,83 @@ extraction of each commit's `core/`:
 
 verify: sh R=core/skills/ai-dlc-update/reconcile; for f in retired-layer-passage retired-layer-contract lib; do [ -f "$R/$f.sh" ] || exit 9; done; [ -f "$R/setup-sites.md" ] || exit 9; [ "$(id -u)" -ne 0 ] || exit 9; w="$(mktemp -d)" || exit 9; cp -R "$R" "$w/r" || exit 9; g() { local d="$1"; shift; git -C "$d" -c user.email=r@r -c user.name=r -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }; D="$w/d"; mkdir -p "$D/core/skills/ai-dlc/steps" || exit 9; g "$D" init -q || exit 9; printf -- '- Label: /cmd\nuse {tok}\n1. The lead must always record the gate verdict in the story file before merge.\n' > "$D/core/skills/ai-dlc/steps/a.md"; printf 'small\n' > "$D/core/skills/ai-dlc/steps/b.md"; { g "$D" add -A && g "$D" commit -qm b; } >/dev/null 2>&1 || exit 9; B="$(git -C "$D" rev-parse HEAD)"; printf 'use {tok}\n' > "$D/core/skills/ai-dlc/steps/a.md"; { g "$D" rm -q core/skills/ai-dlc/steps/b.md && g "$D" add -A && g "$D" commit -qm t; } >/dev/null 2>&1 || exit 9; T="$(git -C "$D" rev-parse HEAD)"; C="$w/c"; mkdir -p "$C/.claude/skills/ai-dlc/extensions" || exit 9; printf -- 'see steps/b.md\n1. The lead must always record the gate verdict in the story file before merge.\n' > "$C/.claude/skills/ai-dlc/extensions/e.md"; run() { bash "$w/r/$1.sh" "$D" "$B" "$T" "$C"; }; run retired-layer-passage > "$w/ph" 2>/dev/null || exit 9; [ "$(grep -c '^RETIRED-LAYER-PASSAGE' "$w/ph")" -ge 1 ] || exit 9; run retired-layer-contract > "$w/ch" 2>/dev/null || exit 9; [ "$(grep -c '^RETIRED-LAYER-CONTRACT' "$w/ch")" -ge 1 ] || exit 9; S="$w/r/setup-sites.md"; cp "$S" "$w/sites" || exit 9; chmod 000 "$S" || exit 9; cat "$S" >/dev/null 2>&1 && { chmod 644 "$S"; exit 9; }; run retired-layer-passage > "$w/px" 2> "$w/pxe"; p=$?; run retired-layer-contract > "$w/cx" 2> "$w/cxe"; c=$?; chmod 644 "$S"; awk '/^rulebook:/{print; s=1; next} s && /^  - /{next} {s=0; print}' "$w/sites" > "$S" || exit 9; grep -q '^rulebook:' "$S" || exit 9; [ "$(awk '/^rulebook:/{on=1;next} on && /^[a-z_]+:/{exit} on && /^  - /{n++} END{print n+0}' "$S")" -eq 0 ] || exit 9; run retired-layer-passage > "$w/py" 2> "$w/pye"; q=$?; run retired-layer-contract > "$w/cy" 2> "$w/cye"; y=$?; [ "$p" -ne 0 ] && [ ! -s "$w/px" ] && grep -q 'setup-sites' "$w/pxe" && [ "$c" -ne 0 ] && [ ! -s "$w/cx" ] && grep -qF "$S" "$w/cxe" && [ "$q" -ne 0 ] && [ ! -s "$w/py" ] && [ "$y" -ne 0 ] && [ ! -s "$w/cy" ] && grep -qF "$S" "$w/cye" || { echo BL356-BULLET-1-OR-2-REGRESSED >&2; exit 1; }; cp "$w/sites" "$S" || exit 9; E="$w/e"; mkdir -p "$E/core/scripts" || exit 9; g "$E" init -q || exit 9; U="$(printf 'caf\303\251')"; for f in plain "$U"; do printf 'x=$ROOT/old-%s\n' "$f" > "$E/core/scripts/$f.sh"; done; { g "$E" add -A && g "$E" commit -qm b; } >/dev/null 2>&1 || exit 9; EB="$(git -C "$E" rev-parse HEAD)"; for f in plain "$U"; do printf 'x=$ROOT/new-%s\n' "$f" > "$E/core/scripts/$f.sh"; done; { g "$E" add -A && g "$E" commit -qm t; } >/dev/null 2>&1 || exit 9; ET="$(git -C "$E" rev-parse HEAD)"; K="$w/k"; mkdir -p "$K/scripts/ai-dlc" "$K/.claude" || exit 9; for f in plain "$U"; do printf 'x=$ROOT/old-%s\necho edited\n' "$f" > "$K/scripts/ai-dlc/$f.sh"; done; bash "$w/r/retired-tokens.sh" "$E" "$EB" "$ET" "$K" > "$w/to" 2>/dev/null || exit 9; grep -q '^RETIRED-CONTRACT-TOKEN[[:blank:]]core/scripts/plain\.sh[[:blank:]]' "$w/to" || exit 9; grep -q "^RETIRED-CONTRACT-TOKEN[[:blank:]]core/scripts/$U\.sh[[:blank:]]" "$w/to" || { echo BL356-BULLET-3-PRODUCER-REMAINS >&2; exit 1; }; exit 0
 
+## BL-369 — Check 15's budget-evidence arm audited the gate log's LAST Check 14 row, which is the oldest gate's row in a log written newest-first
+
+**DEFECT.** Filed at batch 171. Discharges PC-S315-CHECK-15-BUDGET-EVIDENCE-VERIFIER-READS-OLDEST-ROW-OF-A-NEWEST-FIRST-GATE-LOG.
+
+`validate-artifact-budget.sh --check-evidence` chose the row with
+`grep -nE '<row14>' "$GATE_LOG" | tail -1`, on the premise that the live gate log is append-only. The reference
+consumer's live s315 log is newest-first: architecture at line 3 (`08:31Z`), requirements at 70 (`05:32Z`),
+carry-over-evaluation at 136 (`02:09Z`). So `tail -1` read line 157, the oldest gate's `3052 tok`, not line 40's
+`5076 tok` for the gate under audit.
+
+**This was a real false PASS, not only a wrong number.** The contract adversary rebuilt s315 at its requirements
+gate (05:32Z). There the base exits 0 citing 3052, the carry-over row, while the requirements row reads
+`evidence line below` and cites no tok.
+
+**The consumer's proposed fix, `head -1`, rests on a refuted premise.** The consumer's committed history APPENDS.
+`fb3f949e5` (s313), `11bd10083` (s314) and `2a40f24c1` (s312) list their sections oldest-first, and only s315
+prepends. A positional rule is right on one population and wrong on the other, and `head -1` would misread every
+committed log. The contract adversary also found backfilled logs whose newest section sits in the middle: an
+ordered-position fallback wedged 7 of 60 committed states.
+
+**The body-search key was refuted too.** The lead's first design found the snapshot's `last_gate_passed`
+timestamp anywhere in a section's text. The contract adversary showed that a stale snapshot names the PREVIOUS
+gate, whose section then wins, so the artifact under audit chooses its own evidence: 28 of 46 rebuilt stale
+instants PASS under it, against 0 under the shipping `tail -1`.
+
+**The fix (c8750cd9) selects by content, never by position.**
+- It partitions the log into `## ` sections. When only one section carries Check 14 rows, it audits that
+  section's last row.
+- Otherwise every row-bearing section must carry an ISO timestamp in its heading block, meaning the lines above
+  its first table row, with minute precision normalised to seconds. The newest must be unique, and a missing
+  timestamp or a tie refuses.
+- On the canonical live log the snapshot's `last_gate_passed` key is a CROSS-CHECK. It reads the bullet plus its
+  continuation lines, cut at `(prior)`. It must be one of the selected section's heading timestamps, or, when
+  the key is a bare date, the selected section's date.
+- When the key instead heads a section with no Check 14 row, the refusal says so: "the gate the snapshot names
+  logged no Check 14 row".
+- Step 12 of `gate-validation.md` now requires the entry to be appended at the end, with `Timestamp:` in the
+  heading block.
+
+**Intended tightening:** a selected row whose tok sits outside its own cell (`evidence line below`) now FAILs,
+which the cell rule has always required. s315's requirements gate is such a row.
+
+**Consumer blast radius**, measured over 61 committed reference-consumer states (the last 60 commits touching
+the live gate log, plus the working-tree pair), base `24f2335f` against tip `c8750cd9`, `cmp -s` asserting the
+two scripts differ: 29 byte-identical, 15 differing only by the new `selected section` line, 1 correction (live
+s315, 3052 to 5076), 8 new refusals where base PASSED, 8 where base already failed and tip still fails, 0
+regressions — 61. In every one of the 8 new refusals base's PASS cited a Check 14 row belonging to a different
+gate from the one the snapshot names: six s302 states (`0d718d99a` and `e2604bdf3` name a gate-3 section with
+no row; `a90948bdc`, `1caf42d5d`, `8ad6c8f95`, `517201683`, `8dd3283d6` carry a key no line of the log holds)
+and one s298 state (`b24772e13`, a row-bearing section whose heading carries only a date). About +12ms per call.
+
+**NOTEs from the census.** The five s302 states whose key appears nowhere in the log get the "stale or names a
+different gate" message, where the real cause is a gate never logged in that file. At `837b7f256` the new
+refusal pre-empts base's own breach message (`claims PASS while citing 254951 tok`); the verdict is unchanged.
+
+The receipt drives the SHIPPING script against nine `mktemp` worlds built into the receipt itself and never
+reads the consumer: w0 one section (calibration, else exit 9), w1 the s315 prepended shape (cites 5076), w2 the
+appended shape with minute-precision headings (cites 5492, where `head -1` gives 4306), w3 the requirements
+instant (exit 1), w4 a stale key over a newest row that DOES cite (non-zero, so only the cross-check fails it),
+w5 a named gate with no row, w6 a date-only key naming an older date, w7 a date-only key matching (cites 4500),
+w8 a date-only key naming a gate with no row. Scored through `backlog-reverify.sh`'s own `eval` shape, each
+variant a tree holding only that copy of the script:
+
+| variant | exit |
+|---|---|
+| tip `c8750cd9` | 0 |
+| base `24f2335f` | 1 |
+| `8ff31cf3` (no date-key compare, no named-gate refusal) | 1 |
+| `head -1` flip of base | 1 |
+| body-search key | 1 |
+| tip with the snapshot cross-check dropped | 2-line diff, 1 |
+| second spelling of a correct fix | 0 |
+| no script / stub exiting 0 | 9 / 9 |
+
+Through `scripts/backlog-reverify.sh` on a scratch ledger it reads CLOSE-CANDIDATE.
+
+**LANDED (v0.662.0, verified 9b84f6f6).** Filed and closed in batch 171's close commit, because the live
+ceiling admitted no filing inside the release.
+
+verify: sh S=core/scripts/validate-artifact-budget.sh; [ -f "$S" ] && grep -q -e '--check-evidence' "$S" || exit 9; T="$(mktemp -d)" || exit 9; L=_bmad-output/implementation-artifacts/gate-log.md; tk(){ printf 'PASS  validate-artifact-budget.sh 4:  ok  _bmad-output/pipeline-snapshot.md    %s tok  (budget   6000)' "$1"; }; sec(){ printf '## Gate Log: Sprint 315 — gate [planning] at %s\n\n- Timestamp: %s. Result: PASSED.\n\n| Check | Result | Evidence |\n|---|---|---|\n| [core] 13 — Gate log | PASSED | appended |\n| [core] 14 — Snapshot updated | PASSED | %s |\n\n' "$1" "$2" "$3"; }; mk(){ mkdir -p "$T/$1/_bmad-output/implementation-artifacts" || exit 9; [ -z "$2" ] || printf -- '- last_gate_passed: planning %s\n- branch: b\n' "$2" > "$T/$1/_bmad-output/pipeline-snapshot.md" || exit 9; }; run(){ O="$(AI_DLC_PROJECT_ROOT="$T/$1" bash "$S" --check-evidence 2>&1)"; R=$?; C="$(printf '%s\n' "$O" | sed -n 's/.*cites \([0-9][0-9]*\) tok.*/\1/p' | tail -1)"; }; F=0; mk w0 ''; sec only 2026-09-01T00:00:00Z "$(tk 1234)" > "$T/w0/$L" || exit 9; run w0; [ "$R" = 0 ] && [ "$C" = 1234 ] || exit 9; mk w1 2026-09-29T08:31:00Z; { sec architecture 2026-09-29T08:31:00Z "$(tk 5076)"; sec requirements 2026-09-29T05:32:00Z 'evidence line below'; sec carry-over-evaluation 2026-09-29T02:09:00Z "$(tk 3052)"; } > "$T/w1/$L" || exit 9; run w1; [ "$R" = 0 ] && [ "$C" = 5076 ] || { echo "BL369-S315-PREPENDED rc=$R cites=$C" >&2; F=1; }; mk w2 2026-09-20T09:15:00Z; { sec carry-over-evaluation 2026-09-20T04:40Z "$(tk 4306)"; sec requirements 2026-09-20T06:02Z "$(tk 4871)"; sec architecture 2026-09-20T09:15Z "$(tk 5492)"; } > "$T/w2/$L" || exit 9; run w2; [ "$R" = 0 ] && [ "$C" = 5492 ] || { echo "BL369-APPENDED rc=$R cites=$C" >&2; F=1; }; mk w3 2026-09-29T05:32:00Z; { sec requirements 2026-09-29T05:32:00Z 'evidence line below'; sec carry-over-evaluation 2026-09-29T02:09:00Z "$(tk 3052)"; } > "$T/w3/$L" || exit 9; run w3; [ "$R" = 1 ] || { echo "BL369-REQUIREMENTS-INSTANT rc=$R cites=$C" >&2; F=1; }; mk w4 2026-09-28T01:00:00Z; { sec requirements 2026-09-28T01:00:00Z "$(tk 4000)"; sec architecture 2026-09-28T02:00:00Z "$(tk 4500)"; } > "$T/w4/$L" || exit 9; run w4; [ "$R" != 0 ] || { echo "BL369-STALE-SNAPSHOT rc=$R cites=$C" >&2; F=1; }; mk w5 2026-09-28T10:00:00Z; { printf '## Gate Log: Sprint 302 — gate [planning] at architecture\n\n- Timestamp: 2026-09-28T10:00:00Z. Result: PASSED.\n\n| Check | Result | Evidence |\n|---|---|---|\n| [core] 13 — Gate log | PASSED | appended |\n\n'; sec requirements 2026-09-26T08:00:00Z "$(tk 4100)"; sec carry-over-evaluation 2026-09-26T03:00:00Z "$(tk 3900)"; } > "$T/w5/$L" || exit 9; run w5; [ "$R" != 0 ] || { echo "BL369-NAMED-GATE-NO-ROW rc=$R cites=$C" >&2; F=1; }; mk w6 2026-09-27; { sec requirements 2026-09-27T01:00:00Z "$(tk 4000)"; sec architecture 2026-09-28T02:00:00Z "$(tk 4500)"; } > "$T/w6/$L" || exit 9; run w6; [ "$R" != 0 ] || { echo "BL369-DATE-KEY-STALE rc=$R cites=$C" >&2; F=1; }; mk w7 2026-09-28; cp "$T/w6/$L" "$T/w7/$L" || exit 9; run w7; [ "$R" = 0 ] && [ "$C" = 4500 ] || { echo "BL369-DATE-KEY-MATCH rc=$R cites=$C" >&2; F=1; }; mk w8 2026-08-13; { printf '## Gate Log: Sprint 298 — gate [implementation] gate-3\n\n- Timestamp: 2026-08-13T04:00:00Z. Result: PASSED.\n\n| Check | Result | Evidence |\n|---|---|---|\n| [core] 13 — Gate log | PASSED | appended |\n\n'; sec requirements 2026-08-11T02:00:00Z "$(tk 3800)"; sec architecture 2026-08-11T06:00:00Z "$(tk 3900)"; } > "$T/w8/$L" || exit 9; run w8; [ "$R" != 0 ] || { echo "BL369-DATE-KEY-NAMED-GATE-NO-ROW rc=$R cites=$C" >&2; F=1; }; exit "$F"
