@@ -98,10 +98,6 @@ operator: seven fixtures on v0.665.0, 0 unrelated rows moved each time. **`BL-37
 operator-scheduled next release**: a scoped `sandbox-exec` tracer measured as a root-free
 replacement for `fs_usage` on four fixtures, open on a 218-fixture comparison.
 
-**RUN THE GATE AT `AI_DLC_FIXTURE_JOBS=12`.** The operator's shell profile exports 6, which the hook
-reads over its default of 12, so both 6-way gates here skipped the pole phase. v0.665.0 at 12-way
-ran every phase, and the pole moved to `gate-adjudication-mutants` (490s); `BL-378` re-baselines.
-
 Gates: v0.664.0 on `ba0968f5`, 22 PASS, 0 FAIL, 1 SKIP (pole, 6-way), 216 ok; v0.665.0 on
 `77706f9f`, 22 PASS, 0 FAIL, 0 SKIP, 217 ok, every changed fixture `ok` by name against an
 impossible-name control of 0. Both squash trees identical to the gated tips.
