@@ -251,7 +251,11 @@ mutate "shed strips all leading blanks" "deeper-\$-output pair" \
 # Each exemption guard has its own arm in the sibling, and each mutant below declares exactly the
 # arms whose input only that guard separates. The real document (A30) and the repair part (A31)
 # carry no mutant of their own: BOTH the path glob and the manifest-beside-the-file test keep
-# them out, so reverting either alone changes no verdict -- two guards covering one subject.
+# them out, so reverting either alone changes no verdict -- two guards covering one subject. The
+# glob gets its own subject in A35 (a manifest-carrying copy outside a repair dir) instead.
+mutate "section path glob widened to every markdown file" "a manifest-carrying copy outside a repair dir" \
+  's|^  \*/shards/\*-repair-p\*/sections/\*\.md)$|  *.md)|'
+
 mutate "section exemption removed" "a self-referencing pair in a section copy" \
   's/^      for (k in tch) if (tch\[k\] .*tch\[k\]=0$/      # MUTANT: no exemption/'
 

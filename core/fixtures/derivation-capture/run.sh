@@ -493,6 +493,19 @@ else
   bad "a command naming a longer path exited $RC (expected 2) — the self-reference test is a substring match"
 fi
 
+# A35: a COPY of the split's sections/ (manifest included) outside `shards/*-repair-p*/` is not a
+# section copy. The one input only the path glob separates: A30 and A31 are also kept out by the
+# manifest test, so without this arm the glob could widen to every file with nothing reddening.
+mkdir -p "$CONSUMER/_bmad-output/planning-artifacts/s1/scratch"
+cp -R "$REPDIR/sections" "$CONSUMER/_bmad-output/planning-artifacts/s1/scratch/"
+sec_write "$CONSUMER/_bmad-output/planning-artifacts/s1/scratch/sections/2.md" "$PAIR_SELF"
+if [ "$RC" = 2 ] && grep -q 'is not backed by' "$ERR" \
+   && [ -f "$CONSUMER/_bmad-output/planning-artifacts/s1/scratch/sections/.manifest" ]; then
+  ok "a sections/2.md with a listing manifest but outside shards/*-repair-p*/, the same pair -> exit 2"
+else
+  bad "a manifest-carrying copy outside a repair dir exited $RC (expected 2) — the exemption is not keyed on the repair-dir path"
+fi
+
 # --- A14: the artifact is not modified by the hook ----------------------------
 # The rejected design overwrote the recorded output with the captured one. It must
 # stay rejected: a wrong COMMAND would then be silently paired with its own real
