@@ -277,6 +277,71 @@ refused_clean "Findings section heads 0 CRITICAL / 0 MAJOR" "$d" \
   && ok "R6: a real-pass heading with no severity word -> REFUSED on the count, never merged as 0 MAJOR" \
   || bad "R6: a heading without a severity word was not refused on its count (rc=$RC): $(cat "$MO")"
 
+# P1: the merged pass is a provenance block the READER accepts. Its artifact_sha is the files-mode
+# list `<stem>=<sha> ...`, which the schema's single-sha pattern refused, so every sharded pass
+# failed validate-provenance-block.sh while the convergence validator passed it. The two
+# near-misses keep the widening honest: a list of ONE (a merge always has two or more stories)
+# and a list carrying a short sha are both refused, and a bare sha is the control that still passes.
+PB="$SRCDIR/validate-provenance-block.sh"
+if [ ! -f "$PB" ]; then
+  bad "P1: FIXTURE BROKEN -- validate-provenance-block.sh is not beside the merge at $SRCDIR"
+else
+  d="$(b3_world)"; o="$(out_of "$d")"; run_merge "$MERGE" "$d"
+  pb() { bash "$PB" "$1" --require-skill ai-dlc-adversary-review > "$WORK/pb.out" 2>&1; }
+  sha_line="$(grep '^artifact_sha:' "$o" 2>/dev/null)"
+  n_pairs="$(printf '%s' "${sha_line#artifact_sha:}" | wc -w | tr -d ' ')"
+  if [ "$RC" -ne 0 ] || [ "${n_pairs:-0}" -lt 2 ]; then
+    bad "P1: FIXTURE BROKEN -- the B3 merge did not write a multi-file artifact_sha (rc=$RC, pairs=${n_pairs:-0})"
+  else
+    one="$WORK/pb-one.md"; short="$WORK/pb-short.md"; bare="$WORK/pb-bare.md"
+    first="$(printf '%s' "${sha_line#artifact_sha: }" | cut -d' ' -f1)"
+    sed "s/^artifact_sha:.*/artifact_sha: $first/" "$o" > "$one"
+    sed -E 's/^(artifact_sha: [^ ]+=)[a-f0-9]{64}/\1abc123/' "$o" > "$short"
+    sed "s/^artifact_sha:.*/artifact_sha: ${first#*=}/" "$o" > "$bare"
+    pb "$o"; r_m=$?; pb "$one"; r_1=$?; pb "$short"; r_s=$?; pb "$bare"; r_b=$?
+    if [ "$r_m" -eq 0 ] && [ "$r_1" -ne 0 ] && [ "$r_s" -ne 0 ] && [ "$r_b" -eq 0 ]; then
+      ok "P1: the merged pass ($n_pairs <stem>=<sha> pairs) passes validate-provenance-block.sh; a one-pair list and a short sha are refused; a bare sha still passes"
+    else
+      bad "P1: provenance reader on the merged forms gave merged=$r_m one-pair=$r_1 short-sha=$r_s bare=$r_b (want 0 non-0 non-0 0)"
+    fi
+    # PM1: the schema reverted to the single-sha pattern -- the shipped defect on demand. Driven
+    # through AI_DLC_PROJECT_ROOT, whose core/schemas/ the reader tries FIRST, so the validator
+    # is the shipped one and only the schema differs. The bare-sha control must stay at 0, or the
+    # mutant tree failed for a reason of its own.
+    SCH=""
+    _d="$SRCDIR"
+    while [ -n "$_d" ] && [ "$_d" != "/" ]; do
+      for _c in "$_d/core/schemas/provenance-block.json" "$_d/.claude/schemas/provenance-block.json"; do
+        [ -f "$_c" ] && { SCH="$_c"; break 2; }
+      done
+      _d="$(dirname "$_d")"
+    done
+    mt="$(mktemp -d "$WORK/pm1.XXXXXX")"; mkdir -p "$mt/core/schemas"
+    if [ -z "$SCH" ]; then
+      bad "PM1: FIXTURE BROKEN -- provenance-block.json not found above $SRCDIR"
+    else
+      cp "$SCH" "$mt/core/schemas/provenance-block.json"
+      M_OLD='"pattern_ref": "artifact_sha"' M_NEW='"pattern_ref": "sha256"' python3 - "$mt/core/schemas/provenance-block.json" <<'PY'
+import os, sys
+p = sys.argv[1]; t = open(p, encoding="utf-8").read(); o = os.environ["M_OLD"]
+if t.count(o) != 1: sys.exit(3)
+open(p, "w", encoding="utf-8").write(t.replace(o, os.environ["M_NEW"]))
+PY
+      if cmp -s "$SCH" "$mt/core/schemas/provenance-block.json"; then
+        bad "PM1: FIXTURE STALE -- the pattern_ref anchor is not in the schema exactly once; re-anchor it, never relax P1"
+      else
+        AI_DLC_PROJECT_ROOT="$mt" bash "$PB" "$o" --require-skill ai-dlc-adversary-review > "$WORK/pb.out" 2>&1; m_m=$?
+        AI_DLC_PROJECT_ROOT="$mt" bash "$PB" "$bare" --require-skill ai-dlc-adversary-review > "$WORK/pb.out" 2>&1; m_b=$?
+        if [ "$m_m" -ne 0 ] && [ "$m_b" -eq 0 ]; then
+          ok "PM1: the schema reverted to the single-sha pattern refuses the merged pass (rc=$m_m) while the bare-sha control holds at 0 -- P1 watches the pattern"
+        else
+          bad "PM1: with the single-sha pattern the merged pass gave rc=$m_m and the bare control rc=$m_b (want non-0 and 0)"
+        fi
+      fi
+    fi
+  fi
+fi
+
 # ------------------------------------------------------------------------------ the mutants
 # A copy of the merge AND its sibling, one literal edit asserted to apply exactly once.
 mutdir() { # <name> -> a dir holding the merge and the siblings it and the predicates resolve

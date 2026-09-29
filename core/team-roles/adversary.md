@@ -241,7 +241,7 @@ tool_use_id: <toolu_... — from the Skill tool response, or the Agent dispatch 
 mode: subagent                              # never solo.
 lead_role: <the step file that invoked or dispatched the evaluation> # which step owns this pass.
 artifact: <path of the artifact you reviewed> # what this pass reviewed.
-artifact_sha: <sha256 of that file, as you read it> # `shasum -a 256 <artifact> | cut -d' ' -f1`. Makes the pass a notarization of the bytes it reviewed, which is what lets the gate later prove a claimed revert landed on a state some pass actually saw.
+artifact_sha: <sha256 of that file, as you read it> # `shasum -a 256 <artifact> | cut -d' ' -f1`. Makes the pass a notarization of the bytes it reviewed, which is what lets the gate later prove a claimed revert landed on a state some pass actually saw. A pass merged from shards by merge-adversarial-shards.sh carries the multi-file form instead, `<stem>=<sha> <stem>=<sha> ...` (two or more, one per story), and the `artifact_sha` pattern accepts exactly those two shapes.
 findings_critical: <int>                    # the residue the verdict is adjudicated against. Required of EVERY known evaluation, not only verdict-bearing ones — see rules.counts_always.
 findings_critical_prior_scope: <int>        # of the CRITICALs above, those in text the PRIOR pass also reviewed. OPTIONAL BY DESIGN: absent means the validator assumes ALL of them (fail-closed). Requiring it would invert that default and reject the safe omission. This is what separates 'not converging' from 'the document is moving'.
 findings_major: <int>                       # omit it and the stall rung goes silent for the ENTIRE series.

@@ -44,6 +44,7 @@
     "tool_use_id": "^toolu_[A-Za-z0-9_-]{6,}$",
     "transcript_citation": "^[^\\s@]+@[a-f0-9]{7,40}$",
     "sha256": "^[a-f0-9]{64}$",
+    "artifact_sha": "^([a-f0-9]{64}|[^\\s=]+=[a-f0-9]{64}( [^\\s=]+=[a-f0-9]{64})+)$",
     "integer": "^\\d+$"
   },
   "known_skills": [
@@ -217,9 +218,9 @@
       "name": "artifact_sha",
       "required": false,
       "required_for_verdict": false,
-      "pattern_ref": "sha256",
+      "pattern_ref": "artifact_sha",
       "placeholder": "<sha256 of that file, as you read it>",
-      "doc": "`shasum -a 256 <artifact> | cut -d' ' -f1`. Makes the pass a notarization of the bytes it reviewed, which is what lets the gate later prove a claimed revert landed on a state some pass actually saw.",
+      "doc": "`shasum -a 256 <artifact> | cut -d' ' -f1`. Makes the pass a notarization of the bytes it reviewed, which is what lets the gate later prove a claimed revert landed on a state some pass actually saw. A pass merged from shards by merge-adversarial-shards.sh carries the multi-file form instead, `<stem>=<sha> <stem>=<sha> ...` (two or more, one per story), and the `artifact_sha` pattern accepts exactly those two shapes.",
       "enforced_by": "Check 24 arm A (validate-adversarial-convergence.sh), not Check 17. Named here so the taught example carries it; asserted there, where the series is in scope."
     },
     {
