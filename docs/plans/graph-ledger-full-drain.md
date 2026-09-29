@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 625..670. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 615..687. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,69 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 169 SHIPPED `v0.660.0` (`feb95866`, #895) AND CLOSED NOTHING. IT DISCHARGES NO CONSUMER
+CANDIDATE.** It was invoked by peer handoff and took `BL-360`'s non-bootstrapping half with `BL-356`
+as rider. The opening sweep: live 28, unfiled 12 (batch 168's "15" counted its three filings before
+they were cited), worklist 5 (the same self-disqualifying rows), TERMINAL 147, DISCHARGED 9, ledger
+md5 `34f7e60e…` on the consumer's `main`, every control at its expected value. Of the 12 unfiled,
+`--is-core` routes 2 to core and both are spent: `PC-S309-VALIDATE-MANDATORY-RULES-CHECK5-…` shipped
+in `v0.542.0` and `PC-S309-PRE-PUSH-FLAG-MISMATCH-…` is superseded in its own entry. Live **100 ->
+100**, archive **262 -> 262**. The exit-0 receipt set is batch 168's nine, compared by id.
+
+**`BL-360`: SEVEN RECONCILE SCRIPTS REFUSE AN INPUT THAT COULD NOT BE STAGED.** `hard-blockers.sh`,
+`relabel-extension-checks.sh`, `retired-layer-contract.sh`, `retired-tokens.sh`,
+`warn-shadowed-local-validators.sh`, `readopt-override.sh` and `derivation-differential.sh` stage
+each input to a file whose write status is read, or test membership with `case`. The census found
+five tier-A sites the entry never listed, and refuted half its premise: a read-only `$TMPDIR` does
+not force the failure on bash 3.2. `BL-356` bullets 1 and 2 exit 2 on an unreadable rulebook list.
+**Neither entry closes**: `BL-360`'s bootstrapping half remains, and `BL-356`'s third bullet is a
+PRODUCER defect — `preclassify.sh` and `lib.sh` C-quote a non-ASCII path before `retired-tokens.sh`
+reads it, so the `rt_blob` change is hardening only. Healthy output byte-identical to `322ef42c` on
+three consumer ranges, 30 of 30 runs each, with every converted site instrumented.
+
+**TWO TIP-ADVERSARY ROUNDS EACH FOUND A REGRESSION IN THE SAME NEW LINE, BOTH FIXED BEFORE MERGE.**
+Reading a staged blob FILE instead of a `$( )`-captured variable changes what the reader sees: the
+capture had silently dropped every NUL. Round 1: BSD `grep` read a NUL-bearing blob as binary, rows
+lost or false at rc 0; its proposed `grep -a` was refuted because it reads a NUL before `#` as live
+code. Round 2: the `tr -d '\000'` that replaced it refused invalid UTF-8 under a UTF-8 locale; it is
+now `LC_ALL=C tr` alone. **Converting a here-string to a staged file is not byte-neutral — test NUL
+and invalid UTF-8 on every converted reader.** Gate on `c9bcbf7d`: 22 phases, 24 PASS, 0 FAIL,
+1 SKIP (pole, pool width 6), 214 ok, all three changed fixtures `ok` by name against an
+impossible-name control of 0, `ls-remote` matching, squash tree identical to the gated tip.
+
+**ONE READ-SET TRACE IS OWED**: `procsub-staged-refusal` now reads five more reconcile scripts, and
+`retired-layer-contract` and `retired-layer-passage` copy the reconcile directory. `sudo bash
+core/scripts/derive-fixture-readsets.sh --list "procsub-staged-refusal retired-layer-contract
+retired-layer-passage"` on a checkout of `origin/main`. Batch 168's two owed traces were run this
+batch and shipped in the release.
+
+**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
+- The unfiled set holds no new core filing. `BL-360`'s remaining half is the strongest
+  distribution-internal work: `apply.sh`, `preclassify.sh`, `ledger-reverify.sh`,
+  `self-update-gate.sh`, `lib.sh` (three `cat <<'AWK'` emitters), `self-update-fixtures.sh` (`:655`,
+  `:961`) and `emit-report.sh` (`:842`) — each BOOTSTRAPPING, each shipping alone. `BL-356` bullet 3
+  lives in `preclassify.sh`/`lib.sh` and can ride the `lib.sh` release.
+- Filings owed when a close frees room, in order: the `theirs`-ref/contract-blob DEFECT carried in
+  `BL-360`; then the four batch-168 NOTEs; then this batch's NOTEs — `unregistered-drift.sh:715,738`
+  read a stale previous iteration on a failed `read` (HARD either way), `register-drift.sh:472`'s
+  staging failure lands in `refuse_fixed` with wrong advice, `hard-blockers --check` exit 1 now
+  means both "omitted" and "refused", and a differential ok-text in `procsub-staged-refusal` says
+  "NUL-bearing" for its two Latin-1 cells.
+- `BL-230` needs a mechanism for E1, E2 and E9.
+
+**THE DELIVERY GAP IS ONE RELEASE, AND THE CONSUMER'S `main` LAGS ITS OWN CARRY-OVER BRANCH.** The
+consumer pulled 0.659.0 on `ai-dlc/carry-over/phase-315-aggregator-ui-cutover` (`111cf45ae`, #1124,
+stamp `322ef42c`); its `main` still reads 0.658.0. Against `VERSION` 0.660.0 the gap is one release.
+The only bootstrapping file in `322ef42c..origin/main` is the update `SKILL.md`, whose change is
+three prose sentences naming the new exit meanings; 0 of 12 `core/` rows are mode-only. PENDING is
+0: this release names no `PC-` id. The three batch-168 ids are still live in the consumer's ledger,
+unrotated after its pull. The banked ruling stands: report the gap and write no runbook.
+
+**THE CONSUMER'S SPRINT-315 `scope_confirmed_cite: SHA256: <hex>` STILL FAILS CHECK 34** —
+`_bmad-output/pipeline-snapshot.md:13`, re-confirmed this batch. Report it; never write it.
+
+Batch 168's next-work list and delivery gap are spent: batch 169's block above replaces both.
 
 **BATCH 168 SHIPPED `v0.659.0` (`87043915`, #893) AND DISCHARGED THREE CONSUMER CANDIDATES**, each
 filed on the consumer's `main` the day it pulled: `PC-S314-SPRINT-STATUS-NO-DEFERRED-ACS-…`
@@ -548,79 +611,6 @@ verifies. The banked ruling stands: report the gap and write no runbook. The con
 moved 28 -> 35 from its own sprint; its ledger md5 did not move.
 
 Batch 160's next-work list and delivery gap are spent: batch 161's block above replaces both.
-
-**BATCH 160 SHIPPED `v0.646.0` (`df3623b9`, #871) AND `v0.647.0` (`1bbf29da`, #872), CLOSING
-`BL-300`, `BL-302` AND `BL-334`. NONE DISCHARGES A CONSUMER CANDIDATE, AND `BL-230` STAYS LIVE.** It
-was invoked by peer handoff. The opening sweep matched batch 159 on every figure and control: live
-27 on one qualifying ref, worklist 5, unfiled 12, histogram 9/46/1, ledger md5 `94c3a4e2…`. The
-unfiled set's two core-routed ids were both spent (one withdraws itself, one was fixed in 0.542.0),
-so the batch took two live DEFECTs with failing receipts. Live **79 -> 90** (fourteen filed, three
-closed), archive **245 -> 248**.
-
-**`v0.646.0`: FIVE SCRIPTS FALL BACK TO THE INSTALLED SCHEMA, AND THE PROVENANCE WRITER READS IN THE
-READER'S ORDER.** Its contract adversary refuted the first design: the old `BL-300` receipt accepted
-an install-first order and a hop-counting fallback, and the steering validator would have passed 0
-of 20 declarations. `BL-302`'s receipt also accepted an install-first writer. Both were replaced.
-On a scratch clone of the consumer, 23 invocations are byte-identical with no override.
-
-**`BL-230`'S POOL RAN IN FULL AND ITS TIP RED WAS DRIVEN TO A CAUSE.** 156 runs (108 tip, 48 base at
-0.624.0, 6 wide) returned one red each side. The tip red is a render whose orientation sample
-swallowed a failed `diff` and printed `none`, and the failed `diff` is a bash 3.2 race: `diff <(…)`
-exits 2 with `/dev/fd/63: Bad file descriptor` at about 0.15-0.4% under concurrent workers.
-**`v0.647.0` makes the render name what did not run, and moves five verdict-bearing diffs to a staged
-file piped into `diff -`**, which keeps healthy output byte-identical where a two-path `diff`
-changed Apple diff's hunks. `BL-334` carries its receipt. **`BL-230` STAYS LIVE**: forcing the
-failure on 0.646.0 reproduced its E3 red and none of E1, E2, E8 or E9. **E8's reported extra world
-was never recorded anywhere, so that arm cannot be matched to any mechanism.**
-
-**THE LIVE `<( )` CLASS IS WIDER THAN THIS RELEASE.** Shipped core outside fixtures carries 84
-non-comment `<( )` lines; 29 are OPERANDS to an external command, the form measured to race, across
-13 files. `BL-335` (DEFECT) owns the rest and names one verdict site:
-`validate-artifact-derivations.sh:727`, whose race reads as STALE and can turn a real NEWLY-FAILING
-into a STALE-BOTH false clear in `derivation-differential.sh`. **A measurement of whether `comm`,
-`grep -f` and `done < <(…)` race read 0 for every form INCLUDING the `diff` control, so it
-discriminates nothing and is not evidence for any form.** Force the interleaving; do not sample.
-
-**THE RACE IS BASH 3.2 ONLY.** `bash:5.2` holds the substitution's fd open. The tip adversary
-caught the shipping `emit-report-refusal` failing every push under bash 5; its forced race arm now
-reports INCONCLUSIVE there, measured on both shells with a pre-fix engine as the failing control.
-
-Each release's gate ran at `AI_DLC_FIXTURE_NO_SKIP=1` on the tree its squash carries: 22 phases,
-0 FAIL, 210 and 211 fixtures `ok`, every changed fixture read by name against an impossible-name
-control, and `ls-remote` matching before the PR. The one SKIP both times is the suite-pole
-comparison at pool width 6 against its 12-wide baseline. **0.646.0's first gate blocked on a new
-fixture missing the git-env seam on line 2; a new `run.sh` sources it or the push fails.**
-
-**The operator ran two read-set traces**, `schema-install-fallback` (988 rows) and
-`snapshot-archive-rotate` (61 rows, now including 23 `core/hooks/` reads); only each one's own
-rows moved. **One trace is owed**: `sudo bash core/scripts/derive-fixture-readsets.sh --list
-"emit-report-refusal"` on a checkout of `origin/main`.
-
-**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
-- **`PC-S314-H2-ATTESTATION-PLACEMENT-GRAIN-REJECTS-THE-STEP-FILES-OWN-STYLE` is the subject**: filed
-  2026-09-27 on the consumer's `ai-dlc/carry-over/telv3-upgrade` (`e06783e14`), ahead of its
-  `main`, cited by no entry here. `validate-h2-attestation.sh --verify` cannot reach an
-  attestation inside a code span in a table cell, because `ATTEST_TAIL` at
-  `core/scripts/validate-h2-attestation.sh:218` demands a `|` or end of line after the span and a
-  closing backtick sits between. The consumer routes it core. Re-derive the premise, file the entry,
-  write the contract, run the adversary alone, then build.
-- `BL-335`: the other 24 operand-form `<( )` sites, starting with the derivation verdict.
-- `BL-230` needs a mechanism for E1, E2 and E9; the verify-time transient on the fixed engine
-  reproduces their recorded sets, and the R6 guard now retries it.
-- `BL-311` waits on the operator.
-
-**THE DELIVERY GAP IS FOUR RELEASES.** The consumer is at 0.643.0 against `VERSION` 0.647.0.
-`apply.sh`, `emit-report.sh` and the update `SKILL.md` each have one commit in
-`7b32fb1a..origin/main`, all in 0.647.0, so **the pull that delivers 0.647.0 runs under the
-consumer's installed 0.643.0 engine and 0.647.0's race fix protects only the pull after it.** Its
-tip adversary measured the installed engine and 0.647.0 rendering byte-identical regions on the
-consumer's real ranges, with every cross-engine `--verify` returning 0. 0 of 47 `core/` rows are
-mode-only. Two PC ids are PENDING, `PC-S313-FOLDIN-…` and `PC-S314-SNAPSHOT-SWAP-BLIND-WINDOW`. The
-banked ruling stands: report the gap and write no runbook. The consumer's porcelain moved 41 -> 27
-from its own sprint, none of it on a path this program writes; its ledger md5 moved to
-`989f20cf…` with the one filing above.
-
-Batch 159's next-work list and delivery gap are spent: batch 160's block above replaces both.
 
 ### Derive the state; do not trust the numbers below
 
