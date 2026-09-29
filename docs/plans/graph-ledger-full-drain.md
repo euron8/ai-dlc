@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 558..681. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 570..630. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,74 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 172 SHIPPED `v0.663.0` (`f217daa0`, #903) AND CLOSED `BL-365`..`BL-368` AND `BL-026`. IT
+DISCHARGES NO CONSUMER CANDIDATE.** It was invoked by peer handoff and took the four entries the
+operator set as highest priority. The opening sweep matched batch 171's prediction on every figure:
+live 29 on 1 qualifying ref (the `BL-369` id, discharged at 0.662.0), unfiled 12, worklist 5,
+TERMINAL 147. Live backlog **104 -> 103** (five rotated, `BL-370`..`BL-373` filed), archive **264 ->
+269**. The receipt histogram, diffed by id between `origin/main` and the release, moved exactly the
+four subjects 1 -> 0.
+
+**THE SUBJECT IS THE LEAD WAITING ON ONE SUBAGENT, ACROSS EVERY ROLE. OPERATOR CORRECTION, MID-BATCH:
+"we aren't solving for just the remediator so don't myopically scope to just one role."** The
+all-role census reproduced the headline exactly (823 agents, 144.4h solo, parallelism 1.28) and
+ranked reachable solo time: remediator ~24h, adversary ~15h, dev ~11h (already required parallel by
+`_dispatch-protocol.md`, so a conduct gap, not a missing rule), dev-escalated ~9h, gate-adjudicator
+~7h, analyst ~4.5h. No single role rule reproduces the per-role figures the four entries carried;
+their archived close notes say so. **The operator then ruled option A: file-level sharding now,
+single-document section sharding deferred** — filed as `BL-372`, a ruled deferral and not a
+narrowing to reopen.
+
+**WHAT SHIPPED.** `rule-bodies/rule-28.md` carries `**Split dispatch: one agent per independent
+part.**`: four axes (files, derived worklist items, declared surfaces, seats × parts), a derived
+partition, a join that is a PROGRAM, and four serial exceptions. Every per-role site cites it.
+The three joins are `merge-adversarial-shards.sh` (ordinal shards + cross, verdict recomputed from
+summed counts), `join-remediator-shards.sh` (parts keyed on the files their `edit:` lines cite
+against a record-then-allow write ledger in the remediation guard), and `validate-gate-adjudication.sh
+--expected --shard i/N` and `--merge`. The dispatch guard records a brief's `shard:` line; Check 22
+WARNs without one; Check 24 arm K fails a post-install TERMINAL pass over a multi-file artifact
+that was not sharded. `FORK_BUDGET` went **3299 -> 3152**, because I75 read each chain twice.
+
+**EVERY ROUND FOUND SOMETHING, AND EVERY FIND WAS A REAL-CORPUS SHAPE THE SEEDS DID NOT HOLD.** The
+contract adversary: all four receipts closed on "Never shard it." and exited 9 on a correct
+rewording; shard files beside pass files break Check 24 and both hooks. The merge's `<epic>-<n>` key
+parsed 23 of 1045 real story files (now an ordinal). The join keyed on an agent id a subagent cannot
+be shown to see (now on files). The adversary and repair shards shared one directory (repair parts
+now at `shards/<artifact>-repair-p<M>/`). 4 of 317 real passes stamp fractional seconds. The tip
+adversary: arm K keyed on every pass, so its own remedy could not clear it; the join refused 16 of
+24 real repair records, which edit `epics/epics.md`. **Build every seed from the consumer's real
+files before trusting a hand-seeded one** — every one of these passed a seeded world first.
+
+**THE FIRST GATE FAILED ON TWO OF THIS RELEASE'S OWN LINES.** `check-24-adversarial-convergence`
+gained a `git init` without sourcing `../lib/preamble.sh` (`validate-fixture-git-env` ceiling 0), and
+a new hook line ended `>> "$LEDGER" 2>/dev/null || true`, which `procsub-staged-refusal`'s r3 rule
+catches. Gate on `62b3ca1c`: 22 phases, 24 PASS, 0 FAIL, 1 SKIP (pole, no fresh measurement), 216
+ok, `all gates green`, every changed fixture `ok` by name against an impossible-name control of 0,
+`ls-remote` matching, squash tree identical to the gated tip. **The operator ran the owed read-set
+trace** on the five changed fixtures; only their rows moved, and the map ships in this close.
+
+**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
+- `BL-372` (single-document sharding, operator-deferred) is the continuation of this batch's subject
+  and the largest remaining lever on lead wait; the design constraints are in its body.
+- `BL-370` (a bad `theirs` ref disarms adjudication at rc 0) is split out of `BL-360` and ships alone,
+  because `layer-drift.sh` is bootstrapping. `BL-360`'s bootstrapping half follows, each file alone;
+  `BL-364` rides with its joins. `BL-371` (arm G, same-second fraction) is small and can ride any
+  release touching the convergence validator.
+- Filings owed when a close frees room: batch 169's, 170's and 171's lists unchanged; then this
+  batch's NOTEs — a merged pass's multi-value `artifact_sha` fails `validate-provenance-block.sh`
+  (not run on pass files today); `.verdict-writes.jsonl` is undeclared like `BL-373`'s ledger; the
+  Check 24 README's case list omits the three arm K cases.
+- `BL-230` needs a mechanism for E1, E2 and E9.
+
+**THE DELIVERY GAP IS FOUR RELEASES.** The consumer is at 0.659.0 against `VERSION` 0.663.0; mid-batch
+it opened `ai-dlc-update/self-update-0.661.0-…` and returned to its carry-over branch with the stamp
+unmoved. v0.663.0 changes two HOOKS every consumer dispatch runs through (record-then-allow, measured
+identical on 817 real prompts). PENDING is 1 (`BL-369`'s id, first named at 0.662.0). The banked
+ruling stands: report the gap and write no runbook.
+
+Batch 171's next-work list and delivery gap are spent: batch 172's block above replaces both, and
+carries the operator priority forward as `BL-372`.
 
 **BATCH 171 SHIPPED `v0.662.0` (`9b84f6f6`, #899) AND DISCHARGED
 `PC-S315-CHECK-15-BUDGET-EVIDENCE-VERIFIER-READS-OLDEST-ROW-OF-A-NEWEST-FIRST-GATE-LOG`, filed and
@@ -498,67 +566,6 @@ only the pull after it.** 0 mode-only rows at batch open. PENDING is empty. The 
 stands: report the gap and write no runbook.
 
 Batch 164's next-work list and delivery gap are spent: batch 165's block above replaces both.
-
-**BATCH 164 SHIPPED `v0.654.0` (`3c606fe2`, #884) AND `v0.655.0` (`c16d83ce`, #885), CLOSING `BL-353`
-AND `BL-354`. NEITHER DISCHARGES A CONSUMER CANDIDATE.** It was invoked by the operator, who chose
-the subject on a marked recommendation. The opening sweep matched batch 163 on every figure: live 25
-on five qualifying refs, unfiled 12 (the same ids and dates), worklist 5, TERMINAL 147, ledger md5
-`ded61c90…`, every control at its expected value. **The consumer pulled 0.643.0 -> 0.653.0 during
-the batch's opening** (reconcile `16203baf`, #1119, on `ai-dlc/carry-over/telv3-upgrade`), so the
-gap opened at ZERO and PENDING is empty. Live **100 -> 100** (two closed, `BL-356` and `BL-357`
-filed), archive **254 -> 256**.
-
-**`BL-353`: AN UNREADABLE OR NON-REGULAR `pending.md` REFUSES AT CHECKS 2 AND 2A.** All three
-escalation validators, `--in-force` included, refuse with `REFUSED:` on stderr and exit 2; at
-0.653.0 all four invocations exited 0 with an ordinary OK line on a chmod-000 file carrying an
-out-of-vocabulary entry. Healthy output is byte-identical on the consumer's real 418 KB
-`pending.md`. Every caller already read a non-zero exit as a refusal. The contract adversary found
-the fixtures' mutant anchors on the exact lines being changed, the `is not a pass` prose cell that
-the new sentence had to avoid, and that `git cat-file -e` returns 128 for absent, bad-ref and
-no-repo alike, so the retired-tokens split moved to `ls-tree`.
-
-**`BL-354`: THE CENSUS REFUTED THE BUILD ORDER BEFORE IT STARTED.** Instrumenting `apply.sh`'s four
-detector calls across the ten fixtures that drive it showed `unregistered-drift.sh` exiting 1 on 96
-of 128 healthy invocations: its scan pipeline ends in `grep | while` under `pipefail` with no exit
-line, so an empty scan set became the script's exit. An rc-keyed refusal row would have fired on
-most of the suite. Release B fixed that producer first, then read every detector's exit as
-`DECISION <detector>-refused`. Healthy `apply.sh` output is byte-identical over three real consumer
-ranges. **Measure what the existing population already returns before keying a new row on it.**
-
-**THE RELEASE B TIP ADVERSARY FOUND THE CLASS THE FIX OPENED**, filed as `BL-357`: staging stdout
-to a file adds a WRITE that nothing reads, and the explicit `exit 0` blesses a failed one. Forced
-with `ulimit -f`, base's pipe kept the HARD drift row and tip lost it. Fixture arm U5 pins that
-shape as correct. `BL-356` carries the three exit-0 refusals left in the detectors.
-
-Both gates ran at `AI_DLC_FIXTURE_NO_SKIP=1`: 22 phases, 0 FAIL, 213 ok, the changed fixtures ok
-by name against an impossible-name control of 0, `ls-remote` matching, and each squash tree
-identical to its gated tip. **A read-set trace may be owed**: the five Release A fixtures now stage
-pre-fix copies from `git show d1c72fa9:…`; `procsub-staged-refusal-boot` already lists its six
-engine files. Run `sudo bash core/scripts/derive-fixture-readsets.sh --list "<name>"` for
-`escalation-status-vocabulary`, `escalation-citation`, `suppression-lifetime`,
-`retired-layer-contract` and `procsub-staged-refusal` on a checkout of `origin/main`, and confirm
-only their rows moved.
-
-**THE IMPOSSIBLE-ID CONTROL `PC-S999-NEVER` IS SPENT.** It prints `0.440.0`, not `UNNAMED`, because
-this repo's own prose about it has been committed since. Pick a token, prove it absent, then trust
-the zero beside it.
-
-**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
-- The unfiled set holds no new core filing. `BL-357` (DEFECT: a failed staged write reads as a
-  clean scan) is the strongest distribution-internal entry and continues this batch's thread;
-  `BL-356` is next.
-- `BL-230` needs a mechanism for E1, E2 and E9.
-
-**THE DELIVERY GAP IS TWO RELEASES.** The consumer is at 0.653.0 against `VERSION` 0.655.0. Five
-bootstrapping files changed in `d1c72fa9..origin/main` (`apply.sh`, `self-update-gate.sh`,
-`unregistered-drift.sh`, `retired-tokens.sh`, `retired-layer-contract.sh`), so **the pull that
-delivers them runs under the installed 0.653.0 engine and their refusals protect only the pull
-after it.** 0 of 17 `core/` rows are mode-only. PENDING is empty: the one discharged id still live
-upstream was first named at 0.648.0, below the installed version. The banked ruling stands: report
-the gap and write no runbook. The consumer's porcelain moved 7 -> 19 from its own sprint 314; its
-ledger md5 did not move.
-
-Batch 163's next-work list and delivery gap are spent: batch 164's block above replaces both.
 
 ### Derive the state; do not trust the numbers below
 

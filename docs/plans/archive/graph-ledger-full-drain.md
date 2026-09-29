@@ -15479,3 +15479,64 @@ porcelain moved 35 -> 11 from its own sprint; its ledger md5 did not move.
 
 Batch 161's next-work list and delivery gap are spent: batch 162's block above replaces both.
 
+**BATCH 164 SHIPPED `v0.654.0` (`3c606fe2`, #884) AND `v0.655.0` (`c16d83ce`, #885), CLOSING `BL-353`
+AND `BL-354`. NEITHER DISCHARGES A CONSUMER CANDIDATE.** It was invoked by the operator, who chose
+the subject on a marked recommendation. The opening sweep matched batch 163 on every figure: live 25
+on five qualifying refs, unfiled 12 (the same ids and dates), worklist 5, TERMINAL 147, ledger md5
+`ded61c90…`, every control at its expected value. **The consumer pulled 0.643.0 -> 0.653.0 during
+the batch's opening** (reconcile `16203baf`, #1119, on `ai-dlc/carry-over/telv3-upgrade`), so the
+gap opened at ZERO and PENDING is empty. Live **100 -> 100** (two closed, `BL-356` and `BL-357`
+filed), archive **254 -> 256**.
+
+**`BL-353`: AN UNREADABLE OR NON-REGULAR `pending.md` REFUSES AT CHECKS 2 AND 2A.** All three
+escalation validators, `--in-force` included, refuse with `REFUSED:` on stderr and exit 2; at
+0.653.0 all four invocations exited 0 with an ordinary OK line on a chmod-000 file carrying an
+out-of-vocabulary entry. Healthy output is byte-identical on the consumer's real 418 KB
+`pending.md`. Every caller already read a non-zero exit as a refusal. The contract adversary found
+the fixtures' mutant anchors on the exact lines being changed, the `is not a pass` prose cell that
+the new sentence had to avoid, and that `git cat-file -e` returns 128 for absent, bad-ref and
+no-repo alike, so the retired-tokens split moved to `ls-tree`.
+
+**`BL-354`: THE CENSUS REFUTED THE BUILD ORDER BEFORE IT STARTED.** Instrumenting `apply.sh`'s four
+detector calls across the ten fixtures that drive it showed `unregistered-drift.sh` exiting 1 on 96
+of 128 healthy invocations: its scan pipeline ends in `grep | while` under `pipefail` with no exit
+line, so an empty scan set became the script's exit. An rc-keyed refusal row would have fired on
+most of the suite. Release B fixed that producer first, then read every detector's exit as
+`DECISION <detector>-refused`. Healthy `apply.sh` output is byte-identical over three real consumer
+ranges. **Measure what the existing population already returns before keying a new row on it.**
+
+**THE RELEASE B TIP ADVERSARY FOUND THE CLASS THE FIX OPENED**, filed as `BL-357`: staging stdout
+to a file adds a WRITE that nothing reads, and the explicit `exit 0` blesses a failed one. Forced
+with `ulimit -f`, base's pipe kept the HARD drift row and tip lost it. Fixture arm U5 pins that
+shape as correct. `BL-356` carries the three exit-0 refusals left in the detectors.
+
+Both gates ran at `AI_DLC_FIXTURE_NO_SKIP=1`: 22 phases, 0 FAIL, 213 ok, the changed fixtures ok
+by name against an impossible-name control of 0, `ls-remote` matching, and each squash tree
+identical to its gated tip. **A read-set trace may be owed**: the five Release A fixtures now stage
+pre-fix copies from `git show d1c72fa9:…`; `procsub-staged-refusal-boot` already lists its six
+engine files. Run `sudo bash core/scripts/derive-fixture-readsets.sh --list "<name>"` for
+`escalation-status-vocabulary`, `escalation-citation`, `suppression-lifetime`,
+`retired-layer-contract` and `procsub-staged-refusal` on a checkout of `origin/main`, and confirm
+only their rows moved.
+
+**THE IMPOSSIBLE-ID CONTROL `PC-S999-NEVER` IS SPENT.** It prints `0.440.0`, not `UNNAMED`, because
+this repo's own prose about it has been committed since. Pick a token, prove it absent, then trust
+the zero beside it.
+
+**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
+- The unfiled set holds no new core filing. `BL-357` (DEFECT: a failed staged write reads as a
+  clean scan) is the strongest distribution-internal entry and continues this batch's thread;
+  `BL-356` is next.
+- `BL-230` needs a mechanism for E1, E2 and E9.
+
+**THE DELIVERY GAP IS TWO RELEASES.** The consumer is at 0.653.0 against `VERSION` 0.655.0. Five
+bootstrapping files changed in `d1c72fa9..origin/main` (`apply.sh`, `self-update-gate.sh`,
+`unregistered-drift.sh`, `retired-tokens.sh`, `retired-layer-contract.sh`), so **the pull that
+delivers them runs under the installed 0.653.0 engine and their refusals protect only the pull
+after it.** 0 of 17 `core/` rows are mode-only. PENDING is empty: the one discharged id still live
+upstream was first named at 0.648.0, below the installed version. The banked ruling stands: report
+the gap and write no runbook. The consumer's porcelain moved 7 -> 19 from its own sprint 314; its
+ledger md5 did not move.
+
+Batch 163's next-work list and delivery gap are spent: batch 164's block above replaces both.
+
