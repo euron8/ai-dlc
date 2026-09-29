@@ -4480,6 +4480,35 @@ The status-drop mutant survives, and that is correct. At mode 000 the empty-list
 its place, and the refusal is the same exit 2. The last row shows exit 0 is reachable, and that
 the producer, not `rt_blob`, is where bullet 3 closes.
 
+**Amended at batch 170 (v0.661.0): bullet 3 is fixed at the producer, in two places.**
+`memo_diff_name_status` in lib.sh now passes `-c core.quotePath=false` on both of its `git diff`
+calls: the memo-miss fallback (`:1128`) and the memoised write (`:1130`). A non-ASCII path now
+reaches preclassify's CLASSIFY rows raw, so `retired-tokens.sh` finds the consumer file and
+prints the row. The contract adversary found that this change alone is not enough. On a
+pre-relocation consumer holding an edited `scripts/café.sh`, base shows a visible but wrong quoted
+CLASSIFY row, while the name-status fix alone replaces it with an inert `PRE-RELOCATION-NOOP` and
+loses the `RELOCATE-MOVE+consumer-edited` disclosure. The cause is preclassify's relocation
+listing, `ls-tree --name-only "$THEIRS" core/scripts/` (base `:538`, tip `:539`), which still
+quoted the name. It now carries the same flag, and the disclosure is back. The tip adversary then
+found a third site. `machinery_paths()` in preclassify built its set from two `ls-files
+--with-tree` calls under the default quoting, and `self-update-gate.sh` arm C and
+`unregistered-drift.sh`'s `carried_bucket` join the now-raw rows against that set with `grep -xF`.
+With only the first two edits, a consumer-edited `core/skills/ai-dlc-update/café.md` lost its
+`SELF-UPDATE-CARRY`, while the ASCII control beside it kept its carry. Base carried it only because
+both sides were quoted alike. Both calls now carry the flag too. All three edits together are the
+producer fix this bullet named. `memo_ls_tree` in the same file has the same quoting and was
+deliberately left alone, because its readers each compare its lines against their own spelling of
+a path. It is the first row of the census of remaining listing sites, which is filed at the batch
+close.
+
+The receipt above was re-scored unchanged, run by `bash -c` from the root of a `git archive`
+extraction of each commit's `core/`:
+
+| tree | exit | tag |
+|---|---|---|
+| base `b0c310a3` (0 `core.quotePath=false diff` lines in lib.sh) | 1 | BULLET-3-PRODUCER-REMAINS |
+| the 0.661.0 tree (2 such lines) | 0 | |
+
 verify: sh R=core/skills/ai-dlc-update/reconcile; for f in retired-layer-passage retired-layer-contract lib; do [ -f "$R/$f.sh" ] || exit 9; done; [ -f "$R/setup-sites.md" ] || exit 9; [ "$(id -u)" -ne 0 ] || exit 9; w="$(mktemp -d)" || exit 9; cp -R "$R" "$w/r" || exit 9; g() { local d="$1"; shift; git -C "$d" -c user.email=r@r -c user.name=r -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }; D="$w/d"; mkdir -p "$D/core/skills/ai-dlc/steps" || exit 9; g "$D" init -q || exit 9; printf -- '- Label: /cmd\nuse {tok}\n1. The lead must always record the gate verdict in the story file before merge.\n' > "$D/core/skills/ai-dlc/steps/a.md"; printf 'small\n' > "$D/core/skills/ai-dlc/steps/b.md"; { g "$D" add -A && g "$D" commit -qm b; } >/dev/null 2>&1 || exit 9; B="$(git -C "$D" rev-parse HEAD)"; printf 'use {tok}\n' > "$D/core/skills/ai-dlc/steps/a.md"; { g "$D" rm -q core/skills/ai-dlc/steps/b.md && g "$D" add -A && g "$D" commit -qm t; } >/dev/null 2>&1 || exit 9; T="$(git -C "$D" rev-parse HEAD)"; C="$w/c"; mkdir -p "$C/.claude/skills/ai-dlc/extensions" || exit 9; printf -- 'see steps/b.md\n1. The lead must always record the gate verdict in the story file before merge.\n' > "$C/.claude/skills/ai-dlc/extensions/e.md"; run() { bash "$w/r/$1.sh" "$D" "$B" "$T" "$C"; }; run retired-layer-passage > "$w/ph" 2>/dev/null || exit 9; [ "$(grep -c '^RETIRED-LAYER-PASSAGE' "$w/ph")" -ge 1 ] || exit 9; run retired-layer-contract > "$w/ch" 2>/dev/null || exit 9; [ "$(grep -c '^RETIRED-LAYER-CONTRACT' "$w/ch")" -ge 1 ] || exit 9; S="$w/r/setup-sites.md"; cp "$S" "$w/sites" || exit 9; chmod 000 "$S" || exit 9; cat "$S" >/dev/null 2>&1 && { chmod 644 "$S"; exit 9; }; run retired-layer-passage > "$w/px" 2> "$w/pxe"; p=$?; run retired-layer-contract > "$w/cx" 2> "$w/cxe"; c=$?; chmod 644 "$S"; awk '/^rulebook:/{print; s=1; next} s && /^  - /{next} {s=0; print}' "$w/sites" > "$S" || exit 9; grep -q '^rulebook:' "$S" || exit 9; [ "$(awk '/^rulebook:/{on=1;next} on && /^[a-z_]+:/{exit} on && /^  - /{n++} END{print n+0}' "$S")" -eq 0 ] || exit 9; run retired-layer-passage > "$w/py" 2> "$w/pye"; q=$?; run retired-layer-contract > "$w/cy" 2> "$w/cye"; y=$?; [ "$p" -ne 0 ] && [ ! -s "$w/px" ] && grep -q 'setup-sites' "$w/pxe" && [ "$c" -ne 0 ] && [ ! -s "$w/cx" ] && grep -qF "$S" "$w/cxe" && [ "$q" -ne 0 ] && [ ! -s "$w/py" ] && [ "$y" -ne 0 ] && [ ! -s "$w/cy" ] && grep -qF "$S" "$w/cye" || { echo BL356-BULLET-1-OR-2-REGRESSED >&2; exit 1; }; cp "$w/sites" "$S" || exit 9; E="$w/e"; mkdir -p "$E/core/scripts" || exit 9; g "$E" init -q || exit 9; U="$(printf 'caf\303\251')"; for f in plain "$U"; do printf 'x=$ROOT/old-%s\n' "$f" > "$E/core/scripts/$f.sh"; done; { g "$E" add -A && g "$E" commit -qm b; } >/dev/null 2>&1 || exit 9; EB="$(git -C "$E" rev-parse HEAD)"; for f in plain "$U"; do printf 'x=$ROOT/new-%s\n' "$f" > "$E/core/scripts/$f.sh"; done; { g "$E" add -A && g "$E" commit -qm t; } >/dev/null 2>&1 || exit 9; ET="$(git -C "$E" rev-parse HEAD)"; K="$w/k"; mkdir -p "$K/scripts/ai-dlc" "$K/.claude" || exit 9; for f in plain "$U"; do printf 'x=$ROOT/old-%s\necho edited\n' "$f" > "$K/scripts/ai-dlc/$f.sh"; done; bash "$w/r/retired-tokens.sh" "$E" "$EB" "$ET" "$K" > "$w/to" 2>/dev/null || exit 9; grep -q '^RETIRED-CONTRACT-TOKEN[[:blank:]]core/scripts/plain\.sh[[:blank:]]' "$w/to" || exit 9; grep -q "^RETIRED-CONTRACT-TOKEN[[:blank:]]core/scripts/$U\.sh[[:blank:]]" "$w/to" || { echo BL356-BULLET-3-PRODUCER-REMAINS >&2; exit 1; }; exit 0
 
 ## BL-355 — `norm_lines` folds case byte-wise, so an accented capital no longer matches its lower-case form
@@ -4664,12 +4693,6 @@ own release:
 - `preclassify.sh:183` (`<<<`) and `:344` (`<<EOF`).
 - `ledger-reverify.sh:2280` and three heredoc loops.
 - `self-update-gate.sh:828-833` and `:909-910`, plus five heredocs.
-- lib.sh's three `cat <<'AWK'` emitters: `nrm_awk` `:64`, `ledger_entry_awk` `:349`, and
-  `backlog_entry_label_awk` `:446`. `warn-shadowed-local-validators.sh` now refuses on an empty or
-  failed capture of one. The other callers interpolate the emitter inline as `"$(…_awk)"`:
-  `ledger-reverify.sh` (tip `:1627`, `:1646`, `:2269`, `:2484`, `:2626`), `ledger-rotate.sh`
-  (`:217`, `:313`), lib.sh's own `:78` and `:185`, and `core/scripts/validate-layer-entries.sh`
-  (`:341`, `:356`). Whether each of those reads a failed emitter was not audited here.
 - `self-update-fixtures.sh:655` (`GRINVLIST`, the required-input check is skipped) and `:961`
   (`COVEOF`, the coverage join passes). Step 2 runs this file unattended.
 - `emit-report.sh:842`, where a preclassify refusal goes undetected, plus tip `:384`, `:444`,
@@ -4748,6 +4771,33 @@ files, deleting the floor-matching lines the cells never execute, and dropping t
 by the spelling conjunct only; the relabel collision was moved to 7999 after a collision at 24
 let the `|| true` mutant survive. Through `scripts/backlog-reverify.sh` on a scratch ledger, with
 an `exit 0` control entry reading CLOSE-CANDIDATE, this entry reads STILL-LIVE in about 30s.
+
+**Amended at batch 170 (v0.661.0): lib.sh's three emitters are literals, and this entry stays
+live.** `nrm_awk`, `ledger_entry_awk` and `backlog_entry_label_awk` were `cat <<'AWK'` heredocs.
+Each is now `printf '%s\n' '<body>'` with the body as a single-quoted literal, so there is no
+staging step that can fail. The one apostrophe in a body, a comment in `ledger_entry_awk`, is
+spelled `'\''`. `core/scripts/validate-layer-entries.sh`'s `nrm_awk` changed identically, because
+I40 byte-binds it to lib.sh's copy. The callers are not edited. Once the emitter cannot fail,
+`"$(ledger_entry_awk)"` can come back empty only on a fork failure, which fails the whole `$( )`.
+Measured under `/bin/bash` 3.2.57 with `trap '' XFSZ; ulimit -f 0`, capturing `x="$(emitter)"`
+under the limit and writing it to disk outside the limit:
+
+| emitter | base `b0c310a3` | the 0.661.0 tree |
+|---|---|---|
+| `nrm_awk` | rc 1, 0 B | rc 0, 109 B |
+| `ledger_entry_awk` | rc 1, 0 B | rc 0, 2495 B |
+| `backlog_entry_label_awk` | rc 1, 0 B | rc 0, 342 B |
+
+Each tip capture under the limit is byte-identical to its unforced output. Each emitter's healthy
+output at tip is byte-identical to base (`cmp -s`, all three), so every awk program these emitters
+feed is unchanged. lib.sh leaves the **Remaining** list above. Its heredoc-opener count is now 0.
+
+**The receipt CANNOT distinguish this release from base.** It exits 1 with
+`BL360-BOOTSTRAP-HALF-REMAINS` on both `b0c310a3` and the 0.661.0 tree, run by `bash -c` from a
+`git archive` extraction of each. Its here-string loop over every `reconcile/*.sh` fires first,
+on the here-strings still in the bootstrapping files, so the heredoc scan that names lib.sh never
+runs on either tree. The guard for this half is the `procsub-staged-refusal` fixture, whose
+emitter cells force each emitter under the write limit.
 
 verify: sh R=core/skills/ai-dlc-update/reconcile; for f in hard-blockers relabel-extension-checks warn-shadowed-local-validators retired-layer-contract retired-tokens readopt-override derivation-differential; do [ -f "$R/$f.sh" ] || exit 9; done; w="$(mktemp -d)" || exit 9; F() { ( trap '' XFSZ; ulimit -f 16; "$@" ); }; c="$(F bash -c 'wc -c <<<"$1"' _ "$(printf '%020000d' 0)" 2>/dev/null)"; case "$c" in *[1-9]*) exit 9 ;; esac; F bash -c 'printf "%08000d" 0 > "$1"' _ "$w/cal" 2>/dev/null; [ "$(wc -c < "$w/cal" | tr -d ' ')" -eq 8000 ] || exit 9; A='/^[[:blank:]]*#/ {next} { l=$0; gsub(/<<<<+/, "", l); if (l ~ /<<</) n++ } END {print n+0}'; printf '%s\n' 'a <<<"$b"' '  # c <<<"$d"' 'echo "<<<<<<< x"' > "$w/sp"; [ "$(awk "$A" "$w/sp")" -eq 1 ] || exit 9; : > "$w/ld"; i=0; while [ $i -lt 200 ]; do printf 'HARD-UNREGISTERED-CORE-DRIFT\tskills/ai-dlc/steps/file-number-%04d-padding-padding.md\tx\n' $i; i=$((i+1)); done > "$w/ud"; echo '# report' > "$w/rep"; hb() { bash "$R/hard-blockers.sh" --check "$w/rep" --ld-rows "$w/ld" --ld-rc 0 --ud-rows "$w/ud" --ud-rc 0 "$w" base "$w" theirs; }; hb > "$w/hbh" 2>&1; [ "$(grep -c '^FAIL' "$w/hbh")" -eq 200 ] || exit 9; F hb > "$w/hbf" 2>&1; [ "$(grep -c '^FAIL' "$w/hbf")" -eq 200 ] || grep -q '^hard-blockers: REFUSED' "$w/hbf" || { echo BL360-CONVERTED-HALF-REGRESSED >&2; exit 1; }; C="$w/rx"; mkdir -p "$C/.claude/skills/ai-dlc/extensions" || exit 9; i=1; while [ $i -le 8000 ]; do printf '### %d. Check title\nbody\n' $i; i=$((i+1)); done > "$C/.claude/skills/ai-dlc/gate-validation.md"; printf -- '---\nkind: check\nid: mine\nhooks: gate-validation.md\n---\n\n### 7999. My check\ntext\n' > "$C/.claude/skills/ai-dlc/extensions/x.md"; bash "$R/relabel-extension-checks.sh" "$C" > "$w/rxh" 2>&1; grep -qF '[ext:mine]' "$w/rxh" || exit 9; F bash "$R/relabel-extension-checks.sh" "$C" > "$w/rxf" 2>&1; grep -qF '[ext:mine]' "$w/rxf" || grep -q '^relabel: REFUSED' "$w/rxf" || { echo BL360-CONVERTED-HALF-REGRESSED >&2; exit 1; }; C="$w/ws"; mkdir -p "$C/_bmad-output/ai-dlc-update" "$C/scripts/ai-dlc" "$C/scripts/ai-dlc-local/sub" "$C/.claude" || exit 9; echo 'echo core' > "$C/scripts/ai-dlc/validate-zz.sh"; echo 'echo fork' > "$C/scripts/ai-dlc-local/validate-zz.sh"; echo 'echo fork2' > "$C/scripts/ai-dlc-local/sub/validate-zz.sh"; { printf '# ledger\n\n## PC-S1-THING fork of validate-zz.sh\n\nADOPTED UPSTREAM in 0.1.0.\n\n'; i=0; while [ $i -lt 900 ]; do printf 'names aaaa-padding-name-%04d.sh\n' $i; i=$((i+1)); done; } > "$C/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; bash "$R/warn-shadowed-local-validators.sh" --root "$C" > "$w/wsh" 2>&1; [ "$(grep -c '^RETIRE-CANDIDATE' "$w/wsh")" -eq 2 ] || exit 9; F bash "$R/warn-shadowed-local-validators.sh" --root "$C" > "$w/wsf" 2>&1; [ "$(grep -c '^RETIRE-CANDIDATE' "$w/wsf")" -eq 2 ] || grep -q '^warn-shadowed-local-validators: REFUSED' "$w/wsf" || { echo BL360-CONVERTED-HALF-REGRESSED >&2; exit 1; }; g() { local d="$1"; shift; git -C "$d" -c user.email=r@r -c user.name=r -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }; D="$w/rd"; mkdir -p "$D/core/skills/ai-dlc/steps" || exit 9; g "$D" init -q || exit 9; printf -- '- Label: /cmd\nuse {tok}\n' > "$D/core/skills/ai-dlc/steps/a.md"; printf 'small\n' > "$D/core/skills/ai-dlc/steps/b.md"; printf 'small\n' > "$D/core/skills/ai-dlc/steps/c.md"; { g "$D" add -A && g "$D" commit -qm b; } >/dev/null 2>&1 || exit 9; B="$(git -C "$D" rev-parse HEAD)"; { g "$D" rm -q core/skills/ai-dlc/steps/b.md core/skills/ai-dlc/steps/c.md && g "$D" commit -qm t; } >/dev/null 2>&1 || exit 9; T="$(git -C "$D" rev-parse HEAD)"; C="$w/rc"; mkdir -p "$C/.claude/skills/ai-dlc/extensions" "$C/.claude/skills/ai-dlc/overrides" || exit 9; { echo 'see steps/b.md for the gate'; head -c 20000 /dev/zero | tr '\0' p; echo; } > "$C/.claude/skills/ai-dlc/extensions/e.md"; printf 'see .claude/skills/ai-dlc/steps/c.md and core/skills/ai-dlc/steps/b.md\n' > "$C/.claude/skills/ai-dlc/overrides/o.md"; printf 'nothing here\n' > "$C/.claude/skills/ai-dlc/extensions/n.md"; bash "$R/retired-layer-contract.sh" "$D" "$B" "$T" "$C" > "$w/rch" 2>/dev/null; [ "$(grep -c '^RETIRED-LAYER-CONTRACT' "$w/rch")" -eq 3 ] || exit 9; F bash "$R/retired-layer-contract.sh" "$D" "$B" "$T" "$C" > "$w/rcf" 2> "$w/rcfe"; rc=$?; cmp -s "$w/rch" "$w/rcf" || { [ "$rc" -ne 0 ] && grep -q '^retired-layer-contract: .*no verdict' "$w/rcfe"; } || { echo BL360-CONVERTED-HALF-REGRESSED >&2; exit 1; }; D="$w/td"; mkdir -p "$D/core/scripts" || exit 9; g "$D" init -q || exit 9; mb() { h="x=\$ROOT/$1"; printf '%s\n' "$h" > "$2"; head -c $((16384 - ${#h} - 1)) /dev/zero | tr '\0' p >> "$2"; }; mb old-z "$D/core/scripts/z.sh"; printf 'x=$ROOT/old-b\nsmall\n' > "$D/core/scripts/b.sh"; { g "$D" add -A && g "$D" commit -qm b; } >/dev/null 2>&1 || exit 9; B="$(git -C "$D" rev-parse HEAD)"; mb new-z "$D/core/scripts/z.sh"; printf 'x=$ROOT/new-b\nsmall\n' > "$D/core/scripts/b.sh"; { g "$D" add -A && g "$D" commit -qm t; } >/dev/null 2>&1 || exit 9; T="$(git -C "$D" rev-parse HEAD)"; [ "$(git -C "$D" cat-file -s "${B}:core/scripts/z.sh")" -eq 16384 ] || exit 9; C="$w/tc"; mkdir -p "$C/scripts/ai-dlc" || exit 9; git -C "$D" show "${B}:core/scripts/z.sh" > "$C/scripts/ai-dlc/z.sh"; git -C "$D" show "${B}:core/scripts/b.sh" > "$C/scripts/ai-dlc/b.sh"; echo 'uses $ROOT/old-b too' >> "$C/scripts/ai-dlc/z.sh"; printf 'X\tcore/scripts/b.sh\tscripts/ai-dlc/b.sh\tCLASSIFY\nX\tcore/scripts/z.sh\tscripts/ai-dlc/z.sh\tCLASSIFY\n' > "$w/rows"; bash "$R/retired-tokens.sh" --bucket-rows "$w/rows" "$D" "$B" "$T" "$C" > "$w/rth" 2>/dev/null; [ "$(cut -f2,3 "$w/rth" | tr '\t\n' ':;')" = 'core/scripts/b.sh:$ROOT/old-b;core/scripts/z.sh:$ROOT/old-z;' ] || exit 9; F bash "$R/retired-tokens.sh" --bucket-rows "$w/rows" "$D" "$B" "$T" "$C" > "$w/rtf" 2> "$w/rtfe"; rc=$?; cmp -s "$w/rth" "$w/rtf" || { [ "$rc" -ne 0 ] && grep -q '^retired-tokens: .*no verdict' "$w/rtfe"; } || { echo BL360-CONVERTED-HALF-REGRESSED >&2; exit 1; }; for f in hard-blockers relabel-extension-checks warn-shadowed-local-validators retired-layer-contract retired-tokens readopt-override derivation-differential; do [ "$(awk "$A" "$R/$f.sh")" -eq 0 ] || { echo BL360-CONVERTED-HALF-REGRESSED >&2; exit 1; }; done; for f in "$R"/*.sh; do [ "$(awk "$A" "$f")" -eq 0 ] || { echo BL360-BOOTSTRAP-HALF-REMAINS >&2; exit 1; }; done; H='/^[[:blank:]]*#/ {next} { l=$0; gsub(/<<<+/, "", l); if (l ~ /<<-?[\047"]?[A-Za-z_]/) n++ } END {print n+0}'; for f in apply preclassify ledger-reverify self-update-gate self-update-fixtures emit-report lib; do [ -f "$R/$f.sh" ] || exit 9; [ "$(awk "$H" "$R/$f.sh")" -eq 0 ] || { echo BL360-BOOTSTRAP-HALF-REMAINS >&2; exit 1; }; done; [ "$(awk '/^[[:blank:]]*#/ {next} /done <</ {n++} END {print n+0}' "$R/readopt-override.sh")" -eq 0 ] || { echo BL360-BOOTSTRAP-HALF-REMAINS >&2; exit 1; }; grep -q 'relabel-extension-checks\.sh.*|| true' "$R/apply.sh" && { echo BL360-BOOTSTRAP-HALF-REMAINS >&2; exit 1; }; exit 0
 

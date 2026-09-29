@@ -15,6 +15,68 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.661.0] - 2026-09-29
+
+lib.sh's three awk emitters are now `printf` literals instead of heredocs, so a full disk can no
+longer empty them. The reconcile producers that listed a changed or relocated path now read it
+raw, so a non-ASCII path is no longer C-quoted and dropped. **`BL-356` closes.** `BL-360` is
+amended and stays live for its remaining bootstrapping files.
+
+### lib.sh's emitters cannot fail to stage (`BL-360`, lib.sh)
+
+`nrm_awk`, `ledger_entry_awk` and `backlog_entry_label_awk` were `cat <<'AWK'` heredocs. Bash 3.2
+stages a heredoc body to a temp file. Under `ulimit -f 0` with SIGXFSZ ignored, which models a
+full disk, each returned rc 1 and 0 bytes at 0.660.0. Every caller that interpolates
+`"$(ledger_entry_awk)"` inline discards that status and runs a program with no entry parser.
+
+- **Each emitter is `printf '%s\n' '<body>'` with a single-quoted literal body.** There is no
+  staging step, so there is no failure channel. The one apostrophe in a body, a comment in
+  `ledger_entry_awk`, is spelled `'\''`. Under the same limit each now returns rc 0 with its full
+  output: 109, 2495 and 342 bytes.
+- **The awk programs are byte-identical to 0.660.0** (`cmp -s` on each emitter's output, all
+  three).
+- **`core/scripts/validate-layer-entries.sh`'s `nrm_awk` changed identically**, because I40
+  byte-binds it to lib.sh's copy. The function keeps its opening line, an indented `printf` and a
+  bare `}`, which is the shape I40's range extraction needs.
+- The callers are unchanged. `warn-shadowed-local-validators.sh` keeps its refusal on a failed or
+  empty capture, and its comment now says the emitter is a literal.
+- `procsub-staged-refusal` is the guard for this change.
+
+`BL-360`'s receipt exits 1 with `BL360-BOOTSTRAP-HALF-REMAINS` on 0.660.0 and on this tree alike.
+Its here-string loop fires first on the bootstrapping files, so its lib.sh heredoc scan never
+runs. The fixture is the guard for this change. The entry stays live for `apply.sh`,
+`preclassify.sh`, `ledger-reverify.sh`, `self-update-gate.sh`, `self-update-fixtures.sh` and
+`emit-report.sh`.
+
+### A non-ASCII changed path reaches preclassify's rows raw (`BL-356`, bullet 3)
+
+`memo_diff_name_status` in lib.sh ran `git diff --no-renames --name-status` under the default
+`core.quotePath`. That C-quoted `core/scripts/café.sh` as `"core/scripts/caf\303\251.sh"` in both
+columns of the CLASSIFY row, and `retired-tokens.sh` then found no such consumer file and dropped
+the row at rc 0.
+
+- **`memo_diff_name_status` passes `-c core.quotePath=false` on both of its `git diff` calls**,
+  the memo-miss fallback and the memoised write.
+- **preclassify's relocation listing, `ls-tree --name-only "$THEIRS" core/scripts/`, passes it
+  too.** The contract adversary found that the first change alone was not enough. On a
+  pre-relocation consumer holding an edited `scripts/café.sh`, it replaced the
+  `RELOCATE-MOVE+consumer-edited` disclosure with an inert `PRE-RELOCATION-NOOP`. With both
+  changes the disclosure is back.
+- **preclassify's `machinery_paths()` passes it on both of its `ls-files --with-tree` calls.** The
+  tip adversary found that raw rows no longer joined that set, which was still C-quoted.
+  `self-update-gate.sh` arm C and `unregistered-drift.sh`'s `carried_bucket` join the two with
+  `grep -xF`, so a consumer-edited non-ASCII machinery file lost its `SELF-UPDATE-CARRY`. At
+  0.660.0 it was carried only because both sides were quoted alike.
+- `memo_ls_tree`, in the same file with the same quoting, is deliberately unchanged. Its readers
+  each compare its lines against their own spelling of a path, and none of them has been audited.
+
+`BL-356`'s receipt exits 0 on this tree and exits 1 with `BL356-BULLET-3-PRODUCER-REMAINS` on
+0.660.0.
+
+This discharges no consumer candidate. lib.sh and `preclassify.sh` are bootstrapping, so the pull
+that delivers 0.661.0 runs under the consumer's installed copies, and these fixes protect only the
+pull after it.
+
 ## [0.660.0] - 2026-09-28
 
 Seven reconcile scripts no longer use a here-string, and several no longer feed a loop from a

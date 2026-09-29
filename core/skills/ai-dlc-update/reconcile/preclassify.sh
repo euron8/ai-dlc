@@ -327,8 +327,10 @@ machinery_paths() { # -> one core-relative machinery path per line, resolved at 
     _mgnorm="$_mgnorm $_mg"
   done
   if [ -n "$_mgnorm" ]; then
-    _mb="$(git -C "$DIST" ls-files --with-tree="$BASE" -- $_mgnorm 2>/dev/null)"
-    _mt="$(git -C "$DIST" ls-files --with-tree="$THEIRS" -- $_mgnorm 2>/dev/null)"
+    # `core.quotePath=false`: the CLASSIFY rows carry raw paths, and arm C and `carried_bucket`
+    # join them against this set with `grep -xF` -- a C-quoted set matches no non-ASCII row.
+    _mb="$(git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$BASE" -- $_mgnorm 2>/dev/null)"
+    _mt="$(git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$THEIRS" -- $_mgnorm 2>/dev/null)"
     _mout="$_mb
 $_mt"
   fi
@@ -535,7 +537,8 @@ dist_only() { # core/fixtures/<name>/... -> is it marked dist-only at THEIRS?
 #
 # STAGED, WITH THE ENUMERATION'S STATUS READ HERE. A failed ls-tree used to feed the loop nothing
 # and the pass reported no relocation for a consumer that holds every validator at the old path.
-git -C "$DIST" ls-tree --name-only "$THEIRS" core/scripts/ > "$PC_STAGE/relocation-ls-tree" 2>/dev/null \
+# `core.quotePath=false`: a non-ASCII name is otherwise C-quoted and matches no consumer path.
+git -C "$DIST" -c core.quotePath=false ls-tree --name-only "$THEIRS" core/scripts/ > "$PC_STAGE/relocation-ls-tree" 2>/dev/null \
   || pc_fail "ls-tree --name-only $THEIRS core/scripts/ exited $?"
 while IFS= read -r core_path; do
   [ -n "$core_path" ] || continue

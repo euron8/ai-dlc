@@ -106,9 +106,9 @@ batch and shipped in the release.
 **NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
 - The unfiled set holds no new core filing. `BL-360`'s remaining half is the strongest
   distribution-internal work: `apply.sh`, `preclassify.sh`, `ledger-reverify.sh`,
-  `self-update-gate.sh`, `lib.sh` (three `cat <<'AWK'` emitters), `self-update-fixtures.sh` (`:655`,
-  `:961`) and `emit-report.sh` (`:842`) — each BOOTSTRAPPING, each shipping alone. `BL-356` bullet 3
-  lives in `preclassify.sh`/`lib.sh` and can ride the `lib.sh` release.
+  `self-update-gate.sh`, `self-update-fixtures.sh` (`:655`, `:961`) and `emit-report.sh` (`:842`) —
+  each BOOTSTRAPPING, each shipping alone. lib.sh's three emitters and `BL-356` bullet 3 shipped in
+  v0.661.0.
 - Filings owed when a close frees room, in order: the `theirs`-ref/contract-blob DEFECT carried in
   `BL-360`; then the four batch-168 NOTEs; then this batch's NOTEs — `unregistered-drift.sh:715,738`
   read a stale previous iteration on a failed `read` (HARD either way), `register-drift.sh:472`'s

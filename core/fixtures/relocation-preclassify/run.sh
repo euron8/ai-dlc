@@ -145,7 +145,7 @@ cp -R "$RECON" "$MUT" || exit 2
 # Neutralize the subject-set generator: the enumeration is STAGED to a file above the loop, and
 # the mutant stages an EMPTY file in its place, so the loop reads nothing. The staging command
 # spans two lines (the call, then its `|| pc_fail` continuation); the match takes both.
-perl -0pi -e 's{git -C "\$DIST" ls-tree --name-only "\$THEIRS" core/scripts/ > "\$PC_STAGE/relocation-ls-tree" 2>/dev/null \\\n[^\n]*\n}{: > "\$PC_STAGE/relocation-ls-tree"\n}' "$MUT/preclassify.sh" || exit 2
+perl -0pi -e 's{git -C "\$DIST" -c core\.quotePath=false ls-tree --name-only "\$THEIRS" core/scripts/ > "\$PC_STAGE/relocation-ls-tree" 2>/dev/null \\\n[^\n]*\n}{: > "\$PC_STAGE/relocation-ls-tree"\n}' "$MUT/preclassify.sh" || exit 2
 if grep -q 'ls-tree --name-only "$THEIRS" core/scripts/' "$MUT/preclassify.sh"; then
   echo "FIXTURE ERROR: mutation did not take — the ls-tree enumerator line was not rewritten" >&2
   exit 2
