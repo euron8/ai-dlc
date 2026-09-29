@@ -6,13 +6,38 @@
 #   merge-adversarial-shards.sh <shard-dir>
 #   merge-adversarial-shards.sh --map <shard-dir>   print `<ordinal>\t<basename>`, one per story,
 #                                                   for the lead to put in each shard brief
+#   merge-adversarial-shards.sh --document <path> <shard-dir>
+#                                                   SECTION mode: one single-file artifact, sharded
+#                                                   by the parts partition-document.sh --map prints
 #
 #   <shard-dir> is `<planning>/s<N>/shards/<artifact>-p<M>/`. Everything else is DERIVED from
 #   that one path, so the placement cannot be mis-spelled by a caller:
 #     stories   <planning>/s<N>/<artifact>/          (the multi-file artifact under review)
 #     output    <planning>/s<N>/<artifact>-adversarial-p<M>.md
-#   No project root is resolved: the only sibling read is the convergence validator, located
-#   beside this script (both layouts put the two in one directory).
+#   No project root is resolved: the siblings read are the convergence validator and, in
+#   section mode, partition-document.sh, both located beside this script (both layouts put them
+#   in one directory). A shard's relative `artifact:` is resolved by walking UP from s<N>/ for
+#   the first directory it names a file under -- a walk, never a root.
+#
+# SECTION MODE (--document)
+#   The unit is a SECTION of one document, not a story file. The ordinal set is the parts
+#   `partition-document.sh --map <path>` prints -- never a listing of the shard directory -- and a
+#   document it calls SERIAL is REFUSED: a SERIAL document is reviewed by one adversary, so a
+#   shard set for it is a dispatch that should not have happened. The shard set, the finding
+#   partition, the count check, the sums and the recomputed verdict are the files-mode ones
+#   below, with three differences:
+#     citation   each finding carries exactly one `sections: <ordinal>[, ...]`; a `stories:`
+#                line is REFUSED by its own guard, which runs before the one-citation count --
+#                a finding carrying one of each passes the count and is refused only there.
+#     sha        EVERY shard, cross included, reviewed the whole document and notarizes the
+#                sha256 of the whole document, which must equal the bytes on disk; the merged
+#                block carries that ONE `artifact_sha`, because the convergence validator's
+#                arms read one sha per pass.
+#     artifact   every shard's `artifact:` must resolve to the same absolute path as
+#                --document; the same bytes under another name are another artifact.
+#   The merged block adds `shard_wall: <key>=<invoked_at>/<mtime> ...`, each shard's claimed
+#   start and its file's modification time (UTC), so the wall clock a section fan-out actually
+#   bought is readable from the pass file rather than argued about.
 #
 # WHY IT EXISTS
 #   A multi-file artifact is reviewed by one adversary per story ORDINAL plus one cross-story
@@ -73,13 +98,23 @@ export LC_ALL=C
 
 refuse() { printf 'REFUSED: %s\n' "$*"; exit 2; }
 
-USAGE="usage: merge-adversarial-shards.sh [--map] <planning>/s<N>/shards/<artifact>-p<M>"
-MAP_ONLY=0
+USAGE="usage: merge-adversarial-shards.sh [--map | --document <path>] <planning>/s<N>/shards/<artifact>-p<M>"
+MAP_ONLY=0; DOCUMENT=""
 case "${1:-}" in
   -h|--help) awk 'NR > 1 && /^set -u/ { exit } NR > 1' "$0"; exit 0 ;;
   --map) MAP_ONLY=1; shift ;;
+  --document)
+    [ $# -ge 2 ] || refuse "$USAGE"
+    DOCUMENT="$2"; shift 2
+    [ -n "$DOCUMENT" ] && [ -f "$DOCUMENT" ] && [ -r "$DOCUMENT" ] || refuse "--document ${DOCUMENT:-<empty>} is not a readable file"
+    DOCUMENT="$(cd "$(dirname "$DOCUMENT")" && pwd -P)/$(basename "$DOCUMENT")" || refuse "--document's directory is not enterable" ;;
 esac
 [ $# -eq 1 ] || refuse "$USAGE"
+# The CITATION AXIS: the one line name a finding cites its unit by. A line of the OTHER axis is
+# refused explicitly (below), never merely ignored -- ignored, a `stories:` line in a document
+# shard is invisible, and the finding is then judged on whatever `sections:` line sits beside it.
+# Files mode keeps no second axis, so its behaviour on every input is what it was before sections.
+if [ -n "$DOCUMENT" ]; then CITE=sections; OTHER=stories; NOUN=section; else CITE=stories; OTHER=""; NOUN=story; fi
 
 SHARD_DIR="${1%/}"
 [ -d "$SHARD_DIR" ] || refuse "shard directory $SHARD_DIR does not exist"
@@ -100,11 +135,42 @@ PASS="$(printf '%s' "$SHARD_BASE" | sed -n 's/^\(.*[^-]\)-p\([0-9][0-9]*\)$/\2/p
 PASS=$((10#$PASS))
 STORIES_DIR="$SPRINT_DIR/$ARTIFACT"
 OUT="$SPRINT_DIR/$ARTIFACT-adversarial-p$PASS.md"
-[ -d "$STORIES_DIR" ] || refuse "the artifact under review $STORIES_DIR is not a directory; a single-file artifact is never sharded"
+if [ -z "$DOCUMENT" ]; then
+  [ -d "$STORIES_DIR" ] || refuse "the artifact under review $STORIES_DIR is not a directory; a single-file artifact is sharded only by section, with --document"
+fi
 
 T="$(mktemp -d "${TMPDIR:-/tmp}/merge-adversarial-shards.XXXXXX")" || refuse "mktemp failed"
 trap 'rm -rf "$T"' EXIT
 
+sha_of() {
+  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1
+  else sha256sum "$1" | cut -d' ' -f1; fi
+}
+
+if [ -n "$DOCUMENT" ]; then
+# ---- the ordinal map, derived from the partition of the document -------------------------
+# partition-document.sh is the ONLY speller of the section grammar; its --map is read here and
+# never re-derived, and never replaced by a listing of the shard directory -- a listing is the
+# set of shards that ARRIVED, not the set that was owed.
+PARTITION="$(cd "$(dirname "$0")" && pwd)/partition-document.sh"
+[ -f "$PARTITION" ] || refuse "cannot read the section partition: $PARTITION is absent"
+bash "$PARTITION" --map "$DOCUMENT" > "$T/map" 2> "$T/map.err"; prc=$?
+if [ "$prc" -eq 3 ]; then
+  refuse "$DOCUMENT does not partition ($(grep -m1 '^SERIAL:' "$T/map" "$T/map.err" 2>/dev/null | sed 's/^[^:]*:SERIAL:/SERIAL:/')); a SERIAL document is reviewed by one adversary and never merged"
+fi
+[ "$prc" -eq 0 ] || refuse "partition-document.sh --map $DOCUMENT exited $prc: $(head -1 "$T/map") $(head -1 "$T/map.err")"
+K="$(grep -c . "$T/map")" || K=0
+[ "$K" -ge 2 ] || refuse "partition-document.sh --map $DOCUMENT printed $K part(s); a section merge needs two or more"
+W=${#K}
+i=0
+while IFS="$(printf '\t')" read -r o a z h; do
+  i=$((i + 1))
+  case "$o" in ""|*[!0-9]*) refuse "partition-document.sh --map printed ordinal '$o' on row $i; want <ordinal>\\t<first>\\t<last>\\t<heading>" ;; esac
+  [ "$((10#$o))" -eq "$i" ] || refuse "partition-document.sh --map printed ordinal $o on row $i; ordinals run 1..K in order"
+done < "$T/map"
+DOC_SHA="$(sha_of "$DOCUMENT")" || refuse "cannot hash $DOCUMENT"
+[[ $DOC_SHA =~ ^[a-f0-9]{64}$ ]] || refuse "cannot hash $DOCUMENT"
+else
 # ---- the ordinal map, derived from the artifact directory ---------------------------------
 # The glob expands in the C collation (LC_ALL=C above); it is re-sorted explicitly anyway so the
 # order never depends on the shell's glob implementation.
@@ -125,7 +191,9 @@ while IFS= read -r b; do
   printf '%0*d\t%s\n' "$W" "$i" "$b" >> "$T/map" || refuse "cannot stage the ordinal map"
 done < "$T/listing.sorted"
 [ "$i" -eq "$K" ] || refuse "read $i of $K story files"
+fi
 if [ "$MAP_ONLY" -eq 1 ]; then cat "$T/map"; exit 0; fi
+if [ -n "$DOCUMENT" ]; then UNIT_COUNT="part count of $DOCUMENT"; else UNIT_COUNT="story count of $STORIES_DIR"; fi
 ORDINALS="$(cut -f1 "$T/map" | tr '\n' ' ')"
 ORDINALS="${ORDINALS% }"
 norm_ord() { # "003" -> 03 at width W; empty unless digits within 1..K
@@ -149,11 +217,6 @@ CRIT_CEIL="$(read_ceiling CRITICAL_EXIT_CEILING)"
 [ -n "$MAJOR_CEIL" ] && [ -n "$CRIT_CEIL" ] \
   || refuse "MAJOR_EXIT_CEILING / CRITICAL_EXIT_CEILING are not each declared exactly once as an integer in $VALIDATOR"
 
-sha_of() {
-  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1
-  else sha256sum "$1" | cut -d' ' -f1; fi
-}
-
 # ---- the shard set ------------------------------------------------------------------------
 : > "$T/shards" || refuse "cannot stage the shard set"
 # Dotfiles are not walked: no shard name begins with a dot, and a Finder `.DS_Store` (one exists
@@ -167,7 +230,7 @@ for f in "$SHARD_DIR"/*; do
     *.md)
       case "${b%.md}" in ""|*[!0-9]*) refuse "$f is not a shard name (<ordinal>.md or cross.md)" ;; esac
       key="$(norm_ord "${b%.md}")"
-      [ -n "$key" ] || refuse "$f names ordinal ${b%.md}, outside 1..$K (the story count of $STORIES_DIR)" ;;
+      [ -n "$key" ] || refuse "$f names ordinal ${b%.md}, outside 1..$K (the $UNIT_COUNT)" ;;
     *) refuse "$f is not a shard name (<ordinal>.md or cross.md)" ;;
   esac
   printf '%s\t%s\n' "$key" "$f" >> "$T/shards" || refuse "cannot stage the shard set"
@@ -209,11 +272,12 @@ parse_shard() {
     fence { next }
     /^## / { flush(); infind = ($0 ~ /^## Findings[ \t]*$/); next }
     infind && /^### / { flush(); fl = NR; fs = sev($0); fn = 0; fst = ""; next }
-    infind && fl > 0 && /^stories:/ {
-      fn++; v = $0; sub(/^stories:[ \t]*/, "", v); gsub(/[ \t]+/, "", v); fst = v; next
+    infind && fl > 0 && index($0, cite ":") == 1 {
+      fn++; v = substr($0, length(cite) + 2); sub(/^[ \t]*/, "", v); gsub(/[ \t]+/, "", v); fst = v; next
     }
-    END { flush(); printf "B %d %d\n", starts + 0, ends + 0 }
-  ' "$1"
+    infind && fl > 0 && other != "" && index($0, other ":") == 1 { if (wrong == 0) wrong = NR; next }
+    END { flush(); printf "B %d %d\n", starts + 0, ends + 0; printf "Y %d\n", wrong + 0 }
+  ' cite="$CITE" other="$OTHER" "$1"
 }
 
 field() { # $1 parse file, $2 key
@@ -232,7 +296,27 @@ eval "$(grep -m1 '^at_key() {' "$VALIDATOR")"
 RE_SHA='^[a-f0-9]{64}$'
 RE_CITED='^[0-9]+(,[0-9]+)*$'
 
-S_CRIT=0; S_PRIOR=0; S_MAJOR=0; S_UNDER=0; S_MINOR=0
+# A shard's `artifact:` token, resolved to the absolute path it names (sets ART_ABS, empty when it
+# names no file). An absolute token is taken as written; a relative one is tried against the
+# sprint directory and each directory above it, nearest first, because a shard writes it relative
+# to the project root and the merge resolves no root of its own. Both sides pass through
+# `pwd -P`, so a symlinked parent (macOS `/tmp` is `/private/tmp`) never refuses a correct path.
+resolve_artifact() {
+  local t="$1" d
+  ART_ABS=""
+  case "$t" in
+    /*) [ -f "$t" ] && ART_ABS="$(cd "$(dirname "$t")" && pwd -P)/$(basename "$t")"; return 0 ;;
+  esac
+  d="$SPRINT_DIR"
+  while [ -n "$d" ]; do
+    if [ -f "$d/$t" ]; then ART_ABS="$(cd "$(dirname "$d/$t")" && pwd -P)/$(basename "$t")"; return 0; fi
+    [ "$d" = "/" ] && return 0
+    d="$(dirname "$d")"
+  done
+  return 0
+}
+
+S_CRIT=0; S_PRIOR=0; S_MAJOR=0; S_UNDER=0; S_MINOR=0; WALL_LIST=""
 ANY_DIVERGENT=0; EARLIEST=""; EARLIEST_KEY=""; SHA_LIST=""; ID_LIST=""; ALL_IDS=""; CROSS_ID=""; CROSS_ARTIFACT=""
 SKILL=""; MODE=""; LEAD_ROLE=""; RESOLVES=""; RESOLVES_SET=0
 : > "$T/body" || refuse "cannot stage the merged body"
@@ -292,7 +376,27 @@ for key in $ORDINALS cross; do
     RESOLVES="$rd"; RESOLVES_SET=1
   fi
 
-  if [ "$key" = "cross" ]; then
+  # The wrong-axis guard. It runs BEFORE the one-citation count below, and on purpose: a finding
+  # carrying one `sections:` line AND a `stories:` line has exactly one line of this axis, so the
+  # count passes it and only this line refuses it.
+  wrong="$(awk '$1 == "Y" { print $2 }' "$P")"
+  [ "${wrong:-0}" = "0" ] || refuse "$sf:$wrong carries a '$OTHER:' line; a document merge cites sections only, and a finding citing both axes is never keyed on one of them"
+
+  if [ -n "$DOCUMENT" ]; then
+    # Every shard -- cross included -- reviewed the WHOLE document's bytes, so every shard
+    # notarizes the one whole-document sha and names the one document.
+    sha="$(field "$P" artifact_sha)"
+    [ "$sha" = "$DOC_SHA" ] || refuse "$sf notarizes ${sha:-<none>} but $DOCUMENT is $DOC_SHA on disk; the shard reviewed other bytes"
+    art="$(field "$P" artifact)"
+    [ -n "$art" ] || refuse "$sf declares no artifact; a section shard names the document it reviewed"
+    resolve_artifact "$art"
+    [ "$ART_ABS" = "$DOCUMENT" ] \
+      || refuse "$sf names artifact '$art', which resolves to ${ART_ABS:-nothing}, not --document $DOCUMENT; the shard reviewed another file"
+    if [ "$key" = "cross" ]; then CROSS_ID="$tid"; CROSS_ARTIFACT="$art"; fi
+    mt="$(date -u -r "$sf" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"
+    [[ $mt =~ $RE_ISO ]] || refuse "cannot read the modification time of $sf"
+    WALL_LIST="$WALL_LIST $key=$at/$mt"
+  elif [ "$key" = "cross" ]; then
     CROSS_ID="$tid"; CROSS_ARTIFACT="$(field "$P" artifact)"
     [ -n "$CROSS_ARTIFACT" ] || refuse "$sf (cross-story) declares no artifact"
   else
@@ -310,8 +414,8 @@ for key in $ORDINALS cross; do
     [ "$tag" = "X" ] || continue
     [ "$s" = "CRITICAL" ] && n_crit_h=$((n_crit_h + 1))
     [ "$s" = "MAJOR" ] && n_major_h=$((n_major_h + 1))
-    [ "$nlines" = "1" ] || refuse "$sf:$line finding carries $nlines stories: lines; each finding carries exactly one"
-    [[ $cited =~ $RE_CITED ]] || refuse "$sf:$line stories: '$cited' is not <ordinal>[, <ordinal>...]"
+    [ "$nlines" = "1" ] || refuse "$sf:$line finding carries $nlines $CITE: lines; each finding carries exactly one"
+    [[ $cited =~ $RE_CITED ]] || refuse "$sf:$line $CITE: '$cited' is not <ordinal>[, <ordinal>...]"
     distinct=""
     for c in $(printf '%s' "$cited" | tr ',' ' '); do
       o="$(norm_ord "$c")"
@@ -320,7 +424,7 @@ for key in $ORDINALS cross; do
     done
     set -- $distinct
     if [ "$key" = "cross" ]; then
-      [ $# -ge 2 ] || refuse "$sf:$line (cross-story shard) cites only$distinct; a cross-story finding cites two or more ordinals, a single-story one belongs to that story shard"
+      [ $# -ge 2 ] || refuse "$sf:$line (cross-$NOUN shard) cites only$distinct; a cross-$NOUN finding cites two or more ordinals, a single-$NOUN one belongs to that $NOUN shard"
     else
       [ $# -eq 1 ] && [ "$1" = "$key" ] \
         || refuse "$sf:$line (shard $key) cites$distinct; a per-ordinal shard reports only findings citing its own ordinal alone"
@@ -333,7 +437,10 @@ for key in $ORDINALS cross; do
   S_UNDER=$((S_UNDER + under)); S_MINOR=$((S_MINOR + minor))
 
   # --- the body, provenance block stripped ---
-  if [ "$key" = "cross" ]; then printf '\n## Shard: cross-story\n\n' >> "$T/body" || refuse "cannot stage the merged body"
+  if [ -n "$DOCUMENT" ]; then
+    if [ "$key" = "cross" ]; then printf '\n## Shard: cross-section\n\n' >> "$T/body" || refuse "cannot stage the merged body"
+    else printf '\n## Shard: section %s\n\n' "$key" >> "$T/body" || refuse "cannot stage the merged body"; fi
+  elif [ "$key" = "cross" ]; then printf '\n## Shard: cross-story\n\n' >> "$T/body" || refuse "cannot stage the merged body"
   else printf '\n## Shard: story %s\n\n' "$key" >> "$T/body" || refuse "cannot stage the merged body"; fi
   awk '/SKILL_INVOCATION_PROVENANCE v1/ { skip = 1; next }
        /SKILL_INVOCATION_PROVENANCE_END/ { skip = 0; next }
@@ -364,7 +471,12 @@ else VERDICT="EXIT_CONDITION_NOT_MET"; fi
   printf 'mode: %s\n' "$MODE"
   printf 'lead_role: %s\n' "$LEAD_ROLE"
   printf 'artifact: %s\n' "$CROSS_ARTIFACT"
-  printf 'artifact_sha:%s\n' "$SHA_LIST"
+  if [ -n "$DOCUMENT" ]; then
+    printf 'artifact_sha: %s\n' "$DOC_SHA"
+    printf 'shard_wall:%s\n' "$WALL_LIST"
+  else
+    printf 'artifact_sha:%s\n' "$SHA_LIST"
+  fi
   printf 'findings_critical: %s\n' "$S_CRIT"
   printf 'findings_critical_prior_scope: %s\n' "$S_PRIOR"
   printf 'findings_major: %s\n' "$S_MAJOR"
