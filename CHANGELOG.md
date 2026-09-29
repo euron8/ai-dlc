@@ -37,17 +37,29 @@ does not exist. Callers rendered all of those runs as clean.
   code; 2 stays reserved for usage errors and lost rows.
 - **An unreadable path refuses.** When the memoized existence probe says no, `have()` asks
   `git ls-tree --full-tree`, staged to a file. A path the tree names but whose object cannot be
-  read (a missing blob, a missing subtree) now refuses. A path the tree does not name is still
-  absent, so a distribution with no contract keeps "no adjudication tier". `rev-parse
+  read now refuses, with a message naming which state it is: the tree names the path and its
+  object is missing, or a tree on its path could not be read. A path the tree does not name is
+  still absent, so a distribution with no contract keeps "no adjudication tier". `rev-parse
   <ref>:<path>` was rejected because it answers "absent" for a missing subtree.
+- **A consumer's spelling is not a store fault.** `ls-tree` normalises its pathspec and the
+  existence probe does not, so `steps/./x.md`, `a//b` or `a/x/../b` found the canonical file
+  under another name. `have()` compares the path `ls-tree -z` printed with the one it was asked
+  for, and reads a mismatch as absent; a `..` spelling that climbs out of the tree is absent too.
+  Both give the advisory `EXTENSION-HOOK-MISSING` row they gave before this release, rather than a
+  refusal that re-fetching cannot clear. Measured on a consumer clone: the base engine refused a
+  `hooks: steps/./gate-validation.md` extension at rc 1, and this release reads it as 54 rows at
+  rc 0 with one `EXTENSION-HOOK-MISSING`.
 - **Healthy output is byte-identical.** 21 of 21 `cmp` comparisons matched on a consumer clone:
   classify, list and codes modes over the 0.662.0 and 0.659.0 ranges, and `hard-blockers.sh` and
   `emit-report.sh` over the 0.662.0 range. Classify wall clock was 19.83s against 19.79s over
   5 interleaved reps, a difference smaller than the spread between reps. On those ranges the
   fallback probe was never reached (77 calls, 0 misses).
-- **Fixture.** `layer-adjudication-tier` Part 11 gains nine arms: bad theirs and bad base in
-  each mode, a missing blob, a missing subtree, a genuinely absent contract as the near-miss,
-  and a healthy control. Seven mutants are each killed by a named arm.
+- **Fixture.** `layer-adjudication-tier` Part 11 gains eleven arms: bad theirs and bad base in
+  each mode, a missing blob, a missing subtree, a genuinely absent contract as the near-miss, a
+  non-canonical spelling, a tree-escaping `..` spelling, and a healthy control. The bad-theirs
+  arms require the startup message itself. Ten mutants are each killed by a named arm, including
+  one removing only the theirs check at startup. `layer-contract.yaml` LC-E3 now names this
+  fixture, because its arms emit `EXTENSION-HOOK-MISSING`.
 - **Update skill.** `SKILL.md`'s step 3c exit table and two later sentences name the new
   refusal causes.
 
