@@ -4734,132 +4734,6 @@ four fixed ones. Scored through `backlog-reverify.sh`'s own `eval` shape, from t
 verify: sh R=core/skills/ai-dlc-update/reconcile; [ -f "$R/lib.sh" ] || exit 9; set -- "$R"/*.sh; [ "$#" -ge 20 ] || exit 9; w="$(mktemp -d)" || exit 9; P='/^[[:blank:]]*#/ {next} /git -C "[^"]*"/ && (/ ls-(tree|files)[[:blank:]]/ || (/ diff[[:blank:]]/ && /--name-(only|status)/)) { if (/core[.]quotePath=false/ || / -z[[:blank:]]/) f++; else u++ } END {print u+0, f+0}'; printf '%s\n' 'x="$(git -C "$D" ls-tree -r --name-only "$T")"' 'git -C "$D" -c core.quotePath=false diff --name-only "$B" "$T"' '  # git -C "$D" ls-tree --name-only "$T"' 'echo "git ls-tree exited"' 'git -C "$D" diff -U0 "$B"' > "$w/p.sh" || exit 9; [ "$(awk "$P" "$w/p.sh")" = "1 1" ] || exit 9; o="$(awk "$P" "$@")" || exit 9; u="${o% *}"; f="${o#* }"; [ "$f" -ge 1 ] && [ "$((u + f))" -ge 20 ] || exit 9; [ "$u" -eq 0 ] && exit 0; echo "BL364-UNQUOTED-LISTING-SITES $u of $((u + f))" >&2; exit 1
 
 
-## BL-370 — a `theirs` ref that does not resolve reads as an EMPTY layer contract, so adjudication switches off at rc 0
-
-**DEFECT.** Split out of `BL-360`, where batch 167's tip adversary filed it as a carried finding
-and batch 168 marked it DEFECT-tier on its own. It discharges no consumer candidate.
-
-`layer-drift.sh --adjudicated-codes <dist> <theirs>` returns the contract's adjudicated codes. On
-this tree at batch 172, `HEAD` returns four (`OVERRIDE-SUPERSEDED EXTENSION-HOOK-DRIFT
-EXTENSION-ANCHOR-DRIFT EXTENSION-RETIRE-CANDIDATE`), and a ref that does not exist returns **0
-bytes at rc 0**, with `git rev-parse -q --verify` answering 1 for that ref in the same run. The
-cause is `have` (`memo_has_path`, a `cat-file -e`), which answers non-zero alike for an absent
-path, an unresolvable ref and a missing object. The v0.658.0 fix deliberately reads an absent
-contract as an empty one, so every one of those takes that branch. Batch 167 also forced the
-missing-object case: with the contract blob removed from the object store, the set was empty at rc
-0, and classify returned 50 rows at rc 0 with a nonexistent `theirs`. Nothing in `layer-drift.sh`,
-`apply.sh` or `emit-report.sh` checks that `theirs` resolves before classifying.
-
-**Remedy direction.** Refuse at startup, exit 1 with a `layer-drift: REFUSED` line, unless `rev-parse
--q --verify` resolves `"${THEIRS}^{commit}"` in all three modes and `"${BASE}^{commit}"` in classify
-and list mode (`--adjudicated-codes` takes no base). Exit 1, not 2: the update `SKILL.md`'s exit
-table reserves 2 for a usage error and for a scan that lost rows, and 1 is refusal to start. In
-`have`, when the memo answers no, ask `ls-tree --full-tree <ref> -- <path>`: rc 0 with no line is
-ABSENT, and rc 0 with a line or any non-zero rc is a read failure that refuses. `rev-parse
-"<ref>:<path>"` cannot be the discriminator, because it answers 1, exactly as for an absent path,
-when the path's SUBTREE or the ROOT tree is the missing object. `layer-drift.sh` is BOOTSTRAPPING,
-so this ships alone.
-
-The receipt first requires `--adjudicated-codes` to be non-empty at `HEAD` and at `HEAD~1`, a
-classify run over `HEAD~1..HEAD` to exit 0, and the probe ref to be absent (else 9). It then drives
-an unresolvable THEIRS through codes, classify and list mode, and an unresolvable BASE through
-classify and list, and exits 0 only when all five exit 1 AND print a `layer-drift: REFUSED` line.
-Scored: origin/main before the fix 1; the fix 0; a build refusing every THEIRS that is not `HEAD` 9;
-the startup check in codes mode only 1; the startup check on THEIRS only 1; the startup refusal
-exiting 2 1; a script that refuses everything 9.
-
-verify: sh LD=core/skills/ai-dlc-update/reconcile/layer-drift.sh; [ -f "$LD" ] || exit 9; r=refs/heads/zz-bl370-absent-ref; git rev-parse -q --verify "$r" >/dev/null 2>&1 && exit 9; h1="$(git rev-parse -q --verify "HEAD~1^{commit}")" || exit 9; c="$(mktemp -d)" || exit 9; [ -n "$(bash "$LD" --adjudicated-codes "$PWD" HEAD 2>/dev/null)" ] || exit 9; [ -n "$(bash "$LD" --adjudicated-codes "$PWD" "$h1" 2>/dev/null)" ] || exit 9; bash "$LD" "$PWD" "$h1" HEAD "$c" >/dev/null 2>&1 || exit 9; f=""; t() { e="$(bash "$LD" "$@" 2>&1 >/dev/null)"; rc=$?; [ "$rc" -eq 1 ] && case "$e" in *"layer-drift: REFUSED"*) return 0 ;; esac; f="$f $1:rc=$rc"; }; t --adjudicated-codes "$PWD" "$r"; t "$PWD" "$h1" "$r" "$c"; t "$PWD" "$r" HEAD "$c"; t --list-adjudications "$PWD" "$h1" "$r" "$c"; t --list-adjudications "$PWD" "$r" HEAD "$c"; [ -z "$f" ] && exit 0; echo "BL370-UNRESOLVED-REF-NOT-REFUSED$f" >&2; exit 1
-
-## BL-371 — arm G reads a same-second pass carrying a fractional second as EARLIER than its predecessor
-
-**DEFECT.** Found by the batch 172 hand fixing `merge-adversarial-shards.sh`'s handling of
-fractional-second stamps. It predates v0.663.0. It discharges no consumer candidate.
-
-`validate-adversarial-convergence.sh` arm G (`G -- CHRONOLOGY`) compares `invoked_at` as a raw
-string, `[[ "$invoked_at" < "$PREV_AT" ]]`. `.` sorts before `Z`, so `15:08:19.497Z` compares as
-earlier than `15:08:19Z`, and a pass written 497 ms after its predecessor fails the gate as a
-chronology break. The reference consumer stamps 4 of 317 real adversarial passes with a fractional
-second, so the mixed pair is reachable, though it needs two passes in the same second. Ordering
-across different seconds is unaffected.
-
-**Remedy direction.** Compare on the key `merge-adversarial-shards.sh` already builds: the seconds
-prefix plus the fraction padded to nine digits. Do not copy that code; lift it into a helper both
-callers source.
-
-The receipt seeds four two-pass series: a genuinely backward pair (arm G must fire, else 9), a
-forward pair a second apart (must not fire, else 9), the same-second mixed pair, and the
-same-INSTANT pair `19.000Z` then `19Z`. It exits 0 only when neither of the last two fires: the
-mixed pair kills the raw-string comparison, the equal pair kills a comparison with the `Z`
-stripped (which reads `19` as a prefix of `19.000`, so earlier). Scored: origin/main 1; tip 0;
-arm G removed 9; raw string 1; stripped-`Z` 1.
-
-verify: sh r="$PWD"; while [ ! -f "$r/VERSION" ]; do [ "$r" = / ] && exit 9; r="$(dirname "$r")"; done; cd "$r" || exit 9; V=core/scripts/validate-adversarial-convergence.sh; [ -f "$V" ] || exit 9; w="$(mktemp -d)" || exit 9; mk() { mkdir -p "$w/$1" || exit 9; i=1; for at in "$2" "$3"; do printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\ninvoked_at: %s\ntool_use_id: toolu_0%s\nmode: subagent\nartifact: x.md\nartifact_sha: %064d\nfindings_critical: 0\nfindings_critical_prior_scope: 0\nfindings_major: 0\nfindings_major_underived: 0\nfindings_minor: 0\nverdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$at" "$i" "$i" > "$w/$1/x-adversarial-p$i.md" || exit 9; i=$((i+1)); done; }; g() { o="$(bash "$V" --series "$w/$1/x-adversarial-p" 2>&1)"; case "$o" in *'G -- CHRONOLOGY'*) echo 1 ;; *) echo 0 ;; esac; }; mk back 2026-09-27T15:08:19Z 2026-09-27T15:08:10.123Z; mk fwd 2026-09-27T15:08:19Z 2026-09-27T15:08:20Z; mk same 2026-09-27T15:08:19Z 2026-09-27T15:08:19.497Z; mk equal 2026-09-27T15:08:19.000Z 2026-09-27T15:08:19Z; [ "$(g back)" = 1 ] || exit 9; [ "$(g fwd)" = 0 ] || exit 9; [ "$(g same)" = 0 ] && [ "$(g equal)" = 0 ] && exit 0; echo BL371-SAME-SECOND-FRACTION-READ-AS-EARLIER >&2; exit 1
-
-## BL-372 — a single-document scope is still reviewed and repaired by one agent
-
-**DEFECT.** The operator lifted the deferral on 2026-09-29: the section-sharding feature ships
-whole in one release. It is the half of `BL-365`/`BL-366` that file-level sharding cannot reach,
-and it discharges no consumer candidate. Rule 28's split-dispatch clause kept it serial by name:
-exception (4), "a scope that is one file -- a single document is not partitioned by section".
-
-**Reach, measured at batch 172** over the graph subagent transcripts (definitions and caveats in
-the archived `BL-365`/`BL-366` close notes): about 17h of adversary solo time sits on single
-documents (PRD, architecture, carry-over evaluation, sprint-review passes), and single-document
-repair is the bulk of remediator wall time (21.9h of 34.7h under the census hand's classifier).
-
-**What a design must answer**, from the batch 172 design hand:
-- **Derived fences.** 31 of 5871 fenced `$ ` commands in graph's planning artifacts reference their
-  own file, mostly `sed -n '<line>p' <own path>`. A shard editing a COPY measures the copy, so
-  derivations must be re-run against the ASSEMBLED file. `_gate-procedures.md` already runs the
-  derivations validator after the join, which is where the assembled file exists.
-- **Line-number self-references.** Any edit above one falsifies it, serial or sharded. In-place
-  shards move the moment of breakage past `ai-dlc-derivation-capture.sh`'s write-time check.
-- **Concurrent Edits to one file race** (read-modify-write). Unmeasured. Section files with an
-  assembler, or a lock, are the two candidate shapes.
-- **The adversary** partitions by section plus one whole-document cross-section reviewer, with a
-  section citation line so counts stay additive, as `merge-adversarial-shards.sh` does for files.
-
-The receipt drives the shipping programs over a synthetic sprint slot. It exits 1 while exception
-(4) still keeps every document whole or names no partition program; while `partition-document.sh`
-is absent, counts a fenced `##`, fails to report a one-section document SERIAL, fails an unedited
-round trip, or assembles over a document written in place or with a section missing; while
-`merge-adversarial-shards.sh --document` does not sum three MET section shards into a NOT_MET the
-convergence validator reads, or accepts `stories:` lines; while `join-remediator-shards.sh
---document` does not join two section writers, assemble and clear the section copies, or does not
-refuse two writers on one section with nothing written. It exits 9 when no `VERSION` sits above
-the working directory, when a subject file is missing, or when the clause is gone.
-
-verify: sh r="$PWD"; while [ ! -f "$r/VERSION" ]; do [ "$r" = / ] && exit 9; r="$(dirname "$r")"; done; cd "$r" || exit 9; R=core/skills/ai-dlc/rule-bodies/rule-28.md; PD="$r/core/scripts/partition-document.sh"; M="$r/core/scripts/merge-adversarial-shards.sh"; C="$r/core/scripts/validate-adversarial-convergence.sh"; J="$r/core/scripts/join-remediator-shards.sh"; [ -f "$R" ] && [ -f "$M" ] && [ -f "$C" ] && [ -f "$J" ] || exit 9; b="$(LC_ALL=C awk '/^[*][*]What stays serial/{f=1} f&&/^$/{exit} f' "$R" | tr '\n' ' ')"; [ -n "$b" ] || exit 9; case "$b" in *'not partitioned by section'*) echo "BL372-SINGLE-DOCUMENT-SERIAL clause still keeps every document whole" >&2; exit 1 ;; esac; case "$b" in *'partition-document.sh'*) ;; *) echo "BL372-SINGLE-DOCUMENT-SERIAL exception (4) names no partition program" >&2; exit 1 ;; esac; [ -f "$PD" ] || { echo "BL372-SINGLE-DOCUMENT-SERIAL partition program absent" >&2; exit 1; }; w="$(mktemp -d)" || exit 9; s="$w/pa/s1"; mkdir -p "$s/shards/prd-p1" "$s/shards/prd-repair-p1" || exit 9; D="$s/prd.md"; mkd() { { printf '# PRD\nintro\n'; for i in 1 2 3; do printf '## Part %s\n' "$i"; printf '```\n## not a heading\n```\n'; j=0; while [ "$j" -lt 20 ]; do j=$((j+1)); printf 'line %s of part %s\n' "$j" "$i"; done; done; } > "$1"; }; mkd "$D" || exit 9; { printf '# One\n## Only\n'; j=0; while [ "$j" -lt 50 ]; do j=$((j+1)); printf 'x %s\n' "$j"; done; printf '## Tiny\ny\n'; } > "$w/one.md" || exit 9; n="$(bash "$PD" --map "$D" 2>&1 | grep -c '^[0-9]')" || n=0; [ "$n" = 3 ] || { echo "BL372-SINGLE-DOCUMENT-SERIAL a 3-section document mapped to $n parts (fenced ## must not count)" >&2; exit 1; }; o="$(bash "$PD" --map "$w/one.md" 2>&1)"; rc=$?; [ "$rc" = 3 ] && grep -q '^SERIAL' <<<"$o" || { echo "BL372-SINGLE-DOCUMENT-SERIAL a document dominated by one section was not reported SERIAL (rc $rc)" >&2; exit 1; }; cp "$D" "$w/orig" || exit 9; bash "$PD" --split "$D" "$s/shards/prd-repair-p1" >/dev/null 2>&1 || { echo "BL372-SINGLE-DOCUMENT-SERIAL split failed" >&2; exit 1; }; bash "$PD" --assemble "$s/shards/prd-repair-p1" >/dev/null 2>&1 && cmp -s "$D" "$w/orig" || { echo "BL372-SINGLE-DOCUMENT-SERIAL an unedited split did not reassemble byte-identical" >&2; exit 1; }; mkdir -p "$s/shards/prd-repair-p2" || exit 9; bash "$PD" --split "$D" "$s/shards/prd-repair-p2" >/dev/null 2>&1 || exit 9; printf 'EDITED\n' >> "$s/shards/prd-repair-p2/sections/2.md" || exit 9; printf 'in place\n' >> "$D" || exit 9; bash "$PD" --assemble "$s/shards/prd-repair-p2" >/dev/null 2>&1 && { echo "BL372-SINGLE-DOCUMENT-SERIAL assembled over a document written in place while the shards ran" >&2; exit 1; }; cp "$w/orig" "$D" || exit 9; mv "$s/shards/prd-repair-p2/sections/3.md" "$w/held-3.md" || exit 9; bash "$PD" --assemble "$s/shards/prd-repair-p2" >/dev/null 2>&1 && { echo "BL372-SINGLE-DOCUMENT-SERIAL assembled with a section missing" >&2; exit 1; }; cmp -s "$D" "$w/orig" || { echo "BL372-SINGLE-DOCUMENT-SERIAL a refused assembly wrote the document" >&2; exit 1; }; h="$(shasum -a 256 "$D")" || exit 9; h="${h%% *}"; mks() { { printf '## Findings\n'; j=0; while [ "$j" -lt "$2" ]; do j=$((j+1)); printf '### MAJOR m%s\n%s: %s\n' "$j" "$4" "$1"; done; printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\ninvoked_at: 2026-01-01T00:00:0%sZ\ntool_use_id: toolu_%s\nmode: subagent\nlead_role: lead\nartifact: s1/prd.md\nartifact_sha: %s\nfindings_critical: 0\nfindings_major: %s\nfindings_minor: 0\nverdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$3" "$3" "$h" "$2"; }; }; for i in 1 2 3; do mks "$i" 2 "$i" sections > "$s/shards/prd-p1/$i.md" || exit 9; done; mks "1,3" 0 9 sections > "$s/shards/prd-p1/cross.md" || exit 9; o="$(bash "$M" --document "$D" "$s/shards/prd-p1" 2>&1)"; grep -q 'verdict=EXIT_CONDITION_NOT_MET ' <<<"$o" || { echo "BL372-SINGLE-DOCUMENT-SERIAL three MET section shards of 2 blocking MAJOR each did not merge NOT_MET: $o" >&2; exit 1; }; o="$(bash "$C" "$s/prd-adversarial-p1.md" 2>&1)"; grep -q 'verdict=EXIT_CONDITION_NOT_MET critical=0 major=6' <<<"$o" || { echo "BL372-SINGLE-DOCUMENT-SERIAL the convergence validator did not read the merged residue: $o" >&2; exit 1; }; mkdir -p "$s/shards/prd-p2" || exit 9; for i in 1 2 3; do mks "$i" 1 "$i" stories > "$s/shards/prd-p2/$i.md" || exit 9; done; mks "1,3" 1 9 stories > "$s/shards/prd-p2/cross.md" || exit 9; bash "$M" --document "$D" "$s/shards/prd-p2" >/dev/null 2>&1 && { echo "BL372-SINGLE-DOCUMENT-SERIAL a section merge accepted stories: citation lines" >&2; exit 1; }; P="$w/j/_bmad-output/planning-artifacts"; E="$P/s1/prd.md"; mkdir -p "$P/s1/shards" || exit 9; mkd "$E" || exit 9; sl=_bmad-output/planning-artifacts/s1/shards; jn() { AI_DLC_PROJECT_ROOT="$w/j" bash "$J" --document "$E" "$P/s1/shards/prd-repair-p$1" --since 2026-01-01T00:00:00Z --until 2026-01-01T00:01:00Z 2>&1; }; row() { printf '{"kind":"artifact-write","agent_id":"%s","ts":"2026-01-01T00:00:1%sZ","path":"%s"}\n' "$1" "$2" "$sl/prd-repair-p$3/sections/$4.md" >> "$P/.artifact-writes.jsonl"; }; prt() { printf '## Finding %s\ndisposition: fixed\nedit: %s/prd-repair-p%s/sections/%s.md\nderivation: grep -c SECFIX-%s\n' "$2" "$sl" "$1" "$2" "$2" > "$P/s1/shards/prd-repair-p$1/$3.md"; }; bash "$PD" --split "$E" "$P/s1/shards/prd-repair-p3" >/dev/null 2>&1 || exit 9; printf 'SECFIX-1\n' >> "$P/s1/shards/prd-repair-p3/sections/1.md" && printf 'SECFIX-2\n' >> "$P/s1/shards/prd-repair-p3/sections/2.md" || exit 9; row agent-a 1 3 1; row agent-b 2 3 2; prt 3 1 1; prt 3 2 2; o="$(jn 3)"; rc=$?; [ "$rc" = 0 ] && [ -f "$P/s1/prd-repair-p3.md" ] && grep -q '^SECFIX-1$' "$E" && grep -q '^SECFIX-2$' "$E" && ! ls "$P/s1/shards/prd-repair-p3/sections/"*.md >/dev/null 2>&1 && grep -q '^assembled[[:blank:]]' "$P/s1/shards/prd-repair-p3/sections/.manifest" || { echo "BL372-SINGLE-DOCUMENT-SERIAL join --document over two section writers did not join, assemble and clear the sections (rc $rc): $o" >&2; exit 1; }; cp "$E" "$w/before-p4" || exit 9; bash "$PD" --split "$E" "$P/s1/shards/prd-repair-p4" >/dev/null 2>&1 || exit 9; printf 'SECFIX-9\n' >> "$P/s1/shards/prd-repair-p4/sections/1.md" || exit 9; row agent-c 3 4 1; row agent-d 4 4 1; prt 4 9 1; o="$(jn 4)"; rc=$?; [ "$rc" = 2 ] && grep -q 'more than one agent' <<<"$o" && cmp -s "$E" "$w/before-p4" && [ ! -e "$P/s1/prd-repair-p4.md" ] && [ -f "$P/s1/shards/prd-repair-p4/sections/1.md" ] || { echo "BL372-SINGLE-DOCUMENT-SERIAL join --document did not refuse two writers on one section, or wrote on the refusal (rc $rc): $o" >&2; exit 1; }; exit 0
-
-## BL-373 — the planning-artifact write ledger is undeclared and never rotated
-
-**NOTE.** From the batch 172 tip adversary. `ai-dlc-gate-remediation-guard.sh` appends one row per
-dispatched planning-artifact write to `_bmad-output/planning-artifacts/.artifact-writes.jsonl`.
-`core/schemas/pipeline-state-paths.json` declares neither it nor its sibling
-`.verdict-writes.jsonl` (0 matches each, against 1 for `spawn-ledger`), and nothing rotates it. It
-grows for the life of the project inside a committed tree. `join-remediator-shards.sh` reads it
-by time window, so growth costs read time, not correctness.
-
-**A `.paths` entry cannot carry them.** `name` is the top-level component I95 derives, and both
-ledgers are nested: the hook builds `${ARTIFACT_LEDGER_DIR}/...` and `${GATE_DIR}/...`, whose
-parents `planning-artifacts` and `gate-adjudication` are already declared durable. Measured, two
-`.paths` entries named for the ledgers fail I95 four times (ORPHAN and PRODUCER for each).
-
-**Remedy.** Declare each ledger in an optional `ledgers` list on its parent's entry, and bind it
-with I95(e) to a non-comment line of its producer that builds `<dir>/<name>`. I95's population
-grammar stays as it is. An entry without the field validates exactly as before.
-
-**Rotation is not part of the close.** No rotator exists for any `.jsonl` ledger in the
-distribution, and `rotate-gate-adjudication.sh` leaves `.verdict-writes.jsonl` in place by
-design. The declaration classifies the two files and names their writer; it does not bound
-their growth.
-
-The receipt reads the declaration through `jq` and requires I95 to run the sub-arm and pass.
-Scored: origin/main 1; tip 0; the field naming a ledger no producer builds 1; the names appended
-as a comment 9; the sub-arm removed 1; the sub-arm made unable to flag, with a ledger renamed 1.
-
-verify: sh r="$PWD"; while [ ! -f "$r/VERSION" ]; do [ "$r" = / ] && exit 9; r="$(dirname "$r")"; done; cd "$r" || exit 9; P=core/schemas/pipeline-state-paths.json; V=scripts/validate-enforcement-map.sh; [ -f "$P" ] && [ -f "$V" ] || exit 9; n="$(jq -r '[.paths[]? | select(.name == "spawn-ledger.jsonl")] | length' "$P" 2>/dev/null)" || exit 9; [ "${n:-0}" -gt 0 ] || exit 9; a="$(jq -r '[.paths[]? | select(.name == "planning-artifacts") | .ledgers[]?.name | select(. == ".artifact-writes.jsonl")] | length' "$P" 2>/dev/null)" || exit 9; g="$(jq -r '[.paths[]? | select(.name == "gate-adjudication") | .ledgers[]?.name | select(. == ".verdict-writes.jsonl")] | length' "$P" 2>/dev/null)" || exit 9; o="$(bash "$V" --arms I95 2>&1)"; r=$?; case "$o" in *'I95(e): '*' nested ledger(s) bound'*) ;; *) echo BL373-SUBARM-DID-NOT-RUN >&2; exit 1 ;; esac; [ "$r" -eq 0 ] || { echo BL373-I95-FAILS >&2; exit 1; }; [ "${a:-0}" -eq 1 ] && [ "${g:-0}" -eq 1 ] && exit 0; echo BL373-ARTIFACT-LEDGER-UNDECLARED >&2; exit 1
-
 ## BL-374 — the shared reconcile memo caches a missing SUBTREE as an absent path, and serves that answer to later processes
 
 **DEFECT.** From the batch 173 adversary, found while attacking the `BL-370` fix. It discharges no
@@ -4892,3 +4766,100 @@ answers absent, so 128 is never cached, 0; a `lib.sh` that fails to source 9; a 
 never used, so every query goes to git direct, 9.
 
 verify: sh L="$PWD/core/skills/ai-dlc-update/reconcile/lib.sh"; [ -f "$L" ] || exit 9; w="$(mktemp -d)" || exit 9; g() { git -C "$w/r" -c user.name=r -c user.email=r@r "$@"; }; git init -q "$w/r" || exit 9; mkdir -p "$w/r/a/b" || exit 9; echo x > "$w/r/a/b/f.txt" || exit 9; echo y > "$w/r/top.txt" || exit 9; g add -A || exit 9; g commit -qm s || exit 9; t="$(g rev-parse HEAD:a/b)" || exit 9; o="$w/r/.git/objects/$(printf %s "$t" | cut -c1-2)/$(printf %s "$t" | cut -c3-)"; [ -f "$o" ] || exit 9; q() { AI_DLC_RECONCILE_MEMO="$1" bash -c '. "$1" >/dev/null 2>&1 || exit 9; memo_has_path "$2" HEAD "$3"; echo "$?"' _ "$L" "$w/r" "$2" 2>/dev/null; }; mkdir "$w/m" "$w/n" "$w/k" || exit 9; [ "$(q "$w/k" top.txt)" = 0 ] || exit 9; [ "$(q "$w/k" nope.txt)" = 0 ] && exit 9; [ "$(q "$w/m" top.txt)" = 0 ] || exit 9; [ -n "$(ls -A "$w/m")" ] || exit 9; mv "$o" "$w/obj" || exit 9; g ls-tree --full-tree HEAD -- a/b/f.txt >/dev/null 2>&1 && exit 9; p1="$(q "$w/m" a/b/f.txt)"; [ "$p1" = 0 ] && exit 9; mv "$w/obj" "$o" || exit 9; [ "$(q "$w/n" a/b/f.txt)" = 0 ] || exit 9; p2="$(q "$w/m" a/b/f.txt)"; [ "$p2" = 0 ] && exit 0; echo "BL374-MISSING-SUBTREE-CACHED-AS-ABSENT p1=$p1 p2=$p2" >&2; exit 1
+
+## BL-375 — the read-set deriver needs root for `fs_usage`, and a scoped `sandbox-exec` tracer measured as a root-free replacement
+
+**DEFECT.** Operator-scheduled on 2026-09-29 as its own release, after v0.665.0.
+`core/scripts/derive-fixture-readsets.sh` requires root (`[ "$(id -u)" = "0" ]`) because `fs_usage`
+does, so every read-set trace blocks a release on an operator `sudo` step.
+
+**Measured at batch 173 on four fixtures** (`plan-shape`, `document-partition`,
+`derivation-capture`, `check-24-adversarial-convergence`), with the tree pinned at 43306861 and
+compared against the map the operator traced there with `fs_usage` plus atime:
+- The scoped sandbox tracer saw every map row outside `.git/**` and `.gitignore`. It missed 14 or
+  15 rows per fixture, all of them git internals. The four fixtures produced 0 sandbox reports under
+  `.git/`, against 56 to 5579 under `core/` in the same windows. Those rows appear in all 218
+  mapped fixtures.
+- It saw three negative lookups `fs_usage` never recorded, which is the safe direction.
+- The atime tracer added nothing the sandbox did not see (sandbox ∪ atime = sandbox on all four).
+- Micro-probe: `cat`, `[ -f existing ]`, `[ -f missing ]`, `[ -d missing ]`, `stat`, `git
+  rev-parse`, `ls` and `readlink` are all reported, as unprivileged. The impossible-token control
+  read 0.
+- Event loss: the scoped profile had 0 drop notices in 6 runs, idle and with two heavy fixtures
+  concurrent. An unscoped `(allow default (with report))` dropped 64,673 messages on `check-24` and
+  lost paths, so the scope is load-bearing.
+- Cost: about +4% on `derivation-capture`.
+
+**Profile:**
+
+    (version 3)
+    (allow default)
+    (allow file* process-exec* (subpath "<TREE>") (with report))
+
+**Extraction,** started BEFORE the fixture (`log show` afterwards returns 0 lines, and the
+`(trace ...)` directive writes nothing). In zsh, `log` is a builtin, so call `/usr/bin/log`.
+`<TREE>` must be the canonical `/private/tmp/...` path.
+
+    /usr/bin/log stream --level debug --style compact \
+      --predicate 'sender == "Sandbox" AND eventMessage CONTAINS "<TREE>/"'
+
+Per line, `Sandbox: <proc>(<pid>) allow <op> <TREE>/<path>`: keep `file*` and `process-exec*` ops,
+then apply the deriver's DAEMONS filter, `norm`, the sentinel drop and `drop_ignored`.
+
+**Open before it replaces `fs_usage`:**
+- Only 4 of 218 fixtures were compared. Add the sandbox tracer as a mode beside the existing one.
+  Take ONE final `sudo` run that traces all 218 with both tracers in the same pass, and require the
+  sandbox's miss set outside `.git/**` and `.gitignore` to be exactly 0. Then remove `fs_usage` and
+  the root check.
+- Establish whether the runner's content-key skip reads the `.git/**` rows. If it does, record them
+  without root (e.g. a fixed set for every mapped fixture); do not simply drop them.
+- `log stream --level debug` was tested only from an admin-group account.
+- `sandbox-exec` is documented as deprecated. It works on macOS 27.2.
+- A read by a process outside the sandboxed lineage (an XPC or launchd helper) is invisible by
+  construction. The per-fixture process census saw only bash, cp, grep, cmp, python and awk.
+
+The batch-173 harness is kept outside the tree at
+`~/.claude/projects/-Users-n8-git-ai-dlc/b173-sandbox-tracer/`: `trace2.sh` (the scoped tracer),
+`mktree.sh`, `micro3.sh`, `compare.sh` and `load.sh`. It is evidence, not the implementation.
+
+verify: manual
+
+## BL-376 — `layer-drift.sh`'s unguarded BASE reads turn a missing base blob into more drift
+
+**NOTE.** From the batch 173 adversary, held at the time by the backlog ceiling. The literal
+`git_show "$BASE"` reads (`layer-drift.sh`, three sites) and the two `git_show "$base_sha"` reads
+treat a blob they cannot read as an empty file, so a missing base object reports MORE drift or a
+`NEW-THIS-PULL` tag rather than fewer rows. It fails toward reporting, never toward a clean sheet,
+which is why it is a NOTE. The fix is the `have()` discipline `BL-370` shipped: tell absent from
+unreadable before reading. Re-derive the line numbers before building; they move.
+
+verify: manual
+
+## BL-377 — `partition-document.sh`'s grammar is coarser than the heading set on three real shapes
+
+**NOTE.** From the batch 173 contract adversary, over the reference consumer's `_bmad-output/`. None
+of these changes a round trip (4854 files, 0 mismatches); each only makes the partition coarser or
+puts a boundary where an author would not.
+- A 4-backtick fence closes on its inner triple fence, so a `## ` inside it becomes a boundary
+  (3 consumer documents).
+- A `## ` inside an HTML comment is a boundary (62 documents).
+- Setext headings are not recognised; a heuristic cannot separate them from horizontal rules.
+- `docs/architecture.md`, reviewed by 52 passes, is SERIAL at 76% in one section, so section
+  sharding buys that series nothing.
+
+The derivation-capture exemption is also spelling-sensitive: a logical `/tmp/...` path, where the
+manifest holds the physical one, and a path through a symlinked directory are refused and cost the
+remediator a re-spelling. The remediator prose names the project-relative spelling.
+
+verify: manual
+
+## BL-378 — the suite-pole baseline still names `ledger-reverify` after the pole moved
+
+**NOTE.** v0.665.0's 12-way gate reported the pole as `gate-adjudication-mutants` at 490s against a
+baseline row for `ledger-reverify` at 628s (band 20%, ceiling 754s), with the note "a row pinned to
+a unit that is no longer longest passes while watching the wrong number". Re-baseline
+`docs/suite-pole-baseline.tsv` from a quiet 12-way run. The 6-way gates earlier in batch 173 skipped
+this phase on the pool-width mismatch, because the operator's shell profile sets
+`AI_DLC_FIXTURE_JOBS=6`.
+
+verify: manual

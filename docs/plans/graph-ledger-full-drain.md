@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 570..630. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 566..635. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,66 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 173 SHIPPED `v0.664.0` (`bf998dfb`, #906) AND `v0.665.0` (`c14be470`, #907), AND CLOSED
+`BL-370`..`BL-373`. IT DISCHARGES NO CONSUMER CANDIDATE.** It was invoked by peer handoff. The
+opening sweep matched batch 172's prediction on every figure: live 29 on 1 qualifying ref, unfiled
+12, worklist 5, TERMINAL 147, ledger md5 `bcbb3db1…` on the consumer's carry-over branch. Live
+backlog **103 -> 104** (`BL-374`..`BL-378` filed, four rotated), archive **269 -> 273**.
+
+**OPERATOR DIRECTION, MID-BATCH: "I want it done" — THE SHARDING FEATURE SHIPPED WHOLE IN ONE
+RELEASE.** `BL-372`'s deferral was lifted. v0.665.0 carries section sharding of a single document
+(`partition-document.sh`, `merge-adversarial-shards.sh --document`, `join-remediator-shards.sh
+--document`, Check 24 arm K2, Rule 28 exception (4) rewritten), plus `BL-371` and `BL-373` and the
+merged-pass readers. One design pass, one contract adversary, six parallel builders, one tip
+adversary, one correction. **Cap the adversary loop at one contract pass and one tip pass; a
+finding in code a release did not make worse is a filed NOTE, not another round.**
+
+**v0.664.0 SHIPPED `BL-370` ALONE, BECAUSE `layer-drift.sh` IS BOOTSTRAPPING.** An unresolvable
+ref, or a contract object the tree names but cannot read, refuses at exit 1 instead of disarming
+adjudication at rc 0. Its tip adversary found the fallback read a consumer's non-canonical path
+spelling as a store fault, which would have blocked a pull on a typo; corrected before merge.
+
+**EVERY TIP ADVERSARY FOUND A REAL DEFECT IN A GATE-GREEN RELEASE, AGAIN.** v0.665.0's: a
+remediator's derivation fence over its section file went stale when assembly removed the file,
+failing a correct repair at the gate (0 stale before the join, 2 after). The fence now names the
+document. **Drive the whole flow end to end on a real consumer document before the gate** — every
+builder's fixture passed alone.
+
+**THE READ-SET DERIVER RUNS FROM THE MAIN CHECKOUT, NEVER A LINKED WORKTREE**, whose `.git` is a
+file; it refuses there. Detach the main checkout at the commit to trace. Traced this batch by the
+operator: seven fixtures on v0.665.0, 0 unrelated rows moved each time. **`BL-375` is the
+operator-scheduled next release**: a scoped `sandbox-exec` tracer measured as a root-free
+replacement for `fs_usage` on four fixtures, open on a 218-fixture comparison.
+
+**RUN THE GATE AT `AI_DLC_FIXTURE_JOBS=12`.** The operator's shell profile exports 6, which the hook
+reads over its default of 12, so both 6-way gates here skipped the pole phase. v0.665.0 at 12-way
+ran every phase, and the pole moved to `gate-adjudication-mutants` (490s); `BL-378` re-baselines.
+
+Gates: v0.664.0 on `ba0968f5`, 22 PASS, 0 FAIL, 1 SKIP (pole, 6-way), 216 ok; v0.665.0 on
+`77706f9f`, 22 PASS, 0 FAIL, 0 SKIP, 217 ok, every changed fixture `ok` by name against an
+impossible-name control of 0. Both squash trees identical to the gated tips.
+
+**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
+- `BL-375` (root-free read-set tracer) is operator-scheduled as the next release.
+- `BL-374` (the `lib.sh` memo caches a missing subtree as absent) is DEFECT and bootstrapping, so
+  it ships alone.
+- `BL-360`'s bootstrapping half follows, each file alone; `BL-364` rides with its joins.
+- Filings owed when a close frees room: the lists in the batch 169, 170 and 171 records below;
+  batch 172's `validate-backlog-receipts.sh` floors NOTE; and this batch's — I95(e) matches
+  `/<name>` rather than `<parent>/<name>`; the provenance schema's `sha256` pattern is now unused;
+  the shard-line grammar has no exception for a shardable role on a partitionable document where
+  no join exists (`analyst`, the bmad one-shot adversary).
+- `BL-230` needs a mechanism for E1, E2 and E9.
+
+**THE DELIVERY GAP IS ONE RELEASE.** The consumer pulled twice during this batch, 0.662.0 ->
+0.663.0 and then 0.663.0 -> 0.664.0 once v0.664.0 merged, so its stamp reads 0.664.0 (`bf998dfb`)
+against `VERSION` 0.665.0. Its installed engine therefore now carries `BL-370`'s refusals for every
+pull after this one. v0.665.0 touches no bootstrapping file. PENDING is 0: neither release names a
+`PC-` id (0 of the commits in `dd7e40ad..origin/main`, against 9 naming `BL-370` as the control).
+The banked ruling stands: report the gap and write no runbook.
+
+Batch 172's next-work list and delivery gap are spent: batch 173's block above replaces both.
 
 **BATCH 172 SHIPPED `v0.663.0` (`f217daa0`, #903) AND CLOSED `BL-365`..`BL-368` AND `BL-026`. IT
 DISCHARGES NO CONSUMER CANDIDATE.** It was invoked by peer handoff and took the four entries the
@@ -502,76 +562,6 @@ engine and their refusals protect only the pull after it.** PENDING is 1 and bel
 version. The banked ruling stands: report the gap and write no runbook.
 
 Batch 165's next-work list and delivery gap are spent: batch 166's block above replaces both.
-
-**BATCH 165 SHIPPED `v0.656.0` (`8b025e69`, #887) AND CLOSED `BL-357`. IT DISCHARGES NO CONSUMER
-CANDIDATE.** It was invoked by peer handoff. The opening sweep matched batch 164 on every figure:
-live 25 on five qualifying refs, unfiled 12 (the same ids and dates), worklist 5, TERMINAL 147,
-DISCHARGED 7, ledger md5 `ded61c90…` on the consumer's `ai-dlc/carry-over/telv3-upgrade` (its
-`main` reads `3c80ea9a…` — the md5 is ref-qualified, and a bare figure is not comparable). The one
-filing ahead of the consumer's `main` is `PC-S314-H2-ATTESTATION-…`, discharged at 0.648.0. The
-consumer moved nothing this program reads: porcelain 19 -> 21 -> 38 from its own sprint 314, ledger
-md5 unmoved. Live **100 -> 100** (`BL-357` closed, `BL-358` filed), archive **256 -> 257**.
-
-**`BL-357`: A ROW `unregistered-drift.sh` COULD NOT WRITE IS A REFUSAL, AND A MEMO SERVE THAT
-FAILED RETURNS A SENTINEL.** `emit()` counts every printf, the scan breaks at the first failed
-write, and `ud_finish` exits 2 with `unregistered-drift: REFUSED — a row could not be written to
-stdout after N row(s) were; …`, which `apply.sh`, `emit-report.sh` and `hard-blockers.sh` already
-render as a detector refusal. `lib.sh` memo serves return **125** when `cat` fails. The contract
-adversary, spawned alone, refuted the first design twice before any build: returning cat's raw 1
-collides with `rev-parse`'s own "absent" answer and turned a `preclassify.sh` refusal into rc 0
-with a `MISSING` bucket; and a pre-flight stdout probe passes the closed-stdout arm while missing
-every mid-stream failure, so the fixture and receipt gained a 20-CORE-OK-then-HARD world under
-`ulimit -f 1`. The measurement hand then found the first fix's message false on the real range:
-bash 3.2 leaks the unflushed failed write into later `$( )` captures, corrupting `$cons`, so the
-rest of the scan was skipped by `[ -f ]` and N read 1 while 49 rows were lost. The amendment
-breaks at the first failure (0 iterations after it, against 29). **A refusal that fires with a
-false message is half a fix; measure the message on the real corpus, not only the exit.**
-
-**THE ADVERSARY'S REMAINING FINDINGS WERE ROUTED, NOT FOLDED.** `layer-drift.sh` carries the same
-class (`:2082` no status check; `ulimit -f 8/10/12` loses 0 of 5 HARD rows at rc 0) and is filed as
-`BL-358` with three NOTEs. `apply.sh` takes the memo FILL path (a private memo is built when none
-is exported), so a hit-only fixture arm would have missed it: U6 has a hit and a fill cell.
-`ulimit -f` around `apply.sh` on the consumer cannot discriminate (it breaks the staged blobs at
-base too); the forcing is a stdout-only wrapper. Under a pipe reader that cuts mid-row N is one
-more than the whole rows the reader holds, because the pipe accepted the partial write; under
-`ulimit -f` it is exact.
-
-**THE FIRST GATE WENT RED ON A FIXTURE NO HAND OWNED.** `preclassify-rename-row`'s BL-230 memo
-mutant anchored byte-exactly on the two `lib.sh` status-filter lines the fix respelled; it reported
-`FIXTURE STALE` (anchor 0 of 2) rather than a false kill, and was re-anchored on the two-line
-spelling. **Before respelling a line in `lib.sh`, grep `core/fixtures` for it as a mutant
-anchor.** The release commit was squashed to one commit whose tree equals the assembled tip,
-because the docs hand's commit carried the CHANGELOG heading ahead of `VERSION` and the per-commit
-triple failed on it. Second gate: 22 phases PASS, 1 SKIP (pole, pool width 6), 213 ok, 0 FAIL,
-both changed fixtures `ok` by name against an impossible-name control of 0, squash tree identical
-to the gated tip, `ls-remote` matching.
-
-**THE OPERATOR RAN BOTH OWED READ-SET TRACES** (`escalation-status-vocabulary` 86 paths, then
-`escalation-citation` 74, `suppression-lifetime` 81, `retired-layer-contract` 63,
-`procsub-staged-refusal` 152); only those five fixtures' rows moved, 0 worktree rows, and the map
-shipped in this release. **One trace is owed**: `procsub-staged-refusal-boot` gained U5b/U6 and
-reads `lib.sh`'s memo files and a `cat` stub — `sudo bash core/scripts/derive-fixture-readsets.sh
---list "procsub-staged-refusal-boot preclassify-rename-row"` on a checkout of `origin/main`.
-
-**AGENT WORKTREES CANNOT BE RESUMED ONCE REMOVED.** Collecting a hand and removing its worktree
-ends its addressability; a follow-up needs a new hand with the full brief. Remove worktrees at
-collection anyway (the accumulation rule stands), and write briefs so the deliverable is complete
-before the hand reports.
-
-**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
-- The unfiled set holds no new core filing. `BL-358` (DEFECT: `layer-drift.sh` loses HARD rows on a
-  failed write at rc 0) is the strongest distribution-internal entry and continues this thread;
-  `BL-356` is next.
-- `BL-230` needs a mechanism for E1, E2 and E9.
-
-**THE DELIVERY GAP IS THREE RELEASES.** The consumer is at 0.653.0 against `VERSION` 0.656.0.
-Six bootstrapping files changed in `d1c72fa9..origin/main` (`apply.sh`, `lib.sh`,
-`unregistered-drift.sh`, `self-update-gate.sh`, `retired-tokens.sh`, `retired-layer-contract.sh`),
-so **the pull that delivers them runs under the installed 0.653.0 engine and their refusals protect
-only the pull after it.** 0 mode-only rows at batch open. PENDING is empty. The banked ruling
-stands: report the gap and write no runbook.
-
-Batch 164's next-work list and delivery gap are spent: batch 165's block above replaces both.
 
 ### Derive the state; do not trust the numbers below
 
