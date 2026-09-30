@@ -246,6 +246,37 @@ AC unimplementable as written → fix the AC or add a setup story.
 referenced in story dispatch plans, verify the file exists on disk.
 Missing role/step file = dispatch will fail silently.
 
+**(c) Evidence-section scaffold.** The story template is BMAD's and emits none
+of the sections the gates read, so every story file this step creates MUST
+carry these four headings, added by the lead at authoring, each empty until
+the dev fills it:
+
+- `## Production Integrity Tests` — read by gate-validation Check 6.
+- `## Smoke Test Updates` — read by gate-validation Check 6's smoke clause
+  and by QA's Validation Checklist.
+- `## Rename Verification` — for a story that renames or RE-POINTS an
+  identifier, constant or path. It carries `git grep -n <old name>` and
+  `git grep -n <new name>` over the whole repository, every hit with a
+  disposition, and a control: one identifier the same command must find,
+  with its non-zero count. A re-point story's consumer list is this
+  output, never a list recalled from the diff. A story that renames and
+  re-points nothing writes `not a rename` under the heading.
+- `## Strategy Test IDs` — the table below, one row per strategy test id
+  that names this story, and one row per case letter when the strategy
+  row lists lettered cases `(a)`, `(b)`, …:
+
+  | Strategy id | Case | Kind | Resolves to |
+  |---|---|---|---|
+
+  `Kind` is exactly one of `test`, `predicate`, `deploy-time`. A `test`
+  row's `Resolves to` is the collectable test node id
+  (`<path>::<test name>`); a `predicate` row's is the shell predicate that
+  discharges it; a `deploy-time` row's is the deploy-validate step and the
+  probe that discharges it. `Case` is the letter, or `-` for an id with no
+  lettered cases. The lead writes the first two columns at Step 5; the dev
+  writes the last two before QA handoff. A case letter with no row, or a
+  `test` row whose node is not on disk, fails gate-validation Check 21.
+
 ### Story-AC Out-of-Scope Declaration Rule
 
 When a Day-0 survey enumerates more targets than the selected lane
@@ -604,6 +635,15 @@ strategy. Steps 1a–2 below otherwise proceed.
    zero. Write its findings under a path that does NOT share the stories series'
    `s<N>/stories-adversarial-p` prefix — Check 24 globs that prefix, and a
    verdict-less one-shot swept into the series fails rung A.
+3. **Bind every strategy case to a story row.** For each test id the
+   repaired strategy assigns to a story, write its rows into that story's
+   `## Strategy Test IDs` table (Pre-Flight Checklist item (c)): the id, and
+   one row per lettered case the strategy row lists, `Kind` and
+   `Resolves to` left for the dev. A lettered case exists only in the
+   strategy's prose until this row names it, and nothing later can ask for
+   a test the story file never listed. Count the case letters in the
+   strategy and the rows across the story files; the two counts are equal
+   before this step ends.
    **When done, immediately proceed to Commit Planning Artifacts:**
 
 ### 6. Commit Planning Artifacts
