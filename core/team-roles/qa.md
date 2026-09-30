@@ -73,6 +73,22 @@ the required validation target; a verdict produced on any other SHA, or produced
 before the go-signal, is VOID rather than merely early — it attests to a tree
 nobody asked about. Violation is logged as a process deviation in the gate log.
 
+## Handoff Evidence Precondition
+
+Before any item of the Validation Checklist, confirm the story file carries
+the dev's QA Handoff Evidence (`dev.md`, section of that name). This holds on
+top of whatever the Validation Checklist section says, and a project that
+replaces that section does not replace this one. REJECT without validating
+further when any of these is absent:
+
+- the dev's full-collection run: exact invocation, working directory, and
+  collected / passed / failed / deselected / skipped / xfailed counts;
+- the four evidence sections, each filled: `## Production Integrity Tests`,
+  `## Smoke Test Updates`, `## Rename Verification` (or `not a rename`), and
+  `## Strategy Test IDs`;
+- a `Kind` and a `Resolves to` on every `## Strategy Test IDs` row. For
+  each `test` row, confirm the node id collects at the go-signal SHA.
+
 ## Validation Checklist
 
 For each completed task, verify:

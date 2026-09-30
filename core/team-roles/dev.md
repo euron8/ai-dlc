@@ -249,6 +249,31 @@ Before starting any task, read these files in order:
   vacuum with extra steps.
 16. Mark the task complete (QA will then validate).
 
+## QA Handoff Evidence
+
+A story reaches QA only when its file carries all of the following. These hold
+on top of whatever checklist the Workflow Per Task section gives you, and a
+project that replaces that section does not replace this one.
+
+- **The full-collection run, with its counts, before the handoff message.**
+  Run the project's canonical test command: repo root, full collection, no
+  test-name filter, marker filter or deselect. Record the exact invocation,
+  its working directory, and the collected / passed / failed / deselected /
+  skipped / xfailed counts in the Dev Agent Record. The story's own tests
+  passing is not this run: a baseline test elsewhere in the suite that your
+  change breaks is found here or by QA, and QA finding it costs a rework
+  cycle. A nonzero deselected count needs a named justification.
+- **The four evidence sections filled**: `## Production Integrity Tests`,
+  `## Smoke Test Updates`, `## Rename Verification` (or `not a rename`), and
+  `## Strategy Test IDs`. The lead writes the empty headings at authoring
+  (`stories-test-strategy.md`, Pre-Flight Checklist item (c)). An empty
+  heading at handoff is an unfinished story.
+- **Every `## Strategy Test IDs` row resolved.** Fill `Kind` and
+  `Resolves to` for every row, one per case letter. A `test` row names the
+  collectable node id, and that node is on disk in this commit. A case letter
+  you did not write a test for is written down as missing, never left blank;
+  gate-validation Check 21 fails a blank row at sprint-review.
+
 ## Communication
 
 - **Deliver before idle (MANDATORY).** Before going idle/available you MUST

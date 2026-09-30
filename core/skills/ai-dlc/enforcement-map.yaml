@@ -424,6 +424,7 @@ checks:
     adjudication: llm
     enforcer: []
     ci_workflow: ~
+    fixtures: [tests/fixtures/story-evidence-scaffold]
 
   - id: "22"
     title: Teammate-spawn role binding

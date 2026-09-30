@@ -1621,18 +1621,34 @@ so a future graph reconciliation does not re-flag it as new.
 test-strategy deliverable (`stories-test-strategy.md` Step 5). Skips
 sprints with no test-strategy artifact.
 
-**Check.** For EVERY test the test strategy names as a required
-deliverable, confirm BOTH: (a) a matching test exists on disk at the
-path/identifier the strategy names — resolved by grep/collection, not by
-the presence of the name in prose; AND (b) that test is cited from a Dev
-Agent Record (the DAR names the test and its PASS run). A test named in
-the strategy but absent on disk, or present on disk but never cited from
-a DAR, FAILS this check. Fail-closed: a test-strategy deliverable that
-cannot be resolved to a named-and-cited test is a gap, not a pass.
+**Citation set.** The citation set is each story file's
+`## Strategy Test IDs` table, in the shape `stories-test-strategy.md`'s
+Story-Authoring Pre-Flight Checklist item (c) prescribes:
 
-**PASS:** every strategy-named test resolves to an on-disk test cited
-from a DAR. **FAIL:** any named test is missing on disk OR present but
-uncited, OR the strategy names tests but no DAR citation set exists.
+| Strategy id | Case | Kind | Resolves to |
+|---|---|---|---|
+
+A Dev Agent Record's prose mention of a test is not a citation.
+
+**Check.** For EVERY test id the test strategy names as a required
+deliverable, and for every lettered case `(a)`, `(b)`, … its strategy row
+lists, confirm: (a) a `## Strategy Test IDs` row exists for that id and
+that case letter; (b) for a `test` row, the node id in `Resolves to`
+exists on disk — resolved by grep/collection of that node, not by the
+presence of the name in prose; (c) for a `predicate` or `deploy-time`
+row, `Resolves to` names the predicate or the deploy-validate step that
+discharges it. A case letter with no row, a `test` row whose node is not
+on disk, or a row whose `Resolves to` is empty FAILS this check.
+Fail-closed: a test-strategy deliverable that cannot be resolved to a
+named-and-cited test is a gap, not a pass.
+
+**PASS:** every strategy id and every lettered case resolves through a
+`## Strategy Test IDs` row, each `test` row to an on-disk node. **FAIL:**
+any case letter has no row, any `test` row's node is missing on disk, OR
+the strategy names tests but no story carries the table. **SKIP, saying
+so:** the strategy artifact exists but carries no test-id table, so
+there is no id set to resolve. Record the SKIP with that reason; it is
+never a PASS.
 
 **Minimum mechanism (Rule 26(c)).** Failure caught: a test the strategy
 promised that was never written (or was written but never run/cited), so
