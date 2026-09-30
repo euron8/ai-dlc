@@ -2380,6 +2380,9 @@ while IFS= read -r f; do
   extends="$(unquote "$(fm "$f" extends)")"
   ext_ancs=""
   if [ -n "$extends" ]; then
+    _sp_rc=0; _sp_v="$(shadow_parts "$extends")" || _sp_rc=$?
+    [ "$_sp_rc" -eq 0 ] || ld_refuse_staging "the extends: parts of ${entry}" "$_sp_rc"
+    ld_stage "$LD_T/ext-parts" "$_sp_v" "the extends: parts of ${entry}"
     while IFS= read -r ext_line; do
       [ -n "$ext_line" ] || continue
       ext_file="$(printf '%s' "$ext_line" | cut -f1)"
@@ -2391,13 +2394,14 @@ while IFS= read -r f; do
       if [ "$ext_file" != "$hooks" ] || [ -z "$ext_anc" ]; then ext_ancs=""; break; fi
       ext_ancs="${ext_ancs}${ext_anc}
 "
-    done <<<"$(shadow_parts "$extends")"
+    done < "$LD_T/ext-parts"
   fi
 
   if git -C "$DIST" diff --quiet "$BASE" "$THEIRS" -- "$cp" 2>/dev/null; then
     emit EXTENSION-OK "$entry" "$hooks" "hooked core file unchanged"
   elif [ -n "$ext_ancs" ]; then
     ext_missing=""; ext_moved=""; ext_all=""
+    ld_stage "$LD_T/ext-ancs" "$ext_ancs" "the extends: anchors of ${entry}"
     while IFS= read -r ext_anc; do
       [ -n "$ext_anc" ] || continue
       ext_all="${ext_all}${ext_all:+, }'${ext_anc}'"
@@ -2408,7 +2412,7 @@ while IFS= read -r f; do
       fi
       ext_old="$(git_show "$BASE" "$cp" | section_of "$ext_anc")"
       [ "$ext_old" = "$ext_new" ] || ext_moved="${ext_moved}${ext_moved:+, }'${ext_anc}'"
-    done <<<"$ext_ancs"
+    done < "$LD_T/ext-ancs"
     if [ -n "$ext_missing" ]; then
       emit EXTENSION-ANCHOR-MISSING "$entry" "$hooks" \
         "declares extends: ${ext_missing}, which resolves to NO heading in '$hooks' at ${THEIRS}. Upstream renamed or removed the section this entry augments, so there is no longer a span to narrow drift to — and an anchor that resolves to nothing would otherwise compare empty against empty and report clean forever. Re-anchor extends: to the heading that replaced it, or retire the entry if the section was absorbed away."

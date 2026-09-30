@@ -290,7 +290,8 @@ fi
 # M5 — the BL-085 regression on the classifier side: only the FIRST declared span is read, which
 # is what `shadow_parts … | head -1` did before several anchors were allowed. multi declares Gamma
 # first, Gamma never moves, so multi goes quiet in run 1 — and that is the ONLY cell that moves.
-if m="$(mk_mutant m5-first-span-only "$DRIFT_BN" 's|^    done <<<"[$](shadow_parts "[$]extends")"$|    done <<<"$(shadow_parts "$extends" \| head -1)"|')"; then
+# Anchored on the staged capture of the parts, which the loop below reads.
+if m="$(mk_mutant m5-first-span-only "$DRIFT_BN" 's|^    _sp_rc=0; _sp_v="[$](shadow_parts "[$]extends")" [|][|] _sp_rc=[$]?$|    _sp_rc=0; _sp_v="$(shadow_parts "$extends" \| head -1)" \|\| _sp_rc=$?|')"; then
   expect m5-first-span-only \
     "reading only the first declared span lets the entry's second span move in silence, and nothing else in the table changes" \
     "$m" \
