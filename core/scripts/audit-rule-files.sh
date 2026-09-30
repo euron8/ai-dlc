@@ -13,7 +13,8 @@ set -euo pipefail
 #
 # exit 0 = no finding at or above the selected fail threshold
 # exit 1 = at least one such finding
-# exit 2 = usage or environment error
+# exit 2 = usage or environment error, including a present `core-paths.sh` whose
+#          `--list` times out, fails or answers empty (ownership cannot be scored)
 #
 # Layout is autodetected. A consumer keeps its rule files under `.claude/`; the
 # distribution keeps the same files under `core/`. Both are scanned by the same
@@ -139,15 +140,35 @@ def core_globs():
     if not os.path.isfile(RESOLVER):
         _globs = []
         return None
+    # A PRESENT RESOLVER THAT FAILS TO ANSWER REFUSES THE AUDIT (exit 2); it never
+    # degrades to `unknown`. `unknown` is for a resolver that is not there -- a
+    # packaging fact the fail-closed path below owns. A stall, a crash or an empty
+    # answer is a fault in THIS run, and scoring every owner `unknown` over it turned
+    # a timed-out `--list` into a sheet of ownership findings nothing attributed to
+    # the timeout. Refusing names the cause; a finding count cannot.
+    def _refuse(cause):
+        sys.stdout.flush()
+        sys.stderr.write(
+            f"audit-rule-files: FAIL — cannot derive the core-glob list: {cause}.\n"
+            "  Ownership of every finding depends on that list. Scoring owners without\n"
+            "  it would report each finding as unresolved and gate on a fault rather than\n"
+            "  on the corpus, so the audit refuses instead of reporting.\n")
+        sys.exit(2)
     try:
         r = subprocess.run(["bash", RESOLVER, "--list"],
                            capture_output=True, text=True, timeout=30)
-        # exit 2 = unparseable manifest. An empty stdout on exit 0 is equally
-        # unusable, and both must reach the caller as "cannot answer".
-        _globs = [l.strip() for l in r.stdout.splitlines() if l.strip()] if r.returncode == 0 else []
-    except Exception:                               # noqa: BLE001 — report, never swallow
-        _globs = []
-    return _globs or None
+    except subprocess.TimeoutExpired as e:
+        _refuse(f"`core-paths.sh --list` timed out after {e.timeout}s")
+    except Exception as e:                          # noqa: BLE001 — report, never swallow
+        _refuse(f"`core-paths.sh --list` could not run ({type(e).__name__}: {e})")
+    # exit 2 = unparseable manifest. An empty stdout on exit 0 is equally
+    # unusable, and both are refusals, never an empty glob set.
+    if r.returncode != 0:
+        _refuse(f"`core-paths.sh --list` exited {r.returncode}")
+    _globs = [l.strip() for l in r.stdout.splitlines() if l.strip()]
+    if not _globs:
+        _refuse("`core-paths.sh --list` exited 0 with no globs")
+    return _globs
 
 
 def owner(path):
