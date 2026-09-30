@@ -1212,6 +1212,18 @@ fi
 # subject replaced by `exit 0` fails them by construction rather than passing as a clean absence.
 T_SECT() { awk '/Template pre-classification/{f=1;next} f&&/^\*\*/{exit} f' "$1"; }
 
+# t_stage <region-file> <emit-report.sh> — render into a STAGED FILE and return the producer's own
+# status, never `T_SECT <(bash …)`. A process substitution discards the producer's exit, and under
+# concurrent bash 3.2 workers the reader's open of `/dev/fd/63` can fail with EBADF (BL-230: 3-8 in
+# 2000 under 4 workers, 0 staged, the same race 0.647.0 removed from the engine). Either way the
+# section read EMPTY, and an empty section is what a CONTROL scores as "the copy rendered no rows" —
+# a verdict about emit-report.sh for a failure that was the fixture's own read. Stderr goes to
+# `<region-file>.stderr` so a refusal can quote it; a healthy render exits 0 in every world these
+# sites drive (the two refusal worlds included — they render DETECTOR-REFUSED at rc 0).
+t_stage() { bash "$2" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$1" 2> "$1.stderr"; }
+# t_stage_why <region-file> <rc> — the refusal text: the status and the producer's last stderr line.
+t_stage_why() { printf 'exited %s (%s)' "$2" "$(grep -v '^[[:space:]]*$' "$1.stderr" 2>/dev/null | tail -1 | cut -c1-160)"; }
+
 # THE BATTERY RENDERS ITS OWN REGION, and that is not tidiness. `$REGION` was rendered by seed.sh
 # before assertions 12-14 seeded a ledger and two shadowed forks into `$CONSUMER`, so a `--verify`
 # against it FAILS on those sections — correctly, and for a reason A4 does not own. MEASURED: A4
@@ -1338,15 +1350,25 @@ t_refuse_world() { # t_refuse_world <dir> <shape> -> builds a reconcile copy, pr
   esac
 }
 t_refuse_check() { # t_refuse_check <label> <shape> <what-the-shape-is>
-  local d="$WORK/tpl-refuse-$2" ctl mut
+  local d="$WORK/tpl-refuse-$2" ctl mut s_rc
   t_refuse_world "$WORK/tpl-refuse-ctl-$2" none || { bad "$1 could not build the control sandbox"; return; }
-  ctl="$(T_SECT <(bash "$WORK/tpl-refuse-ctl-$2/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null))"
+  s_rc=0; t_stage "$WORK/tpl-refuse-ctl-$2.region" "$WORK/tpl-refuse-ctl-$2/emit-report.sh" || s_rc=$?
+  if [ "$s_rc" -ne 0 ]; then
+    bad "FIXTURE BROKEN — $1 CONTROL's unmutated render $(t_stage_why "$WORK/tpl-refuse-ctl-$2.region" "$s_rc"), so neither the control nor the refusal assertion below was read"
+    return
+  fi
+  ctl="$(T_SECT "$WORK/tpl-refuse-ctl-$2.region")" || { bad "FIXTURE BROKEN — $1 could not read its staged CONTROL region"; return; }
   if ! grep -q 'TEMPLATE-PROSE-MERGE' <<<"$ctl"; then
     bad "$1 CONTROL the UNMUTATED sandbox copy rendered no TEMPLATE-PROSE-MERGE row, so the refusal assertion below would pass for a sandbox that simply died"
     return
   fi
   t_refuse_world "$d" "$2" || { bad "$1 could not build the $2 sandbox"; return; }
-  mut="$(T_SECT <(bash "$d/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null))"
+  s_rc=0; t_stage "$d.region" "$d/emit-report.sh" || s_rc=$?
+  if [ "$s_rc" -ne 0 ]; then
+    bad "FIXTURE BROKEN — $1 the $2 sandbox's render $(t_stage_why "$d.region" "$s_rc"), so whether it renders DETECTOR-REFUSED was not read"
+    return
+  fi
+  mut="$(T_SECT "$d.region")" || { bad "FIXTURE BROKEN — $1 could not read the $2 sandbox's staged region"; return; }
   if grep -q 'DETECTOR-REFUSED' <<<"$mut" && ! grep -qx 'none' <<<"$mut" && ! grep -q 'TEMPLATE-' <<<"$mut"; then
     ok "$1 $3 renders DETECTOR-REFUSED and NOT 'none' (control: the unmutated copy beside it renders the real rows)"
   else
@@ -1505,9 +1527,14 @@ fi
 # CONTROL FIRST: an UNMUTATED copy in a fresh directory renders the four rows. Two inert runs
 # compare equal, so without this every kill below could be a battery comparing nothing to nothing.
 T_CTL="$TMD/ctl"; rm -rf "$T_CTL"; cp -R "$(dirname "$EMIT")" "$T_CTL"
-t_ctl_sec="$(T_SECT <(bash "$T_CTL/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null))"
-t_ctl_rows="$(grep -c 'TEMPLATE-PROSE-MERGE\|TEMPLATE-JSON-MERGE\|TEMPLATE-UNCHANGED-NOOP\|CONSUMER-MISSING-NOOP' <<<"$t_ctl_sec")" || t_ctl_rows=0
-if [ "$t_ctl_rows" -eq 4 ]; then
+t_ctl_rc=0; t_stage "$T_CTL.region" "$T_CTL/emit-report.sh" || t_ctl_rc=$?
+t_ctl_sec=""; t_ctl_rows=0
+if [ "$t_ctl_rc" -eq 0 ] && t_ctl_sec="$(T_SECT "$T_CTL.region")"; then
+  t_ctl_rows="$(grep -c 'TEMPLATE-PROSE-MERGE\|TEMPLATE-JSON-MERGE\|TEMPLATE-UNCHANGED-NOOP\|CONSUMER-MISSING-NOOP' <<<"$t_ctl_sec")" || t_ctl_rows=0
+fi
+if [ "$t_ctl_rc" -ne 0 ]; then
+  bad "FIXTURE BROKEN — CONTROL(T)'s unmutated render $(t_stage_why "$T_CTL.region" "$t_ctl_rc"), so its row count was not read and every mutant verdict below is unreadable"
+elif [ "$t_ctl_rows" -eq 4 ]; then
   ok "CONTROL(T) an unmutated copy of reconcile/ in a fresh directory renders all four step-3b rows, so a mutant's changed section is the mutation and not the copy"
 else
   bad "CONTROL(T) the unmutated copy rendered $t_ctl_rows step-3b row(s), not 4 — every mutant verdict below is unreadable, because a copy that never ran renders nothing and that is what a kill looks like"
@@ -2518,7 +2545,18 @@ if [ "$(printf '%s\n' "$B2_N" | grep -c .)" -eq 0 ]; then
 elif [ "$B2_F" = "$B2_N" ]; then
   ok "B2 the flag changes who PAID and not what is answered: flagged and standalone scans agree row-for-row on this fixture's own tree, with the row set asserted non-empty first"
 else
-  bad "B2 the flagged and standalone scans DISAGREE, so the rendered region depends on which caller ran the scan: $(diff <(printf '%s\n' "$B2_N") <(printf '%s\n' "$B2_F") | head -4 | tr '\n' '|')"
+  # The two sides are STAGED and diff's status read: a `<( )` pair here lost diff's exit, so a diff
+  # that could not compare printed an empty sample beside the verdict, reading as "no difference".
+  b2_rc=0
+  { printf '%s\n' "$B2_N" > "$WORK/b2-standalone.rows" && printf '%s\n' "$B2_F" > "$WORK/b2-flagged.rows"; } || b2_rc=staging-failed
+  if [ "$b2_rc" = 0 ]; then
+    diff "$WORK/b2-standalone.rows" "$WORK/b2-flagged.rows" > "$WORK/b2.diff" 2>&1 || b2_rc=$?
+  fi
+  case "$b2_rc" in
+    0|1) b2_why="$(head -4 "$WORK/b2.diff" | tr '\n' '|')" ;;
+    *)   b2_why="(the two row sets could not be diffed: $b2_rc — the disagreement above is decided, its lines are not shown)" ;;
+  esac
+  bad "B2 the flagged and standalone scans DISAGREE, so the rendered region depends on which caller ran the scan: $b2_why"
 fi
 # =========================================================================================
 # MUTANTS FOR THE WORLD GUARDS
