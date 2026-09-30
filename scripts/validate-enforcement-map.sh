@@ -611,7 +611,16 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   3146-3146), every other arm within one. Whole-validator wall clock, interleaved, 3 reps:
 #   before 37.46/26.78/28.97s, after 35.04/28.34/26.46s. HIGH reading 3146 plus the usual 6;
 #   the window 3146..4494 is open.
-FORK_BUDGET=3152
+#
+#   RAISED TO 3174 FOR TWO NEW SUBJECTS, NEITHER A RE-READ. `--stable` by arm in ONE clean
+#   worktree at the same path, base `origin/main` 7d5ad755 then the 0.667.0 tip: base 3149
+#   (spread 3147-3149), tip 3168 (spread 3166-3168), so +19. I116 +10 is new: a shipping
+#   fixture's sibling-fixture dependency, read from every fixture's `run.sh`/`seed.sh` in one awk
+#   pass plus its self-probe. I75 +10 is one more subject: `validate-request-coverage.sh` now
+#   carries the inline root block (BL-327), and I75 hashes each copy's chain once. Every other arm
+#   within one. Whole-validator wall clock, interleaved, 3 reps: base 21/21/20s, tip 21/22/22s.
+#   HIGH reading 3168 plus the usual 6; the window 3168..4525 is open.
+FORK_BUDGET=3174
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
