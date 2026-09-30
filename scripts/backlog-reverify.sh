@@ -38,7 +38,9 @@
 #   HAND-REVIEW      the entry declares `verify: manual` -- no mechanical predicate by design.
 #   NEEDS-REVIEW     the RECEIPT is at fault, never the entry. The DETAIL names which:
 #                    `unresolved:` (no receipt, unknown verb, malformed line, missing path,
-#                    or an `sh` receipt that exited 9 -- its own could-not-measure code)
+#                    an `sh` receipt that exited 9 -- its own could-not-measure code -- or
+#                    one that exited 1/2/127 while ITS OWN SHELL reported `command not
+#                    found`, `syntax error` or `No such file or directory`; see cant_measure)
 #                    or `vacuous predicate:` (a substring that cannot discriminate).
 #   INPUT-UNRESOLVED an ARGUMENT does not resolve. Run-scoped, not entry-scoped. This row
 #                    exists because that state used to be spelled as zero rows and rc=0,
@@ -90,11 +92,34 @@ if [ ! -f "$LIB" ]; then
   printf 'INPUT-UNRESOLVED\t%s\tunresolved: reconcile/lib.sh is missing, so the entry-boundary rule cannot be loaded. Refusing to fall back to a private copy of that grammar -- the two copies this replaced drifted within one release. Nothing was re-verified.\n' "$LIB"
   exit 0
 fi
+# WHAT lib.sh ADDS TO THIS SHELL IS DERIVED, NOT LISTED, SO A RECEIPT CAN BE RUN WITHOUT IT (BL-382).
+# Sourcing lib.sh builds a memo directory and EXPORTS `AI_DLC_RECONCILE_MEMO`, sets four more
+# memo/level variables, and defines some thirty functions -- a shadow `trap` among them. Every
+# `sh` receipt below was evaluated in that shell, so a receipt driving any reconcile script
+# (`preclassify.sh`, a fixture that runs one) BORROWED THIS ENGINE'S MEMO: measured on BL-308's
+# receipt, a cached rename status defeated its own `--no-renames` mutant, exit 1 through the
+# engine and 0 alone -- a fixed entry held STILL-LIVE. So both sets are snapshotted either side
+# of the source and removed inside each receipt's subshell (never here: the engine's own memo
+# and its EXIT cleanup stay intact). `AI_DLC_RECONCILE_MEMO` is ALSO named outright, because a
+# CALLER that already exported one (`backlog-rotate.sh` drives this engine as a child; any
+# orchestrator can) puts it in the BEFORE snapshot, where a diff alone would never remove it.
+_rv_added() { # <before> <after> -- the names in <after> absent from <before>, space-joined
+  printf '%s\n--\n%s\n' "$1" "$2" | awk '/^--$/ { p = 1; next } !p { s[$0] = 1; next } !($0 in s) { printf "%s ", $0 }'
+}
+_rv_pre_v="" _rv_pre_f=""
+_rv_pre_v="$(compgen -v)"; _rv_pre_f="$(compgen -A function)"
 # shellcheck source=../core/skills/ai-dlc-update/reconcile/lib.sh
 . "$LIB" || {
   printf 'INPUT-UNRESOLVED\t%s\tunresolved: reconcile/lib.sh could not be sourced. Nothing was re-verified.\n' "$LIB"
   exit 0
 }
+LIB_VARS="AI_DLC_RECONCILE_MEMO $(_rv_added "$_rv_pre_v" "$(compgen -v)")"
+LIB_FNS="$(_rv_added "$_rv_pre_f" "$(compgen -A function)")"
+unset _rv_pre_v _rv_pre_f
+case " $LIB_FNS " in
+  *" ai_dlc_memo_dir "*) ;;
+  *) printf 'INPUT-UNRESOLVED\t%s\tunresolved: the functions reconcile/lib.sh added could not be derived (ai_dlc_memo_dir is not among them), so receipts cannot be run without its state. Nothing was re-verified.\n' "$LIB"; exit 0 ;;
+esac
 
 # Split the ledger into one record per entry: LABEL <TAB> CLOSED <TAB> RECEIPT
 # CLOSED is 1 when the entry carries the annotation FORM `**LANDED (v` -- the form, never the
@@ -168,6 +193,51 @@ fi
 
 emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3"; }
 
+# A RECEIPT THAT EXITS NON-ZERO HAVING MEASURED NOTHING IS NOT A REPRODUCTION (BL-089, second
+# subject). The eval's stderr used to go to /dev/null, so `receipt_path_tokens: command not
+# found` (BL-081's receipt, after its helper moved one line above a `sed` range) and a fragment
+# that dies at eval time (BL-066's) read STILL-LIVE in the same words as a live defect.
+#
+# cant_measure <rc>, stderr on stdin: prints why the receipt could not measure, or nothing.
+# ONLY THE RECEIPT'S OWN INTERPRETER COUNTS. `eval` runs inside this script, so bash prefixes
+# its own diagnostics with `$0: line N:` or `$0: eval: line N:`; a subject's diagnostics carry
+# ITS name (`cat:`, `bash:`, `./x.sh: line N:`). That prefix is what separates "the receipt's
+# shell could not run it" from "the subject failed, which may be the defect". Matched as a
+# quoted `case` literal, never a regex: `$0` is a path and carries metacharacters.
+#
+# THE NARROWING, MEASURED BEFORE THIS SHIPPED. Candidates were exit 127 on any stderr, and exit
+# 1/2/127 with `command not found`, `syntax error` or `No such file or directory` anywhere. The
+# census ran every live receipt through the engine and every archived one through
+# `--closed-receipts`, logging rc and stderr per receipt; see the CHANGELOG entry for the rows.
+# Unprefixed matching is refused: a subject that prints `No such file` and exits 1 is exactly
+# how several receipts OBSERVE their defect, so that route would hide live entries. Exit 127
+# alone is refused for the same reason from the other side -- `bash "$subject"` returns 127
+# when the SUBJECT calls a helper it does not ship, which is a defect a receipt may be
+# asserting. `unbound variable` is not routed: the engine's `set -u` reaches receipts, and
+# widening to it is a separate decision.
+SELF_NAME="$0"
+cant_measure() {
+  local rc="$1" line msg
+  case "$rc" in 1|2|127) ;; *) return 0 ;; esac
+  while IFS= read -r line; do
+    case "$line" in
+      "$SELF_NAME: line "*|"$SELF_NAME: eval: line "*) ;;
+      *) continue ;;
+    esac
+    case "$line" in
+      *": command not found"|*"syntax error"*|*": No such file or directory")
+        msg="${line#"$SELF_NAME: "}"
+        msg="${msg//	/ }"
+        printf "its own shell reported '%s'" "$(printf '%s' "$msg" | cut -c1-200)"
+        return 0 ;;
+    esac
+  done
+  return 0
+}
+
+ERRF="$(mktemp)" || { printf 'INPUT-UNRESOLVED\t-\tunresolved: mktemp failed, so a receipt that could not run could not be told from one that reproduced. Nothing was re-verified.\n'; exit 0; }
+trap 'rm -f "$ERRF"' EXIT
+
 # `read` on a here-string, never a pipe: an assignment made in a pipeline's last stage is lost
 # to a subshell, and `grep -q` fed from a pipe answers with the WRITER's EPIPE status.
 while IFS="$(printf '\t')" read -r LABEL CLOSED RECEIPT; do
@@ -235,17 +305,34 @@ while IFS="$(printf '\t')" read -r LABEL CLOSED RECEIPT; do
       # words as a genuine reproduction. It routes to NEEDS-REVIEW -- the receipt is at fault,
       # never the entry -- and to NOTHING ELSE: HAND-REVIEW is what backlog-rotate.sh treats as
       # permission to move an annotated entry, and CLOSE-CANDIDATE proposes the close outright,
-      # so either would turn "I could not tell" into a false close. Only 9 is special. 126, 127
-      # and every other non-zero stay STILL-LIVE: a command that vanished is not the receipt's
-      # own could-not-measure signal, and widening this to them is a separate decision.
+      # so either would turn "I could not tell" into a false close. 9 is the receipt's own
+      # signal; the stderr rule below is the SECOND could-not-measure route, and 126 and every
+      # other non-zero still read STILL-LIVE.
       # Stdin is closed: this loop's own stdin is the rest of the ledger, which a receipt
       # reading stdin (`cat >/dev/null`) would consume, dropping every later entry's row.
-      ( cd "$REPO_ROOT" && eval "$REST" </dev/null ) >/dev/null 2>&1
+      # lib.sh's variables and functions are removed INSIDE the subshell (BL-382, see where
+      # LIB_VARS is derived); the engine's own memo is untouched.
+      if ! : > "$ERRF"; then
+        emit "NEEDS-REVIEW" "$LABEL" "unresolved: the receipt's stderr file could not be truncated, so a could-not-measure exit could not be told from a reproduction. It was NOT evaluated."
+        continue
+      fi
+      # shellcheck disable=SC2086 # the two lists are names, space-joined; the split is the point
+      ( unset $LIB_VARS; unset -f $LIB_FNS; cd "$REPO_ROOT" && eval "$REST" </dev/null ) >/dev/null 2>"$ERRF"
       SH_RC=$?
+      SH_WHY=""
+      if [ "$SH_RC" -ne 0 ] && [ "$SH_RC" -ne 9 ]; then
+        if [ ! -r "$ERRF" ]; then
+          SH_WHY="its stderr file is unreadable after the run"
+        else
+          SH_WHY="$(cant_measure "$SH_RC" < "$ERRF")"
+        fi
+      fi
       if [ "$SH_RC" -eq 0 ]; then
         emit "CLOSE-CANDIDATE" "$LABEL" "sh receipt exited 0 -- the fix is present. Operator confirms and annotates."
       elif [ "$SH_RC" -eq 9 ]; then
         emit "NEEDS-REVIEW" "$LABEL" "unresolved: the sh receipt exited 9, which is the receipt reporting that it cannot measure its subject -- a precondition it relies on has moved. That is not a verdict on the entry; repair the receipt, then re-run."
+      elif [ -n "$SH_WHY" ]; then
+        emit "NEEDS-REVIEW" "$LABEL" "unresolved: the sh receipt exited $SH_RC having measured nothing -- $SH_WHY. The receipt's own shell could not run it, which is not a verdict on the entry; repair the receipt, then re-run."
       else
         emit "STILL-LIVE" "$LABEL" "sh receipt exited non-zero -- still reproduces here"
       fi
