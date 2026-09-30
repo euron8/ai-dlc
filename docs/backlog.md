@@ -2985,3 +2985,26 @@ reverify's own shell.
 
 verify: sh r=scripts/backlog-reverify.sh; [ -f "$r" ] || exit 9; d=$(mktemp -d) || exit 9; m="$d/memo"; mkdir "$m" || exit 9; printf '%s\n' '## BL-900 base' '' 'verify: sh exit 1' '' '## BL-901 probe' '' 'verify: sh [ -z "${AI_DLC_RECONCILE_MEMO:-}" ] && ! type ai_dlc_memo_dir >/dev/null 2>&1' > "$d/l.md" || exit 9; a=$(env -u AI_DLC_RECONCILE_MEMO bash "$r" "$d/l.md" 2>/dev/null); b=$(AI_DLC_RECONCILE_MEMO="$m" bash "$r" "$d/l.md" 2>/dev/null); for o in "$a" "$b"; do case "$o" in *STILL-LIVE*BL-900*) ;; *) exit 9 ;; esac; done; [ -d "$m" ] || exit 1; for o in "$a" "$b"; do case "$o" in *CLOSE-CANDIDATE*BL-901*) ;; *) exit 1 ;; esac; done; exit 0
 
+## BL-385 — a notarized artifact amended after MET moved silently: nothing read the disclosure, and the declaring record had no enforced shape
+
+**FIXED IN v0.669.0, pending the post-merge close.** Editing a notarized `SPEC.md` or sprint artifact after
+its series stamped `EXIT_CONDITION_MET` broke no gate: Check 30, Check 3b and `--cycle-state` all stayed
+green, and only K2 printed PENDING. Measured on the consumer: SPEC moved after MET in s314 (disclosed
+nowhere) and twice in s315 (disclosed in prose only). Check 24 arm J2 now compares the terminal MET pass's
+notarized file against the disk sha and requires either a chain of structured repair links
+(`artifact_sha_before -> artifact_sha_after`, the out-of-band residue and gate repairs the pipeline
+teaches) or one `REOPEN_AFTER_MET` record plus one verify pass for a scope change. Arm J's door now
+validates the record it cites; F5 checks `REOPEN_AFTER_MET` (sha moved, `scope_delta` present, and a
+`CAP-<n>`/`FR-S<N>-<n>` for SPEC.md). Cumulative documents (prd, product brief, architecture) are
+excluded. Stamp-gated at 0.669.0 on each series' FIRST pass. Consumer replay over 87 series: J2 PENDING
+on 10, FAIL on none; with the stamp bypassed it fails exactly the four the adversary's census
+predicted. J reclassifies two closed sprints: s303 coe and s307 architecture, whose authorizations
+F6 cannot find because the answering session's transcript is no longer on disk (answers are
+matchable; measured). `_gate-procedures.md` carries the amendment procedure; `remediator.md` and the
+gate-repair record gain the two sha fields.
+
+Discharges the consumer candidate
+`PC-S315-NO-AMENDMENT-PATH-FOR-A-NOTARIZED-ARTIFACT-AFTER-A-STORY-DECISION`, filed by the graph consumer
+session. Its headline premise, that an edit would break the notarization, was refuted by measurement.
+
+verify: sh unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; v=core/scripts/validate-adversarial-convergence.sh; [ -f "$v" ] || exit 9; d=$(mktemp -d) || exit 9; mkdir -p "$d/.claude" "$d/_bmad-output/planning-artifacts" || exit 9; sp() { printf '# SPEC\n\n## C\n\nrev %s\n' "$1"; }; sh1() { sp "$1" | shasum -a 256 | cut -d' ' -f1; }; ( cd "$d" && git init -q . && for s in "0.663.0 2026-09-29T09:00:00Z" "0.669.0 2026-09-29T10:00:00Z"; do printf 'version: %s\n' "${s% *}" > .claude/.ai-dlc-version && git add .claude/.ai-dlc-version && GIT_COMMITTER_DATE="${s#* }" GIT_AUTHOR_DATE="${s#* }" git -c user.email=r@x.invalid -c user.name=r -c commit.gpgsign=false -c core.hooksPath=/dev/null commit -q -m s || exit 1; done ) || exit 9; cell() { c="$d/_bmad-output/planning-artifacts/$1"; mkdir -p "$c" "$d/_bmad-output/specs/$1" || exit 9; a="$3"; [ -n "$a" ] || a="_bmad-output/specs/$1/SPEC.md"; sp 1 > "$d/$a"; printf '<!-- SKILL_INVOCATION_PROVENANCE v1\ninvoked_at: %s\nartifact: %s\nartifact_sha: %s\nfindings_critical: 0\nfindings_major: 0\nverdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$2" "$a" "$(sh1 1)" > "$c/x-adversarial-p1.md"; sp 2 > "$d/$a"; }; cell s1 2026-09-29T11:00:00Z; cell s2 2026-09-29T11:00:00Z; printf -- '- artifact: _bmad-output/specs/s2/SPEC.md\n- artifact_sha_before: %s\n- artifact_sha_after: %s\n- disposition: repaired\n- edit: SPEC.md:5\n- derivation: n/a\n' "$(sh1 1)" "$(sh1 2)" > "$d/_bmad-output/planning-artifacts/s2/gate-planning-repair-p1.md"; cell s3 2026-09-29T11:00:00Z _bmad-output/planning-artifacts/prd.md; cell s4 2026-09-29T09:30:00Z; r() { bash "$v" --series "$d/_bmad-output/planning-artifacts/$1/x-adversarial-p" 2>&1; }; o1=$(r s1); o2=$(r s2); o3=$(r s3); o4=$(r s4); rm -rf "$d"; case "$o1" in *"FAIL (J2 -- DRIFT)"*) : ;; *) exit 1 ;; esac; case "$o2$o3$o4" in *"FAIL (J2"*) exit 1 ;; esac; case "$o4" in *"PENDING (J2 -- DRIFT)"*) exit 0 ;; esac; exit 1
