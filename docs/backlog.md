@@ -4263,7 +4263,15 @@ absorbed into `V_REFUSE_OK`, which is derived from the engine's own seed render,
 nothing; `emit-report-refusal`'s A0 (the refusal set must be exactly `retired-layer-token.sh`) is
 the arm that catches the global case, by its assertion code, not yet driven against that stub.
 
-verify: manual
+The global half was bound at batch 174. The R6-BASE arm in `reconcile-emit-report` compares the
+derived `V_REFUSE_OK` against the fixed name `retired-layer-token.sh`. Its mutant renders the seed
+world through an engine copy whose `ledger-reverify.sh` refuses everywhere, runs it through the
+file's own derivation line, and is refused. **The V-N-only half is REWORDED, not resolved.** The
+message still opens `FIXTURE BROKEN`, because `emit-report-refusal` keys on that prefix. It now
+says that three refusals in a row from a shipped detector are an engine regression. No mutant
+scores that text.
+
+verify: sh f=core/fixtures/reconcile-emit-report/run.sh; [ -f "$f" ] || exit 9; grep -q '^V_REFUSE_OK=' "$f" || exit 9; grep -qx "R6_FIXED_OK='retired-layer-token.sh'" "$f" && grep -qxF 'if [ "$_r6_have" = "$R6_FIXED_OK" ]; then' "$f" && grep -qE '^elif ! _r6e="\$\(v_stub "\$EMIT" "\$_r6m" ledger-reverify\.sh\)"; then$' "$f"
 
 ## BL-339 — `emit-report-refusal` ships and depends on `reconcile-emit-report` shipping, and nothing binds the two
 
