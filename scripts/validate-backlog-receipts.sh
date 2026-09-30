@@ -181,6 +181,15 @@ PROVENANCE='detached checkout of HEAD'
 if [ "${1:-}" = "--score-one" ]; then
   REC="${2:-}"
   [ -n "$REC" ] || exit 2
+  # THE PARENT'S reconcile/lib.sh STATE IS REMOVED BEFORE ANY RECEIPT RUNS. The parent sources
+  # lib.sh, which EXPORTS `AI_DLC_RECONCILE_MEMO`, and this worker inherits it through the
+  # environment -- so every receipt below borrowed the parent's memo, and one driving a reconcile
+  # script read a cached answer (backlog-reverify.sh's BL-382, the same defect). Functions do not
+  # reach here: this is a fresh `bash`, and lib.sh's functions are not exported. The list is
+  # derived in the parent (BR_LIB_VARS, see where lib.sh is sourced) and removed ONCE, here, so
+  # every `eval` in this branch -- and any added later -- runs without it.
+  # shellcheck disable=SC2086 # a space-joined list of variable names, split on purpose
+  [ -n "${BR_LIB_VARS:-}" ] && unset $BR_LIB_VARS
   W="$BR_WORK"
   SR="$BR_SUBJECT_ROOT"
   n="$(basename "$REC")"
@@ -450,8 +459,20 @@ SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 
 LIB="$SELF_ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
 [ -f "$LIB" ] || { echo "$(me): FAIL -- reconcile/lib.sh missing; refusing to fall back to a private copy of the entry-boundary rule" >&2; exit 2; }
+# WHAT lib.sh EXPORTS IS DERIVED, NOT LISTED, SO A RECEIPT CAN BE RUN WITHOUT IT. The same shape
+# as scripts/backlog-reverify.sh's BL-382 fix, duplicated rather than shared: the two files source
+# lib.sh for its entry grammar and share no helper file of their own. The set is the EXPORTED
+# names new after the source, because only those reach a worker; `AI_DLC_RECONCILE_MEMO` is ALSO
+# named outright, because a CALLER that already exported one puts it in the BEFORE snapshot, where
+# a diff alone would never remove it. The worker unsets the list on entry.
+_br_added() { # <before> <after> -- the names in <after> absent from <before>, space-joined
+  printf '%s\n--\n%s\n' "$1" "$2" | awk '/^--$/ { p = 1; next } !p { s[$0] = 1; next } !($0 in s) { printf "%s ", $0 }'
+}
+_br_pre_e="$(compgen -e)"
 # shellcheck source=../core/skills/ai-dlc-update/reconcile/lib.sh
 . "$LIB" || { echo "$(me): FAIL -- cannot source $LIB" >&2; exit 2; }
+BR_LIB_VARS="AI_DLC_RECONCILE_MEMO $(_br_added "$_br_pre_e" "$(compgen -e)")"
+unset _br_pre_e
 
 DEFAULTED=0
 [ -n "$LEDGER" ] || { LEDGER="$SELF_ROOT/docs/backlog.md"; DEFAULTED=1; }
@@ -739,7 +760,7 @@ EOF
 
   BR_WORK="$WORK"; BR_SUBJECT_ROOT="$_sl_root"; BR_PATH_CLASS="$PATH_CLASS"
   BR_TOKAWK="$TOKAWK"; BR_GENERIC_SEED="${BR_GENERIC_SEED:-0}"
-  export BR_WORK BR_SUBJECT_ROOT BR_PATH_CLASS BR_TOKAWK BR_GENERIC_SEED BR_SENTINEL
+  export BR_WORK BR_SUBJECT_ROOT BR_PATH_CLASS BR_TOKAWK BR_GENERIC_SEED BR_SENTINEL BR_LIB_VARS
   find "$WORK/rec" -type f | sort | xargs -P "$JOBS" -n 1 bash "$SELF" --score-one
 
   # EVERY DISPATCHED RECEIPT MUST HAVE PRODUCED A VERDICT. A worker that died leaves no file,
