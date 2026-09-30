@@ -354,10 +354,21 @@ printf 'STABLE %s\n' "$N_STABLE"
 printf 'SPREAD %s\n' "$SPREAD"
 printf 'TARGET %s\n' "$TARGET"
 
+# THE BY-LINE SECTION IS A PREVIEW, AND IT SAYS SO ON THE HEADER LINE. `by-arm` below is
+# unbounded, so without a count the two sections read as the same run at two granularities
+# when only one of them is whole. Measured: the printed 60 rows summed into arm ranges gave
+# I82=642 where the untruncated file gives 657 -- byte-identical to the by-arm column -- and the
+# 15-fork gap was read as a real misattribution. `--dump <dir>` writes the whole file.
+BYLINE_MAX=60
+BYLINE_N="$(grep -c . "$RUN/by-line")" || BYLINE_N=0
 case "$SECTION" in
   by-line|all)
-    printf -- '--- forks-by-line ---\n'
-    head -60 "$RUN/by-line"
+    if [ "$BYLINE_N" -gt "$BYLINE_MAX" ]; then
+      printf -- '--- forks-by-line (TRUNCATED: %s of %s rows shown; --dump <dir> writes all) ---\n' "$BYLINE_MAX" "$BYLINE_N"
+    else
+      printf -- '--- forks-by-line (all %s rows) ---\n' "$BYLINE_N"
+    fi
+    awk -v max="$BYLINE_MAX" 'NR <= max' "$RUN/by-line"
     ;;
 esac
 case "$SECTION" in

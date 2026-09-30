@@ -3404,12 +3404,17 @@ only `tr` site in the range, negative control 0 — reports none). This entry is
 reader who hits both at once, as one did, reconciles the truncation artifact by blaming the
 attribution one and stops looking.
 
-**Receipt.** Keys on the emission site, not on prose about it, and not on the row counts — those
-move with the corpus. Scored before filing across four inputs: tip **1**, the section rewritten to
-`cat` **0**, a file mentioning `head -60 "$RUN/by-line"` only inside a comment **0**, a stub with
-no `forks-by-line` header **9**. Exit 9 if the profiler or that header is gone.
+**LANDED (v0.666.0, verified <sha>).** The section header now carries the row count, and says
+`TRUNCATED: 60 of <n> rows shown; --dump <dir> writes all` when it truncates, or `all <n> rows`
+when it does not.
 
-verify: sh f=scripts/fork-profile.sh; [ -f "$f" ] || exit 9; LC_ALL=C grep -q 'forks-by-line' "$f" || exit 9; LC_ALL=C grep -qE '^[[:blank:]]*head -[0-9]+ "\$RUN/by-line"' "$f" && exit 1; exit 0
+**Receipt.** The filed receipt keyed on a `head -60` spelling and was closable by `head -n 60`.
+This one RUNS the profiler: a seeded 70-fork target must print `TRUNCATED` with `60 of 70`, and
+a 5-fork target must NOT print `TRUNCATED` (so a header that always claims truncation fails).
+Scored: tip **0**, base `2e7c227c` **1**, a mutant printing the TRUNCATED header unconditionally
+**1**. Exit 9 if the profiler or the section header is gone.
+
+verify: sh f=scripts/fork-profile.sh; [ -f "$f" ] || exit 9; d=$(mktemp -d) || exit 9; { echo 'set -u'; i=0; while [ "$i" -lt 70 ]; do echo /usr/bin/true; i=$((i+1)); done; } > "$d/big.sh"; { echo 'set -u'; i=0; while [ "$i" -lt 5 ]; do echo /usr/bin/true; i=$((i+1)); done; } > "$d/small.sh"; big="$(bash "$f" --target "$d/big.sh" --section by-line 2>&1)"; small="$(bash "$f" --target "$d/small.sh" --section by-line 2>&1)"; rm -rf "$d"; printf '%s\n' "$big" | grep -q 'forks-by-line' || exit 9; printf '%s\n' "$big" | grep -qE 'forks-by-line.*TRUNCATED.*60 of 70' || exit 1; printf '%s\n' "$small" | grep -q 'TRUNCATED' && exit 1; exit 0
 
 
 ## BL-271 — no `PreToolUse` hook checks the artifact-path grammar, so a non-conforming path is created by `Write` and caught only at `pre-push`, after other artifacts have cited it
