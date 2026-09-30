@@ -1032,7 +1032,12 @@ prose is itself generated rather than composed.
    `reconcile/ledger-reverify.sh <dist-repo> <base-sha> <consumer-root> <theirs-ref>`.
    Step 8 APPENDS to the ledger; nothing ever closed it, so an entry upstream adopted stayed
    open forever and could be re-pushed. For each OPEN entry carrying a `verify:` line, this
-   re-runs the entry's own receipt against `theirs`:
+   re-runs the entry's own receipt against `theirs`; an OPEN id-keyed entry with NO `verify:`
+   line gets the naming query alone and emits only `NAMED-UPSTREAM(-AMBIGUOUS)`. An entry is a
+   `- **…**` bullet, a column-0 `**<id>** — …` record, or a `##`–`######` heading. The pull
+   that delivers this engine shows those rows in its own report unless the gate returned
+   `SELF-UPDATE-DEFER`; then they first appear on the following pull, or at the
+   `SELF-UPDATE-SAFE-STOP` ref:
    - `CLOSE-CANDIDATE` → the innovation is now present upstream / the defect no longer
      reproduces. **Report-only; never blocks `apply`** (a close touches no core and cannot
      lose data). The operator confirms and annotates at step 8 — the tool never edits the
@@ -1068,7 +1073,7 @@ prose is itself generated rather than composed.
      `NAMED-UPSTREAM`, **not closable** — it is a pointer to a reading, not a verdict.
    - `HAND-REVIEW` → the entry declares `verify: manual`. No mechanical predicate exists for
      it BY DESIGN; adjudicate the body against theirs. This is NOT an entry with no `verify:`
-     line — that emits no row at all.
+     line — that emits `NAMED-UPSTREAM` when upstream names its id, and no row otherwise.
    - `NEEDS-REVIEW` → the receipt is at fault. The DETAIL field opens with the cause; report
      them separately.
      - *unresolved* — the `verify:` line is malformed, its path resolves neither as given
@@ -1197,8 +1202,9 @@ prose is itself generated rather than composed.
    shipped engine already turns into `NEEDS-REVIEW`, so the guard degrades the receipt to a review
    instead of a false close.
 
-   An entry with NO `verify:` line emits no row and is left to hand-review as today; the
-   convention is opt-in and the ledger stays prose. The line is one of
+   An entry with NO `verify:` line gets no receipt verdict and is left to hand-review; only a
+   `NAMED-UPSTREAM` row can reach it, and it re-appears every pull until the entry is closed by
+   annotation. The convention is opt-in and the ledger stays prose. The line is one of
    `theirs_lacks <core-path> "<substr>"` (innovation upstream lacks),
    `theirs_has <core-path> "<substr>"` (defect present upstream), `sh <one-liner>`
    (exit 0 = still reproduces), or `manual`. A `theirs_*` line MAY carry more than one quoted
@@ -1235,7 +1241,7 @@ prose is itself generated rather than composed.
    **A PREDICATE IS ITS READ-SET, NOT ITS SCRIPT.** `predicate-sites.md` declares `reads:` — the
    script AND every schema whose content decides a verdict — because a script-only comparison is
    vacuous for a predicate that resolves a schema at runtime.
-   `core/scripts/validate-provenance-block.sh:16` says "THE SCHEMA IS NOT IN THIS FILE" in its own
+   `core/scripts/validate-provenance-block.sh` says "THE SCHEMA IS NOT IN THIS FILE" in its own
    header, and `v0.382.0` changed `core/schemas/provenance-block.json` while leaving that script
    BYTE-IDENTICAL. A script differential returns 0 there by construction rather than by
    measurement, which is the failure this step exists to catch.

@@ -1587,8 +1587,10 @@ EOF
 TV="$(theirs_show VERSION | tr -d '[:space:]')"
 [ -n "$TV" ] || TV="$THEIRS"
 
-# Extract (label<TAB>directive) for each OPEN entry carrying a verify: line. An entry is a
-# top-level `- **…**` bullet OR a `##`-`######` heading; either one ends the entry before it.
+# Extract (label<TAB>ordinal<TAB>directive) for each OPEN entry carrying a verify: line, plus
+# ONE `0/0` row (directive `-`) for each OPEN id-keyed entry carrying none -- that row reaches
+# the naming query and nothing else. An entry is a top-level `- **…**` bullet, a column-0
+# bare-bold `**<id>** — …` record, OR a `##`-`######` heading; any one ends the entry before it.
 # `ADOPTED UPSTREAM` anywhere in the entry marks it closed → skip. Piped into a while-read
 # loop rather than `mapfile` so it runs under bash 3.2 (macOS), like the sibling reconcile
 # classifiers.
@@ -1629,7 +1631,7 @@ corpus_labels() { # <ledger-file> -> one label per entry line
       if (ledger_entry_shape($0) == "") next
       if ($0 ~ /\(original text, retained for the record\)/) next
       l=$0
-      sub(/^#+[ \t]*/, "", l); sub(/^- \*\*/, "", l); sub(/\*\*.*/, "", l)
+      sub(/^#+[ \t]*/, "", l); sub(/^(- )?\*\*/, "", l); sub(/\*\*.*/, "", l)
       p=index(l, DASH); if (p > 0) l=substr(l, 1, p-1)
       sub(/[[:space:]]+$/, "", l); gsub(/`/, "", l)
       if (l != "") print l
@@ -1669,17 +1671,28 @@ ENTRIES="$(awk -v DASH=' — ' "$(ledger_entry_awk)"'
   # CLOSE-CANDIDATE row can no longer hide a STILL-LIVE one, and ledger-rotate.sh archives only on
   # an explicit `**ADOPTED UPSTREAM (v` annotation by the operator, so the close stays a human act taken
   # with every row in view.
+  #
+  # AN OPEN ID-KEYED ENTRY WITH NO RECEIPT EMITS ONE `0/0` ROW, AND THAT ROW REACHES ONLY THE NAMING
+  # QUERY. Upstream history naming an entry is a property of the ENTRY, not of its receipt, and the
+  # has_verify gate made every receipt-less entry invisible to it. Measured on the reference
+  # consumer: 14 open id-keyed entries carried no receipt, 12 of them named by upstream history,
+  # and all 14 emitted nothing. The filter is ledger_entry_id() -- the shared id rule -- so a
+  # prose-titled or all-caps non-id heading stays silent: feeding prose to `git log --grep`
+  # matches by common words. The loop below lets `0/0` emit NAMED-UPSTREAM(-AMBIGUOUS) and then
+  # skips the verb dispatch, so no receipt verdict is ever invented for it.
   function flush(){
     if (has_verify && !closed && label != "")
       for (di = 1; di <= dn; di++)
         printf "%s\t%s\t%s\n", label, di "/" dn, dv[di]
+    if (!has_verify && !closed && label != "" && ledger_entry_id(label) != "")
+      printf "%s\t%s\t%s\n", label, "0/0", "-"
     has_verify=0; closed=0; label=""; dn=0
   }
   {
     shape = ledger_entry_shape($0)
     if (shape == "bullet") {
       flush()
-      l=$0; sub(/^- \*\*/,"",l); sub(/\*\*.*/,"",l)
+      l=$0; sub(/^(- )?\*\*/,"",l); sub(/\*\*.*/,"",l)
       p=index(l, DASH); if (p > 0) l=substr(l, 1, p-1)
       sub(/[[:space:]]+$/,"",l)
       gsub(/`/,"",l); label=l
@@ -1792,7 +1805,7 @@ while IFS="$(printf '\t')" read -r label ord directive; do
   [ -n "$directive" ] || continue
   # Empty suffix for a single-receipt entry, so those rows are unchanged.
   case "$ord" in
-    1/1|"") RSFX="" ;;
+    1/1|0/0|"") RSFX="" ;;
     *)      RSFX=" [receipt $ord]" ;;
   esac
   verb="${directive%% *}"
@@ -1815,8 +1828,11 @@ while IFS="$(printf '\t')" read -r label ord directive; do
   # loses a distinct fact.
   # ONE ROW PER ENTRY, not per receipt: the name is a property of the entry, and repeating it once
   # per receipt would make a two-receipt entry read as two absorptions.
+  # AND FOR AN ENTRY WITH NO RECEIPT AT ALL (`0/0`, emitted by flush() for an open id-keyed
+  # entry): the name is the ONLY mechanical signal such an entry has, and this block is the only
+  # one its row reaches -- the `0/0` skip below the naming block keeps it out of the verb dispatch.
   na=""; nam=""
-  case "$ord" in 1/*|"") na="$(named_absorbed "$label")"; [ -n "$na" ] || nam="$(named_ambiguous "$label")" ;; esac
+  case "$ord" in 1/*|0/0|"") na="$(named_absorbed "$label")"; [ -n "$na" ] || nam="$(named_ambiguous "$label")" ;; esac
   if [ -n "$na" ]; then
     na_h="$(printf '%s' "$na" | awk '{print $1}')"
     na_n="$(printf '%s' "$na" | awk '{print $2}')"
@@ -1832,7 +1848,13 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       prefix) na_note=" Matched on the SHORT id \`$(printf '%s' "$label" | sed -n 's/^\(PC-S[0-9][0-9]*\)-.*/\1/p')\`, which is the form upstream writes, and that prefix names exactly ONE entry in this ledger -- so the attribution is unambiguous. The full-slug search found nothing, which is normal and is not evidence of anything." ;;
       *)      na_note="" ;;
     esac
+    if [ "$ord" = "0/0" ]; then
+      # RECEIPT-LESS: there is no receipt to be blind to it and none to re-anchor, so the receipt
+      # clauses of the sibling detail would be false here. The close is the annotation alone.
+      emit NAMED-UPSTREAM "$label" "upstream's own history NAMES this entry's id ${na_where}. This entry carries NO verify: receipt, so this row is the only mechanical signal it will ever get.${na_note} THIS ROW CARRIES NO VERSION, DELIBERATELY: naming is not absorbing. A commit naming an id to record a rejection, a split, a plan or a ledger drain is indistinguishable here from one that landed the fix, and a version read off the wrong commit goes into a permanent annotation. Read the commit(s) and decide whether the entry was ABSORBED; if it was, establish WHICH RELEASE contains the absorbing commit and close the entry BY ANNOTATION with THAT version -- **bolded, version immediately after the parenthesis** -- \`**ADOPTED UPSTREAM (v<version>, verified <date>)**\`. Do NOT delete the entry. Until it is annotated this row re-appears on every pull. THE FORM MATTERS: any occurrence of the phrase makes ledger-reverify SKIP this entry from here on, but only that exact form lets ledger-rotate.sh archive it, and an entry that is skipped without being archivable is invisible in every future report and never filed."
+    else
     emit NAMED-UPSTREAM "$label" "upstream's own history NAMES this entry's id ${na_where}, which no receipt in this entry can see.${na_note} THIS ROW CARRIES NO VERSION, DELIBERATELY: naming is not absorbing. A commit naming an id to record a rejection, a split, a plan or a ledger drain is indistinguishable here from one that landed the fix, and a version read off the wrong commit goes into a permanent annotation. Read the commit(s) and decide whether the entry was ABSORBED; if it was, establish WHICH RELEASE contains the absorbing commit and annotate with THAT version -- **bolded, version immediately after the parenthesis** -- \`**ADOPTED UPSTREAM (v<version>, verified <date>)**\`, then re-anchor or drop the stale receipt. Do NOT delete the entry. THE FORM MATTERS: any occurrence of the phrase makes ledger-reverify SKIP this entry from here on, but only that exact form lets ledger-rotate.sh archive it, and an entry that is skipped without being archivable is invisible in every future report and never filed."
+    fi
   elif [ -n "$nam" ]; then
     nam_c="$(printf '%s' "$nam" | awk '{print $1}')"
     nam_n="$(printf '%s' "$nam" | awk '{print $2}')"
@@ -1851,6 +1873,10 @@ while IFS="$(printf '\t')" read -r label ord directive; do
         ;;
     esac
   fi
+
+  # A RECEIPT-LESS ENTRY HAS NO VERB TO DISPATCH. Its `0/0` row exists only to reach the naming
+  # block above; falling through would file its `-` placeholder as an unknown verb.
+  [ "$ord" = "0/0" ] && continue
 
   case "$verb_norm" in
     theirs_lacks|theirs_has)
@@ -2422,8 +2448,9 @@ fi
 # as obviously right:
 #
 #   (1) "an entry that ends without emitting a row". UNSHIPPABLE: an entry with no `verify:` line
-#       legitimately emits nothing, and that is 58 entries there (15 id-shaped, 43 prose). It
-#       reports most of the ledger.
+#       legitimately emits nothing unless upstream history names its id (a prose-titled one never
+#       emits), and that was 58 entries there (15 id-shaped, 43 prose). It reports most of the
+#       ledger.
 #   (2) "a receipt attributed to a label that is not an entry id". Also unshippable, and this one
 #       had to be run against the real tool to find out: SEVEN rows, of which SIX are real entries
 #       that simply carry prose titles rather than id keys. A standalone probe scored it 1 of 1
@@ -2500,7 +2527,7 @@ awk -v DASH=' — ' "$(ledger_entry_awk)$(ledger_entry_id_awk)${CLOSE_AWK}"'
       if (label != "" && idshape(label)) { prev_id = label; prev_id_hadv = hasv; prev_id_closed = hasclose }
       fenced_in = label
       l = $0
-      if (shape == "bullet") { sub(/^- \*\*/, "", l); sub(/\*\*.*/, "", l) }
+      if (shape == "bullet") { sub(/^(- )?\*\*/, "", l); sub(/\*\*.*/, "", l) }
       else                   { sub(/^#+[ \t]*/, "", l) }
       p = index(l, DASH); if (p > 0) l = substr(l, 1, p-1)
       sub(/[[:space:]]+$/, "", l)
@@ -2634,7 +2661,7 @@ awk -v DASH=' — ' "$(ledger_entry_awk)${CLOSE_AWK}${ELC_AWK}"'
     if (shape != "") {
       flush()
       l = $0
-      if (shape == "bullet") { sub(/^- \*\*/, "", l); sub(/\*\*.*/, "", l) }
+      if (shape == "bullet") { sub(/^(- )?\*\*/, "", l); sub(/\*\*.*/, "", l) }
       else                   { sub(/^#+[ \t]*/, "", l) }
       p = index(l, DASH); if (p > 0) l = substr(l, 1, p-1)
       sub(/[[:space:]]+$/, "", l)
