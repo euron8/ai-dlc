@@ -146,7 +146,7 @@ modifying smoke-test infrastructure, thresholds, or operational
 behavior MUST be verified against live infrastructure. A deploy-validate
 gate log entry without `smoke_run_evidence` (the tee'd output path or
 CI run ID) FAILS the gate unconditionally. The same entry without the
-three classification fields below FAILS the gate the same way.
+four fields below FAILS the gate the same way.
 
 If live infrastructure is unreachable (VPN down, SSM broken, cloud
 outage), file HARD_BLOCK — do NOT present PVC without smoke evidence.
@@ -164,7 +164,7 @@ Run live smoke tests and **capture output**:
 ```
 
 **Classify every first-run failure before reading the verdict.** The
-`smoke_run_evidence` record carries three fields beside the output path,
+`smoke_run_evidence` record carries four fields beside the output path,
 and each is written even when its value is zero or `none`:
 
 - `first_run_failures` — the count of tests that failed on the first run.
@@ -175,6 +175,10 @@ and each is written even when its value is zero or `none`:
   run and the retry is in the same captured output.
 - `persistent_failures` — the ids of every test still red, verbatim as
   the runner printed them.
+- `per_action_attribution` — one row per live mutation made between two
+  smoke runs: the action, the tee'd output paths of the run before it and
+  the run after it, and the test ids whose pass-or-fail state changed
+  across that pair. The value `none` when no live mutation was made.
 
 **A failure is transient ONLY when a retry cleared it with NO ACTION BY
 THE LEAD between the runs** — no redeploy, no code change, no config or
@@ -183,6 +187,15 @@ on its own (a rollout finishing, a service restart completing) counts
 as transient. Every other failure is persistent, including one that
 went green only after the lead acted: that is a fix, and the test is
 recorded under `persistent_failures` with the fix that cleared it.
+**One live mutation per smoke run.** A live mutation is any action that
+changes what the smoke reads — a redeploy, a config, flag or
+infrastructure change, a data write, a teammate's fix reaching the
+environment. Re-run the smoke after every live mutation, before the next
+one is made, and record the pair in `per_action_attribution`; two
+mutations between one pair of runs leave the clearing unattributable,
+and the record MUST say so rather than credit either action. A §2a
+destructive one-time operation fired by the operator is a live mutation
+under this rule, the same as one the lead makes.
 `first_run_failures` equals the transient count plus the persistent
 count; a record where it does not is incomplete. Every test in
 `persistent_failures` makes the smoke run red and enters the loop below;
@@ -195,10 +208,11 @@ count.
 reports a run whose first-run failures were all transient and a run
 with one real failure in the same words, so the reader of the gate log
 cannot tell which classes were in the run, and a failure the lead
-cleared by acting is presented as one that cleared by itself.
-False-positive cost: three lines in one gate log entry per smoke run,
-and a harness that prints no per-test ids forces the lead to capture
-them. Removal condition: retire once the smoke harness emits the
+cleared by acting is presented as one that cleared by itself; and
+several live mutations between two runs, after which no record can say
+which action cleared which failure. False-positive cost: four lines in
+one gate log entry per smoke run, one smoke run per live mutation, and
+a harness that prints no per-test ids forces the lead to capture them. Removal condition: retire once the smoke harness emits the
 first-run / retry split as structured output that a script reads into
 the gate log.
 
@@ -321,6 +335,13 @@ If `is_ui_epic == true`:
 - **Document results:** List each surface verified, whether it matched
   the mockup, and any drift found/fixed. Gate validation check #9
   requires this evidence.
+- **Name the evidence kind with the token Check 5 reads.** In the Deploy
+  Status Report row of this sprint's `## Gate Log: Sprint <N>` section,
+  write `USER-CONFIRMED` for a visual check the operator confirmed, and
+  `playwright` with the trace path for an automated one — both when both
+  ran. Check 5 of `scripts/ai-dlc/validate-mandatory-rules.sh` searches
+  that section for exactly those two tokens and FAILs a `web/**` sprint
+  whose section carries neither, whatever else the evidence says.
 
 ### 4b. Deferred-AC discharge verification (Hard Gate — Non-Skippable)
 

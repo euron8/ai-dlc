@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Pin deploy-validate.md §3's smoke-evidence classification text.
 #
-# SUBJECT. §3 (Smoke Tests) requires the `smoke_run_evidence` record to carry three
+# SUBJECT. §3 (Smoke Tests) requires the `smoke_run_evidence` record to carry four
 # fields -- `first_run_failures`, `transient_failures_cleared_on_retry`,
-# `persistent_failures` -- and defines a transient failure as one a retry cleared with
+# `persistent_failures`, `per_action_attribution` -- requires one live mutation per
+# smoke run (an operator-fired §2a operation included), and defines a transient failure as one a retry cleared with
 # NO ACTION BY THE LEAD between the runs. The Production Validation Checkpoint's
 # `Deployment` block reports the same split. No script reads `smoke_run_evidence`; the
 # executing lead reads this prose, so the prose is the mechanism and this fixture pins it.
@@ -38,7 +39,11 @@ bad() { printf '  FAIL  %s\n' "$1" >&2; rc=1; }
 
 echo "deploy-validate-smoke-classification: subject $STEP"
 
-FIELDS="first_run_failures transient_failures_cleared_on_retry persistent_failures"
+FIELDS="first_run_failures transient_failures_cleared_on_retry persistent_failures per_action_attribution"
+# ONE VARIABLE PER SMOKE RUN: without it a run that follows two live mutations cannot say which
+# one cleared a failure. The §2a clause settles that an operator-fired operation is one of them.
+ONEVAR='One live mutation per smoke run.'
+OPFIRED='A §2a destructive one-time operation fired by the operator is a live mutation'
 DEF='A failure is transient ONLY when a retry cleared it with NO ACTION BY THE LEAD between the runs'
 INRUN='in-run retry, same output'
 
@@ -47,6 +52,9 @@ sec3() { # <file> -> §3 body, heading line excluded
 }
 flat() { # stdin -> one line, runs of whitespace collapsed, bold markers dropped
   tr '\n' ' ' | sed -e 's/\*\*//g' -e 's/[[:space:]][[:space:]]*/ /g'
+}
+sec4() { # <file> -> §4 body, heading line excluded
+  awk '/^### 4\. Visual Verification/{on=1; next} on && /^### /{exit} on{print}' "$1"
 }
 deploy_block() { # <file> -> the checkpoint's `### Deployment` block
   awk '/^### Deployment$/{on=1; next} on && /^### /{exit} on{print}' "$1"
@@ -68,6 +76,12 @@ check() {
   case "$fl" in *"$INRUN"*) : ;; *) echo "INRUN: the value '$INRUN' is absent from §3" ;; esac
   case "$fl" in *'Every other failure is persistent'*) : ;; *) echo "PERSISTENT: §3 does not route every non-transient failure to persistent" ;; esac
   case "$fl" in *'Every test in `persistent_failures` makes the smoke run red and enters the loop below'*) : ;; *) echo "LOOP: §3 does not send persistent failures into the fix loop" ;; esac
+  case "$fl" in *"$ONEVAR"*) : ;; *) echo "ONEVAR: §3 does not require one live mutation per smoke run" ;; esac
+  case "$fl" in *"$OPFIRED"*) : ;; *) echo "OPFIRED: §3 does not count an operator-fired §2a operation as a live mutation" ;; esac
+  # VISUAL: §4 must tell the writer to record the tokens Check 5 of validate-mandatory-rules.sh
+  # reads in the gate-log section. Keyed on §4, so a mention elsewhere does not satisfy it.
+  fl="$(sec4 "$f" | flat)"
+  case "$fl" in *'write `USER-CONFIRMED` for a visual check the operator confirmed, and `playwright` with the trace path'*) : ;; *) echo "VISUAL: §4 does not name the USER-CONFIRMED and playwright tokens Check 5 reads" ;; esac
   blk="$(deploy_block "$f")"
   for n in 'First-run failures:' 'Transient, cleared on retry:' 'Persistent:'; do
     grep -qF -- "- Smoke tests:" <<<"$blk" || { echo "CHECKPOINT: no Smoke tests line in the Deployment block"; break; }
@@ -78,7 +92,7 @@ check() {
 # --- the subject -------------------------------------------------------------
 out="$(check "$STEP")"
 if [ -z "$out" ]; then
-  ok "§3 defines all three fields, the transient definition, the in-run value and the loop routing; the checkpoint reports the split"
+  ok "§3 defines all four fields, the transient definition, the in-run value, the loop routing and the one-live-mutation-per-run rule including operator-fired §2a operations; §4 names the Check 5 tokens; the checkpoint reports the split"
 else
   while IFS= read -r l; do bad "$l"; done <<<"$out"
 fi
@@ -148,6 +162,28 @@ mutant "no-loop-entry" \
 mutant "checkpoint-persistent" \
   '/^  - Persistent: \[persistent_failures/{next} {print}' \
   "CHECKPOINT:" "dropping the Persistent line from the checkpoint Deployment block is caught"
+
+mutant "no-onevar" \
+  '{ gsub(/One live mutation per smoke run\./, "Re-run the smoke when convenient."); print }' \
+  "ONEVAR:" "dropping the one-live-mutation-per-smoke-run rule is caught"
+
+# MOVE: the rule sentence leaves §3 for §3b verbatim. A whole-file grep still finds it.
+mutant "move-onevar" \
+  '/^### 3\. Smoke Tests/{s=1} s && /^### 3b/{s=0; print; print "**One live mutation per smoke run.**"; next} s{ gsub(/\*\*One live mutation per smoke run\.\*\*/, "") } {print}' \
+  "ONEVAR:" "moving the one-live-mutation rule out of §3 (into §3b) is caught"
+
+mutant "no-opfired" \
+  '{ gsub(/fired by the operator is a live mutation/, "fired by the operator is exempt"); print }' \
+  "OPFIRED:" "exempting an operator-fired §2a operation from the rule is caught"
+
+mutant "no-visual-tokens" \
+  '/^### 4\. Visual Verification/{s=1} s && /^### 4b/{s=0} s && /USER-CONFIRMED/{ gsub(/`USER-CONFIRMED`/, "the operator confirmation") } {print}' \
+  "VISUAL:" "dropping the Check 5 token instruction from §4 is caught"
+
+# MOVE: the whole §4 token bullet (it runs to the end of §4) relocated under §4b, verbatim.
+mutant "move-visual" \
+  '/^### 4\. Visual Verification/{s=1} s && /^### 4b/{s=0; print; printf "%s", held; next} s && /^- \*\*Name the evidence kind/{h=1} s && h{held=held $0 "\n"; next} {print}' \
+  "VISUAL:" "moving the Check 5 token instruction out of §4 (into §4b) is caught"
 
 # SECTION: §3's heading renamed -> nothing to isolate. Must be a finding, never clean.
 mutant "no-section" \
