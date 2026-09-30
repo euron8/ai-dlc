@@ -1186,6 +1186,8 @@ verify: sh [ -r scripts/install.sh ] && [ -r scripts/uninstall.sh ] || exit 9; c
 
 ## BL-003 — on a CONSUMER, `layer-contract-conformance-b`'s SKIP prints its sibling's name
 
+**LANDED (v0.666.0, verified 7dfe16c0).** Receipt: base 1, tip 0, literal-restored mutant 1; both shards green from the repo root.
+
 Scope matters here and the first filing of this entry got it wrong. **In this repo the shard
 names itself correctly** — it banners `layer-contract-conformance-b fixture` and closes with
 `PASS: all 17 assertions correct in shard 'b' of 'a b'`. There is no collision.
@@ -1418,6 +1420,8 @@ decision as a bug.
 verify: sh bad=0; for f in $(git ls-files templates/pipeline/); do grep -qE "^[^#]*cp .*(${f}|templates/pipeline/)" scripts/install.sh || bad=1; done; [ "$bad" -eq 0 ]
 
 ## BL-020
+
+**LANDED (v0.666.0, verified 7fb6845d).** Receipt: base 1, tip 0, SAW_INFLIGHT-pinned mutant 1; both blocks flag, and output is byte-identical on this tree and a clone of graph.
 
 **Two of the budget script's six finding channels set no flag, and the summary closes them with an
 unqualified PASS.** `core/scripts/validate-artifact-budget.sh` has six finding channels — `:1025` over
