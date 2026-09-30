@@ -1430,7 +1430,27 @@ that its schema was single-sourced out into `core/schemas/audit-anchors.json` be
 live in TWO places at once". Its absence from a consumer is the FIX. Filing it would file a settled
 decision as a bug.
 
-verify: sh bad=0; for f in $(git ls-files templates/pipeline/); do grep -qE "^[^#]*cp .*(${f}|templates/pipeline/)" scripts/install.sh || bad=1; done; [ "$bad" -eq 0 ]
+**LANDED (v0.666.0, verified PENDING).** `templates/pipeline/` is deleted with `git rm -r`. The
+retirement comment in `scripts/install.sh` no longer names the path, so it records history instead of
+pointing at a directory. Same invocation, after the removal: `git grep -l 'templates/pipeline' --
+core/ scripts/ .githooks/` returns **0** files, and the control `templates/audit-anchors` returns
+**6**. `install.sh` has no copy of `templates/pipeline` anywhere.
+
+**THE RECEIPT ABOVE WAS CLOSABLE BY PROSE, SO IT IS REPLACED.** It accepted any non-comment line
+containing `cp` and the path, so appending `echo "cp templates/pipeline/ is retired"` to
+`install.sh` scored 0 with the file still tracked and still unshipped. The new receipt keys on the
+tracked file set, and its `exit 9` guard refuses a tree with no tracked `templates/` at all. A
+move to `core/skills/ai-dlc/templates/`, which the paragraph above names as the other valid fix,
+still passes.
+
+| tree | old receipt | new receipt |
+|---|---|---|
+| tip | 0 | **0** |
+| base `2e7c227c` | 1 | **1** |
+| base + that `echo` line in `install.sh` | **0** | **1** |
+| base with the file moved under `core/skills/ai-dlc/templates/` | 0 | **0** |
+
+verify: sh git ls-files templates/ | grep -q . || exit 9; [ -z "$(git ls-files templates/pipeline/)" ]
 
 ## BL-020
 
