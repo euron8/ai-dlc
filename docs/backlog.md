@@ -2169,7 +2169,13 @@ install-root fallback. Measured in a fresh install of `0c017188`: `--check` exit
 `.claude/` it exits 2 with `pipeline-state-paths.json not found`. The same foreign `--root` in
 the distribution layout gets past the schema and exits 1 on the missing `.gitignore` block.
 
-verify: manual
+Receipt: a copy at `scripts/ai-dlc/` of a consumer-shaped tree (declaration only at
+`.claude/schemas/`), run from `docs/` with `--check --root <foreign>`, must get past the schema
+and report the foreign root's block missing (receipt exit 0), not report the schema `not found`
+(receipt exit 1). `transient-ignore-block` arm 9 carries the
+own-declaration near-miss and mutant M5.
+
+verify: sh d=$(mktemp -d); mkdir -p "$d/c/.git" "$d/c/.claude/schemas" "$d/c/scripts/ai-dlc" "$d/c/docs" "$d/f" || exit 9; cp core/schemas/pipeline-state-paths.json "$d/c/.claude/schemas/" || exit 9; cp core/scripts/sync-transient-ignore.sh "$d/c/scripts/ai-dlc/" || exit 9; printf 'x/\n' > "$d/f/.gitignore"; o=$(cd "$d/c/docs" && env -u AI_DLC_STATE_PATHS_SCHEMA bash "$d/c/scripts/ai-dlc/sync-transient-ignore.sh" --check --root "$d/f" 2>&1); r=$?; case "$o" in *"pipeline-state-paths.json not found"*) exit 1 ;; esac; [ "$r" -eq 1 ] && exit 0; exit 9
 
 ## BL-333 — three "0 ALWAYS" detectors refuse with exit 0 and a stderr line, so the report renders `none` for a scan that never ran
 
