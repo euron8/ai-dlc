@@ -78,14 +78,14 @@ pass() {
 #     construction rather than by hand-editing thirteen call sites.
 record() {
   local file="$1" resolves="$2" kind="$3" sb="$4" sa="$5" bb="$6" ba="$7"
-  local delta="${8:-}" auth="${9:-}" arch="${10:-}" adj="${11:-}"
+  local delta="${8:-}" auth="${9:-}" arch="${10:-}" adj="${11:-}" art="${12:-product-brief.md}"
   {
     printf '# Divergence resolution — %s\n\n' "$kind"
     printf '<!-- ADVERSARIAL_RESOLUTION v1\n'
     printf 'resolves: %s\n' "$resolves"
     printf 'resolution: %s\n' "$kind"
     printf 'adjudicated_by: operator\n'
-    printf 'artifact: product-brief.md\n'
+    printf 'artifact: %s\n' "$art"
     printf 'artifact_sha_before: %s\n' "$sb"
     printf 'artifact_sha_after: %s\n' "$sa"
     printf 'artifact_bytes_before: %s\n' "$bb"
@@ -678,6 +678,15 @@ cat > "$TARGET/prior-session-transcript.jsonl" <<'JSONL'
 {"type":"user","timestamp":"2026-07-12T05:00:00Z","message":{"content":"Cut the claim and re-verify — if it cannot be checked cheaply it is not load-bearing."}}
 JSONL
 
+# THE RE-OPEN AUTHORIZATIONS. Arm J's door validates the record a re-open cites (F2-F7), so a
+# REOPEN_AFTER_MET record's operator_authorization must quote a genuine operator turn exactly
+# as a hard block's does. Before the door validated anything, `reopen-recorded` cited words no
+# transcript here carried, and passed.
+cat > "$TARGET/reopen-session-transcript.jsonl" <<'JSONL'
+{"type":"user","timestamp":"2026-07-12T03:00:00Z","message":{"content":"Yes -- re-open the series and carry the elicitation edits."}}
+{"type":"user","timestamp":"2026-09-29T11:30:00Z","message":{"content":"Amend the spec: re-open it on the record for the CAP-2 wording change."}}
+JSONL
+
 printf '%s\n' "$TARGET"
 
 # --- stalled-resolved: THE SANCTIONED EXIT FROM A STALL ------------------------
@@ -795,6 +804,49 @@ pass "$TARGET/reopen-recorded/s1-adversarial-p3.md" 3 1 2 1 EXIT_CONDITION_NOT_M
 pass "$TARGET/reopen-recorded/s1-adversarial-p4.md" 4 0 0 1 EXIT_CONDITION_MET         0 ccc3
 repair "$TARGET/reopen-recorded/s1-brief-repair-p1.md"
 repair "$TARGET/reopen-recorded/s1-brief-repair-p3.md"
+
+# --- reopen-record-missing: the door names a record that was never written ----------------
+# `reopen-recorded` with the record gone. Arm J's door used to accept the FIELD, so this passed:
+# a citation of nothing was a sanctioned exit. It must FAIL (J), and the hooks must deny.
+mkdir -p "$TARGET/reopen-record-missing"
+pass "$TARGET/reopen-record-missing/s1-adversarial-p1.md" 1 4 2 1 EXIT_CONDITION_NOT_MET 0 NOSHA
+pass "$TARGET/reopen-record-missing/s1-adversarial-p2.md" 2 0 0 0 EXIT_CONDITION_MET     0 ccc1
+pass "$TARGET/reopen-record-missing/s1-adversarial-p3.md" 3 1 2 1 EXIT_CONDITION_NOT_MET 0 ccc2 s1-resolution-p2.md
+pass "$TARGET/reopen-record-missing/s1-adversarial-p4.md" 4 0 0 1 EXIT_CONDITION_MET         0 ccc3
+repair "$TARGET/reopen-record-missing/s1-brief-repair-p1.md"
+repair "$TARGET/reopen-record-missing/s1-brief-repair-p3.md"
+
+# --- drift-spec-no-cap: a SPEC.md re-open whose scope_delta names no capability ----------
+# F5's REOPEN_AFTER_MET arm. The same series as reopen-recorded; the record's artifact is a
+# SPEC.md and its scope_delta names neither a CAP-<n> nor an FR-S<N>-<n>. Must FAIL (J).
+mkdir -p "$TARGET/drift-spec-no-cap"
+pass "$TARGET/drift-spec-no-cap/s1-adversarial-p1.md" 1 4 2 1 EXIT_CONDITION_NOT_MET 0 NOSHA
+pass "$TARGET/drift-spec-no-cap/s1-adversarial-p2.md" 2 0 0 0 EXIT_CONDITION_MET     0 ccc1
+record "$TARGET/drift-spec-no-cap/s1-resolution-p2.md" \
+  s1-adversarial-p2.md REOPEN_AFTER_MET ccc1 ccc2 4000 4300 \
+  "the elicitation edits reworded the intent" \
+  '2026-07-12T03:00:00Z | "re-open the series and carry the elicitation edits"' "" "" \
+  _bmad-output/specs/s1/x/SPEC.md
+pass "$TARGET/drift-spec-no-cap/s1-adversarial-p3.md" 3 1 2 1 EXIT_CONDITION_NOT_MET 0 ccc2 s1-resolution-p2.md
+pass "$TARGET/drift-spec-no-cap/s1-adversarial-p4.md" 4 0 0 1 EXIT_CONDITION_MET         0 ccc3
+repair "$TARGET/drift-spec-no-cap/s1-brief-repair-p1.md"
+repair "$TARGET/drift-spec-no-cap/s1-brief-repair-p3.md"
+
+# --- drift-spec-cap: THE NEAR-MISS, one property from the case above --------------------
+# The same SPEC.md record naming CAP-2 in its scope_delta. Must PASS: the SPEC rule refuses a
+# delta that names nothing, never a SPEC.md re-open as such.
+mkdir -p "$TARGET/drift-spec-cap"
+pass "$TARGET/drift-spec-cap/s1-adversarial-p1.md" 1 4 2 1 EXIT_CONDITION_NOT_MET 0 NOSHA
+pass "$TARGET/drift-spec-cap/s1-adversarial-p2.md" 2 0 0 0 EXIT_CONDITION_MET     0 ccc1
+record "$TARGET/drift-spec-cap/s1-resolution-p2.md" \
+  s1-adversarial-p2.md REOPEN_AFTER_MET ccc1 ccc2 4000 4300 \
+  "the elicitation edits reworded the CAP-2 intent" \
+  '2026-07-12T03:00:00Z | "re-open the series and carry the elicitation edits"' "" "" \
+  _bmad-output/specs/s1/x/SPEC.md
+pass "$TARGET/drift-spec-cap/s1-adversarial-p3.md" 3 1 2 1 EXIT_CONDITION_NOT_MET 0 ccc2 s1-resolution-p2.md
+pass "$TARGET/drift-spec-cap/s1-adversarial-p4.md" 4 0 0 1 EXIT_CONDITION_MET         0 ccc3
+repair "$TARGET/drift-spec-cap/s1-brief-repair-p1.md"
+repair "$TARGET/drift-spec-cap/s1-brief-repair-p3.md"
 
 # =============================================================================
 # ARM I -- RESOLUTION CEILING: the sanctioned exit, taken more than once.
@@ -1160,3 +1212,177 @@ k2_pass "$TARGET/k2-sharded" 2026-09-29T11:00:00Z "$(k2_sha "$TARGET/k2-sharded/
 k2_world "$TARGET/k2-sha-moved" shardable
 k2_pass "$TARGET/k2-sha-moved" 2026-09-29T11:00:00Z "$(k2_sha "$TARGET/k2-sha-moved/prd.md")" ""
 printf '\n## Five\n\necho echo\n' >> "$TARGET/k2-sha-moved/prd.md"
+
+# --- ARM J2: TERMINAL DRIFT -- a notarized sprint artifact moved after MET ------------------
+# Each case is its OWN git repository with TWO stamp commits: 0.663.0 at 09:00 (at or above
+# arm K's release, below J2's) and 0.669.0 at 10:00 (J2's). A series opened at 11:00 is owed;
+# one opened at 09:30 is legacy under J2's release and would be owed under K's -- the one world
+# in which a J2 that forgot to rebind K_RELEASE reads a different stamp. The subject is a
+# SPEC.md at the consumer's real path, one `##` section so partition-document.sh calls it SERIAL
+# and arm K2 stays silent on the terminal pass. Pass files and repair records sit in
+# `_bmad-output/planning-artifacts/s1/`, where the gate reads them.
+j2_spec() {  # $1 version -> SPEC.md bytes; each version one line longer
+  printf '# SPEC\n\n## Capabilities\n\n'
+  i=1; while [ "$i" -le "$1" ]; do printf 'CAP-%s intent, revision %s\n' "$i" "$1"; i=$((i + 1)); done
+}
+j2_world() {  # $1 case dir -> the repo, with SPEC.md at v1
+  mkdir -p "$1/.claude" "$1/_bmad-output/specs/s1/x" "$1/_bmad-output/planning-artifacts/s1"
+  j2_spec 1 > "$1/_bmad-output/specs/s1/x/SPEC.md"
+  ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+    cd "$1" || exit 1
+    git init -q . >/dev/null
+    for st in '0.663.0 2026-09-29T09:00:00Z' '0.669.0 2026-09-29T10:00:00Z'; do
+      printf 'version: %s\n' "${st% *}" > .claude/.ai-dlc-version
+      git add .claude/.ai-dlc-version
+      GIT_COMMITTER_DATE="${st#* }" GIT_AUTHOR_DATE="${st#* }" \
+        git -c user.email=fixture@example.invalid -c user.name=fixture -c commit.gpgsign=false \
+            -c core.hooksPath=/dev/null commit -q -m "stamp ${st% *}" >/dev/null || exit 1
+    done
+  ) || { echo "seed.sh: j2_world could not build the stamped repo at $1" >&2; exit 1; }
+}
+j2_v() {  # $1 case dir  $2 version -> the sha256 of that version
+  j2_spec "$2" > "$1/.v$2"; k2_sha "$1/.v$2"; rm -f "$1/.v$2"
+}
+j2_pass() {  # $1 case dir  $2 n  $3 invoked_at  $4 artifact_sha  $5 resolves ("" = none)  $6 artifact
+  {
+    printf '# spec -- adversarial pass %s\n\n' "$2"
+    printf '<!-- SKILL_INVOCATION_PROVENANCE v1\n'
+    printf 'skill: ai-dlc-adversary-review\n'
+    printf 'invoked_at: %s\n' "$3"
+    printf 'tool_use_id: toolu_fixture_j2p%s\n' "$2"
+    printf 'mode: subagent\n'
+    printf 'lead_role: pm\n'
+    printf 'artifact: %s\n' "${6:-_bmad-output/specs/s1/x/SPEC.md}"
+    printf 'artifact_sha: %s\n' "$4"
+    [ -n "$5" ] && printf 'resolves_divergence: %s\n' "$5"
+    printf 'findings_critical: 0\n'
+    printf 'findings_critical_prior_scope: 0\n'
+    printf 'findings_major: 0\n'
+    printf 'findings_major_underived: 0\n'
+    printf 'findings_minor: 0\n'
+    printf 'verdict: EXIT_CONDITION_MET\n'
+    printf 'SKILL_INVOCATION_PROVENANCE_END -->\n'
+  } > "$1/_bmad-output/planning-artifacts/s1/spec-adversarial-p$2.md"
+}
+# A REPAIR LINK, in the form remediator.md teaches: the record header names the file and its
+# whole-file sha256 before and after, then the per-finding block arm H reads. $4 "unstructured"
+# drops the derivation line, so the record carries both shas and is still not a link.
+j2_link() {  # $1 file  $2 before  $3 after  $4 mode
+  {
+    printf '# Repair record\n\n'
+    printf -- '- artifact: `_bmad-output/specs/s1/x/SPEC.md`\n'
+    printf -- '- artifact_sha_before: %s\n' "$2"
+    printf -- '- artifact_sha_after: %s\n\n' "$3"
+    printf '### G1 — MAJOR\n'
+    printf -- '- **disposition:** repaired\n'
+    printf -- '- **edit:** `_bmad-output/specs/s1/x/SPEC.md:5`\n'
+    [ "${4:-}" = unstructured ] || printf -- '- **derivation:** n/a (no factual claim)\n'
+  } > "$1"
+}
+J2D=_bmad-output/planning-artifacts/s1
+j2_disk() {  # $1 case dir  $2 version -> SPEC.md on disk at that version
+  j2_spec "$2" > "$1/_bmad-output/specs/s1/x/SPEC.md"
+}
+
+# drift-same-bytes -- THE DECOY: the file on disk IS the notarized bytes. PASS, silent.
+J2T="$TARGET/drift-same-bytes"; j2_world "$J2T"
+j2_pass "$J2T" 1 2026-09-29T11:00:00Z "$(j2_v "$J2T" 1)" ""
+
+# drift-unrecorded -- THE OFFENDER: v1 notarized, v2 on disk, nothing on the record. FAIL (J2).
+J2T="$TARGET/drift-unrecorded"; j2_world "$J2T"
+j2_pass "$J2T" 1 2026-09-29T11:00:00Z "$(j2_v "$J2T" 1)" ""
+j2_disk "$J2T" 2
+
+# drift-pre-stamp -- the offender's bytes, series opened at 09:30: after K's stamp, before J2's.
+# PENDING (Legacy). A J2 reading K's release would date it at 09:00 and FAIL it.
+J2T="$TARGET/drift-pre-stamp"; j2_world "$J2T"
+j2_pass "$J2T" 1 2026-09-29T09:30:00Z "$(j2_v "$J2T" 1)" ""
+j2_disk "$J2T" 2
+
+# drift-repair-linked -- one structured link v1 -> v2. PASS.
+J2T="$TARGET/drift-repair-linked"; j2_world "$J2T"
+j2_pass "$J2T" 1 2026-09-29T11:00:00Z "$(j2_v "$J2T" 1)" ""
+j2_link "$J2T/$J2D/gate-planning-repair-p1.md" "$(j2_v "$J2T" 1)" "$(j2_v "$J2T" 2)"
+j2_disk "$J2T" 2
+
+# drift-repair-chain-two-links -- the consumer's shape: v1 -> v2 -> v3 through two records, the
+# SECOND-read record holding the first link, so a walk that reads records in glob order and
+# stops is not the walk this passes. PASS.
+J2T="$TARGET/drift-repair-chain-two-links"; j2_world "$J2T"
+j2_pass "$J2T" 1 2026-09-29T11:00:00Z "$(j2_v "$J2T" 1)" ""
+j2_link "$J2T/$J2D/gate-planning-repair-p1.md" "$(j2_v "$J2T" 2)" "$(j2_v "$J2T" 3)"
+j2_link "$J2T/$J2D/gate-planning-repair-p2.md" "$(j2_v "$J2T" 1)" "$(j2_v "$J2T" 2)"
+j2_disk "$J2T" 3
+
+# drift-chain-broken -- the chain above with its first link missing: v2 -> v3 only. FAIL (J2).
+J2T="$TARGET/drift-chain-broken"; j2_world "$J2T"
+j2_pass "$J2T" 1 2026-09-29T11:00:00Z "$(j2_v "$J2T" 1)" ""
+j2_link "$J2T/$J2D/gate-planning-repair-p1.md" "$(j2_v "$J2T" 2)" "$(j2_v "$J2T" 3)"
+j2_disk "$J2T" 3
+
+# drift-repair-fork -- two records both start at v1: p1 v1 -> v3 (the bytes on disk), p2
+# v1 -> v2. The glob reads p1 first, so a walk that takes the first link and ignores the second
+# reaches the disk sha and PASSES. FAIL (J2), naming both.
+J2T="$TARGET/drift-repair-fork"; j2_world "$J2T"
+j2_pass "$J2T" 1 2026-09-29T11:00:00Z "$(j2_v "$J2T" 1)" ""
+j2_link "$J2T/$J2D/gate-planning-repair-p1.md" "$(j2_v "$J2T" 1)" "$(j2_v "$J2T" 3)"
+j2_link "$J2T/$J2D/gate-planning-repair-p2.md" "$(j2_v "$J2T" 1)" "$(j2_v "$J2T" 2)"
+j2_disk "$J2T" 3
+
+# drift-repair-unstructured -- the link's two shas are right and it carries no derivation line.
+# A record arm H would call unstructured is not a link. FAIL (J2).
+J2T="$TARGET/drift-repair-unstructured"; j2_world "$J2T"
+j2_pass "$J2T" 1 2026-09-29T11:00:00Z "$(j2_v "$J2T" 1)" ""
+j2_link "$J2T/$J2D/gate-planning-repair-p1.md" "$(j2_v "$J2T" 1)" "$(j2_v "$J2T" 2)" unstructured
+j2_disk "$J2T" 2
+
+# The REOPEN path. The record is the one _gate-procedures.md teaches, citing the operator turn
+# in reopen-session-transcript.jsonl (11:30, after p1 opened the window at 11:00).
+J2_AUTH='2026-09-29T11:30:00Z | "re-open it on the record for the CAP-2 wording change"'
+j2_reopen() {  # $1 case dir
+  record "$1/$J2D/spec-resolution-p1.md" spec-adversarial-p1.md REOPEN_AFTER_MET \
+    "$(j2_v "$1" 1)" "$(j2_v "$1" 2)" 120 160 "CAP-2 intent reworded by the architecture step" \
+    "$J2_AUTH" "" "" _bmad-output/specs/s1/x/SPEC.md
+}
+# drift-reopen-verified -- v1 MET, REOPEN v1 -> v2, ONE verify pass notarizing v2. PASS: the
+# verify pass is terminal and its sha is the disk sha; arm J validates the record.
+J2T="$TARGET/drift-reopen-verified"; j2_world "$J2T"
+j2_pass "$J2T" 1 2026-09-29T11:00:00Z "$(j2_v "$J2T" 1)" ""
+j2_reopen "$J2T"
+j2_pass "$J2T" 2 2026-09-29T12:00:00Z "$(j2_v "$J2T" 2)" spec-resolution-p1.md
+j2_disk "$J2T" 2
+
+# drift-reopen-no-verify -- the record written, the verify pass never run. A resolution record
+# is not a repair link. FAIL (J2).
+J2T="$TARGET/drift-reopen-no-verify"; j2_world "$J2T"
+j2_pass "$J2T" 1 2026-09-29T11:00:00Z "$(j2_v "$J2T" 1)" ""
+j2_reopen "$J2T"
+j2_disk "$J2T" 2
+
+# drift-reopen-after-not-disk -- re-opened and verified at v2, then moved again to v3 with no
+# record. The verify pass is terminal and v3 is not what it notarized. FAIL (J2).
+J2T="$TARGET/drift-reopen-after-not-disk"; j2_world "$J2T"
+j2_pass "$J2T" 1 2026-09-29T11:00:00Z "$(j2_v "$J2T" 1)" ""
+j2_reopen "$J2T"
+j2_pass "$J2T" 2 2026-09-29T12:00:00Z "$(j2_v "$J2T" 2)" spec-resolution-p1.md
+j2_disk "$J2T" 3
+
+# drift-cumulative -- RESIDUE: prd.md is edited by every sprint and is not in the subject. The
+# offender's shape over _bmad-output/planning-artifacts/prd.md. PASS, J2 silent.
+J2T="$TARGET/drift-cumulative"; j2_world "$J2T"
+j2_spec 1 > "$J2T/_bmad-output/planning-artifacts/prd.md"
+j2_pass "$J2T" 1 2026-09-29T11:00:00Z "$(j2_v "$J2T" 1)" "" _bmad-output/planning-artifacts/prd.md
+j2_spec 2 > "$J2T/_bmad-output/planning-artifacts/prd.md"
+
+# drift-list -- RESIDUE: the consumer's comma-list spelling, whose FIRST member is an in-subject
+# file that moved. A list names several files and one sha each; it is not one file. PASS, silent.
+J2T="$TARGET/drift-list"; j2_world "$J2T"
+j2_spec 1 > "$J2T/_bmad-output/planning-artifacts/prd.md"
+j2_pass "$J2T" 1 2026-09-29T11:00:00Z "$(j2_v "$J2T" 1),$(j2_v "$J2T" 1)" "" \
+  "_bmad-output/specs/s1/x/SPEC.md,_bmad-output/planning-artifacts/prd.md"
+j2_disk "$J2T" 2
+
+# drift-empty-sprint -- a sprint directory holding no adversarial series. Check 24 skips the
+# sprint; this case pins WHY that skip is in the procedure: a bare --series matching nothing
+# exits 1.
+mkdir -p "$TARGET/drift-empty-sprint/_bmad-output/planning-artifacts/s1"

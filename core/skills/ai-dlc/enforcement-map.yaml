@@ -519,7 +519,7 @@ checks:
     resume_contract:
       states: [CONTINUE, CONVERGED, RESOLVED, DIVERGENT, STALLED]
       record: planning-artifacts/s<N>/<artifact>-resolution-p<M>.md
-      kinds: [REVERT_REPAIR, CHANGE_APPROACH, CUT_SCOPE, RESTART_CYCLE]
+      kinds: [REVERT_REPAIR, CHANGE_APPROACH, CUT_SCOPE, RESTART_CYCLE, REOPEN_AFTER_MET]
       why_no_freeze: a hard block means CRITICALs rose in text a previous pass had
         already reviewed — text that is ALREADY frozen. Freezing it again removes
         nothing, so the verification pass finds the same CRITICALs and the gate can

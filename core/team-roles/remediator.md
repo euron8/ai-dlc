@@ -69,7 +69,19 @@ It binds hardest on the four shapes that read as harmless — a **count**, a **u
 one AST sweep to settle, and a coin-flip to guess; an underived universal costs the next
 adversarial pass a full cycle to call.
 
-In the repair record, per finding:
+The repair record opens with the file it repaired and that file's whole-file sha256 before
+and after your edits — the adversary's `artifact_sha` spelling. A repair landing after the
+series stamped `EXIT_CONDITION_MET` is on the record only through these two shas; Check 24
+arm J2 chains them from the notarized sha to the bytes on disk. Take both with
+`shasum -a 256 <file>`.
+
+```
+- artifact: <the repaired file, project-relative>
+- artifact_sha_before: <sha256 of the file before your first edit>
+- artifact_sha_after: <sha256 of the file after your last edit>
+```
+
+Then, per finding:
 
 ```
 ### <finding id> — <CRITICAL|MAJOR|MINOR>

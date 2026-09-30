@@ -2002,12 +2002,21 @@ resolution record's `operator_authorization` against ground truth; the gate **fa
 if a resolution cites an operator message the corpus does not contain — and fails closed
 too if `--transcript` is omitted, so a forgotten flag cannot silently disarm the check. It
 reads the `findings_critical` / `findings_major` / `artifact_sha` / `verdict` fields of every
-pass in the series (mapping in `team-roles/adversary.md`) and enforces ten arms:
+pass in the series (mapping in `team-roles/adversary.md`) and enforces thirteen arms:
 **A** VOCABULARY, **B** CONSISTENCY, **C** DIVERGENCE (scope-relative), **D** TERMINAL,
 **E** STALL, **F** RESOLUTION, **G** CHRONOLOGY, **H** REPAIR-RECORD, **I** RESOLUTION
-CEILING, **J** RE-OPEN. (This list is hand-maintained and nothing joins it to the script's
-own `err` labels, so it can drift — and had: it read "eight arms: A–H" for several releases
-while the script also carried arm J.)
+CEILING, **J** RE-OPEN, **J2** TERMINAL DRIFT, **K** SHARD, **K2** SECTIONS. (This list is
+hand-maintained and nothing joins it to the script's own `err` labels, so it can drift — and
+had: it read "eight arms: A–H" for several releases while the script also carried arm J, and
+"ten arms" after K and K2 shipped.)
+
+**At every gate after the first planning gate, also run it over every earlier series in the
+sprint.** For each `_bmad-output/planning-artifacts/s<N>/*-adversarial-p*` series whose terminal
+pass stamps `EXIT_CONDITION_MET` and names one file in `artifact:`, invoke the same command with
+that series' prefix; exit 0 required. Skip this when the sprint directory holds no such series —
+a `--series` matching nothing exits 1. Arm J2 fails a series whose notarized file moved after MET
+with no repair chain and no re-open on the record; the amendment procedure is in
+`_gate-procedures.md`, *Divergence resolution dispatch*.
 Each arm emits its own named failure
 with the offending pass and the concrete counts — `err "C -- DIVERGENCE" "<file> declares
 findings_critical_prior_scope=N but ..."` — so the remedy arrives with the verdict and is
@@ -2027,7 +2036,7 @@ end the cycle; it stops it until the operator adjudicates. The exit is a **resol
 record**, `planning-artifacts/s<N>/<artifact>-resolution-p<M>.md`, and arm F reads it.
 *A repair edits the artifact to close findings on UNCHANGED scope — that is what
 diverged. A resolution changes WHAT IS UNDER REVIEW:* `REVERT_REPAIR` |
-`CHANGE_APPROACH` | `CUT_SCOPE` | `RESTART_CYCLE`. The verification pass is the next
+`CHANGE_APPROACH` | `CUT_SCOPE` | `RESTART_CYCLE` | `REOPEN_AFTER_MET`. The verification pass is the next
 number **in the same series**. Procedure and record schema:
 `steps/_gate-procedures.md` § *Divergence resolution dispatch*.
 

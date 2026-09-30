@@ -487,6 +487,22 @@ PreToolUse hook denies every `Agent` / `Skill` / `Task` dispatch until step 3 ha
    elicitation editing an artifact its own series had already notarised, buying a five-pass
    sub-cycle nobody scheduled.
 
+   **THE AMENDMENT PROCEDURE — a notarized artifact that must move after MET.** Check 24 arm J2
+   compares the file the terminal MET pass notarized against the bytes on disk. Amend it one of
+   these ways, in the same dispatch as the edit:
+   1. A residue or gate repair on unchanged scope: the remediator's structured repair record, in
+      the pass directory, with `artifact:`, `artifact_sha_before:` and `artifact_sha_after:`.
+      Each repair's before is the previous repair's after, from the notarized sha to the disk sha.
+   2. A scope change — a later step rewording a capability: append a `(decision)` entry to the
+      spec's `.memlog.md` and re-render `SPEC.md` through `bmad-spec`; update the `prd.md`
+      sprint-block FR in the same dispatch.
+   3. For that scope change, write ONE `REOPEN_AFTER_MET` record above, `artifact_sha_before` =
+      the notarized sha and `artifact_sha_after` = the disk sha, whose `scope_delta` names the
+      `CAP-<n>` or `FR-S<N>-<n>` it moves. It is operator-authorized under F6; a Tier-2
+      `DECIDED_AUTONOMOUSLY` is not authorization.
+   4. Run ONE verify pass in the same series citing that record in `resolves_divergence:`. It is
+      terminal and notarizes the bytes on disk.
+
    **This clause lives here rather than in Rule 8 because `SKILL.md` has no room.** The
    POST-COMPACT RECOVERY PROTOCOL must end inside Claude Code's ~5000-token re-attach
    window, and it ended with THREE tokens of slack; any prose added above it pushes the
@@ -600,7 +616,9 @@ It writes the repaired artifact in place plus a **repair record** (`<M>` = the p
 `_bmad-output/planning-artifacts/s<N>/<artifact>-repair-p<M>.md` when the caller is an
 adversarial pass, or at
 `_bmad-output/planning-artifacts/s<N>/gate-<type>-repair-p<M>.md` when the caller is a gate
-failure. Per finding — or per failed check — the disposition, the edit site, and the command
+failure. Both open with `- artifact:`, `- artifact_sha_before:` and `- artifact_sha_after:` —
+the repaired file and its whole-file sha256 on each side, as `team-roles/remediator.md` teaches.
+Per finding — or per failed check — the disposition, the edit site, and the command
 that derives every factual claim the repair asserts, with its output. The next adversarial pass
 verifies against that record; so does the gate's re-run of the failed checks.
 
