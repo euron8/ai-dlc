@@ -4108,7 +4108,12 @@ load the INSTALL's map, while `--mode adjudicate` still reads escalations from
 suppression join then pairs one tree's escalated set with another tree's escalations. No
 production caller aims the override at a foreign root, so this is latent.
 
-verify: manual
+Receipt: a FAIL verdict over the distribution's escalated set, adjudicated under a foreign root
+holding only `.claude/`, must name the distribution's `docs/escalations/pending.md` (exit 0), not
+the foreign root's (exit 1). `schema-install-fallback` arm N carries the near-miss (a root with its
+own map keeps its own escalations) and the ESC/ESCI mutants.
+
+verify: sh d=$(mktemp -d); mkdir -p "$d/F/.claude" "$d/g" || exit 9; n=implementation-20260715T140322Z; v="$d/g/$n.verdict.json"; ids=$(bash core/scripts/validate-gate-adjudication.sh --expected implementation 2>/dev/null); [ -n "$ids" ] || exit 9; python3 -c 'import json,sys; n=sys.argv[2]; ids=sys.argv[3:]; json.dump({"schema_id":"GATE_ADJUDICATION_VERDICT v1","gate_type":"implementation","gate_series_id":n,"gate_nonce":n,"generated_at":"2026-07-15T14:05:07Z","adjudicator_agent_id":"agent-fixture-0001","catalog":"core","verdicts":[{"check_id":c,"verdict":"FAIL" if i==0 else "PASS","evidence":"r %s"%c} for i,c in enumerate(ids)]},open(sys.argv[1],"w"))' "$v" "$n" $ids || exit 9; o=$(AI_DLC_PROJECT_ROOT="$d/F" bash core/scripts/validate-gate-adjudication.sh implementation "$v" 2>&1); case "$o" in *"$d/F/docs/escalations/pending.md"*) exit 1 ;; *"$PWD/docs/escalations/pending.md"*) exit 0 ;; esac; exit 9
 
 ## BL-327 — `validate-request-coverage.sh` locates its harness-origin schema by counting `..` hops
 
