@@ -428,6 +428,20 @@ TREE="$TRACE_ROOT/t"
 WORK="$TRACE_ROOT/w"
 SENTINEL="$TREE/.readset-sentinel"
 ENDMARK="$TREE/.readset-end"
+# UNDER THE SANDBOX TRACER THE MARKERS LIVE BESIDE THE TREE, NOT IN IT. A fixture that walks its
+# tree (`find .`, a python os.walk, an importer scanning every file) stats both markers, and each
+# such touch is one more marker line in the stream. The window is cut at the LAST start marker and
+# the FIRST end marker, so a walk moves its start INTO the fixture's run -- every report before the
+# walk silently leaves the set -- or puts an end marker before it, which omits the fixture.
+# Measured on the reference consumer: 8 start and 6 end marker lines in one fixture's stream,
+# where one of each is expected. A sibling directory the fixture never walks is reported under
+# the same profile and stream, and sandbox_paths keeps only paths under the tree.
+MARKDIR="$TRACE_ROOT/m"
+if [ "$TRACER" = sandbox ]; then
+  mkdir -p "$MARKDIR" || die "cannot create $MARKDIR"
+  SENTINEL="$MARKDIR/.readset-sentinel"
+  ENDMARK="$MARKDIR/.readset-end"
+fi
 say "copying the tree to $TREE"
 readset_copy_tree "$REPO_ROOT" "$TREE" "$WORK" || die "copy failed"
 [ -d "$TREE/.git" ] || die "copy carries no .git; git-backed fixtures would fail for the wrong reason"
@@ -450,10 +464,13 @@ if [ "$TRACER" = sandbox ]; then
   PROFILE="$WORK/sandbox.sb"
   if [ -n "${AI_DLC_READSET_SANDBOX_PROFILE:-}" ]; then
     [ -r "$AI_DLC_READSET_SANDBOX_PROFILE" ] || die "AI_DLC_READSET_SANDBOX_PROFILE names an unreadable file"
-    awk -v t="$TREE" '{ while ((i = index($0, "@TREE@")) > 0) $0 = substr($0, 1, i - 1) t substr($0, i + 6); print }' \
+    awk -v t="$TREE" -v m="$MARKDIR" '{
+        while ((i = index($0, "@TREE@")) > 0) $0 = substr($0, 1, i - 1) t substr($0, i + 6)
+        while ((i = index($0, "@MARK@")) > 0) $0 = substr($0, 1, i - 1) m substr($0, i + 6)
+        print }' \
       "$AI_DLC_READSET_SANDBOX_PROFILE" > "$PROFILE" || die "cannot write $PROFILE"
   else
-    printf '(version 3)\n(allow default)\n(allow file* process-exec* (subpath "%s") (with report))\n' "$TREE" > "$PROFILE" \
+    printf '(version 3)\n(allow default)\n(allow file* process-exec* (subpath "%s") (subpath "%s") (with report))\n' "$TREE" "$MARKDIR" > "$PROFILE" \
       || die "cannot write $PROFILE"
   fi
   sandbox-exec -f "$PROFILE" true 2>"$WORK/sandbox-probe.err" \
@@ -524,7 +541,7 @@ for fx in $LIST; do
     # reports, so a stream that was not live when an event fired has lost it for good -- which is
     # why the settle loop below and the end sentinel after the fixture are both required.
     /usr/bin/log stream --level debug --style compact \
-      --predicate "sender == \"Sandbox\" AND eventMessage CONTAINS \"$TREE/\"" > "$raw" 2>&1 &
+      --predicate "sender == \"Sandbox\" AND eventMessage CONTAINS \"$TRACE_ROOT/\"" > "$raw" 2>&1 &
     fs_pid=$!
   fi
 
