@@ -3321,6 +3321,11 @@ verify: sh f=core/fixtures/agent-definition-render/run.sh; [ -f "$f" ] || exit 9
 
 ## BL-273 — I33b's batched grammar narrowed on `${VAR/../…}` against an equivalence claim, and the one input separating the two implementations was in no corpus and no assertion
 
+**LANDED (v0.666.0, verified 9131a10e).** A27c was never dispatched: the fixture's enumerator
+`^A[0-9]{2}_` could not spell a lettered name, and A27c's raw-printf FAIL could not fail its
+worker. Both are fixed, a loose definition count now refuses an undispatched arm, and the receipt
+below runs A27c through `--run-one` instead of grepping for its name.
+
 **NOTE.** Found by the contract adversary auditing `0.594.0` and re-derived here. The release
 claims the batched predicate is equivalent to the per-file one, and on the live corpus it is —
 byte-identical stdout and stderr, 29 intermediate rows reproduced, 4 findings against 4 on a
@@ -3357,7 +3362,7 @@ against a ceiling of 1. It extracts `i33b_scan` from the validator, runs it over
 files, and exits 9 rather than 0 if the walk-up case stops being seen, so a predicate that matches
 nothing cannot close it.
 
-verify: sh v=scripts/validate-enforcement-map.sh; [ -f "$v" ] || exit 9; grep -q 'I33B_WALK_AWK' "$v" || exit 9; d=$(mktemp -d) || exit 9; sed -n '/^I33B_WALK_AWK=/,/^}$/p' "$v" > "$d/p.sh"; grep -q 'i33b_scan()' "$d/p.sh" || { rm -rf "$d"; exit 9; }; printf 'A="$(dirname "$X")"\nB="${A/../foo}"\n' > "$d/pat.sh"; printf 'A="$(dirname "$X")"\nB="${A}/../schemas/x.json"\n' > "$d/walk.sh"; . "$d/p.sh"; w=$(i33b_scan "$d/walk.sh" | grep -c .); p=$(i33b_scan "$d/pat.sh" | grep -c .); rm -rf "$d"; [ "$w" -eq 1 ] || exit 9; [ "$p" -eq 0 ] || exit 1; grep -q 'A27c_i33b_pattern_substitution' core/fixtures/enforcement-map-derivations/run.sh && exit 0; exit 1
+verify: sh v=scripts/validate-enforcement-map.sh; [ -f "$v" ] || exit 9; grep -q 'I33B_WALK_AWK' "$v" || exit 9; d=$(mktemp -d) || exit 9; sed -n '/^I33B_WALK_AWK=/,/^}$/p' "$v" > "$d/p.sh"; grep -q 'i33b_scan()' "$d/p.sh" || { rm -rf "$d"; exit 9; }; printf 'A="$(dirname "$X")"\nB="${A/../foo}"\n' > "$d/pat.sh"; printf 'A="$(dirname "$X")"\nB="${A}/../schemas/x.json"\n' > "$d/walk.sh"; . "$d/p.sh"; w=$(i33b_scan "$d/walk.sh" | grep -c .); p=$(i33b_scan "$d/pat.sh" | grep -c .); rm -rf "$d"; [ "$w" -eq 1 ] || exit 9; [ "$p" -eq 0 ] || exit 1; f=core/fixtures/enforcement-map-derivations/run.sh; [ -f "$f" ] || exit 9; o=$(bash "$f" --run-one A27c_i33b_pattern_substitution_is_not_a_walk 2>&1); r=$?; [ "$r" -eq 0 ] || exit 1; case "$o" in *'acquitted while'*) exit 0 ;; esac; exit 1
 
 ## BL-272 — `fork-profile.sh --section by-line` prints 60 of its rows and says nothing, so a by-line sum is silently partial and disagrees with the by-arm column it should equal
 
