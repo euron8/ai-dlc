@@ -98,12 +98,18 @@ previous session.
    - The snapshot is already current (kept fresh by
      `gate-validation.md` Check 14 on each gate passage throughout the
      previous session); do NOT re-initialize it.
-3. If the snapshot exists but user input does NOT indicate a resume
+3. If the snapshot exists but is EMPTY (0 bytes) and the input carries a
+   resume signal, there is no state to resume: an earlier Step 6 was
+   interrupted after the rotator archived the old snapshot and before the
+   new one was written. Say so in the first output line, do not rebuild
+   state from the archive, and continue to Step 1; Step 6 writes the new
+   snapshot into the empty file.
+4. If the snapshot exists but user input does NOT indicate a resume
    (e.g., the user is starting a new feature while an old snapshot
    remains on disk from a previous pipeline run), continue to Step 1.
    Step 6 will detect the stale snapshot and archive it before
    creating a new one.
-4. If no snapshot exists, continue to Step 1 normally.
+5. If no snapshot exists, continue to Step 1 normally.
 
 ### Step 0a: Snapshot Integrity Validation (resume dispatch only)
 

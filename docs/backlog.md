@@ -4079,7 +4079,10 @@ verify: sh R=core/scripts/rotate-snapshot-archive.sh; [ -f "$R" ] || exit 9; d=$
 present and 0 bytes. Step 0 item 1 routes it away from resume, but items 3 and 4 cover only "not a
 resume" and "no snapshot", so `/ai-dlc resume` there falls through with no stated rule.
 
-verify: manual
+The receipt extracts the numbered Step 0 item that opens "If the snapshot exists but is EMPTY" and
+requires it to name the resume signal, the 0-byte state and its route. Scored tip 0, base 1.
+
+verify: sh r=core/skills/ai-dlc/steps/route.md; [ -f "$r" ] || exit 9; z=$(LC_ALL=C awk '/^### Step 0:/{z=1;next} /^### /{z=0} z' "$r"); [ -n "$z" ] || exit 1; i=$(LC_ALL=C awk '/^[0-9]+\. /{p=0} /^[0-9]+\. If the snapshot exists but is EMPTY/{p=1} p' <<<"$z"); [ -n "$i" ] || exit 1; grep -q 'resume signal' <<<"$i" && grep -q '0 bytes' <<<"$i" && grep -q 'continue to Step 1' <<<"$i"
 
 ## BL-324 — an interrupted `snapshot-archive-rotate` kill sweep can leak its scratch trees
 
