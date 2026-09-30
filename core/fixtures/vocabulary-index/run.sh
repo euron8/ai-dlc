@@ -32,6 +32,10 @@
 #   m20 dup-same-value a field repeated VERBATIM, so the values agree    -> must FAIL
 #   m21 unreadable-src the marker corpus at mode 000 -- exists, unreadable -> must FAIL
 #   m22 dup-nonadjacent a repeat SEPARATED from the first declaration      -> must FAIL
+#   m23 dup-name     one vocabulary NAME declared by two non-adjacent blocks -> must FAIL
+#   n2  name-prefix  two names sharing a prefix                           -> must PASS
+#   m24 dup-key      one JSON object repeating `enum`                     -> must FAIL
+#   n3  key-prefix   `enum`/`enum2` in one object, `enum` in a sibling     -> must PASS
 #
 # WHY THIS FIXTURE IS THE ONLY EVIDENCE THE RENDERER WORKS. Its finding set over the real
 # tree is EMPTY by design -- a green `--check` is the steady state, and a renderer that
@@ -785,7 +789,47 @@ else
   fi
 fi
 
+# --- the repeated-NAME and repeated-KEY group --------------------------------------------
+# Two populations, two repeat shapes, each with its near-miss beside it. Both near-misses
+# SHARE A PREFIX with the name or key they sit next to, so a refusal keyed on a substring or
+# on a leading word refuses them and fails its green half. The offender's repeat is placed in
+# a NON-adjacent block, with a distinct block in between, so a refusal that compares a name
+# only with the previous block cannot pass it.
+
+# m23 -- one vocabulary NAME declared by two blocks that are not adjacent.
+seed "$TMP/m23"
+if mutate "$TMP/m23/$MAP" 's|^# vocabulary: adjudicated codes$|# vocabulary: ledger statuses|'; then
+  kill_check_all "m23 dup-name     one vocabulary name in two blocks" "$TMP/m23" render \
+    'same vocabulary NAME' "'ledger statuses'"
+else
+  note "SKIP  m23 -- sed matched nothing; no mutation occurred"; rc=1
+fi
+
+# n2 -- two names sharing a PREFIX must both render.
+seed "$TMP/n2"
+if mutate "$TMP/n2/$MAP" 's|^# vocabulary: adjudicated codes$|# vocabulary: ledger statuses two|'; then
+  green_check "n2  name-prefix    two names sharing a prefix" "$TMP/n2" \
+    "11 cross-file vocabular(ies), 1 schema enum(s)" '| ledger statuses |' '| ledger statuses two |'
+else
+  note "SKIP  n2 -- sed matched nothing; no mutation occurred"; rc=1
+fi
+
+# m24 -- one JSON object repeating the `enum` key. json.load keeps the LAST copy, so without
+# the refusal the index renders SECONDDECL and FIRSTDECL vanishes at exit 0.
+seed "$TMP/m24"
+printf '%s\n' '{"fields": [{"name": "verdict", "enum": ["FIRSTDECL"], "enum": ["SECONDDECL"]}]}' \
+  > "$TMP/m24/core/schemas/seeded.json"
+kill_check_all "m24 dup-key      one JSON object repeating enum" "$TMP/m24" render \
+  'repeats a key inside one JSON object' 'seeded.json' '!OK: wrote'
+
+# n3 -- `enum` and `enum2` in one object plus `enum` in a SIBLING object: no repeat anywhere.
+seed "$TMP/n3"
+printf '%s\n' '{"fields": [{"name": "verdict", "enum": ["YES", "NO"], "enum2": ["X"]}, {"name": "other", "enum": ["UP"]}]}' \
+  > "$TMP/n3/core/schemas/seeded.json"
+green_check "n3  key-prefix     enum/enum2 in one object, enum in a sibling" "$TMP/n3" \
+  "11 cross-file vocabular(ies), 2 schema enum(s)" '| `seeded.json` | `verdict` | `YES` `NO` |' '| `seeded.json` | `other` | `UP` |'
+
 if [ "$rc" -eq 0 ]; then
-  note "PASS  vocabulary-index -- 2 controls + 2 near-miss green, 22/22 mutants killed by their own arm"
+  note "PASS  vocabulary-index -- 2 controls + 4 near-miss green, 24/24 mutants killed by their own arm"
 fi
 exit "$rc"
