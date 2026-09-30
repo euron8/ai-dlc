@@ -15,6 +15,19 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.671.0] - 2026-09-30
+
+Batch 176's first release. It ships alone because `apply.sh` runs `sync-transient-ignore.sh`
+during a consumer pull. Discharges no consumer candidate.
+
+### Backlog
+
+- **`BL-329`** — `sync-transient-ignore.sh --root <foreign>` in the consumer layout exited 2 with
+  `pipeline-state-paths.json not found`: its schema candidates were the environment variable, the
+  script's sibling `schemas/`, and the `--root` tree, never the install root the script runs from.
+  The install root's `.claude/schemas/` is now the last candidate. `transient-ignore-block` arm 9
+  carries the own-declaration near-miss and mutant M5.
+
 ## [0.670.0] - 2026-09-30
 
 Batch 175's third release, and the first to touch the update engine. It ships alone because the
