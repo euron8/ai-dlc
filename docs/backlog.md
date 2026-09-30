@@ -2456,3 +2456,59 @@ path is a push failing AFTER the gate returned OK on an in-sync branch, so it is
 BL-389 fixed and 0.673.0 did not make it worse. Discharges no consumer candidate.
 
 verify: manual
+
+## BL-395 — the steering budget is counted after the fact and nothing refuses a foreground call that will exceed it
+
+**DEFECT.** Filed by the consumer as PC-S315-STEERING-BUDGET-COUNTS-BUT-DOES-NOT-PREVENT. Two claims:
+
+1. `validate-steering-budget.sh` Check A is detect-only. It counts foreground tool calls that blocked
+   past `AI_DLC_STEERING_BUDGET` (120 s by default) from the transcript, after they ran, and the count
+   is the only consequence. The consumer's S315 run reported 26 such calls, 25 of them Bash, the worst at
+   10.0 min. **Re-derived here:** no file under `core/hooks/` read `run_in_background` or
+   `tool_input.timeout` for a deny before this entry, and the detector has no preventing half.
+2. The filing did not establish whether a refusal is feasible, since runtime is unknowable before the
+   call. It proposed a registry of known-long command names.
+
+**Mechanism: a deny keyed on the DECLARED timeout, not a warning and not a command registry.** A
+PreToolUse `additionalContext` reaches the model with the tool result, after the block it would warn
+about, so a warning cannot prevent anything. The declared `timeout` is the caller's own statement of how
+long it will block. Measured by the batch 177 adversary on the consumer's 15 transcripts since the S315
+cut: `timeout > 120000` flags 183 foreground calls and catches 29 of 41 overruns, while the command
+registry flags 425 and catches 9. Re-derived read-only with the same script against the same directory
+and cutoff: 15 files, 183 flagged, 29 of **42** overruns caught. The corpus is filtered by mtime and a
+live session had grown it by one overrun.
+
+`core/hooks/ai-dlc-foreground-budget.sh`, registered on matcher `Bash` in
+`templates/settings.json.template` and committed 100755, denies a Bash call whose `run_in_background`
+is not true and whose `tool_input.timeout` exceeds the budget × 1000 ms. The reason names the re-issue
+with `run_in_background: true`. **The budget is the detector's:** `AI_DLC_STEERING_BUDGET` is read
+first, and when it is unset the default is read from the detector's own
+`BUDGET="${AI_DLC_STEERING_BUDGET:-N}"` line at `scripts/ai-dlc/validate-steering-budget.sh`. This is a
+derivation, not a second `120` bound by a test. A call with no timeout, a timeout at or under the budget,
+`run_in_background: true`, or a non-Bash tool is never touched. No `jq`, unparseable input, an
+unreadable budget, or no detector on disk all ALLOW the call and say so on stderr. It always exits 0 and
+emits no `additionalContext`, so it stays outside I98's population. Every deny is satisfiable on the
+next call by either of two always-available edits to the same call, which is the no-wedge argument
+`ai-dlc-recover-gate.sh` makes.
+
+**What it cannot see.** 12 of the adversary's 41 overruns (13 of 42 re-derived) declared no timeout.
+Those run under the harness default and stay the detector's to count. It also cannot tell a call that
+declared a long timeout and would have returned quickly; those calls are denied, and the consumer
+re-issues them backgrounded. The adversary's note N2, **unverified**: Check A may count
+permission-approval waits as starvation, which would inflate the detector's figure without any
+foreground call running long.
+
+**Fixture `foreground-budget-deny`** (ships, so it is in `uninstall.sh`, `core-manifest.md` and
+`setup-sites.md`) drives the real hook through eleven arms: OVER, REASON, BG, NOTIMEOUT, BOUNDARY
+(exactly at budget allowed, one ms over denied), ENV (override raises the budget, lowers it, and works
+with no detector on disk), DEFAULT (a detector copy whose default is 60 denies 90000 where the real one
+allows it), NONBASH, NODETECTOR, MALFORMED (stderr says fail-open), and EXIT. It runs twelve mutants,
+each scored against the exact set of arms it must fail, plus an unmutated control from the same
+directory. The read-set map has no entry for the new directory; the operator owes
+`sudo bash core/scripts/derive-fixture-readsets.sh --list "foreground-budget-deny"`.
+
+Held note (batch 177): the hook, its registration, the fixture and its packaging entries shipped on branch
+`b177-r0-hook`. Receipt scored four ways: tip (no hook) exits 1, fix exits 0, a warning-only hook exits 1,
+and a hook that also denies `run_in_background: true` exits 1.
+
+verify: sh H=core/hooks/ai-dlc-foreground-budget.sh; command -v jq >/dev/null 2>&1 || exit 9; [ -f "$H" ] || exit 1; grep -q 'ai-dlc-foreground-budget.sh' templates/settings.json.template || exit 1; d() { printf '{"tool_name":"Bash","tool_input":{"command":"x"%s}}' "$1" | AI_DLC_STEERING_BUDGET=120 CLAUDE_PROJECT_DIR=. bash "$H" 2>/dev/null | jq -r '.hookSpecificOutput | select(.permissionDecision == "deny") | .permissionDecisionReason' 2>/dev/null; }; case "$(d ',"timeout":600000')" in *'run_in_background: true'*) ;; *) exit 1 ;; esac; [ -z "$(d ',"timeout":600000,"run_in_background":true')" ] || exit 1; [ -z "$(d ',"timeout":120000')" ] || exit 1; [ -z "$(d '')" ]
