@@ -1427,6 +1427,15 @@ verify: manual
 
 ## BL-077
 
+**FIXED IN v0.668.0, pending the post-merge close.** `validate-steering-budget.sh` derives the corpus
+from `$HOME/.claude/projects/*/$CLAUDE_CODE_SESSION_ID.jsonl` when given neither flag: the file for the
+checks and `--count`, the slug directory for `--cite`/`--since`. Zero or multiple matches, an unset id,
+or an id outside `[A-Za-z0-9-]` fall back to both refusals byte-for-byte. All five delegating call
+sites pass an explicit flag and return before calling when they have none, so no fail-open or
+fail-closed branch moved. Check 25 and the retro audit no longer carry a typed derivation. Pinned by
+`check-25-steering-conduct` `derive-shipping` (`CNSZTE`), mutants G/H/I/J killed. Receipt: base 1,
+tip 0, hardcoded 1, refuse-override 9, doc-only 1.
+
 **`validate-steering-budget.sh` refuses to run without a caller-supplied corpus, so the
 derivation of "this session's transcript" is retyped by the MODEL in prose at
 `core/skills/ai-dlc/steps/gate-validation.md:1665` and by hand in `steps/retro.md:614`, where
@@ -1723,6 +1732,21 @@ verify: sh set -e; a=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$a" ] |
 
 ## BL-126 — the pause-flag deny hook reads no agent identity, so it cannot let an in-flight teammate write reach a consistent stop
 
+**FIXED IN v0.668.0 BY THE APPROXIMATION, NOT TRUE QUIESCE, pending the post-merge close.** Check 3 of
+`core/hooks/ai-dlc-acknowledge.sh` now reads the actor: on a paused tree a
+`Write|Edit|MultiEdit|NotebookEdit` under `_bmad-output/` carrying an `agent_id` is ALLOWED and logged
+as `ACK_TEAMMATE_WRITE` naming the agent and the file; `Agent|Task|Skill|TaskCreate` stay denied for
+teammates, so no new work is dispatched while paused; the lead, and a `--agent` lead carrying
+`agent_type` alone, are denied exactly as before. It is not quiesce: the hook has no record of which
+writes were in flight when the flag went up, so a teammate dispatched before the pause may keep
+writing for as long as it runs, bounded by the dispatch deny. Every `ACK_DENIED` row now carries
+`Agent:` and `File:`. Found and fixed in the same change: `NotebookEdit` carries `notebook_path`, so a
+lead's notebook under `_bmad-output/` was never pause-denied; Check 3 now reads both. Pinned in
+`route-read-required` section 8 (red on 4 arms against the pre-fix hook) and in
+`route-read-required-mutants` (six mutants, each moving only its own cell). The receipt below drives
+behaviour: base 1, fix 0, and 1 each for a blanket teammate exemption, the arm widened to dispatch
+tools, an `agent_type` key, an unlogged allow, and an `ACK_DENIED` row without `File:`.
+
 **The PreToolUse deny at `core/hooks/ai-dlc-acknowledge.sh:466` fires the moment
 `_bmad-output/pipeline-paused.flag` exists, and the hook reads no field that could tell a
 TEAMMATE's in-flight write from the LEAD's next advancing action.** Its whole read-set is
@@ -1790,7 +1814,7 @@ exemption keyed on `agent_type` scores 1: a lead started with `claude --agent <n
 `agent_type` and no `agent_id`, and the receipt drives that lead as its own paused cell. Read `BL-156` for why Check 2z took the blanket form and this
 check must not inherit it.
 
-verify: sh h=core/hooks/ai-dlc-acknowledge.sh; [ -f "$h" ] || exit 9; command -v jq >/dev/null || exit 9; r=$(grep -v '^[[:space:]]*#' "$h" | grep -oE 'jq -r [^|]*\.[a-z_.]+' | grep -oE '\.[a-z_][a-z_.]*' | sort -u); [ -n "$r" ] || exit 9; printf '%s\n' "$r" | grep -q '^\.tool_name$' || exit 9; w=$(mktemp -d) || exit 9; trap 'rm -rf "$w"' EXIT; mkdir -p "$w/p/_bmad-output/planning-artifacts/s7" "$w/p/scripts/ai-dlc"; printf '#!/bin/sh\necho 7\n' > "$w/p/scripts/ai-dlc/sprint-status.sh"; chmod +x "$w/p/scripts/ai-dlc/sprint-status.sh"; : > "$w/p/_bmad-output/pipeline-snapshot.md"; : > "$w/p/_bmad-output/pipeline-paused.flag"; printf '{"type":"user","message":{"content":"<command-name>/ai-dlc</command-name>"}}\n{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"/w/.claude/skills/ai-dlc/steps/route.md"}}]}}\n' > "$w/s.jsonl"; d(){ jq -nc --arg tr "$w/s.jsonl" --arg ag "$1" '{session_id:"r",transcript_path:$tr,tool_name:"Write",tool_input:{file_path:"/w/_bmad-output/planning-artifacts/x.md"}}+(if $ag=="" then {} elif $ag=="type" then {agent_type:"Explore"} else {agent_id:$ag,agent_type:"general-purpose"} end)' | CLAUDE_PROJECT_DIR="$w/p" bash "$h" 2>/dev/null; }; a=$(d ""); b=$(d ax); f=$(d type); case "$a" in *"Rule 29"*) ;; *) exit 9;; esac; case "$f" in *"Rule 29"*) ;; *) exit 1;; esac; case "$b" in *"Rule 29"*) exit 1;; *permissionDecision*) exit 9;; esac; printf '%s\n' "$r" | grep -qE '^\.(subagent|agent_type|agent_id|parent_session_id|invoked_by)' || exit 1; exit 0
+verify: sh h=core/hooks/ai-dlc-acknowledge.sh; [ -f "$h" ] || exit 9; command -v jq >/dev/null || exit 9; w=$(mktemp -d) || exit 9; trap 'rm -rf "$w"' EXIT; printf '{"type":"user","message":{"content":"<command-name>/ai-dlc</command-name>"}}\n{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"/w/.claude/skills/ai-dlc/steps/route.md"}}]}}\n' > "$w/s.jsonl"; d(){ p="$w/$1"; mkdir -p "$p/_bmad-output/planning-artifacts/s7" "$p/scripts/ai-dlc"; printf '#!/bin/sh\necho 7\n' > "$p/scripts/ai-dlc/sprint-status.sh"; chmod +x "$p/scripts/ai-dlc/sprint-status.sh"; : > "$p/_bmad-output/pipeline-snapshot.md"; : > "$p/_bmad-output/pipeline-paused.flag"; jq -nc --arg tr "$w/s.jsonl" --arg t "$2" --arg ag "$3" --arg f "$p/_bmad-output/planning-artifacts/s7/prd.md" '{session_id:"r",transcript_path:$tr,tool_name:$t,tool_input:(if $t=="Agent" then {} else {file_path:$f} end)}+(if $ag=="" then {} elif $ag=="type" then {agent_type:"Explore"} else {agent_id:$ag,agent_type:"general-purpose"} end)' | CLAUDE_PROJECT_DIR="$p" bash "$h" 2>/dev/null; }; lw=$(d lw Write ""); case "$lw" in *"Rule 29"*) ;; *) exit 9;; esac; grep -qF -- "- File: $w/lw/_bmad-output/planning-artifacts/s7/prd.md" "$w/lw/_bmad-output/pipeline-continuation-log.md" || exit 1; tw=$(d tw Write ax); case "$tw" in *permissionDecision*) exit 1;; esac; grep -q '^## .*-- ACK_TEAMMATE_WRITE' "$w/tw/_bmad-output/pipeline-continuation-log.md" 2>/dev/null || exit 1; grep -qF -- "- Agent: ax" "$w/tw/_bmad-output/pipeline-continuation-log.md" || exit 1; ta=$(d ta Agent ax); case "$ta" in *"Rule 29"*) ;; *) exit 1;; esac; fl=$(d fl Write type); case "$fl" in *"Rule 29"*) ;; *) exit 1;; esac; exit 0
 
 ## BL-129 — a change to an adjudication predicate has no mechanism that can see what it RECLASSIFIES
 
@@ -2157,6 +2181,13 @@ verify: sh g=core/skills/ai-dlc-update/reconcile/self-update-gate.sh; [ -f "$g" 
 
 ## BL-133 — line-number citations in shipped core prose resolve against a different file on every consumer
 
+**PARTIAL IN v0.668.0.** The two non-bootstrapping citations (`gate-validation.md`,
+`_gate-procedures.md`) are re-cited by greppable token; both had already drifted. The receipt below
+excludes `core/fixtures/` (six seed-data hits) and scores 5 at base, 3 at tip. The remaining three sit
+in `core/skills/ai-dlc-update/` (`SKILL.md`, `predicate-sites.md` twice) and ship with the next
+release touching that subtree, which is bootstrapping. A citation with no backtick escapes the
+grammar (`predicate-sites.md` "at its lines 118-120").
+
 A consumer runs whatever version it last installed, so a `<path>:<line>` written into shipped
 `core/` prose points into a file that has moved. It does not error; it silently lands on unrelated
 text, which is the failure mode this repo treats as worse than a missing citation.
@@ -2183,7 +2214,7 @@ by searching, which is what they would have done with no citation at all.
 The receipt counts BOTH forms across shipped `core/**/*.md`. Scored two directions: 1 against the
 tree, and 0 against a scratch copy with every citation redacted.
 
-verify: sh n=0; for f in $(git ls-files "core/**/*.md"); do a=$(grep -coE "\`[a-zA-Z0-9._/-]+\.(sh|md|yaml|json):[0-9]+" "$f"); b=$(grep -coE "\`:[0-9]+" "$f"); n=$((n+a+b)); done; [ "$n" -eq 0 ] && exit 0; exit 1
+verify: sh L=$(git ls-files -- "core/**/*.md" ":(exclude)core/fixtures/**"); [ -n "$L" ] || exit 9; [ "$(grep -coE "\`[a-zA-Z0-9._/-]+\.(sh|md|yaml|json):[0-9]+|\`:[0-9]+" <<<"x \`a/b.sh:12 y")" = 1 ] || exit 9; n=0; for f in $L; do a=$(grep -coE "\`[a-zA-Z0-9._/-]+\.(sh|md|yaml|json):[0-9]+" "$f"); b=$(grep -coE "\`:[0-9]+" "$f"); n=$((n+a+b)); done; [ "$n" -eq 0 ] && exit 0; exit 1
 
 ## BL-142 — a withdrawn claim is reported forever, and its withdrawal is invisible by construction
 
