@@ -1222,7 +1222,8 @@ T_SECT() { awk '/Template pre-classification/{f=1;next} f&&/^\*\*/{exit} f' "$1"
 # sites drive (the two refusal worlds included — they render DETECTOR-REFUSED at rc 0).
 t_stage() { bash "$2" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$1" 2> "$1.stderr"; }
 # t_stage_why <region-file> <rc> — the refusal text: the status and the producer's last stderr line.
-t_stage_why() { printf 'exited %s (%s)' "$2" "$(grep -v '^[[:space:]]*$' "$1.stderr" 2>/dev/null | tail -1 | cut -c1-160)"; }
+t_stage_why() { local e; e="$(grep -v '^[[:space:]]*$' "$1.stderr" 2>/dev/null | tail -1 | cut -c1-160)"
+  printf 'exited %s (%s)' "$2" "${e:-no stderr}"; }
 
 # THE BATTERY RENDERS ITS OWN REGION, and that is not tidiness. `$REGION` was rendered by seed.sh
 # before assertions 12-14 seeded a ledger and two shadowed forks into `$CONSUMER`, so a `--verify`
