@@ -2532,7 +2532,10 @@ case inside one strategy row was never its own unit. **Measured on the consumer,
 S315's strategy row for `1.4-UNIT-002` lists cases (a) to (g). The story's Check 21 repair section
 maps 6 of the 7 to nodes in `server/tests/test_s315_4_base_binding.py` and states (g) has none. A
 per-letter check over that population returns 6 resolved and 1 unresolved: the true (g), with 0
-false positives. **N=1 strategy row**, so the zero is a floor, not a rate. The same story carries
+false positives. **N=1 strategy row**, so the zero is a floor, not a rate. That figure was taken
+over the repair section's PROSE mapping, and it scores the per-letter resolution logic only. The
+shipped Check 21 wording does not accept that prose as a citation. On S315 as it stands, with no
+story carrying the table, the check FAILS on shape and never reaches the letters. The same story carries
 rows no collectable node can satisfy: `1.4-OPS-001`/`-004` are deploy-time and `1.4-UNIT-005` is a
 shell predicate. The table's `Kind` column exists so those rows do not fail a node check.
 
