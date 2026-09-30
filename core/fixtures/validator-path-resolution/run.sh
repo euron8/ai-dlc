@@ -179,6 +179,13 @@ printf '# stories-test-strategy\n\nfalsifiable acceptance criteria\n' \
   > "$WORK/.claude/skills/ai-dlc/steps/stories-test-strategy.md"
 printf '# pending\n\n## [x] [lead] - 2026-01-01T00:00:00Z\n**Status:** RESOLVED\n' \
   > "$WORK/docs/pending.md"
+# validate-request-coverage.sh reads schemas/harness-origin.json BEFORE it selects a request, so a
+# capture and a brief with no LOCKED block get it past argument parsing to that read: under the
+# right root it resolves the schema and stops at "no LOCKED bullet", under the poisoned one it
+# refuses the schema. Both exit 2; the words differ, which is the separation the mutant arm reads.
+printf '# requests\n\n## 2026-01-01T00:00:00Z -- /ai-dlc\n- SHA256: abc\n\n```text\nplease\n```\n' \
+  > "$WORK/docs/requests.md"
+printf '# brief\n' > "$WORK/docs/brief.md"
 for d in check-h1-recursion check-17-bypass check-manifest-bypass; do
   mkdir -p "$WORK/tests/fixtures/$d" || exit 2
   printf 'seed\n' > "$WORK/tests/fixtures/$d/README.md"
@@ -195,7 +202,7 @@ done
 # an install-first fallback here. The seed is not under the correct root, so the agreement runs
 # above are untouched. No exemption list: each of the five proves sensitivity the ordinary way.
 mkdir -p "$WORK/scripts/core/schemas" || exit 2
-for _pz in sprint-status.json provenance-block.json audit-anchors.json gate-adjudication-verdict.json write-format-steering.json; do
+for _pz in sprint-status.json provenance-block.json audit-anchors.json gate-adjudication-verdict.json write-format-steering.json harness-origin.json pipeline-state-paths.json; do
   printf '{ "vpr_poison": true }\n' > "$WORK/scripts/core/schemas/$_pz"
 done
 
@@ -220,6 +227,7 @@ argv_for() {
     validate-ac-falsifiability.sh)  printf '%s' "$WORK/docs/stories/story-1.md" ;;
     validate-escalation-status-vocabulary.sh) printf '%s' "$WORK/docs/pending.md" ;;
     validate-suppression-lifetime.sh) printf '%s' "--escalations $WORK/docs/pending.md" ;;
+    validate-request-coverage.sh)   printf '%s' "--requests $WORK/docs/requests.md --brief $WORK/docs/brief.md --sprint 1" ;;
     validate-h2-attestation.sh)     printf '%s' "--digest" ;;
     # `current` prints nothing from every root when no ledger exists, which is byte-identical
     # and scores the resolver INERT. `list` on a nonce that the seed does not carry is the

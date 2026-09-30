@@ -220,6 +220,39 @@ ESC
 ESC
   if [[ "$(check6_detail "$t")" == *"no DECIDED_AUTONOMOUSLY or HARD_BLOCK waiver for 'Story 302-1'"* ]]; then
     echo "A12 PASS"; else echo "A12 FAIL"; fi
+
+  # --- A13 (BL-328): run from a SUBDIRECTORY of the consumer, the schema and the corpus are still
+  # found. The schema lookup used bare `.claude/schemas/…` and `core/schemas/…`, which resolve
+  # against the cwd: in this consumer-shaped tree the script-relative candidate is scripts/schemas/
+  # (absent), so a run from below the root found no schema and Check 6 failed as unresolved. A2 is
+  # the near-miss — the same tree driven from the root, which passed before and after.
+  t="$(fresh "$TOOLS")"
+  story "$t/$MIG" story-1-alpha done
+  story "$t/$MIG" story-2-beta  in_progress
+  mkdir -p "$t/docs/sub"
+  if [[ "$( ( cd "$t/docs/sub" && bash "$t/scripts/ai-dlc/validate-mandatory-rules.sh" 302 2>&1 ) | grep -E '^  CHECK 6:')" == *"PASS — 2 story file(s) verified"* ]]; then
+    echo "A13 PASS"; else echo "A13 FAIL"; fi
+
+  # --- A14 (BL-328): the WAIVER path from a subdirectory gives the ROOT-RUN verdict. A11's world
+  # (a self-executed story whose naming escalation entry carries DECIDED_AUTONOMOUSLY), driven from
+  # docs/sub/. Re-rooting only the schema and the corpus found the story but not
+  # docs/escalations/pending.md, so a VALID waiver failed with "no waiver" -- a wrong reason, worse
+  # than the honest "unresolved" base printed. Asserted as byte-equality of the Check 6 verdict AND
+  # every Check6_ detail line with the root run, plus the PASS itself, so a wrong-reason FAIL and a
+  # differently-worded pass both fail it. A11 is the root-run near-miss.
+  t="$(fresh "$TOOLS")"
+  selfexec_story "$t/$MIG" story-1-alpha
+  escalations "$t" <<'ESC'
+## [Sprint-302 / Story 302-1 self-execution] Lead - 2026-08-11
+**Status:** DECIDED_AUTONOMOUSLY
+**Context:** covered.
+ESC
+  mkdir -p "$t/docs/sub"
+  local a14_root a14_sub
+  a14_root="$( ( cd "$t" && bash "$t/scripts/ai-dlc/validate-mandatory-rules.sh" 302 2>&1 ) | grep -E '^  CHECK 6:|^\[Check6_')"
+  a14_sub="$( ( cd "$t/docs/sub" && bash "$t/scripts/ai-dlc/validate-mandatory-rules.sh" 302 2>&1 ) | grep -E '^  CHECK 6:|^\[Check6_')"
+  if [ "$a14_sub" = "$a14_root" ] && [[ "$a14_sub" == *"PASS — 1 story file(s) verified"* ]]; then
+    echo "A14 PASS"; else echo "A14 FAIL"; fi
 }
 
 echo "story-corpus-sprint-slot:"
@@ -230,7 +263,7 @@ FAILED="$(battery "$TD_REAL" | awk '$2=="FAIL"{printf "%s ", $1}')"
 if [ -n "$FAILED" ]; then
   bad "battery failed on the SHIPPING tools: $FAILED"
 else
-  ok "all 12 assertions pass on the shipping tools"
+  ok "all 14 assertions pass on the shipping tools"
 fi
 
 # =============================================================================
@@ -239,7 +272,7 @@ fi
 # =============================================================================
 mutant() { # <expected-assertion> <label> <target: ss|vmr> <sed expr>
   local want="$1" label="$2" which="$3" expr="$4"
-  local mdir="$WORK/mut-$want"
+  local mdir="$WORK/mut-${want// /_}"
   rm -rf "$mdir"; cp -R "$TD_REAL" "$mdir"
   local target
   case "$which" in
@@ -288,6 +321,17 @@ mutant A10 "corpus literal restated instead of resolved" ss \
 # mutation is exactly the layer under test, and A11 staying green is what says so.
 mutant A12 "waiver window free to cross an entry boundary again" vmr \
   '/^          \/\^## \/ { win = 0 }/d'
+# A13 + A14: the BL-328 fix reverted whole -- the process no longer moves to the walked-up root, so
+# every read resolves against the invoking directory again. Both subdirectory arms fail and that is
+# declared, not entangled: A14 reads everything A13 reads (schema, corpus) plus the escalations
+# file, so no mutant can fail A13 without A14. A14's own subject is the mutant below.
+mutant "A13 A14" "the process stays in the invoking directory" vmr \
+  's|^if \[ -n "\$VMR_ROOT" \] && \[ "\$VMR_ROOT" != "\$VMR_CALLER_CWD" \]; then$|if false; then|'
+# A14: ONE read restored to the invoking directory -- the escalations file -- with the schema and
+# corpus still rooted. That is the partial re-root this arm exists for: the story is found, its
+# waiver is not, and Check 6 fails with a wrong reason. A11 (root run) must stay green.
+mutant A14 "escalations file read from the invoking directory again" vmr \
+  's|^ESCALATIONS_FILE="docs/escalations/pending.md"$|ESCALATIONS_FILE="${VMR_CALLER_CWD}/docs/escalations/pending.md"|'
 
 # --- Unmutated control -------------------------------------------------------
 # A copy in the same directory shape as the mutants, mutated not at all. Without it, a harness

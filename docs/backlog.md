@@ -4457,6 +4457,8 @@ verify: sh f=core/fixtures/snapshot-archive-rotate/run.sh; [ -f "$f" ] || exit 9
 
 ## BL-326 — `validate-gate-adjudication.sh` reads the map from the install fallback and the escalations from the foreign root
 
+**FIXED IN v0.667.0, pending the post-merge close.** Escalations are read from the root the map resolved under (`GA_MAP_ROOT`); receipt 0 at tip, 1 at base; `schema-install-fallback` arm N, ESC/ESCI killed.
+
 **NOTE.** Found by the batch-160 contract adversary.
 
 Since 0.646.0, a foreign `AI_DLC_PROJECT_ROOT` with no `enforcement-map.yaml` makes the script
@@ -4465,9 +4467,16 @@ load the INSTALL's map, while `--mode adjudicate` still reads escalations from
 suppression join then pairs one tree's escalated set with another tree's escalations. No
 production caller aims the override at a foreign root, so this is latent.
 
-verify: manual
+Receipt: a FAIL verdict over the distribution's escalated set, adjudicated under a foreign root
+holding only `.claude/`, must name the distribution's `docs/escalations/pending.md` (exit 0), not
+the foreign root's (exit 1). `schema-install-fallback` arm N carries the near-miss (a root with its
+own map keeps its own escalations) and the ESC/ESCI mutants.
+
+verify: sh d=$(mktemp -d); mkdir -p "$d/F/.claude" "$d/g" || exit 9; n=implementation-20260715T140322Z; v="$d/g/$n.verdict.json"; ids=$(bash core/scripts/validate-gate-adjudication.sh --expected implementation 2>/dev/null); [ -n "$ids" ] || exit 9; python3 -c 'import json,sys; n=sys.argv[2]; ids=sys.argv[3:]; json.dump({"schema_id":"GATE_ADJUDICATION_VERDICT v1","gate_type":"implementation","gate_series_id":n,"gate_nonce":n,"generated_at":"2026-07-15T14:05:07Z","adjudicator_agent_id":"agent-fixture-0001","catalog":"core","verdicts":[{"check_id":c,"verdict":"FAIL" if i==0 else "PASS","evidence":"r %s"%c} for i,c in enumerate(ids)]},open(sys.argv[1],"w"))' "$v" "$n" $ids || exit 9; o=$(AI_DLC_PROJECT_ROOT="$d/F" bash core/scripts/validate-gate-adjudication.sh implementation "$v" 2>&1); case "$o" in *"$d/F/docs/escalations/pending.md"*) exit 1 ;; *"$PWD/docs/escalations/pending.md"*) exit 0 ;; esac; exit 9
 
 ## BL-327 — `validate-request-coverage.sh` locates its harness-origin schema by counting `..` hops
+
+**FIXED IN v0.667.0, pending the post-merge close.** Canonical AI_DLC_ROOT block (I75) plus install-root last candidate; receipt 0 at tip, 1 at base; `request-coverage` legacy-layout arm and hop mutant, `validator-path-resolution` now requires it root-sensitive.
 
 **NOTE.** Found by the batch-160 contract adversary.
 
@@ -4476,9 +4485,15 @@ verify: manual
 right only while the script sits exactly two levels below the project root, which is the hop
 count the repo's walk-up rule forbids. A copy anywhere else gets an empty `HARNESS_ORIGIN`.
 
-verify: manual
+Receipt: a copy at the pre-relocation `scripts/X` of a consumer-shaped tree holding the schema only
+at `.claude/schemas/`, run from `docs/`, must reach its brief check (exit 0) rather than refuse the
+schema (exit 1). `request-coverage` carries the scripts/ai-dlc near-miss and the hop mutant.
+
+verify: sh d=$(mktemp -d); mkdir -p "$d/.git" "$d/.claude/schemas" "$d/scripts" "$d/docs" || exit 9; cp core/schemas/harness-origin.json "$d/.claude/schemas/" || exit 9; cp core/scripts/validate-request-coverage.sh core/scripts/validate-locked-anchor.sh "$d/scripts/" || exit 9; printf '# r\n\n## 2026-01-01T00:00:00Z -- /ai-dlc\n- SHA256: abc\n\n```text\nplease\n```\n' > "$d/r.md"; printf '# b\n' > "$d/b.md"; o=$(cd "$d/docs" && bash "$d/scripts/validate-request-coverage.sh" --requests "$d/r.md" --brief "$d/b.md" --sprint 1 2>&1); case "$o" in *"harness-origin.json could not be resolved"*) exit 1 ;; *"no LOCKED bullet"*) exit 0 ;; esac; exit 9
 
 ## BL-328 — `validate-mandatory-rules.sh` resolves its sprint-status schema relative to the cwd
+
+**FIXED IN v0.667.0, pending the post-merge close.** The process moves to the project root walked up from the cwd, so every read (schema, story corpus, escalations, status file, gate log, audit anchors, cycle log, snapshot) resolves there together; receipt 0 at tip, 1 at base and at the partial re-root; `story-corpus-sprint-slot` A13 and A14 with their mutants.
 
 **NOTE.** Found by the batch-160 contract adversary.
 
@@ -4487,7 +4502,15 @@ bare relative paths `.claude/schemas/sprint-status.json` and `core/schemas/sprin
 Those two resolve against the process's working directory, not a resolved project root, so in
 the consumer layout a run from any directory other than the project root finds no schema.
 
-verify: manual
+Receipt: in a consumer-shaped tree (schema only at `.claude/schemas/`), a self-executed story
+whose naming escalation entry carries `DECIDED_AUTONOMOUSLY` must give, from `docs/sub/`, the
+byte-identical Check 6 verdict and detail lines as a run from the root, and that root verdict must
+be a PASS (exit 0). A subdirectory run that finds the schema but not the escalations file, and so
+fails with "no waiver", exits 1, as does one that finds nothing. `story-corpus-sprint-slot` A13
+(corpus) and A14 (waiver) carry it, with A2/A11 as the root-run near-misses, a whole-revert mutant
+and a one-read (escalations) mutant.
+
+verify: sh d=$(mktemp -d); mkdir -p "$d/.git" "$d/.claude/schemas" "$d/scripts/ai-dlc" "$d/_bmad-output/planning-artifacts/s302/stories" "$d/docs/sub" "$d/docs/escalations" || exit 9; cp core/schemas/sprint-status.json "$d/.claude/schemas/" || exit 9; cp core/scripts/validate-mandatory-rules.sh "$d/scripts/ai-dlc/" || exit 9; for s in validate-retro-evidence.sh validate-cycle-commits.sh validate-retro-prereq.sh; do printf '#!/bin/sh\nexit 0\n' > "$d/scripts/ai-dlc/$s"; done; printf -- '---\nstatus: done\n---\n\n# s\n\n## Dev Agent Record\n\nModel: lead (self-executed) — see waiver\n' > "$d/_bmad-output/planning-artifacts/s302/stories/story-1-a.md"; printf '## [Sprint-302 / Story 302-1 self-execution] Lead - 2026-08-11\n**Status:** DECIDED_AUTONOMOUSLY\n' > "$d/docs/escalations/pending.md"; r=$(cd "$d" && bash "$d/scripts/ai-dlc/validate-mandatory-rules.sh" 302 2>&1 | grep -E '^  CHECK 6:|^\[Check6_'); s=$(cd "$d/docs/sub" && bash "$d/scripts/ai-dlc/validate-mandatory-rules.sh" 302 2>&1 | grep -E '^  CHECK 6:|^\[Check6_'); case "$r" in *"PASS — 1 story file(s) verified"*) ;; *) exit 9 ;; esac; [ "$s" = "$r" ] && exit 0; exit 1
 
 ## BL-329 — `sync-transient-ignore.sh --root <foreign>` exits 2 in the consumer layout
 
@@ -4505,6 +4528,8 @@ verify: manual
 
 ## BL-330 — `validate-write-format-steering.sh` falls back per schema FILE, so a root carrying some schemas mixes two trees
 
+**FIXED IN v0.667.0, pending the post-merge close.** The schema pair resolves from one directory; receipt 0 at tip, 1 at base; `schema-install-fallback` arm P, PERFILE killed. BL-331 is not closed by this.
+
 **NOTE.** Found by the batch-160 tip adversary. No production caller passes the override to this
 script (a grep for `AI_DLC_PROJECT_ROOT` beside its name in `core/hooks` returns 0, against a
 non-zero control for other scripts).
@@ -4516,7 +4541,12 @@ core/schemas/layer-adjudication-register.json … no file is there` rc 1: the po
 from the install while the steering schema and `READER_ROOT` stay on the root. The 0.646.0
 contract claimed the fallback changes only runs that fail closed; this input disproves that.
 
-verify: manual
+Receipt: a consumer-shaped install driven under a foreign root carrying `write-format-steering.json`
+and the skills it names, but not `pipeline-state-paths.json`, must read `SKIP — EXAMINED NOTHING`
+(exit 0), not a verdict joined across two trees (exit 1). `schema-install-fallback` arm P carries
+it, with B's full-set root as the near-miss and the PERFILE mutant.
+
+verify: sh d=$(mktemp -d); mkdir -p "$d/t/.git" "$d/t/.claude/schemas" "$d/t/scripts/ai-dlc" "$d/FP/.claude/schemas" "$d/FP/.claude/skills" || exit 9; cp core/schemas/write-format-steering.json core/schemas/pipeline-state-paths.json "$d/t/.claude/schemas/" || exit 9; cp core/scripts/validate-write-format-steering.sh "$d/t/scripts/ai-dlc/" || exit 9; cp core/schemas/write-format-steering.json "$d/FP/.claude/schemas/" || exit 9; cp -R core/skills/ai-dlc-update "$d/FP/.claude/skills/" || exit 9; o=$(cd "$d/t" && AI_DLC_PROJECT_ROOT="$d/FP" bash "$d/t/scripts/ai-dlc/validate-write-format-steering.sh" 2>&1); case "$o" in *"SKIP — EXAMINED NOTHING"*) exit 0 ;; *"validate-write-format-steering: FAIL"*|*"validate-write-format-steering: PASS"*) exit 1 ;; esac; exit 9
 
 ## BL-331 — under a root with no schemas, `validate-write-format-steering.sh` judges the INSTALL's declarations and acquits the root's stale ones
 
