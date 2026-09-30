@@ -47,12 +47,16 @@ done
 # RESOLVE THE ROOT BY WALKING UP FOR A MARKER, never by counting `..` hops. This script sits at
 # core/scripts/ in the distribution and scripts/ai-dlc/ in a consumer, and a hop count that is
 # right in one is wrong in the other -- silently, because it still resolves to a directory.
-if [ -z "$PROJECT_ROOT" ]; then
-  _d="$(cd "$(dirname "$0")" && pwd)"
-  while [ "$_d" != "/" ]; do
-    if [ -d "$_d/.git" ] || [ -f "$_d/VERSION" ]; then PROJECT_ROOT="$_d"; break; fi
+sti_walk_root() { # <dir> -> the nearest ancestor carrying .git/ or VERSION, or nothing
+  local _d="$1"
+  while [ -n "$_d" ] && [ "$_d" != "/" ]; do
+    if [ -d "$_d/.git" ] || [ -f "$_d/VERSION" ]; then printf '%s\n' "$_d"; return 0; fi
     _d="$(dirname "$_d")"
   done
+  return 1
+}
+if [ -z "$PROJECT_ROOT" ]; then
+  PROJECT_ROOT="$(sti_walk_root "$(cd "$(dirname "$0")" && pwd)" || true)"
 fi
 if [ -z "$PROJECT_ROOT" ] || [ ! -d "$PROJECT_ROOT" ]; then
   echo "sync-transient-ignore.sh: could not resolve a project root (no .git or VERSION above $(dirname "$0"))" >&2
@@ -67,16 +71,24 @@ fi
 # covers both, which is the failure invariant I33 exists to catch: a path that resolves in
 # this tree can resolve nowhere in an installed one. The env override is for fixtures, which
 # drive a copy from a temp directory where none of the three resolve.
+#
+# THE INSTALL ROOT, walked up from this script's own directory, is the LAST candidate (BL-329), as
+# in validate-write-format-steering.sh. In the consumer layout the script-relative candidate is
+# scripts/schemas/, which install.sh never writes, so a `--root` naming a directory with no
+# .claude/schemas/ exited 2 while the same foreign root in the distribution got past the schema.
+# Last, so a root carrying its own declaration still wins. An empty walk adds no candidate.
 _self="$(cd "$(dirname "$0")" && pwd)"
+_install_root="$(sti_walk_root "$_self" || true)"
 SCHEMA=""
 for _c in "${AI_DLC_STATE_PATHS_SCHEMA:-}" \
           "${_self}/../schemas/pipeline-state-paths.json" \
           "${PROJECT_ROOT}/.claude/schemas/pipeline-state-paths.json" \
-          "${PROJECT_ROOT}/core/schemas/pipeline-state-paths.json"; do
+          "${PROJECT_ROOT}/core/schemas/pipeline-state-paths.json" \
+          "${_install_root:+${_install_root}/.claude/schemas/pipeline-state-paths.json}"; do
   [ -n "$_c" ] && [ -f "$_c" ] && { SCHEMA="$_c"; break; }
 done
 if [ -z "$SCHEMA" ]; then
-  echo "sync-transient-ignore.sh: pipeline-state-paths.json not found (looked beside this script, then under .claude/schemas/ and core/schemas/ in $PROJECT_ROOT)" >&2
+  echo "sync-transient-ignore.sh: pipeline-state-paths.json not found (looked beside this script, then under .claude/schemas/ and core/schemas/ in $PROJECT_ROOT, then under .claude/schemas/ in the install root ${_install_root:-<unresolved>})" >&2
   exit 2
 fi
 if ! command -v jq >/dev/null 2>&1; then

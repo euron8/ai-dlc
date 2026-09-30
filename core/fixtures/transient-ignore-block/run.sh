@@ -291,11 +291,41 @@ arm_check_is_blind_to_tracked() {
   return 0
 }
 
+# Arm 9 (BL-329): IN THE CONSUMER LAYOUT, a `--root` naming a directory with no declaration of
+# its own falls back to the INSTALL's. The subject is copied to scripts/ai-dlc/ of a
+# consumer-shaped tree whose declaration sits only at .claude/schemas/ -- so the script-relative
+# candidate, scripts/schemas/, does not exist -- and driven with NO env pin, from a subdirectory,
+# against a foreign root holding only a .gitignore. Presence-shaped: the run must get past the
+# schema and REPORT the block missing (exit 1 naming it), never exit 2 "not found". The NEAR-MISS
+# is the same tree with `--root` naming the consumer itself, whose own .claude/schemas/ wins: it
+# must pass --check once written, which a fallback that outranked the root could not tell apart.
+arm_install_fallback() {
+  local w="$1" subj="$2" c="$1/consumer" f="$1/foreign" out rc
+  # A REAL repository, not a bare `.git` directory: any git call the subject makes against the
+  # consumer (M4 adds one to --check) must not die on "not a git repository" and entangle this arm.
+  mkdir -p "$c/.claude/schemas" "$c/scripts/ai-dlc" "$c/docs" "$f" || return 1
+  git init -q "$c" || return 1
+  cp "$SCHEMA" "$c/.claude/schemas/pipeline-state-paths.json" || return 1
+  cp "$subj" "$c/scripts/ai-dlc/sync-transient-ignore.sh" || return 1
+  [ ! -e "$c/scripts/schemas" ] || return 1
+  printf 'node_modules/\n' > "$f/.gitignore"
+  out="$( cd "$c/docs" && bash "$c/scripts/ai-dlc/sync-transient-ignore.sh" --check --root "$f" 2>&1 )"; rc=$?
+  [ "$rc" -eq 1 ] || return 1
+  grep -q 'not found' <<<"$out" && return 1
+  grep -qF -- "$f" <<<"$out" || return 1
+  # Near-miss: the consumer's own declaration, written then checked.
+  printf 'node_modules/\n' > "$c/.gitignore"
+  ( cd "$c/docs" && bash "$c/scripts/ai-dlc/sync-transient-ignore.sh" --root "$c" ) >/dev/null 2>&1 || return 1
+  out="$( cd "$c/docs" && bash "$c/scripts/ai-dlc/sync-transient-ignore.sh" --check --root "$c" 2>&1 )" || return 1
+  grep -q 'transient-state block current' <<<"$out" || return 1
+  return 0
+}
+
 run_arms() { # <subject> -> prints "<name>:<0|1>" per arm, each on its own project
   local subj="$1" name w rc
   for name in renders_declared_set excludes_durable cut_is_bounded idempotent \
               check_discriminates fails_closed_on_empty_marker names_tracked_paths \
-              check_is_blind_to_tracked; do
+              check_is_blind_to_tracked install_fallback; do
     w="$(fresh_project)" || { printf '%s:1\n' "$name"; continue; }
     "arm_$name" "$w" "$subj" >/dev/null 2>&1 && rc=0 || rc=1
     rm -rf "$w"
@@ -318,6 +348,7 @@ while IFS=: read -r name rc; do
     fails_closed_on_empty_marker) msg="an empty block marker is refused and .gitignore is left byte-identical" ;;
     names_tracked_paths)   msg="an already-tracked transient path is named, not silently ignored" ;;
     check_is_blind_to_tracked) msg="--check reports the BLOCK only: it exits 0 over a tracked transient path, which the write path names" ;;
+    install_fallback)      msg="consumer layout: --root naming a tree with no declaration falls back to the install's (exit 1 on the block, not 2), and a root with its own still wins" ;;
     *)                     msg="$name" ;;
   esac
   [ "$rc" -eq 0 ] && ok "$msg" || bad "$msg"
@@ -397,6 +428,9 @@ mutate no-empty-marker-guard 's/if \[ -z "\$IG_BEGIN" \] || \[ -z "\$IG_END" \];
 mutate check-reports-tracked \
   's#^  echo "OK: transient-state block current#  git -C "$PROJECT_ROOT" ls-files -- $PATTERNS 2>/dev/null | sed "s/^/  NOTE: still TRACKED: /"\n  echo "OK: transient-state block current#' \
   check_is_blind_to_tracked
+
+# M5 (BL-329): the install-root candidate empties, so the consumer layout has no fallback again.
+mutate no-install-fallback 's/^_install_root="\$(sti_walk_root "\$_self" || true)"$/_install_root=""/' install_fallback
 
 # UNMUTATED CONTROL, with a POSITIVE conjunct. A control asserting only "nothing went wrong"
 # passes against a subject replaced by `exit 0`, because rc=0 with nothing reported is exactly
