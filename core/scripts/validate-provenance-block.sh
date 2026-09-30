@@ -445,13 +445,48 @@ strays = []
 # realpath on BOTH sides, not a lexical normpath: it additionally makes the explicit branch agree
 # with the default branch about a home that is itself a symlink, where the two branches gave
 # opposite answers about the same file and only the default branch's is the one any gate sees.
-ROOT_REAL = os.path.realpath(os.getcwd())
+#
+# realpath does NOT restore case, so on a case-folding filesystem `DOCS/retro/x.md` kept the
+# caller's spelling and missed `docs/retro/**` -- a false stray. Folding the COMPARISON is the
+# forbidden remedy: on a case-sensitive filesystem a genuinely distinct `DOCS/retro/` would then
+# be accepted as the home, a false PASS on the platform a consumer's CI runs. `ondisk` instead
+# respells each component as its parent directory LISTS it, and only to an entry that is the
+# SAME directory entry (`samestat` on lstat, so a sibling symlink is never chosen). On a
+# case-sensitive filesystem the caller's `DOCS` either is its own entry, listed verbatim and
+# kept, or names nothing and is kept raw -- so this is correct on both, where folding is not.
+_LISTING = {}
+
+
+def ondisk(path):
+    real = os.path.realpath(path)
+    parts = [p for p in real.split(os.sep) if p]
+    out = os.sep
+    for i, part in enumerate(parts):
+        try:
+            st = os.lstat(os.path.join(out, part))
+            names = _LISTING.get(out)
+            if names is None:
+                names = _LISTING[out] = os.listdir(out)
+        except OSError:
+            return os.path.join(out, *parts[i:])
+        if part not in names:
+            fold = part.casefold()
+            for n in names:
+                if n.casefold() == fold and os.path.samestat(st, os.lstat(os.path.join(out, n))):
+                    part = n
+                    break
+        out = os.path.join(out, part)
+    return out
+
+
+# BOTH sides go through `ondisk`: a root respelled on one side only puts every candidate at `../`.
+ROOT_REAL = ondisk(os.getcwd())
 
 
 def canon(path):
     """Root-relative canonical form. A path outside the root keeps a `../` prefix and so
     matches no home, which is the correct answer rather than an error."""
-    return os.path.relpath(os.path.realpath(path), ROOT_REAL)
+    return os.path.relpath(ondisk(path), ROOT_REAL)
 
 
 for path in candidates:
