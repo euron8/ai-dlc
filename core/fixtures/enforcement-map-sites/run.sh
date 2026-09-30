@@ -2367,15 +2367,63 @@ rm -f "$esv_bak"
 # ---------------------------------------------------------------------------
 # THE DRIVER
 # ---------------------------------------------------------------------------
+# THE ASSERTION LIST IS DERIVED FROM THIS FILE'S OWN DEFINITIONS, in source order. A
+# hand-written list here would be this fixture's own subject defect one level out: an
+# assertion dropped from the list runs nothing and prints nothing, and a suite reporting 28
+# greens instead of 29 reads exactly like a suite that passed. The zero guard is the same
+# argument -- a naming grammar that stops matching yields an empty list, and an empty list
+# passes every assertion it never made.
+#
+# THE OPTIONAL LETTER IS LOAD-BEARING. The sibling enforcement-map-derivations carried the
+# same `^A[0-9]{2}_` grammar and two lettered arms (A27b, A27c) that were defined, cited by a
+# backlog receipt as a guard, and dispatched by no shard. `vrun` already derives the arm id
+# from a lettered frame; only this enumerator could not spell one.
+NAMES="$(grep -oE '^A[0-9]{2}[a-z]?_[a-z0-9_]+\(\) \{' "$0" | sed 's/() {$//')"
+N_LISTED="$(printf '%s\n' "$NAMES" | grep -c . || true)"
+if [ "$N_LISTED" -lt 10 ]; then
+  echo "FIXTURE ERROR: derived $N_LISTED assertion(s) from this file — the A<nn>_ naming grammar moved" >&2
+  exit 2
+fi
+
+# EVERY DEFINED ASSERTION IS A DISPATCHED ASSERTION, AND THE TWO SIDES USE DIFFERENT GRAMMARS
+# ON PURPOSE. A count taken with the enumerator's own regex agrees with the enumerator by
+# construction, so it could never fire. This side is deliberately LOOSE: any function whose
+# name starts `A<digit>`, with or without `function`, indentation or spacing before `()`. A
+# definition the strict enumerator cannot spell is counted here and missed there, and the run
+# refuses rather than shipping an arm that runs nowhere.
+#
+# False-positive set measured before shipping: EMPTY. On the tree that added this guard both
+# grammars read 40, and no helper in this file starts with `A<digit>`. The shard partition
+# below then deals N_LISTED - 1 non-control assertions, so defined == listed == dealt + 1.
+N_DEFINED="$(grep -cE '^[[:space:]]*(function[[:space:]]+)?A[0-9][A-Za-z0-9_]*[[:space:]]*\(\)' "$0" || true)"
+if [ "$N_DEFINED" -ne "$N_LISTED" ]; then
+  echo "FIXTURE BROKEN: this file DEFINES $N_DEFINED assertion function(s) but the enumerator lists $N_LISTED." >&2
+  echo "  The difference is defined, reads as coverage, and is dispatched by no shard. Rename it to A<nn>[a-z]_i<id>_<what> or widen the enumerator." >&2
+  exit 2
+fi
+
 # `--run-one <assertion>` is one assertion, in one process, against one freshly seeded
 # tree. It is the unit the pool schedules and it is also how a human runs a single
 # assertion while working on it.
+#
+# IT RUNS ONLY WHAT THE SHARDS WOULD. A name that is a defined function but not in $NAMES is
+# refused, so a hand-run of an undispatched arm fails instead of printing `ok` for a guard the
+# suite never executes.
 if [ "${1:-}" = "--run-one" ]; then
   FN="${2:-}"
   declare -F "$FN" >/dev/null 2>&1 || {
     echo "FIXTURE ERROR: --run-one needs an assertion function name; '$FN' is not one" >&2
     exit 2
   }
+  case "
+$NAMES
+" in
+    *"
+$FN
+"*) ;;
+    *) echo "FIXTURE ERROR: '$FN' is defined but is not in the dispatched assertion list, so no shard runs it; a hand-run here would certify a guard the suite never executes" >&2
+       exit 2 ;;
+  esac
   # THE LEDGER AND THE BROKEN MARKER ARRIVE AS ARGUMENTS, NEVER AS ENVIRONMENT, for the same
   # reason --group does: this file scrubs every ambient AI_DLC_* name above, so an environment
   # variable would be unset before the line that read it, the ledger would be silently empty,
@@ -2394,19 +2442,6 @@ if [ "${1:-}" = "--run-one" ]; then
   fi
   [ "$fails" -eq 0 ] || exit 1
   exit 0
-fi
-
-# THE ASSERTION LIST IS DERIVED FROM THIS FILE'S OWN DEFINITIONS, in source order. A
-# hand-written list here would be this fixture's own subject defect one level out: an
-# assertion dropped from the list runs nothing and prints nothing, and a suite reporting 28
-# greens instead of 29 reads exactly like a suite that passed. The zero guard is the same
-# argument -- a naming grammar that stops matching yields an empty list, and an empty list
-# passes every assertion it never made.
-NAMES="$(grep -oE '^A[0-9]{2}_[a-z0-9_]+\(\) \{' "$0" | sed 's/() {$//')"
-N_LISTED="$(printf '%s\n' "$NAMES" | grep -c . || true)"
-if [ "$N_LISTED" -lt 10 ]; then
-  echo "FIXTURE ERROR: derived $N_LISTED assertion(s) from this file — the A<nn>_ naming grammar moved" >&2
-  exit 2
 fi
 
 # ---------------------------------------------------------------------------
