@@ -4066,7 +4066,12 @@ verify: manual
 - A failed `git add` of the archive is a WARNING with exit 0, leaving it outside Check 35's corpus.
   0.645.0 states this as an exception rather than fixing it.
 
-verify: manual
+The receipt RUNS the rotator on four worlds: a line-1-heading history must rotate to 10 headings,
+each valueless option and `--keep-entries 0` must exit 2, `--archive` equal to `--absorb` must
+exit 2 under `ulimit -f 64`, and a locked index must exit 1 over a history still equal to HEAD.
+Scored tip 0, base 1, and 1 on each of five one-fix reverts.
+
+verify: sh R=core/scripts/rotate-snapshot-archive.sh; [ -f "$R" ] || exit 9; d=$(mktemp -d) || exit 9; mk(){ mkdir -p "$1" && git -C "$1" init -q && { printf "$2"; for i in 1 2 3 4 5 6 7 8 9 10 11 12; do printf '## e%s\nbody %s\n\n' $i $i; done; } > "$1/h.md" && printf 'snap\n' > "$1/s.md" && git -C "$1" add -A && git -C "$1" -c user.email=f@f -c user.name=f commit -qm i; }; mk "$d/a" '' || exit 9; bash "$R" "$d/a/h.md" --apply >/dev/null 2>&1 || exit 1; [ "$(grep -c '^## ' "$d/a/h.md")" -eq 10 ] || exit 1; mk "$d/b" '# H\n\n' || exit 9; for o in --archive --keep-entries --absorb; do bash "$R" "$d/b/h.md" --apply "$o" >/dev/null 2>&1; [ $? -eq 2 ] || exit 1; done; bash "$R" "$d/b/h.md" --keep-entries 0 >/dev/null 2>&1; [ $? -eq 2 ] || exit 1; ( ulimit -f 64; bash "$R" "$d/b/h.md" --archive "$d/b/s.md" --absorb "$d/b/s.md" --apply ) >/dev/null 2>&1; [ $? -eq 2 ] || exit 1; mk "$d/e" '# H\n\n' || exit 9; : > "$d/e/.git/index.lock"; bash "$R" "$d/e/h.md" --apply >/dev/null 2>&1; [ $? -eq 1 ] || exit 1; [ "$(git -C "$d/e" show HEAD:h.md)" = "$(cat "$d/e/h.md")" ]
 
 ## BL-323 — `route.md` Step 0 has no rule for a resume request that meets an empty snapshot
 
