@@ -4052,7 +4052,20 @@ unit's recorded loaded cost is 5s, so a real stall needs about six times that. N
 observed. A receipt must force the timeout and read whether the audit names the timeout as its
 cause.
 
-verify: manual
+**LANDED (v0.666.0, verified b174-bl312).** A present `core-paths.sh` whose `--list` times out,
+raises, exits non-zero or answers empty now makes `audit-rule-files.sh` exit 2 with a stderr line
+naming the cause (`timed out after 1s` when forced); it no longer scores every owner `unknown`.
+An ABSENT resolver still fails closed as `unresolved`, which assertion 28 owns. Forced in a
+scratch copy under `--fail-on=local` with a seeded local finding: origin/main exits 1 with one
+`[unknown]` finding and no timeout text, tip exits 2 naming the timeout. The unforced real-tree
+run under the pre-push argv is byte-identical between the two copies. Fixture assertion 31 forces
+the stall and assertion 32 the non-zero and empty answers; the mutant reverting the timeout
+clause to `_globs = []` fails assertion 31 alone. The receipt refuses (9) on a tree with no
+ownership-tagged finding, where the resolver is never asked.
+Receipt scored: tip 0, origin/main 1, mutant 1.
+
+verify: sh a=core/scripts/audit-rule-files.sh; c=core/scripts/core-paths.sh; [ -f "$a" ] && [ -f "$c" ] || exit 9; d=$(mktemp -d) || exit 9; cp "$a" "$d/audit-rule-files.sh"; cp "$c" "$d/core-paths.sh"; bash "$d/audit-rule-files.sh" --fail-on=local >"$d/kout" 2>&1; k=$?; grep -qE '^  \[(core|local)\] ' "$d/kout" || { rm -rf "$d"; exit 9; }; sed 's/timeout=30)/timeout=1)/' "$a" > "$d/audit-rule-files.sh"; cmp -s "$a" "$d/audit-rule-files.sh" && { rm -rf "$d"; exit 9; }; printf '#!/usr/bin/env bash\nexec sleep 5\n' > "$d/core-paths.sh"; bash "$d/audit-rule-files.sh" --fail-on=local >/dev/null 2>"$d/err"; s=$?; grep -q 'timed out after' "$d/err"; t=$?; rm -rf "$d"; [ "$k" = 2 ] && exit 9; [ "$s" = 2 ] && [ "$t" = 0 ] && exit 0; exit 1
+
 
 ## BL-322 — `rotate-snapshot-archive.sh` refuses or misreports on four edge inputs it does not document
 

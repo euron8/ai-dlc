@@ -1141,6 +1141,65 @@ rc_bad="$(rc_of "$AUDIT" --fail-on=nonsense)"
 [ "$rc_bad" = "2" ] \
   && ok "an unrecognized --fail-on value still exits 2 rather than defaulting" \
   || bad "--fail-on=nonsense returned $rc_bad, not 2 — a typo silently selects a threshold"
+
+# --- Assertion 31: a STALLED resolver REFUSES; it is not scored as ownership --
+# Assertion 28 owns the ABSENT resolver, which fails closed as `unresolved`. A
+# PRESENT resolver whose `--list` stalls past the timeout is a different fact: a
+# fault in this run. Swallowed, it scored every owner `unknown`, counted them as
+# local, and exited 1 with nothing naming the timeout -- a stall read as a sheet of
+# ownership findings. The audit must name the timeout and exit 2.
+#
+# Forced in a scratch sibling dir, as assertion 28 does: a resolver shim that
+# `exec`s a sleep (so the timeout's kill reaps it, with no orphaned grandchild),
+# and the shipped 30s timeout lowered to 1s in the COPY so the unit does not pay
+# 30s. The `cmp -s` guard makes a sed that matched nothing a broken fixture.
+fresh
+SS="$WORK/stall"
+rm -rf "$SS"; mkdir -p "$SS"
+sed 's/timeout=30)/timeout=1)/' "$AUDIT" > "$SS/audit-rule-files.sh"
+if cmp -s "$AUDIT" "$SS/audit-rule-files.sh"; then
+  bad "FIXTURE BROKEN — the timeout sed matched nothing, so the stall cannot be forced inside the unit's budget"
+else
+  printf '#!/usr/bin/env bash\nexec sleep 5\n' > "$SS/core-paths.sh"
+  printf 'The dev MUST comply, because we lost a sprint to this.\n' >> "$WORK/t/docs/coding-conventions.md"
+  rc_st="$( cd "$WORK/t" && bash "$SS/audit-rule-files.sh" --fail-on=local >"$SS/out" 2>"$SS/err"; echo $? )"
+  if [ "$rc_st" = "2" ] && grep -q 'timed out after' "$SS/err" && ! grep -q '\[unknown\]' "$SS/out"; then
+    ok "a STALLED resolver names the timeout and exits 2 — it is not scored as unresolved ownership"
+  else
+    bad "a stalled resolver returned rc=$rc_st without naming the timeout — the stall read as ownership findings"
+  fi
+  # Control: the same scratch dir with the real resolver beside it scores the
+  # seeded local finding (rc=1) and names no timeout. Without this, rc=2 above is
+  # equally consistent with a sibling-dir copy that refuses for any reason at all.
+  # The control runs at the SHIPPED 30s timeout: a real `--list` takes most of a
+  # second on this repo, so a 1s control would itself time out under the pool.
+  cp "$RESOLVER" "$SS/core-paths.sh"
+  cp "$AUDIT" "$SS/audit-rule-files.sh"
+  rc_sc="$( cd "$WORK/t" && bash "$SS/audit-rule-files.sh" --fail-on=local >"$SS/out" 2>"$SS/err"; echo $? )"
+  if [ "$rc_sc" = "1" ] && grep -q '\[local\] docs/coding-conventions.md' "$SS/out" && ! grep -q 'timed out after' "$SS/err"; then
+    ok "  control: the same scratch dir with the real resolver scores the local finding (rc=1) — the refusal above was the STALL"
+  else
+    bad "  control FAILED: the scratch copy with its real resolver returned rc=$rc_sc — assertion 31 proves nothing"
+  fi
+
+  # --- Assertion 32: a resolver that FAILS or answers EMPTY refuses too --------
+  # The same fault class without a stall: `--list` exiting non-zero (its own
+  # unparseable-manifest code is 2) and `--list` exiting 0 with no globs. Both
+  # used to become an empty glob set and score every owner `unknown`. Same
+  # seeded tree and scratch dir as 31, whose control has just shown this copy
+  # scores the finding when the resolver answers.
+  printf '#!/usr/bin/env bash\nexit 2\n' > "$SS/core-paths.sh"
+  rc_f="$( cd "$WORK/t" && bash "$SS/audit-rule-files.sh" --fail-on=local >"$SS/out" 2>"$SS/err"; echo $? )"
+  f_named=0; grep -q 'core-paths.sh --list` exited 2' "$SS/err" && f_named=1
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$SS/core-paths.sh"
+  rc_e="$( cd "$WORK/t" && bash "$SS/audit-rule-files.sh" --fail-on=local >"$SS/out" 2>"$SS/err"; echo $? )"
+  e_named=0; grep -q 'exited 0 with no globs' "$SS/err" && e_named=1
+  if [ "$rc_f" = "2" ] && [ "$f_named" = 1 ] && [ "$rc_e" = "2" ] && [ "$e_named" = 1 ]; then
+    ok "a resolver exiting non-zero, or exiting 0 with no globs, names the cause and exits 2"
+  else
+    bad "a failing/empty resolver was not refused (non-zero: rc=$rc_f named=$f_named; empty: rc=$rc_e named=$e_named) — it was scored as ownership"
+  fi
+fi
 echo
 if [ "$fails" -eq 0 ]; then echo "retro-audit-scans: PASS"; exit 0; fi
 echo "retro-audit-scans: $fails assertion(s) FAILED" >&2
