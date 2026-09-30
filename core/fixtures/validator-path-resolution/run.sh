@@ -186,6 +186,14 @@ printf '# pending\n\n## [x] [lead] - 2026-01-01T00:00:00Z\n**Status:** RESOLVED\
 printf '# requests\n\n## 2026-01-01T00:00:00Z -- /ai-dlc\n- SHA256: abc\n\n```text\nplease\n```\n' \
   > "$WORK/docs/requests.md"
 printf '# brief\n' > "$WORK/docs/brief.md"
+# validate-steering-budget.sh --cite: a corpus with one operator record that does not carry the
+# quote, and an answers-log entry under the CORRECT root that does, naming a session with no
+# transcript in the corpus. Only the right root can see the entry.
+mkdir -p "$WORK/docs/vpr-steer" "$WORK/_bmad-output" || exit 2
+printf '{"type":"user","timestamp":"2026-01-01T00:00:00.000Z","message":{"role":"user","content":"an unrelated operator turn"}}\n' \
+  > "$WORK/docs/vpr-steer/vpr-live.jsonl"
+printf '## 2026-01-01T00:00:00Z -- AskUserQuestion\n- Session: vpr-pruned-session\n\n```text\nvpr-steer-pruned-quote\n```\n\n' \
+  > "$WORK/_bmad-output/operator-answers-history.md"
 for d in check-h1-recursion check-17-bypass check-manifest-bypass; do
   mkdir -p "$WORK/tests/fixtures/$d" || exit 2
   printf 'seed\n' > "$WORK/tests/fixtures/$d/README.md"
@@ -263,6 +271,12 @@ argv_for() {
     # read under the resolved root and its refusal names that path -- which proves the root is
     # CONSULTED, the same floor as the entry above, not that a join is correct.
     join-remediator-shards.sh)      printf '%s' "--sprint 1 --artifact stories --pass 1 --artifact-path _bmad-output/planning-artifacts/s1/stories --since 2026-01-01T00:00:00Z --until 2026-01-02T00:00:00Z" ;;
+    # Its only root-keyed read is the operator answers log, consulted on --cite's plain-NOMATCH
+    # path to tell a pruned transcript from a fabricated quote. A bare run stops at its usage
+    # line from every root. With this argv the corpus holds a record that does not carry the
+    # quote, so the run reaches the log: the right root finds the seeded entry and answers
+    # NOMATCH-TRANSCRIPT-PRUNED, <root>/scripts has no log and answers plain NOMATCH.
+    validate-steering-budget.sh)    printf '%s' "--dir $WORK/docs/vpr-steer --cite vpr-steer-pruned-quote" ;;
     *)                              printf '%s' "" ;;
   esac
 }

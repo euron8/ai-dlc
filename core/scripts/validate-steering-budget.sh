@@ -318,7 +318,35 @@ command -v node >/dev/null 2>&1 || { echo "FAIL: node is required" >&2; exit 1; 
 
 THRESHOLD=$(( BUDGET + GRACE ))
 
-AI_DLC_T="$TRANSCRIPT" AI_DLC_D="$DIR" AI_DLC_TH="$THRESHOLD" AI_DLC_B="$BUDGET" AI_DLC_MB="$MAX_BEATS" AI_DLC_Q="$QUIET" AI_DLC_C="$COUNT" AI_DLC_CITE="$CITE" AI_DLC_SINCE="$SINCE" AI_DLC_AUTH_AT="$AUTH_AT" node <<'NODE'
+# --- AI_DLC_ROOT ------------------------------------------------------------
+# Read by ONE question only: where the operator answers log lives, which --cite consults to
+# tell a pruned transcript from a fabricated citation (the NOMATCH-TRANSCRIPT-PRUNED note in
+# the --cite block). Walked up for a marker, never counted in `..` hops, because this script
+# runs from <root>/core/scripts, <root>/scripts/ai-dlc and <root>/scripts. The install path
+# outranks CLAUDE_PROJECT_DIR (I75): the harness sets that for whatever repo the session
+# started in, so reading it first answers about another tree. Unresolved is /nonexistent,
+# not an exit: no log is found there, the verdict stays the plain NOMATCH, and the --cite
+# block says on stderr that the check was skipped. Inline on purpose; locating a shared lib
+# is the same unsolved problem.
+ai_dlc_resolve_root() {
+    local d="$1"
+    while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "." ]; do
+        if [ -e "$d/.git" ] || [ -d "$d/.claude" ] || [ -d "$d/core/skills/ai-dlc" ]; then
+            printf '%s\n' "$d"; return 0
+        fi
+        d="$(dirname "$d")"
+    done
+    return 1
+}
+SB_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SB_ROOT="${AI_DLC_PROJECT_ROOT:-}"
+[ -n "$SB_ROOT" ] || SB_ROOT="$(ai_dlc_resolve_root "$SB_SCRIPT_DIR" || true)"
+[ -n "$SB_ROOT" ] || SB_ROOT="${CLAUDE_PROJECT_DIR:-}"
+[ -n "$SB_ROOT" ] || SB_ROOT="$(ai_dlc_resolve_root "$(pwd)" || true)"
+SB_ROOT="${SB_ROOT:-/nonexistent}"
+# --- end AI_DLC_ROOT --------------------------------------------------------
+
+AI_DLC_LOGROOT="$SB_ROOT" AI_DLC_T="$TRANSCRIPT" AI_DLC_D="$DIR" AI_DLC_TH="$THRESHOLD" AI_DLC_B="$BUDGET" AI_DLC_MB="$MAX_BEATS" AI_DLC_Q="$QUIET" AI_DLC_C="$COUNT" AI_DLC_CITE="$CITE" AI_DLC_SINCE="$SINCE" AI_DLC_AUTH_AT="$AUTH_AT" node <<'NODE'
 const fs = require("fs"), path = require("path");
 const TH = +process.env.AI_DLC_TH, BUDGET = +process.env.AI_DLC_B;
 const MAX_BEATS = +process.env.AI_DLC_MB;
@@ -702,6 +730,45 @@ if (CITE) {
       ? `, though ${outsideWindow} operator turn(s) carried it outside the +/-${CITE_AUTH_TOLERANCE_S}s window around the cited authorization time ${AUTH_AT} -- the words were said, but not when this record says they were`
       : ` within +/-${CITE_AUTH_TOLERANCE_S}s of the cited authorization time ${AUTH_AT}`;
   console.error(`cite: scanned ${files.length} transcript(s) from ${CORPUS_ID}, no genuine operator message carried it${windowNote}`);
+  // NOMATCH-TRANSCRIPT-PRUNED: THE WORDS WERE CAPTURED, AND THE TRANSCRIPT THAT WOULD PROVE THEM
+  // IS GONE. Claude Code deletes a session's `.jsonl` after `cleanupPeriodDays` (30 when unset),
+  // and a citation of an answer from that session then read NOMATCH -- the verdict a fabricated
+  // authorization gets. Measured on the reference consumer: two closed-sprint records cite
+  // answers from a session whose transcript no longer exists.
+  //
+  // Emitted only when BOTH hold, and each conjunct is what stops a different false token:
+  //   (1) an entry of `_bmad-output/operator-answers-history.md` (ai-dlc-answer-capture.sh) has
+  //       a fenced body that CONTAINS the needle, normalised as the needle is. A match anywhere
+  //       in the log would give the token to a quote the LEAD authored as a question.
+  //   (2) that entry's `- Session: <id>` names no `<id>.jsonl` ON DISK in the corpus directory.
+  //       Disk, never `files`: `files` is the --since-filtered list, and a session merely older
+  //       than the bound is present and REFUTES the quote -- that must stay plain NOMATCH. For
+  //       --transcript the corpus directory is the named file's own directory.
+  //
+  // IT ACQUITS NOTHING. Exit 2 is unchanged, three readers key on the status alone, and
+  // validate-adversarial-convergence.sh exact-compares `NOMATCH-NO-RECORDS`, so this token
+  // falls through to its deny. The answers log is a file the lead can write, so the token is a
+  // DIAGNOSIS for the operator, never evidence; `NOMATCH` stays the prefix.
+  const LOGROOT = process.env.AI_DLC_LOGROOT || "/nonexistent";
+  if (LOGROOT === "/nonexistent") {
+    console.error("cite: pruned-transcript check skipped -- no project root resolved, so _bmad-output/operator-answers-history.md could not be located (set AI_DLC_PROJECT_ROOT)");
+  } else {
+    let log = null;
+    try { log = fs.readFileSync(path.join(LOGROOT, "_bmad-output", "operator-answers-history.md"), "utf8"); }
+    catch { /* no capture hook installed, or no answer yet: nothing to diagnose */ }
+    const tdir = dir || path.dirname(one);
+    const pruned = new Set();
+    for (const e of (log || "").split(/^## /m)) {
+      const sid = (e.match(/^- Session: ([A-Za-z0-9-]+)$/m) || [])[1];
+      const body = (e.match(/^```text\n([\s\S]*?)\n```$/m) || [])[1];
+      if (!sid || body === undefined || !norm(body).includes(needle)) continue;
+      if (!fs.existsSync(path.join(tdir, sid + ".jsonl"))) pruned.add(sid);
+    }
+    if (pruned.size) {
+      console.error(`cite: ${LOGROOT}/_bmad-output/operator-answers-history.md captured it in session(s) ${[...pruned].join(", ")}, whose transcript is not on disk in ${tdir} -- pruned, so the words cannot be verified either way`);
+      console.log("NOMATCH-TRANSCRIPT-PRUNED"); process.exit(2);
+    }
+  }
   console.log("NOMATCH"); process.exit(2);
 }
 

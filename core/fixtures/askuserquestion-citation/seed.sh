@@ -66,9 +66,46 @@ cat > "$WORK/other-tool.jsonl" <<'JSONL'
 {"type":"user","timestamp":"2026-07-21T02:05:00Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_bash1","content":"Your questions have been answered: \"Ship it?\"=\"Accept the deferral and reopen at v2\". You can now continue with these answers in mind."}]}}
 JSONL
 
+# ---- the pruned-session world ------------------------------------------------
+# An answer the capture hook logged, whose session transcript Claude Code has since deleted
+# (cleanupPeriodDays). proj/ is the project root (.claude/ is its walk-up marker) carrying the
+# answers log in ai-dlc-answer-capture.sh's own entry shape; corpus/ is the transcript dir.
+#   PRUNED  logged, no transcript on disk              -> the one NOMATCH-TRANSCRIPT-PRUNED
+#   LIVE    logged, transcript on disk without it      -> plain NOMATCH (the words were refuted)
+#   OLD     logged, transcript on disk but older than
+#           the --since bound, so absent from the scan -> plain NOMATCH (disk, not scan list)
+#   ASKED   the quote is the lead-authored QUESTION of an entry naming a pruned session, and
+#           the answer is something else               -> plain NOMATCH (only the body counts)
+mkdir -p "$WORK/proj/.claude" "$WORK/proj/_bmad-output" "$WORK/proj/sub" \
+         "$WORK/proj/scripts/ai-dlc" "$WORK/corpus" || exit 2
+cp "$VALIDATOR" "$WORK/proj/scripts/ai-dlc/validate-steering-budget.sh" || exit 2
+cat > "$WORK/corpus/live-0000-4000-8000-000000000002.jsonl" <<'JSONL'
+{"type":"user","timestamp":"2026-07-21T01:00:00Z","message":{"content":"an unrelated operator turn about lunch"}}
+JSONL
+cat > "$WORK/corpus/oldd-0000-4000-8000-000000000003.jsonl" <<'JSONL'
+{"type":"user","timestamp":"2026-07-21T01:00:00Z","message":{"content":"another unrelated operator turn"}}
+JSONL
+touch -t 200001010000 "$WORK/corpus/oldd-0000-4000-8000-000000000003.jsonl" || exit 2
+entry() { # entry <session> <question> <answer>
+  printf '## 2026-07-21T02:05:00Z -- AskUserQuestion\n- Session: %s\n- Tool-use: toolu_seed\n' "$1"
+  printf -- '- Question (lead-authored, NOT covered by the hash): %s\n- Bytes: 1\n- SHA256: 0\n\n' "$2"
+  printf '```text\n%s\n```\n\n' "$3"
+}
+{ entry prun-0000-4000-8000-000000000001 "Ship it?" "Ship the pruned release tonight"
+  entry live-0000-4000-8000-000000000002 "Lunch?" "said in a live session but never typed"
+  entry oldd-0000-4000-8000-000000000003 "Old?" "said in an old session never typed"
+  entry askd-0000-4000-8000-000000000004 "Should we rotate the signing keys today" "No"
+} > "$WORK/proj/_bmad-output/operator-answers-history.md" || exit 2
+
 cat > "$WORK/env.sh" <<ENV
 VALIDATOR="$VALIDATOR"
 WORK="$WORK"
+PROJ="$WORK/proj"
+CORPUS="$WORK/corpus"
+Q_PRUNED="Ship the pruned release tonight"
+Q_LIVE="said in a live session but never typed"
+Q_OLD="said in an old session never typed"
+Q_ASKED="Should we rotate the signing keys today"
 ASK="$WORK/ask.jsonl"
 TYPED="$WORK/typed.jsonl"
 OTHER="$WORK/other-tool.jsonl"
