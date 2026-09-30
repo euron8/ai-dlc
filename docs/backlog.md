@@ -115,6 +115,18 @@ verify: sh s=core/scripts/audit-layer-debt.sh; [ -f "$s" ] || exit 9; d=$(mktemp
 
 ## BL-236 — the note that makes `ai-dlc-update`'s braced rev-paths survive a retype has no mechanism behind it, and arm S8 cannot see the form a reader actually mistypes
 
+**ARM HALF FIXED IN v0.668.0, pending the post-merge close; the prose half landed earlier.**
+`validate-shell-portability.sh` gains arm **S8b**: an unbraced `$VAR:` rev-path followed by a zsh
+modifier letter, over a new `doc` corpus (`git ls-files 'core/*'` minus `*.sh`), with its own named
+empty-corpus guard. Measured over `core/*` minus the battery: 0 hits in the 220 non-`.sh` files; 37 in
+`.sh` files, all bash where the form is correct, subtracted by the corpus column. The modifier class
+was re-derived under `/bin/zsh -f` over 52 letters and equals `tool-hazards.md`'s 17; it removes the
+two loose hits at `reconcile/classify-block.md:15-16` (`"$BASE:$CORE_PATH"`). Fixture cells m9d,
+m10c, n7, x16-x20. Stated holes, not coverage: a `.sh` that prints the form for pasting, and
+extensionless bash under `core/` (0 of each today). The receipt below replaces the prose-half one and
+drives the validator on a seeded tree: base 1, fix 0, S8b dropped 1, corpus set to shell 1, modifier
+class dropped 1, keyed on the placeholder 1.
+
 **Found 2026-09-11**, filed by the reference consumer as a candidate against
 `core/skills/ai-dlc-update/SKILL.md`. The prose half landed with the entry; what is owed is the
 enforcement, and the reason it is owed is that the arm which looks like the enforcer is not one.
@@ -175,7 +187,7 @@ a URL) and the two degenerate trees exit 9, each mutant `cmp -s`-asserted applie
 verdict was read. So the arm binds POSITION and VOCABULARY, never semantics; a reviewer reads the
 sentence, and this receipt only establishes that there is one to read.
 
-verify: sh f=core/skills/ai-dlc-update/SKILL.md; [ -r "$f" ] || exit 9; c=$(grep -nE 'show "\$\{[a-z]+\}:' "$f" | head -1 | cut -d: -f1); [ -n "$c" ] || exit 9; n=$(awk -v c="$c" 'BEGIN{bt=sprintf("%c%c%c",96,96,96)} { if (substr($0,1,3)==bt || substr($0,5,3)==bt) { fence=!fence; F[NR]=1 } else F[NR]=fence; L[NR]=tolower($0) } END { for (i=1;i<c;i++) { if (F[i] || L[i] !~ /zsh/ || L[i] ~ /<!--/) continue; lo=i-3; if (lo<1) lo=1; hi=i+5; if (hi>NR) hi=NR; for (j=lo;j<=hi;j++) if (!F[j] && L[j] ~ /brace/) { print i; exit } } }' "$f"); [ -n "$n" ] || exit 1; exit 0
+verify: sh unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; d=$(mktemp -d) && mkdir -p "$d/scripts" "$d/core/skills" "$d/core/fixtures/u" && echo 0.0.0 > "$d/VERSION" && cp scripts/validate-shell-portability.sh "$d/scripts/" && printf '#!/usr/bin/env bash\necho ok\n' > "$d/core/fixtures/u/s.sh" && printf '%s\n' '    git -C "$DIST" show "$THEIRS:core/x.sh" > "$t"' > "$d/core/skills/a.md" && ( cd "$d" && git init -q . && git add -A ) || exit 9; o=$(cd "$d" && bash scripts/validate-shell-portability.sh 2>&1 </dev/null); grep -q '^FAIL: S8b:' <<<"$o" && grep -qF 'core/skills/a.md:1:' <<<"$o" || exit 1; printf '%s\n' '    git show "$REF:$CORE_PATH"' '    git show "$THEIRS:docs/x.md"' '    git show "${THEIRS}:core/x.sh"' > "$d/core/skills/a.md"; o=$(cd "$d" && bash scripts/validate-shell-portability.sh 2>&1 </dev/null) || exit 1; exit 0
 
 ## BL-230 — `reconcile-emit-report`'s kill-set arms fail intermittently under the pool — E1, E8 and E9 all measured, on three different worlds — and E1's success message describes a different assertion than the one it makes
 
@@ -1564,6 +1576,20 @@ verify: sh V=core/scripts/validate-steering-budget.sh; [ -r "$V" ] || exit 9; DA
 
 ## BL-082
 
+**FIXED IN v0.668.0, pending the post-merge close.** The prior verdict, "there is no remedy that is
+right on both platforms", is overturned: it rested on folding the COMPARISON, which stays forbidden.
+`ondisk()` in `validate-provenance-block.sh` respells each path component as its parent directory
+LISTS it, choosing only an entry that is the same directory entry (`samestat` on `lstat`), after
+`realpath`, for root and candidate. On a case-sensitive filesystem a real `DOCS/` is listed verbatim
+and kept, a nonexistent one kept raw, so no false PASS opens. `stray-party-mode-provenance` S10 holds
+it in three worlds: S10-F on the folding host (bare-realpath mutant MUT-F killed; S10-F5 records that
+the forbidden fold is indistinguishable from the fix there); S10-C on a case-sensitive APFS image via
+`hdiutil` (the forbidden fold MUT-G killed only here); S10-H on an HFS+ image, where `docs` and
+`doc<U+017F>` are distinct but casefold-equal (casefold-without-samestat MUT-H killed). A
+present-but-failing `hdiutil` is FIXTURE BROKEN in the distribution; a consumer host without it SKIPs
+S10-C/S10-H naming the unguarded mutant. The fixture ships, so a macOS consumer now builds two 20 MB
+images per run. Receipt unchanged: base 1, fix 0, root-only 1, cache-key-collapse 1.
+
 **On a case-folding filesystem `--strays` reports a declared home as a stray when the caller
 spells a path component in a different case, and every remedy that closes it opens a FALSE PASS
 on a case-sensitive consumer.** `core/scripts/validate-provenance-block.sh` canonicalises each
@@ -2377,6 +2403,14 @@ verify: sh set -e; r="$PWD"; id='PC-S295-RETRO-PARALLEL-OPEN-COUNT-METHOD'; n=0;
 
 ## BL-159 — four handoff-completion defects adjacent to `BL-158`, found by the batch-49 hands and deliberately not fixed there
 
+**PARTIAL IN v0.668.0.** Claim 3 FIXED: auto-handoff step 5 in `_gate-procedures.md` now runs
+`rm -f _bmad-output/.handoff-in-progress` beside the pause-flag touch, spelled as `handoff.md` step 5
+spells it; `handoff-resume-guard` pins it with a span arm keyed on the step-5 line, self-probed both
+ways. Claim 2 DEAD-PREMISE: the consumer tracks the marker 0 times against 5381 tracked paths under
+`_bmad-output/`, and `git check-ignore` exits 0 on it. Claims 1 and 4 SURVIVE: `ai-dlc-continue.sh`
+still has no working-tree test beside its `PUSH_OK=` lines, and `HANDOFF_ON_DISK`'s only reader sits
+inside the transcript-present block. The receipt keys on claim 1 and stays.
+
 Distribution-internal, no `PC-` id; ranks below any PC-backed entry. Filed together because they
 share one subject and one release would otherwise have widened past its scope. NOTE tier for each
 until one is measured to have moved a verdict on the consumer.
@@ -2572,6 +2606,14 @@ verify: sh set -e; d=$(mktemp -d); trap 'rm -rf "$d"' EXIT; s="$d/_bmad-output/p
 
 ## BL-266 — `enforcement-map-sites`' I59 corpus mutation edits four arms' corpora and the battery can only see one of them
 
+**FIXED IN v0.668.0, pending the post-merge close.** The corpus mutation is addressed to I59's own
+`find` line (the one writing `$i59_flist`). The arm refuses unless the mutated copy differs in exactly
+one line, and drives `--arms I60,I83,I84` against the same mutant, which must exit 0 with its `OK:`
+line. Re-derived at `7a325bb6`: the anchor sits on 4 lines (I59, I60, I83, I84), and the unaddressed
+sed turned I59, I60 and I83 red with I84 green. Arm scored tip 0; unaddressed 1 (count guard);
+unaddressed without the count guard 1 (sibling control); addressed to I60's line 1. Fixture wall
+clock unresolved at a +-5s spread (means 40.4s base, 41.1s tip).
+
 **The sed is `-type f -name '*.sh' -not -path`, with no line address, and `sed` applies `s///`
 once per matching line.** Measured on a seeded tree at `4feee7f9`: it applies to **4** lines and
 sends `--arms I59` (exit 1, `I59 found only 0 shipped script(s)`, its own assertion), `--arms I83`
@@ -2600,7 +2642,7 @@ form asked for the words "stays green" and came back 0 immediately, satisfied by
 comment lines about a hand-copied path; that is this repo's text-about-a-program trap, met while
 writing the entry that describes it.
 
-verify: sh f=core/fixtures/enforcement-map-sites/run.sh; v=scripts/validate-enforcement-map.sh; [ -f "$f" ] || exit 9; [ -f "$v" ] || exit 9; grep -q 'I59 grammar mutation' "$f" || exit 9; n="$(grep -c "name '\*\.sh' -not -path" "$v")" || n=0; [ "$n" -le 1 ] && exit 0; LC_ALL=C grep -qE "^[[:blank:]]*sed \"?'?[0-9]+s@-type f -name" "$f" && exit 0; LC_ALL=C grep -qE '^[[:blank:]]*bash "\$V" --arms I(60|83|84)' "$f" && exit 0; exit 1
+verify: sh f=core/fixtures/enforcement-map-sites/run.sh; v=scripts/validate-enforcement-map.sh; [ -f "$f" ] || exit 9; [ -f "$v" ] || exit 9; o="$(bash "$f" --run-one A33_i59_documented_modes 2>&1)"; r=$?; [ "$r" = 2 ] && exit 9; [ "$r" = 0 ] || exit 1; printf '%s\n' "$o" | grep -q '^  ok    a corpus derivation that returns nothing FAILS I59 loudly' || exit 1; printf '%s\n' "$o" | grep -q '^  ok    the I59 corpus mutant leaves I60, I83 and I84 green' || exit 1; exit 0
 
 
 ## BL-265 — the fork budget's A4 stale-high arm had become unreachable at its own committed budget, and the mutant that should have said so was wired to a derived value
@@ -2748,6 +2790,19 @@ verify: sh h=core/fixtures/gate-verdict-grep-shape/run.sh; [ -f "$h" ] || exit 9
 
 ## BL-282 — "a green gate is not a landed push" has no enforcer, and the obvious check RACES a backgrounded push
 
+**FIXED IN v0.668.0, pending the post-merge close.** The enforcer is the push-time keepalive WARNING
+the note above names, not an `ls-remote` reader. `.githooks/pre-push` carries a `KEEPALIVE` block
+above the first step, outside the I66 pool block: for an ssh remote it runs `-G` through the ssh
+command git itself would use (`GIT_SSH_COMMAND`, `core.sshCommand`, `GIT_SSH`, `ssh`) and prints one
+non-blocking line when `serveraliveinterval` is 0. False-positive set on the operator's box: `origin`
+via `github-euron8` is silent with the dotfile as-is and fires under `GIT_SSH_COMMAND="ssh -F <empty
+config>"`. `core/fixtures/prepush-ssh-keepalive` (dist-only) drives the extracted block in five firing
+and six silent shapes, four mutants killed; about 50 ms per push. The second subject stays recorded:
+`verification-discipline.md`'s "confirm the remote ref moved" is still prose; the warning removes the
+measured cause and does not observe the outcome, which no hook can. The receipt below replaces the
+`ls-remote`-shaped one: base 1, fix 0, invocation deleted 1, interval test deleted 1, widened 1,
+alias dropped from the text 1, receipt literals in a comment 1.
+
 **NOTE.** Filed at batch 138 after the lead reported a push failure that had not happened.
 
 **CAUSE FOUND AT 0.619.0–0.621.0, AND IT IS AN OPERATOR DOTFILE, NOT THE TREE.** `git push`
@@ -2797,7 +2852,7 @@ Do not key it on the push command's exit status alone: that is the value the mea
 reports as 0 while the ref is absent, and reading it through a pipe makes it worse, because this
 shell has no `PIPESTATUS` and a pipeline answers with its last stage.
 
-verify: sh set -e; r=.claude/rules/verification-discipline.md; [ -r "$r" ] || exit 9; LC_ALL=C grep -q 'green gate is not a landed push' "$r" || exit 9; n="$(grep -rlF 'ls-remote' .githooks/ scripts/ 2>/dev/null | grep -cv '^$')" || n=0; [ "$n" -gt 0 ] && exit 0; exit 1
+verify: sh h=.githooks/pre-push; [ -f "$h" ] || exit 9; command -v ssh >/dev/null 2>&1 || exit 9; d="$(mktemp -d)" || exit 9; : > "$d/c"; sed -n '/^# KEEPALIVE_BEGIN$/,/^# KEEPALIVE_END$/p' "$h" > "$d/b.sh"; w="$(GIT_SSH_COMMAND="ssh -F $d/c" bash "$d/b.sh" origin git@bl282-probe:o/r.git </dev/null 2>&1)"; q="$(GIT_SSH_COMMAND="ssh -F $d/c -o ServerAliveInterval=60" bash "$d/b.sh" origin git@bl282-probe:o/r.git </dev/null 2>&1)"; rm -f "$d/c" "$d/b.sh"; rmdir "$d"; case "$w" in *'alias "bl282-probe" has no keepalive'*) ;; *) exit 1 ;; esac; [ -z "$q" ] && exit 0; exit 1
 
 ## BL-301 — the gate runs no shipped fixture in the consumer layout, so a fixture red on every consumer ships green
 
@@ -3522,3 +3577,26 @@ consumer session. Its proposed identifier half (`scope_deferred_items`) was alre
 character, so the existing boundary never matched inside it.
 
 verify: sh A=core/scripts/audit-layer-debt.sh; [ -f "$A" ] || exit 9; f=$(mktemp) || exit 9; python3 -c 'import json;b={"clause":"LC-E4","subject_digest":"0"*40,"verdict":"still-additive","recorded_utc":"2026-09-30T00:00:00Z"};[print(json.dumps(dict(b,entry=e,reason=r))) for e,r in [("v.md","route Step 6 now files deferred scope as CO- items and records scope_deferred_items; entry reads sprint-status for routing only"),("a.md","the split is deferred to a later pull"),("b.md","deferred to sprint 316"),("c.md","scope is deferred"),("d.md","the narrowing is deferred scoped-work for S316"),("e.md","the narrowing is deferred scopes for S316")]]' > "$f" || exit 9; o=$(bash "$A" --register "$f" --json 2>/dev/null) || exit 9; rm -f "$f"; printf "%s" "$o" | python3 -c 'import json,sys;u={x["entry"] for x in json.load(sys.stdin)["undeclared"]};sys.exit(0 if u=={"a.md","b.md","c.md","d.md","e.md"} else 1)'
+
+## BL-384 — a sharded repair's Bash-written files get no ledger row, and parts cite absolute paths the join cannot resolve
+
+**FIXED IN v0.668.0, pending the post-merge close.** Measured on the consumer's own transcripts and
+ledger: every unledgered remediator shard wrote its story (and part) file through Bash; the remediation
+guard records only `Edit|Write|MultiEdit`, so no row, and `join-remediator-shards.sh` refused them as
+claimed edits with no write. Every harness-validated Edit/Write/MultiEdit had exactly one row, and the
+two off-by-one shards were edits the harness rejected before PreToolUse. A race, an empty `agent_id`, a
+path-arm miss and a version change were each driven and excluded. Separately, `remediator.md` and
+`_gate-procedures.md` taught "the FULL path", so parts cited absolute paths the join's suffix match cannot
+resolve, and the lead rewrote them by hand. Fixed: the join cuts an absolute citation under the state
+directory's parent (logical and `pwd -P` spellings) to the ledger's spelling, and a foreign prefix still
+refuses; the UNWRITTEN refusal names the Bash cause and the re-dispatch, and never hand-assembly; the
+role file requires Edit/Write/MultiEdit for edits under the sprint slot in a repair dispatch (resolution
+moves stay outside that scope) and the ledger-spelled citation; `_gate-procedures.md` carries the
+numbered route after that refusal. The hook changes in its comment only; its allow stays unconditional.
+Fixture `remediator-shard-join` arms A1-A6, R1, mutants JX8/JX9.
+
+Discharges the consumer candidate `PC-S315-ARTIFACT-WRITE-LEDGER-DROPS-PARALLEL-SHARD-ROWS`, filed by the
+graph consumer session. Its requested N-shard reproduction is not needed: the race it rested on is
+ruled out by the data.
+
+verify: sh J=core/scripts/join-remediator-shards.sh; H=core/hooks/ai-dlc-gate-remediation-guard.sh; [ -f "$J" ] && [ -f "$H" ] && command -v jq >/dev/null || exit 9; S=_bmad-output/planning-artifacts/s9; w() { r=$(mktemp -d) || exit 9; mkdir -p "$r/$S/stories" "$r/$S/shards/stories-repair-p1"; : > "$r/_bmad-output/pipeline-snapshot.md"; echo x > "$r/$S/stories/a.md"; jq -nc --arg f "$r/$S/stories/a.md" '{tool_name:"Edit",tool_input:{file_path:$f},agent_id:"a16fddf14ea289491"}' | CLAUDE_PROJECT_DIR="$r" bash "$H" >/dev/null 2>&1; [ "$(grep -c . "$r/_bmad-output/planning-artifacts/.artifact-writes.jsonl" 2>/dev/null)" = 1 ] || exit 9; }; j() { AI_DLC_PROJECT_ROOT="$r" bash "$J" --sprint 9 --artifact stories --pass 1 --artifact-path "$S" --since 2000-01-01T00:00:00Z --until 2999-01-01T00:00:00Z 2>&1; }; w; printf -- '- disposition: repaired\n- edit: %s:3\n- derivation: n/a\n' "$r/$S/stories/a.md" > "$r/$S/shards/stories-repair-p1/1.md"; j >/dev/null; c1=$?; w; printf -- '- disposition: repaired\n- edit: %s:3\n- derivation: n/a\n' "/elsewhere/proj/$S/stories/a.md" > "$r/$S/shards/stories-repair-p1/1.md"; o=$(j); c2=$?; [ "$c1" -eq 0 ] && [ "$c2" -eq 2 ] && grep -qF "cites /elsewhere/proj/$S/stories/a.md, which no dispatched agent wrote" <<<"$o" || exit 1; exit 0
