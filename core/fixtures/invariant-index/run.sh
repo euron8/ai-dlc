@@ -2,8 +2,8 @@
 # Exercise scripts/render-invariant-index.sh -- the renderer that derives docs/invariant-index.md
 # from the arm headers in scripts/validate-enforcement-map.sh and byte-compares it at pre-push.
 #
-# Two controls plus six mutants, each a throwaway repo under a temp dir.
-# Exit 0 iff both controls are green AND all six mutants are killed by their own arm.
+# Two controls, a near-miss and seven mutants, each a throwaway repo under a temp dir.
+# Exit 0 iff every control is green AND every mutant is killed by its own arm.
 #
 #   controlA  the REAL repo: `--check` against the committed index   -> must PASS
 #   controlB  a synthetic seed: render, then `--check`                -> must PASS
@@ -13,6 +13,8 @@
 #   m4  silent     a declared arm containing no emitter               -> must FAIL
 #   m5  collision  one ID claimed by two solo arm headers             -> must FAIL
 #   m6  zero-arms  a source the header grammar cannot parse at all    -> must FAIL
+#   m7  group-collision  one ID claimed by two GROUP headers          -> must FAIL
+#   n1  group-prefix     two group headers sharing only a prefix      -> must PASS
 #
 # WHY THIS FIXTURE IS THE ONLY EVIDENCE THE RENDERER WORKS. Its finding set over the real
 # tree is EMPTY by design -- a green `--check` is the steady state, and a renderer that
@@ -167,6 +169,27 @@ printf '# --- I1: a second arm claiming the same ID ---\n[ -n "${z:-}" ] && err 
   >> "$TMP/m5/scripts/validate-enforcement-map.sh"
 kill_check "m5 collision  one ID, two solo arms" "$TMP/m5" "claimed by more than one arm" render
 
+# m7 -- one ID, two GROUP headers. The group path was first-wins and silent: the second
+# header's description was dropped at exit 0. I3 is shared by the seed's own overview and a
+# second overview appended here, so the seed's solo I3 arm is also present -- the refusal must
+# fire on the group count, not only when no solo arm exists.
+seed "$TMP/m7"
+printf '# --- I3 / I4: a second overview claiming I3 ---\n[ -n "${z:-}" ] && err "second overview"\n' \
+  >> "$TMP/m7/scripts/validate-enforcement-map.sh"
+kill_check "m7 group-collision one ID, two group headers" "$TMP/m7" "claimed by more than one arm" render
+
+# n1 -- two group headers sharing only a PREFIX (I3 and I30) are not a collision and must render.
+seed "$TMP/n1"
+printf '# --- I30 / I4: a second overview, a prefix neighbour ---\n[ -n "${z:-}" ] && err "second overview"\n' \
+  >> "$TMP/n1/scripts/validate-enforcement-map.sh"
+if outN="$(render_in "$TMP/n1")" && grep -q "5 invariant(s) across 4 arm(s)" <<<"$outN" \
+   && grep -qF "| I30 | a second overview, a prefix neighbour |" "$TMP/n1/docs/invariant-index.md"; then
+  note "ok    n1 group-prefix  two overviews sharing a prefix render"
+else
+  note "FAIL  n1 group-prefix  a prefix neighbour was refused or did not render"
+  printf '%s\n' "$outN" | sed 's/^/      /' | head -5; rc=1
+fi
+
 # m6 -- the grammar parses nothing
 seed "$TMP/m6"
 if mutate "$TMP/m6/scripts/validate-enforcement-map.sh" 's|^# --- |# === |'; then
@@ -176,6 +199,6 @@ else
 fi
 
 if [ "$rc" -eq 0 ]; then
-  note "PASS  invariant-index -- 2 controls green, 6/6 mutants killed by their own arm"
+  note "PASS  invariant-index -- 2 controls + 1 near-miss green, 7/7 mutants killed by their own arm"
 fi
 exit "$rc"

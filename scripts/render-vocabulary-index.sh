@@ -199,6 +199,13 @@ BEGIN {
   if (line ~ /^[[:blank:]]*#[[:blank:]]*vocabulary:/) {
     flush()
     v = line; sub(/^[[:blank:]]*#[[:blank:]]*vocabulary:[[:blank:]]*/, "", v)
+    # A NAME MAY BE DECLARED ONCE PER FILE, the per-block field partition one level up. Two
+    # blocks carrying one name rendered two rows each claiming to be the one set, at exit 0.
+    # Keyed with trailing blanks stripped, because the rendered cell is visually identical
+    # either way. The name line emits #DUPNAME, and the corpus section refuses on it.
+    k = v; sub(/[[:blank:]]+$/, "", k)
+    if (k in seenname) printf "#DUPNAME %s%s%s%s%s\n", k, SEP, seenname[k], SEP, FNR
+    else seenname[k] = FNR
     name = v; marked = 1; next
   }
   if (line ~ /^[[:blank:]]*#[[:blank:]]*vocabulary-invariant:/) {
@@ -243,7 +250,8 @@ END {
 # itself about what a vocabulary header looks like.
 DEMAND_RE='vocabular|taxonom|one set|key set'
 
-markers_of() { awk "$MARKER_AWK" "$1" | grep -vE '^#(DEMAND|DUPFIELD|ORPHANFIELD) ' || true; }
+markers_of() { awk "$MARKER_AWK" "$1" | grep -vE '^#(DEMAND|DUPFIELD|DUPNAME|ORPHANFIELD) ' || true; }
+dupnames_of() { awk "$MARKER_AWK" "$1" | sed -n 's/^#DUPNAME //p' || true; }
 orphans_of() { awk "$MARKER_AWK" "$1" | sed -n 's/^#ORPHANFIELD //p' || true; }
 # The repeated-field reader. Kept beside the other two so all three consume ONE marker
 # grammar -- a second parse of these comment lines here would be this file restating the
@@ -453,6 +461,19 @@ SCHEMA_PY='
 import json, glob, os, sys
 root = sys.argv[1]
 rows = []
+# A REPEATED KEY IS REFUSED, NOT RESOLVED. Plain json.load keeps the LAST of two equal keys in
+# one object, so a schema declaring one field enum twice rendered from the second and dropped
+# the first at exit 0 -- while the header below calls this half total. The hook is per OBJECT,
+# so the same key in two sibling objects (every "name" in a fields list) is not a repeat.
+class DupKey(Exception):
+    pass
+def no_dup_pairs(pairs):
+    seen = {}
+    for k, v in pairs:
+        if k in seen:
+            raise DupKey(k)
+        seen[k] = v
+    return seen
 def walk(node, path, out):
     if isinstance(node, dict):
         if isinstance(node.get("enum"), list):
@@ -469,7 +490,10 @@ def walk(node, path, out):
 for f in sorted(glob.glob(os.path.join(root, "*.json"))):
     out = []
     try:
-        doc = json.load(open(f))
+        doc = json.load(open(f), object_pairs_hook=no_dup_pairs)
+    except DupKey as e:
+        print("DUP-KEY\t%s\t%s" % (os.path.basename(f), e.args[0]))
+        continue
     except Exception as e:
         print("PARSE-ERROR\t%s\t%s" % (os.path.basename(f), e))
         continue
@@ -664,6 +688,31 @@ d_row="$(markers_of "$PROBE_DIR/dup-offender.sh")"
 IFS="$SEP" read -r d_name d_inv d_owner d_ext d_read d_emit <<<"$d_row"
 [ "$d_read" = "probe/first.txt" ] || \
   probe_fail "the block carrying a repeated \`vocabulary-readers:\` read back readers='$d_read'; the FIRST declaration must survive. A reader that reports the repeat and overwrites anyway is silently last-wins everywhere the refusal is not fatal."
+
+# --- probe 1d: the repeated-NAME refusal, both directions -----------------------------
+# The quiet direction on every seed above, then a near-miss whose two names share a PREFIX
+# (`probe zeta` / `probe zeta two`), which a substring or first-word key would refuse. The
+# offender puts the repeat in a NON-adjacent block, with a distinct block between, so a test
+# comparing a name only with the previous block cannot pass it.
+for pseed in markers.sh dup-nearmiss.sh dup-offender.sh dup-empty.sh orphan.sh; do
+  [ -z "$(dupnames_of "$PROBE_DIR/$pseed")" ] || \
+    probe_fail "the repeated-name reader reported a duplicate name in $pseed, which has none."
+done
+printf '%s\n' '# --- I912: a ---' '# vocabulary: probe zeta' '# vocabulary-invariant: I912' \
+  '# --- I913: b ---' '# vocabulary: probe zeta two' '# vocabulary-invariant: I913' > "$PROBE_DIR/name-near.sh"
+[ -z "$(dupnames_of "$PROBE_DIR/name-near.sh")" ] || \
+  probe_fail "two blocks whose names share only a PREFIX were read as one repeated name."
+[ "$(markers_of "$PROBE_DIR/name-near.sh" | grep -c .)" -eq 2 ] || \
+  probe_fail "the repeated-name near-miss did not produce both rows."
+printf '%s\n' '# --- I912: a ---' '# vocabulary: probe zeta' '# vocabulary-invariant: I912' \
+  '# --- I913: b ---' '# vocabulary: probe eta' '# vocabulary-invariant: I913' \
+  '# --- I914: c ---' '# vocabulary: probe zeta' '# vocabulary-invariant: I914' > "$PROBE_DIR/name-dup.sh"
+nd_out="$(dupnames_of "$PROBE_DIR/name-dup.sh")"
+[ "$(grep -c . <<<"$nd_out")" -eq 1 ] || \
+  probe_fail "a vocabulary name declared by two non-adjacent blocks produced $(grep -c . <<<"$nd_out") finding(s); exactly 1 is required."
+IFS="$SEP" read -r nd_name nd_first nd_line <<<"$nd_out"
+[ "$nd_name" = "probe zeta" ] && [ "$nd_first" = "2" ] && [ "$nd_line" = "8" ] || \
+  probe_fail "the repeated name was reported as '$nd_name' lines '$nd_first'/'$nd_line'; wanted 'probe zeta' lines 2/8."
 
 # --- probe 2: the marker reader, negative -- a header whose prose DEMANDS a marker ----
 cat > "$PROBE_DIR/demand.sh" <<'PROBE'
@@ -903,6 +952,23 @@ PROBE
 [ "$(schema_rows "$PROBE_DIR/schemas" | grep -c .)" -eq 2 ] || \
   probe_fail "a schema with no enum changed the walker's row count; it must contribute nothing."
 
+# The repeated-key refusal, both directions, in its own directory so the counts above stay
+# exact. The offender repeats `enum` inside ONE object; the near-miss carries `enum` and
+# `enum2` (a shared prefix) in one object and `enum` again in a SIBLING object, which a
+# file-wide or substring test would refuse and a per-object test must not.
+mkdir -p "$PROBE_DIR/schemas-dup"
+printf '%s\n' '{"properties": {"zz": {"enum": ["FIRSTDECL"], "enum": ["SECONDDECL"]}}}' > "$PROBE_DIR/schemas-dup/dup.json"
+k_out="$(schema_rows "$PROBE_DIR/schemas-dup")"
+[ "$k_out" = "DUP-KEY	dup.json	enum" ] || \
+  probe_fail "a schema repeating \`enum\` in one object walked as '$k_out'. json.load keeps the last copy, so the first would vanish from the index unreported."
+printf '%s\n' '{"a": {"enum": ["P"], "enum2": ["Q"]}, "b": {"enum": ["R"]}}' > "$PROBE_DIR/schemas-dup/dup.json"
+k_near="$(schema_rows "$PROBE_DIR/schemas-dup")"
+case "$k_near" in
+  *DUP-KEY*) probe_fail "the repeated-key refusal fired on keys that share a prefix or sit in sibling objects: '$k_near'" ;;
+esac
+[ "$(grep -c . <<<"$k_near")" -eq 2 ] || \
+  probe_fail "the repeated-key near-miss walked to '$k_near'; its two enums must both render."
+
 # =========================================================================================
 # THE CORPUS.
 # =========================================================================================
@@ -945,6 +1011,20 @@ if [ -n "$orphans" ]; then
       "$oline" "\`# $ofield:\`" "'$ovalue'" >&2
   done <<EOF
 $orphans
+EOF
+  exit 1
+fi
+
+dupnames="$(dupnames_of "$SRC")"
+if [ -n "$dupnames" ]; then
+  echo "render-vocabulary-index: two marker blocks in $SRC declare the same vocabulary NAME." >&2
+  echo "  The index would render two rows, each claiming to be the one set, with owners and" >&2
+  echo "  members that need not agree. Rename one, or merge the blocks:" >&2
+  while IFS="$SEP" read -r nname nfirst nline; do
+    [ -n "$nname" ] || continue
+    printf '    %s declared on line %s and again on line %s\n' "'$nname'" "$nfirst" "$nline" >&2
+  done <<EOF
+$dupnames
 EOF
   exit 1
 fi
@@ -1132,6 +1212,13 @@ n_schema="$(grep -c . <<<"$schema_out")"
 if grep -q '^PARSE-ERROR' <<<"$schema_out"; then
   echo "render-vocabulary-index: a schema under core/schemas/ does not parse as JSON:" >&2
   grep '^PARSE-ERROR' <<<"$schema_out" | sed 's/^/    /' >&2
+  exit 1
+fi
+if grep -q '^DUP-KEY' <<<"$schema_out"; then
+  echo "render-vocabulary-index: a schema under core/schemas/ repeats a key inside one JSON object." >&2
+  echo "  A JSON reader keeps whichever copy it likes -- Python keeps the last -- so one of the two" >&2
+  echo "  declarations would vanish from this index unreported. Delete one (file, key):" >&2
+  grep '^DUP-KEY' <<<"$schema_out" | cut -f2- | sed 's/^/    /' >&2
   exit 1
 fi
 

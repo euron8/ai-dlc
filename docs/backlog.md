@@ -722,6 +722,10 @@ verify: sh P=core/skills/ai-dlc-update/reconcile/preclassify.sh; [ -f "$P" ] || 
 
 ## BL-098 — two blocks may declare the same vocabulary NAME, and the index renders the row twice
 
+**LANDED (v0.666.0, verified 23a85f54).** `MARKER_AWK` keeps a file-scope `seenname[]` and emits
+`#DUPNAME`; the corpus section refuses, naming both lines. Receipt kept, because it drives the
+shipping renderer on a seeded copy: tip 0, base 1, fix-reverted mutant 1. Fixture arms m23 / n2.
+
 **`BL-094` one level up: the contradiction is between two BLOCKS rather than two fields.**
 `MARKER_AWK` tracks a declared field per block, and nothing tracks a declared NAME across the
 file. Two `# vocabulary:` lines carrying one name therefore both render, and the exit code never
@@ -756,6 +760,11 @@ verify: sh R=scripts/render-vocabulary-index.sh; M=scripts/validate-enforcement-
 
 ## BL-097 — the vocabulary renderer declares TWO populations and only one of them refuses a repeated declaration
 
+**LANDED (v0.666.0, verified 23a85f54).** `SCHEMA_PY` loads with an `object_pairs_hook` that
+raises on a repeated key; the walker emits `DUP-KEY` and the corpus section refuses. Receipt
+kept, because it drives the shipping renderer: tip 0, base 1, fix-reverted mutant 1. Fixture
+arms m24 / n3.
+
 **In the file `v0.421.0` hardened, in the half that release did not reach.** `SCHEMA_PY` in
 `scripts/render-vocabulary-index.sh` calls `json.load`, which resolves a duplicate mapping key by
 keeping the LAST. So a `core/schemas/*.json` declaring one field's `enum` twice renders from the
@@ -786,6 +795,11 @@ Found by the scope hand of batch 12, asking whether `BL-094` was wider than file
 verify: sh R=scripts/render-vocabulary-index.sh; [ -f "$R" ] || exit 9; [ -d core/schemas ] || exit 9; D="$(mktemp -d)" || exit 9; tar --exclude=.git -cf - . 2>/dev/null | tar -xf - -C "$D" || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$R" --check >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; J="$D/core/schemas/zzprobe.json"; printf '%s\n' '{"properties": {"zzprobe": {"enum": ["FIRSTDECL"], "enum": ["SECONDDECL"]}}}' > "$J" || { rm -rf "$D"; exit 9; }; [ "$(grep -c FIRSTDECL "$J")" -eq 1 ] && [ "$(grep -c SECONDDECL "$J")" -eq 1 ] || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$R" >/dev/null 2>&1 ); rc=$?; f=0; s=0; grep -qF FIRSTDECL "$D/docs/vocabulary-index.md" 2>/dev/null && f=1; grep -qF SECONDDECL "$D/docs/vocabulary-index.md" 2>/dev/null && s=1; rm -rf "$D"; [ "$rc" -eq 0 ] && [ "$s" -eq 1 ] && [ "$f" -eq 0 ] || exit 0; exit 1
 
 ## BL-096 — the invariant renderer refuses a duplicate SOLO declaration and accepts a duplicate GROUP one
+
+**LANDED (v0.666.0, verified 23a85f54).** The collision arm refuses `solo[id] > 1 || grp[id] > 1`,
+so a counted repeat is refused even when both headers carry identical prose. Receipt kept,
+because it drives the shipping renderer: tip 0, base 1, fix-reverted mutant 1. Fixture arms
+m7 / n1.
 
 **`BL-094`'s defect in the sibling renderer, at mirror polarity.**
 `scripts/render-invariant-index.sh`'s collision arm keys on `solo[id] > 1` — declarations by an arm
