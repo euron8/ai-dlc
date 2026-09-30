@@ -2525,7 +2525,7 @@ provenance-first rule. Filed rather than fixed because it is a different subsyst
 batch and needs a join rather than the table row it resembles — recorded here so the next author
 does not ship the one-line version and read its zero as clean.
 
-**LANDED (v0.666.0, verified PENDING).** All four claims resolved: the `\b` defect re-measured on
+**FIXED IN v0.666.0, pending the post-merge close.** All four claims resolved: the `\b` defect re-measured on
 bash 3.2.57 (and `\B \< \> \w \W \s \S \d` measured failing the same way, so the arm covers the
 set); the home is `scripts/validate-shell-portability.sh` as arm S12 with a `KIND=join` column
 rather than a table row; the join is two-pass and order-free; the grep/sed exemption is
