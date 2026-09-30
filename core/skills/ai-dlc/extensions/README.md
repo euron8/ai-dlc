@@ -81,7 +81,7 @@ hooks: steps/gate-validation.md        # the core file/step this augments
 id: <stable-id>                        # e.g. exec-health-floor, check-financial-display
 push_candidate: false                  # true = generalizable; feeds the ai-dlc-update push-mine / absorption arc
 fixtures: check-foo-bypass             # OPTIONAL, `kind: check` only — see below
-extends: '#Empirical gate validation'  # OPTIONAL — narrows drift to one section; REQUIRED on kind: qualifier
+extends: '#Empirical gate validation'  # OPTIONAL — narrows drift to the named section(s), comma-separated; REQUIRED (exactly one) on kind: qualifier
 position: append                       # `kind: qualifier` ONLY — append | prepend
 conforms_to: 20                         # the contract version you migrated this entry to [LC-C1]
 ---
@@ -98,21 +98,21 @@ your entry never referred to, and a worklist that is 91% noise is one you learn 
 than read. Declaring the anchor is what buys the other 91% back.
 
 Write it `#Anchor` to mean "in the file I already hook", or `file.md#Anchor` — the file part, if
-present, must be the one `hooks:` names. Exactly one anchor: two would mean two spans, and a drift
-row could no longer say which one moved. The anchor must name a heading FORWARD (the heading
+present, must be the one `hooks:` names. Every anchor must name a heading FORWARD (the heading
 contains your anchor), not the reverse — see LC-E11.
 
-**An entry that depends on SEVERAL spans keeps file grain, and that is correct rather than a
-mis-declaration.** One anchor is the whole truth about an entry that AUGMENTS a core span, which
-is why `kind: qualifier` requires it. An entry that ADDS a whole check augments nothing: it
-depends on the gate-type manifest that decides when its check loads, on the consumer-catalog
-crosswalk that governs how its check is numbered, and on whichever core section it sits beside —
-three disjoint spans, and `extends:` can name one. Declaring the largest of them is the trap.
-Measured on core's own `steps/gate-validation.md`: `#Validation Checklist` is 2352 of 2560 lines,
-so anchoring there narrows the drift subject by **6%** and buys that by silencing the manifest and
-the crosswalk, which are the two spans an additive check entry most needs to be re-read against.
-**Take the file-grain re-reads.** They are the price of a declaration that cannot say what your
-entry means, not a defect in your entry.
+**An entry that depends on SEVERAL spans declares all of them, comma-separated:**
+`extends: '#Gate-type manifest, #Consumer-catalog crosswalk, #Validation Checklist'`. Each span
+is resolved and compared on its own, and the drift row names WHICH of them moved, so the row still
+says what to re-read. An entry that ADDS a whole check augments nothing in particular: it depends
+on the gate-type manifest that decides when its check loads, on the consumer-catalog crosswalk
+that governs how its check is numbered, and on whichever core section it sits beside — three
+disjoint spans. **Declaring only the largest of them is the trap.** Measured on core's own
+`steps/gate-validation.md`: `#Validation Checklist` is 2352 of 2560 lines, so anchoring there
+alone narrows the drift subject by **6%** and buys that by silencing the manifest and the
+crosswalk, which are the two spans an additive check entry most needs to be re-read against.
+Name every span the entry depends on, or declare none and keep file grain. `kind: qualifier` is
+the exception and takes exactly one anchor: it renders at `position:` inside one core section.
 
 **`kind: qualifier` — render INSIDE a core section.** The other kinds are additive at file scope:
 they render as their own section. A qualifier renders *within* the core section `extends:` names,
@@ -358,9 +358,11 @@ times on first contact gets disabled and then catches nothing.
 - **[LC-E10]** ERROR — `kind:` is one of `check`, `step-domain`, `role`, `qualifier`. The Rule 27
   loader routes an entry by its kind, so an unrecognised one — a typo included — is read by
   nothing: the entry sits here looking active and governs no run.
-- **[LC-E11]** ERROR — an `extends:` value names exactly one anchor, in the file this entry hooks,
-  and that anchor resolves to a heading by the FORWARD containment arm. One anchor, because the
-  key exists to give the entry ONE drift subject. Forward, because a reverse-only match (your
+- **[LC-E11]** ERROR — an `extends:` value names at least one anchor (exactly one on
+  `kind: qualifier`), every anchor in the file this entry hooks, and each resolves to a heading by
+  the FORWARD containment arm. Several anchors, because an additive entry genuinely depends on
+  several spans and each is compared on its own; one on a qualifier, because it renders inside one
+  section. Every anchor is checked, not the first. Forward, because a reverse-only match (your
   anchor CONTAINS the heading) silently widens the span to that whole section, and you would read
   a narrowed drift row while the classifier watched everything under the heading.
 - **[LC-E12]** ERROR — a `kind: qualifier` entry declares both `extends:` and `position:`, and no

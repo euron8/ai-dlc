@@ -136,6 +136,16 @@ extends: '#Beta review'"
 # a drift row, and a classifier that had stopped emitting anything would satisfy all
 # of them; this entry is what says the run happened at all — and, separately, that the
 # narrowing was not applied to an entry that never asked for it.
+# THE MULTI-SPAN ENTRY. Two anchors, and the span that moves is deliberately NOT the first:
+# Gamma never moves, Beta moves in run 1 only. A classifier that watched only the first
+# declared span would report this entry OK in both runs; it must report ANCHOR-DRIFT in run 1
+# (naming Beta, not Gamma) and OK in run 2, where the file moves and neither of its spans does.
+ext multi 906 "kind: step-domain
+hooks: steps/demo.md
+id: multi
+push_candidate: false
+extends: '#Gamma notes, #Beta review'"
+
 ext unanchored 905 "kind: step-domain
 hooks: steps/demo.md
 id: unanchored

@@ -1524,32 +1524,52 @@ while IFS= read -r f; do
     # Parsed by shadow_parts — the SAME reading `shadows:` gets, bound byte-identical
     # across this file and reconcile/lib.sh by I40. A second parser for a second
     # anchor-bearing key is how the three readings I40's header records came to exist.
+    #
+    # SEVERAL ANCHORS ARE ALLOWED, EXCEPT ON A QUALIFIER. An entry that ADDS a whole check
+    # depends on several disjoint spans of the file it hooks — the gate-type manifest that
+    # decides when it loads, the crosswalk that numbers it, the section it sits beside — and
+    # a one-anchor key could name only one of them. Its author then had two choices, both
+    # wrong: declare nothing and re-read on every change to the whole file, or declare the
+    # largest span and silence the others. Measured on core's own `steps/gate-validation.md`:
+    # `#Validation Checklist` is 2352 of 2560 lines, so that anchor narrows drift by 6% and
+    # silences exactly the two spans an additive check most needs re-reading against. Each
+    # declared span is checked on its own, and the pull classifier reports WHICH of them moved,
+    # so a drift row still names its span. A qualifier stays at exactly one: it renders at
+    # `position:` INSIDE one core section, and two sections give that placement no meaning.
     ext_pairs="$(shadow_parts "$extends")"
     ext_n="$(printf '%s\n' "$ext_pairs" | grep -c .)"
-    if [ "$ext_n" -ne 1 ]; then
-      err E11 "$(rel "$f"): extends: declares $ext_n anchors ('$extends'); exactly one is allowed. The whole point of the key is to give this entry ONE drift subject — two anchors mean two spans, and a drift row could no longer say which one moved without re-introducing the file-grain report it replaces."
+    if [ "$ext_n" -lt 1 ]; then
+      err E11 "$(rel "$f"): extends: '$extends' declares no anchor at all. Every comma-separated part is empty, so the key narrows nothing while reading as though it did."
+    elif [ "$ext_n" -gt 1 ] && [ "$kind" = qualifier ]; then
+      err E11 "$(rel "$f"): extends: declares $ext_n anchors ('$extends') on kind 'qualifier', which takes exactly one. A qualifier renders at position: INSIDE one core section; with two there is no section for the loader to render into. Several anchors are for an entry that depends on several spans without rendering inside any of them — use kind 'check' or 'step-domain' for that."
     else
-      ext_file="$(printf '%s' "$ext_pairs" | cut -f1)"
-      ext_anc="$(printf '%s' "$ext_pairs" | cut -f2)"
-      # A bare `#Anchor` inherits the hooked file: shadow_parts emits an empty file
-      # field for a first part that names none, and that is the intended spelling.
-      [ -n "$ext_file" ] || ext_file="$hooks"
-      if [ "$ext_file" != "$hooks" ]; then
-        err E11 "$(rel "$f"): extends: names '$ext_file' but hooks: names '$hooks'. The anchor must live in the file this entry hooks, or the narrowed drift check would watch one file while the entry augments another — a green row for a section nothing here refers to."
-      elif [ -z "$ext_anc" ]; then
-        err E11 "$(rel "$f"): extends: '$extends' carries no '#anchor'. Without one it declares the same file grain hooks: already declares, so it narrows nothing while reading as though it did."
-      else
-        case "$(anchor_arm "$ext_anc" < "$core_path")" in
-          FORWARD) : ;;
-          REVERSE:*)
-            ext_real="$(anchor_arm "$ext_anc" < "$core_path" | sed 's/^REVERSE://')"
-            err E11 "$(rel "$f"): extends: anchor '$ext_anc' is not a heading in $hooks — it CONTAINS the heading '$ext_real'. It resolves only by the reverse arm of the containment match, which silently WIDENS the span to that whole section: you would believe drift was narrowed to a paragraph while the classifier watched everything under that heading. Write the anchor as '$ext_real'."
-            ;;
-          *)
-            err E11 "$(rel "$f"): extends: anchor '$ext_anc' matches no heading in $hooks. The narrowed drift check has no span to watch, so this entry would report clean through every upstream change to the section it augments."
-            ;;
-        esac
-      fi
+      # One pass per declared span. A bare `#Anchor` inherits the hooked file: shadow_parts
+      # emits an empty file field for a first part that names none (and carries a named file
+      # forward to later parts), and that is the intended spelling. Split with `cut`, NOT with
+      # `IFS=<tab> read`: a tab is IFS WHITESPACE, so read collapses the empty leading file
+      # field and hands the anchor to ext_file — every bare `#Anchor` would then read as a
+      # file mismatch.
+      while IFS= read -r ext_pair; do
+        ext_file="$(printf '%s' "$ext_pair" | cut -f1)"
+        ext_anc="$(printf '%s' "$ext_pair" | cut -f2)"
+        [ -n "$ext_file" ] || ext_file="$hooks"
+        if [ "$ext_file" != "$hooks" ]; then
+          err E11 "$(rel "$f"): extends: names '$ext_file' but hooks: names '$hooks'. The anchor must live in the file this entry hooks, or the narrowed drift check would watch one file while the entry augments another — a green row for a section nothing here refers to."
+        elif [ -z "$ext_anc" ]; then
+          err E11 "$(rel "$f"): extends: '$extends' carries no '#anchor'. Without one it declares the same file grain hooks: already declares, so it narrows nothing while reading as though it did."
+        else
+          case "$(anchor_arm "$ext_anc" < "$core_path")" in
+            FORWARD) : ;;
+            REVERSE:*)
+              ext_real="$(anchor_arm "$ext_anc" < "$core_path" | sed 's/^REVERSE://')"
+              err E11 "$(rel "$f"): extends: anchor '$ext_anc' is not a heading in $hooks — it CONTAINS the heading '$ext_real'. It resolves only by the reverse arm of the containment match, which silently WIDENS the span to that whole section: you would believe drift was narrowed to a paragraph while the classifier watched everything under that heading. Write the anchor as '$ext_real'."
+              ;;
+            *)
+              err E11 "$(rel "$f"): extends: anchor '$ext_anc' matches no heading in $hooks. The narrowed drift check has no span to watch, so this entry would report clean through every upstream change to the section it augments."
+              ;;
+          esac
+        fi
+      done <<<"$ext_pairs"
     fi
   fi
 

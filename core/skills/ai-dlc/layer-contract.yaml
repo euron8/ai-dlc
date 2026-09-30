@@ -754,8 +754,10 @@ clauses:
     level: ERROR
     since: 5
     normative: >-
-      An `extends:` value names exactly one anchor, in the file the entry hooks, and that anchor
-      resolves to a heading by the FORWARD containment arm. A reverse-only match silently widens
+      An `extends:` value names at least one anchor, and exactly one on `kind: qualifier`; every
+      anchor is in the file the entry hooks and resolves to a heading by the FORWARD containment
+      arm, and every one is checked. Several anchors let an entry that depends on several spans
+      declare them all, each compared on its own. A reverse-only match silently widens
       the declared span to the whole enclosing section, so an entry would report narrowed drift
       while the classifier watched everything under that heading.
     prose_home: core/skills/ai-dlc/extensions/README.md

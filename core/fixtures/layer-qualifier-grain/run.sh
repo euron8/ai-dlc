@@ -83,6 +83,14 @@ case " $(status_for anchor-vanished) " in
   *) bad "anchor-vanished reported '$(status_for anchor-vanished)' — core renamed '## Delta handoff' to '## Epsilon handoff', so this entry's declared span resolves to nothing and would answer clean for every future change to the section it claims to augment" ;;
 esac
 
+# --- Part 1d: an unresolved span does not mask a moved one --------------------
+mm=" $(status_for missing-and-moved) "
+case "$mm" in *" EXTENSION-ANCHOR-MISSING "*) mm_m=1 ;; *) mm_m=0 ;; esac
+case "$mm_m$mm" in
+  1*" EXTENSION-ANCHOR-DRIFT "*) ok "one span renamed and another rewritten: BOTH ANCHOR-DRIFT and ANCHOR-MISSING, so the moved span stays adjudicable" ;;
+  *) bad "missing-and-moved reported '$(status_for missing-and-moved)' — '#Gamma review' was rewritten and '#Delta handoff' renamed in the same range, so it needs BOTH rows; MISSING alone drops the rewrite from the only row LC-E14 can adjudicate" ;;
+esac
+
 # --- Part 2: the authoring arms fire, one message each ------------------------
 BAD_OUT="$(bash "$LINTER" "$BAD" 2>&1)"
 assert_msg() { # assert_msg <label> <grep-pattern>
@@ -92,8 +100,10 @@ assert_msg "E10 rejects a kind the loader routes nowhere"        "kind 'qualifer
 assert_msg "E11 rejects an anchor matching no heading"           "anchor 'No Such Heading Anywhere' matches no heading"
 assert_msg "E11 rejects a reverse-only anchor, naming the real heading" "CONTAINS the heading 'Beta'"
 assert_msg "E11 rejects an anchor whose file is not the hooked file"    "but hooks: names"
-assert_msg "E11 rejects two anchors"                             "declares 2 anchors"
+assert_msg "E11 rejects two anchors on a qualifier"              "declares 2 anchors ('#Alpha gate, #Gamma review') on kind 'qualifier'"
+assert_msg "E11 checks EVERY declared span, not the first"      "anchor 'Second Anchor Nowhere' matches no heading"
 assert_msg "E11 rejects an extends: with no anchor"              "carries no '#anchor'"
+assert_msg "E11 rejects an extends: whose every part is empty"   "extends: ',' declares no anchor at all"
 assert_msg "E12 rejects a qualifier missing extends:"            "requires 'extends:'"
 assert_msg "E12 rejects a qualifier missing position:"           "requires 'position:'"
 assert_msg "E12 rejects position: on a non-qualifier"            "does not render inside a core section"
@@ -169,7 +179,7 @@ mutate() { # mutate <name> <src> <sed-expr> [dest-dir]
 
 # M1 — the narrowing itself. Force the anchor branch off, so a declared anchor
 # falls back to file grain. Kills ONLY the load-bearing assertion.
-if m="$(mutate m1-no-narrowing "$DRIFT" 's/^  elif \[ -n "\$ext_anc" \]; then$/  elif false; then/' "$MDIR/reconcile")"; then
+if m="$(mutate m1-no-narrowing "$DRIFT" 's/^  elif \[ -n "\$ext_ancs" \]; then$/  elif false; then/' "$MDIR/reconcile")"; then
   case " $(dstat "$m" anchored-elsewhere) " in
     *" EXTENSION-OK "*) bad "MUTANT m1 (anchor branch disabled) still reports EXTENSION-OK for an entry anchored away from the change — the load-bearing assertion does not depend on the narrowing code and proves nothing" ;;
     *) ok "MUTANT m1 killed: with the anchor branch off, anchored-elsewhere drifts at file grain again" ;;
@@ -178,7 +188,7 @@ fi
 
 # M2 — the anti-silence arm. Treat an unresolvable span as unchanged, which is
 # what a narrowing does when nobody guards it. Kills ONLY Part 1c.
-if m="$(mutate m2-missing-is-ok "$DRIFT" 's/^    if \[ -z "\$ext_new" \]; then$/    if false; then/' "$MDIR/reconcile")"; then
+if m="$(mutate m2-missing-is-ok "$DRIFT" 's/^      if \[ -z "\$ext_new" \]; then$/      if false; then/' "$MDIR/reconcile")"; then
   case " $(dstat "$m" anchor-vanished) " in
     *" EXTENSION-ANCHOR-MISSING "*) bad "MUTANT m2 (unresolvable span no longer reported) still emits EXTENSION-ANCHOR-MISSING — the guard under test is not what produces that row" ;;
     *) ok "MUTANT m2 killed: without the guard, a vanished anchor stops being reported" ;;
@@ -200,7 +210,7 @@ fi
 # That script emitted nothing, both greps failed, and the fixture reported it as
 # entanglement between two assertions that were in fact fine. A mutant must leave
 # the program RUNNABLE or it tests the interpreter, not the check.
-if m="$(mutate m4-accept-reverse "$LINTER" 's/^          REVERSE:\*)$/          REVERSE_DISABLED:*)/')"; then
+if m="$(mutate m4-accept-reverse "$LINTER" 's/^            REVERSE:\*)$/            REVERSE_DISABLED:*)/')"; then
   # CAPTURED, then matched with `case` — not `lstat "$m" | grep -q … && … || …`.
   # Two greps in that form against the same producer gave a false ENTANGLEMENT
   # report here: `grep -q` exits on its first match and closes the pipe, and what
@@ -233,13 +243,61 @@ if m="$(mutate m6-any-position "$LINTER" "s/^      append|prepend) : ;;$/      a
     || ok "MUTANT m6 killed: widening the vocabulary accepts the bad value"
 fi
 
+# M7 — the linter checks only the FIRST declared span (BL-085's regression on the authoring side).
+# extends-second-bad's first anchor resolves, so only its second can draw the error.
+if m="$(mutate m7-first-span-only "$LINTER" 's/^      done <<<"\$ext_pairs"$/      done <<<"$(printf "%s\\n" "$ext_pairs" | head -1)"/')"; then
+  m7out="$(lstat "$m")"
+  case "$m7out" in
+    *"anchor 'Second Anchor Nowhere' matches no heading"*) bad "MUTANT m7 (first span only) still reports the unresolvable SECOND anchor — the every-span assertion is satisfied by something else" ;;
+    *) ok "MUTANT m7 killed: checking only the first span lets a broken second anchor lint clean" ;;
+  esac
+  case "$m7out" in
+    *"anchor 'No Such Heading Anywhere' matches no heading"*) ok "MUTANT m7 leaves the single-anchor no-match arm alive (not entangled)" ;;
+    *) bad "MUTANT m7 also killed the single-anchor no-match arm — the two assertions are entangled" ;;
+  esac
+fi
+
+# M8 — the qualifier's one-anchor limit removed. Only the two-anchor qualifier's message goes.
+if m="$(mutate m8-qualifier-any-anchors "$LINTER" 's/^    elif \[ "\$ext_n" -gt 1 \] && \[ "\$kind" = qualifier \]; then$/    elif false; then/')"; then
+  grep -q "on kind 'qualifier', which takes exactly one" <<<"$(lstat "$m")" \
+    && bad "MUTANT m8 (qualifier anchor limit removed) still rejects a two-anchor qualifier" \
+    || ok "MUTANT m8 killed: without the limit a qualifier with two sections to render into lints clean"
+fi
+
+# M9 — an unresolved span MASKS a moved one again (MISSING and DRIFT made alternatives).
+# Only missing-and-moved's DRIFT row can go; anchor-vanished (one span, unresolved) keeps MISSING.
+if m="$(mutate m9-missing-masks-drift "$DRIFT" 's/^    if \[ -z "\$ext_moved" \]; then$/    if [ -z "$ext_moved" ] || [ -n "$ext_missing" ]; then/' "$MDIR/reconcile")"; then
+  case " $(dstat "$m" missing-and-moved) " in
+    *" EXTENSION-ANCHOR-DRIFT "*) bad "MUTANT m9 (MISSING masks DRIFT) still emits ANCHOR-DRIFT for missing-and-moved — Part 1d is satisfied by something else" ;;
+    *) ok "MUTANT m9 killed: with MISSING masking DRIFT, the rewritten span of missing-and-moved goes unreported" ;;
+  esac
+  case " $(dstat "$m" anchor-vanished) " in
+    *" EXTENSION-ANCHOR-MISSING "*) ok "MUTANT m9 leaves the single-span ANCHOR-MISSING arm alive (not entangled)" ;;
+    *) bad "MUTANT m9 also killed the single-span ANCHOR-MISSING row — entangled" ;;
+  esac
+fi
+
+# M10 — the empty-parts arm removed. An `extends: ','` then reaches the per-span loop with
+# no spans and lints clean; only the empty-parts assertion may move.
+if m="$(mutate m10-empty-parts-accepted "$LINTER" 's/^    if \[ "\$ext_n" -lt 1 \]; then$/    if false; then/')"; then
+  m10out="$(lstat "$m")"
+  case "$m10out" in
+    *"declares no anchor at all"*) bad "MUTANT m10 (empty-parts arm removed) still rejects extends: ','" ;;
+    *) ok "MUTANT m10 killed: without the arm, an extends: of only commas lints clean" ;;
+  esac
+  case "$m10out" in
+    *"carries no '#anchor'"*) ok "MUTANT m10 leaves the no-anchor arm alive (not entangled)" ;;
+    *) bad "MUTANT m10 also killed the no-anchor arm — entangled" ;;
+  esac
+fi
+
 # --- CONTROL: every mutation above actually landed -----------------------------
 # The six assertions above are each guarded by `if m="$(mutate ...)"`, and a sed
 # that matches nothing takes the false branch — no assertion, no diagnostic, and
 # a PASS one line shorter than the run before it. This is where mutate()'s file
 # is read, because this scope is the only one a `$( )` cannot swallow.
 if [ ! -s "$MUT_UNLANDED" ]; then
-  ok "control: all 6 mutations landed (a sed matching nothing cannot skip its assertion in silence)"
+  ok "control: all 10 mutations landed (a sed matching nothing cannot skip its assertion in silence)"
 else
   bad "mutation(s) matched nothing and their assertions were SKIPPED, not failed: $(tr '\n' ' ' < "$MUT_UNLANDED")— each one leaves a check scoring as proven when nothing proved it"
 fi

@@ -80,8 +80,8 @@ bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
 # a check that cannot fire reading exactly like one that passed, inside a fixture written
 # about that class. Counting what actually ran is what closes it, and the count has to be
 # a literal here rather than derived from the assertions, or it disappears with them.
-# 6 premises (2 span-changed + 4 section-identity) + 6 shipped arms + 1 lint + 1 control + 4 mutants.
-EXPECTED_ASSERTIONS=18
+# 8 premises (2 span-changed + 6 section-identity) + 9 shipped arms + 1 lint + 1 control + 5 mutants.
+EXPECTED_ASSERTIONS=24
 
 echo "layer-extends-grain:"
 
@@ -92,7 +92,7 @@ echo "layer-extends-grain:"
 vector() {
   local out cell v=""
   out="$(bash "$1" "$DIST" "$2" "$3" "$CONS" 2>&1)"
-  for e in anchored-alpha anchored-beta unanchored; do
+  for e in anchored-alpha anchored-beta multi unanchored; do
     cell="$(printf '%s\n' "$out" | awk -v e="/$e.md" -F'\t' 'index($2, e) {print $1}' \
             | grep '^EXTENSION-' | sort -u | paste -sd+ -)"
     v="$v${v:+ }${e#anchored-}=${cell:--}"
@@ -103,8 +103,8 @@ vector() {
 V1="$(vector "$DRIFT" "$BASE" "$MID")"
 V2="$(vector "$DRIFT" "$MID" "$TIP")"
 
-WANT1='alpha=EXTENSION-OK beta=EXTENSION-ANCHOR-DRIFT unanchored=EXTENSION-HOOK-DRIFT'
-WANT2='alpha=EXTENSION-ANCHOR-DRIFT beta=EXTENSION-OK unanchored=EXTENSION-HOOK-DRIFT'
+WANT1='alpha=EXTENSION-OK beta=EXTENSION-ANCHOR-DRIFT multi=EXTENSION-ANCHOR-DRIFT unanchored=EXTENSION-HOOK-DRIFT'
+WANT2='alpha=EXTENSION-ANCHOR-DRIFT beta=EXTENSION-OK multi=EXTENSION-OK unanchored=EXTENSION-HOOK-DRIFT'
 
 # --- Part 0: the seed is two real spans, measured WITHOUT the code under test ----------
 # The claims "the file moved" and "this section did not" are the fixture's own premises.
@@ -139,6 +139,8 @@ premise "run1 premise: '#Alpha gate' is byte-identical while the file moves" sam
 premise "run1 premise: '#Beta review' is what moved"                        differ "$BASE" "$MID" "Beta review" "Without it the run-1 file change is not attributable."
 premise "run2 premise: '#Alpha gate' is what moved"                         differ "$MID" "$TIP" "Alpha gate"   "This is the same-entry-second-span arm."
 premise "run2 premise: '#Beta review' is byte-identical while the file moves" same "$MID" "$TIP" "Beta review"  "This is the diagonal."
+premise "run1 premise: '#Gamma notes' is byte-identical" same "$BASE" "$MID" "Gamma notes" "multi declares it FIRST; if it moved, multi's run-1 drift would be attributable to the first span and the every-span arm would prove nothing."
+premise "run2 premise: '#Gamma notes' is byte-identical" same "$MID" "$TIP" "Gamma notes" "multi's run-2 OK rests on both of its spans holding still."
 
 # --- Part 1: the shipped verdicts, per arm --------------------------------------------
 # Asserted per arm rather than as a vector so a regression names the arm it broke. The
@@ -155,6 +157,16 @@ arm "run2  THE SAME ENTRY, span where its OWN anchor moved: EXTENSION-ANCHOR-DRI
   "anchored-alpha is byte-identical to the entry that went quiet in run 1 — same file, same frontmatter, same anchor. Only the span changed. If it stays quiet here, the run-1 silence was a property of the entry rather than of the bytes, and the narrowing is a relabelling."
 arm "run2  THE DIAGONAL: sibling anchored elsewhere stays EXTENSION-OK in that same run" "$V2" "beta=EXTENSION-OK" \
   "anchored-beta must be quiet in the run where anchored-alpha reports, and loud in the run where it does not. One entry reporting proves the classifier can speak; this pair inverting in the same runs is what proves it is speaking about the declared span."
+arm "run1  SEVERAL SPANS: the entry whose SECOND declared span moved reports EXTENSION-ANCHOR-DRIFT" "$V1" "multi=EXTENSION-ANCHOR-DRIFT" \
+  "multi declares '#Gamma notes, #Beta review' and only Beta moved. A quiet row here is a classifier watching the first declared span and letting the others move in silence."
+arm "run2  SEVERAL SPANS: neither declared span moved, so EXTENSION-OK while the file moves" "$V2" "multi=EXTENSION-OK" \
+  "Alpha moved in this span and multi declares neither Alpha nor the whole file. A drift row here means several anchors fell back to file grain."
+R1="$(bash "$DRIFT" "$DIST" "$BASE" "$MID" "$CONS" 2>&1 | awk -F'\t' 'index($2, "/multi.md")')"
+if grep -Fq "'Beta review'" <<<"$R1" && ! grep -Fq "'Gamma notes'" <<<"$R1"; then
+  ok "run1  the multi-span drift row NAMES the span that moved ('Beta review') and not the one that did not"
+else
+  bad "run1  the multi-span drift row does not name exactly the moved span — a row that cannot say which of several spans moved re-introduces the file-grain report. Row: $R1"
+fi
 arm "run1  liveness: an entry declaring no anchor keeps file grain" "$V1" "unanchored=EXTENSION-HOOK-DRIFT" \
   "the narrowing must not reach entries that never asked for it, and without a row in this run every EXTENSION-OK above is satisfied by a classifier that emitted nothing."
 arm "run2  liveness: an entry declaring no anchor keeps file grain" "$V2" "unanchored=EXTENSION-HOOK-DRIFT" \
@@ -232,8 +244,8 @@ if m="$(mk_mutant m1-no-base-side "$DRIFT_BN" 's|^      ext_old="[$](git_show .*
   expect m1-no-base-side \
     "with the BASE side of the span comparison gone, both ANCHOR-DRIFT cells become OK while the file-grain cells are untouched — the drift verdicts are produced by comparing the declared span at two refs, not by the entry having declared one" \
     "$m" \
-    'alpha=EXTENSION-OK beta=EXTENSION-OK unanchored=EXTENSION-HOOK-DRIFT' \
-    'alpha=EXTENSION-OK beta=EXTENSION-OK unanchored=EXTENSION-HOOK-DRIFT'
+    'alpha=EXTENSION-OK beta=EXTENSION-OK multi=EXTENSION-OK unanchored=EXTENSION-HOOK-DRIFT' \
+    'alpha=EXTENSION-OK beta=EXTENSION-OK multi=EXTENSION-OK unanchored=EXTENSION-HOOK-DRIFT'
 fi
 
 # M2 — the narrowing leaks onto entries that never declared an anchor. Only the file-grain
@@ -243,8 +255,8 @@ if m="$(mk_mutant m2-narrowing-leaks "$DRIFT_BN" 's|^    emit EXTENSION-HOOK-DRI
   expect m2-narrowing-leaks \
     "an entry declaring no extends: stops keeping the whole file as its drift subject, and only that — so the six-cell table above cannot be satisfied by a classifier that reports OK for everything unanchored" \
     "$m" \
-    'alpha=EXTENSION-OK beta=EXTENSION-ANCHOR-DRIFT unanchored=EXTENSION-OK' \
-    'alpha=EXTENSION-ANCHOR-DRIFT beta=EXTENSION-OK unanchored=EXTENSION-OK'
+    'alpha=EXTENSION-OK beta=EXTENSION-ANCHOR-DRIFT multi=EXTENSION-ANCHOR-DRIFT unanchored=EXTENSION-OK' \
+    'alpha=EXTENSION-ANCHOR-DRIFT beta=EXTENSION-OK multi=EXTENSION-OK unanchored=EXTENSION-OK'
 fi
 
 # M3 — every entry that declares an anchor watches the FIRST entry's anchor instead of its
@@ -252,12 +264,12 @@ fi
 # and M2's assertions all survive: what dies is per-entry attribution. anchored-beta now
 # tracks Alpha, so it goes quiet in run 1 and reports in run 2 — the diagonal inverts. This
 # is the mutant the diagonal exists for, and nothing else in the table detects it.
-if m="$(mk_mutant m3-shared-anchor "$DRIFT_BN" 's|^    ext_anc="[$](printf .*|    ext_anc="Alpha gate"|')"; then
+if m="$(mk_mutant m3-shared-anchor "$DRIFT_BN" 's|^      ext_anc="[$](printf .*|      ext_anc="Alpha gate"|')"; then
   expect m3-shared-anchor \
     "when every anchored entry watches one shared span, the diagonal inverts — which is the only cell that moves, and the reason a sibling assertion is not a restatement of the load-bearing one" \
     "$m" \
-    'alpha=EXTENSION-OK beta=EXTENSION-OK unanchored=EXTENSION-HOOK-DRIFT' \
-    'alpha=EXTENSION-ANCHOR-DRIFT beta=EXTENSION-ANCHOR-DRIFT unanchored=EXTENSION-HOOK-DRIFT'
+    'alpha=EXTENSION-OK beta=EXTENSION-OK multi=EXTENSION-OK unanchored=EXTENSION-HOOK-DRIFT' \
+    'alpha=EXTENSION-ANCHOR-DRIFT beta=EXTENSION-ANCHOR-DRIFT multi=EXTENSION-ANCHOR-DRIFT unanchored=EXTENSION-HOOK-DRIFT'
 fi
 
 # M4 — the anchor resolves, and then the "span" it resolves to is the whole file. The
@@ -271,8 +283,19 @@ if m="$(mk_mutant m4-span-is-file lib.sh 's|^  if \[ "[$]_rc" -eq 0 \] && \[ -n 
   expect m4-span-is-file \
     "with the declared span widened back to the whole file, both EXTENSION-OK cells become ANCHOR-DRIFT — the quiet verdicts are produced by comparing the anchor's own bytes, not by the presence of an extends: line" \
     "$m" \
-    'alpha=EXTENSION-ANCHOR-DRIFT beta=EXTENSION-ANCHOR-DRIFT unanchored=EXTENSION-HOOK-DRIFT' \
-    'alpha=EXTENSION-ANCHOR-DRIFT beta=EXTENSION-ANCHOR-DRIFT unanchored=EXTENSION-HOOK-DRIFT'
+    'alpha=EXTENSION-ANCHOR-DRIFT beta=EXTENSION-ANCHOR-DRIFT multi=EXTENSION-ANCHOR-DRIFT unanchored=EXTENSION-HOOK-DRIFT' \
+    'alpha=EXTENSION-ANCHOR-DRIFT beta=EXTENSION-ANCHOR-DRIFT multi=EXTENSION-ANCHOR-DRIFT unanchored=EXTENSION-HOOK-DRIFT'
+fi
+
+# M5 — the BL-085 regression on the classifier side: only the FIRST declared span is read, which
+# is what `shadow_parts … | head -1` did before several anchors were allowed. multi declares Gamma
+# first, Gamma never moves, so multi goes quiet in run 1 — and that is the ONLY cell that moves.
+if m="$(mk_mutant m5-first-span-only "$DRIFT_BN" 's|^    done <<<"[$](shadow_parts "[$]extends")"$|    done <<<"$(shadow_parts "$extends" \| head -1)"|')"; then
+  expect m5-first-span-only \
+    "reading only the first declared span lets the entry's second span move in silence, and nothing else in the table changes" \
+    "$m" \
+    'alpha=EXTENSION-OK beta=EXTENSION-ANCHOR-DRIFT multi=EXTENSION-OK unanchored=EXTENSION-HOOK-DRIFT' \
+    'alpha=EXTENSION-ANCHOR-DRIFT beta=EXTENSION-OK multi=EXTENSION-OK unanchored=EXTENSION-HOOK-DRIFT'
 fi
 
 echo

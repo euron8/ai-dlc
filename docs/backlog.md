@@ -697,10 +697,25 @@ landed is the ability to say it: the declaration still cannot express the depend
 worklist cost stands and the distinction between "correctly file-grained" and "never declared" is
 still invisible to every reader.
 
-Anchored on the count predicate every real fix must change, with a second conjunct so that
-DELETING the arm does not satisfy it — the failure mode a removal-shaped receipt otherwise has.
+**FIXED, pending its bootstrapping release.** `extends:` takes several comma-separated anchors on
+every kind except `qualifier`, which keeps exactly one. The linter checks every declared span,
+and `layer-drift.sh` compares every span. The old `shadow_parts | head -1` would have let a second
+span move in silence, so relaxing E11 alone would have been a regression. The drift row names
+which span moved, and an entry with one span renamed and another rewritten in the same range
+draws both ANCHOR-MISSING and ANCHOR-DRIFT, so the rewrite stays adjudicable. The README, the LC-E11 bullet and the contract's normative text now say this.
+Fixtures: `layer-qualifier-grain` (m7, m8) and `layer-extends-grain` (m5).
 
-verify: sh test "$(grep -c 'ext_n" -ne 1' core/scripts/validate-layer-entries.sh)" -eq 0 && test "$(grep -c 'err E11' core/scripts/validate-layer-entries.sh)" -ge 3
+**THE COUNT RECEIPT WAS CLOSABLE BY A RENAME, SO IT IS REPLACED.** Renaming `ext_n` satisfied
+it with nothing changed. The receipt below drives both real programs. It builds a three-section
+distribution with two commits and a consumer holding a two-anchor `step-domain` entry, a
+two-anchor qualifier, and a step-domain whose SECOND anchor does not resolve. It requires the
+linter to accept the first, reject the qualifier on the kind, and report the second anchor. It
+then requires the classifier to report ANCHOR-DRIFT naming `Beta review`, the second declared
+span, for the multi-span entry. Scored: tip **0**, `origin/main` `2e7c227c` **1**, tip with the
+classifier reading only the first span **1**, tip with the linter checking only the first span
+**1**. The old receipt scored 0 on tip and 1 on base.
+
+verify: sh V=core/scripts/validate-layer-entries.sh; D=core/skills/ai-dlc-update/reconcile/layer-drift.sh; C=core/skills/ai-dlc/layer-contract.yaml; [ -f "$V" ] && [ -f "$D" ] && [ -f "$C" ] || exit 9; V="$PWD/$V"; D="$PWD/$D"; d=$(mktemp -d) || exit 9; trap 'rm -rf "$d"' EXIT; T="$d/dist"; S="$T/core/skills/ai-dlc/steps"; mkdir -p "$S" || exit 9; git -C "$T" init -q || exit 9; m(){ printf '# S\n\n## Alpha gate\n\na\n\n## Beta review\n\n%s\n\n## Gamma notes\n\ng\n' "$1" > "$S/demo.md"; git -C "$T" add -A && git -C "$T" -c user.email=r@x -c user.name=r commit -qm "$1"; }; m b1 || exit 9; m b2 || exit 9; K="$d/c/.claude/skills/ai-dlc"; mkdir -p "$K/extensions" "$K/steps" || exit 9; cp "$C" "$K/" || exit 9; cp "$S/demo.md" "$K/steps/demo.md"; e(){ printf -- '---\nkind: %s\nid: %s\nhooks: steps/demo.md\npush_candidate: false\nextends: %s\n%bconforms_to: 1\n---\n# %s\n' "$2" "$1" "$3" "$4" "$1" > "$K/extensions/$1.md"; }; e multi step-domain "'#Alpha gate, #Beta review'" ""; e q2 qualifier "'#Alpha gate, #Beta review'" 'position: append\n'; e sec step-domain "'#Alpha gate, #Zz Nowhere'" ""; L=$(bash "$V" "$d/c" 2>&1); grep -q 'LAYER_CONFORMANCE' <<<"$L" || { echo "HARNESS BROKEN: linter produced no footer"; exit 9; }; grep -q 'E11 .*extensions/multi.md' <<<"$L" && exit 1; grep -q "E11 .*extensions/q2.md.*kind 'qualifier'" <<<"$L" || exit 1; grep -q "E11 .*extensions/sec.md.*'Zz Nowhere' matches no heading" <<<"$L" || exit 1; R=$(bash "$D" "$T" "$(git -C "$T" rev-parse HEAD~1)" "$(git -C "$T" rev-parse HEAD)" "$d/c" 2>&1); grep -q 'EXTENSION-' <<<"$R" || { echo "HARNESS BROKEN: classifier emitted no rows"; exit 9; }; awk -F'\t' 'index($2,"/multi.md") && $1=="EXTENSION-ANCHOR-DRIFT"' <<<"$R" | grep -q "Beta review" || exit 1; exit 0
 
 ---
 
