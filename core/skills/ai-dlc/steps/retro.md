@@ -16,13 +16,79 @@ a chance to comment or ask questions before it closes.
 ### 1. Context Loading
 
 Land on the merged trunk FIRST, then cut the retro branch from it, using the
-canonical name that `scripts/ai-dlc/validate-mandatory-rules.sh` expects:
+canonical name that `scripts/ai-dlc/validate-mandatory-rules.sh` expects, then
+carry onto it every sprint commit made after the sprint PR's head. Substitute
+`<sprint-branch>` with the sprint's own branch (the one deploy-validate committed
+to) and `<N>` with the sprint number, and run the block as written:
 
 ```bash
+# retro Step 1: cut the retro branch from the trunk, then carry the post-squash sprint commits
+SPRINT_TIP="$(git rev-parse --verify -q '<sprint-branch>^{commit}')"
 git fetch origin main && git checkout main && git merge --ff-only origin/main
 git rev-list --count HEAD..origin/main   # MUST be 0
 git checkout -b ai-dlc/retro/sprint-<N> origin/main
+if [ -z "$SPRINT_TIP" ]; then
+  echo "CARRY: HARD_BLOCK unresolved — the sprint branch does not resolve, so its post-squash commits cannot be located"
+elif git merge-base --is-ancestor "$SPRINT_TIP" origin/main; then
+  echo "CARRY: none — the sprint tip is already on origin/main"
+else
+  FORK="$(git rev-list --first-parent "$SPRINT_TIP" \
+    | while read -r c; do git merge-base --is-ancestor "$c" origin/main && { echo "$c"; break; }; done)"
+  PR_HEAD=""
+  if [ -n "$FORK" ]; then
+    TRUNK_TREES="$(git log --format=%T origin/main --not "$FORK")"
+    PR_HEAD="$(git log --first-parent --format='%T %H' "$SPRINT_TIP" --not "$FORK" \
+      | while read -r t h; do grep -qxF "$t" <<<"$TRUNK_TREES" && { echo "$h"; break; }; done)"
+  fi
+  if [ -z "$PR_HEAD" ]; then
+    echo "CARRY: HARD_BLOCK underivable — no sprint commit's tree equals a trunk commit's tree, so the squash's PR head is unknown"
+  else
+    CARRY_N="$(git rev-list --count --no-merges "$SPRINT_TIP" --not "$PR_HEAD" origin/main)"
+    if [ "$CARRY_N" = 0 ]; then
+      echo "CARRY: none — no sprint commit follows PR head $PR_HEAD"
+    elif git cherry-pick --no-merges "$SPRINT_TIP" --not "$PR_HEAD" origin/main; then
+      echo "CARRY: $CARRY_N commit(s) past PR head $PR_HEAD carried onto the retro branch"
+    else
+      git cherry-pick --abort
+      echo "CARRY: HARD_BLOCK conflict — a carried commit did not apply; the pick was aborted and the retro branch is back at origin/main"
+    fi
+  fi
+fi
 ```
+
+**The carry exists because deploy-validate does not stop at the squash.** It
+keeps committing to the sprint branch after the sprint PR squash-merges — gate-log
+revisions, escalation updates, dev reports, the snapshot at its live position —
+and a cut from `origin/main` alone holds none of it. The retro would then read,
+sweep and validate incomplete files, and Step 7a-post would rotate a gate log
+that lacks the deploy-validate block. Carrying the commits onto a trunk-cut
+branch keeps the squash as an ancestor (the property required below) and
+delivers those commits to `main` through the retro PR.
+
+**The PR head is derived, not looked up, and the derivation is the control.** No
+step records the sprint PR's number. A squash commit's tree equals its PR head's
+tree whenever the trunk did not move between the PR's last sync and the merge,
+so the block walks the sprint branch's first-parent chain back to the first
+commit already on `origin/main`, and takes the newest commit on that chain whose
+tree equals the tree of a trunk commit made since. Every candidate is on the
+sprint tip's own chain, so the PR head is an ancestor of the tip by construction.
+The walk is first-parent because a sprint branch that merged the trunk after the
+squash has the squash as an ancestor, and a plain `<tip> --not origin/main` walk
+would see no trunk commit at all. The carry list is the sprint tip's non-merge
+commits that are in neither the PR head nor `origin/main` — a `<pr-head>..<tip>`
+range is NOT used, because on that same branch it would re-pick trunk commits
+and stop on them.
+
+**Every `CARRY:` line is one of four outcomes, and three of them STOP.** A
+count or `none` continues to the next paragraph. `HARD_BLOCK unresolved`,
+`HARD_BLOCK underivable` and `HARD_BLOCK conflict` each file a Tier 1
+`HARD_BLOCK` in `docs/escalations/pending.md` carrying the line verbatim, and
+the retro STOPS. On `underivable` the operator supplies the PR head
+(`gh pr view <sprint-PR> --json headRefOid`); the lead confirms it is an
+ancestor of the sprint tip and runs
+`git cherry-pick --no-merges <sprint-tip> --not <pr-head> origin/main` on the
+retro branch. Never continue past a HARD_BLOCK line on a branch that holds only
+the trunk: that is the incomplete-retro state the carry exists to prevent.
 
 **The retro branch MUST be cut from `main` at `origin/main`, never from
 whatever ref happens to be checked out.** A squash merge never fast-forwards
@@ -33,14 +99,21 @@ Step 7a. If the fast-forward refuses because local `main` holds commits
 `origin/main` lacks, STOP and resolve that before branching. Step 5c's
 Check 7 fails a retro branch that is behind `origin/main`.
 
-**Minimum mechanism (Rule 26(c)).** Failure caught: a retro PR that carries
-the sprint's diff a second time and cannot merge. False-positive cost: one
-`git fetch` per retro; the count is 0 in the steady state. Removal condition:
+**Minimum mechanism (Rule 26(c)).** Failures caught: a retro PR that carries
+the sprint's diff a second time and cannot merge; and a retro branch that lacks
+every sprint commit made after the sprint PR squash-merged, so the retro reads
+incomplete files and Step 7a-post rotates a gate log missing its deploy-validate
+block. False-positive cost: one `git fetch` per retro, the count 0 in the steady
+state, and one tree comparison over the sprint-only commits. Removal condition:
 the `checkout -b` above now names `origin/main` as its base, so a session
 running that line alone cuts from the trunk rather than from wherever it is —
 but `origin/main` is a local ref and the `fetch` is what makes it current, so
 the fetch and the `rev-list` assertion are NOT retired. Retire them only if the
-base ref is guaranteed fresh without a fetch.
+base ref is guaranteed fresh without a fetch. Retire the carry only when
+deploy-validate can no longer commit to the sprint branch after the sprint PR
+merges. Do not retire it by cutting the retro branch from the sprint tip
+instead: that branch lacks the squash commit as an ancestor, which is the
+defect the paragraph above describes.
 
 The branch name MUST contain `sprint-<N>` (literal word "sprint"
 followed by the sprint number). Abbreviated forms (`s<N>`,
