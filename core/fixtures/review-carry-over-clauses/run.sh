@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Pin the carry-over clauses in sprint-review.md §3 (Fix and Re-Validate).
+# Pin the carry-over clauses in sprint-review.md §3 (Fix and Re-Validate), and the
+# two evidence bullets in team-roles/dev.md's pre-submission self-check (item 15).
 #
 # SUBJECT. §3 lets a genuinely environmental integration seam defer, and binds that
 # deferral to an OPEN carry-over item owned by `carry-over-evaluation.md`. §3 also
@@ -38,7 +39,13 @@ rc=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1" >&2; rc=1; }
 
+ROLE="$(locate team-roles/dev.md .claude/team-roles/dev.md)" || {
+  echo "review-carry-over-clauses: FIXTURE BROKEN -- could not locate team-roles/dev.md in either layout. An absent subject is not a passing one." >&2
+  exit 2
+}
+
 echo "review-carry-over-clauses: sprint-review subject $STEP"
+echo "review-carry-over-clauses: dev role subject $ROLE"
 
 sec3() { # <file> -> §3 body, heading line excluded
   awk '/^### 3\. Fix and Re-Validate/{on=1; next} on && /^### /{exit} on{print}' "$1"
@@ -73,10 +80,40 @@ check_review() {
   fi
 }
 
-# --- the subject -------------------------------------------------------------
+# --- dev.md: the pre-submission self-check (Workflow item 15) ------------------
+# Two checklist bullets must sit INSIDE item 15's list (from `15. ` to `16. `): the
+# edit-already-present check and the wall-clock ordering evidence rule. `git diff`
+# already occurs elsewhere in item 15, so the arm reads each bullet's own body.
+item15() { # <file> -> item 15's body, from its opening line up to item 16
+  awk '/^15\. /{on=1} on && /^16\. /{exit} on{print}' "$1"
+}
+bullet() { # <label> -> stdin checklist bullet opening `- [ ] **<label>`, to the next bullet or dedent
+  awk -v lab="- [ ] **$1" 'index($0, lab){on=1; print; next} on && (/^[[:space:]]*- /||/^[^[:space:]]/){exit} on{print}'
+}
+check_role() {
+  local f="$1" body b
+  body="$(item15 "$f")"
+  if [ -z "$body" ]; then echo "ITEM15: Workflow item 15 could not be isolated"; return; fi
+  b="$(bullet 'Edit-already-present check.' <<<"$body" | flat)"
+  case "$b" in *'run `git diff` and read whether the intended change is already in the working tree'*'do not apply it a second time'*) : ;;
+    *) echo "EDIT: item 15 has no edit-already-present bullet requiring a git diff read before re-issuing an edit" ;;
+  esac
+  b="$(bullet 'Wall-clock ordering evidence.' <<<"$body" | flat)"
+  case "$b" in *'wall-clock ordering of concurrent processes'*'N≥10 real-process runs, every one clean'*'Mocked-timing unit tests and a single live run do not satisfy the AC'*) : ;;
+    *) echo "ORDER: item 15 has no wall-clock ordering bullet requiring N≥10 clean real-process runs" ;;
+  esac
+}
+
+# --- the subjects ------------------------------------------------------------
 out="$(check_review "$STEP")"
 if [ -z "$out" ]; then
   ok "§3 binds the environmental deferral to a carry-over and carries the decision-branch carry-over paragraph"
+else
+  while IFS= read -r l; do bad "$l"; done <<<"$out"
+fi
+out="$(check_role "$ROLE")"
+if [ -z "$out" ]; then
+  ok "dev.md item 15 carries the edit-already-present and wall-clock ordering bullets"
 else
   while IFS= read -r l; do bad "$l"; done <<<"$out"
 fi
@@ -138,6 +175,28 @@ mutant check_review "$STEP" "branch-no-owner" \
 mutant check_review "$STEP" "no-section" \
   '/^### 3\. Fix and Re-Validate/{print "### 3. Rework"; next} {print}' \
   "SECTION:" "an unisolatable §3 is a finding, not an empty pass"
+
+RCTL="$WORK/role-control.md"; cp "$ROLE" "$RCTL"
+if [ -z "$(check_role "$RCTL")" ] && [ -n "$(item15 "$RCTL")" ]; then
+  ok "CONTROL: an unmutated dev.md copy passes and item 15 is non-empty"
+else
+  bad "CONTROL: an unmutated dev.md copy fails -- every role mutant verdict below is uninterpretable"
+fi
+
+# A bullet runs from its `- [ ] **<label>` line to the next line opening with `- ` or at column 0.
+DELB='index($0, "- [ ] **" lab){d=1; next} d && (/^[[:space:]]*- /||/^[^[:space:]]/){d=0} d{next} {print}'
+mutant check_role "$ROLE" "del-edit" "BEGIN{lab=\"Edit-already-present check.\"} $DELB" \
+  "EDIT:" "deleting the edit-already-present bullet is caught"
+mutant check_role "$ROLE" "del-order" "BEGIN{lab=\"Wall-clock ordering evidence.\"} $DELB" \
+  "ORDER:" "deleting the wall-clock ordering bullet is caught"
+# MOVE: the bullet leaves item 15 and reappears verbatim under `## Communication`. A
+# whole-file grep still finds it; the item-keyed arm must not.
+mutant check_role "$ROLE" "move-order" \
+  'BEGIN{lab="- [ ] **Wall-clock ordering evidence."} index($0, lab){d=1; held=$0 "\n"; next} d && (/^[[:space:]]*- /||/^[^[:space:]]/){d=0} d{held=held $0 "\n"; next} /^## Communication$/{print; print ""; printf "%s", held; next} {print}' \
+  "ORDER:" "moving the wall-clock ordering bullet out of item 15 (into Communication) is caught"
+mutant check_role "$ROLE" "no-item15" \
+  '/^15\. /{sub(/^15\. /, "15) ")} {print}' \
+  "ITEM15:" "an unisolatable item 15 is a finding, not an empty pass"
 
 echo
 if [ "$rc" -eq 0 ]; then

@@ -1713,8 +1713,19 @@ correctness depends on wall-clock ordering of concurrent processes.
 
 Discharges the consumer entry `extensions/roles/dev-push.md` at pinned ledger line 276.
 
+**Receipt moved from `manual` to `sh` at batch 174, keyed on STRUCTURE with a phrase inside
+it, and that phrase is the admitted weakness.** It isolates Workflow item 15 (from `15. ` to
+`16. `, control `Honest-green` inside it), splits that list into its `- [ ]` bullets, and
+requires ONE bullet naming both `git diff` and "already present / already in the working tree",
+and ONE bullet naming both `wall-clock` and `N≥10`. `git diff` alone would be vacuous (item 15
+already carries it for scope verification); the co-occurrence inside one bullet is what the
+existing text lacks. Scored: tip 0, base 1, and 1 on copies with either bullet deleted and with
+the ordering bullet moved verbatim under `## Communication`. A bullet carrying those words
+closes it whatever it instructs. `core/fixtures/review-carry-over-clauses/` arms EDIT and
+ORDER pin the instruction text.
 
-verify: manual
+
+verify: sh f=core/team-roles/dev.md; b=$(LC_ALL=C awk '/^15\. /{on=1} on&&/^16\. /{exit} on' "$f"); [ -n "$b" ] || exit 1; grep -qF "Honest-green" <<<"$b" || exit 1; bl=$(LC_ALL=C awk '/^[[:space:]]*- \[ \] /{if (x!="") print x; x=$0; next} x!=""{x=x" "$0} END{if (x!="") print x}' <<<"$b" | tr -s " "); grep -F "git diff" <<<"$bl" | grep -qiE "already (present|in the working tree)" || exit 1; grep -iF "wall-clock" <<<"$bl" | grep -qE "N(≥|>=) ?10"
 ## BL-066 — the `named_absorbed` half landed at v0.387.0; the SIBLING half did not, and the release notes say it did
 
 **TRIAGED AT BATCH 10: FOUR OF THE FIVE CLAIMS ARE ABSORBED, THE SIBLING CLAIM SURVIVES, AND
