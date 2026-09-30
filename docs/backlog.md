@@ -1194,7 +1194,43 @@ About 5s, most of it the install; each run leaves one installed tree under `$TMP
 A fix that passes it has not been built, so no passing score exists yet. `settings.json` still has
 to be UN-MERGED rather than deleted, as the paragraph above says.
 
-verify: sh [ -r scripts/install.sh ] && [ -r scripts/uninstall.sh ] || exit 9; command -v git >/dev/null || exit 9; R="$(pwd)"; T="$(mktemp -d)" || exit 9; ( cd "$T" && git init -q && mkdir _bmad && git -c user.name=r -c user.email=r@r commit -q --allow-empty -m init && bash "$R/scripts/install.sh" ) >/dev/null 2>&1 || exit 9; set -- "$T"/.claude/hooks/ai-dlc-*.sh; [ -f "$1" ] || exit 9; grep -q 'hooks/ai-dlc-[a-z0-9-]*\.sh' "$T/.claude/settings.json" 2>/dev/null || exit 9; set -- "$T"/.claude/rules/ai-dlc-*.md; [ -f "$1" ] || exit 9; ( cd "$T" && bash "$R/scripts/uninstall.sh" . --force ) >/dev/null 2>&1 || exit 9; set -- "$T"/.claude/rules/ai-dlc-*.md; [ -f "$1" ] && exit 9; set -- "$T"/.claude/hooks/ai-dlc-*.sh; [ -f "$1" ] && exit 1; [ -f "$T/.claude/settings.json" ] && grep -q 'hooks/ai-dlc-[a-z0-9-]*\.sh' "$T/.claude/settings.json" && exit 1; exit 0
+**LANDED (v0.666.0, verified PENDING).** `scripts/uninstall.sh` now removes `.claude/hooks/ai-dlc-*.sh`
+by prefix; the unprefixed core files in shared directories (`.claude/schemas/*.json`,
+`.claude/session-driver/*.sh`, `upstream-routing.md` under `.claude/rules/`) by basename, derived from
+the checkout's own `core/`; `.claude/.ai-dlc-version`; and the `.claude/agents/*.md` files carrying
+the renderer's GENERATED marker, read from `render-agent-definitions.sh`. `settings.json` is
+un-merged: hook blocks are stripped by driving `settings-merge.sh` with an empty template (its
+predicate, not a copy). Each `aiDlcModels`/`aiDlcRoles` entry, and each shared template key, goes
+only when it still equals the template AND the oldest archived pre-install settings lacked it. A
+tuned entry is consumer data: it is kept and named in the closing listing. The file
+is deleted only when install created it and nothing else remains. The `.gitignore` cut moved ahead
+of the removals, because its markers live in a schema that is now deleted. The `:64` comment now
+describes a hook loop that exists. Round trip into a `mktemp` consumer seeded with its own hook,
+schema, agent and settings: base leaves 25 `ai-dlc`-named files plus 14 generated agents,
+`upstream-routing.md`, 9 schemas and 20 registered hooks. Tip leaves 0 `ai-dlc`-named files, and
+only `consumer-own.sh`, `consumer-own.json`, `mine.md` and a `settings.json` holding exactly the
+consumer's `permissions`, `env` and two hook blocks. `core/fixtures/shipped-rule-version-floor` arm
+H asserts this in a fresh world and in a seeded one, deriving the expected-gone set from `core/`,
+and carries two committed mutants. One neutralises the hook loop and must fail H1 alone. The other
+removes `aiDlcModels`/`aiDlcRoles` unconditionally and must fail H7 alone: a role tuned before
+install and one tuned after it must both survive.
+
+**THE RECEIPT IS STRENGTHENED, BECAUSE THE ONE ABOVE ACCEPTED A DESTRUCTIVE FIX.** It never seeded
+consumer content, so an uninstall that deleted all of `.claude/hooks/` or `settings.json` scored 0.
+This one seeds a consumer hook and a consumer `settings.json` before install, the latter with a
+tuned `aiDlcRoles.dev`. It requires both to survive, with the consumer's hook block still
+registered, the tuned role kept and an untuned role (`pm`) gone. It also requires the schemas,
+session driver and version stamp gone. `BL002_UNINSTALL` overrides the uninstaller for scoring only.
+
+| uninstaller | exit |
+|---|---|
+| tip | **0** |
+| base `2e7c227c` | **1** |
+| tip with the hook-loop append neutralised | **1** |
+| tip with the hook glob widened to `hooks/*.sh` (deletes the consumer's hook) | **1** |
+| tip removing `aiDlcModels`/`aiDlcRoles` unconditionally | **1** |
+
+verify: sh [ -r scripts/install.sh ] && [ -r scripts/uninstall.sh ] || exit 9; command -v git >/dev/null && command -v jq >/dev/null || exit 9; R="$(pwd)"; U="${BL002_UNINSTALL:-$R/scripts/uninstall.sh}"; T="$(mktemp -d)" || exit 9; mkdir -p "$T/_bmad" "$T/.claude/hooks" || exit 9; printf '#!/bin/sh\n' > "$T/.claude/hooks/consumer-own.sh"; printf '%s\n' '{"env":{"CONSUMER_VAR":"1"},"aiDlcRoles":{"dev":{"model":"opus","effort":"medium"}},"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"bash .claude/hooks/consumer-own.sh"}]}]}}' > "$T/.claude/settings.json"; ( cd "$T" && git init -q && git -c user.name=r -c user.email=r@r commit -q --allow-empty -m init && bash "$R/scripts/install.sh" ) >/dev/null 2>&1 || exit 9; set -- "$T"/.claude/hooks/ai-dlc-*.sh; [ -f "$1" ] || exit 9; grep -q 'hooks/ai-dlc-[a-z0-9-]*\.sh' "$T/.claude/settings.json" || exit 9; set -- "$T"/.claude/rules/ai-dlc-*.md; [ -f "$1" ] || exit 9; ( cd "$T" && bash "$U" . --force ) >/dev/null 2>&1 || exit 9; set -- "$T"/.claude/rules/ai-dlc-*.md; [ -f "$1" ] && exit 9; set -- "$T"/.claude/hooks/ai-dlc-*.sh; [ -f "$1" ] && exit 1; for f in "$R"/core/schemas/*.json "$R"/core/session-driver/*.sh; do [ -e "$T/.claude/${f#"$R"/core/}" ] && exit 1; done; [ -e "$T/.claude/.ai-dlc-version" ] && exit 1; grep -q 'hooks/ai-dlc-' "$T/.claude/settings.json" && exit 1; [ -f "$T/.claude/hooks/consumer-own.sh" ] || exit 1; jq -e '.env.CONSUMER_VAR == "1" and .aiDlcRoles.dev.model == "opus" and (.aiDlcRoles | has("pm") | not) and ([.hooks.SessionStart[].hooks[].command] | index("bash .claude/hooks/consumer-own.sh")) != null' "$T/.claude/settings.json" >/dev/null 2>&1 || exit 1; exit 0
 
 ---
 
@@ -1408,7 +1444,27 @@ that its schema was single-sourced out into `core/schemas/audit-anchors.json` be
 live in TWO places at once". Its absence from a consumer is the FIX. Filing it would file a settled
 decision as a bug.
 
-verify: sh bad=0; for f in $(git ls-files templates/pipeline/); do grep -qE "^[^#]*cp .*(${f}|templates/pipeline/)" scripts/install.sh || bad=1; done; [ "$bad" -eq 0 ]
+**LANDED (v0.666.0, verified PENDING).** `templates/pipeline/` is deleted with `git rm -r`. The
+retirement comment in `scripts/install.sh` no longer names the path, so it records history instead of
+pointing at a directory. Same invocation, after the removal: `git grep -l 'templates/pipeline' --
+core/ scripts/ .githooks/` returns **0** files, and the control `templates/audit-anchors` returns
+**6**. `install.sh` has no copy of `templates/pipeline` anywhere.
+
+**THE RECEIPT ABOVE WAS CLOSABLE BY PROSE, SO IT IS REPLACED.** It accepted any non-comment line
+containing `cp` and the path, so appending `echo "cp templates/pipeline/ is retired"` to
+`install.sh` scored 0 with the file still tracked and still unshipped. The new receipt keys on the
+tracked file set, and its `exit 9` guard refuses a tree with no tracked `templates/` at all. A
+move to `core/skills/ai-dlc/templates/`, which the paragraph above names as the other valid fix,
+still passes.
+
+| tree | old receipt | new receipt |
+|---|---|---|
+| tip | 0 | **0** |
+| base `2e7c227c` | 1 | **1** |
+| base + that `echo` line in `install.sh` | **0** | **1** |
+| base with the file moved under `core/skills/ai-dlc/templates/` | 0 | **0** |
+
+verify: sh git ls-files templates/ | grep -q . || exit 9; [ -z "$(git ls-files templates/pipeline/)" ]
 
 ## BL-020
 
