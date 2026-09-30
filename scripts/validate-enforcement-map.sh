@@ -799,6 +799,31 @@ END {
     }
   }
 
+  # SAY WHAT ACTUALLY RUNS WHEN IT IS MORE THAN WAS ASKED FOR. An indented arm merges into its
+  # column-0 unit and `requires-arms:` pulls in whole units, so `--arms I41` executes the
+  # twelve-arm layer-contract unit, and a timing of it is a timing of all twelve. Nothing in
+  # stdout, stderr or the exit said so, and two scopings were built on per-arm seconds taken
+  # that way. One stderr line per run, emitted ONLY when the selection runs an id not requested,
+  # so a request naming every id stays byte-identical to a plain run. The prefix is fixed
+  # because validator-arm-selection filters exactly this prefix out of its subset check.
+  # RE-SPLIT, never reuse `m`: the requires-arms closure above reassigns it, and reading the
+  # stale count scored every requested id past the first as unrequested.
+  nw = split(want, w, /[,[:blank:]]+/)
+  for (k = 1; k <= nw; k++) if (w[k] != "") asked[w[k]] = 1
+  extra = ""; units = ""
+  for (i = 1; i <= nu; i++) {
+    if (!sel[i]) continue
+    units = units (units == "" ? "" : "; ") "line " ustart[i] " [" uids[i] "]"
+    s = uids[i]
+    while (match(s, /I[0-9]+[a-c]?/)) {
+      id = substr(s, RSTART, RLENGTH)
+      if (!(id in asked) && !(id in seenx)) { seenx[id] = 1; extra = extra " " id }
+      s = substr(s, RSTART + RLENGTH)
+    }
+  }
+  if (extra != "")
+    printf "validate-enforcement-map: --arms NOTE: %s selected unit(s) %s; this run also runs%s, so a timing of it is a timing of every arm listed\n", want, units, extra > "/dev/stderr"
+
   for (i = 1; i <= nu; i++) if (sel[i]) for (x = ustart[i]; x <= uend[i]; x++) keep[x] = 1
   ln = 0
   while ((getline l < src) > 0) {

@@ -138,7 +138,19 @@ so only the TIMING path is blind.
 it must, and every invariant still fires. What is broken is a measurement practice this repo's
 own plan instructs sessions to use, and it has now produced two wrong scopings in one session.
 
-verify: sh v=scripts/validate-enforcement-map.sh; r=scripts/render-invariant-index.sh; [ -f "$v" ] || exit 9; [ -f "$r" ] || exit 9; grep -q 'ARMS_SELECT_AWK' "$v" || exit 9; ind=$(awk '/^[[:blank:]]+#[[:blank:]]*---[[:blank:]]*I[0-9]/{n++} END{print n+0}' "$v"); ctl=$(awk '/^[[:blank:]]+#[[:blank:]]*---[[:blank:]]*ZZQQ/{n++} END{print n+0}' "$v"); [ "$ctl" -eq 0 ] || exit 9; [ "$ind" -gt 0 ] || exit 9; bash "$r" --arm-lines "$v" >/dev/null 2>&1 || exit 9; out="$(bash "$v" --arms I41 2>&1 >/dev/null)"; printf '%s' "$out" | grep -qiE 'unit|also runs|selected arms' && exit 0; exit 1
+**LANDED (v0.666.0, verified <sha>).** The stronger form: `--arms` now prints one stderr line,
+`validate-enforcement-map: --arms NOTE: <request> selected unit(s) line <n> [<member ids>]; this
+run also runs <ids>, so a timing of it is a timing of every arm listed`, whenever the selection
+executes an id the request did not name (unit merge or `requires-arms:` closure). A request
+whose unit is itself alone prints nothing, and a request naming every id stays byte-identical
+to a plain run. `core/fixtures/validator-arm-selection`'s sweep worker exempts exactly that
+anchored prefix from its stderr-subset check; any other new stderr line still scores.
+
+**Receipt.** Runs the selector, both directions: `--arms I41` must print `also runs` on stderr,
+and `--arms I108` (a single-arm unit) must NOT. Scored: tip **0**, base `2e7c227c` **1**, a
+mutant with the NOTE unconditional **1**, a mutant with the NOTE removed **1**.
+
+verify: sh v=scripts/validate-enforcement-map.sh; r=scripts/render-invariant-index.sh; [ -f "$v" ] || exit 9; [ -f "$r" ] || exit 9; grep -q 'ARMS_SELECT_AWK' "$v" || exit 9; bash "$r" --arm-lines "$v" >/dev/null 2>&1 || exit 9; out="$(bash "$v" --arms I41 2>&1 >/dev/null)"; solo="$(bash "$v" --arms I108 2>&1 >/dev/null)"; printf '%s\n' "$out" | grep -q 'also runs' || exit 1; printf '%s\n' "$solo" | grep -q 'also runs' && exit 1; exit 0
 
 ## BL-254 — the `sh` receipt's base control is new, and nothing here asserts a consumer's INSTALLED engine ever runs it
 
