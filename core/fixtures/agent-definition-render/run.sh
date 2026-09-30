@@ -480,19 +480,39 @@ mut() { # <label> <sed-expr> <arm-that-must-fail>
     bad "MUTANT $label: the sed matched NOTHING, so the subject was never mutated and this kill would have been fictional"
     return
   fi
+  # A MUTATION MUST NOT PUT A NON-READING COMMAND ON THE RIGHT OF A PIPE. The subject runs
+  # `set -uo pipefail`; a sink such as `true`, `:` or `false` exits without reading, the writer on
+  # the left can then take EPIPE, and pipefail turns that into a failed pipeline -- whether it does
+  # is a race between the two processes, so the mutant's behaviour changes with machine load.
+  # Measured on M3: `printf ... | true` scored the role DRIFTED and made --check return 1 whenever
+  # the writer lost the race, which killed arms that never own the comparison (the entanglement
+  # verdict) and sometimes let arm 5's red cells pass (the SURVIVED verdict), at ~90% of runs under
+  # the pool and 0 of 9 solo. Keyed on the lines the mutation INTRODUCED into the copy, so a pipe
+  # the subject itself already carries is never scored against the mutant. A single `|` only: the
+  # `[^|]` before it keeps `cmd || true`, which is not a pipe, out of the set.
+  local introduced
+  introduced="$(grep -Fvx -f "$SUBJECT" "$copy")" || introduced=""
+  if [ -n "$introduced" ] && grep -Eq '(^|[^|])\|[[:blank:]]*(true|false|:)([[:blank:];)&|]|$)' <<<"$introduced"; then
+    bad "MUTANT $label DID NOT APPLY CLEANLY: it pipes into a command that never reads its input, so under pipefail the writer's EPIPE decides the verdict and no kill it scores is about the mutated property. Use a draining sink such as cat >/dev/null. Introduced line(s): $(tr '\n' ' ' <<<"$introduced")"
+    return
+  fi
   chmod +x "$copy"
   out="$(run_arms "$copy")"
+  # THE OBSERVED arm:rc SET, carried by every verdict below. A verdict naming only which arms
+  # fired cannot say which world moved, and a load-dependent kill is diagnosed from the rcs.
+  local observed
+  observed="$(printf '%s\n' "$out" | tr '\n' ' ')"
   rc="$(printf '%s\n' "$out" | sed -n "s/^${want}://p")"
   if [ "$rc" = "1" ]; then
     kills=$((kills+1))
     others="$(printf '%s\n' "$out" | grep ':1$' | grep -v "^${want}:" | cut -d: -f1 | tr '\n' ' ')"
     if [ -n "${others// /}" ]; then
-      bad "MUTANT $label killed by $want AND by: $others — those arms are entangled and at least one is not independently load-bearing"
+      bad "MUTANT $label killed by $want AND by: $others — those arms are entangled and at least one is not independently load-bearing. observed arm:rc = $observed"
     else
       ok "MUTANT $label killed by $want, and by that arm alone"
     fi
   else
-    bad "MUTANT $label SURVIVED: $want still passes against a subject that no longer does the thing that arm asserts"
+    bad "MUTANT $label SURVIVED: $want still passes against a subject that no longer does the thing that arm asserts. observed arm:rc = $observed"
   fi
 }
 
@@ -528,8 +548,17 @@ mut accepts-any-effort-level \
 # quoting, and they did not. The fixture caught it -- `cmp -s` reported the subject unmutated --
 # rather than scoring a kill against a copy nothing had edited. A short unique anchor is both
 # safer to quote and immune to reflowing the line around it.
+#
+# THE REPLACEMENT DRAINS ITS INPUT, AND `true` WAS WRONG. The comparison sits on the right of a
+# pipe from `printf`, in a subject running under `set -uo pipefail`. `true` exits without reading,
+# so the printf can take EPIPE, pipefail fails the pipeline, and the role is scored DRIFTED -- the
+# mutant then compared nothing only when the writer happened to win the race. Measured by delaying
+# the writer 20ms: arm 10 read `3 1 1` with `true` and `3 1 0` with the real `cmp`, which is the
+# pool-only entanglement this battery kept reporting. `cat >/dev/null` means the same thing --
+# compare nothing, succeed -- and reads to EOF, so the writer cannot lose. The pipe guard in
+# `mut()` refuses a non-reading sink from any future mutation.
 mut check-is-presence-only \
-  's#cmp -s - "$target"#true#' \
+  's#cmp -s - "$target"#cat >/dev/null#' \
   check_joins_declaration_to_projection
 
 # M4: drop the stale-projection sweep, so a role that left `aiDlcRoles` keeps its definition and
