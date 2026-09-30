@@ -11496,6 +11496,90 @@ else
   rm -rf "$i115_probe" 2>/dev/null || true
 fi
 
+# --- I116: a SHIPPING fixture that uses a sibling fixture requires that sibling to ship ---
+#
+# WHAT IT BINDS. `emit-report-refusal` builds its tree from `../reconcile-emit-report/seed.sh`
+# and exits 2 `FIXTURE ERROR` without it; `provenance-flagless-default` and
+# `retro-compliance-workflow` source `../check-17-bypass/seed.sh`. All of them ship. A packaging
+# change adding `.dist-only` to the sibling would leave every consumer's copy of the user
+# erroring or silently skipping, and nothing here joined the two ship declarations.
+#
+# THE SIBLING IS A FIXTURE BY PROPERTY, NOT BY NAME: a directory under core/fixtures/ carrying a
+# run.sh. `core/fixtures/lib/` is a shared library with no run.sh and ships unconditionally, so
+# it is out of population without being named; a lib that grew a run.sh would come in.
+#
+# THE GRAMMAR. A non-comment line in `core/fixtures/<src>/*.sh` naming `../<name>`, where the
+# text before it does not itself end in `../` -- so `$HERE/../../scripts` is a walk up and not a
+# sibling named `scripts`. The file tests are awk `getline` opens (-1 = absent, 0 = empty), so
+# the whole arm is ONE awk over the fixture shell files and forks nothing per pair.
+#
+# FALSE-POSITIVE SET, MEASURED ON THE TREE THAT SHIPPED THIS: 0 findings. Pairs with a sibling
+# that has a run.sh, comment lines excluded: shipped -> shipped 4 (the three above plus
+# layer-contract-conformance-b -> layer-contract-conformance, a shard), dist-only -> anything 16,
+# out of scope because the user itself does not ship. The narrowing that got it to 0 was the
+# run.sh property: without it, the 70-odd shipped fixtures sourcing `../lib/` are pairs too,
+# all satisfied, and `lib` would have to be exempted by name.
+i116_scan() { # <file>... -> "P<TAB>src<TAB>sib" per satisfied pair, "B<TAB>src<TAB>sib<TAB>file:line" per breach
+  awk '
+    function exists(p,   x, r) { r = (getline x < p); close(p); return r >= 0 }
+    FNR == 1 {
+      n = split(FILENAME, seg, "/"); src = seg[n - 1]
+      base = substr(FILENAME, 1, length(FILENAME) - length(seg[n]) - length(src) - 2)
+      shipsrc = !exists(base "/" src "/.dist-only")
+    }
+    /^[[:space:]]*#/ { next }
+    shipsrc {
+      l = $0
+      while (match(l, /\.\.\/[A-Za-z0-9_-]+/)) {
+        pre = substr(l, 1, RSTART - 1); sib = substr(l, RSTART + 3, RLENGTH - 3)
+        l = substr(l, RSTART + RLENGTH)
+        if (pre ~ /\.\.\/$/ || sib == src || (src SUBSEP sib) in seen) continue
+        if (!exists(base "/" sib "/run.sh")) continue
+        seen[src, sib] = 1
+        if (exists(base "/" sib "/.dist-only")) print "B\t" src "\t" sib "\t" FILENAME ":" FNR
+        else print "P\t" src "\t" sib
+      }
+    }
+  ' "$@" 2>/dev/null
+}
+# SELF-PROBE FIRST, BOTH DIRECTIONS, under mktemp. Offender: a shipped fixture using a dist-only
+# sibling that has a run.sh. Near-misses, each one property away: a shipped sibling; a sibling
+# with no run.sh that IS marked dist-only (the lib shape, so the run.sh test is what acquits
+# it); a dist-only user; a reference only in a comment; and a `../../` walk up.
+i116_probe="$(mktemp -d 2>/dev/null)"
+if [ -z "$i116_probe" ] || [ ! -d "$i116_probe" ]; then
+  err "I116 could not create its probe directory, so its self-probe did not run. A scan whose probe did not fire reports a clean corpus it never read; this fails instead."
+else
+  i116_f="$i116_probe/core/fixtures"
+  mkdir -p "$i116_f/user" "$i116_f/dsib" "$i116_f/ssib" "$i116_f/libby" "$i116_f/duser" "$i116_f/csib"
+  : > "$i116_f/dsib/run.sh"; echo reason > "$i116_f/dsib/.dist-only"
+  : > "$i116_f/ssib/run.sh"
+  : > "$i116_f/libby/x.sh"; echo reason > "$i116_f/libby/.dist-only"
+  : > "$i116_f/csib/run.sh"; echo reason > "$i116_f/csib/.dist-only"
+  echo reason > "$i116_f/duser/.dist-only"
+  printf '%s\n' 'H="$(dirname "$0")"' '. "$H/../dsib/seed.sh"' 'bash "$H/../ssib/seed.sh"' '. "$H/../libby/x.sh"' '# see ../csib/seed.sh' 'R="$H/../../dsib"' > "$i116_f/user/run.sh"
+  printf '%s\n' '. "$(dirname "$0")/../dsib/seed.sh"' > "$i116_f/duser/run.sh"
+  i116_p="$(i116_scan "$i116_f"/*/*.sh)"
+  i116_pb="$(printf '%s\n' "$i116_p" | awk -F'\t' '$1 == "B" { printf "%s>%s ", $2, $3 }')"
+  i116_pp="$(printf '%s\n' "$i116_p" | awk -F'\t' '$1 == "P" { printf "%s>%s ", $2, $3 }')"
+  rm -rf "$i116_probe" 2>/dev/null || true
+  if [ "$i116_pb" != "user>dsib " ]; then
+    err "I116 SELF-PROBE FAILED: breaches read '${i116_pb}', expected exactly 'user>dsib '. Either a shipped fixture using a dist-only sibling was not reported, or a near-miss (a lib-shaped dir with no run.sh, a dist-only user, a comment, a ../../ walk) was. Every verdict below is unattributable."
+  elif [ "$i116_pp" != "user>ssib " ]; then
+    err "I116 SELF-PROBE FAILED: satisfied pairs read '${i116_pp}', expected exactly 'user>ssib '. The grammar does not see a shipped sibling, so the breach arm above passed on a scan that reads nothing but the offender."
+  else
+    i116_out="$(cd "$REPO_ROOT" 2>/dev/null && i116_scan core/fixtures/*/*.sh)"
+    # IN-CORPUS CONTROL: the motivating pair must be seen as a pair, shipped or not. A grammar
+    # that stopped matching on the real tree would otherwise report zero breaches forever.
+    if ! printf '%s\n' "$i116_out" | awk -F'\t' '$2 == "emit-report-refusal" && $3 == "reconcile-emit-report" { f = 1 } END { exit !f }'; then
+      err "I116 IN-CORPUS CONTROL FAILED: emit-report-refusal's use of ../reconcile-emit-report/ was not seen as a sibling pair (it is the case this arm exists for, and emit-report-refusal ships). The grammar no longer reaches the real tree, so zero breaches here prove nothing."
+    else
+      i116_bad="$(printf '%s\n' "$i116_out" | awk -F'\t' '$1 == "B" { printf " %s uses %s (%s);", $2, $3, $4 }')"
+      [ -z "$i116_bad" ] || err "I116: a SHIPPING fixture uses a sibling fixture that does not ship:${i116_bad} A consumer receives the user without the sibling, so it errors or skips there while this repo stays green. Remove the sibling's .dist-only, or give the user a .dist-only of its own."
+    fi
+  fi
+fi
+
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"

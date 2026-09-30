@@ -4301,7 +4301,22 @@ ERROR: sibling … not found`. A packaging change marking `reconcile-emit-report
 leave every consumer's `emit-report-refusal` erroring. `layer-entry-unreadable` and
 `provenance-flagless-default` carry the same unbound sibling shape.
 
-verify: manual
+**LANDED (v0.666.0, verified <sha>).** Invariant **I116** in `validate-enforcement-map.sh`: a
+fixture with no `.dist-only` that names `../<dir>/` on a non-comment line, where
+`core/fixtures/<dir>/run.sh` exists, fails the build if `<dir>` carries `.dist-only`. Premise
+correction: `layer-entry-unreadable` sources `../lib/preamble.sh`, and `core/fixtures/lib` has no
+run.sh, so it is out of population by that property, not by name. Measured on the real tree
+(comment lines stripped): 4 shipped-to-shipped pairs, all satisfied, 0 findings —
+emit-report-refusal→reconcile-emit-report, provenance-flagless-default→check-17-bypass,
+retro-compliance-workflow→check-17-bypass, layer-contract-conformance-b→layer-contract-conformance.
+One awk pass, with no forks per pair. Self-probe runs before the corpus: 1 offender and 5 near-misses.
+
+**Receipt.** Drives the shipping arm on the motivating case. A scratch copy with
+`reconcile-emit-report/.dist-only` added must exit 1 naming both fixtures, and the untouched copy
+must exit 0. Scored: tip **0**, base `2e7c227c` **1** (no I116, so `--arms I116` exits 2), a
+mutant with the breach test disabled **1** (its self-probe refuses).
+
+verify: sh v=scripts/validate-enforcement-map.sh; [ -f "$v" ] || exit 9; [ -f core/fixtures/reconcile-emit-report/run.sh ] || exit 9; d=$(mktemp -d) || exit 9; cp VERSION "$d/" && cp -R core scripts .githooks templates docs "$d/" || exit 9; [ -d patterns ] && cp -R patterns "$d/"; mkdir -p "$d/.claude" && cp -R .claude/rules "$d/.claude/rules"; ( cd "$d" && bash scripts/validate-enforcement-map.sh --arms I116 >/dev/null 2>&1 ); c=$?; echo x > "$d/core/fixtures/reconcile-emit-report/.dist-only"; o="$(cd "$d" && bash scripts/validate-enforcement-map.sh --arms I116 2>&1)"; b=$?; rm -rf "$d"; [ "$c" -eq 0 ] || exit 1; [ "$b" -eq 1 ] || exit 1; printf '%s\n' "$o" | grep -q 'I116.*emit-report-refusal uses reconcile-emit-report' || exit 1; exit 0
 
 ## BL-342 — `validate-h2-attestation.sh --verify` numbers a binary gate log with grep's banner
 
