@@ -553,16 +553,16 @@ under the slot must be cited on its `edit:` lines. Writes under `s<N>/shards/` a
 themselves and are not counted. It reads the harness write ledger and refuses (exit 2, `REFUSED:`,
 nothing written) if any file was written by two agents, if a written file is cited by no part,
 if a file is cited by two parts, or if any part is unstructured. Otherwise it writes the one
-repair record below. After a refusal naming a file `which no dispatched agent wrote`:
+repair record below. The serial cross-file remediator runs after that and APPENDS its entries
+to the joined record. The join never overwrites a record, so it is run before the serial
+remediator and never after it.
+
+After a join refusal naming a file `which no dispatched agent wrote`:
 
 1. Re-dispatch that shard, writing through Edit, Write or MultiEdit, and re-run the join. The
    join lists every reason it refused; clear each one.
 2. Only if the operator approves in this session: hand-assemble the record, with a disclosure
    header naming every unledgered file and the refusal's lines.
-
- The serial cross-file remediator runs after that and APPENDS its entries
-to the joined record. The join never overwrites a record, so it is run before the serial
-remediator and never after it.
 
 **Shard by section (Rule 28, "Split dispatch": sections axis).** When the artifact is one
 document, run `scripts/ai-dlc/partition-document.sh --map <artifact path>`. Exit 3 with a `SERIAL:`
