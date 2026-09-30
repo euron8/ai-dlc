@@ -899,6 +899,7 @@ rel() { printf '%s' "${1#"$PROJECT_ROOT"/}"; }
 # with no subject, and `kind: qualifier` spent 20 releases proving how that ends.
 echo "== contract receipt =="
 LC_FILE="$SKILL_DIR/layer-contract.yaml"
+LC_UNREADABLE=0
 LC_CV=''
 LC_SINCE=''
 LC_CODE_ROWS=''
@@ -918,6 +919,17 @@ if [ ! -f "$LC_FILE" ]; then
   # so its absence is a broken install, and a pass that quietly evaluated nothing would
   # report the same clean footer as a consumer that holds every clause.
   err E17 "cannot read the layer contract at $(rel "$LC_FILE") — it ships with the skill, so this is a broken or partial install. Every entry's conforms_to went UNCHECKED in this run; that is not the same as clean. Re-run /ai-dlc-update, or restore the file."
+elif ! LC_CV="$(awk '/^contract_version:/{print $2; exit}' "$LC_FILE" 2>/dev/null)"; then
+  # PRESENT BUT UNREADABLE IS ITS OWN STATE, AND THE STATUS IS THE ONLY THING THAT SAYS SO.
+  # An awk that cannot open the file prints nothing and exits 2; a contract genuinely lacking
+  # `contract_version:` prints nothing and exits 0. Keyed on the value alone, both reached the
+  # malformed-contract arm below and told the operator `got '<none>'` about a file that is
+  # intact — a remedy (rewrite or restore it) aimed at a file with nothing wrong in it. The
+  # status is taken here, once, and LC_UNREADABLE stops the later reads of the same file from
+  # each reporting the one cause as a different defect of their own.
+  LC_CV=''
+  LC_UNREADABLE=1
+  err E17 "the layer contract at $(rel "$LC_FILE") is present but UNREADABLE — awk could not open it (check its permissions and ownership). Its contents were never read, so this run cannot say whether they are well-formed; it is NOT reporting a malformed contract. Every entry's conforms_to, and every clause read from the contract, went UNCHECKED in this run; that is not the same as clean. Restore read access to the file, then re-run."
 else
   LC_CV="$(awk '/^contract_version:/{print $2; exit}' "$LC_FILE")"
   LC_SINCE="$(awk '/^  - id:/{id=$3} /^    since:/{ if (id != "") { print id, $2; id="" } }' "$LC_FILE")"
@@ -1153,7 +1165,12 @@ done < "$VLE_T/overrides"
 # exit 0, and it stopped being able to say that. The subject here is a contract present and
 # silent about the key, which is the only state this arm can speak to.
 CROSSWALK_REL="$(sed -n 's/^consumer_crosswalk_file:[[:space:]]*//p' "$LC_FILE" 2>/dev/null | head -1 | sed 's/[[:space:]]*$//')"
-if [ -z "$CROSSWALK_REL" ] && [ -f "$LC_FILE" ]; then
+if [ "$LC_UNREADABLE" -eq 1 ]; then
+  # Pass 0 already reported the cause, once, as UNREADABLE. Reporting it again here as "could
+  # not read the key" would tell the operator the declaration is missing from a file nobody
+  # read. The table is still unread, so the crosswalk is set EMPTY, exactly as below.
+  CROSSWALK_MD=''
+elif [ -z "$CROSSWALK_REL" ] && [ -f "$LC_FILE" ]; then
   err E16 "could not read 'consumer_crosswalk_file:' from $(rel "$LC_FILE"). The crosswalk table's location is declared there and nowhere else, so without it this run has no table to read — and an unread table is indistinguishable from an empty one, which is E16's and W7's PASS. Both clauses are therefore unevaluated in this run, not clean."
   CROSSWALK_MD=''
 else
