@@ -168,6 +168,7 @@ core_manifest:
   - core/fixtures/escalation-delivery/**
   - core/fixtures/extract-push-flag-decision/**
   - core/fixtures/fold-architect-ledger-join/**
+  - core/fixtures/foreground-budget-deny/**
   - core/fixtures/update-preflight-push/**
   - core/fixtures/inflight-row-shape/**
   - core/fixtures/known-skills-extension/**
