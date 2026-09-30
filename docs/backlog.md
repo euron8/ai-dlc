@@ -3008,3 +3008,33 @@ Discharges the consumer candidate
 session. Its headline premise, that an edit would break the notarization, was refuted by measurement.
 
 verify: sh unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; v=core/scripts/validate-adversarial-convergence.sh; [ -f "$v" ] || exit 9; d=$(mktemp -d) || exit 9; mkdir -p "$d/.claude" "$d/_bmad-output/planning-artifacts" || exit 9; sp() { printf '# SPEC\n\n## C\n\nrev %s\n' "$1"; }; sh1() { sp "$1" | shasum -a 256 | cut -d' ' -f1; }; ( cd "$d" && git init -q . && for s in "0.663.0 2026-09-29T09:00:00Z" "0.669.0 2026-09-29T10:00:00Z"; do printf 'version: %s\n' "${s% *}" > .claude/.ai-dlc-version && git add .claude/.ai-dlc-version && GIT_COMMITTER_DATE="${s#* }" GIT_AUTHOR_DATE="${s#* }" git -c user.email=r@x.invalid -c user.name=r -c commit.gpgsign=false -c core.hooksPath=/dev/null commit -q -m s || exit 1; done ) || exit 9; cell() { c="$d/_bmad-output/planning-artifacts/$1"; mkdir -p "$c" "$d/_bmad-output/specs/$1" || exit 9; a="$3"; [ -n "$a" ] || a="_bmad-output/specs/$1/SPEC.md"; sp 1 > "$d/$a"; printf '<!-- SKILL_INVOCATION_PROVENANCE v1\ninvoked_at: %s\nartifact: %s\nartifact_sha: %s\nfindings_critical: 0\nfindings_major: 0\nverdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$2" "$a" "$(sh1 1)" > "$c/x-adversarial-p1.md"; sp 2 > "$d/$a"; }; cell s1 2026-09-29T11:00:00Z; cell s2 2026-09-29T11:00:00Z; printf -- '- artifact: _bmad-output/specs/s2/SPEC.md\n- artifact_sha_before: %s\n- artifact_sha_after: %s\n- disposition: repaired\n- edit: SPEC.md:5\n- derivation: n/a\n' "$(sh1 1)" "$(sh1 2)" > "$d/_bmad-output/planning-artifacts/s2/gate-planning-repair-p1.md"; cell s3 2026-09-29T11:00:00Z _bmad-output/planning-artifacts/prd.md; cell s4 2026-09-29T09:30:00Z; r() { bash "$v" --series "$d/_bmad-output/planning-artifacts/$1/x-adversarial-p" 2>&1; }; o1=$(r s1); o2=$(r s2); o3=$(r s3); o4=$(r s4); rm -rf "$d"; case "$o1" in *"FAIL (J2 -- DRIFT)"*) : ;; *) exit 1 ;; esac; case "$o2$o3$o4" in *"FAIL (J2"*) exit 1 ;; esac; case "$o4" in *"PENDING (J2 -- DRIFT)"*) exit 0 ;; esac; exit 1
+
+## BL-386 — the derivation-capture refusal of a part pair reading `sections/` misses a symlinked spelling
+
+**FIXED IN v0.669.0, pending the post-merge close.** A repair part's pair that reads the split's
+`sections/` dir is refused at write time, because `--assemble` removes that file and the gate then
+fails the joined record. The refusal compared only the literal spellings of the dir, so
+`<alias>/_bmad-output/.../sections/2.md` (alias a symlink to the project) and a link into `sections/`
+exited 0 with no stderr, where the project-relative spelling exits 2. The refusal now applies the
+same `pwd -P` canonicalisation as `BL-380`: a `$ ` token whose directory canonicalises to the split's
+`sections/` dir or below it is refused. The exemption and the refusal share `dollar_tokens()` and
+`canon_dir()`. The prefix test carries the `/`, so a sibling `sections.bak/` stays accepted, and the
+document through the alias stays exempt. Guarded by `core/fixtures/derivation-capture` arms A50-A53
+and two `derivation-capture-mutants` mutants. Found by the `BL-380` builder. Receipt: base 1, fix 0,
+canonicalisation dropped 1, refusal removed 1; the prefix-without-slash regression is the fixture's.
+
+verify: sh f=core/fixtures/derivation-capture/seed.sh; [ -f "$f" ] || exit 9; w=$(bash "$f" 2>/dev/null) && [ -f "$w/env.sh" ] || exit 9; . "$w/env.sh"; p=$(cd "$CONSUMER" && pwd -P) || exit 9; ln -s "$CONSUMER" "$w/al" || exit 9; s=_bmad-output/planning-artifacts/s1/shards/prd-repair-p1/sections/2.md; [ -f "$CONSUMER/$s" ] || exit 9; t=$(printf '```derived\n$ grep -c %s %s\n4\n```' "'scope item'" "$w/al/$s"); printf '\n%s\n' "$t" >> "$REPDIR/3.md"; e=$(jq -nc --arg f "$REPDIR/3.md" --arg s "$t" '{tool_name:"Edit",tool_input:{file_path:$f,new_string:$s}}' | CLAUDE_PROJECT_DIR="$p" bash "$HOOK" 2>&1 >/dev/null); r=$?; case "$r:$e" in "2:"*"reads the section copy"*) exit 0 ;; 0:*) exit 1 ;; esac; exit 9
+
+## BL-387 — `validate-backlog-receipts.sh` leaks `AI_DLC_RECONCILE_MEMO` into every receipt it scores
+
+**FIXED IN v0.669.0, pending the post-merge close.** `BL-382`'s defect in the second program that
+sources `reconcile/lib.sh`: the parent exports `AI_DLC_RECONCILE_MEMO` and each `--score-one` worker
+inherits it, so every receipt borrowed the parent's memo. Functions do not leak (a worker is a fresh
+`bash`; measured). The parent snapshots `compgen -e` either side of the source, names the memo variable
+outright for a caller-exported memo, and passes the list as `BR_LIB_VARS`, which the worker unsets on
+entry. `_br_added` duplicates `backlog-reverify.sh`'s `_rv_added`. With the gate's flags one receipt
+moves, `BL-308` BOUND -> ALREADY-PASSING, and every ratchet holds. Guarded by
+`core/fixtures/backlog-receipt-binding` (three memo arms, three mutants). Receipt: base 1, fix 0,
+unset removed 1, outright name dropped 1.
+
+verify: sh unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; v=scripts/validate-backlog-receipts.sh; l=core/skills/ai-dlc-update/reconcile; [ -f "$v" ] || exit 9; d=$(mktemp -d) || exit 9; mkdir -p "$d/scripts" "$d/docs" "$d/$l" "$d/p" && cp "$v" "$d/scripts/" && cp "$l/lib.sh" "$l/ledger-reverify.sh" "$d/$l/" && echo 0 > "$d/VERSION" && echo a > "$d/p/a.txt" && echo m > "$d/p/m.txt" || exit 9; printf '## BL-900 s\n\nverify: sh grep -q %s p/a.txt\n\n## BL-901 m\n\nverify: sh [ -n "${AI_DLC_RECONCILE_MEMO:-}" ] && exit 9; ! grep -q %s p/m.txt\n' "'MK900'" "'MK901'" > "$d/docs/backlog.md"; (cd "$d" && git init -q . && git add -A && git -c user.email=p@l -c user.name=p commit -qm s) >/dev/null 2>&1 || exit 9; mkdir "$d/memo"; o=$(cd "$d" && AI_DLC_RECONCILE_MEMO="$d/memo" bash scripts/validate-backlog-receipts.sh --max-prose-closable 1 --max-out-of-population 9 --min-sh-receipts 1 --min-entries 1 2>/dev/null); c=$(printf '%s\n' "$o" | awk -F'\t' '$2=="BL-901"{print $1}'); case "$c" in ALREADY-PASSING) exit 0 ;; OUT-OF-POPULATION) exit 1 ;; esac; exit 9
