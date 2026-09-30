@@ -89,6 +89,15 @@ if [ -z "$ROOT" ]; then
   echo "FIXTURE ERROR: validate-mandatory-rules.sh not found in either layout above $DIR" >&2
   exit 2
 fi
+# retro.md Step 1 is the second subject (Part 2 below). Same two layouts, same root.
+RETRO=""
+for _r in "$ROOT/core/skills/ai-dlc/steps/retro.md" "$ROOT/.claude/skills/ai-dlc/steps/retro.md"; do
+  [ -f "$_r" ] && { RETRO="$_r"; break; }
+done
+if [ -z "$RETRO" ]; then
+  echo "FIXTURE ERROR: steps/retro.md not found under $ROOT in either layout — an absent subject is not a passing one" >&2
+  exit 2
+fi
 
 VMR="$TOOLS/validate-mandatory-rules.sh"
 VAA="$TOOLS/validate-audit-anchors.sh"
@@ -562,10 +571,264 @@ mutate cutpoint \
   "a:PASS/-/X/-/all7/0 b:FAIL/${BEHIND}/X/m/nosumm/1 c:FAIL/${BEHIND}/X/m/nosumm/1 d:SKIP/-/X/-/skip7/0 e:PASS/-/X/-/all7/0 f:PASS/-/X/-/all7/0 g:FAIL/${BEHIND}/R/m/nosumm/1 h:PASS/-/N/-/all7/0" \
   "WRONG FIX — keying on the branch's first commit still convicts the defect world, but the remedy the failure message names can never clear it; arm C is the only arm that separates the two"
 
+# ============================================================================
+# PART 2 — retro.md Step 1's CARRY. Deploy-validate keeps committing to the sprint branch after
+# the sprint PR squash-merges, and a retro branch cut from origin/main alone holds none of it:
+# the retro reads incomplete files and 7a-post rotates a gate log missing its deploy-validate
+# block. Step 1 therefore derives the squash's PR head by TREE equality on the sprint branch's
+# first-parent chain and cherry-picks what follows it onto the trunk-cut branch.
+#
+# THE SUBJECT IS THE SHIPPING BLOCK, EXTRACTED AND RUN. The fenced bash block that opens with
+# `# retro Step 1:` is lifted out of retro.md, its two placeholders substituted, and executed in
+# a clone of a `file://` remote — the block fetches, so every world has a real origin. Nothing
+# here restates the block; a wording change that keeps its behaviour passes and a behaviour
+# change moves a token.
+#
+# SEVEN WORLDS, one per outcome the block can reach, plus the one shape a naive range breaks:
+#   carry       squash, one trunk commit after it, two sprint commits after the PR head
+#   empty       the same with no sprint commit after the PR head — nothing to carry, no error
+#   synced      the sprint branch committed, MERGED the trunk (squash included), and committed
+#               again: the only world where `<pr-head>..<tip>` re-picks trunk commits and where
+#               a walk that is not first-parent finds no fork point below the trunk
+#   conflict    the post-squash sprint commit collides with a trunk commit
+#   underivable the trunk moved between the PR's last sync and the squash, so no sprint tree
+#               equals a trunk tree and the PR head cannot be derived
+#   direct      the sprint tip is already on origin/main (fast-forward landing)
+#   unresolved  the sprint branch is gone
+#
+# TOKEN: <carry>/<behind>/<landed>/<evidence>/<picking>/<branch>
+#   carry     n<k> carried k | none-tip | none-empty | HB-unresolved | HB-underivable |
+#             HB-conflict | NONE (no CARRY: line) | OTHER[<line>]
+#   behind    `git rev-list --count HEAD..origin/main` after the block
+#   landed    y if the commit that landed the sprint on the trunk is an ancestor of HEAD
+#   evidence  how many of the two post-squash markers HEAD carries: `REVISION 3` in the gate
+#             log and `DV-1` in the escalation log — the two greps the filing measured at 0
+#   picking   y if a cherry-pick is still in progress (CHERRY_PICK_HEAD present)
+#   branch    y if HEAD is the retro branch
+# ============================================================================
+echo
+echo "retro-branch-behind-main: part 2 — retro.md Step 1 carry (subject $RETRO)"
+
+extract_block() { # <retro.md> -> the Step 1 carry block, fences excluded
+  awk '/^### 1\. Context Loading/{s=1} s && /^### 2\./{exit}
+       s && /^# retro Step 1:/{on=1} on && /^```$/{exit} on{print}' "$1"
+}
+BLOCK="$(extract_block "$RETRO")"
+case "$BLOCK" in
+  *'<sprint-branch>'*'<N>'*) : ;;
+  *)
+    echo "  FAIL  retro.md Step 1 carries no carry block naming <sprint-branch> and <N> — the post-squash sprint commits are never carried (an absent block is a finding, not a pass)" >&2
+    echo "retro-branch-behind-main: FAIL (part 2 subject absent)" >&2
+    exit 1 ;;
+esac
+
+P2="$WORK/p2"; mkdir -p "$P2"
+SB=ai-dlc/sprint-900
+GL=_bmad-output/implementation-artifacts/gate-log.md
+ESC=docs/escalations/pending.md
+
+# build <world> -> $P2/<world>/{remote.git,clone} and $P2/<world>.landed
+build() {
+  local w="$1" s="$P2/$1/src" m="" landed=""
+  mkdir -p "$s"
+  git -c init.defaultBranch=main init -q "$s" || { echo "FIXTURE ERROR: part 2 init failed ($w)" >&2; exit 2; }
+  git -C "$s" config user.email f@example.com; git -C "$s" config user.name Fixture
+  git -C "$s" config commit.gpgsign false
+  c() { git -C "$s" add -A && git -C "$s" commit -q -m "$1"; }
+  mkdir -p "$s/$(dirname "$GL")" "$s/$(dirname "$ESC")" "$s/trunk"
+  printf 'REVISION 1\n' > "$s/$GL"; printf '# pending\n' > "$s/$ESC"; c C1
+  git -C "$s" checkout -q -b "$SB"
+  printf 'REVISION 1\nREVISION 2\n' > "$s/$GL"; c "sprint work (the PR head)"
+  git -C "$s" checkout -q main
+  case "$w" in
+    underivable) echo x > "$s/trunk/x.txt"; c "trunk moved before the squash" ;;
+  esac
+  if [ "$w" = direct ]; then
+    git -C "$s" merge -q --ff-only "$SB"
+  else
+    git -C "$s" merge -q --squash "$SB" >/dev/null 2>&1; c "sprint (squashed)"
+  fi
+  landed="$(git -C "$s" rev-parse HEAD)"
+  echo t1 > "$s/trunk/b.txt"; c "trunk after the squash"
+  git -C "$s" checkout -q "$SB"
+  case "$w" in
+    carry|synced|underivable|unresolved)
+      printf '# pending\nDV-1\n' > "$s/$ESC"; c "escalation after the squash"
+      # synced: the sprint branch takes the trunk (squash and all) BETWEEN its two post-squash
+      # commits. A merge taken before the first one would itself carry a trunk tree, become the
+      # derived PR head, and make the plain range agree with the shipped one. The first commit
+      # touches only the escalation log, which the trunk never changed, so the merge is clean.
+      if [ "$w" = synced ]; then
+        git -C "$s" merge -q --no-edit main >/dev/null 2>&1 || { echo "FIXTURE ERROR: synced world merge failed" >&2; exit 2; }
+      fi
+      printf 'REVISION 1\nREVISION 2\nREVISION 3\n' > "$s/$GL"; c "deploy-validate revision after the squash" ;;
+    conflict)
+      printf 'REVISION 1\nREVISION 2\nREVISION 3\n' > "$s/$GL"; mkdir -p "$s/trunk"; echo sprint > "$s/trunk/b.txt"
+      c "post-squash commit colliding with the trunk" ;;
+  esac
+  git -C "$s" checkout -q main
+  git clone -q --bare "$s" "$P2/$w/remote.git" 2>/dev/null || { echo "FIXTURE ERROR: part 2 bare clone failed ($w)" >&2; exit 2; }
+  [ "$w" = unresolved ] && git -C "$P2/$w/remote.git" update-ref -d "refs/heads/$SB"
+  git clone -q "file://$P2/$w/remote.git" "$P2/$w/clone" 2>/dev/null || { echo "FIXTURE ERROR: part 2 clone failed ($w)" >&2; exit 2; }
+  git -C "$P2/$w/clone" config user.email f@example.com; git -C "$P2/$w/clone" config user.name Fixture
+  git -C "$P2/$w/clone" config commit.gpgsign false
+  if [ "$w" != unresolved ]; then
+    git -C "$P2/$w/clone" checkout -q -b "$SB" "origin/$SB" || { echo "FIXTURE ERROR: part 2 sprint branch checkout failed ($w)" >&2; exit 2; }
+  fi
+  printf '%s' "$landed" > "$P2/$w.landed"
+}
+WORLDS2="carry empty synced conflict underivable direct unresolved"
+for w in $WORLDS2; do build "$w"; done
+
+# The worlds must hold the relations the arms are written against.
+_t() { git -C "$P2/$1/src" rev-parse "$2^{tree}"; }
+_sq() { git -C "$P2/$1/src" rev-parse "$(cat "$P2/$1.landed")^{tree}"; }
+if [ "$(_t carry "$SB~2")" != "$(_sq carry)" ] \
+   || [ "$(_t underivable "$SB~2")" = "$(_sq underivable)" ] \
+   || ! git -C "$P2/direct/src" merge-base --is-ancestor "$SB" main \
+   || git -C "$P2/carry/src" merge-base --is-ancestor "$SB" main \
+   || [ "$(git -C "$P2/synced/src" rev-list --count --merges "main..$SB")" != "1" ] \
+   || git -C "$P2/unresolved/clone" rev-parse --verify -q "$SB" >/dev/null; then
+  echo "FIXTURE ERROR: the part 2 worlds do not hold the relations the arms are written against." >&2
+  exit 2
+fi
+
+# run_block <block-file> <world> -> token
+run_block() {
+  local b="$1" w="$2" d out line cr n ld ev pk br
+  d="$P2/run-$(basename "$b" .sh)-$w"
+  cp -R "$P2/$w/clone" "$d" || { echo "FIXTURE ERROR: could not copy world $w" >&2; exit 2; }
+  out="$( cd "$d" && bash "$b" 2>&1 )"
+  line="$(grep -m1 '^CARRY: ' <<<"$out")"
+  case "$line" in
+    "CARRY: none — the sprint tip is already on origin/main") cr=none-tip ;;
+    "CARRY: none — no sprint commit follows PR head "*)      cr=none-empty ;;
+    "CARRY: HARD_BLOCK unresolved"*)   cr=HB-unresolved ;;
+    "CARRY: HARD_BLOCK underivable"*)  cr=HB-underivable ;;
+    "CARRY: HARD_BLOCK conflict"*)     cr=HB-conflict ;;
+    "CARRY: "[0-9]*" commit(s) past PR head "*) cr="n$(sed -n 's/^CARRY: \([0-9][0-9]*\) .*/\1/p' <<<"$line")" ;;
+    "") cr=NONE ;;
+    *)  cr="OTHER[$line]" ;;
+  esac
+  n="$(git -C "$d" rev-list --count HEAD..origin/main 2>/dev/null)" || n="?"
+  if git -C "$d" merge-base --is-ancestor "$(cat "$P2/$w.landed")" HEAD 2>/dev/null; then ld=y; else ld=n; fi
+  ev=0
+  grep -q 'REVISION 3' <<<"$(git -C "$d" show "HEAD:$GL" 2>/dev/null)" && ev=$((ev+1))
+  grep -q 'DV-1' <<<"$(git -C "$d" show "HEAD:$ESC" 2>/dev/null)" && ev=$((ev+1))
+  if [ -e "$d/.git/CHERRY_PICK_HEAD" ]; then pk=y; else pk=n; fi
+  if [ "$(git -C "$d" symbolic-ref -q --short HEAD)" = ai-dlc/retro/sprint-900 ]; then br=y; else br=n; fi
+  printf '%s/%s/%s/%s/%s/%s' "$cr" "$n" "$ld" "$ev" "$pk" "$br"
+}
+# battery2 <retro.md copy> <tag> -> seven tokens
+battery2() {
+  local f="$1" tag="$2" b t="" w
+  b="$P2/$tag.sh"
+  extract_block "$f" | sed -e "s@<sprint-branch>@$SB@g" -e 's@<N>@900@g' > "$b"
+  bash -n "$b" 2>/dev/null || { printf 'PARSE-ERROR'; return; }
+  for w in $WORLDS2; do t="$t $w:$(run_block "$b" "$w")"; done
+  printf '%s' "${t# }"
+}
+
+EXPECTED2="carry:n2/0/y/2/n/y empty:none-empty/0/y/0/n/y synced:n2/0/y/2/n/y conflict:HB-conflict/0/y/0/n/y underivable:HB-underivable/0/y/0/n/y direct:none-tip/0/y/0/n/y unresolved:HB-unresolved/0/y/0/n/y"
+
+GOT2="$(battery2 "$RETRO" ship)"
+if [ "$GOT2" = "$EXPECTED2" ]; then
+  ok "part 2, seven worlds: the retro branch is trunk-cut and 0 behind in every world, carries both post-squash commits (also when the sprint branch merged the trunk after the squash), reports an empty carry as none without error, and stops on a conflict, an underivable PR head and a missing sprint branch with a named HARD_BLOCK and no pick left in progress"
+else
+  bad "part 2 battery: expected [$EXPECTED2], got [$GOT2]"
+fi
+
+cp "$RETRO" "$P2/control.md"
+CTL2="$(battery2 "$P2/control.md" control)"
+if [ "$CTL2" = "$EXPECTED2" ]; then
+  ok "part 2 CONTROL: an unmutated copy reproduces all seven worlds, so a mutant's token below is the mutation"
+else
+  echo "FIXTURE ERROR: the part 2 control does not reproduce the battery — expected [$EXPECTED2], got [$CTL2]." >&2
+  exit 2
+fi
+
+# mutate2 <tag> <anchor occurring once in retro.md> <sed-program> <expected> <claim>
+mutate2() {
+  local tag="$1" anchor="$2" prog="$3" want="$4" claim="$5" m="$P2/m-$1.md" n got
+  n="$(grep -cF -- "$anchor" "$RETRO")" || n=0
+  if [ "$n" -ne 1 ]; then
+    echo "FIXTURE ERROR: part 2 mutant '$tag' anchors on a line occurring ${n} time(s), not once." >&2
+    exit 2
+  fi
+  sed "$prog" "$RETRO" > "$m" || { bad "MUTANT $tag: DID NOT APPLY"; return; }
+  if cmp -s "$RETRO" "$m"; then
+    echo "FIXTURE ERROR: part 2 mutant '$tag' matched nothing." >&2
+    exit 2
+  fi
+  got="$(battery2 "$m" "m-$tag")"
+  if [ "$got" = "$want" ]; then
+    ok "MUTANT $tag: $claim"
+  elif [ "$got" = "$EXPECTED2" ]; then
+    bad "MUTANT $tag SURVIVED: $claim — every world unchanged"
+  else
+    bad "MUTANT $tag ($claim): expected [$want], got [$got]"
+  fi
+}
+
+# --- carry-deleted: Step 1 as it stood before the carry. Every world reports no CARRY line, and
+# the two worlds with post-squash evidence lose it — the filing's 0-and-0 greps.
+mutate2 carry-deleted \
+  'if [ -z "$SPRINT_TIP" ]; then' \
+  '/^if \[ -z "\$SPRINT_TIP" \]; then$/,/^fi$/d' \
+  "carry:NONE/0/y/0/n/y empty:NONE/0/y/0/n/y synced:NONE/0/y/0/n/y conflict:NONE/0/y/0/n/y underivable:NONE/0/y/0/n/y direct:NONE/0/y/0/n/y unresolved:NONE/0/y/0/n/y" \
+  "without the carry the trunk-cut retro branch holds neither post-squash marker and nothing says so"
+
+# --- WRONG FIX 1: cut the retro branch from the sprint tip. The markers arrive, and the branch
+# no longer has the squash as an ancestor — the defect part 1 exists for.
+mutate2 cut-from-tip \
+  'git checkout -b ai-dlc/retro/sprint-<N> origin/main' \
+  's@^git checkout -b ai-dlc/retro/sprint-<N> origin/main$@git checkout -b ai-dlc/retro/sprint-<N> "$SPRINT_TIP"@' \
+  "carry:HB-conflict/2/n/2/n/y empty:none-empty/2/n/0/n/y synced:HB-conflict/0/y/2/n/y conflict:HB-conflict/2/n/1/n/y underivable:HB-underivable/3/n/2/n/y direct:none-tip/1/y/0/n/y unresolved:HB-unresolved/0/y/0/n/n" \
+  "WRONG FIX — a tip-cut retro branch trails origin/main and lacks the squash as an ancestor in every world the sprint did not already merge the trunk into"
+
+# --- skip-guard removed: an empty carry list reaches cherry-pick, which refuses it.
+mutate2 no-skip-guard \
+  'if [ "$CARRY_N" = 0 ]; then' \
+  's@^    if \[ "\$CARRY_N" = 0 \]; then$@    if false; then@' \
+  "carry:n2/0/y/2/n/y empty:HB-conflict/0/y/0/n/y synced:n2/0/y/2/n/y conflict:HB-conflict/0/y/0/n/y underivable:HB-underivable/0/y/0/n/y direct:none-tip/0/y/0/n/y unresolved:HB-unresolved/0/y/0/n/y" \
+  "without the count guard a sprint with nothing to carry is reported as a conflict HARD_BLOCK"
+
+# --- abort removed: the conflict world is left mid-pick.
+mutate2 no-abort \
+  'git cherry-pick --abort' \
+  '/^      git cherry-pick --abort$/d' \
+  "carry:n2/0/y/2/n/y empty:none-empty/0/y/0/n/y synced:n2/0/y/2/n/y conflict:HB-conflict/0/y/0/y/y underivable:HB-underivable/0/y/0/n/y direct:none-tip/0/y/0/n/y unresolved:HB-unresolved/0/y/0/n/y" \
+  "without the abort a conflicting carry leaves a cherry-pick in progress on the retro branch"
+
+# --- WRONG FIX 2: the `<pr-head>..<tip>` range. Correct until the sprint branch merged the
+# trunk after the squash; then the range re-picks trunk commits, and the synced world is the
+# only world that can say so.
+mutate2 plain-range \
+  'elif git cherry-pick --no-merges "$SPRINT_TIP" --not "$PR_HEAD" origin/main; then' \
+  's@elif git cherry-pick --no-merges "\$SPRINT_TIP" --not "\$PR_HEAD" origin/main; then@elif git cherry-pick --no-merges "$PR_HEAD..$SPRINT_TIP"; then@' \
+  "carry:n2/0/y/2/n/y empty:none-empty/0/y/0/n/y synced:HB-conflict/0/y/0/n/y conflict:HB-conflict/0/y/0/n/y underivable:HB-underivable/0/y/0/n/y direct:none-tip/0/y/0/n/y unresolved:HB-unresolved/0/y/0/n/y" \
+  "WRONG FIX — a sprint branch that merged the trunk after the squash makes the plain range re-pick trunk commits and stop"
+
+# --- WRONG FIX 3: the merge-base as the PR head. It is the fork point, so the carry re-picks
+# the PR's own work, which the squash already landed, and stops on it.
+mutate2 merge-base \
+  '  if [ -z "$PR_HEAD" ]; then' \
+  's@^  if \[ -z "\$PR_HEAD" \]; then$@  PR_HEAD="$(git merge-base "$SPRINT_TIP" origin/main)"; if [ -z "$PR_HEAD" ]; then@' \
+  "carry:HB-conflict/0/y/0/n/y empty:HB-conflict/0/y/0/n/y synced:HB-conflict/0/y/0/n/y conflict:HB-conflict/0/y/0/n/y underivable:HB-conflict/0/y/0/n/y direct:none-tip/0/y/0/n/y unresolved:HB-unresolved/0/y/0/n/y" \
+  "WRONG FIX — taking the merge-base as the PR head re-picks the squashed PR work, which is already on the trunk, and stops in every world that has a PR head"
+
+# --- not first-parent: a full-history walk finds the post-squash trunk commit as the fork
+# point on a synced branch, so no trunk tree is newer and the PR head reads underivable.
+mutate2 all-parents \
+  'FORK="$(git rev-list --first-parent "$SPRINT_TIP" \' \
+  's@FORK="\$(git rev-list --first-parent "\$SPRINT_TIP" \\@FORK="$(git rev-list "$SPRINT_TIP" \\@' \
+  "carry:n2/0/y/2/n/y empty:none-empty/0/y/0/n/y synced:HB-underivable/0/y/0/n/y conflict:HB-conflict/0/y/0/n/y underivable:HB-underivable/0/y/0/n/y direct:none-tip/0/y/0/n/y unresolved:HB-unresolved/0/y/0/n/y" \
+  "a walk that follows every parent reads a synced sprint branch as underivable and carries nothing"
+
 echo
 # Liveness: a harness that silently stopped running assertions reads exactly like a clean pass.
-if [ "$asserted" -ne 11 ]; then
-  echo "retro-branch-behind-main: FIXTURE ERROR — ran $asserted assertions, expected 11" >&2
+if [ "$asserted" -ne 20 ]; then
+  echo "retro-branch-behind-main: FIXTURE ERROR — ran $asserted assertions, expected 20" >&2
   exit 2
 fi
 if [ "$fails" -eq 0 ]; then

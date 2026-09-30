@@ -2736,3 +2736,113 @@ Held note (batch 177): the hook, its registration, the fixture and its packaging
 and a hook that also denies `run_in_background: true` exits 1.
 
 verify: sh H=core/hooks/ai-dlc-foreground-budget.sh; command -v jq >/dev/null 2>&1 || exit 9; [ -f "$H" ] || exit 1; grep -q 'ai-dlc-foreground-budget.sh' templates/settings.json.template || exit 1; d() { printf '{"tool_name":"Bash","tool_input":{"command":"x"%s}}' "$1" | AI_DLC_STEERING_BUDGET=120 CLAUDE_PROJECT_DIR=. bash "$H" 2>/dev/null | jq -r '.hookSpecificOutput | select(.permissionDecision == "deny") | .permissionDecisionReason' 2>/dev/null; }; case "$(d ',"timeout":600000')" in *'run_in_background: true'*) ;; *) exit 1 ;; esac; [ -z "$(d ',"timeout":600000,"run_in_background":true')" ] || exit 1; [ -z "$(d ',"timeout":120000')" ] || exit 1; [ -z "$(d '')" ]
+
+## BL-394 — `retro.md` Step 1 cuts the retro branch from `origin/main` and drops every sprint commit made after the sprint PR squash-merged
+
+**DEFECT.** Filed by the consumer as PC-S315-RETRO-STEP1-SQUASH-CUT-LACKS-POST-SQUASH-EVIDENCE.
+
+**Claims enumerated.** (1) Step 1 cuts `ai-dlc/retro/sprint-<N>` from `origin/main` and nothing
+else. (2) Deploy-validate keeps committing to the sprint branch after the sprint PR squash-merges
+(gate-log revisions, escalation updates, dev reports, the snapshot at its live position), so
+the cut lacks all of it. (3) The retro then reads, sweeps and validates incomplete files, and
+Step 7a-post rotates a gate log missing its deploy-validate block. (4) Carrying those commits
+onto the trunk-cut branch restores them; the consumer's cherry-pick of `<pr-head>..<tip>` ran
+without conflicts, where a merge conflicted in six files. Claims 2 and 4 are the consumer's
+measurement on one sprint (`rev-list --count` 8 past the squash head, 12 files added, and a
+control of `git diff --stat <squash-base> <pr-head>` empty); they were not re-taken here.
+
+**Premise re-derived on origin/main `144c41b8`.** `retro.md:24` reads
+`git checkout -b ai-dlc/retro/sprint-<N> origin/main`, and `§1 Context Loading` has 0 lines
+matching `cherry-pick|sprint tip|post-squash` beside a control of 8 lines naming `origin/main`
+in the same section, in the same run. Claim 1 holds.
+
+**Fix (cherry-pick, not cut-from-tip).** A cut from the sprint tip is the retro-behind-main
+defect that Step 1's next paragraph and fixture `retro-branch-behind-main` exist to catch: that
+branch lacks the squash as an ancestor and its PR reports CONFLICTING. Step 1 now runs one
+fenced block. It records the sprint tip, cuts the retro branch from `origin/main` exactly as
+before, and then does the following. It walks the sprint branch's first-parent chain back to
+the first commit already on `origin/main`. It takes the newest commit on that chain whose tree
+equals the tree of a trunk commit made since, which is the PR head, derived and not looked up,
+because no core step records the PR number. It cherry-picks the tip's non-merge commits that
+are in neither the PR head nor `origin/main`. The adversary's explicit `is-ancestor <pr-head>
+<tip>` guard is not written, because every candidate is on the tip's first-parent chain, so
+the guard could never fire. Four outcomes, each a `CARRY:` line: a count, `none` (the tip is
+already on the trunk, or nothing follows the PR head, with the count guard ahead of the pick
+because an empty pick exits non-zero), and three named HARD_BLOCKs that STOP. Those are
+`unresolved` (no sprint branch), `underivable` (no tree match, meaning the trunk moved between
+the PR's last sync and the squash; the operator supplies the PR head) and `conflict` (the pick
+is aborted first). A `<pr-head>..<tip>` range is NOT used: on a sprint branch that merged the
+trunk after the squash it re-picks trunk commits and stops. The Rule 26(c) paragraph names the
+new failure, its cost and its removal condition, and forbids retiring the carry by cutting
+from the tip.
+
+**Fixture.** `retro-branch-behind-main` part 2 extracts the shipping block from `retro.md`
+(both layouts), substitutes its two placeholders and runs it in seven `file://` clone worlds
+(carry, empty, synced, conflict, underivable, direct, unresolved). Each token asserts VALUES:
+the `CARRY:` outcome, behind-count 0, the squash an ancestor of HEAD, both post-squash markers
+present, no pick in progress, and HEAD on the retro branch. There is an unmutated control and
+seven mutants: carry-deleted, cut-from-tip, count guard removed, abort removed, the plain
+range, the merge-base as PR head, and an all-parents walk. 20 of 20 assertions pass.
+
+**Receipt scored** in four scratch trees: tip 1, fix 0, cut-from-tip 1, merge of the sprint
+branch in place of the pick 1. It extracts the block from `§1` and runs it in a scratch
+`file://` world. It exits 0 only if the retro branch is 0 behind, carries the squash as an
+ancestor, holds both post-squash markers, and is clean with no merge or pick in progress.
+
+Held note (batch 177): shipped the Step 1 carry block, its four-outcome prose, the Rule 26(c)
+update and `retro-branch-behind-main` part 2 on branch `b177-r0-steps`.
+
+verify: sh R=core/skills/ai-dlc/steps/retro.md; [ -f "$R" ] || exit 9; D="$(mktemp -d)" || exit 9; B="$(awk '/^### 1\. Context Loading/{s=1} s && /^### 2\./{exit} s && /^...bash$/{on=1; next} on && /^...$/ && !/[a-z]/{exit} on{print}' "$R" | sed -e 's@<sprint-branch>@ai-dlc/sprint-9@g' -e 's@<N>@9@g')"; [ -n "$B" ] || exit 9; s="$D/s"; g() { git -C "$s" "$@"; }; git -c init.defaultBranch=main init -q "$s" || exit 9; g config user.email a@b; g config user.name a; g config commit.gpgsign false; mkdir -p "$s/t"; printf 'R1\n' > "$s/gl"; printf 'P\n' > "$s/esc"; g add -A; g commit -qm c1; g checkout -qb ai-dlc/sprint-9; printf 'R1\nR2\n' > "$s/gl"; g commit -qam pr; g checkout -q main; g merge -q --squash ai-dlc/sprint-9 >/dev/null 2>&1; g commit -qm sq; SQ="$(g rev-parse HEAD)"; echo t > "$s/t/b"; g add -A; g commit -qm t1; g checkout -q ai-dlc/sprint-9; printf 'R1\nR2\nR3\n' > "$s/gl"; g commit -qam dv; printf 'P\nDV-1\n' > "$s/esc"; g commit -qam esc; g checkout -q main; git clone -q --bare "$s" "$D/r.git" 2>/dev/null && git clone -q "file://$D/r.git" "$D/c" 2>/dev/null || exit 9; c() { git -C "$D/c" "$@"; }; c config user.email a@b; c config user.name a; c config commit.gpgsign false; c checkout -q -b ai-dlc/sprint-9 origin/ai-dlc/sprint-9 || exit 9; ( cd "$D/c" && bash -c "$B" ) >/dev/null 2>&1; [ "$(c rev-list --count HEAD..origin/main)" = 0 ] && c merge-base --is-ancestor "$SQ" HEAD && [ -z "$(c status --porcelain)" ] && [ ! -e "$D/c/.git/MERGE_HEAD" ] && [ ! -e "$D/c/.git/CHERRY_PICK_HEAD" ] && c show HEAD:gl | grep -q R3 && c show HEAD:esc | grep -q DV-1 || exit 1
+
+## BL-396 — `deploy-validate.md` has no one-variable-per-smoke-run rule, so a gate log cannot attribute which action cleared which failure
+
+**DEFECT.** Filed by the consumer as PC-S315-DEPLOY-VALIDATE-HAS-NO-ONE-VARIABLE-PER-SMOKE-RUN-RULE.
+
+**Claims enumerated.** (1) §3 defines transient versus persistent failures but no per-action
+attribution between runs. (2) With several live mutations between smoke runs, the gate log
+cannot say which action cleared which failure. The consumer's REVISION 2 entry records
+"per-action attribution NOT isolated" for five tests that went green between two runs, which
+is the consumer's own sentence and was not re-read here. (3) Added by the coordinator from the
+adversary on BL-392: §4 never tells the writer to record the tokens Check 5 of
+`validate-mandatory-rules.sh` reads (`USER-CONFIRMED`, `playwright`), so the reader and the
+writer disagree. The claim the filing leaves open (whether the rule costs less than the extra
+run time) is not settled here either.
+
+**Premise re-derived on origin/main `144c41b8`.** `deploy-validate.md` §3 (lines 140..256):
+0 lines matching `attribution|live mutation|per.action`, beside a control of 1 line
+`with the fix that cleared it` in the same section, in the same run. §4: 0 lines matching
+`USER-CONFIRMED|playwright`, and 0 in the whole file, beside a control of 3 `USER-CONFIRMED`
+lines in `core/scripts/validate-mandatory-rules.sh`. An impossible token scored 0. Claims 1
+and 3 hold.
+
+**Fix.** The fix extends §3's existing record rather than adding a parallel one, and adds no
+gate-log template, since none exists. `smoke_run_evidence` gains a fourth field,
+`per_action_attribution`: one row per live mutation between two smoke runs, the output paths
+of the runs on either side, and the test ids whose state changed (`none` when nothing was
+mutated). §3's "with the fix that cleared it" sentence is followed by **One live mutation per
+smoke run.** That rule defines a live mutation, requires a re-run after each one before the
+next, and requires the record to say "unattributable" rather than credit either action when
+two mutations share a pair of runs. It also states that a §2a destructive operation fired by
+the operator is a live mutation. The counts that say "three fields" and the Rule 26(c)
+failure and cost are updated to match. §4 gains a bullet: write `USER-CONFIRMED` and/or
+`playwright` with the trace path in the Deploy Status Report row of the sprint's gate-log
+section, the two tokens Check 5 searches for. This pairs with BL-392, the Check 5 `head -200`
+fix another hand is building.
+
+**Fixture.** `deploy-validate-smoke-classification`: `per_action_attribution` is added to
+`FIELDS=`, so the existing loop generates its delete mutant and its move-out-of-§3 mutant.
+New arms ONEVAR, OPFIRED and VISUAL are each keyed on their section (§3, and §4 via a new
+`sec4()`). Their mutants are no-onevar, move-onevar (the sentence moved to §3b), no-opfired,
+no-visual-tokens and move-visual (the §4 bullet moved to §4b), and each is killed by its own
+arm only. The fixture passes.
+
+**Receipt scored** in four scratch trees: tip 1, fix 0, a whole-file mention 1 (every new §3
+line and the §4 bullet moved verbatim to the end of the file, where 4 lines still carry the
+tokens), and the field bullet present without the one-mutation rule 1. It keys on §3 and §4
+isolated by heading, never on a whole-file grep.
+
+Held note (batch 177): shipped the `per_action_attribution` field, the one-live-mutation rule
+including operator-fired §2a operations, and the §4 Check 5 token bullet, with their fixture
+arms and mutants, on branch `b177-r0-steps`.
+
+verify: sh F=core/skills/ai-dlc/steps/deploy-validate.md; [ -f "$F" ] || exit 9; s3="$(awk '/^### 3\. Smoke Tests/{on=1; next} on && /^### /{exit} on{print}' "$F")"; s4="$(awk '/^### 4\. Visual Verification/{on=1; next} on && /^### /{exit} on{print}' "$F")"; [ -n "$s3" ] && [ -n "$s4" ] || exit 9; f3="$(tr '\n' ' ' <<<"$s3" | sed -e 's/\*\*//g' -e 's/[[:space:]][[:space:]]*/ /g')"; grep -qE '^- .per_action_attribution. ' <<<"$s3" || exit 1; case "$f3" in *'One live mutation per smoke run.'*) : ;; *) exit 1 ;; esac; case "$f3" in *'fired by the operator is a live mutation'*) : ;; *) exit 1 ;; esac; grep -q 'USER-CONFIRMED' <<<"$s4" && grep -q 'playwright' <<<"$s4"
