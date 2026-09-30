@@ -1248,6 +1248,8 @@ verify: sh [ -r scripts/install.sh ] && [ -r scripts/uninstall.sh ] || exit 9; c
 
 ## BL-003 — on a CONSUMER, `layer-contract-conformance-b`'s SKIP prints its sibling's name
 
+**LANDED (v0.666.0, verified 7dfe16c0).** Receipt: base 1, tip 0, literal-restored mutant 1; both shards green from the repo root.
+
 Scope matters here and the first filing of this entry got it wrong. **In this repo the shard
 names itself correctly** — it banners `layer-contract-conformance-b fixture` and closes with
 `PASS: all 17 assertions correct in shard 'b' of 'a b'`. There is no collision.
@@ -1262,9 +1264,18 @@ The runner keys verdicts on the directory, so nothing is broken. What it costs i
 verification step this repo requires of every release — read the fixture BY NAME in the full
 output — which is unsatisfiable for this pair on the only tree where it fires.
 
-Anchored on the hardcoded literal any fix must remove, not on a description of the fix.
+**The receipt is behavioural since v0.666.0.** It used to be `lacks` on the hardcoded literal, which
+rewording the literal closes without changing what either shard prints. It now builds a
+consumer-shaped tree from the working tree's two drivers, three levels below a scratch root so
+neither `validate-enforcement-map.sh` nor the contract resolves, runs both, and requires shard `b` to
+print `layer-contract-conformance-b: SKIP` and never its sibling's line; shard `a` printing its own
+SKIP line is the control that the SKIP path was reached (exit 9 if not). Scored: exit 1 on the base
+driver, exit 0 at the fix, exit 1 on a copy of the fix with the literal restored. The fix derives the
+name from the `--group` argument, not from `$0`: shard `b` `exec`s the sibling by path, so `$0` names
+the sibling in both shards. The same construction is the `skip-name` arm of
+`core/fixtures/layer-contract-conformance`, with its mutant.
 
-verify: lacks core/fixtures/layer-contract-conformance/run.sh "layer-contract-conformance: SKIP"
+verify: sh t=$(mktemp -d) || exit 9; F="$t/x/y/core/fixtures"; mkdir -p "$F/layer-contract-conformance" "$F/layer-contract-conformance-b" && cp core/fixtures/layer-contract-conformance/run.sh "$F/layer-contract-conformance/run.sh" && cp core/fixtures/layer-contract-conformance-b/run.sh "$F/layer-contract-conformance-b/run.sh" || exit 9; a=$(bash "$F/layer-contract-conformance/run.sh" 2>&1); b=$(bash "$F/layer-contract-conformance-b/run.sh" 2>&1); rm -rf "$t"; grep -q '^layer-contract-conformance: SKIP' <<<"$a" || exit 9; grep -q '^layer-contract-conformance-b: SKIP' <<<"$b" && ! grep -q '^layer-contract-conformance: SKIP' <<<"$b"
 
 ---
 
@@ -1416,7 +1427,29 @@ which is the control that the resolver does fire on an N−1 absence — the two
 distinguish "no contiguity check" from "no check ran". An anchor on the `current - 1` source
 line would have closed itself on a reformat.
 
-verify: sh t=$(mktemp -d); f="$t/a.md"; bash core/scripts/validate-audit-anchors.sh --render > "$f"; H=$(git rev-parse HEAD); printf '\n- sprint: 10\n  sha: %s\n\n- sprint: 12\n  sha: %s\n' "$H" "$H" >> "$f"; bash core/scripts/validate-audit-anchors.sh --prior-sprint-sha "$f" 13 >/dev/null 2>&1; r=$?; rm -rf "$t"; [ "$r" -eq 0 ] && exit 1 || exit 0
+**The receipt was rewritten at v0.666.0, because it demanded the posture this entry forbids.** It closed
+on a NON-ZERO exit for `{10,12} -> 13`, and both callers read non-zero as "the anchor did not resolve":
+Check 18 fails closed and Check 5 SKIPs. So the only fix it could accept was the gate-wedging one. The
+fix reports the hole as a `PENDING — contiguity` line on stderr and leaves exit 0 and the sha on
+stdout unchanged. The receipt now requires that line naming 11 with exit 0 and the sha on stdout. The
+near-miss `{10,12,11} -> 13`, out of order with no hole, must carry no such line, and `12`'s prior
+exiting 1 is kept as the control that the resolver still fires on an N-1 absence (exit 9 if either
+control moves). Scored: exit 1 on the base resolver, exit 0 at the fix, exit 1 on a copy of the fix
+with the report disabled. The scan reads the sibling `-archive.md`'s highest sprint so that a hole at
+the live/archive seam is caught. Holes inside the archive are not scanned. The
+`core/fixtures/check5-anchor-base` contiguity battery carries three mutants, one per property.
+
+**STILL OPEN ON ONE HALF, and the receipt is a conjunction for that reason.** Landed in 5634d7a0: a
+hole below the prior sprint is reported while it sits in the live file or at the live/archive seam.
+Not landed: once retro Step 5b prunes a hole past the seam into the archive INTERIOR, it becomes
+invisible again, which is this entry's heading claim ("permanently invisible") in a narrower window.
+The receipt's final clause seeds live `{13,14,15}` with archive `{9,10,12}` and asks for 16, requiring
+11 to be named. It exits 1 today, so the entry reads STILL-LIVE. Whether to scan the archive interior
+is a scope decision: the archive is contracted as "no validator, no budget", and the reference
+consumer's archive today carries 13 interior holes (189, 204, 205, 239-246, 300, 301), which a
+PENDING posture would print at every gate.
+
+verify: sh t=$(mktemp -d) || exit 9; f="$t/a.md"; n="$t/n.md"; H=$(git rev-parse HEAD); printf -- '- sprint: 10\n  sha: %s\n- sprint: 12\n  sha: %s\n' "$H" "$H" > "$f"; printf -- '- sprint: 10\n  sha: %s\n- sprint: 12\n  sha: %s\n- sprint: 11\n  sha: %s\n' "$H" "$H" "$H" > "$n"; V=core/scripts/validate-audit-anchors.sh; bash "$V" --prior-sprint-sha "$f" 12 >/dev/null 2>&1; c=$?; o=$(bash "$V" --prior-sprint-sha "$f" 13 2>"$t/e"); r=$?; bash "$V" --prior-sprint-sha "$n" 13 >/dev/null 2>"$t/ne"; nr=$?; e=$(cat "$t/e"); ne=$(cat "$t/ne"); rm -rf "$t"; [ "$c" -eq 1 ] && [ "$nr" -eq 0 ] || exit 9; grep -q 'contiguity' <<<"$ne" && exit 1; [ "$r" -eq 0 ] && [ "$o" = "$H" ] && grep -q 'PENDING — contiguity: no entry for 1 sprint(s) between 10 and prior 12: 11\.' <<<"$e" || exit 1; u=$(mktemp -d) || exit 9; printf -- '- sprint: 13\n  sha: %s\n- sprint: 14\n  sha: %s\n- sprint: 15\n  sha: %s\n' "$H" "$H" "$H" > "$u/a.md"; printf -- '- sprint: 9\n  sha: %s\n- sprint: 10\n  sha: %s\n- sprint: 12\n  sha: %s\n' "$H" "$H" "$H" > "$u/a-archive.md"; ae=$(bash "$V" --prior-sprint-sha "$u/a.md" 16 2>&1 >/dev/null); rm -rf "$u"; grep -q 'PENDING — contiguity.*: 11' <<<"$ae"
 
 ---
 
@@ -1480,6 +1513,8 @@ verify: sh git ls-files templates/ | grep -q . || exit 9; [ -z "$(git ls-files t
 
 ## BL-020
 
+**LANDED (v0.666.0, verified 7fb6845d).** Receipt: base 1, tip 0, SAW_INFLIGHT-pinned mutant 1; both blocks flag, and output is byte-identical on this tree and a clone of graph.
+
 **Two of the budget script's six finding channels set no flag, and the summary closes them with an
 unqualified PASS.** `core/scripts/validate-artifact-budget.sh` has six finding channels — `:1025` over
 budget, `:1084` off-schema section, `:1118` marked-superseded content, `:1149` struck In-Flight rows,
@@ -1516,7 +1551,14 @@ Behavioural, under the step file's literal flags. The `WARN:` row is the control
 working reports STILL-LIVE rather than closing. Proven able to fire: with one line added setting a flag
 inside the struck-row block of a copy, the same predicate exits 0.
 
-verify: sh d=$(mktemp -d); mkdir -p "$d/_bmad-output"; printf "## Pipeline Position\n- x\n## Sprint Context\n- x\n## Recent Activity\n- x\n## Open Items\n- x\n## Locked Decisions\n- x\n## In-Flight Teammates\n| teammate | deliverable | dispatched-at | note | status |\n| --- | --- | --- | --- | --- |\n| ~~a~~ | t | t | n | in-flight |\n## Context Reminders\n- x\n" > "$d/_bmad-output/pipeline-snapshot.md"; printf "tiny\n" > "$d/_bmad-output/gate-log.md"; o=$(bash core/scripts/validate-artifact-budget.sh --root "$d" --warn-only --fail-on pipeline-snapshot.md 2>&1); rm -rf "$d"; [ "$(grep -cF "WARN: In-Flight Teammates carries struck-through row(s)." <<<"$o")" -ge 1 ] || exit 1; [ "$(grep -cF "is NOT a clean result" <<<"$o")" -ge 1 ] || [ "$(grep -cxF "PASS  every measured living artifact is within its Rule 25(d) budget." <<<"$o")" -eq 0 ]
+**The receipt was tightened at v0.666.0.** It used to close on EITHER the qualified summary OR the
+PASS line being absent, so a fix that merely deleted the PASS line from every run satisfied it. It
+now requires the qualified summary naming the struck-row channel AND no bare PASS line. Scored: exit 1
+on the base script, exit 0 at the fix, exit 1 on a copy of the fix with `SAW_INFLIGHT=1` pinned to 0.
+The marked-superseded half is held by `core/fixtures/budget-summary-verdict` arms 11 and 11b, and by
+mutant M5.
+
+verify: sh d=$(mktemp -d); mkdir -p "$d/_bmad-output"; printf "## Pipeline Position\n- x\n## Sprint Context\n- x\n## Recent Activity\n- x\n## Open Items\n- x\n## Locked Decisions\n- x\n## In-Flight Teammates\n| teammate | deliverable | dispatched-at | note | status |\n| --- | --- | --- | --- | --- |\n| ~~a~~ | t | t | n | in-flight |\n## Context Reminders\n- x\n" > "$d/_bmad-output/pipeline-snapshot.md"; printf "tiny\n" > "$d/_bmad-output/gate-log.md"; o=$(bash core/scripts/validate-artifact-budget.sh --root "$d" --warn-only --fail-on pipeline-snapshot.md 2>&1); r=$?; rm -rf "$d"; [ "$r" -eq 0 ] || exit 1; [ "$(grep -cF "WARN: In-Flight Teammates carries struck-through row(s)." <<<"$o")" -ge 1 ] || exit 1; [ "$(grep -cF "reported struck-through In-Flight row(s)" <<<"$o")" -ge 1 ] && [ "$(grep -cF "is NOT a clean result" <<<"$o")" -ge 1 ] && [ "$(grep -cxF "PASS  every measured living artifact is within its Rule 25(d) budget." <<<"$o")" -eq 0 ]
 
 ## BL-024
 
