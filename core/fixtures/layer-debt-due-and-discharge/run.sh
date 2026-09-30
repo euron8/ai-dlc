@@ -50,7 +50,7 @@ command -v python3 >/dev/null 2>&1 || { echo "FIXTURE ERROR: python3 absent" >&2
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
-EXPECTED_ASSERTIONS=64
+EXPECTED_ASSERTIONS=65
 fails=0; made=0
 ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
@@ -808,6 +808,13 @@ if grep -q 'wstr\.md.*not an array' <<<"$wbad" && grep -q 'wstr\.md' <<<"$wund";
 else
   bad "a bare-string \`withdraws\` was not reported as malformed, or was honoured"
   show "$wout"
+fi
+wjson="$(bash "$AUDIT" --register "$WREG" --json 2>&1)"
+if [ "$(python3 -c 'import json,sys; print(len(json.loads(sys.stdin.read()).get("unresolved_withdrawals", [])))' <<<"$wjson" 2>/dev/null)" = 4 ]; then
+  ok "--json carries all 4 unresolved withdrawals under \`unresolved_withdrawals\`"
+else
+  bad "--json does not carry exactly 4 unresolved withdrawals — the machine channel drops what the text channel reports"
+  show "$wjson"
 fi
 if grep -q 'OWED-WO1' <<<"$wout"; then
   ok "withdrawing the prose of a row that declared an \`owed\` leaves the debt OPEN — only \`closes_owed\` discharges"
