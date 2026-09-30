@@ -26,8 +26,10 @@
 # Denied:  Agent, Skill, TaskCreate, and Write/Edit under _bmad-output/.
 #          Per Rule 28 delegation is the default, so the lead cannot advance
 #          the pipeline without one of these. This is the whole surface.
-#          A dispatched teammate's (agent_id) Write/Edit under _bmad-output/ is
-#          the one exception -- allowed and logged, see Check 3.
+#          Two exceptions, both in Check 3: a dispatched teammate's (agent_id)
+#          Write/Edit under _bmad-output/ is allowed and logged; and in an
+#          /ai-dlc-update session the whole surface is allowed and NOT logged --
+#          its dispatches and its writes alike, since the updater advances no sprint.
 # Allowed: Read, Grep, Glob, Bash, and everything else -- so the lead can
 #          investigate the operator's question, AND so it can always run
 #          `rm -f _bmad-output/pipeline-paused.flag` to resume. Allowing Bash
@@ -166,7 +168,32 @@ if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
   # transcripts: 69 carry a real Skill(ai-dlc*) tool_use, the pattern matches
   # exactly those 69 and 0 others -- and the control is that the session which
   # wrote this comment mentions the string four times and matches zero.
-  LAST_SKILL=$(grep -oE '<command-name>/ai-dlc(-update)?</command-name>|"name":"Skill","input":\{"skill":"ai-dlc(-update)?"' "$TRANSCRIPT" 2>/dev/null | tail -1)
+  #
+  # THE TYPED FORM IS ANCHORED ON THE HARNESS'S OWN USER RECORD, AND THE BARE MARKER WAS
+  # NOT STRUCTURAL. JSON escapes quotes, not `<` or `>`, so `<command-name>/ai-dlc-update
+  # </command-name>` quoted inside a tool_result, an assistant text block, a thinking block
+  # or a compaction summary serialises byte-identically to the real one. The reference
+  # consumer wrote that literal into its push-candidate ledger, which retro sends pipeline
+  # sessions to READ: one Read of the ledger turned a `/ai-dlc` session into an "updater"
+  # and switched its pause off. A typed slash command is written as a user record whose
+  # message is `"role":"user","content":"<command-message>X</command-message>\n<command-name>
+  # /X</command-name>...` -- measured over the reference consumer's 1182 transcripts
+  # (top-level and subagent): 296 real typed ai-dlc invocations, the anchored form matches
+  # all 296 and nothing else; the bare marker matches 315 lines, the other 19 all mentions
+  # (10 compaction summaries, 4 tool_results, 3 thinking, 2 tool_use inputs). Across every
+  # local project, 302 of 302 real typed commands of any name carry the same shape.
+  # `"role":"user",` IS PART OF THE ANCHOR ON PURPOSE. Without it the pattern is satisfied
+  # by a tool_result whose output STARTS with the pair -- a Bash `sed -n`/`grep -A` of the
+  # ledger landing on that line -- because a tool_result's string is also `"content":"...`.
+  # Measured on a seeded record of exactly that shape: `"content":` anchor 1, this anchor 0.
+  # The two agree on every real line of both corpora, so the corpus cannot choose between
+  # them and the seed does.
+  # WHAT THIS ACQUITS: a session whose only `/ai-dlc` trace is a MENTION now reads as no
+  # skill at all, so Check 2z below does not gate it. Measured: 2 of 227 marker-carrying
+  # reference-consumer transcripts change class this way -- one a subagent file whose trace
+  # is assistant text, one whose trace is a continuation summary. Neither was a pipeline
+  # invocation in that file; both were being gated on a quotation.
+  LAST_SKILL=$(grep -oE '"role":"user","content":"<command-message>ai-dlc(-update)?</command-message>\\n<command-name>/ai-dlc(-update)?</command-name>|"name":"Skill","input":\{"skill":"ai-dlc(-update)?"' "$TRANSCRIPT" 2>/dev/null | tail -1)
   case "$LAST_SKILL" in
     *'/ai-dlc-update</command-name>') UPDATER_SESSION=1 ;;
     *'"skill":"ai-dlc-update"')       UPDATER_SESSION=1 ;;
@@ -553,13 +580,16 @@ case "$TOOL_NAME" in
     # In an /ai-dlc-update session these advance nothing: the updater fans out
     # over its own reconcile, it does not run a sprint. Denying here is what
     # pushed the work inline. In a pipeline session they advance the pipeline
-    # and the deny stands.
+    # and the deny stands -- for a teammate too; the teammate exception is on
+    # the Write arm below, beside the updater's.
     [ "$UPDATER_SESSION" -eq 1 ] || ADVANCING=1
     ;;
   Write|Edit|MultiEdit|NotebookEdit)
     # Only artifact production under _bmad-output/ counts. Escalations
     # (docs/escalations/) and source edits are NOT denied -- the lead may
-    # legitimately need to write an escalation while paused.
+    # legitimately need to write an escalation while paused. Two exceptions sit
+    # in the last arm below: an /ai-dlc-update session (neither denied nor
+    # logged) and a dispatched teammate (allowed and logged).
     FP=$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.notebook_path // empty')
     case "$FP" in
       # _bmad-output/ai-dlc-update/** is the UPDATER's scratch space (reconcile
@@ -619,8 +649,28 @@ case "$TOOL_NAME" in
       # deliberately never denied while paused, so no denial was ever measured against it.
       */_bmad-output/pipeline-snapshot-history.md|_bmad-output/pipeline-snapshot-history.md) ;;
 
+      # AN /ai-dlc-update SESSION WRITES HERE UNDENIED AND UNLOGGED -- the exemption the
+      # dispatch arm above already makes, extended to the write surface it was never extended
+      # to. The updater advances no sprint, and its own remedies land here: apply.sh's WORKLIST
+      # `artifact-derivations` rows name Edits under `_bmad-output/planning-artifacts/`. The
+      # pause flag is raised by `ai-dlc-pause.sh` on EVERY operator message while a snapshot
+      # exists, so every operator reply in an updater session re-armed it and the updater's
+      # prescribed Edit was denied -- filed by the reference consumer against the line this
+      # replaced. Not logged either: `ACK_TEAMMATE_WRITE` records a quiesce approximation for a
+      # PIPELINE, and an updater session has no pipeline in flight to approximate, so a
+      # teammate's write in one is silent exactly as the lead's is.
+      #
+      # WHAT THIS ACQUITS, stated: a session whose LAST invoked skill was ai-dlc-update and which
+      # then writes pipeline artifacts without re-invoking /ai-dlc is let through -- the same
+      # acquittal the dispatch arm grants. A typed `/ai-dlc`, or a `Skill(ai-dlc)` tool_use or
+      # payload, resets it (the recency rule at the scan). A MENTION of the typed marker does not
+      # set it: the scan's anchor is structural, and that anchor ships with this arm because a
+      # quoted marker would otherwise turn this arm into a pause bypass for any pipeline session
+      # that Reads a file carrying one.
       */_bmad-output/*|_bmad-output/*)
-        if [ -n "$AGENT_ID" ]; then TEAMMATE_WRITE=1; else ADVANCING=1; fi ;;
+        if [ "$UPDATER_SESSION" -eq 1 ]; then :
+        elif [ -n "$AGENT_ID" ]; then TEAMMATE_WRITE=1
+        else ADVANCING=1; fi ;;
     esac
     ;;
 esac
