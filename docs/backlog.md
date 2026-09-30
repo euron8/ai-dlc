@@ -4013,7 +4013,14 @@ the default mode only. No run showed that either mode exits 2, rather than 0 wit
 when one of its git calls fails. A receipt must force a git failure inside each mode and read the
 exit status and the stdout row count.
 
-verify: manual
+Bound at batch 174 in `preclassify-rename-row`. Its git shim, the technique arm c already uses,
+forces a 128 on `ls-files`, `rev-parse` and `hash-object` under `--untangle` and on `rev-parse`
+under `--templates`. Each cell must exit 2, record a forced hit, and name the call. The row count
+is printed beside each cell. A per-mode transparent-shim control has to classify its seeded row
+first. Two mutants each fail exactly their own cell: one drops `--untangle`'s `ls-files` `|| pc_fail`,
+and the other disarms the USR1 trap before `--templates`' loop.
+
+verify: sh f=core/fixtures/preclassify-rename-row/run.sh; [ -f "$f" ] || exit 9; o="$(bash "$f" 2>&1)" || exit 1; grep -q '^  ok    BL-308 U1-U3 T1: ' <<<"$o" && grep -q '^  ok    MUTANT (BL-308 untangle-nols) fails exactly \[U1\]$' <<<"$o" && grep -q '^  ok    MUTANT (BL-308 templates-notrap) fails exactly \[T1\]$' <<<"$o"
 
 ## BL-309 — ENOSPC in the middle of a memo `.c` fill can cache truncated content with status 0
 
