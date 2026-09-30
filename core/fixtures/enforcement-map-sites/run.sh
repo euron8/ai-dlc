@@ -1699,16 +1699,45 @@ restore
 # ARM 4 — THE CORPUS COLLAPSES. The subject set is derived by `find`, not `git ls-files`,
 # precisely because this fixture seeds a copy with no `.git` — and an empty corpus prints
 # the same clean line as a fully documented one. The floor is what refuses.
+#
+# THE MUTATION IS ADDRESSED TO I59'S OWN CORPUS LINE, and that is measured, not tidiness. The
+# `-type f -name '*.sh' -not -path` text is not I59's: the same `find` opens I60's corpus in
+# `i60_ghosts_batch`, I83's and I84's, so an unaddressed `s@@@` rewrote four lines, sent I59,
+# I60 and I83 red together, and `vrun` -- which reads only I59 -- could not see the other two
+# die. The address is the one thing I59's line carries that the other three do not: it writes
+# `$i59_flist`. Two guards keep it honest. The diff must be EXACTLY one line, so an address that
+# widens back or matches a second site is FIXTURE BROKEN rather than a kill; and the sibling
+# arms that share the anchor are run in the same arm and must stay GREEN, so the mutant is
+# shown to fail I59 and nothing else. Under the unaddressed spelling the sibling run exits 1.
 V_BAK="$(mkbak "$V")"
-sed "s@-type f -name '\*\.sh' -not -path@-type f -name '*.zzz' -not -path@" "$V_BAK" > "$V"
+sed "/> \"\$i59_flist\"\$/s@-type f -name '\*\.sh' -not -path@-type f -name '*.zzz' -not -path@" "$V_BAK" > "$V"
+# Captured before it is counted: under `pipefail` a `diff` that finds a difference exits 1, so
+# `diff | grep -c` fails the pipeline on exactly the input it exists to count and the default
+# overwrites the right answer with 0.
+a33_diff="$(diff "$V_BAK" "$V")"
+a33_nchg="$(grep -c '^<' <<<"$a33_diff")" || a33_nchg=0
 if cmp -s "$V_BAK" "$V"; then
   bad "FIXTURE BROKEN: the I59 corpus mutation matched nothing, so the floor arm is unproven"
+elif [ "$a33_nchg" -ne 1 ]; then
+  bad "FIXTURE BROKEN: the I59 corpus mutation changed $a33_nchg line(s) of the validator, not exactly 1 -- it is editing a corpus I59 does not own, and a kill read off it is not I59's"
 else
   out="$(vrun)"
   if grep -q "I59 found only 0 shipped script(s)" <<<"$out"; then
     ok "a corpus derivation that returns nothing FAILS I59 loudly (scanning zero files is not the same answer as finding zero findings)"
   else
     bad "I59's corpus derivation matched no files and the invariant reported clean — every mode in core/ was unchecked and the run said so nowhere"
+  fi
+  # THE COLLATERAL CONTROL. The arms whose `find` shares the anchor, run against the SAME
+  # mutant. Exit 2 is a selection failure and is routed to FIXTURE BROKEN, never scored; the
+  # positive conjunct is the verdict block's `OK:` line, which a run that never reached it
+  # cannot print.
+  a33_sib="$(bash "$V" --arms I60,I83,I84 2>&1)"; a33_src=$?
+  if [ "$a33_src" = "2" ]; then
+    [ -n "$VRUN_BROKEN" ] && printf 'FIXTURE BROKEN: validate-enforcement-map.sh --arms I60,I83,I84 exited 2 under the I59 corpus mutant, a selection failure rather than a finding: %s\n' "$a33_sib" >> "$VRUN_BROKEN"
+  elif [ "$a33_src" = "0" ] && grep -q '^OK: ' <<<"$a33_sib"; then
+    ok "the I59 corpus mutant leaves I60, I83 and I84 green -- the arms sharing its find anchor are not collateral of this kill"
+  else
+    bad "the I59 corpus mutant also broke a sibling arm (--arms I60,I83,I84 exited $a33_src) -- the mutation is editing a corpus I59 does not own, and vrun cannot see it: $(printf '%s\n' "$a33_sib" | grep -m3 -E '^(FAIL|ERROR)' | tr '\n' ' ')"
   fi
 fi
 cp "$V_BAK" "$V"; rm -f "$V_BAK"
