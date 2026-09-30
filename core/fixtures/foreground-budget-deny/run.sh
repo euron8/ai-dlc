@@ -23,6 +23,11 @@
 #   NONBASH     a Read carrying timeout 600000                    -> allow
 #   NODETECTOR  no env, no detector, timeout 600000 -> allow, and stderr says why
 #   MALFORMED   unparseable stdin -> allow, and stderr says fail-open
+#   PUSH        `git push -u origin HEAD` and `cd /x && git push`, foreground at 600000 -> allow
+#               (the pipeline requires a foreground push at that timeout)
+#   PUSHNEAR    `echo git push` and `git log --grep=push` at 600000 -> deny
+#   AGENT       a payload carrying `agent_id`, 600000 -> allow; the same payload without it
+#               -> deny (Check A never counts a sidechain call)
 #   EXIT        every call above exits 0
 #
 # MUTANTS. Each is a copy of the hook, guarded with `cmp -s` so a `sed` that matched nothing
@@ -65,6 +70,8 @@ call() {
 }
 
 bash_call() { jq -nc --argjson t "$1" --argjson bg "$2" '{tool_name:"Bash", tool_input:({command:"bash scripts/ai-dlc/ci-local.sh"} + (if $t == null then {} else {timeout:$t} end) + (if $bg then {run_in_background:true} else {} end))}'; }
+# cmd_call <command> <agent_id-or-empty> -> a foreground Bash call at timeout 600000
+cmd_call() { jq -nc --arg c "$1" --arg a "$2" '{tool_name:"Bash", tool_input:{command:$c, timeout:600000}} + (if $a == "" then {} else {agent_id:$a} end)'; }
 
 # score <hook> -> prints the space-separated set of arms that FAILED, sorted, or nothing
 score() {
@@ -110,6 +117,21 @@ score() {
   [ "$DEC" = allow ] || note MALFORMED
   case "$ERR_TXT" in *'not readable JSON'*'fail-open'*) ;; *) note MALFORMED ;; esac
 
+  call "$h" "$REAL" - "$(cmd_call 'git push -u origin HEAD' '')"; chk_rc
+  [ "$DEC" = allow ] || note PUSH
+  call "$h" "$REAL" - "$(cmd_call 'cd /x && git push' '')"; chk_rc
+  [ "$DEC" = allow ] || note PUSH
+
+  call "$h" "$REAL" - "$(cmd_call 'echo git push' '')"; chk_rc
+  [ "$DEC" = deny ] || note PUSHNEAR
+  call "$h" "$REAL" - "$(cmd_call 'git log --grep=push' '')"; chk_rc
+  [ "$DEC" = deny ] || note PUSHNEAR
+
+  call "$h" "$REAL" - "$(cmd_call 'bash scripts/ai-dlc/ci-local.sh' 'a1b2c3')"; chk_rc
+  [ "$DEC" = allow ] || note AGENT
+  call "$h" "$REAL" - "$(cmd_call 'bash scripts/ai-dlc/ci-local.sh' '')"; chk_rc
+  [ "$DEC" = deny ] || note AGENT
+
   [ "$exitbad" -eq 0 ] || note EXIT
   printf '%s\n' "$failed" | tr ' ' '\n' | sed '/^$/d' | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//'
 }
@@ -122,7 +144,7 @@ printf '  detector  %s\n' "$DETECTOR"
 [ -x "$HOOK" ] || bad "hook is not executable: $HOOK -- settings.json invokes it as a bare path"
 GOT="$(score "$HOOK")"
 if [ -z "$GOT" ]; then
-  ok "shipped hook passes every arm (OVER REASON BG NOTIMEOUT BOUNDARY ENV DEFAULT NONBASH NODETECTOR MALFORMED EXIT)"
+  ok "shipped hook passes every arm (OVER REASON BG NOTIMEOUT BOUNDARY ENV DEFAULT NONBASH NODETECTOR MALFORMED PUSH PUSHNEAR AGENT EXIT)"
 else
   bad "shipped hook fails arm(s): $GOT"
 fi
@@ -160,9 +182,9 @@ CTL="$(score "$MUT/hook-control.sh")"
 
 # Expected sets are written in C-locale sorted order, which is what score() prints.
 # Mutants 1 and 12 remove the whole deny channel rather than one guard, so they fail every arm
-# holding a deny cell; each of the other ten fails its own arm alone.
+# holding a deny cell; each of the other thirteen fails its own arm alone.
 # 1. warning-only: the same text as context, no decision. The rejected design.
-mut warn-only "BOUNDARY DEFAULT ENV OVER REASON" \
+mut warn-only "AGENT BOUNDARY DEFAULT ENV OVER PUSHNEAR REASON" \
   -e '/permissionDecision: "deny",/d' -e 's/permissionDecisionReason: \$reason/additionalContext: $reason/'
 # 2. denies a call already sent to the background.
 mut denies-background "BG" -e '/and \.tool_input\.run_in_background != true/d'
@@ -187,8 +209,14 @@ mut reason-drops-background "REASON" -e 's/Re-issue the same call with run_in_ba
 # 11. the deny path exits non-zero.
 mut deny-exits-nonzero "EXIT" -e '$s/^exit 0$/exit 2/'
 # 12. the whole subject replaced by silence: every presence-shaped arm must fail.
-mut silence "BOUNDARY DEFAULT ENV MALFORMED NODETECTOR OVER REASON" -e '2i\
+mut silence "AGENT BOUNDARY DEFAULT ENV MALFORMED NODETECTOR OVER PUSHNEAR REASON" -e '2i\
 exit 0'
+# 13. no push allowance: the pipeline's required foreground push is denied.
+mut drop-push "PUSH" -e '/and (is_push | not)/d'
+# 14. the push match loses its start anchor, so `echo git push` rides the exemption.
+mut push-unanchored "PUSHNEAR" -e 's/test("^\[ \\t\]\*(cd/test("(cd/'
+# 15. no agent_id exit: a teammate's call is denied though Check A never counts it.
+mut drop-agent "AGENT" -e '/and ((\.agent_id \/\/ "") | tostring) == ""/d'
 
 [ "$n_mut" -gt 0 ] && [ "$n_kill" -eq "$n_mut" ] \
   && ok "$n_kill of $n_mut mutants killed" \

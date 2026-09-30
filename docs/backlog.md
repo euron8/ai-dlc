@@ -2733,9 +2733,14 @@ directory. The read-set map has no entry for the new directory; the operator owe
 
 Held note (batch 177): the hook, its registration, the fixture and its packaging entries shipped on branch
 `b177-r0-hook`. Receipt scored four ways: tip (no hook) exits 1, fix exits 0, a warning-only hook exits 1,
-and a hook that also denies `run_in_background: true` exits 1.
+and a hook that also denies `run_in_background: true` exits 1. Branch `b177-r0-hook2` exempts a
+`git push` at the command start, because four pipeline instructions require it in the foreground at
+`timeout: 600000` and both remedies the deny offers break that call, and a call carrying `agent_id`,
+because Check A filters `!r.isSidechain` and never counts one; Check A still counts a long foreground
+push. Re-scored: tip exits 1, fix exits 0, warning-only exits 1, denies-background exits 1, and the
+unexempted hook from `fc1ae2a9` exits 1.
 
-verify: sh H=core/hooks/ai-dlc-foreground-budget.sh; command -v jq >/dev/null 2>&1 || exit 9; [ -f "$H" ] || exit 1; grep -q 'ai-dlc-foreground-budget.sh' templates/settings.json.template || exit 1; d() { printf '{"tool_name":"Bash","tool_input":{"command":"x"%s}}' "$1" | AI_DLC_STEERING_BUDGET=120 CLAUDE_PROJECT_DIR=. bash "$H" 2>/dev/null | jq -r '.hookSpecificOutput | select(.permissionDecision == "deny") | .permissionDecisionReason' 2>/dev/null; }; case "$(d ',"timeout":600000')" in *'run_in_background: true'*) ;; *) exit 1 ;; esac; [ -z "$(d ',"timeout":600000,"run_in_background":true')" ] || exit 1; [ -z "$(d ',"timeout":120000')" ] || exit 1; [ -z "$(d '')" ]
+verify: sh H=core/hooks/ai-dlc-foreground-budget.sh; command -v jq >/dev/null 2>&1 || exit 9; [ -f "$H" ] || exit 1; grep -q 'ai-dlc-foreground-budget.sh' templates/settings.json.template || exit 1; d() { printf '{"tool_name":"Bash"%s,"tool_input":{"command":"%s"%s}}' "$3" "$1" "$2" | AI_DLC_STEERING_BUDGET=120 CLAUDE_PROJECT_DIR=. bash "$H" 2>/dev/null | jq -r '.hookSpecificOutput | select(.permissionDecision == "deny") | .permissionDecisionReason' 2>/dev/null; }; case "$(d x ',"timeout":600000')" in *'run_in_background: true'*) ;; *) exit 1 ;; esac; [ -z "$(d x ',"timeout":600000,"run_in_background":true')" ] || exit 1; [ -z "$(d x ',"timeout":120000')" ] || exit 1; [ -z "$(d x '')" ] || exit 1; [ -z "$(d 'git push -u origin HEAD' ',"timeout":600000')" ] || exit 1; [ -n "$(d 'echo git push' ',"timeout":600000')" ] || exit 1; [ -z "$(d x ',"timeout":600000' ',"agent_id":"a1"')" ]
 
 ## BL-394 — `retro.md` Step 1 cuts the retro branch from `origin/main` and drops every sprint commit made after the sprint PR squash-merged
 
