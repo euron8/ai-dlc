@@ -3226,7 +3226,21 @@ question to answer first.
 **Tiered NOTE.** Recorded so the refutation is not re-derived and the enforcer question is not
 re-opened blind.
 
-verify: manual
+**LANDED (v0.666.0, verified 12942cfe).** Claim by claim. The HEADLINE ("invisible to intake")
+was already dead and stays dead: re-derived at `2e7c227c`, `requirements.md` mandates the
+`docs/adr/` corpus and fails its gate without the prior-decision search. The VOCABULARY GAP is
+closed: both carriers of the disposition vocabulary (`steps/requirements.md` and
+`steps/discovery.md` — derived as every step file carrying `one-line disposition per hit (`; no
+script, validator, template or role file parses it, and `docs/vocabulary-index.md` does not
+register it) now read `superseded` / `still binding` / `not relevant` / `deferred-unfiled`, and a
+`deferred-unfiled` hit MUST be filed as a carry-over backlog item before the gate passes.
+`core/fixtures/requirements-step` arm (h) pins the four-member set across the derived carriers,
+with mutants dropping the member from one carrier and from every carrier. "NO ENFORCER IS
+CONSTRUCTIBLE" SURVIVES: this adds a slot and a mandate the step author obeys, not a mechanism
+that detects an ADR deferring work. OWNERSHIP was settled by the batch that authorised the
+upstream change.
+
+verify: sh n=0; for f in core/skills/ai-dlc/steps/*.md; do x="$(tr '\n' ' ' < "$f" | tr -s ' ')"; case "$x" in *'one-line disposition per hit ('*) ;; *) continue ;; esac; x="${x#*one-line disposition per hit (}"; s="$(grep -oE '`[^`]+`' <<<"${x%%)*}" | tr -d '`' | LC_ALL=C sort | tr '\n' ,)"; [ "$s" = 'deferred-unfiled,not relevant,still binding,superseded,' ] || exit 1; n=$((n+1)); done; [ "$n" -ge 2 ] || exit 1; exit 0
 
 ## BL-258 — `agent-definition-render`'s `check-is-presence-only` mutant is killed by two arms under the pool and by one arm solo, so a green tree goes red on a run that changed nothing
 

@@ -10,7 +10,7 @@ toggle: a fix that widens the merge to every variant, or a join that never moved
 `carry-over`/`feature`, both look like a clean tree to a check that reads only one
 side.
 
-Seven arms, each proven against a self-built `mktemp` offender and near-miss before
+Eight arms, each proven against a self-built `mktemp` offender and near-miss before
 the corpus is ever read:
 
 | Arm | Subject | Claim |
@@ -22,6 +22,7 @@ the corpus is ever read:
 | (e) | `requirements.md` | names `architecture-impact.md` and the token `architecture_impact:` |
 | (f) | `SKILL.md` | Rule 8's `lightweight` row names `requirements` |
 | (g) | `validate-draft-stamps.sh` | `DRAFTS=` contains `requirements-context` |
+| (h) | every step file carrying `one-line disposition per hit (` | the carrier set is DERIVED (at least two); the backtick members of that parenthetical, lines joined, are identical across carriers and are exactly `superseded` / `still binding` / `not relevant` / `deferred-unfiled`; each carrier states the `deferred-unfiled` filing mandate. Two mutants on a copy of the steps dir: drop the member from one carrier (disagreement) and from every carrier (agreement on the wrong set) |
 
 ## Why the grammar is not a bare substring match
 
