@@ -3335,6 +3335,10 @@ verify: sh n=0; for f in core/skills/ai-dlc/steps/*.md; do x="$(tr '\n' ' ' < "$
 
 ## BL-258 — `agent-definition-render`'s `check-is-presence-only` mutant is killed by two arms under the pool and by one arm solo, so a green tree goes red on a run that changed nothing
 
+Discharges the reference consumer's `PC-S315-AGENT-DEFINITION-RENDER-ENTANGLEMENT-ARM-FIRES-UNDER-THE-PRE-PUSH-POOL`,
+filed 2026-09-29 on the byte-identical failure line after it deferred the consumer's 0.663.0 -> 0.664.0
+self-update.
+
 **DEFECT.** During batch 117's pole calibration — three serial full `AI_DLC_FIXTURE_NO_SKIP=1` gate
 runs in a `file://` clone of `origin/main` at `83747ef4`, no change between runs — run 2 went red on
 exactly one unit while runs 1 and 3 were green 21/21. The failing line, verbatim from the pool's

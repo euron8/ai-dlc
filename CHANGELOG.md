@@ -15,6 +15,77 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.666.0] - 2026-09-29
+
+A backlog drain. Every live backlog entry was re-adjudicated against the tree; this release ships
+the fixes that were finished, discharges two consumer candidates, and carries a brief asking the
+reference consumer to close fourteen candidates no upstream release will ever discharge. Fixes:
+`BL-028`, `BL-038`, `BL-048`, `BL-096`, `BL-097`, `BL-098`, `BL-130`, `BL-195`, `BL-214`,
+`BL-215`, `BL-258`, `BL-273`, `BL-312`, `BL-332`, `BL-377`, and `BL-142`'s engine half.
+
+### Consumer candidates
+
+- **`PC-S315-AGENT-DEFINITION-RENDER-ENTANGLEMENT-ARM-FIRES-UNDER-THE-PRE-PUSH-POOL`** (`BL-258`).
+  Mutant `check-is-presence-only` replaced `cmp` with `true`. Under `pipefail`, `true` can exit
+  before the writer finishes, the writer takes EPIPE, and the renderer scores the role drifted.
+  Forced deterministically by delaying the writer: `true` gives `3 1 1`, a draining sink `3 1 0`.
+  The mutant now drains its input (`cat >/dev/null`); `mut()` refuses any mutation that pipes into
+  a command that never reads; every entanglement verdict prints each arm's observed result. Thirty
+  concurrent runs: 0 red, against 3 of 30 with the old mutant. The renderer itself was correct.
+- **`PC-S309-ADR-DEFERRED-WORK-HAS-NO-CARRIER-INTO-BACKLOG`** (`BL-215`). The prior-decision
+  disposition vocabulary in `steps/requirements.md` and `steps/discovery.md` gains
+  `deferred-unfiled`, which must be filed as a carry-over item before the gate passes.
+  `requirements-step` derives every carrier of the vocabulary and requires them to agree.
+- **`docs/reviews/graph-consumer-owned-close-brief.md`**, for the operator to carry into a graph
+  session. Eleven candidates name only files the distribution does not ship (`core-paths.sh
+  --is-core` exit 1 on every path); three more were adjudicated here and their remedies measured not
+  to be the fix. Rehearsed on a copy of the consumer's ledger with its installed rotator: 14 move,
+  live candidates 31 -> 17, no other id moved.
+
+### Fixtures that could not fail
+
+- **`BL-273`.** `enforcement-map-derivations` enumerated arms with `^A[0-9]{2}_`, so the lettered
+  arms `A27b` and `A27c` never ran. `A27c` was dead a second way: it printed FAIL and returned in a
+  way its shard counted as a pass. Both run now; each fixture counts the arms it DEFINES against the
+  arms it DISPATCHES and refuses on a mismatch; `--run-one` refuses an undispatched name.
+  `enforcement-map-sites` carried the same enumerator and gets the same self-check (40 of 40 today).
+- **`BL-332`.** `schema-install-fallback` arm E asserted the install's docs unchanged, true only
+  because they were in sync. Arm E2 seeds a stale region in the install's `retro.md` and requires a
+  foreign-root write to rewrite it; both mutants leave arm E green and fail E2 alone.
+
+### Renderers, validators and audits
+
+- **`BL-096`, `BL-097`, `BL-098`.** `render-invariant-index.sh` refuses an invariant id declared by
+  two group headers; `render-vocabulary-index.sh` refuses a JSON key repeated in one object and a
+  vocabulary name used twice. Each previously kept one copy and exited 0. The real indexes are
+  byte-identical.
+- **`BL-130`.** `validate-shell-portability.sh` arm S12 reports a GNU regex escape (`\b \B \< \>
+  \w \W \s \S \d`) reaching bash 3.2's `[[ =~ ]]`, where it matches nothing, inline or through a
+  variable assigned anywhere in the file. False-positive set on the tracked corpus: 0 of 32 real
+  tests.
+- **`BL-312`.** `audit-rule-files.sh` exits 2 naming the cause when `core-paths.sh --list` times
+  out, fails or returns nothing, where it scored every owner `unknown` and counted it local.
+- **`BL-195`.** The suppression-lifetime expiry FAIL names the verdict row's timestamp and says it
+  is the PREVIOUS gate's recorded verdict. The stale read itself stands; the entry stays open.
+- **`BL-214`.** The artifact-path migrator lets a readable `**Sprint:**` header outrank the number
+  in a legacy `story-<A>-<B>` name. On the consumer's 786 such files it moves exactly the 146 whose
+  header names another sprint; move, refusal and collision counts are unchanged.
+- **`BL-377`.** `partition-document.sh` tracks the opening fence's run and closes only on a run at
+  least as long, and ignores `##` inside a multi-line HTML comment. Over 7048 consumer documents,
+  1 map changed, and it carries the comment shape.
+- **`BL-142`, engine half.** The layer-adjudication register gains an optional `withdraws` field;
+  `audit-layer-debt.sh` drops a withdrawn row from UNDECLARED and reports a withdrawal that resolves
+  to nothing. The consumer's 655-row register renders byte-identically. Teaching the field to the
+  adjudicator is an update-skill change and ships with the next release that touches that file.
+
+### Steps and roles
+
+- **`BL-028`, `BL-038`.** `steps/sprint-review.md` §3: a deferred environmental seam is filed as a
+  carry-over in the same step, and an un-exercised decision branch gets a passive carry-over. Pinned
+  by the new shipping fixture `review-carry-over-clauses`.
+- **`BL-048`.** `team-roles/dev.md` item 15 gains an edit-already-present check and a wall-clock
+  ordering rule (N >= 10 clean real-process runs).
+
 ## [0.665.0] - 2026-09-29
 
 A single planning document is now reviewed and repaired one agent per section instead of one
