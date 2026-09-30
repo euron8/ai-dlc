@@ -722,7 +722,7 @@ verify: sh P=core/skills/ai-dlc-update/reconcile/preclassify.sh; [ -f "$P" ] || 
 
 ## BL-098 — two blocks may declare the same vocabulary NAME, and the index renders the row twice
 
-**LANDED (v0.666.0, verified 23a85f54).** `MARKER_AWK` keeps a file-scope `seenname[]` and emits
+**FIXED IN v0.666.0, pending the post-merge close.** `MARKER_AWK` keeps a file-scope `seenname[]` and emits
 `#DUPNAME`; the corpus section refuses, naming both lines. Receipt kept, because it drives the
 shipping renderer on a seeded copy: tip 0, base 1, fix-reverted mutant 1. Fixture arms m23 / n2.
 
@@ -760,7 +760,7 @@ verify: sh R=scripts/render-vocabulary-index.sh; M=scripts/validate-enforcement-
 
 ## BL-097 — the vocabulary renderer declares TWO populations and only one of them refuses a repeated declaration
 
-**LANDED (v0.666.0, verified 23a85f54).** `SCHEMA_PY` loads with an `object_pairs_hook` that
+**FIXED IN v0.666.0, pending the post-merge close.** `SCHEMA_PY` loads with an `object_pairs_hook` that
 raises on a repeated key; the walker emits `DUP-KEY` and the corpus section refuses. Receipt
 kept, because it drives the shipping renderer: tip 0, base 1, fix-reverted mutant 1. Fixture
 arms m24 / n3.
@@ -796,7 +796,7 @@ verify: sh R=scripts/render-vocabulary-index.sh; [ -f "$R" ] || exit 9; [ -d cor
 
 ## BL-096 — the invariant renderer refuses a duplicate SOLO declaration and accepts a duplicate GROUP one
 
-**LANDED (v0.666.0, verified 23a85f54).** The collision arm refuses `solo[id] > 1 || grp[id] > 1`,
+**FIXED IN v0.666.0, pending the post-merge close.** The collision arm refuses `solo[id] > 1 || grp[id] > 1`,
 so a counted repeat is refused even when both headers carry identical prose. Receipt kept,
 because it drives the shipping renderer: tip 0, base 1, fix-reverted mutant 1. Fixture arms
 m7 / n1.
@@ -3283,7 +3283,7 @@ question to answer first.
 **Tiered NOTE.** Recorded so the refutation is not re-derived and the enforcer question is not
 re-opened blind.
 
-**LANDED (v0.666.0, verified 12942cfe).** Claim by claim. The HEADLINE ("invisible to intake")
+**FIXED IN v0.666.0, pending the post-merge close.** Claim by claim. The HEADLINE ("invisible to intake")
 was already dead and stays dead: re-derived at `2e7c227c`, `requirements.md` mandates the
 `docs/adr/` corpus and fails its gate without the prior-decision search. The VOCABULARY GAP is
 closed: both carriers of the disposition vocabulary (`steps/requirements.md` and
@@ -3409,7 +3409,7 @@ shared source has no concurrent writer and the non-atomic `cp` has nothing to ra
 The copy race was not measured under the full 12-way gate pool, where other fixtures run beside
 this one.
 
-**LANDED (v0.666.0, verified 9cb4956d).** M3 now substitutes `cat >/dev/null` (compare nothing,
+**FIXED IN v0.666.0, pending the post-merge close.** M3 now substitutes `cat >/dev/null` (compare nothing,
 succeed, drain the pipe). `mut()` refuses any mutation whose INTRODUCED lines — the copy minus the
 subject — pipe into `true`, `false` or `:`, before any arm runs, so a non-reading sink cannot
 return. Both the entanglement verdict and the SURVIVED verdict append the observed `arm:rc` set,
@@ -3419,7 +3419,7 @@ verify: sh f=core/fixtures/agent-definition-render/run.sh; [ -f "$f" ] || exit 9
 
 ## BL-273 — I33b's batched grammar narrowed on `${VAR/../…}` against an equivalence claim, and the one input separating the two implementations was in no corpus and no assertion
 
-**LANDED (v0.666.0, verified 9131a10e).** A27c was never dispatched: the fixture's enumerator
+**FIXED IN v0.666.0, pending the post-merge close.** A27c was never dispatched: the fixture's enumerator
 `^A[0-9]{2}_` could not spell a lettered name, and A27c's raw-printf FAIL could not fail its
 worker. Both are fixed, a loose definition count now refuses an undispatched arm, and the receipt
 below runs A27c through `--run-one` instead of grepping for its name.
@@ -4155,7 +4155,7 @@ unit's recorded loaded cost is 5s, so a real stall needs about six times that. N
 observed. A receipt must force the timeout and read whether the audit names the timeout as its
 cause.
 
-**LANDED (v0.666.0, verified b174-bl312).** A present `core-paths.sh` whose `--list` times out,
+**FIXED IN v0.666.0, pending the post-merge close.** A present `core-paths.sh` whose `--list` times out,
 raises, exits non-zero or answers empty now makes `audit-rule-files.sh` exit 2 with a stderr line
 naming the cause (`timed out after 1s` when forced); it no longer scores every owner `unknown`.
 An ABSENT resolver still fails closed as `unresolved`, which assertion 28 owns. Forced in a
