@@ -164,6 +164,24 @@ id: anchor-vanished
 push_candidate: false
 extends: '#Delta handoff'"
 
+# Two spans, one RENAMED upstream (Delta) and one REWRITTEN (Gamma), in the same range. The
+# unresolved span must not mask the moved one: this entry draws ANCHOR-MISSING AND
+# ANCHOR-DRIFT, because DRIFT is the row the adjudication path reads.
+ext missing-and-moved "kind: step-domain
+hooks: steps/demo.md
+id: missing-and-moved
+push_candidate: false
+extends: '#Gamma review, #Delta handoff'"
+
+# A multi-span entry: two anchors, both resolving, on a kind that does not render inside a
+# section. The NEAR-MISS for the two-anchor arm: it carries every property the qualifier
+# offender does except the kind, so it must lint clean.
+ext multi-span "kind: step-domain
+hooks: steps/demo.md
+id: multi-span
+push_candidate: false
+extends: '#Alpha gate, #Beta'"
+
 # A well-formed qualifier. The DISCRIMINATION CONTROL for every authoring arm:
 # it declares every new key correctly and must draw no error at all.
 ext good-qualifier "kind: qualifier
@@ -224,12 +242,29 @@ id: extends-otherfile
 push_candidate: false
 extends: 'steps/demo.md#Alpha gate'"
 
-# E11 — two anchors, so the entry would have two drift subjects.
-bad_ext extends-two "kind: step-domain
+# E11 — two anchors on a QUALIFIER, which renders inside ONE core section. Several anchors are
+# legal on every other kind (see multi-span in the clean consumer); this is the kind they are not.
+bad_ext extends-two "kind: qualifier
 hooks: steps/demo.md
 id: extends-two
 push_candidate: false
-extends: '#Alpha gate, #Gamma review'"
+extends: '#Alpha gate, #Gamma review'
+position: append"
+
+# E11 — several anchors, the FIRST resolving and the SECOND not. The linter must check every
+# declared span; one that stopped at the first would pass this entry.
+bad_ext extends-second-bad "kind: step-domain
+hooks: steps/demo.md
+id: extends-second-bad
+push_candidate: false
+extends: '#Alpha gate, #Second Anchor Nowhere'"
+
+# E11 — every comma-separated part empty: the key is present and declares no anchor at all.
+bad_ext extends-empty-parts "kind: step-domain
+hooks: steps/demo.md
+id: extends-empty-parts
+push_candidate: false
+extends: ','"
 
 # E11 — a file with no '#anchor' narrows nothing while reading as though it did.
 bad_ext extends-noanchor "kind: step-domain

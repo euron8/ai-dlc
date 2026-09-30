@@ -2366,34 +2366,62 @@ while IFS= read -r f; do
   # linter's under I40 — the linter's E11 and this arm must agree about which span
   # an entry declares, or whichever the operator did not run is the one that is
   # wrong.
+  #
+  # EVERY DECLARED SPAN IS COMPARED, NOT THE FIRST. `extends:` may name several anchors
+  # (E11 allows it on every kind but qualifier), and reading only the first would watch one
+  # span while the entry's other dependencies moved in silence — the narrowing inventing
+  # silence, through the door marked "several spans". Any span that no longer resolves is
+  # ANCHOR-MISSING; any span that changed is ANCHOR-DRIFT naming WHICH spans moved; OK only
+  # when neither. MISSING and DRIFT are NOT alternatives: an entry with one span renamed and
+  # another rewritten in the same range gets BOTH rows. Folding the moved span into MISSING
+  # would drop it — DRIFT is the row that carries adj_prefix, so it is the only one LC-E14 can
+  # adjudicate, and the next pull's BASE is already past the change. The adjudication key
+  # (entry + hooked file + status) is the same shape it has always been.
   extends="$(unquote "$(fm "$f" extends)")"
-  ext_anc=""
+  ext_ancs=""
   if [ -n "$extends" ]; then
-    ext_line="$(shadow_parts "$extends" | head -1)"
-    ext_file="$(printf '%s' "$ext_line" | cut -f1)"
-    ext_anc="$(printf '%s' "$ext_line" | cut -f2)"
-    [ -n "$ext_file" ] || ext_file="$hooks"
-    # A mismatch is E11's ERROR at authoring time. Here it only means the anchor
-    # names a file this loop is not looking at, so narrowing would watch the wrong
-    # span: fall back to file grain rather than report on a span nothing declared.
-    [ "$ext_file" = "$hooks" ] || ext_anc=""
+    _sp_rc=0; _sp_v="$(shadow_parts "$extends")" || _sp_rc=$?
+    [ "$_sp_rc" -eq 0 ] || ld_refuse_staging "the extends: parts of ${entry}" "$_sp_rc"
+    ld_stage "$LD_T/ext-parts" "$_sp_v" "the extends: parts of ${entry}"
+    while IFS= read -r ext_line; do
+      [ -n "$ext_line" ] || continue
+      ext_file="$(printf '%s' "$ext_line" | cut -f1)"
+      ext_anc="$(printf '%s' "$ext_line" | cut -f2)"
+      [ -n "$ext_file" ] || ext_file="$hooks"
+      # A mismatch (or an empty anchor) is E11's ERROR at authoring time. Here it means
+      # the entry declares a dependency this loop cannot narrow to, so the WHOLE entry
+      # falls back to file grain rather than report on a subset of what it declared.
+      if [ "$ext_file" != "$hooks" ] || [ -z "$ext_anc" ]; then ext_ancs=""; break; fi
+      ext_ancs="${ext_ancs}${ext_anc}
+"
+    done < "$LD_T/ext-parts"
   fi
 
   if git -C "$DIST" diff --quiet "$BASE" "$THEIRS" -- "$cp" 2>/dev/null; then
     emit EXTENSION-OK "$entry" "$hooks" "hooked core file unchanged"
-  elif [ -n "$ext_anc" ]; then
-    ext_new="$(git_show "$THEIRS" "$cp" | section_of "$ext_anc")"
-    if [ -z "$ext_new" ]; then
-      emit EXTENSION-ANCHOR-MISSING "$entry" "$hooks" \
-        "declares extends: '${ext_anc}', which resolves to NO heading in '$hooks' at ${THEIRS}. Upstream renamed or removed the section this entry augments, so there is no longer a span to narrow drift to — and an anchor that resolves to nothing would otherwise compare empty against empty and report clean forever. Re-anchor extends: to the heading that replaced it, or retire the entry if the section was absorbed away."
-    else
-      ext_old="$(git_show "$BASE" "$cp" | section_of "$ext_anc")"
-      if [ "$ext_old" = "$ext_new" ]; then
-        emit EXTENSION-OK "$entry" "$hooks" "hooked core file changed ${BASE}..${THEIRS} but the declared extends: span '${ext_anc}' did not"
-      else
-        emit EXTENSION-ANCHOR-DRIFT "$entry" "$hooks" \
-          "$(adj_prefix "$entry" "$hooks" EXTENSION-ANCHOR-DRIFT)the declared extends: span '${ext_anc}' in '$hooks' changed ${BASE}..${THEIRS} — re-read this entry against the new core text for that section. This is the file-grain re-read narrowed to the span the entry actually declared; everything else that moved in this file is not this entry's business."
+  elif [ -n "$ext_ancs" ]; then
+    ext_missing=""; ext_moved=""; ext_all=""
+    ld_stage "$LD_T/ext-ancs" "$ext_ancs" "the extends: anchors of ${entry}"
+    while IFS= read -r ext_anc; do
+      [ -n "$ext_anc" ] || continue
+      ext_all="${ext_all}${ext_all:+, }'${ext_anc}'"
+      ext_new="$(git_show "$THEIRS" "$cp" | section_of "$ext_anc")"
+      if [ -z "$ext_new" ]; then
+        ext_missing="${ext_missing}${ext_missing:+, }'${ext_anc}'"
+        continue
       fi
+      ext_old="$(git_show "$BASE" "$cp" | section_of "$ext_anc")"
+      [ "$ext_old" = "$ext_new" ] || ext_moved="${ext_moved}${ext_moved:+, }'${ext_anc}'"
+    done < "$LD_T/ext-ancs"
+    if [ -n "$ext_missing" ]; then
+      emit EXTENSION-ANCHOR-MISSING "$entry" "$hooks" \
+        "declares extends: ${ext_missing}, which resolves to NO heading in '$hooks' at ${THEIRS}. Upstream renamed or removed the section this entry augments, so there is no longer a span to narrow drift to — and an anchor that resolves to nothing would otherwise compare empty against empty and report clean forever. Re-anchor extends: to the heading that replaced it, or retire the entry if the section was absorbed away."
+    fi
+    if [ -z "$ext_moved" ]; then
+      [ -n "$ext_missing" ] || emit EXTENSION-OK "$entry" "$hooks" "hooked core file changed ${BASE}..${THEIRS} but the declared extends: span(s) ${ext_all} did not"
+    else
+      emit EXTENSION-ANCHOR-DRIFT "$entry" "$hooks" \
+        "$(adj_prefix "$entry" "$hooks" EXTENSION-ANCHOR-DRIFT)the declared extends: span(s) ${ext_moved} in '$hooks' changed ${BASE}..${THEIRS} — re-read this entry against the new core text for that section. This is the file-grain re-read narrowed to the span(s) the entry actually declared; everything else that moved in this file is not this entry's business."
     fi
   else
     emit EXTENSION-HOOK-DRIFT "$entry" "$hooks" "$(adj_prefix "$entry" "$hooks" EXTENSION-HOOK-DRIFT)hooked core file changed ${BASE}..${THEIRS} — this entry declares no extends: anchor, so its drift subject is the whole file; re-read it against the new core text"
