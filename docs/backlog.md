@@ -1434,7 +1434,14 @@ Behavioural, under the step file's literal flags. The `WARN:` row is the control
 working reports STILL-LIVE rather than closing. Proven able to fire: with one line added setting a flag
 inside the struck-row block of a copy, the same predicate exits 0.
 
-verify: sh d=$(mktemp -d); mkdir -p "$d/_bmad-output"; printf "## Pipeline Position\n- x\n## Sprint Context\n- x\n## Recent Activity\n- x\n## Open Items\n- x\n## Locked Decisions\n- x\n## In-Flight Teammates\n| teammate | deliverable | dispatched-at | note | status |\n| --- | --- | --- | --- | --- |\n| ~~a~~ | t | t | n | in-flight |\n## Context Reminders\n- x\n" > "$d/_bmad-output/pipeline-snapshot.md"; printf "tiny\n" > "$d/_bmad-output/gate-log.md"; o=$(bash core/scripts/validate-artifact-budget.sh --root "$d" --warn-only --fail-on pipeline-snapshot.md 2>&1); rm -rf "$d"; [ "$(grep -cF "WARN: In-Flight Teammates carries struck-through row(s)." <<<"$o")" -ge 1 ] || exit 1; [ "$(grep -cF "is NOT a clean result" <<<"$o")" -ge 1 ] || [ "$(grep -cxF "PASS  every measured living artifact is within its Rule 25(d) budget." <<<"$o")" -eq 0 ]
+**The receipt was tightened at v0.666.0.** It used to close on EITHER the qualified summary OR the
+PASS line being absent, so a fix that merely deleted the PASS line from every run satisfied it. It
+now requires the qualified summary naming the struck-row channel AND no bare PASS line. Scored: exit 1
+on the base script, exit 0 at the fix, exit 1 on a copy of the fix with `SAW_INFLIGHT=1` pinned to 0.
+The marked-superseded half is held by `core/fixtures/budget-summary-verdict` arms 11 and 11b, and by
+mutant M5.
+
+verify: sh d=$(mktemp -d); mkdir -p "$d/_bmad-output"; printf "## Pipeline Position\n- x\n## Sprint Context\n- x\n## Recent Activity\n- x\n## Open Items\n- x\n## Locked Decisions\n- x\n## In-Flight Teammates\n| teammate | deliverable | dispatched-at | note | status |\n| --- | --- | --- | --- | --- |\n| ~~a~~ | t | t | n | in-flight |\n## Context Reminders\n- x\n" > "$d/_bmad-output/pipeline-snapshot.md"; printf "tiny\n" > "$d/_bmad-output/gate-log.md"; o=$(bash core/scripts/validate-artifact-budget.sh --root "$d" --warn-only --fail-on pipeline-snapshot.md 2>&1); r=$?; rm -rf "$d"; [ "$r" -eq 0 ] || exit 1; [ "$(grep -cF "WARN: In-Flight Teammates carries struck-through row(s)." <<<"$o")" -ge 1 ] || exit 1; [ "$(grep -cF "reported struck-through In-Flight row(s)" <<<"$o")" -ge 1 ] && [ "$(grep -cF "is NOT a clean result" <<<"$o")" -ge 1 ] && [ "$(grep -cxF "PASS  every measured living artifact is within its Rule 25(d) budget." <<<"$o")" -eq 0 ]
 
 ## BL-024
 

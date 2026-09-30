@@ -288,6 +288,96 @@ else
   grep -E '^WARN  this run' "$OUT" | sed 's/^/      /' >&2
 fi
 
+# --- 10-14. THE TWO CHANNELS THAT USED TO SET NO FLAG (BL-020) ------------------------
+# The marked-superseded block and the struck-row block each print a `WARN:` under
+# --warn-only, and neither raised a SAW_* flag, so a run whose only finding came from one
+# of them fell through to the bare PASS line. Arm 9's join keys on `^OVER  ` rows and
+# cannot see either channel, so these arms assert the summary directly.
+#
+# THE STRUCK ROW IS DRIVEN UNDER retro.md's LITERAL FLAGS, `--warn-only --fail-on
+# pipeline-snapshot.md`, because that is the shipped invocation that reached the false
+# PASS: --fail-on does not harden the struck-row channel, so RC stays 0 and the summary
+# runs. Its status cell is `in-flight`, a member of the closed set, so the status channel
+# cannot co-fire and supply the qualified line on its own.
+INFLIGHT_STRUCK='| teammate | deliverable | dispatched-at | note | status |
+| --- | --- | --- | --- | --- |
+| ~~dev-a~~ | story-1 | 2026-01-01 | none | in-flight |'
+RETRO_FLAGS="--warn-only --fail-on pipeline-snapshot.md"
+seed_marker() { printf -- '- the old plan SUPERSEDED\n' >> "$1/_bmad-output/pipeline-snapshot.md"; }
+
+A10="$(arm_dir struck)"; seed_clean "$A10"
+seed_snapshot "$A10" "$INFLIGHT_STRUCK"
+# shellcheck disable=SC2086
+drive struck-retro "$V" "$A10" $RETRO_FLAGS
+if [ "$(status_of struck-retro)" = "0" ] \
+   && has 'WARN: In-Flight Teammates carries struck-through row(s).' \
+   && has 'WARN  this run reported struck-through In-Flight row(s) and is NOT a clean result.' \
+   && ! has "$PASS_LINE"; then
+  ok "a struck In-Flight row under retro's flags exits 0, names the row in the summary, and prints no PASS line"
+else
+  bad "struck In-Flight row under retro's flags: exit $(status_of struck-retro), qualified summary missing or bare PASS printed"
+  grep -E '^(WARN|PASS|FAIL)' "$OUT" | sed 's/^/      /' >&2
+fi
+
+# The marker channel is reachable as a false PASS only under --warn-only WITHOUT the
+# snapshot hardened: --fail-on pipeline-snapshot.md turns it into a FAIL and RC=1.
+A11="$(arm_dir marker)"; seed_clean "$A11"
+seed_snapshot "$A11" "$INFLIGHT_CLEAN"; seed_marker "$A11"
+drive marker-warnonly "$V" "$A11" --warn-only
+if [ "$(status_of marker-warnonly)" = "0" ] \
+   && has 'WARN: pipeline-snapshot.md marks superseded content in place.' \
+   && has 'WARN  this run reported superseded content marked in place and is NOT a clean result.' \
+   && ! has "$PASS_LINE"; then
+  ok "a superseded marker under --warn-only exits 0, names the marker in the summary, and prints no PASS line"
+else
+  bad "superseded marker under --warn-only: exit $(status_of marker-warnonly), qualified summary missing or bare PASS printed"
+  grep -E '^(WARN|PASS|FAIL)' "$OUT" | sed 's/^/      /' >&2
+fi
+# The same seed under retro's flags is the hardened posture, and it must NOT move: a FAIL,
+# RC=1, and the summary block unreached. A fix that flagged the channel by softening the
+# hardening would pass arm 11 and fail here.
+# shellcheck disable=SC2086
+drive marker-retro "$V" "$A11" $RETRO_FLAGS
+if [ "$(status_of marker-retro)" = "1" ] \
+   && has 'FAIL: pipeline-snapshot.md marks superseded content in place.' \
+   && ! has "$PASS_LINE" && ! grep -q '^WARN  this run' "$OUT"; then
+  ok "  and under retro's flags the same marker still FAILs with exit 1 and reaches no summary"
+else
+  bad "  superseded marker under retro's flags: exit $(status_of marker-retro), the hardened FAIL moved"
+  grep -E '^(WARN|PASS|FAIL)' "$OUT" | sed 's/^/      /' >&2
+fi
+
+# THE NEAR-MISSES, one per channel, each carrying the token the channel keys on. A `~~`
+# strike OUTSIDE the dispatch ledger is out of scope by default, and lowercase
+# "superseded" is ordinary prose. Both must leave the bare PASS line intact under retro's
+# flags -- otherwise arms 10 and 11 are satisfied by a summary that qualifies everything.
+A12="$(arm_dir nearmiss)"; seed_clean "$A12"
+seed_snapshot "$A12" "$INFLIGHT_CLEAN"
+printf -- '- ~~an old entry~~ superseded by the short form\n' >> "$A12/_bmad-output/pipeline-snapshot.md"
+# shellcheck disable=SC2086
+drive nearmiss-retro "$V" "$A12" $RETRO_FLAGS
+if [ "$(status_of nearmiss-retro)" = "0" ] && has "$PASS_LINE" && ! grep -q '^WARN' "$OUT"; then
+  ok "  near-miss: an out-of-ledger strike and lowercase 'superseded' leave the bare PASS line under retro's flags"
+else
+  bad "  near-miss: exit $(status_of nearmiss-retro), a WARN appeared or the PASS line moved on a snapshot neither channel covers"
+  grep -E '^(WARN|PASS|FAIL)' "$OUT" | sed 's/^/      /' >&2
+fi
+
+# --- 13. ALL FIVE MEASURED-ARTIFACT CHANNELS AT ONCE, in block order ------------------
+A13="$(arm_dir combined5)"; seed_breach "$A13"
+seed_snapshot "$A13" "$INFLIGHT_STRUCK
+| dev-b | story-2 | 2026-01-01 | none | finished |"
+printf '\n## Invented Section\n- lead invention\n' >> "$A13/_bmad-output/pipeline-snapshot.md"
+seed_marker "$A13"
+drive combined5-warnonly "$V" "$A13" --warn-only
+if [ "$(status_of combined5-warnonly)" = "0" ] \
+   && has 'WARN  this run reported over-budget artifact(s), off-schema section(s), superseded content marked in place, struck-through In-Flight row(s), unrecognised In-Flight status row(s) and is NOT a clean result.'; then
+  ok "five channels in one --warn-only run are all enumerated in one summary line"
+else
+  bad "five-channel --warn-only run: exit $(status_of combined5-warnonly), the summary did not enumerate all five"
+  grep -E '^WARN  this run' "$OUT" | sed 's/^/      /' >&2
+fi
+
 # --- 9. THE FILED DEFECT, AS A JOIN OVER EVERY RUN ABOVE ------------------------------
 # PC-S303-BUDGET-SCRIPT-PASS-LINE-UNCONDITIONAL is a CO-OCCURRENCE: one run that printed
 # an OVER row and also printed the unqualified PASS line. Arms 1-3 and 8 each assert
@@ -419,6 +509,38 @@ if [ "$(status_of m3-coverage)" = "0" ] \
   ok "MUTANT M3 (qualifier deleted): the coverage run prints a bare PASS -- assertion 5 measures the qualifier"
 else
   bad "MUTANT M3 SURVIVED: the qualifier still appeared with its say lines deleted"
+fi
+
+# --- M4 / M5. REVERT ONE NEW FLAG EACH (BL-020) ---------------------------------------
+# Same narrowness discipline as M2: each must bring back the bare PASS on its own channel
+# and leave the OTHER new channel's qualified summary intact, or the two flags are
+# entangled and one of arms 10/11 is vacuous.
+mut_flag() { # mut_flag <out> <flag>
+  sed "s/^  $2=1\$/  $2=0/" "$V" > "$1" || exit 2
+  if cmp -s "$V" "$1"; then
+    echo "FIXTURE ERROR: mutant pinning $2 matched nothing -- the assignment was rewritten" >&2
+    exit 2
+  fi
+}
+M4="$MUT_BIN/m4-no-saw-inflight.sh"; mut_flag "$M4" SAW_INFLIGHT
+# shellcheck disable=SC2086
+drive m4-struck "$M4" "$A10" $RETRO_FLAGS
+drive m4-marker "$M4" "$A11" --warn-only
+if grep -qxF "$PASS_LINE" "$WORK/runs/m4-struck.out" \
+   && grep -q '^WARN  this run reported superseded content marked in place' "$WORK/runs/m4-marker.out"; then
+  ok "MUTANT M4 (SAW_INFLIGHT never raised): the struck-row run prints a bare PASS while the marker run is untouched"
+else
+  bad "MUTANT M4 SURVIVED or was not narrow: struck run PASS=$(grep -cxF "$PASS_LINE" "$WORK/runs/m4-struck.out"), marker summary=$(grep -c '^WARN  this run reported superseded' "$WORK/runs/m4-marker.out")"
+fi
+M5="$MUT_BIN/m5-no-saw-marker.sh"; mut_flag "$M5" SAW_MARKER
+drive m5-marker "$M5" "$A11" --warn-only
+# shellcheck disable=SC2086
+drive m5-struck "$M5" "$A10" $RETRO_FLAGS
+if grep -qxF "$PASS_LINE" "$WORK/runs/m5-marker.out" \
+   && grep -q '^WARN  this run reported struck-through In-Flight row(s)' "$WORK/runs/m5-struck.out"; then
+  ok "MUTANT M5 (SAW_MARKER never raised): the marker run prints a bare PASS while the struck-row run is untouched"
+else
+  bad "MUTANT M5 SURVIVED or was not narrow: marker run PASS=$(grep -cxF "$PASS_LINE" "$WORK/runs/m5-marker.out"), struck summary=$(grep -c '^WARN  this run reported struck' "$WORK/runs/m5-struck.out")"
 fi
 
 # --- CONTROL. An UNMUTATED copy, staged in the same directory, driven the same way ----

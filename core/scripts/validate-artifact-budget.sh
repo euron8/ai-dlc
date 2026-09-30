@@ -1476,6 +1476,12 @@ SAW_BREACH=0
 SAW_SCHEMA=0
 SAW_STATUS=0
 SAW_UNGOV=0
+# The marked-superseded and struck-row channels set their own flags too. They used to set none,
+# so a --warn-only run whose ONLY finding was a struck In-Flight row printed that row's `WARN:`
+# and then closed with the bare PASS line -- the same contradiction as the breach case above, on
+# the channel retro.md Step 5c's own invocation leaves at exit 0.
+SAW_MARKER=0
+SAW_INFLIGHT=0
 
 if [ -s "$BREACH_FILE" ]; then
   SAW_BREACH=1
@@ -1643,6 +1649,7 @@ rm -f "$ENTRY_FILE"
 # content whose defect is that it was never MOVED, and the trim then destroys the record
 # the write-only history file exists to keep.
 if [ -s "$MARKER_FILE" ]; then
+  SAW_MARKER=1
   say ""
   if [ "$WARN_ONLY" -eq 1 ] && ! is_fail_on "pipeline-snapshot.md"; then
     echo "WARN: pipeline-snapshot.md marks superseded content in place."
@@ -1674,6 +1681,7 @@ rm -f "$MARKER_FILE"
 # struck row is not "over budget", and sending the lead to `trim` would have it
 # shrink the prose around a row whose whole problem is that the row still exists.
 if [ -s "$INFLIGHT_FILE" ]; then
+  SAW_INFLIGHT=1
   say ""
   if [ "$WARN_ONLY" -eq 1 ]; then
     echo "WARN: In-Flight Teammates carries struck-through row(s)."
@@ -1828,7 +1836,8 @@ fi
 # match on -- and a fix that moves the passing output is a fix nobody can adopt quietly.
 #
 # The four channels are NOT interchangeable and the summary must not flatten them:
-#   breach/schema/status -- findings about artifacts this table measures. A run that printed
+#   breach/schema/marker/inflight/status
+#                        -- findings about artifacts this table measures. A run that printed
 #                           one of these has NOT established that everything is within
 #                           budget, whatever its exit code says.
 #   coverage             -- artifacts NO budget governs. Its WARN and the clean claim are
@@ -1838,10 +1847,13 @@ fi
 #                           so is the difference between legible and merely quiet.
 if [ "$RC" -eq 0 ]; then
   say ""
-  if [ "$SAW_BREACH" -eq 1 ] || [ "$SAW_SCHEMA" -eq 1 ] || [ "$SAW_STATUS" -eq 1 ]; then
+  if [ "$SAW_BREACH" -eq 1 ] || [ "$SAW_SCHEMA" -eq 1 ] || [ "$SAW_MARKER" -eq 1 ] \
+     || [ "$SAW_INFLIGHT" -eq 1 ] || [ "$SAW_STATUS" -eq 1 ]; then
     _what=""
     [ "$SAW_BREACH" -eq 1 ] && _what="${_what}, over-budget artifact(s)"
     [ "$SAW_SCHEMA" -eq 1 ] && _what="${_what}, off-schema section(s)"
+    [ "$SAW_MARKER" -eq 1 ] && _what="${_what}, superseded content marked in place"
+    [ "$SAW_INFLIGHT" -eq 1 ] && _what="${_what}, struck-through In-Flight row(s)"
     [ "$SAW_STATUS" -eq 1 ] && _what="${_what}, unrecognised In-Flight status row(s)"
     _what="${_what#, }"
     say "WARN  this run reported ${_what} and is NOT a clean result."
