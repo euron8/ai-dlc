@@ -675,10 +675,11 @@ Skip this check for planning phase gates. Required for Phase 4+ gates.
   produce evidence (command output, test results, verification).
 - **Evidence:** Include in gate log:
   - Deploy command and output
-  - Smoke test command and pass/fail results, with the classification
-    fields `first_run_failures`, `transient_failures_cleared_on_retry`
-    and `persistent_failures` that `deploy-validate.md` §3 defines. An
-    entry missing any of the three FAILS this check.
+  - Smoke test command and pass/fail results, with the fields
+    `first_run_failures`, `transient_failures_cleared_on_retry`,
+    `persistent_failures` and `per_action_attribution` that
+    `deploy-validate.md` §3 defines. An entry missing any of the four
+    FAILS this check.
   - Asset verification output
 
 ### 9. Visual verification? (UI sprint gates only)
