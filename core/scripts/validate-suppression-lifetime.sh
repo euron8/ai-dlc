@@ -374,7 +374,7 @@ GATES_N="$(grep -c . <<<"${GATE_TS:-}" || true)"
 # THE ROW'S `ts` TRAVELS WITH ITS VERDICT, because the verdict is the PREVIOUS gate's. This file is
 # written only by Check 12, which runs after Check 2 invokes this script, so the newest row is never
 # the current gate's. A fix landing between two gates is invisible here, and the four candidate
-# repairs were each measured and refuted (docs/backlog.md BL-195). What this can do is make a stale
+# repairs were each measured and refuted upstream (BL-195). What this can do is make a stale
 # FAIL LEGIBLE: the expiry message names the `ts` of the row it read and says whose record it is.
 #
 # THE JOIN IS (catalog, check), NEVER check ALONE. The record schema names `catalog` for
