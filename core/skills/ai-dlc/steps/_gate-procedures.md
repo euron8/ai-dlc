@@ -855,8 +855,9 @@ carry the no-human-present additions:
 
 5. Create the pause flag so the continuation hook allows this
    auto-handoff to end the session (an autonomous handoff has no user
-   message to set it): `touch _bmad-output/pipeline-paused.flag`. Then
-   end the session — do not continue the pipeline in this conversation.
+   message to set it): `touch _bmad-output/pipeline-paused.flag`, and clear the
+   entry marker from the preamble: `rm -f _bmad-output/.handoff-in-progress`.
+   Then end the session — do not continue the pipeline in this conversation.
    Reply to any further messages with a pointer to the snapshot and the
    resume prompt. Resume itself is NOT automated: the user MUST open a
    new conversation and paste the resume prompt.
