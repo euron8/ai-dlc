@@ -3,7 +3,7 @@
 # Exercise scripts/validate-shell-portability.sh -- the bash-3.2 / BSD-userland floor for every
 # shipped shell file.
 #
-# THIS FIXTURE IS THE ONLY EVIDENCE THE VALIDATOR WORKS. Every one of its ten arms reports
+# THIS FIXTURE IS THE ONLY EVIDENCE THE VALIDATOR WORKS. Every one of its arms reports
 # ZERO over the real corpus, by design -- they are regression guards, not a cleanup. A green
 # run and a scanner whose patterns stopped matching anything produce the identical line, so
 # the arms are proven here or not at all.
@@ -31,7 +31,9 @@
 #   m9c S8  the ESCAPED-quote form a tool PRINTS -- invisible to
 #           BOTH earlier patterns, and it survived the v0.422.0
 #           pass over this class and a consumer ADOPTED close     -> must FAIL
+#   m9d S8b `show "$THEIRS:core/…"` in a `.md`, no placeholder    -> must FAIL
 #   m10     the CORE corpus emptied                               -> must FAIL (fail closed)
+#   m10c    ONLY the CORE TEXT (non-`.sh`) corpus emptied         -> must FAIL (fail closed)
 #   m10b    ONLY the FIXTURE shell corpus emptied, both wider
 #           corpora alive -- the one world the nesting allows      -> must FAIL (fail closed)
 #   m11 S10 a multibyte bracket class, all FOUR census shapes plus
@@ -56,6 +58,11 @@
 #   m13 S12 a GNU escape reaching `[[ =~ ]]`, six join shapes     -> must FAIL, 6 counted lines
 #   x14 S12 the command-substitution exemption deleted            -> a report must APPEAR
 #   x15 S12 quoted-body blanking removed                          -> a report must APPEAR
+#   x16 S8b S8b_CORPUS forced from `doc` to `instr`, bash seed    -> a report must APPEAR
+#   x17 S8b dropped from ARMS                                     -> the report must VANISH
+#   x18 S8b the name grammar narrowed to `[A-Za-z_]+`, `$T1:` seed -> the report must VANISH
+#   x19 S8b the modifier class after the colon dropped            -> a report must APPEAR
+#   x20     the CORE TEXT empty-corpus condition at n_shell       -> its NAMED refusal must VANISH
 #   n1      `sed -i ''` and `sed -i.bak`                          -> must NOT fail
 #   n2      python `re.sub(r"\1")` in a .sh file                  -> must NOT fail
 #   n3      braced, `HEAD:`-literal, `"${SHA}:` and the braced
@@ -64,6 +71,7 @@
 #           prose aside, and a comment naming the class           -> must NOT fail
 #   n5  S11 guarded cd in six spellings plus a comment            -> must NOT fail
 #   n6  S12 correct `=~` forms and grep-only escapes              -> must NOT fail
+#   n7  S8b braced, `$`-after-colon, `docs/` and literal-ref forms -> must NOT fail
 #
 # THE NEGATIVE ARMS ARE NOT DECORATION. n1 and n2 are measured false positives the validator
 # was narrowed against: every `sed -i` site in this repo already uses the portable pair, and
@@ -828,6 +836,63 @@ seed_core "$TMP/m9c" scripts/emit.sh \
   '  "run: git -C <dist> show \"<theirs>:templates/settings.json.template\" > \"\$t\""'
 kill_check "m9c S8 escaped-quote rev-path (a PRINTED remedy)" "$TMP/m9c" S8
 
+# m9d -- S8b. The ref is already a VARIABLE, which S8's `<ref>:` placeholder grammar cannot spell.
+# The seed is the shape the reader produces by dropping the braces from a correct site, in a
+# `.md`, and it carries NO angle bracket, so S8 cannot also fire and the kill is S8b's alone.
+seed "$TMP/m9d"
+seed_core "$TMP/m9d" skills/pull.md \
+  'Read the incoming copy of the validator:' \
+  '' \
+  '    git -C "$DIST" show "$THEIRS:core/scripts/validate-thing.sh" > "$t"'
+kill_check "m9d S8b unbraced \$VAR: rev-path in a .md" "$TMP/m9d" S8b
+
+# m10c -- the CORE TEXT corpus emptied. `doc` is `core/*` minus `*.sh`, a SUBSET of `instr`, so the
+# one world where ONLY its condition fires is a `core/` holding shell files and nothing else:
+# remove the clean `.md`, keep the fixture seed. `instr` and `fixture` both stay live.
+empty_doc() { # empty_doc <dir>   -- every non-`.sh` file under `core/`; the `.sh` ones stay
+  rm -f "$1/core/skills/clean.md"
+  ( cd "$1" && git rm -q --cached core/skills/clean.md >/dev/null 2>&1 )
+}
+seed "$TMP/m10c"
+empty_doc "$TMP/m10c"
+empty_check "m10c" "$TMP/m10c" "the CORE TEXT corpus (core and fixture shell still live)" "CORE TEXT"
+
+# x16 -- S8b's CORPUS column, which IS the `.sh` exclusion. The seed is a bash script under
+# `core/` carrying the unbraced form, which is CORRECT there (bash has no history modifiers) and
+# is the shape of all 37 real-corpus lines the exclusion subtracts. Shipped: silent. Forced from
+# `doc` to `instr`: reported. S8 cannot see it (no placeholder), so the mutant moves one arm.
+seed "$TMP/x16"
+seed_core "$TMP/x16" scripts/restore.sh \
+  '#!/usr/bin/env bash' \
+  'git -C "$DIST" show "$BASE:core/scripts/validate-thing.sh" > "$DIST/core/scripts/validate-thing.sh"'
+appear_check "x16 S8b_CORPUS=doc (.sh excluded)" "$TMP/x16" 's/S8b_CORPUS=doc/S8b_CORPUS=instr/' S8b \
+  "the corpus column excluding bash scripts"
+
+# x17 -- S8b's MEMBERSHIP in ARMS. Dropped, the probe loop and the corpus loop both skip it and
+# m9d's seed goes unreported. The anchor carries the SPACE before `S8b` and the ` S9` after it,
+# so it cannot touch `S8`.
+seed "$TMP/x17"
+seed_core "$TMP/x17" skills/pull.md \
+  '    git -C "$DIST" show "$THEIRS:core/scripts/validate-thing.sh" > "$t"'
+blind_check "x17 S8b in ARMS" "$TMP/x17" 's/ S8 S8b S9 / S8 S9 /' S8b \
+  "the arm's membership in ARMS"
+
+# x18 -- S8b's NAME grammar. The first candidate spelled the name `[A-Za-z_]+`, which cannot
+# cross a DIGIT, so `$T1:` scored 0. The seed is that name and nothing else discriminates it.
+seed "$TMP/x18"
+seed_core "$TMP/x18" skills/pull.md \
+  '    git show "$T1:templates/settings.json.template" > "$t"'
+blind_check "x18 S8b_PAT digit in name" "$TMP/x18" '/^S8b_PAT=/s/\[A-Za-z_\]\[A-Za-z0-9_\]\*/[A-Za-z_]+/' S8b \
+  "a variable name that may carry a digit"
+
+# x19 (S8b's modifier class) sits below `probe_owned_appear`'s definition, further down.
+
+# x20 -- the CORE TEXT empty-corpus condition, m10c's world, pointed at n_shell.
+seed "$TMP/x20"
+empty_doc "$TMP/x20"
+corpus_cell_check "x20 empty-guard CORE TEXT" "$TMP/x20" 's/n_doc:-0/n_shell:-0/' "CORE TEXT" \
+  "the CORE TEXT corpus condition"
+
 # n4 -- S10's negatives, one line per acquitting mechanism. Every line here is either the FIX
 # S10 prescribes or one of the three narrowings its header records, and each is acquitted by a
 # DIFFERENT cell, so a widening anywhere in the arm shows up as a line appearing:
@@ -977,6 +1042,19 @@ X15EOF
 probe_owned_appear "x15 S12 quoted text is not a site" "$TMP/x15" 's/out = out "_"/out = out c/' \
   S12 'scripts/subject.sh:4:' "blanking quoted bodies before looking for =~"
 
+# x19 -- S8b's MODIFIER CLASS. The seed is the two measured near-misses: `"$REF:$CP"`, the shape
+# live at `reconcile/classify-block.md:15-16` (next char `$`), and `"$THEIRS:docs/x"` (`d` is not a
+# modifier). Dropping the class reports both. The validator's own `good.sh` carries the same two,
+# so the probe misfires too -- that is S8b's probe doing its job, which `probe_owned_appear` allows.
+# It sits HERE, below the helper's definition: called above it, bash prints `command not found`,
+# `rc` is never touched, and the fixture reports PASS over a cell that never ran -- measured.
+seed "$TMP/x19"
+seed_core "$TMP/x19" skills/reconcile.md \
+  'theirs = git -C "$DIST" show "$THEIRS:$CORE_PATH"' \
+  'docs   = git -C "$DIST" show "$THEIRS:docs/notes.md"'
+probe_owned_appear "x19 S8b_PAT modifier class" "$TMP/x19" '/^S8b_PAT=/s/:\[acefghlqrstuwAFPQ\]"$/:"/' \
+  S8b 'core/skills/reconcile.md:1:' "the zsh modifier-letter class after the colon"
+
 # n6 -- S12's negatives. Every line is a correct `=~` or a correct `\b`: an anchored inline ERE, a
 # QUOTED literal RHS, a clean variable, a grep count checked by `=~`, a tainted variable that only
 # feeds `grep`, a comment and a string naming `=~`, an EVEN backslash run (a literal backslash,
@@ -1008,6 +1086,24 @@ else
   printf '%s\n' "$out" | sed 's/^/      /' | head -8; rc=1
 fi
 
+# n7 -- S8b's negatives in a `.md`, one per acquitting property: the BRACED form (the remedy), a
+# `$`-after-colon form (classify-block's shape), a non-modifier letter (`docs/`), a literal ref,
+# and a markdown `#` heading carrying the braced form, which `keep` scans and must still pass.
+seed "$TMP/n7"
+seed_core "$TMP/n7" skills/correct-vars.md \
+  '# Reading `git show "${THEIRS}:core/x"` safely' \
+  '' \
+  '    git -C "$DIST" show "${THEIRS}:core/scripts/validate-thing.sh" > "$t"' \
+  '    git -C "$DIST" show "$THEIRS:$CORE_PATH" > "$t"' \
+  '    git -C "$DIST" show "$THEIRS:docs/notes.md" > "$t"' \
+  '    git show HEAD:core/scripts/validate-thing.sh > "$t"'
+if out="$(run_v "$TMP/n7")" && grep -q "PASS" <<<"$out"; then
+  note "ok    n7 -- braced, \$-after-colon, non-modifier-letter and literal-ref rev-paths in a .md are NOT reported"
+else
+  note "FAIL  n7 -- S8b flagged a correct rev-path; the arm fires on its own fix or on a safe letter"
+  printf '%s\n' "$out" | sed 's/^/      /' | head -8; rc=1
+fi
+
 # THE MUTANT COUNT IS DERIVED; THE OTHER TWO ARE NOT, AND THE ASYMMETRY IS DELIBERATE.
 # This line read a hardcoded `11/11 ... (24 assertions)` and went stale the moment `m9b` and
 # `m9c` landed -- it still said 11 with twelve corpus mutants live. A total that decays
@@ -1018,7 +1114,7 @@ fi
 # falling, a report appearing, the validator REFUSING under a foreign locale). A
 # `grep -c blind_check` therefore reads 6 where the truth is 13 -- a derivation that is
 # confidently wrong is worse than a literal somebody must update, so this one stays a literal
-# and says why. If you add an `x*`, update the 15.
+# and says why. If you add an `x*`, update the 20.
 # `m11` goes through `count_check` (it asserts a LINE COUNT, not merely a kill), and `m8`/`m10`
 # assert fail-closed rather than a kill, so all three are counted separately from `kill_check`.
 # A count that silently omitted them is what the first derivation of this line did.
@@ -1026,6 +1122,6 @@ _n_kill=$(grep -o 'kill_check "' "$0" | grep -c .)
 _n_count=$(grep -o 'count_check "' "$0" | grep -c .)
 _n_kill=$((_n_kill - 1 + _n_count - 1))   # each counting line names its own helper
 if [ "$rc" -eq 0 ]; then
-  note "PASS  shell-portability -- control green, ${_n_kill}/${_n_kill} corpus mutants killed by their own arm, 15/15 arm-table cells proven load-bearing, 6/6 negatives silent"
+  note "PASS  shell-portability -- control green, ${_n_kill}/${_n_kill} corpus mutants killed by their own arm, 20/20 arm-table cells proven load-bearing, 7/7 negatives silent"
 fi
 exit "$rc"

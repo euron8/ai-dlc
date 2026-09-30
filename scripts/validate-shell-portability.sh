@@ -210,6 +210,40 @@ S10_SKIP="re\\.[a-z]+\\("
 S10_WHY="a MULTIBYTE character inside a bracket class in a shell, awk, sed or grep expression. Under the C locale -- every CI runner with LANG unset, every \`env -i\` -- the class holds the character's BYTES, not the character: a match lands on its last byte, a strip leaves the other two behind in the extracted value, and the value joins against nothing. Measured: \`[—–-]\` split every \`**Suppresses:**\` id in the suppression-lifetime validator so no SUPPRESSED carve-out existed under \`env -i\`. Spell it as an ALTERNATION -- \`(—|–|-)\`, \`(\\\\.|—)\` -- which is a byte sequence under both locales. The alternation CARRIES a \`|\`: if the expression is later interpolated into a \`sed s|…|…|\`, pick another delimiter (measured: relabel-extension-checks.sh's \`s|(\${anchor_at})|…|\` refused the pattern and wrote nothing)."
 S8_PAT="(show|cat-file -p|ls-tree|archive|diff)[[:space:]]+\\\\?\"?<[^>]+>:"
 S8_WHY="a git rev-path in shipped instruction text whose ref placeholder is not BRACED. A reader who binds the ref to a variable and pastes this into zsh loses the character after the colon: \`:c\` and \`:t\` are history modifiers that consume it, so \`git show \"\$THEIRS:templates/x\"\` reports \`fatal: ambiguous argument 'ca1fb6eemplates/x'\` -- and any \`>\` redirect in the same line still creates the target as a 0-byte file that the next command reads and reports on. QUOTING DOES NOT FIX IT; only the braces do. Render it \`git show \"\${theirs}:<path>\"\`."
+# S8b IS S8's SECOND SPELLING OF ONE DEFECT: the rev-path whose ref is ALREADY a variable. S8 keys
+# on the `<ref>:` placeholder, so `git show "$THEIRS:core/x"` -- what a reader produces by dropping
+# the braces from a correct site -- is outside its grammar by construction (measured: S8_PAT scores
+# `show <theirs>:<core-path>` 1 and `show "$THEIRS:core/scripts/x.sh"` 0). A separate arm and not
+# an alternation in S8_PAT, because the two need DIFFERENT CORPORA and the corpus is a per-arm
+# column: a `$VAR:` rev-path in a `#!/usr/bin/env bash` script is CORRECT, because bash has no
+# history modifiers.
+#
+# THE CORPUS IS `doc` -- `core/*` MINUS `*.sh` -- AND THAT SUBTRACTION IS THE WHOLE NARROWING.
+# Measured over `git ls-files 'core/*'` minus this validator's own battery: 37 lines in `.sh`
+# files carry this pattern (39 with the battery's two comment lines), every one of them in a
+# bash script where the form works -- fixture seeds and `reconcile/emit-report.sh:536` -- and
+# 0 lines in the non-`.sh` files. A `.sh` subject is run by bash; a `.md` subject is retyped by a
+# model or an operator into whatever shell they hold, and on this machine that is zsh. The
+# subtraction is a CORPUS rather than a SKIP because the self-probe below is `bad.sh`/`good.sh`:
+# a skip keyed on `\.sh:` would subtract the probe's own offender and the arm could never fire.
+#
+# FALSE-POSITIVE SET: EMPTY over the `doc` corpus, after two narrowings measured on it:
+#   1. THE CHARACTER AFTER THE COLON MUST BE A MODIFIER LETTER. A loose `\$NAME:` form finds 2
+#      lines in shipped non-`.sh` core, both `reconcile/classify-block.md:15-16`
+#      (`show "$BASE:$CORE_PATH"`), where the next character is `$` and zsh consumes nothing.
+#      The class is the 17 letters `.claude/rules/tool-hazards.md` names, re-derived by
+#      enumerating `"$T:<L>rest/x"` against `"${T}:<L>rest/x"` under `/bin/zsh -f` for all 52
+#      letters: exactly `acefghlqrstuwAFPQ` differ. So `"$THEIRS:docs/x"` is SAFE (d) and is
+#      asserted quiet; `core/` (c), `templates/` (t) and `lib/` (l) are not.
+#   2. THE NAME IS `[A-Za-z_][A-Za-z0-9_]*`, NOT `[A-Za-z_]+`. The latter cannot spell a variable
+#      carrying a digit, so `show $T1:templates/x` scored 0 under the first candidate. Widening,
+#      not narrowing; it moves no corpus count (0 either way) and the battery's x-arm owns it.
+# STATED HOLES, not claims of coverage: a `.sh` that PRINTS the remedy as text for an operator to
+# paste (`say "run: git show \"\$T:core/x\""`) is outside this arm twice -- `.sh` is excluded, and
+# the `\$` breaks the pattern. Measured 0 such sites in `core/*`. And an extensionless bash file
+# under `core/` (a git hook) is IN the `doc` corpus and would over-report; 0 hits there today.
+S8b_PAT="(show|cat-file -p|ls-tree|archive|diff)[[:space:]]+\\\\?\"?\\\$[A-Za-z_][A-Za-z0-9_]*:[acefghlqrstuwAFPQ]"
+S8b_WHY="a git rev-path in shipped NON-shell text whose ref is an UNBRACED variable followed by a zsh history-modifier letter. S8's placeholder form, one step later: the reader has already bound the ref. Under zsh \`git show \"\$THEIRS:core/x\"\` loses the \`c\` -- \`:c\` is a modifier and it fires INSIDE the quotes -- and git answers about a different path or fails. A \`.sh\` file is exempt because bash runs it; a \`.md\` is retyped into whatever shell the reader holds. Brace it: \`git show \"\${THEIRS}:core/x\"\`."
 # S11 IS THE ONE ARM HERE WHOSE FAILURE REACHES OUTSIDE THE PROCESS, and its corpus is
 # FIXTURE shell rather than every `.sh`. A fixture seed's first act is to enter a sandbox it
 # just built and then run repo-mutating git; if the `cd` fails, every one of those commands
@@ -404,7 +438,7 @@ END { if (nbuf > 0) flush() }
 # Only S1 subtracts. Declared explicitly rather than defaulted in a loop, because `set -u`
 # turns a missing one into an abort mid-scan, and an aborted scan prints fewer findings than
 # a clean one rather than more.
-S2_SKIP=""; S3_SKIP=""; S4_SKIP=""; S5_SKIP=""; S6_SKIP=""; S8_SKIP=""; S9_SKIP=""; S12_SKIP=""
+S2_SKIP=""; S3_SKIP=""; S4_SKIP=""; S5_SKIP=""; S6_SKIP=""; S8_SKIP=""; S8b_SKIP=""; S9_SKIP=""; S12_SKIP=""
 # S7's one measured false positive is PYTHON, not awk. Several shell files here embed a
 # heredoc'd python program, and `re.sub(r"...", r"\1...")` is correct there -- python has
 # backreferences and awk does not. The subtraction is on the LANGUAGE (`re.` qualifies the
@@ -412,7 +446,7 @@ S2_SKIP=""; S3_SKIP=""; S4_SKIP=""; S5_SKIP=""; S6_SKIP=""; S8_SKIP=""; S9_SKIP=
 # lands and an awk backreference in the same file is still caught.
 S7_SKIP="re\\.g?sub\\("
 
-ARMS="S1 S2 S3 S4 S5 S6 S7 S8 S9 S10 S11 S12"
+ARMS="S1 S2 S3 S4 S5 S6 S7 S8 S8b S9 S10 S11 S12"
 
 # Two more per-arm columns, declared for EVERY arm for the reason the SKIP block above gives:
 # under `set -u` a missing one aborts the scan mid-way, and an aborted scan prints FEWER
@@ -431,17 +465,21 @@ ARMS="S1 S2 S3 S4 S5 S6 S7 S8 S9 S10 S11 S12"
 # `fixture` is `git ls-files 'core/fixtures/*/*.sh'` -- S11's subject is a fixture SEED's
 # sandbox entry, and the `scripts/` validators it would otherwise scan resolve their own root
 # by walking up for `VERSION` rather than by entering a directory they built.
+#
+# `doc` is `instr` minus every `*.sh` -- S8b's subject is text a reader RETYPES, and a `.sh` is
+# run by bash, where the unbraced `$VAR:` form is correct. S8b's header carries the measurement.
+# `keep` for S8b as for S8: a markdown `#` line is a HEADING, and `skip` would drop it.
 S1_CORPUS=shell; S2_CORPUS=shell; S3_CORPUS=shell; S4_CORPUS=shell
-S5_CORPUS=shell; S6_CORPUS=shell; S7_CORPUS=shell; S8_CORPUS=instr
+S5_CORPUS=shell; S6_CORPUS=shell; S7_CORPUS=shell; S8_CORPUS=instr; S8b_CORPUS=doc
 S9_CORPUS=shell; S10_CORPUS=shell; S11_CORPUS=fixture
 S12_CORPUS=shell
 S1_COMMENTS=skip; S2_COMMENTS=skip; S3_COMMENTS=skip; S4_COMMENTS=skip
-S5_COMMENTS=skip; S6_COMMENTS=skip; S7_COMMENTS=skip; S8_COMMENTS=keep
+S5_COMMENTS=skip; S6_COMMENTS=skip; S7_COMMENTS=skip; S8_COMMENTS=keep; S8b_COMMENTS=keep
 S9_COMMENTS=skip; S10_COMMENTS=skip; S11_COMMENTS=skip; S12_COMMENTS=skip
 # KIND. `line` is one `grep -E` per line through `scan`; `join` is S12's two-pass program over
 # whole files through `scan_join`, which the PATTERN still drives, so every arm's PAT cell is live.
 S1_KIND=line; S2_KIND=line; S3_KIND=line; S4_KIND=line; S5_KIND=line; S6_KIND=line
-S7_KIND=line; S8_KIND=line; S9_KIND=line; S10_KIND=line; S11_KIND=line; S12_KIND=join
+S7_KIND=line; S8_KIND=line; S8b_KIND=line; S9_KIND=line; S10_KIND=line; S11_KIND=line; S12_KIND=join
 
 # Corpus: every tracked shell file except this one and its own mutation battery.
 #
@@ -462,10 +500,11 @@ S7_KIND=line; S8_KIND=line; S9_KIND=line; S10_KIND=line; S11_KIND=line; S12_KIND
 # `git ls-files 'core/*'`: the battery lives UNDER `core/`, so an S8 offender seeded there
 # would pin this arm non-zero for as long as the fixture exists.
 SELF_BATTERY="core/fixtures/$(basename "$SELF" .sh | sed 's/^validate-//')/"
-corpus() { # corpus shell|instr|fixture
+corpus() { # corpus shell|instr|doc|fixture
   case "$1" in
     shell) git ls-files '*.sh' ;;
     instr) git ls-files 'core/*' ;;
+    doc) git ls-files 'core/*' | grep -v '\.sh$' ;;
     fixture) git ls-files 'core/fixtures/*/*.sh' ;;
     *) return 1 ;;
   esac | grep -vxF "$SELF" | grep -v "^${SELF_BATTERY}"
@@ -517,6 +556,7 @@ awk '{ gsub(/(a)b/, "\1x") }' f
 git -C <dist> show <theirs>:templates/settings.json.template > "$t"
 git -C <dist> show "<theirs>:templates/settings.json.template" > "$t"
 git grep -nE '\bMODEL_MAX\b' -- core/
+git -C "$DIST" show "$THEIRS:core/scripts/validate-thing.sh" > "$t"
 awk '{ sub(/[[:space:]]*[—–-][[:space:]].*$/, "", s) }' f
   /^#{2,4}[ \t]+[0-9]+[ \t]*[.—]/ { print }
   cd "$REPO"
@@ -538,6 +578,9 @@ awk '{ if (match($0, /(a)b/)) print substr($0, RSTART, RLENGTH) }' f
 git -C <dist> show "${theirs}:templates/settings.json.template" > "$t"
 git show "${SHA}:templates/settings.json.template" > "$t"
 git show HEAD:templates/settings.json.template > "$t"
+git -C "$DIST" show "${THEIRS}:core/scripts/validate-thing.sh" > "$t"
+git -C "$DIST" show "$THEIRS:$CORE_PATH" > "$t"
+git -C "$DIST" show "$THEIRS:docs/x.md" > "$t"
 git grep -nE '[[:space:]]MODEL_MAX' -- core/
 grep -oE '\bLR-[0-9]+\b' f
 awk '{ sub(/[[:space:]]*(—|–|-)[[:space:]].*$/, "", s) }' f
@@ -589,9 +632,11 @@ done
 # --- the corpus ----------------------------------------------------------------------------
 FILES_shell="$(corpus shell)"
 FILES_instr="$(corpus instr)"
+FILES_doc="$(corpus doc)"
 FILES_fixture="$(corpus fixture)"
 n_shell="$(grep -c . <<<"$FILES_shell" || true)"
 n_instr="$(grep -c . <<<"$FILES_instr" || true)"
+n_doc="$(grep -c . <<<"$FILES_doc" || true)"
 n_fixture="$(grep -c . <<<"$FILES_fixture" || true)"
 n_files="$n_shell"
 # ZERO is the failure, not "few". A threshold tuned to this repo's 325 files would make the
@@ -628,6 +673,12 @@ if [ "${n_instr:-0}" -lt 1 ]; then
   err "the CORE corpus is empty. \`git ls-files 'core/*'\` found nothing to scan, and an empty corpus passes every arm it never ran. Failing closed."
   dead_corpus=1
 fi
+# `doc` is a SUBSET of `instr`, so it nests like `fixture` does: the one world where only this
+# condition fires is a `core/` holding shell files and nothing else.
+if [ "${n_doc:-0}" -lt 1 ]; then
+  err "the CORE TEXT corpus is empty. \`git ls-files 'core/*'\` minus \`*.sh\` found nothing to scan, and an empty corpus passes every arm it never ran. Failing closed."
+  dead_corpus=1
+fi
 if [ "${n_fixture:-0}" -lt 1 ]; then
   err "the FIXTURE shell corpus is empty. \`git ls-files 'core/fixtures/*/*.sh'\` found nothing to scan, and an empty corpus passes every arm it never ran. Failing closed."
   dead_corpus=1
@@ -655,6 +706,6 @@ fi
 n_arms=0
 for a in $ARMS; do n_arms=$((n_arms + 1)); done
 if [ "$fail" -eq 0 ]; then
-  say "validate-shell-portability: PASS -- $n_shell shell file(s) + $n_instr core file(s) + $n_fixture fixture shell file(s), $n_arms arms (S1 sed -i, S2 mapfile, S3 declare -A, S4 setsid, S5/S6 backslash-s, S7 awk backreference, S8 unquoted rev-path, S9 git-grep ERE escape, S10 multibyte bracket class, S11 unguarded cd in a fixture script, S12 GNU escape reaching [[ =~ ]]), every arm probed in both directions."
+  say "validate-shell-portability: PASS -- $n_shell shell file(s) + $n_instr core file(s) ($n_doc non-shell) + $n_fixture fixture shell file(s), $n_arms arms (S1 sed -i, S2 mapfile, S3 declare -A, S4 setsid, S5/S6 backslash-s, S7 awk backreference, S8 unquoted rev-path, S8b unbraced \$VAR: rev-path in non-shell text, S9 git-grep ERE escape, S10 multibyte bracket class, S11 unguarded cd in a fixture script, S12 GNU escape reaching [[ =~ ]]), every arm probed in both directions."
 fi
 exit "$fail"
