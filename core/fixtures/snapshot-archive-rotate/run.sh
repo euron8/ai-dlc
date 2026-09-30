@@ -22,7 +22,37 @@ WORK="$(bash "$HERE/seed.sh" | tail -1)" || { echo "FIXTURE ERROR: seed failed" 
 # A `chflags uchg` file cannot be unlinked, and MCF leaves killed worlds carrying one under $WORK, so
 # the flag is cleared HERE, before the remove, where an interrupted run (TERM during the MCF sweep)
 # still reaches it. `chflags` is BSD-only; where it is absent no such flag can have been set.
-trap 'if command -v chflags >/dev/null 2>&1; then chflags -R nouchg "$WORK" 2>/dev/null; fi; rm -rf "$WORK"' EXIT
+#
+# AN INTERRUPT MUST REAP THE SWEEP BEFORE IT REMOVES ANYTHING. The kill-point sweep runs KPAR
+# background workers, each a tree (worker -> subshell -> rotator -> its children), and only `wait`
+# reaped them: a TERM to this shell ran the EXIT handler while every worker kept copying worlds into
+# $WORK, so the `rm -rf` raced live writers and the tree came back (5k to 42k entries left in 7 of 10
+# interrupted runs). So TERM and INT exit through the EXIT handler, and the handler, before its first
+# removal, ignores TERM and INT itself (a second TERM landing during `chflags -R` otherwise killed
+# bash before `rm` and left the whole sandbox) and reaps every worker's TREE: each process is stopped
+# before its children are listed, so none can fork past the walk, then killed.
+KPIDS=""
+reap_tree() {  # <pid>: stop it, reap its descendants depth-first, then kill it
+  local c
+  kill -STOP "$1" 2>/dev/null
+  for c in $(pgrep -P "$1" 2>/dev/null); do reap_tree "$c"; done
+  kill -KILL "$1" 2>/dev/null
+}
+fixture_cleanup() {
+  trap '' TERM INT
+  local p
+  for p in $KPIDS; do reap_tree "$p"; done
+  for p in $KPIDS; do wait "$p" 2>/dev/null; done
+  if command -v chflags >/dev/null 2>&1; then chflags -R nouchg "$WORK" 2>/dev/null; fi
+  rm -rf "$WORK"
+}
+# TERM and INT exit explicitly so the EXIT handler runs on every bash, not only where an untrapped
+# fatal signal happens to run it. Measured with a forced TERM mid-sweep in a scratch copy on bash 3.2:
+# 0 entries left under the caller's TMPDIR; with the reap loop deleted, 9 rotator temp dirs; the
+# unfixed fixture, 28.
+trap fixture_cleanup EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
 
@@ -611,6 +641,9 @@ cat > "$GSHIM/git" <<'SHIMEOF'
 if [ "${SNAPROT_SHIM_MODE:-}" = gitkill ] && [ "${3:-}" = add ]; then
   printf 'gitkill\n' >> "$SNAPROT_SHIM_SENT"; kill -KILL "$PPID"; exit 1
 fi
+if [ "${SNAPROT_SHIM_MODE:-}" = gitfail ] && [ "${3:-}" = add ]; then
+  printf 'gitfail\n' >> "$SNAPROT_SHIM_SENT"; exit 1
+fi
 exec "$SNAPROT_REAL_GIT" "$@"
 SHIMEOF
 chmod +x "$RSHIM/cat" "$RSHIM/mv" "$GSHIM/git" || { echo "FIXTURE ERROR: cannot chmod the rewrite shims" >&2; exit 2; }
@@ -664,6 +697,16 @@ ENVEOF
 KPAR=12
 KL=1
 KSTRIDE=8
+# The forms that turn the sweep's trace off from inside the rotator (see arm_killed's header).
+# Self-probe, both directions, before any rotator is read: each escape form matches, and the
+# shipped rotator's own `set` and `trap` lines do not.
+KESC_RE='set[[:blank:]]+\+[A-Za-z]*T|set[[:blank:]]+\+o[[:blank:]]+functrace|trap[[:blank:]].*DEBUG'
+for _k in 'set +T' 'set +eT' 'set +o functrace' 'trap - DEBUG' "trap '' DEBUG"; do
+  grep -qE "$KESC_RE" <<<"$_k" || { echo "FIXTURE BROKEN: KESC_RE does not match '$_k'" >&2; exit 2; }
+done
+for _k in 'set -uo pipefail' "trap 'rm -rf \"\$TMPD\"' EXIT" 'set -T'; do
+  grep -qE "$KESC_RE" <<<"$_k" && { echo "FIXTURE BROKEN: KESC_RE matches the near-miss '$_k'" >&2; exit 2; }
+done
 
 # The expected new history of the `above` world, from the SHIPPED rotator on an unmodified copy, so a
 # mutant under test cannot move its own yardstick. Asserted to differ from the pre-run history.
@@ -883,13 +926,22 @@ arm_atomic() {
 #              pipeline stage or background job still running when the kill lands is not killed
 #              with the rotator (`kill $$` names the shell alone). A write through the history of
 #              1024 bytes or fewer is whole under L = 1.
+#              A rotator that switches the trace OFF itself (`set +T`, `set +o functrace`,
+#              `trap - DEBUG`, `trap '' DEBUG`) runs every later command untraced and unkilled: MTU
+#              survived 269 kills that way. The sweep cannot reach that, so the arm REFUSES any
+#              rotator whose own text matches KESC_RE before it sweeps (MTU pins the refusal). The
+#              refusal reads the rotator's text only: the same switch spelled through `eval`, a
+#              variable, or a sourced file is not seen, and such a rotator is unreached.
 #
-# staged: the rename has happened and the kill lands on `git add` of the archive, WITHOUT --absorb.
-# The sweep does not stand in for it, and that is measured: with --absorb the re-run's absorb
-# stages the archive itself, so m18 (no staging on the cut-floor path) passed all 63 kill points of
-# the round-8 sweep and dies only here. The control: after run 1 the archive is NOT tracked, so the world
-# expresses the defect. Run 2 lands on "nothing to rotate": rc 0, the archive tracked, the history
-# equal to a clean rotation, and every pre-run history line in the tracked corpus.
+# staged: WITHOUT --absorb, two halves. (1) The kill lands on `git add` of the archive, which now
+# runs BEFORE the rename: the history is still the pre-run file, the archive untracked; the plain
+# re-run rotates again (a duplicate block), rc 0, the archive tracked, the history equal to a clean
+# rotation, every pre-run line in the tracked corpus. (2) A history ALREADY CUT whose archive is
+# untracked -- what an earlier revision, which staged after the rename, left on a kill there -- is
+# seeded directly (a clean rotation, then `git rm --cached` of the archive). The re-run lands on
+# "nothing to rotate" and must stage it. The sweep does not stand in for (2): with --absorb the
+# re-run's absorb stages the archive itself, so m18 (no staging on the cut-floor path) passed all 63
+# kill points of the round-8 sweep and dies only here.
 sweep_one() {  # <N> <L> <dir>: one kill point at limit L; writes <dir>/r.<N>.<L>, and <dir>/stop if it fails
   local N="$1" L="$2" d="$3" w c rc1 rc2 post heq miss hb pb f at
   w="$d/w$N.$L"; c="$d/c$N.$L"
@@ -922,7 +974,9 @@ sweep_one() {  # <N> <L> <dir>: one kill point at limit L; writes <dir>/r.<N>.<L
   # handed a verdict computed elsewhere: MCH (mode bits), MCF (a `chflags uchg` file flag) and MCA
   # (a deny-write ACL) each leave a killed world whose bytes are the template's and whose re-run is
   # refused, and no portable reading sees the flag or the ACL.
-  ( cd "$w" && bash "$R_" "$HIST_REL" --absorb "$SNAP_REL" --apply ) >/dev/null 2>&1; rc2=$?
+  # TMPDIR inside the world, as run 1 has: an interrupt reaps this re-run by SIGKILL, which runs no
+  # EXIT trap, and its mktemp directory must then be under $WORK, not in the caller's TMPDIR.
+  ( cd "$w" && TMPDIR="$w.tmp" bash "$R_" "$HIST_REL" --absorb "$SNAP_REL" --apply ) >/dev/null 2>&1; rc2=$?
   ( cd "$w" && git ls-files -z -- '*.md' | xargs -0 cat 2>/dev/null ) | sort -u > "$w.corpus"
   miss="$(comm -23 "$d/want" "$w.corpus" | wc -l | tr -d ' ')"
   heq=no; cmp -s "$w/$HIST_REL" "$EXPECT" && heq=yes
@@ -942,15 +996,24 @@ sweep_pass() {  # <dir> <job list>: KPAR workers, job i to worker (i mod KPAR), 
   local j=0
   while [ "$j" -lt "$KPAR" ]; do
     awk -v w="$j" -v k="$KPAR" '(NR - 1) % k == w' "$2" > "$2.$j"
-    sweep_worker "$2.$j" "$1" & j=$((j + 1))
+    sweep_worker "$2.$j" "$1" & KPIDS="$KPIDS $!"; j=$((j + 1))
   done
+  # The worker pids are recorded (KPIDS) so an interrupt can reap their trees; see the EXIT handler.
+  # SNAPROT_SWEEP_STARTED names a file written once every worker is running, so a probe that
+  # interrupts this fixture mid-sweep waits on a condition rather than on a process table.
+  [ -n "${SNAPROT_SWEEP_STARTED:-}" ] && echo "$KPIDS" > "$SNAPROT_SWEEP_STARTED"
   wait
+  KPIDS=""
 }
 arm_killed() {
   local heq ok_all=1 d T N j k L bad nk npost nmiss nmv npart first swept stop bh be tk tl W0 n0 n1 wpost
   local f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 part1
   expect_above || { MSG="cannot build the expected new history"; return 1; }
   MSG=""
+  if grep -qE "$KESC_RE" "$R_"; then
+    MSG="sweep: REFUSED -- the rotator switches off its own DEBUG trace ($(grep -nE "$KESC_RE" "$R_" | head -1 | cut -c1-60)), so no kill point after it can be reached"
+    return 1
+  fi
   # SIZING. `ulimit -f 1` writes 1024 bytes and stops, which is a PARTIAL write only of a file longer
   # than that. Both the pre-run history and the new history must be, or every limited write is whole.
   bh="$(fbytes "$TMPL/above/$HIST_REL")"; be="$(fbytes "$EXPECT")"
@@ -1043,16 +1106,106 @@ arm_staged() {
   hpre="$w.hist"; cp "$w/$HIST_REL" "$hpre" || { MSG="history copy failed"; return 1; }
   rshim gitkill "$w" "$GSHIM"; rc1=$RC; n1=$SENT
   trk0=no; tracked "$w" "$ARCH_REL" && trk0=yes
+  local hk=no; cmp -s "$hpre" "$w/$HIST_REL" && hk=yes
   o2="$(bash "$R_" "$w/$HIST_REL" --apply 2>&1)"; rc2=$?
   trk1=no; tracked "$w" "$ARCH_REL" && trk1=yes
   heq=no; cmp -s "$w/$HIST_REL" "$EXPECT" && heq=yes
   sort -u "$hpre" > "$w.want"
   ( cd "$w" && git ls-files -z -- '*.md' | xargs -0 cat 2>/dev/null ) | sort -u > "$w.corpus"
   miss="$(comm -23 "$w.want" "$w.corpus" | wc -l | tr -d ' ')"
-  MSG="staging: shim acted ${n1}x, run 1 rc=${rc1}, archive tracked after run 1=${trk0}; run 2 rc=${rc2} ($(head -1 <<<"$o2" | cut -c1-70)), archive tracked=${trk1}, history == clean rotation: ${heq}, pre-run lines missing from the tracked corpus=${miss}"
-  [ "$n1" -eq 1 ] && [ "$rc1" -eq 137 ] && [ "$trk0" = no ] && [ "$rc2" -eq 0 ] \
-    && grep -q 'nothing to rotate' <<<"$o2" && [ "$trk1" = yes ] && [ "$heq" = yes ] \
-    && [ -s "$w.want" ] && [ "$miss" -eq 0 ]
+  # (2) an already-cut history with an untracked archive.
+  local w2 o3 rc3 trk2 trk3 heq2
+  w2="$(world above)" || { MSG="world copy failed"; return 1; }
+  bash "$ROT" "$w2/$HIST_REL" --apply >/dev/null 2>&1
+  ( cd "$w2" && git rm -q --cached -- "$ARCH_REL" ) >/dev/null 2>&1
+  trk2=no; tracked "$w2" "$ARCH_REL" && trk2=yes
+  o3="$(bash "$R_" "$w2/$HIST_REL" --apply 2>&1)"; rc3=$?
+  trk3=no; tracked "$w2" "$ARCH_REL" && trk3=yes
+  heq2=no; cmp -s "$w2/$HIST_REL" "$EXPECT" && heq2=yes
+  MSG="staging killed: shim acted ${n1}x, run 1 rc=${rc1}, history unchanged after run 1=${hk}, archive tracked after run 1=${trk0}; run 2 rc=${rc2}, archive tracked=${trk1}, history == clean rotation: ${heq}, pre-run lines missing from the tracked corpus=${miss}; already-cut + untracked: tracked before=${trk2}, re-run rc=${rc3} ($(head -1 <<<"$o3" | cut -c1-60)), tracked after=${trk3}, history == clean rotation: ${heq2}"
+  [ "$n1" -eq 1 ] && [ "$rc1" -eq 137 ] && [ "$hk" = yes ] && [ "$trk0" = no ] && [ "$rc2" -eq 0 ] \
+    && [ "$trk1" = yes ] && [ "$heq" = yes ] && [ -s "$w.want" ] && [ "$miss" -eq 0 ] \
+    && [ "$trk2" = no ] && [ "$rc3" -eq 0 ] && grep -q 'nothing to rotate' <<<"$o3" \
+    && [ "$trk3" = yes ] && [ "$heq2" = yes ]
+}
+
+# --- BL-322's edge inputs. Every world asserts CONSERVATION: a refusal leaves the history, the
+# snapshot and the archive byte-identical (or absent); a rotation leaves pre-run == preamble + moved +
+# kept byte for byte, the new history == preamble + kept, and the archive's last lines == moved.
+# conserved <before> <after> <archive> <preamble lines>: the rotation half of that.
+conserved() {
+  local lb la k P="$4"
+  lb="$(wc -l < "$1" | tr -d ' ')"; la="$(wc -l < "$2" | tr -d ' ')"; k=$(( lb - la ))
+  [ "$k" -gt 0 ] || return 1
+  head -n "$P" "$1" > "$1.pre"; sed -n "$(( P + 1 )),$(( P + k ))p" "$1" > "$1.mov"
+  tail -n +"$(( P + k + 1 ))" "$1" > "$1.kept"
+  cat "$1.pre" "$1.kept" | cmp -s - "$2" && cat "$1.pre" "$1.mov" "$1.kept" | cmp -s - "$1" \
+    && tail -n "$k" "$3" | cmp -s "$1.mov" -
+}
+# unchanged <world> <history copy> <snapshot copy>: history and snapshot byte-identical, no archive.
+unchanged() { cmp -s "$2" "$1/$HIST_REL" && cmp -s "$3" "$1/$SNAP_REL" && [ ! -e "$1/$ARCH_REL" ]; }
+
+# H1HEAD: a history whose line 1 is a `## ` heading (no preamble) rotates, and conserves. Its control,
+# the same bytes with the preamble, is arm `above`.
+arm_h1head() {
+  local w b out rc; w="$(world above)" || { MSG="world copy failed"; return 1; }
+  tail -n +3 "$TMPL/above/$HIST_REL" > "$w/$HIST_REL" || { MSG="history strip failed"; return 1; }
+  ( cd "$w" && git add -A && git -c user.email=f@f -c user.name=f commit -qm h1 ) >/dev/null 2>&1
+  b="$w.hist"; cp "$w/$HIST_REL" "$b"
+  out="$(bash "$R_" "$w/$HIST_REL" --apply 2>&1)"; rc=$?
+  local c=no; conserved "$b" "$w/$HIST_REL" "$w/$ARCH_REL" 0 && c=yes
+  MSG="line 1 = '$(head -1 "$b" | cut -c1-20)', rc=${rc}, conserved=${c}: $(head -1 <<<"$out" | cut -c1-90)"
+  [ "$(head -c 3 "$b")" = '## ' ] && [ "$rc" -eq 0 ] && [ "$c" = yes ]
+}
+# NOVAL: --archive, --keep-entries and --absorb each given as the LAST argument, and --archive given
+# an option as its value: each rc 2 (usage), nothing written.
+arm_noval() {
+  local w h s o rcs="" ok_all=1; w="$(world above)" || { MSG="world copy failed"; return 1; }
+  h="$w.hist"; s="$w.snap"; cp "$w/$HIST_REL" "$h"; cp "$w/$SNAP_REL" "$s"
+  for o in --archive --keep-entries --absorb; do
+    bash "$R_" "$w/$HIST_REL" --apply "$o" >/dev/null 2>&1; rc=$?; rcs="${rcs} ${o}=${rc}"
+    [ "$rc" -eq 2 ] || ok_all=0
+  done
+  bash "$R_" "$w/$HIST_REL" --archive --apply >/dev/null 2>&1; rc=$?; rcs="${rcs} --archive-then-option=${rc}"
+  [ "$rc" -eq 2 ] || ok_all=0
+  local u=no; unchanged "$w" "$h" "$s" && u=yes
+  MSG="rc:${rcs}; unchanged=${u}"
+  [ "$ok_all" -eq 1 ] && [ "$u" = yes ]
+}
+# KEEP0: --keep-entries 0 is refused as usage, before any `sed` runs, and writes nothing.
+arm_keep0() {
+  local w h s out rc; w="$(world above)" || { MSG="world copy failed"; return 1; }
+  h="$w.hist"; s="$w.snap"; cp "$w/$HIST_REL" "$h"; cp "$w/$SNAP_REL" "$s"
+  out="$(bash "$R_" "$w/$HIST_REL" --keep-entries 0 --absorb "$w/$SNAP_REL" --apply 2>&1)"; rc=$?
+  local u=no; unchanged "$w" "$h" "$s" && u=yes
+  MSG="rc=${rc}, sed errors=$(grep -c '^sed:' <<<"$out"), names the option=$(grep -c 'keep-entries' <<<"$out"), unchanged=${u}"
+  [ "$rc" -eq 2 ] && ! grep -q '^sed:' <<<"$out" && grep -q 'keep-entries' <<<"$out" && [ "$u" = yes ]
+}
+# SAME: --archive naming the absorbed snapshot (a second spelling through `..`), and --archive naming
+# the history: each rc 2, nothing written. The run is bounded by `ulimit -f` because the defect is an
+# append of a file to itself, which on a subject without the guard never ends.
+arm_same() {
+  local w h s rc1 rc2 alias; w="$(world above)" || { MSG="world copy failed"; return 1; }
+  h="$w.hist"; s="$w.snap"; cp "$w/$HIST_REL" "$h"; cp "$w/$SNAP_REL" "$s"
+  alias="$w/_bmad-output/../_bmad-output/pipeline-snapshot.md"
+  ( ulimit -f 4096; bash "$R_" "$w/$HIST_REL" --archive "$alias" --absorb "$w/$SNAP_REL" --apply ) >/dev/null 2>&1; rc1=$?
+  local u1=no; cmp -s "$h" "$w/$HIST_REL" && cmp -s "$s" "$w/$SNAP_REL" && u1=yes
+  ( ulimit -f 4096; bash "$R_" "$w/$HIST_REL" --archive "$w/$HIST_REL" --apply ) >/dev/null 2>&1; rc2=$?
+  local u2=no; cmp -s "$h" "$w/$HIST_REL" && cmp -s "$s" "$w/$SNAP_REL" && [ ! -e "$w/$ARCH_REL" ] && u2=yes
+  MSG="archive==absorb rc=${rc1} unchanged=${u1} (snapshot $(fbytes "$w/$SNAP_REL") bytes); archive==history rc=${rc2} unchanged=${u2}"
+  [ "$rc1" -eq 2 ] && [ "$u1" = yes ] && [ "$rc2" -eq 2 ] && [ "$u2" = yes ]
+}
+# GITFAIL: `git add` of the archive fails (a shim, exit 1) on the rotation path with --absorb: rc 1,
+# the history and the snapshot byte-identical (the stage precedes the rename and the truncate), the
+# archive untracked, and the refusal says so. It was a WARNING with rc 0 over a shrunk history.
+arm_gitfail() {
+  local w h s trk; w="$(world above)" || { MSG="world copy failed"; return 1; }
+  h="$w.hist"; s="$w.snap"; cp "$w/$HIST_REL" "$h"; cp "$w/$SNAP_REL" "$s"
+  rshim gitfail "$w" "$GSHIM" absorb
+  local u=no; cmp -s "$h" "$w/$HIST_REL" && cmp -s "$s" "$w/$SNAP_REL" && u=yes
+  trk=no; tracked "$w" "$ARCH_REL" && trk=yes
+  MSG="shim acted ${SENT}x, rc=${RC}, refused=$(grep -c 'REFUSED -- could not stage' <<<"$OUT"), history+snapshot unchanged=${u}, archive tracked=${trk}"
+  [ "$SENT" -ge 1 ] && [ "$RC" -eq 1 ] && grep -q 'REFUSED -- could not stage' <<<"$OUT" && [ "$u" = yes ] && [ "$trk" = no ]
 }
 
 # ARGS: on the no-history path an unknown option and an --absorb naming no file are both usage
@@ -1079,9 +1232,14 @@ arm_idem() {
     && absorbed_ok "$w" "STALESNAP-nohist" "$pre"
 }
 
-ARMS="swap neg nohist floor above ign unw ulim wlate wshort rew tlate tshort rohist links mode atomic killed staged args idem ro rodir rosnap"
+ARMS="swap neg nohist floor above ign unw ulim wlate wshort rew tlate tshort rohist links mode atomic killed staged args idem ro rodir rosnap h1head noval keep0 same gitfail"
 arm_run() {
   case "$1" in
+    h1head)   arm_h1head ;;
+    noval)    arm_noval ;;
+    keep0)    arm_keep0 ;;
+    same)     arm_same ;;
+    gitfail)  arm_gitfail ;;
     rosnap)   arm_rosnap ;;
     tlate)    arm_tshim tlate ;;
     tshort)   arm_tshim tshort ;;
@@ -1150,6 +1308,11 @@ for a in $ARMS; do
     args)   what="USAGE on the no-history path — unknown option rc 2, --absorb naming no file rc 2" ;;
     idem)   what="idempotent — absorbing the already-empty snapshot appends nothing" ;;
     ro)     what="REPORT-ONLY — --absorb without --apply on no history, the floor and above it writes nothing (git status empty, snapshot byte-identical, no archive) and says what it would do" ;;
+    h1head)   what="LINE-1 HEADING — a history with no preamble rotates (rc 0) and conserves: pre-run == moved + kept byte for byte, the archive's tail == moved" ;;
+    noval)    what="USAGE — --archive, --keep-entries, --absorb given no value, and --archive given an option as its value: each rc 2, nothing written" ;;
+    keep0)    what="USAGE — --keep-entries 0: rc 2 naming the option, no sed error, nothing written" ;;
+    same)     what="USAGE — --archive naming the absorbed snapshot (by a second spelling) or the history: each rc 2, nothing written (no self-append)" ;;
+    gitfail)  what="REFUSAL — git add of the archive fails: rc 1, history and snapshot byte-identical, archive untracked" ;;
   esac
   ROHIST_SKIP=""
   if arm_run "$a"; then
@@ -1456,6 +1619,38 @@ if mut_line "$ROT" "$MD/mTa.sh" "$MT_TRAP_OLD" "$MT_TRAP_NEW" \
    && mut_after "$MD/mTa.sh" "$MD/mT.sh" "$MK_OLD" '_mt=1'; then
   score MT killed "$MD/mT.sh" "$CH" "$PH" "after the rename, the history copied back through itself inline in the EXIT trap string (a trap handler's inline commands are kill points)"
 else bad "MT DID NOT APPLY — the EXIT trap line or the rename line is not in the rotator exactly once, or the insert did not land"; fi
+
+# --- MUTANTS of BL-322's five edge-input fixes, each killed by the arm built for it ---------------
+if mut_line "$ROT" "$MD/mH1.sh" 'if [ "$PREAMBLE_END" -gt 0 ]; then' 'if true; then'; then
+  score mH1 h1head "$MD/mH1.sh" "$CH" "$PH" "the empty-preamble branch removed (sed -n 1,0p prints line 1)"
+else bad "mH1 DID NOT APPLY — the preamble guard is not in the rotator exactly once"; fi
+
+if mut_line "$ROT" "$MD/mNV.sh" 'need_value() {' 'need_value() { return 0'; then
+  score mNV noval "$MD/mNV.sh" "$CH" "$PH" "a value-taking option's missing value no longer refused as usage"
+else bad "mNV DID NOT APPLY — 'need_value() {' is not in the rotator exactly once"; fi
+
+if mut_line "$ROT" "$MD/mK0.sh" 'if [ "$KEEP_ENTRIES" -lt 1 ]; then' 'if false; then'; then
+  score mK0 keep0 "$MD/mK0.sh" "$CH" "$PH" "--keep-entries 0 no longer refused"
+else bad "mK0 DID NOT APPLY — the zero guard is not in the rotator exactly once"; fi
+
+if mut_line "$ROT" "$MD/mSM.sh" 'same_file() {' 'same_file() { return 1'; then
+  score mSM same "$MD/mSM.sh" "$CH" "$PH" "the same-file guard removed (the archive appended to itself)"
+else bad "mSM DID NOT APPLY — 'same_file() {' is not in the rotator exactly once"; fi
+
+# Two layers, one mutant each: the refusal made a warning again, and the stage moved back after the
+# rename (with its refusal intact, it then refuses over a history already shrunk).
+if mut_line "$ROT" "$MD/mGF.sh" '    git -C "$GITROOT" add -- "$ARCHIVE" >/dev/null 2>&1 || {' '    git -C "$GITROOT" add -- "$ARCHIVE" >/dev/null 2>&1 || true || {'; then
+  score mGF gitfail "$MD/mGF.sh" "$CH" "$PH" "a failed git add of the archive no longer refuses"
+else bad "mGF DID NOT APPLY — the staging line is not in the rotator exactly once"; fi
+if mut_line "$ROT" "$MD/mGOa.sh" 'stage_archive' ':' && mut_after "$MD/mGOa.sh" "$MD/mGO.sh" "$MK_OLD" 'stage_archive'; then
+  score mGO gitfail "$MD/mGO.sh" "$CH" "$PH" "the stage moved back after the rename"
+else bad "mGO DID NOT APPLY — the top-level stage call or the rename line is not in the rotator exactly once"; fi
+
+# MTU: a rotator that turns off the sweep's DEBUG trace before its writes. The sweep cannot kill past
+# it, so arm_killed refuses it by text; this pins the refusal.
+if mut_after "$ROT" "$MD/mTU.sh" 'HIST_BASE="$(basename "$HISTORY")"' 'trap - DEBUG'; then
+  score MTU killed "$MD/mTU.sh" "$CH" "$PH" "the rotator runs 'trap - DEBUG' before its writes (the sweep's trace switched off)"
+else bad "MTU DID NOT APPLY — the HIST_BASE line is not in the rotator exactly once"; fi
 
 # unw_probe asks whether THIS host and user can make a scratch file read as not writable (`[ -w ]`
 # false, which is what the rotator's precheck reads) by one means: `mode` (chmod a-w, MCH), `flag`

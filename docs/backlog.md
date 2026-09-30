@@ -1648,7 +1648,13 @@ reports STILL-LIVE rather than closing.
 Discharges the consumer entry `extensions/steps-domain/route-push.md` at pinned ledger line 265.
 
 
-verify: sh r=core/skills/ai-dlc/steps/route.md; v=$(LC_ALL=C awk '/^- .has_ready_sprint/{print;exit}' "$r"); [ -n "$v" ] || exit 1; s=$(sed 's/has_ready_sprint//g' <<<"$v"); grep -qi sprint <<<"$s" && grep -qEi 'unread|never read|not be read|without reading|do not read' "$r"
+**The receipt's arm 2 was replaced: it false-closed on half the fix.** Grepped over the whole file,
+`not be read` already matched `cannot be read (permission error…` elsewhere in `route.md`, so
+scoping line 18 alone exited 0. Arm 2 now reads only the Step 0 item that opens "If the snapshot
+exists but user input does NOT indicate a resume", and refuses `cannot` by a word boundary. Scored
+tip 0, base 1, line-18-only half fix 1 (the old receipt: 0), no-read-only half fix 1.
+
+verify: sh r=core/skills/ai-dlc/steps/route.md; [ -f "$r" ] || exit 9; v=$(LC_ALL=C awk '/^- .has_ready_sprint/{print;exit}' "$r"); [ -n "$v" ] || exit 1; s=$(sed 's/has_ready_sprint//g' <<<"$v"); grep -qi sprint <<<"$s" || exit 1; i=$(LC_ALL=C awk '/^### Step 0:/{z=1;next} /^### /{z=0} z&&/^[0-9]+\. /{p=0} z&&/^[0-9]+\. If the snapshot exists but user input does NOT indicate a resume/{p=1} p' "$r"); [ -n "$i" ] || exit 1; grep -qEi 'unread|never read|(^|[^a-z])not be read|without reading|do not read' <<<"$i"
 ## BL-028
 
 **Core's sprint-review has no rule for a decision branch that no live event exercises, so
@@ -4276,7 +4282,12 @@ verify: sh a=core/scripts/audit-rule-files.sh; c=core/scripts/core-paths.sh; [ -
 - A failed `git add` of the archive is a WARNING with exit 0, leaving it outside Check 35's corpus.
   0.645.0 states this as an exception rather than fixing it.
 
-verify: manual
+The receipt RUNS the rotator on four worlds: a line-1-heading history must rotate to 10 headings,
+each valueless option and `--keep-entries 0` must exit 2, `--archive` equal to `--absorb` must
+exit 2 under `ulimit -f 64`, and a locked index must exit 1 over a history still equal to HEAD.
+Scored tip 0, base 1, and 1 on each of five one-fix reverts.
+
+verify: sh R=core/scripts/rotate-snapshot-archive.sh; [ -f "$R" ] || exit 9; d=$(mktemp -d) || exit 9; mk(){ mkdir -p "$1" && git -C "$1" init -q && { printf "$2"; for i in 1 2 3 4 5 6 7 8 9 10 11 12; do printf '## e%s\nbody %s\n\n' $i $i; done; } > "$1/h.md" && printf 'snap\n' > "$1/s.md" && git -C "$1" add -A && git -C "$1" -c user.email=f@f -c user.name=f commit -qm i; }; mk "$d/a" '' || exit 9; bash "$R" "$d/a/h.md" --apply >/dev/null 2>&1 || exit 1; [ "$(grep -c '^## ' "$d/a/h.md")" -eq 10 ] || exit 1; mk "$d/b" '# H\n\n' || exit 9; for o in --archive --keep-entries --absorb; do bash "$R" "$d/b/h.md" --apply "$o" >/dev/null 2>&1; [ $? -eq 2 ] || exit 1; done; bash "$R" "$d/b/h.md" --keep-entries 0 >/dev/null 2>&1; [ $? -eq 2 ] || exit 1; ( ulimit -f 64; bash "$R" "$d/b/h.md" --archive "$d/b/s.md" --absorb "$d/b/s.md" --apply ) >/dev/null 2>&1; [ $? -eq 2 ] || exit 1; mk "$d/e" '# H\n\n' || exit 9; : > "$d/e/.git/index.lock"; bash "$R" "$d/e/h.md" --apply >/dev/null 2>&1; [ $? -eq 1 ] || exit 1; [ "$(git -C "$d/e" show HEAD:h.md)" = "$(cat "$d/e/h.md")" ]
 
 ## BL-323 — `route.md` Step 0 has no rule for a resume request that meets an empty snapshot
 
@@ -4284,7 +4295,10 @@ verify: manual
 present and 0 bytes. Step 0 item 1 routes it away from resume, but items 3 and 4 cover only "not a
 resume" and "no snapshot", so `/ai-dlc resume` there falls through with no stated rule.
 
-verify: manual
+The receipt extracts the numbered Step 0 item that opens "If the snapshot exists but is EMPTY" and
+requires it to name the resume signal, the 0-byte state and its route. Scored tip 0, base 1.
+
+verify: sh r=core/skills/ai-dlc/steps/route.md; [ -f "$r" ] || exit 9; z=$(LC_ALL=C awk '/^### Step 0:/{z=1;next} /^### /{z=0} z' "$r"); [ -n "$z" ] || exit 1; i=$(LC_ALL=C awk '/^[0-9]+\. /{p=0} /^[0-9]+\. If the snapshot exists but is EMPTY/{p=1} p' <<<"$z"); [ -n "$i" ] || exit 1; grep -q 'resume signal' <<<"$i" && grep -q '0 bytes' <<<"$i" && grep -q 'continue to Step 1' <<<"$i"
 
 ## BL-324 — an interrupted `snapshot-archive-rotate` kill sweep can leak its scratch trees
 
@@ -4293,7 +4307,15 @@ temp tree in 7 of 10 runs, 5k to 42k entries each. The fixture's sweep workers c
 to the fixture and keep writing after its EXIT trap's `rm -rf`. Neither is reached by the engine,
 which sets no timeout; only an operator interrupt reaches them.
 
-verify: manual
+Fixed by recording each sweep worker's pid and reaping its whole tree (stop, walk children by
+`pgrep -P`, kill) in the EXIT handler before any removal, which TERM and INT now reach explicitly.
+Measured with a forced TERM mid-sweep in a scratch copy, pids read from a sentinel file and checked
+by `kill -0`: tip 0 of 12 workers alive, 0 entries left under the caller's TMPDIR; reap loop and its
+`wait` deleted, 9 entries (killed re-runs' rotator temp dirs); base, 28. The sweep's plain re-run
+now also sets TMPDIR inside its world, so a reaped re-run leaves nothing outside $WORK. The receipt
+reads the fixture's executable lines (comments excluded). Scored tip 0, base 1, reap-deleted 1.
+
+verify: sh f=core/fixtures/snapshot-archive-rotate/run.sh; [ -f "$f" ] || exit 9; body(){ LC_ALL=C awk -v n="$1" '$0 ~ "^"n"\\(\\) *\\{" {p=1; next} p && /^}/ {exit} p && !/^[[:blank:]]*#/' "$f"; }; h=$(body fixture_cleanup); s=$(body sweep_pass); [ -n "$h" ] && [ -n "$s" ] || exit 1; grep -q 'KPIDS="\$KPIDS \$!"' <<<"$s" || exit 1; r=$(grep -n 'reap_tree "\$p"' <<<"$h" | head -1 | cut -d: -f1); m=$(grep -n 'rm -rf "\$WORK"' <<<"$h" | head -1 | cut -d: -f1); [ -n "$r" ] && [ -n "$m" ] && [ "$r" -lt "$m" ] || exit 1; grep -qx 'trap fixture_cleanup EXIT' "$f" && grep -qx "trap 'exit 143' TERM" "$f" && grep -q 'pgrep -P' <<<"$(body reap_tree)"
 
 ## BL-325 — the `snapshot-archive-rotate` kill sweep does not reach a rotator that turns off its own trace, and a TERM during its EXIT trap leaks the sandbox
 
@@ -4306,7 +4328,15 @@ verify: manual
 - A TERM that lands while the fixture's EXIT trap runs `chflags -R` kills bash before `rm`, and
   leaked 336,939 entries in one run. `trap '' TERM INT` at the top of the handler closes it.
 
-verify: manual
+Both fixed, with the refusal option taken for the first: `arm_killed` refuses a rotator matching
+`KESC_RE` (`set +…T`, `set +o functrace`, `trap … DEBUG`) before it sweeps, the regex self-probed
+in both directions at load, and mutant MTU (`trap - DEBUG` inserted) is now KILLED by that refusal.
+The not-reached text names what the refusal still cannot see (`eval`, a variable, a sourced file).
+The handler's first line is `trap '' TERM INT`. The TERM-during-`chflags` window was not forced;
+the receipt reads the handler's first executable line. Scored tip 0, base 1, and 1 on each of
+the trap-ignore deleted and the refusal disabled.
+
+verify: sh f=core/fixtures/snapshot-archive-rotate/run.sh; [ -f "$f" ] || exit 9; body(){ LC_ALL=C awk -v n="$1" '$0 ~ "^"n"\\(\\) *\\{" {p=1; next} p && /^}/ {exit} p && !/^[[:blank:]]*#/' "$f"; }; h=$(body fixture_cleanup); [ -n "$h" ] || exit 1; [ "$(head -1 <<<"$h" | tr -d ' ')" = "trap''TERMINT" ] || exit 1; k=$(body arm_killed); [ -n "$k" ] || exit 1; e=$(grep -n 'grep -qE "\$KESC_RE" "\$R_"' <<<"$k" | head -1 | cut -d: -f1); z=$(grep -n 'bh="\$(fbytes' <<<"$k" | head -1 | cut -d: -f1); [ -n "$e" ] && [ -n "$z" ] && [ "$e" -lt "$z" ] || exit 1; grep -q '^  score MTU killed ' "$f"
 
 ## BL-326 — `validate-gate-adjudication.sh` reads the map from the install fallback and the escalations from the foreign root
 
