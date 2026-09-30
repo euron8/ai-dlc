@@ -4181,7 +4181,13 @@ root and a stale generated region in the install's `retro.md` exits 0 and rewrit
 file (0.645.0: rc 1, nothing written). That is the intended behaviour, and what a run with no
 override does. Arm E asserts only the already-in-sync case, so the write path has no arm.
 
-verify: manual
+Arm E2 in `core/fixtures/schema-install-fallback/run.sh` seeds that stale region in the install's
+`steps/retro.md`, derives the expected bytes from a no-override write of the same seed, and asserts
+the foreign-root write exits 0, reports one file updated, produces those bytes, leaves the foreign
+decoy alone and passes `--check` after. Two write-mode-gated mutants of the fallback branch (install
+doc dirs skipped, rc 0; the 0.645.0 exit 1) each leave the A-E vector at `000-0-` and fail E2 alone.
+
+verify: sh f=core/fixtures/schema-install-fallback/run.sh; [ -f "$f" ] || exit 9; o="$(bash "$f" 2>&1)" || exit 1; grep -q '^  ok    E2 write mode under a foreign root rewrites a stale INSTALL retro.md region' <<<"$o" || exit 1; grep -q '^  ok    MUTANT SKIP on sync-taught-schema leaves A-E at 000-0- and is killed by E2 alone' <<<"$o" || exit 1; grep -q '^  ok    MUTANT R2W on sync-taught-schema leaves A-E at 000-0- and is killed by E2 alone' <<<"$o" || exit 1; exit 0
 
 ## BL-333 — three "0 ALWAYS" detectors refuse with exit 0 and a stderr line, so the report renders `none` for a scan that never ran
 
