@@ -202,7 +202,7 @@ done
 # an install-first fallback here. The seed is not under the correct root, so the agreement runs
 # above are untouched. No exemption list: each of the five proves sensitivity the ordinary way.
 mkdir -p "$WORK/scripts/core/schemas" || exit 2
-for _pz in sprint-status.json provenance-block.json audit-anchors.json gate-adjudication-verdict.json write-format-steering.json harness-origin.json; do
+for _pz in sprint-status.json provenance-block.json audit-anchors.json gate-adjudication-verdict.json write-format-steering.json harness-origin.json pipeline-state-paths.json; do
   printf '{ "vpr_poison": true }\n' > "$WORK/scripts/core/schemas/$_pz"
 done
 

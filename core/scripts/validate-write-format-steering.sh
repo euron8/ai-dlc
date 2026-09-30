@@ -159,22 +159,23 @@ command -v python3 >/dev/null 2>&1 || {
 # consumer layout the script-relative one is scripts/schemas/, which never exists, so an override
 # naming a root with no .claude/schemas/ failed closed (BL-300). Last, as in BL-299's pair, so a
 # root carrying its own schema still wins. An empty walk adds no candidate.
+#
+# THE TWO SCHEMAS RESOLVE AS A SET, FROM ONE DIRECTORY (BL-330). They used to fall back one FILE at
+# a time, so a root carrying the steering schema but not the population schema joined its own
+# steering declaration to the INSTALL's population and judged `declared_in` under the root: a
+# verdict over two trees that neither tree would give. The first candidate DIRECTORY holding the
+# steering schema now owns the pair — an unparseable one included, so a broken root copy fails
+# rather than being skipped for the install's — and the population is read from that directory
+# only. A directory whose population half is absent is the consumer-before-pull state below: an
+# honest SKIP, never the other tree's half.
 AI_DLC_INSTALL_ROOT="$(ai_dlc_resolve_root "$AI_DLC_SELF_DIR" || true)"
-resolve_schema() {
-  _n="$1"
-  _i=""
-  [ -n "$AI_DLC_INSTALL_ROOT" ] && _i="$AI_DLC_INSTALL_ROOT/.claude/schemas/$_n"
-  for _c in "$AI_DLC_SELF_DIR/../schemas/$_n" \
-            "$AI_DLC_ROOT/core/schemas/$_n" \
-            "$AI_DLC_ROOT/.claude/schemas/$_n" \
-            "$_i"; do
-    [ -n "$_c" ] && [ -f "$_c" ] && { printf '%s\n' "$_c"; return 0; }
-  done
-  return 1
-}
-
-STEERING="$(resolve_schema write-format-steering.json || true)"
-POP_DEFAULT="$(resolve_schema pipeline-state-paths.json || true)"
+STEERING=""; SCHEMA_DIR=""
+for _d in "$AI_DLC_SELF_DIR/../schemas" \
+          "$AI_DLC_ROOT/core/schemas" \
+          "$AI_DLC_ROOT/.claude/schemas" \
+          "${AI_DLC_INSTALL_ROOT:+$AI_DLC_INSTALL_ROOT/.claude/schemas}"; do
+  [ -n "$_d" ] && [ -f "$_d/write-format-steering.json" ] && { SCHEMA_DIR="$_d"; STEERING="$_d/write-format-steering.json"; break; }
+done
 
 if [ -z "$STEERING" ]; then
   echo "validate-write-format-steering: FAIL — cannot find schemas/write-format-steering.json." >&2
@@ -416,10 +417,12 @@ fi
 # --- the corpus ---------------------------------------------------------------
 # The population schema is resolved from the STEERING schema's own `join.population_schema`,
 # so the declaration decides which file is joined and this reader cannot pick a different one.
+# An unreadable declaration names the default. Either way it is looked for in the directory the
+# steering schema came from, and nowhere else.
 POP_NAME="$(python3 -c 'import json,sys; print((json.load(open(sys.argv[1])).get("join") or {}).get("population_schema") or "")' "$STEERING" 2>/dev/null || true)"
+[ -n "$POP_NAME" ] || POP_NAME="pipeline-state-paths.json"
 POP=""
-[ -n "$POP_NAME" ] && POP="$(resolve_schema "$POP_NAME" || true)"
-[ -n "$POP" ] || POP="$POP_DEFAULT"
+[ -f "$SCHEMA_DIR/$POP_NAME" ] && POP="$SCHEMA_DIR/$POP_NAME"
 
 if [ -z "$POP" ]; then
   # A CONSUMER THAT HAS NOT PULLED THE POPULATION SCHEMA IS A SKIP, NOT A FAILURE. It has
@@ -436,7 +439,7 @@ fi
 # root instead, a root holding only .claude/ would resolve none of them and report PASS having
 # judged nothing (BL-300).
 READER_ROOT="$AI_DLC_ROOT"
-if [ -n "$AI_DLC_INSTALL_ROOT" ] && [ "$STEERING" = "$AI_DLC_INSTALL_ROOT/.claude/schemas/write-format-steering.json" ]; then
+if [ -n "$AI_DLC_INSTALL_ROOT" ] && [ "$SCHEMA_DIR" = "$AI_DLC_INSTALL_ROOT/.claude/schemas" ]; then
   READER_ROOT="$AI_DLC_INSTALL_ROOT"
 fi
 OUT="$(run_reader live "$STEERING" "$POP" "$READER_ROOT" 2>&1)"

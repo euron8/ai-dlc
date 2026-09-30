@@ -42,6 +42,12 @@
 #                       (GE) it is GE's. Killed by reading the escalations from the override root
 #                       again (ESC) and by always reading the install's (ESCI). IFMAP also fails N,
 #                       legitimately: a root whose map is not chosen does not own the escalations.
+#   P  BL-330, write-format-steering only: a foreign root carrying the steering schema but NOT the
+#                       population schema (FP) owns the PAIR, so its missing half is the honest
+#                       `SKIP — EXAMINED NOTHING` (rc 0), never the install's population joined to the
+#                       root's steering and judged under the root (rc 1). B's Ggood, the root carrying
+#                       the whole set, is the near-miss. Killed by falling back per FILE again
+#                       (PERFILE). IF also fails P, legitimately: install-first never lets a root own it.
 #
 # THE KILL IS THE WHOLE VECTOR. A mutant is killed only when every arm of the script it edits
 # answers exactly as declared — its own arm(s) fail and the rest hold — so no kill is borrowed
@@ -113,13 +119,13 @@ token_of() {
     validate-gate-adjudication)     printf '%s' '^[0-9]+[a-z]?$' ;;
   esac
 }
-# The unmutated answer per script, over arms A B C D E M N ('-' = the arm is not this script's).
+# The unmutated answer per script, over arms A B C D E M N P ('-' = the arm is not this script's).
 want_base() {
   case "$1" in
-    validate-write-format-steering) printf '%s' '0000---' ;;
-    sync-taught-schema)             printf '%s' '000-0--' ;;
-    validate-gate-adjudication)     printf '%s' '000--00' ;;
-    *)                              printf '%s' '000----' ;;
+    validate-write-format-steering) printf '%s' '0000---0' ;;
+    sync-taught-schema)             printf '%s' '000-0---' ;;
+    validate-gate-adjudication)     printf '%s' '000--00-' ;;
+    *)                              printf '%s' '000-----' ;;
   esac
 }
 
@@ -224,6 +230,12 @@ mk_roots() { # $1 world
   # escalated set exactly and the run reaches the join, and whose escalations are therefore its own.
   mkdir -p "$w/GE/.claude/skills/ai-dlc" || return 1
   cp "$w/t/.claude/skills/ai-dlc/enforcement-map.yaml" "$w/GE/.claude/skills/ai-dlc/" || return 1
+  # P's subject: the install's steering schema, WITHOUT the population schema, plus the skills its
+  # `declared_in` paths name, so the only thing the root lacks is the population half.
+  mkdir -p "$w/FP/.claude/schemas" || return 1
+  cp "$w/t/.claude/schemas/write-format-steering.json" "$w/FP/.claude/schemas/" || return 1
+  cp -R "$w/t/.claude/skills" "$w/FP/.claude/" || return 1
+  [ ! -e "$w/FP/.claude/schemas/pipeline-state-paths.json" ] || return 1
 }
 
 # drive <world> <ai|legacy> <script> <override root or ""> -> "rc=<n>" then the normalized output
@@ -249,10 +261,10 @@ adjudicate() {
   printf '%s\n' "$out" | sed -e "s@$w@WORLD@g" | grep -oE '\((no-escalations-file|ok):[^)]*' | sed -n 's/^([a-z-]*://p' | sed -n 1p
 }
 
-# vector <world> <script> -> seven characters over A B C D E M N: 0 held, 1 failed, - not this
+# vector <world> <script> -> eight characters over A B C D E M N P: 0 held, 1 failed, - not this
 # script's; or "BROKEN: <why>" when the unmutated control itself did not run.
 vector() {
-  local w="$1" s="$2" ctl fo lg gb gg a b c d="-" e="-" m="-" n="-" nc nf d0 i0 d1 i1 gm
+  local w="$1" s="$2" ctl fo lg gb gg a b c d="-" e="-" m="-" n="-" p="-" nc nf d0 i0 d1 i1 gm fp
   ctl="$(drive "$w" ai "$s" "")"
   if [ "$(first_line "$ctl")" != rc=0 ] || ! grep -Eq "$(token_of "$s")" <<<"$ctl"; then
     echo "BROKEN: the no-override control of $s did not exit 0 with its baseline line: $(printf '%s' "$ctl" | tr '\n' '|' | cut -c1-160)"; return
@@ -272,6 +284,10 @@ vector() {
     nc="$(decl_rows "$ctl")"; nf="$(decl_rows "$fo")"
     case "$nc" in ''|0) echo "BROKEN: the control of $s judged no declaration rows"; return ;; esac
     d=1; [ "$nf" = "$nc" ] && d=0
+    fp="$(drive "$w" ai "$s" "$w/FP")"
+    p=1
+    if [ "$(first_line "$fp")" = rc=0 ] && grep -q 'SKIP — EXAMINED NOTHING' <<<"$fp" \
+       && [ "$(first_line "$gg")" = rc=0 ] && ! grep -q 'SKIP — EXAMINED NOTHING' <<<"$gg"; then p=0; fi
   fi
   if [ "$s" = sync-taught-schema ]; then
     d0="$(cksum < "$w/FE/.claude/skills/ai-dlc/decoy.md")"; i0="$(sum_docs "$w")"
@@ -287,7 +303,7 @@ vector() {
     if [ "$(adjudicate "$w" "$w/F")" = "WORLD/t/docs/escalations/pending.md" ] \
        && [ "$(adjudicate "$w" "$w/GE")" = "WORLD/GE/docs/escalations/pending.md" ]; then n=0; fi
   fi
-  printf '%s%s%s%s%s%s%s\n' "$a" "$b" "$c" "$d" "$e" "$m" "$n"
+  printf '%s%s%s%s%s%s%s%s\n' "$a" "$b" "$c" "$d" "$e" "$m" "$n" "$p"
 }
 
 # --- the mutants ------------------------------------------------------------------------------
@@ -316,9 +332,11 @@ if mode in ("DEL", "HOP"):
     rep = m.group(1) + '=""' if mode == "DEL" else m.group(1) + '="$(cd "$' + m.group(2) + '/../.." && pwd)"'
     out = src[:m.start()] + rep + src[m.end():]
 elif mode == "IF":
-    if "resolve_schema() {" in src:
-        out = lit(' \\\n            "$_i"; do', '; do', src)
-        out = lit('for _c in "$AI_DLC_SELF_DIR/../schemas/$_n"', 'for _c in "$_i" "$AI_DLC_SELF_DIR/../schemas/$_n"', out)
+    if 'SCHEMA_DIR=""' in src:
+        # write-format-steering resolves its schema pair by DIRECTORY; the install's goes first.
+        out = lit(' \\\n          "${AI_DLC_INSTALL_ROOT:+$AI_DLC_INSTALL_ROOT/.claude/schemas}"; do', '; do', src)
+        out = lit('for _d in "$AI_DLC_SELF_DIR/../schemas"',
+                  'for _d in "${AI_DLC_INSTALL_ROOT:+$AI_DLC_INSTALL_ROOT/.claude/schemas}" "$AI_DLC_SELF_DIR/../schemas"', out)
     elif "GA_INSTALL_SCHEMA" in src:
         out = lit('schemas/gate-adjudication-verdict.json" \\\n        "$GA_INSTALL_SCHEMA"; do',
                   'schemas/gate-adjudication-verdict.json"; do', src)
@@ -344,6 +362,13 @@ elif mode == "R2":
 elif mode == "ESC":
     # BL-326 reverted: the escalations are read from the override root whatever tree the map is from.
     out = lit('ESC="${AI_DLC_ESCALATIONS:-$GA_MAP_ROOT/', 'ESC="${AI_DLC_ESCALATIONS:-$GA_ROOT/', src)
+elif mode == "PERFILE":
+    # BL-330 reverted: the population schema falls back on its own, through every candidate
+    # directory, whatever directory the steering schema came from.
+    out = lit('[ -f "$SCHEMA_DIR/$POP_NAME" ] && POP="$SCHEMA_DIR/$POP_NAME"\n',
+              'for _pd in "$AI_DLC_SELF_DIR/../schemas" "$AI_DLC_ROOT/core/schemas" "$AI_DLC_ROOT/.claude/schemas" '
+              '"${AI_DLC_INSTALL_ROOT:+$AI_DLC_INSTALL_ROOT/.claude/schemas}"; do '
+              '[ -n "$_pd" ] && [ -f "$_pd/$POP_NAME" ] && { POP="$_pd/$POP_NAME"; break; }; done\n', src)
 elif mode == "ESCI":
     # Over-reach: the escalations always come from the install, even when the root's own map won.
     out = lit('GA_MAP_ROOT="$GA_ROOT"\n', 'GA_MAP_ROOT="$GA_INSTALL_ROOT"\n', src)
@@ -352,18 +377,19 @@ else:
 open(dst_path, "w").write(out)
 PY
 
-# script:MODE:want — want over A B C D E M N, exactly. DEL on gate-adjudication also fails N: with
+# script:MODE:want — want over A B C D E M N P, exactly. DEL on gate-adjudication also fails N: with
 # no install fallback the no-map root F finds no map at all, so there is no escalations path to read.
 MUTANTS="
-sprint-status:DEL:100---- sprint-status:IF:010---- sprint-status:HOP:001----
-validate-audit-anchors:DEL:100---- validate-audit-anchors:IF:010---- validate-audit-anchors:HOP:001----
-validate-write-format-steering:DEL:1001--- validate-write-format-steering:IF:0100---
-validate-write-format-steering:HOP:0010--- validate-write-format-steering:R1:0001---
-sync-taught-schema:DEL:100-0-- sync-taught-schema:IF:010-0-- sync-taught-schema:HOP:001-0--
-sync-taught-schema:R2:100-1--
-validate-gate-adjudication:DEL:100--01 validate-gate-adjudication:IF:010--00
-validate-gate-adjudication:HOP:001--00 validate-gate-adjudication:IFMAP:000--11
-validate-gate-adjudication:ESC:000--01 validate-gate-adjudication:ESCI:000--01
+sprint-status:DEL:100----- sprint-status:IF:010----- sprint-status:HOP:001-----
+validate-audit-anchors:DEL:100----- validate-audit-anchors:IF:010----- validate-audit-anchors:HOP:001-----
+validate-write-format-steering:DEL:1001---0 validate-write-format-steering:IF:0100---1
+validate-write-format-steering:HOP:0010---0 validate-write-format-steering:R1:0001---0
+validate-write-format-steering:PERFILE:0000---1
+sync-taught-schema:DEL:100-0--- sync-taught-schema:IF:010-0--- sync-taught-schema:HOP:001-0---
+sync-taught-schema:R2:100-1---
+validate-gate-adjudication:DEL:100--01- validate-gate-adjudication:IF:010--00-
+validate-gate-adjudication:HOP:001--00- validate-gate-adjudication:IFMAP:000--11-
+validate-gate-adjudication:ESC:000--01- validate-gate-adjudication:ESCI:000--01-
 "
 
 # world <name> <script or ""> <mode or COPY> -> writes the world; its .status says APPLIED or why not
@@ -390,7 +416,7 @@ echo ""
 # --- anchor control: every mutation refuses a file that carries none of the fix -------------
 printf '#!/usr/bin/env bash\necho no fix here\n' > "$WORK/decoy.sh"
 n_decoy=0; n_modes=0
-for mode in DEL HOP IF IFMAP R1 R2 ESC ESCI; do
+for mode in DEL HOP IF IFMAP R1 R2 ESC ESCI PERFILE; do
   n_modes=$((n_modes + 1))
   python3 "$MUTPY" "$mode" "$WORK/decoy.sh" "$WORK/decoy.out" 2>/dev/null && n_decoy=$((n_decoy + 1))
 done
@@ -417,7 +443,7 @@ fi
 
 extra_arms() {
   case "$1" in
-    validate-write-format-steering) printf '%s' ', D same declaration rows' ;;
+    validate-write-format-steering) printf '%s' ', D same declaration rows, P schema pair resolves as a set' ;;
     sync-taught-schema)             printf '%s' ', E write mode touches nothing' ;;
     validate-gate-adjudication)     printf '%s' ', M root map wins, N escalations follow the map' ;;
   esac
@@ -428,7 +454,7 @@ for s in $SCRIPTS; do
   if [ "$got" = "$want" ]; then
     ok "$s: A no-schema root = control, B root schema wins, C legacy layout agrees$(extra_arms "$s") ($got)"
   else
-    bad "$s: vector $got, want $want (A B C D E M N)"; base_ok=0
+    bad "$s: vector $got, want $want (A B C D E M N P)"; base_ok=0
   fi
 done
 
@@ -476,7 +502,7 @@ for spec in $MUTANTS; do
   if [ "$base_ok" -ne 1 ]; then bad "$label: FIXTURE BROKEN — the unmutated vectors are wrong, so no kill is readable"; continue; fi
   got="$(cat "$WORK/m$i/.vec" 2>/dev/null)"
   if [ "$got" = "$want" ]; then ok "$label killed by its own arm(s) only ($got)"; n_killed=$((n_killed + 1))
-  else bad "$label: vector ${got:-<none>}, want $want (A B C D E M N)"; fi
+  else bad "$label: vector ${got:-<none>}, want $want (A B C D E M N P)"; fi
 done
 [ "$n_killed" -gt 0 ] || bad "no mutant was killed — the arms were never shown to fire"
 

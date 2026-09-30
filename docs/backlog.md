@@ -4173,7 +4173,12 @@ core/schemas/layer-adjudication-register.json … no file is there` rc 1: the po
 from the install while the steering schema and `READER_ROOT` stay on the root. The 0.646.0
 contract claimed the fallback changes only runs that fail closed; this input disproves that.
 
-verify: manual
+Receipt: a consumer-shaped install driven under a foreign root carrying `write-format-steering.json`
+and the skills it names, but not `pipeline-state-paths.json`, must read `SKIP — EXAMINED NOTHING`
+(exit 0), not a verdict joined across two trees (exit 1). `schema-install-fallback` arm P carries
+it, with B's full-set root as the near-miss and the PERFILE mutant.
+
+verify: sh d=$(mktemp -d); mkdir -p "$d/t/.git" "$d/t/.claude/schemas" "$d/t/scripts/ai-dlc" "$d/FP/.claude/schemas" "$d/FP/.claude/skills" || exit 9; cp core/schemas/write-format-steering.json core/schemas/pipeline-state-paths.json "$d/t/.claude/schemas/" || exit 9; cp core/scripts/validate-write-format-steering.sh "$d/t/scripts/ai-dlc/" || exit 9; cp core/schemas/write-format-steering.json "$d/FP/.claude/schemas/" || exit 9; cp -R core/skills/ai-dlc-update "$d/FP/.claude/skills/" || exit 9; o=$(cd "$d/t" && AI_DLC_PROJECT_ROOT="$d/FP" bash "$d/t/scripts/ai-dlc/validate-write-format-steering.sh" 2>&1); case "$o" in *"SKIP — EXAMINED NOTHING"*) exit 0 ;; *"validate-write-format-steering: FAIL"*|*"validate-write-format-steering: PASS"*) exit 1 ;; esac; exit 9
 
 ## BL-331 — under a root with no schemas, `validate-write-format-steering.sh` judges the INSTALL's declarations and acquits the root's stale ones
 
