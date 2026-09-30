@@ -2456,3 +2456,107 @@ path is a push failing AFTER the gate returned OK on an in-sync branch, so it is
 BL-389 fixed and 0.673.0 did not make it worse. Discharges no consumer candidate.
 
 verify: manual
+
+## BL-392 — Check 5 read only the first 200 lines of the sprint's gate-log section, so a long section failed on evidence it held
+
+**DEFECT.** Filed by the consumer as `PC-S315-VALIDATE-MANDATORY-RULES-CHECK5-HEAD-200-TRUNCATES-A-LONG-SPRINT-SECTION`.
+The consumer's Sprint 315 retro is blocked on it.
+
+**Claims, enumerated.** (1) `core/scripts/validate-mandatory-rules.sh` Check 5 isolated the sprint's
+`## Gate Log: Sprint N` section and piped it through `| head -200`, so evidence past section line 200
+was never read. (2) The section is already bounded by the next `## Gate Log: Sprint` header, so the
+whole section can be searched. (3, stated by the filing as NOT established) how many other sprints'
+sections exceed 200 lines. Claims 1 and 2 are closed here; claim 3 stays unmeasured.
+
+**Premise, re-derived on this tree and on the consumer (read-only).** The truncation was at
+`validate-mandatory-rules.sh:450` on origin/main `144c41b8`, and it was the only `head -N` applied to
+an isolated section in the script: :385 is a comment, and the other `head` sites take a single value.
+The shipping isolation awk was run against the consumer's Sprint 315 section, both at
+`_bmad-output/implementation-artifacts/s315/gate-log-archive.md` and at the `ai-dlc/retro/sprint-315`
+blob. The section is 432 lines now (the filing's 426 predates the retro's own appended lines). The
+first 200 lines hold `USER-CONFIRMED` 0 and `playwright` 0, so Check 5 FAILs. The whole section holds
+`USER-CONFIRMED` 0 and `playwright` 2. The control token `zzqx-no-such-token` scores 0 on the same
+section.
+
+**The fix does not show the consumer's evidence was always there.** Both `playwright` hits are
+INCIDENTAL: section line 284 is a spec filename inside a remediation note, and line 300 is a Check 11
+row. The real visual-verification line (399, "Visual verification (is_ui_epic): PASSED for the
+selector") carries neither token. So the consumer's section passes after this fix only because of
+those two incidental hits. The writer/reader mismatch behind that is a separate defect: deploy-validate
+§4 never tells the writer to record `USER-CONFIRMED` or `playwright`, while `gate-validation.md`
+requires one of them. BL-396's hand fixes that mismatch in the same release. The `tail -200` wrong fix
+also reads 2 on this section, which is why the fixture seeds its evidence outside the last 200 lines
+as well as the first.
+
+**Fix.** The `| head -200` is removed from the `SPRINT_SECTION` assignment, with a comment beside it
+saying why no prefix or suffix of the section may be taken. Fixture `check5-anchor-base` gains a
+~700-line world with the evidence at section line ~350 (it PASSes), a cross-sprint world (Sprint 901's
+`USER-CONFIRMED` must not acquit Sprint 900, which FAILs), a structural arm asserting the isolation
+line carries no `head` (its extractor is self-probed both ways), an unmutated control, and three
+mutants, each moving one cell. `tail -200` moves the long world, a whole-file read moves the
+cross-sprint world, and `head -2000` leaves both worlds unchanged and moves only the structural arm.
+
+**Receipt, scored in fresh trees holding only the files it names.** The tip (origin/main) exits 1,
+the fix exits 0, `tail -200` exits 1, `head -2000` exits 1, and a whole-file read exits 1. It drives
+the real validator over a 2600-line section with the evidence at line 2301, then over a 900/901 pair.
+It exits 9 unless a no-evidence section FAILs and a short evidenced one PASSes first.
+
+Held note (batch 177): the `head -200` removal and the check5-anchor-base long-section,
+cross-sprint and structural arms with three mutants shipped on `b177-r0-c5hook`.
+
+verify: sh V=core/scripts/validate-mandatory-rules.sh; A=core/scripts/validate-audit-anchors.sh; J=core/schemas/audit-anchors.json; [ -f "$V" ] && [ -f "$A" ] && [ -f "$J" ] || exit 9; d=$(mktemp -d) || exit 9; mkdir -p "$d/b" "$d/schemas" "$d/r" || exit 9; cp "$V" "$A" "$d/b/" && cp "$J" "$d/schemas/" || exit 9; printf '#!/bin/sh\nexit 0\n' > "$d/b/validate-retro-evidence.sh"; cp "$d/b/validate-retro-evidence.sh" "$d/b/validate-cycle-commits.sh"; cd "$d/r" || exit 9; g() { git -c user.email=f@f -c user.name=f -c commit.gpgsign=false "$@"; }; git init -q . || exit 9; echo s > s; git add s && g commit -qm s || exit 9; P=$(git rev-parse HEAD); mkdir -p web/src _bmad-output/implementation-artifacts; echo x > web/src/a.jsx; git add web && g commit -qm w || exit 9; printf -- '- sprint: 899\n  sha: %s\n- sprint: 900\n  sha: <PENDING-S900-RETRO>\n' "$P" > _bmad-output/audit-anchors.md; L=_bmad-output/implementation-artifacts/gate-log.md; c() { bash "$d/b/validate-mandatory-rules.sh" 900 2>/dev/null | grep 'CHECK 5:' | head -1; }; f() { awk -v a="$1" -v b="$2" 'BEGIN{for(i=a;i<=b;i++) print "- note " i}'; }; { printf '## Gate Log: Sprint 900\n'; f 2 9; } > "$L"; case "$(c)" in *FAIL*) ;; *) exit 9 ;; esac; printf '## Gate Log: Sprint 900\nUSER-CONFIRMED\n' > "$L"; case "$(c)" in *PASS*) ;; *) exit 9 ;; esac; { printf '## Gate Log: Sprint 900\n'; f 2 2299; printf 'USER-CONFIRMED\n'; f 2301 2600; } > "$L"; case "$(c)" in *PASS*) ;; *) exit 1 ;; esac; printf '## Gate Log: Sprint 900\n- deploy completed\n\n## Gate Log: Sprint 901\nUSER-CONFIRMED\n' > "$L"; case "$(c)" in *FAIL*) exit 0 ;; *) exit 1 ;; esac
+
+## BL-393 — the consumer pre-push failed every pinned role on the first push from a fresh worktree, because `.claude/agents/` is gitignored and was only ever checked
+
+**DEFECT.** Filed by the consumer as `PC-S315-PREPUSH-REQUIRES-RENDERED-AGENT-DEFS-IN-FRESH-WORKTREE`.
+
+**Claims, enumerated.** (1) `core/git-hooks/pre-push`'s agent-definitions arm ran
+`render-agent-definitions.sh --check` only, and `.claude/agents/` is never present in a new
+`git worktree add`, so the push failed on every pinned role. (2) The remedy command appeared only in a
+trailing sub-line of the failure. (3, stated by the filing as NOT established) whether the hook should
+render or stay check-only.
+
+**Premise, re-derived.** On the consumer (read-only): `git check-ignore -q .claude/agents/dev.md` exits
+0 and `.claude/settings.json` is tracked and not ignored (`check-ignore` exits 1, `ls-files
+--error-unmatch` exits 0). The control is a root-level path that exits 1, and 0 `.claude/agents` files
+are tracked. So the declaration travels with every checkout and its projection never does. On this
+tree, origin/main `144c41b8`'s `agent_definitions()` ran only `--check`. Driven in a scratch consumer
+with the directory absent, it exits 1.
+
+**Decision on claim 3: render when ABSENT, check-only when PRESENT.** An absent directory is a derived
+build product that a fresh checkout has never had, and regenerating it from the tracked declaration
+destroys nothing. A present directory that has drifted is either a hand edit or a settings change
+nobody re-rendered. Overwriting it at push time would erase the evidence of which, so it still blocks
+the push. The renderer's own `--check` still never writes, and mutant M7 in `agent-definition-render`
+still pins that; the write is the hook's decision. `.githooks/pre-push` (the distribution runner) is
+unchanged: the distribution has no settings file, and I66 is untouched. Claim 2 therefore closes in
+two halves. It is moot for the absent case, which no longer fails. For a present, drifted directory
+the renderer's failure output still ends in the exact command, so that half is unchanged.
+
+**Fix.** In `agent_definitions()`, `[ ! -d .claude/agents ]` runs the renderer in write mode with
+`--root .`, prints its output, and then the existing `--check` runs. The renderer refuses before any
+write on unparseable settings (2) or no `aiDlcRoles` (3), so no empty directory is left behind for the
+next push to read as present. Fixture `agent-definition-render` gains a section that drives the REAL
+consumer hook in a scratch consumer (a git repo with the renderer and the hook installed and no
+`tests/fixtures`). It has four worlds. An absent directory renders, the push passes, and `--check`
+agrees afterwards. A drifted definition blocks the push (exit 1) and stays byte-identical. A current
+tree prints the OK line and is not written. Unparseable settings block the push and create no
+directory. The section also has an unmutated-hook liveness control and four mutants: `never-render`
+moves the absent world; `render-unconditionally` moves drift and current, both of which are that
+write; `mkdir-before-render` moves unparseable; and `skip-the-arm` moves three worlds, scored as such.
+
+**Receipt, scored in fresh trees holding only the files it names.** The tip (origin/main) exits 1 and
+the fix exits 0. Three wrong fixes each exit 1: rendering unconditionally overwrites the drifted file,
+skipping the arm when the directory is absent leaves no definitions, and a message-only fix still
+blocks the absent push. It exits 9 unless the unmutated hook passes a current scratch consumer and the
+absent world really starts with no directory.
+
+**Owed outside this tree:** `agent-definition-render` now READS `core/git-hooks/pre-push`, which its
+read-set entry does not list. Run `sudo bash core/scripts/derive-fixture-readsets.sh --list
+"agent-definition-render"` and commit the map it writes.
+
+Held note (batch 177): render-when-absent in the consumer hook's agent-definitions arm and the
+agent-definition-render hook section (four worlds, a liveness control and four mutants) shipped on
+`b177-r0-c5hook`.
+
+verify: sh H=core/git-hooks/pre-push; R=core/scripts/render-agent-definitions.sh; [ -f "$H" ] && [ -f "$R" ] || exit 9; command -v jq >/dev/null 2>&1 || exit 9; d=$(mktemp -d) || exit 9; w() { p="$d/$1"; mkdir -p "$p/scripts/ai-dlc" "$p/.githooks" "$p/.claude" || return 1; git init -q "$p" || return 1; cp "$R" "$p/scripts/ai-dlc/render-agent-definitions.sh" && cp "$H" "$p/.githooks/pre-push" || return 1; printf '{"aiDlcModels":{"o":"claude-opus-5"},"aiDlcRoles":{"alpha":{"model":"o","effort":"high"}}}\n' > "$p/.claude/settings.json"; }; run() { ( cd "$d/$1" && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE bash .githooks/pre-push </dev/null >/dev/null 2>&1 ); }; w c || exit 9; bash "$R" --root "$d/c" >/dev/null 2>&1 || exit 9; run c || exit 9; w x || exit 9; bash "$R" --root "$d/x" >/dev/null 2>&1 || exit 9; printf 'effort: max\n' >> "$d/x/.claude/agents/alpha.md"; m1=$(cksum < "$d/x/.claude/agents/alpha.md"); run x; rx=$?; m2=$(cksum < "$d/x/.claude/agents/alpha.md"); [ "$rx" -eq 1 ] && [ "$m1" = "$m2" ] || exit 1; w a || exit 9; [ ! -e "$d/a/.claude/agents" ] || exit 9; run a || exit 1; [ -f "$d/a/.claude/agents/alpha.md" ] || exit 1; bash "$R" --check --root "$d/a" >/dev/null 2>&1
