@@ -1200,9 +1200,18 @@ The runner keys verdicts on the directory, so nothing is broken. What it costs i
 verification step this repo requires of every release — read the fixture BY NAME in the full
 output — which is unsatisfiable for this pair on the only tree where it fires.
 
-Anchored on the hardcoded literal any fix must remove, not on a description of the fix.
+**The receipt is behavioural since v0.666.0.** It used to be `lacks` on the hardcoded literal, which
+rewording the literal closes without changing what either shard prints. It now builds a
+consumer-shaped tree from the working tree's two drivers, three levels below a scratch root so
+neither `validate-enforcement-map.sh` nor the contract resolves, runs both, and requires shard `b` to
+print `layer-contract-conformance-b: SKIP` and never its sibling's line; shard `a` printing its own
+SKIP line is the control that the SKIP path was reached (exit 9 if not). Scored: exit 1 on the base
+driver, exit 0 at the fix, exit 1 on a copy of the fix with the literal restored. The fix derives the
+name from the `--group` argument, not from `$0`: shard `b` `exec`s the sibling by path, so `$0` names
+the sibling in both shards. The same construction is the `skip-name` arm of
+`core/fixtures/layer-contract-conformance`, with its mutant.
 
-verify: lacks core/fixtures/layer-contract-conformance/run.sh "layer-contract-conformance: SKIP"
+verify: sh t=$(mktemp -d) || exit 9; F="$t/x/y/core/fixtures"; mkdir -p "$F/layer-contract-conformance" "$F/layer-contract-conformance-b" && cp core/fixtures/layer-contract-conformance/run.sh "$F/layer-contract-conformance/run.sh" && cp core/fixtures/layer-contract-conformance-b/run.sh "$F/layer-contract-conformance-b/run.sh" || exit 9; a=$(bash "$F/layer-contract-conformance/run.sh" 2>&1); b=$(bash "$F/layer-contract-conformance-b/run.sh" 2>&1); rm -rf "$t"; grep -q '^layer-contract-conformance: SKIP' <<<"$a" || exit 9; grep -q '^layer-contract-conformance-b: SKIP' <<<"$b" && ! grep -q '^layer-contract-conformance: SKIP' <<<"$b"
 
 ---
 

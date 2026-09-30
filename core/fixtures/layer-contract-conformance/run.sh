@@ -66,8 +66,22 @@ for cand in "$DIR/../../skills/ai-dlc/layer-contract.yaml" \
             "$DIR/../../../core/skills/ai-dlc/layer-contract.yaml"; do
   [ -f "$cand" ] && CONTRACT="$cand" && break
 done
+# THE SHARD'S NAME IS DERIVED BEFORE THE SKIP, AND ONLY THE NAME (BL-003). Shard 'b' `exec`s
+# this file by path, so `$0` here names THIS directory in both shards and cannot tell them
+# apart — the only thing that can is the `--group` argument. The SKIP used to print a literal
+# naming this directory, so on a consumer both directories emitted the same SKIP line and the
+# suite log could not be read by name. The argument is only CAPTURED here; its validation and
+# the coverage join stay below the SKIP, for the reason stated at the shard split.
+GROUP=a
+if [ "${1:-}" = "--group" ]; then
+  GROUP="${2:-}"
+  [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }
+fi
+NAME="layer-contract-conformance"
+[ "$GROUP" = a ] || NAME="layer-contract-conformance-$GROUP"
+SKIP_MSG="SKIP — validate-enforcement-map.sh is distribution-only and is not installed in a consumer tree."
 if [ -z "$VAL" ] || [ -z "$CONTRACT" ]; then
-  echo "layer-contract-conformance: SKIP — validate-enforcement-map.sh is distribution-only and is not installed in a consumer tree."
+  echo "$NAME: $SKIP_MSG"
   exit 0
 fi
 REPO="$(cd "$(dirname "$VAL")/.." && pwd)"
@@ -99,12 +113,8 @@ SHARDS="a b"
 # AI_DLC_LAYER_CONTRACT near the top for I10 — a fixture must not inherit a tunable that
 # changes what it measures — and an `AI_DLC_LCC_GROUP` would be the same shape of thing to
 # scrub next. An argument cannot be scrubbed: it is not ambient. A fallback-to-'a' design
-# would run shard 'a' twice and report two green fixtures.
-GROUP=a
-if [ "${1:-}" = "--group" ]; then
-  GROUP="${2:-}"
-  [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }
-fi
+# would run shard 'a' twice and report two green fixtures. $GROUP is captured above the SKIP,
+# so the SKIP line can name its shard; it is validated HERE.
 case " $SHARDS " in
   *" $GROUP "*) ;;
   *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;;
@@ -127,9 +137,6 @@ if [ "$GROUP" = a ]; then
     exit 2
   fi
 fi
-
-NAME="layer-contract-conformance"
-[ "$GROUP" = a ] || NAME="layer-contract-conformance-$GROUP"
 
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/layer-contract-XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
@@ -817,6 +824,52 @@ awk -F'\t' -v g="$GROUP" '
 # pass: the count is the thing the floor exists to make trustworthy, and a shard reporting a
 # number it did not compute retires the floor for both shards at once.
 ASSERTIONS="$(grep -c . "$ARMS_MINE" || true)"
+
+# ---------------------------------------------------------------------------
+# THE CONSUMER SKIP NAMES ITS OWN SHARD (BL-003) — shard 'a' only, not a registry arm
+# ---------------------------------------------------------------------------
+# On a consumer neither directory resolves $VAL, both take the SKIP, and the runner's log is
+# read BY NAME. This builds that tree: copies of both drivers three levels below a scratch
+# root, so `$DIR/../../../scripts/` and both contract candidates resolve to nothing, and runs
+# each. Shard 'b' must print ITS name and never this directory's; shard 'a' is the control
+# that the SKIP path was reached at all. The mutant restores the literal the SKIP used to
+# print and must bring the wrong name back through shard 'b'. It is counted here rather than
+# in the registry because it runs no validator, and the EXPECTED_ASSERTIONS floor above
+# counts registry arms only.
+if [ "$GROUP" = a ]; then
+  _sk_build() { # _sk_build <root> <driver-a-source>
+    mkdir -p "$1/x/y/core/fixtures/layer-contract-conformance" "$1/x/y/core/fixtures/layer-contract-conformance-b" || return 1
+    cp "$2" "$1/x/y/core/fixtures/layer-contract-conformance/run.sh" || return 1
+    cp "$DIR/../layer-contract-conformance-b/run.sh" "$1/x/y/core/fixtures/layer-contract-conformance-b/run.sh"
+  }
+  _SK="$TMP/skip-name"
+  _sk_build "$_SK/good" "$DIR/run.sh" || { echo "$NAME: FIXTURE ERROR — could not build the consumer-shaped SKIP tree" >&2; exit 2; }
+  _sk_a="$(bash "$_SK/good/x/y/core/fixtures/layer-contract-conformance/run.sh" 2>&1)"
+  _sk_b="$(bash "$_SK/good/x/y/core/fixtures/layer-contract-conformance-b/run.sh" 2>&1)"
+  ASSERTIONS=$((ASSERTIONS + 2))
+  if grep -q '^layer-contract-conformance: SKIP' <<<"$_sk_a" \
+     && grep -q '^layer-contract-conformance-b: SKIP' <<<"$_sk_b" \
+     && ! grep -q '^layer-contract-conformance: SKIP' <<<"$_sk_b"; then
+    printf '  ok    %-18s %s\n' skip-name "on a consumer-shaped tree each shard's SKIP line names its own directory"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-18s %s\n' skip-name "the consumer SKIP lines do not name their shards — a: [${_sk_a}] b: [${_sk_b}]"
+  fi
+  sed 's/^  echo "\$NAME: \$SKIP_MSG"$/  echo "layer-contract-conformance: $SKIP_MSG"/' "$DIR/run.sh" > "$_SK/mut.sh"
+  if cmp -s "$DIR/run.sh" "$_SK/mut.sh"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-18s %s\n' skip-name-mut "the mutation matched nothing, so the skip-name arm is unproven"
+  else
+    _sk_build "$_SK/mut" "$_SK/mut.sh" || { echo "$NAME: FIXTURE ERROR — could not build the mutant SKIP tree" >&2; exit 2; }
+    _sk_m="$(bash "$_SK/mut/x/y/core/fixtures/layer-contract-conformance-b/run.sh" 2>&1)"
+    if grep -q '^layer-contract-conformance: SKIP' <<<"$_sk_m" && ! grep -q '^layer-contract-conformance-b: SKIP' <<<"$_sk_m"; then
+      printf '  ok    %-18s %s\n' skip-name-mut "MUTANT (literal SKIP name restored): shard 'b' prints its sibling's name again, so skip-name can fire"
+    else
+      FAILURES=$((FAILURES + 1))
+      printf '  FAIL  %-18s %s\n' skip-name-mut "MUTANT SURVIVED: with the literal restored shard 'b' printed [${_sk_m}]"
+    fi
+  fi
+fi
 
 AI_DLC_LCC_VAL="$VAL" AI_DLC_LCC_OUT="$OUTD" AI_DLC_LCC_RUNS="$RUNS" AI_DLC_LCC_SEL="$SEL" \
   xargs -P "$LCC_JOBS" -I{} bash "$RUNNER" {} < "$TMP/pool"
