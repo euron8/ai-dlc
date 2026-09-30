@@ -3615,10 +3615,23 @@ traced command whose reported line is a bare `fi`/`done`/`esac` cannot be the si
 so a reader cannot silently take one. Until then: before scoping an arm's cut from a by-line
 citation, confirm the named line is an executable fork site in that arm's range.
 
-**Receipt.** Keys on the ambiguity being MARKED or the attribution being fixed — not on the
-count, which moves with the corpus. Exit 9 if the profiler is gone.
+**LANDED (v0.666.0, verified <sha>).** The marking form. Every by-line row whose reported line
+is a bare `fi`/`done`/`esac`/`}`/`;;` carries a fourth field `AMBIGUOUS`, in the printed section
+and in the `--dump` file; by-arm rows holding such forks carry `ambiguous=<n>`; the summary
+prints `AMBIGUOUS <rows> <forks>`. The attribution itself is not fixed — bash 3.2 does not
+report the substitution's line, so the instrument can only say when the reported one cannot
+be a fork site. Measured on the validator at this tip: `AMBIGUOUS 25 25`, on 12 closer lines
+(11 `fi`, 1 `done`), each below a `<(` (control: an impossible token scores 0 in the same file).
 
-verify: sh f=scripts/fork-profile.sh; [ -f "$f" ] || exit 9; LC_ALL=C grep -qE 'process substitution|substitution is WRITTEN|ambiguous attribution|bare (fi|`fi`)' "$f" && exit 0; exit 1
+**Receipt.** The filed receipt matched any of four phrases anywhere in the profiler, so a
+comment closed it. This one RUNS the profiler on a seeded script with `done < <(printf | tr)`
+inside an if/elif chain and a straight-line `/usr/bin/true` after the `fi`. Exit 9 unless the
+seed reproduces the artifact (`tr` traced at line 9, the bare `fi`) and the control row is
+present; exit 1 unless the `tr` row is marked and the summary reads `AMBIGUOUS 1 1` (so the
+unmarked control stays unmarked). Scored: tip **0**, base `2e7c227c` **1**, a mutant whose
+closer predicate records nothing **1**.
+
+verify: sh f=scripts/fork-profile.sh; [ -f "$f" ] || exit 9; d=$(mktemp -d) || exit 9; printf '%s\n' 'set -u' 'x=1' 'if [ "$x" = 2 ]; then' '  :' 'elif [ "$x" = 1 ]; then' '  while read -r l; do' '    : "$l"' "  done < <(printf 'a/b\\n' | tr '/' '\\n')" 'fi' '/usr/bin/true' > "$d/seed.sh"; out="$(bash "$f" --target "$d/seed.sh" --section by-line 2>&1)"; rm -rf "$d"; printf '%s\n' "$out" | grep -qE '^1 9 tr( |$)' || exit 9; printf '%s\n' "$out" | grep -qE '^1 10 /usr/bin/true$' || exit 9; printf '%s\n' "$out" | grep -qE '^1 9 tr AMBIGUOUS$' || exit 1; printf '%s\n' "$out" | grep -qE '^AMBIGUOUS 1 1$' || exit 1; exit 0
 
 ## BL-269 — I75 has no fixture anywhere, so the arm most at risk from a batching rewrite is the one with no equivalence oracle
 
