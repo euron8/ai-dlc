@@ -1232,6 +1232,17 @@ verify: sh L=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; f=$(sed -n 
 
 ## BL-067
 
+**FIXED IN v0.668.0, pending the post-merge close.** `audit-layer-debt.sh` now classifies each OPEN
+debt's `closes_when` by KIND: a trigger naming the debt's OWN id, at an id boundary, reads `closes by:
+the register join`; anything else reads `closes by: a prose condition nothing evaluates`. Claim 1
+("consumed by nothing") and the paragraph "NO REPLACEMENT FIX IS SHIPPED" expire. The population is in
+the consumer register's history: at graph `8e53e4b4`, 16 open debts, 3 joins (exactly the three whose
+trigger names its own id) and 13 prose, 0 false joins; on the live register (`b6b68b3c`, 0 open) both
+report forms are byte-identical before and after. Guarded by the CLOSES-BY section of
+`core/fixtures/layer-debt-due-and-discharge` (arms 25-28, mutants `MK_off`, `MK_substr`). The receipt
+below replaces the previous one, which accepted three regressions (bare substring, `.sh` token, length
+under 80 bytes); it scores base 1, fix 0, no-classification 1, each of those three 1, missing script 9.
+
 **RE-SCORED AT v0.453.0. THE DEFECT SURVIVES, ITS COST CLAUSE HAS EXPIRED, AND ITS OWN REMEDY IS
 UNSHIPPABLE. The entry is kept whole; the receipt below is REPLACED because the old one CERTIFIED
 that remedy.** Which half died is the part that stops the next reader repeating this, so all four
@@ -1370,7 +1381,7 @@ byte-identical would leave this STILL-LIVE — the safe direction, but not a clo
 Found by the graph consumer session. Cross-references the consumer entry
 `PC-S334-CLOSES-WHEN-NAMES-A-COMMAND-AND-NOTHING-JOINS-THE-TWO`.
 
-verify: sh S=core/scripts/audit-layer-debt.sh; [ -f "$S" ] || exit 9; d=$(mktemp -d) || exit 9; A="a later register row for this entry names OWED-PROBE-A in closes_owed"; B="validate-gate-manifest.sh reports 914 resolving to a gate-type set that includes retro"; D="before the next pull, so the forked copy stops shadowing core validate-mutation-red.sh guidance"; [ "$A" != "$B" ] && [ "$B" != "$D" ] || { rm -rf "$d"; exit 9; }; h="{\"clause\":\"LC-E1\",\"entry\":\"extensions/p.md\",\"subject_digest\":\"d0\",\"verdict\":\"still-additive\",\"recorded_utc\":\"1970-01-01T00:00:00Z\",\"reason\":\"probe row\",\"owed\":{\"what\":\"same what\","; { printf "%s\"id\":\"OWED-PROBE-A\",\"closes_when\":\"%s\"}}\n" "$h" "$A"; printf "%s\"id\":\"OWED-PROBE-B\",\"closes_when\":\"%s\"}}\n" "$h" "$B"; printf "%s\"id\":\"OWED-PROBE-D\",\"closes_when\":\"%s\"}}\n" "$h" "$D"; printf "%s\"id\":\"OWED-PROBE-E\"}}\n" "$h"; } > "$d/r.jsonl"; o=$(bash "$S" --register "$d/r.jsonl" 2>/dev/null); rc=$?; rm -rf "$d"; [ "$rc" = 0 ] || exit 9; for i in A B D E; do case "$o" in *OWED-PROBE-$i*) : ;; *) exit 9 ;; esac; done; e=$(printf "%s\n" "$o" | sed "s|$A|<CW>|g; s|$B|<CW>|g; s|$D|<CW>|g"); case "$e" in *validate-gate-manifest.sh*|*validate-mutation-red.sh*) exit 1 ;; esac; blk() { printf "%s\n" "$e" | sed -n "/OWED-PROBE-$1/,/OWED-PROBE-$2/p" | sed "\$d" | sed "s/OWED-PROBE-$1/OWED-PROBE-X/g"; }; a=$(blk A B); b=$(blk B D); q=$(blk D E); [ -n "$a" ] && [ -n "$b" ] && [ -n "$q" ] || exit 9; [ "$b" = "$q" ] || exit 1; [ "$a" != "$b" ]
+verify: sh S=core/scripts/audit-layer-debt.sh; [ -f "$S" ] || exit 9; d=$(mktemp -d) || exit 9; A="a later register row for this entry names OWED-PROBE-A in closes_owed"; B="validate-gate-manifest.sh reports 914 resolving to a gate-type set that includes retro"; D="before the next pull, so the forked copy stops shadowing core validate-mutation-red.sh guidance"; E="after the next pull lands"; F="a later register row for this entry names OWED-PROBE-F-V2 in closes_owed"; h="{\"clause\":\"LC-E1\",\"entry\":\"extensions/p.md\",\"subject_digest\":\"d0\",\"verdict\":\"still-additive\",\"recorded_utc\":\"1970-01-01T00:00:00Z\",\"reason\":\"probe row\",\"owed\":{\"what\":\"same what\","; { for p in "A|$A" "B|$B" "D|$D" "E|$E" "F|$F"; do printf "%s\"id\":\"OWED-PROBE-%s\",\"closes_when\":\"%s\"}}\n" "$h" "${p%%|*}" "${p#*|}"; done; printf "%s\"id\":\"OWED-PROBE-G\"}}\n" "$h"; } > "$d/r.jsonl"; o=$(bash "$S" --register "$d/r.jsonl" 2>/dev/null); rc=$?; rm -rf "$d"; [ "$rc" = 0 ] || exit 9; for i in A B D E F G; do case "$o" in *OWED-PROBE-$i*) : ;; *) exit 9 ;; esac; done; e=$(printf "%s\n" "$o" | sed "s|$A|<CW>|g; s|$B|<CW>|g; s|$D|<CW>|g; s|$E|<CW>|g; s|$F|<CW>|g"); case "$e" in *validate-gate-manifest.sh*|*validate-mutation-red.sh*) exit 1 ;; esac; blk() { printf "%s\n" "$e" | sed -n "/OWED-PROBE-$1 /,/OWED-PROBE-$2 /p" | sed "\$d" | sed "s/OWED-PROBE-$1/OWED-PROBE-X/g"; }; a=$(blk A B); b=$(blk B D); q=$(blk D E); s=$(blk E F); f=$(blk F G); [ -n "$a" ] && [ -n "$b" ] && [ -n "$q" ] && [ -n "$s" ] && [ -n "$f" ] || exit 9; [ "$b" = "$q" ] && [ "$b" = "$s" ] && [ "$b" = "$f" ] || exit 1; [ "$a" != "$b" ]
 
 ## BL-071
 
@@ -3458,3 +3469,25 @@ receipts with the memo unset (`env -u AI_DLC_RECONCILE_MEMO`), or to scope the e
 reverify's own shell.
 
 verify: sh r=scripts/backlog-reverify.sh; [ -f "$r" ] || exit 9; d=$(mktemp -d) || exit 9; printf '## BL-900 probe\n\nverify: sh [ -z "${AI_DLC_RECONCILE_MEMO:-}" ]\n' > "$d/l.md"; o=$(bash "$r" "$d/l.md" 2>/dev/null) || exit 9; case "$o" in *CLOSE-CANDIDATE*BL-900*) exit 0 ;; *STILL-LIVE*BL-900*) exit 1 ;; esac; exit 9
+
+## BL-383 — the migration arm read `deferred scope`, the adjudicator's name for what route Step 6 files, as an undeclared obligation
+
+**FIXED IN v0.668.0, pending the post-merge close.** `audit-layer-debt.sh`'s `PROSE` cue `deferred` now
+carries a negative lookahead for exactly the word `scope`, with the same `(?![\w-])` boundary as the
+remediation mechanism-noun set. `deferred scope` occurs 0 times under `core/skills/ai-dlc` (route.md
+spells it "deferred part"; control: `scope_deferred_items` occurs 6 times), so the phrase is the
+adjudicator's paraphrase of a core mechanism. Measured on the graph register at `c00f387f` (683 rows):
+UNDECLARED 1 -> 0, the only mover being `route-domain.md` LC-E4 recorded 2026-09-29T00:05:07Z. At
+`b6b68b3c` (689 rows) it is 0 -> 0, because that row was since withdrawn by `withdraws` (graph
+`522e8681`). `deferred scopes`, `deferred scoped-work`, `scope is deferred` and `the split is deferred
+to a later pull` all remain cues. Refused widenings (`scopes`, `deferred part`, `deferred seams`,
+`deferred to <script> constants`) each move 0 cells. The one constructible false acquittal, "the rest
+is deferred scope for S316", is enumerated and accepted in the header. Guarded by
+`core/fixtures/layer-debt-due-and-discharge` arms 23a-23c and 24, mutants `MD_off` and `MD_wide`.
+
+Discharges the consumer candidate
+`PC-S315-AUDIT-LAYER-DEBT-CUE-ARM-READS-CORE-FIELD-VOCABULARY-AS-AN-OBLIGATION`, filed by the graph
+consumer session. Its proposed identifier half (`scope_deferred_items`) was already clean: `_` is a word
+character, so the existing boundary never matched inside it.
+
+verify: sh A=core/scripts/audit-layer-debt.sh; [ -f "$A" ] || exit 9; f=$(mktemp) || exit 9; python3 -c 'import json;b={"clause":"LC-E4","subject_digest":"0"*40,"verdict":"still-additive","recorded_utc":"2026-09-30T00:00:00Z"};[print(json.dumps(dict(b,entry=e,reason=r))) for e,r in [("v.md","route Step 6 now files deferred scope as CO- items and records scope_deferred_items; entry reads sprint-status for routing only"),("a.md","the split is deferred to a later pull"),("b.md","deferred to sprint 316"),("c.md","scope is deferred"),("d.md","the narrowing is deferred scoped-work for S316"),("e.md","the narrowing is deferred scopes for S316")]]' > "$f" || exit 9; o=$(bash "$A" --register "$f" --json 2>/dev/null) || exit 9; rm -f "$f"; printf "%s" "$o" | python3 -c 'import json,sys;u={x["entry"] for x in json.load(sys.stdin)["undeclared"]};sys.exit(0 if u=={"a.md","b.md","c.md","d.md","e.md"} else 1)'
