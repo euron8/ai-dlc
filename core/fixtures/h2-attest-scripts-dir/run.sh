@@ -321,7 +321,8 @@ else
   done
 
   # vx <script> <seed> <sprint> -> X_RC, X_OUT (stdout), X_ERR (stderr), kept apart
-  # because the located diagnostic goes to stderr and "no PASS" is a claim about stdout.
+  # because EVERY verdict goes to stdout and stderr must stay empty for one (BL-344): a
+  # caller capturing only stdout once saw nothing for a located refusal or for CHANGED.
   # Every predicate below takes the SCRIPT as its argument, so the same predicate is the
   # arm against the subject and the kill test against each mutant further down.
   vx() {
@@ -330,7 +331,7 @@ else
     X_RC=$?
     X_OUT="$(cat "$WORK/vx.out")"; X_ERR="$(cat "$WORK/vx.err")"
   }
-  located() { grep -qF "$VLOG/$1.md:$2 QUOTES" <<<"$X_ERR"; }  # located <seed> <line>
+  located() { grep -qF "$VLOG/$1.md:$2 QUOTES" <<<"$X_OUT" && [ -z "$X_ERR" ]; }  # located <seed> <line>
   vx_show() { printf '%s\n%s\n' "$X_OUT" "$X_ERR" | head -3 | sed 's/^/        /' >&2; }
 
   # L + M. THE TRAILING ACQUITTAL, and it is the half that makes a widened reader WORSE
@@ -341,7 +342,7 @@ else
   # the span is there, so "this is the sprint's first gate" is the wrong diagnostic too.
   p_lm() {  # p_lm <script> <seed>
     vx "$1" "$2" 311
-    [ "$X_RC" -eq 1 ] && ! grep -q 'PASS' <<<"$X_OUT" \
+    [ "$X_RC" -eq 1 ] && ! grep -q '^PASS' <<<"$X_OUT" \
       && ! grep -q 'CHANGED' <<<"$X_OUT$X_ERR" && located "$2" 1
   }
   for seed in prose-failure col1-then-prose; do
@@ -349,7 +350,7 @@ else
       ok "--verify refuses $seed and LOCATES it (a span followed by WORDS is prose)"
     else
       bad "--verify on $seed (rc=$X_RC): wanted rc 1, no PASS, no CHANGED, and"
-      echo "        '$seed.md:1 QUOTES' on stderr." >&2
+      echo "        '$seed.md:1 QUOTES' on stdout, stderr empty." >&2
       vx_show
     fi
   done
@@ -378,7 +379,7 @@ else
 
   p_bullet_live() {
     vx "$1" bullet-live 314
-    [ "$X_RC" -eq 1 ] && located bullet-live 2 && ! grep -q 'PASS' <<<"$X_OUT"
+    [ "$X_RC" -eq 1 ] && located bullet-live 2 && ! grep -q '^PASS' <<<"$X_OUT"
   }
   p_bullet_moved() {
     vx "$1" bullet-moved 314
@@ -393,7 +394,7 @@ else
     ok "--verify refuses the consumer's bullet at the live digest and names bullet-live.md:2"
   else
     bad "--verify on the consumer's live bullet (rc=$X_RC): wanted rc 1, no PASS on stdout,"
-    echo "        and 'bullet-live.md:2 QUOTES' on stderr." >&2; vx_show
+    echo "        and 'bullet-live.md:2 QUOTES' on stdout, stderr empty." >&2; vx_show
   fi
   if p_bullet_moved "$SUT"; then
     ok "--verify LOCATES the bullet at a moved digest (not first-gate, not CHANGED)"
@@ -421,7 +422,7 @@ else
   # same bullet; the arm demands the instruction, not just the line number.
   p_remedy() {
     vx "$1" bullet-live 314
-    located bullet-live 2 && grep -qF 'OWN line at column 1, nothing before or after it.' <<<"$X_ERR"
+    located bullet-live 2 && grep -qF 'OWN line at column 1, nothing before or after it.' <<<"$X_OUT"
   }
   if p_remedy "$SUT"; then
     ok "--verify's located refusal carries the remedy: re-drive, append alone at column 1"
@@ -440,7 +441,7 @@ else
   printf -- '- [core] H2: \140NOT_%s\140; re-drive.\n' "$ADV_SPAN" > "$VLOG/adv-notprefix-bullet.md"
   printf -- '- [core] H2 — Harness self-test: **PASS** claimed at requirements as \140%s\140; retracted: item 3 re-judged FAIL.\n' "$ADV_SPAN" > "$VLOG/adv-pass-then-retract.md"
   ADV_SEEDS="adv-311-sentence adv-do-not-cite adv-emdash-fail adv-item3-fail-bullet adv-notprefix-bullet adv-pass-then-retract"
-  p_adv() { vx "$1" "$2" 314; [ "$X_RC" -eq 1 ] && ! grep -q 'PASS' <<<"$X_OUT"; }
+  p_adv() { vx "$1" "$2" 314; [ "$X_RC" -eq 1 ] && ! grep -q '^PASS' <<<"$X_OUT" && grep -q 'RE-DRIVE' <<<"$X_OUT"; }
   for seed in $ADV_SEEDS; do
     [ -s "$VLOG/$seed.md" ] || { echo "FIXTURE ERROR: adversarial seed $seed is empty" >&2; exit 2; }
     if p_adv "$SUT" "$seed"; then
@@ -609,9 +610,9 @@ ${V_OK}
     vx "$1" "$2" 311
     [ "$X_RC" -eq 1 ] && ! grep -q '^PASS' <<<"$X_OUT" \
       && ! grep -q 'CHANGED' <<<"$X_OUT$X_ERR" && ! grep -q 'first gate' <<<"$X_OUT$X_ERR" \
-      && located "$2" "$3" && { [ -z "${4:-}" ] || grep -qF -- "$4" <<<"$X_ERR"; }
+      && located "$2" "$3" && { [ -z "${4:-}" ] || grep -qF -- "$4" <<<"$X_OUT"; }
   }
-  p_changed() { vx "$1" "$2" 311; [ "$X_RC" -eq 1 ] && grep -q 'the fixture set CHANGED' <<<"$X_ERR"; }
+  p_changed() { vx "$1" "$2" 311; [ "$X_RC" -eq 1 ] && grep -q 'the fixture set CHANGED' <<<"$X_OUT" && [ -z "$X_ERR" ]; }
   p_first()   { vx "$1" "$2" 311; [ "$X_RC" -eq 1 ] && grep -q "this is the sprint's first gate" <<<"$X_OUT"; }
   p_cite() {
     vx "$1" cb-cite-last 311
@@ -637,7 +638,7 @@ ${V_OK}
     if p_refuse "$SUT" "$s" "$l" "$r"; then ok "--verify refuses $s and LOCATES it at :$l${r:+ ($r)}"
     else
       bad "--verify on $s (rc=$X_RC): wanted rc 1, no PASS, no CHANGED, no first-gate,"
-      echo "        '$s.md:$l QUOTES' on stderr${r:+ and the reason '$r'}." >&2; vx_show
+      echo "        '$s.md:$l QUOTES' on stdout${r:+ and the reason '$r'}, stderr empty." >&2; vx_show
     fi
   done <<<"$RB_ROWS"
   [ "$n_rb" -ge 23 ] || bad "only $n_rb refusal rows were driven — the RB_ROWS list was truncated"
@@ -650,6 +651,175 @@ ${V_OK}
     bad "--verify's citation (rc=$X_RC) is not the accepted column-1 span; it came from"
     echo "        another line of the log." >&2; vx_show
   fi
+
+  # BL-342..BL-351. Each entry: its offender REFUSED (and located, never first-gate), and a
+  # near-miss carrying every property the feared regression keys on ACCEPTED. The shapes are
+  # the sweep probe the defect reports were measured with, and the near-misses come from the
+  # consumer's own logs (a span AFTER a closed fence, the 309 re-attestation row, the
+  # "voids the attestation by design" sentence).
+  FN="${BT}${BT}${BT}"
+  # BL-346: fenced, HTML comment block, indented code block
+  sd b346-fence       "${FN}
+${V_OK}
+${FN}"
+  sd b346-fence-table "${FN}
+${HR}
+| H2 | PASS | ${BT}${V_OK}${BT} |
+${FN}"
+  sd b346-comment     "<!--
+${V_OK}
+-->"
+  sd b346-indent4     "    ${V_OK}"
+  sd b346-split-table "${HR}
+${FN}
+note
+${FN}
+| H2 | PASS | ${BT}${V_OK}${BT} |"
+  sd n346-after-fence   "${FN}
+x
+${FN}
+${V_OK}"
+  sd n346-after-comment "<!--
+x
+-->
+<!-- one-line note -->
+${V_OK}"
+  sd n346-indent3       "   ${V_OK}"
+  # BL-347: a tab is decoration where a space is; a tab BEFORE a line is an indented code block
+  sd b347-tab-col1  "$(printf '\t%s' "$V_OK")"
+  sd n347-tab-cell  "$HR
+$(printf '| H2 | PASS |\t%s%s%s\t|' "$BT" "$V_OK" "$BT")"
+  sd n347-tab-trail "$(printf '%s\t' "$V_OK")"
+  # BL-349: the WHOLE verdict cell, and EVERY verdict column
+  sd b349-pass-fail  "$HR
+| H2 | PASS (FAILED on re-drive) | ${BT}${V_OK}${BT} |"
+  sd b349-pass-slash "$HR
+| H2 | PASS/FAIL | ${BT}${V_OK}${BT} |"
+  sd b349-two-cols   "| Check | Result | Status | Evidence |
+|---|---|---|---|
+| H2 | PASS | FAIL | ${BT}${V_OK}${BT} |"
+  sd n349-two-cols   "| Check | Result | Status | Evidence |
+|---|---|---|---|
+| H2 | PASS | PASSED | ${BT}${V_OK}${BT} |"
+  sd n349-reattested "$HR
+| H2 | PASSED (RE-ATTESTED, digest changed) | ${BT}${V_OK}${BT} |"
+  # BL-350: a LATER revocation revokes; a later grant re-grants
+  sd b350-row      "${V_OK}
+
+${HR}
+| H2 | VOIDED | ${BT}${V_OK}${BT} |"
+  sd b350-sentence "${V_OK}
+The attestation above is void."
+  sd b350-over-changed "${V_OK}
+${HR}
+| H2 | VOIDED | ${BT}${V_OK}${BT} |
+| H2 | PASS | ${BT}${V_BAD}${BT} |"
+  sd n350-regrant  "${V_OK}
+${HR}
+| H2 | VOIDED | ${BT}${V_OK}${BT} |
+
+${V_LATER}"
+  sd n350-commentary "${V_OK}
+A changed fixture voids the attestation by design.
+| [core] H2 | PASSED (RE-ATTESTED, digest changed) | Prior attestation (${BT}digest=0000000000000000${BT}) voided by the reconcile |
+The attestation above is void: digest=0000000000000000 predates the reconcile."
+  # BL-342 / BL-351: a NUL byte, which ends a line for BSD awk
+  printf '| Check | Result | Evidence |\n|---|---|---|\n| H2 | FAIL\000 | %s%s%s |\n' "$BT" "$V_OK" "$BT" > "$VLOG/b351-nul-cell.md" || exit 2
+  printf '%s\000 FAILED, do not cite\n' "$V_OK" > "$VLOG/b351-nul-prose.md" || exit 2
+  printf 'x\000y\nH2 FAILED: %s%s%s do not cite\n' "$BT" "$V_OK" "$BT" > "$VLOG/b342-nul-number.md" || exit 2
+  printf 'x\000y\n%s\n' "$V_OK" > "$VLOG/n351-nul-elsewhere.md" || exit 2
+  sd b351-underscore "_${V_OK}_"
+  sd b351-star       "*${V_OK}*"
+  # BL-343: one cp1252 byte on the quoted line, and on a line beside a good one
+  printf -- '- \223note: %s%s%s; item 3 FAILED\n' "$BT" "$V_OK" "$BT" > "$VLOG/b343-cp1252.md" || exit 2
+  printf '\223 note\n%s\n' "$V_OK" > "$VLOG/n343-cp1252.md" || exit 2
+  for s in b351-nul-cell b351-nul-prose b342-nul-number n351-nul-elsewhere; do
+    [ "$(wc -c < "$VLOG/$s.md")" -gt "$(tr -d '\000' < "$VLOG/$s.md" | wc -c)" ] \
+      || { echo "FIXTURE ERROR: $s.md carries no NUL byte" >&2; exit 2; }
+  done
+  # BL-344: an unreadable log. Root reads a mode-000 file, so the cell is skipped there.
+  cp "$VLOG/col1.md" "$VLOG/b344-unread.md" && chmod 000 "$VLOG/b344-unread.md"
+  UNREAD_OK=1; [ -r "$VLOG/b344-unread.md" ] && UNREAD_OK=0
+
+  p_rev() {  # p_rev <script> <seed> <line> <grantline>
+    vx "$1" "$2" 311
+    [ "$X_RC" -eq 1 ] && [ -z "$X_ERR" ] && ! grep -q '^PASS' <<<"$X_OUT" \
+      && grep -qF "$VLOG/$2.md:$3 REVOKES the H2 attestation for sprint 311 accepted at line $4." <<<"$X_OUT"
+  }
+  p_sprint_rx() {
+    ( cd "$WORK" && bash "$1" --verify --sprint '.*' --gate-log "$VLOG/col1.md" ) >"$WORK/vx.out" 2>"$WORK/vx.err"
+    X_RC=$?; X_OUT="$(cat "$WORK/vx.out")"; X_ERR="$(cat "$WORK/vx.err")"
+    [ "$X_RC" -eq 1 ] && ! grep -q '^PASS' <<<"$X_OUT" && grep -q 'digits only' <<<"$X_ERR"
+  }
+  p_first_stdout() { p_first "$1" cb-none && [ -z "$X_ERR" ]; }
+  p_unread() {
+    vx "$1" b344-unread 311
+    [ "$X_RC" -eq 1 ] && grep -q 'could not read' <<<"$X_ERR" && ! grep -q 'first gate' <<<"$X_OUT$X_ERR"
+  }
+  vxl() {  # vxl <script> <seed> <locale>
+    ( cd "$WORK" && LC_ALL="$3" bash "$1" --verify --sprint 311 --gate-log "$VLOG/$2.md" ) \
+      >"$WORK/vx.out" 2>"$WORK/vx.err"
+    X_RC=$?; X_OUT="$(cat "$WORK/vx.out")"; X_ERR="$(cat "$WORK/vx.err")"
+  }
+  U8=""
+  for l in en_US.UTF-8 C.UTF-8; do [ "$(LC_ALL=$l locale charmap 2>/dev/null)" = "UTF-8" ] && { U8="$l"; break; }; done
+  p_cp1252() {  # both locales: refused-and-located, and the neighbouring good line verifies
+    local l
+    for l in C $U8; do
+      vxl "$1" b343-cp1252 "$l"; [ "$X_RC" -eq 1 ] && located b343-cp1252 1 || return 1
+      vxl "$1" n343-cp1252 "$l"; [ "$X_RC" -eq 0 ] && grep -q '^PASS  H2 attested' <<<"$X_OUT" || return 1
+    done
+  }
+
+  # <seed>|<line>|<reason>, all refused, all located
+  B_ROWS="b346-fence|2|inside a fenced code block
+b346-fence-table|4|inside a fenced code block
+b346-comment|2|inside an HTML comment block
+b346-indent4|1|inside an indented code block
+b346-split-table|6|no header row
+b347-tab-col1|1|inside an indented code block
+b349-pass-fail|3|carries a failure word after PASS
+b349-pass-slash|3|carries more than PASS and one parenthetical
+b349-two-cols|3|Status cell does not begin PASS
+b351-nul-cell|3|does not begin PASS
+b351-nul-prose|1|inside other text
+b342-nul-number|2|inside other text
+b351-underscore|1|inside other text
+b351-star|1|inside other text"
+  N_SEEDS="n346-after-fence n346-after-comment n346-indent3 n347-tab-cell n347-tab-trail n349-two-cols n349-reattested n350-regrant n350-commentary n351-nul-elsewhere"
+  n_b=0
+  while IFS='|' read -r s l r; do
+    [ -n "$s" ] || continue; n_b=$((n_b + 1))
+    if p_refuse "$SUT" "$s" "$l" "$r"; then ok "--verify refuses $s and LOCATES it at :$l ($r)"
+    else bad "--verify on $s (rc=$X_RC): wanted located at :$l with '$r', nothing on stderr"; vx_show; fi
+  done <<<"$B_ROWS"
+  [ "$n_b" -ge 14 ] || bad "only $n_b BL-342..351 refusal rows were driven — B_ROWS was truncated"
+  for s in $N_SEEDS; do
+    if p_verify "$SUT" "$s"; then ok "--verify accepts near-miss $s"
+    else bad "--verify REFUSED near-miss $s (rc=$X_RC)"; vx_show; fi
+  done
+  if p_rev "$SUT" b350-row 5 1; then ok "--verify: a later VOIDED row carrying the span REVOKES the grant at line 1"
+  else bad "--verify on b350-row (rc=$X_RC) did not report the revocation at :5"; vx_show; fi
+  if p_rev "$SUT" b350-sentence 2 1; then ok "--verify: a later 'attestation above is void' sentence REVOKES it"
+  else bad "--verify on b350-sentence (rc=$X_RC) did not report the revocation at :2"; vx_show; fi
+  if p_rev "$SUT" b350-over-changed 4 1; then ok "--verify: a revocation outranks a later moved-digest row (REVOKED, not CHANGED)"
+  else bad "--verify on b350-over-changed (rc=$X_RC) did not report REVOKED at :4"; vx_show; fi
+  if p_sprint_rx "$SUT"; then ok "--verify refuses --sprint '.*' (digits only) and grants nothing"
+  else bad "--verify with --sprint '.*' (rc=$X_RC) was not refused on stderr"; vx_show; fi
+  if p_first_stdout "$SUT"; then ok "--verify's first-gate verdict is on stdout, stderr empty"
+  else bad "--verify's first-gate verdict (rc=$X_RC) is not stdout-only"; vx_show; fi
+  if [ "$UNREAD_OK" -eq 1 ]; then
+    if p_unread "$SUT"; then ok "--verify on a mode-000 log says could-not-read, never first-gate"
+    else bad "--verify on an unreadable log (rc=$X_RC) did not say could-not-read"; vx_show; fi
+  else echo "  skip  mode-000 cell: this user can read a mode-000 file"; fi
+  [ -n "$U8" ] || echo "  skip  UTF-8 half of the cp1252 cell: no UTF-8 locale on this host"
+  if p_cp1252 "$SUT"; then ok "--verify: a cp1252 byte is located, and its neighbour verifies, under C${U8:+ and $U8}"
+  else bad "--verify on the cp1252 seeds (rc=$X_RC) differs by locale or lost the location"; vx_show; fi
+  p_all_b() {
+    local s l r
+    while IFS='|' read -r s l r; do [ -n "$s" ] || continue; p_refuse "$1" "$s" "$l" "$r" || return 1; done <<<"$B_ROWS"
+  }
+  p_all_n() { local s; for s in $N_SEEDS; do p_verify "$1" "$s" || return 1; done; }
 
   # K + X. THE MUTATION BATTERY. Every mutant is a COPY of the subject with named lines
   # replaced, and every replacement is keyed on ONE line of the subject: mut_sub refuses an
@@ -742,8 +912,30 @@ ${V_OK}
   MCTL="$WORK/h2-control.copy.sh"
   cp "$SUT" "$MCTL" || exit 2
   ctl_ok=1
+  q_fence()   { p_refuse "$1" b346-fence 2 'inside a fenced code block'; }
+  q_ftable()  { p_refuse "$1" b346-fence-table 4 'inside a fenced code block'; }
+  q_comment() { p_refuse "$1" b346-comment 2 'inside an HTML comment block'; }
+  q_indent()  { p_refuse "$1" b346-indent4 1 'inside an indented code block'; }
+  q_tabcell() { p_verify "$1" n347-tab-cell; }
+  q_tabcol1() { p_refuse "$1" b347-tab-col1 1 'inside an indented code block'; }
+  q_vwhole()  { p_refuse "$1" b349-pass-fail 3 'carries a failure word after PASS'; }
+  q_vslash()  { p_refuse "$1" b349-pass-slash 3 'carries more than PASS and one parenthetical'; }
+  q_vcols()   { p_refuse "$1" b349-two-cols 3 'Status cell does not begin PASS'; }
+  q_reatt()   { p_verify "$1" n349-reattested; }
+  q_revrow()  { p_rev "$1" b350-row 5 1; }
+  q_revsent() { p_rev "$1" b350-sentence 2 1; }
+  q_regrant() { p_verify "$1" n350-regrant; }
+  q_comm()    { p_verify "$1" n350-commentary; }
+  q_nulcell() { p_refuse "$1" b351-nul-cell 3 'does not begin PASS'; }
+  q_nulprose(){ p_refuse "$1" b351-nul-prose 1 'inside other text'; }
+  q_under()   { p_refuse "$1" b351-underscore 1 'inside other text'; }
+  q_star()    { p_refuse "$1" b351-star 1 'inside other text'; }
+  q_sprint()  { p_sprint_rx "$1"; }
+  q_split()   { p_refuse "$1" b346-split-table 6 'no header row'; }
+  q_stream()  { p_refuse "$1" rb-bl5 1 'inside other text' && p_changed "$1" cb-moved-pass; }
   for p in p_bullet_live p_bullet_moved p_empty p_order p_two p_remedy p_all_vb p_all_rb \
-           q_col1 q_cell q_xprefix q_g q_lm q_cite q_adv_none; do
+           q_col1 q_cell q_xprefix q_g q_lm q_cite q_adv_none p_all_b p_all_n p_first_stdout \
+           q_revrow q_revsent q_sprint p_cp1252; do
     "$p" "$MCTL" || { ctl_ok=0; bad "MUTATION CONTROL: the unmutated copy fails $p (rc=$X_RC) —"
       echo "        the harness cannot drive a copy from \$WORK, so no mutant verdict is evidence." >&2; }
   done
@@ -789,8 +981,8 @@ ${V_OK}
       && score g "$M" q_fail_mv "verdict unjudged on the moved-digest arm reports CHANGED for a FAIL row" q_col1 q_g
     # (h) the citation cut from the LAST span in the log, not from the accepted placement.
     M="$WORK/h2-cite-last.mutant.sh"
-    mut_mk h "$M" 'if ($0 !~ (LOC "(" ANY ")")) next' \
-      'if ($0 !~ (LOC "(" ANY ")")) next; match($0, ANY); lastspan = substr($0, RSTART, RLENGTH)' \
+    mut_mk h "$M" 'spanl = (index($0, "H2_ATTESTED") && $0 ~ (LOC "(" ANY ")"))' \
+      'spanl = (index($0, "H2_ATTESTED") && $0 ~ (LOC "(" ANY ")")); if (spanl) { match($0, ANY); lastspan = substr($0, RSTART, RLENGTH) }' \
       'if (pass) print "PASS|" cite' 'if (pass) print "PASS|" lastspan' \
       && score h "$M" q_cite "citing the last span in the log prints the refused re-drive" q_col1 q_cell
 
@@ -849,6 +1041,81 @@ ${V_OK}
     else
       score m7 "$M" p_remedy "deleting the remedy line loses the column-1 instruction" p_bullet_live
     fi
+
+    # BL-346..BL-351 and BL-344. One mutant per fix, each reverting ONLY that fix.
+    # (n1) fences not tracked: a span in a ``` block verifies again.
+    M="$WORK/h2-no-fence.mutant.sh"
+    mut_mk n1 "$M" 'if (fence != "") {' 'if (0) {' \
+      '} else if (match($0, /^(   |  | )?(```|~~~)/)) {' '} else if (0) {' \
+      && score n1 "$M" q_fence "an untracked fence grants a span inside a code block" q_col1 q_comment q_indent
+    # (n2) a fence does not reset table state: the row inside the fence is judged as a row,
+    #      so the fence refusal is what still holds it. Owned by the split-table seed instead:
+    #      a header ABOVE a fence arms a row BELOW it.
+    M="$WORK/h2-fence-keeps-table.mutant.sh"
+    mut_mk n2 "$M" 'prevtab = 0; rows = 0; hdr = ""; prev = ""   # a block ends any table around it' 'prevtab = prevtab' \
+      && score n2 "$M" q_split "a block that keeps table state lets a header above a fence arm a row below it" q_col1 q_fence
+    # (n3) HTML comment blocks not tracked.
+    M="$WORK/h2-no-comment.mutant.sh"
+    mut_mk n3 "$M" 'incom = 1; blk = "inside an HTML comment block"' 'blk = ""' \
+      && score n3 "$M" q_comment "an untracked comment block grants a commented-out span" q_col1 q_fence q_indent
+    # (n4) indented code blocks not refused (spaces AND tab).
+    M="$WORK/h2-no-indent.mutant.sh"
+    mut_mk n4 "$M" 'blk = "inside an indented code block"' 'blk = ""' \
+      && score n4 "$M" q_indent "no indented-code refusal grants a four-space span" q_col1 q_fence q_comment
+    # (n5) BL-347 reverted: the closed decoration sets name the space only.
+    M="$WORK/h2-no-tab.mutant.sh"
+    mut_mk n5 "$M" "ATTEST_LEAD=" "ATTEST_LEAD='[ ]*(- )?[ ]*(\\*\\*)?${BT}?'" \
+      "ATTEST_TAIL=" "ATTEST_TAIL='${BT}?(\\*\\*)?\\.?[ ]*'" \
+      && score n5 "$M" q_tabcell "space-only decoration refuses a tab-padded PASS cell" q_col1 q_cell q_tabcol1
+    # (n6) the verdict cell read only at its START (the pre-fix test).
+    M="$WORK/h2-vcell-start.mutant.sh"
+    mut_mk n6 "$M" 'if (v !~ /^PASS(ED)?( [(][^()]*[)])?[.]?$/) return "carries more than PASS and one parenthetical"' 'v = v' \
+      'if (toupper(v) ~ REVOKE_WORDS || toupper(v) ~ /FAIL/) return "carries a failure word after PASS"' 'v = v' \
+      && score n6 "$M" q_vwhole "a start-only verdict test grants PASS (FAILED on re-drive)" q_hdr_pass q_reatt
+    # (n7) only the parenthetical word test removed: PASS (FAILED ...) is one parenthetical.
+    M="$WORK/h2-vcell-noword.mutant.sh"
+    mut_mk n7 "$M" 'if (toupper(v) ~ REVOKE_WORDS || toupper(v) ~ /FAIL/) return "carries a failure word after PASS"' 'v = v' \
+      && score n7 "$M" q_vwhole "no failure-word test grants a failing parenthetical" q_vslash q_reatt
+    # (n8) only the FIRST verdict column read.
+    M="$WORK/h2-vcol-first.mutant.sh"
+    mut_mk n8 "$M" 'if ((why = vcell(v)) != "") return "in a row whose " k " cell " why' \
+      'if ((why = vcell(v)) != "") return "in a row whose " k " cell " why; break' \
+      && score n8 "$M" q_vcols "reading one verdict column grants PASS | FAIL" q_hdr_pass q_reatt
+    # (n9) revocation deleted: a later VOIDED row does not withdraw the grant.
+    M="$WORK/h2-no-revoke.mutant.sh"
+    mut_mk n9 "$M" 'if (pass && revokes()) { pass = 0; revoked = NR; revn = passn; next }' 'revn = revn' \
+      && score n9 "$M" q_revrow "with no revocation a later VOIDED row leaves the grant" q_col1 q_regrant
+    # (n10) the span-less sentence arm deleted: only rows carrying the span revoke.
+    M="$WORK/h2-revoke-span-only.mutant.sh"
+    mut_mk n10 "$M" 'if ($0 ~ /digest=/) return 0' 'return 0' \
+      && score n10 "$M" q_revsent "span-only revocation misses 'the attestation above is void'" q_revrow q_comm
+    # (n11) the FIRST design: any H2/attestation line with a revocation word revokes. It refuses
+    #       the consumer's own commentary, which is why the sentence arm is shaped as it is.
+    M="$WORK/h2-revoke-vocab.mutant.sh"
+    mut_mk n11 "$M" 'if ($0 ~ /digest=/) return 0' 'return (u ~ /H2|ATTESTATION/ && u ~ REVOKE_WORDS)' \
+      && score n11 "$M" q_comm "a vocabulary revocation refuses 'voids the attestation by design'" q_revrow q_revsent
+    # (n12) no re-grant: once revoked, a later accepted span does not verify.
+    M="$WORK/h2-no-regrant.mutant.sh"
+    mut_mk n12 "$M" 'if (spanl && $0 ~ SPAN && judge(SPAN) == "OK") { pass = 1; passn = NR; revoked = 0; cite = CITE; next }' \
+      'if (spanl && $0 ~ SPAN && !revoked && judge(SPAN) == "OK") { pass = 1; passn = NR; cite = CITE; next }' \
+      && score n12 "$M" q_regrant "a sticky revocation refuses the re-attested span" q_col1 q_revrow
+    # (n13) NULs reach awk: the line is cut at the NUL.
+    M="$WORK/h2-nul-raw.mutant.sh"
+    mut_mk n13 "$M" "LC_ALL=C tr '\\000' '\\032' < \"\$GATE_LOG\" |" "cat \"\$GATE_LOG\" |" \
+      && score n13 "$M" q_nulprose "raw NULs cut SPAN\\0 FAILED to a bare span" q_col1 q_under
+    # (n14) BL-351 underscore: `_` back in the locating boundary.
+    M="$WORK/h2-locate-underscore.mutant.sh"
+    mut_mk n14 "$M" "ATTEST_LOCATE=" "ATTEST_LOCATE='(^|[^0-9A-Za-z_])'" \
+      && score n14 "$M" q_under "an underscore boundary reads _SPAN_ as first-gate" q_star q_col1
+    # (n15) BL-344 --sprint unguarded.
+    M="$WORK/h2-sprint-open.mutant.sh"
+    mut_mk n15 "$M" '*[!0-9]*) echo "FAIL: --sprint takes a sprint NUMBER (digits only), got: $SPRINT" >&2; exit 1 ;;' '__never__) ;;' \
+      && score n15 "$M" q_sprint "an unguarded --sprint '.*' grants a sprint=311 line" q_col1 q_cell
+    # (n16) BL-344 stream: the located refusal back on stderr.
+    M="$WORK/h2-locate-stderr.mutant.sh"
+    mut_mk n16 "$M" 'echo "RE-DRIVE: ${GATE_LOG}:${_a} QUOTES an H2_ATTESTED span for sprint ${SPRINT} ${_b},"' \
+      'echo "RE-DRIVE: ${GATE_LOG}:${_a} QUOTES an H2_ATTESTED span for sprint ${SPRINT} ${_b}," >&2' \
+      && score n16 "$M" q_stream "a located refusal on stderr is invisible to a stdout caller" q_col1 p_empty
   fi
 fi
 
