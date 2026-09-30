@@ -2763,7 +2763,27 @@ non-fatal when the range does not touch the rejecting gate. Because step 1 runs 
 protects only the pull after the one that delivers it. Close on a structural trace plus a fixture keyed on
 the step-1 emission lines (operator ruling: no model replay closes a step-file fix).
 
-verify: manual
+**Remedy taken at batch 176: no gate at step 1; a failed step-1 push is non-fatal and `apply` is
+refused at step 6.** Running `self-update-gate.sh` at step 1 was refuted: its coupling arms emit DEFER
+and `exit 0` before its `git rev-parse --git-path hooks/pre-push` probe is reached (re-read in the gate at batch 176), and DEFER is the expected verdict on any check-adding range, so the
+verdict is not a push verdict. Step 1 writes nothing, so the orphaned-branch hazard that gate exists
+for cannot arise there. The step-1 push bullets now mark the branch UN-SYNCED and continue; step 2
+does not push on an UN-SYNCED branch; step 6's re-confirm bullet no longer auto-pushes and is the
+one place `apply` is refused. The receipt reads those three bullets, each joined across its
+continuation lines and whitespace-collapsed, and exits 9 unless each anchor selects exactly one
+bullet. Scored in fresh `mktemp -d` trees, all 15 pairs `cmp`-distinct:
+
+| variant | want | got |
+|---|---|---|
+| live (`origin/main` at 0.670.0) | 1 | 1 |
+| the fix | 0 | 0 |
+| wrong1: ahead-only failure reworded to "STOP the run" | 1 | 1 |
+| wrong2: the fix with step 6's "Do not push here, ever." replaced by an "auto-push to re-sync" sentence | 1 | 1 |
+| rightB: step-6 bullet respelled ("refuse `apply`", no push word) | 0 | 0 |
+| wrapped: all three bullets reflowed so no anchor sits on one line | 0 | 0 |
+| no `SKILL.md` at the root | 9 | 9 |
+
+verify: sh P=core/skills/ai-dlc-update/SKILL.md; [ -f "$P" ] || exit 9; grep -q 'AUTO-PUSH' "$P" || exit 9; awk 'function fin() { if (t == "") return; gsub(/[ \t]+/, " ", t); l = tolower(t); if (index(t, "Remote exists but the current branch has no upstream")) { na++; if (l ~ /(^|[^a-z])stop([^a-z]|$)|run ends|do not proceed/ || l !~ /fail|reject/) bad = 1 } if (index(t, "Branch AHEAD of its upstream")) { nb++; if (l ~ /(^|[^a-z])stop([^a-z]|$)|run ends|do not proceed/ || l !~ /fail|reject/) bad = 1 } if (index(t, "Re-confirm the step-1 git preflight")) { nc++; if (l ~ /auto-push|git push/ || l !~ /(stop|refuse)[^.;]*apply/ || l !~ /un-synced|not in sync/) bad = 1 } t = "" } /^[ \t]*- / { fin(); t = $0; next } /^[ \t]+[^ \t]/ && t != "" { t = t " " $0; next } { fin() } END { fin(); if (na != 1 || nb != 1 || nc != 1) exit 9; exit bad }' "$P"
 
 ## BL-390 — an authorization whose source transcript has been pruned reads identically to one that was never given
 
