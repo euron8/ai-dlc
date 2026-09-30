@@ -349,6 +349,75 @@ mutate closenote \
   "without the NOTE a sprint closed WITHOUT a retro-PR merge resolves silently, reading exactly like a merge anchor"
 
 # ============================================================================
+# CONTIGUITY BELOW THE PRIOR SPRINT (BL-007). The resolution is a 1-deep link, so a hole at N-2 or
+# older used to be invisible. It is now a `PENDING — contiguity` line on stderr and NOTHING ELSE:
+# the anchor resolved, both callers read non-zero as "did not resolve", and consumer chains already
+# carry historical holes. So every arm asserts exit 0 AND the sha on stdout as well as the line.
+#
+# THREE WORLDS, one token each, and a mutant for each:
+#   g  sprints 10 and 12, asking for 13. The motivating case: 12 resolves, 11 is missing.
+#   q  THE NEAR-MISS: 10, 12, 11 in that ORDER, asking for 13. No hole, but out of order, which
+#      is the property an adjacency scan would key on — real chains append 267 before 266.
+#   s  THE SEAM: live 12, 13 and a sibling -archive.md holding 7, 9, 10, asking for 14. Sprint 11
+#      was pruned out of the live file's range, so a floor taken from the live file alone misses
+#      it; sprint 8 is a hole INSIDE the archive, which is a write-only sink and must not be named.
+# ============================================================================
+printf -- '- sprint: 10\n  sha: %s\n- sprint: 12\n  sha: %s\n' "$PRIOR_SHA" "$PRIOR_SHA" > "$WORK/gap.md"
+printf -- '- sprint: 10\n  sha: %s\n- sprint: 12\n  sha: %s\n- sprint: 11\n  sha: %s\n' \
+  "$PRIOR_SHA" "$PRIOR_SHA" "$PRIOR_SHA" > "$WORK/nogap.md"
+printf -- '- sprint: 12\n  sha: %s\n- sprint: 13\n  sha: %s\n' "$PRIOR_SHA" "$PRIOR_SHA" > "$WORK/seam.md"
+printf -- '# Audit Anchors — Archive\n\n```yaml\n- sprint: 7\n  sha: %s\n- sprint: 9\n  sha: %s\n- sprint: 10\n  sha: %s\n```\n' \
+  "$PRIOR_SHA" "$PRIOR_SHA" "$PRIOR_SHA" > "$WORK/seam-archive.md"
+
+contig_battery() {  # <script> -> "G:<g><q><s>", each y or n
+  local S="$1" out rc g=n q=n s=n
+  out="$( ( cd "$WORK" && bash "$S" --prior-sprint-sha gap.md 13 ) 2>"$WORK/cg.err" )"; rc=$?
+  if [ "$rc" -eq 0 ] && [ "$out" = "$PRIOR_SHA" ] \
+     && grep -q 'PENDING — contiguity: no entry for 1 sprint(s) between 10 and prior 12: 11\.' "$WORK/cg.err"; then g=y; fi
+  out="$( ( cd "$WORK" && bash "$S" --prior-sprint-sha nogap.md 13 ) 2>"$WORK/cq.err" )"; rc=$?
+  if [ "$rc" -eq 0 ] && [ "$out" = "$PRIOR_SHA" ] && grep -q 'prior-sprint-sha OK' "$WORK/cq.err" \
+     && ! grep -q 'contiguity' "$WORK/cq.err"; then q=y; fi
+  out="$( ( cd "$WORK" && bash "$S" --prior-sprint-sha seam.md 14 ) 2>"$WORK/cs.err" )"; rc=$?
+  if [ "$rc" -eq 0 ] && [ "$out" = "$PRIOR_SHA" ] \
+     && grep -q 'PENDING — contiguity: no entry for 1 sprint(s) between 11 and prior 13: 11\.' "$WORK/cs.err"; then s=y; fi
+  printf 'G:%s%s%s' "$g" "$q" "$s"
+}
+CONTIG_EXPECTED="G:yyy"
+
+CG="$(contig_battery "$WORK/bin/validate-audit-anchors.sh")"
+if [ "$CG" = "$CONTIG_EXPECTED" ]; then
+  ok "--prior-sprint-sha names a hole older than the prior sprint as PENDING on stderr, keeps exit 0 and the sha on stdout, stays quiet on an out-of-order chain with no hole, and sees a hole at the live/archive seam without indicting the archive's own history"
+else
+  bad "--prior-sprint-sha contiguity battery: expected [$CONTIG_EXPECTED], got [$CG]"
+fi
+CCG="$(contig_battery "$CTL")"
+if [ "$CCG" = "$CONTIG_EXPECTED" ]; then
+  ok "CONTROL: the unmutated copy answers the contiguity battery identically"
+else
+  echo "FIXTURE ERROR: the unmutated control does not reproduce the contiguity battery — expected [$CONTIG_EXPECTED], got [$CCG]." >&2
+  exit 2
+fi
+
+# contig_mutate <tag> <sed-program> <expected> <claim>
+contig_mutate() {
+  local tag="$1" prog="$2" want="$3" claim="$4"
+  local M="$WORK/mut/$tag.sh" got
+  sed "$prog" "$WORK/bin/validate-audit-anchors.sh" > "$M" || { bad "MUTANT $tag: sed failed"; return; }
+  if cmp -s "$WORK/bin/validate-audit-anchors.sh" "$M"; then
+    echo "FIXTURE ERROR: mutant '$tag' matched nothing — the line it targets was renamed." >&2
+    exit 2
+  fi
+  got="$(contig_battery "$M")"
+  if [ "$got" = "$want" ]; then ok "MUTANT $tag: $claim"; else bad "MUTANT $tag ($claim): expected [$want], got [$got]"; fi
+}
+contig_mutate nocontig 's/^    if missing:$/    if False:/' "G:nyn" \
+  "without the report a hole older than the prior sprint is invisible again, and the near-miss stays quiet"
+contig_mutate lastappended 's/^    present = sprint_ints(entries)$/    present = sprint_ints(entries[:-1])/' "G:yny" \
+  "a reader that does not count the last-appended entry reads an out-of-order chain as holed, and only the near-miss sees it"
+contig_mutate noseam 's/^    if archive_max is not None and archive_max + 1 < floor:$/    if False:/' "G:yyn" \
+  "without the archive floor a hole pruned to the live/archive seam is invisible, which is the case the entry describes"
+
+# ============================================================================
 # THE TEST-ONLY CARVE-OUT. Check 5 fires on ANY web/** member of the diff, so a sprint whose
 # entire web/** change is one test file — no source, no rendering — FAILed for want of visual
 # evidence of a rendering that did not change. The consumer that filed it had exactly one changed
@@ -618,8 +687,8 @@ fi
 
 echo
 # Liveness: a harness that silently stopped running assertions reads exactly like a clean pass.
-if [ "$asserted" -ne 23 ]; then
-  echo "check5-anchor-base: FIXTURE ERROR — ran $asserted assertions, expected 23" >&2
+if [ "$asserted" -ne 28 ]; then
+  echo "check5-anchor-base: FIXTURE ERROR — ran $asserted assertions, expected 28" >&2
   exit 2
 fi
 if [ "$fails" -eq 0 ]; then

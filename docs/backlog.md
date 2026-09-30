@@ -1363,7 +1363,19 @@ which is the control that the resolver does fire on an N−1 absence — the two
 distinguish "no contiguity check" from "no check ran". An anchor on the `current - 1` source
 line would have closed itself on a reformat.
 
-verify: sh t=$(mktemp -d); f="$t/a.md"; bash core/scripts/validate-audit-anchors.sh --render > "$f"; H=$(git rev-parse HEAD); printf '\n- sprint: 10\n  sha: %s\n\n- sprint: 12\n  sha: %s\n' "$H" "$H" >> "$f"; bash core/scripts/validate-audit-anchors.sh --prior-sprint-sha "$f" 13 >/dev/null 2>&1; r=$?; rm -rf "$t"; [ "$r" -eq 0 ] && exit 1 || exit 0
+**The receipt was rewritten at v0.666.0, because it demanded the posture this entry forbids.** It closed
+on a NON-ZERO exit for `{10,12} -> 13`, and both callers read non-zero as "the anchor did not resolve":
+Check 18 fails closed and Check 5 SKIPs. So the only fix it could accept was the gate-wedging one. The
+fix reports the hole as a `PENDING — contiguity` line on stderr and leaves exit 0 and the sha on
+stdout unchanged. The receipt now requires that line naming 11 with exit 0 and the sha on stdout. The
+near-miss `{10,12,11} -> 13`, out of order with no hole, must carry no such line, and `12`'s prior
+exiting 1 is kept as the control that the resolver still fires on an N-1 absence (exit 9 if either
+control moves). Scored: exit 1 on the base resolver, exit 0 at the fix, exit 1 on a copy of the fix
+with the report disabled. The scan reads the sibling `-archive.md`'s highest sprint so that a hole at
+the live/archive seam is caught. Holes inside the archive are not scanned. The
+`core/fixtures/check5-anchor-base` contiguity battery carries three mutants, one per property.
+
+verify: sh t=$(mktemp -d) || exit 9; f="$t/a.md"; n="$t/n.md"; H=$(git rev-parse HEAD); printf -- '- sprint: 10\n  sha: %s\n- sprint: 12\n  sha: %s\n' "$H" "$H" > "$f"; printf -- '- sprint: 10\n  sha: %s\n- sprint: 12\n  sha: %s\n- sprint: 11\n  sha: %s\n' "$H" "$H" "$H" > "$n"; V=core/scripts/validate-audit-anchors.sh; bash "$V" --prior-sprint-sha "$f" 12 >/dev/null 2>&1; c=$?; o=$(bash "$V" --prior-sprint-sha "$f" 13 2>"$t/e"); r=$?; bash "$V" --prior-sprint-sha "$n" 13 >/dev/null 2>"$t/ne"; nr=$?; e=$(cat "$t/e"); ne=$(cat "$t/ne"); rm -rf "$t"; [ "$c" -eq 1 ] && [ "$nr" -eq 0 ] || exit 9; grep -q 'contiguity' <<<"$ne" && exit 1; [ "$r" -eq 0 ] && [ "$o" = "$H" ] && grep -q 'PENDING — contiguity: no entry for 1 sprint(s) between 10 and prior 12: 11\.' <<<"$e"
 
 ---
 
