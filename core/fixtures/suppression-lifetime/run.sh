@@ -234,6 +234,109 @@ else
   bad "the control stopped firing in the mirrored timeline (rc=$rc)"
 fi
 
+# --- Assertions 18a-18c: the expiry FAIL names the ts of the row it read (BL-195) ------
+# Check 2 reads gate-metrics.jsonl before Check 12 writes this gate's rows, so the verdict is
+# always the PREVIOUS gate's. The message must say so and name the row, or a stale FAIL is
+# indistinguishable from a live one. The ts is asserted EXACTLY, and 18b is the input that
+# separates "the ts of the row the (catalog, check) join selected" from "the newest ts in the
+# file": in GM_COLLIDE the newest row for check 32 is the EXTENSION row at G3, and core's
+# newest FAIL is at G2.
+SL_TS_WHY=""
+sl_names_ts() { # <want-ts> <unwanted-ts> -- reads LAST_OUT
+  SL_TS_WHY=""
+  grep -qF "ts $1 in " <<<"$LAST_OUT" || { SL_TS_WHY="no 'ts $1 in' in the message"; return 1; }
+  if [ -n "$2" ] && grep -qF "ts $2 in " <<<"$LAST_OUT"; then SL_TS_WHY="names $2 too"; return 1; fi
+  grep -qF "PREVIOUS" <<<"$LAST_OUT" || { SL_TS_WHY="does not say the source is the PREVIOUS gate"; return 1; }
+  return 0
+}
+drive "$VALIDATOR" expired-still-failing "$GM_FAILING"; rc="$LAST_RC"
+if [ "$rc" = "1" ] && sl_names_ts "$G3" "$G2"; then
+  ok "18a: the expiry FAIL names the ts of the row it read ($G3) and that it is the PREVIOUS gate's verdict"
+else
+  bad "18a: the expiry FAIL does not name the verdict row's ts (rc=$rc, $SL_TS_WHY) — a stale read is illegible"
+fi
+drive "$VALIDATOR" collide-core "$GM_COLLIDE"; rc="$LAST_RC"
+if [ "$rc" = "1" ] && sl_names_ts "$G2" "$G3"; then
+  ok "18b: in the colliding timeline the named ts is core's row ($G2), not the newer extension row"
+else
+  bad "18b: the named ts is not the row the catalog join selected (rc=$rc, $SL_TS_WHY)"
+fi
+# 18c: the RESOLVED arm shares latest_verdict, whose output shape changed; it must still fire.
+drive "$VALIDATOR" terminal-names-failing "$GM_FAILING"; rc="$LAST_RC"
+if [ "$rc" = "1" ] && grep -q "recorded FAILING" <<<"$LAST_OUT"; then
+  ok "18c: the terminal-entry arm still reads the verdict out of the widened row"
+else
+  bad "18c: the terminal-entry arm stopped firing (rc=$rc) — it compares the whole row to FAIL"
+fi
+
+# 18d: every seeded timeline above is written in ASCENDING ts order, so "the newest row" and
+# "the last row read" are the same row there and a reader printing the last-seen ts passes 18a
+# and 18b. The real file is appended by a lead per gate but nothing orders it. Reversed, the two
+# readings name different rows; MUTANT L below is that reader.
+GM_REV="$WORK/gm-failing-reversed.jsonl"
+awk '{ l[NR] = $0 } END { for (i = NR; i >= 1; i--) print l[i] }' "$GM_FAILING" > "$GM_REV"
+if cmp -s "$GM_FAILING" "$GM_REV"; then
+  bad "18d: the reversed timeline is byte-identical to the original — the arm cannot discriminate"
+else
+  drive "$VALIDATOR" expired-still-failing "$GM_REV"; rc="$LAST_RC"
+  if [ "$rc" = "1" ] && sl_names_ts "$G3" "$G1"; then
+    ok "18d: with the newest row written FIRST the named ts is still the newest ($G3), not the last read"
+  else
+    bad "18d: the named ts follows file order, not recency (rc=$rc, $SL_TS_WHY)"
+  fi
+fi
+
+# MUTANT K: the ts dropped from the row latest_verdict returns. 18a and 18b must die; the
+# verdicts (rc of 2 and 7) must not move, or the ts channel is entangled with the verdict.
+SL_MUT_K="$WORK/mutant-k-no-ts.sh"
+SL_K_A='END { print bestv "\t" bestt }'
+SL_K_N="$(grep -cF -- "$SL_K_A" "$VALIDATOR")" || SL_K_N=0
+A="$SL_K_A" awk '{ i = index($0, ENVIRON["A"]); if (i) $0 = substr($0, 1, i - 1) "END { print bestv \"\\t\" }" substr($0, i + length(ENVIRON["A"])); print }' \
+  "$VALIDATOR" > "$SL_MUT_K"
+if [ "$SL_K_N" -ne 1 ]; then
+  bad "MUTANT K anchor matches $SL_K_N line(s), not 1 — re-anchor it"
+elif cmp -s "$VALIDATOR" "$SL_MUT_K"; then
+  bad "MUTANT K did not change the file — its silence would score as a kill"
+elif ! bash -n "$SL_MUT_K" 2>/dev/null; then
+  bad "MUTANT K is not a valid program"
+else
+  drive "$SL_MUT_K" expired-still-failing "$GM_FAILING"; rc="$LAST_RC"
+  if [ "$rc" = "1" ] && grep -q "STILL FAILING" <<<"$LAST_OUT" && ! sl_names_ts "$G3" ""; then
+    ok "MUTANT K killed — with the ts dropped the FAIL still fires and 18a sees no ts ($SL_TS_WHY)"
+  else
+    bad "MUTANT K SURVIVED 18a (rc=$rc) — the assertion is not reading the ts"
+  fi
+  drive "$SL_MUT_K" terminal-names-failing "$GM_FAILING"; rc="$LAST_RC"
+  if [ "$rc" = "1" ]; then
+    ok "MUTANT K leaves the verdict arms intact — the ts channel is additive"
+  else
+    bad "MUTANT K ALSO moved a verdict (rc=$rc) — ts and verdict are entangled"
+  fi
+fi
+
+# MUTANT L: the ts printed is the LAST matching row read, not the newest. Only 18d can see it.
+SL_MUT_L="$WORK/mutant-l-last-ts.sh"
+A="$SL_K_A" awk '{ i = index($0, ENVIRON["A"]); if (i) $0 = substr($0, 1, i - 1) "END { print bestv \"\\t\" t }" substr($0, i + length(ENVIRON["A"])); print }' \
+  "$VALIDATOR" > "$SL_MUT_L"
+if [ "$SL_K_N" -ne 1 ] || cmp -s "$VALIDATOR" "$SL_MUT_L"; then
+  bad "MUTANT L did not apply — anchor count $SL_K_N"
+elif ! bash -n "$SL_MUT_L" 2>/dev/null; then
+  bad "MUTANT L is not a valid program"
+else
+  drive "$SL_MUT_L" expired-still-failing "$GM_FAILING"; rc="$LAST_RC"
+  if [ "$rc" = "1" ] && sl_names_ts "$G3" "$G2"; then
+    ok "MUTANT L passes 18a on the ascending timeline — the reason 18d exists"
+  else
+    bad "MUTANT L already fails 18a (rc=$rc, $SL_TS_WHY) — 18d is not the arm that kills it"
+  fi
+  drive "$SL_MUT_L" expired-still-failing "$GM_REV"; rc="$LAST_RC"
+  if [ "$rc" = "1" ] && ! sl_names_ts "$G3" "$G1"; then
+    ok "MUTANT L killed by 18d — a last-read ts names the wrong row once the file is not in order ($SL_TS_WHY)"
+  else
+    bad "MUTANT L SURVIVED 18d (rc=$rc) — the reversed timeline does not separate newest from last-read"
+  fi
+fi
+
 # ------------------------------------------------------------------------------
 # MUTANTS. Copies, never in-place edits. `cmp -s` proves the mutation landed and
 # `bash -n` proves the result is still a program — a copy that dies on a syntax error

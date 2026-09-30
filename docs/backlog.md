@@ -3149,6 +3149,16 @@ fires.
 whether their sprints should keep suppressing rather than escalating, is that consumer's own
 carry-over.
 
+**The smallest honest change shipped in v0.666.0; the defect stands.** The expiry FAIL now names
+the `ts` of the row `latest_verdict` selected and the metrics file, and says that this is the
+PREVIOUS gate's recorded verdict because Check 12 writes this gate's row after Check 2 runs.
+`gate-validation.md` Check 2 and `escalations.md` state the same thing. Fixture arms 18a-18d in
+`core/fixtures/suppression-lifetime/run.sh` pin the exact ts: the newest core row, not a newer
+extension row, and not the last row read in file order. Mutants K (ts dropped) and L (last-read
+ts) are killed. The stale read itself is unchanged, so this entry stays open and its receipt
+stays `manual`: an `sh` receipt over the mitigation exits 0 and would score the entry
+CLOSE-CANDIDATE for a defect that still reproduces. The fixture carries the mitigation.
+
 verify: manual
 
 ## BL-214 — `story_normalize` reads a carry-over ITEM number as a sprint, and the licence that authorised it used a non-discriminating control
