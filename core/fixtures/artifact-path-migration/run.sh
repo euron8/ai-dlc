@@ -221,6 +221,43 @@ moved "recover-not-a-mention" "_bmad-output/planning-artifacts/s158/stories/hotf
                          "_bmad-output/planning-artifacts/stories/hotfix-158-1-token0-fixes.md" \
                          "a mid-line 'Sprint 131b' mention is not read as the file's declaration"
 
+# BL-214: A READABLE HEADER OUTRANKS THE LEADING NUMBER OF `story-<A>-<B>`, not only when the path
+# is silent. `A` is the carry-over ITEM in the pre-s199 era; the consumer's own file declares 53 and
+# was filed under s102. Each arm asserts the destination AND that the name's slot was not created.
+moved "hdr-over-name"    "_bmad-output/planning-artifacts/s53/stories/story-1-effective-spread-500.md" \
+                         "_bmad-output/planning-artifacts/stories/story-102-1-effective-spread-500.md" \
+                         "**Sprint:** 53 on story-102-1 lands s53, not the item number's s102"
+asserts=$((asserts+1))
+if [ ! -d "$W/_bmad-output/planning-artifacts/s102" ]; then
+  printf '  ok    %-26s %s\n' "hdr-over-name-no-s102" "no s102/ slot was created for the item number"
+else
+  fails=$((fails+1)); printf '  FAIL  %-26s %s\n' "hdr-over-name-no-s102" "s102/ exists: the item number was read as the sprint"
+fi
+moved "hdr-over-name-3dig" "_bmad-output/planning-artifacts/s185/stories/story-1-three-digit.md" \
+                         "_bmad-output/planning-artifacts/stories/story-230-1-three-digit.md" \
+                         "three digits each side: **Sprint:** 185 on story-230-1 lands s185"
+asserts=$((asserts+1))
+if [ ! -d "$W/_bmad-output/planning-artifacts/s230" ]; then
+  printf '  ok    %-26s %s\n' "hdr-over-name-no-s230" "no s230/ slot was created for the item number"
+else
+  fails=$((fails+1)); printf '  FAIL  %-26s %s\n' "hdr-over-name-no-s230" "s230/ exists: the item number was read as the sprint"
+fi
+moved "hdr-agrees-name"  "_bmad-output/planning-artifacts/s296/stories/story-2-delta.md" \
+                         "_bmad-output/planning-artifacts/stories/story-296-2-delta.md" \
+                         "near-miss: a header AGREEING with the name moves exactly as before"
+moved "hdr-unreadable-name" "_bmad-output/planning-artifacts/s95/stories/story-1-foundation.md" \
+                         "_bmad-output/planning-artifacts/stories/story-95-1-foundation.md" \
+                         "an unreadable header (50A) leaves the name's reading in place"
+asserts=$((asserts+1))
+if grep -qE '^  s53 +header>name +.*story-102-1-effective-spread-500\.md$' <<<"$OUT" \
+   && grep -qE '^  s185 +header>name +.*story-230-1-three-digit\.md$' <<<"$OUT" \
+   && ! grep -q 'story-296-2-delta' <<<"$(sed -n '/SPRINT RECOVERED/,/^$/p' <<<"$OUT")" \
+   && ! grep -q 'story-95-1-foundation' <<<"$(sed -n '/SPRINT RECOVERED/,/^$/p' <<<"$OUT")"; then
+  printf '  ok    %-26s %s\n' "hdr-over-name-reported" "each override is reported as header>name; the agreeing and unreadable files are not"
+else
+  fails=$((fails+1)); printf '  FAIL  %-26s %s\n' "hdr-over-name-reported" "an override was silent, or a non-override was reported as one"
+fi
+
 # A SUFFIXED SPRINT IS REFUSED, NOT ROUNDED. `131b` has no legal `^s[0-9]+$` slot spelling, and
 # truncating it to s131 merges one sprint's artifacts into another's on a guess.
 refused "recover-suffixed" "_bmad-output/planning-artifacts/stories/story-131b-1-hr12-retirement.md" \
@@ -405,6 +442,14 @@ mutate 'story-slot-blind' \
   's@^  local head=@  return 0\n  local head=@' \
   '[ ! -f "$w/_bmad-output/planning-artifacts/s299/stories/story-299-3-gamma.md" ]' \
   'a conforming story is re-migrated once the s<N>/-above-it test stops firing'
+
+# BL-214: disarm the header-over-name override. The item number is then read as the sprint and
+# the consumer's story lands under s102 -- while bug-124 (header, path-silent channel) still lands
+# s72, so the mutant moves only its own arm.
+mutate 'hdr-over-name-off' \
+  's@^      if \[ -n "\$hd_n" \] && \[ -n "\$nm_n" \] && \[ "\$hd_n" != "\$nm_n" \]; then@      if false; then@' \
+  '[ -f "$w/_bmad-output/planning-artifacts/s102/stories/story-1-effective-spread-500.md" ] && [ -f "$w/_bmad-output/planning-artifacts/s230/stories/story-1-three-digit.md" ] && [ -f "$w/_bmad-output/planning-artifacts/s72/stories/bug-124-deployed-range.md" ]' \
+  'without the override the item number is read as the sprint (s102, s230); the path-silent header channel is untouched (s72)'
 
 # UNMUTATED CONTROL, from the same directory: the harness itself must not be what fails. A lone
 # copy that dies sourcing something emits nothing, and "no output" otherwise scores as a kill.

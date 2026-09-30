@@ -22,7 +22,8 @@
 # THE VERDICT IS RE-READ, NEVER ASSUMED
 # A suppression past its expiry is only a failure if the named check is STILL failing. The
 # check's own recorded verdict decides that, read from gate-metrics.jsonl at the most
-# recent gate. A suppression whose cause was genuinely fixed costs nothing and reports
+# recent RECORDED gate -- the previous one, since Check 12 writes this gate's rows after
+# Check 2 has run. The expiry message names that row's `ts`. A suppression whose cause was genuinely fixed costs nothing and reports
 # nothing — in the measured sprint the third gate is exactly that case. This is what keeps
 # the arm from becoming a bookkeeping lint on entries nobody needs to touch again.
 #
@@ -368,7 +369,13 @@ fi
 GATES_N="$(grep -c . <<<"${GATE_TS:-}" || true)"
 [ -n "$GATE_TS" ] || GATES_N=0
 
-# latest_verdict <check-id> [catalog] -> verdict at the most recent gate that recorded it
+# latest_verdict <check-id> [catalog] -> "<verdict>\t<ts>" at the most recent gate that recorded it
+#
+# THE ROW'S `ts` TRAVELS WITH ITS VERDICT, because the verdict is the PREVIOUS gate's. This file is
+# written only by Check 12, which runs after Check 2 invokes this script, so the newest row is never
+# the current gate's. A fix landing between two gates is invisible here, and the four candidate
+# repairs were each measured and refuted (docs/backlog.md BL-195). What this can do is make a stale
+# FAIL LEGIBLE: the expiry message names the `ts` of the row it read and says whose record it is.
 #
 # THE JOIN IS (catalog, check), NEVER check ALONE. The record schema names `catalog` for
 # exactly this reason -- gate-validation.md:757 says it "is what makes a consumer's `check`
@@ -413,7 +420,7 @@ latest_verdict() {
       v = jstr($0, "verdict")
       if (t >= bestt) { bestt = t; bestv = v }
     }
-    END { print bestv }
+    END { print bestv "\t" bestt }
   ' "$GATE_METRICS"
 }
 
@@ -548,7 +555,9 @@ while IFS="$(printf '\037')" read -r header status supp expires authts named sup
         continue
       fi
       elapsed="$(gates_since "$authts")"
-      verdict="$(latest_verdict "$supp" "$suppcat")"
+      vrow="$(latest_verdict "$supp" "$suppcat")"
+      verdict="${vrow%%$'\t'*}"
+      vts="${vrow#*$'\t'}"
       if [ "$elapsed" -gt "$expires" ]; then
         if [ "$verdict" = "FAIL" ]; then
           key="EXPIRED:$supp"
@@ -560,6 +569,9 @@ while IFS="$(printf '\037')" read -r header status supp expires authts named sup
             echo "FAIL: suppression of check '$supp' is past its lifetime and the check is" >&2
             echo "      STILL FAILING. Authorized $authts, **Expires after:** $expires gate(s)," >&2
             echo "      $elapsed gate(s) recorded since; latest recorded verdict is FAIL." >&2
+            echo "      Verdict source: the row at ts $vts in $GATE_METRICS -- the PREVIOUS" >&2
+            echo "      gate's recorded verdict. This gate's own row is written by Check 12," >&2
+            echo "      which runs after Check 2." >&2
             echo "      entry: $short" >&2
             echo "      The prior citation may not be re-cited. Obtain fresh operator" >&2
             echo "      authorization as a NEW entry, or fix the underlying failure." >&2
@@ -583,7 +595,8 @@ while IFS="$(printf '\037')" read -r header status supp expires authts named sup
         # Passing the entry's own `suppcat` would be wrong: a RESOLVED entry carrying a
         # stray non-core bracket would then ask for a verdict in a catalog whose ids were
         # never resolved, and every such entry would silently stop being checked.
-        [ "$(latest_verdict "$id" core)" = "FAIL" ] || continue
+        vrow="$(latest_verdict "$id" core)"
+        [ "${vrow%%$'\t'*}" = "FAIL" ] || continue
         hit="$hit $id"
       done
       [ -n "$hit" ] || continue

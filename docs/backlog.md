@@ -3216,6 +3216,16 @@ fires.
 whether their sprints should keep suppressing rather than escalating, is that consumer's own
 carry-over.
 
+**The smallest honest change shipped in v0.666.0; the defect stands.** The expiry FAIL now names
+the `ts` of the row `latest_verdict` selected and the metrics file, and says that this is the
+PREVIOUS gate's recorded verdict because Check 12 writes this gate's row after Check 2 runs.
+`gate-validation.md` Check 2 and `escalations.md` state the same thing. Fixture arms 18a-18d in
+`core/fixtures/suppression-lifetime/run.sh` pin the exact ts: the newest core row, not a newer
+extension row, and not the last row read in file order. Mutants K (ts dropped) and L (last-read
+ts) are killed. The stale read itself is unchanged, so this entry stays open and its receipt
+stays `manual`: an `sh` receipt over the mitigation exits 0 and would score the entry
+CLOSE-CANDIDATE for a defect that still reproduces. The fixture carries the mitigation.
+
 verify: manual
 
 ## BL-214 — `story_normalize` reads a carry-over ITEM number as a sprint, and the licence that authorised it used a non-discriminating control
@@ -3258,7 +3268,21 @@ repair also cannot be a pure rename of the recovery order: 598 files agree today
 **Tiered DEFECT.** Files are placed under a wrong but well-formed slot, so nothing reports and the
 error is invisible to every conformance check — the destination is on the grammar either way.
 
-verify: sh set -e; d=$(mktemp -d); trap 'rm -rf "$d"' EXIT; mkdir -p "$d/_bmad-output/planning-artifacts/stories"; ( cd "$d" && git init -q . && git config user.email t@t && git config user.name t ); printf '# S\n\n**Sprint:** 53\n\nB.\n' > "$d/_bmad-output/planning-artifacts/stories/story-102-1-x.md"; ( cd "$d" && git add -A && git commit -qm s ); o="$(bash core/scripts/migrate-artifact-paths.sh --root "$d" --grammar "$PWD/core/skills/ai-dlc/artifact-path-grammar.md" 2>&1)"; grep -q 's102/stories' <<<"$o" && exit 1; exit 0
+**Fixed at the producer in v0.666.0; two residuals stand.** In the plan loop, a READABLE
+`**Sprint:**` header that names a sprint other than the normalised name's `A` now wins, and the
+move is reported under SPRINT RECOVERED as `header>name`. An agreeing header changes nothing. The
+licence text in `artifact-path-grammar.md` and the script header is replaced by the discriminating
+measurement: each file's own header over the 786 `story-<A>-<B>` files at the pre-migration ref
+`15c890eb^`, of which 319 agree, 146 disagree (all with header < `A`, none with `A` >= 199), 6 are
+unreadable and 315 have no header. Driven on that corpus in a scratch repo, the shipping migrator
+plans `s53/` for `story-102-1-effective-spread-500.md`, and its `header>name` set equals the 146
+exactly (empty `comm -3`). **Residual 1:** the 315 headerless files still take `A`, because
+nothing in the file can separate item from sprint for them. **Residual 2:** the 6 `50A`/`50B`
+files keep `A`, because refusing them would break the conformance validator's blocking-set ==
+move-set join. That validator reads paths only, never headers. The false-positive measurement the
+entry asked for over the post-s199 era comes back empty (0 disagreements with `A` >= 199).
+
+verify: sh set -e; d=$(mktemp -d); trap 'rm -rf "$d"' EXIT; s="$d/_bmad-output/planning-artifacts/stories"; mkdir -p "$s"; ( cd "$d" && git init -q . && git config user.email t@t && git config user.name t ); printf '# Story 102-1: x\n\n**Epic:** 102 - Sprint 53 x (Item 102)\n**Sprint:** 53\n' > "$s/story-102-1-x.md"; printf '# Story 297-1: y\n\nNo header.\n' > "$s/story-297-1-y.md"; ( cd "$d" && git add -A && git commit -qm s ); o="$(bash core/scripts/migrate-artifact-paths.sh --root "$d" --grammar "$PWD/core/skills/ai-dlc/artifact-path-grammar.md" 2>&1)" || exit 9; grep -q 's297/stories/story-1-y.md' <<<"$o" || exit 9; grep -q 's102/stories' <<<"$o" && exit 1; grep -q 's53/stories/story-1-x.md' <<<"$o" || exit 1; exit 0
 
 ## BL-215 — an ADR that defers work reaches the next sprint's intake, but the intake's disposition vocabulary has no slot for "this names undone work"
 
