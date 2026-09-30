@@ -15,6 +15,68 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.668.0] - 2026-09-30
+
+Batch 175's first release. Discharges two consumer candidates, ships a rehearsed brief that closes
+thirteen more the consumer's own engine cannot see, and fixes `BL-067`, `BL-077`, `BL-082`,
+`BL-126`, `BL-236`, `BL-266` and `BL-282`. `BL-133` and `BL-159` are fixed in part. No file here is
+one the update engine runs on itself.
+
+### Consumer candidate
+
+- **`PC-S315-AUDIT-LAYER-DEBT-CUE-ARM-READS-CORE-FIELD-VOCABULARY-AS-AN-OBLIGATION`** (`BL-383`).
+  `audit-layer-debt.sh`'s migration arm read `deferred scope`, an adjudicator's paraphrase of what
+  route Step 6 files, as an undeclared obligation. The `deferred` cue now carries a lookahead for
+  exactly `scope` at the same boundary as the remediation noun set. On the consumer's register at
+  `c00f387f`, UNDECLARED 1 -> 0 with that one row the only mover; the live register reads 0 either
+  way because the consumer has since withdrawn the row. `scope_deferred_items` was already clean.
+- **`PC-S315-ARTIFACT-WRITE-LEDGER-DROPS-PARALLEL-SHARD-ROWS`** (`BL-384`). The rows were never lost:
+  every unledgered remediator shard wrote its files through Bash, which reaches no Edit matcher, and
+  every validated Edit/Write/MultiEdit had its row. The remediator role now requires those tools for
+  edits in a repair dispatch and teaches the ledger-spelled, project-relative citation instead of
+  "the FULL path"; the join accepts an absolute citation under the state directory's parent and
+  still refuses a foreign one; its refusal names the Bash cause and the re-dispatch. The hook's
+  allow is unchanged.
+
+### Consumer close brief
+
+- `docs/reviews/graph-consumer-close-brief-2.md` closes thirteen live consumer candidates that
+  upstream releases already fixed. Twelve carry no `verify:` line, and `ledger-reverify.sh` emits
+  no row for a receipt-less entry, so no pull ever reported them; the thirteenth carries a receipt
+  that exits 0 on both sides of its fix. Each close line is backed by a fix-specific token counted
+  at the release, the release before and the consumer's installed file. Rehearsed on a clone: the
+  rotator archived exactly the thirteen and nothing else. The engine gap itself is a bootstrapping
+  fix and ships separately.
+
+### Backlog
+
+- **`BL-067`** — `audit-layer-debt.sh` classifies each open debt's `closes_when` by kind: a trigger
+  naming the debt's own id closes by the register join; anything else is a prose condition nothing
+  evaluates. The previous receipt accepted three regressions and is replaced.
+- **`BL-077`** — `validate-steering-budget.sh` derives this session's transcript corpus when given
+  no path, so Check 25 and the retro audit no longer have the model type the derivation. Zero or
+  several matches refuse exactly as before.
+- **`BL-126`** — on a paused tree, a dispatched teammate's write under `_bmad-output/` goes through
+  and is logged as `ACK_TEAMMATE_WRITE`; its dispatches, and every lead write, are still denied.
+  This is an approximation of quiesce, not quiesce. A lead's `NotebookEdit` under `_bmad-output/`
+  was never pause-denied because it carries `notebook_path`; Check 3 now reads both.
+- **`BL-082`** — `validate-provenance-block.sh --strays` respells each path component as its parent
+  directory lists it (same directory entry only), so two case spellings of one file agree on a
+  folding filesystem without folding the comparison. Case-sensitive APFS and HFS+ disk-image arms
+  kill the forbidden fold where it is distinguishable.
+- **`BL-236`** — arm S8b in `validate-shell-portability.sh`: an unbraced `$VAR:` rev-path followed
+  by a zsh modifier letter, in non-shell `core/` text.
+- **`BL-266`** — `enforcement-map-sites`' I59 corpus mutation is addressed to I59's own line, must
+  change exactly one line, and drives I60, I83 and I84 green against it.
+- **`BL-282`** — `.githooks/pre-push` warns, never blocks, when the push remote's ssh alias carries
+  no keepalive. Distribution hook only.
+- **`BL-133`**, in part — two shipped step-file line citations are re-cited by greppable token. The
+  three remaining sit in the update skill and ship with the next release touching it.
+- **`BL-159`**, in part — auto-handoff step 5 clears the handoff marker, as the manual path does.
+
+Read-set traces owed for `remediator-shard-join`, `stray-party-mode-provenance` and the new
+`prepush-ssh-keepalive`.
+
 ## [0.667.0] - 2026-09-29
 
 The rest of batch 174's backlog drain: the fixes still building when 0.666.0 shipped. Discharges

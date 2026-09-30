@@ -310,7 +310,7 @@ and all belonging to ONE sprint**, sitting inside an artifact the whole-read bud
 **AND NOTHING IN CORE READS ONE, WHICH IS THE REASON TO HOME IT RATHER THAN TO DROP IT.**
 `change[ -]?log` over `scripts/ai-dlc/` and `.claude/hooks/` matches only the
 *validation-cycle-log* model — one of those lines says per-artifact changelogs are "freeform
-prose, not countable here" (`validate-mandatory-rules.sh:139`). The entries are evidence a human reads when asking
+prose, not countable here" (`validate-mandatory-rules.sh`, its `[Check 2]` enablement comment). The entries are evidence a human reads when asking
 what a sprint did to an artifact, and a coverage report can cite one; deleting them breaks a
 record the pass produced. **Existing entries already inside a durable artifact are MOVED into
 the slot of the sprint they describe, never removed** — the same disposition item 23b took for
@@ -543,7 +543,8 @@ shard edits its files IN PLACE, never a copy. A finding citing more than one fil
 serial remediator dispatched after the join. A single-file artifact is sharded by section
 (below). Each shard's brief carries `shard: <i>/<N> <files>` and the parts path
 `_bmad-output/planning-artifacts/s<N>/shards/<artifact>-repair-p<M>/<i>.md`. Every `edit:` line
-cites the full path of each file it edits, and a citation must not wrap onto the next line. Beat-join
+cites the project-relative path in the ledger's spelling (`_bmad-output/planning-artifacts/s<N>/…`)
+of each file it edits, and a citation must not wrap onto the next line. Beat-join
 every part, then run the join
 `scripts/ai-dlc/join-remediator-shards.sh --sprint <N> --artifact <name> --pass <M> --artifact-path _bmad-output/planning-artifacts/s<N> --since <ISO> --until <ISO>`
 over the repair window. `--artifact-path` is the sprint slot `s<N>`, not `s<N>/stories`: a
@@ -555,6 +556,13 @@ if a file is cited by two parts, or if any part is unstructured. Otherwise it wr
 repair record below. The serial cross-file remediator runs after that and APPENDS its entries
 to the joined record. The join never overwrites a record, so it is run before the serial
 remediator and never after it.
+
+After a join refusal naming a file `which no dispatched agent wrote`:
+
+1. Re-dispatch that shard, writing through Edit, Write or MultiEdit, and re-run the join. The
+   join lists every reason it refused; clear each one.
+2. Only if the operator approves in this session: hand-assemble the record, with a disclosure
+   header naming every unledgered file and the refusal's lines.
 
 **Shard by section (Rule 28, "Split dispatch": sections axis).** When the artifact is one
 document, run `scripts/ai-dlc/partition-document.sh --map <artifact path>`. Exit 3 with a `SERIAL:`
@@ -847,8 +855,9 @@ carry the no-human-present additions:
 
 5. Create the pause flag so the continuation hook allows this
    auto-handoff to end the session (an autonomous handoff has no user
-   message to set it): `touch _bmad-output/pipeline-paused.flag`. Then
-   end the session — do not continue the pipeline in this conversation.
+   message to set it): `touch _bmad-output/pipeline-paused.flag`, and clear the
+   entry marker from the preamble: `rm -f _bmad-output/.handoff-in-progress`.
+   Then end the session — do not continue the pipeline in this conversation.
    Reply to any further messages with a pointer to the snapshot and the
    resume prompt. Resume itself is NOT automated: the user MUST open a
    new conversation and paste the resume prompt.

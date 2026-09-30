@@ -712,10 +712,10 @@ impossible, and both are mechanically detectable. **Audit first, rotate second**
 rotating before the audit destroys the evidence the audit reads.
 
 **Audit.** Run the validator across every transcript in the SPRINT window, not this
-session's:
+session's. With `--since` and no path it scans this session's project directory, which it
+resolves itself and names on its `corpus :` line:
 
     scripts/ai-dlc/validate-steering-budget.sh \
-      --dir ~/.claude/projects/<project-slug>/ \
       --since <ISO-8601 UTC of the sprint's first commit>
 
 Record the reported `transcripts scanned : N` in the retro. **N must be greater than 1 on
@@ -731,7 +731,7 @@ auto-compacted but never handed off is therefore a COMPLETE scan, and scoring it
 mis-scoped is a false finding. Where a scan of 1 needs confirming, enumerate the window's
 transcripts directly rather than inferring the count from what the sprint did:
 
-    find ~/.claude/projects/<project-slug>/ -maxdepth 1 -name '*.jsonl' \
+    find <the directory the audit's corpus line named> -maxdepth 1 -name '*.jsonl' \
       -newermt '<sprint start as YYYY-MM-DD HH:MM:SS +0000>'
 
 One file means `N = 1` covered the whole sprint window. More files than the validator

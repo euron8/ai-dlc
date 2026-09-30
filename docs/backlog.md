@@ -115,6 +115,18 @@ verify: sh s=core/scripts/audit-layer-debt.sh; [ -f "$s" ] || exit 9; d=$(mktemp
 
 ## BL-236 — the note that makes `ai-dlc-update`'s braced rev-paths survive a retype has no mechanism behind it, and arm S8 cannot see the form a reader actually mistypes
 
+**ARM HALF FIXED IN v0.668.0, pending the post-merge close; the prose half landed earlier.**
+`validate-shell-portability.sh` gains arm **S8b**: an unbraced `$VAR:` rev-path followed by a zsh
+modifier letter, over a new `doc` corpus (`git ls-files 'core/*'` minus `*.sh`), with its own named
+empty-corpus guard. Measured over `core/*` minus the battery: 0 hits in the 220 non-`.sh` files; 37 in
+`.sh` files, all bash where the form is correct, subtracted by the corpus column. The modifier class
+was re-derived under `/bin/zsh -f` over 52 letters and equals `tool-hazards.md`'s 17; it removes the
+two loose hits at `reconcile/classify-block.md:15-16` (`"$BASE:$CORE_PATH"`). Fixture cells m9d,
+m10c, n7, x16-x20. Stated holes, not coverage: a `.sh` that prints the form for pasting, and
+extensionless bash under `core/` (0 of each today). The receipt below replaces the prose-half one and
+drives the validator on a seeded tree: base 1, fix 0, S8b dropped 1, corpus set to shell 1, modifier
+class dropped 1, keyed on the placeholder 1.
+
 **Found 2026-09-11**, filed by the reference consumer as a candidate against
 `core/skills/ai-dlc-update/SKILL.md`. The prose half landed with the entry; what is owed is the
 enforcement, and the reason it is owed is that the arm which looks like the enforcer is not one.
@@ -175,7 +187,7 @@ a URL) and the two degenerate trees exit 9, each mutant `cmp -s`-asserted applie
 verdict was read. So the arm binds POSITION and VOCABULARY, never semantics; a reviewer reads the
 sentence, and this receipt only establishes that there is one to read.
 
-verify: sh f=core/skills/ai-dlc-update/SKILL.md; [ -r "$f" ] || exit 9; c=$(grep -nE 'show "\$\{[a-z]+\}:' "$f" | head -1 | cut -d: -f1); [ -n "$c" ] || exit 9; n=$(awk -v c="$c" 'BEGIN{bt=sprintf("%c%c%c",96,96,96)} { if (substr($0,1,3)==bt || substr($0,5,3)==bt) { fence=!fence; F[NR]=1 } else F[NR]=fence; L[NR]=tolower($0) } END { for (i=1;i<c;i++) { if (F[i] || L[i] !~ /zsh/ || L[i] ~ /<!--/) continue; lo=i-3; if (lo<1) lo=1; hi=i+5; if (hi>NR) hi=NR; for (j=lo;j<=hi;j++) if (!F[j] && L[j] ~ /brace/) { print i; exit } } }' "$f"); [ -n "$n" ] || exit 1; exit 0
+verify: sh unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; d=$(mktemp -d) && mkdir -p "$d/scripts" "$d/core/skills" "$d/core/fixtures/u" && echo 0.0.0 > "$d/VERSION" && cp scripts/validate-shell-portability.sh "$d/scripts/" && printf '#!/usr/bin/env bash\necho ok\n' > "$d/core/fixtures/u/s.sh" && printf '%s\n' '    git -C "$DIST" show "$THEIRS:core/x.sh" > "$t"' > "$d/core/skills/a.md" && ( cd "$d" && git init -q . && git add -A ) || exit 9; o=$(cd "$d" && bash scripts/validate-shell-portability.sh 2>&1 </dev/null); grep -q '^FAIL: S8b:' <<<"$o" && grep -qF 'core/skills/a.md:1:' <<<"$o" || exit 1; printf '%s\n' '    git show "$REF:$CORE_PATH"' '    git show "$THEIRS:docs/x.md"' '    git show "${THEIRS}:core/x.sh"' > "$d/core/skills/a.md"; o=$(cd "$d" && bash scripts/validate-shell-portability.sh 2>&1 </dev/null) || exit 1; exit 0
 
 ## BL-230 — `reconcile-emit-report`'s kill-set arms fail intermittently under the pool — E1, E8 and E9 all measured, on three different worlds — and E1's success message describes a different assertion than the one it makes
 
@@ -1232,6 +1244,17 @@ verify: sh L=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; f=$(sed -n 
 
 ## BL-067
 
+**FIXED IN v0.668.0, pending the post-merge close.** `audit-layer-debt.sh` now classifies each OPEN
+debt's `closes_when` by KIND: a trigger naming the debt's OWN id, at an id boundary, reads `closes by:
+the register join`; anything else reads `closes by: a prose condition nothing evaluates`. Claim 1
+("consumed by nothing") and the paragraph "NO REPLACEMENT FIX IS SHIPPED" expire. The population is in
+the consumer register's history: at graph `8e53e4b4`, 16 open debts, 3 joins (exactly the three whose
+trigger names its own id) and 13 prose, 0 false joins; on the live register (`b6b68b3c`, 0 open) both
+report forms are byte-identical before and after. Guarded by the CLOSES-BY section of
+`core/fixtures/layer-debt-due-and-discharge` (arms 25-28, mutants `MK_off`, `MK_substr`). The receipt
+below replaces the previous one, which accepted three regressions (bare substring, `.sh` token, length
+under 80 bytes); it scores base 1, fix 0, no-classification 1, each of those three 1, missing script 9.
+
 **RE-SCORED AT v0.453.0. THE DEFECT SURVIVES, ITS COST CLAUSE HAS EXPIRED, AND ITS OWN REMEDY IS
 UNSHIPPABLE. The entry is kept whole; the receipt below is REPLACED because the old one CERTIFIED
 that remedy.** Which half died is the part that stops the next reader repeating this, so all four
@@ -1370,7 +1393,7 @@ byte-identical would leave this STILL-LIVE — the safe direction, but not a clo
 Found by the graph consumer session. Cross-references the consumer entry
 `PC-S334-CLOSES-WHEN-NAMES-A-COMMAND-AND-NOTHING-JOINS-THE-TWO`.
 
-verify: sh S=core/scripts/audit-layer-debt.sh; [ -f "$S" ] || exit 9; d=$(mktemp -d) || exit 9; A="a later register row for this entry names OWED-PROBE-A in closes_owed"; B="validate-gate-manifest.sh reports 914 resolving to a gate-type set that includes retro"; D="before the next pull, so the forked copy stops shadowing core validate-mutation-red.sh guidance"; [ "$A" != "$B" ] && [ "$B" != "$D" ] || { rm -rf "$d"; exit 9; }; h="{\"clause\":\"LC-E1\",\"entry\":\"extensions/p.md\",\"subject_digest\":\"d0\",\"verdict\":\"still-additive\",\"recorded_utc\":\"1970-01-01T00:00:00Z\",\"reason\":\"probe row\",\"owed\":{\"what\":\"same what\","; { printf "%s\"id\":\"OWED-PROBE-A\",\"closes_when\":\"%s\"}}\n" "$h" "$A"; printf "%s\"id\":\"OWED-PROBE-B\",\"closes_when\":\"%s\"}}\n" "$h" "$B"; printf "%s\"id\":\"OWED-PROBE-D\",\"closes_when\":\"%s\"}}\n" "$h" "$D"; printf "%s\"id\":\"OWED-PROBE-E\"}}\n" "$h"; } > "$d/r.jsonl"; o=$(bash "$S" --register "$d/r.jsonl" 2>/dev/null); rc=$?; rm -rf "$d"; [ "$rc" = 0 ] || exit 9; for i in A B D E; do case "$o" in *OWED-PROBE-$i*) : ;; *) exit 9 ;; esac; done; e=$(printf "%s\n" "$o" | sed "s|$A|<CW>|g; s|$B|<CW>|g; s|$D|<CW>|g"); case "$e" in *validate-gate-manifest.sh*|*validate-mutation-red.sh*) exit 1 ;; esac; blk() { printf "%s\n" "$e" | sed -n "/OWED-PROBE-$1/,/OWED-PROBE-$2/p" | sed "\$d" | sed "s/OWED-PROBE-$1/OWED-PROBE-X/g"; }; a=$(blk A B); b=$(blk B D); q=$(blk D E); [ -n "$a" ] && [ -n "$b" ] && [ -n "$q" ] || exit 9; [ "$b" = "$q" ] || exit 1; [ "$a" != "$b" ]
+verify: sh S=core/scripts/audit-layer-debt.sh; [ -f "$S" ] || exit 9; d=$(mktemp -d) || exit 9; A="a later register row for this entry names OWED-PROBE-A in closes_owed"; B="validate-gate-manifest.sh reports 914 resolving to a gate-type set that includes retro"; D="before the next pull, so the forked copy stops shadowing core validate-mutation-red.sh guidance"; E="after the next pull lands"; F="a later register row for this entry names OWED-PROBE-F-V2 in closes_owed"; h="{\"clause\":\"LC-E1\",\"entry\":\"extensions/p.md\",\"subject_digest\":\"d0\",\"verdict\":\"still-additive\",\"recorded_utc\":\"1970-01-01T00:00:00Z\",\"reason\":\"probe row\",\"owed\":{\"what\":\"same what\","; { for p in "A|$A" "B|$B" "D|$D" "E|$E" "F|$F"; do printf "%s\"id\":\"OWED-PROBE-%s\",\"closes_when\":\"%s\"}}\n" "$h" "${p%%|*}" "${p#*|}"; done; printf "%s\"id\":\"OWED-PROBE-G\"}}\n" "$h"; } > "$d/r.jsonl"; o=$(bash "$S" --register "$d/r.jsonl" 2>/dev/null); rc=$?; rm -rf "$d"; [ "$rc" = 0 ] || exit 9; for i in A B D E F G; do case "$o" in *OWED-PROBE-$i*) : ;; *) exit 9 ;; esac; done; e=$(printf "%s\n" "$o" | sed "s|$A|<CW>|g; s|$B|<CW>|g; s|$D|<CW>|g; s|$E|<CW>|g; s|$F|<CW>|g"); case "$e" in *validate-gate-manifest.sh*|*validate-mutation-red.sh*) exit 1 ;; esac; blk() { printf "%s\n" "$e" | sed -n "/OWED-PROBE-$1 /,/OWED-PROBE-$2 /p" | sed "\$d" | sed "s/OWED-PROBE-$1/OWED-PROBE-X/g"; }; a=$(blk A B); b=$(blk B D); q=$(blk D E); s=$(blk E F); f=$(blk F G); [ -n "$a" ] && [ -n "$b" ] && [ -n "$q" ] && [ -n "$s" ] && [ -n "$f" ] || exit 9; [ "$b" = "$q" ] && [ "$b" = "$s" ] && [ "$b" = "$f" ] || exit 1; [ "$a" != "$b" ]
 
 ## BL-071
 
@@ -1415,6 +1438,15 @@ Found while remediating `BL-035`, by that fixture, against its own author.
 verify: manual
 
 ## BL-077
+
+**FIXED IN v0.668.0, pending the post-merge close.** `validate-steering-budget.sh` derives the corpus
+from `$HOME/.claude/projects/*/$CLAUDE_CODE_SESSION_ID.jsonl` when given neither flag: the file for the
+checks and `--count`, the slug directory for `--cite`/`--since`. Zero or multiple matches, an unset id,
+or an id outside `[A-Za-z0-9-]` fall back to both refusals byte-for-byte. All five delegating call
+sites pass an explicit flag and return before calling when they have none, so no fail-open or
+fail-closed branch moved. Check 25 and the retro audit no longer carry a typed derivation. Pinned by
+`check-25-steering-conduct` `derive-shipping` (`CNSZTE`), mutants G/H/I/J killed. Receipt: base 1,
+tip 0, hardcoded 1, refuse-override 9, doc-only 1.
 
 **`validate-steering-budget.sh` refuses to run without a caller-supplied corpus, so the
 derivation of "this session's transcript" is retyped by the MODEL in prose at
@@ -1543,6 +1575,20 @@ common to all three.
 verify: sh V=core/scripts/validate-steering-budget.sh; [ -r "$V" ] || exit 9; DA=$(mktemp -d); DB=$(mktemp -d); [ "$DA" != "$DB" ] || exit 9; J='{"type":"user","message":{"role":"user","content":"probe"}}'; printf '%s\n' "$J" > "$DA/alpha.jsonl"; printf '%s\n' "$J" > "$DB/alpha.jsonl"; OA=$(bash "$V" --transcript "$DA/alpha.jsonl" 2>&1); RA=$?; OB=$(bash "$V" --transcript "$DB/alpha.jsonl" 2>&1); RB=$?; OC=$(bash "$V" --dir "$DA" 2>&1); RC=$?; ON=$(bash "$V" --cite zzzabsentphrasezzz 2>&1); RN=$?; EH=$(mktemp -d); OH=$(HOME="$EH" bash "$V" --cite zzzabsentphrasezzz 2>&1); rm -rf "$DA" "$DB" "$EH"; [ "$RA" = 0 ] && [ "$RB" = 0 ] && [ "$RC" = 0 ] || exit 9; grep -qF "transcripts read" <<<"$OA" || exit 9; [ "$OA" != "$OB" ] || exit 9; grep -qF "$DA/alpha.jsonl" <<<"$OA" && grep -qF "$DB/alpha.jsonl" <<<"$OB" || exit 9; case "$RN" in 0|2) ;; *) exit 1 ;; esac; name(){ L=$(sed -n '/ from /{p;q;}' <<<"$1"); L="${L##* from }"; L="${L%, no genuine operator message carried it}"; printf '%s' "${L%)}"; }; P=$(name "$ON"); [ -n "$P" ] || exit 1; { [ -r "$P" ] || [ -d "$P" ]; } || exit 1; case "$P" in "$PWD"/*|"$PWD") exit 1 ;; esac; Q=$(name "$OH"); [ "$Q" != "$P" ] || exit 1
 
 ## BL-082
+
+**FIXED IN v0.668.0, pending the post-merge close.** The prior verdict, "there is no remedy that is
+right on both platforms", is overturned: it rested on folding the COMPARISON, which stays forbidden.
+`ondisk()` in `validate-provenance-block.sh` respells each path component as its parent directory
+LISTS it, choosing only an entry that is the same directory entry (`samestat` on `lstat`), after
+`realpath`, for root and candidate. On a case-sensitive filesystem a real `DOCS/` is listed verbatim
+and kept, a nonexistent one kept raw, so no false PASS opens. `stray-party-mode-provenance` S10 holds
+it in three worlds: S10-F on the folding host (bare-realpath mutant MUT-F killed; S10-F5 records that
+the forbidden fold is indistinguishable from the fix there); S10-C on a case-sensitive APFS image via
+`hdiutil` (the forbidden fold MUT-G killed only here); S10-H on an HFS+ image, where `docs` and
+`doc<U+017F>` are distinct but casefold-equal (casefold-without-samestat MUT-H killed). A
+present-but-failing `hdiutil` is FIXTURE BROKEN in the distribution; a consumer host without it SKIPs
+S10-C/S10-H naming the unguarded mutant. The fixture ships, so a macOS consumer now builds two 20 MB
+images per run. Receipt unchanged: base 1, fix 0, root-only 1, cache-key-collapse 1.
 
 **On a case-folding filesystem `--strays` reports a declared home as a stray when the caller
 spells a path component in a different case, and every remedy that closes it opens a FALSE PASS
@@ -1712,6 +1758,21 @@ verify: sh set -e; a=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$a" ] |
 
 ## BL-126 — the pause-flag deny hook reads no agent identity, so it cannot let an in-flight teammate write reach a consistent stop
 
+**FIXED IN v0.668.0 BY THE APPROXIMATION, NOT TRUE QUIESCE, pending the post-merge close.** Check 3 of
+`core/hooks/ai-dlc-acknowledge.sh` now reads the actor: on a paused tree a
+`Write|Edit|MultiEdit|NotebookEdit` under `_bmad-output/` carrying an `agent_id` is ALLOWED and logged
+as `ACK_TEAMMATE_WRITE` naming the agent and the file; `Agent|Task|Skill|TaskCreate` stay denied for
+teammates, so no new work is dispatched while paused; the lead, and a `--agent` lead carrying
+`agent_type` alone, are denied exactly as before. It is not quiesce: the hook has no record of which
+writes were in flight when the flag went up, so a teammate dispatched before the pause may keep
+writing for as long as it runs, bounded by the dispatch deny. Every `ACK_DENIED` row now carries
+`Agent:` and `File:`. Found and fixed in the same change: `NotebookEdit` carries `notebook_path`, so a
+lead's notebook under `_bmad-output/` was never pause-denied; Check 3 now reads both. Pinned in
+`route-read-required` section 8 (red on 4 arms against the pre-fix hook) and in
+`route-read-required-mutants` (six mutants, each moving only its own cell). The receipt below drives
+behaviour: base 1, fix 0, and 1 each for a blanket teammate exemption, the arm widened to dispatch
+tools, an `agent_type` key, an unlogged allow, and an `ACK_DENIED` row without `File:`.
+
 **The PreToolUse deny at `core/hooks/ai-dlc-acknowledge.sh:466` fires the moment
 `_bmad-output/pipeline-paused.flag` exists, and the hook reads no field that could tell a
 TEAMMATE's in-flight write from the LEAD's next advancing action.** Its whole read-set is
@@ -1779,7 +1840,7 @@ exemption keyed on `agent_type` scores 1: a lead started with `claude --agent <n
 `agent_type` and no `agent_id`, and the receipt drives that lead as its own paused cell. Read `BL-156` for why Check 2z took the blanket form and this
 check must not inherit it.
 
-verify: sh h=core/hooks/ai-dlc-acknowledge.sh; [ -f "$h" ] || exit 9; command -v jq >/dev/null || exit 9; r=$(grep -v '^[[:space:]]*#' "$h" | grep -oE 'jq -r [^|]*\.[a-z_.]+' | grep -oE '\.[a-z_][a-z_.]*' | sort -u); [ -n "$r" ] || exit 9; printf '%s\n' "$r" | grep -q '^\.tool_name$' || exit 9; w=$(mktemp -d) || exit 9; trap 'rm -rf "$w"' EXIT; mkdir -p "$w/p/_bmad-output/planning-artifacts/s7" "$w/p/scripts/ai-dlc"; printf '#!/bin/sh\necho 7\n' > "$w/p/scripts/ai-dlc/sprint-status.sh"; chmod +x "$w/p/scripts/ai-dlc/sprint-status.sh"; : > "$w/p/_bmad-output/pipeline-snapshot.md"; : > "$w/p/_bmad-output/pipeline-paused.flag"; printf '{"type":"user","message":{"content":"<command-name>/ai-dlc</command-name>"}}\n{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"/w/.claude/skills/ai-dlc/steps/route.md"}}]}}\n' > "$w/s.jsonl"; d(){ jq -nc --arg tr "$w/s.jsonl" --arg ag "$1" '{session_id:"r",transcript_path:$tr,tool_name:"Write",tool_input:{file_path:"/w/_bmad-output/planning-artifacts/x.md"}}+(if $ag=="" then {} elif $ag=="type" then {agent_type:"Explore"} else {agent_id:$ag,agent_type:"general-purpose"} end)' | CLAUDE_PROJECT_DIR="$w/p" bash "$h" 2>/dev/null; }; a=$(d ""); b=$(d ax); f=$(d type); case "$a" in *"Rule 29"*) ;; *) exit 9;; esac; case "$f" in *"Rule 29"*) ;; *) exit 1;; esac; case "$b" in *"Rule 29"*) exit 1;; *permissionDecision*) exit 9;; esac; printf '%s\n' "$r" | grep -qE '^\.(subagent|agent_type|agent_id|parent_session_id|invoked_by)' || exit 1; exit 0
+verify: sh h=core/hooks/ai-dlc-acknowledge.sh; [ -f "$h" ] || exit 9; command -v jq >/dev/null || exit 9; w=$(mktemp -d) || exit 9; trap 'rm -rf "$w"' EXIT; printf '{"type":"user","message":{"content":"<command-name>/ai-dlc</command-name>"}}\n{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"/w/.claude/skills/ai-dlc/steps/route.md"}}]}}\n' > "$w/s.jsonl"; d(){ p="$w/$1"; mkdir -p "$p/_bmad-output/planning-artifacts/s7" "$p/scripts/ai-dlc"; printf '#!/bin/sh\necho 7\n' > "$p/scripts/ai-dlc/sprint-status.sh"; chmod +x "$p/scripts/ai-dlc/sprint-status.sh"; : > "$p/_bmad-output/pipeline-snapshot.md"; : > "$p/_bmad-output/pipeline-paused.flag"; jq -nc --arg tr "$w/s.jsonl" --arg t "$2" --arg ag "$3" --arg f "$p/_bmad-output/planning-artifacts/s7/prd.md" '{session_id:"r",transcript_path:$tr,tool_name:$t,tool_input:(if $t=="Agent" then {} else {file_path:$f} end)}+(if $ag=="" then {} elif $ag=="type" then {agent_type:"Explore"} else {agent_id:$ag,agent_type:"general-purpose"} end)' | CLAUDE_PROJECT_DIR="$p" bash "$h" 2>/dev/null; }; lw=$(d lw Write ""); case "$lw" in *"Rule 29"*) ;; *) exit 9;; esac; grep -qF -- "- File: $w/lw/_bmad-output/planning-artifacts/s7/prd.md" "$w/lw/_bmad-output/pipeline-continuation-log.md" || exit 1; tw=$(d tw Write ax); case "$tw" in *permissionDecision*) exit 1;; esac; grep -q '^## .*-- ACK_TEAMMATE_WRITE' "$w/tw/_bmad-output/pipeline-continuation-log.md" 2>/dev/null || exit 1; grep -qF -- "- Agent: ax" "$w/tw/_bmad-output/pipeline-continuation-log.md" || exit 1; ta=$(d ta Agent ax); case "$ta" in *"Rule 29"*) ;; *) exit 1;; esac; fl=$(d fl Write type); case "$fl" in *"Rule 29"*) ;; *) exit 1;; esac; exit 0
 
 ## BL-129 — a change to an adjudication predicate has no mechanism that can see what it RECLASSIFIES
 
@@ -2146,6 +2207,13 @@ verify: sh g=core/skills/ai-dlc-update/reconcile/self-update-gate.sh; [ -f "$g" 
 
 ## BL-133 — line-number citations in shipped core prose resolve against a different file on every consumer
 
+**PARTIAL IN v0.668.0.** The two non-bootstrapping citations (`gate-validation.md`,
+`_gate-procedures.md`) are re-cited by greppable token; both had already drifted. The receipt below
+excludes `core/fixtures/` (six seed-data hits) and scores 5 at base, 3 at tip. The remaining three sit
+in `core/skills/ai-dlc-update/` (`SKILL.md`, `predicate-sites.md` twice) and ship with the next
+release touching that subtree, which is bootstrapping. A citation with no backtick escapes the
+grammar (`predicate-sites.md` "at its lines 118-120").
+
 A consumer runs whatever version it last installed, so a `<path>:<line>` written into shipped
 `core/` prose points into a file that has moved. It does not error; it silently lands on unrelated
 text, which is the failure mode this repo treats as worse than a missing citation.
@@ -2172,7 +2240,7 @@ by searching, which is what they would have done with no citation at all.
 The receipt counts BOTH forms across shipped `core/**/*.md`. Scored two directions: 1 against the
 tree, and 0 against a scratch copy with every citation redacted.
 
-verify: sh n=0; for f in $(git ls-files "core/**/*.md"); do a=$(grep -coE "\`[a-zA-Z0-9._/-]+\.(sh|md|yaml|json):[0-9]+" "$f"); b=$(grep -coE "\`:[0-9]+" "$f"); n=$((n+a+b)); done; [ "$n" -eq 0 ] && exit 0; exit 1
+verify: sh L=$(git ls-files -- "core/**/*.md" ":(exclude)core/fixtures/**"); [ -n "$L" ] || exit 9; [ "$(grep -coE "\`[a-zA-Z0-9._/-]+\.(sh|md|yaml|json):[0-9]+|\`:[0-9]+" <<<"x \`a/b.sh:12 y")" = 1 ] || exit 9; n=0; for f in $L; do a=$(grep -coE "\`[a-zA-Z0-9._/-]+\.(sh|md|yaml|json):[0-9]+" "$f"); b=$(grep -coE "\`:[0-9]+" "$f"); n=$((n+a+b)); done; [ "$n" -eq 0 ] && exit 0; exit 1
 
 ## BL-142 — a withdrawn claim is reported forever, and its withdrawal is invisible by construction
 
@@ -2334,6 +2402,14 @@ verify: sh set -e; r="$PWD"; id='PC-S295-RETRO-PARALLEL-OPEN-COUNT-METHOD'; n=0;
 
 
 ## BL-159 — four handoff-completion defects adjacent to `BL-158`, found by the batch-49 hands and deliberately not fixed there
+
+**PARTIAL IN v0.668.0.** Claim 3 FIXED: auto-handoff step 5 in `_gate-procedures.md` now runs
+`rm -f _bmad-output/.handoff-in-progress` beside the pause-flag touch, spelled as `handoff.md` step 5
+spells it; `handoff-resume-guard` pins it with a span arm keyed on the step-5 line, self-probed both
+ways. Claim 2 DEAD-PREMISE: the consumer tracks the marker 0 times against 5381 tracked paths under
+`_bmad-output/`, and `git check-ignore` exits 0 on it. Claims 1 and 4 SURVIVE: `ai-dlc-continue.sh`
+still has no working-tree test beside its `PUSH_OK=` lines, and `HANDOFF_ON_DISK`'s only reader sits
+inside the transcript-present block. The receipt keys on claim 1 and stays.
 
 Distribution-internal, no `PC-` id; ranks below any PC-backed entry. Filed together because they
 share one subject and one release would otherwise have widened past its scope. NOTE tier for each
@@ -2530,6 +2606,14 @@ verify: sh set -e; d=$(mktemp -d); trap 'rm -rf "$d"' EXIT; s="$d/_bmad-output/p
 
 ## BL-266 — `enforcement-map-sites`' I59 corpus mutation edits four arms' corpora and the battery can only see one of them
 
+**FIXED IN v0.668.0, pending the post-merge close.** The corpus mutation is addressed to I59's own
+`find` line (the one writing `$i59_flist`). The arm refuses unless the mutated copy differs in exactly
+one line, and drives `--arms I60,I83,I84` against the same mutant, which must exit 0 with its `OK:`
+line. Re-derived at `7a325bb6`: the anchor sits on 4 lines (I59, I60, I83, I84), and the unaddressed
+sed turned I59, I60 and I83 red with I84 green. Arm scored tip 0; unaddressed 1 (count guard);
+unaddressed without the count guard 1 (sibling control); addressed to I60's line 1. Fixture wall
+clock unresolved at a +-5s spread (means 40.4s base, 41.1s tip).
+
 **The sed is `-type f -name '*.sh' -not -path`, with no line address, and `sed` applies `s///`
 once per matching line.** Measured on a seeded tree at `4feee7f9`: it applies to **4** lines and
 sends `--arms I59` (exit 1, `I59 found only 0 shipped script(s)`, its own assertion), `--arms I83`
@@ -2558,7 +2642,7 @@ form asked for the words "stays green" and came back 0 immediately, satisfied by
 comment lines about a hand-copied path; that is this repo's text-about-a-program trap, met while
 writing the entry that describes it.
 
-verify: sh f=core/fixtures/enforcement-map-sites/run.sh; v=scripts/validate-enforcement-map.sh; [ -f "$f" ] || exit 9; [ -f "$v" ] || exit 9; grep -q 'I59 grammar mutation' "$f" || exit 9; n="$(grep -c "name '\*\.sh' -not -path" "$v")" || n=0; [ "$n" -le 1 ] && exit 0; LC_ALL=C grep -qE "^[[:blank:]]*sed \"?'?[0-9]+s@-type f -name" "$f" && exit 0; LC_ALL=C grep -qE '^[[:blank:]]*bash "\$V" --arms I(60|83|84)' "$f" && exit 0; exit 1
+verify: sh f=core/fixtures/enforcement-map-sites/run.sh; v=scripts/validate-enforcement-map.sh; [ -f "$f" ] || exit 9; [ -f "$v" ] || exit 9; o="$(bash "$f" --run-one A33_i59_documented_modes 2>&1)"; r=$?; [ "$r" = 2 ] && exit 9; [ "$r" = 0 ] || exit 1; printf '%s\n' "$o" | grep -q '^  ok    a corpus derivation that returns nothing FAILS I59 loudly' || exit 1; printf '%s\n' "$o" | grep -q '^  ok    the I59 corpus mutant leaves I60, I83 and I84 green' || exit 1; exit 0
 
 
 ## BL-265 — the fork budget's A4 stale-high arm had become unreachable at its own committed budget, and the mutant that should have said so was wired to a derived value
@@ -2706,6 +2790,19 @@ verify: sh h=core/fixtures/gate-verdict-grep-shape/run.sh; [ -f "$h" ] || exit 9
 
 ## BL-282 — "a green gate is not a landed push" has no enforcer, and the obvious check RACES a backgrounded push
 
+**FIXED IN v0.668.0, pending the post-merge close.** The enforcer is the push-time keepalive WARNING
+the note above names, not an `ls-remote` reader. `.githooks/pre-push` carries a `KEEPALIVE` block
+above the first step, outside the I66 pool block: for an ssh remote it runs `-G` through the ssh
+command git itself would use (`GIT_SSH_COMMAND`, `core.sshCommand`, `GIT_SSH`, `ssh`) and prints one
+non-blocking line when `serveraliveinterval` is 0. False-positive set on the operator's box: `origin`
+via `github-euron8` is silent with the dotfile as-is and fires under `GIT_SSH_COMMAND="ssh -F <empty
+config>"`. `core/fixtures/prepush-ssh-keepalive` (dist-only) drives the extracted block in five firing
+and six silent shapes, four mutants killed; about 50 ms per push. The second subject stays recorded:
+`verification-discipline.md`'s "confirm the remote ref moved" is still prose; the warning removes the
+measured cause and does not observe the outcome, which no hook can. The receipt below replaces the
+`ls-remote`-shaped one: base 1, fix 0, invocation deleted 1, interval test deleted 1, widened 1,
+alias dropped from the text 1, receipt literals in a comment 1.
+
 **NOTE.** Filed at batch 138 after the lead reported a push failure that had not happened.
 
 **CAUSE FOUND AT 0.619.0–0.621.0, AND IT IS AN OPERATOR DOTFILE, NOT THE TREE.** `git push`
@@ -2755,7 +2852,7 @@ Do not key it on the push command's exit status alone: that is the value the mea
 reports as 0 while the ref is absent, and reading it through a pipe makes it worse, because this
 shell has no `PIPESTATUS` and a pipeline answers with its last stage.
 
-verify: sh set -e; r=.claude/rules/verification-discipline.md; [ -r "$r" ] || exit 9; LC_ALL=C grep -q 'green gate is not a landed push' "$r" || exit 9; n="$(grep -rlF 'ls-remote' .githooks/ scripts/ 2>/dev/null | grep -cv '^$')" || n=0; [ "$n" -gt 0 ] && exit 0; exit 1
+verify: sh h=.githooks/pre-push; [ -f "$h" ] || exit 9; command -v ssh >/dev/null 2>&1 || exit 9; d="$(mktemp -d)" || exit 9; : > "$d/c"; sed -n '/^# KEEPALIVE_BEGIN$/,/^# KEEPALIVE_END$/p' "$h" > "$d/b.sh"; w="$(GIT_SSH_COMMAND="ssh -F $d/c" bash "$d/b.sh" origin git@bl282-probe:o/r.git </dev/null 2>&1)"; q="$(GIT_SSH_COMMAND="ssh -F $d/c -o ServerAliveInterval=60" bash "$d/b.sh" origin git@bl282-probe:o/r.git </dev/null 2>&1)"; rm -f "$d/c" "$d/b.sh"; rmdir "$d"; case "$w" in *'alias "bl282-probe" has no keepalive'*) ;; *) exit 1 ;; esac; [ -z "$q" ] && exit 0; exit 1
 
 ## BL-301 — the gate runs no shipped fixture in the consumer layout, so a fixture red on every consumer ships green
 
@@ -3458,3 +3555,48 @@ receipts with the memo unset (`env -u AI_DLC_RECONCILE_MEMO`), or to scope the e
 reverify's own shell.
 
 verify: sh r=scripts/backlog-reverify.sh; [ -f "$r" ] || exit 9; d=$(mktemp -d) || exit 9; printf '## BL-900 probe\n\nverify: sh [ -z "${AI_DLC_RECONCILE_MEMO:-}" ]\n' > "$d/l.md"; o=$(bash "$r" "$d/l.md" 2>/dev/null) || exit 9; case "$o" in *CLOSE-CANDIDATE*BL-900*) exit 0 ;; *STILL-LIVE*BL-900*) exit 1 ;; esac; exit 9
+
+## BL-383 — the migration arm read `deferred scope`, the adjudicator's name for what route Step 6 files, as an undeclared obligation
+
+**FIXED IN v0.668.0, pending the post-merge close.** `audit-layer-debt.sh`'s `PROSE` cue `deferred` now
+carries a negative lookahead for exactly the word `scope`, with the same `(?![\w-])` boundary as the
+remediation mechanism-noun set. `deferred scope` occurs 0 times under `core/skills/ai-dlc` (route.md
+spells it "deferred part"; control: `scope_deferred_items` occurs 6 times), so the phrase is the
+adjudicator's paraphrase of a core mechanism. Measured on the graph register at `c00f387f` (683 rows):
+UNDECLARED 1 -> 0, the only mover being `route-domain.md` LC-E4 recorded 2026-09-29T00:05:07Z. At
+`b6b68b3c` (689 rows) it is 0 -> 0, because that row was since withdrawn by `withdraws` (graph
+`522e8681`). `deferred scopes`, `deferred scoped-work`, `scope is deferred` and `the split is deferred
+to a later pull` all remain cues. Refused widenings (`scopes`, `deferred part`, `deferred seams`,
+`deferred to <script> constants`) each move 0 cells. The one constructible false acquittal, "the rest
+is deferred scope for S316", is enumerated and accepted in the header. Guarded by
+`core/fixtures/layer-debt-due-and-discharge` arms 23a-23c and 24, mutants `MD_off` and `MD_wide`.
+
+Discharges the consumer candidate
+`PC-S315-AUDIT-LAYER-DEBT-CUE-ARM-READS-CORE-FIELD-VOCABULARY-AS-AN-OBLIGATION`, filed by the graph
+consumer session. Its proposed identifier half (`scope_deferred_items`) was already clean: `_` is a word
+character, so the existing boundary never matched inside it.
+
+verify: sh A=core/scripts/audit-layer-debt.sh; [ -f "$A" ] || exit 9; f=$(mktemp) || exit 9; python3 -c 'import json;b={"clause":"LC-E4","subject_digest":"0"*40,"verdict":"still-additive","recorded_utc":"2026-09-30T00:00:00Z"};[print(json.dumps(dict(b,entry=e,reason=r))) for e,r in [("v.md","route Step 6 now files deferred scope as CO- items and records scope_deferred_items; entry reads sprint-status for routing only"),("a.md","the split is deferred to a later pull"),("b.md","deferred to sprint 316"),("c.md","scope is deferred"),("d.md","the narrowing is deferred scoped-work for S316"),("e.md","the narrowing is deferred scopes for S316")]]' > "$f" || exit 9; o=$(bash "$A" --register "$f" --json 2>/dev/null) || exit 9; rm -f "$f"; printf "%s" "$o" | python3 -c 'import json,sys;u={x["entry"] for x in json.load(sys.stdin)["undeclared"]};sys.exit(0 if u=={"a.md","b.md","c.md","d.md","e.md"} else 1)'
+
+## BL-384 — a sharded repair's Bash-written files get no ledger row, and parts cite absolute paths the join cannot resolve
+
+**FIXED IN v0.668.0, pending the post-merge close.** Measured on the consumer's own transcripts and
+ledger: every unledgered remediator shard wrote its story (and part) file through Bash; the remediation
+guard records only `Edit|Write|MultiEdit`, so no row, and `join-remediator-shards.sh` refused them as
+claimed edits with no write. Every harness-validated Edit/Write/MultiEdit had exactly one row, and the
+two off-by-one shards were edits the harness rejected before PreToolUse. A race, an empty `agent_id`, a
+path-arm miss and a version change were each driven and excluded. Separately, `remediator.md` and
+`_gate-procedures.md` taught "the FULL path", so parts cited absolute paths the join's suffix match cannot
+resolve, and the lead rewrote them by hand. Fixed: the join cuts an absolute citation under the state
+directory's parent (logical and `pwd -P` spellings) to the ledger's spelling, and a foreign prefix still
+refuses; the UNWRITTEN refusal names the Bash cause and the re-dispatch, and never hand-assembly; the
+role file requires Edit/Write/MultiEdit for edits under the sprint slot in a repair dispatch (resolution
+moves stay outside that scope) and the ledger-spelled citation; `_gate-procedures.md` carries the
+numbered route after that refusal. The hook changes in its comment only; its allow stays unconditional.
+Fixture `remediator-shard-join` arms A1-A6, R1, mutants JX8/JX9.
+
+Discharges the consumer candidate `PC-S315-ARTIFACT-WRITE-LEDGER-DROPS-PARALLEL-SHARD-ROWS`, filed by the
+graph consumer session. Its requested N-shard reproduction is not needed: the race it rested on is
+ruled out by the data.
+
+verify: sh J=core/scripts/join-remediator-shards.sh; H=core/hooks/ai-dlc-gate-remediation-guard.sh; [ -f "$J" ] && [ -f "$H" ] && command -v jq >/dev/null || exit 9; S=_bmad-output/planning-artifacts/s9; w() { r=$(mktemp -d) || exit 9; mkdir -p "$r/$S/stories" "$r/$S/shards/stories-repair-p1"; : > "$r/_bmad-output/pipeline-snapshot.md"; echo x > "$r/$S/stories/a.md"; jq -nc --arg f "$r/$S/stories/a.md" '{tool_name:"Edit",tool_input:{file_path:$f},agent_id:"a16fddf14ea289491"}' | CLAUDE_PROJECT_DIR="$r" bash "$H" >/dev/null 2>&1; [ "$(grep -c . "$r/_bmad-output/planning-artifacts/.artifact-writes.jsonl" 2>/dev/null)" = 1 ] || exit 9; }; j() { AI_DLC_PROJECT_ROOT="$r" bash "$J" --sprint 9 --artifact stories --pass 1 --artifact-path "$S" --since 2000-01-01T00:00:00Z --until 2999-01-01T00:00:00Z 2>&1; }; w; printf -- '- disposition: repaired\n- edit: %s:3\n- derivation: n/a\n' "$r/$S/stories/a.md" > "$r/$S/shards/stories-repair-p1/1.md"; j >/dev/null; c1=$?; w; printf -- '- disposition: repaired\n- edit: %s:3\n- derivation: n/a\n' "/elsewhere/proj/$S/stories/a.md" > "$r/$S/shards/stories-repair-p1/1.md"; o=$(j); c2=$?; [ "$c1" -eq 0 ] && [ "$c2" -eq 2 ] && grep -qF "cites /elsewhere/proj/$S/stories/a.md, which no dispatched agent wrote" <<<"$o" || exit 1; exit 0

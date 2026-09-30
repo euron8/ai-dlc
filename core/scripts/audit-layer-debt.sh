@@ -200,7 +200,7 @@ unowned = sorted({(r.get("clause") or "", r.get("entry") or "") for r in rows
 # A cue EMBEDDED IN A LONGER IDENTIFIER is not prose about an obligation: `debt` inside
 # `test-check18-debt-audit` is a filename, and it was 1 of the 2 false positives measured
 # on the reference register. Require the cue to stand alone, not to sit between hyphens.
-PROSE = re.compile(r"(?<![\w-])(?<!cue ')(?<!cues: ')(owed|still owed|deferred|remediation(?!\s+(?:protocol|edits?|guard|routing)(?![\w-]))|follow-?up|debt|TODO)(?![\w-])", re.I)
+PROSE = re.compile(r"(?<![\w-])(?<!cue ')(?<!cues: ')(owed|still owed|deferred(?!\s+scope(?![\w-]))|remediation(?!\s+(?:protocol|edits?|guard|routing)(?![\w-]))|follow-?up|debt|TODO)(?![\w-])", re.I)
 #
 # A SIXTH FALSE-POSITIVE CLASS, AND IT IS LEXICAL LIKE THE FIRST: THE CUE IS PART OF A NAME. The
 # construct is a MECHANISM NAME — `remediation protocol`, `remediation EDIT`, `remediation guard`,
@@ -211,7 +211,7 @@ PROSE = re.compile(r"(?<![\w-])(?<!cue ')(?<!cues: ')(owed|still owed|deferred|r
 # describing the report, not incurring a debt — the case the third class below records the tool
 # scoring as an instance of its own subject.
 #
-# BOTH RULES LIVE INSIDE `PROSE`, AS LOOKAROUNDS, AND NOT IN THE `hits` COMPREHENSION BELOW. The
+# EVERY SUCH RULE LIVES INSIDE `PROSE`, AS A LOOKAROUND, AND NOT IN THE `hits` COMPREHENSION BELOW. The
 # `layer-debt-due-and-discharge` battery anchors three mutants (M5, M6, M11) on the text of that
 # comprehension, so a rule sited there would move their anchor and break them.
 #
@@ -247,6 +247,35 @@ PROSE = re.compile(r"(?<![\w-])(?<!cue ')(?<!cues: ')(owed|still owed|deferred|r
 # spelled with a mechanism noun, and it is acquitted. That is the accepted cost: that sentence
 # names an edit that is pending, and the register's adjudicators spell that case with `owed` or
 # `deferred`, which this change does not touch.
+#
+# A SEVENTH FALSE-POSITIVE CLASS, LEXICAL AGAIN: `deferred scope` IS A NAME FOR A THING CORE FILES,
+# NOT A STATEMENT THAT ANYTHING IS DEFERRED. The `deferred` alternative carries its own negative
+# lookahead, so `deferred` followed by exactly the word `scope` is not a cue. The lookahead is not
+# spelled out here because the fixture's mutants anchor on its text and must find it once. The
+# phrase is the ADJUDICATOR'S paraphrase of route.md Step 6, which core itself spells "deferred
+# part": `deferred scope` occurs 0 times under core/skills/ai-dlc, against a control of 6 for
+# `scope_deferred_items` in the same tree. The identifier form was already clean before this rule,
+# because `_` is `\w` and the cue's own lookbehind refuses it; this rule does not re-implement that.
+#
+# MEASURED ON THE REFERENCE REGISTER at graph c00f387f, 683 rows: UNDECLARED 1 before, 0 after. The
+# one mover is route-domain.md, LC-E4, recorded 2026-09-29T00:05:07Z, whose reason reads `route
+# Step 6 now files deferred scope as CO- items and records scope_deferred_items`. On the live
+# register at graph b6b68b3c, 689 rows, it is 0 before and 0 after, because that row was since
+# retracted by a `withdraws` row (graph 522e8681) and the withdrawal skip already drops it.
+#
+# THE NARROWING STORY, beside the remediation one and for the same reason. The noun is exactly
+# `scope`, ending at the same `(?![\w-])` boundary as the mechanism-noun set, so `deferred scopes`
+# and `deferred scoped-work` stay cues. Widenings REFUSED, each measured at 0 cells moved on the
+# register above, which is the vacuous widening `mechanism-design.md` refuses: `scopes`; `deferred
+# part`; `deferred seams` (0-based row 680, entry-gated); `deferred to <script> constants` (0-based
+# row 441, entry-gated). `scopes` and `deferred part` occur on no row at all. "Entry-gated" means an
+# `owed` declared on the same entry already acquits the row, so admitting the phrase moves nothing.
+#
+# FALSE-ACQUITTAL SET, ENUMERATED. On the register it is EMPTY: the one acquitted occurrence is the
+# mover above. One false acquittal is constructible — "the rest is deferred scope for S316" is an
+# obligation spelled with the name, and it is acquitted. That is the accepted cost: the register's
+# adjudicators spell a real deferral `deferred to …`, `still deferred` or `deferred by …`, and every
+# one of those stays a cue, as does `scope is deferred` and `the split is deferred to a later pull`.
 #
 # A THIRD FALSE-POSITIVE CLASS, AND IT IS THE ONE THAT PUNISHES THE CORRECT ANSWER. The two
 # above are lexical (a cue inside an identifier) and structural (a discharge row). This one is
@@ -608,6 +637,23 @@ if open_items:
         print("      what: %s" % d["what"])
         if d["closes_when"]:
             print("      closes when: %s" % d["closes_when"])
+            # A `closes_when` IS CLASSIFIED BY KIND, NOT BY ITS BYTES. The only kind this report can
+            # join is a trigger naming the debt's OWN id — "a later row names OWED-X in closes_owed"
+            # — because that is exactly the join `closed` above already runs; everything else is a
+            # prose condition no reader evaluates. The id must stand alone: a trigger naming a
+            # DIFFERENT id, or one merely prefixed by this one, joins nothing and reads as prose.
+            #
+            # THE NARROWING STORY. The filed remedy extracted a `\S+\.sh` token and was 3 of 3
+            # FALSE on the reference register: two conditions ABOUT a script's output and one
+            # script named as a noun. Keyed on kind instead, measured on the reference register's
+            # history (graph): at 8e53e4b4, 16 open, 3 join and 13 prose, and the 3 joins are
+            # exactly the three debts whose trigger names their own id; at 74268d2a, 10 open, 0
+            # join, 10 prose. False joins: 0. The live register at b6b68b3c has 0 open, so the
+            # line prints nowhere there and both report forms are byte-identical before and after.
+            print("      closes by: %s" % (
+                "the register join, when a later row names this id in closes_owed"
+                if re.search(r"(?<![\w-])%s(?![\w-])" % re.escape(d["id"]), d["closes_when"])
+                else "a prose condition nothing evaluates; re-read it by hand"))
         print("      opened: %s" % d["opened"])
 else:
     print("OPEN (0) — no row declares an undischarged `owed` object.")

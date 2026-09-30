@@ -29,19 +29,25 @@ source; do not infer either value from anywhere else.
    produce a document that contradicts itself, which is the defect you were called to remove.
    As a shard, you write your record to the part path your brief names under
    `s<N>/shards/<artifact>-repair-p<M>/`, not to the record path in item 3. Every `edit:` line
-   cites the FULL path of each file you edited, on that one line with no wrap onto the next. Ask
+   cites the project-relative path in the ledger's spelling (`_bmad-output/planning-artifacts/s<N>/…`)
+   of each file you edited, on that one line with no wrap onto the next. Ask
    for and report no agent id. The join `join-remediator-shards.sh` keys your part on those
    citations against the harness write ledger over the whole sprint slot
    (`--artifact-path _bmad-output/planning-artifacts/s<N>`), and it refuses an uncited or
    doubly-written file: every file you edit under `s<N>/` — stories, `epics/epics.md`, any
    sibling — appears on an `edit:` line. Your part file under `s<N>/shards/` is not counted.
 
+   In a repair dispatch, every edit to a file under the sprint slot goes through Edit, Write or
+   MultiEdit, never a Bash redirect, `sed -i`, `tee` or a script's `open(…, 'w')`: only those
+   produce the ledger row the join requires. Write your part through Write too, so the
+   derivation-capture hook checks its fences as you write them.
+
    **As a section shard** of one document, your brief names a section file
    `s<N>/shards/<artifact>-repair-p<M>/sections/<ordinal>.md` and its first-line offset. Edit
    ONLY that section file, never the document itself: the assembler refuses a document that
    moved since the split. A finding's document line `L` is line `L - <first-line> + 1` of your
-   section file. Every `edit:` line cites the section file by its FULL path, never a bare
-   basename. A `derivation:` fence names the DOCUMENT by its project-relative path, never the
+   section file. Every `edit:` line cites the section file by the project-relative path in the
+   ledger's spelling (`_bmad-output/planning-artifacts/s<N>/…`), never a bare basename. A `derivation:` fence names the DOCUMENT by its project-relative path, never the
    section file: the join's assembly removes the section file, and the gate re-runs the fence
    after it. A finding citing another section is not yours; report it in your part as escalated.
 2. **Repair every CRITICAL and MAJOR.** MINOR/NIT at your discretion; say which you

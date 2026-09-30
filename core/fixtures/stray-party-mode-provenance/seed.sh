@@ -18,9 +18,11 @@ C_ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 if [ -n "$D_ROOT" ] && [ -f "$D_ROOT/core/scripts/validate-provenance-block.sh" ]; then
   VALIDATOR_SRC="$D_ROOT/core/scripts/validate-provenance-block.sh"
   SCHEMA_SRC="$D_ROOT/core/schemas/provenance-block.json"
+  LAYOUT=dist
 elif [ -n "$C_ROOT" ] && [ -f "$C_ROOT/scripts/ai-dlc/validate-provenance-block.sh" ]; then
   VALIDATOR_SRC="$C_ROOT/scripts/ai-dlc/validate-provenance-block.sh"
   SCHEMA_SRC="$C_ROOT/.claude/schemas/provenance-block.json"
+  LAYOUT=consumer
 else
   echo "FIXTURE ERROR: validate-provenance-block.sh not found in either layout" >&2
   exit 2
@@ -197,6 +199,27 @@ mutate_py "$V" "$WORK/mut-substr.sh" \
   'return rel.startswith(prefix)' \
   'return prefix in rel' "substr"
 
+# MUT-F: the on-disk respelling is reverted to bare realpath, on BOTH sides at once -- the anchor
+# is inside the one helper the root and every candidate go through, so no layer survives it.
+# A case-variant spelling of a declared home is a false stray again on a case-folding filesystem.
+mutate_py "$V" "$WORK/mut-ondisk-revert.sh" \
+  '    real = os.path.realpath(path)' \
+  '    return os.path.realpath(path)' "ondisk-revert"
+
+# MUT-G: the FORBIDDEN remedy -- fold case in the home comparison instead of respelling the path.
+# It closes the false stray on a folding filesystem exactly as the shipped fix does, so nothing
+# on such a host can tell them apart. On a case-sensitive filesystem it accepts a genuinely
+# distinct DOCS/retro/ as the home: a false PASS. Only the case-sensitive arm can kill it.
+mutate_py "$V" "$WORK/mut-casefold.sh" \
+  'return rel.startswith(prefix)' \
+  'return rel.casefold().startswith(prefix.casefold())' "casefold"
+
+# MUT-H: the respelling picks by casefold alone, dropping the samestat check. Where the filesystem
+# folds more narrowly than casefold, two listed entries match and the first listed wins.
+mutate_py "$V" "$WORK/mut-no-samestat.sh" \
+  'if n.casefold() == fold and os.path.samestat(st, os.lstat(os.path.join(out, n))):' \
+  'if n.casefold() == fold:' "no-samestat"
+
 cat > "$WORK/env.sh" <<ENV
 WORK="$WORK"
 PROJ="$P"
@@ -213,6 +236,10 @@ EXT_MALFORMED_TYPE="$WORK/ext-malformed-type.json"
 EXT_BAD_GLOB="$WORK/ext-bad-glob.json"
 NESTED="$N"
 MUT_SUBSTR="$WORK/mut-substr.sh"
+MUT_ONDISK_REVERT="$WORK/mut-ondisk-revert.sh"
+MUT_CASEFOLD="$WORK/mut-casefold.sh"
+MUT_NO_SAMESTAT="$WORK/mut-no-samestat.sh"
+LAYOUT="$LAYOUT"
 ENV
 
 printf '%s\n' "$WORK"

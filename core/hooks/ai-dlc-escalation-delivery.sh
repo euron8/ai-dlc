@@ -141,6 +141,10 @@ Event types:
   message was outstanding and unacknowledged (Rule 29). A nonzero count means
   the lead tried to execute straight through a waiting human and the hook --
   not the lead's judgment -- is what stopped it. Investigate each one.
+- `ACK_TEAMMATE_WRITE`: the pause flag was up and a DISPATCHED TEAMMATE's
+  write under _bmad-output/ was let through, so an in-flight artifact is not
+  left half-amended. Its dispatches are still denied. The row names the agent
+  and the file; it is not a denial and is not counted as one
 - `BACKOFF`: rapid-fire stop attempts detected; stall confirmed. A block
   continues the stall run when NO tool call came between it and the previous
   block, at any spacing, or when it came within 30s of it; only a tool call

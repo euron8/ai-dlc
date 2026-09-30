@@ -28,7 +28,31 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
-trap 'rm -rf "$WORK"' EXIT
+# The case-sensitive arm may ATTACH a disk image under $WORK. Detach it before the tree is
+# removed: an rm walking into a live mount is not a cleanup.
+CS_MNT=""; HFS_MNT=""
+cleanup() {
+  local m
+  for m in "$CS_MNT" "$HFS_MNT"; do
+    [ -n "$m" ] || continue
+    hdiutil detach "$m" >/dev/null 2>&1 || hdiutil detach -force "$m" >/dev/null 2>&1
+  done
+  rm -rf "$WORK"
+}
+trap cleanup EXIT
+# bash skips the EXIT trap on an untrapped TERM, and a pool timeout would leak an attached image.
+trap 'exit 130' INT TERM
+
+# image_unavailable <arm> <what failed> -- hdiutil is PRESENT and could not build the world.
+# In the distribution that is a broken fixture, not a skip: this host is known to build both
+# images, and a SKIP here would leave MUT-G/MUT-H unguarded while the suite reads green. On a
+# consumer the host is not ours to assume (a sandboxed CI may refuse disk images), so it SKIPs,
+# naming the mutant it leaves unguarded and hdiutil's own words.
+image_unavailable() {
+  local why; why="$(tail -1 "$WORK/hdiutil.err" 2>/dev/null)"
+  [ "$LAYOUT" = dist ] && broken "$1: $2 (hdiutil: ${why:-no stderr})"
+  ok "$1 SKIP: $2 on this consumer host (hdiutil: ${why:-no stderr})"
+}
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
 
@@ -318,20 +342,160 @@ scan_at "$NESTED" "$NESTED" "$VALIDATOR" "$CONTROL_SCHEMA" "" "$NESTED/vendor/do
   && ok "S7b a stray under vendor/docs/retro/ is reported; a home is a place the path STARTS, not one it contains" \
   || bad "S7b FALSE PASS: vendor/docs/retro/inner.md was accepted as a home (rc=$RC) — the home pattern was found mid-path"
 
-# --- (no S10) case-variant spellings are a FILED DEFECT, not an arm ----------
-# `DOCS/retro/sprint-1.md` and `docs/retro/sprint-1.md` are ONE FILE where the filesystem folds
-# case, and this repo's development host is one. `realpath` resolves symlinks and `..` and does
-# NOT fold case, so the case-variant spelling of a declared home keeps the caller's spelling,
-# misses the home, and is reported as a stray. Measured, with the correct-case spelling as the
-# control in the same run. Filed as BL-082; deliberately not asserted here.
+# --- S10: case-variant spellings, on BOTH kinds of filesystem (BL-082) -------
+# `realpath` resolves symlinks and `..` and does NOT restore case, so where the filesystem folds
+# case `DOCS/retro/sprint-1.md` -- the same file as the home -- kept the caller's spelling, missed
+# `docs/retro/**`, and was reported as a stray. The validator now respells each component as its
+# parent directory LISTS it, and only to an entry that is the same directory entry.
 #
-# THE OBVIOUS REMEDY IS FORBIDDEN. Folding case in the home match closes it on a case-folding
-# filesystem and OPENS A FALSE PASS on a case-sensitive one, where `DOCS/retro/` can be a
-# genuinely distinct directory that would then be accepted as the declared home — a false STRAY
-# traded for a false PASS, on the platform a consumer's CI actually runs. A per-component
-# case-canonicalising walk is only correct on the folding filesystem, so no remedy is right on
-# both. That is what makes it a filed defect rather than a fix, and it is why there is a gap
-# here instead of an arm.
+# THE OBVIOUS REMEDY IS FORBIDDEN AND THIS SECTION IS WHAT HOLDS IT OUT. Folding case in the home
+# match closes the false stray exactly as the respelling does, so NO arm on a folding filesystem
+# can tell the two apart (S10-F5 records that). On a case-sensitive filesystem `DOCS/retro/` can
+# be a genuinely distinct directory, and folding accepts it as the home: a false PASS on the
+# platform a consumer's CI runs. S10-C is that world, and MUT-G, the folding remedy, dies there.
+#
+# Two worlds, each built fresh here rather than in seed.sh so no whole-tree count above moves.
+# Files are copied from seeded ones, so this file spells no complete block either.
+case_proj() { # <root> -- the home, a near-miss stray beside it, and a service stray
+  mkdir -p "$1/.claude/schemas" "$1/docs/retro" "$1/docs/retros" "$1/server" || broken "case_proj: mkdir under $1"
+  cp "$CONTROL_SCHEMA" "$1/.claude/schemas/provenance-block.json" \
+    && cp "$PROJ/docs/retro/sprint-1.md" "$1/docs/retro/sprint-1.md" \
+    && cp "$PROJ/server/handler.py" "$1/docs/retros/stray.md" \
+    && cp "$PROJ/server/handler.py" "$1/server/handler.py" || broken "case_proj: seeding $1"
+}
+
+# S10-F: the FOLDING world, on whatever filesystem $WORK sits on.
+CI="$WORK/case-fold/proj"
+case_proj "$CI"
+if [ ! -e "$WORK/case-fold/PROJ/DOCS/retro/sprint-1.md" ]; then
+  ok "S10-F SKIP: the filesystem under \$WORK does not fold case, so a case variant names nothing (no subject; S10-C covers this host)"
+else
+  scan_at "$CI" "$CI" "$VALIDATOR" "$CONTROL_SCHEMA" "" "DOCS/retro/sprint-1.md"
+  { [ "$RC" -eq 0 ] && [ "$(scanned_count)" = "1" ]; } \
+    && ok "S10-F1 a declared home spelled DOCS/retro/ on a case-folding filesystem is not a stray (and was scanned)" \
+    || bad "S10-F1 DOCS/retro/sprint-1.md -- the same file as the home here -- was reported as a stray (rc=$RC, scanned='$(scanned_count)')"
+  # The near-miss: a stray whose name is one letter from the home, case-varied. Respelling must
+  # land on ITS OWN entry and report it under its on-disk name, never collapse onto the home.
+  scan_at "$CI" "$CI" "$VALIDATOR" "$CONTROL_SCHEMA" "" "DOCS/RETROS/stray.md"
+  { [ "$RC" -eq 1 ] && reported "docs/retros/stray.md"; } \
+    && ok "S10-F2 a stray at docs/retros/ spelled DOCS/RETROS/ is reported, under its on-disk spelling" \
+    || bad "S10-F2 DOCS/RETROS/stray.md was not reported as docs/retros/stray.md (rc=$RC) -- the respelling accepted or misnamed a near-miss"
+  scan_at "$CI" "$CI" "$VALIDATOR" "$CONTROL_SCHEMA" "" "SERVER/handler.py"
+  { [ "$RC" -eq 1 ] && reported "server/handler.py"; } \
+    && ok "S10-F3 a service stray spelled SERVER/ is still reported (a case variant is not a pass)" \
+    || bad "S10-F3 SERVER/handler.py was not reported as server/handler.py (rc=$RC)"
+  # MUT-F, the revert to bare realpath: the false stray comes back. Paired with a live control
+  # from the same mutant, because the kill below is presence-shaped only on the rc=1 side.
+  scan_at "$CI" "$CI" "$MUT_ONDISK_REVERT" "$CONTROL_SCHEMA" "" "DOCS/retro/sprint-1.md"
+  mut_f_stray=0; { [ "$RC" -eq 1 ] && reported "DOCS/retro/sprint-1.md"; } && mut_f_stray=1
+  scan_at "$CI" "$CI" "$MUT_ONDISK_REVERT" "$CONTROL_SCHEMA" "" "docs/retro/sprint-1.md"
+  mut_f_alive=0; { [ "$RC" -eq 0 ] && [ "$(scanned_count)" = "1" ]; } && mut_f_alive=1
+  { [ "$mut_f_stray" -eq 1 ] && [ "$mut_f_alive" -eq 1 ]; } \
+    && ok "MUTANT (on-disk respelling reverted to bare realpath): DOCS/retro/ is a false stray again while docs/retro/ still passes -- S10-F1 is what stops that" \
+    || bad "MUTANT SURVIVED: reverting the respelling did not bring back the false stray (stray=$mut_f_stray, alive=$mut_f_alive)"
+  # S10-F5 is a RECORD, not a kill: here the forbidden fold is indistinguishable from the fix.
+  scan_at "$CI" "$CI" "$MUT_CASEFOLD" "$CONTROL_SCHEMA" "" "DOCS/retro/sprint-1.md"
+  [ "$RC" -eq 0 ] \
+    && ok "S10-F5 the forbidden case-fold remedy ALSO passes here (rc=0) -- no folding-filesystem arm can reject it; S10-C must" \
+    || bad "S10-F5 the case-fold mutant gave rc=$RC on the folding filesystem; S10-C's premise that only a case-sensitive world separates the two has moved"
+fi
+
+# S10-C: the CASE-SENSITIVE world. Native where $WORK already is one (a Linux consumer's CI);
+# otherwise a case-sensitive APFS image under $WORK; otherwise SKIP with the reason.
+CS_BASE=""; CS_WHY=""
+mkdir -p "$WORK/cs-native/probe" || broken "S10-C: mkdir cs-native"
+if [ ! -e "$WORK/cs-native/PROBE" ]; then
+  CS_BASE="$WORK/cs-native"; CS_WHY="native case-sensitive filesystem"
+elif command -v hdiutil >/dev/null 2>&1; then
+  if hdiutil create -fs 'Case-sensitive APFS' -size 20m -volname bl082cs "$WORK/cs.dmg" >/dev/null 2>"$WORK/hdiutil.err" \
+     && mkdir -p "$WORK/cs-mnt" \
+     && hdiutil attach -nobrowse -mountpoint "$WORK/cs-mnt" "$WORK/cs.dmg" >/dev/null 2>"$WORK/hdiutil.err"; then
+    CS_MNT="$WORK/cs-mnt"; CS_BASE="$CS_MNT"; CS_WHY="case-sensitive APFS disk image"
+  else
+    CS_WHY="-"
+    image_unavailable "S10-C" "hdiutil could not create or attach a case-sensitive APFS image -- MUT-G (the forbidden case-fold remedy) is UNGUARDED"
+  fi
+else
+  CS_WHY="the filesystem folds case and hdiutil is not available to build one that does not"
+fi
+if [ -z "$CS_BASE" ]; then
+  [ "$CS_WHY" = "-" ] || ok "S10-C SKIP: $CS_WHY -- MUT-G (the forbidden case-fold remedy) is UNGUARDED on this run"
+else
+  CS="$CS_BASE/proj"
+  case_proj "$CS"
+  mkdir -p "$CS/DOCS/retro" && cp "$PROJ/server/handler.py" "$CS/DOCS/retro/sprint-1.md" || broken "S10-C: seeding DOCS/retro"
+  # Premise: the two directories are genuinely distinct here, or this world is the folding one.
+  [ "$(ls "$CS" | grep -c -x -e docs -e DOCS)" = "2" ] || broken "S10-C premise ($CS_WHY): docs/ and DOCS/ are not two entries"
+  scan_at "$CS" "$CS" "$VALIDATOR" "$CONTROL_SCHEMA" "" "DOCS/retro/sprint-1.md"
+  { [ "$RC" -eq 1 ] && reported "DOCS/retro/sprint-1.md"; } \
+    && ok "S10-C1 ($CS_WHY) a DISTINCT DOCS/retro/ is a stray, not the declared home" \
+    || bad "S10-C1 FALSE PASS ($CS_WHY): DOCS/retro/sprint-1.md is a different file from the home and came back rc=$RC"
+  scan_at "$CS" "$CS" "$VALIDATOR" "$CONTROL_SCHEMA" "" "docs/retro/sprint-1.md"
+  { [ "$RC" -eq 0 ] && [ "$(scanned_count)" = "1" ]; } \
+    && ok "S10-C2 ($CS_WHY) the real home beside it still passes (and was scanned)" \
+    || bad "S10-C2 ($CS_WHY) docs/retro/sprint-1.md was not PASS-over-1 (rc=$RC, scanned='$(scanned_count)')"
+  scan_at "$CS" "$CS" "$VALIDATOR" "$CONTROL_SCHEMA" ""
+  { [ "$RC" -eq 1 ] && reported "DOCS/retro/sprint-1.md" && ! reported "docs/retro/sprint-1.md"; } \
+    && ok "S10-C3 ($CS_WHY) the whole-tree scan reports DOCS/retro/ and not docs/retro/" \
+    || bad "S10-C3 ($CS_WHY) the whole-tree scan did not separate DOCS/retro/ from docs/retro/ (rc=$RC)"
+  # MUT-G, the forbidden remedy: the distinct DOCS/retro/ is accepted as the home. Paired with a
+  # stray no fold can excuse, from the same mutant, so a dead copy cannot score the kill.
+  scan_at "$CS" "$CS" "$MUT_CASEFOLD" "$CONTROL_SCHEMA" "" "DOCS/retro/sprint-1.md"
+  mut_g_pass=0; { [ "$RC" -eq 0 ] && [ "$(scanned_count)" = "1" ]; } && mut_g_pass=1
+  scan_at "$CS" "$CS" "$MUT_CASEFOLD" "$CONTROL_SCHEMA" "" "server/handler.py"
+  mut_g_alive=0; { [ "$RC" -eq 1 ] && reported "server/handler.py"; } && mut_g_alive=1
+  { [ "$mut_g_pass" -eq 1 ] && [ "$mut_g_alive" -eq 1 ]; } \
+    && ok "MUTANT (home match folds case -- the forbidden remedy): a distinct DOCS/retro/ is excused while server/ is still caught -- S10-C1 is what stops that" \
+    || bad "MUTANT SURVIVED: folding the home match did not excuse the distinct DOCS/retro/ (false-pass=$mut_g_pass, alive=$mut_g_alive)"
+  # And the fix is inert here: reverting it changes no verdict in the world with no subject.
+  scan_at "$CS" "$CS" "$MUT_ONDISK_REVERT" "$CONTROL_SCHEMA" "" "DOCS/retro/sprint-1.md"
+  { [ "$RC" -eq 1 ] && reported "DOCS/retro/sprint-1.md"; } \
+    && ok "S10-C4 ($CS_WHY) the respelling is inert where case is significant (reverting it keeps DOCS/retro/ a stray)" \
+    || bad "S10-C4 ($CS_WHY) the reverted mutant answered rc=$RC on the distinct DOCS/retro/"
+fi
+
+# S10-H: the world where the SAMESTAT check decides. HFS+ folds case more narrowly than python's
+# casefold: `docs` and `doc<U+017F>` (long s) are two DISTINCT entries there, and both casefold
+# to `docs`. A respelling that picked by casefold alone would take whichever is listed first --
+# so of the two spellings below, one lands on the wrong directory whatever the listing order,
+# and when it lands on the home that is a false PASS. Only an HFS+ volume holds this world:
+# APFS folds the long s, and a case-sensitive filesystem never reaches the respelling at all.
+LS="$(printf 'doc\305\277')"
+if ! command -v hdiutil >/dev/null 2>&1; then
+  ok "S10-H SKIP: hdiutil is not available to build an HFS+ volume -- MUT-H (casefold without samestat) is UNGUARDED on this run"
+elif ! { hdiutil create -fs 'HFS+' -size 20m -volname bl082hfs "$WORK/hfs.dmg" >/dev/null 2>"$WORK/hdiutil.err" \
+         && mkdir -p "$WORK/hfs-mnt" \
+         && hdiutil attach -nobrowse -mountpoint "$WORK/hfs-mnt" "$WORK/hfs.dmg" >/dev/null 2>"$WORK/hdiutil.err"; }; then
+  image_unavailable "S10-H" "hdiutil could not create or attach an HFS+ image -- MUT-H (casefold without samestat) is UNGUARDED"
+else
+  HFS_MNT="$WORK/hfs-mnt"
+  HP="$HFS_MNT/proj"
+  case_proj "$HP"
+  mkdir -p "$HP/$LS/retro" && cp "$PROJ/server/handler.py" "$HP/$LS/retro/sprint-1.md" || broken "S10-H: seeding the long-s directory"
+  [ -e "$HP/DOCS/retro/sprint-1.md" ] || broken "S10-H premise: the HFS+ volume does not fold ASCII case"
+  cmp -s "$HP/docs/retro/sprint-1.md" "$HP/$LS/retro/sprint-1.md" && broken "S10-H premise: docs/ and the long-s directory are one entry here"
+  H_UP="$(printf 'DOC\305\277')"
+  scan_at "$HP" "$HP" "$VALIDATOR" "$CONTROL_SCHEMA" "" "DOCS/retro/sprint-1.md"
+  h_home=0; { [ "$RC" -eq 0 ] && [ "$(scanned_count)" = "1" ]; } && h_home=1
+  scan_at "$HP" "$HP" "$VALIDATOR" "$CONTROL_SCHEMA" "" "$H_UP/retro/sprint-1.md"
+  h_stray=0; { [ "$RC" -eq 1 ] && reported "$LS/retro/sprint-1.md"; } && h_stray=1
+  { [ "$h_home" -eq 1 ] && [ "$h_stray" -eq 1 ]; } \
+    && ok "S10-H (HFS+ image) DOCS/ respells to the home and DOC<long-s>/ to its own distinct directory, which is reported" \
+    || bad "S10-H (HFS+ image) two casefold-equal entries were not told apart (home-passes=$h_home, long-s-reported=$h_stray)"
+  # The kill is PRESENCE-shaped: a mutant that crashed (rc=2) satisfies neither cell. Whichever
+  # entry the volume lists first, one spelling lands on the OTHER directory, and that shows as a
+  # positive wrong answer -- the long-s stray excused as the home (PASS over 1 file), or the home
+  # reported as a stray under the long-s name.
+  scan_at "$HP" "$HP" "$MUT_NO_SAMESTAT" "$CONTROL_SCHEMA" "" "$H_UP/retro/sprint-1.md"
+  m_stray_excused=0; { [ "$RC" -eq 0 ] && [ "$(scanned_count)" = "1" ]; } && m_stray_excused=1
+  scan_at "$HP" "$HP" "$MUT_NO_SAMESTAT" "$CONTROL_SCHEMA" "" "DOCS/retro/sprint-1.md"
+  m_home_misnamed=0; { [ "$RC" -eq 1 ] && reported "$LS/retro/sprint-1.md"; } && m_home_misnamed=1
+  scan_at "$HP" "$HP" "$MUT_NO_SAMESTAT" "$CONTROL_SCHEMA" "" "server/handler.py"
+  m_alive=0; { [ "$RC" -eq 1 ] && reported "server/handler.py"; } && m_alive=1
+  { [ "$m_alive" -eq 1 ] && [ $((m_stray_excused + m_home_misnamed)) -eq 1 ]; } \
+    && ok "MUTANT (respelling by casefold without samestat): one spelling lands on the other directory (long-s-excused=$m_stray_excused, home-misnamed=$m_home_misnamed) -- S10-H is what stops that" \
+    || bad "MUTANT SURVIVED: dropping the samestat check produced no wrong-directory answer (long-s-excused=$m_stray_excused, home-misnamed=$m_home_misnamed, alive=$m_alive)"
+fi
 
 # --- S9: a SYMLINK named on the command line -----------------------------------
 # The last member of the zero-candidate class, and the one an existence test cannot see. A test

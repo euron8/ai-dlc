@@ -686,6 +686,82 @@ else
   check_beat_clause "_gate-procedures.md step 1" "$g_step1"
 fi
 
+# --- Step-5 marker-clear arm --------------------------------------------------------
+#
+# THE DEFECT THIS ARM EXISTS FOR. `handoff.md` step 5 touches the pause flag AND clears the
+# entry marker `_bmad-output/.handoff-in-progress`; its auto-handoff twin in
+# `_gate-procedures.md` touched the flag and never cleared the marker (measured: the file
+# named `handoff-in-progress` 0 times against 1 for `pipeline-paused.flag`). An interrupted
+# manual handoff leaves the marker behind, a later auto-handoff then ends with it present,
+# and Check 0's marker arm blocks that stop.
+#
+# THE ASSERTION IS A SPAN, KEYED ON THE STEP-5 EMISSION LINE. Both tokens must sit inside the
+# step whose line opens `5. Create the pause flag`, ending at the next column-0 line. A
+# whole-file grep would be satisfied by the marker being named anywhere -- this comment, a
+# hook pointer, step 4 -- and that is not the step that finishes the handoff. The pause flag
+# is the span's positive control: a span that extracted nothing cannot carry it.
+step5_span() { # step5_span <file> [<section heading regex>] -> the step-5 block
+  awk -v sec="${2:-}" '
+    sec != "" && /^## / { insec = ($0 ~ sec) }
+    sec != "" && !insec { next }
+    /^5\. Create the pause flag/ { f=1; print; next }
+    f && /^[^ ]/ { exit }
+    f { print }
+  ' "$1"
+}
+check_step5() { # check_step5 <label> <span text> -> 0 iff both tokens are in the span
+  grep -qF 'touch _bmad-output/pipeline-paused.flag' <<<"$2" \
+    && grep -qF 'rm -f _bmad-output/.handoff-in-progress' <<<"$2"
+}
+if [ -z "${HANDOFF_MD:-}" ] || [ -z "${GATE_PROC_MD:-}" ]; then
+  bad "FIXTURE BROKEN — handoff.md/_gate-procedures.md unresolved, so the step-5 marker-clear arm asserted nothing"
+else
+  S5W="$(mktemp -d)"
+  AUTO_SEC='^## Auto-handoff evaluation'
+  # SELF-PROBE, offender: the pre-fix text, rebuilt from the subject by deleting the clearing
+  # line, must FAIL.
+  S5_OFF="$S5W/gp-nomarker.md"
+  grep -vF 'rm -f _bmad-output/.handoff-in-progress' "$GATE_PROC_MD" > "$S5_OFF"
+  # SELF-PROBE, near-miss: the clearing command is still in the file, moved OUT of step 5 to
+  # the paragraph after the procedure. A whole-file grep passes it; the span must not.
+  S5_NEAR="$S5W/gp-moved.md"
+  awk '
+    /rm -f _bmad-output\/\.handoff-in-progress/ { next }
+    /^A FIRE outcome does not return control/ { print "Afterwards run `rm -f _bmad-output/.handoff-in-progress`." ; print "" }
+    { print }
+  ' "$GATE_PROC_MD" > "$S5_NEAR"
+  if cmp -s "$GATE_PROC_MD" "$S5_OFF" || cmp -s "$GATE_PROC_MD" "$S5_NEAR"; then
+    bad "FIXTURE STALE: a step-5 decoy is byte-identical to _gate-procedures.md — the clearing line is gone from the subject or the near-miss anchor moved, and the self-probe cannot discriminate"
+  elif ! grep -qF 'rm -f _bmad-output/.handoff-in-progress' "$S5_NEAR"; then
+    bad "FIXTURE STALE: the near-miss decoy lost the clearing command entirely, so it probes the offender twice rather than the span"
+  else
+    s5_off="$(step5_span "$S5_OFF" "$AUTO_SEC")"
+    s5_near="$(step5_span "$S5_NEAR" "$AUTO_SEC")"
+    if ! grep -qF 'touch _bmad-output/pipeline-paused.flag' <<<"$s5_off"; then
+      bad "SELF-PROBE BROKEN: the offender decoy's step-5 span does not carry the pause flag — the extractor found no step 5, so its failure below would be the span's, not the marker's"
+    elif check_step5 x "$s5_off"; then
+      bad "SELF-PROBE FAILED: a step 5 with no marker clear still passed — the arm cannot fire"
+    elif check_step5 x "$s5_near"; then
+      bad "SELF-PROBE FAILED: a marker clear moved OUTSIDE step 5 still passed — the arm is a whole-file grep, not a span"
+    else
+      ok "self-probe: step 5 with the marker clear removed FAILS, and with it moved out of step 5 also FAILS"
+    fi
+  fi
+  g_s5="$(step5_span "$GATE_PROC_MD" "$AUTO_SEC")"
+  h_s5="$(step5_span "$HANDOFF_MD")"
+  if check_step5 x "$g_s5"; then
+    ok "_gate-procedures.md auto-handoff step 5 touches the pause flag AND clears .handoff-in-progress, as handoff.md step 5 does"
+  else
+    bad "_gate-procedures.md auto-handoff step 5 does not both touch pipeline-paused.flag and rm -f _bmad-output/.handoff-in-progress — a marker left by an interrupted manual handoff survives the auto-handoff and Check 0 blocks the stop on it"
+  fi
+  if check_step5 x "$h_s5"; then
+    ok "handoff.md step 5 touches the pause flag AND clears .handoff-in-progress"
+  else
+    bad "handoff.md step 5 no longer both touches pipeline-paused.flag and clears .handoff-in-progress — the canonical copy the auto-handoff is spelled from has drifted"
+  fi
+  rm -rf "$S5W"
+fi
+
 # --- Beat-is-backgrounded arms ------------------------------------------------------
 #
 # THE DEFECT THESE ARMS EXIST FOR. The `## Bounded-join beat` section of

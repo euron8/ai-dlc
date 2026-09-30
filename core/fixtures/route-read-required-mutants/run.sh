@@ -139,25 +139,60 @@ logcell() { # <hook copy> <transcript token> -> PRESENT | ABSENT
 
 # THE THIRD OBSERVABLE, and it exists for the same reason the log cells do: no cell of the verdict
 # table is PAUSED, so a mutation that turns Check 2z's `agent_id` conjunct into a whole-hook exit
-# moves nothing in that table and would score a survival. This drives a teammate's Write on a
-# PAUSED tree with a ROUTED transcript -- Check 2z has nothing to say either way, so what answers
-# is Check 3's Rule 29 deny, which the exemption must NOT have reached.
-pausecell() { # <hook copy> -> DENY | ALLOW
+# moves nothing in that table and would score a survival. This drives a teammate's AGENT DISPATCH
+# on a PAUSED tree with a ROUTED transcript -- Check 2z has nothing to say either way, so what
+# answers is Check 3's Rule 29 deny, which no teammate exemption may reach. (A teammate's WRITE is
+# allowed by Check 3 itself while paused, so it cannot tell a whole-hook exit from the design.)
+pausetree() { # -> fresh paused tree path
   local pw="$WORK/pause.$$"; rm -rf "$pw"
   mkdir -p "$pw/_bmad-output/planning-artifacts/s7" "$pw/scripts/ai-dlc"
   : > "$pw/_bmad-output/pipeline-snapshot.md"
   : > "$pw/_bmad-output/pipeline-paused.flag"
   printf '#!/bin/sh\necho 7\n' > "$pw/scripts/ai-dlc/sprint-status.sh"; chmod +x "$pw/scripts/ai-dlc/sprint-status.sh"
+  printf '%s' "$pw"
+}
+pverdict() { # <hook copy> <tree> <tool> <agent token: - | type | id> -> DENY | ALLOW (deny must be Rule 29's)
   local out
-  out="$(jq -nc --arg tr "$(tr_of ROUTED)" \
-     '{session_id:"m",transcript_path:$tr,tool_name:"Write",agent_id:"ax",
-       agent_type:"general-purpose",
-       tool_input:{file_path:"/w/_bmad-output/planning-artifacts/product-brief.md"}}' \
-    | CLAUDE_PROJECT_DIR="$pw" bash "$1" 2>/dev/null)"
+  out="$(jq -nc --arg t "$3" --arg tr "$(tr_of ROUTED)" --arg ag "$4" --arg p "$2/_bmad-output/planning-artifacts/s7/prd.md" \
+     '{session_id:"m",transcript_path:$tr,tool_name:$t,
+       tool_input:(if $t == "NotebookEdit" then {notebook_path:$p} elif $t == "Agent" then {} else {file_path:$p} end)}
+      + (if $ag == "-" then {} elif $ag == "type" then {agent_type:"Explore"}
+         else {agent_id:$ag,agent_type:"general-purpose"} end)' \
+    | CLAUDE_PROJECT_DIR="$2" bash "$1" 2>/dev/null)"
   case "$out" in
-    *'"permissionDecision": "deny"'*|*'"permissionDecision":"deny"'*) printf 'DENY' ;;
+    *'Rule 29'*) printf 'DENY' ;;
+    *'"permissionDecision"'*) printf 'OTHER' ;;
     *) printf 'ALLOW' ;;
   esac
+}
+pausecell() { # <hook copy> -> DENY | ALLOW  (a teammate's Agent dispatch on a paused tree)
+  pverdict "$1" "$(pausetree)" Agent ax
+}
+
+# THE PAUSED TABLE -- Check 3's teammate decision, one property apart per cell. On a PAUSED tree:
+# teammate Write, teammate Agent, lead Write, `--agent` lead Write (agent_type only), lead
+# NotebookEdit (whose path field is `notebook_path`). Baseline: only the teammate's write goes through.
+PAUSE_NAME=( team-write team-agent lead-write agentlead-write lead-notebook )
+PAUSE_TOOL=( Write      Agent      Write      Write           NotebookEdit  )
+PAUSE_AG=(   ax         ax         -          type            -             )
+PAUSE_BASE='ALLOW DENY DENY DENY DENY'
+prow() { # <hook copy> -> one verdict per paused cell
+  local h="$1" i out=""
+  for i in 0 1 2 3 4; do out="$out $(pverdict "$h" "$(pausetree)" "${PAUSE_TOOL[$i]}" "${PAUSE_AG[$i]}")"; done
+  printf '%s' "${out# }"
+}
+pscore() { # <label> <expected paused row> <sentence>
+  local got; got="$(prow "$WORK/$1.sh")"
+  if [ "$got" = "$2" ]; then ok "MUTANT $1 $3"
+  else bad "MUTANT $1: expected paused row '$2' over (${PAUSE_NAME[*]}), got '$got'"; fi
+}
+# The paused LOG: a teammate's allowed write must record ACK_TEAMMATE_WRITE and NO ACK_DENIED.
+plogcell() { # <hook copy> -> "<ACK_TEAMMATE_WRITE count>/<ACK_DENIED count>"
+  local pw a d; pw="$(pausetree)"
+  pverdict "$1" "$pw" Write ax >/dev/null
+  a="$(grep -c '^## .*-- ACK_TEAMMATE_WRITE' "$pw/_bmad-output/pipeline-continuation-log.md" 2>/dev/null)" || a=0
+  d="$(grep -c '^## .*-- ACK_DENIED' "$pw/_bmad-output/pipeline-continuation-log.md" 2>/dev/null)" || d=0
+  printf '%s/%s' "$a" "$d"
 }
 
 # Build a mutant as a COPY and refuse one that changed nothing: an unmutated copy answers the
@@ -228,6 +263,12 @@ if [ "$CTRL" = "$BASELINE" ]; then
   ok "CONTROL: an unmutated copy DENIES both lead write cells and allows every other cell including \`teammate\` (positive conjunct: \`bypass\` and \`notebook\` are DENY, so a subject that emitted nothing would fail this)"
 else
   bad "CONTROL: an unmutated copy answers '$CTRL' over (${PROBE_NAME[*]}), not '$BASELINE' — the harness, not the mutants, is what the arms below measure"
+fi
+CP_ROW="$(prow "$WORK/control.sh")"; CP_LOG="$(plogcell "$WORK/control.sh")"
+if [ "$CP_ROW" = "$PAUSE_BASE" ] && [ "$CP_LOG" = "1/0" ]; then
+  ok "CONTROL: on a PAUSED tree an unmutated copy allows only the teammate's write (logged 1 ACK_TEAMMATE_WRITE / 0 ACK_DENIED) and Rule-29-denies the teammate's dispatch and every lead write"
+else
+  bad "CONTROL: paused row '$CP_ROW' over (${PAUSE_NAME[*]}) and log '$CP_LOG', not '$PAUSE_BASE' and '1/0'"
 fi
 CL_D="$(logcell "$WORK/control.sh" BYPASS)"; CL_A="$(logcell "$WORK/control.sh" ROUTED)"
 if [ "$CL_D" = PRESENT ] && [ "$CL_A" = ABSENT ]; then
@@ -367,6 +408,10 @@ fi
 if mk teammate-keyed-on-agent-type 's#\.agent_id // empty#.agent_type // empty#'; then
   score teammate-keyed-on-agent-type 'DENY ALLOW ALLOW ALLOW ALLOW DENY ALLOW ALLOW ALLOW ALLOW' \
     "turns the \`agentlead\` cell from DENY to ALLOW and moves nothing else: keying the exemption on \`agent_type\` exempts a \`--agent\` lead, and Check 2z cannot fire on such a session"
+  # The same field swap reaches Check 3, which reads the same AGENT_ID: the `--agent` lead then
+  # writes straight through a pause.
+  pscore teammate-keyed-on-agent-type 'ALLOW DENY DENY ALLOW DENY' \
+    "also turns the paused \`agentlead-write\` cell from DENY to ALLOW: Check 3's teammate arm keyed on \`agent_type\` lets a \`--agent\` lead through the pause"
 fi
 
 LN_AG="$(anchor 'AGENT_ID=$(echo "$INPUT"')"
@@ -377,9 +422,63 @@ elif splice teammate-exemption-whole-hook "$LN_AG" after '[ -z "$AGENT_ID" ] || 
   CP="$(pausecell "$WORK/control.sh")"
   MP="$(pausecell "$WORK/teammate-exemption-whole-hook.sh")"
   if [ "$CP" = DENY ] && [ "$MP" = ALLOW ] && [ "$MR" = "$BASELINE" ]; then
-    ok "MUTANT teammate-exemption-whole-hook moves NO verdict cell, and the paused probe catches it anyway: the control DENIES a teammate's paused write (Rule 29) where the mutant ALLOWS it, so \"the exemption is scoped to Check 2z\" is a falsifiable claim and not a description"
+    ok "MUTANT teammate-exemption-whole-hook moves NO verdict cell, and the paused probe catches it anyway: the control DENIES a teammate's paused Agent dispatch (Rule 29) where the mutant ALLOWS it, so \"the exemption is scoped to Check 2z\" is a falsifiable claim and not a description"
   else
     bad "MUTANT teammate-exemption-whole-hook: expected pause cells 'DENY'/'ALLOW' over (control,mutant) and an unchanged verdict row; got '$CP'/'$MP' and '$MR'"
+  fi
+fi
+
+# =============================================================================
+# 5b. CHECK 3's TEAMMATE ARM — the paused table. One mutant per property, scored on the row.
+# =============================================================================
+# Located by UNIQUE anchor and rewritten whole (see `splice`). Each mutant must move exactly the
+# cell its property owns: the arm dropped denies the teammate's write; the arm widened to the
+# dispatch tools lets the teammate spawn; the `notebook_path` fallback dropped lets the lead's
+# notebook through. The log mutants are read on the second observable, which no row can see.
+ck3() { # <label> <anchor> <replacement line> -> 0 = built
+  local ln; ln="$(anchor "$2")"
+  if [ -z "$ln" ]; then bad "ANCHOR: \`$2\` is not unique in the hook, so MUTANT $1 is aimed at nothing"; return 1; fi
+  splice "$1" "$ln" replace "$3"
+}
+if ck3 teammate-write-arm-dropped 'then TEAMMATE_WRITE=1; else ADVANCING=1; fi ;;' \
+     '        ADVANCING=1 ;;'; then
+  pscore teammate-write-arm-dropped 'DENY DENY DENY DENY DENY' \
+    "turns the paused \`team-write\` cell from ALLOW to DENY and moves nothing else: the teammate's in-flight write is let through by this arm alone"
+fi
+if ck3 teammate-arm-widened-to-dispatch '[ "$UPDATER_SESSION" -eq 1 ] || ADVANCING=1' \
+     '    [ "$UPDATER_SESSION" -eq 1 ] || [ -n "$AGENT_ID" ] || ADVANCING=1'; then
+  pscore teammate-arm-widened-to-dispatch 'ALLOW ALLOW DENY DENY DENY' \
+    "turns the paused \`team-agent\` cell from DENY to ALLOW and moves nothing else: a teammate exemption on every tool lets a teammate spawn work past a waiting operator"
+fi
+if ck3 notebook-path-dropped ".tool_input.file_path // .tool_input.notebook_path // empty" \
+     "    FP=\$(echo \"\$INPUT\" | jq -r '.tool_input.file_path // empty')"; then
+  pscore notebook-path-dropped 'ALLOW DENY DENY DENY ALLOW' \
+    "turns the paused \`lead-notebook\` cell from DENY to ALLOW and moves nothing else: NotebookEdit's \`notebook_path\` is what puts a notebook under the pause"
+fi
+if ck3 teammate-write-logged-as-denial 'echo "## ${TIMESTAMP} -- ACK_TEAMMATE_WRITE"' \
+     '    echo "## ${TIMESTAMP} -- ACK_DENIED"'; then
+  ML="$(plogcell "$WORK/teammate-write-logged-as-denial.sh")"; MR="$(prow "$WORK/teammate-write-logged-as-denial.sh")"
+  if [ "$ML" = "0/1" ] && [ "$MR" = "$PAUSE_BASE" ]; then
+    ok "MUTANT teammate-write-logged-as-denial moves the paused log from 1/0 to 0/1 and no verdict: an allowed write recorded as ACK_DENIED would inflate the denial count, and the log arm sees it"
+  else
+    bad "MUTANT teammate-write-logged-as-denial: expected log '0/1' and paused row '$PAUSE_BASE'; got '$ML' and '$MR'"
+  fi
+fi
+# The attribution lines on the DENY row: drop `File:` and the lead's denial is unattributable again.
+lead_log_has_file() { # <hook copy> -> YES | NO
+  local pw; pw="$(pausetree)"
+  pverdict "$1" "$pw" Write - >/dev/null
+  if grep -qF -- "- File: $pw/_bmad-output/planning-artifacts/s7/prd.md" "$pw/_bmad-output/pipeline-continuation-log.md" 2>/dev/null \
+     && grep -qF -- '- Agent: <lead>' "$pw/_bmad-output/pipeline-continuation-log.md" 2>/dev/null
+  then printf YES; else printf NO; fi
+}
+CF="$(lead_log_has_file "$WORK/control.sh")"
+if ck3 ack-denied-file-line-dropped 'echo "- File: ${FP:-<none>}"' '  echo "- Pause flag present"'; then
+  MF="$(lead_log_has_file "$WORK/ack-denied-file-line-dropped.sh")"
+  if [ "$CF" = YES ] && [ "$MF" = NO ]; then
+    ok "MUTANT ack-denied-file-line-dropped: the control's ACK_DENIED row carries the lead actor and the file, the mutant's does not"
+  else
+    bad "MUTANT ack-denied-file-line-dropped: expected control/mutant 'YES'/'NO', got '$CF'/'$MF'"
   fi
 fi
 
@@ -405,14 +504,24 @@ JOIN_TOK=( 'BYPASS: \`$T\` is DENIED'
            'TEAMMATE twin:'
            'TEAMMATE pause:'
            'TEAMMATE log:'
-           'TEAMMATE agent-flag:' )
+           'TEAMMATE agent-flag:'
+           'PAUSE teammate write:'
+           'PAUSE teammate spawn:'
+           'PAUSE lead write:'
+           'PAUSE agent-flag lead:'
+           'PAUSE lead notebook:'
+           'PAUSE teammate log:'
+           'PAUSE lead log:' )
 JOIN_WHY=( bypass "routed near-miss" "the remedy arms" "all three remedy tools" \
            "the whole denied surface including NotebookEdit" updater "not-an-ai-dlc-session" \
            "the checks below Check 2z" "the teammate exemption" \
            "the teammate's lead twin, one property apart" \
            "the exemption's scope at Check 3's pause deny" \
            "the teammate allow writing no ROUTE_DENIED row" \
-           "the --agent lead carrying agent_type alone still being denied" )
+           "the --agent lead carrying agent_type alone still being denied" \
+           "the teammate's paused write allowed" "the teammate's paused dispatch denied" \
+           "the lead's paused write denied" "the --agent lead's paused write denied" \
+           "the lead's paused notebook denied" "the ACK_TEAMMATE_WRITE row" "the attributable ACK_DENIED row" )
 i=0
 while [ "$i" -lt ${#JOIN_TOK[@]} ]; do
   if grep -qF -- "${JOIN_TOK[$i]}" "$SUBJ"; then

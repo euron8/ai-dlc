@@ -91,7 +91,9 @@ required, and none should be invented.
 | 1486 | `PC-S313-EMIT-REPORT-E2-IS-A-FOURTH-POOL-FLAKE-ARM` | — (core; see below) | `**WITHDRAWN (2026-09-29) — the E2/V-HC mechanism this entry observed at 0.624.0 was fixed upstream twice after filing (is_unregistered in 0.625.0, the process-substitution fd race in 0.647.0); upstream keeps the unexplained E1, E8 and E9 arms as BL-230.**` |
 
 `PC-S309-VALIDATE-MANDATORY-RULES-CHECK5-TEST-ONLY-WEB-DIFF-FALSE-FAIL` is **not** in this set:
-upstream shipped its fix in v0.542.0, so it closes on the normal re-verify path, not by withdrawal.
+upstream shipped its fix in v0.542.0, so it closes as adopted, not by withdrawal. It carries no
+`verify:` receipt, so re-verification skips it and cannot close it; its annotation is in
+[`graph-consumer-close-brief-2.md`](graph-consumer-close-brief-2.md).
 
 ## Steps
 
