@@ -480,6 +480,9 @@ def ondisk(path):
 
 
 # BOTH sides go through `ondisk`: a root respelled on one side only puts every candidate at `../`.
+# On Darwin `getcwd` already returns the on-disk spelling after a `cd` through a case variant, so
+# this side is inert there and its mutant survives there; it is kept for a filesystem whose
+# dentry can carry the caller's spelling (a Linux casefold mount), which no host here can build.
 ROOT_REAL = ondisk(os.getcwd())
 
 

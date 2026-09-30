@@ -18,9 +18,11 @@ C_ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 if [ -n "$D_ROOT" ] && [ -f "$D_ROOT/core/scripts/validate-provenance-block.sh" ]; then
   VALIDATOR_SRC="$D_ROOT/core/scripts/validate-provenance-block.sh"
   SCHEMA_SRC="$D_ROOT/core/schemas/provenance-block.json"
+  LAYOUT=dist
 elif [ -n "$C_ROOT" ] && [ -f "$C_ROOT/scripts/ai-dlc/validate-provenance-block.sh" ]; then
   VALIDATOR_SRC="$C_ROOT/scripts/ai-dlc/validate-provenance-block.sh"
   SCHEMA_SRC="$C_ROOT/.claude/schemas/provenance-block.json"
+  LAYOUT=consumer
 else
   echo "FIXTURE ERROR: validate-provenance-block.sh not found in either layout" >&2
   exit 2
@@ -237,6 +239,7 @@ MUT_SUBSTR="$WORK/mut-substr.sh"
 MUT_ONDISK_REVERT="$WORK/mut-ondisk-revert.sh"
 MUT_CASEFOLD="$WORK/mut-casefold.sh"
 MUT_NO_SAMESTAT="$WORK/mut-no-samestat.sh"
+LAYOUT="$LAYOUT"
 ENV
 
 printf '%s\n' "$WORK"

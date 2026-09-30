@@ -40,6 +40,19 @@ cleanup() {
   rm -rf "$WORK"
 }
 trap cleanup EXIT
+# bash skips the EXIT trap on an untrapped TERM, and a pool timeout would leak an attached image.
+trap 'exit 130' INT TERM
+
+# image_unavailable <arm> <what failed> -- hdiutil is PRESENT and could not build the world.
+# In the distribution that is a broken fixture, not a skip: this host is known to build both
+# images, and a SKIP here would leave MUT-G/MUT-H unguarded while the suite reads green. On a
+# consumer the host is not ours to assume (a sandboxed CI may refuse disk images), so it SKIPs,
+# naming the mutant it leaves unguarded and hdiutil's own words.
+image_unavailable() {
+  local why; why="$(tail -1 "$WORK/hdiutil.err" 2>/dev/null)"
+  [ "$LAYOUT" = dist ] && broken "$1: $2 (hdiutil: ${why:-no stderr})"
+  ok "$1 SKIP: $2 on this consumer host (hdiutil: ${why:-no stderr})"
+}
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
 
@@ -394,18 +407,19 @@ mkdir -p "$WORK/cs-native/probe" || broken "S10-C: mkdir cs-native"
 if [ ! -e "$WORK/cs-native/PROBE" ]; then
   CS_BASE="$WORK/cs-native"; CS_WHY="native case-sensitive filesystem"
 elif command -v hdiutil >/dev/null 2>&1; then
-  if hdiutil create -fs 'Case-sensitive APFS' -size 20m -volname bl082cs "$WORK/cs.dmg" >/dev/null 2>&1 \
+  if hdiutil create -fs 'Case-sensitive APFS' -size 20m -volname bl082cs "$WORK/cs.dmg" >/dev/null 2>"$WORK/hdiutil.err" \
      && mkdir -p "$WORK/cs-mnt" \
-     && hdiutil attach -nobrowse -mountpoint "$WORK/cs-mnt" "$WORK/cs.dmg" >/dev/null 2>&1; then
+     && hdiutil attach -nobrowse -mountpoint "$WORK/cs-mnt" "$WORK/cs.dmg" >/dev/null 2>"$WORK/hdiutil.err"; then
     CS_MNT="$WORK/cs-mnt"; CS_BASE="$CS_MNT"; CS_WHY="case-sensitive APFS disk image"
   else
-    CS_WHY="hdiutil could not create or attach a case-sensitive APFS image here"
+    CS_WHY="-"
+    image_unavailable "S10-C" "hdiutil could not create or attach a case-sensitive APFS image -- MUT-G (the forbidden case-fold remedy) is UNGUARDED"
   fi
 else
   CS_WHY="the filesystem folds case and hdiutil is not available to build one that does not"
 fi
 if [ -z "$CS_BASE" ]; then
-  ok "S10-C SKIP: $CS_WHY -- MUT-G (the forbidden case-fold remedy) is UNGUARDED on this run"
+  [ "$CS_WHY" = "-" ] || ok "S10-C SKIP: $CS_WHY -- MUT-G (the forbidden case-fold remedy) is UNGUARDED on this run"
 else
   CS="$CS_BASE/proj"
   case_proj "$CS"
@@ -449,10 +463,10 @@ fi
 LS="$(printf 'doc\305\277')"
 if ! command -v hdiutil >/dev/null 2>&1; then
   ok "S10-H SKIP: hdiutil is not available to build an HFS+ volume -- MUT-H (casefold without samestat) is UNGUARDED on this run"
-elif ! { hdiutil create -fs 'HFS+' -size 20m -volname bl082hfs "$WORK/hfs.dmg" >/dev/null 2>&1 \
+elif ! { hdiutil create -fs 'HFS+' -size 20m -volname bl082hfs "$WORK/hfs.dmg" >/dev/null 2>"$WORK/hdiutil.err" \
          && mkdir -p "$WORK/hfs-mnt" \
-         && hdiutil attach -nobrowse -mountpoint "$WORK/hfs-mnt" "$WORK/hfs.dmg" >/dev/null 2>&1; }; then
-  ok "S10-H SKIP: hdiutil could not create or attach an HFS+ image here -- MUT-H is UNGUARDED on this run"
+         && hdiutil attach -nobrowse -mountpoint "$WORK/hfs-mnt" "$WORK/hfs.dmg" >/dev/null 2>"$WORK/hdiutil.err"; }; then
+  image_unavailable "S10-H" "hdiutil could not create or attach an HFS+ image -- MUT-H (casefold without samestat) is UNGUARDED"
 else
   HFS_MNT="$WORK/hfs-mnt"
   HP="$HFS_MNT/proj"
@@ -468,15 +482,19 @@ else
   { [ "$h_home" -eq 1 ] && [ "$h_stray" -eq 1 ]; } \
     && ok "S10-H (HFS+ image) DOCS/ respells to the home and DOC<long-s>/ to its own distinct directory, which is reported" \
     || bad "S10-H (HFS+ image) two casefold-equal entries were not told apart (home-passes=$h_home, long-s-reported=$h_stray)"
-  scan_at "$HP" "$HP" "$MUT_NO_SAMESTAT" "$CONTROL_SCHEMA" "" "DOCS/retro/sprint-1.md"
-  m_home=0; { [ "$RC" -eq 0 ] && [ "$(scanned_count)" = "1" ]; } && m_home=1
+  # The kill is PRESENCE-shaped: a mutant that crashed (rc=2) satisfies neither cell. Whichever
+  # entry the volume lists first, one spelling lands on the OTHER directory, and that shows as a
+  # positive wrong answer -- the long-s stray excused as the home (PASS over 1 file), or the home
+  # reported as a stray under the long-s name.
   scan_at "$HP" "$HP" "$MUT_NO_SAMESTAT" "$CONTROL_SCHEMA" "" "$H_UP/retro/sprint-1.md"
-  m_stray=0; { [ "$RC" -eq 1 ] && reported "$LS/retro/sprint-1.md"; } && m_stray=1
+  m_stray_excused=0; { [ "$RC" -eq 0 ] && [ "$(scanned_count)" = "1" ]; } && m_stray_excused=1
+  scan_at "$HP" "$HP" "$MUT_NO_SAMESTAT" "$CONTROL_SCHEMA" "" "DOCS/retro/sprint-1.md"
+  m_home_misnamed=0; { [ "$RC" -eq 1 ] && reported "$LS/retro/sprint-1.md"; } && m_home_misnamed=1
   scan_at "$HP" "$HP" "$MUT_NO_SAMESTAT" "$CONTROL_SCHEMA" "" "server/handler.py"
   m_alive=0; { [ "$RC" -eq 1 ] && reported "server/handler.py"; } && m_alive=1
-  { [ "$m_alive" -eq 1 ] && ! { [ "$m_home" -eq 1 ] && [ "$m_stray" -eq 1 ]; }; } \
-    && ok "MUTANT (respelling by casefold without samestat): one of DOCS/ and DOC<long-s>/ lands on the wrong directory (home-passes=$m_home, long-s-reported=$m_stray) -- S10-H is what stops that" \
-    || bad "MUTANT SURVIVED: dropping the samestat check still told the two entries apart (home-passes=$m_home, long-s-reported=$m_stray, alive=$m_alive)"
+  { [ "$m_alive" -eq 1 ] && [ $((m_stray_excused + m_home_misnamed)) -eq 1 ]; } \
+    && ok "MUTANT (respelling by casefold without samestat): one spelling lands on the other directory (long-s-excused=$m_stray_excused, home-misnamed=$m_home_misnamed) -- S10-H is what stops that" \
+    || bad "MUTANT SURVIVED: dropping the samestat check produced no wrong-directory answer (long-s-excused=$m_stray_excused, home-misnamed=$m_home_misnamed, alive=$m_alive)"
 fi
 
 # --- S9: a SYMLINK named on the command line -----------------------------------
