@@ -238,6 +238,10 @@ for line in sys.stdin:
 ' | LC_ALL=C sort -u
 }
 
+# READSET_DROP_BEGIN
+# Driven by core/fixtures/readset-skip on a seeded repo carrying a real submodule; it reads only
+# $TREE and stdin, so the extracted span is the shipped logic.
+#
 # A GITIGNORED PATH IS NOT A SUITE INPUT, AND RECORDING ONE MAKES THE MAP A FUNCTION OF WHAT
 # ELSE WAS ON THE DISK. `.claude/worktrees/` is the Claude Code harness's own agent checkouts:
 # not this project's state, not any project's state, present in whatever number of concurrent
@@ -262,20 +266,54 @@ for line in sys.stdin:
 # STDIN IS BUFFERED BEFORE THE FILTER RUNS, because a pipeline consumes it exactly once and the
 # fail-open branch has nothing left to fall back on otherwise -- it would emit an EMPTY read-set,
 # which is the one direction this must never take.
+#
+# A PATH INSIDE A SUBMODULE MAKES `check-ignore` REFUSE THE WHOLE BATCH, SO THE FILTER NEVER RAN
+# WHERE A GITLINK EXISTS. One `sub/x` row and git exits 128 with "is in submodule" and no verdict
+# for any row; the fail-open branch then keeps all of them. Measured on the reference consumer
+# (gitlink `hook/lib/v4-core`, mode 160000): 357 rows in, 357 out, ignored `.venv`, `.pytest_cache`
+# and nonce paths among the survivors -- 139 -> 66 once the submodule rows were taken out of the
+# batch. So those rows never reach `check-ignore`:
+#   * a path at or under a gitlink COLLAPSES TO THE GITLINK PATH ITSELF, which the parent tracks
+#     and a submodule bump changes. The parent's runner never sees a change to a file inside the
+#     submodule (it is not in the parent's index), so the gitlink row is the one that can select
+#     the fixture; the inner rows could match nothing.
+#   * a `.git/modules/` row is kept as-is and bypasses the batch too. Measured: `check-ignore`
+#     does NOT refuse one (rc 0, reported non-matching), so this is belt rather than repair; it is
+#     git internals, and the runner strips `.git/` before matching.
+# Gitlinks are read off the INDEX (`ls-files -s`), never off the disk, so an unpopulated or
+# emptied submodule directory is still recognised.
 drop_ignored() { # reads paths on stdin (repo-relative), writes the non-ignored ones
-  local in keep
+  local in ask sub gl keep
   in="$(mktemp)" || { cat; return 0; }
-  keep="$(mktemp)" || { cat > "$in"; cat "$in"; rm -f "$in"; return 0; }
+  ask="$in.ask"; sub="$in.sub"; gl="$in.gl"; keep="$in.keep"
   cat > "$in"
-  if ( cd "$TREE" && git check-ignore --stdin --non-matching --verbose < "$in" ) 2>/dev/null \
-       | sed -n 's/^::[[:space:]]*//p' | LC_ALL=C sort -u > "$keep" && [ -s "$keep" ]; then
-    cat "$keep"
-  else
-    # No usable verdict -- keep everything rather than silently emptying the read-set.
-    cat "$in"
-  fi
-  rm -f "$in" "$keep"
+  # `-z`, then the TAB split: a submodule path may carry a space, which a whitespace awk split
+  # would cut in half and then never match.
+  ( cd "$TREE" && git ls-files -s -z 2>/dev/null ) | tr '\0' '\n' \
+    | awk -F'\t' 'substr($1, 1, 7) == "160000 " { print $2 }' > "$gl"
+  awk -v glf="$gl" -v subf="$sub" '
+    BEGIN { while ((getline g < glf) > 0) if (g != "") gl[g] = 1 }
+    {
+      p = $0
+      if (p == ".git/modules" || index(p, ".git/modules/") == 1) { print p > subf; next }
+      for (g in gl) if (p == g || index(p, g "/") == 1) { print g > subf; next }
+      print p
+    }' "$in" > "$ask" || { cat "$in"; rm -f "$in" "$ask" "$sub" "$gl" "$keep"; return 0; }
+  {
+    if [ -s "$ask" ]; then
+      if ( cd "$TREE" && git check-ignore --stdin --non-matching --verbose < "$ask" ) 2>/dev/null \
+           | sed -n 's/^::[[:space:]]*//p' | LC_ALL=C sort -u > "$keep" && [ -s "$keep" ]; then
+        cat "$keep"
+      else
+        # No usable verdict -- keep everything rather than silently emptying the read-set.
+        cat "$ask"
+      fi
+    fi
+    [ -s "$sub" ] && cat "$sub"
+  } | LC_ALL=C sort -u
+  rm -f "$in" "$ask" "$sub" "$gl" "$keep"
 }
+# READSET_DROP_END
 
 say "fs_usage runs as root; fixtures run as '$RUN_AS'"
 rm -rf "$TRACE_ROOT"; mkdir -p "$TREE" "$WORK" || die "cannot create $TRACE_ROOT"
