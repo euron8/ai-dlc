@@ -3321,6 +3321,11 @@ verify: sh f=core/fixtures/agent-definition-render/run.sh; [ -f "$f" ] || exit 9
 
 ## BL-273 — I33b's batched grammar narrowed on `${VAR/../…}` against an equivalence claim, and the one input separating the two implementations was in no corpus and no assertion
 
+**LANDED (v0.666.0, verified 9131a10e).** A27c was never dispatched: the fixture's enumerator
+`^A[0-9]{2}_` could not spell a lettered name, and A27c's raw-printf FAIL could not fail its
+worker. Both are fixed, a loose definition count now refuses an undispatched arm, and the receipt
+below runs A27c through `--run-one` instead of grepping for its name.
+
 **NOTE.** Found by the contract adversary auditing `0.594.0` and re-derived here. The release
 claims the batched predicate is equivalent to the per-file one, and on the live corpus it is —
 byte-identical stdout and stderr, 29 intermediate rows reproduced, 4 findings against 4 on a
