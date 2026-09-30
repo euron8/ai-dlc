@@ -203,6 +203,46 @@ if [ -n "$SEC_DIR" ]; then
   SEC_REL="$(rel_of "${SEC_PHYS:-$SEC_DIR}")"
   SEC_LOG="${PROJECT_DIR%/}/${SEC_REL}"
 fi
+# THE SAME DOCUMENT UNDER ANOTHER SPELLING (BL-380). The three spellings above are the manifest's
+# physical path, the project-relative one, and PROJECT_DIR plus that. A command reaching the
+# document through a symlink is none of them: a logical /tmp path where the harness hands a
+# physical project dir (its cwd is physical), or a path through a symlinked directory. Such a
+# token is the document when its DIRECTORY canonicalises, with `pwd -P`, to the document's own
+# and its basename is the document's -- the same directory entry, so nothing else can pass. The
+# directory is canonicalised rather than the file, because the file may not exist under that
+# spelling alone. Relative tokens resolve against PROJECT_DIR, where the validator runs them; a
+# directory that does not exist there (`../<path>` from the project dir) resolves to nothing and
+# names nothing. Only the file's `$ ` tokens ending in the document's basename are tried, and
+# only inside a split, so a write anywhere else pays no fork for it.
+self_aliases() { # -> the file's `$ ` tokens that name SELF_DOC under another spelling, one per line
+  local base ddir tok d c
+  base="$(basename "$SELF_DOC")"
+  ddir="$(cd "$(dirname "$SELF_DOC")" 2>/dev/null && pwd -P)" || return 0
+  [ -n "$ddir" ] || return 0
+  awk -v b="$base" -v q="'" '
+    function trim(t,   qs) {
+      qs = "\"" q "`"
+      while (length(t) && index(qs, substr(t, 1, 1))) t = substr(t, 2)
+      while (length(t) && index(qs, substr(t, length(t), 1))) t = substr(t, 1, length(t) - 1)
+      return t
+    }
+    /^[ \t]*\$ / {
+      for (f = 2; f <= NF; f++) {
+        t = trim($f)
+        if (t == b || substr(t, length(t) - length(b)) == "/" b) if (!seen[t]++) print t
+      }
+    }' "$FILE" 2>/dev/null |
+  # The directory part by expansion, never `dirname`: a token is command text, and one that opens
+  # with `-` is read as an option and prints a usage error onto the hook's stderr.
+  while IFS= read -r tok; do
+    case "$tok" in */*) d="${tok%/*}" ;; *) d=. ;; esac
+    case "$tok" in /*) d="${d:-/}" ;; *) d="${PROJECT_DIR%/}/${d}" ;; esac
+    c="$(cd "$d" 2>/dev/null && pwd -P)" || continue
+    [ -n "$c" ] && [ "$c" = "$ddir" ] && printf '%s\n' "$tok"
+  done
+}
+SELF_ALIASES=""
+[ -n "$SELF_DOC" ] && SELF_ALIASES="$(self_aliases)"
 
 # The text THIS tool call wrote. `content` for Write, `new_string` for Edit, every
 # `edits[].new_string` for MultiEdit -- whichever the payload carries.
@@ -229,7 +269,7 @@ printf '%s\n' "$PAYLOAD" > "$TMPD/payload.txt" 2>/dev/null || exit 0
 # index because nearly every payload has one and it would touch every pair.
 MASK="$TMPD/$(basename "$FILE")"
 DOOMED="$TMPD/doomed"
-awk -v sa="$SELF_DOC" -v sr="$SELF_REL" -v sl="$SELF_LOG" \
+SELF_ALIASES="$SELF_ALIASES" awk -v sa="$SELF_DOC" -v sr="$SELF_REL" -v sl="$SELF_LOG" \
     -v da="${SEC_PHYS:+$SEC_PHYS/}" -v dr="${SEC_REL:+$SEC_REL/}" -v dl="${SEC_LOG:+$SEC_LOG/}" -v dout="$DOOMED" '
 # lead(s): the leading blanks of s. shed(s, ind): s with the block indent removed -- exactly
 # `ind` when s carries it, else whatever leading blanks s has. The same two rules the
@@ -276,6 +316,13 @@ function under(s, d,   i, off) {
   }
   return 0
 }
+# aliased(s): s names the document under one of the canonicalised spellings self_aliases found.
+# Read from ENVIRON, not -v, which would strip one level of backslashes from each spelling.
+function aliased(s,   a) {
+  for (a = 1; a <= NAL; a++) if (names(s, AL[a])) return 1
+  return 0
+}
+BEGIN { NAL = (ENVIRON["SELF_ALIASES"] == "" ? 0 : split(ENVIRON["SELF_ALIASES"], AL, "\n")) }
 FNR==NR { if ($0 != "") PAY[$0]=1; next }
 { L[FNR]=$0; N=FNR }
 END {
@@ -299,7 +346,7 @@ END {
       # A part pair naming the split sections/ dir is doomed at assembly: recorded, refused below.
       for (k in tch) if (tch[k] && (under(L[k], da) || under(L[k], dr) || under(L[k], dl))) print k > dout
       # The section-copy exemption: a touched pair whose command names the split document.
-      for (k in tch) if (tch[k] && (names(L[k], sa) || names(L[k], sr) || names(L[k], sl))) tch[k]=0
+      for (k in tch) if (tch[k] && (names(L[k], sa) || names(L[k], sr) || names(L[k], sl) || aliased(L[k]))) tch[k]=0
       any=0
       for (k=i+1;k<j;k++) if (pid[k]>0 && tch[pid[k]]) any=1
       print (any ? L[i] : "")

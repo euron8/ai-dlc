@@ -488,6 +488,17 @@ if [ "$RC" = 0 ] && [ ! -s "$ERR" ] && seeded "$REPDIR/2.md" "$PAIR_DOT"; then
 else
   bad "a ./-prefixed document path in a repair part exited $RC — the leading ./ is not normalised"
 fi
+# A37b: the ./ token after a redirect, `<./<path>`. The canonical spelling (A44-A49) also resolves a
+# bare `./<path>` to the document, so A37 alone is covered by two guards and a mutant of either
+# survives. Here the whitespace field is `<./...`, whose directory does not exist, so only the ./
+# normalisation in the token match can exempt it. Written into part 1.md, which no other arm touches.
+PAIR_DOTREDIR="$(printf '```derived\n$ grep -c scope <./%s\n96\n```' "$SELF_REL")"
+sec_write "$REPDIR/1.md" "$PAIR_DOTREDIR"
+if [ "$RC" = 0 ] && [ ! -s "$ERR" ] && seeded "$REPDIR/1.md" "$PAIR_DOTREDIR"; then
+  ok "repair part, the document spelled <./<path> -> exit 0 (the ./ after a redirect is the same token)"
+else
+  bad "a redirected ./-prefixed document path in a repair part exited $RC — the leading ./ is not normalised"
+fi
 sec_write "$REPDIR/2.md" "$PAIR_DOTDOT"
 if [ "$RC" = 2 ] && grep -q 'is not backed by' "$ERR"; then
   ok "repair part, the document spelled ../<path> -> exit 2 (a different file)"
@@ -595,6 +606,113 @@ if [ "$RC" = 2 ] && grep -q 'is not backed by' "$ERR" \
   ok "a sections/2.md with a listing manifest but outside shards/*-repair-p*/, the same pair -> exit 2"
 else
   bad "a manifest-carrying copy outside a repair dir exited $RC (expected 2) — the exemption is not keyed on the repair-dir path"
+fi
+
+# --- A44-A48: THE SAME DOCUMENT UNDER ANOTHER SPELLING (BL-380) ---------------------------------
+# The manifest stores the document's PHYSICAL path, and the three spellings the exemption compared
+# are that path, the project-relative one, and CLAUDE_PROJECT_DIR plus it. The harness's cwd is
+# physical, so a command reaching the document through a symlink -- a logical /tmp path, or a
+# directory that is itself a link -- matched none of them and a correct self-derivation was
+# refused. Every arm writes into sections/1.md, which no earlier arm touches, silent arms first and
+# near-misses last, so a file-grain mask cannot drag an earlier stale pair into a silent arm.
+S1="$REPDIR/sections/1.md"
+PD_PHYS="$(cd "$CONSUMER" && pwd -P)"
+fire_pd() { # <project dir> <json> -> fire with the project dir spelled as given
+  printf '%s' "$2" | CLAUDE_PROJECT_DIR="$1" bash "$HOOK" >"$OUT" 2>"$ERR"
+  RC=$?
+}
+# pair_on <path> [output]: the near-misses each record their OWN output, because a recorded output
+# line in the payload touches every pair in the file that records it, and a shared `97` would drag
+# an earlier near-miss's stale pair into a later arm and refuse it for the wrong reason.
+pair_on() { printf '```derived\n$ grep -c scope %s\n%s\n```' "$1" "${2:-97}"; }
+# A second prd.md in ANOTHER directory: the near-misses spell a path whose basename is the
+# document's and whose canonical directory is not. It carries no `scope` line, so 97 is stale.
+OTHER_DIR="$CONSUMER/_bmad-output/planning-artifacts/s2"
+mkdir -p "$OTHER_DIR"; printf '# other\n' > "$OTHER_DIR/prd.md"
+# The ancestor alias: a symlink to the project root itself, OUTSIDE it, as /tmp is to /private/tmp.
+ALIAS="$WORK/alias-root"; ln -s "$CONSUMER" "$ALIAS"
+# The in-project alias: a directory link inside the project, spelled relative.
+ln -s _bmad-output/planning-artifacts/s1 "$CONSUMER/lnk"
+ln -s _bmad-output/planning-artifacts/s2 "$CONSUMER/lnk2"
+
+# A44: the ancestor alias, the harness handing the PHYSICAL project dir. The arm first proves the
+# two spellings differ and resolve to one directory, or it compares a spelling with itself.
+PAIR_ALIAS="$(pair_on "$ALIAS/$SELF_REL")"
+if [ "$ALIAS/$SELF_REL" != "$PD_PHYS/$SELF_REL" ] && [ "$(cd "$ALIAS" && pwd -P)" = "$PD_PHYS" ]; then
+  mkdir -p "$(dirname "$S1")"; printf '\n%s\n' "$PAIR_ALIAS" >> "$S1"
+  fire_pd "$PD_PHYS" "$(edit_json "$S1" "$PAIR_ALIAS")"
+  if [ "$RC" = 0 ] && [ ! -s "$ERR" ] && seeded "$S1" "$PAIR_ALIAS"; then
+    ok "section copy, the document spelled through a symlinked ANCESTOR, physical project dir -> exit 0"
+  else
+    bad "the document spelled through a symlinked ancestor exited $RC — a logical spelling of the split document is refused"
+  fi
+else
+  bad "FIXTURE BROKEN: the ancestor alias does not differ from, or does not resolve to, $PD_PHYS"
+fi
+
+# A45: the in-project directory link, spelled relative.
+PAIR_LNK="$(pair_on "lnk/prd.md")"
+sec_write "$S1" "$PAIR_LNK"
+if [ "$RC" = 0 ] && [ ! -s "$ERR" ] && seeded "$S1" "$PAIR_LNK" && [ -L "$CONSUMER/lnk" ]; then
+  ok "section copy, the document spelled through an in-project directory symlink -> exit 0"
+else
+  bad "the document spelled through a symlinked directory exited $RC — a path through a directory link is refused"
+fi
+
+# A46: the literal /tmp spelling. A second seed under /tmp, whose manifest therefore holds the
+# /private/tmp path, driven with the physical project dir as the harness has it. Where /tmp is not
+# a symlink the spelling cannot differ and the arm says so instead of passing.
+if [ "$(cd /tmp && pwd -P)" != /tmp ] && TW="$(TMPDIR=/tmp bash "$HERE/seed.sh" 2>/dev/null)" && [ -f "$TW/env.sh" ]; then
+  # Cleaned by the EXIT trap with the other temp dirs this run made outside $WORK.
+  NOROOT_DIRS="${NOROOT_DIRS:-} $TW"
+  T_CONSUMER="$( . "$TW/env.sh"; printf '%s' "$CONSUMER" )"; T_REPDIR="$( . "$TW/env.sh"; printf '%s' "$REPDIR" )"
+  T_HOOK="$( . "$TW/env.sh"; printf '%s' "$HOOK" )"
+  T_PHYS="$(cd "$T_CONSUMER" && pwd -P)"
+  T_DOCLINE="$(sed -n 's/^document	//p' "$T_REPDIR/sections/.manifest")"
+  PAIR_TMP="$(pair_on "$T_CONSUMER/$SELF_REL")"
+  printf '\n%s\n' "$PAIR_TMP" >> "$T_REPDIR/sections/1.md"
+  printf '%s' "$(edit_json "$T_REPDIR/sections/1.md" "$PAIR_TMP")" | CLAUDE_PROJECT_DIR="$T_PHYS" bash "$T_HOOK" >"$OUT" 2>"$ERR"
+  RC=$?
+  case "$T_CONSUMER" in /tmp/*) T_LOGICAL=1 ;; *) T_LOGICAL=0 ;; esac
+  if [ "$T_LOGICAL" = 1 ] && [ "$T_DOCLINE" = "$T_PHYS/$SELF_REL" ] && [ "$T_PHYS" != "$T_CONSUMER" ] \
+     && [ "$RC" = 0 ] && [ ! -s "$ERR" ]; then
+    ok "section copy, the document spelled /tmp/... with the manifest and project dir at /private/tmp/... -> exit 0"
+  else
+    bad "the /tmp spelling of a /private/tmp document exited $RC (manifest '$T_DOCLINE', project dir '$T_PHYS', command under '$T_CONSUMER')"
+  fi
+else
+  printf '  n/a   the /tmp spelling: /tmp is not a symlink on this host, so A44 and A45 carry the mechanism\n'
+fi
+
+# A47: NEAR-MISS through the ancestor alias -- the same basename in ANOTHER directory. The
+# canonical directory differs, so it is a different file and is witnessed.
+PAIR_ALIAS_OTHER="$(pair_on "$ALIAS/_bmad-output/planning-artifacts/s2/prd.md" 91)"
+printf '\n%s\n' "$PAIR_ALIAS_OTHER" >> "$S1"
+fire_pd "$PD_PHYS" "$(edit_json "$S1" "$PAIR_ALIAS_OTHER")"
+if [ "$RC" = 2 ] && grep -q 'is not backed by' "$ERR" && [ -f "$ALIAS/_bmad-output/planning-artifacts/s2/prd.md" ]; then
+  ok "section copy, another prd.md spelled through the ancestor alias -> exit 2 (a different directory)"
+else
+  bad "another directory's prd.md through the ancestor alias exited $RC (expected 2) — the canonical spelling acquits a different file"
+fi
+
+# A48: NEAR-MISS through an in-project link to the OTHER directory.
+PAIR_LNK_OTHER="$(pair_on "lnk2/prd.md" 92)"
+sec_write "$S1" "$PAIR_LNK_OTHER"
+if [ "$RC" = 2 ] && grep -q 'is not backed by' "$ERR" && [ -L "$CONSUMER/lnk2" ]; then
+  ok "section copy, lnk2/prd.md linking to another directory -> exit 2"
+else
+  bad "a directory link to another prd.md exited $RC (expected 2) — the canonical spelling is keyed on the basename alone"
+fi
+
+# A49: NEAR-MISS in the document's OWN directory, through the same link: a different basename is a
+# different file, though its directory canonicalises to the document's.
+printf '# notes\n' > "$CONSUMER/_bmad-output/planning-artifacts/s1/notes.md"
+PAIR_LNK_SIB="$(pair_on "lnk/notes.md" 93)"
+sec_write "$S1" "$PAIR_LNK_SIB"
+if [ "$RC" = 2 ] && grep -q 'is not backed by' "$ERR" && [ -f "$CONSUMER/lnk/notes.md" ]; then
+  ok "section copy, lnk/notes.md beside the document -> exit 2 (same directory, another file)"
+else
+  bad "a sibling of the document through the link exited $RC (expected 2) — the canonical spelling is keyed on the directory alone"
 fi
 
 # --- A14: the artifact is not modified by the hook ----------------------------
