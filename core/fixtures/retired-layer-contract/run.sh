@@ -69,12 +69,12 @@ grep -q 'retro-domain.md' <<<"$OUT" \
 # base == theirs, so the retired set is empty and the detector must report no finding.
 #
 # BOTH REFS ARE `BASE`, AND THAT IS LOAD-BEARING. This arm used to pass `THEIRS THEIRS`,
-# which does not exercise the empty-retired-set branch at all: the seeded rulebook at
+# which did not exercise the empty-retired-set branch at all: the seeded rulebook at
 # THEIRS carries NO contract shape (that is what the release retired), so that invocation
-# trips the unreadable-base guard instead and exits before the retired set is ever
-# computed. The arm asserted empty stdout, got it from the wrong branch, and read as a
-# pass for nine releases. `BASE BASE` gives a ref whose rulebook HAS shapes and whose
-# retired set is genuinely empty, which is the case this arm names.
+# took a shapeless-base exit, since removed, before the retired set was ever computed. The
+# arm asserted empty stdout, got it from the wrong branch, and read as a pass for nine
+# releases. `BASE BASE` gives a ref whose rulebook HAS shapes and whose retired set is
+# genuinely empty, which is the case this arm names.
 NOOP="$(bash "$SCRIPT" "$DIST" "$BASE" "$BASE" "$CONSUMER" 2>/dev/null)"
 [ -z "$NOOP" ] && ok "a release that retires nothing reports no finding" \
   || bad "the detector reported a finding when base and theirs are identical — it is not deriving the retired set"
@@ -86,8 +86,9 @@ NOOP="$(bash "$SCRIPT" "$DIST" "$BASE" "$BASE" "$CONSUMER" 2>/dev/null)"
 # consumer's 0.356.0 -> 0.357.0 pull: the retired set was empty, this branch was taken, and
 # the clean read was taken as evidence about layer files the run never read.
 NOOPERR="$(bash "$SCRIPT" "$DIST" "$BASE" "$BASE" "$CONSUMER" 2>&1 >/dev/null)"
-# Control: this must be the empty-retired-set branch, NOT the unreadable-base guard that
-# the old `THEIRS THEIRS` form reached. Without this the arm could pass on the wrong exit.
+# Control: this must be the empty-retired-set branch, NOT a refusal. `refusing to report
+# clean` is the phrase every unreadable-rulebook refusal carries. Without this the arm could
+# pass on the wrong exit.
 grep -q 'refusing to report clean' <<<"$NOOPERR" \
   && bad "  the empty-retired-set arm reached the unreadable-base guard instead — it is testing the wrong branch" \
   || ok "  and it reached the empty-retired-set branch, not the unreadable-base guard"
@@ -667,6 +668,85 @@ if rlcmut u1-sites-unread -f "$RLC_SITES_SED"; then
     else
       ok "  mutant [u1-sites-unread] KILLED by U1: with the base read restored, an unreadable list reads as a clean run ($RLC_UWHY)"
     fi
+  fi
+fi
+
+# =============================================================================
+# S1  A SHAPELESS BASE RULEBOOK STILL REACHES THE PATH ARM
+#
+# THE DEFECT. A base rulebook that was READ and carries no contract shape made the detector print
+# one stderr line and exit 0 before the path arm ran. Every UNREADABLE-rulebook case already
+# refuses with exit 2 elsewhere, so that exit refused nothing -- it only swallowed the true path
+# row of a release that deleted a rulebook file a layer file cites. Measured before the fix on
+# this world: 0 rows at rc 0, against 1 row per citing file once the exit is gone.
+#
+# THE WORLD IS PROVEN SHAPELESS BEFORE A VERDICT IS READ OFF IT. The seed keeps backticks in the
+# rewritten role file, because a backtick-free seed is shapeless for a trivial reason and reads 0
+# rows under the fixed detector too if the path arm is ever gated on shapes -- nothing would
+# discriminate. The control asserts the shaped BASE copy carries a labelled directive and the
+# shapeless one carries a backtick and no labelled directive, in the same run.
+#
+# SKIPS on a consumer whose installed detector predates the fix: this fixture ships a pull ahead
+# of the code it guards, and there the refusal line is still present. In the distribution it runs
+# regardless, so a pre-fix detector goes red here.
+# =============================================================================
+echo
+echo "  --- a shapeless base rulebook still reaches the path arm ---"
+case "$SCRIPT" in */core/skills/ai-dlc-update/reconcile/retired-layer-contract.sh) S_ISDIST=1 ;; *) S_ISDIST=0 ;; esac
+S_RUN=1
+if [ -z "${SHAPELESS_BASE:-}" ] || [ -z "${SHAPELESS_THEIRS:-}" ]; then
+  echo "FIXTURE ERROR: seed.sh wrote no SHAPELESS_BASE/SHAPELESS_THEIRS into env.sh" >&2; exit 2
+fi
+if grep -qF 'could not read any rulebook contract shape' "$SCRIPT"; then
+  if [ "$S_ISDIST" = 0 ]; then
+    printf '  SKIP  S1 -- the installed retired-layer-contract.sh predates the shapeless-base fall-through; it lands with the pull that carries this fixture (this is not a pass)\n'
+    S_RUN=0
+  else
+    printf '  --    (S1: this retired-layer-contract.sh still carries the shapeless-base exit; in the distribution S1 runs anyway and must go red)\n'
+  fi
+fi
+S_LBL='^- [A-Z][A-Za-z-]*: \\?`/[a-z]'
+s_role() { git -C "$DIST" show "${1}:core/team-roles/architect.md" 2>/dev/null; }
+S_B_SHAPED="$(s_role "$BASE")"; S_B_LESS="$(s_role "$SHAPELESS_BASE")"
+if grep -qE -- "$S_LBL" <<<"$S_B_SHAPED" && ! grep -qE -- "$S_LBL" <<<"$S_B_LESS" && grep -qF '`' <<<"$S_B_LESS"; then
+  ok "  S1 control: BASE's role file carries a labelled directive; SHAPELESS_BASE's carries backticks and none"
+else
+  echo "FIXTURE ERROR: the shapeless-base world is not shapeless-with-backticks, so S1 cannot discriminate" >&2; exit 2
+fi
+# s1 <script> -> 0 when the shapeless world yields the entry-spelling path row, by value, and no shape row
+S1_WHY=""
+s1() {
+  local o rc
+  o="$(bash "$1" "$DIST" "$SHAPELESS_BASE" "$SHAPELESS_THEIRS" "$CONSUMER" 2>/dev/null)"; rc=$?
+  S1_WHY="rc=$rc rows=$(printf '%s\n' "$o" | grep -c .)"
+  [ "$rc" -eq 0 ] || return 1
+  [ -n "$(awk -F'\t' '$1 == "RETIRED-LAYER-CONTRACT" && $2 == ".claude/skills/ai-dlc/extensions/steps-domain/path-entry-spelling.md" && $3 == "path:core/skills/ai-dlc/steps/route.md"' <<<"$o")" ] || return 1
+  [ -z "$(awk -F'\t' 'NF && $3 !~ /^path:/' <<<"$o")" ]
+}
+if [ "$S_RUN" = 1 ]; then
+  if s1 "$SCRIPT"; then
+    ok "S1 a shapeless base rulebook plus a retired rulebook path yields the path row, by value, and no shape row ($S1_WHY)"
+  else
+    bad "S1 a shapeless base rulebook swallowed the retired-path row ($S1_WHY) -- a base carrying no contract shape is a result, not a refusal, and the path subtraction still has a subject"
+  fi
+  # THE MUTANT RESTORES THE EXIT: a shapeless base ends the run with exit 0 before the path arm.
+  # Inserted before `count_of`, which is where it sat. It must fail S1 alone: assertion 7 (the
+  # shaped PATH_ONLY world) and the shape control must still hold on it.
+  S_MUT_SED="$WORK/m-shapeless.sed"
+  printf '%s\n' '/^count_of() {/i\' \
+    '[ -n "$BASE_SET" ] || { echo "retired-layer-contract: mutant shapeless-base exit" >&2; exit 0; }' > "$S_MUT_SED"
+  if rlcmut s1-shapeless-exit -f "$S_MUT_SED"; then
+    if s1 "$RLC_MUT"; then
+      bad "MUTANT SURVIVED [s1-shapeless-exit]: with the shapeless-base exit restored, S1 still passed ($S1_WHY)"
+    else
+      ok "  mutant [s1-shapeless-exit] KILLED by S1: the restored exit swallows the path row ($S1_WHY)"
+    fi
+    if [ -n "$(rlcrun "$RLC_MUT")" ]; then
+      ok "  mutant [s1-shapeless-exit]: assertion 7's shaped path-only world still emits, so the kill is S1's alone"
+    else
+      bad "mutant [s1-shapeless-exit] also silenced assertion 7's shaped world -- the mutation is not confined to a shapeless base"
+    fi
+    rlcctl s1-shapeless-exit "$RLC_MUT"
   fi
 fi
 

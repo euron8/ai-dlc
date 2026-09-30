@@ -337,12 +337,26 @@ p7() {
   o="$(out_of "$1" "$BASE_SHA" "$CORE_PATH")"; e="$(err_of "$1" "$BASE_SHA" "$CORE_PATH")"
   grep -q 'RETIRED-CONTRACT-TOKEN.*\$ROOT/\.chan' <<<"$o" && [ -z "$e" ]
 }
+# p8 ASSERTS THE EXIT, NOT ONLY THE MESSAGE. Both callers discard this detector's stderr and read
+# its rows and its exit, so a refusal that exits 0 reaches them as a clean run with no row -- the
+# message alone was satisfied by exactly that. The exit must be 2, the refusal code.
+#
+# SKIPPED (the rc conjunct only) on a consumer whose installed detector predates the exit-2
+# refusal: this fixture ships a pull ahead of the code. In the distribution it always binds.
+case "$DETECT" in */core/skills/ai-dlc-update/reconcile/retired-tokens.sh) P8_ISDIST=1 ;; *) P8_ISDIST=0 ;; esac
+P8_RC=1
+if [ "$P8_ISDIST" = 0 ] && ! sed -n '/produced no rows/,/^fi$/p' "$DETECT" | grep -q '^  exit 2$'; then
+  printf '  SKIP  p8 exit-code conjunct -- the installed retired-tokens.sh predates the exit-2 refusal; it lands with the pull that carries this fixture (this is not a pass)\n'
+  P8_RC=0
+fi
+rc_of() { bash "$1" "$DIST" "$2" "$THEIRS_SHA" "$CONS" >/dev/null 2>&1; printf '%s' "$?"; }
 p8() {
   seed_at_theirs
   o="$(out_of "$1" "$THEIRS_SHA")"; e="$(err_of "$1" "$THEIRS_SHA")"
   [ -z "$(printf '%s' "$o" | grep . || true)" ] \
     && grep -q 'produced no rows' <<<"$e" \
-    && ! grep -q 'NOTE --' <<<"$e"
+    && ! grep -q 'NOTE --' <<<"$e" || return 1
+  [ "$P8_RC" = 0 ] || [ "$(rc_of "$1" "$THEIRS_SHA")" = 2 ]
 }
 
 # The world p5 drives must PRODUCE preclassify rows, or the wrong fix keyed on "no rows"
@@ -435,6 +449,12 @@ score "limit-dropped" "$(mkmut nolimit 's| \$LIMIT" >&2$|" >\&2|')" "0111"
 score "requires-listed" "$(mkmut reqlisted 's|^if \[ "\$opened" -eq 0 \]; then|[ "$listed" -gt 0 ] \|\| exit 0; if [ "$opened" -eq 0 ]; then|')" "0111"
 # Refusal neutered: an unresolvable input falls through to the vacuity NOTE. p8 alone falls.
 score "refusal-neutered" "$(mkmut norefuse 's|^  echo "retired-tokens: preclassify.sh produced no rows|  : "|')" "1110"
+# The refusal keeps its message and exits 0 -- the pre-fix contract, which both callers read as a
+# clean run with no row because each discards stderr. p8 alone falls, on its exit conjunct. Anchored
+# inside the refusal block, because `if [ -z "$ROWS" ]` opens two blocks and `exit 2` closes many.
+if [ "$P8_RC" = 1 ]; then
+  score "refusal-exits-0" "$(mkmut refuse0 '/produced no rows/,/^fi$/s|^  exit 2$|  exit 0|')" "1110"
+fi
 
 echo ""
 if [ "$fails" -eq 0 ]; then

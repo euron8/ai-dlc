@@ -58,19 +58,24 @@
 #   never touched them), not ALREADY-AT-THEIRS, so read the NOTE's counts and not this
 #   header for the cause. Its siblings carried a NOTE for the same state; this one did not. A
 #   run that opened files and matched nothing states its denominator for the same
-#   reason. A run where preclassify.sh listed nothing at all -- an empty range, a bad
-#   ref, an unreadable dist -- is refused rather than read as clean; no program caller
-#   can reach that state (both call from inside a CLASSIFY case arm), so the by-hand
-#   run is its only reader. A run that produced rows says nothing on stderr: the rows
-#   are the answer.
+#   reason. A run where preclassify.sh listed nothing at all -- a docs-only release or
+#   base == theirs, a bad ref, an unreadable dist -- is REFUSED with exit 2 rather than
+#   read as clean. No program caller can reach that state (both call from inside a
+#   CLASSIFY case arm, and the update skill stops a base == theirs pull before either
+#   runs), so the by-hand run is its usual reader; a caller that did reach it would
+#   render the exit as a refusal -- `emit-report.sh` as `DETECTOR-REFUSED`, `apply.sh` as
+#   `DECISION retired-tokens-refused` -- never as `none`. It used to exit 0, so the one
+#   channel either caller reads said "clean". A run that produced rows says nothing on
+#   stderr: the rows are the answer.
 #   `emit-report.sh` discards stderr and reads the rows and the exit. `apply.sh` stages
 #   stderr beside the rows and, on a non-zero exit, quotes its first `: REFUSED` line
 #   (else its line 1) in `DECISION retired-tokens-refused`; on exit 0 it reads the rows
 #   only. The NOTE is for the operator running step 3a-ii by hand.
 #
 # EXIT
-#   0  always when it ran (a detector reports; the caller decides)
-#   2  a producer this detector reads did not run -- a refusal, never a finding or a clean
+#   0  it listed a subject set and reported on it (rows, or a NOTE naming what it opened)
+#   2  a refusal, never a finding or a clean: a producer this detector reads did not run,
+#      or preclassify.sh listed no rows at all, so no subject set exists to report on
 
 set -u
 
@@ -143,10 +148,11 @@ fi
 # release, or base == theirs), a ref that did not resolve, or an unreadable dist. All
 # three mean NO core file was scanned. Refuse to read it as clean -- "no rows" and "no
 # retired token" are the same stdout -- and name every cause, because a refusal that
-# lists only the exotic ones misdiagnoses the common one.
+# lists only the exotic ones misdiagnoses the common one. EXIT 2, the refusal code: an
+# exit 0 here reached both callers as a clean run, since each discards stderr.
 if [ -z "$ROWS" ]; then
   echo "retired-tokens: preclassify.sh produced no rows for ${BASE}..${THEIRS} (no file under a mapped core path moved between them, a ref did not resolve, or the dist is unreadable) -- refusing to report clean, because 'no rows' and 'no retired token' are the same output. $LIMIT" >&2
-  exit 0
+  exit 2
 fi
 
 SUBJECT="$(printf '%s\n' "$ROWS" | awk -F'\t' 'NF>=4 && $4 ~ /CLASSIFY/ {print $2"\t"$3}' | sort -u)"
