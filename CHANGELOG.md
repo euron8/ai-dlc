@@ -15,6 +15,45 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.669.0] - 2026-09-30
+
+Batch 175's second release. Discharges one consumer candidate and fixes `BL-089`, `BL-331`,
+`BL-338`, `BL-380`, `BL-382`, `BL-386` and `BL-387`; `BL-230` is fixed in part, and `BL-308`,
+fixed in 0.667.0, can now rotate. No file here is one the update engine runs on itself.
+
+### Consumer candidate
+
+- **`PC-S315-NO-AMENDMENT-PATH-FOR-A-NOTARIZED-ARTIFACT-AFTER-A-STORY-DECISION`** (`BL-385`).
+  Editing a notarized SPEC or sprint artifact after its series stamped `EXIT_CONDITION_MET` broke no
+  gate; the consumer's SPEC moved after MET in two sprints with nothing reading the disclosure. Check
+  24 arm J2 now compares the terminal MET pass's notarized file with the disk and requires a chain of
+  structured repair links, or one operator-authorized `REOPEN_AFTER_MET` record plus a verify pass for
+  a scope change. Arm J validates the record it cites and F5 checks `REOPEN_AFTER_MET`. Cumulative
+  documents are excluded, and the arm is stamp-gated on each series' first pass: on the consumer's 87
+  series it reports PENDING on 10 and FAIL on none. J reclassifies two closed sprints, s303 coe and
+  s307 architecture, whose authorizing transcripts are no longer on disk. The remediator and
+  gate-repair records gain `artifact_sha_before`/`artifact_sha_after`.
+
+### Backlog
+
+- **`BL-382`**, **`BL-387`** — `backlog-reverify.sh` and `validate-backlog-receipts.sh` no longer
+  leak `reconcile/lib.sh`'s memo state into the receipts they evaluate. `BL-308`'s receipt now
+  reads the same through both engines as it does alone.
+- **`BL-089`** — `backlog-reverify.sh` routes a receipt whose own shell reports `command not
+  found`, a syntax error or a missing file to NEEDS-REVIEW, not STILL-LIVE. Over 36 live and 300
+  archived receipts, nothing moved.
+- **`BL-331`** — under the install fallback, `validate-write-format-steering.sh` also judges the
+  project root's own declared files, so a stale root copy fails in the consumer layout.
+- **`BL-380`**, **`BL-386`** — the derivation-capture hook's section-copy exemption and refusal
+  both see a path spelled through a symlink.
+- **`BL-338`** — `reconcile-emit-report`'s R6 guard reports a shipped detector refusing on one
+  world as an ENGINE REGRESSION, not FIXTURE BROKEN.
+- **`BL-230`**, in part — the fixture's own four process substitutions are staged and their
+  producers' exit status read. The pool flake's cause is still open.
+
+Read-set traces owed for `derivation-capture`, `derivation-capture-mutants`,
+`backlog-receipt-binding` and `check-24-adversarial-convergence`.
+
 ## [0.668.0] - 2026-09-30
 
 Batch 175's first release. Discharges two consumer candidates, ships a rehearsed brief that closes

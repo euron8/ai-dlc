@@ -1035,6 +1035,34 @@ validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -
         fi
       fi
       ;;
+    REOPEN_AFTER_MET)
+      # An AMENDMENT of a notarized artifact, after its series stamped EXIT_CONDITION_MET. Like
+      # the two kinds above it cannot be anchored arithmetically -- an amendment can grow, shrink
+      # or hold size -- so it carries the same burden: the bytes MOVED, and the record says what
+      # moved. A SPEC.md record names the capability or requirement it moves (a CAP-<n> or an
+      # FR-S<N>-<n>), because a spec amendment is a scope change and a scope change that names
+      # nothing is a repair wearing a resolution's name.
+      if [ -z "$sha_a" ] || [ "$sha_a" = "$sha_b" ]; then
+        F_WHY="$rec declares REOPEN_AFTER_MET but the artifact did not change
+      (sha_before=${sha_b:-<none>}, sha_after=${sha_a:-<none>}). A re-open records bytes that
+      MOVED after the series notarized them; unchanged bytes are not an amendment."
+        return 1
+      fi
+      if [ -z "$delta" ]; then
+        F_WHY="$rec declares REOPEN_AFTER_MET with no 'scope_delta:'. Name what moved."
+        return 1
+      fi
+      local r_art r_re='(CAP-[0-9]+|FR-S[0-9]+-[0-9]+)'
+      r_art="$(record_field "$rec" 'artifact')"
+      r_art="${r_art%%[[:space:]]*}"
+      if [ "${r_art##*/}" = "SPEC.md" ] && ! [[ "$delta" =~ $r_re ]]; then
+        F_WHY="$rec declares REOPEN_AFTER_MET over SPEC.md and its scope_delta names no CAP-<n>
+      or FR-S<N>-<n> ('$delta'). A spec amendment moves a capability or a requirement; name
+      the one it moves, so the re-render through bmad-spec and the prd.md sprint-block FR can be
+      checked against it."
+        return 1
+      fi
+      ;;
   esac
 
   # F6 -- OPERATOR CITATION. Every resolution CLEARS a HARD_BLOCK, and a HARD_BLOCK is
@@ -1537,8 +1565,23 @@ for ((i = 0; i + 1 < N; i++)); do
       an improvement is deferred to the NEXT step's artifact or it re-opens this series on the
       record -- it does not simply happen."
   else
-    # A declared re-open is a sanctioned exit, exactly as a resolved hard block is.
-    REOPEN_LIVE=0
+    # A declared re-open is a sanctioned exit, exactly as a resolved hard block is -- and only
+    # when the record it cites IS one. This door used to accept any string in
+    # `resolves_divergence:`, so a series citing a record that was never written, or one that
+    # resolves some other pass, or one no operator authorized, walked through it. The citation
+    # is now held to the same validate_record arm F holds a hard block's to: it must exist,
+    # point back at THIS MET pass, anchor on the sha that pass notarized, agree with its own
+    # kind (F5) and cite the operator (F6, F7).
+    j_rec="${P_RESOLVES[$j]}"
+    [ -f "$j_rec" ] || [ -z "${j_rec##/*}" ] || j_rec="$(dirname "${P_FILE[$j]}")/$(basename "$j_rec")"
+    if validate_record "$j_rec" "${P_FILE[$i]}" "$i"; then
+      REOPEN_LIVE=0
+    else
+      err "J -- REOPEN" "$REOPEN_AT re-opens $REOPEN_FROM citing '${P_RESOLVES[$j]}', but $F_WHY
+      A re-open is sanctioned by a VALID record, not by the field naming one. Write the
+      'resolution: REOPEN_AFTER_MET' record against $REOPEN_FROM (_gate-procedures.md, the
+      amendment procedure) and cite it."
+    fi
   fi
 done
 
@@ -1826,6 +1869,25 @@ fi
 K2_RELEASE="0.665.0"
 K2_PD="$(cd "$(dirname "$0")" && pwd)/partition-document.sh"
 
+# THE STAMP HISTORY, READ ONCE PER ROOT. K2 and J2 both date a series against the first commit
+# stamping `.claude/.ai-dlc-version`; each parses the same `git log -p` text with its own release
+# bound to K_RELEASE. Staged to a file so the second arm pays no second `git` fork. Sets STAMP_LOG
+# (an empty file when there is no git or no history). A git hook exports GIT_DIR/GIT_WORK_TREE,
+# which would redirect `git -C` to the hook's own repository -- unset, as arm K does.
+STAMP_ROOT=""
+STAMP_LOG="$AC_T/stamp-log"
+stamp_log() {  # $1 root
+  [ "$1" = "$STAMP_ROOT" ] && [ -f "$STAMP_LOG" ] && return 0
+  STAMP_ROOT="$1"
+  : > "$STAMP_LOG" || { echo "validate-adversarial-convergence.sh: the stamp history could not stage; no verdict" >&2; exit 2; }
+  command -v git >/dev/null 2>&1 || return 0
+  ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+    TZ=UTC0 git -C "$1" log --no-color --no-ext-diff -p \
+      --date=format-local:%Y-%m-%dT%H:%M:%SZ --format='C %cd' \
+      -- .claude/.ai-dlc-version 2>/dev/null ) > "$STAMP_LOG"
+  return 0
+}
+
 k2_resolve_file() {  # $1 pass file, $2 artifact token -> K2_FILE (empty when no FILE resolves)
   K2_FILE=""
   kt="$2"
@@ -1939,12 +2001,9 @@ if [ -n "$K2_CAND" ]; then
     exit 2
   fi
   k2_stamp=""
-  if [ -n "$k2_root" ] && command -v git >/dev/null 2>&1; then
-    # Unset the hook's git environment, as arm K does, or `git -C` answers about the hook's repo.
-    k2_stamp="$( ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
-                   TZ=UTC0 git -C "$k2_root" log --no-color --no-ext-diff -p \
-                     --date=format-local:%Y-%m-%dT%H:%M:%SZ --format='C %cd' \
-                     -- .claude/.ai-dlc-version 2>/dev/null ) | K_RELEASE="$K2_RELEASE" k_stamp_parse)"
+  if [ -n "$k2_root" ]; then
+    stamp_log "$k2_root"
+    k2_stamp="$(K_RELEASE="$K2_RELEASE" k_stamp_parse < "$STAMP_LOG")"
   fi
   case "$k2_at" in
     [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) k2_atok=1 ;;
@@ -2112,6 +2171,198 @@ for ((h = 0; h + 1 < N; h++)); do
       repair, which is why this arm reads the record, not the series."
   fi
 done
+
+# =============================================================================
+# J2. TERMINAL DRIFT -- the file the terminal MET pass notarized moved, and nothing says how.
+# =============================================================================
+# GATE ONLY, like K, K2 and H: --cycle-state has exited above, and this arm reads git.
+#
+# Arm J sees a re-open only when a LATER PASS runs over moved bytes. An artifact edited after
+# its series stamped EXIT_CONDITION_MET, with no later pass, broke no gate: the gate read the
+# pass file and never the artifact. Measured on the reference consumer, two sprints running --
+# a SPEC.md moved after MET through an out-of-band residue repair, and another moved twice
+# through a gate repair and a re-derive -- each disclosed in prose nothing reads.
+#
+#   subject    the TERMINAL pass, `$LAST_FILE`, when it stamps EXIT_CONDITION_MET; its
+#              `artifact:` resolves (k2_resolve_file) to ONE regular file; its `artifact_sha:` is
+#              ONE sha256; and the file is a SPEC.md or lives under `planning-artifacts/s<N>/`.
+#   PASS       the file's sha256 on disk equals the notarized sha; or a CHAIN of repair links
+#              runs from the notarized sha to the disk sha. A link is any `*-repair-p*.md` in the
+#              pass directory whose `artifact:` resolves to the same file, whose
+#              `artifact_sha_before:` / `artifact_sha_after:` are each one sha256, and which is
+#              structured for arm H (disposition, edit, derivation). Each link's before is the
+#              previous link's after.
+#   FAIL       no complete chain; or two links share the before the walk stands on (a fork --
+#              both are named). The series' FIRST pass is at or after the first commit stamping
+#              `.claude/.ai-dlc-version` at J2_RELEASE or later (`k_stamp_parse`, K_RELEASE
+#              rebound, the history read once per root by `stamp_log`).
+#   PENDING    printed, never counted: no such stamp, no git work tree, a first pass opened
+#              before the stamp, or a first `invoked_at` that is not ISO 8601 UTC.
+#
+# THE REMEDY FOR A SCOPE CHANGE IS A RE-OPEN, NOT A LINK. One REOPEN_AFTER_MET record from the
+# notarized sha to the disk sha plus ONE verify pass in this series makes the verify pass
+# terminal; its sha is the disk sha, this arm is quiet, and arm J owns the record.
+#
+# RESIDUE, stated so it is not read as coverage: cumulative documents -- `prd.md`,
+# `product-brief.md`, `docs/architecture.md` -- are edited by every sprint and are not in the
+# subject; a comma list in `artifact:` resolves to no file; a directory is arm K's; a
+# `<stem>=<sha>` list is not one sha256. None of those is judged. A repair link is existence +
+# structure: a repair record written for what was really a scope change is a false statement
+# this arm cannot see, and a pass file's `artifact_sha` can be rewritten by whoever writes it.
+#
+# FALSE-POSITIVE SET, and how it reached zero, measured over the reference consumer's three
+# latest sprints (eleven terminal series). Unnarrowed, every single-file series whose artifact
+# moved after MET fires -- five. Three narrowings: the CUMULATIVE-DOC exclusion (one of the five
+# is `docs/architecture.md`); REPAIR-LINK acceptance (each of the remaining four has a repair
+# record that, carrying the two sha fields remediator.md now teaches, is the link); and the
+# STAMP keyed on the series' FIRST pass -- no commit there stamps J2_RELEASE, so every candidate
+# is PENDING and none fails.
+J2_RELEASE="0.669.0"
+
+j2_in_subject() {  # $1 resolved file -> 0 when it is a sprint-scoped single artifact
+  case "$1" in
+    */SPEC.md|SPEC.md) return 0 ;;
+    */planning-artifacts/s[0-9]*/*) return 0 ;;
+  esac
+  return 1
+}
+j2_is_sha() {  # $1 value -> 0 when it is exactly one sha256
+  [ "${#1}" -eq 64 ] || return 1
+  case "$1" in *[!0-9a-fA-F]*) return 1 ;; esac
+  return 0
+}
+# The VALUE of a repair-record field, read with the emphasis tolerance repair_field has: the
+# label opens the line, optionally wrapped in `*`, `_` or backticks, colon immediately after.
+# Prints the first token of the value with emphasis and backticks removed. `artifact` does not
+# read `artifact_sha_before:` -- the colon must follow the label.
+repair_value() {  # $1 label  $2 file
+  awk -v l="$1" '
+    { if (match($0, "^[[:space:]-]*[*_`]?[*_`]?" l "[*_`]?[*_`]?:")) {
+        v = substr($0, RSTART + RLENGTH)
+        sub(/^[*_`]+[[:space:]]+/, "", v); sub(/^[[:space:]]+/, "", v); gsub(/[`*]/, "", v)
+        sub(/[[:space:]].*$/, "", v); print v; exit } }' "$2"
+}
+# THE CHAIN WALK. $1 start sha  $2 target sha  $3 links file (`<before>\t<after>\t<record>`).
+# Sets J2_END to complete | incomplete | fork, and J2_FORK to the two records of a fork.
+j2_walk() {
+  local cur="$1" steps=0 hits next first b a r
+  J2_END=incomplete; J2_FORK=""
+  while [ "$steps" -lt 64 ]; do
+    if [ "$cur" = "$2" ]; then J2_END=complete; return 0; fi
+    hits=0; next=""; first=""
+    while IFS="$(printf '\t')" read -r b a r; do
+      [ -n "$b" ] && [ "$b" = "$cur" ] || continue
+      hits=$((hits + 1))
+      if [ -z "$first" ]; then first="$r"; next="$a"; else J2_FORK="$first $r"; fi
+    done < "$3"
+    if [ "$hits" -ge 2 ]; then J2_END=fork; return 0; fi
+    [ "$hits" -eq 1 ] || return 0
+    cur="$next"
+    steps=$((steps + 1))
+  done
+}
+
+if [ "$N" -gt 0 ] && [ "$LAST_VERDICT" = "EXIT_CONDITION_MET" ]; then
+  j2_art="$(block_field "$LAST_FILE" 'artifact')"
+  j2_sha="$(block_field "$LAST_FILE" 'artifact_sha' | tr 'A-F' 'a-f')"
+  j2_sha="${j2_sha%"${j2_sha##*[![:space:]]}"}"
+  k2_resolve_file "$LAST_FILE" "$j2_art"; j2_file="$K2_FILE"
+  if [ -n "$j2_file" ] && j2_is_sha "$j2_sha" && j2_in_subject "$j2_file"; then
+    j2_disk="$(k2_sha "$j2_file")"
+    if [ -n "$j2_disk" ] && [ "$j2_disk" != "$j2_sha" ]; then
+      # THE SELF-PROBE, both directions, before the corpus -- and only here, where the drift
+      # makes the walk and the reader load-bearing. The pole invokes this validator hundreds of
+      # times per run; a probe on every invocation would pay for a question nobody asked.
+      printf 'a\tb\tr1\nb\tc\tr2\n' > "$AC_T/j2-chain" && printf 'a\tb\tr1\na\tc\tr2\n' > "$AC_T/j2-fork" \
+        && printf -- '- **artifact:** `x/y.md`\n- artifact_sha_before: abc\n' > "$AC_T/j2-rec.md" || {
+        echo "validate-adversarial-convergence.sh: arm J2 self-probe could not stage; no verdict" >&2; exit 2; }
+      j2_walk a c "$AC_T/j2-chain"; j2p1="$J2_END"
+      j2_walk a d "$AC_T/j2-chain"; j2p2="$J2_END"
+      j2_walk a c "$AC_T/j2-fork";  j2p3="$J2_END"
+      j2p4="$(repair_value artifact "$AC_T/j2-rec.md")"
+      j2p5="$(repair_value artifact_sha "$AC_T/j2-rec.md")"
+      if [ "$j2p1" != complete ] || [ "$j2p2" != incomplete ] || [ "$j2p3" != fork ] \
+         || [ "$j2p4" != "x/y.md" ] || [ -n "$j2p5" ]; then
+        echo "validate-adversarial-convergence.sh: arm J2 self-probe failed (chain '$j2p1', miss '$j2p2', fork '$j2p3', value '$j2p4', near-miss label '$j2p5'); no verdict" >&2
+        exit 2
+      fi
+      : > "$AC_T/j2-links"
+      for j2_rec in "$(dirname "$LAST_FILE")"/*-repair-p*.md; do
+        [ -f "$j2_rec" ] || continue
+        j2_ra="$(repair_value artifact "$j2_rec")"
+        [ -n "$j2_ra" ] || continue
+        k2_resolve_file "$j2_rec" "$j2_ra"
+        [ "$K2_FILE" = "$j2_file" ] || continue
+        j2_b="$(repair_value artifact_sha_before "$j2_rec" | tr 'A-F' 'a-f')"
+        j2_a="$(repair_value artifact_sha_after "$j2_rec" | tr 'A-F' 'a-f')"
+        j2_is_sha "$j2_b" && j2_is_sha "$j2_a" || continue
+        repair_field disposition "$j2_rec" && repair_field edit "$j2_rec" \
+          && repair_field derivation "$j2_rec" || continue
+        printf '%s\t%s\t%s\n' "$j2_b" "$j2_a" "${j2_rec##*/}" >> "$AC_T/j2-links"
+      done
+      j2_walk "$j2_sha" "$j2_disk" "$AC_T/j2-links"
+      if [ "$J2_END" != complete ]; then
+        j2_term="${LAST_FILE##*/}"
+        j2_first="$(basename "${P_FILE[0]}")"
+        j2_at="${P_AT[0]:-}"
+        j2_root=""
+        j2_walkup="$(cd "$(dirname "${P_FILE[0]}")" 2>/dev/null && pwd)"
+        while [ -n "$j2_walkup" ]; do
+          if [ -f "$j2_walkup/.claude/.ai-dlc-version" ]; then j2_root="$j2_walkup"; break; fi
+          j2_walkup="${j2_walkup%/*}"
+        done
+        # The rebinding is probed with J2_RELEASE's predecessor as the near-miss, as K2's is.
+        IFS=. read -r j2_maj j2_min j2_pat <<EOF
+$J2_RELEASE
+EOF
+        j2_pred="${j2_maj}.$((j2_min - 1)).${j2_pat}"
+        j2_probe="$(printf '%s\n' 'C 2026-01-02T00:00:00Z' "+version: $J2_RELEASE" 'C 2026-01-01T00:00:00Z' "+version: $j2_pred" \
+                    'C 2026-01-03T00:00:00Z' '+version: 9.0.0' | K_RELEASE="$J2_RELEASE" k_stamp_parse)"
+        j2_probe_none="$(printf '%s\n' 'C 2026-01-01T00:00:00Z' "+version: $j2_pred" | K_RELEASE="$J2_RELEASE" k_stamp_parse)"
+        if [ "$j2_probe" != "2026-01-02T00:00:00Z" ] || [ -n "$j2_probe_none" ]; then
+          echo "validate-adversarial-convergence.sh: arm J2 stamp-parser self-probe failed (got '$j2_probe', near-miss '$j2_probe_none'); no verdict" >&2
+          exit 2
+        fi
+        j2_stamp=""
+        if [ -n "$j2_root" ]; then
+          stamp_log "$j2_root"
+          j2_stamp="$(K_RELEASE="$J2_RELEASE" k_stamp_parse < "$STAMP_LOG")"
+        fi
+        case "$j2_at" in
+          [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) j2_atok=1 ;;
+          *) j2_atok=0 ;;
+        esac
+        if [ "$J2_END" = fork ]; then
+          j2_what="two repair records both start from the same sha (${J2_FORK}), so the file's history forks and neither can be the one that produced the bytes on disk"
+        else
+          j2_what="no chain of repair records runs from the notarized sha to the disk sha"
+        fi
+        if [ -z "$j2_stamp" ]; then
+          echo "PENDING (J2 -- DRIFT): ${j2_term} notarized ${j2_file} at ${j2_sha}, the file on disk is ${j2_disk}, and ${j2_what};"
+          echo "      no commit${j2_root:+ in $j2_root} stamps .claude/.ai-dlc-version at ${J2_RELEASE} or later -- not owed yet."
+        elif [ "$j2_atok" -eq 0 ]; then
+          echo "PENDING (J2 -- DRIFT): ${j2_term} notarized ${j2_file} at ${j2_sha}, the file on disk is ${j2_disk}, and ${j2_what};"
+          echo "      the series' first pass ${j2_first} has no ISO 8601 UTC invoked_at ('${j2_at}') to date against ${j2_stamp}."
+        elif [[ "$j2_at" < "$j2_stamp" ]]; then
+          echo "PENDING (J2 -- DRIFT): ${j2_term} notarized ${j2_file} at ${j2_sha}, the file on disk is ${j2_disk}, and ${j2_what};"
+          echo "      the series opened (${j2_first}, ${j2_at}) before ${J2_RELEASE} was stamped (${j2_stamp}). Legacy series."
+        else
+          err "J2 -- DRIFT" "${j2_term} stamps EXIT_CONDITION_MET over ${j2_file} at ${j2_sha}, and the file on
+      disk is ${j2_disk}: it MOVED after the series notarized it, and ${j2_what}.
+      A notarized artifact is amended on the record, one of two ways (_gate-procedures.md, the
+      amendment procedure):
+        REPAIR   a residue or gate repair on unchanged scope -- a structured repair record in
+                 $(dirname "$LAST_FILE") naming this file in 'artifact:' and carrying
+                 'artifact_sha_before:' / 'artifact_sha_after:' (whole-file sha256), each
+                 before equal to the previous after, from ${j2_sha} to ${j2_disk}.
+        REOPEN   a scope change -- ONE 'resolution: REOPEN_AFTER_MET' record from ${j2_sha} to
+                 ${j2_disk}, operator-authorized, and ONE verify pass in this series citing it.
+                 The verify pass becomes terminal and notarizes the bytes on disk."
+        fi
+      fi
+    fi
+  fi
+fi
 
 # --- D. TERMINAL ------------------------------------------------------------
 case "$LAST_VERDICT" in

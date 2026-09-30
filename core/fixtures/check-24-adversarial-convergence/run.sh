@@ -1471,6 +1471,164 @@ sg_mutate scope-grew-pass-number \
   '  if [ -n "$crit" ] && [ -n "$prior" ] && [ "$(printf "%s" "$f" | sed -E "s/.*[^0-9]([0-9]+)\.md$/\1/")" != "1" ] && [ "$crit" -gt "$prior" ]; then' \
   "GENERIC MOVING MOVING MOVING"
 
+echo
+# --- ARM J's DOOR: a re-open is sanctioned by a VALID record, not by naming one ------------
+expect reopen-record-missing 1 "resolves_divergence names a record that was never written -- FAIL (J)" s1-adversarial-p
+expect_says reopen-record-missing s1-adversarial-p "J-door-validates" \
+  "FAIL (J -- REOPEN)" "the record it names does not exist"
+expect_state reopen-record-missing s1-adversarial-p REOPENED 3 "a citation of nothing is not a sanctioned exit -- deny"
+expect drift-spec-no-cap 1 "a SPEC.md re-open whose scope_delta names no CAP-<n> or FR-S<N>-<n> -- FAIL (J, F5)" s1-adversarial-p
+expect_says drift-spec-no-cap s1-adversarial-p "F5-reopen-spec" \
+  "FAIL (J -- REOPEN)" "names no CAP-<n>"
+expect_state drift-spec-no-cap s1-adversarial-p REOPENED 3 "a spec amendment naming nothing it moved is not a release -- deny"
+expect drift-spec-cap 0 "NEAR-MISS: the same SPEC.md record naming CAP-2 -- PASS" s1-adversarial-p
+
+echo
+# --- ARM J2: TERMINAL DRIFT --------------------------------------------------------------
+# Each case is a stamped repo built by seed.sh with TWO stamp commits (0.663.0 at 09:00, 0.669.0
+# at 10:00); its series lives under `_bmad-output/planning-artifacts/s1/`, where the gate reads it.
+J2P=_bmad-output/planning-artifacts/s1/spec-adversarial-p
+expect drift-unrecorded 1 "SPEC.md moved after MET, nothing on the record -- FAIL (J2)" "$J2P"
+expect_says drift-unrecorded "$J2P" "J2-names-both-remedies" \
+  "FAIL (J2 -- DRIFT): spec-adversarial-p1.md stamps EXIT_CONDITION_MET" "REPAIR" "REOPEN" \
+  "artifact_sha_before:"
+expect_state drift-unrecorded "$J2P" CONVERGED 0 "arm J2 is GATE-ONLY: --cycle-state stays CONVERGED under drift"
+expect drift-same-bytes 0 "DECOY: the bytes on disk are the notarized bytes" "$J2P"
+expect drift-pre-stamp 0 "the series opened before J2's stamp (after K's): PENDING, not counted" "$J2P"
+expect_says drift-pre-stamp "$J2P" "J2-legacy-pending" "PENDING (J2 -- DRIFT)" "Legacy series."
+expect drift-repair-linked 0 "one structured repair link from the notarized sha to the disk sha -- PASS" "$J2P"
+expect drift-repair-chain-two-links 0 "two links v1->v2->v3, the first link in the second-read record -- PASS" "$J2P"
+expect drift-chain-broken 1 "only the v2->v3 link: no chain from the notarized sha -- FAIL (J2)" "$J2P"
+expect drift-repair-fork 1 "two links from the same sha -- FAIL (J2), even though one of them reaches the disk sha" "$J2P"
+expect_says drift-repair-fork "$J2P" "J2-fork-names-both" \
+  "FAIL (J2 -- DRIFT)" "gate-planning-repair-p1.md gate-planning-repair-p2.md"
+expect drift-repair-unstructured 1 "a link with both shas and no derivation: arm H would refuse it -- FAIL (J2)" "$J2P"
+expect drift-reopen-verified 0 "REOPEN_AFTER_MET record + ONE verify pass: the verify pass is terminal -- PASS" "$J2P"
+expect drift-reopen-no-verify 1 "the REOPEN record without the verify pass is not a link -- FAIL (J2)" "$J2P"
+expect drift-reopen-after-not-disk 1 "verified at v2, then moved to v3 with no record -- FAIL (J2)" "$J2P"
+expect drift-cumulative 0 "RESIDUE: prd.md is cumulative and not in the subject -- J2 silent" "$J2P"
+expect drift-list 0 "RESIDUE: a comma list is not one file, even when its first member moved -- J2 silent" "$J2P"
+
+# THE SKIP IS IN THE PROCEDURE BECAUSE A BARE --series MATCHING NOTHING FAILS. gate-validation.md
+# tells the gate to skip a sprint dir holding no *-adversarial-p series; this pins why.
+ASSERTIONS=$((ASSERTIONS + 1))
+es_out="$(bash "$VALIDATOR" --series "$ROOT/drift-empty-sprint/$J2P" 2>&1)"; es_rc=$?
+if [ "$es_rc" -eq 1 ] && grep -qF -- "matched nothing" <<<"$es_out"; then
+  printf '  ok    %-28s exit=1 "matched nothing" (%s)\n' "drift-empty-sprint" "the procedure skips such a sprint rather than running the check"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-28s exit=%s -- a --series over an empty sprint dir must exit 1 naming the empty match\n' "drift-empty-sprint" "$es_rc"
+fi
+
+# --- MUTATION: J2's walk, fork check, subject, stamp rebinding; J's door ------------------
+#                         unrec  pre      linked  chain2  fork   cumul   reopen-ver
+#   shipped               FAIL   PENDING  SILENT  SILENT  FAIL   SILENT  SILENT
+#   chain walk removed    FAIL   PENDING  FAIL    FAIL    FAIL   SILENT  SILENT
+#   fork check removed    FAIL   PENDING  SILENT  SILENT  SILENT SILENT  SILENT
+#   subject widened       FAIL   PENDING  SILENT  SILENT  FAIL   FAIL    SILENT
+#   stamp not rebound     FAIL   FAIL     SILENT  SILENT  FAIL   SILENT  SILENT
+# Built in a copy of the validator's directory carrying both siblings, with an unmutated control.
+J2_CASES="drift-unrecorded drift-pre-stamp drift-repair-linked drift-repair-chain-two-links drift-repair-fork drift-cumulative drift-reopen-verified"
+J2_REAL="FAIL PENDING SILENT SILENT FAIL SILENT SILENT"
+J2_MUT="$ROOT/j2-mutants"; mkdir -p "$J2_MUT"
+cp "$(dirname "$VALIDATOR")/validate-steering-budget.sh" "$J2_MUT/validate-steering-budget.sh"
+cp "$(dirname "$VALIDATOR")/partition-document.sh" "$J2_MUT/partition-document.sh"
+j2_cell() {  # $1 script  $2 case -> FAIL | PENDING | SILENT
+  local out
+  out="$(bash "$1" --series "$ROOT/$2/$J2P" --transcript-dir "$ROOT" 2>&1)"
+  case "$out" in
+    *"FAIL (J2 -- DRIFT)"*)    printf 'FAIL\n' ;;
+    *"PENDING (J2 -- DRIFT)"*) printf 'PENDING\n' ;;
+    *)                         printf 'SILENT\n' ;;
+  esac
+}
+j2_score() {  # $1 label  $2 script  $3 expected row
+  local got="" c
+  ASSERTIONS=$((ASSERTIONS + 1))
+  for c in $J2_CASES; do got="$got $(j2_cell "$2" "$c")"; done
+  if [ "$(echo $got)" = "$(echo $3)" ]; then
+    printf '  ok    %-28s [%s]\n' "$1" "$(echo $got)"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s got [%s] want [%s]\n' "$1" "$(echo $got)" "$(echo $3)"
+  fi
+}
+cp "$VALIDATOR" "$J2_MUT/control.sh"
+j2_score "CONTROL j2 copy" "$J2_MUT/control.sh" "$J2_REAL"
+
+# $1 label  $2 expected row  $3.. old/new pairs, EACH anchor exactly once in the validator.
+# Every layer of a layered subject is reverted. The fork mutant removes the fork verdict AND the
+# single-hit guard below it, which on its own also stops a two-hit walk as incomplete (measured:
+# with only the first layer removed the fork cell still read FAIL). It also drops the fork
+# conjunct of the self-probe, which would otherwise refuse the mutant with exit 2.
+j2_mut_build() {  # $1 out  $2.. old/new pairs -> 0 applied, 1 an anchor was not unique
+  local out="$1"; shift
+  python3 - "$VALIDATOR" "$out" "$@" <<'PY'
+import sys
+s = open(sys.argv[1]).read()
+a = sys.argv[3:]
+for i in range(0, len(a), 2):
+    if s.count(a[i]) != 1: sys.exit(1)
+    s = s.replace(a[i], a[i + 1])
+open(sys.argv[2], "w").write(s)
+PY
+}
+j2_mutate() {  # $1 label  $2 expected row  $3.. old/new pairs
+  local label="$1" want="$2" mut="$J2_MUT/mutant-$1.sh"; shift 2
+  if ! j2_mut_build "$mut" "$@" || cmp -s "$VALIDATOR" "$mut" || ! bash -n "$mut" 2>/dev/null; then
+    ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s an anchor is not unique, the mutation DID NOT APPLY, or the mutant is not valid shell\n' "MUTATION $label"
+    return
+  fi
+  j2_score "MUTATION $label" "$mut" "$want"
+}
+j2_mutate j2-chain-walk "FAIL PENDING FAIL FAIL FAIL SILENT SILENT" \
+  '      j2_walk "$j2_sha" "$j2_disk" "$AC_T/j2-links"' '      J2_END=incomplete'
+j2_mutate j2-fork-check "FAIL PENDING SILENT SILENT SILENT SILENT SILENT" \
+  '    if [ "$hits" -ge 2 ]; then J2_END=fork; return 0; fi' '    :' \
+  '    [ "$hits" -eq 1 ] || return 0' '    [ "$hits" -ge 1 ] || return 0' \
+  '[ "$j2p3" != fork ]' '[ -z "$j2p3" ]'
+j2_mutate j2-subject "FAIL PENDING SILENT SILENT FAIL FAIL SILENT" \
+  '  if [ -n "$j2_file" ] && j2_is_sha "$j2_sha" && j2_in_subject "$j2_file"; then' \
+  '  if [ -n "$j2_file" ] && j2_is_sha "$j2_sha"; then'
+j2_mutate j2-stamp-rebind "FAIL FAIL SILENT SILENT FAIL SILENT SILENT" \
+  '          j2_stamp="$(K_RELEASE="$J2_RELEASE" k_stamp_parse < "$STAMP_LOG")"' \
+  '          j2_stamp="$(k_stamp_parse < "$STAMP_LOG")"'
+
+# J's door, scored on its own four cells in --cycle-state, the mode the hooks read.
+JD_CASES="reopen-recorded reopen-record-missing drift-spec-no-cap drift-spec-cap"
+JD_REAL="CONVERGED REOPENED REOPENED CONVERGED"
+jd_score() {  # $1 label  $2 script  $3 expected row
+  local got="" c
+  ASSERTIONS=$((ASSERTIONS + 1))
+  for c in $JD_CASES; do
+    got="$got $(bash "$2" --series "$ROOT/$c/s1-adversarial-p" --cycle-state --transcript-dir "$ROOT" 2>/dev/null | cut -f1)"
+  done
+  if [ "$(echo $got)" = "$(echo $3)" ]; then
+    printf '  ok    %-28s [%s]\n' "$1" "$(echo $got)"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s got [%s] want [%s]\n' "$1" "$(echo $got)" "$(echo $3)"
+  fi
+}
+jd_score "CONTROL j-door copy" "$J2_MUT/control.sh" "$JD_REAL"
+jd_mutate() {  # $1 label  $2 expected row  $3.. old/new pairs
+  local label="$1" want="$2" mut="$J2_MUT/mutant-$1.sh"; shift 2
+  if ! j2_mut_build "$mut" "$@" || cmp -s "$VALIDATOR" "$mut" || ! bash -n "$mut" 2>/dev/null; then
+    ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s an anchor is not unique, the mutation DID NOT APPLY, or the mutant is not valid shell\n' "MUTATION $label"
+    return
+  fi
+  jd_score "MUTATION $label" "$mut" "$want"
+}
+# The door accepting the field again -- the shipped defect on demand. Both invalid records pass.
+jd_mutate j-citation "CONVERGED CONVERGED CONVERGED CONVERGED" \
+  '    if validate_record "$j_rec" "${P_FILE[$i]}" "$i"; then' '    if true; then'
+# F5's SPEC rule alone. Only the SPEC.md cell with no CAP moves, so the door mutant above is not
+# the only thing standing between a spec amendment and an unnamed scope change.
+jd_mutate f5-reopen-spec "CONVERGED REOPENED CONVERGED CONVERGED" \
+  '      if [ "${r_art##*/}" = "SPEC.md" ] && ! [[ "$delta" =~ $r_re ]]; then' '      if false; then'
+
 # --- PAIRING: a case that DENIES must assert the state the hooks read -------------
 # THE MECHANISM FOR A DEFECT CLASS THIS FIXTURE HAS NOW HIT TWICE. Gate mode and
 # --cycle-state are different code paths with different branch ordering, and the second one

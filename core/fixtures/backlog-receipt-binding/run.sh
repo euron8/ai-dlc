@@ -1034,6 +1034,106 @@ else
     git -C "$gd_caller" worktree prune >/dev/null 2>&1 ) || true
 fi
 
+# ===== MEMO. A RECEIPT MUST NOT INHERIT THE STATE reconcile/lib.sh EXPORTED IN THE PARENT. =====
+# The parent sources lib.sh, which EXPORTS `AI_DLC_RECONCILE_MEMO`, and every `--score-one` worker
+# inherited it through the environment -- so a receipt driving a reconcile script borrowed the
+# parent's memo (backlog-reverify.sh's BL-382, the same defect). Functions do not reach a worker,
+# which is a fresh `bash`; BL-824 records that and is not what any mutant below keys on.
+#
+# ITS OWN WORLD, NEVER bl_seed_ledger: BL_N's floor is keyed on that ledger's count. The receipts
+# are shaped so the leaked and the clean readings are both REPORTED BY NAME -- a leak turns an
+# ALREADY-PASSING receipt into an exit-9 OUT-OF-POPULATION one -- and BL-821 is the scored receipt
+# that keeps the subject past its zero-scored refusal, which prints no rows at all.
+#
+# THE DERIVED HALF NEEDS A SUBJECT, SO THIS WORLD'S lib.sh EXPORTS A SECOND VARIABLE. The shipped
+# lib.sh exports exactly one, which the fix also names outright, so a fix that dropped the
+# derivation would pass every drive of an unmodified copy. BL-823 keys on the synthesised one.
+# TWO DRIVES: no inbound memo (lib.sh makes one, so it is NEW to the parent) and a CALLER-exported
+# memo (already there before lib.sh ran, so only the outright name removes it).
+seed_memo() { # seed_memo <dir>
+  local d="$1"
+  mkdir -p "$d/scripts" "$d/docs" "$d/core/skills/ai-dlc-update/reconcile" "$d/probe"
+  echo "0.0.0" > "$d/VERSION"
+  cp "$VALIDATOR" "$d/scripts/validate-backlog-receipts.sh"
+  cp "$LIBSRC" "$d/core/skills/ai-dlc-update/reconcile/lib.sh"
+  printf '\nLIBPROBE_EXPORTED=1\nexport LIBPROBE_EXPORTED\n' >> "$d/core/skills/ai-dlc-update/reconcile/lib.sh"
+  cp "$REVSRC" "$d/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh"
+  printf 'alpha\n' > "$d/probe/subject.txt"
+  printf 'memo\n' > "$d/probe/memo.txt"
+  printf 'probe\n' > "$d/probe/probe.txt"
+  printf 'fn\n' > "$d/probe/fn.txt"
+  {
+    printf '# Probe backlog\n\n'
+    printf '## BL-821\n\nverify: sh grep -q %s probe/subject.txt\n\n' "'MARK821'"
+    printf '## BL-822\n\nverify: sh [ -n "${AI_DLC_RECONCILE_MEMO:-}" ] && exit 9; ! grep -q %s probe/memo.txt\n\n' "'MARK822'"
+    printf '## BL-823\n\nverify: sh [ -n "${LIBPROBE_EXPORTED:-}" ] && exit 9; ! grep -q %s probe/probe.txt\n\n' "'MARK823'"
+    printf '## BL-824\n\nverify: sh type ai_dlc_memo_dir >/dev/null 2>&1 && exit 9; ! grep -q %s probe/fn.txt\n\n' "'MARK824'"
+  } > "$d/docs/backlog.md"
+  ( cd "$d" && git init -q . >/dev/null 2>&1 && git add -A >/dev/null 2>&1 \
+      && git -c user.email=p@local -c user.name=p commit -q -m seed >/dev/null 2>&1 )
+  [ -d "$d/.git" ] || { echo "FIXTURE BROKEN: the memo probe repository at $d has no .git" >&2; exit 2; }
+}
+MEMO_ARGS="--max-prose-closable 1 --max-unscorable 9 --max-out-of-population 9 --max-unstable 0 --min-sh-receipts 4 --min-entries 4"
+MEMO_IN="$TMP/inbound-memo"; mkdir -p "$MEMO_IN"
+# memo_drive <dir> <none|caller> -> "BL-821=... BL-822=... BL-823=... BL-824=... rc=N"
+memo_drive() {
+  local d="$1" e="" o r id s
+  [ "$2" = caller ] && e="AI_DLC_RECONCILE_MEMO=$MEMO_IN"
+  o="$(run_v "$e" "$d" $MEMO_ARGS)"; r=$?
+  s=""
+  for id in BL-821 BL-822 BL-823 BL-824; do s="$s$id=$(cls "$o" "$id") "; done
+  printf '%src=%s' "$s" "$r"
+}
+MEMO_WANT="BL-821=PROSE-CLOSABLE BL-822=ALREADY-PASSING BL-823=ALREADY-PASSING BL-824=ALREADY-PASSING rc=0"
+
+# THE WORLD DISCRIMINATES: each sensitive receipt exits 9 with its variable set and 0 without, and
+# the world's lib.sh copy carries the synthesised export the shipped one does not.
+seed_memo "$TMP/memo"
+mw_lib="$TMP/memo/core/skills/ai-dlc-update/reconcile/lib.sh"
+mw_n="$(grep -c '^export LIBPROBE_EXPORTED$' "$mw_lib")" || mw_n=0
+mw_src="$(grep -c '^export LIBPROBE_EXPORTED$' "$LIBSRC")" || mw_src=0
+mw_a="$(cd "$TMP/memo" && env -u AI_DLC_RECONCILE_MEMO bash -c '[ -n "${AI_DLC_RECONCILE_MEMO:-}" ] && exit 9; ! grep -q MARK822 probe/memo.txt' >/dev/null 2>&1; echo $?)"
+mw_b="$(cd "$TMP/memo" && AI_DLC_RECONCILE_MEMO="$MEMO_IN" bash -c '[ -n "${AI_DLC_RECONCILE_MEMO:-}" ] && exit 9; ! grep -q MARK822 probe/memo.txt' >/dev/null 2>&1; echo $?)"
+if [ "$mw_n" -eq 1 ] && [ "$mw_src" -eq 0 ] && [ "$mw_a" -eq 0 ] && [ "$mw_b" -eq 9 ]; then
+  note "ok    memo-discriminates -- BL-822 exits 0 bare and 9 with the memo set, and only the world's lib.sh exports LIBPROBE_EXPORTED"
+else
+  note "FAIL  memo-discriminates -- bare $mw_a, memo-set $mw_b, world export $mw_n, shipped export $mw_src: the world cannot see a leak"; rc=1
+fi
+for mdrv in none caller; do
+  mgot="$(memo_drive "$TMP/memo" "$mdrv")"
+  if [ "$mgot" = "$MEMO_WANT" ]; then
+    note "ok    memo-leak-$mdrv -- no receipt inherits lib.sh's exports ($mgot)"
+  else
+    note "FAIL  memo-leak-$mdrv -- a receipt read the parent's lib.sh state: got '$mgot', want '$MEMO_WANT'"; rc=1
+  fi
+done
+[ -d "$MEMO_IN" ] || { note "FAIL  memo-caller-owned -- the subject removed a memo directory its caller owns"; rc=1; }
+
+# THREE MUTANTS, one per half of the fix, each scored on BOTH drives against its own expected cells.
+# memo_mut <name> <sed> <want-none> <want-caller>
+memo_mut() {
+  local n="$1" expr="$2" wn="$3" wc="$4" gn gc
+  seed_memo "$TMP/$n"
+  mut "$TMP/$n" "$expr" || return
+  gn="$(memo_drive "$TMP/$n" none)"; gc="$(memo_drive "$TMP/$n" caller)"
+  if [ "$gn" = "$MEMO_WANT" ] && [ "$gc" = "$MEMO_WANT" ]; then
+    note "FAIL  $n -- SURVIVED: both drives read clean with this half of the fix removed"; rc=1
+  elif [ "$gn" = "$wn" ] && [ "$gc" = "$wc" ]; then
+    note "ok    $n -- killed on exactly its own cells"
+  else
+    note "FAIL  $n -- moved the wrong cells: none '$gn' (want '$wn'), caller '$gc' (want '$wc')"; rc=1
+  fi
+}
+LEAK_BOTH="BL-821=PROSE-CLOSABLE BL-822=OUT-OF-POPULATION BL-823=OUT-OF-POPULATION BL-824=ALREADY-PASSING rc=0"
+LEAK_MEMO="BL-821=PROSE-CLOSABLE BL-822=OUT-OF-POPULATION BL-823=ALREADY-PASSING BL-824=ALREADY-PASSING rc=0"
+LEAK_PROBE="BL-821=PROSE-CLOSABLE BL-822=ALREADY-PASSING BL-823=OUT-OF-POPULATION BL-824=ALREADY-PASSING rc=0"
+# The unset in the worker removed: every export leaks, in both drives.
+memo_mut m-memo-unset 's|^  \[ -n "\${BR_LIB_VARS:-}" \] \&\& unset \$BR_LIB_VARS$|  : MUTANT|' "$LEAK_BOTH" "$LEAK_BOTH"
+# The outright name dropped: only a CALLER's memo leaks, because lib.sh's own is new to the diff.
+memo_mut m-memo-name 's|^BR_LIB_VARS="AI_DLC_RECONCILE_MEMO \$(_br_added |BR_LIB_VARS="$(_br_added |' "$MEMO_WANT" "$LEAK_MEMO"
+# The derivation dropped: only the synthesised export leaks.
+memo_mut m-memo-derive 's|^BR_LIB_VARS="AI_DLC_RECONCILE_MEMO \$(_br_added .*$|BR_LIB_VARS="AI_DLC_RECONCILE_MEMO"|' "$LEAK_PROBE" "$LEAK_PROBE"
+
 if [ "$rc" -eq 0 ]; then
   note "PASS  backlog-receipt-binding -- control green, every mutant killed by its own assertion"
 fi

@@ -198,9 +198,25 @@ def load(p):
     with io.open(p, encoding='utf-8') as f:
         return json.load(f)
 
+def layout_cands(root, where):
+    # BOTH LAYOUTS. install.sh splits what shares a parent here:
+    # core/scripts/<x> -> scripts/ai-dlc/<x>, core/schemas/ -> .claude/schemas/,
+    # core/skills/<x> -> .claude/skills/<x>. A declaration written as a distribution
+    # path resolves nowhere on a consumer, so the consumer spelling is tried too
+    # before anything is called missing.
+    cands = [os.path.join(root, where)]
+    if where.startswith('core/schemas/'):
+        cands.append(os.path.join(root, '.claude/schemas/', os.path.basename(where)))
+    if where.startswith('core/scripts/'):
+        cands.append(os.path.join(root, 'scripts/ai-dlc/', os.path.basename(where)))
+    if where.startswith('core/skills/'):
+        cands.append(os.path.join(root, '.claude/skills/',
+                                  where[len('core/skills/'):]))
+    return cands
+
 args = sys.argv[1:]
-for i in range(0, len(args), 4):
-    tag, steer_p, pop_p, root = args[i], args[i+1], args[i+2], args[i+3]
+for i in range(0, len(args), 5):
+    tag, steer_p, pop_p, root, also_root = args[i], args[i+1], args[i+2], args[i+3], args[i+4]
     try:
         steer = load(steer_p)
     except Exception as exc:
@@ -264,19 +280,25 @@ for i in range(0, len(args), 4):
                 print('%s\tFIELD\t%s\tdeclares no %s'
                       % (tag, nm, 'declared_in' if not where else 'anchor'))
                 continue
-            # BOTH LAYOUTS. install.sh splits what shares a parent here:
-            # core/scripts/<x> -> scripts/ai-dlc/<x>, core/schemas/ -> .claude/schemas/,
-            # core/skills/<x> -> .claude/skills/<x>. A declaration written as a distribution
-            # path resolves nowhere on a consumer, so the consumer spelling is tried too
-            # before anything is called missing.
-            cands = [os.path.join(root, where)]
-            if where.startswith('core/schemas/'):
-                cands.append(os.path.join(root, '.claude/schemas/', os.path.basename(where)))
-            if where.startswith('core/scripts/'):
-                cands.append(os.path.join(root, 'scripts/ai-dlc/', os.path.basename(where)))
-            if where.startswith('core/skills/'):
-                cands.append(os.path.join(root, '.claude/skills/',
-                                          where[len('core/skills/'):]))
+            # THE PROJECT ROOT'S OWN COPY, when the declarations are judged against the install
+            # (BL-331). A root carrying the declared file with its anchor gone is the exact state
+            # this arm exists to catch, and resolving `declared_in` against the install alone read
+            # the install's intact copy and acquitted the root's. Findings only: an intact or
+            # absent root copy prints nothing, so the row counts stay the install's.
+            if also_root:
+                rhit = next((c for c in layout_cands(also_root, where) if os.path.isfile(c)), None)
+                if rhit is not None:
+                    try:
+                        rbody = io.open(rhit, encoding='utf-8', errors='replace').read()
+                    except Exception as exc:
+                        print('%s\tUNREADABLE\t%s\t%s under the project root: %s'
+                              % (tag, nm, os.path.relpath(rhit, also_root), exc))
+                        rbody = None
+                    if rbody is not None:
+                        if anchor not in rbody:
+                            print('%s\tSTALE\t%s\t%s under the project root no longer contains %r'
+                                  % (tag, nm, os.path.relpath(rhit, also_root), anchor))
+            cands = layout_cands(root, where)
             hit = next((c for c in cands if os.path.isfile(c)), None)
             if hit is None:
                 # A DECLARATION WHOSE OWNING TOP-LEVEL COMPONENT ISN'T ON THIS TREE AT ALL IS
@@ -379,8 +401,8 @@ PROBE_OUT=""; PROBE_BUILT=0
 if build_probe; then
   PROBE_BUILT=1
   PROBE_OUT="$(run_reader \
-      pos "$PROBE_POS/steer.json" "$PROBE_POS/pop.json" "$PROBE_POS" \
-      neg "$PROBE_NEG/steer.json" "$PROBE_NEG/pop.json" "$PROBE_NEG" 2>&1)"
+      pos "$PROBE_POS/steer.json" "$PROBE_POS/pop.json" "$PROBE_POS" "" \
+      neg "$PROBE_NEG/steer.json" "$PROBE_NEG/pop.json" "$PROBE_NEG" "" 2>&1)"
 fi
 [ -n "$PROBE_DIR" ] && rm -rf "$PROBE_DIR"
 
@@ -438,11 +460,22 @@ fi
 # INSTALL's tree, so its `declared_in` paths are resolved there too. Judged against the override
 # root instead, a root holding only .claude/ would resolve none of them and report PASS having
 # judged nothing (BL-300).
-READER_ROOT="$AI_DLC_ROOT"
+#
+# AND THE PROJECT ROOT'S OWN COPIES ARE JUDGED BESIDE THEM (BL-331). Resolving against the install
+# alone acquitted a root that carries a declared file with its anchor gone: the install's intact
+# copy was read, the root's stale one never was, and the run printed the no-override PASS. So in
+# this branch every `declared_in` is ALSO resolved under the project root, and a copy there without
+# its anchor fails as STALE. Findings only: a root copy that is intact, or absent (a root between
+# pulls, or one that holds only .claude/), adds nothing. Skipped when the root IS the install,
+# compared physically, so a no-override run does not read the same file twice.
+READER_ROOT="$AI_DLC_ROOT"; ALSO_ROOT=""
 if [ -n "$AI_DLC_INSTALL_ROOT" ] && [ "$SCHEMA_DIR" = "$AI_DLC_INSTALL_ROOT/.claude/schemas" ]; then
   READER_ROOT="$AI_DLC_INSTALL_ROOT"
+  if [ "$(cd "$AI_DLC_ROOT" 2>/dev/null && pwd -P)" != "$(cd "$AI_DLC_INSTALL_ROOT" 2>/dev/null && pwd -P)" ]; then
+    ALSO_ROOT="$AI_DLC_ROOT"
+  fi
 fi
-OUT="$(run_reader live "$STEERING" "$POP" "$READER_ROOT" 2>&1)"
+OUT="$(run_reader live "$STEERING" "$POP" "$READER_ROOT" "$ALSO_ROOT" 2>&1)"
 
 if [ -z "$OUT" ]; then
   echo "validate-write-format-steering: FAIL — the reader produced NO output at all, not even" >&2

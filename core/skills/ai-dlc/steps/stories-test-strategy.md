@@ -507,6 +507,9 @@ sprint's stories — its passes use the **Adversarial review dispatch** and
 - **on convergence:** append a changelog to each story file, then stamp story
   provenance (below).
 
+A SPEC.md or sprint artifact whose series already stamped MET and that this step must change is
+amended by `_gate-procedures.md`'s amendment procedure, never edited in place.
+
 **A folded bug-fix story (§3a) is NOT a subject of this cycle.** It keeps the
 one-shot `bug-investigation.md` §4 ran on it and its `bug-story-provenance`
 block, and it never enters convergence. Leave it out of the reviewed set and out

@@ -48,6 +48,11 @@
 #                       root's steering and judged under the root (rc 1). B's Ggood, the root carrying
 #                       the whole set, is the near-miss. Killed by falling back per FILE again
 #                       (PERFILE). IF also fails P, legitimately: install-first never lets a root own it.
+#   Q  BL-331, write-format-steering only, a standalone arm after E2: under the install fallback a
+#                       root carrying its OWN declared file without the anchor exits 1 naming the
+#                       root's copy, and the same root with the anchor passes at the control's row
+#                       count. Killed by dropping the root resolution (NOROOT) and by failing any root
+#                       that carries the file (ANCHORLESS); each leaves A-P at its base value.
 #
 # THE KILL IS THE WHOLE VECTOR. A mutant is killed only when every arm of the script it edits
 # answers exactly as declared — its own arm(s) fail and the rest hold — so no kill is borrowed
@@ -619,6 +624,101 @@ bl332_stale_install_arm() {
   done
 }
 bl332_stale_install_arm
+
+# --- Q (BL-331): under the install fallback, the ROOT's copy of a declared file is judged too ---
+# Arm D resolves every `declared_in` against the install once the schema pair came from there, so a
+# root carrying its OWN copy of a declared file with the anchor gone was acquitted: the install's
+# intact copy was judged and the root's stale one never read (measured: rc 0 `PASS — 5 of 20`,
+# byte-for-byte the no-override answer, where the distribution layout exits 1 on the same root).
+# The root holds no .claude/schemas, so the fallback branch is the one taken, in the consumer layout.
+#   STALE root  its reconcile/lib.sh lacks `function ledger_entry_shape(` -> rc 1 and a STALE finding
+#               naming the ROOT's lib.sh. Killed by dropping the root resolution (NOROOT).
+#   INTACT root the same file WITH its anchor -> rc 0, `PASS —`, and the control's declaration-row
+#               count, so the root side adds findings only, never a row. Killed by failing any root
+#               that merely CARRIES the file (ANCHORLESS). F, the bare root, is arm A and holds.
+# Each mutant must leave the A-P vector at its base value, so the kill is Q's alone.
+bl331_mut() { # $1 NOROOT|ANCHORLESS  $2 src  $3 dst
+  python3 - "$1" "$2" "$3" <<'PY'
+import sys
+mode, src_path, dst_path = sys.argv[1], sys.argv[2], sys.argv[3]
+src = open(src_path).read()
+if mode == "NOROOT":
+    old, new = 'ALSO_ROOT="$AI_DLC_ROOT"', 'ALSO_ROOT=""'
+elif mode == "ANCHORLESS":
+    old, new = 'if anchor not in rbody:', 'if True:'
+else:
+    sys.stderr.write("anchor: unknown mode %s\n" % mode); sys.exit(3)
+if src.count(old) != 1:
+    sys.stderr.write("anchor: %r found %d times\n" % (old, src.count(old))); sys.exit(3)
+open(dst_path, "w").write(src.replace(old, new))
+PY
+}
+
+# q <world> -> two characters, stale-arm then intact-arm, 0 held 1 failed; or "BROKEN: <why>"
+bl331_q() {
+  local w="$1" lib=".claude/skills/ai-dlc-update/reconcile/lib.sh" ctl st it rc_s rc_i s=1 i=1 nc
+  [ -f "$w/t/$lib" ] && grep -qF 'function ledger_entry_shape(' "$w/t/$lib" \
+    || { echo "BROKEN: the install's $lib does not carry the anchor"; return; }
+  mkdir -p "$w/S331/$(dirname "$lib")" "$w/I331/$(dirname "$lib")" || { echo "BROKEN: mkdir"; return; }
+  grep -vF 'function ledger_entry_shape(' "$w/t/$lib" > "$w/S331/$lib"
+  cp "$w/t/$lib" "$w/I331/$lib" || { echo "BROKEN: copy"; return; }
+  grep -qF 'function ledger_entry_shape(' "$w/S331/$lib" && { echo "BROKEN: the stale copy still carries the anchor"; return; }
+  [ ! -e "$w/S331/.claude/schemas" ] && [ ! -e "$w/I331/.claude/schemas" ] || { echo "BROKEN: a Q root carries schemas"; return; }
+  ctl="$(drive "$w" ai validate-write-format-steering "")"
+  nc="$(decl_rows "$ctl")"
+  case "$nc" in ''|0) echo "BROKEN: the control judged no declaration rows"; return ;; esac
+  st="$(drive "$w" ai validate-write-format-steering "$w/S331")"; rc_s="$(first_line "$st")"
+  it="$(drive "$w" ai validate-write-format-steering "$w/I331")"; rc_i="$(first_line "$it")"
+  if [ "$rc_s" = rc=1 ] && grep -qF "$lib under the project root" <<<"$st" \
+     && grep -qF "no longer contains 'function ledger_entry_shape('" <<<"$st"; then s=0; fi
+  if [ "$rc_i" = rc=0 ] && grep -q '^validate-write-format-steering: PASS ' <<<"$it" \
+     && [ "$(decl_rows "$it")" = "$nc" ]; then i=0; fi
+  echo "$s$i"
+}
+
+bl331_arm() {
+  local m w st v q n_dec=0
+  printf '#!/usr/bin/env bash\necho no fix here\n' > "$WORK/bl331-decoy.sh"
+  for m in NOROOT ANCHORLESS; do bl331_mut "$m" "$WORK/bl331-decoy.sh" "$WORK/bl331-decoy.out" 2>/dev/null && n_dec=$((n_dec + 1)); done
+  [ "$n_dec" -eq 0 ] && ok "Q mutants: both BL-331 mutation programs refuse a decoy carrying no anchor" \
+                     || bad "Q mutants: $n_dec BL-331 mutation program(s) applied to a decoy"
+  for m in NONE NOROOT ANCHORLESS; do
+    (
+      w="$WORK/q-$m"
+      mkdir -p "$w" && cp -R "$BASE/t" "$w/t" || { echo "DID NOT APPLY: copy of the install failed" > "$w/.status"; exit 0; }
+      if [ "$m" != NONE ]; then
+        bl331_mut "$m" "$BASE/t/scripts/ai-dlc/validate-write-format-steering.sh" "$w/t/scripts/ai-dlc/validate-write-format-steering.sh" 2>"$w/.err" \
+          || { echo "DID NOT APPLY: $(sed -n 1p "$w/.err")" > "$w/.status"; exit 0; }
+        cmp -s "$BASE/t/scripts/ai-dlc/validate-write-format-steering.sh" "$w/t/scripts/ai-dlc/validate-write-format-steering.sh" \
+          && { echo "DID NOT APPLY: identical to the installed validate-write-format-steering.sh" > "$w/.status"; exit 0; }
+        cp "$w/t/scripts/ai-dlc/validate-write-format-steering.sh" "$w/t/scripts/validate-write-format-steering.sh" \
+          || { echo "DID NOT APPLY: legacy copy failed" > "$w/.status"; exit 0; }
+      fi
+      mk_roots "$w" || { echo "DID NOT APPLY: foreign roots not built" > "$w/.status"; exit 0; }
+      echo APPLIED > "$w/.status"
+      vector "$w" validate-write-format-steering > "$w/.vec"
+      bl331_q "$w" > "$w/.q"
+    ) &
+  done
+  wait
+  for m in NONE NOROOT ANCHORLESS; do
+    w="$WORK/q-$m"; st="$(cat "$w/.status" 2>/dev/null)"
+    if [ "$st" != APPLIED ]; then bad "Q $m: ${st:-no status written}"; continue; fi
+    v="$(cat "$w/.vec" 2>/dev/null)"; q="$(cat "$w/.q" 2>/dev/null)"
+    case "$q" in BROKEN*) bad "Q $m: FIXTURE BROKEN — ${q#BROKEN: }"; continue ;; esac
+    if [ "$v" != "$(want_base validate-write-format-steering)" ]; then
+      bad "Q $m: vector $v, want $(want_base validate-write-format-steering) — a mutant moving A-P is entangled, not a Q kill"; continue
+    fi
+    case "$m:$q" in
+      NONE:00)       ok "Q a stale root lib.sh under the install fallback exits 1 naming the root's copy; the intact root passes with the control's row count" ;;
+      NONE:*)        bad "Q stale/intact root under the install fallback: $q, want 00 (a stale root is acquitted, or an intact one fails)" ;;
+      NOROOT:10)     ok "MUTANT NOROOT on validate-write-format-steering leaves A-P at $v and is killed by Q's stale arm alone" ;;
+      ANCHORLESS:01) ok "MUTANT ANCHORLESS on validate-write-format-steering leaves A-P at $v and is killed by Q's intact arm alone" ;;
+      *)             bad "MUTANT $m on validate-write-format-steering: Q $q, want $( [ "$m" = NOROOT ] && echo 10 || echo 01)" ;;
+    esac
+  done
+}
+bl331_arm
 
 echo ""
 if [ "$fails" -eq 0 ]; then

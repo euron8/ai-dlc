@@ -26,6 +26,9 @@
 # Usage: run.sh
 # Exit:  0 = every assertion holds, 1 = one regressed, 2 = fixture broken.
 set -uo pipefail
+# Ambient AI_DLC_* cleared, as the suite does: seed E sets AI_DLC_RECONCILE_MEMO itself on the
+# drive that needs it, and an inherited one would otherwise decide which drive is "no memo".
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 pick() { for c in "$@"; do [ -n "$c" ] && [ -f "$c" ] && { printf '%s' "$c"; return; }; done; }
@@ -200,8 +203,12 @@ MUT="$MROOT/scripts/backlog-reverify.sh"
 GN="$(grep -c '^ *if ! bash -n -c "\$SH_PROG" >/dev/null 2>&1; then$' "$RV")" || GN=0
 if [ "$GN" -eq 1 ]; then ok "parse-anchor" "the parse guard line is unique in the engine"
 else bad "parse-anchor" "the parse guard line appears $GN times; the mutations below need exactly one"; fi
-# 1. THE GUARD DISARMED. BL-113 regresses to STILL-LIVE (the filed silent mis-score) and BL-115
-#    to CLOSE-CANDIDATE (the false close); BL-114 stays CLOSE-CANDIDATE, the control.
+# 1. THE GUARD DISARMED. BL-115 regresses to CLOSE-CANDIDATE (the false close) and BL-113 loses
+#    its MALFORMED naming; BL-114 stays CLOSE-CANDIDATE, the control. BL-113 no longer falls to
+#    STILL-LIVE: the stderr route (seed F) also catches an eval-time syntax error, so the two
+#    guards OVERLAP on that seed and the parse guard's own contribution there is the diagnosis
+#    that the receipt was cut at a newline. BL-115 is the subject only the parse guard can see —
+#    its fragment exits 0 and writes nothing to stderr.
 sed 's/^\( *\)if ! bash -n -c "\$SH_PROG" >\/dev\/null 2>&1; then$/\1if false; then/' "$RV" > "$MUT"
 if cmp -s "$RV" "$MUT"; then
   bad "mutation-no-parse" "the mutation matched nothing, so the parse guard is unproven"
@@ -209,8 +216,9 @@ else
   MOUT="$(bash "$MUT" "$LA" 2>&1)"
   if ! grep -qE '^CLOSE-CANDIDATE	BL-114	' <<<"$MOUT"; then
     bad "mutation-no-parse" "the control row (BL-114 CLOSE-CANDIDATE) is gone — the mutant broke the engine, not the guard"
-  elif grep -qE '^STILL-LIVE	BL-113	' <<<"$MOUT" && grep -qE '^CLOSE-CANDIDATE	BL-115	' <<<"$MOUT"; then
-    ok "mutation-no-parse" "with the guard disarmed the cut-quote receipt reads STILL-LIVE and the backslash one CLOSES — the guard is load-bearing in both directions"
+  elif M113="$(grep -E '	BL-113	' <<<"$MOUT")" && ! grep -q "MALFORMED sh receipt" <<<"$M113" \
+       && grep -qE '^CLOSE-CANDIDATE	BL-115	' <<<"$MOUT"; then
+    ok "mutation-no-parse" "with the guard disarmed the cut-quote receipt loses its MALFORMED diagnosis and the backslash one CLOSES — the guard is load-bearing in both directions"
   else
     bad "mutation-no-parse" "guard disarmed and the seeds did not regress: $(grep -E '	BL-11[35]	' <<<"$MOUT" | cut -f1,2 | tr '\n' ' ')"
   fi
@@ -239,8 +247,10 @@ fi
 # ELSE: CLOSE-CANDIDATE proposes the close outright, and HAND-REVIEW is what backlog-rotate.sh
 # accepts as permission to move an annotated entry, so either turns "I could not tell" into a
 # false close. The controls sit in the SAME seed, one exit code apart: 0 must still close, and
-# 1, 126 and 127 must still read STILL-LIVE — the last two so a fix widened from "9" to "any
-# code that is not 1" is caught, since a vanished command is not the receipt's own signal.
+# 1, 126 and a BARE 127 (no diagnostic from the receipt's own shell) must still read STILL-LIVE
+# — so a fix widened from "9" to "any code that is not 1" is caught. BL-124 is the receipt's own
+# shell reporting `command not found`: that is the stderr route (seed E owns it), and here it
+# pins that the route reads NEEDS-REVIEW and never a close.
 LC="$WORK/c.md"
 cat > "$LC" <<'EOM'
 # Probe ledger — exit routing
@@ -264,20 +274,25 @@ verify: sh no-such-command-bl089-zz
 ## BL-125 — sh exits 126
 
 verify: sh exit 126
+
+## BL-126 — sh exits a bare 127, nothing on stderr
+
+verify: sh exit 127
 EOM
 
 # route_ok <output> — 0 when every row of seed C routes correctly, else 1 with the reason on
 # stdout. Every conjunct is PRESENCE-shaped, so an engine that emitted nothing fails it.
 route_ok() {
   local o="$1" id n
-  for id in 121 122 123 124 125; do
+  for id in 121 122 123 124 125 126; do
     n="$(grep -cE "	BL-$id	" <<<"$o")" || n=0
     [ "$n" -eq 1 ] || { echo "BL-$id has $n rows, want 1"; return 1; }
   done
   grep -qE '^CLOSE-CANDIDATE	BL-121	' <<<"$o" || { echo "exit 0 is not CLOSE-CANDIDATE"; return 1; }
   grep -qE '^STILL-LIVE	BL-122	'      <<<"$o" || { echo "exit 1 is not STILL-LIVE"; return 1; }
-  grep -qE '^STILL-LIVE	BL-124	'      <<<"$o" || { echo "exit 127 is not STILL-LIVE"; return 1; }
+  grep -qE '^NEEDS-REVIEW	BL-124	unresolved:' <<<"$o" || { echo "exit 127 with the receipt's own 'command not found' is not NEEDS-REVIEW unresolved:"; return 1; }
   grep -qE '^STILL-LIVE	BL-125	'      <<<"$o" || { echo "exit 126 is not STILL-LIVE"; return 1; }
+  grep -qE '^STILL-LIVE	BL-126	'      <<<"$o" || { echo "a bare exit 127 is not STILL-LIVE"; return 1; }
   grep -qE '^NEEDS-REVIEW	BL-123	unresolved:' <<<"$o" \
     || { echo "exit 9 reads '$(grep -E '	BL-123	' <<<"$o" | cut -f1)', want NEEDS-REVIEW with an unresolved: detail"; return 1; }
   return 0
@@ -285,7 +300,7 @@ route_ok() {
 
 COUT="$(bash "$RV" "$LC" 2>&1)"
 if why="$(route_ok "$COUT")"; then
-  ok "exit-9-routing" "exit 9 reads NEEDS-REVIEW unresolved:, beside 0 CLOSE-CANDIDATE and 1/126/127 STILL-LIVE"
+  ok "exit-9-routing" "exit 9 reads NEEDS-REVIEW unresolved:, beside 0 CLOSE-CANDIDATE and 1/126/bare-127 STILL-LIVE"
 else
   bad "exit-9-routing" "$why"
 fi
@@ -389,7 +404,7 @@ fi
 # THE MUTANT: the redirect removed. Same mutant root as above, and its unmutated control runs
 # first on the same seed so a dead root cannot score the kill. The kill needs BL-131's row
 # PRESENT (the copy ran) and the rows after it missing.
-DAN="$(grep -c '^ *( cd "\$REPO_ROOT" && eval "\$REST" </dev/null ) >/dev/null 2>&1$' "$RV")" || DAN=0
+DAN="$(grep -c '^ *( unset \$LIB_VARS; unset -f \$LIB_FNS; cd "\$REPO_ROOT" && eval "\$REST" </dev/null ) >/dev/null 2>"\$ERRF"$' "$RV")" || DAN=0
 if [ "$DAN" -eq 1 ]; then ok "stdin-anchor" "the receipt eval line is unique in the engine"
 else bad "stdin-anchor" "the receipt eval line appears $DAN times; the mutation below needs exactly one"; fi
 cp "$RV" "$MUT"
@@ -399,7 +414,7 @@ if why="$(stdin_ok "$MOUT")"; then
 else
   bad "stdin-control" "the unmutated copy fails seed D, so the mutant verdict below is void: $why"
 fi
-if ! sed 's@^\( *\)( cd "\$REPO_ROOT" \&\& eval "\$REST" </dev/null ) >/dev/null 2>&1$@\1( cd "$REPO_ROOT" \&\& eval "$REST" ) >/dev/null 2>\&1@' "$RV" > "$MUT"; then
+if ! sed 's@^\( *( unset \$LIB_VARS; unset -f \$LIB_FNS; cd "\$REPO_ROOT" && eval "\$REST"\) </dev/null ) >/dev/null 2>"\$ERRF"$@\1 ) >/dev/null 2>"$ERRF"@' "$RV" > "$MUT"; then
   bad "mutation-stdin" "DID NOT APPLY: sed failed"
 elif cmp -s "$RV" "$MUT"; then
   bad "mutation-stdin" "DID NOT APPLY: the mutation matched nothing, so the closed stdin is unproven"
@@ -411,6 +426,210 @@ else
     bad "mutation-stdin" "SURVIVED: with the receipt's stdin inherited, seed D still keeps every row"
   else
     ok "mutation-stdin" "killed: with the receipt's stdin inherited the reader swallows the later entries -- $why"
+  fi
+fi
+
+# ---------------------------------------------------------------------------------------
+# Seed E — a receipt must not inherit the state reconcile/lib.sh put in the engine (BL-382).
+# ---------------------------------------------------------------------------------------
+# The engine sources lib.sh, which EXPORTS `AI_DLC_RECONCILE_MEMO` and defines its functions,
+# and a receipt that drives a reconcile script then borrows the engine's memo: BL-308's receipt
+# read exit 1 through the engine and 0 alone. BL-141 is sensitive to the variable, BL-142 to the
+# functions. The arm compares the engine's verdict against the BARE verdict — the same receipt
+# run in a clean shell — and asserts the world discriminates first: with the variable set,
+# BL-141 alone must exit non-zero, or this seed cannot see a leak at all.
+#
+# TWO DRIVES. With no inbound memo, lib.sh makes one and the variable is NEW to the engine. With
+# one EXPORTED BY THE CALLER (backlog-rotate.sh drives this engine as a child), the variable was
+# already there before lib.sh ran, so a fix that only removes what the source ADDED leaks it.
+LE="$WORK/e.md"
+cat > "$LE" <<'EOM'
+# Probe ledger — lib.sh state leaking into a receipt
+
+## BL-140 — sh exits 1, the baseline
+
+verify: sh exit 1
+
+## BL-141 — the receipt passes only when no memo is exported to it
+
+verify: sh [ -z "${AI_DLC_RECONCILE_MEMO:-}" ]
+
+## BL-142 — the receipt passes only when lib.sh's functions are absent
+
+verify: sh ! type ai_dlc_memo_dir >/dev/null 2>&1
+EOM
+rc2v() { case "$1" in 0) echo CLOSE-CANDIDATE ;; 9) echo NEEDS-REVIEW ;; *) echo STILL-LIVE ;; esac; }
+bare_rc() { # <receipt> — run one receipt in a clean shell, as an author would
+  env -u AI_DLC_RECONCILE_MEMO bash -c "$1" </dev/null >/dev/null 2>&1; echo $?
+}
+R141='[ -z "${AI_DLC_RECONCILE_MEMO:-}" ]'
+R142='! type ai_dlc_memo_dir >/dev/null 2>&1'
+INMEMO="$WORK/inbound-memo"; mkdir -p "$INMEMO"
+LEAK_RC="$(AI_DLC_RECONCILE_MEMO="$INMEMO" bash -c "$R141" </dev/null >/dev/null 2>&1; echo $?)"
+if [ "$LEAK_RC" -ne 0 ] && [ "$(bare_rc "$R141")" -eq 0 ]; then
+  ok "memo-discriminates" "BL-141 exits 0 bare and $LEAK_RC with the memo exported — the seed can see a leak"
+else
+  bad "memo-discriminates" "BL-141 exits $(bare_rc "$R141") bare and $LEAK_RC with the memo set; the seed cannot separate a leak from none"
+fi
+# leak_ok <output> — every row present once, BL-140 STILL-LIVE (the copy ran), and BL-141/142
+# carrying their BARE verdicts. Presence-shaped throughout.
+leak_ok() {
+  local o="$1" id n want
+  for id in 140 141 142; do
+    n="$(grep -cE "	BL-$id	" <<<"$o")" || n=0
+    [ "$n" -eq 1 ] || { echo "BL-$id has $n rows, want 1"; return 1; }
+  done
+  grep -qE '^STILL-LIVE	BL-140	' <<<"$o" || { echo "baseline BL-140 is not STILL-LIVE"; return 1; }
+  want="$(rc2v "$(bare_rc "$R141")")"
+  grep -qE "^$want	BL-141	" <<<"$o" || { echo "BL-141 reads '$(grep -E '	BL-141	' <<<"$o" | cut -f1)' through the engine, '$want' bare — the memo variable leaked"; return 1; }
+  want="$(rc2v "$(bare_rc "$R142")")"
+  grep -qE "^$want	BL-142	" <<<"$o" || { echo "BL-142 reads '$(grep -E '	BL-142	' <<<"$o" | cut -f1)' through the engine, '$want' bare — lib.sh's functions leaked"; return 1; }
+  return 0
+}
+leak_both() { # <engine> — both drives; prints the first failure
+  local e="$1" o why
+  o="$(env -u AI_DLC_RECONCILE_MEMO bash "$e" "$LE" 2>&1)"
+  why="$(leak_ok "$o")" || { echo "no inbound memo: $why"; return 1; }
+  o="$(AI_DLC_RECONCILE_MEMO="$INMEMO" bash "$e" "$LE" 2>&1)"
+  why="$(leak_ok "$o")" || { echo "caller-exported memo: $why"; return 1; }
+  return 0
+}
+if why="$(leak_both "$RV")"; then
+  ok "memo-leak" "engine verdicts equal bare verdicts for BL-141/142, with and without a caller-exported memo"
+else
+  bad "memo-leak" "$why"
+fi
+[ -d "$INMEMO" ] && ok "memo-caller-owned" "a caller's memo directory survives the engine run" \
+  || bad "memo-caller-owned" "the engine removed a memo directory its caller owns"
+cp "$RV" "$MUT"
+if why="$(leak_both "$MUT")"; then ok "memo-control" "the unmutated copy in the mutant root passes seed E both ways"
+else bad "memo-control" "the unmutated copy fails seed E, so the mutant verdicts below are void: $why"; fi
+score_leak_mut() { # <arm> <description>
+  local why o
+  o="$(env -u AI_DLC_RECONCILE_MEMO bash "$MUT" "$LE" 2>&1)"
+  if ! grep -qE '^STILL-LIVE	BL-140	' <<<"$o"; then
+    bad "$1" "the baseline row (BL-140 STILL-LIVE) is gone — the mutant broke the engine, not the unset"
+  elif why="$(leak_both "$MUT")"; then
+    bad "$1" "SURVIVED: with $2 seed E still passes"
+  else
+    ok "$1" "killed: $2 — $why"
+  fi
+}
+UVN="$(grep -c '^ *( unset \$LIB_VARS; unset -f \$LIB_FNS; cd ' "$RV")" || UVN=0
+NMN="$(grep -c '^LIB_VARS="AI_DLC_RECONCILE_MEMO \$(_rv_added ' "$RV")" || NMN=0
+if [ "$UVN" -eq 1 ] && [ "$NMN" -eq 1 ]; then ok "memo-anchors" "the unset line and the named-variable line are unique in the engine"
+else bad "memo-anchors" "anchors appear $UVN and $NMN times; the mutations below need exactly one each"; fi
+# 1. THE VARIABLES RE-EXPORTED to the receipt: the unset of lib.sh's variables removed.
+if ! sed 's/^\( *\)( unset \$LIB_VARS; unset -f \$LIB_FNS; cd /\1( unset -f $LIB_FNS; cd /' "$RV" > "$MUT"; then
+  bad "mutation-memo-export" "DID NOT APPLY: sed failed"
+elif cmp -s "$RV" "$MUT"; then
+  bad "mutation-memo-export" "DID NOT APPLY: the mutation matched nothing"
+else
+  score_leak_mut "mutation-memo-export" "lib.sh's variables left exported to every receipt"
+fi
+# 2. DIFF-ONLY: the variable is no longer named outright, so a CALLER's memo leaks through.
+if ! sed 's/^LIB_VARS="AI_DLC_RECONCILE_MEMO \$(_rv_added /LIB_VARS="$(_rv_added /' "$RV" > "$MUT"; then
+  bad "mutation-memo-diffonly" "DID NOT APPLY: sed failed"
+elif cmp -s "$RV" "$MUT"; then
+  bad "mutation-memo-diffonly" "DID NOT APPLY: the mutation matched nothing"
+else
+  score_leak_mut "mutation-memo-diffonly" "only the variables lib.sh ADDED removed, a caller-exported memo kept"
+fi
+# 3. THE FUNCTIONS LEFT DEFINED in the receipt's shell.
+if ! sed 's/^\( *\)( unset \$LIB_VARS; unset -f \$LIB_FNS; cd /\1( unset $LIB_VARS; cd /' "$RV" > "$MUT"; then
+  bad "mutation-memo-fns" "DID NOT APPLY: sed failed"
+elif cmp -s "$RV" "$MUT"; then
+  bad "mutation-memo-fns" "DID NOT APPLY: the mutation matched nothing"
+else
+  score_leak_mut "mutation-memo-fns" "lib.sh's functions left defined in every receipt"
+fi
+
+# ---------------------------------------------------------------------------------------
+# Seed F — a receipt that exits non-zero having MEASURED NOTHING (BL-089, second subject).
+# ---------------------------------------------------------------------------------------
+# BL-151 is BL-081's filed shape: a helper the receipt calls is gone, `$( )` swallows the 127,
+# and the test on the empty result exits 1. BL-152 is BL-066's: a fragment that parses as a
+# receipt and dies at eval time. Both used to read STILL-LIVE; both must read NEEDS-REVIEW with
+# an `unresolved:` detail.
+#
+# THE NEAR-MISSES CARRY THE STRINGS AND THE EXIT CODES. BL-153's SUBJECT prints `No such file or
+# directory` and exits 1 — the ordinary way a receipt observes a live defect. BL-154's subject
+# is a child script whose own shell prints `<path>: line 1: ...: No such file or directory`,
+# so a rule keyed on `line N:` without the engine's own name is caught. BL-155's child script
+# calls a helper it does not ship and exits 127 with `command not found`, so a rule keyed on 127
+# or on the string alone is caught. All three must stay STILL-LIVE.
+SUBJ="$WORK/subjects"; mkdir -p "$SUBJ"
+printf 'cat "%s/absent-input.txt"\n' "$SUBJ" > "$SUBJ/reads-missing.sh"
+printf 'grep -q x < "%s/absent-input.txt"\n' "$SUBJ" > "$SUBJ/redirect-missing.sh"
+printf 'subject_helper_bl089_zz\n' > "$SUBJ/calls-missing.sh"
+LF="$WORK/f.md"
+{
+  printf '# Probe ledger — could-not-measure\n\n'
+  printf '## BL-150 — sh exits 1, the baseline\n\nverify: sh exit 1\n\n'
+  printf '## BL-151 — a helper the receipt calls is gone\n\nverify: sh b=$(receipt_helper_bl089_zz x); [ -n "$b" ]\n\n'
+  printf '## BL-152 — an extracted fragment that dies at eval time\n\nverify: sh eval "f() { echo"; f\n\n'
+  printf '## BL-153 — the subject reports a missing file and exits 1\n\nverify: sh bash "%s/reads-missing.sh"\n\n' "$SUBJ"
+  printf '## BL-154 — a child shell reports a missing file on a line-numbered prefix\n\nverify: sh bash "%s/redirect-missing.sh"\n\n' "$SUBJ"
+  printf '## BL-155 — the subject calls a helper it does not ship, exit 127\n\nverify: sh bash "%s/calls-missing.sh"\n\n' "$SUBJ"
+} > "$LF"
+cm_ok() {
+  local o="$1" id n
+  for id in 150 151 152 153 154 155; do
+    n="$(grep -cE "	BL-$id	" <<<"$o")" || n=0
+    [ "$n" -eq 1 ] || { echo "BL-$id has $n rows, want 1"; return 1; }
+  done
+  grep -qE '^STILL-LIVE	BL-150	' <<<"$o" || { echo "baseline BL-150 is not STILL-LIVE"; return 1; }
+  grep -qE '^NEEDS-REVIEW	BL-151	unresolved:.*command not found' <<<"$o" || { echo "BL-151 (missing helper) reads '$(grep -E '	BL-151	' <<<"$o" | cut -f1)', want NEEDS-REVIEW naming 'command not found'"; return 1; }
+  grep -qE '^NEEDS-REVIEW	BL-152	unresolved:.*syntax error' <<<"$o" || { echo "BL-152 (eval-time syntax error) reads '$(grep -E '	BL-152	' <<<"$o" | cut -f1)', want NEEDS-REVIEW naming 'syntax error'"; return 1; }
+  grep -qE '^STILL-LIVE	BL-153	' <<<"$o" || { echo "BL-153 (subject prints No such file, exit 1) is not STILL-LIVE"; return 1; }
+  grep -qE '^STILL-LIVE	BL-154	' <<<"$o" || { echo "BL-154 (a child shell's line-numbered No such file) is not STILL-LIVE"; return 1; }
+  grep -qE '^STILL-LIVE	BL-155	' <<<"$o" || { echo "BL-155 (the subject's own command not found, exit 127) is not STILL-LIVE"; return 1; }
+  return 0
+}
+FOUT="$(bash "$RV" "$LF" 2>&1)"
+if why="$(cm_ok "$FOUT")"; then
+  ok "cant-measure" "missing helper and eval-time syntax error read NEEDS-REVIEW; three subject-side near-misses stay STILL-LIVE"
+else
+  bad "cant-measure" "$why"
+fi
+cp "$RV" "$MUT"
+MOUT="$(bash "$MUT" "$LF" 2>&1)"
+if why="$(cm_ok "$MOUT")"; then ok "cant-measure-control" "the unmutated copy in the mutant root passes seed F — its own name differs, so the prefix is derived, not fixed"
+else bad "cant-measure-control" "the unmutated copy fails seed F, so the mutant verdict below is void: $why"; fi
+CMN="$(grep -c '^ *elif \[ -n "\$SH_WHY" \]; then$' "$RV")" || CMN=0
+if [ "$CMN" -eq 1 ]; then ok "cant-measure-anchor" "the stderr routing line is unique in the engine"
+else bad "cant-measure-anchor" "the stderr routing line appears $CMN times; the mutation below needs exactly one"; fi
+# THE STDERR ROUTING DROPPED: every could-not-measure receipt falls back to STILL-LIVE.
+if ! sed 's/^\( *\)elif \[ -n "\$SH_WHY" \]; then$/\1elif false; then/' "$RV" > "$MUT"; then
+  bad "mutation-stderr-route" "DID NOT APPLY: sed failed"
+elif cmp -s "$RV" "$MUT"; then
+  bad "mutation-stderr-route" "DID NOT APPLY: the mutation matched nothing"
+else
+  MOUT="$(bash "$MUT" "$LF" 2>&1)"
+  if ! grep -qE '^STILL-LIVE	BL-150	' <<<"$MOUT"; then
+    bad "mutation-stderr-route" "the baseline row (BL-150 STILL-LIVE) is gone — the mutant broke the engine, not the routing"
+  elif why="$(cm_ok "$MOUT")"; then
+    bad "mutation-stderr-route" "SURVIVED: with the stderr routing dropped seed F still passes"
+  else
+    ok "mutation-stderr-route" "killed: stderr routing dropped — $why"
+  fi
+fi
+# THE OWN-PREFIX DROPPED: the three strings matched on any stderr line. The near-misses must die.
+PFN="$(grep -c '^      "\$SELF_NAME: line "\*|"\$SELF_NAME: eval: line "\*) ;;$' "$RV")" || PFN=0
+if [ "$PFN" -eq 1 ]; then ok "prefix-anchor" "the own-interpreter prefix line is unique in the engine"
+else bad "prefix-anchor" "the own-interpreter prefix line appears $PFN times; the mutation below needs exactly one"; fi
+if ! sed 's/^\(      \)"\$SELF_NAME: line "\*|"\$SELF_NAME: eval: line "\*) ;;$/\1*) ;;/' "$RV" > "$MUT"; then
+  bad "mutation-no-prefix" "DID NOT APPLY: sed failed"
+elif cmp -s "$RV" "$MUT"; then
+  bad "mutation-no-prefix" "DID NOT APPLY: the mutation matched nothing"
+else
+  MOUT="$(bash "$MUT" "$LF" 2>&1)"
+  if ! grep -qE '^STILL-LIVE	BL-150	' <<<"$MOUT"; then
+    bad "mutation-no-prefix" "the baseline row (BL-150 STILL-LIVE) is gone — the mutant broke the engine, not the prefix"
+  elif why="$(cm_ok "$MOUT")"; then
+    bad "mutation-no-prefix" "SURVIVED: with any stderr line counted, seed F still passes"
+  else
+    ok "mutation-no-prefix" "killed: any stderr line counted — $why"
   fi
 fi
 

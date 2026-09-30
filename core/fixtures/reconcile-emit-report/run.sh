@@ -1212,6 +1212,19 @@ fi
 # subject replaced by `exit 0` fails them by construction rather than passing as a clean absence.
 T_SECT() { awk '/Template pre-classification/{f=1;next} f&&/^\*\*/{exit} f' "$1"; }
 
+# t_stage <region-file> <emit-report.sh> — render into a STAGED FILE and return the producer's own
+# status, never `T_SECT <(bash …)`. A process substitution discards the producer's exit, and under
+# concurrent bash 3.2 workers the reader's open of `/dev/fd/63` can fail with EBADF (BL-230: 3-8 in
+# 2000 under 4 workers, 0 staged, the same race 0.647.0 removed from the engine). Either way the
+# section read EMPTY, and an empty section is what a CONTROL scores as "the copy rendered no rows" —
+# a verdict about emit-report.sh for a failure that was the fixture's own read. Stderr goes to
+# `<region-file>.stderr` so a refusal can quote it; a healthy render exits 0 in every world these
+# sites drive (the two refusal worlds included — they render DETECTOR-REFUSED at rc 0).
+t_stage() { bash "$2" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$1" 2> "$1.stderr"; }
+# t_stage_why <region-file> <rc> — the refusal text: the status and the producer's last stderr line.
+t_stage_why() { local e; e="$(grep -v '^[[:space:]]*$' "$1.stderr" 2>/dev/null | tail -1 | cut -c1-160)"
+  printf 'exited %s (%s)' "$2" "${e:-no stderr}"; }
+
 # THE BATTERY RENDERS ITS OWN REGION, and that is not tidiness. `$REGION` was rendered by seed.sh
 # before assertions 12-14 seeded a ledger and two shadowed forks into `$CONSUMER`, so a `--verify`
 # against it FAILS on those sections — correctly, and for a reason A4 does not own. MEASURED: A4
@@ -1338,15 +1351,25 @@ t_refuse_world() { # t_refuse_world <dir> <shape> -> builds a reconcile copy, pr
   esac
 }
 t_refuse_check() { # t_refuse_check <label> <shape> <what-the-shape-is>
-  local d="$WORK/tpl-refuse-$2" ctl mut
+  local d="$WORK/tpl-refuse-$2" ctl mut s_rc
   t_refuse_world "$WORK/tpl-refuse-ctl-$2" none || { bad "$1 could not build the control sandbox"; return; }
-  ctl="$(T_SECT <(bash "$WORK/tpl-refuse-ctl-$2/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null))"
+  s_rc=0; t_stage "$WORK/tpl-refuse-ctl-$2.region" "$WORK/tpl-refuse-ctl-$2/emit-report.sh" || s_rc=$?
+  if [ "$s_rc" -ne 0 ]; then
+    bad "FIXTURE BROKEN — $1 CONTROL's unmutated render $(t_stage_why "$WORK/tpl-refuse-ctl-$2.region" "$s_rc"), so neither the control nor the refusal assertion below was read"
+    return
+  fi
+  ctl="$(T_SECT "$WORK/tpl-refuse-ctl-$2.region")" || { bad "FIXTURE BROKEN — $1 could not read its staged CONTROL region"; return; }
   if ! grep -q 'TEMPLATE-PROSE-MERGE' <<<"$ctl"; then
     bad "$1 CONTROL the UNMUTATED sandbox copy rendered no TEMPLATE-PROSE-MERGE row, so the refusal assertion below would pass for a sandbox that simply died"
     return
   fi
   t_refuse_world "$d" "$2" || { bad "$1 could not build the $2 sandbox"; return; }
-  mut="$(T_SECT <(bash "$d/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null))"
+  s_rc=0; t_stage "$d.region" "$d/emit-report.sh" || s_rc=$?
+  if [ "$s_rc" -ne 0 ]; then
+    bad "FIXTURE BROKEN — $1 the $2 sandbox's render $(t_stage_why "$d.region" "$s_rc"), so whether it renders DETECTOR-REFUSED was not read"
+    return
+  fi
+  mut="$(T_SECT "$d.region")" || { bad "FIXTURE BROKEN — $1 could not read the $2 sandbox's staged region"; return; }
   if grep -q 'DETECTOR-REFUSED' <<<"$mut" && ! grep -qx 'none' <<<"$mut" && ! grep -q 'TEMPLATE-' <<<"$mut"; then
     ok "$1 $3 renders DETECTOR-REFUSED and NOT 'none' (control: the unmutated copy beside it renders the real rows)"
   else
@@ -1505,9 +1528,14 @@ fi
 # CONTROL FIRST: an UNMUTATED copy in a fresh directory renders the four rows. Two inert runs
 # compare equal, so without this every kill below could be a battery comparing nothing to nothing.
 T_CTL="$TMD/ctl"; rm -rf "$T_CTL"; cp -R "$(dirname "$EMIT")" "$T_CTL"
-t_ctl_sec="$(T_SECT <(bash "$T_CTL/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null))"
-t_ctl_rows="$(grep -c 'TEMPLATE-PROSE-MERGE\|TEMPLATE-JSON-MERGE\|TEMPLATE-UNCHANGED-NOOP\|CONSUMER-MISSING-NOOP' <<<"$t_ctl_sec")" || t_ctl_rows=0
-if [ "$t_ctl_rows" -eq 4 ]; then
+t_ctl_rc=0; t_stage "$T_CTL.region" "$T_CTL/emit-report.sh" || t_ctl_rc=$?
+t_ctl_sec=""; t_ctl_rows=0
+if [ "$t_ctl_rc" -eq 0 ] && t_ctl_sec="$(T_SECT "$T_CTL.region")"; then
+  t_ctl_rows="$(grep -c 'TEMPLATE-PROSE-MERGE\|TEMPLATE-JSON-MERGE\|TEMPLATE-UNCHANGED-NOOP\|CONSUMER-MISSING-NOOP' <<<"$t_ctl_sec")" || t_ctl_rows=0
+fi
+if [ "$t_ctl_rc" -ne 0 ]; then
+  bad "FIXTURE BROKEN — CONTROL(T)'s unmutated render $(t_stage_why "$T_CTL.region" "$t_ctl_rc"), so its row count was not read and every mutant verdict below is unreadable"
+elif [ "$t_ctl_rows" -eq 4 ]; then
   ok "CONTROL(T) an unmutated copy of reconcile/ in a fresh directory renders all four step-3b rows, so a mutant's changed section is the mutation and not the copy"
 else
   bad "CONTROL(T) the unmutated copy rendered $t_ctl_rows step-3b row(s), not 4 — every mutant verdict below is unreadable, because a copy that never ran renders nothing and that is what a kill looks like"
@@ -1675,9 +1703,14 @@ v_copy()    { local d="$VW/$1"; rm -rf "$d"; mkdir -p "$d" && cp -R "$CONSUMER" 
 #
 # SO BOTH SIDES RETRY, BOUNDED AT THREE, AND ONLY ON A REFUSAL THE HEALTHY WORLD DOES NOT CARRY.
 # A retry is legitimate here only because the engine now NAMES the failure; before it, this
-# would have retried straight into a silent `none`. Three refusals in a row are not transient,
-# and they report FIXTURE BROKEN naming the world, the program and the line — never a verdict
-# on emit-report.sh.
+# would have retried straight into a silent `none`. Three refusals in a row are not transient.
+# When the last one names a detector that is a file beside the engine under test and the seed
+# world does not refuse it, the guard reports ENGINE REGRESSION naming the world and the
+# detector: a shipped detector refusing on this world and not on the seed is a defect in that
+# detector, and reporting it as FIXTURE BROKEN sent the reader to the wrong file (BL-338).
+# Anything else — `orientation`, which is no file, or a name the seed itself refuses — stays
+# FIXTURE BROKEN, and `emit-report-refusal` holds both of those shapes to that prefix. R6-VN
+# below drives the ENGINE REGRESSION branch.
 #
 # THE BASELINE IS DERIVED, NEVER LISTED. The seed world carries one legitimate refusal on every
 # clean run (`retired-layer-token.sh`), so keying on `^DETECTOR-REFUSED` at large would retry
@@ -1697,7 +1730,7 @@ v_foreign() {
     }' "$1"
 }
 v_approve() { # v_approve <world> <ref-to-render-at>
-  local d="$VW/$1" a=0 x=""
+  local d="$VW/$1" a=0 x="" n=""
   printf '%s\n' "$2" > "$d/ref"
   # `until`, where v_score's loop is `while`: the two retries are mutated separately by
   # `emit-report-refusal`, whose battery extracts these helpers from this file and drives them.
@@ -1707,7 +1740,17 @@ v_approve() { # v_approve <world> <ref-to-render-at>
     x="$(v_foreign "$d/region.md" "")"
     [ -z "$x" ] && break
   done
-  [ -n "$x" ] && bad "FIXTURE BROKEN — $1 approval rendered DETECTOR-REFUSED on $V_TRIES attempts: $x — three in a row is not transient: when the named detector is one emit-report.sh ships, this is a deterministic ENGINE regression in that detector on this world, not a fixture fault"
+  if [ -n "$x" ]; then
+    n="$(printf '%s\n' "$x" | awk '{ print $2; exit }')"
+    # The seed test reads `$REGION` itself, never `V_REFUSE_OK`: a baseline that failed to
+    # derive must not turn the seed's own refusal into an accusation against the engine.
+    if [ -f "$(dirname "$EMIT")/$n" ] \
+      && ! awk -v n="$n" 'index($0, "DETECTOR-REFUSED  " n " ") == 1 { f = 1 } END { exit !f }' "$REGION"; then
+      bad "ENGINE REGRESSION — $1 approval: $n refused on $V_TRIES attempts and the seed world does not refuse it: $x — a detector emit-report.sh ships refusing deterministically on this world is a defect in $n, not in this fixture"
+    else
+      bad "FIXTURE BROKEN — $1 approval rendered DETECTOR-REFUSED on $V_TRIES attempts: $x — it names no detector emit-report.sh ships, or one the seed world itself refuses, so the retry or the baseline is what failed"
+    fi
+  fi
   { echo "# Reconcile report (fixture)"; echo; cat "$d/region.md"; } > "$d/approved.md"
   [ -s "$d/region.md" ]
 }
@@ -1773,6 +1816,61 @@ else
     *) bad "FIXTURE BROKEN [R6-BASE mutant]: the stubbed engine's derived set is [${_r6m_set:-empty}] — it must carry BOTH the seed's retired-layer-token refusal (the copy ran) and ledger-reverify.sh (the stub fired)" ;;
   esac
 fi
+
+# --- R6-VN begin ---
+# R6-VN — A SHIPPED DETECTOR REFUSING ON ONE WORLD IS REPORTED AS AN ENGINE REGRESSION (BL-338).
+# R6-BASE owns the global case. This is the other half: an engine copy whose `ledger-reverify.sh`
+# refuses only when the consumer it is handed is a V-N world, so the seed render — and therefore
+# `V_REFUSE_OK` — stays exactly as healthy as the real one, and nothing but v_approve's own
+# message can say what went wrong. The shipped v_approve is driven, not restated, against two
+# worlds built from the seed consumer through that ONE engine:
+#   V-N  the refusing world   -> exactly one `ENGINE REGRESSION — V-N approval: ledger-reverify.sh`
+#                                line, no FIXTURE BROKEN, and the stub fired exactly V_TRIES times
+#   V-R  the near-miss        -> no line at all, and its Push-candidate ledger section is non-empty,
+#                                carries no refusal, and is byte-identical to the SHIPPED engine's
+#                                section for the same world, so the stub is keyed on the world and
+#                                not refusing everywhere (which is R6-BASE's case). Compared against a
+#                                live render, never a row count: the shared consumer's ledger is
+#                                rewritten earlier in this file, so a count seeded from the seed
+#                                ledger reads 0 here and 2 in isolation.
+# Both run as background jobs; `bad` cannot count there, so each job writes its lines to a file
+# read below. PRESENCE-SHAPED on the refusing side: a v_approve that reports nothing fails it.
+_r6v="$WORK/r6-vn"; rm -rf "$_r6v"; mkdir -p "$_r6v/vw/V-N" "$_r6v/vw/V-R"
+cp -R "$(dirname "$EMIT")" "$_r6v/eng"
+awk -v fired="$_r6v/stub.fired" 'NR == 1 { print; print "case \"${3:-}\" in */V-N/consumer) echo x >> \"" fired "\"; exit 2 ;; esac"; next } { print }' \
+  "$(dirname "$EMIT")/ledger-reverify.sh" > "$_r6v/eng/ledger-reverify.sh"
+cp -R "$CONSUMER" "$_r6v/vw/V-N/consumer"; cp -R "$CONSUMER" "$_r6v/vw/V-R/consumer"
+if cmp -s "$(dirname "$EMIT")/ledger-reverify.sh" "$_r6v/eng/ledger-reverify.sh"; then
+  bad "FIXTURE BROKEN [R6-VN]: the V-N-only ledger-reverify.sh stub did not apply"
+else
+  for _w in V-N V-R; do
+    ( EMIT="$_r6v/eng/emit-report.sh"; VW="$_r6v/vw"
+      bad() { printf '%s\n' "$1" >> "$_r6v/$_w.bad"; }
+      : > "$_r6v/$_w.bad"; v_approve "$_w" "$THEIRS"; : > "$_r6v/$_w.done" ) &
+  done
+  ( bash "$EMIT" "$DIST" "$BASE" "$_r6v/vw/V-R/consumer" "$THEIRS" > "$_r6v/V-R.shipped.md" 2>/dev/null ) &
+  wait
+  _r6v_fired="$(grep -c . "$_r6v/stub.fired" 2>/dev/null)" || _r6v_fired=0
+  _r6v_lines="$(grep -c . "$_r6v/V-N.bad" 2>/dev/null)" || _r6v_lines=0
+  _r6v_rt="$(grep -c '^DETECTOR-REFUSED  retired-layer-token\.sh ' "$_r6v/vw/V-N/region.md" 2>/dev/null)" || _r6v_rt=0
+  if [ ! -f "$_r6v/V-N.done" ] || [ ! -f "$_r6v/V-R.done" ] || [ "$_r6v_rt" != 1 ]; then
+    bad "FIXTURE BROKEN [R6-VN]: an approval job did not finish, or the stubbed engine's V-N render lacks the seed's retired-layer-token refusal ($_r6v_rt) — the copy never ran"
+  elif [ "$_r6v_lines" = 1 ] && [ "$_r6v_fired" = "$V_TRIES" ] \
+    && grep -q '^ENGINE REGRESSION — V-N approval: ledger-reverify\.sh refused on 3 attempts and the seed world does not refuse it: DETECTOR-REFUSED  ledger-reverify\.sh exited 2 ' "$_r6v/V-N.bad"; then
+    ok "R6-VN a shipped detector (ledger-reverify.sh) refusing on the V-N approval only is reported as ENGINE REGRESSION naming the world and the detector, after $_r6v_fired attempts, and not as FIXTURE BROKEN"
+  else
+    bad "R6-VN the V-N-only ledger-reverify.sh refusal was reported as [$(head -1 "$_r6v/V-N.bad" | cut -c1-160)] ($_r6v_lines line(s), stub fired $_r6v_fired times), want one ENGINE REGRESSION line naming V-N and ledger-reverify.sh after $V_TRIES attempts — a deterministic engine refusal must not read as a fixture fault"
+  fi
+  _r6v_sec() { awk 'f && /^$/ { exit } f { print } index($0, "**Push-candidate ledger") == 1 { f = 1 }' "$1" 2>/dev/null; }
+  _r6v_got="$(_r6v_sec "$_r6v/vw/V-R/region.md")"; _r6v_want="$(_r6v_sec "$_r6v/V-R.shipped.md")"
+  if [ -f "$_r6v/V-R.done" ] && [ ! -s "$_r6v/V-R.bad" ] && [ -n "$_r6v_got" ] \
+    && [ "$_r6v_got" = "$_r6v_want" ] && ! grep -q 'DETECTOR-REFUSED' <<< "$_r6v_got"; then
+    ok "R6-VN near-miss: the same stubbed engine approves V-R clean, its Push-candidate ledger section byte-identical to the shipped engine's — the refusal is the V-N world's, not the engine's everywhere"
+  else
+    bad "R6-VN near-miss: V-R through the V-N-only stub reported [$(head -1 "$_r6v/V-R.bad" 2>/dev/null | cut -c1-160)], ledger section [$(printf '%s' "$_r6v_got" | head -1 | cut -c1-100)] vs shipped [$(printf '%s' "$_r6v_want" | head -1 | cut -c1-100)], want nothing and an identical non-refused section"
+  fi
+fi
+# --- R6-VN end ---
 
 # v_score <emit> <world> <tag> -> "<rc>|<cause>|<resolved-lines>|<n1>|<n2>|<unseen-lines>"
 #
@@ -2448,7 +2546,18 @@ if [ "$(printf '%s\n' "$B2_N" | grep -c .)" -eq 0 ]; then
 elif [ "$B2_F" = "$B2_N" ]; then
   ok "B2 the flag changes who PAID and not what is answered: flagged and standalone scans agree row-for-row on this fixture's own tree, with the row set asserted non-empty first"
 else
-  bad "B2 the flagged and standalone scans DISAGREE, so the rendered region depends on which caller ran the scan: $(diff <(printf '%s\n' "$B2_N") <(printf '%s\n' "$B2_F") | head -4 | tr '\n' '|')"
+  # The two sides are STAGED and diff's status read: a `<( )` pair here lost diff's exit, so a diff
+  # that could not compare printed an empty sample beside the verdict, reading as "no difference".
+  b2_rc=0
+  { printf '%s\n' "$B2_N" > "$WORK/b2-standalone.rows" && printf '%s\n' "$B2_F" > "$WORK/b2-flagged.rows"; } || b2_rc=staging-failed
+  if [ "$b2_rc" = 0 ]; then
+    diff "$WORK/b2-standalone.rows" "$WORK/b2-flagged.rows" > "$WORK/b2.diff" 2>&1 || b2_rc=$?
+  fi
+  case "$b2_rc" in
+    0|1) b2_why="$(head -4 "$WORK/b2.diff" | tr '\n' '|')" ;;
+    *)   b2_why="(the two row sets could not be diffed: $b2_rc — the disagreement above is decided, its lines are not shown)" ;;
+  esac
+  bad "B2 the flagged and standalone scans DISAGREE, so the rendered region depends on which caller ran the scan: $b2_why"
 fi
 # =========================================================================================
 # MUTANTS FOR THE WORLD GUARDS
