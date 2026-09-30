@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 502..564. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 512..569. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -67,6 +67,76 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
 
+**BATCH 177 SHIPPED `v0.674.0` (`f7eec6f5`, #930) AND DISCHARGED SEVEN CONSUMER CANDIDATES**, every
+one the reference consumer filed at its sprint-315 retro, all in one release because none touches the
+update skill's machinery (`setup-sites.md` gains two fixture lines only):
+`PC-S315-VALIDATE-MANDATORY-RULES-CHECK5-HEAD-200-TRUNCATES-A-LONG-SPRINT-SECTION` (`BL-392`),
+`PC-S315-PREPUSH-REQUIRES-RENDERED-AGENT-DEFS-IN-FRESH-WORKTREE` (`BL-393`),
+`PC-S315-RETRO-STEP1-SQUASH-CUT-LACKS-POST-SQUASH-EVIDENCE` (`BL-394`),
+`PC-S315-STEERING-BUDGET-COUNTS-BUT-DOES-NOT-PREVENT` (`BL-395`),
+`PC-S315-DEPLOY-VALIDATE-HAS-NO-ONE-VARIABLE-PER-SMOKE-RUN-RULE` (`BL-396`),
+`PC-S315-DEV-AND-QA-ROLE-CHECKLISTS-LET-A-STORY-REACH-GATE-1-WITHOUT-THE-EVIDENCE-SECTIONS-AND-THE-FULL-SUITE`
+(`BL-397`) and
+`PC-S315-STORIES-TEST-STRATEGY-CASE-LETTERS-AND-RE-POINT-CONSUMERS-ARE-NOT-BOUND-TO-A-TEST-AT-AUTHORING`
+(`BL-398`). It also shipped `BL-390`'s operator-ruled remedy. It was invoked by peer handoff. Its
+close rotated those 8 and filed `BL-399`: live backlog **46 -> 39**, archive **351 -> 359**, net
+closed minus filed **7**. R5 floors unchanged at the measured 18 sh receipts over 39 live entries.
+
+**THE OPERATOR RE-SCOPED THE BATCH MID-FLIGHT, AND THE RULING STANDS: A NEW CONSUMER FILING THAT BIT
+THE CONSUMER'S SPRINT PRE-EMPTS BACKLOG WORK, AND BACKLOG WORK IS STOPPED FOR IT.** The opening sweep
+found the PC-backed worklist empty, so the batch scoped eight backlog releases from a whole-backlog
+adjudication. The seven filings then landed on the consumer's retro branch; the operator ruled them
+first and had the backlog work stopped, to be picked up by a later session. The eight unbuilt release
+contracts, with the one adversary pass that reported (R4, `apply.sh`), are recorded in
+`docs/reviews/b177-backlog-release-contracts.md` as a record to re-derive from, not a plan.
+
+**THE WHOLE-BACKLOG ADJUDICATION: 39 entries, 0 CLOSE, 5 PARTIAL, 34 LIVE, 0 dead premise.** Every
+`sh` receipt exited 1 and none 9. Findings a later batch needs, each in the entry's body or the
+contracts record: `BL-333` is worse than filed (`retired-layer-contract.sh:332` swallows a true
+retired-path row); `BL-360`'s carried DEFECT bullet shipped as `BL-370` and can be struck; `BL-066`'s,
+`BL-083`'s, `BL-127`'s, `BL-132`'s and `BL-145`'s receipts reject a correct fix.
+
+**THE TIP ADVERSARY FOUND A BLOCKER IN A GATE-GREEN-SHAPED RELEASE, AGAIN.** The new
+`ai-dlc-foreground-budget.sh` denied the foreground `git push` with `timeout: 600000` that four shipped
+instructions mandate (`_gate-procedures.md`, `handoff.md`, `retro.md` Step 6b, the continue hook's
+HANDOFF GUARD), and both remedies its deny offered break that call. Fixed before merge: a push whose
+first word is `git push` and teammate calls (`agent_id`) are exempt. **Grep the step files for every
+instruction a new deny hook would refuse before shipping it** — the fixture's own OVER arm scored the
+wedge as correct.
+
+**THE GATE FAILED TWICE BEFORE IT PASSED.** First on the unfixed hook tree, stopped mid-run. Then
+`validator-fork-budget` at 3188 against 3174: measured by arm against base, +11 from the new hook as a
+subject of every per-hook arm and +10 from `BL-390`'s inline root block (I75); `FORK_BUDGET` is 3194
+with the measurement beside it, exec bit checked committed at `100755` before the push. The same run
+failed `stray-party-mode-provenance` S10-C (`hdiutil create failed - Directory not empty`), which
+passed alone and passed in the next gate; not this release. Gate on `f9ad0e70`: 22 sections, 222
+fixtures ok, 0 FAIL, `all gates green`, every changed fixture `ok` by name against an impossible-name
+control of 0, `ls-remote` matching, squash tree identical to the gated tip.
+
+**`BL-395`'s RECEIPT BLOCKED ITS OWN ROTATION**: an unguarded `$3` under the engine's `set -u`, exit 0
+alone and 1 through `backlog-reverify.sh` — the batch-175 `BL-385` shape exactly. Guarded to `${3:-}`
+and rescored under `set -uo pipefail`: fix 0, no hook 1, the pre-exemption hook 1, a warn-only mutant 1.
+**Score every new receipt under `set -uo pipefail`, not in a bare shell.**
+
+**OPERATOR RULINGS THIS BATCH:** `BL-007` stays open for the archive-interior hole; `BL-390` took the
+distinct verdict (shipped); `BL-132` is left unbuilt; `docs/context-hardening-notes.md` is a LOG,
+unbounded like `CHANGELOG.md`, so `BL-093` closes on a header once built. **`BL-375` is the operator's
+to schedule**, with the command fixed as `sudo bash core/scripts/derive-fixture-readsets.sh --all
+--tracer both`; that mode is in R1's contract and is NOT yet built, so the command refuses today.
+
+**THE READ-SET MAP IS CURRENT.** The operator traced `update-preflight-push` and the eight fixtures
+0.674.0 changed; it shipped in the release. No trace is owed.
+
+**THE DELIVERY GAP IS ONE RELEASE.** The consumer is at 0.673.0 against `VERSION` 0.674.0, which
+touches no bootstrapping file. PENDING is 9: the seven ids above, plus
+`PC-S315-ARTIFACT-WRITE-LEDGER-DROPS-PARALLEL-SHARD-ROWS` and
+`PC-S315-NO-AMENDMENT-PATH-FOR-A-NOTARIZED-ARTIFACT-AFTER-A-STORY-DECISION`, shipped at 0.668.0 and
+0.669.0 and filed after the consumer's last pull base, so its re-verify never evaluated them.
+`docs/reviews/graph-consumer-close-brief-2.md` still closes thirteen more on the consumer's side and is
+unapplied. The banked ruling stands: report the gap and write no runbook.
+
+Batch 176's operator-decisions list is spent: batch 177's rulings above replace it.
+
 **BATCH 176 SHIPPED `v0.671.0` (`8e697587`, #925), `v0.672.0` (`9a9b8146`, #926) AND `v0.673.0`
 (`72b1ea2a`, #927), AND DISCHARGED ONE CONSUMER CANDIDATE:**
 `PC-S336-STEP-1-AUTOPUSH-IS-THE-UNGUARDED-TWIN-OF-THE-PUSH-STEP-2-HARDENED` (`BL-389`). It was
@@ -100,10 +170,8 @@ Staged through `ld_stage`, and `layer-extends-grain`'s m5 re-anchored. Gates: `v
 `ef5b4b57`, `v0.672.0` on `62d1be89`, `v0.673.0` on `9ebb9f6a`; each 22 phases, 24 PASS, 1 SKIP,
 0 FAIL, every changed fixture `ok` by name, squash tree identical to the gated tip.
 
-**OPERATOR DECISIONS OUTSTANDING, OFFERED IN BATCH 176's PINGS AND UNANSWERED:** `BL-007` (the
-archive-interior hole; recommended leave open), `BL-390` (which remedy; recommended the distinct
-verdict keyed on a named session with no transcript on disk), `BL-375` (the one `sudo` both-tracer
-comparison).
+**OPERATOR DECISIONS OFFERED IN BATCH 176's PINGS** were answered in batch 177; its block above records
+the rulings.
 
 **READ-SET TRACE OWED**: `sudo bash core/scripts/derive-fixture-readsets.sh --list
 "update-preflight-push"` — the new fixture is unmapped, so the runner runs it on every push. The
@@ -441,64 +509,6 @@ carry-over gate's 3052). The banked ruling stands: report the gap and write no r
 Batch 170's next-work list and delivery gap are spent: batch 171's block above replaces both, and
 carries the operator priority forward.
 
-**BATCH 170 SHIPPED `v0.661.0` (`4fff688e`, #897) AND CLOSED `BL-356`. IT DISCHARGES NO CONSUMER
-CANDIDATE.** It was invoked by peer handoff and took the lib.sh release the batch-169 block
-recommended. The opening sweep matched batch 169 exactly: live 28, unfiled 12, worklist 5 (the same
-self-disqualifying rows), TERMINAL 147, ledger md5 `34f7e60e…` on the consumer's `main`, every control
-at its expected value. Live backlog **100 -> 100** (`BL-356` rotated, `BL-364` filed), archive
-**262 -> 263**. The exit-0 receipt set went from batch 169's nine to those nine plus `BL-356`,
-compared by id, so nothing closed incidentally.
-
-**`BL-360`, LIB.SH HALF: THE THREE AWK EMITTERS ARE `printf` LITERALS.** Under `ulimit -f 0` with
-SIGXFSZ ignored, `ledger_entry_awk` returned rc 1 and 0 bytes at 0.660.0, and every inline
-`awk "$(ledger_entry_awk)…"` caller discarded that status. The emitted programs are byte-identical to
-0.660.0. **`BL-356` CLOSED AT THE PRODUCER, IN THREE PLACES**: `memo_diff_name_status`, preclassify's
-relocation `ls-tree`, and `machinery_paths()`'s two `ls-files`. The contract adversary found the
-second and the tip adversary the third; without the third, arm C stopped carrying a consumer-edited
-non-ASCII machinery file. **Every `core.quotePath` site is a JOIN, not a listing**: flipping one side
-breaks whatever joins it against a side still quoted. `BL-364` files the other 29 as a census.
-
-**THE GATE FAILED TWICE ON THIS RELEASE'S OWN EDITS, NEITHER A REGRESSION.** `relocation-preclassify`
-anchored a mutation on the exact `ls-tree` text the fix changed, and its `cmp` guard refused; it is
-re-anchored. `S7` read a `gsub(` and a `\047` on one line as a backreference; the line is split. Gate
-on `d656c87d`: 24 PASS, 0 FAIL, 1 SKIP, 214 ok, all four changed fixtures `ok` by name against an
-impossible-name control of 0, `ls-remote` matching, squash tree identical to the gated tip.
-
-**READ-SET TRACES STILL OWED**, and this batch adds none: `procsub-staged-refusal`'s row already
-lists the whole `reconcile/` directory. Batch 169's owed trace has not run —
-`.ai-dlc-fixture-readsets.tsv` last moved at `feb95866`. `sudo bash
-core/scripts/derive-fixture-readsets.sh --list "procsub-staged-refusal retired-layer-contract
-retired-layer-passage"` on a checkout of `origin/main`.
-
-**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
-- **OPERATOR PRIORITY, SET 2026-09-29: `BL-365`..`BL-368` come BEFORE `BL-360`.** They shard the
-  adversary, party-mode, remediator, gate-adjudicator and analyst dispatches, which hold most of the
-  graph lead's 144h of solo subagent wait.
-- The unfiled set holds no new core filing. `BL-360`'s remaining half is the strongest
-  distribution-internal work: `apply.sh`, `preclassify.sh`, `ledger-reverify.sh`,
-  `self-update-gate.sh`, `self-update-fixtures.sh` (`:655`, `:961`) and `emit-report.sh` (`:842`) —
-  each BOOTSTRAPPING, each shipping alone. `BL-364`'s sites in the same file can ride each release,
-  but only with every join that reads them flipped in the same release.
-- Filings owed when a close frees room are batch 169's list, unchanged, then this batch's NOTEs:
-  `memo_diff_name_status`'s memo key omits the `quotePath` flag (harmless while one process tree
-  sources one lib.sh), and a bare `git archive <sha>` in this repo exported only `core/` (cause
-  unfound; pass the top-level paths).
-- `BL-230` needs a mechanism for E1, E2 and E9.
-
-**THE DELIVERY GAP IS TWO RELEASES.** The consumer's `main` stamps 0.658.0 (`312c46ee`); its
-checked-out carry-over branch stamps 0.659.0 (`322ef42c`). Against `VERSION` 0.661.0,
-`322ef42c..origin/main` carries three bootstrapping files — the update `SKILL.md`, `lib.sh` and
-`preclassify.sh` — and 0 of 16 `core/` rows are mode-only. PENDING is 0: no release commit in the
-range names a `PC-` id (positive control: the 0.659.0 range names 3). The banked ruling stands:
-report the gap and write no runbook.
-
-**THE CHECK-34 FINDING HAS EXPIRED.** `_bmad-output/pipeline-snapshot.md:13` now carries bare 64-hex
-with no `SHA256:` prefix, which `validate-scope-confirmation.sh`'s hex rule accepts (1 match against
-the prefix grep's 0). Do not restate it.
-
-Batch 169's next-work list, delivery gap and check-34 finding are spent: batch 170's block above
-replaces all three.
-
 ### Derive the state; do not trust the numbers below
 
 Every figure here is a HYPOTHESIS about a tree that has moved. The measured base rate of expired
@@ -792,15 +802,16 @@ comm -12 /tmp/live.txt /tmp/arch.txt | wc -l          # control: must be 0, the 
 comm -12 /tmp/live.txt /tmp/filed.txt | wc -l         # live candidates a backlog entry cites
 comm -23 /tmp/live.txt /tmp/filed.txt                 # live candidates NOTHING has filed
 grep -cx 'PC-S333-SKILL-RENDERS-THE-THEIRS-REF-UNQUOTED-AND-ZSH-EATS-IT' /tmp/filed.txt  # control: 1
-grep -cx 'PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY' /tmp/live.txt   # control: 1, a SPACED bullet.
-                                                      # It was `PC-S309-PRE-PUSH-FLAG-MISMATCH-ORIGINAL-TEXT`,
-                                                      # then `PC-S295-RETRO-PARALLEL-OPEN-COUNT-METHOD`,
-                                                      # and `-CHECK5-SELF-REFERENTIAL` before that,
-                                                      # until the consumer ARCHIVED each id, after
-                                                      # which it read 0 on a correct derivation. A
-                                                      # control a close can break must be re-checked
-                                                      # every batch, not trusted.
-grep -cx 'PC-S336-STEP-1-AUTOPUSH-IS-THE-UNGUARDED-TWIN-OF-THE-PUSH-STEP-2-HARDENED' /tmp/live.txt
+grep -cx 'PC-S309-PRE-PUSH-FLAG-MISMATCH-ORIGINAL-TEXT' /tmp/arch.txt   # control: 1, a SPACED bullet.
+                                                      # READS `arch.txt`: no live entry of either bullet
+                                                      # form remains, measured at batch 177 over every
+                                                      # qualifying ref. Every live control this line
+                                                      # used read 0 once the consumer ARCHIVED its id,
+                                                      # on a correct derivation. The archive is
+                                                      # append-only, so both forms stay reachable there;
+                                                      # if a live bullet entry is filed again, control
+                                                      # BOTH files.
+grep -cx 'PC-S336-STEP-1-AUTOPUSH-IS-THE-UNGUARDED-TWIN-OF-THE-PUSH-STEP-2-HARDENED' /tmp/arch.txt
                                                       # control: 1, a BARE-BOLD bullet -- this is
                                                       # the arm that fails if anyone reinstates the
                                                       # trailing space, and a reinstated grammar
@@ -911,7 +922,7 @@ wc -l < /tmp/pc_backed.tsv     # THE WORKLIST: entries whose candidate is STILL 
 cat /tmp/pc_backed.tsv         # read it -- the ids are the batch's candidate set
 # controls, same invocation:
 wc -l < /tmp/live.txt                                            # must be NON-ZERO
-grep -cxF 'PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY' /tmp/live.txt  # a known-live id: 1
+grep -cxF 'PC-S315-ARTIFACT-WRITE-LEDGER-DROPS-PARALLEL-SHARD-ROWS' /tmp/live.txt  # a known-live id: 1 -- a close breaks it; re-check
 grep -cxF 'PC-S999-NEVER-A-REAL-ID' /tmp/live.txt                # impossible id: 0
 ```
 
@@ -1179,6 +1190,14 @@ given at batch 90.
      batch 106, after a hand's `rm -rf "$S/$d"` loop stopped the session on a harness prompt
      that must not be allow-listed.
    - **Never merge while a hand is out**, and never read a hand's idle state as its report.
+   - **A consumer filing that bit the consumer's sprint pre-empts backlog work.** Operator ruling at
+     batch 177: re-derive the sweep whenever the operator reports a new filing mid-batch, slot the
+     filings as the next release, and STOP backlog hands that would delay it — a later session picks
+     that work up. Packaging and release of the filings are the lead's call without asking.
+   - **A new DENY hook ships only after the step files are grepped for every call it would refuse.**
+     Batch 177's tip adversary found the budget hook refusing a push four shipped instructions require.
+   - **Score every new `sh` receipt under `set -uo pipefail`**, which is how `backlog-reverify.sh`
+     evaluates it; a bare-shell 0 has twice been a rotation-time 1.
    - **A fixture hand whose arms touch hooks runs `bash scripts/validate-enforcement-map.sh`
      before it reports.** Batch 145's gate failed on I10 across 11 fixtures because a hand ran
      only its own fixture.

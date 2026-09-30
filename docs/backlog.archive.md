@@ -24923,3 +24923,430 @@ selects two units: 9 from the receipt and STALE from the fixture, neither a pass
 
 verify: sh P=core/skills/ai-dlc-update/SKILL.md; [ -f "$P" ] || exit 9; grep -q 'AUTO-PUSH' "$P" || exit 9; LC_ALL=C awk 'BEGIN { F = "(^|[^a-z])(stop|stops|stopped|halt|halts|halted|abort|aborts|terminate|terminates)([^a-z]|$)|run ends|ends the run|end the run|do not proceed|does not proceed"; NF_ = "not fatal|non-fatal|negfatal"; C = "continue|keep going|carry on|carries on|(proceed|proceeds|continues) to the dry-run"; NP = "do not push|does not push|never push|no push|nothing is pushed|nothing is published|pushes nothing|publishes nothing"; PU = "auto-push|push it|push the branch|to re-sync|push anyway|pushes anyway" } function pf() { return !(l ~ F) && l ~ NF_ && l ~ C && l ~ /fail|reject/ && index(l, "un-synced") } function fin() { if (t == "") return; gsub(/[*]/, "", t); gsub(/[ \t]+/, " ", t); l = tolower(t); t = ""; gsub(/(not|never|no|nor) (a )?(stop|halt|abort|end|terminate)/, "negfatal", l); if (index(l, "remote exists but the current branch has no upstream")) { na++; if (!pf()) bad = 1 } if (index(l, "branch ahead of its upstream")) { nb++; if (!pf()) bad = 1 } if (index(l, "re-confirm the step-1 git preflight")) { nc++; if (l ~ PU || !(l ~ NP) || !(l ~ /un-synced[^.;]*(stop|refuse)[^.;]*apply/)) bad = 1 } if (index(l, "one whose step-1 auto-push failed")) { np++; if (l ~ F || !(l ~ /(proceed|proceeds|continue|continues) to the dry-run/) || !index(l, "defer")) bad = 1 } if (index(l, "on a branch step 1 left un-synced")) { ns++; if (!(l ~ /left un-synced[^.;]*defer/) || l ~ PU || l ~ /commits? (it )?locally/) bad = 1 } } /^[ \t]*- / { fin(); t = $0; next } /^[ \t]+[^ \t]/ { t = (t == "" ? $0 : t " " $0); next } { fin() } END { fin(); if (na != 1 || nb != 1 || nc != 1 || np > 1 || ns > 1) exit 9; if (np != 1 || ns != 1) exit 1; exit bad }' "$P"
 
+## BL-390 — an authorization whose source transcript has been pruned reads identically to one that was never given
+
+**NOTE. Filed at batch 175.** `validate-steering-budget.sh --cite`, which F6 and the other citation readers
+call, matches AskUserQuestion answers correctly (measured on synthetic and real transcripts;
+`askuserquestion-citation` pins it). But when the session holding the answer has been deleted from
+`~/.claude/projects/` — Claude Code's default transcript retention is 30 days when `cleanupPeriodDays` is
+unset — the result is NOMATCH, the same verdict a fabricated authorization gets. Measured on the reference
+consumer: two closed-sprint records (s307) cite answers from session `208d13f3…`, whose `.jsonl` no longer
+exists, and the only surviving copy of the quotes is a Bash echo of the answers log, which F6 correctly
+rejects. Two remedies, neither chosen: a distinct verdict when the answers log names a session with no
+transcript on disk, or a consumer setting for `cleanupPeriodDays`.
+
+**LANDED (v0.674.0, verified f7eec6f5).**
+
+Held note (batch 177): `--cite` now prints `NOMATCH-TRANSCRIPT-PRUNED` (exit 2 unchanged) when a
+plain NOMATCH's quote sits inside the fenced body of an `_bmad-output/operator-answers-history.md` entry
+whose `- Session:` names no `.jsonl` on disk in the corpus directory; a --since-filtered session stays
+plain NOMATCH. The log's root comes from the I75 canonical chain (override, own install, CLAUDE_PROJECT_DIR,
+cwd walk), not CLAUDE_PROJECT_DIR first, because I75 fails the push on any other order; an unresolved root
+prints one stderr skip line. Pinned by `askuserquestion-citation` P1-P6 plus five mutants, and by a
+`validator-path-resolution` argv entry. Receipt scored: tip 1, fix 0, quote-anywhere 1, since-filtered 1,
+CLAUDE_PROJECT_DIR-or-cwd root 1.
+
+verify: sh V=core/scripts/validate-steering-budget.sh; [ -f "$V" ] || exit 9; V="$PWD/$V"; command -v node >/dev/null || exit 9; mk() { local b d; b="$(cd "$1" 2>/dev/null && pwd -P)" || return 1; d="$b"; while [ "$d" != / ]; do { [ -e "$d/.git" ] || [ -d "$d/.claude" ] || [ -d "$d/core/skills/ai-dlc" ]; } && return 1; d="$(dirname "$d")"; done; mktemp -d "$b/r390.XXXXXX"; }; w="$(mk "${TMPDIR:-/tmp}" || mk /tmp || mk /var/tmp)" || exit 9; [ -d "$w" ] || exit 9; mkdir -p "$w/p/_bmad-output" "$w/p/.claude" "$w/p/sub" "$w/p/scripts/ai-dlc" "$w/t" "$w/bin" "$w/q" || exit 9; cp "$V" "$w/p/scripts/ai-dlc/v.sh" && cp "$V" "$w/bin/v.sh" || exit 9; P=aaaaaaaa-0000-4000-8000-000000000001; L=bbbbbbbb-0000-4000-8000-000000000002; M=cccccccc-0000-4000-8000-000000000003; Q='ship the pruned release tonight please'; rec() { printf '{"type":"user","sessionId":"%s","timestamp":"2026-09-01T10:00:00.000Z","message":{"role":"user","content":"%s"}}\n' "$1" "$2"; }; rec "$L" 'a control quote the operator really typed' > "$w/t/$L.jsonl" || exit 9; rec "$M" 'an unrelated operator turn about lunch' > "$w/t/$M.jsonl" || exit 9; touch -t 200001010000 "$w/t/$L.jsonl" || exit 9; ent() { printf '## 2026-09-01T10:00:00Z -- AskUserQuestion\n- Session: %s\n- Tool-use: toolu_x\n- Question (lead-authored, NOT covered by the hash): q\n- Bytes: 1\n- SHA256: 0\n\n```text\n%s\n```\n\n' "$1" "$2"; }; c() { ( cd "$w/p" && AI_DLC_PROJECT_ROOT="$w/p" CLAUDE_PROJECT_DIR= bash "$V" --dir "$w/t" --cite "$1" --authorized-at "" "${@:2}" 2>/dev/null ); }; u() { ( cd "$1" && env -u CLAUDE_PROJECT_DIR -u AI_DLC_PROJECT_ROOT bash "$2" --dir "$w/t" --cite "$Q" --authorized-at "" 2>"$w/err" ); }; o="$(c 'a control quote the operator really typed')"; [ "$?" -eq 0 ] && [ "${o%% *}" = MATCH ] || exit 9; o="$(c 'a control quote the operator really typed' --since 2010-01-01T00:00:00Z)"; [ "$?" -eq 2 ] && [ "$o" = NOMATCH ] || exit 9; { ent "$P" "$Q"; ent "$L" 'said in a filtered session never typed'; ent "$M" 'said in a live session but never typed'; } > "$w/p/_bmad-output/operator-answers-history.md" || exit 9; o="$(c "$Q")"; r=$?; [ "$r" -eq 0 ] && { echo "BL390-PRUNED-CITATION-ACQUITTED" >&2; exit 1; }; [ "$r" -eq 2 ] || { echo "BL390-EXIT-CHANGED $r" >&2; exit 1; }; n1="$(c 'a phrase no answer ever carried at all')"; r1=$?; n2="$(c 'said in a live session but never typed')"; r2=$?; n3="$(c 'said in a filtered session never typed' --since 2010-01-01T00:00:00Z)"; r3=$?; [ "$r1$r2$r3" = 222 ] || { echo "BL390-EXIT-CHANGED $r1$r2$r3" >&2; exit 1; }; [ "$n1" = NOMATCH ] || { echo "BL390-TOKEN-ON-UNLOGGED-QUOTE $n1" >&2; exit 1; }; [ "$n2" = NOMATCH ] || { echo "BL390-TOKEN-ON-LIVE-SESSION $n2" >&2; exit 1; }; [ "$n3" = NOMATCH ] || { echo "BL390-TOKEN-ON-SINCE-FILTERED-SESSION $n3" >&2; exit 1; }; [ "$o" = NOMATCH-TRANSCRIPT-PRUNED ] || { echo "BL390-PRUNED-READS-AS-NEVER-GIVEN $o" >&2; exit 1; }; oa="$(u "$w/p/sub" "$w/p/scripts/ai-dlc/v.sh")"; ra=$?; [ "$ra$oa" = 2NOMATCH-TRANSCRIPT-PRUNED ] || { echo "BL390-INSTALLED-LAYOUT-FROM-SUBDIR-MISSED $ra $oa" >&2; exit 1; }; ob="$(u "$w/p/sub" "$w/bin/v.sh")"; rb=$?; [ "$rb$ob" = 2NOMATCH-TRANSCRIPT-PRUNED ] || { echo "BL390-CWD-WALK-FROM-SUBDIR-MISSED $rb $ob" >&2; exit 1; }; oc="$(u "$w/q" "$w/bin/v.sh")"; rc=$?; [ "$rc$oc" = 2NOMATCH ] || { echo "BL390-UNRESOLVED-ROOT-VERDICT $rc $oc" >&2; exit 1; }; [ "$(grep -c 'pruned-transcript check skipped' "$w/err")" = 1 ] || { echo "BL390-UNRESOLVED-ROOT-SILENT" >&2; exit 1; }; od="$( cd "$w/q" && env -u CLAUDE_PROJECT_DIR AI_DLC_PROJECT_ROOT="$w/p" bash "$w/bin/v.sh" --dir "$w/t" --cite "$Q" --authorized-at "" 2>"$w/err" )"; [ "$od" = NOMATCH-TRANSCRIPT-PRUNED ] || { echo "BL390-CONTROL-ROOT-SET-MISSED $od" >&2; exit 1; }; [ "$(grep -c 'pruned-transcript check skipped' "$w/err")" = 0 ] || { echo "BL390-SKIP-LINE-ON-RESOLVED-ROOT" >&2; exit 1; }; exit 0
+
+
+## BL-397 — a story reaches gate-1 without the evidence sections, and reaches QA without a full-collection run with counts
+
+**DEFECT.** Filed by the consumer as PC-S315-DEV-AND-QA-ROLE-CHECKLISTS-LET-A-STORY-REACH-GATE-1-WITHOUT-THE-EVIDENCE-SECTIONS-AND-THE-FULL-SUITE.
+
+**Claims, enumerated.** (1) No story file carried `Production Integrity Tests`, `Smoke Test Updates`
+and, for renames, `Rename Verification` at its first submission: the filing says 0 of 5. (2) Story
+1.5 reached QA without the dev having run the full suite and failed gate-2 on a baseline-fixture
+test. (3) Check 21 failed pass 1 with 0 of 31 strategy test ids cited in any Dev Agent Record.
+(4) Code review has no baseline-fixture sweep when a diff changes a handler's result shape.
+
+**Premise, re-derived at `origin/main` 144c41b8.** The story template is BMAD's, and no ai-dlc
+step tells the lead to add the evidence headings: `Strategy Test IDs` occurs in 0 files under `core/`
+(control: `Production Integrity Tests` occurs in 4). `dev.md` already requires a canonical
+full-collection run, but only inside `## Workflow Per Task` item 15. The dev side requires no counts: `deselect`
+occurs 0 times in `dev.md` outside that section and once inside it. The phrase is the `--deselect`
+flag, not a count. `code-reviewer.md` contains `baseline-fixture` 0 times (control: `fixture` 9).
+At the consumer's final S315 tip, 5 of 5 stories carry the Production Integrity Tests and Smoke
+Test Updates headings and 2 of 5 carry Rename Verification, because rework added them. The
+first-submission state the filing counts was not walked. That walk was available but not taken,
+because this session's harness refuses git commands aimed at the consumer tree. Claim (1) is an
+unmeasured claim, not an unmeasurable one. Claim (2) is the seats' reading and was not
+re-derived.
+
+**Consumer overrides, read-only, `graph/.claude/skills/ai-dlc/overrides/`.** 10 override files
+(control: 10 of 10 carry `shadows:`). The consumer shadows `team-roles/dev.md#Workflow Per Task` and
+`team-roles/qa.md#Validation Checklist` wholesale (`team-roles__dev__bug-class-sweep.md`,
+`team-roles__qa__bug-class-sweep.md`). Nothing shadows `code-reviewer.md`, `stories-test-strategy.md`
+or Check 21. Any upstream text inside those two sections never reaches this consumer's dev or QA
+until the consumer re-adopts the overrides against the new base. That is why the new requirements
+sit in sibling sections.
+
+**The fix.** `stories-test-strategy.md` Pre-Flight Checklist item (c) requires four headings in
+every story file. They are `## Production Integrity Tests`, `## Smoke Test Updates`,
+`## Rename Verification` and `## Strategy Test IDs`, the last a table with a closed `Kind`
+vocabulary. `dev.md` gains `## QA Handoff Evidence`: the full-collection invocation, its working
+directory and collected/passed/failed/deselected/skipped/xfailed counts before the handoff
+message, the four sections filled, and every table row resolved. `qa.md` gains
+`## Handoff Evidence Precondition`, a REJECT before any checklist item when that evidence is
+absent. `code-reviewer.md` Field Verification item 5 adds the baseline-fixture sweep, with a
+control, as an Important finding. Check 21 names the table as its citation set (BL-398).
+
+**Fixture.** `story-evidence-scaffold` (ships) has section-keyed arms. The dev and qa arms first
+stub the two shadowed sections, as the loader does, so text moved into them is a finding. It has
+twelve copy mutants, each killed by its own arm only, plus a control and a cwd probe. Bound to
+Check 21 in `enforcement-map.yaml`. Its read-set is not yet traced; the operator runs
+`sudo bash core/scripts/derive-fixture-readsets.sh --list "story-evidence-scaffold"`.
+
+**Receipt, scored.** Tip 1 (no fixture). Fix 0. Wrong fix A exits 1: it folds the dev text into
+the shadowed `## Workflow Per Task`, which a whole-file grep accepts. Wrong fix B exits 1: it puts
+the qa precondition inside the shadowed `## Validation Checklist`. Exit 9 means a subject role
+file is gone or the fixture reports FIXTURE BROKEN.
+
+**LANDED (v0.674.0, verified f7eec6f5).**
+
+Held note (batch 177): shipped the Pre-Flight scaffold (c), the dev `## QA Handoff Evidence` and
+qa `## Handoff Evidence Precondition` sections outside the consumer's shadowed sections, the
+code-reviewer baseline-fixture sweep, and fixture `story-evidence-scaffold`.
+
+verify: sh F=core/fixtures/story-evidence-scaffold/run.sh; [ -f core/team-roles/dev.md ] && [ -f core/team-roles/qa.md ] || exit 9; [ -f "$F" ] || exit 1; o="$(bash "$F" 2>&1)"; [ $? -eq 2 ] && exit 9; for m in dev-into-workflow dev-no-counts qa-into-checklist cr-no-sweep drop-strategy-heading move-strategy-heading; do grep -qF "MUTATION '$m' killed by its own arm only" <<<"$o" || exit 1; done; grep -qx 'story-evidence-scaffold: PASS' <<<"$o"
+
+## BL-398 — a strategy case letter is not bound to a test until sprint-review, and a re-point story lists its consumers from memory
+
+**DEFECT.** Filed by the consumer as PC-S315-STORIES-TEST-STRATEGY-CASE-LETTERS-AND-RE-POINT-CONSUMERS-ARE-NOT-BOUND-TO-A-TEST-AT-AUTHORING.
+
+**Claims, enumerated.** (1) Nothing at authoring or story close resolves a strategy case letter
+to a test name: planned case `(g)` of `1.4-UNIT-002` had no test until sprint-review. (2) Nothing
+requires a re-point story to enumerate every consumer of the constant by `git grep`, with a
+control. The filing's instance is one constant left un-normalized for a sprint.
+
+**Premise, re-derived at `origin/main` 144c41b8.** `stories-test-strategy.md` names no strategy case
+letters. Its one `lowercase letter` hit, line 156, is the AC-ordinal grammar (control:
+`Test Strategy` occurs 4 times). Check 21 resolved "every test the strategy names" against "a Dev Agent
+Record" citation with no prescribed shape. A DAR prose mention therefore counted, and a lettered
+case inside one strategy row was never its own unit. **Measured on the consumer, read-only:**
+S315's strategy row for `1.4-UNIT-002` lists cases (a) to (g). The story's Check 21 repair section
+maps 6 of the 7 to nodes in `server/tests/test_s315_4_base_binding.py` and states (g) has none. A
+per-letter check over that population returns 6 resolved and 1 unresolved: the true (g), with 0
+false positives. **N=1 strategy row**, so the zero is a floor, not a rate. That figure was taken
+over the repair section's PROSE mapping, and it scores the per-letter resolution logic only. The
+shipped Check 21 wording does not accept that prose as a citation. On S315 as it stands, with no
+story carrying the table, the check FAILS on shape and never reaches the letters. The same story carries
+rows no collectable node can satisfy: `1.4-OPS-001`/`-004` are deploy-time and `1.4-UNIT-005` is a
+shell predicate. The table's `Kind` column exists so those rows do not fail a node check.
+
+**Consumer overrides.** No override shadows `stories-test-strategy.md` or Check 21. The consumer
+overrides `steps/gate-validation.md#Check 20` and `#Check 5` only, so this reaches the consumer on
+its next pull with no re-adoption.
+
+**The fix.** Pre-Flight item (c)'s `## Strategy Test IDs` table has one row per strategy id and
+per lettered case, with `Kind` ∈ {`test`, `predicate`, `deploy-time`}. Step 5 item 3 writes the
+rows and requires the strategy's letter count to equal the row count. Check 21 names that table
+as its citation set and says a DAR prose mention is not a citation. It fails a letter with no row,
+a `test` row whose node is not on disk, and an empty `Resolves to`, and reports a strategy with
+no id table as a stated SKIP, never a PASS. **Re-point consumers:** `## Rename Verification` now
+requires `git grep` of the old and new names, every hit dispositioned, with a control. This half
+is prose plus fixture only, and there is no mechanical check. A re-point story's consumer set has
+no machine-readable declaration to join against, so its false-positive set cannot be measured.
+
+**Fixture.** `story-evidence-scaffold` (shared with BL-397): the per-letter binding, the closed
+vocabulary, the citation set, the unrowed-letter arm, the SKIP-not-PASS arm and an unisolatable
+Check 21. Each has a mutant killed by its own arm only.
+
+**Receipt, scored.** Tip 1. Fix 0. Wrong fix A exits 1: Check 21 keeps accepting a DAR naming a
+test as a citation. Wrong fix B exits 1: a table-less strategy reads PASS and Step 5 writes "rows
+as needed".
+
+**LANDED (v0.674.0, verified f7eec6f5).**
+
+Held note (batch 177): shipped the `## Strategy Test IDs` table with per-letter rows and a closed
+Kind vocabulary, Step 5's binding, Check 21 reading that table with a stated SKIP, the
+`## Rename Verification` git-grep enumeration, and fixture `story-evidence-scaffold`.
+
+verify: sh F=core/fixtures/story-evidence-scaffold/run.sh; [ -f core/skills/ai-dlc/steps/gate-validation.md ] && [ -f core/skills/ai-dlc/steps/stories-test-strategy.md ] || exit 9; [ -f "$F" ] || exit 1; o="$(bash "$F" 2>&1)"; [ $? -eq 2 ] && exit 9; for m in no-letter-binding open-kind dar-prose-citation letter-unchecked skip-as-pass no-check-21; do grep -qF "MUTATION '$m' killed by its own arm only" <<<"$o" || exit 1; done; grep -qx 'story-evidence-scaffold: PASS' <<<"$o"
+
+## BL-392 — Check 5 read only the first 200 lines of the sprint's gate-log section, so a long section failed on evidence it held
+
+**DEFECT.** Filed by the consumer as `PC-S315-VALIDATE-MANDATORY-RULES-CHECK5-HEAD-200-TRUNCATES-A-LONG-SPRINT-SECTION`.
+The consumer's Sprint 315 retro is blocked on it.
+
+**Claims, enumerated.** (1) `core/scripts/validate-mandatory-rules.sh` Check 5 isolated the sprint's
+`## Gate Log: Sprint N` section and piped it through `| head -200`, so evidence past section line 200
+was never read. (2) The section is already bounded by the next `## Gate Log: Sprint` header, so the
+whole section can be searched. (3, stated by the filing as NOT established) how many other sprints'
+sections exceed 200 lines. Claims 1 and 2 are closed here; claim 3 stays unmeasured.
+
+**Premise, re-derived on this tree and on the consumer (read-only).** The truncation was at
+`validate-mandatory-rules.sh:450` on origin/main `144c41b8`, and it was the only `head -N` applied to
+an isolated section in the script: :385 is a comment, and the other `head` sites take a single value.
+The shipping isolation awk was run against the consumer's Sprint 315 section, both at
+`_bmad-output/implementation-artifacts/s315/gate-log-archive.md` and at the `ai-dlc/retro/sprint-315`
+blob. The section is 432 lines now (the filing's 426 predates the retro's own appended lines). The
+first 200 lines hold `USER-CONFIRMED` 0 and `playwright` 0, so Check 5 FAILs. The whole section holds
+`USER-CONFIRMED` 0 and `playwright` 2. The control token `zzqx-no-such-token` scores 0 on the same
+section.
+
+**The fix does not show the consumer's evidence was always there.** Both `playwright` hits are
+INCIDENTAL: section line 284 is a spec filename inside a remediation note, and line 300 is a Check 11
+row. The real visual-verification line (399, "Visual verification (is_ui_epic): PASSED for the
+selector") carries neither token. So the consumer's section passes after this fix only because of
+those two incidental hits. The writer/reader mismatch behind that is a separate defect: deploy-validate
+§4 never tells the writer to record `USER-CONFIRMED` or `playwright`, while `gate-validation.md`
+requires one of them. BL-396's hand fixes that mismatch in the same release. The `tail -200` wrong fix
+also reads 2 on this section, which is why the fixture seeds its evidence outside the last 200 lines
+as well as the first.
+
+**Fix.** The `| head -200` is removed from the `SPRINT_SECTION` assignment, with a comment beside it
+saying why no prefix or suffix of the section may be taken. Fixture `check5-anchor-base` gains a
+~700-line world with the evidence at section line ~350 (it PASSes), a cross-sprint world (Sprint 901's
+`USER-CONFIRMED` must not acquit Sprint 900, which FAILs), a structural arm asserting the isolation
+line carries no `head` (its extractor is self-probed both ways), an unmutated control, and three
+mutants, each moving one cell. `tail -200` moves the long world, a whole-file read moves the
+cross-sprint world, and `head -2000` leaves both worlds unchanged and moves only the structural arm.
+
+**Receipt, scored in fresh trees holding only the files it names.** The tip (origin/main) exits 1,
+the fix exits 0, `tail -200` exits 1, `head -2000` exits 1, and a whole-file read exits 1. It drives
+the real validator over a 2600-line section with the evidence at line 2301, then over a 900/901 pair.
+It exits 9 unless a no-evidence section FAILs and a short evidenced one PASSes first.
+
+**LANDED (v0.674.0, verified f7eec6f5).**
+
+Held note (batch 177): the `head -200` removal and the check5-anchor-base long-section,
+cross-sprint and structural arms with three mutants shipped on `b177-r0-c5hook`.
+
+verify: sh V=core/scripts/validate-mandatory-rules.sh; A=core/scripts/validate-audit-anchors.sh; J=core/schemas/audit-anchors.json; [ -f "$V" ] && [ -f "$A" ] && [ -f "$J" ] || exit 9; d=$(mktemp -d) || exit 9; mkdir -p "$d/b" "$d/schemas" "$d/r" || exit 9; cp "$V" "$A" "$d/b/" && cp "$J" "$d/schemas/" || exit 9; printf '#!/bin/sh\nexit 0\n' > "$d/b/validate-retro-evidence.sh"; cp "$d/b/validate-retro-evidence.sh" "$d/b/validate-cycle-commits.sh"; cd "$d/r" || exit 9; g() { git -c user.email=f@f -c user.name=f -c commit.gpgsign=false "$@"; }; git init -q . || exit 9; echo s > s; git add s && g commit -qm s || exit 9; P=$(git rev-parse HEAD); mkdir -p web/src _bmad-output/implementation-artifacts; echo x > web/src/a.jsx; git add web && g commit -qm w || exit 9; printf -- '- sprint: 899\n  sha: %s\n- sprint: 900\n  sha: <PENDING-S900-RETRO>\n' "$P" > _bmad-output/audit-anchors.md; L=_bmad-output/implementation-artifacts/gate-log.md; c() { bash "$d/b/validate-mandatory-rules.sh" 900 2>/dev/null | grep 'CHECK 5:' | head -1; }; f() { awk -v a="$1" -v b="$2" 'BEGIN{for(i=a;i<=b;i++) print "- note " i}'; }; { printf '## Gate Log: Sprint 900\n'; f 2 9; } > "$L"; case "$(c)" in *FAIL*) ;; *) exit 9 ;; esac; printf '## Gate Log: Sprint 900\nUSER-CONFIRMED\n' > "$L"; case "$(c)" in *PASS*) ;; *) exit 9 ;; esac; { printf '## Gate Log: Sprint 900\n'; f 2 2299; printf 'USER-CONFIRMED\n'; f 2301 2600; } > "$L"; case "$(c)" in *PASS*) ;; *) exit 1 ;; esac; printf '## Gate Log: Sprint 900\n- deploy completed\n\n## Gate Log: Sprint 901\nUSER-CONFIRMED\n' > "$L"; case "$(c)" in *FAIL*) exit 0 ;; *) exit 1 ;; esac
+
+## BL-393 — the consumer pre-push failed every pinned role on the first push from a fresh worktree, because `.claude/agents/` is gitignored and was only ever checked
+
+**DEFECT.** Filed by the consumer as `PC-S315-PREPUSH-REQUIRES-RENDERED-AGENT-DEFS-IN-FRESH-WORKTREE`.
+
+**Claims, enumerated.** (1) `core/git-hooks/pre-push`'s agent-definitions arm ran
+`render-agent-definitions.sh --check` only, and `.claude/agents/` is never present in a new
+`git worktree add`, so the push failed on every pinned role. (2) The remedy command appeared only in a
+trailing sub-line of the failure. (3, stated by the filing as NOT established) whether the hook should
+render or stay check-only.
+
+**Premise, re-derived.** On the consumer (read-only): `git check-ignore -q .claude/agents/dev.md` exits
+0 and `.claude/settings.json` is tracked and not ignored (`check-ignore` exits 1, `ls-files
+--error-unmatch` exits 0). The control is a root-level path that exits 1, and 0 `.claude/agents` files
+are tracked. So the declaration travels with every checkout and its projection never does. On this
+tree, origin/main `144c41b8`'s `agent_definitions()` ran only `--check`. Driven in a scratch consumer
+with the directory absent, it exits 1.
+
+**Decision on claim 3: render when ABSENT, check-only when PRESENT.** An absent directory is a derived
+build product that a fresh checkout has never had, and regenerating it from the tracked declaration
+destroys nothing. A present directory that has drifted is either a hand edit or a settings change
+nobody re-rendered. Overwriting it at push time would erase the evidence of which, so it still blocks
+the push. The renderer's own `--check` still never writes, and mutant M7 in `agent-definition-render`
+still pins that; the write is the hook's decision. `.githooks/pre-push` (the distribution runner) is
+unchanged: the distribution has no settings file, and I66 is untouched. Claim 2 therefore closes in
+two halves. It is moot for the absent case, which no longer fails. For a present, drifted directory
+the renderer's failure output still ends in the exact command, so that half is unchanged.
+
+**Fix.** In `agent_definitions()`, `[ ! -d .claude/agents ]` runs the renderer in write mode with
+`--root .`, prints its output, and then the existing `--check` runs. The renderer refuses before any
+write on unparseable settings (2) or no `aiDlcRoles` (3), so no empty directory is left behind for the
+next push to read as present. Fixture `agent-definition-render` gains a section that drives the REAL
+consumer hook in a scratch consumer (a git repo with the renderer and the hook installed and no
+`tests/fixtures`). It has four worlds. An absent directory renders, the push passes, and `--check`
+agrees afterwards. A drifted definition blocks the push (exit 1) and stays byte-identical. A current
+tree prints the OK line and is not written. Unparseable settings block the push and create no
+directory. The section also has an unmutated-hook liveness control and four mutants: `never-render`
+moves the absent world; `render-unconditionally` moves drift and current, both of which are that
+write; `mkdir-before-render` moves unparseable; and `skip-the-arm` moves three worlds, scored as such.
+
+**Receipt, scored in fresh trees holding only the files it names.** The tip (origin/main) exits 1 and
+the fix exits 0. Three wrong fixes each exit 1: rendering unconditionally overwrites the drifted file,
+skipping the arm when the directory is absent leaves no definitions, and a message-only fix still
+blocks the absent push. It exits 9 unless the unmutated hook passes a current scratch consumer and the
+absent world really starts with no directory.
+
+**Owed outside this tree:** `agent-definition-render` now READS `core/git-hooks/pre-push`, which its
+read-set entry does not list. Run `sudo bash core/scripts/derive-fixture-readsets.sh --list
+"agent-definition-render"` and commit the map it writes.
+
+**LANDED (v0.674.0, verified f7eec6f5).**
+
+Held note (batch 177): render-when-absent in the consumer hook's agent-definitions arm and the
+agent-definition-render hook section (four worlds, a liveness control and four mutants) shipped on
+`b177-r0-c5hook`.
+
+verify: sh H=core/git-hooks/pre-push; R=core/scripts/render-agent-definitions.sh; [ -f "$H" ] && [ -f "$R" ] || exit 9; command -v jq >/dev/null 2>&1 || exit 9; d=$(mktemp -d) || exit 9; w() { p="$d/$1"; mkdir -p "$p/scripts/ai-dlc" "$p/.githooks" "$p/.claude" || return 1; git init -q "$p" || return 1; cp "$R" "$p/scripts/ai-dlc/render-agent-definitions.sh" && cp "$H" "$p/.githooks/pre-push" || return 1; printf '{"aiDlcModels":{"o":"claude-opus-5"},"aiDlcRoles":{"alpha":{"model":"o","effort":"high"}}}\n' > "$p/.claude/settings.json"; }; run() { ( cd "$d/$1" && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE bash .githooks/pre-push </dev/null >/dev/null 2>&1 ); }; w c || exit 9; bash "$R" --root "$d/c" >/dev/null 2>&1 || exit 9; run c || exit 9; w x || exit 9; bash "$R" --root "$d/x" >/dev/null 2>&1 || exit 9; printf 'effort: max\n' >> "$d/x/.claude/agents/alpha.md"; m1=$(cksum < "$d/x/.claude/agents/alpha.md"); run x; rx=$?; m2=$(cksum < "$d/x/.claude/agents/alpha.md"); [ "$rx" -eq 1 ] && [ "$m1" = "$m2" ] || exit 1; w a || exit 9; [ ! -e "$d/a/.claude/agents" ] || exit 9; run a || exit 1; [ -f "$d/a/.claude/agents/alpha.md" ] || exit 1; bash "$R" --check --root "$d/a" >/dev/null 2>&1
+
+## BL-395 — the steering budget is counted after the fact and nothing refuses a foreground call that will exceed it
+
+**DEFECT.** Filed by the consumer as PC-S315-STEERING-BUDGET-COUNTS-BUT-DOES-NOT-PREVENT. Two claims:
+
+1. `validate-steering-budget.sh` Check A is detect-only. It counts foreground tool calls that blocked
+   past `AI_DLC_STEERING_BUDGET` (120 s by default) from the transcript, after they ran, and the count
+   is the only consequence. The consumer's S315 run reported 26 such calls, 25 of them Bash, the worst at
+   10.0 min. **Re-derived here:** no file under `core/hooks/` read `run_in_background` or
+   `tool_input.timeout` for a deny before this entry, and the detector has no preventing half.
+2. The filing did not establish whether a refusal is feasible, since runtime is unknowable before the
+   call. It proposed a registry of known-long command names.
+
+**Mechanism: a deny keyed on the DECLARED timeout, not a warning and not a command registry.** A
+PreToolUse `additionalContext` reaches the model with the tool result, after the block it would warn
+about, so a warning cannot prevent anything. The declared `timeout` is the caller's own statement of how
+long it will block. Measured by the batch 177 adversary on the consumer's 15 transcripts since the S315
+cut: `timeout > 120000` flags 183 foreground calls and catches 29 of 41 overruns, while the command
+registry flags 425 and catches 9. Re-derived read-only with the same script against the same directory
+and cutoff: 15 files, 183 flagged, 29 of **42** overruns caught. The corpus is filtered by mtime and a
+live session had grown it by one overrun.
+
+`core/hooks/ai-dlc-foreground-budget.sh`, registered on matcher `Bash` in
+`templates/settings.json.template` and committed 100755, denies a Bash call whose `run_in_background`
+is not true and whose `tool_input.timeout` exceeds the budget × 1000 ms. The reason names the re-issue
+with `run_in_background: true`. **The budget is the detector's:** `AI_DLC_STEERING_BUDGET` is read
+first, and when it is unset the default is read from the detector's own
+`BUDGET="${AI_DLC_STEERING_BUDGET:-N}"` line at `scripts/ai-dlc/validate-steering-budget.sh`. This is a
+derivation, not a second `120` bound by a test. A call with no timeout, a timeout at or under the budget,
+`run_in_background: true`, or a non-Bash tool is never touched. No `jq`, unparseable input, an
+unreadable budget, or no detector on disk all ALLOW the call and say so on stderr. It always exits 0 and
+emits no `additionalContext`, so it stays outside I98's population. Every deny is satisfiable on the
+next call by either of two always-available edits to the same call, which is the no-wedge argument
+`ai-dlc-recover-gate.sh` makes.
+
+**What it cannot see.** 12 of the adversary's 41 overruns (13 of 42 re-derived) declared no timeout.
+Those run under the harness default and stay the detector's to count. It also cannot tell a call that
+declared a long timeout and would have returned quickly. **The false-positive set is 154 of 183**: on
+the re-derived corpus, 154 of the calls this hook would deny returned inside the budget. Each costs
+one re-issue with `run_in_background: true`, or with a timeout at or under the budget. The adversary's note N2, **unverified**: Check A may count
+permission-approval waits as starvation, which would inflate the detector's figure without any
+foreground call running long.
+
+**Fixture `foreground-budget-deny`** (ships, so it is in `uninstall.sh`, `core-manifest.md` and
+`setup-sites.md`) drives the real hook through fourteen arms: OVER, REASON, BG, NOTIMEOUT, BOUNDARY
+(exactly at budget allowed, one ms over denied), ENV (override raises the budget, lowers it, and works
+with no detector on disk), DEFAULT (a detector copy whose default is 60 denies 90000 where the real one
+allows it), NONBASH, NODETECTOR, MALFORMED (stderr says fail-open), PUSH (`git push -u origin HEAD` and
+`cd /x && git push` at 600000 allowed), PUSHNEAR (`echo git push` and `git log --grep=push` denied),
+AGENT (an `agent_id` payload allowed, the same payload without it denied), and EXIT. It runs fifteen mutants,
+each scored against the exact set of arms it must fail, plus an unmutated control from the same
+directory. The read-set map has no entry for the new directory; the operator owes
+`sudo bash core/scripts/derive-fixture-readsets.sh --list "foreground-budget-deny"`.
+
+**LANDED (v0.674.0, verified f7eec6f5).**
+
+Held note (batch 177): the hook, its registration, the fixture and its packaging entries shipped on branch
+`b177-r0-hook`. Receipt scored four ways: tip (no hook) exits 1, fix exits 0, a warning-only hook exits 1,
+and a hook that also denies `run_in_background: true` exits 1. Branch `b177-r0-hook2` exempts a
+`git push` at the command start, because four pipeline instructions require it in the foreground at
+`timeout: 600000` and both remedies the deny offers break that call, and a call carrying `agent_id`,
+because Check A filters `!r.isSidechain` and never counts one; Check A still counts a long foreground
+push. Re-scored: tip exits 1, fix exits 0, warning-only exits 1, denies-background exits 1, and the
+unexempted hook from `fc1ae2a9` exits 1.
+
+verify: sh H=core/hooks/ai-dlc-foreground-budget.sh; command -v jq >/dev/null 2>&1 || exit 9; [ -f "$H" ] || exit 1; grep -q 'ai-dlc-foreground-budget.sh' templates/settings.json.template || exit 1; d() { printf '{"tool_name":"Bash"%s,"tool_input":{"command":"%s"%s}}' "${3:-}" "$1" "$2" | AI_DLC_STEERING_BUDGET=120 CLAUDE_PROJECT_DIR=. bash "$H" 2>/dev/null | jq -r '.hookSpecificOutput | select(.permissionDecision == "deny") | .permissionDecisionReason' 2>/dev/null; }; case "$(d x ',"timeout":600000')" in *'run_in_background: true'*) ;; *) exit 1 ;; esac; [ -z "$(d x ',"timeout":600000,"run_in_background":true')" ] || exit 1; [ -z "$(d x ',"timeout":120000')" ] || exit 1; [ -z "$(d x '')" ] || exit 1; [ -z "$(d 'git push -u origin HEAD' ',"timeout":600000')" ] || exit 1; [ -n "$(d 'echo git push' ',"timeout":600000')" ] || exit 1; [ -z "$(d x ',"timeout":600000' ',"agent_id":"a1"')" ]
+
+## BL-394 — `retro.md` Step 1 cuts the retro branch from `origin/main` and drops every sprint commit made after the sprint PR squash-merged
+
+**DEFECT.** Filed by the consumer as PC-S315-RETRO-STEP1-SQUASH-CUT-LACKS-POST-SQUASH-EVIDENCE.
+
+**Claims enumerated.** (1) Step 1 cuts `ai-dlc/retro/sprint-<N>` from `origin/main` and nothing
+else. (2) Deploy-validate keeps committing to the sprint branch after the sprint PR squash-merges
+(gate-log revisions, escalation updates, dev reports, the snapshot at its live position), so
+the cut lacks all of it. (3) The retro then reads, sweeps and validates incomplete files, and
+Step 7a-post rotates a gate log missing its deploy-validate block. (4) Carrying those commits
+onto the trunk-cut branch restores them; the consumer's cherry-pick of `<pr-head>..<tip>` ran
+without conflicts, where a merge conflicted in six files. Claims 2 and 4 are the consumer's
+measurement on one sprint (`rev-list --count` 8 past the squash head, 12 files added, and a
+control of `git diff --stat <squash-base> <pr-head>` empty); they were not re-taken here.
+
+**Premise re-derived on origin/main `144c41b8`.** `retro.md:24` reads
+`git checkout -b ai-dlc/retro/sprint-<N> origin/main`, and `§1 Context Loading` has 0 lines
+matching `cherry-pick|sprint tip|post-squash` beside a control of 8 lines naming `origin/main`
+in the same section, in the same run. Claim 1 holds.
+
+**Fix (cherry-pick, not cut-from-tip).** A cut from the sprint tip is the retro-behind-main
+defect that Step 1's next paragraph and fixture `retro-branch-behind-main` exist to catch: that
+branch lacks the squash as an ancestor and its PR reports CONFLICTING. Step 1 now runs one
+fenced block. It records the sprint tip, cuts the retro branch from `origin/main` exactly as
+before, and then does the following. It walks the sprint branch's first-parent chain back to
+the first commit already on `origin/main`. It takes the newest commit on that chain whose tree
+equals the tree of a trunk commit made since, which is the PR head, derived and not looked up,
+because no core step records the PR number. It cherry-picks the tip's non-merge commits that
+are in neither the PR head nor `origin/main`. The adversary's explicit `is-ancestor <pr-head>
+<tip>` guard is not written, because every candidate is on the tip's first-parent chain, so
+the guard could never fire. Four outcomes, each a `CARRY:` line: a count, `none` (the tip is
+already on the trunk, or nothing follows the PR head, with the count guard ahead of the pick
+because an empty pick exits non-zero), and three named HARD_BLOCKs that STOP. Those are
+`unresolved` (no sprint branch), `underivable` (no tree match, meaning the trunk moved between
+the PR's last sync and the squash; the operator supplies the PR head) and `conflict` (the pick
+is aborted first). A `<pr-head>..<tip>` range is NOT used: on a sprint branch that merged the
+trunk after the squash it re-picks trunk commits and stops. The Rule 26(c) paragraph names the
+new failure, its cost and its removal condition, and forbids retiring the carry by cutting
+from the tip.
+
+**Fixture.** `retro-branch-behind-main` part 2 extracts the shipping block from `retro.md`
+(both layouts), substitutes its two placeholders and runs it in seven `file://` clone worlds
+(carry, empty, synced, conflict, underivable, direct, unresolved). Each token asserts VALUES:
+the `CARRY:` outcome, behind-count 0, the squash an ancestor of HEAD, both post-squash markers
+present, no pick in progress, and HEAD on the retro branch. There is an unmutated control and
+seven mutants: carry-deleted, cut-from-tip, count guard removed, abort removed, the plain
+range, the merge-base as PR head, and an all-parents walk. 20 of 20 assertions pass.
+
+**Receipt scored** in four scratch trees: tip 1, fix 0, cut-from-tip 1, merge of the sprint
+branch in place of the pick 1. It extracts the block from `§1` and runs it in a scratch
+`file://` world. It exits 0 only if the retro branch is 0 behind, carries the squash as an
+ancestor, holds both post-squash markers, and is clean with no merge or pick in progress.
+
+**LANDED (v0.674.0, verified f7eec6f5).**
+
+Held note (batch 177): shipped the Step 1 carry block, its four-outcome prose, the Rule 26(c)
+update and `retro-branch-behind-main` part 2 on branch `b177-r0-steps`.
+
+verify: sh R=core/skills/ai-dlc/steps/retro.md; [ -f "$R" ] || exit 9; D="$(mktemp -d)" || exit 9; B="$(awk '/^### 1\. Context Loading/{s=1} s && /^### 2\./{exit} s && /^...bash$/{on=1; next} on && /^...$/ && !/[a-z]/{exit} on{print}' "$R" | sed -e 's@<sprint-branch>@ai-dlc/sprint-9@g' -e 's@<N>@9@g')"; [ -n "$B" ] || exit 9; s="$D/s"; g() { git -C "$s" "$@"; }; git -c init.defaultBranch=main init -q "$s" || exit 9; g config user.email a@b; g config user.name a; g config commit.gpgsign false; mkdir -p "$s/t"; printf 'R1\n' > "$s/gl"; printf 'P\n' > "$s/esc"; g add -A; g commit -qm c1; g checkout -qb ai-dlc/sprint-9; printf 'R1\nR2\n' > "$s/gl"; g commit -qam pr; g checkout -q main; g merge -q --squash ai-dlc/sprint-9 >/dev/null 2>&1; g commit -qm sq; SQ="$(g rev-parse HEAD)"; echo t > "$s/t/b"; g add -A; g commit -qm t1; g checkout -q ai-dlc/sprint-9; printf 'R1\nR2\nR3\n' > "$s/gl"; g commit -qam dv; printf 'P\nDV-1\n' > "$s/esc"; g commit -qam esc; g checkout -q main; git clone -q --bare "$s" "$D/r.git" 2>/dev/null && git clone -q "file://$D/r.git" "$D/c" 2>/dev/null || exit 9; c() { git -C "$D/c" "$@"; }; c config user.email a@b; c config user.name a; c config commit.gpgsign false; c checkout -q -b ai-dlc/sprint-9 origin/ai-dlc/sprint-9 || exit 9; ( cd "$D/c" && bash -c "$B" ) >/dev/null 2>&1; [ "$(c rev-list --count HEAD..origin/main)" = 0 ] && c merge-base --is-ancestor "$SQ" HEAD && [ -z "$(c status --porcelain)" ] && [ ! -e "$D/c/.git/MERGE_HEAD" ] && [ ! -e "$D/c/.git/CHERRY_PICK_HEAD" ] && c show HEAD:gl | grep -q R3 && c show HEAD:esc | grep -q DV-1 || exit 1
+
+## BL-396 — `deploy-validate.md` has no one-variable-per-smoke-run rule, so a gate log cannot attribute which action cleared which failure
+
+**DEFECT.** Filed by the consumer as PC-S315-DEPLOY-VALIDATE-HAS-NO-ONE-VARIABLE-PER-SMOKE-RUN-RULE.
+
+**Claims enumerated.** (1) §3 defines transient versus persistent failures but no per-action
+attribution between runs. (2) With several live mutations between smoke runs, the gate log
+cannot say which action cleared which failure. The consumer's REVISION 2 entry records
+"per-action attribution NOT isolated" for five tests that went green between two runs, which
+is the consumer's own sentence and was not re-read here. (3) Added by the coordinator from the
+adversary on BL-392: §4 never tells the writer to record the tokens Check 5 of
+`validate-mandatory-rules.sh` reads (`USER-CONFIRMED`, `playwright`), so the reader and the
+writer disagree. The claim the filing leaves open (whether the rule costs less than the extra
+run time) is not settled here either.
+
+**Premise re-derived on origin/main `144c41b8`.** `deploy-validate.md` §3 (lines 140..256):
+0 lines matching `attribution|live mutation|per.action`, beside a control of 1 line
+`with the fix that cleared it` in the same section, in the same run. §4: 0 lines matching
+`USER-CONFIRMED|playwright`, and 0 in the whole file, beside a control of 3 `USER-CONFIRMED`
+lines in `core/scripts/validate-mandatory-rules.sh`. An impossible token scored 0. Claims 1
+and 3 hold.
+
+**Fix.** The fix extends §3's existing record rather than adding a parallel one, and adds no
+gate-log template, since none exists. `smoke_run_evidence` gains a fourth field,
+`per_action_attribution`: one row per live mutation between two smoke runs, the output paths
+of the runs on either side, and the test ids whose state changed (`none` when nothing was
+mutated). §3's "with the fix that cleared it" sentence is followed by **One live mutation per
+smoke run.** That rule defines a live mutation, requires a re-run after each one before the
+next, and requires the record to say "unattributable" rather than credit either action when
+two mutations share a pair of runs. It also states that a §2a destructive operation fired by
+the operator is a live mutation. The counts that say "three fields" and the Rule 26(c)
+failure and cost are updated to match. §4 gains a bullet: write `USER-CONFIRMED` and/or
+`playwright` with the trace path in the Deploy Status Report row of the sprint's gate-log
+section, the two tokens Check 5 searches for. This pairs with BL-392, the Check 5 `head -200`
+fix another hand is building.
+
+**Fixture.** `deploy-validate-smoke-classification`: `per_action_attribution` is added to
+`FIELDS=`, so the existing loop generates its delete mutant and its move-out-of-§3 mutant.
+New arms ONEVAR, OPFIRED and VISUAL are each keyed on their section (§3, and §4 via a new
+`sec4()`). Their mutants are no-onevar, move-onevar (the sentence moved to §3b), no-opfired,
+no-visual-tokens and move-visual (the §4 bullet moved to §4b), and each is killed by its own
+arm only. The fixture passes.
+
+**Receipt scored** in four scratch trees: tip 1, fix 0, a whole-file mention 1 (every new §3
+line and the §4 bullet moved verbatim to the end of the file, where 4 lines still carry the
+tokens), and the field bullet present without the one-mutation rule 1. It keys on §3 and §4
+isolated by heading, never on a whole-file grep.
+
+**LANDED (v0.674.0, verified f7eec6f5).**
+
+Held note (batch 177): shipped the `per_action_attribution` field, the one-live-mutation rule
+including operator-fired §2a operations, and the §4 Check 5 token bullet, with their fixture
+arms and mutants, on branch `b177-r0-steps`.
+
+verify: sh F=core/skills/ai-dlc/steps/deploy-validate.md; [ -f "$F" ] || exit 9; s3="$(awk '/^### 3\. Smoke Tests/{on=1; next} on && /^### /{exit} on{print}' "$F")"; s4="$(awk '/^### 4\. Visual Verification/{on=1; next} on && /^### /{exit} on{print}' "$F")"; [ -n "$s3" ] && [ -n "$s4" ] || exit 9; f3="$(tr '\n' ' ' <<<"$s3" | sed -e 's/\*\*//g' -e 's/[[:space:]][[:space:]]*/ /g')"; grep -qE '^- .per_action_attribution. ' <<<"$s3" || exit 1; case "$f3" in *'One live mutation per smoke run.'*) : ;; *) exit 1 ;; esac; case "$f3" in *'fired by the operator is a live mutation'*) : ;; *) exit 1 ;; esac; grep -q 'USER-CONFIRMED' <<<"$s4" && grep -q 'playwright' <<<"$s4"
