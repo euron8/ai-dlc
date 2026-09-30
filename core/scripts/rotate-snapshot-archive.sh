@@ -86,7 +86,7 @@
 #
 # Exit: 0 = reported or rotated (nothing to rotate is a normal, affirmative result). With --apply,
 #           an existing archive is staged on every exit-0 path, not only after a rotation.
-#       1 = REFUSED: an integrity check or a write failed.
+#       1 = REFUSED: an integrity check, a write, or the `git add` of the archive failed.
 #           On exit 1 the history is byte-identical to before, EXCEPT in exactly one case: the
 #           history rename succeeded and the snapshot truncate then failed (read-only snapshot).
 #           There the history is the new, complete history and the archive holds the moved block
@@ -97,7 +97,9 @@
 #           that is a symlink, has more than one hard link, is not writable, or sits in a
 #           directory that is not writable (or is sticky and owned by someone else); and any
 #           failure while building the new history beside it (the temp copy is removed).
-#       2 = usage
+#       2 = usage: an unknown option, a value-taking option given no value, --keep-entries not a
+#           positive integer, --absorb naming no file, or --archive/--absorb/the history naming the
+#           same file twice. Nothing is written.
 #
 # THE HISTORY IS REPLACED BY AN ATOMIC RENAME, AND NOTHING EVER WRITES INTO IT. The new history is
 # built in a fresh `mktemp` file in the history's own directory (same filesystem, so `mv` is a
@@ -120,8 +122,10 @@
 #     scratch directory, never that temp, and SIGKILL runs no trap at all. The stray is HARMLESS
 #     and SAFE TO DELETE: the history was never written through it, no later run reads it or
 #     refuses on it, and it is outside the `*.md` corpus Check 35 reads.
-#   - A kill between the rename and the snapshot truncate leaves the archive unstaged; the re-run
-#     lands on "nothing to rotate", stages it, and absorbs the snapshot again (a duplicate block).
+#   - The archive is staged BEFORE the rename. A kill between the append and the stage leaves the
+#     history unchanged and the archive holding an unstaged block; the re-run rotates again (a
+#     duplicate block) and stages it. A kill between the rename and the snapshot truncate leaves
+#     the archive staged; the re-run absorbs the snapshot again (a duplicate block).
 #   - ONE RUN ASSUMES NO CONCURRENT WRITER TO THE HISTORY. A writer holding it open with `>>`
 #     across a rotation writes into the replaced inode and its lines are lost; a trim appending
 #     between this run's read and its rename is lost too (as it was under the in-place design).
@@ -144,23 +148,61 @@ KEEP_ENTRIES=10
 ABSORB=""
 ARCHIVE="$(dirname "$HISTORY")/pipeline-history/pipeline-snapshot-archive.md"
 
+# need_value <option> <argc> <value>: a value-taking option given no value is a USAGE error (exit 2),
+# never `${2:?}`, which exits 1 and reads as a refusal. A value that is itself an option (`--archive
+# --apply`) is a missing value too: taking it would name a file `--apply` and drop the flag.
+need_value() {
+  if [ "$2" -lt 2 ] || [ -z "$3" ]; then
+    echo "${SELF_NAME}: $1 needs a value" >&2; usage
+  fi
+  case "$3" in --*) echo "${SELF_NAME}: $1 needs a value, got the option '$3'" >&2; usage ;; esac
+}
 while [ $# -gt 0 ]; do
   case "$1" in
     --apply)         APPLY=1; shift ;;
-    --archive)       ARCHIVE="${2:?--archive needs a path}"; shift 2 ;;
-    --keep-entries)  KEEP_ENTRIES="${2:?--keep-entries needs a number}"; shift 2 ;;
-    --absorb)        ABSORB="${2:?--absorb needs a path}"; shift 2 ;;
+    --archive)       need_value "$1" "$#" "${2:-}"; ARCHIVE="$2"; shift 2 ;;
+    --keep-entries)  need_value "$1" "$#" "${2:-}"; KEEP_ENTRIES="$2"; shift 2 ;;
+    --absorb)        need_value "$1" "$#" "${2:-}"; ABSORB="$2"; shift 2 ;;
     *) echo "${SELF_NAME}: unknown argument '$1'" >&2; usage ;;
   esac
 done
 
+# Zero is refused with the rest: keeping no entry leaves `tail -n 0` no cut point, and the split then
+# ran `sed` over an empty address and refused through its error text.
 case "$KEEP_ENTRIES" in
-  ''|*[!0-9]*) echo "${SELF_NAME}: --keep-entries must be a non-negative integer, got '${KEEP_ENTRIES}'" >&2; exit 2 ;;
+  ''|*[!0-9]*) echo "${SELF_NAME}: --keep-entries must be a positive integer, got '${KEEP_ENTRIES}'" >&2; exit 2 ;;
 esac
+if [ "$KEEP_ENTRIES" -lt 1 ]; then
+  echo "${SELF_NAME}: --keep-entries must be a positive integer, got '${KEEP_ENTRIES}'" >&2; exit 2
+fi
 
 if [ -n "$ABSORB" ] && [ ! -f "$ABSORB" ]; then
   echo "${SELF_NAME}: --absorb names no file: '${ABSORB}'" >&2
   exit 2
+fi
+
+# THE ARCHIVE, THE HISTORY AND THE ABSORBED SNAPSHOT MUST BE THREE DIFFERENT FILES. An archive that
+# is the absorbed snapshot or the history is appended to ITSELF (`cat f >> f`), which never reaches
+# end of file and grows until the disk fills. An absorb naming the history truncates the history the
+# run just rewrote. Compared by identity where both exist (`-ef` sees through a symlink and a second
+# spelling of one path) and by physical directory plus basename where one does not exist yet.
+canon() {  # <path>: the physical directory plus the basename, or empty when the directory is absent
+  local d; d="$(cd "$(dirname "$1")" 2>/dev/null && pwd -P)" || return 0
+  printf '%s/%s\n' "$d" "$(basename "$1")"
+}
+same_file() {
+  if [ -e "$1" ] && [ -e "$2" ]; then [ "$1" -ef "$2" ]; return; fi
+  local a b; a="$(canon "$1")"; b="$(canon "$2")"
+  [ -n "$a" ] && [ "$a" = "$b" ]
+}
+if same_file "$ARCHIVE" "$HISTORY"; then
+  echo "${SELF_NAME}: --archive names the history itself: '${ARCHIVE}'. Nothing written." >&2; exit 2
+fi
+if [ -n "$ABSORB" ] && same_file "$ARCHIVE" "$ABSORB"; then
+  echo "${SELF_NAME}: --archive and --absorb name the same file: '${ARCHIVE}'. Nothing written." >&2; exit 2
+fi
+if [ -n "$ABSORB" ] && same_file "$ABSORB" "$HISTORY"; then
+  echo "${SELF_NAME}: --absorb names the history itself: '${ABSORB}'. Nothing written." >&2; exit 2
 fi
 
 ARCHIVE_DIR="$(dirname "$ARCHIVE")"
@@ -274,12 +316,20 @@ NL=$'\n'
 # The move is not complete until the destination is in the corpus. Staging here rather than
 # leaving it to the caller is deliberate: the caller who forgets is exactly the failure REFUSAL 3
 # exists to prevent, and an unstaged new file contributes nothing to `git ls-files`.
+#
+# A FAILED STAGE REFUSES, AND EVERY CALLER STAGES BEFORE ANYTHING SHRINKS. It was a WARNING with exit
+# 0, after the history rename: the history shrank, the archive holding its lines stayed outside Check
+# 35's corpus, and the caller's "re-run until exit 0" loop had already stopped. Now the stage runs
+# after the archive append and BEFORE the rename and the snapshot truncate, so a refusal here leaves
+# the history and the snapshot unchanged; the archive holds a block the re-run appends again.
 stage_archive() {
   if [ "$IN_GIT" -eq 1 ] && [ -n "$GITROOT" ]; then
     git -C "$GITROOT" add -- "$ARCHIVE" >/dev/null 2>&1 || {
-      echo "${SELF_NAME}: WARNING -- could not stage ${ARCHIVE}." >&2
-      echo "  Until it is tracked, Check 35 cannot see the lines just moved into it." >&2
-      echo "  Run: git add -- ${ARCHIVE}" >&2
+      [ -n "${HIST_NEW:-}" ] && rm -f "$HIST_NEW"
+      echo "${SELF_NAME}: REFUSED -- could not stage the archive ${ARCHIVE} (git add failed)." >&2
+      echo "  Until it is tracked, Check 35 cannot see lines moved into it, so nothing was truncated: the history${ABSORB:+ and ${ABSORB}} are unchanged." >&2
+      echo "  Fix the cause (an index.lock, a read-only .git, an ignore rule) and re-run; the re-run may append a duplicate block, which conserves it." >&2
+      exit 1
     }
   fi
 }
@@ -347,16 +397,15 @@ absorb_only() {
 }
 
 # The archive is staged on the paths that do not rotate too, whenever it exists and --apply was
-# given. A run killed after the history rename and before the staging leaves the new history
-# already cut and the archive holding the moved block UNTRACKED; the re-run then lands on "nothing
-# to rotate". Without staging there, a caller without --absorb left the archive untracked and
-# Check 35 scored every line moved into it as destroyed. Measured under the earlier in-place
+# given. A history already cut while its archive is UNTRACKED lands here on every later run: a run
+# of an earlier revision killed between its rename and its stage (it staged after the rename), or a
+# hand `git rm --cached`. Without staging here, a caller without --absorb left the archive untracked
+# and Check 35 scored every line moved into it as destroyed. Measured under the earlier in-place
 # design, whose recovery landed on the same path: 8 of 29 pre-run lines absent from
 # `git ls-files` after a clean exit-0 re-run.
 #
-# It stages only; it does not refuse. An archive that already exists and is ignored is refused by
-# REFUSAL 3 on every path that writes to it, and here `git add` of it fails and prints the same
-# warning as every other staging failure.
+# A `git add` that fails here refuses (exit 1) like every other staging failure; nothing has been
+# written on these paths, so the refusal leaves every file as it was.
 stage_existing_archive() {
   [ "$APPLY" -eq 1 ] && [ -f "$ARCHIVE" ] || return 0
   resolve_git
@@ -479,7 +528,14 @@ CUT="$(tail -n "$KEEP_ENTRIES" "$TMPD/cutpoints" | head -1 | cut -d: -f1)"
 # ---------------------------------------------------------------------------
 # Split. Three parts, and every line of the file is in exactly one of them.
 # ---------------------------------------------------------------------------
-sed -n "1,${PREAMBLE_END}p"        "$HISTORY" > "$TMPD/preamble"
+# A history whose line 1 is a heading has no preamble, and `sed -n "1,0p"` is NOT empty: an end
+# address below the start prints the start line, so line 1 landed in two parts and the accounting
+# refused forever. An empty preamble is written without sed.
+if [ "$PREAMBLE_END" -gt 0 ]; then
+  sed -n "1,${PREAMBLE_END}p"      "$HISTORY" > "$TMPD/preamble"
+else
+  : > "$TMPD/preamble"
+fi
 sed -n "$((PREAMBLE_END + 1)),$((CUT - 1))p" "$HISTORY" > "$TMPD/move"
 sed -n "${CUT},\$p"                "$HISTORY" > "$TMPD/tail"
 
@@ -537,6 +593,8 @@ fi
 #   1. prechecks                 -- refuse, nothing written;
 #   2. build the temp, verify it -- remove the temp, refuse, nothing else written;
 #   3. archive append, verified  -- remove the temp, refuse; the archive may hold a partial block;
+#   3b. `git add` of the archive -- remove the temp, refuse; the history is unchanged and the archive
+#      holds the moved block, which the next run appends again;
 #   4. rename the temp over the history -- remove the temp, refuse; the history is unchanged and
 #      the archive holds the moved block, which the next run appends again (a duplicate that
 #      conserves it);
@@ -623,11 +681,13 @@ archive_append "${NL}<!-- rotated from $(basename "$HISTORY"): ${L_MOVE} lines, 
 absorb_append
 ARCHIVE_WRITTEN=1
 
+# STAGE, before the rename: a stage that fails refuses while the history is still the old file.
+stage_archive
+
 # RENAME. The history is the complete old file until this returns and the complete new file after.
 mv -f -- "$HIST_NEW" "$HISTORY" || rewrite_fail "the rename over the history failed"
 HIST_NEW=""
 
-stage_archive
 absorb_truncate
 
 echo "${SELF_NAME}: moved ${N_MOVE} entr(ies), ${L_MOVE} lines (${B_MOVE} bytes) to ${ARCHIVE};${ABSORB_NOTE} history is now $(wc -l < "$HISTORY" | tr -d ' ') lines."

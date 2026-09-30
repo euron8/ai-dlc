@@ -138,6 +138,11 @@ if [ "$MODE" = "digest" ]; then
 fi
 
 [ -n "$SPRINT" ] || { echo "FAIL: --sprint N is required for --attest/--verify" >&2; exit 1; }
+# SPRINT is spliced into the span regex below, so a non-digit value is a regex, not a sprint:
+# `--sprint '.*'` and `--sprint '5|'` each verified a sprint=5 line. Refused here, once.
+case "$SPRINT" in
+  *[!0-9]*) echo "FAIL: --sprint takes a sprint NUMBER (digits only), got: $SPRINT" >&2; exit 1 ;;
+esac
 
 if [ -z "$GATE_LOG" ]; then
   for cand in "$PROJECT_DIR/_bmad-output/implementation-artifacts/gate-log.md" \
@@ -168,15 +173,18 @@ fi
 # against the shipping script and the real fixture digest, five gate logs differing
 # only in what precedes one byte-identical attestation: under that `^` anchor column 1
 # exited 0, and a table cell, a backtick wrap, a `- ` bullet and a four-space indent all
-# exited 1. Under a token boundary all five exit 0 — but a token boundary does not read
+# exited 1. (A four-space indent is an indented CODE BLOCK and is now refused by the block
+# context in the reader, with fences and HTML comment blocks.)
+# Under a token boundary all five exit 0 — but a token boundary does not read
 # what PRECEDES the span, so failure words before it were granted. The closed lead at
 # the end of this block is what closed that.
 #
 # WHY NOT A BARE SUBSTRING EITHER. Dropping the anchor makes `XH2_ATTESTED` and
 # `NOT_H2_ATTESTED` count, so a line that DENIES an attestation grants one. The
-# grammar is therefore a TOKEN boundary: start of line, or any character that is not
-# a word character. `[^0-9A-Za-z_]` rather than `\b`, because this expression is also
-# what a reader copies into a `git grep -E`, where `\b` returns a clean zero.
+# grammar is therefore a TOKEN boundary for GRANTING: the closed lead admits no letter
+# before the span. The LOCATING boundary is `[^0-9A-Za-z]` rather than `\b`, because this
+# expression is also what a reader copies into a `git grep -E`, where `\b` returns a clean
+# zero; it omits `_` so `_SPAN_` and `NOT_H2_ATTESTED` are located, never first-gate.
 #
 # A BACKTICK MUST NOT BE INTERPOLATED INTO A DOUBLE-QUOTED STRING. When these grammars
 # were `grep -qE "…"` arguments, an unescaped backtick opened command substitution and
@@ -264,10 +272,25 @@ fi
 #
 # VERDICT. A span in a table row is accepted only when the table's header row — the row
 # directly above its `|---|` separator — names a Result, Verdict, Status or Outcome
-# column, and that row's cell in the column BEGINS `PASS` after `*`, `_`, backtick and
-# space decoration (PASS, PASSED, `**PASS (…)**`). A row in a table with no header, or a
-# header naming no such column, or a verdict cell that is `—`, VOIDED or FAIL, is refused.
+# column, and EVERY such cell in the row reads, whole, `PASS` or `PASSED` plus at most one
+# parenthetical and a period, after `*`, `_`, backtick and space decoration (PASS, PASSED,
+# `**PASS (…)**`), with no FAIL or revocation word in the parenthetical. A row in a table
+# with no header, or a header naming no such column, or a verdict cell that is `—`, VOIDED,
+# FAIL, `PASS/FAIL`, `PASS (FAILED on re-drive)`, or a second verdict column reading FAIL, is
+# refused. Measured over every revision of every consumer file carrying a span: 4 table rows
+# are ever granted, each verdict cell exactly `PASS`, so the whole-cell grammar refuses none.
 # A span alone on its own line is not in a row and needs no verdict column.
+#
+# BLOCK CONTEXT AND REVOCATION. A span inside a fenced code block, an HTML comment block or an
+# indented code block (four spaces or a tab before the line) is refused and located. A LATER
+# line carrying the live span with VOID, REVOKE, RETRACT, SUPERSEDE or INVALID withdraws an
+# earlier grant (REVOKED, naming both lines); a later accepted span re-grants. A revoking
+# sentence that carries NO span is not read: that shape refused five correct consumer gate
+# logs on commentary ("a changed fixture voids the attestation by design").
+#
+# Measured over 501 distinct consumer blobs carrying the token (every revision of 67 paths),
+# 688 forced-digest runs: no verdict changes on any gate-log path. Twenty runs change, all on
+# pipeline snapshots and one h2-drive note whose span sits inside a real ``` block.
 #
 # WHY AN ALLOWLIST AND NOT A FAILURE VOCABULARY. The first design refused a row whose
 # other cells carried FAIL, INVALID, REFUSED, RE-DRIVE or "do not cite". Over the
@@ -306,9 +329,14 @@ fi
 # These strings are no longer interpolated into a double-quoted `grep -E` argument; the
 # single awk pass reads them from its environment, so the backtick in the closed sets is
 # a literal character here and cannot open a command substitution.
-ATTEST_LEAD='[ ]*(- )?[ ]*(\*\*)?`?'
-ATTEST_TAIL='`?(\*\*)?\.?[ ]*'
-ATTEST_LOCATE='(^|[^0-9A-Za-z_])'
+# A TAB is decoration exactly where a space is (padding in a cell, after a bullet). A tab or
+# four spaces BEFORE a line is not: that line is an indented code block, refused by the block
+# context below before these sets are read.
+ATTEST_LEAD='[ \t]*(- )?[ \t]*(\*\*)?`?'
+ATTEST_TAIL='`?(\*\*)?\.?[ \t]*'
+# `_` is NOT a boundary-breaking character here: `_SPAN_` is markdown emphasis, and with `_`
+# counted as a word character it was never located and read as the sprint's first gate.
+ATTEST_LOCATE='(^|[^0-9A-Za-z])'
 # The emitted span, for the tail test and for CITATION. Its optional groups mirror the line
 # --attest emits field for field, so a field added there is matched here without being required.
 ATTEST_FIELDS='( at=[0-9A-Za-z:-]+)?( items=[0-9,]+)?( mechanical=check-17-bypass:PASS)?'
@@ -336,7 +364,14 @@ if [ "$MODE" = "verify" ]; then
   # and ATTEST_ANY, so ANY refused span is located rather than reported as first-gate.
   # A table row needs the header the judge reads, which is why this is one stateful pass
   # and no longer three greps. The program is single-quoted and may carry no apostrophe.
-  _res="$(LC_ALL=C H2_LEAD="$ATTEST_LEAD" H2_TAIL="$ATTEST_TAIL" H2_LOCATE="$ATTEST_LOCATE" \
+  #
+  # A NUL BYTE ENDS A LINE FOR BSD awk, so `| H2 | FAIL\0 | SPAN |` was judged as `| H2 | FAIL`
+  # and `SPAN\0 FAILED, do not cite` as a bare SPAN. Every NUL is rewritten to \032 (SUB) before
+  # awk reads the log: a byte in no decoration set, so it can neither end a cell nor pad a span.
+  # pipefail keeps an unreadable log on the could-not-read arm rather than reading it as empty.
+  _res="$(set -o pipefail
+          LC_ALL=C tr '\000' '\032' < "$GATE_LOG" |
+          LC_ALL=C H2_LEAD="$ATTEST_LEAD" H2_TAIL="$ATTEST_TAIL" H2_LOCATE="$ATTEST_LOCATE" \
           H2_SPAN="$ATTEST_SPAN" H2_ANY="$ATTEST_ANY" awk '
     # cells(s, arr): split a table row into cells, by the reading GFM selects. A TABLE ROW
     # VERIFIES ONLY IF BOTH READINGS ACCEPT IT. A pipe written as \| is never a delimiter
@@ -425,21 +460,73 @@ if [ "$MODE" = "verify" ]; then
         if (tolower(k) ~ /^(result|verdict|status|outcome)$/) { vi = i; name = k; break }
       }
       if (!vi) return "in a table whose header names no Result, Verdict, Status or Outcome column"
-      v = (vi <= n) ? c[vi] : ""
-      sub(/^[ *_`]+/, "", v)
-      if (v !~ /^PASS(ED)?([^0-9A-Za-z_]|$)/) return "in a row whose " name " cell does not begin PASS"
+      # EVERY verdict column is read, and the WHOLE cell: PASS or PASSED, optionally one
+      # parenthetical, optionally a period, and nothing else. `PASS (FAILED on re-drive)`,
+      # `PASS/FAIL`, `PASS~~` and `| Result | Status |` holding `PASS | FAIL` are refused.
+      for (i = vi; i <= hn; i++) {
+        k = hc[i]; gsub(/[ *_`]/, "", k)
+        if (tolower(k) !~ /^(result|verdict|status|outcome)$/) continue
+        v = (i <= n) ? c[i] : ""
+        if ((why = vcell(v)) != "") return "in a row whose " k " cell " why
+      }
       match(c[at], rx); CITE = substr(c[at], RSTART, RLENGTH); return "OK"
+    }
+    # vcell(v): empty when a verdict cell reads PASS, else why not. The first test keeps the
+    # original message, so a cell that never began PASS reads as it always did.
+    function vcell(v) {
+      gsub(/^[ \t*_`]+|[ \t*_`]+$/, "", v)
+      if (v !~ /^PASS(ED)?([^0-9A-Za-z_]|$)/) return "does not begin PASS"
+      if (v !~ /^PASS(ED)?( [(][^()]*[)])?[.]?$/) return "carries more than PASS and one parenthetical"
+      if (toupper(v) ~ REVOKE_WORDS || toupper(v) ~ /FAIL/) return "carries a failure word after PASS"
+      return ""
+    }
+    # revokes(): this line withdraws THE attestation already granted, which it can only do by
+    # carrying the live span itself AND a revocation word. A sentence that merely mentions
+    # voiding is NOT read: over the consumer history that shape refused five correct PASS
+    # gate logs (sprints 289, 308, 309) on prose such as "a changed fixture voids the
+    # attestation by design" and "not an invalid attestation". A line naming no span cannot
+    # say WHICH attestation it withdraws, and no word list separates it from commentary.
+    function revokes(    u) {
+      u = toupper($0)
+      if ($0 ~ SPAN) return (u ~ REVOKE_WORDS)
+      # One sentence shape carries no span and still revokes: a statement that THE attestation
+      # IS void, and names no digest (a digest names some OTHER attestation this line is about).
+      if ($0 ~ /digest=/) return 0
+      return (u ~ /ATTESTATION (ABOVE |LINE )?(IS|WAS) (NOW )?(VOID|REVOKED|RETRACTED|WITHDRAWN|INVALID)/)
     }
     BEGIN {
       LEAD = ENVIRON["H2_LEAD"]; TAIL = ENVIRON["H2_TAIL"]; LOC = ENVIRON["H2_LOCATE"]
       SPAN = ENVIRON["H2_SPAN"]; ANY = ENVIRON["H2_ANY"]
-      prevtab = 0; rows = 0; hdr = ""; prev = ""
+      REVOKE_WORDS = "VOID|REVOKE|RETRACT|SUPERSEDE|INVALID"
+      prevtab = 0; rows = 0; hdr = ""; prev = ""; fence = ""; incom = 0
     }
     {
-      # Table state first, so the row being judged sees its own header. The header is the
-      # row directly above the separator, and only when it is the first row of its block.
       # A CRLF log must judge like an LF one, so the carriage return goes first.
       sub(/\r$/, "")
+      # BLOCK CONTEXT before anything else. A span inside a fenced code block, an HTML
+      # comment block, or an indented code block (four spaces, or a tab, before the line) is
+      # displayed text, not a record: it is located, never granted, and never arms a table.
+      blk = ""
+      if (fence != "") {
+        blk = "inside a fenced code block"
+        if ($0 ~ ("^(   |  | )?" fence)) fence = ""
+      } else if (match($0, /^(   |  | )?(```|~~~)/)) {
+        fence = substr($0, RSTART + RLENGTH - 3, 3); blk = "on a code fence line"
+      } else if (incom) {
+        blk = "inside an HTML comment block"
+        if (index($0, "-->")) incom = 0
+      } else if ($0 ~ /^[ \t]*<!--/ && index(substr($0, index($0, "<!--") + 4), "-->") == 0) {
+        incom = 1; blk = "inside an HTML comment block"
+      } else if ($0 ~ /^(    |\t| \t|  \t|   \t)/) {
+        blk = "inside an indented code block"
+      }
+      if (blk != "") {
+        prevtab = 0; rows = 0; hdr = ""; prev = ""   # a block ends any table around it
+        if (index($0, "H2_ATTESTED") && $0 ~ (LOC "(" ANY ")")) { locn = NR; locwhy = blk }
+        next
+      }
+      # Table state next, so the row being judged sees its own header. The header is the
+      # row directly above the separator, and only when it is the first row of its block.
       istab = ($0 ~ /^[ ]*[|]/)
       if (!istab) { rows = 0; hdr = "" }
       else if ($0 ~ /^[ |:-]+$/ && $0 ~ /-/) {
@@ -450,19 +537,25 @@ if [ "$MODE" = "verify" ]; then
         rows++
       }
       prevtab = istab; prev = $0
-      if (index($0, "H2_ATTESTED") == 0) next
-      if ($0 !~ (LOC "(" ANY ")")) next
-      if ($0 ~ SPAN && judge(SPAN) == "OK") { pass = 1; cite = CITE; next }
+      # A LATER REVOCATION REVOKES. The log is read in order and the last word on this
+      # sprint at this digest stands: a VOIDED row carrying the span, or a sentence voiding
+      # the H2 attestation, withdraws an earlier grant, and a later accepted span re-grants.
+      # A line that is itself an accepted placement is a grant, never a revocation.
+      spanl = (index($0, "H2_ATTESTED") && $0 ~ (LOC "(" ANY ")"))
+      if (spanl && $0 ~ SPAN && judge(SPAN) == "OK") { pass = 1; passn = NR; revoked = 0; cite = CITE; next }
+      if (pass && revokes()) { pass = 0; revoked = NR; revn = passn; next }
+      if (!spanl) next
       why = judge(ANY)
       if (why == "OK") { changed = 1; next }
       locn = NR; locwhy = why
     }
     END {
       if (pass) print "PASS|" cite
+      else if (revoked) print "REVOKED|" revoked "|" revn
       else if (changed) print "CHANGED"
       else if (locn) print "LOCATE|" locn "|" locwhy
       else print "NONE"
-    }' "$GATE_LOG")" || {
+    }')" || {
     echo "RE-DRIVE: could not read ${GATE_LOG} — H2 cannot be verified from it." >&2
     exit 1
   }
@@ -479,17 +572,24 @@ if [ "$MODE" = "verify" ]; then
       printf '%s\n' "$_a"
       echo "      Cite this line. The fixtures are byte-identical to when it was driven."
       exit 0 ;;
+    # EVERY VERDICT GOES TO STDOUT, like PASS and first-gate: a caller capturing only stdout
+    # once saw nothing for CHANGED or a located refusal. stderr carries only reader failures.
     CHANGED)
-      echo "RE-DRIVE: sprint ${SPRINT} has an attestation, but the fixture set CHANGED." >&2
-      echo "          expected digest ${DIGEST}; the logged attestation carries another." >&2
-      echo "          A changed fixture voids the attestation by design — re-drive H2 in full." >&2
+      echo "RE-DRIVE: sprint ${SPRINT} has an attestation, but the fixture set CHANGED."
+      echo "          expected digest ${DIGEST}; the logged attestation carries another."
+      echo "          A changed fixture voids the attestation by design — re-drive H2 in full."
+      exit 1 ;;
+    REVOKED)
+      echo "RE-DRIVE: ${GATE_LOG}:${_a} REVOKES the H2 attestation for sprint ${SPRINT} accepted at line ${_b}."
+      echo "          A later line voiding the attestation withdraws it. Re-drive --attest and append"
+      echo "          its line on its OWN line at column 1, nothing before or after it."
       exit 1 ;;
     LOCATE)
-      echo "RE-DRIVE: ${GATE_LOG}:${_a} QUOTES an H2_ATTESTED span for sprint ${SPRINT} ${_b}," >&2
-      echo "          so it cannot be verified (a span the placement rules refuse is not an attestation). Re-drive" >&2
-      echo "          --attest and append its line on its OWN line at column 1, nothing before or after it." >&2
-      echo "          In a table log the span may instead sit ALONE in a cell of a row whose" >&2
-      echo "          Result, Verdict, Status or Outcome column reads PASS." >&2
+      echo "RE-DRIVE: ${GATE_LOG}:${_a} QUOTES an H2_ATTESTED span for sprint ${SPRINT} ${_b},"
+      echo "          so it cannot be verified (a span the placement rules refuse is not an attestation). Re-drive"
+      echo "          --attest and append its line on its OWN line at column 1, nothing before or after it."
+      echo "          In a table log the span may instead sit ALONE in a cell of a row whose"
+      echo "          Result, Verdict, Status or Outcome column reads PASS."
       exit 1 ;;
     NONE)
       echo "RE-DRIVE: no H2 attestation for sprint ${SPRINT} — this is the sprint's first gate."

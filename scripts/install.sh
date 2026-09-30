@@ -194,9 +194,9 @@ for doc in escalations.md rule-authoring.md artifact-path-grammar.md core-manife
     cp "$SCRIPT_DIR/../core/skills/ai-dlc/$doc" "$PROJECT_ROOT/.claude/skills/ai-dlc/"
 done
 # Skill templates cited by step files with a skill-root-relative path
-# (retro.md's finding-class table). These were previously kept at the dev repo's
-# templates/pipeline/ and never copied, so retro.md pointed at a file no consumer
-# had. A reader that cannot resolve the pointer applies no finding-class at all
+# (retro.md's finding-class table). These were once kept in a dev-repo directory
+# outside core/ that nothing copied (since deleted), so retro.md pointed at a file
+# no consumer had. A reader that cannot resolve the pointer applies no finding-class at all
 # and nothing reports it -- the same shape as a check whose PASS is identical to
 # its never having run.
 #

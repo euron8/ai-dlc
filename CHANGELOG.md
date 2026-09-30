@@ -15,6 +15,74 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.667.0] - 2026-09-29
+
+The rest of batch 174's backlog drain: the fixes still building when 0.666.0 shipped. Discharges
+one consumer candidate and fixes `BL-002`, `BL-003`, `BL-010`, `BL-020`, `BL-027`, `BL-123`,
+`BL-267`, `BL-268`, `BL-269`, `BL-272`, `BL-274`, `BL-275`, `BL-308`, `BL-322`, `BL-323`,
+`BL-324`, `BL-325`, `BL-326`, `BL-327`, `BL-328`, `BL-330`, `BL-339`, `BL-344`, `BL-346`,
+`BL-347`, `BL-349`, `BL-350`, `BL-351` and `BL-379`. `BL-007` and `BL-338` are fixed in part and
+stay open. No file here is one the update engine runs on itself.
+
+### Consumer candidate
+
+- **`PC-S315-DERIVE-FIXTURE-READSETS-COPIES-THE-WHOLE-WORKING-TREE`** (`BL-379`).
+  `derive-fixture-readsets.sh` copied the whole working tree, ignored files included, and walked
+  it once per fixture. The trace tree is now `.git/` plus `git ls-files -z --cached --others
+  --exclude-standard`. On a copy of the consumer's tree: 14310 files against 103945, first-run
+  fixture times roughly halved, and every committed non-ignored row outside `.git/**` still found.
+  Without the consumer's `.venv-ci`, three fixtures fall back to the system python and record
+  extra existence probes (a superset, the safe direction).
+- In the same file: `drop_ignored` now filters when the tree carries a submodule (a gitlink made
+  `git check-ignore` exit 128 and the fail-open branch kept every row, so the consumer's map held
+  about 15,700 ignored rows); it reads `check-ignore`'s own exit, because a refused batch printed a
+  partial verdict list that silently dropped every later row; and the atime scan runs before the
+  deriver's own `git status`, whose reads had appeared in every fixture's set.
+- `--tracer sandbox` is a root-free tracer mode beside `fs_usage` (`BL-375`). It omits a fixture on
+  any lost event rather than emitting a smaller set. `BL-375` stays open until one root run traces
+  every fixture with both tracers.
+
+### Uninstall, rotation and routing
+
+- **`BL-002`, `BL-010`.** `uninstall.sh` removes the `.claude` machinery it installed and un-merges
+  `settings.json`, keeping consumer-authored hooks and settings. A tuned `aiDlcModels` or
+  `aiDlcRoles` entry is kept and listed; an untuned one is removed. `templates/pipeline/` is gone.
+- **`BL-322`.** `rotate-snapshot-archive.sh` refuses five edge inputs cleanly and conserves every
+  line. The worst: an `--archive` naming the absorbed snapshot or the history appended the file to
+  itself without end (a 5-byte snapshot grew to 5.1 GB in two minutes); it now exits 2. A failed
+  `git add` now refuses before the rename, leaving history and snapshot unchanged.
+- **`BL-324`, `BL-325`.** The rotation fixture reaps its sweep workers on TERM (0 of 12 left,
+  against 28 temp directories on base) and refuses a rotator that switches off its own trace.
+- **`BL-323`, `BL-027`.** `route.md` Step 0 rules on a resume signal meeting an empty snapshot, and
+  scopes `has_ready_sprint` to the current sprint with no read of the stale snapshot.
+- **`BL-326`, `BL-327`, `BL-328`, `BL-330`.** Four scripts resolve their root or schemas from the
+  right tree: gate-adjudication reads escalations beside its map; request-coverage walks up instead
+  of counting `..` hops; mandatory-rules runs every read from the walked-up root, so a subdirectory
+  run gives the root run's verdict and message; write-format-steering resolves its schema pair as a
+  set.
+
+### Attestation, validators and fixtures
+
+- **`BL-344`, `BL-346`, `BL-347`, `BL-349`, `BL-350`, `BL-351`.** `validate-h2-attestation.sh
+  --verify` refuses a span inside a fence, an HTML comment or an indented block, reads every verdict
+  cell whole, honours a later revocation (a new `REVOKED` verdict), survives NUL bytes and tabs, and
+  refuses a non-digit `--sprint`. Over 501 real attestation-carrying blobs in the consumer's
+  history, no gate log changed verdict.
+- **`BL-003`, `BL-020`, `BL-123`.** The layer-contract shard's SKIP names its own shard; the
+  artifact-budget summary names struck and superseded rows; an unreadable layer contract is
+  reported as unreadable. **`BL-007`** reports a missing sprint as PENDING without failing a gate;
+  a hole inside the archive stays open by operator ruling.
+- **`BL-267`, `BL-268`, `BL-272`, `BL-274`.** I59 re-reads a file instead of buffering it;
+  `fork-profile.sh` marks rows it cannot attribute (`AMBIGUOUS`) and says when its table is
+  truncated; `--arms` names the unit it actually ran. Validator CPU time is unchanged within the
+  rep spread.
+- **`BL-339`.** New invariant **I116**: a shipping fixture that sources a sibling fixture requires
+  that sibling to ship. 4 such pairs on the tree, all satisfied.
+- **`BL-269`, `BL-275`, `BL-308`.** I75 gains a seeded-drift oracle; all three `--bucket-rows`
+  caller sites are bound at the executing line; `preclassify.sh`'s `--untangle` and `--templates`
+  modes are driven through forced git failures. **`BL-338`** pins R6's refusal baseline to a fixed
+  name and stays open for its V-N case.
+
 ## [0.666.0] - 2026-09-29
 
 A backlog drain. Every live backlog entry was re-adjudicated against the tree; this release ships

@@ -1707,7 +1707,7 @@ v_approve() { # v_approve <world> <ref-to-render-at>
     x="$(v_foreign "$d/region.md" "")"
     [ -z "$x" ] && break
   done
-  [ -n "$x" ] && bad "FIXTURE BROKEN — $1 approval rendered DETECTOR-REFUSED on $V_TRIES attempts: $x"
+  [ -n "$x" ] && bad "FIXTURE BROKEN — $1 approval rendered DETECTOR-REFUSED on $V_TRIES attempts: $x — three in a row is not transient: when the named detector is one emit-report.sh ships, this is a deterministic ENGINE regression in that detector on this world, not a fixture fault"
   { echo "# Reconcile report (fixture)"; echo; cat "$d/region.md"; } > "$d/approved.md"
   [ -s "$d/region.md" ]
 }
@@ -1729,6 +1729,50 @@ v_stub() { # v_stub <emit-path> <dest-dir> <sibling-to-refuse> -> prints the emi
   printf '%s\n' "$s" > "$d/.stubbed"
   printf '%s\n' "$d/$(basename "$e")"
 }
+
+# R6-BASE — THE DERIVED BASELINE IS PINNED TO THE ONE REFUSAL THE SEED IS KNOWN TO CARRY (BL-338).
+# `V_REFUSE_OK` is read off the engine's own seed render, so an engine regression that refuses on
+# EVERY world — the seed included — lands in the accepted set and R6 absorbs it: every approval
+# and every score then reads clean. The derivation stays (it is what keeps the retries off the
+# seed's legitimate refusal); this arm is the independent side of the join, a FIXED name.
+# THE MUTANT is an engine copy whose `ledger-reverify.sh` refuses everywhere, rendered once over
+# the seed world and put through the SAME derivation line — extracted from this file, so a change
+# to how `V_REFUSE_OK` is derived is a change to what the mutant measures. Its positive control
+# is the retired-layer-token refusal still being there, so a copy that never ran cannot score.
+R6_FIXED_OK='retired-layer-token.sh'
+r6_set() { printf '%s\n' $1 | awk 'NF' | sort -u | tr '\n' ' ' | sed 's/ $//'; }
+_r6_have="$(r6_set "$V_REFUSE_OK")"
+if [ "$_r6_have" = "$R6_FIXED_OK" ]; then
+  ok "R6-BASE the derived refusal baseline is exactly {$R6_FIXED_OK}, the one refusal the seed world is known to carry — an engine refusal on every world cannot hide inside it"
+else
+  bad "R6-BASE the seed render's refusal set is [${_r6_have:-empty}], not exactly {$R6_FIXED_OK}: R6 would absorb that refusal on every world, so a detector the engine ships refusing everywhere reads as a clean baseline"
+fi
+_r6_line="$(grep -c '^V_REFUSE_OK="\$(awk .* "\$REGION")"$' "$HERE/run.sh")" || _r6_line=0
+_r6m="$WORK/r6-base-mutant"
+if [ "$_r6_line" -ne 1 ]; then
+  bad "FIXTURE STALE [R6-BASE mutant]: the V_REFUSE_OK derivation line matched $_r6_line times in run.sh, not 1 — re-anchor on the same derivation"
+elif ! _r6e="$(v_stub "$EMIT" "$_r6m" ledger-reverify.sh)"; then
+  bad "FIXTURE BROKEN [R6-BASE mutant]: could not copy the engine directory"
+else
+  bash "$_r6e" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$WORK/r6-base-mutant.region" 2>/dev/null
+  _r6m_ok="$(REGION="$WORK/r6-base-mutant.region"; eval "$(grep '^V_REFUSE_OK="\$(awk .* "\$REGION")"$' "$HERE/run.sh")"; printf '%s' "$V_REFUSE_OK")"
+  _r6m_set="$(r6_set "$_r6m_ok")"
+  # Membership is tested one name at a time: the set is sorted and space-joined, so two names
+  # adjacent in it share ONE space, and a single glob naming both with a space on each side
+  # cannot match them.
+  _r6m_both=0
+  case " $_r6m_set " in *" retired-layer-token.sh "*) _r6m_both=$((_r6m_both+1)) ;; esac
+  case " $_r6m_set " in *" ledger-reverify.sh "*) _r6m_both=$((_r6m_both+1)) ;; esac
+  case "$_r6m_both" in
+    2)
+      if [ "$_r6m_set" != "$R6_FIXED_OK" ]; then
+        ok "R6-BASE mutant [ledger-reverify.sh refuses on every world] KILLED: the derived baseline becomes [$_r6m_set], which the fixed-name arm refuses"
+      else
+        bad "R6-BASE mutant SURVIVED: an engine refusing ledger-reverify.sh everywhere still derived exactly {$R6_FIXED_OK}"
+      fi ;;
+    *) bad "FIXTURE BROKEN [R6-BASE mutant]: the stubbed engine's derived set is [${_r6m_set:-empty}] — it must carry BOTH the seed's retired-layer-token refusal (the copy ran) and ledger-reverify.sh (the stub fired)" ;;
+  esac
+fi
 
 # v_score <emit> <world> <tag> -> "<rc>|<cause>|<resolved-lines>|<n1>|<n2>|<unseen-lines>"
 #

@@ -15,7 +15,7 @@ nextStepFile: dynamically determined by routing logic
 - `has_architecture`: boolean
 - `has_stories`: boolean
 - `has_carry_over_items`: boolean
-- `has_ready_sprint`: boolean (stories exist with status ready-for-dev or in-progress)
+- `has_ready_sprint`: boolean (stories of the CURRENT sprint — the one `scripts/ai-dlc/sprint-status.sh sprint-id` resolves — have status ready-for-dev or in-progress; a story left in a closed sprint's block does not count)
 - `is_ui_epic`: boolean (determined during planning, not routing)
 
 ## EXECUTION SEQUENCE
@@ -98,12 +98,19 @@ previous session.
    - The snapshot is already current (kept fresh by
      `gate-validation.md` Check 14 on each gate passage throughout the
      previous session); do NOT re-initialize it.
-3. If the snapshot exists but user input does NOT indicate a resume
+3. If the snapshot exists but is EMPTY (0 bytes) and the input carries a
+   resume signal, there is no state to resume: an earlier Step 6 was
+   interrupted after the rotator archived the old snapshot and before the
+   new one was written. Say so in the first output line, do not rebuild
+   state from the archive, and continue to Step 1; Step 6 writes the new
+   snapshot into the empty file.
+4. If the snapshot exists but user input does NOT indicate a resume
    (e.g., the user is starting a new feature while an old snapshot
    remains on disk from a previous pipeline run), continue to Step 1.
-   Step 6 will detect the stale snapshot and archive it before
+   Do NOT read the stale snapshot's content: it describes a previous
+   pipeline, and Step 6 absorbs it into the archive unread before
    creating a new one.
-4. If no snapshot exists, continue to Step 1 normally.
+5. If no snapshot exists, continue to Step 1 normally.
 
 ### Step 0a: Snapshot Integrity Validation (resume dispatch only)
 

@@ -385,6 +385,14 @@ if [ -z "$SCHEMA" ] || [ ! -f "$SCHEMA" ]; then
 fi
 
 MAP="${AI_DLC_ENFORCEMENT_MAP:-}"
+# THE ESCALATIONS COME FROM THE TREE THE MAP CAME FROM (BL-326). The escalated set is derived from
+# the map and the suppression join pairs it with that tree's `docs/escalations/pending.md`; a map
+# taken from the install while the escalations were read from a foreign root joined one tree's
+# escalated set to another tree's suppressions. So the root the map resolved under is recorded
+# beside it: the root's own two candidates keep GA_ROOT, and the script-relative and install
+# candidates — both the package this copy shipped in — move it to the install root. An explicit
+# AI_DLC_ENFORCEMENT_MAP names no tree, so it keeps GA_ROOT, as AI_DLC_ESCALATIONS still wins.
+GA_MAP_ROOT="$GA_ROOT"
 if [ -z "$MAP" ]; then
     for cand in \
         "$GA_ROOT/core/skills/ai-dlc/enforcement-map.yaml" \
@@ -393,6 +401,10 @@ if [ -z "$MAP" ]; then
         "$GA_INSTALL_MAP"; do
         [ -n "$cand" ] && [ -f "$cand" ] && { MAP="$cand"; break; }
     done
+    case "$MAP" in
+        "$GA_ROOT/core/skills/ai-dlc/enforcement-map.yaml"|"$GA_ROOT/.claude/skills/ai-dlc/enforcement-map.yaml") ;;
+        ?*) [ -n "$GA_INSTALL_ROOT" ] && GA_MAP_ROOT="$GA_INSTALL_ROOT" ;;
+    esac
 fi
 if [ -z "$MAP" ] || [ ! -f "$MAP" ]; then
     echo "FAIL: enforcement-map.yaml not found. The escalated set is DERIVED from it; this" >&2
@@ -509,7 +521,7 @@ GA_VERIFIER_ERRORS=0
 # guard ever widens, this number moves instead of the bound disappearing in silence.
 GA_UNBOUNDED_CITES=0
 if [ "$MODE" = "adjudicate" ]; then
-    ESC="${AI_DLC_ESCALATIONS:-$GA_ROOT/docs/escalations/pending.md}"
+    ESC="${AI_DLC_ESCALATIONS:-$GA_MAP_ROOT/docs/escalations/pending.md}"
     # The sibling is named IN FULL at its call sites below, never through a variable holding
     # the whole path: I107 in scripts/validate-enforcement-map.sh joins the mode spelled here
     # to the mode the sibling dispatches, and it reads the literal beside the basename.

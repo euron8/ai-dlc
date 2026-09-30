@@ -59,7 +59,8 @@
 # two documented postures, and neither is silent.
 #
 # Exit codes:
-#   0  — the requested checks pass
+#   0  — the requested checks pass. For --prior-sprint-sha a hole OLDER than the prior sprint
+#         is still exit 0: it is reported as a `PENDING — contiguity` line on stderr (BL-007)
 #   1  — header drifted/missing, an entry is malformed, or the schema is unreadable (fail-closed);
 #         for --prior-sprint-sha, the prior-sprint anchor did not resolve (cause named on stderr)
 #   2  — usage error
@@ -498,6 +499,60 @@ if mode == "prior-sprint-sha":
         sys.stderr.write(f"validate-audit-anchors: NOTE — sprint {prior} was closed WITHOUT a "
                          f"retro-PR merge (close_reason: {cr}). The audit window opens at the "
                          f"commit that sprint stopped at, not at a merge.\n")
+    # CONTIGUITY, BELOW THE PRIOR SPRINT (BL-007). The resolution above is a 1-deep link: a hole
+    # at N-1 fails closed, and a hole at N-2 or older was invisible forever, because nothing
+    # revisits it and retro Step 5b prunes the live file to its 3 newest entries.
+    #
+    # POSTURE: PENDING, NEVER A GATE FAILURE. Both callers read a non-zero exit as "the anchor did
+    # not resolve" — Check 18 fails closed, Check 5 SKIPs — and the anchor HAS resolved. A hole
+    # older than the prior sprint does not change the audit window's lower bound, and consumer
+    # chains already carrying one (the reference consumer's archive has several) must not be
+    # wedged by a check that arrived after the hole did. So the exit code and stdout are
+    # untouched and the finding is one stderr line naming each missing sprint and the remedy.
+    #
+    # THE SET, AND WHY IT IS A SET. Membership, not adjacency: real chains carry entries out of
+    # order (267 appended before 266), and an adjacency scan reads that as two holes.
+    #
+    # THE FLOOR, AND WHY IT READS THE ARCHIVE'S LAST SPRINT. The lowest sprint in the live file
+    # alone misses exactly the case the entry describes: a hole at the live/archive seam is pruned
+    # out of the live file's range by the very retro that would expose it. So the floor is one past
+    # the archive's highest sprint when the sibling `<stem>-archive.md` exists and is lower than
+    # the live minimum. Holes INSIDE the archive are not scanned: it is a write-only sink with no
+    # validator by design, and indicting its history would fire on every consumer that has one.
+    def sprint_ints(ents):
+        out = set()
+        for e_ in ents:
+            try:
+                out.add(int(e_.get("sprint", "")))
+            except ValueError:
+                pass
+        return out
+    present = sprint_ints(entries)
+    archive_max = None
+    arch_path = re.sub(r"\.md$", "", file_path) + "-archive.md"
+    if arch_path != file_path and os.path.isfile(arch_path):
+        try:
+            atext = open(arch_path).read()
+        except OSError:
+            atext = ""
+        anums = {int(m_.group(1)) for m_ in re.finditer(r"(?m)^-\s+sprint:\s*([0-9]+)\s*$", atext)}
+        if anums:
+            archive_max = max(anums)
+    # Only the archive's MAXIMUM is read. The scanned range starts above it, so no archive member
+    # can fall inside the range and adding them to `present` would change no verdict.
+    live_below = [n_ for n_ in sprint_ints(entries) if n_ < prior]
+    floor = min(live_below) if live_below else prior
+    if archive_max is not None and archive_max + 1 < floor:
+        floor = archive_max + 1
+    missing = [n_ for n_ in range(floor, prior) if n_ not in present]
+    if missing:
+        shown = ", ".join(str(n_) for n_ in missing[:12]) + (" …" if len(missing) > 12 else "")
+        sys.stderr.write(f"validate-audit-anchors: PENDING — contiguity: no entry for "
+                         f"{len(missing)} sprint(s) between {floor} and prior {prior}: {shown}. "
+                         f"The prior-sprint anchor resolved, so the exit status is unchanged and "
+                         f"this is not a gate failure. Record each hole with --close-record "
+                         f"<file> <N> <reset|abandoned> <sha> if that sprint was closed without "
+                         f"a retro.\n")
     sys.stderr.write(f"validate-audit-anchors: --prior-sprint-sha OK — scanned {scanned} entr"
                      f"{'y' if scanned == 1 else 'ies'}, sprint {prior} -> {resolved}\n")
     print(resolved)

@@ -117,6 +117,41 @@ say "$([ "$(footer_field "$NOLC_OUT" contract_version)" = '-' ] && echo 1 || ech
   "the footer reads contract_version=- when the contract could not be read, never a plausible number"
 
 # ---------------------------------------------------------------------------
+# Part 4b — PRESENT BUT UNREADABLE is not MALFORMED, and the two must not share a message
+# ---------------------------------------------------------------------------
+# An awk that cannot open the contract prints nothing and exits 2; a contract lacking
+# `contract_version:` prints nothing and exits 0. Keyed on the value alone both drew
+# `got '<none>'`, and the operator was told to repair a file that is intact. The pair below is
+# the discriminating input: the SAME consumer, once sealed at mode 000 and once readable with
+# the version line deleted. Each must draw its own message and not the other's.
+SEALED="$TMP/sealed"; MALF="$TMP/malformed"
+cp -R "$CONS" "$SEALED"; cp -R "$CONS" "$MALF"
+SEALED_LC="$SEALED/.claude/skills/ai-dlc/layer-contract.yaml"
+MALF_LC="$MALF/.claude/skills/ai-dlc/layer-contract.yaml"
+awk '!/^contract_version:/' "$CONS/.claude/skills/ai-dlc/layer-contract.yaml" > "$MALF_LC"
+chmod 000 "$SEALED_LC"
+# Restore on exit: a mode-000 file is the one thing in TMP a later cleanup could trip on.
+trap 'chmod -R u+rwX "$TMP" 2>/dev/null; rm -rf "$ROOT" "$TMP"' EXIT
+# The seal must take, or every assertion below is about a READABLE file. Under root it does
+# not, and that is a broken fixture rather than a regression.
+if awk '{exit}' "$SEALED_LC" 2>/dev/null; then
+  echo "FIXTURE BROKEN: chmod 000 did not make the contract unreadable (running as root?) — Part 4b cannot express its subject" >&2
+  exit 2
+fi
+grep -q '^contract_version:' "$MALF_LC" && { echo "FIXTURE BROKEN: the malformed contract still carries contract_version:" >&2; exit 2; }
+SEAL_OUT="$(bash "$LINTER" "$SEALED" 2>&1)"; SEAL_RC=$?
+MALF_OUT="$(bash "$LINTER" "$MALF" 2>&1)"
+UNREAD_MSG='is present but UNREADABLE'
+say "$([ "$SEAL_RC" -eq 1 ] && grep -Fq "$UNREAD_MSG" <<<"$SEAL_OUT" && echo 1 || echo 0)" \
+  "a contract present at mode 000 exits 1 and is reported as UNREADABLE, by its own E17 message"
+say "$(grep -Fq "got '<none>'" <<<"$SEAL_OUT" || grep -Fq 'read ZERO clauses' <<<"$SEAL_OUT" || grep -Fq "could not read 'consumer_crosswalk_file:'" <<<"$SEAL_OUT" && echo 0 || echo 1)" \
+  "the sealed contract draws NONE of the malformed-contract messages (got '<none>', ZERO clauses, missing crosswalk key) — one cause, one message"
+say "$(grep -Fq "got '<none>'" <<<"$MALF_OUT" && ! grep -Fq "$UNREAD_MSG" <<<"$MALF_OUT" && echo 1 || echo 0)" \
+  "NEAR-MISS: a READABLE contract missing contract_version still says got '<none>' and is NOT called unreadable"
+say "$(grep -Fq "$UNREAD_MSG" <<<"$CLEAN_OUT" && echo 0 || echo 1)" \
+  "the readable, well-formed consumer never draws the UNREADABLE message"
+
+# ---------------------------------------------------------------------------
 # Part 5 — mutants
 # ---------------------------------------------------------------------------
 mk() { # mk <name> <sed-or-awk-command...>  -- build a mutant copy, guarded by cmp -s
@@ -187,10 +222,28 @@ if mk m5 sed 's|^    elif \[ "$ct" -gt "$LC_CV" \]; then$|    elif false; then|'
     "MUTANT m5 killed: a receipt above contract_version stops being reported, drops the count 4 -> 3, and is tallied at_current=1"
 fi
 
+# --- m6: the read status discarded again (the BL-123 defect) -----------------------------
+# Reverts the unreadable arm to nothing, so a sealed contract falls through to the value-keyed
+# arms exactly as it did before. The kill is POSITIVE: the old wrong message must come back.
+if mk m6 sed 's|^elif ! LC_CV="$(awk .*; then$|elif false; then|'; then
+  M6_OUT="$(bash "$TMP/m6.sh" "$SEALED" 2>&1)"
+  say "$(grep -Fq "got '<none>'" <<<"$M6_OUT" && ! grep -Fq "$UNREAD_MSG" <<<"$M6_OUT" && echo 1 || echo 0)" \
+    "MUTANT m6 killed: with the read status discarded, a sealed contract is told got '<none>' and the UNREADABLE message is gone"
+  say "$(grep -Fq "got '<none>'" <<<"$(bash "$TMP/m6.sh" "$MALF" 2>&1)" && echo 1 || echo 0)" \
+    "MUTANT m6 leaves the malformed-contract arm alive (Part 4b's near-miss is not entangled with it)"
+fi
+
+# --- m7: the crosswalk-key arm no longer stands down for an unreadable contract ----------
+if mk m7 sed 's|^if \[ "$LC_UNREADABLE" -eq 1 \]; then$|if false; then|'; then
+  M7_OUT="$(bash "$TMP/m7.sh" "$SEALED" 2>&1)"
+  say "$(grep -Fq "could not read 'consumer_crosswalk_file:'" <<<"$M7_OUT" && grep -Fq "$UNREAD_MSG" <<<"$M7_OUT" && echo 1 || echo 0)" \
+    "MUTANT m7 killed: without the stand-down, the one unreadable file is reported a second time as a missing crosswalk key"
+fi
+
 # THE ASSERTION-COUNT FLOOR. Several arms above run inside `if mk ...; then` blocks, and a
 # mutation that silently matched nothing skips its assertion entirely — a shorter green report,
 # which reads exactly like a passing one. v0.217.0 shipped that exact shape once already.
-EXPECTED_ASSERTIONS=23
+EXPECTED_ASSERTIONS=30
 echo
 if [ "$ASSERTIONS" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf 'layer-conforms-to: FAIL — %d assertions ran, %d expected. An arm did not execute.\n' \

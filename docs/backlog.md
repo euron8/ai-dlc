@@ -60,6 +60,8 @@ not a closed entry.
 
 ## BL-275 — a shared detector's cost-saving flag is bound by NO fixture at any CALLER, so a second caller can silently stop passing it
 
+**FIXED IN v0.667.0, pending the post-merge close.**
+
 **DEFECT.** Found while scoping `0.597.0`, by censusing `reconcile-emit-report` and then ablating
 the detectors its renderer drives.
 
@@ -96,7 +98,14 @@ and require each to be bound) is the stronger fix and needs a join key that does
 **Tiered DEFECT, not BLOCKER.** No verdict is wrong in either direction: the flag changes who paid
 and never what is answered, which is exactly why its absence was invisible for as long as it was.
 
-verify: sh a=core/skills/ai-dlc-update/reconcile/apply.sh; ctl=$(grep -rchE -- '--bucket-rows-ZZQQ' core/fixtures 2>/dev/null | awk '{s+=$1} END{print s+0}'); [ "$ctl" -eq 0 ] || exit 1; grep -qE '^[[:blank:]]*UD_FLAG="--bucket-rows"' "$a" 2>/dev/null || exit 1; for g in core/fixtures/*/run.sh; do grep -qE 'grep [^|]*-c[^|]*UD_FLAG="--bucket-rows"|grep [^|]*-c[^|]*bucket-rows[^|]*"\$APPLY"|grep [^|]*-q[^|]*--bucket-rows[^|]*"\$APPLY"' "$g" 2>/dev/null && exit 0; done; exit 1
+**WIDER THAN FILED, re-derived at batch 174.** Three executing caller sites hand rows down, not
+one: `apply.sh`'s `UD_FLAG="--bucket-rows"` into `unregistered-drift.sh`, `apply.sh`'s
+`detector_run rt retired-tokens.sh --bucket-rows "$RT_PC"`, and `emit-report.sh`'s
+`retired-tokens.sh --bucket-rows "$rt_pc"`. `apply-drift-after-write`'s BL-275 arm binds all three
+at the executing line, and one mutant per site drops the flag while leaving the flagged text in a
+comment. Each mutant turns only its own letter red.
+
+verify: sh f=core/fixtures/apply-drift-after-write/run.sh; R=core/skills/ai-dlc-update/reconcile; [ -f "$f" ] && [ -f "$R/apply.sh" ] || exit 9; d=$(mktemp -d) || exit 9; sed -n '/^bl275_score() {/,/^}/p' "$f" > "$d/s.sh"; grep -q '^bl275_score() {' "$d/s.sh" || { rm -f "$d"/*; rmdir "$d"; exit 1; }; . "$d/s.sh"; sed -E 's/"\$UD_FLAG" "\$UD_PC" //' "$R/apply.sh" > "$d/u"; sed -E 's/--bucket-rows "\$RT_PC" //' "$R/apply.sh" > "$d/r"; sed -E 's/--bucket-rows "\$rt_pc" //' "$R/emit-report.sh" > "$d/e"; g="$(bl275_score "$R/apply.sh" "$R/emit-report.sh")$(bl275_score "$d/u" "$R/emit-report.sh")$(bl275_score "$d/r" "$R/emit-report.sh")$(bl275_score "$R/apply.sh" "$d/e")"; rm -f "$d"/*; rmdir "$d"; [ "$g" = ".U.R.E." ]
 
 ## BL-274 — `--arms <indented-id>` runs the whole enclosing unit, so timing one arm that way measures up to twelve, and nothing says so
 
@@ -138,7 +147,19 @@ so only the TIMING path is blind.
 it must, and every invariant still fires. What is broken is a measurement practice this repo's
 own plan instructs sessions to use, and it has now produced two wrong scopings in one session.
 
-verify: sh v=scripts/validate-enforcement-map.sh; r=scripts/render-invariant-index.sh; [ -f "$v" ] || exit 9; [ -f "$r" ] || exit 9; grep -q 'ARMS_SELECT_AWK' "$v" || exit 9; ind=$(awk '/^[[:blank:]]+#[[:blank:]]*---[[:blank:]]*I[0-9]/{n++} END{print n+0}' "$v"); ctl=$(awk '/^[[:blank:]]+#[[:blank:]]*---[[:blank:]]*ZZQQ/{n++} END{print n+0}' "$v"); [ "$ctl" -eq 0 ] || exit 9; [ "$ind" -gt 0 ] || exit 9; bash "$r" --arm-lines "$v" >/dev/null 2>&1 || exit 9; out="$(bash "$v" --arms I41 2>&1 >/dev/null)"; printf '%s' "$out" | grep -qiE 'unit|also runs|selected arms' && exit 0; exit 1
+**FIXED IN v0.667.0, pending the post-merge close.** The stronger form: `--arms` now prints one stderr line,
+`validate-enforcement-map: --arms NOTE: <request> selected unit(s) line <n> [<member ids>]; this
+run also runs <ids>, so a timing of it is a timing of every arm listed`, whenever the selection
+executes an id the request did not name (unit merge or `requires-arms:` closure). A request
+whose unit is itself alone prints nothing, and a request naming every id stays byte-identical
+to a plain run. `core/fixtures/validator-arm-selection`'s sweep worker exempts exactly that
+anchored prefix from its stderr-subset check; any other new stderr line still scores.
+
+**Receipt.** Runs the selector, both directions: `--arms I41` must print `also runs` on stderr,
+and `--arms I108` (a single-arm unit) must NOT. Scored: tip **0**, base `2e7c227c` **1**, a
+mutant with the NOTE unconditional **1**, a mutant with the NOTE removed **1**.
+
+verify: sh v=scripts/validate-enforcement-map.sh; r=scripts/render-invariant-index.sh; [ -f "$v" ] || exit 9; [ -f "$r" ] || exit 9; grep -q 'ARMS_SELECT_AWK' "$v" || exit 9; bash "$r" --arm-lines "$v" >/dev/null 2>&1 || exit 9; out="$(bash "$v" --arms I41 2>&1 >/dev/null)"; solo="$(bash "$v" --arms I108 2>&1 >/dev/null)"; printf '%s\n' "$out" | grep -q 'also runs' || exit 1; printf '%s\n' "$solo" | grep -q 'also runs' && exit 1; exit 0
 
 ## BL-238 — the consumer ledger's `theirs`-ref receipt grammar cannot key on an ARM's body, so a receipt written to ask a behavioural question is satisfied by a comment
 
@@ -987,11 +1008,49 @@ About 5s, most of it the install; each run leaves one installed tree under `$TMP
 A fix that passes it has not been built, so no passing score exists yet. `settings.json` still has
 to be UN-MERGED rather than deleted, as the paragraph above says.
 
-verify: sh [ -r scripts/install.sh ] && [ -r scripts/uninstall.sh ] || exit 9; command -v git >/dev/null || exit 9; R="$(pwd)"; T="$(mktemp -d)" || exit 9; ( cd "$T" && git init -q && mkdir _bmad && git -c user.name=r -c user.email=r@r commit -q --allow-empty -m init && bash "$R/scripts/install.sh" ) >/dev/null 2>&1 || exit 9; set -- "$T"/.claude/hooks/ai-dlc-*.sh; [ -f "$1" ] || exit 9; grep -q 'hooks/ai-dlc-[a-z0-9-]*\.sh' "$T/.claude/settings.json" 2>/dev/null || exit 9; set -- "$T"/.claude/rules/ai-dlc-*.md; [ -f "$1" ] || exit 9; ( cd "$T" && bash "$R/scripts/uninstall.sh" . --force ) >/dev/null 2>&1 || exit 9; set -- "$T"/.claude/rules/ai-dlc-*.md; [ -f "$1" ] && exit 9; set -- "$T"/.claude/hooks/ai-dlc-*.sh; [ -f "$1" ] && exit 1; [ -f "$T/.claude/settings.json" ] && grep -q 'hooks/ai-dlc-[a-z0-9-]*\.sh' "$T/.claude/settings.json" && exit 1; exit 0
+**FIXED IN v0.667.0, pending the post-merge close.** `scripts/uninstall.sh` now removes `.claude/hooks/ai-dlc-*.sh`
+by prefix; the unprefixed core files in shared directories (`.claude/schemas/*.json`,
+`.claude/session-driver/*.sh`, `upstream-routing.md` under `.claude/rules/`) by basename, derived from
+the checkout's own `core/`; `.claude/.ai-dlc-version`; and the `.claude/agents/*.md` files carrying
+the renderer's GENERATED marker, read from `render-agent-definitions.sh`. `settings.json` is
+un-merged: hook blocks are stripped by driving `settings-merge.sh` with an empty template (its
+predicate, not a copy). Each `aiDlcModels`/`aiDlcRoles` entry, and each shared template key, goes
+only when it still equals the template AND the oldest archived pre-install settings lacked it. A
+tuned entry is consumer data: it is kept and named in the closing listing. The file
+is deleted only when install created it and nothing else remains. The `.gitignore` cut moved ahead
+of the removals, because its markers live in a schema that is now deleted. The `:64` comment now
+describes a hook loop that exists. Round trip into a `mktemp` consumer seeded with its own hook,
+schema, agent and settings: base leaves 25 `ai-dlc`-named files plus 14 generated agents,
+`upstream-routing.md`, 9 schemas and 20 registered hooks. Tip leaves 0 `ai-dlc`-named files, and
+only `consumer-own.sh`, `consumer-own.json`, `mine.md` and a `settings.json` holding exactly the
+consumer's `permissions`, `env` and two hook blocks. `core/fixtures/shipped-rule-version-floor` arm
+H asserts this in a fresh world and in a seeded one, deriving the expected-gone set from `core/`,
+and carries two committed mutants. One neutralises the hook loop and must fail H1 alone. The other
+removes `aiDlcModels`/`aiDlcRoles` unconditionally and must fail H7 alone: a role tuned before
+install and one tuned after it must both survive.
+
+**THE RECEIPT IS STRENGTHENED, BECAUSE THE ONE ABOVE ACCEPTED A DESTRUCTIVE FIX.** It never seeded
+consumer content, so an uninstall that deleted all of `.claude/hooks/` or `settings.json` scored 0.
+This one seeds a consumer hook and a consumer `settings.json` before install, the latter with a
+tuned `aiDlcRoles.dev`. It requires both to survive, with the consumer's hook block still
+registered, the tuned role kept and an untuned role (`pm`) gone. It also requires the schemas,
+session driver and version stamp gone. `BL002_UNINSTALL` overrides the uninstaller for scoring only.
+
+| uninstaller | exit |
+|---|---|
+| tip | **0** |
+| base `2e7c227c` | **1** |
+| tip with the hook-loop append neutralised | **1** |
+| tip with the hook glob widened to `hooks/*.sh` (deletes the consumer's hook) | **1** |
+| tip removing `aiDlcModels`/`aiDlcRoles` unconditionally | **1** |
+
+verify: sh [ -r scripts/install.sh ] && [ -r scripts/uninstall.sh ] || exit 9; command -v git >/dev/null && command -v jq >/dev/null || exit 9; R="$(pwd)"; U="${BL002_UNINSTALL:-$R/scripts/uninstall.sh}"; T="$(mktemp -d)" || exit 9; mkdir -p "$T/_bmad" "$T/.claude/hooks" || exit 9; printf '#!/bin/sh\n' > "$T/.claude/hooks/consumer-own.sh"; printf '%s\n' '{"env":{"CONSUMER_VAR":"1"},"aiDlcRoles":{"dev":{"model":"opus","effort":"medium"}},"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"bash .claude/hooks/consumer-own.sh"}]}]}}' > "$T/.claude/settings.json"; ( cd "$T" && git init -q && git -c user.name=r -c user.email=r@r commit -q --allow-empty -m init && bash "$R/scripts/install.sh" ) >/dev/null 2>&1 || exit 9; set -- "$T"/.claude/hooks/ai-dlc-*.sh; [ -f "$1" ] || exit 9; grep -q 'hooks/ai-dlc-[a-z0-9-]*\.sh' "$T/.claude/settings.json" || exit 9; set -- "$T"/.claude/rules/ai-dlc-*.md; [ -f "$1" ] || exit 9; ( cd "$T" && bash "$U" . --force ) >/dev/null 2>&1 || exit 9; set -- "$T"/.claude/rules/ai-dlc-*.md; [ -f "$1" ] && exit 9; set -- "$T"/.claude/hooks/ai-dlc-*.sh; [ -f "$1" ] && exit 1; for f in "$R"/core/schemas/*.json "$R"/core/session-driver/*.sh; do [ -e "$T/.claude/${f#"$R"/core/}" ] && exit 1; done; [ -e "$T/.claude/.ai-dlc-version" ] && exit 1; grep -q 'hooks/ai-dlc-' "$T/.claude/settings.json" && exit 1; [ -f "$T/.claude/hooks/consumer-own.sh" ] || exit 1; jq -e '.env.CONSUMER_VAR == "1" and .aiDlcRoles.dev.model == "opus" and (.aiDlcRoles | has("pm") | not) and ([.hooks.SessionStart[].hooks[].command] | index("bash .claude/hooks/consumer-own.sh")) != null' "$T/.claude/settings.json" >/dev/null 2>&1 || exit 1; exit 0
 
 ---
 
 ## BL-003 — on a CONSUMER, `layer-contract-conformance-b`'s SKIP prints its sibling's name
+
+**FIXED IN v0.667.0, pending the post-merge close.** Receipt: base 1, tip 0, literal-restored mutant 1; both shards green from the repo root.
 
 Scope matters here and the first filing of this entry got it wrong. **In this repo the shard
 names itself correctly** — it banners `layer-contract-conformance-b fixture` and closes with
@@ -1007,9 +1066,18 @@ The runner keys verdicts on the directory, so nothing is broken. What it costs i
 verification step this repo requires of every release — read the fixture BY NAME in the full
 output — which is unsatisfiable for this pair on the only tree where it fires.
 
-Anchored on the hardcoded literal any fix must remove, not on a description of the fix.
+**The receipt is behavioural since v0.666.0.** It used to be `lacks` on the hardcoded literal, which
+rewording the literal closes without changing what either shard prints. It now builds a
+consumer-shaped tree from the working tree's two drivers, three levels below a scratch root so
+neither `validate-enforcement-map.sh` nor the contract resolves, runs both, and requires shard `b` to
+print `layer-contract-conformance-b: SKIP` and never its sibling's line; shard `a` printing its own
+SKIP line is the control that the SKIP path was reached (exit 9 if not). Scored: exit 1 on the base
+driver, exit 0 at the fix, exit 1 on a copy of the fix with the literal restored. The fix derives the
+name from the `--group` argument, not from `$0`: shard `b` `exec`s the sibling by path, so `$0` names
+the sibling in both shards. The same construction is the `skip-name` arm of
+`core/fixtures/layer-contract-conformance`, with its mutant.
 
-verify: lacks core/fixtures/layer-contract-conformance/run.sh "layer-contract-conformance: SKIP"
+verify: sh t=$(mktemp -d) || exit 9; F="$t/x/y/core/fixtures"; mkdir -p "$F/layer-contract-conformance" "$F/layer-contract-conformance-b" && cp core/fixtures/layer-contract-conformance/run.sh "$F/layer-contract-conformance/run.sh" && cp core/fixtures/layer-contract-conformance-b/run.sh "$F/layer-contract-conformance-b/run.sh" || exit 9; a=$(bash "$F/layer-contract-conformance/run.sh" 2>&1); b=$(bash "$F/layer-contract-conformance-b/run.sh" 2>&1); rm -rf "$t"; grep -q '^layer-contract-conformance: SKIP' <<<"$a" || exit 9; grep -q '^layer-contract-conformance-b: SKIP' <<<"$b" && ! grep -q '^layer-contract-conformance: SKIP' <<<"$b"
 
 ---
 
@@ -1161,7 +1229,29 @@ which is the control that the resolver does fire on an N−1 absence — the two
 distinguish "no contiguity check" from "no check ran". An anchor on the `current - 1` source
 line would have closed itself on a reformat.
 
-verify: sh t=$(mktemp -d); f="$t/a.md"; bash core/scripts/validate-audit-anchors.sh --render > "$f"; H=$(git rev-parse HEAD); printf '\n- sprint: 10\n  sha: %s\n\n- sprint: 12\n  sha: %s\n' "$H" "$H" >> "$f"; bash core/scripts/validate-audit-anchors.sh --prior-sprint-sha "$f" 13 >/dev/null 2>&1; r=$?; rm -rf "$t"; [ "$r" -eq 0 ] && exit 1 || exit 0
+**The receipt was rewritten at v0.666.0, because it demanded the posture this entry forbids.** It closed
+on a NON-ZERO exit for `{10,12} -> 13`, and both callers read non-zero as "the anchor did not resolve":
+Check 18 fails closed and Check 5 SKIPs. So the only fix it could accept was the gate-wedging one. The
+fix reports the hole as a `PENDING — contiguity` line on stderr and leaves exit 0 and the sha on
+stdout unchanged. The receipt now requires that line naming 11 with exit 0 and the sha on stdout. The
+near-miss `{10,12,11} -> 13`, out of order with no hole, must carry no such line, and `12`'s prior
+exiting 1 is kept as the control that the resolver still fires on an N-1 absence (exit 9 if either
+control moves). Scored: exit 1 on the base resolver, exit 0 at the fix, exit 1 on a copy of the fix
+with the report disabled. The scan reads the sibling `-archive.md`'s highest sprint so that a hole at
+the live/archive seam is caught. Holes inside the archive are not scanned. The
+`core/fixtures/check5-anchor-base` contiguity battery carries three mutants, one per property.
+
+**STILL OPEN ON ONE HALF, and the receipt is a conjunction for that reason.** Landed in 5634d7a0: a
+hole below the prior sprint is reported while it sits in the live file or at the live/archive seam.
+Not landed: once retro Step 5b prunes a hole past the seam into the archive INTERIOR, it becomes
+invisible again, which is this entry's heading claim ("permanently invisible") in a narrower window.
+The receipt's final clause seeds live `{13,14,15}` with archive `{9,10,12}` and asks for 16, requiring
+11 to be named. It exits 1 today, so the entry reads STILL-LIVE. Whether to scan the archive interior
+is a scope decision: the archive is contracted as "no validator, no budget", and the reference
+consumer's archive today carries 13 interior holes (189, 204, 205, 239-246, 300, 301), which a
+PENDING posture would print at every gate.
+
+verify: sh t=$(mktemp -d) || exit 9; f="$t/a.md"; n="$t/n.md"; H=$(git rev-parse HEAD); printf -- '- sprint: 10\n  sha: %s\n- sprint: 12\n  sha: %s\n' "$H" "$H" > "$f"; printf -- '- sprint: 10\n  sha: %s\n- sprint: 12\n  sha: %s\n- sprint: 11\n  sha: %s\n' "$H" "$H" "$H" > "$n"; V=core/scripts/validate-audit-anchors.sh; bash "$V" --prior-sprint-sha "$f" 12 >/dev/null 2>&1; c=$?; o=$(bash "$V" --prior-sprint-sha "$f" 13 2>"$t/e"); r=$?; bash "$V" --prior-sprint-sha "$n" 13 >/dev/null 2>"$t/ne"; nr=$?; e=$(cat "$t/e"); ne=$(cat "$t/ne"); rm -rf "$t"; [ "$c" -eq 1 ] && [ "$nr" -eq 0 ] || exit 9; grep -q 'contiguity' <<<"$ne" && exit 1; [ "$r" -eq 0 ] && [ "$o" = "$H" ] && grep -q 'PENDING — contiguity: no entry for 1 sprint(s) between 10 and prior 12: 11\.' <<<"$e" || exit 1; u=$(mktemp -d) || exit 9; printf -- '- sprint: 13\n  sha: %s\n- sprint: 14\n  sha: %s\n- sprint: 15\n  sha: %s\n' "$H" "$H" "$H" > "$u/a.md"; printf -- '- sprint: 9\n  sha: %s\n- sprint: 10\n  sha: %s\n- sprint: 12\n  sha: %s\n' "$H" "$H" "$H" > "$u/a-archive.md"; ae=$(bash "$V" --prior-sprint-sha "$u/a.md" 16 2>&1 >/dev/null); rm -rf "$u"; grep -q 'PENDING — contiguity.*: 11' <<<"$ae"
 
 ---
 
@@ -1201,9 +1291,31 @@ that its schema was single-sourced out into `core/schemas/audit-anchors.json` be
 live in TWO places at once". Its absence from a consumer is the FIX. Filing it would file a settled
 decision as a bug.
 
-verify: sh bad=0; for f in $(git ls-files templates/pipeline/); do grep -qE "^[^#]*cp .*(${f}|templates/pipeline/)" scripts/install.sh || bad=1; done; [ "$bad" -eq 0 ]
+**FIXED IN v0.667.0, pending the post-merge close.** `templates/pipeline/` is deleted with `git rm -r`. The
+retirement comment in `scripts/install.sh` no longer names the path, so it records history instead of
+pointing at a directory. Same invocation, after the removal: `git grep -l 'templates/pipeline' --
+core/ scripts/ .githooks/` returns **0** files, and the control `templates/audit-anchors` returns
+**6**. `install.sh` has no copy of `templates/pipeline` anywhere.
+
+**THE RECEIPT ABOVE WAS CLOSABLE BY PROSE, SO IT IS REPLACED.** It accepted any non-comment line
+containing `cp` and the path, so appending `echo "cp templates/pipeline/ is retired"` to
+`install.sh` scored 0 with the file still tracked and still unshipped. The new receipt keys on the
+tracked file set, and its `exit 9` guard refuses a tree with no tracked `templates/` at all. A
+move to `core/skills/ai-dlc/templates/`, which the paragraph above names as the other valid fix,
+still passes.
+
+| tree | old receipt | new receipt |
+|---|---|---|
+| tip | 0 | **0** |
+| base `2e7c227c` | 1 | **1** |
+| base + that `echo` line in `install.sh` | **0** | **1** |
+| base with the file moved under `core/skills/ai-dlc/templates/` | 0 | **0** |
+
+verify: sh git ls-files templates/ | grep -q . || exit 9; [ -z "$(git ls-files templates/pipeline/)" ]
 
 ## BL-020
+
+**FIXED IN v0.667.0, pending the post-merge close.** Receipt: base 1, tip 0, SAW_INFLIGHT-pinned mutant 1; both blocks flag, and output is byte-identical on this tree and a clone of graph.
 
 **Two of the budget script's six finding channels set no flag, and the summary closes them with an
 unqualified PASS.** `core/scripts/validate-artifact-budget.sh` has six finding channels — `:1025` over
@@ -1241,7 +1353,14 @@ Behavioural, under the step file's literal flags. The `WARN:` row is the control
 working reports STILL-LIVE rather than closing. Proven able to fire: with one line added setting a flag
 inside the struck-row block of a copy, the same predicate exits 0.
 
-verify: sh d=$(mktemp -d); mkdir -p "$d/_bmad-output"; printf "## Pipeline Position\n- x\n## Sprint Context\n- x\n## Recent Activity\n- x\n## Open Items\n- x\n## Locked Decisions\n- x\n## In-Flight Teammates\n| teammate | deliverable | dispatched-at | note | status |\n| --- | --- | --- | --- | --- |\n| ~~a~~ | t | t | n | in-flight |\n## Context Reminders\n- x\n" > "$d/_bmad-output/pipeline-snapshot.md"; printf "tiny\n" > "$d/_bmad-output/gate-log.md"; o=$(bash core/scripts/validate-artifact-budget.sh --root "$d" --warn-only --fail-on pipeline-snapshot.md 2>&1); rm -rf "$d"; [ "$(grep -cF "WARN: In-Flight Teammates carries struck-through row(s)." <<<"$o")" -ge 1 ] || exit 1; [ "$(grep -cF "is NOT a clean result" <<<"$o")" -ge 1 ] || [ "$(grep -cxF "PASS  every measured living artifact is within its Rule 25(d) budget." <<<"$o")" -eq 0 ]
+**The receipt was tightened at v0.666.0.** It used to close on EITHER the qualified summary OR the
+PASS line being absent, so a fix that merely deleted the PASS line from every run satisfied it. It
+now requires the qualified summary naming the struck-row channel AND no bare PASS line. Scored: exit 1
+on the base script, exit 0 at the fix, exit 1 on a copy of the fix with `SAW_INFLIGHT=1` pinned to 0.
+The marked-superseded half is held by `core/fixtures/budget-summary-verdict` arms 11 and 11b, and by
+mutant M5.
+
+verify: sh d=$(mktemp -d); mkdir -p "$d/_bmad-output"; printf "## Pipeline Position\n- x\n## Sprint Context\n- x\n## Recent Activity\n- x\n## Open Items\n- x\n## Locked Decisions\n- x\n## In-Flight Teammates\n| teammate | deliverable | dispatched-at | note | status |\n| --- | --- | --- | --- | --- |\n| ~~a~~ | t | t | n | in-flight |\n## Context Reminders\n- x\n" > "$d/_bmad-output/pipeline-snapshot.md"; printf "tiny\n" > "$d/_bmad-output/gate-log.md"; o=$(bash core/scripts/validate-artifact-budget.sh --root "$d" --warn-only --fail-on pipeline-snapshot.md 2>&1); r=$?; rm -rf "$d"; [ "$r" -eq 0 ] || exit 1; [ "$(grep -cF "WARN: In-Flight Teammates carries struck-through row(s)." <<<"$o")" -ge 1 ] || exit 1; [ "$(grep -cF "reported struck-through In-Flight row(s)" <<<"$o")" -ge 1 ] && [ "$(grep -cF "is NOT a clean result" <<<"$o")" -ge 1 ] && [ "$(grep -cxF "PASS  every measured living artifact is within its Rule 25(d) budget." <<<"$o")" -eq 0 ]
 
 ## BL-024
 
@@ -1342,7 +1461,13 @@ reports STILL-LIVE rather than closing.
 Discharges the consumer entry `extensions/steps-domain/route-push.md` at pinned ledger line 265.
 
 
-verify: sh r=core/skills/ai-dlc/steps/route.md; v=$(LC_ALL=C awk '/^- .has_ready_sprint/{print;exit}' "$r"); [ -n "$v" ] || exit 1; s=$(sed 's/has_ready_sprint//g' <<<"$v"); grep -qi sprint <<<"$s" && grep -qEi 'unread|never read|not be read|without reading|do not read' "$r"
+**The receipt's arm 2 was replaced: it false-closed on half the fix.** Grepped over the whole file,
+`not be read` already matched `cannot be read (permission error…` elsewhere in `route.md`, so
+scoping line 18 alone exited 0. Arm 2 now reads only the Step 0 item that opens "If the snapshot
+exists but user input does NOT indicate a resume", and refuses `cannot` by a word boundary. Scored
+tip 0, base 1, line-18-only half fix 1 (the old receipt: 0), no-read-only half fix 1.
+
+verify: sh r=core/skills/ai-dlc/steps/route.md; [ -f "$r" ] || exit 9; v=$(LC_ALL=C awk '/^- .has_ready_sprint/{print;exit}' "$r"); [ -n "$v" ] || exit 1; s=$(sed 's/has_ready_sprint//g' <<<"$v"); grep -qi sprint <<<"$s" || exit 1; i=$(LC_ALL=C awk '/^### Step 0:/{z=1;next} /^### /{z=0} z&&/^[0-9]+\. /{p=0} z&&/^[0-9]+\. If the snapshot exists but user input does NOT indicate a resume/{p=1} p' "$r"); [ -n "$i" ] || exit 1; grep -qEi 'unread|never read|(^|[^a-z])not be read|without reading|do not read' <<<"$i"
 ## BL-066 — the `named_absorbed` half landed at v0.387.0; the SIBLING half did not, and the release notes say it did
 
 **TRIAGED AT BATCH 10: FOUR OF THE FIVE CLAIMS ARE ABSORBED, THE SIBLING CLAIM SURVIVES, AND
@@ -2005,7 +2130,24 @@ read failure as a read failure, and that leaves the schema instance open.
 the read, which is the same fix shape `fm()` received. Note that `layer-conforms-to` asserts on E17
 text, so a message change has a fixture obligation.
 
-verify: sh V=core/scripts/validate-layer-entries.sh; C=core/skills/ai-dlc/layer-contract.yaml; [ -f "$V" ] && [ -f "$C" ] || exit 9; d=$(mktemp -d) || exit 9; trap 'chmod -R u+rwX "$d" 2>/dev/null; rm -rf "$d"' EXIT; K="$d/.claude/skills/ai-dlc"; mkdir -p "$K/extensions" || exit 9; cp "$C" "$K/" || exit 9; printf -- '---\nkind: role\nid: r\nhooks: steps/retro.md\npush_candidate: false\nconforms_to: 1\n---\n# R\n' > "$K/extensions/e.md"; O=$(bash "$V" "$d" 2>&1); grep -q "contract_version" <<<"$O" || { echo "HARNESS BROKEN: readable control produced no contract line"; exit 9; }; chmod 000 "$K/layer-contract.yaml"; if awk '{exit}' "$K/layer-contract.yaml" 2>/dev/null; then echo "HARNESS BROKEN: seal did not take"; exit 9; fi; U=$(bash "$V" "$d" 2>&1); grep -qE "could not READ|unreadable|cannot read" <<<"$U" || exit 1; grep -q "got '<none>'" <<<"$U" && exit 1; exit 0
+**FIXED IN v0.667.0, pending the post-merge close.** The `contract_version` read takes awk's status. A
+contract that is present but cannot be opened draws its own E17 message, `is present but
+UNREADABLE`, which says the contents were never read and that the contract is NOT being called
+malformed. On that path the three messages that would misdescribe it stand down: `got '<none>'`,
+`read ZERO clauses`, and E16's `could not read 'consumer_crosswalk_file:'`. The later reads at
+the crosswalk and machinery sites return empty values, which is honest for a file that was not
+read, and the one E17 names the cause. The run still exits 1. A readable contract missing the
+version line still says `got '<none>'`. `layer-conforms-to` Part 4b asserts both states; m6 and m7 revert each half. The W11
+sibling instance is untouched, as scoped above.
+
+**THE OLD RECEIPT WAS CLOSABLE BY REWORDING, SO IT IS REPLACED.** A copy of `origin/main` with
+only the `got '<none>'` text rewritten to contain "UNREADABLE" scored **0** on it, with no status
+taken. The receipt below adds a near-miss, the same consumer with a READABLE contract missing
+`contract_version:`, and requires that one to still say `got '<none>'` and not be called
+unreadable. That is the input only a status test separates. Scored: tip **0**, `origin/main`
+`2e7c227c` **1**, tip with the status arm reverted **1**, the prose-only rewording **1**.
+
+verify: sh V=core/scripts/validate-layer-entries.sh; C=core/skills/ai-dlc/layer-contract.yaml; [ -f "$V" ] && [ -f "$C" ] || exit 9; d=$(mktemp -d) || exit 9; trap 'chmod -R u+rwX "$d" 2>/dev/null; rm -rf "$d"' EXIT; K="$d/c/.claude/skills/ai-dlc"; mkdir -p "$K/extensions" || exit 9; cp "$C" "$K/" || exit 9; printf -- '---\nkind: role\nid: r\nhooks: steps/retro.md\npush_candidate: false\nconforms_to: 1\n---\n# R\n' > "$K/extensions/e.md"; cp -R "$d/c" "$d/m" || exit 9; awk '!/^contract_version:/' "$C" > "$d/m/.claude/skills/ai-dlc/layer-contract.yaml" || exit 9; O=$(bash "$V" "$d/c" 2>&1); grep -q "contract_version=[0-9]" <<<"$O" || { echo "HARNESS BROKEN: readable control read no contract_version"; exit 9; }; grep -q "present but UNREADABLE" <<<"$O" && exit 1; M=$(bash "$V" "$d/m" 2>&1); grep -q "got '<none>'" <<<"$M" || exit 1; grep -q "present but UNREADABLE" <<<"$M" && exit 1; chmod 000 "$K/layer-contract.yaml"; if awk '{exit}' "$K/layer-contract.yaml" 2>/dev/null; then echo "HARNESS BROKEN: seal did not take"; exit 9; fi; U=$(bash "$V" "$d/c" 2>&1); grep -q "present but UNREADABLE" <<<"$U" || exit 1; grep -q "got '<none>'" <<<"$U" && exit 1; grep -q "read ZERO clauses" <<<"$U" && exit 1; grep -q "could not read 'consumer_crosswalk_file:'" <<<"$U" && exit 1; exit 0
 
 
 ## BL-126 — the pause-flag deny hook reads no agent identity, so it cannot let an in-flight teammate write reach a consistent stop
@@ -2871,12 +3013,17 @@ only `tr` site in the range, negative control 0 — reports none). This entry is
 reader who hits both at once, as one did, reconciles the truncation artifact by blaming the
 attribution one and stops looking.
 
-**Receipt.** Keys on the emission site, not on prose about it, and not on the row counts — those
-move with the corpus. Scored before filing across four inputs: tip **1**, the section rewritten to
-`cat` **0**, a file mentioning `head -60 "$RUN/by-line"` only inside a comment **0**, a stub with
-no `forks-by-line` header **9**. Exit 9 if the profiler or that header is gone.
+**FIXED IN v0.667.0, pending the post-merge close.** The section header now carries the row count, and says
+`TRUNCATED: 60 of <n> rows shown; --dump <dir> writes all` when it truncates, or `all <n> rows`
+when it does not.
 
-verify: sh f=scripts/fork-profile.sh; [ -f "$f" ] || exit 9; LC_ALL=C grep -q 'forks-by-line' "$f" || exit 9; LC_ALL=C grep -qE '^[[:blank:]]*head -[0-9]+ "\$RUN/by-line"' "$f" && exit 1; exit 0
+**Receipt.** The filed receipt keyed on a `head -60` spelling and was closable by `head -n 60`.
+This one RUNS the profiler: a seeded 70-fork target must print `TRUNCATED` with `60 of 70`, and
+a 5-fork target must NOT print `TRUNCATED` (so a header that always claims truncation fails).
+Scored: tip **0**, base `2e7c227c` **1**, a mutant printing the TRUNCATED header unconditionally
+**1**. Exit 9 if the profiler or the section header is gone.
+
+verify: sh f=scripts/fork-profile.sh; [ -f "$f" ] || exit 9; d=$(mktemp -d) || exit 9; { echo 'set -u'; i=0; while [ "$i" -lt 70 ]; do echo /usr/bin/true; i=$((i+1)); done; } > "$d/big.sh"; { echo 'set -u'; i=0; while [ "$i" -lt 5 ]; do echo /usr/bin/true; i=$((i+1)); done; } > "$d/small.sh"; big="$(bash "$f" --target "$d/big.sh" --section by-line 2>&1)"; small="$(bash "$f" --target "$d/small.sh" --section by-line 2>&1)"; rm -rf "$d"; printf '%s\n' "$big" | grep -q 'forks-by-line' || exit 9; printf '%s\n' "$big" | grep -qE 'forks-by-line.*TRUNCATED.*60 of 70' || exit 1; printf '%s\n' "$small" | grep -q 'TRUNCATED' && exit 1; exit 0
 
 
 ## BL-268 — `fork-profile.sh --section by-line` misattributes forks across arm boundaries on bash 3.2, and the by-arm table inherits it
@@ -2912,10 +3059,23 @@ traced command whose reported line is a bare `fi`/`done`/`esac` cannot be the si
 so a reader cannot silently take one. Until then: before scoping an arm's cut from a by-line
 citation, confirm the named line is an executable fork site in that arm's range.
 
-**Receipt.** Keys on the ambiguity being MARKED or the attribution being fixed — not on the
-count, which moves with the corpus. Exit 9 if the profiler is gone.
+**FIXED IN v0.667.0, pending the post-merge close.** The marking form. Every by-line row whose reported line
+is a bare `fi`/`done`/`esac`/`}`/`;;` carries a fourth field `AMBIGUOUS`, in the printed section
+and in the `--dump` file; by-arm rows holding such forks carry `ambiguous=<n>`; the summary
+prints `AMBIGUOUS <rows> <forks>`. The attribution itself is not fixed — bash 3.2 does not
+report the substitution's line, so the instrument can only say when the reported one cannot
+be a fork site. Measured on the validator at this tip: `AMBIGUOUS 25 25`, on 12 closer lines
+(11 `fi`, 1 `done`), each below a `<(` (control: an impossible token scores 0 in the same file).
 
-verify: sh f=scripts/fork-profile.sh; [ -f "$f" ] || exit 9; LC_ALL=C grep -qE 'process substitution|substitution is WRITTEN|ambiguous attribution|bare (fi|`fi`)' "$f" && exit 0; exit 1
+**Receipt.** The filed receipt matched any of four phrases anywhere in the profiler, so a
+comment closed it. This one RUNS the profiler on a seeded script with `done < <(printf | tr)`
+inside an if/elif chain and a straight-line `/usr/bin/true` after the `fi`. Exit 9 unless the
+seed reproduces the artifact (`tr` traced at line 9, the bare `fi`) and the control row is
+present; exit 1 unless the `tr` row is marked and the summary reads `AMBIGUOUS 1 1` (so the
+unmarked control stays unmarked). Scored: tip **0**, base `2e7c227c` **1**, a mutant whose
+closer predicate records nothing **1**.
+
+verify: sh f=scripts/fork-profile.sh; [ -f "$f" ] || exit 9; d=$(mktemp -d) || exit 9; printf '%s\n' 'set -u' 'x=1' 'if [ "$x" = 2 ]; then' '  :' 'elif [ "$x" = 1 ]; then' '  while read -r l; do' '    : "$l"' "  done < <(printf 'a/b\\n' | tr '/' '\\n')" 'fi' '/usr/bin/true' > "$d/seed.sh"; out="$(bash "$f" --target "$d/seed.sh" --section by-line 2>&1)"; rm -rf "$d"; printf '%s\n' "$out" | grep -qE '^1 9 tr( |$)' || exit 9; printf '%s\n' "$out" | grep -qE '^1 10 /usr/bin/true$' || exit 9; printf '%s\n' "$out" | grep -qE '^1 9 tr AMBIGUOUS$' || exit 1; printf '%s\n' "$out" | grep -qE '^AMBIGUOUS 1 1$' || exit 1; exit 0
 
 ## BL-269 — I75 has no fixture anywhere, so the arm most at risk from a batching rewrite is the one with no equivalence oracle
 
@@ -2944,7 +3104,22 @@ to be equivalent to.
 tractable form is dropping the hash and comparing normalised text directly, which is
 semantically identical and removes the per-subject external.
 
-verify: sh v=scripts/validate-enforcement-map.sh; [ -f "$v" ] || exit 9; LC_ALL=C grep -q 'i75_chain' "$v" || exit 9; n=$(grep -rl 'i75_norm\|i75_chain\|i75_failsclosed' core/fixtures/ --include='*.sh' 2>/dev/null | wc -l | tr -d ' '); [ "$n" -gt 0 ] && exit 0; exit 1
+**FIXED IN v0.667.0, pending the post-merge close.** Seeded-drift arms A16–A19 in
+`core/fixtures/derived-fence-binding/run.sh`, driven through `--arms I75` on that fixture's
+whole-tree seed. A16 is the control: the clean seed passes and prints the verdict line. In A17,
+`audit-upstream-routing.sh`'s root block reads `CLAUDE_PROJECT_DIR` before the override, and
+`i75_drift` must name it. In A18 its `exit 2` terminal guard is removed, and `i75_open` must name
+it. A19 is the near-miss: a reworded comment inside the block must be acquitted. The host is
+not one of the enforcement-map batteries, because `b174-deadarm` is editing both. This fixture
+already drives `--arms` over a seed carrying `core/scripts/`, and its read set already covers
+the validator and the subject.
+
+**Receipt.** The filed receipt counted fixtures naming `i75_norm`/`i75_chain`, which a comment
+satisfies. This one RUNS the host fixture and requires the A17 and A18 `ok` lines. Scored: tip
+**0**, base `2e7c227c` **1**, and **1** for a mutant with the validator's `i75_drift` assignment
+neutered, in a whole-tree copy. Exit 9 if the host is gone.
+
+verify: sh f=core/fixtures/derived-fence-binding/run.sh; [ -f "$f" ] || exit 9; [ -f scripts/validate-enforcement-map.sh ] || exit 9; out="$(bash "$f" 2>&1)"; printf '%s\n' "$out" | grep -q '^  ok    A17 I75 ' || exit 1; printf '%s\n' "$out" | grep -q '^  ok    A18 I75 ' || exit 1; exit 0
 
 ## BL-267 — `I59_UNDOC_AWK` buffers a whole file into `lines[]`, so its memory cost is the largest corpus file rather than a constant
 
@@ -2964,6 +3139,18 @@ is in page cache by then.
 
 **Tiered NOTE.** Nothing is wrong today and no guard is weakened; this records a
 characteristic the change introduced so that a future corpus growth is not a surprise.
+
+**FIXED IN v0.667.0, pending the post-merge close.** The second-pass form. After the mode pass the awk calls
+`close(fn)` and re-reads the file for the documentation pass, and it skips that pass when the file
+dispatches no mode. `lines[]` is gone. The battery anchors (`substr(parts[i], 1, 2) == "--"`,
+the `I59_HELP_EXEMPTION` line, and the corpus `find`) are byte-identical. Equivalence: base and
+tip awk programs run over the real `core/` corpus plus seeded files (an offender, an empty file
+and an absent file; 109 listed) gave byte-identical findings and an identical scanned count
+(107). Validator cost: see the commit.
+
+**Receipt.** Stays structural, deliberately. The property is memory, and no cheap behavioural
+receipt can tell a buffer from a re-read on a corpus this small. The equivalence above is the
+behavioural half.
 
 verify: sh v=scripts/validate-enforcement-map.sh; [ -f "$v" ] || exit 9; grep -q 'I59_UNDOC_AWK' "$v" || exit 9; LC_ALL=C grep -qE '^[[:blank:]]*lines\[\+\+nl\] = line$' "$v" || exit 0; exit 1
 
@@ -3234,6 +3421,8 @@ verify: manual
 
 ## BL-308 — `preclassify.sh --templates` and `--untangle` route through the new failure path, but neither mode was force-tested on its own
 
+**FIXED IN v0.667.0, pending the post-merge close.**
+
 **NOTE.** Found at batch 153 by the `BL-230` docs hand, reading the 0.637.0 diff. It discharges no
 consumer candidate.
 
@@ -3244,7 +3433,14 @@ the default mode only. No run showed that either mode exits 2, rather than 0 wit
 when one of its git calls fails. A receipt must force a git failure inside each mode and read the
 exit status and the stdout row count.
 
-verify: manual
+Bound at batch 174 in `preclassify-rename-row`. Its git shim, the technique arm c already uses,
+forces a 128 on `ls-files`, `rev-parse` and `hash-object` under `--untangle` and on `rev-parse`
+under `--templates`. Each cell must exit 2, record a forced hit, and name the call. The row count
+is printed beside each cell. A per-mode transparent-shim control has to classify its seeded row
+first. Two mutants each fail exactly their own cell: one drops `--untangle`'s `ls-files` `|| pc_fail`,
+and the other disarms the USR1 trap before `--templates`' loop.
+
+verify: sh f=core/fixtures/preclassify-rename-row/run.sh; [ -f "$f" ] || exit 9; o="$(bash "$f" 2>&1)" || exit 1; grep -q '^  ok    BL-308 U1-U3 T1: ' <<<"$o" && grep -q '^  ok    MUTANT (BL-308 untangle-nols) fails exactly \[U1\]$' <<<"$o" && grep -q '^  ok    MUTANT (BL-308 templates-notrap) fails exactly \[T1\]$' <<<"$o"
 
 ## BL-310 — after a transient `cat-file` or `show` failure on a present path, the memo still hands one caller a wrong "absent"
 
@@ -3274,7 +3470,12 @@ verify: manual
 - A failed `git add` of the archive is a WARNING with exit 0, leaving it outside Check 35's corpus.
   0.645.0 states this as an exception rather than fixing it.
 
-verify: manual
+The receipt RUNS the rotator on four worlds: a line-1-heading history must rotate to 10 headings,
+each valueless option and `--keep-entries 0` must exit 2, `--archive` equal to `--absorb` must
+exit 2 under `ulimit -f 64`, and a locked index must exit 1 over a history still equal to HEAD.
+Scored tip 0, base 1, and 1 on each of five one-fix reverts.
+
+verify: sh R=core/scripts/rotate-snapshot-archive.sh; [ -f "$R" ] || exit 9; d=$(mktemp -d) || exit 9; mk(){ mkdir -p "$1" && git -C "$1" init -q && { printf "$2"; for i in 1 2 3 4 5 6 7 8 9 10 11 12; do printf '## e%s\nbody %s\n\n' $i $i; done; } > "$1/h.md" && printf 'snap\n' > "$1/s.md" && git -C "$1" add -A && git -C "$1" -c user.email=f@f -c user.name=f commit -qm i; }; mk "$d/a" '' || exit 9; bash "$R" "$d/a/h.md" --apply >/dev/null 2>&1 || exit 1; [ "$(grep -c '^## ' "$d/a/h.md")" -eq 10 ] || exit 1; mk "$d/b" '# H\n\n' || exit 9; for o in --archive --keep-entries --absorb; do bash "$R" "$d/b/h.md" --apply "$o" >/dev/null 2>&1; [ $? -eq 2 ] || exit 1; done; bash "$R" "$d/b/h.md" --keep-entries 0 >/dev/null 2>&1; [ $? -eq 2 ] || exit 1; ( ulimit -f 64; bash "$R" "$d/b/h.md" --archive "$d/b/s.md" --absorb "$d/b/s.md" --apply ) >/dev/null 2>&1; [ $? -eq 2 ] || exit 1; mk "$d/e" '# H\n\n' || exit 9; : > "$d/e/.git/index.lock"; bash "$R" "$d/e/h.md" --apply >/dev/null 2>&1; [ $? -eq 1 ] || exit 1; [ "$(git -C "$d/e" show HEAD:h.md)" = "$(cat "$d/e/h.md")" ]
 
 ## BL-323 — `route.md` Step 0 has no rule for a resume request that meets an empty snapshot
 
@@ -3282,7 +3483,10 @@ verify: manual
 present and 0 bytes. Step 0 item 1 routes it away from resume, but items 3 and 4 cover only "not a
 resume" and "no snapshot", so `/ai-dlc resume` there falls through with no stated rule.
 
-verify: manual
+The receipt extracts the numbered Step 0 item that opens "If the snapshot exists but is EMPTY" and
+requires it to name the resume signal, the 0-byte state and its route. Scored tip 0, base 1.
+
+verify: sh r=core/skills/ai-dlc/steps/route.md; [ -f "$r" ] || exit 9; z=$(LC_ALL=C awk '/^### Step 0:/{z=1;next} /^### /{z=0} z' "$r"); [ -n "$z" ] || exit 1; i=$(LC_ALL=C awk '/^[0-9]+\. /{p=0} /^[0-9]+\. If the snapshot exists but is EMPTY/{p=1} p' <<<"$z"); [ -n "$i" ] || exit 1; grep -q 'resume signal' <<<"$i" && grep -q '0 bytes' <<<"$i" && grep -q 'continue to Step 1' <<<"$i"
 
 ## BL-324 — an interrupted `snapshot-archive-rotate` kill sweep can leak its scratch trees
 
@@ -3291,7 +3495,15 @@ temp tree in 7 of 10 runs, 5k to 42k entries each. The fixture's sweep workers c
 to the fixture and keep writing after its EXIT trap's `rm -rf`. Neither is reached by the engine,
 which sets no timeout; only an operator interrupt reaches them.
 
-verify: manual
+Fixed by recording each sweep worker's pid and reaping its whole tree (stop, walk children by
+`pgrep -P`, kill) in the EXIT handler before any removal, which TERM and INT now reach explicitly.
+Measured with a forced TERM mid-sweep in a scratch copy, pids read from a sentinel file and checked
+by `kill -0`: tip 0 of 12 workers alive, 0 entries left under the caller's TMPDIR; reap loop and its
+`wait` deleted, 9 entries (killed re-runs' rotator temp dirs); base, 28. The sweep's plain re-run
+now also sets TMPDIR inside its world, so a reaped re-run leaves nothing outside $WORK. The receipt
+reads the fixture's executable lines (comments excluded). Scored tip 0, base 1, reap-deleted 1.
+
+verify: sh f=core/fixtures/snapshot-archive-rotate/run.sh; [ -f "$f" ] || exit 9; body(){ LC_ALL=C awk -v n="$1" '$0 ~ "^"n"\\(\\) *\\{" {p=1; next} p && /^}/ {exit} p && !/^[[:blank:]]*#/' "$f"; }; h=$(body fixture_cleanup); s=$(body sweep_pass); [ -n "$h" ] && [ -n "$s" ] || exit 1; grep -q 'KPIDS="\$KPIDS \$!"' <<<"$s" || exit 1; r=$(grep -n 'reap_tree "\$p"' <<<"$h" | head -1 | cut -d: -f1); m=$(grep -n 'rm -rf "\$WORK"' <<<"$h" | head -1 | cut -d: -f1); [ -n "$r" ] && [ -n "$m" ] && [ "$r" -lt "$m" ] || exit 1; grep -qx 'trap fixture_cleanup EXIT' "$f" && grep -qx "trap 'exit 143' TERM" "$f" && grep -q 'pgrep -P' <<<"$(body reap_tree)"
 
 ## BL-325 — the `snapshot-archive-rotate` kill sweep does not reach a rotator that turns off its own trace, and a TERM during its EXIT trap leaks the sandbox
 
@@ -3304,9 +3516,19 @@ verify: manual
 - A TERM that lands while the fixture's EXIT trap runs `chflags -R` kills bash before `rm`, and
   leaked 336,939 entries in one run. `trap '' TERM INT` at the top of the handler closes it.
 
-verify: manual
+Both fixed, with the refusal option taken for the first: `arm_killed` refuses a rotator matching
+`KESC_RE` (`set +…T`, `set +o functrace`, `trap … DEBUG`) before it sweeps, the regex self-probed
+in both directions at load, and mutant MTU (`trap - DEBUG` inserted) is now KILLED by that refusal.
+The not-reached text names what the refusal still cannot see (`eval`, a variable, a sourced file).
+The handler's first line is `trap '' TERM INT`. The TERM-during-`chflags` window was not forced;
+the receipt reads the handler's first executable line. Scored tip 0, base 1, and 1 on each of
+the trap-ignore deleted and the refusal disabled.
+
+verify: sh f=core/fixtures/snapshot-archive-rotate/run.sh; [ -f "$f" ] || exit 9; body(){ LC_ALL=C awk -v n="$1" '$0 ~ "^"n"\\(\\) *\\{" {p=1; next} p && /^}/ {exit} p && !/^[[:blank:]]*#/' "$f"; }; h=$(body fixture_cleanup); [ -n "$h" ] || exit 1; [ "$(head -1 <<<"$h" | tr -d ' ')" = "trap''TERMINT" ] || exit 1; k=$(body arm_killed); [ -n "$k" ] || exit 1; e=$(grep -n 'grep -qE "\$KESC_RE" "\$R_"' <<<"$k" | head -1 | cut -d: -f1); z=$(grep -n 'bh="\$(fbytes' <<<"$k" | head -1 | cut -d: -f1); [ -n "$e" ] && [ -n "$z" ] && [ "$e" -lt "$z" ] || exit 1; grep -q '^  score MTU killed ' "$f"
 
 ## BL-326 — `validate-gate-adjudication.sh` reads the map from the install fallback and the escalations from the foreign root
+
+**FIXED IN v0.667.0, pending the post-merge close.** Escalations are read from the root the map resolved under (`GA_MAP_ROOT`); receipt 0 at tip, 1 at base; `schema-install-fallback` arm N, ESC/ESCI killed.
 
 **NOTE.** Found by the batch-160 contract adversary.
 
@@ -3316,9 +3538,16 @@ load the INSTALL's map, while `--mode adjudicate` still reads escalations from
 suppression join then pairs one tree's escalated set with another tree's escalations. No
 production caller aims the override at a foreign root, so this is latent.
 
-verify: manual
+Receipt: a FAIL verdict over the distribution's escalated set, adjudicated under a foreign root
+holding only `.claude/`, must name the distribution's `docs/escalations/pending.md` (exit 0), not
+the foreign root's (exit 1). `schema-install-fallback` arm N carries the near-miss (a root with its
+own map keeps its own escalations) and the ESC/ESCI mutants.
+
+verify: sh d=$(mktemp -d); mkdir -p "$d/F/.claude" "$d/g" || exit 9; n=implementation-20260715T140322Z; v="$d/g/$n.verdict.json"; ids=$(bash core/scripts/validate-gate-adjudication.sh --expected implementation 2>/dev/null); [ -n "$ids" ] || exit 9; python3 -c 'import json,sys; n=sys.argv[2]; ids=sys.argv[3:]; json.dump({"schema_id":"GATE_ADJUDICATION_VERDICT v1","gate_type":"implementation","gate_series_id":n,"gate_nonce":n,"generated_at":"2026-07-15T14:05:07Z","adjudicator_agent_id":"agent-fixture-0001","catalog":"core","verdicts":[{"check_id":c,"verdict":"FAIL" if i==0 else "PASS","evidence":"r %s"%c} for i,c in enumerate(ids)]},open(sys.argv[1],"w"))' "$v" "$n" $ids || exit 9; o=$(AI_DLC_PROJECT_ROOT="$d/F" bash core/scripts/validate-gate-adjudication.sh implementation "$v" 2>&1); case "$o" in *"$d/F/docs/escalations/pending.md"*) exit 1 ;; *"$PWD/docs/escalations/pending.md"*) exit 0 ;; esac; exit 9
 
 ## BL-327 — `validate-request-coverage.sh` locates its harness-origin schema by counting `..` hops
+
+**FIXED IN v0.667.0, pending the post-merge close.** Canonical AI_DLC_ROOT block (I75) plus install-root last candidate; receipt 0 at tip, 1 at base; `request-coverage` legacy-layout arm and hop mutant, `validator-path-resolution` now requires it root-sensitive.
 
 **NOTE.** Found by the batch-160 contract adversary.
 
@@ -3327,9 +3556,15 @@ verify: manual
 right only while the script sits exactly two levels below the project root, which is the hop
 count the repo's walk-up rule forbids. A copy anywhere else gets an empty `HARNESS_ORIGIN`.
 
-verify: manual
+Receipt: a copy at the pre-relocation `scripts/X` of a consumer-shaped tree holding the schema only
+at `.claude/schemas/`, run from `docs/`, must reach its brief check (exit 0) rather than refuse the
+schema (exit 1). `request-coverage` carries the scripts/ai-dlc near-miss and the hop mutant.
+
+verify: sh d=$(mktemp -d); mkdir -p "$d/.git" "$d/.claude/schemas" "$d/scripts" "$d/docs" || exit 9; cp core/schemas/harness-origin.json "$d/.claude/schemas/" || exit 9; cp core/scripts/validate-request-coverage.sh core/scripts/validate-locked-anchor.sh "$d/scripts/" || exit 9; printf '# r\n\n## 2026-01-01T00:00:00Z -- /ai-dlc\n- SHA256: abc\n\n```text\nplease\n```\n' > "$d/r.md"; printf '# b\n' > "$d/b.md"; o=$(cd "$d/docs" && bash "$d/scripts/validate-request-coverage.sh" --requests "$d/r.md" --brief "$d/b.md" --sprint 1 2>&1); case "$o" in *"harness-origin.json could not be resolved"*) exit 1 ;; *"no LOCKED bullet"*) exit 0 ;; esac; exit 9
 
 ## BL-328 — `validate-mandatory-rules.sh` resolves its sprint-status schema relative to the cwd
+
+**FIXED IN v0.667.0, pending the post-merge close.** The process moves to the project root walked up from the cwd, so every read (schema, story corpus, escalations, status file, gate log, audit anchors, cycle log, snapshot) resolves there together; receipt 0 at tip, 1 at base and at the partial re-root; `story-corpus-sprint-slot` A13 and A14 with their mutants.
 
 **NOTE.** Found by the batch-160 contract adversary.
 
@@ -3338,7 +3573,15 @@ bare relative paths `.claude/schemas/sprint-status.json` and `core/schemas/sprin
 Those two resolve against the process's working directory, not a resolved project root, so in
 the consumer layout a run from any directory other than the project root finds no schema.
 
-verify: manual
+Receipt: in a consumer-shaped tree (schema only at `.claude/schemas/`), a self-executed story
+whose naming escalation entry carries `DECIDED_AUTONOMOUSLY` must give, from `docs/sub/`, the
+byte-identical Check 6 verdict and detail lines as a run from the root, and that root verdict must
+be a PASS (exit 0). A subdirectory run that finds the schema but not the escalations file, and so
+fails with "no waiver", exits 1, as does one that finds nothing. `story-corpus-sprint-slot` A13
+(corpus) and A14 (waiver) carry it, with A2/A11 as the root-run near-misses, a whole-revert mutant
+and a one-read (escalations) mutant.
+
+verify: sh d=$(mktemp -d); mkdir -p "$d/.git" "$d/.claude/schemas" "$d/scripts/ai-dlc" "$d/_bmad-output/planning-artifacts/s302/stories" "$d/docs/sub" "$d/docs/escalations" || exit 9; cp core/schemas/sprint-status.json "$d/.claude/schemas/" || exit 9; cp core/scripts/validate-mandatory-rules.sh "$d/scripts/ai-dlc/" || exit 9; for s in validate-retro-evidence.sh validate-cycle-commits.sh validate-retro-prereq.sh; do printf '#!/bin/sh\nexit 0\n' > "$d/scripts/ai-dlc/$s"; done; printf -- '---\nstatus: done\n---\n\n# s\n\n## Dev Agent Record\n\nModel: lead (self-executed) — see waiver\n' > "$d/_bmad-output/planning-artifacts/s302/stories/story-1-a.md"; printf '## [Sprint-302 / Story 302-1 self-execution] Lead - 2026-08-11\n**Status:** DECIDED_AUTONOMOUSLY\n' > "$d/docs/escalations/pending.md"; r=$(cd "$d" && bash "$d/scripts/ai-dlc/validate-mandatory-rules.sh" 302 2>&1 | grep -E '^  CHECK 6:|^\[Check6_'); s=$(cd "$d/docs/sub" && bash "$d/scripts/ai-dlc/validate-mandatory-rules.sh" 302 2>&1 | grep -E '^  CHECK 6:|^\[Check6_'); case "$r" in *"PASS — 1 story file(s) verified"*) ;; *) exit 9 ;; esac; [ "$s" = "$r" ] && exit 0; exit 1
 
 ## BL-329 — `sync-transient-ignore.sh --root <foreign>` exits 2 in the consumer layout
 
@@ -3356,6 +3599,8 @@ verify: manual
 
 ## BL-330 — `validate-write-format-steering.sh` falls back per schema FILE, so a root carrying some schemas mixes two trees
 
+**FIXED IN v0.667.0, pending the post-merge close.** The schema pair resolves from one directory; receipt 0 at tip, 1 at base; `schema-install-fallback` arm P, PERFILE killed. BL-331 is not closed by this.
+
 **NOTE.** Found by the batch-160 tip adversary. No production caller passes the override to this
 script (a grep for `AI_DLC_PROJECT_ROOT` beside its name in `core/hooks` returns 0, against a
 non-zero control for other scripts).
@@ -3367,7 +3612,12 @@ core/schemas/layer-adjudication-register.json … no file is there` rc 1: the po
 from the install while the steering schema and `READER_ROOT` stay on the root. The 0.646.0
 contract claimed the fallback changes only runs that fail closed; this input disproves that.
 
-verify: manual
+Receipt: a consumer-shaped install driven under a foreign root carrying `write-format-steering.json`
+and the skills it names, but not `pipeline-state-paths.json`, must read `SKIP — EXAMINED NOTHING`
+(exit 0), not a verdict joined across two trees (exit 1). `schema-install-fallback` arm P carries
+it, with B's full-set root as the near-miss and the PERFILE mutant.
+
+verify: sh d=$(mktemp -d); mkdir -p "$d/t/.git" "$d/t/.claude/schemas" "$d/t/scripts/ai-dlc" "$d/FP/.claude/schemas" "$d/FP/.claude/skills" || exit 9; cp core/schemas/write-format-steering.json core/schemas/pipeline-state-paths.json "$d/t/.claude/schemas/" || exit 9; cp core/scripts/validate-write-format-steering.sh "$d/t/scripts/ai-dlc/" || exit 9; cp core/schemas/write-format-steering.json "$d/FP/.claude/schemas/" || exit 9; cp -R core/skills/ai-dlc-update "$d/FP/.claude/skills/" || exit 9; o=$(cd "$d/t" && AI_DLC_PROJECT_ROOT="$d/FP" bash "$d/t/scripts/ai-dlc/validate-write-format-steering.sh" 2>&1); case "$o" in *"SKIP — EXAMINED NOTHING"*) exit 0 ;; *"validate-write-format-steering: FAIL"*|*"validate-write-format-steering: PASS"*) exit 1 ;; esac; exit 9
 
 ## BL-331 — under a root with no schemas, `validate-write-format-steering.sh` judges the INSTALL's declarations and acquits the root's stale ones
 
@@ -3438,7 +3688,15 @@ absorbed into `V_REFUSE_OK`, which is derived from the engine's own seed render,
 nothing; `emit-report-refusal`'s A0 (the refusal set must be exactly `retired-layer-token.sh`) is
 the arm that catches the global case, by its assertion code, not yet driven against that stub.
 
-verify: manual
+The global half was bound at batch 174. The R6-BASE arm in `reconcile-emit-report` compares the
+derived `V_REFUSE_OK` against the fixed name `retired-layer-token.sh`. Its mutant renders the seed
+world through an engine copy whose `ledger-reverify.sh` refuses everywhere, runs it through the
+file's own derivation line, and is refused. **The V-N-only half is REWORDED, not resolved.** The
+message still opens `FIXTURE BROKEN`, because `emit-report-refusal` keys on that prefix. It now
+says that three refusals in a row from a shipped detector are an engine regression. No mutant
+scores that text.
+
+verify: sh f=core/fixtures/reconcile-emit-report/run.sh; [ -f "$f" ] || exit 9; grep -q '^V_REFUSE_OK=' "$f" || exit 9; grep -qx "R6_FIXED_OK='retired-layer-token.sh'" "$f" && grep -qxF 'if [ "$_r6_have" = "$R6_FIXED_OK" ]; then' "$f" && grep -qE '^elif ! _r6e="\$\(v_stub "\$EMIT" "\$_r6m" ledger-reverify\.sh\)"; then$' "$f"
 
 ## BL-339 — `emit-report-refusal` ships and depends on `reconcile-emit-report` shipping, and nothing binds the two
 
@@ -3448,9 +3706,26 @@ ERROR: sibling … not found`. A packaging change marking `reconcile-emit-report
 leave every consumer's `emit-report-refusal` erroring. `layer-entry-unreadable` and
 `provenance-flagless-default` carry the same unbound sibling shape.
 
-verify: manual
+**FIXED IN v0.667.0, pending the post-merge close.** Invariant **I116** in `validate-enforcement-map.sh`: a
+fixture with no `.dist-only` that names `../<dir>/` on a non-comment line, where
+`core/fixtures/<dir>/run.sh` exists, fails the build if `<dir>` carries `.dist-only`. Premise
+correction: `layer-entry-unreadable` sources `../lib/preamble.sh`, and `core/fixtures/lib` has no
+run.sh, so it is out of population by that property, not by name. Measured on the real tree
+(comment lines stripped): 4 shipped-to-shipped pairs, all satisfied, 0 findings —
+emit-report-refusal→reconcile-emit-report, provenance-flagless-default→check-17-bypass,
+retro-compliance-workflow→check-17-bypass, layer-contract-conformance-b→layer-contract-conformance.
+One awk pass, with no forks per pair. Self-probe runs before the corpus: 1 offender and 5 near-misses.
+
+**Receipt.** Drives the shipping arm on the motivating case. A scratch copy with
+`reconcile-emit-report/.dist-only` added must exit 1 naming both fixtures, and the untouched copy
+must exit 0. Scored: tip **0**, base `2e7c227c` **1** (no I116, so `--arms I116` exits 2), a
+mutant with the breach test disabled **1** (its self-probe refuses).
+
+verify: sh v=scripts/validate-enforcement-map.sh; [ -f "$v" ] || exit 9; [ -f core/fixtures/reconcile-emit-report/run.sh ] || exit 9; d=$(mktemp -d) || exit 9; cp VERSION "$d/" && cp -R core scripts .githooks templates docs "$d/" || exit 9; [ -d patterns ] && cp -R patterns "$d/"; mkdir -p "$d/.claude" && cp -R .claude/rules "$d/.claude/rules"; ( cd "$d" && bash scripts/validate-enforcement-map.sh --arms I116 >/dev/null 2>&1 ); c=$?; echo x > "$d/core/fixtures/reconcile-emit-report/.dist-only"; o="$(cd "$d" && bash scripts/validate-enforcement-map.sh --arms I116 2>&1)"; b=$?; rm -rf "$d"; [ "$c" -eq 0 ] || exit 1; [ "$b" -eq 1 ] || exit 1; printf '%s\n' "$o" | grep -q 'I116.*emit-report-refusal uses reconcile-emit-report' || exit 1; exit 0
 
 ## BL-344 — `validate-h2-attestation.sh` interpolates `--sprint` into its regex unescaped, and an unreadable log reads as the first gate
+
+**FIXED IN v0.667.0, pending the post-merge close.** `--sprint` refuses a non-digit value, the mode-000 log reads could-not-read, and every verdict (CHANGED, located, revoked, first-gate) is on stdout with stderr empty.
 
 **NOTE.** Found by the batch-161 tip adversary; both predate 0.648.0. `--sprint '.*'` and
 `--sprint '5|'` each verify a `sprint=5` line (rc 0, PASS). A gate log at mode 000 makes all
@@ -3458,9 +3733,11 @@ three greps exit 2, which the script reads as no match: it prints `grep: … Per
 and then the first-gate message, rc 1. Separately, the located refusal goes to stderr like
 CHANGED while first-gate goes to stdout, so a caller capturing only stdout sees nothing for it.
 
-verify: manual
+verify: sh s=core/scripts/validate-h2-attestation.sh; d=$(bash "$s" --digest) || exit 9; t=$(mktemp) || exit 9; printf 'H2_ATTESTED v1 sprint=5 digest=%s\n' "$d" > "$t"; bash "$s" --verify --sprint 5 --gate-log "$t" >/dev/null 2>&1 || { rm -f "$t"; exit 9; }; f=0; for p in '.*' '5|'; do bash "$s" --verify --sprint "$p" --gate-log "$t" >/dev/null 2>&1 && f=1; done; printf 'H2 FAILED: H2_ATTESTED v1 sprint=5 digest=%s\n' "$d" > "$t"; e=$(bash "$s" --verify --sprint 5 --gate-log "$t" 2>&1 >/dev/null); o=$(bash "$s" --verify --sprint 5 --gate-log "$t" 2>/dev/null); rm -f "$t"; [ "$f" -eq 0 ] && [ -z "$e" ] && printf '%s' "$o" | grep -qF "$t:1 QUOTES"
 
 ## BL-346 — `validate-h2-attestation.sh --verify` verifies a span inside a fenced code block, an HTML comment block or an indented code block
+
+**FIXED IN v0.667.0, pending the post-merge close.** Spans inside a fenced code block, an HTML comment block, or an indented code block (four spaces or a tab) are refused and located; a block also ends any table around it.
 
 **NOTE.** Found by the batch 162 adversary and re-measured by the docs hand at `2a76c0b7`. A span
 alone on its line between ```` ``` ```` fences, between `<!--` and `-->` lines, or indented four
@@ -3469,18 +3746,22 @@ and none of those lines carries a refused lead. The 0.648.0 reader verifies all 
 consumer's gate-log lines carry no four-space-indented span; fenced and multi-line-comment shapes
 were not censused.
 
-verify: manual
+verify: sh s=core/scripts/validate-h2-attestation.sh; d=$(bash "$s" --digest) || exit 9; t=$(mktemp) || exit 9; L="H2_ATTESTED v1 sprint=7 digest=$d"; printf '```\nx\n```\n%s\n' "$L" > "$t"; bash "$s" --verify --sprint 7 --gate-log "$t" >/dev/null 2>&1 || { rm -f "$t"; exit 1; }; f=0; for fmt in '```\n%s\n```\n' '<!--\n%s\n-->\n' '    %s\n'; do printf "$fmt" "$L" > "$t"; o=$(bash "$s" --verify --sprint 7 --gate-log "$t" 2>&1); [ $? -eq 1 ] && printf '%s' "$o" | grep -qE 'QUOTES an H2_ATTESTED span for sprint 7 inside an? (fenced code|HTML comment|indented code) block' || f=1; done; rm -f "$t"; [ "$f" -eq 0 ]
 
 ## BL-347 — `validate-h2-attestation.sh --verify` refuses a span whose decoration is a tab
+
+**FIXED IN v0.667.0, pending the post-merge close.** A tab is decoration wherever a space is; a tab BEFORE a line is an indented code block and is refused as one, named so.
 
 **NOTE.** Found by the batch 162 docs hand. The closed decoration sets name the space character
 only, so a tab before a column-1 span, or tabs padding a PASS row's evidence cell, is refused
 (exit 1) where the same text with spaces verifies. The refusal is the safe direction. The
 consumer's 194 span-carrying lines under `_bmad-output/` contain no tab.
 
-verify: manual
+verify: sh s=core/scripts/validate-h2-attestation.sh; d=$(bash "$s" --digest) || exit 9; t=$(mktemp) || exit 9; L="H2_ATTESTED v1 sprint=7 digest=$d"; printf '| Check | Result | Evidence |\n|---|---|---|\n| H2 | PASS |\t\140%s\140\t|\n' "$L" > "$t"; bash "$s" --verify --sprint 7 --gate-log "$t" >/dev/null 2>&1; a=$?; printf '\t%s\n' "$L" > "$t"; o=$(bash "$s" --verify --sprint 7 --gate-log "$t" 2>&1); b=$?; rm -f "$t"; [ "$a" -eq 0 ] && [ "$b" -eq 1 ] && printf '%s' "$o" | grep -q 'inside an indented code block'
 
 ## BL-349 — `validate-h2-attestation.sh --verify` reads only the START of the verdict cell, and only the first verdict column
+
+**FIXED IN v0.667.0, pending the post-merge close.** Every verdict column is read, whole: PASS or PASSED plus at most one parenthetical with no FAIL or revocation word. Over the consumer history 4 table rows are ever granted, each exactly `PASS`.
 
 **NOTE.** Found by the batch 162 tip adversary at `2f074fe5`. The verdict test is "the cell begins
 `PASS`", so `PASS (FAILED on re-drive)`, `PASSED? no`, `PASS→FAIL`, `PASS/FAIL` and `PASS~~` each
@@ -3490,24 +3771,28 @@ column matching Result, Verdict, Status or Outcome wins, so `| Result | Status |
 word after a leading PASS, and its one two-verdict-column row is not granted. Anchoring the cell's
 end would refuse the consumer's real `PASS — \`H2_ATTESTED …\`` rows, so there is no one-line fix.
 
-verify: manual
+verify: sh s=core/scripts/validate-h2-attestation.sh; d=$(bash "$s" --digest) || exit 9; t=$(mktemp) || exit 9; L="H2_ATTESTED v1 sprint=7 digest=$d"; printf '| Check | Result | Evidence |\n|---|---|---|\n| H2 | PASSED (RE-ATTESTED, digest changed) | \140%s\140 |\n' "$L" > "$t"; bash "$s" --verify --sprint 7 --gate-log "$t" >/dev/null 2>&1 || { rm -f "$t"; exit 1; }; f=0; for v in 'PASS (FAILED on re-drive)' 'PASS/FAIL' 'PASS~~'; do printf '| Check | Result | Evidence |\n|---|---|---|\n| H2 | %s | \140%s\140 |\n' "$v" "$L" > "$t"; o=$(bash "$s" --verify --sprint 7 --gate-log "$t" 2>&1); [ $? -eq 1 ] && printf '%s' "$o" | grep -qF "$t:3 QUOTES" || f=1; done; printf '| Check | Result | Status | Evidence |\n|---|---|---|---|\n| H2 | PASS | FAIL | \140%s\140 |\n' "$L" > "$t"; o=$(bash "$s" --verify --sprint 7 --gate-log "$t" 2>&1); [ $? -eq 1 ] && printf '%s' "$o" | grep -qF "$t:3 QUOTES" || f=1; rm -f "$t"; [ "$f" -eq 0 ]
 
 ## BL-350 — a later revocation does not revoke an earlier H2 attestation
+
+**FIXED IN v0.667.0, pending the post-merge close.** A later line carrying the live span and VOID/REVOKE/RETRACT/SUPERSEDE/INVALID, or stating the attestation IS void with no digest, withdraws the grant and is reported as REVOKED; a later accepted span re-grants.
 
 **NOTE.** Found by the batch 162 tip adversary. A column-1 span followed later in the log by a
 `VOIDED` row carrying the same span, or by a sentence saying the attestation above is void, still
 exits 0, because any accepted placement grants. 0.648.0 behaves the same.
 
-verify: manual
+verify: sh s=core/scripts/validate-h2-attestation.sh; d=$(bash "$s" --digest) || exit 9; t=$(mktemp) || exit 9; L="H2_ATTESTED v1 sprint=7 digest=$d"; printf '%s\nA changed fixture voids the attestation by design.\n' "$L" > "$t"; bash "$s" --verify --sprint 7 --gate-log "$t" >/dev/null 2>&1 || { rm -f "$t"; exit 1; }; f=0; printf '%s\n| Check | Result | Evidence |\n|---|---|---|\n| H2 | VOIDED | \140%s\140 |\n' "$L" "$L" > "$t"; o=$(bash "$s" --verify --sprint 7 --gate-log "$t" 2>&1); [ $? -eq 1 ] && printf '%s' "$o" | grep -qF "$t:4 REVOKES" || f=1; printf '%s\nThe attestation above is void.\n' "$L" > "$t"; o=$(bash "$s" --verify --sprint 7 --gate-log "$t" 2>&1); [ $? -eq 1 ] && printf '%s' "$o" | grep -qF "$t:2 REVOKES" || f=1; rm -f "$t"; [ "$f" -eq 0 ]
 
 ## BL-351 — two refused H2 spans still get the first-gate message
+
+**FIXED IN v0.667.0, pending the post-merge close.** NUL bytes are rewritten before awk reads the log, and `_` no longer counts as a word character in the locating boundary, so all three shapes are located.
 
 **NOTE.** Found by the batch 162 tip adversary. BSD awk stops reading a line at a NUL, so
 `| H2 | FAIL\0 | \`SPAN\` |` reports "this is the sprint's first gate" (0.648.0 granted it), and
 `SPAN\0 FAILED, do not cite` verifies at both. `_SPAN_` also gets first-gate at both, because `_`
 is a word character in `ATTEST_LOCATE`, where `*SPAN*` is located.
 
-verify: manual
+verify: sh s=core/scripts/validate-h2-attestation.sh; d=$(bash "$s" --digest) || exit 9; t=$(mktemp) || exit 9; L="H2_ATTESTED v1 sprint=7 digest=$d"; printf 'x\000y\n%s\n' "$L" > "$t"; bash "$s" --verify --sprint 7 --gate-log "$t" >/dev/null 2>&1 || { rm -f "$t"; exit 1; }; f=0; printf '| Check | Result | Evidence |\n|---|---|---|\n| H2 | FAIL\000 | \140%s\140 |\n' "$L" > "$t"; o=$(bash "$s" --verify --sprint 7 --gate-log "$t" 2>&1); [ $? -eq 1 ] && printf '%s' "$o" | grep -qF "$t:3 QUOTES" || f=1; printf '%s\000 FAILED, do not cite\n' "$L" > "$t"; o=$(bash "$s" --verify --sprint 7 --gate-log "$t" 2>&1); [ $? -eq 1 ] && printf '%s' "$o" | grep -qF "$t:1 QUOTES" || f=1; printf '_%s_\n' "$L" > "$t"; o=$(bash "$s" --verify --sprint 7 --gate-log "$t" 2>&1); [ $? -eq 1 ] && printf '%s' "$o" | grep -qF "$t:1 QUOTES" || f=1; rm -f "$t"; [ "$f" -eq 0 ]
 
 ## BL-355 — `norm_lines` folds case byte-wise, so an accented capital no longer matches its lower-case form
 

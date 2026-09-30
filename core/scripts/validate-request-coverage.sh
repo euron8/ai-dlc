@@ -174,15 +174,55 @@ BLOCKS="$(bash "$ANCHOR" "$BRIEF" --emit-blocks)" || {
     exit 2
 }
 
+# --- AI_DLC_ROOT ------------------------------------------------------------
+# Resolve the project root by walking UP for a marker, never by a fixed number of
+# `..` hops. This script runs from three layouts:
+#   <root>/core/scripts/X      distribution
+#   <root>/scripts/ai-dlc/X    consumer, v0.126.0+
+#   <root>/scripts/X           consumer, pre-v0.126.0
+# and no fixed hop count fits all three. The harness-origin lookup used to climb
+# `$SELF_DIR/../..`, which is the consumer root only from scripts/ai-dlc/: from the
+# pre-relocation scripts/X it lands one level above the project and HARNESS_ORIGIN
+# came back empty (BL-327).
+# Inline on purpose, in every script that needs it: a shared lib cannot fix this,
+# because locating the lib is the same unsolved problem. Duplication is correct
+# here. core/fixtures/validator-path-resolution asserts both layouts agree.
+ai_dlc_resolve_root() {
+  local d="$1"
+  while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "." ]; do
+    if [ -e "$d/.git" ] || [ -d "$d/.claude" ] || [ -d "$d/core/skills/ai-dlc" ]; then
+      printf '%s\n' "$d"; return 0
+    fi
+    d="$(dirname "$d")"
+  done
+  return 1
+}
+AI_DLC_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+AI_DLC_ROOT="${AI_DLC_PROJECT_ROOT:-}"
+[ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="$(ai_dlc_resolve_root "$AI_DLC_SELF_DIR" || true)"
+[ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="${CLAUDE_PROJECT_DIR:-}"
+[ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="$(ai_dlc_resolve_root "$(pwd)" || true)"
+[ -n "$AI_DLC_ROOT" ] || {
+  echo "ERROR: cannot resolve the project root from ${AI_DLC_SELF_DIR} (no .git or" >&2
+  echo "  .claude/ marker in any parent). Set AI_DLC_PROJECT_ROOT to the repo root." >&2
+  exit 2
+}
+# --- end AI_DLC_ROOT --------------------------------------------------------
+
 # The harness-origin declaration is resolved HERE, in bash, and passed in. The Python below
 # runs from a heredoc, so it has no `__file__` to walk from -- a path derived there resolves
-# against the caller's cwd and finds nothing. Both layouts are tried, because install.sh
-# splits what shares a parent in core/.
+# against the caller's cwd and finds nothing. Script-relative first (the package this copy
+# shipped in), then the resolved root, distribution before consumer, because install.sh splits
+# what shares a parent in core/. The INSTALL root, walked up from this script's own directory, is
+# the LAST candidate, as in validate-write-format-steering.sh: an override naming a root with no
+# schemas still finds the copy this script was installed beside. An empty walk adds none.
+AI_DLC_INSTALL_ROOT="$(ai_dlc_resolve_root "$AI_DLC_SELF_DIR" || true)"
 HARNESS_ORIGIN=""
-for _hoc in "$SELF_DIR/../schemas/harness-origin.json" \
-            "$SELF_DIR/../../.claude/schemas/harness-origin.json" \
-            "$SELF_DIR/../../core/schemas/harness-origin.json"; do
-  [ -f "$_hoc" ] && { HARNESS_ORIGIN="$_hoc"; break; }
+for _hoc in "$AI_DLC_SELF_DIR/../schemas/harness-origin.json" \
+            "$AI_DLC_ROOT/core/schemas/harness-origin.json" \
+            "$AI_DLC_ROOT/.claude/schemas/harness-origin.json" \
+            "${AI_DLC_INSTALL_ROOT:+$AI_DLC_INSTALL_ROOT/.claude/schemas/harness-origin.json}"; do
+  [ -n "$_hoc" ] && [ -f "$_hoc" ] && { HARNESS_ORIGIN="$_hoc"; break; }
 done
 
 REQUESTS="$REQUESTS" BLOCKS="$BLOCKS" SPRINT="$SPRINT" CITE_SHA="$CITE_SHA" BRIEF="$BRIEF" HARNESS_ORIGIN="$HARNESS_ORIGIN" python3 <<'PYEOF'
