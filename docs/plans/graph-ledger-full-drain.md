@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 566..635. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 567..628. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,65 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 174 SHIPPED `v0.666.0` (`d41d47d0`, #913) AND DISCHARGED TWO CONSUMER CANDIDATES:
+`PC-S315-AGENT-DEFINITION-RENDER-ENTANGLEMENT-ARM-FIRES-UNDER-THE-PRE-PUSH-POOL` (`BL-258`) and
+`PC-S309-ADR-DEFERRED-WORK-HAS-NO-CARRIER-INTO-BACKLOG` (`BL-215`).** It was invoked by peer
+handoff. The opening sweep: live 31 on 1 qualifying ref, unfiled 14, worklist 5, TERMINAL 147. Live
+backlog **104 -> 84** (22 closed and rotated, `BL-379` and `BL-380` filed), archive **273 -> 295**.
+
+**THE OPERATOR RE-DIRECTED THE BATCH TWICE, AND BOTH RULINGS STAND.** First, every live backlog
+entry was adjudicated, not only the PC-backed set: seven hands swept 88 entries, finding 9 closes
+with no build and about 45 live entries with a small fix. Second, packaging split into
+releases as work finished rather than one monolithic release: `v0.666.0` shipped what was
+collected, `v0.667.0` takes the rest. **Adjudicate the whole backlog every batch; ship each
+release the moment its builders are collected.**
+
+**A LANDED ANNOTATION MADE INSIDE A RELEASE FAILS ITS OWN PUSH.** `validate-backlog-receipts.sh`
+excludes a LANDED entry from the live sh-receipt population, so annotating closes inside the release
+drops R5 below `--min-sh-receipts`; and the branch shas builders cite die on squash. Builders' close
+lines were rewritten to a held note in the release and the post-merge close commit annotated each
+with the squash sha, rotated them, and set both R5 floors to the measured post-rotation population
+(`--min-sh-receipts 45 --min-entries 84`), which is R5's own stated remedy.
+
+**THE FIRST GATE FAILED ON A LINE THE RELEASE ADDED**: a shipped comment cited `docs/backlog.md`,
+which `validate-no-dead-doc-refs.sh` refuses because consumers do not get that file. Gate on
+`61236bce`: 22 phases PASS, 218 fixtures ok, 0 FAIL, every changed fixture `ok` by name against an
+impossible-name control of 0, `ls-remote` matching, squash tree identical to the gated tip. The
+tip adversary found no BLOCKER; its two DEFECTs were read-set traces, which the operator ran on
+`d41d47d0` and which ship in this close (only `requirements-step` and `review-carry-over-clauses`
+moved).
+
+**`docs/reviews/graph-consumer-owned-close-brief.md` is for the operator to carry into a graph
+session**: fourteen candidates no upstream release will discharge, eleven naming only non-core paths
+and three adjudicated here, rehearsed on a copy of the consumer's ledger at `737bf163` with its
+installed rotator (14 move, live 31 -> 17, no other id moved).
+
+**`v0.667.0` IS ASSEMBLED FROM COLLECTED BRANCHES, NOT BUILT YET AS A RELEASE.** Ten branches carry
+it, each verified by content: `b174-readsets` (`PC-S315-DERIVE-FIXTURE-READSETS-COPIES-THE-WHOLE-WORKING-TREE`,
+`BL-379`, plus `BL-375`'s root-free tracer mode), `b174-uninstall` (`BL-002`, `BL-010`), `b174-rotator`
+(`BL-322`..`BL-325`, `BL-027`), `b174-forkprofile` (`BL-267`, `BL-268`, `BL-269`, `BL-272`, `BL-274`,
+`BL-339`, new invariant `I116`), `b174-validators` (`BL-003`, `BL-020`, `BL-007` partial),
+`b174-reconcile-arms` (`BL-275`, `BL-308`, `BL-338` partial), `b174-roots` (`BL-326`..`BL-328`,
+`BL-330`), `b174-h2` (`BL-344`, `BL-346`, `BL-347`, `BL-349`..`BL-351`), `b174-bl123` (`BL-123`).
+**Operator rulings for it:** `BL-007` stays open for a hole inside the archive; tuned
+`aiDlcModels`/`aiDlcRoles` survive uninstall.
+
+**BOOTSTRAPPING RELEASES ARE QUEUED, EACH FILE ALONE.** Built and held: `b174-bl085` (`BL-085`,
+`layer-drift.sh`; the operator ruled `contract_version` stays 20 and the CHANGELOG says `LC-E11` was
+widened in place) and `b174-bl329` (`BL-329`, `sync-transient-ignore.sh`, which `apply.sh` runs in a
+pull). Owed, unbuilt: `PC-S336-STEP-1-AUTOPUSH-IS-THE-UNGUARDED-TWIN-OF-THE-PUSH-STEP-2-HARDENED`
+with `BL-142`'s adjudicator sentence and `BL-024` (the update skill), then `apply.sh`
+(`BL-099`, `BL-103`, `BL-119`, `BL-336`), `lib.sh` (`BL-310`, `BL-355`, `BL-374` — its receipt
+tests one of four sites), `ledger-reverify.sh` (`BL-066`, `BL-092`), `preclassify.sh` (`BL-100`),
+`layer-drift.sh` (`BL-376`), and the multi-file `BL-360`, `BL-364`.
+
+**THE DELIVERY GAP IS TWO RELEASES.** The consumer's stamp reads 0.664.0 (`bf998dfb`) against
+`VERSION` 0.666.0; neither 0.665.0 nor 0.666.0 touches a bootstrapping file. PENDING is 2: this
+batch's two ids, first named at 0.666.0. The banked ruling stands: report the gap and write no
+runbook.
+
+Batch 173's next-work list and delivery gap are spent: batch 174's block above replaces both.
 
 **BATCH 173 SHIPPED `v0.664.0` (`bf998dfb`, #906) AND `v0.665.0` (`c14be470`, #907), AND CLOSED
 `BL-370`..`BL-373`. IT DISCHARGES NO CONSUMER CANDIDATE.** It was invoked by peer handoff. The
@@ -505,68 +564,6 @@ report the gap and write no runbook.
 
 Batch 166's next-work list and delivery gap are spent: batch 167's block above replaces both.
 
-**BATCH 166 SHIPPED `v0.657.0` (`91671ae8`, #889) AND CLOSED `BL-358`. IT DISCHARGES NO CONSUMER
-CANDIDATE.** It was invoked by peer handoff. The opening sweep matched batch 165 on every figure:
-live 25 on five qualifying refs, unfiled 12 (the same ids and dates), worklist 5, TERMINAL 147,
-DISCHARGED 7, PENDING 1 (`PC-S314-H2-ATTESTATION-…`, first named at 0.648.0), ledger md5
-`ded61c90…` on the consumer's `ai-dlc/carry-over/telv3-upgrade` (its `main` reads `3c80ea9a…`).
-The consumer moved nothing this program reads: porcelain 38 -> 44 from its own sprint 314 (the one
-distribution-adjacent path is an untracked `ai-dlc-update/scratch-*` directory), working-tree ledger
-byte-identical to HEAD, `pending.md` absent. Live **100 -> 100** (`BL-358` closed, `BL-359` filed),
-archive **257 -> 258**.
-
-**`BL-358`: EVERY ROW-WRITING STDOUT SITE IN `layer-drift.sh` COUNTS ITS STATUS, AND ONE `ld_finish`
-REFUSES.** `emit`, `emit_raw` (the writer of every `HARD-LAYER-ADJUDICATION-MISSING` row, which the
-first contract missed), the contradiction awk and the `--list-adjudications` listing count into
-`ld_emit_ok`/`ld_emit_failed`; every writer returns without writing after one failure; the three
-outer loops break; `ld_finish` exits 2 with `layer-drift: REFUSED — a row could not be written to
-stdout after N row(s) were; …`, which `apply.sh` already renders as `DECISION layer-drift-refused`.
-The double-shadow block is restaged out of its `| while | while` subshells with both producers'
-statuses read. Healthy output byte-identical to `a0a9c556` in both modes on both consumer ranges.
-
-**THE CONTRACT ADVERSARY REFUTED THE FORCING: `ulimit -f` CANNOT ISOLATE STDOUT ON THIS SCRIPT.**
-bash 3.2 stages every here-string to a temp file under the same limit, and `layer-contract.yaml`
-(78 KB) is fed by `<<<` — larger than the whole output — so any limit that truncates stdout fails
-that here-string first, `ADJ_CODES` reads empty, adjudication disarms, 8 `OVERRIDE-OK` rows flip,
-all at rc 0 with zero `write error` lines. A contract-literal fix read rc 0 / 54 rows / 0 HARD at
-every `ulimit -f` >= 12 and would have shipped. Real-corpus forcing is a truncating pipe reader
-with SIGPIPE ignored; the fixture's EFBIG worlds keep every here-string under the limit and carry
-a precondition arm that reports `FIXTURE BROKEN` on `cannot create temp file for here document`.
-The disarm itself is `BL-359` (DEFECT), with two tip-adversary findings folded into it for the
-ceiling: `emit-report.sh` prints `0 HARD blockers.` beside a layer-drift refusal (pre-existing,
-DEFECT-tier, split it out at the next close), and two refusal paths have no fixture cell.
-
-**THE FIRST GATE WENT RED ON A FIXTURE NO HAND OWNED, AGAIN.** `procsub-staged-refusal`'s spelling
-arm (r1: `done <<< "$( )"` discards a producer's status) caught the restaged double-shadow block's
-per-entry split, which the fix hand, the fixture hand and the tip adversary all passed over. Staged
-with its own `ld_refuse`, mutant re-anchored, both fixtures green alone, byte-identity re-measured.
-**A restage that removes a subshell can reintroduce the other forbidden shape; run
-`procsub-staged-refusal` alone on any `reconcile/` change before the gate.** Second gate: 22 phases
-PASS, 1 SKIP (pole, no fresh full-suite measurement), 213 ok, 0 FAIL, both changed fixtures `ok` by
-name against an impossible-name control of 0, squash tree identical to the gated tip `a9083485`,
-`ls-remote` matching.
-
-**TWO READ-SET TRACES ARE OWED**: `procsub-staged-refusal-boot` now reads `a0a9c556`'s
-`layer-drift.sh` through `git show` (batch 165's owed trace for it was never run either), and
-`preclassify-rename-row` from batch 165. `sudo bash core/scripts/derive-fixture-readsets.sh --list
-"procsub-staged-refusal-boot preclassify-rename-row"` on a checkout of `origin/main`.
-
-**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
-- The unfiled set holds no new core filing. `BL-359` (DEFECT: a failed here-string disarms
-  adjudication at rc 0) is the strongest distribution-internal entry and continues this thread;
-  `BL-356` is next.
-- `BL-230` needs a mechanism for E1, E2 and E9.
-
-**THE DELIVERY GAP IS FOUR RELEASES.** The consumer is at 0.653.0 against `VERSION` 0.657.0.
-Nine bootstrapping files changed in `d1c72fa9..origin/main` (`apply.sh`, `lib.sh`,
-`layer-drift.sh`, `unregistered-drift.sh`, `self-update-gate.sh`, `retired-tokens.sh`,
-`retired-layer-contract.sh`, `predicate-differential.sh` and the update `SKILL.md`; 0 mode-only
-rows), so **the pull that delivers them runs under the installed 0.653.0
-engine and their refusals protect only the pull after it.** PENDING is 1 and below the installed
-version. The banked ruling stands: report the gap and write no runbook.
-
-Batch 165's next-work list and delivery gap are spent: batch 166's block above replaces both.
-
 ### Derive the state; do not trust the numbers below
 
 Every figure here is a HYPOTHESIS about a tree that has moved. The measured base rate of expired
@@ -766,8 +763,12 @@ git -C /Users/n8/git/graph show "main:_bmad-output/ai-dlc-update/push-candidate-
 lids /tmp/mainled.md >> /tmp/union_live_raw.txt
 git -C /Users/n8/git/graph show "main:_bmad-output/ai-dlc-update/push-candidate-ledger.archive.md" > /tmp/mainarch.md
 lids /tmp/mainarch.md >> /tmp/union_arch_raw.txt
-for b in $(git -C /Users/n8/git/graph for-each-ref --format='%(refname:short)' refs/heads); do
-  [ "$b" = main ] && continue
+# REMOTE BRANCHES TOO, MEASURED AT BATCH 174. The consumer moved a filing OFF its carry-over branch
+# onto its own pushed branch (`origin/ai-dlc-update/pc-s315-derive-readsets-whole-tree-copy`) and
+# reset the carry-over branch past it, so a `refs/heads`-only loop would have scored the candidate
+# absent. `origin/HEAD` is a symref, never a candidate.
+for b in $(git -C /Users/n8/git/graph for-each-ref --format='%(refname:short)' refs/heads refs/remotes/origin); do
+  case "$b" in main|origin/main|origin/HEAD|origin) continue ;; esac
   git -C /Users/n8/git/graph cat-file -e "${b}:_bmad-output/ai-dlc-update/push-candidate-ledger.md" 2>/dev/null || continue
   git -C /Users/n8/git/graph show "${b}:_bmad-output/ai-dlc-update/push-candidate-ledger.md" > /tmp/cand.md
   git -C /Users/n8/git/graph show "main:_bmad-output/ai-dlc-update/push-candidate-ledger.md" > /tmp/mainled.md
