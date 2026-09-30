@@ -146,7 +146,7 @@ function flush(   r) {
   if (shape != "") {
     line = $0
     if (shape == "heading") { sub(/^#{2,6}[ \t]+/, "", line) }
-    else                    { sub(/^- \*\*/, "", line); sub(/\*\*.*$/, "", line) }
+    else                    { sub(/^(- )?\*\*/, "", line); sub(/\*\*.*$/, "", line) }
     # THE LABEL RULE IS LOCAL, AND lib.sh SAYS SO -- only the BOUNDARY is shared, because the
     # two callers extract a label differently from a bullet and from a heading.
     #

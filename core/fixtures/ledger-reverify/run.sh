@@ -127,7 +127,7 @@ echo
 row_is "Entry A" STILL-LIVE      "theirs still lacks MARKER_A -> entry stays open"
 row_is "Entry B" CLOSE-CANDIDATE "theirs now has MARKER_B -> upstream absorbed it"
 row_is "Entry C" ABSENT          "already ADOPTED UPSTREAM -> closed, not re-emitted"
-row_is "Entry D" ABSENT          "no verify: line -> hand-review, no row"
+row_is "Entry D" ABSENT          "no verify: line AND a prose label, not an entry id -> no row; only an id-keyed receipt-less entry reaches the naming query"
 
 # THE THIRD DIFFERENTIAL — a declared manual entry vs a malformed one. Both used to land on
 # NEEDS-REVIEW, so a deliberate "no mechanical predicate exists" declaration was reported in
@@ -4098,6 +4098,148 @@ dp_kill mutation-nonid-all-verbs "$nid_m5" \
   '$2 ~ /a-real-entry\.sh/ && $1=="NEEDS-REVIEW" {f=1} END{exit !f}' \
   "$nid_ctl" \
   'widening past `manual` reports a prose-titled entry whose mechanical receipt RUNS — 43 rows across the real corpora, nine of them live extension entries' \
+  "$nid_ctlmsg"
+
+# --- A RECEIPT-LESS ID-KEYED ENTRY REACHES THE NAMING QUERY ------------------------------------
+# THE DEFECT. flush() printed a row only for an entry carrying a `verify:` line, so an open
+# id-keyed entry with NO receipt never reached `named_absorbed()` -- and upstream naming it is the
+# ONLY mechanical signal such an entry can get. Measured on the reference consumer: 14 open
+# id-keyed entries carried no receipt, 12 of them were named by upstream history, 0 rows for all 14.
+# The fix emits a `0/0` extraction row for those entries that reaches the naming block and is then
+# skipped before the verb dispatch.
+#
+# THREE SEEDS, ONE PROPERTY APART. NORECEIPT-NAMED is named by a pre-base commit and must emit
+# exactly one row, NAMED-UPSTREAM with the receipt-less detail. NORECEIPT-NEVER-CITED is the same
+# shape with no naming commit and must emit nothing. CAPS-HEADING is all-caps, hyphenated and named
+# by the same commit, but is NOT an entry id: it passes named_absorbed()'s local case guard, so the
+# shared `ledger_entry_id()` filter at extraction is the only thing keeping it silent.
+rl_one='$2 ~ /^PC-FIXTURE-NORECEIPT-NAMED-UPSTREAM$/ {n++} END{print n+0}'
+rl_n="$(printf '%s\n' "$OUT" | awk -F'\t' "$rl_one")"
+row_has "PC-FIXTURE-NORECEIPT-NAMED-UPSTREAM" NAMED-UPSTREAM \
+  "an open id-keyed entry with NO receipt, named by upstream history -> NAMED-UPSTREAM, its only mechanical signal"
+ASSERTIONS=$((ASSERTIONS + 1))
+rl_det="$(printf '%s\n' "$OUT" | awk -F'\t' '$1=="NAMED-UPSTREAM" && $2=="PC-FIXTURE-NORECEIPT-NAMED-UPSTREAM" {print $3; exit}')"
+if [ "$rl_n" != 1 ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the receipt-less named entry emitted %s rows, want exactly 1 — a 0/0 row that reaches the verb dispatch invents a receipt verdict\n' "receiptless-one-row" "$rl_n"
+elif ! grep -q 'carries NO verify: receipt' <<<"$rl_det"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the row does not say the entry carries no receipt: %s\n' "receiptless-one-row" "$(printf '%s' "$rl_det" | cut -c1-110)"
+elif grep -q 'no receipt in this entry can see\|re-anchor or drop the stale receipt' <<<"$rl_det"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the row tells the operator to fix a receipt the entry does not have\n' "receiptless-one-row"
+else
+  printf '  ok    %-22s exactly one row, and its detail says the entry carries no receipt and closes by annotation\n' "receiptless-one-row"
+fi
+row_is "PC-FIXTURE-NORECEIPT-NEVER-CITED" ABSENT \
+  "receipt-less and id-keyed but never named upstream -> no row of any kind"
+row_is "FIXTURE-CAPS-HEADING-NOT-AN-ID" ABSENT \
+  "all-caps and hyphenated, named by a commit verbatim, but not an entry id -> the shared id rule keeps it silent"
+
+# --- THE COLUMN-0 BARE-BOLD RECORD (`**PC-…** — …`) IS AN ENTRY ------------------------------
+# THE DEFECT, filed as PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY. `ledger_entry_shape()`
+# opened an entry only on `- **` or a heading, so a record written without the leading dash was
+# body text of the entry ABOVE it: its receipt became that entry's second receipt and no row ever
+# named it. The strict rule is an id-only bold span followed by an em dash or end of line.
+row_is "PC-FIXTURE-BARE-BOLD-RECORD" CLOSE-CANDIDATE \
+  "a column-0 bold id with an em dash opens its own entry, and its own receipt reports under it"
+row_is "PC-FIXTURE-BARE-BOLD-EOL" STILL-LIVE \
+  "the second spelling, the bold id alone on its line, opens its own entry too"
+bb_above='$2 ~ /PC-FIXTURE-DASHED-ABOVE-BARE-BOLD/ {n++} END{print n+0}'
+ASSERTIONS=$((ASSERTIONS + 1))
+bb_n="$(printf '%s\n' "$OUT" | awk -F'\t' "$bb_above")"
+if [ "$bb_n" = 1 ]; then
+  printf '  ok    %-22s the dashed entry above the record emits exactly one row — the record receipt is not attributed to it\n' "bare-bold-neighbour"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the dashed entry above the record emitted %s rows, want 1 — the record was swallowed into it\n' "bare-bold-neighbour" "$bb_n"
+fi
+# THE NEAR-MISS. A body line OPENING with a bold id that closes before a comma is a MENTION. The
+# looser `^-? ?\*\*PC-` rule matches it, splits the host, and moves the host receipt onto the
+# mentioned id -- measured on the reference consumer archive, where such a line sits mid-body.
+row_is "PC-FIXTURE-BARE-BOLD-MENTION-HOST" STILL-LIVE \
+  "a bolded id opening a body line and closing before a comma is a mention -> the host keeps its row"
+row_is "PC-FIXTURE-MENTIONED-IN-A-BODY" ABSENT \
+  "...and the mentioned id does not become an entry of its own"
+
+# THE MUTANTS. rl_mutant copies the whole reconcile directory, replaces a LITERAL string in one
+# named file with an exact expected count, and refuses the copy if the count is wrong, the file
+# did not change, or it does not parse. It can be called twice on one directory, for a layer that
+# spans two files. The control row for every one is nid_ctl, which no mutant here touches.
+rl_mutant() { # <dir> <file> <old> <new> <want-count> -> 0 iff applied exactly want-count times
+  local d="$1" f="$2" n
+  [ -f "$d/$f" ] || return 1
+  n="$(RL_O="$3" RL_N="$4" awk '
+    BEGIN { o = ENVIRON["RL_O"]; nw = ENVIRON["RL_N"]; c = 0 }
+    { s = $0; out = ""
+      while ((i = index(s, o)) > 0) { out = out substr(s, 1, i - 1) nw; s = substr(s, i + length(o)); c++ }
+      print out s > (FILENAME ".mut") }
+    END { print c }
+  ' "$d/$f")" || return 1
+  [ "$n" = "$5" ] || return 1
+  cmp -s "$d/$f" "$d/$f.mut" && return 1
+  mv "$d/$f.mut" "$d/$f"
+  bash -n "$d/$f" 2>/dev/null
+}
+rl_dir() { # <name> -> fresh copy of the reconcile directory on stdout
+  local d
+  d="$(dirname "$DIST")/mut-$1"; rm -rf "$d"; mkdir -p "$d"
+  cp "$(dirname "$CLOSER")"/*.sh "$(dirname "$CLOSER")"/*.md "$d/" 2>/dev/null
+  [ -f "$d/lib.sh" ] && [ -f "$d/ledger-reverify.sh" ] || return 1
+  printf '%s' "$d"
+}
+RL_GATE='    if (!has_verify && !closed && label != "" && ledger_entry_id(label) != "")'
+BB_SHAPE='  if (l ~ /^\*\*`?(PC|BL)-[A-Za-z0-9_.-]+`?\*\*([ \t]+—|[ \t]*$)/) sh = "bullet"'
+
+# m-gate — the has_verify gate restored: no receipt-less entry reaches the naming query.
+rl_m1="$(rl_dir rl-gate)" && rl_mutant "$rl_m1" ledger-reverify.sh "$RL_GATE" '    if (0)' 1 || rl_m1=""
+dp_kill mutation-receiptless-gate "$rl_m1" \
+  '$2 ~ /^PC-FIXTURE-NORECEIPT-NAMED-UPSTREAM$/ {f=1} END{exit f}' \
+  "$nid_ctl" \
+  'with the has_verify gate restored the named receipt-less entry emits nothing — the 0/0 row is what carries it to the naming query' \
+  "$nid_ctlmsg"
+# m-guard — the extraction filter swapped for named_absorbed()'s local case guard (charset plus
+# a hyphen). The all-caps non-id heading then reaches the naming query and matches its commit.
+rl_m2="$(rl_dir rl-local-guard)" && rl_mutant "$rl_m2" ledger-reverify.sh 'ledger_entry_id(label) != "")' 'label ~ /^[A-Z0-9-]+$/ && label ~ /-/)' 1 || rl_m2=""
+dp_kill mutation-receiptless-local-guard "$rl_m2" \
+  '$2 ~ /^FIXTURE-CAPS-HEADING-NOT-AN-ID$/ && $1=="NAMED-UPSTREAM" {f=1} END{exit !f}' \
+  "$nid_ctl" \
+  'filtering on the local charset guard instead of ledger_entry_id() reports an all-caps heading that is not an id — the shared id rule is what keeps it silent' \
+  "$nid_ctlmsg"
+# m-skip — the 0/0 skip before the verb dispatch removed. The `-` placeholder dispatches as a
+# verb, so the never-cited receipt-less entry acquires a row it has no receipt to earn.
+rl_m3="$(rl_dir rl-no-skip)" && rl_mutant "$rl_m3" ledger-reverify.sh '  [ "$ord" = "0/0" ] && continue' '  :' 1 || rl_m3=""
+dp_kill mutation-receiptless-no-skip "$rl_m3" \
+  '$2 ~ /^PC-FIXTURE-NORECEIPT-NEVER-CITED$/ {f=1} END{exit !f}' \
+  "$nid_ctl" \
+  'without the 0/0 skip a receipt-less entry reaches the verb dispatch and gets a verdict no receipt produced' \
+  "$nid_ctlmsg"
+# m-shape — the bare-bold shape arm removed from lib.sh. The record is body text again: its row
+# is gone and its receipt lands on the dashed entry above as a second one.
+bb_m1="$(rl_dir bb-no-shape)" && rl_mutant "$bb_m1" lib.sh "$BB_SHAPE" '  sh = sh' 1 || bb_m1=""
+dp_kill mutation-bare-bold-no-shape "$bb_m1" \
+  '$2 ~ /PC-FIXTURE-BARE-BOLD-RECORD/ {g=1} $2 ~ /PC-FIXTURE-DASHED-ABOVE-BARE-BOLD/ {n++} END{exit !(!g && n == 2)}' \
+  "$nid_ctl" \
+  'without the shape arm the record row is gone and the dashed entry above carries two receipts — the swallow, reproduced' \
+  "$nid_ctlmsg"
+# m-strip — every widened label strip put back to `^- \*\*`, in BOTH files that carry one. The
+# shape still opens the entry, so the neighbour keeps one row, but the label is "" and the entry
+# and its receipt vanish together — the half of the fix a shape-only change leaves broken.
+bb_m2="$(rl_dir bb-narrow-strip)" \
+  && rl_mutant "$bb_m2" ledger-reverify.sh 'sub(/^(- )?\*\*/' 'sub(/^- \*\*/' 4 \
+  && rl_mutant "$bb_m2" lib.sh 'sub(/^(- )?\*\*/' 'sub(/^- \*\*/' 2 || bb_m2=""
+dp_kill mutation-bare-bold-narrow-strip "$bb_m2" \
+  '$2 ~ /PC-FIXTURE-BARE-BOLD-RECORD/ {g=1} $2 ~ /PC-FIXTURE-DASHED-ABOVE-BARE-BOLD/ {n++} END{exit !(!g && n == 1)}' \
+  "$nid_ctl" \
+  'with the label strip left narrow the record opens an entry labelled "" — its row AND its receipt vanish, and the neighbour keeps exactly one row' \
+  "$nid_ctlmsg"
+# m-loose — the shape widened to the looser `^-? ?\*\*(PC|BL)-`. The body mention then opens an
+# entry and takes the host receipt with it.
+bb_m3="$(rl_dir bb-loose)" && rl_mutant "$bb_m3" lib.sh "$BB_SHAPE" '  if (l ~ /^-? ?\*\*(PC|BL)-/) sh = "bullet"' 1 || bb_m3=""
+dp_kill mutation-bare-bold-loose "$bb_m3" \
+  '$2 ~ /^PC-FIXTURE-MENTIONED-IN-A-BODY/ {f=1} END{exit !f}' \
+  "$nid_ctl" \
+  'the looser grammar splits the host at a body line opening with a bolded id — the strict id-only span and em dash are load-bearing' \
   "$nid_ctlmsg"
 
 # --- THE CROSS-PROCESS MEMO LEAVES NOTHING BEHIND --------------------------------------------

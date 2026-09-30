@@ -346,6 +346,17 @@ unquote() { # unquote <value>
 # awk run starts clean. `__lef_reset` carries the NR at which an id-keyed boundary reset an
 # open fence, for readers that report it.
 #
+# THE COLUMN-0 BARE-BOLD RECORD IS A BULLET TOO -- `**PC-…** — prose` or `**PC-…**` alone on its
+# line, with no leading `- `. It is a real record form on the reference consumer, and before it
+# was a boundary the entry above it swallowed its body and its receipt, so no reverify row ever
+# named it. The rule is deliberately STRICT: the bold span holds an id and nothing else, and is
+# followed by an em dash or the end of the line. The looser `^-? ?\*\*PC-` matches a mid-body
+# line OPENING with a bolded id (`**PC-…**, reported from …`) and splits the entry that carries
+# it -- measured on the reference consumer archive. It sets the SAME shape value, "bullet",
+# because every caller branches bullet-versus-heading; every bullet label strip is therefore
+# `^(- )?\*\*`, or the bare form labels as "" and the entry and its receipt vanish. The old
+# `^- \*\*` line below it stays byte-identical because fixtures anchor mutations on it.
+#
 # `ledger_entry_id()` LIVES IN THIS EMITTER NOW, because the shape rule reads it. It used to
 # be `ledger_entry_id_awk()` on its own, and every caller loaded both; that emitter is kept as
 # a no-op so those concatenations still parse, and its header says why.
@@ -361,6 +372,7 @@ function ledger_entry_shape(l,   t, rest, sh, line) {
   if (__lef_nr == NR) return __lef_shape
   __lef_nr = NR; __lef_reset = 0
   sh = ""
+  if (l ~ /^\*\*`?(PC|BL)-[A-Za-z0-9_.-]+`?\*\*([ \t]+—|[ \t]*$)/) sh = "bullet"
   if (l ~ /^- \*\*/)           sh = "bullet"
   else if (l ~ /^#{2,6}[ \t]/) sh = "heading"
   t = l; sub(/^[ \t]+/, "", t)
@@ -393,7 +405,7 @@ function ledger_entry_shape(l,   t, rest, sh, line) {
     }
     if (__lef_in && sh != "") {
       line = l
-      if (sh == "heading") sub(/^#{2,6}[ \t]+/, "", line); else sub(/^- \*\*/, "", line)
+      if (sh == "heading") sub(/^#{2,6}[ \t]+/, "", line); else sub(/^(- )?\*\*/, "", line)
       if (ledger_entry_id(line) != "") { __lef_in = 0; __lef_stray = 1; __lef_reset = NR }
       else sh = ""
     }
@@ -452,7 +464,7 @@ backlog_entry_label_awk() {
   if (shape == "") return ""
   line = l
   if (shape == "heading") { sub(/^#{2,6}[ \t]+/, "", line) }
-  else                    { sub(/^- \*\*/, "", line); sub(/\*\*.*$/, "", line) }
+  else                    { sub(/^(- )?\*\*/, "", line); sub(/\*\*.*$/, "", line) }
   if (match(line, /^BL-[0-9]+/)) return substr(line, 1, RLENGTH)
   return ""
 }'

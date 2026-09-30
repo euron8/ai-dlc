@@ -132,6 +132,16 @@ printf '#!/bin/sh\necho s907 fixed\n' > "$DIST/core/scripts/s907-subject.sh"
 git -C "$DIST" add -A
 git -C "$DIST" commit -q -m 'fix: absorb PC-S907-NAMED-UPSTREAM-SURVIVES-A-REFUSED-RECEIPT'
 
+# THE NAMING COMMIT FOR THE RECEIPT-LESS PAIR. An open id-keyed entry with NO receipt reaches the
+# naming query through a `0/0` extraction row; without a commit naming one such entry the arm
+# asserting that has no subject. The same message names an ALL-CAPS HYPHENATED heading that is
+# NOT an entry id: it passes `named_absorbed()`'s local case guard (charset and a hyphen) and fails
+# the shared `ledger_entry_id()`, so the extraction filter is the only thing keeping it silent.
+printf '#!/bin/sh\necho receiptless fixed\n' > "$DIST/core/scripts/receiptless-subject.sh"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'fix: absorb PC-FIXTURE-NORECEIPT-NAMED-UPSTREAM' \
+  -m 'Also names FIXTURE-CAPS-HEADING-NOT-AN-ID, which is a heading and not an entry id.'
+
 # --- base: neither marker present ---
 printf '# SKILL\nrule one\nrule two\n' > "$SK"
 printf '0.100.0\n' > "$DIST/VERSION"
@@ -251,7 +261,8 @@ cat > "$LED" <<'LEDGER'
   verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_B"
 
 - **Entry D has no verify line.** A legacy prose entry, hand-review as today.
-  <br>No machine-runnable receipt; the closer must not emit a row for it.
+  <br>No machine-runnable receipt and a prose label, not an entry id, so the closer emits no row
+  for it: a receipt-less entry reaches only the naming query, and only when it is id-keyed.
 
 - **PC-FIXTURE-ENTRY-E-DECLARES-MANUAL — Entry E declares manual.** No mechanical predicate
   exists for this claim.
@@ -1250,6 +1261,42 @@ reference consumer, fifteen of its thirty-six live `sh` receipts with it. This o
 must read STILL-LIVE.
 
 verify: sh case 'a\b' in *\\*) exit 0 ;; *) exit 1 ;; esac
+
+---
+
+## PC-FIXTURE-NORECEIPT-NAMED-UPSTREAM — an open id-keyed entry with no receipt, named upstream
+
+No receipt line at all. Upstream history names this id, and that is the only mechanical signal
+this entry will ever get, so it must emit NAMED-UPSTREAM and nothing else.
+
+## PC-FIXTURE-NORECEIPT-NEVER-CITED — an open id-keyed entry with no receipt, never named
+
+No receipt line and no naming commit. It must emit no row of any kind.
+
+## FIXTURE-CAPS-HEADING-NOT-AN-ID — all caps and hyphenated, and still not an entry id
+
+No receipt line. A pre-base commit names this exact text, and the local charset guard in
+named_absorbed accepts it, so only the shared id rule at extraction keeps it silent.
+
+- **PC-FIXTURE-DASHED-ABOVE-BARE-BOLD** — a dashed entry directly above a bare-bold record
+  Its own receipt, and exactly one row. If the record below stops being a boundary, the record
+  receipt lands here as a second one.
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+**PC-FIXTURE-BARE-BOLD-RECORD** — a column-0 bold id with no leading dash, then an em dash
+A real record form on the reference consumer. It opens its own entry and carries its own
+receipt, which closes because theirs carries MARKER_B.
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_B"
+
+## PC-FIXTURE-BARE-BOLD-MENTION-HOST — a body line opening with a bolded id is not a record
+
+The next line starts at column 0 with a bold id and closes the bold before a comma, so it is a
+MENTION inside this entry, not a new one. The receipt after it belongs to this entry.
+**PC-FIXTURE-MENTIONED-IN-A-BODY**, reported from the consumer while annotating this entry.
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+**PC-FIXTURE-BARE-BOLD-EOL**
+The second spelling of the record: the bold id alone on its line, nothing after it.
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
 
 ---
 

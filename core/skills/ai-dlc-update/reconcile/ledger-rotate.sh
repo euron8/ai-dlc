@@ -220,7 +220,7 @@ SPLIT_FINDINGS="$(LC_ALL=C awk "$(ledger_entry_awk)$(ledger_entry_id_awk)${CLOSE
     if (shape == "") return "\001"
     line = l
     if (shape == "heading") { sub(/^#{2,6}[ \t]+/, "", line) }
-    else                    { sub(/^- \*\*/, "", line); sub(/\*\*.*$/, "", line) }
+    else                    { sub(/^(- )?\*\*/, "", line); sub(/\*\*.*$/, "", line) }
     return line
   }
   function report() {
