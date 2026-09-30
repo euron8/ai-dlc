@@ -1566,7 +1566,13 @@ reports STILL-LIVE rather than closing.
 Discharges the consumer entry `extensions/steps-domain/route-push.md` at pinned ledger line 265.
 
 
-verify: sh r=core/skills/ai-dlc/steps/route.md; v=$(LC_ALL=C awk '/^- .has_ready_sprint/{print;exit}' "$r"); [ -n "$v" ] || exit 1; s=$(sed 's/has_ready_sprint//g' <<<"$v"); grep -qi sprint <<<"$s" && grep -qEi 'unread|never read|not be read|without reading|do not read' "$r"
+**The receipt's arm 2 was replaced: it false-closed on half the fix.** Grepped over the whole file,
+`not be read` already matched `cannot be read (permission error…` elsewhere in `route.md`, so
+scoping line 18 alone exited 0. Arm 2 now reads only the Step 0 item that opens "If the snapshot
+exists but user input does NOT indicate a resume", and refuses `cannot` by a word boundary. Scored
+tip 0, base 1, line-18-only half fix 1 (the old receipt: 0), no-read-only half fix 1.
+
+verify: sh r=core/skills/ai-dlc/steps/route.md; [ -f "$r" ] || exit 9; v=$(LC_ALL=C awk '/^- .has_ready_sprint/{print;exit}' "$r"); [ -n "$v" ] || exit 1; s=$(sed 's/has_ready_sprint//g' <<<"$v"); grep -qi sprint <<<"$s" || exit 1; i=$(LC_ALL=C awk '/^### Step 0:/{z=1;next} /^### /{z=0} z&&/^[0-9]+\. /{p=0} z&&/^[0-9]+\. If the snapshot exists but user input does NOT indicate a resume/{p=1} p' "$r"); [ -n "$i" ] || exit 1; grep -qEi 'unread|never read|(^|[^a-z])not be read|without reading|do not read' <<<"$i"
 ## BL-028
 
 **Core's sprint-review has no rule for a decision branch that no live event exercises, so
