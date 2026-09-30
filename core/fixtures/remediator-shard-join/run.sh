@@ -243,7 +243,67 @@ p_filesguard() { # the SAME split dir joined in FILES mode -> refused: its secti
   RC=$?
   doc_refused "$w" "was split by section" && [ -f "$w/$RDREL/sections/1.md" ]
 }
-P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard"
+# ---- ABSOLUTE CITATIONS. A part citing its file by an absolute path under the state dir's parent
+# lands in the ledger's `<state-dir-name>/...` spelling; one under any other prefix still refuses.
+# The nested-state and trailing-slash worlds separate a strip of the STATE DIR'S PARENT from a strip
+# of the project root: the root is not the parent there, or is spelled with a `//`.
+abspart() { # <part dir> <cited path> -- one synthetic part citing one file
+  printf -- '- **disposition:** repaired\n- **edit:** `%s:3`\n- **derivation:** n/a (no factual claim)\n' "$2" > "$1/01.md"
+}
+joined_one() { # <out file> -- rc 0, one part, one writer, the record written
+  [ "$RC" -eq 0 ] && has "$JO" "(1 parts, 1 writers)" && [ -f "$1" ]
+}
+p_absroot() { # default layout, the part cites the file absolutely under the root -> JOINED
+  local w; w="$(new_world)"
+  drive "$w" Edit "$w/$REL/$S21" "$AG1"
+  abspart "$w/$SLOT/shards/stories-repair-p1" "$w/$REL/$S21"
+  run_join "$1" "$w"
+  joined_one "$(out_of "$w")"
+}
+p_absforeign() { # the same file cited under a FOREIGN root -> REFUSED as a claimed edit with no write
+  local w; w="$(new_world)"
+  drive "$w" Edit "$w/$REL/$S21" "$AG1"
+  abspart "$w/$SLOT/shards/stories-repair-p1" "/elsewhere/proj/$REL/$S21"
+  run_join "$1" "$w"
+  refused "$w" "01.md cites /elsewhere/proj/$REL/$S21, which no dispatched agent wrote"
+}
+p_absnested() { # AI_DLC_STATE_DIR=out/_bmad-output, the part cites absolutely under it -> JOINED
+  local w st; w="$(mktemp -d "$WORK/n.XXXXXX")" || return 1
+  st="$w/out/_bmad-output"
+  mkdir -p "$st/planning-artifacts/s305/stories" "$st/planning-artifacts/s305/shards/stories-repair-p1"
+  printf '# Pipeline Snapshot\n' > "$st/pipeline-snapshot.md"
+  cp "$HERE/seed.$S21" "$st/planning-artifacts/s305/stories/$S21"
+  AI_DLC_STATE_DIR=out/_bmad-output drive "$w" Edit "$st/planning-artifacts/s305/stories/$S21" "$AG1"
+  [ -f "$st/planning-artifacts/.artifact-writes.jsonl" ] || return 1   # the hook honoured the nested state dir
+  abspart "$st/planning-artifacts/s305/shards/stories-repair-p1" "$st/planning-artifacts/s305/stories/$S21"
+  AI_DLC_STATE_DIR=out/_bmad-output run_join "$1" "$w"
+  joined_one "$st/planning-artifacts/s305/stories-repair-p1.md"
+}
+p_absslash() { # AI_DLC_PROJECT_ROOT carries a trailing slash, the part cites absolutely -> JOINED
+  local w; w="$(new_world)"
+  drive "$w" Edit "$w/$REL/$S21" "$AG1"
+  abspart "$w/$SLOT/shards/stories-repair-p1" "$w/$REL/$S21"
+  run_join "$1" "$w/"
+  joined_one "$(out_of "$w")"
+}
+p_basecite() { # the control: a bare basename citation still resolves -> JOINED
+  local w; w="$(new_world)"
+  drive "$w" Edit "$w/$REL/$S21" "$AG1"
+  abspart "$w/$SLOT/shards/stories-repair-p1" "$S21"
+  run_join "$1" "$w"
+  joined_one "$(out_of "$w")"
+}
+p_unwrittenmsg() { # the UNWRITTEN line names the Bash cause and the re-dispatch, and never hand-assembly
+  local w l; w="$(new_world)"
+  drive "$w" Edit "$w/$REL/$S21" "$AG1"
+  part "$w" 01 2.1; part "$w" 03 3.1
+  run_join "$1" "$w"
+  l="$(grep -F "which no dispatched agent wrote" "$JO")" || return 1
+  grep -qF "written through Bash or another tool that reaches no Edit matcher" <<<"$l" \
+    && grep -qF "re-dispatch that shard writing through Edit, Write or MultiEdit" <<<"$l" \
+    && ! grep -qiE "hand.assembl" <<<"$l"
+}
+P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash basecite unwrittenmsg"
 
 # ---- A PART'S DERIVATION SURVIVES THE JOIN. The part's ```derived fence is copied into the joined
 # record, and the gate re-runs `validate-artifact-derivations.sh` over the sprint dir AFTER the
@@ -358,6 +418,43 @@ p_asmrefuse "$JOIN"  && ok "D3: --document over a document written in place afte
   || bad "D3: an assembly refusal did not stop the join before its record (rc=$RC): $(cat "$JO")"
 p_filesguard "$JOIN" && ok "D4: the same split dir joined WITHOUT --document -> REFUSED 'was split by section', nothing written" \
   || bad "D4: a files-mode join accepted a section-split repair dir (rc=$RC): $(cat "$JO")"
+p_absroot "$JOIN"    && ok "A1: a part citing its file ABSOLUTELY under the root -> JOINED, 1 part / 1 writer" \
+  || bad "A1: an absolute citation under the root did not join (rc=$RC): $(cat "$JO")"
+p_absforeign "$JOIN" && ok "A2: the same file cited under a FOREIGN root -> REFUSED 'which no dispatched agent wrote', nothing written" \
+  || bad "A2: a foreign-root citation was not refused as unwritten (rc=$RC): $(cat "$JO")"
+p_absnested "$JOIN"  && ok "A3: AI_DLC_STATE_DIR=out/_bmad-output, an absolute citation under it -> JOINED (the state dir's parent is stripped, not the root)" \
+  || bad "A3: a nested state dir's absolute citation did not join (rc=$RC): $(cat "$JO")"
+p_absslash "$JOIN"   && ok "A4: AI_DLC_PROJECT_ROOT with a trailing slash, an absolute citation -> JOINED" \
+  || bad "A4: a trailing-slash root's absolute citation did not join (rc=$RC): $(cat "$JO")"
+p_basecite "$JOIN"   && ok "A5: control -- a bare basename citation still resolves -> JOINED" \
+  || bad "A5: a basename citation stopped resolving (rc=$RC): $(cat "$JO")"
+p_unwrittenmsg "$JOIN" && ok "A6: the UNWRITTEN refusal names the Bash cause and the re-dispatch, and not hand-assembly" \
+  || bad "A6: the UNWRITTEN refusal line does not name the Bash cause and the re-dispatch, or names hand-assembly: $(cat "$JO")"
+
+# R1: the role file the remediator is bound to teaches the write tool and the citation form. Walked
+# up from this fixture in both layouts; install copies team-roles/ verbatim, so no render exists.
+ROLE=""
+_d="$HERE"
+while [ -n "$_d" ] && [ "$_d" != "/" ]; do
+  for _c in "$_d/core/team-roles/remediator.md" "$_d/.claude/team-roles/remediator.md"; do
+    [ -f "$_c" ] && { ROLE="$_c"; break 2; }
+  done
+  _d="$(dirname "$_d")"
+done
+if [ -z "$ROLE" ]; then
+  bad "R1: FIXTURE BROKEN -- remediator.md not found above $HERE in either layout"
+else
+  role_flat="$(tr '\n' ' ' < "$ROLE" | tr -s ' ')"
+  n_rel="$(grep -o "the project-relative path in the ledger's spelling" <<<"$role_flat" | grep -c .)" || n_rel=0
+  n_full="$(grep -c 'FULL path' "$ROLE")" || n_full=0
+  if grep -qF "every edit to a file under the sprint slot goes through Edit, Write or MultiEdit, never a Bash redirect" <<<"$role_flat" \
+     && [ "$n_rel" -eq 2 ] && [ "$n_full" -eq 0 ]; then
+    ok "R1: $ROLE teaches Edit/Write/MultiEdit for slot edits and the ledger-spelled citation at both sites (2), with no FULL path left"
+  else
+    bad "R1: $ROLE -- Edit/Write/MultiEdit sentence absent, or ledger-spelled citations=$n_rel (want 2), FULL path=$n_full (want 0)"
+  fi
+fi
+
 p_derivdoc "$DHOOK" && ok "D5: a part whose derivation names the DOCUMENT -> the capture hook accepts it (a stale control in the same world refused), the join assembles, the derivations re-run over the sprint dir -> rc 0, 2 reproduce" \
   || bad "D5: a document-naming part derivation did not survive capture, join and the gate re-run (hook rc=${CAP_RC:-?}, join rc=$RC, derivations rc=${DV_RC:-?}): $(cat "$CAP_ERR" "$JO" "$DV_OUT" 2>/dev/null)"
 p_derivsec "$DHOOK" && ok "D6: a part whose derivation names the SECTION FILE -> the capture hook refuses it 'reads the section copy'; written past the hook, the gate re-run after the join -> rc 1, 2 stale" \
@@ -474,6 +571,16 @@ mutant "JX6 the assembler's refusal ignored" "asmrefuse" \
 mutant "JX7 files mode accepts a section-split dir" "filesguard" \
   '  [ -e "$MANIFEST" ] && die' \
   '  false && die'
+# JX8/JX9: the absolute-citation strip removed, and widened to any `.../<state-dir-name>/...` --
+# the second acquits a foreign root, which only A2 sees.
+STRIP='    _t="${_t#"$STATE_PARENT"}"; _t="${_t#"$STATE_PARENT_P"}"'
+mutant "JX8 the state-parent strip removed" "absroot absnested absslash" \
+  "$STRIP" \
+  '    :'
+mutant "JX9 any .../<state-dir-name>/... rewritten to <state-dir-name>/..." "absforeign" \
+  "$STRIP" \
+  "$STRIP"'
+    case "$_t" in */"${STATE##*/}"/*) _t="${STATE##*/}/${_t#*/"${STATE##*/}"/}" ;; esac'
 
 echo
 if [ "$fails" -eq 0 ]; then echo "remediator-shard-join: PASS"; exit 0; fi

@@ -56,9 +56,9 @@
 # `agent_id` is the harness's attribution and no dispatched model is shown it, so the join
 # compares harness ids only with harness ids, and joins a part to a writer through the files the
 # part's `edit:` lines name. A cited token is a path-shaped run ending in a document extension
-# (`:<line>` suffixes and prose fall away), resolved to the written file it equals or is a
-# `/`-suffix of. Only the `edit:` line itself is read; a citation wrapped onto the next line is
-# not seen, and a file it names then reads as UNCITED -- a refusal, never an acquittal.
+# (`:<line>` suffixes and prose fall away); an absolute one under the state dir's parent is cut to
+# the ledger's spelling; then it resolves to the written file it equals or is a `/`-suffix of.
+# Only the `edit:` line is read; a wrapped citation names a file that reads UNCITED -- a refusal.
 #
 # "STRUCTURED IFF EVERY PART IS". Arm H of `validate-adversarial-convergence.sh` reads a record as
 # structured when each of `disposition:`, `edit:`, `derivation:` opens a line ANYWHERE in it, so a
@@ -183,6 +183,14 @@ JR_ROOT="${AI_DLC_PROJECT_ROOT:-}"
 
 _STATE_DIR="${AI_DLC_STATE_DIR:-_bmad-output}"
 case "$_STATE_DIR" in /*) STATE="$_STATE_DIR" ;; *) STATE="${JR_ROOT}/${_STATE_DIR}" ;; esac
+STATE="${STATE%/}"
+# The state dir's PARENT, logical and physical, slash-terminated: an absolute citation under it
+# is cut to the ledger's `<state-dir-name>/...` spelling (the token loop below). Never the root:
+# a nested or absolute state dir has a parent that is not the root. `pwd` collapses the `//` a
+# trailing-slash root leaves in STATE; `pwd -P` is the spelling a resolved symlink gives.
+STATE_PARENT="${STATE%/*}/"; STATE_PARENT_P="$STATE_PARENT"
+if _sl="$(cd "$STATE" 2>/dev/null && pwd)"; then STATE_PARENT="${_sl%/*}/"; fi
+if _sp="$(cd "$STATE" 2>/dev/null && pwd -P)"; then STATE_PARENT_P="${_sp%/*}/"; fi
 PA="${STATE}/planning-artifacts"
 LEDGER="${PA}/.artifact-writes.jsonl"
 SHARD_DIR="${PA}/s${SPRINT}/shards/${ARTIFACT}-repair-p${PASS}"
@@ -281,6 +289,7 @@ while IFS= read -r p; do
     }' "$p" | sort -u)"
   while IFS= read -r _t; do
     [ -n "$_t" ] || continue
+    _t="${_t#"$STATE_PARENT"}"; _t="${_t#"$STATE_PARENT_P"}"
     CITES="${CITES}C	$(basename "$p")	${_t}
 "
   done <<TOKEOF
@@ -331,7 +340,7 @@ JOINRES="$({ printf '%s\n' "$ROWS" | awk -F'\t' 'NF >= 2 { print "W\t" $1 "\t" $
 if [ -n "$JOINRES" ]; then
   while IFS='	' read -r kind a b c; do
     case "$kind" in
-      UNWRITTEN) refuse "${a} cites ${b}, which no dispatched agent wrote under ${APATH} in the window -- a claimed edit with no write (or a write the ledger failed to record)" ;;
+      UNWRITTEN) refuse "${a} cites ${b}, which no dispatched agent wrote under ${APATH} in the window -- the file was written through Bash or another tool that reaches no Edit matcher, or it was never written; re-dispatch that shard writing through Edit, Write or MultiEdit" ;;
       AMBIG)     refuse "${a} cites ${b}, which matches more than one written file (${c}); cite the path, not the basename" ;;
       UNCITED)   refuse "${a} was written in the window by ${b} and is cited by no shard record -- a missing shard" ;;
       DOUBLE)    refuse "${a} is cited by more than one shard record (${b}); one file belongs to one shard" ;;

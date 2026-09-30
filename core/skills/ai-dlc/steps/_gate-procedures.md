@@ -543,7 +543,8 @@ shard edits its files IN PLACE, never a copy. A finding citing more than one fil
 serial remediator dispatched after the join. A single-file artifact is sharded by section
 (below). Each shard's brief carries `shard: <i>/<N> <files>` and the parts path
 `_bmad-output/planning-artifacts/s<N>/shards/<artifact>-repair-p<M>/<i>.md`. Every `edit:` line
-cites the full path of each file it edits, and a citation must not wrap onto the next line. Beat-join
+cites the project-relative path in the ledger's spelling (`_bmad-output/planning-artifacts/s<N>/…`)
+of each file it edits, and a citation must not wrap onto the next line. Beat-join
 every part, then run the join
 `scripts/ai-dlc/join-remediator-shards.sh --sprint <N> --artifact <name> --pass <M> --artifact-path _bmad-output/planning-artifacts/s<N> --since <ISO> --until <ISO>`
 over the repair window. `--artifact-path` is the sprint slot `s<N>`, not `s<N>/stories`: a
@@ -552,7 +553,14 @@ under the slot must be cited on its `edit:` lines. Writes under `s<N>/shards/` a
 themselves and are not counted. It reads the harness write ledger and refuses (exit 2, `REFUSED:`,
 nothing written) if any file was written by two agents, if a written file is cited by no part,
 if a file is cited by two parts, or if any part is unstructured. Otherwise it writes the one
-repair record below. The serial cross-file remediator runs after that and APPENDS its entries
+repair record below. After a refusal naming a file `which no dispatched agent wrote`:
+
+1. Re-dispatch that shard, writing through Edit, Write or MultiEdit, and re-run the join. The
+   join lists every reason it refused; clear each one.
+2. Only if the operator approves in this session: hand-assemble the record, with a disclosure
+   header naming every unledgered file and the refusal's lines.
+
+ The serial cross-file remediator runs after that and APPENDS its entries
 to the joined record. The join never overwrites a record, so it is run before the serial
 remediator and never after it.
 

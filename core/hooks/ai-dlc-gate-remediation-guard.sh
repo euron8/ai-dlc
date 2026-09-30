@@ -377,6 +377,8 @@ record_verdict_write() { # $1 file_path -- silent no-op unless this is a verdict
 #
 # PreToolUse fires BEFORE the write, so a row is an ATTEMPT. The join refuses on an attempted
 # overlap, which is the conservative direction for a check whose subject is two writers.
+# A row is written only for an Edit, Write or MultiEdit the harness validated and passed to
+# PreToolUse; a Bash write (a redirect, `sed -i`, `tee`, a script's open) produces none.
 record_artifact_write() { # $1 file_path -- silent no-op unless this is a planning-artifact write
   case "$TOOL_NAME" in Edit|Write|MultiEdit) ;; *) return 0 ;; esac
   # The LOG_DIR prefix first, so a directory under planning-artifacts that happens to share the
