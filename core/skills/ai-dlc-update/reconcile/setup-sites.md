@@ -201,6 +201,7 @@ core_manifest:
   - core/fixtures/predicate-reclassification/**
   - core/fixtures/derivation-differential/**
   - core/fixtures/deploy-validate-smoke-classification/**
+  - core/fixtures/story-evidence-scaffold/**
   - core/fixtures/review-carry-over-clauses/**
   - core/fixtures/provenance-flagless-default/**
   - core/fixtures/provenance-not-accessible/**
