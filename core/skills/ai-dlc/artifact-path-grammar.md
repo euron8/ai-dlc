@@ -186,12 +186,15 @@ grammar itself prescribes. No expression can separate those two **from the name*
 the strength of the sentence above, which is true and was the wrong question. This grammar places
 `stories/` **only under `s<N>/`**, so a `stories/` directory with no `s<N>/` component above it
 cannot hold a conforming file *whatever the file is called*: everything in one predates the
-grammar, by construction, and its leading number is the sprint. Both the migration and the
-pre-push validator read it positionally, and the licence is corroborated rather than assumed — of
-the 786 basenames matching `story-<A>-<B>`, **all 786** have `A` inside the sprint range the tree
-actually uses (7–302) and `B` distributed as a story index. Control, in the form where the sprint
-is not in doubt: all **73** `story-S<N>-<M>` files carry that same structure in those same two
-positions.
+grammar, by construction. Both the migration and the pre-push validator read it positionally.
+**Position says the file is legacy; it does not say the leading number is the sprint.** In the
+pre-s199 era `story-<A>-<B>` opens with the carry-over ITEM or epic number, and an item number
+falls inside the same range the tree's sprints use, so "every `A` is in the sprint range" cannot
+separate the two readings. The file's own `**Sprint:**` header can: over the reference consumer's
+786 `story-<A>-<B>` files at the pre-migration ref, 319 headers agree with `A`, **146 name a
+different sprint** (every one lower than `A`; none where `A` is 199 or more), 6 are unreadable and
+315 are absent. So the migration reads `A` only where the header is absent or unreadable; a
+readable header naming another sprint wins, and the move is reported as `header>name`.
 
 What survives is per-FILE rather than per-directory, and it is what survives BOTH readings the
 migration attempts. A story path naming no sprint is not refused on its name alone: the migration
