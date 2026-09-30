@@ -447,7 +447,14 @@ else
   else
     # Look for Sprint N Deploy-Validate section in gate-log.md.
     # Use [[:space:]] instead of \b for BSD awk (macOS) word-boundary compatibility.
-    SPRINT_SECTION=$(awk "/^## Gate Log: Sprint ${SPRINT_N}([[:space:]]|$)/{found=1} found && /^## Gate Log: Sprint [0-9]/ && !/^## Gate Log: Sprint ${SPRINT_N}([[:space:]]|$)/{found=0} found{print}" "$GATE_LOG" 2>/dev/null | head -200)
+    #
+    # THE WHOLE SECTION, NEVER A PREFIX OR A SUFFIX OF IT. This line used to end in `| head -200`,
+    # and the awk already bounds the read: it stops at the next `## Gate Log: Sprint` header. The
+    # truncation therefore cut nothing a neighbour owned; it cut this sprint's own later lines, and
+    # the deploy-validate entry is written LAST. Measured on a consumer: a 432-line sprint section
+    # read 0 evidence tokens in its first 200 lines and 2 over the whole. A `tail -N` is the same
+    # defect from the other end, since the retro appends its own lines after deploy-validate's.
+    SPRINT_SECTION=$(awk "/^## Gate Log: Sprint ${SPRINT_N}([[:space:]]|$)/{found=1} found && /^## Gate Log: Sprint [0-9]/ && !/^## Gate Log: Sprint ${SPRINT_N}([[:space:]]|$)/{found=0} found{print}" "$GATE_LOG" 2>/dev/null)
 
     if [ -z "$SPRINT_SECTION" ]; then
       # Could not isolate this sprint's deploy-validate section in gate-log.md. SKIP rather than

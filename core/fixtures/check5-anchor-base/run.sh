@@ -685,10 +685,157 @@ else
   ok "MUTANT stories: widening the acquittal to a THIRD suffix leaves every world unchanged, so no battery of worlds can catch it, and the set-lock arm is what reads [test|spec|stories] and refuses"
 fi
 
+# ============================================================================
+# THE SECTION IS READ WHOLE. The isolation line used to end in `| head -200`, so a sprint whose
+# gate-log section ran past 200 lines FAILed Check 5 with its evidence sitting further down the
+# same section — and the deploy-validate entry is among the LAST things written to it. The awk
+# already stops at the next `## Gate Log: Sprint` header, so nothing needed truncating.
+#
+# TWO WORLDS AND ONE STRUCTURAL ARM, and each exists to kill one wrong fix the others pass:
+#
+#   L  a ~700-line Sprint 900 section whose only evidence sits at section line ~350 — outside the
+#      first 200 AND outside the last 200. The filing's own section read 2 evidence tokens in its
+#      last 200 lines and 0 in its first, so a `tail -200` "fix" passes that section and fails
+#      this one. It is the world that tells the truncation from the whole-section read.
+#   X  a Sprint 900 section with NO evidence followed by a Sprint 901 section WITH it, asked for
+#      900. Must FAIL. The wrong fix it kills reads the whole FILE rather than the section, which
+#      passes L as well as the correct fix does.
+#   S  the isolation line carries no `head`. A `head -2000` passes both worlds — no world short
+#      of 2000 lines can see it, and the next consumer section that grows past it is this defect
+#      again — so, as with the suffix set above, the property is read off the emitting line.
+# ============================================================================
+C5_SEC_FILL() {  # <from> <to> -> filler rows that carry no evidence token
+  awk -v a="$1" -v b="$2" 'BEGIN{for(i=a;i<=b;i++) printf "- note %d: remediation pass recorded, adjudicator PASS\n", i}'
+}
+write_long_gatelog() {
+  {
+    printf '## Gate Log: Sprint 900\n\n'
+    C5_SEC_FILL 3 349
+    printf '| Deploy Status Report | PASS | USER-CONFIRMED visual verification captured |\n'
+    C5_SEC_FILL 351 700
+  } > "$GATE_LOG"
+}
+write_cross_gatelog() {
+  {
+    printf '## Gate Log: Sprint 900\n\n| Gate | Result | Notes |\n|------|--------|-------|\n| Deploy Status Report | PASS | deploy completed |\n\n'
+    printf '## Gate Log: Sprint 901\n\n| Gate | Result | Notes |\n|------|--------|-------|\n| Deploy Status Report | PASS | USER-CONFIRMED visual verification captured |\n'
+  } > "$GATE_LOG"
+}
+
+battery_sec() {  # <script> -> "L:<pass|FAIL|none> X:<fails|PASSED|none>"
+  local S="$1" L t=""
+  c5_world longsec web/src/components/LongSection.jsx
+  write_long_gatelog
+  L="$(check5_line "$S")"
+  case "$L" in *PASS*) t="L:pass" ;; *FAIL*) t="L:FAIL" ;; *) t="L:none" ;; esac
+  c5_world crosssec web/src/components/CrossSection.jsx
+  write_cross_gatelog
+  L="$(check5_line "$S")"
+  case "$L" in *FAIL*) t="$t X:fails" ;; *PASS*) t="$t X:PASSED" ;; *) t="$t X:none" ;; esac
+  printf '%s' "$t"
+}
+EXPECTED_SEC="L:pass X:fails"
+
+# S — read off the ONE line that assigns SPRINT_SECTION. Exactly one such line, or the arm refuses:
+# zero means the assignment was reshaped and the arm would read nothing; two means the extraction
+# is not keyed on what it claims.
+sec_line_token() {  # <script> -> S:clean | S:head | S:lost
+  local n l
+  n="$(grep -c '^    SPRINT_SECTION=\$(' "$1")" || n=0
+  [ "$n" -eq 1 ] || { printf 'S:lost'; return; }
+  l="$(grep '^    SPRINT_SECTION=\$(' "$1")"
+  case "$l" in *'|'*head*) printf 'S:head' ;; *) printf 'S:clean' ;; esac
+}
+# The extractor's self-probe, both directions, on lines built here: a piped head must read S:head,
+# and the same line without it S:clean. Without this a case pattern that could never match would
+# read S:clean on every mutant as well as on the fix.
+SEC_PROBE="$WORK/sec-probe.sh"
+printf '    SPRINT_SECTION=$(awk "{print}" "$GATE_LOG" 2>/dev/null | head -2000)\n' > "$SEC_PROBE"
+SEC_P1="$(sec_line_token "$SEC_PROBE")"
+printf '    SPRINT_SECTION=$(awk "{print}" "$GATE_LOG" 2>/dev/null)\n' > "$SEC_PROBE"
+SEC_P2="$(sec_line_token "$SEC_PROBE")"
+if [ "$SEC_P1" != "S:head" ] || [ "$SEC_P2" != "S:clean" ]; then
+  echo "FIXTURE ERROR: the SPRINT_SECTION line extractor does not discriminate (piped probe read [$SEC_P1], unpiped read [$SEC_P2])" >&2
+  exit 2
+fi
+
+# --- 9. the shipping validator reads the whole section, and only this sprint's ---
+GOTSEC="$(battery_sec "$WORK/bin/validate-mandatory-rules.sh")"
+if [ "$GOTSEC" = "$EXPECTED_SEC" ]; then
+  ok "long-section: evidence at line ~350 of a ~700-line sprint section PASSes (outside both the first and the last 200), and a later sprint's evidence does not acquit this one"
+else
+  bad "long-section battery: expected [$EXPECTED_SEC], got [$GOTSEC]"
+fi
+
+# --- 10. the isolation line carries no head -------------------------------------
+GOTS="$(sec_line_token "$WORK/bin/validate-mandatory-rules.sh")"
+if [ "$GOTS" = "S:clean" ]; then
+  ok "the SPRINT_SECTION isolation line carries no head (extractor self-probed both ways) — a bounded prefix of the section cannot come back without failing here"
+else
+  bad "the SPRINT_SECTION isolation line reads [$GOTS], expected [S:clean] — a head truncates the sprint's own later lines, and the deploy-validate entry is among the last written"
+fi
+
+# --- 11. CONTROL for the section mutants: an unmutated copy with its siblings ---
+SECCTL="$WORK/mutsec-control"
+mkdir -p "$SECCTL"
+cp "$WORK/bin/validate-mandatory-rules.sh" "$WORK/bin/validate-audit-anchors.sh" \
+   "$WORK/bin/validate-retro-evidence.sh" "$WORK/bin/validate-cycle-commits.sh" "$SECCTL/"
+SECCGOT="$(battery_sec "$SECCTL/validate-mandatory-rules.sh")"
+if [ "$SECCGOT" = "$EXPECTED_SEC" ]; then
+  ok "CONTROL: an unmutated copy beside the section mutants PASSes the long world and FAILs the cross-sprint world"
+else
+  echo "FIXTURE ERROR: the unmutated section control does not reproduce — expected [$EXPECTED_SEC], got [$SECCGOT]." >&2
+  exit 2
+fi
+
+# mutsec <tag> <sed-program> <expected "battery S-token"> <claim>
+mutsec() {
+  local tag="$1" prog="$2" want="$3" claim="$4"
+  local D="$WORK/mutsec-$tag" got
+  mkdir -p "$D"
+  cp "$WORK/bin/validate-audit-anchors.sh" "$WORK/bin/validate-retro-evidence.sh" \
+     "$WORK/bin/validate-cycle-commits.sh" "$D/"
+  sed "$prog" "$WORK/bin/validate-mandatory-rules.sh" > "$D/validate-mandatory-rules.sh" \
+    || { bad "MUTANT $tag: sed DID NOT APPLY"; return; }
+  if cmp -s "$WORK/bin/validate-mandatory-rules.sh" "$D/validate-mandatory-rules.sh"; then
+    echo "FIXTURE ERROR: mutant '$tag' matched nothing — the SPRINT_SECTION line was reshaped." >&2
+    exit 2
+  fi
+  got="$(battery_sec "$D/validate-mandatory-rules.sh") $(sec_line_token "$D/validate-mandatory-rules.sh")"
+  if [ "$got" = "$want" ]; then
+    ok "MUTANT $tag: $claim"
+  elif [ "$got" = "$EXPECTED_SEC S:clean" ]; then
+    bad "MUTANT $tag SURVIVED: $claim — every cell unchanged"
+  else
+    bad "MUTANT $tag ($claim): expected [$want], got [$got]"
+  fi
+}
+
+# WRONG FIX 1: read the END of the section instead of its start. It passes the filing's own
+# section, whose two evidence tokens sit in its last 200 lines, and fails L.
+mutsec tail200 \
+  's@"\$GATE_LOG" 2>/dev/null)$@"$GATE_LOG" 2>/dev/null | tail -200)@' \
+  "L:FAIL X:fails S:clean" \
+  "reading the last 200 lines of the section misses evidence in its middle, and only the long world sees it"
+
+# WRONG FIX 2: grep the whole FILE. Every long section passes, and so does a sprint that carries
+# no evidence of its own beside a later sprint that does.
+mutsec wholefile \
+  's@^    SPRINT_SECTION=\$(awk .*@    SPRINT_SECTION=$(cat "$GATE_LOG" 2>/dev/null)@' \
+  "L:pass X:PASSED S:clean" \
+  "reading the whole gate log acquits Sprint 900 on Sprint 901's evidence, and only the cross-sprint world sees it"
+
+# WRONG FIX 3: raise the bound. Both worlds are unchanged — neither is 2000 lines — and that
+# blindness is the reason S exists; the structural arm is what reads the head.
+mutsec head2000 \
+  's@"\$GATE_LOG" 2>/dev/null)$@"$GATE_LOG" 2>/dev/null | head -2000)@' \
+  "L:pass X:fails S:head" \
+  "a larger head passes every world short of its bound, and only the structural arm refuses it"
+
 echo
 # Liveness: a harness that silently stopped running assertions reads exactly like a clean pass.
-if [ "$asserted" -ne 28 ]; then
-  echo "check5-anchor-base: FIXTURE ERROR — ran $asserted assertions, expected 28" >&2
+if [ "$asserted" -ne 34 ]; then
+  echo "check5-anchor-base: FIXTURE ERROR — ran $asserted assertions, expected 34" >&2
   exit 2
 fi
 if [ "$fails" -eq 0 ]; then
