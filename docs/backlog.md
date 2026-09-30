@@ -2473,7 +2473,17 @@ provenance-first rule. Filed rather than fixed because it is a different subsyst
 batch and needs a join rather than the table row it resembles — recorded here so the next author
 does not ship the one-line version and read its zero as clean.
 
-  verify: sh V=scripts/validate-shell-portability.sh; [ -f "$V" ] || exit 9; d=$(mktemp -d) || exit 9; mkdir -p "$d/scripts" "$d/core" || exit 9; cp "$V" "$d/scripts/" || exit 9; printf '0.0.0\n' > "$d/VERSION"; printf 'ok\n' > "$d/core/note.md"; printf 'x=1\nre="\\b(foo)\\b"\nif [[ $x =~ $re ]]; then :; fi\n' > "$d/probe.sh"; printf 'n=$(printf %%s a | grep -cE "\\bfoo\\b")\n' > "$d/exempt.sh"; printf 'mapfile -t arr < /dev/null\n' > "$d/control.sh"; git -C "$d" init -q && git -C "$d" add -A && git -C "$d" -c user.email=t@t -c user.name=t commit -qm s || exit 9; out=$(bash "$d/scripts/validate-shell-portability.sh" 2>&1); rc=$?; rm -rf "$d"; case "$out" in *control.sh*) ;; *) exit 9 ;; esac; case "$out" in *exempt.sh*) exit 1 ;; esac; case "$out" in *probe.sh*) ;; *) exit 1 ;; esac; [ "$rc" -ne 0 ] || exit 1; exit 0
+**LANDED (v0.666.0, verified PENDING).** All four claims resolved: the `\b` defect re-measured on
+bash 3.2.57 (and `\B \< \> \w \W \s \S \d` measured failing the same way, so the arm covers the
+set); the home is `scripts/validate-shell-portability.sh` as arm S12 with a `KIND=join` column
+rather than a table row; the join is two-pass and order-free; the grep/sed exemption is
+structural because the join key is `=~`, and the false-positive set over the tracked corpus is
+empty (48 raw `=~` lines, 32 code-site lines, 0 flagged). The receipt below was repaired: it now seeds
+a fixture-corpus file, which the validator's fail-closed guard requires, and seeds the consumer
+ABOVE its assignment. Scored: tip 0, base 1, `S12_PAT` made to match nothing 1; the old receipt
+exited 9 on tip.
+
+  verify: sh V=scripts/validate-shell-portability.sh; [ -f "$V" ] || exit 9; d=$(mktemp -d) || exit 9; mkdir -p "$d/scripts" "$d/core/fixtures/u" || exit 9; cp "$V" "$d/scripts/" || exit 9; printf '0.0.0\n' > "$d/VERSION"; printf 'ok\n' > "$d/core/note.md"; printf 'echo ok\n' > "$d/core/fixtures/u/seed.sh"; printf 'x=1\nif [[ $x =~ $re ]]; then :; fi\nre="\\b(foo)\\b"\n' > "$d/probe.sh"; printf 'n=$(printf %%s a | grep -cE "\\bfoo\\b")\ng="\\bfoo\\b"\ngrep -E "$g" f\n' > "$d/exempt.sh"; printf 'mapfile -t arr < /dev/null\n' > "$d/control.sh"; git -C "$d" init -q && git -C "$d" add -A && git -C "$d" -c user.email=t@t -c user.name=t commit -qm s || exit 9; out=$(bash "$d/scripts/validate-shell-portability.sh" 2>&1); rc=$?; case "$out" in *control.sh*) ;; *) exit 9 ;; esac; case "$out" in *exempt.sh*) exit 1 ;; esac; case "$out" in *"FAIL: S12:"*probe.sh*) ;; *) exit 1 ;; esac; [ "$rc" -ne 0 ] || exit 1; exit 0
 
 ## BL-129 — a change to an adjudication predicate has no mechanism that can see what it RECLASSIFIES
 

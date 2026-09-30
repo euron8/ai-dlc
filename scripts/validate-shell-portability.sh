@@ -258,10 +258,153 @@ S11_PAT="^[[:space:]]*(\\([[:space:]]*)?cd[[:space:]]"
 S11_SKIP="cd[[:space:]][^;]*(\\|\\||&&|\\\\$)"
 S11_WHY="an UNGUARDED \`cd\` in a fixture script. If the target does not exist the \`cd\` fails, the script keeps going, and every command below it -- \`git init\`, \`git config\`, \`git commit\` -- resolves against the PROCESS working directory instead of the sandbox. Measured on a throwaway repo: with the target absent, the following \`git config user.email\` overwrote the SURROUNDING repository's value and the subshell still exited 0, so nothing reported it. Under a linked worktree, where git exports \`GIT_DIR\` absolute, that surrounding repository is the real one. Write \`cd \"\$x\" || exit 2\` (or \`( cd \"\$x\" && … )\`), and where the subshell's output is discarded, read its exit status at the closing paren."
 
+# S12 IS THE FIRST ARM HERE THAT A LINE-ORIENTED `grep` CANNOT EXPRESS, AND THAT IS WHY IT CARRIES
+# A `KIND` COLUMN. bash's `[[ =~ ]]` hands its right-hand side to the platform's regcomp, and on
+# this machine that ERE knows none of the GNU escapes `grep -E` accepts. Measured, bash 3.2.57,
+# one invocation, input `ab a b 1 a-b`: `\b \B \< \> \w \W \s \S \d` EACH match nothing under
+# `[[ =~ ]]` while `/usr/bin/grep -cE` answers 1 for every one of them; `re='\bstub\b'` with
+# `[[ "stub = 1" =~ $re ]]` misses, inline and via a variable alike, against a control without
+# the boundary that matches. So a `\b` in a `grep -E` is CORRECT here and the same text in a
+# `[[ =~ ]]` is a predicate that is never true -- a check that examines nothing and reports a
+# clean tree. The motivating instance was a filed remedy, `STUB_MARKER='\b(...)\b'`, which built
+# as a mutant examined 0 markers over 393 files.
+#
+# THE OFFENDER IS TWO LINES, NOT ONE. The pattern is ASSIGNED to a variable at one line and
+# CONSUMED by `=~` at another -- 116 lines apart in the motivating case -- so a same-line grep for
+# `=~` and `\b` scored it as a non-instance (0 over 390 files, and a seeded two-line probe did not
+# fire it). S12 is a two-pass join per file: pass 1 collects every variable whose assigned value
+# carries an escape, pass 2 reports every `[[ … =~ … ]]` whose right-hand side carries one inline
+# or names a collected variable. Order-free: a consumer ABOVE its assignment is reported too.
+#
+# `S12_PAT` IS THE ESCAPE, and it is an ODD run of backslashes before the letter. `a\\bc` is a
+# correct regex for a literal backslash followed by `bc` -- measured, it matches `a\bc` -- and an
+# even run is therefore not the defect. A double-quoted value is shell-unescaped first (`"\\b"`
+# stores `\b`, measured), an unquoted one likewise, a single-quoted one is taken raw.
+#
+# FALSE-POSITIVE SET: EMPTY over the tracked shell corpus, measured at the build against a
+# positive control of 5 seeded offenders appended to the same run, every figure DERIVED by an
+# instrumented copy of the join rather than read off a grep. The census: 48 raw lines carry `=~`;
+# the join reads 32 of them (33 occurrences) as code inside `[[`, and the 16 it does not are 11
+# comment lines and 5 lines where `=~` sits inside a quoted sed/awk mutation string
+# (`check-15-bypass/run.sh`). None of the 33 is reported. Their right-hand sides name 19 distinct
+# variables: 14 assigned an escape-free literal, 4 (`i82_tok_re`, `i82_slot_re`, `i99_conceal_re`,
+# `i99_conceal_id_re`) assigned from `artifact-path-config.sh`, whose output carries no escape,
+# and `item`, a digit loop variable. Pass 1 taints 0 variables in the files that carry a `=~`
+# (4 elsewhere, in files with no `=~`, which the join skips whole). The narrowings:
+#   1. THE JOIN KEY IS `=~`, SO THE GREP/SED CONSUMERS ARE STRUCTURALLY OUT. `\b` in a `grep -E`
+#      is correct here (107 lines carry `\b`; the entry counted 17 load-bearing grep/sed sites) and
+#      no name list exempts them: a tainted variable that only ever feeds `grep` is never reported.
+#   2. A COMMAND SUBSTITUTION IS NOT A PATTERN. `id=$(grep -m1 -oE '\bID-[0-9]+\b' f)` stores
+#      grep's OUTPUT, and `[[ $line =~ $id ]]` below it matches a token, not a `\b`; an assignment
+#      whose value opens `$(` or a backtick taints nothing. Without this the arm convicts the grep
+#      consumer it exempts. (A grep COUNT tested as `[[ $n =~ ^[0-9]+$ ]]` never needed this: only
+#      the RIGHT-hand side of `=~` is read, so a variable on the left is not a pattern at all.)
+#   3. QUOTED TEXT AND COMMENTS ARE NOT CODE. Each line is scanned through a view that blanks
+#      quoted bodies and drops a `#` comment, so `echo "[[ \$x =~ \$g ]]"` and `# [[ $x =~ $g ]]`
+#      are not sites. That is what acquits the two quoted mutation strings in the census.
+# STATED HOLES, not claims of coverage: a variable assigned in one file and consumed in a file
+# that sources it; `read`/`printf -v`/array assignment; a heredoc body is read as code (which can
+# only over-report). Taint is flow-insensitive per file, so a variable later reassigned clean
+# stays tainted -- also over-report only.
+S12_PAT="(^|[^\\\\])(\\\\\\\\)*\\\\[bBwWsSdD<>]"
+S12_WHY="a GNU regex escape (\`\\b \\B \\< \\> \\w \\W \\s \\S \\d\`) reaching bash's \`[[ =~ ]]\`, inline or through a variable assigned it -- possibly many lines away. \`grep -E\` on this machine honours these; bash 3.2's \`=~\` hands the pattern to the platform ERE, which does not, so the test is NEVER true and whatever it guards examines nothing while reading as a pass. Measured: \`re='\\bstub\\b'; [[ \"stub = 1\" =~ \$re ]]\` misses where the same test without the boundary matches. Spell the boundary out -- \`(^|[^[:alnum:]_])stub([^[:alnum:]_]|\$)\` -- and \`[[:space:]]\`/\`[[:alnum:]_]\`/\`[0-9]\` for the others."
+# The join. Single-quoted, so it carries no apostrophe anywhere, comments included; the pattern
+# reaches it through ENVIRON, never `awk -v`, which would strip one level of its backslashes.
+# COST: a file carrying no `=~` is skipped whole, pass 1 reads only lines carrying a backslash
+# and pass 2 only lines carrying `=~`. Neither prefilter names an escape letter, so widening
+# S12_PAT cannot be silently narrowed by them. Measured in CPU-seconds, 2 interleaved reps against
+# a clean worktree of the base: base 3.68/3.73, with S12 4.12/4.11; the join alone is ~0.44s.
+# Wall clock was NOT usable -- on a loaded box the same base read 4.0s and 12.7s.
+S12_JOIN='
+function codeview(s,   i, n, c, st, out, prev) {
+  out = ""; st = ""; n = length(s); prev = " "
+  for (i = 1; i <= n; i++) {
+    c = substr(s, i, 1)
+    if (st == "") {
+      if (c == "\\") { out = out c substr(s, i + 1, 1); i++; prev = "x"; continue }
+      if (c == "#" && (prev == " " || prev == "\t")) break
+      if (c == SQ || c == "\"") st = c
+      out = out c; prev = c; continue
+    }
+    if (st == "\"" && c == "\\") { out = out "__"; i++; continue }
+    if (c == st) { st = ""; out = out c; prev = c; continue }
+    out = out "_"
+  }
+  return out
+}
+function unesc(s, p, stop,   i, n, c, d, v) {
+  v = ""; n = length(s)
+  for (i = p; i <= n; i++) {
+    c = substr(s, i, 1)
+    if (c == "\\") {
+      d = substr(s, i + 1, 1); i++
+      if (stop == "\"" && index("\\\"$`", d) == 0) v = v c
+      v = v d; continue
+    }
+    if (stop == "\"" && c == "\"") break
+    if (stop == " " && index(" \t;&|)", c)) break
+    v = v c
+  }
+  return v
+}
+function flush(   i, s, cv, rest, off, tok, name, vpos, c1, e, val, at, pre, tail, q, rhs, hit, t, r) {
+  split("", tainted)
+  if (!hassite) { nbuf = 0; return }
+  for (i = 1; i <= nbuf; i++) {
+    s = buf[i]
+    if (index(s, "\\") == 0) continue
+    cv = codeview(s); rest = cv; off = 0
+    while (match(rest, ASSIGN_RE)) {
+      tok = substr(rest, RSTART, RLENGTH)
+      vpos = off + RSTART + RLENGTH
+      off = off + RSTART + RLENGTH - 1; rest = substr(cv, off + 1)
+      if (tok ~ /^[^A-Za-z_]/) tok = substr(tok, 2)
+      name = substr(tok, 1, length(tok) - 1)
+      c1 = substr(s, vpos, 1)
+      if (c1 == "=" || c1 == "~") continue
+      if (c1 == SQ) { e = index(substr(s, vpos + 1), SQ); val = (e ? substr(s, vpos + 1, e - 1) : substr(s, vpos + 1)) }
+      else if (c1 == "\"") val = unesc(s, vpos + 1, "\"")
+      else if (substr(s, vpos, 2) == "$(" || c1 == "`") val = substr(s, vpos)
+      else val = unesc(s, vpos, " ")
+      if (index(val, "$(") || index(val, "`")) continue
+      if (val ~ ESC) tainted[name] = 1
+    }
+  }
+  for (i = 1; i <= nbuf; i++) {
+    s = buf[i]
+    if (index(s, "=~") == 0) continue
+    cv = codeview(s); rest = cv; off = 0
+    while ((at = index(rest, "=~")) > 0) {
+      at = off + at
+      pre = substr(cv, 1, at - 1)
+      off = at + 1; rest = substr(cv, off + 1)
+      if (index(pre, "[[") == 0) continue
+      tail = substr(cv, at + 2); q = index(tail, "]]")
+      rhs = (q ? substr(s, at + 2, q - 1) : substr(s, at + 2))
+      hit = 0
+      if (rhs ~ ESC) hit = 1
+      t = rhs
+      while (match(t, /[$][{]?[A-Za-z_][A-Za-z0-9_]*/)) {
+        r = substr(t, RSTART, RLENGTH); gsub(/[${]/, "", r)
+        if (r in tainted) hit = 1
+        t = substr(t, RSTART + RLENGTH)
+      }
+      if (hit) { print fname ":" i ":" s; break }
+    }
+  }
+  nbuf = 0; hassite = 0
+}
+BEGIN { SQ = sprintf("%c", 39); ESC = ENVIRON["S12_ESC"]
+        ASSIGN_RE = "(^|[^-A-Za-z0-9_$.{/])[A-Za-z_][A-Za-z0-9_]*=" }
+FNR == 1 && nbuf > 0 { flush() }
+{ buf[FNR] = $0; nbuf = FNR; fname = FILENAME; if (index($0, "=~")) hassite = 1 }
+END { if (nbuf > 0) flush() }
+'
+
 # Only S1 subtracts. Declared explicitly rather than defaulted in a loop, because `set -u`
 # turns a missing one into an abort mid-scan, and an aborted scan prints fewer findings than
 # a clean one rather than more.
-S2_SKIP=""; S3_SKIP=""; S4_SKIP=""; S5_SKIP=""; S6_SKIP=""; S8_SKIP=""; S9_SKIP=""
+S2_SKIP=""; S3_SKIP=""; S4_SKIP=""; S5_SKIP=""; S6_SKIP=""; S8_SKIP=""; S9_SKIP=""; S12_SKIP=""
 # S7's one measured false positive is PYTHON, not awk. Several shell files here embed a
 # heredoc'd python program, and `re.sub(r"...", r"\1...")` is correct there -- python has
 # backreferences and awk does not. The subtraction is on the LANGUAGE (`re.` qualifies the
@@ -269,7 +412,7 @@ S2_SKIP=""; S3_SKIP=""; S4_SKIP=""; S5_SKIP=""; S6_SKIP=""; S8_SKIP=""; S9_SKIP=
 # lands and an awk backreference in the same file is still caught.
 S7_SKIP="re\\.g?sub\\("
 
-ARMS="S1 S2 S3 S4 S5 S6 S7 S8 S9 S10 S11"
+ARMS="S1 S2 S3 S4 S5 S6 S7 S8 S9 S10 S11 S12"
 
 # Two more per-arm columns, declared for EVERY arm for the reason the SKIP block above gives:
 # under `set -u` a missing one aborts the scan mid-way, and an aborted scan prints FEWER
@@ -291,9 +434,14 @@ ARMS="S1 S2 S3 S4 S5 S6 S7 S8 S9 S10 S11"
 S1_CORPUS=shell; S2_CORPUS=shell; S3_CORPUS=shell; S4_CORPUS=shell
 S5_CORPUS=shell; S6_CORPUS=shell; S7_CORPUS=shell; S8_CORPUS=instr
 S9_CORPUS=shell; S10_CORPUS=shell; S11_CORPUS=fixture
+S12_CORPUS=shell
 S1_COMMENTS=skip; S2_COMMENTS=skip; S3_COMMENTS=skip; S4_COMMENTS=skip
 S5_COMMENTS=skip; S6_COMMENTS=skip; S7_COMMENTS=skip; S8_COMMENTS=keep
-S9_COMMENTS=skip; S10_COMMENTS=skip; S11_COMMENTS=skip
+S9_COMMENTS=skip; S10_COMMENTS=skip; S11_COMMENTS=skip; S12_COMMENTS=skip
+# KIND. `line` is one `grep -E` per line through `scan`; `join` is S12's two-pass program over
+# whole files through `scan_join`, which the PATTERN still drives, so every arm's PAT cell is live.
+S1_KIND=line; S2_KIND=line; S3_KIND=line; S4_KIND=line; S5_KIND=line; S6_KIND=line
+S7_KIND=line; S8_KIND=line; S9_KIND=line; S10_KIND=line; S11_KIND=line; S12_KIND=join
 
 # Corpus: every tracked shell file except this one and its own mutation battery.
 #
@@ -338,6 +486,20 @@ scan() { # scan <pattern> <skip-pattern-or-empty> <skip|keep comments> <file...>
   [ -n "$skip" ] && out="$(grep -vE "$skip" <<<"$out")"
   printf '%s' "$out"
 }
+# The same contract as `scan`, same `file:line:text` output, same comment and skip filters
+# applied after -- so a `join` arm is read by the loops below exactly as a `line` arm is.
+scan_join() { # scan_join <escape-pattern> <skip-pattern-or-empty> <skip|keep comments> <file...>
+  local pat="$1" skip="$2" comments="$3"; shift 3
+  local out
+  out="$(S12_ESC="$pat" awk "$S12_JOIN" "$@" 2>/dev/null)"
+  [ "$comments" = "skip" ] && out="$(grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' <<<"$out")"
+  [ -n "$skip" ] && out="$(grep -vE "$skip" <<<"$out")"
+  printf '%s' "$out"
+}
+run_arm() { # run_arm <kind> <pattern> <skip> <comments> <file...>
+  local k="$1"; shift
+  if [ "$k" = "join" ]; then scan_join "$@"; else scan "$@"; fi
+}
 
 # --- self-probes, before the corpus --------------------------------------------------------
 probe="$(mktemp -d)"; trap 'rm -rf "$probe"' EXIT
@@ -358,6 +520,13 @@ git grep -nE '\bMODEL_MAX\b' -- core/
 awk '{ sub(/[[:space:]]*[—–-][[:space:]].*$/, "", s) }' f
   /^#{2,4}[ \t]+[0-9]+[ \t]*[.—]/ { print }
   cd "$REPO"
+if [[ $x =~ $early ]]; then :; fi
+re="\b(foo)\b"
+if [[ $x =~ $re ]]; then :; fi
+if [[ $x =~ \bfoo\b ]]; then :; fi
+  [[ "$line" =~ ${wre} ]] && echo y
+  local wre=^\\<local
+early='\<stub\>'
 BADEOF
 cat > "$probe/good.sh" <<'GOODEOF'
 sed -i.bak 's/a/b/' f && rm -f f.bak
@@ -387,14 +556,29 @@ ok "prose naming a class in a message ([…]) is a string, not a class"
 SECTION_RE = re.compile(r'^## Sprint (\d+) [—\-]+ (.+)')
 # mapfile and declare -A and setsid named in a comment are prose, not code
 #   cd "$REPO" named in a comment is prose, not an unguarded chdir
+if [[ $x =~ ^a ]]; then :; fi
+[[ "$x" =~ "a.b" ]] && echo lit
+pat='^[0-9]+$'
+[[ $n =~ $pat ]] || n=0
+n=$(printf %s a | grep -cE "\bfoo\b")
+[[ $n =~ ^[0-9]+$ ]] || n=0
+id=$(grep -m1 -oE '\bID-[0-9]+\b' f)
+[[ $line =~ $id ]] && echo seen
+g='\bfoo\b'
+grep -E "$g" f
+# [[ $x =~ $g ]] named in a comment is prose
+echo "[[ \$x =~ \$g ]] in a string is prose"
+lb='a\\bc'
+[[ $x =~ $lb ]] && echo literal-backslash
 GOODEOF
 
 for a in $ARMS; do
   eval "p=\$${a}_PAT"
   eval "sk=\$${a}_SKIP"
   eval "cm=\$${a}_COMMENTS"
-  hit_bad="$(scan "$p" "$sk" "$cm" "$probe/bad.sh")"
-  hit_good="$(scan "$p" "$sk" "$cm" "$probe/good.sh")"
+  eval "kd=\$${a}_KIND"
+  hit_bad="$(run_arm "$kd" "$p" "$sk" "$cm" "$probe/bad.sh")"
+  hit_good="$(run_arm "$kd" "$p" "$sk" "$cm" "$probe/good.sh")"
   if [ -z "$hit_bad" ]; then
     err "$a's own probe did not fire: the seeded offender was not reported. Its zero over the corpus below would be a scan that cannot find anything, which reads exactly like a clean tree."
   elif [ -n "$hit_good" ]; then
@@ -453,9 +637,9 @@ if [ "$dead_corpus" -ne 0 ]; then
 else
   for a in $ARMS; do
     eval "p=\$${a}_PAT"; eval "w=\$${a}_WHY"; eval "sk=\$${a}_SKIP"
-    eval "cm=\$${a}_COMMENTS"; eval "cp_kind=\$${a}_CORPUS"
+    eval "cm=\$${a}_COMMENTS"; eval "cp_kind=\$${a}_CORPUS"; eval "kd=\$${a}_KIND"
     eval "files=\$FILES_${cp_kind}"
-    hits="$(scan "$p" "$sk" "$cm" $files)"
+    hits="$(run_arm "$kd" "$p" "$sk" "$cm" $files)"
     if [ -n "$hits" ]; then
       err "$a: $w"
       printf '%s\n' "$hits" | sed 's/^/    /' >&2
@@ -471,6 +655,6 @@ fi
 n_arms=0
 for a in $ARMS; do n_arms=$((n_arms + 1)); done
 if [ "$fail" -eq 0 ]; then
-  say "validate-shell-portability: PASS -- $n_shell shell file(s) + $n_instr core file(s) + $n_fixture fixture shell file(s), $n_arms arms (S1 sed -i, S2 mapfile, S3 declare -A, S4 setsid, S5/S6 backslash-s, S7 awk backreference, S8 unquoted rev-path, S9 git-grep ERE escape, S10 multibyte bracket class, S11 unguarded cd in a fixture script), every arm probed in both directions."
+  say "validate-shell-portability: PASS -- $n_shell shell file(s) + $n_instr core file(s) + $n_fixture fixture shell file(s), $n_arms arms (S1 sed -i, S2 mapfile, S3 declare -A, S4 setsid, S5/S6 backslash-s, S7 awk backreference, S8 unquoted rev-path, S9 git-grep ERE escape, S10 multibyte bracket class, S11 unguarded cd in a fixture script, S12 GNU escape reaching [[ =~ ]]), every arm probed in both directions."
 fi
 exit "$fail"
