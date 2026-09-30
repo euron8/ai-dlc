@@ -24522,3 +24522,404 @@ local case guard in place of `ledger_entry_id`, the `0/0` skip removed, the bare
 removed, the label strip left narrow, and the shape loosened.
 
 verify: sh R="$PWD/core/skills/ai-dlc-update/reconcile"; [ -f "$R/ledger-reverify.sh" ] && [ -f "$R/lib.sh" ] || exit 9; d=$(mktemp -d) || exit 9; trap 'rm -rf "$d"' EXIT; D="$d/dist"; C="$d/cons"; L="$C/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; mkdir -p "$D/core" "${L%/*}" || exit 9; git init -q "$D" || exit 9; g(){ git -C "$D" -c user.email=r@r -c user.name=r "$@"; }; echo a > "$D/core/x.md"; g add -A && g commit -qm 'fix: absorb PC-R1-NORECEIPT' -m 'names CAPS-NOT-AN-ID too' || exit 9; b=$(g rev-parse HEAD); echo 'a MB' > "$D/core/x.md"; g commit -qam t || exit 9; t=$(g rev-parse HEAD); printf '%s\n' '# L' '' '## PC-R1-NORECEIPT — named, no receipt' '' '## PC-R6-NEVER — never named, no receipt' '' '## CAPS-NOT-AN-ID — named, not an id' '' '- **PC-R2-DASHED** — above the record' '  verify: theirs_lacks core/x.md "ZZ"' '**PC-R3-BARE** — the record' 'verify: theirs_lacks core/x.md "MB"' '' '## PC-R4-HOST — host' '**PC-R5-MENTION**, reported from x' 'verify: theirs_lacks core/x.md "ZZ"' > "$L" || exit 9; o=$(cd "$C" && bash "$R/ledger-reverify.sh" "$D" "$b" "$C" "$t" 2>/dev/null); n(){ printf '%s\n' "$o" | awk -F'\t' -v l="$1" '$2==l{c++} END{print c+0}'; }; [ "$(n PC-R2-DASHED)" -ge 1 ] || exit 9; r1=$(printf '%s\n' "$o" | awk -F'\t' '$2=="PC-R1-NORECEIPT" && $1=="NAMED-UPSTREAM" && $3 ~ /carries NO verify: receipt/{c++} END{print c+0}'); [ "$r1" = 1 ] && [ "$(n PC-R1-NORECEIPT)" = 1 ] && [ "$(n PC-R6-NEVER)" = 0 ] && [ "$(n CAPS-NOT-AN-ID)" = 0 ] && [ "$(n PC-R2-DASHED)" = 1 ] && [ "$(n PC-R3-BARE)" = 1 ] && [ "$(n PC-R4-HOST)" = 1 ] && [ "$(n PC-R5-MENTION)" = 0 ] && exit 0; exit 1
+## BL-238 — the consumer ledger's `theirs`-ref receipt grammar cannot key on an ARM's body, so a receipt written to ask a behavioural question is satisfied by a comment
+
+**LANDED (v0.673.0, verified 72b1ea2a).** Closed by adjudication, no build: the engine exports `$THEIRS_TREE` to every `sh` receipt since 0.567.0 (`60a2beac`), so a receipt can run its subject at theirs. Driven through `ledger-reverify.sh` against a fixed and a guard-deleted tree: CLOSE-CANDIDATE and STILL-LIVE.
+
+**Found 2026-09-11** while closing a consumer candidate whose own receipt was built to avoid an
+unfalsifiable predicate and landed on a different unfalsifiable one. The subject is the RECEIPT
+GRAMMAR, not that candidate — its fix has landed.
+
+**THE MEASUREMENT.** The candidate's receipt asked the behavioural question *does an entry-keyed
+subtraction appear anywhere inside this arm* by windowing the arm with `awk` and grepping the
+window for a variable name:
+
+```
+git -C "$DIST" show "${THEIRS}:core/scripts/audit-layer-debt.sh" \
+  | awk '/^undeclared = \[\]/,/^if undeclared:/' | grep -q 'owed_entries' && exit 1 || exit 0
+```
+
+Scored against five candidates built as copies, each asserted APPLIED by `cmp -s` before its
+verdict was read, it **CLOSED on four things that are not the fix**: a one-line COMMENT naming
+`owed_entries` inside the window (behaviour unchanged, 32 reported before and after); the arm
+SUPPRESSED entirely, which reports `UNDECLARED (0)` forever and loses every real obligation; a
+subtraction keyed on the `(clause, entry)` PAIR, which is what the filed remedy's wording
+literally says and leaves the defect live on any row whose clause differs from the declaring
+row's; and the variable name inside a STRING LITERAL in the report payload. It correctly stayed
+open on a pure reflow. **And it did NOT close on the real fix as first written**, because the
+derivation sat one line above the `awk` window — a correct fix reading as unlanded.
+
+**THE GENERALISATION, AND IT IS WHY THIS IS FILED.** A consumer receipt resolves against a
+`theirs` ref, so `git show | grep` is the only verb available to it: it cannot execute the
+subject, because the subject at that ref is not installed anywhere. Every receipt asking a
+BEHAVIOURAL question through that grammar is therefore a text search, and
+`verification-discipline.md`'s "a whole-file `grep -qF` is satisfied by a comment" applies to a
+WINDOWED grep exactly as it does to a whole file — narrowing the window shrinks the set of
+satisfying comments without emptying it. `core/fixtures/ledger-reverify-unfalsifiable/` already
+measures the mirror error (a predicate that can never go green); this is the direction that goes
+green wrongly, and nothing measures it.
+
+**What the fix is NOT.** Not a wider window — the comment lives inside any window containing the
+line. Not a "no comment lines" filter either: two of the four non-fixes carry no comment at all.
+The shape that discriminated all six candidates in this measurement is a receipt that RUNS the
+subject against a two-row synthetic register and reads which rows it reports, which the ledger
+grammar cannot express at a ref. So the candidate fix is upstream: either the ledger engine gains
+a verb that can drive an installed subject at HEAD rather than reading a ref, or the grammar grows
+a way to ask a structural question (an AST predicate over the extracted python) that a comment
+cannot answer. Both are engine changes, which is why this is an entry and not an edit.
+
+**Receipt limits, stated.** The receipt below scores the SUBJECT of the closed candidate, not the
+grammar defect — it drives `audit-layer-debt.sh` against a synthetic register in which one entry
+declares its `owed` on a LATER row and another declares none, and requires the first to be cleared
+while the second is still reported. That is the discriminating pair, and it refuses (exit 9) if the
+arm reports neither, so a disarmed subject cannot read as a fix. **It does not and cannot score the
+grammar defect**, because the grammar's own limitation is that a receipt cannot execute a ref;
+closing this needs a stated finding about what the ledger engine gained, and no `sh` predicate here
+can observe that. Exit 9 if the subject is absent.
+
+verify: sh s=core/scripts/audit-layer-debt.sh; [ -f "$s" ] || exit 9; d=$(mktemp -d) || exit 9; printf "%s\n" "{\"clause\":\"LC-E4\",\"entry\":\"e/x.md\",\"subject_digest\":\"0000000000000000000000000000000000000000\",\"verdict\":\"still-additive\",\"recorded_utc\":\"2026-01-01T00:00:00Z\",\"reason\":\"The split remains deferred to a later pull.\"}" "{\"clause\":\"LC-O15\",\"entry\":\"e/x.md\",\"subject_digest\":\"1111111111111111111111111111111111111111\",\"verdict\":\"still-additive\",\"recorded_utc\":\"2026-01-02T00:00:00Z\",\"reason\":\"declaring it\",\"owed\":{\"id\":\"OWED-1\",\"what\":\"w\"}}" "{\"clause\":\"LC-E4\",\"entry\":\"e/y.md\",\"subject_digest\":\"0000000000000000000000000000000000000000\",\"verdict\":\"still-additive\",\"recorded_utc\":\"2026-01-01T00:00:00Z\",\"reason\":\"The split remains deferred to a later pull.\"}" > "$d/r.jsonl" || exit 9; o=$(bash "$s" --register "$d/r.jsonl" --json 2>/dev/null) || { rm -rf "$d"; exit 9; }; rm -rf "$d"; u=$(printf "%s" "$o" | python3 -c "import json,sys; print(\" \".join(r[\"entry\"] for r in json.load(sys.stdin)[\"undeclared\"]))") || exit 9; case " $u " in *" e/y.md "*) : ;; *) exit 9 ;; esac; case " $u " in *" e/x.md "*) exit 1 ;; esac; exit 0
+
+## BL-091 — untitled `## BL-NNN` headings give a trailing-space extractor zero bytes, which reads as a close
+
+**LANDED (v0.673.0, verified 72b1ea2a).** The five bare headings are titled in this close; the file now holds 0 untitled and 46 titled headings, and the receipt exits 0.
+
+**52 of the 64 headings in this file carry no title, so an extractor keyed on `## BL-0NN ` gets
+zero bytes — and an empty script exits 0, which this ledger reads as "the fix is present".**
+The heading grammar is inconsistent: `docs/backlog.md` currently holds **52** headings matching
+`^## BL-[0-9]+[ \t]*$` and **12** matching `^## BL-[0-9]+[ \t]+`, against a total of 64 (all
+three derived in one invocation, so the partition is closed). An extractor written against a
+titled entry and keyed on a trailing space therefore returns 4151 bytes for `BL-090` and **0
+bytes** for `BL-066`, silently, for four-fifths of the corpus.
+
+**The failure is a FALSE CLOSE, which is the direction that loses data.** A zero-byte extract
+is a valid empty shell program; it parses, runs, and exits 0. Anything that pipes an extracted
+entry into `sh` — which is what a receipt-repair or an audit pass does — reads that 0 as
+CLOSE-CANDIDATE and proposes retiring a live entry. Measured during the batch-10 triage sweep:
+one hand hit it and caught it only because it had run a byte-count control; a second hand
+reproduced it independently and established the 52/12 split.
+
+**The shipping readers are NOT affected, and that is what makes this latent rather than broken.**
+`backlog-reverify.sh` extracts labels with `match(line, /^BL-[0-9]+/)` after stripping the
+heading marker, and `backlog-rotate.sh` goes through `ledger_entry_shape()`; neither keys on a
+trailing space. So no gate fails today and nothing will start failing on its own — the cost is
+paid by the next ad-hoc extractor, which is exactly the reader no mechanism watches.
+
+**The fix is to make the grammar uniform** by giving every entry a title, which removes the
+ambiguity rather than documenting it, and is the `remove the affordance` form this repo prefers
+over a check that looks for the mistake afterwards.
+
+verify: sh L=docs/backlog.md; [ -f "$L" ] || exit 9; t="$(grep -cE '^## BL-[0-9]+' "$L")"; [ "$t" -gt 0 ] || exit 9; ttl="$(grep -cE '^## BL-[0-9]+[ \t]+[^ \t]' "$L")"; bare="$(grep -cE '^## BL-[0-9]+[ \t]*$' "$L")"; [ "$((ttl + bare))" -eq "$t" ] || exit 9; [ "$bare" -eq 0 ]
+
+## BL-085 — `extends:` cannot express a multi-span dependency, so an additive entry falls back to file grain and nothing says so
+
+**LANDED (v0.672.0, verified 9a9b8146).** `extends:` takes several anchors on every kind but `qualifier`; the linter and `layer-drift.sh` check every span, the two new loops read staged files rather than here-strings. The receipt exits 0 on this tree and 1 on 8e697587.
+
+`LC-E11` permits exactly one anchor, and the reasoning is sound: two anchors mean two spans and a
+drift row could no longer say which one moved. The consequence is that an entry whose dependency
+is genuinely multi-span has no way to declare it, falls back to whole-file drift, and is
+indistinguishable from an entry whose author never thought about the grain.
+
+**Measured on the reference consumer, twice, on consecutive pulls.** Four `kind: check` entries —
+`attribution-provenance`, `gate-validation-domain`, `gate-validation-push`, `validator-honesty` —
+report `HARD-LAYER-ADJUDICATION-MISSING` on every pull that touches `steps/gate-validation.md`,
+because none declares `extends:` and each one's drift subject is therefore the whole file. Fresh
+digests each pull spend the prior verdicts, so that consumer records four near-identical
+adjudications per pull whose reasoning is always "core's change was confined to Check N and this
+entry adds checks that do not restate it".
+
+**The obvious anchor is worse than none, and that is the finding rather than the recurrence.**
+`#Validation Checklist` is 2352 of core's 2560 lines, so declaring it narrows the subject by 6%
+and silences `## Gate-type manifest` (94 lines, decides WHEN the entry's check loads) and
+`## Consumer-catalog crosswalk` (49 lines, governs how it is numbered) — the two spans an additive
+check entry most needs re-reading against. A consumer reaching for the anchor that looks right
+would trade 6% fewer re-reads for the drift that would actually break them, and `LC-E11` accepts
+it silently: its arms are structural, so a wrong anchor resolves and reports clean forever.
+
+The prose half is landed with this entry — `extensions/README.md` now states that file grain is
+correct for a multi-span entry rather than a mis-declaration, with the arithmetic. What is NOT
+landed is the ability to say it: the declaration still cannot express the dependency, so the
+worklist cost stands and the distinction between "correctly file-grained" and "never declared" is
+still invisible to every reader.
+
+**FIXED, pending its bootstrapping release.** `extends:` takes several comma-separated anchors on
+every kind except `qualifier`, which keeps exactly one. The linter checks every declared span,
+and `layer-drift.sh` compares every span. The old `shadow_parts | head -1` would have let a second
+span move in silence, so relaxing E11 alone would have been a regression. The drift row names
+which span moved, and an entry with one span renamed and another rewritten in the same range
+draws both ANCHOR-MISSING and ANCHOR-DRIFT, so the rewrite stays adjudicable. The README, the LC-E11 bullet and the contract's normative text now say this.
+Fixtures: `layer-qualifier-grain` (m7, m8) and `layer-extends-grain` (m5).
+
+**THE COUNT RECEIPT WAS CLOSABLE BY A RENAME, SO IT IS REPLACED.** Renaming `ext_n` satisfied
+it with nothing changed. The receipt below drives both real programs. It builds a three-section
+distribution with two commits and a consumer holding a two-anchor `step-domain` entry, a
+two-anchor qualifier, and a step-domain whose SECOND anchor does not resolve. It requires the
+linter to accept the first, reject the qualifier on the kind, and report the second anchor. It
+then requires the classifier to report ANCHOR-DRIFT naming `Beta review`, the second declared
+span, for the multi-span entry. Scored: tip **0**, `origin/main` `2e7c227c` **1**, tip with the
+classifier reading only the first span **1**, tip with the linter checking only the first span
+**1**. The old receipt scored 0 on tip and 1 on base.
+
+verify: sh V=core/scripts/validate-layer-entries.sh; D=core/skills/ai-dlc-update/reconcile/layer-drift.sh; C=core/skills/ai-dlc/layer-contract.yaml; [ -f "$V" ] && [ -f "$D" ] && [ -f "$C" ] || exit 9; V="$PWD/$V"; D="$PWD/$D"; d=$(mktemp -d) || exit 9; trap 'rm -rf "$d"' EXIT; T="$d/dist"; S="$T/core/skills/ai-dlc/steps"; mkdir -p "$S" || exit 9; git -C "$T" init -q || exit 9; m(){ printf '# S\n\n## Alpha gate\n\na\n\n## Beta review\n\n%s\n\n## Gamma notes\n\ng\n' "$1" > "$S/demo.md"; git -C "$T" add -A && git -C "$T" -c user.email=r@x -c user.name=r commit -qm "$1"; }; m b1 || exit 9; m b2 || exit 9; K="$d/c/.claude/skills/ai-dlc"; mkdir -p "$K/extensions" "$K/steps" || exit 9; cp "$C" "$K/" || exit 9; cp "$S/demo.md" "$K/steps/demo.md"; e(){ printf -- '---\nkind: %s\nid: %s\nhooks: steps/demo.md\npush_candidate: false\nextends: %s\n%bconforms_to: 1\n---\n# %s\n' "$2" "$1" "$3" "$4" "$1" > "$K/extensions/$1.md"; }; e multi step-domain "'#Alpha gate, #Beta review'" ""; e q2 qualifier "'#Alpha gate, #Beta review'" 'position: append\n'; e sec step-domain "'#Alpha gate, #Zz Nowhere'" ""; L=$(bash "$V" "$d/c" 2>&1); grep -q 'LAYER_CONFORMANCE' <<<"$L" || { echo "HARNESS BROKEN: linter produced no footer"; exit 9; }; grep -q 'E11 .*extensions/multi.md' <<<"$L" && exit 1; grep -q "E11 .*extensions/q2.md.*kind 'qualifier'" <<<"$L" || exit 1; grep -q "E11 .*extensions/sec.md.*'Zz Nowhere' matches no heading" <<<"$L" || exit 1; R=$(bash "$D" "$T" "$(git -C "$T" rev-parse HEAD~1)" "$(git -C "$T" rev-parse HEAD)" "$d/c" 2>&1); grep -q 'EXTENSION-' <<<"$R" || { echo "HARNESS BROKEN: classifier emitted no rows"; exit 9; }; awk -F'\t' 'index($2,"/multi.md") && $1=="EXTENSION-ANCHOR-DRIFT"' <<<"$R" | grep -q "Beta review" || exit 1; exit 0
+
+---
+
+## BL-142 — a withdrawn claim is reported forever, and its withdrawal is invisible by construction
+
+**LANDED (v0.673.0, verified 72b1ea2a).** Closed by adjudication, no build: `withdraws` is in `layer-adjudication-register.json` and read by `audit-layer-debt.sh`. The receipt exits 0; without the `withdraws` field the same register reports `e.md`.
+
+**Found by two adversarial hands after `v0.478.0` merged**, 2026-09-02, and NOT fixed here. It
+corrects `BL-141`'s claim that the false-acquittal set was empty, and files the defect that review
+turned up underneath it. Distribution-internal; no `PC-` id, so it ranks BELOW any PC-backed entry.
+
+`audit-layer-debt.sh`'s UNDECLARED arm reports a row whose `reason` prose reads like an obligation.
+The register is APPEND-ONLY, so the only way to correct a row is to write a later one. **The later
+row is very often a DISCHARGE row, and discharge rows are exempted at `core/scripts/audit-layer-debt.sh:225`.**
+So the register holds both a claim and its formal retraction, and the arm reads only the claim.
+
+Measured on the reference consumer's register, the two rows verbatim:
+
+    line 302  retro-push-sprint-ship-verification.md  19:10:00Z  closes_owed absent  -> REPORTED
+      "...the body-relocation half of that debt was NOT re-checked this run and the debt is
+       therefore left open."
+
+    line 304  same entry                              19:30:00Z  closes_owed present -> SKIPPED
+      "CORRECTION to the row I recorded for this entry earlier in the same session... There is
+       no body-relocation half... The earlier sentence was an unverified inference and is
+       withdrawn; the register is append-only, so this row is the correction."
+
+**The two exemptions compose badly and each is right on its own terms.** The discharge exemption
+exists so an operator is not charged for closing a debt correctly — that is `BL-140`-era work and
+it should stay. But it makes the register's only correction channel unreadable, permanently, with
+no act available to clear the row.
+
+**THE SCHEMA'S SUPERSESSION FIELD CANNOT EXPRESS THIS, WHICH IS WHY THIS IS NOT A ONE-LINE FIX.**
+`core/schemas/layer-adjudication-register.json` carries `supersedes`, and its own description
+scopes it: *"Required only when this record states a DIFFERENT verdict from an earlier record
+under the same key."* Both rows here are `still-additive`, so the author correctly did NOT use it
+— the correction withdraws a factual sentence inside `reason` without changing the verdict, and
+the schema has no field for that. Exactly 1 of 318 rows uses `supersedes` at all, on a different
+entry, and `audit-layer-debt.sh` reads it in **0** places against a control of 9 for `closes_owed`.
+
+**THREE REMEDIES WERE BUILT AND SCORED BEFORE FILING. THE OBVIOUS ONE IS REFUTED.**
+
+- **Entry-grain** (silence a reported row when any later row on the same entry discharges
+  anything), which is what the `contradicts-core` arm's satisfiability argument at lines 181-186
+  would imply here: silences **3 of 19**, and **2 of the 3 are wrong** — they are silenced by the
+  discharge of an unrelated debt. Refuted.
+- **Retraction token** (a later row on the same entry says `withdrawn`/`CORRECTION`/`retract`):
+  silences exactly **1 of 19**, precisely the withdrawn row, against a control of 5 rows carrying
+  such a token anywhere in the register. Correct on this corpus — but it keys on free prose, which
+  is the class this arm has now been wrong on three separate times, and 5 rows is not a corpus
+  from which to measure a false-positive set.
+- **Schema field** — a way to withdraw a `reason` clause without changing the verdict. That is the
+  shape the defect actually has, and it is a SCHEMA change plus a producer change, not an edit to
+  this reader. It is a different subsystem, so say which one you are closing.
+
+Sibling to `BL-141`, which narrowed the same arm. Taking this means saying whether you are
+changing the schema or accepting a prose predicate, and measuring the false-positive set of
+whichever you choose.
+
+**The receipt was replaced when the schema field was chosen.** The earlier one seeded the
+withdrawal as PROSE only, so it could be closed only by the retraction-token predicate this entry
+refutes. This one seeds the structured `withdraws` field, keeps the near-miss, and requires an
+unresolvable withdrawal to be REPORTED.
+
+verify: sh set -e; d=$(mktemp -d); printf '%s\n' '{"clause":"LC-E4","entry":"x/e.md","subject_digest":"a","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"The body-relocation half of that debt was NOT re-checked and the debt is therefore left open."}' '{"clause":"LC-E4","entry":"x/e.md","subject_digest":"a","verdict":"still-additive","recorded_utc":"2026-01-01T00:30:00Z","closes_owed":["OWED-X"],"withdraws":["2026-01-01T00:00:00Z"],"reason":"Debt discharged. CORRECTION to the row recorded earlier for this entry: there is no body-relocation half; that sentence is withdrawn."}' '{"clause":"LC-E4","entry":"x/keep.md","subject_digest":"b","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"The split remains deferred to a later pull."}' '{"clause":"LC-E4","entry":"x/g.md","subject_digest":"c","verdict":"still-additive","recorded_utc":"2026-01-01T01:00:00Z","withdraws":["2026-01-01T00:00:01Z"],"reason":"probe"}' > "$d/r.jsonl"; o="$(bash core/scripts/audit-layer-debt.sh --register "$d/r.jsonl" 2>/dev/null)"; grep -q '^  keep\.md' <<<"$o" && ! grep -q '^  e\.md' <<<"$o" && grep -q 'g\.md .*no record on this entry' <<<"$o"
+
+## BL-214 — `story_normalize` reads a carry-over ITEM number as a sprint, and the licence that authorised it used a non-discriminating control
+
+**LANDED (v0.673.0, verified 72b1ea2a).** Closed by adjudication, no build: shipped in 0.666.0 (`d41d47d0`). The receipt exits 0 on this tree and 1 at `d41d47d0^`. The two residuals are stated limits with no remedy owed.
+
+`story_normalize()` (`core/scripts/migrate-artifact-paths.sh:244`) rewrites `story-<A>-<B>` to
+`story-s<A>-<B>`, taking `A` as the sprint. In the pre-s199 era `A` is the carry-over ITEM or epic
+number, not the sprint, so the migration places those files under the wrong slot.
+
+Driven on the shipping program, seeded from the consumer's own file, with a refused control in the
+same run: a story whose body carries `**Sprint:** 53` is planned into `s102/`, because its basename
+is `story-102-1-…`. On the reference consumer the real file
+`s102/stories/story-1-effective-spread-500.md` carries `**Sprint:** 53` and the title
+`Epic: 102 — Sprint 53 … (Item 102)`; `docs/retro/s53/retro.md` opens by naming that story, while
+`docs/retro/s102/retro.md` is a different sprint entirely. There is no `s53` planning directory,
+against a control that `s102` exists.
+
+**Scale, and it is not a delivery lag.** 1045 story files compared header-against-slot: 598 agree,
+165 DISAGREE, 282 silent. Control on 600 non-story artifacts under a slot: 4 disagree of 90 valued.
+All 165 run ONE direction — slot strictly greater than header, 165 to 0. An authored-in-one-sprint
+delivered-in-the-next reading predicts a small positive gap; the mass sits at gaps of 44, 45, 48 and
+50, and only 8 files sit at gap 1. Adjudicated against sprint retros, the header-named sprint's retro
+claims the story 22 times against the slot-named sprint's 3; the 3 counter-cases are all gap 1 and
+are genuine carry-over, correctly slotted. Against add-commit subjects on a 300-file sample, the
+header sided with the subject against the name 58 times to 4.
+
+**The licence's own control could not discriminate, which is why this shipped.**
+`core/skills/ai-dlc/artifact-path-grammar.md:191` justifies reading `A` as the sprint on the ground
+that all 786 `story-<A>-<B>` basenames have `A` "inside the sprint range the tree actually uses
+(7–302)". An item number falls inside that same range, so the observation is true and cannot
+separate the two hypotheses it is offered as evidence for. This is the repo's own rule — a control
+drawn from a form you already know cannot discover the form you do not — collected on the licence
+that authorised 951 moves.
+
+**Not fixed here, and deliberately not folded into the `STORY-NO-SPRINT` work beside it.** That
+subject is the refusal class for files with NO derivable sprint; this is the opposite failure — a
+sprint derived confidently and wrongly — and the remedy is a change to `story_normalize`'s licence
+with its own false-positive measurement over the post-s199 era, where `A` genuinely is a sprint. The
+repair also cannot be a pure rename of the recovery order: 598 files agree today and must not move.
+
+**Tiered DEFECT.** Files are placed under a wrong but well-formed slot, so nothing reports and the
+error is invisible to every conformance check — the destination is on the grammar either way.
+
+**Fixed at the producer in v0.666.0; two residuals stand.** In the plan loop, a READABLE
+`**Sprint:**` header that names a sprint other than the normalised name's `A` now wins, and the
+move is reported under SPRINT RECOVERED as `header>name`. An agreeing header changes nothing. The
+licence text in `artifact-path-grammar.md` and the script header is replaced by the discriminating
+measurement: each file's own header over the 786 `story-<A>-<B>` files at the pre-migration ref
+`15c890eb^`, of which 319 agree, 146 disagree (all with header < `A`, none with `A` >= 199), 6 are
+unreadable and 315 have no header. Driven on that corpus in a scratch repo, the shipping migrator
+plans `s53/` for `story-102-1-effective-spread-500.md`, and its `header>name` set equals the 146
+exactly (empty `comm -3`). **Residual 1:** the 315 headerless files still take `A`, because
+nothing in the file can separate item from sprint for them. **Residual 2:** the 6 `50A`/`50B`
+files keep `A`, because refusing them would break the conformance validator's blocking-set ==
+move-set join. That validator reads paths only, never headers. The false-positive measurement the
+entry asked for over the post-s199 era comes back empty (0 disagreements with `A` >= 199).
+
+verify: sh set -e; d=$(mktemp -d); trap 'rm -rf "$d"' EXIT; s="$d/_bmad-output/planning-artifacts/stories"; mkdir -p "$s"; ( cd "$d" && git init -q . && git config user.email t@t && git config user.name t ); printf '# Story 102-1: x\n\n**Epic:** 102 - Sprint 53 x (Item 102)\n**Sprint:** 53\n' > "$s/story-102-1-x.md"; printf '# Story 297-1: y\n\nNo header.\n' > "$s/story-297-1-y.md"; ( cd "$d" && git add -A && git commit -qm s ); o="$(bash core/scripts/migrate-artifact-paths.sh --root "$d" --grammar "$PWD/core/skills/ai-dlc/artifact-path-grammar.md" 2>&1)" || exit 9; grep -q 's297/stories/story-1-y.md' <<<"$o" || exit 9; grep -q 's102/stories' <<<"$o" && exit 1; grep -q 's53/stories/story-1-x.md' <<<"$o" || exit 1; exit 0
+
+## BL-264 — the read-set deriver records GITIGNORED paths, so a tracked map is a function of ambient harness activity
+
+**LANDED (v0.673.0, verified 72b1ea2a).** Closed by adjudication, no build: `drop_ignored()` filters gitignored paths since 0.585.0; the receipt exits 0 on this tree and 1 at `389b6bdc^`. The operator's batch-176 trace took the committed map's `.claude/worktrees/` rows from 6384 to 0, shipped in this close.
+
+**`core/scripts/derive-fixture-readsets.sh` traced every path a fixture touched and wrote all of
+them into `.ai-dlc-fixture-readsets.tsv`, with no gitignore filter** — 0 `check-ignore` or
+`gitignore` sites in the deriver before this change, against a control of 2 after it. The tracer
+therefore recorded `.claude/worktrees/agent-*/`, which is the **Claude Code harness's own agent
+checkouts**: not this project's state, not any project's state, and present in whatever number of
+concurrent sessions happened to be running when the derivation ran.
+
+**Measured on the tracked map at `264a95de`: 12435 of 36046 rows point into
+`.claude/worktrees/`, plus 49 `.DS_Store` rows.** Re-derived across the whole map, 3943 of 6605
+distinct paths are gitignored and **12506 of 36036 data rows — roughly 35% — are paths no fixture
+depends on**. Control in the same derivation: `core/fixtures/ledger-reverify/run.sh` is present in
+the map and is NOT in the ignored set, so the filter discriminates rather than matching everything.
+
+**THE DEFECT IS REPRODUCIBILITY, NOT SELECTION.** Two derivations of one fixture minutes apart
+returned 4815 rows and then 26854 — a 5.6x move with no change to the fixture, caused only by how
+many agents were live. A derived artifact whose content depends on ambient activity cannot be
+reviewed, diffed, or reproduced, and the map is tracked, so every such run is a large spurious
+diff. The selection consequence is bounded and is in the SAFE direction: an over-broad read-set
+makes a fixture run MORE often than it must, never less.
+
+**The boundary is the repository's own `.gitignore`, read by git — never a hand-written prefix
+list.** `.claude/rules/**` is un-ignored by negation and IS tracked, and fixtures read those rule
+files; a prefix list keyed on `.claude` drops them. `git check-ignore` separates the two and a
+string match cannot. The filter FAILS OPEN by design: if `check-ignore` yields no usable verdict
+every path is kept, the read-set is a superset, and the fixture runs more often — the dangerous
+direction would be dropping a real input, which makes a fixture skip when its subject moved.
+
+**This is NOT `BL-127`, which is the opposite direction** — a mapped row OMITTING a file its
+`run.sh` opens, so the fixture is skipped on the change most likely to break it. That entry is
+about under-inclusion and silence; this one is about over-inclusion and irreproducibility. Both
+were checked before filing.
+
+**The 12435 stale rows are not cleared by this change.** The map is trace-derived and hand-editing
+it puts a second, drifting declaration beside the derivation — `BL-127` says so in as many words.
+They clear on the next `sudo bash core/scripts/derive-fixture-readsets.sh` run, which needs root
+and is the operator's to run, and which should be taken with no agent worktrees on disk so the
+result is stable.
+
+**Tiered DEFECT.** Nothing is corrupted and no guard is removed; what it costs is a 2.9MB tracked
+artifact that no reviewer can diff and that moves for reasons unrelated to the suite.
+
+The receipt keys on the filter EXISTING in the deriver, not on the map's row count reaching zero:
+the rows clear only on a root-privileged re-derivation, so a count-based receipt would be
+unattainable in this session and would read as a failure of a fix that works.
+
+verify: sh d=core/scripts/derive-fixture-readsets.sh; [ -f "$d" ] || exit 9; grep -q '^norm()' "$d" || exit 9; grep -q '^drop_ignored()' "$d" && grep -q 'check-ignore' "$d" && exit 0; exit 1
+
+
+## BL-329 — `sync-transient-ignore.sh --root <foreign>` exits 2 in the consumer layout
+
+**LANDED (v0.671.0, verified 8e697587).** The install root's `.claude/schemas/` is the last schema candidate; the receipt exits 0 on this tree and 1 on 069781ed.
+
+**NOTE.** Found by the batch-160 contract adversary. It is the `BL-300` shape reached through
+`--root` rather than `AI_DLC_PROJECT_ROOT`.
+
+The script looks for `pipeline-state-paths.json` beside itself and under `--root`'s
+`.claude/schemas/` and `core/schemas/` (`core/scripts/sync-transient-ignore.sh:73-75`), with no
+install-root fallback. Measured in a fresh install of `0c017188`: `--check` exits 0 with no
+`--root` and with `--root` naming the consumer. With `--root` naming a directory holding only
+`.claude/` it exits 2 with `pipeline-state-paths.json not found`. The same foreign `--root` in
+the distribution layout gets past the schema and exits 1 on the missing `.gitignore` block.
+
+Receipt: a copy at `scripts/ai-dlc/` of a consumer-shaped tree (declaration only at
+`.claude/schemas/`), run from `docs/` with `--check --root <foreign>`, must get past the schema
+and report the foreign root's block missing (receipt exit 0), not report the schema `not found`
+(receipt exit 1). `transient-ignore-block` arm 9 carries the
+own-declaration near-miss and mutant M5.
+
+verify: sh d=$(mktemp -d); mkdir -p "$d/c/.git" "$d/c/.claude/schemas" "$d/c/scripts/ai-dlc" "$d/c/docs" "$d/f" || exit 9; cp core/schemas/pipeline-state-paths.json "$d/c/.claude/schemas/" || exit 9; cp core/scripts/sync-transient-ignore.sh "$d/c/scripts/ai-dlc/" || exit 9; printf 'x/\n' > "$d/f/.gitignore"; o=$(cd "$d/c/docs" && env -u AI_DLC_STATE_PATHS_SCHEMA bash "$d/c/scripts/ai-dlc/sync-transient-ignore.sh" --check --root "$d/f" 2>&1); r=$?; case "$o" in *"pipeline-state-paths.json not found"*) exit 1 ;; esac; [ "$r" -eq 1 ] && exit 0; exit 9
+
+## BL-389 — the updater's step-1 auto-push is unguarded and fatal where step 2's push is gated and soft
+
+**LANDED (v0.673.0, verified 72b1ea2a).** Remedy (ii): a failed step-1 push marks the branch UN-SYNCED, step 2 defers, step 6 fetches and refuses `apply`. Remedy (i) was refuted by the contract adversary. The consumer's non-fatal receipt is discharged; its gate-in-span receipt stays unsatisfied by design. The receipt exits 0 on this tree and 1 on 9a9b8146.
+
+**DEFECT. Filed at batch 175, not shipped.** Discharges nothing yet; owns the consumer candidate
+`PC-S336-STEP-1-AUTOPUSH-IS-THE-UNGUARDED-TWIN-OF-THE-PUSH-STEP-2-HARDENED`, which no backlog entry owned
+(`BL-145` cites it as one row of an illustration table; `BL-154` quotes its reverify row). Measured on
+`origin/main` at 0.670.0: the step-1 preflight span of `core/skills/ai-dlc-update/SKILL.md` (from `Git
+preflight` to `2. **Self-update`) mentions `self-update-gate|SELF-UPDATE-DEFER` 0 times against 18 in the
+whole file, and carries 7 `STOP` instructions, so a rejected step-1 push ends the run. Step 2 runs
+`self-update-gate.sh` before its push and treats a failed push as non-fatal. The only commit naming the id,
+`459f4c86`, touches 0 core paths. **Not shipped because the file is the update skill, which is
+bootstrapping and ships alone; batch 175 closed at its last collected release.** Candidate remedies: run
+the slice computation and `self-update-gate.sh` before the step-1 push arm, or make a step-1 rejection
+non-fatal when the range does not touch the rejecting gate. Because step 1 runs before self-update, the fix
+protects only the pull after the one that delivers it. Close on a structural trace plus a fixture keyed on
+the step-1 emission lines (operator ruling: no model replay closes a step-file fix).
+
+**Remedy taken at batch 176: no gate at step 1; a failed step-1 push is non-fatal and `apply` is
+refused at step 6.** Running `self-update-gate.sh` at step 1 was refuted: its coupling arms emit DEFER
+and `exit 0` before its `git rev-parse --git-path hooks/pre-push` probe is reached (re-read in the gate at batch 176), and DEFER is the expected verdict on any check-adding range, so the
+verdict is not a push verdict. Step 1 writes nothing, so the orphaned-branch hazard that gate exists
+for cannot arise there. The step-1 push bullets now mark the branch UN-SYNCED and continue; step 2
+DEFERS on an UN-SYNCED branch (no branch cut, no slice written, no stamp advanced), because a local
+self-update commit there is the orphan shape step 2's own gate paragraph describes; step 6's
+re-confirm bullet no longer auto-pushes, fetches before recomputing ahead/behind, and is the one
+place `apply` is refused. The receipt reads five units, each joined across its continuation lines, whitespace-collapsed,
+lowercased, with a negated fatal verb ("not stop", "not a halt") rewritten to `negfatal` first. It
+exits 9 unless each of the three bullet anchors selects exactly one unit, and 1 if either added
+paragraph is absent. Every arm REQUIRES the phrase the fix states, rather than only forbidding a
+closed word list: a step-1 failure bullet needs a non-fatal phrase, a continue phrase and UN-SYNCED
+and no fatal phrase; step 6 needs its no-push sentence, no push instruction, and UN-SYNCED with a
+stop/refuse of `apply` in one clause, and naming the remedy command `git push -u origin <branch>`
+is allowed; the step-1 UN-SYNCED paragraph needs "to the dry-run" and "defer" and no fatal phrase;
+the step-2 UN-SYNCED clause must itself say DEFER and nothing in it may push or commit locally.
+The first grammar, keyed on a closed stop-word list and the literal `git push`, passed wA-wF below
+and failed rG and rH. `core/fixtures/update-preflight-push` carries the same regexes as six arms.
+Scored in fresh `mktemp -d` trees, all 105 variant pairs `cmp`-distinct; the fixture column is its
+six corpus arms run against the variant as resolved subject, cwd `/` (its mutant arms anchor on the
+fix's own lines and report DID NOT APPLY on any other text, so its exit is not the column):
+
+| variant | want | receipt | fixture arms |
+|---|---|---|---|
+| live (`origin/main`, pre-fix) | 1 | 1 | 111111 |
+| the fix | 0 | 0 | 000000 |
+| wrong1: ahead-only failure reworded to "STOP the run" | 1 | 1 | 010000 |
+| wrong2: step 6's no-push sentence replaced by "auto-push to re-sync" | 1 | 1 | 001000 |
+| rightB: step-6 bullet respelled ("refuse `apply`", "Nothing is published") | 0 | 0 | 000000 |
+| wrapped: all five units reflowed so no anchor sits on one line | 0 | 0 | 000000 |
+| wA: ahead-only "and halt the run" | 1 | 1 | 010000 |
+| wB: no-upstream "and abort" | 1 | 1 | 100000 |
+| wC: step 6 "push it to re-sync as step 1 does and continue" | 1 | 1 | 001000 |
+| wD: step 6 "do not STOP `apply`" | 1 | 1 | 000100 |
+| wE: step-2 UN-SYNCED sentence "pushes anyway" | 1 | 1 | 000001 |
+| wE': the adversary's "push anyway" in the step-2 cycle bullet | non-zero | 9 | 000003 |
+| wF: UN-SYNCED paragraph "ends the run here" | 1 | 1 | 000010 |
+| rG: "does NOT stop the run" | 0 | 0 | 000000 |
+| rH: step 6 names `git push` / `git push -u origin <branch>` | 0 | 0 | 000000 |
+| no `SKILL.md` at the root | 9 | 9 | SKIP |
+
+wE' puts a second "On a branch step 1 left UN-SYNCED" sentence in the file, so the step-2 anchor
+selects two units: 9 from the receipt and STALE from the fixture, neither a pass.
+
+verify: sh P=core/skills/ai-dlc-update/SKILL.md; [ -f "$P" ] || exit 9; grep -q 'AUTO-PUSH' "$P" || exit 9; LC_ALL=C awk 'BEGIN { F = "(^|[^a-z])(stop|stops|stopped|halt|halts|halted|abort|aborts|terminate|terminates)([^a-z]|$)|run ends|ends the run|end the run|do not proceed|does not proceed"; NF_ = "not fatal|non-fatal|negfatal"; C = "continue|keep going|carry on|carries on|(proceed|proceeds|continues) to the dry-run"; NP = "do not push|does not push|never push|no push|nothing is pushed|nothing is published|pushes nothing|publishes nothing"; PU = "auto-push|push it|push the branch|to re-sync|push anyway|pushes anyway" } function pf() { return !(l ~ F) && l ~ NF_ && l ~ C && l ~ /fail|reject/ && index(l, "un-synced") } function fin() { if (t == "") return; gsub(/[*]/, "", t); gsub(/[ \t]+/, " ", t); l = tolower(t); t = ""; gsub(/(not|never|no|nor) (a )?(stop|halt|abort|end|terminate)/, "negfatal", l); if (index(l, "remote exists but the current branch has no upstream")) { na++; if (!pf()) bad = 1 } if (index(l, "branch ahead of its upstream")) { nb++; if (!pf()) bad = 1 } if (index(l, "re-confirm the step-1 git preflight")) { nc++; if (l ~ PU || !(l ~ NP) || !(l ~ /un-synced[^.;]*(stop|refuse)[^.;]*apply/)) bad = 1 } if (index(l, "one whose step-1 auto-push failed")) { np++; if (l ~ F || !(l ~ /(proceed|proceeds|continue|continues) to the dry-run/) || !index(l, "defer")) bad = 1 } if (index(l, "on a branch step 1 left un-synced")) { ns++; if (!(l ~ /left un-synced[^.;]*defer/) || l ~ PU || l ~ /commits? (it )?locally/) bad = 1 } } /^[ \t]*- / { fin(); t = $0; next } /^[ \t]+[^ \t]/ { t = (t == "" ? $0 : t " " $0); next } { fin() } END { fin(); if (na != 1 || nb != 1 || nc != 1 || np > 1 || ns > 1) exit 9; if (np != 1 || ns != 1) exit 1; exit bad }' "$P"
+
