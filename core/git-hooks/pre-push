@@ -208,8 +208,25 @@ if [ -f scripts/ai-dlc/render-agent-definitions.sh ]; then
   #     looking for `.git` or `VERSION` above the SCRIPT. Passing the root git gave us means a
   #     tree where that walk would answer differently -- a submodule, a `--git-dir` pointing
   #     elsewhere -- cannot make this arm check a different project than the one being pushed.
+  #
+  #     AN ABSENT DIRECTORY IS RENDERED, A PRESENT ONE IS ONLY CHECKED. `.claude/agents/` is a
+  #     derived, gitignored artifact, so every fresh `git worktree add` or clone starts without
+  #     it and this arm failed every pinned role on the first push from that tree -- a state no
+  #     edit caused and the pusher cannot see coming. Rendering there is regenerating a build
+  #     product from the tracked declaration, which is what a fresh checkout is owed. A PRESENT
+  #     directory stays check-only: a drifted definition is either a hand edit or a settings
+  #     change nobody re-rendered, and silently overwriting it here would erase the evidence of
+  #     which. The renderer's own `--check` never writes; the write is this hook's decision and
+  #     is taken only on absence. The renderer refuses before any write on a settings file with
+  #     no aiDlcRoles (3) or one it cannot parse (2), and the `--check` below then says so.
   agent_definitions() {
     local out rc
+    if [ ! -d .claude/agents ]; then
+      out="$(bash scripts/ai-dlc/render-agent-definitions.sh --root . 2>&1)"
+      [ -d .claude/agents ] \
+        && printf '   .claude/agents/ was absent (a gitignored, derived directory), so it was rendered:\n'
+      printf '%s\n' "$out"
+    fi
     out="$(bash scripts/ai-dlc/render-agent-definitions.sh --check --root . 2>&1)"; rc=$?
     printf '%s\n' "$out"
     case "$rc" in
