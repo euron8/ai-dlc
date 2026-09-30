@@ -63,7 +63,10 @@ for _s in "seed.$S21" "seed.$S22" "seed.$S31" seed.block-2.1.md seed.block-2.2.m
 done
 echo "remediator-shard-join: resolved subjects = $JOIN, $HOOK"
 
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/remediator-shard-join.XXXXXX")" || exit 2
+# The trailing slash macOS puts on TMPDIR is stripped, so a doubled slash reaches the join only
+# where A7 seeds one on purpose; otherwise JX10's kill set would depend on the host's TMPDIR.
+_tmp="${TMPDIR:-/tmp}"; _tmp="${_tmp%/}"
+WORK="$(mktemp -d "${_tmp:-/tmp}/remediator-shard-join.XXXXXX")" || exit 2
 trap 'rm -rf "$WORK"' EXIT
 
 fails=0
@@ -286,6 +289,13 @@ p_absslash() { # AI_DLC_PROJECT_ROOT carries a trailing slash, the part cites ab
   run_join "$1" "$w/"
   joined_one "$(out_of "$w")"
 }
+p_absdouble() { # the part cites absolutely with a doubled slash (a TMPDIR ending in `/` spells it so) -> JOINED
+  local w; w="$(new_world)"
+  drive "$w" Edit "$w/$REL/$S21" "$AG1"
+  abspart "$w/$SLOT/shards/stories-repair-p1" "$w//$SLOT//stories/$S21"
+  run_join "$1" "$w"
+  joined_one "$(out_of "$w")"
+}
 p_basecite() { # the control: a bare basename citation still resolves -> JOINED
   local w; w="$(new_world)"
   drive "$w" Edit "$w/$REL/$S21" "$AG1"
@@ -303,7 +313,7 @@ p_unwrittenmsg() { # the UNWRITTEN line names the Bash cause and the re-dispatch
     && grep -qF "re-dispatch that shard writing through Edit, Write or MultiEdit" <<<"$l" \
     && ! grep -qiE "hand.assembl" <<<"$l"
 }
-P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash basecite unwrittenmsg"
+P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg"
 
 # ---- A PART'S DERIVATION SURVIVES THE JOIN. The part's ```derived fence is copied into the joined
 # record, and the gate re-runs `validate-artifact-derivations.sh` over the sprint dir AFTER the
@@ -426,6 +436,8 @@ p_absnested "$JOIN"  && ok "A3: AI_DLC_STATE_DIR=out/_bmad-output, an absolute c
   || bad "A3: a nested state dir's absolute citation did not join (rc=$RC): $(cat "$JO")"
 p_absslash "$JOIN"   && ok "A4: AI_DLC_PROJECT_ROOT with a trailing slash, an absolute citation -> JOINED" \
   || bad "A4: a trailing-slash root's absolute citation did not join (rc=$RC): $(cat "$JO")"
+p_absdouble "$JOIN"  && ok "A7: an absolute citation carrying a doubled slash (a TMPDIR ending in /) -> JOINED" \
+  || bad "A7: a doubled-slash absolute citation did not join (rc=$RC): $(cat "$JO")"
 p_basecite "$JOIN"   && ok "A5: control -- a bare basename citation still resolves -> JOINED" \
   || bad "A5: a basename citation stopped resolving (rc=$RC): $(cat "$JO")"
 p_unwrittenmsg "$JOIN" && ok "A6: the UNWRITTEN refusal names the Bash cause and the re-dispatch, and not hand-assembly" \
@@ -574,9 +586,12 @@ mutant "JX7 files mode accepts a section-split dir" "filesguard" \
 # JX8/JX9: the absolute-citation strip removed, and widened to any `.../<state-dir-name>/...` --
 # the second acquits a foreign root, which only A2 sees.
 STRIP='    _t="${_t#"$STATE_PARENT"}"; _t="${_t#"$STATE_PARENT_P"}"'
-mutant "JX8 the state-parent strip removed" "absroot absnested absslash" \
+mutant "JX8 the state-parent strip removed" "absroot absnested absslash absdouble" \
   "$STRIP" \
   '    :'
+mutant "JX10 the cited token's slash squeeze removed" "absdouble" \
+  'tok = substr(line, RSTART, RLENGTH); gsub(/\/\/+/, "/", tok); print tok' \
+  'tok = substr(line, RSTART, RLENGTH); print tok'
 mutant "JX9 any .../<state-dir-name>/... rewritten to <state-dir-name>/..." "absforeign" \
   "$STRIP" \
   "$STRIP"'

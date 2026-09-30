@@ -280,11 +280,15 @@ while IFS= read -r p; do
   for fld in disposition edit derivation; do
     repair_field "$fld" "$p" || refuse "$(basename "$p") has no '${fld}:' field as arm H reads it; the joined record would read structured on another part's labels"
   done
+  # A run of slashes in a cited token is squeezed to one before the strip below: a TMPDIR ending in
+  # `/` spells every path under it `T//x`, while STATE_PARENT comes from `pwd`, which collapses it,
+  # so the literal prefix strip never matched and an absolute citation under the root refused.
   _toks="$(awk '
     /^[[:space:]-]*[*_`]*edit[*_`]*:/ {
       line = $0; sub(/^[^:]*:/, "", line)
       while (match(line, /[A-Za-z0-9_.\/-]+[.](md|json|jsonl|yaml|yml|txt|csv)/)) {
-        print substr(line, RSTART, RLENGTH); line = substr(line, RSTART + RLENGTH)
+        tok = substr(line, RSTART, RLENGTH); gsub(/\/\/+/, "/", tok); print tok
+        line = substr(line, RSTART + RLENGTH)
       }
     }' "$p" | sort -u)"
   while IFS= read -r _t; do
