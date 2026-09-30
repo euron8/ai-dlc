@@ -207,9 +207,13 @@ emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3"; }
 #
 # THE NARROWING, MEASURED BEFORE THIS SHIPPED. Candidates were exit 127 on any stderr, and exit
 # 1/2/127 with `command not found`, `syntax error` or `No such file or directory` anywhere. The
-# census ran every live receipt through the engine and every archived one through
-# `--closed-receipts`, logging rc and stderr per receipt; see the CHANGELOG entry for the rows.
-# Unprefixed matching is refused: a subject that prints `No such file` and exits 1 is exactly
+# census ran every live receipt through this engine (36) and the archived ones through
+# `--closed-receipts` (300 of 309; the 11 that run the whole pre-push suite were excluded),
+# logging rc and every stderr line carrying a candidate string. Own-prefix matches: ZERO, so
+# the routed set moves no real row. Unprefixed: ONE, a subject's `cat: ...: No such file` in a
+# receipt that exits 0. The census hook was proven able to fire first: a probe ledger scored an
+# own-prefix `command not found`, a subject-side `No such file` and an `unbound variable`.
+# Unprefixed matching is refused anyway: a subject that prints `No such file` and exits 1 is exactly
 # how several receipts OBSERVE their defect, so that route would hide live entries. Exit 127
 # alone is refused for the same reason from the other side -- `bash "$subject"` returns 127
 # when the SUBJECT calls a helper it does not ship, which is a defect a receipt may be
