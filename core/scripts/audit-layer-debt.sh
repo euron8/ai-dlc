@@ -200,7 +200,7 @@ unowned = sorted({(r.get("clause") or "", r.get("entry") or "") for r in rows
 # A cue EMBEDDED IN A LONGER IDENTIFIER is not prose about an obligation: `debt` inside
 # `test-check18-debt-audit` is a filename, and it was 1 of the 2 false positives measured
 # on the reference register. Require the cue to stand alone, not to sit between hyphens.
-PROSE = re.compile(r"(?<![\w-])(?<!cue ')(?<!cues: ')(owed|still owed|deferred|remediation(?!\s+(?:protocol|edits?|guard|routing)(?![\w-]))|follow-?up|debt|TODO)(?![\w-])", re.I)
+PROSE = re.compile(r"(?<![\w-])(?<!cue ')(?<!cues: ')(owed|still owed|deferred(?!\s+scope(?![\w-]))|remediation(?!\s+(?:protocol|edits?|guard|routing)(?![\w-]))|follow-?up|debt|TODO)(?![\w-])", re.I)
 #
 # A SIXTH FALSE-POSITIVE CLASS, AND IT IS LEXICAL LIKE THE FIRST: THE CUE IS PART OF A NAME. The
 # construct is a MECHANISM NAME — `remediation protocol`, `remediation EDIT`, `remediation guard`,
@@ -211,7 +211,7 @@ PROSE = re.compile(r"(?<![\w-])(?<!cue ')(?<!cues: ')(owed|still owed|deferred|r
 # describing the report, not incurring a debt — the case the third class below records the tool
 # scoring as an instance of its own subject.
 #
-# BOTH RULES LIVE INSIDE `PROSE`, AS LOOKAROUNDS, AND NOT IN THE `hits` COMPREHENSION BELOW. The
+# EVERY SUCH RULE LIVES INSIDE `PROSE`, AS A LOOKAROUND, AND NOT IN THE `hits` COMPREHENSION BELOW. The
 # `layer-debt-due-and-discharge` battery anchors three mutants (M5, M6, M11) on the text of that
 # comprehension, so a rule sited there would move their anchor and break them.
 #
@@ -247,6 +247,35 @@ PROSE = re.compile(r"(?<![\w-])(?<!cue ')(?<!cues: ')(owed|still owed|deferred|r
 # spelled with a mechanism noun, and it is acquitted. That is the accepted cost: that sentence
 # names an edit that is pending, and the register's adjudicators spell that case with `owed` or
 # `deferred`, which this change does not touch.
+#
+# A SEVENTH FALSE-POSITIVE CLASS, LEXICAL AGAIN: `deferred scope` IS A NAME FOR A THING CORE FILES,
+# NOT A STATEMENT THAT ANYTHING IS DEFERRED. The `deferred` alternative carries its own negative
+# lookahead, so `deferred` followed by exactly the word `scope` is not a cue. The lookahead is not
+# spelled out here because the fixture's mutants anchor on its text and must find it once. The
+# phrase is the ADJUDICATOR'S paraphrase of route.md Step 6, which core itself spells "deferred
+# part": `deferred scope` occurs 0 times under core/skills/ai-dlc, against a control of 6 for
+# `scope_deferred_items` in the same tree. The identifier form was already clean before this rule,
+# because `_` is `\w` and the cue's own lookbehind refuses it; this rule does not re-implement that.
+#
+# MEASURED ON THE REFERENCE REGISTER at graph c00f387f, 683 rows: UNDECLARED 1 before, 0 after. The
+# one mover is route-domain.md, LC-E4, recorded 2026-09-29T00:05:07Z, whose reason reads `route
+# Step 6 now files deferred scope as CO- items and records scope_deferred_items`. On the live
+# register at graph b6b68b3c, 689 rows, it is 0 before and 0 after, because that row was since
+# retracted by a `withdraws` row (graph 522e8681) and the withdrawal skip already drops it.
+#
+# THE NARROWING STORY, beside the remediation one and for the same reason. The noun is exactly
+# `scope`, ending at the same `(?![\w-])` boundary as the mechanism-noun set, so `deferred scopes`
+# and `deferred scoped-work` stay cues. Widenings REFUSED, each measured at 0 cells moved on the
+# register above, which is the vacuous widening `mechanism-design.md` refuses: `scopes`; `deferred
+# part`; `deferred seams` (0-based row 680, entry-gated); `deferred to <script> constants` (0-based
+# row 441, entry-gated). `scopes` and `deferred part` occur on no row at all. "Entry-gated" means an
+# `owed` declared on the same entry already acquits the row, so admitting the phrase moves nothing.
+#
+# FALSE-ACQUITTAL SET, ENUMERATED. On the register it is EMPTY: the one acquitted occurrence is the
+# mover above. One false acquittal is constructible — "the rest is deferred scope for S316" is an
+# obligation spelled with the name, and it is acquitted. That is the accepted cost: the register's
+# adjudicators spell a real deferral `deferred to …`, `still deferred` or `deferred by …`, and every
+# one of those stays a cue, as does `scope is deferred` and `the split is deferred to a later pull`.
 #
 # A THIRD FALSE-POSITIVE CLASS, AND IT IS THE ONE THAT PUNISHES THE CORRECT ANSWER. The two
 # above are lexical (a cue inside an identifier) and structural (a discharge row). This one is

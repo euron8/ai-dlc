@@ -50,7 +50,7 @@ command -v python3 >/dev/null 2>&1 || { echo "FIXTURE ERROR: python3 absent" >&2
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
-EXPECTED_ASSERTIONS=65
+EXPECTED_ASSERTIONS=70
 fails=0; made=0
 ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
@@ -443,10 +443,12 @@ fi
 # =============================================================================================
 # THE NAMED-CUE CLASS — the cue is part of a NAME, not a statement that anything is owed.
 #
-# Two rules, both lookarounds inside `PROSE`. (B) `remediation` followed by a member of a CLOSED
+# Three rules, all lookarounds inside `PROSE`. (B) `remediation` followed by a member of a CLOSED
 # mechanism-noun set (protocol, edit, edits, guard, routing), ending at the cue's own boundary,
 # names core machinery. (C) a cue in the tool's own quoted reporting form — `cue '` or `cues: '` —
-# is a mention of this report's output, not an obligation.
+# is a mention of this report's output, not an obligation. (D) `deferred` followed by exactly the
+# word `scope`, ending at the same boundary, is the adjudicator's name for what route Step 6 files,
+# not a statement that anything is deferred.
 #
 # EVERY ROW BELOW DECLARES NO `owed` AND NO `closes_owed`, and no row in this register declares
 # one, so neither the discharge skip, the entry subtraction nor the citation acquittal can reach
@@ -462,6 +464,9 @@ python3 "$WORK/mkreg.py" "$CREG" <<'SPEC'
 {"entry":"extensions/mentionplus.md","reason":"audit-layer-debt.sh lists this entry under UNDECLARED on cue 'deferred'. The split is still deferred to a later pull."}
 {"entry":"extensions/scarequote.md","reason":"The split is 'deferred' to a later pull."}
 {"entry":"extensions/remcomma.md","reason":"Anchor REMEDIATION, pending operator decision."}
+{"entry":"extensions/defscope.md","reason":"route Step 6 now files deferred scope as CO- items and records scope_deferred_items; entry reads sprint-status for routing only"}
+{"entry":"extensions/defscoped.md","reason":"the narrowing is deferred scoped-work for S316"}
+{"entry":"extensions/deflater.md","reason":"the split is deferred to a later pull"}
 SPEC
 cout="$(run "$CREG")"
 cund="$(und_block "$cout")"
@@ -526,12 +531,42 @@ else
   show "$cund"
 fi
 
-# --- 24. and the count is exactly the four rows that earn it -----------------------------------
-# A conjunct, exactly as at arms 3 and 17: it cannot say WHICH row moved.
-if grep -qE '^UNDECLARED \(4\)' <<<"$cout"; then
-  ok "exactly 4 of the 6 cue-carrying rows are reported — the other 2 name a mechanism or quote the tool"
+# --- 23a. THE OFFENDER: `deferred scope` is a name, not a deferral ------------------------------
+# The reason is VERBATIM from the reference consumer's register (route-domain.md, LC-E4). Its only
+# cue is `deferred`; `scope_deferred_items` beside it is an identifier the cue's boundary already
+# refuses, so the lookahead on `deferred` is the one thing deciding this row.
+if grep -q 'defscope\.md' <<<"$cund"; then
+  bad "a row saying route Step 6 files \`deferred scope\` as CO- items was filed as an undeclared obligation — the arm charges the adjudicator for naming what core files"
+  show "$cund"
 else
-  bad "the undeclared count is not 4; the named-cue rules are not partitioning names and mentions from obligations"
+  ok "NAMED THING: \`deferred scope\`, the adjudicator's name for what route Step 6 files, is not a cue"
+fi
+
+# --- 23b. THE NEAR-MISS: `deferred` followed by a word that merely STARTS with `scope` ---------
+# Carries `deferred`, whitespace, and the letters `scope` — every property a boundary-less
+# lookahead keys on — and lacks only the end of the word.
+if grep -q 'defscoped\.md' <<<"$cund"; then
+  ok "NEAR-MISS: \`deferred scoped-work\` is still reported — the noun must be exactly \`scope\`"
+else
+  bad "\`deferred scoped-work\` was acquitted — the \`scope\` lookahead has lost its word boundary"
+  show "$cund"
+fi
+
+# --- 23c. THE NEAR-MISS: `deferred` followed by any other word is still a cue ------------------
+# Carries `deferred`, whitespace and a following WORD — the property an any-word lookahead keys on.
+if grep -q 'deflater\.md' <<<"$cund"; then
+  ok "NEAR-MISS: \`the split is deferred to a later pull\` is still reported"
+else
+  bad "a real deferral was acquitted — the lookahead on \`deferred\` has widened past the single noun \`scope\`"
+  show "$cund"
+fi
+
+# --- 24. and the count is exactly the six rows that earn it ------------------------------------
+# A conjunct, exactly as at arms 3 and 17: it cannot say WHICH row moved.
+if grep -qE '^UNDECLARED \(6\)' <<<"$cout"; then
+  ok "exactly 6 of the 9 cue-carrying rows are reported — the other 3 name a mechanism, quote the tool, or name deferred scope"
+else
+  bad "the undeclared count is not 6; the named-cue rules are not partitioning names and mentions from obligations"
   show "$cout"
 fi
 
@@ -729,6 +764,21 @@ score MC_off "$(mkmut mc_off "$ANCHOR_QUOTE" '')" "$CREG" \
 score MC_anyq "$(mkmut mc_anyq "$ANCHOR_QUOTE" "(?<!')")" "$CREG" \
   "a lookbehind on any quote acquits the scare-quoted real obligation \`is 'deferred' to a later pull\`" \
   absent 'scarequote\.md'
+
+# The `deferred scope` anchor, keyed on the lookahead group alone so each mutant moves only rule (D).
+ANCHOR_SCOPE='(?!\s+scope(?![\w-]))'
+
+# MD_off — the `scope` lookahead removed, i.e. the behaviour rule (D) replaced. Scored on the
+# verbatim consumer row REAPPEARING.
+score MD_off "$(mkmut md_off "deferred$ANCHOR_SCOPE" 'deferred')" "$CREG" \
+  "without the \`scope\` lookahead, the verbatim route-domain row naming \`deferred scope\` is filed as an obligation again" \
+  present 'defscope\.md'
+
+# MD_wide — the single noun widened to any following word. Scored on the any-word near-miss
+# VANISHING, which only that row can see: the offender is acquitted either way.
+score MD_wide "$(mkmut md_wide "$ANCHOR_SCOPE" '(?!\s+\w)')" "$CREG" \
+  "a lookahead acquitting \`deferred\` before ANY word loses \`the split is deferred to a later pull\`" \
+  absent 'deflater\.md'
 
 # =============================================================================================
 # THE CORRECTION CHANNEL (BL-142) — a later row's `withdraws` retracts the REASON of earlier rows
