@@ -4969,6 +4969,18 @@ verify: manual
 
 ## BL-377 — `partition-document.sh`'s grammar is coarser than the heading set on three real shapes
 
+**LANDED (v0.666.0, verified <sha>).** The fence tracker records the opening run and closes only on
+a run of the same character at least as long; an HTML comment tracker holds a multi-line `<!--`
+open until `-->`, and neither opens inside the other. `document-partition` arms A17-A19 seed both
+shapes in both directions, and mutants MX7-MX10 each kill only their own arms. Over a working-tree
+copy of the consumer's `_bmad-output/` and `docs/` (7048 `.md` files, `/usr/bin/find`) the fix
+changes 1 map: `_bmad-output/pipeline-history/pipeline-snapshot-archive.md`, whose 421-line
+comment hides ten `## ` lines. The first two bullets below were the fix targets. Setext
+headings and the 76% SERIAL on `docs/architecture.md` are observations and were not fixed. A
+closing fence carrying an info string (```` ```bash ```` inside a ``` fence) still closes it; that is
+also left as an observation. The derivation-capture spelling paragraph below is a separate
+subject this fix does not touch; it needs its own entry before this one rotates.
+
 **NOTE.** From the batch 173 contract adversary, over the reference consumer's `_bmad-output/`. None
 of these changes a round trip (4854 files, 0 mismatches); each only makes the partition coarser or
 puts a boundary where an author would not.
@@ -4983,7 +4995,7 @@ The derivation-capture exemption is also spelling-sensitive: a logical `/tmp/...
 manifest holds the physical one, and a path through a symlinked directory are refused and cost the
 remediator a re-spelling. The remediator prose names the project-relative spelling.
 
-verify: manual
+verify: sh p=core/scripts/partition-document.sh; [ -f "$p" ] || exit 9; d=$(mktemp -d) || exit 9; b(){ i=0; while [ $i -lt $1 ]; do echo "body line $i padded to a steady width for sizing"; i=$((i+1)); done; }; g(){ { echo '## A'; b 20; echo '## B'; b 18; printf "$1"; b 10; echo '## C'; b 20; echo '## D'; b 20; } > "$d/x.md"; bash "$p" --map "$d/x.md" | cut -f4 | tr '\n' '|'; }; [ "$(g '## Q\n')" = '## A|## B|## Q|## C|## D|' ] || exit 9; [ "$(g '````\n```\n## Q\n```\n````\n')" = '## A|## B|## C|## D|' ] || exit 1; [ "$(g '<!--\n## Q\n-->\n')" = '## A|## B|## C|## D|' ] || exit 1; exit 0
 
 ## BL-378 — the suite-pole baseline still names `ledger-reverify` after the pole moved
 
