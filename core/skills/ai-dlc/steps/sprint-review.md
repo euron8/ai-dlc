@@ -128,7 +128,12 @@ deferring it is a HARD_BLOCK (Rule 12 Tier 1). Such a seam requires an
 in-pipeline mutation-RED wiring test before merge — a test that drives
 the real entrypoint and FAILS if the seam is unwired (external legs MAY
 be mocked; the wiring itself MUST be exercised). Only a genuinely
-environmental seam MAY defer. Any override MUST name the risk verbatim:
+environmental seam MAY defer, and the lead files each deferred seam as an
+OPEN carry-over item in
+`_bmad-output/planning-artifacts/carry-over-backlog.md` (ID grammar and
+`**Status:** OPEN` floor owned by `carry-over-evaluation.md`) naming the
+seam and the live observation that discharges it, before this step's gate.
+Any override MUST name the risk verbatim:
 "this could merge with every gate green and ship functionally inert."
 Catches: a feature that passes code review, QA, and smoke yet ships
 functionally inert because its core wiring seam was never exercised and
@@ -136,6 +141,15 @@ was deferred to a live-only check. False-positive cost: one in-pipeline
 wiring test per core-path seam, external legs mocked. Remove when: the
 sprint's primary deliverable path contains no cross-component wiring
 seam reachable in-process before merge.
+
+**Un-exercised decision branch.** Mutation coverage of a branch SELECTION
+is not evidence that the SELECTED branch executes correctly live. When a
+decision feature ships with a branch that no live or validation event has
+taken, the lead files a passive live-validation carry-over item for that
+branch here, in `_bmad-output/planning-artifacts/carry-over-backlog.md`
+under `carry-over-evaluation.md`'s ID grammar: read-only observation, no
+synthetic trigger, reopened by the first organic event that takes the
+branch.
 
 ### 4. Gate Validation and Proceed
 

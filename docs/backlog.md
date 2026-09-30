@@ -1495,8 +1495,20 @@ Discharges the consumer entry `extensions/steps-domain/implementation-push.md` a
 line 259. That row is a withdrawal candidate on its own terms; this entry is the ai-dlc-side
 mechanism whose absence let it survive.
 
+**Receipt replaced at batch 174: the old one closed on a comment.** Driven through
+`scripts/backlog-reverify.sh` on a copy of the tree where
+`# see docs/v0.13.0-consumer-absorption-spec.md` was appended to `reconcile/lib.sh` and
+nothing else changed, it read CLOSE-CANDIDATE; on the real tree, STILL-LIVE. No behavioural
+receipt can be built yet: no program drains `push_candidate` rows today (the drain is prose at
+`core/skills/ai-dlc-update/SKILL.md` "Drain entries flagged `push_candidate: true`"), so there
+is no output to assert on, and the old anchor assumed a fix in which `core/` cites a `docs/`
+file, which the consumer boundary rules out. **What closes it:** a standing-verdict record
+shipped under `core/` and read by a reconcile program that, in one run on a seeded consumer,
+reports a block the record refuses as refused and a block it does not name as a push candidate.
+Swap this receipt for one driving that program when it exists.
 
-verify: sh grep -rqF 'layer-drift' core/skills/ai-dlc-update/ || exit 1; grep -rqF 'consumer-absorption' core/skills/ai-dlc-update/
+
+verify: manual -- no program drains push_candidate rows yet, so nothing can be driven; see above.
 ## BL-025
 
 **`SKILL.md`'s PREREQUISITES tells the lead that teammates set their own effort in their role
@@ -1626,8 +1638,16 @@ Discharges the consumer entry `extensions/steps-domain/sprint-review-push.md` at
 line 267, whose live carrier is now
 `.claude/skills/ai-dlc/overrides/steps__sprint-review__fix-and-re-validate.md`.
 
+**Receipt re-keyed at batch 174 on POSITION.** The old receipt closed on the words `branch` and
+`carry-over` anywhere in §3, so one sentence of prose satisfied it. This one requires a bold-
+labelled paragraph whose label names a branch, inside §3, whose body names the carry-over
+owner `carry-over-evaluation.md`. Scored on three trees: tip 0, base 1, and 1 on both a copy
+with that paragraph deleted and a copy with it moved verbatim into §4. It is still text: a
+paragraph of the right shape closes it whatever it instructs. The behaviour is pinned by
+`core/fixtures/review-carry-over-clauses/`, whose mutants delete, move and de-own the paragraph.
 
-verify: sh s=core/skills/ai-dlc/steps/sprint-review.md; b=$(LC_ALL=C awk '/^### 3\. Fix and Re-Validate/{f=1;next} f&&/^### 4\./{exit} f' "$s"); [ -n "$b" ] || exit 1; grep -qi live <<<"$b" || exit 1; grep -qi branch <<<"$b" && grep -qi carry-over <<<"$b"
+
+verify: sh s=core/skills/ai-dlc/steps/sprint-review.md; b=$(LC_ALL=C awk '/^### 3\. Fix and Re-Validate/{f=1;next} f&&/^### /{exit} f' "$s"); [ -n "$b" ] || exit 1; grep -qi live <<<"$b" || exit 1; p=$(LC_ALL=C awk '/^\*\*[^*]*[Bb]ranch[^*]*\*\*/{f=1} f&&/^[[:space:]]*$/{exit} f' <<<"$b"); [ -n "$p" ] && grep -qF carry-over-evaluation.md <<<"$p"
 ## BL-038
 
 **Core's sprint-review §3 lets a "genuinely environmental" integration seam defer with no
@@ -1664,8 +1684,15 @@ non-empty — a heading rename reports STILL-LIVE rather than closing silently.
 Discharges the consumer entry `Decision-branch execution-coverage for sprint-review §3 "Fix and
 Re-Validate" (PI-S259-2)` at pinned ledger line 316.
 
+**Receipt re-keyed at batch 174 on POSITION, and it no longer takes either fix.** The old
+receipt closed when `environmental` left §3, which a regression deleting the permission would
+satisfy while shipping no obligation. This one requires the permission sentence itself to
+survive and to carry `carry-over-evaluation.md` before its own sentence end. Scored: tip 0,
+base 1, and 1 on a copy whose permission keeps its words and loses its duty. It is still text:
+a sentence of that shape closes it. `core/fixtures/review-carry-over-clauses/` arm ENV pins it.
 
-verify: sh F=core/skills/ai-dlc/steps/sprint-review.md; [ "$(grep -cF HARD_BLOCK "$F")" -ge 1 ] || exit 1; S=$(sed -n '/^### 3\. Fix and Re-Validate/,/^### 4\./p' "$F"); [ -n "$S" ] || exit 1; E=$(grep -ci environmental <<<"$S"); C=$(grep -ci carry-over <<<"$S"); [ "$E" -eq 0 ] || [ "$C" -ge 1 ]
+
+verify: sh F=core/skills/ai-dlc/steps/sprint-review.md; [ "$(grep -cF HARD_BLOCK "$F")" -ge 1 ] || exit 1; S=$(LC_ALL=C awk '/^### 3\. Fix and Re-Validate/{f=1;next} f&&/^### /{exit} f' "$F" | tr "\n" " "); [ -n "$S" ] || exit 1; grep -qF "environmental seam MAY defer" <<<"$S" || exit 1; t=${S#*environmental seam MAY defer}; t=${t%%. *}; grep -qF carry-over-evaluation.md <<<"$t"
 ## BL-048
 
 **Two of the three dev-role checks this consumer carries have no upstream equivalent, and the
@@ -1712,8 +1739,19 @@ correctness depends on wall-clock ordering of concurrent processes.
 
 Discharges the consumer entry `extensions/roles/dev-push.md` at pinned ledger line 276.
 
+**Receipt moved from `manual` to `sh` at batch 174, keyed on STRUCTURE with a phrase inside
+it, and that phrase is the admitted weakness.** It isolates Workflow item 15 (from `15. ` to
+`16. `, control `Honest-green` inside it), splits that list into its `- [ ]` bullets, and
+requires ONE bullet naming both `git diff` and "already present / already in the working tree",
+and ONE bullet naming both `wall-clock` and `N≥10`. `git diff` alone would be vacuous (item 15
+already carries it for scope verification); the co-occurrence inside one bullet is what the
+existing text lacks. Scored: tip 0, base 1, and 1 on copies with either bullet deleted and with
+the ordering bullet moved verbatim under `## Communication`. A bullet carrying those words
+closes it whatever it instructs. `core/fixtures/review-carry-over-clauses/` arms EDIT and
+ORDER pin the instruction text.
 
-verify: manual
+
+verify: sh f=core/team-roles/dev.md; b=$(LC_ALL=C awk '/^15\. /{on=1} on&&/^16\. /{exit} on' "$f"); [ -n "$b" ] || exit 1; grep -qF "Honest-green" <<<"$b" || exit 1; bl=$(LC_ALL=C awk '/^[[:space:]]*- \[ \] /{if (x!="") print x; x=$0; next} x!=""{x=x" "$0} END{if (x!="") print x}' <<<"$b" | tr -s " "); grep -F "git diff" <<<"$bl" | grep -qiE "already (present|in the working tree)" || exit 1; grep -iF "wall-clock" <<<"$bl" | grep -qE "N(≥|>=) ?10"
 ## BL-066 — the `named_absorbed` half landed at v0.387.0; the SIBLING half did not, and the release notes say it did
 
 **TRIAGED AT BATCH 10: FOUR OF THE FIVE CLAIMS ARE ABSORBED, THE SIBLING CLAIM SURVIVES, AND
