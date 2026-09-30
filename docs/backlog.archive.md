@@ -23511,3 +23511,669 @@ existence probes each (a superset, the safe direction).
 
 verify: sh r=core/scripts/derive-fixture-readsets.sh; [ -f "$r" ] || exit 9; grep -q 'READSET_COPY' "$r" || exit 1; d=$(mktemp -d) || exit 9; s=$(awk '/READSET_COPY_BEGIN/{f=1;next} /READSET_COPY_END/{f=0} f' "$r"); [ -n "$s" ] || exit 9; git -C "$d" init -q "$d/src" || exit 9; printf 'x\n' > "$d/src/t"; printf 'ignored.log\n' > "$d/src/.gitignore"; printf 'y\n' > "$d/src/ignored.log"; printf 'z\n' > "$d/src/u"; git -C "$d/src" add t .gitignore; git -C "$d/src" -c user.email=f@f -c user.name=f commit -qm i || exit 9; mkdir -p "$d/dst"; mkdir -p "$d/scr"; ( eval "$s"; readset_copy_tree "$d/src" "$d/dst" "$d/scr" ) >/dev/null 2>&1 || exit 1; [ -f "$d/dst/t" ] && [ -f "$d/dst/u" ] && [ ! -e "$d/dst/ignored.log" ] || exit 1; exit 0
 
+## BL-236 — the note that makes `ai-dlc-update`'s braced rev-paths survive a retype has no mechanism behind it, and arm S8 cannot see the form a reader actually mistypes
+
+**LANDED (v0.668.0, verified 1eca2ed2).**
+`validate-shell-portability.sh` gains arm **S8b**: an unbraced `$VAR:` rev-path followed by a zsh
+modifier letter, over a new `doc` corpus (`git ls-files 'core/*'` minus `*.sh`), with its own named
+empty-corpus guard. Measured over `core/*` minus the battery: 0 hits in the 220 non-`.sh` files; 37 in
+`.sh` files, all bash where the form is correct, subtracted by the corpus column. The modifier class
+was re-derived under `/bin/zsh -f` over 52 letters and equals `tool-hazards.md`'s 17; it removes the
+two loose hits at `reconcile/classify-block.md:15-16` (`"$BASE:$CORE_PATH"`). Fixture cells m9d,
+m10c, n7, x16-x20. Stated holes, not coverage: a `.sh` that prints the form for pasting, and
+extensionless bash under `core/` (0 of each today). The receipt below replaces the prose-half one and
+drives the validator on a seeded tree: base 1, fix 0, S8b dropped 1, corpus set to shell 1, modifier
+class dropped 1, keyed on the placeholder 1.
+
+**Found 2026-09-11**, filed by the reference consumer as a candidate against
+`core/skills/ai-dlc-update/SKILL.md`. The prose half landed with the entry; what is owed is the
+enforcement, and the reason it is owed is that the arm which looks like the enforcer is not one.
+
+**THE ARM DOES NOT COVER THE FORM.** `validate-shell-portability.sh`'s S8 already spells this
+exact rule in its own `S8_WHY` — history modifiers, `:c`/`:t`, "QUOTING DOES NOT FIX IT; only the
+braces do" — so the program exists and a second one must not be built. But its pattern is
+`(show|cat-file -p|…)[[:space:]]+\\?"?<[^>]+>:`, which is keyed on an **angle-bracket
+placeholder**. Derived by extracting `S8_PAT` from the shipping file and running it against four
+renderings: `show <theirs>:<core-path>` scores **1**, and `show "$THEIRS:core/scripts/x.sh"`,
+`show "${THEIRS}:core/scripts/x.sh"` and `show "${theirs}:<core-path>"` each score **0**. So the
+`$VAR:` spelling — the one a reader produces by dropping the braces from a correct site, and the
+one that is live in two shipped files today — is outside the arm's grammar by construction.
+
+**THE PROSE IS THE ONLY CARRIER, AND ITS CHANNEL IS WRONG FOR THE JOB.** `resident-context.md`
+requires a named carrier per rule. This one's carrier is a paragraph in a file the reader is
+already skimming, and the failure it prevents is silent in the expensive direction: the ref
+resolves, git answers about a different blob, and the answer looks like an answer. Measured on
+this machine under `/bin/zsh` with the ref bound, bare against braced: `core/scripts/x.sh`,
+`templates/x` and `tests/x` MANGLE, `docs/x` is SAFE (control, same invocation), and
+`"$REF:$CP"` is also SAFE because the character after the colon is `$`, not a modifier letter.
+That last row is why `reconcile/classify-block.md:15-16` is NOT a defect despite carrying the
+bare form, and it is also why a naive `\$[A-Za-z_]+:` arm would have a non-empty false-positive
+set on the shipped tree.
+
+**WHAT THE MISSING ARM WOULD HAVE TO DISCRIMINATE**, and why it is not a one-liner. Three
+populations share one shape and need three verdicts: the bare form in a `#!/usr/bin/env bash`
+script is CORRECT (`reconcile/emit-report.sh:300`, `reconcile/ledger-reverify.sh:636` — both
+shebangs verified), the bare form followed by `$` is correct in any shell, and the bare form in
+instruction text a human retypes is the defect. Keying on the shebang was measured wrong for
+S11's subject for a reason that applies here too — a line-oriented scan cannot see which shell
+will run the text — and for a `.md` file there is no shebang to key on at all. So the arm's
+population is "text that will be retyped", which no regex spells, and any candidate needs its
+false-positive set measured over `git ls-files 'core/*'` before it ships.
+
+**Why this is filed rather than built now.** The entry's own remedy was one sentence, and the
+operator's instruction was explicitly not to build a mechanism. Widening S8 changes an arm whose
+false-positive set is recorded EMPTY and whose corpus the fixture battery under
+`core/fixtures/shell-portability/` necessarily seeds with every pattern it forbids — that
+exclusion is derived from the validator's own name at `:316`, so a widened pattern interacts
+with it. That is a measured change to a live arm, not an addition beside one.
+
+**Receipt limits, stated.** The receipt scores the PROSE half only — that a `zsh` sentence about
+braces stands above the first braced rev-path command, outside a fenced block and outside an HTML
+comment. **It cannot score the missing arm**, because the arm does not exist and a receipt for an
+absent mechanism has nothing to run; closing this entry needs S8 widened or a successor arm with
+its own measured false-positive set, and that half is not receipt-enforceable. Exit 9 if the
+subject file or every braced command site is gone — a truncated or deleted file is NEEDS-REVIEW,
+never a close.
+
+**AND IT CANNOT SCORE WHETHER THE SENTENCE IS TRUE.** Measured by the lead against seeds chosen
+independently of the ones that produced the arm: a note reading *"the braces in a rev-path are
+cosmetic; zsh needs no brace here"* — wrong in the one way that matters, and placed correctly
+above the first command with both keywords in window — closes the receipt at exit 0, beside a
+control of 0 for the real fix. Six other non-fixes were rejected (`zsh` as a command inside a
+fence, a sentence denying the hazard, the correct note below the last command site, `zsh` inside
+a URL) and the two degenerate trees exit 9, each mutant `cmp -s`-asserted applied before its
+verdict was read. So the arm binds POSITION and VOCABULARY, never semantics; a reviewer reads the
+sentence, and this receipt only establishes that there is one to read.
+
+verify: sh unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; d=$(mktemp -d) && mkdir -p "$d/scripts" "$d/core/skills" "$d/core/fixtures/u" && echo 0.0.0 > "$d/VERSION" && cp scripts/validate-shell-portability.sh "$d/scripts/" && printf '#!/usr/bin/env bash\necho ok\n' > "$d/core/fixtures/u/s.sh" && printf '%s\n' '    git -C "$DIST" show "$THEIRS:core/x.sh" > "$t"' > "$d/core/skills/a.md" && ( cd "$d" && git init -q . && git add -A ) || exit 9; o=$(cd "$d" && bash scripts/validate-shell-portability.sh 2>&1 </dev/null); grep -q '^FAIL: S8b:' <<<"$o" && grep -qF 'core/skills/a.md:1:' <<<"$o" || exit 1; printf '%s\n' '    git show "$REF:$CORE_PATH"' '    git show "$THEIRS:docs/x.md"' '    git show "${THEIRS}:core/x.sh"' > "$d/core/skills/a.md"; o=$(cd "$d" && bash scripts/validate-shell-portability.sh 2>&1 </dev/null) || exit 1; exit 0
+
+## BL-067
+
+**LANDED (v0.668.0, verified 1eca2ed2).** `audit-layer-debt.sh` now classifies each OPEN
+debt's `closes_when` by KIND: a trigger naming the debt's OWN id, at an id boundary, reads `closes by:
+the register join`; anything else reads `closes by: a prose condition nothing evaluates`. Claim 1
+("consumed by nothing") and the paragraph "NO REPLACEMENT FIX IS SHIPPED" expire. The population is in
+the consumer register's history: at graph `8e53e4b4`, 16 open debts, 3 joins (exactly the three whose
+trigger names its own id) and 13 prose, 0 false joins; on the live register (`b6b68b3c`, 0 open) both
+report forms are byte-identical before and after. Guarded by the CLOSES-BY section of
+`core/fixtures/layer-debt-due-and-discharge` (arms 25-28, mutants `MK_off`, `MK_substr`). The receipt
+below replaces the previous one, which accepted three regressions (bare substring, `.sh` token, length
+under 80 bytes); it scores base 1, fix 0, no-classification 1, each of those three 1, missing script 9.
+
+**RE-SCORED AT v0.453.0. THE DEFECT SURVIVES, ITS COST CLAUSE HAS EXPIRED, AND ITS OWN REMEDY IS
+UNSHIPPABLE. The entry is kept whole; the receipt below is REPLACED because the old one CERTIFIED
+that remedy.** Which half died is the part that stops the next reader repeating this, so all four
+claims are scored rather than the entry re-filed.
+
+*Claim 1 — the field is declared, schema'd, printed, and consumed by nothing.* **SURVIVES.** The
+three occurrences in `audit-layer-debt.sh` are unchanged, and nothing else reads the value.
+
+*Claim 2 — "six of this consumer's sixteen OPEN debts" name a command, and running it made them
+due silently.* **EXPIRED.** Re-derived against the reference register (297 rows, up from 213): the
+six `migrate-artifact-paths.sh --apply` debts are **6 declared and 0 still OPEN** — they were
+discharged, and by the same six closes that produced `BL-069`'s population. Control in the same
+invocation: an impossible `closes_when` token returns 0. **Of the 16 OPEN debts today, ZERO name a
+command to run.** The entry's cost paragraph therefore describes a state the only register that
+exists no longer holds.
+
+*Claim 3 — the remedy is a `TRIGGERED` list separating debts whose precondition has been met.*
+**UNSHIPPABLE AS SPECIFIED, and this was established by BUILDING it, not by reading it.** The
+entry's own satisfiability note describes the remedy as one line matching a `.sh` token out of
+`closes_when`. Built exactly so, it emits **3 `DUE-AFTER:` rows on the live register and all three
+are FALSE**: `validate-gate-manifest.sh` twice, out of *"validate-gate-manifest.sh reports 914
+resolving to a gate-type set that includes retro"* — a CONDITION about a script's output, not a
+command anyone runs to discharge — and `validate-mutation-red.sh`, out of *"so the forked copy
+stops shadowing core's validate-mutation-red.sh"*, where the script is a NOUN. A false-positive
+rate of 3 of 3 is a wrong answer delivered confidently to every consumer.
+
+*Claim 4 — the receipt is a differential and its stated limit is a flag-gated fix.* **REFUTED, and
+worse than its stated limit.** The remedy above **satisfies the old receipt at exit 0.** So the
+receipt certified the very implementation that is 3/3 false. That is not the limit the entry
+declares; it is the receipt accepting a regression.
+
+**NO REPLACEMENT FIX IS SHIPPED, because every derivable signal is zero or false on the only
+register that exists** — the `.sh` extractor is 3/3 false; an `OWED-`id join over `closes_when`
+finds 3, all naming their own debt and **0 dangling**; and every one of the 16 OPEN debts already
+carries a non-empty `closes_when`, so an absence check finds 0. A check that cannot fire reads
+exactly like one that passed, so none was built. **What a future fix needs is a population, and
+this entry is now the record that there is not one yet.**
+
+**THE REPLACEMENT RECEIPT REJECTS THE FILED REMEDY BY NAME.** It seeds three OPEN debts in ONE
+register so the negative sits beside the offender in the same run: `OWED-PROBE-A`, whose
+`closes_when` names its own id; `OWED-PROBE-B`, carrying the live register's own
+`validate-gate-manifest.sh` string verbatim; and `OWED-PROBE-C` as a bound so B's block is
+terminated. Sanity arms exit 9 — the script must exist, the run must exit 0, and all three ids
+must appear, which asserts the run got deep enough for a fix to be SITED. It then exits 1 on any
+output naming `validate-gate-manifest.sh` outside the `closes when:` echo, which is the sole
+discriminator against the filed remedy, and finally compares A's and B's rendered blocks **with
+the debt id normalised out**, so a fix siting its output on the header line counts equally with
+one siting it in the body. Scored against four implementations: shipping **1**, the filed remedy
+**1**, a correct fix **0**, and a SECOND SPELLING of that correct fix **0**. The id normalisation
+is there because the first draft scored the second spelling as **1** — it keyed on WHERE the fix
+put its output, which is the "a receipt rejecting a competent author's other phrasing" failure.
+
+**IT ERASES THE FIELD'S VALUE RATHER THAN STRIPPING A LABELLED LINE.** The first draft filtered
+on the literal label `closes when:`, and a one-token relabel to `closes-when:` defeats that
+filter and closes the entry while parsing nothing at all — the strip was keyed on a string the
+fix under test is free to rename. Substituting the VALUE for a fixed token is invariant under
+any relabel.
+
+**IT SEEDS TWO PREDICATE-SHAPED ROWS AND REQUIRES THEM TO RENDER ALIKE, and that arm exists
+because the version of this entry merged at `v0.453.0` CLAIMED A SCORE IT DID NOT HAVE.** That
+revision said the receipt accepted 2 and rejected 5. **Measured against a wider candidate set it
+accepted SEVEN.** Probe A and probe B differed in length, digit content, vocabulary and
+self-reference — not solely in whether a command is named — so **any non-constant function of the
+field's bytes passed**: its length, an md5 of it, whether it contains a digit, its last word.
+Each reads `closes_when` and joins it to nothing, which is the defect itself. **The score was
+right about the mutants it was run on and the mutant set was too narrow, which is the
+"count what a receipt ACCEPTS" failure one level up — I counted acceptances over a set I chose.**
+
+The repair is a fourth row, not another arm. `OWED-PROBE-D` carries a SECOND predicate-shaped
+`closes_when` — different bytes, same kind — and the receipt requires B and D to render
+IDENTICALLY before it reads A against B. A function of the bytes cannot satisfy that, because B
+and D differ in bytes; only a fix that classifies by KIND can. Re-scored over eleven
+implementations: **ACCEPTS 3, REJECTS 8.** Rejected are shipping, the filed remedy, the relabel,
+a deleted printer, a re-echo under a new label, and four byte-functions. Accepted are the correct
+fix, its second spelling sited on the header line, and a THIRD spelling that renders the same
+self-reference join as a boolean — that last one is a correct implementation, not a leak.
+
+**ONE HOLE IS KNOWN AND LEFT OPEN, STATED HERE RATHER THAN HIDDEN BEHIND THE SCORE.** The same
+hand showed that an implementation gated on `len(rows)` satisfies any receipt whose register has
+a fixed row count while leaving the report byte-identical on a real one. This receipt seeds three
+rows, so a mutant keyed on `len(rows)==3` would pass it. **No receipt over a fixed seed can close
+that**, and the durable guard is the fixture rather than the receipt — which is why
+`core/fixtures/layer-debt-due-and-discharge` exists and why its DISARM mutant matters more than
+this line does. A receipt is a tripwire against a false close; it is not the proof.
+
+**`closes_when` names the command that discharges a layer debt, and nothing in the tree joins the
+two — so running the named command clears the debt in fact and announces nothing.**
+`core/scripts/audit-layer-debt.sh:108` carries the field into the report dict and `:215-216` prints
+it verbatim (`print("      closes when: %s" % d["closes_when"])`). Those, plus the dict key itself,
+are all **3** occurrences in that file. The value is free prose written by an adjudicator, and no
+reader parses it.
+
+**Declared and produced, but consumed by nothing.** `core/schemas/layer-adjudication-register.json:72`
+declares `closes_when` as an optional property of `owed` (`required` is `["id","what"]`);
+`core/skills/ai-dlc-update/SKILL.md:1242` instructs the adjudicator to write it and `:1251` shows an
+example. The only other occurrences in the tracked tree are a seed row at
+`core/fixtures/layer-debt-ledger/run.sh:55` and one CHANGELOG line — and that fixture has **0** hits
+for the printed form `closes when` against **18** for `assert`/`expect`, so the field's rendering is
+seeded but never asserted. The field has a producer, a schema, a printer, and no consumer.
+
+**The command the values actually name has zero awareness of them.**
+`core/scripts/migrate-artifact-paths.sh` has **0** hits for
+`closes_when|layer-debt|audit-layer-debt`; positive control in the same invocation, `strip_token`
+returns **3** in that same file, so the grep reaches the file and discriminates.
+
+**Measured on the reference consumer's register**, `_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl`,
+read out of the consumer tree without writing to it: 207 rows, **24** `owed` objects, **0** ids
+appearing in any row's `closes_owed` — so all 24 are OPEN and none has ever been recorded as paid.
+**6 of the 24 carry the identical `closes_when` value** *"immediately after
+`scripts/ai-dlc/migrate-artifact-paths.sh --apply` completes"*. That consumer ran exactly that
+command to clear an unrelated pre-push blocker; all six came due and nothing announced it. They were
+found only because a session ran the debt audit and read the strings by hand. Control in the same
+invocation: **0** open debts match the impossible token `zzz-no-such-cmd`.
+
+**Tier: DEFECT, not BLOCKER.** No answer is wrong — the debts stay visible as OPEN, and
+`audit-layer-debt.sh` is report-only by design (`exit 0` on findings). What is lost is the reminder:
+the one moment at which a debt becomes payable passes silently, and the register's own `closes_owed`
+half stays empty because nobody is told to fill it.
+
+**Why the receipt is a differential and what its limit is.** There is no substring a fix must
+contain, and anchoring on `closes_when` itself would be satisfied by the comment a fix writes about
+the field. The receipt instead drives the shipping script twice over the SAME register path, with
+one row whose `closes_when` names a command and one whose `closes_when` names no command at all,
+strips the echoed `closes when:` lines from both outputs, and asserts what remains still differs —
+i.e. that something other than the echo depends on the field's content. Sanity arms exit 9: both
+runs must exit 0, both must name the probe id, the two register bodies must differ, and the two RAW
+outputs must differ. **The first draft of this receipt FALSE-CLOSED** — it wrote the two registers to
+two different temp paths, and the report's header line prints `register=%s`, so the outputs differed
+on the path alone and the receipt reported the fix present against the shipping code. Re-run over
+one path rewritten between the two runs, shipping exits **1**. Satisfiability demonstrated against a
+mutant asserted to differ from shipping, which adds one line matching a `.sh` token out of
+`closes_when` and printing `DUE-AFTER:` or `(no command named)`: that copy exits **0**. The limit,
+stated rather than hidden: a fix that puts the join behind a new flag and leaves the default report
+byte-identical would leave this STILL-LIVE — the safe direction, but not a close.
+
+Found by the graph consumer session. Cross-references the consumer entry
+`PC-S334-CLOSES-WHEN-NAMES-A-COMMAND-AND-NOTHING-JOINS-THE-TWO`.
+
+verify: sh S=core/scripts/audit-layer-debt.sh; [ -f "$S" ] || exit 9; d=$(mktemp -d) || exit 9; A="a later register row for this entry names OWED-PROBE-A in closes_owed"; B="validate-gate-manifest.sh reports 914 resolving to a gate-type set that includes retro"; D="before the next pull, so the forked copy stops shadowing core validate-mutation-red.sh guidance"; E="after the next pull lands"; F="a later register row for this entry names OWED-PROBE-F-V2 in closes_owed"; h="{\"clause\":\"LC-E1\",\"entry\":\"extensions/p.md\",\"subject_digest\":\"d0\",\"verdict\":\"still-additive\",\"recorded_utc\":\"1970-01-01T00:00:00Z\",\"reason\":\"probe row\",\"owed\":{\"what\":\"same what\","; { for p in "A|$A" "B|$B" "D|$D" "E|$E" "F|$F"; do printf "%s\"id\":\"OWED-PROBE-%s\",\"closes_when\":\"%s\"}}\n" "$h" "${p%%|*}" "${p#*|}"; done; printf "%s\"id\":\"OWED-PROBE-G\"}}\n" "$h"; } > "$d/r.jsonl"; o=$(bash "$S" --register "$d/r.jsonl" 2>/dev/null); rc=$?; rm -rf "$d"; [ "$rc" = 0 ] || exit 9; for i in A B D E F G; do case "$o" in *OWED-PROBE-$i*) : ;; *) exit 9 ;; esac; done; e=$(printf "%s\n" "$o" | sed "s|$A|<CW>|g; s|$B|<CW>|g; s|$D|<CW>|g; s|$E|<CW>|g; s|$F|<CW>|g"); case "$e" in *validate-gate-manifest.sh*|*validate-mutation-red.sh*) exit 1 ;; esac; blk() { printf "%s\n" "$e" | sed -n "/OWED-PROBE-$1 /,/OWED-PROBE-$2 /p" | sed "\$d" | sed "s/OWED-PROBE-$1/OWED-PROBE-X/g"; }; a=$(blk A B); b=$(blk B D); q=$(blk D E); s=$(blk E F); f=$(blk F G); [ -n "$a" ] && [ -n "$b" ] && [ -n "$q" ] && [ -n "$s" ] && [ -n "$f" ] || exit 9; [ "$b" = "$q" ] && [ "$b" = "$s" ] && [ "$b" = "$f" ] || exit 1; [ "$a" != "$b" ]
+
+## BL-077
+
+**LANDED (v0.668.0, verified 1eca2ed2).** `validate-steering-budget.sh` derives the corpus
+from `$HOME/.claude/projects/*/$CLAUDE_CODE_SESSION_ID.jsonl` when given neither flag: the file for the
+checks and `--count`, the slug directory for `--cite`/`--since`. Zero or multiple matches, an unset id,
+or an id outside `[A-Za-z0-9-]` fall back to both refusals byte-for-byte. All five delegating call
+sites pass an explicit flag and return before calling when they have none, so no fail-open or
+fail-closed branch moved. Check 25 and the retro audit no longer carry a typed derivation. Pinned by
+`check-25-steering-conduct` `derive-shipping` (`CNSZTE`), mutants G/H/I/J killed. Receipt: base 1,
+tip 0, hardcoded 1, refuse-override 9, doc-only 1.
+
+**`validate-steering-budget.sh` refuses to run without a caller-supplied corpus, so the
+derivation of "this session's transcript" is retyped by the MODEL in prose at
+`core/skills/ai-dlc/steps/gate-validation.md:1665` and by hand in `steps/retro.md:614`, where
+nothing can check either one.** With no corpus flag the script exits 1 at
+`core/scripts/validate-steering-budget.sh:189` with `FAIL: pass --transcript PATH or --dir PATH`,
+so every caller must construct the path itself. The gate's construction is
+`T=$(ls -t ~/.claude/projects/"$(pwd | sed 's|/|-|g')"/*.jsonl 2>/dev/null | head -1)` — a model
+transcription sitting in a step file, which is `.claude/rules/mechanism-design.md`'s own named
+failure mode ("a skill that ends in a manual transcription step ends in a place where the
+transcription silently stops happening"). That rule's remedy shape is to move the derivation
+INTO the tool so the prose carries no transcription at all. Split from `BL-059`, whose two-part
+remedy this is the first half of; the second half — naming the corpus that was read — shipped on
+this branch and is what makes a wrong derivation VISIBLE rather than impossible.
+
+**The retyped derivation is wrong in two ways and currently right by luck, and both halves must
+be stated in the same breath.** Measured on the live tree: the operator's projects directory holds
+**9** project slug directories and the one for this repo holds **163** top-level `*.jsonl` session files — down from **173** counted forty
+minutes earlier in the same session, same glob, so the corpus `ls -t` reads is not merely
+contended but actively PRUNED underneath it, of which **1** was modified in the last 60 minutes, **4** in the last 24 hours and **26** in
+the last 7 days; `ls -t … | head -1` therefore picks **this session's file, correctly, right now**
+— the race is LATENT, not a live miswitness, and needs a second concurrent session on the same
+project to fire. The slug rule is the same shape: `sed 's|/|-|g'` and the harness's own `/` **and**
+`.` collapse agree byte-for-byte on a path with no dot in it and DIVERGE on any checkout that
+carries one — control, computed both ways in one invocation: `/Users/n8/git/my.app` gives
+`-Users-n8-git-my.app` from the `sed` form against `-Users-n8-git-my-app` from the collapse. So
+this repo cannot observe the bug, and a consumer whose checkout path holds a dot gets a directory
+that does not exist, a `head -1` of nothing, and an empty `$T` that the gate's own SKIP branch then
+reads as "no transcript (CI, a non-Claude-Code runner)". **A misderived corpus fails as a
+legitimate SKIP**, which is the shape this repo calls a check that cannot fire.
+
+**The consequence is not symmetric, and `--cite` is the half that matters.** `--cite` is THE
+genuine-operator predicate — the convergence validator, the escalation gate and
+`core/hooks/ai-dlc-gate-remediation-guard.sh` all delegate "a real human said this" to it, and the
+guard is a `PreToolUse` hook that DENIES tool calls on the answer. A wrong corpus there makes a
+genuine operator authorization unverifiable (NOMATCH, the record stops counting, `--cycle-state`
+regresses to STALLED, every dispatch denied — the deadlock those files' own headers record), and
+the inverse direction is worse in kind: a corpus WIDER than the session makes a citation verifiable
+that the operator never made in the relevant sprint. **Frequency is UNMEASURED and it is
+measurable** — every gate run writes `steering_violations:` into the gate log and the `--cite`
+calls are hook-logged, so a consumer's committed gate-log archive would answer how often the
+derived corpus was empty. That measurement was not taken here, and not taking it is not a limit on
+the fix.
+
+**Twelve call sites, and a default change breaks none of them, because every one passes an explicit
+corpus flag today.** Derived over `core/` and `scripts/`, with an impossible flag returning rc 1 in
+the same invocation so the scan is known to discriminate: seven fixture invocations across
+`askuserquestion-citation`, `command-args-citation` and `check-25-steering-conduct`; the three
+delegating callers; and the two prose sites. **`--transcript` and `--dir` MUST stay explicit
+overrides** — a fix that makes either refuse a caller-supplied path breaks all ten mechanical sites
+at once and is a regression, not a fix. The receipt asserts the override arms FIRST and exits 9 if
+they have stopped discriminating, so a run that measured nothing reports STILL-LIVE rather than
+closing.
+
+**The three delegating callers are why this is not a one-line default, and why it did not ride
+along with `BL-059`.** Each has an explicit "no corpus" branch that fails OPEN in hook mode
+(`ADVERSARIAL_CITATION_UNVERIFIABLE`, return 0, never wedge the pipeline) and CLOSED in gate mode.
+A derived default silently DELETES that branch: the hook stops failing open and starts adjudicating
+against a corpus nobody chose, inside a `PreToolUse` deny path. That is the consumer-visible
+behaviour change. **And the default differs by MODE**: those callers prefer the directory precisely
+because an authorization OUTLIVES the session that recorded it, so a `--cite` default must be the
+slug DIRECTORY while a `--count`/checks-A–D default is the single session FILE. One default for
+both modes is wrong in whichever mode it was not written for.
+
+**The environment the derivation reads is not the one first proposed, and three clauses of that
+proposal re-derived FALSE.** `CLAUDE_CODE_SESSION_ID` IS present in a Bash-tool child (control: an
+all-zeros UUID under the same slug directory is correctly absent). `CLAUDE_PROJECT_DIR` is **UNSET**
+in that same child while **70** tracked files reference it — it is a HOOK-environment variable — so
+a formula slugging `$CLAUDE_PROJECT_DIR` resolves to a path with an empty component and finds
+nothing. The available root is the working directory, and it must be the REPO ROOT resolved by
+walking up for `VERSION`, never `$PWD`: run from `core/scripts/`, a `$PWD`-slugged derivation on a
+patched copy refused outright, while the same copy from the repo root resolved. Two further facts
+belong in the specification rather than in a later session's surprise: **a subagent's Bash child
+sees the TEAM session id, not its own**, and subagent transcripts live one level down under a
+per-session directory — **13** of them for the session that measured this — invisible both to a
+`<slug>/*.jsonl` glob and to the non-recursive directory read at `:427`. The derived corpus is the
+LEAD's conduct, which is what Rule 29 asks for; that exclusion should be DECLARED, not discovered.
+
+**The case against, and why it does not block.** The derivation depends on a harness variable with
+no published contract, absent for a consumer running the validator from CI, a plain terminal or a
+git hook outside the tool, and absent under a sandbox with a different `HOME`. Measured on a
+patched copy with `HOME` pointed at an empty `mktemp -d`: it falls back to the existing refusal,
+rc 1, byte-identical to today's message. **That is the required shape and it is the specification:
+derive-or-fall-back-to-the-current-refusal, never derive-or-fail-differently.** A fix that makes an
+underivable environment fail in a NEW way fails closed on every consumer not running Claude Code,
+which is the shipping hazard here.
+
+**The receipt anchors on the CONTRACT, not on the mechanism.** Anchoring on the literal
+`CLAUDE_CODE_SESSION_ID` would prescribe one implementation and REJECT every other correct
+derivation; anchoring on the absence of the `ls -t` line from `gate-validation.md` would CLOSE when
+someone deletes the instruction without replacing it, and the receipt never reads that file for
+exactly that reason. Instead: a corpus-flagless `--cite` run must name a corpus that EXISTS, is not
+a path the receipt supplied, and is not inside the repo; and the same flagless run under a swapped
+`HOME` must name something DIFFERENT, which makes a hardcoded constant unconstructible. Both rc 0
+and rc 2 are accepted from that arm because **the receipt's own probe token enters the live
+transcript the moment anyone runs it** — measured, a token typed literally into a command read
+**4** occurrences in the session file while a token assembled at runtime read **0**, so a negative
+control against a LIVE transcript is contaminated by the act of running it.
+
+Proven in both directions with the sides asserted to differ first: **1** against the current tree,
+and **0** against a patched copy carrying a derivation that never mentions the environment variable
+at all, which is the property the receipt is meant to have. Killed: a hardcoded constant corpus, by
+the `HOME`-swap arm; a derivation that also makes `--transcript` refuse a caller path, at exit 9 by
+the override control; and a doc-only change, which moves nothing.
+
+**Two constraints on the fix that the receipt imposes, stated rather than left to be discovered.**
+It does not fire where no corpus is resolvable at all, which is the safe direction. And it requires
+a derivation NOT rooted at the SCRIPT's own location: the receipt exercises the validator as a
+COPY, so a `dirname "$0"` walk-up for a repo marker finds nothing above a `core/scripts` copy,
+never derives, and scores a fix that is correct in the tree as STILL-LIVE. Measured on one patch
+with a single expression changed — script-rooted **1**, working-directory-rooted **0**. That costs
+nothing, because the rooting the receipt demands is the correct one on the merits: globbing
+`$HOME/.claude/projects/*/<session-id>.jsonl` computes NO slug, sorts nothing, and is invariant to
+both the working directory and the install layout that puts this file at `core/scripts/` here and
+at `scripts/ai-dlc/` in a consumer — so it retires the `.`-versus-`/` slug bug and the `ls -t` race
+in the same stroke.
+
+**The extraction covers all THREE `--cite` diagnostics, and keyed on one of them it rejected a
+correct fix.** Proven rather than reasoned: a seeded `HOME` whose slug directory holds a single
+UNPARSEABLE transcript drives the zero-records branch, where a `sed` keyed on the `cite: scanned`
+wording lifts an empty string and exits at the non-empty guard — a permanent false STILL-LIVE for
+any consumer whose corpus happens to be unparseable. The shipped form lifts the ` from ` suffix
+common to all three.
+
+
+verify: sh V=core/scripts/validate-steering-budget.sh; [ -r "$V" ] || exit 9; DA=$(mktemp -d); DB=$(mktemp -d); [ "$DA" != "$DB" ] || exit 9; J='{"type":"user","message":{"role":"user","content":"probe"}}'; printf '%s\n' "$J" > "$DA/alpha.jsonl"; printf '%s\n' "$J" > "$DB/alpha.jsonl"; OA=$(bash "$V" --transcript "$DA/alpha.jsonl" 2>&1); RA=$?; OB=$(bash "$V" --transcript "$DB/alpha.jsonl" 2>&1); RB=$?; OC=$(bash "$V" --dir "$DA" 2>&1); RC=$?; ON=$(bash "$V" --cite zzzabsentphrasezzz 2>&1); RN=$?; EH=$(mktemp -d); OH=$(HOME="$EH" bash "$V" --cite zzzabsentphrasezzz 2>&1); rm -rf "$DA" "$DB" "$EH"; [ "$RA" = 0 ] && [ "$RB" = 0 ] && [ "$RC" = 0 ] || exit 9; grep -qF "transcripts read" <<<"$OA" || exit 9; [ "$OA" != "$OB" ] || exit 9; grep -qF "$DA/alpha.jsonl" <<<"$OA" && grep -qF "$DB/alpha.jsonl" <<<"$OB" || exit 9; case "$RN" in 0|2) ;; *) exit 1 ;; esac; name(){ L=$(sed -n '/ from /{p;q;}' <<<"$1"); L="${L##* from }"; L="${L%, no genuine operator message carried it}"; printf '%s' "${L%)}"; }; P=$(name "$ON"); [ -n "$P" ] || exit 1; { [ -r "$P" ] || [ -d "$P" ]; } || exit 1; case "$P" in "$PWD"/*|"$PWD") exit 1 ;; esac; Q=$(name "$OH"); [ "$Q" != "$P" ] || exit 1
+
+## BL-082
+
+**LANDED (v0.668.0, verified 1eca2ed2).** The prior verdict, "there is no remedy that is
+right on both platforms", is overturned: it rested on folding the COMPARISON, which stays forbidden.
+`ondisk()` in `validate-provenance-block.sh` respells each path component as its parent directory
+LISTS it, choosing only an entry that is the same directory entry (`samestat` on `lstat`), after
+`realpath`, for root and candidate. On a case-sensitive filesystem a real `DOCS/` is listed verbatim
+and kept, a nonexistent one kept raw, so no false PASS opens. `stray-party-mode-provenance` S10 holds
+it in three worlds: S10-F on the folding host (bare-realpath mutant MUT-F killed; S10-F5 records that
+the forbidden fold is indistinguishable from the fix there); S10-C on a case-sensitive APFS image via
+`hdiutil` (the forbidden fold MUT-G killed only here); S10-H on an HFS+ image, where `docs` and
+`doc<U+017F>` are distinct but casefold-equal (casefold-without-samestat MUT-H killed). A
+present-but-failing `hdiutil` is FIXTURE BROKEN in the distribution; a consumer host without it SKIPs
+S10-C/S10-H naming the unguarded mutant. The fixture ships, so a macOS consumer now builds two 20 MB
+images per run. Receipt unchanged: base 1, fix 0, root-only 1, cache-key-collapse 1.
+
+**On a case-folding filesystem `--strays` reports a declared home as a stray when the caller
+spells a path component in a different case, and every remedy that closes it opens a FALSE PASS
+on a case-sensitive consumer.** `core/scripts/validate-provenance-block.sh` canonicalises each
+candidate through `os.path.realpath`, which resolves symlinks and `..` and does **not** fold
+case, so the canonical form keeps the caller's spelling and misses the home. Measured on this
+host with the filesystem's behaviour PROBED rather than inferred from the platform name
+(`[ -e "$PROJ/DOCS" ]` is true, so the two spellings are one file): `docs/retro/sprint-1.md`
+exits **0**, `DOCS/retro/sprint-1.md` — the same file — exits **1** and is reported
+`STRAY PARTY-MODE PROVENANCE: DOCS/retro/sprint-1.md`. Control in the same run: a genuine stray
+spelled correctly, `server/handler.py`, exits **1**, so the scan fires and the passing arm is not
+a dead scan.
+
+**The direction is the safe one and that is why this is filed rather than fixed.** A case variant
+cannot turn a non-home into a home — on a folding filesystem the two spellings name the same
+directory either way — so there is no false-PASS counterpart to the defect itself. It is noise: a
+false STRAY, loud, and the operator fixes it by respelling the argument.
+
+**The obvious remedy is forbidden, and that is the entry's substance.** Case-folding the home
+comparison would make `docs/retro/**` match a genuinely DISTINCT `DOCS/retro/` directory on a
+case-sensitive filesystem, which is what a consumer's Linux CI runs. That converts a
+noise-tier false stray on one platform into a false PASS on the platform that matters — the exact
+direction `BL-060` was opened to close, reintroduced by its own cleanup. A per-component
+case-canonicalising walk is correct only on the folding filesystem and is wrong to ship as a
+general rule. So there is no remedy that is right on both platforms, and the entry exists to stop
+the next author reaching for the one that looks obvious.
+
+**It is unreachable in the place it would matter.** On a case-sensitive filesystem `DOCS/retro/`
+names nothing, and the explicit-argument existence assert added alongside `BL-060` already
+refuses it at exit 2 — which is the correct answer there. So this fires on a developer's macOS
+checkout and never in a consumer's CI.
+
+Found by the independent fixture hand for `BL-060` while enumerating sixteen path spellings; the
+arm was written, measured, and then deliberately removed rather than left red or closed by
+folding, with a comment at its site pointing here. Two spelling classes were enumerated alongside
+it and are NOT covered by this entry: hard links, which are not a distinct spelling because a
+second link is the same inode with no way for a caller to name it differently, and Unicode
+NFC/NFD filename variants, which are constructible on APFS and were deliberately not asserted
+because they were not measured.
+
+The receipt drives the shipping validator on both spellings of one file and requires them to
+agree, with the genuine-stray control in the same invocation so a disarmed scan cannot satisfy
+it. It SKIPs — exit 9, which reverify reports as STILL-LIVE, the safe direction — on a filesystem
+that does not fold case, because there the subject does not exist and an arm with no subject must
+not report a verdict.
+
+
+verify: sh V=core/scripts/validate-provenance-block.sh; [ -f "$V" ] || exit 9; R="$PWD"; D=$(mktemp -d); P="$D/proj"; mkdir -p "$P/.claude/schemas" "$P/docs/retro" "$P/server"; cp core/schemas/provenance-block.json "$P/.claude/schemas/" || { rm -rf "$D"; exit 9; }; printf '0.0.0\n' > "$P/VERSION"; python3 -c 'import json,sys;S=json.load(open(sys.argv[1]));e=S["envelope"];b=e["open"]+chr(10)+"skill: "+S["stray_scan"]["party_mode_skills"][0]+chr(10)+"invoked_at: 2026-07-28T09:00:00Z"+chr(10)+"mode: subagent"+chr(10)+e["close"]+chr(10);[open(p,"w").write(b) for p in sys.argv[2:]]' "$P/.claude/schemas/provenance-block.json" "$P/docs/retro/probe.md" "$P/server/stray.md" || { rm -rf "$D"; exit 9; }; [ -e "$P/DOCS" ] || { rm -rf "$D"; exit 9; }; ( cd "$P" && AI_DLC_PROJECT_ROOT="$P" bash "$R/$V" --strays server/stray.md >/dev/null 2>&1 ); c=$?; ( cd "$P" && AI_DLC_PROJECT_ROOT="$P" bash "$R/$V" --strays docs/retro/probe.md >/dev/null 2>&1 ); a=$?; ( cd "$P" && AI_DLC_PROJECT_ROOT="$P" bash "$R/$V" --strays DOCS/retro/probe.md >/dev/null 2>&1 ); b=$?; rm -rf "$D"; [ "$c" = 1 ] || exit 9; [ "$a" = 0 ] || exit 9; [ "$b" = 0 ]
+## BL-126 — the pause-flag deny hook reads no agent identity, so it cannot let an in-flight teammate write reach a consistent stop
+
+**LANDED (v0.668.0, verified 1eca2ed2).** Closed by the approximation, not true quiesce. Check 3 of
+`core/hooks/ai-dlc-acknowledge.sh` now reads the actor: on a paused tree a
+`Write|Edit|MultiEdit|NotebookEdit` under `_bmad-output/` carrying an `agent_id` is ALLOWED and logged
+as `ACK_TEAMMATE_WRITE` naming the agent and the file; `Agent|Task|Skill|TaskCreate` stay denied for
+teammates, so no new work is dispatched while paused; the lead, and a `--agent` lead carrying
+`agent_type` alone, are denied exactly as before. It is not quiesce: the hook has no record of which
+writes were in flight when the flag went up, so a teammate dispatched before the pause may keep
+writing for as long as it runs, bounded by the dispatch deny. Every `ACK_DENIED` row now carries
+`Agent:` and `File:`. Found and fixed in the same change: `NotebookEdit` carries `notebook_path`, so a
+lead's notebook under `_bmad-output/` was never pause-denied; Check 3 now reads both. Pinned in
+`route-read-required` section 8 (red on 4 arms against the pre-fix hook) and in
+`route-read-required-mutants` (six mutants, each moving only its own cell). The receipt below drives
+behaviour: base 1, fix 0, and 1 each for a blanket teammate exemption, the arm widened to dispatch
+tools, an `agent_type` key, an unlogged allow, and an `ACK_DENIED` row without `File:`.
+
+**The PreToolUse deny at `core/hooks/ai-dlc-acknowledge.sh:466` fires the moment
+`_bmad-output/pipeline-paused.flag` exists, and the hook reads no field that could tell a
+TEAMMATE's in-flight write from the LEAD's next advancing action.** Its whole read-set is
+`.session_id` (`:60`), `.tool_name` (`:61`), `.transcript_path` (`:62`), `.tool_input.skill`
+(`:161`) and `.tool_input.file_path` (`:402`). Grepping that file for `subagent`, `agent_type`,
+`parent` or `teammate` returns only two prose comments (`:427`, `:521`) and no read — control in
+the same invocation: `UPDATER_SESSION` returns 7 hits, so the grammar fires.
+
+There is also no quiesce concept anywhere to hang a fix on: `grep -rn 'quiesce|drain|in-flight|inflight' core/hooks/`
+returns nothing, against a control of `pipeline-paused` matching in five hook files.
+
+**The consequence is an artifact left less consistent than either endpoint.** Arming the flag
+while a teammate is mid-derive denies its next `Write`/`Edit` under `_bmad-output/`, so a
+multi-section artifact keeps the sections already amended and the sections still carrying the text
+those amendments contradict. Filed by the reference consumer as
+`PC-S307-CONTINUE-HOOK-CANNOT-DISTINGUISH-A-DIRECTED-SESSION-FROM-AN-UNATTENDED-ONE`, whose second
+claim this is, observed on its sprint-307 carry-over session.
+
+**TWO PARTS OF THAT FILING ARE REFUTED AND ARE NOT THIS ENTRY'S SUBJECT.** It calls the blast
+radius "binary (block everything, immediately)". It is not: the deny is scoped to
+`Agent|Task|Skill|TaskCreate` plus `Write|Edit|MultiEdit|NotebookEdit` whose `file_path` is under
+`_bmad-output/`, `:481` leaves Read/Grep/Glob/Bash allowed, and FOUR carve-outs already ship —
+`:411` `_bmad-output/ai-dlc-update/*`, `:424` `*-resolution-p*.md`, `:438` `pipeline-snapshot.md`,
+`:459` `pipeline-snapshot-history.md`. The exemption precedent is established; what is missing is a
+predicate, not permission. And the filing's attribution of the denied writes to a named teammate is
+**not established by any shipped artifact**: the `ACK_DENIED` log rows carry no `file_path` and no
+agent identity, and both rows recorded that session carry the LEAD's session id. That
+observability gap is part of this entry's subject — a deny nobody can attribute is a deny nobody
+can adjudicate.
+
+**Why this is not folded into the release that shipped the other half.** The sibling claim was a
+retry-text gap in `ai-dlc-continue.sh`, a Stop hook. This is the PreToolUse deny path, a different
+hook and a different subsystem, and the remedy is a quiesce semantic that does not exist yet
+anywhere in `core/hooks/`. Under this repo's one-subsystem-per-batch rule those do not belong in
+one release.
+
+**Do NOT fix this by widening the carve-out list.** A fifth path pattern acquits a path for every
+caller including the lead, which is the thing the flag exists to stop. The predicate has to be
+about WHO is writing, and the hook is currently blind to that — so the first thing this entry owes
+is a measurement of whether a PreToolUse payload carries any usable subagent discriminator at all.
+If it does not, the entry's remedy is the observability half alone: record `file_path` and whatever
+identity IS available on every `ACK_DENIED` row, so the next occurrence is attributable.
+
+**Tiered DEFECT.** It corrupts a shared artifact rather than losing work outright, and reaching it
+requires a pause to be armed while a teammate write is in flight.
+
+**The measurement this entry owed first is delivered, and the receipt is replaced (`v0.496.0`,
+`BL-156`).** A teammate's PreToolUse payload DOES carry a discriminator: `agent_id` and
+`agent_type`, absent on the lead's own calls, with the LEAD's `transcript_path` beside them.
+`v0.496.0` reads `.agent_id` in this very hook — for Check 2z, the router-read guard, and not
+for the pause deny this entry is about. The receipt that stood here keyed on the hook's READ-SET
+and would have read CLOSED on that change while a teammate's write on a paused tree still
+answers `Rule 29` (measured, before and after). It now drives the pause deny with a teammate
+payload on a paused tree: exit 1 while that write is denied as Rule 29, 0 only when the hook
+both reads an identity field on a non-comment line (a whole-file grep was satisfied by a
+comment, measured by the adversarial hand at `v0.496.0`) and no longer answers Rule 29 to it, and
+9 when the lead's own
+paused write is not Rule-29-denied (the deny is gone, nothing measured) or the teammate's returns
+a deny naming another check. **Limit, stated:** a change that exempts every teammate from the
+pause deny outright scores 0 here. This entry's own text asks for a quiesce semantic — let the
+in-flight write finish, do not admit new dispatches — not a blanket exemption, so whoever closes
+it must say which was built. A whole-hook early exit on `agent_id` also scores 0 and additionally
+removes Check 2a's Rule 8 stop deny for teammates, which nothing here names as wanted. An
+exemption keyed on `agent_type` scores 1: a lead started with `claude --agent <name>` carries
+`agent_type` and no `agent_id`, and the receipt drives that lead as its own paused cell. Read `BL-156` for why Check 2z took the blanket form and this
+check must not inherit it.
+
+verify: sh h=core/hooks/ai-dlc-acknowledge.sh; [ -f "$h" ] || exit 9; command -v jq >/dev/null || exit 9; w=$(mktemp -d) || exit 9; trap 'rm -rf "$w"' EXIT; printf '{"type":"user","message":{"content":"<command-name>/ai-dlc</command-name>"}}\n{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"/w/.claude/skills/ai-dlc/steps/route.md"}}]}}\n' > "$w/s.jsonl"; d(){ p="$w/$1"; mkdir -p "$p/_bmad-output/planning-artifacts/s7" "$p/scripts/ai-dlc"; printf '#!/bin/sh\necho 7\n' > "$p/scripts/ai-dlc/sprint-status.sh"; chmod +x "$p/scripts/ai-dlc/sprint-status.sh"; : > "$p/_bmad-output/pipeline-snapshot.md"; : > "$p/_bmad-output/pipeline-paused.flag"; jq -nc --arg tr "$w/s.jsonl" --arg t "$2" --arg ag "$3" --arg f "$p/_bmad-output/planning-artifacts/s7/prd.md" '{session_id:"r",transcript_path:$tr,tool_name:$t,tool_input:(if $t=="Agent" then {} else {file_path:$f} end)}+(if $ag=="" then {} elif $ag=="type" then {agent_type:"Explore"} else {agent_id:$ag,agent_type:"general-purpose"} end)' | CLAUDE_PROJECT_DIR="$p" bash "$h" 2>/dev/null; }; lw=$(d lw Write ""); case "$lw" in *"Rule 29"*) ;; *) exit 9;; esac; grep -qF -- "- File: $w/lw/_bmad-output/planning-artifacts/s7/prd.md" "$w/lw/_bmad-output/pipeline-continuation-log.md" || exit 1; tw=$(d tw Write ax); case "$tw" in *permissionDecision*) exit 1;; esac; grep -q '^## .*-- ACK_TEAMMATE_WRITE' "$w/tw/_bmad-output/pipeline-continuation-log.md" 2>/dev/null || exit 1; grep -qF -- "- Agent: ax" "$w/tw/_bmad-output/pipeline-continuation-log.md" || exit 1; ta=$(d ta Agent ax); case "$ta" in *"Rule 29"*) ;; *) exit 1;; esac; fl=$(d fl Write type); case "$fl" in *"Rule 29"*) ;; *) exit 1;; esac; exit 0
+
+## BL-266 — `enforcement-map-sites`' I59 corpus mutation edits four arms' corpora and the battery can only see one of them
+
+**LANDED (v0.668.0, verified 1eca2ed2).** The corpus mutation is addressed to I59's own
+`find` line (the one writing `$i59_flist`). The arm refuses unless the mutated copy differs in exactly
+one line, and drives `--arms I60,I83,I84` against the same mutant, which must exit 0 with its `OK:`
+line. Re-derived at `7a325bb6`: the anchor sits on 4 lines (I59, I60, I83, I84), and the unaddressed
+sed turned I59, I60 and I83 red with I84 green. Arm scored tip 0; unaddressed 1 (count guard);
+unaddressed without the count guard 1 (sibling control); addressed to I60's line 1. Fixture wall
+clock unresolved at a +-5s spread (means 40.4s base, 41.1s tip).
+
+**The sed is `-type f -name '*.sh' -not -path`, with no line address, and `sed` applies `s///`
+once per matching line.** Measured on a seeded tree at `4feee7f9`: it applies to **4** lines and
+sends `--arms I59` (exit 1, `I59 found only 0 shipped script(s)`, its own assertion), `--arms I83`
+(exit 1) and `--arms I60` (exit 1) red together, with I84 unaffected at exit 0.
+
+**It is PRE-EXISTING and this release widened it by one.** Same mutation at the parent `5e5ff9e7`:
+3 lines, with I59 and I83 both red and I60 still green. `0.588.0` added I60's own corpus `find` in
+the batched rewrite, so the anchor picked up a fourth site.
+
+**The arm passes for its own reason and the collateral is invisible.** `vrun` derives `--arms I59`
+from the calling function's name, so the battery reads only I59's verdict and never observes that
+two other arms were disabled in the same breath. `.claude/rules/fixture-mutants.md` requires a
+mutant to fail ONLY its own assertion; this one cannot be seen to violate that, which is the part
+worth filing — the check that would notice is the one that does not exist.
+
+**What is owed.** Either the mutation is line-addressed to I59's own corpus line, or the battery
+asserts that the arms the mutation is NOT about stay green in the same run. The second is the
+stronger form and generalises: every mutation in this file could carry it.
+
+**Tiered NOTE.** No verdict is wrong today and no guard is removed; the mutation is over-broad
+rather than insufficient, which is the safe direction for a kill.
+
+The receipt keys on the two REMEDIES as executable forms — a line-addressed `sed` for the corpus
+mutation, or a `vrun`-style drive of a second arm inside assertion 33 — never on prose. Its first
+form asked for the words "stays green" and came back 0 immediately, satisfied by two unrelated
+comment lines about a hand-copied path; that is this repo's text-about-a-program trap, met while
+writing the entry that describes it.
+
+verify: sh f=core/fixtures/enforcement-map-sites/run.sh; v=scripts/validate-enforcement-map.sh; [ -f "$f" ] || exit 9; [ -f "$v" ] || exit 9; o="$(bash "$f" --run-one A33_i59_documented_modes 2>&1)"; r=$?; [ "$r" = 2 ] && exit 9; [ "$r" = 0 ] || exit 1; printf '%s\n' "$o" | grep -q '^  ok    a corpus derivation that returns nothing FAILS I59 loudly' || exit 1; printf '%s\n' "$o" | grep -q '^  ok    the I59 corpus mutant leaves I60, I83 and I84 green' || exit 1; exit 0
+
+
+## BL-282 — "a green gate is not a landed push" has no enforcer, and the obvious check RACES a backgrounded push
+
+**LANDED (v0.668.0, verified 1eca2ed2).** The enforcer is the push-time keepalive WARNING
+the note above names, not an `ls-remote` reader. `.githooks/pre-push` carries a `KEEPALIVE` block
+above the first step, outside the I66 pool block: for an ssh remote it runs `-G` through the ssh
+command git itself would use (`GIT_SSH_COMMAND`, `core.sshCommand`, `GIT_SSH`, `ssh`) and prints one
+non-blocking line when `serveraliveinterval` is 0. False-positive set on the operator's box: `origin`
+via `github-euron8` is silent with the dotfile as-is and fires under `GIT_SSH_COMMAND="ssh -F <empty
+config>"`. `core/fixtures/prepush-ssh-keepalive` (dist-only) drives the extracted block in five firing
+and six silent shapes, four mutants killed; about 50 ms per push. The second subject stays recorded:
+`verification-discipline.md`'s "confirm the remote ref moved" is still prose; the warning removes the
+measured cause and does not observe the outcome, which no hook can. The receipt below replaces the
+`ls-remote`-shaped one: base 1, fix 0, invocation deleted 1, interval test deleted 1, widened 1,
+alias dropped from the text 1, receipt literals in a comment 1.
+
+**NOTE.** Filed at batch 138 after the lead reported a push failure that had not happened.
+
+**CAUSE FOUND AT 0.619.0–0.621.0, AND IT IS AN OPERATOR DOTFILE, NOT THE TREE.** `git push`
+opens the SSH connection before `pre-push` runs (the hook reads the remote's refs on stdin), the
+suite then idles that connection for the length of a full run, GitHub's sshd drops it, and git
+takes SIGPIPE writing the pack — exit 141, gate green, ref absent. Three consecutive pushes on the
+0.619.0 branch dropped at the same point mid-suite, each log carrying `Connection to github.com
+closed by remote host` before `pre-push: all gates green`. `~/.ssh/config` for the alias carried
+no keepalive. With `ServerAliveInterval 60` / `ServerAliveCountMax 30` added — the one variable
+changed — the next three pushes ran **8m04s, 8m41s, 8m08s** with zero drops and every ref
+landed. The receipt below asks for an `ls-remote` reader in the hook, which is a detector for a
+symptom whose cause is now known; the mechanism that would fire is the hook WARNING at push time
+when the ssh alias lacks a keepalive, which is a check with a measured false-positive set (this
+box, before the change). The entry stays open on that reshaped receipt, and this note is the
+record that the symptom-detector is no longer the right shape.
+
+**THE RULE IS PROSE WITH NOTHING BEHIND IT.** `.claude/rules/verification-discipline.md:216`
+records the measured hazard: twice, every phase PASS, `pre-push: all gates green`, **exit 141 from
+the transport**, and the ref NOT on origin. It instructs confirming the remote ref moved before
+opening a PR or reporting a release. Derived at this tip: `grep -rn 'ls-remote'` over
+`.githooks/pre-push` and `scripts/*.sh` returns **0** readers, against a control of 15 `pre-push`
+occurrences in `docs/backlog.md` — so the instruction has no mechanism and depends on the session
+remembering it.
+
+**AND GIT OFFERS NO HOOK POINT FOR IT.** Derived from the hook samples git itself ships:
+`post-push` is **0** of the 14, against a control of **1** for `pre-push`. `pre-push` runs BEFORE
+the transport, so the failure it would need to observe happens after it exits. **A hook cannot
+carry this check**, which is why the rule has stayed prose and why this entry is a NOTE rather
+than a fix with a known shape.
+
+**THE OBVIOUS CHECK HAS A MEASURED FALSE POSITIVE, AND THE LEAD SHIPPED IT THIS BATCH.** A
+`git ls-remote --heads origin <branch>` reading 0 is only evidence of an absent ref if the push
+has FINISHED. Measured: `git push -q` was backgrounded under a 600s timeout, `ls-remote` ran while
+it was still in flight and read **0** against an impossible-branch control of 0, and the push then
+completed and the ref appeared. The reflog shows exactly **one** push landing the sha — the
+"re-push" that followed was a no-op against an already-landed ref. **A zero read from a check
+whose subject is still being written is not a finding**, and it is indistinguishable from the real
+exit-141 case the rule exists for.
+
+**SO A CHECK MUST ESTABLISH THAT THE PUSH COMPLETED BEFORE IT READS THE REF.** That is the
+property the design has to carry, and it is the reason this is not a one-line addition. A session
+that backgrounds the push cannot read the ref until the background task reports, and nothing today
+joins those two events.
+
+**WHAT A FIX MUST NOT DO.** Do not put the check in `pre-push` — it cannot see the outcome.
+Do not key it on the push command's exit status alone: that is the value the measured hazard
+reports as 0 while the ref is absent, and reading it through a pipe makes it worse, because this
+shell has no `PIPESTATUS` and a pipeline answers with its last stage.
+
+verify: sh h=.githooks/pre-push; [ -f "$h" ] || exit 9; command -v ssh >/dev/null 2>&1 || exit 9; d="$(mktemp -d)" || exit 9; : > "$d/c"; sed -n '/^# KEEPALIVE_BEGIN$/,/^# KEEPALIVE_END$/p' "$h" > "$d/b.sh"; w="$(GIT_SSH_COMMAND="ssh -F $d/c" bash "$d/b.sh" origin git@bl282-probe:o/r.git </dev/null 2>&1)"; q="$(GIT_SSH_COMMAND="ssh -F $d/c -o ServerAliveInterval=60" bash "$d/b.sh" origin git@bl282-probe:o/r.git </dev/null 2>&1)"; rm -f "$d/c" "$d/b.sh"; rmdir "$d"; case "$w" in *'alias "bl282-probe" has no keepalive'*) ;; *) exit 1 ;; esac; [ -z "$q" ] && exit 0; exit 1
+
+## BL-383 — the migration arm read `deferred scope`, the adjudicator's name for what route Step 6 files, as an undeclared obligation
+
+**LANDED (v0.668.0, verified 1eca2ed2).** `audit-layer-debt.sh`'s `PROSE` cue `deferred` now
+carries a negative lookahead for exactly the word `scope`, with the same `(?![\w-])` boundary as the
+remediation mechanism-noun set. `deferred scope` occurs 0 times under `core/skills/ai-dlc` (route.md
+spells it "deferred part"; control: `scope_deferred_items` occurs 6 times), so the phrase is the
+adjudicator's paraphrase of a core mechanism. Measured on the graph register at `c00f387f` (683 rows):
+UNDECLARED 1 -> 0, the only mover being `route-domain.md` LC-E4 recorded 2026-09-29T00:05:07Z. At
+`b6b68b3c` (689 rows) it is 0 -> 0, because that row was since withdrawn by `withdraws` (graph
+`522e8681`). `deferred scopes`, `deferred scoped-work`, `scope is deferred` and `the split is deferred
+to a later pull` all remain cues. Refused widenings (`scopes`, `deferred part`, `deferred seams`,
+`deferred to <script> constants`) each move 0 cells. The one constructible false acquittal, "the rest
+is deferred scope for S316", is enumerated and accepted in the header. Guarded by
+`core/fixtures/layer-debt-due-and-discharge` arms 23a-23c and 24, mutants `MD_off` and `MD_wide`.
+
+Discharges the consumer candidate
+`PC-S315-AUDIT-LAYER-DEBT-CUE-ARM-READS-CORE-FIELD-VOCABULARY-AS-AN-OBLIGATION`, filed by the graph
+consumer session. Its proposed identifier half (`scope_deferred_items`) was already clean: `_` is a word
+character, so the existing boundary never matched inside it.
+
+verify: sh A=core/scripts/audit-layer-debt.sh; [ -f "$A" ] || exit 9; f=$(mktemp) || exit 9; python3 -c 'import json;b={"clause":"LC-E4","subject_digest":"0"*40,"verdict":"still-additive","recorded_utc":"2026-09-30T00:00:00Z"};[print(json.dumps(dict(b,entry=e,reason=r))) for e,r in [("v.md","route Step 6 now files deferred scope as CO- items and records scope_deferred_items; entry reads sprint-status for routing only"),("a.md","the split is deferred to a later pull"),("b.md","deferred to sprint 316"),("c.md","scope is deferred"),("d.md","the narrowing is deferred scoped-work for S316"),("e.md","the narrowing is deferred scopes for S316")]]' > "$f" || exit 9; o=$(bash "$A" --register "$f" --json 2>/dev/null) || exit 9; rm -f "$f"; printf "%s" "$o" | python3 -c 'import json,sys;u={x["entry"] for x in json.load(sys.stdin)["undeclared"]};sys.exit(0 if u=={"a.md","b.md","c.md","d.md","e.md"} else 1)'
+
+## BL-384 — a sharded repair's Bash-written files get no ledger row, and parts cite absolute paths the join cannot resolve
+
+**LANDED (v0.668.0, verified 1eca2ed2).** Measured on the consumer's own transcripts and
+ledger: every unledgered remediator shard wrote its story (and part) file through Bash; the remediation
+guard records only `Edit|Write|MultiEdit`, so no row, and `join-remediator-shards.sh` refused them as
+claimed edits with no write. Every harness-validated Edit/Write/MultiEdit had exactly one row, and the
+two off-by-one shards were edits the harness rejected before PreToolUse. A race, an empty `agent_id`, a
+path-arm miss and a version change were each driven and excluded. Separately, `remediator.md` and
+`_gate-procedures.md` taught "the FULL path", so parts cited absolute paths the join's suffix match cannot
+resolve, and the lead rewrote them by hand. Fixed: the join cuts an absolute citation under the state
+directory's parent (logical and `pwd -P` spellings) to the ledger's spelling, and a foreign prefix still
+refuses; the UNWRITTEN refusal names the Bash cause and the re-dispatch, and never hand-assembly; the
+role file requires Edit/Write/MultiEdit for edits under the sprint slot in a repair dispatch (resolution
+moves stay outside that scope) and the ledger-spelled citation; `_gate-procedures.md` carries the
+numbered route after that refusal. The hook changes in its comment only; its allow stays unconditional.
+Fixture `remediator-shard-join` arms A1-A6, R1, mutants JX8/JX9.
+
+Discharges the consumer candidate `PC-S315-ARTIFACT-WRITE-LEDGER-DROPS-PARALLEL-SHARD-ROWS`, filed by the
+graph consumer session. Its requested N-shard reproduction is not needed: the race it rested on is
+ruled out by the data.
+
+verify: sh J=core/scripts/join-remediator-shards.sh; H=core/hooks/ai-dlc-gate-remediation-guard.sh; [ -f "$J" ] && [ -f "$H" ] && command -v jq >/dev/null || exit 9; S=_bmad-output/planning-artifacts/s9; w() { r=$(mktemp -d) || exit 9; mkdir -p "$r/$S/stories" "$r/$S/shards/stories-repair-p1"; : > "$r/_bmad-output/pipeline-snapshot.md"; echo x > "$r/$S/stories/a.md"; jq -nc --arg f "$r/$S/stories/a.md" '{tool_name:"Edit",tool_input:{file_path:$f},agent_id:"a16fddf14ea289491"}' | CLAUDE_PROJECT_DIR="$r" bash "$H" >/dev/null 2>&1; [ "$(grep -c . "$r/_bmad-output/planning-artifacts/.artifact-writes.jsonl" 2>/dev/null)" = 1 ] || exit 9; }; j() { AI_DLC_PROJECT_ROOT="$r" bash "$J" --sprint 9 --artifact stories --pass 1 --artifact-path "$S" --since 2000-01-01T00:00:00Z --until 2999-01-01T00:00:00Z 2>&1; }; w; printf -- '- disposition: repaired\n- edit: %s:3\n- derivation: n/a\n' "$r/$S/stories/a.md" > "$r/$S/shards/stories-repair-p1/1.md"; j >/dev/null; c1=$?; w; printf -- '- disposition: repaired\n- edit: %s:3\n- derivation: n/a\n' "/elsewhere/proj/$S/stories/a.md" > "$r/$S/shards/stories-repair-p1/1.md"; o=$(j); c2=$?; [ "$c1" -eq 0 ] && [ "$c2" -eq 2 ] && grep -qF "cites /elsewhere/proj/$S/stories/a.md, which no dispatched agent wrote" <<<"$o" || exit 1; exit 0
