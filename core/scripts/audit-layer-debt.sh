@@ -637,6 +637,23 @@ if open_items:
         print("      what: %s" % d["what"])
         if d["closes_when"]:
             print("      closes when: %s" % d["closes_when"])
+            # A `closes_when` IS CLASSIFIED BY KIND, NOT BY ITS BYTES. The only kind this report can
+            # join is a trigger naming the debt's OWN id — "a later row names OWED-X in closes_owed"
+            # — because that is exactly the join `closed` above already runs; everything else is a
+            # prose condition no reader evaluates. The id must stand alone: a trigger naming a
+            # DIFFERENT id, or one merely prefixed by this one, joins nothing and reads as prose.
+            #
+            # THE NARROWING STORY. The filed remedy extracted a `\S+\.sh` token and was 3 of 3
+            # FALSE on the reference register: two conditions ABOUT a script's output and one
+            # script named as a noun. Keyed on kind instead, measured on the reference register's
+            # history (graph): at 8e53e4b4, 16 open, 3 join and 13 prose, and the 3 joins are
+            # exactly the three debts whose trigger names their own id; at 74268d2a, 10 open, 0
+            # join, 10 prose. False joins: 0. The live register at b6b68b3c has 0 open, so the
+            # line prints nowhere there and both report forms are byte-identical before and after.
+            print("      closes by: %s" % (
+                "the register join, when a later row names this id in closes_owed"
+                if re.search(r"(?<![\w-])%s(?![\w-])" % re.escape(d["id"]), d["closes_when"])
+                else "a prose condition nothing evaluates; re-read it by hand"))
         print("      opened: %s" % d["opened"])
 else:
     print("OPEN (0) — no row declares an undischarged `owed` object.")

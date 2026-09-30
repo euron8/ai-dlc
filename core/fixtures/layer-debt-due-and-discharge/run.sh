@@ -19,11 +19,11 @@
 # the discriminating pair here is two rows of ONE register read by ONE invocation, carrying
 # BYTE-IDENTICAL reason prose and differing in exactly one field.
 #
-# THERE IS DELIBERATELY NO ARM ON `owed.closes_when`. The obvious one — assert the report
-# derives something from a debt whose stated trigger names a command — was built and scored
-# against the live register: the `\S+\.sh` token partition emits 3 rows and ALL 3 ARE FALSE, two
-# reading a condition about a script's output and one reading a script named as a NOUN. An arm
-# here would demand a behaviour that should not ship. See BL-067.
+# THE `owed.closes_when` ARM CLASSIFIES BY KIND, NEVER BY A `.sh` TOKEN. The `\S+\.sh` partition
+# was built and scored against the live register and all 3 of its rows were FALSE — two read a
+# condition about a script's output and one read a script named as a NOUN. The kind the report
+# can join is a trigger naming the debt's OWN id, because that is the join it already runs; the
+# CLOSES-BY section below seeds one of each kind plus a dangling-id near-miss. See BL-067.
 #
 # Usage: run.sh [audit-layer-debt.sh]
 # Exit:  0 = every assertion holds, 1 = the reader regressed, 2 = fixture broken.
@@ -50,7 +50,7 @@ command -v python3 >/dev/null 2>&1 || { echo "FIXTURE ERROR: python3 absent" >&2
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
-EXPECTED_ASSERTIONS=70
+EXPECTED_ASSERTIONS=76
 fails=0; made=0
 ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
@@ -915,6 +915,80 @@ score MW_uncond "$(mkmut mw_uncond 'if bad_withdrawals:
     print("WITHDRAWALS')" "$DREG" \
   "a withdrawal section printed with no \`withdraws\` field in the register changes old output" \
   present 'WITHDRAWALS THAT RESOLVE'
+
+# =============================================================================================
+# CLOSES-BY (BL-067) — each OPEN debt's `closes_when` is classified by KIND. A trigger naming the
+# debt's OWN id is the join the report already runs; anything else is a prose condition.
+#
+# FOUR OPEN DEBTS IN ONE REGISTER, ONE RUN, so every verdict sits beside its opposite. The join
+# seed is the live register's own spelling. The long prose seed is the live register's own
+# `validate-gate-manifest.sh` condition, verbatim, which a `.sh`-token classifier misreads. The
+# short prose seed names no id and no script and is under 80 bytes, so a classifier keyed on a
+# `.sh` token OR on length reads it as joinable. The dangling seed names an id that EXTENDS its
+# own and is declared by no row: a bare substring test reads it as joinable, and the id boundary
+# must not.
+# =============================================================================================
+KREG="$WORK/closesby.jsonl"
+python3 "$WORK/mkreg.py" "$KREG" <<'SPEC'
+{"entry":"extensions/kjoin.md","reason":"carries an obligation","owed":{"id":"OWED-K-JOIN","what":"split X out","closes_when":"a later register row for this entry names OWED-K-JOIN in closes_owed"}}
+{"entry":"extensions/klong.md","reason":"carries an obligation","owed":{"id":"OWED-K-LONG","what":"split X out","closes_when":"validate-gate-manifest.sh reports 914 resolving to a gate-type set that includes retro, AND 921/918/902s/903a have not gained retro as a side effect"}}
+{"entry":"extensions/kshort.md","reason":"carries an obligation","owed":{"id":"OWED-K-SHORT","what":"split X out","closes_when":"after the next pull lands"}}
+{"entry":"extensions/kdang.md","reason":"carries an obligation","owed":{"id":"OWED-K-DANG","what":"split X out","closes_when":"a later register row for this entry names OWED-K-DANG-V2 in closes_owed"}}
+SPEC
+kout="$(run "$KREG")"
+# The block of ONE debt: its header line through its `opened:` line.
+kblk() { awk -v id="  $2  " 'index($0, id) == 1 {f=1} f; f && /opened:/ {exit}' <<<"$1"; }
+JOINED='closes by: the register join'
+PROSED='closes by: a prose condition'
+
+# --- 25. THE JOINABLE KIND: a trigger naming the debt's own id -------------------------------
+if grep -qF "$JOINED" <<<"$(kblk "$kout" OWED-K-JOIN)"; then
+  ok "JOINABLE: a \`closes_when\` naming the debt's own id is reported as closing by the register join"
+else
+  bad "a \`closes_when\` naming its own id was not classified as the register join"
+  show "$kout"
+fi
+
+# --- 26. THE PROSE KIND, verbatim from the live register, carrying a `.sh` token --------------
+if grep -qF "$PROSED" <<<"$(kblk "$kout" OWED-K-LONG)"; then
+  ok "PROSE: the live register's \`validate-gate-manifest.sh reports …\` condition is a prose condition, not a command"
+else
+  bad "a condition ABOUT a script's output was not classified as prose — the classifier is keyed on bytes, not kind"
+  show "$kout"
+fi
+
+# --- 27. THE PROSE KIND, short and carrying no script ----------------------------------------
+if grep -qF "$PROSED" <<<"$(kblk "$kout" OWED-K-SHORT)"; then
+  ok "PROSE: a short trigger naming no id (\`after the next pull lands\`) is a prose condition"
+else
+  bad "a short trigger naming no id was classified as joinable — the classifier keys on a \`.sh\` token or on length"
+  show "$kout"
+fi
+
+# --- 28. THE NEAR-MISS: a dangling id that extends the debt's own -----------------------------
+if grep -qF "$PROSED" <<<"$(kblk "$kout" OWED-K-DANG)"; then
+  ok "NEAR-MISS: a trigger naming \`OWED-K-DANG-V2\`, which no row declares, is not the join for \`OWED-K-DANG\`"
+else
+  bad "a trigger naming a DIFFERENT id that merely starts with this one was classified as joinable — the id has no boundary"
+  show "$kout"
+fi
+
+ANCHOR_KIND='                if re.search(r"(?<![\w-])%s(?![\w-])" % re.escape(d["id"]), d["closes_when"])'
+
+# MK_off — the classification dropped: every trigger reads as prose. Scored on the joinable seed
+# LOSING its join, which only arm 25 can see.
+score MK_off "$(mkmut mk_off "$ANCHOR_KIND" '                if False')" "$KREG" \
+  "without the classification, a trigger naming the debt's own id is no longer reported as the register join" \
+  absent 'the register join'
+
+# MK_substr — the id boundary dropped, i.e. a bare substring test. Scored on a register holding
+# ONLY the dangling seed, because `score` greps the whole report and the joinable seed would
+# otherwise satisfy the token on every run: here the join line can come from that row alone.
+KDREG="$WORK/closesby-dangling.jsonl"
+grep -F 'kdang.md' "$KREG" >"$KDREG"
+score MK_substr "$(mkmut mk_substr "$ANCHOR_KIND" '                if d["id"] in d["closes_when"]')" "$KDREG" \
+  "a bare substring test reads \`OWED-K-DANG-V2\` as the join for \`OWED-K-DANG\`" \
+  present 'the register join'
 
 # UNMUTATED CONTROL — necessary and NOT sufficient. rc=0-with-no-findings is exactly what a
 # subject replaced by `exit 0` looks like, so this carries a POSITIVE conjunct: a copy taken and
