@@ -70,11 +70,11 @@ chmod +x "$W/scripts/ai-dlc/sprint-status.sh"
 # fixture's header). `routed` is `bypass` plus exactly one line.
 TR_BYPASS="$WORK/bypass.jsonl"; TR_ROUTED="$WORK/routed.jsonl"
 TR_UPDATER="$WORK/updater.jsonl"; TR_PLAIN="$WORK/plain.jsonl"
-printf '{"type":"user","message":{"content":"<command-name>/ai-dlc</command-name>"}}\n' > "$TR_BYPASS"
+printf '{"type":"user","message":{"role":"user","content":"<command-message>ai-dlc</command-message>\\n<command-name>/ai-dlc</command-name>\\n<command-args></command-args>"}}\n' > "$TR_BYPASS"
 printf '{"type":"assistant","message":{"content":[{"type":"text","text":"**READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/route.md`"}]}}\n' >> "$TR_BYPASS"
 cp "$TR_BYPASS" "$TR_ROUTED"
 printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_01","name":"Read","input":{"file_path":"/w/.claude/skills/ai-dlc/steps/route.md"}}]}}\n' >> "$TR_ROUTED"
-printf '{"type":"user","message":{"content":"<command-name>/ai-dlc-update</command-name>"}}\n' > "$TR_UPDATER"
+printf '{"type":"user","message":{"role":"user","content":"<command-message>ai-dlc-update</command-message>\\n<command-name>/ai-dlc-update</command-name>\\n<command-args></command-args>"}}\n' > "$TR_UPDATER"
 printf '{"type":"user","message":{"content":"fix the timezone bug in the ingest worker"}}\n' > "$TR_PLAIN"
 
 # THE ACTOR IS A PROBE AXIS, not a variant of the transcript axis. `teammate` differs from
@@ -440,8 +440,13 @@ ck3() { # <label> <anchor> <replacement line> -> 0 = built
   if [ -z "$ln" ]; then bad "ANCHOR: \`$2\` is not unique in the hook, so MUTANT $1 is aimed at nothing"; return 1; fi
   splice "$1" "$ln" replace "$3"
 }
-if ck3 teammate-write-arm-dropped 'then TEAMMATE_WRITE=1; else ADVANCING=1; fi ;;' \
-     '        ADVANCING=1 ;;'; then
+# Anchored on the TEAMMATE branch itself, not on the arm's opening line: the arm is three lines
+# (updater, teammate, lead) and only this one owns the `team-write` cell. The replacement keeps
+# the `elif` chain well-formed and makes the branch unreachable. The paused table's transcript is
+# a routed `/ai-dlc` session, so the updater branch above it is inert and every cell is the lead's
+# or the teammate's -- which is why the expected row is unchanged from the single-line arm.
+if ck3 teammate-write-arm-dropped 'elif [ -n "$AGENT_ID" ]; then TEAMMATE_WRITE=1' \
+     '        elif false; then :'; then
   pscore teammate-write-arm-dropped 'DENY DENY DENY DENY DENY' \
     "turns the paused \`team-write\` cell from ALLOW to DENY and moves nothing else: the teammate's in-flight write is let through by this arm alone"
 fi

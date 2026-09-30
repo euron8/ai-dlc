@@ -87,15 +87,45 @@ expect_set payload-arm-deleted 2 'PC-S331 is back|stays exempt forever' \
   "/jq -r '\.tool_input\.skill/,/^esac\$/d"
 
 # 2. THE TOOL_USE CASE ARM. Covers everything AFTER the dispatch — the updater's own
-#    per-file fan-out, which no payload carries a skill field for.
-expect_set tooluse-case-deleted 1 'per-file Agent dispatch was DENIED' \
+#    per-file fan-out, which no payload carries a skill field for, and every Write it makes
+#    after the dispatch (an Edit carries no skill field either).
+expect_set tooluse-case-deleted 2 'per-file Agent dispatch was DENIED|WRITE \(ii\)' \
   '/"skill":"ai-dlc-update".)/d'
 
-# 3. THE COMMAND-NAME ALTERNATIVE. The pre-existing arm, and the ONLY signal a typed
-#    invocation produces — a fix that replaced it rather than adding to it would come out
-#    green on everything the consumer reported and break the operator's own path.
-expect_set marker-alternative-deleted 1 'typed by the operator was DENIED' \
-  's#<command-name>/ai-dlc(-update)?</command-name>|##'
+# 3. THE TYPED ALTERNATIVE. The pre-existing arm, and the ONLY signal a typed invocation
+#    produces — a fix that replaced it rather than adding to it would come out green on
+#    everything the consumer reported and break the operator's own path. Deleted WHOLE,
+#    anchor and marker together: keyed on the bare marker alone this `sed` now lands inside
+#    the anchored alternative and leaves a mangled regex rather than no typed arm. It reds the
+#    typed session's dispatch, its write, and its teammate's write (which then reads as a
+#    no-skill session's teammate and is logged).
+expect_set marker-alternative-deleted 3 'typed by the operator was DENIED|WRITE \(i\)|WRITE \(vi\)' \
+  '/^  LAST_SKILL=/s#"role":"user","content":"<command-message>ai-dlc(-update)?</command-message>\\\\n<command-name>/ai-dlc(-update)?</command-name>|##'
+
+# 6. THE WRITE ARM's UPDATER CONJUNCT, made unreachable. The defect as filed: an updater
+#    session's Edit under planning-artifacts/ is denied again, typed or Skill-invoked, and a
+#    teammate in one is logged as a pipeline teammate.
+expect_set write-updater-conjunct-dropped 3 'WRITE \(i\)|WRITE \(ii\)|WRITE \(vi\)' \
+  's/if \[ "\$UPDATER_SESSION" -eq 1 \]; then :$/if false; then :/'
+
+# 7. ...and made UNCONDITIONAL — the leak. Every paused write under _bmad-output/ passes
+#    silently: the section's own control, the resumed pipeline, the missing transcript, the
+#    pipeline teammate (no longer logged), and all three mention arms' Edit halves. Their Agent
+#    halves stay DENY, because the dispatch arm is a different line.
+expect_set write-updater-unconditional 7 'FIXTURE BROKEN: a pipeline lead|WRITE \(iii\)|WRITE \(iv\)|WRITE \(v\)|MENTION (read|text|head) Edit' \
+  's/if \[ "\$UPDATER_SESSION" -eq 1 \]; then :$/if true; then :/'
+
+# 8. THE TYPED ANCHOR REVERTED TO THE BARE MARKER — B1's leak. A pipeline session that reads,
+#    quotes or prints the updater's marker becomes "the updater" and its pause is off, for
+#    writes and dispatches alike: all six mention cells.
+expect_set typed-anchor-reverted-to-bare 6 'MENTION (read|text|head) (Edit|Agent): LEAK' \
+  '/^  LAST_SKILL=/s#"role":"user","content":"<command-message>ai-dlc(-update)?</command-message>\\\\n##'
+
+# 9. THE ANCHOR's `"role":"user",` PREFIX DROPPED. A tool_result's string follows `"content":"`
+#    exactly as a typed record's does, so only the seed whose output STARTS with the pair can
+#    tell the two anchors apart — and it must be the only thing that moves.
+expect_set typed-anchor-role-dropped 2 'MENTION head (Edit|Agent): LEAK' \
+  '/^  LAST_SKILL=/s#"role":"user","content":"<command-message>#"content":"<command-message>#'
 
 # 4. THE PAYLOAD ARM WIDENED to any ai-dlc* skill — the leak that turns the Rule 29 pause
 #    off for the pipeline skill it exists to stop.

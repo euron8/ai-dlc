@@ -114,7 +114,11 @@ TR_ROUTED="$WORK/routed.jsonl"    # ...the same session, plus the one line a Rea
 TR_UPDATER="$WORK/updater.jsonl"  # /ai-dlc-update; no route read, and none is owed
 TR_PLAIN="$WORK/plain.jsonl"      # no ai-dlc skill invoked at all, ever
 
-printf '{"type":"user","message":{"content":"<command-name>/ai-dlc</command-name>"}}\n' > "$TR_BYPASS"
+# THE TYPED INVOCATION IS THE HARNESS'S USER RECORD, WHOLE. The hook anchors on
+# `"role":"user","content":"<command-message>X</command-message>\n<command-name>/X` because the
+# bare `<command-name>` marker is also what a QUOTATION of it looks like; a seed carrying only the
+# bare marker now reads as a mention, correctly, and would leave every arm below about nothing.
+printf '{"type":"user","message":{"role":"user","content":"<command-message>ai-dlc</command-message>\\n<command-name>/ai-dlc</command-name>\\n<command-args></command-args>"}}\n' > "$TR_BYPASS"
 # The MENTION. This is `SKILL.md` INITIALIZATION quoted back into the transcript -- the exact
 # text every `/ai-dlc` session carries, which is why a string-keyed check is vacuous.
 printf '{"type":"assistant","message":{"content":[{"type":"text","text":"**READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/route.md`"}]}}\n' >> "$TR_BYPASS"
@@ -125,7 +129,7 @@ printf '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Wri
 cp "$TR_BYPASS" "$TR_ROUTED"
 printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_01","name":"Read","input":{"file_path":"/w/.claude/skills/ai-dlc/steps/route.md"}}]}}\n' >> "$TR_ROUTED"
 
-printf '{"type":"user","message":{"content":"<command-name>/ai-dlc-update</command-name>"}}\n' > "$TR_UPDATER"
+printf '{"type":"user","message":{"role":"user","content":"<command-message>ai-dlc-update</command-message>\\n<command-name>/ai-dlc-update</command-name>\\n<command-args></command-args>"}}\n' > "$TR_UPDATER"
 printf '{"type":"user","message":{"content":"fix the timezone bug in the ingest worker"}}\n' > "$TR_PLAIN"
 
 # -----------------------------------------------------------------------------
