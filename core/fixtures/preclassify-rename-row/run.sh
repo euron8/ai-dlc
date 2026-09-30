@@ -211,7 +211,7 @@ done
 hit=""
 case "${FX_GIT_FAIL:-}" in
   diff) if [ "$sub" = diff ]; then for a in "$@"; do [ "$a" = --name-status ] && hit=1; done; fi ;;
-  hash-object|rev-parse) [ "$sub" = "$FX_GIT_FAIL" ] && hit=1 ;;
+  hash-object|rev-parse|ls-files) [ "$sub" = "$FX_GIT_FAIL" ] && hit=1 ;;
 esac
 if [ -n "$hit" ] && [ -n "${FX_GIT_ONCE:-}" ] && [ -e "$FX_GIT_ONCE" ]; then hit=""; fi
 if [ -n "$hit" ]; then
@@ -319,6 +319,118 @@ SHIMEOF
       "") bad "MUTANT SURVIVED [BL-230 memo]: with every status cached, arm d still passed -- it cannot see the cache" ;;
       *)  bad "MUTANT [BL-230 memo] failed [$mg], expected exactly [d] -- the arms are entangled" ;;
     esac
+  fi
+
+  # ===========================================================================
+  # BL-308 -- THE TWO OPTIONAL MODES REFUSE ON THEIR OWN
+  # ===========================================================================
+  # Arm c above drives the DEFAULT mode only. `--untangle` enumerates through its own
+  # `ls-files` pipeline and `--templates` through its own `printf | while`, and each reaches
+  # pc_fail() from a different subshell, so a mode can exit 0 over a failed git call while the
+  # default mode refuses. One cell per forced call, each scored on the exit (2), a forced hit
+  # (the shim really fired), and the fixed stderr grammar naming the call; the stdout row
+  # count is recorded beside it, because rows printed before a refusal are partial by contract.
+  #   U1 --untangle, ls-files fails     U2 --untangle, rev-parse fails
+  #   U3 --untangle, hash-object fails  T1 --templates, rev-parse fails
+  # OWN WORLD, so the rename world the arms above score is not changed: a dist carrying one
+  # manifest-globbed file (core/rules/*.md) and one manifest template, edited at theirs, and a
+  # consumer holding an edited copy of each -- so both modes classify a non-empty row set.
+  MD="$WORK/modes-dist"; mkdir -p "$MD/core/rules" "$MD/templates" || exit 2
+  git -C "$MD" init -q 2>/dev/null || exit 2
+  printf 'rule base\n' > "$MD/core/rules/probe.md"
+  printf 'template base\n' > "$MD/templates/CLAUDE.md.template"
+  git -C "$MD" -c user.email=f@f -c user.name=fixture add -A \
+    && git -C "$MD" -c user.email=f@f -c user.name=fixture commit -q -m base || exit 2
+  M_B="$(git -C "$MD" rev-parse HEAD)"
+  printf 'template theirs\n' > "$MD/templates/CLAUDE.md.template"
+  git -C "$MD" -c user.email=f@f -c user.name=fixture commit -q -am theirs || exit 2
+  M_T="$(git -C "$MD" rev-parse HEAD)"
+  MC="$WORK/modes-consumer"; mkdir -p "$MC/.claude/rules" || exit 2
+  printf 'rule consumer edit\n' > "$MC/.claude/rules/probe.md"
+  printf 'consumer claude\n' > "$MC/CLAUDE.md"
+  printf 'version: 1.0.0\ncommit: %s\n' "$M_T" > "$MC/.claude/.ai-dlc-version"
+
+  # m_run <recon> <mode> <fail|""> <out-prefix> -- --untangle runs base == theirs, its contract
+  m_run() {
+    local _b="$M_B"; [ "$2" = --untangle ] && _b="$M_T"
+    : > "$4.hits"
+    PATH="$SHIM:$PATH" FX_GIT_FAIL="$3" FX_GIT_HITS="$4.hits" FX_GIT_ONCE="" AI_DLC_RECONCILE_MEMO="" \
+      bash "$1/preclassify.sh" "$MD" "$_b" "$M_T" "$MC" "$2" > "$4.rows" 2> "$4.err"
+  }
+  # score_modes <recon> <tag> -> failing cells among U1 U2 U3 T1 (ending in `.`), or BROKEN.
+  score_modes() {
+    local _d="$1" _o="$WORK/b308-$2" _r="" _c _m _s _rc
+    mkdir -p "$_o"
+    # CONTROLS, one per mode: transparent shim, rc 0, zero hits, and the row the world seeds
+    # must be THERE -- rc 0 with no rows is what a mode that classified nothing looks like.
+    m_run "$_d" --untangle "" "$_o/ctl-u"; _rc=$?
+    { [ "$_rc" -eq 0 ] && [ ! -s "$_o/ctl-u.hits" ] \
+      && grep -q "^U	core/rules/probe.md	.claude/rules/probe.md	BOTH-CHANGED->CLASSIFY$" "$_o/ctl-u.rows"; } \
+      || { printf 'BROKEN(untangle control rc=%s rows=%s)' "$_rc" "$(grep -c . "$_o/ctl-u.rows")"; return; }
+    m_run "$_d" --templates "" "$_o/ctl-t"; _rc=$?
+    { [ "$_rc" -eq 0 ] && [ ! -s "$_o/ctl-t.hits" ] \
+      && grep -q "^T	templates/CLAUDE.md.template	CLAUDE.md	TEMPLATE-PROSE-MERGE$" "$_o/ctl-t.rows"; } \
+      || { printf 'BROKEN(templates control rc=%s rows=%s)' "$_rc" "$(grep -c . "$_o/ctl-t.rows")"; return; }
+    for _c in U1:--untangle:ls-files U2:--untangle:rev-parse U3:--untangle:hash-object T1:--templates:rev-parse; do
+      _s="${_c#*:}"; _m="${_s%%:*}"; _s="${_s#*:}"; _c="${_c%%:*}"
+      m_run "$_d" "$_m" "$_s" "$_o/$_c"; _rc=$?
+      printf '%s %s %s: rc=%s rows=%s hits=%s stderr=%s\n' "$_c" "$_m" "$_s" "$_rc" "$(grep -c . "$_o/$_c.rows")" \
+        "$(grep -c . "$_o/$_c.hits")" "$(head -1 "$_o/$_c.err")" >> "$_o/why"
+      if [ "$_rc" -ne 2 ] || [ ! -s "$_o/$_c.hits" ] \
+         || ! grep -qE "^preclassify: git failed, refusing to classify: ${_s} .* exited 128$" "$_o/$_c.err"; then
+        _r="$_r$_c"
+      fi
+    done
+    printf '%s.' "$_r"
+  }
+  b308_verdict() { # b308_verdict <recon> <tag> -> sets $got, or reports the harness broken
+    got="$(score_modes "$1" "$2")"
+    case "$got" in *.) got="${got%.}"; return 0 ;; esac
+    return 1
+  }
+  if ! b308_verdict "$RECON" tip; then
+    echo "FIXTURE ERROR: BL-308 $got -- a mode through the TRANSPARENT shim did not classify its seeded row, so every forced cell would measure the harness" >&2
+    exit 2
+  fi
+  ok "BL-308 control: --untangle and --templates each classify their seeded row through the transparent shim, zero forced hits"
+  if [ -z "$got" ]; then
+    ok "BL-308 U1-U3 T1: a forced 128 on ls-files, rev-parse or hash-object under --untangle, and on rev-parse under --templates, exits 2 naming the call ($(awk '{printf "%s %s; ", $1, $5}' "$WORK/b308-tip/why"))"
+  else
+    bad "BL-308 cell(s) [$got]: a mode exited other than 2 over a forced git failure, or did not name the call -- $(tr '\n' ' ' < "$WORK/b308-tip/why")"
+  fi
+  # MUTANTS, each a copy of the whole reconcile dir, each owning one mode's route to pc_fail():
+  #   untangle-nols  the `|| pc_fail` on --untangle's ls-files removed: its enumeration fails
+  #                  into an empty stream and the mode exits 0            -> exactly [U1]
+  #   templates-notrap  --templates disarms the USR1 trap before its loop, so pc_fail() in a
+  #                  `$( )` ends only the subshell, both hashes read empty and equal, and the
+  #                  row reads TEMPLATE-UNCHANGED-NOOP at rc 0              -> exactly [T1]
+  b308_mut() { # b308_mut <name> <awk-program> <want>
+    local _d="$WORK/b308-m-$1" _n _ctl
+    cp -R "$RECON" "$_d" || exit 2
+    awk "$2" "$RECON/preclassify.sh" > "$_d/preclassify.sh" 2>/dev/null
+    if cmp -s "$RECON/preclassify.sh" "$_d/preclassify.sh" || ! bash -n "$_d/preclassify.sh" 2>/dev/null; then
+      bad "FIXTURE STALE [BL-308 mutant $1]: the mutation did not apply or does not parse -- re-anchor it on the same observable"
+      return
+    fi
+    if ! b308_verdict "$_d" "$1"; then bad "MUTANT HARNESS BROKEN [BL-308 $1]: $got"; return; fi
+    case "$got" in
+      "$3") ok "MUTANT (BL-308 $1) fails exactly [$3]" ;;
+      "")   bad "MUTANT SURVIVED [BL-308 $1]: every mode cell still passed" ;;
+      *)    bad "MUTANT [BL-308 $1] failed [$got], expected exactly [$3] -- the cells are entangled" ;;
+    esac
+  }
+  _u_anchor='    git -C "$DIST" ls-files "$glob" || pc_fail "ls-files $glob exited $?"'
+  _t_anchor='  printf '"'"'%s\n'"'"' "$TEMPLATE_ROWS" |'
+  _uh="$(grep -cxF "$_u_anchor" "$RECON/preclassify.sh")" || _uh=0
+  _th="$(grep -cxF "$_t_anchor" "$RECON/preclassify.sh")" || _th=0
+  _xh="$(grep -cxF 'ZZ-NO-SUCH-PRECLASSIFY-ANCHOR-ZZ' "$RECON/preclassify.sh")" || _xh=0
+  if [ "$_uh" -ne 1 ] || [ "$_th" -ne 1 ] || [ "$_xh" -ne 0 ]; then
+    bad "FIXTURE STALE [BL-308 mutants]: anchors match untangle=$_uh templates=$_th (want 1 each; impossible-anchor control $_xh, want 0)"
+  else
+    B308_A="$_u_anchor" b308_mut untangle-nols \
+      '$0 == ENVIRON["B308_A"] { print "    git -C \"$DIST\" ls-files \"$glob\""; next } { print }' U1
+    B308_A="$_t_anchor" b308_mut templates-notrap \
+      '$0 == ENVIRON["B308_A"] { print "  trap : USR1" } { print }' T1
   fi
 fi
 

@@ -60,6 +60,8 @@ not a closed entry.
 
 ## BL-275 — a shared detector's cost-saving flag is bound by NO fixture at any CALLER, so a second caller can silently stop passing it
 
+**LANDED (v0.666.0, verified 0a8015a2).**
+
 **DEFECT.** Found while scoping `0.597.0`, by censusing `reconcile-emit-report` and then ablating
 the detectors its renderer drives.
 
@@ -96,7 +98,14 @@ and require each to be bound) is the stronger fix and needs a join key that does
 **Tiered DEFECT, not BLOCKER.** No verdict is wrong in either direction: the flag changes who paid
 and never what is answered, which is exactly why its absence was invisible for as long as it was.
 
-verify: sh a=core/skills/ai-dlc-update/reconcile/apply.sh; ctl=$(grep -rchE -- '--bucket-rows-ZZQQ' core/fixtures 2>/dev/null | awk '{s+=$1} END{print s+0}'); [ "$ctl" -eq 0 ] || exit 1; grep -qE '^[[:blank:]]*UD_FLAG="--bucket-rows"' "$a" 2>/dev/null || exit 1; for g in core/fixtures/*/run.sh; do grep -qE 'grep [^|]*-c[^|]*UD_FLAG="--bucket-rows"|grep [^|]*-c[^|]*bucket-rows[^|]*"\$APPLY"|grep [^|]*-q[^|]*--bucket-rows[^|]*"\$APPLY"' "$g" 2>/dev/null && exit 0; done; exit 1
+**WIDER THAN FILED, re-derived at batch 174.** Three executing caller sites hand rows down, not
+one: `apply.sh`'s `UD_FLAG="--bucket-rows"` into `unregistered-drift.sh`, `apply.sh`'s
+`detector_run rt retired-tokens.sh --bucket-rows "$RT_PC"`, and `emit-report.sh`'s
+`retired-tokens.sh --bucket-rows "$rt_pc"`. `apply-drift-after-write`'s BL-275 arm binds all three
+at the executing line, and one mutant per site drops the flag while leaving the flagged text in a
+comment. Each mutant turns only its own letter red.
+
+verify: sh f=core/fixtures/apply-drift-after-write/run.sh; R=core/skills/ai-dlc-update/reconcile; [ -f "$f" ] && [ -f "$R/apply.sh" ] || exit 9; d=$(mktemp -d) || exit 9; sed -n '/^bl275_score() {/,/^}/p' "$f" > "$d/s.sh"; grep -q '^bl275_score() {' "$d/s.sh" || { rm -f "$d"/*; rmdir "$d"; exit 1; }; . "$d/s.sh"; sed -E 's/"\$UD_FLAG" "\$UD_PC" //' "$R/apply.sh" > "$d/u"; sed -E 's/--bucket-rows "\$RT_PC" //' "$R/apply.sh" > "$d/r"; sed -E 's/--bucket-rows "\$rt_pc" //' "$R/emit-report.sh" > "$d/e"; g="$(bl275_score "$R/apply.sh" "$R/emit-report.sh")$(bl275_score "$d/u" "$R/emit-report.sh")$(bl275_score "$d/r" "$R/emit-report.sh")$(bl275_score "$R/apply.sh" "$d/e")"; rm -f "$d"/*; rmdir "$d"; [ "$g" = ".U.R.E." ]
 
 ## BL-274 — `--arms <indented-id>` runs the whole enclosing unit, so timing one arm that way measures up to twelve, and nothing says so
 
@@ -4298,6 +4307,8 @@ verify: manual
 
 ## BL-308 — `preclassify.sh --templates` and `--untangle` route through the new failure path, but neither mode was force-tested on its own
 
+**LANDED (v0.666.0, verified cfffdedc).**
+
 **NOTE.** Found at batch 153 by the `BL-230` docs hand, reading the 0.637.0 diff. It discharges no
 consumer candidate.
 
@@ -4308,7 +4319,14 @@ the default mode only. No run showed that either mode exits 2, rather than 0 wit
 when one of its git calls fails. A receipt must force a git failure inside each mode and read the
 exit status and the stdout row count.
 
-verify: manual
+Bound at batch 174 in `preclassify-rename-row`. Its git shim, the technique arm c already uses,
+forces a 128 on `ls-files`, `rev-parse` and `hash-object` under `--untangle` and on `rev-parse`
+under `--templates`. Each cell must exit 2, record a forced hit, and name the call. The row count
+is printed beside each cell. A per-mode transparent-shim control has to classify its seeded row
+first. Two mutants each fail exactly their own cell: one drops `--untangle`'s `ls-files` `|| pc_fail`,
+and the other disarms the USR1 trap before `--templates`' loop.
+
+verify: sh f=core/fixtures/preclassify-rename-row/run.sh; [ -f "$f" ] || exit 9; o="$(bash "$f" 2>&1)" || exit 1; grep -q '^  ok    BL-308 U1-U3 T1: ' <<<"$o" && grep -q '^  ok    MUTANT (BL-308 untangle-nols) fails exactly \[U1\]$' <<<"$o" && grep -q '^  ok    MUTANT (BL-308 templates-notrap) fails exactly \[T1\]$' <<<"$o"
 
 ## BL-309 — ENOSPC in the middle of a memo `.c` fill can cache truncated content with status 0
 
@@ -4594,7 +4612,15 @@ absorbed into `V_REFUSE_OK`, which is derived from the engine's own seed render,
 nothing; `emit-report-refusal`'s A0 (the refusal set must be exactly `retired-layer-token.sh`) is
 the arm that catches the global case, by its assertion code, not yet driven against that stub.
 
-verify: manual
+The global half was bound at batch 174. The R6-BASE arm in `reconcile-emit-report` compares the
+derived `V_REFUSE_OK` against the fixed name `retired-layer-token.sh`. Its mutant renders the seed
+world through an engine copy whose `ledger-reverify.sh` refuses everywhere, runs it through the
+file's own derivation line, and is refused. **The V-N-only half is REWORDED, not resolved.** The
+message still opens `FIXTURE BROKEN`, because `emit-report-refusal` keys on that prefix. It now
+says that three refusals in a row from a shipped detector are an engine regression. No mutant
+scores that text.
+
+verify: sh f=core/fixtures/reconcile-emit-report/run.sh; [ -f "$f" ] || exit 9; grep -q '^V_REFUSE_OK=' "$f" || exit 9; grep -qx "R6_FIXED_OK='retired-layer-token.sh'" "$f" && grep -qxF 'if [ "$_r6_have" = "$R6_FIXED_OK" ]; then' "$f" && grep -qE '^elif ! _r6e="\$\(v_stub "\$EMIT" "\$_r6m" ledger-reverify\.sh\)"; then$' "$f"
 
 ## BL-339 — `emit-report-refusal` ships and depends on `reconcile-emit-report` shipping, and nothing binds the two
 

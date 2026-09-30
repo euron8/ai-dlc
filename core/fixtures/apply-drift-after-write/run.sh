@@ -634,6 +634,75 @@ else
   rm -rf "$W5"
 fi
 
+# --- BL-275: EVERY CALLER THAT HOLDS preclassify's ROWS HANDS THEM DOWN ------------------
+# Assertion 5c and m5 own the flag's SEMANTICS. What nothing bound was that a CALLER passes it:
+# deleting `--bucket-rows` at a call site changes no verdict (the detector re-derives the same
+# rows in a second preclassify process), so the cost comes back and every arm stays green.
+# Three executing call sites hold rows they already paid for and pass them down:
+#   U  apply.sh        -> unregistered-drift.sh  (`UD_FLAG="--bucket-rows"`, passed as "$UD_FLAG" "$UD_PC")
+#   R  apply.sh        -> retired-tokens.sh      (once per CLASSIFY row)
+#   E  emit-report.sh  -> retired-tokens.sh      (once per CLASSIFY file per render)
+# emit-report.sh -> unregistered-drift.sh is B1 in reconcile-emit-report and is not restated here.
+#
+# KEYED ON THE EXECUTING LINE, NEVER ON THE FILE. A whole-file grep for the flag is satisfied by
+# the header comments both programs carry about it. Each grammar is anchored at line start on
+# the call itself, so a `#` line cannot match; the NARROWING that got the false-positive set to
+# zero is that anchor, and the probe below proves it: every mutant drops the flag at its site AND
+# appends a comment carrying the exact flagged text, so a grammar that reads prose stays green on
+# it. Each mutant must turn exactly its own letter red. An impossible-flag control in the same
+# grammar must read 0.
+bl275_score() { # bl275_score <apply> <emit> -> failing letters among U R E, then `.`
+  local a="$1" e="$2" f="" n
+  n="$(grep -cE '^[[:blank:]]*UD_FLAG="--bucket-rows"$' "$a")" || n=0
+  { [ "$n" -eq 1 ] && grep -qE '^[[:blank:]]*detector_run ud unregistered-drift\.sh "\$UD_FLAG" "\$UD_PC" ' "$a"; } || f="${f}U"
+  grep -qE '^[[:blank:]]*detector_run rt retired-tokens\.sh --bucket-rows "\$RT_PC" ' "$a" || f="${f}R"
+  grep -qE '^[[:blank:]]*rt="\$\(bash "\$SELF/retired-tokens\.sh" --bucket-rows "\$rt_pc" ' "$e" || f="${f}E"
+  printf '%s.' "$f"
+}
+BL275_EMIT="$RECONCILE/emit-report.sh"
+bl275_ctl=0
+for _g in 'detector_run rt retired-tokens\.sh --qqq-absent-rows ' 'rt="\$\(bash "\$SELF/retired-tokens\.sh" --qqq-absent-rows ' 'UD_FLAG="--qqq-absent-rows"$'; do
+  _c="$(grep -chE "^[[:blank:]]*$_g" "$APPLY" "$BL275_EMIT" | awk '{s+=$1} END{print s+0}')"
+  bl275_ctl=$((bl275_ctl + _c))
+done
+bl275_got="$(bl275_score "$APPLY" "$BL275_EMIT")"
+if [ "$bl275_ctl" -ne 0 ]; then
+  bad "BL-275 CONTROL the impossible-flag grammars matched $bl275_ctl executing lines, so the site counts establish nothing"
+elif [ "$bl275_got" = "." ]; then
+  ok "BL-275 U R E: apply.sh hands --bucket-rows to unregistered-drift.sh and to retired-tokens.sh, and emit-report.sh to retired-tokens.sh, each at an EXECUTING line (control: the same grammars with an impossible flag read 0)"
+else
+  bad "BL-275 site(s) [${bl275_got%.}] no longer pass --bucket-rows at an executing line: that caller re-derives preclassify in a second process on every run"
+fi
+# bl275_mut <name> <file-var: apply|emit> <anchor-regex> <sed-expr> <comment-text> <want>
+bl275_mut() {
+  local d="$WORK/bl275-$1" src out h
+  mkdir -p "$d"
+  case "$2" in apply) src="$APPLY" ;; *) src="$BL275_EMIT" ;; esac
+  out="$d/$(basename "$src")"
+  h="$(grep -cE "$3" "$src")" || h=0
+  if [ "$h" -ne 1 ]; then bad "FIXTURE STALE [BL-275 mutant $1]: anchor matches $h lines, not 1"; return; fi
+  sed -E "$4" "$src" > "$out" || { bad "MUTANT BL-275 $1 DID NOT APPLY (sed died)"; return; }
+  if cmp -s "$src" "$out"; then bad "MUTANT BL-275 $1 DID NOT APPLY (matched nothing)"; return; fi
+  printf '# %s\n' "$5" >> "$out"
+  bash -n "$out" 2>/dev/null || { bad "MUTANT BL-275 $1 DOES NOT PARSE"; return; }
+  case "$2" in apply) g="$(bl275_score "$out" "$BL275_EMIT")" ;; *) g="$(bl275_score "$APPLY" "$out")" ;; esac
+  g="${g%.}"
+  case "$g" in
+    "$6") ok "MUTANT BL-275 $1 (flag dropped at that site, flagged text left in a comment) fails exactly [$6]" ;;
+    "")   bad "MUTANT BL-275 $1 SURVIVED: the flag was dropped at its call site and every site arm still passed -- the grammar reads prose" ;;
+    *)    bad "MUTANT BL-275 $1 failed [$g], expected exactly [$6] -- the site arms are entangled" ;;
+  esac
+}
+bl275_mut ud apply '^[[:blank:]]*detector_run ud unregistered-drift\.sh "\$UD_FLAG" "\$UD_PC" ' \
+  's/^([[:blank:]]*detector_run ud unregistered-drift\.sh) "\$UD_FLAG" "\$UD_PC" /\1 /' \
+  'detector_run ud unregistered-drift.sh "$UD_FLAG" "$UD_PC" "$DIST" "$BASE" "$CONSUMER" "$THEIRS"' U
+bl275_mut rt-apply apply '^[[:blank:]]*detector_run rt retired-tokens\.sh --bucket-rows "\$RT_PC" ' \
+  's/^([[:blank:]]*detector_run rt retired-tokens\.sh) --bucket-rows "\$RT_PC" /\1 /' \
+  'detector_run rt retired-tokens.sh --bucket-rows "$RT_PC" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" "$path"' R
+bl275_mut rt-emit emit '^[[:blank:]]*rt="\$\(bash "\$SELF/retired-tokens\.sh" --bucket-rows "\$rt_pc" ' \
+  's/^([[:blank:]]*rt="\$\(bash "\$SELF\/retired-tokens\.sh") --bucket-rows "\$rt_pc" /\1 /' \
+  'rt="$(bash "$SELF/retired-tokens.sh" --bucket-rows "$rt_pc" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" "$cp" 2>/dev/null)"' E
+
 # --- EXTENSION-FIXTURE-UNBOUND — a declared binding that resolves to nothing ---------
 # `fixtures:` is how a CONSUMER check's adversarial fixture reaches core H1's derived coverage
 # set; before it there was no binding path at all, so a consumer shipping fixtures with its
