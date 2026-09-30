@@ -373,7 +373,7 @@ for line in sys.stdin:
 # Gitlinks are read off the INDEX (`ls-files -s`), never off the disk, so an unpopulated or
 # emptied submodule directory is still recognised.
 drop_ignored() { # reads paths on stdin (repo-relative), writes the non-ignored ones
-  local in ask sub gl keep
+  local in ask sub gl keep circ
   in="$(mktemp)" || { cat; return 0; }
   ask="$in.ask"; sub="$in.sub"; gl="$in.gl"; keep="$in.keep"
   cat > "$in"
@@ -389,10 +389,16 @@ drop_ignored() { # reads paths on stdin (repo-relative), writes the non-ignored 
       for (g in gl) if (p == g || index(p, g "/") == 1) { print g > subf; next }
       print p
     }' "$in" > "$ask" || { cat "$in"; rm -f "$in" "$ask" "$sub" "$gl" "$keep"; return 0; }
+  # CHECK-IGNORE'S OWN STATUS IS READ, NOT A PIPELINE'S. On a refused batch it prints verdicts for
+  # the rows BEFORE the offending one and then exits 128; piped into sed and sort, only `pipefail`
+  # stood between that partial list and the caller -- measured: sourced without it, the partial
+  # list came back as the filtered set and every row after the refusal was silently dropped.
+  # 0 (some ignored) and 1 (none ignored) are verdicts; anything else is not.
   {
     if [ -s "$ask" ]; then
-      if ( cd "$TREE" && git check-ignore --stdin --non-matching --verbose < "$ask" ) 2>/dev/null \
-           | sed -n 's/^::[[:space:]]*//p' | LC_ALL=C sort -u > "$keep" && [ -s "$keep" ]; then
+      ( cd "$TREE" && git check-ignore --stdin --non-matching --verbose < "$ask" ) > "$keep.ci" 2>/dev/null
+      circ=$?
+      if [ "$circ" -le 1 ] && sed -n 's/^::[[:space:]]*//p' "$keep.ci" | LC_ALL=C sort -u > "$keep" && [ -s "$keep" ]; then
         cat "$keep"
       else
         # No usable verdict -- keep everything rather than silently emptying the read-set.
@@ -401,7 +407,7 @@ drop_ignored() { # reads paths on stdin (repo-relative), writes the non-ignored 
     fi
     [ -s "$sub" ] && cat "$sub"
   } | LC_ALL=C sort -u
-  rm -f "$in" "$ask" "$sub" "$gl" "$keep"
+  rm -f "$in" "$ask" "$sub" "$gl" "$keep" "$keep.ci"
 }
 # READSET_DROP_END
 
