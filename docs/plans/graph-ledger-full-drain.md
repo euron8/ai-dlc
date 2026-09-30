@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 567..628. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 516..578. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -512,69 +512,6 @@ bootstrapping file changed in `312c46ee..origin/main`. Three PC ids are PENDING,
 0.659.0. The banked ruling stands: report the gap and write no runbook.
 
 Batch 167's next-work list and delivery gap are spent: batch 168's block above replaces both.
-
-**BATCH 167 SHIPPED `v0.658.0` (`9d1fe6c0`, #891) AND CLOSED `BL-359`. IT DISCHARGES NO CONSUMER
-CANDIDATE.** It was invoked by peer handoff. The opening sweep matched batch 166 on every figure:
-live 25 on five qualifying refs, unfiled 12 (the same ids and dates), worklist 5, TERMINAL 147,
-DISCHARGED 7, PENDING 1 (`PC-S314-H2-ATTESTATION-…`, first named at 0.648.0), ledger md5
-`ded61c90…` on the consumer's `ai-dlc/carry-over/telv3-upgrade`, every control at its expected
-value. The consumer moved nothing this program reads: porcelain 4 -> 9 from its own sprint 314,
-ledger byte-identical to HEAD throughout. Live **100 -> 100** (`BL-359` closed, `BL-360` filed),
-archive **258 -> 259**. The exit-0 receipt set is batch 166's nine plus `BL-359`, compared by id.
-
-**`BL-359`: `layer-drift.sh` CARRIES NO HERE-STRING.** Bash 3.2 stages every `<<<` to a temp file;
-when the write fails the command is NOT RUN and the site returns 1 in every shape the file used —
-`$( )`, `grep -q`, `done <<<`, a function on stdin — which is a miss or an empty input, and a
-negated site reads it as a HIT. All 34 sites converted: `ld_has_line` (a `case`) for membership,
-a status-read pipe or a file staged once for captures, `ld_stage` files for loops, every failure
-through `ld_refuse_staging`'s `layer-drift: REFUSED —` line. The contract read is checked before
-`--adjudicated-codes`, and an R2 post-condition refuses an empty code set beside a real
-`level: ADJUDICATED` clause. `hard-blockers.sh` no longer prints `0 HARD blockers.` beside a
-layer-drift or unregistered-drift refusal. Healthy output byte-identical on two consumer ranges;
-classify median 20.9s -> 16.4s and 191 fewer forks, both resolvable against their spread.
-
-**THE CONTRACT ADVERSARY FOUND THE CONSUMER'S REAL EXPOSURE WAS NOT THE ENTRY'S SUBJECT.** The
-78 KB contract is not the largest here-string: `steps/gate-validation.md` at theirs is 189 KB and
-feeds the per-override and extension sites, which fail ALONE at `ulimit -f` 80-160 with every HARD
-row kept and two `OVERRIDE-OK` rows flipped at rc 0. It also showed the first design's mutant was
-unkillable (the staging write fails before the here-string can), and that a naive
-"contains `level: ADJUDICATED`" post-condition refuses a legitimate contract, because two prose
-lines carry the phrase. **Measure every staged input's size on the real corpus before choosing
-the forcing — the entry names the input its author saw, not the largest one.**
-
-**`printf | grep -q` ON A LARGE HAYSTACK UNDER `pipefail` ANSWERS NOT-FOUND ON A MATCH**, 20 of 20
-at 206 KB with the match on line 1 — a size threshold, not a race. The regex sites use `grep -c`.
-The pipe-fed `grep -q` census over the reconcile scripts is 0 at tip and base.
-
-**THE MACHINE CRASHED MID-BATCH.** Two hands were stopped with uncommitted work; both worktrees
-survived intact and both hands resumed by AGENT ID (their names did not survive). The scratchpad
-did not: the adversary's `file://` clones, probe scripts and the contract were lost, and the
-contract was restored from the lead's copy. **Snapshot a hand's uncommitted diff to the scratchpad
-before resuming it, and keep the contract somewhere a crash does not take.** Gate on `f5109133`:
-22 phases, 24 PASS, 0 FAIL, 1 SKIP (pole, pool width 6), 213 ok, every changed fixture `ok` by
-name against an impossible-name control of 0, `ls-remote` matching, squash tree identical to the
-gated tip. **No read-set trace is owed**: the operator traced `procsub-staged-refusal-boot` (57 ->
-66) and `preclassify-rename-row` (49 -> 51) on the release branch; only those two moved and the
-map shipped in the release.
-
-**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
-- The unfiled set holds no new core filing. `BL-360` (DEFECT: 39 real `<<<` sites and the
-  `<<EOF` bodies in the other reconcile scripts, several reading empty as clean) continues this
-  thread; its carried finding — a bad `theirs` ref or missing contract blob disarms adjudication
-  at rc 0 — is DEFECT-tier alone and splits out at the next close. `BL-356` is next.
-- `BL-230` needs a mechanism for E1, E2 and E9.
-
-**THE DELIVERY GAP IS FIVE RELEASES.** The consumer is at 0.653.0 against `VERSION` 0.658.0. Ten
-bootstrapping files changed in `d1c72fa9..origin/main` (`apply.sh`, `lib.sh`, `layer-drift.sh`,
-`hard-blockers.sh`, `unregistered-drift.sh`, `self-update-gate.sh`, `retired-tokens.sh`,
-`retired-layer-contract.sh`, `predicate-differential.sh` and the update `SKILL.md`; 0 of 24 `core/`
-rows mode-only), so **the pull that delivers them runs under the installed 0.653.0 engine and their
-refusals protect only the pull after it** — measured this batch: the installed engine over
-`d1c72fa9..e52a87ff` returns rc 0 with two drifted override rows at `ulimit -f 120`, where the fixed
-engine refuses. PENDING is 1 and below the installed version. The banked ruling stands:
-report the gap and write no runbook.
-
-Batch 166's next-work list and delivery gap are spent: batch 167's block above replaces both.
 
 ### Derive the state; do not trust the numbers below
 
@@ -1153,9 +1090,10 @@ WORK SELECTION ARE VERY AGGRESSIVE.** In the operator's words: the ledger "shoul
 drained by now". It was given before and not recorded; this paragraph is the record. It governs
 every action below, and where an older paragraph reads narrower, this one wins.
 
-- **Every release takes EVERY live candidate the sweep derives**, never one or two. That is the
+- **Every batch takes EVERY live candidate the sweep derives**, never one or two. That is the
   unfiled set, every worklist row, and every discharged candidate still awaiting the consumer's
-  own close. A release carrying fewer states which candidate it left out and the measured reason.
+  own close. Each release carries every one whose builders are collected; a batch that closes
+  with a candidate unshipped states which one and the measured reason.
 - **PC-backed work outranks every distribution-internal entry, always.** A non-PC entry rides a
   release only beside the candidates, never instead of them. An operator-scheduled item (`BL-375`)
   is the one exception, and it still rides with the candidates.
@@ -1171,9 +1109,30 @@ every action below, and where an older paragraph reads narrower, this one wins.
 - **Fan out to the hand cap.** One hand per candidate or per disjoint file set, all in one spawn
   block; the lead only scopes, collects by content, cuts the release and pings.
 - **The bootstrapping rule in action 2 still holds**; candidates touching the same bootstrapping
-  file ship together in one release, and bootstrapping releases run back to back, not one per batch.
+  file ship together in one release, and bootstrapping releases run back to back WITHIN the batch
+  that scoped them.
 - **This is a direction for how a batch runs, not a licence to start one.** A batch starts from
   the one-liner, the operator, or action 9's handoff — never from a remark mid-session.
+
+**STANDING OPERATOR RULINGS FROM BATCH 174. They bind every batch until the operator says
+otherwise, and where any older paragraph in this file reads narrower, these win.**
+
+- **Adjudicate the WHOLE backlog every batch, not only PC-backed work.** Re-adjudicate every live
+  `docs/backlog.md` entry against the tree as CLOSE, PARTIAL, LIVE or DEAD-PREMISE, with evidence.
+  Fan it out, one hand per slice of about 14 entries, in the same spawn block as the sweep. Every
+  close that holds up, and every live entry with a small fix, rides the batch's releases beside
+  the candidates.
+- **Ship each release the moment its builders are collected.** Never hold a finished fix for a
+  slower one. A batch splits into as many releases as its collection order produces. Action 2's
+  batching conditions govern what goes into ONE release among the builders already collected;
+  they never delay a collected fix to wait for another.
+- **A session ends when its batch closes.** After the batch's last release merges, run its close
+  commit, then actions 6, 6b and 9, then stop. Work left queued goes into the resume block as
+  facts for the next session; no ruling in this file extends a session past its close.
+- **Each batch picks its own work from its own derivation.** A resume block records facts only:
+  what shipped, which built branches are held and why, operator rulings that bind a subject if it
+  is picked, and filings. It never lists the next batch's subjects or their order. The next
+  session's sweep and whole-backlog adjudication decide scope.
 
 **0. DISPATCH HANDS BEFORE YOU RUN A SINGLE SWEEP COMMAND YOURSELF.** Operator instruction,
 given at batch 90.
@@ -1530,15 +1489,18 @@ given at batch 90.
    rather than removing it and manufactures the `commit != skill_commit` state. The gate cannot
    reach that conclusion itself, which is filed as
    `PC-S340-SAFE-STOP-ACQUITTAL-TESTS-ANCESTRY-NOT-CONTENT`.
-2. **BATCH MULTIPLE CANDIDATES INTO ONE RELEASE WHEREVER POSSIBLE.** Operator instruction at
-   batch 52, replacing the one-subsystem rule that governed batches 17 through 52. "Possible"
+2. **BATCH MULTIPLE CANDIDATES INTO ONE RELEASE WHEREVER POSSIBLE, AMONG THE BUILDERS ALREADY
+   COLLECTED.** Operator instruction at batch 52, replacing the one-subsystem rule that governed
+   batches 17 through 52; the batch-174 ruling at the head of this list bounds it: a collected fix
+   ships in the next release cut and never waits for a slower builder. "Possible"
    is a set of conditions, each of which keeps the candidates SEPARABLE after they ship:
    - each candidate gets its own fix commit(s) naming NO `PC-` id, its own `BL-` entry with its
      own receipt scored against its own regressions AND against the other candidates' fixes
      (a receipt the other fix closes is a pairing to refuse), its own fixture arms and mutants,
      and its own hands;
-   - the default is ALL live candidates in one release (the standing ruling above); these
-     conditions decide how they are kept separable, never whether they ride;
+   - every live candidate is in the BATCH's scope (the standing ruling above), and each release
+     takes every candidate whose builders are collected when it is cut; these conditions decide
+     how they are kept separable, never whether they ride;
    - the ONE release commit names every closed id verbatim, and the CHANGELOG carries one `###`
      per id — action 8 governs: `named_absorbed()` reads `VERSION` at the OLDEST commit naming
      an id, so a per-candidate commit that named its id would report the previous version;
