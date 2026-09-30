@@ -1612,8 +1612,16 @@ Discharges the consumer entry `extensions/steps-domain/sprint-review-push.md` at
 line 267, whose live carrier is now
 `.claude/skills/ai-dlc/overrides/steps__sprint-review__fix-and-re-validate.md`.
 
+**Receipt re-keyed at batch 174 on POSITION.** The old receipt closed on the words `branch` and
+`carry-over` anywhere in §3, so one sentence of prose satisfied it. This one requires a bold-
+labelled paragraph whose label names a branch, inside §3, whose body names the carry-over
+owner `carry-over-evaluation.md`. Scored on three trees: tip 0, base 1, and 1 on both a copy
+with that paragraph deleted and a copy with it moved verbatim into §4. It is still text: a
+paragraph of the right shape closes it whatever it instructs. The behaviour is pinned by
+`core/fixtures/review-carry-over-clauses/`, whose mutants delete, move and de-own the paragraph.
 
-verify: sh s=core/skills/ai-dlc/steps/sprint-review.md; b=$(LC_ALL=C awk '/^### 3\. Fix and Re-Validate/{f=1;next} f&&/^### 4\./{exit} f' "$s"); [ -n "$b" ] || exit 1; grep -qi live <<<"$b" || exit 1; grep -qi branch <<<"$b" && grep -qi carry-over <<<"$b"
+
+verify: sh s=core/skills/ai-dlc/steps/sprint-review.md; b=$(LC_ALL=C awk '/^### 3\. Fix and Re-Validate/{f=1;next} f&&/^### /{exit} f' "$s"); [ -n "$b" ] || exit 1; grep -qi live <<<"$b" || exit 1; p=$(LC_ALL=C awk '/^\*\*[^*]*[Bb]ranch[^*]*\*\*/{f=1} f&&/^[[:space:]]*$/{exit} f' <<<"$b"); [ -n "$p" ] && grep -qF carry-over-evaluation.md <<<"$p"
 ## BL-038
 
 **Core's sprint-review §3 lets a "genuinely environmental" integration seam defer with no
@@ -1650,8 +1658,15 @@ non-empty — a heading rename reports STILL-LIVE rather than closing silently.
 Discharges the consumer entry `Decision-branch execution-coverage for sprint-review §3 "Fix and
 Re-Validate" (PI-S259-2)` at pinned ledger line 316.
 
+**Receipt re-keyed at batch 174 on POSITION, and it no longer takes either fix.** The old
+receipt closed when `environmental` left §3, which a regression deleting the permission would
+satisfy while shipping no obligation. This one requires the permission sentence itself to
+survive and to carry `carry-over-evaluation.md` before its own sentence end. Scored: tip 0,
+base 1, and 1 on a copy whose permission keeps its words and loses its duty. It is still text:
+a sentence of that shape closes it. `core/fixtures/review-carry-over-clauses/` arm ENV pins it.
 
-verify: sh F=core/skills/ai-dlc/steps/sprint-review.md; [ "$(grep -cF HARD_BLOCK "$F")" -ge 1 ] || exit 1; S=$(sed -n '/^### 3\. Fix and Re-Validate/,/^### 4\./p' "$F"); [ -n "$S" ] || exit 1; E=$(grep -ci environmental <<<"$S"); C=$(grep -ci carry-over <<<"$S"); [ "$E" -eq 0 ] || [ "$C" -ge 1 ]
+
+verify: sh F=core/skills/ai-dlc/steps/sprint-review.md; [ "$(grep -cF HARD_BLOCK "$F")" -ge 1 ] || exit 1; S=$(LC_ALL=C awk '/^### 3\. Fix and Re-Validate/{f=1;next} f&&/^### /{exit} f' "$F" | tr "\n" " "); [ -n "$S" ] || exit 1; grep -qF "environmental seam MAY defer" <<<"$S" || exit 1; t=${S#*environmental seam MAY defer}; t=${t%%. *}; grep -qF carry-over-evaluation.md <<<"$t"
 ## BL-048
 
 **Two of the three dev-role checks this consumer carries have no upstream equivalent, and the
