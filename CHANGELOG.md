@@ -15,6 +15,57 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.674.0] - 2026-09-30
+
+Batch 177's first release. Seven consumer candidates filed by the reference consumer's sprint-315
+retro, plus the operator-ruled remedy for `BL-390`. No file under the update skill's own machinery
+changes except `setup-sites.md`, which gains two fixture lines, as every fixture-adding release does.
+
+### Consumer candidates
+
+- **`PC-S315-VALIDATE-MANDATORY-RULES-CHECK5-HEAD-200-TRUNCATES-A-LONG-SPRINT-SECTION`** (`BL-392`).
+  Check 5 reads the whole isolated gate-log section rather than its first 200 lines. The consumer's
+  live section passes after this fix only on two incidental `playwright` mentions; its real
+  visual-verification line carries neither token Check 5 reads, which `BL-396` fixes at the writer.
+- **`PC-S315-PREPUSH-REQUIRES-RENDERED-AGENT-DEFS-IN-FRESH-WORKTREE`** (`BL-393`). The consumer
+  pre-push hook renders the agent definitions when `.claude/agents/` is absent, then runs the
+  existing check. A present directory stays check-only, and `--check` still never writes.
+- **`PC-S315-RETRO-STEP1-SQUASH-CUT-LACKS-POST-SQUASH-EVIDENCE`** (`BL-394`). Retro Step 1 still cuts
+  from `origin/main`, then carries the sprint commits made after the squash onto the retro branch.
+  The PR head is derived by tree equality with the squash commit, an empty range is skipped, and a
+  conflicting pick stops with a hard block. Cutting from the sprint tip was refuted: it re-creates
+  the behind-main conflict the retro exists to catch.
+- **`PC-S315-STEERING-BUDGET-COUNTS-BUT-DOES-NOT-PREVENT`** (`BL-395`). New PreToolUse hook
+  `ai-dlc-foreground-budget.sh` denies a foreground Bash whose declared timeout exceeds the steering
+  budget, and names the re-issue with `run_in_background: true`. It reads the budget from the
+  detector's own default. A warning was refuted: its context reaches the model after the call
+  returns. On the consumer's transcripts it catches 29 of 42 overruns; 13 declared no timeout.
+- **`PC-S315-DEPLOY-VALIDATE-HAS-NO-ONE-VARIABLE-PER-SMOKE-RUN-RULE`** (`BL-396`). Deploy-validate
+  requires one live mutation per smoke run and records a `per_action_attribution` field beside the
+  existing persistent-failure record; §4 names the tokens Check 5 reads, and Check 8 requires the
+  new field.
+- **`PC-S315-DEV-AND-QA-ROLE-CHECKLISTS-LET-A-STORY-REACH-GATE-1-WITHOUT-THE-EVIDENCE-SECTIONS-AND-THE-FULL-SUITE`**
+  (`BL-397`). Every story file carries four evidence sections, including a `Strategy Test IDs`
+  table. Dev and QA gain handoff-evidence sections outside the sections the consumer overrides;
+  the code reviewer sweeps baseline fixtures when a handler's result shape changes.
+- **`PC-S315-STORIES-TEST-STRATEGY-CASE-LETTERS-AND-RE-POINT-CONSUMERS-ARE-NOT-BOUND-TO-A-TEST-AT-AUTHORING`**
+  (`BL-398`). Check 21 reads the `Strategy Test IDs` table as its citation set and fails a case
+  letter with no row or a test node absent on disk. A strategy with no table is a stated SKIP.
+
+### Also
+
+- **`BL-390`** (operator-ruled remedy). `validate-steering-budget.sh --cite` prints
+  `NOMATCH-TRANSCRIPT-PRUNED` when the quoted answer's session transcript is gone from disk. Exit
+  stays 2, so every gate still denies.
+
+### Fixtures
+
+- **`story-evidence-scaffold`** (new, ships) and **`foreground-budget-deny`** (new, ships).
+- Arms and mutants added to `check5-anchor-base`, `agent-definition-render`,
+  `askuserquestion-citation`, `retro-branch-behind-main`, `deploy-validate-smoke-classification`
+  and `validator-path-resolution`. The read-set map is re-traced for all eight and for
+  `update-preflight-push`.
+
 ## [0.673.0] - 2026-09-30
 
 Batch 176's third release. It ships alone because the update skill runs the pull that delivers

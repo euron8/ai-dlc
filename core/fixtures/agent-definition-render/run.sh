@@ -639,6 +639,169 @@ fi
 # loaded reports the same silence as one whose arms cannot fire.
 [ "$kills" -eq 0 ] && bad "NO MUTANT WAS KILLED. Either the mutations landed in a copy nothing executes, or none of these arms is load-bearing."
 
+# ---------------------------------------------------------------------------------------
+# THE CONSUMER HOOK. `.claude/agents/` is gitignored and derived, so a fresh `git worktree add`
+# or clone has none, and the hook's `--check` failed every pinned role on the first push from
+# such a tree. The hook now RENDERS when the directory is ABSENT and stays check-only when it is
+# PRESENT. These worlds drive the REAL consumer hook in a scratch consumer -- a git repo holding
+# the renderer at `scripts/ai-dlc/` and the hook at `.githooks/pre-push`, with no tests/fixtures
+# so the suite step is not reached.
+#
+# FOUR WORLDS, one token each, and each is the one a named wrong fix moves:
+#   A  absent directory       -> exit 0, the definitions EXIST, and `--check` agrees afterwards
+#   D  drifted definition     -> exit 1, the drifted file's digest UNCHANGED (kills "always render")
+#   C  current definitions    -> exit 0, the OK line PRESENT, digest unchanged, no write-mode line
+#   U  unparseable settings   -> non-zero, and `.claude/agents` still does NOT exist (kills
+#      "create the directory, then render": a renderer refusing leaves a dir the next push reads
+#      as present, so the fresh-worktree case turns into a permanent check-only FAIL)
+# ---------------------------------------------------------------------------------------
+HOOK=""
+if [ -f "$ROOT/core/git-hooks/pre-push" ]; then
+  HOOK="$ROOT/core/git-hooks/pre-push"
+elif [ "$SUBJECT" = "$ROOT/scripts/ai-dlc/render-agent-definitions.sh" ] && [ -f "$ROOT/.githooks/pre-push" ]; then
+  # In the distribution `.githooks/pre-push` is the distribution's OWN runner, not the subject;
+  # it is the consumer hook only in the installed layout.
+  HOOK="$ROOT/.githooks/pre-push"
+fi
+
+hook_world() { # <hook> -> a scratch consumer project with the renderer and the hook installed
+  local h="$1" p
+  p="$(fresh)" || return 1
+  git -c init.defaultBranch=main init -q "$p" >/dev/null 2>&1 || return 1
+  mkdir -p "$p/scripts/ai-dlc" "$p/.githooks" || return 1
+  cp "$SUBJECT" "$p/scripts/ai-dlc/render-agent-definitions.sh" || return 1
+  cp "$h" "$p/.githooks/pre-push" || return 1
+  printf '%s\n' "$p"
+}
+drive_hook() { # <project> -> the hook's combined output; exit = the hook's
+  ( cd "$1" && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE bash .githooks/pre-push </dev/null 2>&1 )
+}
+agents_digest() { ( cd "$1/.claude/agents" 2>/dev/null && shasum -a 256 -- *.md 2>/dev/null ) }
+
+hook_battery() { # <hook> -> "A:<> D:<> C:<> U:<>"
+  local h="$1" p out rc t="" b a
+  # A -- absent. The seed's foreign definition is removed so the directory can go with it.
+  p="$(hook_world "$h")" || { printf 'A:broken D:broken C:broken U:broken'; return; }
+  rm -f "$p/.claude/agents/my-own-helper.md"; rmdir "$p/.claude/agents"
+  out="$(drive_hook "$p")"; rc=$?
+  if [ "$rc" -eq 0 ] && [ -f "$p/.claude/agents/$WITH_EFFORT.md" ] \
+     && render "$SUBJECT" "$p" --check >/dev/null 2>&1 && grep -q 'definition(s) written' <<<"$out"; then
+    t="A:rendered"
+  elif [ "$rc" -eq 0 ]; then t="A:green-unrendered"
+  else t="A:blocked"; fi
+  drop "$p"
+  # D -- drifted. Rendered, then hand-edited; the hook must refuse and leave the edit in place.
+  p="$(hook_world "$h")" || { printf '%s D:broken C:broken U:broken' "$t"; return; }
+  render "$SUBJECT" "$p" >/dev/null
+  printf 'effort: max\n' >> "$p/.claude/agents/$WITH_EFFORT.md"
+  b="$(agents_digest "$p")"
+  out="$(drive_hook "$p")"; rc=$?
+  a="$(agents_digest "$p")"
+  if [ "$rc" -eq 1 ] && [ -n "$b" ] && [ "$b" = "$a" ]; then t="$t D:refused-untouched"
+  elif [ "$b" != "$a" ]; then t="$t D:overwritten"
+  else t="$t D:rc$rc"; fi
+  drop "$p"
+  # C -- current. Presence-shaped: the check's own OK line must be THERE.
+  p="$(hook_world "$h")" || { printf '%s C:broken U:broken' "$t"; return; }
+  render "$SUBJECT" "$p" >/dev/null
+  b="$(agents_digest "$p")"
+  out="$(drive_hook "$p")"; rc=$?
+  a="$(agents_digest "$p")"
+  if [ "$rc" -eq 0 ] && grep -q 'OK: agent definitions current' <<<"$out" && [ "$b" = "$a" ] \
+     && ! grep -q 'definition(s) written' <<<"$out"; then t="$t C:checked"
+  elif grep -q 'definition(s) written' <<<"$out"; then t="$t C:rewritten"
+  else t="$t C:rc$rc"; fi
+  drop "$p"
+  # U -- unparseable settings over an absent directory.
+  p="$(hook_world "$h")" || { printf '%s U:broken' "$t"; return; }
+  rm -f "$p/.claude/agents/my-own-helper.md"; rmdir "$p/.claude/agents"
+  printf '{ "aiDlcRoles": \n' > "$p/.claude/settings.json"
+  out="$(drive_hook "$p")"; rc=$?
+  if [ "$rc" -ne 0 ] && [ ! -e "$p/.claude/agents" ]; then t="$t U:refused-nothing-written"
+  elif [ -e "$p/.claude/agents" ]; then t="$t U:dir-created"
+  else t="$t U:rc$rc"; fi
+  drop "$p"
+  printf '%s' "$t"
+}
+HOOK_EXPECTED="A:rendered D:refused-untouched C:checked U:refused-nothing-written"
+
+if [ -z "$HOOK" ]; then
+  echo "  skip  consumer pre-push hook not found (looked for core/git-hooks/pre-push, and .githooks/pre-push in the installed layout)"
+else
+  echo "  hook:    ${HOOK#"$ROOT"/}"
+  # THE HOOK RAN AT ALL, in a scratch consumer: an unmutated drive over a current world must
+  # exit 0 and print the renderer's own OK line. A hook that died before this arm would
+  # otherwise make every mutant below read as killed.
+  HP="$(hook_world "$HOOK")" || { echo "FIXTURE BROKEN: could not build a scratch consumer for the hook" >&2; exit 2; }
+  render "$SUBJECT" "$HP" >/dev/null
+  HOUT="$(drive_hook "$HP")"; HRC=$?
+  drop "$HP"
+  if [ "$HRC" -ne 0 ] || ! grep -q 'OK: agent definitions current' <<<"$HOUT"; then
+    echo "FIXTURE BROKEN: the unmutated consumer hook did not pass a current scratch consumer (rc=$HRC) -- nothing below would be about the agent-definitions arm" >&2
+    printf '%s\n' "$HOUT" | tail -20 >&2
+    exit 2
+  fi
+
+  HGOT="$(hook_battery "$HOOK")"
+  if [ "$HGOT" = "$HOOK_EXPECTED" ]; then
+    ok "consumer pre-push: an ABSENT .claude/agents/ is rendered and the push passes; a DRIFTED definition blocks the push and is left byte-identical; a CURRENT tree is checked and not written; UNPARSEABLE settings block with no directory created"
+  else
+    bad "consumer pre-push battery: expected [$HOOK_EXPECTED], got [$HGOT]"
+  fi
+
+  # hmut <label> <sed-expr> <expected battery> <claim>
+  hmut() {
+    local label="$1" expr="$2" want="$3" claim="$4" d="$MUTROOT/hook-$1" got
+    mkdir -p "$d"
+    if ! sed -e "$expr" "$HOOK" > "$d/pre-push" 2>/dev/null; then
+      bad "HOOK MUTANT $label DID NOT APPLY: the sed died"; return
+    fi
+    if cmp -s "$HOOK" "$d/pre-push"; then
+      bad "HOOK MUTANT $label: the sed matched NOTHING, so no mutant existed"; return
+    fi
+    got="$(hook_battery "$d/pre-push")"
+    if [ "$got" = "$want" ]; then
+      kills=$((kills+1)); ok "HOOK MUTANT $label: $claim"
+    elif [ "$got" = "$HOOK_EXPECTED" ]; then
+      bad "HOOK MUTANT $label SURVIVED: $claim"
+    else
+      bad "HOOK MUTANT $label ($claim): expected [$want], got [$got]"
+    fi
+  }
+
+  # The tip's behaviour: never render. Only the absent world moves.
+  hmut never-render \
+    's/^    if \[ ! -d \.claude\/agents \]; then$/    if false; then/' \
+    "A:blocked D:refused-untouched C:checked U:refused-nothing-written" \
+    "without the absent-directory render a fresh worktree's first push is blocked on every pinned role, and only the absent world sees it"
+
+  # WRONG FIX: render on every push. It clears the absent world AND erases a drifted definition,
+  # so the push goes green over a hand edit nobody reviewed. TWO CELLS, and both are the same
+  # defect: C reads the write it performs on a tree that needed none (byte-identical, so only the
+  # write-mode line shows it), and D reads the write that destroys evidence.
+  hmut render-unconditionally \
+    's/^    if \[ ! -d \.claude\/agents \]; then$/    if true; then/' \
+    "A:rendered D:overwritten C:rewritten U:refused-nothing-written" \
+    "rendering on every push overwrites a drifted definition and passes (D), and writes over a current tree that needed nothing (C)"
+
+  # WRONG FIX: "make sure the directory exists" before rendering. A renderer that then refuses
+  # leaves an EMPTY directory, which every later push reads as present and check-only.
+  hmut mkdir-before-render \
+    '/^      out="\$(bash scripts\/ai-dlc\/render-agent-definitions.sh --root \. 2>&1)"$/i\
+      mkdir -p .claude/agents
+' \
+    "A:rendered D:refused-untouched C:checked U:dir-created" \
+    "creating the directory before the renderer decides leaves an empty .claude/agents/ behind a refused render, and only the unparseable world sees it"
+
+  # WRONG FIX: skip the arm. Scored as THREE cells on purpose: the current world asserts the OK
+  # line is PRESENT, so a hook that no longer runs the arm moves it, and moves A and D with it
+  # because nothing renders and nothing refuses. U stays, because a skipped arm writes nothing.
+  hmut skip-the-arm \
+    's/^    agent_definitions$/    true/' \
+    "A:green-unrendered D:rc0 C:rc0 U:rc0" \
+    "a hook that stops running the arm passes all four worlds' exit codes wrongly or not at all; C is the world that proves the arm RAN"
+fi
+
 echo "  $fails failed, $kills mutant(s) killed"
 [ "$fails" -eq 0 ] || exit 1
 exit 0

@@ -240,6 +240,7 @@ core_manifest:
   - fixtures/escalation-delivery/**
   - fixtures/extract-push-flag-decision/**
   - fixtures/fold-architect-ledger-join/**
+  - fixtures/foreground-budget-deny/**
   - fixtures/update-preflight-push/**
   - fixtures/inflight-row-shape/**
   - fixtures/known-skills-extension/**
@@ -273,6 +274,7 @@ core_manifest:
   - fixtures/predicate-reclassification/**
   - fixtures/derivation-differential/**
   - fixtures/deploy-validate-smoke-classification/**
+  - fixtures/story-evidence-scaffold/**
   - fixtures/review-carry-over-clauses/**
   - fixtures/provenance-flagless-default/**
   - fixtures/provenance-not-accessible/**

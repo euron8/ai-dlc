@@ -153,7 +153,17 @@ verification step:
    against a schema copy held in the repo.
 4. Cross-check test fixtures: do the mocked response shapes match the real
    API response shapes?
-5. Any unverifiable field name is **Important** severity, not Suggestion.
+5. **Baseline-fixture sweep when a diff changes a handler's result shape.**
+   When the diff adds, removes, renames or retypes a field in what a
+   handler, endpoint or producer returns, grep the project's test-fixture
+   directories for that handler's name, route and changed field names
+   (`git grep -l <name> -- <fixture dirs>`), with a control: one token the
+   same command must find. List every fixture hit and the test that loads
+   it, and confirm each test passes in the dev's full-collection run. A
+   fixture hit whose test was not in that run, or an absent sweep, is
+   **Important**: the baseline tests those fixtures feed break in a later
+   gate and not in this review.
+6. Any unverifiable field name is **Important** severity, not Suggestion.
    Synchronized fixture/schema bugs bypass all automated testing.
 
 ## Bug-Site Anchoring

@@ -620,7 +620,14 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   carries the inline root block (BL-327), and I75 hashes each copy's chain once. Every other arm
 #   within one. Whole-validator wall clock, interleaved, 3 reps: base 21/21/20s, tip 21/22/22s.
 #   HIGH reading 3168 plus the usual 6; the window 3168..4525 is open.
-FORK_BUDGET=3174
+#
+#   RAISED TO 3194 FOR TWO NEW SUBJECTS, NEITHER A RE-READ. `fork-profile.sh --section by-arm`,
+#   base `origin/main` 144c41b8 in a clean detached worktree against the 0.674.0 tip: base 3166,
+#   tip 3187 (gate reading 3188), so +21. The new hook `ai-dlc-foreground-budget.sh` is one more
+#   subject of every per-hook arm: I14 +4, I13 +2, I84 +2, I93 +2, I83 +1. I75 +10 is one more
+#   inline root block, in `validate-steering-budget.sh` (BL-390), hashed once like every copy.
+#   Every other arm unchanged. HIGH reading 3188 plus the usual 6.
+FORK_BUDGET=3194
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
