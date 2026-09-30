@@ -503,6 +503,55 @@ CITED = (re.compile(r"(?<![\w-])(?:%s)(?![\w-])"
                     % "|".join(re.escape(i) for i in sorted(declared, key=len, reverse=True)))
          if declared else None)
 
+# A SIXTH CLASS, AND IT IS THE CORRECTION CHANNEL. The register is append-only, so an
+# adjudicator who finds that an earlier reason stated an obligation that does not exist can only
+# say so on a LATER row — and that later row is very often a discharge row, which the skip below
+# exempts. The claim was read and its retraction was not, permanently, with no act available to
+# clear the row. `supersedes` cannot carry it: its schema description scopes it to a DIFFERENT
+# verdict, and a withdrawn sentence leaves the verdict standing.
+#
+# SO THE RETRACTION IS A FIELD, NOT A PROSE PREDICATE. `withdraws` on a later row names the
+# `recorded_utc` of the earlier records on its own entry whose reason it retracts. A retraction
+# token (`withdrawn`, `CORRECTION`, `retract`) was scored first: 1 of 19 reported rows silenced,
+# correctly, against 5 rows carrying such a token anywhere in the register — a corpus from which
+# no false-positive set can be measured, keyed on free prose, which is the class this arm has
+# been wrong on three separate times. A structured name has a false-positive set of zero by
+# construction: it acquits only the rows it names.
+#
+# THE KEY IS (entry, recorded_utc), NOT (entry, clause, recorded_utc), AND THAT IS DELIBERATE.
+# Measured on the reference register, 655 rows: (entry, recorded_utc) collides on 6 keys, and 5
+# of the 6 are twin LC-E4 / LC-E19 rows one adjudicator wrote at one instant on one digest with
+# one reason — one act, withdrawn as one. The sixth is a byte-identical duplicate. Adding the
+# clause would make the adjudicator name each twin separately and leave the other reported.
+#
+# AN UNRESOLVABLE WITHDRAWAL IS REPORTED, NEVER HONOURED AND NEVER DROPPED. Three shapes: the
+# value is not an array of strings; it names an instant at which no record on this entry sits;
+# it names an instant at or after its own row's, which an append-only correction cannot do. A
+# silent no-op on any of them would leave the adjudicator believing a row was retracted while it
+# is still reported, which is this defect with its symptom moved.
+#
+# ONLY THE UNDECLARED ARM READS IT. A withdrawn row that declared an `owed` stays OPEN until a
+# `closes_owed` names it — withdrawing prose does not discharge a structured commitment — and
+# the verdict still answers every `layer-drift.sh` lookup.
+withdrawn, bad_withdrawals = set(), []
+instants = {}
+for w in rows:
+    instants.setdefault(w.get("entry"), set()).add(w.get("recorded_utc"))
+for w in rows:
+    if "withdraws" not in w:
+        continue
+    wv, went, wutc = w.get("withdraws"), w.get("entry"), w.get("recorded_utc") or ""
+    if not isinstance(wv, list) or not all(isinstance(t, str) for t in wv):
+        bad_withdrawals.append((went or "", wutc, repr(wv)[:60], "not an array of recorded_utc strings"))
+        continue
+    for t in wv:
+        if t not in instants.get(went, set()):
+            bad_withdrawals.append((went or "", wutc, t, "no record on this entry carries that recorded_utc"))
+        elif not t < wutc:
+            bad_withdrawals.append((went or "", wutc, t, "names a record at or after the withdrawing row's own instant"))
+        else:
+            withdrawn.add((went, t))
+
 undeclared = []
 owed_any_entry = {e for _c, e in owed_entries}
 for r in rows:
@@ -511,6 +560,8 @@ for r in rows:
     if closes_ids(r)[0]:
         continue
     if r.get("entry") in owed_any_entry:
+        continue
+    if (r.get("entry"), r.get("recorded_utc")) in withdrawn:
         continue
     reason = r.get("reason", "") or ""
     # A CITATION OF A DECLARED id IS A HANDLE, so this row's prose is a REFERENCE to an
@@ -532,11 +583,17 @@ for r in rows:
                            "verdict": r.get("verdict", ""), "cues": hits})
 
 if as_json:
-    print(json.dumps({"open": open_items, "undeclared": undeclared,
-                      "rows": len(rows), "malformed": malformed,
-                      "mistyped_closes_owed": mistyped,
-                      "contradicts_core_unowed": [{"clause": c, "entry": e}
-                                                  for c, e in unowned]}, indent=1))
+    # The new key is CONDITIONAL so a register carrying no `withdraws` field produces output
+    # byte-identical to the reader that predates it.
+    doc = {"open": open_items, "undeclared": undeclared,
+           "rows": len(rows), "malformed": malformed,
+           "mistyped_closes_owed": mistyped,
+           "contradicts_core_unowed": [{"clause": c, "entry": e}
+                                       for c, e in unowned]}
+    if bad_withdrawals:
+        doc["unresolved_withdrawals"] = [{"entry": e, "recorded_utc": u, "names": t, "why": y}
+                                         for e, u, t, y in bad_withdrawals]
+    print(json.dumps(doc, indent=1))
     raise SystemExit(0)
 
 print("LAYER DEBT  register=%s  rows=%d%s%s"
@@ -565,6 +622,15 @@ if undeclared:
 else:
     print("UNDECLARED (0) — no row's prose reads like an undeclared obligation.")
 print()
+# Printed only when non-empty, so a register with no `withdraws` field reads byte-identically.
+if bad_withdrawals:
+    print("WITHDRAWALS THAT RESOLVE TO NOTHING (%d) — honoured by no arm; the named row is still read:" % len(bad_withdrawals))
+    for e, u, t, y in bad_withdrawals:
+        print("  %-44s %s  withdraws %s — %s" % (e.split("/")[-1][:44], u, t, y))
+    print()
+    print("  `withdraws` names the `recorded_utc` of an EARLIER record on the SAME entry. Append a")
+    print("  corrected row; the register is append-only, so the bad value cannot be edited away.")
+    print()
 if unowned:
     print("CONTRADICTS-CORE WITHOUT AN `owed` (%d) — a ruling nothing will surface again:" % len(unowned))
     for c, e in unowned:

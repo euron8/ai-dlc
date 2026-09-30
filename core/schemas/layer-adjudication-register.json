@@ -82,6 +82,14 @@
         "pattern": "^OWED-[A-Z0-9][A-Z0-9-]*$"
       },
       "description": "OPTIONAL. Ids this record discharges. The register is append-only, so a debt is closed by a LATER row naming it, never by editing the row that opened it \u2014 the same supersession model `supersedes` already uses for verdicts."
+    },
+    "withdraws": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$"
+      },
+      "description": "OPTIONAL. Retracts the REASON PROSE of earlier records on this SAME entry without changing any verdict. Each item is the `recorded_utc` of an earlier record on this record's `entry`, copied verbatim; every record on the entry at that instant is withdrawn (twin rows written at one instant under two clauses are one act and are withdrawn together). Use it when an earlier reason stated something that turned out false \u2014 an obligation that does not exist, most often \u2014 and the verdict itself stands, so `supersedes` (scoped to a DIFFERENT verdict) does not apply. The register is append-only, so a sentence is withdrawn by a LATER row naming it, never by editing the row that wrote it. `audit-layer-debt.sh` stops listing a withdrawn record under UNDECLARED, and reports under WITHDRAWALS THAT RESOLVE TO NOTHING any value that names no earlier record on the entry, names one at or after this record's own instant, or is not an array of strings. A withdrawn record's verdict still answers `layer-drift.sh` lookups; this field is read by the debt audit and nothing else."
     }
   }
 }
