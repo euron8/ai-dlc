@@ -60,6 +60,8 @@ not a closed entry.
 
 ## BL-275 — a shared detector's cost-saving flag is bound by NO fixture at any CALLER, so a second caller can silently stop passing it
 
+**LANDED (v0.666.0, verified 0a8015a2).**
+
 **DEFECT.** Found while scoping `0.597.0`, by censusing `reconcile-emit-report` and then ablating
 the detectors its renderer drives.
 
@@ -4002,6 +4004,8 @@ fixture and passing on its removal.
 verify: manual
 
 ## BL-308 — `preclassify.sh --templates` and `--untangle` route through the new failure path, but neither mode was force-tested on its own
+
+**LANDED (v0.666.0, verified cfffdedc).**
 
 **NOTE.** Found at batch 153 by the `BL-230` docs hand, reading the 0.637.0 diff. It discharges no
 consumer candidate.
