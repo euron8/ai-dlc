@@ -2723,10 +2723,12 @@ permission-approval waits as starvation, which would inflate the detector's figu
 foreground call running long.
 
 **Fixture `foreground-budget-deny`** (ships, so it is in `uninstall.sh`, `core-manifest.md` and
-`setup-sites.md`) drives the real hook through eleven arms: OVER, REASON, BG, NOTIMEOUT, BOUNDARY
+`setup-sites.md`) drives the real hook through fourteen arms: OVER, REASON, BG, NOTIMEOUT, BOUNDARY
 (exactly at budget allowed, one ms over denied), ENV (override raises the budget, lowers it, and works
 with no detector on disk), DEFAULT (a detector copy whose default is 60 denies 90000 where the real one
-allows it), NONBASH, NODETECTOR, MALFORMED (stderr says fail-open), and EXIT. It runs twelve mutants,
+allows it), NONBASH, NODETECTOR, MALFORMED (stderr says fail-open), PUSH (`git push -u origin HEAD` and
+`cd /x && git push` at 600000 allowed), PUSHNEAR (`echo git push` and `git log --grep=push` denied),
+AGENT (an `agent_id` payload allowed, the same payload without it denied), and EXIT. It runs fifteen mutants,
 each scored against the exact set of arms it must fail, plus an unmutated control from the same
 directory. The read-set map has no entry for the new directory; the operator owes
 `sudo bash core/scripts/derive-fixture-readsets.sh --list "foreground-budget-deny"`.
