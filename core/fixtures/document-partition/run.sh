@@ -11,6 +11,10 @@
 # another predicate wrote. Shapes that the partition must handle and that each separate a mutant:
 #   - a `## ` inside a ``` fence, sized so a fence-blind partition yields a DIFFERENT part count
 #     and a part headed by the fenced text (greedy packing cannot absorb the extra atom);
+#   - a `## ` inside a ```` fence past its inner ``` pair, inside a ~~~ fence past a ``` pair, and a
+#     ``` fence closed by a longer run (the toggle mutant keeps the first two open wrongly);
+#   - a `## ` inside a multi-line HTML comment, and a real `## ` right after a one-line comment;
+#   - an odd ``` inside a comment and a `<!--` inside a fence -- neither may open the other;
 #   - a dominant `##` section with no `### ` (SERIAL) beside its twin WITH `### ` (shards);
 #   - twelve equal atoms and no preamble, where the uncapped greedy pack yields twelve parts;
 #   - LF, CRLF and no-trailing-newline documents through split + assemble, compared by `cmp`.
@@ -67,6 +71,36 @@ doc_fenced() { # four equal sections; section 2 carries a fenced `## ` at its mi
   printf '## Gamma\n'; body gamma 20
   printf '## Delta\n'; body delta 20
 }
+# The three documents below share one frame: four sections, and the section that hides a `## `
+# carries 18 body lines BEFORE it and 10 after, so a leaked atom cannot pack into the part before
+# it and shows as a fifth part headed by the hidden text (or, where the leak swallows the rest,
+# as lost Gamma/Delta headings).
+doc_longfence() { # a ```` fence holding a ``` pair, a ~~~ fence holding one, a short fence closed long
+  printf '# Long fence\n\n'
+  printf '## Alpha\n'; body alpha 10; printf '```\n## Short Fence Heading\n`````\n'; body alpha2 10
+  printf '## Beta\n'; body beta 18
+  printf '````markdown\n```bash\n## Quad Fence Heading\n```\n````\n'; body beta2 10
+  printf '## Gamma\n'; body gamma 18
+  printf '~~~\n```\n## Tilde Fence Heading\n```\n~~~\n'; body gamma2 10
+  printf '## Delta\n'; body delta 20
+}
+doc_comment() { # a comment spanning lines hides a `## `; a one-line comment right before a real one
+  printf '# Comment\n\n'
+  printf '## Alpha\n'; body alpha 20
+  printf '## Beta\n'; body beta 18
+  printf '<!--\n## Commented Heading\n-->\n'; body beta2 10
+  printf '<!-- a one-line note -->\n'
+  printf '## Gamma\n'; body gamma 20
+  printf '## Delta\n'; body delta 20
+}
+doc_cfence() { # an odd ``` inside a comment; a `<!--` inside a fence
+  printf '# Comment fence\n\n'
+  printf '## Alpha\n'; body alpha 10; printf '```html\n<!-- an example opening\n```\n'; body alpha2 10
+  printf '## Beta\n'; body beta 18
+  printf '<!--\n```\n## Comment Fence Heading\n-->\n'; body beta2 10
+  printf '## Gamma\n'; body gamma 20
+  printf '## Delta\n'; body delta 20
+}
 doc_dominant() { # one `##` section over half the document and NO `### ` inside it
   printf '# Dominant\n\n## Small A\n'; body a 5
   printf '## Huge\n'; body huge 60
@@ -108,6 +142,16 @@ p_fence() { # a fenced `## ` is neither a boundary nor a heading
   [ "$n" -eq 4 ] || return 1
   [ "$(printf '%s\n' "$m" | cut -f4 | tr '\n' '|')" = "## Alpha|## Beta|## Gamma|## Delta|" ]
 }
+four_parts() { # <pd> <doc-fn> -- exactly 4 parts headed Alpha/Beta/Gamma/Delta
+  local w m n; w="$(world)"; "$2" > "$w/d.md"
+  m="$(bash "$1" --map "$w/d.md")" || return 1
+  n="$(printf '%s\n' "$m" | grep -c .)" || n=0
+  [ "$n" -eq 4 ] || return 1
+  [ "$(printf '%s\n' "$m" | cut -f4 | tr '\n' '|')" = "## Alpha|## Beta|## Gamma|## Delta|" ]
+}
+p_longfence() { four_parts "$1" doc_longfence; }
+p_comment() { four_parts "$1" doc_comment; }
+p_cfence() { four_parts "$1" doc_cfence; }
 p_serial_dominant() { # dominant section, no ###: SERIAL on stdout, exit 3; the ### twin shards
   local w m rc; w="$(world)"; doc_dominant > "$w/d.md"; doc_dominant_h3 > "$w/t.md"
   m="$(bash "$1" --map "$w/d.md" 2>/dev/null)"; rc=$?
@@ -232,12 +276,15 @@ p_no_overwrite() { # a second split over a live sections/ is refused
   [ "$rc" -eq 2 ] && has "$w/e" "already exists"
 }
 
-P_ALL="fence serial_dominant serial_one roundtrip crlf_map cap manifest sha_moved missing newline refused_intact removed unchanged expect_sha relative no_overwrite"
+P_ALL="fence longfence comment cfence serial_dominant serial_one roundtrip crlf_map cap manifest sha_moved missing newline refused_intact removed unchanged expect_sha relative no_overwrite"
 
 arm() { # <predicate> <label>
   if "p_$1" "$PD"; then ok "$2"; else bad "$2"; fi
 }
 arm fence            "A1: a \`## \` inside a \`\`\` fence is not a boundary -- 4 parts, headed Alpha/Beta/Gamma/Delta"
+arm longfence        "A17: a \`## \` inside a \`\`\`\` fence past its inner \`\`\` pair, and inside a ~~~ fence past a \`\`\` pair, is not a boundary; a \`\`\` fence closed by \`\`\`\`\` closes"
+arm comment          "A18: a \`## \` inside a multi-line HTML comment is not a boundary; a real \`## \` right after a one-line comment is"
+arm cfence           "A19: an odd \`\`\` inside a comment opens no fence, and a \`<!--\` inside a fence opens no comment"
 arm serial_dominant  "A2: a dominant ## section with no ### -> exit 3 'SERIAL: largest part is'; its ### twin shards"
 arm serial_one       "A3: one ## section -> exit 3 'SERIAL: one part', and --split creates nothing"
 arm roundtrip        "A4: LF, CRLF and no-trailing-newline documents split + assemble byte-identical, mode 640 kept"
@@ -312,8 +359,21 @@ mutant "MX1 the split-sha check removed (both layers)" "sha_moved" \
   '[ "$(sha_of "$DOC")" = "$SHA" ] || { rm -f "$T"; refuse "$DOC moved' 'true || { rm -f "$T"; refuse "$DOC moved'
 mutant "MX2 the missing-section check removed" "missing" \
   '[ -f "$DIR/sections/$o.md" ] || refuse "section $o is missing' 'true || refuse "section $o is missing'
-mutant "MX3 the partition made fence-blind" "fence" \
-  '/^[ \t]*(```|~~~)/ { fence = !fence; next }' '/^[ \t]*(```|~~~)/ { next }'
+mutant "MX3 the partition made fence-blind" "fence longfence cfence" \
+  '{ match($0, /(`+|~+)/); fence = substr($0, RSTART, RLENGTH); next }' '{ next }'
+mutant "MX7 the fence tracker reverted to the toggle (any fence line closes)" "longfence" \
+  'if (n >= length(fence)) fence = ""' 'if ($0 ~ /^[ \t]*(```|~~~)/) fence = ""' \
+  'fence = substr($0, RSTART, RLENGTH); next }' 'fence = "x"; next }'
+mutant "MX8 the comment tracker dropped" "comment cfence" \
+  'cmt { if (index($0, "-->")) cmt = 0; next }' '' \
+  '/^[ \t]*<!--/ { if (!index(substr($0, index($0, "<!--") + 4), "-->")) cmt = 1; next }' ''
+mutant "MX9 a fence may open inside a comment (fence-open checked before comment continuation)" "cfence" \
+  '    cmt { if (index($0, "-->")) cmt = 0; next }
+    /^[ \t]*(```|~~~)/ { match($0, /(`+|~+)/); fence = substr($0, RSTART, RLENGTH); next }' \
+  '    /^[ \t]*(```|~~~)/ { match($0, /(`+|~+)/); fence = substr($0, RSTART, RLENGTH); next }
+    cmt { if (index($0, "-->")) cmt = 0; next }'
+mutant "MX10 a one-line comment left open" "comment" \
+  '{ if (!index(substr($0, index($0, "<!--") + 4), "-->")) cmt = 1; next }' '{ cmt = 1; next }'
 mutant "MX4 the trailing-newline check removed" "newline" \
   '|| refuse "section $o does not end in a newline' '|| true "section $o does not end in a newline'
 mutant "MX5 the PART_CAP repack removed" "cap" \
