@@ -4097,7 +4097,15 @@ temp tree in 7 of 10 runs, 5k to 42k entries each. The fixture's sweep workers c
 to the fixture and keep writing after its EXIT trap's `rm -rf`. Neither is reached by the engine,
 which sets no timeout; only an operator interrupt reaches them.
 
-verify: manual
+Fixed by recording each sweep worker's pid and reaping its whole tree (stop, walk children by
+`pgrep -P`, kill) in the EXIT handler before any removal, which TERM and INT now reach explicitly.
+Measured with a forced TERM mid-sweep in a scratch copy, pids read from a sentinel file and checked
+by `kill -0`: tip 0 of 12 workers alive, 0 entries left under the caller's TMPDIR; reap loop and its
+`wait` deleted, 9 entries (killed re-runs' rotator temp dirs); base, 28. The sweep's plain re-run
+now also sets TMPDIR inside its world, so a reaped re-run leaves nothing outside $WORK. The receipt
+reads the fixture's executable lines (comments excluded). Scored tip 0, base 1, reap-deleted 1.
+
+verify: sh f=core/fixtures/snapshot-archive-rotate/run.sh; [ -f "$f" ] || exit 9; body(){ LC_ALL=C awk -v n="$1" '$0 ~ "^"n"\\(\\) *\\{" {p=1; next} p && /^}/ {exit} p && !/^[[:blank:]]*#/' "$f"; }; h=$(body fixture_cleanup); s=$(body sweep_pass); [ -n "$h" ] && [ -n "$s" ] || exit 1; grep -q 'KPIDS="\$KPIDS \$!"' <<<"$s" || exit 1; r=$(grep -n 'reap_tree "\$p"' <<<"$h" | head -1 | cut -d: -f1); m=$(grep -n 'rm -rf "\$WORK"' <<<"$h" | head -1 | cut -d: -f1); [ -n "$r" ] && [ -n "$m" ] && [ "$r" -lt "$m" ] || exit 1; grep -qx 'trap fixture_cleanup EXIT' "$f" && grep -qx "trap 'exit 143' TERM" "$f" && grep -q 'pgrep -P' <<<"$(body reap_tree)"
 
 ## BL-325 — the `snapshot-archive-rotate` kill sweep does not reach a rotator that turns off its own trace, and a TERM during its EXIT trap leaks the sandbox
 
@@ -4110,7 +4118,15 @@ verify: manual
 - A TERM that lands while the fixture's EXIT trap runs `chflags -R` kills bash before `rm`, and
   leaked 336,939 entries in one run. `trap '' TERM INT` at the top of the handler closes it.
 
-verify: manual
+Both fixed, with the refusal option taken for the first: `arm_killed` refuses a rotator matching
+`KESC_RE` (`set +…T`, `set +o functrace`, `trap … DEBUG`) before it sweeps, the regex self-probed
+in both directions at load, and mutant MTU (`trap - DEBUG` inserted) is now KILLED by that refusal.
+The not-reached text names what the refusal still cannot see (`eval`, a variable, a sourced file).
+The handler's first line is `trap '' TERM INT`. The TERM-during-`chflags` window was not forced;
+the receipt reads the handler's first executable line. Scored tip 0, base 1, and 1 on each of
+the trap-ignore deleted and the refusal disabled.
+
+verify: sh f=core/fixtures/snapshot-archive-rotate/run.sh; [ -f "$f" ] || exit 9; body(){ LC_ALL=C awk -v n="$1" '$0 ~ "^"n"\\(\\) *\\{" {p=1; next} p && /^}/ {exit} p && !/^[[:blank:]]*#/' "$f"; }; h=$(body fixture_cleanup); [ -n "$h" ] || exit 1; [ "$(head -1 <<<"$h" | tr -d ' ')" = "trap''TERMINT" ] || exit 1; k=$(body arm_killed); [ -n "$k" ] || exit 1; e=$(grep -n 'grep -qE "\$KESC_RE" "\$R_"' <<<"$k" | head -1 | cut -d: -f1); z=$(grep -n 'bh="\$(fbytes' <<<"$k" | head -1 | cut -d: -f1); [ -n "$e" ] && [ -n "$z" ] && [ "$e" -lt "$z" ] || exit 1; grep -q '^  score MTU killed ' "$f"
 
 ## BL-326 — `validate-gate-adjudication.sh` reads the map from the install fallback and the escalations from the foreign root
 

@@ -22,7 +22,37 @@ WORK="$(bash "$HERE/seed.sh" | tail -1)" || { echo "FIXTURE ERROR: seed failed" 
 # A `chflags uchg` file cannot be unlinked, and MCF leaves killed worlds carrying one under $WORK, so
 # the flag is cleared HERE, before the remove, where an interrupted run (TERM during the MCF sweep)
 # still reaches it. `chflags` is BSD-only; where it is absent no such flag can have been set.
-trap 'if command -v chflags >/dev/null 2>&1; then chflags -R nouchg "$WORK" 2>/dev/null; fi; rm -rf "$WORK"' EXIT
+#
+# AN INTERRUPT MUST REAP THE SWEEP BEFORE IT REMOVES ANYTHING. The kill-point sweep runs KPAR
+# background workers, each a tree (worker -> subshell -> rotator -> its children), and only `wait`
+# reaped them: a TERM to this shell ran the EXIT handler while every worker kept copying worlds into
+# $WORK, so the `rm -rf` raced live writers and the tree came back (5k to 42k entries left in 7 of 10
+# interrupted runs). So TERM and INT exit through the EXIT handler, and the handler, before its first
+# removal, ignores TERM and INT itself (a second TERM landing during `chflags -R` otherwise killed
+# bash before `rm` and left the whole sandbox) and reaps every worker's TREE: each process is stopped
+# before its children are listed, so none can fork past the walk, then killed.
+KPIDS=""
+reap_tree() {  # <pid>: stop it, reap its descendants depth-first, then kill it
+  local c
+  kill -STOP "$1" 2>/dev/null
+  for c in $(pgrep -P "$1" 2>/dev/null); do reap_tree "$c"; done
+  kill -KILL "$1" 2>/dev/null
+}
+fixture_cleanup() {
+  trap '' TERM INT
+  local p
+  for p in $KPIDS; do reap_tree "$p"; done
+  for p in $KPIDS; do wait "$p" 2>/dev/null; done
+  if command -v chflags >/dev/null 2>&1; then chflags -R nouchg "$WORK" 2>/dev/null; fi
+  rm -rf "$WORK"
+}
+# TERM and INT exit explicitly so the EXIT handler runs on every bash, not only where an untrapped
+# fatal signal happens to run it. Measured with a forced TERM mid-sweep in a scratch copy on bash 3.2:
+# 0 entries left under the caller's TMPDIR; with the reap loop deleted, 9 rotator temp dirs; the
+# unfixed fixture, 28.
+trap fixture_cleanup EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
 
@@ -667,6 +697,16 @@ ENVEOF
 KPAR=12
 KL=1
 KSTRIDE=8
+# The forms that turn the sweep's trace off from inside the rotator (see arm_killed's header).
+# Self-probe, both directions, before any rotator is read: each escape form matches, and the
+# shipped rotator's own `set` and `trap` lines do not.
+KESC_RE='set[[:blank:]]+\+[A-Za-z]*T|set[[:blank:]]+\+o[[:blank:]]+functrace|trap[[:blank:]].*DEBUG'
+for _k in 'set +T' 'set +eT' 'set +o functrace' 'trap - DEBUG' "trap '' DEBUG"; do
+  grep -qE "$KESC_RE" <<<"$_k" || { echo "FIXTURE BROKEN: KESC_RE does not match '$_k'" >&2; exit 2; }
+done
+for _k in 'set -uo pipefail' "trap 'rm -rf \"\$TMPD\"' EXIT" 'set -T'; do
+  grep -qE "$KESC_RE" <<<"$_k" && { echo "FIXTURE BROKEN: KESC_RE matches the near-miss '$_k'" >&2; exit 2; }
+done
 
 # The expected new history of the `above` world, from the SHIPPED rotator on an unmodified copy, so a
 # mutant under test cannot move its own yardstick. Asserted to differ from the pre-run history.
@@ -886,6 +926,12 @@ arm_atomic() {
 #              pipeline stage or background job still running when the kill lands is not killed
 #              with the rotator (`kill $$` names the shell alone). A write through the history of
 #              1024 bytes or fewer is whole under L = 1.
+#              A rotator that switches the trace OFF itself (`set +T`, `set +o functrace`,
+#              `trap - DEBUG`, `trap '' DEBUG`) runs every later command untraced and unkilled: MTU
+#              survived 269 kills that way. The sweep cannot reach that, so the arm REFUSES any
+#              rotator whose own text matches KESC_RE before it sweeps (MTU pins the refusal). The
+#              refusal reads the rotator's text only: the same switch spelled through `eval`, a
+#              variable, or a sourced file is not seen, and such a rotator is unreached.
 #
 # staged: WITHOUT --absorb, two halves. (1) The kill lands on `git add` of the archive, which now
 # runs BEFORE the rename: the history is still the pre-run file, the archive untracked; the plain
@@ -928,7 +974,9 @@ sweep_one() {  # <N> <L> <dir>: one kill point at limit L; writes <dir>/r.<N>.<L
   # handed a verdict computed elsewhere: MCH (mode bits), MCF (a `chflags uchg` file flag) and MCA
   # (a deny-write ACL) each leave a killed world whose bytes are the template's and whose re-run is
   # refused, and no portable reading sees the flag or the ACL.
-  ( cd "$w" && bash "$R_" "$HIST_REL" --absorb "$SNAP_REL" --apply ) >/dev/null 2>&1; rc2=$?
+  # TMPDIR inside the world, as run 1 has: an interrupt reaps this re-run by SIGKILL, which runs no
+  # EXIT trap, and its mktemp directory must then be under $WORK, not in the caller's TMPDIR.
+  ( cd "$w" && TMPDIR="$w.tmp" bash "$R_" "$HIST_REL" --absorb "$SNAP_REL" --apply ) >/dev/null 2>&1; rc2=$?
   ( cd "$w" && git ls-files -z -- '*.md' | xargs -0 cat 2>/dev/null ) | sort -u > "$w.corpus"
   miss="$(comm -23 "$d/want" "$w.corpus" | wc -l | tr -d ' ')"
   heq=no; cmp -s "$w/$HIST_REL" "$EXPECT" && heq=yes
@@ -948,15 +996,24 @@ sweep_pass() {  # <dir> <job list>: KPAR workers, job i to worker (i mod KPAR), 
   local j=0
   while [ "$j" -lt "$KPAR" ]; do
     awk -v w="$j" -v k="$KPAR" '(NR - 1) % k == w' "$2" > "$2.$j"
-    sweep_worker "$2.$j" "$1" & j=$((j + 1))
+    sweep_worker "$2.$j" "$1" & KPIDS="$KPIDS $!"; j=$((j + 1))
   done
+  # The worker pids are recorded (KPIDS) so an interrupt can reap their trees; see the EXIT handler.
+  # SNAPROT_SWEEP_STARTED names a file written once every worker is running, so a probe that
+  # interrupts this fixture mid-sweep waits on a condition rather than on a process table.
+  [ -n "${SNAPROT_SWEEP_STARTED:-}" ] && echo "$KPIDS" > "$SNAPROT_SWEEP_STARTED"
   wait
+  KPIDS=""
 }
 arm_killed() {
   local heq ok_all=1 d T N j k L bad nk npost nmiss nmv npart first swept stop bh be tk tl W0 n0 n1 wpost
   local f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 part1
   expect_above || { MSG="cannot build the expected new history"; return 1; }
   MSG=""
+  if grep -qE "$KESC_RE" "$R_"; then
+    MSG="sweep: REFUSED -- the rotator switches off its own DEBUG trace ($(grep -nE "$KESC_RE" "$R_" | head -1 | cut -c1-60)), so no kill point after it can be reached"
+    return 1
+  fi
   # SIZING. `ulimit -f 1` writes 1024 bytes and stops, which is a PARTIAL write only of a file longer
   # than that. Both the pre-run history and the new history must be, or every limited write is whole.
   bh="$(fbytes "$TMPL/above/$HIST_REL")"; be="$(fbytes "$EXPECT")"
@@ -1588,6 +1645,12 @@ else bad "mGF DID NOT APPLY — the staging line is not in the rotator exactly o
 if mut_line "$ROT" "$MD/mGOa.sh" 'stage_archive' ':' && mut_after "$MD/mGOa.sh" "$MD/mGO.sh" "$MK_OLD" 'stage_archive'; then
   score mGO gitfail "$MD/mGO.sh" "$CH" "$PH" "the stage moved back after the rename"
 else bad "mGO DID NOT APPLY — the top-level stage call or the rename line is not in the rotator exactly once"; fi
+
+# MTU: a rotator that turns off the sweep's DEBUG trace before its writes. The sweep cannot kill past
+# it, so arm_killed refuses it by text; this pins the refusal.
+if mut_after "$ROT" "$MD/mTU.sh" 'HIST_BASE="$(basename "$HISTORY")"' 'trap - DEBUG'; then
+  score MTU killed "$MD/mTU.sh" "$CH" "$PH" "the rotator runs 'trap - DEBUG' before its writes (the sweep's trace switched off)"
+else bad "MTU DID NOT APPLY — the HIST_BASE line is not in the rotator exactly once"; fi
 
 # unw_probe asks whether THIS host and user can make a scratch file read as not writable (`[ -w ]`
 # false, which is what the rotator's precheck reads) by one means: `mode` (chmod a-w, MCH), `flag`
