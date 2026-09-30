@@ -220,6 +220,18 @@ ESC
 ESC
   if [[ "$(check6_detail "$t")" == *"no DECIDED_AUTONOMOUSLY or HARD_BLOCK waiver for 'Story 302-1'"* ]]; then
     echo "A12 PASS"; else echo "A12 FAIL"; fi
+
+  # --- A13 (BL-328): run from a SUBDIRECTORY of the consumer, the schema and the corpus are still
+  # found. The schema lookup used bare `.claude/schemas/…` and `core/schemas/…`, which resolve
+  # against the cwd: in this consumer-shaped tree the script-relative candidate is scripts/schemas/
+  # (absent), so a run from below the root found no schema and Check 6 failed as unresolved. A2 is
+  # the near-miss — the same tree driven from the root, which passed before and after.
+  t="$(fresh "$TOOLS")"
+  story "$t/$MIG" story-1-alpha done
+  story "$t/$MIG" story-2-beta  in_progress
+  mkdir -p "$t/docs/sub"
+  if [[ "$( ( cd "$t/docs/sub" && bash "$t/scripts/ai-dlc/validate-mandatory-rules.sh" 302 2>&1 ) | grep -E '^  CHECK 6:')" == *"PASS — 2 story file(s) verified"* ]]; then
+    echo "A13 PASS"; else echo "A13 FAIL"; fi
 }
 
 echo "story-corpus-sprint-slot:"
@@ -230,7 +242,7 @@ FAILED="$(battery "$TD_REAL" | awk '$2=="FAIL"{printf "%s ", $1}')"
 if [ -n "$FAILED" ]; then
   bad "battery failed on the SHIPPING tools: $FAILED"
 else
-  ok "all 12 assertions pass on the shipping tools"
+  ok "all 13 assertions pass on the shipping tools"
 fi
 
 # =============================================================================
@@ -288,6 +300,12 @@ mutant A10 "corpus literal restated instead of resolved" ss \
 # mutation is exactly the layer under test, and A11 staying green is what says so.
 mutant A12 "waiver window free to cross an entry boundary again" vmr \
   '/^          \/\^## \/ { win = 0 }/d'
+# A13: BOTH layers of the BL-328 fix reverted — the schema's root candidates go back to bare
+# cwd-relative paths AND the corpus template is no longer re-rooted. Reverting only one still fails
+# A13 (no schema, or a schema whose relative corpus reads empty), so a partial revert would prove
+# the layer left in place; this one proves the pair.
+mutant A13 "schema and corpus resolved against the cwd again" vmr \
+  's|"\${VMR_ROOT:-\.}/|"|; s|^  if \[ -n "\$STORIES_DIR_T" \] && \[ -n "\$VMR_ROOT" \] && \[ "\$VMR_ROOT" != "\$(pwd)" \]; then$|  if false; then|'
 
 # --- Unmutated control -------------------------------------------------------
 # A copy in the same directory shape as the mutants, mutated not at all. Without it, a harness

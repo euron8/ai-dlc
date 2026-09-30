@@ -4139,7 +4139,12 @@ bare relative paths `.claude/schemas/sprint-status.json` and `core/schemas/sprin
 Those two resolve against the process's working directory, not a resolved project root, so in
 the consumer layout a run from any directory other than the project root finds no schema.
 
-verify: manual
+Receipt: a consumer-shaped tree (schema only at `.claude/schemas/`, one story in the sprint's slot)
+driven from `docs/sub/` must verify the story (exit 0), not report the corpus location unresolved
+(exit 1). `story-corpus-sprint-slot` A13 carries it with the A2 root-run near-miss and a mutant
+reverting both the schema and the corpus rooting.
+
+verify: sh d=$(mktemp -d); mkdir -p "$d/.git" "$d/.claude/schemas" "$d/scripts/ai-dlc" "$d/_bmad-output/planning-artifacts/s302/stories" "$d/docs/sub" || exit 9; cp core/schemas/sprint-status.json "$d/.claude/schemas/" || exit 9; cp core/scripts/validate-mandatory-rules.sh "$d/scripts/ai-dlc/" || exit 9; for s in validate-retro-evidence.sh validate-cycle-commits.sh validate-retro-prereq.sh; do printf '#!/bin/sh\nexit 0\n' > "$d/scripts/ai-dlc/$s"; done; printf -- '---\nstatus: done\n---\n\n# s\n\n## Dev Agent Record\n\ndev did it.\n' > "$d/_bmad-output/planning-artifacts/s302/stories/story-1-a.md"; o=$(cd "$d/docs/sub" && bash "$d/scripts/ai-dlc/validate-mandatory-rules.sh" 302 2>&1); case "$o" in *"CHECK 6: PASS — 1 story file(s) verified"*) exit 0 ;; *"CHECK 6: FAIL — the corpus location did not resolve"*) exit 1 ;; esac; exit 9
 
 ## BL-329 — `sync-transient-ignore.sh --root <foreign>` exits 2 in the consumer layout
 
