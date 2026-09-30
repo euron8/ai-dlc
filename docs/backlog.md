@@ -2493,8 +2493,9 @@ next call by either of two always-available edits to the same call, which is the
 
 **What it cannot see.** 12 of the adversary's 41 overruns (13 of 42 re-derived) declared no timeout.
 Those run under the harness default and stay the detector's to count. It also cannot tell a call that
-declared a long timeout and would have returned quickly; those calls are denied, and the consumer
-re-issues them backgrounded. The adversary's note N2, **unverified**: Check A may count
+declared a long timeout and would have returned quickly. **The false-positive set is 154 of 183**: on
+the re-derived corpus, 154 of the calls this hook would deny returned inside the budget. Each costs
+one re-issue with `run_in_background: true`, or with a timeout at or under the budget. The adversary's note N2, **unverified**: Check A may count
 permission-approval waits as starvation, which would inflate the detector's figure without any
 foreground call running long.
 
