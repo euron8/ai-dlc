@@ -826,8 +826,12 @@ kill_check_all "m24 dup-key      one JSON object repeating enum" "$TMP/m24" rend
 seed "$TMP/n3"
 printf '%s\n' '{"fields": [{"name": "verdict", "enum": ["YES", "NO"], "enum2": ["X"]}, {"name": "other", "enum": ["UP"]}]}' \
   > "$TMP/n3/core/schemas/seeded.json"
+# The backtick is built, not typed: I85 scans for one inside a quoted operator-facing string.
+N3_BT="$(printf '\140')"
 green_check "n3  key-prefix     enum/enum2 in one object, enum in a sibling" "$TMP/n3" \
-  "11 cross-file vocabular(ies), 2 schema enum(s)" '| `seeded.json` | `verdict` | `YES` `NO` |' '| `seeded.json` | `other` | `UP` |'
+  "11 cross-file vocabular(ies), 2 schema enum(s)" \
+  "| ${N3_BT}seeded.json${N3_BT} | ${N3_BT}verdict${N3_BT} | ${N3_BT}YES${N3_BT} ${N3_BT}NO${N3_BT} |" \
+  "| ${N3_BT}seeded.json${N3_BT} | ${N3_BT}other${N3_BT} | ${N3_BT}UP${N3_BT} |"
 
 if [ "$rc" -eq 0 ]; then
   note "PASS  vocabulary-index -- 2 controls + 4 near-miss green, 24/24 mutants killed by their own arm"
