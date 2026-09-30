@@ -15,6 +15,21 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.672.0] - 2026-09-30
+
+Batch 176's second release. It ships alone because `layer-drift.sh` classifies the pull that
+delivers it. Discharges no consumer candidate.
+
+### Backlog
+
+- **`BL-085`** — a layer entry's `extends:` may declare several comma-separated anchors on every
+  kind except `qualifier`, which keeps exactly one because it renders at `position:` inside one
+  section. `LC-E11` was widened in place and `contract_version` stays 20: every entry valid under
+  the old clause is valid under the new one. `validate-layer-entries.sh` checks every declared span,
+  and `layer-drift.sh` compares every span instead of the first, emitting `ANCHOR-MISSING` for a
+  span that no longer resolves and `ANCHOR-DRIFT` naming the spans that moved. An entry depending on
+  several disjoint spans no longer falls back to file grain.
+
 ## [0.671.0] - 2026-09-30
 
 Batch 176's first release. It ships alone because `apply.sh` runs `sync-transient-ignore.sh`
