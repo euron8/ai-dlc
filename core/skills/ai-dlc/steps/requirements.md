@@ -59,10 +59,13 @@ If the project keeps no such files, the corpus is the archived-escalation / ADR 
 wherever it lives; the search is still required and a zero-hit pass still shows its command.
 
 Cite the literal grep command(s) run, the hit count, and a one-line disposition per hit
-(`superseded` / `still binding` / `not relevant`). A subsystem-keyword grep returning zero
-hits is a valid pass ONLY if the grep command itself is shown. **A step that does not cite the
-prior-decision search → gate FAILS.** Any prior decision dispositioned `still binding` MUST be
-carried into the requirements as an explicit constraint. Rationale and the minimum-mechanism
+(`superseded` / `still binding` / `not relevant` / `deferred-unfiled`). A subsystem-keyword grep
+returning zero hits is a valid pass ONLY if the grep command itself is shown. **A step that does
+not cite the prior-decision search → gate FAILS.** Any prior decision dispositioned `still binding`
+MUST be carried into the requirements as an explicit constraint. A hit dispositioned
+`deferred-unfiled` is a decision that names work it defers, where no carry-over backlog item
+carries that work: it MUST be filed as a carry-over backlog item in `carry-over-backlog.md` before
+the gate passes, and the item is cited beside the disposition. Rationale and the minimum-mechanism
 accounting: `discovery.md` §1a.
 
 ### 2. Option Check (Rule 13)
