@@ -390,6 +390,7 @@ fi
 # SKIP says so; passing silently would make a vanished arm and a satisfied arm identical.
 MERGE_ARMS=0
 CONTROL_ARMS=0
+TRACE_ARMS=0
 DERIVER=""
 for _d in "$ROOT/scripts/ai-dlc/derive-fixture-readsets.sh" "$ROOT/core/scripts/derive-fixture-readsets.sh"; do
   [ -f "$_d" ] && DERIVER="$_d" && break
@@ -751,13 +752,229 @@ EOF
     ok "the deriver's ONLY call of the control (line $E_CALL) passes the MERGED map, built by the merge at line $E_RUN into the variable assigned at line $E_MERGED, and is read by the die at line $E_DIE — the call site is bound, not just the function"
   fi
   fi
+
+  # ------------------------------------------------------- the trace tree's POPULATION ----
+  # WHAT THE TRACE TREE HOLDS DECIDES WHAT A FIXTURE CAN READ WHILE IT IS TRACED. It was `cp -a`
+  # of the whole working tree; it is now `.git/` plus `git ls-files --cached --others
+  # --exclude-standard`. The copy is extracted between its own sentinels and DRIVEN on a seeded
+  # repo carrying one member per property the copy must get right, and the population is
+  # compared EXACTLY -- a count or a presence check would accept a copy that carries extra files.
+  #
+  # THREE PLAUSIBLE WRONG COPIES ARE KILLED, EACH BY A NAMED MEMBER, which is what shows the seed
+  # can express every way the copy goes wrong:
+  #   `cp -a` then remove the ignored files -- the populated SUBMODULE's files survive
+  #   `git archive HEAD`                      -- the untracked-not-ignored file is missing
+  #   `rsync --exclude-from=.gitignore`       -- the `.claude/rules/` NEGATION is not honoured
+  # A mutant that survives means the seed lacks the input that separates it; the repair is a
+  # member, never a dropped mutant.
+  CP="$WORK/copy.sh"
+  sed -n '/# READSET_COPY_BEGIN/,/# READSET_COPY_END/p' "$DERIVER" > "$CP"
+  CSEED="$WORK/copyseed"
+  TRACE_ARMS=$((TRACE_ARMS+1))
+  if ! grep -q 'readset_copy_tree()' "$CP"; then
+    bad "extracted no readset_copy_tree from $DERIVER — the READSET_COPY span is absent, so the trace tree's population cannot be driven"
+  else
+    mkdir -p "$CSEED/inner" "$CSEED/src" || broken "mkdir failed"
+    ( cd "$CSEED/inner" && git init -q . && echo i > in.txt && git add in.txt \
+        && git -c user.email=f@f -c user.name=f commit -qm i ) >/dev/null 2>&1 || broken "could not seed the submodule's origin"
+    ( cd "$CSEED/src" && git init -q . \
+        && printf 'ignored.log\n.claude/*\n!.claude/rules/\n' > .gitignore \
+        && echo t > tracked.txt && echo x > exec.sh && chmod 755 exec.sh && echo s > 'sp ace.txt' \
+        && ln -s tracked.txt link && ln -s nowhere dangling \
+        && mkdir -p .claude/rules && echo r > .claude/rules/x.md && echo '{}' > .claude/settings.local.json \
+        && echo gone > deleted.txt \
+        && git add -A && git -c user.email=f@f -c user.name=f commit -qm seed \
+        && git -c protocol.file.allow=always submodule -q add "file://$CSEED/inner" lib/sub \
+        && git -c user.email=f@f -c user.name=f commit -qm sub \
+        && echo u > untracked.txt && echo i > ignored.log && rm deleted.txt \
+        && touch -m -t 200501010000 tracked.txt ) >/dev/null 2>&1 || broken "could not seed the copy's source repo"
+    # THE SEED MUST CARRY EVERY PROPERTY BEFORE ANY VERDICT IS READ: a submodule that was not
+    # populated cannot kill `cp -a`+rm, and an unignored settings file cannot test the negation.
+    [ -f "$CSEED/src/lib/sub/in.txt" ] && [ -f "$CSEED/src/.claude/settings.local.json" ] \
+      && [ -f "$CSEED/src/untracked.txt" ] && [ -f "$CSEED/src/ignored.log" ] \
+      && ( cd "$CSEED/src" && git ls-files -s | grep -q '^160000' ) \
+      && ( cd "$CSEED/src" && git check-ignore -q .claude/settings.local.json ) \
+      && ! ( cd "$CSEED/src" && git check-ignore -q .claude/rules/x.md ) \
+      || broken "the copy seed lost a property (populated gitlink, ignored settings file, negated rules file, untracked file) — the arms below could not tell a right copy from a wrong one"
+
+    # The one population a correct copy produces: every regular file and symlink outside `.git/`.
+    printf '%s\n' ./.claude/rules/x.md ./.gitignore ./.gitmodules ./dangling ./exec.sh ./link \
+      './sp ace.txt' ./tracked.txt ./untracked.txt | LC_ALL=C sort > "$CSEED/expected"
+
+    # copy_with <impl-file> <label> -> leaves the tree at $CSEED/dst.<label>, its stdout in .out,
+    # and prints the DEFECTS found: population diff lines and named property failures.
+    copy_with() {
+      local impl="$1" label="$2" dst="$CSEED/dst.$2" scr="$CSEED/scr.$2" v=""
+      mkdir -p "$dst" "$scr"
+      ( . "$impl"; readset_copy_tree "$CSEED/src" "$dst" "$scr" ) > "$CSEED/$label.out" 2>&1
+      ( cd "$dst" && find . -path ./.git -prune -o \( -type f -o -type l \) -print ) | LC_ALL=C sort > "$CSEED/$label.pop"
+      v="$(LC_ALL=C comm -3 "$CSEED/expected" "$CSEED/$label.pop" | sed 's/^\t/EXTRA:/; s/^\.\//MISSING:.\//' | tr '\n' ' ')"
+      [ -L "$dst/link" ] && [ "$(readlink "$dst/link")" = tracked.txt ] || v="$v link-not-a-symlink"
+      [ -L "$dst/dangling" ] || v="$v dangling-symlink-lost"
+      [ -x "$dst/exec.sh" ] || v="$v exec-bit-lost"
+      [ -n "$(find "$dst/tracked.txt" -newer "$CSEED/src/tracked.txt" 2>/dev/null)" ] && v="$v mtime-not-preserved"
+      [ -d "$dst/lib/sub" ] || v="$v gitlink-dir-absent"
+      [ -d "$dst/.git/modules/lib/sub" ] || v="$v git-dir-not-copied"
+      printf '%s' "$v"
+    }
+
+    CV="$(copy_with "$CP" shipped)"
+    if [ -z "$CV" ]; then
+      ok "the shipped copy lands EXACTLY the tracked and untracked-not-ignored files — exec bit, mtime, a space in a name, a symlink and a dangling symlink kept; the ignored file, the ignored .claude/settings.local.json and the submodule's contents absent; the negated .claude/rules/x.md present; .git/ whole"
+    else
+      bad "the shipped copy's population is wrong: $CV"
+    fi
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    if [ -d "$CSEED/dst.shipped/lib/sub" ] && [ -z "$(ls -A "$CSEED/dst.shipped/lib/sub" 2>/dev/null)" ] \
+       && grep -q "deleted.txt" "$CSEED/shipped.out"; then
+      ok "  and the GITLINK lands as an EMPTY directory, and the deleted-unstaged path is skipped and NAMED rather than aborting the copy"
+    else
+      bad "  the gitlink is not an empty directory, or the deleted-unstaged path was not named: $(tr '\n' ' ' < "$CSEED/shipped.out")"
+    fi
+
+    # The three wrong copies, each written as a whole replacement of the function.
+    cat > "$CSEED/m.cprm.sh" <<'MUT'
+readset_copy_tree() {
+  cp -a "$1/." "$2/" || return 1
+  ( cd "$2" && git ls-files -z --others --ignored --exclude-standard | xargs -0 rm -f )
+  echo "copied"
+}
+MUT
+    cat > "$CSEED/m.archive.sh" <<'MUT'
+readset_copy_tree() {
+  ( cd "$1" && git archive HEAD ) | ( cd "$2" && tar -xf - ) || return 1
+  cp -a "$1/.git" "$2/.git" || return 1
+  echo "copied"
+}
+MUT
+    cat > "$CSEED/m.rsync.sh" <<'MUT'
+readset_copy_tree() {
+  rsync -a --exclude-from="$1/.gitignore" "$1/" "$2/" || return 1
+  echo "copied"
+}
+MUT
+    for _m in "cprm:./lib/sub/in.txt:EXTRA" "archive:./untracked.txt:MISSING" "rsync:./.claude/rules/x.md:MISSING"; do
+      _n="${_m%%:*}"; _rest="${_m#*:}"; _member="${_rest%:*}"; _dir="${_rest##*:}"
+      TRACE_ARMS=$((TRACE_ARMS+1))
+      if [ "$_n" = rsync ] && ! command -v rsync >/dev/null 2>&1; then
+        bad "COPY MUTANT rsync: no rsync on PATH, so this mutant cannot be built and its kill is unproven"; continue
+      fi
+      _v="$(copy_with "$CSEED/m.$_n.sh" "$_n")"
+      case " $_v " in
+        *"$_dir:$_member"*) ok "COPY MUTANT $_n is killed by its named member ($_dir $_member)" ;;
+        *) bad "COPY MUTANT $_n was not killed by $_dir $_member — the seed lacks the input that separates it (defects seen: ${_v:-none})" ;;
+      esac
+    done
+  fi
+
+  # ---------------------------------------------- submodule rows and the ignore filter ----
+  # `git check-ignore --stdin` REFUSES A WHOLE BATCH -- exit 128, "is in submodule" -- when one
+  # row lies inside a submodule, and drop_ignored's fail-open branch then keeps every row. On a
+  # tree with a gitlink the ignore filter never ran. The shipped filter collapses submodule rows
+  # to the gitlink path before asking. Driven from its sentinels, on the same seeded repo.
+  DR="$WORK/drop.sh"
+  sed -n '/# READSET_DROP_BEGIN/,/# READSET_DROP_END/p' "$DERIVER" > "$DR"
+  TRACE_ARMS=$((TRACE_ARMS+1))
+  if ! grep -q 'drop_ignored()' "$DR"; then
+    bad "extracted no drop_ignored from $DERIVER — the READSET_DROP span is absent"
+  elif [ ! -d "$CSEED/src/.git" ]; then
+    bad "the submodule arm has no seeded repo to run on (the copy arm above did not seed one)"
+  else
+    printf '%s\n' tracked.txt ignored.log .claude/settings.local.json lib/sub/in.txt untracked.txt .claude/rules/x.md > "$CSEED/batch"
+    printf '%s\n' .claude/rules/x.md lib/sub tracked.txt untracked.txt | LC_ALL=C sort > "$CSEED/batch.expected"
+    # THE SEED MUST REPRODUCE THE REFUSAL, or the arm proves a filter that was never at risk.
+    ( cd "$CSEED/src" && git check-ignore --stdin --non-matching --verbose < "$CSEED/batch" ) >/dev/null 2>&1
+    CI_RC=$?
+    [ "$CI_RC" -ne 0 ] || broken "raw check-ignore on the submodule batch exited 0 — the seed no longer reproduces the refusal"
+    DO="$( TREE="$CSEED/src"; . "$DR"; drop_ignored < "$CSEED/batch" )"
+    if [ "$(printf '%s\n' "$DO" | LC_ALL=C sort)" = "$(cat "$CSEED/batch.expected")" ]; then
+      ok "a batch carrying a SUBMODULE row still filters (raw check-ignore exits $CI_RC on it): both ignored rows dropped, tracked, untracked and negated rows kept, the inner row collapsed to the gitlink"
+    else
+      bad "the submodule batch did not filter to exactly the non-ignored rows (raw check-ignore rc $CI_RC): got $(printf '%s' "$DO" | tr '\n' ' ')"
+    fi
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    sed 's|substr($1, 1, 7) == "160000 "|0|' "$DR" > "$CSEED/drop.mut.sh"
+    if cmp -s "$DR" "$CSEED/drop.mut.sh"; then
+      bad "DROP MUTANT nogitlink: the edit matched nothing"
+    else
+      DM="$( TREE="$CSEED/src"; . "$CSEED/drop.mut.sh"; drop_ignored < "$CSEED/batch" )"
+      case "$DM" in
+        *ignored.log*) ok "DROP MUTANT nogitlink: without the gitlink collapse the batch is refused and the ignored rows survive — the arm above depends on it" ;;
+        *) bad "DROP MUTANT nogitlink: the ignored row was still dropped, so the arm above does not depend on the gitlink collapse: $(printf '%s' "$DM" | tr '\n' ' ')" ;;
+      esac
+    fi
+  fi
+
+  # ------------------------------------------ the sandbox tracer refuses a LOSSY window ----
+  # `log stream` drops reports when it cannot keep up and prints `=== Messages dropped during
+  # live streaming`. The reports it dropped are gone, so the set that remains is short by an
+  # unknown amount -- the silent-skip direction. The deriver must OMIT such a fixture.
+  #
+  # LOSS IS FORCED, NOT AWAITED: an UNSCOPED profile reports every operation the fixture makes
+  # anywhere, and a burst of it overflows the stream. It is still probabilistic -- measured, 4
+  # of 5 unscoped bursts dropped -- so the arm checks an INVARIANT on every attempt, in both
+  # directions: a window WITH a drop notice is omitted naming the drop, and a window without one
+  # is mapped. It needs at least one lossy window to count as proven; with none in three
+  # attempts it SKIPS, naming why. It never passes on attempts that forced nothing.
+  #
+  # IT SKIPS where the stream cannot run: no sandbox-exec, no /usr/bin/log, running as root (the
+  # sandbox tracer refuses root), or INSIDE a sandbox -- `log stream` answers "Cannot run while
+  # sandboxed", which is exactly this fixture's state while `--tracer sandbox` traces it.
+  LS_WHY=""
+  if ! command -v sandbox-exec >/dev/null 2>&1; then LS_WHY="no sandbox-exec (not macOS)"
+  elif [ ! -x /usr/bin/log ]; then LS_WHY="no /usr/bin/log"
+  elif [ "$(id -u)" = 0 ]; then LS_WHY="running as root, which --tracer sandbox refuses"
+  else
+    /usr/bin/log stream --style compact --timeout 1s --predicate 'sender == "readset-skip-probe"' >/dev/null 2>"$WORK/ls.err" \
+      || LS_WHY="log stream unavailable here: $(head -1 "$WORK/ls.err")"
+  fi
+  if [ -n "$LS_WHY" ]; then
+    printf '  SKIP  sandbox-tracer loss arm: %s\n' "$LS_WHY"
+  else
+    PR="$WORK/lossprobe"
+    mkdir -p "$PR/core/fixtures/burst" "$PR/core/scripts" "$PR/.githooks" "$PR/d" || broken "mkdir failed"
+    _i=0; while [ "$_i" -lt 400 ]; do _i=$((_i+1)); echo "$_i" > "$PR/d/f$_i"; done
+    printf '#!/bin/bash\nfor d in core/fixtures/*/; do :; done\n' > "$PR/.githooks/pre-push"
+    printf '#!/bin/bash\ncat d/f* >/dev/null\nls -lR /usr/share >/dev/null 2>&1\ncat d/f* >/dev/null\necho burst ok\n' > "$PR/core/fixtures/burst/run.sh"
+    cp "$DERIVER" "$PR/core/scripts/derive-fixture-readsets.sh"
+    ( cd "$PR" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm probe ) >/dev/null 2>&1 \
+      || broken "could not seed the loss probe repo"
+    printf '(version 3)\n(allow default (with report))\n' > "$WORK/unscoped.sb"
+    L_FORCED=0; L_CLEAN=0; L_BAD=""; _a=0
+    while [ "$_a" -lt 3 ] && [ "$L_FORCED" -eq 0 ]; do
+      _a=$((_a+1)); _tr="$WORK/losstr.$_a"
+      # The exit status is NOT read: a one-fixture run can never pass the discrimination control
+      # (arm (c) above), so the deriver dies after the per-fixture line. That line is the verdict.
+      ( cd "$PR" && AI_DLC_READSET_TRACE_ROOT="$_tr" AI_DLC_READSET_SANDBOX_PROFILE="$WORK/unscoped.sb" \
+          bash core/scripts/derive-fixture-readsets.sh --list burst --tracer sandbox ) > "$WORK/loss.$_a.out" 2>&1
+      _line="$(grep -E '^  burst ' "$WORK/loss.$_a.out")"
+      _win="$(find "$_tr" -name burst.win 2>/dev/null | head -1)"
+      _d=0; [ -n "$_win" ] && { _d="$(grep -c 'dropped during' "$_win")" || _d=0; }
+      case "$_d:$_line" in
+        0:*" paths"*) L_CLEAN=$((L_CLEAN+1)) ;;
+        0:*"dropped reports"*) L_BAD="$L_BAD attempt $_a omitted for a drop its window does not carry;" ;;
+        0:*) : ;;   # omitted for another reason (settle/flush) -- neither direction observed
+        *:*"dropped reports"*) L_FORCED=$((L_FORCED+1)) ;;
+        *) L_BAD="$L_BAD attempt $_a had $_d drop notice(s) in its window and was not omitted for it: '$_line';" ;;
+      esac
+    done
+    if [ -n "$L_BAD" ]; then
+      TRACE_ARMS=$((TRACE_ARMS+1))
+      bad "the sandbox tracer's loss refusal is wrong:$L_BAD"
+    elif [ "$L_FORCED" -eq 0 ]; then
+      printf '  SKIP  sandbox-tracer loss arm: no attempt of %s forced a drop notice into the window (%s clean), so the refusal was not exercised\n' "$_a" "$L_CLEAN"
+    else
+      TRACE_ARMS=$((TRACE_ARMS+1))
+      ok "the sandbox tracer OMITS a fixture whose window carries a 'dropped during' notice ($L_FORCED forced, $L_CLEAN clean window(s) mapped, over $_a attempt(s)) — a lossy trace never becomes a smaller read-set"
+    fi
+  fi
 fi
 
 # THE SUMMARY IS ALSO A COMPLETENESS CHECK. This fixture once ended mid-file after an editing
 # mistake: it printed two thirds of its arms, never reached a verdict line, and exited 0 --
 # which the suite's worker records as `ok`. A fixture that dies silently reads exactly like one
 # that passed, so the arm count is asserted against the number this file actually carries.
-EXPECTED=$(( 18 + MERGE_ARMS + CONTROL_ARMS ))
+EXPECTED=$(( 18 + MERGE_ARMS + CONTROL_ARMS + TRACE_ARMS ))
 if [ "$asserts" -lt "$EXPECTED" ]; then
   printf '  FAIL  only %s assertions ran; this fixture carries %s — it exited early and a short green run reads exactly like a passing one\n' "$asserts" "$EXPECTED"
   fails=$((fails+1))
