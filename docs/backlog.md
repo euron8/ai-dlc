@@ -3672,7 +3672,22 @@ to be equivalent to.
 tractable form is dropping the hash and comparing normalised text directly, which is
 semantically identical and removes the per-subject external.
 
-verify: sh v=scripts/validate-enforcement-map.sh; [ -f "$v" ] || exit 9; LC_ALL=C grep -q 'i75_chain' "$v" || exit 9; n=$(grep -rl 'i75_norm\|i75_chain\|i75_failsclosed' core/fixtures/ --include='*.sh' 2>/dev/null | wc -l | tr -d ' '); [ "$n" -gt 0 ] && exit 0; exit 1
+**LANDED (v0.666.0, verified <sha>).** Seeded-drift arms A16–A19 in
+`core/fixtures/derived-fence-binding/run.sh`, driven through `--arms I75` on that fixture's
+whole-tree seed. A16 is the control: the clean seed passes and prints the verdict line. In A17,
+`audit-upstream-routing.sh`'s root block reads `CLAUDE_PROJECT_DIR` before the override, and
+`i75_drift` must name it. In A18 its `exit 2` terminal guard is removed, and `i75_open` must name
+it. A19 is the near-miss: a reworded comment inside the block must be acquitted. The host is
+not one of the enforcement-map batteries, because `b174-deadarm` is editing both. This fixture
+already drives `--arms` over a seed carrying `core/scripts/`, and its read set already covers
+the validator and the subject.
+
+**Receipt.** The filed receipt counted fixtures naming `i75_norm`/`i75_chain`, which a comment
+satisfies. This one RUNS the host fixture and requires the A17 and A18 `ok` lines. Scored: tip
+**0**, base `2e7c227c` **1**, and **1** for a mutant with the validator's `i75_drift` assignment
+neutered, in a whole-tree copy. Exit 9 if the host is gone.
+
+verify: sh f=core/fixtures/derived-fence-binding/run.sh; [ -f "$f" ] || exit 9; [ -f scripts/validate-enforcement-map.sh ] || exit 9; out="$(bash "$f" 2>&1)"; printf '%s\n' "$out" | grep -q '^  ok    A17 I75 ' || exit 1; printf '%s\n' "$out" | grep -q '^  ok    A18 I75 ' || exit 1; exit 0
 
 ## BL-267 — `I59_UNDOC_AWK` buffers a whole file into `lines[]`, so its memory cost is the largest corpus file rather than a constant
 
