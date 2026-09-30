@@ -100,29 +100,39 @@ session**: fourteen candidates no upstream release will discharge, eleven naming
 and three adjudicated here, rehearsed on a copy of the consumer's ledger at `737bf163` with its
 installed rotator (14 move, live 31 -> 17, no other id moved).
 
-**`v0.667.0` IS ASSEMBLED FROM COLLECTED BRANCHES, NOT BUILT YET AS A RELEASE.** Ten branches carry
-it, each verified by content: `b174-readsets` (`PC-S315-DERIVE-FIXTURE-READSETS-COPIES-THE-WHOLE-WORKING-TREE`,
-`BL-379`, plus `BL-375`'s root-free tracer mode), `b174-uninstall` (`BL-002`, `BL-010`), `b174-rotator`
-(`BL-322`..`BL-325`, `BL-027`), `b174-forkprofile` (`BL-267`, `BL-268`, `BL-269`, `BL-272`, `BL-274`,
-`BL-339`, new invariant `I116`), `b174-validators` (`BL-003`, `BL-020`, `BL-007` partial),
-`b174-reconcile-arms` (`BL-275`, `BL-308`, `BL-338` partial), `b174-roots` (`BL-326`..`BL-328`,
-`BL-330`), `b174-h2` (`BL-344`, `BL-346`, `BL-347`, `BL-349`..`BL-351`), `b174-bl123` (`BL-123`).
-**Operator rulings for it:** `BL-007` stays open for a hole inside the archive; tuned
-`aiDlcModels`/`aiDlcRoles` survive uninstall.
+**BATCH 174 ALSO SHIPPED `v0.667.0` (`23af7954`, #915) AND DISCHARGED
+`PC-S315-DERIVE-FIXTURE-READSETS-COPIES-THE-WHOLE-WORKING-TREE` (`BL-379`).** It carried the
+branches still building when `v0.666.0` shipped. Its close rotated 28 entries: live backlog
+**84 -> 58** (`BL-381`, `BL-382` filed), archive **295 -> 323**, R5 floors set to the measured
+36 sh receipts over 58 live entries. `BL-007` and `BL-338` are fixed in part and stay open; the
+operator ruled that `BL-007` stays open for a hole inside the archive.
 
-**BOOTSTRAPPING RELEASES ARE QUEUED, EACH FILE ALONE.** Built and held: `b174-bl085` (`BL-085`,
-`layer-drift.sh`; the operator ruled `contract_version` stays 20 and the CHANGELOG says `LC-E11` was
-widened in place) and `b174-bl329` (`BL-329`, `sync-transient-ignore.sh`, which `apply.sh` runs in a
-pull). Owed, unbuilt: `PC-S336-STEP-1-AUTOPUSH-IS-THE-UNGUARDED-TWIN-OF-THE-PUSH-STEP-2-HARDENED`
-with `BL-142`'s adjudicator sentence and `BL-024` (the update skill), then `apply.sh`
-(`BL-099`, `BL-103`, `BL-119`, `BL-336`), `lib.sh` (`BL-310`, `BL-355`, `BL-374` — its receipt
-tests one of four sites), `ledger-reverify.sh` (`BL-066`, `BL-092`), `preclassify.sh` (`BL-100`),
-`layer-drift.sh` (`BL-376`), and the multi-file `BL-360`, `BL-364`.
+**`BL-308` IS FIXED IN `v0.667.0` AND COULD NOT ROTATE.** Its receipt exits 0 alone and 1 through
+`backlog-reverify.sh`, which exports `AI_DLC_RECONCILE_MEMO` from `reconcile/lib.sh` into every
+receipt it evaluates; the cached rename status defeats `preclassify-rename-row`'s `--no-renames`
+mutant. Filed as `BL-382`, whose receipt exits 1 on the tree and 0 with the variable unset around
+the eval. The leak predates this batch: the pre-0.667.0 fixture fails the same way with it set.
 
-**THE DELIVERY GAP IS TWO RELEASES.** The consumer's stamp reads 0.664.0 (`bf998dfb`) against
-`VERSION` 0.666.0; neither 0.665.0 nor 0.666.0 touches a bootstrapping file. PENDING is 2: this
-batch's two ids, first named at 0.666.0. The banked ruling stands: report the gap and write no
-runbook.
+**THE `v0.667.0` GATE FAILED TWICE BEFORE IT PASSED.** First `validator-fork-budget` at 3168
+against 3152, from new invariant `I116` and one more `I75` subject; `FORK_BUDGET` is 3174 with the
+measurement beside it. Then the budget edit dropped the validator's executable bit (`I77`), taking
+four fixtures with it. The same run failed `layer-adjudication-tier` Part 11 world E, a packed-store
+setup flake this release did not touch, filed as `BL-381`. Gate on `63c640fa`: 22 phases PASS, 218
+fixtures ok, every changed fixture `ok` by name, squash tree identical to the gated tip. The
+operator's read-set trace for the six fixtures that read new files ships in this close; only their
+rows moved, and `layer-contract-conformance` lost its 2128 stale `.claude/worktrees/` rows.
+
+**BUILT BRANCHES HELD UNMERGED, EACH TOUCHING A BOOTSTRAPPING FILE SO EACH SHIPS ALONE IF PICKED.**
+`b174-bl085` (`BL-085`, `layer-drift.sh`): the operator ruled `contract_version` stays 20, and its
+CHANGELOG entry states that `LC-E11` was widened in place. `b174-bl329` (`BL-329`,
+`sync-transient-ignore.sh`, which `apply.sh` runs in a pull). **Uninstall keeps a tuned
+`aiDlcModels`/`aiDlcRoles` entry and any file whose bytes differ from core's copy** (operator ruling
+and tip-adversary fix, both shipped in `v0.667.0`).
+
+**THE DELIVERY GAP IS THREE RELEASES.** The consumer's stamp reads 0.664.0 (`bf998dfb`) against
+`VERSION` 0.667.0; none of 0.665.0, 0.666.0 or 0.667.0 touches a bootstrapping file. PENDING is 3:
+this batch's three ids, first named at 0.666.0 and 0.667.0. The banked ruling stands: report the gap
+and write no runbook.
 
 Batch 173's next-work list and delivery gap are spent: batch 174's block above replaces both.
 
