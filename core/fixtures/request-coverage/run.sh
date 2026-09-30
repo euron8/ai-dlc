@@ -296,6 +296,58 @@ else
   fi
 fi
 
+# --- BL-327: the harness-origin schema is found by WALKING UP, from either consumer layout ------
+# The lookup used to climb `$SELF_DIR/../..`, which is the consumer root only from scripts/ai-dlc/X.
+# From the pre-relocation scripts/X it lands one level ABOVE the project, HARNESS_ORIGIN came back
+# empty, and every run refused with exit 2. A consumer-shaped tree is built here holding the schema
+# ONLY at .claude/schemas/ (the install mapping) and a copy of the validator plus the sibling it
+# shells to in BOTH layouts; each is driven from a SUBDIRECTORY so no cwd-relative path can rescue
+# it. The scripts/ai-dlc/ copy is the near-miss: the hop count was right there, so it must agree
+# with the original on the covered brief (exit 0) under the old code and the new.
+ANCHOR_SRC="$(dirname "$VALIDATOR")/validate-locked-anchor.sh"
+# The schema is located from THIS fixture's own location, naming both layouts (I33): the fixture
+# sits three levels below the project root as core/fixtures/<x>/ upstream and tests/fixtures/<x>/
+# in a consumer, where install.sh puts core/schemas/ at .claude/schemas/.
+FX_ROOT="$(cd "$HERE/../../.." && pwd)"
+HO_SRC=""
+for _c in "$FX_ROOT/core/schemas/harness-origin.json" "$FX_ROOT/.claude/schemas/harness-origin.json"; do
+  [ -f "$_c" ] && { HO_SRC="$_c"; break; }
+done
+CT="$WORK/consumer-tree"
+if [ -z "$HO_SRC" ] || [ ! -f "$ANCHOR_SRC" ]; then
+  bad "FIXTURE BROKEN: BL-327 arm cannot find harness-origin.json or validate-locked-anchor.sh beside $VALIDATOR"
+else
+  mkdir -p "$CT/.git" "$CT/.claude/schemas" "$CT/scripts/ai-dlc" "$CT/docs/sub"
+  cp "$HO_SRC" "$CT/.claude/schemas/harness-origin.json"
+  for _l in scripts scripts/ai-dlc; do
+    cp "$VALIDATOR" "$CT/$_l/validate-request-coverage.sh"; cp "$ANCHOR_SRC" "$CT/$_l/validate-locked-anchor.sh"
+  done
+  cons_rc() { ( cd "$CT/docs/sub" && bash "$CT/$1/validate-request-coverage.sh" --requests "$REQ" --brief "$COVERED" --sprint 42 ) >/dev/null 2>&1; echo $?; }
+  NM="$(cons_rc scripts/ai-dlc)"; LG="$(cons_rc scripts)"
+  [ "$NM" = 0 ] && ok "BL-327 near-miss: the scripts/ai-dlc/ copy in a consumer-shaped tree covers the brief (exit 0) from a subdirectory" \
+                || bad "BL-327 near-miss: the scripts/ai-dlc/ copy exited $NM — the consumer tree is not one the validator can run in, so the legacy arm below proves nothing"
+  [ "$LG" = 0 ] && ok "BL-327: the pre-relocation scripts/ copy finds harness-origin.json by walking up and covers the brief (exit 0)" \
+                || bad "BL-327: the pre-relocation scripts/ copy exited $LG — its harness-origin lookup counts hops and lands above the project"
+  # MUTANT: the hop chain restored — the root candidates climb `$AI_DLC_SELF_DIR/../..` and the
+  # install candidate is dropped, both layers of the fix reverted. It must fail the legacy arm only.
+  HOPMUT="$CT/hopmut.sh"
+  sed -e 's|"\$AI_DLC_ROOT/core/schemas/harness-origin.json"|"$AI_DLC_SELF_DIR/../../core/schemas/harness-origin.json"|' \
+      -e 's|"\$AI_DLC_ROOT/.claude/schemas/harness-origin.json"|"$AI_DLC_SELF_DIR/../../.claude/schemas/harness-origin.json"|' \
+      -e 's|"\${AI_DLC_INSTALL_ROOT:+\$AI_DLC_INSTALL_ROOT/.claude/schemas/harness-origin.json}"|""|' \
+      "$VALIDATOR" > "$HOPMUT"
+  if [ "$(grep -c 'SELF_DIR/../../' "$HOPMUT")" -ne 2 ] || grep -q 'INSTALL_ROOT/.claude/schemas/harness-origin' "$HOPMUT"; then
+    bad "FIXTURE BROKEN: the BL-327 hop mutant did not apply to all three candidates — its verdict would be about an unmutated file"
+  else
+    for _l in scripts scripts/ai-dlc; do cp "$HOPMUT" "$CT/$_l/validate-request-coverage.sh"; done
+    MNM="$(cons_rc scripts/ai-dlc)"; MLG="$(cons_rc scripts)"
+    if [ "$MNM" = 0 ] && [ "$MLG" != 0 ]; then
+      ok "MUTANT hop: counting hops passes the scripts/ai-dlc/ copy (exit 0) and fails the legacy copy (exit $MLG) — the legacy arm is what kills it"
+    else
+      bad "MUTANT hop SURVIVED or broke the near-miss: scripts/ai-dlc exit $MNM, scripts exit $MLG"
+    fi
+  fi
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "request-coverage: PASS"; exit 0; fi
 echo "request-coverage: $fails assertion(s) FAILED" >&2

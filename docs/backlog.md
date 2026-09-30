@@ -4124,7 +4124,11 @@ verify: sh d=$(mktemp -d); mkdir -p "$d/F/.claude" "$d/g" || exit 9; n=implement
 right only while the script sits exactly two levels below the project root, which is the hop
 count the repo's walk-up rule forbids. A copy anywhere else gets an empty `HARNESS_ORIGIN`.
 
-verify: manual
+Receipt: a copy at the pre-relocation `scripts/X` of a consumer-shaped tree holding the schema only
+at `.claude/schemas/`, run from `docs/`, must reach its brief check (exit 0) rather than refuse the
+schema (exit 1). `request-coverage` carries the scripts/ai-dlc near-miss and the hop mutant.
+
+verify: sh d=$(mktemp -d); mkdir -p "$d/.git" "$d/.claude/schemas" "$d/scripts" "$d/docs" || exit 9; cp core/schemas/harness-origin.json "$d/.claude/schemas/" || exit 9; cp core/scripts/validate-request-coverage.sh core/scripts/validate-locked-anchor.sh "$d/scripts/" || exit 9; printf '# r\n\n## 2026-01-01T00:00:00Z -- /ai-dlc\n- SHA256: abc\n\n```text\nplease\n```\n' > "$d/r.md"; printf '# b\n' > "$d/b.md"; o=$(cd "$d/docs" && bash "$d/scripts/validate-request-coverage.sh" --requests "$d/r.md" --brief "$d/b.md" --sprint 1 2>&1); case "$o" in *"harness-origin.json could not be resolved"*) exit 1 ;; *"no LOCKED bullet"*) exit 0 ;; esac; exit 9
 
 ## BL-328 — `validate-mandatory-rules.sh` resolves its sprint-status schema relative to the cwd
 
