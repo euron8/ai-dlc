@@ -118,21 +118,9 @@ OF `### NEXT ACTIONS`.** Every live candidate the sweep derives is in scope for 
 the 13 unfiled, the 5 worklist rows, and the 11 discharged awaiting the consumer's close. Branch
 hygiene is NOT scheduled: the operator never prioritized it.
 
-**Material left on origin by an unrequested batch-174 start, not merged and not verified.** This
-session opened work the operator had not asked for, then stopped every hand mid-task. Treat these as
-unverified drafts to salvage by content, never as finished work:
-- `w1-flake` — the new filing's fix. `agent-definition-render`'s M3 mutant rewrote `cmp` to `true`,
-  which never reads its pipe, so under load the writer took SIGPIPE and the mutant read drift on a
-  current tree. Forced with a writer delay it reproduced the consumer's FAIL line deterministically;
-  the fix reads the pipe to EOF. The fixture passed on it; nothing else was run. It also closes
-  `BL-258`, whose stated lead (copy contention) this refutes.
-- `b174-drain` — rotates `BL-254`, `BL-025`, `BL-271`, `BL-264`, `BL-089`'s exit-9 half and the
-  expired `BL-342`, `BL-343`, `BL-352`; replaces the receipts of `BL-236`, `BL-238`, `BL-265` and
-  `BL-273`, each of which exited 0 on a non-fix; files `BL-379` and `BL-380`. It lowers the
-  pre-push `--min-sh-receipts` floor from 54 to 52 to match.
-- `w1-e`, `w1-f`, `w1-g`, `w1-j`, `w2-o`, `b174-tracer` — partial non-PC fixes, stopped before their
-  own checks finished. Eleven more hands left only uncommitted diffs, kept outside the tree at
-  `~/.claude/projects/-Users-n8-git-ai-dlc/b174-stopped-hands/` (one diff per branch).
+**NO BATCH-174 DRAFT EXISTS. BUILD EVERY SUBJECT FROM `origin/main`.** An unrequested batch-174
+start left branches and saved diffs behind; the operator had every one of them destroyed, on origin
+and locally, and the next session started over. Do not look for them.
 
 **THE DELIVERY GAP IS ONE RELEASE.** The consumer pulled twice during this batch, 0.662.0 ->
 0.663.0 and then 0.663.0 -> 0.664.0 once v0.664.0 merged, so its stamp reads 0.664.0 (`bf998dfb`)
