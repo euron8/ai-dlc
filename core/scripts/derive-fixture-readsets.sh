@@ -215,6 +215,59 @@ readset_discrimination_control() {
 }
 # READSET_CONTROL_END
 
+# READSET_COPY_BEGIN
+# Build the trace tree: the whole `.git/`, plus exactly the paths git would call candidate inputs
+# -- `git ls-files --cached --others --exclude-standard`, tracked plus untracked-not-ignored.
+#   $1 source repo root   $2 destination (exists, empty)   $3 scratch dir for the path list
+# Prints one `copied N path(s)` line, and a note naming any listed path absent on disk.
+#
+# WHY NOT `cp -a` OF THE WHOLE WORKING TREE. Everything gitignored was copied and then never
+# recordable, because drop_ignored removes every ignored path from the read-set -- yet it was
+# walked by reset_atimes and the `-newerat` scan once per fixture. Measured on the reference
+# consumer: 117595 files in the trace copy against 11976 tracked. This population is the one
+# drop_ignored already treats as a possible input, so the NAMES a read-set can hold are
+# unchanged. What CAN change is behaviour: a fixture that reads an ignored file which exists
+# only in the working tree now finds it absent. That is the correct tree to trace -- a fresh
+# clone, which is what CI and every other checkout see, does not carry it either.
+#
+# WHAT LANDS, and each is asserted by core/fixtures/readset-skip, which drives this block:
+#   * `-z` END TO END. A name with a space or a newline is one record, never two.
+#   * modes, mtimes and symlinks are preserved -- a tracked symlink stays a symlink, a tracked
+#     executable stays executable. `tar` rather than a `cp` loop, because `cp -R` of a symlink to
+#     a directory follows it on BSD cp and the list is one fork, not one per file.
+#   * A GITLINK LANDS AS AN EMPTY DIRECTORY. `--no-recursion` archives the listed directory entry
+#     and nothing under it; the submodule's objects are in `.git/modules/`, copied with `.git/`.
+#     A fixture that reads inside the submodule's work tree will not find its files, and the
+#     submodule rows in the map vanish at the next derivation (drop_ignored collapses any that do
+#     appear into the gitlink row). An untracked nested repository lands the same way.
+#   * A LISTED PATH ABSENT ON DISK (deleted, not yet staged) is skipped and NAMED, never allowed
+#     to abort the copy: the index still lists it, and the working tree is what a fixture sees.
+#     A dangling tracked symlink is present (`-L`) and is copied as the symlink it is.
+readset_copy_tree() {
+  local src="$1" dst="$2" scratch="$3" p n=0 miss=0 misslist=""
+  ( cd "$src" && git ls-files -z --cached --others --exclude-standard ) > "$scratch/copy.all" \
+    || { echo "readset_copy_tree: git ls-files failed in $src" >&2; return 1; }
+  while IFS= read -r -d '' p; do
+    if [ -e "$src/$p" ] || [ -L "$src/$p" ]; then
+      printf '%s\0' "$p"; n=$((n+1))
+    else
+      miss=$((miss+1)); [ "$miss" -le 5 ] && misslist="$misslist '$p'"
+    fi
+  done < "$scratch/copy.all" > "$scratch/copy.list"
+  if [ "$n" -gt 0 ]; then
+    ( cd "$src" && tar -cf - --null --no-recursion -T "$scratch/copy.list" ) \
+      > "$scratch/copy.tar" || { echo "readset_copy_tree: tar -c failed" >&2; return 1; }
+    ( cd "$dst" && tar -xpf "$scratch/copy.tar" ) \
+      || { echo "readset_copy_tree: tar -x failed" >&2; return 1; }
+    rm -f "$scratch/copy.tar"
+  fi
+  cp -a "$src/.git" "$dst/.git" || { echo "readset_copy_tree: copying .git failed" >&2; return 1; }
+  echo "copied $n path(s) plus .git/"
+  [ "$miss" -eq 0 ] || echo "note: $miss listed path(s) absent on disk, not copied:$misslist"
+  return 0
+}
+# READSET_COPY_END
+
 MODE="${1:---all}"
 [ "$(id -u)" = "0" ] || die "must run as root -- fs_usage needs it. Use: sudo bash $0 $MODE"
 command -v fs_usage >/dev/null || die "fs_usage not found; this derivation is macOS-only"
@@ -255,9 +308,11 @@ for line in sys.stdin:
 # negation and so SURVIVES this filter: fixtures do read those rule files, and the distinction
 # between "under .claude" and "ignored" is exactly what a hand-written prefix list gets wrong.
 #
-# WHY NOT `--others`/`ls-files`: the trace runs inside a COPY whose own index is the repo's, but
-# a path may legitimately be untracked-and-not-ignored (a file a fixture creates and reads back),
-# and that is a real dependency. Ignored is the narrower, correct predicate.
+# WHY NOT FILTER ON `ls-files --cached` ALONE: a path may legitimately be untracked-and-not-ignored
+# (a file a fixture creates and reads back), and that is a real dependency. Ignored is the
+# narrower, correct predicate -- and it is the same one readset_copy_tree builds the trace tree
+# from (`--cached --others --exclude-standard`), so the copy and this filter agree on what can be
+# an input.
 #
 # FAILS OPEN BY DESIGN, and that is the safe direction here: if `git check-ignore` cannot run,
 # every path is kept, the read-set is a superset, and the fixture runs more often than it must.
@@ -318,7 +373,7 @@ drop_ignored() { # reads paths on stdin (repo-relative), writes the non-ignored 
 say "fs_usage runs as root; fixtures run as '$RUN_AS'"
 rm -rf "$TRACE_ROOT"; mkdir -p "$TREE" "$WORK" || die "cannot create $TRACE_ROOT"
 say "copying the tree to $TREE"
-cp -a "$REPO_ROOT/." "$TREE/" || die "copy failed"
+readset_copy_tree "$REPO_ROOT" "$TREE" "$WORK" || die "copy failed"
 [ -d "$TREE/.git" ] || die "copy carries no .git; git-backed fixtures would fail for the wrong reason"
 chown -R "$RUN_AS" "$TREE" || die "chown failed"
 # The sentinel lives inside the tree because the tracer filters on the tree prefix, which
