@@ -4679,23 +4679,29 @@ verify: sh v=scripts/validate-enforcement-map.sh; [ -f "$v" ] || exit 9; [ -f co
 
 ## BL-342 — `validate-h2-attestation.sh --verify` numbers a binary gate log with grep's banner
 
+**LANDED (v0.666.0, verified 1684f6c8).** A NUL elsewhere in the log is rewritten before awk reads it, so the refused span is numbered `<log>:2`; the h2-attest-scripts-dir cell `b342-nul-number` pins it.
+
 **NOTE.** Found by the batch-161 tip adversary. A NUL byte anywhere in the gate log makes
 `grep -nE` print `Binary file <log> matches` instead of `<n>:<line>`, and `cut -d: -f1` then
 takes the whole banner, so the located refusal reads `RE-DRIVE: <log>:Binary file <log>
 matches QUOTES …`. The exit is still 1 and nothing is granted. `grep -a` would number it.
 
-verify: manual
+verify: sh s=core/scripts/validate-h2-attestation.sh; d=$(bash "$s" --digest) || exit 9; t=$(mktemp) || exit 9; L="H2_ATTESTED v1 sprint=7 digest=$d"; printf '%s\n' "$L" > "$t"; bash "$s" --verify --sprint 7 --gate-log "$t" >/dev/null 2>&1 || { rm -f "$t"; exit 9; }; printf 'x\000y\nH2 FAILED: %s do not cite\n' "$L" > "$t"; o=$(bash "$s" --verify --sprint 7 --gate-log "$t" 2>&1); r=$?; rm -f "$t"; [ "$r" -eq 1 ] && printf '%s' "$o" | grep -qF "$t:2 QUOTES"
 
 ## BL-343 — `validate-h2-attestation.sh --verify` falls back to the first-gate message on a non-UTF-8 byte under a UTF-8 locale
+
+**LANDED (v0.666.0, verified 1684f6c8).** The cp1252 line is located, and a good line beside one verifies, under both `LC_ALL=C` and a UTF-8 locale; the h2-attest-scripts-dir `p_cp1252` cell pins both.
 
 **NOTE.** Found by the batch-161 tip adversary. One cp1252 byte (`\223`) on the quoted bullet's
 line: under `LC_ALL=C` the refusal is located; under `LC_ALL=en_US.UTF-8` it reads "this is the
 sprint's first gate", which is the misreport 0.648.0 removes. The accepting arm has the same
 exposure on such a line. The fixture runs under the caller's locale and seeds no such byte.
 
-verify: manual
+verify: sh s=core/scripts/validate-h2-attestation.sh; u=; for l in en_US.UTF-8 C.UTF-8; do [ "$(LC_ALL=$l locale charmap 2>/dev/null)" = UTF-8 ] && { u=$l; break; }; done; [ -n "$u" ] || exit 9; d=$(bash "$s" --digest) || exit 9; t=$(mktemp) || exit 9; L="H2_ATTESTED v1 sprint=7 digest=$d"; printf '\223 note\n%s\n' "$L" > "$t"; LC_ALL=$u bash "$s" --verify --sprint 7 --gate-log "$t" >/dev/null 2>&1 || { rm -f "$t"; exit 1; }; printf -- '- \223note: %s; item 3 FAILED\n' "$L" > "$t"; f=0; for l in C "$u"; do o=$(LC_ALL=$l bash "$s" --verify --sprint 7 --gate-log "$t" 2>&1); [ $? -eq 1 ] && printf '%s' "$o" | grep -qF "$t:1 QUOTES" || f=1; done; rm -f "$t"; [ "$f" -eq 0 ]
 
 ## BL-344 — `validate-h2-attestation.sh` interpolates `--sprint` into its regex unescaped, and an unreadable log reads as the first gate
+
+**LANDED (v0.666.0, verified 1684f6c8).** `--sprint` refuses a non-digit value, the mode-000 log reads could-not-read, and every verdict (CHANGED, located, revoked, first-gate) is on stdout with stderr empty.
 
 **NOTE.** Found by the batch-161 tip adversary; both predate 0.648.0. `--sprint '.*'` and
 `--sprint '5|'` each verify a `sprint=5` line (rc 0, PASS). A gate log at mode 000 makes all
@@ -4703,9 +4709,11 @@ three greps exit 2, which the script reads as no match: it prints `grep: … Per
 and then the first-gate message, rc 1. Separately, the located refusal goes to stderr like
 CHANGED while first-gate goes to stdout, so a caller capturing only stdout sees nothing for it.
 
-verify: manual
+verify: sh s=core/scripts/validate-h2-attestation.sh; d=$(bash "$s" --digest) || exit 9; t=$(mktemp) || exit 9; printf 'H2_ATTESTED v1 sprint=5 digest=%s\n' "$d" > "$t"; bash "$s" --verify --sprint 5 --gate-log "$t" >/dev/null 2>&1 || { rm -f "$t"; exit 9; }; f=0; for p in '.*' '5|'; do bash "$s" --verify --sprint "$p" --gate-log "$t" >/dev/null 2>&1 && f=1; done; printf 'H2 FAILED: H2_ATTESTED v1 sprint=5 digest=%s\n' "$d" > "$t"; e=$(bash "$s" --verify --sprint 5 --gate-log "$t" 2>&1 >/dev/null); o=$(bash "$s" --verify --sprint 5 --gate-log "$t" 2>/dev/null); rm -f "$t"; [ "$f" -eq 0 ] && [ -z "$e" ] && printf '%s' "$o" | grep -qF "$t:1 QUOTES"
 
 ## BL-346 — `validate-h2-attestation.sh --verify` verifies a span inside a fenced code block, an HTML comment block or an indented code block
+
+**LANDED (v0.666.0, verified 1684f6c8).** Spans inside a fenced code block, an HTML comment block, or an indented code block (four spaces or a tab) are refused and located; a block also ends any table around it.
 
 **NOTE.** Found by the batch 162 adversary and re-measured by the docs hand at `2a76c0b7`. A span
 alone on its line between ```` ``` ```` fences, between `<!--` and `-->` lines, or indented four
@@ -4714,18 +4722,22 @@ and none of those lines carries a refused lead. The 0.648.0 reader verifies all 
 consumer's gate-log lines carry no four-space-indented span; fenced and multi-line-comment shapes
 were not censused.
 
-verify: manual
+verify: sh s=core/scripts/validate-h2-attestation.sh; d=$(bash "$s" --digest) || exit 9; t=$(mktemp) || exit 9; L="H2_ATTESTED v1 sprint=7 digest=$d"; printf '```\nx\n```\n%s\n' "$L" > "$t"; bash "$s" --verify --sprint 7 --gate-log "$t" >/dev/null 2>&1 || { rm -f "$t"; exit 1; }; f=0; for fmt in '```\n%s\n```\n' '<!--\n%s\n-->\n' '    %s\n'; do printf "$fmt" "$L" > "$t"; o=$(bash "$s" --verify --sprint 7 --gate-log "$t" 2>&1); [ $? -eq 1 ] && printf '%s' "$o" | grep -qE 'QUOTES an H2_ATTESTED span for sprint 7 inside an? (fenced code|HTML comment|indented code) block' || f=1; done; rm -f "$t"; [ "$f" -eq 0 ]
 
 ## BL-347 — `validate-h2-attestation.sh --verify` refuses a span whose decoration is a tab
+
+**LANDED (v0.666.0, verified 1684f6c8).** A tab is decoration wherever a space is; a tab BEFORE a line is an indented code block and is refused as one, named so.
 
 **NOTE.** Found by the batch 162 docs hand. The closed decoration sets name the space character
 only, so a tab before a column-1 span, or tabs padding a PASS row's evidence cell, is refused
 (exit 1) where the same text with spaces verifies. The refusal is the safe direction. The
 consumer's 194 span-carrying lines under `_bmad-output/` contain no tab.
 
-verify: manual
+verify: sh s=core/scripts/validate-h2-attestation.sh; d=$(bash "$s" --digest) || exit 9; t=$(mktemp) || exit 9; L="H2_ATTESTED v1 sprint=7 digest=$d"; printf '| Check | Result | Evidence |\n|---|---|---|\n| H2 | PASS |\t\140%s\140\t|\n' "$L" > "$t"; bash "$s" --verify --sprint 7 --gate-log "$t" >/dev/null 2>&1; a=$?; printf '\t%s\n' "$L" > "$t"; o=$(bash "$s" --verify --sprint 7 --gate-log "$t" 2>&1); b=$?; rm -f "$t"; [ "$a" -eq 0 ] && [ "$b" -eq 1 ] && printf '%s' "$o" | grep -q 'inside an indented code block'
 
 ## BL-349 — `validate-h2-attestation.sh --verify` reads only the START of the verdict cell, and only the first verdict column
+
+**LANDED (v0.666.0, verified 1684f6c8).** Every verdict column is read, whole: PASS or PASSED plus at most one parenthetical with no FAIL or revocation word. Over the consumer history 4 table rows are ever granted, each exactly `PASS`.
 
 **NOTE.** Found by the batch 162 tip adversary at `2f074fe5`. The verdict test is "the cell begins
 `PASS`", so `PASS (FAILED on re-drive)`, `PASSED? no`, `PASS→FAIL`, `PASS/FAIL` and `PASS~~` each
@@ -4735,24 +4747,28 @@ column matching Result, Verdict, Status or Outcome wins, so `| Result | Status |
 word after a leading PASS, and its one two-verdict-column row is not granted. Anchoring the cell's
 end would refuse the consumer's real `PASS — \`H2_ATTESTED …\`` rows, so there is no one-line fix.
 
-verify: manual
+verify: sh s=core/scripts/validate-h2-attestation.sh; d=$(bash "$s" --digest) || exit 9; t=$(mktemp) || exit 9; L="H2_ATTESTED v1 sprint=7 digest=$d"; printf '| Check | Result | Evidence |\n|---|---|---|\n| H2 | PASSED (RE-ATTESTED, digest changed) | \140%s\140 |\n' "$L" > "$t"; bash "$s" --verify --sprint 7 --gate-log "$t" >/dev/null 2>&1 || { rm -f "$t"; exit 1; }; f=0; for v in 'PASS (FAILED on re-drive)' 'PASS/FAIL' 'PASS~~'; do printf '| Check | Result | Evidence |\n|---|---|---|\n| H2 | %s | \140%s\140 |\n' "$v" "$L" > "$t"; o=$(bash "$s" --verify --sprint 7 --gate-log "$t" 2>&1); [ $? -eq 1 ] && printf '%s' "$o" | grep -qF "$t:3 QUOTES" || f=1; done; printf '| Check | Result | Status | Evidence |\n|---|---|---|---|\n| H2 | PASS | FAIL | \140%s\140 |\n' "$L" > "$t"; o=$(bash "$s" --verify --sprint 7 --gate-log "$t" 2>&1); [ $? -eq 1 ] && printf '%s' "$o" | grep -qF "$t:3 QUOTES" || f=1; rm -f "$t"; [ "$f" -eq 0 ]
 
 ## BL-350 — a later revocation does not revoke an earlier H2 attestation
+
+**LANDED (v0.666.0, verified 1684f6c8).** A later line carrying the live span and VOID/REVOKE/RETRACT/SUPERSEDE/INVALID, or stating the attestation IS void with no digest, withdraws the grant and is reported as REVOKED; a later accepted span re-grants.
 
 **NOTE.** Found by the batch 162 tip adversary. A column-1 span followed later in the log by a
 `VOIDED` row carrying the same span, or by a sentence saying the attestation above is void, still
 exits 0, because any accepted placement grants. 0.648.0 behaves the same.
 
-verify: manual
+verify: sh s=core/scripts/validate-h2-attestation.sh; d=$(bash "$s" --digest) || exit 9; t=$(mktemp) || exit 9; L="H2_ATTESTED v1 sprint=7 digest=$d"; printf '%s\nA changed fixture voids the attestation by design.\n' "$L" > "$t"; bash "$s" --verify --sprint 7 --gate-log "$t" >/dev/null 2>&1 || { rm -f "$t"; exit 1; }; f=0; printf '%s\n| Check | Result | Evidence |\n|---|---|---|\n| H2 | VOIDED | \140%s\140 |\n' "$L" "$L" > "$t"; o=$(bash "$s" --verify --sprint 7 --gate-log "$t" 2>&1); [ $? -eq 1 ] && printf '%s' "$o" | grep -qF "$t:4 REVOKES" || f=1; printf '%s\nThe attestation above is void.\n' "$L" > "$t"; o=$(bash "$s" --verify --sprint 7 --gate-log "$t" 2>&1); [ $? -eq 1 ] && printf '%s' "$o" | grep -qF "$t:2 REVOKES" || f=1; rm -f "$t"; [ "$f" -eq 0 ]
 
 ## BL-351 — two refused H2 spans still get the first-gate message
+
+**LANDED (v0.666.0, verified 1684f6c8).** NUL bytes are rewritten before awk reads the log, and `_` no longer counts as a word character in the locating boundary, so all three shapes are located.
 
 **NOTE.** Found by the batch 162 tip adversary. BSD awk stops reading a line at a NUL, so
 `| H2 | FAIL\0 | \`SPAN\` |` reports "this is the sprint's first gate" (0.648.0 granted it), and
 `SPAN\0 FAILED, do not cite` verifies at both. `_SPAN_` also gets first-gate at both, because `_`
 is a word character in `ATTEST_LOCATE`, where `*SPAN*` is located.
 
-verify: manual
+verify: sh s=core/scripts/validate-h2-attestation.sh; d=$(bash "$s" --digest) || exit 9; t=$(mktemp) || exit 9; L="H2_ATTESTED v1 sprint=7 digest=$d"; printf 'x\000y\n%s\n' "$L" > "$t"; bash "$s" --verify --sprint 7 --gate-log "$t" >/dev/null 2>&1 || { rm -f "$t"; exit 1; }; f=0; printf '| Check | Result | Evidence |\n|---|---|---|\n| H2 | FAIL\000 | \140%s\140 |\n' "$L" > "$t"; o=$(bash "$s" --verify --sprint 7 --gate-log "$t" 2>&1); [ $? -eq 1 ] && printf '%s' "$o" | grep -qF "$t:3 QUOTES" || f=1; printf '%s\000 FAILED, do not cite\n' "$L" > "$t"; o=$(bash "$s" --verify --sprint 7 --gate-log "$t" 2>&1); [ $? -eq 1 ] && printf '%s' "$o" | grep -qF "$t:1 QUOTES" || f=1; printf '_%s_\n' "$L" > "$t"; o=$(bash "$s" --verify --sprint 7 --gate-log "$t" 2>&1); [ $? -eq 1 ] && printf '%s' "$o" | grep -qF "$t:1 QUOTES" || f=1; rm -f "$t"; [ "$f" -eq 0 ]
 
 ## BL-352 — the `BL-341`, `BL-345` and `BL-348` receipts each accept a non-fix
 
