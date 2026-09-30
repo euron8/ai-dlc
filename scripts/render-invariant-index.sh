@@ -154,12 +154,20 @@ END {
       id = idlist[i, k]
       seen[id] = 1
       if (nid_of[i] == 1) { solo[id]++; sdesc[id] = armdesc[i] }
-      else { if (!(id in gdesc)) gdesc[id] = armdesc[i] }
+      else { grp[id]++; if (!(id in gdesc)) gdesc[id] = armdesc[i] }
     }
   }
 
+  # A GROUP DECLARATION MAY APPEAR ONCE PER ID, exactly as a solo one may. The overview
+  # distinction above exempts ONE overview plus the id`s own arm and nothing wider: two group
+  # headers sharing a member resolved FIRST-WINS into `gdesc` and reported nothing, so the
+  # second header`s description was discarded while the index claimed to render every arm.
+  # Counted, not compared: a disagreement test would acquit two headers that happen to carry
+  # the same prose, and one header naming an id twice (`I803 / I803`) counts twice here too.
+  # Measured on the real corpus before this shipped: 7 ids group-declared, every one exactly
+  # once, so the false-positive set is empty.
   ncol = 0
-  for (id in seen) if (solo[id] > 1) { printf "ZZZZZ\t#COLLISION\t%s\n", id; ncol++ }
+  for (id in seen) if (solo[id] > 1 || grp[id] > 1) { printf "ZZZZZ\t#COLLISION\t%s\n", id; ncol++ }
 
   nid = 0
   for (id in seen) {
@@ -255,6 +263,25 @@ esac
 v_desc="$(awk -F'\t' '$2 == "I703" { print $3 }' <<<"$v_out")"
 [ "$v_desc" = "its own arm" ] || \
   probe_fail "the solo arm's description must win over the overview's: got '$v_desc'"
+
+# NEGATIVE PROBE 0b -- two GROUP headers sharing one member is a collision too. The group path
+# was first-wins and silent, so this is the seed that separates a counted refusal from it. The
+# near-miss shares a PREFIX (I705 / I7050) and must not fire: a refusal matching ids by
+# substring would pass the offender and refuse every corpus with a two-digit neighbour.
+printf '# --- I704 / I705: first overview ---\nerr "a"\n# --- I705 / I706: second overview ---\nerr "b"\n' > "$PROBE_DIR/gcollide.sh"
+g_out="$(extract "$PROBE_DIR/gcollide.sh")"
+g_tot="$(awk -F'\t' '$2 == "#TOTALS" { print $3 }' <<<"$g_out")"
+case "$g_tot" in
+  *" 1") : ;;
+  *) probe_fail "two group headers sharing I705 were not scored as a collision: totals '$g_tot' should end in '1'" ;;
+esac
+grep -q '#COLLISION.I705$' <<<"$g_out" || probe_fail "the group collision probe named no id, or the wrong one"
+printf '# --- I704 / I705: first overview ---\nerr "a"\n# --- I7050 / I706: second overview ---\nerr "b"\n' > "$PROBE_DIR/gnear.sh"
+n_tot="$(extract "$PROBE_DIR/gnear.sh" | awk -F'\t' '$2 == "#TOTALS" { print $3 }')"
+case "$n_tot" in
+  *" 0") : ;;
+  *) probe_fail "two group headers sharing only a PREFIX (I705, I7050) were scored as a collision: totals '$n_tot'" ;;
+esac
 
 # NEGATIVE PROBE 1 -- an emitter outside any arm must be counted as an ORPHAN.
 printf 'err "loose finding"\n# --- I601: an arm ---\nerr "in arm"\n' > "$PROBE_DIR/orphan.sh"

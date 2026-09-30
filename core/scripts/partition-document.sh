@@ -18,7 +18,17 @@
 #   refusal writes nothing: not the document, not the manifest, not a section.
 #
 # THE GRAMMAR (nothing else in core may restate it; callers read `--map`)
-#   Atoms are `## ` headings OUTSIDE ``` / ~~~ fences. The preamble joins atom 1. A `##` atom over
+#   Atoms are `## ` headings OUTSIDE fences and OUTSIDE HTML comments.
+#   A FENCE opens on a line whose first non-blank run is 3+ backticks or 3+ tildes, and records
+#   that run; it closes only on a line opening with a run of the SAME character at least as long.
+#   So a ```` fence holding a ``` example stays open across the inner pair (a toggle closed it
+#   there, and a `## ` inside became a boundary).
+#   A COMMENT opens on a line beginning (after blanks) with `<!--` that carries no `-->` after
+#   it, and closes on the next line containing `-->`. A single-line comment is one inert line.
+#   Neither nests in the other: inside a fence nothing opens a comment, inside a comment nothing
+#   opens a fence, so an odd count of ``` lines in a comment cannot swallow the document.
+#   A `<!--` opened mid-line is not tracked. Setext headings are not atoms.
+#   The preamble joins atom 1. A `##` atom over
 #   half the document's bytes splits at its own `### ` headings. Consecutive atoms are packed
 #   greedily against a target of max(largest atom, total/PART_CAP); when that yields more than
 #   PART_CAP parts the target is RAISED to the smallest value that yields at most PART_CAP (a
@@ -90,8 +100,15 @@ map_of() { # <doc> -> map on stdout (rc 0) or one SERIAL line (rc 3)
     }
     function head_of(line) { sub(/\r$/, "", line); gsub(/\t/, " ", line); return line }
     { B[NR] = length($0) + 1; tot += B[NR] }
-    /^[ \t]*(```|~~~)/ { fence = !fence; next }
-    fence { next }
+    fence != "" {
+      t = $0; sub(/^[ \t]*/, "", t); c = substr(fence, 1, 1); n = 0
+      while (substr(t, n + 1, 1) == c) n++
+      if (n >= length(fence)) fence = ""
+      next
+    }
+    cmt { if (index($0, "-->")) cmt = 0; next }
+    /^[ \t]*(```|~~~)/ { match($0, /(`+|~+)/); fence = substr($0, RSTART, RLENGTH); next }
+    /^[ \t]*<!--/ { if (!index(substr($0, index($0, "<!--") + 4), "-->")) cmt = 1; next }
     /^## /  { n2++; h2[n2] = NR; h2t[n2] = $0; next }
     /^### / { n3++; h3[n3] = NR; h3t[n3] = $0; next }
     END {

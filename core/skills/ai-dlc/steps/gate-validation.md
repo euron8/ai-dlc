@@ -288,6 +288,9 @@ Two arms, either satisfies (dual-arm OR):
   no-op. Past its `**Expires after:**` count a suppression whose named check is
   still recorded `FAIL` needs fresh authorization; one whose cause was fixed
   reports nothing. See `escalations.md` for the `SUPPRESSED` field set.
+  **The verdict it reads is the PREVIOUS gate's.** `gate-metrics.jsonl` is
+  written by Check 12, after this check, so this gate's own verdict is not yet
+  in it. The expiry FAIL names the `ts` of the row it read.
 - **An absent or empty `pending.md` is a PASS.** Both scripts then exit 0 with a line
   containing `OK: EXAMINED NOTHING`, and at this check that line IS a pass, because no
   escalation exists to be unresolved. An unreadable or non-regular `pending.md` is a

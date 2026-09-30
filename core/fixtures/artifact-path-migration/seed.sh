@@ -142,6 +142,40 @@ mk _bmad-output/planning-artifacts/stories/bug-315-zero-hdr.md \
 
 **Sprint:** 0'
 
+# --- BL-214: A `story-<A>-<B>` NAME WHOSE `A` IS AN ITEM NUMBER, NOT THE SPRINT --------------
+# Copied in shape from the reference consumer's pre-migration
+# `stories/story-102-1-effective-spread-500.md`: the title restates the name's 102-1, the
+# `**Epic:**` line mentions BOTH numbers mid-line, and the `**Sprint:**` declaration says 53.
+# Reading `A` filed it under s102, which is a different sprint. Digits chosen to discriminate:
+# 102 vs 53 differ in length, so a reader that truncates or pads cannot land on either by accident.
+mk _bmad-output/planning-artifacts/stories/story-102-1-effective-spread-500.md \
+   '# Story 102-1: Add $500 Trade Size to Effective Spread
+
+**Epic:** 102 — Sprint 53 Effective Spread $500 Trade Size (Item 102)
+**Status:** done
+**Sprint:** 53
+**Depends on:** none'
+# Both numbers three digits and sharing none of their digits in place, so only the header can
+# produce 185 and only the name can produce 230.
+mk _bmad-output/planning-artifacts/stories/story-230-1-three-digit.md \
+   '# Story 230-1: three-digit item
+
+**Sprint:** 185'
+# THE NEAR-MISS: a header that AGREES with the name moves exactly as before and is NOT reported as
+# an override. This carries every property the override keys on (a legacy `story-<A>-<B>` name and
+# a readable header) except the disagreement.
+mk _bmad-output/planning-artifacts/stories/story-296-2-delta.md \
+   '# Story 296-2: header agrees
+
+**Sprint:** 296'
+# UNREADABLE HEADER ON A `story-<A>-<B>` NAME: the consumer's six `**Sprint:** 50A (Foundation)`
+# files. `50A` has no legal slot, and refusing here would block a source path the conformance
+# validator (which reads paths, never headers) counts as moved, so the name's reading stands.
+mk _bmad-output/planning-artifacts/stories/story-95-1-foundation.md \
+   '# Story 95-1: unreadable header
+
+**Sprint:** 50A (Foundation)'
+
 # SUFFIXED SPRINT -- RECOVERABLE BY NEITHER, DELIBERATELY. `131b` is not spellable as the reserved
 # slot `^s[0-9]+$`, so truncating it to s131 would merge a distinct sprint into another's slot on a
 # guess. It is REFUSED, which is the one place this fix trades a placement for a refusal.

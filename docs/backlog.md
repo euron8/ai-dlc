@@ -722,6 +722,10 @@ verify: sh P=core/skills/ai-dlc-update/reconcile/preclassify.sh; [ -f "$P" ] || 
 
 ## BL-098 — two blocks may declare the same vocabulary NAME, and the index renders the row twice
 
+**FIXED IN v0.666.0, pending the post-merge close.** `MARKER_AWK` keeps a file-scope `seenname[]` and emits
+`#DUPNAME`; the corpus section refuses, naming both lines. Receipt kept, because it drives the
+shipping renderer on a seeded copy: tip 0, base 1, fix-reverted mutant 1. Fixture arms m23 / n2.
+
 **`BL-094` one level up: the contradiction is between two BLOCKS rather than two fields.**
 `MARKER_AWK` tracks a declared field per block, and nothing tracks a declared NAME across the
 file. Two `# vocabulary:` lines carrying one name therefore both render, and the exit code never
@@ -756,6 +760,11 @@ verify: sh R=scripts/render-vocabulary-index.sh; M=scripts/validate-enforcement-
 
 ## BL-097 — the vocabulary renderer declares TWO populations and only one of them refuses a repeated declaration
 
+**FIXED IN v0.666.0, pending the post-merge close.** `SCHEMA_PY` loads with an `object_pairs_hook` that
+raises on a repeated key; the walker emits `DUP-KEY` and the corpus section refuses. Receipt
+kept, because it drives the shipping renderer: tip 0, base 1, fix-reverted mutant 1. Fixture
+arms m24 / n3.
+
 **In the file `v0.421.0` hardened, in the half that release did not reach.** `SCHEMA_PY` in
 `scripts/render-vocabulary-index.sh` calls `json.load`, which resolves a duplicate mapping key by
 keeping the LAST. So a `core/schemas/*.json` declaring one field's `enum` twice renders from the
@@ -786,6 +795,11 @@ Found by the scope hand of batch 12, asking whether `BL-094` was wider than file
 verify: sh R=scripts/render-vocabulary-index.sh; [ -f "$R" ] || exit 9; [ -d core/schemas ] || exit 9; D="$(mktemp -d)" || exit 9; tar --exclude=.git -cf - . 2>/dev/null | tar -xf - -C "$D" || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$R" --check >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; J="$D/core/schemas/zzprobe.json"; printf '%s\n' '{"properties": {"zzprobe": {"enum": ["FIRSTDECL"], "enum": ["SECONDDECL"]}}}' > "$J" || { rm -rf "$D"; exit 9; }; [ "$(grep -c FIRSTDECL "$J")" -eq 1 ] && [ "$(grep -c SECONDDECL "$J")" -eq 1 ] || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$R" >/dev/null 2>&1 ); rc=$?; f=0; s=0; grep -qF FIRSTDECL "$D/docs/vocabulary-index.md" 2>/dev/null && f=1; grep -qF SECONDDECL "$D/docs/vocabulary-index.md" 2>/dev/null && s=1; rm -rf "$D"; [ "$rc" -eq 0 ] && [ "$s" -eq 1 ] && [ "$f" -eq 0 ] || exit 0; exit 1
 
 ## BL-096 — the invariant renderer refuses a duplicate SOLO declaration and accepts a duplicate GROUP one
+
+**FIXED IN v0.666.0, pending the post-merge close.** The collision arm refuses `solo[id] > 1 || grp[id] > 1`,
+so a counted repeat is refused even when both headers carry identical prose. Receipt kept,
+because it drives the shipping renderer: tip 0, base 1, fix-reverted mutant 1. Fixture arms
+m7 / n1.
 
 **`BL-094`'s defect in the sibling renderer, at mirror polarity.**
 `scripts/render-invariant-index.sh`'s collision arm keys on `solo[id] > 1` — declarations by an arm
@@ -1481,8 +1495,20 @@ Discharges the consumer entry `extensions/steps-domain/implementation-push.md` a
 line 259. That row is a withdrawal candidate on its own terms; this entry is the ai-dlc-side
 mechanism whose absence let it survive.
 
+**Receipt replaced at batch 174: the old one closed on a comment.** Driven through
+`scripts/backlog-reverify.sh` on a copy of the tree where
+`# see docs/v0.13.0-consumer-absorption-spec.md` was appended to `reconcile/lib.sh` and
+nothing else changed, it read CLOSE-CANDIDATE; on the real tree, STILL-LIVE. No behavioural
+receipt can be built yet: no program drains `push_candidate` rows today (the drain is prose at
+`core/skills/ai-dlc-update/SKILL.md` "Drain entries flagged `push_candidate: true`"), so there
+is no output to assert on, and the old anchor assumed a fix in which `core/` cites a `docs/`
+file, which the consumer boundary rules out. **What closes it:** a standing-verdict record
+shipped under `core/` and read by a reconcile program that, in one run on a seeded consumer,
+reports a block the record refuses as refused and a block it does not name as a push candidate.
+Swap this receipt for one driving that program when it exists.
 
-verify: sh grep -rqF 'layer-drift' core/skills/ai-dlc-update/ || exit 1; grep -rqF 'consumer-absorption' core/skills/ai-dlc-update/
+
+verify: manual -- no program drains push_candidate rows yet, so nothing can be driven; see above.
 ## BL-025
 
 **`SKILL.md`'s PREREQUISITES tells the lead that teammates set their own effort in their role
@@ -1612,8 +1638,16 @@ Discharges the consumer entry `extensions/steps-domain/sprint-review-push.md` at
 line 267, whose live carrier is now
 `.claude/skills/ai-dlc/overrides/steps__sprint-review__fix-and-re-validate.md`.
 
+**Receipt re-keyed at batch 174 on POSITION.** The old receipt closed on the words `branch` and
+`carry-over` anywhere in §3, so one sentence of prose satisfied it. This one requires a bold-
+labelled paragraph whose label names a branch, inside §3, whose body names the carry-over
+owner `carry-over-evaluation.md`. Scored on three trees: tip 0, base 1, and 1 on both a copy
+with that paragraph deleted and a copy with it moved verbatim into §4. It is still text: a
+paragraph of the right shape closes it whatever it instructs. The behaviour is pinned by
+`core/fixtures/review-carry-over-clauses/`, whose mutants delete, move and de-own the paragraph.
 
-verify: sh s=core/skills/ai-dlc/steps/sprint-review.md; b=$(LC_ALL=C awk '/^### 3\. Fix and Re-Validate/{f=1;next} f&&/^### 4\./{exit} f' "$s"); [ -n "$b" ] || exit 1; grep -qi live <<<"$b" || exit 1; grep -qi branch <<<"$b" && grep -qi carry-over <<<"$b"
+
+verify: sh s=core/skills/ai-dlc/steps/sprint-review.md; b=$(LC_ALL=C awk '/^### 3\. Fix and Re-Validate/{f=1;next} f&&/^### /{exit} f' "$s"); [ -n "$b" ] || exit 1; grep -qi live <<<"$b" || exit 1; p=$(LC_ALL=C awk '/^\*\*[^*]*[Bb]ranch[^*]*\*\*/{f=1} f&&/^[[:space:]]*$/{exit} f' <<<"$b"); [ -n "$p" ] && grep -qF carry-over-evaluation.md <<<"$p"
 ## BL-038
 
 **Core's sprint-review §3 lets a "genuinely environmental" integration seam defer with no
@@ -1650,8 +1684,15 @@ non-empty — a heading rename reports STILL-LIVE rather than closing silently.
 Discharges the consumer entry `Decision-branch execution-coverage for sprint-review §3 "Fix and
 Re-Validate" (PI-S259-2)` at pinned ledger line 316.
 
+**Receipt re-keyed at batch 174 on POSITION, and it no longer takes either fix.** The old
+receipt closed when `environmental` left §3, which a regression deleting the permission would
+satisfy while shipping no obligation. This one requires the permission sentence itself to
+survive and to carry `carry-over-evaluation.md` before its own sentence end. Scored: tip 0,
+base 1, and 1 on a copy whose permission keeps its words and loses its duty. It is still text:
+a sentence of that shape closes it. `core/fixtures/review-carry-over-clauses/` arm ENV pins it.
 
-verify: sh F=core/skills/ai-dlc/steps/sprint-review.md; [ "$(grep -cF HARD_BLOCK "$F")" -ge 1 ] || exit 1; S=$(sed -n '/^### 3\. Fix and Re-Validate/,/^### 4\./p' "$F"); [ -n "$S" ] || exit 1; E=$(grep -ci environmental <<<"$S"); C=$(grep -ci carry-over <<<"$S"); [ "$E" -eq 0 ] || [ "$C" -ge 1 ]
+
+verify: sh F=core/skills/ai-dlc/steps/sprint-review.md; [ "$(grep -cF HARD_BLOCK "$F")" -ge 1 ] || exit 1; S=$(LC_ALL=C awk '/^### 3\. Fix and Re-Validate/{f=1;next} f&&/^### /{exit} f' "$F" | tr "\n" " "); [ -n "$S" ] || exit 1; grep -qF "environmental seam MAY defer" <<<"$S" || exit 1; t=${S#*environmental seam MAY defer}; t=${t%%. *}; grep -qF carry-over-evaluation.md <<<"$t"
 ## BL-048
 
 **Two of the three dev-role checks this consumer carries have no upstream equivalent, and the
@@ -1698,8 +1739,19 @@ correctness depends on wall-clock ordering of concurrent processes.
 
 Discharges the consumer entry `extensions/roles/dev-push.md` at pinned ledger line 276.
 
+**Receipt moved from `manual` to `sh` at batch 174, keyed on STRUCTURE with a phrase inside
+it, and that phrase is the admitted weakness.** It isolates Workflow item 15 (from `15. ` to
+`16. `, control `Honest-green` inside it), splits that list into its `- [ ]` bullets, and
+requires ONE bullet naming both `git diff` and "already present / already in the working tree",
+and ONE bullet naming both `wall-clock` and `N≥10`. `git diff` alone would be vacuous (item 15
+already carries it for scope verification); the co-occurrence inside one bullet is what the
+existing text lacks. Scored: tip 0, base 1, and 1 on copies with either bullet deleted and with
+the ordering bullet moved verbatim under `## Communication`. A bullet carrying those words
+closes it whatever it instructs. `core/fixtures/review-carry-over-clauses/` arms EDIT and
+ORDER pin the instruction text.
 
-verify: manual
+
+verify: sh f=core/team-roles/dev.md; b=$(LC_ALL=C awk '/^15\. /{on=1} on&&/^16\. /{exit} on' "$f"); [ -n "$b" ] || exit 1; grep -qF "Honest-green" <<<"$b" || exit 1; bl=$(LC_ALL=C awk '/^[[:space:]]*- \[ \] /{if (x!="") print x; x=$0; next} x!=""{x=x" "$0} END{if (x!="") print x}' <<<"$b" | tr -s " "); grep -F "git diff" <<<"$bl" | grep -qiE "already (present|in the working tree)" || exit 1; grep -iF "wall-clock" <<<"$bl" | grep -qE "N(≥|>=) ?10"
 ## BL-066 — the `named_absorbed` half landed at v0.387.0; the SIBLING half did not, and the release notes say it did
 
 **TRIAGED AT BATCH 10: FOUR OF THE FIVE CLAIMS ARE ABSORBED, THE SIBLING CLAIM SURVIVES, AND
@@ -2473,7 +2525,17 @@ provenance-first rule. Filed rather than fixed because it is a different subsyst
 batch and needs a join rather than the table row it resembles — recorded here so the next author
 does not ship the one-line version and read its zero as clean.
 
-  verify: sh V=scripts/validate-shell-portability.sh; [ -f "$V" ] || exit 9; d=$(mktemp -d) || exit 9; mkdir -p "$d/scripts" "$d/core" || exit 9; cp "$V" "$d/scripts/" || exit 9; printf '0.0.0\n' > "$d/VERSION"; printf 'ok\n' > "$d/core/note.md"; printf 'x=1\nre="\\b(foo)\\b"\nif [[ $x =~ $re ]]; then :; fi\n' > "$d/probe.sh"; printf 'n=$(printf %%s a | grep -cE "\\bfoo\\b")\n' > "$d/exempt.sh"; printf 'mapfile -t arr < /dev/null\n' > "$d/control.sh"; git -C "$d" init -q && git -C "$d" add -A && git -C "$d" -c user.email=t@t -c user.name=t commit -qm s || exit 9; out=$(bash "$d/scripts/validate-shell-portability.sh" 2>&1); rc=$?; rm -rf "$d"; case "$out" in *control.sh*) ;; *) exit 9 ;; esac; case "$out" in *exempt.sh*) exit 1 ;; esac; case "$out" in *probe.sh*) ;; *) exit 1 ;; esac; [ "$rc" -ne 0 ] || exit 1; exit 0
+**FIXED IN v0.666.0, pending the post-merge close.** All four claims resolved: the `\b` defect re-measured on
+bash 3.2.57 (and `\B \< \> \w \W \s \S \d` measured failing the same way, so the arm covers the
+set); the home is `scripts/validate-shell-portability.sh` as arm S12 with a `KIND=join` column
+rather than a table row; the join is two-pass and order-free; the grep/sed exemption is
+structural because the join key is `=~`, and the false-positive set over the tracked corpus is
+empty (48 raw `=~` lines, 32 code-site lines, 0 flagged). The receipt below was repaired: it now seeds
+a fixture-corpus file, which the validator's fail-closed guard requires, and seeds the consumer
+ABOVE its assignment. Scored: tip 0, base 1, `S12_PAT` made to match nothing 1; the old receipt
+exited 9 on tip.
+
+  verify: sh V=scripts/validate-shell-portability.sh; [ -f "$V" ] || exit 9; d=$(mktemp -d) || exit 9; mkdir -p "$d/scripts" "$d/core/fixtures/u" || exit 9; cp "$V" "$d/scripts/" || exit 9; printf '0.0.0\n' > "$d/VERSION"; printf 'ok\n' > "$d/core/note.md"; printf 'echo ok\n' > "$d/core/fixtures/u/seed.sh"; printf 'x=1\nif [[ $x =~ $re ]]; then :; fi\nre="\\b(foo)\\b"\n' > "$d/probe.sh"; printf 'n=$(printf %%s a | grep -cE "\\bfoo\\b")\ng="\\bfoo\\b"\ngrep -E "$g" f\n' > "$d/exempt.sh"; printf 'mapfile -t arr < /dev/null\n' > "$d/control.sh"; git -C "$d" init -q && git -C "$d" add -A && git -C "$d" -c user.email=t@t -c user.name=t commit -qm s || exit 9; out=$(bash "$d/scripts/validate-shell-portability.sh" 2>&1); rc=$?; case "$out" in *control.sh*) ;; *) exit 9 ;; esac; case "$out" in *exempt.sh*) exit 1 ;; esac; case "$out" in *"FAIL: S12:"*probe.sh*) ;; *) exit 1 ;; esac; [ "$rc" -ne 0 ] || exit 1; exit 0
 
 ## BL-129 — a change to an adjudication predicate has no mechanism that can see what it RECLASSIFIES
 
@@ -2922,7 +2984,12 @@ Sibling to `BL-141`, which narrowed the same arm. Taking this means saying wheth
 changing the schema or accepting a prose predicate, and measuring the false-positive set of
 whichever you choose.
 
-verify: sh set -e; d=$(mktemp -d); printf '%s\n' '{"clause":"LC-E4","entry":"x/e.md","subject_digest":"a","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"The body-relocation half of that debt was NOT re-checked and the debt is therefore left open."}' '{"clause":"LC-E4","entry":"x/e.md","subject_digest":"a","verdict":"still-additive","recorded_utc":"2026-01-01T00:30:00Z","closes_owed":["OWED-X"],"reason":"Debt discharged. CORRECTION to the row recorded earlier for this entry: there is no body-relocation half; that sentence was an unverified inference and is withdrawn."}' '{"clause":"LC-E4","entry":"x/keep.md","subject_digest":"b","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"The split remains deferred to a later pull."}' > "$d/r.jsonl"; o="$(bash core/scripts/audit-layer-debt.sh --register "$d/r.jsonl" 2>/dev/null)"; grep -q 'keep\.md' <<<"$o" && ! grep -q 'x/e\.md\|^  e\.md' <<<"$o"
+**The receipt was replaced when the schema field was chosen.** The earlier one seeded the
+withdrawal as PROSE only, so it could be closed only by the retraction-token predicate this entry
+refutes. This one seeds the structured `withdraws` field, keeps the near-miss, and requires an
+unresolvable withdrawal to be REPORTED.
+
+verify: sh set -e; d=$(mktemp -d); printf '%s\n' '{"clause":"LC-E4","entry":"x/e.md","subject_digest":"a","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"The body-relocation half of that debt was NOT re-checked and the debt is therefore left open."}' '{"clause":"LC-E4","entry":"x/e.md","subject_digest":"a","verdict":"still-additive","recorded_utc":"2026-01-01T00:30:00Z","closes_owed":["OWED-X"],"withdraws":["2026-01-01T00:00:00Z"],"reason":"Debt discharged. CORRECTION to the row recorded earlier for this entry: there is no body-relocation half; that sentence is withdrawn."}' '{"clause":"LC-E4","entry":"x/keep.md","subject_digest":"b","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"The split remains deferred to a later pull."}' '{"clause":"LC-E4","entry":"x/g.md","subject_digest":"c","verdict":"still-additive","recorded_utc":"2026-01-01T01:00:00Z","withdraws":["2026-01-01T00:00:01Z"],"reason":"probe"}' > "$d/r.jsonl"; o="$(bash core/scripts/audit-layer-debt.sh --register "$d/r.jsonl" 2>/dev/null)"; grep -q '^  keep\.md' <<<"$o" && ! grep -q '^  e\.md' <<<"$o" && grep -q 'g\.md .*no record on this entry' <<<"$o"
 
 ## BL-145 — a docs commit that MENTIONS a candidate id is reported to the consumer as upstream having absorbed it
 
@@ -3149,6 +3216,16 @@ fires.
 whether their sprints should keep suppressing rather than escalating, is that consumer's own
 carry-over.
 
+**The smallest honest change shipped in v0.666.0; the defect stands.** The expiry FAIL now names
+the `ts` of the row `latest_verdict` selected and the metrics file, and says that this is the
+PREVIOUS gate's recorded verdict because Check 12 writes this gate's row after Check 2 runs.
+`gate-validation.md` Check 2 and `escalations.md` state the same thing. Fixture arms 18a-18d in
+`core/fixtures/suppression-lifetime/run.sh` pin the exact ts: the newest core row, not a newer
+extension row, and not the last row read in file order. Mutants K (ts dropped) and L (last-read
+ts) are killed. The stale read itself is unchanged, so this entry stays open and its receipt
+stays `manual`: an `sh` receipt over the mitigation exits 0 and would score the entry
+CLOSE-CANDIDATE for a defect that still reproduces. The fixture carries the mitigation.
+
 verify: manual
 
 ## BL-214 — `story_normalize` reads a carry-over ITEM number as a sprint, and the licence that authorised it used a non-discriminating control
@@ -3191,7 +3268,21 @@ repair also cannot be a pure rename of the recovery order: 598 files agree today
 **Tiered DEFECT.** Files are placed under a wrong but well-formed slot, so nothing reports and the
 error is invisible to every conformance check — the destination is on the grammar either way.
 
-verify: sh set -e; d=$(mktemp -d); trap 'rm -rf "$d"' EXIT; mkdir -p "$d/_bmad-output/planning-artifacts/stories"; ( cd "$d" && git init -q . && git config user.email t@t && git config user.name t ); printf '# S\n\n**Sprint:** 53\n\nB.\n' > "$d/_bmad-output/planning-artifacts/stories/story-102-1-x.md"; ( cd "$d" && git add -A && git commit -qm s ); o="$(bash core/scripts/migrate-artifact-paths.sh --root "$d" --grammar "$PWD/core/skills/ai-dlc/artifact-path-grammar.md" 2>&1)"; grep -q 's102/stories' <<<"$o" && exit 1; exit 0
+**Fixed at the producer in v0.666.0; two residuals stand.** In the plan loop, a READABLE
+`**Sprint:**` header that names a sprint other than the normalised name's `A` now wins, and the
+move is reported under SPRINT RECOVERED as `header>name`. An agreeing header changes nothing. The
+licence text in `artifact-path-grammar.md` and the script header is replaced by the discriminating
+measurement: each file's own header over the 786 `story-<A>-<B>` files at the pre-migration ref
+`15c890eb^`, of which 319 agree, 146 disagree (all with header < `A`, none with `A` >= 199), 6 are
+unreadable and 315 have no header. Driven on that corpus in a scratch repo, the shipping migrator
+plans `s53/` for `story-102-1-effective-spread-500.md`, and its `header>name` set equals the 146
+exactly (empty `comm -3`). **Residual 1:** the 315 headerless files still take `A`, because
+nothing in the file can separate item from sprint for them. **Residual 2:** the 6 `50A`/`50B`
+files keep `A`, because refusing them would break the conformance validator's blocking-set ==
+move-set join. That validator reads paths only, never headers. The false-positive measurement the
+entry asked for over the post-s199 era comes back empty (0 disagreements with `A` >= 199).
+
+verify: sh set -e; d=$(mktemp -d); trap 'rm -rf "$d"' EXIT; s="$d/_bmad-output/planning-artifacts/stories"; mkdir -p "$s"; ( cd "$d" && git init -q . && git config user.email t@t && git config user.name t ); printf '# Story 102-1: x\n\n**Epic:** 102 - Sprint 53 x (Item 102)\n**Sprint:** 53\n' > "$s/story-102-1-x.md"; printf '# Story 297-1: y\n\nNo header.\n' > "$s/story-297-1-y.md"; ( cd "$d" && git add -A && git commit -qm s ); o="$(bash core/scripts/migrate-artifact-paths.sh --root "$d" --grammar "$PWD/core/skills/ai-dlc/artifact-path-grammar.md" 2>&1)" || exit 9; grep -q 's297/stories/story-1-y.md' <<<"$o" || exit 9; grep -q 's102/stories' <<<"$o" && exit 1; grep -q 's53/stories/story-1-x.md' <<<"$o" || exit 1; exit 0
 
 ## BL-215 — an ADR that defers work reaches the next sprint's intake, but the intake's disposition vocabulary has no slot for "this names undone work"
 
@@ -3226,9 +3317,27 @@ question to answer first.
 **Tiered NOTE.** Recorded so the refutation is not re-derived and the enforcer question is not
 re-opened blind.
 
-verify: manual
+**FIXED IN v0.666.0, pending the post-merge close.** Claim by claim. The HEADLINE ("invisible to intake")
+was already dead and stays dead: re-derived at `2e7c227c`, `requirements.md` mandates the
+`docs/adr/` corpus and fails its gate without the prior-decision search. The VOCABULARY GAP is
+closed: both carriers of the disposition vocabulary (`steps/requirements.md` and
+`steps/discovery.md` — derived as every step file carrying `one-line disposition per hit (`; no
+script, validator, template or role file parses it, and `docs/vocabulary-index.md` does not
+register it) now read `superseded` / `still binding` / `not relevant` / `deferred-unfiled`, and a
+`deferred-unfiled` hit MUST be filed as a carry-over backlog item before the gate passes.
+`core/fixtures/requirements-step` arm (h) pins the four-member set across the derived carriers,
+with mutants dropping the member from one carrier and from every carrier. "NO ENFORCER IS
+CONSTRUCTIBLE" SURVIVES: this adds a slot and a mandate the step author obeys, not a mechanism
+that detects an ADR deferring work. OWNERSHIP was settled by the batch that authorised the
+upstream change.
+
+verify: sh n=0; for f in core/skills/ai-dlc/steps/*.md; do x="$(tr '\n' ' ' < "$f" | tr -s ' ')"; case "$x" in *'one-line disposition per hit ('*) ;; *) continue ;; esac; x="${x#*one-line disposition per hit (}"; s="$(grep -oE '`[^`]+`' <<<"${x%%)*}" | tr -d '`' | LC_ALL=C sort | tr '\n' ,)"; [ "$s" = 'deferred-unfiled,not relevant,still binding,superseded,' ] || exit 1; n=$((n+1)); done; [ "$n" -ge 2 ] || exit 1; exit 0
 
 ## BL-258 — `agent-definition-render`'s `check-is-presence-only` mutant is killed by two arms under the pool and by one arm solo, so a green tree goes red on a run that changed nothing
+
+Discharges the reference consumer's `PC-S315-AGENT-DEFINITION-RENDER-ENTANGLEMENT-ARM-FIRES-UNDER-THE-PRE-PUSH-POOL`,
+filed 2026-09-29 on the byte-identical failure line after it deferred the consumer's 0.663.0 -> 0.664.0
+self-update.
 
 **DEFECT.** During batch 117's pole calibration — three serial full `AI_DLC_FIXTURE_NO_SKIP=1` gate
 runs in a `file://` clone of `origin/main` at `83747ef4`, no change between runs — run 2 went red on
@@ -3317,9 +3426,41 @@ of the words sits in a COMMENT exits 9, because the extraction is anchored on th
 `bad "MUTANT` emitter and finds none — the emitter being gone is a precondition moved, not a
 close.
 
+**THE MECHANISM, FORCED AT BATCH 174: THE MUTANT, NOT THE HARNESS OR THE LOAD.** M3's
+replacement was `true`, which turns `render-agent-definitions.sh:259` into
+`elif ! printf '%s\n' "$want" | true; then`. The subject runs `set -uo pipefail`; `true` exits
+without reading, so the printf can take EPIPE, pipefail fails the pipeline, the role is scored
+DRIFTED and `--check` returns 1 — but only when the writer loses the race, which is why load
+moved it. That one false drift explains every shape above: arm 10's `rc_pass` (the render is
+followed by a `--check`), arm 7's `--check`, and arm 5's cells in either direction (the
+SURVIVED rows). Forced deterministically by delaying the writer 20ms in a scratch copy of the
+subject: arm 10 reads `3 1 1` with `true`, `3 1 0` with the real `cmp` and with `cat >/dev/null`.
+The subject itself was always correct; `cmp` reads to EOF or to the first difference.
+
+**THE COPY-RACE LEAD ABOVE IS NOT THE CAUSE, AND IS NOT NEEDED TO EXPLAIN ANY ROW.** No fixture
+writes the live `core/scripts/`: a grep of `core/fixtures` for write verbs aimed at
+`$ROOT|$REPO/core/scripts` returned 3 files against 42 that name the path at all, and all three
+are copies OUT of it or a `mv` inside a SEEDED root (`enforcement-map-sites/run.sh:76`), so the
+shared source has no concurrent writer and the non-atomic `cp` has nothing to race. Measured at
+30 concurrent runs of this fixture alone, same tree: old mutant with the new guard disabled, 3 of
+30 red (2 `three_states_are_distinct`, 1 `foreign_definition_untouched`); fixed mutant, 0 of 30.
+The copy race was not measured under the full 12-way gate pool, where other fixtures run beside
+this one.
+
+**FIXED IN v0.666.0, pending the post-merge close.** M3 now substitutes `cat >/dev/null` (compare nothing,
+succeed, drain the pipe). `mut()` refuses any mutation whose INTRODUCED lines — the copy minus the
+subject — pipe into `true`, `false` or `:`, before any arm runs, so a non-reading sink cannot
+return. Both the entanglement verdict and the SURVIVED verdict append the observed `arm:rc` set,
+which is this entry's receipt.
+
 verify: sh f=core/fixtures/agent-definition-render/run.sh; [ -f "$f" ] || exit 9; l="$(grep -E '^[[:blank:]]*bad "MUTANT \$label killed by \$want AND by:' "$f")"; [ -n "$l" ] || exit 9; case "$l" in *'$out'*|*'rc='*|*'observed'*) exit 0 ;; esac; exit 1
 
 ## BL-273 — I33b's batched grammar narrowed on `${VAR/../…}` against an equivalence claim, and the one input separating the two implementations was in no corpus and no assertion
+
+**FIXED IN v0.666.0, pending the post-merge close.** A27c was never dispatched: the fixture's enumerator
+`^A[0-9]{2}_` could not spell a lettered name, and A27c's raw-printf FAIL could not fail its
+worker. Both are fixed, a loose definition count now refuses an undispatched arm, and the receipt
+below runs A27c through `--run-one` instead of grepping for its name.
 
 **NOTE.** Found by the contract adversary auditing `0.594.0` and re-derived here. The release
 claims the batched predicate is equivalent to the per-file one, and on the live corpus it is —
@@ -3357,7 +3498,7 @@ against a ceiling of 1. It extracts `i33b_scan` from the validator, runs it over
 files, and exits 9 rather than 0 if the walk-up case stops being seen, so a predicate that matches
 nothing cannot close it.
 
-verify: sh v=scripts/validate-enforcement-map.sh; [ -f "$v" ] || exit 9; grep -q 'I33B_WALK_AWK' "$v" || exit 9; d=$(mktemp -d) || exit 9; sed -n '/^I33B_WALK_AWK=/,/^}$/p' "$v" > "$d/p.sh"; grep -q 'i33b_scan()' "$d/p.sh" || { rm -rf "$d"; exit 9; }; printf 'A="$(dirname "$X")"\nB="${A/../foo}"\n' > "$d/pat.sh"; printf 'A="$(dirname "$X")"\nB="${A}/../schemas/x.json"\n' > "$d/walk.sh"; . "$d/p.sh"; w=$(i33b_scan "$d/walk.sh" | grep -c .); p=$(i33b_scan "$d/pat.sh" | grep -c .); rm -rf "$d"; [ "$w" -eq 1 ] || exit 9; [ "$p" -eq 0 ] || exit 1; grep -q 'A27c_i33b_pattern_substitution' core/fixtures/enforcement-map-derivations/run.sh && exit 0; exit 1
+verify: sh v=scripts/validate-enforcement-map.sh; [ -f "$v" ] || exit 9; grep -q 'I33B_WALK_AWK' "$v" || exit 9; d=$(mktemp -d) || exit 9; sed -n '/^I33B_WALK_AWK=/,/^}$/p' "$v" > "$d/p.sh"; grep -q 'i33b_scan()' "$d/p.sh" || { rm -rf "$d"; exit 9; }; printf 'A="$(dirname "$X")"\nB="${A/../foo}"\n' > "$d/pat.sh"; printf 'A="$(dirname "$X")"\nB="${A}/../schemas/x.json"\n' > "$d/walk.sh"; . "$d/p.sh"; w=$(i33b_scan "$d/walk.sh" | grep -c .); p=$(i33b_scan "$d/pat.sh" | grep -c .); rm -rf "$d"; [ "$w" -eq 1 ] || exit 9; [ "$p" -eq 0 ] || exit 1; f=core/fixtures/enforcement-map-derivations/run.sh; [ -f "$f" ] || exit 9; o=$(bash "$f" --run-one A27c_i33b_pattern_substitution_is_not_a_walk 2>&1); r=$?; [ "$r" -eq 0 ] || exit 1; case "$o" in *'acquitted while'*) exit 0 ;; esac; exit 1
 
 ## BL-272 — `fork-profile.sh --section by-line` prints 60 of its rows and says nothing, so a by-line sum is silently partial and disagrees with the by-arm column it should equal
 
@@ -4052,7 +4193,20 @@ unit's recorded loaded cost is 5s, so a real stall needs about six times that. N
 observed. A receipt must force the timeout and read whether the audit names the timeout as its
 cause.
 
-verify: manual
+**FIXED IN v0.666.0, pending the post-merge close.** A present `core-paths.sh` whose `--list` times out,
+raises, exits non-zero or answers empty now makes `audit-rule-files.sh` exit 2 with a stderr line
+naming the cause (`timed out after 1s` when forced); it no longer scores every owner `unknown`.
+An ABSENT resolver still fails closed as `unresolved`, which assertion 28 owns. Forced in a
+scratch copy under `--fail-on=local` with a seeded local finding: origin/main exits 1 with one
+`[unknown]` finding and no timeout text, tip exits 2 naming the timeout. The unforced real-tree
+run under the pre-push argv is byte-identical between the two copies. Fixture assertion 31 forces
+the stall and assertion 32 the non-zero and empty answers; the mutant reverting the timeout
+clause to `_globs = []` fails assertion 31 alone. The receipt refuses (9) on a tree with no
+ownership-tagged finding, where the resolver is never asked.
+Receipt scored: tip 0, origin/main 1, mutant 1.
+
+verify: sh a=core/scripts/audit-rule-files.sh; c=core/scripts/core-paths.sh; [ -f "$a" ] && [ -f "$c" ] || exit 9; d=$(mktemp -d) || exit 9; cp "$a" "$d/audit-rule-files.sh"; cp "$c" "$d/core-paths.sh"; bash "$d/audit-rule-files.sh" --fail-on=local >"$d/kout" 2>&1; k=$?; grep -qE '^  \[(core|local)\] ' "$d/kout" || { rm -rf "$d"; exit 9; }; sed 's/timeout=30)/timeout=1)/' "$a" > "$d/audit-rule-files.sh"; cmp -s "$a" "$d/audit-rule-files.sh" && { rm -rf "$d"; exit 9; }; printf '#!/usr/bin/env bash\nexec sleep 5\n' > "$d/core-paths.sh"; bash "$d/audit-rule-files.sh" --fail-on=local >/dev/null 2>"$d/err"; s=$?; grep -q 'timed out after' "$d/err"; t=$?; rm -rf "$d"; [ "$k" = 2 ] && exit 9; [ "$s" = 2 ] && [ "$t" = 0 ] && exit 0; exit 1
+
 
 ## BL-322 — `rotate-snapshot-archive.sh` refuses or misreports on four edge inputs it does not document
 
@@ -4181,7 +4335,13 @@ root and a stale generated region in the install's `retro.md` exits 0 and rewrit
 file (0.645.0: rc 1, nothing written). That is the intended behaviour, and what a run with no
 override does. Arm E asserts only the already-in-sync case, so the write path has no arm.
 
-verify: manual
+Arm E2 in `core/fixtures/schema-install-fallback/run.sh` seeds that stale region in the install's
+`steps/retro.md`, derives the expected bytes from a no-override write of the same seed, and asserts
+the foreign-root write exits 0, reports one file updated, produces those bytes, leaves the foreign
+decoy alone and passes `--check` after. Two write-mode-gated mutants of the fallback branch (install
+doc dirs skipped, rc 0; the 0.645.0 exit 1) each leave the A-E vector at `000-0-` and fail E2 alone.
+
+verify: sh f=core/fixtures/schema-install-fallback/run.sh; [ -f "$f" ] || exit 9; o="$(bash "$f" 2>&1)" || exit 1; grep -q '^  ok    E2 write mode under a foreign root rewrites a stale INSTALL retro.md region' <<<"$o" || exit 1; grep -q '^  ok    MUTANT SKIP on sync-taught-schema leaves A-E at 000-0- and is killed by E2 alone' <<<"$o" || exit 1; grep -q '^  ok    MUTANT R2W on sync-taught-schema leaves A-E at 000-0- and is killed by E2 alone' <<<"$o" || exit 1; exit 0
 
 ## BL-333 — three "0 ALWAYS" detectors refuse with exit 0 and a stderr line, so the report renders `none` for a scan that never ran
 
@@ -4837,6 +4997,18 @@ verify: manual
 
 ## BL-377 — `partition-document.sh`'s grammar is coarser than the heading set on three real shapes
 
+**FIXED IN v0.666.0, pending the post-merge close.** The fence tracker records the opening run and closes only on
+a run of the same character at least as long; an HTML comment tracker holds a multi-line `<!--`
+open until `-->`, and neither opens inside the other. `document-partition` arms A17-A19 seed both
+shapes in both directions, and mutants MX7-MX10 each kill only their own arms. Over a working-tree
+copy of the consumer's `_bmad-output/` and `docs/` (7048 `.md` files, `/usr/bin/find`) the fix
+changes 1 map: `_bmad-output/pipeline-history/pipeline-snapshot-archive.md`, whose 421-line
+comment hides ten `## ` lines. The first two bullets below were the fix targets. Setext
+headings and the 76% SERIAL on `docs/architecture.md` are observations and were not fixed. A
+closing fence carrying an info string (```` ```bash ```` inside a ``` fence) still closes it; that is
+also left as an observation. The derivation-capture spelling paragraph below is a separate
+subject this fix does not touch; it needs its own entry before this one rotates.
+
 **NOTE.** From the batch 173 contract adversary, over the reference consumer's `_bmad-output/`. None
 of these changes a round trip (4854 files, 0 mismatches); each only makes the partition coarser or
 puts a boundary where an author would not.
@@ -4851,7 +5023,7 @@ The derivation-capture exemption is also spelling-sensitive: a logical `/tmp/...
 manifest holds the physical one, and a path through a symlinked directory are refused and cost the
 remediator a re-spelling. The remediator prose names the project-relative spelling.
 
-verify: manual
+verify: sh p=core/scripts/partition-document.sh; [ -f "$p" ] || exit 9; d=$(mktemp -d) || exit 9; b(){ i=0; while [ $i -lt $1 ]; do echo "body line $i padded to a steady width for sizing"; i=$((i+1)); done; }; g(){ { echo '## A'; b 20; echo '## B'; b 18; printf "$1"; b 10; echo '## C'; b 20; echo '## D'; b 20; } > "$d/x.md"; bash "$p" --map "$d/x.md" | cut -f4 | tr '\n' '|'; }; [ "$(g '## Q\n')" = '## A|## B|## Q|## C|## D|' ] || exit 9; [ "$(g '````\n```\n## Q\n```\n````\n')" = '## A|## B|## C|## D|' ] || exit 1; [ "$(g '<!--\n## Q\n-->\n')" = '## A|## B|## C|## D|' ] || exit 1; exit 0
 
 ## BL-378 — the suite-pole baseline still names `ledger-reverify` after the pole moved
 

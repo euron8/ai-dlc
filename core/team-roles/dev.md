@@ -217,6 +217,17 @@ Before starting any task, read these files in order:
           grep-referenced by ≥1 test file in the SAME PR (by filename), else
           delete it or add a one-line justification. An unreferenced fixture
           is repo-bloat that no later gate catches.
+    - [ ] **Edit-already-present check.** Before re-issuing any edit, run
+          `git diff` and read whether the intended change is already in the
+          working tree. If it is present and uncommitted, commit it; do not
+          apply it a second time.
+    - [ ] **Wall-clock ordering evidence.** For an AC whose correctness
+          depends on the wall-clock ordering of concurrent processes
+          (process reaps, signal or parent-PID races, spawn-then-kill), the
+          gate evidence is a repeated live or near-live harness: N≥10
+          real-process runs, every one clean, with the command and all
+          results logged in the story file. Mocked-timing unit tests and a
+          single live run do not satisfy the AC; mocked tests MAY supplement.
 - When a story requires a validation evaluation (`/bmad-party-mode`,
   `/bmad-advanced-elicitation`, `/bmad-review-adversarial-general`,
   `/bmad-prd`, or the native `ai-dlc-adversary-review` convergence

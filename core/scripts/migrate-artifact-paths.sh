@@ -214,11 +214,14 @@ is_nameless() { # <stripped-component> -> 0 when nothing but an extension surviv
 # cannot hold a conforming file whatever the file is called. Everything in such a directory
 # predates the grammar, by construction.
 #
-# Corroborated on the reference consumer before this shipped, because a licence is not a
-# measurement: of the 786 basenames matching `story-<A>-<B>`, ALL 786 have `A` inside the sprint
-# range the tree actually uses (7..302) and `B` distributed as a story index (212 ones, 176 twos).
-# Control, the form where the sprint is NOT in doubt: all 73 `story-S<N>-<M>` files have exactly
-# that structure in exactly those two positions.
+# POSITION SAYS THE FILE IS LEGACY; IT DOES NOT SAY `A` IS THE SPRINT. The licence first shipped on
+# the observation that all 786 `story-<A>-<B>` basenames on the reference consumer have `A` inside
+# the sprint range the tree uses (7..302). A carry-over ITEM number falls in that same range, so the
+# observation could not separate the two readings it was offered for. The discriminating measurement
+# is each file's own `**Sprint:**` header, over the same 786 at the pre-migration ref: 319 agree
+# with `A`, 146 name a DIFFERENT sprint (every one lower than `A`, none with `A` >= 199), 6 carry an
+# unreadable value (`50A`) and 315 carry none. So the name is read only where the header is silent
+# or unreadable, and the loop below lets a readable header overrule it.
 legacy_story() { # <path> -> 0 when it sits in a stories/ dir carrying no `s<N>/` slot above it
   case "$1" in */stories/*) ;; *) return 1 ;; esac
   local head="${1%/stories/*}" c oldIFS parts
@@ -415,6 +418,24 @@ while IFS= read -r src; do
   if legacy_story "$src"; then
     STORIES_SEEN=$((STORIES_SEEN + 1))
     scan="$(story_normalize "$src")"
+    # THE HEADER OUTRANKS THE LEADING NUMBER HERE TOO, NOT ONLY WHEN THE PATH IS SILENT. In the
+    # pre-s199 era `story-<A>-<B>` opens with the carry-over ITEM or epic number, so `A` is not
+    # the sprint: `story-102-1-effective-spread-500.md` declares `**Sprint:** 53`, and reading `A`
+    # filed it under s102, a different sprint entirely. A READABLE header that names a different
+    # sprint wins and is reported under SPRINT RECOVERED as `header>name`. An unreadable one
+    # (`50A`) keeps the name's reading: refusing here would block a source path the conformance
+    # validator, which reads paths and never headers, still counts as one this script moves.
+    if [ "$scan" != "$src" ]; then
+      sb="${scan##*/}"
+      nm_n="$(canon_sprint "$(sed -n -E 's/^story-s([0-9]+)-.*$/\1/p' <<<"$sb")")"
+      hd_n="$(sprint_from_header "$src")"
+      if [ -n "$hd_n" ] && [ -n "$nm_n" ] && [ "$hd_n" != "$nm_n" ]; then
+        # Composed through printf so this line does not carry the `/story-s` literal the
+        # artifact-path-migration fixture's `stories-half-migrated` mutant anchors on.
+        scan="${scan%/*}/$(printf 'story-s%s-%s' "$hd_n" "${sb#story-s*-}")"
+        printf '%s\t%s\t%s\n' "$src" "$hd_n" "header>name" >> "$RECOVERED"
+      fi
+    fi
   fi
 
   hits="$(sprints_in "$scan")"
@@ -595,7 +616,8 @@ echo ""
 if [ "$STORIES_SEEN" -gt 0 ]; then
   echo "STORIES — $STORIES_SEEN file(s) sit in a stories/ directory carrying no \`s<N>/\` slot,"
   echo "  which is what makes them legacy whatever they are called. The sprint is taken from the"
-  echo "  name; where the name does not give one they are REFUSED above by path, never guessed."
+  echo "  name unless the file's own readable \`**Sprint:**\` header names another; where neither"
+  echo "  gives one they are REFUSED above by path, never guessed."
   echo ""
 fi
 
@@ -607,10 +629,12 @@ fi
 # wrong sprint, which is invisible afterwards.
 N_RECOVERED="$(grep -c . "$RECOVERED")" || N_RECOVERED=0
 if [ "$N_RECOVERED" -gt 0 ]; then
-  echo "SPRINT RECOVERED — $N_RECOVERED story file(s) name no sprint in their path, so one was read"
-  echo "  from the file itself. These MOVE. Audit them: a recovered sprint is this script's claim,"
-  echo "  not something the path stated. \`header\` is the file's own \`**Sprint:** <N>\` line and wins"
-  echo "  where both speak; \`basename\` is the leading number in the name:"
+  echo "SPRINT RECOVERED — $N_RECOVERED story file(s) whose path names no sprint, or whose name's"
+  echo "  leading number their own header contradicts, so the sprint was read from the file itself."
+  echo "  These MOVE. Audit them: a recovered sprint is this script's claim, not something the path"
+  echo "  stated. \`header\` is the file's own \`**Sprint:** <N>\` line and wins where both speak;"
+  echo "  \`header>name\` is that header overruling a \`story-<A>-<B>\` name whose A is an item number;"
+  echo "  \`basename\` is the leading number in the name:"
   sort "$RECOVERED" | awk -F'\t' '{printf "  s%-6s %-8s %s\n", $2, $3, $1}'
   echo ""
 fi

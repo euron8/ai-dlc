@@ -272,6 +272,7 @@ core_manifest:
   - fixtures/predicate-reclassification/**
   - fixtures/derivation-differential/**
   - fixtures/deploy-validate-smoke-classification/**
+  - fixtures/review-carry-over-clauses/**
   - fixtures/provenance-flagless-default/**
   - fixtures/provenance-not-accessible/**
   - fixtures/reconcile-blocking-list/**

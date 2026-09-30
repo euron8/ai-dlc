@@ -948,20 +948,25 @@ A27c_i33b_pattern_substitution_is_not_a_walk() {
     return
   fi
   out="$(run_map I33b 2>&1)"
+  sel_guard "$?" I33b "$out"
+  # EVERY FAIL GOES THROUGH `bad`, NEVER A RAW printf. The worker's exit is `$fails`, so a FAIL
+  # line printed around it leaves the worker at 0 and the parent never reads the line: this arm
+  # shipped that way and would have printed FAIL inside a shard that reported PASS.
+  #
   # HERE-STRINGS, NOT PIPES. A validator run is far larger than the pipe buffer, and under
   # pipefail `printf | grep -q` answers with the WRITER's EPIPE once the output after the match
   # passes it -- so both tests below would report NOT FOUND on output that contains the token,
   # permanently and with no symptom. I54 and I54b caught exactly that in the first draft of this
   # arm; the redirect goes at the end of the grep and the pipe disappears.
   if grep -q 'zz-i33b-patsub' <<< "$out"; then
-    printf '  FAIL  I33b named zz-i33b-patsub: `${A/../foo}` is bash pattern substitution, not a walk up into a sibling subtree, and reporting it is the false positive the batched grammar exists to have removed\n'
+    bad 'I33b named zz-i33b-patsub: `${A/../foo}` is bash pattern substitution, not a walk up into a sibling subtree, and reporting it is the false positive the batched grammar exists to have removed'
     return 1
   fi
   if ! grep -q 'zz-i33b-braced' <<< "$out"; then
-    printf '  FAIL  I33b did NOT name zz-i33b-braced: `${A}/../` IS a walk up from a dirname variable, so the silence above is the predicate matching nothing rather than discriminating\n'
+    bad 'I33b did NOT name zz-i33b-braced: `${A}/../` IS a walk up from a dirname variable, so the silence above is the predicate matching nothing rather than discriminating'
     return 1
   fi
-  printf '  ok    I33b `${A/../foo}` is acquitted while `${A}/../` one property apart is REPORTED\n'
+  ok 'I33b `${A/../foo}` is acquitted while `${A}/../` one property apart is REPORTED'
 }
 
 # --- Assertion 27: I33b — one predicate, and it fails closed when blinded ----
@@ -1353,19 +1358,76 @@ A42_i112_owner_grammar_is_anchored() {
   fi
 }
 
+# THE ASSERTION LIST IS DERIVED FROM THIS FILE'S OWN DEFINITIONS, in source order. A
+# hand-written list here would be this fixture's own subject defect one level out: an
+# assertion dropped from the list runs nothing and prints nothing, and a suite reporting 14
+# greens instead of 15 reads exactly like a suite that passed. The zero guard is the same
+# argument -- a naming grammar that stops matching yields an empty list, and an empty list
+# passes every assertion it never made.
+#
+# THE OPTIONAL LETTER IS LOAD-BEARING. The grammar was `^A[0-9]{2}_`, and A27b and A27c were
+# defined, commented, cited by a backlog receipt as the guard on their fix -- and never
+# dispatched by either shard. `--run-one` ran them fine, which is how a hand-run "proven both
+# ways" was recorded against an arm the suite had never executed.
+NAMES="$(grep -oE '^A[0-9]{2}[a-z]?_[a-z0-9_]+\(\) \{' "$0" | sed 's/() {$//')"
+N_LISTED="$(printf '%s\n' "$NAMES" | grep -c . || true)"
+if [ "$N_LISTED" -lt 10 ]; then
+  echo "FIXTURE ERROR: derived $N_LISTED assertion(s) from this file — the A<nn>_ naming grammar moved" >&2
+  exit 2
+fi
+
+# EVERY DEFINED ASSERTION IS A DISPATCHED ASSERTION, AND THE TWO SIDES USE DIFFERENT GRAMMARS
+# ON PURPOSE. A count taken with the enumerator's own regex agrees with the enumerator by
+# construction -- 46 against 46 under the grammar that dropped A27b/A27c -- so it could never
+# fire. This side is deliberately LOOSE: any function whose name starts `A<digit>`, with or
+# without `function`, indentation or spacing before `()`. A definition the strict enumerator
+# cannot spell (a second letter, an uppercase tail, a `function` keyword) is counted here and
+# missed there, and the run refuses rather than shipping an arm that runs nowhere.
+#
+# False-positive set measured before shipping: EMPTY. On the tree that added this guard the
+# loose grammar and the widened enumerator both read 48, and no helper in this file starts
+# with `A<digit>` (the helpers are lowercase). The shard partition check below then closes
+# the chain: defined == listed here, listed - 1 == dealt there.
+N_DEFINED="$(grep -cE '^[[:space:]]*(function[[:space:]]+)?A[0-9][A-Za-z0-9_]*[[:space:]]*\(\)' "$0" || true)"
+if [ "$N_DEFINED" -ne "$N_LISTED" ]; then
+  echo "FIXTURE BROKEN: this file DEFINES $N_DEFINED assertion function(s) but the enumerator lists $N_LISTED." >&2
+  echo "  The difference is defined, reads as coverage, and is dispatched by no shard. Rename it to A<nn>[a-z]_i<id>_<what> or widen the enumerator." >&2
+  exit 2
+fi
+
 # `--run-one <assertion>` is one assertion, in one process, against one freshly seeded
 # tree. It is the unit the pool schedules and it is also how a human runs a single
 # assertion while working on it.
+#
+# IT RUNS ONLY WHAT THE SHARDS WOULD. A name that is a defined function but not in $NAMES is
+# refused, so a hand-run of an undispatched arm fails instead of printing `ok` for a guard the
+# suite never executes.
 if [ "${1:-}" = "--run-one" ]; then
   FN="${2:-}"
   declare -F "$FN" >/dev/null 2>&1 || {
     echo "FIXTURE ERROR: --run-one needs an assertion function name; '$FN' is not one" >&2
     exit 2
   }
+  case "
+$NAMES
+" in
+    *"
+$FN
+"*) ;;
+    *) echo "FIXTURE ERROR: '$FN' is defined but is not in the dispatched assertion list, so no shard runs it; a hand-run here would certify a guard the suite never executes" >&2
+       exit 2 ;;
+  esac
   seed_tree
   trap 'rm -rf "$PRISTINE" "$WORK"' EXIT
   : > "$WORK/calls"
   "$FN"
+  fn_rc=$?
+  # AN ASSERTION THAT RETURNED NONZERO WITHOUT CHARGING `bad` IS A FAILURE, NOT A PASS. The
+  # worker's exit below is `$fails`; an arm that printed its own FAIL and returned 1 used to
+  # exit 0 here, and the parent reads FAIL lines only from a nonzero worker.
+  if [ "$fn_rc" -ne 0 ] && [ "$fails" -eq 0 ]; then
+    bad "$FN returned $fn_rc without charging a failure through bad — its verdict is unknown, so it is not a pass"
+  fi
 
   # THE POSITIVE CONTROL THAT SELECTION ACTUALLY HAPPENED, and it is here rather than only in
   # the parent because this is the process that made the calls.
@@ -1394,19 +1456,6 @@ if [ "${1:-}" = "--run-one" ]; then
   fi
   [ "$fails" -eq 0 ] || exit 1
   exit 0
-fi
-
-# THE ASSERTION LIST IS DERIVED FROM THIS FILE'S OWN DEFINITIONS, in source order. A
-# hand-written list here would be this fixture's own subject defect one level out: an
-# assertion dropped from the list runs nothing and prints nothing, and a suite reporting 14
-# greens instead of 15 reads exactly like a suite that passed. The zero guard is the same
-# argument -- a naming grammar that stops matching yields an empty list, and an empty list
-# passes every assertion it never made.
-NAMES="$(grep -oE '^A[0-9]{2}_[a-z0-9_]+\(\) \{' "$0" | sed 's/() {$//')"
-N_LISTED="$(printf '%s\n' "$NAMES" | grep -c . || true)"
-if [ "$N_LISTED" -lt 10 ]; then
-  echo "FIXTURE ERROR: derived $N_LISTED assertion(s) from this file — the A<nn>_ naming grammar moved" >&2
-  exit 2
 fi
 
 # ---------------------------------------------------------------------------

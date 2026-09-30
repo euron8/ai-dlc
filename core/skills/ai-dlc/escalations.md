@@ -158,7 +158,8 @@ live failure again and the gate must obtain fresh authorization. The prior
 citation may not be re-cited; re-suppression is a new entry with a new operator
 turn. Enforced by `scripts/ai-dlc/validate-suppression-lifetime.sh` at Check 2,
 which counts elapsed gates from `gate-metrics.jsonl` and re-reads the named
-check's own recorded verdict — so a suppression whose cause has genuinely been
+check's own recorded verdict — the PREVIOUS gate's, since Check 12 writes that
+file after Check 2, and the FAIL names the row's `ts` — so a suppression whose cause has genuinely been
 fixed costs nothing, and only one that is still red is stopped.
 
 **An escalated check is covered the same way.** The `adjudication: llm` checks

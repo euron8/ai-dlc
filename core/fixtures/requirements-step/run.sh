@@ -28,6 +28,9 @@
 #   (e) requirements.md names architecture-impact.md and architecture_impact:.
 #   (f) SKILL.md Rule 8 lightweight row names `requirements`.
 #   (g) validate-draft-stamps.sh DRAFTS= contains requirements-context.
+#   (h) every step file carrying the prior-decision disposition vocabulary (derived,
+#       at least two) agrees on the four members and states the deferred-unfiled
+#       filing mandate; two committed mutants on a copy of the steps dir.
 #
 # Usage: run.sh
 # Exit:  0 = every assertion holds (or subject not installed), 1 = a regression,
@@ -280,6 +283,87 @@ else
   probe_bad "(g)" "near-miss probe failed to pass a well-formed line"
 fi
 
+# --- arm (h): the prior-decision disposition vocabulary ---
+# The CARRIER set is derived, never hand-listed: every step file whose text, with
+# its lines joined, carries the anchor `one-line disposition per hit (`. Members are
+# the backtick tokens inside THAT parenthetical only -- discovery.md names two of
+# them again in its cost paragraph, and a whole-file grammar would count those.
+# Joining lines first is what makes a reflow a non-event: the two carriers wrap at
+# different widths. Three conjuncts, because agreement alone cannot fail on a tree
+# where EVERY carrier dropped the member: >=2 carriers, identical sets, and the set
+# is exactly the four members with `deferred-unfiled` among them. A fourth conjunct
+# keys the member's mandate (file it before the gate passes) in every carrier.
+DISPO_ANCHOR='one-line disposition per hit ('
+DISPO_WANT='deferred-unfiled
+not relevant
+still binding
+superseded'
+DISPO_MANDATE='MUST be filed as a carry-over backlog item in `carry-over-backlog.md` before the gate passes'
+flat_text() { tr '\n' ' ' < "$1" | tr -s ' '; }
+disposition_set() { # <file> -> sorted members, one per line; nothing if no anchor
+  local flat after
+  flat="$(flat_text "$1")"
+  case "$flat" in *"$DISPO_ANCHOR"*) ;; *) return 0 ;; esac
+  after="${flat#*"$DISPO_ANCHOR"}"
+  { grep -oE '`[^`]+`' <<<"${after%%)*}" || true; } | tr -d '`' | LC_ALL=C sort
+}
+DISPO_WHY=""
+dispositions_agree() { # <steps-dir> -> 0 when every conjunct holds; DISPO_WHY says which failed
+  local f s first="" n=0 have
+  DISPO_WHY=""
+  for f in "$1"/*.md; do
+    [ -f "$f" ] || continue
+    s="$(disposition_set "$f")"
+    [ -n "$s" ] || continue
+    n=$((n + 1))
+    if [ "$n" -eq 1 ]; then first="$s"; have="$(basename "$f")"
+    elif [ "$s" != "$first" ]; then
+      DISPO_WHY="carriers disagree: $have has [$(tr '\n' ',' <<<"$first")] but $(basename "$f") has [$(tr '\n' ',' <<<"$s")]"
+      return 1
+    fi
+    case "$(flat_text "$f")" in *"$DISPO_MANDATE"*) ;; *)
+      DISPO_WHY="$(basename "$f") carries the vocabulary but not the deferred-unfiled filing mandate"
+      return 1 ;;
+    esac
+  done
+  [ "$n" -ge 2 ] || { DISPO_WHY="only $n carrier(s) of the anchor found; agreement over fewer than two is vacuous"; return 1; }
+  [ "$first" = "$DISPO_WANT" ] || { DISPO_WHY="carriers agree on [$(tr '\n' ',' <<<"$first")], not the four-member set"; return 1; }
+  return 0
+}
+mk_carrier() { # <file> <parenthetical-members> <wrap: one|two> [extra prose]
+  if [ "$3" = one ]; then
+    printf 'Cite the hit count, and a one-line disposition per hit (%s). %s\nA hit dispositioned `deferred-unfiled` %s, and the item is cited.\n' "$2" "${4:-}" "$DISPO_MANDATE" > "$1"
+  else
+    printf 'Cite the hit count, and a one-line disposition per\nhit (%s).\n%s A hit dispositioned\n`deferred-unfiled` %s, and\nthe item is cited.\n' "$2" "${4:-}" "$DISPO_MANDATE" > "$1"
+  fi
+}
+M4='`superseded` / `still binding` / `not relevant` / `deferred-unfiled`'
+M3='`superseded` / `still binding` / `not relevant`'
+dprobe() { # <label> <expect: fire|quiet> <dir>
+  if dispositions_agree "$3"; then got=quiet; else got=fire; fi
+  if [ "$got" = "$2" ]; then probe_ok "(h) $1 -> $got${DISPO_WHY:+ ($DISPO_WHY)}"
+  else probe_bad "(h) $1" "expected $2, got $got${DISPO_WHY:+ ($DISPO_WHY)}"; fi
+}
+for w in nm-reflow off-one off-all off-prose off-single off-mandate; do mkdir -p "$PROBE/h-$w"; done
+mk_carrier "$PROBE/h-nm-reflow/a.md" "$M4" one
+mk_carrier "$PROBE/h-nm-reflow/b.md" "$M4" two 'Other prose names `superseded` again.'
+printf 'No anchor here, only `superseded`.\n' > "$PROBE/h-nm-reflow/c.md"
+mk_carrier "$PROBE/h-off-one/a.md" "$M4" one
+mk_carrier "$PROBE/h-off-one/b.md" "$M3" two
+mk_carrier "$PROBE/h-off-all/a.md" "$M3" one
+mk_carrier "$PROBE/h-off-all/b.md" "$M3" two
+mk_carrier "$PROBE/h-off-prose/a.md" "$M4" one
+mk_carrier "$PROBE/h-off-prose/b.md" "$M3" two 'Elsewhere `deferred-unfiled` is named in prose.'
+mk_carrier "$PROBE/h-off-single/a.md" "$M4" one
+mk_carrier "$PROBE/h-off-mandate/a.md" "$M4" one
+printf 'Cite the hit count, and a one-line disposition per hit (%s).\n' "$M4" > "$PROBE/h-off-mandate/b.md"
+dprobe "near-miss: same four members, different wrap, extra prose tokens, a non-carrier" quiet "$PROBE/h-nm-reflow"
+dprobe "offender: one carrier dropped deferred-unfiled" fire "$PROBE/h-off-one"
+dprobe "offender: every carrier dropped deferred-unfiled (agreement alone would pass)" fire "$PROBE/h-off-all"
+dprobe "offender: deferred-unfiled in prose but not in the parenthetical" fire "$PROBE/h-off-prose"
+dprobe "offender: a single carrier" fire "$PROBE/h-off-single"
+dprobe "offender: a carrier without the filing mandate" fire "$PROBE/h-off-mandate"
+
 echo "requirements-step: $probes self-probe assertion(s), $fails failed"
 if [ "$fails" -gt 0 ]; then
   echo "FIXTURE ERROR: a self-probe could not discriminate offender from near-miss; corpus arms below would not be trustworthy." >&2
@@ -426,6 +510,41 @@ if [ -n "$DRAFTSTAMPS" ] && [ -f "$DRAFTSTAMPS" ]; then
   fi
 else
   bad "(g) validate-draft-stamps.sh not found"
+fi
+
+# --- (h) the disposition vocabulary agrees across every derived carrier ---
+if dispositions_agree "$STEPS"; then
+  ok "(h) every step file carrying the prior-decision disposition vocabulary agrees on the four members, and carries the deferred-unfiled filing mandate"
+else
+  bad "(h) prior-decision disposition vocabulary: $DISPO_WHY"
+fi
+# Mutants, each on a COPY of the steps dir, each guarded by cmp -s so a sed that
+# matched nothing reads DID NOT APPLY rather than as a kill.
+DISPO_CARRIERS=""
+for f in "$STEPS"/*.md; do [ -n "$(disposition_set "$f")" ] && DISPO_CARRIERS="$DISPO_CARRIERS $(basename "$f")"; done
+set -- $DISPO_CARRIERS
+if [ "$#" -lt 2 ]; then
+  bad "(h) mutants: fewer than two carriers derived ($#), nothing to mutate"
+else
+  MUT="$(mktemp -d)"
+  for which in one all; do
+    mkdir "$MUT/$which"; cp -R "$STEPS" "$MUT/$which/steps"
+    MS="$MUT/$which/steps"
+    applied=1
+    for c in "$@"; do
+      [ "$which" = one ] && [ "$c" != "$1" ] && continue
+      sed 's| / `deferred-unfiled`)|)|' "$STEPS/$c" > "$MS/$c"
+      cmp -s "$STEPS/$c" "$MS/$c" && applied=0
+    done
+    if [ "$applied" -eq 0 ]; then
+      bad "(h) MUTANT drop-from-$which DID NOT APPLY"
+    elif dispositions_agree "$MS"; then
+      bad "(h) MUTANT drop-from-$which SURVIVED: the arm passed with deferred-unfiled removed"
+    else
+      ok "(h) MUTANT drop-from-$which killed: $DISPO_WHY"
+    fi
+  done
+  rm -rf "$MUT"
 fi
 
 echo
