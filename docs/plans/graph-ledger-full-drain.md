@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 515..572. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 502..564. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -76,7 +76,7 @@ invoked by peer handoff. The two held batch-174 branches shipped as `v0.671.0` (
 archive **343 -> 351**, net closed minus filed **7**. R5 floors set to the measured 18 sh receipts
 over 39 live entries.
 
-**THE OPENING SWEEP AND THE WHOLE-BACKLOG ADJUDICATION.** Live 18 on 19 qualifying refs, unfiled 1
+**THE OPENING SWEEP AND THE WHOLE-BACKLOG ADJUDICATION.** Live 18 on 19 qualifying refs at the batch open (25 at its close), unfiled 1
 (`PC-S309-VALIDATE-MANDATORY-RULES-CHECK5-TEST-ONLY-WEB-DIFF-FALSE-FAIL`, shipped at 0.542.0), worklist
 2 (`BL-145` and `BL-389`, both citing S336), TERMINAL 153, DISCHARGED 15 overlap-corrected. Four hands
 adjudicated all 46 live entries: 4 CLOSE, 5 PARTIAL, 37 LIVE, 0 dead premise. **An archive-side
@@ -498,69 +498,6 @@ the prefix grep's 0). Do not restate it.
 
 Batch 169's next-work list, delivery gap and check-34 finding are spent: batch 170's block above
 replaces all three.
-
-**BATCH 169 SHIPPED `v0.660.0` (`feb95866`, #895) AND CLOSED NOTHING. IT DISCHARGES NO CONSUMER
-CANDIDATE.** It was invoked by peer handoff and took `BL-360`'s non-bootstrapping half with `BL-356`
-as rider. The opening sweep: live 28, unfiled 12 (batch 168's "15" counted its three filings before
-they were cited), worklist 5 (the same self-disqualifying rows), TERMINAL 147, DISCHARGED 9, ledger
-md5 `34f7e60e…` on the consumer's `main`, every control at its expected value. Of the 12 unfiled,
-`--is-core` routes 2 to core and both are spent: `PC-S309-VALIDATE-MANDATORY-RULES-CHECK5-…` shipped
-in `v0.542.0` and `PC-S309-PRE-PUSH-FLAG-MISMATCH-…` is superseded in its own entry. Live **100 ->
-100**, archive **262 -> 262**. The exit-0 receipt set is batch 168's nine, compared by id.
-
-**`BL-360`: SEVEN RECONCILE SCRIPTS REFUSE AN INPUT THAT COULD NOT BE STAGED.** `hard-blockers.sh`,
-`relabel-extension-checks.sh`, `retired-layer-contract.sh`, `retired-tokens.sh`,
-`warn-shadowed-local-validators.sh`, `readopt-override.sh` and `derivation-differential.sh` stage
-each input to a file whose write status is read, or test membership with `case`. The census found
-five tier-A sites the entry never listed, and refuted half its premise: a read-only `$TMPDIR` does
-not force the failure on bash 3.2. `BL-356` bullets 1 and 2 exit 2 on an unreadable rulebook list.
-**Neither entry closes**: `BL-360`'s bootstrapping half remains, and `BL-356`'s third bullet is a
-PRODUCER defect — `preclassify.sh` and `lib.sh` C-quote a non-ASCII path before `retired-tokens.sh`
-reads it, so the `rt_blob` change is hardening only. Healthy output byte-identical to `322ef42c` on
-three consumer ranges, 30 of 30 runs each, with every converted site instrumented.
-
-**TWO TIP-ADVERSARY ROUNDS EACH FOUND A REGRESSION IN THE SAME NEW LINE, BOTH FIXED BEFORE MERGE.**
-Reading a staged blob FILE instead of a `$( )`-captured variable changes what the reader sees: the
-capture had silently dropped every NUL. Round 1: BSD `grep` read a NUL-bearing blob as binary, rows
-lost or false at rc 0; its proposed `grep -a` was refuted because it reads a NUL before `#` as live
-code. Round 2: the `tr -d '\000'` that replaced it refused invalid UTF-8 under a UTF-8 locale; it is
-now `LC_ALL=C tr` alone. **Converting a here-string to a staged file is not byte-neutral — test NUL
-and invalid UTF-8 on every converted reader.** Gate on `c9bcbf7d`: 22 phases, 24 PASS, 0 FAIL,
-1 SKIP (pole, pool width 6), 214 ok, all three changed fixtures `ok` by name against an
-impossible-name control of 0, `ls-remote` matching, squash tree identical to the gated tip.
-
-**ONE READ-SET TRACE IS OWED**: `procsub-staged-refusal` now reads five more reconcile scripts, and
-`retired-layer-contract` and `retired-layer-passage` copy the reconcile directory. `sudo bash
-core/scripts/derive-fixture-readsets.sh --list "procsub-staged-refusal retired-layer-contract
-retired-layer-passage"` on a checkout of `origin/main`. Batch 168's two owed traces were run this
-batch and shipped in the release.
-
-**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
-- The unfiled set holds no new core filing. `BL-360`'s remaining half is the strongest
-  distribution-internal work: `apply.sh`, `preclassify.sh`, `ledger-reverify.sh`,
-  `self-update-gate.sh`, `self-update-fixtures.sh` (`:655`, `:961`) and `emit-report.sh` (`:842`) —
-  each BOOTSTRAPPING, each shipping alone. lib.sh's three emitters and `BL-356` bullet 3 shipped in
-  v0.661.0.
-- Filings owed when a close frees room, in order: the `theirs`-ref/contract-blob DEFECT carried in
-  `BL-360`; then the four batch-168 NOTEs; then this batch's NOTEs — `unregistered-drift.sh:715,738`
-  read a stale previous iteration on a failed `read` (HARD either way), `register-drift.sh:472`'s
-  staging failure lands in `refuse_fixed` with wrong advice, `hard-blockers --check` exit 1 now
-  means both "omitted" and "refused", and a differential ok-text in `procsub-staged-refusal` says
-  "NUL-bearing" for its two Latin-1 cells.
-- `BL-230` needs a mechanism for E1, E2 and E9.
-
-**THE DELIVERY GAP IS ONE RELEASE, AND THE CONSUMER'S `main` LAGS ITS OWN CARRY-OVER BRANCH.** The
-consumer pulled 0.659.0 on `ai-dlc/carry-over/phase-315-aggregator-ui-cutover` (`111cf45ae`, #1124,
-stamp `322ef42c`); its `main` still reads 0.658.0. Against `VERSION` 0.660.0 the gap is one release.
-The only bootstrapping file in `322ef42c..origin/main` is the update `SKILL.md`, whose change is
-three prose sentences naming the new exit meanings; 0 of 12 `core/` rows are mode-only. PENDING is
-0: this release names no `PC-` id. The three batch-168 ids are still live in the consumer's ledger,
-unrotated after its pull. The banked ruling stands: report the gap and write no runbook.
-
-**THE CONSUMER'S SPRINT-315 `scope_confirmed_cite: SHA256: <hex>` STILL FAILS CHECK 34** —
-`_bmad-output/pipeline-snapshot.md:13`, re-confirmed this batch. Report it; never write it.
-
-Batch 168's next-work list and delivery gap are spent: batch 169's block above replaces both.
 
 ### Derive the state; do not trust the numbers below
 
@@ -1022,11 +959,12 @@ Derive the gap; it is not optional bookkeeping:
 ```
 awk -F': ' '/^version:/{print $2; exit}' /Users/n8/git/graph/.claude/.ai-dlc-version   # installed
 cat VERSION                                                                            # shipped
-# per discharged id, the release that FIRST named it -- named_absorbed() takes tail -1.
+# per discharged id, the oldest RELEASE naming it. `-- VERSION` keeps only commits that bump it:
+# a docs commit naming an id first read S336 as 0.433.0 where 0.673.0 shipped it.
 # Loop over the DISCHARGED set derived above; the id is a variable, never a literal placeholder
 # (a `<id>` typed verbatim matches the string "<id>" and returns a real, meaningless commit).
 for id in $(comm -12 /tmp/live.txt /tmp/closed_here); do
-  sha="$(git log --format='%H' -F --grep="$id" origin/main | tail -1)"
+  sha="$(git log --format='%H' -F --grep="$id" origin/main -- VERSION | tail -1)"
   printf '%s\t%s\n' "$id" "$( [ -n "$sha" ] && git show "${sha}:VERSION" || echo UNNAMED )"
 done                                                                                   # control: an impossible id prints UNNAMED
 ```
