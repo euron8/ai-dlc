@@ -15,6 +15,30 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.673.0] - 2026-09-30
+
+Batch 176's third release. It ships alone because the update skill runs the pull that delivers
+it, so it protects only the pull after that one. Discharges one consumer candidate.
+
+### Consumer candidate
+
+- **`PC-S336-STEP-1-AUTOPUSH-IS-THE-UNGUARDED-TWIN-OF-THE-PUSH-STEP-2-HARDENED`** (`BL-389`). A
+  failed or rejected step-1 auto-push no longer ends the run. It is reported, the branch is marked
+  UN-SYNCED for the invocation, step 2 defers (no self-update branch, no slice, no stamp advanced),
+  the dry-run report still runs, and step 6 refuses `apply`. Step 6 never pushes: it fetches,
+  recomputes, and refuses `apply` on any branch not in sync, so a rejected push reads as diverged
+  rather than as ahead-only. This takes the candidate's remedy (ii) and not (i): running
+  `self-update-gate.sh` before the step-1 push was built and refuted, because the gate's coupling
+  arms defer on every check-adding range before its push probe runs, which would have refused a
+  push the hook accepts. So the candidate's non-fatal receipt is discharged and its gate-in-span
+  receipt stays unsatisfied by design.
+
+### Fixtures
+
+- **`update-preflight-push`** (new, ships) pins the step-1 push-failure bullets, step 1's and step 2's
+  UN-SYNCED paragraphs, and the step-6 re-confirm bullet by required phrase, in both install layouts.
+  Twelve committed mutants, each killed by its own arm alone.
+
 ## [0.672.0] - 2026-09-30
 
 Batch 176's second release. It ships alone because `layer-drift.sh` classifies the pull that

@@ -2763,7 +2763,52 @@ non-fatal when the range does not touch the rejecting gate. Because step 1 runs 
 protects only the pull after the one that delivers it. Close on a structural trace plus a fixture keyed on
 the step-1 emission lines (operator ruling: no model replay closes a step-file fix).
 
-verify: manual
+**Remedy taken at batch 176: no gate at step 1; a failed step-1 push is non-fatal and `apply` is
+refused at step 6.** Running `self-update-gate.sh` at step 1 was refuted: its coupling arms emit DEFER
+and `exit 0` before its `git rev-parse --git-path hooks/pre-push` probe is reached (re-read in the gate at batch 176), and DEFER is the expected verdict on any check-adding range, so the
+verdict is not a push verdict. Step 1 writes nothing, so the orphaned-branch hazard that gate exists
+for cannot arise there. The step-1 push bullets now mark the branch UN-SYNCED and continue; step 2
+DEFERS on an UN-SYNCED branch (no branch cut, no slice written, no stamp advanced), because a local
+self-update commit there is the orphan shape step 2's own gate paragraph describes; step 6's
+re-confirm bullet no longer auto-pushes, fetches before recomputing ahead/behind, and is the one
+place `apply` is refused. The receipt reads five units, each joined across its continuation lines, whitespace-collapsed,
+lowercased, with a negated fatal verb ("not stop", "not a halt") rewritten to `negfatal` first. It
+exits 9 unless each of the three bullet anchors selects exactly one unit, and 1 if either added
+paragraph is absent. Every arm REQUIRES the phrase the fix states, rather than only forbidding a
+closed word list: a step-1 failure bullet needs a non-fatal phrase, a continue phrase and UN-SYNCED
+and no fatal phrase; step 6 needs its no-push sentence, no push instruction, and UN-SYNCED with a
+stop/refuse of `apply` in one clause, and naming the remedy command `git push -u origin <branch>`
+is allowed; the step-1 UN-SYNCED paragraph needs "to the dry-run" and "defer" and no fatal phrase;
+the step-2 UN-SYNCED clause must itself say DEFER and nothing in it may push or commit locally.
+The first grammar, keyed on a closed stop-word list and the literal `git push`, passed wA-wF below
+and failed rG and rH. `core/fixtures/update-preflight-push` carries the same regexes as six arms.
+Scored in fresh `mktemp -d` trees, all 105 variant pairs `cmp`-distinct; the fixture column is its
+six corpus arms run against the variant as resolved subject, cwd `/` (its mutant arms anchor on the
+fix's own lines and report DID NOT APPLY on any other text, so its exit is not the column):
+
+| variant | want | receipt | fixture arms |
+|---|---|---|---|
+| live (`origin/main`, pre-fix) | 1 | 1 | 111111 |
+| the fix | 0 | 0 | 000000 |
+| wrong1: ahead-only failure reworded to "STOP the run" | 1 | 1 | 010000 |
+| wrong2: step 6's no-push sentence replaced by "auto-push to re-sync" | 1 | 1 | 001000 |
+| rightB: step-6 bullet respelled ("refuse `apply`", "Nothing is published") | 0 | 0 | 000000 |
+| wrapped: all five units reflowed so no anchor sits on one line | 0 | 0 | 000000 |
+| wA: ahead-only "and halt the run" | 1 | 1 | 010000 |
+| wB: no-upstream "and abort" | 1 | 1 | 100000 |
+| wC: step 6 "push it to re-sync as step 1 does and continue" | 1 | 1 | 001000 |
+| wD: step 6 "do not STOP `apply`" | 1 | 1 | 000100 |
+| wE: step-2 UN-SYNCED sentence "pushes anyway" | 1 | 1 | 000001 |
+| wE': the adversary's "push anyway" in the step-2 cycle bullet | non-zero | 9 | 000003 |
+| wF: UN-SYNCED paragraph "ends the run here" | 1 | 1 | 000010 |
+| rG: "does NOT stop the run" | 0 | 0 | 000000 |
+| rH: step 6 names `git push` / `git push -u origin <branch>` | 0 | 0 | 000000 |
+| no `SKILL.md` at the root | 9 | 9 | SKIP |
+
+wE' puts a second "On a branch step 1 left UN-SYNCED" sentence in the file, so the step-2 anchor
+selects two units: 9 from the receipt and STALE from the fixture, neither a pass.
+
+verify: sh P=core/skills/ai-dlc-update/SKILL.md; [ -f "$P" ] || exit 9; grep -q 'AUTO-PUSH' "$P" || exit 9; LC_ALL=C awk 'BEGIN { F = "(^|[^a-z])(stop|stops|stopped|halt|halts|halted|abort|aborts|terminate|terminates)([^a-z]|$)|run ends|ends the run|end the run|do not proceed|does not proceed"; NF_ = "not fatal|non-fatal|negfatal"; C = "continue|keep going|carry on|carries on|(proceed|proceeds|continues) to the dry-run"; NP = "do not push|does not push|never push|no push|nothing is pushed|nothing is published|pushes nothing|publishes nothing"; PU = "auto-push|push it|push the branch|to re-sync|push anyway|pushes anyway" } function pf() { return !(l ~ F) && l ~ NF_ && l ~ C && l ~ /fail|reject/ && index(l, "un-synced") } function fin() { if (t == "") return; gsub(/[*]/, "", t); gsub(/[ \t]+/, " ", t); l = tolower(t); t = ""; gsub(/(not|never|no|nor) (a )?(stop|halt|abort|end|terminate)/, "negfatal", l); if (index(l, "remote exists but the current branch has no upstream")) { na++; if (!pf()) bad = 1 } if (index(l, "branch ahead of its upstream")) { nb++; if (!pf()) bad = 1 } if (index(l, "re-confirm the step-1 git preflight")) { nc++; if (l ~ PU || !(l ~ NP) || !(l ~ /un-synced[^.;]*(stop|refuse)[^.;]*apply/)) bad = 1 } if (index(l, "one whose step-1 auto-push failed")) { np++; if (l ~ F || !(l ~ /(proceed|proceeds|continue|continues) to the dry-run/) || !index(l, "defer")) bad = 1 } if (index(l, "on a branch step 1 left un-synced")) { ns++; if (!(l ~ /left un-synced[^.;]*defer/) || l ~ PU || l ~ /commits? (it )?locally/) bad = 1 } } /^[ \t]*- / { fin(); t = $0; next } /^[ \t]+[^ \t]/ { t = (t == "" ? $0 : t " " $0); next } { fin() } END { fin(); if (na != 1 || nb != 1 || nc != 1 || np > 1 || ns > 1) exit 9; if (np != 1 || ns != 1) exit 1; exit bad }' "$P"
 
 ## BL-390 — an authorization whose source transcript has been pruned reads identically to one that was never given
 

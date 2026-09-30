@@ -191,16 +191,19 @@ prose is itself generated rather than composed.
    - **Remote exists but the current branch has no upstream** (never pushed) →
      **AUTO-PUSH**: run `git push -u origin <branch>` to publish it, then proceed.
      Its commits are absent from `origin`, so a branch cut off it and merged to
-     `origin` would strand them; publishing first removes the hazard. If the push
-     fails (auth, network, protected branch, remote rejected) → STOP and report
-     the exact `git push` error and remedy; do not proceed on an un-synced branch.
+     `origin` would strand them; publishing first removes the hazard. **A failed
+     push is NOT fatal** (auth, network, protected branch, remote rejected): report
+     the exact `git push` error and its remedy in one line, mark the branch
+     **UN-SYNCED** for this invocation, and continue — see the UN-SYNCED paragraph
+     below for what that state may and may not reach.
    - **Branch AHEAD of its upstream** (unpushed commits) → **AUTO-PUSH**: run
      `git push` to bring `origin` in sync, then proceed. Ahead-only means the
      remote has not moved, so this is a clean fast-forward on `origin` and the
-     exact remedy the operator would run by hand. If the push is rejected
-     (e.g. the remote advanced between check and push, making the branch actually
-     diverged) or otherwise fails → STOP and report the `git push` error; the
-     branch is then no longer ahead-only and needs a pull/rebase first.
+     exact remedy the operator would run by hand. **A rejected or failed push is
+     NOT fatal**: report the `git push` error in one line, mark the branch
+     **UN-SYNCED** for this invocation, and continue. A rejection because the
+     remote advanced between check and push means the branch is now diverged, so
+     the remedy to report is the diverged one — pull/rebase, then re-invoke.
    - **Branch BEHIND its upstream** → STOP; fast-forward/pull first, so the
      reconcile runs against current `origin`, not a stale local base. (Not
      auto-resolved: a pull can conflict and is not a push.)
@@ -217,7 +220,16 @@ prose is itself generated rather than composed.
    ahead/behind counts and the `git pull`/rebase remedy in the STOP so the
    operator knows what to run, then re-invoke. A clean tree on a branch in sync
    with its upstream — reached directly or via the auto-push — is the only state
-   that proceeds.
+   that proceeds to step 2's push or to `apply`.
+
+   **An UN-SYNCED branch, one whose step-1 auto-push failed on THIS invocation,
+   proceeds to the dry-run only.** Step 2 DEFERS on it: it cuts no self-update
+   branch, writes no slice, leaves `skill_version`/`skill_commit` where they are, and
+   reports that it deferred because step 1 could not sync. Steps 3–5 run and write the
+   report; `apply` is refused at step 6's re-confirm bullet, which is the one place
+   this state refuses anything. A failed push wrote nothing and a deferred step 2
+   writes nothing, so nothing is stranded by continuing to the report; the hazard is a
+   branch cut on top of it, and steps 2 and 6 are where such a branch would be cut.
 2. **Self-update — an AUTONOMOUS, self-contained commit→merge cycle (before any
    rulebook classify/apply).** You run FROM a copy of this skill inside the
    consumer; a pull can include a change to that copy, so the logic executing the
@@ -382,6 +394,17 @@ prose is itself generated rather than composed.
 
    If the slice is EMPTY after that subtraction, say so in one line and continue to step 3.
 
+   **On a branch step 1 left UN-SYNCED, step 2 DEFERS a non-empty slice, before the gate.**
+   Do not run `reconcile/self-update-gate.sh`, do not cut the self-update branch, do not write
+   the slice, and do not advance `skill_version`/`skill_commit`. Report in one line that step 2
+   deferred because step 1 could not sync the branch, then continue to step 3. The slice is
+   carried to the gated apply, and step 6 refuses that apply on this state, so nothing records
+   the slice for later: the next invocation, after the operator syncs the branch, derives it
+   again. A local commit here is the orphan `PC-S308` describes (a stamp advanced on a commit
+   that never merges), left checked out on a branch the next invocation's step 1 would publish
+   without the gate. No self-update landed, so the re-invoke rule below does not fire and
+   steps 3–5 run on this invocation's logic.
+
    If NON-EMPTY, **first run `reconcile/self-update-gate.sh <dist> <base> <theirs> <consumer>`.**
    The machinery slice includes `core/scripts/*`, and the consumer's own `.githooks/pre-push`
    INVOKES several of those scripts — so this cycle can install a check that then fails the very
@@ -434,7 +457,8 @@ prose is itself generated rather than composed.
 
    **THE APPROVAL ARTIFACT FOR THIS AUTONOMOUS CYCLE IS THE PAIR OF RECORDS, AND IT IS THE ONLY
    ONE.** This cycle cuts a branch, writes the machinery slice, pushes and auto-merges with no
-   operator gate, so nothing outside the operating agent's own narration records the decision that
+   operator gate, only when step 1 reached sync (on an UN-SYNCED branch step 2 defers and
+   writes nothing), so nothing outside the operating agent's own narration records the decision that
    permitted the write. The gate now writes
    `_bmad-output/ai-dlc-update/self-update-gate-<ts>.md` — its verdict, the rows it emitted and the
    range it classified — and `reconcile/self-update-fixtures.sh` writes its own log beside it.
@@ -488,10 +512,12 @@ prose is itself generated rather than composed.
      **word-split the derived list explicitly**, because an unquoted variable holding a
      newline-joined list arrives as ONE argument under zsh —
      **and require green BEFORE the push**, push,
-     open a PR, and **auto-merge (squash, delete branch)** — no operator gate (the
-     step-1 git preflight confirmed the branch is in sync with `origin`, so this
-     merge cannot strand local commits). If there is no remote / push fails,
-     commit locally and note it; do not block the run. Advancing `skill_version` here is what keeps the stamp an honest record
+     open a PR, and **auto-merge (squash, delete branch)** — no operator gate.
+     **That holds only when step 1 reached sync**: the preflight then confirmed the
+     branch is in sync with `origin`, so this merge cannot strand local commits.
+     This bullet is never reached on an UN-SYNCED branch: step 2 deferred above,
+     before the gate. If there is no remote / push fails, commit locally and note it; do
+     not block the run. Advancing `skill_version` here is what keeps the stamp an honest record
      of the installed tool version — it is bookkeeping tied to the (already
      autonomous) self-update, and never touches `version`/`commit` (the rulebook
      base stays put until a gated apply).
@@ -1445,11 +1471,21 @@ prose is itself generated rather than composed.
      diff, STOP and report — let the operator stash/commit first. (A dirty tree
      unrelated to the rulebook may be fine; when in doubt, stop.)
    - Re-confirm the step-1 git preflight still holds: the branch is in sync with
-     its upstream. Time may have passed since the dry-run, so if the branch has
-     since drifted AHEAD of `origin` (or gained an upstream-less state),
-     **auto-push** to re-sync exactly as in step 1 and continue; if it drifted
-     BEHIND or diverged, STOP with the `git pull`/rebase remedy — the reconcile
-     branch cut here must sit on a base that matches `origin`.
+     its upstream. **Do not push here, ever.** Time may have passed since the
+     dry-run, and a push rejected because the remote advanced leaves the local
+     upstream ref stale, so the unfetched counts read ahead-only when the branch is
+     diverged. **Fetch first**: `git fetch <remote>` for the remote the upstream
+     names, then recompute the ahead/behind counts with step 1's detect commands.
+     An upstream-less branch has nothing to fetch and is refused below as
+     upstream-less; a fetch that fails STOPs `apply` with the fetch error. If the
+     branch is not in sync with its upstream — ahead, behind, diverged or
+     upstream-less — or step 1 left it UN-SYNCED on this invocation, **STOP
+     `apply`** and report the ahead/behind counts and the remedy: the push step 1
+     names for ahead-only or upstream-less, `git pull`/rebase for behind or
+     diverged; then re-invoke with `apply`. This is the ONE place a failed step-1
+     push refuses anything. A consumer with no remote configured has no upstream
+     to match and is not refused here, exactly as step 1 lets it proceed. The
+     reconcile branch cut here must sit on a base that matches `origin`.
    - `git checkout -b ai-dlc-update/<theirs-version>-reconcile-<ts>` off the
      current branch. ALL step-7 writes land here, so the operator reviews a
      clean diff / opens a PR — never a silently-mutated working branch.
@@ -2567,7 +2603,9 @@ free of pull-only assumptions so the other three jobs can reuse it.
   asking the operator when the field is absent (a legacy stamp).
 - **Self-update** is handled in step 2 as its own autonomous branch→commit→push
   →PR→auto-merge cycle (the skill's files are overwrite-safe upstream tooling, no
-  operator gate), separate from the operator-gated rulebook reconcile (step 8).
+  operator gate), only when step 1 reached sync, separate from the operator-gated
+  rulebook reconcile (step 8). When step 1 could not sync the branch, step 2 defers
+  and writes nothing, and the run continues to the dry-run.
   After it merges the run stops and **automatically re-invokes `/ai-dlc-update`**
   (carrying the operator's original argument) to run the reconcile on the updated
   logic — no operator prompt. The in-flight agent can't hot-reload its own
