@@ -387,17 +387,17 @@ fi
 
 # THE SCOPE OF THE EXEMPTION. It is a conjunct on Check 2z's guard, not an early return from the
 # hook. A fresh PAUSED tree, as arm 5 seeds one, and a routed transcript so Check 2z has nothing
-# to say either way: what answers must be Check 3's Rule 29 deny, read by its VALUE and not by the
-# bare verdict. Whether a teammate SHOULD be pause-denied is a separate question; this arm holds
-# the answer where the hook put it and does not decide it.
+# to say either way. Check 3 lets a teammate's WRITE through while paused (section 8), so the
+# probe that can see a whole-hook exemption is the teammate's DISPATCH: that must still answer
+# Check 3's Rule 29 deny, read by its VALUE and not by the bare verdict.
 WT="$(seed teampaused paused)"
-OUT="$(drive "$WT" Write "$TR_ROUTED" "$WT/_bmad-output/planning-artifacts/product-brief.md" "$AG")"
+OUT="$(drive "$WT" Agent "$TR_ROUTED" "" "$AG")"
 if denied "$OUT" && is_pause_deny "$OUT"; then
-  ok "TEAMMATE pause: a teammate's artifact write on a PAUSED tree is still denied by Check 3's Rule 29"
+  ok "TEAMMATE pause: a teammate's Agent dispatch on a PAUSED tree is still denied by Check 3's Rule 29"
 elif denied "$OUT"; then
-  bad "TEAMMATE pause: the teammate's paused write was denied by the WRONG check — the reason names no Rule 29, so this arm is reading Check 2z's verdict"
+  bad "TEAMMATE pause: the teammate's paused dispatch was denied by the WRONG check — the reason names no Rule 29"
 else
-  bad "TEAMMATE pause: a teammate's write on a PAUSED tree was ALLOWED. The \`agent_id\` exemption has leaked out of Check 2z into the whole hook, and every check below it is now unreachable for a dispatched teammate."
+  bad "TEAMMATE pause: a teammate's Agent dispatch on a PAUSED tree was ALLOWED. The \`agent_id\` exemption has leaked into the whole hook, and a teammate can spawn work past a waiting operator."
 fi
 
 # AND THE LOG, ON A FRESH TREE so it cannot read another arm's record — the same both-directions
@@ -409,6 +409,95 @@ if grep -q 'ROUTE_DENIED' "$WTL/_bmad-output/pipeline-continuation-log.md" 2>/de
   bad "TEAMMATE log: the teammate's ALLOWED Write still recorded a ROUTE_DENIED event — the audit that reads this file counts a denial that did not happen, and every nonzero count in it is meaningless"
 else
   ok "TEAMMATE log: the teammate's allowed Write records no ROUTE_DENIED event"
+fi
+
+# =============================================================================
+# 8. CHECK 3 (RULE 29) AND THE TEAMMATE — the write goes through, the dispatch does not.
+# =============================================================================
+# The pause flag lands while teammates the lead already dispatched are mid-derive. Check 3 lets a
+# teammate's WRITE under _bmad-output/ through and logs it as ACK_TEAMMATE_WRITE; the teammate's
+# DISPATCH is still denied, and the LEAD is denied exactly as before. This is an approximation of
+# quiesce, not quiesce: the hook has no record of what was in flight. Every cell has its twin in
+# this section, one property apart, on the same routed transcript so Check 2z has nothing to say.
+PW="$(seed pausedteam paused)"
+PFP="$PW/_bmad-output/planning-artifacts/s7/prd.md"
+OUT="$(drive "$PW" Write "$TR_ROUTED" "$PFP" "$AG")"
+if denied "$OUT"; then
+  bad "PAUSE teammate write: a dispatched teammate's in-flight Write on a PAUSED tree was DENIED — the artifact it was mid-derive on is left half-amended"
+else
+  ok "PAUSE teammate write: a dispatched teammate's Write under _bmad-output/ on a PAUSED tree is ALLOWED"
+fi
+PLOG="$PW/_bmad-output/pipeline-continuation-log.md"
+n_tw="$(grep -c '^## .*-- ACK_TEAMMATE_WRITE' "$PLOG" 2>/dev/null)" || n_tw=0
+n_ad="$(grep -c '^## .*-- ACK_DENIED' "$PLOG" 2>/dev/null)" || n_ad=0
+if [ "$n_tw" = 1 ] && [ "$n_ad" = 0 ] && grep -qF -- "- Agent: $AG" "$PLOG" && grep -qF -- "- File: $PFP" "$PLOG"; then
+  ok "PAUSE teammate log: the allowed write records one ACK_TEAMMATE_WRITE row naming the agent and the file, and no ACK_DENIED"
+else
+  bad "PAUSE teammate log: expected 1 ACK_TEAMMATE_WRITE row carrying '- Agent: $AG' and '- File: $PFP' and 0 ACK_DENIED; got $n_tw / $n_ad"
+fi
+
+OUT="$(drive "$PW" Agent "$TR_ROUTED" "" "$AG")"
+if denied "$OUT" && is_pause_deny "$OUT"; then
+  ok "PAUSE teammate spawn: the same teammate's Agent dispatch on the same PAUSED tree is still denied by Rule 29"
+else
+  bad "PAUSE teammate spawn: a teammate's Agent dispatch on a PAUSED tree was not Rule-29-denied — the teammate exemption covers dispatch, and a teammate can spawn work past a waiting operator"
+fi
+
+# THE LEAD TWIN: the identical Write with no `agent_id`, on a FRESH paused tree so its log is its own.
+LW="$(seed pausedlead paused)"
+LFP="$LW/_bmad-output/planning-artifacts/s7/prd.md"
+OUT="$(drive "$LW" Write "$TR_ROUTED" "$LFP")"
+if denied "$OUT" && is_pause_deny "$OUT"; then
+  ok "PAUSE lead write: the identical Write with NO \`agent_id\` is still denied by Rule 29, so the exemption does not cover the lead"
+else
+  bad "PAUSE lead write: the lead's Write on a PAUSED tree was not Rule-29-denied — the pause has lost its teeth for the actor it exists to stop"
+fi
+LLOG="$LW/_bmad-output/pipeline-continuation-log.md"
+if grep -q '^## .*-- ACK_DENIED' "$LLOG" 2>/dev/null && grep -qF -- '- Agent: <lead>' "$LLOG" && grep -qF -- "- File: $LFP" "$LLOG"; then
+  ok "PAUSE lead log: the ACK_DENIED row names the actor as the lead and carries the denied file_path, so the denial is attributable"
+else
+  bad "PAUSE lead log: the ACK_DENIED row is missing, or carries no '- Agent: <lead>' / '- File: $LFP' line — a denial nobody can attribute"
+fi
+
+# THE `--agent` LEAD: `agent_type` and no `agent_id`. An exemption keyed on `agent_type` would let
+# this lead write straight through a pause.
+OUT="$(drive "$LW" Write "$TR_ROUTED" "$LFP" TYPE-ONLY)"
+if denied "$OUT" && is_pause_deny "$OUT"; then
+  ok "PAUSE agent-flag lead: a lead carrying \`agent_type\` and NO \`agent_id\` is still Rule-29-denied"
+else
+  bad "PAUSE agent-flag lead: a \`--agent\` lead's Write on a PAUSED tree was allowed — the exemption keys on \`agent_type\`"
+fi
+
+# NotebookEdit names its path `notebook_path`. The lead's notebook under _bmad-output/ must be
+# denied like any other write, and the teammate's allowed.
+nb() { # <tree> [agent_id] -> stdout
+  jq -nc --arg tr "$TR_ROUTED" --arg p "$1/_bmad-output/analysis.ipynb" --arg ag "${2:-}" \
+     '{session_id:"rrr-session",transcript_path:$tr,tool_name:"NotebookEdit",tool_input:{notebook_path:$p,new_source:"x"}}
+      + (if $ag == "" then {} else {agent_id:$ag,agent_type:"general-purpose"} end)' \
+    | CLAUDE_PROJECT_DIR="$1" bash "$HOOK" 2>/dev/null
+}
+OUT="$(nb "$LW")"
+if denied "$OUT" && is_pause_deny "$OUT"; then
+  ok "PAUSE lead notebook: a lead's NotebookEdit (\`notebook_path\`) under _bmad-output/ is Rule-29-denied"
+else
+  bad "PAUSE lead notebook: a lead's NotebookEdit under _bmad-output/ on a PAUSED tree was ALLOWED — the hook reads only \`file_path\` and NotebookEdit carries \`notebook_path\`"
+fi
+OUT="$(nb "$PW" "$AG")"
+if denied "$OUT"; then
+  bad "PAUSE teammate notebook: a teammate's NotebookEdit on a PAUSED tree was DENIED"
+else
+  ok "PAUSE teammate notebook: a teammate's NotebookEdit on a PAUSED tree is ALLOWED"
+fi
+
+# NOT PAUSED -> UNCHANGED: the same teammate Write on an unpaused tree is allowed and writes NO row.
+UW="$(seed unpausedteam)"
+OUT="$(drive "$UW" Write "$TR_ROUTED" "$UW/_bmad-output/planning-artifacts/s7/prd.md" "$AG")"
+if denied "$OUT"; then
+  bad "UNPAUSED teammate: a teammate's Write on an UNPAUSED tree was denied"
+elif grep -q 'ACK_TEAMMATE_WRITE' "$UW/_bmad-output/pipeline-continuation-log.md" 2>/dev/null; then
+  bad "UNPAUSED teammate: an ACK_TEAMMATE_WRITE row was written with no pause flag — the row no longer means a pause was up"
+else
+  ok "UNPAUSED teammate: with no pause flag the teammate's Write is allowed and records no ACK_TEAMMATE_WRITE row"
 fi
 
 echo

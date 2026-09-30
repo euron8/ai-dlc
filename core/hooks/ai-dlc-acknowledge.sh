@@ -26,6 +26,8 @@
 # Denied:  Agent, Skill, TaskCreate, and Write/Edit under _bmad-output/.
 #          Per Rule 28 delegation is the default, so the lead cannot advance
 #          the pipeline without one of these. This is the whole surface.
+#          A dispatched teammate's (agent_id) Write/Edit under _bmad-output/ is
+#          the one exception -- allowed and logged, see Check 3.
 # Allowed: Read, Grep, Glob, Bash, and everything else -- so the lead can
 #          investigate the operator's question, AND so it can always run
 #          `rm -f _bmad-output/pipeline-paused.flag` to resume. Allowing Bash
@@ -45,7 +47,7 @@
 # 1. Place at .claude/hooks/ai-dlc-acknowledge.sh
 # 2. chmod +x .claude/hooks/ai-dlc-acknowledge.sh
 # 3. Add to .claude/settings.json hooks under "PreToolUse" with
-#    "matcher": "Agent|Skill|TaskCreate|Write|Edit"
+#    "matcher": "Agent|Task|Skill|TaskCreate|Write|Edit|MultiEdit|NotebookEdit"
 # 4. Restart Claude Code; verify with /hooks
 
 set -u
@@ -263,8 +265,8 @@ esac
 # because that row is a record of a DENIAL and the shipped fixture holds a nonzero count of them
 # to mean real denials -- a row written for a write that was allowed would make the count
 # meaningless in exactly the way its allow-path arm exists to refuse. Check 3's pause deny
-# below carries no such conjunct and still answers for a teammate; that is `BL-126`'s question
-# and is not decided here.
+# below makes its OWN, narrower teammate decision -- a teammate's WRITE is let through, its
+# DISPATCH is not -- and it is written there rather than inherited from this blanket form.
 if [ -z "$AGENT_ID" ] && [ "$AIDLC_SESSION" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
   case "$TOOL_NAME" in
     Write|Edit|MultiEdit|NotebookEdit)
@@ -523,7 +525,29 @@ fi
 # -----------------------------------------------------------------------------
 # Check 3: is this tool pipeline-advancing?
 # -----------------------------------------------------------------------------
+#
+# A DISPATCHED TEAMMATE'S IN-FLIGHT WRITE IS LET THROUGH; ITS DISPATCH IS NOT. The flag is raised
+# on an operator message to the LEAD, and it lands while teammates the lead already dispatched are
+# mid-derive. Denying a teammate's next Write leaves a multi-section artifact half-amended -- the
+# sections already rewritten beside the sections their rewrite contradicts -- which is less
+# consistent than either endpoint. So a Write/Edit/MultiEdit/NotebookEdit carrying an `agent_id`
+# (set by the harness only on a call made inside a dispatched teammate; see Check 2z) is allowed
+# and LOGGED as `ACK_TEAMMATE_WRITE`. Agent/Task/Skill/TaskCreate stay denied for a teammate too:
+# a teammate may not spawn more work or advance the pipeline while the operator is waiting.
+#
+# THIS IS AN APPROXIMATION OF QUIESCE, NOT QUIESCE. True quiesce would let only the writes that
+# were IN FLIGHT when the flag was raised complete. This hook has no record of what was in flight,
+# so a teammate dispatched before the pause may keep writing under `_bmad-output/` for as long as
+# it runs. What bounds it is the Agent deny above: no NEW teammate can be dispatched while paused.
+#
+# `agent_id`, NEVER `agent_type`. A lead started with `claude --agent <name>` carries `agent_type`
+# and no `agent_id`, and that lead is exactly what this check exists to stop.
+#
+# NotebookEdit names its path `notebook_path`, not `file_path`. Reading only `file_path` left a
+# notebook under `_bmad-output/` outside this check for every actor, the lead included.
 ADVANCING=0
+TEAMMATE_WRITE=0
+FP=""
 case "$TOOL_NAME" in
   Agent|Task|Skill|TaskCreate)
     # In an /ai-dlc-update session these advance nothing: the updater fans out
@@ -536,7 +560,7 @@ case "$TOOL_NAME" in
     # Only artifact production under _bmad-output/ counts. Escalations
     # (docs/escalations/) and source edits are NOT denied -- the lead may
     # legitimately need to write an escalation while paused.
-    FP=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
+    FP=$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.notebook_path // empty')
     case "$FP" in
       # _bmad-output/ai-dlc-update/** is the UPDATER's scratch space (reconcile
       # report, push-candidate ledger) -- NOT pipeline output. /ai-dlc-update is a
@@ -595,12 +619,13 @@ case "$TOOL_NAME" in
       # deliberately never denied while paused, so no denial was ever measured against it.
       */_bmad-output/pipeline-snapshot-history.md|_bmad-output/pipeline-snapshot-history.md) ;;
 
-      */_bmad-output/*|_bmad-output/*) ADVANCING=1 ;;
+      */_bmad-output/*|_bmad-output/*)
+        if [ -n "$AGENT_ID" ]; then TEAMMATE_WRITE=1; else ADVANCING=1; fi ;;
     esac
     ;;
 esac
 
-[ "$ADVANCING" -eq 1 ] || exit 0
+[ "$ADVANCING" -eq 1 ] || [ "$TEAMMATE_WRITE" -eq 1 ] || exit 0
 
 # -----------------------------------------------------------------------------
 # DENY. The operator is waiting.
@@ -659,6 +684,10 @@ Event types:
   message was outstanding and unacknowledged (Rule 29). A nonzero count means
   the lead tried to execute straight through a waiting human and the hook --
   not the lead's judgment -- is what stopped it. Investigate each one.
+- `ACK_TEAMMATE_WRITE`: the pause flag was up and a DISPATCHED TEAMMATE's
+  write under _bmad-output/ was let through, so an in-flight artifact is not
+  left half-amended. Its dispatches are still denied. The row names the agent
+  and the file; it is not a denial and is not counted as one
 - `BACKOFF`: rapid-fire stop attempts detected; stall confirmed. A block
   continues the stall run when NO tool call came between it and the previous
   block, at any spacing, or when it came within 30s of it; only a tool call
@@ -695,10 +724,30 @@ plausible enough that nothing about the result signals it counted documentation.
 EOF
 fi
 
+# THE TEAMMATE'S WRITE IS RECORDED, NOT DENIED. A pause that let a write through with no trace
+# would make the approximation above unauditable, and it gets its own event rather than an
+# ACK_DENIED row: that count means real denials, and a row for an allowed write would inflate it.
+if [ "$TEAMMATE_WRITE" -eq 1 ]; then
+  {
+    echo "## ${TIMESTAMP} -- ACK_TEAMMATE_WRITE"
+    echo "- Session: ${SESSION_ID}"
+    echo "- Agent: ${AGENT_ID}"
+    echo "- Tool allowed: ${TOOL_NAME}"
+    echo "- File: ${FP}"
+    echo "- Pause flag present; a dispatched teammate's write was let through (quiesce approximation)"
+    echo ""
+  } >> "$LOG_FILE"
+  exit 0
+fi
+
+# `Agent:` and `File:` make a denial ATTRIBUTABLE. Without them a row cannot say whether the lead or
+# a teammate was stopped, or on what -- and a deny nobody can attribute is one nobody can adjudicate.
 {
   echo "## ${TIMESTAMP} -- ACK_DENIED"
   echo "- Session: ${SESSION_ID}"
+  echo "- Agent: ${AGENT_ID:-<lead>}"
   echo "- Tool denied: ${TOOL_NAME}"
+  echo "- File: ${FP:-<none>}"
   echo "- Pause flag present; operator message not yet acknowledged"
   echo ""
 } >> "$LOG_FILE"
