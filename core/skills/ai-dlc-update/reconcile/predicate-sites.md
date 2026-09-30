@@ -44,9 +44,8 @@ The first cut of this file declared one `predicate:` path and the detector compa
 the two refs. **For a predicate that carries its thresholds inline that is correct, and for one
 that resolves a SCHEMA at runtime it is a confident wrong clean.**
 
-`core/scripts/validate-provenance-block.sh:16` says so in its own header — *"THE SCHEMA IS NOT IN
-THIS FILE"* — and resolves `.claude/schemas/provenance-block.json` at runtime at its lines
-118-120. (That is the CONSUMER path, which is the one a reader of this file needs: `install.sh`
+`core/scripts/validate-provenance-block.sh` says so in its own header — *"THE SCHEMA IS NOT IN
+THIS FILE"* — and resolves `.claude/schemas/provenance-block.json` at runtime. (That is the CONSUMER path, which is the one a reader of this file needs: `install.sh`
 lands `core/schemas/` at `.claude/schemas/`, so a bare `schemas/…` pointer resolves against the
 skill root and is dead in every installed tree. The `reads:` globs below are DIST-relative
 because they are resolved with `git ls-files` against the distribution, which is a different
@@ -72,7 +71,8 @@ member. A site whose `reads:` resolves to nothing at BOTH refs is refused, not s
 - `entry:` — which member of `reads:` is the executable, dist-relative.
 - `corpus:` — a `find`-style name pattern, resolved under the consumer root.
   **DERIVE IT FROM THE SHIPPED GRAMMAR, NOT BY INVENTION.** The first cut used `*pass[0-9]*` and
-  reached 16 series where `core/hooks/ai-dlc-continue.sh:430`'s own live-series glob reaches 119
+  reached 16 series where the live-series glob between `core/hooks/ai-dlc-continue.sh`'s
+  `I81 LIVE-SERIES BLOCK` markers reaches 119
   on the same tree. A narrow pattern lowers the reported FLOOR without lowering it visibly.
 - `series:` — a `sed -E` expression reducing a record path to its SERIES key. A predicate that
   adjudicates single files declares the identity expression.
@@ -88,7 +88,7 @@ entry: core/scripts/validate-adversarial-convergence.sh
 corpus: *adversarial*p*.md
 series: s/(pass|p)[0-9]+\.md$//
 invoke: --series {series}
-verdict: s/^FAIL \(([A-Z]+) --.*/\1/p
+verdict: s/^FAIL \(([A-Z0-9]+) --.*/\1/p
 
 reads: core/scripts/validate-provenance-block.sh core/schemas/provenance-block.json
 entry: core/scripts/validate-provenance-block.sh

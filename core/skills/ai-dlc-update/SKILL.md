@@ -1241,7 +1241,7 @@ prose is itself generated rather than composed.
    **A PREDICATE IS ITS READ-SET, NOT ITS SCRIPT.** `predicate-sites.md` declares `reads:` — the
    script AND every schema whose content decides a verdict — because a script-only comparison is
    vacuous for a predicate that resolves a schema at runtime.
-   `core/scripts/validate-provenance-block.sh:16` says "THE SCHEMA IS NOT IN THIS FILE" in its own
+   `core/scripts/validate-provenance-block.sh` says "THE SCHEMA IS NOT IN THIS FILE" in its own
    header, and `v0.382.0` changed `core/schemas/provenance-block.json` while leaving that script
    BYTE-IDENTICAL. A script differential returns 0 there by construction rather than by
    measurement, which is the failure this step exists to catch.

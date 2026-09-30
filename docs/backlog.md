@@ -1603,6 +1603,12 @@ verify: sh g=core/skills/ai-dlc-update/reconcile/self-update-gate.sh; [ -f "$g" 
 
 ## BL-133 — line-number citations in shipped core prose resolve against a different file on every consumer
 
+**FIXED IN v0.670.0, pending the post-merge close.** The three remaining citations, all in the update
+skill (bootstrapping), are re-cited by token: `SKILL.md` and `predicate-sites.md` name
+`validate-provenance-block.sh` without a line number, and the live-series glob is cited by the
+`I81 LIVE-SERIES BLOCK` markers in `ai-dlc-continue.sh`. Two of the three were already stale. The
+receipt reads 0 at tip and 1 on a 0.669.0 worktree.
+
 **PARTIAL IN v0.668.0.** The two non-bootstrapping citations (`gate-validation.md`,
 `_gate-procedures.md`) are re-cited by greppable token; both had already drifted. The receipt below
 excludes `core/fixtures/` (six seed-data hits) and scores 5 at base, 3 at tip. The remaining three sit
@@ -2763,3 +2769,30 @@ auto-gc cause is inferred from the message, not reproduced.
 
 verify: manual
 
+## BL-388 — ledger-reverify: a receipt-less id-keyed entry never reaches the naming query, and the column-0 bare-bold record is not an entry
+
+**FIXED IN v0.670.0, pending the post-merge close.** Twelve of the reference consumer's live
+candidates carried no `verify:` line, and `ledger-reverify.sh` emitted no row for a receipt-less
+entry, so no pull ever reported that upstream had named them. An open entry with no `verify:` line
+whose label passes `ledger_entry_id()` now emits a `0/0` row that reaches the naming query
+(NAMED-UPSTREAM / -AMBIGUOUS, with a receipt-less detail saying the entry closes by annotation) and is
+skipped before the verb dispatch, so no receipt verdict is invented. On a clone of the consumer: +12
+NAMED-UPSTREAM rows, 0 removed, 0 pre-existing rows changed, stderr identical. NAMED-UPSTREAM re-fires
+every pull until the entry is annotated; all 12 fall on entries
+`docs/reviews/graph-consumer-close-brief-2.md` closes.
+
+Second half: `ledger_entry_shape()` treats `**<id>** — …` or `**<id>**` alone at column 0 as an entry
+boundary (strict: id-only bold span, then em dash or end of line; the looser optional-dash form splits
+entries at body mentions), and every bullet label strip accepts the dash-less form (8 sites across
+`ledger-reverify.sh`, `lib.sh`, `ledger-rotate.sh` and `backlog-reverify.sh`). The consumer holds no such
+record today, so `core/fixtures/ledger-reverify` is this half's only evidence.
+
+Discharges the consumer candidate `PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY`.
+
+BOOTSTRAPPING (`core/skills/ai-dlc-update/**`): a delivering pull that is not SELF-UPDATE-DEFER shows
+these rows in its own report; under SELF-UPDATE-DEFER they first appear on the following pull, or at the
+SELF-UPDATE-SAFE-STOP ref. Receipt: base 1, fix 0, and 1 each for the `has_verify` gate restored, the
+local case guard in place of `ledger_entry_id`, the `0/0` skip removed, the bare-bold shape arm
+removed, the label strip left narrow, and the shape loosened.
+
+verify: sh R="$PWD/core/skills/ai-dlc-update/reconcile"; [ -f "$R/ledger-reverify.sh" ] && [ -f "$R/lib.sh" ] || exit 9; d=$(mktemp -d) || exit 9; trap 'rm -rf "$d"' EXIT; D="$d/dist"; C="$d/cons"; L="$C/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; mkdir -p "$D/core" "${L%/*}" || exit 9; git init -q "$D" || exit 9; g(){ git -C "$D" -c user.email=r@r -c user.name=r "$@"; }; echo a > "$D/core/x.md"; g add -A && g commit -qm 'fix: absorb PC-R1-NORECEIPT' -m 'names CAPS-NOT-AN-ID too' || exit 9; b=$(g rev-parse HEAD); echo 'a MB' > "$D/core/x.md"; g commit -qam t || exit 9; t=$(g rev-parse HEAD); printf '%s\n' '# L' '' '## PC-R1-NORECEIPT — named, no receipt' '' '## PC-R6-NEVER — never named, no receipt' '' '## CAPS-NOT-AN-ID — named, not an id' '' '- **PC-R2-DASHED** — above the record' '  verify: theirs_lacks core/x.md "ZZ"' '**PC-R3-BARE** — the record' 'verify: theirs_lacks core/x.md "MB"' '' '## PC-R4-HOST — host' '**PC-R5-MENTION**, reported from x' 'verify: theirs_lacks core/x.md "ZZ"' > "$L" || exit 9; o=$(cd "$C" && bash "$R/ledger-reverify.sh" "$D" "$b" "$C" "$t" 2>/dev/null); n(){ printf '%s\n' "$o" | awk -F'\t' -v l="$1" '$2==l{c++} END{print c+0}'; }; [ "$(n PC-R2-DASHED)" -ge 1 ] || exit 9; r1=$(printf '%s\n' "$o" | awk -F'\t' '$2=="PC-R1-NORECEIPT" && $1=="NAMED-UPSTREAM" && $3 ~ /carries NO verify: receipt/{c++} END{print c+0}'); [ "$r1" = 1 ] && [ "$(n PC-R1-NORECEIPT)" = 1 ] && [ "$(n PC-R6-NEVER)" = 0 ] && [ "$(n CAPS-NOT-AN-ID)" = 0 ] && [ "$(n PC-R2-DASHED)" = 1 ] && [ "$(n PC-R3-BARE)" = 1 ] && [ "$(n PC-R4-HOST)" = 1 ] && [ "$(n PC-R5-MENTION)" = 0 ] && exit 0; exit 1

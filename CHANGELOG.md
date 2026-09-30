@@ -15,6 +15,32 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.670.0] - 2026-09-30
+
+Batch 175's third release, and the first to touch the update engine. It ships alone because the
+engine classifies the pull that delivers it. Discharges one consumer candidate and fixes `BL-133` and
+`BL-388`.
+
+### Consumer candidate
+
+- **`PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY`** (`BL-388`). `ledger_entry_shape()`
+  treats a column-0 `**<id>** — …` record as an entry, and every bullet label strip accepts the
+  dash-less form. The reference consumer holds no such record today.
+
+### Backlog
+
+- **`BL-388`** — `ledger-reverify.sh` reports NAMED-UPSTREAM for an open, id-keyed entry that
+  carries no `verify:` line. Twelve of the reference consumer's live candidates were in that shape and
+  got no row on any pull; on a clone of its ledger the report gains 12 rows and loses none. Such a
+  row re-fires on every pull until the entry is closed by annotation, and all twelve fall on entries
+  `docs/reviews/graph-consumer-close-brief-2.md` closes. Under SELF-UPDATE-DEFER the rows first
+  appear on the pull after the one that delivers this release.
+- **`BL-133`** — the update skill's three remaining line-number citations are re-cited by token.
+- `predicate-sites.md`'s verdict grammar for the adversarial-convergence site reads `[A-Z0-9]+`, so
+  the arms `K2` and `J2` are compared; before this it extracted `J` from `J2` and missed `K2`.
+
+The `ledger-reverify` fixture costs about 28% more (six new mutants, each a full run).
+
 ## [0.669.0] - 2026-09-30
 
 Batch 175's second release. Discharges one consumer candidate and fixes `BL-089`, `BL-331`,
