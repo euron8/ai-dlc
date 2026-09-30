@@ -96,7 +96,14 @@ and require each to be bound) is the stronger fix and needs a join key that does
 **Tiered DEFECT, not BLOCKER.** No verdict is wrong in either direction: the flag changes who paid
 and never what is answered, which is exactly why its absence was invisible for as long as it was.
 
-verify: sh a=core/skills/ai-dlc-update/reconcile/apply.sh; ctl=$(grep -rchE -- '--bucket-rows-ZZQQ' core/fixtures 2>/dev/null | awk '{s+=$1} END{print s+0}'); [ "$ctl" -eq 0 ] || exit 1; grep -qE '^[[:blank:]]*UD_FLAG="--bucket-rows"' "$a" 2>/dev/null || exit 1; for g in core/fixtures/*/run.sh; do grep -qE 'grep [^|]*-c[^|]*UD_FLAG="--bucket-rows"|grep [^|]*-c[^|]*bucket-rows[^|]*"\$APPLY"|grep [^|]*-q[^|]*--bucket-rows[^|]*"\$APPLY"' "$g" 2>/dev/null && exit 0; done; exit 1
+**WIDER THAN FILED, re-derived at batch 174.** Three executing caller sites hand rows down, not
+one: `apply.sh`'s `UD_FLAG="--bucket-rows"` into `unregistered-drift.sh`, `apply.sh`'s
+`detector_run rt retired-tokens.sh --bucket-rows "$RT_PC"`, and `emit-report.sh`'s
+`retired-tokens.sh --bucket-rows "$rt_pc"`. `apply-drift-after-write`'s BL-275 arm binds all three
+at the executing line, and one mutant per site drops the flag while leaving the flagged text in a
+comment. Each mutant turns only its own letter red.
+
+verify: sh f=core/fixtures/apply-drift-after-write/run.sh; R=core/skills/ai-dlc-update/reconcile; [ -f "$f" ] && [ -f "$R/apply.sh" ] || exit 9; d=$(mktemp -d) || exit 9; sed -n '/^bl275_score() {/,/^}/p' "$f" > "$d/s.sh"; grep -q '^bl275_score() {' "$d/s.sh" || { rm -f "$d"/*; rmdir "$d"; exit 1; }; . "$d/s.sh"; sed -E 's/"\$UD_FLAG" "\$UD_PC" //' "$R/apply.sh" > "$d/u"; sed -E 's/--bucket-rows "\$RT_PC" //' "$R/apply.sh" > "$d/r"; sed -E 's/--bucket-rows "\$rt_pc" //' "$R/emit-report.sh" > "$d/e"; g="$(bl275_score "$R/apply.sh" "$R/emit-report.sh")$(bl275_score "$d/u" "$R/emit-report.sh")$(bl275_score "$d/r" "$R/emit-report.sh")$(bl275_score "$R/apply.sh" "$d/e")"; rm -f "$d"/*; rmdir "$d"; [ "$g" = ".U.R.E." ]
 
 ## BL-274 — `--arms <indented-id>` runs the whole enclosing unit, so timing one arm that way measures up to twelve, and nothing says so
 
