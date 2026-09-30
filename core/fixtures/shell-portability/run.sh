@@ -53,6 +53,9 @@
 #   x11     the FIXTURE empty-corpus condition pointed at n_shell -> its NAMED refusal must VANISH
 #   x12 S11 a file-level `set -e` acquittal spliced into the loop -> the report must VANISH
 #   x13 S11 S11_SKIP's `[^;]*` bound restored to `.*`            -> all 4 reports must VANISH
+#   m13 S12 a GNU escape reaching `[[ =~ ]]`, six join shapes     -> must FAIL, 6 counted lines
+#   x14 S12 the command-substitution exemption deleted            -> a report must APPEAR
+#   x15 S12 quoted-body blanking removed                          -> a report must APPEAR
 #   n1      `sed -i ''` and `sed -i.bak`                          -> must NOT fail
 #   n2      python `re.sub(r"\1")` in a .sh file                  -> must NOT fail
 #   n3      braced, `HEAD:`-literal, `"${SHA}:` and the braced
@@ -60,6 +63,7 @@
 #   n4  S10 alternations, python, message prose, a bracketed
 #           prose aside, and a comment naming the class           -> must NOT fail
 #   n5  S11 guarded cd in six spellings plus a comment            -> must NOT fail
+#   n6  S12 correct `=~` forms and grep-only escapes              -> must NOT fail
 #
 # THE NEGATIVE ARMS ARE NOT DECORATION. n1 and n2 are measured false positives the validator
 # was narrowed against: every `sed -i` site in this repo already uses the portable pair, and
@@ -730,7 +734,7 @@ X12EOF
 # lists the files NOT carrying the pattern, which is the whole acquittal in one physical line
 # with no nesting, and the substitution below rewrites exactly one line.
 blind_check "x12 S11 set -e non-acquittal" "$TMP/x12" \
-  's|^    hits="\$(scan "\$p" "\$sk" "\$cm" \$files)"$|    if [ "$a" = S11 ]; then files="$(grep -L "^set -e" $files)"; fi; hits="$(scan "$p" "$sk" "$cm" $files)"|' \
+  's|^    hits="\$(run_arm "\$kd" "\$p" "\$sk" "\$cm" \$files)"$|    if [ "$a" = S11 ]; then files="$(grep -L "^set -e" $files)"; fi; hits="$(run_arm "$kd" "$p" "$sk" "$cm" $files)"|' \
   S11 "refusing to acquit a file carrying \`set -e\`"
 
 # x13 -- D1's cell: S11_SKIP's `[^;]*` anchor. The mutation restores the first cut's `.*`, which
@@ -903,6 +907,107 @@ else
   printf '%s\n' "$out" | sed 's/^/      /' | head -8; rc=1
 fi
 
+# `appear_check` for a cell the validator's OWN SELF-PROBE also exercises. S12's `good.sh` carries
+# the near-miss for each acquitting cell, so a mutant of that cell trips the probe as well as the
+# corpus: two FAIL lines, both S12. That is the probe doing its job, not entanglement with another
+# arm, so the assertion is: shipped silent; mutated names the probe misfire AND reports the seeded
+# corpus line named by <tag>; no OTHER arm moves. Line numbers in <tag> count the shebang.
+probe_owned_appear() { # probe_owned_appear <name> <dir> <sed-expr> <arm> <file:line: tag> <cell>
+  local n="$1" d="$2" expr="$3" arm="$4" tag="$5" cell="$6" pre post other
+  pre="$(run_v "$d")"
+  if ! grep -q "^validate-shell-portability: PASS" <<<"$pre"; then
+    note "FAIL  $n -- the UNMUTATED validator already reported this seed, so $cell cannot be what acquits it"
+    printf '%s\n' "$pre" | sed 's/^/      /' | head -4; rc=1; return
+  fi
+  mutate "$d" "$expr" "$n" || { rc=1; return; }
+  post="$(run_v "$d")"
+  other="$(grep '^FAIL:' <<<"$post" | grep -vc "^FAIL: ${arm}")" || other=0
+  if grep -q "${arm}'s own probe misfired" <<<"$post" && grep -q "^FAIL: ${arm}:" <<<"$post" \
+     && grep -qF "$tag" <<<"$post" && [ "$other" -eq 0 ]; then
+    note "ok    $n -- $cell is load-bearing: shipped is silent, mutated reports the seed ($tag) AND ${arm}'s probe misfires"
+  else
+    note "FAIL  $n -- $cell: the mutant did not report both the seeded line ($tag) and ${arm}'s probe, and nothing else"
+    printf '%s\n' "$post" | sed 's/^/      /' | head -6; rc=1
+  fi
+}
+
+# m13 -- S12. SIX SEEDS, COUNTED, because S12 is a JOIN and each seed is a different way the two
+# ends meet: an inline escape (1), a double-quoted variable consumed below its assignment (2), a
+# single-quoted one consumed ABOVE its assignment -- the order-free half of the join (3), a braced
+# `${v}` consumer of an UNQUOTED assignment whose `\\<` shell-unescapes to `\<` (4), an escape
+# other than `\b` (5), and one inside an `if` compound (6). Lines carrying only an assignment or
+# only a clean consumer are not counted, so the number is the join and not a line grep.
+seed_shell "$TMP/m13" <<'M13EOF'
+[[ $x =~ \bfoo\b ]] && echo 1
+re="\b(foo)\b"
+[[ $x =~ $re ]] && echo 2
+[[ $y =~ $early ]] && echo 3
+early='\<stub\>'
+w=^\\<local
+[[ "$line" =~ ${w} ]] && echo 4
+[[ $n =~ ^\d+$ ]] || echo 5
+if [[ "$z" =~ x\sy ]]; then :; fi
+M13EOF
+count_check "m13 S12 GNU escape reaching [[ =~ ]]" "$TMP/m13" S12 6
+
+# x14 -- S12's COMMAND-SUBSTITUTION exemption. `id=$(grep -m1 -oE '\bID-[0-9]+\b' f)` stores grep's
+# OUTPUT, a token, and `[[ $line =~ $id ]]` is correct; this is the grep consumer the arm exists NOT
+# to convict. The mutation deletes the one line that refuses to taint a `$(`-valued assignment.
+# Both spellings are seeded, bare and double-quoted, because they reach the value by different
+# readers. THE TAINTED NAME SITS ON THE RIGHT OF `=~`: the first cut of this seed tested a grep
+# COUNT as `[[ $n =~ ^[0-9]+$ ]]`, whose variable is on the LEFT, which S12 never reads -- so the
+# mutant survived, correctly, and the seed was what was wrong.
+seed_shell "$TMP/x14" <<'X14EOF'
+id=$(grep -m1 -oE '\bID-[0-9]+\b' f)
+[[ $line =~ $id ]] && echo seen
+tok="$(grep -m1 -oE '\bLR-[0-9]+\b' f)"
+[[ $row =~ $tok ]] && echo seen
+X14EOF
+probe_owned_appear "x14 S12 command-substitution exemption" "$TMP/x14" '/index(val, "\$(")/d' \
+  S12 'scripts/subject.sh:5:' "refusing to taint a command-substitution value"
+
+# x15 -- S12's QUOTE BLANKING. Text ABOUT `=~` inside a quoted string is not a site: the seed is a
+# single-quoted echo naming a variable that IS tainted in the same file, so only the blanking
+# stands between it and a report.
+seed_shell "$TMP/x15" <<'X15EOF'
+g='\bfoo\b'
+grep -E "$g" f
+echo 'if [[ $x =~ $g ]]; then' > f
+X15EOF
+probe_owned_appear "x15 S12 quoted text is not a site" "$TMP/x15" 's/out = out "_"/out = out c/' \
+  S12 'scripts/subject.sh:4:' "blanking quoted bodies before looking for =~"
+
+# n6 -- S12's negatives. Every line is a correct `=~` or a correct `\b`: an anchored inline ERE, a
+# QUOTED literal RHS, a clean variable, a grep count checked by `=~`, a tainted variable that only
+# feeds `grep`, a comment and a string naming `=~`, an EVEN backslash run (a literal backslash,
+# measured to match `a\bc`), a spelled-out word boundary, and the check-15-bypass shape of `=~`
+# inside an awk program.
+seed_shell "$TMP/n6" <<'N6EOF'
+if [[ $x =~ ^a ]]; then :; fi
+[[ "$x" =~ "a.b" ]] && echo lit
+pat='^[0-9]+$'
+[[ $n =~ $pat ]] || n=0
+n=$(printf %s a | grep -cE "\bfoo\b")
+[[ $n =~ ^[0-9]+$ ]] || n=0
+id=$(grep -m1 -oE '\bID-[0-9]+\b' f)
+[[ $line =~ $id ]] && echo seen
+g='\bfoo\b'
+grep -E "$g" f
+# [[ $x =~ $g ]] named in a comment is prose
+echo "[[ \$x =~ \$g ]] in a string is prose"
+lb='a\\bc'
+[[ $x =~ $lb ]] && echo literal-backslash
+k="(^|[^[:alnum:]_])stub([^[:alnum:]_]|$)"
+[[ $x =~ $k ]] && echo word
+awk '/^      \[\[ \$bl =~ \\\(/ { print }' f
+N6EOF
+if out="$(run_v "$TMP/n6")" && grep -q "PASS" <<<"$out"; then
+  note "ok    n6 -- a quoted literal, clean variables, grep-only escapes, prose and an even backslash run are NOT reported"
+else
+  note "FAIL  n6 -- S12 flagged a correct form; the arm fires on a grep consumer, on prose or on its own fix"
+  printf '%s\n' "$out" | sed 's/^/      /' | head -8; rc=1
+fi
+
 # THE MUTANT COUNT IS DERIVED; THE OTHER TWO ARE NOT, AND THE ASYMMETRY IS DELIBERATE.
 # This line read a hardcoded `11/11 ... (24 assertions)` and went stale the moment `m9b` and
 # `m9c` landed -- it still said 11 with twelve corpus mutants live. A total that decays
@@ -913,7 +1018,7 @@ fi
 # falling, a report appearing, the validator REFUSING under a foreign locale). A
 # `grep -c blind_check` therefore reads 6 where the truth is 13 -- a derivation that is
 # confidently wrong is worse than a literal somebody must update, so this one stays a literal
-# and says why. If you add an `x*`, update the 13.
+# and says why. If you add an `x*`, update the 15.
 # `m11` goes through `count_check` (it asserts a LINE COUNT, not merely a kill), and `m8`/`m10`
 # assert fail-closed rather than a kill, so all three are counted separately from `kill_check`.
 # A count that silently omitted them is what the first derivation of this line did.
@@ -921,6 +1026,6 @@ _n_kill=$(grep -o 'kill_check "' "$0" | grep -c .)
 _n_count=$(grep -o 'count_check "' "$0" | grep -c .)
 _n_kill=$((_n_kill - 1 + _n_count - 1))   # each counting line names its own helper
 if [ "$rc" -eq 0 ]; then
-  note "PASS  shell-portability -- control green, ${_n_kill}/${_n_kill} corpus mutants killed by their own arm, 13/13 arm-table cells proven load-bearing, 5/5 negatives silent"
+  note "PASS  shell-portability -- control green, ${_n_kill}/${_n_kill} corpus mutants killed by their own arm, 15/15 arm-table cells proven load-bearing, 6/6 negatives silent"
 fi
 exit "$rc"
