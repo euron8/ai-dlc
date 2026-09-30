@@ -15735,3 +15735,61 @@ report the gap and write no runbook.
 
 Batch 166's next-work list and delivery gap are spent: batch 167's block above replaces both.
 
+**BATCH 168 SHIPPED `v0.659.0` (`87043915`, #893) AND DISCHARGED THREE CONSUMER CANDIDATES**, each
+filed on the consumer's `main` the day it pulled: `PC-S314-SPRINT-STATUS-NO-DEFERRED-ACS-…`
+(`BL-361`), `PC-S314-DEPLOY-VALIDATE-SMOKE-EVIDENCE-…` (`BL-362`) and
+`PC-S314-ROUTE-STEP6-RATIFIES-PHASE-SPLIT-…` (`BL-363`). The operator typed the one-liner and took
+the marked recommendation. **The consumer pulled 0.653.0 -> 0.658.0 before the batch opened**
+(`64b58fb4`, #1123, on its `main`, 0 HARD blockers, no candidate closed), so the delivery gap
+opened at ZERO and there were **0 qualifying refs** — the union is `main` alone. The opening sweep:
+live 28 (25 + the three filings), unfiled 15, worklist 5 (the same self-disqualifying rows),
+TERMINAL 147, DISCHARGED 7, ledger md5 `34f7e60e…` on the consumer's `main`, every control at its
+expected value. Live **100 -> 100** (three filed LANDED and rotated in the close commit, because
+the ceiling admitted none inside the release), archive **259 -> 262**.
+
+**THE CONTRACT ADVERSARY REFUTED FOUR DESIGN POINTS BEFORE ANY BUILD, EACH WITH A FIX.** The story
+grammar reads a block list as `''`, so `deferred_acs` has one inline spelling and everything else
+is a FINDING. "Re-deferral keeps the id" plus a refusing `close` wedged §4b's own sanctioned path,
+so a re-deferral now files a `CO-` item and clears the id. `field_of` truncates a list to its first
+id, so Check 34's new arm has its own extractor. And "capture hook installed" does not date a
+routing record, so an absent `scope_deferred_items` is legacy only when the hook-written answer
+timestamp predates the first consumer commit stamping 0.659.0.
+
+**TWO TIP-ADVERSARY ROUNDS EACH FOUND A WRONG EXIT IN THE GATED RELEASE, AND BOTH WERE FIXED
+BEFORE MERGE.** Round 1: an unreadable carry-over backlog acquitted a CLOSED or never-filed id at
+rc 0 (awk could not open it, `st` came back empty, the catch-all took it), and a misindented or
+tab-indented `deferred_acs` was dropped so `close` stamped over it. Round 2: reading the lookup's
+awk exit made a UTF-8 locale refuse a readable OPEN item carrying one Latin-1 byte; the lookup now
+runs `LC_ALL=C`. **Reading a tool's exit where it was ignored before surfaces every failure mode
+that exit carries, including locale aborts — pin the locale in the same change.** Gate on
+`ac1d8308`: 22 phases, 0 FAIL, 214 ok, all three changed fixtures `ok` by name against an
+impossible-name control of 0, `ls-remote` matching, squash tree identical to the gated tip.
+
+**TWO READ-SET TRACES ARE OWED**: `deploy-validate-smoke-classification` is a NEW directory with no
+map entry, so the runner runs it on every push, and `scope-confirmation` now calls `git`, `date` and
+a UTF-8 locale. `sudo bash core/scripts/derive-fixture-readsets.sh --list
+"deploy-validate-smoke-classification scope-confirmation"` on a checkout of `origin/main`.
+
+**THE CONSUMER'S LIVE SPRINT-315 ROUTING RECORD FAILS CHECK 34 TODAY, AT 0.658.0, INDEPENDENT OF
+THIS RELEASE.** It writes `scope_confirmed_cite: SHA256: <hex>`, which `field_of` reads as `SHA256`
+("not a hex SHA256"), so its next planning gate hard-blocks. That is a consumer record, not a core
+defect; report it, never write it.
+
+**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
+- The unfiled set holds no new core filing beyond this batch's three, now discharged. `BL-360`
+  (DEFECT: 39 real `<<<` sites and `<<EOF` bodies in the other reconcile scripts) is the strongest
+  distribution-internal entry; its carried `theirs`-ref/contract-blob finding is DEFECT-tier alone
+  and splits out at the next close. `BL-356` is next.
+- The batch-168 tip adversaries' NOTEs are recorded in the three archived entries' residue
+  paragraphs and are NOT filed (the ceiling admitted none): Check 34's id grammar refuses 5 of the
+  consumer's 704 real `CO-` headings, only `CLOSED*` is terminal, `[CO-X,,]` passes, and a
+  `deferred_acs:` continuation line in a block scalar refuses `close` loudly. File them when a
+  close frees room.
+- `BL-230` needs a mechanism for E1, E2 and E9.
+
+**THE DELIVERY GAP IS ONE RELEASE.** The consumer is at 0.658.0 against `VERSION` 0.659.0. No
+bootstrapping file changed in `312c46ee..origin/main`. Three PC ids are PENDING, all first named at
+0.659.0. The banked ruling stands: report the gap and write no runbook.
+
+Batch 167's next-work list and delivery gap are spent: batch 168's block above replaces both.
+

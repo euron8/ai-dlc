@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 516..578. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 515..572. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,63 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 175 SHIPPED `v0.668.0` (`1eca2ed2`, #919), `v0.669.0` (`627916ac`, #921) AND `v0.670.0`
+(`ab5d0735`, #923), AND DISCHARGED FOUR CONSUMER CANDIDATES:**
+`PC-S315-AUDIT-LAYER-DEBT-CUE-ARM-READS-CORE-FIELD-VOCABULARY-AS-AN-OBLIGATION` (`BL-383`),
+`PC-S315-ARTIFACT-WRITE-LEDGER-DROPS-PARALLEL-SHARD-ROWS` (`BL-384`),
+`PC-S315-NO-AMENDMENT-PATH-FOR-A-NOTARIZED-ARTIFACT-AFTER-A-STORY-DECISION` (`BL-385`) and
+`PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY` (`BL-388`). It was invoked by peer handoff,
+and the operator's batch-174 rulings were written into `### NEXT ACTIONS` first (#918). Closes #920,
+#922 and this one rotated 20 entries: live backlog **58 -> 46** (`BL-383`..`BL-390` filed, six of them
+closed in the batch), archive **323 -> 343**. Net closed minus filed: **12**.
+`docs/reviews/graph-consumer-close-brief-2.md`, rehearsed on a clone, closes thirteen more candidates
+upstream already fixed that the consumer's engine never reported; it is the consumer session's to
+apply.
+
+**THE OPENING SWEEP AND THE WHOLE-BACKLOG ADJUDICATION.** Live 18 on 12 qualifying refs, unfiled 4,
+worklist 1, TERMINAL 151, ledger md5 `3450b81c…`. Four hands adjudicated all 58 live entries: 2 CLOSE,
+15 PARTIAL, 41 LIVE, 0 dead premise. Three receipts cannot close on a correct fix: `BL-066`'s is dead
+(field 1 is now a slug, never a version), `BL-083`'s counts seed files a rule fix cannot move, and
+`BL-103`'s greps `settings-merge.sh` where the fix belongs in `apply.sh`.
+
+**HELD, UNSHIPPED, EACH BOOTSTRAPPING, AND THE BATCH CLOSED AT ITS LAST COLLECTED RELEASE.**
+`b174-bl085` (`BL-085`) and `b174-bl329` (`BL-329`) both `git merge-tree` cleanly onto `ab5d0735`
+(re-verified at this close). `BL-389` owns
+`PC-S336-STEP-1-AUTOPUSH-IS-THE-UNGUARDED-TWIN-OF-THE-PUSH-STEP-2-HARDENED`, which no entry owned; its
+fix is to the update `SKILL.md`. The adjudicators also found small bootstrapping fixes for `BL-066`,
+`BL-092`, `BL-099`, `BL-103`, `BL-119`, `BL-310`, `BL-336`, `BL-355`, `BL-374` and `BL-376`, recorded in
+each entry's body.
+
+**THE GATE FAILED ONCE, ON A LINE THIS BATCH WROTE.** `remediator-shard-join` A1, A3 and A4 failed on
+0.668.0's first gate: macOS's `TMPDIR` ends in `/`, so every path under it reads `T//x`, while the
+join's strip prefix came from `pwd`, which collapses it. The builder's tree passed only because its
+`TMPDIR` had no trailing slash. Fixed at `ba97e4da` (arm A7, mutant JX10). `BL-385`'s receipt then read
+STILL-LIVE through `backlog-reverify.sh` and blocked the rotation: an unguarded `$3` under the engine's
+`set -u`. No other live receipt changes exit under `set -u`.
+
+**A HAND WROTE `core.worktree` INTO THE SHARED `.git/config`.** Every worktree then read one builder's
+files: the release branch's `git status` showed 19 phantom modifications with a clean reflog, and two
+cherry-picks refused. Unset and re-hashed clean; the release commits were unaffected, verified by
+content against each builder commit. Every later brief forbade a bare `git config`.
+
+**THE DELIVERY GAP IS THREE RELEASES.** The consumer is at 0.667.0 against `VERSION` 0.670.0. 0.670.0
+changes `ledger-reverify.sh`, `lib.sh`, `ledger-rotate.sh` and the update `SKILL.md`, so under
+SELF-UPDATE-DEFER its rows first appear on the pull after the one that delivers it. PENDING is 4, the
+four ids above. The banked ruling stands: report the gap and write no runbook. The re-derived sweep at
+this close: live 18 on 17 qualifying refs, unfiled 1
+(`PC-S309-VALIDATE-MANDATORY-RULES-CHECK5-TEST-ONLY-WEB-DIFF-FALSE-FAIL`, shipped at 0.542.0 and closed
+by the close brief), worklist 2 (`BL-145` and `BL-389`, both citing S336), TERMINAL 153, ledger md5
+unchanged.
+
+**READ-SET TRACES OWED**, one command: `sudo bash core/scripts/derive-fixture-readsets.sh --list
+"remediator-shard-join stray-party-mode-provenance prepush-ssh-keepalive derivation-capture
+derivation-capture-mutants backlog-receipt-binding check-24-adversarial-convergence ledger-reverify
+validator-fork-budget validator-arm-selection layer-contract-conformance-b"`. The last three clear
+`BL-264`'s residue; `prepush-ssh-keepalive` is unmapped, so the runner runs it on every push until
+traced.
+
+Batch 174's delivery gap and held-branch record are spent: batch 175's block above replaces both.
 
 **BATCH 174 SHIPPED `v0.666.0` (`d41d47d0`, #913) AND DISCHARGED TWO CONSUMER CANDIDATES:
 `PC-S315-AGENT-DEFINITION-RENDER-ENTANGLEMENT-ARM-FIRES-UNDER-THE-PRE-PUSH-POOL` (`BL-258`) and
@@ -454,64 +511,6 @@ unrotated after its pull. The banked ruling stands: report the gap and write no 
 `_bmad-output/pipeline-snapshot.md:13`, re-confirmed this batch. Report it; never write it.
 
 Batch 168's next-work list and delivery gap are spent: batch 169's block above replaces both.
-
-**BATCH 168 SHIPPED `v0.659.0` (`87043915`, #893) AND DISCHARGED THREE CONSUMER CANDIDATES**, each
-filed on the consumer's `main` the day it pulled: `PC-S314-SPRINT-STATUS-NO-DEFERRED-ACS-…`
-(`BL-361`), `PC-S314-DEPLOY-VALIDATE-SMOKE-EVIDENCE-…` (`BL-362`) and
-`PC-S314-ROUTE-STEP6-RATIFIES-PHASE-SPLIT-…` (`BL-363`). The operator typed the one-liner and took
-the marked recommendation. **The consumer pulled 0.653.0 -> 0.658.0 before the batch opened**
-(`64b58fb4`, #1123, on its `main`, 0 HARD blockers, no candidate closed), so the delivery gap
-opened at ZERO and there were **0 qualifying refs** — the union is `main` alone. The opening sweep:
-live 28 (25 + the three filings), unfiled 15, worklist 5 (the same self-disqualifying rows),
-TERMINAL 147, DISCHARGED 7, ledger md5 `34f7e60e…` on the consumer's `main`, every control at its
-expected value. Live **100 -> 100** (three filed LANDED and rotated in the close commit, because
-the ceiling admitted none inside the release), archive **259 -> 262**.
-
-**THE CONTRACT ADVERSARY REFUTED FOUR DESIGN POINTS BEFORE ANY BUILD, EACH WITH A FIX.** The story
-grammar reads a block list as `''`, so `deferred_acs` has one inline spelling and everything else
-is a FINDING. "Re-deferral keeps the id" plus a refusing `close` wedged §4b's own sanctioned path,
-so a re-deferral now files a `CO-` item and clears the id. `field_of` truncates a list to its first
-id, so Check 34's new arm has its own extractor. And "capture hook installed" does not date a
-routing record, so an absent `scope_deferred_items` is legacy only when the hook-written answer
-timestamp predates the first consumer commit stamping 0.659.0.
-
-**TWO TIP-ADVERSARY ROUNDS EACH FOUND A WRONG EXIT IN THE GATED RELEASE, AND BOTH WERE FIXED
-BEFORE MERGE.** Round 1: an unreadable carry-over backlog acquitted a CLOSED or never-filed id at
-rc 0 (awk could not open it, `st` came back empty, the catch-all took it), and a misindented or
-tab-indented `deferred_acs` was dropped so `close` stamped over it. Round 2: reading the lookup's
-awk exit made a UTF-8 locale refuse a readable OPEN item carrying one Latin-1 byte; the lookup now
-runs `LC_ALL=C`. **Reading a tool's exit where it was ignored before surfaces every failure mode
-that exit carries, including locale aborts — pin the locale in the same change.** Gate on
-`ac1d8308`: 22 phases, 0 FAIL, 214 ok, all three changed fixtures `ok` by name against an
-impossible-name control of 0, `ls-remote` matching, squash tree identical to the gated tip.
-
-**TWO READ-SET TRACES ARE OWED**: `deploy-validate-smoke-classification` is a NEW directory with no
-map entry, so the runner runs it on every push, and `scope-confirmation` now calls `git`, `date` and
-a UTF-8 locale. `sudo bash core/scripts/derive-fixture-readsets.sh --list
-"deploy-validate-smoke-classification scope-confirmation"` on a checkout of `origin/main`.
-
-**THE CONSUMER'S LIVE SPRINT-315 ROUTING RECORD FAILS CHECK 34 TODAY, AT 0.658.0, INDEPENDENT OF
-THIS RELEASE.** It writes `scope_confirmed_cite: SHA256: <hex>`, which `field_of` reads as `SHA256`
-("not a hex SHA256"), so its next planning gate hard-blocks. That is a consumer record, not a core
-defect; report it, never write it.
-
-**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
-- The unfiled set holds no new core filing beyond this batch's three, now discharged. `BL-360`
-  (DEFECT: 39 real `<<<` sites and `<<EOF` bodies in the other reconcile scripts) is the strongest
-  distribution-internal entry; its carried `theirs`-ref/contract-blob finding is DEFECT-tier alone
-  and splits out at the next close. `BL-356` is next.
-- The batch-168 tip adversaries' NOTEs are recorded in the three archived entries' residue
-  paragraphs and are NOT filed (the ceiling admitted none): Check 34's id grammar refuses 5 of the
-  consumer's 704 real `CO-` headings, only `CLOSED*` is terminal, `[CO-X,,]` passes, and a
-  `deferred_acs:` continuation line in a block scalar refuses `close` loudly. File them when a
-  close frees room.
-- `BL-230` needs a mechanism for E1, E2 and E9.
-
-**THE DELIVERY GAP IS ONE RELEASE.** The consumer is at 0.658.0 against `VERSION` 0.659.0. No
-bootstrapping file changed in `312c46ee..origin/main`. Three PC ids are PENDING, all first named at
-0.659.0. The banked ruling stands: report the gap and write no runbook.
-
-Batch 167's next-work list and delivery gap are spent: batch 168's block above replaces both.
 
 ### Derive the state; do not trust the numbers below
 
