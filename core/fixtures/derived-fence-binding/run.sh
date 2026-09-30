@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # derived-fence-binding — assert invariant I108 both fires and discriminates.
+# Also hosts I75's seeded-drift oracle (A16-A19), which had no fixture anywhere.
 #
 # Usage: run.sh
 # Exit:  0 = every assertion holds, 1 = one regressed, 2 = fixture broken.
@@ -38,6 +39,9 @@
 # same reason: each demands a specific message, so a validator that emits nothing fails them by
 # construction rather than passing them by silence.
 set -uo pipefail
+# The I75 arms edit a root block naming AI_DLC_PROJECT_ROOT; an ambient value would steer the
+# validator's own root resolution, so the environment is cleared (I87).
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 D_ROOT="$(cd "$HERE/../../.." && pwd)"
@@ -526,11 +530,81 @@ elif edit "$t" "core/team-roles/sm.md" "$MUT_DRIFT"; then
   fi
 fi
 
+# --- I75: the seeded-drift oracle (BL-269) ------------------------------------
+# I75 had no fixture anywhere, and its finding sets are EMPTY on a clean tree -- every subject
+# hashes to the one modal chain -- so a before/after comparison around any rewrite of it compares
+# two empty sets. These arms seed the two defects it exists for, one property apart from a
+# near-miss, so a batching rewrite has something to be equivalent to. HOSTED HERE, not in the
+# enforcement-map batteries, because this fixture already drives `--arms` against a whole-tree
+# seed carrying core/scripts/; the I108 name of the file is its origin, not its limit.
+#
+# The subject is audit-upstream-routing.sh: its root block carries the canonical chain with the
+# `exit 2` terminal guard on its own line, so each mutation below is a one-line edit INSIDE the
+# block, and `edit` refuses it if the anchor moved.
+I75_SUBJ="core/scripts/audit-upstream-routing.sh"
+run_i75() { bash "$1/$ARM" --arms I75 2>&1; }
+i75_case() { # <label> <tree> <want-substring|OK> — presence-shaped both ways
+  local label="$1" t="$2" want="$3" out rc
+  out="$(run_i75 "$t")"; rc=$?
+  if [ "$rc" = 2 ]; then
+    bad "$label — FIXTURE BROKEN: --arms I75 exited 2, a selection failure, so nothing was checked. The validator said: $(printf '%s' "$out" | head -3)"
+    return
+  fi
+  if [ "$want" = OK ]; then
+    case "$out" in
+      *"I75"*) bad "$label — I75 reported on a tree it must acquit (rc=$rc): $(printf '%s\n' "$out" | grep I75 | cut -c1-200)" ;;
+      *"$OKLINE"*) ok "$label" ;;
+      *) bad "$label — no I75 finding, but no verdict line either (rc=$rc), so the silence is not an acquittal" ;;
+    esac
+  else
+    case "$out" in
+      *"$want"*"${I75_SUBJ##*/}"*) ok "$label" ;;
+      *) bad "$label — I75 did not report the seeded subject (rc=$rc). Its finding set stays empty on a tree that carries the defect, which reads exactly like a clean tree." ;;
+    esac
+  fi
+}
+
+t="$(fresh)"
+i75_case "A16 I75 CONTROL: the unmutated seed passes --arms I75 and reaches its verdict" "$t" OK
+
+# The override read moved BELOW the CLAUDE_PROJECT_DIR fallback: the precedence that answers
+# about whichever repo the session started in.
+t="$(fresh)"
+if edit "$t" "$I75_SUBJ" '
+  /^# --- AI_DLC_ROOT ---/ { inb = 1 }
+  inb && $0 == "AI_DLC_ROOT=\"${AI_DLC_PROJECT_ROOT:-}\"" { held = $0; next }
+  inb && held != "" && $0 == "[ -n \"$AI_DLC_ROOT\" ] || AI_DLC_ROOT=\"${CLAUDE_PROJECT_DIR:-}\"" { print "AI_DLC_ROOT=\"${CLAUDE_PROJECT_DIR:-}\""; print "[ -n \"$AI_DLC_ROOT\" ] || AI_DLC_ROOT=\"${AI_DLC_PROJECT_ROOT:-}\""; held = ""; next }
+  /^# --- end AI_DLC_ROOT ---/ { inb = 0 }
+  { print }'; then
+  i75_case "A17 I75 a root chain reading CLAUDE_PROJECT_DIR before the override is REPORTED as drift, by name" "$t" "precedence chain differs from the canonical one"
+fi
+
+# The terminal guard gone: an unresolved root leaves the variable empty.
+t="$(fresh)"
+if edit "$t" "$I75_SUBJ" '
+  /^# --- AI_DLC_ROOT ---/ { inb = 1 }
+  inb && $0 == "  exit 2" { print "  :"; next }
+  /^# --- end AI_DLC_ROOT ---/ { inb = 0 }
+  { print }'; then
+  i75_case "A18 I75 a root chain with no terminal guard is REPORTED as not failing closed, by name" "$t" "does not fail closed"
+fi
+
+# NEAR-MISS: a comment inside the block reworded. I75 compares EXECUTABLE lines, so prose that
+# differs per script -- the house style -- must not read as drift.
+t="$(fresh)"
+if edit "$t" "$I75_SUBJ" '
+  /^# --- AI_DLC_ROOT ---/ { inb = 1; print; next }
+  inb && !done && /^# / { print "# (reworded) " substr($0, 3); done = 1; next }
+  /^# --- end AI_DLC_ROOT ---/ { inb = 0 }
+  { print }'; then
+  i75_case "A19 I75 a reworded COMMENT inside the root block is acquitted and the run reaches its verdict" "$t" OK
+fi
+
 # --- Verdict ------------------------------------------------------------------
 # THE COUNT IS ASSERTED. A driver whose `for` loop or `if` guard stopped reaching an assertion
 # prints fewer lines and no failure, and an unrun assertion is indistinguishable from one that
 # passed.
-EXPECTED=25
+EXPECTED=29
 if [ "$asserted" -ne "$EXPECTED" ]; then
   printf '\nderived-fence-binding: FIXTURE BROKEN — %d assertions ran, %d were declared. An assertion that never ran reads exactly like one that passed.\n' "$asserted" "$EXPECTED"
   exit 2

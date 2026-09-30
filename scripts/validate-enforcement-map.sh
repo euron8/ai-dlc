@@ -799,6 +799,31 @@ END {
     }
   }
 
+  # SAY WHAT ACTUALLY RUNS WHEN IT IS MORE THAN WAS ASKED FOR. An indented arm merges into its
+  # column-0 unit and `requires-arms:` pulls in whole units, so `--arms I41` executes the
+  # twelve-arm layer-contract unit, and a timing of it is a timing of all twelve. Nothing in
+  # stdout, stderr or the exit said so, and two scopings were built on per-arm seconds taken
+  # that way. One stderr line per run, emitted ONLY when the selection runs an id not requested,
+  # so a request naming every id stays byte-identical to a plain run. The prefix is fixed
+  # because validator-arm-selection filters exactly this prefix out of its subset check.
+  # RE-SPLIT, never reuse `m`: the requires-arms closure above reassigns it, and reading the
+  # stale count scored every requested id past the first as unrequested.
+  nw = split(want, w, /[,[:blank:]]+/)
+  for (k = 1; k <= nw; k++) if (w[k] != "") asked[w[k]] = 1
+  extra = ""; units = ""
+  for (i = 1; i <= nu; i++) {
+    if (!sel[i]) continue
+    units = units (units == "" ? "" : "; ") "line " ustart[i] " [" uids[i] "]"
+    s = uids[i]
+    while (match(s, /I[0-9]+[a-c]?/)) {
+      id = substr(s, RSTART, RLENGTH)
+      if (!(id in asked) && !(id in seenx)) { seenx[id] = 1; extra = extra " " id }
+      s = substr(s, RSTART + RLENGTH)
+    }
+  }
+  if (extra != "")
+    printf "validate-enforcement-map: --arms NOTE: %s selected unit(s) %s; this run also runs%s, so a timing of it is a timing of every arm listed\n", want, units, extra > "/dev/stderr"
+
   for (i = 1; i <= nu; i++) if (sel[i]) for (x = ustart[i]; x <= uend[i]; x++) keep[x] = 1
   ln = 0
   while ((getline l < src) > 0) {
@@ -2143,7 +2168,6 @@ I59_UNDOC_AWK='
       # count reaching the caller must be about what was SCANNED.
       while ((getline line < fn) > 0) {
         nread++
-        lines[++nl] = line
         if (match(line, /^[[:space:]]*(--?[a-z][a-z0-9-]*\|)*--?[a-z][a-z0-9-]*\)/)) {
           seg = substr(line, RSTART, RLENGTH)
           gsub(/[ \t)]/, "", seg)
@@ -2157,11 +2181,17 @@ I59_UNDOC_AWK='
         }
       }
       close(fn)
-      for (i = 1; i <= nl; i++) {
-        line = lines[i]
-        if (line ~ /^[[:space:]]*#/ || index(line, "usage")) {
-          for (m in modes) if (index(line, m)) documented[m] = 1
+      # THE DOCUMENTATION PASS RE-READS THE FILE rather than replaying a buffer of it, so the
+      # memory this program holds is one line and the mode set, not the largest corpus file.
+      # The mode set must be complete before any line can be judged, hence two passes; the
+      # file is in page cache from the first. Skipped when the file dispatches no mode.
+      if (nm > 0) {
+        while ((getline line < fn) > 0) {
+          if (line ~ /^[[:space:]]*#/ || index(line, "usage")) {
+            for (m in modes) if (index(line, m)) documented[m] = 1
+          }
         }
+        close(fn)
       }
       # SORTED, because the shell form ended in `sort -u` and a caller comparing two
       # runs must not see an order that depends on awk hash iteration.
@@ -2169,8 +2199,6 @@ I59_UNDOC_AWK='
         if (order[j] < order[i]) { t = order[i]; order[i] = order[j]; order[j] = t }
       for (i = 1; i <= nm; i++) if (!(order[i] in documented)) printf "%s\t%s\n", fn, order[i]
       if (nread > 0) scanned++
-      nl = 0
-      delete lines
       delete order
     }
     close(FLIST)
@@ -11466,6 +11494,90 @@ else
     fi
   fi
   rm -rf "$i115_probe" 2>/dev/null || true
+fi
+
+# --- I116: a SHIPPING fixture that uses a sibling fixture requires that sibling to ship ---
+#
+# WHAT IT BINDS. `emit-report-refusal` builds its tree from `../reconcile-emit-report/seed.sh`
+# and exits 2 `FIXTURE ERROR` without it; `provenance-flagless-default` and
+# `retro-compliance-workflow` source `../check-17-bypass/seed.sh`. All of them ship. A packaging
+# change adding `.dist-only` to the sibling would leave every consumer's copy of the user
+# erroring or silently skipping, and nothing here joined the two ship declarations.
+#
+# THE SIBLING IS A FIXTURE BY PROPERTY, NOT BY NAME: a directory under core/fixtures/ carrying a
+# run.sh. `core/fixtures/lib/` is a shared library with no run.sh and ships unconditionally, so
+# it is out of population without being named; a lib that grew a run.sh would come in.
+#
+# THE GRAMMAR. A non-comment line in `core/fixtures/<src>/*.sh` naming `../<name>`, where the
+# text before it does not itself end in `../` -- so `$HERE/../../scripts` is a walk up and not a
+# sibling named `scripts`. The file tests are awk `getline` opens (-1 = absent, 0 = empty), so
+# the whole arm is ONE awk over the fixture shell files and forks nothing per pair.
+#
+# FALSE-POSITIVE SET, MEASURED ON THE TREE THAT SHIPPED THIS: 0 findings. Pairs with a sibling
+# that has a run.sh, comment lines excluded: shipped -> shipped 4 (the three above plus
+# layer-contract-conformance-b -> layer-contract-conformance, a shard), dist-only -> anything 16,
+# out of scope because the user itself does not ship. The narrowing that got it to 0 was the
+# run.sh property: without it, the 70-odd shipped fixtures sourcing `../lib/` are pairs too,
+# all satisfied, and `lib` would have to be exempted by name.
+i116_scan() { # <file>... -> "P<TAB>src<TAB>sib" per satisfied pair, "B<TAB>src<TAB>sib<TAB>file:line" per breach
+  awk '
+    function exists(p,   x, r) { r = (getline x < p); close(p); return r >= 0 }
+    FNR == 1 {
+      n = split(FILENAME, seg, "/"); src = seg[n - 1]
+      base = substr(FILENAME, 1, length(FILENAME) - length(seg[n]) - length(src) - 2)
+      shipsrc = !exists(base "/" src "/.dist-only")
+    }
+    /^[[:space:]]*#/ { next }
+    shipsrc {
+      l = $0
+      while (match(l, /\.\.\/[A-Za-z0-9_-]+/)) {
+        pre = substr(l, 1, RSTART - 1); sib = substr(l, RSTART + 3, RLENGTH - 3)
+        l = substr(l, RSTART + RLENGTH)
+        if (pre ~ /\.\.\/$/ || sib == src || (src SUBSEP sib) in seen) continue
+        if (!exists(base "/" sib "/run.sh")) continue
+        seen[src, sib] = 1
+        if (exists(base "/" sib "/.dist-only")) print "B\t" src "\t" sib "\t" FILENAME ":" FNR
+        else print "P\t" src "\t" sib
+      }
+    }
+  ' "$@" 2>/dev/null
+}
+# SELF-PROBE FIRST, BOTH DIRECTIONS, under mktemp. Offender: a shipped fixture using a dist-only
+# sibling that has a run.sh. Near-misses, each one property away: a shipped sibling; a sibling
+# with no run.sh that IS marked dist-only (the lib shape, so the run.sh test is what acquits
+# it); a dist-only user; a reference only in a comment; and a `../../` walk up.
+i116_probe="$(mktemp -d 2>/dev/null)"
+if [ -z "$i116_probe" ] || [ ! -d "$i116_probe" ]; then
+  err "I116 could not create its probe directory, so its self-probe did not run. A scan whose probe did not fire reports a clean corpus it never read; this fails instead."
+else
+  i116_f="$i116_probe/core/fixtures"
+  mkdir -p "$i116_f/user" "$i116_f/dsib" "$i116_f/ssib" "$i116_f/libby" "$i116_f/duser" "$i116_f/csib"
+  : > "$i116_f/dsib/run.sh"; echo reason > "$i116_f/dsib/.dist-only"
+  : > "$i116_f/ssib/run.sh"
+  : > "$i116_f/libby/x.sh"; echo reason > "$i116_f/libby/.dist-only"
+  : > "$i116_f/csib/run.sh"; echo reason > "$i116_f/csib/.dist-only"
+  echo reason > "$i116_f/duser/.dist-only"
+  printf '%s\n' 'H="$(dirname "$0")"' '. "$H/../dsib/seed.sh"' 'bash "$H/../ssib/seed.sh"' '. "$H/../libby/x.sh"' '# see ../csib/seed.sh' 'R="$H/../../dsib"' > "$i116_f/user/run.sh"
+  printf '%s\n' '. "$(dirname "$0")/../dsib/seed.sh"' > "$i116_f/duser/run.sh"
+  i116_p="$(i116_scan "$i116_f"/*/*.sh)"
+  i116_pb="$(printf '%s\n' "$i116_p" | awk -F'\t' '$1 == "B" { printf "%s>%s ", $2, $3 }')"
+  i116_pp="$(printf '%s\n' "$i116_p" | awk -F'\t' '$1 == "P" { printf "%s>%s ", $2, $3 }')"
+  rm -rf "$i116_probe" 2>/dev/null || true
+  if [ "$i116_pb" != "user>dsib " ]; then
+    err "I116 SELF-PROBE FAILED: breaches read '${i116_pb}', expected exactly 'user>dsib '. Either a shipped fixture using a dist-only sibling was not reported, or a near-miss (a lib-shaped dir with no run.sh, a dist-only user, a comment, a ../../ walk) was. Every verdict below is unattributable."
+  elif [ "$i116_pp" != "user>ssib " ]; then
+    err "I116 SELF-PROBE FAILED: satisfied pairs read '${i116_pp}', expected exactly 'user>ssib '. The grammar does not see a shipped sibling, so the breach arm above passed on a scan that reads nothing but the offender."
+  else
+    i116_out="$(cd "$REPO_ROOT" 2>/dev/null && i116_scan core/fixtures/*/*.sh)"
+    # IN-CORPUS CONTROL: the motivating pair must be seen as a pair, shipped or not. A grammar
+    # that stopped matching on the real tree would otherwise report zero breaches forever.
+    if ! printf '%s\n' "$i116_out" | awk -F'\t' '$2 == "emit-report-refusal" && $3 == "reconcile-emit-report" { f = 1 } END { exit !f }'; then
+      err "I116 IN-CORPUS CONTROL FAILED: emit-report-refusal's use of ../reconcile-emit-report/ was not seen as a sibling pair (it is the case this arm exists for, and emit-report-refusal ships). The grammar no longer reaches the real tree, so zero breaches here prove nothing."
+    else
+      i116_bad="$(printf '%s\n' "$i116_out" | awk -F'\t' '$1 == "B" { printf " %s uses %s (%s);", $2, $3, $4 }')"
+      [ -z "$i116_bad" ] || err "I116: a SHIPPING fixture uses a sibling fixture that does not ship:${i116_bad} A consumer receives the user without the sibling, so it errors or skips there while this repo stays green. Remove the sibling's .dist-only, or give the user a .dist-only of its own."
+    fi
+  fi
 fi
 
 # --- Verdict ------------------------------------------------------------------

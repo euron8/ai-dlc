@@ -128,6 +128,34 @@ END {
 }
 '
 
+# ---------------------------------------------------------------------------------------
+# AMBIGUOUS ATTRIBUTION, MARKED RATHER THAN LEFT FOR A READER TO TAKE. On bash 3.2 the commands
+# inside a process substitution `<( ... )` nested in an if/elif/fi chain trace with the LINENO
+# of the chain's CLOSING line, not the line the substitution is written on. Measured on a
+# seeded script: `done < <(printf ... | tr ...)` on line 8 traced `printf` and `tr` at line 9,
+# a bare `fi`. So a by-line row can name a line that cannot fork, and the by-arm table buckets
+# it into whichever arm's range holds that closer.
+#
+# The instrument cannot recover the true line, but it can say when the reported one is not a
+# fork site: a line that is nothing but `fi`, `done`, `esac`, `}` or `;;` (after blanks and a
+# trailing comment are stripped) executes no command. Every by-line row naming such a line
+# carries a fourth field, AMBIGUOUS, in the printed section AND in the `--dump` file, and the
+# summary reports how many rows and forks carry it. Before scoping a cut from a marked row,
+# find the `<(` whose chain that closer ends -- the fork is written there.
+#
+# THE MARK IS A FOURTH FIELD so every existing reader, which reads fields 1-3, is unaffected.
+# ---------------------------------------------------------------------------------------
+AMBIG_AWK='
+NR == FNR {
+  s = $0
+  sub(/[[:blank:]]+#.*$/, "", s)
+  gsub(/^[[:blank:]]+|[[:blank:]]+$/, "", s)
+  if (s ~ /^(fi|done|esac|\}|;;)$/) closer[FNR] = 1
+  next
+}
+{ if (($2 + 0) in closer) print $0 " AMBIGUOUS"; else print }
+'
+
 # `compgen` is a bash builtin and is available non-interactively. Both lists are DERIVED, never
 # hand-written, because a hand list of bash builtins is one more thing that silently goes stale.
 # THE GUARD AGAINST AN EMPTY LIST IS THE NEGATIVE PROBE, not a count here: with no builtins the
@@ -152,10 +180,12 @@ profile() { # <script> <outdir> -> outdir/{trace,by-line,meta}; echoes nothing
   PS4='+@${LINENO}@ ' bash -x "$src" >/dev/null 2>"$out/trace"
   echo "$?" > "$out/rc"
   awk -v metafile="$out/meta" "$CLASSIFY_AWK" "$out/known" "$out/trace" \
-    | LC_ALL=C sort -k1,1nr -k2,2n -k3,3 > "$out/by-line"
+    | LC_ALL=C sort -k1,1nr -k2,2n -k3,3 > "$out/by-line.raw"
   # A trace file with no META line means awk never reached END -- fail closed rather than
   # letting a missing file read as zero.
   [ -s "$out/meta" ] || { echo "fork-profile: classifier produced no META for $src" >&2; return 2; }
+  awk "$AMBIG_AWK" "$src" "$out/by-line.raw" > "$out/by-line" \
+    || { echo "fork-profile: the ambiguity marker failed on $src" >&2; return 2; }
   return 0
 }
 
@@ -327,11 +357,17 @@ emit_by_arm() {
     {
       c = $1 + 0; ln = $2 + 0; k = 0
       for (i = 1; i <= n; i++) { if (al[i] <= ln) k = i; else break }
-      if (k == 0) pro += c; else byarm[ids[k]] += c
+      a = (k == 0) ? "<prologue>" : ids[k]
+      byarm[a] += c
+      if ($4 == "AMBIGUOUS") amb[a] += c
     }
     END {
-      if (pro > 0) printf "%d\t<prologue>\n", pro
-      for (a in byarm) printf "%d\t%s\n", byarm[a], a
+      # An arm whose count includes forks traced at a bare closer may be holding a NEIGHBOUR
+      # arm`s cost; the third column says how many, so the swap is visible rather than silent.
+      for (a in byarm) {
+        if (amb[a] > 0) printf "%d\t%s\tambiguous=%d\n", byarm[a], a, amb[a]
+        else printf "%d\t%s\n", byarm[a], a
+      }
     }
   ' "$ARMS" "$RUN/by-line" | LC_ALL=C sort -k1,1nr
 }
@@ -353,11 +389,24 @@ printf 'REPS %s\n' "$rep"
 printf 'STABLE %s\n' "$N_STABLE"
 printf 'SPREAD %s\n' "$SPREAD"
 printf 'TARGET %s\n' "$TARGET"
+# rows, then forks, whose reported line is a bare closer -- see AMBIG_AWK.
+printf 'AMBIGUOUS %s\n' "$(awk '$4 == "AMBIGUOUS" { r++; f += $1 } END { print r + 0, f + 0 }' "$RUN/by-line")"
 
+# THE BY-LINE SECTION IS A PREVIEW, AND IT SAYS SO ON THE HEADER LINE. `by-arm` below is
+# unbounded, so without a count the two sections read as the same run at two granularities
+# when only one of them is whole. Measured: the printed 60 rows summed into arm ranges gave
+# I82=642 where the untruncated file gives 657 -- byte-identical to the by-arm column -- and the
+# 15-fork gap was read as a real misattribution. `--dump <dir>` writes the whole file.
+BYLINE_MAX=60
+BYLINE_N="$(grep -c . "$RUN/by-line")" || BYLINE_N=0
 case "$SECTION" in
   by-line|all)
-    printf -- '--- forks-by-line ---\n'
-    head -60 "$RUN/by-line"
+    if [ "$BYLINE_N" -gt "$BYLINE_MAX" ]; then
+      printf -- '--- forks-by-line (TRUNCATED: %s of %s rows shown; --dump <dir> writes all) ---\n' "$BYLINE_MAX" "$BYLINE_N"
+    else
+      printf -- '--- forks-by-line (all %s rows) ---\n' "$BYLINE_N"
+    fi
+    awk -v max="$BYLINE_MAX" 'NR <= max' "$RUN/by-line"
     ;;
 esac
 case "$SECTION" in

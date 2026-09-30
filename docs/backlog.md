@@ -138,7 +138,19 @@ so only the TIMING path is blind.
 it must, and every invariant still fires. What is broken is a measurement practice this repo's
 own plan instructs sessions to use, and it has now produced two wrong scopings in one session.
 
-verify: sh v=scripts/validate-enforcement-map.sh; r=scripts/render-invariant-index.sh; [ -f "$v" ] || exit 9; [ -f "$r" ] || exit 9; grep -q 'ARMS_SELECT_AWK' "$v" || exit 9; ind=$(awk '/^[[:blank:]]+#[[:blank:]]*---[[:blank:]]*I[0-9]/{n++} END{print n+0}' "$v"); ctl=$(awk '/^[[:blank:]]+#[[:blank:]]*---[[:blank:]]*ZZQQ/{n++} END{print n+0}' "$v"); [ "$ctl" -eq 0 ] || exit 9; [ "$ind" -gt 0 ] || exit 9; bash "$r" --arm-lines "$v" >/dev/null 2>&1 || exit 9; out="$(bash "$v" --arms I41 2>&1 >/dev/null)"; printf '%s' "$out" | grep -qiE 'unit|also runs|selected arms' && exit 0; exit 1
+**LANDED (v0.666.0, verified <sha>).** The stronger form: `--arms` now prints one stderr line,
+`validate-enforcement-map: --arms NOTE: <request> selected unit(s) line <n> [<member ids>]; this
+run also runs <ids>, so a timing of it is a timing of every arm listed`, whenever the selection
+executes an id the request did not name (unit merge or `requires-arms:` closure). A request
+whose unit is itself alone prints nothing, and a request naming every id stays byte-identical
+to a plain run. `core/fixtures/validator-arm-selection`'s sweep worker exempts exactly that
+anchored prefix from its stderr-subset check; any other new stderr line still scores.
+
+**Receipt.** Runs the selector, both directions: `--arms I41` must print `also runs` on stderr,
+and `--arms I108` (a single-arm unit) must NOT. Scored: tip **0**, base `2e7c227c` **1**, a
+mutant with the NOTE unconditional **1**, a mutant with the NOTE removed **1**.
+
+verify: sh v=scripts/validate-enforcement-map.sh; r=scripts/render-invariant-index.sh; [ -f "$v" ] || exit 9; [ -f "$r" ] || exit 9; grep -q 'ARMS_SELECT_AWK' "$v" || exit 9; bash "$r" --arm-lines "$v" >/dev/null 2>&1 || exit 9; out="$(bash "$v" --arms I41 2>&1 >/dev/null)"; solo="$(bash "$v" --arms I108 2>&1 >/dev/null)"; printf '%s\n' "$out" | grep -q 'also runs' || exit 1; printf '%s\n' "$solo" | grep -q 'also runs' && exit 1; exit 0
 
 ## BL-254 — the `sh` receipt's base control is new, and nothing here asserts a consumer's INSTALLED engine ever runs it
 
@@ -3607,12 +3619,17 @@ only `tr` site in the range, negative control 0 — reports none). This entry is
 reader who hits both at once, as one did, reconciles the truncation artifact by blaming the
 attribution one and stops looking.
 
-**Receipt.** Keys on the emission site, not on prose about it, and not on the row counts — those
-move with the corpus. Scored before filing across four inputs: tip **1**, the section rewritten to
-`cat` **0**, a file mentioning `head -60 "$RUN/by-line"` only inside a comment **0**, a stub with
-no `forks-by-line` header **9**. Exit 9 if the profiler or that header is gone.
+**LANDED (v0.666.0, verified <sha>).** The section header now carries the row count, and says
+`TRUNCATED: 60 of <n> rows shown; --dump <dir> writes all` when it truncates, or `all <n> rows`
+when it does not.
 
-verify: sh f=scripts/fork-profile.sh; [ -f "$f" ] || exit 9; LC_ALL=C grep -q 'forks-by-line' "$f" || exit 9; LC_ALL=C grep -qE '^[[:blank:]]*head -[0-9]+ "\$RUN/by-line"' "$f" && exit 1; exit 0
+**Receipt.** The filed receipt keyed on a `head -60` spelling and was closable by `head -n 60`.
+This one RUNS the profiler: a seeded 70-fork target must print `TRUNCATED` with `60 of 70`, and
+a 5-fork target must NOT print `TRUNCATED` (so a header that always claims truncation fails).
+Scored: tip **0**, base `2e7c227c` **1**, a mutant printing the TRUNCATED header unconditionally
+**1**. Exit 9 if the profiler or the section header is gone.
+
+verify: sh f=scripts/fork-profile.sh; [ -f "$f" ] || exit 9; d=$(mktemp -d) || exit 9; { echo 'set -u'; i=0; while [ "$i" -lt 70 ]; do echo /usr/bin/true; i=$((i+1)); done; } > "$d/big.sh"; { echo 'set -u'; i=0; while [ "$i" -lt 5 ]; do echo /usr/bin/true; i=$((i+1)); done; } > "$d/small.sh"; big="$(bash "$f" --target "$d/big.sh" --section by-line 2>&1)"; small="$(bash "$f" --target "$d/small.sh" --section by-line 2>&1)"; rm -rf "$d"; printf '%s\n' "$big" | grep -q 'forks-by-line' || exit 9; printf '%s\n' "$big" | grep -qE 'forks-by-line.*TRUNCATED.*60 of 70' || exit 1; printf '%s\n' "$small" | grep -q 'TRUNCATED' && exit 1; exit 0
 
 
 ## BL-271 — no `PreToolUse` hook checks the artifact-path grammar, so a non-conforming path is created by `Write` and caught only at `pre-push`, after other artifacts have cited it
@@ -3813,10 +3830,23 @@ traced command whose reported line is a bare `fi`/`done`/`esac` cannot be the si
 so a reader cannot silently take one. Until then: before scoping an arm's cut from a by-line
 citation, confirm the named line is an executable fork site in that arm's range.
 
-**Receipt.** Keys on the ambiguity being MARKED or the attribution being fixed — not on the
-count, which moves with the corpus. Exit 9 if the profiler is gone.
+**LANDED (v0.666.0, verified <sha>).** The marking form. Every by-line row whose reported line
+is a bare `fi`/`done`/`esac`/`}`/`;;` carries a fourth field `AMBIGUOUS`, in the printed section
+and in the `--dump` file; by-arm rows holding such forks carry `ambiguous=<n>`; the summary
+prints `AMBIGUOUS <rows> <forks>`. The attribution itself is not fixed — bash 3.2 does not
+report the substitution's line, so the instrument can only say when the reported one cannot
+be a fork site. Measured on the validator at this tip: `AMBIGUOUS 25 25`, on 12 closer lines
+(11 `fi`, 1 `done`), each below a `<(` (control: an impossible token scores 0 in the same file).
 
-verify: sh f=scripts/fork-profile.sh; [ -f "$f" ] || exit 9; LC_ALL=C grep -qE 'process substitution|substitution is WRITTEN|ambiguous attribution|bare (fi|`fi`)' "$f" && exit 0; exit 1
+**Receipt.** The filed receipt matched any of four phrases anywhere in the profiler, so a
+comment closed it. This one RUNS the profiler on a seeded script with `done < <(printf | tr)`
+inside an if/elif chain and a straight-line `/usr/bin/true` after the `fi`. Exit 9 unless the
+seed reproduces the artifact (`tr` traced at line 9, the bare `fi`) and the control row is
+present; exit 1 unless the `tr` row is marked and the summary reads `AMBIGUOUS 1 1` (so the
+unmarked control stays unmarked). Scored: tip **0**, base `2e7c227c` **1**, a mutant whose
+closer predicate records nothing **1**.
+
+verify: sh f=scripts/fork-profile.sh; [ -f "$f" ] || exit 9; d=$(mktemp -d) || exit 9; printf '%s\n' 'set -u' 'x=1' 'if [ "$x" = 2 ]; then' '  :' 'elif [ "$x" = 1 ]; then' '  while read -r l; do' '    : "$l"' "  done < <(printf 'a/b\\n' | tr '/' '\\n')" 'fi' '/usr/bin/true' > "$d/seed.sh"; out="$(bash "$f" --target "$d/seed.sh" --section by-line 2>&1)"; rm -rf "$d"; printf '%s\n' "$out" | grep -qE '^1 9 tr( |$)' || exit 9; printf '%s\n' "$out" | grep -qE '^1 10 /usr/bin/true$' || exit 9; printf '%s\n' "$out" | grep -qE '^1 9 tr AMBIGUOUS$' || exit 1; printf '%s\n' "$out" | grep -qE '^AMBIGUOUS 1 1$' || exit 1; exit 0
 
 ## BL-269 — I75 has no fixture anywhere, so the arm most at risk from a batching rewrite is the one with no equivalence oracle
 
@@ -3845,7 +3875,22 @@ to be equivalent to.
 tractable form is dropping the hash and comparing normalised text directly, which is
 semantically identical and removes the per-subject external.
 
-verify: sh v=scripts/validate-enforcement-map.sh; [ -f "$v" ] || exit 9; LC_ALL=C grep -q 'i75_chain' "$v" || exit 9; n=$(grep -rl 'i75_norm\|i75_chain\|i75_failsclosed' core/fixtures/ --include='*.sh' 2>/dev/null | wc -l | tr -d ' '); [ "$n" -gt 0 ] && exit 0; exit 1
+**LANDED (v0.666.0, verified <sha>).** Seeded-drift arms A16–A19 in
+`core/fixtures/derived-fence-binding/run.sh`, driven through `--arms I75` on that fixture's
+whole-tree seed. A16 is the control: the clean seed passes and prints the verdict line. In A17,
+`audit-upstream-routing.sh`'s root block reads `CLAUDE_PROJECT_DIR` before the override, and
+`i75_drift` must name it. In A18 its `exit 2` terminal guard is removed, and `i75_open` must name
+it. A19 is the near-miss: a reworded comment inside the block must be acquitted. The host is
+not one of the enforcement-map batteries, because `b174-deadarm` is editing both. This fixture
+already drives `--arms` over a seed carrying `core/scripts/`, and its read set already covers
+the validator and the subject.
+
+**Receipt.** The filed receipt counted fixtures naming `i75_norm`/`i75_chain`, which a comment
+satisfies. This one RUNS the host fixture and requires the A17 and A18 `ok` lines. Scored: tip
+**0**, base `2e7c227c` **1**, and **1** for a mutant with the validator's `i75_drift` assignment
+neutered, in a whole-tree copy. Exit 9 if the host is gone.
+
+verify: sh f=core/fixtures/derived-fence-binding/run.sh; [ -f "$f" ] || exit 9; [ -f scripts/validate-enforcement-map.sh ] || exit 9; out="$(bash "$f" 2>&1)"; printf '%s\n' "$out" | grep -q '^  ok    A17 I75 ' || exit 1; printf '%s\n' "$out" | grep -q '^  ok    A18 I75 ' || exit 1; exit 0
 
 ## BL-267 — `I59_UNDOC_AWK` buffers a whole file into `lines[]`, so its memory cost is the largest corpus file rather than a constant
 
@@ -3865,6 +3910,18 @@ is in page cache by then.
 
 **Tiered NOTE.** Nothing is wrong today and no guard is weakened; this records a
 characteristic the change introduced so that a future corpus growth is not a surprise.
+
+**LANDED (v0.666.0, verified <sha>).** The second-pass form. After the mode pass the awk calls
+`close(fn)` and re-reads the file for the documentation pass, and it skips that pass when the file
+dispatches no mode. `lines[]` is gone. The battery anchors (`substr(parts[i], 1, 2) == "--"`,
+the `I59_HELP_EXEMPTION` line, and the corpus `find`) are byte-identical. Equivalence: base and
+tip awk programs run over the real `core/` corpus plus seeded files (an offender, an empty file
+and an absent file; 109 listed) gave byte-identical findings and an identical scanned count
+(107). Validator cost: see the commit.
+
+**Receipt.** Stays structural, deliberately. The property is memory, and no cheap behavioural
+receipt can tell a buffer from a re-read on a corpus this small. The equivalence above is the
+behavioural half.
 
 verify: sh v=scripts/validate-enforcement-map.sh; [ -f "$v" ] || exit 9; grep -q 'I59_UNDOC_AWK' "$v" || exit 9; LC_ALL=C grep -qE '^[[:blank:]]*lines\[\+\+nl\] = line$' "$v" || exit 0; exit 1
 
@@ -4505,7 +4562,22 @@ ERROR: sibling … not found`. A packaging change marking `reconcile-emit-report
 leave every consumer's `emit-report-refusal` erroring. `layer-entry-unreadable` and
 `provenance-flagless-default` carry the same unbound sibling shape.
 
-verify: manual
+**LANDED (v0.666.0, verified <sha>).** Invariant **I116** in `validate-enforcement-map.sh`: a
+fixture with no `.dist-only` that names `../<dir>/` on a non-comment line, where
+`core/fixtures/<dir>/run.sh` exists, fails the build if `<dir>` carries `.dist-only`. Premise
+correction: `layer-entry-unreadable` sources `../lib/preamble.sh`, and `core/fixtures/lib` has no
+run.sh, so it is out of population by that property, not by name. Measured on the real tree
+(comment lines stripped): 4 shipped-to-shipped pairs, all satisfied, 0 findings —
+emit-report-refusal→reconcile-emit-report, provenance-flagless-default→check-17-bypass,
+retro-compliance-workflow→check-17-bypass, layer-contract-conformance-b→layer-contract-conformance.
+One awk pass, with no forks per pair. Self-probe runs before the corpus: 1 offender and 5 near-misses.
+
+**Receipt.** Drives the shipping arm on the motivating case. A scratch copy with
+`reconcile-emit-report/.dist-only` added must exit 1 naming both fixtures, and the untouched copy
+must exit 0. Scored: tip **0**, base `2e7c227c` **1** (no I116, so `--arms I116` exits 2), a
+mutant with the breach test disabled **1** (its self-probe refuses).
+
+verify: sh v=scripts/validate-enforcement-map.sh; [ -f "$v" ] || exit 9; [ -f core/fixtures/reconcile-emit-report/run.sh ] || exit 9; d=$(mktemp -d) || exit 9; cp VERSION "$d/" && cp -R core scripts .githooks templates docs "$d/" || exit 9; [ -d patterns ] && cp -R patterns "$d/"; mkdir -p "$d/.claude" && cp -R .claude/rules "$d/.claude/rules"; ( cd "$d" && bash scripts/validate-enforcement-map.sh --arms I116 >/dev/null 2>&1 ); c=$?; echo x > "$d/core/fixtures/reconcile-emit-report/.dist-only"; o="$(cd "$d" && bash scripts/validate-enforcement-map.sh --arms I116 2>&1)"; b=$?; rm -rf "$d"; [ "$c" -eq 0 ] || exit 1; [ "$b" -eq 1 ] || exit 1; printf '%s\n' "$o" | grep -q 'I116.*emit-report-refusal uses reconcile-emit-report' || exit 1; exit 0
 
 ## BL-342 — `validate-h2-attestation.sh --verify` numbers a binary gate log with grep's banner
 

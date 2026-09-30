@@ -154,7 +154,12 @@ if [ "${1:-}" = "--sweep-one" ]; then
   if [ ! -s "$sw_out" ]; then
     printf '%s\tno-baseline\tthe full run produced empty stdout\n' "$sw_id"
   else
-    extra="$( { grep -vxF -f "$sw_out" "$sw_dir/o.$sw_id"; grep -vxF -f "$sw_err" "$sw_dir/e.$sw_id"; } | grep -c . || true)"
+    # ONE stderr line is exempt, by its fixed prefix and nothing looser: the selector's own
+    # `--arms NOTE:` naming the unit it actually ran (BL-274). A plain run cannot print it, so
+    # without this every id that shares a unit would score not-a-subset. Any OTHER new line still
+    # does -- the prefix is anchored and literal.
+    grep -v '^validate-enforcement-map: --arms NOTE: ' "$sw_dir/e.$sw_id" > "$sw_dir/e.$sw_id.f" || :
+    extra="$( { grep -vxF -f "$sw_out" "$sw_dir/o.$sw_id"; grep -vxF -f "$sw_err" "$sw_dir/e.$sw_id.f"; } | grep -c . || true)"
     [ "${extra:-0}" -eq 0 ] || printf '%s\tnot-a-subset\t%s line(s)\n' "$sw_id" "$extra"
   fi
   exit 0
