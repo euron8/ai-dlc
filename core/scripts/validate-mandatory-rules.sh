@@ -94,6 +94,40 @@ esac
 
 RETRO_BRANCH="ai-dlc/retro/sprint-${SPRINT_N}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# ---- run AT the project root, whatever directory it was invoked from (BL-328) ----------------
+# Every path this script reads is written relative to the project root: the schema's two root
+# arms, the story corpus template, docs/escalations/pending.md, the sprint-status.yaml pair, the
+# gate log, audit-anchors.md, the cycle log and the pipeline snapshot. Invoked from a subdirectory
+# they all resolved against the cwd, and re-rooting only SOME of them was worse than none: the
+# schema and corpus were found while the escalations file was not, so a story carrying a valid
+# waiver failed with "no waiver" -- a wrong reason, where a whole-cwd miss had at least said
+# "unresolved". So the root is resolved ONCE and the process moves there, which re-roots every
+# read together and leaves every message byte-identical to a run started at the root.
+#
+# The root is the nearest ancestor of the cwd carrying a marker only a PROJECT carries: .git, the
+# _bmad-output/ tree this script reads, .claude/schemas/ (the consumer install) or
+# core/skills/ai-dlc/ (the distribution). The cwd itself when invoked at the root, as documented.
+# NOT a bare .claude/, which the canonical resolver accepts: that directory also exists in $HOME
+# and in the per-user temp parent, so a project without .git walked straight out of itself into
+# an unrelated ancestor and moved there -- measured on validate-mandatory-rules-revive, whose
+# mktemp project climbed to <TMPDIR>/../.claude and lost Check 3. Moving the process makes a false
+# root cost every read, so the marker set is narrower here than where a root is only consulted.
+# NOT the override -> own-location -> harness-directory chain either: toolchain copies run from a
+# directory outside any project, where that chain falls through to the harness's session
+# directory, a different repo from the one the cwd names. An unresolved walk stays where it was
+# invoked, exactly as before. SCRIPT_DIR is absolute and resolved above, so siblings are unaffected.
+VMR_CALLER_CWD="$(pwd)"
+VMR_ROOT=""
+_vd="$VMR_CALLER_CWD"
+while [ -n "$_vd" ] && [ "$_vd" != "/" ]; do
+  if [ -e "$_vd/.git" ] || [ -d "$_vd/_bmad-output" ] || [ -d "$_vd/.claude/schemas" ] || [ -d "$_vd/core/skills/ai-dlc" ]; then VMR_ROOT="$_vd"; break; fi
+  _vd="$(dirname "$_vd")"
+done
+if [ -n "$VMR_ROOT" ] && [ "$VMR_ROOT" != "$VMR_CALLER_CWD" ]; then
+  cd "$VMR_ROOT" || { echo "validate-mandatory-rules.sh: cannot enter the project root $VMR_ROOT" >&2; exit 2; }
+fi
+
 FAILURES=0
 SKIPPED_CHECKS=""
 FAILURE_MSGS=""
@@ -267,32 +301,16 @@ GATE_LOG="_bmad-output/implementation-artifacts/gate-log.md"
 #   $SCRIPT_DIR/../schemas   the package this copy shipped in. Correct upstream
 #                            (core/scripts/../schemas) and in a synthetic toolchain dir; it is
 #                            NOT correct in a consumer, where it resolves to scripts/schemas.
-#   <root>/.claude/schemas   the consumer.
-#   <root>/core/schemas      the distribution.
+#   .claude/schemas          the consumer, from the project root this script runs at (it moved
+#                            there at the top, BL-328).
+#   core/schemas             the distribution, from its root.
 #
 # Script-relative FIRST, for sprint-status.sh's reason: a copy should read the schema it shipped
-# beside. The two root arms are the layouts where that copy has been split away from it.
-#
-# <root> IS WALKED UP FROM THE CWD, NOT TAKEN AS THE CWD (BL-328). The two root arms were bare
-# relative paths, so in the consumer layout a run from any directory below the project root found
-# no schema and Check 6 failed as unresolved. This script's contract is that it runs AT the project
-# root — every other path in it is cwd-relative — so the root is the nearest ancestor of the cwd
-# carrying the marker the canonical resolver uses, which is the cwd itself when that contract
-# holds. NOT the canonical override -> own-location -> harness-directory chain: toolchain copies
-# run from a directory outside any project, where that chain falls through to the harness's
-# session directory — a different repo from the one the cwd names. An unresolved walk keeps the
-# cwd, exactly as before. The story corpus below is rooted on the SAME root, so a run from a subdirectory reads
-# the corpus the schema describes rather than finding none and reporting it empty.
-VMR_ROOT=""
-_vd="$(pwd)"
-while [ -n "$_vd" ] && [ "$_vd" != "/" ]; do
-  if [ -e "$_vd/.git" ] || [ -d "$_vd/.claude" ] || [ -d "$_vd/core/skills/ai-dlc" ]; then VMR_ROOT="$_vd"; break; fi
-  _vd="$(dirname "$_vd")"
-done
+# beside. The two root-relative arms are the layouts where that copy has been split away from it.
 SPRINT_STATUS_SCHEMA=""
 for _sch in "$SCRIPT_DIR/../schemas/sprint-status.json" \
-            "${VMR_ROOT:-.}/.claude/schemas/sprint-status.json" \
-            "${VMR_ROOT:-.}/core/schemas/sprint-status.json"; do
+            ".claude/schemas/sprint-status.json" \
+            "core/schemas/sprint-status.json"; do
   [ -f "$_sch" ] && { SPRINT_STATUS_SCHEMA="$_sch"; break; }
 done
 STORIES_DIR_T=""
@@ -300,11 +318,6 @@ STORIES_SLOT=""
 if [ -n "$SPRINT_STATUS_SCHEMA" ]; then
   STORIES_DIR_T="$(sed -n 's/.*"stories_dir"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$SPRINT_STATUS_SCHEMA" | head -1)"
   STORIES_SLOT="$(sed -n 's/.*"stories_dir_sprint_placeholder"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$SPRINT_STATUS_SCHEMA" | head -1)"
-  # Below the project root the relative template is re-rooted. At the root it stays relative, so
-  # every message a run at the root prints is unchanged.
-  if [ -n "$STORIES_DIR_T" ] && [ -n "$VMR_ROOT" ] && [ "$VMR_ROOT" != "$(pwd)" ]; then
-    case "$STORIES_DIR_T" in /*) ;; *) STORIES_DIR_T="$VMR_ROOT/$STORIES_DIR_T" ;; esac
-  fi
 fi
 
 # <sprint-number, or `*` for every sprint> -> the corpus directory. Rule 1 declares `s*` the same
@@ -660,7 +673,7 @@ else
 fi
 
 if [ "$CHECK6_UNRESOLVED" -eq 1 ]; then
-  fail "Check6_STORIES_DIR_UNRESOLVED" "the story corpus location could not be resolved from schemas/sprint-status.json (looked beside ${SCRIPT_DIR}, then for .claude/schemas/ and core/schemas/ under ${VMR_ROOT:-$(pwd)}, the project root walked up from $(pwd); found '${SPRINT_STATUS_SCHEMA:-<no schema>}', stories_dir template '${STORIES_DIR_T:-<empty>}', slot '${STORIES_SLOT:-<empty>}'). Check 6 has no directory to read, so it verified NOTHING. This fails rather than skipping: an unresolvable subject and a clean one are the same silence."
+  fail "Check6_STORIES_DIR_UNRESOLVED" "the story corpus location could not be resolved from schemas/sprint-status.json (looked beside ${SCRIPT_DIR}, then for .claude/schemas/ and core/schemas/ under $(pwd), the project root walked up from ${VMR_CALLER_CWD}; found '${SPRINT_STATUS_SCHEMA:-<no schema>}', stories_dir template '${STORIES_DIR_T:-<empty>}', slot '${STORIES_SLOT:-<empty>}'). Check 6 has no directory to read, so it verified NOTHING. This fails rather than skipping: an unresolvable subject and a clean one are the same silence."
   CHECK6_FAILURES=$((CHECK6_FAILURES + 1))
   echo "  CHECK 6: FAIL — the corpus location did not resolve"
 elif [ "$CHECK6_SKIPPED" -eq 1 ]; then

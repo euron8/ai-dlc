@@ -4100,7 +4100,7 @@ verify: manual
 
 ## BL-326 — `validate-gate-adjudication.sh` reads the map from the install fallback and the escalations from the foreign root
 
-**LANDED (v0.666.0, verified 1cad026c).** Escalations are read from the root the map resolved under (`GA_MAP_ROOT`); receipt 0 at tip, 1 at base; `schema-install-fallback` arm N, ESC/ESCI killed.
+**FIXED IN v0.667.0, pending the post-merge close.** Escalations are read from the root the map resolved under (`GA_MAP_ROOT`); receipt 0 at tip, 1 at base; `schema-install-fallback` arm N, ESC/ESCI killed.
 
 **NOTE.** Found by the batch-160 contract adversary.
 
@@ -4119,7 +4119,7 @@ verify: sh d=$(mktemp -d); mkdir -p "$d/F/.claude" "$d/g" || exit 9; n=implement
 
 ## BL-327 — `validate-request-coverage.sh` locates its harness-origin schema by counting `..` hops
 
-**LANDED (v0.666.0, verified c1bc66dd).** Canonical AI_DLC_ROOT block (I75) plus install-root last candidate; receipt 0 at tip, 1 at base; `request-coverage` legacy-layout arm and hop mutant, `validator-path-resolution` now requires it root-sensitive.
+**FIXED IN v0.667.0, pending the post-merge close.** Canonical AI_DLC_ROOT block (I75) plus install-root last candidate; receipt 0 at tip, 1 at base; `request-coverage` legacy-layout arm and hop mutant, `validator-path-resolution` now requires it root-sensitive.
 
 **NOTE.** Found by the batch-160 contract adversary.
 
@@ -4136,7 +4136,7 @@ verify: sh d=$(mktemp -d); mkdir -p "$d/.git" "$d/.claude/schemas" "$d/scripts" 
 
 ## BL-328 — `validate-mandatory-rules.sh` resolves its sprint-status schema relative to the cwd
 
-**LANDED (v0.666.0, verified 8a72ce80).** Schema and story corpus resolve under a root walked up from the cwd; receipt 0 at tip, 1 at base; `story-corpus-sprint-slot` A13 and its two-layer mutant.
+**FIXED IN v0.667.0, pending the post-merge close.** The process moves to the project root walked up from the cwd, so every read (schema, story corpus, escalations, status file, gate log, audit anchors, cycle log, snapshot) resolves there together; receipt 0 at tip, 1 at base and at the partial re-root; `story-corpus-sprint-slot` A13 and A14 with their mutants.
 
 **NOTE.** Found by the batch-160 contract adversary.
 
@@ -4145,12 +4145,15 @@ bare relative paths `.claude/schemas/sprint-status.json` and `core/schemas/sprin
 Those two resolve against the process's working directory, not a resolved project root, so in
 the consumer layout a run from any directory other than the project root finds no schema.
 
-Receipt: a consumer-shaped tree (schema only at `.claude/schemas/`, one story in the sprint's slot)
-driven from `docs/sub/` must verify the story (exit 0), not report the corpus location unresolved
-(exit 1). `story-corpus-sprint-slot` A13 carries it with the A2 root-run near-miss and a mutant
-reverting both the schema and the corpus rooting.
+Receipt: in a consumer-shaped tree (schema only at `.claude/schemas/`), a self-executed story
+whose naming escalation entry carries `DECIDED_AUTONOMOUSLY` must give, from `docs/sub/`, the
+byte-identical Check 6 verdict and detail lines as a run from the root, and that root verdict must
+be a PASS (exit 0). A subdirectory run that finds the schema but not the escalations file, and so
+fails with "no waiver", exits 1, as does one that finds nothing. `story-corpus-sprint-slot` A13
+(corpus) and A14 (waiver) carry it, with A2/A11 as the root-run near-misses, a whole-revert mutant
+and a one-read (escalations) mutant.
 
-verify: sh d=$(mktemp -d); mkdir -p "$d/.git" "$d/.claude/schemas" "$d/scripts/ai-dlc" "$d/_bmad-output/planning-artifacts/s302/stories" "$d/docs/sub" || exit 9; cp core/schemas/sprint-status.json "$d/.claude/schemas/" || exit 9; cp core/scripts/validate-mandatory-rules.sh "$d/scripts/ai-dlc/" || exit 9; for s in validate-retro-evidence.sh validate-cycle-commits.sh validate-retro-prereq.sh; do printf '#!/bin/sh\nexit 0\n' > "$d/scripts/ai-dlc/$s"; done; printf -- '---\nstatus: done\n---\n\n# s\n\n## Dev Agent Record\n\ndev did it.\n' > "$d/_bmad-output/planning-artifacts/s302/stories/story-1-a.md"; o=$(cd "$d/docs/sub" && bash "$d/scripts/ai-dlc/validate-mandatory-rules.sh" 302 2>&1); case "$o" in *"CHECK 6: PASS — 1 story file(s) verified"*) exit 0 ;; *"CHECK 6: FAIL — the corpus location did not resolve"*) exit 1 ;; esac; exit 9
+verify: sh d=$(mktemp -d); mkdir -p "$d/.git" "$d/.claude/schemas" "$d/scripts/ai-dlc" "$d/_bmad-output/planning-artifacts/s302/stories" "$d/docs/sub" "$d/docs/escalations" || exit 9; cp core/schemas/sprint-status.json "$d/.claude/schemas/" || exit 9; cp core/scripts/validate-mandatory-rules.sh "$d/scripts/ai-dlc/" || exit 9; for s in validate-retro-evidence.sh validate-cycle-commits.sh validate-retro-prereq.sh; do printf '#!/bin/sh\nexit 0\n' > "$d/scripts/ai-dlc/$s"; done; printf -- '---\nstatus: done\n---\n\n# s\n\n## Dev Agent Record\n\nModel: lead (self-executed) — see waiver\n' > "$d/_bmad-output/planning-artifacts/s302/stories/story-1-a.md"; printf '## [Sprint-302 / Story 302-1 self-execution] Lead - 2026-08-11\n**Status:** DECIDED_AUTONOMOUSLY\n' > "$d/docs/escalations/pending.md"; r=$(cd "$d" && bash "$d/scripts/ai-dlc/validate-mandatory-rules.sh" 302 2>&1 | grep -E '^  CHECK 6:|^\[Check6_'); s=$(cd "$d/docs/sub" && bash "$d/scripts/ai-dlc/validate-mandatory-rules.sh" 302 2>&1 | grep -E '^  CHECK 6:|^\[Check6_'); case "$r" in *"PASS — 1 story file(s) verified"*) ;; *) exit 9 ;; esac; [ "$s" = "$r" ] && exit 0; exit 1
 
 ## BL-329 — `sync-transient-ignore.sh --root <foreign>` exits 2 in the consumer layout
 
@@ -4168,7 +4171,7 @@ verify: manual
 
 ## BL-330 — `validate-write-format-steering.sh` falls back per schema FILE, so a root carrying some schemas mixes two trees
 
-**LANDED (v0.666.0, verified 846743b0).** The schema pair resolves from one directory; receipt 0 at tip, 1 at base; `schema-install-fallback` arm P, PERFILE killed. BL-331 is not closed by this.
+**FIXED IN v0.667.0, pending the post-merge close.** The schema pair resolves from one directory; receipt 0 at tip, 1 at base; `schema-install-fallback` arm P, PERFILE killed. BL-331 is not closed by this.
 
 **NOTE.** Found by the batch-160 tip adversary. No production caller passes the override to this
 script (a grep for `AI_DLC_PROJECT_ROOT` beside its name in `core/hooks` returns 0, against a
