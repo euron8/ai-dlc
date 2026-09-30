@@ -15856,3 +15856,61 @@ unrotated after its pull. The banked ruling stands: report the gap and write no 
 
 Batch 168's next-work list and delivery gap are spent: batch 169's block above replaces both.
 
+**BATCH 170 SHIPPED `v0.661.0` (`4fff688e`, #897) AND CLOSED `BL-356`. IT DISCHARGES NO CONSUMER
+CANDIDATE.** It was invoked by peer handoff and took the lib.sh release the batch-169 block
+recommended. The opening sweep matched batch 169 exactly: live 28, unfiled 12, worklist 5 (the same
+self-disqualifying rows), TERMINAL 147, ledger md5 `34f7e60e…` on the consumer's `main`, every control
+at its expected value. Live backlog **100 -> 100** (`BL-356` rotated, `BL-364` filed), archive
+**262 -> 263**. The exit-0 receipt set went from batch 169's nine to those nine plus `BL-356`,
+compared by id, so nothing closed incidentally.
+
+**`BL-360`, LIB.SH HALF: THE THREE AWK EMITTERS ARE `printf` LITERALS.** Under `ulimit -f 0` with
+SIGXFSZ ignored, `ledger_entry_awk` returned rc 1 and 0 bytes at 0.660.0, and every inline
+`awk "$(ledger_entry_awk)…"` caller discarded that status. The emitted programs are byte-identical to
+0.660.0. **`BL-356` CLOSED AT THE PRODUCER, IN THREE PLACES**: `memo_diff_name_status`, preclassify's
+relocation `ls-tree`, and `machinery_paths()`'s two `ls-files`. The contract adversary found the
+second and the tip adversary the third; without the third, arm C stopped carrying a consumer-edited
+non-ASCII machinery file. **Every `core.quotePath` site is a JOIN, not a listing**: flipping one side
+breaks whatever joins it against a side still quoted. `BL-364` files the other 29 as a census.
+
+**THE GATE FAILED TWICE ON THIS RELEASE'S OWN EDITS, NEITHER A REGRESSION.** `relocation-preclassify`
+anchored a mutation on the exact `ls-tree` text the fix changed, and its `cmp` guard refused; it is
+re-anchored. `S7` read a `gsub(` and a `\047` on one line as a backreference; the line is split. Gate
+on `d656c87d`: 24 PASS, 0 FAIL, 1 SKIP, 214 ok, all four changed fixtures `ok` by name against an
+impossible-name control of 0, `ls-remote` matching, squash tree identical to the gated tip.
+
+**READ-SET TRACES STILL OWED**, and this batch adds none: `procsub-staged-refusal`'s row already
+lists the whole `reconcile/` directory. Batch 169's owed trace has not run —
+`.ai-dlc-fixture-readsets.tsv` last moved at `feb95866`. `sudo bash
+core/scripts/derive-fixture-readsets.sh --list "procsub-staged-refusal retired-layer-contract
+retired-layer-passage"` on a checkout of `origin/main`.
+
+**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
+- **OPERATOR PRIORITY, SET 2026-09-29: `BL-365`..`BL-368` come BEFORE `BL-360`.** They shard the
+  adversary, party-mode, remediator, gate-adjudicator and analyst dispatches, which hold most of the
+  graph lead's 144h of solo subagent wait.
+- The unfiled set holds no new core filing. `BL-360`'s remaining half is the strongest
+  distribution-internal work: `apply.sh`, `preclassify.sh`, `ledger-reverify.sh`,
+  `self-update-gate.sh`, `self-update-fixtures.sh` (`:655`, `:961`) and `emit-report.sh` (`:842`) —
+  each BOOTSTRAPPING, each shipping alone. `BL-364`'s sites in the same file can ride each release,
+  but only with every join that reads them flipped in the same release.
+- Filings owed when a close frees room are batch 169's list, unchanged, then this batch's NOTEs:
+  `memo_diff_name_status`'s memo key omits the `quotePath` flag (harmless while one process tree
+  sources one lib.sh), and a bare `git archive <sha>` in this repo exported only `core/` (cause
+  unfound; pass the top-level paths).
+- `BL-230` needs a mechanism for E1, E2 and E9.
+
+**THE DELIVERY GAP IS TWO RELEASES.** The consumer's `main` stamps 0.658.0 (`312c46ee`); its
+checked-out carry-over branch stamps 0.659.0 (`322ef42c`). Against `VERSION` 0.661.0,
+`322ef42c..origin/main` carries three bootstrapping files — the update `SKILL.md`, `lib.sh` and
+`preclassify.sh` — and 0 of 16 `core/` rows are mode-only. PENDING is 0: no release commit in the
+range names a `PC-` id (positive control: the 0.659.0 range names 3). The banked ruling stands:
+report the gap and write no runbook.
+
+**THE CHECK-34 FINDING HAS EXPIRED.** `_bmad-output/pipeline-snapshot.md:13` now carries bare 64-hex
+with no `SHA256:` prefix, which `validate-scope-confirmation.sh`'s hex rule accepts (1 match against
+the prefix grep's 0). Do not restate it.
+
+Batch 169's next-work list, delivery gap and check-34 finding are spent: batch 170's block above
+replaces all three.
+
