@@ -240,6 +240,7 @@ core_manifest:
   - fixtures/escalation-delivery/**
   - fixtures/extract-push-flag-decision/**
   - fixtures/fold-architect-ledger-join/**
+  - fixtures/update-preflight-push/**
   - fixtures/inflight-row-shape/**
   - fixtures/known-skills-extension/**
   - fixtures/layer-anchor-declaration/**
