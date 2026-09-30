@@ -50,7 +50,7 @@ command -v python3 >/dev/null 2>&1 || { echo "FIXTURE ERROR: python3 absent" >&2
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
-EXPECTED_ASSERTIONS=48
+EXPECTED_ASSERTIONS=65
 fails=0; made=0
 ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
@@ -729,6 +729,142 @@ score MC_off "$(mkmut mc_off "$ANCHOR_QUOTE" '')" "$CREG" \
 score MC_anyq "$(mkmut mc_anyq "$ANCHOR_QUOTE" "(?<!')")" "$CREG" \
   "a lookbehind on any quote acquits the scare-quoted real obligation \`is 'deferred' to a later pull\`" \
   absent 'scarequote\.md'
+
+# =============================================================================================
+# THE CORRECTION CHANNEL (BL-142) — a later row's `withdraws` retracts the REASON of earlier rows
+# on its own entry without changing the verdict. Before it, the register's only correction path
+# was a later row whose prose said so, and that later row is usually a discharge row the arm
+# exempts — so the claim was read forever and its retraction never.
+#
+# `wdrawn.md` and `keepw.md` carry BYTE-IDENTICAL reason prose at the SAME instant and differ in
+# exactly one thing: a later row on `wdrawn.md` names that instant. `wdrawn.md` also carries a TWIN row
+# at that instant under a second clause — the shape the reference register holds five of — so
+# the withdrawal must take both. The withdrawing row on `wdrawn.md` is a discharge row, as it was on
+# the reference consumer. `wself.md`'s withdrawing row is NOT a discharge and states its own
+# obligation: a withdrawal retracts what it names, never the row that carries it.
+# =============================================================================================
+WREG="$WORK/withdraw.jsonl"
+python3 "$WORK/mkreg.py" "$WREG" <<'SPEC'
+{"entry":"extensions/wdrawn.md","reason":"The body-relocation half was NOT re-checked and the debt is therefore left open.","recorded_utc":"2026-08-06T10:00:00Z"}
+{"entry":"extensions/wdrawn.md","clause":"LC-E19","reason":"The body-relocation half was NOT re-checked and the debt is therefore left open.","recorded_utc":"2026-08-06T10:00:00Z"}
+{"entry":"extensions/keepw.md","reason":"The body-relocation half was NOT re-checked and the debt is therefore left open.","recorded_utc":"2026-08-06T10:00:00Z"}
+{"entry":"extensions/wdrawn.md","reason":"Debt discharged. CORRECTION to the earlier row: there is no body-relocation half; that sentence is withdrawn.","recorded_utc":"2026-08-06T10:30:00Z","closes_owed":["OWED-W1"],"withdraws":["2026-08-06T10:00:00Z"]}
+{"entry":"extensions/wself.md","reason":"The body-relocation half was NOT re-checked and the debt is therefore left open.","recorded_utc":"2026-08-06T10:00:00Z"}
+{"entry":"extensions/wself.md","reason":"The earlier row is withdrawn. The split is still deferred to a later pull.","recorded_utc":"2026-08-06T10:30:00Z","withdraws":["2026-08-06T10:00:00Z"]}
+{"entry":"extensions/wx.md","reason":"The split is still deferred to a later pull.","recorded_utc":"2026-08-06T09:00:00Z"}
+{"entry":"extensions/wx.md","reason":"withdraws an instant that exists only on another entry","recorded_utc":"2026-08-06T11:00:00Z","withdraws":["2026-08-06T10:00:00Z"]}
+{"entry":"extensions/wghost.md","reason":"The split is still deferred to a later pull.","recorded_utc":"2026-08-06T10:00:00Z"}
+{"entry":"extensions/wghost.md","reason":"withdraws an instant no row carries","recorded_utc":"2026-08-06T11:00:00Z","withdraws":["2026-08-06T10:00:01Z"]}
+{"entry":"extensions/wfwd.md","reason":"withdraws a row written after it","recorded_utc":"2026-08-06T10:00:00Z","withdraws":["2026-08-06T11:00:00Z"]}
+{"entry":"extensions/wfwd.md","reason":"The split is still deferred to a later pull.","recorded_utc":"2026-08-06T11:00:00Z"}
+{"entry":"extensions/wstr.md","reason":"The split is still deferred to a later pull.","recorded_utc":"2026-08-06T10:00:00Z"}
+{"entry":"extensions/wstr.md","reason":"withdraws as a bare string","recorded_utc":"2026-08-06T11:00:00Z","withdraws":"2026-08-06T10:00:00Z"}
+{"entry":"extensions/wowed.md","reason":"carries an obligation","recorded_utc":"2026-08-06T10:00:00Z","owed":{"id":"OWED-WO1","what":"split X out"}}
+{"entry":"extensions/wowed.md","reason":"the earlier reason is withdrawn","recorded_utc":"2026-08-06T11:00:00Z","withdraws":["2026-08-06T10:00:00Z"]}
+SPEC
+wout="$(run "$WREG")"
+wund="$(und_block "$wout")"
+wbad="$(awk '/^WITHDRAWALS THAT RESOLVE TO NOTHING/{f=1} /^CONTRADICTS-CORE/{f=0} f' <<<"$wout")"
+
+if grep -q 'wdrawn\.md' <<<"$wund"; then
+  bad "a row whose reason a LATER row on its entry withdraws (and its same-instant twin) is still filed as undeclared"
+  show "$wund"
+else
+  ok "a withdrawn row and its same-instant twin under a second clause leave UNDECLARED"
+fi
+if grep -q 'keepw\.md' <<<"$wund"; then
+  ok "NEAR-MISS: byte-identical prose at the same instant on an entry nothing withdraws is still reported"
+else
+  bad "the withdrawal acquitted a row on a DIFFERENT entry — it is keyed on the instant, not on (entry, instant)"
+  show "$wund"
+fi
+n_wself="$(grep -c 'wself\.md' <<<"$wund")" || n_wself=0
+if [ "$n_wself" -eq 1 ]; then
+  ok "the withdrawing row's own obligation is still reported, and only the row it names is retracted"
+else
+  bad "wself.md appears $n_wself times in UNDECLARED, not 1 — the withdrawal retracted the wrong row(s)"
+  show "$wund"
+fi
+if grep -q 'wx\.md.*no record on this entry' <<<"$wbad" && grep -q 'wx\.md' <<<"$wund"; then
+  ok "a withdrawal naming an instant that exists only on ANOTHER entry is reported, and its entry's row stays"
+else
+  bad "a cross-entry withdrawal was not reported as unresolved, or its entry's row was acquitted"
+  show "$wout"
+fi
+if grep -q 'wghost\.md.*no record on this entry' <<<"$wbad" && grep -q 'wghost\.md' <<<"$wund"; then
+  ok "a withdrawal naming an instant no row carries is reported, not silently accepted"
+else
+  bad "a withdrawal naming a non-existent row was silently accepted"
+  show "$wout"
+fi
+if grep -q 'wfwd\.md.*at or after' <<<"$wbad" && grep -q 'wfwd\.md' <<<"$wund"; then
+  ok "a FORWARD withdrawal (naming a row written after it) is reported and honoured by nothing"
+else
+  bad "a forward withdrawal was honoured or not reported — an append-only correction cannot name a later row"
+  show "$wout"
+fi
+if grep -q 'wstr\.md.*not an array' <<<"$wbad" && grep -q 'wstr\.md' <<<"$wund"; then
+  ok "a bare-string \`withdraws\` is reported as malformed and honoured by nothing"
+else
+  bad "a bare-string \`withdraws\` was not reported as malformed, or was honoured"
+  show "$wout"
+fi
+wjson="$(bash "$AUDIT" --register "$WREG" --json 2>&1)"
+if [ "$(python3 -c 'import json,sys; print(len(json.loads(sys.stdin.read()).get("unresolved_withdrawals", [])))' <<<"$wjson" 2>/dev/null)" = 4 ]; then
+  ok "--json carries all 4 unresolved withdrawals under \`unresolved_withdrawals\`"
+else
+  bad "--json does not carry exactly 4 unresolved withdrawals — the machine channel drops what the text channel reports"
+  show "$wjson"
+fi
+if grep -q 'OWED-WO1' <<<"$wout"; then
+  ok "withdrawing the prose of a row that declared an \`owed\` leaves the debt OPEN — only \`closes_owed\` discharges"
+else
+  bad "a withdrawal discharged a structured \`owed\` — withdrawing prose is not closing a commitment"
+  show "$wout"
+fi
+if grep -q 'WITHDRAWALS\|withdraw' <<<"$dout" || grep -q 'unresolved_withdrawals' <<<"$(bash "$AUDIT" --register "$DREG" --json 2>&1)"; then
+  bad "a register carrying no \`withdraws\` field printed withdrawal output — the reader is not backward compatible"
+  show "$dout"
+else
+  ok "a register with no \`withdraws\` field prints no withdrawal section, text or --json"
+fi
+
+ANCHOR_WSKIP='    if (r.get("entry"), r.get("recorded_utc")) in withdrawn:
+        continue'
+# MW_off — the reader blind to `withdraws`, i.e. the behaviour this section replaced.
+score MW_off "$(mkmut mw_off "$ANCHOR_WSKIP" '    if False:
+        continue')" "$WREG" \
+  "with the withdrawal ignored, the withdrawn row is filed as undeclared again" \
+  present 'wdrawn\.md'
+# MW_utc — keyed on the instant alone. `keepw.md` shares the withdrawn instant on another entry.
+score MW_utc "$(mkmut mw_utc "$ANCHOR_WSKIP" '    if r.get("recorded_utc") in {_u for _e, _u in withdrawn}:
+        continue')" "$WREG" \
+  "a withdrawal keyed on the instant alone acquits the same-instant row on an entry nothing withdraws" \
+  absent 'keepw\.md'
+# MW_self — the field's mere PRESENCE silences its own row.
+score MW_self "$(mkmut mw_self "$ANCHOR_WSKIP" '    if (r.get("entry"), r.get("recorded_utc")) in withdrawn or "withdraws" in r:
+        continue')" "$WREG" \
+  "a skip keyed on the field rather than on its target silences the withdrawing row's own obligation" \
+  absent 'wself\.md'
+# MW_nores — the resolution check dropped: an unresolvable name is accepted silently.
+score MW_nores "$(mkmut mw_nores '        if t not in instants.get(went, set()):' '        if False:')" "$WREG" \
+  "without the resolution check, a withdrawal naming no row on its entry goes unreported" \
+  absent 'no record on this entry carries'
+# MW_fwd — the ordering check dropped: a row withdraws one written after it.
+score MW_fwd "$(mkmut mw_fwd '        elif not t < wutc:' '        elif False:')" "$WREG" \
+  "without the ordering check, a forward withdrawal is honoured and goes unreported" \
+  absent 'at or after'
+# MW_type — the type check dropped: a bare string is iterated as characters.
+score MW_type "$(mkmut mw_type '    if not isinstance(wv, list) or not all(isinstance(t, str) for t in wv):' '    if False:')" "$WREG" \
+  "without the type check, a bare-string withdrawal is not reported as malformed" \
+  absent 'not an array'
+# MW_uncond — the section printed unconditionally, which breaks byte-identity for every register
+# that predates the field. Scored on the no-`withdraws` register.
+score MW_uncond "$(mkmut mw_uncond 'if bad_withdrawals:
+    print("WITHDRAWALS' 'if True:
+    print("WITHDRAWALS')" "$DREG" \
+  "a withdrawal section printed with no \`withdraws\` field in the register changes old output" \
+  present 'WITHDRAWALS THAT RESOLVE'
 
 # UNMUTATED CONTROL — necessary and NOT sufficient. rc=0-with-no-findings is exactly what a
 # subject replaced by `exit 0` looks like, so this carries a POSITIVE conjunct: a copy taken and
