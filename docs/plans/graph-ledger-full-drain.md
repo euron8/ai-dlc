@@ -95,10 +95,9 @@ tip adversary found no BLOCKER; its two DEFECTs were read-set traces, which the 
 `d41d47d0` and which ship in this close (only `requirements-step` and `review-carry-over-clauses`
 moved).
 
-**`docs/reviews/graph-consumer-owned-close-brief.md` is for the operator to carry into a graph
-session**: fourteen candidates no upstream release will discharge, eleven naming only non-core paths
-and three adjudicated here, rehearsed on a copy of the consumer's ledger at `737bf163` with its
-installed rotator (14 move, live 31 -> 17, no other id moved).
+**`docs/reviews/graph-consumer-owned-close-brief.md` IS APPLIED.** Its fourteen candidates, eleven
+naming only non-core paths and three adjudicated here, are all in the consumer's archive, 14 of 14,
+measured by the fresh-resume sweep against `origin/main` `02e890e0`.
 
 **BATCH 174 ALSO SHIPPED `v0.667.0` (`23af7954`, #915) AND DISCHARGED
 `PC-S315-DERIVE-FIXTURE-READSETS-COPIES-THE-WHOLE-WORKING-TREE` (`BL-379`).** It carried the
@@ -129,10 +128,13 @@ CHANGELOG entry states that `LC-E11` was widened in place. `b174-bl329` (`BL-329
 `aiDlcModels`/`aiDlcRoles` entry and any file whose bytes differ from core's copy** (operator ruling
 and tip-adversary fix, both shipped in `v0.667.0`).
 
-**THE DELIVERY GAP IS THREE RELEASES.** The consumer's stamp reads 0.664.0 (`bf998dfb`) against
-`VERSION` 0.667.0; none of 0.665.0, 0.666.0 or 0.667.0 touches a bootstrapping file. PENDING is 3:
-this batch's three ids, first named at 0.666.0 and 0.667.0. The banked ruling stands: report the gap
-and write no runbook.
+**THE DELIVERY GAP IS ZERO.** The consumer pulled to 0.667.0 (`23af7954`) while the close ran, on
+`b6b68b3c` (#1136), so its stamp equals `VERSION`. This batch's three discharged ids are still live
+in its ledger until its own ledger-reverify closes them. It filed three candidates on 2026-09-29 and
+2026-09-30 that no backlog entry cites yet: `PC-S315-ARTIFACT-WRITE-LEDGER-DROPS-PARALLEL-SHARD-ROWS`,
+`PC-S315-AUDIT-LAYER-DEBT-CUE-ARM-READS-CORE-FIELD-VOCABULARY-AS-AN-OBLIGATION` and
+`PC-S315-NO-AMENDMENT-PATH-FOR-A-NOTARIZED-ARTIFACT-AFTER-A-STORY-DECISION`. The fresh-resume sweep
+read live 18 on 8 qualifying refs, unfiled 4, worklist 1, TERMINAL 151.
 
 Batch 173's next-work list and delivery gap are spent: batch 174's block above replaces both.
 
@@ -867,8 +869,9 @@ comm -12 /tmp/live.txt /tmp/arch.txt | wc -l          # control: must be 0, the 
 comm -12 /tmp/live.txt /tmp/filed.txt | wc -l         # live candidates a backlog entry cites
 comm -23 /tmp/live.txt /tmp/filed.txt                 # live candidates NOTHING has filed
 grep -cx 'PC-S333-SKILL-RENDERS-THE-THEIRS-REF-UNQUOTED-AND-ZSH-EATS-IT' /tmp/filed.txt  # control: 1
-grep -cx 'PC-S309-PRE-PUSH-FLAG-MISMATCH-ORIGINAL-TEXT' /tmp/live.txt   # control: 1, a SPACED bullet.
-                                                      # It was `PC-S295-RETRO-PARALLEL-OPEN-COUNT-METHOD`,
+grep -cx 'PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY' /tmp/live.txt   # control: 1, a SPACED bullet.
+                                                      # It was `PC-S309-PRE-PUSH-FLAG-MISMATCH-ORIGINAL-TEXT`,
+                                                      # then `PC-S295-RETRO-PARALLEL-OPEN-COUNT-METHOD`,
                                                       # and `-CHECK5-SELF-REFERENTIAL` before that,
                                                       # until the consumer ARCHIVED each id, after
                                                       # which it read 0 on a correct derivation. A
@@ -985,7 +988,7 @@ wc -l < /tmp/pc_backed.tsv     # THE WORKLIST: entries whose candidate is STILL 
 cat /tmp/pc_backed.tsv         # read it -- the ids are the batch's candidate set
 # controls, same invocation:
 wc -l < /tmp/live.txt                                            # must be NON-ZERO
-grep -cxF 'PC-S309-PRE-PUSH-FLAG-MISMATCH-ORIGINAL-TEXT' /tmp/live.txt  # a known-live id: 1
+grep -cxF 'PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY' /tmp/live.txt  # a known-live id: 1
 grep -cxF 'PC-S999-NEVER-A-REAL-ID' /tmp/live.txt                # impossible id: 0
 ```
 
