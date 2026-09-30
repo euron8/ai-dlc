@@ -578,115 +578,6 @@ over a check that looks for the mistake afterwards.
 
 verify: sh L=docs/backlog.md; [ -f "$L" ] || exit 9; t="$(grep -cE '^## BL-[0-9]+' "$L")"; [ "$t" -gt 0 ] || exit 9; ttl="$(grep -cE '^## BL-[0-9]+[ \t]+[^ \t]' "$L")"; bare="$(grep -cE '^## BL-[0-9]+[ \t]*$' "$L")"; [ "$((ttl + bare))" -eq "$t" ] || exit 9; [ "$bare" -eq 0 ]
 
-## BL-089 — an EXPIRED receipt and a live defect are the same row, so a receipt that can no longer measure anything reads as evidence that it did
-
-**SECOND SUBJECT FIXED IN v0.669.0, pending the post-merge close.** `backlog-reverify.sh` captures
-each receipt's stderr and routes exit 1/2/127 to NEEDS-REVIEW `unresolved:` when the receipt's OWN
-shell (the `$0: line` / `$0: eval: line` prefix) reports `command not found`, `syntax error` or `No such
-file or directory`; subject-side diagnostics and a bare 127 stay STILL-LIVE. False-positive set measured
-over 36 live and 300 of 309 archived receipts: 0 own-prefix matches, 0 archived rows moved. The 11
-unmeasured each run the whole pre-push suite (BL-046, 051, 086, 124, 155, 191, 208, 237, 259, 277, 354);
-available, not measured, for cost at load ~130. `backlog-ledger` seed F holds BL-081's and BL-066's
-shapes against three subject-side near-misses, two mutants killed. Receipt: base 1, fix 0, stderr routing
-dropped 1, own-prefix dropped 1, any-127 routed 1.
-
-**WIDER THAN FILED: the population is not the exit-9 receipts.** This entry was filed against
-the exit-9 convention, and its cited population has since moved — `BL-076` is archived, leaving
-one live exit-9 member. The batch-10 triage sweep measured the class directly and found the
-larger and more dangerous half is receipts that exit **1** having measured nothing, which is
-byte-indistinguishable from a genuine reproduction and does not even carry the 9 as a hint:
-
-- **`BL-081`'s receipt** returned exit 1 from `v0.402.0` until this sweep retired it. `d983feb9`
-  factored the token split into `receipt_path_tokens()` one line ABOVE the receipt's
-  `sed -n "/^receipt_absent_subjects() {/,/^}/p"` range, so both arms died with
-  `receipt_path_tokens: command not found` and the empty `b` failed the test. It had correctly
-  earned a close for the 16 releases between `v0.386.0` and `v0.402.0`, then went silently
-  wrong. Its sanity arm could not see it: the arm tests only that the extracted text CONTAINS
-  the function name, which mangled text still does.
-- **`BL-066`'s receipt** exits 9, but for the same structural reason rather than the documented
-  one: the fix introduced a multi-line parameter expansion whose continuation line is a bare
-  `}"`, which the `/^}/` range end matches, truncating the extraction to an unparseable
-  fragment. It is also unsatisfiable even once repaired, because the fix changed the return
-  shape from a version to a sha pair while the assertion still tests `$1 = "0.3.0"`.
-- **`BL-006`'s receipt** fails in the opposite direction — it exits 0 on a comment. See that
-  entry; it is currently the ledger's only CLOSE-CANDIDATE and it is false.
-
-**The shape to take from this: single-sourcing a helper to prevent drift BREAKS every receipt
-that extracts its caller by `sed`/`awk` range.** The two failures are the same edit seen from
-opposite ends. A receipt that reconstructs a function body from the file is coupled to the
-file's LAYOUT, and nothing declares that coupling. Any remedy for this entry should treat "the
-receipt errored" as its own status rather than folding it into either verdict — the distinction
-`backlog-reverify.sh` cannot currently draw is between *measured and reproduced* and *could not
-measure*, and the exit code alone will never carry it.
-
-**`backlog-reverify.sh` maps `sh` receipts on exit code alone — 0 is CLOSE-CANDIDATE and
-EVERY non-zero is `STILL-LIVE  … "sh receipt exited non-zero -- still reproduces here"`
-(`scripts/backlog-reverify.sh:198-203` as filed; the routing now sits at `:241-250`).** But this corpus's receipts use **exit 9** as their
-own HAND-REVIEW convention: it is what a receipt returns when a PRECONDITION has moved and it
-therefore measured nothing. The engine folds that into STILL-LIVE, so a receipt asserting *"I
-could not tell"* is reported in the same words as one asserting *"the defect is still here"*.
-
-**Driven through the shipping engine on a two-entry probe ledger, both verdicts byte-identical:**
-
-```
-STILL-LIVE	BL-901	sh receipt exited non-zero -- still reproduces here     (receipt: exit 1)
-STILL-LIVE	BL-902	sh receipt exited non-zero -- still reproduces here     (receipt: exit 9)
-```
-
-**The population is 2 of the 56 live `verify: sh` entries, and it is derived twice.** Running
-every live receipt directly: 0 exit 0, **2 exit 9**, 54 other non-zero, against a control of 5
-entries declaring `verify: manual` which the engine does route to HAND-REVIEW. They are
-**`BL-066`** and **`BL-076`**. Independently, a mutant of the engine that routes 9 to
-NEEDS-REVIEW takes the real ledger from 54 STILL-LIVE to **52** — the same 2, arrived at from
-the other side.
-
-**`BL-066`'s receipt does not merely expire, it is BROKEN SHELL**: it dies with
-`syntax error: unexpected end of file` and is reported as a defect that still reproduces. That
-is the direction that matters — a receipt with no valid parse and a defect with no fix are one
-row, and the row reads as the second.
-
-**This is not hypothetical damage and the cost is measured in releases.** `BL-079`'s receipt
-seeded a `SPEC.md` in a capability grammar the validator had since started DISARMing, so both
-its arms returned 2 and its own guard `[ "$c" -eq 1 ] || exit 9` fired against **every**
-implementation, a correct one included. It sat as STILL-LIVE from `v0.378.0` to `v0.415.0` and
-was found only because a session re-derived the entry by hand rather than believing its row.
-**A receipt that rejects all answers is the CLOSE side of the same coin the engine's own
-comments already worry about**: its `has`/`lacks` arms carry a paragraph on a false CLOSE
-retiring a live item, and this is a false STILL-LIVE keeping a dead one — cheaper per instance
-and unbounded in duration, because nothing ever revisits a STILL-LIVE row.
-
-**Why the receipt is the receipt.** It cannot assert on the engine's WORDING, since any fix is
-free to phrase a new verdict differently, and it must not assert on the real ledger, whose
-membership moves every batch. It seeds a two-entry ledger under `mktemp` — one receipt exiting
-1, one exiting 9 — drives the shipping engine over it, and requires the two rows to receive
-DIFFERENT verdicts. Its control runs FIRST and is that the exit-1 entry is reported STILL-LIVE:
-without that, "the two differ" is equally satisfied by an engine that emitted nothing, and by
-one that never ran. It exits 9 itself if either probe row is missing or either verdict is empty.
-Proven both directions: **1** against this tree, **0** against a mutant routing exit 9 to
-NEEDS-REVIEW, with the two sides asserted to differ and the mutant asserted to be valid shell
-first. Tier: **DEFECT** — it silently disables the only instrument this backlog has.
-
-**THE FILED RECEIPT ACCEPTED TWO FALSE-CLOSE ROUTES, AND IT IS REPLACED.** It required only
-that the exit-9 row differ from STILL-LIVE, so an engine routing 9 to CLOSE-CANDIDATE satisfied
-it, and so did one routing 9 to HAND-REVIEW — which `backlog-rotate.sh:431` accepts as
-permission to move an annotated entry. Both turn "I could not measure" into a close. The
-receipt below pins the route: 9 must read NEEDS-REVIEW with an `unresolved:` detail, beside 0
-CLOSE-CANDIDATE and 1 and 127 STILL-LIVE in the same probe ledger. **The census premise was
-re-measured, not carried:** 1 live receipt exits 9 today, `BL-130`'s (two runs, exit 9 both
-times), and the same-root differential of the old and new engine over the real ledger moves
-exactly that one row, STILL-LIVE to NEEDS-REVIEW. `scripts/backlog-reverify.sh:241-250` now
-captures the exit; `core/fixtures/backlog-ledger` arm `exit-9-routing` holds it, with committed
-mutants for both false-close routes.
-
-**THIS DISCHARGES THE EXIT-9 SUBJECT ONLY.** The entry's second subject survives untouched:
-receipts that exit **1** having measured nothing — `BL-081`'s shape above — are still
-byte-indistinguishable from a genuine reproduction, and no exit-code routing can separate them.
-The entry stays live for that subject, and its receipt below closes only the first.
-
-verify: sh R=scripts/backlog-reverify.sh; [ -r "$R" ] || exit 9; D=$(mktemp -d) || exit 9; X(){ rm -rf "$D"; exit "$1"; }; printf '%s\n' "cat \"$D/absent.txt\"" > "$D/subj.sh" || X 9; printf '%s\n' '# probe ledger' '' '## BL-901' '' 'verify: sh exit 1' '' '## BL-902' '' 'verify: sh exit 9' '' '## BL-903' '' 'verify: sh exit 0' '' '## BL-904' '' 'verify: sh exit 127' '' '## BL-905' '' 'verify: sh b=$(gone_helper_bl089 x); [ -n "$b" ]' '' '## BL-906' '' 'verify: sh eval "f() { echo"; f' '' '## BL-907' '' "verify: sh bash \"$D/subj.sh\"" > "$D/probe.md" || X 9; O=$(bash "$R" "$D/probe.md" 2>/dev/null); v(){ awk -F'\t' -v l="BL-$1" -v f="$2" '$2==l{print $f}' <<<"$O"; }; for i in 901 902 903 904 905 906 907; do [ "$(v $i 2 | grep -c .)" -eq 1 ] || X 9; done; [ "$(v 901 1)" = STILL-LIVE ] || X 9; [ "$(v 903 1)" = CLOSE-CANDIDATE ] || X 9; [ "$(v 904 1)" = STILL-LIVE ] || X 1; [ "$(v 907 1)" = STILL-LIVE ] || X 1; for i in 902 905 906; do [ "$(v $i 1)" = NEEDS-REVIEW ] || X 1; case "$(v $i 3)" in unresolved:*) ;; *) X 1 ;; esac; done; X 0
-
----
-
 ## BL-087 — ANSWERED: `PreToolUse` does NOT fire on a tool call that fails INPUT VALIDATION, so a guard whose predicate is the malformation is unbuildable
 
 **THE ANSWER.** A tool call whose input fails the tool's own schema is rejected before any hook
@@ -2287,30 +2178,6 @@ fixture and passing on its removal.
 
 verify: manual
 
-## BL-308 — `preclassify.sh --templates` and `--untangle` route through the new failure path, but neither mode was force-tested on its own
-
-**FIXED IN v0.667.0 (23af7954); NOT ROTATED.** The fix is present and its arms pass, but the receipt reads STILL-LIVE through backlog-reverify.sh because a memo variable leaks into it (BL-382); it rotates once that is fixed.
-
-
-**NOTE.** Found at batch 153 by the `BL-230` docs hand, reading the 0.637.0 diff. It discharges no
-consumer candidate.
-
-0.637.0 made `preclassify.sh` exit 2 on a failed git call through `pc_fail()` and its USR1 trap.
-Both optional modes reach that path: `--untangle` calls `blob_hash` and now checks each `ls-files`,
-and `--templates` shares the same helpers. Every forced-failure measurement in batch 153 drove
-the default mode only. No run showed that either mode exits 2, rather than 0 with partial rows,
-when one of its git calls fails. A receipt must force a git failure inside each mode and read the
-exit status and the stdout row count.
-
-Bound at batch 174 in `preclassify-rename-row`. Its git shim, the technique arm c already uses,
-forces a 128 on `ls-files`, `rev-parse` and `hash-object` under `--untangle` and on `rev-parse`
-under `--templates`. Each cell must exit 2, record a forced hit, and name the call. The row count
-is printed beside each cell. A per-mode transparent-shim control has to classify its seeded row
-first. Two mutants each fail exactly their own cell: one drops `--untangle`'s `ls-files` `|| pc_fail`,
-and the other disarms the USR1 trap before `--templates`' loop.
-
-verify: sh f=core/fixtures/preclassify-rename-row/run.sh; [ -f "$f" ] || exit 9; o="$(bash "$f" 2>&1)" || exit 1; grep -q '^  ok    BL-308 U1-U3 T1: ' <<<"$o" && grep -q '^  ok    MUTANT (BL-308 untangle-nols) fails exactly \[U1\]$' <<<"$o" && grep -q '^  ok    MUTANT (BL-308 templates-notrap) fails exactly \[T1\]$' <<<"$o"
-
 ## BL-310 — after a transient `cat-file` or `show` failure on a present path, the memo still hands one caller a wrong "absent"
 
 **NOTE.** Found at batch 153 by the `BL-230` tip adversary, reading the 0.637.0 memo change. It
@@ -2340,26 +2207,6 @@ install-root fallback. Measured in a fresh install of `0c017188`: `--check` exit
 the distribution layout gets past the schema and exits 1 on the missing `.gitignore` block.
 
 verify: manual
-
-## BL-331 — under a root with no schemas, `validate-write-format-steering.sh` judges the INSTALL's declarations and acquits the root's stale ones
-
-**FIXED IN v0.669.0, pending the post-merge close.** Under the install fallback each `declared_in` is
-also resolved under the project root, and a root copy without its anchor fails as STALE, naming the
-root's file. Consumer layout, measured on a tree built by `install.sh` into an empty directory: the stale
-root exits 1; the control, intact and bare roots exit 0 at `PASS — 5 of 20`. Pinned by
-`schema-install-fallback` arm Q, mutants NOROOT and ANCHORLESS each killed by its own half. Receipt:
-base 1, fix 0, NOROOT 1, ANCHORLESS 1, GATEINV 1.
-
-**NOTE.** Found by the batch-160 tip adversary. The behaviour is 0.646.0's R1 by design; it is
-filed because it turns a failure into a PASS over a tree the operator did not name.
-
-A foreign root carrying a `.claude/skills/ai-dlc-update/reconcile/lib.sh` with its anchor removed
-and no `.claude/schemas`: 0.645.0 rc 1 (cannot find the schema), 0.646.0 rc 0 `PASS — 5 of 20`,
-having judged the install's `lib.sh` and never read the root's. Near-miss control: the same root
-also carrying the schemas reads rc 1 `no longer contains 'function ledger_entry_shape('` at both
-releases. 0.645.0 never detected the stale file either.
-
-verify: sh d=$(mktemp -d) || exit 9; L=.claude/skills/ai-dlc-update/reconcile/lib.sh; A='function ledger_entry_shape('; mkdir -p "$d/t/.git" "$d/t/.claude/schemas" "$d/t/.claude/skills" "$d/t/scripts/ai-dlc" "$d/S/$(dirname $L)" "$d/I/$(dirname $L)" || exit 9; cp core/schemas/*.json "$d/t/.claude/schemas/" && cp -R core/skills/ai-dlc-update "$d/t/.claude/skills/" && cp core/scripts/validate-write-format-steering.sh "$d/t/scripts/ai-dlc/" || exit 9; grep -qF "$A" "$d/t/$L" || exit 9; grep -vF "$A" "$d/t/$L" > "$d/S/$L"; cp "$d/t/$L" "$d/I/$L" || exit 9; V="$d/t/scripts/ai-dlc/validate-write-format-steering.sh"; c=$(cd "$d/t" && bash "$V" 2>&1) || exit 9; case "$c" in *"validate-write-format-steering: PASS"*) ;; *) exit 9 ;; esac; s=$(cd "$d/t" && AI_DLC_PROJECT_ROOT="$d/S" bash "$V" 2>&1); sr=$?; i=$(cd "$d/t" && AI_DLC_PROJECT_ROOT="$d/I" bash "$V" 2>&1); ir=$?; [ "$sr" = 1 ] || exit 1; case "$s" in *"$L under the project root no longer contains"*) ;; *) exit 1 ;; esac; [ "$ir" = 0 ] || exit 1; case "$i" in *"validate-write-format-steering: PASS"*) exit 0 ;; esac; exit 1
 
 ## BL-333 — three "0 ALWAYS" detectors refuse with exit 0 and a stderr line, so the report renders `none` for a scan that never ran
 
@@ -2407,35 +2254,6 @@ own comment at `:852-859` calls a remedy of this shape a defect. Reachable only 
 transient staging or diff failure; `--finish` gates on WORKLIST rows and does not stop on it.
 
 verify: manual
-
-## BL-338 — `reconcile-emit-report`'s R6 guard reports a deterministic engine refusal as FIXTURE BROKEN, and absorbs one that fires on every world
-
-**FIXED IN v0.669.0, pending the post-merge close; both halves are now bound.** Global half: the
-R6-BASE arm (batch 174). V-N-only half: `v_approve`'s guard reports `ENGINE REGRESSION — <world>
-approval: <detector> refused on 3 attempts and the seed world does not refuse it` when the refusal
-names a detector file shipped beside the engine under test that the seed region does not refuse; any
-other refusal keeps the `FIXTURE BROKEN` prefix `emit-report-refusal`'s mutants assert. The R6-VN arm
-drives the shipped `v_approve` through an engine copy whose `ledger-reverify.sh` refuses only on a V-N
-consumer: V-N reads exactly one ENGINE REGRESSION line after 3 stub firings, and the V-R near-miss
-reads nothing with a Push-candidate section byte-identical to the shipped engine's. The receipt below
-replaces the grep of R6-BASE: base 1, fix 0, stub removed 1, wording reverted 1.
-
-**NOTE.** Found by the batch-160 tip adversary of 0.647.0. A `ledger-reverify.sh` stub crashing on
-V-N only still fails the unit, but reads `FIXTURE BROKEN — V-N approval rendered DETECTOR-REFUSED
-on 3 attempts`, blaming the fixture for an engine regression. The same crash on every world is
-absorbed into `V_REFUSE_OK`, which is derived from the engine's own seed render, and R6 records
-nothing; `emit-report-refusal`'s A0 (the refusal set must be exactly `retired-layer-token.sh`) is
-the arm that catches the global case, by its assertion code, not yet driven against that stub.
-
-The global half was bound at batch 174. The R6-BASE arm in `reconcile-emit-report` compares the
-derived `V_REFUSE_OK` against the fixed name `retired-layer-token.sh`. Its mutant renders the seed
-world through an engine copy whose `ledger-reverify.sh` refuses everywhere, runs it through the
-file's own derivation line, and is refused. **The V-N-only half is REWORDED, not resolved.** The
-message still opens `FIXTURE BROKEN`, because `emit-report-refusal` keys on that prefix. It now
-says that three refusals in a row from a shipped detector are an engine regression. No mutant
-scores that text.
-
-verify: sh f=core/fixtures/reconcile-emit-report/run.sh; [ -f "$f" ] || exit 9; n="$(grep -cxF -e '# --- R6-VN begin ---' -e '# --- R6-VN end ---' "$f")" || n=0; [ "$n" = 2 ] || exit 1; W="$(bash core/fixtures/reconcile-emit-report/seed.sh)" || exit 9; trap 'rm -rf "$W"' EXIT; P="$W/r6vn-receipt.sh"; { printf 'set -u; . "%s/env.sh"; WORK="%s"; fails=0; ok() { printf "ok %%s\\n" "$1"; }; bad() { printf "FAIL %%s\\n" "$1"; fails=$((fails+1)); }\n' "$W" "$W"; awk '/^V_TRIES=3$/ { p = 1 } /^v_resolve\(\) / { p = 0 } /^# --- R6-VN begin ---$/ { q = 1 } p || q { print } /^# --- R6-VN end ---$/ { q = 0 }' "$f"; echo 'exit "$fails"'; } > "$P"; o="$(bash "$P" 2>&1)" || exit 1; grep -q '^ok R6-VN a shipped detector (ledger-reverify\.sh) refusing on the V-N approval only is reported as ENGINE REGRESSION' <<< "$o"
 
 ## BL-355 — `norm_lines` folds case byte-wise, so an accented capital no longer matches its lower-case form
 
@@ -2933,25 +2751,6 @@ this phase on the pool-width mismatch, because the operator's shell profile sets
 
 verify: manual
 
-## BL-380 — the derivation-capture exemption refuses a logical `/tmp` spelling and a path through a symlinked directory
-
-**FIXED IN v0.669.0, pending the post-merge close.** The section-copy exemption also accepts a
-token whose directory canonicalises (`pwd -P`) to the document's own and whose basename is the
-document's. Still refused: another directory, a link to another directory, a sibling file, `../`.
-Pinned by `derivation-capture` A44-A49 and A37b, three new battery mutants. The consumer holds 0
-symlinks and 0 repair-part commands naming `/tmp` or the document, so the fixture worlds are the
-measurement. Receipt: base 1, fix 0, DROPPED 1, BASENAME 1, DIRONLY 1.
-
-**NOTE.** Split out of `BL-377`, whose own subject shipped in v0.666.0. The derivation-capture
-exemption for a section copy compares the command's path against the manifest's document spelling.
-A logical `/tmp/...` path, where the manifest holds the physical `/private/tmp/...` one, and a path
-through a symlinked directory are both refused, so the remediator pays a re-spelling. It fails
-toward refusing, never toward acquitting, which is why it is a NOTE. The remediator prose already
-names the project-relative spelling. Re-derive the exemption's current line and measure whether a
-canonicalised comparison acquits anything it should not before building.
-
-verify: sh command -v jq >/dev/null || exit 9; H=core/hooks/ai-dlc-derivation-capture.sh; P=core/scripts/partition-document.sh; [ -f "$H" ] && [ -f "$P" ] || exit 9; d=$(mktemp -d) && d=$(cd "$d" && pwd -P) || exit 9; C="$d/c"; S="$C/_bmad-output/s1"; mkdir -p "$C/scripts/ai-dlc" "$S" "$C/_bmad-output/s2" || exit 9; printf '0.0.0\n' > "$C/VERSION"; cp core/scripts/validate-artifact-derivations.sh "$C/scripts/ai-dlc/" || exit 9; printf '# PRD\n\n## Goals\ng one\ng two\ng three\n\n## Scope\ns one\ns two\ns three\ns four\n\n## Risks\nr one\nr two\n' > "$S/prd.md"; printf '# other\n' > "$C/_bmad-output/s2/prd.md"; printf '# n\n' > "$S/notes.md"; bash "$P" --split "$S/prd.md" "$S/shards/prd-repair-p1" >/dev/null 2>&1 || exit 9; F="$S/shards/prd-repair-p1/sections/1.md"; [ -f "$F" ] || exit 9; ln -s "$C" "$d/al" || exit 9; f() { p=$(printf '```derived\n$ grep -c zz %s\n%s\n```' "$1" "$2"); printf '\n%s\n' "$p" >> "$F"; jq -nc --arg f "$F" --arg s "$p" '{tool_name:"Edit",tool_input:{file_path:$f,new_string:$s}}' | CLAUDE_PROJECT_DIR="$C" bash "$H" >/dev/null 2>&1; }; f "$C/_bmad-output/s1/prd.md" 91; k=$?; [ "$k" = 0 ] || exit 9; f "$d/al/_bmad-output/s1/prd.md" 92; a=$?; f "$d/al/_bmad-output/s2/prd.md" 93; b=$?; f "$d/al/_bmad-output/s1/notes.md" 94; n=$?; [ "$a" = 0 ] && [ "$b" = 2 ] && [ "$n" = 2 ] && exit 0; exit 1
-
 ## BL-381 — `layer-adjudication-tier` Part 11 world E fails to build when git packs the fixture's store
 
 **NOTE.** Seen on the 0.667.0 gate at `bc1ed530`, 1 of 218 units, and once before in the recorded
@@ -2964,77 +2763,3 @@ auto-gc cause is inferred from the message, not reproduced.
 
 verify: manual
 
-## BL-382 — `backlog-reverify.sh` leaks `AI_DLC_RECONCILE_MEMO` into every receipt it evaluates
-
-**FIXED IN v0.669.0, pending the post-merge close.** `backlog-reverify.sh` derives the variables and
-functions `reconcile/lib.sh` adds (a snapshot either side of the source) and unsets them, plus
-`AI_DLC_RECONCILE_MEMO` by name, inside each receipt's subshell. `BL-308`'s receipt now reads
-CLOSE-CANDIDATE through the engine. `backlog-ledger` seed E holds it with and without a caller-exported
-memo, three mutants killed. The receipt below drives both inbound shapes: base 1, fix 0, and 1 each for
-variables still exported, a diff-only unset, and functions left defined.
-
-**DEFECT.** `backlog-reverify.sh` sources `reconcile/lib.sh`, whose memo setup exports
-`AI_DLC_RECONCILE_MEMO` (`lib.sh:894-895`), and then evaluates every `verify: sh` receipt in that
-environment. A receipt that runs a fixture driving `preclassify.sh` inherits the memo, and a cached
-rename status defeats `preclassify-rename-row`'s `--no-renames` mutant: `MUTANT SURVIVED`, exit 1.
-Measured on `BL-308`'s receipt: exit 0 with the variable unset, exit 1 with it set, the same on the
-pre-0.667.0 fixture, so the leak predates `BL-308`. It fails toward STILL-LIVE, keeping an entry live
-that is fixed: `BL-308` could not rotate at the 0.667.0 close for this reason. The fix is to evaluate
-receipts with the memo unset (`env -u AI_DLC_RECONCILE_MEMO`), or to scope the export out of
-reverify's own shell.
-
-verify: sh r=scripts/backlog-reverify.sh; [ -f "$r" ] || exit 9; d=$(mktemp -d) || exit 9; m="$d/memo"; mkdir "$m" || exit 9; printf '%s\n' '## BL-900 base' '' 'verify: sh exit 1' '' '## BL-901 probe' '' 'verify: sh [ -z "${AI_DLC_RECONCILE_MEMO:-}" ] && ! type ai_dlc_memo_dir >/dev/null 2>&1' > "$d/l.md" || exit 9; a=$(env -u AI_DLC_RECONCILE_MEMO bash "$r" "$d/l.md" 2>/dev/null); b=$(AI_DLC_RECONCILE_MEMO="$m" bash "$r" "$d/l.md" 2>/dev/null); for o in "$a" "$b"; do case "$o" in *STILL-LIVE*BL-900*) ;; *) exit 9 ;; esac; done; [ -d "$m" ] || exit 1; for o in "$a" "$b"; do case "$o" in *CLOSE-CANDIDATE*BL-901*) ;; *) exit 1 ;; esac; done; exit 0
-
-## BL-385 — a notarized artifact amended after MET moved silently: nothing read the disclosure, and the declaring record had no enforced shape
-
-**FIXED IN v0.669.0, pending the post-merge close.** Editing a notarized `SPEC.md` or sprint artifact after
-its series stamped `EXIT_CONDITION_MET` broke no gate: Check 30, Check 3b and `--cycle-state` all stayed
-green, and only K2 printed PENDING. Measured on the consumer: SPEC moved after MET in s314 (disclosed
-nowhere) and twice in s315 (disclosed in prose only). Check 24 arm J2 now compares the terminal MET pass's
-notarized file against the disk sha and requires either a chain of structured repair links
-(`artifact_sha_before -> artifact_sha_after`, the out-of-band residue and gate repairs the pipeline
-teaches) or one `REOPEN_AFTER_MET` record plus one verify pass for a scope change. Arm J's door now
-validates the record it cites; F5 checks `REOPEN_AFTER_MET` (sha moved, `scope_delta` present, and a
-`CAP-<n>`/`FR-S<N>-<n>` for SPEC.md). Cumulative documents (prd, product brief, architecture) are
-excluded. Stamp-gated at 0.669.0 on each series' FIRST pass. Consumer replay over 87 series: J2 PENDING
-on 10, FAIL on none; with the stamp bypassed it fails exactly the four the adversary's census
-predicted. J reclassifies two closed sprints: s303 coe and s307 architecture, whose authorizations
-F6 cannot find because the answering session's transcript is no longer on disk (answers are
-matchable; measured). `_gate-procedures.md` carries the amendment procedure; `remediator.md` and the
-gate-repair record gain the two sha fields.
-
-Discharges the consumer candidate
-`PC-S315-NO-AMENDMENT-PATH-FOR-A-NOTARIZED-ARTIFACT-AFTER-A-STORY-DECISION`, filed by the graph consumer
-session. Its headline premise, that an edit would break the notarization, was refuted by measurement.
-
-verify: sh unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; v=core/scripts/validate-adversarial-convergence.sh; [ -f "$v" ] || exit 9; d=$(mktemp -d) || exit 9; mkdir -p "$d/.claude" "$d/_bmad-output/planning-artifacts" || exit 9; sp() { printf '# SPEC\n\n## C\n\nrev %s\n' "$1"; }; sh1() { sp "$1" | shasum -a 256 | cut -d' ' -f1; }; ( cd "$d" && git init -q . && for s in "0.663.0 2026-09-29T09:00:00Z" "0.669.0 2026-09-29T10:00:00Z"; do printf 'version: %s\n' "${s% *}" > .claude/.ai-dlc-version && git add .claude/.ai-dlc-version && GIT_COMMITTER_DATE="${s#* }" GIT_AUTHOR_DATE="${s#* }" git -c user.email=r@x.invalid -c user.name=r -c commit.gpgsign=false -c core.hooksPath=/dev/null commit -q -m s || exit 1; done ) || exit 9; cell() { c="$d/_bmad-output/planning-artifacts/$1"; mkdir -p "$c" "$d/_bmad-output/specs/$1" || exit 9; a="$3"; [ -n "$a" ] || a="_bmad-output/specs/$1/SPEC.md"; sp 1 > "$d/$a"; printf '<!-- SKILL_INVOCATION_PROVENANCE v1\ninvoked_at: %s\nartifact: %s\nartifact_sha: %s\nfindings_critical: 0\nfindings_major: 0\nverdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$2" "$a" "$(sh1 1)" > "$c/x-adversarial-p1.md"; sp 2 > "$d/$a"; }; cell s1 2026-09-29T11:00:00Z; cell s2 2026-09-29T11:00:00Z; printf -- '- artifact: _bmad-output/specs/s2/SPEC.md\n- artifact_sha_before: %s\n- artifact_sha_after: %s\n- disposition: repaired\n- edit: SPEC.md:5\n- derivation: n/a\n' "$(sh1 1)" "$(sh1 2)" > "$d/_bmad-output/planning-artifacts/s2/gate-planning-repair-p1.md"; cell s3 2026-09-29T11:00:00Z _bmad-output/planning-artifacts/prd.md; cell s4 2026-09-29T09:30:00Z; r() { bash "$v" --series "$d/_bmad-output/planning-artifacts/$1/x-adversarial-p" 2>&1; }; o1=$(r s1); o2=$(r s2); o3=$(r s3); o4=$(r s4); rm -rf "$d"; case "$o1" in *"FAIL (J2 -- DRIFT)"*) : ;; *) exit 1 ;; esac; case "$o2$o3$o4" in *"FAIL (J2"*) exit 1 ;; esac; case "$o4" in *"PENDING (J2 -- DRIFT)"*) exit 0 ;; esac; exit 1
-
-## BL-386 — the derivation-capture refusal of a part pair reading `sections/` misses a symlinked spelling
-
-**FIXED IN v0.669.0, pending the post-merge close.** A repair part's pair that reads the split's
-`sections/` dir is refused at write time, because `--assemble` removes that file and the gate then
-fails the joined record. The refusal compared only the literal spellings of the dir, so
-`<alias>/_bmad-output/.../sections/2.md` (alias a symlink to the project) and a link into `sections/`
-exited 0 with no stderr, where the project-relative spelling exits 2. The refusal now applies the
-same `pwd -P` canonicalisation as `BL-380`: a `$ ` token whose directory canonicalises to the split's
-`sections/` dir or below it is refused. The exemption and the refusal share `dollar_tokens()` and
-`canon_dir()`. The prefix test carries the `/`, so a sibling `sections.bak/` stays accepted, and the
-document through the alias stays exempt. Guarded by `core/fixtures/derivation-capture` arms A50-A53
-and two `derivation-capture-mutants` mutants. Found by the `BL-380` builder. Receipt: base 1, fix 0,
-canonicalisation dropped 1, refusal removed 1; the prefix-without-slash regression is the fixture's.
-
-verify: sh f=core/fixtures/derivation-capture/seed.sh; [ -f "$f" ] || exit 9; w=$(bash "$f" 2>/dev/null) && [ -f "$w/env.sh" ] || exit 9; . "$w/env.sh"; p=$(cd "$CONSUMER" && pwd -P) || exit 9; ln -s "$CONSUMER" "$w/al" || exit 9; s=_bmad-output/planning-artifacts/s1/shards/prd-repair-p1/sections/2.md; [ -f "$CONSUMER/$s" ] || exit 9; t=$(printf '```derived\n$ grep -c %s %s\n4\n```' "'scope item'" "$w/al/$s"); printf '\n%s\n' "$t" >> "$REPDIR/3.md"; e=$(jq -nc --arg f "$REPDIR/3.md" --arg s "$t" '{tool_name:"Edit",tool_input:{file_path:$f,new_string:$s}}' | CLAUDE_PROJECT_DIR="$p" bash "$HOOK" 2>&1 >/dev/null); r=$?; case "$r:$e" in "2:"*"reads the section copy"*) exit 0 ;; 0:*) exit 1 ;; esac; exit 9
-
-## BL-387 — `validate-backlog-receipts.sh` leaks `AI_DLC_RECONCILE_MEMO` into every receipt it scores
-
-**FIXED IN v0.669.0, pending the post-merge close.** `BL-382`'s defect in the second program that
-sources `reconcile/lib.sh`: the parent exports `AI_DLC_RECONCILE_MEMO` and each `--score-one` worker
-inherits it, so every receipt borrowed the parent's memo. Functions do not leak (a worker is a fresh
-`bash`; measured). The parent snapshots `compgen -e` either side of the source, names the memo variable
-outright for a caller-exported memo, and passes the list as `BR_LIB_VARS`, which the worker unsets on
-entry. `_br_added` duplicates `backlog-reverify.sh`'s `_rv_added`. With the gate's flags one receipt
-moves, `BL-308` BOUND -> ALREADY-PASSING, and every ratchet holds. Guarded by
-`core/fixtures/backlog-receipt-binding` (three memo arms, three mutants). Receipt: base 1, fix 0,
-unset removed 1, outright name dropped 1.
-
-verify: sh unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; v=scripts/validate-backlog-receipts.sh; l=core/skills/ai-dlc-update/reconcile; [ -f "$v" ] || exit 9; d=$(mktemp -d) || exit 9; mkdir -p "$d/scripts" "$d/docs" "$d/$l" "$d/p" && cp "$v" "$d/scripts/" && cp "$l/lib.sh" "$l/ledger-reverify.sh" "$d/$l/" && echo 0 > "$d/VERSION" && echo a > "$d/p/a.txt" && echo m > "$d/p/m.txt" || exit 9; printf '## BL-900 s\n\nverify: sh grep -q %s p/a.txt\n\n## BL-901 m\n\nverify: sh [ -n "${AI_DLC_RECONCILE_MEMO:-}" ] && exit 9; ! grep -q %s p/m.txt\n' "'MK900'" "'MK901'" > "$d/docs/backlog.md"; (cd "$d" && git init -q . && git add -A && git -c user.email=p@l -c user.name=p commit -qm s) >/dev/null 2>&1 || exit 9; mkdir "$d/memo"; o=$(cd "$d" && AI_DLC_RECONCILE_MEMO="$d/memo" bash scripts/validate-backlog-receipts.sh --max-prose-closable 1 --max-out-of-population 9 --min-sh-receipts 1 --min-entries 1 2>/dev/null); c=$(printf '%s\n' "$o" | awk -F'\t' '$2=="BL-901"{print $1}'); case "$c" in ALREADY-PASSING) exit 0 ;; OUT-OF-POPULATION) exit 1 ;; esac; exit 9
