@@ -2456,3 +2456,110 @@ path is a push failing AFTER the gate returned OK on an in-sync branch, so it is
 BL-389 fixed and 0.673.0 did not make it worse. Discharges no consumer candidate.
 
 verify: manual
+
+## BL-397 — a story reaches gate-1 without the evidence sections, and reaches QA without a full-collection run with counts
+
+**DEFECT.** Filed by the consumer as PC-S315-DEV-AND-QA-ROLE-CHECKLISTS-LET-A-STORY-REACH-GATE-1-WITHOUT-THE-EVIDENCE-SECTIONS-AND-THE-FULL-SUITE.
+
+**Claims, enumerated.** (1) No story file carried `Production Integrity Tests`, `Smoke Test Updates`
+and, for renames, `Rename Verification` at its first submission: the filing says 0 of 5. (2) Story
+1.5 reached QA without the dev having run the full suite and failed gate-2 on a baseline-fixture
+test. (3) Check 21 failed pass 1 with 0 of 31 strategy test ids cited in any Dev Agent Record.
+(4) Code review has no baseline-fixture sweep when a diff changes a handler's result shape.
+
+**Premise, re-derived at `origin/main` 144c41b8.** The story template is BMAD's, and no ai-dlc
+step tells the lead to add the evidence headings: `Strategy Test IDs` occurs in 0 files under `core/`
+(control: `Production Integrity Tests` occurs in 4). `dev.md` already requires a canonical
+full-collection run, but only inside `## Workflow Per Task` item 15. The dev side requires no counts: `deselect`
+occurs 0 times in `dev.md` outside that section and once inside it. The phrase is the `--deselect`
+flag, not a count. `code-reviewer.md` contains `baseline-fixture` 0 times (control: `fixture` 9).
+At the consumer's final S315 tip, 5 of 5 stories carry the Production Integrity Tests and Smoke
+Test Updates headings and 2 of 5 carry Rename Verification, because rework added them. The
+first-submission state the filing counts was not walked. That walk was available but not taken,
+because this session's harness refuses git commands aimed at the consumer tree. Claim (1) is an
+unmeasured claim, not an unmeasurable one. Claim (2) is the seats' reading and was not
+re-derived.
+
+**Consumer overrides, read-only, `graph/.claude/skills/ai-dlc/overrides/`.** 10 override files
+(control: 10 of 10 carry `shadows:`). The consumer shadows `team-roles/dev.md#Workflow Per Task` and
+`team-roles/qa.md#Validation Checklist` wholesale (`team-roles__dev__bug-class-sweep.md`,
+`team-roles__qa__bug-class-sweep.md`). Nothing shadows `code-reviewer.md`, `stories-test-strategy.md`
+or Check 21. Any upstream text inside those two sections never reaches this consumer's dev or QA
+until the consumer re-adopts the overrides against the new base. That is why the new requirements
+sit in sibling sections.
+
+**The fix.** `stories-test-strategy.md` Pre-Flight Checklist item (c) requires four headings in
+every story file. They are `## Production Integrity Tests`, `## Smoke Test Updates`,
+`## Rename Verification` and `## Strategy Test IDs`, the last a table with a closed `Kind`
+vocabulary. `dev.md` gains `## QA Handoff Evidence`: the full-collection invocation, its working
+directory and collected/passed/failed/deselected/skipped/xfailed counts before the handoff
+message, the four sections filled, and every table row resolved. `qa.md` gains
+`## Handoff Evidence Precondition`, a REJECT before any checklist item when that evidence is
+absent. `code-reviewer.md` Field Verification item 5 adds the baseline-fixture sweep, with a
+control, as an Important finding. Check 21 names the table as its citation set (BL-398).
+
+**Fixture.** `story-evidence-scaffold` (ships) has section-keyed arms. The dev and qa arms first
+stub the two shadowed sections, as the loader does, so text moved into them is a finding. It has
+twelve copy mutants, each killed by its own arm only, plus a control and a cwd probe. Bound to
+Check 21 in `enforcement-map.yaml`. Its read-set is not yet traced; the operator runs
+`sudo bash core/scripts/derive-fixture-readsets.sh --list "story-evidence-scaffold"`.
+
+**Receipt, scored.** Tip 1 (no fixture). Fix 0. Wrong fix A exits 1: it folds the dev text into
+the shadowed `## Workflow Per Task`, which a whole-file grep accepts. Wrong fix B exits 1: it puts
+the qa precondition inside the shadowed `## Validation Checklist`. Exit 9 means a subject role
+file is gone or the fixture reports FIXTURE BROKEN.
+
+Held note (batch 177): shipped the Pre-Flight scaffold (c), the dev `## QA Handoff Evidence` and
+qa `## Handoff Evidence Precondition` sections outside the consumer's shadowed sections, the
+code-reviewer baseline-fixture sweep, and fixture `story-evidence-scaffold`.
+
+verify: sh F=core/fixtures/story-evidence-scaffold/run.sh; [ -f core/team-roles/dev.md ] && [ -f core/team-roles/qa.md ] || exit 9; [ -f "$F" ] || exit 1; o="$(bash "$F" 2>&1)"; [ $? -eq 2 ] && exit 9; for m in dev-into-workflow dev-no-counts qa-into-checklist cr-no-sweep drop-strategy-heading move-strategy-heading; do grep -qF "MUTATION '$m' killed by its own arm only" <<<"$o" || exit 1; done; grep -qx 'story-evidence-scaffold: PASS' <<<"$o"
+
+## BL-398 — a strategy case letter is not bound to a test until sprint-review, and a re-point story lists its consumers from memory
+
+**DEFECT.** Filed by the consumer as PC-S315-STORIES-TEST-STRATEGY-CASE-LETTERS-AND-RE-POINT-CONSUMERS-ARE-NOT-BOUND-TO-A-TEST-AT-AUTHORING.
+
+**Claims, enumerated.** (1) Nothing at authoring or story close resolves a strategy case letter
+to a test name: planned case `(g)` of `1.4-UNIT-002` had no test until sprint-review. (2) Nothing
+requires a re-point story to enumerate every consumer of the constant by `git grep`, with a
+control. The filing's instance is one constant left un-normalized for a sprint.
+
+**Premise, re-derived at `origin/main` 144c41b8.** `stories-test-strategy.md` names no strategy case
+letters. Its one `lowercase letter` hit, line 156, is the AC-ordinal grammar (control:
+`Test Strategy` occurs 4 times). Check 21 resolved "every test the strategy names" against "a Dev Agent
+Record" citation with no prescribed shape. A DAR prose mention therefore counted, and a lettered
+case inside one strategy row was never its own unit. **Measured on the consumer, read-only:**
+S315's strategy row for `1.4-UNIT-002` lists cases (a) to (g). The story's Check 21 repair section
+maps 6 of the 7 to nodes in `server/tests/test_s315_4_base_binding.py` and states (g) has none. A
+per-letter check over that population returns 6 resolved and 1 unresolved: the true (g), with 0
+false positives. **N=1 strategy row**, so the zero is a floor, not a rate. The same story carries
+rows no collectable node can satisfy: `1.4-OPS-001`/`-004` are deploy-time and `1.4-UNIT-005` is a
+shell predicate. The table's `Kind` column exists so those rows do not fail a node check.
+
+**Consumer overrides.** No override shadows `stories-test-strategy.md` or Check 21. The consumer
+overrides `steps/gate-validation.md#Check 20` and `#Check 5` only, so this reaches the consumer on
+its next pull with no re-adoption.
+
+**The fix.** Pre-Flight item (c)'s `## Strategy Test IDs` table has one row per strategy id and
+per lettered case, with `Kind` ∈ {`test`, `predicate`, `deploy-time`}. Step 5 item 3 writes the
+rows and requires the strategy's letter count to equal the row count. Check 21 names that table
+as its citation set and says a DAR prose mention is not a citation. It fails a letter with no row,
+a `test` row whose node is not on disk, and an empty `Resolves to`, and reports a strategy with
+no id table as a stated SKIP, never a PASS. **Re-point consumers:** `## Rename Verification` now
+requires `git grep` of the old and new names, every hit dispositioned, with a control. This half
+is prose plus fixture only, and there is no mechanical check. A re-point story's consumer set has
+no machine-readable declaration to join against, so its false-positive set cannot be measured.
+
+**Fixture.** `story-evidence-scaffold` (shared with BL-397): the per-letter binding, the closed
+vocabulary, the citation set, the unrowed-letter arm, the SKIP-not-PASS arm and an unisolatable
+Check 21. Each has a mutant killed by its own arm only.
+
+**Receipt, scored.** Tip 1. Fix 0. Wrong fix A exits 1: Check 21 keeps accepting a DAR naming a
+test as a citation. Wrong fix B exits 1: a table-less strategy reads PASS and Step 5 writes "rows
+as needed".
+
+Held note (batch 177): shipped the `## Strategy Test IDs` table with per-letter rows and a closed
+Kind vocabulary, Step 5's binding, Check 21 reading that table with a stated SKIP, the
+`## Rename Verification` git-grep enumeration, and fixture `story-evidence-scaffold`.
+
+verify: sh F=core/fixtures/story-evidence-scaffold/run.sh; [ -f core/skills/ai-dlc/steps/gate-validation.md ] && [ -f core/skills/ai-dlc/steps/stories-test-strategy.md ] || exit 9; [ -f "$F" ] || exit 1; o="$(bash "$F" 2>&1)"; [ $? -eq 2 ] && exit 9; for m in no-letter-binding open-kind dar-prose-citation letter-unchecked skip-as-pass no-check-21; do grep -qF "MUTATION '$m' killed by its own arm only" <<<"$o" || exit 1; done; grep -qx 'story-evidence-scaffold: PASS' <<<"$o"
