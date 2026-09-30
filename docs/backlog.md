@@ -2362,7 +2362,24 @@ read failure as a read failure, and that leaves the schema instance open.
 the read, which is the same fix shape `fm()` received. Note that `layer-conforms-to` asserts on E17
 text, so a message change has a fixture obligation.
 
-verify: sh V=core/scripts/validate-layer-entries.sh; C=core/skills/ai-dlc/layer-contract.yaml; [ -f "$V" ] && [ -f "$C" ] || exit 9; d=$(mktemp -d) || exit 9; trap 'chmod -R u+rwX "$d" 2>/dev/null; rm -rf "$d"' EXIT; K="$d/.claude/skills/ai-dlc"; mkdir -p "$K/extensions" || exit 9; cp "$C" "$K/" || exit 9; printf -- '---\nkind: role\nid: r\nhooks: steps/retro.md\npush_candidate: false\nconforms_to: 1\n---\n# R\n' > "$K/extensions/e.md"; O=$(bash "$V" "$d" 2>&1); grep -q "contract_version" <<<"$O" || { echo "HARNESS BROKEN: readable control produced no contract line"; exit 9; }; chmod 000 "$K/layer-contract.yaml"; if awk '{exit}' "$K/layer-contract.yaml" 2>/dev/null; then echo "HARNESS BROKEN: seal did not take"; exit 9; fi; U=$(bash "$V" "$d" 2>&1); grep -qE "could not READ|unreadable|cannot read" <<<"$U" || exit 1; grep -q "got '<none>'" <<<"$U" && exit 1; exit 0
+**FIXED IN v0.667.0, pending the post-merge close.** The `contract_version` read takes awk's status. A
+contract that is present but cannot be opened draws its own E17 message, `is present but
+UNREADABLE`, which says the contents were never read and that the contract is NOT being called
+malformed. On that path the three messages that would misdescribe it stand down: `got '<none>'`,
+`read ZERO clauses`, and E16's `could not read 'consumer_crosswalk_file:'`. The later reads at
+the crosswalk and machinery sites return empty values, which is honest for a file that was not
+read, and the one E17 names the cause. The run still exits 1. A readable contract missing the
+version line still says `got '<none>'`. `layer-conforms-to` Part 4b asserts both states; m6 and m7 revert each half. The W11
+sibling instance is untouched, as scoped above.
+
+**THE OLD RECEIPT WAS CLOSABLE BY REWORDING, SO IT IS REPLACED.** A copy of `origin/main` with
+only the `got '<none>'` text rewritten to contain "UNREADABLE" scored **0** on it, with no status
+taken. The receipt below adds a near-miss, the same consumer with a READABLE contract missing
+`contract_version:`, and requires that one to still say `got '<none>'` and not be called
+unreadable. That is the input only a status test separates. Scored: tip **0**, `origin/main`
+`2e7c227c` **1**, tip with the status arm reverted **1**, the prose-only rewording **1**.
+
+verify: sh V=core/scripts/validate-layer-entries.sh; C=core/skills/ai-dlc/layer-contract.yaml; [ -f "$V" ] && [ -f "$C" ] || exit 9; d=$(mktemp -d) || exit 9; trap 'chmod -R u+rwX "$d" 2>/dev/null; rm -rf "$d"' EXIT; K="$d/c/.claude/skills/ai-dlc"; mkdir -p "$K/extensions" || exit 9; cp "$C" "$K/" || exit 9; printf -- '---\nkind: role\nid: r\nhooks: steps/retro.md\npush_candidate: false\nconforms_to: 1\n---\n# R\n' > "$K/extensions/e.md"; cp -R "$d/c" "$d/m" || exit 9; awk '!/^contract_version:/' "$C" > "$d/m/.claude/skills/ai-dlc/layer-contract.yaml" || exit 9; O=$(bash "$V" "$d/c" 2>&1); grep -q "contract_version=[0-9]" <<<"$O" || { echo "HARNESS BROKEN: readable control read no contract_version"; exit 9; }; grep -q "present but UNREADABLE" <<<"$O" && exit 1; M=$(bash "$V" "$d/m" 2>&1); grep -q "got '<none>'" <<<"$M" || exit 1; grep -q "present but UNREADABLE" <<<"$M" && exit 1; chmod 000 "$K/layer-contract.yaml"; if awk '{exit}' "$K/layer-contract.yaml" 2>/dev/null; then echo "HARNESS BROKEN: seal did not take"; exit 9; fi; U=$(bash "$V" "$d/c" 2>&1); grep -q "present but UNREADABLE" <<<"$U" || exit 1; grep -q "got '<none>'" <<<"$U" && exit 1; grep -q "read ZERO clauses" <<<"$U" && exit 1; grep -q "could not read 'consumer_crosswalk_file:'" <<<"$U" && exit 1; exit 0
 
 
 ## BL-126 — the pause-flag deny hook reads no agent identity, so it cannot let an in-flight teammate write reach a consistent stop
