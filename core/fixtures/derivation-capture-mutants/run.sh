@@ -263,11 +263,11 @@ mutate "shed strips all leading blanks" "deeper-\$-output pair" \
 # no manifest beside it -- so the part loses both its exemption (A31, the ./ arm) and its doomed
 # refusal (A38) along with A35.
 mutate "section path glob widened to every markdown file" \
-  "a manifest-carrying copy outside a repair dir|a self-referencing pair in the repair part|a ./-prefixed document path in a repair part|a redirected ./-prefixed document path|a part pair reading the section copy" \
+  "a manifest-carrying copy outside a repair dir|a self-referencing pair in the repair part|a ./-prefixed document path in a repair part|a redirected ./-prefixed document path|a part pair reading the section copy|the document through an alias in a repair part|the section copy reached via an aliased root|the section copy reached via a link into sections/" \
   's|^  \*/shards/\*-repair-p\*/sections/\*\.md)$|  *.md)|'
 
 mutate "section exemption removed" \
-  "a self-referencing pair in a section copy|a self-referencing pair in the repair part|a ./-prefixed document path in a repair part|a redirected ./-prefixed document path|spelled through a symlinked ancestor|spelled through a symlinked directory|the /tmp spelling" \
+  "a self-referencing pair in a section copy|a self-referencing pair in the repair part|a ./-prefixed document path in a repair part|a redirected ./-prefixed document path|spelled through a symlinked ancestor|spelled through a symlinked directory|the /tmp spelling|the document through an alias in a repair part" \
   's/^      for (k in tch) if (tch\[k\] \&\& (names.*tch\[k\]=0$/      # MUTANT: no exemption/'
 
 mutate "section exemption widened to every command" \
@@ -291,10 +291,11 @@ mutate "document path matched as a substring" "a command naming a longer path|a 
 # no manifest) carries no mutant: the manifest `-f` test and the awk that reads the manifest both
 # keep it out, and the awk fails closed on a missing file.
 mutate "part exemption removed (SELF_DOC never set for a part)" \
-  "a self-referencing pair in the repair part|a ./-prefixed document path in a repair part|a redirected ./-prefixed document path" \
+  "a self-referencing pair in the repair part|a ./-prefixed document path in a repair part|a redirected ./-prefixed document path|the document through an alias in a repair part" \
   's/^      SEC_DIR="\${PART_DIR}\/sections"$/      SEC_DIR="${PART_DIR}\/sections"; SELF_DOC=""/'
 
-mutate "doomed section-copy pair not refused" "a part pair reading the section copy" \
+mutate "doomed section-copy pair not refused" \
+  "a part pair reading the section copy|the section copy reached via an aliased root|the section copy reached via a link into sections/" \
   's/^if \[ -s "\$DOOMED" \]; then$/if false; then/'
 
 # A bare ./<path> is also the document under the canonical spelling (BL-380), so A37 no longer moves;
@@ -317,7 +318,7 @@ mutate "part exemption outlives assembly" "a part after assembly" \
 # --- 26-27. THE CANONICAL SPELLING (BL-380) --------------------------------------------------
 # Dropped: a symlinked ancestor, an in-project directory link and a /tmp path are refused again.
 mutate "canonical spelling of the document dropped" \
-  "spelled through a symlinked ancestor|spelled through a symlinked directory|the /tmp spelling" \
+  "spelled through a symlinked ancestor|spelled through a symlinked directory|the /tmp spelling|the document through an alias in a repair part" \
   's/^\[ -n "\$SELF_DOC" \] \&\& SELF_ALIASES="\$(self_aliases)"$/: MUTANT/'
 
 # The directory comparison dropped, so any token ending in the document's basename is the
@@ -331,6 +332,18 @@ mutate "canonical spelling keyed on the basename alone" \
 mutate "canonical spelling keyed on the directory alone" \
   "a sibling of the document through the link|a command naming a longer path" \
   's/^        if (t == b || substr(t, length(t) - length(b)) == "\/" b) if (!seen\[t\]++) print t$/        if (!seen[t]++) print t/'
+
+# --- 29-30. THE SECTION-COPY REFUSAL UNDER ANOTHER SPELLING -----------------------------------
+# Dropped: a part pair reaching sections/ through a symlinked ancestor or a link into sections/
+# is accepted again. The literal-spelling refusal (A38) does not move, so only the two new arms own it.
+mutate "section-copy refusal canonicalisation dropped" \
+  "the section copy reached via an aliased root|the section copy reached via a link into sections/" \
+  's/^\[ -n "\$SEC_DIR" \] \&\& SEC_ALIASES="\$(sec_aliases)"$/: MUTANT/'
+
+# The `/` dropped from the prefix test, so a sibling whose name extends sections/ is doomed too.
+mutate "section-copy refusal prefix without the slash" \
+  "a reproducing part pair over sections.bak/" \
+  's/^    case "\$c" in "\$SEC_PHYS"|"\$SEC_PHYS"\/\*) printf/    case "$c" in "$SEC_PHYS"*) printf/'
 
 if [ "$fails" -gt 0 ]; then
   printf '  %s mutation(s) did not behave\n' "$fails"

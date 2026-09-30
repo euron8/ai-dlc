@@ -715,6 +715,61 @@ else
   bad "a sibling of the document through the link exited $RC (expected 2) — the canonical spelling is keyed on the directory alone"
 fi
 
+# --- A50-A53: THE SECTION-COPY REFUSAL UNDER ANOTHER SPELLING ------------------------------------
+# A38 refuses a part pair naming the split's sections/ dir by its three literal spellings. A command
+# reaching the same file through a symlink matched none of them: accepted, 0 bytes of stderr, and
+# `--assemble` then removed the file the joined record re-runs against. Every arm writes into part
+# 3.md, which no earlier arm touches, silent near-misses first, and each pair records its OWN output
+# so a payload line cannot touch another arm's pair. The two offenders REPRODUCE (4 and 1 under the
+# real validator, A38's control), so exit 2 is the path and never a stale count.
+P3="$REPDIR/3.md"
+SEC2="_bmad-output/planning-artifacts/s1/shards/prd-repair-p1/sections/2.md"
+# A sibling of sections/ whose name EXTENDS it, carrying a reproducing copy: the near-miss for a
+# prefix test that forgets the `/`.
+mkdir -p "$REPDIR/sections.bak"; cp "$REPDIR/sections/2.md" "$REPDIR/sections.bak/2.md"
+ln -s _bmad-output/planning-artifacts/s1/shards/prd-repair-p1/sections "$CONSUMER/seclnk"
+sec_pair() { printf '```derived\n$ grep -c %s %s\n%s\n```' "'$1'" "$2" "$3"; }
+
+# A52: NEAR-MISS -- the reproducing pair over sections.bak/2.md, through the ancestor alias.
+PAIR_BAK="$(sec_pair 'scope item' "$ALIAS/_bmad-output/planning-artifacts/s1/shards/prd-repair-p1/sections.bak/2.md" 4)"
+printf '\n%s\n' "$PAIR_BAK" >> "$P3"
+fire_pd "$PD_PHYS" "$(edit_json "$P3" "$PAIR_BAK")"
+if [ "$RC" = 0 ] && [ ! -s "$ERR" ] && seeded "$P3" "$PAIR_BAK" && [ -f "$REPDIR/sections.bak/2.md" ]; then
+  ok "repair part, a reproducing pair over sections.bak/2.md through the ancestor alias -> exit 0 (outside sections/)"
+else
+  bad "a reproducing part pair over sections.bak/ through an alias exited $RC (expected 0) — the aliased refusal is a prefix match without the slash"
+fi
+
+# A53: NEAR-MISS -- the DOCUMENT through the ancestor alias, in the part: exempt (BL-380), not doomed.
+PAIR_PDOC="$(pair_on "$ALIAS/$SELF_REL" 81)"
+printf '\n%s\n' "$PAIR_PDOC" >> "$P3"
+fire_pd "$PD_PHYS" "$(edit_json "$P3" "$PAIR_PDOC")"
+if [ "$RC" = 0 ] && [ ! -s "$ERR" ] && seeded "$P3" "$PAIR_PDOC"; then
+  ok "repair part, the document spelled through the ancestor alias -> exit 0 (exempt, not the section copy)"
+else
+  bad "the document through an alias in a repair part exited $RC (expected 0) — the aliased refusal or the part's canonical exemption is wrong"
+fi
+
+# A50: THE OFFENDER -- sections/2.md through the ancestor alias, harness handing the physical dir.
+PAIR_SECALIAS="$(sec_pair 'scope item' "$ALIAS/$SEC2" 4)"
+printf '\n%s\n' "$PAIR_SECALIAS" >> "$P3"
+fire_pd "$PD_PHYS" "$(edit_json "$P3" "$PAIR_SECALIAS")"
+if [ "$RC" = 2 ] && grep -q 'reads the section copy' "$ERR" && grep -q 'prd-repair-p1/3.md:' "$ERR" \
+   && [ "$ALIAS/$SEC2" != "$PD_PHYS/$SEC2" ]; then
+  ok "repair part, a reproducing pair over sections/2.md through the ancestor alias -> exit 2 'reads the section copy'"
+else
+  bad "the section copy reached via an aliased root exited $RC (expected 2 'reads the section copy') — a doomed pair is accepted under another spelling"
+fi
+
+# A51: THE OFFENDER -- a relative link whose target IS the sections/ dir.
+PAIR_SECLNK="$(sec_pair 'second scope' "seclnk/2.md" 1)"
+sec_write "$P3" "$PAIR_SECLNK"
+if [ "$RC" = 2 ] && grep -q 'reads the section copy' "$ERR" && grep -q 'seclnk/2.md' "$ERR" && [ -L "$CONSUMER/seclnk" ]; then
+  ok "repair part, a reproducing pair over seclnk/2.md (a link to sections/) -> exit 2 'reads the section copy'"
+else
+  bad "the section copy reached via a link into sections/ exited $RC (expected 2 'reads the section copy') — a doomed pair is accepted under another spelling"
+fi
+
 # --- A14: the artifact is not modified by the hook ----------------------------
 # The rejected design overwrote the recorded output with the captured one. It must
 # stay rejected: a wrong COMMAND would then be silently paired with its own real

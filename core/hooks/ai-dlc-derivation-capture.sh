@@ -214,12 +214,10 @@ fi
 # directory that does not exist there (`../<path>` from the project dir) resolves to nothing and
 # names nothing. Only the file's `$ ` tokens ending in the document's basename are tried, and
 # only inside a split, so a write anywhere else pays no fork for it.
-self_aliases() { # -> the file's `$ ` tokens that name SELF_DOC under another spelling, one per line
-  local base ddir tok d c
-  base="$(basename "$SELF_DOC")"
-  ddir="$(cd "$(dirname "$SELF_DOC")" 2>/dev/null && pwd -P)" || return 0
-  [ -n "$ddir" ] || return 0
-  awk -v b="$base" -v q="'" '
+dollar_tokens() { # [<basename>] -> the file's `$ ` tokens, quotes trimmed, one per line
+  # With a basename: only the tokens ending in it. Without: every token carrying a `/`, with a
+  # leading redirection (`<`, `>`) removed, since `grep x <dir/f` reads dir/f.
+  awk -v b="${1:-}" -v q="'" '
     function trim(t,   qs) {
       qs = "\"" q "`"
       while (length(t) && index(qs, substr(t, 1, 1))) t = substr(t, 2)
@@ -229,20 +227,50 @@ self_aliases() { # -> the file's `$ ` tokens that name SELF_DOC under another sp
     /^[ \t]*\$ / {
       for (f = 2; f <= NF; f++) {
         t = trim($f)
+        if (b == "") { sub(/^[<>]+/, "", t); if (index(t, "/") && !seen[t]++) print t; continue }
         if (t == b || substr(t, length(t) - length(b)) == "/" b) if (!seen[t]++) print t
       }
-    }' "$FILE" 2>/dev/null |
+    }' "$FILE" 2>/dev/null
+}
+canon_dir() { # <token> -> `pwd -P` of the token's directory, relative tokens against PROJECT_DIR
   # The directory part by expansion, never `dirname`: a token is command text, and one that opens
-  # with `-` is read as an option and prints a usage error onto the hook's stderr.
+  # with `-` is read as an option and prints a usage error onto the hook's stderr. Called inside
+  # `$( )`, so the `cd` is the substitution's own and costs no second fork.
+  local d
+  case "$1" in */*) d="${1%/*}" ;; *) d=. ;; esac
+  case "$1" in /*) d="${d:-/}" ;; *) d="${PROJECT_DIR%/}/${d}" ;; esac
+  cd "$d" 2>/dev/null && pwd -P
+}
+self_aliases() { # -> the file's `$ ` tokens that name SELF_DOC under another spelling, one per line
+  local base ddir tok c
+  base="$(basename "$SELF_DOC")"
+  ddir="$(cd "$(dirname "$SELF_DOC")" 2>/dev/null && pwd -P)" || return 0
+  [ -n "$ddir" ] || return 0
+  dollar_tokens "$base" |
   while IFS= read -r tok; do
-    case "$tok" in */*) d="${tok%/*}" ;; *) d=. ;; esac
-    case "$tok" in /*) d="${d:-/}" ;; *) d="${PROJECT_DIR%/}/${d}" ;; esac
-    c="$(cd "$d" 2>/dev/null && pwd -P)" || continue
+    c="$(canon_dir "$tok")" || continue
     [ -n "$c" ] && [ "$c" = "$ddir" ] && printf '%s\n' "$tok"
   done
 }
 SELF_ALIASES=""
 [ -n "$SELF_DOC" ] && SELF_ALIASES="$(self_aliases)"
+# THE REFUSAL SEES THE SAME SPELLINGS. A part's pair naming the split's `sections/` dir is doomed
+# at assembly (above), and the three literal spellings of that dir miss a command reaching it
+# through a symlink exactly as they missed the document: `<alias>/.../sections/2.md` and a link
+# INTO sections/ were accepted with no stderr, and `--assemble` then removed the file the joined
+# record re-runs against. A token is the section copy when its directory canonicalises to
+# SEC_PHYS or below it -- with the `/`, so a sibling `sections.bak/` is not.
+sec_aliases() { # -> the file's `$ ` tokens under the split's sections/ dir by another spelling
+  local tok c
+  [ -n "$SEC_PHYS" ] || return 0
+  dollar_tokens |
+  while IFS= read -r tok; do
+    c="$(canon_dir "$tok")" || continue
+    case "$c" in "$SEC_PHYS"|"$SEC_PHYS"/*) printf '%s\n' "$tok" ;; esac
+  done
+}
+SEC_ALIASES=""
+[ -n "$SEC_DIR" ] && SEC_ALIASES="$(sec_aliases)"
 
 # The text THIS tool call wrote. `content` for Write, `new_string` for Edit, every
 # `edits[].new_string` for MultiEdit -- whichever the payload carries.
@@ -269,7 +297,7 @@ printf '%s\n' "$PAYLOAD" > "$TMPD/payload.txt" 2>/dev/null || exit 0
 # index because nearly every payload has one and it would touch every pair.
 MASK="$TMPD/$(basename "$FILE")"
 DOOMED="$TMPD/doomed"
-SELF_ALIASES="$SELF_ALIASES" awk -v sa="$SELF_DOC" -v sr="$SELF_REL" -v sl="$SELF_LOG" \
+SELF_ALIASES="$SELF_ALIASES" SEC_ALIASES="$SEC_ALIASES" awk -v sa="$SELF_DOC" -v sr="$SELF_REL" -v sl="$SELF_LOG" \
     -v da="${SEC_PHYS:+$SEC_PHYS/}" -v dr="${SEC_REL:+$SEC_REL/}" -v dl="${SEC_LOG:+$SEC_LOG/}" -v dout="$DOOMED" '
 # lead(s): the leading blanks of s. shed(s, ind): s with the block indent removed -- exactly
 # `ind` when s carries it, else whatever leading blanks s has. The same two rules the
@@ -322,7 +350,15 @@ function aliased(s,   a) {
   for (a = 1; a <= NAL; a++) if (names(s, AL[a])) return 1
   return 0
 }
-BEGIN { NAL = (ENVIRON["SELF_ALIASES"] == "" ? 0 : split(ENVIRON["SELF_ALIASES"], AL, "\n")) }
+# secaliased(s): s names a file under the split sections/ dir by a spelling sec_aliases found.
+function secaliased(s,   a) {
+  for (a = 1; a <= NSA; a++) if (names(s, SA[a])) return 1
+  return 0
+}
+BEGIN {
+  NAL = (ENVIRON["SELF_ALIASES"] == "" ? 0 : split(ENVIRON["SELF_ALIASES"], AL, "\n"))
+  NSA = (ENVIRON["SEC_ALIASES"] == "" ? 0 : split(ENVIRON["SEC_ALIASES"], SA, "\n"))
+}
 FNR==NR { if ($0 != "") PAY[$0]=1; next }
 { L[FNR]=$0; N=FNR }
 END {
@@ -344,7 +380,7 @@ END {
         if (cur>0 && (L[k] in PAY)) tch[cur]=1
       }
       # A part pair naming the split sections/ dir is doomed at assembly: recorded, refused below.
-      for (k in tch) if (tch[k] && (under(L[k], da) || under(L[k], dr) || under(L[k], dl))) print k > dout
+      for (k in tch) if (tch[k] && (under(L[k], da) || under(L[k], dr) || under(L[k], dl) || secaliased(L[k]))) print k > dout
       # The section-copy exemption: a touched pair whose command names the split document.
       for (k in tch) if (tch[k] && (names(L[k], sa) || names(L[k], sr) || names(L[k], sl) || aliased(L[k]))) tch[k]=0
       any=0
