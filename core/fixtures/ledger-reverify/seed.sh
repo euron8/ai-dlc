@@ -1163,6 +1163,43 @@ EOF
 
 ---
 
+## PC-FIXTURE-NORECEIPT-NAMED-UPSTREAM — an open id-keyed entry with no receipt, named upstream
+
+No receipt line at all. Upstream history names this id, and that is the only mechanical signal
+this entry will ever get, so it must emit NAMED-UPSTREAM and nothing else. This block sits ABOVE
+the backslash range the tiny-ledger arm cuts, so it does not change that corpus.
+
+## PC-FIXTURE-NORECEIPT-NEVER-CITED — an open id-keyed entry with no receipt, never named
+
+No receipt line and no naming commit. It must emit no row of any kind.
+
+## FIXTURE-CAPS-HEADING-NOT-AN-ID — all caps and hyphenated, and still not an entry id
+
+No receipt line. A pre-base commit names this exact text, and the local charset guard in
+named_absorbed accepts it, so only the shared id rule at extraction keeps it silent.
+
+- **PC-FIXTURE-DASHED-ABOVE-BARE-BOLD** — a dashed entry directly above a bare-bold record
+  Its own receipt, and exactly one row. If the record below stops being a boundary, the record
+  receipt lands here as a second one.
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+**PC-FIXTURE-BARE-BOLD-RECORD** — a column-0 bold id with no leading dash, then an em dash
+A real record form on the reference consumer. It opens its own entry and carries its own
+receipt, which closes because theirs carries MARKER_B.
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_B"
+
+## PC-FIXTURE-BARE-BOLD-MENTION-HOST — a body line opening with a bolded id is not a record
+
+The next line starts at column 0 with a bold id and closes the bold before a comma, so it is a
+MENTION inside this entry, not a new one. The receipt after it belongs to this entry.
+**PC-FIXTURE-MENTIONED-IN-A-BODY**, reported from the consumer while annotating this entry.
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+**PC-FIXTURE-BARE-BOLD-EOL**
+The second spelling of the record: the bold id alone on its line, nothing after it.
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
 ## PC-FIXTURE-ESCAPED-BACKTICK — a receipt whose backticks are markdown-escaped
 
 THE FILED DEFECT. Read with bare backticks the substring is present at base and gone at
@@ -1261,42 +1298,6 @@ reference consumer, fifteen of its thirty-six live `sh` receipts with it. This o
 must read STILL-LIVE.
 
 verify: sh case 'a\b' in *\\*) exit 0 ;; *) exit 1 ;; esac
-
----
-
-## PC-FIXTURE-NORECEIPT-NAMED-UPSTREAM — an open id-keyed entry with no receipt, named upstream
-
-No receipt line at all. Upstream history names this id, and that is the only mechanical signal
-this entry will ever get, so it must emit NAMED-UPSTREAM and nothing else.
-
-## PC-FIXTURE-NORECEIPT-NEVER-CITED — an open id-keyed entry with no receipt, never named
-
-No receipt line and no naming commit. It must emit no row of any kind.
-
-## FIXTURE-CAPS-HEADING-NOT-AN-ID — all caps and hyphenated, and still not an entry id
-
-No receipt line. A pre-base commit names this exact text, and the local charset guard in
-named_absorbed accepts it, so only the shared id rule at extraction keeps it silent.
-
-- **PC-FIXTURE-DASHED-ABOVE-BARE-BOLD** — a dashed entry directly above a bare-bold record
-  Its own receipt, and exactly one row. If the record below stops being a boundary, the record
-  receipt lands here as a second one.
-  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
-**PC-FIXTURE-BARE-BOLD-RECORD** — a column-0 bold id with no leading dash, then an em dash
-A real record form on the reference consumer. It opens its own entry and carries its own
-receipt, which closes because theirs carries MARKER_B.
-verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_B"
-
-## PC-FIXTURE-BARE-BOLD-MENTION-HOST — a body line opening with a bolded id is not a record
-
-The next line starts at column 0 with a bold id and closes the bold before a comma, so it is a
-MENTION inside this entry, not a new one. The receipt after it belongs to this entry.
-**PC-FIXTURE-MENTIONED-IN-A-BODY**, reported from the consumer while annotating this entry.
-verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
-
-**PC-FIXTURE-BARE-BOLD-EOL**
-The second spelling of the record: the bold id alone on its line, nothing after it.
-verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
 
 ---
 
