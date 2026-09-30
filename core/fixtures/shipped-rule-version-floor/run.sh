@@ -189,11 +189,13 @@ h_check() {
     # install created the file, so every key in it was install's
     [ -f "$t/.claude/settings.json" ] && echo H2f
   fi
-  # H3 every unprefixed core file in a shared directory is gone, plus the version stamp
+  # H3 every unprefixed core file in a shared directory is gone, plus the version stamp. A file
+  # whose bytes differ from core's is H9's subject and is SUPPOSED to survive, so H3 judges only
+  # files still byte-identical to core -- the ones uninstall must remove.
   for f in "$ROOT/core/schemas/"*.json "$ROOT/core/session-driver/"*.sh "$ROOT/core/rules/"*.md; do
     [ -f "$f" ] || continue
     n="${f#"$ROOT"/core/}"
-    [ -e "$t/.claude/$n" ] && { echo H3; break; }
+    [ -e "$t/.claude/$n" ] && cmp -s "$f" "$t/.claude/$n" && { echo H3; break; }
   done
   [ -e "$t/.claude/.ai-dlc-version" ] && echo H3
   # H4 no generated agent definition survives
@@ -208,6 +210,11 @@ h_check() {
   fi
   # H6 the managed .gitignore block is cut (its markers are read from a schema H3 deletes)
   [ -f "$t/.gitignore" ] && grep -q 'AI/DLC' "$t/.gitignore" && echo H6
+  # H9 a file sharing a core file's NAME but not its bytes (edited after install) survives, and
+  # the closing listing names it. H3 still sees every byte-identical core file removed.
+  if [ "$world" = seeded ]; then
+    grep -qx '{"edited":"by the consumer"}' "$t/.claude/schemas/audit-anchors.json" 2>/dev/null || echo H9
+  fi
   return 0
 }
 
@@ -249,17 +256,24 @@ grep -qxF -- "$(jq -r .block_begin "$ROOT/core/schemas/pipeline-state-paths.json
 # it, so only "differs from what install wrote" can keep it.
 jq '.aiDlcRoles.qa = {"model":"opus","effort":"low"}' "$hs/.claude/settings.json" > "$TMP/s.json" \
   && mv "$TMP/s.json" "$hs/.claude/settings.json"
+# Edit a shipped schema AFTER install: same name as core's, different bytes. H9's subject, and
+# a file no uninstall path reads (pipeline-state-paths.json is read for the .gitignore markers).
+cmp -s "$ROOT/core/schemas/audit-anchors.json" "$hs/.claude/schemas/audit-anchors.json" \
+  || { echo "run.sh: seeded install did not write core's audit-anchors.json -- H9 cannot discriminate" >&2; exit 2; }
+printf '%s\n' '{"edited":"by the consumer"}' > "$hs/.claude/schemas/audit-anchors.json"
 jq -e '.aiDlcRoles.dev.model == "opus" and .aiDlcRoles.pm.model == "sonnet" and has("aiDlcModels")' \
   "$hs/.claude/settings.json" >/dev/null 2>&1 \
   || { echo "run.sh: seeded install did not keep the tuned dev role beside untuned template roles -- H7/H8 cannot discriminate" >&2; exit 2; }
 # Copies of the installed tree for the mutants and their control, before anything uninstalls it.
 hc="$TMP/seeded-control"; hm="$TMP/seeded-mutant"; hm2="$TMP/seeded-mutant-roles"
-cp -R "$hs" "$hc"; cp -R "$hs" "$hm"; cp -R "$hs" "$hm2"
+cp -R "$hs" "$hc"; cp -R "$hs" "$hm"; cp -R "$hs" "$hm2"; cp -R "$hs" "$hc.pre"
 
 bash "$UNINSTALL" "$hs" --force > "$TMP/uninstall-h.log" 2>&1
 grep -q 'aiDlcRoles.dev' "$TMP/uninstall-h.log" && grep -q 'aiDlcRoles.qa' "$TMP/uninstall-h.log" \
   && grep -q 'Consumer-tuned AI/DLC configuration left in place' "$TMP/uninstall-h.log" \
   || { note "FAIL  H7 the closing listing does not name the tuned roles left in place"; rc=1; }
+grep -q '\.claude/schemas/audit-anchors\.json' "$TMP/uninstall-h.log" \
+  || { note "FAIL  H9 the closing listing does not name the edited schema left in place"; rc=1; }
 h_seed="$(h_check "$hs" seeded)"
 if [ -z "$h_seed" ]; then note "ok    H seeded install -> uninstall removed every AI/DLC file and registration, kept every consumer-authored one"
 else note "FAIL  H seeded-world arms failed: $(echo $h_seed)"; rc=1; fi
@@ -305,6 +319,22 @@ else
       note "FAIL  H mutant 2 did not run to completion, so its verdict says nothing about the aiDlc* un-merge"; rc=1
     elif [ "$h_mut2" = "H7 " ]; then note "ok    H mutant removing aiDlcModels/aiDlcRoles unconditionally fails H7 and only H7"
     else note "FAIL  H mutant removing aiDlcModels/aiDlcRoles unconditionally scored '$h_mut2', expected exactly 'H7'"; rc=1; fi
+  fi
+  # Third mutant: remove by NAME alone, as the first cut of BL-002 did. ONLY H9 may fail.
+  hm3="$TMP/seeded-mutant-name"; cp -R "$hc.pre" "$hm3" 2>/dev/null || true
+  sed 's|^    if cmp -s "$core_file" "$PROJECT_ROOT/.claude/$sub/$name"; then$|    if true; then|' \
+    "$UNINSTALL" > "$MD/scripts/uninstall-mut3.sh"
+  if cmp -s "$UNINSTALL" "$MD/scripts/uninstall-mut3.sh"; then
+    note "FAIL  H mutant 3 DID NOT APPLY: the byte-compare anchor matched nothing"; rc=1
+  elif [ ! -d "$hm3" ]; then
+    note "FAIL  H mutant 3 has no pre-uninstall copy of the seeded world"; rc=1
+  else
+    bash "$MD/scripts/uninstall-mut3.sh" "$hm3" --force > "$TMP/uninstall-hm3.log" 2>&1
+    h_mut3="$(h_check "$hm3" seeded | sort -u | tr '\n' ' ')"
+    if ! grep -q 'Uninstall complete' "$TMP/uninstall-hm3.log"; then
+      note "FAIL  H mutant 3 did not run to completion, so its verdict says nothing about the byte compare"; rc=1
+    elif [ "$h_mut3" = "H9 " ]; then note "ok    H mutant removing same-named files by name alone fails H9 and only H9"
+    else note "FAIL  H mutant removing same-named files by name alone scored '$h_mut3', expected exactly 'H9'"; rc=1; fi
   fi
 fi
 

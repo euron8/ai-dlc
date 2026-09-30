@@ -48,6 +48,8 @@ echo ""
 
 DIRS_TO_REMOVE=()
 FILES_TO_REMOVE=()
+KEPT_EDITED=""
+KEPT_TUNED=""
 
 # -- Skills --
 if [ -d "$PROJECT_ROOT/.claude/skills/ai-dlc" ]; then
@@ -103,6 +105,10 @@ fi
 # is removed, so a consumer's own schema or rule beside ours is never touched. An uninstall
 # run from a NEWER checkout than the one installed leaves behind a file the old version
 # shipped and the new one dropped -- residue, the safe direction.
+#
+# A NAME IS NOT PROOF OF AUTHORSHIP. A file whose BYTES differ from core's copy was edited
+# after install, or is the consumer's own under a name core also ships, so it is kept and
+# listed rather than removed. A byte-identical file is core's, so it goes.
 if [ ! -d "$AI_DLC_ROOT/core" ]; then
   echo "  WARNING: $AI_DLC_ROOT/core is absent, so .claude/schemas/, .claude/session-driver/"
   echo "    and unprefixed .claude/rules/ files cannot be derived and are left in place."
@@ -113,7 +119,12 @@ for pair in "rules:md" "schemas:json" "session-driver:sh"; do
     [ -f "$core_file" ] || continue
     name="$(basename "$core_file")"
     case "$sub:$name" in rules:ai-dlc-*) continue ;; esac   # the prefix loop above has it
-    [ -f "$PROJECT_ROOT/.claude/$sub/$name" ] && FILES_TO_REMOVE+=(".claude/$sub/$name")
+    [ -f "$PROJECT_ROOT/.claude/$sub/$name" ] || continue
+    if cmp -s "$core_file" "$PROJECT_ROOT/.claude/$sub/$name"; then
+      FILES_TO_REMOVE+=(".claude/$sub/$name")
+    else
+      KEPT_EDITED="$KEPT_EDITED .claude/$sub/$name"
+    fi
   done
 done
 
@@ -457,6 +468,11 @@ if [ -n "${KEPT_TUNED// /}" ]; then
   echo "  - Consumer-tuned AI/DLC configuration left in place in .claude/settings.json"
   echo "    (it differs from what install.sh wrote, or predates the install):"
   for k in $KEPT_TUNED; do echo "      $k"; done
+fi
+if [ -n "${KEPT_EDITED// /}" ]; then
+  echo "  - Files that share a name with an AI/DLC file but differ from it (edited after"
+  echo "    install, or your own), left in place:"
+  for k in $KEPT_EDITED; do echo "      $k"; done
 fi
 echo ""
 echo "To also remove BMAD Method: rm -rf _bmad/"
