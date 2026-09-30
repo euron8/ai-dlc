@@ -3317,6 +3317,33 @@ of the words sits in a COMMENT exits 9, because the extraction is anchored on th
 `bad "MUTANT` emitter and finds none — the emitter being gone is a precondition moved, not a
 close.
 
+**THE MECHANISM, FORCED AT BATCH 174: THE MUTANT, NOT THE HARNESS OR THE LOAD.** M3's
+replacement was `true`, which turns `render-agent-definitions.sh:259` into
+`elif ! printf '%s\n' "$want" | true; then`. The subject runs `set -uo pipefail`; `true` exits
+without reading, so the printf can take EPIPE, pipefail fails the pipeline, the role is scored
+DRIFTED and `--check` returns 1 — but only when the writer loses the race, which is why load
+moved it. That one false drift explains every shape above: arm 10's `rc_pass` (the render is
+followed by a `--check`), arm 7's `--check`, and arm 5's cells in either direction (the
+SURVIVED rows). Forced deterministically by delaying the writer 20ms in a scratch copy of the
+subject: arm 10 reads `3 1 1` with `true`, `3 1 0` with the real `cmp` and with `cat >/dev/null`.
+The subject itself was always correct; `cmp` reads to EOF or to the first difference.
+
+**THE COPY-RACE LEAD ABOVE IS NOT THE CAUSE, AND IS NOT NEEDED TO EXPLAIN ANY ROW.** No fixture
+writes the live `core/scripts/`: a grep of `core/fixtures` for write verbs aimed at
+`$ROOT|$REPO/core/scripts` returned 3 files against 42 that name the path at all, and all three
+are copies OUT of it or a `mv` inside a SEEDED root (`enforcement-map-sites/run.sh:76`), so the
+shared source has no concurrent writer and the non-atomic `cp` has nothing to race. Measured at
+30 concurrent runs of this fixture alone, same tree: old mutant with the new guard disabled, 3 of
+30 red (2 `three_states_are_distinct`, 1 `foreign_definition_untouched`); fixed mutant, 0 of 30.
+The copy race was not measured under the full 12-way gate pool, where other fixtures run beside
+this one.
+
+**LANDED (v0.666.0, verified 9cb4956d).** M3 now substitutes `cat >/dev/null` (compare nothing,
+succeed, drain the pipe). `mut()` refuses any mutation whose INTRODUCED lines — the copy minus the
+subject — pipe into `true`, `false` or `:`, before any arm runs, so a non-reading sink cannot
+return. Both the entanglement verdict and the SURVIVED verdict append the observed `arm:rc` set,
+which is this entry's receipt.
+
 verify: sh f=core/fixtures/agent-definition-render/run.sh; [ -f "$f" ] || exit 9; l="$(grep -E '^[[:blank:]]*bad "MUTANT \$label killed by \$want AND by:' "$f")"; [ -n "$l" ] || exit 9; case "$l" in *'$out'*|*'rc='*|*'observed'*) exit 0 ;; esac; exit 1
 
 ## BL-273 — I33b's batched grammar narrowed on `${VAR/../…}` against an equivalence claim, and the one input separating the two implementations was in no corpus and no assertion
