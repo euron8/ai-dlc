@@ -100,6 +100,11 @@
 #       the scan reaches back across sprint boundaries. The count of transcripts scanned
 #       and the count excluded are both printed, so a narrow scan is visible rather than
 #       assumed.
+#   core/scripts/validate-steering-budget.sh [--count | --since ISO | --cite "SUBSTR"] ...
+#       With NEITHER --transcript nor --dir, the corpus is derived from CLAUDE_CODE_SESSION_ID:
+#       this session's FILE for the checks and --count, its project DIRECTORY for --cite or
+#       --since. Where it cannot be derived to exactly one file, the run refuses exactly as it
+#       did before the derivation existed. See DERIVE-SESSION-CORPUS below.
 #   core/scripts/validate-steering-budget.sh --transcript PATH --count
 #       Print ONLY the total violation count (A+B+C+D) as a bare integer, exit 0.
 #       gate-validation.md Check 25 needs an integer to compare against the count
@@ -108,7 +113,8 @@
 #       PROVENANCE-CITATION query mode. Asks a different question from the checks
 #       above: not "did the lead mishandle operator messages?" but "did a GENUINE
 #       operator message actually contain these words?" Prints MATCH <ts> or NOMATCH
-#       and exits 0 (found) / 2 (not found). --since bounds the search to messages at
+#       and exits 0 (found) / 2 (not found). With neither corpus flag the corpus is this
+#       session's project directory, derived (see DERIVE-SESSION-CORPUS below). --since bounds the search to messages at
 #       or after an ISO-8601 timestamp (the pause window). This exists so a record
 #       that CLAIMS operator authorization (an ADVERSARIAL_RESOLUTION operator_
 #       authorization citation) can be checked against the harness-owned transcript.
@@ -207,6 +213,57 @@ while [ $# -gt 0 ]; do
 done
 
 say(){ [ "$QUIET" -eq 1 ] || printf '%s\n' "$*"; }
+
+# NO CORPUS FLAG: DERIVE THIS SESSION'S CORPUS, OR FALL BACK TO THE REFUSAL UNCHANGED.
+#
+# Every caller used to construct the corpus path itself, and the gate step did it as a model
+# transcription (`ls -t` over a `sed`-slugged working directory) that nothing checked: the slug
+# rule diverged from the harness's on any checkout path carrying a `.`, and `ls -t | head -1`
+# picks whichever session wrote last. A misderived corpus then read as the step's legitimate
+# "no transcript" SKIP. The harness exports CLAUDE_CODE_SESSION_ID into every Bash-tool child,
+# and the session's transcript is `$HOME/.claude/projects/<slug>/<id>.jsonl` -- so the glob
+# below computes NO slug, sorts nothing, and is invariant to the working directory and to the
+# install layout (`core/scripts/` here, `scripts/ai-dlc/` in a consumer).
+#
+# WHAT IS DERIVED DEPENDS ON THE MODE, and one default for both is wrong in whichever mode it was
+# not written for:
+#   --cite, or --since     the session's slug DIRECTORY. An authorization outlives the session
+#                          that recorded it, and --since is a bound on a directory listing --
+#                          with --transcript it filters nothing.
+#   anything else          the session FILE -- Check 25 counts THIS session's conduct.
+# The derived corpus is the LEAD's: a teammate's Bash child sees the lead's session id, and
+# per-teammate transcripts under `<slug>/<id>/subagents/` are outside the non-recursive `.jsonl`
+# read, so they are excluded by construction rather than by accident.
+#
+# EXACTLY ONE MATCH OR NOTHING. No id (CI, a plain terminal, a git hook), an id carrying any
+# character outside [A-Za-z0-9-] (it is spliced into a glob), no match, or two matches under two
+# project slugs all leave both flags empty, and the two refusals below then fire BYTE-FOR-BYTE as
+# they always have. A derivation that failed in a NEW way would fail closed on every consumer not
+# running Claude Code. An explicit --transcript or --dir is never overridden. Every delegating
+# caller (the remediation guard, the gate-adjudication, convergence and escalation validators)
+# passes an explicit flag and returns before calling when it has none, so their fail-open and
+# fail-closed "no corpus" branches are untouched by this.
+# >>> DERIVE-SESSION-CORPUS >>>
+if [ -z "$TRANSCRIPT" ] && [ -z "$DIR" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ] && [ -n "${HOME:-}" ]; then
+  case "$CLAUDE_CODE_SESSION_ID" in
+    *[!A-Za-z0-9-]*) ;;
+    *)
+      DERIVED_N=0; DERIVED_F=""
+      for _dsc in "$HOME"/.claude/projects/*/"$CLAUDE_CODE_SESSION_ID".jsonl; do
+        [ -f "$_dsc" ] && [ -r "$_dsc" ] || continue
+        DERIVED_N=$((DERIVED_N + 1)); DERIVED_F="$_dsc"
+      done
+      if [ "$DERIVED_N" -eq 1 ]; then
+        if [ -n "$CITE" ] || [ -n "$SINCE" ]; then
+          DIR="$(dirname "$DERIVED_F")"
+        else
+          TRANSCRIPT="$DERIVED_F"
+        fi
+      fi
+      ;;
+  esac
+fi
+# <<< DERIVE-SESSION-CORPUS <<<
 
 # --cite TAKES A CORPUS, and withholding that was a live deadlock.
 #

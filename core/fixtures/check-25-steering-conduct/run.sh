@@ -623,16 +623,138 @@ if [ -n "$MF" ]; then
   mw F-meta-holds "$MF" "$CITE_META" "" "NOMATCH/2" hold "F: the isMeta arm is unmoved"
 fi
 
+# ===========================================================================
+# NO CORPUS FLAG: THE SESSION'S CORPUS IS DERIVED, OR THE RUN REFUSES EXACTLY AS BEFORE.
+#
+# The gate step used to make the model type the corpus path (`ls -t` over a `sed`-slugged
+# working directory); the validator now derives it from CLAUDE_CODE_SESSION_ID under
+# $HOME/.claude/projects/*/. Every call below sets BOTH variables explicitly -- the suite runs
+# under `git push` from a Claude Code session, where the real id is exported, and in CI, where
+# it is not, and an arm that inherited either would score against whatever that machine holds.
+#
+# THE SLUG DIRECTORY HOLDS A SECOND SESSION, and it is what separates the two modes. The cited
+# phrase is ONLY in the other session's file (an operator authorizes in one session and the
+# gate that leans on it runs in another), so --cite must derive the DIRECTORY to MATCH; and
+# both files starve once, so --count must derive the FILE to read 1 rather than 2.
+echo
+echo "  -- flagless: the derived session corpus --"
+DWORK="$(mktemp -d)"
+trap 'rm -rf "$ROOT" "$CORPA" "$CORPB" "$AWORK" "$MWORK" "$DWORK"' EXIT
+DSID="0c0ffee0-1111-4222-8333-444455556666"
+DPHRASE="ship the flagless corpus derivation today"
+DH1="$DWORK/one"; DSLUG="$DH1/.claude/projects/-seeded-checkout"
+mkdir -p "$DSLUG" "$DH1/.claude/projects/-another-project"
+cp "$ROOT/starves/session.jsonl" "$DSLUG/$DSID.jsonl"
+cp "$ROOT/starves/session.jsonl" "$DSLUG/aaaa-earlier-session.jsonl"
+printf '%s\n' "{\"type\":\"user\",\"timestamp\":\"2026-07-13T12:05:00.000Z\",\"message\":{\"role\":\"user\",\"content\":\"$DPHRASE\"}}" >> "$DSLUG/aaaa-earlier-session.jsonl"
+cp "$ROOT/clean/session.jsonl" "$DH1/.claude/projects/-another-project/other.jsonl"
+# ZERO: a projects tree holding transcripts, none of them this session's.
+DH0="$DWORK/zero"; mkdir -p "$DH0/.claude/projects/-seeded-checkout"
+cp "$ROOT/clean/session.jsonl" "$DH0/.claude/projects/-seeded-checkout/aaaa-earlier-session.jsonl"
+# TWO: the same session id under two project slugs. Ambiguous, so nothing is derived.
+DH2="$DWORK/two"; mkdir -p "$DH2/.claude/projects/-a" "$DH2/.claude/projects/-b"
+cp "$DSLUG/aaaa-earlier-session.jsonl" "$DH2/.claude/projects/-a/$DSID.jsonl"
+cp "$DSLUG/aaaa-earlier-session.jsonl" "$DH2/.claude/projects/-b/$DSID.jsonl"
+# ESCAPE: an id carrying `../` would splice a path out of the slug directory into the glob.
+DESC="../escape-session"
+mkdir -p "$DWORK/esc/.claude/projects/-x"
+cp "$DSLUG/aaaa-earlier-session.jsonl" "$DWORK/esc/.claude/projects/escape-session.jsonl"
+
+REF_CITE="FAIL: --cite requires --transcript PATH or --dir PATH"
+REF_ANY="FAIL: pass --transcript PATH or --dir PATH"
+# drive <validator> <home> <sid-or-UNSET> <args...> -> "<rc>|<stdout+stderr>"
+drive() {
+  local v="$1" h="$2" sid="$3" o r; shift 3
+  if [ "$sid" = "UNSET" ]; then
+    o="$(env -u CLAUDE_CODE_SESSION_ID HOME="$h" bash "$v" "$@" 2>&1)"; r=$?
+  else
+    o="$(env HOME="$h" CLAUDE_CODE_SESSION_ID="$sid" bash "$v" "$@" 2>&1)"; r=$?
+  fi
+  printf '%s|%s' "$r" "$o"
+}
+# The verdict for one validator over the derivation worlds, one token per world, so a mutant's
+# vector reads beside the shipping one.
+#   C  flagless --cite, single match: MATCH, and the diagnostic names the slug DIRECTORY
+#   N  flagless --count, single match: the bare integer 1 (the FILE, not the directory's 2)
+#   S  flagless --since: the corpus line names the slug DIRECTORY
+#   Z  zero matches: both refusals byte-identical to an unset-id run, and each IS the literal
+#   T  two matches: the same
+#   E  an id carrying ../: the same
+dvec() {
+  local v="$1" c n s z t e x y
+  c="$(drive "$v" "$DH1" "$DSID" --cite "$DPHRASE")"
+  if [ "$c" = "0|cite: scanned 2 transcript(s) from $DSLUG
+MATCH 2026-07-13T12:05:00.000Z" ]; then c=C; else c=c; fi
+  n="$(drive "$v" "$DH1" "$DSID" --count)"
+  if [ "$n" = "0|1" ]; then
+    n="$(drive "$v" "$DH1" "$DSID")"
+    case "$n" in *"corpus              : $DSLUG/$DSID.jsonl"*) n=N ;; *) n=n ;; esac
+  else n=n; fi
+  s="$(drive "$v" "$DH1" "$DSID" --since 2020-01-01T00:00:00Z)"
+  case "$s" in *"corpus              : $DSLUG
+"*) s=S ;; *) s=s ;; esac
+  # refuse <home> <sid> -> R when both flagless shapes refuse exactly as an unset id does
+  refuse() {
+    x="$(drive "$v" "$1" "$2" --cite "$DPHRASE")"; y="$(drive "$v" "$1" UNSET --cite "$DPHRASE")"
+    [ "$x" = "$y" ] && [ "$x" = "1|$REF_CITE" ] || { printf r; return; }
+    x="$(drive "$v" "$1" "$2" --count)"; y="$(drive "$v" "$1" UNSET --count)"
+    [ "$x" = "$y" ] && [ "$x" = "1|$REF_ANY" ] || { printf r; return; }
+    printf R
+  }
+  z="$(refuse "$DH0" "$DSID")"; t="$(refuse "$DH2" "$DSID")"; e="$(refuse "$DWORK/esc" "$DESC")"
+  z="${z/R/Z}"; z="${z/r/z}"; t="${t/R/T}"; t="${t/r/t}"; e="${e/R/E}"; e="${e/r/e}"
+  printf '%s%s%s%s%s%s' "$c" "$n" "$s" "$z" "$t" "$e"
+}
+DV="$(dvec "$VALIDATOR")"
+w derive-shipping "$DV" "CNSZTE" \
+  "flagless --cite derives the slug DIRECTORY, --count the session FILE, --since the DIRECTORY; zero, two and a ../ id refuse byte-for-byte as an unset id does"
+# THE ESCAPE WORLD MUST BE ABLE TO MATCH, or E is a refusal for a reason that is not the guard:
+# the same file read through an explicit --dir must MATCH the phrase.
+w derive-escape-reachable "$(drive "$VALIDATOR" "$DWORK/esc" UNSET --dir "$DWORK/esc/.claude/projects" --cite "$DPHRASE" | sed -n '$p')" \
+  "MATCH 2026-07-13T12:05:00.000Z" "the ../ world's file carries the phrase, so E refuses because of the id guard and not an empty world"
+
+# MUTANT G -- the derivation removed. Every flagless run refuses: C, N and S die, the refusal
+# worlds are unmoved -- which is exactly what the pre-fix program did.
+mut derive-removed '/^# >>> DERIVE-SESSION-CORPUS >>>$/,/^# <<< DERIVE-SESSION-CORPUS <<<$/d'
+if [ -n "$MUTP" ]; then
+  GV="$(dvec "$MUTP")"
+  if [ "$GV" = "cnsZTE" ]; then kill_ G-derive-removed "G: with no derivation every flagless run refuses (cnsZTE) -- the arm sees the fix"
+  else bad_ G-derive-removed "got '$GV', want 'cnsZTE'"; fi
+fi
+# MUTANT H -- ANY number of matches accepted. The two-slug world now derives one of them.
+mut derive-multi 's|^      if \[ "\$DERIVED_N" -eq 1 \]; then$|      if [ "$DERIVED_N" -ge 1 ]; then|'
+if [ -n "$MUTP" ]; then
+  HV="$(dvec "$MUTP")"
+  if [ "$HV" = "CNSZtE" ]; then kill_ H-derive-multi "H: an ambiguous id under two slugs derives a corpus (CNSZtE) -- T has teeth"
+  else bad_ H-derive-multi "got '$HV', want 'CNSZtE'"; fi
+fi
+# MUTANT I -- ONE MODE FOR ALL: --cite and --since derive the FILE. The cited phrase lives in
+# the other session, so --cite NOMATCHes; --since names the file.
+mut derive-one-mode 's|^        if \[ -n "\$CITE" \] [|][|] \[ -n "\$SINCE" \]; then$|        if false; then|'
+if [ -n "$MUTP" ]; then
+  IV="$(dvec "$MUTP")"
+  if [ "$IV" = "cNsZTE" ]; then kill_ I-derive-one-mode "I: a file-only default loses a cross-session citation and the sprint window (cNsZTE) -- C and S have teeth"
+  else bad_ I-derive-one-mode "got '$IV', want 'cNsZTE'"; fi
+fi
+# MUTANT J -- the id guard widened to admit `.` and `/`. The ../ id splices a path out of the
+# slug directory and derives it.
+mut derive-id-unguarded 's|^    \*\[!A-Za-z0-9-\]\*) ;;$|    *[!A-Za-z0-9./-]*) ;;|'
+if [ -n "$MUTP" ]; then
+  JV="$(dvec "$MUTP")"
+  if [ "$JV" = "CNSZTe" ]; then kill_ J-derive-id-unguarded "J: an id carrying ../ reaches outside the slug directory (CNSZTe) -- E has teeth"
+  else bad_ J-derive-id-unguarded "got '$JV', want 'CNSZTe'"; fi
+fi
+
 # KILL COUNT. A mutation that applied cleanly to a file this run never loaded reads exactly
 # like an arm that cannot fire, and `cmp -s` cannot tell them apart. Zero kills is that state.
-if [ "$KILLS" -ge 7 ]; then
+if [ "$KILLS" -ge 11 ]; then
   ok_ KILL-COUNT "$KILLS mutant kill(s) -- the arms above can fire"
 else
   bad_ KILL-COUNT "$KILLS kill(s); the mutants changed bytes in a file these arms never loaded"
 fi
 
 if [ "$FAILURES" -eq 0 ]; then
-  echo "PASS: check-25 steering-conduct fixture holds (3 cases + count contract + 9 identity arms + provenance window/isMeta arms + 6 mutants)."
+  echo "PASS: check-25 steering-conduct fixture holds (3 cases + count contract + 9 identity arms + provenance window/isMeta arms + flagless-derivation arms + 10 mutants)."
   exit 0
 fi
 echo "FAIL: $FAILURES check-25 assertion(s) failed."

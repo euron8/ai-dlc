@@ -2107,13 +2107,15 @@ consecutive sprints record zero series holding more than one valid resolution re
 
 **Scope.** Every gate. Rule 29 binds any phase that dispatches.
 
-**Check.** Resolve this session's transcript, then compare the violation count
-against the one the previous gate recorded:
+**Check.** Compare this session's violation count against the one the previous gate
+recorded. The validator resolves this session's transcript itself; pass no path:
 
-    T=$(ls -t ~/.claude/projects/"$(pwd | sed 's|/|-|g')"/*.jsonl 2>/dev/null | head -1)
-    scripts/ai-dlc/validate-steering-budget.sh --transcript "$T" --count
+    scripts/ai-dlc/validate-steering-budget.sh --count
 
-- **No transcript** (CI, a non-Claude-Code runner) → **SKIP**, recorded as SKIP.
+- **No transcript** (CI, a non-Claude-Code runner) → **SKIP**, recorded as SKIP. The
+  validator says so by exiting 1 with no integer on stdout and
+  `FAIL: pass --transcript PATH or --dir PATH` on stderr; `--count` exits 0 whenever it
+  found a transcript, violations or not.
 - Read `steering_violations:` from the **previous gate-log entry of this session**
   (Check 12 owns the field). No previous entry → baseline `0`.
 - **Count INCREASED → the gate FAILS.** Unchanged → PASS.
