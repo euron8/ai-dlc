@@ -1481,8 +1481,20 @@ Discharges the consumer entry `extensions/steps-domain/implementation-push.md` a
 line 259. That row is a withdrawal candidate on its own terms; this entry is the ai-dlc-side
 mechanism whose absence let it survive.
 
+**Receipt replaced at batch 174: the old one closed on a comment.** Driven through
+`scripts/backlog-reverify.sh` on a copy of the tree where
+`# see docs/v0.13.0-consumer-absorption-spec.md` was appended to `reconcile/lib.sh` and
+nothing else changed, it read CLOSE-CANDIDATE; on the real tree, STILL-LIVE. No behavioural
+receipt can be built yet: no program drains `push_candidate` rows today (the drain is prose at
+`core/skills/ai-dlc-update/SKILL.md` "Drain entries flagged `push_candidate: true`"), so there
+is no output to assert on, and the old anchor assumed a fix in which `core/` cites a `docs/`
+file, which the consumer boundary rules out. **What closes it:** a standing-verdict record
+shipped under `core/` and read by a reconcile program that, in one run on a seeded consumer,
+reports a block the record refuses as refused and a block it does not name as a push candidate.
+Swap this receipt for one driving that program when it exists.
 
-verify: sh grep -rqF 'layer-drift' core/skills/ai-dlc-update/ || exit 1; grep -rqF 'consumer-absorption' core/skills/ai-dlc-update/
+
+verify: manual -- no program drains push_candidate rows yet, so nothing can be driven; see above.
 ## BL-025
 
 **`SKILL.md`'s PREREQUISITES tells the lead that teammates set their own effort in their role
