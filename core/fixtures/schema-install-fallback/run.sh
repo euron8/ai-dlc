@@ -432,6 +432,120 @@ for spec in $MUTANTS; do
 done
 [ "$n_killed" -gt 0 ] || bad "no mutant was killed — the arms were never shown to fire"
 
+# --- E2 (BL-332): write mode under a foreign root REWRITES a stale region in the INSTALL ------
+# Arm E seeds its stale region in the FOREIGN root only, and the install's docs are already in
+# sync, so "the install's docs are unchanged" holds whether the fallback branch renders them or
+# skips them — and E never reads the exit. Under R2 the fallback branch takes ROOT and DOC_DIRS
+# from the install, so write mode over a stale install region must do exactly what a run with no
+# override does: exit 0, rewrite the install's retro.md, leave the foreign decoy alone.
+#   1. The seed is live: --check under the foreign root exits 1 naming steps/retro.md.
+#   2. EXPECTED is DERIVED, not the shipped bytes: a no-override write of the same seed (that run
+#      resolves the install's .claude/schemas/ branch, never the fallback, so no mutant here can
+#      move it), asserted to differ from the seed so the comparison is not two no-ops.
+#   3. Re-seeded, the foreign-root write exits 0, reports 1 file updated, produces EXPECTED byte
+#      for byte, leaves the decoy's cksum alone, and --check then passes.
+# Two mutants, both gated on write mode inside the fallback branch so A (check mode) cannot move:
+#   SKIP  the install's doc dirs are dropped — exit 0, nothing written. An rc-only arm passes it.
+#   R2W   the 0.645.0 answer — exit 1, nothing written.
+# Each is shown to leave the whole A-E vector at its base value (E green) and to fail E2 alone.
+bl332_mut() { # $1 SKIP|R2W|DECOY-CHECK  $2 src  $3 dst
+  python3 - "$1" "$2" "$3" <<'PY'
+import sys
+mode, src_path, dst_path = sys.argv[1], sys.argv[2], sys.argv[3]
+src = open(src_path).read()
+# Anchored on the fallback branch's own ROOT line, which the branch above it does not carry;
+# its DOC_DIRS line is byte-identical to that branch's, so it is never the anchor on its own.
+old = '    ROOT="$AI_DLC_INSTALL_ROOT"\n    DOC_DIRS=("$ROOT/.claude/skills" "$ROOT/.claude/team-roles")\n'
+if src.count(old) != 1:
+    sys.stderr.write("anchor: fallback ROOT/DOC_DIRS pair found %d times\n" % src.count(old)); sys.exit(3)
+if mode == "SKIP":
+    new = old + '    [ "$MODE" = sync ] && DOC_DIRS=("$ROOT/.sif-bl332-no-such-dir")\n'
+elif mode == "R2W":
+    new = old + '    [ "$MODE" = sync ] && { echo "sync-taught-schema: FAIL — BL-332 mutant" >&2; exit 1; }\n'
+else:
+    sys.stderr.write("anchor: unknown mode %s\n" % mode); sys.exit(3)
+open(dst_path, "w").write(src.replace(old, new))
+PY
+}
+
+# e2 <world> -> "0" held, or "1 <why>"
+bl332_e2() {
+  local w="$1" r out rc exp seed d0 sc
+  r="$w/t/.claude/skills/ai-dlc/steps/retro.md"
+  [ -f "$r" ] && grep -qF "$BEGIN_LINE" "$r" || { echo "1 BROKEN: the install carries no provenance region in steps/retro.md"; return; }
+  seed="$w/retro.seeded"; exp="$w/retro.expected"
+  python3 - "$r" "$seed" "$BEGIN_LINE" "$END_LINE" <<'PY' || { echo "1 BROKEN: seeding failed"; return; }
+import sys
+p, out, b, e = sys.argv[1:5]
+s = open(p).read()
+i = s.index(b) + len(b); j = s.index(e, i)
+open(out, "w").write(s[:i] + "\nSTALE — BL-332 seed, not what the schema renders\n" + s[j:])
+PY
+  cmp -s "$seed" "$r" && { echo "1 BROKEN: the seed is byte-identical to the shipped retro.md"; return; }
+  cp "$seed" "$r" || { echo "1 BROKEN: seed copy failed"; return; }
+  out="$(cd "$w/t" && AI_DLC_PROJECT_ROOT="$w/FE" bash "$w/t/scripts/ai-dlc/sync-taught-schema.sh" --check 2>&1)"; rc=$?
+  [ "$rc" = 1 ] && grep -q 'steps/retro.md' <<<"$out" || { echo "1 BROKEN: --check under the foreign root did not flag the seeded retro.md (rc=$rc)"; return; }
+  ( cd "$w/t" && bash "$w/t/scripts/ai-dlc/sync-taught-schema.sh" >/dev/null 2>&1 ) || { echo "1 BROKEN: the no-override write failed"; return; }
+  cp "$r" "$exp" || { echo "1 BROKEN: expected copy failed"; return; }
+  cmp -s "$exp" "$seed" && { echo "1 BROKEN: the no-override write left the seed unchanged"; return; }
+  cp "$seed" "$r" || { echo "1 BROKEN: re-seed failed"; return; }
+  d0="$(cksum < "$w/FE/.claude/skills/ai-dlc/decoy.md")"
+  out="$(cd "$w/t" && AI_DLC_PROJECT_ROOT="$w/FE" bash "$w/t/scripts/ai-dlc/sync-taught-schema.sh" 2>&1)"; rc=$?
+  [ "$rc" = 0 ] || { echo "1 foreign-root write exited $rc"; return; }
+  grep -q '; 1 file(s) updated\.$' <<<"$out" || { echo "1 foreign-root write did not report 1 file updated"; return; }
+  cmp -s "$r" "$exp" || { echo "1 foreign-root write left retro.md differing from the no-override render"; return; }
+  [ "$(cksum < "$w/FE/.claude/skills/ai-dlc/decoy.md")" = "$d0" ] || { echo "1 foreign-root write modified the foreign decoy"; return; }
+  ( cd "$w/t" && bash "$w/t/scripts/ai-dlc/sync-taught-schema.sh" --check >/dev/null 2>&1 ); sc=$?
+  [ "$sc" = 0 ] || { echo "1 --check after the write exited $sc"; return; }
+  echo 0
+}
+
+bl332_stale_install_arm() {
+  local m w st v e n_dec=0
+  printf '#!/usr/bin/env bash\necho no fix here\n' > "$WORK/bl332-decoy.sh"
+  for m in SKIP R2W; do bl332_mut "$m" "$WORK/bl332-decoy.sh" "$WORK/bl332-decoy.out" 2>/dev/null && n_dec=$((n_dec + 1)); done
+  [ "$n_dec" -eq 0 ] && ok "E2 mutants: both BL-332 mutation programs refuse a decoy carrying no anchor" \
+                     || bad "E2 mutants: $n_dec BL-332 mutation program(s) applied to a decoy"
+  for m in NONE SKIP R2W; do
+    (
+      w="$WORK/e2-$m"
+      mkdir -p "$w" && cp -R "$BASE/t" "$w/t" || { echo "DID NOT APPLY: copy of the install failed" > "$w/.status"; exit 0; }
+      if [ "$m" != NONE ]; then
+        bl332_mut "$m" "$BASE/t/scripts/ai-dlc/sync-taught-schema.sh" "$w/t/scripts/ai-dlc/sync-taught-schema.sh" 2>"$w/.err" \
+          || { echo "DID NOT APPLY: $(sed -n 1p "$w/.err")" > "$w/.status"; exit 0; }
+        cmp -s "$BASE/t/scripts/ai-dlc/sync-taught-schema.sh" "$w/t/scripts/ai-dlc/sync-taught-schema.sh" \
+          && { echo "DID NOT APPLY: identical to the installed sync-taught-schema.sh" > "$w/.status"; exit 0; }
+        cp "$w/t/scripts/ai-dlc/sync-taught-schema.sh" "$w/t/scripts/sync-taught-schema.sh" \
+          || { echo "DID NOT APPLY: legacy copy failed" > "$w/.status"; exit 0; }
+      fi
+      mk_roots "$w" || { echo "DID NOT APPLY: foreign roots not built" > "$w/.status"; exit 0; }
+      echo APPLIED > "$w/.status"
+      # The vector first: once the install region is seeded, E's install checksum moves under a
+      # CORRECT write too, so the order is part of the arm.
+      vector "$w" sync-taught-schema > "$w/.vec"
+      bl332_e2 "$w" > "$w/.e2"
+    ) &
+  done
+  wait
+  for m in NONE SKIP R2W; do
+    w="$WORK/e2-$m"; st="$(cat "$w/.status" 2>/dev/null)"
+    if [ "$st" != APPLIED ]; then bad "E2 $m: ${st:-no status written}"; continue; fi
+    v="$(cat "$w/.vec" 2>/dev/null)"; e="$(cat "$w/.e2" 2>/dev/null)"
+    case "$e" in "1 BROKEN"*) bad "E2 $m: FIXTURE BROKEN — ${e#1 }"; continue ;; esac
+    if [ "$v" != "$(want_base sync-taught-schema)" ]; then
+      bad "E2 $m: vector $v, want $(want_base sync-taught-schema) — a mutant moving A-E is entangled, not an E2 kill"; continue
+    fi
+    if [ "$m" = NONE ]; then
+      [ "$e" = 0 ] && ok "E2 write mode under a foreign root rewrites a stale INSTALL retro.md region to the no-override render, decoy untouched" \
+                   || bad "E2 write mode under a foreign root over a stale install region: ${e#1 }"
+    else
+      [ "${e%% *}" = 1 ] && ok "MUTANT $m on sync-taught-schema leaves A-E at $v and is killed by E2 alone (${e#1 })" \
+                         || bad "MUTANT $m on sync-taught-schema: E2 held — the arm cannot see a skipped install region"
+    fi
+  done
+}
+bl332_stale_install_arm
+
 echo ""
 if [ "$fails" -eq 0 ]; then
   echo "schema-install-fallback: PASS ($n_killed mutant(s) killed)"
