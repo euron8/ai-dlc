@@ -26,6 +26,89 @@
 set -uo pipefail
 cd "$(git rev-parse --show-toplevel)" || exit 1
 
+# 0. A GREEN GATE IS NOT A LANDED PUSH, and the cause is a dotfile, not this tree. `git push`
+#    opens the SSH connection BEFORE this hook runs; the suite below then idles it for minutes,
+#    GitHub's sshd drops it, and the pack write takes SIGPIPE -- exit 141, every phase PASS, the
+#    ref absent on origin. Measured: three consecutive pushes dropped mid-suite; adding
+#    `ServerAliveInterval 60` / `ServerAliveCountMax 30` to the remote's ssh alias was the one
+#    change, and the next three landed. This WARNS, once, when the effective ssh config for the
+#    push remote carries no keepalive. It never fails the push: the gate's verdict is about the
+#    tree, and a missing keepalive is about the transport.
+#
+#    WHY NOT `git ls-remote` AFTER THE PUSH. pre-push runs before the transport, so it cannot
+#    see the outcome; and a reader run from outside races a backgrounded push -- measured
+#    reading 0 while the push was still in flight and then landed. The cause is checkable here;
+#    the symptom is not.
+#
+#    IT READS THE SSH COMMAND GIT WILL ACTUALLY RUN, in git's own precedence: GIT_SSH_COMMAND,
+#    then core.sshCommand (both run through `sh -c 'CMD "$@"'`, as git does), then GIT_SSH
+#    (exec'd directly), then `ssh`. An operator pushing with
+#    `GIT_SSH_COMMAND="ssh -o ServerAliveInterval=60"` IS configured, and a plain `ssh -G`
+#    would warn at them -- so the effective value is what `-G` prints through THAT command,
+#    never what one file says. That is also how the fixture seeds a config without touching
+#    `~/.ssh/config`: it sets `GIT_SSH_COMMAND="ssh -F <seeded config>"`, the same knob an
+#    operator uses. No test-only variable exists for a mutant to leave switched on.
+#
+#    SILENT, never guessing, when: the URL is not ssh (https, file, a local path); the args are
+#    absent (a hand run or a fixture driving this hook); the command's first word is not
+#    `ssh` (plink, a wrapper -- handed `-G` it might connect); or `ssh -G` fails or prints no
+#    `serveraliveinterval`. stdin is closed on the probe: it carries git's ref lines.
+#
+#    FALSE-POSITIVE SET, measured on the operator's box: `origin` is
+#    `git@github-euron8:euron8/ai-dlc.git`, `ssh -G github-euron8` reports
+#    `serveraliveinterval 60`, and this block is silent; the same args with
+#    `GIT_SSH_COMMAND="ssh -F <empty config>"` fire. `core/fixtures/prepush-ssh-keepalive`
+#    drives this block, extracted between the sentinels, in both directions with two mutants.
+# KEEPALIVE_BEGIN
+ssh_keepalive_warn() {
+  local url="${2:-}" cmd="" via="" first="" rest="" auth="" target="" port="" host_alias="" out="" line="" iv=""
+  [ -n "$url" ] || return 0
+  case "$url" in
+    ssh://*|git+ssh://*|ssh+git://*)
+      rest="${url#*://}"; auth="${rest%%/*}"
+      case "$auth" in *\[*) return 0 ;; esac
+      target="${auth%%:*}"
+      case "$auth" in *:*) port="${auth#*:}" ;; esac ;;
+    *://*) return 0 ;;
+    *:*)
+      target="${url%%:*}"
+      case "$target" in ''|*/*) return 0 ;; esac ;;
+    *) return 0 ;;
+  esac
+  [ -n "$target" ] || return 0
+  host_alias="${target#*@}"
+  if [ -n "${GIT_SSH_COMMAND:-}" ]; then cmd="$GIT_SSH_COMMAND"; via=shell
+  elif cmd="$(git config --get core.sshCommand 2>/dev/null)" && [ -n "$cmd" ]; then via=shell
+  elif [ -n "${GIT_SSH:-}" ]; then cmd="$GIT_SSH"; via=exec
+  else cmd=ssh; via=exec
+  fi
+  if [ "$via" = shell ]; then first="${cmd%%[[:space:]]*}"; else first="$cmd"; fi
+  [ "${first##*/}" = ssh ] || return 0
+  command -v "$first" >/dev/null 2>&1 || return 0
+  if [ "$via" = shell ]; then
+    if [ -n "$port" ]; then
+      out="$(sh -c "$cmd"' "$@"' "$cmd" -G -p "$port" "$target" </dev/null 2>/dev/null)" || return 0
+    else
+      out="$(sh -c "$cmd"' "$@"' "$cmd" -G "$target" </dev/null 2>/dev/null)" || return 0
+    fi
+  else
+    if [ -n "$port" ]; then
+      out="$("$cmd" -G -p "$port" "$target" </dev/null 2>/dev/null)" || return 0
+    else
+      out="$("$cmd" -G "$target" </dev/null 2>/dev/null)" || return 0
+    fi
+  fi
+  while IFS= read -r line; do
+    case "$line" in serveraliveinterval\ *) iv="${line#serveraliveinterval }" ;; esac
+  done <<EOF
+$out
+EOF
+  [ "$iv" = 0 ] || return 0
+  printf 'pre-push: WARNING -- ssh host alias "%s" has no keepalive (ServerAliveInterval 0). The suite below idles the connection git already opened, GitHub drops it, and the push exits 141 with every gate green and the ref NOT on origin. Add "ServerAliveInterval 60" and "ServerAliveCountMax 30" under "Host %s" in ~/.ssh/config. Not blocking.\n' "$host_alias" "$host_alias"
+}
+ssh_keepalive_warn "${1:-}" "${2:-}"
+# KEEPALIVE_END
+
 fail=0
 step() {
   printf '\n── %s\n' "$1"; shift
