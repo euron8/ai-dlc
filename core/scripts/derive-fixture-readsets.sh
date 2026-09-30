@@ -5,6 +5,13 @@
 # RUN AS, in this distribution:  sudo bash core/scripts/derive-fixture-readsets.sh [--all | --list "<fixtures>"]
 #         in an installed tree:  sudo bash scripts/ai-dlc/derive-fixture-readsets.sh [--all | --list "<fixtures>"]
 #
+# `--tracer sandbox` replaces fs_usage with the kernel's own Sandbox reports (a scoped
+# `sandbox-exec` profile read through `log stream`) and needs NO root -- run it WITHOUT sudo.
+# fs_usage stays the default until one root run traces every fixture with both tracers and the
+# sandbox misses nothing outside `.git/**` and `.gitignore` (BL-375). The sandbox cannot see a
+# read by a process outside the fixture's lineage (an XPC or launchd helper), and `log stream`
+# DROPS reports under load; a window carrying a drop notice omits its fixture.
+#
 # ---------------------------------------------------------------------------------------
 # WHY IT LIVES IN core/scripts/ AND SHIPS. It did not, for the whole life of the read-set
 # skip: v0.294.0 shipped `core/git-hooks/pre-push`, which READS the map, and left the program
@@ -93,10 +100,6 @@ REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
 [ -n "$REPO_ROOT" ] && [ -d "$REPO_ROOT/.git" ] || {
   echo "ERROR: not inside a git work tree. The map is a tracked artifact of one repository and the trace copies its .git; there is nothing to derive from here." >&2; exit 1; }
 MAP="$REPO_ROOT/.ai-dlc-fixture-readsets.tsv"
-TRACE_ROOT="${AI_DLC_READSET_TRACE_ROOT:-/private/tmp/ai-dlc-readset}"
-TREE="$TRACE_ROOT/t"
-WORK="$TRACE_ROOT/w"
-SENTINEL="$TREE/.readset-sentinel"
 
 # System daemons that walk the filesystem on their own schedule and are never part of a
 # fixture's work. Deliberately NOT a general noise list: a fixture's own helpers (bash, git,
@@ -106,6 +109,30 @@ DAEMONS='fseventsd|mds|mds_stores|mdworker|mdworker_shared|mdsync|Spotlight|dist
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 say() { echo "[$(date +%H:%M:%S)] $*"; }
+
+USAGE="usage: bash $0 [--all | --list \"<fixtures>\"] [--tracer fs_usage|sandbox]   (fs_usage needs sudo)"
+MODE=""; LIST_ARG=""; TRACER="fs_usage"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --all)       MODE="--all"; shift ;;
+    --list)      MODE="--list"; LIST_ARG="${2:-}"; shift; [ $# -gt 0 ] && shift ;;
+    --tracer)    TRACER="${2:-}"; shift; [ $# -gt 0 ] && shift ;;
+    --tracer=*)  TRACER="${1#--tracer=}"; shift ;;
+    *)           die "$USAGE" ;;
+  esac
+done
+: "${MODE:=--all}"
+case "$TRACER" in fs_usage|sandbox) ;; *) die "unknown --tracer '$TRACER'. $USAGE" ;; esac
+
+# EACH TRACER HAS ITS OWN TRACE ROOT. The fs_usage run creates its tree as root and then chowns
+# only the tree, so a root-owned TRACE_ROOT is left behind; a later sandbox run -- unprivileged by
+# construction -- cannot `rm -rf` it and would die, or worse, trace inside a half-cleared tree.
+# A sandbox run also REFUSES any existing root it does not own, rather than attempting the delete.
+if [ "$TRACER" = sandbox ]; then
+  TRACE_ROOT="${AI_DLC_READSET_TRACE_ROOT:-/private/tmp/ai-dlc-readset-sandbox-$(id -u)}"
+else
+  TRACE_ROOT="${AI_DLC_READSET_TRACE_ROOT:-/private/tmp/ai-dlc-readset}"
+fi
 
 # THE FIXTURE ROOT IS READ OFF THE RUNNER THAT WILL CONSUME THE MAP, not restated here. The
 # map's key is a fixture BASENAME and the runner looks it up against the directories its own
@@ -268,17 +295,25 @@ readset_copy_tree() {
 }
 # READSET_COPY_END
 
-MODE="${1:---all}"
-[ "$(id -u)" = "0" ] || die "must run as root -- fs_usage needs it. Use: sudo bash $0 $MODE"
-command -v fs_usage >/dev/null || die "fs_usage not found; this derivation is macOS-only"
 command -v python3  >/dev/null || die "python3 not found (path normalisation)"
-
-RUN_AS="${SUDO_USER:-}"
-[ -n "$RUN_AS" ] && [ "$RUN_AS" != "root" ] || die \
+# THE ROOT CHECK BELONGS TO fs_usage, NOT TO THE DERIVATION. The sandbox tracer is unprivileged
+# end to end, and it REFUSES root instead: its fixtures run as whoever invoked it, and a fixture
+# run as root reads past every permission-refusal arm and comes back with a short read-set.
+if [ "$TRACER" = fs_usage ]; then
+  [ "$(id -u)" = "0" ] || die "must run as root -- fs_usage needs it. Use: sudo bash $0 $MODE${LIST_ARG:+ \"$LIST_ARG\"}   (or --tracer sandbox, which needs no root)"
+  command -v fs_usage >/dev/null || die "fs_usage not found; this derivation is macOS-only"
+  RUN_AS="${SUDO_USER:-}"
+  [ -n "$RUN_AS" ] && [ "$RUN_AS" != "root" ] || die \
 "cannot determine the invoking user (SUDO_USER unset). Fixtures MUST NOT run as root: a
    permission-refusal arm silently passes and its read-set comes back short, which is a
    permanent silent skip. Invoke through sudo from a normal account."
-id -u "$RUN_AS" >/dev/null 2>&1 || die "user '$RUN_AS' does not resolve"
+  id -u "$RUN_AS" >/dev/null 2>&1 || die "user '$RUN_AS' does not resolve"
+else
+  [ "$(id -u)" != "0" ] || die "--tracer sandbox must NOT run as root: its fixtures run as the invoking user, and a fixture run as root passes permission-refusal arms by reading anyway, which shortens its read-set permanently. Run it from a normal account, without sudo."
+  command -v sandbox-exec >/dev/null || die "sandbox-exec not found; --tracer sandbox is macOS-only"
+  [ -x /usr/bin/log ] || die "/usr/bin/log not found; --tracer sandbox reads the kernel's Sandbox reports through 'log stream'"
+  RUN_AS="$(id -un)"
+fi
 
 norm() {
   python3 -c '
@@ -370,16 +405,54 @@ drop_ignored() { # reads paths on stdin (repo-relative), writes the non-ignored 
 }
 # READSET_DROP_END
 
-say "fs_usage runs as root; fixtures run as '$RUN_AS'"
-rm -rf "$TRACE_ROOT"; mkdir -p "$TREE" "$WORK" || die "cannot create $TRACE_ROOT"
+if [ "$TRACER" = fs_usage ]; then
+  say "fs_usage runs as root; fixtures run as '$RUN_AS'"
+else
+  say "sandbox tracer: fixtures run as '$RUN_AS' under sandbox-exec; no root anywhere"
+  [ ! -e "$TRACE_ROOT" ] || [ -O "$TRACE_ROOT" ] || die "$TRACE_ROOT exists and is not owned by '$RUN_AS' (a root fs_usage run leaves one behind). Refusing to delete it; point AI_DLC_READSET_TRACE_ROOT elsewhere."
+fi
+rm -rf "$TRACE_ROOT" 2>/dev/null
+[ ! -e "$TRACE_ROOT" ] || die "could not clear $TRACE_ROOT -- a tree left by another run, or one this user cannot delete"
+mkdir -p "$TRACE_ROOT/t" "$TRACE_ROOT/w" || die "cannot create $TRACE_ROOT"
+# CANONICAL SPELLING, because both tracers match on the path STRING. The kernel reports
+# `/private/tmp/...`; a `/tmp/...` root would make the sandbox's `subpath` and the stream
+# predicate match nothing, and every fixture would come back with an atime-only read-set.
+TRACE_ROOT="$(cd "$TRACE_ROOT" && pwd -P)" || die "cannot resolve $TRACE_ROOT"
+TREE="$TRACE_ROOT/t"
+WORK="$TRACE_ROOT/w"
+SENTINEL="$TREE/.readset-sentinel"
+ENDMARK="$TREE/.readset-end"
 say "copying the tree to $TREE"
 readset_copy_tree "$REPO_ROOT" "$TREE" "$WORK" || die "copy failed"
 [ -d "$TREE/.git" ] || die "copy carries no .git; git-backed fixtures would fail for the wrong reason"
-chown -R "$RUN_AS" "$TREE" || die "chown failed"
-# The sentinel lives inside the tree because the tracer filters on the tree prefix, which
-# makes it an untracked file. Left visible it pegs `git status --porcelain` at 1 and the
+if [ "$TRACER" = fs_usage ]; then
+  chown -R "$RUN_AS" "$TREE" || die "chown failed"
+fi
+# The sentinels live inside the tree because the tracer filters on the tree prefix, which
+# makes them untracked files. Left visible they peg `git status --porcelain` and the
 # contamination guard below can never report anything.
-echo ".readset-sentinel" >> "$TREE/.git/info/exclude"
+printf '.readset-sentinel\n.readset-end\n' >> "$TREE/.git/info/exclude"
+
+# THE SANDBOX PROFILE IS SCOPED TO THE TREE, AND THE SCOPE IS LOAD-BEARING. `(with report)` on
+# `(allow default)` reports every operation the fixture makes anywhere on the machine; measured,
+# that dropped 64,673 messages on one heavy fixture and lost paths. Reporting only file and exec
+# operations under the tree keeps the stream small enough to deliver.
+# AI_DLC_READSET_SANDBOX_PROFILE names a replacement profile file, `@TREE@` substituted -- it
+# exists so core/fixtures/readset-skip can force event loss with an unscoped profile and prove
+# the refusal below fires. It is not a tuning knob.
+if [ "$TRACER" = sandbox ]; then
+  PROFILE="$WORK/sandbox.sb"
+  if [ -n "${AI_DLC_READSET_SANDBOX_PROFILE:-}" ]; then
+    [ -r "$AI_DLC_READSET_SANDBOX_PROFILE" ] || die "AI_DLC_READSET_SANDBOX_PROFILE names an unreadable file"
+    awk -v t="$TREE" '{ while ((i = index($0, "@TREE@")) > 0) $0 = substr($0, 1, i - 1) t substr($0, i + 6); print }' \
+      "$AI_DLC_READSET_SANDBOX_PROFILE" > "$PROFILE" || die "cannot write $PROFILE"
+  else
+    printf '(version 3)\n(allow default)\n(allow file* process-exec* (subpath "%s") (with report))\n' "$TREE" > "$PROFILE" \
+      || die "cannot write $PROFILE"
+  fi
+  sandbox-exec -f "$PROFILE" true 2>"$WORK/sandbox-probe.err" \
+    || die "sandbox-exec refused the profile: $(head -1 "$WORK/sandbox-probe.err")"
+fi
 
 # THE CONTAMINATION GUARD MEASURES A DELTA, NOT AN ABSOLUTE. The copy carries whatever the
 # working tree carries, so deriving from a tree with uncommitted work starts non-zero -- and
@@ -393,8 +466,8 @@ case "$DIRTY_BASE" in ''|*[!0-9]*) DIRTY_BASE=0 ;; esac
 
 case "$MODE" in
   --all)  LIST="$(cd "$TREE" && for d in "$FIXTURE_ROOT"/*/; do [ -f "$d/run.sh" ] && basename "$d"; done)" ;;
-  --list) LIST="${2:-}"; [ -n "$LIST" ] || die "--list needs a fixture list" ;;
-  *)      die "usage: sudo bash $0 [--all | --list \"<fixtures>\"]" ;;
+  --list) LIST="$LIST_ARG"; [ -n "$LIST" ] || die "--list needs a fixture list" ;;
+  *)      die "$USAGE" ;;
 esac
 N_SUBJECT="$(echo "$LIST" | wc -w | tr -d ' ')"
 [ "$N_SUBJECT" -gt 0 ] || die "no drivable fixtures found -- an empty map would skip the entire suite"
@@ -407,21 +480,60 @@ reset_atimes() {
 OMITTED=""; MAPPED=0; TOTAL_PATHS=0
 : > "$WORK/map"
 
+# THE SANDBOX TRACER'S EXTRACTION. One kernel report per line:
+#   ... Sandbox: <proc>(<pid>) allow <op> <TREE>/<path>
+# The PATH RUNS TO END OF LINE and may carry spaces, so it is everything after the op token, never
+# a `\S*` match. Only file* and process-exec* ops are kept, then the same DAEMONS filter the
+# fs_usage extraction applies. Reads the window on stdin, writes tree-relative paths.
+sandbox_paths() {
+  awk -v tree="$TREE/" -v d="^($DAEMONS)$" '
+    {
+      i = index($0, "Sandbox: "); if (i == 0) next
+      rest = substr($0, i + 9)
+      j = index(rest, ") allow "); if (j == 0) next
+      head = substr(rest, 1, j - 1); k = 0
+      for (m = length(head); m > 0; m--) if (substr(head, m, 1) == "(") { k = m; break }
+      proc = (k ? substr(head, 1, k - 1) : head)
+      rest = substr(rest, j + 8)
+      sp = index(rest, " "); if (sp == 0) next
+      op = substr(rest, 1, sp - 1); path = substr(rest, sp + 1)
+      if (op !~ /^(file|process-exec)/) next
+      if (proc ~ d) next
+      if (index(path, tree) != 1) next
+      print substr(path, length(tree) + 1)
+    }'
+}
+
 for fx in $LIST; do
   raw="$WORK/$fx.raw"
   echo "sentinel-$fx" > "$SENTINEL"
+  echo "end-$fx" > "$ENDMARK"
   reset_atimes
 
-  fs_usage -w -f filesys 2>/dev/null | grep --line-buffered -F "$TREE/" > "$raw" &
-  fs_pid=$!
+  if [ "$TRACER" = fs_usage ]; then
+    fs_usage -w -f filesys 2>/dev/null | grep --line-buffered -F "$TREE/" > "$raw" &
+    fs_pid=$!
+  else
+    # STARTED BEFORE THE FIXTURE, per window. `log show` afterwards returns nothing for these
+    # reports, so a stream that was not live when an event fired has lost it for good -- which is
+    # why the settle loop below and the end sentinel after the fixture are both required.
+    /usr/bin/log stream --level debug --style compact \
+      --predicate "sender == \"Sandbox\" AND eventMessage CONTAINS \"$TREE/\"" > "$raw" 2>&1 &
+    fs_pid=$!
+  fi
 
   # ADAPTIVE SETTLE, AND IT IS A CONTROL RATHER THAN A GUESS. A fixed sleep cannot tell
   # "settled" from "not attached yet": measured, a 2s sleep still lost every fixture's own
   # run.sh to the capture boundary. Here the sentinel is read in a loop and the fixture does
-  # not start until that read APPEARS IN THE TRACE, i.e. until tracing is provably live.
+  # not start until that read APPEARS IN THE TRACE, i.e. until tracing is provably live. Under
+  # the sandbox tracer the read has to happen INSIDE the profile, or nothing reports it.
   settled=0; i=0
-  while [ "$i" -lt 60 ]; do
-    cat "$SENTINEL" >/dev/null 2>&1
+  while [ "$i" -lt 100 ]; do
+    if [ "$TRACER" = fs_usage ]; then
+      cat "$SENTINEL" >/dev/null 2>&1
+    else
+      sandbox-exec -f "$PROFILE" cat "$SENTINEL" >/dev/null 2>&1
+    fi
     if grep -q 'readset-sentinel' "$raw" 2>/dev/null; then settled=1; break; fi
     sleep 0.2; i=$(( i + 1 ))
   done
@@ -431,15 +543,35 @@ for fx in $LIST; do
   # failures. `-n` and </dev/null are not decoration: backgrounded, sudo reaches for the
   # controlling terminal, the process group takes SIGTTIN and the whole derivation stops dead
   # in state T with no error and no exit code.
-  ( cd "$TREE" && sudo -n -u "$RUN_AS" bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
-  rc=$?
+  if [ "$TRACER" = fs_usage ]; then
+    ( cd "$TREE" && sudo -n -u "$RUN_AS" bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
+    rc=$?
+  else
+    ( cd "$TREE" && sandbox-exec -f "$PROFILE" bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
+    rc=$?
+  fi
 
-  sleep 1
-  # `$!` names the LAST element of the pipeline -- grep, not fs_usage. Killing only that
-  # orphans the tracer, and orphans accumulate across a hundred fixtures until every later
-  # trace drops events. That failure looks like a small read-set, not like a fault.
-  kill "$fs_pid" 2>/dev/null; wait "$fs_pid" 2>/dev/null
-  pkill -x fs_usage 2>/dev/null; sleep 0.5
+  flushed=1
+  if [ "$TRACER" = fs_usage ]; then
+    sleep 1
+    # `$!` names the LAST element of the pipeline -- grep, not fs_usage. Killing only that
+    # orphans the tracer, and orphans accumulate across a hundred fixtures until every later
+    # trace drops events. That failure looks like a small read-set, not like a fault.
+    kill "$fs_pid" 2>/dev/null; wait "$fs_pid" 2>/dev/null
+    pkill -x fs_usage 2>/dev/null; sleep 0.5
+  else
+    # THE END SENTINEL IS THE FLUSH CONTROL. The stream delivers asynchronously, so the fixture
+    # exiting says nothing about whether its last reports have arrived. Its own tail is read
+    # through the profile until that read APPEARS, and everything before it in the stream is
+    # the fixture's. No end sentinel, no trustworthy window: the fixture is omitted below.
+    flushed=0; i=0
+    while [ "$i" -lt 100 ]; do
+      sandbox-exec -f "$PROFILE" cat "$ENDMARK" >/dev/null 2>&1
+      if grep -q 'readset-end' "$raw" 2>/dev/null; then flushed=1; break; fi
+      sleep 0.2; i=$(( i + 1 ))
+    done
+    kill "$fs_pid" 2>/dev/null; wait "$fs_pid" 2>/dev/null
+  fi
 
   # atime moved off the forced epoch == the file was READ.
   #
@@ -459,13 +591,31 @@ for fx in $LIST; do
   # and a truncated path maps to the wrong file or to none, which reads exactly like a clean
   # trace.
   last="$(grep -n 'readset-sentinel' "$raw" 2>/dev/null | tail -1 | cut -d: -f1)"; : "${last:=0}"
-  tail -n "+$(( last + 1 ))" "$raw" 2>/dev/null \
-    | grep -v 'RdData\|WrData' \
-    | awk -v d="^($DAEMONS)(\\\\.[0-9]+)?$" '{ p=$NF; sub(/\.[0-9]+$/,"",p); if (p !~ d) print }' \
-    | grep -oE "$TREE/[^ ]*" | sed "s|^$TREE/*||" | grep -v '^-\?$' | norm > "$WORK/$fx.fs"
+  lost=0
+  if [ "$TRACER" = fs_usage ]; then
+    tail -n "+$(( last + 1 ))" "$raw" 2>/dev/null \
+      | grep -v 'RdData\|WrData' \
+      | awk -v d="^($DAEMONS)(\\\\.[0-9]+)?$" '{ p=$NF; sub(/\.[0-9]+$/,"",p); if (p !~ d) print }' \
+      | grep -oE "$TREE/[^ ]*" | sed "s|^$TREE/*||" | grep -v '^-\?$' | norm > "$WORK/$fx.fs"
+  else
+    # The window is strictly between the LAST start sentinel and the FIRST end sentinel.
+    endl="$(grep -n 'readset-end' "$raw" 2>/dev/null | head -1 | cut -d: -f1)"; : "${endl:=0}"
+    if [ "$endl" -gt "$last" ]; then
+      sed -n "$(( last + 1 )),$(( endl - 1 ))p" "$raw" > "$WORK/$fx.win"
+    else
+      : > "$WORK/$fx.win"; flushed=0
+    fi
+    # EVENT LOSS OMITS THE FIXTURE; A SMALLER SET IS NEVER EMITTED. `log stream` prints
+    # `=== Messages dropped during live streaming` when it cannot keep up, and the reports it
+    # dropped are gone -- the set that remains is short by an unknown amount, which is the
+    # silent-skip direction. Measured on this machine at load ~38: even the scoped profile drops
+    # under a burst of a few hundred opens, and every burst that lost paths printed the notice.
+    lost="$(grep -c 'dropped during' "$WORK/$fx.win" 2>/dev/null)" || lost=0
+    sandbox_paths < "$WORK/$fx.win" | grep -v '^-\?$' | norm > "$WORK/$fx.fs"
+  fi
 
   cat "$WORK/$fx.at" "$WORK/$fx.fs" | LC_ALL=C sort -u \
-    | grep -v '^\.readset-sentinel$' | drop_ignored > "$WORK/$fx.set"
+    | grep -v '^\.readset-sentinel$' | grep -v '^\.readset-end$' | drop_ignored > "$WORK/$fx.set"
   n="$(grep -c . "$WORK/$fx.set" 2>/dev/null)"; case "$n" in ''|*[!0-9]*) n=0 ;; esac
 
   # FAIL CLOSED. Anything that makes this trace untrustworthy omits the fixture from the map,
@@ -473,6 +623,8 @@ for fx in $LIST; do
   why=""
   [ "$rc" -eq 0 ]     || why="fixture exited $rc"
   [ "$settled" -eq 1 ] || why="${why:+$why; }tracing never settled"
+  [ "$flushed" -eq 1 ] || why="${why:+$why; }no end sentinel in the stream -- the tail of the window is unknown"
+  [ "$lost" -eq 0 ]    || why="${why:+$why; }the stream dropped reports $lost time(s) in this window"
   [ "$n" -gt 0 ]      || why="${why:+$why; }empty read-set"
   [ "$dirty" -le "$DIRTY_BASE" ] || why="${why:+$why; }fixture wrote $(( dirty - DIRTY_BASE )) path(s) into the tree"
 
