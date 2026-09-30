@@ -386,11 +386,17 @@ for fx in $LIST; do
   kill "$fs_pid" 2>/dev/null; wait "$fs_pid" 2>/dev/null
   pkill -x fs_usage 2>/dev/null; sleep 0.5
 
-  dirty="$( ( cd "$TREE" && git status --porcelain 2>/dev/null | wc -l ) | tr -d ' ')"
-
   # atime moved off the forced epoch == the file was READ.
+  #
+  # THE SCAN RUNS BEFORE THE DIRTY CHECK BELOW, NEVER AFTER IT. `git status` reads `.git/index`,
+  # `.gitignore`, `.git/info/exclude` and the refs -- in every fixture's window, because it is the
+  # DERIVER running it. Taken after, the atime scan recorded that footprint as the fixture's own:
+  # the `.git/**` and `.gitignore` rows present in all 218 mapped fixtures, including ones whose
+  # run.sh never runs git. Nothing between the fixture's exit and this line reads the tree.
   find "$TREE" -type f -newerat "2001-01-02" -print 2>/dev/null \
     | sed "s|^$TREE/||" | norm > "$WORK/$fx.at"
+
+  dirty="$( ( cd "$TREE" && git status --porcelain 2>/dev/null | wc -l ) | tr -d ' ')"
 
   # fs_usage, filtered by process and to events after the fixture actually started.
   # RdData/WrData are excluded: they are reads against an already-open fd, they carry no path
