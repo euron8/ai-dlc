@@ -189,10 +189,10 @@ if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
   # The two agree on every real line of both corpora, so the corpus cannot choose between
   # them and the seed does.
   # WHAT THIS ACQUITS: a session whose only `/ai-dlc` trace is a MENTION now reads as no
-  # skill at all, so Check 2z below does not gate it. Measured: 2 of 227 marker-carrying
-  # reference-consumer transcripts change class this way -- one a subagent file whose trace
-  # is assistant text, one whose trace is a continuation summary. Neither was a pipeline
-  # invocation in that file; both were being gated on a quotation.
+  # skill at all, so Check 2z below does not gate it. Measured on the population this hook
+  # actually scans -- top-level session files, since `transcript_path` is the LEAD's file even
+  # on a teammate's call (Check 2z) -- 0 of 225 marker-carrying reference-consumer transcripts
+  # change class. The only 2 that do are both `subagents/` files, which this hook never reads.
   LAST_SKILL=$(grep -oE '"role":"user","content":"<command-message>ai-dlc(-update)?</command-message>\\n<command-name>/ai-dlc(-update)?</command-name>|"name":"Skill","input":\{"skill":"ai-dlc(-update)?"' "$TRANSCRIPT" 2>/dev/null | tail -1)
   case "$LAST_SKILL" in
     *'/ai-dlc-update</command-name>') UPDATER_SESSION=1 ;;
