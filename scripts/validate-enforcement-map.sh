@@ -2168,7 +2168,6 @@ I59_UNDOC_AWK='
       # count reaching the caller must be about what was SCANNED.
       while ((getline line < fn) > 0) {
         nread++
-        lines[++nl] = line
         if (match(line, /^[[:space:]]*(--?[a-z][a-z0-9-]*\|)*--?[a-z][a-z0-9-]*\)/)) {
           seg = substr(line, RSTART, RLENGTH)
           gsub(/[ \t)]/, "", seg)
@@ -2182,11 +2181,17 @@ I59_UNDOC_AWK='
         }
       }
       close(fn)
-      for (i = 1; i <= nl; i++) {
-        line = lines[i]
-        if (line ~ /^[[:space:]]*#/ || index(line, "usage")) {
-          for (m in modes) if (index(line, m)) documented[m] = 1
+      # THE DOCUMENTATION PASS RE-READS THE FILE rather than replaying a buffer of it, so the
+      # memory this program holds is one line and the mode set, not the largest corpus file.
+      # The mode set must be complete before any line can be judged, hence two passes; the
+      # file is in page cache from the first. Skipped when the file dispatches no mode.
+      if (nm > 0) {
+        while ((getline line < fn) > 0) {
+          if (line ~ /^[[:space:]]*#/ || index(line, "usage")) {
+            for (m in modes) if (index(line, m)) documented[m] = 1
+          }
         }
+        close(fn)
       }
       # SORTED, because the shell form ended in `sort -u` and a caller comparing two
       # runs must not see an order that depends on awk hash iteration.
@@ -2194,8 +2199,6 @@ I59_UNDOC_AWK='
         if (order[j] < order[i]) { t = order[i]; order[i] = order[j]; order[j] = t }
       for (i = 1; i <= nm; i++) if (!(order[i] in documented)) printf "%s\t%s\n", fn, order[i]
       if (nread > 0) scanned++
-      nl = 0
-      delete lines
       delete order
     }
     close(FLIST)

@@ -3693,6 +3693,18 @@ is in page cache by then.
 **Tiered NOTE.** Nothing is wrong today and no guard is weakened; this records a
 characteristic the change introduced so that a future corpus growth is not a surprise.
 
+**LANDED (v0.666.0, verified <sha>).** The second-pass form. After the mode pass the awk calls
+`close(fn)` and re-reads the file for the documentation pass, and it skips that pass when the file
+dispatches no mode. `lines[]` is gone. The battery anchors (`substr(parts[i], 1, 2) == "--"`,
+the `I59_HELP_EXEMPTION` line, and the corpus `find`) are byte-identical. Equivalence: base and
+tip awk programs run over the real `core/` corpus plus seeded files (an offender, an empty file
+and an absent file; 109 listed) gave byte-identical findings and an identical scanned count
+(107). Validator cost: see the commit.
+
+**Receipt.** Stays structural, deliberately. The property is memory, and no cheap behavioural
+receipt can tell a buffer from a re-read on a corpus this small. The equivalence above is the
+behavioural half.
+
 verify: sh v=scripts/validate-enforcement-map.sh; [ -f "$v" ] || exit 9; grep -q 'I59_UNDOC_AWK' "$v" || exit 9; LC_ALL=C grep -qE '^[[:blank:]]*lines\[\+\+nl\] = line$' "$v" || exit 0; exit 1
 
 
