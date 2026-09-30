@@ -310,7 +310,7 @@ and all belonging to ONE sprint**, sitting inside an artifact the whole-read bud
 **AND NOTHING IN CORE READS ONE, WHICH IS THE REASON TO HOME IT RATHER THAN TO DROP IT.**
 `change[ -]?log` over `scripts/ai-dlc/` and `.claude/hooks/` matches only the
 *validation-cycle-log* model — one of those lines says per-artifact changelogs are "freeform
-prose, not countable here" (`validate-mandatory-rules.sh:139`). The entries are evidence a human reads when asking
+prose, not countable here" (`validate-mandatory-rules.sh`, its `[Check 2]` enablement comment). The entries are evidence a human reads when asking
 what a sprint did to an artifact, and a coverage report can cite one; deleting them breaks a
 record the pass produced. **Existing entries already inside a durable artifact are MOVED into
 the slot of the sprint they describe, never removed** — the same disposition item 23b took for

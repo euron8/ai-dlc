@@ -3092,8 +3092,8 @@ If any check fails:
    `pipeline-snapshot.md` or `pipeline-snapshot-history.md` is repaired by the
    LEAD, not by a remediator — recover the destroyed content from git, never
    re-author it, per Check 35's own remedy. Those two files are the first two
-   arms of the gate-remediation guard's permitted set
-   (`.claude/hooks/ai-dlc-gate-remediation-guard.sh:467-468`), so the lead's
+   arms of the gate-remediation guard's permitted set (the `case "$FP"` under
+   `# --- 6. The permitted set` in `.claude/hooks/ai-dlc-gate-remediation-guard.sh`), so the lead's
    write is already permitted there. Rule 28(c) routes a repair to the remediator
    because the lead would otherwise rebuild a planning ARTIFACT from a compacted
    summary; a state record the lead already owns and the guard already permits is
