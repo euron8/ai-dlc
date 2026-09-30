@@ -4100,6 +4100,8 @@ verify: manual
 
 ## BL-326 — `validate-gate-adjudication.sh` reads the map from the install fallback and the escalations from the foreign root
 
+**LANDED (v0.666.0, verified 1cad026c).** Escalations are read from the root the map resolved under (`GA_MAP_ROOT`); receipt 0 at tip, 1 at base; `schema-install-fallback` arm N, ESC/ESCI killed.
+
 **NOTE.** Found by the batch-160 contract adversary.
 
 Since 0.646.0, a foreign `AI_DLC_PROJECT_ROOT` with no `enforcement-map.yaml` makes the script
@@ -4117,6 +4119,8 @@ verify: sh d=$(mktemp -d); mkdir -p "$d/F/.claude" "$d/g" || exit 9; n=implement
 
 ## BL-327 — `validate-request-coverage.sh` locates its harness-origin schema by counting `..` hops
 
+**LANDED (v0.666.0, verified c1bc66dd).** Canonical AI_DLC_ROOT block (I75) plus install-root last candidate; receipt 0 at tip, 1 at base; `request-coverage` legacy-layout arm and hop mutant, `validator-path-resolution` now requires it root-sensitive.
+
 **NOTE.** Found by the batch-160 contract adversary.
 
 `core/scripts/validate-request-coverage.sh:182-184` tries `$SELF_DIR/../schemas/`, then
@@ -4131,6 +4135,8 @@ schema (exit 1). `request-coverage` carries the scripts/ai-dlc near-miss and the
 verify: sh d=$(mktemp -d); mkdir -p "$d/.git" "$d/.claude/schemas" "$d/scripts" "$d/docs" || exit 9; cp core/schemas/harness-origin.json "$d/.claude/schemas/" || exit 9; cp core/scripts/validate-request-coverage.sh core/scripts/validate-locked-anchor.sh "$d/scripts/" || exit 9; printf '# r\n\n## 2026-01-01T00:00:00Z -- /ai-dlc\n- SHA256: abc\n\n```text\nplease\n```\n' > "$d/r.md"; printf '# b\n' > "$d/b.md"; o=$(cd "$d/docs" && bash "$d/scripts/validate-request-coverage.sh" --requests "$d/r.md" --brief "$d/b.md" --sprint 1 2>&1); case "$o" in *"harness-origin.json could not be resolved"*) exit 1 ;; *"no LOCKED bullet"*) exit 0 ;; esac; exit 9
 
 ## BL-328 — `validate-mandatory-rules.sh` resolves its sprint-status schema relative to the cwd
+
+**LANDED (v0.666.0, verified 8a72ce80).** Schema and story corpus resolve under a root walked up from the cwd; receipt 0 at tip, 1 at base; `story-corpus-sprint-slot` A13 and its two-layer mutant.
 
 **NOTE.** Found by the batch-160 contract adversary.
 
@@ -4161,6 +4167,8 @@ the distribution layout gets past the schema and exits 1 on the missing `.gitign
 verify: manual
 
 ## BL-330 — `validate-write-format-steering.sh` falls back per schema FILE, so a root carrying some schemas mixes two trees
+
+**LANDED (v0.666.0, verified 846743b0).** The schema pair resolves from one directory; receipt 0 at tip, 1 at base; `schema-install-fallback` arm P, PERFILE killed. BL-331 is not closed by this.
 
 **NOTE.** Found by the batch-160 tip adversary. No production caller passes the override to this
 script (a grep for `AI_DLC_PROJECT_ROOT` beside its name in `core/hooks` returns 0, against a
