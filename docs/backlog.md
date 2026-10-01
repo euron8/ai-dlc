@@ -2424,12 +2424,24 @@ verify: manual
 **NOTE.** Seen on the 0.667.0 gate at `bc1ed530`, 1 of 218 units, and once before in the recorded
 failures; it passed alone and on the next gate. Part 11 world E hides the contract's loose blob to
 build a missing-object store, and refuses as `FIXTURE ERROR` when the blob is "readable but not
-loose (in-pack: 22 packs: 1)". The fixture commits 8 times into `$DIST` and neither it nor
-`core/fixtures/lib/preamble.sh` sets `gc.auto=0`, so git's auto-gc can pack the store first. It
-fails toward a FIXTURE ERROR, never toward a false pass, which is why it is a NOTE. Not forced: the
-auto-gc cause is inferred from the message, not reproduced.
+loose (in-pack: 22 packs: 1)". The packer is `git maintenance run --auto`, which every `commit`
+runs; on git 2.54 it repacks once two loose objects sit in the `objects/17` sample bucket, and it
+is governed by `maintenance.auto`, NOT `gc.auto` — measured, `-c gc.auto=0` packs exactly as the
+default does. The packing commits are into `$DIST` (`seed.sh` base and theirs, `run.sh` Parts 4b and
+5), and world E is a later `cp -R "$DIST"`. It fails toward a FIXTURE ERROR, never toward a false
+pass, which is why it is a NOTE.
 
-verify: manual
+Held note (batch 178): REPRODUCED and fixed. On origin/main's fixture code, two unreachable loose
+objects written into `objects/17` before the seed's first commit turn world E into the filed
+refusal every run (76 ok, 1 FAIL, "in-pack: 13 packs: 2"); unforced, the same tree passes.
+`seed.sh` now sets `maintenance.auto false` in `$DIST`'s own config, and `run.sh` Part 12 forces
+the trigger on a copy of the distribution, drives the same world E build (now `p11_build_e`, shared
+with Part 11), and kills a mutant seed without the line on world E's own "readable but not loose"
+refusal. A probe on a fresh repository skips Part 12 under a git that does not pack on this
+trigger. No other fixture reads loose-object files: `objects/` across `core/fixtures`, `scripts`,
+`.githooks` and `core/scripts` hits only this fixture and a comment in `self-update-join-gate`.
+
+verify: sh S=core/fixtures/layer-adjudication-tier/seed.sh; [ -f "$S" ] || exit 9; d=$(mktemp -d) || exit 9; r=""; trap 'rm -rf "$d" ${r:+"$r"}' EXIT; f() { for p in 'bl381 unreachable 43' 'bl381 unreachable 778'; do s=$(printf '%s\n' "$p" | git -C "$1" hash-object -w --stdin) || return 9; case "$s" in 17*) : ;; *) return 9 ;; esac; done; printf 'f\n' > "$1/bl381-forcing"; git -C "$1" add -A && git -C "$1" -c maintenance.autoDetach=false commit -qm forcing >/dev/null 2>&1 || return 9; }; ip() { git -C "$1" count-objects -v | awk '$1=="in-pack:"{print $2}'; }; c="$d/ctl"; mkdir -p "$c" && git -C "$c" init -q && git -C "$c" config user.email f@x && git -C "$c" config user.name f || exit 9; printf 'a\n' > "$c/a"; git -C "$c" add -A && git -C "$c" commit -qm one >/dev/null 2>&1 || exit 9; f "$c" || exit 9; [ "$(ip "$c")" -gt 0 ] || exit 9; r=$(bash "$S" 2>/dev/null) && [ -d "$r/dist/.git" ] || exit 9; f "$r/dist" || exit 9; n=$(ip "$r/dist"); [ -n "$n" ] || exit 9; [ "$n" -eq 0 ]
 
 ## BL-391 — step 2 still commits locally when its gated push fails, which the same file calls the stranded-branch shape
 
