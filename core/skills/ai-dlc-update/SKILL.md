@@ -413,9 +413,10 @@ prose is itself generated rather than composed.
    The machinery slice includes `core/scripts/*`, and the consumer's own `.githooks/pre-push`
    INVOKES several of those scripts — so this cycle can install a check that then fails the very
    push it is making, on layer state that predates the pull and whose remedy is rulebook-side work
-   this step deliberately does not do. It does not deadlock (a failed push commits locally and does
-   not block the run), which is worse in one respect: it strands an orphaned local branch whose
-   push is permanently blocked and a `skill_version` advanced on a commit that will never merge.
+   this step deliberately does not do. Before this gate it did not deadlock — a failed push used to
+   commit locally and not block the run — which was worse in one respect: it stranded an orphaned
+   local branch whose push was permanently blocked and a `skill_version` advanced on a commit that
+   would never merge. A failed push now discards the cycle; see the push-failure paragraph below.
    Filed by the reference consumer as `PC-S308` after its operator hit it and derived the remedy by
    hand.
 
