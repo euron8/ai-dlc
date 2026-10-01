@@ -287,7 +287,7 @@ PY
   n355_mut c-fold N1 '; then _nf="$(_norm_fold_probe)"; fi' '; then _nf=c; fi'
   # the ungated fix: LC_ALL=C dropped from the C fold, so a Latin-1 file is folded in the caller's locale
   if [ "$H_TR_REFUSES" = 1 ]; then
-    n355_mut no-gate N2 "      *)   LC_ALL=C tr '[:upper:]' '[:lower:]' <&5 || _rc=\$? ;;" "      *)   tr '[:upper:]' '[:lower:]' <&5 || _rc=\$? ;;"
+    n355_mut no-gate N2 "      c)   LC_ALL=C tr '[:upper:]' '[:lower:]' <&5 || _rc=\$? ;;" "      c)   tr '[:upper:]' '[:lower:]' <&5 || _rc=\$? ;;"
   else
     echo "  SKIP  MUTANT (BL-355 no-gate) -- this host's tr reads a Latin-1 byte under UTF-8 without refusing, so the mutant expresses nothing here"
   fi
@@ -364,6 +364,60 @@ else
     .)   bad "MUTANT SURVIVED [BL-403c late-rm]: K1 still read 0 files left -- the cell cannot see the leak" ;;
     *)   bad "MUTANT [BL-403c late-rm] scored [$got], expected exactly [K1.]" ;;
   esac
+fi
+
+# --- norm_lines near the fd limit: an unanswered fold probe is a refusal, never a silent C fold -----
+# With fds 3-5 held, `$(_norm_fold_probe)` cannot fork at `ulimit -n 7`, and `_nf` came back EMPTY.
+# A default `case` arm took the C fold there: rc 0, `\303\211lan x` left unfolded.
+#   F1 under en_US.UTF-8, stdin and stdout opened BEFORE the limit, `ulimit -n 7`: rc 125, or rc 0 with
+#      the accented capital folded. rc 0 with it unfolded is the silent C fold and fails.
+#   F0 control: the same driver with no limit folds it, rc 0 -- so F1 is not a driver that never folds.
+f_drive() { # f_drive <reconcile-dir> <limit or -> -> "<rc>|<output, cat -v>"
+  local t
+  t="$(mktemp -d "$WORK/f-tmp.XXXXXX")" || { echo BROKEN; return; }
+  printf '\303\211lan X\n' > "$t.in"
+  env -u AI_DLC_RECONCILE_MEMO TMPDIR="$t" LC_ALL=en_US.UTF-8 bash -c '. "$1/lib.sh" || exit 90
+    exec 0<"$2" 1>"$3"; [ "$4" = - ] || ulimit -n "$4"; norm_lines; echo "rc=$?"' _ "$1" "$t.in" "$t.out" "$2" 2>/dev/null
+  tr '\n' '|' < "$t.out" | LC_ALL=C cat -v
+}
+f_score() { # f_score <reconcile-dir> -> failing cells then `.`
+  local r="" o
+  o="$(f_drive "$1" -)"
+  [ "$o" = 'M-CM-)lan x|rc=0|' ] || r="${r}F0"
+  o="$(f_drive "$1" 7)"
+  case "$o" in 'rc=125|'|'M-CM-)lan x|rc=0|') ;; *) r="${r}F1" ;; esac
+  printf '%s.' "$r"
+}
+if ! grep -qx 'en_US.UTF-8' <<<"$N_LOCALES"; then
+  bad "FIXTURE BROKEN -- en_US.UTF-8 is not installed here, so the fd-limit fold cell cannot be expressed"
+else
+  got="$(f_score "$RLP_SRC")"
+  case "$got" in
+    .)  ok "norm_lines F0-F1: at ulimit -n 7 the unanswered fold probe refuses (125) or folds correctly, never a silent C fold; unlimited it folds" ;;
+    *.) bad "norm_lines cell(s) [${got%.}] failed: an unanswered fold probe was taken as the C fold ($(f_drive "$RLP_SRC" 7))" ;;
+  esac
+  # MUTANT: the fallthrough restored -- the C fold is the `case` default again.
+  FM="$WORK/f-mut"
+  if ! rlp_copy "$FM"; then bad "MUTANT HARNESS BROKEN [norm-fallthrough]: could not copy the reconcile directory"
+  elif ! python3 - "$RLP_SRC/lib.sh" "$FM/lib.sh" <<'PY'
+import sys
+src, dst = sys.argv[1:3]
+s = open(src, encoding="utf-8").read()
+f = "      c)   LC_ALL=C tr '[:upper:]' '[:lower:]' <&5 || _rc=$? ;;\n      *)   _rc=125 ;;\n"
+if s.count(f) != 1: sys.exit(1)
+open(dst, "w", encoding="utf-8").write(s.replace(f, "      *)   LC_ALL=C tr '[:upper:]' '[:lower:]' <&5 || _rc=$? ;;\n"))
+PY
+  then bad "FIXTURE STALE [norm-fallthrough]: the refusal arm anchor did not match exactly once in lib.sh"
+  elif cmp -s "$RLP_SRC/lib.sh" "$FM/lib.sh" || ! bash -n "$FM/lib.sh" 2>/dev/null; then
+    bad "FIXTURE STALE [norm-fallthrough]: the mutation did not apply or does not parse"
+  else
+    got="$(f_score "$FM")"
+    case "$got" in
+      F1.) ok "MUTANT (norm-fallthrough) fails exactly [F1]: the C-fold default returns rc 0 with the capital unfolded" ;;
+      .)   bad "MUTANT SURVIVED [norm-fallthrough]: F1 still passed -- the cell cannot see the silent fold" ;;
+      *)   bad "MUTANT [norm-fallthrough] scored [$got], expected exactly [F1.]" ;;
+    esac
+  fi
 fi
 
 echo

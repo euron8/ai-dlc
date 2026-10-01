@@ -195,10 +195,15 @@ norm_lines() {
           s/[.[:space:]]+$//' >&3 || _rc=$?
   if [ "$_rc" -eq 0 ]; then
     if iconv -f UTF-8 -t UTF-8 <&4 > /dev/null 2>&1; then _nf="$(_norm_fold_probe)"; fi
+    # Only the probe's three answers select a fold. Anything else -- above all an EMPTY `_nf`, which
+    # is what `$(_norm_fold_probe)` returns when it cannot fork (measured: `ulimit -n 7` with fds 3-5
+    # held here) -- is a refusal. A default arm used to take the C fold there and return 0 with a
+    # multibyte capital left unfolded, a silent wrong normalisation.
     case "$_nf" in
       tr)  tr '[:upper:]' '[:lower:]' <&5 || _rc=$? ;;
       awk) awk '{ print tolower($0) }' <&5 || _rc=$? ;;
-      *)   LC_ALL=C tr '[:upper:]' '[:lower:]' <&5 || _rc=$? ;;
+      c)   LC_ALL=C tr '[:upper:]' '[:lower:]' <&5 || _rc=$? ;;
+      *)   _rc=125 ;;
     esac
   fi
   } 3> "$_nt" 4< "$_nt" 5< "$_nt"
