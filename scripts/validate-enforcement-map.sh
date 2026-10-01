@@ -11824,7 +11824,9 @@ fi
 # pairs on this tree are spelled `"$hd/ai-dlc-continue.sh"`, `resolve ai-dlc-x.sh` or a `pick`
 # list over `$HERE/../../hooks/$n`, and the path grammar cannot see them. Widening to bare
 # basenames would bring the five non-openers above back. An omission in that shape stays a
-# silent skip until the fixture is re-traced.
+# silent skip until the fixture is re-traced. A DIRECT path split by quotes is invisible too
+# (`"$D/core/hooks/"ai-dlc-x.sh`, `"$D/core"/hooks/ai-dlc-x.sh`): the grammar reads one
+# unbroken `core/hooks/<h>.sh` token. No mapped fixture spells a row-absent hook that way today.
 #
 # A SEEDED COPY OF THE DISTRIBUTION HAS NO MAP, AND THAT IS NOT A FINDING. Every fixture driving
 # this validator copies `core scripts .githooks templates` into a mktemp root with no `.git`, and

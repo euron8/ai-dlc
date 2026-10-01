@@ -39,7 +39,7 @@ so it carries several subjects.
 - **`BL-127`**. Invariant `I118` binds a mapped fixture's read-set rows to the `core/hooks/` paths its
   `run.sh` or `seed.sh` names on a code line. The false-positive set on the real corpus is empty.
   `FORK_BUDGET` 3202 to 3214 on a clean same-path measurement of +6.
-- **`BL-401`**. The `I54`/`I54b` walk prunes `.claude/worktrees/` by exact path.
+- **`BL-401`**. The `I54`/`I54b` walk prunes `.claude/worktrees/` by exact path, with an arm that a sibling `.claude/worktrees-not/` still fires and a mutant restoring the unpruned find.
 - **`BL-404`**, narrowed and open: `updater-session-signals` seeds the `/ai-dlc` then
   `Skill(ai-dlc-update)` order; the serialisation half stays open.
 - **`BL-405`**, parts (b) and (c): the `backlog-receipt-binding` fallback and the `apply-restamp-worklist`
