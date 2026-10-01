@@ -26673,3 +26673,35 @@ Scored under `set -uo pipefail` on the base revision (1), the fix (0), `origin/m
 
 verify: sh S=core/skills/ai-dlc-update/SKILL.md; [ -f "$S" ] || exit 9; n=$(grep -n -m1 -F -- "- \`NAMED-UPSTREAM\` — upstream" "$S" | cut -d: -f1); c=$(grep -n -m1 -F -- "- **Commit**" "$S" | cut -d: -f1); p=$(grep -n -m1 -F -- "- **Open a PR** into" "$S" | cut -d: -f1); [ -n "$n" ] && [ -n "$c" ] && [ -n "$p" ] || exit 9; [ "$n" -lt "$c" ] && [ "$n" -lt "$p" ]
 
+## BL-406 — the `ledger-reverify` fixture is the suite's pole and is one serial unit; shard it
+
+**LANDED (v0.690.0, verified 2243f322).**
+
+**DEFECT. Filed at batch 178 by the operator, who directs that the next batch takes it.** The pre-push
+fixture suite is pole-bound: its makespan tracks its single longest directory, because the outer pool
+globs `core/fixtures/*/run.sh`. `core/fixtures/ledger-reverify/run.sh` is that pole — 429s loaded in
+`.git/ai-dlc-fixture-durations` (next: `gate-adjudication-mutants` 405s), 4447 lines that call the
+engine 126 times in sequence with no internal parallelism, and `docs/suite-pole-baseline.tsv` still
+records it at 628. No pool width can get under a single serial unit, so `AI_DLC_FIXTURE_JOBS` buys
+nothing at the pole, and each release touching `ledger-reverify.sh` grows it (batch 178's B2 added
+about 30 engine runs).
+
+**Remedy shape, the pattern this repo already ships.** `fold-architect-ledger-join-mutants` and its
+`-b`/`-c` siblings: a `SHARDS="a b c"` declaration in the fixture, one directory per shard that
+re-enters the fixture with `--group <x>`, every shard paying the shared controls so none can pass
+against a harness that never ran, and a join that refuses unless every part ran exactly once. The
+shard count comes from a measured fixed cost per shard, not a preference. Two differences to design for:
+- **This fixture SHIPS** (no `.dist-only`), so every shard directory ships too and needs the packaging
+  `.claude/rules/fixture-ship-decl.md` names: `uninstall.sh`, both manifest copies, `setup-sites.md`,
+  and I74's join.
+- **Each new shard directory needs a read-set entry**, traced with the sandbox tracer per
+  `operator-rulings.md`.
+
+Re-measure the pole after the split, re-baseline `docs/suite-pole-baseline.tsv` (`BL-378`), and state
+which unit became the new pole.
+
+Discharges no consumer candidate.
+
+verify: sh F=core/fixtures/ledger-reverify/run.sh; [ -f "$F" ] || exit 9; C="$(grep -v '^[[:blank:]]*#' "$F")"; [ -n "$C" ] || exit 9; G="$(sed -nE 's/^SHARDS="([a-z ]+)".*$/\1/p' <<<"$C" | tail -1)"; [ -n "$G" ] || exit 1; D="$(sed -nE 's/^lr_unit_([a-z0-9_]+)\(\) \{.*$/\1/p' <<<"$C" | sort)"; [ -n "$D" ] || exit 1; U=""; n=0; for g in $G; do n=$((n+1)); P="$(bash "$F" --plan "$g" 2>/dev/null)" || exit 1; [ -n "$P" ] || exit 1; U="$U$P"$'\n'; [ "$g" = a ] && continue; R="core/fixtures/ledger-reverify-$g/run.sh"; [ -f "$R" ] || exit 1; K="$(grep -v '^[[:blank:]]*#' "$R" | sed -E 's/[[:blank:]]+#.*$//')"; grep -qE "bash \"\\\$IMPL\" --group $g([[:blank:]]|\$)" <<<"$K" || exit 1; grep -qF "in shard '$g'" <<<"$K" || exit 1; grep -qE '^exec ' <<<"$K" && exit 1; done; U="$(printf '%s' "$U" | grep . | sort)"; [ -z "$(uniq -d <<<"$U")" ] || exit 1; [ "$U" = "$D" ] || exit 1; [ "$n" -ge 2 ]
+
+
