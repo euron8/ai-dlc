@@ -19,6 +19,27 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.691.0] - 2026-10-01
+
+Batch 179's eighth release: `apply.sh` alone. Bootstrapping, so it ships alone. A consumer runs its
+installed copy, so this takes effect on the pull after the one that delivers it.
+
+### Backlog
+
+- **`BL-402`**. `apply.sh --finish` no longer stamps over a tree it has not finished. It runs
+  `finish_reapply_owed()` before it stamps: a skill the consumer added that the extension still lacks raises
+  a WORKLIST `finish-refile-owed` row, a diff that cannot run raises `finish-refile-unverified`, and the exec
+  audit (now one function shared by both modes) raises `finish-exec-owed`; each withholds the stamp. The
+  refile check reuses the ordinary run's own in-place-edit gate, so a skill upstream retired and a schema the
+  operator kept by hand no longer raise a wrong remedy. The withheld-stamp row names re-render, re-approve or
+  apply instead of `--finish` while a fresh ordinary run is owed.
+- **`BL-360`**, share for this file, left open. `apply.sh` has no here-strings or heredocs outside comments
+  (14 on base). Every loop input is staged through `ap_stage`, which writes through a pipe so a failed write
+  cannot leave bytes in the shell's output buffer, and the first failed write stops later staging and becomes
+  a `staging-refused` row. `finish_verify_tree` reads a staged file too: under `ulimit -f` it used to run
+  zero times and stamp over an unapplied tree, and it now withholds the stamp. The relabel call's `|| true`
+  became a checked detector status.
+
 ## [0.690.0] - 2026-10-01
 
 Batch 179's seventh release: the `ledger-reverify` fixture, the suite's pole, split into four shards. No
