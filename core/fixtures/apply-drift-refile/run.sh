@@ -531,6 +531,196 @@ if [ "$Q_RUN" = 1 ]; then
   }
 fi
 
+# --- arm t: `--finish`'s REFILE CHECK IS THE ORDINARY RUN'S PREDICATE, GATE AND ALL ----------------
+# finish_reapply_owed diffed theirs against the consumer schema with no in-place-edit gate, and read
+# a theirs line that only gained a trailing comma as consumer-added. Four worlds:
+#   An  upstream retires `retired-skill`; the consumer schema is untouched (at base)
+#                                     -> no finish-refile-owed row (it would restore a retired skill)
+#   Ap  the same range; the consumer appended `my-persona-skill` in place  -> NOT owed: both sides
+#       changed the schema, so the ordinary run buckets it BOTH-CHANGED->CLASSIFY and hands it back as
+#       `semantic-merge` (measured), never a refile; the finisher, on the same predicate, owes nothing
+#       and leaves the merge to that row. Without the gate it owed both names, retired one included.
+#   Bk  refile done by hand (extension holds the skill), schema KEPT as is -> no owed row, STAMPS
+#   Bn  as Bk with no extension written                                    -> owed, naming it
+# Cell: "<An owes retired-skill?>|<Ap owes my-persona-skill?>|<Bk owed row?>|<Bk stamp>|<Bn owed?>"
+t_aworld() { # t_aworld <add-persona 0|1> -> path of a fresh world, refs in .B/.T
+  local _w _d _c
+  _w="$(mktemp -d "$WORK/t.XXXXXX")" || return 1
+  _d="$_w/dist"; _c="$_w/cons"
+  mkdir -p "$_d/core/schemas" "$_d/core/scripts" "$_c/.claude/schemas" "$_c/scripts/ai-dlc" || return 1
+  printf '#!/usr/bin/env bash\necho v\n' > "$_d/core/scripts/validate-synthetic.sh"
+  printf '#!/usr/bin/env bash\necho v\n' > "$_c/scripts/ai-dlc/validate-synthetic.sh"
+  printf '{\n  "known_skills": [\n    "bmad-party-mode",\n    "retired-skill"\n  ]\n}\n' > "$_d/core/schemas/provenance-block.json"
+  printf '9.9.9\n' > "$_d/VERSION"
+  git -C "$_d" init -q && git -C "$_d" -c user.email=f@f -c user.name=fixture add -A \
+    && git -C "$_d" -c user.email=f@f -c user.name=fixture commit -qm base || return 1
+  git -C "$_d" rev-parse HEAD > "$_w/.B"
+  printf '{\n  "known_skills": [\n    "bmad-party-mode"\n  ]\n}\n' > "$_d/core/schemas/provenance-block.json"
+  git -C "$_d" -c user.email=f@f -c user.name=fixture commit -qam theirs || return 1
+  git -C "$_d" rev-parse HEAD > "$_w/.T"
+  if [ "$1" = 1 ]; then
+    printf '{\n  "known_skills": [\n    "bmad-party-mode",\n    "retired-skill",\n    "my-persona-skill"\n  ]\n}\n' > "$_c/.claude/schemas/provenance-block.json"
+  else
+    git -C "$_d" show "$(cat "$_w/.B"):core/schemas/provenance-block.json" > "$_c/.claude/schemas/provenance-block.json" || return 1
+  fi
+  printf 'version: 0.0.1\ncommit: %s\n' "$(cat "$_w/.B")" > "$_c/.claude/.ai-dlc-version"
+  printf '%s' "$_w"
+}
+t_score() { # t_score <reconcile-dir> -> the cell above, or NOROW / BROKEN
+  local rec="$1" w fo c1 c2 c3 c4 c5
+  w="$(t_aworld 0)" && [ -d "$w/cons" ] || { printf 'BROKEN'; return; }
+  fo="$(bash "$rec/apply.sh" --finish "$w/dist" "$(cat "$w/.B")" "$w/cons" "$(cat "$w/.T")" 2>/dev/null)"
+  c1="$(awk -F'\t' '$1=="WORKLIST" && $2=="finish-refile-owed" && index($4, "retired-skill") {f=1} END {print (f ? "RETIRED" : "-")}' <<<"$fo")"
+  w="$(t_aworld 1)" && [ -d "$w/cons" ] || { printf 'BROKEN'; return; }
+  fo="$(bash "$rec/apply.sh" --finish "$w/dist" "$(cat "$w/.B")" "$w/cons" "$(cat "$w/.T")" 2>/dev/null)"
+  c2="$(awk -F'\t' '$1=="WORKLIST" && $2=="finish-refile-owed" && index($4, "my-persona-skill") {f=1} END {print (f ? "OWED" : "-")}' <<<"$fo")"
+  q_world "$rec" W || { printf 'BROKEN'; return; }
+  grep -q 'did not run' <<<"$Q_OUT" || { printf 'NOROW'; return; }
+  mkdir -p "$(dirname "$Q_EXT")" && printf '{\n  "known_skills": [\n    "my-persona-skill"\n  ]\n}\n' > "$Q_EXT" || { printf 'BROKEN'; return; }
+  grep -q 'my-persona-skill' "$Q_SCHEMA" || { printf 'BROKEN'; return; }
+  fo="$(bash "$rec/apply.sh" --finish "$Q_DIST" "$Q_BASE" "$Q_CONSUMER" "$Q_THEIRS" 2>/dev/null)"
+  c3="$(awk -F'\t' '$1=="WORKLIST" && $2=="finish-refile-owed" {printf "%s", (index($4, "bmad-party-mode") ? "BMAD" : "OTHER"); f=1} END {if (!f) print "-"}' <<<"$fo")"
+  c4="$(grep -qE '^version: 9\.9\.9$' "$Q_STAMP" && echo STAMPED || echo -)"
+  q_world "$rec" W || { printf 'BROKEN'; return; }
+  fo="$(bash "$rec/apply.sh" --finish "$Q_DIST" "$Q_BASE" "$Q_CONSUMER" "$Q_THEIRS" 2>/dev/null)"
+  c5="$(awk -F'\t' '$1=="WORKLIST" && $2=="finish-refile-owed" && index($4, "my-persona-skill") {f=1} END {print (f ? "OWED" : "-")}' <<<"$fo")"
+  printf '%s|%s|%s|%s|%s' "$c1" "$c2" "$c3" "$c4" "$c5"
+}
+# A mutant copy: each <anchor> -> <replacement> pair is applied once; refuses unless every anchor is
+# in apply.sh exactly once, the copy differs and parses, and preclassify.sh is beside it.
+mut_copy() { # mut_copy <dir> <anchor> <replacement> [<anchor> <replacement>]
+  local d="$1" n src; shift
+  cp -R "$(dirname "$APPLY")" "$d" || return 1
+  src="$APPLY"
+  while [ "$#" -ge 2 ]; do
+    n="$(grep -cF -- "$1" "$APPLY")" || n=0
+    [ "$n" = 1 ] || return 1
+    M_A="$1" M_R="$2" awk '{ i = index($0, ENVIRON["M_A"]); if (i) $0 = substr($0, 1, i-1) ENVIRON["M_R"] substr($0, i + length(ENVIRON["M_A"])); print }' \
+      "$src" > "$d/apply.sh.next" || return 1
+    mv "$d/apply.sh.next" "$d/apply.sh"; src="$d/apply.sh"; shift 2
+  done
+  ! cmp -s "$APPLY" "$d/apply.sh" && bash -n "$d/apply.sh" && [ -f "$d/preclassify.sh" ]
+}
+T_WANT='-|-|-|STAMPED|OWED'
+T_RUN=1
+if ! grep -qF 'ud_capture' "$APPLY"; then
+  case "$APPLY" in
+    */core/skills/ai-dlc-update/reconcile/apply.sh) printf '  --    (arm t: this apply.sh carries no shared in-place-edit gate; in the distribution arm t runs anyway and must go red)\n' ;;
+    *) T_RUN=0; printf '  SKIP  arm t -- the installed apply.sh predates the shared refile gate; it lands with the pull that carries this fixture\n' ;;
+  esac
+fi
+if [ "$T_RUN" = 1 ]; then
+  T_GOT="$(t_score "$(dirname "$APPLY")")"
+  case "$T_GOT" in
+    NOROW)    printf '  SKIP  arm t -- a mode-000 schema was still readable (running as root?), so worlds Bk/Bn could not be built\n' ;;
+    BROKEN)   bad "FIXTURE BROKEN [arm t]: a world could not be seeded" ;;
+    "$T_WANT") ok "arm t: --finish owes no refile for an untouched schema whose range retires a skill, nor for a kept schema whose skills are in the extension (and stamps it), nor for a both-changed schema the ordinary run hands back as a semantic merge; it still owes an unrefiled in-place addition" ;;
+    *)        bad "arm t: $T_GOT (want $T_WANT; cells: An-owes-retired|Ap-owed|Bk-owed-row|Bk-stamp|Bn-owed)" ;;
+  esac
+  [ "$T_GOT" = NOROW ] || {
+    # t-M1 drops the gate (any diff counts); t-M2 drops the trailing-comma cancel. Each moves only its own world.
+    if mut_copy "$WORK/t-M1" '          *) ap_drc=0 ;;' '          *) : ;;'; then
+      g="$(t_score "$WORK/t-M1")"
+      [ "$g" = 'RETIRED|OWED|-|STAMPED|OWED' ] && ok "arm t t-M1 killed (in-place-edit gate removed): An owes the retired skill and Ap owes a both-changed schema ($g)" \
+        || bad "arm t t-M1 SURVIVED or misfired: $g (want RETIRED|OWED|-|STAMPED|OWED)"
+    else
+      bad "arm t t-M1 DID NOT APPLY -- the gate's fall-through anchor is not in apply.sh exactly once, or the copy does not parse"
+    fi
+    if mut_copy "$WORK/t-M2" 'if (old[new_n[i]] > 0) { old[new_n[i]]--; continue }' 'if (0) { continue }'; then
+      g="$(t_score "$WORK/t-M2")"
+      [ "$g" = '-|-|BMAD|-|OWED' ] && ok "arm t t-M2 killed (trailing-comma cancel removed): Bk owes bmad-party-mode and withholds ($g)" \
+        || bad "arm t t-M2 SURVIVED or misfired: $g (want -|-|BMAD|-|OWED)"
+    else
+      bad "arm t t-M2 DID NOT APPLY -- the comma-cancel anchor is not in apply.sh exactly once, or the copy does not parse"
+    fi
+  }
+fi
+
+# --- arm u: A `--finish` WHOSE FINISH-CHECK INPUT CANNOT BE STAGED WITHHOLDS THE STAMP ---------------
+# finish_verify_tree read preclassify's rows from a heredoc. Under a file-size limit bash 3.2 cannot
+# write the heredoc's temp file and runs the loop on EMPTY stdin: no finish-unapplied row, and the
+# stamp advanced to theirs over a tree with every file still at base. The world: 100 files at base
+# under one long directory, so the rows (~22 KB) exceed a 14 and a 20 KB limit while everything else
+# the finish path writes fits under 14. Limits are in 1024-byte units, SIGXFSZ ignored.
+# Cell per limit: "<finish-unapplied rows>|<fv staging-refused or finish-unverified-tree row?>|<stamp>"
+u_world() {
+  local _w _d _c _ld i
+  _w="$(mktemp -d "$WORK/u.XXXXXX")" || return 1
+  _d="$_w/dist"; _c="$_w/cons"
+  _ld="$(printf '%075d' 0 | tr 0 d)"
+  mkdir -p "$_d/core/session-driver/$_ld" "$_d/core/scripts" "$_c/.claude/session-driver/$_ld" "$_c/scripts/ai-dlc" || return 1
+  printf '#!/usr/bin/env bash\necho v\n' > "$_d/core/scripts/validate-synthetic.sh"
+  printf '#!/usr/bin/env bash\necho v\n' > "$_c/scripts/ai-dlc/validate-synthetic.sh"
+  i=0; while [ "$i" -lt 100 ]; do printf 'v1 %s\n' "$i" > "$_d/core/session-driver/$_ld/f$(printf %03d "$i")"; i=$((i+1)); done
+  printf '9.9.9\n' > "$_d/VERSION"
+  git -C "$_d" init -q && git -C "$_d" -c user.email=f@f -c user.name=fixture add -A \
+    && git -C "$_d" -c user.email=f@f -c user.name=fixture commit -qm base || return 1
+  git -C "$_d" rev-parse HEAD > "$_w/.B"
+  i=0; while [ "$i" -lt 100 ]; do printf 'v2 %s\n' "$i" > "$_d/core/session-driver/$_ld/f$(printf %03d "$i")"; i=$((i+1)); done
+  git -C "$_d" -c user.email=f@f -c user.name=fixture commit -qam theirs || return 1
+  git -C "$_d" rev-parse HEAD > "$_w/.T"
+  i=0; while [ "$i" -lt 100 ]; do printf 'v1 %s\n' "$i" > "$_c/.claude/session-driver/$_ld/f$(printf %03d "$i")"; i=$((i+1)); done
+  printf '%s' "$_w"
+}
+u_cell() { # u_cell <world> <apply.sh> <limit|none>
+  local w="$1" b t o
+  b="$(cat "$w/.B")"; t="$(cat "$w/.T")"
+  printf 'version: 0.0.1\ncommit: %s\n' "$b" > "$w/cons/.claude/.ai-dlc-version"
+  printf 'base: %s\ntheirs: %s\n' "$b" "$t" > "$w/cons/.claude/.ai-dlc-applying"
+  if [ "$3" = none ]; then
+    o="$(bash "$2" --finish "$w/dist" "$b" "$w/cons" "$t" 2>/dev/null)"
+  else
+    o="$(trap '' XFSZ; ulimit -f "$3"; bash "$2" --finish "$w/dist" "$b" "$w/cons" "$t" 2>/dev/null)"
+  fi
+  printf '%s|%s|%s' \
+    "$(awk -F'\t' '$1=="WORKLIST" && $2=="finish-unapplied"' <<<"$o" | wc -l | tr -d ' ')" \
+    "$(awk -F'\t' '$1=="WORKLIST" && (($2=="staging-refused" && index($4, "for the finish check")) || $2=="finish-unverified-tree") {f=1} END {print (f ? "REFUSED" : "-")}' <<<"$o")" \
+    "$(sed -n 's/^version: //p' "$w/cons/.claude/.ai-dlc-version")"
+}
+U_RUN=1
+if ! grep -qF 'ap_stage fv-rows' "$APPLY"; then
+  case "$APPLY" in
+    */core/skills/ai-dlc-update/reconcile/apply.sh) printf '  --    (arm u: this apply.sh does not stage the finish check rows; in the distribution arm u runs anyway and must go red)\n' ;;
+    *) U_RUN=0; printf '  SKIP  arm u -- the installed apply.sh predates the staged finish check; it lands with the pull that carries this fixture\n' ;;
+  esac
+fi
+if [ "$U_RUN" = 1 ]; then
+  UW="$(u_world)"
+  if [ -z "$UW" ] || [ ! -d "$UW/cons" ]; then
+    bad "FIXTURE BROKEN [arm u]: the many-files world could not be seeded"
+  else
+    U_CTL="$(u_cell "$UW" "$APPLY" none)"
+    if [ "$U_CTL" != '100|-|0.0.1' ]; then
+      bad "arm u control: with no limit --finish read $U_CTL (want 100|-|0.0.1) -- the world does not hold 100 files at base, so the limited runs prove nothing"
+    else
+      ok "arm u control: with no limit --finish names all 100 files still at base and leaves the stamp at 0.0.1"
+      for U_L in 10 14 20; do
+        u="$(u_cell "$UW" "$APPLY" "$U_L")"
+        case "$u" in
+          *'|REFUSED|0.0.1') ok "arm u (ulimit -f $U_L): the finish check could not stage its rows, says so, and withholds the stamp ($u)" ;;
+          *) bad "arm u (ulimit -f $U_L): $u (want <n>|REFUSED|0.0.1) -- a finish check that could not read its rows let the stamp advance or said nothing" ;;
+        esac
+      done
+      # u-M1 restores the heredoc and drops the stage: both layers of the fix.
+      if mut_copy "$WORK/u-M1" '  _fv_rc=0; ap_stage fv-rows "$_fv_rows" || _fv_rc=$?' '  _fv_rc=0' \
+                               '  done < "$AP_TMP/fv-rows"' "$(printf '  done <<EOF\n$_fv_rows\nEOF')"; then
+        um_ctl="$(u_cell "$UW" "$WORK/u-M1/apply.sh" none)"
+        um14="$(u_cell "$UW" "$WORK/u-M1/apply.sh" 14)"
+        um20="$(u_cell "$UW" "$WORK/u-M1/apply.sh" 20)"
+        if [ "$um_ctl" != '100|-|0.0.1' ]; then
+          bad "arm u u-M1: the mutant copy with no limit read $um_ctl (want 100|-|0.0.1) -- it did not run as a finisher"
+        elif [ "$um14" = '0|-|9.9.9' ] && [ "$um20" = '0|-|9.9.9' ]; then
+          ok "arm u u-M1 killed (heredoc restored): under 14 and 20 the loop reads nothing and the stamp advances over 100 files at base ($um14, $um20)"
+        else
+          bad "arm u u-M1 SURVIVED or misfired: 14=$um14 20=$um20 (want 0|-|9.9.9 at both)"
+        fi
+      else
+        bad "arm u u-M1 DID NOT APPLY -- the fv-rows staging anchors are not each in apply.sh exactly once, or the copy does not parse"
+      fi
+    fi
+  fi
+fi
+
 # --- BL-360 arm s: A RELABEL TOOL THAT REFUSED IS A ROW, NOT "NOTHING TO RELABEL" -----------------
 # apply.sh read relabel-extension-checks.sh through `2>/dev/null || true`, so its refusal (exit 2,
 # no count printed) read exactly like a catalog with no collisions. The copy's relabel tool is

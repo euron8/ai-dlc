@@ -8047,7 +8047,10 @@ else
       # turn the arm red. The resolution sits ahead of the loop, so scoping the read to the loop
       # body is what makes the two states distinguishable, and it does not care how the comparison
       # is spelled.
-      i86_body="$(sed -n '/^while IFS="\$TAB_CH" read -r ovr detail; do$/,/^done <<EOF$/p' "$i86_read")"
+      # The span closes on the loop's own input line. It was a heredoc (`done <<EOF`) until the loop
+      # read a staged file, and a span whose close never matches runs to end of file: the arm then
+      # reads every later use of the variable as inside the loop.
+      i86_body="$(sed -n '/^while IFS="\$TAB_CH" read -r ovr detail; do$/,/^done < "\$LD_SUP_SRC"$/p' "$i86_read")"
       if [ -z "$i86_body" ]; then
         err "I86 could not locate the override-supersession loop in apply.sh, so the arm that proves the keep verdict is READ where the decision is taken could not run. An unlocatable span reports the same silence as a satisfied one."
       elif ! grep -q 'ADJ_KEEP_VERDICT' <<<"$i86_body"; then
