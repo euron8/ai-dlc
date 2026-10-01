@@ -427,13 +427,33 @@ if [ -r "$_AI_DLC_HP" ]; then
   fi
 fi
 
-if [ "$HANDOFF_VOCAB_OK" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
+# THE ON-DISK KEYS ENTER THIS GUARD WITHOUT A TRANSCRIPT. The entry test used to require a
+# readable transcript, so a Stop with no transcript path skipped every arm -- including the
+# on-disk trigger built for exactly the request the transcript cannot see. The sticky record
+# enters too: it is a file, and the lead it exists for (key 1 cleared before step 4's touch)
+# has no key left to enter by.
+#
+# WITH NO TRANSCRIPT, THE TRANSCRIPT-DERIVED ARMS READ 1 = UNKNOWN, NEVER 0. The resume arm
+# parses LAST_ASST and the In-Flight arm joins the transcript's dispatch ids; neither input
+# exists here, and a verdict drawn from an input never read is the defect handoff-resume-guard
+# case G pins for the In-Flight arm. Only PUSH, DRIVER, MARKER and TEAMMATES -- all read off
+# disk or git -- may convict on this path.
+#
+# HANDOFF_VOCAB_OK STAYS A CONJUNCT. handoff-resume-guard assertion 0 pins "an unresolved
+# declaration skips the whole check" as the contract, and key 3 reads the same vocabulary.
+HANDOFF_TRANSCRIPT_OK=0
+[ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ] && HANDOFF_TRANSCRIPT_OK=1
+if [ "$HANDOFF_VOCAB_OK" = "1" ] && { [ "$HANDOFF_TRANSCRIPT_OK" = "1" ] || [ "$HANDOFF_ON_DISK" = "1" ] \
+     || [ -f "${LOG_DIR}/.handoff-guard-armed" ]; }; then
   # ONE LINE, BECAUSE THE DECLARED PATTERNS ANCHOR ON `^` AND `$` AND grep ANCHORS PER LINE.
   # A multi-line message with a middle line reading `handoff` (or, since the final-sentence
   # alternative, ending `. handoff`) matched on that line alone and routed the whole message --
   # a pasted filing quoting the incident row would arm the guard. ai-dlc-pause.sh already
   # collapses newlines before writing the row key 3 reads, so this is the transcript reader
   # seeing the same text shape as the on-disk reader, not a new rule.
+  LAST_USER=""
+  LAST_ASST=""
+  if [ "$HANDOFF_TRANSCRIPT_OK" = "1" ]; then
   LAST_USER=$({ jq -rs '[.[]|select(.message.role=="user")|.message.content|(if type=="string" then . else (map(select(.type=="text")|.text)|join(" ")) end)]|map(select(length>0))|last // ""' "$TRANSCRIPT" 2>/dev/null || echo ""; } | tr '\n' ' ')
   # LAST_ASST is reconstructed with join("") (NOT " "): the format check below is
   # line-anchored, and a streaming split of one text block into chunks can land a
@@ -441,6 +461,7 @@ if [ "$HANDOFF_VOCAB_OK" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]
   # lead's own well-formed block false-blocks. join("") rejoins contiguous text so
   # marker lines survive. LAST_USER keeps join(" ") (substring regex, spacing-tolerant).
   LAST_ASST=$(jq -rs '[.[]|select(.message.role=="assistant")|.message.content|(if type=="string" then . else (map(select(.type=="text")|.text)|join("")) end)]|map(select(length>0))|last // ""' "$TRANSCRIPT" 2>/dev/null || echo "")
+  fi
 
   # Match REQUEST-shaped phrasings only — "handoff"/"hand off" as a VERB, a terse
   # standalone "handoff", or "continue in a new session". Do NOT match incidental
@@ -477,6 +498,8 @@ if [ "$HANDOFF_VOCAB_OK" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]
       /^[[:space:]]*-{4,}[[:space:]]*$/ { marks++; if (marks==1){opened=1;sawcmd=0} else if (marks>=2 && sawcmd){ok=1}; next }
       opened && /^[[:space:]]*\/ai-dlc[[:space:]]+resume[[:space:]]*$/ { sawcmd=1 }
       END { print (ok?"1":"0") }')
+    # NO TRANSCRIPT: the resume block was never read, so it is unknown, not missing.
+    [ "$HANDOFF_TRANSCRIPT_OK" = "1" ] || RESUME_OK=1
 
     # The teammate-sweep arm. Reads the LAST cell of every table row inside the
     # `## In-Flight Teammates` section, which is the `status` column route.md defines. The
@@ -816,6 +839,9 @@ EOF
       # lead that was told plainly and skipped the steps.
       [ "$HANDOFF_ON_DISK" = "1" ] && H_WHY="${H_WHY} [pending handoff seen on disk via ${AI_DLC_HANDOFF_KEY:-unknown}, not the transcript]"
       [ "$HANDOFF_ON_DISK" != "1" ] && [ "$HANDOFF_STICKY" = "1" ] && H_WHY="${H_WHY} [armed by an earlier Stop of this session, no key holds now]"
+      # The block TEXT below can still say "the resume prompt is well-formed"; with no transcript
+      # that clause was not checked, and the record says so rather than rewording six messages.
+      [ "$HANDOFF_TRANSCRIPT_OK" != "1" ] && H_WHY="${H_WHY} [no transcript: the resume block and the dispatch set were not read]"
       # The remediation text is assembled the same way, so a lead that satisfied one arm is
       # not told to redo it.
       H_FIX_RESUME="Per steps/handoff.md step 4, emit exactly this, and nothing else -- no narrated body:"
@@ -895,7 +921,13 @@ The \`/ai-dlc resume\` line MUST sit BETWEEN two delimiter lines (four or more h
       rm -f "$HANDOFF_STATE" "$HANDOFF_ARMED_FILE"   # possible false positive, as before
       exit 0
     else
-      rm -f "$HANDOFF_STATE" "$HANDOFF_ARMED_FILE"   # every arm satisfied: the handoff is complete
+      rm -f "$HANDOFF_STATE"   # every arm satisfied: the handoff is complete
+      # THE ARMING RECORD IS CLEARED ONLY WHEN THE RESUME ARM WAS ACTUALLY READ. With no transcript
+      # RESUME_OK is forced to 1 because the block is UNKNOWN, not present; removing the sticky
+      # record on that Stop let the next Stop -- transcript present, no resume block -- arrive
+      # unarmed and pass. Measured by driving this hook: no-transcript Stop then transcript Stop
+      # without the block was ALLOW with the unconditional removal and BLOCK without it.
+      [ "$HANDOFF_TRANSCRIPT_OK" = "1" ] && rm -f "$HANDOFF_ARMED_FILE"
       # AND THE SNAPSHOT'S HANDOFF RECORD IS DISCHARGED HERE, which is key 2's whole lifecycle.
       # That key reads a LINE in a document whose writers only append, so nothing in this
       # distribution can remove it and it armed this guard permanently -- measured on the
@@ -913,7 +945,15 @@ The \`/ai-dlc resume\` line MUST sit BETWEEN two delimiter lines (four or more h
       # this stamp. The predicate compares the two that way round -- snapshot newer than stamp
       # -- because bash 3.2's `-nt` is whole-second and the inverse form would disarm a
       # compliant handoff whose step 3 and step 5 landed in one second.
+      #
+      # NOT WITH NO TRANSCRIPT. There the resume arm read 1 = unknown, so "every arm was READ and
+      # found satisfied" is false and the stamp would discharge key 2 on an unverified resume.
+      # Left armed, key 2 is bounded by the pause flag, which the resume path takes down. The
+      # body is left unindented so its line stays byte-identical to the one the fixture's
+      # stamp-writer mutant anchors on.
+      if [ "$HANDOFF_TRANSCRIPT_OK" = "1" ]; then
       : > "${LOG_DIR}/.handoff-complete" 2>/dev/null || true
+      fi
     fi
   fi
 fi

@@ -810,6 +810,108 @@ r="$(disk "$SESS_A")"
                  || bad "  the operator's answer field did not block either ($r) — (j) proves nothing, and the AskUserQuestion channel is unguarded"
 
 # =============================================================================
+# ai-dlc-continue.sh — THE ON-DISK KEYS WITH NO TRANSCRIPT
+# =============================================================================
+# THE SUBJECT. The guard's entry test required a readable transcript, so a Stop whose
+# transcript path names no file skipped every arm -- including the on-disk trigger built for
+# the request the transcript cannot see. The keys now enter on their own.
+#
+# THE ARM THAT MATTERS IS (nt3), THE ALL-SATISFIED ALLOW. With no transcript the resume arm
+# has nothing to parse; computed anyway it reads 0, and every transcript-less Stop with a key
+# would block for "no resume block" -- a verdict drawn from an input never read. It must read
+# 1 = unknown, so only the disk-and-git arms convict here. (nt1)/(nt2) prove those still do.
+#
+# THE TRANSCRIPT PATH IS ASSERTED ABSENT IN THE SAME INVOCATION. A path that happened to exist
+# would be the transcript-present case wearing this battery's label.
+# HC is defined HERE, before its first reader. Defined below it, `[ ! -f "$(HC …)" ]` tests
+# the empty path and passes whatever the hook wrote.
+HC() { printf '%s' "$1/_bmad-output/.handoff-complete"; }
+T_NONE="$ROOT/no-such-transcript.jsonl"
+NT_ANN="[no transcript:"
+ntdisk() { verdict "$(drive "$P_DISK" "$SESS_A" "$T_NONE" "${1:-$HOOKS_DIR}")"; }
+if [ ! -e "$T_NONE" ] && [ -f "$T_QUIET" ]; then
+  ok "(nt0) the no-transcript path names nothing, and the transcript control beside it exists"
+else
+  broken "the no-transcript seed path exists (or the transcript control does not) — every (nt) verdict below would be about the wrong input"
+fi
+
+# (nt1) key 3 + step 4 skipped, no transcript -> BLOCK on the driver arm, and the row says the
+#       transcript was not read.
+log_prompt "$LG" "$SESS_A" "$P_INTENT"
+dsetup "$LG"; rm -f "$P_DISK/_bmad-output/.driver/handoff"
+rr="$(reason "$(drive "$P_DISK" "$SESS_A" "$T_NONE")")"
+has "$rr" "$DRIVER_MARK" && ok "(nt1) key 3, NO transcript, driver signal absent -> BLOCK with the step-4 text (the on-disk key enters the guard on its own)" \
+                         || bad "(nt1) a handoff recorded on disk with no transcript did not block on step 4 ($([ -n "$rr" ] && echo "different text" || echo "allowed")) — the guard still requires a transcript to run any arm"
+grep -qF -- "$NT_ANN" "$(disk_log)" 2>/dev/null \
+  && ok "  the HANDOFF_GUARD_BLOCK row records that the transcript was not read" \
+  || bad "  the block row does not say the transcript was absent — a retro reads the resume clause of the block text as checked"
+
+# (nt2) key 1, the entry marker, no transcript -> BLOCK on the marker arm.
+dsetup "" yes
+rr="$(reason "$(drive "$P_DISK" "$SESS_A" "$T_NONE")")"
+has "$rr" "$MARKER_MARK" && ok "(nt2) key 1, NO transcript -> BLOCK with the step-5 text" \
+                         || bad "(nt2) the entry marker with no transcript did not block on step 5 ($([ -n "$rr" ] && echo "different text" || echo "allowed"))"
+
+# (nt3) key 3, every disk arm satisfied, no transcript -> ALLOW, and NO completion stamp: the
+#       resume arm was not read, so the completion is not verified and key 2 must not discharge.
+log_prompt "$LG" "$SESS_A" "$P_INTENT"
+dsetup "$LG"
+r="$(ntdisk)"
+[ "$r" = allow ] && ok "(nt3) key 3, NO transcript, every disk arm satisfied -> ALLOW (the unread resume arm reads unknown, not missing)" \
+                 || bad "(nt3) BLOCKED with no transcript and every disk arm satisfied ($r) — the resume arm is convicting from a transcript it never read"
+[ ! -f "$(HC "$P_DISK")" ] && ok "  and writes NO completion stamp (an unverified resume does not discharge key 2)" \
+                           || bad "  the no-transcript ALLOW wrote .handoff-complete — key 2 is discharged on a completion nobody verified"
+# CONTROL: the same tree with a compliant transcript allows AND stamps, so the absence above
+# is the transcript condition and not a writer that never runs.
+log_prompt "$LG" "$SESS_A" "$P_INTENT"
+dsetup "$LG"
+r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_QUIET_OK")")"
+{ [ "$r" = allow ] && [ -f "$(HC "$P_DISK")" ]; } \
+  && ok "  control: the same tree WITH a compliant transcript allows and stamps" \
+  || bad "  the transcript-present control did not allow-and-stamp ($r, stamp $([ -f "$(HC "$P_DISK")" ] && echo present || echo absent)) — (nt3)'s stamp absence is unreadable"
+# CONTROL: the transcript arms still convict when the transcript IS readable -- T_QUIET carries
+# no resume block, so it blocks on the resume text, and its row does NOT carry the annotation.
+log_prompt "$LG" "$SESS_A" "$P_INTENT"
+dsetup "$LG"
+rr="$(reason "$(drive "$P_DISK" "$SESS_A" "$T_QUIET")")"
+{ has "$rr" "$RESUME_MARK" && ! grep -qF -- "$NT_ANN" "$(disk_log)" 2>/dev/null; } \
+  && ok "  control: the same key WITH a transcript lacking the resume block still BLOCKS on the resume text, unannotated" \
+  || bad "  the transcript-present resume case did not block on the resume text, or carried the no-transcript annotation — the unknown reading has leaked into the transcript path"
+
+# (nt4) NEAR-MISS: the pause flag, NO key, NO transcript -> ALLOW, and nothing armed. The
+#       driver signal is REMOVED so a hook that entered on the flag alone would BLOCK on step 4;
+#       with it present every disk arm is satisfied and the ALLOW would discriminate nothing.
+dsetup; rm -f "$P_DISK/_bmad-output/.driver/handoff"
+r="$(ntdisk)"
+{ [ "$r" = allow ] && [ ! -f "$ARMED" ]; } \
+  && ok "(nt4) pause flag, no key, no transcript -> ALLOW, and no arming record (the flag alone never enters the guard)" \
+  || bad "(nt4) flag with no key and no transcript produced $r (record $([ -f "$ARMED" ] && echo present || echo absent)) — the hoist admits a Stop with nothing pending"
+
+# (nt5) THE STICKY RECORD ENTERS TOO. Key 1 cleared before step 4's touch leaves no key; the
+#       record an earlier Stop of this session wrote is what arms the guard, transcript or not.
+dsetup; printf '%s\n' "$SESS_A" > "$ARMED"; rm -f "$P_DISK/_bmad-output/.driver/handoff"
+rr="$(reason "$(drive "$P_DISK" "$SESS_A" "$T_NONE")")"
+has "$rr" "$DRIVER_MARK" && ok "(nt5) sticky record for THIS session, no key, no transcript -> BLOCK with the step-4 text" \
+                         || bad "(nt5) the sticky record did not arm a transcript-less Stop ($([ -n "$rr" ] && echo "different text" || echo "allowed")) — clearing key 1 early escapes the guard whenever the transcript is absent"
+dsetup
+
+# (nt6) AN UNREAD RESUME ARM DOES NOT DISCHARGE THE STICKY RECORD. Two Stops of one session.
+#       The first has no transcript and every disk arm satisfied, so it ALLOWS with the resume
+#       arm read as unknown -- and must leave the record on disk, because the one arm it could
+#       not read is still owed. The second has a transcript with no resume block and no key;
+#       only the record arms it, so it must BLOCK on the resume text. A hook that removes the
+#       record on the unverified ALLOW lets the second Stop end the session.
+dsetup; printf '%s\n' "$SESS_A" > "$ARMED"
+r="$(ntdisk)"
+{ [ "$r" = allow ] && [ -f "$ARMED" ]; } \
+  && ok "(nt6) sticky record, every disk arm satisfied, NO transcript -> ALLOW with the record still on disk" \
+  || bad "(nt6) the transcript-less satisfied Stop produced $r with the record $([ -f "$ARMED" ] && echo present || echo absent) — an unread resume arm discharged the arming"
+rr="$(reason "$(drive "$P_DISK" "$SESS_A" "$T_QUIET")")"
+has "$rr" "$RESUME_MARK" && ok "  then a Stop WITH a transcript lacking the resume block -> BLOCK on the resume text (the record carried the arming across)" \
+                         || bad "  the second Stop, transcript present and no resume block, $([ -n "$rr" ] && echo "blocked on different text" || echo "was ALLOWED") — the handoff escaped its resume check"
+dsetup
+
+# =============================================================================
 # KEY 2's LIFECYCLE — the completion stamp, at both ends
 # =============================================================================
 # THE SUBJECT. Key 2 reads a LINE in the snapshot, and the snapshot's writers only APPEND.
@@ -833,7 +935,6 @@ r="$(disk "$SESS_A")"
 # THE SEED IS THE PRODUCER-DERIVED ONE, the reference consumer's own bold lead-in -- the only
 # instance of this record that exists anywhere. A lifecycle asserted over the reader-derived
 # heading alone would be asserted over a shape nothing has been observed writing.
-HC() { printf '%s' "$1/_bmad-output/.handoff-complete"; }
 SNAP_BOLD_SRC="$ROOT/snap-bold.md"
 [ -r "$SNAP_BOLD_SRC" ] || broken "the producer-derived snapshot seed is missing from the sandbox; every key-2 lifecycle case below would run against a tree with no handoff record and pass for the wrong reason"
 snap_at() { cp "$SNAP_BOLD_SRC" "$1/_bmad-output/pipeline-snapshot.md"; }
@@ -1858,6 +1959,70 @@ if mkmut m24-no-sticky-arm "$CONF" -e 's|^      HANDOFF_STICKY=1$|      HANDOFF_
                    || bad "MUTANT TOO BROAD [m24]: the key-1 Stop stopped blocking too ($r)"
   reset_state "$P_DISK"
   mut_ctl m24 "$MUT_DIR"
+fi
+
+# M31 — THE TRANSCRIPT GATE RESTORED, which is the pre-fix hook. Killed by (nt1) and (nt2):
+#       a transcript-less Stop with an on-disk key never enters the guard.
+if mkmut m31-transcript-gate "$CONF" \
+     -e 's@^if \[ "$HANDOFF_VOCAB_OK" = "1" \] && { @if [ "$HANDOFF_VOCAB_OK" = "1" ] \&\& [ "$HANDOFF_TRANSCRIPT_OK" = "1" ] \&\& { @'; then
+  log_prompt "$LG" "$SESS_A" "$P_INTENT"
+  dsetup "$LG"; rm -f "$P_DISK/_bmad-output/.driver/handoff"
+  r="$(ntdisk "$MUT_DIR")"
+  [ "$r" = allow ] && ok "  mutant [m31] KILLED by assertion (nt1): with the transcript gate back, key 3 with no transcript ends the session" \
+                   || bad "MUTANT SURVIVED [m31]: expected allow, got $r — (nt1) does not depend on the entry test"
+  dsetup "" yes
+  r="$(ntdisk "$MUT_DIR")"
+  [ "$r" = allow ] && ok "  mutant [m31] KILLED by assertion (nt2): key 1 with no transcript is skipped too" \
+                   || bad "MUTANT SURVIVED [m31]: expected allow, got $r — (nt2) does not depend on the entry test"
+  mut_ctl m31 "$MUT_DIR"
+fi
+
+# M32 — THE NAIVE HOIST: the gate opened, but the resume arm still parsed from an unread
+#       transcript. Killed by (nt3) alone, which is what makes the unknown reading load-bearing.
+if mkmut m32-resume-from-unread "$CONF" \
+     -e 's@^    \[ "$HANDOFF_TRANSCRIPT_OK" = "1" \] || RESUME_OK=1$@    : # resume computed from the unread transcript@'; then
+  log_prompt "$LG" "$SESS_A" "$P_INTENT"
+  dsetup "$LG"
+  rr="$(reason "$(drive "$P_DISK" "$SESS_A" "$T_NONE" "$MUT_DIR")")"
+  has "$rr" "$RESUME_MARK" && ok "  mutant [m32] KILLED by assertion (nt3): every transcript-less Stop with a key blocks for a resume block nobody read" \
+                           || bad "MUTANT SURVIVED [m32]: expected the resume block text, got $([ -n "$rr" ] && echo "different text" || echo "allow") — (nt3) does not depend on the unknown reading"
+  mut_ctl m32 "$MUT_DIR"
+fi
+
+# M33 — THE STAMP WRITTEN WITH NO TRANSCRIPT. Killed by (nt3)'s stamp arm alone.
+if mkmut m33-stamp-without-transcript "$CONF" \
+     -e 's@^      if \[ "$HANDOFF_TRANSCRIPT_OK" = "1" \]; then$@      if true; then@'; then
+  log_prompt "$LG" "$SESS_A" "$P_INTENT"
+  dsetup "$LG"
+  r="$(ntdisk "$MUT_DIR")"
+  { [ "$r" = allow ] && [ -f "$(HC "$P_DISK")" ]; } \
+    && ok "  mutant [m33] KILLED by assertion (nt3): the unverified ALLOW now discharges key 2" \
+    || bad "MUTANT SURVIVED [m33]: $r with stamp $([ -f "$(HC "$P_DISK")" ] && echo present || echo absent) — (nt3)'s stamp arm does not depend on the transcript condition"
+  mut_ctl m33 "$MUT_DIR"
+fi
+
+# M34 — THE STICKY RECORD NO LONGER ENTERS. Killed by (nt5) alone.
+if mkmut m34-sticky-not-entry "$CONF" \
+     -e 's@^     || \[ -f "${LOG_DIR}/.handoff-guard-armed" \]; }; then$@     || false; }; then@'; then
+  dsetup; printf '%s\n' "$SESS_A" > "$ARMED"; rm -f "$P_DISK/_bmad-output/.driver/handoff"
+  r="$(ntdisk "$MUT_DIR")"
+  [ "$r" = allow ] && ok "  mutant [m34] KILLED by assertion (nt5): with the record not an entry condition, a transcript-less sticky Stop escapes" \
+                   || bad "MUTANT SURVIVED [m34]: expected allow, got $r — (nt5) does not depend on the sticky entry conjunct"
+  dsetup
+  mut_ctl m34 "$MUT_DIR"
+fi
+
+# M35 — THE ARMING RECORD REMOVED ON AN UNVERIFIED ALLOW. Killed by (nt6) alone: the
+#       transcript-less satisfied Stop deletes the record, and the next Stop is unarmed.
+if mkmut m35-unconditional-disarm "$CONF" \
+     -e 's@^      \[ "$HANDOFF_TRANSCRIPT_OK" = "1" \] && rm -f "$HANDOFF_ARMED_FILE"$@      rm -f "$HANDOFF_ARMED_FILE"@'; then
+  dsetup; printf '%s\n' "$SESS_A" > "$ARMED"
+  ntdisk "$MUT_DIR" >/dev/null
+  r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_QUIET" "$MUT_DIR")")"
+  [ "$r" = allow ] && ok "  mutant [m35] KILLED by assertion (nt6): with the removal unconditional, the no-transcript ALLOW disarms and the resume-less Stop escapes" \
+                   || bad "MUTANT SURVIVED [m35]: expected allow, got $r — (nt6) does not depend on the transcript condition on the record's removal"
+  dsetup
+  mut_ctl m35 "$MUT_DIR"
 fi
 
 # M22 — the marker arm never fires. Killed by (d2) alone.

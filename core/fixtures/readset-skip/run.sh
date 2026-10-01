@@ -391,6 +391,7 @@ fi
 MERGE_ARMS=0
 CONTROL_ARMS=0
 TRACE_ARMS=0
+BOTH_ARMS=0
 DERIVER=""
 for _d in "$ROOT/scripts/ai-dlc/derive-fixture-readsets.sh" "$ROOT/core/scripts/derive-fixture-readsets.sh"; do
   [ -f "$_d" ] && DERIVER="$_d" && break
@@ -968,13 +969,259 @@ MUT
       ok "the sandbox tracer OMITS a fixture whose window carries a 'dropped during' notice ($L_FORCED forced, $L_CLEAN clean window(s) mapped, over $_a attempt(s)) — a lossy trace never becomes a smaller read-set"
     fi
   fi
+
+  # ------------------------------------------------- `--tracer both`: the comparison mode ----
+  # The operator runs `sudo bash core/scripts/derive-fixture-readsets.sh --all --tracer both` to
+  # decide whether the sandbox tracer may replace fs_usage. Its verdict must never read clean
+  # having compared nothing, its refusals must never read as a verdict, and it must never write
+  # the map. None of that needs root to prove: the verdict logic is driven from its sentinels, the
+  # refusals are reached before any tracer starts, and the no-write guarantee is driven through
+  # the WHOLE script in a stub world (stub fs_usage, sandbox-exec, sudo, id, and log stream).
+  BOTH_SPAN="$WORK/both.sh"
+  sed -n '/# READSET_BOTH_BEGIN/,/# READSET_BOTH_END/p' "$DERIVER" > "$BOTH_SPAN"
+  BOTH_ARMS=$((BOTH_ARMS+1))
+  if ! grep -q 'readset_both_verdict()' "$BOTH_SPAN" || ! grep -q 'readset_both_compare()' "$BOTH_SPAN"; then
+    bad "extracted no readset_both_verdict/readset_both_compare from $DERIVER — the READSET_BOTH span is absent, so --tracer both cannot be driven"
+  else
+    ok "the READSET_BOTH span carries the comparison and the verdict"
+    BW="$WORK/both"
+    mkdir -p "$BW/r" || broken "mkdir failed"
+    printf '*.log\n' > "$BW/r/.gitignore"
+    ( cd "$BW/r" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm s ) >/dev/null 2>&1 \
+      || broken "could not seed the --tracer both comparison repo"
+    # fs_usage saw five paths; the sandbox saw two of them plus one fs_usage did not. Exactly ONE
+    # is a sandbox miss: `.git` and `.git/HEAD` go by prefix, `build.log` by the ignore filter.
+    printf '%s\n' .git .git/HEAD build.log src/a.sh src/miss.sh | LC_ALL=C sort > "$BW/fs"
+    printf '%s\n' src/a.sh src/neg.sh | LC_ALL=C sort > "$BW/sb"
+    both_compare_with() { # $1 span file; prints "<counts>|<sandbox-missed paths>"
+      ( TREE="$BW/r"; . "$DR"; . "$1"
+        c="$(readset_both_compare "$BW/fs" "$BW/sb" "$BW/cmp")" || c="rc=$?"
+        printf '%s|%s' "$c" "$(tr '\n' ' ' < "$BW/cmp.sbmiss" 2>/dev/null)" )
+    }
+    BC="$(both_compare_with "$BOTH_SPAN")"
+    BOTH_ARMS=$((BOTH_ARMS+1))
+    if [ "$BC" = "1 1|src/miss.sh " ]; then
+      ok "a sandbox miss is fs_usage MINUS sandbox, outside .git/** and the ignored set: exactly src/miss.sh (1 sandbox-missed, 1 fs_usage-missed)"
+    else
+      bad "the comparison did not isolate exactly src/miss.sh as the one sandbox miss: got '$BC'"
+    fi
+    # One verdict driver; the results rows are the shape the loop writes.
+    both_verdict_with() { # $1 span  $2 list  $3 results file; prints "<rc>|<line>"
+      ( . "$1"; l="$(readset_both_verdict "$2" "$3" "$BW/missed" "$BW")"; printf '%s|%s' "$?" "$l" )
+    }
+    printf 'fa\tcompared\t0\t2\t\nfb\tcompared\t0\t0\t\n' > "$BW/res.clean"
+    printf 'fa\tcompared\t2\t0\t\nfb\tcompared\t1\t0\t\nfc\tcompared\t0\t0\t\n' > "$BW/res.miss"
+    printf 'fa\tcompared\t0\t0\t\nfb\tuncompared\t-\t-\tsandbox set empty\n' > "$BW/res.part"
+    V="$(both_verdict_with "$BOTH_SPAN" "fa fb" "$BW/res.clean")"
+    BOTH_ARMS=$((BOTH_ARMS+1))
+    case "$V" in
+      "0|SANDBOX-MISSES-NOTHING"*"2 of 2"*) ok "every listed fixture compared with no sandbox miss reads SANDBOX-MISSES-NOTHING, exit 0 — fs_usage-missed paths do not count against it" ;;
+      *) bad "a clean comparison did not read SANDBOX-MISSES-NOTHING at exit 0: '$V'" ;;
+    esac
+    V="$(both_verdict_with "$BOTH_SPAN" "fa fb fc" "$BW/res.miss")"
+    BOTH_ARMS=$((BOTH_ARMS+1))
+    case "$V" in
+      "1|SANDBOX-MISSES 3 path(s) across 2 fixture(s)"*) ok "misses read SANDBOX-MISSES <n> path(s) across <m> fixture(s), exit 1 — summed over fixtures, counting only those that missed" ;;
+      *) bad "misses did not read 'SANDBOX-MISSES 3 path(s) across 2 fixture(s)' at exit 1: '$V'" ;;
+    esac
+    # THE MOTIVATING CASE: three listed, one compared, one uncompared, one with no row at all.
+    V="$(both_verdict_with "$BOTH_SPAN" "fa fb fc" "$BW/res.part")"
+    BOTH_ARMS=$((BOTH_ARMS+1))
+    case "$V" in
+      "2|REFUSED: compared 1 of 3"*"fb (sandbox set empty)"*"fc (no result row"*) ok "compared < listed REFUSES at exit 2, naming the uncompared fixture with its reason AND the one the loop never reached" ;;
+      *) bad "a partial comparison was not refused at exit 2 naming fb and fc: '$V'" ;;
+    esac
+    V="$(both_verdict_with "$BOTH_SPAN" "" "$BW/res.clean")"
+    BOTH_ARMS=$((BOTH_ARMS+1))
+    case "$V" in
+      "2|REFUSED: EXAMINED NOTHING -- no fixture was listed"*) ok "an empty fixture list REFUSES at exit 2 rather than reading clean over nothing" ;;
+      *) bad "an empty list was not refused at exit 2: '$V'" ;;
+    esac
+    # MUTANTS on the span, each a cmp -s guarded copy. Each names the one arm it must move.
+    both_mut() { # $1 name  $2 sed expr; leaves $BW/m.$1.sh or reports DID NOT APPLY
+      sed "$2" "$BOTH_SPAN" > "$BW/m.$1.sh" 2>/dev/null || { bad "BOTH MUTANT $1: sed DID NOT APPLY"; return 1; }
+      cmp -s "$BOTH_SPAN" "$BW/m.$1.sh" && { bad "BOTH MUTANT $1: the edit matched nothing"; return 1; }
+      return 0
+    }
+    BOTH_ARMS=$((BOTH_ARMS+1))
+    if both_mut gitprefix 's|$0 != ".git" && index($0, ".git/") != 1|$0 != ""|'; then
+      case "$(both_compare_with "$BW/m.gitprefix.sh")" in
+        "1 1|"*) bad "BOTH MUTANT gitprefix: dropping the .git prefix exclusion left the miss count at 1 — the arm does not depend on it" ;;
+        *) ok "BOTH MUTANT gitprefix moves the comparison arm: without the prefix exclusion .git rows count as sandbox misses" ;;
+      esac
+    fi
+    BOTH_ARMS=$((BOTH_ARMS+1))
+    if both_mut noignore 's/ | drop_ignored$//'; then
+      case "$(both_compare_with "$BW/m.noignore.sh")" in
+        *build.log*) ok "BOTH MUTANT noignore moves the comparison arm: without the ignore filter an ignored path counts as a sandbox miss" ;;
+        *) bad "BOTH MUTANT noignore: the ignored path still did not count — the arm does not depend on drop_ignored" ;;
+      esac
+    fi
+    BOTH_ARMS=$((BOTH_ARMS+1))
+    if both_mut direction 's|comm -23 "$out.fs.cmp" "$out.sb.cmp" > "$out.sbmiss"|comm -13 "$out.fs.cmp" "$out.sb.cmp" > "$out.sbmiss"|'; then
+      case "$(both_compare_with "$BW/m.direction.sh")" in
+        *"|src/miss.sh "*) bad "BOTH MUTANT direction: reversing the miss direction still named src/miss.sh — the arm reads a count, not the set" ;;
+        *) ok "BOTH MUTANT direction moves the comparison arm: a reversed miss names what the SANDBOX alone saw" ;;
+      esac
+    fi
+    BOTH_ARMS=$((BOTH_ARMS+1))
+    if both_mut partial 's|if (c < n) {|if (0) {|'; then
+      case "$(both_verdict_with "$BW/m.partial.sh" "fa fb fc" "$BW/res.part")" in
+        2*) bad "BOTH MUTANT partial: without the compared < listed guard the partial run was still refused — the arm does not depend on it" ;;
+        *) ok "BOTH MUTANT partial moves the refusal arm: without compared < listed, a run that compared one of three reads as a verdict" ;;
+      esac
+    fi
+  fi
+
+  # Arguments and refusals, driven through the WHOLE script in a seeded repo, as a normal user.
+  # Base dies at the parse with `unknown --tracer 'both'`; the near-misses are the same refusal in
+  # the other modes, which must stay at exit 1, and a fixture NAMED `both` in a --list.
+  if [ "$(id -u)" = 0 ]; then
+    printf '  SKIP  --tracer both refusal arms: running as root, so the not-root refusal cannot be reached\n'
+  else
+    BR="$WORK/bothrepo"
+    mkdir -p "$BR/core/fixtures/fxa" "$BR/core/scripts" "$BR/.githooks" "$BR/src" || broken "mkdir failed"
+    printf '#!/bin/bash\nfor d in core/fixtures/*/; do :; done\n' > "$BR/.githooks/pre-push"
+    printf '#!/bin/bash\ncat src/a.sh >/dev/null\necho fxa ok\n' > "$BR/core/fixtures/fxa/run.sh"
+    printf 'a\n' > "$BR/src/a.sh"; printf 'o\n' > "$BR/src/other.sh"
+    printf '*.log\n' > "$BR/.gitignore"
+    printf 'other\tsrc/other.sh\nother\tcore/fixtures/other/run.sh\n' > "$BR/.ai-dlc-fixture-readsets.tsv"
+    cp "$DERIVER" "$BR/core/scripts/derive-fixture-readsets.sh"
+    ( cd "$BR" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm seed ) >/dev/null 2>&1 \
+      || broken "could not seed the --tracer both repo"
+    drive_in() { # $1 dir; rest = args. prints "<rc>|<first ERROR line>"
+      local d="$1" r; shift
+      ( cd "$d" && bash core/scripts/derive-fixture-readsets.sh "$@" ) > "$WORK/br.out" 2>&1; r=$?
+      printf '%s|%s' "$r" "$(grep -m1 'ERROR' "$WORK/br.out")"
+    }
+    V1="$(drive_in "$BR" --all --tracer both)"
+    V2="$(drive_in "$BR" --all --tracer=both)"
+    V3="$(drive_in "$BR" --all --tracer fs_usage)"
+    V4="$(drive_in "$BR" --list both --tracer fs_usage)"
+    BOTH_ARMS=$((BOTH_ARMS+1))
+    case "$V1" in
+      "2|ERROR: must run as root"*"--tracer both"*) ok "--all --tracer both PARSES and refuses a normal user at exit 2, naming the sudo command" ;;
+      *) bad "--all --tracer both without root did not refuse at exit 2 for root: '$V1'" ;;
+    esac
+    BOTH_ARMS=$((BOTH_ARMS+1))
+    case "$V2|$V3|$V4" in
+      "2|ERROR: must run as root"*"|1|ERROR: must run as root"*"|1|ERROR: must run as root"*) ok "  --tracer=both refuses at 2 too, and the same refusal stays at exit 1 in fs_usage mode — including for a fixture NAMED 'both'" ;;
+      *) bad "the refusal exit codes do not separate both-mode from the others: '=both' $V2 / fs_usage $V3 / --list both $V4" ;;
+    esac
+    # A REPEATED --tracer: the parser keeps the LAST value, so the refusal code must follow the
+    # last one too. Both orders, so a pre-scan that latches on any `both` and one that ignores
+    # `both` entirely each fail one half.
+    V5="$(drive_in "$BR" --all --tracer both --tracer fs_usage)"
+    V6="$(drive_in "$BR" --all --tracer fs_usage --tracer both)"
+    BOTH_ARMS=$((BOTH_ARMS+1))
+    case "$V5|$V6" in
+      "1|ERROR: must run as root"*"--tracer fs_usage"*"|2|ERROR: must run as root"*"--tracer both"*) ok "  a repeated --tracer refuses at the LAST value's code: 'both then fs_usage' at 1, 'fs_usage then both' at 2" ;;
+      *) bad "a repeated --tracer did not refuse at the last value's exit code: both,fs_usage $V5 / fs_usage,both $V6" ;;
+    esac
+    # A LINKED WORKTREE dies before the arguments are parsed, so it is the case the raw pre-scan
+    # exists for: 2 under both, still 1 otherwise.
+    ( cd "$BR" && git worktree add -q "$WORK/bothwt" -b bothwt ) >/dev/null 2>&1 || broken "could not add a linked worktree to the --tracer both repo"
+    W1="$(drive_in "$WORK/bothwt" --all --tracer both)"
+    W2="$(drive_in "$WORK/bothwt" --all --tracer fs_usage)"
+    BOTH_ARMS=$((BOTH_ARMS+1))
+    case "$W1|$W2" in
+      "2|ERROR:"*"LINKED worktree"*"|1|ERROR:"*"LINKED worktree"*) ok "a LINKED worktree refuses --tracer both at exit 2 before any parse, and the same refusal stays at 1 in fs_usage mode" ;;
+      *) bad "a linked worktree did not refuse at 2 under both / 1 otherwise: both $W1 / fs_usage $W2" ;;
+    esac
+
+    # THE NO-WRITE GUARANTEE, DRIVEN THROUGH THE WHOLE SCRIPT. Stubs stand in for every privileged
+    # or kernel-backed tool; `/usr/bin/log` is called by absolute path and cannot be PATH-stubbed,
+    # so a COPY of the deriver has its one LOG_BIN line pointed at a stub. The stub fs_usage sees
+    # five paths and the stub sandbox two, so the real loop must report exactly 1 sandbox miss.
+    # The seeded map carries a SECOND fixture's rows so that, with the guard deleted, the script
+    # passes every control and reaches the write -- the md5 arm is then about the guard, not about
+    # a control that happened to stop the run first.
+    SB="$WORK/bothstub"; mkdir -p "$SB" || broken "mkdir failed"
+    BOTH_TR="$(cd "$WORK" && pwd -P)/both.tr"
+    cat > "$SB/id" <<'STUB'
+#!/bin/bash
+[ "$#" -eq 1 ] && [ "$1" = -u ] && { echo 0; exit 0; }
+exec /usr/bin/id "$@"
+STUB
+    cat > "$SB/sudo" <<'STUB'
+#!/bin/bash
+while [ "$#" -gt 0 ]; do case "$1" in -n) shift ;; -u) shift 2 ;; *) break ;; esac; done
+exec "$@"
+STUB
+    cat > "$SB/sandbox-exec" <<'STUB'
+#!/bin/bash
+[ "$1" = -f ] && shift 2
+if [ "$1" = bash ]; then
+  while IFS= read -r p; do [ -n "$p" ] && printf 'x Sandbox: bash(1) allow file-read-data %s/%s\n' "$PWD" "$p"; done < "$STUB_SB" >> "$STUB_FEED"
+else
+  for a in "$@"; do case "$a" in /*) printf 'x Sandbox: cat(1) allow file-read-data %s\n' "$a" >> "$STUB_FEED" ;; esac; done
+fi
+exec "$@"
+STUB
+    cat > "$SB/fs_usage" <<'STUB'
+#!/bin/bash
+# Exits on its own once nobody reads it: `git push` runs hooks with SIGPIPE ignored, and the
+# deriver kills grep (the pipeline's last element), not this.
+emit() { printf '%s\n' "$1" || exit 0; }
+emit "00:00:00  open  F=3  (R_____)  $STUB_ROOT/m/.readset-sentinel  0.000010  cat.1"
+while IFS= read -r p; do [ -n "$p" ] && emit "00:00:00  open  F=3  (R_____)  $STUB_ROOT/t/$p  0.000010  bash.2"; done < "$STUB_FS"
+n=0; while [ "$n" -lt 300 ]; do sleep 0.2; emit heartbeat; n=$((n+1)); done
+STUB
+    cat > "$SB/logstream" <<'STUB'
+#!/bin/bash
+exec tail -n 0 -f "$STUB_FEED"
+STUB
+    chmod +x "$SB/id" "$SB/sudo" "$SB/sandbox-exec" "$SB/fs_usage" "$SB/logstream"
+    : > "$SB/feed"
+    printf '%s\n' core/fixtures/fxa/run.sh src/a.sh src/miss.sh .git/HEAD build.log > "$SB/fs.list"
+    printf '%s\n' core/fixtures/fxa/run.sh src/a.sh > "$SB/sb.list"
+    : > "$SB/empty.list"
+    STUB_DERIVER="$BR/core/scripts/derive-fixture-readsets.sh"
+    sed "s|^LOG_BIN=/usr/bin/log\$|LOG_BIN=\"$SB/logstream\"|" "$DERIVER" > "$SB/deriver.sh"
+    cmp -s "$DERIVER" "$SB/deriver.sh" && broken "the LOG_BIN line is gone from $DERIVER, so the stub world cannot point the stream at a stub"
+    sed '/^  exit "\$BOTH_RC"$/d' "$SB/deriver.sh" > "$SB/deriver.nowrite.sh"
+    cmp -s "$SB/deriver.sh" "$SB/deriver.nowrite.sh" && broken "the both-mode exit line is gone, so the no-write mutant cannot be built"
+    sum_of() { md5 -q "$1" 2>/dev/null || cksum < "$1"; }
+    stub_run() { # $1 deriver copy  $2 sandbox path list; prints "<rc>|<verdict line>|<fxa line>|<map moved?>"
+      local before after r
+      cp "$1" "$STUB_DERIVER"
+      before="$(sum_of "$BR/.ai-dlc-fixture-readsets.tsv")"
+      ( cd "$BR" && PATH="$SB:$PATH" SUDO_USER="$(id -un)" STUB_ROOT="$BOTH_TR" STUB_FEED="$SB/feed" \
+          STUB_FS="$SB/fs.list" STUB_SB="$2" AI_DLC_READSET_TRACE_ROOT="$BOTH_TR" \
+          bash core/scripts/derive-fixture-readsets.sh --list fxa --tracer both ) > "$WORK/stub.out" 2>&1 </dev/null
+      r=$?
+      after="$(sum_of "$BR/.ai-dlc-fixture-readsets.tsv")"
+      ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
+      printf '%s|%s|%s|%s' "$r" "$(grep -m1 -E '^(SANDBOX-MISSES|REFUSED)' "$WORK/stub.out")" \
+        "$(grep -m1 -E '^  fxa ' "$WORK/stub.out" | tr -s ' ')" "$([ "$before" = "$after" ] && echo same || echo MOVED)"
+    }
+    S1="$(stub_run "$SB/deriver.sh" "$SB/sb.list")"
+    BOTH_ARMS=$((BOTH_ARMS+1))
+    case "$S1" in
+      "1|SANDBOX-MISSES 1 path(s) across 1 fixture(s)"*"| fxa sandbox-missed 1 fs_usage-missed 0|same")
+        ok "a full stub-world --tracer both run reports 'fxa sandbox-missed 1 fs_usage-missed 0', reads SANDBOX-MISSES at exit 1, and leaves the map's md5 unchanged" ;;
+      *) bad "the stub-world --tracer both run did not read exactly one miss with the map unchanged: '$S1' — $(tail -3 "$WORK/stub.out" | tr '\n' ' ')" ;;
+    esac
+    S2="$(stub_run "$SB/deriver.sh" "$SB/empty.list")"
+    BOTH_ARMS=$((BOTH_ARMS+1))
+    case "$S2" in
+      "2|REFUSED: compared 0 of 1"*"fxa (sandbox set empty)"*"|same") ok "  and a sandbox that reported nothing for the fixture — how an unseen sudo -u child would look — is REFUSED at exit 2, not compared" ;;
+      *) bad "an empty sandbox set was not refused at exit 2 naming fxa: '$S2'" ;;
+    esac
+    S3="$(stub_run "$SB/deriver.nowrite.sh" "$SB/sb.list")"
+    BOTH_ARMS=$((BOTH_ARMS+1))
+    case "$S3" in
+      *"|MOVED") ok "NOWRITE MUTANT: with the both-mode exit deleted the same run WRITES the map (md5 moved) — that exit is the guard the arm above depends on" ;;
+      *) bad "NOWRITE MUTANT: the map did not move with the exit deleted, so the no-write arm proves nothing about it: '$S3' — $(tail -3 "$WORK/stub.out" | tr '\n' ' ')" ;;
+    esac
+  fi
 fi
 
 # THE SUMMARY IS ALSO A COMPLETENESS CHECK. This fixture once ended mid-file after an editing
 # mistake: it printed two thirds of its arms, never reached a verdict line, and exited 0 --
 # which the suite's worker records as `ok`. A fixture that dies silently reads exactly like one
 # that passed, so the arm count is asserted against the number this file actually carries.
-EXPECTED=$(( 18 + MERGE_ARMS + CONTROL_ARMS + TRACE_ARMS ))
+EXPECTED=$(( 18 + MERGE_ARMS + CONTROL_ARMS + TRACE_ARMS + BOTH_ARMS ))
 if [ "$asserts" -lt "$EXPECTED" ]; then
   printf '  FAIL  only %s assertions ran; this fixture carries %s — it exited early and a short green run reads exactly like a passing one\n' "$asserts" "$EXPECTED"
   fails=$((fails+1))

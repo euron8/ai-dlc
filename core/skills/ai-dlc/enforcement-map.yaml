@@ -90,6 +90,7 @@ empty_subject_verdict:
     - core/scripts/validate-scope-confirmation.sh
     - core/scripts/validate-spawn-ledger.sh
     - core/scripts/validate-write-format-steering.sh
+    - core/scripts/derive-fixture-readsets.sh
   readers:
     - core/skills/ai-dlc/steps/gate-validation.md
     - core/skills/ai-dlc/steps/retro.md

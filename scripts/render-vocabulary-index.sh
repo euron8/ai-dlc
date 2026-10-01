@@ -370,7 +370,69 @@ vocab_extract_review_verdicts() {
     | LC_ALL=C sort -u
 }
 
-IMPLEMENTED='ledger-statuses extension-kinds adjudicated-codes pr-class-keys intensity-table syntax-globs empty-subject-verdict inflight-statuses effort-levels review-verdicts'
+# THE `--cite` VERDICT GRAMMAR IS A VARIABLE, NOT A FUNCTION BODY, because it has two readers.
+# I117 in scripts/validate-enforcement-map.sh LIFTS this assignment out of this file by its own
+# quoting -- the opening line, the body, a lone closing quote -- and runs it, so the set this
+# index renders and the set that arm compares readers against are one program rather than two
+# copies that agree today. Keep the opening line and the lone closing quote exactly as they are.
+#
+# WHAT IT READS. Only the `if (CITE) {` block of core/scripts/validate-steering-budget.sh, to
+# its first column-0 closing brace: the same file prints a finding COUNT and a human report
+# through `console.log` further down, and neither is a `--cite` verdict. Inside the block, every
+# `console.log(` call is a verdict emitter, and each one is read up to its balancing paren:
+#   - every double-quoted literal is a member, so a ternary yields BOTH of its arms;
+#   - a template literal yields its leading word -- `MATCH ${ts}` is the member `MATCH`, and
+#     the timestamp after it is a value, not a verdict.
+# `console.error` is stderr and is never a member; a `//` line is a comment about an emitter.
+#
+# EVERY EMITTER MUST YIELD A MEMBER, AND ONE THAT DOES NOT IS REPORTED RATHER THAN SKIPPED. A
+# `console.log(verdict)` built from a variable is an emitter this grammar cannot spell, and
+# dropping it would render a set that is short by a member while looking complete. It prints
+# `U<TAB><line>`; members print `M<TAB><member>`. The renderer keeps the M lines and the zero
+# guard below; I117 refuses on any U line.
+#
+# NO APOSTROPHES AND NO LITERAL BACKTICK IN THE PROGRAM: it is a single-quoted shell string,
+# and the backtick is built with sprintf for I85s reason.
+CITE_VERDICTS_AWK='
+BEGIN { BQ = sprintf("%c", 96); DQ = sprintf("%c", 34); TB = sprintf("%c", 9) }
+/^if \(CITE\) \{/ { on = 1; next }
+on && /^\}/       { exit }
+!on               { next }
+/^[[:blank:]]*\/\// { next }
+{
+  rest = $0
+  while ((p = index(rest, "console.log(")) > 0) {
+    rest = substr(rest, p + 12)
+    depth = 1; got = 0; i = 1; n = length(rest)
+    while (i <= n && depth > 0) {
+      c = substr(rest, i, 1)
+      if (c == DQ) {
+        j = i + 1
+        while (j <= n && substr(rest, j, 1) != DQ) j++
+        printf "M%s%s\n", TB, substr(rest, i + 1, j - i - 1); got++
+        i = j + 1; continue
+      }
+      if (c == BQ) {
+        j = i + 1
+        while (j <= n && substr(rest, j, 1) ~ /[A-Za-z0-9_-]/) j++
+        if (j > i + 1) { printf "M%s%s\n", TB, substr(rest, i + 1, j - i - 1); got++ }
+        while (j <= n && substr(rest, j, 1) != BQ) j++
+        i = j + 1; continue
+      }
+      if (c == "(") depth++
+      if (c == ")") depth--
+      i++
+    }
+    if (!got) printf "U%s%d%s%s\n", TB, NR, TB, $0
+    rest = substr(rest, i)
+  }
+}
+'
+vocab_extract_cite_verdicts() {
+  awk "$CITE_VERDICTS_AWK" "$1" | awk -F"$(printf '\t')" '$1 == "M" { print $2 }' | LC_ALL=C sort -u
+}
+
+IMPLEMENTED='ledger-statuses extension-kinds adjudicated-codes pr-class-keys intensity-table syntax-globs empty-subject-verdict inflight-statuses effort-levels review-verdicts cite-verdicts'
 
 # =========================================================================================
 # THE PATH LISTS. A marker's `vocabulary-readers:` and `vocabulary-emitters:` fields carry
@@ -450,6 +512,7 @@ extract_with() { # extract_with <slug> <owner-path>
     inflight-statuses)  vocab_extract_inflight_statuses  "$2" ;;
     effort-levels)      vocab_extract_effort_levels      "$2" ;;
     review-verdicts)    vocab_extract_review_verdicts    "$2" ;;
+    cite-verdicts)      vocab_extract_cite_verdicts      "$2" ;;
     *) return 3 ;;
   esac
 }
@@ -880,6 +943,36 @@ printf '%s\n' \
   'PROBE_SIX | PROBE_SEVEN' > "$PROBE_DIR/reviewer-none.md"
 [ -z "$(vocab_extract_review_verdicts "$PROBE_DIR/reviewer-none.md")" ] || \
   probe_fail "the review-verdicts extractor returned a member from a file carrying no \`## Verdict\` template line; it is reading the parenthesised alternation the role file writes in prose, or a member named only in a bullet, rather than the template a review file is written from."
+
+# The `--cite` verdict seed carries every emitter shape the owner uses -- a ternary with two
+# literal arms, a template literal whose leading word is the member, a plain literal -- and
+# every shape that is NOT an emitter: a `console.log` BEFORE the block and AFTER it (the owner
+# prints a count and a report there), a `console.error` inside it, and a `//` line inside it
+# naming a member in an emitter call. The members are synthetic, so a scan for the real ones
+# cannot be satisfied by this file.
+cvq='"'; cvb="$(printf '\140')"
+{ printf '%s\n' "console.log(${cvq}PROBE-BEFORE${cvq});"
+  printf '%s\n' 'if (CITE) {'
+  printf '%s\n' "  console.error(${cvq}PROBE-STDERR${cvq});"
+  printf '%s\n' "  // console.log(${cvq}PROBE-COMMENTED${cvq});"
+  printf '%s\n' "    console.log(n ? ${cvq}PROBE-ALPHA${cvq} : ${cvq}PROBE-BETA${cvq}); process.exit(2);"
+  printf '%s\n' "      console.log(${cvb}PROBE-GAMMA \${r.ts}${cvb}); process.exit(0);"
+  printf '%s\n' "  console.log(${cvq}PROBE-DELTA${cvq}); process.exit(2);"
+  printf '%s\n' '}'
+  printf '%s\n' "console.log(${cvq}PROBE-AFTER${cvq});"
+} > "$PROBE_DIR/cite.js"
+probe_extract cite-verdicts "$PROBE_DIR/cite.js" "PROBE-ALPHA PROBE-BETA PROBE-DELTA PROBE-GAMMA"
+# THE UNSPELLABLE EMITTER IS REPORTED, NOT DROPPED. A verdict printed from a variable yields no
+# member, and a grammar that skipped it would render a set short by one while looking whole.
+printf '%s\n' 'if (CITE) {' "  console.log(${cvq}PROBE-ALPHA${cvq});" '  console.log(verdict);' '}' > "$PROBE_DIR/cite-var.js"
+cv_u="$(awk "$CITE_VERDICTS_AWK" "$PROBE_DIR/cite-var.js" | awk -F"$(printf '\t')" '$1 == "U" { print $2 }')"
+[ "$cv_u" = "3" ] || \
+  probe_fail "the cite-verdicts grammar reported unspellable emitter line(s) '$cv_u' on a seed whose only one is line 3. I117 refuses on that report; if it cannot fire, a verdict built from a variable vanishes from the set unnoticed."
+# NEAR-MISS: no `if (CITE) {` block at all. The count and report emitters outside it are not
+# verdicts, so a file-wide reader returns them and the shipped one returns nothing.
+printf '%s\n' "console.log(${cvq}PROBE-BEFORE${cvq});" 'if (COUNT) {' "  console.log(${cvq}PROBE-NOTCITE${cvq});" '}' > "$PROBE_DIR/cite-none.js"
+[ -z "$(vocab_extract_cite_verdicts "$PROBE_DIR/cite-none.js")" ] || \
+  probe_fail "the cite-verdicts extractor returned a member from a file carrying no \`if (CITE) {\` block; it is reading every console.log in the file, and the owner prints a finding count and a report that are not verdicts."
 
 # --- probe 3b: the PATH lists, positive and in every near-miss direction ---------------
 # The seed carries both lists, a scalar `token:` inside the block, and a decoy list under a

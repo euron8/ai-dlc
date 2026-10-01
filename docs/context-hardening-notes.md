@@ -8,6 +8,11 @@ This document is the honest contract between the design and the
 user. If you are maintaining or extending the context-management
 rules, read this first.
 
+**LOG — unbounded by design; rotation does not apply.** Stories behind the resident rules are
+appended here (`.claude/rules/resident-context.md` sends them here), and the file is a history,
+like `CHANGELOG.md`, not a queue. That is an operator ruling of batch 177
+(`docs/plans/graph-ledger-full-drain.md`, OPERATOR RULINGS THIS BATCH).
+
 ---
 
 ## What changed

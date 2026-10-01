@@ -7,10 +7,43 @@
 #
 # `--tracer sandbox` replaces fs_usage with the kernel's own Sandbox reports (a scoped
 # `sandbox-exec` profile read through `log stream`) and needs NO root -- run it WITHOUT sudo.
-# fs_usage stays the default until one root run traces every fixture with both tracers and the
-# sandbox misses nothing outside `.git/**` and `.gitignore` (BL-375). The sandbox cannot see a
-# read by a process outside the fixture's lineage (an XPC or launchd helper), and `log stream`
-# DROPS reports under load; a window carrying a drop notice omits its fixture.
+# The sandbox cannot see a read by a process outside the fixture's lineage (an XPC or launchd
+# helper), and `log stream` DROPS reports under load; a window carrying a drop notice omits its
+# fixture.
+#
+# `--tracer both` IS THE COMPARISON THAT DECIDES WHETHER THE SANDBOX MAY REPLACE fs_usage:
+#     sudo bash core/scripts/derive-fixture-readsets.sh --all --tracer both     (or --list)
+# fs_usage stays the default until this run reads SANDBOX-MISSES-NOTHING over every fixture.
+#   * NEEDS ROOT, because fs_usage does. The fixture still runs unprivileged: it is started as
+#     `sudo -n -u "$SUDO_USER" sandbox-exec -f <profile> bash <run.sh>`, ONCE, under both tracers
+#     at the same time, so the two sets describe one execution rather than two.
+#   * NEVER WRITES THE MAP. It is a measurement of the tracers, not a derivation; the map stays
+#     whatever the last fs_usage run wrote. The union of the three tracers is still collected per
+#     fixture, so the loop body is the one the other modes run, but the script exits at the
+#     verdict and never reaches the write.
+#   * ONE LINE PER FIXTURE with two counts: `sandbox-missed` (in fs_usage, not in the sandbox --
+#     the count the verdict reads) and `fs_usage-missed` (the reverse, informational: negative
+#     lookups fs_usage does not record were measured in that direction and are safe).
+#   * A MISS IS fs_usage MINUS sandbox, NOT fs_usage MINUS (sandbox UNION atime). The stricter set
+#     can only over-report, so a clean verdict under it is clean under the looser one too; on the
+#     four fixtures measured so far the two agreed (sandbox UNION atime = sandbox).
+#   * TWO EXCLUSIONS, applied to BOTH sets before they are compared, and nothing else:
+#       `.git` and `.git/**`, by PREFIX. The pre-push runner strips exactly those from the map's
+#       universe before matching, so a row there can never select or skip a fixture -- and
+#       `git check-ignore` answers NOT-ignored for `.git/HEAD`, so the ignore filter would keep it.
+#       Every path `git check-ignore` calls IGNORED, through drop_ignored -- the same filter every
+#       map row already passes through, so an ignored path can never become a map row either way.
+#       The FILE `.gitignore` is NOT excluded: it is tracked, the map carries it as a read of many
+#       fixtures, and the runner does not strip it, so it is a live skip input like any other.
+#   * EXIT 0 = `SANDBOX-MISSES-NOTHING`; 1 = `SANDBOX-MISSES <n> path(s) across <m> fixture(s)`;
+#     2 = REFUSED, and every refusal in this mode is 2, including the ones that exit 1 in the
+#     other modes (not root, SUDO_USER unset, a missing tool, a LINKED WORKTREE -- which dies
+#     before the arguments are parsed, so the mode is read off the raw arguments first). It is
+#     also 2 whenever fewer fixtures were COMPARED than were LISTED, naming each uncompared one
+#     and why (fixture exit, settle, flush, a stream drop, a dirty tree, either set empty): a
+#     verdict over part of the suite must never read as a verdict over all of it. An EMPTY
+#     sandbox set is its own reason because it is how a root `log stream` that cannot see the
+#     `sudo -u` child's reports would present -- not measurable without root, so refused.
 #
 # ---------------------------------------------------------------------------------------
 # WHY IT LIVES IN core/scripts/ AND SHIPS. It did not, for the whole life of the read-set
@@ -96,9 +129,28 @@ set -uo pipefail
 # at `scripts/ai-dlc/` in an installed tree; a fixed number of hops is correct in exactly one of
 # them and silently names a subdirectory in the other. `git rev-parse` is the marker both
 # layouts share, and it is what both pre-push hooks already use.
+#
+# `--tracer both` IS READ OFF THE RAW ARGUMENTS HERE, BEFORE THE CHECK BELOW, because in that mode
+# exit 1 is a VERDICT (the sandbox missed something) and a refusal at 1 would read as one. Read
+# pairwise, so a fixture that happens to be NAMED `both` in a `--list` does not switch the mode.
+# THE LAST `--tracer` WINS, because the parser below overwrites TRACER on each one: every
+# occurrence sets the code from its own value, so `--tracer both --tracer fs_usage` refuses at 1.
+DIE_RC=1
+_prev=""
+for _a in "$@"; do
+  if [ "$_prev" = --tracer ]; then
+    if [ "$_a" = both ]; then DIE_RC=2; else DIE_RC=1; fi
+  else
+    case "$_a" in
+      --tracer=both) DIE_RC=2 ;;
+      --tracer=*)    DIE_RC=1 ;;
+    esac
+  fi
+  _prev="$_a"
+done
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
 [ -n "$REPO_ROOT" ] && [ -d "$REPO_ROOT/.git" ] || {
-  echo "ERROR: not inside a git work tree. The map is a tracked artifact of one repository and the trace copies its .git; there is nothing to derive from here." >&2; exit 1; }
+  echo "ERROR: not inside a git work tree, or inside a LINKED worktree (whose .git is a file). The map is a tracked artifact of one repository and the trace copies its .git; there is nothing to derive from here." >&2; exit "$DIE_RC"; }
 MAP="$REPO_ROOT/.ai-dlc-fixture-readsets.tsv"
 
 # System daemons that walk the filesystem on their own schedule and are never part of a
@@ -107,10 +159,15 @@ MAP="$REPO_ROOT/.ai-dlc-fixture-readsets.tsv"
 # dependency and fixtures copy trees constantly.
 DAEMONS='fseventsd|mds|mds_stores|mdworker|mdworker_shared|mdsync|Spotlight|distnoted|cfprefsd|syspolicyd|opendirectoryd|securityd|notifyd|logd|UserEventAgent|revisiond|backupd|diskarbitrationd|coreauthd|trustd|nsurlsessiond|Finder|fmfd|photoanalysisd|cloudd|bird|CrashReporter'
 
-die() { echo "ERROR: $*" >&2; exit 1; }
+# ONE ASSIGNMENT, ON ITS OWN LINE, so core/fixtures/readset-skip can point a COPY of this script at
+# a stub stream: `/usr/bin/log` is called by absolute path (zsh shadows `log` with a builtin), so a
+# PATH stub can never stand in for it. Not an environment knob.
+LOG_BIN=/usr/bin/log
+
+die() { echo "ERROR: $*" >&2; exit "$DIE_RC"; }
 say() { echo "[$(date +%H:%M:%S)] $*"; }
 
-USAGE="usage: bash $0 [--all | --list \"<fixtures>\"] [--tracer fs_usage|sandbox]   (fs_usage needs sudo)"
+USAGE="usage: bash $0 [--all | --list \"<fixtures>\"] [--tracer fs_usage|sandbox|both]   (fs_usage and both need sudo)"
 MODE=""; LIST_ARG=""; TRACER="fs_usage"
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -122,7 +179,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 : "${MODE:=--all}"
-case "$TRACER" in fs_usage|sandbox) ;; *) die "unknown --tracer '$TRACER'. $USAGE" ;; esac
+case "$TRACER" in fs_usage|sandbox|both) ;; *) die "unknown --tracer '$TRACER'. $USAGE" ;; esac
 
 # EACH TRACER HAS ITS OWN TRACE ROOT. The fs_usage run creates its tree as root and then chowns
 # only the tree, so a root-owned TRACE_ROOT is left behind; a later sandbox run -- unprivileged by
@@ -130,6 +187,8 @@ case "$TRACER" in fs_usage|sandbox) ;; *) die "unknown --tracer '$TRACER'. $USAG
 # A sandbox run also REFUSES any existing root it does not own, rather than attempting the delete.
 if [ "$TRACER" = sandbox ]; then
   TRACE_ROOT="${AI_DLC_READSET_TRACE_ROOT:-/private/tmp/ai-dlc-readset-sandbox-$(id -u)}"
+elif [ "$TRACER" = both ]; then
+  TRACE_ROOT="${AI_DLC_READSET_TRACE_ROOT:-/private/tmp/ai-dlc-readset-both}"
 else
   TRACE_ROOT="${AI_DLC_READSET_TRACE_ROOT:-/private/tmp/ai-dlc-readset}"
 fi
@@ -299,9 +358,19 @@ command -v python3  >/dev/null || die "python3 not found (path normalisation)"
 # THE ROOT CHECK BELONGS TO fs_usage, NOT TO THE DERIVATION. The sandbox tracer is unprivileged
 # end to end, and it REFUSES root instead: its fixtures run as whoever invoked it, and a fixture
 # run as root reads past every permission-refusal arm and comes back with a short read-set.
-if [ "$TRACER" = fs_usage ]; then
-  [ "$(id -u)" = "0" ] || die "must run as root -- fs_usage needs it. Use: sudo bash $0 $MODE${LIST_ARG:+ \"$LIST_ARG\"}   (or --tracer sandbox, which needs no root)"
+#
+# `--tracer both` takes the fs_usage half of this (root, and a non-root SUDO_USER to run fixtures
+# as) AND the sandbox half's tools. Its fixture runs as `sudo -n -u "$RUN_AS" sandbox-exec`, so
+# everything root writes that the child must READ -- the profile, the marker directory, the
+# markers -- is created under umask 022.
+if [ "$TRACER" = fs_usage ] || [ "$TRACER" = both ]; then
+  [ "$(id -u)" = "0" ] || die "must run as root -- fs_usage needs it. Use: sudo bash $0 $MODE${LIST_ARG:+ \"$LIST_ARG\"} --tracer $TRACER"
   command -v fs_usage >/dev/null || die "fs_usage not found; this derivation is macOS-only"
+  if [ "$TRACER" = both ]; then
+    command -v sandbox-exec >/dev/null || die "sandbox-exec not found; --tracer both is macOS-only"
+    [ -x "$LOG_BIN" ] || die "$LOG_BIN not found; --tracer both reads the kernel's Sandbox reports through 'log stream'"
+    umask 022
+  fi
   RUN_AS="${SUDO_USER:-}"
   [ -n "$RUN_AS" ] && [ "$RUN_AS" != "root" ] || die \
 "cannot determine the invoking user (SUDO_USER unset). Fixtures MUST NOT run as root: a
@@ -311,7 +380,7 @@ if [ "$TRACER" = fs_usage ]; then
 else
   [ "$(id -u)" != "0" ] || die "--tracer sandbox must NOT run as root: its fixtures run as the invoking user, and a fixture run as root passes permission-refusal arms by reading anyway, which shortens its read-set permanently. Run it from a normal account, without sudo."
   command -v sandbox-exec >/dev/null || die "sandbox-exec not found; --tracer sandbox is macOS-only"
-  [ -x /usr/bin/log ] || die "/usr/bin/log not found; --tracer sandbox reads the kernel's Sandbox reports through 'log stream'"
+  [ -x "$LOG_BIN" ] || die "$LOG_BIN not found; --tracer sandbox reads the kernel's Sandbox reports through 'log stream'"
   RUN_AS="$(id -un)"
 fi
 
@@ -413,6 +482,8 @@ drop_ignored() { # reads paths on stdin (repo-relative), writes the non-ignored 
 
 if [ "$TRACER" = fs_usage ]; then
   say "fs_usage runs as root; fixtures run as '$RUN_AS'"
+elif [ "$TRACER" = both ]; then
+  say "both tracers: fs_usage and log stream run as root; each fixture runs ONCE as '$RUN_AS' under sandbox-exec; the map is NOT written"
 else
   say "sandbox tracer: fixtures run as '$RUN_AS' under sandbox-exec; no root anywhere"
   [ ! -e "$TRACE_ROOT" ] || [ -O "$TRACE_ROOT" ] || die "$TRACE_ROOT exists and is not owned by '$RUN_AS' (a root fs_usage run leaves one behind). Refusing to delete it; point AI_DLC_READSET_TRACE_ROOT elsewhere."
@@ -436,8 +507,13 @@ ENDMARK="$TREE/.readset-end"
 # Measured on the reference consumer: 8 start and 6 end marker lines in one fixture's stream,
 # where one of each is expected. A sibling directory the fixture never walks is reported under
 # the same profile and stream, and sandbox_paths keeps only paths under the tree.
+#
+# UNDER `--tracer both` THE MARKERS ARE IN $MARKDIR TOO, and fs_usage is told to keep that prefix
+# as well as the tree's (`-e "$TREE/" -e "$MARKDIR/"` below). Widening its filter to the whole
+# $TRACE_ROOT/ instead would feed it its own output: the raw capture is written under $WORK, which
+# is under that root, so every line grep writes is an fs_usage event grep then matches again.
 MARKDIR="$TRACE_ROOT/m"
-if [ "$TRACER" = sandbox ]; then
+if [ "$TRACER" = sandbox ] || [ "$TRACER" = both ]; then
   mkdir -p "$MARKDIR" || die "cannot create $MARKDIR"
   SENTINEL="$MARKDIR/.readset-sentinel"
   ENDMARK="$MARKDIR/.readset-end"
@@ -445,7 +521,7 @@ fi
 say "copying the tree to $TREE"
 readset_copy_tree "$REPO_ROOT" "$TREE" "$WORK" || die "copy failed"
 [ -d "$TREE/.git" ] || die "copy carries no .git; git-backed fixtures would fail for the wrong reason"
-if [ "$TRACER" = fs_usage ]; then
+if [ "$TRACER" = fs_usage ] || [ "$TRACER" = both ]; then
   chown -R "$RUN_AS" "$TREE" || die "chown failed"
 fi
 # The sentinels live inside the tree because the tracer filters on the tree prefix, which
@@ -460,7 +536,18 @@ printf '.readset-sentinel\n.readset-end\n' >> "$TREE/.git/info/exclude"
 # AI_DLC_READSET_SANDBOX_PROFILE names a replacement profile file, `@TREE@` substituted -- it
 # exists so core/fixtures/readset-skip can force event loss with an unscoped profile and prove
 # the refusal below fires. It is not a tuning knob.
-if [ "$TRACER" = sandbox ]; then
+#
+# sandboxed() RUNS ONE COMMAND THE WAY THIS TRACER RUNS A FIXTURE. Under `both` the caller is root,
+# and a fixture must never be: it drops to the invoking user BEFORE entering the profile, so the
+# probe, both marker reads and the fixture itself all execute as the user the map is derived for.
+sandboxed() {
+  if [ "$TRACER" = both ]; then
+    sudo -n -u "$RUN_AS" sandbox-exec -f "$PROFILE" "$@"
+  else
+    sandbox-exec -f "$PROFILE" "$@"
+  fi
+}
+if [ "$TRACER" = sandbox ] || [ "$TRACER" = both ]; then
   PROFILE="$WORK/sandbox.sb"
   if [ -n "${AI_DLC_READSET_SANDBOX_PROFILE:-}" ]; then
     [ -r "$AI_DLC_READSET_SANDBOX_PROFILE" ] || die "AI_DLC_READSET_SANDBOX_PROFILE names an unreadable file"
@@ -473,7 +560,7 @@ if [ "$TRACER" = sandbox ]; then
     printf '(version 3)\n(allow default)\n(allow file* process-exec* (subpath "%s") (subpath "%s") (with report))\n' "$TREE" "$MARKDIR" > "$PROFILE" \
       || die "cannot write $PROFILE"
   fi
-  sandbox-exec -f "$PROFILE" true 2>"$WORK/sandbox-probe.err" \
+  sandboxed true 2>"$WORK/sandbox-probe.err" </dev/null \
     || die "sandbox-exec refused the profile: $(head -1 "$WORK/sandbox-probe.err")"
 fi
 
@@ -500,8 +587,72 @@ reset_atimes() {
   return 0
 }
 
+# READSET_BOTH_BEGIN
+# `--tracer both`: the comparison of one fixture's two sets, and the closing verdict over all of
+# them. Kept between sentinels because the rest of this mode needs root: core/fixtures/readset-skip
+# extracts THIS block and drives it, so the miss definition and the verdict under test are the
+# shipped ones. readset_both_compare calls drop_ignored, which the fixture sources from its own span.
+#
+# THE TWO EXCLUSIONS, AND NOTHING ELSE (see the header for why each): `.git` and `.git/**` by
+# prefix, then every path `git check-ignore` calls ignored. drop_ignored FAILS OPEN -- if
+# check-ignore cannot run every path is kept -- so a broken filter can only ADD misses, which
+# refuses the replacement rather than approving it.
+readset_both_comparable() {
+  awk '$0 != "" && $0 != ".git" && index($0, ".git/") != 1' | drop_ignored
+}
+#   $1 the fs_usage set   $2 the sandbox set   $3 output prefix
+# Writes $3.sbmiss (in fs_usage, not in the sandbox -- the verdict's subject) and $3.fsmiss (the
+# reverse), and prints `<sandbox-missed> <fs_usage-missed>`. Returns 2 if either set is unreadable.
+readset_both_compare() {
+  local fs="$1" sb="$2" out="$3"
+  [ -r "$fs" ] && [ -r "$sb" ] || return 2
+  readset_both_comparable < "$fs" > "$out.fs.cmp" || return 2
+  readset_both_comparable < "$sb" > "$out.sb.cmp" || return 2
+  LC_ALL=C comm -23 "$out.fs.cmp" "$out.sb.cmp" > "$out.sbmiss" || return 2
+  LC_ALL=C comm -13 "$out.fs.cmp" "$out.sb.cmp" > "$out.fsmiss" || return 2
+  printf '%s %s\n' "$(wc -l < "$out.sbmiss" | tr -d ' ')" "$(wc -l < "$out.fsmiss" | tr -d ' ')"
+}
+#   $1 the LISTED fixtures (whitespace-separated)   $2 the results file, one row per fixture the
+#   loop finished: `<fx>\tcompared\t<sandbox-missed>\t<fs_usage-missed>\t` or
+#   `<fx>\tuncompared\t-\t-\t<why>`   $3 the missed-paths file it names   $4 scratch dir
+# Prints ONE verdict line and returns 0, 1 or 2.
+#
+# COMPARED IS COUNTED AGAINST LISTED, NEVER AGAINST THE ROWS PRESENT. A loop that died part-way
+# leaves no row for the fixtures after it, and a verdict read off the rows alone would be clean over
+# whatever subset happened to finish -- a comparison passing having compared almost nothing.
+readset_both_verdict() {
+  local list="$1" results="$2" missed="$3" scratch="$4" f
+  [ -r "$results" ] || { echo "REFUSED: EXAMINED NOTHING -- the results file $results is unreadable"; return 2; }
+  : > "$scratch/both.listed" || { echo "REFUSED: cannot write $scratch/both.listed"; return 2; }
+  for f in $list; do printf '%s\n' "$f" >> "$scratch/both.listed"; done
+  awk -F'\t' -v missed="$missed" '
+    FILENAME == ARGV[1] { if ($0 != "") listed[++n] = $0; next }
+    { st[$1] = $2; sb[$1] = $3; why[$1] = $5 }
+    END {
+      if (n == 0) { print "REFUSED: EXAMINED NOTHING -- no fixture was listed, and a comparison over none is not a verdict"; exit 2 }
+      c = 0; u = ""; N = 0; M = 0
+      for (i = 1; i <= n; i++) {
+        f = listed[i]
+        if ((f in st) == 0)         { u = u (u == "" ? "" : "; ") f " (no result row -- the loop never finished it)" }
+        else if (st[f] != "compared") { u = u (u == "" ? "" : "; ") f " (" why[f] ")" }
+        else if (sb[f] !~ /^[0-9]+$/) { u = u (u == "" ? "" : "; ") f " (unreadable miss count)" }
+        else { c++; if (sb[f] > 0) { N += sb[f]; M++ } }
+      }
+      if (c < n) {
+        printf "REFUSED: compared %d of %d listed fixture(s) -- a verdict over part of the suite is not one over all of it. Uncompared: %s\n", c, n, u
+        exit 2
+      }
+      if (N > 0) { printf "SANDBOX-MISSES %d path(s) across %d fixture(s) -- each listed as <fixture>TAB<path> in %s\n", N, M, missed; exit 1 }
+      printf "SANDBOX-MISSES-NOTHING -- %d of %d listed fixture(s) compared; no path outside .git/** and the ignored set was seen by fs_usage and not by the sandbox\n", c, n
+      exit 0
+    }' "$scratch/both.listed" "$results"
+}
+# READSET_BOTH_END
+
 OMITTED=""; MAPPED=0; TOTAL_PATHS=0
 : > "$WORK/map"
+: > "$WORK/both.results"
+: > "$WORK/both.missed"
 
 # THE SANDBOX TRACER'S EXTRACTION. One kernel report per line:
 #   ... Sandbox: <proc>(<pid>) allow <op> <TREE>/<path>
@@ -533,14 +684,23 @@ for fx in $LIST; do
   echo "end-$fx" > "$ENDMARK"
   reset_atimes
 
-  if [ "$TRACER" = fs_usage ]; then
+  fsu_pid=""
+  if [ "$TRACER" = both ]; then
+    # TWO CAPTURES OF ONE EXECUTION. fs_usage keeps the marker prefix as well as the tree's, so
+    # the sentinel both tracers settle on is the SAME read, in the same window.
+    fs_usage -w -f filesys 2>/dev/null | grep --line-buffered -F -e "$TREE/" -e "$MARKDIR/" > "$raw.fsu" &
+    fsu_pid=$!
+    "$LOG_BIN" stream --level debug --style compact \
+      --predicate "sender == \"Sandbox\" AND eventMessage CONTAINS \"$TRACE_ROOT/\"" > "$raw" 2>&1 &
+    fs_pid=$!
+  elif [ "$TRACER" = fs_usage ]; then
     fs_usage -w -f filesys 2>/dev/null | grep --line-buffered -F "$TREE/" > "$raw" &
     fs_pid=$!
   else
     # STARTED BEFORE THE FIXTURE, per window. `log show` afterwards returns nothing for these
     # reports, so a stream that was not live when an event fired has lost it for good -- which is
     # why the settle loop below and the end sentinel after the fixture are both required.
-    /usr/bin/log stream --level debug --style compact \
+    "$LOG_BIN" stream --level debug --style compact \
       --predicate "sender == \"Sandbox\" AND eventMessage CONTAINS \"$TRACE_ROOT/\"" > "$raw" 2>&1 &
     fs_pid=$!
   fi
@@ -555,9 +715,14 @@ for fx in $LIST; do
     if [ "$TRACER" = fs_usage ]; then
       cat "$SENTINEL" >/dev/null 2>&1
     else
-      sandbox-exec -f "$PROFILE" cat "$SENTINEL" >/dev/null 2>&1
+      sandboxed cat "$SENTINEL" >/dev/null 2>&1 </dev/null
     fi
-    if grep -q 'readset-sentinel' "$raw" 2>/dev/null; then settled=1; break; fi
+    # Under `both`, settled means BOTH captures carry the sentinel: a fixture started when only
+    # one tracer was live would be compared against a set that missed its opening reads.
+    if grep -q 'readset-sentinel' "$raw" 2>/dev/null \
+       && { [ "$TRACER" != both ] || grep -q 'readset-sentinel' "$raw.fsu" 2>/dev/null; }; then
+      settled=1; break
+    fi
     sleep 0.2; i=$(( i + 1 ))
   done
 
@@ -570,7 +735,7 @@ for fx in $LIST; do
     ( cd "$TREE" && sudo -n -u "$RUN_AS" bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
     rc=$?
   else
-    ( cd "$TREE" && sandbox-exec -f "$PROFILE" bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
+    ( cd "$TREE" && sandboxed bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
     rc=$?
   fi
 
@@ -589,11 +754,17 @@ for fx in $LIST; do
     # the fixture's. No end sentinel, no trustworthy window: the fixture is omitted below.
     flushed=0; i=0
     while [ "$i" -lt 100 ]; do
-      sandbox-exec -f "$PROFILE" cat "$ENDMARK" >/dev/null 2>&1
+      sandboxed cat "$ENDMARK" >/dev/null 2>&1 </dev/null
       if grep -q 'readset-end' "$raw" 2>/dev/null; then flushed=1; break; fi
       sleep 0.2; i=$(( i + 1 ))
     done
     kill "$fs_pid" 2>/dev/null; wait "$fs_pid" 2>/dev/null
+    if [ -n "$fsu_pid" ]; then
+      # Same reaping as the fs_usage mode: `$!` is grep, so the tracer itself is named too.
+      sleep 1
+      kill "$fsu_pid" 2>/dev/null; wait "$fsu_pid" 2>/dev/null
+      pkill -x fs_usage 2>/dev/null; sleep 0.5
+    fi
   fi
 
   # atime moved off the forced epoch == the file was READ.
@@ -636,8 +807,18 @@ for fx in $LIST; do
     lost="$(grep -c 'dropped during' "$WORK/$fx.win" 2>/dev/null)" || lost=0
     sandbox_paths < "$WORK/$fx.win" | grep -v '^-\?$' | norm > "$WORK/$fx.fs"
   fi
+  # Under `both`, the fs_usage capture is extracted exactly as the fs_usage mode extracts it, from
+  # its OWN last sentinel line, into $fx.fsu. $fx.fs above is then the sandbox set.
+  : > "$WORK/$fx.fsu"
+  if [ "$TRACER" = both ]; then
+    flast="$(grep -n 'readset-sentinel' "$raw.fsu" 2>/dev/null | tail -1 | cut -d: -f1)"; : "${flast:=0}"
+    tail -n "+$(( flast + 1 ))" "$raw.fsu" 2>/dev/null \
+      | grep -v 'RdData\|WrData' \
+      | awk -v d="^($DAEMONS)(\\\\.[0-9]+)?$" '{ p=$NF; sub(/\.[0-9]+$/,"",p); if (p !~ d) print }' \
+      | grep -oE "$TREE/[^ ]*" | sed "s|^$TREE/*||" | grep -v '^-\?$' | norm > "$WORK/$fx.fsu"
+  fi
 
-  cat "$WORK/$fx.at" "$WORK/$fx.fs" | LC_ALL=C sort -u \
+  cat "$WORK/$fx.at" "$WORK/$fx.fs" "$WORK/$fx.fsu" | LC_ALL=C sort -u \
     | grep -v '^\.readset-sentinel$' | grep -v '^\.readset-end$' | drop_ignored > "$WORK/$fx.set"
   n="$(grep -c . "$WORK/$fx.set" 2>/dev/null)"; case "$n" in ''|*[!0-9]*) n=0 ;; esac
 
@@ -651,15 +832,48 @@ for fx in $LIST; do
   [ "$n" -gt 0 ]      || why="${why:+$why; }empty read-set"
   [ "$dirty" -le "$DIRTY_BASE" ] || why="${why:+$why; }fixture wrote $(( dirty - DIRTY_BASE )) path(s) into the tree"
 
+  if [ "$TRACER" = both ]; then
+    # EITHER SET EMPTY IS ITS OWN REASON. An empty sandbox set is what a root `log stream` that
+    # cannot see the `sudo -u` child's reports would produce, and compared against it fs_usage
+    # would show every path as a sandbox miss -- or, the other way round, nothing to compare.
+    [ -s "$WORK/$fx.fsu" ] || why="${why:+$why; }fs_usage set empty"
+    [ -s "$WORK/$fx.fs" ]  || why="${why:+$why; }sandbox set empty"
+    if [ -z "$why" ]; then
+      counts="$(readset_both_compare "$WORK/$fx.fsu" "$WORK/$fx.fs" "$WORK/$fx.cmp")" \
+        || { counts=""; why="the comparison could not read its two sets"; }
+    fi
+    if [ -n "$why" ]; then
+      printf '%s\tuncompared\t-\t-\t%s\n' "$fx" "$why" >> "$WORK/both.results"
+      printf '  %-32s UNCOMPARED (%s)\n' "$fx" "$why"
+    else
+      sbm="${counts%% *}"; fsm="${counts##* }"
+      printf '%s\tcompared\t%s\t%s\t\n' "$fx" "$sbm" "$fsm" >> "$WORK/both.results"
+      awk -v f="$fx" '{ print f "\t" $0 }' "$WORK/$fx.cmp.sbmiss" >> "$WORK/both.missed"
+      printf '  %-32s sandbox-missed %5s   fs_usage-missed %5s\n' "$fx" "$sbm" "$fsm"
+    fi
+  fi
+
   if [ -n "$why" ]; then
     OMITTED="${OMITTED}${OMITTED:+ }$fx"
-    printf '  %-32s OMITTED (%s) -- will always run\n' "$fx" "$why"
+    [ "$TRACER" = both ] || printf '  %-32s OMITTED (%s) -- will always run\n' "$fx" "$why"
   else
     awk -v f="$fx" '{ print f "\t" $0 }' "$WORK/$fx.set" >> "$WORK/map"
     MAPPED=$(( MAPPED + 1 )); TOTAL_PATHS=$(( TOTAL_PATHS + n ))
-    printf '  %-32s %5s paths\n' "$fx" "$n"
+    [ "$TRACER" = both ] || printf '  %-32s %5s paths\n' "$fx" "$n"
   fi
 done
+
+# `--tracer both` ENDS HERE, AT ITS VERDICT, AND NEVER REACHES THE WRITE BELOW. The loop above still
+# built $WORK/map exactly as the other modes do, so this exit is the ONLY thing between a
+# comparison run and a rewritten map -- core/fixtures/readset-skip deletes it in a copy and asserts
+# the map's md5 then moves, which is how this guard is known to be the one that holds.
+if [ "$TRACER" = both ]; then
+  BOTH_LINE="$(readset_both_verdict "$LIST" "$WORK/both.results" "$WORK/both.missed" "$WORK")"
+  BOTH_RC=$?
+  echo "$BOTH_LINE"
+  say "the map was NOT written (--tracer both compares tracers; it never derives)"
+  exit "$BOTH_RC"
+fi
 
 # ---------------------------------------------------------------------- controls ----
 # A map is only worth shipping if it still selects the fixture that caught a real regression,
@@ -770,6 +984,7 @@ M_PATH="$(cut -f2 "$MERGED" | sort -u | wc -l | tr -d ' ')"
 
 {
   echo "# GENERATED by derive-fixture-readsets.sh -- DO NOT EDIT BY HAND."
+  echo "# LOG -- unbounded by design; rotation does not apply. It grows with the fixture suite and is regenerated whole, never trimmed."
   echo "#"
   echo "# <fixture>\t<path it reads>. The pre-push suite runs a fixture when any changed path"
   echo "# is in its set, and ALWAYS runs a fixture that has no entry here -- absence means"

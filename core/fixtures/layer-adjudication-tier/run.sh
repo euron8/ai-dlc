@@ -1260,33 +1260,43 @@ fi
 
 # A loose object moved ASIDE, never deleted: a packed store has no such file, and a world whose
 # object was never removed reads exactly like an engine that read it fine.
+# The hidden copy sits BESIDE the repo, keyed on its path, because Part 12 hides the same blob sha
+# from other copies of the store and one shared name would let a later move overwrite an earlier.
 p11_hide_obj() { # <repo> <sha> -> 0 when the loose object existed and is now out of the store
   local f="$1/.git/objects/${2:0:2}/${2:2}"
   [ -n "$2" ] && [ -f "$f" ] || return 1
-  mv "$f" "$P11W/hidden-${2}" && [ ! -e "$f" ]
+  mv "$f" "${1}.hidden-${2}" && [ ! -e "$f" ]
+}
+
+# THE WORLD E BUILD, as a function because Part 12 drives the SAME build against a store it forced
+# auto-maintenance onto. A restatement there would be a second implementation of the thing whose
+# flake it exists to hold. Sets p11_ewhy: empty when the world was built.
+# Each way the build can fail is NAMED, because one message covering all of them ("not loose, or
+# the tree no longer names it, or it still reads") cannot say which one a flake was: the copy
+# incomplete, the sha empty, the object packed, or the object still readable after the move.
+p11_build_e() { # <repo copy> <theirs sha>
+  local r="$1" t="$2" blob
+  blob="$(git -C "$r" rev-parse -q --verify "${t}:${P11REL}" 2>/dev/null)" || blob=""
+  p11_ewhy=""
+  if [ -z "$blob" ]; then
+    p11_ewhy="rev-parse ${t}:${P11REL} answered empty in the copy"
+  elif ! git -C "$r" cat-file -e "$blob" 2>/dev/null; then
+    p11_ewhy="blob $blob is not readable in the copy BEFORE hiding, so cp -R did not copy the store whole"
+  elif [ ! -f "$r/.git/objects/${blob:0:2}/${blob:2}" ]; then
+    p11_ewhy="blob $blob is readable but not loose ($(git -C "$r" count-objects -v 2>/dev/null | awk '$1=="in-pack:"||$1=="packs:"' | tr '\n' ' ')), so something packed the store"
+  elif ! p11_hide_obj "$r" "$blob"; then
+    p11_ewhy="blob $blob is loose and could not be moved aside"
+  elif [ -z "$(git -C "$r" ls-tree --full-tree "$t" -- "$P11REL" 2>/dev/null)" ]; then
+    p11_ewhy="with the blob hidden the tree no longer names $P11REL"
+  elif git -C "$r" cat-file -e "${t}:${P11REL}" 2>/dev/null; then
+    p11_ewhy="with the blob hidden ${t}:${P11REL} still reads, so a second copy of it exists in the store"
+  fi
 }
 
 if [ "$p11_ready" = yes ]; then
   # E -- the contract's BLOB is missing, its tree entry present.
   P11E="$P11W/dist-blob"; cp -R "$DIST" "$P11E"
-  p11_blob="$(git -C "$P11E" rev-parse -q --verify "${P11T}:${P11REL}" 2>/dev/null)" || p11_blob=""
-  # Each way the build can fail is NAMED, because one message covering all of them ("not loose, or
-  # the tree no longer names it, or it still reads") cannot say which one a flake was: the copy
-  # incomplete, the sha empty, the object packed, or the object still readable after the move.
-  p11_ewhy=""
-  if [ -z "$p11_blob" ]; then
-    p11_ewhy="rev-parse ${P11T}:${P11REL} answered empty in the copy"
-  elif ! git -C "$P11E" cat-file -e "$p11_blob" 2>/dev/null; then
-    p11_ewhy="blob $p11_blob is not readable in the copy BEFORE hiding, so cp -R did not copy the store whole"
-  elif [ ! -f "$P11E/.git/objects/${p11_blob:0:2}/${p11_blob:2}" ]; then
-    p11_ewhy="blob $p11_blob is readable but not loose ($(git -C "$P11E" count-objects -v 2>/dev/null | awk '$1=="in-pack:"||$1=="packs:"' | tr '\n' ' ')), so something packed the store"
-  elif ! p11_hide_obj "$P11E" "$p11_blob"; then
-    p11_ewhy="blob $p11_blob is loose and could not be moved aside"
-  elif [ -z "$(git -C "$P11E" ls-tree --full-tree "$P11T" -- "$P11REL" 2>/dev/null)" ]; then
-    p11_ewhy="with the blob hidden the tree no longer names $P11REL"
-  elif git -C "$P11E" cat-file -e "${P11T}:${P11REL}" 2>/dev/null; then
-    p11_ewhy="with the blob hidden ${P11T}:${P11REL} still reads, so a second copy of it exists in the store"
-  fi
+  p11_build_e "$P11E" "$P11T"
   if [ -z "$p11_ewhy" ]; then
     ok "Part 11 world E: the contract's tree entry is present at theirs and its blob cannot be read"
   else
@@ -1602,6 +1612,116 @@ if [ "$p11_ready" = yes ]; then
   fi
 fi
 rm -rf "$P11W"
+
+# --- Part 12: world E survives a store that auto-maintenance WOULD pack ---------------------
+#
+# THE FLAKE. Every `git commit` ends in `git maintenance run --auto`, and on git 2.54 that repacks
+# the store once two loose objects sit in the objects/17 sample bucket. Whether a given run gets
+# there depends on which shas that run's commits happen to mint, so world E refused as a FIXTURE
+# ERROR ("readable but not loose") on roughly one gate in two hundred. `gc.auto` does not govern
+# the call -- measured, `-c gc.auto=0` packs exactly as the default does -- and `maintenance.auto`
+# does, which is the line seed.sh writes into the distribution's own config.
+#
+# THIS PART FORCES THE TRIGGER rather than waiting for it: two unreachable loose objects written
+# into objects/17 of a `cp -R` of the distribution, then one more commit, then the SAME world E
+# build Part 11 runs. The commit is synchronous (`maintenance.autoDetach=false`), because a
+# detached maintenance leaves the store half-packed when the build reads it and a child still
+# writing when the trap removes the tree; that flag does not suppress the trigger, only the fork.
+#
+# THE PROBE COMES FIRST AND DECIDES WHETHER THE PART CAN MEASURE ANYTHING. The trigger is a
+# property of this git, not of the fixture: a git that does not pack on two loose objects in one
+# bucket gives a mutant that survives for a reason unrelated to the seed. A fresh repository with
+# no maintenance config gets the same forcing; if it does not pack, the part SKIPS and says which
+# git it ran under, rather than failing a consumer whose tree is correct.
+#
+# THE MUTANT is a copy of seed.sh without the config line, seeded into its own root. It must
+# produce world E's own "readable but not loose" refusal -- a presence, so a copy that never ran
+# cannot score the kill.
+echo
+echo "Part 12 — a store auto-maintenance would pack still yields world E, because the seed disables it"
+
+P12W="$ROOT/p12"
+rm -rf "$P12W"; mkdir -p "$P12W"
+# Two payloads whose blob shas begin 17, found once by search and CHECKED here on every run.
+P12PAY1='bl381 unreachable 43'; P12PAY2='bl381 unreachable 778'
+p12_force() { # <repo> -> 0 when two bucket-17 loose objects were written and a commit followed
+  local r="$1" p s
+  for p in "$P12PAY1" "$P12PAY2"; do
+    s="$(printf '%s\n' "$p" | git -C "$r" hash-object -w --stdin 2>/dev/null)" || return 1
+    case "$s" in 17*) : ;; *) p12_why="payload '$p' hashes to $s, not into bucket 17"; return 1 ;; esac
+  done
+  p12_n17="$(ls "$r/.git/objects/17" 2>/dev/null | wc -l | tr -d ' ')"
+  [ "$p12_n17" -ge 2 ] || { p12_why="only $p12_n17 loose object(s) in objects/17 after the writes"; return 1; }
+  printf 'forcing commit\n' > "$r/p12-forcing.txt"
+  git -C "$r" add -A >/dev/null 2>&1 \
+    && git -C "$r" -c maintenance.autoDetach=false commit -qm "p12 forcing commit" >/dev/null 2>&1 \
+    || { p12_why="the forcing commit failed"; return 1; }
+}
+p12_inpack() { git -C "$1" count-objects -v 2>/dev/null | awk '$1=="in-pack:"{print $2}'; }
+
+# The probe: a git that does not pack here cannot give the arms below a subject.
+P12P="$P12W/probe"; mkdir -p "$P12P"; p12_why=""
+git -C "$P12P" init -q && git -C "$P12P" config user.email f@x && git -C "$P12P" config user.name f
+printf 'a\n' > "$P12P/a"; git -C "$P12P" add -A >/dev/null 2>&1; git -C "$P12P" commit -qm one >/dev/null 2>&1
+p12_live=no
+if p12_force "$P12P" && [ "$(p12_inpack "$P12P")" -gt 0 ]; then
+  p12_live=yes
+  ok "Part 12 probe: a fresh repository with no maintenance config PACKS on two loose objects in objects/17 ($(p12_inpack "$P12P") in-pack) — the trigger is live under this git"
+elif [ -n "$p12_why" ]; then
+  bad "FIXTURE ERROR: Part 12 probe could not force the trigger — $p12_why"
+else
+  printf '  skip  %s\n' "Part 12: $(git --version) does not pack a fresh store on two loose objects in objects/17, so neither the fix nor its mutant can be measured under it"
+fi
+
+if [ "$p12_live" = yes ]; then
+  P12T="$(git -C "$DIST" rev-parse -q --verify "${THEIRS}^{commit}" 2>/dev/null)" || P12T=""
+  # FIX: the shipping seed's distribution, copied the way world E copies it.
+  P12F="$P12W/dist"; cp -R "$DIST" "$P12F"; p12_why=""
+  if ! p12_force "$P12F"; then
+    bad "FIXTURE ERROR: Part 12 could not force the trigger on the distribution copy — $p12_why"
+  else
+    p12_n17after="$(ls "$P12F/.git/objects/17" 2>/dev/null | wc -l | tr -d ' ')"
+    p11_build_e "$P12F" "$P12T"
+    if [ -z "$p11_ewhy" ] && [ "$(p12_inpack "$P12F")" -eq 0 ] && [ "$p12_n17after" -ge 2 ]; then
+      ok "Part 12 fix: with the trigger forced the store stays loose ($p12_n17after in objects/17, 0 in-pack) and world E builds — the seed's maintenance.auto line holds"
+    else
+      bad "Part 12 fix: with the trigger forced, world E refused — ${p11_ewhy:-built, but $(p12_inpack "$P12F") in-pack and $p12_n17after in objects/17} — so the distribution store is being packed and Part 11 will flake"
+    fi
+  fi
+
+  # MUTANT: the seed without the config line.
+  P12M="$P12W/mut"; mkdir -p "$P12M"
+  sed '/^git -C "\$DIST" config maintenance\.auto false$/d' "$HERE/seed.sh" > "$P12M/seed.sh"
+  p12_orig="$(grep -c '^git -C "\$DIST" config maintenance\.auto false$' "$HERE/seed.sh")" || p12_orig=0
+  p12_left="$(grep -c 'config maintenance\.auto' "$P12M/seed.sh")" || p12_left=0
+  if cmp -s "$HERE/seed.sh" "$P12M/seed.sh" || [ "$p12_orig" -ne 1 ] || [ "$p12_left" -ne 0 ]; then
+    bad "FIXTURE ERROR: the Part 12 mutation did not remove exactly the one config line (original $p12_orig, left $p12_left), so the mutant proves nothing. Update the sed to seed.sh's real line"
+  else
+    # The mutant seed's own commits run auto-maintenance, so make them SYNCHRONOUS: a detached
+    # repack still writing while the copy below reads the store is the flake this part guards.
+    p12_mr="$(GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=maintenance.autoDetach GIT_CONFIG_VALUE_0=false \
+              bash "$P12M/seed.sh" 2>/dev/null)" || p12_mr=""
+    if [ -z "$p12_mr" ] || [ ! -d "$p12_mr/dist/.git" ]; then
+      bad "FIXTURE ERROR: the Part 12 mutant seed built no distribution ('$p12_mr'), so no mutant verdict is attributable"
+    else
+      mv "$p12_mr" "$P12M/root"
+      P12MD="$P12W/mut-dist"; cp -R "$P12M/root/dist" "$P12MD"; p12_why=""
+      P12MT="$(git -C "$P12MD" rev-parse -q --verify HEAD 2>/dev/null)" || P12MT=""
+      if ! p12_force "$P12MD"; then
+        bad "FIXTURE ERROR: Part 12 could not force the trigger on the mutant copy — $p12_why"
+      else
+        p11_build_e "$P12MD" "$P12MT"
+        case "$p11_ewhy" in
+          *"readable but not loose"*)
+            ok "Part 12 MUTANT — seed without maintenance.auto: KILLED, world E refuses as the flake did ($p11_ewhy)" ;;
+          *)
+            bad "Part 12 MUTANT — seed without maintenance.auto: SURVIVED, world E answered '${p11_ewhy:-built}' where the packed store should refuse, so Part 12's fix arm is not what holds the line" ;;
+        esac
+      fi
+    fi
+  fi
+fi
+rm -rf "$P12W"
 
 echo
 if [ "$fails" -eq 0 ]; then
