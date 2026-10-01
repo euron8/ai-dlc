@@ -1036,6 +1036,92 @@ printf -- '---\nshadows: %ssteps/x.md#Two\nbase_sha: %s\nreason: fixture\n---\n\
   "$_ro_sh" "$RO_BASE" "$RO_HEAD" "$L_OLD" "$L_KEEP" "$RO_L2" > "$ROF"
 { for _i in 1 2 3 4 5 6; do printf '%s\n' "$RO_HEAD"; done; echo Two; } > "$FW/ro-payload"
 
+# --- BL-360's R-H files: register-drift, settings-merge, readopt-override, adopt-extension-checks.
+# Each world puts ONE here-string or heredoc above its limit, and the limit is DERIVED from that
+# payload (its size in blocks, rounded down, so payload + the here-string's newline is past it).
+# fx_lim <payload-file> -> the block count a here-string of it cannot fit in
+fx_lim() { local s; s="$(fx_sz "$1")"; if [ "$FX_BLK" -gt 0 ] && [ "$s" -ge "$FX_BLK" ]; then echo $(( s / FX_BLK )); else echo 1; fi; }
+rh_git() { # rh_git <dir> -- a one-commit dist repo; its sha in <dir>/.B
+  gitq -C "$1" init -q && gitq -C "$1" add -A && gitq -C "$1" commit -qm base && git -C "$1" rev-parse HEAD > "$1/.B"; }
+# RDS: one 40-line section edited whole. Its section DIFF -- both sides' lines -- is the largest
+# thing register-drift holds, so substitution_only's feed is the one write above the limit.
+RDS="$FW/rds"; mkdir -p "$RDS/dist/core/team-roles" "$RDS/cons/.claude/team-roles"
+{ printf '# X\n\n## Alpha\n\n'; awk 'BEGIN { for (i = 0; i < 40; i++) printf "core line %03d of the alpha section text.\n", i }'
+  printf '\n## Beta\n\nbeta.\n'; } > "$RDS/dist/core/team-roles/x.md"
+rh_git "$RDS/dist"
+sed 's/^core line/CONS line/' "$RDS/dist/core/team-roles/x.md" > "$RDS/cons/.claude/team-roles/x.md"
+( . "$RC_/lib.sh" >/dev/null 2>&1
+  section_of Alpha < "$RDS/dist/core/team-roles/x.md" > "$FW/rds-core.sec"
+  section_of Alpha < "$RDS/cons/.claude/team-roles/x.md" > "$FW/rds-cons.sec" )
+diff "$FW/rds-core.sec" "$FW/rds-cons.sec" > "$FW/rds-payload"
+# The override register-drift writes for RDS, exactly: an unforced `--apply` on a throwaway copy, the
+# file it wrote taken as the payload. Its limit is the CONSUMER file's size in blocks rounded UP, so
+# section_of's staging of that file lands and the override is the write that cannot.
+cp -R "$RDS" "$FW/rdo-seed" && bash "$RC_/register-drift.sh" "$FW/rdo-seed/dist" "$(cat "$RDS/dist/.B")" "$FW/rdo-seed/cons" \
+  team-roles/x.md --apply > /dev/null 2>&1
+cp "$FW/rdo-seed/cons/.claude/skills/ai-dlc/overrides/team-roles__x__consumer-drift.md" "$FW/rdo-payload" 2>/dev/null || : > "$FW/rdo-payload"
+RDO_N=1; _rdc="$(wc -c < "$RDS/cons/.claude/team-roles/x.md" | tr -d ' ')"; [ "$FX_BLK" -gt 0 ] && RDO_N=$(( (_rdc + FX_BLK - 1) / FX_BLK ))
+# RDH: 45 headings with long names and short bodies, ONE body edited. The heading list is the
+# loop's feed and is staged before the first iteration; the consumer file holding it is larger, so
+# a run that reaches the loop can only refuse on section_of's own staging -- never complete.
+RDH="$FW/rdh"; mkdir -p "$RDH/dist/core/team-roles" "$RDH/cons/.claude/team-roles"
+awk 'BEGIN { printf "# X\n"; for (s = 0; s < 45; s++) printf "\n## Heading number %03d carrying enough padding words to make the list long\n\ntext %d.\n", s, s }' \
+  > "$RDH/dist/core/team-roles/x.md"
+rh_git "$RDH/dist"
+sed 's/^text 7\.$/text 7 RDH-EDITED./' "$RDH/dist/core/team-roles/x.md" > "$RDH/cons/.claude/team-roles/x.md"
+grep -nE '^#{2,3} ' "$RDH/cons/.claude/team-roles/x.md" | sed 's/:.*#\{2,3\} /:/' > "$FW/rdh-payload"
+# RDW: twelve small sections, every line edited. Each section diff is small; the WHOLE-FILE diff the
+# conservation check reads is the one write above the limit.
+RDW="$FW/rdw"; mkdir -p "$RDW/dist/core/team-roles" "$RDW/cons/.claude/team-roles"
+awk 'BEGIN { printf "# X\n"; for (s = 0; s < 12; s++) { printf "\n## Sec%02d\n\n", s; for (i = 0; i < 5; i++) printf "core line %d of section %02d here.\n", i, s } }' \
+  > "$RDW/dist/core/team-roles/x.md"
+rh_git "$RDW/dist"
+sed 's/core line/CONS line/' "$RDW/dist/core/team-roles/x.md" > "$RDW/cons/.claude/team-roles/x.md"
+diff "$RDW/dist/core/team-roles/x.md" "$RDW/cons/.claude/team-roles/x.md" > "$FW/rdw-payload"
+# SMW: a valid 2.3 KB consumer settings.json. `--check` writes nothing, so the validation's feed is
+# the only staged write.
+SMW="$FW/smw"; mkdir -p "$SMW"
+awk 'BEGIN { printf "{\"permissions\":{\"allow\":["; for (i = 0; i < 150; i++) printf "%s\"Bash(x%04d)\"", (i ? ", " : ""), i; printf "]},\"hooks\":{}}\n" }' > "$SMW/settings.json"
+printf '{"hooks":{}}\n' > "$SMW/tmpl.json"
+cp "$SMW/settings.json" "$FW/smw-payload"
+# ADW: an extensions/ dir with no check entry. The python program is the only staged input, and it
+# is the program the script runs, recovered from its argument with its '\'' escapes undone.
+ADW="$FW/adw"; mkdir -p "$ADW/.claude/skills/ai-dlc/extensions"
+# The argument opens at `python3 -c '` and closes at the LAST line holding a lone `'`.
+python3 -c 'import sys
+s = open(sys.argv[1], encoding="utf-8").read(); k = "python3 -c \x27"; a = s.find(k)
+b = s.rfind("\n\x27\n")
+if a < 0 or b < a: sys.exit(3)
+open(sys.argv[2], "w", encoding="utf-8").write(s[a + len(k):b + 1].replace("\x27\\\x27\x27", "\x27"))' \
+  "$RC_/adopt-extension-checks.sh" "$FW/adw-payload" 2>/dev/null || : > "$FW/adw-payload"
+# ROD2: a dossier whose override carries a 22-line `reason:`, so the header block is the one write
+# above the limit; the core file, its sections and the anchor ids stay below it.
+ROD2="$FW/rod2"; ROC2="$FW/roc2"; mkdir -p "$ROD2/core/skills/ai-dlc/steps" "$ROC2/.claude/skills/ai-dlc/overrides"
+printf '# X\n\n## Gate\n\n%s\n%s\n' "$L_OLD" "$L_KEEP" > "$ROD2/core/skills/ai-dlc/steps/x.md"
+gitq -C "$ROD2" init -q; gitq -C "$ROD2" add -A; gitq -C "$ROD2" commit -qm base
+RO2_BASE="$(git -C "$ROD2" rev-parse HEAD)"
+printf '# X\n\n## Gate\n\n%s\n%s\n' "$L_NEW" "$L_KEEP" > "$ROD2/core/skills/ai-dlc/steps/x.md"
+gitq -C "$ROD2" add -A; gitq -C "$ROD2" commit -qm theirs
+RO2_THEIRS="$(git -C "$ROD2" rev-parse HEAD)"
+ROF2="$ROC2/.claude/skills/ai-dlc/overrides/steps__x.md"
+{ printf -- '---\nshadows: steps/x.md#Gate\nbase_sha: %s\nreason: |\n' "$RO2_BASE"
+  awk 'BEGIN { for (i = 1; i <= 22; i++) printf "  reason line %02d explaining at some length why this consumer keeps its own gate text.\n", i }'
+  printf -- '---\n\n## Gate\n\n%s\n%s\n' "$L_OLD" "$L_KEEP"; } > "$ROF2"
+# ROM: the same refs, an override whose frontmatter and body are each UNDER one block and whose
+# whole is OVER it. `--merge` stages the frontmatter, the body and the merged body separately, so all
+# three land, and the rewritten override is the one write above the limit. Each run gets a fresh copy,
+# because `--merge` writes it.
+ROM_P=6
+ROM="$FW/rom"; mkdir -p "$ROM/.claude/skills/ai-dlc/overrides"
+{ printf -- '---\nshadows: steps/x.md#Gate\nbase_sha: %s\nreason: |\n' "$RO2_BASE"
+  awk 'BEGIN { for (i = 1; i <= 7; i++) printf "  reason line %02d: why this consumer keeps a local preamble above the gate.\n", i }'
+  printf -- '---\n\n## Local preamble\n\n'
+  awk -v n="$ROM_P" 'BEGIN { for (i = 1; i <= n; i++) printf "consumer prose line %02d that no anchor covers and that must survive.\n", i }'
+  printf '\n## Gate\n\n%s\n%s\n' "$L_OLD" "$L_KEEP"; } > "$ROM/.claude/skills/ai-dlc/overrides/steps__x.md"
+cp "$ROM/.claude/skills/ai-dlc/overrides/steps__x.md" "$FW/rom-payload"
+awk 'NR==1 && /^---$/ {f=1; print; next} f && /^---$/ {print; exit} f {print}' "$FW/rom-payload" > "$FW/rom-fm"
+awk 'NR==1 && /^---$/ {f=1; next} f && /^---$/ {f=0; s=1; next} s {print}' "$FW/rom-payload" > "$FW/rom-body"
+
 # --- the calibration ---------------------------------------------------------------------------
 fx_hs_fails() { # fx_hs_fails <limit-blocks> <payload-file> -> 0 when a here-string of it cannot be staged
   local r=0
@@ -1140,6 +1226,60 @@ arm_fx_rxo_apply() { local d x ck
 arm_fx_ro_healthy() { fx_healthy "$1" 1 '^STALE-CORE-TEXT ' "$ROD" "$RO_THEIRS" "$ROC" "$ROF" --check; }
 arm_fx_ro() { fx_cell "$1" "$FX_RO_N" 1 '^STALE-CORE-TEXT ' 2 '^readopt-override: the superseded-line scan ' \
   "$ROD" "$RO_THEIRS" "$ROC" "$ROF" --check; }
+# --- BL-360's R-H cells. Each refusal ERE names a refusal the FIXED script can give under the limit,
+# and none names the base's: base refused the RDS and RDW worlds too, but with a message that is
+# false there ("diff did not run" about a diff that ran; a content refusal "re-running ... refuses the
+# same way" over a check that never read its input), so a cell accepting any `register-drift:` line
+# would pass the base and prove nothing.
+RD_DRY='^register-drift: DRY RUN\.'
+# The override's OWN write, at a limit the consumer file fits and the override does not. The refusal
+# must BEGIN the stderr line: a `printf` that failed outside a subshell leaked its unwritten override
+# text onto the front of the refusal, which no longer read as one.
+arm_fx_rdo() { fx_cell "$1" "$RDO_N" 0 "$RD_DRY" 2 '^register-drift: cannot write the override ' \
+  "$RDS/dist" "$(cat "$RDS/dist/.B")" "$RDS/cons" team-roles/x.md || return 1
+  # ...and no override text reached stderr either: its edited lines are the leak's signature there
+  # (fx_cell already requires an EMPTY stdout, which a leak into stdout breaks).
+  if grep -q 'alpha section text' "$ERR"; then ARM_WHY="$ARM_WHY; but override text leaked onto stderr"; return 1; fi; }
+arm_fx_rds_healthy() { fx_healthy "$1" 0 "$RD_DRY" "$RDS/dist" "$(cat "$RDS/dist/.B")" "$RDS/cons" team-roles/x.md; }
+arm_fx_rds() { fx_cell "$1" "$(fx_lim "$FW/rds-payload")" 0 "$RD_DRY" 2 '^register-drift: cannot (read|write|stage) ' \
+  "$RDS/dist" "$(cat "$RDS/dist/.B")" "$RDS/cons" team-roles/x.md; }
+arm_fx_rdh_healthy() { fx_healthy "$1" 0 "$RD_DRY" "$RDH/dist" "$(cat "$RDH/dist/.B")" "$RDH/cons" team-roles/x.md; }
+arm_fx_rdh() { fx_cell "$1" "$(fx_lim "$FW/rdh-payload")" 0 "$RD_DRY" 2 "^register-drift: cannot read the consumer's section " \
+  "$RDH/dist" "$(cat "$RDH/dist/.B")" "$RDH/cons" team-roles/x.md; }
+arm_fx_rdw_healthy() { fx_healthy "$1" 0 "$RD_DRY" "$RDW/dist" "$(cat "$RDW/dist/.B")" "$RDW/cons" team-roles/x.md; }
+arm_fx_rdw() { fx_cell "$1" "$(fx_lim "$FW/rdw-payload")" 0 "$RD_DRY" 2 '^register-drift: cannot (read|write|stage) ' \
+  "$RDW/dist" "$(cat "$RDW/dist/.B")" "$RDW/cons" team-roles/x.md; }
+arm_fx_smw_healthy() { fx_healthy "$1" 0 '^model_window_needed=no$' --consumer "$SMW/settings.json" --template "$SMW/tmpl.json" --check; }
+# settings-merge `--check` and adopt-extension-checks stage NOTHING once converted, so the only
+# accepted outcome is the complete one: the refusal arm is given a status no run can exit with.
+arm_fx_smw() { fx_cell "$1" "$(fx_lim "$FW/smw-payload")" 0 '^model_window_needed=no$' -1 '^no refusal is accepted$' \
+  --consumer "$SMW/settings.json" --template "$SMW/tmpl.json" --check; }
+arm_fx_adw_healthy() { fx_healthy "$1" 0 'nothing to adopt$' "$ADW"; }
+arm_fx_adw() { fx_cell "$1" "$(fx_lim "$FW/adw-payload")" 0 'nothing to adopt$' -1 '^no refusal is accepted$' "$ADW"; }
+RO2_Q='^--- THE ONE QUESTION -+$'
+arm_fx_rod_healthy() { fx_healthy "$1" 0 "$RO2_Q" "$ROD2" "$RO2_THEIRS" "$ROC2" "$ROF2"; }
+arm_fx_rod() { fx_cell "$1" 1 0 "$RO2_Q" 2 '^readopt-override: .*did not run to completion' "$ROD2" "$RO2_THEIRS" "$ROC2" "$ROF2"; }
+# `--merge` rewrites the override, so each run gets a fresh copy, and the cell reads the OVERRIDE, not
+# only the output: complete is rc 0, one MERGED anchor, upstream's new clause in the body and all 30
+# prose lines kept; refused is rc 2, the merge's own refusal line, and the override byte-identical.
+# The base wrote it in place: under the limit it was cut short and lost prose at rc 1.
+rom_copy() { FXA_N=$((FXA_N+1)); ROMC="$FW/rom.$FXA_N"; cp -R "$ROM" "$ROMC"; ROMF="$ROMC/.claude/skills/ai-dlc/overrides/steps__x.md"; }
+rom_merged() { [ "$FX_RC" -eq 0 ] && grep -qF "$L_NEW" "$ROMF" && [ "$(grep -c '^consumer prose line ' "$ROMF")" -eq "$ROM_P" ] \
+  && grep -q ': 1 merged, 0 unchanged, 0 conflicted\.$' "$OUT"; }
+arm_fx_rom_healthy() { fx_ready || return 1; rom_copy || { ARM_WHY="could not copy the merge world"; return 1; }
+  fx_run 0 "$OUT" "$ERR" "$1" "$ROD2" "$RO2_THEIRS" "$ROMC" "$ROMF" --merge
+  ARM_WHY="unforced rc=$FX_RC, new clause $(grep -cF "$L_NEW" "$ROMF"), prose $(grep -c '^consumer prose line ' "$ROMF")/$ROM_P"
+  rom_merged; }
+arm_fx_rom() { local ck
+  arm_fx_rom_healthy "$1" || { ARM_WHY="no healthy baseline: $ARM_WHY"; return 1; }
+  rom_copy || { ARM_WHY="could not copy the merge world"; return 1; }
+  ck="$(cksum < "$ROMF")"
+  fx_run 1 "$OUT" "$ERR" "$1" "$ROD2" "$RO2_THEIRS" "$ROMC" "$ROMF" --merge
+  if rom_merged; then ARM_WHY="complete: rc=0, merged, every prose line kept"; return 0; fi
+  if [ "$FX_RC" -eq 2 ] && grep -qE '^readopt-override: --merge could not ' "$ERR" && [ "$(cksum < "$ROMF")" = "$ck" ]; then
+    ARM_WHY="refused: rc=2, $(grep -E '^readopt-override: --merge could not ' "$ERR" | head -1 | cut -c1-90), the override byte-identical"; return 0; fi
+  ARM_WHY="rc=$FX_RC, override $([ "$(cksum < "$ROMF")" = "$ck" ] && echo unchanged || echo CHANGED) at $(fx_sz "$ROMF") B, prose $(grep -c '^consumer prose line ' "$ROMF")/$ROM_P: $(grep -v '^$' "$ERR" | tail -1 | sed 's#.*/##' | cut -c1-90)"
+  return 1; }
 RLC_ROW='extensions/e\.md.path:core/skills/ai-dlc/steps/b\.md$'
 arm_fx_rlc_healthy() { fx_healthy "$1" 0 "$RLC_ROW" "$RFD" "$RF_BASE" "$RF_THEIRS" "$RFC"; }
 arm_fx_rlc() { fx_cell "$1" "$FX_N" 0 "$RLC_ROW" 2 '^retired-layer-contract: .*no verdict' "$RFD" "$RF_BASE" "$RF_THEIRS" "$RFC"; }
@@ -1410,6 +1550,18 @@ else
     "$(( ${#RLS_P} + 1 ))" "$(git -C "$RLSD" ls-tree -r --name-only "$RLS_BASE" | wc -c | tr -d ' ')"
   fx_cal relabel-order "$FX_RX_N" "$FW/rx-payload" "$(fx_sz "$FW/rxo-nums")"
   fx_cal readopt-override "$FX_RO_N" "$FW/ro-payload" "$(git -C "$ROD" show "${RO_BASE}:core/skills/ai-dlc/steps/x.md" | wc -c | tr -d ' ')"
+  # BL-360's R-H worlds: the one oversize payload each, and every other input the fixed script stages.
+  _ro2c="$(git -C "$ROD2" show "${RO2_THEIRS}:core/skills/ai-dlc/steps/x.md" | wc -c | tr -d ' ')"
+  fx_cal register-drift-section "$(fx_lim "$FW/rds-payload")" "$FW/rds-payload" \
+    "$(fx_sz "$RDS/cons/.claude/team-roles/x.md")" "$(fx_sz "$FW/rdo-payload")"
+  fx_cal register-drift-override "$RDO_N" "$FW/rdo-payload" "$(fx_sz "$RDS/cons/.claude/team-roles/x.md")"
+  fx_cal register-drift-headings "$(fx_lim "$FW/rdh-payload")" "$FW/rdh-payload"
+  fx_cal register-drift-wholefile "$(fx_lim "$FW/rdw-payload")" "$FW/rdw-payload" \
+    "$(fx_sz "$RDW/cons/.claude/team-roles/x.md")" "$(fx_sz "$RDW/dist/core/team-roles/x.md")"
+  fx_cal settings-merge "$(fx_lim "$FW/smw-payload")" "$FW/smw-payload"
+  fx_cal adopt-extension-checks "$(fx_lim "$FW/adw-payload")" "$FW/adw-payload"
+  fx_cal readopt-dossier 1 "$ROF2" "$_ro2c"
+  fx_cal readopt-merge 1 "$FW/rom-payload" "$_ro2c" "$(fx_sz "$FW/rom-fm")" "$(fx_sz "$FW/rom-body")"
   [ "$FX_CAL_FAILS" -eq 0 ] && FX_READY=1
 fi
 echo "== a staging write that fails: each cell prints the complete output or refuses, never rc 0 with a row missing or false =="
@@ -1425,6 +1577,15 @@ run_arm arm_fx_rt        "$S_RT"  "retired-tokens, z.sh blob at exactly the limi
 run_arm arm_fx_rls       "$S_RLC" "retired-layer-contract path arm, a 1.5 KB spellings file: the path: row or the SPELLINGS refusal, never 0 rows at rc 0"
 run_arm arm_fx_rxo_apply "$S_RX"  "relabel --apply, a relabel due in the check pass and an oversize rule set: labelled, or REFUSED exit 2 with the extension byte-identical"
 run_arm arm_fx_ro        "$S_RO"  "readopt-override --check, an oversize anchor-id list: STALE-CORE-TEXT, or the superseded-line scan's refusal"
+S_RD="$RC_/register-drift.sh"; S_SM="$RC_/settings-merge.sh"; S_AD="$RC_/adopt-extension-checks.sh"
+run_arm arm_fx_rds       "$S_RD"  "register-drift dry run, a 40-line section edited whole: the preview, or a named read/write refusal -- never 'diff did not run' over a diff that ran"
+run_arm arm_fx_rdo       "$S_RD"  "register-drift dry run, the override's own write past the limit: the preview, or 'cannot write the override' BEGINNING its line"
+run_arm arm_fx_rdh       "$S_RD"  "register-drift dry run, a 45-heading list: the preview, or 'cannot read the consumer's section' -- never 'no section differs' at exit 1"
+run_arm arm_fx_rdw       "$S_RD"  "register-drift dry run, a whole-file diff past the limit: the preview, or a named read/write refusal -- never a content refusal over an unread diff"
+run_arm arm_fx_smw       "$S_SM"  "settings-merge --check, a valid 2.3 KB settings.json: the complete report -- never 'not valid JSON'"
+run_arm arm_fx_adw       "$S_AD"  "adopt-extension-checks dry run: 'nothing to adopt' at exit 0 -- never exit 1 ('adoptable checks found') over a tree python never scanned"
+run_arm arm_fx_rod       "$S_RO"  "readopt-override dossier, a 22-line reason: the whole dossier through THE ONE QUESTION, or a named refusal -- never a dossier missing its header"
+run_arm arm_fx_rom       "$S_RO"  "readopt-override --merge, the rewritten override past the limit: merged with every prose line, or refused with the override byte-identical"
 if [ "$(id -u)" -eq 0 ]; then
   skip "arm_rlc_unread_layer: running as root, which reads a mode-000 layer file, so the world is not expressible (this is not a pass)"
 else
@@ -1688,6 +1849,17 @@ else
   bad "LH self-probe read '$LH_GOT', expected '7 4 1 2 3 4' -- the grammar cannot be trusted on lib.sh"
 fi
 run_arm arm_lh "$S_LIB" "LH: lib.sh carries no heredoc opener outside comments"
+# BL-360's R-H files hold BOTH spellings at zero, by r5 and LH's own grammars (self-probed above). A
+# list of its own, never appended to R5_FILES, which also drives the 322ef42c differential. These
+# floors are the secondary conjunct: the forced cells above are what show a staging failure refuses.
+# The two loops a forced cell cannot reach -- readopt's --merge span plan and its drift panel -- are
+# held by these floors alone: both iterate the anchor ids, which `shadow_ids` has already written to
+# a file earlier in the same run, so no world makes them the one write above the limit.
+RH_FILES="register-drift.sh settings-merge.sh readopt-override.sh adopt-extension-checks.sh"
+for _rh in $RH_FILES; do
+  run_arm arm_r5 "$RC_/$_rh" "r5 (BL-360 R-H): $_rh carries no non-comment here-string"
+  run_arm arm_lh "$RC_/$_rh" "LH (BL-360 R-H): $_rh carries no heredoc opener outside comments"
+done
 
 # ================================================================================================
 # THE b0c310a3 DIFFERENTIAL. lib.sh and preclassify.sh at the base this release was cut from, staged
@@ -1829,6 +2001,48 @@ else
 fi
 
 # ================================================================================================
+# THE 1749b545 DIFFERENTIAL. BL-360's R-H cells against the four files at the base they were built
+# on, staged beside the tree's lib.sh. Every forced cell MUST FAIL there, and each failure is the
+# base's own behaviour, measured: a refusal with a FALSE message (register-drift's "diff did not
+# run" over a diff that ran, a content refusal over a diff it never read, settings-merge's "not valid
+# JSON" over valid JSON), a false verdict ("no section differs" at exit 1, adopt's exit 1 over a tree
+# python never scanned), a dossier missing its header, or an override cut short in place.
+# ================================================================================================
+RH_PIN=1749b545b2e05010adb5b197a5bfd67891c1bf3b
+if ! git -C "$OWN" cat-file -e "${RH_PIN}^{commit}" 2>/dev/null; then
+  skip "1749b545 differential -- the pin ${RH_PIN} is not in this clone's history, so no base copy exists (this is not a pass)"
+else
+  RHB="$W/rhb"; cp -R "$RC_" "$RHB" || { echo "FIXTURE BROKEN: could not copy reconcile/ for the 1749b545 differential" >&2; exit 2; }
+  rhb_ok=1
+  for _rh in $RH_FILES; do
+    if ! git -C "$OWN" show "${RH_PIN}:core/skills/ai-dlc-update/reconcile/${_rh}" > "$RHB/$_rh" 2>/dev/null; then
+      bad "1749b545 differential: could not stage ${_rh} at the pin"; rhb_ok=0
+    elif cmp -s "$RC_/$_rh" "$RHB/$_rh"; then
+      bad "1749b545 differential: ${_rh} at the pin is byte-identical to the tree's copy"; rhb_ok=0
+    fi
+  done
+  if [ "$rhb_ok" -eq 1 ]; then
+    ok "1749b545 differential: the four R-H scripts staged at the pin beside lib.sh, each DIFFERS from the tree's copy (cmp -s)"
+    rhb_fail() { # rhb_fail <arm> <script-basename> <what the base did>
+      if "$1" "$RHB/$2"; then bad "1749b545 differential: $1 PASSED against the base $2, so it cannot tell the fix from its absence -- $ARM_WHY"
+      else ok "1749b545 differential: $1 FAILS against the base $2 ($3) -- $ARM_WHY"; fi; }
+    rhb_fail arm_fx_rds register-drift.sh       "refused 'cannot classify ... diff did not run' over a diff that ran"
+    rhb_fail arm_fx_rdo register-drift.sh       "the section diff's here-string failed first, refusing with the false 'diff did not run'"
+    rhb_fail arm_fx_rdh register-drift.sh       "the heading loop ran zero times: 'no section differs' at exit 1"
+    rhb_fail arm_fx_rdw register-drift.sh       "a content refusal ('re-running ... refuses the same way') over a whole-file diff it never read"
+    rhb_fail arm_fx_smw settings-merge.sh       "'not valid JSON' over a valid settings.json"
+    rhb_fail arm_fx_adw adopt-extension-checks.sh "python never ran and the script exited 1, 'adoptable checks found'"
+    rhb_fail arm_fx_rod readopt-override.sh     "the dossier lost its header and THE ONE QUESTION at exit 1"
+    rhb_fail arm_fx_rom readopt-override.sh     "the override rewritten in place and cut short"
+    for _rh in $RH_FILES; do
+      if arm_r5 "$RHB/$_rh" && arm_lh "$RHB/$_rh"; then
+        bad "1749b545 differential: r5 and LH both PASS against the base $_rh, so the floor cannot see its spellings"
+      else ok "1749b545 differential: the spelling floor FAILS against the base $_rh -- $ARM_WHY"; fi
+    done
+  fi
+fi
+
+# ================================================================================================
 # MUTANTS. One copy of each subject directory; each mutant is a sibling file in that copy, so the
 # script finds lib.sh, setup-sites.md, preclassify.sh and artifact-path-config.sh beside it.
 # ================================================================================================
@@ -1917,6 +2131,10 @@ control reconcile retired-tokens.sh             arm_fx_rt_healthy arm_fx_rt arm_
 [ "$LW_UTF8" -eq 1 ] && control reconcile retired-tokens.sh arm_lw_utf8
 control reconcile readopt-override.sh           arm_ro_healthy arm_r5
 control reconcile derivation-differential.sh    arm_dd_usage arm_r5
+control reconcile register-drift.sh             arm_fx_rds_healthy arm_fx_rds arm_fx_rdo arm_fx_rdh_healthy arm_fx_rdh arm_fx_rdw_healthy arm_fx_rdw arm_r5 arm_lh
+control reconcile settings-merge.sh             arm_fx_smw_healthy arm_fx_smw arm_r5 arm_lh
+control reconcile adopt-extension-checks.sh     arm_fx_adw_healthy arm_fx_adw arm_r5 arm_lh
+control reconcile readopt-override.sh           arm_fx_rod_healthy arm_fx_rod arm_fx_rom_healthy arm_fx_rom arm_r5 arm_lh
 
 echo "== mutants (each restores a discarded status at one site) =="
 mutant CI-RETRO scripts validate-ci-gates.sh arm_ci_healthy "arm_ci_retro" \
@@ -2261,6 +2479,39 @@ pcmutant QP-MACH arm_qc_plain "arm_qc_cafe" \
   '_mt="$(git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$THEIRS"' '_mt="$(git -C "$DIST" ls-files --with-tree="$THEIRS"'
 mutant DD-HERESTRING reconcile derivation-differential.sh arm_dd_usage "arm_r5" \
   '  case "$NL$1" in *"${NL}skill_commit:"*) ;; *) return 0 ;; esac' $'  awk \'/^skill_commit:/ { f = 1 } END { exit !f }\' <<<"$1" || return 0'
+echo "== mutants: BL-360's R-H sites, each restoring the base's staged input at ONE site =="
+# register-drift: substitution_only's hunk feed back on a here-string.
+mutant RD-SECTION reconcile register-drift.sh arm_fx_rds_healthy "arm_fx_rds arm_r5" \
+  $'  printf \'%s\\n\' "$d" | awk \'' $'  awk \'' \
+  $'print (bad ? "no" : "yes") }\n  \'\n}' $'print (bad ? "no" : "yes") }\n  \' <<<"$d"\n}'
+# register-drift: the heading loop fed by a here-string again.
+mutant RD-HEADINGS reconcile register-drift.sh arm_fx_rdh_healthy "arm_fx_rdh arm_r5" \
+  $'rd_lines "$hl"\nfor line in ${RD_L[@]+"${RD_L[@]}"}; do' 'while IFS= read -r line; do' \
+  $'  changed="${changed}${changed:+$\'\\n\'}${h}"\ndone' $'  changed="${changed}${changed:+$\'\\n\'}${h}"\ndone <<<"$hl"'
+# register-drift: the conservation check's whole-file diff on a here-string again.
+mutant RD-WHOLEFILE reconcile register-drift.sh arm_fx_rdw_healthy "arm_fx_rdw arm_r5" \
+  $'cons_check="$(printf \'%s\\n\' "$core_d" | awk -v' 'cons_check="$(awk -v' \
+  $'${EXT_TMP:+"$EXT_TMP"} -)"; crc=$?' $'${EXT_TMP:+"$EXT_TMP"} - <<<"$core_d")"; crc=$?'
+# register-drift: the override's write out of its subshell, so a failed printf leaks onto the refusal.
+mutant RD-LEAK reconcile register-drift.sh arm_fx_rds_healthy "arm_fx_rdo" \
+  '( render ) > "$OUT_TMP" || refuse' 'render > "$OUT_TMP" || refuse'
+# settings-merge: the validation fed by a here-string again.
+mutant SM-VALIDATE reconcile settings-merge.sh arm_fx_smw_healthy "arm_fx_smw arm_r5" \
+  $'printf \'%s\\n\' "$BASE_JSON" | jq -e . >/dev/null 2>&1 ||' 'jq -e . >/dev/null 2>&1 <<<"$BASE_JSON" ||'
+# adopt-extension-checks: the program handed to python on staged stdin again (the same single-quoted
+# word, so its escapes are untouched).
+mutant AD-STDIN reconcile adopt-extension-checks.sh arm_fx_adw_healthy "arm_fx_adw arm_r5" \
+  "python3 -c 'import os, re, sys, glob" "python3 - <<<'import os, re, sys, glob"
+# readopt-override: THE ONE QUESTION's block fed through a staged here-string again.
+mutant RO-DOSSIER reconcile readopt-override.sh arm_fx_rod_healthy "arm_fx_rod arm_r5" \
+  $'printf \'%s\\n\' \\\n  \'\' \\\n  \'--- THE ONE QUESTION' $'cat <<<"$(printf \'%s\\n\' \\\n  \'\' \\\n  \'--- THE ONE QUESTION' \
+  $'refused while the body is stale.\' \\\n  \'================================================================================\'' \
+  $'refused while the body is stale.\' \\\n  \'================================================================================\')"'
+# readopt-override: --merge writes the override IN PLACE again, truncating it before the write.
+mutant RO-INPLACE reconcile readopt-override.sh arm_fx_rom_healthy "arm_fx_rom" \
+  $'    cp -p "$OVR" "$staged" || ro_merge_refuse "stage a copy of the override"\n' '' \
+  $'    cat "$fmf" "$out" > "$staged" || ro_merge_refuse "write the merged override"\n    mv -f "$staged" "$OVR" || ro_merge_refuse "move the merged override into place"' \
+  $'    cat "$fmf" "$out" > "$OVR"'
 
 echo
 if [ "$fails" -eq 0 ]; then echo "procsub-staged-refusal: PASS"; exit 0; fi
