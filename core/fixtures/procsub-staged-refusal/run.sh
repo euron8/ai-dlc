@@ -1892,10 +1892,11 @@ le_mut LE-W9        arm_le_w9        w9-layers       '{ layer_files "$EXT_DIR"; 
 le_mut LE-W11       arm_le_w11       w11-layers      '{ layer_files "$EXT_DIR"; layer_files "$OVR_DIR"; }'
 
 echo "== mutants: a staged FUNCTION whose body is a pipeline (each restores the v0.650.0 status) =="
-# norm_lines returns `tr`'s status again: a dead sed reads as a normalised EMPTY file.
+# norm_lines returns `tr`'s status again: a dead sed reads as a normalised EMPTY file. Since sed's
+# output is STAGED (the iconv-gated case fold reads it twice), the mutation drops the staged sed's
+# own status read, which leaves `tr` folding an empty file at 0 -- the same observable.
 libmutant RLP-NORMLINES retired-layer-passage.sh arm_rlp_healthy "arm_rlp_norm arm_rlp_removed" \
-  $'norm_lines() {\n  local _ps\n' $'norm_lines() {\n' \
-  $'  _ps="${PIPESTATUS[*]}"\n  case "$_ps" in \'0 0\') return 0 ;; \'0 \'*) return "${_ps#0 }" ;; *) return "${_ps%% *}" ;; esac\n' ''
+  $'          s/[.[:space:]]+$//\' > "$_nt" || _rc=$?\n' $'          s/[.[:space:]]+$//\' > "$_nt"\n'
 # The deleted-line side read through a pipeline again, so its status is the LAST stage's.
 mutant RLP-REMOVED reconcile retired-layer-passage.sh arm_rlp_healthy "arm_rlp_removed" \
   'norm_lines < "$RLP_T/removed-raw" > "$RLP_T/removed-norm" || _rlp_rc=$?' \

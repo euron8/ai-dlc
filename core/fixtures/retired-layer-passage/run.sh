@@ -157,6 +157,91 @@ else
   ok "mutant [rlp-exit0] KILLED by 7b: with the base exit 0 restored, the unreadable list reads as a clean run ($RLP_WHY)"
 fi
 
+# --- BL-355: an accented capital still folds to its lower-case form ----------------
+# norm_lines folded case under LC_ALL=C, which folds ASCII only: core deleting `1. Élan must …` and a
+# layer carrying `- élan must …` stopped matching. The fold now runs in the caller's locale when the
+# staged stream is valid UTF-8, and under C otherwise -- so a Latin-1 layer file is still READ.
+#   N1 a UTF-8 caller, a layer reproducing the deleted line with the accented capital lowered -> its row
+#   N2 a UTF-8 caller, a SECOND consumer that also holds a Latin-1 file reproducing an ASCII deleted
+#      line -> exit 0 and the Latin-1 file's row (a fold run in the caller's locale on Latin-1 bytes
+#      dies with "Illegal byte sequence" and the run refuses)
+#   N0 control: a same-case accented reproduction, under a C caller -> its row
+N_SKIP=0
+if ! grep -qF 'iconv -f UTF-8 -t UTF-8' "$RLP_SRC/lib.sh"; then
+  case "$RLP_SRC" in
+    */core/skills/ai-dlc-update/reconcile) echo "  --    (BL-355: this lib.sh carries no iconv-gated fold; in the distribution N0-N2 run anyway and must go red)" ;;
+    *) echo "  SKIP  BL-355 N0-N2 -- the installed lib.sh predates the locale-aware fold; it lands with the pull that carries this fixture"; N_SKIP=1 ;;
+  esac
+fi
+# Captured, never `locale -a | grep -q`: under pipefail grep's early exit gives `locale` an EPIPE
+# and the pipeline reports NOT-FOUND on a list that contains the locale.
+N_LOCALES="$(locale -a 2>/dev/null)" || N_LOCALES=""
+if [ "$N_SKIP" = 0 ] && ! grep -qx 'en_US.UTF-8' <<<"$N_LOCALES"; then
+  bad "FIXTURE BROKEN -- en_US.UTF-8 is not installed here, so BL-355's caller-locale fold cannot be expressed"
+  N_SKIP=1
+fi
+if [ "$N_SKIP" = 0 ]; then
+  NW="$WORK/bl355"; ND="$NW/dist"; mkdir -p "$ND/core/skills/ai-dlc/steps" || exit 2
+  git -C "$ND" init -q || exit 2
+  printf '# Accent step\n\n1. \303\211lan must always be recorded in the story file before merge.\n2. Caf\303\251 owners sign the release note.\n3. Every gate run is logged before the merge.\n' \
+    > "$ND/core/skills/ai-dlc/steps/accent.md"
+  git -C "$ND" -c user.email=f@f -c user.name=f add -A && git -C "$ND" -c user.email=f@f -c user.name=f commit -qm base || exit 2
+  NB="$(git -C "$ND" rev-parse HEAD)"
+  printf '# Accent step\n\n1. Nothing here any more.\n' > "$ND/core/skills/ai-dlc/steps/accent.md"
+  git -C "$ND" -c user.email=f@f -c user.name=f commit -qam theirs || exit 2
+  NT="$(git -C "$ND" rev-parse HEAD)"
+  N1C="$NW/c1"; mkdir -p "$N1C/.claude/skills/ai-dlc/extensions" || exit 2
+  printf -- '- \303\251lan must always be recorded in the story file before merge.\n' > "$N1C/.claude/skills/ai-dlc/extensions/lowered.md"
+  printf -- '- Caf\303\251 owners sign the release note.\n' > "$N1C/.claude/skills/ai-dlc/extensions/samecase.md"
+  N2C="$NW/c2"; cp -R "$N1C" "$N2C" || exit 2
+  printf -- '# caf\351\n- Every gate run is logged before the merge.\n' > "$N2C/.claude/skills/ai-dlc/extensions/latin1.md"
+  # SEED CONTROL: the Latin-1 file really is invalid UTF-8, or N2 cannot express the refusal.
+  iconv -f UTF-8 -t UTF-8 < "$N2C/.claude/skills/ai-dlc/extensions/latin1.md" >/dev/null 2>&1 \
+    && { bad "FIXTURE BROKEN -- the Latin-1 seed validates as UTF-8, so N2 expresses nothing"; N_SKIP=1; }
+fi
+if [ "$N_SKIP" = 0 ]; then
+  score_355() { # score_355 <reconcile-dir> -> failing cells, then `.`
+    local _r="" _o _rc
+    _o="$(env -u LANG LC_ALL=C bash "$1/retired-layer-passage.sh" "$ND" "$NB" "$NT" "$N1C" 2>/dev/null)"
+    grep -q 'extensions/samecase.md' <<<"$_o" || _r="${_r}N0"
+    _o="$(env -u LANG LC_ALL=en_US.UTF-8 bash "$1/retired-layer-passage.sh" "$ND" "$NB" "$NT" "$N1C" 2>/dev/null)"
+    grep -q 'extensions/lowered.md' <<<"$_o" || _r="${_r}N1"
+    _o="$(env -u LANG LC_ALL=en_US.UTF-8 bash "$1/retired-layer-passage.sh" "$ND" "$NB" "$NT" "$N2C" 2>/dev/null)"; _rc=$?
+    { [ "$_rc" -eq 0 ] && grep -q 'extensions/latin1.md' <<<"$_o"; } || _r="${_r}N2"
+    printf '%s.' "$_r"
+  }
+  got="$(score_355 "$RLP_SRC")"
+  case "$got" in
+    .) ok "BL-355 N0-N2: an accented capital folds under a UTF-8 caller, a same-case control matches under C, and a Latin-1 layer file is still read (exit 0)" ;;
+    *.) bad "BL-355 cell(s) [${got%.}] failed: an accented reproduction is missed, or a Latin-1 file refuses the run" ;;
+    *) bad "FIXTURE BROKEN -- the BL-355 cells did not complete" ;;
+  esac
+  n355_mut() { # n355_mut <name> <want> <find> <replace>
+    local _d="$WORK/bl355-$1"
+    if ! rlp_copy "$_d"; then bad "MUTANT HARNESS BROKEN [BL-355 $1]: could not copy the reconcile directory"; return; fi
+    if ! python3 - "$RLP_SRC/lib.sh" "$_d/lib.sh" "$3" "$4" <<'PY'
+import sys
+src, dst, f, r = sys.argv[1:5]
+s = open(src, encoding="utf-8").read()
+if s.count(f) != 1: sys.exit(1)
+open(dst, "w", encoding="utf-8").write(s.replace(f, r))
+PY
+    then bad "FIXTURE STALE [BL-355 $1]: its anchor did not match exactly once in lib.sh -- re-anchor on the same observable"; return; fi
+    if cmp -s "$RLP_SRC/lib.sh" "$_d/lib.sh" || ! bash -n "$_d/lib.sh" 2>/dev/null; then
+      bad "FIXTURE STALE [BL-355 $1]: the mutation did not apply or does not parse"; return; fi
+    got="$(score_355 "$_d")"
+    case "$got" in
+      "$2.") ok "MUTANT (BL-355 $1) fails exactly [$2]" ;;
+      .)     bad "MUTANT SURVIVED [BL-355 $1]: every cell still passed" ;;
+      *)     bad "MUTANT [BL-355 $1] failed [${got%.}], expected exactly [$2]" ;;
+    esac
+  }
+  # the 0.652.0 shape: the fold always byte-wise
+  n355_mut c-fold N1 "      tr '[:upper:]' '[:lower:]' < \"\$_nt\" || _rc=\$?" "      LC_ALL=C tr '[:upper:]' '[:lower:]' < \"\$_nt\" || _rc=\$?"
+  # the ungated fix: LC_ALL=C dropped from tr, no iconv validation
+  n355_mut no-gate N2 "      LC_ALL=C tr '[:upper:]' '[:lower:]' < \"\$_nt\" || _rc=\$?" "      tr '[:upper:]' '[:lower:]' < \"\$_nt\" || _rc=\$?"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "retired-layer-passage: PASS"; exit 0; fi
 echo "retired-layer-passage: $fails assertion(s) FAILED" >&2
