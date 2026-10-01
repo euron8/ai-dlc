@@ -1518,6 +1518,63 @@ A54_i118_seed_resolved_omission() {
   fi
 }
 
+# ============================================================================
+# I54 — the shell walk prunes .claude/worktrees/ by its exact path (BL-401)
+# ============================================================================
+# `.claude/worktrees/` holds gitignored agent worktrees, each a full checkout carrying a
+# builder's UNCOMMITTED work, and a run from the main checkout once failed I54b on one of them.
+# The walk I54 and I54b share now prunes "$REPO_ROOT/.claude/worktrees" by -path. Three
+# assertions: the pruned offender is silent, the same offender one directory over still fires,
+# and a committed mutant restoring the unpruned find line makes the pruned offender fire again.
+#
+# THE OFFENDER IS ASSEMBLED, NEVER TYPED. I54 scans every `.sh` in the tree, this file included,
+# so a literal of the banned idiom on a code line here would be a finding against the real tree.
+# It sits under `scripts/` in each seeded directory, never under a `hooks/` directory, so I118
+# does not read the seeded path as a core hook.
+WT_Q="'"; WT_FMT="${WT_Q}%""s${WT_Q}"
+WT_LINE="if printf ${WT_FMT} \"\$v\" | grep -q TOKEN; then :; fi"
+wt_seed() { # <dir relative to the tree root>
+  mkdir -p "$t/$1/scripts"
+  printf '%s\n' '#!/usr/bin/env bash' 'v=x' "$WT_LINE" > "$t/$1/scripts/zz.sh"
+}
+# The mutation: the find line as it was before BL-401, pruning `.git` alone. Matched by index()
+# on the exact prune clause, not by a regex, so the escapes in the line are taken literally.
+WT_UNPRUNE='$0 ~ /^i54_files=/ { s = "\\( -name .git -o -path \"$REPO_ROOT/.claude/worktrees\" \\) -prune"; i = index($0, s); if (i) $0 = substr($0, 1, i - 1) "-name .git -prune" substr($0, i + length(s)) } { print }'
+
+# --- Assertion 55: I54 — an offender under .claude/worktrees/ is silent ------
+A55_i54_agent_worktree_offender_is_silent() {
+  t="$(fresh)"
+  wt_seed ".claude/worktrees/agent-x"
+  assert_silent "I54 an offender inside .claude/worktrees/agent-x/ is not scanned (BL-401)"
+}
+
+# --- Assertion 56: I54 — A55's twin one directory over: .claude/worktrees-not/ -
+# One property apart from A55: the same offender in a sibling whose name merely STARTS with
+# `worktrees`. A prune keyed on a name prefix or a glob would silence this too.
+A56_i54_worktrees_sibling_still_fires() {
+  t="$(fresh)"
+  wt_seed ".claude/worktrees-not"
+  assert_fires_n "I54 the same offender in .claude/worktrees-not/ is still REPORTED (A55's twin)" \
+                 ".claude/worktrees-not/scripts/zz.sh:3:" 1
+}
+
+# --- Assertion 57: I54 — the unpruned find line, as a committed mutant ------
+# Whole-tree copy (`fresh`), offender under agent-x. POSITIVE CONTROL FIRST, on the same tree
+# unmutated: the run must reach its verdict line silent, so a validator that is broken for its
+# own reasons cannot score the mutant below as a kill. Then `edit` restores the old find line
+# under its `cmp -s` guard, and the agent-x offender must be reported.
+A57_i54_unpruned_find_mutant_reports_worktree() {
+  t="$(fresh)"
+  wt_seed ".claude/worktrees/agent-x"
+  local before="$fails"
+  assert_silent "I54 mutant control: the unmutated copy is silent on the agent-x offender"
+  [ "$fails" -eq "$before" ] || return 0
+  if edit "$t/scripts/validate-enforcement-map.sh" "$WT_UNPRUNE"; then
+    assert_fires_n "I54 mutant: restoring the unpruned find line REPORTS the agent-x offender" \
+                   ".claude/worktrees/agent-x/scripts/zz.sh:3:" 1
+  fi
+}
+
 # THE ASSERTION LIST IS DERIVED FROM THIS FILE'S OWN DEFINITIONS, in source order. A
 # hand-written list here would be this fixture's own subject defect one level out: an
 # assertion dropped from the list runs nothing and prints nothing, and a suite reporting 14
