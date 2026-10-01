@@ -1741,6 +1741,20 @@ names. **What survives is the third class.** A commit that changes `core/` but n
 subject (`b3debba3` for PC-S308) still reads NAMED-UPSTREAM, because a per-id subject path is
 recorded nowhere.
 
+**Amended on `b178-b2-rel`: a naming commit that changes `VERSION` also reaches.** In this repo's
+release convention the release commit names the id and changes only `CHANGELOG.md` and `VERSION`,
+while its parent carries the `core/` fix and names nothing, so the first cut read real absorptions
+as DOCS-ONLY. Its row text and SKILL.md step 8 also forbade annotating them. Both texts now say
+the naming is not evidence and send the operator to the entry's subject. Re-run on the same
+stripped archive (base `f7eec6f5`, theirs = the branch tip), DOCS-ONLY falls from 32 to 5 and
+NAMED-UPSTREAM rises from 201 to 228. Every one of the 27 movers has a VERSION-touching naming
+commit and no `core/` or `templates/` one, re-derived per parent with `git diff-tree`. Each of the 5
+survivors has only naming commits that touch none of the three. Rows of every other kind are
+byte-identical between the two engines. A release that names an id only to adjudicate it, such as
+`c79a1d55` (ALREADY-FIXED), now reads NAMED-UPSTREAM too. That kind already says naming is not
+absorbing. Fixture arm S954 holds the release shape, and its mutant `reach-no-version` is killed by
+that cell alone. The receipt below has no VERSION-touching commit, so its verdict does not move.
+
 The replacement receipt drives `ledger-reverify.sh` over three single-commit entries: docs-only,
 templates-only, and a core commit that mentions an id whose subject it never touches. It exits 1
 while that third class reads NAMED-UPSTREAM, which today is by design, so the entry stays open. It
