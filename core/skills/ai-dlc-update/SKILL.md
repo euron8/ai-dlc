@@ -2250,17 +2250,36 @@ prose is itself generated rather than composed.
         `<theirs>` is skipped. If `preclassify.sh` fails, or returns nothing while the range
         moves `core/`, that is `WORKLIST finish-unverified-tree`, never a pass.
      4. **No file handed back as a semantic merge is still untouched.** The ordinary run
-        records, in `.claude/.ai-dlc-applying`, the consumer blob of every file it handed back
-        under a `…CLASSIFY` bucket. A recorded file still byte-identical to that blob is
-        `WORKLIST finish-classify-unmerged`: the merge was never done. Do it and re-run
-        `--finish`. A file you merged by hand differs from the record, so it does not hold the
-        finisher up; one you deleted does not either. An unreadable record or file is
-        `WORKLIST finish-classify-unverified`. **If the merge is deliberately a no-op** — the
-        copy is already right — remove the marker and re-run `--finish`: it stamps with
-        `DECISION restamp-identity-unchecked`, which forfeits check 1 and this check for every
-        other handed-back file. A marker written by an apply that predates the record carries
-        no `classify-hashes:` line; `--finish` then says so on a `NOTE finish-classify-unrecorded`
-        and does not withhold, so this check cannot fire on the pull that delivers it.
+        records, in `.claude/.ai-dlc-applying`, the consumer blob AND exec bit of every file it
+        handed back under a `…CLASSIFY` bucket, as `classify: <blob> <755|644><TAB><path>`. A
+        recorded file whose blob and mode both still match is `WORKLIST finish-classify-unmerged`:
+        the merge was never done. Do it and re-run `--finish`. A file you merged by hand differs
+        from the record in its bytes or its mode (a merge that is only `chmod +x` counts), so it
+        does not hold the finisher up; one you deleted does not either. An unreadable record or
+        file is `WORKLIST finish-classify-unverified`.
+
+        The record is written once per BASE: a later ordinary run from the same `base:` — the
+        re-run a withheld row prescribes, a pull re-pointed at a newer `<theirs>`, a second pull
+        before finishing — keeps every line already there and adds only new paths, so a copy you
+        already merged never becomes the reference. `UPSTREAM-DELETED+consumer-modified` and
+        `ORPHANED-UNKNOWN` files are still handed back but are NOT recorded, because keeping the
+        consumer's copy is their normal disposition.
+
+        **If keeping a recorded copy as it is IS the disposition** — the merge is deliberately a
+        no-op, which is common for `BOTH-ADDED` — delete that file's own `classify: … <path>`
+        line from `.claude/.ai-dlc-applying` and re-run `--finish`. Every other check still runs,
+        and the marker keeps the fixture suite blocked until the stamp clears it. Removing the
+        whole marker (`rm .claude/.ai-dlc-applying`) is the LAST resort: it unblocks the fixture
+        suite on a tree that may still be mid-pull, and stamps with
+        `DECISION restamp-identity-unchecked`, forfeiting check 1 and this check for every other
+        handed-back file.
+
+        A marker written by an apply that predates the record carries no `classify-hashes:`
+        line, and a later run from the same base leaves it that way (the tree may already hold
+        your merges, so nothing read then is the copy the apply found). `--finish` then says so on
+        a `NOTE finish-classify-unrecorded` and does not withhold, so this check cannot fire on
+        the pull that delivers it. A path carrying a TAB or a `"` reaches the record C-quoted by
+        `preclassify.sh` and is not recorded either; confirm such a file's merge by hand.
      5. **The two remedies only a fresh ordinary run performs are done.** A known_skills entry
         the consumer added in place and never refiled is `WORKLIST finish-refile-owed`; a refile
         check that could not run is `WORKLIST finish-refile-unverified`; a shipped file whose
@@ -2285,8 +2304,10 @@ prose is itself generated rather than composed.
      `finish-classify-unverified`, `finish-refile-owed`, `finish-refile-unverified`,
      `finish-exec-owed`, `staging-refused`, `hook-unshipped`, `settings-merge`,
      `settings-local-dangling`, `transient-ignore`, `transient-ignore-tracked`,
-     `agent-definitions`. Two `DECISION` rows stop it without stamping, because they write
-     nothing: `restamp-identity-mismatch` and `restamp-unresolvable`.
+     `agent-definitions`. Three `DECISION` rows stop it without stamping, because they write
+     nothing: `restamp-identity-mismatch`, `restamp-unresolvable` and `restamp-absent` (no stamp
+     file at all). `restamp-failed` and `skill-restamp-failed` also leave the stamp short of
+     `<theirs>`, but only after a write was attempted.
 
    - **YOU write `_bmad-output/ai-dlc-update/reconcile-log-<ts>.md`, and `apply.sh` does NOT.**
      Write it LAST, after the post-apply re-runs, because it records them. It carries the gates

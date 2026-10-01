@@ -917,11 +917,17 @@ applying_guard() {
       --finish checks the tree before it stamps. It withholds again, with a WORKLIST row per
       file, while any file still reads as a pure apply from theirs (missing, or still at
       base), and while any file the apply handed back as a semantic merge is still
-      byte-identical to the copy the apply found. It also withholds when <base> is not the
-      stamp's own commit, or when <theirs> is not the ref recorded in this marker. A file you
-      merged by hand differs from that copy and does not hold it up.
+      byte-identical to the copy the apply found, mode included. It also withholds when <base>
+      is not the stamp's own commit, or when <theirs> is not the ref recorded in this marker. A
+      file you merged by hand differs from that copy in bytes or mode and does not hold it up.
 
-   If that pull was abandoned and the tree is known good, remove the marker:
+      If keeping one of those copies as it is IS the disposition, delete that file's own
+      `classify: ... <path>` line from .claude/.ai-dlc-applying and re-run --finish. Every
+      other check still runs, and this marker keeps blocking the suite until the stamp.
+
+   LAST RESORT, if that pull was abandoned and the tree is known good: remove the marker.
+   This unblocks the fixture suite on whatever the tree holds, and the next --finish stamps
+   without checking <theirs> or any handed-back merge:
 
      rm .claude/.ai-dlc-applying
 
