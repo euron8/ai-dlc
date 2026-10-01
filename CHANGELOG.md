@@ -19,6 +19,44 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.676.0] - 2026-09-30
+
+Batch 178's second release: distribution-internal backlog work from the whole-backlog adjudication.
+No consumer candidate, and no file under the update skill's machinery.
+
+### Backlog
+
+- **`BL-381`**. `layer-adjudication-tier` no longer flakes at Part 11 world E ("readable but not
+  loose"). The packer was `git maintenance run --auto`, which on git 2.54 repacks once two loose
+  objects sit in `objects/17`; `gc.auto=0` does not govern it. The seed sets `maintenance.auto false`
+  on its distribution store, and Part 12 forces the trigger and kills a seed without the line on
+  world E's own refusal. It skips under a git that does not pack on that trigger.
+- **`BL-375`**. `sudo bash core/scripts/derive-fixture-readsets.sh --all --tracer both` now runs:
+  each fixture once, unprivileged under `sandbox-exec`, with fs_usage and the Sandbox log stream
+  capturing the same run. It prints both miss counts per fixture and ends `SANDBOX-MISSES-NOTHING`
+  (0), `SANDBOX-MISSES <n> path(s) across <m> fixture(s)` (1) or `REFUSED` (2), including a run that
+  compared fewer fixtures than it listed. It never writes the map. The entry stays open for the
+  operator's run.
+- **`BL-093`**. `CHANGELOG.md`, `docs/context-hardening-notes.md` and the read-set map are declared
+  LOGs, unbounded by design. The map's line is emitted by the deriver and lands at the next trace
+  that writes the map.
+- **`BL-399`**. `validate-steering-budget.sh --cite`'s verdict set (`MATCH`, `NOMATCH`,
+  `NOMATCH-NO-RECORDS`, `NOMATCH-TRANSCRIPT-PRUNED`) has an owner row in `docs/vocabulary-index.md`
+  and a new invariant, **I117**, which lifts the renderer's extractor rather than copying it.
+  `FORK_BUDGET` 3194 → 3202 (base 3186, tip 3196).
+- **`BL-159`** claim 4. The Stop hook's handoff guard enters on an on-disk key with no transcript;
+  the resume and in-flight arms then read as unknown, so only the push, driver, marker and teammate
+  arms can block. No verdict moved across the 594 Stops the existing seeds produce. Claim 1 stays open.
+- **`BL-278`**. `backlog-receipt-binding` joins `BL-040`'s archived receipt, read at run time, to
+  `gate-verdict-grep-shape`'s arms: every shape the receipt closes over must have a row that
+  fixture's oracle reproduces.
+- **`BL-083`**. `verification-discipline.md` cites `ai_dlc_resolve_root()` and
+  `validator-path-resolution` instead of prescribing a walk up for `VERSION`; the population claim
+  is refuted (0 shipping fixture walkers).
+- Entry corrections: `BL-360`'s carried bullet struck (shipped as `BL-370`), `BL-129` re-scoped
+  (`predicate-differential.sh` shipped in v0.444.0), `BL-127` kept at DEFECT on a live stale row
+  (`postcompact-rulebook-recovery` runs `ai-dlc-postcompact.sh` and its row omits it).
+
 ## [0.675.0] - 2026-09-30
 
 Batch 178's first release. One consumer candidate, filed by the reference consumer during its
