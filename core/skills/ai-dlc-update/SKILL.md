@@ -2421,7 +2421,7 @@ declared sites, not everywhere unconditionally.
      and rose back at the rotate, which on a two-member prefix flipped the surviving sibling's
      row between the two statuses above and read exactly like a sweep. The count is taken over
      the corpus, so that flip cannot occur.
-   - **Commit** all step-7 writes on the step-6 reconcile branch, with a subject
+   - **Commit** all step-7 writes and the step-8 ledger writes above on the step-6 reconcile branch, with a subject
      like `chore(ai-dlc-update): reconcile distribution <base-ver> → <theirs-ver>`
      and a body summarizing buckets applied + conflicts adjudicated + the log path.
    - **Push** the reconcile branch to the consumer's remote (`origin`). If there

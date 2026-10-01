@@ -19,6 +19,25 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.685.0] - 2026-10-01
+
+Batch 179's second release: the update `SKILL.md` alone. Bootstrapping, so it ships alone. Its step-8
+reorder takes effect on the pull AFTER the one that delivers it, because a consumer runs the installed
+copy of this file.
+
+### Backlog
+
+- **`PC-S316-UPDATE-STEP8-ORDERS-THE-LEDGER-DISPOSITIONS-AFTER-THE-PUSH-AND-MERGE`**, carried by
+  **`BL-408`**. Step 8 now runs every ledger-writing bullet (the drain, the re-verify, the closes, the
+  per-status dispositions and the rotation) before Commit, Push, Open a PR and Merge, with each bullet's
+  text unchanged. The Commit bullet names the step-8 ledger writes as well as the step-7 writes, so an
+  agent following the order commits the dispositions it just made instead of leaving them behind.
+- **`BL-403`**, part (b) only, left open. Step 7u says what to do with `UPSTREAM-ONLY-ADD` rows: write
+  theirs' copy, then set the executable bit from `git ls-tree` at theirs (`chmod +x` for `100755`,
+  `chmod -x` for `100644`). For a wrong-bit copy, setting the mode is the whole action. An arm in
+  `extract-push-flag-decision` binds the prose. Parts (a) and (e) ride the self-update release, (c) and
+  (d) the `lib.sh` release.
+
 ## [0.684.0] - 2026-10-01
 
 Batch 179's first release: the party-mode sections axis and the split-dispatch census, the handoff
