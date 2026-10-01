@@ -1715,36 +1715,6 @@ verify: manual
 
 The receipt is manual because its subject is the harness's own transcript format, which no file in this tree contains: a predicate keyed on the hook's regex would only check the regex against the copy the seeds were written from.
 
-## BL-406 — the `ledger-reverify` fixture is the suite's pole and is one serial unit; shard it
-
-**DEFECT. Filed at batch 178 by the operator, who directs that the next batch takes it.** The pre-push
-fixture suite is pole-bound: its makespan tracks its single longest directory, because the outer pool
-globs `core/fixtures/*/run.sh`. `core/fixtures/ledger-reverify/run.sh` is that pole — 429s loaded in
-`.git/ai-dlc-fixture-durations` (next: `gate-adjudication-mutants` 405s), 4447 lines that call the
-engine 126 times in sequence with no internal parallelism, and `docs/suite-pole-baseline.tsv` still
-records it at 628. No pool width can get under a single serial unit, so `AI_DLC_FIXTURE_JOBS` buys
-nothing at the pole, and each release touching `ledger-reverify.sh` grows it (batch 178's B2 added
-about 30 engine runs).
-
-**Remedy shape, the pattern this repo already ships.** `fold-architect-ledger-join-mutants` and its
-`-b`/`-c` siblings: a `SHARDS="a b c"` declaration in the fixture, one directory per shard that
-re-enters the fixture with `--group <x>`, every shard paying the shared controls so none can pass
-against a harness that never ran, and a join that refuses unless every part ran exactly once. The
-shard count comes from a measured fixed cost per shard, not a preference. Two differences to design for:
-- **This fixture SHIPS** (no `.dist-only`), so every shard directory ships too and needs the packaging
-  `.claude/rules/fixture-ship-decl.md` names: `uninstall.sh`, both manifest copies, `setup-sites.md`,
-  and I74's join.
-- **Each new shard directory needs a read-set entry**, traced with the sandbox tracer per
-  `operator-rulings.md`.
-
-Re-measure the pole after the split, re-baseline `docs/suite-pole-baseline.tsv` (`BL-378`), and state
-which unit became the new pole.
-
-Discharges no consumer candidate.
-
-verify: sh F=core/fixtures/ledger-reverify/run.sh; [ -f "$F" ] || exit 9; C="$(grep -v '^[[:blank:]]*#' "$F")"; [ -n "$C" ] || exit 9; G="$(sed -nE 's/^SHARDS="([a-z ]+)".*$/\1/p' <<<"$C" | tail -1)"; [ -n "$G" ] || exit 1; D="$(sed -nE 's/^lr_unit_([a-z0-9_]+)\(\) \{.*$/\1/p' <<<"$C" | sort)"; [ -n "$D" ] || exit 1; U=""; n=0; for g in $G; do n=$((n+1)); P="$(bash "$F" --plan "$g" 2>/dev/null)" || exit 1; [ -n "$P" ] || exit 1; U="$U$P"$'\n'; [ "$g" = a ] && continue; R="core/fixtures/ledger-reverify-$g/run.sh"; [ -f "$R" ] || exit 1; K="$(grep -v '^[[:blank:]]*#' "$R" | sed -E 's/[[:blank:]]+#.*$//')"; grep -qE "bash \"\\\$IMPL\" --group $g([[:blank:]]|\$)" <<<"$K" || exit 1; grep -qF "in shard '$g'" <<<"$K" || exit 1; grep -qE '^exec ' <<<"$K" && exit 1; done; U="$(printf '%s' "$U" | grep . | sort)"; [ -z "$(uniq -d <<<"$U")" ] || exit 1; [ "$U" = "$D" ] || exit 1; [ "$n" -ge 2 ]
-
-
 ## BL-409 — `predicate-differential.sh` cannot reach `docs/escalations/pending.md`, so the suppression-lifetime site reports UNDECIDABLE on every consumer
 
 **NOTE. Found by the BL-129 hand at batch 179, not fixed there.** The suppression-lifetime site added to `predicate-sites.md` names `docs/escalations/pending.md` as its subject, and the reader only looks under `_bmad-output/`. Run directly on the reference consumer's `pending.md` over `1f838777~1..HEAD`, the block gives `OK` on both sides, so the block works once the reader can reach the file. The hand's scoring scripts are not committed; re-derive before building.
@@ -1762,3 +1732,9 @@ verify: manual -- no receipt has been scored; the claim is the BL-129 hand's rep
 **DEFECT. Found by the `b179-lib` tip adversary at batch 179, predating that branch.** `memo_ls_tree` and `memo_show` return 125 when a cached status is unreadable or malformed (BL-403(d)), and three callers swallow it: `retired-layer-token.sh` `files_at` (`memo_ls_tree … || return 0`) and `show_at` (`memo_show … || true`), and `layer-drift.sh` (`_tree="$(memo_ls_tree … | grep '^core/' || true)"`, near `:1409`). Measured with an empty `.s` on a cache hit: `rc=0 matches=0` on base and on the branch, against `matches=2` uncorrupted. The branch changed one thing here: base's swallow left `numeric argument required` on stderr and the branch's leaves nothing, so the refusal got quieter. Fourteen `git_show` call sites in `layer-drift.sh` and ten in `unregistered-drift.sh` are further candidates, listed and not traced. Re-derive before building.
 
 verify: manual -- no receipt has been scored; the claim is the adversary's report and the lead has not re-derived it.
+
+## BL-412 — `layer-reference-resolution` went red once under the pool on a close commit that touches none of its inputs, and the cause is not established
+
+**NOTE. Seen at batch 179, not diagnosed.** The first gate of the second close commit (`d7cb330a`, which changed only `docs/backlog.md`, `docs/backlog.archive.md` and `.githooks/pre-push`) failed on one unit of 216 at pool width 16 and a 1-minute load near 40: mutant `hook-resolve-mention` read `w12shadow5=W` where the fixture expects `-`. That fixture reads none of the three files and its read-set rows name none of them. Run alone from the main checkout it passed three times (42 assertions, about 55s), and the unchanged commit passed a second gate with 216 of 216 ok. No ordering or timing construct in `vector.sh` or `worker.sh` was found that would explain it, and the recorded loaded cost is 148s against 55s solo. A load-dependent fault is a hypothesis, not a finding. The hook's failure record (`.git/ai-dlc-fixture-failures`) holds the full got-vector and is overwritten by the next red run, so copy it before the next gate if this recurs.
+
+verify: manual -- the failure did not reproduce solo or on a second gate, so there is no receipt to score; the claim is the lead's measurement and the cause is unestablished.
