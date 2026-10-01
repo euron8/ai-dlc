@@ -221,7 +221,7 @@ score_a M-A1 "$(mut_line a1 '  if [ -n "$LR_DIST_ONLY" ]; then' '  if false; the
 score_a M-A2 "$(mut_line a2 '      /^core\/fixtures\// { f = substr($0, 15); sub(/\/.*/, "", f); if (f in drop) next }' '      /^core\/fixtures\// { next }')" \
   "$DO $NU $DO $NU $DO $DO $NU" \
   "dropping every core/fixtures/ path demotes the SHIPPING fixtures' S803 and S806, and only those two move"
-score_a M-A3 "$(mut_line a3 'LR_DIST_ONLY="$(git -C "$DIST" ls-tree -r --name-only "${THEIRS}" -- core/fixtures/ 2>/dev/null \' 'LR_DIST_ONLY="$( (cd "$DIST" && find core/fixtures -name .dist-only) 2>/dev/null \')" \
+score_a M-A3 "$(mut_line a3 'LR_DIST_ONLY="$(git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "${THEIRS}" -- core/fixtures/ 2>/dev/null \' 'LR_DIST_ONLY="$( (cd "$DIST" && find core/fixtures -name .dist-only) 2>/dev/null \')" \
   "$NU $NU $NU $NU $NU $NU $NU" \
   "reading the markers from the CHECKOUT (at base) instead of THEIRS loses both markers and S801, S805 read NAMED-UPSTREAM"
 # M-A4 moves S807 as well as S804, and both are its subject: the rename listing without detection
@@ -236,11 +236,131 @@ score_a M-A5 "$(mut_line a5 '      BEGIN { n = split(ENVIRON["LR_D"], a, "\n"); 
   "$DO $NU $NU $NU $NU $DO $NU" \
   "a space-split marker set leaves the dist-only 'sp ace' (S805) at NAMED-UPSTREAM and demotes the shipping 'sp' (S806), and only those two move"
 # M-A6: FIX 2 REVERTED. Rename detection back on, so S807 lists only its dist-only destination.
-L6_FIX='  _files="$(printf '"'"'%s\n'"'"' "$1" | git -C "$DIST" log --no-walk --stdin -m --no-renames --name-only --format= 2>/dev/null)" \'
-L6_MUT='  _files="$(printf '"'"'%s\n'"'"' "$1" | git -C "$DIST" log --no-walk --stdin -m --name-only --format= 2>/dev/null)" \'
+L6_FIX='  _files="$(printf '"'"'%s\n'"'"' "$1" | git -C "$DIST" -c core.quotePath=false log --no-walk --stdin -m --no-renames --name-only --format= 2>/dev/null)" \'
+L6_MUT='  _files="$(printf '"'"'%s\n'"'"' "$1" | git -C "$DIST" -c core.quotePath=false log --no-walk --stdin -m --name-only --format= 2>/dev/null)" \'
 score_a M-A6 "$(mut_line a6 "$L6_FIX" "$L6_MUT")" \
   "$DO $NU $NU $NU $DO $NU $DO" \
   "with rename detection the commit moving an installed script into a dist-only fixture reads docs-only, and only S807 moves"
+
+# =================================================================================================
+# PART E -- A NON-ASCII PATH IS LISTED RAW AT EVERY READER WHOSE ANSWER IT CAN MOVE
+# =================================================================================================
+# Under the default `core.quotePath` git C-quotes `core/scripts/café.sh` as
+# `"core/scripts/caf\303\251.sh"`. Three readers in the engine lose a row to that, each at rc 0:
+#   - `named_reach`'s commit listing: the quoted line opens with `"`, so the `core/` prefix test
+#     scored an installed script, and a shipping fixture, docs-only (E1, E2).
+#   - `$LR_DIST_ONLY`: the `sed` anchor rejects the quoted marker line, so a dist-only fixture with
+#     a non-ASCII name is not in the set (E3 -- visible only once `named_reach` lists raw).
+#   - `theirs_basename_matches`: the quoted line's last field ends `caf\303\251.sh"` and matches
+#     no raw basename, so a consumer-spelled path did not resolve (E4).
+# Its own world and its own labels, so part A's seven-kind vector and its mutants are untouched.
+EW="$W/e"; ED="$EW/dist"; EC="$EW/consumer"
+mkdir -p "$ED/core/scripts" "$ED/core/fixtures/café-ship" || broken "E: could not build the dist tree"
+g "$ED" init -q . 2>/dev/null || git init -q "$ED" || broken "E: git init failed"
+printf '0.1.0\n' > "$ED/VERSION"
+printf '#!/bin/sh\necho plain\n' > "$ED/core/scripts/plain.sh"
+printf '#!/bin/sh\necho cafe\n' > "$ED/core/scripts/café.sh"
+printf '#!/bin/sh\necho ships\n' > "$ED/core/fixtures/café-ship/run.sh"
+g "$ED" add -A && g "$ED" commit -qm base || broken "E: base commit failed"
+E_BASE="$(git -C "$ED" rev-parse HEAD)"
+mkdir -p "$ED/core/fixtures/café-dist"
+printf 'Distribution-only: a name carrying a non-ASCII character.\n' > "$ED/core/fixtures/café-dist/.dist-only"
+printf '#!/bin/sh\necho dist\n' > "$ED/core/fixtures/café-dist/run.sh"
+g "$ED" add -A && g "$ED" commit -qm 'test: add a non-ASCII dist-only fixture' || broken "E: marker commit failed"
+printf 'echo edited\n' >> "$ED/core/fixtures/café-dist/run.sh"
+g "$ED" add -A && g "$ED" commit -qm 'test: tighten it, cites PC-S821-CAFE-DISTONLY' || broken "E: S821 commit failed"
+printf 'echo edited\n' >> "$ED/core/fixtures/café-ship/run.sh"
+g "$ED" add -A && g "$ED" commit -qm 'test: covers PC-S822-CAFE-SHIPPING' || broken "E: S822 commit failed"
+# S823's commit touches ONLY the non-ASCII script: an ASCII `core/` path beside it would score the
+# commit `code` whatever the listing did to café.sh. The ASCII control's token lands separately.
+printf 'echo ZZ-E-CAFE-FIXED\n' >> "$ED/core/scripts/café.sh"
+g "$ED" add -A && g "$ED" commit -qm 'fix: absorb PC-S823-CAFE-SCRIPT' || broken "E: S823 commit failed"
+printf 'echo ZZ-E-PLAIN-FIXED\n' >> "$ED/core/scripts/plain.sh"
+g "$ED" add -A && g "$ED" commit -qm 'fix: the ascii control token' || broken "E: control commit failed"
+E_THEIRS="$(git -C "$ED" rev-parse HEAD)"
+mkdir -p "$EC/_bmad-output/ai-dlc-update"
+E_LED="$EC/_bmad-output/ai-dlc-update/push-candidate-ledger.md"
+cat > "$E_LED" <<'EOM'
+# Push-candidate ledger
+
+- **PC-S821-CAFE-DISTONLY** — named only by a commit touching a non-ASCII dist-only fixture.
+
+- **PC-S822-CAFE-SHIPPING** — named only by a commit touching a non-ASCII shipping fixture.
+
+- **PC-S823-CAFE-SCRIPT** — named by a commit touching a non-ASCII installed script.
+
+- **ZZ-E4-CAFE** — a receipt filed in the consumer's install layout on a non-ASCII script.
+  verify: theirs_has scripts/ai-dlc/café.sh "ZZ-E-CAFE-FIXED"
+
+- **ZZ-E4-PLAIN** — the same receipt on an ASCII script, the control.
+  verify: theirs_has scripts/ai-dlc/plain.sh "ZZ-E-PLAIN-FIXED"
+EOM
+g "$EC" init -q . 2>/dev/null || git init -q "$EC" || broken "E: consumer git init failed"
+g "$EC" add -A && g "$EC" commit -qm consumer || broken "E: consumer commit failed"
+
+# SANITY. The DEFAULT listing in this world must C-quote the name: an inherited
+# `core.quotePath=false` would make the shipped engine and every mutant below agree for a reason
+# that is not the engine. The raw paths must exist at theirs, and the consumer-spelled path must
+# NOT resolve dist-relative, or E4 never reaches the basename fallback.
+case "$(git -C "$ED" ls-tree -r --name-only "$E_THEIRS" -- core/scripts/)" in
+  *'"core/scripts/caf\303\251.sh"'*) : ;;
+  *) broken "E: the default ls-tree listing does not C-quote café.sh here, so no cell below can discriminate" ;;
+esac
+git -C "$ED" cat-file -e "${E_THEIRS}:core/scripts/café.sh" 2>/dev/null || broken "E: core/scripts/café.sh is not at theirs"
+git -C "$ED" cat-file -e "${E_THEIRS}:core/fixtures/café-dist/.dist-only" 2>/dev/null || broken "E: the café-dist marker is not at theirs"
+git -C "$ED" cat-file -e "${E_THEIRS}:scripts/ai-dlc/café.sh" 2>/dev/null && broken "E: scripts/ai-dlc/café.sh resolves dist-relative, so E4 skips the basename fallback"
+ok "E before: the default listing C-quotes café.sh; the raw paths are at theirs; the consumer-spelled path is not"
+
+run_e() { bash "$1" "$ED" "$E_BASE" "$EC" "$E_THEIRS" "$E_LED" 2>/dev/null; }
+row_of() { printf '%s\n' "$1" | awk -F'\t' -v l="$2" '$2 == l {print $1 "\t" $3; exit}'; }
+E_WANT="$DO $NU $NU resolved resolved"
+kinds_e() { # <rows> -> S821 S822 S823 kinds, then E4-CAFE and E4-PLAIN as resolved|unresolved|<none>
+  local _r="$1" _out="" _l _k _x
+  for _l in PC-S821-CAFE-DISTONLY PC-S822-CAFE-SHIPPING PC-S823-CAFE-SCRIPT; do
+    _k="$(kind_of "$_r" "$_l")"; _out="$_out ${_k:-<none>}"
+  done
+  for _l in ZZ-E4-CAFE ZZ-E4-PLAIN; do
+    _x="$(row_of "$_r" "$_l")"
+    case "$_x" in
+      '') _out="$_out <none>" ;;
+      *"basename matches"*) _out="$_out unresolved" ;;
+      STILL-LIVE*) _out="$_out resolved" ;;
+      *) _out="$_out other" ;;
+    esac
+  done
+  printf '%s' "${_out# }"; }
+
+E_GOT="$(kinds_e "$(run_e "$RV")")"
+if [ "$E_GOT" = "$E_WANT" ]; then
+  ok "E: S821 (non-ASCII dist-only fixture) -> DOCS-ONLY; S822 (non-ASCII shipping fixture), S823 (non-ASCII script) -> NAMED-UPSTREAM; scripts/ai-dlc/café.sh resolves by basename and is judged, beside its ASCII control"
+else
+  bad "E: read '$E_GOT', want '$E_WANT'"
+fi
+
+# PART E mutants: each strips the flag from ONE listing, and is also scored over part A's seven
+# ASCII kinds, which must not move -- a mutant that moved them would be breaking more than quoting.
+L91_FIX="$L6_FIX"
+L91_MUT='  _files="$(printf '"'"'%s\n'"'"' "$1" | git -C "$DIST" log --no-walk --stdin -m --no-renames --name-only --format= 2>/dev/null)" \'
+L46_FIX='LR_DIST_ONLY="$(git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "${THEIRS}" -- core/fixtures/ 2>/dev/null \'
+L46_MUT='LR_DIST_ONLY="$(git -C "$DIST" ls-tree -r --name-only "${THEIRS}" -- core/fixtures/ 2>/dev/null \'
+L06_FIX='  git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "$THEIRS" 2>/dev/null |'
+L06_MUT='  git -C "$DIST" ls-tree -r --name-only "$THEIRS" 2>/dev/null |'
+score_e() { # <tag> <mutant path> <want E kinds> <what it proves>
+  local _got _ga
+  if [ -z "$2" ]; then bad "E mutant $1 DID NOT APPLY (its anchor matched nothing or more than once)"; return; fi
+  _got="$(kinds_e "$(run_e "$2")")"; _ga="$(kinds_a "$(run_a "$2")")"
+  if [ "$_got" = "$3" ] && [ "$_ga" = "$WANT_A" ]; then ok "E mutant $1 killed: $4"
+  else bad "E mutant $1 read '$_got' (want '$3') and part A '$_ga' (want '$WANT_A')"; fi
+}
+score_e M-E1 "$(mut_line e1 "$L91_FIX" "$L91_MUT")" \
+  "$DO $DO $DO resolved resolved" \
+  "with named_reach listing C-quoted the non-ASCII shipping fixture and script read docs-only, and part A does not move"
+score_e M-E2 "$(mut_line e2 "$L46_FIX" "$L46_MUT")" \
+  "$NU $NU $NU resolved resolved" \
+  "with the marker listing C-quoted the non-ASCII dist-only fixture leaves the set and S821 reads NAMED-UPSTREAM, and part A does not move"
+score_e M-E3 "$(mut_line e3 "$L06_FIX" "$L06_MUT")" \
+  "$DO $NU $NU unresolved resolved" \
+  "with the basename listing C-quoted scripts/ai-dlc/café.sh matches no basename while its ASCII control still resolves"
 
 # =================================================================================================
 # PART B -- a failed staging write of the entry loop's input refuses
