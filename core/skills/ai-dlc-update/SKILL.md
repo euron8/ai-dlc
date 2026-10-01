@@ -2324,22 +2324,6 @@ declared sites, not everywhere unconditionally.
 8. **Deliver — branch → commit → push → PR → merge.** The reconcile is landed
    through the consumer's normal review flow, never force-written to the working
    branch:
-   - **Commit** all step-7 writes on the step-6 reconcile branch, with a subject
-     like `chore(ai-dlc-update): reconcile distribution <base-ver> → <theirs-ver>`
-     and a body summarizing buckets applied + conflicts adjudicated + the log path.
-   - **Push** the reconcile branch to the consumer's remote (`origin`). If there
-     is no remote or push fails (a local-only consumer), STOP here and hand the
-     operator the local branch + diff to merge manually — do not silently drop
-     the work.
-   - **Open a PR** into the working branch (`gh pr create`), body = the reconcile
-     report summary (buckets, conflicts, push-candidates).
-   - **Merge ONLY on explicit operator approval of the PR.** This is a second,
-     independent gate — separate from the `apply` arg that authorized the write.
-     The skill does NOT auto-merge. None of the following authorize a merge: zero
-     conflicts, a clean diff, the `apply` arg already given, or inferred intent.
-     Present the PR and wait for the operator to approve it; only then merge
-     (squash, delete branch). On merge, the re-stamp + log + changes reach the
-     working branch.
    - Drain any `push_candidate`-flagged extensions into the push-candidate ledger
      for a later upstream push-mine (spec §8.1).
    - **Drain the defects this run found in UPSTREAM's own tooling** into the same ledger,
@@ -2437,6 +2421,22 @@ declared sites, not everywhere unconditionally.
      and rose back at the rotate, which on a two-member prefix flipped the surviving sibling's
      row between the two statuses above and read exactly like a sweep. The count is taken over
      the corpus, so that flip cannot occur.
+   - **Commit** all step-7 writes on the step-6 reconcile branch, with a subject
+     like `chore(ai-dlc-update): reconcile distribution <base-ver> → <theirs-ver>`
+     and a body summarizing buckets applied + conflicts adjudicated + the log path.
+   - **Push** the reconcile branch to the consumer's remote (`origin`). If there
+     is no remote or push fails (a local-only consumer), STOP here and hand the
+     operator the local branch + diff to merge manually — do not silently drop
+     the work.
+   - **Open a PR** into the working branch (`gh pr create`), body = the reconcile
+     report summary (buckets, conflicts, push-candidates).
+   - **Merge ONLY on explicit operator approval of the PR.** This is a second,
+     independent gate — separate from the `apply` arg that authorized the write.
+     The skill does NOT auto-merge. None of the following authorize a merge: zero
+     conflicts, a clean diff, the `apply` arg already given, or inferred intent.
+     Present the PR and wait for the operator to approve it; only then merge
+     (squash, delete branch). On merge, the re-stamp + log + changes reach the
+     working branch.
 9. **Safety.** Three independent recover layers: the step-6 reconcile **branch**
    (the working branch is never touched), the consumer's
    `docs/pre-ai-dlc/<ts>/_divergence/` archive (written by install), and the
