@@ -632,8 +632,8 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   `origin/main` 297f7499 in a clean detached worktree against the BL-399 tip: base 3186
 #   (spread 3186-3188), tip 3196 (spread 3195-3196), so +10. I117 +9 is new: the `--cite`
 #   verdict set, one awk lift of its grammar out of the renderer, one awk over the owner, one
-#   grep over core/, and its mktemp self-probe. I13 +1, I82 +1 and I116 -1 were not
-#   attributed to a line. Every other arm unchanged. HIGH reading 3196 plus
+#   grep over core/, and its mktemp self-probe. I13 +1, I82 +1 and I116 -1 net to +1, inside
+#   the instrument's own base spread of 2. Every other arm unchanged. HIGH reading 3196 plus
 #   the usual 6.
 FORK_BUDGET=3202
 
