@@ -1942,9 +1942,11 @@ else
 fi
 
 # --- MUTATION: prove the arms above can fail -----------------------------------------------
-# The runner sources nothing from its own directory, so a lone copy is a working harness here
-# — but the copies are still taken beside the original and checked with an unmutated control,
-# because "the mutant emitted nothing" and "the mutant survived" are the same bytes.
+# The runner SOURCES lib.sh from its own directory and evals `map_consumer()` out of
+# preclassify.sh beside it, so a lone copy is NOT a working harness: it refuses before it runs
+# anything. Every copy is therefore taken into `$MUTDIR`, which holds every reconcile sibling, and
+# checked with an unmutated control, because "the mutant emitted nothing" and "the mutant
+# survived" are the same bytes.
 MUTDIR="$(mktemp -d)"; trap 'rm -rf "$CONS" "$CONS2" "$DIST" "$WREPO" "$MUTDIR"' EXIT
 cp "$RECONCILE"/*.sh "$MUTDIR"/ 2>/dev/null
 CTL="$MUTDIR/control-unmutated.sh"; cp "$RUNNER" "$CTL"
@@ -2138,8 +2140,11 @@ pat = r"git -C \"\$DIST\" rev-parse -q --verify \"\$\{THEIRS\}:core/fixtures/([^
 out, n = re.subn(pat, lambda m: "git -C \"$DIST\" cat-file -e \"${THEIRS}:core/fixtures/" + m.group(1) + "\" 2>/dev/null", s)
 open(sys.argv[2], "w").write(out)
 print(n)' "$RUNNER" "$M15" 2>/dev/null || echo 0)"
-    if [ "${MUT_N:-0}" -ne 4 ] || cmp -s "$RUNNER" "$M15"; then
-      bad "FIXTURE ERROR: expected 4 tree-resolving probe sites to mutate, moved ${MUT_N:-0} — Part 20 proves nothing"
+    # TWO SITES, NOT FOUR: the two `.dist-only` probes are `memo_has_path` now (BL-403), and only
+    # the two `run.sh` probes still resolve through `rev-parse`. Those are the ones a filtered
+    # blob can fool, and they alone produce both halves of the observable below.
+    if [ "${MUT_N:-0}" -ne 2 ] || cmp -s "$RUNNER" "$M15"; then
+      bad "FIXTURE ERROR: expected 2 tree-resolving run.sh probe sites to mutate, moved ${MUT_N:-0} — Part 20 proves nothing"
     else
       rm -f "$LOGDIR2"/self-update-fixtures-*.md
       bash "$M15" "$FILT" "$f_base" filt-theirs "$CONS2" keeper mover >/dev/null 2>&1
@@ -2162,8 +2167,8 @@ fi
 
 # --- MUTANT 1: the .dist-only exemption inverted ---------------------------------------------
 M1="$MUTDIR/m1-exemption-inverted.sh"
-if mkmutant "$M1" 'core/fixtures/${d}/.dist-only" >/dev/null 2>&1 && continue' \
-                  'core/fixtures/${d}/.dist-only" >/dev/null 2>&1 || true'; then
+if mkmutant "$M1" '    0)   continue ;;' \
+                  '    0)   ;;'; then
   rm -f "$LOGDIR2"/self-update-fixtures-*.md
   bash "$M1" "$DIST" "$D_BASE" theirs-tag "$CONS2" touched-named green-one >/dev/null 2>&1
   if [ "$(cov_set "$(newest_log2)")" = "touched-distonly,touched-shippable," ]; then
@@ -2325,11 +2330,11 @@ fi
 
 # --- MUTANT 7: the .dist-only probe neutered, the run.sh probe kept ---------------------------
 # One exclusion at a time, because a mutant that removes both cannot say which arm saw it. The
-# anchor carries the `  if ` prefix that the diff-side copy of the same probe does not, so the
-# substitution cannot land on the miss-join's exemption instead.
+# anchor is the over-arm's `elif` on the probe's status; the diff-side copy of the same probe
+# reads its status through a `case`, so the substitution cannot land on the miss-join's exemption.
 M7="$MUTDIR/m7-distonly-probe-gone.sh"
-if mkmutant "$M7" '  if git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${d}/.dist-only" >/dev/null 2>&1; then' \
-                  '  if false; then'; then
+if mkmutant "$M7" '  elif [ "$_do_rc" -eq 0 ]; then' \
+                  '  elif false; then'; then
   rm -f "$LOGDIR2"/self-update-fixtures-*.md
   bash "$M7" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
        named-distonly green-one cwd-probe touched-shippable >/dev/null 2>&1
@@ -2422,8 +2427,10 @@ fi
 # INVERSE of Part 17's set, and it is wrong in both directions at once: it acquits an orphan
 # bound for the consumer and convicts two fixtures the pull genuinely delivers.
 M11="$MUTDIR/m11-probes-read-disk.sh"
-if mkmutant2 "$M11" 'if git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${d}/.dist-only" >/dev/null 2>&1; then' \
-                    'if [ -f "$DIST/core/fixtures/${d}/.dist-only" ]; then' \
+# The marker probe is spelled identically at both sites, so its anchor carries the over-arm's
+# own status test on the next line, which the diff-side copy does not have.
+if mkmutant2 "$M11" $'  memo_has_path "$DIST" "$THEIRS" "core/fixtures/${d}/.dist-only" || _do_rc=$?\n  if [ "$_do_rc" -ne 0 ] && [ "$_do_rc" -ne 128 ]; then' \
+                    $'  [ -f "$DIST/core/fixtures/${d}/.dist-only" ] || _do_rc=128\n  if [ "$_do_rc" -ne 0 ] && [ "$_do_rc" -ne 128 ]; then' \
                     'elif ! git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${d}/run.sh" >/dev/null 2>&1; then' \
                     'elif [ ! -f "$DIST/core/fixtures/${d}/run.sh" ]; then'; then
   rm -f "$LOGDIR2"/self-update-fixtures-*.md
@@ -2887,8 +2894,8 @@ fi
 # all, which is the state `fixture-mutants.md` names: an arm asserting that nothing was said
 # passes against a subject that says nothing, and only a widening copy tells the two apart.
 M14="$MUTDIR/m14-distonly-probe-widened.sh"
-if mkmutant "$M14" '  if git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${d}/.dist-only" >/dev/null 2>&1; then' \
-                   '  if ! git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${d}/.dist-only" >/dev/null 2>&1; then'; then
+if mkmutant "$M14" '  elif [ "$_do_rc" -eq 0 ]; then' \
+                   '  elif [ "$_do_rc" -eq 128 ]; then'; then
   rm -f "$LOGDIR2"/self-update-fixtures-*.md
   bash "$M14" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
        green-one cwd-probe touched-named touched-shippable >/dev/null 2>&1
@@ -3709,6 +3716,182 @@ else
       bad "CONTROL — the reader did not name DEFER and UNDECIDED on the offender tree (got '${j_ctl_off:-empty}'). A reader whose output does not depend on its input scores every mutant above for a reason that is not the mutation" ;;
   esac
 fi
+
+# --- Part 21: AN UNREADABLE `.dist-only` IS A REFUSAL, NEVER AN ANSWER (BL-403) ---------------
+# Both `.dist-only` probes are `memo_has_path` (lib.sh): 0 present, 128 CONFIRMED absent, 125 when
+# git said no and the absence could not be confirmed. The probe they replaced, `rev-parse -q
+# --verify`, answers 1 for an absent marker and for an unreadable subtree alike.
+#
+# TWO WORLDS, ONE PER SITE, because one missing object cannot reach both. At the OVER-arm the
+# discriminating input is a named directory whose TREE at theirs is missing: the old probe read
+# "not dist-only", then "no run.sh at theirs", and told the operator upstream deleted a driver it
+# could not even see. At the DIFF-side join a missing subtree never arrives, because `git diff`
+# must read the subtree of any directory the range touches and fails first (the UNRESOLVABLE
+# refusal above). What does arrive is a directory whose `.dist-only` BLOB is missing — the tree
+# resolves, so `ls-tree` names the entry, `cat-file -e` answers 1, and the probe answers 125.
+#
+# The world is asserted to DISCRIMINATE before any verdict is read: the old spelling and the new
+# one must disagree on the subject and agree on a readable control directory.
+P21="$(mktemp -d)"
+P21D="$P21/dist"
+P21C="$(bash "$HERE/seed.sh")"
+P21LOG="$P21C/_bmad-output/ai-dlc-update"
+(
+  unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+  git -c init.templateDir= init -q "$P21D" || exit 1
+  PG() { git -C "$P21D" -c user.name=ai-dlc-fixture -c user.email=fixture@invalid \
+                        -c commit.gpgsign=false "$@"; }
+  for f in keeper treeless blobless; do
+    mkdir -p "$P21D/core/fixtures/$f"
+    printf 'p21 unique base %s\n' "$f" > "$P21D/core/fixtures/$f/run.sh"
+  done
+  PG add -A && PG commit -q --no-verify -m base && PG tag p21-base || exit 1
+  printf 'p21 unique theirs blobless\n' > "$P21D/core/fixtures/blobless/run.sh"
+  printf 'p21 unique marker: a mutation battery, never shipped\n' > "$P21D/core/fixtures/blobless/.dist-only"
+  PG add -A && PG commit -q --no-verify -m theirs && PG tag p21-theirs || exit 1
+) >/dev/null 2>&1
+p21_obj() { # p21_obj <spec> -> move that loose object aside; 0 when it is gone
+  local s; s="$(git -C "$P21D" rev-parse -q --verify "$1" 2>/dev/null)" || return 1
+  [ -n "$s" ] && mv "$P21D/.git/objects/${s%"${s#??}"}/${s#??}" "$P21/gone-$s" 2>/dev/null
+}
+seed_record "$P21LOG" "$P21D" p21-base p21-theirs OK 021 >/dev/null 2>&1
+p21_obj 'p21-theirs:core/fixtures/treeless'
+p21_obj 'p21-theirs:core/fixtures/blobless/.dist-only'
+p21_rp() { git -C "$P21D" rev-parse -q --verify "p21-theirs:core/fixtures/$1" >/dev/null 2>&1 && echo 0 || echo 1; }
+p21_ce() { git -C "$P21D" cat-file -e "p21-theirs:core/fixtures/$1" >/dev/null 2>&1 && echo 0 || echo 1; }
+P21_DISC="tree:rp=$(p21_rp treeless/.dist-only),ce=$(p21_ce treeless) blob:rp=$(p21_rp blobless/.dist-only),ce=$(p21_ce blobless/.dist-only) ctl:rp=$(p21_rp keeper/run.sh),ce=$(p21_ce keeper)"
+p21_newest() { ls -t "$P21LOG"/self-update-fixtures-*.md 2>/dev/null | head -1; }
+# p21_over <runner> -> "rc=<n> why=<unconfirmed|deleted|other> keeper=<refused|kept>"
+p21_over() {
+  local rc=0 l w=other k=kept
+  rm -f "$P21LOG"/self-update-fixtures-*.md
+  bash "$1" "$P21D" p21-base p21-theirs "$P21C" treeless keeper >/dev/null 2>&1 || rc=$?
+  l="$(p21_newest)"
+  if grep -q '^  treeless — its .dist-only marker at .* could not be confirmed present or absent' "${l:-/dev/null}"; then w=unconfirmed
+  elif grep -q '^  treeless — no run.sh at .*upstream deleted the driver' "${l:-/dev/null}"; then w=deleted; fi
+  grep -q '^  keeper ' "${l:-/dev/null}" && k=refused
+  printf 'rc=%s why=%s keeper=%s\n' "$rc" "$w" "$k"
+}
+# p21_diff <runner> -> "rc=<n> tag=<unconfirmed|uncovered|none> subject=<blobless|->"
+p21_diff() {
+  local rc=0 l t=none s=-
+  rm -f "$P21LOG"/self-update-fixtures-*.md
+  bash "$1" "$P21D" p21-base p21-theirs "$P21C" keeper >/dev/null 2>&1 || rc=$?
+  l="$(p21_newest)"
+  if grep -q '^COVERAGE: UNCONFIRMED' "${l:-/dev/null}"; then
+    t=unconfirmed
+    # A whole-line membership `case`, not `| grep -q`, which I54b refuses under pipefail.
+    p21_sec="$(sed -n '/^COVERAGE: UNCONFIRMED/,/^$/p' "$l")"
+    case "
+$p21_sec
+" in *"
+  blobless
+"*) s=blobless ;; esac
+  elif grep -q '^COVERAGE: the diff changes' "${l:-/dev/null}"; then t=uncovered; fi
+  printf 'rc=%s tag=%s subject=%s\n' "$rc" "$t" "$s"
+}
+if [ "$P21_DISC" != "tree:rp=1,ce=1 blob:rp=0,ce=1 ctl:rp=0,ce=0" ]; then
+  bad "FIXTURE BROKEN: Part 21's world does not discriminate ($P21_DISC, want tree:rp=1,ce=1 blob:rp=0,ce=1 ctl:rp=0,ce=0) — the moved objects did not leave the states the two spellings disagree on, so no verdict below would mean anything"
+else
+  ok "Part 21 world discriminates: a missing subtree reads rev-parse 1 (the old 'absent') and a missing marker blob reads rev-parse 0 while cat-file fails, against a readable control"
+  p21_g="$(p21_over "$RUNNER")"
+  if [ "$p21_g" = "rc=2 why=unconfirmed keeper=kept" ]; then
+    ok "Part 21a: a named directory whose tree at theirs cannot be read is REFUSED as unconfirmed, not reported as a driver upstream deleted, and the readable directory beside it is accepted"
+  else
+    bad "Part 21a: an unreadable named tree read '$p21_g', want 'rc=2 why=unconfirmed keeper=kept'. The .dist-only probe is answering an unreadable subtree as an absent marker"
+  fi
+  p21_g="$(p21_diff "$RUNNER")"
+  if [ "$p21_g" = "rc=2 tag=unconfirmed subject=blobless" ]; then
+    ok "Part 21b: a diff-touched directory whose .dist-only blob cannot be read is REFUSED under its own COVERAGE: UNCONFIRMED tag, never skipped or counted"
+  else
+    bad "Part 21b: a diff-touched directory with an unreadable marker read '$p21_g', want 'rc=2 tag=unconfirmed subject=blobless'"
+  fi
+
+  # CONTROL: an unmutated copy beside its siblings gives both verdicts, so every kill below is the
+  # mutation and not a copy that could not source lib.sh.
+  p21_c="$(p21_over "$CTL") | $(p21_diff "$CTL")"
+  if [ "$p21_c" = "rc=2 why=unconfirmed keeper=kept | rc=2 tag=unconfirmed subject=blobless" ]; then
+    ok "Part 21 CONTROL: the unmutated copy in the mutant directory gives both refusals"
+  else
+    bad "Part 21 CONTROL: the unmutated copy read '$p21_c' — the mutant harness cannot run the runner, so the kills below prove nothing"
+  fi
+  # M21a: the over-arm's 125 branch made unreachable, so 125 falls to the old reading.
+  M21A="$MUTDIR/m21a-overarm-125-ignored.sh"
+  if mkmutant "$M21A" '  if [ "$_do_rc" -ne 0 ] && [ "$_do_rc" -ne 128 ]; then' '  if false; then'; then
+    p21_g="$(p21_over "$M21A")"
+    if [ "$p21_g" = "rc=2 why=deleted keeper=kept" ]; then
+      ok "MUTATION 21a — with the over-arm's 125 branch gone the unreadable tree is reported as a driver upstream DELETED: Part 21a is what catches that"
+    else
+      bad "MUTATION 21a — the 125 branch was removed and Part 21a's input read '$p21_g', want 'rc=2 why=deleted keeper=kept'"
+    fi
+  else
+    bad "FIXTURE ERROR: the over-arm's 125 anchor no longer occurs exactly once in the runner — Part 21a proves nothing"
+  fi
+  # M21b: the diff-side 125 branch falls through to the run.sh probe, as the old `&& continue` did.
+  M21B="$MUTDIR/m21b-diffside-125-falls-through.sh"
+  if mkmutant "$M21B" '    *)   cov_refused="$cov_refused $d"; continue ;;' '    *)   ;;'; then
+    p21_g="$(p21_diff "$M21B")"
+    if [ "$p21_g" = "rc=2 tag=uncovered subject=-" ]; then
+      ok "MUTATION 21b — with the diff-side 125 branch falling through, the unreadable marker is read as 'not dist-only' and the directory is demanded of the slice: Part 21b is what catches that"
+    else
+      bad "MUTATION 21b — the diff-side 125 branch was removed and Part 21b's input read '$p21_g', want 'rc=2 tag=uncovered subject=-'"
+    fi
+  else
+    bad "FIXTURE ERROR: the diff-side 125 anchor no longer occurs exactly once in the runner — Part 21b proves nothing"
+  fi
+fi
+
+# --- Part 22: A STAGING WRITE THAT FAILS IS A REFUSAL (BL-360) --------------------------------
+# Every loop in the runner reads a file `su_stage` wrote, and a failed write must end the run with
+# exit 2 — the heredocs it replaced ran their loops ZERO times and read the empty input as clean.
+# FORCED, NEVER SAMPLED: a `mktemp` stub on PATH hands the runner a READ-ONLY staging directory,
+# so the first staging write fails with EACCES. It claims only the runner's own `su-stage.XXXXXX`
+# call (lib.sh's memo `mktemp` passes through) and logs each claim, and the arm asserts it fired.
+# EACCES stands in for the EFBIG/ENOSPC a real full TMPDIR gives; the subject is that the write's
+# STATUS is read, which is the same branch for every errno.
+P22S="$P21/stub"; mkdir -p "$P22S"
+P22_REAL_MKTEMP="$(command -v mktemp)"
+printf '#!/bin/sh\ncase "$*" in\n  *su-stage.XXXXXX*) d="$(%s "$@")" || exit $?; chmod 555 "$d"; echo fired >> %s/fired; printf "%%s\\n" "$d" ;;\n  *) exec %s "$@" ;;\nesac\n' \
+  "$P22_REAL_MKTEMP" "$P22S" "$P22_REAL_MKTEMP" > "$P22S/mktemp"
+chmod +x "$P22S/mktemp"
+# p22 <runner> <stubbed:yes|no> -> "rc=<n> staging=<refused|none> fired=<n>"
+p22() {
+  local rc=0 l s=none
+  rm -f "$LOGDIR2"/self-update-fixtures-*.md "$P22S/fired"
+  if [ "$2" = yes ]; then
+    PATH="$P22S:$PATH" bash "$1" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" green-one >/dev/null 2>&1 || rc=$?
+  else
+    bash "$1" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" green-one >/dev/null 2>&1 || rc=$?
+  fi
+  l="$(newest_log2)"
+  grep -q '^STAGING: REFUSED — the gate-record candidate list could not be staged' "${l:-/dev/null}" && s=refused
+  printf 'rc=%s staging=%s fired=%s\n' "$rc" "$s" "$(grep -c . "$P22S/fired" 2>/dev/null || echo 0)"
+}
+p22_g="$(p22 "$RUNNER" yes)"
+if [ "$p22_g" = "rc=2 staging=refused fired=1" ]; then
+  ok "Part 22: a staging directory the runner cannot write is REFUSED at the first staged input, exit 2, with the stub shown to fire"
+else
+  bad "Part 22: an unwritable staging directory read '$p22_g', want 'rc=2 staging=refused fired=1'"
+fi
+p22_g="$(p22 "$RUNNER" no)"
+if [ "$p22_g" = "rc=0 staging=none fired=0" ]; then
+  ok "Part 22 healthy twin: the same world unstubbed runs green, so the refusal above is the staging write and not a runner that refuses everything"
+else
+  bad "Part 22 healthy twin read '$p22_g', want 'rc=0 staging=none fired=0'"
+fi
+M22="$MUTDIR/m22-stage-status-unread.sh"
+if mkmutant "$M22" '  [ "$_rc" -eq 0 ] && return 0' '  return 0'; then
+  p22_g="$(p22 "$M22" yes)"
+  case "$p22_g" in
+    *"staging=none fired=1")
+      ok "MUTATION 22 — with su_stage's status unread the failed write is not refused and the run goes on to read a file that was never written ($p22_g): Part 22 is what catches that" ;;
+    *)
+      bad "MUTATION 22 — su_stage's status check was removed and Part 22 read '$p22_g', want staging=none with the stub fired" ;;
+  esac
+else
+  bad "FIXTURE ERROR: su_stage's status anchor no longer occurs exactly once in the runner — Part 22 proves nothing"
+fi
+rm -rf "$P21" "$P21C"
 
 echo
 if [ "$fails" -eq 0 ]; then
