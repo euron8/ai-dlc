@@ -37,11 +37,14 @@ for f in "\$SERIES"*; do
   [ -f "\$f" ] || continue
   v="\$(sed -n 's/^value:[[:space:]]*//p' "\$f" | head -1)"
   [ -n "\$v" ] || { echo "FAIL (A -- VOCABULARY): \$f declares no value:"; rc=1; continue; }
+  case "\$v" in *[!0-9]*) echo "ERROR: \$f carries an unparseable value"; rc=2; continue ;; esac
   if [ "\$v" -gt "\$CEILING" ]; then
     echo "FAIL (B -- CONSISTENCY): \$f declares \$v above ceiling \$CEILING"
     rc=1
   fi
 done
+# A PASS LINE, like validate-adversarial-convergence.sh's: printed only when nothing failed or errored.
+[ "\$rc" -eq 0 ] && echo "PASS: every value is within ceiling \$CEILING"
 exit \$rc
 PRED
   chmod +x "$ROOT/dist/core/scripts/toy-predicate.sh"
@@ -189,6 +192,11 @@ printf 'value: 0\n' > "$A/steady-adversarial-pass1.md"
 # at least one token even when nothing moves -- the series that makes a null STABLE rather than
 # UNDECIDABLE, so a root-resolution defect reads as the false clean it is.
 printf 'value: 9\n' > "$A/always-adversarial-pass1.md"
+
+# UNPARSEABLE: the predicate prints neither a FAIL token nor its PASS line on either side. With a
+# `pass:` grammar this is the one UNCLASSIFIED series, and the steady one the one PASSED; without
+# it the two cannot be told apart, which is what `unclassified=n/a` says.
+printf 'value: x\n' > "$A/garbled-adversarial-pass1.md"
 
 # CROSSES, AND NAMES A SKILL ONLY THE CONSUMER'S EXTENSION KNOWS. Its delta must be [] -> [B]; if
 # the extension is not reachable from the side it is [U] -> [B,U], on both sides.

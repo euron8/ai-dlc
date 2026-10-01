@@ -297,11 +297,20 @@ ck "12c the same site WITHOUT the field still searches _bmad-output (the default
 
 # ---- PART 13: EVERY ROW CARRIES ITS POPULATION AND ITS COUNTS ---------------------------------
 # A figure a second party cannot re-derive is not a measurement. The counts are exact for the
-# seed: four records, four series, three yielding a token on some side, the steady one none.
-ck "13a a RECLASSIFIES summary names its population" "population: root=_bmad-output corpus=*pass[0-9]* series=s/pass[0-9]+.*\$/pass/" "$out"
-ck "13b and its counts"                                "records=4 series=4 compared=3 notoken=1" "$out"
-ck "13c a byte-identical STABLE row names its population" "population: root=_bmad-output corpus=*pass[0-9]*" "$out_same"
+# seed: five records and five series; crossing, always and ext yield a token on some side; steady
+# prints the PASS line on both sides; garbled prints neither. Values are backticked so a glob is
+# code in a markdown report, so the expected strings are single-quoted.
+ck "13a a RECLASSIFIES summary names its population" 'population: root=`_bmad-output` corpus=`*pass[0-9]*` series=`s/pass[0-9]+.*$/pass/`' "$out"
+# A SITE WITH NO `pass:` CANNOT TELL A PASS FROM AN UNPARSEABLE OUTPUT, AND SAYS SO.
+ck "13b a fail-only grammar prints unclassified as n/a, not a number" "records=5 series=5 compared=3 unclassified=n/a (grammar spells failures only)" "$out"
+ck "13c a byte-identical STABLE row names its population" 'population: root=`_bmad-output` corpus=`*pass[0-9]*`' "$out_same"
 ck "13d an UNDECIDABLE-for-no-corpus row says records=0"  "records=0" "$out4"
+# A SITE DECLARING `pass:` SPLITS THE TOKENLESS SERIES: steady passed, garbled unclassified.
+R13="$(mkrecon "$(sed 's|^verdict: |pass: s/^PASS: .*/PASS/p\
+verdict: |' <<<"$GOOD")")"
+out13="$(bash "$R13/predicate-differential.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>&1)"
+ck "13e a site with pass: counts passed and unclassified separately" "records=5 series=5 compared=3 passed=1 unclassified=1" "$out13"
+nk "13f and does not print n/a"                                       "unclassified=n/a" "$out13"
 
 # ---- PART 14: A NON-ASCII READ-SET MEMBER MATERIALIZES -----------------------------------------
 # Listed under the default core.quotePath, `core/schemas/café.yaml` arrives C-quoted, `git show`
@@ -314,6 +323,20 @@ out14="$(pd "$R14/predicate-differential.sh" "$DIST" "$BASE" "$THEIRS" "$CONS")"
   || { printf 'FAIL 14a the seed does not track café.yaml; part 14 asserts nothing\n'; fails=$((fails + 1)); }
 nk "14b a non-ASCII member does not make the side unmaterializable" "could not materialize" "$out14"
 ck "14c the site is compared"                                       "PREDICATE-RECLASSIFIES	toy-predicate.sh" "$out14"
+
+# ---- PART 15: A corpus-root THAT COULD LEAVE THE CONSUMER OR SPLIT THE ROW IS REFUSED ------------
+# Each refused shape reports UNDECIDABLE naming the field. The near-miss `docs/..x` holds two dots
+# that are not a parent component, so it is NOT refused: it reaches the corpus search and fails
+# there, for the ordinary reason.
+for c15 in 'a:../outside' 'b:/etc' 'c:docs/esc alations'; do
+  R15="$(mkrecon "$(sed "s|^corpus-root: .*|corpus-root: ${c15#*:}|" <<<"$ESC_SITE")")"
+  o15="$(pd "$R15/predicate-differential.sh" "$DIST" "$BASE" "$THEIRS" "$CONS")"
+  ck "15${c15%%:*} corpus-root '${c15#*:}' is refused, naming the field" "PREDICATE-UNDECIDABLE	toy-predicate.sh	the site's corpus-root: value is refused" "$o15"
+done
+R15n="$(mkrecon "$(sed 's|^corpus-root: .*|corpus-root: docs/..x|' <<<"$ESC_SITE")")"
+o15n="$(pd "$R15n/predicate-differential.sh" "$DIST" "$BASE" "$THEIRS" "$CONS")"
+nk "15d near-miss 'docs/..x' is not refused"                 "corpus-root: value is refused" "$o15n"
+ck "15e and it reaches the corpus search"                    "matched NO stored artifact under $CONS/docs/..x." "$o15n"
 
 if [ "$fails" -ne 0 ]; then
   printf '\n%s assertion(s) FAILED\n' "$fails"; exit 1

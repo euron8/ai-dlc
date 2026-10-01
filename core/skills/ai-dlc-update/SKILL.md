@@ -1340,12 +1340,14 @@ prose is itself generated rather than composed.
      subject must not return clean.**
 
    **Every row carries its population.** `population: root=… corpus=… series=…` names the
-   consumer directory, file pattern and series key the site used; a row whose corpus was read adds
-   `records= series= compared= notoken=`. `notoken` counts series that yielded no verdict token on
-   either side and were scored unchanged without being classified — for a grammar that spells only
-   failures it includes series that passed on both sides. In the step-5 report a STABLE site renders
-   as one line carrying only that population tail, so a null can be re-derived rather than read as
-   `none`.
+   consumer directory, file pattern and series key the site used. A row whose corpus was read adds
+   `records= series= compared=`, then either `passed= unclassified=` or, for a site whose
+   validator prints no pass line, `unclassified=n/a (grammar spells failures only)` — there a
+   series with no verdict token may be a pass or an unparseable output, and nothing says which.
+   In the step-5 report a STABLE site renders as one line carrying only the population
+   definition, so a null can be re-derived rather than read as `none`. The counts stay in the
+   detector's own output: they come from a live corpus, and the report region is byte-compared
+   at step 7.
 
    **This check cannot be sited upstream and that is structural, not an oversight.**
    `consumer-boundary.md` is unconditional: no gate in the distribution reaches a consumer tree.
