@@ -807,7 +807,7 @@ if [ -z "${AI_DLC_GATE_IN_SAFE_STOP:-}" ]; then
     # own doctrine for an unattributable failure is UNDECIDED -- reported, treated as defer,
     # never silently OK.
     if [ -z "$c_out" ] \
-       && [ -n "$(git -C "$DIST" diff --name-only "${BASE}..${THEIRS}" -- core/ 2>/dev/null)" ]; then
+       && [ -n "$(git -C "$DIST" -c core.quotePath=false diff --name-only "${BASE}..${THEIRS}" -- core/ 2>/dev/null)" ]; then
       GATE_CARRY_STATE=undecided
       emit SELF-UPDATE-UNDECIDED "preclassify.sh" "the bucket derivation returned no rows while ${BASE}..${THEIRS} changes core/ paths, so whether any machinery path is consumer-modified is UNKNOWN. An empty bucket set reads exactly like a clean one; a gate that cannot read its own subject must not return OK."
     else
@@ -920,7 +920,7 @@ fi
 # header warns about and which the fixture's assertion 3 exists to catch. What matters is
 # whether the consumer's OWN rulebook is about to change, so each candidate is compared by
 # CONTENT against theirs and only genuine differences count.
-R2_CAND="$(git -C "$DIST" diff --name-only "${BASE}..${THEIRS}" -- \
+R2_CAND="$(git -C "$DIST" -c core.quotePath=false diff --name-only "${BASE}..${THEIRS}" -- \
            core/skills/ai-dlc/SKILL.md \
            core/skills/ai-dlc/steps/ \
            core/skills/ai-dlc/escalations.md \
@@ -990,7 +990,14 @@ if [ ! -f "$HOOK" ]; then
 fi
 
 # Scripts the hook invokes, by basename. Derived from the hook text.
-INVOKED="$(grep -oE 'scripts/ai-dlc/[A-Za-z0-9._-]+\.sh' "$HOOK" | sed 's|.*/||' | sort -u)"
+#
+# THE NAME CLASS IS A NEGATION OVER WHAT ENDS A PATH IN A HOOK LINE, never an enumeration of what
+# may appear in one. `[A-Za-z0-9._-]` captured no `scripts/ai-dlc/café.sh` under any locale, so a
+# changed non-ASCII gating script left GATING empty and the gate emitted SELF-UPDATE-OK for the
+# pull that replaced it. The excluded set is whitespace, quotes, backtick, the shell operators, and
+# `$ * ? { } \ /` so a variable, a glob or a deeper path is still not read as a name. ASCII only:
+# a multibyte character in a bracket class is its bytes under the C locale (S10).
+INVOKED="$(grep -oE 'scripts/ai-dlc/[^]['"'"'"`[:space:];|&()<>$*?{}\\/]+\.sh' "$HOOK" | sed 's|.*/||' | sort -u)"
 
 # EVERY SCRIPT THE HOOK NAMES IS AN INPUT, not only the ones that get rows. Which scripts get
 # rows is itself derived from this list intersected with the pull's changed set, so recording
@@ -1176,7 +1183,7 @@ changed_why=""
 if [ -z "${TMP:-}" ] || [ ! -d "$TMP" ]; then
   changed_why="no staging directory exists for this run"
 else
-  git -C "$DIST" diff --name-only "${BASE}..${THEIRS}" -- core/scripts/ > "$TMP/changed-raw" 2>/dev/null
+  git -C "$DIST" -c core.quotePath=false diff --name-only "${BASE}..${THEIRS}" -- core/scripts/ > "$TMP/changed-raw" 2>/dev/null
   changed_rc=$?
   [ "$changed_rc" -eq 0 ] || changed_why="git diff --name-only ${BASE}..${THEIRS} -- core/scripts/ exited ${changed_rc}"
 fi
