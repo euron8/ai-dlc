@@ -183,7 +183,11 @@ widens it back.
 
 Never count `..` hops. A validator that counts hops answers differently from the repo root,
 from a subdirectory, and from a fixture sandbox that copied it — and the sandbox answer is
-usually the silent one. Walk up for `VERSION`.
+usually the silent one. `VERSION` exists only in the distribution, so a walk keyed on it cannot
+resolve an installed tree. Walk up the way `ai_dlc_resolve_root()` at
+`core/scripts/validate-provenance-block.sh:138` does; `core/fixtures/validator-path-resolution`
+holds both layouts to one answer. No shipping fixture walks up for `VERSION` — the ones that name
+it write a seed.
 
 ## A glob that matches nothing must not report success
 

@@ -1043,7 +1043,21 @@ because text about a program is not the program. It exits 9 — STILL-LIVE, the 
 the install did not produce a tree, so a broken probe cannot read as a fix.
 
 
-verify: sh R="$PWD"; D=$(mktemp -d) || exit 9; mkdir -p "$D/_bmad"; bash scripts/install.sh "$D" >/dev/null 2>&1; [ -d "$D/tests/fixtures" ] || { rm -rf "$D"; exit 9; }; n=$(find "$D" -name VERSION -type f 2>/dev/null | wc -l | tr -d ' '); rm -rf "$D"; [ "$n" -gt 0 ] && exit 0; c=$(grep -l '/VERSION"' "$R"/core/fixtures/*/run.sh 2>/dev/null | wc -l | tr -d ' '); k=$(grep -l 'FIXTURE' "$R"/core/fixtures/*/run.sh 2>/dev/null | wc -l | tr -d ' '); [ "$k" -gt 0 ] || exit 9; [ "$c" -eq 0 ]
+Held note (batch 178): the rule is corrected and the population claim is refuted, so this entry
+CLOSES at the close commit. The section now names `ai_dlc_resolve_root()` at
+`core/scripts/validate-provenance-block.sh:138` (the `:98` above is stale) and
+`core/fixtures/validator-path-resolution`, states `VERSION` exists only in the distribution, and
+does not restate the marker set. Population re-derived at this tip: **32** fixture `run.sh` files
+carry `/VERSION"` (control: 216 carry `FIXTURE`) — **19** `.dist-only`, **13** shipping, and all 13
+shipping hits are seed WRITES (`>`, `echo`, `printf`, `cp`). **0 shipping fixture walkers**; the same
+walker pattern matches 11 lines in the `.dist-only` set, so the zero is not the pattern's. The
+"16 shipped fixtures test a `/VERSION` marker" paragraph above counted seed-writers as walkers. A6
+after the edit: 64704/67584. The receipt below replaces the install-driving one, which could only
+close by a fix this entry no longer asks for; it is keyed on the SECTION span, bounded at 40
+lines. Scored: base 1, fix 0, name added elsewhere in the file 1, name added inside the section
+with "Walk up for `VERSION`" kept 1, section unbounded to EOF 9, heading renamed 9.
+
+verify: sh f=.claude/rules/verification-discipline.md; [ -f "$f" ] || exit 9; s="$(awk '/^## Resolve the repo root/ { f = 1; print; next } f && /^## / { exit } f' "$f")"; [ -n "$s" ] || exit 9; [ "$(printf '%s\n' "$s" | wc -l)" -lt 40 ] || exit 9; grep -qF 'ai_dlc_resolve_root' <<<"$s" || exit 1; grep -qF 'Walk up for `VERSION`' <<<"$s" && exit 1; exit 0
 
 
 ## BL-103 — an `ai-dlc-*.sh` hook the settings template cannot register withholds `--finish` forever
