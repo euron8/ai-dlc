@@ -19,6 +19,28 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.679.0] - 2026-09-30
+
+Batch 178's fifth release: the update skill's `SKILL.md` alone, because a consumer's installed copy
+runs the pull that delivers it.
+
+### Backlog
+
+- **`BL-391`**. A step-2 self-update push that fails after the gate's pre-push probe passed now
+  discards the cycle instead of keeping a local commit that advances `skill_version`. The commit
+  stages only the paths the cycle wrote, by pathspec, and the agent checks out the original branch;
+  the self-update branch is deleted only when its file list is within what the cycle wrote, and
+  otherwise the agent stops and names it. Step 2 reports DEFER and marks the branch UN-SYNCED, and
+  step 6 refuses `apply` on it. Committing locally now happens only for a consumer with no remote.
+  Step 1's claim to require a clean tree is corrected: step 1 never checked the tree, and step 6
+  refuses a dirty one before `apply`. The deadlock sentence earlier in the step now describes the
+  old behaviour in the past tense. `update-preflight-push` gains arms 7-9 and 14 mutants, and a
+  consumer whose installed `SKILL.md` predates this skips the new arms.
+
+The consumer's real self-update commits touch only the stamp, the slice, the fixtures and the two
+records, which is exactly the set the new file-list check accepts; a reverted historical cycle that
+swept in about 100 unrelated paths is the case it stops.
+
 ## [0.678.0] - 2026-09-30
 
 Batch 178's fourth release: `ledger-rotate.sh` alone, because a consumer's installed copy runs the
