@@ -19,6 +19,26 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.696.0] - 2026-10-01
+
+Batch 181's fourth release: `emit-report.sh` alone. Bootstrapping, so it ships alone; a consumer runs its installed
+copy, so this takes effect on the pull after the one that delivers it.
+
+### Backlog
+
+- `BL-360` (partial): `emit-report.sh` feeds no decision from a here-string. A new `er_stage` writes each input
+  through a pipe into a file, reads the write status, and refuses by name on failure. Under a write limit the
+  `--verify` preclassify check (`:861`) read an empty input, missed the refusal, and answered "present, current,
+  and complete" at exit 0, which `apply.sh` then wrote on; it now exits 1 with `cause: UNDECIDED`. The orientation
+  sample and the retired-token projection reported failures that never happened (`exited 1`, `projection-1`); they
+  now name the staging failure. A builtin `printf >` of THEIRS leaked about 1 KiB of upstream text into the region
+  on the next stdout write; every such write is routed through the pipe. With no write limit, base and tip render
+  byte-identical reports, and each engine's `--verify` accepts the other's.
+- `BL-364` (partial): both listing sites pass `-c core.quotePath=false`. Each reader only tests emptiness, so no
+  output moves.
+- `procsub-staged-refusal-boot`: forced cells O1, O2, O3 and V1 under `ulimit -f`, with a calibration probe and a
+  mutant per site that is killed by the base engine's own shape.
+
 ## [0.695.0] - 2026-10-01
 
 Batch 181's third release: `preclassify.sh` alone. Bootstrapping, so it ships alone; a consumer runs its installed
