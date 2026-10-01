@@ -28,6 +28,10 @@
 # Exit: 0 = every assertion holds, 1 = something regressed, 2 = the harness could not run.
 set -uo pipefail
 
+# HERMETIC (I87): the subject passes AI_DLC_KNOWN_SKILLS_EXT through when the caller set it, so an
+# operator's tuning would otherwise decide part 11's extension cell.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 pick() { for c in "$@"; do [ -n "$c" ] && [ -f "$c" ] && { printf '%s' "$c"; return; }; done; }
