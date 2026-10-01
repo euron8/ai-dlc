@@ -252,6 +252,9 @@ core_manifest:
   - fixtures/layer-debt-ledger/**
   - fixtures/layer-readopt-gate/**
   - fixtures/ledger-reverify/**
+  - fixtures/ledger-reverify-b/**
+  - fixtures/ledger-reverify-c/**
+  - fixtures/ledger-reverify-d/**
   - fixtures/ledger-status-vocabulary/**
   - fixtures/ledger-reverify-unfalsifiable/**
   - fixtures/ledger-reverify-dist-only-reach/**

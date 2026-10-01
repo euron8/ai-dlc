@@ -10,6 +10,119 @@
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# --- THE SHARD SPLIT (BL-406), AND IT IS A MEASUREMENT RATHER THAN A PREFERENCE ------------------
+# The pre-push suite is POLE-BOUND: its makespan tracks its single longest DIRECTORY, because
+# `core/fixtures/*/run.sh` is what the outer pool globs. Unsharded, this file was that pole: one
+# serial unit of roughly 480s summed over its sections, which no pool width can get under.
+#
+# THE UNIT IS A `lr_unit_<slug>` FUNCTION, AND THE SET IS DERIVED FROM THIS FILE. Every section
+# below the shared control is wrapped in one, closed by `} # end lr_unit_<slug>`. Sections that
+# share state -- a helper one defines and the next one calls, a directory one builds and the next
+# one reads -- are ONE unit, so no deal can separate them; helpers more than one unit calls are
+# hoisted above the shared control, so any shard can call them. The receipt-suffix cluster
+# (~108s, its mutants sharing the wreckage probe's shipped copy) stays atomic: a four-way deal
+# already balances around it.
+#
+# FOUR SHARDS, DEALT BY MEASURED COST (longest-first onto the lightest shard), listed in file
+# order within a shard. Every shard pays the seed, the baseline run and the six-row shared
+# control, because a shard that skipped them could report green against a harness that never ran.
+#
+# THE SHARD ARRIVES AS AN ARGUMENT (`--group b`), never from the environment: the pre-push runner
+# scrubs AI_DLC_*, and a fallback-to-'a' design would run shard 'a' four times and report four
+# green fixtures. `--plan <x>` runs the coverage join and prints shard x's units, one per line,
+# without seeding anything. The sibling directories `-b`, `-c` and `-d` are drivers that run this
+# file with their shard and exit 2 unless its verdict line names that shard -- so an argument
+# parser that stopped honouring `--group` cannot run shard 'a' four times and read green.
+#
+# THE COVERAGE JOIN (J0) runs in every shard before anything is seeded: the declared unit set is
+# derived from this file's own `lr_unit_<slug>() {` lines, every one must have its end marker,
+# the lists dealt across the words of SHARDS must be disjoint, non-empty and union to it exactly,
+# and every declared shard but 'a' must have a driver directory that names it. The join proves it
+# can fire, on a seeded duplicate and a seeded omission, before it is trusted.
+#
+# A MISSING DRIVER EXITS 2 IN EVERY LAYOUT, CONSUMER INCLUDED. All four directories sit under the
+# same manifest globs and arrive in the same pull, so there is no ordering in which this file
+# lands without its drivers; a shard 'a' that went green over absent drivers would be three
+# quarters of this fixture silently gone. There is no consumer SKIP here to sit behind.
+#
+# THESE ARMS REPORT THROUGH FAILURES OR EXIT 2, NEVER THROUGH ASSERTIONS. The shards' assertion
+# counts must sum, less three repeats of the shared six, to the unsharded total.
+SHARDS="a b c d"
+UNITS_a="close_anchor unicode_escape receipt_suffix"
+UNITS_b="nonid_manual caller_error sh_base_control every_receipt name_signal short_id named_commits no_colon_swallow backslash_anchor dist_checkout bootstrap_window receiptless_named"
+UNITS_c="cwd_invariance sh_missing_subject receipts_undecided naming_set unreadable_path nonid_wrong_fixes bare_bold_record"
+UNITS_d="consumer_root entry_swallowed midline_receipt fenced_entries two_line_sh memo_lifecycle"
+
+GROUP=a; LR_PLAN=0
+case "${1:-}" in
+  --group|--plan)
+    [ "$1" = --plan ] && LR_PLAN=1
+    GROUP="${2:-}"
+    [ -n "$GROUP" ] || { echo "FIXTURE ERROR: $1 needs a shard name" >&2; exit 2; } ;;
+  "") ;;
+  *) echo "FIXTURE ERROR: unknown argument '$1' (want --group <x> or --plan <x>)" >&2; exit 2 ;;
+esac
+case " $SHARDS " in
+  *" $GROUP "*) ;;
+  *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;;
+esac
+
+# lr_partition_ok <declared file> <dealt file> -> 0 when dealt is disjoint and covers declared
+# exactly; prints the offending names otherwise.
+lr_partition_ok() {
+  local dup miss extra
+  dup="$(sort "$2" | uniq -d | tr '\n' ' ')"
+  miss="$(sort -u "$2" | comm -23 <(sort -u "$1") - | tr '\n' ' ')"
+  extra="$(sort -u "$2" | comm -13 <(sort -u "$1") - | tr '\n' ' ')"
+  [ -z "$dup$miss$extra" ] && return 0
+  echo "dealt twice: {${dup% }} dealt to no shard: {${miss% }} dealt but not declared: {${extra% }}"
+  return 1
+}
+LR_SELF="$DIR/run.sh"
+[ -f "$LR_SELF" ] || { echo "FIXTURE ERROR: cannot read $LR_SELF for the coverage join" >&2; exit 2; }
+LR_JW="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed for the coverage join" >&2; exit 2; }
+printf '%s\n' u1 u2 u3 > "$LR_JW/pd"
+printf '%s\n' u1 u2 u2 u3 > "$LR_JW/pdup"
+printf '%s\n' u1 u3 > "$LR_JW/pmiss"
+printf '%s\n' u3 u1 u2 > "$LR_JW/pok"
+if lr_partition_ok "$LR_JW/pd" "$LR_JW/pdup" >/dev/null || lr_partition_ok "$LR_JW/pd" "$LR_JW/pmiss" >/dev/null \
+   || ! lr_partition_ok "$LR_JW/pd" "$LR_JW/pok" >/dev/null; then
+  echo "FIXTURE BROKEN: [J0] the coverage join's self-probe did not discriminate (duplicate, omission, exact)" >&2
+  rm -rf "$LR_JW"; exit 2
+fi
+sed -n 's/^lr_unit_\([a-z0-9_]*\)() {$/\1/p' "$LR_SELF" > "$LR_JW/declared"
+sed -n 's/^} # end lr_unit_\([a-z0-9_]*\)$/\1/p' "$LR_SELF" > "$LR_JW/ended"
+for _s in $SHARDS; do eval "printf '%s\n' \${UNITS_$_s:-}"; done | grep . > "$LR_JW/dealt"
+lr_ndecl="$(grep -c . "$LR_JW/declared")" || lr_ndecl=0
+lr_ndup="$(sort "$LR_JW/declared" | uniq -d | grep -c .)" || lr_ndup=0
+if [ "$lr_ndecl" -eq 0 ] || [ "$lr_ndup" -ne 0 ] || ! cmp -s "$LR_JW/declared" "$LR_JW/ended"; then
+  echo "FIXTURE BROKEN: [J0] $lr_ndecl lr_unit_ definitions derived from $LR_SELF ($lr_ndup declared twice), or their end markers do not pair with them one for one" >&2
+  rm -rf "$LR_JW"; exit 2
+fi
+if ! lr_why="$(lr_partition_ok "$LR_JW/declared" "$LR_JW/dealt")"; then
+  echo "FIXTURE BROKEN: [J0] the shard deal does not cover the declared units exactly -- $lr_why" >&2
+  rm -rf "$LR_JW"; exit 2
+fi
+for _s in $SHARDS; do
+  eval "_l=\"\${UNITS_$_s:-}\""
+  [ -n "$_l" ] || { echo "FIXTURE BROKEN: [J0] shard '$_s' is declared and dealt no units; an empty shard passes everything it never checked" >&2; rm -rf "$LR_JW"; exit 2; }
+  [ "$_s" = a ] && continue
+  _drv="$DIR/../ledger-reverify-$_s/run.sh"
+  # The driver must INVOKE this file with its shard as the argument. Comments are stripped whole-
+  # line AND trailing, so `--group a # --group b` names shard a and nothing else.
+  if [ ! -f "$_drv" ] || ! sed -e '/^[[:blank:]]*#/d' -e 's/[[:blank:]]#.*$//' "$_drv" \
+       | grep -qE -- "^[[:blank:]]*(exec[[:blank:]]+)?bash[[:blank:]]+\"\\\$IMPL\"[[:blank:]]+--group[[:blank:]]+$_s([[:blank:]]|\$)"; then
+    echo "FIXTURE BROKEN: [J0] shard '$_s' is declared but $_drv does not drive it" >&2; rm -rf "$LR_JW"; exit 2
+  fi
+done
+rm -rf "$LR_JW"
+eval "LR_MINE=\"\${UNITS_$GROUP}\""
+if [ "$LR_PLAN" = 1 ]; then
+  printf '%s\n' $LR_MINE
+  exit 0
+fi
+LR_JOIN_LINE="[J0] coverage join: $lr_ndecl units derived from lr_unit_ lines, dealt disjointly across {$SHARDS}, union exact; shard '$GROUP' runs {$LR_MINE}"
+
 # Locate the detector in BOTH layouts. Distribution: fixtures at core/fixtures/<name>/,
 # detector at core/skills/…. Consumer: install.sh relocates fixtures to tests/fixtures/<name>/
 # and the detector to .claude/skills/… — three levels up from the fixture, NOT two. The
@@ -29,49 +142,24 @@ for cand in \
 done
 [ -n "$CLOSER" ] || { printf 'FAIL: cannot locate ledger-reverify.sh from %s. Looked in:\n%s' "$DIR" "$LOOKED"; exit 1; }
 
+# fd 3 is the run's own stderr, saved before any unit redirects it. The single EXIT trap
+# replays a unit's captured stderr there: a unit that exits from inside its body (`exit 2` on
+# a FIXTURE ERROR) runs this trap with the unit's `2>` still in force, so a replay to fd 2
+# would write the file into itself and the message would reach nobody.
+# LR_DONE is set only just before the final verdict. Any exit before it -- an `exit 0` inside a
+# unit included, which would otherwise end the shard green with no verdict and skip every later
+# unit, J1 and the floor -- is exit 2 after the unit's own stderr has been replayed once.
+LR_DONE=""
+exec 3>&2
 read -r DIST BASE CONS THEIRS < <(bash "$DIR/seed.sh")
-trap 'rm -rf "$(dirname "$DIST")"' EXIT
+trap '[ -n "${LR_UNIT_ERR:-}" ] && [ -s "$LR_UNIT_ERR" ] && cat "$LR_UNIT_ERR" >&3; rm -rf "$(dirname "$DIST")"; [ "${LR_DONE:-}" = 1 ] || { echo "FIXTURE BROKEN: shard exited before dispatch completed" >&3; exit 2; }' EXIT
 
 OUT="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
 
 FAILURES=0
 ASSERTIONS=0
 
-# --- CWD INVARIANCE, and it is asserted here because it is not free -------------------------
-# A `verify: sh` receipt names CONSUMER-RELATIVE paths and used to be run with `bash -c` from
-# whatever directory the caller happened to be standing in. The same receipt, the same ledger and
-# the same four arguments then produced DIFFERENT verdicts per cwd. Measured on the reference
-# consumer's ledger, one row apart:
-#
-#   from the CONSUMER root       PC-S331  STILL-LIVE       the receipt found its file
-#   from the DISTRIBUTION root   PC-S331  CLOSE-CANDIDATE  grep exited 2, no such file
-#
-# The wrong-cwd direction is the one that loses data -- it proposes closing a live entry -- and
-# the path-existence guard could not see it, because that guard resolves against $CONSUMER and
-# correctly reported every path present while the predicate read another tree entirely.
-#
-# EVERY OTHER ASSERTION IN THIS FILE IS BLIND TO IT: they all read one $OUT, taken from one cwd,
-# so they agree with each other no matter which tree the receipts were evaluated against. This
-# arm is the only one that can see it, which is why the comparison is byte-for-byte rather than
-# per-row.
-# THE COMPARISON NEEDS A CWD WHERE THE RECEIPT RESOLVES, and the first draft of this arm did
-# not have one: it compared `/` against the fixture's own cwd, and a bare relative subject is
-# missing from BOTH, so the mutant produced the same wrong answer twice and the byte-comparison
-# passed. One side is now the CONSUMER ROOT itself -- the only directory where a
-# consumer-relative path resolves -- which is what makes the two sides able to disagree.
-cwd_probe="$(cd / && bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
-cwd_atcons="$(cd "$CONS" && bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
-ASSERTIONS=$((ASSERTIONS + 1))
-if [ "$cwd_probe" = "$cwd_atcons" ]; then
-  printf '  ok    %-22s byte-identical from `/` and from the CONSUMER root — a receipt is evaluated at the consumer root, not wherever the caller stands
-' "cwd-invariance"
-else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the verdicts CHANGED with the working directory. A `verify: sh` receipt names consumer-relative paths; run from elsewhere its grep exits non-zero on a missing file and the entry reads as absorbed. That direction closes live entries.
-' "cwd-invariance"
-  diff <(printf '%s\n' "$cwd_atcons") <(printf '%s\n' "$cwd_probe") | sed 's/^/          | /' | head -12
-fi
-
+# --- HOISTED HELPERS: every unit may call these, whichever shard it is dealt to ----------------
 # $1 label-substring  $2 expected STATUS (or "ABSENT")  $3 why
 row_is() {
   local label="$1" want="$2" why="$3" got
@@ -121,6 +209,102 @@ row_lacks() {
   fi
 }
 
+# $1 label-substring  $2 fixed string the DETAIL must contain  $3 why
+detail_has() {
+  local label="$1" want="$2" why="$3"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if printf '%s\n' "$OUT" | awk -F'\t' -v l="$label" -v s="$want" '$2 ~ l && index($3, s) > 0 {f=1} END{exit !f}'; then
+    printf '  ok    %-22s detail names "%s"  (%s)\n' "$label" "$want" "$why"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s no row for this label carries "%s" in its detail  (%s)\n' "$label" "$want" "$why"
+    printf '%s\n' "$OUT" | awk -F'\t' -v l="$label" '$2 ~ l' | sed 's/^/          | /'
+  fi
+}
+detail_lacks() {
+  local label="$1" bad="$2" why="$3"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if printf '%s\n' "$OUT" | awk -F'\t' -v l="$label" -v s="$bad" '$2 ~ l && index($3, s) > 0 {f=1} END{exit !f}'; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s a row for this label still carries "%s"  (%s)\n' "$label" "$bad" "$why"
+    printf '%s\n' "$OUT" | awk -F'\t' -v l="$label" '$2 ~ l' | sed 's/^/          | /'
+  else
+    printf '  ok    %-22s no row carries "%s"  (%s)\n' "$label" "$bad" "$why"
+  fi
+}
+
+# THE MUTATION IS A LINE REPLACEMENT READ FROM STDIN, NOT AN INLINE awk OR sed PROGRAM.
+#
+# Every anchor in this battery carries `$`, `"`, `'` and `\` together. Passed through the shell
+# into `awk '…'` each one costs a level of escaping in each direction, and MEASURED on this
+# battery's first cut THREE of six mutations died with `awk: illegal statement` and were reported
+# as DID NOT APPLY — which reads exactly like an anchor that moved, on a change that was correct.
+# `sed` is no better: the target lines contain `|`, `&` and `/`, so every delimiter is taken and
+# an `&` in a replacement re-inserts the whole match.
+#
+# So the mutation is DATA: the exact OLD line and the exact NEW line as SINGLE-QUOTED ARGUMENTS,
+# matched and substituted by a fixed-string compare in awk with both sides passed through ENVIRON,
+# which no layer reprocesses. The anchor is a literal, so it is what the uniqueness assertion
+# above checked, byte for byte.
+#
+# ARGUMENTS AND NOT A HEREDOC. A `<<'MUT'` body inside a `$( )` is NOT protected by its quoted
+# delimiter here — MEASURED while writing this: the assignment
+# `x="$(f <<'MUT' … $THEIRS … MUT )"` died with `THEIRS: unbound variable` under `set -u`, so the
+# body was expanded despite the quoting. A single-quoted argument cannot be.
+dp_mutant() { # <name> <OLD-line> [NEW-line] -> dir on stdout, empty if nothing changed
+  local n="$1" old="$2" new="${3:-}" d
+  d="$(dirname "$DIST")/mut-$n"; rm -rf "$d"; mkdir -p "$d"
+  cp "$(dirname "$CLOSER")"/*.sh "$d/" 2>/dev/null
+  [ -f "$d/lib.sh" ] || return 1
+  DP_OLD="$old" DP_NEW="$new" awk '
+    $0 == ENVIRON["DP_OLD"] { if (ENVIRON["DP_NEW"] != "") print ENVIRON["DP_NEW"]; next }
+    { print }
+  ' "$CLOSER" > "$d/ledger-reverify.sh" || return 1
+  if cmp -s "$CLOSER" "$d/ledger-reverify.sh"; then return 1; fi
+  # A MUTATION THAT APPLIED MUST STILL PARSE. A mutant with a syntax error emits nothing on every
+  # input, and "no rows" scores as a kill against every presence-shaped arm while the control arm
+  # fails for the same reason — which reads as entanglement rather than as a broken mutant.
+  bash -n "$d/ledger-reverify.sh" 2>/dev/null || return 1
+  printf '%s' "$d"
+}
+dp_kill() { # <name> <dir-or-empty> <kill-awk> <control-awk> <kill-msg> <ctl-msg>
+  local n="$1" d="$2" kill="$3" ctl="$4" kmsg="$5" cmsg="$6" out
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ -z "$d" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutation DID NOT APPLY (matched nothing, awk died, or the sibling copy is incomplete), so the arm it targets is unproven\n' "$n"
+    return
+  fi
+  out="$(bash "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
+  if ! printf '%s\n' "$out" | awk -F'\t' "$ctl"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the control row is gone too (%s) — the mutant broke the closer rather than the guard, so its verdict is wreckage\n' "$n" "$cmsg"
+    printf '%s\n' "$out" | grep -E 'SH-DIST|SH-THEIRS-TREE' | sed 's/^/          | /'
+  elif printf '%s\n' "$out" | awk -F'\t' "$kill"; then
+    printf '  ok    %-22s %s\n' "$n" "$kmsg"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutation applied and the arm it targets did NOT change verdict — that arm cannot fire\n' "$n"
+    printf '%s\n' "$out" | grep -E 'SH-DIST|SH-THEIRS-TREE' | sed 's/^/          | /'
+  fi
+}
+
+# THE B2 ARMS SHIP AHEAD OF THEIR SUBJECT. This fixture reaches a consumer a pull before the
+# engine it tests, so every arm below that reads a B2 behaviour (the rev-spec strip, the reach
+# kind, the full citing-commit list, the unreadable refusal) SKIPs on an installed engine that
+# predates it. Keyed on a token only the fixed engine carries, and decided on the RESOLVED engine
+# directory: in the distribution the arms always run, so a pre-fix engine there goes red.
+B2_ISDIST=0
+[ "$(cd "$(dirname "$CLOSER")" && pwd)" = "$(cd "$DIR/../../skills/ai-dlc-update/reconcile" 2>/dev/null && pwd)" ] && B2_ISDIST=1
+B2_RUN=1
+if ! grep -qF 'NAMED-UPSTREAM-DOCS-ONLY' "$CLOSER" && [ "$B2_ISDIST" = 0 ]; then B2_RUN=0; fi
+
+# THE CONTROL ROW FOR ALL FIVE is the bare-bold near-miss reporting HAND-REVIEW. It is a
+# legitimate entry that every correct engine emits, so a mutant that lost it broke the tool.
+nid_ctl='$2 ~ /PC-FIXTURE-BARE-BOLD-MANUAL-STILL-SEEN/ && $1=="HAND-REVIEW" {f=1} END{exit !f}'
+nid_ctlmsg='PC-FIXTURE-BARE-BOLD-MANUAL-STILL-SEEN HAND-REVIEW'
+
+
 echo "ledger-reverify fixture"
 echo
 
@@ -136,6 +320,44 @@ row_is "Entry D" ABSENT          "no verify: line AND a prose label, not an entr
 row_is "PC-FIXTURE-ENTRY-E-DECLARES-MANUAL" HAND-REVIEW     "verify: manual is a declaration, not a malformed line"
 row_is "PC-FIXTURE-ENTRY-F-MANUAL-BACKTICK" HAND-REVIEW     "trailing backtick on the verb is a formatting slip, not a different verb"
 
+lr_unit_cwd_invariance() {
+# --- CWD INVARIANCE, and it is asserted here because it is not free -------------------------
+# A `verify: sh` receipt names CONSUMER-RELATIVE paths and used to be run with `bash -c` from
+# whatever directory the caller happened to be standing in. The same receipt, the same ledger and
+# the same four arguments then produced DIFFERENT verdicts per cwd. Measured on the reference
+# consumer's ledger, one row apart:
+#
+#   from the CONSUMER root       PC-S331  STILL-LIVE       the receipt found its file
+#   from the DISTRIBUTION root   PC-S331  CLOSE-CANDIDATE  grep exited 2, no such file
+#
+# The wrong-cwd direction is the one that loses data -- it proposes closing a live entry -- and
+# the path-existence guard could not see it, because that guard resolves against $CONSUMER and
+# correctly reported every path present while the predicate read another tree entirely.
+#
+# EVERY OTHER ASSERTION IN THIS FILE IS BLIND TO IT: they all read one $OUT, taken from one cwd,
+# so they agree with each other no matter which tree the receipts were evaluated against. This
+# arm is the only one that can see it, which is why the comparison is byte-for-byte rather than
+# per-row.
+# THE COMPARISON NEEDS A CWD WHERE THE RECEIPT RESOLVES, and the first draft of this arm did
+# not have one: it compared `/` against the fixture's own cwd, and a bare relative subject is
+# missing from BOTH, so the mutant produced the same wrong answer twice and the byte-comparison
+# passed. One side is now the CONSUMER ROOT itself -- the only directory where a
+# consumer-relative path resolves -- which is what makes the two sides able to disagree.
+cwd_probe="$(cd / && bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
+cwd_atcons="$(cd "$CONS" && bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ "$cwd_probe" = "$cwd_atcons" ]; then
+  printf '  ok    %-22s byte-identical from `/` and from the CONSUMER root — a receipt is evaluated at the consumer root, not wherever the caller stands
+' "cwd-invariance"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the verdicts CHANGED with the working directory. A `verify: sh` receipt names consumer-relative paths; run from elsewhere its grep exits non-zero on a missing file and the entry reads as absorbed. That direction closes live entries.
+' "cwd-invariance"
+  diff <(printf '%s\n' "$cwd_atcons") <(printf '%s\n' "$cwd_probe") | sed 's/^/          | /' | head -12
+fi
+
+} # end lr_unit_cwd_invariance
+lr_unit_nonid_manual() {
 # --- A NON-ID `verify: manual` IS AN ENTRY-SHAPE DEFECT, NOT A HAND-REVIEW DECLARATION -----
 # THE DEFECT. `manual` declared under a label the shared id rule cannot spell produced
 # HAND-REVIEW, whose step-8 disposition is "adjudicate the entry body against theirs". The
@@ -225,6 +447,8 @@ row_is "Entry K" NEEDS-REVIEW    "theirs_lacks on a substring present at base to
 # would sit open forever against an upstream that had already absorbed it. Matching each
 # substring separately is what makes the pair disagree, which is what makes the test real.
 row_is "Entry L" STILL-LIVE      "two substrings, neither at theirs -> genuinely still live"
+} # end lr_unit_nonid_manual
+lr_unit_sh_missing_subject() {
 # --- the `sh` verb: a MISSING SUBJECT is not a fix -----------------------------
 # Three outcomes, because two would let a verb that always reports one thing pass.
 row_is "Entry SH-MOVED" NEEDS-REVIEW "exit 127 = subject renamed/deleted, NOT absorbed. A close here records an absorption that never happened, and closing is the direction that loses information permanently"
@@ -250,15 +474,6 @@ row_is "Entry SH-DIST-BARE-CORE" CLOSE-CANDIDATE "a bare \`core/scripts/<x>\` pa
 # the rev-spec at its colon left `docs/zz-dist-only-a.md` standing, the whitelist admitted it, it is
 # absent on the consumer, and a receipt that works read as naming a missing subject. Five spellings
 # of the ref in one receipt, so a strip that handles only one leaves the row NEEDS-REVIEW.
-# THE B2 ARMS SHIP AHEAD OF THEIR SUBJECT. This fixture reaches a consumer a pull before the
-# engine it tests, so every arm below that reads a B2 behaviour (the rev-spec strip, the reach
-# kind, the full citing-commit list, the unreadable refusal) SKIPs on an installed engine that
-# predates it. Keyed on a token only the fixed engine carries, and decided on the RESOLVED engine
-# directory: in the distribution the arms always run, so a pre-fix engine there goes red.
-B2_ISDIST=0
-[ "$(cd "$(dirname "$CLOSER")" && pwd)" = "$(cd "$DIR/../../skills/ai-dlc-update/reconcile" 2>/dev/null && pwd)" ] && B2_ISDIST=1
-B2_RUN=1
-if ! grep -qF 'NAMED-UPSTREAM-DOCS-ONLY' "$CLOSER" && [ "$B2_ISDIST" = 0 ]; then B2_RUN=0; fi
 if [ "$B2_RUN" = 1 ]; then
 row_is "Entry SH-REVPATH-DOCS" CLOSE-CANDIDATE "every <ref>:<path> token is a distribution read, whatever prefix its right-hand side carries"
 else
@@ -531,6 +746,8 @@ else
   printf '  FAIL  %-22s exit=%s want=0  (a close must never block apply)\n' "exit-code" "$rc"
 fi
 
+} # end lr_unit_sh_missing_subject
+lr_unit_caller_error() {
 # --- A CALLER ERROR MUST NOT READ AS A CLEAN CORPUS --------------------------------------
 # THIS ARM USED TO ASSERT THE DEFECT. It read "a consumer with NO ledger: exit 0, no output"
 # and produced that case by passing an EXPLICIT arg-5 path that does not exist — which is not
@@ -596,6 +813,8 @@ else
   printf '  FAIL  %-22s swapped=%s bad-arg5=%s want 0/0 — reporting by exit code blocks apply\n' "input-exit-code" "$sw_rc" "$b5_rc"
 fi
 
+} # end lr_unit_caller_error
+lr_unit_consumer_root() {
 # --- THE CONSUMER ROOT IS NORMALIZED, AND THE FAILURE WAS A FALSE CLOSE -------------------
 # `.` is a valid consumer root and callers routinely pass it. It is the only one of the four
 # exported values a receipt reads AS A PATH, so a receipt whose own claim is about absolute-path
@@ -828,6 +1047,8 @@ else
   fi
 fi
 
+} # end lr_unit_consumer_root
+lr_unit_receipts_undecided() {
 # --- RECEIPTS-UNDECIDED: how much of the STILL-LIVE column this pull actually measured ----
 # Both entries are STILL-LIVE, so the status alone cannot separate them. TH-UNDECIDED's
 # substring is at BOTH refs (this pull moved neither side of the predicate); TH-DECIDED's
@@ -912,6 +1133,8 @@ else
   fi
 fi
 
+} # end lr_unit_receipts_undecided
+lr_unit_sh_base_control() {
 # --- THE `sh` BASE CONTROL: does a STILL-LIVE say the PULL measured anything? -----------------
 #
 # THE STATE UNDER TEST. `verify: sh` exported `$BASE` to every receipt and evaluated nothing at
@@ -1388,6 +1611,8 @@ for si in eval base; do
   fi
 done
 
+} # end lr_unit_sh_base_control
+lr_unit_close_anchor() {
 # --- THE CLOSE PREDICATE IS ANCHORED, like the verify: predicate beside it -------------
 # Unanchored, a PROSE MENTION of the vocabulary closed a live entry, and the failure was silent
 # in the worse direction: no row at all rather than a wrong one. Measured on the reference
@@ -1452,6 +1677,8 @@ else
   fi
 fi
 
+} # end lr_unit_close_anchor
+lr_unit_every_receipt() {
 # --- EVERY RECEIPT, NOT THE LAST ONE ---------------------------------------------------
 # `directive` was a scalar assigned inside a per-line awk rule, so a second line-leading `verify:`
 # silently overwrote the first. Measured on the reference consumer AFTER the fix: 2 entries carry
@@ -1513,6 +1740,8 @@ else
   fi
 fi
 
+} # end lr_unit_every_receipt
+lr_unit_name_signal() {
 # --- THE NAME IS THE THIRD SIGNAL ------------------------------------------------------
 # Every predicate above tests the RECEIPT, which is the wrong instrument when the receipt is
 # what is broken. A receipt anchored on a token present at both refs, or an inverted verb, or
@@ -1538,6 +1767,8 @@ row_lacks "PC-FIXTURE-HEADING-ABSORBED" NAMED-UPSTREAM \
 row_lacks "Entry A" NAMED-UPSTREAM \
   "prose label quoted verbatim in the history -> the id-shape guard refuses to join on words"
 
+} # end lr_unit_name_signal
+lr_unit_short_id() {
 # --- THE SHORT ID IS THE FORM UPSTREAM WRITES (PC-S328) ---------------------------------
 # The join asked only for the FULL SLUG, and upstream's commits cite `PC-S<n>`. Measured on the
 # reference consumer at 0.328.0: the slug search found 20 of 128 entries, while 20 of the 29
@@ -1578,12 +1809,15 @@ row_lacks "PC-S903-NEVER-CITED-AT-ALL" NAMED-UPSTREAM \
 row_lacks "PC-S903-NEVER-CITED-AT-ALL" NAMED-UPSTREAM-AMBIGUOUS \
   "and not reported as ambiguous either — an uncited prefix is not an unresolvable one"
 
+} # end lr_unit_short_id
+lr_unit_naming_set() {
 # --- WHAT A NAMING SET CHANGED (BL-145) AND EVERY CITING COMMIT OF A PREFIX (BL-066) --------
 # A naming commit that changes nothing under core/ or templates/ cannot have shipped a fix, and a
 # plan that cross-references an id matched the message search exactly as the fix did. The row is
 # KEPT under its own kind, with every sha: a wrong fix that deletes the row instead passes every
 # arm keyed on the absence of NAMED-UPSTREAM, which is why S950 is asserted on PRESENCE.
 if [ "$B2_RUN" = 0 ]; then
+  LR_SKIPPED=1  # this unit's whole body is the SKIP below; the floor reads this, not silence
   printf '  SKIP  BL-145/BL-066 reach and citing-commit arms -- the installed ledger-reverify.sh predates them; they land with the pull that carries this fixture\n'
 else
 row_has   "PC-S950-DOCS-ONLY-NAMING" NAMED-UPSTREAM-DOCS-ONLY \
@@ -1715,6 +1949,8 @@ else
 fi
 fi
 
+} # end lr_unit_naming_set
+lr_unit_unreadable_path() {
 # --- AN UNREADABLE PATH IS REFUSED, NEVER READ AS ABSENT OR EMPTY (BL-310) -----------------
 # `memo_has_path` returns 125 when git said no and the path could not be confirmed absent; every
 # read site used to fold that into "absent" (a basename guess, or "does not resolve") and every
@@ -1944,6 +2180,8 @@ else
   printf '  FAIL  %-22s unmutated copy emitted %s named rows against %s in place (want equal, and >= 3) — a copy that cannot run scores as a kill\n' "mutation-control" "$ctl_named" "$own_named"
 fi
 
+} # end lr_unit_unreadable_path
+lr_unit_named_commits() {
 # --- EVERY NAMING COMMIT IS LISTED, AND NO END IS ELECTED --------------------------------
 # THE DEFECT. The row reported the NEWEST and the OLDEST commit whose message names the id and
 # nothing between them, so for n > 2 the middle commits were never shown — and the two ends are
@@ -2250,6 +2488,8 @@ else
   printf '  FAIL  %-22s byte-identical output between:%s — a duplicated mutant reads as coverage and is not\n' "named-mutants-distinct" "$mdist_dupe"
 fi
 
+} # end lr_unit_named_commits
+lr_unit_entry_swallowed() {
 # --- ENTRY-SWALLOWED: a bold-bullet annotation that became its own entry -----------------
 # THE DEFECT. A line-leading `- **…**` annotation inside an entry opens a NEW entry, so it
 # truncates the one it annotates and captures its receipt. The real entry then emits no row
@@ -2311,6 +2551,8 @@ else
   fi
 fi
 
+} # end lr_unit_entry_swallowed
+lr_unit_no_colon_swallow() {
 # --- BL-013: THE NO-COLON SWALLOW, WHICH THE COLON SIGNAL CANNOT SEE ----------------------
 # The colon gate fires ZERO times on every corpus available — the reference consumer's live
 # ledger and archive, and both distribution backlog files — while those same corpora carry
@@ -2451,6 +2693,8 @@ else
   printf '  FAIL  %-22s unmutated copy emitted %s rows against %s in place (want equal, and >= 2) — a copy that cannot run scores as a kill\n' "swallow-control" "$ctl_sw" "$own_sw"
 fi
 
+} # end lr_unit_no_colon_swallow
+lr_unit_midline_receipt() {
 # --- NEEDS-REVIEW / mid-line receipt: a real receipt the anchored grammar cannot spell --------
 # THE DEFECT. The receipt rule is anchored at the start of the line, deliberately — unanchored it
 # reads a PROSE MENTION as a receipt, and 20 of 85 lines carrying the token on the reference
@@ -2729,6 +2973,8 @@ else
 fi
 
 
+} # end lr_unit_midline_receipt
+lr_unit_unicode_escape() {
 # --- NO UNICODE ESCAPE SURVIVES INTO A DETAIL FIELD --------------------------------------
 # THE DEFECT. emit() writes its three fields with a printf whose format is three %s
 # conversions, and a %s conversion does NOT interpret escapes. A six-character
@@ -2877,6 +3123,8 @@ else
   fi
 fi
 
+} # end lr_unit_unicode_escape
+lr_unit_fenced_entries() {
 # --- FENCED ENTRY-SHAPED LINES — PC-S308-LEDGER-REVERIFY-ENTRY-BOUNDARY-IGNORES-FENCED-HEADINGS -
 # THE DEFECT. `ledger_entry_shape()` opened an entry on every heading-shaped line and tracked no
 # fence state, so a `derived` block whose recorded output carried `## <ts> -- EVENT` lines split
@@ -3016,6 +3264,8 @@ fence_kill mutation-no-reset "$(fence_mutant no-reset 's@if (ledger_entry_id(lin
   "without the id-keyed reset an unterminated fence hides the id-keyed entry after it — the 47-entry desync, reproduced" \
   "PC-FIXTURE-AFTER-QUOTE STILL-LIVE"
 
+} # end lr_unit_fenced_entries
+lr_unit_receipt_suffix() {
 # --- THE RECEIPT SUFFIX DOES NOT OUTLIVE THE RECEIPT LOOP --------------------------------------
 # THE DEFECT. `RSFX` holds the ` [receipt n/n]` suffix, is set per receipt INSIDE the receipt
 # loop, and is read by `emit()` on every call in the file. So every row emitted BELOW that loop
@@ -3376,6 +3626,8 @@ sfx_pass acquit-before-if "$(sfx_mutant before-if '/^if \[ "\$\{th_undecided:-0\
 sfx_pass acquit-cond-ord "$(sfx_mutant cond-ord '/^done < "\$LR_STAGE\/entries"$/ { print; print "case \"${ord:-}\" in 1\/1|\"\") RSFX=\"\" ;; esac"; next }')" \
   "a reset guarded on the leftover ordinal, which read fires unconditionally clears at EOF"
 
+} # end lr_unit_receipt_suffix
+lr_unit_backslash_anchor() {
 # --- A BACKSLASH IN THE ANCHOR — PC-S308-LEDGER-REVERIFY-READS-ESCAPED-BACKTICKS-LITERALLY -----
 # THE DEFECT. The substring grammar is literal and has no escape mechanism, and nothing said so:
 # a receipt whose backticks were markdown-escaped was searched for WITH its backslashes, found at
@@ -3389,29 +3641,6 @@ sfx_pass acquit-cond-ord "$(sfx_mutant cond-ord '/^done < "\$LR_STAGE\/entries"$
 # THE DETAIL IS ASSERTED, NOT ONLY THE STATUS. The old behaviour was ALSO a NEEDS-REVIEW row, so
 # a status-only arm cannot tell the fix from the defect; what separates them is whether the row
 # names the backslash or calls the predicate vacuous.
-# $1 label-substring  $2 fixed string the DETAIL must contain  $3 why
-detail_has() {
-  local label="$1" want="$2" why="$3"
-  ASSERTIONS=$((ASSERTIONS + 1))
-  if printf '%s\n' "$OUT" | awk -F'\t' -v l="$label" -v s="$want" '$2 ~ l && index($3, s) > 0 {f=1} END{exit !f}'; then
-    printf '  ok    %-22s detail names "%s"  (%s)\n' "$label" "$want" "$why"
-  else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s no row for this label carries "%s" in its detail  (%s)\n' "$label" "$want" "$why"
-    printf '%s\n' "$OUT" | awk -F'\t' -v l="$label" '$2 ~ l' | sed 's/^/          | /'
-  fi
-}
-detail_lacks() {
-  local label="$1" bad="$2" why="$3"
-  ASSERTIONS=$((ASSERTIONS + 1))
-  if printf '%s\n' "$OUT" | awk -F'\t' -v l="$label" -v s="$bad" '$2 ~ l && index($3, s) > 0 {f=1} END{exit !f}'; then
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s a row for this label still carries "%s"  (%s)\n' "$label" "$bad" "$why"
-    printf '%s\n' "$OUT" | awk -F'\t' -v l="$label" '$2 ~ l' | sed 's/^/          | /'
-  else
-    printf '  ok    %-22s no row carries "%s"  (%s)\n' "$label" "$bad" "$why"
-  fi
-}
 row_is "PC-FIXTURE-ESCAPED-BACKTICK" NEEDS-REVIEW \
   "a markdown-escaped backtick in the anchor is refused, not searched for"
 detail_has "PC-FIXTURE-ESCAPED-BACKTICK" "contains a backslash" \
@@ -3465,6 +3694,8 @@ detail_has "PC-FIXTURE-ESCAPED-PATH" "Write the path bare" \
 row_is "PC-FIXTURE-SH-WITH-BACKSLASH" STILL-LIVE \
   "an sh receipt carrying a backslash is EVALUATED, not refused — the remedy the refusal row offers exists"
 
+} # end lr_unit_backslash_anchor
+lr_unit_two_line_sh() {
 # --- A TWO-LINE `sh` RECEIPT IS REFUSED, NEVER CLOSED (BL-113) ---------------------------------
 # The extraction reads one line, so a receipt wrapped across two arrives cut inside its quote.
 # Before the parse guard `bash -c` died at exit 2 on the fragment, `*)` read exit 2 as "no longer
@@ -3690,6 +3921,8 @@ bs_kill mutation-bs-no-path-guard \
   '$2 ~ /PC-FIXTURE-CLEAN-PATH/ && $1=="CLOSE-CANDIDATE" {f=1} END{exit !f}' \
   "without the path guard the escaped path is guessed right by basename and the entry CLOSES — the guard is what stops the guess" \
   "PC-FIXTURE-CLEAN-PATH CLOSE-CANDIDATE"
+} # end lr_unit_two_line_sh
+lr_unit_dist_checkout() {
 # --- $DIST IS THE CHECKOUT, NOT THE REF BEING PULLED ------------------------------------------
 #
 # `ledger-reverify.sh` exports `$DIST` to every `sh` receipt, and its header used to say `$DIST`
@@ -3927,82 +4160,6 @@ case "$lz_live" in
       "theirs-tree-prefix" "$LZ_TMP" "${lz_live:-<none recorded>}" ;;
 esac
 
-# --- THE BOOTSTRAPPING WINDOW: AN OLD ENGINE DOES NOT EXPORT $THEIRS_TREE ----------------------
-#
-# Re-verification runs on the engine the CONSUMER LAST INSTALLED, so for one pull after
-# `$THEIRS_TREE` ships, the engine evaluating a `$THEIRS_TREE` receipt is one that never exports
-# it. Unguarded, `$THEIRS_TREE/VERSION` expands to `/VERSION`, the read fails, the receipt exits
-# non-zero, and that engine reads non-zero as "no longer reproduces" — a false CLOSE on the very
-# pull that delivers the fix. Nothing in the new engine can refuse it; the engine that would is
-# the one not yet installed.
-#
-# THE CONVENTION THAT CLOSES IT, AND THIS ARM IS WHAT PROVES IT WORKS: every `$THEIRS_TREE`
-# receipt opens `[ -n "${THEIRS_TREE:-}" ] || exit 127;`. 127 is the "subject renamed or deleted"
-# status the `126|127)` arm has turned into NEEDS-REVIEW since that arm was written, so a guarded
-# receipt degrades to a review on an OLD engine instead of a close.
-#
-# DRIVEN AGAINST A REAL OLD ENGINE, not against a description of one: the blob at HEAD of the
-# distribution repo this fixture runs in. `git show` of that blob is the pre-fix engine whenever
-# this fixture runs before the fix commits, and after it the arm SKIPS rather than asserting
-# against a copy of itself — an arm comparing the tip to the tip proves nothing and must say so.
-BOOT_DIR="$(dirname "$DIST")/boot-engine"
-rm -rf "$BOOT_DIR"; mkdir -p "$BOOT_DIR"
-cp "$(dirname "$CLOSER")"/*.sh "$BOOT_DIR/" 2>/dev/null
-# The OLD engine is built by DELETING THE EXPORT from the shipped one. That single edit is the
-# whole of what a pre-fix engine looks like FROM A RECEIPT'S SIDE — the value is simply not in its
-# environment — and it is available whatever this repo's HEAD happens to be, unlike a git blob of
-# the pre-fix file, which stops existing as an old engine the moment the fix is committed.
-printf '%s\n' 's| THEIRS_TREE="$THEIRS_TREE"||' > "$BOOT_DIR/.boot.sed"
-sed -f "$BOOT_DIR/.boot.sed" "$CLOSER" > "$BOOT_DIR/ledger-reverify.sh"
-ASSERTIONS=$((ASSERTIONS + 1))
-if cmp -s "$CLOSER" "$BOOT_DIR/ledger-reverify.sh"; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the old-engine build DID NOT APPLY, so the bootstrapping arm below would compare the tip against itself\n' "boot-engine-build"
-  BOOT_DIR=""
-elif grep -qF 'THEIRS_TREE="$THEIRS_TREE"' "$BOOT_DIR/ledger-reverify.sh"; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the old-engine build still EXPORTS $THEIRS_TREE, so it is not an old engine and the arm cannot fire\n' "boot-engine-build"
-  BOOT_DIR=""
-elif ! bash -n "$BOOT_DIR/ledger-reverify.sh" 2>/dev/null; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the old-engine build does not PARSE, so it emits nothing on every input and both halves of the pair below would fail for that reason\n' "boot-engine-build"
-  BOOT_DIR=""
-else
-  printf '  ok    %-22s the old-engine build parses, differs from the tip (cmp -s) and exports no $THEIRS_TREE — the two sides of this differential are two programs\n' "boot-engine-build"
-fi
-if [ -n "$BOOT_DIR" ]; then
-  # Two receipts, one property apart: the GUARD. Both read the tree; only one opens with 127.
-  LED_BOOT="$(dirname "$DIST")/boot-ledger.md"
-  {
-    printf '# probe\n\n'
-    printf '## PC-FIXTURE-BOOT-GUARDED — the guarded form, which an old engine must REVIEW\n\n'
-    printf 'verify: sh [ -n "${THEIRS_TREE:-}" ] || exit 127; [ "$(cat "$THEIRS_TREE/VERSION")" = "0.103.0" ]\n\n---\n\n'
-    printf '## PC-FIXTURE-BOOT-UNGUARDED — the same read WITHOUT the guard: the false close\n\n'
-    printf 'verify: sh [ "$(cat "$THEIRS_TREE/VERSION")" = "0.103.0" ]\n'
-  } > "$LED_BOOT"
-  boot_out="$(bash "$BOOT_DIR/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$LED_BOOT" 2>&1)"
-  ASSERTIONS=$((ASSERTIONS + 1))
-  if printf '%s\n' "$boot_out" | awk -F'\t' '$2 ~ /BOOT-GUARDED/ && $1=="NEEDS-REVIEW" {a=1} $2 ~ /BOOT-UNGUARDED/ && $1=="CLOSE-CANDIDATE" {b=1} END{exit !(a && b)}'; then
-    printf '  ok    %-22s on an engine that does not export $THEIRS_TREE the GUARDED receipt reads NEEDS-REVIEW while the UNGUARDED one reads CLOSE-CANDIDATE — the guard is what stops the bootstrapping false close\n' "boot-guard"
-  else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s the guarded/unguarded pair does not split on an old engine, so the exit-127 convention is unproven and every $THEIRS_TREE receipt written before a consumer pulls is at risk of a false close\n' "boot-guard"
-    printf '%s\n' "$boot_out" | sed 's/^/          | /'
-  fi
-  # ...and the NEW engine refuses a $THEIRS_TREE receipt it could not materialize a tree for,
-  # rather than scoring its non-zero exit. Driven by pointing the closer at a ref that does not
-  # resolve in this dist, which is the only reachable materialization failure.
-  ASSERTIONS=$((ASSERTIONS + 1))
-  badref_out="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "0000000000000000000000000000000000000000" "$LED_BOOT" 2>&1)"
-  if printf '%s\n' "$badref_out" | awk -F'\t' '$2 ~ /BOOT-GUARDED/ && $1=="NEEDS-REVIEW" {a=1} $2 ~ /BOOT-GUARDED/ && $1=="CLOSE-CANDIDATE" {b=1} END{exit !(a && !b)}'; then
-    printf '  ok    %-22s with the tree unmaterializable the receipt is NEEDS-REVIEW, never CLOSE — a tool failure must not manufacture the verdict that loses data\n' "theirs-tree-unavailable"
-  else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s a $THEIRS_TREE receipt whose tree could not be materialized did not read NEEDS-REVIEW; every read inside an absent tree fails, so this is a close manufactured from a tool failure\n' "theirs-tree-unavailable"
-    printf '%s\n' "$badref_out" | sed 's/^/          | /'
-  fi
-fi
-
 # --- SIX MUTANTS, EACH KILLED BY THE ARM THAT OWNS IT -----------------------------------------
 #
 # Each is a whole-DIRECTORY copy so the closer finds `lib.sh` and `preclassify.sh` beside it — a
@@ -4031,61 +4188,6 @@ else
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s a mutation anchor is not unique (%s) or the impossible control matched (%s); the mutants below would edit a line no arm reads and score kills they did not earn\n' "dist-anchors" "${dp_anchors_bad:-none}" "$dp_ctl_n"
 fi
-# THE MUTATION IS A LINE REPLACEMENT READ FROM STDIN, NOT AN INLINE awk OR sed PROGRAM.
-#
-# Every anchor in this battery carries `$`, `"`, `'` and `\` together. Passed through the shell
-# into `awk '…'` each one costs a level of escaping in each direction, and MEASURED on this
-# battery's first cut THREE of six mutations died with `awk: illegal statement` and were reported
-# as DID NOT APPLY — which reads exactly like an anchor that moved, on a change that was correct.
-# `sed` is no better: the target lines contain `|`, `&` and `/`, so every delimiter is taken and
-# an `&` in a replacement re-inserts the whole match.
-#
-# So the mutation is DATA: the exact OLD line and the exact NEW line as SINGLE-QUOTED ARGUMENTS,
-# matched and substituted by a fixed-string compare in awk with both sides passed through ENVIRON,
-# which no layer reprocesses. The anchor is a literal, so it is what the uniqueness assertion
-# above checked, byte for byte.
-#
-# ARGUMENTS AND NOT A HEREDOC. A `<<'MUT'` body inside a `$( )` is NOT protected by its quoted
-# delimiter here — MEASURED while writing this: the assignment
-# `x="$(f <<'MUT' … $THEIRS … MUT )"` died with `THEIRS: unbound variable` under `set -u`, so the
-# body was expanded despite the quoting. A single-quoted argument cannot be.
-dp_mutant() { # <name> <OLD-line> [NEW-line] -> dir on stdout, empty if nothing changed
-  local n="$1" old="$2" new="${3:-}" d
-  d="$(dirname "$DIST")/mut-$n"; rm -rf "$d"; mkdir -p "$d"
-  cp "$(dirname "$CLOSER")"/*.sh "$d/" 2>/dev/null
-  [ -f "$d/lib.sh" ] || return 1
-  DP_OLD="$old" DP_NEW="$new" awk '
-    $0 == ENVIRON["DP_OLD"] { if (ENVIRON["DP_NEW"] != "") print ENVIRON["DP_NEW"]; next }
-    { print }
-  ' "$CLOSER" > "$d/ledger-reverify.sh" || return 1
-  if cmp -s "$CLOSER" "$d/ledger-reverify.sh"; then return 1; fi
-  # A MUTATION THAT APPLIED MUST STILL PARSE. A mutant with a syntax error emits nothing on every
-  # input, and "no rows" scores as a kill against every presence-shaped arm while the control arm
-  # fails for the same reason — which reads as entanglement rather than as a broken mutant.
-  bash -n "$d/ledger-reverify.sh" 2>/dev/null || return 1
-  printf '%s' "$d"
-}
-dp_kill() { # <name> <dir-or-empty> <kill-awk> <control-awk> <kill-msg> <ctl-msg>
-  local n="$1" d="$2" kill="$3" ctl="$4" kmsg="$5" cmsg="$6" out
-  ASSERTIONS=$((ASSERTIONS + 1))
-  if [ -z "$d" ]; then
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s the mutation DID NOT APPLY (matched nothing, awk died, or the sibling copy is incomplete), so the arm it targets is unproven\n' "$n"
-    return
-  fi
-  out="$(bash "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
-  if ! printf '%s\n' "$out" | awk -F'\t' "$ctl"; then
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s the control row is gone too (%s) — the mutant broke the closer rather than the guard, so its verdict is wreckage\n' "$n" "$cmsg"
-    printf '%s\n' "$out" | grep -E 'SH-DIST|SH-THEIRS-TREE' | sed 's/^/          | /'
-  elif printf '%s\n' "$out" | awk -F'\t' "$kill"; then
-    printf '  ok    %-22s %s\n' "$n" "$kmsg"
-  else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s the mutation applied and the arm it targets did NOT change verdict — that arm cannot fire\n' "$n"
-    printf '%s\n' "$out" | grep -E 'SH-DIST|SH-THEIRS-TREE' | sed 's/^/          | /'
-  fi
-}
 # m1 — THEIRS_TREE bound to $DIST. Killed by arm A: the tree then reads the checkout (0.104.0),
 # the receipt's equality against 0.103.0 fails, and the entry closes on a ref nobody pulled.
 #
@@ -4269,6 +4371,86 @@ dp_kill mutation-refuse-after-run "$dp_m6" \
   'a refusal that also requires a non-zero exit leaves the zero-exit $DIST reader as a healthy-looking STILL-LIVE — the residue an exit-1-only seed cannot see' \
   'SH-DIST-REVSPEC STILL-LIVE'
 
+} # end lr_unit_dist_checkout
+lr_unit_bootstrap_window() {
+# --- THE BOOTSTRAPPING WINDOW: AN OLD ENGINE DOES NOT EXPORT $THEIRS_TREE ----------------------
+#
+# Re-verification runs on the engine the CONSUMER LAST INSTALLED, so for one pull after
+# `$THEIRS_TREE` ships, the engine evaluating a `$THEIRS_TREE` receipt is one that never exports
+# it. Unguarded, `$THEIRS_TREE/VERSION` expands to `/VERSION`, the read fails, the receipt exits
+# non-zero, and that engine reads non-zero as "no longer reproduces" — a false CLOSE on the very
+# pull that delivers the fix. Nothing in the new engine can refuse it; the engine that would is
+# the one not yet installed.
+#
+# THE CONVENTION THAT CLOSES IT, AND THIS ARM IS WHAT PROVES IT WORKS: every `$THEIRS_TREE`
+# receipt opens `[ -n "${THEIRS_TREE:-}" ] || exit 127;`. 127 is the "subject renamed or deleted"
+# status the `126|127)` arm has turned into NEEDS-REVIEW since that arm was written, so a guarded
+# receipt degrades to a review on an OLD engine instead of a close.
+#
+# DRIVEN AGAINST A REAL OLD ENGINE, not against a description of one: the blob at HEAD of the
+# distribution repo this fixture runs in. `git show` of that blob is the pre-fix engine whenever
+# this fixture runs before the fix commits, and after it the arm SKIPS rather than asserting
+# against a copy of itself — an arm comparing the tip to the tip proves nothing and must say so.
+BOOT_DIR="$(dirname "$DIST")/boot-engine"
+rm -rf "$BOOT_DIR"; mkdir -p "$BOOT_DIR"
+cp "$(dirname "$CLOSER")"/*.sh "$BOOT_DIR/" 2>/dev/null
+# The OLD engine is built by DELETING THE EXPORT from the shipped one. That single edit is the
+# whole of what a pre-fix engine looks like FROM A RECEIPT'S SIDE — the value is simply not in its
+# environment — and it is available whatever this repo's HEAD happens to be, unlike a git blob of
+# the pre-fix file, which stops existing as an old engine the moment the fix is committed.
+printf '%s\n' 's| THEIRS_TREE="$THEIRS_TREE"||' > "$BOOT_DIR/.boot.sed"
+sed -f "$BOOT_DIR/.boot.sed" "$CLOSER" > "$BOOT_DIR/ledger-reverify.sh"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$CLOSER" "$BOOT_DIR/ledger-reverify.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the old-engine build DID NOT APPLY, so the bootstrapping arm below would compare the tip against itself\n' "boot-engine-build"
+  BOOT_DIR=""
+elif grep -qF 'THEIRS_TREE="$THEIRS_TREE"' "$BOOT_DIR/ledger-reverify.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the old-engine build still EXPORTS $THEIRS_TREE, so it is not an old engine and the arm cannot fire\n' "boot-engine-build"
+  BOOT_DIR=""
+elif ! bash -n "$BOOT_DIR/ledger-reverify.sh" 2>/dev/null; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the old-engine build does not PARSE, so it emits nothing on every input and both halves of the pair below would fail for that reason\n' "boot-engine-build"
+  BOOT_DIR=""
+else
+  printf '  ok    %-22s the old-engine build parses, differs from the tip (cmp -s) and exports no $THEIRS_TREE — the two sides of this differential are two programs\n' "boot-engine-build"
+fi
+if [ -n "$BOOT_DIR" ]; then
+  # Two receipts, one property apart: the GUARD. Both read the tree; only one opens with 127.
+  LED_BOOT="$(dirname "$DIST")/boot-ledger.md"
+  {
+    printf '# probe\n\n'
+    printf '## PC-FIXTURE-BOOT-GUARDED — the guarded form, which an old engine must REVIEW\n\n'
+    printf 'verify: sh [ -n "${THEIRS_TREE:-}" ] || exit 127; [ "$(cat "$THEIRS_TREE/VERSION")" = "0.103.0" ]\n\n---\n\n'
+    printf '## PC-FIXTURE-BOOT-UNGUARDED — the same read WITHOUT the guard: the false close\n\n'
+    printf 'verify: sh [ "$(cat "$THEIRS_TREE/VERSION")" = "0.103.0" ]\n'
+  } > "$LED_BOOT"
+  boot_out="$(bash "$BOOT_DIR/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$LED_BOOT" 2>&1)"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if printf '%s\n' "$boot_out" | awk -F'\t' '$2 ~ /BOOT-GUARDED/ && $1=="NEEDS-REVIEW" {a=1} $2 ~ /BOOT-UNGUARDED/ && $1=="CLOSE-CANDIDATE" {b=1} END{exit !(a && b)}'; then
+    printf '  ok    %-22s on an engine that does not export $THEIRS_TREE the GUARDED receipt reads NEEDS-REVIEW while the UNGUARDED one reads CLOSE-CANDIDATE — the guard is what stops the bootstrapping false close\n' "boot-guard"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the guarded/unguarded pair does not split on an old engine, so the exit-127 convention is unproven and every $THEIRS_TREE receipt written before a consumer pulls is at risk of a false close\n' "boot-guard"
+    printf '%s\n' "$boot_out" | sed 's/^/          | /'
+  fi
+  # ...and the NEW engine refuses a $THEIRS_TREE receipt it could not materialize a tree for,
+  # rather than scoring its non-zero exit. Driven by pointing the closer at a ref that does not
+  # resolve in this dist, which is the only reachable materialization failure.
+  ASSERTIONS=$((ASSERTIONS + 1))
+  badref_out="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "0000000000000000000000000000000000000000" "$LED_BOOT" 2>&1)"
+  if printf '%s\n' "$badref_out" | awk -F'\t' '$2 ~ /BOOT-GUARDED/ && $1=="NEEDS-REVIEW" {a=1} $2 ~ /BOOT-GUARDED/ && $1=="CLOSE-CANDIDATE" {b=1} END{exit !(a && !b)}'; then
+    printf '  ok    %-22s with the tree unmaterializable the receipt is NEEDS-REVIEW, never CLOSE — a tool failure must not manufacture the verdict that loses data\n' "theirs-tree-unavailable"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s a $THEIRS_TREE receipt whose tree could not be materialized did not read NEEDS-REVIEW; every read inside an absent tree fails, so this is a close manufactured from a tool failure\n' "theirs-tree-unavailable"
+    printf '%s\n' "$badref_out" | sed 's/^/          | /'
+  fi
+fi
+
+} # end lr_unit_bootstrap_window
+lr_unit_nonid_wrong_fixes() {
 # --- FIVE WRONG FIXES FOR THE NON-ID `manual` DEFECT ------------------------------------------
 # Each is a fix a reader would plausibly write, and each is scored on BEHAVIOUR through the same
 # `dp_mutant`/`dp_kill` harness the $DIST battery uses: the mutation is a copy, `cmp -s` refuses
@@ -4291,10 +4473,6 @@ else
   printf '  FAIL  %-22s the id-test anchor matched %s lines (want 1) and the impossible control matched %s (want 0) — the mutations below would cut the wrong line or none\n' "nonid-anchor" "$nid_n" "$nid_imp"
 fi
 
-# THE CONTROL ROW FOR ALL FIVE is the bare-bold near-miss reporting HAND-REVIEW. It is a
-# legitimate entry that every correct engine emits, so a mutant that lost it broke the tool.
-nid_ctl='$2 ~ /PC-FIXTURE-BARE-BOLD-MANUAL-STILL-SEEN/ && $1=="HAND-REVIEW" {f=1} END{exit !f}'
-nid_ctlmsg='PC-FIXTURE-BARE-BOLD-MANUAL-STILL-SEEN HAND-REVIEW'
 
 # m1 — NO FIX AT ALL. The pre-change engine: `manual` always emits HAND-REVIEW. This is the
 # baseline mutant and it is what proves the whole arm set can fail — without it, every arm below
@@ -4385,6 +4563,8 @@ dp_kill mutation-nonid-all-verbs "$nid_m5" \
   'widening past `manual` reports a prose-titled entry whose mechanical receipt RUNS — 43 rows across the real corpora, nine of them live extension entries' \
   "$nid_ctlmsg"
 
+} # end lr_unit_nonid_wrong_fixes
+lr_unit_receiptless_named() {
 # --- A RECEIPT-LESS ID-KEYED ENTRY REACHES THE NAMING QUERY ------------------------------------
 # THE DEFECT. flush() printed a row only for an entry carrying a `verify:` line, so an open
 # id-keyed entry with NO receipt never reached `named_absorbed()` -- and upstream naming it is the
@@ -4421,6 +4601,8 @@ row_is "PC-FIXTURE-NORECEIPT-NEVER-CITED" ABSENT \
 row_is "FIXTURE-CAPS-HEADING-NOT-AN-ID" ABSENT \
   "all-caps and hyphenated, named by a commit verbatim, but not an entry id -> the shared id rule keeps it silent"
 
+} # end lr_unit_receiptless_named
+lr_unit_bare_bold_record() {
 # --- THE COLUMN-0 BARE-BOLD RECORD (`**PC-…** — …`) IS AN ENTRY ------------------------------
 # THE DEFECT, filed as PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY. `ledger_entry_shape()`
 # opened an entry only on `- **` or a heading, so a record written without the leading dash was
@@ -4527,6 +4709,8 @@ dp_kill mutation-bare-bold-loose "$bb_m3" \
   'the looser grammar splits the host at a body line opening with a bolded id — the strict id-only span and em dash are load-bearing' \
   "$nid_ctlmsg"
 
+} # end lr_unit_bare_bold_record
+lr_unit_memo_lifecycle() {
 # --- THE CROSS-PROCESS MEMO LEAVES NOTHING BEHIND --------------------------------------------
 # lib.sh builds `reconcile-memo.*` at SOURCE time in the main shell and arms its removal on the
 # sourcing shell's EXIT, composed into any later `trap X EXIT`. Before that, the first lookup ran
@@ -4723,10 +4907,66 @@ else
   esac
 fi
 
+} # end lr_unit_memo_lifecycle
+
+# --- DISPATCH: this shard's units, then the joins that say they all ran -------------------------
+printf '  ok    %s\n' "$LR_JOIN_LINE"
+# THE SHARED CONTROL IS EXACTLY SIX, CHECKED HERE AND NOT BESIDE IT. Everything between the
+# shared control and this line is a function DEFINITION, so a unit body left at top level, or a
+# helper call outside any unit, executes before this point and moves the count.
+if [ "$ASSERTIONS" -ne 6 ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s %s assertions ran before dispatch, want the shared control'"'"'s 6 -- something outside every lr_unit_ ran, in every shard\n' "[shared]" "$ASSERTIONS"
+fi
+# A unit's stderr is captured to a FILE with `2>`, never with `$( )`, which would run the unit in
+# a subshell and lose every ASSERTIONS and FAILURES it moved. It is replayed to stderr after the
+# unit, and by the EXIT trap if the unit exits from inside its body.
+LR_ENTERED=""
+for _u in $LR_MINE; do
+  LR_ENTERED="$LR_ENTERED $_u"
+  LR_UNIT_ERR="$(dirname "$DIST")/lr-unit-$_u.err"
+  _before="$ASSERTIONS"; LR_SKIPPED=""
+  "lr_unit_$_u" 2>"$LR_UNIT_ERR"
+  cat "$LR_UNIT_ERR" >&2
+  # J2: a call to a helper this shard does not define, or a variable another unit used to set,
+  # prints to stderr and the unit runs on with fewer assertions -- which otherwise reads PASS.
+  if grep -qE 'run\.sh: line [0-9]+: .*(command not found|unbound variable)$' "$LR_UNIT_ERR"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s unit %s hit: %s\n' "[J2]" "$_u" \
+      "$(grep -E 'run\.sh: line [0-9]+: .*(command not found|unbound variable)$' "$LR_UNIT_ERR" | head -1)"
+  fi
+  LR_UNIT_ERR=""
+  # THE FLOOR: every unit asserts something. An emptied or early-returning unit otherwise passes.
+  # The one exemption is DECLARED by the unit (LR_SKIPPED=1, on a consumer whose installed engine
+  # predates the arms it would run); an early return declares nothing and is still caught.
+  if [ "$ASSERTIONS" -le "$_before" ] && [ -z "$LR_SKIPPED" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s unit %s made no assertion -- an emptied or early-returning unit reads exactly like a passing one\n' "[floor]" "$_u"
+  fi
+done
+# J1: the SET of units entered equals this shard's list AS DECLARED IN THIS FILE'S TEXT, and no
+# unit dealt to another shard was entered. A count off the loop variable cannot see a shard whose
+# list was widened to every unit: it would run all of them and agree with itself.
+lr_declared_for() { sed -n "s/^UNITS_$1=\"\\([a-z0-9_ ]*\\)\"\$/\\1/p" "$LR_SELF" | tr ' ' '\n' | grep . | sort; }
+lr_got="$(printf '%s\n' $LR_ENTERED | grep . | sort)"
+lr_want="$(lr_declared_for "$GROUP")"
+lr_foreign=""
+for _s in $SHARDS; do
+  [ "$_s" = "$GROUP" ] && continue
+  for _u in $LR_ENTERED; do
+    lr_declared_for "$_s" | grep -qxF -- "$_u" && lr_foreign="$lr_foreign $_u"
+  done
+done
+if [ -z "$lr_want" ] || [ "$lr_got" != "$lr_want" ] || [ -n "$lr_foreign" ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s shard %s entered {%s}, its declared list is {%s}; entered from other shards: {%s}\n' "[J1]" "$GROUP" \
+    "$(printf '%s' "$lr_got" | tr '\n' ' ')" "$(printf '%s' "$lr_want" | tr '\n' ' ')" "${lr_foreign# }"
+fi
+LR_DONE=1
 echo
 if [ "$FAILURES" -gt 0 ]; then
-  echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong."
+  echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong in shard '$GROUP' of '$SHARDS'."
   exit 1
 fi
-echo "PASS: all $ASSERTIONS assertions correct."
+echo "PASS: all $ASSERTIONS assertions correct in shard '$GROUP' of '$SHARDS'."
 exit 0
