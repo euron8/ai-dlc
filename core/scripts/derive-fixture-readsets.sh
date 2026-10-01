@@ -133,10 +133,19 @@ set -uo pipefail
 # `--tracer both` IS READ OFF THE RAW ARGUMENTS HERE, BEFORE THE CHECK BELOW, because in that mode
 # exit 1 is a VERDICT (the sandbox missed something) and a refusal at 1 would read as one. Read
 # pairwise, so a fixture that happens to be NAMED `both` in a `--list` does not switch the mode.
+# THE LAST `--tracer` WINS, because the parser below overwrites TRACER on each one: every
+# occurrence sets the code from its own value, so `--tracer both --tracer fs_usage` refuses at 1.
 DIE_RC=1
 _prev=""
 for _a in "$@"; do
-  if { [ "$_prev" = --tracer ] && [ "$_a" = both ]; } || [ "$_a" = --tracer=both ]; then DIE_RC=2; fi
+  if [ "$_prev" = --tracer ]; then
+    if [ "$_a" = both ]; then DIE_RC=2; else DIE_RC=1; fi
+  else
+    case "$_a" in
+      --tracer=both) DIE_RC=2 ;;
+      --tracer=*)    DIE_RC=1 ;;
+    esac
+  fi
   _prev="$_a"
 done
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"

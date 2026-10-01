@@ -1108,6 +1108,16 @@ MUT
       "2|ERROR: must run as root"*"|1|ERROR: must run as root"*"|1|ERROR: must run as root"*) ok "  --tracer=both refuses at 2 too, and the same refusal stays at exit 1 in fs_usage mode — including for a fixture NAMED 'both'" ;;
       *) bad "the refusal exit codes do not separate both-mode from the others: '=both' $V2 / fs_usage $V3 / --list both $V4" ;;
     esac
+    # A REPEATED --tracer: the parser keeps the LAST value, so the refusal code must follow the
+    # last one too. Both orders, so a pre-scan that latches on any `both` and one that ignores
+    # `both` entirely each fail one half.
+    V5="$(drive_in "$BR" --all --tracer both --tracer fs_usage)"
+    V6="$(drive_in "$BR" --all --tracer fs_usage --tracer both)"
+    BOTH_ARMS=$((BOTH_ARMS+1))
+    case "$V5|$V6" in
+      "1|ERROR: must run as root"*"--tracer fs_usage"*"|2|ERROR: must run as root"*"--tracer both"*) ok "  a repeated --tracer refuses at the LAST value's code: 'both then fs_usage' at 1, 'fs_usage then both' at 2" ;;
+      *) bad "a repeated --tracer did not refuse at the last value's exit code: both,fs_usage $V5 / fs_usage,both $V6" ;;
+    esac
     # A LINKED WORKTREE dies before the arguments are parsed, so it is the case the raw pre-scan
     # exists for: 2 under both, still 1 otherwise.
     ( cd "$BR" && git worktree add -q "$WORK/bothwt" -b bothwt ) >/dev/null 2>&1 || broken "could not add a linked worktree to the --tracer both repo"
