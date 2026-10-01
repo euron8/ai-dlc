@@ -921,7 +921,13 @@ The \`/ai-dlc resume\` line MUST sit BETWEEN two delimiter lines (four or more h
       rm -f "$HANDOFF_STATE" "$HANDOFF_ARMED_FILE"   # possible false positive, as before
       exit 0
     else
-      rm -f "$HANDOFF_STATE" "$HANDOFF_ARMED_FILE"   # every arm satisfied: the handoff is complete
+      rm -f "$HANDOFF_STATE"   # every arm satisfied: the handoff is complete
+      # THE ARMING RECORD IS CLEARED ONLY WHEN THE RESUME ARM WAS ACTUALLY READ. With no transcript
+      # RESUME_OK is forced to 1 because the block is UNKNOWN, not present; removing the sticky
+      # record on that Stop let the next Stop -- transcript present, no resume block -- arrive
+      # unarmed and pass. Measured by driving this hook: no-transcript Stop then transcript Stop
+      # without the block was ALLOW with the unconditional removal and BLOCK without it.
+      [ "$HANDOFF_TRANSCRIPT_OK" = "1" ] && rm -f "$HANDOFF_ARMED_FILE"
       # AND THE SNAPSHOT'S HANDOFF RECORD IS DISCHARGED HERE, which is key 2's whole lifecycle.
       # That key reads a LINE in a document whose writers only append, so nothing in this
       # distribution can remove it and it armed this guard permanently -- measured on the

@@ -895,6 +895,22 @@ has "$rr" "$DRIVER_MARK" && ok "(nt5) sticky record for THIS session, no key, no
                          || bad "(nt5) the sticky record did not arm a transcript-less Stop ($([ -n "$rr" ] && echo "different text" || echo "allowed")) — clearing key 1 early escapes the guard whenever the transcript is absent"
 dsetup
 
+# (nt6) AN UNREAD RESUME ARM DOES NOT DISCHARGE THE STICKY RECORD. Two Stops of one session.
+#       The first has no transcript and every disk arm satisfied, so it ALLOWS with the resume
+#       arm read as unknown -- and must leave the record on disk, because the one arm it could
+#       not read is still owed. The second has a transcript with no resume block and no key;
+#       only the record arms it, so it must BLOCK on the resume text. A hook that removes the
+#       record on the unverified ALLOW lets the second Stop end the session.
+dsetup; printf '%s\n' "$SESS_A" > "$ARMED"
+r="$(ntdisk)"
+{ [ "$r" = allow ] && [ -f "$ARMED" ]; } \
+  && ok "(nt6) sticky record, every disk arm satisfied, NO transcript -> ALLOW with the record still on disk" \
+  || bad "(nt6) the transcript-less satisfied Stop produced $r with the record $([ -f "$ARMED" ] && echo present || echo absent) — an unread resume arm discharged the arming"
+rr="$(reason "$(drive "$P_DISK" "$SESS_A" "$T_QUIET")")"
+has "$rr" "$RESUME_MARK" && ok "  then a Stop WITH a transcript lacking the resume block -> BLOCK on the resume text (the record carried the arming across)" \
+                         || bad "  the second Stop, transcript present and no resume block, $([ -n "$rr" ] && echo "blocked on different text" || echo "was ALLOWED") — the handoff escaped its resume check"
+dsetup
+
 # =============================================================================
 # KEY 2's LIFECYCLE — the completion stamp, at both ends
 # =============================================================================
@@ -1994,6 +2010,19 @@ if mkmut m34-sticky-not-entry "$CONF" \
                    || bad "MUTANT SURVIVED [m34]: expected allow, got $r — (nt5) does not depend on the sticky entry conjunct"
   dsetup
   mut_ctl m34 "$MUT_DIR"
+fi
+
+# M35 — THE ARMING RECORD REMOVED ON AN UNVERIFIED ALLOW. Killed by (nt6) alone: the
+#       transcript-less satisfied Stop deletes the record, and the next Stop is unarmed.
+if mkmut m35-unconditional-disarm "$CONF" \
+     -e 's@^      \[ "$HANDOFF_TRANSCRIPT_OK" = "1" \] && rm -f "$HANDOFF_ARMED_FILE"$@      rm -f "$HANDOFF_ARMED_FILE"@'; then
+  dsetup; printf '%s\n' "$SESS_A" > "$ARMED"
+  ntdisk "$MUT_DIR" >/dev/null
+  r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_QUIET" "$MUT_DIR")")"
+  [ "$r" = allow ] && ok "  mutant [m35] KILLED by assertion (nt6): with the removal unconditional, the no-transcript ALLOW disarms and the resume-less Stop escapes" \
+                   || bad "MUTANT SURVIVED [m35]: expected allow, got $r — (nt6) does not depend on the transcript condition on the record's removal"
+  dsetup
+  mut_ctl m35 "$MUT_DIR"
 fi
 
 # M22 — the marker arm never fires. Killed by (d2) alone.
