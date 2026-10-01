@@ -26717,3 +26717,16 @@ Discharges no consumer candidate.
 
 verify: sh S=core/fixtures/apply-drift-refile/seed.sh; A=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$S" ] && [ -f "$A" ] || exit 9; T="$(mktemp -d)" || exit 9; w() { TMPDIR="$T" bash "$S" 2>/dev/null; }; G="$(w)" && [ -f "$G/env.sh" ] || exit 9; eval "$(sed 's/^/G_/' "$G/env.sh")"; bash "$A" "$G_DIST" "$G_BASE" "$G_CONSUMER" "$G_THEIRS" >/dev/null 2>&1; grep -q my-persona-skill "$G_EXT" 2>/dev/null && grep -qE '^version: 9\.9\.9$' "$G_STAMP" || exit 9; W="$(w)" && [ -f "$W/env.sh" ] || exit 9; eval "$(sed 's/^/W_/' "$W/env.sh")"; chmod 000 "$W_SCHEMA"; o="$(bash "$A" "$W_DIST" "$W_BASE" "$W_CONSUMER" "$W_THEIRS" 2>/dev/null)"; chmod 644 "$W_SCHEMA"; grep -q 'did not run' <<<"$o" || exit 9; grep -qE '^version: 9\.9\.9$' "$W_STAMP" && exit 9; H="$(w)" && [ -f "$H/env.sh" ] || exit 9; eval "$(sed 's/^/H_/' "$H/env.sh")"; chmod 000 "$H_SCHEMA"; bash "$A" "$H_DIST" "$H_BASE" "$H_CONSUMER" "$H_THEIRS" >/dev/null 2>&1; chmod 644 "$H_SCHEMA"; mkdir -p "$(dirname "$H_EXT")" && cp "$G_EXT" "$H_EXT" && git -C "$H_DIST" show "${H_THEIRS}:core/schemas/provenance-block.json" > "$H_SCHEMA" || exit 9; bash "$A" --finish "$H_DIST" "$H_BASE" "$H_CONSUMER" "$H_THEIRS" >/dev/null 2>&1; grep -qE '^version: 9\.9\.9$' "$H_STAMP" || exit 1; bash "$A" --finish "$W_DIST" "$W_BASE" "$W_CONSUMER" "$W_THEIRS" >/dev/null 2>&1; grep -qE '^version: 9\.9\.9$' "$W_STAMP" || exit 0; grep -q my-persona-skill "$W_EXT" 2>/dev/null && git -C "$W_DIST" show "${W_THEIRS}:core/schemas/provenance-block.json" | cmp -s - "$W_SCHEMA" && exit 0; exit 1
 
+## BL-416 — `retired-layer-passage`'s `norm-fallthrough` mutant survives when the caller hands down open fds 3-9
+
+**DEFECT. Carries the reference consumer's `PC-S316-RETIRED-LAYER-PASSAGE-NORM-FALLTHROUGH-MUTANT-DEPENDS-ON-INHERITED-FDS`**,
+filed during its 0.683.0 → 0.691.0 pull. `f_drive` lowered the limit to `ulimit -n 7` assuming only `norm_lines`' own
+fds 3-5 would be held. The consumer's pre-push pool hands its children open fds 3-9, which left no fd for `norm_lines`'
+`mktemp` substitution, so the real `lib.sh` and the mutant both refused 125, F1 scored identically, and the push was
+blocked by `MUTANT SURVIVED [norm-fallthrough]`. Reproduced here: `ok` with clean fds, `FAIL` with 3-9 opened by the
+caller. The fix is fixture-only: `f_drive` closes 3-9 before it lowers the limit, and a new arm re-scores both cells
+with 3-9 held. That arm fails (`./.`) with the close removed; `lib.sh` is unchanged.
+
+**LANDED (v0.692.0, verified 08655178).**
+
+verify: sh o="$(exec 3</dev/null 4</dev/null 5</dev/null 6</dev/null 7</dev/null 8</dev/null 9</dev/null; bash core/fixtures/retired-layer-passage/run.sh 2>&1)"; ! grep -qF 'MUTANT SURVIVED [norm-fallthrough]' <<<"$o" && grep -qF 'norm_lines F0-F1 with fds 3-9 inherited' <<<"$o"
