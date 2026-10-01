@@ -994,10 +994,14 @@ fi
 # THE NAME CLASS IS A NEGATION OVER WHAT ENDS A PATH IN A HOOK LINE, never an enumeration of what
 # may appear in one. `[A-Za-z0-9._-]` captured no `scripts/ai-dlc/café.sh` under any locale, so a
 # changed non-ASCII gating script left GATING empty and the gate emitted SELF-UPDATE-OK for the
-# pull that replaced it. The excluded set is whitespace, quotes, backtick, the shell operators, and
-# `$ * ? { } \ /` so a variable, a glob or a deeper path is still not read as a name. ASCII only:
-# a multibyte character in a bracket class is its bytes under the C locale (S10).
-INVOKED="$(grep -oE 'scripts/ai-dlc/[^]['"'"'"`[:space:];|&()<>$*?{}\\/]+\.sh' "$HOOK" | sed 's|.*/||' | sort -u)"
+# pull that replaced it. The excluded set is whitespace, quotes, backtick, the shell operators,
+# `$ * ? { } \ /` so a variable, a glob or a deeper path is still not read as a name, and
+# `, : = # ! @ % + ~` so a name followed by a list separator or an assignment is not JOINED to
+# what follows: a hook naming `real.sh,stale.sh` under the prefix read as one token and dropped
+# `real.sh` from INVOKED, which is the same false OK. ASCII only: a multibyte character in a bracket class is
+# its bytes under the C locale (S10). self-update-fixtures.sh's `gr_invoked` carries this class
+# byte for byte.
+INVOKED="$(grep -oE 'scripts/ai-dlc/[^]['"'"'"`[:space:];|&()<>$*?{}\\/,:=#!@%+~]+\.sh' "$HOOK" | sed 's|.*/||' | sort -u)"
 
 # EVERY SCRIPT THE HOOK NAMES IS AN INPUT, not only the ones that get rows. Which scripts get
 # rows is itself derived from this list intersected with the pull's changed set, so recording
