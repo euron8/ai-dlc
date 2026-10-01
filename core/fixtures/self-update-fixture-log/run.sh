@@ -2126,7 +2126,7 @@ if [ -d "$FILT/.git" ]; then
     # MUTANT 15, scored HERE because the clone it needs is alive only inside this block. Both
     # arms above are the shape `fixture-mutants.md` warns about — one asserts an acquittal and
     # the other a presence, and a subject that emits nothing would satisfy the first. This is
-    # what makes them load-bearing: put the blob-reading spelling back at all four probe sites.
+    # what makes them load-bearing: put the blob-reading spelling back at the two `run.sh` probe sites.
     #
     # `mkmutant` writes into `$MUTDIR`, which already holds the reconcile siblings. A copy made
     # anywhere else cannot load `map_consumer()` out of `preclassify.sh` and exits 2 as a

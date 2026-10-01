@@ -901,7 +901,8 @@ fi
 # sentence sent both to the zsh remedy. A reader of a path-form row who follows a
 # word-splitting instruction learns nothing and changes nothing.
 #
-# `rev-parse -q --verify`, NOT `cat-file -e`, AND THE DIFFERENCE IS A SHIPPED FALSE CONVICTION.
+# `rev-parse -q --verify`, NOT `cat-file -e`, FOR THE `run.sh` PROBES (the two `.dist-only` probes
+# below use `memo_has_path` instead), AND THE DIFFERENCE IS A SHIPPED FALSE CONVICTION.
 # `cat-file -e <rev>:<path>` requires the BLOB OBJECT to be present locally. On a
 # `--filter=blob:none` clone whose promisor is unreachable it answers ABSENT for a path that
 # exists, so every named dir reads as "no run.sh at theirs" and the arm convicts a correct set.
