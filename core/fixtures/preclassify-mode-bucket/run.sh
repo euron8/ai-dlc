@@ -659,7 +659,9 @@ fi
 #   U6 core/rules/edited.md, consumer bytes differ     -> BOTH-CHANGED->CLASSIFY (control)
 U_RUN=1
 case "$RECON" in */core/skills/ai-dlc-update/reconcile) U_DIST=1 ;; *) U_DIST=0 ;; esac
-if ! grep -qF 'content AND mode -- nothing to untangle' "$RECON/preclassify.sh"; then
+# Keyed on the CODE of the --untangle arm, never on its trailing comment: a comment can be reworded
+# with the conjunct intact (a false SKIP on a consumer) or survive the conjunct's removal.
+if ! grep -qF '[ "$ours_h" = "$base_h" ] && mode_at_theirs "$path" "$cons"; then bucket="ALREADY-AT-THEIRS"' "$RECON/preclassify.sh"; then
   if [ "$U_DIST" = 0 ]; then
     printf '  SKIP  BL-100/BL-364 arms U1-U6 -- the installed preclassify.sh predates the --untangle mode conjunct; it lands with the pull that carries this fixture\n'
     U_RUN=0
