@@ -1230,64 +1230,6 @@ CLOSE-CANDIDATE for a defect that still reproduces. The fixture carries the miti
 
 verify: manual
 
-## BL-265 — the fork budget's A4 stale-high arm had become unreachable at its own committed budget, and the mutant that should have said so was wired to a derived value
-
-**`core/fixtures/validator-fork-budget/run.sh`'s `judge` evaluates A1 floor before A4
-stale-high.** A1 was a hardcoded `[ "$t" -le 5000 ]`, sized when the validator forked 8225. A4
-fires only when `t*10 < b*7`. So A4's window is `5000 < t < 0.7b`, which is EMPTY for every
-budget at or below 7143. Measured across the budgets this file has actually carried: at
-`FORK_BUDGET=8225` (0.583.0) the window was 5001..5756; at `6431` (0.587.0) there was **none**.
-A4 — whose own message reads *"a ceiling nothing can reach is a check that cannot fire, and it
-reads exactly like one that passed"* — had become exactly that, one release before anyone looked.
-
-**`m3` could not see it, and the reason is the mutant's wiring rather than its predicate.** It
-drives `judge` with `budget = T1 * 2`, where the window is non-empty under any floor, so it
-stayed green through the closure. The comment above it explains that mutants are wired to `$T1`
-rather than `$BUDGET` deliberately — measured, because entangling them with the committed budget
-made m5 and m6 fire on the ceiling arm. That reasoning is right for m2–m6 and it is precisely
-what left no arm watching the committed budget's own reachability.
-
-**Fixed in this release, both halves.** A1 is now `40%` of `FORK_BUDGET`, so the two bounds move
-together; `0.4b < 0.7b` for every positive budget, so A4 has a window at every budget this can
-carry. The floor still refuses every input it exists to refuse — measured in one invocation, the
-three real broken-tracer cases read **0** (a subject that forks nothing), **0** (the `PS4` marker
-neutered, where the profiler's own self-probe refuses first) and **1** (the validator truncated at
-line 400, the case A1's header names), against a control of **4767** for the live reading, which
-must and does pass. And `m8` asserts A4's reachability at the LIVE budget by constructing the
-midpoint of its window — the one mutant that must key on `$BUDGET`. Scored against the old
-constant floor it reports the FAIL at `b=6431` and `b=4773` and passes at `b=8225`, which is the
-closure it would have caught.
-
-**The trigger was a correct change reading as a broken one.** Taking I59 and I60 from 1724 forks
-to 66 put the true reading at 4767, under the constant, and the fixture reported
-`BROKEN ... a broken tracer, an unmatched marker or a validator that exited early` with m2, m3, m5
-and m6 all going off on A1 instead of their own arms — five failures from one improvement.
-
-**What is owed, and why this entry survives the fix.** The floor is now proportional but the
-FRACTIONS are still two literals (`4/10`, `7/10`) in one `judge`, and nothing joins them to the
-quantity they are about. A future ratchet that takes the budget far enough down makes `0.4b` a
-number a genuinely broken tracer could exceed — the tracer's failure modes read near zero today,
-but that is a property of the profiler's current shape, not a bound. The durable form derives the
-floor from what a BROKEN subject actually measures rather than from a fraction of the ceiling.
-
-**Tiered DEFECT.** No guard was removed and nothing shipped wrong; what it cost was one arm that
-could not fire for a release, and a correct change that had to be diagnosed before it could land.
-
-The receipt keys on the two EMITTING lines — the floor's own `if` test and the `kill_j` call
-that drives m8 — never on the file merely containing the fraction or the mutant's name. Its
-first form did the latter and was satisfied by a three-line file of pure comments carrying no
-executable floor at all; scored again on the emission sites it reads 0 on the real file, 1 on
-that prose file and 1 at the parent commit.
-
-**Re-keyed at batch 176.** That receipt scored the two halves that shipped and exited 0 while the
-owed half — the literal fractions — stood, so it proposed closing an entry whose own text keeps it
-open. It now requires an A1 floor test and m8 to be present AND the literal `4 / 10` floor to be
-gone: 1 on today's tree, 0 once the floor is derived from what a broken subject measures, and 1 on a
-regression that deletes the floor outright.
-
-verify: sh f=core/fixtures/validator-fork-budget/run.sh; [ -f "$f" ] || exit 9; grep -q 'A4 stale-high' "$f" || exit 9; d="$(mktemp -d)"; mkdir -p "$d/scripts" "$d/core/fixtures/u"; echo 0.0.0 > "$d/VERSION"; printf '%s\n' '#!/bin/sh' 'case "$*" in *--probe-only*) n= ;; *tiny.sh*) n=3 ;; *--target*) n=7 ;; *) n=2000 ;; esac' 'printf "PROBEPOS 50\nPROBENEG 0\n"' '[ -n "$n" ] || exit 0' 'printf "TOTAL %s\nEXIT 0\nMAXLINE 9\nLASTARM 5\nREPS 2\nSTABLE 2\nSPREAD x\n" "$n"' > "$d/scripts/fork-profile.sh"; printf 'FORK_BUDGET=2200\n' > "$d/scripts/validate-enforcement-map.sh"; cp "$f" "$d/core/fixtures/u/run.sh"; out="$(bash "$d/core/fixtures/u/run.sh" 2>&1)"; grep -q '^ok    A1 floor .*floor of 7 ' <<<"$out" || exit 1; j="$(awk '/^judge\(\) \{/{p=1} p{print} p&&/^\}$/{exit}' "$f")"; [ -n "$j" ] || exit 1; r8="$(FLOOR=7 NFX=1 VAL=v bash -c "$j"'; judge 8 0 10 5 2200')"; r7="$(FLOOR=7 NFX=1 VAL=v bash -c "$j"'; judge 7 0 10 5 2200')"; case "$r8" in RED*stale-high*) ;; *) exit 1 ;; esac; case "$r7" in BROKEN*floor*) ;; *) exit 1 ;; esac; exit 0
-
-
 ## BL-301 — the gate runs no shipped fixture in the consumer layout, so a fixture red on every consumer ships green
 
 **DEFECT.** Found by the batch 150 contract adversary. It discharges no consumer candidate.
@@ -1761,20 +1703,6 @@ Discharges no consumer candidate.
 
 verify: sh S=core/fixtures/apply-drift-refile/seed.sh; A=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$S" ] && [ -f "$A" ] || exit 9; T="$(mktemp -d)" || exit 9; w() { TMPDIR="$T" bash "$S" 2>/dev/null; }; G="$(w)" && [ -f "$G/env.sh" ] || exit 9; eval "$(sed 's/^/G_/' "$G/env.sh")"; bash "$A" "$G_DIST" "$G_BASE" "$G_CONSUMER" "$G_THEIRS" >/dev/null 2>&1; grep -q my-persona-skill "$G_EXT" 2>/dev/null && grep -qE '^version: 9\.9\.9$' "$G_STAMP" || exit 9; W="$(w)" && [ -f "$W/env.sh" ] || exit 9; eval "$(sed 's/^/W_/' "$W/env.sh")"; chmod 000 "$W_SCHEMA"; o="$(bash "$A" "$W_DIST" "$W_BASE" "$W_CONSUMER" "$W_THEIRS" 2>/dev/null)"; chmod 644 "$W_SCHEMA"; grep -q 'did not run' <<<"$o" || exit 9; grep -qE '^version: 9\.9\.9$' "$W_STAMP" && exit 9; H="$(w)" && [ -f "$H/env.sh" ] || exit 9; eval "$(sed 's/^/H_/' "$H/env.sh")"; chmod 000 "$H_SCHEMA"; bash "$A" "$H_DIST" "$H_BASE" "$H_CONSUMER" "$H_THEIRS" >/dev/null 2>&1; chmod 644 "$H_SCHEMA"; mkdir -p "$(dirname "$H_EXT")" && cp "$G_EXT" "$H_EXT" && git -C "$H_DIST" show "${H_THEIRS}:core/schemas/provenance-block.json" > "$H_SCHEMA" || exit 9; bash "$A" --finish "$H_DIST" "$H_BASE" "$H_CONSUMER" "$H_THEIRS" >/dev/null 2>&1; grep -qE '^version: 9\.9\.9$' "$H_STAMP" || exit 1; bash "$A" --finish "$W_DIST" "$W_BASE" "$W_CONSUMER" "$W_THEIRS" >/dev/null 2>&1; grep -qE '^version: 9\.9\.9$' "$W_STAMP" || exit 0; grep -q my-persona-skill "$W_EXT" 2>/dev/null && git -C "$W_DIST" show "${W_THEIRS}:core/schemas/provenance-block.json" | cmp -s - "$W_SCHEMA" && exit 0; exit 1
 
-## BL-403 — reconcile residue: an oracle 0.681.0 retired, an untangle step with no exec bit, a temp file, an uncaptured read, two stale comments
-
-**NOTE. Found at batch 178 by the B-series builders and adversaries.** The receipt covers (a); the rest are carried.
-
-- (a) `core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh:873` and `:957` decide dist-only with `rev-parse -q --verify "${THEIRS}:core/fixtures/${d}/.dist-only"`, which answers 1 for an absent marker and for an unreadable subtree alike — the oracle `preclassify.sh`'s `dist_only()` replaced in 0.681.0 with `memo_has_path` and a 125 refusal.
-- (b) The update `SKILL.md`'s step 7u (`:2517`) has no exec-bit step, so a file the untangle plan buckets `UPSTREAM-ONLY-ADD` is written but never `chmod`ed.
-- (c) `lib.sh`'s `norm_lines` (`:173-192`) leaves its `norm-lines.XXXXXX` temp file when killed mid-`sed`; no trap removes it.
-- (d) `lib.sh` reads a cached status through `$(<"$_f.s")` at `:1142` and `:1176`, although `layer-drift.sh`'s `have()` header says that path never captures. Unreachable on the shipped engine; any mutant that continues past a failed write reaches it.
-- (e) `self-update-gate.sh:15` and `:1002` still describe commit-locally as a failed push's outcome; since 0.679.0 a failed push discards the cycle.
-
-Discharges no consumer candidate.
-
-verify: sh F=core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh; [ -f "$F" ] || exit 9; C="$(grep -v '^[[:blank:]]*#' "$F")"; [ -n "$C" ] || exit 9; grep -qF 'core/fixtures/${d}/run.sh' <<<"$C" || exit 9; o="$(grep -cE '(rev-parse|cat-file)[^|;]*core/fixtures/\$\{d\}/\.dist-only' <<<"$C")"; M="$(grep -F 'memo_has_path "$DIST" "$THEIRS" "core/fixtures/${d}/.dist-only"' <<<"$C")"; m="$(grep -c . <<<"$M")"; g="$(grep -cE '[|][|][[:blank:]]*[A-Za-z_][A-Za-z0-9_]*=\$\?' <<<"$M")"; [ "$o" -eq 0 ] && [ "$m" -ge 2 ] && [ "$g" -eq "$m" ]
-
 ## BL-404 — the acknowledge hook's typed-invocation anchor depends on the harness's serialisation, and an updater call inside a pipeline session is asserted by no arm
 
 **NOTE. Found at batch 178 by the S316 tip adversary.** `core/hooks/ai-dlc-acknowledge.sh:196` recognises a typed `/ai-dlc` or `/ai-dlc-update` only as `"role":"user","content":"<command-message>…</command-message>\n<command-name>/…`. Across the local transcripts all 301 typed-skill records carry that shape (negative control 0); the other user lines with a `<command-name>` are built-in commands with no `<command-message>`, and there are 0 array-content variants. If the harness changes how it serialises a typed command, typed updater sessions are denied writes under the pause again and Check 2z stops gating typed `/ai-dlc` sessions, and nothing in the tree would notice.
@@ -1786,19 +1714,6 @@ Discharges no consumer candidate.
 verify: manual
 
 The receipt is manual because its subject is the harness's own transcript format, which no file in this tree contains: a predicate keyed on the hook's regex would only check the regex against the copy the seeds were written from.
-
-## BL-405 — fixture and receipt residue from batch 178's ledger-reverify and apply work
-
-**NOTE. Found at batch 178 by the B2 and B3 builders and adversaries.** The receipt covers (c).
-
-- (a) `ledger-reverify.sh`'s naming-reach predicate scores a commit as reaching core if any listed file starts with `core/`, so a commit touching only `core/fixtures/<x>/.dist-only`, which no consumer installs, counts as reaching core.
-- (b) `core/fixtures/backlog-receipt-binding/run.sh`'s j1 arm falls back to the count printed in R2's refusal (`validate-backlog-receipts.sh` exits before its SUMMARY line), so j1 no longer doubles as a guard that something was scored.
-- (c) `core/fixtures/apply-restamp-worklist/run.sh:2339` puts a `$(case … )` inside HR-f's failure message. Driven under `/bin/bash` 3.2.57 it prints the case text instead of yes or no; the verdict is unaffected. `apply.sh:1775-1777` documents the same hazard.
-- (d) The false-positive floor for `apply.sh`'s `extra-executable` row (0 tracked `100644` `.sh` under non-fixture `core/`) was measured at HEAD only. At `196188e0` (v0.70.0) there were 2, fixed in `be1dbb8a` (v0.70.1); before then the `chmod -x` remedy would have stripped a hook's needed bit.
-
-Discharges no consumer candidate.
-
-verify: sh F=core/fixtures/apply-restamp-worklist/run.sh; [ -f "$F" ] && grep -q "HR-f a near-miss fired" "$F" || exit 9; n="$(grep -v "^[[:blank:]]*#" "$F" | grep -cE "\\$\\([[:blank:]]*case[[:blank:]]")" || n=0; [ "$n" -eq 0 ]
 
 ## BL-406 — the `ledger-reverify` fixture is the suite's pole and is one serial unit; shard it
 
@@ -1830,16 +1745,6 @@ Discharges no consumer candidate.
 verify: sh F=core/fixtures/ledger-reverify/run.sh; [ -f "$F" ] || exit 9; C="$(grep -v '^[[:blank:]]*#' "$F")"; [ -n "$C" ] || exit 9; L="$(grep -E '^SHARDS="[a-z ]+"$' <<<"$C" | tail -1)"; [ -n "$L" ] || exit 1; G="$(sed -E 's/^SHARDS="([a-z ]+)"$/\1/' <<<"$L")"; n=0; for g in $G; do n=$((n+1)); [ "$g" = a ] && continue; R="core/fixtures/ledger-reverify-$g/run.sh"; [ -f "$R" ] || exit 1; grep -v '^[[:blank:]]*#' "$R" | grep -qE -- "--group[[:blank:]]+$g([[:blank:]]|\$)" || exit 1; done; [ "$n" -ge 2 ]
 
 
-## BL-408 — update `SKILL.md` step 8 lists Commit, Push, Open a PR and Merge before the ledger work, so a following agent merges with dispositions owed
-
-**DEFECT. Carries the reference consumer's `PC-S316-UPDATE-STEP8-ORDERS-THE-LEDGER-DISPOSITIONS-AFTER-THE-PUSH-AND-MERGE`**, filed 2026-09-30 during its 0.673.0 to 0.674.0 pull. Step 8 ("Deliver") puts the ledger drain, re-verify, closes, `NAMED-UPSTREAM` dispositions and rotation after the Commit, Push, Open a PR and Merge bullets. On that pull the agent merged PR #1147 with 22 `NAMED-UPSTREAM` rows undisposed and needed a third branch and push to dispose of them. `core-paths.sh --is-core` routes the installed `SKILL.md` to core (stdout `core:`; a non-core control prints `not-core:`).
-
-**Built, held, not shipped.** `b179-skillmd` (`777dda58`) moves every ledger-writing bullet before Commit with the bullet text byte-identical (sorted lines and byte count unchanged). The update `SKILL.md` is bootstrapping, so it ships alone. Not established: whether the Commit bullet's "all step-7 writes" should now also name the step-8 ledger writes, and a mechanical check (`apply.sh --finish` refusing while an undisposed `NAMED-UPSTREAM` remains) is the candidate's stronger remedy and is not built.
-
-Scored under `set -uo pipefail` on the base revision (1), the fix (0), `origin/main` (1) and a copy with the Commit bullet renamed (9).
-
-verify: sh S=core/skills/ai-dlc-update/SKILL.md; [ -f "$S" ] || exit 9; n=$(grep -n -m1 -F -- "- \`NAMED-UPSTREAM\` — upstream" "$S" | cut -d: -f1); c=$(grep -n -m1 -F -- "- **Commit**" "$S" | cut -d: -f1); p=$(grep -n -m1 -F -- "- **Open a PR** into" "$S" | cut -d: -f1); [ -n "$n" ] && [ -n "$c" ] && [ -n "$p" ] || exit 9; [ "$n" -lt "$c" ] && [ "$n" -lt "$p" ]
-
 ## BL-409 — `predicate-differential.sh` cannot reach `docs/escalations/pending.md`, so the suppression-lifetime site reports UNDECIDABLE on every consumer
 
 **NOTE. Found by the BL-129 hand at batch 179, not fixed there.** The suppression-lifetime site added to `predicate-sites.md` names `docs/escalations/pending.md` as its subject, and the reader only looks under `_bmad-output/`. Run directly on the reference consumer's `pending.md` over `1f838777~1..HEAD`, the block gives `OK` on both sides, so the block works once the reader can reach the file. The hand's scoring scripts are not committed; re-derive before building.
@@ -1851,3 +1756,9 @@ verify: manual -- no receipt has been scored against the reader; the claim is th
 **NOTE. Found by the BL-129 hand at batch 179, not fixed there.** The materialized `validate-provenance-block.sh` resolves `SCHEMA=<consumer>/.claude/schemas/provenance-block.json`, the consumer's installed schema, on both sides of the differential, so the v0.382.0 case the site exists to catch (a schema-only change) reports STABLE. `predicate-reclassification` Part 10 cannot see it because its seed creates no `.claude/schemas/`. Re-derive before building; the claim is the hand's report.
 
 verify: manual -- no receipt has been scored; the claim is the BL-129 hand's report and is unverified by the lead.
+
+## BL-411 — three callers turn the reconcile memo's refusal (125) into a clean result
+
+**DEFECT. Found by the `b179-lib` tip adversary at batch 179, predating that branch.** `memo_ls_tree` and `memo_show` return 125 when a cached status is unreadable or malformed (BL-403(d)), and three callers swallow it: `retired-layer-token.sh` `files_at` (`memo_ls_tree … || return 0`) and `show_at` (`memo_show … || true`), and `layer-drift.sh` (`_tree="$(memo_ls_tree … | grep '^core/' || true)"`, near `:1409`). Measured with an empty `.s` on a cache hit: `rc=0 matches=0` on base and on the branch, against `matches=2` uncorrupted. The branch changed one thing here: base's swallow left `numeric argument required` on stderr and the branch's leaves nothing, so the refusal got quieter. Fourteen `git_show` call sites in `layer-drift.sh` and ten in `unregistered-drift.sh` are further candidates, listed and not traced. Re-derive before building.
+
+verify: manual -- no receipt has been scored; the claim is the adversary's report and the lead has not re-derived it.
