@@ -1118,9 +1118,18 @@ prose is itself generated rather than composed.
      honour different token sets.
      Read it as "upstream named it", not "upstream took it": a commit can name an id to record
      a rejection or a split. Confirm which, then re-anchor or drop the stale receipt.
+   - `NAMED-UPSTREAM-DOCS-ONLY` → upstream's history names this entry's id, and **none** of the
+     naming commits changes a path under `core/` or `templates/` — the two trees a consumer
+     installs — so none of them can have shipped a fix. A plan, a review or a ledger drain that
+     cross-references an id matches the message search exactly as a fix does; this kind keeps
+     the row and its full sha list but says it is not an absorption. **Not a close, and not
+     grounds to annotate** — read the commits for a withdrawal or a split, which can be. The
+     converse does not hold: a commit that touches `core/` can still merely mention an id, so a
+     plain `NAMED-UPSTREAM` remains "upstream named it", never "upstream took it".
    - `NAMED-UPSTREAM-AMBIGUOUS` → upstream's history cites this entry's SPRINT prefix
      (`PC-S<n>`), but two or more ledger entries share that prefix and the commit does not say
-     which it absorbed. **Deliberately NOT attributed.** Upstream writes the short id, not the
+     which it absorbed. The row names EVERY citing commit, newest first, and says when none of
+     them changes `core/` or `templates/`. **Deliberately NOT attributed.** Upstream writes the short id, not the
      full slug — measured against it at 0.328.0, the slug search found 20 of 128 entries while
      20 of 29 prefixes appeared, and of those 20 prefixes only 9 named a single entry. Matching
      the prefix regardless would tell you to close entries upstream never touched, which is
@@ -1146,6 +1155,12 @@ prose is itself generated rather than composed.
        `verify: manual` if the entry is a proposal nobody has built yet. **Never drain on
        this verdict.** A DETAIL reporting reachability NOT checked means unchecked, not
        clean.
+     - *unreadable* — git could not READ the receipt's path or blob at theirs or at base and
+       could not confirm it absent (a missing object in the distribution checkout, or an
+       unresolvable ref). The predicate was not evaluated and no basename was guessed, because an
+       unread blob reads exactly like an empty one. Repair the distribution (`git fsck`, re-fetch)
+       and re-run; the entry is untouched. A `VERSION` at theirs that is unreadable refuses the
+       whole run instead, because every close row names that version.
      - *mis-anchored predicate* — a `theirs_lacks` substring absent at base AND at theirs
        while a near-miss spelling of it is absent at base and PRESENT at theirs: upstream
        moved, and the receipt anchors on a token the fix was not written with. Re-anchor on
@@ -2379,9 +2394,13 @@ declared sites, not everywhere unconditionally.
        — a fix that lands before its bump reads one release early there. The row deliberately
        stopped guessing it, because a version read off a commit that merely NAMES the id is a
        claim about the wrong event and the annotation it lands in is permanent.
-     - `NAMED-UPSTREAM-AMBIGUOUS` — the commit cites the sprint prefix and two or more entries
+     - `NAMED-UPSTREAM-AMBIGUOUS` — the commits cite the sprint prefix and two or more entries
        share it. Deliberately NOT attributed: read the named commit and decide per entry.
        Annotate nothing on the strength of the row alone.
+     - `NAMED-UPSTREAM-DOCS-ONLY` — upstream's history names the id but no naming commit
+       changes `core/` or `templates/`. Read the commits for a withdrawal or a split and act on
+       that if there is one; otherwise leave the entry open. Never annotate an absorption on
+       this row — no commit it lists can have shipped one.
      - `HAND-REVIEW` — the entry declares `verify: manual` and no mechanical predicate exists
        for it by design. Adjudicate the body against `theirs`; annotate only what that
        adjudication establishes.

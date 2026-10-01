@@ -120,13 +120,16 @@
 #   CLOSE-CANDIDATE  upstream absorbed the entry; the operator confirms and annotates.
 #   NAMED-UPSTREAM   upstream's own history NAMES this entry's id. Emitted IN ADDITION to the
 #                    receipt's verdict, never instead of it — see THE NAME IS THE THIRD SIGNAL.
-#   STILL-LIVE       the entry still reproduces at theirs; stays open (filtered from the report).
+#   NAMED-UPSTREAM-DOCS-ONLY  the same, but NO naming commit changes a path under core/ or
+#                    templates/, so none of them can have shipped a fix (`named_reach`).
+#   STILL-LIVE      the entry still reproduces at theirs; stays open (filtered from the report).
 #   HAND-REVIEW      the entry declares `verify: manual` — no mechanical predicate by design.
 #   NEEDS-REVIEW     the receipt itself is at fault, and the DETAIL names the cause by its
 #                    prefix: `unresolved:` (malformed line, unresolvable path, empty sh, an sh
 #                    one-liner that does not PARSE, unknown verb), `vacuous predicate:`,
-#                    `unfalsifiable predicate:`, `mis-anchored predicate:`, and `mid-line
-#                    receipt:` (a real receipt the anchored grammar cannot see; the pass at
+#                    `unfalsifiable predicate:`, `mis-anchored predicate:`, `unreadable:` (git
+#                    could not read the path or blob and could not confirm it absent), and
+#                    `mid-line receipt:` (a real receipt the anchored grammar cannot see; the pass at
 #                    the foot of this file). Hand-review, as an entry without a verify line
 #                    would be.
 #
@@ -558,7 +561,7 @@ prefix_entry_count() { # <PC-S<n>> -> integer
   } | sort -u | grep -cE "^$1-" 2>/dev/null || true
 }
 
-named_absorbed() { # <label> -> "<how> <n> <sha>,<sha>,..." if upstream's history names it, else ""
+named_absorbed() { # <label> -> "<how> <n> <sha>,<sha>,... <code|docs>" if upstream's history names it, else ""
   local _id="$1" _hits _list _n _pfx _how _h
   case "$_id" in
     *[!A-Z0-9-]*|'') return 0 ;;              # not id-shaped: prose label, nothing to ask
@@ -648,12 +651,49 @@ named_absorbed() { # <label> -> "<how> <n> <sha>,<sha>,..." if upstream's histor
   # under zsh, where it would iterate once over the whole newline-joined string, hand that to
   # `rev-parse`, and return an EMPTY list with no error.
   _list="$(printf '%s\n' "$_hits" | tr '\n' ',' | sed 's/,$//')"
-  printf '%s %s %s' "$_how" "${_n:-1}" "$_list"
+  printf '%s %s %s %s' "$_how" "${_n:-1}" "$_list" "$(named_reach "$_hits")"
+}
+
+# named_reach <newline-separated shas> -> `code` when at least one of them changes a path under
+# `core/` or `templates/`, `docs` when none does.
+#
+# A COMMIT THAT CHANGES NOTHING A CONSUMER INSTALLS CANNOT HAVE ABSORBED A CONSUMER DEFECT ON ITS
+# OWN. `core/` and `templates/` are the two trees `install.sh` copies into a consumer; a commit
+# touching neither is a plan, a review or a ledger drain that MENTIONS the id. Measured against
+# this distribution's history for the reference consumer's live ledger: PC-S295's only naming
+# commit is a `docs(plan):` commit with one file changed and zero `core/` paths, and it read as
+# NAMED-UPSTREAM -- the signal a pull session reads as "upstream took it". Control in the same
+# derivation: PC-S340-VALIDATE-SPAWN-LEDGER resolves three commits, two of them touching `core/`.
+#
+# THE KIND CHANGES, THE ROW STAYS. The caller emits `NAMED-UPSTREAM-DOCS-ONLY` with the same full
+# sha list, never nothing: a docs-only naming is still a fact the operator may need (it can record
+# a withdrawal), and a fix that dropped the row would delete the signal rather than qualify it.
+#
+# WHAT THIS DOES NOT DECIDE, stated so the kind is not over-read. A commit that touches `core/`
+# can still merely MENTION an id -- a release citing an entry it discharged by some other route --
+# and that commit passes this predicate. Whether a commit changed the entry's OWN subject needs a
+# per-id subject path nothing records. So `code` means "could have absorbed it", never "did".
+#
+# FAILS TOWARDS THE OLD KIND. `-m` lists a merge commit's files against each parent (without it a
+# merge lists none and would score as docs-only). If the listing itself fails, the answer is
+# `code` -- the row it produced before this predicate existed -- never `docs`, which would demote a
+# real absorption on a git error.
+named_reach() {
+  local _files
+  _files="$(printf '%s\n' "$1" | git -C "$DIST" log --no-walk --stdin -m --name-only --format= 2>/dev/null)" \
+    || { printf 'code'; return 0; }
+  case "
+$_files" in
+    *"
+core/"*|*"
+templates/"*) printf 'code' ;;
+    *) printf 'docs' ;;
+  esac
 }
 
 # The ambiguous half, reported rather than guessed. Upstream cites the sprint prefix, two or more
 # ledger entries carry it, and nothing in the commit says which -- so the operator reads the commit.
-named_ambiguous() { # <label> -> "<newest-sha> <n-entries>" when the prefix is shared
+named_ambiguous() { # <label> -> "<n-commits> <sha>,<sha>,... <n-entries> <code|docs>" when the prefix is shared
   local _id="$1" _pfx _n _c _hits
   case "$_id" in *[!A-Z0-9-]*|'') return 0 ;; esac
   # THE FORK-FREE GUARDS RUN FIRST, and that ordering is the whole cost of this function. All
@@ -694,11 +734,18 @@ named_ambiguous() { # <label> -> "<newest-sha> <n-entries>" when the prefix is s
   # NO VERSION HERE EITHER, for the same reason as the sibling: the commit this names MENTIONS a
   # sprint prefix, and a version read off a mention is a claim about the wrong event. The row
   # already tells the operator to go and read the commit; that is what it can honestly say.
-  _hits="$(git -C "$DIST" log -E --grep="${_pfx}([^0-9A-Za-z-]|\$)" --format=%H "$THEIRS" 2>/dev/null)"
+  #
+  # EVERY CITING COMMIT, NOT THE NEWEST. This printed `${_hits%%<newline>*}` -- ONE sha -- beside
+  # the ENTRY count, so a prefix three commits cite read as one commit, and on a synthetic upstream
+  # the one it named was the ledger-drain docs commit. `named_absorbed` stopped electing an end at
+  # v0.387.0 and that release's notes said both joins had; this one had not. Same shape as its
+  # sibling now: the commit count, then the whole newest-first list, `%h` so no per-sha
+  # `rev-parse --short` is paid, then the entry count the row's "and N entries in this ledger carry
+  # it" is built from (ledger-rotate's fixture parses that phrase), then the reach.
+  _hits="$(git -C "$DIST" log -E --grep="${_pfx}([^0-9A-Za-z-]|\$)" --format=%h "$THEIRS" 2>/dev/null)"
   [ -n "$_hits" ] || return 0
-  _c="${_hits%%
-*}"
-  printf '%s %s' "$(git -C "$DIST" rev-parse --short "$_c" 2>/dev/null)" "$_n"
+  _c="$(printf '%s\n' "$_hits" | grep -c . 2>/dev/null || true)"
+  printf '%s %s %s %s' "${_c:-1}" "$(printf '%s\n' "$_hits" | tr '\n' ',' | sed 's/,$//')" "$_n" "$(named_reach "$_hits")"
 }
 
 # $1 = file content, $2 = newline-separated substrings. True iff EVERY one is present.
@@ -747,7 +794,12 @@ EOF
 
 # Did the substrings already hold at BASE? A close is only meaningful if the predicate's
 # still-live side was ever reachable — see VACUOUS PREDICATES in the header.
-base_holds() { all_present "$(base_show "$1")" "$2"; }
+#
+# IT READS `$LR_BB`, THE BASE BLOB THE CALLER ALREADY READ AND CHECKED, NOT A FRESH `base_show`.
+# The fresh read discarded its status, so a base blob git could not read was the same empty
+# string as one absent at base. The caller sets `$LR_BB` for `$1` before every call, after
+# refusing an unreadable read; `$1` is kept so every call site reads as the question it asks.
+base_holds() { all_present "$LR_BB" "$2"; }
 
 # receipt_absent_subjects <sh-receipt> -> " <path>" for each consumer-relative path the receipt
 # names that is NOT on disk under $CONSUMER. Empty when every path it can see is present.
@@ -770,8 +822,19 @@ base_holds() { all_present "$(base_show "$1")" "$2"; }
 # Splitting on every character a path cannot contain leaves each candidate standing as its own
 # word, so the four `case` prefixes below decide a token that BEGINS with them rather than one
 # that merely contains them. `$` stays in the keep-set so `$CONSUMER/...` survives as one token
-# and is normalised on the next line; `:` does not, so a rev-spec splits at the colon and its
-# distribution half fails the prefix test.
+# and is normalised on the next line; `:` does not, so a rev-spec splits at the colon.
+#
+# SPLITTING AT THE COLON IS NOT A DEFENCE AGAINST A REV-SPEC, AND THIS PARAGRAPH USED TO SAY IT
+# WAS. It held only while every rev-path's right-hand side began `core/`, which no prefix below
+# admits. `"$THEIRS:docs/backlog.md"` splits into `$THEIRS` and `docs/backlog.md`, and the second
+# half is a perfectly good consumer prefix: a DISTRIBUTION path at a ref, reported as a missing
+# consumer subject, withholding a close the receipt earned. So `receipt_absent_subjects` deletes
+# every `<ref>:<path>` token BEFORE the split -- `$VAR:`, `${VAR}:`, a 7-40 digit hex sha and
+# `HEAD` (each with an optional `~N`/`^N` suffix, and a closing quote allowed before the colon, as in
+# `"$THEIRS":docs/x.md`), and only where the ref begins a word, so a
+# `docs/a.md:12` mid-token is not eaten. The strip is that function's alone: the split is shared,
+# and `receipt_named_subjects` READS the right-hand side of `$THEIRS:core/scripts/x.sh` as the
+# upstream file a receipt names, which a strip inside the shared split would delete.
 #
 # MEASURED over the reference consumer's ledger, 45 `sh` receipts: 7 entries stop being flagged,
 # every one of them a `core/scripts/<x>` seen mid-token, and 0 paths are newly flagged. Control
@@ -853,9 +916,12 @@ receipt_path_tokens() { printf '%s\n' "$1" | tr -c 'A-Za-z0-9_./$-' '\n'; }
 # subshell, so it RETURNS 3 and the caller refuses the whole run. Its own staging file; the
 # directory is made by `lr_stage_ready` in the main shell before the call.
 receipt_absent_subjects() {
-  local rest="$1" p out=""
+  local rest="$1" p out="" _norev
   [ -n "$LR_STAGE" ] || return 3
-  receipt_path_tokens "$rest" > "$LR_STAGE/absent-tokens" || return 3
+  # THE REV-SPEC STRIP, read for its status like the split below: a failed `sed` would hand the
+  # split an empty receipt, and an empty token list is the every-path-exists answer.
+  _norev="$(printf '%s\n' "$rest" | sed -E 's/(^|[^A-Za-z0-9_./$-])(\$[A-Za-z_][A-Za-z0-9_]*|\$\{[A-Za-z_][A-Za-z0-9_]*\}|[0-9a-fA-F]{7,40}|HEAD)([~^][0-9]*)*"?:[A-Za-z0-9_./$-]*/\1/g')" || return 3
+  receipt_path_tokens "$_norev" > "$LR_STAGE/absent-tokens" || return 3
   while IFS= read -r p; do
     [ -n "$p" ] || continue
     p="${p#\$CONSUMER/}"
@@ -1544,11 +1610,16 @@ anchor_variants() { # <anchor> -> candidate spellings, the original excluded by 
 # Echoes the first variant that is absent at base and present at theirs; empty when none is.
 # Multi-substring predicates are skipped: `all_present` requires every substring, so which one
 # was misspelled is not derivable and a guess names the wrong token in the row.
+# THE TWO BLOBS ARE THE CALLER'S `$LR_TB` / `$LR_BB`, read once with their status and refused
+# when unreadable. This used to re-read both and discard both statuses, so an unreadable theirs
+# blob was "contains no variant" and an unreadable base blob "lacks every variant" -- the second
+# is half of the near-miss test passing on bytes nobody read. `<path>` stays in the signature
+# for the call site's readability; the caller sets both blobs for it before calling.
 near_miss_spelling() { # <path> <anchor> <subs>
-  local _p="$1" _a="$2" _subs="$3" _v _tb _bb
+  local _a="$2" _subs="$3" _v _tb _bb
   case "$_subs" in ""|*"
 "*) return 0 ;; esac
-  _tb="$(theirs_show "$_p")"; _bb="$(base_show "$_p")"
+  _tb="$LR_TB"; _bb="$LR_BB"
   while IFS= read -r _v; do
     [ -n "$_v" ] && [ "$_v" != "$_a" ] || continue
     case "$_tb" in *"$_v"*) ;; *) continue ;; esac
@@ -1584,7 +1655,25 @@ EOF
   return 0
 }
 
-TV="$(theirs_show VERSION | tr -d '[:space:]')"
+# `$TV` IS INTERPOLATED INTO `ADOPTED UPSTREAM (v$TV, …)`, A PERMANENT ANNOTATION, so an unread
+# VERSION blob must not quietly become the theirs ref. A VERSION CONFIRMED ABSENT at theirs keeps
+# the old fallback -- a distribution that ships none is a real state, and the ref is then the most
+# honest label there is. A VERSION that is present and could not be read refuses the whole run:
+# every row's version text depends on it. Staged rather than piped, so the show's status is read.
+#
+# AN UNRESOLVABLE THEIRS REF IS NOT THIS CASE AND KEEPS THE OLD FALLBACK. Every read at such a ref
+# fails, each per-entry path then refuses as `unreadable`, and a `$THEIRS_TREE` receipt refuses at
+# materialization -- the fixture's `theirs-tree-unavailable` arm drives exactly that. Refusing the
+# whole run here would replace those per-row findings with one line naming the wrong cause.
+_tv_s=0; TV="$(theirs_show VERSION)" || _tv_s=$?
+if [ "$_tv_s" -ne 0 ]; then
+  _tv_h=0; theirs_has_path VERSION || _tv_h=$?
+  if [ "$_tv_h" -ne 128 ] && git -C "$DIST" rev-parse -q --verify "${THEIRS}^{commit}" >/dev/null 2>&1; then
+    lr_refuse "VERSION at theirs ($THEIRS) is unreadable (git show exited $_tv_s, and it is not confirmed absent), so the version every close row names could not be read"
+  fi
+  TV=""
+fi
+TV="$(printf '%s' "$TV" | tr -d '[:space:]')"
 [ -n "$TV" ] || TV="$THEIRS"
 
 # Extract (label<TAB>ordinal<TAB>directive) for each OPEN entry carrying a verify: line, plus
@@ -1837,6 +1926,7 @@ while IFS="$(printf '\t')" read -r label ord directive; do
     na_h="$(printf '%s' "$na" | awk '{print $1}')"
     na_n="$(printf '%s' "$na" | awk '{print $2}')"
     na_c="$(printf '%s' "$na" | awk '{print $3}')"
+    na_r="$(printf '%s' "$na" | awk '{print $4}')"
     if [ "${na_n:-1}" -gt 1 ] 2>/dev/null; then
       # ALL OF THEM, newest first, none elected. Naming two ends told the operator to read two
       # commits and hid the rest; on the measured corpus the absorbing commit is usually neither.
@@ -1848,7 +1938,13 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       prefix) na_note=" Matched on the SHORT id \`$(printf '%s' "$label" | sed -n 's/^\(PC-S[0-9][0-9]*\)-.*/\1/p')\`, which is the form upstream writes, and that prefix names exactly ONE entry in this ledger -- so the attribution is unambiguous. The full-slug search found nothing, which is normal and is not evidence of anything." ;;
       *)      na_note="" ;;
     esac
-    if [ "$ord" = "0/0" ]; then
+    if [ "$na_r" = docs ]; then
+      # A NAMING SET THAT CHANGES NOTHING A CONSUMER INSTALLS. See `named_reach` for the predicate
+      # and what it does not decide. The row is kept, with every sha, and its kind says it cannot
+      # be the absorption on its own: an operator reading NAMED-UPSTREAM as "upstream took it"
+      # closed an entry on a `docs(plan):` commit that only cross-referenced it.
+      emit NAMED-UPSTREAM-DOCS-ONLY "$label" "upstream's own history NAMES this entry's id ${na_where}, and NONE of those commits changes a path under core/ or templates/ -- the two trees a consumer installs. A plan, a review or a ledger drain mentioning the id matches the same way a fix does, and none of these can have shipped the fix.${na_note} This is NOT an absorption and NOT a close: annotate nothing on the strength of it. Read the commit(s) -- one may record a withdrawal or a split, which IS something to act on -- and leave the entry open unless they say why it should close."
+    elif [ "$ord" = "0/0" ]; then
       # RECEIPT-LESS: there is no receipt to be blind to it and none to re-anchor, so the receipt
       # clauses of the sibling detail would be false here. The close is the annotation alone.
       emit NAMED-UPSTREAM "$label" "upstream's own history NAMES this entry's id ${na_where}. This entry carries NO verify: receipt, so this row is the only mechanical signal it will ever get.${na_note} THIS ROW CARRIES NO VERSION, DELIBERATELY: naming is not absorbing. A commit naming an id to record a rejection, a split, a plan or a ledger drain is indistinguishable here from one that landed the fix, and a version read off the wrong commit goes into a permanent annotation. Read the commit(s) and decide whether the entry was ABSORBED; if it was, establish WHICH RELEASE contains the absorbing commit and close the entry BY ANNOTATION with THAT version -- **bolded, version immediately after the parenthesis** -- \`**ADOPTED UPSTREAM (v<version>, verified <date>)**\`. Do NOT delete the entry. Until it is annotated this row re-appears on every pull. THE FORM MATTERS: any occurrence of the phrase makes ledger-reverify SKIP this entry from here on, but only that exact form lets ledger-rotate.sh archive it, and an entry that is skipped without being archivable is invisible in every future report and never filed."
@@ -1856,8 +1952,21 @@ while IFS="$(printf '\t')" read -r label ord directive; do
     emit NAMED-UPSTREAM "$label" "upstream's own history NAMES this entry's id ${na_where}, which no receipt in this entry can see.${na_note} THIS ROW CARRIES NO VERSION, DELIBERATELY: naming is not absorbing. A commit naming an id to record a rejection, a split, a plan or a ledger drain is indistinguishable here from one that landed the fix, and a version read off the wrong commit goes into a permanent annotation. Read the commit(s) and decide whether the entry was ABSORBED; if it was, establish WHICH RELEASE contains the absorbing commit and annotate with THAT version -- **bolded, version immediately after the parenthesis** -- \`**ADOPTED UPSTREAM (v<version>, verified <date>)**\`, then re-anchor or drop the stale receipt. Do NOT delete the entry. THE FORM MATTERS: any occurrence of the phrase makes ledger-reverify SKIP this entry from here on, but only that exact form lets ledger-rotate.sh archive it, and an entry that is skipped without being archivable is invisible in every future report and never filed."
     fi
   elif [ -n "$nam" ]; then
-    nam_c="$(printf '%s' "$nam" | awk '{print $1}')"
-    nam_n="$(printf '%s' "$nam" | awk '{print $2}')"
+    nam_k="$(printf '%s' "$nam" | awk '{print $1}')"
+    nam_c="$(printf '%s' "$nam" | awk '{print $2}')"
+    nam_n="$(printf '%s' "$nam" | awk '{print $3}')"
+    nam_r="$(printf '%s' "$nam" | awk '{print $4}')"
+    # THE SAME REACH PREDICATE AS THE SIBLING, folded into the detail rather than the kind. This
+    # row is already never attributed and never a close, so a docs-only citing set changes what
+    # the operator reads first, not what they may do.
+    if [ "${nam_k:-1}" -gt 1 ] 2>/dev/null; then
+      nam_where="$nam_k commits, ALL of them: $nam_c (newest first, none elected)"
+    else
+      nam_where="one commit, $nam_c"
+    fi
+    if [ "$nam_r" = docs ]; then
+      nam_where="$nam_where -- and NONE of them changes a path under core/ or templates/, so none can have shipped a fix"
+    fi
     nam_p="$(printf '%s' "$label" | sed -n 's/^\(PC-S[0-9][0-9]*\)-.*/\1/p')"
     # ONE ROW PER PREFIX, NOT PER ENTRY, and the label IS the prefix because that is the
     # subject. Measured on the reference consumer: per-entry emission produced 45 rows from 11
@@ -1869,7 +1978,7 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       *"|$nam_p|"*) : ;;
       *)
         NAM_SEEN="${NAM_SEEN:-|}$nam_p|"
-        emit NAMED-UPSTREAM-AMBIGUOUS "$nam_p" "upstream's history cites this SPRINT prefix ($nam_c), and $nam_n entries in this ledger carry it. No version, for the sibling row's reason: the commit MENTIONS the prefix, and a version read off a mention is a claim about the wrong event. NOT attributed to any of them, deliberately: naming all $nam_n would tell you to close entries upstream never touched, which is worse than the silence it replaces. Read $nam_c and decide per entry. The full-slug search found nothing for them, which is normal -- upstream cites the short id, not the slug."
+        emit NAMED-UPSTREAM-AMBIGUOUS "$nam_p" "upstream's history cites this SPRINT prefix in $nam_where, and $nam_n entries in this ledger carry it. No version, for the sibling row's reason: a commit MENTIONS the prefix, and a version read off a mention is a claim about the wrong event. NOT attributed to any of them, deliberately: naming all $nam_n would tell you to close entries upstream never touched, which is worse than the silence it replaces. Read $nam_c and decide per entry. The full-slug search found nothing for them, which is normal -- upstream cites the short id, not the slug."
         ;;
     esac
   fi
@@ -1932,7 +2041,20 @@ while IFS="$(printf '\t')" read -r label ord directive; do
           continue
           ;;
       esac
-      if ! theirs_has_path "$path"; then
+      # A PATH GIT COULD NOT READ IS NOT A PATH THAT IS ABSENT, AND ONLY ONE OF THEM MAY BE GUESSED
+      # AT. `memo_has_path` returns 125 when `cat-file` said no and lib.sh's discriminator could not
+      # confirm the absence -- a missing blob, a missing subtree or root tree. This read every
+      # non-zero as absent, so an unreadable path fell to the basename retry and was decided by a
+      # guess, or read as "does not resolve"; and `:theirs_show` below discarded its status, so a
+      # blob that went missing after its `has` lookup was cached read as EMPTY content -- for
+      # `theirs_has`, a CLOSE-CANDIDATE. Refused per entry, with the word `unreadable` in the
+      # detail: that word is the only thing separating this row from a vacuous-predicate one.
+      _hp=0; theirs_has_path "$path" || _hp=$?
+      if [ "$_hp" -eq 125 ]; then
+        emit NEEDS-REVIEW "$label" "unreadable: path '$path' could not be READ at theirs ($TV) -- git said no and the path could not be confirmed absent (a missing blob or tree object, or an unresolvable ref), so it was neither resolved by basename nor judged. This is a fault in the distribution checkout, not a verdict on the entry. Run 'git -C <dist> fsck' or re-fetch the distribution, then re-run."
+        continue
+      fi
+      if [ "$_hp" -ne 0 ]; then
         # Filed in the consumer's install layout rather than dist-relative. Retry by basename.
         matches="$(theirs_basename_matches "${path##*/}")"
         nmatch="$(printf '%s' "$matches" | grep -c . )"
@@ -1944,7 +2066,27 @@ while IFS="$(printf '\t')" read -r label ord directive; do
           continue
         fi
       fi
-      present=1; all_present "$(theirs_show "$path")" "$subs" || present=0
+      # BOTH BLOBS ARE READ ONCE HERE, WITH THEIR STATUS, AND EVERY JUDGEMENT BELOW READS THESE
+      # BYTES. The path resolves at theirs, so a failed show of it is a read failure, never an
+      # absence. At BASE a failed show is ambiguous -- a path new at theirs is legitimately absent
+      # there -- so `memo_has_path` decides: only a CONFIRMED absence (128) reads as empty content.
+      # `base_holds` and `near_miss_spelling` used to re-read both blobs and discard the status, so
+      # an unreadable base read as "absent at base", which for `theirs_lacks` is a CLOSE-CANDIDATE.
+      LR_TB="$(theirs_show "$path")"; _ts=$?
+      if [ "$_ts" -ne 0 ]; then
+        emit NEEDS-REVIEW "$label" "unreadable: '$path' resolves at theirs ($TV) but its content could not be read (git show exited $_ts), so the predicate was not evaluated -- an unread blob is not an empty one. This is a fault in the distribution checkout, not a verdict on the entry. Run 'git -C <dist> fsck' or re-fetch the distribution, then re-run.$note"
+        continue
+      fi
+      LR_BB="$(base_show "$path")"; _bs=$?
+      if [ "$_bs" -ne 0 ]; then
+        _bh=0; memo_has_path "$DIST" "$BASE" "$path" || _bh=$?
+        if [ "$_bh" -ne 128 ]; then
+          emit NEEDS-REVIEW "$label" "unreadable: '$path' could not be read at BASE (git show exited $_bs, and the path is not confirmed absent there), so whether the predicate held before this pull is unknown and no verdict that depends on it was emitted. This is a fault in the distribution checkout, not a verdict on the entry. Run 'git -C <dist> fsck' or re-fetch the distribution, then re-run.$note"
+          continue
+        fi
+        LR_BB=""
+      fi
+      present=1; all_present "$LR_TB" "$subs" || present=0
       if [ "$verb_norm" = theirs_lacks ]; then
         if [ "$present" -eq 1 ]; then
           if base_holds "$path" "$subs"; then
