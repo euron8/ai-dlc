@@ -260,8 +260,8 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    "Split dispatch": seats x sections axis) over the parts
    `scripts/ai-dlc/partition-document.sh --map <doc>` prints: one persona agent per (seat,
    part ordinal) plus one cross-part round per seat scoped to interactions between sections. A `SERIAL:` answer keeps one agent per seat
-   (Rule 28 serial exception 4). `PART_CAP` in `partition-document.sh` bounds a round at 8 parts:
-   36 spawns at four seats, 45 at five.
+   (Rule 28 serial exception 4). `PART_CAP` in `partition-document.sh` bounds the parts, so a round
+   spawns at most seats x (`PART_CAP` + 1) agents.
    A subject that meets neither case keeps one agent per seat.
    The lead's join COUNTS, before it proceeds, only files named `<step>-<seat>-<ordinal>.md` and
    `<step>-<seat>-cross.md` for this step, seats taken from the step's seat list and never from
