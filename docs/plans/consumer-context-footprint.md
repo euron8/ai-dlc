@@ -209,7 +209,7 @@ recorded above as blocked with the measurement that blocked it; Lever A is recor
 dropped by operator ruling and is not a criterion. Observation point for the
 consumer figure: the graph transcript census taken AFTER the operator's pull and one sprint,
 compared category-by-category against the 2026-09-18 baseline in the Derivation section below.
-The gate command that must be green on each release: `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`,
+The gate that must be green on each release is the pre-push hook's own run on the push,
 read by exit code, never by the tally.
 
 ### Derive block
