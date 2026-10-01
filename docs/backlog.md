@@ -1266,6 +1266,19 @@ objections are why it is recorded as a candidate rather than a plan:
 shipped predicates adjudicate persisted artifacts a consumer already holds — that population is the
 entry's real subject and it has not been derived.
 
+Held note (batch 178): PREMISE CORRECTION, and the entry is re-scoped. The differential this
+entry calls "not missing" SHIPPED: `core/skills/ai-dlc-update/reconcile/predicate-differential.sh`
+landed in v0.444.0 (`0ca1d0e9`) and is wired as update `SKILL.md` step 3g, driven by the site
+manifest `reconcile/predicate-sites.md`. That manifest declares two sites today
+(`validate-adversarial-convergence.sh`, `validate-provenance-block.sh`). What remains is (1) three
+shipped validators that adjudicate a consumer's STORED artifacts and are not declared there —
+`core/scripts/validate-gate-adjudication.sh` (named in the manifest's prose at `:53`, but given no
+site block), `core/scripts/validate-snapshot-conservation.sh`, and
+`core/scripts/validate-suppression-lifetime.sh`; and (2) the population field the "consequence for
+scoping" paragraph above asks for: a site's output does not carry the population definition it used
+or how many artifacts it could not classify, so a second party cannot re-derive the figure. The
+characterization-corpus candidate is unchanged and still not chosen. No code in this batch.
+
 verify: unscoped — this entry records a gap and names a candidate, not a receipt. Do not close it
 on a green `check-24` run or a green suite; that green is exactly what failed to see the defect.
 
