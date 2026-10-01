@@ -640,19 +640,52 @@ fi
 # fixture time rather than on the gate's hot path. NO NUMBER IS HARDCODED: a literal would go
 # stale on the next filed entry, and equality alone is satisfied by two broken predicates that
 # both return 0, so both sides are asserted non-zero as well.
+# R2 REFUSES BEFORE THE SUMMARY when this tree can score none of the real ledger's receipts, and
+# that is a property of THIS tree, not of the ledger: it carries only the validator, lib.sh and
+# ledger-reverify.sh, so most real receipts exit 9 or 0 here, and a correct fix closing the last
+# one it could bind empties the scored set. Reading the population out of R2's refusal instead
+# kept j1 green there, and cost j1 its second job: a validator that scored NOTHING read the same.
+# So the j1 ledger carries one ANCHOR receipt, appended LAST and keyed on a seed file every
+# `seed` tree holds, which this tree always scores (a literal grep: PROSE-CLOSABLE). The SUMMARY
+# is then always printed, the population is read from it alone, and `scored=` must be non-zero.
+# The anchor is one more sh receipt on BOTH sides of the join, so the comparison is unmoved.
+J1_ANCHOR='BL-899'
+j1_read() { # j1_read <validator output> -> "<sh-receipts> <scored>", or nothing without a SUMMARY
+  printf '%s\n' "$1" | sed -n 's/^SUMMARY .*sh-receipts=\([0-9][0-9]*\) scored=\([0-9][0-9]*\) .*/\1 \2/p'
+}
+# SELF-PROBE, BOTH DIRECTIONS, before the real ledger: a zero-scored ledger (one exit-9 receipt)
+# must yield NO reading, and the same ledger plus the anchor must yield one with scored >= 1.
+seed "$TMP/j1p"
+printf '# Probe backlog\n\n## BL-803\n\nverify: sh grep -q %s probe/guarded.txt || exit 9\n\n' "'MARK803'" \
+  > "$TMP/j1p/docs/backlog.md"
+( cd "$TMP/j1p" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m zero >/dev/null 2>&1 )
+j1p_zero="$(j1_read "$(run_v "" "$TMP/j1p" --max-prose-closable 9999 --max-unscorable 9999 --max-out-of-population 9999 --min-sh-receipts 0 --min-entries 0)")"
+printf '## %s\n\nverify: sh grep -q %s probe/subject.txt\n\n' "$J1_ANCHOR" "'MARKJ1ANCHOR'" >> "$TMP/j1p/docs/backlog.md"
+( cd "$TMP/j1p" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m anchor >/dev/null 2>&1 )
+j1p_anch="$(j1_read "$(run_v "" "$TMP/j1p" --max-prose-closable 9999 --max-unscorable 9999 --max-out-of-population 9999 --min-sh-receipts 0 --min-entries 0)")"
+if [ -z "$j1p_zero" ] && [ "${j1p_anch#* }" = 1 ]; then
+  note "ok    j1 probe -- a zero-scored ledger yields no SUMMARY reading, and the same ledger plus the anchor yields scored=1"
+else
+  note "FAIL  j1 probe -- zero-scored reading '$j1p_zero' (want none), anchored reading '$j1p_anch' (want '<n> 1'); the j1 reader or its anchor cannot discriminate, so j1 below proves nothing"; rc=1
+fi
 if [ -n "$REVERIFY" ] && [ -n "$REAL_LEDGER" ]; then
   seed "$TMP/j1"
   cp "$REVERIFY" "$TMP/j1/scripts/backlog-reverify.sh"
   cp "$REAL_LEDGER" "$TMP/j1/docs/backlog.md"
+  # The anchor must be an id the real ledger does not carry, or it is a second entry under one id.
+  # Real entries are titled (`## BL-NNN — ...`), so the id is closed by a non-digit or line end.
+  if grep -qE "^## ${J1_ANCHOR}([^0-9]|\$)" "$TMP/j1/docs/backlog.md" || ! grep -q '^## BL-' "$TMP/j1/docs/backlog.md"; then
+    note "FAIL  j1 -- the real ledger already carries ${J1_ANCHOR}, or carries no '## BL-' entry at all; the anchor cannot be told apart"; rc=1
+  fi
+  printf '\n## %s\n\nverify: sh grep -q %s probe/subject.txt\n\n' "$J1_ANCHOR" "'MARKJ1ANCHOR'" >> "$TMP/j1/docs/backlog.md"
   ( cd "$TMP/j1" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m real >/dev/null 2>&1 )
   j1_out="$(run_v "" "$TMP/j1" --max-prose-closable 9999 --max-unscorable 9999 --max-out-of-population 9999 --min-sh-receipts 0 --min-entries 0)"
-  j1_arm="$(printf '%s\n' "$j1_out" | sed -n 's/^SUMMARY .*sh-receipts=\([0-9][0-9]*\) .*/\1/p')"
-  # R2 REFUSES BEFORE THE SUMMARY when this tree can score none of the real ledger's receipts,
-  # and that is a property of THIS tree, not of the ledger: it carries only the validator, lib.sh
-  # and ledger-reverify.sh, so most real receipts exit 9 or 0 here. When the last receipt it
-  # could bind is closed by a correct fix, the scored set empties and the SUMMARY line vanishes.
-  # The population this arm compares is still printed, in R2's own refusal, so it is read there.
-  [ -n "$j1_arm" ] || j1_arm="$(printf '%s\n' "$j1_out" | sed -n 's/^FAIL: R2: .*produced ZERO scored receipts (.*sh receipts \([0-9][0-9]*\),.*/\1/p')"
+  j1_rd="$(j1_read "$j1_out")"
+  j1_arm="${j1_rd%% *}"; j1_sc="${j1_rd#* }"
+  if [ -z "$j1_rd" ] || [ "$j1_sc" -eq 0 ]; then
+    note "FAIL  j1 -- the validator printed no SUMMARY or scored nothing on the real ledger plus a receipt it always scores (reading '$j1_rd'); nothing was observed"; rc=1
+    j1_arm=""
+  fi
   # Reverify's own view: one row per entry, id in field 2, restricted to the rows whose verb
   # it resolved as `sh` -- which are exactly the ones it reports STILL-LIVE or CLOSE-CANDIDATE
   # from an sh receipt. Counting its distinct ids for those statuses is its population.
