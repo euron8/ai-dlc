@@ -772,6 +772,28 @@ EOF
       fi
     fi
 
+    # THE COMMIT ARM (step 2). The push arm counts COMMITS, so a handoff that skipped step 2
+    # reads `ahead 0` and passes with the work still uncommitted -- the reference consumer read
+    # ahead 0 with 7 dirty files. This asserts the working tree instead, and it sits OUTSIDE the
+    # remote conjunct: step 3 forgives a push that cannot land, and handoff.md says in as many
+    # words that the fallback is false whenever step 2 was also skipped.
+    #
+    # THE PIPELINE ROOT IS EXCLUDED, WHOLE, AND THAT IS THE FALSE-POSITIVE STORY. Every path a
+    # shipped hook writes resolves under it, step 3 commits it only "if the project tracks"
+    # it, and on the reference consumer mid-sprint 33 of 34 porcelain entries sat under it
+    # against 1 outside. It is also self-dirtying: this hook appends a row to the tracked
+    # continuation log on every block, so with the root in scope the first block would dirty
+    # the tree and every later Stop would block on the hook's own write. Untracked files
+    # outside it count -- step 2 names work teammates left in the working tree. The exclusion
+    # is relative to the project dir, where the root lives, and `:/` keeps the rest of the
+    # repository in scope; an unreadable status is not a finding.
+    COMMIT_OK=1
+    COMMIT_DIRTY=""
+    if command -v git >/dev/null 2>&1 && git -C "$PROJECT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+      COMMIT_DIRTY="$(git -C "$PROJECT_DIR" status --porcelain -- ':/' ":(exclude)${LOG_DIR##*/}" 2>/dev/null)" || COMMIT_DIRTY=""
+      [ -n "$COMMIT_DIRTY" ] && COMMIT_OK=0
+    fi
+
     # THE DRIVER-SIGNAL ARM (step 4's touch) AND THE MARKER ARM (step 5's clear). Measured on
     # the reference consumer over every handoff its transcript corpus can score (39 of 120):
     # the `touch _bmad-output/.driver/handoff` was skipped on 20, the most-skipped step by six
@@ -819,7 +841,8 @@ EOF
     [ -f "${LOG_DIR}/.handoff-in-progress" ] && MARKER_OK=0
 
     if [ "$RESUME_OK" != "1" ] || [ "$TEAMMATES_OK" != "1" ] || [ "$INFLIGHT_OK" != "1" ] \
-       || [ "$PUSH_OK" != "1" ] || [ "$DRIVER_OK" != "1" ] || [ "$MARKER_OK" != "1" ]; then
+       || [ "$COMMIT_OK" != "1" ] || [ "$PUSH_OK" != "1" ] || [ "$DRIVER_OK" != "1" ] \
+       || [ "$MARKER_OK" != "1" ]; then
       # THE SAME STALL-RUN RULE AS CHECK 3, through the same helper and the same EFF_MAX: the
       # harness counts this site's blocks and Check 3's as one run.
       stall_run "$HANDOFF_STATE"; H_CNT="$RUN_CNT"
@@ -830,6 +853,7 @@ EOF
       [ "$RESUME_OK" != "1" ]    && H_WHY="no delimited /ai-dlc resume block"
       [ "$TEAMMATES_OK" != "1" ] && H_WHY="${H_WHY:+$H_WHY; }In-Flight Teammates still carries an \`in-flight\` row"
       [ "$INFLIGHT_OK" != "1" ]  && H_WHY="${H_WHY:+$H_WHY; }step 1's In-Flight Teammates table is EMPTY while ${OPEN_N} dispatched teammate(s) have no stop record"
+      [ "$COMMIT_OK" != "1" ]    && H_WHY="${H_WHY:+$H_WHY; }step 2's commit has not landed ($(printf '%s\n' "$COMMIT_DIRTY" | sed '/^$/d' | wc -l | tr -d ' ') uncommitted path(s) outside ${LOG_DIR##*/})"
       [ "$PUSH_OK" != "1" ]      && H_WHY="${H_WHY:+$H_WHY; }step 3's push has not landed (branch unpublished or ahead of its upstream)"
       [ "$DRIVER_OK" != "1" ]    && H_WHY="${H_WHY:+$H_WHY; }step 4's driver signal was not touched (_bmad-output/.driver/handoff absent)"
       [ "$MARKER_OK" != "1" ]    && H_WHY="${H_WHY:+$H_WHY; }step 5's entry marker was not cleared (_bmad-output/.handoff-in-progress present)"
@@ -859,6 +883,18 @@ EOF
         # told the EARLIEST unsatisfied step rather than whichever arm this code tests first.
         # With two arms the old form could infer the cause from `RESUME_OK`; with three that
         # inference is wrong, and it would have answered a missing PUSH with the teammate text.
+        #
+        # STEP 2 PRECEDES STEP 3, so an uncommitted tree is answered before an unpushed branch.
+        # A tree that is 0 ahead and dirty would otherwise reach no push text at all, and one
+        # that is both is told to commit first -- a push then carries the work.
+        if [ "$COMMIT_OK" != "1" ] && [ "$TEAMMATES_OK" = "1" ] && [ "$INFLIGHT_OK" = "1" ] \
+           && [ "$RESUME_OK" = "1" ]; then
+          jq -n --arg r "HANDOFF GUARD: the operator requested a handoff, the teammate sweep is recorded and the resume prompt is well-formed, but step 2's commit has NOT landed -- the working tree carries uncommitted work outside ${LOG_DIR##*/}/:
+$(printf '%s\n' "$COMMIT_DIRTY" | sed '/^$/d' | head -10)
+
+Per steps/handoff.md step 2, \`git add\` and \`git commit\` that work, including anything teammates left in the working tree, then push (step 3, \`git push -u origin HEAD\`) and end the turn again. A push cannot carry work that was never committed, so a clean push of the earlier commits does not satisfy this. Do not resume pipeline work." '{decision:"block",reason:$r,suppressOutput:true}'
+          exit 0
+        fi
         if [ "$PUSH_OK" != "1" ] && [ "$TEAMMATES_OK" = "1" ] && [ "$INFLIGHT_OK" = "1" ] \
            && [ "$RESUME_OK" = "1" ]; then
           jq -n --arg r "HANDOFF GUARD: the operator requested a handoff, the teammate sweep is recorded and the resume prompt is well-formed, but step 3's push has NOT landed -- this branch is either unpublished or still ahead of its upstream, so the commits this handoff just made exist only on this machine. Per steps/handoff.md step 3, run \`git push -u origin HEAD\` in the foreground with \`timeout: 600000\`. \`-u origin HEAD\`, never a bare \`git push\`: a bare push cannot succeed on a branch that has never been pushed, which is every sprint's FIRST handoff wherever a branch is cut per sprint.
