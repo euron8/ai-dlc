@@ -19,6 +19,27 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.697.0] - 2026-10-01
+
+Batch 181's fifth release: `partition-document.sh` alone. It is under the update skill's machinery glob, so it
+ships as its own file set. The script runs when a remediator is dispatched, not during a pull, so the pull that
+delivers it does not run it.
+
+### `PC-S316-PARTITION-DOCUMENT-SERIAL-ON-A-NO-H3-TABLE-PIECE-THAT-HOLDS-70-PERCENT-OF-THE-BYTES`
+
+- `core/scripts/partition-document.sh`: a piece still over the 50% cap after the `###` subdivision is split
+  again between markdown table rows, cutting before line k only where lines k-2, k-1 and k all begin with `|`
+  outside a fence or comment. Each new piece repeats the parent heading. There is no blank-line split and no
+  table-header re-emit; every reader treats a part as a byte slice of the document, so a cut may leave a table's
+  header rows in the previous piece. The cap stays at 50%.
+- The `SERIAL:` line names the blocking part: ` (lines a-b, NN%, no-boundary|single-line)` after
+  `of the document`. `SERIAL: one part` and exit 3 are unchanged.
+- The consumer's `docs/architecture.md` (428,940 bytes), refused at 70% before, partitions into 8 parts, the
+  largest at 13%, and `--split` then `--assemble` reproduces it byte for byte.
+- `core/fixtures/document-partition`: arms A20-A24 (a wide-table dominant section, the same table inside a fence,
+  a table with no three consecutive rows, one over-cap row, front matter with CRLF) and mutants MX11-MX15; every
+  existing mutant's kill set was re-derived.
+
 ## [0.696.0] - 2026-10-01
 
 Batch 181's fourth release: `emit-report.sh` alone. Bootstrapping, so it ships alone; a consumer runs its installed
