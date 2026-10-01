@@ -10,10 +10,11 @@
 # sibling's packaging and the sibling ships: it is named in scripts/uninstall.sh's removal loop,
 # in core-manifest.md and in setup-sites.md, and I74 joins those against the derived shippable set.
 #
-# IT EXECS UNCONDITIONALLY. There is deliberately no check that the sibling declares SHARDS: an
-# older sibling that ignores `--group` runs every unit, which is correct at four times the cost,
-# where such a check would turn a respelling into a green no-op. The sibling's own coverage join
-# refuses if this file stops naming its shard.
+# THE SIBLING'S VERDICT MUST NAME THIS SHARD, or this run is exit 2. A sibling that stopped
+# honouring `--group` would run shard 'a' here, print PASS for it, and leave this shard's units
+# run nowhere while every directory read green. This driver and the sibling arrive in the same
+# pull, so an older sibling ignoring `--group` is not a state to tolerate. Stdout goes to a FILE,
+# never `$( )`, and is replayed whole; stderr passes straight through.
 #
 # Resolved as a SIBLING inside core/fixtures/, never by walking up into a core subtree.
 #
@@ -27,5 +28,13 @@ IMPL="$HERE/../ledger-reverify/run.sh"
   echo "FIXTURE ERROR: sibling ledger-reverify/run.sh not found — shard 'b' has no assertions to run, and a shard that runs nothing passes everything it never checked" >&2
   exit 2
 }
-
-exec bash "$IMPL" --group b
+LR_OUT="$(mktemp 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed for shard 'b'" >&2; exit 2; }
+trap 'rm -f "$LR_OUT"' EXIT
+bash "$IMPL" --group b > "$LR_OUT"
+rc=$?
+cat "$LR_OUT" || { echo "FIXTURE ERROR: could not replay shard 'b' output" >&2; exit 2; }
+grep -qE "^(PASS|FAIL): .* in shard 'b' of '[a-z ]+'\.\$" "$LR_OUT" || {
+  echo "FIXTURE BROKEN: the sibling's verdict does not name shard 'b' (rc=$rc) — it ran another shard or none, and shard 'b' ran nowhere" >&2
+  exit 2
+}
+exit "$rc"

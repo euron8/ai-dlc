@@ -30,8 +30,9 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 # THE SHARD ARRIVES AS AN ARGUMENT (`--group b`), never from the environment: the pre-push runner
 # scrubs AI_DLC_*, and a fallback-to-'a' design would run shard 'a' four times and report four
 # green fixtures. `--plan <x>` runs the coverage join and prints shard x's units, one per line,
-# without seeding anything. The sibling directories `-b`, `-c` and `-d` are drivers that exec
-# this file unconditionally.
+# without seeding anything. The sibling directories `-b`, `-c` and `-d` are drivers that run this
+# file with their shard and exit 2 unless its verdict line names that shard -- so an argument
+# parser that stopped honouring `--group` cannot run shard 'a' four times and read green.
 #
 # THE COVERAGE JOIN (J0) runs in every shard before anything is seeded: the declared unit set is
 # derived from this file's own `lr_unit_<slug>() {` lines, every one must have its end marker,
@@ -107,7 +108,10 @@ for _s in $SHARDS; do
   [ -n "$_l" ] || { echo "FIXTURE BROKEN: [J0] shard '$_s' is declared and dealt no units; an empty shard passes everything it never checked" >&2; rm -rf "$LR_JW"; exit 2; }
   [ "$_s" = a ] && continue
   _drv="$DIR/../ledger-reverify-$_s/run.sh"
-  if [ ! -f "$_drv" ] || ! grep -v '^[[:blank:]]*#' "$_drv" | grep -qE -- "--group[[:blank:]]+$_s([[:blank:]]|\$)"; then
+  # The driver must INVOKE this file with its shard as the argument. Comments are stripped whole-
+  # line AND trailing, so `--group a # --group b` names shard a and nothing else.
+  if [ ! -f "$_drv" ] || ! sed -e '/^[[:blank:]]*#/d' -e 's/[[:blank:]]#.*$//' "$_drv" \
+       | grep -qE -- "^[[:blank:]]*(exec[[:blank:]]+)?bash[[:blank:]]+\"\\\$IMPL\"[[:blank:]]+--group[[:blank:]]+$_s([[:blank:]]|\$)"; then
     echo "FIXTURE BROKEN: [J0] shard '$_s' is declared but $_drv does not drive it" >&2; rm -rf "$LR_JW"; exit 2
   fi
 done
@@ -142,9 +146,13 @@ done
 # replays a unit's captured stderr there: a unit that exits from inside its body (`exit 2` on
 # a FIXTURE ERROR) runs this trap with the unit's `2>` still in force, so a replay to fd 2
 # would write the file into itself and the message would reach nobody.
+# LR_DONE is set only just before the final verdict. Any exit before it -- an `exit 0` inside a
+# unit included, which would otherwise end the shard green with no verdict and skip every later
+# unit, J1 and the floor -- is exit 2 after the unit's own stderr has been replayed once.
+LR_DONE=""
 exec 3>&2
 read -r DIST BASE CONS THEIRS < <(bash "$DIR/seed.sh")
-trap '[ -n "${LR_UNIT_ERR:-}" ] && [ -s "$LR_UNIT_ERR" ] && cat "$LR_UNIT_ERR" >&3; rm -rf "$(dirname "$DIST")"' EXIT
+trap '[ -n "${LR_UNIT_ERR:-}" ] && [ -s "$LR_UNIT_ERR" ] && cat "$LR_UNIT_ERR" >&3; rm -rf "$(dirname "$DIST")"; [ "${LR_DONE:-}" = 1 ] || { echo "FIXTURE BROKEN: shard exited before dispatch completed" >&3; exit 2; }' EXIT
 
 OUT="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
 
@@ -4954,6 +4962,7 @@ if [ -z "$lr_want" ] || [ "$lr_got" != "$lr_want" ] || [ -n "$lr_foreign" ]; the
   printf '  FAIL  %-22s shard %s entered {%s}, its declared list is {%s}; entered from other shards: {%s}\n' "[J1]" "$GROUP" \
     "$(printf '%s' "$lr_got" | tr '\n' ' ')" "$(printf '%s' "$lr_want" | tr '\n' ' ')" "${lr_foreign# }"
 fi
+LR_DONE=1
 echo
 if [ "$FAILURES" -gt 0 ]; then
   echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong in shard '$GROUP' of '$SHARDS'."

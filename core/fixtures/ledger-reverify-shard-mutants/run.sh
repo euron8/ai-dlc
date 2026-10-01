@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # ledger-reverify-shard-mutants — the mutation battery behind ledger-reverify's SHARD PROTOCOL
-# (BL-406): the coverage join J0, the entered-set join J1, the stderr scan J2, the unit floor and
-# the shared-control count. DISTRIBUTION-ONLY.
+# (BL-406): the coverage join J0, the entered-set join J1, the stderr scan J2, the unit floor,
+# the shared-control count, the drivers' shard-named-verdict check and the EXIT trap's LR_DONE
+# guard. DISTRIBUTION-ONLY.
 #
 # Usage: run.sh
 # Exit:  0 every mutant is KILLED by exactly the arm it targets; 1 a mutant survived or killed an
@@ -206,6 +207,87 @@ run_j0 J0-missing-driver "$t" "shard 'b' is declared but"
 # --- an undealt unit: shard b's list loses one declared unit.
 t="$(newtree)" && mut "$t/$FX/run.sh" "UNITS_b=\"$KEEP_B\"" 'UNITS_b="name_signal"' || t=""
 run_j0 J0-unit-dealt-nowhere "$t" "dealt to no shard: {short_id}"
+
+# --- G2: the driver names shard b only inside a trailing comment and actually runs shard a.
+t="$(newtree)" && mut "$t/$FX-b/run.sh" 'bash "$IMPL" --group b >' 'bash "$IMPL" --group a # --group b >' || t=""
+run_j0 J0-driver-trailing-comment "$t" "shard 'b' is declared but"
+
+# --- G1: the argument parser stops honouring --group, so driver b runs shard a and that shard
+# --- prints its own PASS. The premise first: with the driver's verdict check reverted to the old
+# --- `exec`, the same copy exits 0 on shard a's PASS and shard b runs nowhere.
+G1_OLD='case "${1:-}" in'; G1_NEW='case "" in'
+DRV_OLD='bash "$IMPL" --group b > "$LR_OUT"'
+t="$(newtree)" && mut "$t/$FX/run.sh" "$G1_OLD" "$G1_NEW" || t=""
+tp=""
+[ -n "$t" ] && { tp="$WORK/t-g1-premise"; cp -R "$t" "$tp" && mut "$tp/$FX-b/run.sh" "$DRV_OLD" 'exec bash "$IMPL" --group b' || tp=""; }
+if [ -z "$tp" ]; then
+  bad "[G1-premise] the exec-driver copy DID NOT APPLY"
+else
+  drive "$tp" b "$WORK/g1p.out"; rc=$?
+  if [ "$rc" -eq 0 ] && grep -q "^PASS: all [0-9]* assertions correct in shard 'a' of 'a b'\.\$" "$WORK/g1p.out"; then
+    ok "[G1-premise] with an exec driver, an ignored --group runs shard a under driver b and exits 0"
+  else
+    bad "[G1-premise] the exec-driver copy did not read PASS for shard a under driver b (rc=$rc)"
+  fi
+fi
+if [ -z "$t" ]; then
+  bad "[G1-group-ignored] DID NOT APPLY (tree build, prep or anchor failed)"
+else
+  drive "$t" b "$WORK/g1.out"; rc=$?
+  if [ "$rc" -eq 2 ] && grep -q "^FIXTURE BROKEN: the sibling's verdict does not name shard 'b'" "$WORK/g1.out" \
+     && grep -q "^PASS: all [0-9]* assertions correct in shard 'a' of 'a b'\.\$" "$WORK/g1.out"; then
+    ok "[G1-group-ignored] KILLED by the driver: shard a's PASS replayed, then exit 2 naming shard 'b'"
+  else
+    bad "[G1-group-ignored] SURVIVED (rc=$rc)"; sed -n '1,10p' "$WORK/g1.out" | sed 's/^/          | /'
+  fi
+fi
+
+# --- E1: a unit calls `exit 0`. The premise first: with the trap's LR_DONE guard removed, the
+# --- shard exits 0 with no verdict line, which the pool reads as green. Driven as shard a, which
+# --- has no driver in front of it, so the sibling's own trap is the only thing that can catch it.
+E1_UNIT='lr_unit_nonid_manual() {'
+E1_GUARD='; [ "${LR_DONE:-}" = 1 ] || { echo "FIXTURE BROKEN: shard exited before dispatch completed" >&3; exit 2; }'"'"' EXIT'
+t="$(newtree)" && mut "$t/$FX/run.sh" "$E1_UNIT" "$E1_UNIT
+  exit 0" || t=""
+tp=""
+[ -n "$t" ] && { tp="$WORK/t-e1-premise"; cp -R "$t" "$tp" && mut "$tp/$FX/run.sh" "$E1_GUARD" "' EXIT" || tp=""; }
+if [ -z "$tp" ]; then
+  bad "[E1-premise] the guard-removed copy DID NOT APPLY"
+else
+  drive "$tp" a "$WORK/e1p.out"; rc=$?
+  if [ "$rc" -eq 0 ] && ! grep -qE "^(PASS|FAIL): " "$WORK/e1p.out" && grep -q '^  ok    \[J0\]' "$WORK/e1p.out"; then
+    ok "[E1-premise] without the LR_DONE guard, a unit's exit 0 ends the shard green with no verdict"
+  else
+    bad "[E1-premise] the guard-removed copy did not exit 0 verdictless (rc=$rc)"
+  fi
+fi
+if [ -z "$t" ]; then
+  bad "[E1-unit-exit-0] DID NOT APPLY (tree build, prep or anchor failed)"
+else
+  drive "$t" a "$WORK/e1.out"; rc=$?
+  if [ "$rc" -eq 2 ] && grep -q '^FIXTURE BROKEN: shard exited before dispatch completed$' "$WORK/e1.out" \
+     && ! grep -qE "^(PASS|FAIL): " "$WORK/e1.out" && grep -q '^  ok    \[J0\]' "$WORK/e1.out"; then
+    ok "[E1-unit-exit-0] KILLED by the EXIT trap: exit 2, no verdict line"
+  else
+    bad "[E1-unit-exit-0] SURVIVED (rc=$rc)"; sed -n '1,10p' "$WORK/e1.out" | sed 's/^/          | /'
+  fi
+fi
+
+# --- E2: a unit's legitimate refusal (`exit 2` after a FIXTURE ERROR on stderr) still surfaces
+# --- its own text exactly once through the trap's replay, beside the trap's own line.
+t="$(newtree)" && mut "$t/$FX/run.sh" "$E1_UNIT" "$E1_UNIT
+  echo 'FIXTURE ERROR: E2 unit refusal probe' >&2; exit 2" || t=""
+if [ -z "$t" ]; then
+  bad "[E2-refusal-surfaces-once] DID NOT APPLY (tree build, prep or anchor failed)"
+else
+  drive "$t" a "$WORK/e2.out"; rc=$?
+  e2n="$(grep -c '^FIXTURE ERROR: E2 unit refusal probe$' "$WORK/e2.out")" || e2n=0
+  if [ "$rc" -eq 2 ] && [ "$e2n" -eq 1 ] && grep -q '^FIXTURE BROKEN: shard exited before dispatch completed$' "$WORK/e2.out"; then
+    ok "[E2-refusal-surfaces-once] a unit's exit 2 refusal reaches stderr once, and the run is exit 2"
+  else
+    bad "[E2-refusal-surfaces-once] rc=$rc, the refusal text appeared $e2n time(s), want rc 2 and once"
+  fi
+fi
 
 echo "ledger-reverify-shard-mutants: $fails FAIL"
 [ "$fails" -eq 0 ]
