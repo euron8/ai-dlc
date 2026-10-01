@@ -142,6 +142,53 @@ git -C "$DIST" add -A
 git -C "$DIST" commit -q -m 'fix: absorb PC-FIXTURE-NORECEIPT-NAMED-UPSTREAM' \
   -m 'Also names FIXTURE-CAPS-HEADING-NOT-AN-ID, which is a heading and not an entry id.'
 
+# --- pre-base: WHAT A NAMING SET CHANGED (the reach of NAMED-UPSTREAM) ---
+#
+# A naming commit that changes nothing a consumer installs cannot have absorbed a consumer defect,
+# and `ledger-reverify.sh` reports such a set as NAMED-UPSTREAM-DOCS-ONLY. Every naming commit
+# above touches `core/`, so each of these is the one subject of its own arm:
+#
+#   PC-S950  ONE naming commit, docs/ only           -> NAMED-UPSTREAM-DOCS-ONLY, never NAMED-UPSTREAM
+#   PC-S951  ONE naming commit, templates/ only      -> NAMED-UPSTREAM. `templates/` is installed too,
+#            so a predicate keyed on `core/` alone demotes it -- the near-miss for the S950 arm.
+#   PC-S952  a MERGE commit names it; its side branch touches core/ and names nothing. `git log
+#            --name-only` lists NO files for a merge without `-m`, so a predicate that forgets `-m`
+#            scores this as docs-only.
+#   PC-S953  a SHARED prefix (two entries) cited by ONE docs-only commit -> the AMBIGUOUS row says
+#            none of its commits changes core/ or templates/.
+#   PC-S902  gains a SECOND citing commit here, so its AMBIGUOUS row has a list to get wrong: the
+#            row used to print the newest sha alone.
+printf 'a plan that cross-references an entry\n' > "$DIST/docs/s950-plan.md"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'docs(plan): cross-reference PC-S950-DOCS-ONLY-NAMING in the resume block'
+
+mkdir -p "$DIST/templates"
+printf 'a template line\n' > "$DIST/templates/s951.md.template"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'fix: absorb PC-S951-TEMPLATES-ONLY-NAMING'
+
+S952_MAIN="$(git -C "$DIST" symbolic-ref --short HEAD)"
+git -C "$DIST" checkout -q -b s952-side
+printf '#!/bin/sh\necho s952 fixed\n' > "$DIST/core/scripts/s952-subject.sh"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'side work, names no entry'
+git -C "$DIST" checkout -q "$S952_MAIN"
+printf 'main-line note\n' > "$DIST/docs/s952-mainline.md"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'docs: a main-line note, names no entry'
+git -C "$DIST" merge -q --no-ff --no-edit s952-side -m 'Merge: absorb PC-S952-MERGE-NAMING'
+git -C "$DIST" branch -q -D s952-side
+[ "$(git -C "$DIST" rev-list --parents -n 1 HEAD | wc -w | tr -d ' ')" = 3 ] \
+  || { echo 'seed: the PC-S952 naming commit is not a merge' >&2; exit 1; }
+
+printf 'a ledger note\n' > "$DIST/docs/s953-note.md"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'docs(ledger): PC-S953 cited for both entries, no fix'
+
+printf '#!/bin/sh\necho s902 second\n' > "$DIST/core/scripts/s902-second.sh"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'fix: a second change citing PC-S902'
+
 # --- base: neither marker present ---
 printf '# SKILL\nrule one\nrule two\n' > "$SK"
 printf '0.100.0\n' > "$DIST/VERSION"
@@ -321,6 +368,25 @@ cat > "$LED" <<'LEDGER'
   both take the `n > 1` branch, and only the SHA SET tells them apart.
   verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
 
+- **PC-S950-DOCS-ONLY-NAMING** — named by ONE `docs(plan):` commit that changes nothing under
+  `core/` or `templates/`. It must read NAMED-UPSTREAM-DOCS-ONLY and never NAMED-UPSTREAM.
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+- **PC-S951-TEMPLATES-ONLY-NAMING** — named by ONE commit that changes only `templates/`, which a
+  consumer installs. It must stay NAMED-UPSTREAM.
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+- **PC-S952-MERGE-NAMING** — named by a MERGE whose side branch changes `core/`. It must stay
+  NAMED-UPSTREAM.
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+- **PC-S953-SHARED-DOCS-FIRST** — shares `PC-S953` with the entry below; the one citing commit is
+  docs-only.
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+- **PC-S953-SHARED-DOCS-SECOND** — the other half of the pair.
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
 - **Entry H names an ambiguous basename.** Two files at theirs are called
   `validate-thing.sh`, so the fallback has no unique answer and must refuse to guess.
   verify: theirs_lacks core/scripts/ai-dlc/validate-thing.sh "MARKER_B"
@@ -451,6 +517,22 @@ cat > "$LED" <<'LEDGER'
   the paired control: a genuinely absent CONSUMER path in the same position must still be flagged,
   or this arm is satisfied by an extractor that sees nothing at all.
   verify: sh git -C "$DIST" show "$THEIRS:core/scripts/validate-artifact-derivations.sh" >/dev/null 2>&1; exit 1
+
+---
+
+- **Entry SH-DIST-BARE-CORE names a distribution path OUTSIDE a rev-spec.** `core/scripts/<x>` here
+  is a `git diff` pathspec, so no rev-spec strip can remove it: only the whitelist's
+  first-character test keeps it out. SH-DIST-PATH above lost that role once rev-specs were
+  stripped whole, which is why the anchoring mutant reads this entry.
+  verify: sh git -C "$DIST" diff --quiet "$BASE" "$THEIRS" -- core/scripts/validate-artifact-derivations.sh; exit 1
+
+---
+
+- **Entry SH-REVPATH-DOCS reads a distribution `docs/` path at a ref.** `docs/` IS a consumer
+  prefix, so splitting the rev-spec at its colon left a token the whitelist admits, and a working
+  receipt read as naming a missing consumer subject. Every spelling of the ref is here: unbraced,
+  braced, a closing quote before the colon, a sha, and `HEAD~1`.
+  verify: sh git -C "$DIST" show "$THEIRS:docs/zz-dist-only-a.md" >/dev/null 2>&1; git -C "$DIST" show "${THEIRS}:docs/zz-dist-only-b.md" >/dev/null 2>&1; git -C "$DIST" show "$THEIRS":docs/zz-dist-only-c.md >/dev/null 2>&1; git -C "$DIST" show 0123abcd:.claude/zz-dist-only-d.md >/dev/null 2>&1; git -C "$DIST" show HEAD~1:_bmad-output/zz-dist-only-e.md >/dev/null 2>&1; exit 1
 
 ---
 

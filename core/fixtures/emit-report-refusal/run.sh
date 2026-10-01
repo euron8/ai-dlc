@@ -42,6 +42,10 @@
 #       and the stub exemption, each with a mutant.
 set -uo pipefail
 
+# HERMETIC -- scrub the operator's tuning before reading anything (I10). H1 below drives a world
+# carrying an ai-dlc hook through the hook-registration validator.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SIB="$HERE/../reconcile-emit-report"
 [ -f "$SIB/seed.sh" ] && [ -f "$SIB/run.sh" ] \
@@ -608,6 +612,66 @@ RACE
     printf '  INCONCLUSIVE  A7 sampled: the unfixed <( ) control failed 0 of 10000 on this run, so the load never reached the race and the engine side'"'"'s 0 of 10000 discriminates nothing (the forced half above carries the arm)\n'
   else
     ok "A7 sampled: across 8 concurrent workers the unfixed <( ) spelling failed $_ua of 10000 and the engine's orientation diff 0 of 10000, interleaved in the same loop"
+  fi
+fi
+
+# --- H1: THE HOOK VALIDATOR'S FIX LINE NAMES A STABLE PATH, SO TWO RENDERS ARE ONE -------------
+# The validator prints `bash <its own path> --root …` at the foot of its FIX block, and
+# emit-report runs THEIRS' copy out of a fresh mktemp file -- so with any ai-dlc hook unregistered
+# every render differed in that line, `--verify` failed on every render, and the apply gate could
+# not pass on that consumer state at all. The line now names the consumer's INSTALLED path.
+# Its own world: the seed above carries no validator at THEIRS, so it never takes that branch.
+#
+# SHIPS AHEAD OF ITS SUBJECT: an installed emit-report.sh that predates the rewrite SKIPs, keyed on
+# the rewrite's own variable, which the pre-fix copy lacks. Decided on the RESOLVED engine dir.
+H_ISDIST=0
+[ "$RDIR" = "$(cd "$HERE/../../skills/ai-dlc-update/reconcile" 2>/dev/null && pwd)" ] && H_ISDIST=1
+if ! grep -qF 'HRI="$CONSUMER/scripts/ai-dlc/validate-hook-registration.sh"' "$EMIT" && [ "$H_ISDIST" = 0 ]; then
+  printf '  SKIP  H1 -- the installed emit-report.sh predates the stable hook-validator path; it lands with the pull that carries this fixture\n'
+else
+  HV=""; for _c in "$HERE/../../scripts/validate-hook-registration.sh" "$HERE/../../../scripts/ai-dlc/validate-hook-registration.sh"; do
+    [ -f "$_c" ] && { HV="$_c"; break; }; done
+  HM=""; for _c in "$RDIR/settings-merge.sh"; do [ -f "$_c" ] && HM="$_c"; done
+  if [ -z "$HV" ] || [ -z "$HM" ]; then
+    bad "H1 FIXTURE BROKEN: validate-hook-registration.sh or settings-merge.sh not found beside this unit, so no world can carry an unregistered hook"
+  else
+    H="$WORK/hook"; mkdir -p "$H/d/core/scripts" "$H/d/templates" "$H/c/.claude/hooks" "$H/c/.claude/skills/ai-dlc-update/reconcile"
+    cp "$HV" "$H/d/core/scripts/validate-hook-registration.sh"
+    printf '{\n  "hooks": {}\n}\n' > "$H/d/templates/settings.json.template"
+    hg() { git -C "$H/d" -c user.name=f -c user.email=f@f -c commit.gpgsign=false "$@"; }
+    git init -q "$H/d"; hg add -A; hg commit -qm base; HB="$(hg rev-parse HEAD)"
+    printf 'x\n' > "$H/d/templates/x.md"; hg add -A; hg commit -qm theirs; HT="$(hg rev-parse HEAD)"
+    printf '{\n  "hooks": {}\n}\n' > "$H/c/.claude/settings.json"
+    printf '#!/bin/sh\nexit 0\n' > "$H/c/.claude/hooks/ai-dlc-probe.sh"
+    cp "$HM" "$H/c/.claude/skills/ai-dlc-update/reconcile/settings-merge.sh"
+    # h_two <emit-report> -> "<identical yes|no> <verify rc> <unregistered named yes|no>"
+    h_two() {
+      local a b v
+      a="$(bash "$1" "$H/d" "$HB" "$H/c" "$HT" 2>/dev/null)"; b="$(bash "$1" "$H/d" "$HB" "$H/c" "$HT" 2>/dev/null)"
+      printf '%s\n' "$a" > "$H/report.md"
+      bash "$1" --verify "$H/report.md" "$H/d" "$HB" "$H/c" "$HT" >/dev/null 2>&1; v=$?
+      printf '%s %s %s' "$([ "$a" = "$b" ] && echo yes || echo no)" "$v" \
+        "$(grep -qF '.claude/hooks/ai-dlc-probe.sh' <<<"$a" && echo yes || echo no)"
+    }
+    h_ctl="$(h_two "$EMIT")"
+    if [ "$h_ctl" = "yes 0 yes" ]; then
+      ok "H1 a world with an unregistered ai-dlc hook renders byte-identically twice, names the hook, and --verify returns 0"
+    else
+      bad "H1 the unregistered-hook world: identical/verify/named = $h_ctl, want 'yes 0 yes' — the FIX line is not stable, so --verify fails on every render of this state"
+    fi
+    # MUTANT: the rewrite removed, so the FIX line names the mktemp copy again.
+    mkdir -p "$R/h1mut"; cp "$RDIR"/*.sh "$R/h1mut/" 2>/dev/null
+    A='             print }'"'"')" && [ -n "$hrs" ] && hro="$hrs"' B='             print }'"'"')"' \
+      awk '$0 == ENVIRON["A"] { print ENVIRON["B"]; n++; next } { print } END { exit (n == 1) ? 0 : 3 }' "$EMIT" > "$R/h1mut/emit-report.sh"
+    if [ "$?" -ne 0 ] || cmp -s "$EMIT" "$R/h1mut/emit-report.sh"; then
+      bad "H1 mutant DID NOT APPLY, so the stable-path arm is unproven"
+    else
+      h_mut="$(h_two "$R/h1mut/emit-report.sh")"
+      case "$h_mut" in
+        "no 1 yes") ok "H1 mutant: without the rewrite the two renders differ and --verify returns 1 — the arm sees the temp path" ;;
+        *) bad "H1 mutant: identical/verify/named = $h_mut, want 'no 1 yes' — the arm cannot see the temp path" ;;
+      esac
+    fi
   fi
 fi
 

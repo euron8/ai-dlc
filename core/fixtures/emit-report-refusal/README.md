@@ -15,6 +15,8 @@ run, the reconcile report must say so with a column-0 `DETECTOR-REFUSED` line. I
   `BLOCKERS-RESOLVED`.
 - The orientation diff survives a forced interleaving that makes a process-substitution operand
   fail every time.
+- With an ai-dlc hook unregistered, two renders are byte-identical and `--verify` passes: the
+  hook validator's FIX line names the consumer's installed path, never the render's temp copy.
 - The `reconcile-emit-report` fixture's R6 guard retries a world approved or scored under a
   transient refusal. It keeps the seed's own legitimate refusal and a stubbed sibling's
   intended one.

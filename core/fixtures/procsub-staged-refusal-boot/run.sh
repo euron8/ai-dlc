@@ -1246,10 +1246,10 @@ report_score() { # <m> <own> <k> <got_own> <others_ok> <detail> <base-shape>
 }
 
 LR=ledger-reverify.sh
-  d="$(DROP1='  receipt_path_tokens "$rest" > "$LR_STAGE/absent-tokens" || return 3' DROP2='ZZ-PSB-NONE' \
-       OLD='  done < "$LR_STAGE/absent-tokens"' NEW='  done < <(receipt_path_tokens "$rest")' \
-       mut M-L1 "$LR" "$SWAP" '  done < <(receipt_path_tokens "$rest")' 'absent-tokens' \
-         '  receipt_path_tokens "$rest" > "$LR_STAGE/absent-tokens" || return 3' '  done < "$LR_STAGE/absent-tokens"')" \
+  d="$(DROP1='  receipt_path_tokens "$_norev" > "$LR_STAGE/absent-tokens" || return 3' DROP2='ZZ-PSB-NONE' \
+       OLD='  done < "$LR_STAGE/absent-tokens"' NEW='  done < <(receipt_path_tokens "$_norev")' \
+       mut M-L1 "$LR" "$SWAP" '  done < <(receipt_path_tokens "$_norev")' 'absent-tokens' \
+         '  receipt_path_tokens "$_norev" > "$LR_STAGE/absent-tokens" || return 3' '  done < "$LR_STAGE/absent-tokens"')" \
     && score M-L1 L1 "$d" \
     || mutreport M-L1
   d="$(DROP1='  receipt_path_tokens "$1" > "$LR_STAGE/named-tokens" || return 3' DROP2='ZZ-PSB-NONE' \
