@@ -1670,8 +1670,8 @@ if [ "$(reach_kind "$rc_ctl" PC-S950-DOCS-ONLY-NAMING)" = NAMED-UPSTREAM-DOCS-ON
   reach_case reach-core-only "templates/\"*) printf 'code' ;;" "zz-never-a-prefix/\"*) printf 'code' ;;" PC-S951-TEMPLATES-ONLY-NAMING NAMED-UPSTREAM-DOCS-ONLY \
     "a core/-only predicate demotes the templates-only absorption, and S951 is what sees it"
   reach_case reach-no-m \
-    "  _files=\"\$(printf '%s\\n' \"\$1\" | git -C \"\$DIST\" log --no-walk --stdin -m --name-only --format= 2>/dev/null)\" \\" \
-    "  _files=\"\$(printf '%s\\n' \"\$1\" | git -C \"\$DIST\" log --no-walk --stdin --name-only --format= 2>/dev/null)\" \\" \
+    "  _files=\"\$(printf '%s\\n' \"\$1\" | git -C \"\$DIST\" log --no-walk --stdin -m --no-renames --name-only --format= 2>/dev/null)\" \\" \
+    "  _files=\"\$(printf '%s\\n' \"\$1\" | git -C \"\$DIST\" log --no-walk --stdin --no-renames --name-only --format= 2>/dev/null)\" \\" \
     PC-S952-MERGE-NAMING NAMED-UPSTREAM-DOCS-ONLY \
     "without -m a merge lists no files and its core/ side branch reads docs-only, and S952 is what sees it"
   # THE VERSION CONJUNCT, and ONLY S954 may see it go. The mutant renames the matched line to one
