@@ -85,7 +85,7 @@ its gated tip:
   narrowed and open.
 
 `BL-400` was filed at the operator's request (#936). The close rotated 18 entries and filed `BL-401`..`BL-406`:
-live backlog **39 -> 28** (`BL-400`..`BL-406` filed), archive **359 -> 377**. Net closed minus filed: **11**.
+live backlog **39 -> 28** (`BL-400`..`BL-407` filed, `BL-407` closed on filing), archive **359 -> 378**. Net closed minus filed: **11**.
 
 **THE WHOLE-BACKLOG ADJUDICATION: 39 entries, 0 CLOSE, about 9 PARTIAL, about 30 LIVE, 1 stale premise
 (`BL-129`).** Every batch-177 contract carried at least one claim the tree had moved past; `BL-310`'s
@@ -112,7 +112,7 @@ each was given a cell of its own. Two pushes lost SSH after a green verdict (exi
 
 **THE DELIVERY GAP IS NINE RELEASES, WHICH IS WIDE.** The consumer is at 0.674.0 against `VERSION` 0.683.0, and
 seven of the nine change a bootstrapping file (0.677.0 through 0.683.0 —
-each shipped alone for that reason). PENDING is 1: S316. The banked ruling stands: report the gap and write no
+each shipped alone for that reason). PENDING is 1: S316 (`BL-407`). The consumer filed a second candidate at its 0.674.0 ledger close (graph `a06ad9ac`, 2026-09-30), `PC-S316-UPDATE-STEP8-ORDERS-THE-LEDGER-DISPOSITIONS-AFTER-THE-PUSH-AND-MERGE`, unfiled here. The banked ruling stands: report the gap and write no
 runbook.
 
 Batch 177's block below is history: batch 178's block replaces its delivery gap and its rulings record.
@@ -914,7 +914,7 @@ wc -l < /tmp/pc_backed.tsv     # THE WORKLIST: entries whose candidate is STILL 
 cat /tmp/pc_backed.tsv         # read it -- the ids are the batch's candidate set
 # controls, same invocation:
 wc -l < /tmp/live.txt                                            # must be NON-ZERO
-grep -cxF 'PC-S315-ARTIFACT-WRITE-LEDGER-DROPS-PARALLEL-SHARD-ROWS' /tmp/live.txt  # a known-live id: 1 -- a close breaks it; re-check
+grep -cxF 'PC-S316-UPDATE-STEP8-ORDERS-THE-LEDGER-DISPOSITIONS-AFTER-THE-PUSH-AND-MERGE' /tmp/live.txt  # a known-live id: 1 -- a close breaks it; re-check
 grep -cxF 'PC-S999-NEVER-A-REAL-ID' /tmp/live.txt                # impossible id: 0
 ```
 

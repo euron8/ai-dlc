@@ -2037,3 +2037,4 @@ which unit became the new pole.
 Discharges no consumer candidate.
 
 verify: sh F=core/fixtures/ledger-reverify/run.sh; [ -f "$F" ] || exit 9; C="$(grep -v '^[[:blank:]]*#' "$F")"; [ -n "$C" ] || exit 9; L="$(grep -E '^SHARDS="[a-z ]+"$' <<<"$C" | tail -1)"; [ -n "$L" ] || exit 1; G="$(sed -E 's/^SHARDS="([a-z ]+)"$/\1/' <<<"$L")"; n=0; for g in $G; do n=$((n+1)); [ "$g" = a ] && continue; R="core/fixtures/ledger-reverify-$g/run.sh"; [ -f "$R" ] || exit 1; grep -v '^[[:blank:]]*#' "$R" | grep -qE -- "--group[[:blank:]]+$g([[:blank:]]|\$)" || exit 1; done; [ "$n" -ge 2 ]
+
