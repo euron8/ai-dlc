@@ -1693,16 +1693,6 @@ this phase on the pool-width mismatch, because the operator's shell profile sets
 
 verify: manual
 
-## BL-402 — `apply.sh --finish` skips the resolution phases, so it stamps theirs over a tree whose DECISION remedy was never performed
-
-**DEFECT. Found at batch 178 by the B3 builder and its tip adversary.** The residue `BL-336` left. That release pointed the provenance refile's did-not-run row at re-render, re-approve and apply instead of `--finish` (`reapply_remedy`, `core/skills/ai-dlc-update/reconcile/apply.sh:198-207`), but the finisher itself still accepts the tree. The `FINISH=0` span (`:532-1799`) holds the drift refile (`:947`) and the NOEXEC audit (`:1767`). Under `--finish` the only tree check is `finish_verify_tree` (`:1886`), which reads preclassify's pure-apply buckets and nothing else, so no DECISION row's remedy is re-checked; the withheld-stamp row at `:1981` still prints `apply.sh --finish` as the next step.
-
-Measured in `apply-drift-refile`'s seeded world with the consumer schema at mode 000: apply raises `DECISION drift … did not run` and withholds the stamp, and `--finish` then stamps `version: 9.9.9` with `my-persona-skill` unrefiled and the schema still drifted. A control world whose refile was done by hand also stamps, so a finisher that refuses everything does not pass. **A correct fix must update `core/fixtures/apply-drift-refile/run.sh:434`** in the same change: it pins the defective behaviour as the r-M2 mutant's expected result.
-
-Discharges no consumer candidate.
-
-verify: sh S=core/fixtures/apply-drift-refile/seed.sh; A=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$S" ] && [ -f "$A" ] || exit 9; T="$(mktemp -d)" || exit 9; w() { TMPDIR="$T" bash "$S" 2>/dev/null; }; G="$(w)" && [ -f "$G/env.sh" ] || exit 9; eval "$(sed 's/^/G_/' "$G/env.sh")"; bash "$A" "$G_DIST" "$G_BASE" "$G_CONSUMER" "$G_THEIRS" >/dev/null 2>&1; grep -q my-persona-skill "$G_EXT" 2>/dev/null && grep -qE '^version: 9\.9\.9$' "$G_STAMP" || exit 9; W="$(w)" && [ -f "$W/env.sh" ] || exit 9; eval "$(sed 's/^/W_/' "$W/env.sh")"; chmod 000 "$W_SCHEMA"; o="$(bash "$A" "$W_DIST" "$W_BASE" "$W_CONSUMER" "$W_THEIRS" 2>/dev/null)"; chmod 644 "$W_SCHEMA"; grep -q 'did not run' <<<"$o" || exit 9; grep -qE '^version: 9\.9\.9$' "$W_STAMP" && exit 9; H="$(w)" && [ -f "$H/env.sh" ] || exit 9; eval "$(sed 's/^/H_/' "$H/env.sh")"; chmod 000 "$H_SCHEMA"; bash "$A" "$H_DIST" "$H_BASE" "$H_CONSUMER" "$H_THEIRS" >/dev/null 2>&1; chmod 644 "$H_SCHEMA"; mkdir -p "$(dirname "$H_EXT")" && cp "$G_EXT" "$H_EXT" && git -C "$H_DIST" show "${H_THEIRS}:core/schemas/provenance-block.json" > "$H_SCHEMA" || exit 9; bash "$A" --finish "$H_DIST" "$H_BASE" "$H_CONSUMER" "$H_THEIRS" >/dev/null 2>&1; grep -qE '^version: 9\.9\.9$' "$H_STAMP" || exit 1; bash "$A" --finish "$W_DIST" "$W_BASE" "$W_CONSUMER" "$W_THEIRS" >/dev/null 2>&1; grep -qE '^version: 9\.9\.9$' "$W_STAMP" || exit 0; grep -q my-persona-skill "$W_EXT" 2>/dev/null && git -C "$W_DIST" show "${W_THEIRS}:core/schemas/provenance-block.json" | cmp -s - "$W_SCHEMA" && exit 0; exit 1
-
 ## BL-404 — the acknowledge hook's typed-invocation anchor depends on the harness's serialisation, and an updater call inside a pipeline session is asserted by no arm
 
 **NOTE. Found at batch 178 by the S316 tip adversary.** `core/hooks/ai-dlc-acknowledge.sh:196` recognises a typed `/ai-dlc` or `/ai-dlc-update` only as `"role":"user","content":"<command-message>…</command-message>\n<command-name>/…`. Across the local transcripts all 301 typed-skill records carry that shape (negative control 0); the other user lines with a `<command-name>` are built-in commands with no `<command-message>`, and there are 0 array-content variants. If the harness changes how it serialises a typed command, typed updater sessions are denied writes under the pause again and Check 2z stops gating typed `/ai-dlc` sessions, and nothing in the tree would notice.
@@ -1738,3 +1728,35 @@ verify: manual -- no receipt has been scored; the claim is the adversary's repor
 **NOTE. Seen at batch 179, not diagnosed.** The first gate of the second close commit (`d7cb330a`, which changed only `docs/backlog.md`, `docs/backlog.archive.md` and `.githooks/pre-push`) failed on one unit of 216 at pool width 16 and a 1-minute load near 40: mutant `hook-resolve-mention` read `w12shadow5=W` where the fixture expects `-`. That fixture reads none of the three files and its read-set rows name none of them. Run alone from the main checkout it passed three times (42 assertions, about 55s), and the unchanged commit passed a second gate with 216 of 216 ok. No ordering or timing construct in `vector.sh` or `worker.sh` was found that would explain it, and the recorded loaded cost is 148s against 55s solo. A load-dependent fault is a hypothesis, not a finding. The hook's failure record (`.git/ai-dlc-fixture-failures`) holds the full got-vector and is overwritten by the next red run, so copy it before the next gate if this recurs.
 
 verify: manual -- the failure did not reproduce solo or on a second gate, so there is no receipt to score; the claim is the lead's measurement and the cause is unestablished.
+
+## BL-413 — `apply.sh --finish` stamps over a both-changed (CLASSIFY) file the ordinary run handed back as a semantic merge and nobody merged
+
+**DEFECT. Found by the `b179-apply` tip adversary at batch 179; the gap predates that branch.** `finish_verify_tree` counts only `UPSTREAM-ONLY`, `UPSTREAM-ONLY-ADD` and `*SETUP-TOKENS*` rows, and `core/skills/ai-dlc-update/SKILL.md` (the `--finish` section near line 2234) says on purpose that a `BOTH-CHANGED->CLASSIFY` file never counts. So `--finish` cannot tell a merged CLASSIFY file from an untouched one.
+
+Measured in the seeded world where upstream retires `retired-skill` and the consumer appended `my-persona-skill` in place: the ordinary run raises `WORKLIST semantic-merge` and withholds the stamp at 0.0.1, while `--finish` on the same snapshot raises no row and stamps 9.9.9 with the schema never merged. Both runs start from one copied snapshot and take different paths, which is the control. The 0.691.0 refile gate removed the accidental withhold that `f07030d4` had (a `finish-refile-owed` row whose remedy would have restored the retired skill); `apply-drift-refile` arm t asserts only that no `finish-refile-owed` row appears for this world, not that the stamp is withheld.
+
+**Fix candidate (the adversary's, unscored):** have the ordinary run record each CLASSIFY file's consumer blob hash in `.ai-dlc-applying`, and have `--finish` withhold while any of those files is still byte-identical to its recorded hash. A fix must keep the hand-refiled control world stamping.
+
+`apply.sh` is a bootstrapping file, so a fix takes effect two pulls after the one that delivers it.
+
+Discharges no consumer candidate.
+
+verify: manual -- no receipt has been scored; the claim is the adversary's measurement in a seeded world and the lead has not re-derived it.
+
+## BL-414 — `apply.sh` builtin `printf` redirects at the bucket-rows and unregistered-drift staging sites leak a partial bucket row into stdout under a write limit
+
+**NOTE. Found by the `b179-apply` tip adversary at batch 179; present on base.** `apply.sh` writes `printf '%s\n' "$PC" > "$UD_PC"` and one sibling with the status unread. The comment above `ap_stage` already records that a failed builtin redirect leaks bytes into the surrounding capture. Under `ulimit -f` 10, 14 and 20 an ordinary apply printed one malformed manifest line, for example `.sh<TAB>UPSTREAM-ONLY`. The stamp is unaffected: `ap_stage buckets` fails on the same bytes and the run withholds.
+
+Discharges no consumer candidate.
+
+verify: manual -- no receipt has been scored; the claim is the adversary's measurement.
+
+## BL-415 — `SKILL.md` does not describe the 0.691.0 `--finish` rows, and `ap_stage_or_refuse` gives a remedy the union gate refuses at the after-write sites
+
+**NOTE. Found by the `b179-apply` builder and tip adversary at batch 179.** `core/skills/ai-dlc-update/SKILL.md` lists three `--finish` checks and omits `finish-refile-owed`, `finish-refile-unverified`, `finish-exec-owed` and `staging-refused`, all of which withhold the stamp; its detector-refused paragraph omits `DECISION staging-refused`; and two passages that send the operator to the finisher contradict the new `restamp-withheld` row. Separately, `ap_stage_or_refuse` tells the operator to re-run the invocation, which the union gate refuses after the writes; the text should use `${reapply_remedy}`. The stamp is withheld either way, so this costs a detour and not a wrong stamp.
+
+`apply.sh` and `SKILL.md` are both bootstrapping, so the fix reaches a consumer two pulls out.
+
+Discharges no consumer candidate.
+
+verify: manual -- the claim is the builder's and adversary's reading of the two files and has not been re-derived by the lead.
