@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 512..569. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 504..561. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,56 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 178 SHIPPED NINE RELEASES, `v0.675.0` THROUGH `v0.683.0`, AND DISCHARGED ONE CONSUMER CANDIDATE:
+`PC-S316-ACKNOWLEDGE-HOOK-DENIES-UPDATER-EDITS-OUTSIDE-ITS-OWN-DIRECTORY`** (`v0.675.0`, `512ccb01`, #932),
+filed by the reference consumer during its 0.673.0 → 0.674.0 pull. It was invoked by peer handoff, and the
+operator then directed the rest of the session to run autonomously. Releases, each squash tree identical to
+its gated tip:
+
+- `v0.676.0` (`0dc1eeb5`, #933): `BL-381`, `BL-375` (`--tracer both`), `BL-093`, `BL-399` (I117), `BL-159`
+  claim 4, `BL-278`, `BL-083`; entry corrections to `BL-360`, `BL-129`, `BL-127`.
+- `v0.677.0` (`5f0cf11f`, #934) `apply.sh`: `BL-099`, `BL-103`, `BL-119`, `BL-336`.
+- `v0.678.0` (`0870961e`, #935) `ledger-rotate.sh`: `BL-006`, `BL-071` (narrowed, open).
+- `v0.679.0` (`ee5cf55b`, #937) update `SKILL.md`: `BL-391` (open; its receipt reads prose).
+- `v0.680.0` (`f0139f8b`, #938) retired-layer detectors: `BL-333`.
+- `v0.681.0` (`d0cedeeb`, #939) `lib.sh` + `preclassify.sh`: `BL-374`, `BL-100`, `BL-355`, `BL-310` lib half.
+- `v0.682.0` (`105d43b0`, #940) `layer-drift.sh`: `BL-376`.
+- `v0.683.0` (`e151c238`, #941) `ledger-reverify.sh` + `emit-report.sh`: `BL-092`, `BL-066`, `BL-310`; `BL-145`
+  narrowed and open.
+
+`BL-400` was filed at the operator's request (#936). The close rotated 18 entries and filed `BL-401`..`BL-406`:
+live backlog **39 -> 28** (`BL-400`..`BL-406` filed), archive **359 -> 377**. Net closed minus filed: **11**.
+
+**THE WHOLE-BACKLOG ADJUDICATION: 39 entries, 0 CLOSE, about 9 PARTIAL, about 30 LIVE, 1 stale premise
+(`BL-129`).** Every batch-177 contract carried at least one claim the tree had moved past; `BL-310`'s
+"status 128" was 1, and `BL-374`'s receipt accepted a half-fix. **Re-derive a recorded contract before
+building from it.**
+
+**EVERY TIP ADVERSARY FOUND A DEFECT IN A GATE-GREEN BRANCH, AGAIN.** S316's first cut would have switched the
+pause off for a pipeline session's writes after it read the consumer's ledger (the typed marker matched
+quotations of itself). 0.676.0's Stop-hook change deleted a sticky handoff record it never checked. B1's case
+fold depended on which `tr` resolved. B2's DOCS-ONLY row forbade annotating real releases whose naming commit
+touched only `CHANGELOG.md` and `VERSION`. All fixed before merge.
+
+**THREE GATES FAILED, NONE ON A FIXTURE THE RELEASE CHANGED.** 0.675.0's first gate failed I54b on a builder's
+uncommitted file in `.claude/worktrees/` (filed `BL-401`); gate from a clean `git worktree add` while hands are
+out. 0.677.0's failed `procsub-staged-refusal`'s spelling arm on two new `apply.sh` loops; run that arm's
+grammar over a branch's added lines before pushing. B6's failed two older mutants its new `have` gate covered;
+each was given a cell of its own. Two pushes lost SSH after a green verdict (exit 141); re-pushing the gated sha
+`--no-verify` with an `ls-remote` check landed both.
+
+**READ-SET TRACES OWED**, one command: `sudo bash core/scripts/derive-fixture-readsets.sh --list
+"backlog-receipt-binding vocabulary-index postcompact-rulebook-recovery"`. The first two read new files since
+0.676.0; the third's row omits `ai-dlc-postcompact.sh`, which it runs (`BL-127`). `BL-375`'s command
+`sudo bash core/scripts/derive-fixture-readsets.sh --all --tracer both` now parses; it is the operator's to run.
+
+**THE DELIVERY GAP IS NINE RELEASES, WHICH IS WIDE.** The consumer is at 0.674.0 against `VERSION` 0.683.0, and
+seven of the nine change a bootstrapping file (0.677.0 through 0.683.0 —
+each shipped alone for that reason). PENDING is 1: S316. The banked ruling stands: report the gap and write no
+runbook.
+
+Batch 177's block below is history: batch 178's block replaces its delivery gap and its rulings record.
 
 **BATCH 177 SHIPPED `v0.674.0` (`f7eec6f5`, #930) AND DISCHARGED SEVEN CONSUMER CANDIDATES**, every
 one the reference consumer filed at its sprint-315 retro, all in one release because none touches the
@@ -450,64 +500,6 @@ write no runbook.
 
 Batch 171's next-work list and delivery gap are spent: batch 172's block above replaces both, and
 carries the operator priority forward as `BL-372`.
-
-**BATCH 171 SHIPPED `v0.662.0` (`9b84f6f6`, #899) AND DISCHARGED
-`PC-S315-CHECK-15-BUDGET-EVIDENCE-VERIFIER-READS-OLDEST-ROW-OF-A-NEWEST-FIRST-GATE-LOG`, filed and
-closed as `BL-369`.** The operator typed the one-liner and took the marked recommendation. The
-opening sweep matched batch 170 on every figure (live 28, unfiled 12, worklist 5, TERMINAL 147,
-0 qualifying refs, ledger md5 `34f7e60e…` on `main`). **The filing was UNCOMMITTED when the sweep
-ran**, visible only as a working-tree md5 (`bcbb3db1…`) and a one-id diff against `HEAD`; the
-consumer committed it on its carry-over branch (`4a2694b9c`) during the batch. **Diff the working
-ledger's id set against `HEAD` whenever the two md5s differ** — no ref-based join can see it.
-**Now that it is committed, the next sweep reads live 29 and 1 qualifying ref**
-(`ai-dlc/carry-over/phase-315-aggregator-ui-cutover`, adds 1 — that id, DISCHARGED by `BL-369`);
-unfiled 12, worklist 5 and TERMINAL 147 do not move. Measured by the fresh-resume check at `a2430ea4`.
-
-**THE FILING'S PREMISE WAS HALF WRONG, AND SO WAS THE LEAD'S FIRST DESIGN.** Committed s312-s314
-logs APPEND; only s315 prepends, so the proposed `head -1` misreads the whole history. The lead's
-snapshot-key-in-body design was refuted by the contract adversary: a stale snapshot names the
-previous gate's section, so the audited artifact picks its own evidence (28 of 46 rebuilt stale
-instants PASS). The fix selects the section with the newest ISO heading timestamp, refuses a tie
-or a missing timestamp, and cross-checks `last_gate_passed` on the canonical live log. The
-measurement hand then found two engine defects in the first fix commit (a misleading refusal
-message, and a date-only key skipping the cross-check), fixed before the gate. **Consumer census,
-61 committed states:** 29 identical, 15 differing only by the new `selected section` line, 1
-correction, 8 new refusals where base passed (each base PASS cited another gate's row), 8 already
-failing, 0 regressions. Gate on `686183b2`: 24 PASS, 0 FAIL, 1 SKIP (pole, pool width 6), `all gates
-green`, `snapshot-evidence-cell` ok by name against an impossible-name control of 0, `ls-remote`
-matching, squash tree identical. The operator's owed read-set trace for the three batch-169
-fixtures shipped in the release; only their rows moved, so no trace is owed. **`snapshot-evidence-cell`'s
-solo cost went from about 4s to about 35s**; read its loaded cost from the durations file before
-assuming it is off the pole.
-
-**A PEER SESSION FILES INTO `docs/backlog.md` BY OPERATOR DIRECTION.** It landed #900 (`BL-365`..`BL-368`,
-ceiling raised to 104) while this batch's close was on the gate, and the close's `BL-365` collided and
-was rebuilt as `BL-369` on the new `origin/main`. **Assign a new id from the highest on `origin/main`
-AT THE MOMENT OF THE CLOSE COMMIT, and `git merge-tree` the close branch against a fresh fetch before
-opening its PR.**
-
-**NEXT WORK.** Re-derive the sweep, including the working-tree diff above; a later consumer filing
-outranks everything below.
-- **OPERATOR PRIORITY, SET 2026-09-29: `BL-365`..`BL-368` come BEFORE `BL-360`.** They shard the
-  adversary, party-mode, remediator, gate-adjudicator and analyst dispatches, which hold most of the
-  graph lead's 144h of solo subagent wait.
-- `BL-360`'s bootstrapping half follows, each file shipping alone; `BL-364` rides with its joins.
-- Filings owed when a close frees room: batch 169's and 170's lists, unchanged, then batch 171's
-  NOTEs — a key naming a gate absent from the log gets the "stale" message where the cause is an
-  unlogged gate, a new refusal pre-empts base's own breach message at the consumer's committed state
-  `837b7f256`, and
-  `core/hooks/ai-dlc-precompact.sh:98` still injects `tail -40` of a log that may be newest-first.
-- `BL-230` needs a mechanism for E1, E2 and E9.
-
-**THE DELIVERY GAP IS THREE RELEASES.** The consumer is at 0.659.0 against `VERSION` 0.662.0.
-0.662.0 touches no bootstrapping file. PENDING is 1 (this batch's id, first named at 0.662.0).
-**After the pull, the consumer's next Check 15 on a newest-first log refuses** unless each entry
-carries a heading-block `Timestamp:` — its s315 entries already do, and its live `gate-log.md` plus
-`pipeline-snapshot.md` PASS at 0.662.0 citing the architecture gate's 5076 tok (0.659.0 cites the
-carry-over gate's 3052). The banked ruling stands: report the gap and write no runbook.
-
-Batch 170's next-work list and delivery gap are spent: batch 171's block above replaces both, and
-carries the operator priority forward.
 
 ### Derive the state; do not trust the numbers below
 
@@ -1093,8 +1085,8 @@ every action below, and where an older paragraph reads narrower, this one wins.
   own close. Each release carries every one whose builders are collected; a batch that closes
   with a candidate unshipped states which one and the measured reason.
 - **PC-backed work outranks every distribution-internal entry, always.** A non-PC entry rides a
-  release only beside the candidates, never instead of them. An operator-scheduled item (`BL-375`)
-  is the one exception, and it still rides with the candidates.
+  release only beside the candidates, never instead of them. An operator-scheduled item (`BL-375`,
+  `BL-406`) is the one exception, and it still rides with the candidates.
 - **No candidate sits.** A worklist row whose remedy its own entry calls refuted, unshippable or
   ownership-bound goes to the operator in the batch's FIRST ping as a choice with a marked
   recommendation — build the smallest measurable fix, close it upstream, or leave it — rather than
@@ -1131,6 +1123,22 @@ otherwise, and where any older paragraph in this file reads narrower, these win.
   what shipped, which built branches are held and why, operator rulings that bind a subject if it
   is picked, and filings. It never lists the next batch's subjects or their order. The next
   session's sweep and whole-backlog adjudication decide scope.
+
+**STANDING OPERATOR RULINGS FROM BATCH 178. They bind every batch until the operator says
+otherwise.**
+
+- **`BL-406` (shard the `ledger-reverify` pole) IS THE NEXT BATCH'S #1 PRIORITY AND SHIPS FIRST.**
+  Operator ruling: "the sharding entry is #1 priority and needs to deliver ASAP in next session." Its
+  contract and adversary go in the batch's FIRST spawn block beside the sweep, and it ships as that
+  batch's first release the moment its builders are collected — ahead of every other entry and ahead
+  of a candidate whose builders are not yet collected. Everything else the batch scopes still rides
+  the releases after it.
+- **A batch builds EVERY adjudicated entry with a buildable fix, not one or two.** In the operator's
+  words: "that's just ONE item, the next session had better pull in a whole lot more with it." The
+  whole-backlog adjudication's LIVE and PARTIAL entries whose remedy the adjudicator can name are all
+  in scope, alongside the candidates; bootstrapping ones ship one file set per release, back to back.
+  A batch that closes with a buildable entry unbuilt names it and the measured reason.
+- **Read-set traces run with the sandbox tracer, by the session** (`operator-rulings.md`).
 
 **0. DISPATCH HANDS BEFORE YOU RUN A SINGLE SWEEP COMMAND YOURSELF.** Operator instruction,
 given at batch 90.

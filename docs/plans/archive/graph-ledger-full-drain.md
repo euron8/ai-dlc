@@ -15914,3 +15914,61 @@ the prefix grep's 0). Do not restate it.
 Batch 169's next-work list, delivery gap and check-34 finding are spent: batch 170's block above
 replaces all three.
 
+**BATCH 171 SHIPPED `v0.662.0` (`9b84f6f6`, #899) AND DISCHARGED
+`PC-S315-CHECK-15-BUDGET-EVIDENCE-VERIFIER-READS-OLDEST-ROW-OF-A-NEWEST-FIRST-GATE-LOG`, filed and
+closed as `BL-369`.** The operator typed the one-liner and took the marked recommendation. The
+opening sweep matched batch 170 on every figure (live 28, unfiled 12, worklist 5, TERMINAL 147,
+0 qualifying refs, ledger md5 `34f7e60e…` on `main`). **The filing was UNCOMMITTED when the sweep
+ran**, visible only as a working-tree md5 (`bcbb3db1…`) and a one-id diff against `HEAD`; the
+consumer committed it on its carry-over branch (`4a2694b9c`) during the batch. **Diff the working
+ledger's id set against `HEAD` whenever the two md5s differ** — no ref-based join can see it.
+**Now that it is committed, the next sweep reads live 29 and 1 qualifying ref**
+(`ai-dlc/carry-over/phase-315-aggregator-ui-cutover`, adds 1 — that id, DISCHARGED by `BL-369`);
+unfiled 12, worklist 5 and TERMINAL 147 do not move. Measured by the fresh-resume check at `a2430ea4`.
+
+**THE FILING'S PREMISE WAS HALF WRONG, AND SO WAS THE LEAD'S FIRST DESIGN.** Committed s312-s314
+logs APPEND; only s315 prepends, so the proposed `head -1` misreads the whole history. The lead's
+snapshot-key-in-body design was refuted by the contract adversary: a stale snapshot names the
+previous gate's section, so the audited artifact picks its own evidence (28 of 46 rebuilt stale
+instants PASS). The fix selects the section with the newest ISO heading timestamp, refuses a tie
+or a missing timestamp, and cross-checks `last_gate_passed` on the canonical live log. The
+measurement hand then found two engine defects in the first fix commit (a misleading refusal
+message, and a date-only key skipping the cross-check), fixed before the gate. **Consumer census,
+61 committed states:** 29 identical, 15 differing only by the new `selected section` line, 1
+correction, 8 new refusals where base passed (each base PASS cited another gate's row), 8 already
+failing, 0 regressions. Gate on `686183b2`: 24 PASS, 0 FAIL, 1 SKIP (pole, pool width 6), `all gates
+green`, `snapshot-evidence-cell` ok by name against an impossible-name control of 0, `ls-remote`
+matching, squash tree identical. The operator's owed read-set trace for the three batch-169
+fixtures shipped in the release; only their rows moved, so no trace is owed. **`snapshot-evidence-cell`'s
+solo cost went from about 4s to about 35s**; read its loaded cost from the durations file before
+assuming it is off the pole.
+
+**A PEER SESSION FILES INTO `docs/backlog.md` BY OPERATOR DIRECTION.** It landed #900 (`BL-365`..`BL-368`,
+ceiling raised to 104) while this batch's close was on the gate, and the close's `BL-365` collided and
+was rebuilt as `BL-369` on the new `origin/main`. **Assign a new id from the highest on `origin/main`
+AT THE MOMENT OF THE CLOSE COMMIT, and `git merge-tree` the close branch against a fresh fetch before
+opening its PR.**
+
+**NEXT WORK.** Re-derive the sweep, including the working-tree diff above; a later consumer filing
+outranks everything below.
+- **OPERATOR PRIORITY, SET 2026-09-29: `BL-365`..`BL-368` come BEFORE `BL-360`.** They shard the
+  adversary, party-mode, remediator, gate-adjudicator and analyst dispatches, which hold most of the
+  graph lead's 144h of solo subagent wait.
+- `BL-360`'s bootstrapping half follows, each file shipping alone; `BL-364` rides with its joins.
+- Filings owed when a close frees room: batch 169's and 170's lists, unchanged, then batch 171's
+  NOTEs — a key naming a gate absent from the log gets the "stale" message where the cause is an
+  unlogged gate, a new refusal pre-empts base's own breach message at the consumer's committed state
+  `837b7f256`, and
+  `core/hooks/ai-dlc-precompact.sh:98` still injects `tail -40` of a log that may be newest-first.
+- `BL-230` needs a mechanism for E1, E2 and E9.
+
+**THE DELIVERY GAP IS THREE RELEASES.** The consumer is at 0.659.0 against `VERSION` 0.662.0.
+0.662.0 touches no bootstrapping file. PENDING is 1 (this batch's id, first named at 0.662.0).
+**After the pull, the consumer's next Check 15 on a newest-first log refuses** unless each entry
+carries a heading-block `Timestamp:` — its s315 entries already do, and its live `gate-log.md` plus
+`pipeline-snapshot.md` PASS at 0.662.0 citing the architecture gate's 5076 tok (0.659.0 cites the
+carry-over gate's 3052). The banked ruling stands: report the gap and write no runbook.
+
+Batch 170's next-work list and delivery gap are spent: batch 171's block above replaces both, and
+carries the operator priority forward.
+

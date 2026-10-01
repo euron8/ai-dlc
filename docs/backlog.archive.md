@@ -25350,3 +25350,984 @@ including operator-fired §2a operations, and the §4 Check 5 token bullet, with
 arms and mutants, on branch `b177-r0-steps`.
 
 verify: sh F=core/skills/ai-dlc/steps/deploy-validate.md; [ -f "$F" ] || exit 9; s3="$(awk '/^### 3\. Smoke Tests/{on=1; next} on && /^### /{exit} on{print}' "$F")"; s4="$(awk '/^### 4\. Visual Verification/{on=1; next} on && /^### /{exit} on{print}' "$F")"; [ -n "$s3" ] && [ -n "$s4" ] || exit 9; f3="$(tr '\n' ' ' <<<"$s3" | sed -e 's/\*\*//g' -e 's/[[:space:]][[:space:]]*/ /g')"; grep -qE '^- .per_action_attribution. ' <<<"$s3" || exit 1; case "$f3" in *'One live mutation per smoke run.'*) : ;; *) exit 1 ;; esac; case "$f3" in *'fired by the operator is a live mutation'*) : ;; *) exit 1 ;; esac; grep -q 'USER-CONFIRMED' <<<"$s4" && grep -q 'playwright' <<<"$s4"
+## BL-099 — the exec-bit audit is one-directional, so a consumer file that upstream STOPPED shipping executable is never reported
+
+**`apply.sh`'s EXEC-BIT AUDIT is LEVEL-triggered and covers exactly one of the two directions
+it could.** It walks `git ls-tree -r "$THEIRS" -- core/`, keeps `$1=="100755"`, and reports every
+one whose consumer copy is not executable. There is no mirror arm: a path upstream ships
+`100644` whose consumer copy IS executable produces no finding anywhere, ever.
+
+Measured, with a control in the same invocation: `100644` occurs three times in `apply.sh` and two
+of those are comment prose — the only live one is the `chmod -x` inside `sync_mode_from_theirs()`,
+which runs only on a file being APPLIED. `100755` occurs eight times, and both audit arms
+(`apply.sh:878`, `apply.sh:1081`) test it alone.
+
+**The asymmetry matters because the two directions have different backstops.** A file that should
+be executable and is not gets caught on every subsequent pull, whatever earlier release left it
+that way — that is what LEVEL buys. A file that should NOT be executable and is gets caught only
+if some pull happens to APPLY it. `v0.423.0` closed the classifier half of that (a path whose
+content matches theirs and whose bit does not now routes to a bucket that applies, so
+`sync_mode_from_theirs` runs and `chmod -x` fires), but a bit left set by a pull that predates
+that fix is still invisible, and nothing will look at it again.
+
+The consequence is smaller than the `100755` direction — an over-permissive mode rather than an
+inert validator — which is why this is filed rather than fixed inside `v0.423.0`. It is
+nonetheless a hole in a check whose own header says "LEVEL, NOT EDGE ... an event-driven audit
+would never look at it again".
+
+**Candidate fix**: a second `awk` arm over the same `ls-tree` output keeping `$1=="100644"` and
+reporting consumer copies that ARE executable. One walk, two filters — the enumeration is already
+paid for. False-positive set NOT yet measured; that measurement is the first thing this entry
+owes, because a consumer tree may hold executable copies for reasons this driver did not create.
+
+**The receipt below is TEXT-KEYED, deliberately, and its weakness is stated rather than hidden.**
+Driving `apply.sh` end-to-end needs the harness the `apply-*` fixtures carry and does not fit a
+one-liner. It extracts the `NOEXEC` command substitution, STRIPS COMMENTS, and requires a
+`100644` to survive — so the obvious prose close does not work: measured, a seeded
+`# seeded: a 100644 arm` comment leaves it at exit 1, while a seeded `awk` arm takes it to 0.
+It still cannot tell a real arm from any other live mention of the token in that block. The
+proper proof belongs in a fixture that drives the audit.
+
+Tiered **DEFECT**.
+
+Found while closing `BL-033` at `v0.423.0`; not a `PC-` candidate, so it ranks below the
+PC-backed set.
+
+**LANDED (v0.677.0, verified 5f0cf11f).**
+
+Held note (batch 178): the audit walks both modes in one `ls-tree` pass and emits `DECISION
+extra-executable` (counted into `mech_fail`, so the stamp is withheld) for a `100644` blob whose
+consumer copy is executable; `not-executable` is unchanged. False-positive floor measured at the
+distribution's HEAD: 0 `100644` `*.sh` under `core/` against 434 `100755` entries. Caveat:
+`install.sh:343/:375/:381` chmod whole globs (`reconcile/*.sh`, `hooks/*.sh`,
+`session-driver/*.sh`), so a future `100644` `.sh` in one of those directories trips this row on
+every consumer. The exec-bit rows now name re-render/re-approve/apply rather than a bare re-run:
+measured, a bare re-run is refused rc 1 by the union gate, and `--finish` stamps with the bit still
+wrong because it skips the audit. Fixture: `apply-legacy-script-path` case 12, seeds (i)-(iii) and
+remedy arm (r), mutants XE-M1..M5. The text-keyed receipt below is replaced by one that drives
+`apply.sh` through a three-file world; scored tip 1, fix 0, b177's wrong fix 1 (`[ ! -x ]` for both
+modes) 1, wrong fix 2 (mirror test inverted) 1.
+
+verify: sh R=core/skills/ai-dlc-update/reconcile; [ -f "$R/apply.sh" ] || exit 9; W=$(mktemp -d) || exit 9; D="$W/d"; C="$W/c"; mkdir -p "$D/core/scripts" "$D/core/session-driver" "$C/scripts/ai-dlc" "$C/.claude/session-driver"; g() { git -C "$D" -c user.email=f@f -c user.name=f "$@" >/dev/null 2>&1; }; printf '#!/bin/sh\n' > "$D/core/scripts/validate-x.sh"; chmod +x "$D/core/scripts/validate-x.sh"; for f in e p m; do printf '# %s\n' "$f" > "$D/core/session-driver/$f.sh"; done; echo 1.0.0 > "$D/VERSION"; git -C "$D" init -q && g add -A && g commit -qm b || exit 9; B=$(git -C "$D" rev-parse HEAD); echo 2.0.0 > "$D/VERSION"; echo v2 >> "$D/core/session-driver/m.sh"; g commit -qam t || exit 9; T=$(git -C "$D" rev-parse HEAD); cp "$D/core/scripts/validate-x.sh" "$C/scripts/ai-dlc/"; chmod -x "$C/scripts/ai-dlc/validate-x.sh"; for f in e p m; do printf '# %s\n' "$f" > "$C/.claude/session-driver/$f.sh"; done; chmod +x "$C/.claude/session-driver/e.sh"; printf 'version: 1.0.0\ncommit: %s\n' "$B" > "$C/.claude/.ai-dlc-version"; o=$(bash "$R/apply.sh" "$D" "$B" "$C" "$T" 2>/dev/null); h() { awk -F'\t' -v k="$1" -v p="$2" '$1=="DECISION" && (k=="*" || $2==k) && $3==p {f=1} END {exit !f}' <<<"$o"; }; h not-executable scripts/ai-dlc/validate-x.sh || exit 9; h '*' .claude/session-driver/p.sh && exit 1; h extra-executable .claude/session-driver/e.sh || exit 1; grep -q '^version: 1\.0\.0$' "$C/.claude/.ai-dlc-version" || exit 1; exit 0
+
+## BL-100 — `--untangle` gives a mode-drifted consumer copy the same verdict as a correct one
+
+**`preclassify.sh`'s `--untangle` mode buckets on `ours_h = base_h` and that comparison is
+content-only**, so a consumer file holding the right bytes with the wrong exec bit reads
+`ALREADY-AT-THEIRS` — "consumer never touched it, nothing to untangle".
+
+Driven through the shipping script against this distribution as `DIST` with `HEAD` as both base
+and theirs, and a synthetic consumer. The subject the population itself selects first is
+`core/git-hooks/pre-push`, which maps to the consumer's `.githooks/pre-push`:
+
+```
+consumer copy 755, right content   ALREADY-AT-THEIRS      <- control
+consumer copy 644, right content   ALREADY-AT-THEIRS      <- the finding: same answer
+```
+
+**The control and the subject returning the SAME value is what the finding IS here**, and it is
+worth saying plainly because a control that agrees with the verdict is normally the sign of a
+broken probe. Not in this shape: the claim is that the arm cannot discriminate, so the two arms
+of the probe agreeing is the positive result. The probe is shown to be live by its own `exit 9`
+guards — an empty row set, an unresolvable blob, or a control that is not `ALREADY-AT-THEIRS`
+all abort rather than pass.
+
+**The consequence is bounded by a backstop, which is why this is not a BLOCKER.** `--untangle`
+is a one-time Phase-2 migration, and any later ordinary pull runs the level-triggered EXEC-BIT
+AUDIT, which does cover `core/git-hooks/pre-push` in the `100755` direction. So the wrong verdict
+is `--untangle`'s own report rather than a permanent state. In the `100644` direction there is no
+backstop at all — see `BL-099`.
+
+**Remedy NOT decided, deliberately.** `--untangle`'s three buckets are `UPSTREAM-ONLY-ADD`,
+`ALREADY-AT-THEIRS` and `BOTH-CHANGED->CLASSIFY`, and it is not established which a mode-drifted
+copy should take: it is not a content tangle, so `BOTH-CHANGED->CLASSIFY` overstates it. The
+receipt therefore asserts only that the bucket is NOT `ALREADY-AT-THEIRS`, which any of the
+plausible remedies satisfies. Whoever takes this decides the bucket first.
+
+Note the `v0.423.0` conjunct is NOT reusable as-is: `mode_at_theirs()` reads `$THEIRS`, and in
+`--untangle` base and theirs are the same ref by construction, so the helper resolves but answers
+a question about a ref the mode never came from. Re-derive rather than copying the call.
+
+Tiered **DEFECT**.
+
+Found while closing `BL-033` at `v0.423.0`; not a `PC-` candidate, so it ranks below the
+PC-backed set.
+
+**LANDED (v0.681.0, verified d0cedeeb).**
+
+**Held note (batch 178):** fixed on `b178-b1`, not landed. The bucket is decided:
+`UPSTREAM-ONLY-ADD`, the bucket the default mode's A branch already gives a copy whose content is
+present and whose exec bit is not, and the one `SKILL.md` already defines as covering "lacking
+theirs' exec bit". No fourth bucket and no `SKILL.md` change. `--untangle` now reads
+`mode_at_theirs` on the `ours_h = base_h` arm: content and mode is `ALREADY-AT-THEIRS`, content
+alone `UPSTREAM-ONLY-ADD`. The helper reads `$THEIRS`; the mode's contract is base == theirs, so
+theirs' mode is base's, which the code comment states rather than asserting (an assertion would be a
+new refusal on an operator path whose caller is `SKILL.md`).
+
+The replacement receipt asserts the EXACT bucket in both directions on a synthetic dist: a 100755
+hook held 644 must read `UPSTREAM-ONLY-ADD`, a 100644 rule held 755 must read `UPSTREAM-ONLY-ADD`,
+and the matched copies of each `ALREADY-AT-THEIRS`. Scored: origin/main 1; fix 0; the
+CLASSIFY-fallthrough fix (conjunct only) 1; a conjunct that demands `+x` whatever theirs records 1
+(the 100644 direction inverts).
+
+verify: sh P="$PWD/core/skills/ai-dlc-update/reconcile/preclassify.sh"; [ -f "$P" ] || exit 9; w="$(mktemp -d)" || exit 9; mkdir -p "$w/d/core/git-hooks" "$w/d/core/rules" "$w/c/.githooks" "$w/c/.claude/rules" || exit 9; git init -q "$w/d" && git -C "$w/d" config core.fileMode true || exit 9; printf '#!/usr/bin/env bash\necho h\n' > "$w/d/core/git-hooks/pre-push" && chmod 755 "$w/d/core/git-hooks/pre-push" || exit 9; printf 'rule\n' > "$w/d/core/rules/p.md" && chmod 644 "$w/d/core/rules/p.md" || exit 9; git -C "$w/d" -c user.name=r -c user.email=r@r add -A && git -C "$w/d" -c user.name=r -c user.email=r@r commit -qm s || exit 9; H="$(git -C "$w/d" rev-parse HEAD)" || exit 9; [ "$(git -C "$w/d" ls-tree "$H" -- core/git-hooks/pre-push | cut -c1-6)" = 100755 ] || exit 9; cp "$w/d/core/git-hooks/pre-push" "$w/c/.githooks/pre-push" && cp "$w/d/core/rules/p.md" "$w/c/.claude/rules/p.md" || exit 9; b() { bash "$P" "$w/d" "$H" "$H" "$w/c" --untangle 2>/dev/null | LC_ALL=C awk -F'\t' -v p="$1" '$2==p {print $4}'; }; chmod 755 "$w/c/.githooks/pre-push"; chmod 644 "$w/c/.claude/rules/p.md"; [ "$(b core/git-hooks/pre-push)" = ALREADY-AT-THEIRS ] || exit 9; c644="$(b core/rules/p.md)"; chmod 644 "$w/c/.githooks/pre-push"; chmod 755 "$w/c/.claude/rules/p.md"; x="$(b core/git-hooks/pre-push)"; y="$(b core/rules/p.md)"; [ "$c644" = ALREADY-AT-THEIRS ] && [ "$x" = UPSTREAM-ONLY-ADD ] && [ "$y" = UPSTREAM-ONLY-ADD ] && exit 0; echo "BL100-UNTANGLE-MODE-BLIND hook-644=$x rule-755=$y rule-644-control=$c644" >&2; exit 1
+
+## BL-006 — the PLANS corpus and the CONSUMER's own ledger are still unbounded
+
+**NARROWED at v0.418.0. The original subject is discharged; two subjects are not, and this entry
+is those two.** `docs/backlog.md` is now bounded by `scripts/validate-backlog-size.sh` (arm `B1`,
+`AI_DLC_BACKLOG_MAX_ENTRIES`, default 100), registered as a `step` in `.githooks/pre-push`. What
+follows is what that arm does NOT reach. **An entry with two subjects expires only when both do.**
+The plans subject is now discharged by `validate-plan-shape.sh` arm P8, as the batch-178 Held note
+below derives. The receipt below therefore tests the consumer subject alone.
+
+**`docs/plans/` WAS unbounded when this was filed; P8 now bounds it.** At filing,
+`scripts/validate-plan-shape.sh` had no size arm. Measured then —
+`docs/plans/retire-graph-consumer-layer.md` is **384817 bytes** against a **17021-byte median
+across 29 plans**, a 22.6x ratio, and no push has ever failed over it. (The figures this entry
+was filed with, a 16726-byte median across 23 plans, have drifted; the ratio has not.) That
+validator is already standalone and already runs at pre-push (`.githooks/pre-push:117`), so the
+arm has a home that costs no suite-pole wall clock.
+
+**The CONSUMER's own push-candidate ledger is unbounded, and the distribution-side arm reaches no
+consumer by construction.** `core/skills/ai-dlc-update/SKILL.md:1723-1724` records the reference
+consumer's ledger at **2830 lines / 220 KB / 50 entries, of which only 39 are still classified** —
+the state this whole pattern was forked from. `core/skills/ai-dlc-update/reconcile/ledger-rotate.sh`
+carries no ceiling of any kind. `docs/backlog.md` does not ship: `install.sh` copies from
+`core/scripts/`, never from top-level `scripts/`, so `validate-backlog-size.sh` is
+distribution-only and a consumer inherits nothing from it.
+
+**This entry previously cited `SKILL.md:1678` for those figures and that citation was WRONG-TARGET.**
+`:1678` is prose about a checker obeying an over-wide declaration; `2830` occurs at `:1723`.
+It is the `v0.390.0` class — the citation RESOLVES, so `validate-plan-shape.sh`'s resolvability
+arm passes it, and a dangling-ref detector is blind to a wrong-target ref by construction.
+
+**WHAT A `CLOSE-CANDIDATE` ON THIS ENTRY WOULD AND WOULD NOT MEAN.** The receipt's consumer half
+drives shipped `reconcile/*.sh` against two synthetic ledgers inside a clone. It therefore
+certifies that **the DISTRIBUTION ships a rotator that WARNS on an oversized ledger and still rotates it** — never that
+any consumer's ledger is actually bounded, which no distribution-side receipt can observe. A
+consumer runs its own installed engine, so the bound arrives only on the pull that carries it.
+Read a green row here as "the refusal is shipped", and confirm the consumer separately. This
+entry has already produced one false `CLOSE-CANDIDATE`; this paragraph exists so the next one is
+not merely a misread.
+
+**Put the consumer-side ceiling where a LEDGER PATH is the argument.** Measured over the 22
+`reconcile/*.sh`: four accept a bare ledger path (`ledger-rotate.sh`, `adopt-extension-checks.sh`,
+`lib.sh`, `relabel-extension-checks.sh`) and the other 18 exit non-zero on any ledger, being usage
+errors. `ledger-reverify.sh` is one of the 18 — its argument order is a `<dist> <base> <consumer>
+<theirs>` pull triple — so a remedy landing inside it would read STILL-LIVE against the receipt
+below. `ledger-rotate.sh` is the natural home: it is the shipped program whose declared subject is
+already this ledger's SIZE, and its default is dry-run.
+
+**What the discharged half cost, recorded because the next author will propose it again.** A BYTE
+clause was ruled, built and withdrawn on measurement: rotation is the only sanctioned lever and it
+is denominated in ENTRIES; archived entries average 7193 bytes against a live mean of 3758, so
+archiving one frees 1.9x the live mean; a byte ceiling admitting the same growth sat within 1.5% of
+the entry ceiling and bound first, making the entry clause vacuous; and at all four states where
+such a clause approached firing the count of rotatable entries was ZERO. A per-entry cap fails too
+— 10 of 27 archived entries exceed 8000 bytes and the largest is 16137.
+
+**LANDED (v0.678.0, verified 0870961e).**
+
+Held note (batch 178): the consumer half is built. `ledger-rotate.sh` now WARNS — never refuses, because it is the only thing that shrinks the ledger — when more than `LEDGER_MAX_OPEN_ENTRIES=150` entries stay in the live ledger after rotation, counted by the rotator's own `ledger_entry_shape()` walk inside the split, and printed before the nothing-to-rotate exit so an unrotatable ledger still warns. The ceiling comes from all 144 committed revisions of the reference consumer's live ledger, each dry-run through the rotator: at most 126 entries ever stayed (74 `^## ` headings at most, which is the figure a heading count gives, and it undercounts because most entries are bullets), and 0 revisions reach 150. The consumer archive holds 359 entries, all closed, so a count over the input would warn on a file rotation empties; this one reads 0 there. The plans half is discharged by `validate-plan-shape.sh` arm P8 (150000-byte default): the default run exits 0, the largest plan is 149500 bytes, the plan this entry named is now 52982 bytes, and the same validator with `AI_DLC_PLAN_BYTES=100000` exits 1 naming two plans (the control). The receipt below drives the shipping rotator on a 500-entry bullet ledger and asserts the WARN AND that the closed entries move under `--apply`; scored under `bash -c 'set -uo pipefail; …'`: tip 1, fix 0, refuse-instead-of-warn 1, ceiling counted by `^## ` 1.
+
+verify: sh R=core/skills/ai-dlc-update/reconcile/ledger-rotate.sh; [ -f "$R" ] && [ -f "${R%/*}/lib.sh" ] || exit 9; D=$(mktemp -d) || exit 9; trap 'rm -rf "$D"' EXIT; awk 'BEGIN{printf "# Push-candidate ledger\n\n"; for(i=1;i<=10;i++) printf "- **PC-S900-C%04d** — a closed candidate\n\n  **ADOPTED UPSTREAM (v0.1.0, verified 2026-01-01).** done\n\n", i; for(i=1;i<=490;i++) printf "- **PC-S900-O%04d** — an open candidate\n\n  Body.\n\n", i}' > "$D/l.md" || exit 9; [ "$(grep -c '^- \*\*PC-S900-' "$D/l.md")" -eq 500 ] && [ "$(grep -c '^## ' "$D/l.md")" -eq 0 ] || exit 9; o=$(bash "$R" "$D/l.md" --archive "$D/a.md" 2>&1); rc=$?; [ "$rc" -eq 0 ] || exit 1; grep -q '10 closed entries would move' <<<"$o" || exit 9; grep -q 'WARN — 490 entries stay in the live ledger' <<<"$o" || exit 1; o=$(bash "$R" "$D/l.md" --archive "$D/a.md" --apply 2>&1) || exit 1; grep -q 'WARN — 490 entries stay in the live ledger' <<<"$o" || exit 1; [ "$(grep -c 'PC-S900-C' "$D/a.md")" -eq 10 ] && [ "$(grep -c 'PC-S900-C' "$D/l.md")" -eq 0 ] && [ "$(grep -c 'PC-S900-O' "$D/l.md")" -eq 490 ] || exit 1
+
+---
+
+## BL-093 — the ledger ceiling bounds one member of a wider unbounded population
+
+`scripts/validate-backlog-size.sh` bounds `docs/backlog.md`. Re-derived at batch 178 by ranking
+every tracked file by `wc -c` at `297f7499`: `docs/backlog.md` is **194366 bytes, 10th**, and the
+larger files are `CHANGELOG.md` (**3190562 bytes / 764 release headings**), `docs/backlog.archive.md`,
+`.ai-dlc-fixture-readsets.tsv` (**tracked, regenerated whole, 1726310 bytes / 26311 lines**), two
+archived plans, `scripts/validate-enforcement-map.sh` and two fixture drivers.
+`docs/plans/retire-graph-consumer-layer.md` has since moved to `docs/plans/archive/` (333144 bytes)
+and is not part of this entry. `docs/context-hardening-notes.md` is **108317 bytes** and is the file
+`.claude/rules/resident-context.md` directs every session to append stories to. The only other
+ceiling in the repo is A6's `DURABLE_MAX` over `CLAUDE.md` + `.claude/rules/`.
+
+Two of these are DEFENSIBLY unbounded — a CHANGELOG is a history and an archive is an archive —
+and saying so in their own headers is the cheaper half of the fix, because an audit that has to
+re-derive "is this a queue or a log" each time will keep re-filing this entry. The one that is
+neither is `docs/context-hardening-notes.md`: it is a live read target with a standing instruction
+to append to it and nothing bounding it.
+
+Decide per file whether it is a QUEUE (bound it) or a LOG (say so, in its own header, so the next
+audit stops). The plans corpus is NOT part of this entry — it is `BL-006`'s surviving half.
+
+**LANDED (v0.676.0, verified 0dc1eeb5).**
+
+Held note (batch 178): disposition taken under the batch-177 operator ruling
+(`docs/plans/graph-ledger-full-drain.md`, OPERATOR RULINGS THIS BATCH) that
+`docs/context-hardening-notes.md` is a LOG, unbounded like `CHANGELOG.md`. All three are LOGs.
+`CHANGELOG.md` and `docs/context-hardening-notes.md` carry a bold
+`**LOG — unbounded by design; rotation does not apply.**` paragraph above their first `## `
+heading; the CHANGELOG's is deliberately NOT a `## [` heading, which `validate-release-version.sh`
+keys on. The map's line is emitted by the deriver's write block as a `#` comment, which every map
+reader skips; the map was not hand-edited, so the line lands in `.ai-dlc-fixture-readsets.tsv` at
+the next `fs_usage` or `sandbox` trace (`--tracer both` never writes the map). The receipt binds the
+emitter LINE inside the `{ … } > "$MAP"` block, not a whole-file grep, which a comment satisfies.
+
+verify: sh D=core/scripts/derive-fixture-readsets.sh; for f in "$D" CHANGELOG.md docs/context-hardening-notes.md; do [ -f "$f" ] || exit 9; done; E="$(awk '/^\{$/ {f=1; next} /^\} > "\$MAP"$/ {f=0} f' "$D")"; [ -n "$E" ] || exit 9; grep -q '^  echo "# LOG -- unbounded by design; rotation does not apply' <<<"$E" || exit 1; for f in CHANGELOG.md docs/context-hardening-notes.md; do P="$(awk '/^## / {exit} {print}' "$f")"; grep -q '^\*\*LOG — unbounded by design; rotation does not apply\.\*\*' <<<"$P" || exit 1; done; exit 0
+## BL-083 — `verification-discipline.md` prescribes a root marker a consumer tree does not carry
+
+**`verification-discipline.md` prescribes a root marker that does not exist in one of the two
+layouts, so a fixture that follows the rule exactly cannot resolve its root on a consumer — and
+the fixtures that work do so by the idiom the same rule forbids.** The rule reads *"Resolve the
+repo root by walking up for a marker. Never count `..` hops... Walk up for `VERSION`."* Measured:
+`scripts/install.sh` into an empty directory produces a tree with **0** `VERSION` files at any
+depth, while the distribution root carries one — control in the same invocation, the installed
+`tests/fixtures/<name>` directory IS present, so the install ran and the absence is real.
+
+**The correct two-layout resolver already exists in this repo and the rule restates a different
+one.** `core/scripts/validate-provenance-block.sh:98` is `ai_dlc_resolve_root()`, which walks up
+for `.git` OR `.claude` OR `core/skills/ai-dlc` — a marker set satisfied in BOTH layouts, and
+inlined into every validator that needs it with a comment recording why duplication is correct
+there. So this is not a missing mechanism; it is a rule that restates one and has drifted from
+it, which is the failure `mechanism-design.md` names as *"a rule that RESTATES a mechanism drifts
+tighter than the mechanism, invisibly."*
+
+**It was found the way it bites: by a fixture author following the rule.** A new fixture's first
+draft walked up for `VERSION`, passed every distribution test, and then failed **all six arms** on
+a tree built by `install.sh` with *"no VERSION marker … cannot resolve its own tree"*. It now
+walks up for its own home — `<root>/core/fixtures/<name>` or `<root>/tests/fixtures/<name>` — which
+is self-anchoring and additionally names the layout it resolved.
+
+**The population is not one file.** **16** of the shipped fixture `run.sh` files test a `/VERSION`
+marker (control in the same invocation: **155** carry the token `FIXTURE`, so the grep reaches the
+corpus). Most other shipped fixtures resolve by counting three `..` hops — which happens to be
+correct in both layouts and is the exact idiom the rule prohibits. So the rule is currently
+obeyed by the files that break on a consumer and disobeyed by the files that work, which is the
+strongest available evidence that the rule rather than the fixtures is what is wrong.
+
+**Scope note, deliberately narrow.** The 16 is a FLOOR and an approximation: it counts files
+testing the literal marker path, and a fixture that resolves correctly by another route may still
+appear. The entry's claim is the divergence and the consumer-side zero, both of which are exact;
+the 16 is offered as a population size to re-derive, not as a defect count.
+
+**Why the receipt is two-armed.** Two different fixes are legitimate and a one-sided anchor would
+go unsatisfiable when the other is taken: `install.sh` could land a root marker in the consumer
+layout, or the rule and its followers could move to the marker set the shipped validators already
+use. It closes on either, and it drives a real `install.sh` rather than reading the rule's prose,
+because text about a program is not the program. It exits 9 — STILL-LIVE, the safe direction — if
+the install did not produce a tree, so a broken probe cannot read as a fix.
+
+
+**LANDED (v0.676.0, verified 0dc1eeb5).**
+
+Held note (batch 178): the rule is corrected and the population claim is refuted, so this entry
+CLOSES at the close commit. The section now names `ai_dlc_resolve_root()` at
+`core/scripts/validate-provenance-block.sh:138` (the `:98` above is stale) and
+`core/fixtures/validator-path-resolution`, states `VERSION` exists only in the distribution, and
+does not restate the marker set. Population re-derived at this tip: **32** fixture `run.sh` files
+carry `/VERSION"` (control: 216 carry `FIXTURE`) — **19** `.dist-only`, **13** shipping. Every
+shipping hit was read: all are seed writes (`>`, `echo`, `printf`, `cp`) except one comment, two
+`cat "$DIST/VERSION"` reads of a seeded dist, and one `test -f "$THEIRS_TREE/VERSION"` inside a
+seeded receipt string. **0 shipping fixture walkers**; the walker pattern matches 11 lines in the
+`.dist-only` set, and an any-case `[ -f "$VAR/VERSION" ]` test matches 0 shipping files against 9
+`.dist-only` ones. The
+"16 shipped fixtures test a `/VERSION` marker" paragraph above counted seed-writers as walkers. A6
+after the edit: 64721/67584. The receipt below replaces the install-driving one, which could only
+close by a fix this entry no longer asks for; it is keyed on the SECTION span, bounded at 40
+lines. Scored: base 1, fix 0, name added elsewhere in the file 1, name added inside the section
+with "Walk up for `VERSION`" kept 1, section unbounded to EOF 9, heading renamed 9.
+
+verify: sh f=.claude/rules/verification-discipline.md; [ -f "$f" ] || exit 9; s="$(awk '/^## Resolve the repo root/ { f = 1; print; next } f && /^## / { exit } f' "$f")"; [ -n "$s" ] || exit 9; [ "$(printf '%s\n' "$s" | wc -l)" -lt 40 ] || exit 9; grep -qF 'ai_dlc_resolve_root' <<<"$s" || exit 1; grep -qF 'Walk up for `VERSION`' <<<"$s" && exit 1; exit 0
+
+
+## BL-103 — an `ai-dlc-*.sh` hook the settings template cannot register withholds `--finish` forever
+
+**`--finish` gates on `WORKLIST settings-merge`, and that row's own prescribed remedy does not
+always clear it.** `settings-merge.sh` re-applies the TEMPLATE's owned hook block; it cannot
+register a hook the template does not carry. So a consumer holding an `ai-dlc-*.sh` hook that
+upstream has retired — or one whose registration the operator declined — gets
+`validate-hook-registration.sh` rc 1 on every run, and the finisher withholds with no reachable
+exit short of deleting the hook by hand.
+
+Measured against a consumer built from the shipped template with the real validator: clean
+consumer rc 0 gives `RESOLVED restamp` and a cleared marker; one unregistered `ai-dlc-*.sh` on
+disk gives rc 1, `WORKLIST settings-merge`, `DECISION restamp-withheld` and a present marker;
+running the row's own remedy left the validator still at rc 1 and the state unchanged.
+
+Reachable because `apply.sh` emits `DECISION deletion` and never removes a consumer file, so a
+hook retired upstream persists across every later pull.
+
+**The population is EMPTY today and that is stated rather than assumed**: the reference consumer
+carries 19 hooks and registers 19, validator rc 0, and `git log -p templates/settings.json.template`
+shows zero genuinely retired hook names — the one candidate on a `-` line is still in the current
+template, a moved line. A loaded gun, not live fire.
+
+Tiered **DEFECT**. It wedges a consumer's push with no in-band exit, but nothing reaches the
+state today.
+
+Found by an adversarial pass on `v0.426.0`. Not a `PC-` candidate, so it ranks below the
+PC-backed set.
+
+**LANDED (v0.677.0, verified 5f0cf11f).**
+
+Held note (batch 178): `hook_registration_row` partitions the validator's UNREGISTERED names. A
+name in neither `${THEIRS}:core/hooks/` nor THEIRS' `templates/settings.json.template` gets
+`WORKLIST hook-unshipped`, still gating because the consumer's pre-push runs the same validator,
+naming three exits: delete, rename out of `ai-dlc-`, or register in `.claude/settings.local.json`.
+Every other name keeps the `settings-merge` row, and an unreadable template at THEIRS keeps today's
+behaviour. `settings-merge.sh` is unchanged, so the old receipt (which grepped it) is replaced by a
+finisher world. Population on the distribution is empty. Fixture: `apply-restamp-worklist`
+HU-0/a/b/c/t on its own dist, mutants HU-M1..M5. Scored tip 1, fix 0, wrong fix 1 (template-only
+partition) 1, wrong fix 2 (row demoted to NOTE) 1.
+
+verify: sh R=core/skills/ai-dlc-update/reconcile; V=core/scripts/validate-hook-registration.sh; [ -f "$R/apply.sh" ] && [ -f "$R/settings-merge.sh" ] && [ -f "$V" ] || exit 9; command -v python3 >/dev/null || exit 9; W=$(mktemp -d) || exit 9; D="$W/d"; mkdir -p "$D/core/hooks" "$D/core/session-driver" "$D/templates"; g() { git -C "$D" -c user.email=f@f -c user.name=f "$@" >/dev/null 2>&1; }; hk() { printf '#!/bin/sh\nexit 0\n' > "$1"; chmod +x "$1"; }; reg() { f="$1"; shift; s=""; for n in "$@"; do s="$s${s:+,}{\"type\":\"command\",\"command\":\"\$CLAUDE_PROJECT_DIR/.claude/hooks/$n\"}"; done; printf '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[%s]}]}}\n' "$s" > "$f"; }; hk "$D/core/hooks/ai-dlc-kept.sh"; hk "$D/core/hooks/ai-dlc-shipped.sh"; reg "$D/templates/settings.json.template" ai-dlc-kept.sh ai-dlc-tmplonly.sh; echo v1 > "$D/core/session-driver/s.sh"; echo 1.0.0 > "$D/VERSION"; git -C "$D" init -q && g add -A && g commit -qm b || exit 9; B=$(git -C "$D" rev-parse HEAD); echo 2.0.0 > "$D/VERSION"; echo v2 > "$D/core/session-driver/s.sh"; g commit -qam t || exit 9; T=$(git -C "$D" rev-parse HEAD); mk() { c="$W/$1"; mkdir -p "$c/.claude/hooks" "$c/.claude/session-driver" "$c/scripts/ai-dlc" "$c/.claude/skills/ai-dlc-update/reconcile"; echo v2 > "$c/.claude/session-driver/s.sh"; cp "$V" "$c/scripts/ai-dlc/"; chmod +x "$c/scripts/ai-dlc/validate-hook-registration.sh"; cp "$R/settings-merge.sh" "$c/.claude/skills/ai-dlc-update/reconcile/"; for h in kept shipped tmplonly; do hk "$c/.claude/hooks/ai-dlc-$h.sh"; done; printf 'version: 1.0.0\ncommit: %s\n' "$B" > "$c/.claude/.ai-dlc-version"; printf 'base: %s\ntheirs: %s\n' "$B" "$T" > "$c/.claude/.ai-dlc-applying"; }; fin() { bash "$R/apply.sh" --finish "$D" "$B" "$W/$1" "$T" 2>/dev/null; }; v() { sed -n 's/^version: //p' "$W/$1/.claude/.ai-dlc-version"; }; mk near; reg "$W/near/.claude/settings.json" ai-dlc-kept.sh; n=$(fin near); m=$(awk -F'\t' '$1=="WORKLIST" && $2=="settings-merge" {print $4}' <<<"$n"); case "$m" in *ai-dlc-tmplonly.sh*) ;; *) exit 9 ;; esac; case "$m" in *ai-dlc-shipped.sh*) ;; *) exit 1 ;; esac; awk -F'\t' '$1=="WORKLIST" && $2=="hook-unshipped" {f=1} END {exit !f}' <<<"$n" && exit 1; mk o; hk "$W/o/.claude/hooks/ai-dlc-gone.sh"; reg "$W/o/.claude/settings.json" ai-dlc-kept.sh ai-dlc-shipped.sh ai-dlc-tmplonly.sh; a=$(fin o); awk -F'\t' '$1=="WORKLIST" && $2=="hook-unshipped" && index($4, ": ai-dlc-gone.sh ") {f=1} END {exit !f}' <<<"$a" || exit 1; [ "$(v o)" = 1.0.0 ] || exit 1; reg "$W/o/.claude/settings.local.json" ai-dlc-gone.sh; fin o >/dev/null; [ "$(v o)" = 2.0.0 ] || exit 1; exit 0
+
+---
+
+## BL-119 — a `retire` verdict on an EXTENSION reaches no actor, because no step exists to reach
+
+**Uncovered while fixing `BL-118`, and it is the same class one subject over — but not the same
+defect, and the difference is the whole finding.** `apply.sh:731-741` suppresses the
+`WORKLIST extension-reread` row on any recorded verdict, exactly as the override loop did. That
+suppression is CORRECT: the row's obligation is *"re-read this entry against the new core text and
+record a verdict"*, and any recorded verdict discharges it. The reading has been done.
+
+**What is missing is the other half.** For an override, `still-additive` means keep and the other
+two authorize a remedy the script emits. For an extension, `retire` and `contradicts-core` are
+recordable, are honest answers, and authorize nothing — **there is no extension remedy emitter in
+the tree at all.** Derived over `core/`, with the override path as the control in the same
+invocation:
+
+```
+say (NOTE|WORKLIST|HARD…) <kind>  across apply.sh   -> 8 distinct kinds, none of them a retire
+                                                       or repair for an extension
+grep -rn 'extension-retire' core/                   -> 0
+grep -c  'stamp retire' …/apply.sh                  -> 4    # control: the OVERRIDE path has one
+```
+
+`layer-drift.sh:1526` does tell a consumer to retire an extension that merely duplicates core, but
+that is the `EXTENSION-TITLE-MATCHES-CORE` row and a different subject; nothing carries a
+`retire` recorded against `EXTENSION-HOOK-DRIFT`. So a consumer that reads the entry, concludes it
+should go, and records that honestly is left with a decision nobody is told to act on — the
+outcome `BL-118` names, reached by a route `BL-118`'s fix does not touch.
+
+Tiered **DEFECT**, and the consequence is silence rather than a wrong prescription: no consumer
+has been observed hitting it, unlike `PC-S307`, which was filed off a live pull. Not filed
+upstream — it was found here.
+
+The receipt is the same DIFFERENTIAL the `apply-worklist-rows` fixture uses on the override side,
+and its first cut was wrong in a way worth recording: comparing the two runs' full output scored
+**0** on the unfixed tree, because the NOTE interpolates the verdict name and the two messages
+therefore differ by construction. Keyed on the row SEVERITY and KIND instead it reads 1 here, and
+0 against a mutant that emits any distinct row for a non-keep verdict. Exit 9 if the loop cannot
+be located or the keep run emits nothing.
+
+**LANDED (v0.677.0, verified 5f0cf11f).**
+
+Held note (batch 178): the extension loop routes a recorded verdict. The keep verdict (resolved
+from `layer-drift.sh`, never spelled in `apply.sh`) keeps `NOTE extension-adjudicated`; `retire`
+emits `NOTE extension-retire` (delete per Rule 27(b), or cut the retired section); `contradicts-core`
+emits `NOTE extension-contradicts-core` (refile as an override with a `base_sha`, LC-E5, or edit
+it); any other value emits `NOTE extension-adjudicated-unrouted` rather than reading as keep. All
+NOTE, so neither `handback` nor `worklist_n` counts them and `--finish` is unaffected. Fixture:
+`apply-drift-after-write` 2d, per-verdict cells, mutants M1 (keep comparison deleted), M2 (retire
+label unmatched), M3 (every verdict read as keep). The old differential receipt accepted the
+inverted fix; the replacement drives the real seed once per verdict and asserts each kind and its
+actor text. Scored tip 1, fix 0, wrong fix 1 (inverted keep test) 1, wrong fix 2 (contradicts-core
+unrouted) 1.
+
+verify: sh S=core/fixtures/apply-drift-after-write/seed.sh; [ -f "$S" ] && command -v jq >/dev/null || exit 9; W=$(bash "$S") && [ -f "$W/env.sh" ] || exit 9; . "$W/env.sh"; L="$(dirname "$APPLY")/layer-drift.sh"; K=$(bash "$L" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null | awk -F'\t' '$1=="ADJUDICABLE"{print $4}' | grep -x '[0-9a-f]\{40\}'); [ -n "$K" ] || exit 9; G="$CONSUMER/_bmad-output/ai-dlc-update"; mkdir -p "$G"; run() { : > "$G/layer-adjudication-register.jsonl"; for d in $K; do printf '{"clause":"LC-E4","entry":"x","subject_digest":"%s","verdict":"%s","recorded_utc":"2026-01-01T00:00:00Z","reason":"r"}\n' "$d" "$1" >> "$G/layer-adjudication-register.jsonl"; done; bash "$APPLY" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | awk -F'\t' '$1=="NOTE" && $2 ~ /^extension-/ && index($3, "alpha-domain") {print $2 "|" $4}'; }; k=$(run still-additive); [ -n "$k" ] || exit 9; [ "$(grep -c . <<<"$k")" = 1 ] || exit 1; case "$k" in extension-adjudicated\|*) ;; *) exit 1 ;; esac; r=$(run retire); [ "$(grep -c . <<<"$r")" = 1 ] || exit 1; case "$r" in "extension-retire|"*"delete the entry per Rule 27(b), or cut the retired section"*) ;; *) exit 1 ;; esac; c=$(run contradicts-core); [ "$(grep -c . <<<"$c")" = 1 ] || exit 1; case "$c" in "extension-contradicts-core|"*"Refile the entry as an override with a base_sha"*) ;; *) exit 1 ;; esac; exit 0
+
+## BL-278 — the join between an entry's receipt and the fixture that covers the same subject has no home a consumer can run
+
+**DEFECT.** Found at batch 134, when the arm that would have carried this join was reverted out
+of a shipping fixture by the pre-push dead-doc-ref phase.
+
+**THE JOIN IS REAL AND NOTHING ASSERTS IT.** A backlog entry's `verify: sh` receipt and the
+fixture arms covering the same subject divide the work between them: the receipt establishes
+that the fix is present, and the arms establish what the receipt cannot express. At batch 134
+that division was measured rather than assumed — BL-040's receipt is blind to a mutant deleting
+only the Check 12 writer half, and blind to a comment or a bare mention replacing the comparand,
+so three of the six seeded shapes are fixture-owned. **The division is currently stated in a
+comment**, and a comment goes stale in silence: the next hand to widen the receipt reads the arms
+as redundant and deletes one.
+
+**WHY IT HAS NO HOME TODAY.** The join's two sides live on opposite sides of the consumer
+boundary. The receipt is a line in `docs/backlog.md`, which `install.sh` does not ship; the arms
+live in `core/fixtures/gate-verdict-grep-shape/`, which does. Derived at this tip, both sides in
+the same invocation: `grep -rlF 'docs/backlog.md' core/fixtures/` returns **4** fixtures —
+`backlog-ledger`, `backlog-receipt-binding`, `backlog-rotate-fence-guard`, `backlog-size-ceiling`
+— and **4 of 4** carry a `.dist-only` marker, against **0** shipping ones. So the tree's existing
+answer to this class is unanimous and the arm that broke it was the anomaly.
+`scripts/validate-no-dead-doc-refs.sh` enforces exactly that, and the class it names is not
+cosmetic: a shipping fixture whose corpus is absent on a consumer STANDS DOWN there, and a unit
+that cannot fail scores as a pass in that consumer's own suite verdict.
+
+**THE OBVIOUS REPAIR IS THE ONE TO REFUSE.** Hardcoding the receipt into the fixture makes the
+arm runnable on a consumer and creates a second definition of the receipt — which is the drift
+this entry exists to prevent, one level down. The receipt must be DERIVED from the entry or not
+scored at all.
+
+**What is owed is a `.dist-only` home beside the other backlog units.**
+`core/fixtures/backlog-receipt-binding/` already reads `docs/backlog.md` (14 sites) and already
+drives receipts over seeded ledgers, and its `.dist-only` marker states this exact reasoning.
+Whether the join belongs as arms there, or in a new `.dist-only` fixture, is the scoping question
+— `.claude/rules/fixture-ship-decl.md` governs either way, and a NEW fixture directory also owes
+a read-set row the operator must derive with root.
+
+Discharges nothing upstream; this is distribution-internal and ranks below any PC-backed entry.
+
+**LANDED (v0.676.0, verified 0dc1eeb5).**
+
+Held note (batch 178): the join now lives as arms `rj-*` in `core/fixtures/backlog-receipt-binding`
+(`.dist-only`). BL-040's receipt is DERIVED from `docs/backlog.archive.md` by entry id at run time and
+run over every `mode == "..."` branch of gate-verdict-grep-shape's seed builder; a shape it closes
+over (exit 0) must carry a row in that fixture's verdict tables whose verdict its own oracle
+reproduces. Re-derived at this tip: **8 of 10** seeded shapes are receipt-blind (the entry's "three
+of the six" predates the bound and near-miss seeds); `no-read` (exit 1) and `no-anchor6` (exit 2)
+are receipt-owned. Self-probes in three directions before the corpus: the `comment` row deleted is
+reported UNCOVERED, the receipt-owned `no-read` row deleted stays quiet, and `comment` relabelled
+GREEN is reported UNREPRODUCED. Known limit: a seed branch deleted together with its row is
+invisible. The old receipt's `grep -qE 'BL-040|CHECK_LOADED: 5'` was closable by a comment; the
+replacement requires the archive path and the sibling fixture on a non-comment line AND BL-040's
+receipt body absent from the fixture. Scored: base 1, fix 0, archive named only in a comment 1,
+body pasted 1, sibling fixture absent 9. A read-set re-trace is owed for `backlog-receipt-binding`
+(three new reads: the archive, gate-verdict-grep-shape/run.sh, gate-validation.md).
+
+verify: sh h=core/fixtures/gate-verdict-grep-shape/run.sh; b=core/fixtures/backlog-receipt-binding/run.sh; a=docs/backlog.archive.md; [ -f "$h" ] && [ -f "$b" ] && [ -f "$a" ] || exit 9; [ -f core/fixtures/backlog-receipt-binding/.dist-only ] || exit 9; grep -q 'docs/backlog.md' "$h" && exit 9; r="$(awk '$0 == "## BL-040" || index($0, "## BL-040 ") == 1 { f = 1; next } f && /^## / { exit } f && /^verify: sh / { sub(/^verify: sh /, ""); print; exit }' "$a")"; [ -n "$r" ] || exit 9; grep -qF "$r" "$b" && exit 1; grep -qF 'CHECK_LOADED: 5 /,/CHECK_LOADED: 6' "$b" && exit 1; c="$(grep -v '^[[:space:]]*#' "$b")"; grep -qF 'docs/backlog.archive.md' <<<"$c" && grep -qF 'gate-verdict-grep-shape/run.sh' <<<"$c" && exit 0; exit 1
+
+## BL-333 — three "0 ALWAYS" detectors refuse with exit 0 and a stderr line, so the report renders `none` for a scan that never ran
+
+**DEFECT.** Found by the batch-160 contract adversary (contract D3). It is the `BL-230` class that
+0.647.0 closes for a detector that exits non-zero, in the form it leaves open: a refusal that
+exits 0.
+
+`retired-tokens.sh`, `retired-layer-contract.sh` and `retired-layer-passage.sh` each document
+"0 ALWAYS" and each refuses on stderr with exit 0 and no rows: `retired-tokens.sh:119-120`
+(preclassify listed no rows), `retired-layer-contract.sh:260-261` (no rulebook shape readable at
+base), `retired-layer-passage.sh:77-78` (the rulebook list in `setup-sites.md` unreadable).
+`emit-report.sh` discards stderr at every call site, so the section renders `none`, which is the
+same text a full scan that matched nothing renders. `--verify` keys refusals on
+`^DETECTOR-REFUSED` and cannot see these.
+
+Measured at `1f0a81f3` on the `reconcile-emit-report` seed world, with `setup-sites.md` moved
+aside: `retired-layer-passage.sh` exits **0** with **0** bytes of stdout and **1** `refusing to
+report clean` line on stderr, and `retired-layer-contract.sh` does the same. `emit-report.sh`
+exits 0 and renders both sections as `none`. The render's only `^DETECTOR-REFUSED` line is
+`retired-layer-token.sh`'s, which exits 2 on the same input and is the control. With the file in
+place, the control run also renders `none` with 0 stderr refusals.
+
+The other two detectors in the contract's list refuse differently, and neither renders `none`.
+`predicate-differential.sh` emits a `PREDICATE-UNDECIDABLE` row: with `predicate-sites.md` moved
+aside it exits 0 with that one row, and the section shows it. `--verify` counts it as an ordinary
+row, not a refusal. `retired-fixtures.sh` emits `HARD-RETIRED-FIXTURE-SCAN-UNAVAILABLE` on stdout
+(`:59-61`, `:71-73`; read from the code, not driven), which renders as a `HARD-` row.
+
+The fix changes each detector's contract to exit non-zero on a refusal, which `emit-report.sh`
+already renders as `DETECTOR-REFUSED` since 0.647.0. It also changes `apply.sh`'s callers, which
+read the same detectors' stdout with stderr discarded: `retired-tokens.sh` at `apply.sh:620` and
+`:623`, and `retired-layer-passage.sh` at `:688`. The comment above `:688` states the rlp silence
+and calls it the safe direction. `apply.sh` calls neither `retired-layer-contract.sh`,
+`retired-fixtures.sh` nor `predicate-differential.sh`.
+
+**LANDED (v0.680.0, verified f0139f8b).**
+
+Held note (batch 178): all three detector subjects are addressed on this branch, so the entry is a
+close candidate. `retired-layer-passage.sh` already refused with exit 2 before this release (its
+rulebook-list refusal, `:88`), and `apply.sh` reads it through `detector_refused` (`:785`).
+`retired-tokens.sh` now exits 2 on the preclassify-listed-nothing refusal (message unchanged, the
+docs-only-release and base == theirs cause kept); `emit-report.sh:445-446` renders a non-zero exit as
+`DETECTOR-REFUSED` and `apply.sh:698-700` as `detector_refused`. No program caller reaches that state:
+both call it from inside a CLASSIFY arm, and the update skill stops a base == theirs pull at its
+ref check. `retired-layer-contract.sh`'s exit-0 line was not a refusal at all: every unreadable
+rulebook case already exits 2, so the branch that printed "could not read any rulebook contract
+shape" fired only on a rulebook that WAS read and carried no shape, and it swallowed a true path
+row. It is deleted, so that world reaches the path arm: on a shapeless base plus a retired cited
+rulebook file, 0 rows became 1 row per citing file, an unresolvable base ref still exits 2, and
+base == base still ends at the nothing-retired NOTE. Fixtures: `retired-layer-contract` S1 (the
+shapeless world, the row asserted by value, and a mutant restoring the exit, killed by S1 alone), and
+`retired-contract-token` p8 now asserts rc 2 (mutant `refusal-exits-0`, vector 1110). Receipt
+scored under `bash -c 'set -uo pipefail; …'`: origin/main 1, the fix 0, rlc keeping the exit but
+at 2 → 1, rt falling through to the NOTE → 1, rt left at exit 0 → 1, a reconcile dir missing
+`preclassify.sh` → 9. Residue NOT built, outside this release's files: `emit-report.sh:432-436`
+still says retired-tokens' "exit-0-with-stderr refusal is its own contract", which is now stale.
+
+verify: sh R="${B7_RC:-core/skills/ai-dlc-update/reconcile}"; for f in retired-layer-contract.sh retired-tokens.sh preclassify.sh lib.sh setup-sites.md; do [ -f "$R/$f" ] || exit 9; done; D="$(mktemp -d)" || exit 9; trap 'rm -rf "$D"' EXIT; g() { git -C "$D/d" -c user.email=r@r -c user.name=r "$@" >/dev/null 2>&1; }; mkdir -p "$D/d/core/team-roles" "$D/d/core/skills/ai-dlc/steps" "$D/c/.claude/skills/ai-dlc/extensions" || exit 9; g init -q || exit 9; printf -- '- Personal: `/model x`\n' > "$D/d/core/team-roles/r.md"; printf 'x\n' > "$D/d/core/skills/ai-dlc/steps/gone.md"; g add -A && g commit -qm b0 || exit 9; B0="$(git -C "$D/d" rev-parse HEAD)"; g rm -q core/skills/ai-dlc/steps/gone.md && g commit -qm t0 || exit 9; T0="$(git -C "$D/d" rev-parse HEAD)"; g checkout -q "$B0" || exit 9; printf -- '- `/effort high`\n- The model is `opus`.\n' > "$D/d/core/team-roles/r.md"; g add -A && g commit -qm s || exit 9; S="$(git -C "$D/d" rev-parse HEAD)"; g rm -q core/skills/ai-dlc/steps/gone.md && g commit -qm t || exit 9; T="$(git -C "$D/d" rev-parse HEAD)"; printf 'hooks: steps/gone.md\n' > "$D/c/.claude/skills/ai-dlc/extensions/e.md"; row() { bash "$R/retired-layer-contract.sh" "$D/d" "$1" "$2" "$D/c" 2>/dev/null | awk -F'\t' '$2==".claude/skills/ai-dlc/extensions/e.md" && $3=="path:core/skills/ai-dlc/steps/gone.md"' | grep -c .; }; [ "$(row "$B0" "$T0")" = 1 ] || exit 9; [ "$(row "$S" "$T")" = 1 ] || exit 1; bash "$R/retired-tokens.sh" "$D/d" "$S" "$S" "$D/c" >/dev/null 2>"$D/e"; x=$?; grep -q 'produced no rows' "$D/e" || exit 9; [ "$x" = 2 ]
+
+## BL-336 — `apply.sh`'s refile refusal tells the operator to re-run apply, which the union gate refuses
+
+**NOTE.** Found by the batch-160 tip adversary of 0.647.0. When the `provenance-block.json` refile's
+diff fails, 0.647.0 raises a DECISION row and withholds the stamp; its remedy reads "re-run
+apply". A bare re-run is refused by the union gate (rc 1, UNDECIDED) because the tree moved since
+approval, and that refusal names the procedure that works (re-render, re-approve, re-run). `apply.sh`'s
+own comment at `:852-859` calls a remedy of this shape a defect. Reachable only through a
+transient staging or diff failure; `--finish` gates on WORKLIST rows and does not stop on it.
+
+**LANDED (v0.677.0, verified 5f0cf11f).**
+
+Held note (batch 178): remedy (a) shipped, chosen by measurement on the forced state. The state
+was forced with `chmod 000` on the consumer's `schemas/provenance-block.json`, an approved report
+present, and the mode restored before the remedy was followed. An unwritable TMPDIR does not reach
+the row, because preclassify refuses first. Bare re-run: rc 1 (union gate), stamp stays. (a)
+re-render, re-approve, apply: rc 0, refiled, schema at theirs, stamp advanced. (b) `--finish`: rc 0
+and stamp advanced with nothing refiled and the schema still drifted, so it was not shipped. The
+`did not run` row and its exec-bit siblings (`declared-not-executable`, `not-executable`) now share
+one `reapply_remedy` text interpolating the run's four arguments; the siblings were driven in an
+exec-bit world with the same three outcomes. Fixture: `apply-drift-refile` arm r follows whatever
+the row prescribes and reads the tree, mutants r-M1 (bare re-run) and r-M2 (`--finish`). Scored tip
+1, fix 0, wrong fix 1 (`--finish` remedy) 1, wrong fix 2 (bare re-run) 1; exit 9 when the row does
+not appear (e.g. run as root).
+
+verify: sh S=core/fixtures/apply-drift-refile/seed.sh; [ -f "$S" ] || exit 9; W=$(bash "$S") && [ -f "$W/env.sh" ] || exit 9; . "$W/env.sh"; Q="$(dirname "$APPLY")"; G="$CONSUMER/_bmad-output/ai-dlc-update"; mkdir -p "$G"; rr() { { printf '# r\n\n'; bash "$Q/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null; } > "$G/reconcile-report.md"; }; rr; chmod 000 "$SCHEMA"; row=$(bash "$APPLY" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | awk -F'\t' '$1=="DECISION" && $2=="drift" && index($4, "did not run") {print $4; exit}'); chmod 644 "$SCHEMA"; [ -n "$row" ] || exit 9; case "$row" in *--finish*) bash "$APPLY" --finish "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>&1 ;; *emit-report.sh*) rr; bash "$APPLY" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>&1 ;; *) bash "$APPLY" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>&1 ;; esac || exit 1; grep -q my-persona-skill "$EXT" 2>/dev/null || exit 1; git -C "$DIST" show "${THEIRS}:core/schemas/provenance-block.json" | cmp -s - "$SCHEMA" || exit 1; grep -qE '^version: 9\.9\.9$' "$STAMP" || exit 1; exit 0
+
+## BL-355 — `norm_lines` folds case byte-wise, so an accented capital no longer matches its lower-case form
+
+**DEFECT, latent.** Found by the 0.652.0 tip adversary; introduced by 0.652.0. It discharges no
+consumer candidate.
+
+0.652.0 runs `norm_lines`' `tr '[:upper:]' '[:lower:]'` under `LC_ALL=C`
+(`core/skills/ai-dlc-update/reconcile/lib.sh:150`), which fixed the Latin-1 abort in its `sed` but
+folds only ASCII. Forced: core deletes `1. Élan must always be recorded in the story file before
+merge.` (valid UTF-8), a consumer extension carries `- élan must always …`; 0.651.0 reads 1
+`RETIRED-LAYER-PASSAGE` row, 0.652.0 reads 0 with "no match". An ASCII case-differing control and a
+same-case accented control read 1 on both. `retired-layer-passage.sh:61-66`'s comment says the
+locale "cannot manufacture a difference between them", which is false for case.
+
+**Not reachable today:** the rulebook set carries 0 files with a non-ASCII letter byte (control: 63
+with an em-dash), and core carries 0 non-ASCII capitals.
+
+**Remedy:** keep `sed` under C. Fold case in the caller's locale only when the staged stream is
+valid UTF-8 (`iconv -f UTF-8 -t UTF-8`), otherwise under C. Dropping `LC_ALL=C` from `tr` alone is
+wrong: under UTF-8, `tr` on a Latin-1 byte prints "Illegal byte sequence", truncates, and still
+exits 0.
+
+**Five NOTEs from the same three adversaries, none a lost verdict today:**
+- `norm_lines`' `case` over `"${PIPESTATUS[*]}"` depends on `IFS`: `IFS=$'\n'` makes a healthy run
+  return 255, `IFS=''` makes a failed `sed` return 10. No caller sets `IFS`. Respell as an array,
+  as `readopt-override.sh:334,354` already do.
+- `readopt-override.sh:589-590` ignore `section_of`'s status. Both failing reads `UNCHANGED`, rc 0,
+  as before 0.650.0; the later stamp gate still blocks.
+- `validate-layer-entries.sh`'s `defined_rules` and `defined_anchors` accept a post-harvest
+  `sed`'s exit 1 as "no rule". No natural trigger was found.
+- Four `defined_anchors` calls in `validate-layer-entries.sh` (`:1394`, `:1405`, `:2223`, and the
+  `:1720` history arm) discard their status, so a forced failure prints a spurious E16 before the
+  correct refusal.
+- `validate-ci-gates.sh`'s `code_hits` counts with `sed | grep -c || true`; a failed `sed` reads 0,
+  which is a false DORMANT finding (exit 1), the blocking direction.
+
+**LANDED (v0.681.0, verified d0cedeeb).**
+
+**Held note (batch 178):** fixed on `b178-b1`, not landed. `norm_lines` stages `sed`'s output to a
+`mktemp` file and folds case in the CALLER's locale when `iconv -f UTF-8 -t UTF-8` accepts it, under
+C otherwise; each stage's own status is read, so the `PIPESTATUS[*]`/`IFS` NOTE above is gone with
+the pipeline. Measured on this host, the entry's "exits 0" for UTF-8 `tr` on a Latin-1 byte is
+wrong here: it prints "Illegal byte sequence", cuts the output at that byte and exits **1**, so the
+ungated fix REFUSES the run (exit 2) rather than truncating silently. `procsub-staged-refusal`'s
+RLP-NORMLINES is re-anchored on the staged `sed` status; RLP-LOCALE's anchor is unchanged.
+
+The receipt drives `retired-layer-passage.sh` on a world deleting `Élan must …` and an ASCII line,
+with a consumer carrying `- élan must …` and a Latin-1 file reproducing the ASCII line: under
+`en_US.UTF-8` the run must exit 0 with BOTH rows. Exits 9 without that locale, if the Latin-1 seed
+validates as UTF-8, or if the C-locale control does not flag the Latin-1 file. Scored: origin/main
+1 (accented row 0); fix 0; `LC_ALL=C` dropped from `tr` 1 (exit 2, both rows lost); staged with
+the fold still under C 1.
+
+verify: sh R="$PWD/core/skills/ai-dlc-update/reconcile"; S="$R/retired-layer-passage.sh"; [ -f "$S" ] && [ -f "$R/lib.sh" ] || exit 9; l="$(locale -a 2>/dev/null)" || exit 9; grep -qx 'en_US.UTF-8' <<<"$l" || exit 9; w="$(mktemp -d)" || exit 9; mkdir -p "$w/d/core/skills/ai-dlc/steps" "$w/c/.claude/skills/ai-dlc/extensions" || exit 9; git init -q "$w/d" || exit 9; f="$w/d/core/skills/ai-dlc/steps/accent.md"; printf '# A\n\n1. \303\211lan must always be recorded in the story file before merge.\n2. Every gate run is logged before the merge.\n' > "$f" || exit 9; G() { git -C "$w/d" -c user.name=r -c user.email=r@r "$@"; }; G add -A && G commit -qm b || exit 9; B="$(G rev-parse HEAD)" || exit 9; printf '# A\n\n1. Nothing.\n' > "$f" && G commit -qam t || exit 9; T="$(G rev-parse HEAD)" || exit 9; E="$w/c/.claude/skills/ai-dlc/extensions"; printf -- '- \303\251lan must always be recorded in the story file before merge.\n' > "$E/lowered.md" || exit 9; printf -- '# caf\351\n- Every gate run is logged before the merge.\n' > "$E/latin1.md" || exit 9; iconv -f UTF-8 -t UTF-8 < "$E/latin1.md" >/dev/null 2>&1 && exit 9; o="$(env -u LANG LC_ALL=C bash "$S" "$w/d" "$B" "$T" "$w/c" 2>/dev/null)" || exit 9; grep -q 'latin1.md' <<<"$o" || exit 9; u="$(env -u LANG LC_ALL=en_US.UTF-8 bash "$S" "$w/d" "$B" "$T" "$w/c" 2>/dev/null)"; rc=$?; a=0; b=0; grep -q 'lowered.md' <<<"$u" && a=1; grep -q 'latin1.md' <<<"$u" && b=1; [ "$rc" = 0 ] && [ "$a" = 1 ] && [ "$b" = 1 ] && exit 0; echo "BL355-ACCENT-FOLD rc=$rc accented-row=$a latin1-row=$b" >&2; exit 1
+
+
+
+## BL-374 — the shared reconcile memo caches a missing SUBTREE as an absent path, and serves that answer to later processes
+
+**DEFECT.** From the batch 173 adversary, found while attacking the `BL-370` fix. It discharges no
+consumer candidate.
+
+`memo_has_path` and `memo_show` in `reconcile/lib.sh` cache a git status of 128 only when
+`_ai_dlc_memo_absent` says the path is genuinely absent. That oracle is `rev-parse -q --verify
+<ref>:<path>` exiting 1, and `rev-parse` exits 1 in exactly that way when the path's SUBTREE or the
+ROOT tree is the missing object. So a read failure is written into the memo as an absence. The memo
+is shared across processes through `AI_DLC_RECONCILE_MEMO`, so every later reader in the same render
+gets the cached absence even after the object is back. The adversary measured it: process 1 cached
+128 while the subtree was missing, process 2 after the restore got the cached 128, and a no-memo
+control read 0. `preclassify.sh`'s `blob_hash` (`memo_rev_parse`) uses the same oracle to decide
+`MISSING`, so the same missing subtree buckets a present file as `MISSING` there.
+
+**Remedy direction.** Use the discriminator `layer-drift.sh`'s `have` adopted in `BL-370`: `ls-tree
+--full-tree <ref> -- <path>`, where rc 0 with no line is absent, and rc 0 with a line or any non-zero
+rc is a read failure that must stay uncached. Apply it to `_ai_dlc_memo_absent` and to
+`preclassify.sh`'s `MISSING` decision.
+
+The receipt builds a throwaway repo holding `a/b/f.txt` and `top.txt`. Through `lib.sh` with the
+memo pointed at its own `mktemp` directories, it first requires a present path to read 0 and an
+absent one non-zero in a fresh memo, and memo `m` to hold a file after one present-path query, so
+the memo was actually used (else 9). It then moves the `a/b` tree object aside, requires
+`ls-tree` on the path to fail (the seed took, else 9), queries `a/b/f.txt` into memo `m`, restores
+the object, requires a fresh memo `n` to read 0 (the object is back, else 9), and queries memo `m`
+again. It exits 0 only when that second query reads 0. Scored on this tree: live 1 (`p1=128
+p2=128`); `_ai_dlc_memo_absent` rewritten to the `ls-tree` rule 0; `_ai_dlc_memo_absent` that never
+answers absent, so 128 is never cached, 0; a `lib.sh` that fails to source 9; a memo that is
+never used, so every query goes to git direct, 9.
+
+**LANDED (v0.681.0, verified d0cedeeb).**
+
+**Held note (batch 178):** fixed on `b178-b1`, not landed. `_ai_dlc_memo_absent <dist> <ref>
+<path>` now carries `layer-drift.sh` `have()`'s whole `ls-tree --full-tree` table: rc 0 and no line,
+a line naming a different (canonical) path, or a `..` component is ABSENT; a line naming exactly
+the asked path, or any other non-zero, is a read failure. `memo_has_path` and `memo_rev_parse`
+cache a "no" only when it is confirmed and otherwise return 125, uncached, on the fill AND the
+direct (unavailable or unwritable memo) line. `preclassify.sh`'s `blob_hash` refuses 125 with its
+own message, so an unresolvable rev now REFUSES in `--untangle`/`--templates` where it bucketed
+every row MISSING, and `dist_only()` reads `memo_has_path` and refuses anything but 0/128.
+`have()` itself is not yet folded onto the lib helper; that is not in this batch.
+
+The receipt below replaces the one that accepted the lib-only half-fix. It drives lib.sh and
+`preclassify.sh` through one world: `memo_rev_parse` must read 125 on a moved subtree with a
+writable AND a `chmod 555` memo, `memo_has_path` 125 on the writable one, both 0 from that same
+memo after the restore, a non-canonical spelling (`a/./b/f.txt`) still 128, and `--untangle` with
+the manifest subtree moved must exit 2. Exits 9 if the seed does not take, the memo is never
+written, a `chmod 555` directory is writable, or the healthy controls fail. Scored from a `git
+archive` extraction under `bash -c 'set -uo pipefail; …'`: origin/main 1 (`rp-rw=1 rp-ro=1
+has-rw=128 after-restore=1/128 preclassify=0`); fix 0; the lib-only half-fix (`memo_rev_parse`
+caching its 1) 1; the fix without the direct lines 1 (`rp-ro=1`); the naive rule 1
+(`noncanonical=125`); `preclassify.sh` reading 125 as MISSING 1 (`preclassify=0`).
+
+verify: sh L="$PWD/core/skills/ai-dlc-update/reconcile"; [ -f "$L/lib.sh" ] && [ -f "$L/preclassify.sh" ] || exit 9; w="$(mktemp -d)" || exit 9; g() { git -C "$w/r" -c user.name=r -c user.email=r@r "$@"; }; git init -q "$w/r" || exit 9; mkdir -p "$w/r/a/b" "$w/r/core/rules" "$w/c/.claude/rules" || exit 9; echo x > "$w/r/a/b/f.txt" && echo y > "$w/r/top.txt" && echo rule > "$w/r/core/rules/p.md" && cp "$w/r/core/rules/p.md" "$w/c/.claude/rules/p.md" || exit 9; g add -A && g commit -qm s || exit 9; H="$(g rev-parse HEAD)" || exit 9; ob() { local s; s="$(g rev-parse "HEAD:$1")" || return 1; printf '%s' "$w/r/.git/objects/$(printf %s "$s" | cut -c1-2)/$(printf %s "$s" | cut -c3-)"; }; o="$(ob a/b)" && orl="$(ob core/rules)" || exit 9; [ -f "$o" ] && [ -f "$orl" ] || exit 9; mkdir "$w/m" "$w/k" "$w/ro" && chmod 555 "$w/ro" || exit 9; ( : > "$w/ro/p" ) 2>/dev/null && exit 9; q() { AI_DLC_RECONCILE_MEMO="$1" bash -c '. "$1/lib.sh" >/dev/null 2>&1 || exit 97; shift; "$@" >/dev/null 2>&1; echo "$?"' _ "$L" "${@:2}" 2>/dev/null; }; [ "$(q "$w/k" memo_has_path "$w/r" HEAD top.txt)" = 0 ] || exit 9; [ "$(q "$w/k" memo_rev_parse "$w/r" HEAD:nope)" = 1 ] || exit 9; [ "$(q "$w/m" memo_rev_parse "$w/r" HEAD:top.txt)" = 0 ] || exit 9; [ -n "$(ls -A "$w/m")" ] || exit 9; u="$(bash "$L/preclassify.sh" "$w/r" "$H" "$H" "$w/c" --untangle 2>/dev/null)" || exit 9; grep -q '	core/rules/p.md	' <<<"$u" || exit 9; mv "$o" "$w/obj" || exit 9; g ls-tree --full-tree HEAD -- a/b/f.txt >/dev/null 2>&1 && exit 9; r1="$(q "$w/m" memo_rev_parse "$w/r" HEAD:a/b/f.txt)"; r2="$(q "$w/ro" memo_rev_parse "$w/r" HEAD:a/b/f.txt)"; h1="$(q "$w/m" memo_has_path "$w/r" HEAD a/b/f.txt)"; mv "$w/obj" "$o" || exit 9; [ "$(q "$w/k" memo_rev_parse "$w/r" HEAD:a/b/f.txt)" = 0 ] || exit 9; p1="$(q "$w/m" memo_rev_parse "$w/r" HEAD:a/b/f.txt)"; p2="$(q "$w/m" memo_has_path "$w/r" HEAD a/b/f.txt)"; n="$(q "$w/m" memo_has_path "$w/r" HEAD a/./b/f.txt)"; mv "$orl" "$w/orl" || exit 9; bash "$L/preclassify.sh" "$w/r" "$H" "$H" "$w/c" --untangle >/dev/null 2>&1; pc=$?; mv "$w/orl" "$orl" || exit 9; [ "$r1" = 125 ] && [ "$r2" = 125 ] && [ "$h1" = 125 ] && [ "$p1" = 0 ] && [ "$p2" = 0 ] && [ "$n" = 128 ] && [ "$pc" = 2 ] && exit 0; echo "BL374-READ-FAILURE-ANSWERED-AS-ABSENT rp-rw=$r1 rp-ro=$r2 has-rw=$h1 after-restore=$p1/$p2 noncanonical=$n preclassify=$pc" >&2; exit 1
+
+## BL-376 — `layer-drift.sh`'s unguarded BASE reads turn a missing base blob into more drift
+
+**NOTE.** From the batch 173 adversary, held at the time by the backlog ceiling. The literal
+`git_show "$BASE"` reads (`layer-drift.sh`, three sites) and the two `git_show "$base_sha"` reads
+treat a blob they cannot read as an empty file, so a missing base object reports MORE drift or a
+`NEW-THIS-PULL` tag rather than fewer rows. It fails toward reporting, never toward a clean sheet,
+which is why it is a NOTE. The fix is the `have()` discipline `BL-370` shipped: tell absent from
+unreadable before reading. Re-derive the line numbers before building; they move.
+
+**LANDED (v0.682.0, verified 105d43b0).**
+
+Held note (batch 178): all five base reads are gated on `have` with its ABSENT answer discarded
+(`have … || :`), so only an unreadable object refuses and a path absent at base keeps today's
+empty read. The `sup_measure` gate sits in the main shell before the `$( )`, so the refusal is
+`have`'s own line and not a staging failure. `layer-absorption-retire` part 2 owns it: five
+one-site refusing worlds, a near-miss consumer hooked on a core file new this pull, a healthy
+control, and eleven mutants (gate removed ×5, `|| continue` ×5, gate inside the subshell). On a
+scratch copy of the reference consumer, ranges `627916ac`, `c14be470` and `d41d47d0` to
+`297f7499` give 49 byte-identical rows, rc 0, on both engines. The receipt below drives the
+engine through a damaged store and reaches the numbered-catalog and override-section gates
+plus the absent-at-base fall-through: tip 1, fix 0, `|| continue` 1, the two `base_sha` gates
+dropped 1, subject absent 9. The title, extends: and surplus gates are owned by the fixture.
+
+verify: sh P=core/skills/ai-dlc-update/reconcile/layer-drift.sh; J=core/schemas/layer-adjudication-register.json; [ -f "$P" ] && [ -f "$J" ] || exit 9; T="$(mktemp -d)" || exit 9; trap 'rm -rf "$T"' EXIT; D="$T/d"; S=core/skills/ai-dlc; W="$S/steps/widget.md"; mkdir -p "$D/$S/steps" "$D/core/schemas" || exit 9; cp "$J" "$D/core/schemas/" || exit 9; g() { git -C "$D" -c user.email=r@x -c user.name=r "$@" >/dev/null 2>&1; }; g init -q || exit 9; printf '<!-- CORE_MANIFEST v1 -->\nmachinery:\n  - core-manifest.md\nrulebook:\n  - steps/*.md\n' > "$D/$S/core-manifest.md"; printf 'contract_version: 16\n' > "$D/$S/layer-contract.yaml"; printf '# W\n\n### 3. Widget Check.\n\nCore check.\n\n## Stable Notes\n\nNotes.\n' > "$D/$W"; g add -A; g commit -qm base || exit 9; B="$(git -C "$D" rev-parse HEAD)" || exit 9; printf '# W\n\n### 3. Widget Check.\n\nReworded.\n\n## Stable Notes\n\nNotes.\n' > "$D/$W"; printf '# F\n\n### 7. Fresh Check.\n\nNew.\n' > "$D/$S/steps/fresh.md"; g add -A; g commit -qm theirs || exit 9; H="$(git -C "$D" rev-parse HEAD)" || exit 9; O="$(git -C "$D" rev-parse "${B}:${W}")" || exit 9; mv "$D/.git/objects/${O:0:2}/${O:2}" "$T/hidden" 2>/dev/null || exit 9; git -C "$D" cat-file -e "${B}:${W}" 2>/dev/null && exit 9; git -C "$D" cat-file -e "${H}:${W}" 2>/dev/null || exit 9; e() { mkdir -p "$T/$1/.claude/skills/ai-dlc/extensions" "$T/$1/.claude/skills/ai-dlc/overrides"; printf -- '---\nkind: step-domain\nhooks: steps/%s.md\nid: %s\npush_candidate: false\nconforms_to: 16\n---\n\n### %s\n\nCopy.\n' "$2" "$1" "$3" > "$T/$1/.claude/skills/ai-dlc/extensions/$1.md"; }; e cn widget '3. Widget Check.'; e cm fresh '7. Fresh Check.'; mkdir -p "$T/co/.claude/skills/ai-dlc/extensions" "$T/co/.claude/skills/ai-dlc/overrides"; printf -- '---\nshadows: steps/widget.md#Stable Notes\nbase_sha: %s\nreason: r\nconforms_to: 16\n---\n\n## Stable Notes\n\nNotes.\nMine.\n' "$B" > "$T/co/.claude/skills/ai-dlc/overrides/o.md"; r() { bash "$P" "$D" "$B" "$H" "$T/$1" > "$T/$1.out" 2> "$T/$1.err"; }; r cn; [ $? -eq 1 ] && grep -qF "REFUSED — $W at $B" "$T/cn.err" || exit 1; r co; [ $? -eq 1 ] && grep -qF "REFUSED — $W at $B" "$T/co.err" || exit 1; r cm; [ $? -eq 0 ] && awk -F'\t' '$1=="EXTENSION-RETIRE-CANDIDATE" && index($0,"NEW-THIS-PULL"){f=1} END{exit !f}' "$T/cm.out"
+
+## BL-381 — `layer-adjudication-tier` Part 11 world E fails to build when git packs the fixture's store
+
+**NOTE.** Seen on the 0.667.0 gate at `bc1ed530`, 1 of 218 units, and once before in the recorded
+failures; it passed alone and on the next gate. Part 11 world E hides the contract's loose blob to
+build a missing-object store, and refuses as `FIXTURE ERROR` when the blob is "readable but not
+loose (in-pack: 22 packs: 1)". The packer is `git maintenance run --auto`, which every `commit`
+runs; on git 2.54 it repacks once two loose objects sit in the `objects/17` sample bucket, and it
+is governed by `maintenance.auto`, NOT `gc.auto` — measured, `-c gc.auto=0` packs exactly as the
+default does. The packing commits are into `$DIST` (`seed.sh` base and theirs, `run.sh` Parts 4b and
+5), and world E is a later `cp -R "$DIST"`. It fails toward a FIXTURE ERROR, never toward a false
+pass, which is why it is a NOTE.
+
+**LANDED (v0.676.0, verified 0dc1eeb5).**
+
+Held note (batch 178): REPRODUCED and fixed. On origin/main's fixture code, two unreachable loose
+objects written into `objects/17` before the seed's first commit turn world E into the filed
+refusal every run (76 ok, 1 FAIL, "in-pack: 13 packs: 2"); unforced, the same tree passes.
+`seed.sh` now sets `maintenance.auto false` in `$DIST`'s own config, and `run.sh` Part 12 forces
+the trigger on a copy of the distribution, drives the same world E build (now `p11_build_e`, shared
+with Part 11), and kills a mutant seed without the line on world E's own "readable but not loose"
+refusal. A probe on a fresh repository skips Part 12 under a git that does not pack on this
+trigger. No other fixture reads loose-object files: `objects/` across `core/fixtures`, `scripts`,
+`.githooks` and `core/scripts` hits only this fixture and a comment in `self-update-join-gate`.
+
+verify: sh S=core/fixtures/layer-adjudication-tier/seed.sh; [ -f "$S" ] || exit 9; d=$(mktemp -d) || exit 9; r=""; trap 'rm -rf "$d" ${r:+"$r"}' EXIT; f() { for p in 'bl381 unreachable 43' 'bl381 unreachable 778'; do s=$(printf '%s\n' "$p" | git -C "$1" hash-object -w --stdin) || return 9; case "$s" in 17*) : ;; *) return 9 ;; esac; done; printf 'f\n' > "$1/bl381-forcing"; git -C "$1" add -A && git -C "$1" -c maintenance.autoDetach=false commit -qm forcing >/dev/null 2>&1 || return 9; }; ip() { git -C "$1" count-objects -v | awk '$1=="in-pack:"{print $2}'; }; c="$d/ctl"; mkdir -p "$c" && git -C "$c" init -q && git -C "$c" config user.email f@x && git -C "$c" config user.name f || exit 9; printf 'a\n' > "$c/a"; git -C "$c" add -A && git -C "$c" commit -qm one >/dev/null 2>&1 || exit 9; f "$c" || exit 9; [ "$(ip "$c")" -gt 0 ] || exit 9; r=$(bash "$S" 2>/dev/null) && [ -d "$r/dist/.git" ] || exit 9; f "$r/dist" || exit 9; n=$(ip "$r/dist"); [ -n "$n" ] || exit 9; [ "$n" -eq 0 ]
+
+## BL-399 — the `--cite` stdout vocabulary of `validate-steering-budget.sh` has no owner in the vocabulary index
+
+**NOTE. Found by the BL-390 contract hand at batch 177, not shipped.** `validate-steering-budget.sh --cite`
+prints one of `MATCH`, `NOMATCH`, `NOMATCH-NO-RECORDS` and, since 0.674.0, `NOMATCH-TRANSCRIPT-PRUNED`.
+`docs/vocabulary-index.md` names none of them (0 hits for `NOMATCH`, against a control of 1 for
+`EXAMINED NOTHING` in the same file), so no arm binds the set its readers compare against. Today every
+reader compares one member exactly (`validate-adversarial-convergence.sh` against `NOMATCH-NO-RECORDS`)
+or reads the exit status only, so a new member cannot silently pass a gate. Discharges no consumer
+candidate.
+
+**LANDED (v0.676.0, verified 0dc1eeb5).**
+
+Held note (batch 178): new arm **I117** in `scripts/validate-enforcement-map.sh` owns the set and carries the
+`# vocabulary:` marker; the row renders all four members from the owner. The emitter grammar is
+`CITE_VERDICTS_AWK` in `scripts/render-vocabulary-index.sh` (slug `cite-verdicts`), lifted and run by I117
+rather than copied. It reads every `console.log` inside the `if (CITE) {` block: ternary arms, a template
+literal's leading word, and plain literals. I117 refuses an emitter that grammar cannot spell, a member
+outside the `MATCH` / `NOMATCH-<WORD>` shape, and a quoted verdict-shaped literal in any core `.sh` that is
+not a member. Its false-positive set was 15 sites and 0 findings, and the owner's own sites are skipped. The
+recorded limit is that an unquoted compare is invisible. Pinned by renderer probes in both directions,
+`vocabulary-index` (I814 seed), and `enforcement-map-derivations` A46-A51. The suite pays for it in
+`FORK_BUDGET` 3194 -> 3202 (base 3186, tip 3196, I117 +9). Receipt scored: tip 1, fix 0, marker on an
+existing arm 1, three-member extractor 1, hand-typed index row 1.
+
+verify: sh O=core/scripts/validate-steering-budget.sh; [ -f "$O" ] && grep -q '^if (CITE) {$' "$O" || exit 9; B="$(printf '\140')"; R="$(grep -F "| ${B}${O}${B} |" docs/vocabulary-index.md)"; [ -n "$R" ] || exit 1; bash scripts/render-vocabulary-index.sh --check >/dev/null 2>&1 || exit 1; M="$(printf '%s' "$R" | cut -d'|' -f3)"; for v in MATCH NOMATCH NOMATCH-NO-RECORDS NOMATCH-TRANSCRIPT-PRUNED; do case "$M" in *"${B}${v}${B}"*) ;; *) exit 1 ;; esac; done; I="$(printf '%s' "$R" | cut -d'|' -f5 | tr -d ' ')"; case "$I" in I[0-9]*) ;; *) exit 1 ;; esac; D="$(mktemp -d)" || exit 9; for x in core scripts .githooks templates VERSION; do cp -R "$x" "$D/$x" || exit 9; done; awk '/^  console\.log\("NOMATCH"\); process\.exit\(2\);$/ && !d { print "  console.log(v); process.exit(2);"; d = 1 } { print }' "$O" > "$D/$O"; cmp -s "$O" "$D/$O" && exit 9; out="$(cd "$D" && bash scripts/validate-enforcement-map.sh --arms "$I" 2>&1)"; grep -q "^FAIL: $I" <<<"$out"
+
+## BL-092 — the rev-path defence is keyed on a `core/` prefix, so a non-`core/` distribution path reads as a missing consumer subject
+
+**The rev-path defence is keyed on a `core/` PREFIX, so a distribution path that does not start
+with `core/` is still read as a missing consumer subject.** `receipt_path_tokens()` at
+`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:611` splits on non-path bytes, and the
+four `case` prefixes then reject the `core/…` half of a rev-spec. A rev-path whose right side is
+`docs/…`, `.claude/…` or `_bmad-output/…` has no such half. Measured at HEAD: a receipt naming
+`$THEIRS:docs/backlog.md` yields `[ docs/backlog.md]` and `$THEIRS:.claude/rules/tool-hazards.md`
+yields `[ .claude/rules/tool-hazards.md]` — both reported as absent consumer subjects when both
+are distribution paths at a ref. **The shipped comment at `:599-600` asserts the opposite** —
+"its distribution half fails the prefix test" — which is false for exactly these spellings, so
+the file documents a defence it does not have.
+
+**ZERO INSTANCES REPRODUCE TODAY, AND THAT IS THE ENTRY'S POINT, NOT A REASON TO SKIP IT.** All
+10 rev-path right-hand sides in the reference consumer's 25-receipt live corpus are `core/`
+prefixed (control: 48 of 48 rev-specs across the 70-receipt live + archive corpus begin `core/`),
+so the guard is correct on every receipt anyone has written. It fails on the first receipt that
+names a distribution `docs/` path at a ref, and it fails silently, by downgrading a close that
+receipt had earned. This is the latent half of `BL-081`, separated from it deliberately:
+`BL-081`'s title, mechanism, evidence and receipt are all specific to the
+`core/scripts/<x>` → `scripts/<x>` substring, and that half is dead.
+
+**Why this receipt.** It drives the shipping function rather than grepping the comment that
+states the claim, because the comment is the thing that is wrong. It asserts both directions in
+one run — the `docs/` rev-path must stop being reported AND a genuinely absent consumer path
+must still be reported — so a fix that deletes the guard fails it.
+
+**The probe sets `LR_STAGE`, because 0.651.0 made it part of the calling contract.**
+`receipt_absent_subjects` now stages its tokens under the directory `lr_stage_ready` makes in the
+main shell, and returns 3 without one. The first 0.651.0 gate failed R4 on this receipt, which
+read exit 9 at its control and measured nothing.
+
+**LANDED (v0.683.0, verified e151c238).**
+
+**Held note (batch 178):** fixed on `b178-b2`. `receipt_absent_subjects` now deletes every
+`<ref>:<path>` token before the split: `$VAR:`, `${VAR}:`, a 7-40 digit hex sha and `HEAD`, each with
+an optional `~N`/`^N` suffix and a closing quote allowed before the colon. The strip happens only
+where the ref begins a word, so `docs/a.md:12` keeps its `docs/a.md`. It lives inside
+`receipt_absent_subjects` alone, because the second reader of the shared split,
+`receipt_named_subjects`, reads the right-hand side of `$THEIRS:core/scripts/x.sh` as the upstream
+file a receipt names. The false comment that claimed the colon split was the defence is corrected.
+A failed `sed` returns 3, like the `tr` beside it. The fixture's `SH-DIST-PATH` seed lost its role
+as the anchoring mutant's subject, because a `core/` rev-spec is now stripped whole before the
+whitelist sees it. `SH-DIST-BARE-CORE`, a bare `core/scripts/<x>` pathspec, took that role, and
+`SH-REVPATH-DOCS` carries the five ref spellings.
+
+The replacement receipt drives `ledger-reverify.sh` end to end over a world with four rev-path
+receipts (unbraced, braced, sha, `HEAD`) against a distribution `docs/` path and a control receipt
+naming a genuinely missing consumer path. Scored under `bash -c 'set -uo pipefail; …'`: B1+B5 tip 1
+(all four NEEDS-REVIEW), fix 0, a strip of the unbraced form only 1, and `docs/` dropped from the
+whitelist 1 (the control closes). The old receipt was the last one in this ledger that
+`backlog-receipt-binding`'s j1 tree (which carries only `ledger-reverify.sh` and `lib.sh`) could
+score, so its close leaves j1 with zero scored receipts, and R2 refuses before printing a SUMMARY.
+Any correct fix does that. j1 now reads the receipt population from R2's refusal line as well.
+
+verify: sh L="$PWD/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh"; [ -f "$L" ] || exit 9; w="$(mktemp -d)" || exit 9; g() { git -C "$w/d" -c user.name=r -c user.email=r@r -c commit.gpgsign=false "$@"; }; git init -q "$w/d" || exit 9; mkdir -p "$w/d/docs" "$w/c/docs" || exit 9; echo 1.0.0 > "$w/d/VERSION"; echo x > "$w/d/docs/backlog.md"; g add -A && g commit -qm base || exit 9; H="$(g rev-parse HEAD)"; [ ! -e "$w/c/docs/backlog.md" ] && [ ! -e "$w/c/docs/gone.md" ] || exit 9; printf -- '# l\n\n- **Entry RP-A** -- unbraced.\n  verify: sh git -C "$DIST" show "$THEIRS:docs/backlog.md" | grep -q zz-never\n\n- **Entry RP-B** -- braced.\n  verify: sh git -C "$DIST" show "${THEIRS}:docs/backlog.md" | grep -q zz-never\n\n- **Entry RP-C** -- sha.\n  verify: sh git -C "$DIST" show %s:docs/backlog.md | grep -q zz-never\n\n- **Entry RP-D** -- HEAD.\n  verify: sh git -C "$DIST" show HEAD:docs/backlog.md | grep -q zz-never\n\n- **Entry RP-GONE** -- a real missing consumer subject.\n  verify: sh grep -q x "$CONSUMER/docs/gone.md"\n' "$(printf %s "$H" | cut -c1-12)" > "$w/c/l.md"; o="$(cd "$w/c" && bash "$L" "$w/d" "$H" "$w/c" "$H" "$w/c/l.md" 2>/dev/null)"; v() { printf '%s\n' "$o" | awk -F'\t' -v l="$1" '$2==l {print $1; exit}'; }; [ -n "$(v 'Entry RP-GONE')" ] || exit 9; bad=""; [ "$(v 'Entry RP-GONE')" = NEEDS-REVIEW ] || bad=" RP-GONE=$(v 'Entry RP-GONE')(a missing consumer subject no longer withholds the close)"; for e in RP-A RP-B RP-C RP-D; do [ "$(v "Entry $e")" = CLOSE-CANDIDATE ] || bad="$bad $e=$(v "Entry $e")"; done; [ -z "$bad" ] && exit 0; echo "BL092-REVPATH-READ-AS-MISSING-CONSUMER-SUBJECT$bad" >&2; exit 1
+
+## BL-066 — the `named_absorbed` half landed at v0.387.0; the SIBLING half did not, and the release notes say it did
+
+**TRIAGED AT BATCH 10: FOUR OF THE FIVE CLAIMS ARE ABSORBED, THE SIBLING CLAIM SURVIVES, AND
+THIS ENTRY STAYS OPEN ON THAT CLAIM ALONE.** Two verifiers attacked the proposed close
+independently, agreed on every measurement, and split on scope; the entry text below decided
+it. `34c77736` (`v0.387.0`) genuinely fixed `named_absorbed()` — it removed 3 `tail -1` lines
+and 3 `VERSION` reads, `na_v` now occurs **0** times in tracked code (controls in the same
+invocation: `na_c` 3, `na_o` 2, `na_h` 2), the three surviving `tail -1` occurrences at `:393`,
+`:457` and `:473` all classify as COMMENT against a control returning CODE at `:254-256`, and
+driving the real function returns `<newest-sha> <oldest-sha> <n> <how>` with no version at all.
+The consumer's installed copy is byte-identical. So the version-into-a-permanent-annotation harm
+is closed.
+
+**What survives is the SIBLING paragraph below, and it survives on its own words.** That
+paragraph names two mechanisms (`| tail -1`, the `VERSION` read) and a distinct harm: *"its
+output is the sha an operator is told to go and read. A fix keyed only on `named_absorbed`
+leaves that half emitting the same wrong commit."* The mechanisms are gone; **the harm is not**.
+`named_ambiguous()` at `:537-541` still resolves the message-grep to a set and emits ONE commit
+— `_c="${_hits%%\n*}"`, now the NEWEST rather than the oldest — with no commit count and no
+range, and its second field is the number of ledger ENTRIES sharing the prefix, not the number
+of citing commits. Driven against a synthetic upstream where THREE commits cite the prefix, the
+row emits `a6b80ae 2`, and `a6b80ae` is the ledger-drain docs commit — precisely the
+"cited it while closing the ledger" confusion this entry names. Control in the same invocation:
+with a one-entry ledger the function returns empty, so the arm discriminates.
+
+**Two things make this a defect rather than an asymmetry worth noting.** `named_absorbed`'s own
+shipped header at `:472` states the remedy standard — *"reports WHAT IT KNOWS — how many commits
+name the id, and the two ends of the range — and stops electing one of them"* — and the sibling
+did not receive it. And **`v0.387.0`'s CHANGELOG asserts *"Both name joins now report what they
+know … and elect none of them"*, which is false as measured.** Nothing guards it:
+`core/fixtures/ledger-reverify/run.sh:866-890` carries three `NAMED-UPSTREAM-AMBIGUOUS` arms and
+none asserts a commit count or a range (control: a bogus token greps 0 in that file while
+`NAMED-UPSTREAM` greps 18).
+
+**THE RECEIPT BELOW IS DEAD AND MUST BE REPLACED, NOT RE-ANCHORED.** It exits 9 because
+`sed -n "/^named_absorbed() {/,/^}/p"` truncates at the bare `}"` at `:504`, and repairing the
+extraction does not rescue it — the assertion tests `$1 = "0.3.0"` and field 1 is now a short
+sha, so a repaired receipt exits 1 against the *correct* fix and can never go green. That is the
+trap this entry's own "Why this receipt" paragraph says an earlier draft was rewritten to avoid.
+The replacement should assert that the `NAMED-UPSTREAM-AMBIGUOUS` row names ≥2 commits when ≥2
+cite the prefix. Filed as evidence under `BL-089`, which this widens.
+
+**`named_absorbed()` joins on the OLDEST commit whose MESSAGE mentions the id, which is not the
+commit that absorbed the entry, and the version it reads there is interpolated into a permanent
+paste-ready annotation.** `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:402` is
+`git log -F --grep="$_id" --format=%H "$THEIRS" | tail -1` — newest-first output, so the last line
+is the FIRST commit whose message contains the id. `:427` then reads `VERSION` at that commit, and
+`:848` interpolates the result into the row's instruction to the operator:
+`**ADOPTED UPSTREAM (v$na_v, verified <date>)**`. That annotation is the form `ledger-rotate.sh`
+keys on to archive the entry, so a wrong version here is written into the consumer's ledger by hand
+and never re-derived.
+
+**The join key is the defect, not the `tail`.** The comment at `:338-341` defends `tail -1` over
+`--reverse | head -1` on SIGPIPE grounds and states the premise in as many words — *"the last line
+is the FIRST commit to name the id"*. Naming is not absorbing. The two are not the same question,
+and nothing between the grep and the `VERSION` read distinguishes them. This is the
+`receipt_absent_subjects` "reads vs mentions" class one level along: there, a receipt path a file
+MENTIONS was counted as one it READS; here, a commit message that MENTIONS an id is counted as the
+commit that landed it. The SIGPIPE argument is orthogonal and does not block a fix — reading the log
+into a variable and taking its first line abandons no pipe.
+
+**Measured against this repo's own history, over the 29 `PC-` ids cited in `e939a92`'s message.**
+For each id, `git log -F --grep=<id> --format=%H HEAD | tail -1`, `VERSION` read at that commit,
+joined to `docs/reviews/graph-ledger-adjudication-data/final-disposition.tsv` on col2 with the
+version parsed out of col3's `ALREADY-FIXED-v<X>`:
+
+- **20 of 29 resolve to `e939a92` itself** and would be annotated with that release's version.
+- **9 resolve to older commits.**
+- **24 of the 29 carry a literal `ALREADY-FIXED-v<X>` verdict.** Of those, **2 agree** —
+  `8dc52be`/`0.247.0` and `1537e4c`/`0.372.0` — and **22 disagree**.
+- **A 25th is comparable and a `v`-anchored regex cannot see it.** The remaining five are 2
+  `FALSIFIED`, 2 `DUPLICATE-OF` and one `ALREADY-FIXED-93e05d3` — an `ALREADY-FIXED` naming a SHA
+  rather than a version. It is a real absorption claim, so it belongs in the comparable set:
+  `93e05d3` CHANGES `VERSION` itself, `0.101.0` -> `0.102.0`, so it IS its own release and shipped
+  at **`0.102.0`**, while the join reports **`0.373.0`**, resolving to `e939a92`. **So the split is
+  25 comparable, 2 agreeing, 23 disagreeing**, and only the four refutation/duplicate rows name no
+  absorbing release at all. Control in the same invocation: an impossible id resolves to 0 commits.
+- **BOTH SHAPES EXIST IN THIS HISTORY AND ASSUMING EITHER IS AN ERROR.** A fix commit may land
+  while `VERSION` still holds the previous number, with the bump arriving later in a separate
+  release commit — that is `941021d`, the case the consumer's own `PC-S334` filing is about. Or the
+  fix commit may BE the release, bumping `VERSION` in the same commit — that is `93e05d3`. Resolving
+  a sha to its shipping release therefore takes the earliest `VERSION`-changing commit **at or
+  after** it, inclusive of the commit itself.
+- **THE SHA FORM IS THE SHAPE A JOIN SILENTLY MISBUCKETS, AND THIS ENTRY DEMONSTRATED IT TWICE.**
+  A first derivation put the row in a bucket labelled "no comparable verdict" — not because it lacks
+  one, but because the parser's grammar was `ALREADY-FIXED-v[0-9]` and the row spells its version as
+  a commit. A zero over the wrong grammar reads exactly like an absence, and here it read as a row
+  with nothing to say while it was in fact the largest single disagreement in the set.
+- **3 of the 9 older resolutions are upstream's own documentation commits**, whose diffs are
+  docs-only and which merely mention the id: `2bc7aa4` (`docs(plan)`, 1 file),
+  `c9a4500` (`docs(reviews)`, 4 files), `40770c3` (`docs(reviews)`, 6 files).
+- A fourth, `5b5b95c`, is worse than a docs mention: it is a ledger-drain release touching 23
+  `core/` files, and the entry it is attributed to —
+  `PC-S303-UNREGISTERED-DRIFT-SCANS-FIVE-OF-TEN-CORE-SUBTREES` — is adjudicated **FALSIFIED**. The
+  function would propose an `ADOPTED UPSTREAM` annotation for an entry that was never a defect.
+
+Control in the same invocation: the impossible id `PC-S999-IMPOSSIBLE-NEVER` resolves to **0**
+commits while `PC-S300-CYCLE-STATE-RESOLVED-UNREACHABLE-FOR-A-STALLED-TERMINAL-PASS` resolves to
+**2**, so the search runs and discriminates.
+
+**This repo's own instruction produced the 20-row case.** `docs/plans/graph-ledger-full-drain.md:49`
+directs that *"the id goes in the RELEASE COMMIT MESSAGE, verbatim, for every closed entry"*. That
+correction is right for coverage and it is exactly what makes an unqualified message-grep resolve to
+the release commit — the id is now guaranteed to appear in a commit whose relationship to the fix is
+"cited it while closing the ledger", which the join cannot tell apart from "landed it".
+
+**A SIBLING INSTANCE, SAME IDIOM, SAME FILE.** `named_ambiguous()` (`:433`) runs the same
+`| tail -1` at `:453` and reads `VERSION` at `:455`, and its output is the sha an operator is told to
+go and read. A fix keyed only on `named_absorbed` leaves that half emitting the same wrong commit.
+The prefix-fallback arm inside `named_absorbed` at `:423` is a third site of the same idiom.
+
+**NOT the same defect as `absorbed_at()`.** `absorbed_at()` (`:267`, `VERSION` at `:271`) uses a
+content pickaxe (`log -S"$2"`) bounded to `BASE..THEIRS` with `--reverse | head -1`, so it already
+joins on a diff rather than on a message; its filed problem is which version blob it reads at the
+commit it found. Filed by the consumer as
+`PC-S334-ABSORBED-AT-READS-THE-VERSION-BLOB-AT-THE-FIX-COMMIT`. Cross-referenced, not merged — the
+two need different fixes and a joint one would satisfy neither join.
+
+**Why this receipt and why it is behavioural.** A substring anchor is unusable: the fix will quote
+the `tail -1` wording back inside the comment recording what it replaced, exactly as `:338-341`
+already quotes the reasoning it is defending. The receipt instead `sed`-extracts the shipping
+`named_absorbed()` body, evals it against a three-commit synthetic upstream in which a `docs(plan)`
+commit at `0.2.0` MENTIONS the id and touches no subject, and the `fix:` commit at `0.3.0` absorbs it
+— and asserts the returned version is the absorbing one. Its four sanity arms exit 9 (which reverify
+reports as STILL-LIVE, the safe direction): the extraction produced a function, the two commits'
+`VERSION` blobs genuinely differ, the mentioning commit really mentions the id, and the mentioning
+commit does NOT touch the subject while the absorbing commit does. An earlier draft guarded on the
+extracted text containing `tail -1`, which would have exited 9 on precisely the fix — a receipt that
+cannot go green. Satisfiability demonstrated against a mutant whose two sides were asserted to
+differ: shipping returns `0.2.0 <sha> slug` and exits **1**; the same receipt against a copy with
+`| tail -1` changed to `| head -1` in that arm returns `0.3.0` and exits **0**.
+
+Cross-references the consumer entry `PC-S334-NAMED-ABSORBED-JOINS-ON-THE-OLDEST-MESSAGE-MENTION`,
+filed by the graph consumer session. That id appears in **0** commits of this repo's history
+(control in the same invocation: `PC-S303` appears in **8**), so nothing upstream can be read as
+having answered it.
+
+**LANDED (v0.683.0, verified e151c238).**
+
+**Held note (batch 178):** fixed on `b178-b2`. `named_ambiguous` now returns
+`<n-commits> <sha,sha,…> <n-entries> <reach>`, reading `%h` directly (no per-sha `rev-parse
+--short`). The row names every citing commit, newest first, and keeps the phrase "and N entries in
+this ledger carry it", which `ledger-rotate`'s fixture parses. New fixture arms: `ambiguous-lists-all`
+(PC-S902 now has two citing commits, and the row must name both plus the count), `ambiguous-reach`,
+and the `mutation-ambig-newest` mutant (`| head -1` on the hits), which only the list arm sees. The
+old receipt was dead and is replaced: it drives `ledger-reverify.sh` over a three-entry, two-commit
+world. Three entries against two commits means a wrong fix printing the commit count where the
+entry count belongs cannot pass. Scored: B1+B5 tip 1, fix 0, newest-only 1, commit count in the
+entry-count slot 1.
+
+verify: sh L="$PWD/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh"; [ -f "$L" ] || exit 9; w="$(mktemp -d)" || exit 9; g() { git -C "$w/d" -c user.name=r -c user.email=r@r -c commit.gpgsign=false "$@"; }; git init -q "$w/d" || exit 9; mkdir -p "$w/d/core" "$w/d/docs" "$w/c" || exit 9; echo 1.0.0 > "$w/d/VERSION"; echo M > "$w/d/core/s.md"; g add -A && g commit -qm base || exit 9; B="$(g rev-parse HEAD)"; echo a > "$w/d/core/a.sh"; g add -A && g commit -qm "fix: PC-S880 first" || exit 9; echo b > "$w/d/docs/b.md"; g add -A && g commit -qm "docs(ledger): PC-S880 drained" || exit 9; T="$(g rev-parse HEAD)"; n="$(g log -E --grep='PC-S880([^0-9A-Za-z-]|$)' --format=%h "$T" | grep -c .)"; [ "$n" = 2 ] || exit 9; printf -- '# l\n\n- **PC-S880-ONE** -- a.\n  verify: theirs_lacks core/s.md "ZZ"\n\n- **PC-S880-TWO** -- b.\n  verify: theirs_lacks core/s.md "ZZ"\n\n- **PC-S880-THREE** -- c.\n  verify: theirs_lacks core/s.md "ZZ"\n' > "$w/c/l.md"; o="$(bash "$L" "$w/d" "$B" "$w/c" "$T" "$w/c/l.md" 2>/dev/null)"; r="$(printf '%s\n' "$o" | awk -F'\t' '$1=="NAMED-UPSTREAM-AMBIGUOUS" && $2=="PC-S880" {print $3; exit}')"; [ -n "$r" ] || { echo "BL066-NO-AMBIGUOUS-ROW" >&2; exit 1; }; m=0; for s in $(g log -E --grep='PC-S880([^0-9A-Za-z-]|$)' --format=%h "$T"); do case "$r" in *"$s"*) ;; *) m=$((m+1)) ;; esac; done; case "$r" in *"in 2 commits, ALL of them:"*"and 3 entries in this ledger carry it"*) [ "$m" = 0 ] && exit 0 ;; esac; echo "BL066-AMBIGUOUS-ROW-ELECTS-ONE-COMMIT missing=$m row=$r" >&2; exit 1
+
+
+## BL-310 — after a transient `cat-file` or `show` failure on a present path, the memo still hands one caller a wrong "absent"
+
+**NOTE.** Found at batch 153 by the `BL-230` tip adversary, reading the 0.637.0 memo change. It
+discharges no consumer candidate.
+
+0.637.0 stopped `lib.sh`'s memo from caching a failed git status. `memo_has_path` and `memo_show`
+treat 128 as git's answer for an absent path and cache it only after `rev-parse -q --verify`
+confirms the path is absent. When that check says the path is present and `cat-file` or `show`
+failed anyway, both return the 128 uncached. Their callers in `ledger-reverify.sh` and
+`layer-drift.sh` read any non-zero as absent, so each transient failure still produces one wrong
+answer; it is no longer served to every later lookup. `memo_has_path` could return 0 there, since
+its own check established presence. The cost of the extra `rev-parse` on each distinct absent key
+was not measured, and `ledger-reverify`'s `theirs_has_path` is its heaviest caller.
+
+**LANDED (v0.683.0, verified e151c238).**
+
+**Held note (batch 178):** the lib half is fixed on `b178-b1`. The b177 claim that `memo_has_path`
+returns 128 for a present-but-unreadable path was wrong: with the BLOB missing it returned `cat-file
+-e`'s **1**, uncached, matching neither caching branch, so a fix keyed on 128 never fires. It now
+returns 125 for any "no" the BL-374 discriminator cannot confirm (missing blob, missing subtree or
+root tree, unresolvable rev), on the fill and the direct line. **This entry closes only with B2.**
+`ledger-reverify.sh` still reads any non-zero `theirs_has_path` as absent at `:1935` (the basename
+retry), and `:1947` (`all_present "$(theirs_show "$path")"`), `:1551` (`near_miss_spelling`) and
+`:1587` (`TV`) discard `memo_show`'s status; B2 must read 125 / the show status at all four. Until
+then a 125 reads as absent there, exactly as today's 128 and 1 did, so B1 pulled without B2 changes
+no verdict.
+
+The receipt drives `memo_has_path` and `ledger-reverify.sh` through two worlds, a missing BLOB
+(`cat-file -e` 1, `rev-parse` 0) and a missing SUBTREE (`cat-file -e` 128), and requires 125 from
+`memo_has_path` in both, the memo serving 0 after each restore, and a `NEEDS-REVIEW` row from
+`ledger-reverify.sh` whose DETAIL column carries the literal word `unreadable` for both entries
+(B2's refusal text must contain it; today's blob-missing row is also `NEEDS-REVIEW`, a "vacuous
+predicate", and only that word separates the two), including one whose `has` lookup was
+cached healthy before the blob went (the `:1947` read). Scored from a `git archive` extraction:
+origin/main 1; B1 alone (this branch) 1, so it stays open; B1 plus a stand-in B2 at `:1935` and
+`:1947` 0; that stand-in over a lib keyed on 128 1 (`has(blob)=1`); B2 at `:1935` only 1.
+
+**Held note (batch 178), the B2 half:** fixed on `b178-b2`, together with B1's lib half. All four
+`ledger-reverify.sh` sites now read the status. A 125 from `theirs_has_path` emits `NEEDS-REVIEW
+unreadable: path …` and is never sent to the basename retry. Theirs and base blobs are each read once
+per entry, with the status. A failed theirs show of a resolved path is `unreadable:`. A failed base
+show is `unreadable:` unless `memo_has_path` at base returns 128, which is a confirmed absence, and
+that branch keeps the empty-content behaviour for a path new at theirs. `base_holds` and
+`near_miss_spelling` now read those checked bytes and no longer re-read git. `TV` refuses the run
+(exit 2) when VERSION at a resolvable theirs is unreadable and not confirmed absent; an unresolvable
+theirs keeps the old ref fallback, so each entry refuses on its own. SKILL.md step 3f documents the
+`unreadable` cause. Fixture: five broken worlds (blob, subtree, unread blob behind a cached `has`,
+unread base blob, unread VERSION) plus a healthy control and near-misses, with one mutant per layer.
+Each mutant moves only its own world.
+
+The receipt is extended with a base-blob world, so a fix that guards only the theirs reads cannot
+pass, and each world now gets its own memo. Scored: B1 alone 1, B1+B2 0, B2 without the
+theirs-show refusal 1, B2 without the `:1935` refusal 1, B2 without the base refusal 1.
+
+verify: sh L="$PWD/core/skills/ai-dlc-update/reconcile"; [ -f "$L/lib.sh" ] && [ -f "$L/ledger-reverify.sh" ] || exit 9; w="$(mktemp -d)" || exit 9; g() { git -C "$w/d" -c user.name=r -c user.email=r@r -c commit.gpgsign=false "$@"; }; git init -q "$w/d" || exit 9; mkdir -p "$w/d/a/b" "$w/c" "$w/k" "$w/m1" "$w/m2" "$w/m3" "$w/m4" "$w/m5" || exit 9; echo 'MARK base' > "$w/d/top.txt"; echo MARK > "$w/d/a/b/f.txt"; echo 'KEEP base' > "$w/d/keep.txt"; echo 1.0.0 > "$w/d/VERSION"; g add -A && g commit -qm b || exit 9; B="$(g rev-parse HEAD)"; echo 'MARK theirs' > "$w/d/top.txt"; echo 'KEEP theirs' > "$w/d/keep.txt"; echo 1.1.0 > "$w/d/VERSION"; g add -A && g commit -qm t || exit 9; T="$(g rev-parse HEAD)"; printf -- '# l\n\n- **Entry QB** -- blob.\n  verify: theirs_has top.txt "MARK"\n\n- **Entry QS** -- subtree.\n  verify: theirs_has a/b/f.txt "MARK"\n\n- **Entry QK** -- base blob.\n  verify: theirs_lacks keep.txt "KEEP"\n' > "$w/c/l.md" || exit 9; ob() { local s; s="$(g rev-parse "$1:$2")" || return 1; printf '%s' "$w/d/.git/objects/$(printf %s "$s" | cut -c1-2)/$(printf %s "$s" | cut -c3-)"; }; TB="$(ob "$T" top.txt)" && TT="$(ob "$T" a/b)" && BK="$(ob "$B" keep.txt)" || exit 9; [ -f "$TB" ] && [ -f "$TT" ] && [ -f "$BK" ] || exit 9; q() { AI_DLC_RECONCILE_MEMO="$1" bash -c '. "$1/lib.sh" >/dev/null 2>&1 || exit 97; memo_has_path "$2" "$4" "$3"; echo "$?"' _ "$L" "$w/d" "$2" "$T" 2>/dev/null; }; lr() { AI_DLC_RECONCILE_MEMO="$1" bash "$L/ledger-reverify.sh" "$w/d" "$B" "$w/c" "$T" "$w/c/l.md" 2>/dev/null | LC_ALL=C awk -F'\t' -v e="$2" '$2==e {print $1 "|" $3; exit}'; }; case "$(lr "$w/k" "Entry QB")|$(lr "$w/k" "Entry QS")|$(lr "$w/k" "Entry QK")" in STILL-LIVE*"|STILL-LIVE"*"|NEEDS-REVIEW|vacuous"*) ;; *) exit 9 ;; esac; [ "$(q "$w/m3" top.txt)" = 0 ] || exit 9; mv "$TB" "$w/tb" || exit 9; hb="$(q "$w/m1" top.txt)"; vb="$(lr "$w/m2" "Entry QB")"; vw="$(lr "$w/m3" "Entry QB")"; mv "$w/tb" "$TB" || exit 9; mv "$TT" "$w/tt" || exit 9; hs="$(q "$w/m1" a/b/f.txt)"; vs="$(lr "$w/m5" "Entry QS")"; mv "$w/tt" "$TT" || exit 9; mv "$BK" "$w/bk" || exit 9; vk="$(lr "$w/m4" "Entry QK")"; mv "$w/bk" "$BK" || exit 9; [ "$(q "$w/m1" top.txt)" = 0 ] && [ "$(q "$w/m1" a/b/f.txt)" = 0 ] || hb="$hb-cached"; ur() { case "$1" in NEEDS-REVIEW\|unreadable*) return 0 ;; esac; return 1; }; [ "$hb" = 125 ] && [ "$hs" = 125 ] && ur "$vb" && ur "$vs" && ur "$vw" && ur "$vk" && exit 0; echo "BL310-UNREADABLE-READ-AS-ABSENT has(blob)=$hb has(subtree)=$hs ledger(blob)=${vb%%|*} ledger(subtree)=${vs%%|*} ledger(has-cached,theirs-blob-gone)=${vw%%|*} ledger(base-blob-gone)=${vk%%|*}" >&2; exit 1
+
