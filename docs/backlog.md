@@ -1355,6 +1355,24 @@ below any PC-backed entry under the provenance-first rule.
 **Tiered DEFECT.** It does not corrupt anything; it removes a guard silently, and the symptom of a
 missing guard is a green push.
 
+Held note (batch 178): the false-positive set this entry owes is now MEASURED, and it does NOT
+support re-tiering to NOTE. Re-derived at this tip: **25** (mapped fixture, `core/hooks/` basename)
+pairs where `run.sh` names the hook and the fixture's rows omit `core/hooks/<name>` (control in the
+same derivation: 61 pairs where the row DOES carry it). **19** are comment-only mentions (an
+earlier count read 18). The **6** non-comment ones were inspected by hand. Five do not open the
+core hook: `layer-readopt-gate` passes `hooks/ai-dlc-continue.sh` as an argument,
+`core-write-guard` puts a consumer path in tool-call JSON, `upstream-routing` truncates a stub in
+its own consumer tree, `settings-merge-unparseable-template` greps a template for the name, and
+`gate-repair-record` quotes it in prose. **The sixth is a live instance:**
+`postcompact-rulebook-recovery` resolves `core/hooks/ai-dlc-postcompact.sh` in `seed.sh:46` and
+executes it at `run.sh:1762`. Its rows carry four other hooks and not that one, because they were
+last derived on 2026-09-15 and the arm that reads that hook landed on 2026-09-22 (0.620.0). A push
+touching only `ai-dlc-postcompact.sh` skips the one fixture guarding the defect 0.620.0 fixed. The
+motivating instance is closed: `pause-hook-origin`'s rows now carry `core/hooks/ai-dlc-continue.sh`.
+Two corrections to the method above: a `run.sh`-only mention grep misses reads resolved in a
+sibling `seed.sh` (this instance names the hook in `run.sh` only in messages), and the remedy is a
+re-trace of `postcompact-rulebook-recovery`, not a hand-edited row. Tier stays **DEFECT**.
+
 The receipt is STRUCTURAL: it exits 1 while no arm in `scripts/validate-enforcement-map.sh` binds a
 fixture's read-set row to the `core/hooks/` paths its `run.sh` resolves, 0 once one does, and 9 if
 the map or the read-set file cannot be located, so a relocated map reports a moved precondition
