@@ -902,19 +902,24 @@ applying_guard() {
 
    2. WORKLIST or DECISION rows were handed back and are not yet disposed. Do them —
       each semantic merge, each override readopt/retire, each extension re-read, each
-      operator call — and then run the finisher:
+      operator call — and then do what the restamp-withheld row names. Usually that is
+      the finisher:
 
         reconcile/apply.sh --finish [--carried-machinery-slice] <dist> <base> . <theirs>
 
       RE-RUNNING /ai-dlc-update DOES NOT CLEAR THESE. A hand-back row is derived from the
       upstream range against your extensions, not from the tree, so a re-run re-emits it and
-      withholds again. --finish is the only exit for this case. The withheld row prints the
-      exact command with the machinery flag already resolved.
+      withholds again. The withheld row prints the exact command with the machinery flag
+      already resolved. When a row only a fresh ordinary run clears is outstanding, the
+      withheld row names re-render / re-approve / re-run INSTEAD, and says --finish is not
+      the next step; follow it.
 
       --finish checks the tree before it stamps. It withholds again, with a WORKLIST row per
       file, while any file still reads as a pure apply from theirs (missing, or still at
-      base). It also withholds when <base> is not the stamp's own commit, or when <theirs> is
-      not the ref recorded in this marker. A file you merged by hand does not hold it up.
+      base), and while any file the apply handed back as a semantic merge is still
+      byte-identical to the copy the apply found. It also withholds when <base> is not the
+      stamp's own commit, or when <theirs> is not the ref recorded in this marker. A file you
+      merged by hand differs from that copy and does not hold it up.
 
    If that pull was abandoned and the tree is known good, remove the marker:
 
