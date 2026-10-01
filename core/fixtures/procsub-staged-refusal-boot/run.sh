@@ -193,6 +193,11 @@ mkstub_for() {
     L3)    stub "$2" git "$REAL_GIT" "*' ls-tree -r --name-only '*' -- core/'" \
              "$LOGF; \"$REAL_GIT\" \"\$@\" | head -n 1; exit 1" ;;
     P1)    stub "$2" find "$REAL_FIND" "*'/.claude/fixtures -type f'" "$LOGF; echo 'find: forced failure' >&2; exit 1" ;;
+    # P2 / P3 fail nothing: their forcing input is the file-size limit pm_shape runs them under. The
+    # stub logs the subject's own blob lookup, so FIRED > 0 proves the run reached the bucket arm.
+    # It logs one short word, never "$*": the FIRED file is a regular file under the same limit.
+    P2)    stub "$2" git "$REAL_GIT" "*' rev-parse -q --verify '*':core/zz-psb-sited/new-sited.md'" "echo x >> \"\$F\"" ;;
+    P3)    stub "$2" git "$REAL_GIT" "*' rev-parse -q --verify '*':core/skills/ai-dlc-update/zz-psb-subject.md'" "echo x >> \"\$F\"" ;;
     E1)    stub "$2" sed "$REAL_SED" "'-E s/[[:space:]]+/ /g'" \
              "t=\"\$(mktemp)\" || exit 3; cat > \"\$t\"; if \"$REAL_GREP\" -q ZZ-PSB-HAND-EDIT \"\$t\"; then \"$REAL_SED\" \"\$@\" < \"\$t\"; r=\$?; rm -f \"\$t\"; exit \$r; fi; rm -f \"\$t\"; $LOGF; exit 2" ;;
     S1)    stub "$2" comm "$REAL_COMM" "'-23 '*" "$LOGF; echo 'comm: forced failure' >&2; exit 2" ;;
@@ -338,6 +343,98 @@ pc_shape() { # <recon> <stub-dir or ->
   else echo "OTHER(rc=$rc,O=$no,other=$nn)"
   fi
   rm -f "$err"
+}
+
+# === WORLDS pm: preclassify's two whole-line MEMBERSHIP tests (BL-360) ============================
+# `setup_sited` and `is_machinery` were `grep -qxF` fed by a here-string and a heredoc. Under
+# `trap '' XFSZ; ulimit -f 1` a haystack past one block cannot be staged, grep never runs, and the
+# test answers "not a member" at rc 0 -- so the run buckets a path wrong and exits clean.
+#   P2  a NEW upstream file declared setup-sited, consumer lacks it. Healthy
+#       `UPSTREAM-ONLY-ADD+SETUP-TOKENS->SUBSTITUTE`; base under the limit `UPSTREAM-ONLY-ADD`.
+#       The haystack is read out of `setup-sites.md` BESIDE the engine, so every run gets its own
+#       copy of the recon directory with forty padding paths and the subject appended LAST.
+#   P3  a machinery file (`core/skills/ai-dlc-update/**`) whose consumer copy is the distribution's
+#       blob at the consumer's own `skill_commit`, neither base nor theirs. Healthy `UPSTREAM-ONLY`;
+#       base under the limit `BOTH-CHANGED->CLASSIFY`. Thirty long-named machinery paddings make the
+#       machinery listing larger than one block.
+# Every OTHER file the run writes under the limit -- the staged relocation listing and changed rows,
+# the memo's sha files -- is far below one block, so the membership haystack is the only input the
+# limit can take. The tip's forced reading being the HEALTHY one is what shows that.
+PMW_S="$WORK/pmw-s"; PMW_M="$WORK/pmw-m"
+mk_pm_world() { # <dir> <s|m>
+  local W="$1" D="$1/dist" C="$1/consumer" i
+  mkdir -p "$D/core/rules" "$C/.claude" || return 1
+  printf '0.1.0\n' > "$D/VERSION"; printf 'rule\n' > "$D/core/rules/keep.md"
+  if [ "$2" = m ]; then
+    mkdir -p "$D/core/skills/ai-dlc-update/zz-psb-pad" "$C/.claude/skills/ai-dlc-update" || return 1
+    i=0; while [ "$i" -lt 30 ]; do
+      printf 'pad\n' > "$D/core/skills/ai-dlc-update/zz-psb-pad/a-machinery-padding-file-whose-name-is-long-$(printf '%03d' "$i").md"
+      i=$((i+1)); done
+    printf 'v1\n' > "$D/core/skills/ai-dlc-update/zz-psb-subject.md"
+  fi
+  { gi "$D" init -q && gi "$D" add -A && gi "$D" commit -qm base; } >/dev/null 2>&1 || return 1
+  git -C "$D" rev-parse HEAD > "$W/B"
+  if [ "$2" = m ]; then
+    printf 'v2\n' > "$D/core/skills/ai-dlc-update/zz-psb-subject.md"
+    { gi "$D" add -A && gi "$D" commit -qm self-update; } >/dev/null 2>&1 || return 1
+    git -C "$D" rev-parse HEAD > "$W/M"
+    printf 'v3\n' > "$D/core/skills/ai-dlc-update/zz-psb-subject.md"
+    printf 'v2\n' > "$C/.claude/skills/ai-dlc-update/zz-psb-subject.md"
+    printf 'version: 0.1.0\ncommit: %s\nskill_commit: %s\n' "$(cat "$W/B")" "$(cat "$W/M")" > "$C/.claude/.ai-dlc-version"
+  else
+    mkdir -p "$D/core/zz-psb-sited" || return 1
+    printf 'model: {model}\n' > "$D/core/zz-psb-sited/new-sited.md"
+    printf 'version: 0.1.0\ncommit: %s\n' "$(cat "$W/B")" > "$C/.claude/.ai-dlc-version"
+  fi
+  printf '0.2.0\n' > "$D/VERSION"
+  { gi "$D" add -A && gi "$D" commit -qm theirs; } >/dev/null 2>&1 || return 1
+  git -C "$D" rev-parse HEAD > "$W/T"
+}
+mk_pm_world "$PMW_S" s || { echo "FIXTURE ERROR: pm sited world" >&2; exit 2; }
+mk_pm_world "$PMW_M" m || { echo "FIXTURE ERROR: pm machinery world" >&2; exit 2; }
+pm_sited_recon() { # <recon> -> a copy whose setup-sites.md declares the padding and the subject, LAST
+  local d i=0
+  d="$(mktemp -d "$WORK/pm-recon.XXXXXX")" || return 1
+  cp -R "$1/." "$d/" || return 1
+  { while [ "$i" -lt 40 ]; do
+      printf '  file: core/zz-psb-pad/a-setup-sited-padding-path-whose-name-is-long-%03d.md\n' "$i"; i=$((i+1)); done
+    printf '  file: core/zz-psb-sited/new-sited.md\n'; } >> "$d/setup-sites.md" || return 1
+  printf '%s' "$d"
+}
+pm_shape() { # <recon> <P2|P3> <stub-dir or ->
+  local R="$1" W p="$PATH" out err rc row nr hd hay subj healthy wrong hs ws
+  [ "$3" = - ] || p="$3:$PATH"
+  case "$2" in
+    P2) W="$PMW_S"; subj=core/zz-psb-sited/new-sited.md
+        healthy='UPSTREAM-ONLY-ADD+SETUP-TOKENS->SUBSTITUTE'; wrong=UPSTREAM-ONLY-ADD; hs=SITED; ws=UNSITED-HEREDOC
+        R="$(pm_sited_recon "$1")" || { echo "OTHER(recon-copy)"; return 0; }
+        hay="$(awk '/^[ \t]*file:[ \t]*core\//{sub(/^[ \t]*file:[ \t]*/,""); print}' "$R/setup-sites.md" | sort -u | wc -c | tr -d ' ')" ;;
+    P3) W="$PMW_M"; subj=core/skills/ai-dlc-update/zz-psb-subject.md
+        healthy=UPSTREAM-ONLY; wrong='BOTH-CHANGED->CLASSIFY'; hs=AT-SELF-UPDATE; ws=NOT-MACHINERY-HEREDOC
+        hay="$(git -C "$W/dist" ls-files --with-tree="$(cat "$W/T")" -- 'core/skills/ai-dlc-update/**' | wc -c | tr -d ' ')" ;;
+  esac
+  out="$(mktemp "$WORK/pm-out.XXXXXX")" || { echo "OTHER(mktemp)"; return 0; }
+  if [ "$3" = - ]; then
+    err="$( ( PATH="$p"; export PATH
+      exec "$REAL_BASH" "$R/preclassify.sh" "$W/dist" "$(cat "$W/B")" "$(cat "$W/T")" "$W/consumer" > "$out" ) 2>&1 )"; rc=$?
+  else
+    # SIGXFSZ ignored, so the staging write fails with EFBIG the way a full disk fails it. Stderr goes
+    # to a PIPE, never to a file the limit binds.
+    err="$( ( trap '' XFSZ; ulimit -f 1; PATH="$p"; export PATH
+      exec "$REAL_BASH" "$R/preclassify.sh" "$W/dist" "$(cat "$W/B")" "$(cat "$W/T")" "$W/consumer" > "$out" ) 2>&1 )"; rc=$?
+  fi
+  row="$(awk -F'\t' -v s="$subj" '$2==s {print $4}' "$out")"
+  nr="$(awk -F'\t' -v s="$subj" '$2==s' "$out" | "$REAL_GREP" -c .)" || nr=0
+  hd="$("$REAL_GREP" -c 'cannot create temp file for here' <<<"$err")" || hd=0
+  rm -f "$out"
+  # THE CALIBRATION, read on the control: a haystack that fits in one block cannot be lost under
+  # `ulimit -f 1`, and a forced run over it would read exactly like a fixed engine.
+  if [ "$3" = - ] && [ "${hay:-0}" -le "$LD_BLK" ]; then echo "OTHER(calibration:haystack=${hay}B<=block=${LD_BLK}B)"
+  elif [ "$rc" -eq 0 ] && [ "$nr" -eq 1 ] && [ "$row" = "$healthy" ] && [ "$hd" -eq 0 ]; then echo "$hs"
+  elif [ "$rc" -eq 2 ] && [ "$nr" -eq 0 ] && "$REAL_GREP" -q '^preclassify: ' <<<"$err"; then echo REFUSED
+  elif [ "$rc" -eq 0 ] && [ "$nr" -eq 1 ] && [ "$row" = "$wrong" ] && [ "$hd" -ge 1 ]; then echo "$ws"
+  else echo "OTHER(rc=$rc,rows=$nr,bucket=${row:-none},heredoc=$hd)"
+  fi
 }
 
 # === WORLD er: emit-report --verify ===============================================================
@@ -1062,6 +1159,7 @@ arm_shape() {
   case "$1" in
     L1|L2|L3) lr_shape "$2" "$1" "$3" ;;
     P1) pc_shape "$2" "$3" ;;
+    P2|P3) pm_shape "$2" "$1" "$3" ;;
     E1) er_shape "$2" "$3" ;;
     S1|S2|S3) sg_shape "$2" "$1" "$3" ;;
     U1|U2|U2b|U3|U4|U5|U5b|U6-hit|U6-fill) ud_shape "$2" "$1" "$3" ;;
@@ -1076,6 +1174,8 @@ EXPECT='L1 lr NEEDS-REVIEW-ABSENT REFUSED-ABSENT CLOSE-CANDIDATE
 L2 lr NEEDS-REVIEW-UNFALSIFIABLE REFUSED-NAMED STILL-LIVE-NO-SUBJECT
 L3 lr NEEDS-REVIEW-UNFALSIFIABLE STILL-LIVE-LSTREE-FAILED STILL-LIVE-CONSUMER-OWNED
 P1 pc ORPHAN-ROWS REFUSED NO-ORPHAN-ROWS
+P2 pm SITED SITED UNSITED-HEREDOC
+P3 pm AT-SELF-UPDATE AT-SELF-UPDATE NOT-MACHINERY-HEREDOC
 E1 er UNDECIDED-DIFF UNDECIDED-UNCOMPUTED BLOCKERS-RESOLVED
 S1 sg DEFER UNDECIDED-UNCOMPUTED/DEFER OK
 S2 sg DEFER UNDECIDED-UNCOMPUTED/UNDECIDED OK
@@ -1280,6 +1380,20 @@ LR=ledger-reverify.sh
          '  done < "$PC_STAGE/orphan-sorted"')" \
     && score M-P1 P1 "$d" \
     || mutreport M-P1
+  # M-P2 / M-P3: each membership test fed by its 1749b545 here-string / heredoc again. The base
+  # shape is keyed on bash's own staging message, so a bash that stages nothing reads OTHER, not a kill.
+  PM_S_T='setup_sited() { pc_has_line "$SETUP_SITED_PATHS" "$1"; }'
+  PM_S_B='setup_sited() { grep -qxF "$1" <<<"$SETUP_SITED_PATHS"; }'
+  d="$(DROP1=ZZ-PSB-NONE DROP2=ZZ-PSB-NONE OLD="$PM_S_T" NEW="$PM_S_B" \
+       mut M-P2 preclassify.sh "$SWAP" "$PM_S_B" 'pc_has_line "$SETUP_SITED_PATHS"' "$PM_S_T")" \
+    && score M-P2 P2 "$d" \
+    || mutreport M-P2
+  PM_M_T='is_machinery() { pc_has_line "$MACHINERY_PATHS" "$1"; }'
+  PM_M_B='is_machinery() { grep -qxF "$1" <<EOF'
+  d="$(DROP1=ZZ-PSB-NONE DROP2=ZZ-PSB-NONE OLD="$PM_M_T" NEW="$PM_M_B"$'\n$MACHINERY_PATHS\nEOF\n}' \
+       mut M-P3 preclassify.sh "$SWAP" "$PM_M_B" 'pc_has_line "$MACHINERY_PATHS"' "$PM_M_T")" \
+    && score M-P3 P3 "$d" \
+    || mutreport M-P3
   E_B1='only_render="$(LC_ALL=C comm -23 <(printf '"'"'%s\n'"'"' "$want" | norm_rows) <(printf '"'"'%s\n'"'"' "$got" | norm_rows))"'
   E_B2='only_report="$(LC_ALL=C comm -13 <(printf '"'"'%s\n'"'"' "$want" | norm_rows) <(printf '"'"'%s\n'"'"' "$got" | norm_rows))"'
   d="$(START='er_sets_why=""' END='fi' NFI=1 NEW="$E_B1
@@ -1530,6 +1644,30 @@ elif [ "$_st" -eq 0 ]; then
   ok "SPELL: layer-drift.sh carries 0 non-comment here-strings (probe: offender +1, comment near-miss +0, the ${LD_BASE_SHA} engine $_sb)"
 else
   bad "SPELL: layer-drift.sh carries $_st non-comment here-string(s) -- a \`<<<\` whose temp file cannot be written feeds its command EMPTY stdin at the command's own exit status (BL-359)"
+fi
+# === SPELL: preclassify.sh carries no here-string, no heredoc and no `< <(` (BL-360) ===============
+# P2 and P3 force the two membership tests. The third site -- the orphan pass's relocation table, a
+# `done <<'RELOCATIONS'` heredoc of ~70 bytes -- CANNOT be forced on its own: `ulimit -f` binds in
+# 1 KiB blocks, and the run stages its changed rows (at least one byte) and its relocation listing
+# before the orphan pass, so any limit that fails that heredoc refuses the run earlier, at base and
+# tip alike. This spelling count is its guard, and it also refuses `done < <(printf …)`, which
+# passes every forced cell because a `printf` producer cannot fail to stage. Probed on mktemp copies
+# BEFORE the corpus, in both directions, with the 1749b545 engine as the positive control.
+pc_spell() { awk '/^[[:space:]]*#/ { next } { l = $0; gsub(/<<<<+/, "", l) } l ~ /<<</ || l ~ /<<-?[\047"]?[A-Za-z_]/ || l ~ /< <\(/ { n++ } END { print n + 0 }' "$1"; }
+cp "$RECON/preclassify.sh" "$_sp/pc-offender.sh" && cp "$RECON/preclassify.sh" "$_sp/pc-nearmiss.sh" \
+  && git -C "$TREE_TOP" show "1749b545:core/skills/ai-dlc-update/reconcile/preclassify.sh" > "$_sp/pc-base.sh" 2>/dev/null \
+  || { echo "FIXTURE ERROR: preclassify spell probe copies" >&2; exit 2; }
+printf 'done < <(printf %s "$x")\n' "'%s\n'" >> "$_sp/pc-offender.sh"
+printf '  # a comment naming done <<EOF and < <(x) is not a site; echo "<<<<<<< x" neither\n' >> "$_sp/pc-nearmiss.sh"
+printf 'echo "<<<<<<< x"\n' >> "$_sp/pc-nearmiss.sh"
+_po="$(pc_spell "$_sp/pc-offender.sh")"; _pn="$(pc_spell "$_sp/pc-nearmiss.sh")"
+_pt="$(pc_spell "$RECON/preclassify.sh")"; _pb="$(pc_spell "$_sp/pc-base.sh")"
+if [ "$_po" -ne $(( _pt + 1 )) ] || [ "$_pn" -ne "$_pt" ] || [ "$_pb" -ne 3 ]; then
+  bad "SPELL probe (preclassify): a seeded \`< <(\` counted $_po (want $(( _pt + 1 ))), a seeded comment/conflict-marker near-miss $_pn (want $_pt), the 1749b545 engine $_pb (want its 3 sites) -- the count cannot discriminate, so its zero below is no finding"
+elif [ "$_pt" -eq 0 ]; then
+  ok "SPELL: preclassify.sh carries 0 non-comment here-strings, heredocs or \`< <(\` (probe: offender +1, near-miss +0, the 1749b545 engine 3)"
+else
+  bad "SPELL: preclassify.sh carries $_pt non-comment here-string/heredoc/\`< <(\` site(s) -- an input bash 3.2 stages to a temp file reads EMPTY when that write fails (BL-360)"
 fi
 # THE HEALTHY PATH IS BYTE-IDENTICAL TO THE PRE-FIX ENGINE, in both modes, on every L world. The two
 # engine files are asserted to DIFFER first, or the comparison reads one program twice.
