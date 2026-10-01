@@ -151,7 +151,8 @@ already did. Do not read a quiet Check C as "leads stopped over-waiting.")
 **When the operator does reach you, answer them.** An operator message sets
 `_bmad-output/pipeline-paused.flag` (UserPromptSubmit hook). While it exists
 you MUST NOT advance the pipeline -- the `PreToolUse` hook denies `Agent`,
-`Skill`, `TaskCreate`, and `_bmad-output/` writes until you deal with it. Read
+`Skill`, `TaskCreate`, and `_bmad-output/` writes until you deal with it (an
+`/ai-dlc-update` session is exempt: it advances no sprint). Read
 the message, respond in text, then classify: resume intent -> `rm -f
 _bmad-output/pipeline-paused.flag` and re-read the step file (Rule 22);
 question or correction -> answer it and leave the flag set; the operator is

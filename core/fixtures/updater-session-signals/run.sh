@@ -32,7 +32,14 @@
 # will otherwise execute straight through a waiting human. Arms 4-8 are the load-bearing
 # half. Arm 8 in particular holds the new transcript pattern to being STRUCTURAL: a session
 # that merely quotes the string carries it JSON-escaped, and an escaped mention must not
-# read as an invocation.
+# read as an invocation. The MENTION arms hold the TYPED form to the same standard, where
+# JSON escaping does not help: angle brackets are not escaped, so the marker is anchored on
+# the harness's whole user record instead.
+#
+# THE WRITE SURFACE (section W). An updater session's Edit under `_bmad-output/` passes the
+# pause silently, a teammate's passes logged only in a pipeline session, and a pipeline lead's
+# is denied. Since that exemption keys on the same signal, the MENTION arms are what stop it
+# from becoming a pause bypass for every pipeline session that reads a file quoting the marker.
 set -uo pipefail
 
 # AI_DLC_USS_HOOK is the seam the sibling mutation battery drives; unset in every real run.
@@ -85,27 +92,95 @@ TR_PIPELINE="$WORK/pipeline.jsonl"    # operator typed /ai-dlc
 TR_RESUMED="$WORK/resumed.jsonl"      # updater tool_use, THEN a pipeline dispatch
 TR_MENTION="$WORK/mention.jsonl"      # a session that only QUOTES the tool_use string
 
-printf '{"type":"user","message":{"content":"<command-name>/ai-dlc-update</command-name>"}}\n' > "$TR_TYPED"
+# A TYPED SLASH COMMAND IS THE HARNESS'S WHOLE USER RECORD, not the bare `<command-name>` marker.
+# Lifted from the reference consumer's transcripts: every one of 296 real typed ai-dlc invocations
+# is `"role":"user","content":"<command-message>X</command-message>\n<command-name>/X</command-name>
+# \n<command-args>...`. The bare marker is also what a QUOTATION of it looks like, which is the
+# leak the MENTION arms below hold shut; a seed of the bare marker is a mention, not an invocation.
+typed() { # <skill> -> one typed-invocation record
+  printf '{"type":"user","message":{"role":"user","content":"<command-message>%s</command-message>\\n<command-name>/%s</command-name>\\n<command-args></command-args>"}}\n' "$1" "$1"
+}
+ROUTE_READ='{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_r","name":"Read","input":{"file_path":"/w/.claude/skills/ai-dlc/steps/route.md"}}]}}'
+typed ai-dlc-update > "$TR_TYPED"
 printf '{"type":"user","message":{"content":"take the pull"}}\n' > "$TR_AGENT_PRE"
 cp "$TR_AGENT_PRE" "$TR_AGENT_POST"
 printf '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"ai-dlc-update"},"caller":{"type":"direct"}}]}}\n' >> "$TR_AGENT_POST"
-printf '{"type":"user","message":{"content":"<command-name>/ai-dlc</command-name>"}}\n' > "$TR_PIPELINE"
+typed ai-dlc > "$TR_PIPELINE"
 cp "$TR_AGENT_POST" "$TR_RESUMED"
 printf '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"ai-dlc","args":"resume"}}]}}\n' >> "$TR_RESUMED"
 printf '{"type":"assistant","message":{"content":[{"type":"text","text":"the hook greps for \\"name\\":\\"Skill\\",\\"input\\":{\\"skill\\":\\"ai-dlc-update\\" in the transcript"}]}}\n' > "$TR_MENTION"
 
+# THE WRITE SURFACE's PIPELINE SESSIONS HAVE ROUTED. A lead Edit in an `/ai-dlc` session that never
+# Read `steps/route.md` is denied by Check 2z before Check 3 is reached, so without the Read every
+# DENY below would be Check 2z's and prove nothing about the pause. Each arm also demands the Rule
+# 29 reason by value, which Check 2z's reason does not carry.
+TR_PIPE_ROUTED="$WORK/pipe-routed.jsonl"
+{ cat "$TR_PIPELINE"; printf '%s\n' "$ROUTE_READ"; } > "$TR_PIPE_ROUTED"
+TR_RESUMED_ROUTED="$WORK/resumed-routed.jsonl"
+{ cat "$TR_RESUMED"; printf '%s\n' "$ROUTE_READ"; } > "$TR_RESUMED_ROUTED"
+
+# THE THREE MENTIONS. Each is a routed `/ai-dlc` pipeline session whose LAST line quotes the
+# updater's typed marker -- the order that makes a mention the last match, which is the only order
+# in which reading it as an invocation changes anything.
+#   read:  a Read of the push-candidate ledger, the marker mid-line inside the tool_result -- the
+#          reference consumer's ledger carries it, and retro sends pipeline sessions to read it.
+#   text:  the lead's own assistant text quoting it.
+#   head:  a Bash tool_result whose output STARTS with the pair (`sed -n` landing on it). Its
+#          string follows `"content":"` exactly as a typed record's does, so this is the seed that
+#          separates the shipped anchor from one lacking its `"role":"user",` prefix.
+TR_M_READ="$WORK/m-read.jsonl"; TR_M_TEXT="$WORK/m-text.jsonl"; TR_M_HEAD="$WORK/m-head.jsonl"
+{ cat "$TR_PIPE_ROUTED"
+  printf '%s\n' '{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_l","type":"tool_result","content":"    22\t**Derivation.** In this session the transcript carries `<command-name>/ai-dlc-update</command-name>` (the operator typed it)"}]}}'
+} > "$TR_M_READ"
+{ cat "$TR_PIPE_ROUTED"
+  printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"text","text":"The ledger says the operator typed <command-message>ai-dlc-update</command-message>\n<command-name>/ai-dlc-update</command-name> in that session."}]}}'
+} > "$TR_M_TEXT"
+{ cat "$TR_PIPE_ROUTED"
+  printf '%s\n' '{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_b","type":"tool_result","content":"<command-message>ai-dlc-update</command-message>\n<command-name>/ai-dlc-update</command-name>\n<command-args></command-args>"}]}}'
+} > "$TR_M_HEAD"
+
 # Drive the PreToolUse hook. `skill` is present only on a Skill payload, exactly as the
 # harness sends it -- every other tool carries no such field.
-drive() { # <work> <tool> <transcript> [skill] -> stdout
-  local w="$1" tool="$2" tr="$3" skill="${4:-}"
+drive() { # <work> <tool> <transcript> [skill] [file_path] [agent_id] -> stdout
+  local w="$1" tool="$2" tr="$3" skill="${4:-}" fp="${5:-}" ag="${6:-}"
   local ti
   if [ -n "$skill" ]; then ti="$(jq -nc --arg s "$skill" '{skill:$s}')"
+  elif [ -n "$fp" ]; then ti="$(jq -nc --arg p "$fp" '{file_path:$p}')"
   else ti="$(jq -nc '{}')"; fi
-  jq -nc --arg t "$tool" --arg tr "$tr" --argjson ti "$ti" \
-     '{session_id:"t",transcript_path:$tr,tool_name:$t,tool_input:$ti}' \
+  jq -nc --arg t "$tool" --arg tr "$tr" --argjson ti "$ti" --arg ag "$ag" \
+     '{session_id:"t",transcript_path:$tr,tool_name:$t,tool_input:$ti}
+      + (if $ag == "" then {} else {agent_id:$ag,agent_type:"general-purpose"} end)' \
     | CLAUDE_PROJECT_DIR="$w" bash "$HOOK" 2>/dev/null
 }
 denied() { case "$1" in *'"permissionDecision": "deny"'*|*'"permissionDecision":"deny"'*) return 0 ;; esac; return 1; }
+# A DENY THAT IS THE PAUSE's, by value. Check 2z denies the same tools with a different reason, and a
+# write arm reading only `denied` could not tell which check answered.
+paused_deny() { denied "$1" && case "$1" in *'AI/DLC Rule 29: the pipeline is PAUSED'*) return 0 ;; esac; return 1; }
+# Event counts, one row per `## <ts> -- <EVENT>` line (the log header names every event, so a bare
+# grep over-counts). An absent log is zero rows.
+rows() { # <work> <event> -> count
+  local n; n="$(grep -c "^## .*-- $2\$" "$1/_bmad-output/pipeline-continuation-log.md" 2>/dev/null)" || n=0
+  printf '%s' "$n"
+}
+# ONE WRITE ARM: a fresh paused tree per arm, so each log count is that arm's alone.
+# -> "<ALLOW|DENY|OTHER> <ACK_DENIED rows> <ACK_TEAMMATE_WRITE rows> <File: line matches>"
+wcell() { # <label> <tool> <transcript> [agent_id]
+  local w fp out v f
+  w="$(seed "w-$1")"; fp="$w/_bmad-output/planning-artifacts/s7/x.md"
+  out="$(drive "$w" "$2" "$3" "" "$fp" "${4:-}")"
+  if paused_deny "$out"; then v=DENY; elif denied "$out"; then v=OTHER; else v=ALLOW; fi
+  f="$(grep -cF -- "- File: $fp" "$w/_bmad-output/pipeline-continuation-log.md" 2>/dev/null)" || f=0
+  printf '%s %s %s %s' "$v" "$(rows "$w" ACK_DENIED)" "$(rows "$w" ACK_TEAMMATE_WRITE)" "$f"
+}
+# The same, for a dispatch. Agent carries no file, so there is no File: line to count.
+acell() { # <label> <transcript>
+  local w out
+  w="$(seed "a-$1")"
+  out="$(drive "$w" Agent "$2")"
+  if paused_deny "$out"; then printf 'DENY %s' "$(rows "$w" ACK_DENIED)"
+  elif denied "$out"; then printf 'OTHER %s' "$(rows "$w" ACK_DENIED)"
+  else printf 'ALLOW %s' "$(rows "$w" ACK_DENIED)"; fi
+}
 
 echo "updater-session-signals:"
 
@@ -174,6 +249,61 @@ else bad "an escaped MENTION reads as an invocation — any session discussing t
 OUT="$(drive "$W" Agent "$WORK/does-not-exist.jsonl")"
 if denied "$OUT"; then ok "an unreadable transcript denies (absence of evidence is not the updater)"
 else bad "a missing transcript exempts the session — every hook failure becomes a pause bypass"; fi
+
+# =============================================================================
+# W. THE WRITE SURFACE — an updater session's Edit under _bmad-output/ passes the pause.
+# =============================================================================
+# The defect the reference consumer filed: Check 3's Write arm never read UPDATER_SESSION, so the
+# updater's own prescribed Edit under `planning-artifacts/` (apply.sh's WORKLIST
+# `artifact-derivations` row) was denied on every operator reply. Every cell is read BY VALUE --
+# verdict, ACK_DENIED rows, ACK_TEAMMATE_WRITE rows, and whether a `File:` line names the path --
+# on a fresh tree, and every DENY must carry the Rule 29 reason so Check 2z cannot answer for it.
+wexpect() { # <label> <expected cell> <tool> <transcript> [agent_id] <ok sentence> <bad sentence>
+  local got; got="$(wcell "$1" "$3" "$4" "${5:-}")"
+  if [ "$got" = "$2" ]; then ok "$6"; else bad "$7 (cell '$got', expected '$2')"; fi
+}
+# The CONTROL for the whole section: without it every ALLOW below is satisfied by a hook that
+# allows every write.
+wexpect ctl "DENY 1 0 1" Edit "$TR_PIPE_ROUTED" "" \
+  "WRITE control: a routed /ai-dlc lead's Edit under planning-artifacts/ is DENIED by the pause, with one attributable ACK_DENIED row" \
+  "FIXTURE BROKEN: a pipeline lead's paused Edit is not denied by Rule 29, so every WRITE ALLOW arm below proves nothing"
+wexpect typed "ALLOW 0 0 0" Edit "$TR_TYPED" "" \
+  "WRITE (i): a typed /ai-dlc-update session's Edit under planning-artifacts/ is ALLOWED while paused, and logs nothing" \
+  "WRITE (i): a typed /ai-dlc-update session's Edit under planning-artifacts/ was not a silent allow — the updater's own remedy is denied again"
+wexpect tooluse "ALLOW 0 0 0" Edit "$TR_AGENT_POST" "" \
+  "WRITE (ii): a Skill(ai-dlc-update) session's Edit under planning-artifacts/ is ALLOWED while paused, and logs nothing" \
+  "WRITE (ii): a Skill(ai-dlc-update) session's Edit under planning-artifacts/ was not a silent allow"
+wexpect resumed "DENY 1 0 1" Edit "$TR_RESUMED_ROUTED" "" \
+  "WRITE (iii): a session whose LAST skill is /ai-dlc, after an updater call, is DENIED — the write exemption follows recency" \
+  "WRITE (iii): LEAK — an updater call earlier in the session exempts a resumed pipeline's writes from the pause"
+wexpect notranscript "DENY 1 0 1" Edit "$WORK/does-not-exist.jsonl" "" \
+  "WRITE (iv): an unreadable transcript's Edit is DENIED (absence of evidence is not the updater)" \
+  "WRITE (iv): LEAK — a missing transcript exempts a write from the pause"
+wexpect teampipe "ALLOW 0 1 1" Edit "$TR_PIPE_ROUTED" ax \
+  "WRITE (v): a teammate's Edit in a pipeline session is ALLOWED and logged as exactly one ACK_TEAMMATE_WRITE naming the file (unchanged)" \
+  "WRITE (v): a teammate's paused write in a pipeline session is no longer allowed-and-logged"
+wexpect teamupd "ALLOW 0 0 0" Edit "$TR_TYPED" ax \
+  "WRITE (vi): a teammate's Edit in an updater session is ALLOWED and logs NOTHING — no pipeline is in flight to quiesce" \
+  "WRITE (vi): a teammate's Edit in an updater session is not a silent allow"
+
+# =============================================================================
+# M. THE MENTIONS — a quoted typed marker is not an invocation, for Edit AND for Agent.
+# =============================================================================
+# The write exemption above is only as safe as the updater signal. JSON escapes quotes, not angle
+# brackets, so the bare marker quoted anywhere matches the bare pattern; the reference consumer's
+# ledger carries it and pipeline sessions read that file. Each mention is the transcript's LAST
+# line, in a routed pipeline session, so reading it as an invocation would flip the answer.
+mexpect() { # <label> <transcript> <what>
+  local we ae
+  we="$(wcell "m-$1" Edit "$2")"; ae="$(acell "m-$1" "$2")"
+  if [ "$we" = "DENY 1 0 1" ]; then ok "MENTION $1 Edit: $3 does not make a pipeline session the updater — its paused Edit is DENIED"
+  else bad "MENTION $1 Edit: LEAK — $3 read as an /ai-dlc-update invocation and a pipeline session's paused Edit passed (cell '$we')"; fi
+  if [ "$ae" = "DENY 1" ]; then ok "MENTION $1 Agent: $3 does not make a pipeline session the updater — its paused Agent dispatch is DENIED"
+  else bad "MENTION $1 Agent: LEAK — $3 read as an /ai-dlc-update invocation and a pipeline session's paused Agent dispatch passed (cell '$ae')"; fi
+}
+mexpect read "$TR_M_READ" "a Read of ledger text carrying the typed marker (tool_result, mid-line)"
+mexpect text "$TR_M_TEXT" "assistant text quoting the typed marker pair"
+mexpect head "$TR_M_HEAD" "a tool_result whose output STARTS with the typed marker pair"
 
 # =============================================================================
 # 9. AND CHECK 2a MUST NOT HAVE BEEN WHAT ANSWERED. If the seed tripped the
