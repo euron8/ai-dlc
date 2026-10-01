@@ -582,7 +582,7 @@ ap_staging_refused() {
 # `ls-tree` was an audit that named nothing -- a clean audit. Each line carries its direction
 # (`N` = 100755 not executable, `X` = 100644 executable).
 exec_audit() {
-  local _ne _rc=0 _mode _cp _rel _cons _tab
+  local _ne _rc=0 mode _cp _rel cons _tab _dir
   _tab="$(printf '\t')"
   _ne="$(git -C "$DIST" ls-tree -r "$THEIRS" -- core/ 2>/dev/null \
     | awk '$1=="100755" || $1=="100644" { m = $1; sub(/^[^\t]*\t/, ""); print m "\t" $0 }')" || _rc=$?
@@ -598,33 +598,38 @@ exec_audit() {
     [ "$FINISH" = 1 ] || mech_fail=$((mech_fail+1))
     return 0
   fi
-  while IFS="$_tab" read -r _mode _cp; do
-    [ -n "$_mode" ] || continue
+  while IFS="$_tab" read -r mode _cp; do
+    [ -n "$mode" ] || continue
     _rel="${_cp#core/}"
-    _cons="$(consumer_path "$_rel" 2>/dev/null)" || continue
+    cons="$(consumer_path "$_rel" 2>/dev/null)" || continue
     # Not every shipped file lands on every consumer (ci-templates only with
     # .github/, for one). Absent is a different finding, covered above.
-    [ -f "$_cons" ] || continue
+    [ -f "$cons" ] || continue
+    # The direction is decided ONCE, by one test per direction, for both modes.
+    _dir=""
+    if [ "$mode" = 100755 ] && [ ! -x "$cons" ]; then _dir=N
+    elif [ "$mode" = 100644 ] && [ -x "$cons" ]; then _dir=X
+    fi
+    [ -n "$_dir" ] || continue
     if [ "$FINISH" = 1 ]; then
       # finish_verify_tree() OWNS a file in the range: its `finish-unapplied` row already names a
       # missing exec bit, so this audit stands down for that path and owns only the rest.
-      case "${AP_NL}${fv_unapplied}${AP_NL}" in *"${AP_NL}${_cons#"$CONSUMER"/}${AP_NL}"*) continue ;; esac
-      if [ "$_mode" = 100755 ] && [ ! -x "$_cons" ]; then
-        say WORKLIST finish-exec-owed "${_cons#"$CONSUMER"/}" \
-          "upstream ships this 100755 but the consumer copy is not executable — installed and inert, and the stamp would claim theirs over it. \`chmod +x\` it, then re-run --finish: this audit runs again there and clears when the bit is set."
-      elif [ "$_mode" = 100644 ] && [ -x "$_cons" ]; then
-        say WORKLIST finish-exec-owed "${_cons#"$CONSUMER"/}" \
-          "upstream ships this 100644 but the consumer copy is executable, and the stamp would claim theirs over it. \`chmod -x\` it, then re-run --finish: this audit runs again there and clears when the bit is cleared."
-      fi
-    elif [ "$_mode" = 100755 ] && [ ! -x "$_cons" ]; then
-      say DECISION not-executable "${_cons#"$CONSUMER"/}" \
-           "upstream ships this 100755 but the consumer copy is not executable — installed and inert; every call site that invokes it directly fails until it is fixed. \`chmod +x\` it, then ${reapply_remedy}"
-      mech_fail=$((mech_fail+1))
-    elif [ "$_mode" = 100644 ] && [ -x "$_cons" ]; then
-      say DECISION extra-executable "${_cons#"$CONSUMER"/}" \
-           "upstream ships this 100644 but the consumer copy is executable — a bit upstream does not grant, left by an earlier pull or by hand, and no later pull clears it unless it happens to rewrite this file. \`chmod -x\` it, then ${reapply_remedy}"
-      mech_fail=$((mech_fail+1))
+      case "${AP_NL}${fv_unapplied}${AP_NL}" in *"${AP_NL}${cons#"$CONSUMER"/}${AP_NL}"*) continue ;; esac
+      case "$_dir" in
+        N) say WORKLIST finish-exec-owed "${cons#"$CONSUMER"/}" \
+             "upstream ships this 100755 but the consumer copy is not executable — installed and inert, and the stamp would claim theirs over it. \`chmod +x\` it, then re-run --finish: this audit runs again there and clears when the bit is set." ;;
+        X) say WORKLIST finish-exec-owed "${cons#"$CONSUMER"/}" \
+             "upstream ships this 100644 but the consumer copy is executable, and the stamp would claim theirs over it. \`chmod -x\` it, then re-run --finish: this audit runs again there and clears when the bit is cleared." ;;
+      esac
+      continue
     fi
+    case "$_dir" in
+      N) say DECISION not-executable "${cons#"$CONSUMER"/}" \
+           "upstream ships this 100755 but the consumer copy is not executable — installed and inert; every call site that invokes it directly fails until it is fixed. \`chmod +x\` it, then ${reapply_remedy}" ;;
+      X) say DECISION extra-executable "${cons#"$CONSUMER"/}" \
+           "upstream ships this 100644 but the consumer copy is executable — a bit upstream does not grant, left by an earlier pull or by hand, and no later pull clears it unless it happens to rewrite this file. \`chmod -x\` it, then ${reapply_remedy}" ;;
+    esac
+    mech_fail=$((mech_fail+1))
   done < "$AP_TMP/exec-audit"
   return 0
 }
@@ -2148,17 +2153,20 @@ finish_id_mismatch=""
 finish_id_note=""
 if [ "$FINISH" = 1 ]; then
   finish_identity
-  if [ -z "$finish_id_mismatch" ]; then finish_verify_tree; finish_reapply_owed; fi
+  [ -z "$finish_id_mismatch" ] && finish_verify_tree
+  [ -z "$finish_id_mismatch" ] && finish_reapply_owed
 fi
 if [ "$FINISH" = 1 ]; then outstanding="$worklist_n"; else outstanding="$handback"; fi
-# A ROW ONLY A FRESH ORDINARY RUN CLEARS IS NOT FINISHED BY `--finish`, SO THE WITHHELD ROW DOES NOT
-# OFFER IT THEN (BL-402). It used to name `--finish` unconditionally, beside a drift row whose own
-# remedy said the finisher would stamp over the unrefiled tree -- and it did. `reapply_owed` is
-# counted in `say`, from the detail text, so this branch cannot miss a row the counter saw.
-if { [ "$mech_fail" -gt 0 ] || [ "$outstanding" -gt 0 ]; } && [ "$reapply_owed" -gt 0 ]; then
+if [ "$mech_fail" -gt 0 ] || [ "$outstanding" -gt 0 ]; then
+  # A ROW ONLY A FRESH ORDINARY RUN CLEARS IS NOT FINISHED BY `--finish`, SO THE WITHHELD ROW DOES
+  # NOT OFFER IT THEN (BL-402). It used to name `--finish` unconditionally, beside a drift row whose
+  # own remedy said the finisher would stamp over the unrefiled tree -- and it did. `reapply_owed`
+  # is counted in `say`, from the detail text, so this branch cannot miss a row the counter saw.
+  if [ "$reapply_owed" -gt 0 ]; then
   say DECISION restamp-withheld "$STAMP" "${mech_fail} file(s) could not be placed mechanically and ${outstanding} WORKLIST/DECISION row(s) above are undisposed, ${reapply_owed} of them a step only a fresh ordinary run performs — the stamp would claim ${THEIRS} while the tree does not yet match it, and the next pull computes its merge base from that stamp. Left at ${BASE}, and \`${APPLYING##*/}\` is deliberately left in place so the fixture suite keeps blocking. Follow those rows' own remedy (re-render the report, re-approve it, re-run apply with the same four arguments); that run re-stamps when nothing is left. The finish mode is NOT the next step here: it re-checks those rows and withholds while they are undone.${withheld_extra}"
-elif [ "$mech_fail" -gt 0 ] || [ "$outstanding" -gt 0 ]; then
+  else
   say DECISION restamp-withheld "$STAMP" "${mech_fail} file(s) could not be placed mechanically and ${outstanding} WORKLIST/DECISION row(s) above are undisposed — the stamp would claim ${THEIRS} while the tree does not yet match it, and the next pull computes its merge base from that stamp. Left at ${BASE}, and \`${APPLYING##*/}\` is deliberately left in place so the fixture suite keeps blocking. Do the rows above, then advance the stamp with: apply.sh --finish${finish_flag} <dist> ${BASE} <consumer> ${THEIRS}${withheld_extra}"
+  fi
 elif [ -f "$STAMP" ]; then
   # RESOLVE THEIRS BEFORE WRITING ANYTHING, AND REFUSE IF IT DOES NOT RESOLVE.
   #

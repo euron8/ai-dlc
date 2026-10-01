@@ -299,13 +299,14 @@ else
   fi
 fi
 
-# MUTANT 2 — the key loop back to `printf | while read`, which drops its last element. Assertion
-# 1 must go red; assertion 2 must NOT, because the surviving row is the one whose detail is read.
+# MUTANT 2 — the key loop fed an UNTERMINATED stream, as `printf | while read` did, which drops
+# its last element. Assertion 1 must go red; assertion 2 must NOT, because the surviving row is the
+# one whose detail is read. Anchored on the staged-file read (BL-360 replaced the here-string).
 build_rec "$W/mut2"
-sed "s@^    done <<< \"\$(printf '%s' \"\$env_key\" | tr ',' '\\\\n')\"@    done < <(printf '%s' \"\$env_key\" | tr ',' '\\\\n')@" \
+sed "s@^    done < \"\$AP_TMP/env-keys\"\$@    done < <(printf '%s' \"\$env_key\" | tr ',' '\\\\n')@" \
   "$REC/apply.sh" > "$W/mut2/apply.sh"
 if cmp -s "$REC/apply.sh" "$W/mut2/apply.sh"; then
-  bad "MUTANT 2 did not apply — the here-string spelling it targets has changed, so this mutant proves nothing"
+  bad "MUTANT 2 did not apply — the staged key-loop read it targets has changed, so this mutant proves nothing"
 else
   M2="$(retire_rows "$W/mut2")"
   if assert_count "$M2"; then

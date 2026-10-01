@@ -515,7 +515,7 @@ if [ "$Q_RUN" = 1 ]; then
   [ "$Q_GOT" = NOROW ] || {
     q_mut q-M1 'elif [ "$ap_drc" -eq 1 ]; then' 'elif false; then' '-|STAMPED|-|STAMPED|-|EXEC'
     q_mut q-M2 '  exec_audit' '  :' '-|-|OWED|STAMPED|STAMPED|-'
-    q_mut q-M3 '} && [ "$reapply_owed" -gt 0 ]; then' '} && false; then' 'F|-|OWED|STAMPED|-|EXEC'
+    q_mut q-M3 'if [ "$reapply_owed" -gt 0 ]; then' 'if false; then' 'F|-|OWED|STAMPED|-|EXEC'
   }
 fi
 
