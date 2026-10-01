@@ -1101,7 +1101,7 @@ ac_kill "armc-mut-uncond" 's@^          \*) continue ;;$@          *) ;;@' \
 # bucket filter does NOT carry the non-machinery path, and dropping the membership test does
 # NOT carry the untouched one.
 ac_kill "armc-mut-member" \
-  's@^        grep -qxF "\$c_path" <<EOF || continue$@        true <<EOF || continue@' \
+  's@^        gate_has_line "\$C_PATHS" "\$c_path" || continue$@        true || continue@' \
   'core/git-hooks/pre-push,core/rules/doomed.md,core/rules/edited.md,core/schemas/fresh.json,core/scripts/reloc.sh,core/skills/ai-dlc/steps/gate-validation.md,' \
   "dropping the machinery-membership test carries a diverged path this gate does not decide"
 
@@ -2676,6 +2676,56 @@ cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$PP/m-control"/ 2>/dev/n
 ss_assert "pp-mut-control" "$(pp_scan "$PP/m-control/self-update-gate.sh" "$PP_RED")" \
   "pp=SELF-UPDATE-DEFER sum=1 ss=1 und=0" \
   "an unmutated copy beside its siblings defers on the red world, so each kill above is its mutation"
+
+# --- A STAGING WRITE THAT FAILS IS UNDECIDED (BL-360) -------------------------------------
+# Every loop in the gate reads a file `gate_stage` wrote into `$TMP`. The heredocs these replaced
+# ran their loop ZERO times when bash 3.2 could not write the body's temp file, and at the
+# differential loop zero iterations is `deferred=0` — no DEFER row, the OK this gate exists to
+# withhold. FORCED, NEVER SAMPLED: a `mktemp` stub on PATH creates the gate's own `$TMP` and puts
+# a DIRECTORY where `$TMP/gating` will be written, so exactly that one staging write fails
+# (EISDIR) while the record and every other stage land. It claims only the gate's
+# `self-update-gate-XXXXXX` call and logs each claim; the cell asserts it fired.
+SG="$(mktemp -d "${TMPDIR:-/tmp}/su-gate-stage.XXXXXX")"
+SG_REAL_MKTEMP="$(command -v mktemp)"
+printf '#!/bin/sh\ncase "$*" in\n  *self-update-gate-XXXXXX*) d="$(%s "$@")" || exit $?; mkdir "$d/gating"; echo fired >> %s/fired; printf "%%s\\n" "$d" ;;\n  *) exec %s "$@" ;;\nesac\n' \
+  "$SG_REAL_MKTEMP" "$SG" "$SG_REAL_MKTEMP" > "$SG/mktemp"
+chmod +x "$SG/mktemp"
+# sg_scan <gate> <stubbed:yes|no> -> "und=<n> defer=<n> fired=<n>" on the base seed
+#   und   UNDECIDED rows naming the gating-script set's staging
+#   defer gate-defer.sh's own DEFER row, which only the differential loop can emit
+sg_scan() {
+  local o
+  rm -f "$SG/fired"
+  if [ "$2" = yes ]; then o="$(PATH="$SG:$PATH" bash "$1" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null)"
+  else o="$(bash "$1" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null)"; fi
+  printf 'und=%s defer=%s fired=%s\n' \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1 == "SELF-UPDATE-UNDECIDED" && $3 ~ /^the gating-script set could not be staged/' | grep -c .)" \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1 == "SELF-UPDATE-DEFER" && $2 == "gate-defer.sh"' | grep -c .)" \
+    "$(grep -c . "$SG/fired" 2>/dev/null || echo 0)"
+}
+ss_assert "stage-gating-refused" "$(sg_scan "$GATE" yes)" "und=1 defer=0 fired=1" \
+  "a gating-script set that cannot be staged is UNDECIDED, and the stub that broke it is shown to fire"
+ss_assert "stage-gating-healthy" "$(sg_scan "$GATE" no)" "und=0 defer=1 fired=0" \
+  "the same seed unstubbed reaches the differential and defers on gate-defer.sh, so the refusal is the staging write"
+rm -rf "$SG/m"; mkdir -p "$SG/m"
+cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$SG/m"/ 2>/dev/null
+ss_assert "stage-mut-control" "$(sg_scan "$SG/m/self-update-gate.sh" yes)" "und=1 defer=0 fired=1" \
+  "an unmutated copy beside its siblings refuses the same way, so the kill below is the mutation"
+awk 'index($0,"  [ \"$_rc\" = 0 ] && return 0") == 1 { print "  return 0"; next } { print }' \
+  "$GATE" > "$SG/m/self-update-gate.sh"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$GATE" "$SG/m/self-update-gate.sh"; then
+  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s mutation matched nothing\n' "stage-mut-status"
+else
+  sg_m="$(sg_scan "$SG/m/self-update-gate.sh" yes)"
+  if [ "$sg_m" = "und=0 defer=0 fired=1" ]; then
+    printf '  ok    %-16s KILLED (with the staging status unread the loop reads nothing, and gate-defer.sh'\''s DEFER silently vanishes: %s)\n' "stage-mut-status" "$sg_m"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s SURVIVED: got [%s], want [und=0 defer=0 fired=1]\n' "stage-mut-status" "$sg_m"
+  fi
+fi
+rm -rf "$SG"
 
 echo
 if [ "$FAILURES" -gt 0 ]; then
