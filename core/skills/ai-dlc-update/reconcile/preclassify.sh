@@ -185,7 +185,24 @@ opted_out() { # opted_out <consumer-path> -> 0 if this file must be skipped
 # model strings / ownership paths / deploy commands.
 SETUP_SITED_PATHS="$(awk '/^[ \t]*file:[ \t]*core\//{sub(/^[ \t]*file:[ \t]*/,""); print}' \
   "$(dirname "$0")/setup-sites.md" 2>/dev/null | sort -u)"
-setup_sited() { grep -qxF "$1" <<<"$SETUP_SITED_PATHS"; }
+# --- WHOLE-LINE MEMBERSHIP IS A `case`, NEVER A HERE-STRING OR A HEREDOC -----------------------
+# Both membership tests below were `grep -qxF "$1"` fed by `<<<` or `<<EOF`. bash 3.2 stages
+# either one to a temp file under the SAME file-size limit as everything else, and when that write
+# fails (`ulimit -f`, a full disk) it prints `cannot create temp file for here document`, does not
+# run grep, and the test returns 1 -- the "not a member" answer, at rc 0 for the whole run.
+# Measured on 1749b545 under `trap '' XFSZ; ulimit -f 1` with each haystack past one block: a new
+# setup-sited file bucketed `UPSTREAM-ONLY-ADD` instead of `+SETUP-TOKENS->SUBSTITUTE`, and a
+# machinery file at the consumer's own `skill_commit` bucketed `BOTH-CHANGED->CLASSIFY` instead of
+# `UPSTREAM-ONLY`. A `case` over the haystack writes no file and forks nothing, so the empty-input
+# state is unconstructible rather than detected -- the shape `layer-drift.sh`'s `ld_has_line`
+# ships. Each call used to fork one `grep`; it now forks none.
+PC_NL='
+'
+pc_has_line() { # pc_has_line <haystack> <needle> -> 0 when <needle> is a WHOLE line of <haystack>
+  case "$PC_NL$1$PC_NL" in *"$PC_NL$2$PC_NL"*) return 0 ;; esac
+  return 1
+}
+setup_sited() { pc_has_line "$SETUP_SITED_PATHS" "$1"; }
 
 # memo_rev_parse (lib.sh) is `rev-parse -q --verify` behind the SHARED cross-process cache
 # (populated once per <dist,spec> for the whole render, when emit-report.sh set one up), so a
@@ -352,10 +369,7 @@ $_mt"
 # cost with no reader.
 MACHINERY_PATHS=""
 [ -n "$SELF_UPDATE_REF" ] && MACHINERY_PATHS="$(machinery_paths)"
-is_machinery() { grep -qxF "$1" <<EOF
-$MACHINERY_PATHS
-EOF
-}
+is_machinery() { pc_has_line "$MACHINERY_PATHS" "$1"; }
 
 # The whole predicate, in one place so the three call sites cannot disagree about it: this
 # consumer's copy is byte-identical to the distribution at the consumer's own `skill_commit`,
@@ -399,7 +413,11 @@ at_self_update() { # <core-rel-path> <ours-hash>
 # driver chmods -- same posture as `sync_mode_from_theirs()`, which leaves them alone.
 mode_at_theirs() { # <core-rel-path> <consumer-rel-path> -> 0 if the consumer copy's exec bit already matches theirs
   local entry
-  entry="$(git -C "$DIST" ls-tree "$THEIRS" -- "$1" 2>/dev/null)" || pc_fail "ls-tree $THEIRS -- $1 exited $?"
+  # `core.quotePath=false`, as at every other listing here. Only the MODE field is read today, and
+  # quoting touches only the path after the tab, so this reader cannot lose a row to it (measured:
+  # a mode-only change to a non-ASCII path buckets identically with and without the flag). The flag
+  # is here so the line a later reader extends already lists the raw path.
+  entry="$(git -C "$DIST" -c core.quotePath=false ls-tree "$THEIRS" -- "$1" 2>/dev/null)" || pc_fail "ls-tree $THEIRS -- $1 exited $?"
   case "${entry%% *}" in
     100755) [ -x "$CONS/$2" ] ;;
     100644) [ ! -x "$CONS/$2" ] ;;
@@ -767,7 +785,13 @@ done < "$PC_STAGE/changed-rows"
 # first. A failed walk used to feed the loop nothing, which is the "no orphan here" answer, and
 # the stale copies it exists to surface survived the pull unreported. One file per stage, never
 # shared with another loop.
-while IFS='|' read -r old_prefix core_dir; do
+#
+# THE TABLE IS A WORD LIST, NOT A HEREDOC. It was `done <<'RELOCATIONS'`, which bash 3.2 stages to
+# a temp file like any heredoc: a failed staging write ran the loop over NOTHING, at rc 0 -- every
+# orphan unreported, the exact answer this pass exists to replace. A literal word list has no
+# input to lose. Each word is `<old consumer prefix>|<core subdir>`.
+for _pc_reloc in '.claude/fixtures|fixtures' '.claude/ci-templates|ci-templates' '.claude/git-hooks|git-hooks'; do
+  old_prefix="${_pc_reloc%%|*}"; core_dir="${_pc_reloc#*|}"
   [ -n "$old_prefix" ] || continue
   [ -d "$CONS/$old_prefix" ] || continue
 
@@ -798,8 +822,4 @@ while IFS='|' read -r old_prefix core_dir; do
     fi
     printf '%s\t%s\t%s\t%s\n' "O" "$core_path" "$cons_rel" "$bucket -> now at $new_path"
   done < "$PC_STAGE/orphan-sorted"
-done <<'RELOCATIONS'
-.claude/fixtures|fixtures
-.claude/ci-templates|ci-templates
-.claude/git-hooks|git-hooks
-RELOCATIONS
+done
