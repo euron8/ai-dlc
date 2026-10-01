@@ -1285,7 +1285,7 @@ open. It now requires an A1 floor test and m8 to be present AND the literal `4 /
 gone: 1 on today's tree, 0 once the floor is derived from what a broken subject measures, and 1 on a
 regression that deletes the floor outright.
 
-verify: sh f=core/fixtures/validator-fork-budget/run.sh; [ -f "$f" ] || exit 9; grep -q 'A4 stale-high' "$f" || exit 9; grep -qE '^[[:blank:]]*kill_j "m8 A4-reachable' "$f" || exit 1; grep -qE '^[[:blank:]]*if \[ "\$t" -le ' "$f" || exit 1; grep -qE '^[[:blank:]]*if \[ "\$t" -le "\$\(\(b \* 4 / 10\)\)" \]; then' "$f" && exit 1; exit 0
+verify: sh f=core/fixtures/validator-fork-budget/run.sh; [ -f "$f" ] || exit 9; grep -q 'A4 stale-high' "$f" || exit 9; d="$(mktemp -d)"; mkdir -p "$d/scripts" "$d/core/fixtures/u"; echo 0.0.0 > "$d/VERSION"; printf '%s\n' '#!/bin/sh' 'case "$*" in *--probe-only*) n= ;; *tiny.sh*) n=3 ;; *--target*) n=7 ;; *) n=2000 ;; esac' 'printf "PROBEPOS 50\nPROBENEG 0\n"' '[ -n "$n" ] || exit 0' 'printf "TOTAL %s\nEXIT 0\nMAXLINE 9\nLASTARM 5\nREPS 2\nSTABLE 2\nSPREAD x\n" "$n"' > "$d/scripts/fork-profile.sh"; printf 'FORK_BUDGET=2200\n' > "$d/scripts/validate-enforcement-map.sh"; cp "$f" "$d/core/fixtures/u/run.sh"; out="$(bash "$d/core/fixtures/u/run.sh" 2>&1)"; grep -q '^ok    A1 floor .*floor of 7 ' <<<"$out" || exit 1; j="$(awk '/^judge\(\) \{/{p=1} p{print} p&&/^\}$/{exit}' "$f")"; [ -n "$j" ] || exit 1; r8="$(FLOOR=7 NFX=1 VAL=v bash -c "$j"'; judge 8 0 10 5 2200')"; r7="$(FLOOR=7 NFX=1 VAL=v bash -c "$j"'; judge 7 0 10 5 2200')"; case "$r8" in RED*stale-high*) ;; *) exit 1 ;; esac; case "$r7" in BROKEN*floor*) ;; *) exit 1 ;; esac; exit 0
 
 
 ## BL-301 — the gate runs no shipped fixture in the consumer layout, so a fixture red on every consumer ships green

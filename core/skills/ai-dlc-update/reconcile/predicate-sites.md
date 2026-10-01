@@ -81,6 +81,34 @@ member. A site whose `reads:` resolves to nothing at BOTH refs is refused, not s
 - `verdict:` — a `sed -nE` expression extracting the comparable verdict tokens from the
   predicate's combined stdout+stderr. The compared value is the SORTED SET of what it prints.
 
+## Three of these sites carry arguments the probe root forces
+
+The probe root a site runs from has no `.git` and no `.claude/`, so a predicate that resolves
+its project root by walking up from ITSELF finds nothing there and falls back to the cwd, which
+is the consumer. Two consequences, each written into a block below rather than left to that
+fallback:
+
+- `validate-gate-adjudication.sh` resolves its schema, `enforcement-map.yaml` and its
+  `validate-adversarial-convergence.sh` sibling under the walked-up root. The walk stops at the
+  probe root only because `core/skills/ai-dlc/` exists there, which it does because
+  `enforcement-map.yaml` is in `reads:`. Drop that member and the incoming script reads the
+  consumer's INSTALLED schema and map, so both sides compare the same data. `--series` is the
+  form the consumer's own gate runs; the per-pass form needs a gate type per file, which the
+  `invoke:` grammar cannot derive.
+- `validate-snapshot-conservation.sh` gets `--root .` and `validate-suppression-lifetime.sh`
+  gets an explicit `--gate-metrics`. Without them, a predicate that cannot find its inputs reports
+  NOT-APPLICABLE or an uncounted lifetime on both sides, and that parses as agreement.
+
+The verdict grammars extract the verdict CLASS and the subject each finding names, never a
+count. `catalog=57` against `catalog=58` is the catalog growing, not a stored artifact being
+reclassified.
+
+**The suppression-lifetime site reports UNDECIDABLE whenever its read-set moves, and STABLE
+(byte-identical) otherwise, on the shipped `docs/escalations/` layout; that is the reader's limit,
+not this block's.** Its subject is `docs/escalations/pending.md`, and
+`predicate-differential.sh` resolves `corpus:` only under `_bmad-output/`. The block is declared
+so the gap is reported as a row instead of being absent from the population.
+
 ## Sites
 
 reads: core/scripts/validate-adversarial-convergence.sh
@@ -96,3 +124,24 @@ corpus: *adversarial*p*.md
 series: s/$//
 invoke: {series}
 verdict: s/^FAIL: ([A-Za-z0-9_-]+).*/\1/p
+
+reads: core/scripts/validate-gate-adjudication.sh core/schemas/gate-adjudication-verdict.json core/skills/ai-dlc/enforcement-map.yaml core/scripts/validate-adversarial-convergence.sh
+entry: core/scripts/validate-gate-adjudication.sh
+corpus: *.verdict.json
+series: s|/[^/]*\.verdict\.json$||
+invoke: --series {series}
+verdict: s/^VALIDATE-GATE-ADJUDICATION: (PASS|FAIL).*/\1/p; s/^  - STALLED: series '([^']+)'.* check '([^']+)' has held FAIL.*/STALLED \1 \2/p; s/^  - (MISSING|UNSTRUCTURED) REPAIR RECORD: series '([^']+)' \([^)]*\) pass ([0-9]+).*/\1 REPAIR RECORD \2 p\3/p; s/^  - SPLIT SERIES: check '([^']+)'.* between series '([^']+)'.*/SPLIT SERIES \2 \1/p; s/^  - series '([^']+)' (has two passes|spans gate_types).*/\2 \1/p; s/^  - ([^ ]+): (gate_nonce|carries no gate_series_id).*/\2 \1/p
+
+reads: core/scripts/validate-snapshot-conservation.sh
+entry: core/scripts/validate-snapshot-conservation.sh
+corpus: pipeline-snapshot.md
+series: s/$//
+invoke: --root . --snapshot {series}
+verdict: s/^verdict[[:space:]]+: ([A-Z-]+).*/\1/p; s/^(FAIL|WARN): .*/\1/p
+
+reads: core/scripts/validate-suppression-lifetime.sh core/skills/ai-dlc/enforcement-map.yaml
+entry: core/scripts/validate-suppression-lifetime.sh
+corpus: pending.md
+series: s/$//
+invoke: --escalations {series} --gate-metrics _bmad-output/implementation-artifacts/gate-metrics.jsonl
+verdict: s/^OK: EXAMINED NOTHING.*/EXAMINED-NOTHING/p; s/^OK: .*/OK/p; s/^FAIL: suppression of check '([^']+)' is past its lifetime.*/EXPIRED \1/p; s/^FAIL: a ([A-Z_]+) entry names check\(s\) *(.*), which are recorded FAILING.*/TERMINAL \1 \2/p; s/^FAIL: malformed SUPPRESSED entry -- missing:(.*)/MALFORMED\1/p; s/^FAIL: \*\*Suppresses:\*\* names '([^']+)'.*/UNKNOWN-CHECK \1/p; s/^FAIL: \*\*Expires after:\*\* ([^ ]+) gates is outside.*/EXPIRY-RANGE \1/p; s/^FAIL: suppression fields on an entry that does not classify.*/FIELDS-ON-NON-SUPPRESSED/p; s/^FAIL: baselined key no longer reproduces: (.*)/STALE-BASELINE \1/p
