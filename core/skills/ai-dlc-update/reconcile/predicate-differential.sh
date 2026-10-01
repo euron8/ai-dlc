@@ -78,17 +78,34 @@ trap 'rm -rf "$TMP"' EXIT
 # `corpus-root:` is OPTIONAL and defaults to `_bmad-output`, the root every site used before the
 # field existed. The default is emitted HERE, never left empty: tab is IFS whitespace to `read`,
 # so an empty column collapses and every later field shifts one place left.
+#
+# A `corpus-root:` that could leave the consumer tree or split the TSV is refused here and the
+# refusal is carried to the site's row as `!bad:<reason>`: a `..` component, a leading `/`, or
+# any whitespace. The value is taken by stripping the key, never by `index($0,$2)`, which finds
+# a value like `root` inside the key itself.
+#
+# `pass:` is OPTIONAL: a `sed -nE` expression matching the line the predicate prints when it
+# PASSES. With it, a series yielding no verdict token on either side is counted as passed when
+# both sides print that line and unclassified otherwise. Without it, a grammar that spells only
+# failures cannot tell those two apart, and the row says so instead of printing a number. It is
+# emitted as `-` when absent, for the same collapsing-tab reason as the root default.
 awk '
-  /^reads:[[:space:]]/       { r=substr($0, index($0,$2)); e=""; c=""; s=""; i=""; v=""; k=""; next }
+  /^reads:[[:space:]]/       { r=substr($0, index($0,$2)); e=""; c=""; s=""; i=""; v=""; k=""; p=""; next }
   /^entry:[[:space:]]/       { e=$2; next }
-  /^corpus-root:[[:space:]]/ { k=$2; next }
+  /^corpus-root:[[:space:]]/ { k=$0; sub(/^corpus-root:[[:space:]]*/, "", k); sub(/[[:space:]]+$/, "", k);
+                               if (k ~ /[[:space:]]/)                 k="!bad:whitespace";
+                               else if (k ~ /^\//)                    k="!bad:absolute";
+                               else if (k ~ /(^|\/)\.\.(\/|$)/)       k="!bad:parent";
+                               next }
   /^corpus:[[:space:]]/      { c=substr($0, index($0,$2)); next }
   /^series:[[:space:]]/      { s=substr($0, index($0,$2)); next }
   /^invoke:[[:space:]]/      { i=substr($0, index($0,$2)); next }
+  /^pass:[[:space:]]/        { p=$0; sub(/^pass:[[:space:]]*/, "", p); next }
   /^verdict:[[:space:]]/     { v=substr($0, index($0,$2));
                                if (k=="") k="_bmad-output";
+                               if (p=="") p="-";
                                if (r!="" && e!="" && c!="" && s!="" && i!="" && v!="")
-                                 printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r, e, c, s, i, v, k;
+                                 printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r, e, c, s, i, v, k, p;
                                r=""; next }
 ' "$MANIFEST" > "$TMP/sites.tsv"
 
@@ -113,13 +130,21 @@ if [ ! -s "$TMP/sites.tsv" ]; then
   exit 0
 fi
 
-while IFS="$(printf '\t')" read -r P_READS P_ENTRY P_CORPUS P_SERIES P_INVOKE P_VERDICT P_ROOT; do
+while IFS="$(printf '\t')" read -r P_READS P_ENTRY P_CORPUS P_SERIES P_INVOKE P_VERDICT P_ROOT P_PASS; do
   [ -n "${P_READS:-}" ] || continue
   p_name="$(basename "$P_ENTRY")"
+  case "$P_ROOT" in
+    '!bad:'*)
+      emit PREDICATE-UNDECIDABLE "$p_name" "the site's corpus-root: value is refused (${P_ROOT#!bad:}). It must be a directory relative to the consumer root, with no '..' component, no leading '/', and no whitespace; anything else could read outside the consumer or split this row. Nothing was compared."
+      continue ;;
+  esac
   # THE POPULATION DEFINITION, ON EVERY ROW THAT GOT PAST THE MANIFEST. A count a second party
   # cannot re-derive is not a measurement, and the definition is where every past disagreement
-  # over these figures lived -- never in the arithmetic. One fixed spelling so one grep finds it.
-  p_pop="population: root=${P_ROOT} corpus=${P_CORPUS} series=${P_SERIES}"
+  # over these figures lived -- never in the arithmetic. One fixed spelling so one grep finds it,
+  # each value backticked so a glob reaches a markdown report as code rather than as emphasis.
+  # It is STATIC -- built from the manifest alone -- so `emit-report.sh` can carry it into the
+  # byte-compared region without a corpus that grew between approve and verify failing the check.
+  p_pop="population: root=\`${P_ROOT}\` corpus=\`${P_CORPUS}\` series=\`${P_SERIES}\`"
 
   # ---- MATERIALIZE THE WHOLE READ-SET PER SIDE, INTO A PROBE ROOT -------------------
   # Not the script alone. A predicate that resolves a SCHEMA at runtime moves when the schema
@@ -188,7 +213,7 @@ while IFS="$(printf '\t')" read -r P_READS P_ENTRY P_CORPUS P_SERIES P_INVOKE P_
   n_series="$(grep -c . < "$TMP/series")"
 
   : > "$TMP/pairs"
-  n_parsed=0
+  n_parsed=0; n_passed=0
   while IFS= read -r s; do
     [ -n "$s" ] || continue
     rel="${s#"$CONSUMER"/}"
@@ -200,20 +225,32 @@ while IFS="$(printf '\t')" read -r P_READS P_ENTRY P_CORPUS P_SERIES P_INVOKE P_
     # point there too -- so a schema-only change compares one schema with itself and reads
     # STABLE. A walk-up marker alone does not fix that: an inherited AI_DLC_PROJECT_ROOT wins
     # over the walk. Consumer data the probe root cannot hold is passed by path (PD_EXT above).
-    a_base="$( ( cd "$CONSUMER" && AI_DLC_PROJECT_ROOT="$TMP/root-base" AI_DLC_KNOWN_SKILLS_EXT="$PD_EXT" bash "$TMP/root-base/$P_ENTRY"   $inv 2>&1 ) | sed -nE "$P_VERDICT" | sort -u | tr '\n' ',')"
-    a_theirs="$( ( cd "$CONSUMER" && AI_DLC_PROJECT_ROOT="$TMP/root-theirs" AI_DLC_KNOWN_SKILLS_EXT="$PD_EXT" bash "$TMP/root-theirs/$P_ENTRY" $inv 2>&1 ) | sed -nE "$P_VERDICT" | sort -u | tr '\n' ',')"
-    [ -n "$a_base" ] || [ -n "$a_theirs" ] && n_parsed=$((n_parsed + 1))
+    ( cd "$CONSUMER" && AI_DLC_PROJECT_ROOT="$TMP/root-base" AI_DLC_KNOWN_SKILLS_EXT="$PD_EXT" bash "$TMP/root-base/$P_ENTRY"   $inv ) > "$TMP/out-base" 2>&1
+    ( cd "$CONSUMER" && AI_DLC_PROJECT_ROOT="$TMP/root-theirs" AI_DLC_KNOWN_SKILLS_EXT="$PD_EXT" bash "$TMP/root-theirs/$P_ENTRY" $inv ) > "$TMP/out-theirs" 2>&1
+    a_base="$(sed -nE "$P_VERDICT" "$TMP/out-base" | sort -u | tr '\n' ',')"
+    a_theirs="$(sed -nE "$P_VERDICT" "$TMP/out-theirs" | sort -u | tr '\n' ',')"
+    if [ -n "$a_base" ] || [ -n "$a_theirs" ]; then
+      n_parsed=$((n_parsed + 1))
+    elif [ "$P_PASS" != - ] && [ -n "$(sed -nE "$P_PASS" "$TMP/out-base")" ] && [ -n "$(sed -nE "$P_PASS" "$TMP/out-theirs")" ]; then
+      n_passed=$((n_passed + 1))
+    fi
     printf '%s\t%s\t%s\n' "$a_base" "$a_theirs" "$rel" >> "$TMP/pairs"
   done < "$TMP/series"
 
   find "$CONSUMER/$P_ROOT" -type f -name "$P_CORPUS" 2>/dev/null | sort > "$TMP/records2"
   fp_after="$(wc -c < "$TMP/records2" | tr -d ' ')"
-  # THE COUNTS EVERY COMPARED ROW CARRIES. `notoken` is the series that yielded no verdict token
-  # on EITHER side, so they were scored unchanged without being classified. For a grammar that
-  # spells only failures this includes series that genuinely passed on both sides: it is the
-  # number a second party must reproduce, not a count of defects.
+  # THE COUNTS EVERY COMPARED ROW CARRIES. `compared` is the series yielding a verdict token on
+  # at least one side. Of the rest, a site declaring `pass:` splits them: `passed` printed the
+  # pass line on BOTH sides, and `unclassified` did neither -- the series this run could not
+  # classify. A site with no `pass:` cannot make that split, so it prints `unclassified=n/a`
+  # rather than a number that would read as one: there, a tokenless series is either a pass or
+  # unparseable, and nothing in the output says which.
   n_records="$(grep -c . < "$TMP/records")" || n_records=0
-  p_counts="records=${n_records} series=${n_series} compared=${n_parsed} notoken=$((n_series - n_parsed))"
+  if [ "$P_PASS" = - ]; then
+    p_counts="records=${n_records} series=${n_series} compared=${n_parsed} unclassified=n/a (grammar spells failures only)"
+  else
+    p_counts="records=${n_records} series=${n_series} compared=${n_parsed} passed=${n_passed} unclassified=$((n_series - n_parsed - n_passed))"
+  fi
   if [ "$fp_before" != "$fp_after" ]; then
     emit PREDICATE-UNDECIDABLE "$p_name" "the consumer's artifact corpus CHANGED while the differential was running (${fp_before} -> ${fp_after} bytes of path list) — its own pipeline is live. Any count taken across a moving corpus is a snapshot of a file another party is holding open. Re-run against a quiescent tree. ${p_pop}; ${p_counts}."
     continue

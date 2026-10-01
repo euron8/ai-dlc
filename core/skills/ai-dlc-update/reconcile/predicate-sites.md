@@ -71,7 +71,9 @@ member. A site whose `reads:` resolves to nothing at BOTH refs is refused, not s
 - `entry:` — which member of `reads:` is the executable, dist-relative.
 - `corpus-root:` — OPTIONAL, consumer-relative directory the `corpus:` pattern is searched under.
   Defaults to `_bmad-output`. A site whose stored subject lives elsewhere declares it here;
-  without it that subject is unreachable and the site reads UNDECIDABLE on every consumer.
+  without it that subject is unreachable and the site reads UNDECIDABLE on every consumer. A
+  value with a `..` component, a leading `/` or any whitespace is refused, and the site reports
+  UNDECIDABLE naming the field.
 - `corpus:` — a `find`-style name pattern, resolved under `<consumer>/<corpus-root>`.
   **DERIVE IT FROM THE SHIPPED GRAMMAR, NOT BY INVENTION.** The first cut used `*pass[0-9]*` and
   reached 16 series where the live-series glob between `core/hooks/ai-dlc-continue.sh`'s
@@ -83,6 +85,12 @@ member. A site whose `reads:` resolves to nothing at BOTH refs is refused, not s
   own gate uses; where they disagree the CONSUMER's is right and this field is stale.
 - `verdict:` — a `sed -nE` expression extracting the comparable verdict tokens from the
   predicate's combined stdout+stderr. The compared value is the SORTED SET of what it prints.
+- `pass:` — OPTIONAL `sed -nE` expression matching the line the predicate prints when it
+  PASSES, copied from the validator's own emitter. It lets the row split a series that yielded
+  no verdict token into `passed` (pass line on both sides) and `unclassified` (neither). A site
+  without it prints `unclassified=n/a (grammar spells failures only)`, because its tokenless
+  series are passes and unparseable outputs mixed. Never write a pass line the validator does
+  not print.
 
 ## Each side runs rooted at its own probe root, so consumer DATA must be passed in
 
@@ -99,6 +107,10 @@ there. Every such input is therefore passed explicitly:
 - the known-skills extension is passed as `AI_DLC_KNOWN_SKILLS_EXT`, resolved once from the
   consumer's `.claude/skills/ai-dlc/extensions/known-skills.json`. Searched under the probe root
   it resolves to nothing on BOTH sides, an identical empty input that parses as agreement.
+  **This makes a change to the validator's extension SEARCH PATH unobservable to the
+  differential**: both sides are handed the file by path, so a release that moves where the
+  validator looks for it compares identically. Only a change to how the file's CONTENT is read
+  is still seen.
 - `validate-gate-adjudication.sh` resolves its schema, `enforcement-map.yaml` and its
   `validate-adversarial-convergence.sh` sibling under the pinned root, which is why all three
   are in `reads:`. Drop one and that side has no copy of it. `--series` is the form the
@@ -117,10 +129,12 @@ reclassified.
 `docs/escalations/pending.md`, outside `_bmad-output/`. Before the field existed the reader
 searched only `_bmad-output/` and the site reported UNDECIDABLE whenever its read-set moved.
 
-Every row past the manifest carries `population: root=… corpus=… series=…`, and every row whose
-corpus was read also carries `records= series= compared= notoken=`. `notoken` is the series that
-yielded no verdict token on either side; for a grammar that spells only failures it includes
-series that passed on both sides.
+Every row past the manifest carries `population: root=… corpus=… series=…`, each value
+backticked. Every row whose corpus was read also carries `records= series= compared=` and either
+`passed= unclassified=` (a site with `pass:`) or `unclassified=n/a (grammar spells failures
+only)`. The population is static; the counts come from a live corpus, so `emit-report.sh`
+carries only the population into the byte-compared report region and the counts stay in the
+detector's own rows.
 
 ## Sites
 
@@ -129,6 +143,7 @@ entry: core/scripts/validate-adversarial-convergence.sh
 corpus: *adversarial*p*.md
 series: s/(pass|p)[0-9]+\.md$//
 invoke: --series {series}
+pass: s/^PASS: the cycle converged.*/PASS/p
 verdict: s/^FAIL \(([A-Z0-9]+) --.*/\1/p
 
 reads: core/scripts/validate-provenance-block.sh core/schemas/provenance-block.json
@@ -136,6 +151,7 @@ entry: core/scripts/validate-provenance-block.sh
 corpus: *adversarial*p*.md
 series: s/$//
 invoke: {series}
+pass: s/^VALIDATE-PROVENANCE-BLOCK: PASS .*/PASS/p
 verdict: s/^FAIL: ([A-Za-z0-9_-]+).*/\1/p
 
 reads: core/scripts/validate-gate-adjudication.sh core/schemas/gate-adjudication-verdict.json core/skills/ai-dlc/enforcement-map.yaml core/scripts/validate-adversarial-convergence.sh
