@@ -1589,6 +1589,16 @@ ways. Claim 2 DEAD-PREMISE: the consumer tracks the marker 0 times against 5381 
 still has no working-tree test beside its `PUSH_OK=` lines, and `HANDOFF_ON_DISK`'s only reader sits
 inside the transcript-present block. The receipt keys on claim 1 and stays.
 
+Held note (batch 178): claim 4 fixed on this branch. Check 0 in `core/hooks/ai-dlc-continue.sh` now
+enters on `HANDOFF_VOCAB_OK` AND (a readable transcript OR `HANDOFF_ON_DISK` OR the sticky
+`.handoff-guard-armed` record). With no transcript the resume arm reads 1 = unknown, the In-Flight
+arm keeps its existing `-f "$TRANSCRIPT"` fail-open, the block row carries `[no transcript: …]`,
+and the completion stamp is not written. `handoff-completion-assertion` arms (nt0)-(nt5) pin the
+entry condition, the resume-unknown line, the stamp decision and the sticky entry; mutants m31
+(transcript gate restored), m32 (resume parsed from the unread transcript), m33 (stamp without a
+transcript) and m34 (sticky not an entry condition) each die on their arm. Claim 1 stays open and
+the receipt below still keys on it; claim 4's receipt is the fixture, not this line.
+
 Distribution-internal, no `PC-` id; ranks below any PC-backed entry. Filed together because they
 share one subject and one release would otherwise have widened past its scope. NOTE tier for each
 until one is measured to have moved a verdict on the consumer.
