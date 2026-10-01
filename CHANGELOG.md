@@ -19,6 +19,27 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.694.0] - 2026-10-01
+
+Batch 181's second release: `self-update-gate.sh` with its fixture runner `self-update-fixtures.sh`. Bootstrapping,
+so it ships alone; a consumer runs its installed copy, so this takes effect on the pull after the one that
+delivers it.
+
+### Backlog
+
+- `BL-364` (partial): the gate and the runner stop C-quoting non-ASCII paths (`-c core.quotePath=false`) at
+  their four listing sites. A rulebook-coupled fixture the consumer already held under a non-ASCII name read
+  as missing (a false DEFER), and a changed non-ASCII gating script dropped out of `CHANGED`. The receipt reads
+  19 unflagged sites of 38 on this file set alone.
+- The gate's `INVOKED` class and the runner's `gr_invoked` were ASCII-only (`[A-Za-z0-9._-]`), so a hook naming
+  `scripts/ai-dlc/café.sh` produced no row in any locale and the gate reported `SELF-UPDATE-OK` for a changed
+  gating script. Both are now one negated class, byte-identical between the two files, that stops at whitespace,
+  quotes, shell operators and `, : = # ! @ % + ~`; a token like `real.sh,stale.sh` no longer hides `real.sh`.
+  The runner's path-form name predicate accepts non-ASCII under the C locale and refuses `.` and `..`.
+- Cells in `self-update-gate` and `self-update-fixture-log` fail on the base engines for the stated reasons and
+  pass on tip, under UTF-8 and C, with a mutant per site. The `self-update-gate` fixture now unsets ambient
+  `AI_DLC_*` (I10), because the gate reads `AI_DLC_GATE_IN_SAFE_STOP`.
+
 ## [0.693.0] - 2026-10-01
 
 Batch 181's first release: `ledger-reverify.sh` alone. Bootstrapping, so it ships alone. A consumer runs its
