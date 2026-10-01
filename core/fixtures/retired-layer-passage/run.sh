@@ -285,7 +285,7 @@ PY
   n355_mut c-fold N1 '; then _nf="$(_norm_fold_probe)"; fi' '; then _nf=c; fi'
   # the ungated fix: LC_ALL=C dropped from the C fold, so a Latin-1 file is folded in the caller's locale
   if [ "$H_TR_REFUSES" = 1 ]; then
-    n355_mut no-gate N2 "      *)   LC_ALL=C tr '[:upper:]' '[:lower:]' < \"\$_nt\" || _rc=\$? ;;" "      *)   tr '[:upper:]' '[:lower:]' < \"\$_nt\" || _rc=\$? ;;"
+    n355_mut no-gate N2 "      *)   LC_ALL=C tr '[:upper:]' '[:lower:]' <&5 || _rc=\$? ;;" "      *)   tr '[:upper:]' '[:lower:]' <&5 || _rc=\$? ;;"
   else
     echo "  SKIP  MUTANT (BL-355 no-gate) -- this host's tr reads a Latin-1 byte under UTF-8 without refusing, so the mutant expresses nothing here"
   fi
@@ -295,6 +295,73 @@ PY
   # the probe without its awk candidate: a byte-wise tr falls to the C fold and misses the accent
   if [ "$H_TR_FOLDS" = 1 ]; then w_na=N3; else w_na=N1; fi
   n355_mut no-awk "$w_na" '  [ "$_got" = "$_want" ] && { echo awk; return 0; }' '  :'
+fi
+
+# --- BL-403(c): norm_lines leaves no staged file behind when it is KILLED mid-sed ----------------
+# The staged `norm-lines.XXXXXX` was removed by an `rm -f` on the normal path only. The fix unlinks it
+# before sed starts and works on open descriptors, so no exit -- SIGKILL included -- can leave it.
+#   K1 a `sed` stub first on PATH that writes a sentinel and kills its parent (the shell running
+#      norm_lines) with -9: the shell dies 137, the sentinel was written, and 0 norm-lines.* remain
+#      in the run's private TMPDIR. `reconcile-memo.*` is left there too and is NOT the subject.
+#   K0 control: the same driver with no stub normalises `  1. **Hello**  World.` to `hello world`,
+#      rc 0, and leaves 0 norm-lines.* -- so a K1 zero is not a driver that never staged anything.
+K_SENT=""
+k_drive() { # k_drive <reconcile-dir> <stub|none> -> "<rc> <sentinel> <left> <out>"
+  local t o rc
+  t="$(mktemp -d "$WORK/k-tmp.XXXXXX")" || { echo "BROKEN"; return; }
+  K_SENT="$t.sent"; rm -f "$K_SENT"
+  printf '  1. **Hello**  World.\n' > "$t.in"
+  if [ "$2" = stub ]; then
+    o="$(env -u AI_DLC_RECONCILE_MEMO TMPDIR="$t" FX_SENT="$K_SENT" PATH="$KSTUB:$PATH" \
+      bash -c '. "$1/lib.sh" || exit 90; norm_lines < "$2"; echo "rc=$?"' _ "$1" "$t.in" 2>/dev/null)"; rc=$?
+  else
+    o="$(env -u AI_DLC_RECONCILE_MEMO TMPDIR="$t" \
+      bash -c '. "$1/lib.sh" || exit 90; norm_lines < "$2"; echo "rc=$?"' _ "$1" "$t.in" 2>/dev/null)"; rc=$?
+  fi
+  printf '%s %s %s %s' "$rc" "$([ -s "$K_SENT" ] && echo fired || echo silent)" \
+    "$(find "$t" -maxdepth 1 -name 'norm-lines.*' | grep -c .)" "$(printf '%s' "$o" | tr '\n ' '|_')"
+}
+KSTUB="$WORK/k-stub"; mkdir -p "$KSTUB" || exit 2
+printf '#!/bin/sh\necho fired > "$FX_SENT"\nkill -9 $PPID\n' > "$KSTUB/sed" && chmod +x "$KSTUB/sed" || exit 2
+k_score() { # k_score <reconcile-dir> -> failing cells (K0, K1) then `.`, or BROKEN
+  local r="" v
+  set -- "$1" $(k_drive "$1" none)
+  [ "$#" -ge 5 ] || { echo BROKEN; return; }
+  { [ "$2" -eq 0 ] && [ "$4" -eq 0 ] && [ "$5" = 'hello_world|rc=0' ]; } || r="${r}K0"
+  v="$(k_drive "$1" stub)"; set -- "$1" $v
+  # The stub must have FIRED and the shell must have died by it, or K1 measured no kill at all.
+  { [ "$2" -eq 137 ] && [ "$3" = fired ]; } || { echo "BROKEN kill not delivered ($v)"; return; }
+  [ "$4" -eq 0 ] || r="${r}K1"
+  printf '%s.' "$r"
+}
+got="$(k_score "$RLP_SRC")"
+case "$got" in
+  .)  ok "BL-403(c) K0-K1: norm_lines killed -9 mid-sed leaves 0 norm-lines.* files; unkilled it still normalises and leaves 0" ;;
+  *.) bad "BL-403(c) cell(s) [${got%.}] failed: a killed norm_lines left its staged file, or the healthy run broke" ;;
+  *)  bad "FIXTURE BROKEN -- BL-403(c): $got" ;;
+esac
+# MUTANT: the early unlink removed, so the name lives until the normal-path `rm` -- the base shape.
+# K1 must die and K0 must not: the healthy path still cleans up after itself.
+KM="$WORK/k-mut"
+if ! rlp_copy "$KM"; then bad "MUTANT HARNESS BROKEN [BL-403c late-rm]: could not copy the reconcile directory"
+elif ! python3 - "$RLP_SRC/lib.sh" "$KM/lib.sh" <<'PY'
+import sys
+src, dst = sys.argv[1:3]
+s = open(src, encoding="utf-8").read()
+f = '  _no=1; rm -f "$_nt"\n'
+if s.count(f) != 1: sys.exit(1)
+open(dst, "w", encoding="utf-8").write(s.replace(f, '  _no=1\n'))
+PY
+then bad "FIXTURE STALE [BL-403c late-rm]: the early-unlink anchor did not match exactly once in lib.sh -- re-anchor on the same observable"
+elif cmp -s "$RLP_SRC/lib.sh" "$KM/lib.sh" || ! bash -n "$KM/lib.sh" 2>/dev/null; then
+  bad "FIXTURE STALE [BL-403c late-rm]: the mutation did not apply or does not parse"
+else
+  got="$(k_score "$KM")"
+  case "$got" in
+    K1.) ok "MUTANT (BL-403c late-rm) fails exactly [K1]: without the early unlink a SIGKILL leaves norm-lines.*" ;;
+    .)   bad "MUTANT SURVIVED [BL-403c late-rm]: K1 still read 0 files left -- the cell cannot see the leak" ;;
+    *)   bad "MUTANT [BL-403c late-rm] scored [$got], expected exactly [K1.]" ;;
+  esac
 fi
 
 echo

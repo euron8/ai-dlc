@@ -1931,7 +1931,7 @@ echo "== mutants: a staged FUNCTION whose body is a pipeline (each restores the 
 # output is STAGED (the iconv-gated case fold reads it twice), the mutation drops the staged sed's
 # own status read, which leaves `tr` folding an empty file at 0 -- the same observable.
 libmutant RLP-NORMLINES retired-layer-passage.sh arm_rlp_healthy "arm_rlp_norm arm_rlp_removed" \
-  $'          s/[.[:space:]]+$//\' > "$_nt" || _rc=$?\n' $'          s/[.[:space:]]+$//\' > "$_nt"\n'
+  $'          s/[.[:space:]]+$//\' >&3 || _rc=$?\n' $'          s/[.[:space:]]+$//\' >&3\n'
 # The deleted-line side read through a pipeline again, so its status is the LAST stage's.
 mutant RLP-REMOVED reconcile retired-layer-passage.sh arm_rlp_healthy "arm_rlp_removed" \
   'norm_lines < "$RLP_T/removed-raw" > "$RLP_T/removed-norm" || _rlp_rc=$?' \

@@ -170,25 +170,42 @@ _norm_fold_probe() { # -> tr | awk | c
   [ "$_got" = "$_want" ] && { echo awk; return 0; }
   echo c
 }
+#
+# THE STAGED FILE IS UNLINKED BEFORE `sed` STARTS, so no exit can leave it behind. It used to be
+# removed by an `rm -f` on the normal path only, and a run killed mid-`sed` left its
+# `norm-lines.XXXXXX` in TMPDIR. A trap cannot carry this: norm_lines runs in the sourcing script's
+# MAIN shell, where lib.sh's shadow `trap` composes an EXIT handler by REPLACING the caller's, and
+# no trap fires on SIGKILL. So the group below opens the path once for writing (fd 3) and twice for
+# reading (fds 4 and 5 -- the stream is read twice and bash cannot rewind), removes the name, and
+# works on the descriptors; the kernel frees the bytes when the last one closes. Fixed fds, because
+# bash 3.2 has no `{fd}` allocation; the group's redirections scope them, so a caller's own 3-5 are
+# restored on return. `_no` is set by the group's first command, so a redirection that failed to
+# open is a refusal (125), never an empty normalised stream.
 norm_lines() {
-  local _nt _rc=0 _nf=c
+  local _nt _rc=0 _nf=c _no=0
   _nt="$(mktemp "${TMPDIR:-/tmp}/norm-lines.XXXXXX" 2>/dev/null)" || return 125
   [ -n "$_nt" ] || return 125
+  {
+  _no=1; rm -f "$_nt"
   LC_ALL=C sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//
           s/^[-*+][[:space:]]+//
           s/^[0-9]+[.)][[:space:]]+//
           s/[`*_]//g
           s/[[:space:]]+/ /g
-          s/[.[:space:]]+$//' > "$_nt" || _rc=$?
+          s/[.[:space:]]+$//' >&3 || _rc=$?
   if [ "$_rc" -eq 0 ]; then
-    if iconv -f UTF-8 -t UTF-8 < "$_nt" > /dev/null 2>&1; then _nf="$(_norm_fold_probe)"; fi
+    if iconv -f UTF-8 -t UTF-8 <&4 > /dev/null 2>&1; then _nf="$(_norm_fold_probe)"; fi
     case "$_nf" in
-      tr)  tr '[:upper:]' '[:lower:]' < "$_nt" || _rc=$? ;;
-      awk) awk '{ print tolower($0) }' < "$_nt" || _rc=$? ;;
-      *)   LC_ALL=C tr '[:upper:]' '[:lower:]' < "$_nt" || _rc=$? ;;
+      tr)  tr '[:upper:]' '[:lower:]' <&5 || _rc=$? ;;
+      awk) awk '{ print tolower($0) }' <&5 || _rc=$? ;;
+      *)   LC_ALL=C tr '[:upper:]' '[:lower:]' <&5 || _rc=$? ;;
     esac
   fi
-  rm -f "$_nt"
+  } 3> "$_nt" 4< "$_nt" 5< "$_nt"
+  # Unconditional, and a no-op once the early `rm` ran: it covers a redirection that never opened and
+  # an early `rm` that itself failed (measured under `ulimit -n 6`: that `rm` aborted and the file stayed).
+  rm -f "$_nt" 2>/dev/null
+  [ "$_no" -eq 1 ] || return 125
   return "$_rc"
 }
 
