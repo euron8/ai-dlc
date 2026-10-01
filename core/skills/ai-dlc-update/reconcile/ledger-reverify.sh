@@ -2016,7 +2016,7 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       # "upstream took it" closed an entry on a `docs(plan):` commit that only cross-referenced it.
       # It does NOT say the entry is unabsorbed -- a fix that never names the id is invisible to the
       # message search -- so the text sends the operator to the subject, never forbids a close.
-      emit NAMED-UPSTREAM-DOCS-ONLY "$label" "upstream's own history NAMES this entry's id ${na_where}, and NONE of those commits changes a path under core/ or templates/ -- the two trees a consumer installs -- and none of them cuts a release (changes VERSION). A plan, a review or a ledger drain mentioning the id matches the same way a fix does, so this row is not evidence of an absorption.${na_note} It is NOT a close on its own. The fix can still have landed in a commit that does not name the id: read the commit(s) -- one may record a withdrawal or a split, which IS something to act on -- then read the entry's own subject at theirs. Annotate only what that reading establishes, and otherwise leave the entry open."
+      emit NAMED-UPSTREAM-DOCS-ONLY "$label" "upstream's own history NAMES this entry's id ${na_where}, and NONE of those commits changes a path a consumer installs under core/ or templates/ (a path inside a distribution-only fixture, one carrying a .dist-only marker at theirs, is not installed and does not count) -- and none of them cuts a release (changes VERSION). A plan, a review or a ledger drain mentioning the id matches the same way a fix does, so this row is not evidence of an absorption.${na_note} It is NOT a close on its own. The fix can still have landed in a commit that does not name the id: read the commit(s) -- one may record a withdrawal or a split, which IS something to act on -- then read the entry's own subject at theirs. Annotate only what that reading establishes, and otherwise leave the entry open."
     elif [ "$ord" = "0/0" ]; then
       # RECEIPT-LESS: there is no receipt to be blind to it and none to re-anchor, so the receipt
       # clauses of the sibling detail would be false here. The close is the annotation alone.
@@ -2038,7 +2038,7 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       nam_where="one commit, $nam_c"
     fi
     if [ "$nam_r" = docs ]; then
-      nam_where="$nam_where -- and NONE of them changes a path under core/ or templates/ or cuts a release (changes VERSION)"
+      nam_where="$nam_where -- and NONE of them changes a path under core/ or templates/ (a path inside a distribution-only fixture does not count) or cuts a release (changes VERSION)"
     fi
     nam_p="$(printf '%s' "$label" | sed -n 's/^\(PC-S[0-9][0-9]*\)-.*/\1/p')"
     # ONE ROW PER PREFIX, NOT PER ENTRY, and the label IS the prefix because that is the
