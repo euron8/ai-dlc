@@ -642,6 +642,121 @@ if [ "$BATTERY" = yes ]; then
   fi
 fi
 
+# =========================================================================================
+# BL-100 / BL-364 -- `--untangle` READS THE MODE, AND ITS MANIFEST LISTING IS NOT C-QUOTED
+# =========================================================================================
+# `--untangle` bucketed on `ours_h = base_h` alone, so a consumer copy holding base's bytes with
+# the wrong exec bit read ALREADY-AT-THEIRS, "nothing to untangle". The decided bucket is
+# UPSTREAM-ONLY-ADD -- the one the default mode's A branch gives content-present-bit-not -- never
+# BOTH-CHANGED->CLASSIFY, which is a content tangle. Its manifest `ls-files` listed paths under the
+# default core.quotePath, so a non-ASCII manifest file arrived C-quoted and mapped to no consumer path.
+# Own world, base == theirs as the mode's contract requires:
+#   U1 core/git-hooks/pre-push 100755, consumer 755   -> ALREADY-AT-THEIRS   (control)
+#   U2 the same file, consumer 644                     -> UPSTREAM-ONLY-ADD
+#   U3 core/rules/plain.md 100644, consumer 644        -> ALREADY-AT-THEIRS   (control, the 100644 direction)
+#   U4 the same file, consumer 755                     -> UPSTREAM-ONLY-ADD
+#   U5 core/rules/caf\303\251.md 100755, consumer 755  -> one row, raw path, ALREADY-AT-THEIRS
+#   U6 core/rules/edited.md, consumer bytes differ     -> BOTH-CHANGED->CLASSIFY (control)
+U_RUN=1
+case "$RECON" in */core/skills/ai-dlc-update/reconcile) U_DIST=1 ;; *) U_DIST=0 ;; esac
+# Keyed on the CODE of the --untangle arm, never on its trailing comment: a comment can be reworded
+# with the conjunct intact (a false SKIP on a consumer) or survive the conjunct's removal.
+if ! grep -qF '[ "$ours_h" = "$base_h" ] && mode_at_theirs "$path" "$cons"; then bucket="ALREADY-AT-THEIRS"' "$RECON/preclassify.sh"; then
+  if [ "$U_DIST" = 0 ]; then
+    printf '  SKIP  BL-100/BL-364 arms U1-U6 -- the installed preclassify.sh predates the --untangle mode conjunct; it lands with the pull that carries this fixture\n'
+    U_RUN=0
+  else
+    printf '  --    (BL-100: this preclassify.sh carries no --untangle mode conjunct; in the distribution the arms run anyway and must go red)\n'
+  fi
+fi
+if [ "$U_RUN" = 1 ]; then
+  UD="$WORK/u-dist"; UC="$WORK/u-cons"
+  CAFE="caf$(printf '\303\251').md"
+  mkdir -p "$UD/core/git-hooks" "$UD/core/rules" "$UC/.githooks" "$UC/.claude/rules" || broken "mkdir untangle world"
+  git -C "$UD" init -q >/dev/null 2>&1 || broken "git init untangle dist"
+  git -C "$UD" config core.fileMode true || broken "git config core.fileMode on the untangle dist"
+  printf '#!/usr/bin/env bash\necho hook\n' > "$UD/core/git-hooks/pre-push"; chmod 755 "$UD/core/git-hooks/pre-push"
+  printf 'plain rule\n' > "$UD/core/rules/plain.md"; chmod 644 "$UD/core/rules/plain.md"
+  # 100755 at both ends, so a mode mutant that demands +x cannot reach U5: U5 is quotePath's alone.
+  printf 'accented rule\n' > "$UD/core/rules/$CAFE"; chmod 755 "$UD/core/rules/$CAFE"
+  printf 'edited rule base\n' > "$UD/core/rules/edited.md"
+  git -C "$UD" -c user.email=f@f -c user.name=fixture add -A >/dev/null 2>&1 \
+    && git -C "$UD" -c user.email=f@f -c user.name=fixture commit -q -m base >/dev/null 2>&1 || broken "untangle dist commit"
+  UH="$(git -C "$UD" rev-parse HEAD)" || broken "untangle dist rev-parse"
+  # SEED CONTROL: the two modes are really in the tree, and the accented name really is C-quoted by
+  # a default listing -- else U2/U4 and U5 cannot express their defects.
+  [ "$(git -C "$UD" ls-tree "$UH" -- core/git-hooks/pre-push | cut -c1-6)" = 100755 ] || broken "the untangle seed's pre-push is not 100755"
+  [ "$(git -C "$UD" ls-tree "$UH" -- core/rules/plain.md | cut -c1-6)" = 100644 ] || broken "the untangle seed's plain.md is not 100644"
+  _u_ls="$(git -C "$UD" ls-files 'core/rules/*.md')" || broken "ls-files on the untangle seed failed"
+  grep -q '^"' <<<"$_u_ls" || broken "a default ls-files does not C-quote the accented name here, so U5 cannot express BL-364"
+  cp "$UD/core/git-hooks/pre-push" "$UC/.githooks/pre-push"
+  cp "$UD/core/rules/plain.md" "$UC/.claude/rules/plain.md"
+  cp "$UD/core/rules/$CAFE" "$UC/.claude/rules/$CAFE"; chmod 755 "$UC/.claude/rules/$CAFE"
+  printf 'edited rule CONSUMER\n' > "$UC/.claude/rules/edited.md"
+  u_rows() { bash "$1/preclassify.sh" "$UD" "$UH" "$UH" "$UC" --untangle 2>/dev/null; }
+  u_b() { printf '%s\n' "$1" | LC_ALL=C awk -F'\t' -v p="$2" '$2==p {print $4}'; }
+  score_u() { # score_u <recon> -> failing cells, then `.`
+    local _r="" r1 r2
+    chmod 755 "$UC/.githooks/pre-push"; chmod 644 "$UC/.claude/rules/plain.md"
+    r1="$(u_rows "$1")"
+    chmod 644 "$UC/.githooks/pre-push"; chmod 755 "$UC/.claude/rules/plain.md"
+    r2="$(u_rows "$1")"
+    [ "$(u_b "$r1" core/git-hooks/pre-push)" = ALREADY-AT-THEIRS ] || _r="${_r}U1"
+    [ "$(u_b "$r2" core/git-hooks/pre-push)" = UPSTREAM-ONLY-ADD ] || _r="${_r}U2"
+    [ "$(u_b "$r1" core/rules/plain.md)" = ALREADY-AT-THEIRS ] || _r="${_r}U3"
+    [ "$(u_b "$r2" core/rules/plain.md)" = UPSTREAM-ONLY-ADD ] || _r="${_r}U4"
+    { [ "$(u_b "$r1" "core/rules/$CAFE")" = ALREADY-AT-THEIRS ] \
+      && [ "$(printf '%s\n' "$r1" | grep -c 'caf')" = 1 ]; } || _r="${_r}U5"
+    [ "$(u_b "$r1" core/rules/edited.md)" = 'BOTH-CHANGED->CLASSIFY' ] || _r="${_r}U6"
+    printf '%s.' "$_r"
+  }
+  u_verdict() { got="$(score_u "$1")"; case "$got" in *.) got="${got%.}" ;; *) broken "the untangle cells did not complete against $1" ;; esac; }
+  u_verdict "$RECON"
+  u_subj="$got"
+  if [ -z "$got" ]; then
+    ok "BL-100 U1-U4: --untangle buckets base's bytes with the wrong exec bit UPSTREAM-ONLY-ADD in BOTH directions, and the mode-matched copies ALREADY-AT-THEIRS"
+    ok "BL-364 U5: --untangle lists an accented manifest file once, under its raw path, at ALREADY-AT-THEIRS; U6 a content edit is still CLASSIFY"
+  else
+    bad "BL-100/BL-364 cell(s) [$got] failed on --untangle"
+  fi
+  u_mut() { # u_mut <name> <want> <find> <replace>
+    local _d="$WORK/u-mut-$1"
+    rm -rf "$_d"; cp -R "$RECON" "$_d" || broken "cp -R for untangle mutant $1"
+    if ! python3 - "$RECON/preclassify.sh" "$_d/preclassify.sh" "$3" "$4" <<'PY'
+import sys
+src, dst, f, r = sys.argv[1:5]
+s = open(src, encoding="utf-8").read()
+if s.count(f) != 1: sys.exit(1)
+open(dst, "w", encoding="utf-8").write(s.replace(f, r))
+PY
+    then bad "FIXTURE STALE [BL-100 mutant $1]: its anchor did not match exactly once -- re-anchor on the same observable"; return; fi
+    if cmp -s "$RECON/preclassify.sh" "$_d/preclassify.sh" || ! bash -n "$_d/preclassify.sh" 2>/dev/null; then
+      bad "FIXTURE STALE [BL-100 mutant $1]: the mutation did not apply or does not parse"; return; fi
+    u_verdict "$_d"
+    case "$got" in
+      "$2") ok "MUTANT (BL-100 $1) fails exactly [$2]" ;;
+      "")   bad "MUTANT SURVIVED [BL-100 $1]: every untangle cell still passed" ;;
+      *)    bad "MUTANT [BL-100 $1] failed [$got], expected exactly [$2]" ;;
+    esac
+  }
+  if [ -n "$u_subj" ]; then
+    echo "  (BL-100 mutants not scored: the subject itself fails [$u_subj])"
+  else
+    U_ARM='    elif [ "$ours_h" = "$base_h" ]; then bucket="UPSTREAM-ONLY-ADD"       # content at base, exec bit is not -- apply delivers it'
+    U_AAT='    elif [ "$ours_h" = "$base_h" ] && mode_at_theirs "$path" "$cons"; then bucket="ALREADY-AT-THEIRS"   # content AND mode -- nothing to untangle'
+    # the unfixed shape: no conjunct, so the wrong-mode copy reads ALREADY-AT-THEIRS
+    u_mut no-conjunct U2U4 "$U_AAT
+$U_ARM" '    elif [ "$ours_h" = "$base_h" ]; then bucket="ALREADY-AT-THEIRS"'
+    # the overstated fix: the conjunct alone, a wrong-mode copy falls through to CLASSIFY
+    u_mut classify-fallthrough U2U4 "$U_ARM
+" ''
+    # a conjunct that demands +x whatever theirs records: the 100644 direction inverts
+    u_mut demands-exec U3U4 "$U_AAT" '    elif [ "$ours_h" = "$base_h" ] && [ -x "$CONS/$cons" ]; then bucket="ALREADY-AT-THEIRS"'
+    # the listing C-quoted again
+    u_mut quotepath U5 '    git -C "$DIST" -c core.quotePath=false ls-files "$glob" || pc_fail' '    git -C "$DIST" ls-files "$glob" || pc_fail'
+  fi
+fi
+
 echo ""
 if [ "$fails" -eq 0 ]; then
   echo "preclassify-mode-bucket: PASS"

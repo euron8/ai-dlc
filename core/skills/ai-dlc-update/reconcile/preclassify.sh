@@ -15,8 +15,13 @@
 #                  upstream delta exists). A plain base->theirs diff is empty
 #                  in that case (git diff <sha> <sha> is always empty), so
 #                  this mode enumerates the core-manifest file list from
-#                  reconcile/setup-sites.md instead and buckets purely by
-#                  ours vs base (there is no theirs-side status to branch on).
+#                  reconcile/setup-sites.md instead and buckets by ours vs
+#                  base (there is no theirs-side status to branch on), with
+#                  the exec bit read at theirs (== base by this contract):
+#                    UPSTREAM-ONLY-ADD       consumer lacks the file, or holds
+#                                            base's bytes without base's mode
+#                    ALREADY-AT-THEIRS       base's bytes AND base's mode
+#                    BOTH-CHANGED->CLASSIFY  the consumer changed the bytes
 #   --templates    optional. Reconcile the generated files OUTSIDE core/
 #                  (CLAUDE.md, coding-conventions.md, QUICKSTART.md,
 #                  settings.json) from reconcile/template-sites.md. Buckets on
@@ -182,16 +187,19 @@ SETUP_SITED_PATHS="$(awk '/^[ \t]*file:[ \t]*core\//{sub(/^[ \t]*file:[ \t]*/,""
   "$(dirname "$0")/setup-sites.md" 2>/dev/null | sort -u)"
 setup_sited() { grep -qxF "$1" <<<"$SETUP_SITED_PATHS"; }
 
-# memo_rev_parse (lib.sh) is BYTE-IDENTICAL in semantics to the bare call this replaces --
-# both are `rev-parse -q --verify`, so a MISSING path still reads MISSING and a resolvable
-# one still returns its sha. The only change is that the SHARED cross-process cache
-# (populated once per <dist,spec> for the whole render, when emit-report.sh set one up)
-# answers repeats instead of forking `git` again.
+# memo_rev_parse (lib.sh) is `rev-parse -q --verify` behind the SHARED cross-process cache
+# (populated once per <dist,spec> for the whole render, when emit-report.sh set one up), so a
+# resolvable spec still returns its sha and repeats do not fork `git` again.
 #
-# MISSING IS AN ANSWER, SO ONLY GIT'S OWN "ABSENT" MAY PRODUCE IT. `rev-parse -q --verify` exits 1
-# for a path absent at a resolvable rev AND for an unresolvable rev (measured: both 1, a present
-# path 0, a git that cannot run 128). Any other status is a failure and refuses the run. And a
-# consumer file that EXISTS but will not hash is a failure too -- reading it as MISSING turned a
+# MISSING IS AN ANSWER, SO ONLY A CONFIRMED ABSENCE MAY PRODUCE IT. `rev-parse -q --verify` exits 1
+# for a path absent at a resolvable rev, for an unresolvable rev, and for a path whose SUBTREE or
+# ROOT tree is the missing object -- one status for four states. memo_rev_parse separates them with
+# lib.sh's discriminator and returns 1 only for a path confirmed absent at a readable tree; the
+# other three come back as 125 and refuse the run here. So an UNRESOLVABLE REV REFUSES: before this
+# it read as MISSING, and in `--untangle`/`--templates`, which run no `diff` that would have failed
+# on it first, every row then bucketed as though the dist held nothing. A path present in the tree
+# whose subtree could not be read bucketed MISSING the same way. Any other status is a failure too.
+# And a consumer file that EXISTS but will not hash is a failure -- reading it as MISSING turned a
 # BOTH-ADDED file into an UPSTREAM-ONLY-ADD that apply overwrites.
 blob_hash() {
   local _h _rc
@@ -200,6 +208,7 @@ blob_hash() {
     0) [ -n "$_h" ] || pc_fail "rev-parse -q --verify $1:$2 exited 0 with no sha"
        printf '%s' "$_h" ;;
     1) echo MISSING ;;
+    125) pc_fail "rev-parse -q --verify $1:$2 said absent, and ls-tree could not confirm it: the rev does not resolve, or a tree or blob on the path could not be read" ;;
     *) pc_fail "rev-parse -q --verify $1:$2 exited $_rc" ;;
   esac
 }
@@ -448,16 +457,27 @@ if [ "$MODE" = "--untangle" ]; then
   # with this script) rather than diffing base->theirs, which is always
   # empty when base == theirs.
   MANIFEST="$(dirname "$0")/setup-sites.md"
+  # `core.quotePath=false`: every path below is mapped by map_consumer() and shown to git again by
+  # blob_hash(); a C-quoted non-ASCII name (`"core/rules/caf\303\251.md"`) matches no `core/*` case,
+  # maps to itself, and reads MISSING at both ends -- a manifest file reported as one the consumer lacks.
   awk '/^core_manifest:/{f=1; next} f && /^  - /{sub(/^  - /,""); print; next} f{exit}' "$MANIFEST" |
   while IFS= read -r glob; do
-    git -C "$DIST" ls-files "$glob" || pc_fail "ls-files $glob exited $?"
+    git -C "$DIST" -c core.quotePath=false ls-files "$glob" || pc_fail "ls-files $glob exited $?"
   done | while IFS= read -r path; do
     cons="$(map_consumer "$path")"
     base_h="$(blob_hash "$BASE" "$path")"
     ours_h="$(file_hash "$cons")"
 
+    # "Nothing to untangle" needs the MODE too, not only the bytes: a consumer copy holding base's
+    # content without base's exec bit (or with one base does not carry) is not at theirs. It is not
+    # a content tangle either, so it is not CLASSIFY: it buckets UPSTREAM-ONLY-ADD, the bucket the
+    # default mode's A branch already gives a copy whose content is present and whose bit is not.
+    # `mode_at_theirs` reads $THEIRS; this mode's contract is base == theirs (the caller runs it
+    # on a stamp that already equals upstream), so theirs' mode IS base's. With two different refs
+    # passed, the content is compared at base and the mode at theirs.
     if   [ "$ours_h" = MISSING ];   then bucket="UPSTREAM-ONLY-ADD"       # consumer lacks this manifest file
-    elif [ "$ours_h" = "$base_h" ]; then bucket="ALREADY-AT-THEIRS"       # consumer never touched it -- nothing to untangle
+    elif [ "$ours_h" = "$base_h" ] && mode_at_theirs "$path" "$cons"; then bucket="ALREADY-AT-THEIRS"   # content AND mode -- nothing to untangle
+    elif [ "$ours_h" = "$base_h" ]; then bucket="UPSTREAM-ONLY-ADD"       # content at base, exec bit is not -- apply delivers it
     else                                 bucket="BOTH-CHANGED->CLASSIFY"; fi
     printf '%s\t%s\t%s\t%s\n' "U" "$path" "$cons" "$bucket"
   done
@@ -482,17 +502,19 @@ dist_only() { # core/fixtures/<name>/... -> is it marked dist-only at THEIRS?
   case "$1" in
     core/fixtures/*)
       _f="${1#core/fixtures/}"; _f="${_f%%/*}"
-      git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${_f}/.dist-only" 2>/dev/null
-      _do_rc=$?
-      # `cat-file -e` exits 128 for an ABSENT marker and for a git that could not answer alike;
-      # only `rev-parse -q --verify`'s 1 separates them. A failure read as "not dist-only" ships a
-      # dist-only fixture into the consumer, so it refuses instead.
-      if [ "$_do_rc" -eq 128 ]; then
-        git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${_f}/.dist-only" >/dev/null 2>&1
-        _do_rv=$?
-        [ "$_do_rv" -eq 1 ] || pc_fail "cat-file -e ${THEIRS}:core/fixtures/${_f}/.dist-only exited 128 and rev-parse -q --verify of it exited $_do_rv"
-      fi
-      return "$_do_rc"
+      # `cat-file -e` exits 128 for an ABSENT marker and for a git that could not answer alike, and
+      # `rev-parse -q --verify` -- the second opinion this used -- answers 1 for a missing SUBTREE
+      # exactly as for an absent marker, so a `core/fixtures/<f>/` tree that could not be read read
+      # as "not dist-only" and the fixture shipped. memo_has_path (lib.sh) answers 0 present, 128
+      # CONFIRMED absent, and 125 when the absence could not be confirmed; a failure read as "not
+      # dist-only" ships a dist-only fixture into the consumer, so anything but 0 and 128 refuses.
+      _do_rc=0
+      memo_has_path "$DIST" "$THEIRS" "core/fixtures/${_f}/.dist-only" || _do_rc=$?
+      case "$_do_rc" in
+        0)   return 0 ;;
+        128) return 1 ;;
+        *)   pc_fail "cat-file -e ${THEIRS}:core/fixtures/${_f}/.dist-only exited $_do_rc: the marker could not be confirmed present or absent" ;;
+      esac
       ;;
     *) return 1 ;;
   esac

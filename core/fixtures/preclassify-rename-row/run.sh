@@ -419,7 +419,11 @@ SHIMEOF
       *)    bad "MUTANT [BL-308 $1] failed [$got], expected exactly [$3] -- the cells are entangled" ;;
     esac
   }
-  _u_anchor='    git -C "$DIST" ls-files "$glob" || pc_fail "ls-files $glob exited $?"'
+  _u_anchor='    git -C "$DIST" -c core.quotePath=false ls-files "$glob" || pc_fail "ls-files $glob exited $?"'
+  # A consumer layout whose preclassify.sh predates the quotePath flag on this line carries the
+  # unflagged spelling; the mutant below targets whichever one the subject carries.
+  grep -qxF "$_u_anchor" "$RECON/preclassify.sh" \
+    || _u_anchor='    git -C "$DIST" ls-files "$glob" || pc_fail "ls-files $glob exited $?"'
   _t_anchor='  printf '"'"'%s\n'"'"' "$TEMPLATE_ROWS" |'
   _uh="$(grep -cxF "$_u_anchor" "$RECON/preclassify.sh")" || _uh=0
   _th="$(grep -cxF "$_t_anchor" "$RECON/preclassify.sh")" || _th=0
@@ -428,7 +432,7 @@ SHIMEOF
     bad "FIXTURE STALE [BL-308 mutants]: anchors match untangle=$_uh templates=$_th (want 1 each; impossible-anchor control $_xh, want 0)"
   else
     B308_A="$_u_anchor" b308_mut untangle-nols \
-      '$0 == ENVIRON["B308_A"] { print "    git -C \"$DIST\" ls-files \"$glob\""; next } { print }' U1
+      '$0 == ENVIRON["B308_A"] { sub(/ [|][|] pc_fail.*$/, ""); print; next } { print }' U1
     B308_A="$_t_anchor" b308_mut templates-notrap \
       '$0 == ENVIRON["B308_A"] { print "  trap : USR1" } { print }' T1
   fi
@@ -567,6 +571,252 @@ mut_memo() { # mut_memo <name> <mode> -> mutant dir on stdout
   esac
 done
 chmod 755 "$RO"
+
+# =============================================================================
+# BL-374 / BL-310 -- A READ FAILURE IS NEVER CACHED, OR ANSWERED, AS AN ABSENCE
+# =============================================================================
+# lib.sh's memo cached `cat-file -e`'s 128 and `rev-parse -q --verify`'s 1 as "absent" whenever
+# `rev-parse` agreed -- and `rev-parse` answers 1 for a path whose SUBTREE is the missing object,
+# exactly as for an absent one. So a read failure was cached, served to every later process sharing
+# the memo after the object was back, and turned into a MISSING bucket by preclassify. A missing
+# BLOB was the second shape: `cat-file -e` 1, which matched neither caching branch and reached every
+# caller as an absent path. The discriminator is layer-drift.sh's have() table (lib.sh's
+# `_ai_dlc_memo_absent`); a "no" it cannot confirm is 125.
+#
+# One world: a dist holding a/b/f.txt, top.txt, core/rules/probe.md and templates/CLAUDE.md.template,
+# a consumer holding the last two at base. Each cell moves ONE object aside and puts it back.
+#   a memo_has_path, a/b tree missing, writable memo   -> 125     b  the same, chmod-555 memo -> 125
+#   c memo_rev_parse, a/b tree missing, writable memo  -> 125     d  the same, chmod-555 memo -> 125
+#   e the writable memo queried while missing, after restore -> memo_has_path 0 AND memo_rev_parse 0
+#   f memo_has_path, top.txt's BLOB missing, writable  -> 125     g  the same, chmod-555 memo -> 125
+#   h a NON-CANONICAL spelling (a/./b/f.txt) on a healthy tree -> memo_has_path 128, memo_rev_parse 1;
+#     an absolute path INTO the repository (<dist>/top.txt) -> memo_has_path 128
+#   i a `..` spelling that climbs out (../x) on a healthy tree -> memo_has_path 128
+#   m an absolute path OUTSIDE the repository (/etc/passwd) -> memo_has_path 128, memo_rev_parse 1
+#   n a pathspec-magic spelling (:(glob)a/**) -> memo_has_path 128, memo_rev_parse 1
+#   j preclassify --untangle AND --templates, each with its subject's tree missing -> exit 2, named
+#   k preclassify --untangle with an unresolvable rev -> exit 2 (it bucketed every row before)
+#   l preclassify's dist_only(), the .dist-only marker read as cat-file 128 / rev-parse 1 / ls-tree 1
+#     (the missing-subtree signature, forced by a shim) -> exit 2, not "not dist-only"
+# h, i, m and n are the NEAR-MISSES: all are absences the naive rule ("ls-tree rc 0 with a line, or any
+# non-zero, is a failure") reads as failures, and a ledger path spelled that way would then refuse.
+N_RUN=1
+case "$RECON" in */core/skills/ai-dlc-update/reconcile) N_DIST=1 ;; *) N_DIST=0 ;; esac
+# Keyed on the discriminator's NEWEST clause, the literal ls-tree read cells m-n and their mutants
+# need: an engine carrying `_ai_dlc_rev_absent` without it would run m-n red on a consumer.
+if ! grep -qF 'git -C "$1" --literal-pathspecs ls-tree -z --full-tree' "$RECON/lib.sh"; then
+  if [ "$N_DIST" = 0 ]; then
+    printf '  SKIP  BL-374/BL-310 arms a-n -- the installed lib.sh predates the literal ls-tree discriminator; it lands with the pull that carries this fixture\n'
+    N_RUN=0
+  else
+    printf '  --    (BL-374/BL-310: this lib.sh carries no literal ls-tree discriminator; in the distribution the arms run anyway and must go red)\n'
+  fi
+fi
+if [ "$N_RUN" = 1 ]; then
+  NW="$WORK/nworld"; ND="$NW/dist"; NC="$NW/consumer"
+  mkdir -p "$ND/a/b" "$ND/core/rules" "$ND/templates" "$NC/.claude/rules" || exit 2
+  git -C "$ND" init -q 2>/dev/null || exit 2
+  echo x > "$ND/a/b/f.txt"; echo y > "$ND/top.txt"
+  printf 'rule\n' > "$ND/core/rules/probe.md"; printf 'template\n' > "$ND/templates/CLAUDE.md.template"
+  git -C "$ND" -c user.email=f@f -c user.name=fixture add -A \
+    && git -C "$ND" -c user.email=f@f -c user.name=fixture commit -q -m n || exit 2
+  NH="$(git -C "$ND" rev-parse HEAD)" || exit 2
+  cp "$ND/core/rules/probe.md" "$NC/.claude/rules/probe.md"; printf 'consumer claude\n' > "$NC/CLAUDE.md"
+  n_obj() { local _s; _s="$(git -C "$ND" rev-parse "HEAD:$1")" || exit 2; printf '%s' "$ND/.git/objects/$(printf %s "$_s" | cut -c1-2)/$(printf %s "$_s" | cut -c3-)"; }
+  O_AB="$(n_obj a/b)"; O_TOP="$(n_obj top.txt)"; O_RULES="$(n_obj core/rules)"; O_TPL="$(n_obj templates)"
+  for _o in "$O_AB" "$O_TOP" "$O_RULES" "$O_TPL"; do
+    [ -f "$_o" ] || { echo "FIXTURE ERROR: BL-374 seed -- object $_o is not a loose file, so it cannot be moved aside" >&2; exit 2; }
+  done
+  NRO="$NW/ro"; mkdir -p "$NRO" && chmod 555 "$NRO" || exit 2
+  # lq <recon> <memo> <fn> <args...> -> the function's status; 97 = lib.sh did not load
+  lq() {
+    local _r="$1" _m="$2"; shift 2
+    ( cd "$NW" && AI_DLC_RECONCILE_MEMO="$_m" bash -c '. "$1/lib.sh" 2>/dev/null; command -v memo_has_path >/dev/null || exit 97; shift; "$@" >/dev/null 2>&1' _ "$_r" "$@" 2>/dev/null )
+  }
+  aside() { mv "$1" "$1.aside" || { echo "FIXTURE ERROR: could not move $1 aside" >&2; exit 2; }; }
+  back()  { mv "$1.aside" "$1" || { echo "FIXTURE ERROR: could not restore $1" >&2; exit 2; }; }
+  # SEED CONTROL: with a/b moved aside ls-tree must FAIL on the path, or no cell expresses the defect.
+  aside "$O_AB"
+  git -C "$ND" ls-tree --full-tree HEAD -- a/b/f.txt >/dev/null 2>&1 && { back "$O_AB"; echo "FIXTURE ERROR: BL-374 seed did not take -- ls-tree reads a/b/f.txt with its tree moved aside" >&2; exit 2; }
+  back "$O_AB"
+  # The l shim: the .dist-only marker of core/fixtures/probe reads as a missing subtree would.
+  NSHIM="$NW/shim"; mkdir -p "$NSHIM" || exit 2
+  FX_N_REAL_GIT="$(command -v git)"; export FX_N_REAL_GIT
+  cat > "$NSHIM/git" <<'NSHIMEOF'
+#!/usr/bin/env bash
+if [ -n "${FX_N_FORCE:-}" ]; then
+  case "$*" in
+    *core/fixtures/probe/.dist-only*)
+      [ -n "${FX_N_HITS:-}" ] && echo hit >> "$FX_N_HITS"
+      case "$*" in *cat-file*) exit 128 ;; *rev-parse*) exit 1 ;; *ls-tree*) exit 1 ;; esac ;;
+  esac
+fi
+exec "$FX_N_REAL_GIT" "$@"
+NSHIMEOF
+  chmod +x "$NSHIM/git" || exit 2
+  # n_pc <recon> <out-prefix> <base> <theirs> <mode> -> rc
+  n_pc() { AI_DLC_RECONCILE_MEMO="" bash "$1/preclassify.sh" "$ND" "$3" "$4" "$NC" "$5" > "$2.rows" 2> "$2.err"; }
+  score_n() { # score_n <recon> <tag> -> failing cells a-n then `.`, or BROKEN(...)
+    local _d="$1" _o="$NW/s-$2" _r="" _m _x _y _rc
+    mkdir -p "$_o"
+    # CONTROLS on the healthy tree, every one PRESENCE-shaped
+    [ "$(lq "$_d" "$_o" true; echo $?)" = 0 ] || { printf 'BROKEN(lib.sh did not load)'; return; }
+    _m="$_o/m"; mkdir -p "$_m"
+    lq "$_d" "$_m" memo_has_path dist HEAD top.txt || { printf 'BROKEN(has top.txt != 0)'; return; }
+    [ -n "$(ls -A "$_m")" ] || { printf 'BROKEN(the memo was never written)'; return; }
+    lq "$_d" "$_o" memo_has_path dist HEAD nope.txt; [ "$?" = 128 ] || { printf 'BROKEN(has nope.txt != 128)'; return; }
+    lq "$_d" "$_o" memo_rev_parse dist HEAD:nope.txt; [ "$?" = 1 ] || { printf 'BROKEN(rev_parse nope.txt != 1)'; return; }
+    n_pc "$_d" "$_o/cu" "$NH" "$NH" --untangle; _rc=$?
+    { [ "$_rc" = 0 ] && grep -q "^U	core/rules/probe.md	.claude/rules/probe.md	ALREADY-AT-THEIRS$" "$_o/cu.rows"; } \
+      || { printf 'BROKEN(untangle control rc=%s)' "$_rc"; return; }
+    n_pc "$_d" "$_o/ct" "$NH" "$NH" --templates; _rc=$?
+    { [ "$_rc" = 0 ] && grep -q "^T	templates/CLAUDE.md.template	CLAUDE.md	TEMPLATE-UNCHANGED-NOOP$" "$_o/ct.rows"; } \
+      || { printf 'BROKEN(templates control rc=%s)' "$_rc"; return; }
+    : > "$_o/l0.hits"
+    PATH="$NSHIM:$PATH" FX_N_FORCE="" FX_N_HITS="$_o/l0.hits" AI_DLC_RECONCILE_MEMO="" \
+      bash "$_d/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" > "$_o/l0.rows" 2>/dev/null; _rc=$?
+    { [ "$_rc" = 0 ] && cmp -s "$_o/l0.rows" "$WORK/n-ref.rows" && [ ! -s "$_o/l0.hits" ]; } \
+      || { printf 'BROKEN(transparent shim rc=%s)' "$_rc"; return; }
+    # --- a b c d e: the a/b tree moved aside
+    aside "$O_AB"
+    lq "$_d" "$_m" memo_has_path dist HEAD a/b/f.txt;    _x=$?; [ "$_x" = 125 ] || _r="${_r}a"
+    lq "$_d" "$NRO" memo_has_path dist HEAD a/b/f.txt;   _x=$?; [ "$_x" = 125 ] || _r="${_r}b"
+    lq "$_d" "$_m" memo_rev_parse dist HEAD:a/b/f.txt;   _x=$?; [ "$_x" = 125 ] || _r="${_r}c"
+    lq "$_d" "$NRO" memo_rev_parse dist HEAD:a/b/f.txt;  _x=$?; [ "$_x" = 125 ] || _r="${_r}d"
+    back "$O_AB"
+    lq "$_d" "$_m" memo_has_path dist HEAD a/b/f.txt;    _x=$?
+    lq "$_d" "$_m" memo_rev_parse dist HEAD:a/b/f.txt;   _y=$?
+    { [ "$_x" = 0 ] && [ "$_y" = 0 ]; } || _r="${_r}e"
+    # --- f g: top.txt's blob moved aside (a fresh memo, so f reads the fill, not e's cache)
+    mkdir -p "$_o/mf"; aside "$O_TOP"
+    lq "$_d" "$_o/mf" memo_has_path dist HEAD top.txt;   _x=$?; [ "$_x" = 125 ] || _r="${_r}f"
+    lq "$_d" "$NRO" memo_has_path dist HEAD top.txt;     _x=$?; [ "$_x" = 125 ] || _r="${_r}g"
+    back "$O_TOP"
+    # --- h i: healthy tree, spellings that are absences
+    mkdir -p "$_o/mh"
+    lq "$_d" "$_o/mh" memo_has_path dist HEAD a/./b/f.txt;  _x=$?
+    lq "$_d" "$_o/mh" memo_rev_parse dist HEAD:a//b/f.txt; _y=$?
+    # and an absolute path INTO the repository: ls-tree lists the RELATIVE name, a different path
+    lq "$_d" "$_o/mh" memo_has_path dist HEAD "$ND/top.txt"; _z=$?
+    { [ "$_x" = 128 ] && [ "$_y" = 1 ] && [ "$_z" = 128 ]; } || _r="${_r}h"
+    lq "$_d" "$_o/mh" memo_has_path dist HEAD ../x;         _x=$?; [ "$_x" = 128 ] || _r="${_r}i"
+    # --- m: an absolute path OUTSIDE the repository is refused before any object is read, like `..`
+    mkdir -p "$_o/mm"
+    lq "$_d" "$_o/mm" memo_has_path dist HEAD /etc/passwd;  _x=$?
+    lq "$_d" "$_o/mm" memo_rev_parse dist HEAD:/etc/passwd; _y=$?
+    { [ "$_x" = 128 ] && [ "$_y" = 1 ]; } || _r="${_r}m"
+    # --- n: a pathspec-magic spelling names no tree entry; ls-tree reads it literally, as cat-file does
+    mkdir -p "$_o/mn"
+    lq "$_d" "$_o/mn" memo_has_path dist HEAD ':(glob)a/**';  _x=$?
+    lq "$_d" "$_o/mn" memo_rev_parse dist 'HEAD::(glob)a/**'; _y=$?
+    { [ "$_x" = 128 ] && [ "$_y" = 1 ]; } || _r="${_r}n"
+    # --- j: each mode with its subject's tree missing
+    aside "$O_RULES"; n_pc "$_d" "$_o/ju" "$NH" "$NH" --untangle; _x=$?; back "$O_RULES"
+    aside "$O_TPL";   n_pc "$_d" "$_o/jt" "$NH" "$NH" --templates; _y=$?; back "$O_TPL"
+    { [ "$_x" = 2 ] && [ "$_y" = 2 ] && grep -q 'ls-tree could not confirm it' "$_o/ju.err" \
+      && grep -q 'ls-tree could not confirm it' "$_o/jt.err"; } || _r="${_r}j"
+    # --- k: an unresolvable rev under --untangle
+    n_pc "$_d" "$_o/k" 1111111111111111111111111111111111111111 1111111111111111111111111111111111111111 --untangle; _x=$?
+    { [ "$_x" = 2 ] && grep -q 'ls-tree could not confirm it' "$_o/k.err"; } || _r="${_r}k"
+    # --- l: dist_only() under the forced missing-subtree signature
+    : > "$_o/l.hits"
+    PATH="$NSHIM:$PATH" FX_N_FORCE=1 FX_N_HITS="$_o/l.hits" AI_DLC_RECONCILE_MEMO="" \
+      bash "$_d/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" > "$_o/l.rows" 2> "$_o/l.err"; _x=$?
+    { [ "$_x" = 2 ] && [ -s "$_o/l.hits" ] && grep -q 'dist-only exited 125' "$_o/l.err"; } || _r="${_r}l"
+    printf '%s.' "$_r"
+  }
+  n_verdict() { got="$(score_n "$1" "$2")"; case "$got" in *.) got="${got%.}"; return 0 ;; esac; return 1; }
+  AI_DLC_RECONCILE_MEMO="" bash "$RECON/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" > "$WORK/n-ref.rows" 2>/dev/null \
+    || { echo "FIXTURE ERROR: BL-374 reference classification failed" >&2; exit 2; }
+  if ! n_verdict "$RECON" tip; then
+    echo "FIXTURE ERROR: BL-374/BL-310 $got -- a healthy-tree control did not hold, so every cell would measure the harness" >&2
+    exit 2
+  fi
+  ok "BL-374/BL-310 controls: present 0, absent 128/1, the memo written, both modes and the transparent shim classify"
+  n_subj="$got"
+  if [ -z "$got" ]; then
+    ok "BL-374/BL-310 a-g: a missing subtree or blob reads 125 from memo_has_path and memo_rev_parse, writable or chmod-555 memo, and is never cached"
+    ok "BL-374/BL-310 h-i: a non-canonical spelling, an absolute path into the repository and a climbing \`..\` are still ABSENT (128 / 1), never a refusal"
+    ok "BL-310 m-n: an absolute path outside the repository and a pathspec-magic spelling are ABSENT (128 / 1), never a refusal"
+    ok "BL-374 j-l: preclassify refuses (exit 2) on a missing subtree in --untangle and --templates, an unresolvable rev, and an unconfirmable .dist-only marker"
+  else
+    bad "BL-374/BL-310 cell(s) [$got] failed -- a read failure is still answered or cached as an absence (see the cell table above)"
+  fi
+  # THE MUTANTS, each a copy of the whole reconcile dir, each one wrong fix with its exact signature.
+  n_mut() { # n_mut <name> <want> <file> <find> <replace> [<find> <replace>...]
+    local _n="$1" _w="$2" _f="$3" _d="$NW/mut-$1"; shift 3
+    cp -R "$RECON" "$_d" || exit 2
+    if ! python3 - "$RECON/$_f" "$_d/$_f" "$@" <<'PY'
+import sys
+src, dst, pairs = sys.argv[1], sys.argv[2], sys.argv[3:]
+s = open(src, encoding="utf-8").read()
+for i in range(0, len(pairs), 2):
+    if s.count(pairs[i]) != 1:
+        sys.exit(1)
+    s = s.replace(pairs[i], pairs[i + 1])
+open(dst, "w", encoding="utf-8").write(s)
+PY
+    then bad "FIXTURE STALE [BL-374 mutant $_n]: an anchor did not match exactly once in $_f -- re-anchor on the same observable"; return; fi
+    if cmp -s "$RECON/$_f" "$_d/$_f" || ! bash -n "$_d/$_f" 2>/dev/null; then
+      bad "FIXTURE STALE [BL-374 mutant $_n]: the mutation did not apply or does not parse"; return; fi
+    if ! n_verdict "$_d" "$_n"; then bad "MUTANT HARNESS BROKEN [BL-374 $_n]: $got"; return; fi
+    case "$got" in
+      "$_w") ok "MUTANT (BL-374 $_n) fails exactly [$_w]" ;;
+      "")    bad "MUTANT SURVIVED [BL-374 $_n]: every cell still passed" ;;
+      *)     bad "MUTANT [BL-374 $_n] failed [$got], expected exactly [$_w]" ;;
+    esac
+  }
+  if [ -n "$n_subj" ]; then
+    echo "  (BL-374 mutants not scored: the subject itself fails [$n_subj])"
+  else
+    N_ABS_BODY='  local _e _lr=0
+  { _e="$(git -C "$1" --literal-pathspecs ls-tree -z --full-tree "$2" -- "$3" 2>/dev/null)"; } 2>/dev/null || _lr=$?
+  if [ "$_lr" -eq 0 ]; then
+    [ -n "$_e" ] || return 0
+    [ "${_e#*$'"'"'\t'"'"'}" = "$3" ] && return 1
+    return 0
+  fi
+  case "/$3/" in */../*) return 0 ;; esac
+  case "$3" in /*) return 0 ;; esac
+  return 1'
+    # the pre-fix oracle: rev-parse -q --verify answering 1
+    n_mut revparse-oracle abcdeijkl lib.sh "$N_ABS_BODY" '  git -C "$1" rev-parse -q --verify "$2:$3" >/dev/null 2>&1
+  [ "$?" -eq 1 ]'
+    # the naive rule: a line at rc 0 is a failure whatever path it names
+    n_mut naive-line h lib.sh '    [ "${_e#*$'"'"'\t'"'"'}" = "$3" ] && return 1
+    return 0' '    return 1'
+    # no `..` clause: every non-zero ls-tree is a failure
+    n_mut no-dotdot i lib.sh '  case "/$3/" in */../*) return 0 ;; esac
+  case "$3" in /*) return 0 ;; esac' '  case "$3" in /*) return 0 ;; esac'
+    # no absolute-path clause: git's "outside repository" 128 on /etc/passwd reads as a failure
+    n_mut no-abs m lib.sh '  case "$3" in /*) return 0 ;; esac
+  return 1
+}' '  return 1
+}'
+    # pathspecs read as magic again: ls-tree refuses `:(glob)…` at 128, read as a failure
+    n_mut no-literal n lib.sh 'git -C "$1" --literal-pathspecs ls-tree -z' 'git -C "$1" ls-tree -z'
+    # the direct lines keep git's raw status (an unwritable memo answers differently)
+    n_mut raw-direct bdg lib.sh \
+      '    [ "$_st" -eq 0 ] || _ai_dlc_memo_absent "$_dist" "$_ref" "$_path" || return 125; return "$_st"; }' '    return "$_st"; }' \
+      '    [ "$_st" -ne 1 ] || _ai_dlc_rev_absent "$_dist" "$_spec" || return 125; return "$_st"; }' '    return "$_st"; }'
+    # the lib-only half-fix: memo_rev_parse caches its 1 unconditionally, as before
+    n_mut rev-parse-caches-1 cejk lib.sh \
+      '      1) if _ai_dlc_rev_absent "$_dist" "$_spec"; then _ai_dlc_memo_commit "$_f" "$_t" "$_st" || return 125
+         else _ai_dlc_memo_serve "$_t"; return 125; fi ;;' '      1) _ai_dlc_memo_commit "$_f" "$_t" "$_st" || return 125 ;;'
+    # the BL-310 half-fix keyed on 128: a missing blob (cat-file 1) is still answered as absent
+    n_mut keyed-on-128 fg lib.sh \
+      '    [ "$_st" -eq 0 ] || _ai_dlc_memo_absent "$_dist" "$_ref" "$_path" || return 125; return "$_st"; }' '    [ "$_st" -ne 128 ] || _ai_dlc_memo_absent "$_dist" "$_ref" "$_path" || return 125; return "$_st"; }' \
+      '      _ai_dlc_memo_absent "$_dist" "$_ref" "$_path" || _st=125' '      [ "$_st" -ne 128 ] || _ai_dlc_memo_absent "$_dist" "$_ref" "$_path" || _st=125'
+    # dist_only keeps its own rev-parse second opinion
+    n_mut dist-only-revparse l preclassify.sh \
+      '      _do_rc=0
+      memo_has_path "$DIST" "$THEIRS" "core/fixtures/${_f}/.dist-only" || _do_rc=$?' \
+      '      _do_rc=0
+      git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${_f}/.dist-only" 2>/dev/null || _do_rc=$?
+      if [ "$_do_rc" -eq 128 ]; then git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${_f}/.dist-only" >/dev/null 2>&1; [ "$?" -eq 1 ] || _do_rc=125; fi'
+  fi
+  chmod 755 "$NRO"
+fi
 
 echo ""
 if [ "$fails" -eq 0 ]; then

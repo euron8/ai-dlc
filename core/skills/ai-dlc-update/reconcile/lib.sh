@@ -138,22 +138,58 @@ norm() { printf '%s' "$1" | tr 'A-Z' 'a-z' | tr -d '`*' | sed -E 's/[^a-z0-9]+/ 
 # ITS STATUS IS THE FIRST FAILED STAGE'S, NOT `tr`'s. Without it a `sed` that died -- BSD sed
 # exits 1 on one byte that is invalid in the caller's locale -- handed `tr` an empty stream and
 # the function returned 0, so a caller that read the status saw a normalised EMPTY file and
-# reported "no match". Neither stage has a healthy non-zero exit, so both must be 0. Read from
-# PIPESTATUS, never by setting pipefail on a caller's file.
+# reported "no match". No stage has a healthy non-zero exit, so every one must be 0. Each stage is
+# staged to a file and its own status read, never PIPESTATUS (whose `[*]` joins on the caller's
+# IFS) and never pipefail on a caller's file.
 #
-# BYTE-WISE (LC_ALL=C) for the same reason: under a UTF-8 locale that `sed` dies on one Latin-1
+# `sed` IS BYTE-WISE (LC_ALL=C) for the same reason: under a UTF-8 locale it dies on one Latin-1
 # byte, so a consumer file carrying one could not be normalised at all.
+#
+# THE CASE FOLD IS NOT BYTE-WISE WHEN IT CAN AFFORD NOT TO BE. Under C, `tr` folds ASCII only, so a
+# deleted core line `Élan must …` and a layer line `élan must …` stopped matching (measured: one
+# RETIRED-LAYER-PASSAGE row before the C fold, zero after). So the fold runs in the CALLER's locale
+# when the staged stream is valid UTF-8 (`iconv -f UTF-8 -t UTF-8` accepts it), and under C
+# otherwise. Dropping `LC_ALL=C` from `tr` alone is wrong: under UTF-8, `tr` on a Latin-1 byte
+# prints "Illegal byte sequence" and stops there (measured on this host: exit 1, the output cut at
+# that byte), so a Latin-1 layer file would refuse the run where it is read today. Reading the
+# stream twice -- once to validate, once to fold -- is why the `sed` output is staged rather than
+# piped. A caller whose locale is C folds ASCII only, as before.
+#
+# WHICH FOLDER RUNS IS PROBED, NEVER ASSUMED FROM THE LOCALE. GNU coreutils `tr` first on PATH folds
+# BYTE BY BYTE under a UTF-8 locale: `É` (\303\211) came out \343\211, invalid UTF-8, so a deleted
+# `Élan must …` matched nothing and the verdict depended on which `tr` resolved (measured with GNU tr
+# 9.11). `_norm_fold_probe` folds a known multibyte capital with each candidate in the caller's
+# locale and takes the first that returns exactly `é`: the PATH's `tr`, then `awk`'s `tolower`, then
+# the C fold. Both candidates emit one line per input line, so the line-preserving contract holds.
+_norm_fold_probe() { # -> tr | awk | c
+  local _want _got
+  _want="$(printf '\303\251')"
+  _got="$(printf '\303\211' | tr '[:upper:]' '[:lower:]' 2>/dev/null)"
+  [ "$_got" = "$_want" ] && { echo tr; return 0; }
+  _got="$(printf '\303\211\n' | awk '{ print tolower($0) }' 2>/dev/null)"
+  [ "$_got" = "$_want" ] && { echo awk; return 0; }
+  echo c
+}
 norm_lines() {
-  local _ps
+  local _nt _rc=0 _nf=c
+  _nt="$(mktemp "${TMPDIR:-/tmp}/norm-lines.XXXXXX" 2>/dev/null)" || return 125
+  [ -n "$_nt" ] || return 125
   LC_ALL=C sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//
           s/^[-*+][[:space:]]+//
           s/^[0-9]+[.)][[:space:]]+//
           s/[`*_]//g
           s/[[:space:]]+/ /g
-          s/[.[:space:]]+$//' \
-  | LC_ALL=C tr '[:upper:]' '[:lower:]'
-  _ps="${PIPESTATUS[*]}"
-  case "$_ps" in '0 0') return 0 ;; '0 '*) return "${_ps#0 }" ;; *) return "${_ps%% *}" ;; esac
+          s/[.[:space:]]+$//' > "$_nt" || _rc=$?
+  if [ "$_rc" -eq 0 ]; then
+    if iconv -f UTF-8 -t UTF-8 < "$_nt" > /dev/null 2>&1; then _nf="$(_norm_fold_probe)"; fi
+    case "$_nf" in
+      tr)  tr '[:upper:]' '[:lower:]' < "$_nt" || _rc=$? ;;
+      awk) awk '{ print tolower($0) }' < "$_nt" || _rc=$? ;;
+      *)   LC_ALL=C tr '[:upper:]' '[:lower:]' < "$_nt" || _rc=$? ;;
+    esac
+  fi
+  rm -f "$_nt"
+  return "$_rc"
 }
 
 # ---------------------------------------------------------------------------
@@ -936,15 +972,57 @@ fi
 # So each memo caches only the statuses that are its subcommand's ANSWERS, measured per
 # subcommand on this machine rather than recalled:
 #
-#   rev-parse -q --verify "${rev}:<path>"  0 present; 1 absent path OR unresolvable rev; 128 a git
-#                                        that could not run (not a repository). Cache 0 and 1.
+#   rev-parse -q --verify "${rev}:<path>"  0 present; 1 for an absent path, an unresolvable rev, a
+#                                        missing SUBTREE and a missing ROOT tree alike; 128 a git
+#                                        that could not run. Cache 0; cache 1 only when the
+#                                        discriminator below confirms the path absent.
 #   ls-tree -r --name-only <ref>         0 only. A bad ref is 128, the same as a failure.
 #   diff --no-renames --name-status      0 only (no --exit-code). A bad ref is 128.
 #   show "${rev}:<path>", cat-file -e    0 present; 128 for an absent path AND for a failure --
 #                                        the two are the same status. A 128 is cached only when
-#                                        `rev-parse -q --verify` on the SAME spec answers 1, the
-#                                        one command whose status separates them. It costs one
-#                                        fork per MISSED key, once per render.
+#                                        the discriminator below confirms the path absent. A
+#                                        missing BLOB is `cat-file -e` 1, never 128.
+#
+# THE DISCRIMINATOR IS `_ai_dlc_memo_absent`, and it is `layer-drift.sh`'s `have()` table, whole.
+# `rev-parse -q --verify` was the oracle here, and it answers 1 for an absent path AND for a path
+# whose subtree or root tree is the missing object, so a read failure was cached as an absence and
+# served to every later process sharing the memo (measured: a moved `a/b` tree cached `a/b/f.txt`
+# as absent, and after the object was restored the same memo still answered absent while a fresh
+# one answered present). Each miss pays one `ls-tree` in place of that `rev-parse`, so a miss costs
+# the same fork it did. Measured per spelling, in a scratch repo with one object moved aside:
+#
+#   state / spelling                  cat-file -e   rev-parse   ls-tree --full-tree   verdict
+#   healthy                           0             0           0, one line           (present)
+#   genuinely absent, or a prefix     128           1           0, no line            ABSENT
+#   blob missing                      1             0           0, names the path     failure
+#   parent subtree missing            128           1           1, no line            failure
+#   root tree missing                 128           1           128, no line          failure
+#   unresolvable rev                  128           1           128, no line          failure
+#   `a/./b/f.txt` `a//b/f.txt`        128           1           0, one line naming    ABSENT
+#     `a/b/../b/f.txt`                                           the CANONICAL path
+#   `../x` (climbs out of the tree)   128           128         128, no line          ABSENT
+#   `/etc/passwd` (absolute, outside) 128           1           128, no line          ABSENT
+#   `<repo>/a/f` (absolute, inside)   128           1           0, one line naming    ABSENT
+#                                                               the RELATIVE path
+#   `:(glob)a/**` (pathspec magic)    128           1           128 without, 0 and    ABSENT
+#                                                               no line with
+#                                                               `--literal-pathspecs`
+#
+# THE PATHSPEC IS READ LITERALLY (`--literal-pathspecs`), as `cat-file -e <ref>:<path>` reads it.
+# Without the flag `:(glob)…` and `:!…` are magic `ls-tree` refuses at 128, so a spelling no tree
+# entry can carry read as a failure; with it they list nothing and are absent, and a tree entry
+# literally named `:(glob)x` is still found by name. An ABSOLUTE path is refused at 128 as "outside
+# repository" before any object is read, like `..`, so it is absent too; one pointing INTO the
+# repository lists the relative name, which mismatches the spelling and is absent at rc 0.
+#
+# A NON-CANONICAL SPELLING IS ABSENT, NOT A FAILURE. `ls-tree` normalises its pathspec and `cat-file`
+# does not, so the line it prints names a different path; every later read of the caller's spelling
+# misses too, so it is the absence the caller gets today. Read as a failure it would turn a
+# hand-written ledger path into a refusal -- exactly the refusal BL-370 removed from `have()` after
+# it blocked a real consumer pull. A `..` component can never name a tree entry, and git refuses one
+# that climbs out at 128 before any object is read, so it is absent too. Any other non-zero `ls-tree`
+# is a tree on the path that could not be read. The compare reads `-z`, so `core.quotePath` cannot
+# octal-escape a non-ASCII name into a false mismatch.
 #
 # Anything else is returned to the caller UNCACHED, so the next lookup asks git again. The fill
 # goes to a per-process temp and is renamed into place only when it is cacheable, so an uncached
@@ -963,9 +1041,25 @@ fi
 # the fill; each hit path returns it before reading `.s`. The `.c`/`.s` files are untouched by a
 # failed serve -- a failed READ is not evidence the cache is wrong, so it is neither deleted nor
 # rewritten, and the next call serves it again.
-_ai_dlc_memo_absent() { # <dist> <spec> -> 0 only when git itself says the spec does not resolve
-  git -C "$1" rev-parse -q --verify "$2" >/dev/null 2>&1
-  [ "$?" -eq 1 ]
+#
+# 125 ALSO MEANS "GIT SAID NO AND THE PATH COULD NOT BE CONFIRMED ABSENT". `memo_has_path` and
+# `memo_rev_parse` return it, uncached, when their subcommand's "absent" status arrived and the
+# discriminator says a tree or blob on the path could not be read -- so a caller that reads 1 or 128
+# as absent never receives a read failure in that spelling. `memo_show` keeps git's own status: its
+# callers read every non-zero alike.
+_ai_dlc_memo_absent() { # <dist> <ref> <path> -> 0 only when the path is CONFIRMED absent at the ref
+  # One `ls-tree` entry at most: a pathspec naming one path lists that entry or nothing. `$( )`
+  # drops the NUL `-z` ends it with; a newer bash warns on its own stderr, hence the group redirect.
+  local _e _lr=0
+  { _e="$(git -C "$1" --literal-pathspecs ls-tree -z --full-tree "$2" -- "$3" 2>/dev/null)"; } 2>/dev/null || _lr=$?
+  if [ "$_lr" -eq 0 ]; then
+    [ -n "$_e" ] || return 0
+    [ "${_e#*$'\t'}" = "$3" ] && return 1
+    return 0
+  fi
+  case "/$3/" in */../*) return 0 ;; esac
+  case "$3" in /*) return 0 ;; esac
+  return 1
 }
 _ai_dlc_memo_commit() { # <file-stem> <tmp> <status> -> cache the fill; always serves it
   # 0 when the fill reached stdout, 125 when it did not (both branches) -- the caller then returns
@@ -1027,7 +1121,7 @@ memo_show() {
   if [ -n "$_t" ]; then
     git -C "$_dist" show "${_ref}:${_path}" > "$_t" 2>/dev/null
     _st=$?
-    if [ "$_st" -eq 0 ] || { [ "$_st" -eq 128 ] && _ai_dlc_memo_absent "$_dist" "${_ref}:${_path}"; }; then
+    if [ "$_st" -eq 0 ] || { [ "$_st" -eq 128 ] && _ai_dlc_memo_absent "$_dist" "$_ref" "$_path"; }; then
       _ai_dlc_memo_commit "$_f" "$_t" "$_st" || return 125
     else
       _ai_dlc_memo_serve "$_t" || return 125
@@ -1049,23 +1143,33 @@ memo_show() {
   return "$_st"
 }
 
-# memo_has_path <dist> <ref> <path> -- 0 when the path exists at the ref. THE STATUS IS
-# THE ANSWER here, unlike memo_show, so it is the only thing cached.
+# memo_has_path <dist> <ref> <path> -- 0 when the path exists at the ref, 128 when it is CONFIRMED
+# absent, 125 when git said no and the discriminator could not confirm the absence: a missing blob
+# (`cat-file -e` 1), a missing subtree or root tree, an unresolvable rev. THE STATUS IS THE ANSWER
+# here, unlike memo_show, so it is the only thing cached, and only 0 and a confirmed 128 are.
+#
+# 125 WHATEVER GIT'S OWN STATUS WAS, NOT ONLY ON ITS 128. A missing blob is `cat-file -e` 1, which
+# matched neither caching branch and reached every caller as an absent path; a rule keyed on 128
+# never sees it. The DIRECT line -- an unavailable memo, or a fill file that cannot be created --
+# applies the same rule, or a `chmod 555` memo would hand back git's raw status where a writable one
+# refuses.
 memo_has_path() {
   local _dist="$1" _ref="$2" _path="$3" _k _f _st _t
   _k="e $_dist $_ref:$_path"; _k="${_k//%/%25}"; _k="${_k//\//%2F}"
   # The probe is a TEMP renamed onto `.s`, never an empty `.s` created in place: an empty `.s`
   # left behind by an uncacheable status would be read by the next HIT as `return ""`, which is
   # 255, the very wrong answer this guard exists to prevent.
-  _ai_dlc_memo_open "$_k" || { git -C "$_dist" cat-file -e "${_ref}:${_path}" 2>/dev/null; return $?; }
+  _ai_dlc_memo_open "$_k" || { git -C "$_dist" cat-file -e "${_ref}:${_path}" 2>/dev/null; _st=$?
+    [ "$_st" -eq 0 ] || _ai_dlc_memo_absent "$_dist" "$_ref" "$_path" || return 125; return "$_st"; }
   if [ -n "$_t" ]; then
     git -C "$_dist" cat-file -e "${_ref}:${_path}" 2>/dev/null
     _st=$?
     # 128 is BOTH "absent" and "git could not answer" for `cat-file -e`; only the former is cached.
-    if [ "$_st" -eq 0 ] || { [ "$_st" -eq 128 ] && _ai_dlc_memo_absent "$_dist" "${_ref}:${_path}"; }; then
+    if [ "$_st" -eq 0 ] || { [ "$_st" -eq 128 ] && _ai_dlc_memo_absent "$_dist" "$_ref" "$_path"; }; then
       { printf '%s' "$_st" > "$_t" && mv -f "$_t" "$_f.s"; } 2>/dev/null || rm -f "$_t"
     else
       rm -f "$_t"
+      _ai_dlc_memo_absent "$_dist" "$_ref" "$_path" || _st=125
     fi
     return "$_st"
   fi
@@ -1077,16 +1181,34 @@ memo_has_path() {
 # empty) on stdout, exit status preserved. <spec> is typically `<ref>:<path>` and it IS
 # the whole key, percent/slash-escaped exactly as memo_show's key is, so two different
 # specs never collide.
+#
+# ITS 1 IS CACHED ONLY WHEN THE PATH IS CONFIRMED ABSENT; otherwise it returns 125, uncached, on the
+# fill AND on the direct line. `-q --verify` answers 1 for a missing subtree exactly as for an
+# absent path, and this used to cache that 1 unconditionally: `preclassify.sh` bucketed a present
+# file MISSING, and every later process sharing the memo was served the same 1 after the object was
+# back. The spec is split at its FIRST `:` -- a ref name cannot contain one -- into the ref and path
+# the discriminator takes. A spec with no `:` names no path, so there is nothing to discriminate and
+# its 1 keeps today's meaning; no caller passes one.
+_ai_dlc_rev_absent() { # <dist> <spec> -> 0 when a `rev-parse -q --verify` 1 on <spec> is an absence
+  case "$2" in
+    *:*) _ai_dlc_memo_absent "$1" "${2%%:*}" "${2#*:}" ;;
+    *)   return 0 ;;
+  esac
+}
 memo_rev_parse() {
   local _dist="$1" _spec="$2" _k _f _st _t
   _k="r $_dist $_spec"; _k="${_k//%/%25}"; _k="${_k//\//%2F}"
-  _ai_dlc_memo_open "$_k" || { git -C "$_dist" rev-parse -q --verify "$_spec" 2>/dev/null; return $?; }
+  _ai_dlc_memo_open "$_k" || { git -C "$_dist" rev-parse -q --verify "$_spec" 2>/dev/null; _st=$?
+    [ "$_st" -ne 1 ] || _ai_dlc_rev_absent "$_dist" "$_spec" || return 125; return "$_st"; }
   if [ -n "$_t" ]; then
     git -C "$_dist" rev-parse -q --verify "$_spec" > "$_t" 2>/dev/null
     _st=$?
-    # 0 resolved, 1 does not resolve -- `-q --verify`'s two answers. Anything else is a failure.
+    # 0 resolved, 1 does not resolve -- `-q --verify`'s two answers, the second cached only when
+    # the discriminator confirms it. Anything else is a failure.
     case "$_st" in
-      0|1) _ai_dlc_memo_commit "$_f" "$_t" "$_st" || return 125 ;;
+      0) _ai_dlc_memo_commit "$_f" "$_t" "$_st" || return 125 ;;
+      1) if _ai_dlc_rev_absent "$_dist" "$_spec"; then _ai_dlc_memo_commit "$_f" "$_t" "$_st" || return 125
+         else _ai_dlc_memo_serve "$_t"; return 125; fi ;;
       *)   _ai_dlc_memo_serve "$_t" || return 125 ;;
     esac
     return "$_st"

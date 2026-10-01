@@ -81,7 +81,12 @@ shim diff-zeta    diff "case \"\$#:\${2:-}\" in 2:*templates/zeta.md) $FIRE; exi
 shim diff-classes diff "case \"\$#:\${2:-}\" in 2:*templates/classes.md) $FIRE; exit 2 ;; esac" "exec '$REAL_DIFF' \"\$@\""
 shim awk-fail     awk "if [ \"\${1:-}\" = -v ] && [ \"\${2:-}\" = 'm=<' ]; then $FIRE; exit 2; fi"          "exec '$REAL_AWK' \"\$@\""
 shim awk-nonnum   awk "if [ \"\${1:-}\" = -v ] && [ \"\${2:-}\" = 'm=<' ]; then $FIRE; echo x; exit 0; fi" "exec '$REAL_AWK' \"\$@\""
+# Keyed on the ORIENTATION read's shape (`ls-tree <ref> -- <path>`), never on lib.sh's absence
+# discriminator (`ls-tree -z --full-tree`), which preclassify also asks about classes.md at base: a
+# forced failure there makes that absence unconfirmable and preclassify refuses first, correctly,
+# so the orientation read this arm is about is never reached.
 shim git-split    git 'case " $* " in' \
+  "  *' --full-tree '*) exec '$REAL_GIT' \"\$@\" ;;" \
   "  *' ls-tree '*' -- $CL '*) $FIRE; exit 128 ;;" \
   "  *' show '*':$ZE '*) $FIRE; exit 128 ;;" 'esac' "exec '$REAL_GIT' \"\$@\""
 # ONE-SHOT: fails the first classes.md diff after its latch is cleared, then passes. `mkdir` is
