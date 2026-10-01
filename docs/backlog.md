@@ -2655,7 +2655,18 @@ treat a blob they cannot read as an empty file, so a missing base object reports
 which is why it is a NOTE. The fix is the `have()` discipline `BL-370` shipped: tell absent from
 unreadable before reading. Re-derive the line numbers before building; they move.
 
-verify: manual
+Held note (batch 178): all five base reads are gated on `have` with its ABSENT answer discarded
+(`have … || :`), so only an unreadable object refuses and a path absent at base keeps today's
+empty read. The `sup_measure` gate sits in the main shell before the `$( )`, so the refusal is
+`have`'s own line and not a staging failure. `layer-absorption-retire` part 2 owns it: five
+one-site refusing worlds, a near-miss consumer hooked on a core file new this pull, a healthy
+control, and eleven mutants (gate removed ×5, `|| continue` ×5, gate inside the subshell). On a
+scratch copy of the reference consumer, ranges `627916ac`, `c14be470` and `d41d47d0` to
+`297f7499` give 49 byte-identical rows, rc 0, on both engines. The receipt below drives the
+engine through a damaged store: tip 1, fix 0, `|| continue` 1, the three `$BASE` sites only 1,
+subject absent 9.
+
+verify: sh P=core/skills/ai-dlc-update/reconcile/layer-drift.sh; J=core/schemas/layer-adjudication-register.json; [ -f "$P" ] && [ -f "$J" ] || exit 9; T="$(mktemp -d)" || exit 9; trap 'rm -rf "$T"' EXIT; D="$T/d"; S=core/skills/ai-dlc; W="$S/steps/widget.md"; mkdir -p "$D/$S/steps" "$D/core/schemas" || exit 9; cp "$J" "$D/core/schemas/" || exit 9; g() { git -C "$D" -c user.email=r@x -c user.name=r "$@" >/dev/null 2>&1; }; g init -q || exit 9; printf '<!-- CORE_MANIFEST v1 -->\nmachinery:\n  - core-manifest.md\nrulebook:\n  - steps/*.md\n' > "$D/$S/core-manifest.md"; printf 'contract_version: 16\n' > "$D/$S/layer-contract.yaml"; printf '# W\n\n### 3. Widget Check.\n\nCore check.\n\n## Stable Notes\n\nNotes.\n' > "$D/$W"; g add -A; g commit -qm base || exit 9; B="$(git -C "$D" rev-parse HEAD)" || exit 9; printf '# W\n\n### 3. Widget Check.\n\nReworded.\n\n## Stable Notes\n\nNotes.\n' > "$D/$W"; printf '# F\n\n### 7. Fresh Check.\n\nNew.\n' > "$D/$S/steps/fresh.md"; g add -A; g commit -qm theirs || exit 9; H="$(git -C "$D" rev-parse HEAD)" || exit 9; O="$(git -C "$D" rev-parse "${B}:${W}")" || exit 9; mv "$D/.git/objects/${O:0:2}/${O:2}" "$T/hidden" 2>/dev/null || exit 9; git -C "$D" cat-file -e "${B}:${W}" 2>/dev/null && exit 9; git -C "$D" cat-file -e "${H}:${W}" 2>/dev/null || exit 9; e() { mkdir -p "$T/$1/.claude/skills/ai-dlc/extensions" "$T/$1/.claude/skills/ai-dlc/overrides"; printf -- '---\nkind: step-domain\nhooks: steps/%s.md\nid: %s\npush_candidate: false\nconforms_to: 16\n---\n\n### %s\n\nCopy.\n' "$2" "$1" "$3" > "$T/$1/.claude/skills/ai-dlc/extensions/$1.md"; }; e cn widget '3. Widget Check.'; e cm fresh '7. Fresh Check.'; mkdir -p "$T/co/.claude/skills/ai-dlc/extensions" "$T/co/.claude/skills/ai-dlc/overrides"; printf -- '---\nshadows: steps/widget.md#Stable Notes\nbase_sha: %s\nreason: r\nconforms_to: 16\n---\n\n## Stable Notes\n\nNotes.\nMine.\n' "$B" > "$T/co/.claude/skills/ai-dlc/overrides/o.md"; r() { bash "$P" "$D" "$B" "$H" "$T/$1" > "$T/$1.out" 2> "$T/$1.err"; }; r cn; [ $? -eq 1 ] && grep -qF "REFUSED — $W at $B" "$T/cn.err" || exit 1; r co; [ $? -eq 1 ] && grep -qF "REFUSED — $W at $B" "$T/co.err" || exit 1; r cm; [ $? -eq 0 ] && awk -F'\t' '$1=="EXTENSION-RETIRE-CANDIDATE" && index($0,"NEW-THIS-PULL"){f=1} END{exit !f}' "$T/cm.out"
 
 ## BL-378 — the suite-pole baseline still names `ledger-reverify` after the pole moved
 
