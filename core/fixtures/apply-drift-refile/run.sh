@@ -411,8 +411,9 @@ if [ "$R_RUN" = 1 ]; then
     *) bad "BL-336 arm r: following the did-not-run row's remedy did not finish the refile ($R_GOT; want ROW|0|EXT|SCHEMA|STAMPED|rerender)" ;;
   esac
   # MUTANTS, each a copy of the whole reconcile dir. r-M1 restores the old bare re-run text (the
-  # union gate refuses it); r-M2 points the row at the --finish the withheld row prints (it stamps
-  # with nothing refiled). Both must leave the work undone, read off the tree.
+  # union gate refuses it); r-M2 points the row at --finish, which since BL-402 re-checks the
+  # refile and WITHHOLDS (stamp cell `-`) rather than stamping with nothing refiled. Both must
+  # leave the work undone, read off the tree.
   r_mut() { # <label> <replacement for ${reapply_remedy} in the did-not-run row> <want-prefix>
     local d="$WORK/r-$1" a='the consumer copy unreadable, or no staging directory), then ${reapply_remedy}"' n
     n="$(grep -cF -- "$a" "$APPLY")" || n=0
@@ -431,8 +432,145 @@ if [ "$R_RUN" = 1 ]; then
   }
   [ "$R_GOT" = NOROW ] || {
     r_mut r-M1 're-run apply' 'ROW|1|-|-|-|bare'
-    r_mut r-M2 'advance the stamp with apply.sh --finish' 'ROW|0|-|-|STAMPED|finish'
+    r_mut r-M2 'advance the stamp with apply.sh --finish' 'ROW|0|-|-|-|finish'
   }
+fi
+
+# --- BL-402 arm q: `--finish` RE-CHECKS THE TWO REMEDIES ONLY A FRESH RUN PERFORMS ----------------
+# Three worlds, each from a fresh seed, each driven by the ordinary apply with the schema at mode 000
+# (the did-not-run row), then the mode restored:
+#   W  nothing refiled                       -> the withheld row does NOT offer --finish, and
+#                                               --finish WITHHOLDS with `finish-refile-owed`
+#   H  refiled by hand, schema = theirs       -> --finish STAMPS (the ALLOW twin: a finisher that
+#                                               refuses everything fails here)
+#   X  as H, plus validate-synthetic.sh +x    -> --finish WITHHOLDS with `finish-exec-owed`. That
+#      (100644 upstream, OUTSIDE the range, so finish_verify_tree cannot see it)
+# Cell: "<W row names --finish? F|->|<W finish stamp>|<W refile-owed row>|<H stamp>|<X stamp>|<X exec row>"
+q_world() { # q_world <reconcile-dir> <W|H|X> -> sets Q_* from a fresh seed, ordinary apply run
+  local w; w="$(TMPDIR="$WORK" bash "$HERE/seed.sh")" || return 1
+  eval "$(sed 's/^/Q_/' "$w/env.sh")"
+  chmod 000 "$Q_SCHEMA"
+  Q_OUT="$(bash "$1/apply.sh" "$Q_DIST" "$Q_BASE" "$Q_CONSUMER" "$Q_THEIRS" 2>/dev/null)"
+  chmod 644 "$Q_SCHEMA"
+  if [ "$2" != W ]; then
+    mkdir -p "$(dirname "$Q_EXT")" || return 1
+    printf '{\n  "known_skills": [\n    "my-persona-skill"\n  ]\n}\n' > "$Q_EXT" || return 1
+    git -C "$Q_DIST" show "${Q_THEIRS}:core/schemas/provenance-block.json" > "$Q_SCHEMA" || return 1
+  fi
+  if [ "$2" = X ]; then chmod +x "$Q_CONSUMER/scripts/ai-dlc/validate-synthetic.sh" || return 1; fi
+  return 0
+}
+q_score() { # q_score <reconcile-dir> -> the cell above, or NOROW / BROKEN
+  local rec="$1" c1 c2 c3 c4 c5 c6 fo
+  q_world "$rec" W || { printf 'BROKEN'; return; }
+  grep -q 'did not run' <<<"$Q_OUT" || { printf 'NOROW'; return; }
+  c1="$(awk -F'\t' '$1=="DECISION" && $2=="restamp-withheld" && index($4, "--finish") {f=1} END {print (f ? "F" : "-")}' <<<"$Q_OUT")"
+  fo="$(bash "$rec/apply.sh" --finish "$Q_DIST" "$Q_BASE" "$Q_CONSUMER" "$Q_THEIRS" 2>/dev/null)"
+  c2="$(grep -qE '^version: 9\.9\.9$' "$Q_STAMP" && echo STAMPED || echo -)"
+  c3="$(awk -F'\t' '$1=="WORKLIST" && $2=="finish-refile-owed" && index($4, "my-persona-skill") {f=1} END {print (f ? "OWED" : "-")}' <<<"$fo")"
+  q_world "$rec" H || { printf 'BROKEN'; return; }
+  bash "$rec/apply.sh" --finish "$Q_DIST" "$Q_BASE" "$Q_CONSUMER" "$Q_THEIRS" >/dev/null 2>&1
+  c4="$(grep -qE '^version: 9\.9\.9$' "$Q_STAMP" && echo STAMPED || echo -)"
+  q_world "$rec" X || { printf 'BROKEN'; return; }
+  fo="$(bash "$rec/apply.sh" --finish "$Q_DIST" "$Q_BASE" "$Q_CONSUMER" "$Q_THEIRS" 2>/dev/null)"
+  c5="$(grep -qE '^version: 9\.9\.9$' "$Q_STAMP" && echo STAMPED || echo -)"
+  c6="$(awk -F'\t' '$1=="WORKLIST" && $2=="finish-exec-owed" && $3=="scripts/ai-dlc/validate-synthetic.sh" {f=1} END {print (f ? "EXEC" : "-")}' <<<"$fo")"
+  printf '%s|%s|%s|%s|%s|%s' "$c1" "$c2" "$c3" "$c4" "$c5" "$c6"
+}
+Q_WANT='-|-|OWED|STAMPED|-|EXEC'
+if ! grep -qF 'finish_reapply_owed' "$APPLY"; then
+  case "$APPLY" in
+    */core/skills/ai-dlc-update/reconcile/apply.sh) Q_RUN=1; printf '  --    (BL-402: this apply.sh carries no finish_reapply_owed; in the distribution arm q runs anyway and must go red)\n' ;;
+    *) Q_RUN=0; printf '  SKIP  BL-402 arm q -- the installed apply.sh predates the finisher re-check; it lands with the pull that carries this fixture\n' ;;
+  esac
+else
+  Q_RUN=1
+fi
+if [ "$Q_RUN" = 1 ]; then
+  Q_GOT="$(q_score "$(dirname "$APPLY")")"
+  case "$Q_GOT" in
+    NOROW)   printf '  SKIP  BL-402 arm q -- a mode-000 schema was still readable (running as root?), so the did-not-run row never appeared\n' ;;
+    BROKEN)  bad "FIXTURE BROKEN [BL-402 arm q]: a world could not be seeded" ;;
+    "$Q_WANT") ok "BL-402 arm q: the withheld row does not offer --finish while the refile is owed; --finish withholds over an unrefiled tree (finish-refile-owed) and over a 100644 file left +x outside the range (finish-exec-owed), and STAMPS the hand-refiled tree" ;;
+    *)       bad "BL-402 arm q: $Q_GOT (want $Q_WANT; cells: W-row-names-finish|W-finish-stamp|W-refile-owed|H-stamp|X-stamp|X-exec-row)" ;;
+  esac
+  # MUTANTS, each a whole-dir copy, each reverting ONE layer and expected to move ONLY its own cells.
+  q_mut() { # <label> <anchor> <replacement> <want>
+    local d="$WORK/q-$1" n
+    n="$(grep -cF -- "$2" "$APPLY")" || n=0
+    if [ "$n" != 1 ]; then bad "BL-402 $1 DID NOT APPLY -- its anchor is in apply.sh $n times (want 1)"; return; fi
+    cp -R "$(dirname "$APPLY")" "$d" || { bad "BL-402 $1 could not copy the reconcile dir"; return; }
+    Q_A="$2" Q_R="$3" \
+      awk '{ i = index($0, ENVIRON["Q_A"]); if (i) $0 = substr($0, 1, i-1) ENVIRON["Q_R"] substr($0, i + length(ENVIRON["Q_A"])); print }' \
+      "$APPLY" > "$d/apply.sh"
+    if cmp -s "$APPLY" "$d/apply.sh" || ! bash -n "$d/apply.sh"; then bad "BL-402 $1 DID NOT APPLY or does not parse"; return; fi
+    [ -f "$d/preclassify.sh" ] || { bad "BL-402 $1: the copy has no preclassify.sh beside apply.sh"; return; }
+    local g; g="$(q_score "$d")"
+    case "$g" in
+      NOROW)  printf '  SKIP  BL-402 %s -- the row did not appear\n' "$1" ;;
+      "$4")   ok "BL-402 $1 killed: arm q reads $g" ;;
+      *)      bad "BL-402 $1 SURVIVED or misfired: $g (want $4)" ;;
+    esac
+  }
+  [ "$Q_GOT" = NOROW ] || {
+    q_mut q-M1 'elif [ "$ap_drc" -eq 1 ]; then' 'elif false; then' '-|STAMPED|-|STAMPED|-|EXEC'
+    q_mut q-M2 '  exec_audit' '  :' '-|-|OWED|STAMPED|STAMPED|-'
+    q_mut q-M3 '} && [ "$reapply_owed" -gt 0 ]; then' '} && false; then' 'F|-|OWED|STAMPED|-|EXEC'
+  }
+fi
+
+# --- BL-360 arm s: A RELABEL TOOL THAT REFUSED IS A ROW, NOT "NOTHING TO RELABEL" -----------------
+# apply.sh read relabel-extension-checks.sh through `2>/dev/null || true`, so its refusal (exit 2,
+# no count printed) read exactly like a catalog with no collisions. The copy's relabel tool is
+# replaced by one that refuses; the arm reads the `relabel-refused` DECISION and the withheld stamp.
+# Its mutant restores the `|| true` capture, and must lose the row.
+s_score() { # s_score <reconcile-dir> -> "<relabel-refused row?>|<stamp>"
+  local w o
+  w="$(TMPDIR="$WORK" bash "$HERE/seed.sh")" || { printf 'BROKEN'; return; }
+  eval "$(sed 's/^/S_/' "$w/env.sh")"
+  o="$(bash "$1/apply.sh" "$S_DIST" "$S_BASE" "$S_CONSUMER" "$S_THEIRS" 2>/dev/null)"
+  printf '%s|%s' \
+    "$(awk -F'\t' '$1=="DECISION" && $2=="relabel-refused" && index($4, "exited 2") {f=1} END {print (f ? "REFUSED" : "-")}' <<<"$o")" \
+    "$(grep -qE '^version: 9\.9\.9$' "$S_STAMP" && echo STAMPED || echo -)"
+}
+s_copy() { # s_copy <dir> -- the reconcile dir with a relabel tool that refuses
+  cp -R "$(dirname "$APPLY")" "$1" || return 1
+  printf '#!/usr/bin/env bash\necho "relabel: REFUSED — fixture stub" >&2\nexit 2\n' > "$1/relabel-extension-checks.sh"
+}
+S_RUN=1
+if ! grep -qF 'detector_run relabel relabel-extension-checks.sh' "$APPLY"; then
+  case "$APPLY" in
+    */core/skills/ai-dlc-update/reconcile/apply.sh) printf '  --    (BL-360: this apply.sh does not stage the relabel tool; in the distribution arm s runs anyway and must go red)\n' ;;
+    *) S_RUN=0; printf '  SKIP  BL-360 arm s -- the installed apply.sh does not stage the relabel tool; it lands with the pull that carries this fixture\n' ;;
+  esac
+fi
+if [ "$S_RUN" = 1 ]; then
+  if s_copy "$WORK/s-ctl"; then
+    S_GOT="$(s_score "$WORK/s-ctl")"
+    [ "$S_GOT" = 'REFUSED|-' ] && ok "BL-360 arm s: a relabel tool that exits 2 draws DECISION relabel-refused and the stamp is withheld" \
+      || bad "BL-360 arm s: $S_GOT (want REFUSED|-)"
+    # Control in the same run: the untouched tool on the same seed draws no refusal and stamps.
+    S_CTL="$(s_score "$(dirname "$APPLY")")"
+    [ "$S_CTL" = '-|STAMPED' ] && ok "BL-360 arm s control: the shipped relabel tool draws no refusal and the stamp advances" \
+      || bad "BL-360 arm s control: $S_CTL (want -|STAMPED)"
+    s_anchor='detector_run relabel relabel-extension-checks.sh "$CONSUMER" --apply --dist "$DIST" --theirs "$THEIRS"'
+    if [ "$(grep -cF -- "$s_anchor" "$APPLY")" = 1 ] && s_copy "$WORK/s-M1"; then
+      S_A="$s_anchor" S_R='bash "$SELF/relabel-extension-checks.sh" "$CONSUMER" --apply --dist "$DIST" --theirs "$THEIRS" >/dev/null 2>&1 || true' \
+        awk '{ i = index($0, ENVIRON["S_A"]); if (i) $0 = substr($0, 1, i-1) ENVIRON["S_R"] substr($0, i + length(ENVIRON["S_A"])); print }' \
+        "$APPLY" > "$WORK/s-M1/apply.sh"
+      if cmp -s "$APPLY" "$WORK/s-M1/apply.sh" || ! bash -n "$WORK/s-M1/apply.sh"; then
+        bad "BL-360 s-M1 DID NOT APPLY or does not parse"
+      else
+        S_M="$(s_score "$WORK/s-M1")"
+        [ "$S_M" = '-|STAMPED' ] && ok "BL-360 s-M1 killed: with the status folded into success the refusal vanishes and the stamp advances ($S_M)" \
+          || bad "BL-360 s-M1 SURVIVED or misfired: $S_M (want -|STAMPED)"
+      fi
+    else
+      bad "BL-360 s-M1 DID NOT APPLY -- the relabel detector_run line is not in apply.sh exactly once"
+    fi
+  else
+    bad "FIXTURE BROKEN [BL-360 arm s]: could not copy the reconcile dir"
+  fi
 fi
 
 echo

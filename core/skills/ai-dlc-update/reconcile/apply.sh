@@ -184,11 +184,18 @@ self_replaced=0
 # because `--finish` is the exit. `--finish` gates on WORKLIST only -- a row naming concrete work
 # that clears when the work is done -- and never on a DECISION, which at that point is either
 # already adjudicated by the operator or is this program saying it could not look.
+#
+# A THIRD COUNT, `reapply_owed`, IS TAKEN HERE FOR THE SAME REASON: it is every row whose detail
+# carries `reapply_remedy` below, the rows only a fresh ordinary run clears. Keyed on the detail
+# text at the emitter rather than on a list of call sites, so a fifth such row is counted without
+# anyone remembering to. The withheld-stamp row reads it to decide which next step it names.
 handback=0
 worklist_n=0
+reapply_owed=0
 say() {
   case "$1" in WORKLIST|DECISION) handback=$((handback+1)) ;; esac
   case "$1" in WORKLIST)          worklist_n=$((worklist_n+1)) ;; esac
+  case "${4:-}" in *"$reapply_remedy"*) reapply_owed=$((reapply_owed+1)) ;; esac
   if [ -n "${4:-}" ]; then printf '%s\t%s\t%s\t%s\n' "$1" "$2" "${3:-}" "$4"
   else                     printf '%s\t%s\t%s\n'     "$1" "$2" "${3:-}"
   fi
@@ -204,7 +211,11 @@ err() { echo "apply: $*" >&2; exit 1; }
 # known_skills edit unrefiled and the schema still drifted, and it stamped theirs over a 100755
 # validator still not executable. The procedure whose SUCCESS implies the work was done is the
 # union gate's own: re-render, re-approve, apply -- that run refiles, and that run re-audits.
-reapply_remedy="re-render the report with \`emit-report.sh ${DIST} ${BASE} ${CONSUMER} ${THEIRS}\` from the tree as it now stands, re-approve it, then re-run apply with the same four arguments. A bare re-run is refused by the union gate, because this run already wrote the tree the approved report describes; and the finish mode the withheld-stamp row offers does not redo this step, so it would stamp theirs over the tree exactly as it is."
+#
+# `--finish` NOW RE-CHECKS BOTH AND REFUSES, rather than stamping over them (finish_reapply_owed
+# below), and the withheld row no longer offers it while one of these rows is outstanding. It
+# still does not REDO either step, which is why this remedy does not name it.
+reapply_remedy="re-render the report with \`emit-report.sh ${DIST} ${BASE} ${CONSUMER} ${THEIRS}\` from the tree as it now stands, re-approve it, then re-run apply with the same four arguments. A bare re-run is refused by the union gate, because this run already wrote the tree the approved report describes; and the finish mode does not redo this step -- it re-checks it and withholds the stamp while it is still undone."
 
 # --- MECHANICAL UNION GATE, CONDITION (1), DRIVEN HERE RATHER THAN NARRATED ----
 # SKILL.md step 7 lets `apply` write only after
@@ -518,6 +529,123 @@ detector_refused() {
     [ -n "$_first" ] || _first="(empty)"
   fi
   say DECISION "$1-refused" "$3" "DETECTOR-REFUSED: $2 exited $4 — this section is NOT a finding of 'none'; stderr: ${_first}"
+}
+
+# NO HERE-STRING FEEDS A DECISION IN THIS FILE, FOR layer-drift.sh's REASON (its header carries the
+# measurement). bash 3.2 stages every `<<<` to a temp file, and when that write fails -- `ulimit -f`,
+# a full or read-only TMPDIR -- it runs the command with EMPTY stdin and the command's own exit:
+# a loop runs zero times, a `grep -q` answers "absent". Here that read as no retire keys, no
+# exec-bit finding and no dangling hook, each a clean answer.
+#
+# ap_stage <name> <value> -- writes the bytes a here-string would feed (`printf '%s\n'`) to
+# $AP_TMP/<name> and returns the write's status. Loops then read the file in the main shell, so a
+# counter set in the body survives. The builtin `printf` writes into a PIPE, never into the file:
+# a failed builtin write leaves its unflushed bytes in this shell's stdout buffer, and the next
+# write to stdout -- a manifest row -- carries them (measured on bash 3.2.57 under `ulimit -f 4`:
+# the tail of the lost value printed ahead of the next row). A pipe cannot fail that way; `cat`,
+# a child, takes the write error, and `pipefail` (set above) hands its status back.
+#
+# THE FIRST FAILED WRITE ENDS ALL STAGING FOR THE RUN. A staging directory that refused one write
+# is not trusted for the next, so every later call refuses without writing, and every caller
+# reports its own section through ap_staging_refused rather than reading an empty input.
+AP_NL='
+'
+ap_stage_dead=0
+fv_unapplied=""
+ap_stage() {
+  local _rc=0
+  { [ -n "$AP_TMP" ] && [ "$ap_stage_dead" = 0 ]; } || return 125
+  printf '%s\n' "$2" | cat > "$AP_TMP/$1" || _rc=$?
+  [ "$_rc" -eq 0 ] || ap_stage_dead=1
+  return "$_rc"
+}
+# ap_staging_refused <subject> <what could not be staged> <rc> <remedy> -- the one spelling of the
+# row. A WORKLIST under `--finish`, which gates on WORKLIST alone, so the finisher withholds rather
+# than stamping over a section it could not read; a DECISION on the ordinary run, which withholds
+# on both. It clears when the staging directory can be written again.
+ap_staging_refused() {
+  local _k=DECISION
+  [ "$FINISH" = 1 ] && _k=WORKLIST
+  say "$_k" staging-refused "$1" "$2 could not be staged (exit $3), so this section is UNKNOWN, not clean, and no row it would have produced was emitted. Check that TMPDIR (${TMPDIR:-/tmp}) is writable and has space and that no file-size limit is set, then $4"
+}
+
+# --- THE EXEC-BIT AUDIT, ONE BODY FOR BOTH MODES -----------------------------------------------
+#
+# LEVEL, NOT EDGE: it reads the whole shipped set against the tree as it stands, so it answers the
+# same question on the ordinary run and under `--finish`. The ordinary run raises a DECISION per
+# finding and counts it a mechanical failure (the rationale is at the call site in the resolution
+# phases). Under `--finish` each finding is a WORKLIST row: the finisher used to skip this audit
+# and stamped theirs over a 100755 validator still not executable, which is BL-402. There the fix
+# is the `chmod` itself -- this audit re-runs on the next `--finish` and clears when it is done.
+#
+# THE LISTING'S STATUS IS READ. It used to be captured with its status discarded, so a failed
+# `ls-tree` was an audit that named nothing -- a clean audit. Each line carries its direction
+# (`N` = 100755 not executable, `X` = 100644 executable).
+exec_audit() {
+  local _ne _rc=0 _mode _cp _rel _cons _tab
+  _tab="$(printf '\t')"
+  _ne="$(git -C "$DIST" ls-tree -r "$THEIRS" -- core/ 2>/dev/null \
+    | awk '$1=="100755" || $1=="100644" { m = $1; sub(/^[^\t]*\t/, ""); print m "\t" $0 }')" || _rc=$?
+  if [ "$_rc" -eq 0 ] && [ -z "$_ne" ]; then _rc=empty; fi
+  if [ "$_rc" != 0 ]; then
+    ap_staging_refused "core/" "the mode listing of \`${THEIRS}:core/\` (git ls-tree)" "$_rc" "re-run this invocation."
+    [ "$FINISH" = 1 ] || mech_fail=$((mech_fail+1))
+    return 0
+  fi
+  _rc=0; ap_stage exec-audit "$_ne" || _rc=$?
+  if [ "$_rc" -ne 0 ]; then
+    ap_staging_refused "core/" "the mode listing of \`${THEIRS}:core/\`" "$_rc" "re-run this invocation."
+    [ "$FINISH" = 1 ] || mech_fail=$((mech_fail+1))
+    return 0
+  fi
+  while IFS="$_tab" read -r _mode _cp; do
+    [ -n "$_mode" ] || continue
+    _rel="${_cp#core/}"
+    _cons="$(consumer_path "$_rel" 2>/dev/null)" || continue
+    # Not every shipped file lands on every consumer (ci-templates only with
+    # .github/, for one). Absent is a different finding, covered above.
+    [ -f "$_cons" ] || continue
+    if [ "$FINISH" = 1 ]; then
+      # finish_verify_tree() OWNS a file in the range: its `finish-unapplied` row already names a
+      # missing exec bit, so this audit stands down for that path and owns only the rest.
+      case "${AP_NL}${fv_unapplied}${AP_NL}" in *"${AP_NL}${_cons#"$CONSUMER"/}${AP_NL}"*) continue ;; esac
+      if [ "$_mode" = 100755 ] && [ ! -x "$_cons" ]; then
+        say WORKLIST finish-exec-owed "${_cons#"$CONSUMER"/}" \
+          "upstream ships this 100755 but the consumer copy is not executable — installed and inert, and the stamp would claim theirs over it. \`chmod +x\` it, then re-run --finish: this audit runs again there and clears when the bit is set."
+      elif [ "$_mode" = 100644 ] && [ -x "$_cons" ]; then
+        say WORKLIST finish-exec-owed "${_cons#"$CONSUMER"/}" \
+          "upstream ships this 100644 but the consumer copy is executable, and the stamp would claim theirs over it. \`chmod -x\` it, then re-run --finish: this audit runs again there and clears when the bit is cleared."
+      fi
+    elif [ "$_mode" = 100755 ] && [ ! -x "$_cons" ]; then
+      say DECISION not-executable "${_cons#"$CONSUMER"/}" \
+           "upstream ships this 100755 but the consumer copy is not executable — installed and inert; every call site that invokes it directly fails until it is fixed. \`chmod +x\` it, then ${reapply_remedy}"
+      mech_fail=$((mech_fail+1))
+    elif [ "$_mode" = 100644 ] && [ -x "$_cons" ]; then
+      say DECISION extra-executable "${_cons#"$CONSUMER"/}" \
+           "upstream ships this 100644 but the consumer copy is executable — a bit upstream does not grant, left by an earlier pull or by hand, and no later pull clears it unless it happens to rewrite this file. \`chmod -x\` it, then ${reapply_remedy}"
+      mech_fail=$((mech_fail+1))
+    fi
+  done < "$AP_TMP/exec-audit"
+  return 0
+}
+
+# --- THE KNOWN_SKILLS REFILE'S DIFF, ONE BODY FOR BOTH MODES -----------------------------------
+#
+# ap_ks_diff <rel> <consumer-file> -- sets `ap_d` to diff(theirs, consumer) and `ap_drc` to its
+# status, or `staging-failed` when theirs could not be staged. Theirs is STAGED and diff's rc read
+# off the bare run (0/1 ran, >=2 refused): the old `diff <(git show …) | …` read no status at all,
+# and the `<( )` fd race (3-8 in 2000 under 4 bash 3.2 workers, batch 160) exits 2 -- which read
+# as "no known_skills added". Piped through `ap_pdiff`; a failed `cat` is 2.
+# ap_ks_added <diff> -- the skill names the CONSUMER side carries and theirs does not.
+ap_ks_diff() {
+  ap_d=""; ap_drc=staging-failed
+  if [ -n "$AP_TMP" ] && git -C "$DIST" show "${THEIRS}:core/${1}" > "$AP_TMP/theirs" 2>/dev/null; then
+    ap_d="$(ap_pdiff "$AP_TMP/theirs" "$2" 2>/dev/null)"; ap_drc=$?
+  fi
+  return 0
+}
+ap_ks_added() {
+  printf '%s\n' "$1" | sed -n 's/^> *//p' | grep -oE '"[^"]+"' | tr -d '"' | grep -v '^known_skills$' | sort -u
 }
 
 # =============================================================================================
@@ -956,20 +1084,15 @@ while IFS= read -r rel; do
   cons="$(consumer_path "$rel")" || { say DECISION drift "$rel" "no consumer path mapping"; mech_fail=$((mech_fail+1)); continue; }
   case "$rel" in
     schemas/provenance-block.json)
-      # Theirs is STAGED and diff's rc read off the bare run (0/1 ran, >=2 refused): the old
-      # `diff <(git show …) | …` read no status at all, and the `<( )` fd race (3-8 in 2000 under
-      # 4 bash 3.2 workers, batch 160) exits 2 -- which read as "no known_skills added". A failed
-      # show, staging or diff is a DECISION that withholds the stamp, never an empty diff.
-      ap_d=""; ap_drc=staging-failed
-      # Piped through `ap_pdiff`; a failed `cat` is 2.
-      if [ -n "$AP_TMP" ] && git -C "$DIST" show "${THEIRS}:core/${rel}" > "$AP_TMP/theirs" 2>/dev/null; then
-        ap_d="$(ap_pdiff "$AP_TMP/theirs" "$cons" 2>/dev/null)"; ap_drc=$?
-      fi
+      # The diff is ap_ks_diff's, which `--finish` re-runs to see whether this refile is still
+      # owed. A failed show, staging or diff is a DECISION that withholds the stamp, never an
+      # empty diff.
+      ap_ks_diff "$rel" "$cons"
       if [ "$ap_drc" = staging-failed ] || [ "$ap_drc" -ge 2 ]; then
         say DECISION drift "$rel" "the diff against ${THEIRS} did not run (${ap_drc}) — whether this edit is an additive known_skills entry is UNKNOWN, not no. Fix what stopped it (the consumer copy unreadable, or no staging directory), then ${reapply_remedy}"
         mech_fail=$((mech_fail+1)); continue
       fi
-      added="$(printf '%s\n' "$ap_d" | sed -n 's/^> *//p' | grep -oE '"[^"]+"' | tr -d '"' | grep -v '^known_skills$' | sort -u)"
+      added="$(ap_ks_added "$ap_d")"
       if [ -n "$added" ]; then
         ext="$CONSUMER/.claude/skills/ai-dlc/extensions/known-skills.json"
         mkdir -p "$(dirname "$ext")"
@@ -1211,7 +1334,7 @@ while IFS="$TAB_CH" read -r ovr detail; do
     # keys that replace it not yet written, and reds the next gate.
     key_total=$(( $(printf '%s' "$env_key" | tr ',' '\n' | grep -c .) + 1 ))
     key_n=0
-    # `<<<`, NOT `printf | while read`, AND THE DIFFERENCE IS EVERY KEY ROW.
+    # A STAGED FILE, NOT `printf | while read`, AND THE DIFFERENCE IS EVERY KEY ROW.
     #
     # `printf '%s'` writes NO trailing newline, so the final element reaches `read` at EOF:
     # `read` assigns it and returns NON-ZERO, and the loop body never runs on it. N keys emitted
@@ -1224,13 +1347,22 @@ while IFS="$TAB_CH" read -r ovr detail; do
     # `key_total` was RIGHT throughout, because `grep -c` counts a final unterminated line. That
     # is why the numbering could keep advertising a row nobody emitted.
     #
-    # A here-string appends the newline the last element needs, and it also drops the subshell
-    # the pipeline created -- so `key_n` now survives the loop instead of being reset per run.
+    # The list is now STAGED with `ap_stage`, which writes `printf '%s\n'` -- the trailing newline
+    # the last element needs, exactly as the here-string supplied it -- and the loop reads that
+    # file in the main shell, so `key_n` survives the loop. Not a here-string any more: a
+    # here-string that could not be staged ran this loop ZERO times and the sequence lost every
+    # write step. A staging failure is a row, and the retire step below is withheld with it,
+    # because printing step N/N alone is the order this block exists to forbid.
+    ok_rc=0; ap_stage env-keys "${env_key//,/$AP_NL}" || ok_rc=$?
+    if [ "$ok_rc" -ne 0 ]; then
+      ap_staging_refused "$ovr" "the settings_env_keys list of this supersession" "$ok_rc" "re-render the report and re-run apply with the same four arguments."
+      continue
+    fi
     while IFS= read -r one_key; do
       [ -n "$one_key" ] || continue
       key_n=$(( key_n + 1 ))
       say WORKLIST override-retire "$ovr" "${key_n}/${key_total} ATOMIC — write ${one_key} into .claude/settings.json \"env\" (derive its value per override_supersessions in layer-contract.yaml; do NOT copy the example). Doing the retire stamp first re-imposes the core constraint this entry was widening and reds the next gate."
-    done <<< "$(printf '%s' "$env_key" | tr ',' '\n')"
+    done < "$AP_TMP/env-keys"
     # "THE ROW(S) ABOVE" NAMED THE WRONG ROWS THE MOMENT ANYTHING ELSE PRINTED FOR THIS PATH.
     # The steps that must land together are the other steps of THIS sequence, and the phrase
     # said "above" -- which, for an override that is also drift-hard, points at an
@@ -1348,7 +1480,20 @@ EOF
 # So read the COUNT the tool already prints, and say nothing when there was nothing to do. Parsed
 # with parameter expansion rather than a pipeline: feeding a variable into a reader is the I54b
 # shape, and this value decides whether a manifest row exists.
-relabel_out="$(bash "$SELF/relabel-extension-checks.sh" "$CONSUMER" --apply --dist "$DIST" --theirs "$THEIRS" 2>/dev/null || true)"
+#
+# AND ITS EXIT IS READ, NOT FOLDED INTO SUCCESS. This was `2>/dev/null || true`, so a tool that
+# REFUSED (exit 2: no staging directory, an extension walk that did not run, a core anchor set
+# that could not be staged) printed no count and read here as "nothing to relabel". Under
+# `--apply` the tool exits 0 on every outcome it decided, so any non-zero is a refusal, reported
+# through `detector_run`/`detector_refused` like every other sibling this file consults.
+relabel_out=""
+detector_run relabel relabel-extension-checks.sh "$CONSUMER" --apply --dist "$DIST" --theirs "$THEIRS"
+RELABEL_RC=$?
+if [ "$RELABEL_RC" -ne 0 ]; then
+  detector_refused relabel relabel-extension-checks.sh ".claude/skills/ai-dlc/extensions/" "$RELABEL_RC" relabel
+else
+  relabel_out="$(cat "$DT_DIR/relabel.out")" || relabel_out=""
+fi
 relabel_n=""
 case "$relabel_out" in
   *"relabel-extension-checks: labelled "*)
@@ -1760,41 +1905,11 @@ fi
 # writes. It is a mechanical failure for the same reason as the other direction -- preclassify's
 # `mode_at_theirs` already reads 100644-plus-exec as NOT at theirs, and a stamp claiming theirs
 # over it would disagree with the classifier the next pull runs.
-# The listing is staged BEFORE the loop, never piped into it: a `| while` runs the loop in a
-# subshell that drops its refusals (procsub-staged-refusal's spelling arm, r2).
-NE_LIST="$(git -C "$DIST" ls-tree -r "$THEIRS" -- core/ 2>/dev/null \
-  | awk '$1=="100755" || $1=="100644" { m = $1; sub(/^[^\t]*\t/, ""); print m "\t" $0 }')"
-NOEXEC="$(
-  while IFS="$TAB_CH" read -r mode cp; do
-        [ -n "$mode" ] || continue
-        rel="${cp#core/}"
-        cons="$(consumer_path "$rel" 2>/dev/null)" || continue
-        # Not every shipped file lands on every consumer (ci-templates only with
-        # .github/, for one). Absent is a different finding, covered above.
-        [ -f "$cons" ] || continue
-        # `if`, never `case`: a `case` pattern's `)` inside `$( )` is where bash 3.2's parser
-        # breaks (see ap_pdiff), and here it broke SILENTLY -- the substitution came back empty
-        # and the audit named nothing in either direction.
-        if [ "$mode" = 100755 ] && [ ! -x "$cons" ]; then printf 'N\t%s\n' "$cons"
-        elif [ "$mode" = 100644 ] && [ -x "$cons" ]; then printf 'X\t%s\n' "$cons"
-        fi
-  done <<< "$NE_LIST"
-)"
-
-if [ -n "$NOEXEC" ]; then
-  while IFS="$TAB_CH" read -r dir cons; do
-    [ -n "$cons" ] || continue
-    case "$dir" in
-      N) say DECISION not-executable "${cons#"$CONSUMER"/}" \
-           "upstream ships this 100755 but the consumer copy is not executable — installed and inert; every call site that invokes it directly fails until it is fixed. \`chmod +x\` it, then ${reapply_remedy}" ;;
-      X) say DECISION extra-executable "${cons#"$CONSUMER"/}" \
-           "upstream ships this 100644 but the consumer copy is executable — a bit upstream does not grant, left by an earlier pull or by hand, and no later pull clears it unless it happens to rewrite this file. \`chmod -x\` it, then ${reapply_remedy}" ;;
-    esac
-    mech_fail=$((mech_fail+1))
-  done <<EOF
-$NOEXEC
-EOF
-fi
+# The body is exec_audit(), above the phase guard, because `--finish` runs the same audit (BL-402).
+# The listing is staged to a file with its status read and the loop reads that file in the main
+# shell -- never a `| while`, whose subshell drops its refusals, and never a here-string, which
+# reads a failed staging as an empty listing.
+exec_audit
 
 fi  # ---- end of the resolution phases; see the `--finish` guard that opens them --------------
 
@@ -1928,16 +2043,75 @@ finish_verify_tree() {
     [ -n "${_fv_bucket:-}" ] || continue
     case "$_fv_bucket" in
       UPSTREAM-ONLY|UPSTREAM-ONLY-ADD|*SETUP-TOKENS*)
+        fv_unapplied="${fv_unapplied}${AP_NL}${_fv_cons}"
         say WORKLIST finish-unapplied "$_fv_cons" "${_fv_bucket}: this file still reads as ${_fv_bucket} against \`${THEIRS}\` -- missing, still at base, or without theirs' exec bit -- so the tree does not carry what the stamp would claim. Write theirs' copy: \`git -C <dist> show \"${THEIRS}:${_fv_path}\" > ${_fv_cons}\` (and \`chmod +x\` it if upstream ships it executable), or re-run the ordinary apply, then re-run --finish." ;;
       *)
         case "$_fv_st" in R|O) continue ;; esac
-        if grep -qxF "$_fv_path" <<< "$_fv_sited"; then
-          say NOTE finish-unverified "$_fv_cons" "setup-sited, bucketed ${_fv_bucket}: a setup-filled file never byte-matches base or theirs, so --finish cannot tell a merged copy from an untouched one. Confirm by hand that theirs' changes are in it."
-        fi ;;
+        # A `case` membership test, not `grep -qxF <<<`: no temp file to lose, so a staging
+        # failure cannot read as "not setup-sited" and drop the row.
+        case "${AP_NL}${_fv_sited}${AP_NL}" in *"${AP_NL}${_fv_path}${AP_NL}"*)
+          say NOTE finish-unverified "$_fv_cons" "setup-sited, bucketed ${_fv_bucket}: a setup-filled file never byte-matches base or theirs, so --finish cannot tell a merged copy from an untouched one. Confirm by hand that theirs' changes are in it." ;;
+        esac ;;
     esac
   done <<EOF
 $_fv_rows
 EOF
+  return 0
+}
+
+# --- `--finish`: ARE THE TWO DECISION REMEDIES ONLY A FRESH RUN PERFORMS STILL OWED? (BL-402) -----
+#
+# finish_verify_tree() reads preclassify's pure-apply buckets and nothing else, so the two steps
+# the ordinary run performs and `--finish` skips were never re-checked: the provenance refile and
+# the exec-bit audit. Measured in apply-drift-refile's seeded world with the consumer schema at
+# mode 000: apply raised `DECISION drift … did not run` and withheld the stamp, and `--finish` then
+# stamped theirs with `my-persona-skill` unrefiled and the schema still drifted.
+#
+# So `--finish` re-checks both, against the tree as it now stands, and each still-owed one is a
+# WORKLIST row -- what it gates on -- that clears when the work is done, by hand or by the fresh
+# ordinary run the DECISION row prescribed. It does not PERFORM either step: a finisher that wrote
+# core would be a second apply, and the reason it is the stamp and nothing else is stated above
+# the phase guard.
+#
+# THE REFILE IS OWED WHILE A SKILL THE CONSUMER'S SCHEMA ADDS TO THEIRS' known_skills IS NOT IN
+# THE EXTENSION. Keyed on that set and not on "the schema differs from theirs": a schema the
+# operator kept in place after the refile-vs-revert DECISION differs forever, and keying on the
+# difference would withhold every finish over it with no in-band exit. A schema byte-equal to
+# theirs runs no parser at all. A diff or parse that could not run is a withhold, never a pass.
+finish_reapply_owed() {
+  local _rel=schemas/provenance-block.json _cons _ext _owed _prc=0
+  # An unresolvable <theirs> is write_stamp()'s `restamp-unresolvable` refusal, as in
+  # finish_verify_tree(); a row here would pre-empt it with a withheld row naming the wrong cause.
+  git -C "$DIST" rev-parse -q --verify "${THEIRS}^{commit}" >/dev/null 2>&1 || return 0
+  _cons="$(consumer_path "$_rel" 2>/dev/null)" || _cons=""
+  if [ -n "$_cons" ] && [ -e "$_cons" ]; then
+    ap_ks_diff "$_rel" "$_cons"
+    if [ "$ap_drc" = staging-failed ] || [ "$ap_drc" -ge 2 ]; then
+      say WORKLIST finish-refile-unverified "$_rel" "the diff against \`${THEIRS}\` did not run (${ap_drc}), so whether a known_skills entry is still unrefiled is UNKNOWN and the stamp is not advanced. Fix what stopped it (the consumer copy unreadable, or no staging directory), then re-run --finish."
+    elif [ "$ap_drc" -eq 1 ]; then
+      _ext="$CONSUMER/.claude/skills/ai-dlc/extensions/known-skills.json"
+      _owed="$(python3 - "$AP_TMP/theirs" "$_cons" "$_ext" <<'PY'
+import json, os, sys
+def skills(p, required):
+    if not os.path.isfile(p):
+        if required: raise SystemExit(3)
+        return set()
+    d = json.load(open(p))
+    v = d.get("known_skills", []) if isinstance(d, dict) else d
+    if not isinstance(v, list): raise SystemExit(3)
+    return set(str(x) for x in v)
+owed = skills(sys.argv[2], True) - skills(sys.argv[1], True) - skills(sys.argv[3], False)
+for s in sorted(owed): print(s)
+PY
+)" || _prc=$?
+      if [ "$_prc" -ne 0 ]; then
+        say WORKLIST finish-refile-unverified "$_rel" "the consumer schema differs from \`${THEIRS}\` and its known_skills could not be compared against the extension (python3 exited ${_prc}), so whether an entry is still unrefiled is UNKNOWN and the stamp is not advanced. Check that both files are valid JSON and that python3 runs, then re-run --finish."
+      elif [ -n "$_owed" ]; then
+        say WORKLIST finish-refile-owed "$_rel" "known_skills the consumer added in place are still not in extensions/known-skills.json: $(printf '%s' "$_owed" | tr '\n' ' ')— the refile the ordinary run performs was never done, so the stamp would claim theirs over drift it has not migrated. Add each to .claude/skills/ai-dlc/extensions/known-skills.json and restore the schema with \`git -C <dist> show \"${THEIRS}:core/${_rel}\" > .claude/${_rel}\`, or follow the drift row's re-render/re-approve/apply remedy, then re-run --finish."
+      fi
+    fi
+  fi
+  exec_audit
   return 0
 }
 
@@ -1974,10 +2148,16 @@ finish_id_mismatch=""
 finish_id_note=""
 if [ "$FINISH" = 1 ]; then
   finish_identity
-  [ -z "$finish_id_mismatch" ] && finish_verify_tree
+  if [ -z "$finish_id_mismatch" ]; then finish_verify_tree; finish_reapply_owed; fi
 fi
 if [ "$FINISH" = 1 ]; then outstanding="$worklist_n"; else outstanding="$handback"; fi
-if [ "$mech_fail" -gt 0 ] || [ "$outstanding" -gt 0 ]; then
+# A ROW ONLY A FRESH ORDINARY RUN CLEARS IS NOT FINISHED BY `--finish`, SO THE WITHHELD ROW DOES NOT
+# OFFER IT THEN (BL-402). It used to name `--finish` unconditionally, beside a drift row whose own
+# remedy said the finisher would stamp over the unrefiled tree -- and it did. `reapply_owed` is
+# counted in `say`, from the detail text, so this branch cannot miss a row the counter saw.
+if { [ "$mech_fail" -gt 0 ] || [ "$outstanding" -gt 0 ]; } && [ "$reapply_owed" -gt 0 ]; then
+  say DECISION restamp-withheld "$STAMP" "${mech_fail} file(s) could not be placed mechanically and ${outstanding} WORKLIST/DECISION row(s) above are undisposed, ${reapply_owed} of them a step only a fresh ordinary run performs — the stamp would claim ${THEIRS} while the tree does not yet match it, and the next pull computes its merge base from that stamp. Left at ${BASE}, and \`${APPLYING##*/}\` is deliberately left in place so the fixture suite keeps blocking. Follow those rows' own remedy (re-render the report, re-approve it, re-run apply with the same four arguments); that run re-stamps when nothing is left. The finish mode is NOT the next step here: it re-checks those rows and withholds while they are undone.${withheld_extra}"
+elif [ "$mech_fail" -gt 0 ] || [ "$outstanding" -gt 0 ]; then
   say DECISION restamp-withheld "$STAMP" "${mech_fail} file(s) could not be placed mechanically and ${outstanding} WORKLIST/DECISION row(s) above are undisposed — the stamp would claim ${THEIRS} while the tree does not yet match it, and the next pull computes its merge base from that stamp. Left at ${BASE}, and \`${APPLYING##*/}\` is deliberately left in place so the fixture suite keeps blocking. Do the rows above, then advance the stamp with: apply.sh --finish${finish_flag} <dist> ${BASE} <consumer> ${THEIRS}${withheld_extra}"
 elif [ -f "$STAMP" ]; then
   # RESOLVE THEIRS BEFORE WRITING ANYTHING, AND REFUSE IF IT DOES NOT RESOLVE.
@@ -2232,10 +2412,22 @@ for c in cmds:
 ' "$CONSUMER/.claude/settings.local.json" "$hr_pat" 2>/dev/null | tr '\n' ' ')"
   fi
   hr_dangle=""; hr_dangle_local=""
-  # A `while read` OVER A HERE-STRING, NEVER `for _hn in $(...)`. This file has no `set -f`, and a
+  # A `while read` OVER A STAGED FILE, NEVER `for _hn in $(...)`. This file has no `set -f`, and a
   # registered name is whatever the settings say: `.claude/hooks/ai-dlc-*.sh` matches the
   # validator's pattern, is printed under DANGLING as `ai-dlc-*.sh`, and an unquoted expansion
   # globs it against the cwd. Measured from `.claude/hooks`: it named all 21 hooks.
+  #
+  # Not a here-string either, and the two producers' statuses are read: a here-string that could
+  # not be staged, or an `awk` that did not run, both read as "no dangling hook", and on `--finish`
+  # that is a stamp over a registration Claude Code cannot run. Either is a refused section.
+  hr_rc2=0
+  hr_d_list="$(printf '%s\n' "$hr_blocks" | awk '$1 == "D" { print $2 }')" || hr_rc2=$?
+  [ "$hr_rc2" -eq 0 ] && { ap_stage hr-dangling "$hr_d_list" || hr_rc2=$?; }
+  [ "$hr_rc2" -eq 0 ] && { ap_stage hr-names "${hr_names// /$AP_NL}" || hr_rc2=$?; }
+  if [ "$hr_rc2" -ne 0 ]; then
+    ap_staging_refused ".claude/settings.json" "the hook-registration validator's name lists" "$hr_rc2" "re-run scripts/ai-dlc/validate-hook-registration.sh by hand, act on what it names, and re-run this invocation."
+    return 0
+  fi
   while IFS= read -r _hn; do
     [ -n "$_hn" ] || continue
     case "$hr_local" in
@@ -2243,7 +2435,7 @@ for c in cmds:
       *)            hr_dangle="${hr_dangle}${_hn} "
                     case "$hr_inlocal" in *" ${_hn} "*) hr_dangle_local="${hr_dangle_local}${_hn} " ;; esac ;;
     esac
-  done <<< "$(printf '%s\n' "$hr_blocks" | awk '$1 == "D" { print $2 }')"
+  done < "$AP_TMP/hr-dangling"
   # AN UNREGISTERED HOOK THEIRS NEITHER SHIPS NOR REGISTERS IS NOT THE SETTINGS MERGE'S TO CLEAR.
   # `settings-merge.sh` re-applies the TEMPLATE's hook blocks and strips every other `ai-dlc-*`
   # block from settings.json, so the remedy the settings-merge row prints cannot register a name
@@ -2258,7 +2450,6 @@ for c in cmds:
   # without the template there is nothing to say a name is absent from, so today's row stands.
   hr_tmpl="$(git -C "$DIST" show "${THEIRS}:templates/settings.json.template" 2>/dev/null)"; hr_tmpl_rc=$?
   hr_orphan=""; hr_merge_names=""
-  hr_name_list="$(printf '%s\n' "$hr_names" | tr ' ' '\n')"
   while IFS= read -r _hn; do
     [ -n "$_hn" ] || continue
     if [ "$hr_tmpl_rc" -eq 0 ] \
@@ -2270,7 +2461,7 @@ for c in cmds:
     else
       hr_merge_names="${hr_merge_names}${_hn} "
     fi
-  done <<< "$hr_name_list"
+  done < "$AP_TMP/hr-names"
   hr_names="$hr_merge_names"
   if [ "$hr_rc" = "1" ] && [ -n "$hr_orphan" ]; then
     say WORKLIST hook-unshipped ".claude/hooks/" \
