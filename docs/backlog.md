@@ -2035,21 +2035,8 @@ early-exiting reader: `printf | grep -q` on a 206 KB haystack under `pipefail` a
 spelling arm holding the non-comment `<<<` count at zero.
 
 **Findings carried here**, held in this entry because the live ceiling admitted one filing after
-`BL-359` rotated. The first is DEFECT-tier on its own; split it out at the next close:
+`BL-359` rotated. All three are NOTE-tier.
 
-- **A bad `theirs` ref or a missing contract blob reads as an ABSENT contract, so the adjudication
-  tier switches off at rc 0.** `layer-drift.sh`'s `have` (`:593`) is `memo_has_path`, a
-  `cat-file -e` that returns non-zero for an absent path, an unresolvable ref and a missing object
-  alike. The v0.658.0 fix deliberately keeps an absent contract as an empty one, so each of these
-  now takes that branch. Forced by the batch 167 tip adversary on both 0.657.0 and 0.658.0: with
-  the contract blob removed from the object store (`rev-parse --verify` 0, `cat-file -e` 1, `show`
-  128), `--adjudicated-codes` returns an empty set at rc 0 (control, blob intact:
-  `EXTENSION-TITLE-MATCHES-CORE`); with a nonexistent `theirs`, classify returns 50 rows at rc 0,
-  the only signal a skeleton-heading WARNING (control, good ref: 4 codes). Nothing in
-  `layer-drift.sh`, `apply.sh` or `emit-report.sh` checks that `theirs` resolves before
-  classifying. Remedy: refuse at startup unless `rev-parse -q --verify "${BASE}^{commit}"` and
-  `"${THEIRS}^{commit}"` both resolve, and in `have` treat "the path is in the tree but
-  `cat-file -e` fails" as a refusal, not an absence.
 - **NOTE — the W3 contradiction-awk count has no fixture cell.** A mutant replacing
   `adj_register_contradictions`' `PIPESTATUS[1]` read with `_rc=0` silently loses a
   `HARD-REGISTER-CONTRADICTION` row; `mk_ld_world` never writes a register, and neither the
@@ -2062,6 +2049,12 @@ spelling arm holding the non-comment `<<<` count at zero.
 - **NOTE — two early-exit readers fed by a pipe remain in `layer-drift.sh`** (`adj_verdict … | head
   -1` and `shadow_parts … | head -1`), status unread and inputs small, so no current risk; the
   v0.658.0 partition covered `<<<` sites only.
+
+Held note (batch 178): the carried DEFECT bullet — a bad `theirs` ref or a missing contract blob
+read as an absent contract, switching adjudication off at rc 0 — is struck. It was split out as
+`BL-370` and shipped in v0.664.0 (verified bf998dfb): `layer-drift.sh:290` refuses an unresolvable
+ref at startup through `ld_resolve_ref`, and `have()` at `:690-705` refuses a path the tree names
+but cannot read. The three NOTE bullets stay; this entry stays open for the bootstrapping half.
 
 **Amended at batch 169 (v0.660.0): the non-bootstrapping half is converted, and this entry stays
 live for the bootstrapping half.** Line numbers are at `322ef42c` unless marked tip.
