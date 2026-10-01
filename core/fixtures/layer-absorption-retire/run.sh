@@ -266,7 +266,10 @@ fi
 echo
 echo "Part 2 — BL-376: an unreadable base object refuses; a core file new this pull still reads NEW-THIS-PULL"
 B376_MARK='EVERY BASE READ IS GATED ON `have`'
-case "$DRIFT" in */core/skills/ai-dlc-update/reconcile/layer-drift.sh) b376_isdist=1 ;; *) b376_isdist=0 ;; esac
+# The layout is WHICH candidate resolved, not a pattern on the path: $DRIFT keeps the `..`
+# segments it was built from, so a `*/core/skills/...` glob never matches it and part 2 skipped in
+# the distribution on a pre-fix engine.
+b376_isdist=0; [ "$DRIFT" = "$HERE/../../skills/ai-dlc-update/reconcile/layer-drift.sh" ] && b376_isdist=1
 b376_run=1
 if ! grep -qF "$B376_MARK" "$DRIFT"; then
   if [ "$b376_isdist" = 0 ]; then
