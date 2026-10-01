@@ -89,8 +89,10 @@ member. A site whose `reads:` resolves to nothing at BOTH refs is refused, not s
   PASSES, copied from the validator's own emitter. It lets the row split a series that yielded
   no verdict token into `passed` (pass line on both sides) and `unclassified` (neither). A site
   without it prints `unclassified=n/a (grammar spells failures only)`, because its tokenless
-  series are passes and unparseable outputs mixed. Never write a pass line the validator does
-  not print.
+  series are passes and unparseable outputs mixed. The value `in-verdict` declares that
+  `verdict:` already extracts the pass verdict as a token (`PASS`, `OK`, a verdict class), so a
+  pass is counted in `compared` and every tokenless series is unclassified. Never write a pass
+  line the validator does not print.
 
 ## Each side runs rooted at its own probe root, so consumer DATA must be passed in
 
@@ -159,6 +161,7 @@ entry: core/scripts/validate-gate-adjudication.sh
 corpus: *.verdict.json
 series: s|/[^/]*\.verdict\.json$||
 invoke: --series {series}
+pass: in-verdict
 verdict: s/^VALIDATE-GATE-ADJUDICATION: (PASS|FAIL).*/\1/p; s/^  - STALLED: series '([^']+)'.* check '([^']+)' has held FAIL.*/STALLED \1 \2/p; s/^  - (MISSING|UNSTRUCTURED) REPAIR RECORD: series '([^']+)' \([^)]*\) pass ([0-9]+).*/\1 REPAIR RECORD \2 p\3/p; s/^  - SPLIT SERIES: check '([^']+)'.* between series '([^']+)'.*/SPLIT SERIES \2 \1/p; s/^  - series '([^']+)' (has two passes|spans gate_types).*/\2 \1/p; s/^  - ([^ ]+): (gate_nonce|carries no gate_series_id).*/\2 \1/p
 
 reads: core/scripts/validate-snapshot-conservation.sh
@@ -166,6 +169,7 @@ entry: core/scripts/validate-snapshot-conservation.sh
 corpus: pipeline-snapshot.md
 series: s/$//
 invoke: --root . --snapshot {series}
+pass: in-verdict
 verdict: s/^verdict[[:space:]]+: ([A-Z-]+).*/\1/p; s/^(FAIL|WARN): .*/\1/p
 
 reads: core/scripts/validate-suppression-lifetime.sh core/skills/ai-dlc/enforcement-map.yaml
@@ -174,4 +178,5 @@ corpus-root: docs/escalations
 corpus: pending.md
 series: s/$//
 invoke: --escalations {series} --gate-metrics _bmad-output/implementation-artifacts/gate-metrics.jsonl
+pass: in-verdict
 verdict: s/^OK: EXAMINED NOTHING.*/EXAMINED-NOTHING/p; s/^OK: .*/OK/p; s/^FAIL: suppression of check '([^']+)' is past its lifetime.*/EXPIRED \1/p; s/^FAIL: a ([A-Z_]+) entry names check\(s\) *(.*), which are recorded FAILING.*/TERMINAL \1 \2/p; s/^FAIL: malformed SUPPRESSED entry -- missing:(.*)/MALFORMED\1/p; s/^FAIL: \*\*Suppresses:\*\* names '([^']+)'.*/UNKNOWN-CHECK \1/p; s/^FAIL: \*\*Expires after:\*\* ([^ ]+) gates is outside.*/EXPIRY-RANGE \1/p; s/^FAIL: suppression fields on an entry that does not classify.*/FIELDS-ON-NON-SUPPRESSED/p; s/^FAIL: baselined key no longer reproduces: (.*)/STALE-BASELINE \1/p

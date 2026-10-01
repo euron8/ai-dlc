@@ -311,6 +311,12 @@ verdict: |' <<<"$GOOD")")"
 out13="$(bash "$R13/predicate-differential.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>&1)"
 ck "13e a site with pass: counts passed and unclassified separately" "records=5 series=5 compared=3 passed=1 unclassified=1" "$out13"
 nk "13f and does not print n/a"                                       "unclassified=n/a" "$out13"
+# `pass: in-verdict`: the verdict grammar captures the PASS line as a token, so steady is COMPARED
+# and only garbled is unclassified.
+R13v="$(mkrecon "$(sed -e 's|^verdict: .*|pass: in-verdict\
+verdict: s/^FAIL \\(([A-Z]+) --.*/\\1/p; s/^(PASS): .*/\\1/p|' <<<"$GOOD")")"
+out13v="$(bash "$R13v/predicate-differential.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>&1)"
+ck "13g a site whose verdict grammar spells PASS counts only the tokenless as unclassified" "records=5 series=5 compared=4 unclassified=1 (passes are verdict tokens)" "$out13v"
 
 # ---- PART 14: A NON-ASCII READ-SET MEMBER MATERIALIZES -----------------------------------------
 # Listed under the default core.quotePath, `core/schemas/café.yaml` arrives C-quoted, `git show`

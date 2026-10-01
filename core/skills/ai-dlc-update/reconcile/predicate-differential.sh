@@ -231,7 +231,7 @@ while IFS="$(printf '\t')" read -r P_READS P_ENTRY P_CORPUS P_SERIES P_INVOKE P_
     a_theirs="$(sed -nE "$P_VERDICT" "$TMP/out-theirs" | sort -u | tr '\n' ',')"
     if [ -n "$a_base" ] || [ -n "$a_theirs" ]; then
       n_parsed=$((n_parsed + 1))
-    elif [ "$P_PASS" != - ] && [ -n "$(sed -nE "$P_PASS" "$TMP/out-base")" ] && [ -n "$(sed -nE "$P_PASS" "$TMP/out-theirs")" ]; then
+    elif [ "$P_PASS" != - ] && [ "$P_PASS" != in-verdict ] && [ -n "$(sed -nE "$P_PASS" "$TMP/out-base")" ] && [ -n "$(sed -nE "$P_PASS" "$TMP/out-theirs")" ]; then
       n_passed=$((n_passed + 1))
     fi
     printf '%s\t%s\t%s\n' "$a_base" "$a_theirs" "$rel" >> "$TMP/pairs"
@@ -246,8 +246,12 @@ while IFS="$(printf '\t')" read -r P_READS P_ENTRY P_CORPUS P_SERIES P_INVOKE P_
   # rather than a number that would read as one: there, a tokenless series is either a pass or
   # unparseable, and nothing in the output says which.
   n_records="$(grep -c . < "$TMP/records")" || n_records=0
+  # `pass: in-verdict` declares that the verdict grammar already extracts the PASS verdict as a
+  # token, so a pass is counted in `compared` and every tokenless series is unclassified.
   if [ "$P_PASS" = - ]; then
     p_counts="records=${n_records} series=${n_series} compared=${n_parsed} unclassified=n/a (grammar spells failures only)"
+  elif [ "$P_PASS" = in-verdict ]; then
+    p_counts="records=${n_records} series=${n_series} compared=${n_parsed} unclassified=$((n_series - n_parsed)) (passes are verdict tokens)"
   else
     p_counts="records=${n_records} series=${n_series} compared=${n_parsed} passed=${n_passed} unclassified=$((n_series - n_parsed - n_passed))"
   fi
