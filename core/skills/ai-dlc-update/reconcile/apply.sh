@@ -616,38 +616,62 @@ ap_stage_or_refuse() {
 # is ABSENT on the consumer is not recorded: nothing can be byte-identical to it, and a deletion is a
 # disposition. An existing path whose blob cannot be read records `-`, which `--finish` withholds on.
 #
-# FIRST WRITE WINS, WITHIN ONE PULL. The re-run that `reapply_remedy` prescribes runs this again over
-# a tree where the operator may already have merged; recording that run's blob would make the merged
-# copy the reference and the finisher would then withhold on the merge itself. So a recorded line
-# survives every later ordinary run of the SAME pull -- one whose `base:` and `theirs:` name the same
-# `core/` trees as this run's, the comparison finish_identity() makes -- and only a path not yet
-# recorded is added. A marker from another pull, or from an engine that wrote no `classify-hashes:`
-# line, is started fresh.
+# THE BLOB AND THE EXEC BIT, BOTH. A range can change only a file's mode: theirs adds +x to a script
+# the consumer edited, preclassify buckets it BOTH-CHANGED->CLASSIFY, and the whole merge is a
+# `chmod +x` that leaves the blob alone. A blob-only record read that finished merge as untouched and
+# withheld forever. The line is `classify: <blob> <755|644><TAB><path>`; a change in either is touched.
 #
-# `classify-hashes: <n>` IS ALWAYS WRITTEN, zero included. Without it a marker from this engine with
-# no CLASSIFY row is byte-identical to one the previous engine wrote, and `--finish` could not say
-# which it was reading. The lines are SORTED so a re-run over the same state writes the same bytes:
-# `self-update-gate.sh` records this file's digest and its runner compares it strictly, so a marker
-# whose bytes moved without an apply having run would read as one that had.
+# NOT RECORDED WHERE THEIRS HAS NOTHING AT THE PATH TO MERGE IN: `UPSTREAM-DELETED+consumer-modified`
+# (theirs deleted it) and `ORPHANED-UNKNOWN` (no release ever shipped it). Keeping the consumer's copy
+# byte-for-byte is the NORMAL disposition for both, so a record would withhold on the ordinary
+# outcome and send every such pull through the no-op exit. They are still handed back as
+# `semantic-merge` and still listed there; only this check stands down for them.
+#
+# FIRST WRITE WINS, ACROSS EVERY RUN THAT STARTS FROM THE SAME BASE. The re-run that `reapply_remedy`
+# prescribes runs this again over a tree where the operator may already have merged; recording that
+# run's blob would make the merged copy the reference and the finisher would then withhold on the
+# merge itself. The blob being recorded is a fact about the tree the pull STARTED from, so it is keyed
+# on `base:` alone -- compared by `core/` tree -- and NOT on `theirs:`: a pull re-pointed at a newer
+# theirs after a merge, or a second pull from the same base, still started from the same tree. Only a
+# marker from another base is started fresh.
+#
+# A SAME-BASE MARKER WITH NO `classify-hashes:` LINE STAYS UNRECORDED. That is a marker an engine
+# without this record wrote -- on the pull that DELIVERS this engine, the first ordinary run is the old
+# one -- and the tree may already carry the operator's merges, so any blob read now could be a merged
+# copy. This run writes no hash lines and no `classify-hashes:` line, and `--finish` says so on a NOTE.
+#
+# `classify-hashes: <n>` IS OTHERWISE ALWAYS WRITTEN, zero included. Without it a marker from this
+# engine with no CLASSIFY row is byte-identical to one the previous engine wrote. The lines are SORTED
+# so a re-run over the same state writes the same bytes: `self-update-gate.sh` records this file's
+# digest and its runner compares it strictly, so a marker whose bytes moved without an apply having
+# run would read as one that had.
+#
+# A DIRECTORY AT THE MARKER'S PATH IS A REFUSAL. `mv -f` moves the new file INTO it and exits 0, so the
+# write reports success, nothing reads the record, and `core/git-hooks/pre-push` (which tests `-f`)
+# never blocks.
 #
 # WRITTEN THROUGH A PIPE AND RENAMED, NEVER A BUILTIN REDIRECT. A failed builtin `printf > file`
 # leaves its unflushed bytes in this shell's stdout and the next manifest row carries them (see
 # ap_stage). A marker that could not be written is a DECISION: the fixture suite would then run over
 # a mid-pull tree, and `--finish` would have no record to check the merges against.
 ap_write_marker() {
-  local _old="" _keep="" _rows="" _st _p _c _b _h _tab _n _ob _ot _tmp _rc=0 _sited _rest _l
+  local _old="" _keep="" _rows="" _st _p _c _b _h _m _tab _n _ob _bt _tmp _rc=0 _sited _rest _l _unrec=0
   _tab="$(printf '\t')"
+  if [ -d "$APPLYING" ]; then
+    say DECISION applying-marker-unwritten "${APPLYING#"$CONSUMER"/}" "the in-flight marker's path is a DIRECTORY, so the marker cannot be written there: the fixture suite will not block on this mid-pull tree (\`core/git-hooks/pre-push\` tests for a file) and \`--finish\` has no record of which handed-back merges were still untouched. Remove that directory, then re-run apply with the same four arguments."
+    return 0
+  fi
   if [ -f "$APPLYING" ]; then
     _old="$(cat "$APPLYING" 2>/dev/null)" || _old=""
-    case "${NL_CH}${_old}" in *"${NL_CH}classify-hashes: "*)
-      _ob="$(printf '%s\n' "$_old" | sed -n 's/^base:[[:space:]]*//p' | head -1)"
-      _ot="$(printf '%s\n' "$_old" | sed -n 's/^theirs:[[:space:]]*//p' | head -1)"
-      if [ -n "$_ob" ] && [ -n "$_ot" ] \
-         && [ "$(git -C "$DIST" rev-parse -q --verify "${_ob}:core" 2>/dev/null)" = "$(git -C "$DIST" rev-parse -q --verify "${BASE}:core" 2>/dev/null)" ] \
-         && [ "$(git -C "$DIST" rev-parse -q --verify "${_ot}:core" 2>/dev/null)" = "$(git -C "$DIST" rev-parse -q --verify "${THEIRS}:core" 2>/dev/null)" ]; then
-        _keep="$(printf '%s\n' "$_old" | awk '/^classify: /')"
-      fi ;;
-    esac
+    _ob="$(printf '%s\n' "$_old" | sed -n 's/^base:[[:space:]]*//p' | head -1)"
+    _bt="$(git -C "$DIST" rev-parse -q --verify "${BASE}:core" 2>/dev/null)"
+    if [ -n "$_ob" ] && [ -n "$_bt" ] \
+       && [ "$(git -C "$DIST" rev-parse -q --verify "${_ob}:core" 2>/dev/null)" = "$_bt" ]; then
+      case "${NL_CH}${_old}" in
+        *"${NL_CH}classify-hashes: "*) _keep="$(printf '%s\n' "$_old" | awk '/^classify: /')" ;;
+        *) _unrec=1 ;;
+      esac
+    fi
   fi
   SETUP_SITED_PATHS=""
   eval "$(awk '/^SETUP_SITED_PATHS=/,/sort -u\)"$/' "$SELF/preclassify.sh" 2>/dev/null)"
@@ -661,19 +685,25 @@ ap_write_marker() {
     _st="${_l%%"$_tab"*}"; _l="${_l#*"$_tab"}"
     _p="${_l%%"$_tab"*}";  _l="${_l#*"$_tab"}"
     _c="${_l%%"$_tab"*}";  _b="${_l#*"$_tab"}"
+    [ "$_unrec" = 0 ] || break
     case "$_b" in *CLASSIFY*) ;; *) continue ;; esac
+    case "$_b" in UPSTREAM-DELETED*|ORPHANED-UNKNOWN*) continue ;; esac
     [ -n "$_c" ] || continue
     case "${NL_CH}${_sited}${NL_CH}" in *"${NL_CH}${_p}${NL_CH}"*) continue ;; esac
     case "${NL_CH}${_keep}${NL_CH}" in *"${_tab}${_c}${NL_CH}"*) continue ;; esac
     [ -e "$CONSUMER/$_c" ] || continue
     _h="$(git hash-object "$CONSUMER/$_c" 2>/dev/null)" || _h=""
-    _rows="${_rows}classify: ${_h:--}${_tab}${_c}${NL_CH}"
+    _m=644; [ -x "$CONSUMER/$_c" ] && _m=755
+    _rows="${_rows}classify: ${_h:--} ${_m}${_tab}${_c}${NL_CH}"
   done
   _rows="$(printf '%s\n%s' "$_keep" "$_rows" | awk 'NF' | sort -t "$_tab" -k2,2 -u)"
   _n="$(printf '%s' "$_rows" | awk 'NF {n++} END {print n+0}')"
   _tmp="$APPLYING.incoming.$$"
-  { printf 'base: %s\ntheirs: %s\nclassify-hashes: %s\n' "$BASE" "$THEIRS" "$_n"
-    [ -z "$_rows" ] || printf '%s\n' "$_rows"
+  { printf 'base: %s\ntheirs: %s\n' "$BASE" "$THEIRS"
+    if [ "$_unrec" = 0 ]; then
+      printf 'classify-hashes: %s\n' "$_n"
+      [ -z "$_rows" ] || printf '%s\n' "$_rows"
+    fi
   } | cat > "$_tmp" 2>/dev/null || _rc=$?
   [ "$_rc" -eq 0 ] && { mv -f "$_tmp" "$APPLYING" 2>/dev/null || _rc=$?; }
   if [ "$_rc" -ne 0 ]; then
@@ -2262,14 +2292,20 @@ finish_verify_tree() {
 # deletion is a disposition. A `-` record, or a blob that cannot be read now, withholds: unknown is
 # not merged.
 #
-# A DELIBERATE NO-OP MERGE HAS AN EXIT, AND IT IS NAMED IN THE ROW. Where the consumer's copy is
-# already right and the merge changes nothing, removing the marker and re-running `--finish` stamps,
-# with `DECISION restamp-identity-unchecked` saying what that forfeited.
+# TOUCHED MEANS THE BLOB OR THE EXEC BIT MOVED. A range that changes only a file's mode is merged by a
+# `chmod`, which leaves the blob alone. A line with no mode field is compared on the blob alone.
 #
-# A MARKER WITH NO `classify-hashes:` LINE WAS WRITTEN BY AN ENGINE THAT RECORDED NOTHING. It gets a
-# NOTE and the behaviour that engine had: this check cannot fire on the pull that delivers it.
+# A DELIBERATE NO-OP MERGE HAS AN EXIT FOR THAT FILE ALONE, AND IT IS NAMED IN THE ROW: delete that
+# file's own `classify:` line from the marker and re-run `--finish`. The identity check and every
+# other file's check still run, and the marker -- which keeps the fixture suite blocked -- stays until
+# the stamp clears it. Removing the WHOLE marker also stamps, but it unblocks the fixture suite on a
+# tree that may still be mid-pull and forfeits both checks, so the row names it last.
+#
+# A MARKER WITH NO `classify-hashes:` LINE WAS WRITTEN BY AN ENGINE THAT RECORDED NOTHING, or by this
+# one over a same-base marker that engine wrote (see ap_write_marker). It gets a NOTE and the
+# behaviour that engine had: this check cannot fire on the pull that delivers it.
 finish_classify_unmerged() {
-  local _ml _l _h _c _now _tab
+  local _ml _l _h _m _c _now _nm _tab
   [ -f "$APPLYING" ] || return 0
   _tab="$(printf '\t')"
   if ! grep -q '^classify-hashes: ' "$APPLYING" 2>/dev/null; then
@@ -2286,12 +2322,14 @@ finish_classify_unmerged() {
     _l="${_l#classify: }"
     _h="${_l%%"$_tab"*}"; _c="${_l#*"$_tab"}"
     [ -n "$_c" ] && [ "$_c" != "$_l" ] || continue
+    _m=""; case "$_h" in *" "*) _m="${_h#* }"; _h="${_h%% *}" ;; esac
     [ -e "$CONSUMER/$_c" ] || continue
     _now="$(git hash-object "$CONSUMER/$_c" 2>/dev/null)" || _now=""
+    _nm=644; [ -x "$CONSUMER/$_c" ] && _nm=755
     if [ "$_h" = "-" ] || [ -z "$_now" ]; then
       say WORKLIST finish-classify-unverified "$_c" "handed back as a semantic merge, and its blob could not be read $([ "$_h" = "-" ] && printf 'when the apply recorded it' || printf 'now'), so whether the merge was done is UNKNOWN and the stamp is not advanced. Make the file readable, then re-run --finish."
-    elif [ "$_now" = "$_h" ]; then
-      say WORKLIST finish-classify-unmerged "$_c" "handed back as a semantic merge and still byte-identical to the copy the apply found (${_h}), so the merge was never done and the stamp would claim \`${THEIRS}\` over it. Merge theirs' changes into it (the \`semantic-merge\` row's 3-way merge), then re-run --finish. IF THE MERGE IS DELIBERATELY A NO-OP -- this copy is already what it should be -- remove the marker (\`rm .claude/.ai-dlc-applying\`) and re-run --finish: it stamps with \`DECISION restamp-identity-unchecked\`, which forfeits the check that \`${THEIRS}\` is the ref this tree was written from and this check over every other handed-back file."
+    elif [ "$_now" = "$_h" ] && { [ -z "$_m" ] || [ "$_nm" = "$_m" ]; }; then
+      say WORKLIST finish-classify-unmerged "$_c" "handed back as a semantic merge and still byte-identical to the copy the apply found (${_h}${_m:+, mode ${_m}}), so the merge was never done and the stamp would claim \`${THEIRS}\` over it. Merge theirs' changes into it (the \`semantic-merge\` row's 3-way merge, mode included), then re-run --finish. IF KEEPING THIS COPY AS IT IS IS THE DISPOSITION -- the merge is deliberately a no-op -- delete this file's own line from .claude/.ai-dlc-applying (the \`classify: … ${_c}\` line) and re-run --finish: every other check still runs, and the marker stays until the stamp clears it. A later ordinary run records the file again. Removing the whole marker (\`rm .claude/.ai-dlc-applying\`) is the last resort: it unblocks the fixture suite on a tree that may still be mid-pull, and stamps with \`DECISION restamp-identity-unchecked\`, forfeiting the check that \`${THEIRS}\` is the ref this tree was written from and this check over every other handed-back file."
     fi
   done
   return 0
