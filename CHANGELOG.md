@@ -5,6 +5,10 @@ All notable changes to AI/DLC are recorded here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+**LOG — unbounded by design; rotation does not apply.** This file is the release history and
+grows by one entry per release. No ceiling bounds it and none should: `docs/backlog.md` is the
+QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
+
 ## Bump rules
 
 - **MAJOR** — breaking change to skill contract, hook protocol, gate-validation
