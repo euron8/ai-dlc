@@ -1849,6 +1849,301 @@ HB_UD_B='    [ -z "$REFUSALS" ] && echo "0 HARD blockers."'
        mut M6-hb-ud "$HB" "$SWAP" "$HB_UD_B" - "$HB_UD_T")" \
     && score M6-hb-ud C5-ud "$d" \
     || mutreport M6-hb-ud
+
+# === BL-360: emit-report.sh reads no here-string ==================================================
+# Each cell FORCES its site under `trap '' XFSZ; ulimit -f N` (SIGXFSZ ignored: the full-disk model,
+# ENOSPC and no signal) with an input calibrated past the limit, and reads the render's SHAPE:
+#   O1  the orientation sample (`awk … <<<"$d"`): a diff larger than the limit. Base: bash cannot stage
+#       the here-string, awk never runs, the site's rc 1 renders an UNNAMED `sample exited 1` refusal.
+#       Tip: the staging write's own refusal, `exited staging-<rc>`.
+#   O2  the retired-token projection (`awk … <<<"$rt"`): 400 token rows past the limit. Base: the
+#       refusal names a PROJECTION failure (`projection-1`) that never happened. Tip: `staging-<rc>`.
+#   O3  the orientation THEIRS staging (`printf … > file`, a builtin write): THEIRS larger than the
+#       limit. Base refuses too, but the builtin's unflushed bytes come out on the next stdout write --
+#       upstream content INSIDE the region, outside any sample (LEAKED). Tip writes through a pipe.
+#   V1  `--verify`'s preclassify check (`grep <<<"$want"`, and the two extraction lines after it): a
+#       render carrying the refusal, larger than the limit. Base: grep reads EMPTY stdin, the refusal
+#       is not seen, the approved region byte-matches, exit 0 "present, current, and complete" --
+#       apply.sh writes on that 0. Tip: exit 1, cause UNDECIDED, staging named.
+# CALIBRATED, NOT ASSUMED, per world before any shape is read: the site's own input, fed as a
+# here-string under the limit, must FAIL with bash's message; every other blob in the world must
+# fit under it; and on the tip the forced render may differ from its unforced control ONLY in the
+# cell's own lines -- or a cell's shape could be some other write failing. Each mutant restores ONE
+# site's base text in a copy and must move only its own cell to the base shape. Every forced run's
+# PATH stub logs the call that proves the render reached the site (FIRED > 0).
+B360="$WORK/b360"; mkdir -p "$B360" || { echo "FIXTURE ERROR: mkdir b360" >&2; exit 2; }
+ER_BASE_SHA=1749b545b2e05010adb5b197a5bfd67891c1bf3b
+ER_BASE="$WORK/er-base"
+mkdir -p "$ER_BASE" && cp -R "$RECON/." "$ER_BASE/" \
+  && git -C "$TREE_TOP" show "${ER_BASE_SHA}:core/skills/ai-dlc-update/reconcile/emit-report.sh" > "$ER_BASE/emit-report.sh" 2>/dev/null \
+  || { echo "FIXTURE BROKEN: could not stage emit-report.sh at ${ER_BASE_SHA}, the failing control of every BL-360 cell" >&2; exit 2; }
+_h="$("$REAL_GREP" -cF '<<<"$want"' "$ER_BASE/emit-report.sh")" || _h=0
+if cmp -s "$RECON/emit-report.sh" "$ER_BASE/emit-report.sh" || [ "$_h" -ne 2 ]; then
+  echo "FIXTURE BROKEN: the staged ${ER_BASE_SHA} emit-report.sh is not the pre-fix engine (identical to tip, or it carries $_h \`<<<\"\$want\"\` line(s), want 2)" >&2; exit 2
+fi
+# --- the worlds ---
+# eo: a.sh -- the consumer's copy is 600 lines larger than theirs, so the diff is past the limit while
+#     theirs is not (O1 alone, not O3). b.sh -- 400 `$R/tNNNN` tokens at base, all gone at theirs, all
+#     kept by the consumer, so the token rows are past the limit while each blob is not (O2 alone).
+# ek: c.sh -- theirs is 600 marked lines past the limit, ours one line (O3).
+mk_b360_world() { # <dir> <eo|ek>
+  local W="$1" D="$1/dist" C="$1/consumer" i
+  mkdir -p "$D/core/scripts" "$C/scripts/ai-dlc"
+  printf '0.1.0\n' > "$D/VERSION"
+  if [ "$2" = eo ]; then
+    printf '#!/bin/sh\necho a base\n' > "$D/core/scripts/a.sh"
+    { printf '#!/bin/sh\n'; i=0; while [ $i -lt 400 ]; do printf 'x=$R/t%04d\n' $i; i=$((i+1)); done; } > "$D/core/scripts/b.sh"
+  else
+    printf '#!/bin/sh\necho c base\n' > "$D/core/scripts/c.sh"
+  fi
+  { gi "$D" init -q && gi "$D" add -A && gi "$D" commit -qm base; } >/dev/null 2>&1 || return 1
+  git -C "$D" rev-parse HEAD > "$W/B"
+  printf '0.2.0\n' > "$D/VERSION"
+  if [ "$2" = eo ]; then
+    printf '#!/bin/sh\necho a theirs\n' > "$D/core/scripts/a.sh"
+    printf '#!/bin/sh\necho b theirs\n' > "$D/core/scripts/b.sh"
+  else
+    { printf '#!/bin/sh\n'; i=0; while [ $i -lt 600 ]; do printf 'echo ZZ-PSB-LEAK upstream line %04d of the new body\n' $i; i=$((i+1)); done; } > "$D/core/scripts/c.sh"
+  fi
+  { gi "$D" add -A && gi "$D" commit -qm theirs; } >/dev/null 2>&1 || return 1
+  git -C "$D" rev-parse HEAD > "$W/T"
+  if [ "$2" = eo ]; then
+    { printf '#!/bin/sh\necho a ours\n'; i=0; while [ $i -lt 600 ]; do printf 'echo consumer line number %04d of the local adaptation\n' $i; i=$((i+1)); done; } > "$C/scripts/ai-dlc/a.sh"
+    { git -C "$D" show "$(cat "$W/B"):core/scripts/b.sh"; echo 'echo consumer kept'; } > "$C/scripts/ai-dlc/b.sh"
+  else
+    printf '#!/bin/sh\necho c ours\n' > "$C/scripts/ai-dlc/c.sh"
+  fi
+}
+EOW="$WORK/b360-eo"; EKW="$WORK/b360-ek"
+mk_b360_world "$EOW" eo && mk_b360_world "$EKW" ek || { echo "FIXTURE ERROR: b360 worlds" >&2; exit 2; }
+B360_LIM_O=8; B360_LIM_V=3
+# ev: the er world above (the sibling seed), with preclassify refusing. Its APPROVED report is the tip's
+# own render under the same refusal and no limit, so the region matches and only the refusal can fail it.
+B360_PC_STUB="$B360/pc-stub"
+stub "$B360_PC_STUB" bash "$REAL_BASH" "*'/preclassify.sh '*" "case \"\$*\" in *' --templates') ;; *) $LOGF; exit 2 ;; esac"
+PATH="$B360_PC_STUB:$PATH" "$REAL_BASH" "$RECON/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$B360/ev-region" 2>/dev/null
+B360_REPORT="$B360/ev-report.md"
+{ echo "# Reconcile report (fixture)"; echo; cat "$B360/ev-region"; } > "$B360_REPORT"
+_n="$("$REAL_GREP" -c '^DETECTOR-REFUSED  preclassify\.sh exited 2 ' "$B360_REPORT")" || _n=0
+[ "$_n" -ge 1 ] && [ "$(fired "$B360_PC_STUB")" -gt 0 ] \
+  || { echo "FIXTURE ERROR: b360 ev world: the approved render carries $_n preclassify refusal line(s) (stub fired $(fired "$B360_PC_STUB")x), so V1 has no subject" >&2; exit 2; }
+
+# --- calibration (a)+(b): the site inputs fail as here-strings under the limit; nothing else is near it ---
+b360_hs_fails() { # <bytes> <limit-blocks> -> 0 when a here-string of that size cannot be staged
+  local e
+  e="$( ( trap '' XFSZ; ulimit -f "$2"; v="$(printf "%0${1}d" 0)"; cat <<<"$v" > /dev/null ) 2>&1 )"
+  case "$e" in *'cannot create temp file for here'*) return 0 ;; esac; return 1
+}
+_eo_b="$(cat "$EOW/B")"; _eo_t="$(cat "$EOW/T")"; _ek_t="$(cat "$EKW/T")"
+_in_d="$(git -C "$EOW/dist" show "${_eo_t}:core/scripts/a.sh" | diff - "$EOW/consumer/scripts/ai-dlc/a.sh" | wc -c | tr -d ' ')"
+_in_rt="$("$REAL_BASH" "$RECON/retired-tokens.sh" "$EOW/dist" "$_eo_b" "$_eo_t" "$EOW/consumer" core/scripts/b.sh 2>/dev/null | wc -c | tr -d ' ')"
+_in_t="$(git -C "$EKW/dist" cat-file -s "${_ek_t}:core/scripts/c.sh")" || _in_t=0
+_in_w="$(awk '/BEGIN GENERATED: reconcile-mechanical/{f=1} f{print} /END GENERATED: reconcile-mechanical/{f=0}' "$B360_REPORT" | wc -c | tr -d ' ')"
+_ob_o="$( { git -C "$EOW/dist" ls-tree -r -l "$_eo_b"; git -C "$EOW/dist" ls-tree -r -l "$_eo_t"; git -C "$EKW/dist" ls-tree -r -l "$(cat "$EKW/B")"
+            git -C "$EKW/dist" ls-tree -r -l "$_ek_t"; } | awk '$4 + 0 > m && !($5 == "core/scripts/c.sh" && $4 + 0 > 4096) { m = $4 + 0 } END { print m + 0 }')"
+_ob_v="$(git -C "$DIST" ls-tree -r -l "$THEIRS" | awk '$4 + 0 > m { m = $4 + 0 } END { print m + 0 }')"
+_cal=""
+b360_hs_fails "$_in_d" "$B360_LIM_O" || _cal="$_cal O1-diff($_in_d B)-staged"
+b360_hs_fails "$_in_rt" "$B360_LIM_O" || _cal="$_cal O2-rows($_in_rt B)-staged"
+b360_hs_fails "$_in_t" "$B360_LIM_O" || _cal="$_cal O3-theirs($_in_t B)-staged"
+b360_hs_fails "$_in_w" "$B360_LIM_V" || _cal="$_cal V1-render($_in_w B)-staged"
+[ "$_ob_o" -lt $(( (B360_LIM_O - 1) * LD_BLK )) ] || _cal="$_cal eo/ek-largest-other-blob($_ob_o B)"
+[ "$_ob_v" -lt $(( (B360_LIM_V - 1) * LD_BLK )) ] || _cal="$_cal ev-largest-blob($_ob_v B)"
+b360_hs_fails $(( LD_BLK / 2 )) "$B360_LIM_V" && _cal="$_cal a-half-block-here-string-FAILED"
+if [ -n "$_cal" ]; then
+  echo "FIXTURE BROKEN: BL-360 calibration -- the limit no longer bites on the site input, or something else is near it:$_cal" >&2; exit 2
+fi
+ok "BL-360 calibration: under ${B360_LIM_O} block(s) the diff ($_in_d B), the token rows ($_in_rt B) and theirs ($_in_t B) cannot be staged as here-strings, under ${B360_LIM_V} the render ($_in_w B) cannot; every other blob fits ($_ob_o B / $_ob_v B), a half-block here-string stages"
+
+# --- the runs ---
+# b360_run <recon> <eo|ek|ev|evp> <ctl|forced> <tag> -- one render (evp: the ev world in PRINT mode),
+# stdout and stderr each through a PIPE (a file under the limit would fail on its own); rc to a file.
+b360_run() {
+  local R="$1" w="$2" m="$3" o="$B360/$4" sd="$B360/$4.stub" lim="" W=""
+  case "$w" in
+    eo|ek) W="$EOW"; [ "$w" = ek ] && W="$EKW"
+           stub "$sd" bash "$REAL_BASH" "*'/retired-tokens.sh '*" "$LOGF"
+           [ "$m" = forced ] && lim="$B360_LIM_O" ;;
+    *)     stub "$sd" bash "$REAL_BASH" "*'/preclassify.sh '*" "case \"\$*\" in *' --templates') ;; *) $LOGF; exit 2 ;; esac"
+           [ "$m" = forced ] && lim="$B360_LIM_V" ;;
+  esac
+  ( ( trap '' XFSZ; [ -z "$lim" ] || ulimit -f "$lim"; PATH="$sd:$PATH"; export PATH
+      case "$w" in
+        eo|ek) "$REAL_BASH" "$R/emit-report.sh" "$W/dist" "$(cat "$W/B")" "$W/consumer" "$(cat "$W/T")" ;;
+        ev)    "$REAL_BASH" "$R/emit-report.sh" --verify "$B360_REPORT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" ;;
+        evp)   "$REAL_BASH" "$R/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" ;;
+      esac
+      echo "$?" > "$o.rc" ) 2>&1 1>&3 3>&- | cat > "$o.err" ) 3>&1 | cat > "$o.out"
+}
+# Shapes. Each is PRESENCE-shaped: a named line or a counted row set must appear, so a copy that never
+# ran reads OTHER, never a tip or base shape.
+b360_c() { local n; n="$("$REAL_GREP" -cE -- "$1" "$2")" || n=0; printf '%s' "$n"; }
+b360_shape() { # <cell> <tag>
+  local o="$B360/$2.out" a b c
+  case "$1" in
+    O1) a="$(b360_c 'orientation sample exited staging-[0-9]+ for core/scripts/a\.sh' "$o")"
+        b="$(b360_c 'orientation sample exited 1 for core/scripts/a\.sh' "$o")"
+        c="$(b360_c '^    ONLY IN OURS \(12 of 601 shown' "$o")"
+        if [ "$a" -eq 2 ] && [ "$b" -eq 0 ] && [ "$c" -eq 0 ]; then echo REFUSED-STAGING
+        elif [ "$b" -eq 2 ] && [ "$a" -eq 0 ]; then echo REFUSED-RC1
+        elif [ "$c" -eq 1 ] && [ "$a" -eq 0 ] && [ "$b" -eq 0 ]; then echo SAMPLE
+        else echo "OTHER(staging=$a,rc1=$b,sample=$c)"; fi ;;
+    O2) a="$(b360_c 'retired-tokens\.sh exited staging-[0-9]+ for core/scripts/b\.sh' "$o")"
+        b="$(b360_c 'retired-tokens\.sh exited projection-1 for core/scripts/b\.sh' "$o")"
+        c="$(b360_c '^      \$R/t[0-9]{4}$' "$o")"
+        if [ "$a" -eq 1 ] && [ "$b" -eq 0 ] && [ "$c" -eq 0 ]; then echo REFUSED-STAGING
+        elif [ "$b" -eq 1 ] && [ "$a" -eq 0 ] && [ "$c" -eq 0 ]; then echo REFUSED-PROJECTION
+        elif [ "$c" -eq 400 ] && [ "$a" -eq 0 ] && [ "$b" -eq 0 ]; then echo TOKENS-ALL
+        else echo "OTHER(staging=$a,projection=$b,rows=$c)"; fi ;;
+    O3) a="$(b360_c '^DETECTOR-REFUSED  orientation diff exited staging-failed for core/scripts/c\.sh' "$o")"
+        # The leak is the TAIL of the lost write -- the bytes past the last flushed buffer, starting
+        # mid-line (measured: `pstream line 0157 of the new body`) -- so it is keyed on the line's END,
+        # never on its marker at the start, which the flushed part took with it.
+        b="$(awk '/ line [0-9][0-9][0-9][0-9] of the new body$/ && !/^      / { n++ } END { print n + 0 }' "$o")"
+        c="$(b360_c '^    ONLY IN THEIRS \(12 of 600 shown' "$o")"
+        if [ "$b" -gt 0 ]; then echo LEAKED
+        elif [ "$a" -eq 1 ] && [ "$c" -eq 0 ]; then echo REFUSED-NOLEAK
+        elif [ "$c" -eq 1 ] && [ "$a" -eq 0 ]; then echo SAMPLE
+        else echo "OTHER(refused=$a,leak=$b,sample=$c)"; fi ;;
+    V1) a="$(cat "$B360/$2.rc" 2>/dev/null)"
+        if [ "$a" = 1 ] && "$REAL_GREP" -qF 'cause: UNDECIDED — the fresh render could not be staged or read for the preclassify check' "$B360/$2.err"; then echo UNDECIDED-STAGING
+        elif [ "$a" = 1 ] && "$REAL_GREP" -qF 'cause: PRECLASSIFY-REFUSED — preclassify.sh exited 2 without classifying' "$B360/$2.err"; then echo PRECLASSIFY-REFUSED
+        elif [ "$a" = 0 ] && "$REAL_GREP" -qF 'present, current, and complete' "$B360/$2.out"; then echo VERIFIED
+        else echo "OTHER(rc=${a:-none})"; fi ;;
+  esac
+}
+B360_EXPECT='O1 eo SAMPLE REFUSED-STAGING REFUSED-RC1
+O2 eo TOKENS-ALL REFUSED-STAGING REFUSED-PROJECTION
+O3 ek SAMPLE REFUSED-NOLEAK LEAKED
+V1 ev PRECLASSIFY-REFUSED UNDECIDED-STAGING VERIFIED'
+b360_col() { awk -v a="$1" -v c="$2" '$1==a {print $c}' <<<"$B360_EXPECT"; }
+b360_cells() { awk -v k="$1" '$2==k {print $1}' <<<"$B360_EXPECT"; }
+
+# --- the mutants: each restores ONE site's base text ---
+ER=emit-report.sh
+B360_O1_B='              END { printf "%d\n%s", c, s }'"'"' <<<"$d")"; samp_rc=$?'
+B360_O1_NEW='            samp="$(awk -v m="$marker" '"'"'
+              substr($0, 1, 2) == m " " { x = substr($0, 3); if (x ~ /[^[:space:]]/) { c++; s = s x "\n" } }
+'"$B360_O1_B"
+B360_O2_B='          [ "$rt_rc" -eq 0 ] && { rt="$(awk -F'"'"'\t'"'"' '"'"'{print $3}'"'"' <<<"$rt")" || rt_rc="projection-$?"; }'
+B360_O3_T='          if ! er_stage orient.theirs "$t" 2>/dev/null; then'
+B360_O3_B='          if [ -z "$_er_tmp" ] || ! printf '"'"'%s\n'"'"' "$t" > "$_er_tmp/orient.theirs" 2>/dev/null; then'
+B360_V1_B="if grep -Eq '^DETECTOR-REFUSED  preclassify\\.sh (exited|returned) ' <<<\"\$want\"; then"
+B360_V1_NEW="$B360_V1_B
+  echo \"FAIL: preclassify.sh did not classify on this run, so the mechanical region cannot be verified — its buckets, worklist and deletions are unknown, not empty.\" >&2
+  _pc_cause=\"\$(grep -m1 -E '^DETECTOR-REFUSED  preclassify\\.sh (exited|returned) ' <<<\"\$want\")\"
+  _pc_cause=\"\$(sed -E 's/^DETECTOR-REFUSED  //; s/, so this section.*//' <<<\"\$_pc_cause\")\"
+  echo \"  cause: PRECLASSIFY-REFUSED — \${_pc_cause}. Run reconcile/preclassify.sh <dist> <base> <theirs> <consumer> directly, fix what it reports, then re-render and re-approve.\" >&2
+  exit 1
+fi"
+_mo1="$(START='            samp=""; samp_rc=0' END='            fi' NFI=1 NEW="$B360_O1_NEW" \
+        mut M-B360-O1 "$ER" "$BLOCK" "$B360_O1_B" 'orient.diff' \
+          '            samp=""; samp_rc=0' '            er_stage orient.diff "$d" 2>/dev/null || samp_rc="staging-$?"')" || mutreport M-B360-O1
+_mo2="$(START='          if [ "$rt_rc" -eq 0 ]; then' END='          fi' NFI=1 NEW="$B360_O2_B" \
+        mut M-B360-O2 "$ER" "$BLOCK" "$B360_O2_B" 'orient.rt' \
+          '          if [ "$rt_rc" -eq 0 ]; then' '            if er_stage orient.rt "$rt" 2>/dev/null; then')" || mutreport M-B360-O2
+_mo3="$(DROP1="$N0" DROP2="$N0" OLD="$B360_O3_T" NEW="$B360_O3_B" \
+        mut M-B360-O3 "$ER" "$SWAP" "$B360_O3_B" 'er_stage orient.theirs' "$B360_O3_T")" || mutreport M-B360-O3
+_mv1="$(START='if er_stage verify.render "$want" 2>/dev/null; then' END='fi' NFI=3 NEW="$B360_V1_NEW" \
+        mut M-B360-V1 "$ER" "$BLOCK" "$B360_V1_B" 'verify.render' \
+          'if er_stage verify.render "$want" 2>/dev/null; then' 'if [ "$_pc_rc" = 0 ]; then')" || mutreport M-B360-V1
+
+# All renders are independent: run them in waves of six, each a background job writing its own files.
+B360_JOBS="tip:eo:ctl tip:eo:forced tip:ek:ctl tip:ek:forced tip:ev:ctl tip:ev:forced tip:evp:forced
+base:eo:ctl base:eo:forced base:ek:ctl base:ek:forced base:ev:forced base:evp:ctl"
+[ -n "$_mo1" ] && B360_JOBS="$B360_JOBS M-B360-O1:eo:forced"
+[ -n "$_mo2" ] && B360_JOBS="$B360_JOBS M-B360-O2:eo:forced"
+[ -n "$_mo3" ] && B360_JOBS="$B360_JOBS M-B360-O3:ek:forced"
+[ -n "$_mv1" ] && B360_JOBS="$B360_JOBS M-B360-V1:ev:forced"
+_i=0
+for _j in $B360_JOBS; do
+  _p="${_j%%:*}"; _r="${_j#*:}"; _w="${_r%%:*}"; _m="${_r#*:}"
+  case "$_p" in tip) _R="$RECON" ;; base) _R="$ER_BASE" ;; *) _R="$MUTROOT/$_p" ;; esac
+  b360_run "$_R" "$_w" "$_m" "$_p-$_w-$_m" &
+  _i=$((_i + 1)); [ $((_i % 6)) -eq 0 ] && wait
+done
+wait
+_unfired=""
+for _j in $B360_JOBS; do
+  _t="$(printf '%s' "$_j" | tr ':' '-')"
+  [ "$(fired "$B360/$_t.stub")" -gt 0 ] && [ -s "$B360/$_t.rc" ] || _unfired="$_unfired $_t"
+done
+if [ -n "$_unfired" ]; then
+  echo "FIXTURE BROKEN: BL-360 runs whose stub never fired or that wrote no exit status:$_unfired -- their shapes say nothing about the site" >&2; exit 2
+fi
+
+# --- calibration (c): on the tip, forced and unforced differ ONLY in the cells' own lines ---
+_cx=""
+for _w in eo ek; do
+  diff "$B360/tip-$_w-ctl.out" "$B360/tip-$_w-forced.out" > "$B360/cal-$_w.diff"
+  _rm="$(awk '/^< / && !/^<     ONLY IN (THEIRS|OURS) / && !/^<     RETIRED-CONTRACT-TOKEN( — |: none$)/ && !/^<       / { n++ } END { print n + 0 }' "$B360/cal-$_w.diff")"
+  case "$_w" in
+    eo) _ad="$(awk '/^> / && !/^> DETECTOR-REFUSED  orientation sample exited staging-[0-9]+ for core\/scripts\/a\.sh \((THEIRS|OURS)\)/ && !/^> DETECTOR-REFUSED  retired-tokens\.sh exited staging-[0-9]+ for core\/scripts\/b\.sh / { n++ } END { print n + 0 }' "$B360/cal-$_w.diff")"
+        _an="$(b360_c '^> DETECTOR-REFUSED' "$B360/cal-$_w.diff")"; _aw=3 ;;
+    # ek's THEIRS blob is ALSO what retired-tokens.sh stages for the same file, and that converted
+    # sibling refuses on its own write (exit 2, its own named line): the same input, not a second
+    # fault. Exactly that line, for c.sh, is accepted beside the cell's own; anything else is not.
+    ek) _ad="$(awk '/^> / && !/^> DETECTOR-REFUSED  orientation diff exited staging-failed for core\/scripts\/c\.sh/ && !/^> DETECTOR-REFUSED  retired-tokens\.sh exited 2 for core\/scripts\/c\.sh / { n++ } END { print n + 0 }' "$B360/cal-$_w.diff")"
+        _an="$(b360_c '^> DETECTOR-REFUSED' "$B360/cal-$_w.diff")"; _aw=2 ;;
+  esac
+  [ "$_rm" -eq 0 ] && [ "$_ad" -eq 0 ] && [ "$_an" -eq "$_aw" ] || _cx="$_cx $_w(removed-other=$_rm,added-other=$_ad,refusals=$_an/$_aw)"
+done
+cmp -s "$B360/tip-evp-forced.out" "$B360/ev-region" || _cx="$_cx ev(the render under ${B360_LIM_V} block(s) differs from the unlimited one)"
+if [ -n "$_cx" ]; then
+  echo "FIXTURE BROKEN: BL-360 calibration (c) -- a forced render moved lines outside its cells' own sites, so another write failed:$_cx" >&2; exit 2
+fi
+ok "BL-360 calibration (c): each forced tip render differs from its control only in its cells' own lines, and the ev render under the limit is byte-identical to the unlimited one"
+
+# --- cells, then the base engine, then the healthy-path differential, then the mutants ---
+for _A in O1 O2 O3 V1; do
+  _k="$(b360_col "$_A" 2)"
+  _c="$(b360_shape "$_A" "tip-$_k-ctl")"; _f="$(b360_shape "$_A" "tip-$_k-forced")"; _b="$(b360_shape "$_A" "base-$_k-forced")"
+  [ "$_c" = "$(b360_col "$_A" 3)" ] && ok "BL-360 $_A control (no limit): $_c" \
+    || bad "BL-360 $_A control (no limit): $_c, expected $(b360_col "$_A" 3) -- the world does not express the case"
+  [ "$_f" = "$(b360_col "$_A" 4)" ] && ok "BL-360 $_A forced (${_k}): $_f -- the tip shape" \
+    || bad "BL-360 $_A forced (${_k}): $_f, expected $(b360_col "$_A" 4) -- a staging failure read as $_f"
+  [ "$_b" = "$(b360_col "$_A" 5)" ] && ok "BL-360 $_A on the ${ER_BASE_SHA%"${ER_BASE_SHA#????????}"} engine: $_b -- the cell fails the pre-fix engine" \
+    || bad "BL-360 $_A on the ${ER_BASE_SHA%"${ER_BASE_SHA#????????}"} engine: $_b, expected $(b360_col "$_A" 5) -- the cell cannot tell the pre-fix engine from the fix"
+done
+_bh="$(b360_c 'cannot create temp file for here' "$B360/base-eo-forced.err")"
+[ "$_bh" -ge 2 ] && ok "BL-360 base eo run printed bash's here-string failure ${_bh}x -- O1/O2's base shapes are the lost here-string, not another fault" \
+  || bad "BL-360 base eo run printed bash's here-string failure ${_bh}x, want >= 2"
+_hd=""
+cmp -s "$B360/tip-eo-ctl.out" "$B360/base-eo-ctl.out" || _hd="$_hd eo"
+cmp -s "$B360/tip-ek-ctl.out" "$B360/base-ek-ctl.out" || _hd="$_hd ek"
+cmp -s "$B360/base-evp-ctl.out" "$B360/ev-region" || _hd="$_hd ev"
+cmp -s "$RECON/emit-report.sh" "$ER_BASE/emit-report.sh" && _hd="$_hd (the two engines are identical)"
+[ -z "$_hd" ] && ok "BL-360 healthy path: tip and ${ER_BASE_SHA%"${ER_BASE_SHA#????????}"} render the eo, ek and ev worlds byte-identically with no limit (an approved region does not move)" \
+  || bad "BL-360 healthy path: tip and base renders differ with no limit:$_hd"
+for _mm in M-B360-O1:O1 M-B360-O2:O2 M-B360-O3:O3 M-B360-V1:V1; do
+  _m="${_mm%%:*}"; _own="${_mm#*:}"; _k="$(b360_col "$_own" 2)"
+  [ -s "$B360/$_m-$_k-forced.rc" ] || continue
+  _got="" _oth=""
+  for _A in $(b360_cells "$_k"); do
+    _s="$(b360_shape "$_A" "$_m-$_k-forced")"
+    if [ "$_A" = "$_own" ]; then _got="$_s"
+    elif [ "$_s" != "$(b360_col "$_A" 4)" ]; then _oth="$_oth $_A=$_s"; fi
+  done
+  if [ "$_got" != "$(b360_col "$_own" 5)" ]; then bad "MUTANT SURVIVED [$_m]: $_own reads $_got, expected the base shape $(b360_col "$_own" 5)"
+  elif [ -n "$_oth" ]; then bad "MUTANT ENTANGLED [$_m]: $_own reads $_got but other $_k cell(s) moved:$_oth"
+  else ok "MUTANT KILLED [$_m]: $_own reads $_got (the base shape), every other $_k cell stays at its tip shape"; fi
+done
+
+# --- SPELL: emit-report.sh carries no non-comment here-string (secondary to the cells above) ---
+_sp="$(mktemp -d "$WORK/erspell.XXXXXX")" || { echo "FIXTURE ERROR: mktemp erspell" >&2; exit 2; }
+cp "$RECON/emit-report.sh" "$_sp/offender.sh" && cp "$RECON/emit-report.sh" "$_sp/nearmiss.sh" \
+  || { echo "FIXTURE ERROR: erspell probe copies" >&2; exit 2; }
+printf '  x="$(awk %s <<<"$y")"\n' "'{print}'" >> "$_sp/offender.sh"
+printf '    # a comment naming the here-string operator, <<<"$y", is not a site\n' >> "$_sp/nearmiss.sh"
+_so="$(spell_count "$_sp/offender.sh")"; _sn="$(spell_count "$_sp/nearmiss.sh")"; _st="$(spell_count "$RECON/emit-report.sh")"
+_sb="$(spell_count "$ER_BASE/emit-report.sh")"
+if [ "$_so" -ne $(( _st + 1 )) ] || [ "$_sn" -ne "$_st" ] || [ "$_sb" -eq 0 ]; then
+  bad "SPELL emit-report probe: offender $_so (want $(( _st + 1 ))), comment near-miss $_sn (want $_st), the base engine $_sb (want > 0) -- the count cannot discriminate"
+elif [ "$_st" -eq 0 ]; then
+  ok "SPELL: emit-report.sh carries 0 non-comment here-strings (probe: offender +1, comment near-miss +0, the base engine $_sb)"
+else
+  bad "SPELL: emit-report.sh carries $_st non-comment here-string(s) (BL-360)"
+fi
 ld_heredoc_gate
 
 echo

@@ -826,8 +826,10 @@ B230HOOK
     # M4, owned by e: --verify no longer refuses a render carrying the preclassify refusal. The
     # opposite direction -- the guard widened to every DETECTOR-REFUSED -- is owned by assertion 1,
     # whose approved region carries a retired-layer-token refusal on every run.
+    # Anchored on the line that DECIDES the refusal: since BL-360 the render is staged and one grep's
+    # status `_pc_rc` decides it, where this used to be the `grep -Eq … <<<"$want"` line itself.
     b230_launch m4-verify-refusal-dropped e emit-report.sh \
-      "if grep -Eq '^DETECTOR-REFUSED  preclassify\\.sh (exited|returned) ' <<<\"\$want\"; then" \
+      'if [ "$_pc_rc" = 0 ]; then' \
       'if false; then'
     # M5, owned by n: an empty classification is refused whatever the range -- the `[ -z "$pc" ]` fix.
     b230_launch m5-range-ignored n emit-report.sh '    elif [ -n "$pc_rng" ]; then' '    elif true; then'
