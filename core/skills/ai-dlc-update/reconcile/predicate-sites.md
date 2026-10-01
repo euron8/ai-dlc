@@ -103,8 +103,9 @@ The verdict grammars extract the verdict CLASS and the subject each finding name
 count. `catalog=57` against `catalog=58` is the catalog growing, not a stored artifact being
 reclassified.
 
-**The suppression-lifetime site reports UNDECIDABLE on every consumer today, and that is the
-reader's limit, not this block's.** Its subject is `docs/escalations/pending.md`, and
+**The suppression-lifetime site reports UNDECIDABLE whenever its read-set moves, and STABLE
+(byte-identical) otherwise, on the shipped `docs/escalations/` layout; that is the reader's limit,
+not this block's.** Its subject is `docs/escalations/pending.md`, and
 `predicate-differential.sh` resolves `corpus:` only under `_bmad-output/`. The block is declared
 so the gap is reported as a row instead of being absent from the population.
 

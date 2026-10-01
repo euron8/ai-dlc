@@ -19,6 +19,29 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.688.0] - 2026-10-01
+
+Batch 179's fifth release: the predicate-sites declaration and the fork-budget fixture's floor. No
+bootstrapping file changes. The predicate-sites file is read by `predicate-differential.sh` at update step
+3g on the consumer, so the new blocks reach a consumer with a pull.
+
+### Backlog
+
+- **`BL-129`**, left open. `predicate-sites.md` declares `validate-gate-adjudication.sh` (the `--series`
+  form), `validate-snapshot-conservation.sh` and `validate-suppression-lifetime.sh` as predicate sites. The
+  verdict grammars extract the verdict class and the subject each finding names, never a count, so catalog
+  growth reads STABLE. Scored against the real reader in both directions: a reclassifying change reads
+  RECLASSIFIES on the gate-adjudication and snapshot-conservation sites and a count-only change reads
+  STABLE. The suppression-lifetime site is UNDECIDABLE on the reference consumer whenever its read-set
+  moves, because the reader resolves `corpus:` only under `_bmad-output/`; that gap is filed. The
+  population field the differential does not print is still unbuilt.
+- **`BL-265`**. The fork-budget fixture's A1 floor is the larger TOTAL a broken subject measures (an empty
+  subject and a copy cut at line 400), profiled each run, instead of a fraction of the budget. A subject
+  that yields no numeric TOTAL makes the fixture report BROKEN. The wholeness arm runs before the ceiling
+  and stale-high arms, so a truncated copy is no longer told to lower the budget. Mutant `m9` drives a total
+  one above the floor and must land on stale-high. The entry's receipt now runs the fixture against a stub
+  profiler and `judge` itself, so a respelled fraction no longer satisfies it.
+
 ## [0.686.0] - 2026-10-01
 
 Batch 179's third release: `self-update-fixtures.sh` and `self-update-gate.sh`. Bootstrapping, so it ships
