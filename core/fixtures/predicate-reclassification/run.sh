@@ -202,6 +202,115 @@ ck "10b a SCHEMA-only change is reported as a reclassification" "PREDICATE-RECLA
 nk "10c and NOT as byte-identical/stable"                       "PREDICATE-STABLE" "$out10"
 ck "10d the crossing series is named"                           "crossing-adversarial-pass" "$out10"
 
+# ---- PART 11: A PREDICATE THAT FINDS ITS SCHEMA UNDER ITS PROJECT ROOT ------------------------
+# The real schema-backed validators resolve the schema under a PROJECT ROOT, never beside
+# themselves, and the probe root carries no marker. With the cwd at the consumer, an unpinned
+# side walks up from the cwd and reads the consumer's INSTALLED schema (seeded at the base
+# ceiling) on BOTH sides, so a schema-only change compares one schema with itself and reads
+# STABLE. Every run here clears the two inherited roots first, so the cell measures the engine.
+ROOT_SITE='reads: core/scripts/toy-root-predicate.sh core/schemas/toy-schema.yaml
+entry: core/scripts/toy-root-predicate.sh
+corpus: *pass[0-9]*
+series: s/pass[0-9]+.*$/pass/
+invoke: --series {series}
+verdict: s/^FAIL \(([A-Z]+) --.*/\1/p'
+pd() { env -u CLAUDE_PROJECT_DIR -u AI_DLC_PROJECT_ROOT -u AI_DLC_KNOWN_SKILLS_EXT bash "$@" 2>&1; }
+row_of() { grep -F "$1" <<<"$2" | grep -v '^PREDICATE-[A-Z]*	toy' | head -1; }
+R11="$(mkrecon "$ROOT_SITE")"
+out11="$(pd "$R11/predicate-differential.sh" "$DIST" "$BASE" "$SCHEMA_ONLY" "$CONS")"
+ck "11a a schema-only change to a ROOT-resolving predicate is a reclassification" "PREDICATE-RECLASSIFIES	toy-root-predicate.sh" "$out11"
+ck "11b and the crossing series moves [] -> [B]" "verdict tokens [] -> [B,] under toy-root-predicate.sh" "$(row_of crossing-adversarial-pass "$out11")"
+# THE EXTENSION CELL. The series names a skill only the CONSUMER's known-skills file lists. A side
+# whose root is pinned to its probe root and is not handed that file searches the probe root, finds
+# nothing, and fails it as unknown on BOTH sides -- [U] -> [B,U]. Only an explicit per-side value
+# keeps it [] -> [B]. A walk-up marker alone cannot pass this cell.
+ck "11c the consumer's known-skills extension reaches both sides ([] -> [B], no U)" "verdict tokens [] -> [B,] under toy-root-predicate.sh" "$(row_of ext-adversarial-pass "$out11")"
+# AN INHERITED ROOT MUST NOT WIN. The pull may run with AI_DLC_PROJECT_ROOT naming the consumer;
+# a root found by a walk-up marker loses to that variable, so only a per-side pin survives it.
+out11i="$(env -u CLAUDE_PROJECT_DIR AI_DLC_PROJECT_ROOT="$CONS" bash "$R11/predicate-differential.sh" "$DIST" "$BASE" "$SCHEMA_ONLY" "$CONS" 2>&1)"
+ck "11d an inherited AI_DLC_PROJECT_ROOT naming the consumer does not pin both sides" "PREDICATE-RECLASSIFIES	toy-root-predicate.sh" "$out11i"
+# Control: the root toy really is byte-identical across the schema-only commit.
+rb="$(git -C "$DIST" show "${BASE}:core/scripts/toy-root-predicate.sh" | md5 -q)"
+rt="$(git -C "$DIST" show "${SCHEMA_ONLY}:core/scripts/toy-root-predicate.sh" | md5 -q)"
+[ "$rb" = "$rt" ] && printf 'ok   11e control -- toy-root-predicate.sh IS byte-identical across the schema-only commit\n' \
+  || { printf 'FAIL 11e the root toy moved across the schema-only commit; part 11 asserts nothing\n'; fails=$((fails + 1)); }
+
+# THE COMMITTED MUTANTS. Each is a copy of the engine, guarded by an anchor count and `cmp -s`.
+#   m-noroot  deletes the per-side AI_DLC_PROJECT_ROOT pin          -> must fail 11a
+#   m-marker  deletes both per-side values and gives each probe root a `.claude/` walk-up marker
+#             instead -- the fix BL-410's note warns against      -> must fail 11c
+mut11() { # mut11 <name> <anchor> <want-hits> <sed-args...> -> prints the mutant dir, or nothing
+  local n="$1" a="$2" w="$3" h d; shift 3
+  h="$(grep -c -e "$a" "$SUBJ")" || h=0
+  [ "$h" -eq "$w" ] || { printf 'FAIL 11m MUTANT STALE [%s]: anchor matches %s lines, not %s -- re-anchor on the same site\n' "$n" "$h" "$w" >&2; return 1; }
+  d="$(mkrecon "$ROOT_SITE")"
+  sed "$@" "$SUBJ" > "$d/predicate-differential.sh" || return 1
+  cmp -s "$SUBJ" "$d/predicate-differential.sh" && { printf 'FAIL 11m MUTANT DID NOT APPLY [%s]\n' "$n" >&2; return 1; }
+  bash -n "$d/predicate-differential.sh" 2>/dev/null || return 1
+  printf '%s' "$d"
+}
+PIN='AI_DLC_PROJECT_ROOT="\$TMP/root-[a-z]*" '
+EXTP='AI_DLC_KNOWN_SKILLS_EXT="\$PD_EXT" '
+MK='rm -rf "\$TMP/root-\$side"; mkdir -p "\$TMP/root-\$side"$'
+m_noroot="$(mut11 m-noroot "$PIN" 2 -e "s|$PIN||")"
+m_marker="$(mut11 m-marker "$MK" 1 -e "s|$PIN||" -e "s|$EXTP||" -e "s|$MK|&; mkdir -p \"\$TMP/root-\$side/.claude\"|")"
+if [ -z "$m_noroot" ] || [ -z "$m_marker" ]; then
+  printf 'FAIL 11m a part-11 mutant could not be built, so its cell is unproven\n'; fails=$((fails + 1))
+else
+  mo="$(pd "$m_noroot/predicate-differential.sh" "$DIST" "$BASE" "$SCHEMA_ONLY" "$CONS")"
+  mm="$(pd "$m_marker/predicate-differential.sh" "$DIST" "$BASE" "$SCHEMA_ONLY" "$CONS")"
+  # Each mutant must fail its OWN cell and must have run (a positive row from the same run).
+  if grep -qF 'toy-root-predicate.sh' <<<"$mo" && ! grep -qF 'PREDICATE-RECLASSIFIES	toy-root-predicate.sh' <<<"$mo"; then
+    printf 'ok   11f mutant [m-noroot] KILLED: without the per-side root pin the schema-only change reads %s\n' "$(cut -f1 <<<"$mo" | head -1)"
+  else
+    printf 'FAIL 11f mutant [m-noroot] SURVIVED or never ran: %s\n' "$(head -c 200 <<<"$mo")"; fails=$((fails + 1))
+  fi
+  if grep -qF 'PREDICATE-RECLASSIFIES	toy-root-predicate.sh' <<<"$mm" \
+     && ! grep -qF 'verdict tokens [] -> [B,] under toy-root-predicate.sh' <<<"$(row_of ext-adversarial-pass "$mm")"; then
+    printf 'ok   11g mutant [m-marker] KILLED: a walk-up marker finds the schema but loses the extension (%s)\n' "$(row_of ext-adversarial-pass "$mm" | cut -f3 | cut -c1-40)"
+  else
+    printf 'FAIL 11g mutant [m-marker] SURVIVED or never ran: %s\n' "$(head -c 200 <<<"$mm")"; fails=$((fails + 1))
+  fi
+fi
+
+# ---- PART 12: A STORED SUBJECT OUTSIDE _bmad-output/ IS REACHABLE BY `corpus-root:` -----------
+# The suppression-lifetime site's subject is docs/escalations/pending.md. Without the field the
+# site cannot see it and reports UNDECIDABLE on every consumer that has the file.
+ESC_SITE='reads: core/scripts/toy-predicate.sh
+entry: core/scripts/toy-predicate.sh
+corpus-root: docs/escalations
+corpus: pending-pass[0-9]*
+series: s/pass[0-9]+.*$/pass/
+invoke: --series {series}
+verdict: s/^FAIL \(([A-Z]+) --.*/\1/p'
+R12="$(mkrecon "$ESC_SITE")"
+out12="$(pd "$R12/predicate-differential.sh" "$DIST" "$BASE" "$THEIRS" "$CONS")"
+ck "12a a corpus-root outside _bmad-output is compared, not UNDECIDABLE" "PREDICATE-RECLASSIFIES	toy-predicate.sh" "$out12"
+ck "12b and the series under docs/escalations is named"                  "docs/escalations/pending-pass" "$out12"
+R12n="$(mkrecon "$(grep -v '^corpus-root:' <<<"$ESC_SITE")")"
+out12n="$(pd "$R12n/predicate-differential.sh" "$DIST" "$BASE" "$THEIRS" "$CONS")"
+ck "12c the same site WITHOUT the field still searches _bmad-output (the default is unchanged)" "matched NO stored artifact under $CONS/_bmad-output." "$out12n"
+
+# ---- PART 13: EVERY ROW CARRIES ITS POPULATION AND ITS COUNTS ---------------------------------
+# A figure a second party cannot re-derive is not a measurement. The counts are exact for the
+# seed: four records, four series, three yielding a token on some side, the steady one none.
+ck "13a a RECLASSIFIES summary names its population" "population: root=_bmad-output corpus=*pass[0-9]* series=s/pass[0-9]+.*\$/pass/" "$out"
+ck "13b and its counts"                                "records=4 series=4 compared=3 notoken=1" "$out"
+ck "13c a byte-identical STABLE row names its population" "population: root=_bmad-output corpus=*pass[0-9]*" "$out_same"
+ck "13d an UNDECIDABLE-for-no-corpus row says records=0"  "records=0" "$out4"
+
+# ---- PART 14: A NON-ASCII READ-SET MEMBER MATERIALIZES -----------------------------------------
+# Listed under the default core.quotePath, `core/schemas/café.yaml` arrives C-quoted, `git show`
+# is handed a path that names nothing, and the whole site reads as unmaterializable.
+CAFE_SITE="$(sed 's|^reads: .*|reads: core/scripts/toy-predicate.sh core/schemas/café.yaml|' <<<"$GOOD")"
+R14="$(mkrecon "$CAFE_SITE")"
+out14="$(pd "$R14/predicate-differential.sh" "$DIST" "$BASE" "$THEIRS" "$CONS")"
+[ -n "$(git -C "$DIST" -c core.quotePath=false ls-files -- 'core/schemas/caf*' | grep -F 'café')" ] \
+  && printf 'ok   14a control -- the seed tracks core/schemas/café.yaml under its raw name\n' \
+  || { printf 'FAIL 14a the seed does not track café.yaml; part 14 asserts nothing\n'; fails=$((fails + 1)); }
+nk "14b a non-ASCII member does not make the side unmaterializable" "could not materialize" "$out14"
+ck "14c the site is compared"                                       "PREDICATE-RECLASSIFIES	toy-predicate.sh" "$out14"
+
 if [ "$fails" -ne 0 ]; then
   printf '\n%s assertion(s) FAILED\n' "$fails"; exit 1
 fi
