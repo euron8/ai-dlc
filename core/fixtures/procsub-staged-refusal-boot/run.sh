@@ -429,9 +429,15 @@ pm_shape() { # <recon> <P2|P3> <stub-dir or ->
   rm -f "$out"
   # THE CALIBRATION, read on the control: a haystack that fits in one block cannot be lost under
   # `ulimit -f 1`, and a forced run over it would read exactly like a fixed engine.
+  # THE FORCED READING ACCEPTS EITHER CORRECT ANSWER, and names them as one shape. A conversion that
+  # cannot lose its input reads the healthy bucket; a conversion that stages the haystack, reads the
+  # write status and refuses through the engine's own `preclassify:` line is equally correct. A cell
+  # demanding the first would fail a competent author's second spelling. The CONTROL still demands
+  # the healthy bucket alone.
   if [ "$3" = - ] && [ "${hay:-0}" -le "$LD_BLK" ]; then echo "OTHER(calibration:haystack=${hay}B<=block=${LD_BLK}B)"
-  elif [ "$rc" -eq 0 ] && [ "$nr" -eq 1 ] && [ "$row" = "$healthy" ] && [ "$hd" -eq 0 ]; then echo "$hs"
-  elif [ "$rc" -eq 2 ] && [ "$nr" -eq 0 ] && "$REAL_GREP" -q '^preclassify: ' <<<"$err"; then echo REFUSED
+  elif [ "$rc" -eq 0 ] && [ "$nr" -eq 1 ] && [ "$row" = "$healthy" ] && [ "$hd" -eq 0 ]; then
+    if [ "$3" = - ]; then echo "$hs"; else echo "$hs-OR-REFUSED"; fi
+  elif [ "$3" != - ] && [ "$rc" -eq 2 ] && [ "$nr" -eq 0 ] && "$REAL_GREP" -q '^preclassify: ' <<<"$err"; then echo "$hs-OR-REFUSED"
   elif [ "$rc" -eq 0 ] && [ "$nr" -eq 1 ] && [ "$row" = "$wrong" ] && [ "$hd" -ge 1 ]; then echo "$ws"
   else echo "OTHER(rc=$rc,rows=$nr,bucket=${row:-none},heredoc=$hd)"
   fi
@@ -1174,8 +1180,8 @@ EXPECT='L1 lr NEEDS-REVIEW-ABSENT REFUSED-ABSENT CLOSE-CANDIDATE
 L2 lr NEEDS-REVIEW-UNFALSIFIABLE REFUSED-NAMED STILL-LIVE-NO-SUBJECT
 L3 lr NEEDS-REVIEW-UNFALSIFIABLE STILL-LIVE-LSTREE-FAILED STILL-LIVE-CONSUMER-OWNED
 P1 pc ORPHAN-ROWS REFUSED NO-ORPHAN-ROWS
-P2 pm SITED SITED UNSITED-HEREDOC
-P3 pm AT-SELF-UPDATE AT-SELF-UPDATE NOT-MACHINERY-HEREDOC
+P2 pm SITED SITED-OR-REFUSED UNSITED-HEREDOC
+P3 pm AT-SELF-UPDATE AT-SELF-UPDATE-OR-REFUSED NOT-MACHINERY-HEREDOC
 E1 er UNDECIDED-DIFF UNDECIDED-UNCOMPUTED BLOCKERS-RESOLVED
 S1 sg DEFER UNDECIDED-UNCOMPUTED/DEFER OK
 S2 sg DEFER UNDECIDED-UNCOMPUTED/UNDECIDED OK
