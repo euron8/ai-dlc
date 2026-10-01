@@ -2334,7 +2334,9 @@ declared sites, not everywhere unconditionally.
      follow-ups heading that nothing re-reads and the next run overwrites (step 5: "a
      fixed filename overwritten on every run, a snapshot, not a log"). A refusal, a status
      with no actor, a remedy that cannot be executed, a check that passed vacuously: file
-     it. Filing it is not the same as fixing it, and this step never fixes upstream.
+     it. Filing it is not the same as fixing it, and this step never fixes upstream. A defect first
+     found at Push, Open a PR or Merge (the delivery push runs the consumer's pre-push) is
+     drained the same way and committed onto the same branch before the PR is merged.
    - **Every filed defect CITES the command that found it.** One literal command and its
      decisive output line — the discipline `steps/discovery.md` already imposes on the
      prior-decision search, where a zero-hit pass is valid ONLY if the command is shown. A
@@ -2353,6 +2355,8 @@ declared sites, not everywhere unconditionally.
      so an entry authored here is first checked one pull later, after a pull has already acted
      on it. Last cycle this step wrote malformed receipts into the same document that correctly
      explained that defect class. The whole ledger re-verifies in ~1.5s; this costs nothing.
+     It scans TRACKED files only, so first stage the files step 7 created by explicit pathspec
+     (`git add <path>`, never `git add -A` or `git add .`); the Commit bullet below commits them.
    - **Close any `CLOSE-CANDIDATE` entries from step 3f.** For each, confirm the upstream
      version at `theirs` covers your entry (the row's detail names the sha and the version),
      then annotate the ledger entry `**ADOPTED UPSTREAM (v<theirs>, verified <date>)**`, matching
@@ -2421,7 +2425,9 @@ declared sites, not everywhere unconditionally.
      and rose back at the rotate, which on a two-member prefix flipped the surviving sibling's
      row between the two statuses above and read exactly like a sweep. The count is taken over
      the corpus, so that flip cannot occur.
-   - **Commit** all step-7 writes and the step-8 ledger writes above on the step-6 reconcile branch, with a subject
+   - **Commit** all step-7 writes and the step-8 ledger writes above (the ledger and
+     `push-candidate-ledger.archive.md`), each staged by explicit pathspec and never with
+     `git add -A` or `git add .`, on the step-6 reconcile branch, with a subject
      like `chore(ai-dlc-update): reconcile distribution <base-ver> → <theirs-ver>`
      and a body summarizing buckets applied + conflicts adjudicated + the log path.
    - **Push** the reconcile branch to the consumer's remote (`origin`). If there
@@ -2586,8 +2592,10 @@ write theirs' copy (path-mapped, through mask/reinject if manifest-listed) AND
 set its exec bit from theirs. That bucket also holds a copy already carrying
 base's bytes with the wrong bit, in either direction; for it the content write
 changes nothing and the mode IS the action. Read the mode with `git -C <dist>
-ls-tree <theirs> -- core/<path>`: `100755` → `chmod +x`, `100644` → `chmod -x`,
-anything else → leave the bit alone. The same rule binds every file this step
+ls-tree <theirs> -- <path>`, where `<path>` is the row's second column exactly as step 3
+printed it (it already begins with `core/`): `100755` → `chmod +x`, `100644` →
+`chmod -x`, any other mode → leave the bit alone, and an EMPTY answer is a STOP, never a
+no-op. The same rule binds every file this step
 writes: a file the write creates takes the umask's mode, not theirs'.
 
 **7v. Runtime-verification gate — hard, unconditional, blocks delivery on any

@@ -30,11 +30,15 @@ copy of this file.
 - **`PC-S316-UPDATE-STEP8-ORDERS-THE-LEDGER-DISPOSITIONS-AFTER-THE-PUSH-AND-MERGE`**, carried by
   **`BL-408`**. Step 8 now runs every ledger-writing bullet (the drain, the re-verify, the closes, the
   per-status dispositions and the rotation) before Commit, Push, Open a PR and Merge, with each bullet's
-  text unchanged. The Commit bullet names the step-8 ledger writes as well as the step-7 writes, so an
-  agent following the order commits the dispositions it just made instead of leaving them behind.
+  text unchanged. The Commit bullet names the step-8 ledger writes and the archive as well as the step-7
+  writes, each staged by explicit pathspec, so an agent following the order commits the dispositions it
+  just made instead of leaving them behind. The re-verifier bullet stages the files step 7 created first,
+  because it scans tracked files only, and a defect first found at Push, PR or Merge is drained onto the
+  same branch before the merge.
 - **`BL-403`**, part (b) only, left open. Step 7u says what to do with `UPSTREAM-ONLY-ADD` rows: write
   theirs' copy, then set the executable bit from `git ls-tree` at theirs (`chmod +x` for `100755`,
-  `chmod -x` for `100644`). For a wrong-bit copy, setting the mode is the whole action. An arm in
+  `chmod -x` for `100644`, read from the row's second column as step 3 printed it, and an empty
+  answer is a STOP). For a wrong-bit copy, setting the mode is the whole action. An arm in
   `extract-push-flag-decision` binds the prose. Parts (a) and (e) ride the self-update release, (c) and
   (d) the `lib.sh` release.
 
