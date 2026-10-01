@@ -602,13 +602,12 @@ meet this text before building. Its remaining unmeasured half is the coercion pa
 **NARROWED at v0.418.0. The original subject is discharged; two subjects are not, and this entry
 is those two.** `docs/backlog.md` is now bounded by `scripts/validate-backlog-size.sh` (arm `B1`,
 `AI_DLC_BACKLOG_MAX_ENTRIES`, default 100), registered as a `step` in `.githooks/pre-push`. What
-follows is what that arm does NOT reach. **An entry with two subjects expires only when both do**,
-and the receipt below is a conjunction for exactly that reason — it exits 0 only when both halves
-are discharged, so no single-corpus fix can retire this entry.
+follows is what that arm does NOT reach. **An entry with two subjects expires only when both do.**
+The plans subject is now discharged by `validate-plan-shape.sh` arm P8, as the batch-178 Held note
+below derives. The receipt below therefore tests the consumer subject alone.
 
-**`docs/plans/` is unbounded and the ledger ceiling does not touch it.**
-`scripts/validate-plan-shape.sh` has no size arm at all: its only `wc -l`, at `:131`, resolves a
-cited line number, and it contains no `wc -c`. Re-derived on this tree —
+**`docs/plans/` WAS unbounded when this was filed; P8 now bounds it.** At filing,
+`scripts/validate-plan-shape.sh` had no size arm. Measured then —
 `docs/plans/retire-graph-consumer-layer.md` is **384817 bytes** against a **17021-byte median
 across 29 plans**, a 22.6x ratio, and no push has ever failed over it. (The figures this entry
 was filed with, a 16726-byte median across 23 plans, have drifted; the ratio has not.) That
@@ -630,7 +629,7 @@ arm passes it, and a dangling-ref detector is blind to a wrong-target ref by con
 
 **WHAT A `CLOSE-CANDIDATE` ON THIS ENTRY WOULD AND WOULD NOT MEAN.** The receipt's consumer half
 drives shipped `reconcile/*.sh` against two synthetic ledgers inside a clone. It therefore
-certifies that **the DISTRIBUTION ships a program that refuses an oversized ledger** — never that
+certifies that **the DISTRIBUTION ships a rotator that WARNS on an oversized ledger and still rotates it** — never that
 any consumer's ledger is actually bounded, which no distribution-side receipt can observe. A
 consumer runs its own installed engine, so the bound arrives only on the pull that carries it.
 Read a green row here as "the refusal is shipped", and confirm the consumer separately. This
@@ -653,7 +652,9 @@ the entry ceiling and bound first, making the entry clause vacuous; and at all f
 such a clause approached firing the count of rotatable entries was ZERO. A per-entry cap fails too
 — 10 of 27 archived entries exceed 8000 bytes and the largest is 16137.
 
-verify: sh D=$(mktemp -d) || exit 9; trap 'rm -rf "$D"' EXIT; git clone -q --local . "$D/r" 2>/dev/null || exit 9; (git ls-files -z -mo --exclude-standard | tar -cf - --null -T - 2>/dev/null) | (cd "$D/r" && tar -xf - 2>/dev/null); RC="$D/r/core/skills/ai-dlc-update/reconcile"; H="$D/r/.githooks/pre-push"; [ -d "$RC" ] && [ -f "$H" ] || exit 9; n=0; for f in "$RC"/*.sh; do [ -f "$f" ] && n=$((n+1)); done; [ "$n" -ge 2 ] || exit 9; awk '/^step /{s=1;next} s&&/^  bash /{print;s=0}' "$H" > "$D/cmds"; [ -s "$D/cmds" ] || exit 9; P=$( cd "$D/r" && wc -c docs/plans/*.md 2>/dev/null | awk '$2!="total" && $1>m {m=$1; f=$2} END{print f}' ); [ -n "$P" ] && [ -f "$D/r/$P" ] || exit 9; mkl() { mkdir -p "$(dirname "$1")"; { printf '# Push-candidate ledger\n\nPreamble prose that belongs to no entry.\n\n'; awk -v n="$2" 'BEGIN{for(i=1;i<=n;i++)printf "## PC-S900-%04d — an open push candidate\n\nBody text.\n\nverify: theirs_has core/scripts/thing.sh \"MARKER_A\"\n\n---\n\n", i}'; } > "$1"; }; mkl "$D/s/l.md" 10 && mkl "$D/b/l.md" 500 || exit 9; [ "$(grep -c '^## PC-' "$D/b/l.md")" -eq 500 ] && [ "$(grep -c '^## PC-' "$D/s/l.md")" -eq 10 ] || exit 9; C8=0; for f in "$RC"/*.sh; do bash "$f" "$D/s/l.md" >/dev/null 2>&1 || continue; bash "$f" "$D/b/l.md" >/dev/null 2>&1 || { C8=1; break; }; done; [ "$C8" = 1 ] || exit 1; cp "$D/r/$P" "$D/po" || exit 9; awk 'BEGIN{for(i=0;i<4000000;i++)print ""}' >> "$D/r/$P" || exit 9; cp "$D/r/$P" "$D/ps"; C6=0; while IFS= read -r c; do ( cd "$D/r" && eval "$c" ) >/dev/null 2>&1 && continue; cp "$D/po" "$D/r/$P"; ( cd "$D/r" && eval "$c" ) >/dev/null 2>&1 && C6=1; cp "$D/ps" "$D/r/$P"; [ "$C6" = 1 ] && break; done < "$D/cmds"; [ "$C6" = 1 ]
+Held note (batch 178): the consumer half is built. `ledger-rotate.sh` now WARNS — never refuses, because it is the only thing that shrinks the ledger — when more than `LEDGER_MAX_OPEN_ENTRIES=150` entries stay in the live ledger after rotation, counted by the rotator's own `ledger_entry_shape()` walk inside the split, and printed before the nothing-to-rotate exit so an unrotatable ledger still warns. The ceiling comes from all 144 committed revisions of the reference consumer's live ledger, each dry-run through the rotator: at most 126 entries ever stayed (74 `^## ` headings at most, which is the figure a heading count gives, and it undercounts because most entries are bullets), and 0 revisions reach 150. The consumer archive holds 359 entries, all closed, so a count over the input would warn on a file rotation empties; this one reads 0 there. The plans half is discharged by `validate-plan-shape.sh` arm P8 (150000-byte default): the default run exits 0, the largest plan is 149500 bytes, the plan this entry named is now 52982 bytes, and the same validator with `AI_DLC_PLAN_BYTES=100000` exits 1 naming two plans (the control). The receipt below drives the shipping rotator on a 500-entry bullet ledger and asserts the WARN AND that the closed entries move under `--apply`; scored under `bash -c 'set -uo pipefail; …'`: tip 1, fix 0, refuse-instead-of-warn 1, ceiling counted by `^## ` 1.
+
+verify: sh R=core/skills/ai-dlc-update/reconcile/ledger-rotate.sh; [ -f "$R" ] && [ -f "${R%/*}/lib.sh" ] || exit 9; D=$(mktemp -d) || exit 9; trap 'rm -rf "$D"' EXIT; awk 'BEGIN{printf "# Push-candidate ledger\n\n"; for(i=1;i<=10;i++) printf "- **PC-S900-C%04d** — a closed candidate\n\n  **ADOPTED UPSTREAM (v0.1.0, verified 2026-01-01).** done\n\n", i; for(i=1;i<=490;i++) printf "- **PC-S900-O%04d** — an open candidate\n\n  Body.\n\n", i}' > "$D/l.md" || exit 9; [ "$(grep -c '^- \*\*PC-S900-' "$D/l.md")" -eq 500 ] && [ "$(grep -c '^## ' "$D/l.md")" -eq 0 ] || exit 9; o=$(bash "$R" "$D/l.md" --archive "$D/a.md" 2>&1); rc=$?; [ "$rc" -eq 0 ] || exit 1; grep -q '10 closed entries would move' <<<"$o" || exit 9; grep -q 'WARN — 490 entries stay in the live ledger' <<<"$o" || exit 1; o=$(bash "$R" "$D/l.md" --archive "$D/a.md" --apply 2>&1) || exit 1; grep -q 'WARN — 490 entries stay in the live ledger' <<<"$o" || exit 1; [ "$(grep -c 'PC-S900-C' "$D/a.md")" -eq 10 ] && [ "$(grep -c 'PC-S900-C' "$D/l.md")" -eq 0 ] && [ "$(grep -c 'PC-S900-O' "$D/l.md")" -eq 490 ] || exit 1
 
 ---
 
@@ -1007,7 +1008,10 @@ CLAIM — these are the entries `ledger-reverify.sh` skips — so a loose form s
 about an open entry, and tightening it is strictly correct. This one SUPPRESSES a refusal, so a
 loose form merely lets a split through while a TIGHT form refuses a real entry and writes nothing.
 
-**Why there is no `sh` receipt, stated rather than worked around.** The two cases a fix must
+**Why the receipt below REPRODUCES rather than closes.** It exits non-zero while the colon-less
+case survives, and it is expected to stay non-zero: what follows is why no predicate available
+today separates that case. The colon subclass, which the parse DOES separate, is shipped (Held
+note below). The two cases a fix must
 separate are, on today's signals, the same shape: both are a bold bullet inside a closed entry,
 both carry a receipt below them (`susp_hasv`), and the real-entry case does not even carry the
 trailing colon (`susp_colon`) that would mark an annotation lead-in. The ONLY thing separating
@@ -1015,7 +1019,7 @@ them in the current parse is the quotation itself — the real entry quotes the 
 because it is discussing it, and a genuine lead-in does not quote, it IS one. That is an
 accidental signal, not a designed one, and a fix needs a signal the parse does not currently
 compute. A receipt asserting both arms would therefore be UNSATISFIABLE against every predicate
-available today, and shipping one would be a standard nobody can meet.
+available today, so it would be a standard nobody can meet if it were read as a close condition.
 
 The two cases a fix must satisfy simultaneously, so the next session does not have to rederive
 them: `core/fixtures/ledger-rotate/run.sh`'s `splitter` seed must be REFUSED, and its `fp-quotes`
@@ -1023,7 +1027,9 @@ seed must NOT be. Both already exist in that fixture and both are already assert
 
 Found while remediating `BL-035`, by that fixture, against its own author.
 
-verify: manual
+Held note (batch 178): the COLON subclass is closed and the entry narrows to the rest. The suppressor (now near `ledger-rotate.sh:290`) uses the archive grammar `ledger_body_archives()` when the suspect label ends in a colon (`susp_colon`, already computed) and keeps the loose `ledger_entry_line_closes()` otherwise, so a `- **Note:**` lead-in whose body only QUOTES the annotation form now refuses. A colon-titled line with a genuine bolded close still rotates, and the `fp-quotes` seed still rotates. WHAT SURVIVES: a colon-LESS suspect whose body mentions the form is still silenced, because for that label a mention and a real entry discussing the form are the same shape; the entry stays open on it. The header prose that said the consumer archive "reports 22" now says what the number counts: suspect boundary lines inside CLOSED entries, each silenced by its own close, 27 on a copy of the consumer archive at 0.674.0 (22 at the commit first measured), and 0 reported by the guard. Consumer differential, old vs new rotator: live ledger 0/0 findings and the archive 0/0, rc 0 both. Across all 144 historical live-ledger revisions the only difference is 2 revisions already refused for other lines (5eb222bb, 0def7560), which gain a `The share:` suspect in `PC-S296-WHOLE-READ-POOL` whose only silencer was an unbolded close; both rotators refuse those revisions either way. The receipt below asserts the SURVIVING subject and exits 0 only when the colon-less mention also refuses; scored under `bash -c 'set -uo pipefail; …'`: tip 3 (colon cell not refused), fix 1 (surviving cell), archive-grammar-for-every-suspect 4 (the real quoting entry refused), colon-never-silenced 5 (a genuine colon close refused).
+
+verify: sh R=core/skills/ai-dlc-update/reconcile/ledger-rotate.sh; [ -f "$R" ] && [ -f "${R%/*}/lib.sh" ] || exit 9; D=$(mktemp -d) || exit 9; trap 'rm -rf "$D"' EXIT; H='# Push-candidate ledger\n\n- **PC-CLOSED-ABOVE** — closed\n\n  <br>**ADOPTED UPSTREAM (v0.100.0, verified 2026-01-01).** Upstream took it.\n\n'; V='  verify: theirs_has core/scripts/thing.sh "MARKER_A"\n'; Q='  Annotate it `ADOPTED UPSTREAM (vX.Y.Z, verified <date>)` once the grep is non-zero.\n\n'"$V"; printf "$H"'- **Note:** a lead-in\n\n'"$Q" > "$D/colon.md"; printf "$H"'- **A real entry that QUOTES the annotation form** in its body\n\n'"$Q" > "$D/real.md"; printf "$H"'- **Note:** a colon-titled line\n\n  **ADOPTED UPSTREAM (v0.2.0, verified 2026-01-02).** closed in its own right\n\n'"$V" > "$D/cclosed.md"; printf "$H"'- **Note** a lead-in with no colon\n\n'"$Q" > "$D/nocolon.md"; printf "$H"'- **Note:** a lead-in\n\n'"$V" > "$D/ctl.md"; ref() { o=$(bash "$R" "$1" --archive "$D/a.md" 2>&1); [ $? -ne 0 ] && grep -q 'REFUSING to rotate' <<<"$o"; }; ref "$D/ctl.md" || exit 9; ref "$D/colon.md" || exit 3; ref "$D/real.md" && exit 4; ref "$D/cclosed.md" && exit 5; ref "$D/nocolon.md" || exit 1; exit 0
 
 ## BL-083 — `verification-discipline.md` prescribes a root marker a consumer tree does not carry
 

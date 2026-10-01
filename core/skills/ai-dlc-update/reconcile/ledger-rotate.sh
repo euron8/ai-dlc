@@ -208,12 +208,16 @@ trap 'rm -rf "$TMPD"' EXIT
 # backlog or its archive. It fires on the reproduction above and stays silent on the
 # indented near-miss, with the two inputs asserted byte-different first.
 #
-# THE CONSUMER`S OWN ARCHIVE REPORTS 22, AND THAT IS STATED RATHER THAN ROUNDED AWAY. An
-# archive is a rotation OUTPUT and never an input, so those 22 gate nothing and no run reaches
-# them. They are NOT adjudicated here: each is a boundary-shaped line inside a closed entry, and
-# whether a given one is an annotation or a real legacy id-less entry is the same question this
-# whole guard exists BECAUSE nothing can answer. Reporting the number without the adjudication
-# is the honest form; calling it zero because it does not gate anything would not be.
+# THE CONSUMER`S OWN ARCHIVE HOLDS 27 SUSPECT LINES, AND THE GUARD REPORTS ZERO OF THEM -- two
+# different numbers, and this paragraph used to conflate them as "reports 22". The 27 (22 at the
+# consumer commit this was first measured on) are SUSPECT BOUNDARY LINES INSIDE CLOSED ENTRIES:
+# the count the guard reaches with its report condition reduced to `susp_at` alone, measured on
+# a copy of the reference consumer archive at distribution 0.674.0. Each one is SILENCED BY ITS
+# OWN CLOSE -- the same instrument with the condition reduced to `susp_at && susp_closed` also
+# reads 27 -- so the shipped guard reports 0 findings on that file and refused it on neither
+# date. An archive is a rotation OUTPUT and never an input, so none of them gates a run. They
+# are NOT adjudicated here: whether a given one is an annotation or a real legacy id-less entry
+# is the question this whole guard exists BECAUSE nothing can answer.
 SPLIT_FINDINGS="$(LC_ALL=C awk "$(ledger_entry_awk)$(ledger_entry_id_awk)${CLOSE_AWK}"'
   function label_of(l,   line, shape) {
     shape = ledger_entry_shape(l)
@@ -277,12 +281,17 @@ SPLIT_FINDINGS="$(LC_ALL=C awk "$(ledger_entry_awk)$(ledger_entry_id_awk)${CLOSE
     # ROTATE -- a false positive on a real entry, and refusal writes nothing at all. The stuck
     # report is fixed either way: 5 rows on the reference consumer under both.
     #
-    # THE MISSED-REFUSAL DIRECTION IS STILL REAL AND IS FILED RATHER THAN GUESSED AT. A mention
-    # can still silence this guard. Closing that without re-opening the false positive needs a
-    # predicate that is neither of these two, and it needs its own false-positive measurement
-    # against the consumer archive, where 22 boundary-shaped lines inside closed entries all
-    # escape refusal on a single clause today.
-    if (ledger_entry_line_closes($0) && susp_at) susp_closed = 1
+    # THE COLON SUBCLASS IS CLOSED; THE REST OF THE MISSED-REFUSAL DIRECTION IS STILL FILED.
+    # A suspect whose label ENDS IN A COLON is an annotation lead-in by shape -- a real entry
+    # title does not end in one -- so for that suspect the fp-quotes false positive above cannot
+    # arise, and the suppressor can be the ARCHIVE grammar: only a bolded, line-leading close
+    # silences it, and a body line that merely QUOTES the form no longer does. Every other
+    # suspect keeps the loose rule, because for a colon-less label the mention and the real
+    # entry that discusses the form are still the same shape. Measured on scratch copies,
+    # shipped vs this line reverted: colon lead-in with a quoting body 0 refusals -> 1; the
+    # fp-quotes seed 0/0; a colon-titled suspect with a genuine bolded close 0/0; the colon-less
+    # mention 0/0 (the surviving half); reference consumer live ledger and archive 0/0.
+    if (susp_at && (susp_colon ? ledger_body_archives($0) : ledger_entry_line_closes($0))) susp_closed = 1
     if ($0 ~ /^[ \t]*(<br[ \t]*\/?[ \t]*>)?[ \t]*[-*]?[ \t]*`?verify:/) {
       # A receipt ABOVE the suspect line is already on the archive side, so nothing of this
       # entry`s receipt can be stranded by the split and there is nothing to refuse.
@@ -308,14 +317,18 @@ fi
 # (`started` stays 0 until the first boundary, and only `started && closed` moves).
 # Append (`>>`) into pre-created files: awk's `>` truncates on first write per target, which
 # would drop every entry but the last.
-rm -f "$TMPD/keep" "$TMPD/move" "$TMPD/moved-names" "$TMPD/stuck-names"
-: > "$TMPD/keep"; : > "$TMPD/move"; : > "$TMPD/moved-names"; : > "$TMPD/stuck-names"
-awk -v keep="$TMPD/keep" -v move="$TMPD/move" -v names="$TMPD/moved-names" -v stuck="$TMPD/stuck-names" "$(ledger_entry_awk)${CLOSE_AWK}"'
+rm -f "$TMPD/keep" "$TMPD/move" "$TMPD/moved-names" "$TMPD/stuck-names" "$TMPD/kept-entries"
+: > "$TMPD/keep"; : > "$TMPD/move"; : > "$TMPD/moved-names"; : > "$TMPD/stuck-names"; : > "$TMPD/kept-entries"
+awk -v keep="$TMPD/keep" -v move="$TMPD/move" -v names="$TMPD/moved-names" -v stuck="$TMPD/stuck-names" -v kept="$TMPD/kept-entries" "$(ledger_entry_awk)${CLOSE_AWK}"'
   function flush(  i) {
     if (n == 0) return
     out = (started && closed) ? move : keep
     for (i = 1; i <= n; i++) print buf[i] >> out
     if (started && closed) print label >> names
+    # ONE LINE PER ENTRY THAT STAYS, for the entry-count ceiling below. Counted HERE, by the walk
+    # that decides the move, so the ceiling reads the same boundaries rotation does and never a
+    # second grammar. A fixed token rather than the label, because a label can be empty.
+    if (started && !closed) print "e" >> kept
     # THE ENTRIES NEITHER RULE TAKES. `ledger-reverify.sh` skips on a line-leading marker with an
     # OPTIONAL bold span; this file archives on the same grammar with that span MANDATORY. The
     # asymmetry is deliberate and its stated cost is that "an entry wrongly kept costs one more
@@ -515,6 +528,38 @@ l_move="$(wc -l < "$TMPD/move" | tr -d ' ')"
 if [ "$(( l_keep + l_move ))" -ne "$l_all" ]; then
   echo "ledger-rotate: REFUSED — line accounting does not balance (${l_keep} kept + ${l_move} moved != ${l_all} total). Nothing written." >&2
   exit 1
+fi
+
+# --- THE ENTRY-COUNT CEILING: A WARNING, NEVER A REFUSAL ------------------------------------
+# WHY THIS EXISTS. Rotation bounds the live ledger only by what has CLOSED. Nothing bounded what
+# stays open, so a ledger whose entries are never closed grows without limit and every pull,
+# report and receipt edit pays for it -- the growth this script's header measures.
+#
+# WHY IT WARNS AND DOES NOT REFUSE. This script is the ONLY thing that shrinks the ledger. A
+# refusal here would stop the one lever that relieves the condition it complains about, and the
+# larger the ledger the more it would need the rotation the refusal withholds. So it warns, and
+# the rotation below proceeds exactly as it would have -- dry run or --apply, same exit code.
+#
+# WHAT IS COUNTED: ENTRIES THAT STAY, by the walk above -- the boundaries `ledger_entry_shape()`
+# draws, which is the grammar that decides the move. NOT `^## ` headings: the reference
+# consumer writes most entries as `- **...**` bullets, and a heading count reads 20 on a live
+# ledger this grammar reads 31. And NOT the input total: the consumer archive holds 359 entries,
+# every one closed, and a total-count warning would fire on a file rotation empties completely.
+# Counting what stays measures the thing rotation cannot fix.
+#
+# THE CEILING, AND THE SERIES IT WAS TAKEN FROM. Every committed revision of the reference
+# consumer live ledger (144 revisions of `_bmad-output/ai-dlc-update/push-candidate-ledger.md`
+# at distribution 0.674.0), each dry-run through this rotator: the most entries ever left after
+# rotation is 126, the most `^## ` headings ever is 74, and 0 revisions leave 150 or more. So
+# 150 has never fired on real history, sits one sixth above its worst, and a ledger passing it
+# has grown past anything the consumer has actually carried. A literal and not an environment
+# knob: a knob is one more key the fixtures scrub and one more reason for a warning to be off.
+LEDGER_MAX_OPEN_ENTRIES=150
+n_kept_entries="$(wc -l < "$TMPD/kept-entries" | tr -d ' ')"
+if [ "$n_kept_entries" -gt "$LEDGER_MAX_OPEN_ENTRIES" ]; then
+  echo "ledger-rotate: WARN — ${n_kept_entries} entries stay in the live ledger after rotation, above the ceiling of ${LEDGER_MAX_OPEN_ENTRIES}."
+  echo "  Rotation only moves CLOSED entries, so this is open work accumulating. Close or withdraw what"
+  echo "  is done (bold annotation), then rotate again. This is a warning: the rotation still runs."
 fi
 
 if [ "$n_move" -eq 0 ]; then

@@ -19,6 +19,26 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.678.0] - 2026-09-30
+
+Batch 178's fourth release: `ledger-rotate.sh` alone, because a consumer's installed copy runs the
+pull that delivers it.
+
+### Backlog
+
+- **`BL-006`**. `ledger-rotate.sh` warns, and still rotates, when more than 150 entries stay in the
+  live ledger after rotation. The count uses the rotator's own entry boundaries. The ceiling comes
+  from the reference consumer's committed ledger history, where at most 126 entries ever stayed. It
+  warns rather than refuses because the rotator is the only thing that shrinks the ledger. The plans
+  half is discharged by `validate-plan-shape.sh` P8.
+- **`BL-071`**. The split guard no longer lets a body line that merely quotes the annotation form
+  clear a colon-ended lead-in; only a bolded close does. Colon-less suspects keep the loose rule, so
+  the entry stays open. The header's "22" is corrected to what it counts: suspect lines inside closed
+  entries, 27 on the consumer archive today.
+
+The reference consumer's live ledger and archive give byte-identical output under the old and new
+rotator, in `--check` and `--apply`, with no warning and no refusal.
+
 ## [0.677.0] - 2026-09-30
 
 Batch 178's third release, and the first of its bootstrapping releases: `apply.sh` alone, because
