@@ -139,6 +139,33 @@ echo more > "$ROOT/proj-ahead/more.txt"
 git -C "$ROOT/proj-ahead" add more.txt
 git -C "$ROOT/proj-ahead" commit -q --no-verify -m "unpushed work"
 
+# (f) Pushed, 0 ahead, and a TRACKED file modified and never committed. Step 2 skipped: the
+#     push arm reads `ahead 0` here and passes, which is the commit arm's whole subject.
+mkrepo "$ROOT/proj-dirty"
+attach "$ROOT/proj-dirty" "$ROOT/remote-dirty.git"
+git -C "$ROOT/proj-dirty" push -q --no-verify -u origin HEAD
+echo "uncommitted edit" >> "$ROOT/proj-dirty/seed.txt"
+
+# (g) Pushed, 0 ahead, the TRACKED file clean, and an UNTRACKED file beside it -- work a
+#     teammate left in the working tree, which step 2 names and `git add` would pick up.
+mkrepo "$ROOT/proj-untracked"
+attach "$ROOT/proj-untracked" "$ROOT/remote-untracked.git"
+git -C "$ROOT/proj-untracked" push -q --no-verify -u origin HEAD
+echo "teammate output" > "$ROOT/proj-untracked/left-behind.md"
+
+# (h) Pushed, 0 ahead, and the pipeline root TRACKED -- the reference consumer tracks its
+#     continuation log. Nothing here dirties it: the hook does, by appending its own block row
+#     to that tracked file, and the fixture drives that write rather than faking it. That
+#     producer-made dirt is what a correct handoff legitimately leaves behind.
+mkrepo "$ROOT/proj-statedirty"
+mkdir -p "$ROOT/proj-statedirty/_bmad-output"
+printf '# Pipeline Flow Log\n\n---\n\n' > "$ROOT/proj-statedirty/_bmad-output/pipeline-continuation-log.md"
+printf '# Snapshot history\n' > "$ROOT/proj-statedirty/_bmad-output/pipeline-snapshot-history.md"
+git -C "$ROOT/proj-statedirty" add _bmad-output
+git -C "$ROOT/proj-statedirty" commit -q --no-verify -m "tracked pipeline root"
+attach "$ROOT/proj-statedirty" "$ROOT/remote-statedirty.git"
+git -C "$ROOT/proj-statedirty" push -q --no-verify -u origin HEAD
+
 # The on-disk battery's tree. NOT a git repo, deliberately: the push arm is then skipped
 # entirely and the only thing that can move those verdicts is the state under _bmad-output.
 # It carries a steps/ directory because key 1's marker is produced by driving
