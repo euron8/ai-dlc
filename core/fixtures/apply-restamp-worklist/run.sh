@@ -2941,9 +2941,17 @@ $VF_WHY"; then
 else
   bad "VF-m-base DID NOT APPLY — \`$VF_WHY\` is not in apply.sh exactly once; VF-R5/R5b are unproven"
 fi
-# m-wt: preclassify's dist_only() reading the dist WORKING TREE again -- the pre-fix spelling.
-VF_DO='      git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${_f}/.dist-only" 2>/dev/null'
-if vf_mut "$WORK/vf-mwt" preclassify.sh "$VF_DO" '      [ -f "$DIST/core/fixtures/$_f/.dist-only" ]'; then
+# m-wt: preclassify's dist_only() reading the dist WORKING TREE again -- the pre-fix spelling. The
+# THEIRS read is memo_has_path since BL-374 (its 128 is the absent marker); an installed
+# preclassify.sh that predates that still carries the bare `cat-file -e`, so the mutant targets
+# whichever spelling the subject carries.
+VF_DO='      memo_has_path "$DIST" "$THEIRS" "core/fixtures/${_f}/.dist-only" || _do_rc=$?'
+VF_DO_R='      [ -f "$DIST/core/fixtures/$_f/.dist-only" ] || _do_rc=128'
+if ! grep -qxF -- "$VF_DO" "$REC/preclassify.sh"; then
+  VF_DO='      git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${_f}/.dist-only" 2>/dev/null'
+  VF_DO_R='      [ -f "$DIST/core/fixtures/$_f/.dist-only" ]'
+fi
+if vf_mut "$WORK/vf-mwt" preclassify.sh "$VF_DO" "$VF_DO_R"; then
   vf_score VF-m-wt "$WORK/vf-mwt" "1 1 1 1 1 1 1 1 0 0 0" "dist_only() reads the dist working tree instead of THEIRS"
 else
   bad "VF-m-wt DID NOT APPLY — \`$VF_DO\` is not in preclassify.sh exactly once; VF-DO1..3 are unproven"

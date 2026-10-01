@@ -685,7 +685,8 @@ if [ "$U_RUN" = 1 ]; then
   # a default listing -- else U2/U4 and U5 cannot express their defects.
   [ "$(git -C "$UD" ls-tree "$UH" -- core/git-hooks/pre-push | cut -c1-6)" = 100755 ] || broken "the untangle seed's pre-push is not 100755"
   [ "$(git -C "$UD" ls-tree "$UH" -- core/rules/plain.md | cut -c1-6)" = 100644 ] || broken "the untangle seed's plain.md is not 100644"
-  git -C "$UD" ls-files 'core/rules/*.md' | grep -q '^"' || broken "a default ls-files does not C-quote the accented name here, so U5 cannot express BL-364"
+  _u_ls="$(git -C "$UD" ls-files 'core/rules/*.md')" || broken "ls-files on the untangle seed failed"
+  grep -q '^"' <<<"$_u_ls" || broken "a default ls-files does not C-quote the accented name here, so U5 cannot express BL-364"
   cp "$UD/core/git-hooks/pre-push" "$UC/.githooks/pre-push"
   cp "$UD/core/rules/plain.md" "$UC/.claude/rules/plain.md"
   cp "$UD/core/rules/$CAFE" "$UC/.claude/rules/$CAFE"; chmod 755 "$UC/.claude/rules/$CAFE"
