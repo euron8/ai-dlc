@@ -2727,6 +2727,163 @@ else
 fi
 rm -rf "$SG"
 
+# --- A NON-ASCII PATH IS LISTED RAW AND READ BY ITS RAW NAME (BL-364) ---------------------------
+# Under git's default `core.quotePath` a name carrying a byte above 0x7f is listed C-quoted —
+# `"core/scripts/caf\303\251.sh"` — and every reader below compares that line against a raw name.
+# Three listing sites and one hook-text derivation decide what this gate sees, and each loses the
+# accented path in a different direction:
+#   INVOKED  (the hook's script list)  an ASCII-only name class captured no `café.sh` at all;
+#   CHANGED  (the core/scripts/ diff)  the quoted basename `caf\303\251.sh"` joins no hook name;
+#   R2_CAND  (the rulebook candidates) `${r2p#core/}` strips nothing off a quoted line, so a
+#            consumer that ALREADY holds theirs' `café.md` reads as missing it — a false DEFER.
+# The first two fail in the ACQUITTING direction: a changed gating script the consumer's hook runs
+# drops out of GATING and the gate says SELF-UPDATE-OK for the pull that replaces it.
+#
+# BOTH LOCALES, because the class fix is a claim about bytes: a bracket class behaves differently
+# under UTF-8 and under C, and a cell run in one locale cannot speak for the other.
+#
+# The range-emptiness test at the bucket derivation (`[ -n "$(git … diff --name-only …)" ]`) carries
+# the flag too but owes no cell: quoting changes a non-empty listing's bytes, never its emptiness.
+QU="$(printf 'caf\303\251')"
+QW="$(mktemp -d "${TMPDIR:-/tmp}/su-gate-quote.XXXXXX")"
+qw_git() { git -C "$1" -c user.email=f@x -c user.name=f -c commit.gpgsign=false "${@:2}"; }
+# qw_world <dir> <kind:script|rulebook> -> writes <dir>/{dist,cons} and <dir>/{B,T}
+qw_world() {
+  local w="$1"
+  mkdir -p "$w/dist/core/rules" "$w/dist/core/scripts" "$w/cons/.githooks" "$w/cons/scripts/ai-dlc"
+  git -C "$w/dist" init -q
+  printf '1.0.0\n' > "$w/dist/VERSION"
+  # One machinery path, never touched again: arm C resolves its population from it, and an
+  # empty machinery set is UNDECIDED for every run (see the ss world above).
+  printf 'qw machinery\n' > "$w/dist/core/rules/qw.md"
+  if [ "$2" = script ]; then
+    printf '#!/bin/sh\nexit 0\n' > "$w/dist/core/scripts/plain.sh"
+    printf '#!/bin/sh\nexit 0\n' > "$w/dist/core/scripts/$QU.sh"
+    printf '#!/bin/sh\nexit 0\n' > "$w/cons/scripts/ai-dlc/plain.sh"
+    printf '#!/bin/sh\nexit 0\n' > "$w/cons/scripts/ai-dlc/$QU.sh"
+    chmod +x "$w/cons/scripts/ai-dlc"/*.sh
+    # NEAR-MISSES for the widened name class: a path ended by `;`, one inside double quotes, one
+    # inside single quotes, and two on one line joined by `&&`. Each must yield exactly its own
+    # name — an over-capture would emit one joined row, or a row carrying the delimiter.
+    for nm in semi dq sq a1 a2; do
+      printf '#!/bin/sh\nexit 0\n' > "$w/dist/core/scripts/$nm.sh"
+      printf '#!/bin/sh\nexit 0\n' > "$w/cons/scripts/ai-dlc/$nm.sh"
+    done
+    chmod +x "$w/cons/scripts/ai-dlc"/*.sh
+    { printf '#!/usr/bin/env bash\nbash scripts/ai-dlc/plain.sh\nbash scripts/ai-dlc/%s.sh\n' "$QU"
+      printf 'bash scripts/ai-dlc/semi.sh;\nbash "scripts/ai-dlc/dq.sh"\n'
+      printf "bash 'scripts/ai-dlc/sq.sh'\n"
+      printf 'bash scripts/ai-dlc/a1.sh && bash scripts/ai-dlc/a2.sh\n'; } > "$w/cons/.githooks/pre-push"
+  else
+    printf '#!/usr/bin/env bash\n# invokes no scripts/ai-dlc/ validator\nexit 0\n' > "$w/cons/.githooks/pre-push"
+    # A fixture whose non-comment code resolves a rulebook file in the live tree: both of R2's
+    # patterns match it, so the arm's only remaining question is whether the rulebook changes.
+    mkdir -p "$w/dist/core/fixtures/qw-coupled"
+    printf '#!/usr/bin/env bash\ncat "$D_ROOT/core/skills/ai-dlc/steps/%s.md"\n' "$QU" > "$w/dist/core/fixtures/qw-coupled/run.sh"
+    mkdir -p "$w/dist/core/skills/ai-dlc/steps"
+    printf '# step at base\n' > "$w/dist/core/skills/ai-dlc/steps/$QU.md"
+  fi
+  chmod +x "$w/cons/.githooks/pre-push"
+  qw_git "$w/dist" add -A >/dev/null 2>&1; qw_git "$w/dist" commit -qm base >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/B"
+  printf '1.1.0\n' > "$w/dist/VERSION"
+  if [ "$2" = script ]; then
+    printf '#!/bin/sh\n# reworded, still passes\nexit 0\n' > "$w/dist/core/scripts/plain.sh"
+    printf '#!/bin/sh\n# the new check finds something\nexit 1\n' > "$w/dist/core/scripts/$QU.sh"
+    for nm in semi dq sq a1 a2; do printf '#!/bin/sh\n# reworded\nexit 0\n' > "$w/dist/core/scripts/$nm.sh"; done
+  else
+    printf '# step at theirs\n' > "$w/dist/core/skills/ai-dlc/steps/$QU.md"
+    # The consumer ALREADY holds theirs' copy, so the rulebook is NOT about to change for it.
+    mkdir -p "$w/cons/.claude/skills/ai-dlc/steps"
+    printf '# step at theirs\n' > "$w/cons/.claude/skills/ai-dlc/steps/$QU.md"
+  fi
+  qw_git "$w/dist" add -A >/dev/null 2>&1; qw_git "$w/dist" commit -qm theirs >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/T"
+}
+qw_world "$QW/s" script
+qw_world "$QW/r" rulebook
+# qw_run <gate> <world> <locale:utf8|c> -> the gate's stdout rows
+qw_run() {
+  if [ "$3" = c ]; then
+    env -i PATH="$PATH" HOME="${HOME:-/}" LC_ALL=C bash "$1" "$2/dist" "$(cat "$2/B")" "$(cat "$2/T")" "$2/cons" 2>/dev/null
+  else
+    LC_ALL=en_US.UTF-8 bash "$1" "$2/dist" "$(cat "$2/B")" "$(cat "$2/T")" "$2/cons" 2>/dev/null
+  fi
+}
+# qs_scan <gate> <locale> -> "plain=<status> cafe=<status|none>" for the script world
+qs_scan() {
+  local o
+  o="$(qw_run "$1" "$QW/s" "$2")"
+  printf 'plain=%s cafe=%s\n' \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$2 == "plain.sh" {print $1; exit}')" \
+    "$(printf '%s\n' "$o" | awk -F'\t' -v n="$QU.sh" '$2 == n {f=$1; exit} END {print (f == "" ? "none" : f)}')"
+}
+# qn_scan <gate> <locale> -> the sorted set of per-script row subjects for the script world
+qn_scan() {
+  qw_run "$1" "$QW/s" "$2" | awk -F'\t' '$1 ~ /^SELF-UPDATE-(OK|DEFER|UNDECIDED)$/ && $2 != "-" && $2 !~ /[.]md$/ {print $2}' \
+    | LC_ALL=C sort -u | tr '\n' ','
+}
+# qr_scan <gate> <locale> -> "r2=<n> ok=<n>" for the rulebook world
+qr_scan() {
+  local o
+  o="$(qw_run "$1" "$QW/r" "$2")"
+  printf 'r2=%s ok=%s\n' \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1 == "SELF-UPDATE-DEFER" && $2 == "rulebook-coupled-fixtures"' | grep -c .)" \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1 == "SELF-UPDATE-OK" && $2 == "-"' | grep -c .)"
+}
+for qloc in utf8 c; do
+  ss_assert "quote-script-$qloc" "$(qs_scan "$GATE" "$qloc")" "plain=SELF-UPDATE-OK cafe=SELF-UPDATE-DEFER" \
+    "($qloc) a changed gating script named café.sh is invoked, changed and deferred on, beside a plain one that passes"
+  ss_assert "quote-names-$qloc" "$(qn_scan "$GATE" "$qloc")" "a1.sh,a2.sh,$QU.sh,dq.sh,plain.sh,semi.sh,sq.sh," \
+    "($qloc) every delimited hook name yields exactly its own row, and two on one line yield two"
+  ss_assert "quote-r2-$qloc" "$(qr_scan "$GATE" "$qloc")" "r2=0 ok=1" \
+    "($qloc) a consumer already holding theirs' café.md is not about to change it, so no rulebook DEFER"
+done
+# THE CONTROL THAT SAYS THE R2 CELL CAN FIRE: the same world with the consumer's copy removed IS
+# about to change, and must defer on the raw name.
+mv "$QW/r/cons/.claude/skills/ai-dlc/steps/$QU.md" "$QW/r/held.md"
+ss_assert "quote-r2-control" "$(qr_scan "$GATE" utf8)" "r2=1 ok=0" \
+  "with the consumer's café.md absent the rulebook IS about to change, so the arm defers"
+mv "$QW/r/held.md" "$QW/r/cons/.claude/skills/ai-dlc/steps/$QU.md"
+
+# --- MUTANTS on the quoting cells: each restores ONE site to its pre-fix spelling --------------
+mkdir -p "$QW/m"
+cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$QW/m"/ 2>/dev/null
+ss_assert "quote-mut-control" "$(qs_scan "$QW/m/self-update-gate.sh" utf8)" \
+  "plain=SELF-UPDATE-OK cafe=SELF-UPDATE-DEFER" "an unmutated copy beside its siblings defers on café.sh, so a kill below is the mutation"
+# qw_mut <label> <line-prefix> <replacement-line> <scanner> <want> <why>
+# Replaces the ONE line opening with <line-prefix> (leading blanks ignored) by <replacement-line>;
+# a prefix matching zero or several lines is refused as an anchor that moved.
+qw_mut() {
+  local mrc=0 got
+  QW_PFX="$2" QW_NEW="$3" python3 -c 'import os,sys
+p, n = os.environ["QW_PFX"], os.environ["QW_NEW"]
+ls = open(sys.argv[1]).read().split("\n")
+hit = [i for i, l in enumerate(ls) if l.lstrip().startswith(p)]
+if len(hit) != 1: sys.exit(3)
+i = hit[0]; ls[i] = ls[i][:len(ls[i]) - len(ls[i].lstrip())] + n
+open(sys.argv[2], "w").write("\n".join(ls))' "$GATE" "$QW/m/self-update-gate.sh" 2>/dev/null || mrc=$?
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ "$mrc" -ne 0 ] || cmp -s "$GATE" "$QW/m/self-update-gate.sh"; then
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s mutation matched nothing (anchor moved)\n' "$1"
+  else
+    got="$("$4" "$QW/m/self-update-gate.sh" utf8)"
+    if [ "$got" = "$5" ]; then printf '  ok    %-16s KILLED (%s: %s)\n' "$1" "$6" "$got"
+    else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED: got [%s], want [%s]\n' "$1" "$got" "$5"; fi
+  fi
+  cp "$GATE" "$QW/m/self-update-gate.sh"
+}
+qw_mut "quote-mut-invoked" 'INVOKED="$(grep -oE ' \
+  "INVOKED=\"\$(grep -oE 'scripts/ai-dlc/[A-Za-z0-9._-]+\\.sh' \"\$HOOK\" | sed 's|.*/||' | sort -u)\"" \
+  qs_scan "plain=SELF-UPDATE-OK cafe=none" "an ASCII-only hook class drops café.sh from INVOKED and the gate is silent on it"
+qw_mut "quote-mut-changed" 'git -C "$DIST" -c core.quotePath=false diff --name-only "${BASE}..${THEIRS}" -- core/scripts/ >' \
+  'git -C "$DIST" diff --name-only "${BASE}..${THEIRS}" -- core/scripts/ > "$TMP/changed-raw" 2>/dev/null' \
+  qs_scan "plain=SELF-UPDATE-OK cafe=none" "a C-quoted changed-script listing joins no hook name and café.sh drops out of GATING"
+qw_mut "quote-mut-r2" 'R2_CAND="$(git -C "$DIST" -c core.quotePath=false diff --name-only' \
+  'R2_CAND="$(git -C "$DIST" diff --name-only "${BASE}..${THEIRS}" -- \' \
+  qr_scan "r2=1 ok=0" "a C-quoted rulebook candidate maps to no consumer path and reads as about to change"
+rm -rf "$QW"
+
 echo
 if [ "$FAILURES" -gt 0 ]; then
   echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong."

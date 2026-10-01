@@ -2717,8 +2717,12 @@ if mkmutant "$N1" '  _nb="$_na"
     core/fixtures/*)  _nc="${_na%/}"; _nc="${_nc#core/fixtures/}" ;;
     tests/fixtures/*) _nc="${_na%/}"; _nc="${_nc#tests/fixtures/}" ;;
   esac
+  # The remainder is a NAME when it is non-empty and carries no slash and no whitespace — a
+  # negation over what cannot be in one directory name, never an ASCII enumeration of what may.
+  # `*[!A-Za-z0-9._-]*` refused `core/fixtures/café`, which the coverage join names under its raw
+  # spelling, so a correct path-form set was convicted as unparsable.
   case "$_nc" in
-    ""|*[!A-Za-z0-9._-]*) ;;
+    ""|*/*|*[[:space:]]*) ;;
     *) _nb="$_nc" ;;
   esac' \
                   '  case "$_na" in
@@ -2742,8 +2746,12 @@ if mkmutant "$N2" '  _nb="$_na"
     core/fixtures/*)  _nc="${_na%/}"; _nc="${_nc#core/fixtures/}" ;;
     tests/fixtures/*) _nc="${_na%/}"; _nc="${_nc#tests/fixtures/}" ;;
   esac
+  # The remainder is a NAME when it is non-empty and carries no slash and no whitespace — a
+  # negation over what cannot be in one directory name, never an ASCII enumeration of what may.
+  # `*[!A-Za-z0-9._-]*` refused `core/fixtures/café`, which the coverage join names under its raw
+  # spelling, so a correct path-form set was convicted as unparsable.
   case "$_nc" in
-    ""|*[!A-Za-z0-9._-]*) ;;
+    ""|*/*|*[[:space:]]*) ;;
     *) _nb="$_nc" ;;
   esac' \
                   '  _nb="${_na#core/}"'; then
@@ -3892,6 +3900,108 @@ else
   bad "FIXTURE ERROR: su_stage's status anchor no longer occurs exactly once in the runner — Part 22 proves nothing"
 fi
 rm -rf "$P21" "$P21C"
+
+# --- Part Q: A NON-ASCII FIXTURE DIRECTORY IS JOINED BY ITS RAW NAME (BL-364) -------------------
+# Under git's default `core.quotePath` the diff lists `"core/fixtures/caf\303\251/run.sh"`, and the
+# directory extraction is anchored on `^core/fixtures/`, so the quoted line was DROPPED from the
+# diff-touched set: a slice omitting a fixture the pull changes passed the coverage join — the
+# acquitting direction. Its own distribution, so no other part's diff census moves. Three runs:
+#   Q1  the slice omits `café`                     -> refused, `café` named, the plain offender too
+#   Q2  the slice names `café` as a bare name       -> green, both fixtures run
+#   Q3  the slice names it as `core/fixtures/café/` -> the SAME run as Q2 (the path form's name
+#       predicate was an ASCII class, which refused the raw name as unparsable)
+# Both locales for Q1, because the cell is a claim about bytes.
+QD="$(mktemp -d)"; QU="$(printf 'caf\303\251')"
+QDG() { git -C "$QD" -c user.name=ai-dlc-fixture -c user.email=fixture@invalid -c commit.gpgsign=false "$@"; }
+git -c init.templateDir= init -q "$QD" >/dev/null 2>&1
+for f in green-one plain-touched "$QU"; do
+  mkdir -p "$QD/core/fixtures/$f"; printf 'at base\n' > "$QD/core/fixtures/$f/run.sh"
+done
+QDG add -A >/dev/null 2>&1; QDG commit -q --no-verify -m base >/dev/null 2>&1
+QD_B="$(QDG rev-parse HEAD 2>/dev/null)"
+printf 'at theirs\n' > "$QD/core/fixtures/plain-touched/run.sh"
+printf 'at theirs\n' > "$QD/core/fixtures/$QU/run.sh"
+QDG add -A >/dev/null 2>&1; QDG commit -q --no-verify -m theirs >/dev/null 2>&1
+QD_T="$(QDG rev-parse HEAD 2>/dev/null)"
+seed_record "$LOGDIR2" "$QD" "$QD_B" "$QD_T" OK 040 >/dev/null \
+  || bad "FIXTURE ERROR: could not seed the non-ASCII range's gate record"
+# The consumer-side copies the named runs execute; removed again below so no later part sees them.
+for f in plain-touched "$QU"; do
+  mkdir -p "$CONS2/tests/fixtures/$f"
+  printf '#!/usr/bin/env bash\necho "%s: every assertion held"\n' "$f" > "$CONS2/tests/fixtures/$f/run.sh"
+done
+# SEED CONTROL: the range really lists the accented directory, raw, and quoted under the default.
+q_raw="$(QDG -c core.quotePath=false diff --name-only "$QD_B" "$QD_T" -- core/fixtures/ 2>/dev/null | grep -cF "core/fixtures/$QU/")" || q_raw=0
+q_quo="$(QDG -c core.quotePath=true diff --name-only "$QD_B" "$QD_T" -- core/fixtures/ 2>/dev/null | grep -c '^"core/fixtures/caf')" || q_quo=0
+if [ "$q_raw" = 1 ] && [ "$q_quo" = 1 ]; then
+  ok "SEED: the non-ASCII range lists core/fixtures/$QU raw under core.quotePath=false and C-quoted under the default"
+else
+  bad "FIXTURE ERROR: the non-ASCII range does not discriminate (raw=$q_raw quoted=$q_quo); Part Q would assert over a diff that cannot lose the row"
+fi
+# q_run <runner> <locale:utf8|c> <named...> -> "rc=<n> cov=<set> sec=<sections>"
+q_run() {
+  local r="$1" loc="$2" rc=0 L; shift 2
+  rm -f "$LOGDIR2"/self-update-fixtures-*.md
+  if [ "$loc" = c ]; then
+    env -i PATH="$PATH" HOME="${HOME:-/}" LC_ALL=C bash "$r" "$QD" "$QD_B" "$QD_T" "$CONS2" "$@" >/dev/null 2>&1 || rc=$?
+  else
+    LC_ALL=en_US.UTF-8 bash "$r" "$QD" "$QD_B" "$QD_T" "$CONS2" "$@" >/dev/null 2>&1 || rc=$?
+  fi
+  L="$(newest_log2)"
+  printf 'rc=%s cov=%s sec=%s\n' "$rc" \
+    "$({ [ -n "$L" ] && sed -n '/^COVERAGE: the diff changes/,/^$/p' "$L" | sed -n 's/^  \([^ ][^ ]*\)$/\1/p' | LC_ALL=C sort | tr '\n' ','; } 2>/dev/null)" \
+    "$(sec_set "$L")"
+}
+Q_GREEN="rc=0 cov= sec=green-one,plain-touched,$QU,"
+for qloc in utf8 c; do
+  got="$(q_run "$RUNNER" "$qloc" green-one plain-touched)"
+  if [ "$got" = "rc=2 cov=$QU, sec=" ]; then
+    ok "Part Q1 ($qloc): a slice omitting the diff-touched fixture $QU is refused with it named"
+  else
+    bad "Part Q1 ($qloc): got [$got], want [rc=2 cov=$QU, sec=]. A C-quoted diff line drops the accented directory from the diff-touched set and the incomplete slice runs"
+  fi
+done
+got="$(q_run "$RUNNER" utf8 green-one plain-touched "$QU")"
+if [ "$got" = "$Q_GREEN" ]; then
+  ok "Part Q2: naming $QU as a bare name clears the join and runs all three"
+else
+  bad "Part Q2: got [$got], want [$Q_GREEN]. The bare raw name must satisfy the join that names it"
+fi
+# Q3 RUNS IN BOTH LOCALES AND ONLY THE C ONE DISCRIMINATES. Measured: bash's `[!A-Za-z0-9._-]`
+# ACCEPTS the accented name under en_US.UTF-8 (the range is collation-ordered there) and refuses
+# it under LC_ALL=C — so a UTF-8-only cell passes the ASCII class and proves nothing.
+for qloc in utf8 c; do
+  got="$(q_run "$RUNNER" "$qloc" green-one plain-touched "core/fixtures/$QU/")"
+  if [ "$got" = "$Q_GREEN" ]; then
+    ok "Part Q3 ($qloc): the path form core/fixtures/$QU/ is normalised to the raw name and is the same run as Q2"
+  else
+    bad "Part Q3 ($qloc): got [$got], want [$Q_GREEN]. An ASCII-only name predicate refuses the raw accented name as an unparsable argument"
+  fi
+done
+# MUTANTS, each restoring ONE site. Q1's want under the diff mutant is the acquittal itself.
+QM="$MUTDIR/q-unquoted-diff.sh"
+if mkmutant "$QM" 'cov_raw="$(git -C "$DIST" -c core.quotePath=false diff --name-only' \
+                  'cov_raw="$(git -C "$DIST" diff --name-only'; then
+  got="$(q_run "$QM" utf8 green-one plain-touched)"
+  if [ "$got" = "rc=0 cov= sec=green-one,plain-touched," ]; then
+    ok "MUTATION — with the coverage diff C-quoted the slice omitting $QU runs green: Part Q1 is what catches that"
+  else
+    bad "MUTATION — the coverage diff was restored to the default quoting and Part Q1's run gave [$got], not the acquittal"
+  fi
+else
+  bad "FIXTURE ERROR: the coverage diff anchor no longer occurs exactly once in the runner — Part Q1 proves nothing"
+fi
+QM2="$MUTDIR/q-ascii-name.sh"
+if mkmutant "$QM2" '    ""|*/*|*[[:space:]]*) ;;' '    ""|*[!A-Za-z0-9._-]*) ;;'; then
+  got="$(q_run "$QM2" c green-one plain-touched "core/fixtures/$QU/")"
+  case "$got" in
+    rc=2*) ok "MUTATION — with the ASCII name class the path form core/fixtures/$QU/ is refused under LC_ALL=C: Part Q3 (c) is what catches that" ;;
+    *)     bad "MUTATION — the ASCII name class was restored and Part Q3's run gave [$got], not a refusal" ;;
+  esac
+else
+  bad "FIXTURE ERROR: the name-shape anchor no longer occurs exactly once in the runner — Part Q3 proves nothing"
+fi
+rm -rf "$CONS2/tests/fixtures/plain-touched" "$CONS2/tests/fixtures/$QU" "$QD"
 
 echo
 if [ "$fails" -eq 0 ]; then
