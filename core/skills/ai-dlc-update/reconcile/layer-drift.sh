@@ -1766,6 +1766,12 @@ while IFS= read -r f; do
               for _ps in "${PIPESTATUS[@]}"; do [ "$_ps" -le 1 ] || exit 3; done)" || return 3
         printf '%s' "MEASURED: your span under that anchor is ${en} non-blank line(s) against core's ${cn} at ${base_sha}, and ${on} of yours appear nowhere in core's -- that is what this action drops out of the rendered rulebook. If those lines are yours and you still want them, the answer is \`still-additive\` with a reason, not a narrowing you undo next sprint."
       }
+      # THE BASE READ IS GATED HERE, IN THE MAIN SHELL, NOT INSIDE sup_measure. `have` refuses by
+      # `exit 1`, and inside the `$( )` below that would end only the subshell: the caller's
+      # ld_refuse would then report a STAGING failure for what is an unreadable base object. A
+      # path ABSENT at base_sha returns 1 and falls through to the read, which comes back empty and
+      # says "could NOT be measured" as it always did.
+      have "$base_sha" "$(dist_path "${sup_raw%%#*}")" || :
       sup_surplus="$(sup_measure "$sup_raw")" || ld_refuse "staging core's span for the surplus measure of ${entry}" "$?"
 
       # ONE ROW PER SUPERSEDED ANCHOR, which is why the old `break` is gone. Two anchors of one
@@ -1907,6 +1913,7 @@ while IFS= read -r f; do
       fi
       continue
     fi
+    have "$base_sha" "$a_cp" || :
     s_base="$(git_show "$base_sha" "$a_cp" | section_of "$id")"
     if [ "$s_base" != "$s_theirs" ]; then
       worst=HARD-OVERRIDE-DRIFT-SECTION
@@ -2088,6 +2095,16 @@ while IFS= read -r f; do
   #   diff number, diff title   -> nothing; the catalogs are simply disjoint here
   ext_anchors="$(anchors_of_file "$f")"
   if [ -n "$ext_anchors" ]; then
+    # EVERY BASE READ IS GATED ON `have`, and the gate's ABSENT answer is deliberately DISCARDED.
+    # `git_show` reads an object it cannot read as an empty file, which here is an empty base
+    # catalog: every same-number duplicate core carried for releases came back NEW-THIS-PULL and
+    # told the operator an absorption landed on this pull. `have` refuses only a path the tree
+    # names and git cannot read. A path genuinely ABSENT at base -- a core file new this pull --
+    # returns 1 and MUST fall through to the empty read, because that empty catalog is the true
+    # answer and is what tags its rows NEW-THIS-PULL. `|| continue` here would drop every entry
+    # hooked on a new core file. The same gate, same reason, sits before the other base reads
+    # (the unnumbered title arm, the extends: span compare, and both override base_sha reads).
+    have "$BASE" "$cp" || :
     base_anchors="$(git_show "$BASE" "$cp" | anchors_of_stream)"
     # THE BLOB IS STAGED ONCE PER FILE AND READ FROM THE FILE. `heading_text_for` exits its awk at
     # the first match, so a pipe would EPIPE its writer; a here-string, the previous spelling, read
@@ -2202,6 +2219,7 @@ while IFS= read -r f; do
   [ "$_ut_rc" -eq 3 ] && ld_refuse_staging "the anchors of ${entry} for the unnumbered title arm" 3
   if [ -n "$ext_titles" ]; then
     theirs_titles="$(git_show "$THEIRS" "$cp" | heading_titles_of_stream | titles_only)"
+    have "$BASE" "$cp" || :
     base_titles="$(git_show "$BASE" "$cp" | heading_titles_of_stream | titles_only)"
     # Each loop feed staged with its write status read (see `ld_has_line` for why not `<<<`).
     ld_stage "$LD_T/ext-titles" "$ext_titles" "the unnumbered headings of ${entry}"
@@ -2410,6 +2428,7 @@ while IFS= read -r f; do
         ext_missing="${ext_missing}${ext_missing:+, }'${ext_anc}'"
         continue
       fi
+      have "$BASE" "$cp" || :
       ext_old="$(git_show "$BASE" "$cp" | section_of "$ext_anc")"
       [ "$ext_old" = "$ext_new" ] || ext_moved="${ext_moved}${ext_moved:+, }'${ext_anc}'"
     done < "$LD_T/ext-ancs"

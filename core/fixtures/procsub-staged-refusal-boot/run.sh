@@ -948,7 +948,28 @@ lc_shape() {
         # The memo key embeds the ref, so the check names THEIRS: the huge step is read at base_sha too.
         case "$A" in C1w) set -- "$R" "$A" "$sd" "${t}:core%2Fskills%2Fai-dlc%2Flayer-contract.yaml.c" ;;
                      *)   set -- "$R" "$A" "$sd" "${t}:core%2Fskills%2Fai-dlc%2Fsteps%2Fzz-psb-huge.md.c" ;; esac
-        [ "$(ls "$memo" | "$REAL_GREP" -cF -- "$4")" -eq 1 ] || { echo "OTHER(memo-not-warm)"; return 0; } ;;
+        [ "$(ls "$memo" | "$REAL_GREP" -cF -- "$4")" -eq 1 ] || { echo "OTHER(memo-not-warm)"; return 0; }
+        # C2w's BASE EXISTENCE KEY IS DROPPED FROM THE COPY, so the only guard deciding the cell is
+        # the THEIRS staging write it is about. The engine gates its base read of the shadowed file
+        # on `have`, and a warm `have` answers from the `e` key's `.s` file through a `$( )` capture.
+        # Under M1 the staging write fails EFBIG and the run CONTINUES, leaving bytes in bash 3.2's
+        # stdout buffer that the capture then reads back as the status: `have` misreads a healthy
+        # store as "object is missing" and refuses, which pre-empts the OK-LOST shape M1 is scored on
+        # and makes the two guards cover one subject. With the key absent `have` asks git fresh and
+        # passes. A memo warmed by an engine that does not gate that read (pre-0.680.0) carries no
+        # such key, so 0 is accepted; more than one is a harness fault. The theirs `.c` check above
+        # stays the warm control: the cell still reads the subject from the memo.
+        # Keyed on the `e ` PREFIX and the ref:path SUFFIX, never on the dist spelling between them
+        # (the engine's, not this file's): memo_show's `s ` key ends identically and must survive.
+        if [ "$A" = C2w ]; then
+          local _ek=0 _ekf
+          for _ekf in "$memo"/"e "*" ${b}:core%2Fskills%2Fai-dlc%2Fsteps%2Fzz-psb-huge.md.s"; do
+            [ -e "$_ekf" ] || continue
+            _ek=$((_ek + 1)); rm -f "$_ekf"
+            [ ! -e "$_ekf" ] || { echo "OTHER(base-e-key-kept)"; return 0; }
+          done
+          [ "$_ek" -le 1 ] || { echo "OTHER(base-e-key-count=$_ek)"; return 0; }
+        fi ;;
     esac
   fi
   out="$(mktemp "$WORK/lc-out.XXXXXX")" || { echo "OTHER(mktemp)"; return 0; }

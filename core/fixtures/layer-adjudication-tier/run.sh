@@ -1223,7 +1223,7 @@ rm -rf "$SWAPDIST" "$E14CONS" "$M10DIR"
 #
 # EVERY REFUSING ARM ASSERTS rc AND A REFUSED LINE CARRYING THE INPUT THAT WAS REFUSED, never a row
 # count alone: the bad ref string on A-D (in C and D2 only BASE is bad, so the ref appearing names
-# which input refused), plus the startup refusal's own words on A-B, and the contract path on E-F.
+# which input refused), plus the startup refusal's own words on A-C, and the contract path on E-F.
 # A row count is what the defect already satisfied. The non-refusing arms G-J are PRESENCE-shaped
 # instead: H demands a code, I and J one advisory row for the seeded entry.
 #
@@ -1394,9 +1394,13 @@ p11_arm() { # <arm> <ok|no> <detail when no>
   [ "$2" = ok ] || p11_d="$p11_d [$1: $3]"
 }
 p11_state() { printf 'rc=%s rows=%s tmp=%s refused=%s' "$p11_rc" "$(p11_rows)" "$p11_tmp" "$(printf '%s\n' "$p11_err" | grep -c 'layer-drift: REFUSED')"; }
-# The STARTUP refusal's own words. A and B key on it as well as on the ref, because `have`'s refusal
-# at the contract read ALSO carries the bad ref (`<path> at <ref>`): with only the ref as the needle,
-# deleting the THEIRS startup check left A and B ok, refused one layer later by `have`.
+# The STARTUP refusal's own words. A, B and C key on it as well as on the ref, because `have`'s
+# refusal ALSO carries the bad ref (`<path> at <ref>`): with only the ref as the needle, deleting the
+# THEIRS startup check left A and B ok, refused one layer later by `have` at the contract read. C is
+# the same shape on BASE: since every base read is gated on `have` too, deleting the BASE startup
+# check left C ok, refused by the first base read's `have` with the bad ref in its line. D and D2
+# need no such conjunct -- the listing's mktemp sits between the two refusals, and their temp-file
+# count is what separates them.
 P11START="does not resolve to a commit"
 # One EXTENSION-HOOK-MISSING row for the seeded spelling entry: the advisory absent row, PRESENCE-
 # shaped, so a copy that emitted nothing cannot pass the arms that also demand "no refusal".
@@ -1413,7 +1417,7 @@ p11_score() {
   if [ "$p11_rc" -eq 1 ] && p11_refline "$P11BAD" && p11_refline "$P11START" && [ "$(p11_rows)" -eq 0 ]; then r=ok; else r=no; fi
   p11_arm B "$r" "$(p11_state)"
   p11_drive "$e" C "$DIST" "$P11BAD" "$P11T" "$CONS"
-  if [ "$p11_rc" -eq 1 ] && p11_refline "$P11BAD" && [ "$(p11_rows)" -eq 0 ]; then r=ok; else r=no; fi
+  if [ "$p11_rc" -eq 1 ] && p11_refline "$P11BAD" && p11_refline "$P11START" && [ "$(p11_rows)" -eq 0 ]; then r=ok; else r=no; fi
   p11_arm C "$r" "$(p11_state)"
   p11_drive "$e" D --list-adjudications "$DIST" "$P11BAD" "$P11BAD" "$CONS"
   if [ "$p11_rc" -eq 1 ] && p11_refline "$P11BAD" && [ "$(p11_rows)" -eq 0 ] && [ "$p11_tmp" -eq 0 ]; then r=ok; else r=no; fi
@@ -1483,11 +1487,12 @@ fi
 # anchor is counted before it is applied: zero is `FIXTURE STALE` (the fix moved and the mutant
 # must be re-anchored on the new site, never dropped), more than one is ambiguous.
 #
-#   M1  ld_resolve_ref never refuses                         -> A B C D D2. On THEIRS the two
-#       layers still both REFUSE: `have`'s ls-tree exits 128 on an unresolvable ref, so the contract
-#       read refuses A and B at rc 1 with the ref in its line. A and B die only because they also
-#       demand the STARTUP refusal's words; keyed on the ref alone they stayed ok under this mutant,
-#       which is the survivor that conjunct was added for. D dies on its temp-file conjunct -- the
+#   M1  ld_resolve_ref never refuses                         -> A B C D D2. On THEIRS and on BASE
+#       the two layers still both REFUSE: `have`'s ls-tree exits 128 on an unresolvable ref, so the
+#       contract read refuses A and B, and the first gated base read refuses C, at rc 1 with the ref
+#       in the line. A, B and C die only because they also demand the STARTUP refusal's words; keyed
+#       on the ref alone they stayed ok under this mutant (A and B first, C once the base reads were
+#       gated), which is the survivor that conjunct was added for. D dies on its temp-file conjunct -- the
 #       `have` refusal comes after the listing's mktemp. M13 still reverts both layers, because
 #       reverting one layer of a layered fix proves only the layer left standing.
 #   M13 both layers removed (M1 + M3)                        -> A B C D D2 E F
@@ -1581,7 +1586,7 @@ if [ "$p11_ready" = yes ]; then
     bad "FIXTURE ERROR: the UNMUTATED copy in $P11MD scores '$p11_v', not all-ok, so the copied directory is not a working harness and no mutant verdict below is attributable —$p11_d"
   else
     ok "Part 11 CONTROL: an unmutated copy in the mutant directory scores every arm ok — the verdicts below are their edits, not the copy"
-    for p11_m in "m1:A=no B=no C=no D=no D2=no E=ok F=ok G=ok H=ok I=ok J=ok:the startup ref refusal removed (an unresolvable THEIRS is still refused by have, whose ls-tree exits 128 there, but without the startup words and only AFTER the listing's mktemp)" \
+    for p11_m in "m1:A=no B=no C=no D=no D2=no E=ok F=ok G=ok H=ok I=ok J=ok:the startup ref refusal removed (an unresolvable THEIRS or BASE is still refused by have, whose ls-tree exits 128 there, but without the startup words and only AFTER the listing's mktemp)" \
                  "m13:A=no B=no C=no D=no D2=no E=no F=no G=ok H=ok I=ok J=ok:BOTH layers removed, the pre-fix engine's shape" \
                  "m2:A=ok B=ok C=no D=ok D2=no E=ok F=ok G=ok H=ok I=ok J=ok:the startup refusal checking THEIRS only" \
                  "m3:A=ok B=ok C=ok D=ok D2=ok E=no F=no G=ok H=ok I=ok J=ok:have() reduced to memo_has_path" \
