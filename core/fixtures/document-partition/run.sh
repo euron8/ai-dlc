@@ -112,6 +112,43 @@ doc_dominant_h3() { # the twin: the same dominant section, split by `### `
   printf '### Part two\n'; body h2 15; printf '### Part three\n'; body h3 15
   printf '## Small B\n'; body b 5
 }
+row() { # <tag> <cells> -> one markdown table row of that many padded cells
+  local i=1
+  printf '|'
+  while [ "$i" -le "$2" ]; do printf ' %s cell %s, padded to a steady width |' "$1" "$i"; i=$((i + 1)); done
+  printf '\n'
+}
+table() { # <tag> <rows> <cells> -> header, separator, and that many data rows
+  local i=1
+  printf '| Id | Decision |\n|----|----------|\n'
+  while [ "$i" -le "$2" ]; do row "$1$i" "$3"; i=$((i + 1)); done
+}
+doc_wide_table() { # the filed shape: a dominant `##` whose lead piece is a wide table, no `### `
+  printf '# Wide\n\n## Small A\n'; body a 5
+  printf '## Decisions\n\nThe decision table.\n\n'; table r 15 12; printf '\n'
+  printf '## Small B\n'; body b 5
+}
+doc_fence_table() { # the same table inside a ``` fence: no row is a boundary
+  printf '# Wide\n\n## Small A\n'; body a 5
+  printf '## Decisions\n\n```markdown\n'; table r 15 12; printf '```\n\n'
+  printf '## Small B\n'; body b 5
+}
+doc_two_row() { # a dominant section of header+separator pairs and prose: never three rows in a row
+  local i=1
+  printf '# Pairs\n\n## Small A\n'; body a 5
+  printf '## Pairs\n'
+  while [ "$i" -le 8 ]; do row "h$i" 6; row "s$i" 6; body "p$i" 3; i=$((i + 1)); done
+  printf '## Small B\n'; body b 5
+}
+doc_one_wide_row() { # a table split at rows whose one row is itself over the cap
+  printf '# Row\n\n## Small A\n'; body a 5
+  printf '## Decisions\n'; table r 3 2; row big 120; row tail 2; row tail2 2
+  printf '## Small B\n'; body b 5
+}
+doc_fm_table_crlf() { # front matter + the wide-table shape, CRLF, no trailing newline
+  { printf -- '---\ntitle: wide\n---\n'; doc_wide_table; } | awk '{ printf "%s\r\n", $0 }'
+  printf 'last line with no newline'
+}
 doc_one() { printf '# One\n\nPreamble.\n\n## Only\n'; body only 20; }
 doc_twelve() { # twelve equal atoms, no preamble
   local s
@@ -156,8 +193,46 @@ p_serial_dominant() { # dominant section, no ###: SERIAL on stdout, exit 3; the 
   local w m rc; w="$(world)"; doc_dominant > "$w/d.md"; doc_dominant_h3 > "$w/t.md"
   m="$(bash "$1" --map "$w/d.md" 2>/dev/null)"; rc=$?
   [ "$rc" -eq 3 ] && [ "${m#SERIAL: largest part is }" != "$m" ] || return 1
+  # The blocking part is named: `## Huge` opens at line 9 and runs to 69, and it holds no table.
+  [ "${m%% of the document (lines 9-69, *}" != "$m" ] && [ "${m%, no-boundary)}" != "$m" ] || return 1
   bash "$1" --map "$w/t.md" > "$w/t.map" 2>/dev/null || return 1
   has "$w/t.map" "### Part two"
+}
+p_wide_table() { # the filed shape: a dominant `##` led by a wide table, no `### ` -> parts at table rows
+  local w n nd; w="$(world)"; doc_wide_table > "$w/d.md"; cp -p "$w/d.md" "$w/orig"
+  bash "$1" --map "$w/d.md" > "$w/m" 2>/dev/null || return 1
+  n="$(grep -c . "$w/m")" || n=0
+  nd="$(cut -f4 "$w/m" | grep -cxF '## Decisions')" || nd=0
+  # Two or more parts, and the table section itself is cut: it heads at least two of them.
+  [ "$n" -ge 2 ] && [ "$nd" -ge 2 ] || return 1
+  bash "$1" --split "$w/d.md" "$w/x" > /dev/null 2>&1 || return 1
+  assemble "$1" "$w"
+  [ "$RC" -eq 0 ] && cmp -s "$w/d.md" "$w/orig"
+}
+p_fence_table() { # the same table inside a fence: no row is a boundary, so it stays SERIAL no-boundary
+  local w m rc; w="$(world)"; doc_fence_table > "$w/d.md"
+  m="$(bash "$1" --map "$w/d.md" 2>/dev/null)"; rc=$?
+  [ "$rc" -eq 3 ] && [ "${m#SERIAL: largest part is }" != "$m" ] && [ "${m%, no-boundary)}" != "$m" ]
+}
+p_two_row() { # never three table rows in a row: no cut, SERIAL no-boundary
+  local w m rc; w="$(world)"; doc_two_row > "$w/d.md"
+  m="$(bash "$1" --map "$w/d.md" 2>/dev/null)"; rc=$?
+  [ "$rc" -eq 3 ] && [ "${m#SERIAL: largest part is }" != "$m" ] && [ "${m%, no-boundary)}" != "$m" ]
+}
+p_single_line() { # one row over the cap: cut around it, and still SERIAL `single-line` naming that line
+  local w m rc; w="$(world)"; doc_one_wide_row > "$w/d.md"
+  [ "$(sed -n 15p "$w/d.md" | cut -c1-12)" = "| big cell 1" ] || return 1
+  m="$(bash "$1" --map "$w/d.md" 2>/dev/null)"; rc=$?
+  [ "$rc" -eq 3 ] && [ "${m%% of the document (lines 15-15, *}" != "$m" ] && [ "${m%, single-line)}" != "$m" ]
+}
+p_fm_crlf_table() { # front matter + CRLF + no trailing newline, row-split: split + assemble byte-identical
+  local w n; w="$(world)"; doc_fm_table_crlf > "$w/d.md"; cp -p "$w/d.md" "$w/orig"
+  bash "$1" --map "$w/d.md" > "$w/m" 2>/dev/null || return 1
+  n="$(cut -f4 "$w/m" | grep -cxF '## Decisions')" || n=0
+  [ "$n" -ge 2 ] || return 1
+  bash "$1" --split "$w/d.md" "$w/x" > /dev/null 2>&1 || return 1
+  assemble "$1" "$w"
+  [ "$RC" -eq 0 ] && cmp -s "$w/d.md" "$w/orig"
 }
 p_serial_one() { # fewer than two parts: SERIAL, exit 3; --split creates nothing
   local w m rc; w="$(world)"; doc_one > "$w/d.md"
@@ -276,7 +351,7 @@ p_no_overwrite() { # a second split over a live sections/ is refused
   [ "$rc" -eq 2 ] && has "$w/e" "already exists"
 }
 
-P_ALL="fence longfence comment cfence serial_dominant serial_one roundtrip crlf_map cap manifest sha_moved missing newline refused_intact removed unchanged expect_sha relative no_overwrite"
+P_ALL="fence longfence comment cfence serial_dominant wide_table fence_table two_row single_line fm_crlf_table serial_one roundtrip crlf_map cap manifest sha_moved missing newline refused_intact removed unchanged expect_sha relative no_overwrite"
 
 arm() { # <predicate> <label>
   if "p_$1" "$PD"; then ok "$2"; else bad "$2"; fi
@@ -285,7 +360,12 @@ arm fence            "A1: a \`## \` inside a \`\`\` fence is not a boundary -- 4
 arm longfence        "A17: a \`## \` inside a \`\`\`\` fence past its inner \`\`\` pair, and inside a ~~~ fence past a \`\`\` pair, is not a boundary; a \`\`\` fence closed by \`\`\`\`\` closes"
 arm comment          "A18: a \`## \` inside a multi-line HTML comment is not a boundary; a real \`## \` right after a one-line comment is"
 arm cfence           "A19: an odd \`\`\` inside a comment opens no fence, and a \`<!--\` inside a fence opens no comment"
-arm serial_dominant  "A2: a dominant ## section with no ### -> exit 3 'SERIAL: largest part is'; its ### twin shards"
+arm serial_dominant  "A2: a dominant ## section with no ### and no table -> exit 3 'SERIAL: largest part is', naming lines 9-69 and 'no-boundary'; its ### twin shards"
+arm wide_table       "A20: a dominant ## led by a wide table, no ### -> cut at table rows into 2+ parts under one heading; split + assemble byte-identical"
+arm fence_table      "A21: the same table inside a \`\`\` fence -> no row is a boundary; SERIAL 'no-boundary'"
+arm two_row          "A22: never three table rows in a row -> no cut; SERIAL 'no-boundary'"
+arm single_line      "A23: one table row over the cap -> SERIAL naming 'lines 15-15' and 'single-line'"
+arm fm_crlf_table    "A24: front matter + CRLF + no trailing newline, row-split -> split + assemble byte-identical"
 arm serial_one       "A3: one ## section -> exit 3 'SERIAL: one part', and --split creates nothing"
 arm roundtrip        "A4: LF, CRLF and no-trailing-newline documents split + assemble byte-identical, mode 640 kept"
 arm crlf_map         "A5: a CRLF document's map carries no CR (the document does)"
@@ -359,7 +439,7 @@ mutant "MX1 the split-sha check removed (both layers)" "sha_moved" \
   '[ "$(sha_of "$DOC")" = "$SHA" ] || { rm -f "$T"; refuse "$DOC moved' 'true || { rm -f "$T"; refuse "$DOC moved'
 mutant "MX2 the missing-section check removed" "missing" \
   '[ -f "$DIR/sections/$o.md" ] || refuse "section $o is missing' 'true || refuse "section $o is missing'
-mutant "MX3 the partition made fence-blind" "fence longfence cfence" \
+mutant "MX3 the partition made fence-blind" "fence longfence cfence fence_table" \
   '{ match($0, /(`+|~+)/); fence = substr($0, RSTART, RLENGTH); next }' '{ next }'
 mutant "MX7 the fence tracker reverted to the toggle (any fence line closes)" "longfence" \
   'if (n >= length(fence)) fence = ""' 'if ($0 ~ /^[ \t]*(```|~~~)/) fence = ""' \
@@ -380,6 +460,18 @@ mutant "MX5 the PART_CAP repack removed" "cap" \
   'if (pack(target) > cap) {' 'if (0) {'
 mutant "MX6 the section files not removed after assembly" "removed" \
   'for o in $ORDS; do rm -f "$DIR/sections/$o.md"; done' ':'
+mutant "MX11 a table row inside a fence counts as a cut point" "fence_table" \
+  '      if (n >= length(fence)) fence = ""' '      if (n >= length(fence)) fence = ""; else if ($0 ~ /^\|/) TR[NR] = 1'
+mutant "MX12 a cut before every table row (the three-row condition dropped)" "two_row" \
+  'if (TR[k] && TR[k - 1] && TR[k - 2])' 'if (TR[k])'
+mutant "MX13 the row split removed" "wide_table single_line fm_crlf_table" \
+  '        if (s * 100 > tot * maxpct)
+          for' '        if (0)
+          for'
+mutant "MX14 the blocking part dropped from the SERIAL line" "serial_dominant fence_table two_row single_line" \
+  ' (lines %d-%d, %d%%, %s)\n", int(big * 100 / tot), P1[bi], P2[bi], int(big * 100 / tot), why' '\n", int(big * 100 / tot)'
+mutant "MX15 the single-line reason never given" "single_line" \
+  'why = "single-line"' 'why = "no-boundary"'
 
 echo
 if [ "$fails" -eq 0 ]; then echo "document-partition: PASS"; exit 0; fi
