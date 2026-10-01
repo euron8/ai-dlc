@@ -1288,11 +1288,18 @@ fi
 #
 # BOTH ARMS ARE PRESENCE/ABSENCE PAIRS ON ONE INPUT, one property apart, so neither can pass by
 # reporting everything or by reporting nothing.
+# THE STAGING HELPERS THE ROW CALLS ARE EXTRACTED BESIDE IT, from the same apply.sh: the row reads its
+# pattern list from a staged file, and an extraction without them reads as "nothing tracked" (T5).
+ti_helpers() {
+  printf 'AP_TMP="$(mktemp -d "%s/ti-stage.XXXXXX")"; ap_stage_dead=0; FINISH=0; mech_fail=0\n' "$WORK"
+  sed -n -e '/^ap_stage() {/,/^}$/p' -e '/^ap_staging_refused() {/,/^}$/p' -e '/^ap_stage_or_refuse() {/,/^}$/p' "$APPLY"
+}
 ti_row_out() { # <consumer> -> the row types this consumer draws, or -NONE-
   local c="$1" out
   out="$( CONSUMER="$c" DIST="$DIST" bash -c '
     handback=0; worklist_n=0
     say() { printf "%s|%s\n" "$1" "$2"; }
+    '"$(ti_helpers)"'
     '"$(sed -n '/^transient_ignore_row() {/,/^}$/p' "$APPLY")"'
     transient_ignore_row' 2>/dev/null | tr '\n' ' ' )"
   printf '%s' "${out:--NONE-}"
@@ -1302,6 +1309,7 @@ ti_row_text() { # <consumer> -> the row's PROSE, for the arms that discriminate 
   CONSUMER="$c" DIST="$DIST" bash -c '
     handback=0; worklist_n=0
     say() { printf "%s\n" "${4:-}"; }
+    '"$(ti_helpers)"'
     '"$(sed -n '/^transient_ignore_row() {/,/^}$/p' "$APPLY")"'
     transient_ignore_row' 2>/dev/null | tr '\n' ' '
 }
