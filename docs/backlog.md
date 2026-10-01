@@ -471,7 +471,22 @@ Tiered **DEFECT**.
 Found while closing `BL-033` at `v0.423.0`; not a `PC-` candidate, so it ranks below the
 PC-backed set.
 
-verify: sh P=core/skills/ai-dlc-update/reconcile/preclassify.sh; [ -f "$P" ] || exit 9; H="$(git rev-parse HEAD)" || exit 9; C="$(mktemp -d)" || exit 9; u() { bash "$P" . "$H" "$H" "$C" --untangle 2>/dev/null; }; R="$(u | LC_ALL=C awk -F'\t' '$1=="U"{print $2 "\t" $3}' | while IFS="$(printf '\t')" read -r cp cons; do [ "$(git ls-tree "$H" -- "$cp" | cut -c1-6)" = 100755 ] && { printf '%s\t%s\n' "$cp" "$cons"; break; }; done)"; [ -n "$R" ] || { rm -rf "$C"; exit 9; }; CP="$(printf '%s' "$R" | cut -f1)"; CO="$(printf '%s' "$R" | cut -f2)"; mkdir -p "$C/$(dirname "$CO")" || { rm -rf "$C"; exit 9; }; git show "${H}:${CP}" > "$C/$CO" 2>/dev/null || { rm -rf "$C"; exit 9; }; b() { u | LC_ALL=C awk -F'\t' -v p="$CP" '$2==p{print $4}'; }; chmod 755 "$C/$CO"; [ "$(b)" = ALREADY-AT-THEIRS ] || { rm -rf "$C"; exit 9; }; chmod 644 "$C/$CO"; D="$(b)"; rm -rf "$C"; [ "$D" != ALREADY-AT-THEIRS ]
+**Held note (batch 178):** fixed on `b178-b1`, not landed. The bucket is decided:
+`UPSTREAM-ONLY-ADD`, the bucket the default mode's A branch already gives a copy whose content is
+present and whose exec bit is not, and the one `SKILL.md` already defines as covering "lacking
+theirs' exec bit". No fourth bucket and no `SKILL.md` change. `--untangle` now reads
+`mode_at_theirs` on the `ours_h = base_h` arm: content and mode is `ALREADY-AT-THEIRS`, content
+alone `UPSTREAM-ONLY-ADD`. The helper reads `$THEIRS`; the mode's contract is base == theirs, so
+theirs' mode is base's, which the code comment states rather than asserting (an assertion would be a
+new refusal on an operator path whose caller is `SKILL.md`).
+
+The replacement receipt asserts the EXACT bucket in both directions on a synthetic dist: a 100755
+hook held 644 must read `UPSTREAM-ONLY-ADD`, a 100644 rule held 755 must read `UPSTREAM-ONLY-ADD`,
+and the matched copies of each `ALREADY-AT-THEIRS`. Scored: origin/main 1; fix 0; the
+CLASSIFY-fallthrough fix (conjunct only) 1; a conjunct that demands `+x` whatever theirs records 1
+(the 100644 direction inverts).
+
+verify: sh P="$PWD/core/skills/ai-dlc-update/reconcile/preclassify.sh"; [ -f "$P" ] || exit 9; w="$(mktemp -d)" || exit 9; mkdir -p "$w/d/core/git-hooks" "$w/d/core/rules" "$w/c/.githooks" "$w/c/.claude/rules" || exit 9; git init -q "$w/d" && git -C "$w/d" config core.fileMode true || exit 9; printf '#!/usr/bin/env bash\necho h\n' > "$w/d/core/git-hooks/pre-push" && chmod 755 "$w/d/core/git-hooks/pre-push" || exit 9; printf 'rule\n' > "$w/d/core/rules/p.md" && chmod 644 "$w/d/core/rules/p.md" || exit 9; git -C "$w/d" -c user.name=r -c user.email=r@r add -A && git -C "$w/d" -c user.name=r -c user.email=r@r commit -qm s || exit 9; H="$(git -C "$w/d" rev-parse HEAD)" || exit 9; [ "$(git -C "$w/d" ls-tree "$H" -- core/git-hooks/pre-push | cut -c1-6)" = 100755 ] || exit 9; cp "$w/d/core/git-hooks/pre-push" "$w/c/.githooks/pre-push" && cp "$w/d/core/rules/p.md" "$w/c/.claude/rules/p.md" || exit 9; b() { bash "$P" "$w/d" "$H" "$H" "$w/c" --untangle 2>/dev/null | LC_ALL=C awk -F'\t' -v p="$1" '$2==p {print $4}'; }; chmod 755 "$w/c/.githooks/pre-push"; chmod 644 "$w/c/.claude/rules/p.md"; [ "$(b core/git-hooks/pre-push)" = ALREADY-AT-THEIRS ] || exit 9; c644="$(b core/rules/p.md)"; chmod 644 "$w/c/.githooks/pre-push"; chmod 755 "$w/c/.claude/rules/p.md"; x="$(b core/git-hooks/pre-push)"; y="$(b core/rules/p.md)"; [ "$c644" = ALREADY-AT-THEIRS ] && [ "$x" = UPSTREAM-ONLY-ADD ] && [ "$y" = UPSTREAM-ONLY-ADD ] && exit 0; echo "BL100-UNTANGLE-MODE-BLIND hook-644=$x rule-755=$y rule-644-control=$c644" >&2; exit 1
 
 ## BL-092 — the rev-path defence is keyed on a `core/` prefix, so a non-`core/` distribution path reads as a missing consumer subject
 
@@ -2003,7 +2018,26 @@ answer; it is no longer served to every later lookup. `memo_has_path` could retu
 its own check established presence. The cost of the extra `rev-parse` on each distinct absent key
 was not measured, and `ledger-reverify`'s `theirs_has_path` is its heaviest caller.
 
-verify: manual
+**Held note (batch 178):** the lib half is fixed on `b178-b1`. The b177 claim that `memo_has_path`
+returns 128 for a present-but-unreadable path was wrong: with the BLOB missing it returned `cat-file
+-e`'s **1**, uncached, matching neither caching branch, so a fix keyed on 128 never fires. It now
+returns 125 for any "no" the BL-374 discriminator cannot confirm (missing blob, missing subtree or
+root tree, unresolvable rev), on the fill and the direct line. **This entry closes only with B2.**
+`ledger-reverify.sh` still reads any non-zero `theirs_has_path` as absent at `:1935` (the basename
+retry), and `:1947` (`all_present "$(theirs_show "$path")"`), `:1551` (`near_miss_spelling`) and
+`:1587` (`TV`) discard `memo_show`'s status; B2 must read 125 / the show status at all four. Until
+then a 125 reads as absent there, exactly as today's 128 and 1 did, so B1 pulled without B2 changes
+no verdict.
+
+The receipt drives `memo_has_path` and `ledger-reverify.sh` through two worlds, a missing BLOB
+(`cat-file -e` 1, `rev-parse` 0) and a missing SUBTREE (`cat-file -e` 128), and requires 125 from
+`memo_has_path` in both, the memo serving 0 after each restore, and an explicit unreadable
+`NEEDS-REVIEW` row from `ledger-reverify.sh` for both entries, including one whose `has` lookup was
+cached healthy before the blob went (the `:1947` read). Scored from a `git archive` extraction:
+origin/main 1; B1 alone (this branch) 1, so it stays open; B1 plus a stand-in B2 at `:1935` and
+`:1947` 0; that stand-in over a lib keyed on 128 1 (`has(blob)=1`); B2 at `:1935` only 1.
+
+verify: sh L="$PWD/core/skills/ai-dlc-update/reconcile"; [ -f "$L/lib.sh" ] && [ -f "$L/ledger-reverify.sh" ] || exit 9; w="$(mktemp -d)" || exit 9; g() { git -C "$w/d" -c user.name=r -c user.email=r@r "$@"; }; git init -q "$w/d" || exit 9; mkdir -p "$w/d/a/b" "$w/c" "$w/k" "$w/m1" "$w/m2" "$w/m3" || exit 9; echo MARK > "$w/d/a/b/f.txt" && echo MARK > "$w/d/top.txt" && echo 1.0.0 > "$w/d/VERSION" || exit 9; g add -A && g commit -qm s || exit 9; H="$(g rev-parse HEAD)" || exit 9; printf -- '# ledger\n\n- **Entry QB** -- blob.\n  verify: theirs_has top.txt "MARK"\n\n- **Entry QS** -- subtree.\n  verify: theirs_has a/b/f.txt "MARK"\n' > "$w/c/ledger.md" || exit 9; ob() { local s; s="$(g rev-parse "HEAD:$1")" || return 1; printf '%s' "$w/d/.git/objects/$(printf %s "$s" | cut -c1-2)/$(printf %s "$s" | cut -c3-)"; }; B="$(ob top.txt)" && T="$(ob a/b)" || exit 9; [ -f "$B" ] && [ -f "$T" ] || exit 9; q() { AI_DLC_RECONCILE_MEMO="$1" bash -c '. "$1/lib.sh" >/dev/null 2>&1 || exit 97; memo_has_path "$2" "$4" "$3"; echo "$?"' _ "$L" "$w/d" "$2" "$H" 2>/dev/null; }; lr() { AI_DLC_RECONCILE_MEMO="$1" bash "$L/ledger-reverify.sh" "$w/d" "$H" "$w/c" "$H" "$w/c/ledger.md" 2>/dev/null | LC_ALL=C awk -F'\t' -v e="$2" '$2==e {print $1 "|" $3; exit}'; }; [ "$(q "$w/k" top.txt)" = 0 ] || exit 9; case "$(lr "$w/k" "Entry QB")" in STILL-LIVE*) ;; *) exit 9 ;; esac; case "$(lr "$w/k" "Entry QS")" in STILL-LIVE*) ;; *) exit 9 ;; esac; [ "$(q "$w/m3" top.txt)" = 0 ] || exit 9; mv "$B" "$w/blob" || exit 9; g cat-file -e HEAD:top.txt 2>/dev/null; [ "$?" = 1 ] || exit 9; hb="$(q "$w/m1" top.txt)"; vb="$(lr "$w/m2" "Entry QB")"; vw="$(lr "$w/m3" "Entry QB")"; mv "$w/blob" "$B" || exit 9; mv "$T" "$w/tree" || exit 9; hs="$(q "$w/m1" a/b/f.txt)"; vs="$(lr "$w/m2" "Entry QS")"; mv "$w/tree" "$T" || exit 9; [ "$(q "$w/m1" top.txt)" = 0 ] && [ "$(q "$w/m1" a/b/f.txt)" = 0 ] || hb="$hb-cached"; ur() { case "$1" in NEEDS-REVIEW\|*unreadable*) return 0 ;; esac; return 1; }; [ "$hb" = 125 ] && [ "$hs" = 125 ] && ur "$vb" && ur "$vs" && ur "$vw" && exit 0; echo "BL310-UNREADABLE-READ-AS-ABSENT has(blob)=$hb has(subtree)=$hs ledger(blob)=${vb%%|*} ledger(subtree)=${vs%%|*} ledger(has-cached,blob-gone)=${vw%%|*}" >&2; exit 1
 
 ## BL-333 — three "0 ALWAYS" detectors refuse with exit 0 and a stderr line, so the report renders `none` for a scan that never ran
 
@@ -2120,7 +2154,22 @@ exits 0.
 - `validate-ci-gates.sh`'s `code_hits` counts with `sed | grep -c || true`; a failed `sed` reads 0,
   which is a false DORMANT finding (exit 1), the blocking direction.
 
-verify: manual
+**Held note (batch 178):** fixed on `b178-b1`, not landed. `norm_lines` stages `sed`'s output to a
+`mktemp` file and folds case in the CALLER's locale when `iconv -f UTF-8 -t UTF-8` accepts it, under
+C otherwise; each stage's own status is read, so the `PIPESTATUS[*]`/`IFS` NOTE above is gone with
+the pipeline. Measured on this host, the entry's "exits 0" for UTF-8 `tr` on a Latin-1 byte is
+wrong here: it prints "Illegal byte sequence", cuts the output at that byte and exits **1**, so the
+ungated fix REFUSES the run (exit 2) rather than truncating silently. `procsub-staged-refusal`'s
+RLP-NORMLINES is re-anchored on the staged `sed` status; RLP-LOCALE's anchor is unchanged.
+
+The receipt drives `retired-layer-passage.sh` on a world deleting `Élan must …` and an ASCII line,
+with a consumer carrying `- élan must …` and a Latin-1 file reproducing the ASCII line: under
+`en_US.UTF-8` the run must exit 0 with BOTH rows. Exits 9 without that locale, if the Latin-1 seed
+validates as UTF-8, or if the C-locale control does not flag the Latin-1 file. Scored: origin/main
+1 (accented row 0); fix 0; `LC_ALL=C` dropped from `tr` 1 (exit 2, both rows lost); staged with
+the fold still under C 1.
+
+verify: sh R="$PWD/core/skills/ai-dlc-update/reconcile"; S="$R/retired-layer-passage.sh"; [ -f "$S" ] && [ -f "$R/lib.sh" ] || exit 9; l="$(locale -a 2>/dev/null)" || exit 9; grep -qx 'en_US.UTF-8' <<<"$l" || exit 9; w="$(mktemp -d)" || exit 9; mkdir -p "$w/d/core/skills/ai-dlc/steps" "$w/c/.claude/skills/ai-dlc/extensions" || exit 9; git init -q "$w/d" || exit 9; f="$w/d/core/skills/ai-dlc/steps/accent.md"; printf '# A\n\n1. \303\211lan must always be recorded in the story file before merge.\n2. Every gate run is logged before the merge.\n' > "$f" || exit 9; G() { git -C "$w/d" -c user.name=r -c user.email=r@r "$@"; }; G add -A && G commit -qm b || exit 9; B="$(G rev-parse HEAD)" || exit 9; printf '# A\n\n1. Nothing.\n' > "$f" && G commit -qam t || exit 9; T="$(G rev-parse HEAD)" || exit 9; E="$w/c/.claude/skills/ai-dlc/extensions"; printf -- '- \303\251lan must always be recorded in the story file before merge.\n' > "$E/lowered.md" || exit 9; printf -- '# caf\351\n- Every gate run is logged before the merge.\n' > "$E/latin1.md" || exit 9; iconv -f UTF-8 -t UTF-8 < "$E/latin1.md" >/dev/null 2>&1 && exit 9; o="$(env -u LANG LC_ALL=C bash "$S" "$w/d" "$B" "$T" "$w/c" 2>/dev/null)" || exit 9; grep -q 'latin1.md' <<<"$o" || exit 9; u="$(env -u LANG LC_ALL=en_US.UTF-8 bash "$S" "$w/d" "$B" "$T" "$w/c" 2>/dev/null)"; rc=$?; a=0; b=0; grep -q 'lowered.md' <<<"$u" && a=1; grep -q 'latin1.md' <<<"$u" && b=1; [ "$rc" = 0 ] && [ "$a" = 1 ] && [ "$b" = 1 ] && exit 0; echo "BL355-ACCENT-FOLD rc=$rc accented-row=$a latin1-row=$b" >&2; exit 1
 
 
 
@@ -2459,6 +2508,12 @@ four fixed ones. Scored through `backlog-reverify.sh`'s own `eval` shape, from t
 | a two-file corpus | 9 | |
 | `awk` stubbed to print nothing | 9 | |
 
+**Held note (batch 178):** one site converted on `b178-b1`, self-contained: `preclassify.sh`'s
+`--untangle` manifest `ls-files` (`:453` above) now runs under `core.quotePath=false`. Its readers are
+`map_consumer`, `blob_hash` and `file_hash`, all inside that loop; `preclassify-mode-bucket` U5 holds an
+accented manifest file that must list once under its raw path, with a mutant restoring the default.
+Every other site in the census is unchanged and the entry stays open.
+
 verify: sh R=core/skills/ai-dlc-update/reconcile; [ -f "$R/lib.sh" ] || exit 9; set -- "$R"/*.sh; [ "$#" -ge 20 ] || exit 9; w="$(mktemp -d)" || exit 9; P='/^[[:blank:]]*#/ {next} /git -C "[^"]*"/ && (/ ls-(tree|files)[[:blank:]]/ || (/ diff[[:blank:]]/ && /--name-(only|status)/)) { if (/core[.]quotePath=false/ || / -z[[:blank:]]/) f++; else u++ } END {print u+0, f+0}'; printf '%s\n' 'x="$(git -C "$D" ls-tree -r --name-only "$T")"' 'git -C "$D" -c core.quotePath=false diff --name-only "$B" "$T"' '  # git -C "$D" ls-tree --name-only "$T"' 'echo "git ls-tree exited"' 'git -C "$D" diff -U0 "$B"' > "$w/p.sh" || exit 9; [ "$(awk "$P" "$w/p.sh")" = "1 1" ] || exit 9; o="$(awk "$P" "$@")" || exit 9; u="${o% *}"; f="${o#* }"; [ "$f" -ge 1 ] && [ "$((u + f))" -ge 20 ] || exit 9; [ "$u" -eq 0 ] && exit 0; echo "BL364-UNQUOTED-LISTING-SITES $u of $((u + f))" >&2; exit 1
 
 
@@ -2493,7 +2548,28 @@ p2=128`); `_ai_dlc_memo_absent` rewritten to the `ls-tree` rule 0; `_ai_dlc_memo
 answers absent, so 128 is never cached, 0; a `lib.sh` that fails to source 9; a memo that is
 never used, so every query goes to git direct, 9.
 
-verify: sh L="$PWD/core/skills/ai-dlc-update/reconcile/lib.sh"; [ -f "$L" ] || exit 9; w="$(mktemp -d)" || exit 9; g() { git -C "$w/r" -c user.name=r -c user.email=r@r "$@"; }; git init -q "$w/r" || exit 9; mkdir -p "$w/r/a/b" || exit 9; echo x > "$w/r/a/b/f.txt" || exit 9; echo y > "$w/r/top.txt" || exit 9; g add -A || exit 9; g commit -qm s || exit 9; t="$(g rev-parse HEAD:a/b)" || exit 9; o="$w/r/.git/objects/$(printf %s "$t" | cut -c1-2)/$(printf %s "$t" | cut -c3-)"; [ -f "$o" ] || exit 9; q() { AI_DLC_RECONCILE_MEMO="$1" bash -c '. "$1" >/dev/null 2>&1 || exit 9; memo_has_path "$2" HEAD "$3"; echo "$?"' _ "$L" "$w/r" "$2" 2>/dev/null; }; mkdir "$w/m" "$w/n" "$w/k" || exit 9; [ "$(q "$w/k" top.txt)" = 0 ] || exit 9; [ "$(q "$w/k" nope.txt)" = 0 ] && exit 9; [ "$(q "$w/m" top.txt)" = 0 ] || exit 9; [ -n "$(ls -A "$w/m")" ] || exit 9; mv "$o" "$w/obj" || exit 9; g ls-tree --full-tree HEAD -- a/b/f.txt >/dev/null 2>&1 && exit 9; p1="$(q "$w/m" a/b/f.txt)"; [ "$p1" = 0 ] && exit 9; mv "$w/obj" "$o" || exit 9; [ "$(q "$w/n" a/b/f.txt)" = 0 ] || exit 9; p2="$(q "$w/m" a/b/f.txt)"; [ "$p2" = 0 ] && exit 0; echo "BL374-MISSING-SUBTREE-CACHED-AS-ABSENT p1=$p1 p2=$p2" >&2; exit 1
+**Held note (batch 178):** fixed on `b178-b1`, not landed. `_ai_dlc_memo_absent <dist> <ref>
+<path>` now carries `layer-drift.sh` `have()`'s whole `ls-tree --full-tree` table: rc 0 and no line,
+a line naming a different (canonical) path, or a `..` component is ABSENT; a line naming exactly
+the asked path, or any other non-zero, is a read failure. `memo_has_path` and `memo_rev_parse`
+cache a "no" only when it is confirmed and otherwise return 125, uncached, on the fill AND the
+direct (unavailable or unwritable memo) line. `preclassify.sh`'s `blob_hash` refuses 125 with its
+own message, so an unresolvable rev now REFUSES in `--untangle`/`--templates` where it bucketed
+every row MISSING, and `dist_only()` reads `memo_has_path` and refuses anything but 0/128.
+`have()` itself is not yet folded onto the lib helper; that is not in this batch.
+
+The receipt below replaces the one that accepted the lib-only half-fix. It drives lib.sh and
+`preclassify.sh` through one world: `memo_rev_parse` must read 125 on a moved subtree with a
+writable AND a `chmod 555` memo, `memo_has_path` 125 on the writable one, both 0 from that same
+memo after the restore, a non-canonical spelling (`a/./b/f.txt`) still 128, and `--untangle` with
+the manifest subtree moved must exit 2. Exits 9 if the seed does not take, the memo is never
+written, a `chmod 555` directory is writable, or the healthy controls fail. Scored from a `git
+archive` extraction under `bash -c 'set -uo pipefail; …'`: origin/main 1 (`rp-rw=1 rp-ro=1
+has-rw=128 after-restore=1/128 preclassify=0`); fix 0; the lib-only half-fix (`memo_rev_parse`
+caching its 1) 1; the fix without the direct lines 1 (`rp-ro=1`); the naive rule 1
+(`noncanonical=125`); `preclassify.sh` reading 125 as MISSING 1 (`preclassify=0`).
+
+verify: sh L="$PWD/core/skills/ai-dlc-update/reconcile"; [ -f "$L/lib.sh" ] && [ -f "$L/preclassify.sh" ] || exit 9; w="$(mktemp -d)" || exit 9; g() { git -C "$w/r" -c user.name=r -c user.email=r@r "$@"; }; git init -q "$w/r" || exit 9; mkdir -p "$w/r/a/b" "$w/r/core/rules" "$w/c/.claude/rules" || exit 9; echo x > "$w/r/a/b/f.txt" && echo y > "$w/r/top.txt" && echo rule > "$w/r/core/rules/p.md" && cp "$w/r/core/rules/p.md" "$w/c/.claude/rules/p.md" || exit 9; g add -A && g commit -qm s || exit 9; H="$(g rev-parse HEAD)" || exit 9; ob() { local s; s="$(g rev-parse "HEAD:$1")" || return 1; printf '%s' "$w/r/.git/objects/$(printf %s "$s" | cut -c1-2)/$(printf %s "$s" | cut -c3-)"; }; o="$(ob a/b)" && orl="$(ob core/rules)" || exit 9; [ -f "$o" ] && [ -f "$orl" ] || exit 9; mkdir "$w/m" "$w/k" "$w/ro" && chmod 555 "$w/ro" || exit 9; ( : > "$w/ro/p" ) 2>/dev/null && exit 9; q() { AI_DLC_RECONCILE_MEMO="$1" bash -c '. "$1/lib.sh" >/dev/null 2>&1 || exit 97; shift; "$@" >/dev/null 2>&1; echo "$?"' _ "$L" "${@:2}" 2>/dev/null; }; [ "$(q "$w/k" memo_has_path "$w/r" HEAD top.txt)" = 0 ] || exit 9; [ "$(q "$w/k" memo_rev_parse "$w/r" HEAD:nope)" = 1 ] || exit 9; [ "$(q "$w/m" memo_rev_parse "$w/r" HEAD:top.txt)" = 0 ] || exit 9; [ -n "$(ls -A "$w/m")" ] || exit 9; u="$(bash "$L/preclassify.sh" "$w/r" "$H" "$H" "$w/c" --untangle 2>/dev/null)" || exit 9; grep -q '	core/rules/p.md	' <<<"$u" || exit 9; mv "$o" "$w/obj" || exit 9; g ls-tree --full-tree HEAD -- a/b/f.txt >/dev/null 2>&1 && exit 9; r1="$(q "$w/m" memo_rev_parse "$w/r" HEAD:a/b/f.txt)"; r2="$(q "$w/ro" memo_rev_parse "$w/r" HEAD:a/b/f.txt)"; h1="$(q "$w/m" memo_has_path "$w/r" HEAD a/b/f.txt)"; mv "$w/obj" "$o" || exit 9; [ "$(q "$w/k" memo_rev_parse "$w/r" HEAD:a/b/f.txt)" = 0 ] || exit 9; p1="$(q "$w/m" memo_rev_parse "$w/r" HEAD:a/b/f.txt)"; p2="$(q "$w/m" memo_has_path "$w/r" HEAD a/b/f.txt)"; n="$(q "$w/m" memo_has_path "$w/r" HEAD a/./b/f.txt)"; mv "$orl" "$w/orl" || exit 9; bash "$L/preclassify.sh" "$w/r" "$H" "$H" "$w/c" --untangle >/dev/null 2>&1; pc=$?; mv "$w/orl" "$orl" || exit 9; [ "$r1" = 125 ] && [ "$r2" = 125 ] && [ "$h1" = 125 ] && [ "$p1" = 0 ] && [ "$p2" = 0 ] && [ "$n" = 128 ] && [ "$pc" = 2 ] && exit 0; echo "BL374-READ-FAILURE-ANSWERED-AS-ABSENT rp-rw=$r1 rp-ro=$r2 has-rw=$h1 after-restore=$p1/$p2 noncanonical=$n preclassify=$pc" >&2; exit 1
 
 ## BL-375 — the read-set deriver needs root for `fs_usage`, and a scoped `sandbox-exec` tracer measured as a root-free replacement
 
