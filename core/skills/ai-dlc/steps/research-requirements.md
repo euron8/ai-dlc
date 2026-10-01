@@ -119,7 +119,9 @@ Run the validation cycle (`_gate-procedures.md`, "Validation cycle") on the PRD 
 its passes use the **Adversarial review dispatch** and **Adversarial repair
 dispatch** sub-routines. Parameters:
 - **party-mode seats / subject:** PM, Architect, UX, Dev, TEA — every section of
-  the PRD (personas, stories, NFRs, metrics, risks, constraints).
+  the PRD (personas, stories, NFRs, metrics, risks, constraints). The PRD is one document
+  (Rule 28, "Split dispatch": seats x sections axis, or serial exception 4 when
+  `partition-document.sh --map` reports it SERIAL).
 - **source-fidelity check:** verify each requirement implements what was
   requested, not a generalized or lower-effort alternative, preserving specific
   details from its source.

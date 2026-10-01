@@ -118,6 +118,15 @@ TR_PIPE_ROUTED="$WORK/pipe-routed.jsonl"
 { cat "$TR_PIPELINE"; printf '%s\n' "$ROUTE_READ"; } > "$TR_PIPE_ROUTED"
 TR_RESUMED_ROUTED="$WORK/resumed-routed.jsonl"
 { cat "$TR_RESUMED"; printf '%s\n' "$ROUTE_READ"; } > "$TR_RESUMED_ROUTED"
+# THE OTHER ORDER (BL-404): a routed, typed `/ai-dlc` lead that then calls Skill(ai-dlc-update).
+# TR_RESUMED is the updater FIRST; this is the updater LAST, so the last-skill rule makes the
+# session the updater and its pause stops binding until `/ai-dlc` is invoked again -- accepted by
+# contract. The typed `/ai-dlc` record comes first, so a scan that took the FIRST skill instead of
+# the last reads this session as the pipeline and denies it.
+TR_PIPE_THEN_UPD="$WORK/pipe-then-upd.jsonl"
+{ cat "$TR_PIPE_ROUTED"
+  printf '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"ai-dlc-update"},"caller":{"type":"direct"}}]}}\n'
+} > "$TR_PIPE_THEN_UPD"
 
 # THE THREE MENTIONS. Each is a routed `/ai-dlc` pipeline session whose LAST line quotes the
 # updater's typed marker -- the order that makes a mention the last match, which is the only order
@@ -276,6 +285,12 @@ wexpect tooluse "ALLOW 0 0 0" Edit "$TR_AGENT_POST" "" \
 wexpect resumed "DENY 1 0 1" Edit "$TR_RESUMED_ROUTED" "" \
   "WRITE (iii): a session whose LAST skill is /ai-dlc, after an updater call, is DENIED — the write exemption follows recency" \
   "WRITE (iii): LEAK — an updater call earlier in the session exempts a resumed pipeline's writes from the pause"
+wexpect pipethenupd "ALLOW 0 0 0" Edit "$TR_PIPE_THEN_UPD" "" \
+  "WRITE (iii-b): a routed /ai-dlc session whose LAST skill is Skill(ai-dlc-update) is the updater — its Edit is ALLOWED and logs nothing (recency, the other order)" \
+  "WRITE (iii-b): a pipeline lead's later Skill(ai-dlc-update) does not make it the updater — the last-skill rule is not what decides"
+PTU="$(acell pipethenupd "$TR_PIPE_THEN_UPD")"
+if [ "$PTU" = "ALLOW 0" ]; then ok "RECENCY (other order): a routed /ai-dlc session that then calls Skill(ai-dlc-update) dispatches — the LAST skill wins in this direction too"
+else bad "RECENCY (other order): a pipeline session's later Skill(ai-dlc-update) did not exempt its Agent dispatch — the transcript scan is not reading the LAST skill (cell '$PTU', expected 'ALLOW 0')"; fi
 wexpect notranscript "DENY 1 0 1" Edit "$WORK/does-not-exist.jsonl" "" \
   "WRITE (iv): an unreadable transcript's Edit is DENIED (absence of evidence is not the updater)" \
   "WRITE (iv): LEAK — a missing transcript exempts a write from the pause"

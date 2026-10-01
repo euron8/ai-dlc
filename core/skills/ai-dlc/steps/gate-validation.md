@@ -3111,7 +3111,7 @@ If any check fails:
 1. Dispatch the pass's repair per `_gate-procedures.md`
    **Adversarial repair dispatch** — the gate is that procedure's second caller,
    and that procedure owns the remediator count and any file or section sharding (Rule 28,
-   "Split dispatch"). It takes every FAILED check of this pass and writes its repair record to
+   "Split dispatch" serial exception 2 between passes). It takes every FAILED check of this pass and writes its repair record to
    `_bmad-output/planning-artifacts/s<N>/gate-<type>-repair-p<M>.md`. The lead
    dispatches, joins, and adjudicates; it does not edit the artifact.
    **One exemption, and it is the only one:** a FAIL whose subject is

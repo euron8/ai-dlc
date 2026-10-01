@@ -1139,6 +1139,10 @@ otherwise.**
   in scope, alongside the candidates; bootstrapping ones ship one file set per release, back to back.
   A batch that closes with a buildable entry unbuilt names it and the measured reason.
 - **Read-set traces run with the sandbox tracer, by the session** (`operator-rulings.md`).
+- **Call the advisor as often as needed and without hesitation.** Operator instruction, batch 179:
+  call `advisor` before scoping a batch, before each contract is handed to a builder, whenever a
+  result does not fit what was expected, before each release is cut, and before the batch is
+  declared closed. A call is never weighed against the work it protects.
 
 **0. DISPATCH HANDS BEFORE YOU RUN A SINGLE SWEEP COMMAND YOURSELF.** Operator instruction,
 given at batch 90.
@@ -1955,7 +1959,7 @@ Each of these is a command, and each was checked to be answerable at the point i
 2. Every id adjudicated `ALREADY-FIXED`, `FALSIFIED`, `DUPLICATE-OF`, or remediated appears
    **verbatim** in `CHANGELOG.md`. Control in the same invocation: an impossible id returns 0
    while a known-cited id returns non-zero.
-3. `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push` is green on every release branch, with each
+3. The pre-push hook's own run on the push is green on every release branch, with each
    changed fixture read by name against an impossible-name control.
 4. **No write by this program reached graph.** The Phase 0 baseline of **35** is NOT the criterion and
    cannot be: a live graph session is committing and editing there throughout, and it had already

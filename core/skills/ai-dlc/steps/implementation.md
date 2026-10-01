@@ -109,7 +109,8 @@ join without a live beat armed); bounded-join ≠ serial execution and the
 wave-DAG planning output; dispatch-prompt cache discipline; the dev-brief
 bug-class checklist; the canonical-story-file pre-flight check; and the
 dev-dispatch exploration budget. Load it once per sprint at the first
-dispatch and follow it at every later one.
+dispatch and follow it at every later one. Dev dispatch is Rule 28, "Split dispatch": files
+axis, as `_dispatch-protocol.md` "Bounded-join ≠ serial execution" applies it.
 
 - **dev** from `dev.md`. Assign ownership based on story scope per the
   ownership paths defined in the dev role file.

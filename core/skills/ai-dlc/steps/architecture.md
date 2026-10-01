@@ -277,7 +277,9 @@ Run the validation cycle (`_gate-procedures.md`, "Validation cycle") on the
 architecture doc — its passes use the **Adversarial review dispatch** and
 **Adversarial repair dispatch** sub-routines. Parameters:
 - **party-mode seats / subject:** Architect, Dev, TEA, PM — every design
-  decision, every component boundary, every data flow.
+  decision, every component boundary, every data flow. The architecture doc is one document
+  (Rule 28, "Split dispatch": seats x sections axis, or serial exception 4 when
+  `partition-document.sh --map` reports it SERIAL).
 - **adversarial focus:** security, scalability, coupling, single points of
   failure, backward compatibility, migration risk, integration seams, and
   over-engineering (Rule 26: mechanism beyond requirements, parallel paths,

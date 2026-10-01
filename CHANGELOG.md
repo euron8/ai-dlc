@@ -19,6 +19,41 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.684.0] - 2026-10-01
+
+Batch 179's first release: the party-mode sections axis and the split-dispatch census, the handoff
+working-tree check, the read-set binding, and the agent-worktree prune. No bootstrapping file changes,
+so it carries several subjects.
+
+### Backlog
+
+- **`BL-400`**. A party-mode round over a single document shards by section: one persona agent per
+  (seat, part ordinal) from `partition-document.sh --map`, plus one cross-part round per seat, with a
+  `SERIAL:` answer keeping one agent per seat. Rule 28 gains the `seats x sections` axis line, and every
+  step file under `steps/` declares an axis, a serial exception, or `shard: n/a (no dispatch)`: 21 files,
+  not the 13 the entry named. `ui-direction`, `deploy-validate`, `requirements` and `doc-repair-backfill`
+  carry the closest honest form rather than a measured fit. No hook or validator reads the sub-step, so
+  the replacement receipt is its only mechanical carrier.
+- **`BL-159`**, claim 1. The Stop hook's handoff check now reads the working tree beside `PUSH_OK`:
+  uncommitted work outside `_bmad-output/`, `.claude/settings.local.json` and `.claude/worktrees/` blocks
+  a handoff that reads as pushed. The last two are Claude Code's own per-user files, which a consumer
+  that does not ignore `.claude/` would otherwise be told to commit.
+- **`BL-127`**. Invariant `I118` binds a mapped fixture's read-set rows to the `core/hooks/` paths its
+  `run.sh` or `seed.sh` names on a code line. The false-positive set on the real corpus is empty.
+  `FORK_BUDGET` 3202 to 3214 on a clean same-path measurement of +6.
+- **`BL-401`**. The `I54`/`I54b` walk prunes `.claude/worktrees/` by exact path, with an arm that a sibling `.claude/worktrees-not/` still fires and a mutant restoring the unpruned find.
+- **`BL-404`**, narrowed and open: `updater-session-signals` seeds the `/ai-dlc` then
+  `Skill(ai-dlc-update)` order; the serialisation half stays open.
+- **`BL-405`**, parts (b) and (c): the `backlog-receipt-binding` fallback and the `apply-restamp-worklist`
+  `case` inside `bad`. Part (a) rides the `ledger-reverify.sh` release.
+- `BL-128` and `BL-129` declare `verify: manual` in place of `verify: unscoped`, a verb the engine does
+  not know.
+
+### Rules
+
+- A full pre-push suite is no longer forced with `AI_DLC_FIXTURE_NO_SKIP`; a changed fixture absent from
+  the hook's run is a read-set gap to chase.
+
 ## [0.683.0] - 2026-10-01
 
 Batch 178's ninth release: `ledger-reverify.sh` with the `emit-report.sh` and update `SKILL.md`

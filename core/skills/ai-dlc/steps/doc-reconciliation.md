@@ -21,7 +21,8 @@ claims against reality, and writes the reconciliation report + gap
 analysis to `_bmad-output/planning-artifacts/doc-reconciliation.md`,
 returning only `{artifact_path, summary, gaps}`. Then resume at section
 6 (Gate Validation and Proceed). If `planning_offload: off`, run all
-sections inline. Per SKILL.md Rule 24.
+sections inline. Per SKILL.md Rule 24 (Rule 28, "Split dispatch": surfaces axis; a
+single-surface scope stays one analyst).
 
 ### 1. Documentation Inventory
 

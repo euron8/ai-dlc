@@ -7,6 +7,8 @@ nextStepFile: dynamically determined by routing logic
 
 # AI/DLC Router
 
+`shard: n/a (no dispatch)` — this step routes to step files and joins prior deliverables.
+
 ## STATE VARIABLES
 - `user_input`: The user's original request text
 - `pipeline_variant`: One of [greenfield, feature, bug, carry-over, sprint-execute, brownfield-a, brownfield-b, brownfield-c, analysis-only]

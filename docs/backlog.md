@@ -807,7 +807,7 @@ scoping" paragraph above asks for: a site's output does not carry the population
 or how many artifacts it could not classify, so a second party cannot re-derive the figure. The
 characterization-corpus candidate is unchanged and still not chosen. No code in this batch.
 
-verify: unscoped — this entry records a gap and names a candidate, not a receipt. Do not close it
+verify: manual -- this entry records a gap and names a candidate, not a receipt. Do not close it
 on a green `check-24` run or a green suite; that green is exactly what failed to see the defect.
 
 ## BL-128 — an override can restate a threshold that later migrates into a validator, and layer-drift cannot see it
@@ -836,7 +836,7 @@ second restatement — `mechanism-design.md` warns that a rule restating a mecha
 tighter than the mechanism. A detector keyed on "this override names a threshold" has an
 unmeasured false-positive set and must not ship before that set is enumerated.
 
-verify: unscoped — this entry records a gap, not a receipt. Do not close it on a green
+verify: manual -- this entry records a gap, not a receipt. Do not close it on a green
 `layer-drift.sh` run; that green is the defect.
 
 ## BL-127 — a fixture is skipped by the read-set map on exactly the change that breaks it
@@ -1948,7 +1948,15 @@ or a named exception.
 
 Discharges no consumer candidate. The consumer has not filed one.
 
-verify: sh G=core/skills/ai-dlc/steps/_gate-procedures.md; [ -f "$G" ] || exit 9; SP="$(awk '/^1\. `\/bmad-party-mode --mode subagent --non-interactive`/{f=1} f&&/^2\. /{exit} f' "$G")"; [ -n "$SP" ] || exit 9; grep -q 'seats x parts' <<<"$SP" || exit 9; grep -q 'partition-document\.sh --map' <<<"$SP" || exit 1; grep -qi 'single document' <<<"$SP" || exit 1
+**Shipped with a census of 21, not 13.** The derived set is every `steps/[!_]*.md`; `gate-validation`
+also said "Split dispatch" with no axis. Four rows are the closest honest form and not a measured fit:
+`ui-direction`, `deploy-validate`, `requirements` and `doc-repair-backfill` (the last two declare that
+Rule 28 has no axis for a multi-artifact subject). No hook or validator reads the party-mode sub-step, so
+this receipt is the only mechanical carrier. It reads the axis list, the sub-step span, the carry-over
+citation and every step file, and rejects a bare "Split dispatch" mention, a declaration inside an HTML
+comment and the Unicode spelling of the axis.
+
+verify: sh set -uo pipefail; G=core/skills/ai-dlc/steps/_gate-procedures.md; R=core/skills/ai-dlc/rule-bodies/rule-28.md; C=core/skills/ai-dlc/steps/carry-over-evaluation.md; for f in "$G" "$R" "$C"; do [ -f "$f" ] || exit 9; done; n=0; for f in core/skills/ai-dlc/steps/[!_]*.md; do [ -f "$f" ] && n=$((n+1)); done; [ "$n" -ge 13 ] || exit 9; SP="$(awk '/^1\. `\/bmad-party-mode --mode subagent --non-interactive`/{f=1} f&&/^2\. /{exit} f' "$G")"; [ -n "$SP" ] || exit 9; grep -qF 'seats x parts' <<<"$SP" || exit 9; AX="$(awk '/^\*\*Split dispatch/{f=1} f&&/^\*\*The partition is derived/{exit} f&&/^- \*\*[a-z ]+\*\* --/{s=$0; sub(/^- \*\*/,"",s); sub(/\*\*.*/,"",s); print s}' "$R")"; grep -qxF 'seats x parts' <<<"$AX" || exit 9; grep -qxF 'seats x sections' <<<"$AX" || exit 1; for t in 'seats x sections' 'partition-document.sh --map' 'SERIAL'; do grep -qF "$t" <<<"$SP" || exit 1; done; grep -qE 'exception 4|serial-document' <<<"$SP" || exit 1; CS="$(awk '/^### 3\. Party Mode Evaluation/{f=1;next} f&&/^#{1,3} /{exit} f' "$C")"; [ -n "$CS" ] || exit 9; grep -qF 'seats x sections' <<<"$CS" || exit 1; ALT="$(sed 's/[.]/[.]/g' <<<"$AX" | paste -sd'|' -)"; DECL="Split dispatch\"?[:,]? *(($ALT) axis|serial exception [1-4]|has no axis for a multi-artifact subject)|shard: none \(([1-4]|data-dependency|pass-repair-pass|authoring-chain|serial-document)\)|shard: n/a \(no dispatch\)"; bad=""; for f in core/skills/ai-dlc/steps/*.md; do   case "${f##*/}" in _*) continue ;; esac;   [ -f "$f" ] || continue;   body="$(awk '/<!--/{c=1} !c{print} /-->/{c=0}' "$f" | tr '\n' ' ' | tr -s ' ')";   grep -qE "$DECL" <<<"$body" || bad="$bad ${f##*/}"; done; [ -z "$bad" ] || { echo "undeclared:$bad" >&2; exit 1; }; exit 0
 
 ## BL-401 — a validator run from the main checkout scans gitignored agent worktrees under `.claude/worktrees/`, so a builder's uncommitted work fails the gate
 

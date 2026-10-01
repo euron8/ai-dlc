@@ -447,6 +447,140 @@ push_case "(e) remote, pushed, 1 commit AHEAD -> BLOCK (offline / protected bran
   "a handoff with unpushed commits was ALLOWED — this is the stranded-work state the operator needs told about" \
   ""
 
+# =============================================================================
+# ai-dlc-continue.sh — THE COMMIT ARM (step 2)
+# =============================================================================
+# The push arm counts COMMITS, so a skipped step 2 reads `ahead 0` and passes. The commit arm
+# reads the working tree with the pipeline root excluded. Three directions: dirty work outside
+# the root BLOCKS (tracked and untracked), dirt the hook ITSELF wrote under a tracked root
+# ALLOWS, and clean is (d) above.
+P_DIRTY="$ROOT/proj-dirty"
+P_UNTRACKED="$ROOT/proj-untracked"
+P_STATEDIRTY="$ROOT/proj-statedirty"
+COMMIT_MARK="step 2's commit has NOT landed"
+ps_excl() { git -C "$1" status --porcelain -- ':/' ':(exclude)_bmad-output' 2>/dev/null | sed '/^$/d' | wc -l | tr -d ' '; }
+ps_raw()  { git -C "$1" status --porcelain 2>/dev/null | sed '/^$/d' | wc -l | tr -d ' '; }
+
+# PROBE SHAPES, TAKEN AFTER reset_state, because that is the tree the drive sees.
+for _p in "$P_DIRTY" "$P_UNTRACKED" "$P_STATEDIRTY"; do
+  reset_state "$_p"
+  _a="$(git -C "$_p" rev-list --count '@{u}..HEAD' 2>/dev/null)"
+  [ "$_a" = "0" ] || broken "commit-arm probe $_p is ${_a:-<unreadable>} commits ahead, not 0 — the push arm would block it and the commit arm would not be isolated"
+done
+reset_state "$P_DIRTY"
+[ "$(git -C "$P_DIRTY" status --porcelain -- seed.txt 2>/dev/null)" = " M seed.txt" ] || \
+  broken "the dirty probe does not carry a MODIFIED tracked seed.txt — case (s2a) is not the skipped-step-2 state"
+reset_state "$P_UNTRACKED"
+[ "$(git -C "$P_UNTRACKED" status --porcelain -- left-behind.md 2>/dev/null)" = "?? left-behind.md" ] || \
+  broken "the untracked probe does not carry an untracked left-behind.md — case (s2b) is not the teammate-left-work state"
+# The pushed tree (d) is the clean direction, and every ALLOW probe carries untracked dirt under
+# the root from reset_state: that is the control that the excluded form CAN see the root (raw
+# >= 1) and the assertion that it does not count it (excluded = 0), in one invocation.
+reset_state "$P_PUSHED"
+_raw="$(ps_raw "$P_PUSHED")"; _ex="$(ps_excl "$P_PUSHED")"
+{ [ "$_raw" -ge 1 ] && [ "$_ex" = "0" ]; } || \
+  broken "pushed probe: raw porcelain $_raw (want >=1, the root's untracked state) and excluded $_ex (want 0) — case (d) does not separate root dirt from work"
+ok "probe shape: (s2a) tracked edit, (s2b) untracked file, both 0 ahead; (d) root dirt raw=$_raw excluded=$_ex"
+
+push_case "(s2a) pushed, 0 ahead, a TRACKED file modified -> BLOCK (step 2 skipped; the push arm reads ahead 0)" \
+  "$P_DIRTY" block \
+  "a handoff with an uncommitted tracked edit was ALLOWED — the push arm counts commits, and this tree is 0 ahead with the work never committed" \
+  ""
+
+push_case "(s2b) pushed, 0 ahead, an UNTRACKED file outside the root -> BLOCK (work a teammate left behind)" \
+  "$P_UNTRACKED" block \
+  "a handoff with an untracked file outside the pipeline root was ALLOWED — step 2 names work teammates left in the working tree" \
+  ""
+
+# (s2a-k) THE REASON NAMES STEP 2 AND NOT STEP 3. This tree is pushed and 0 ahead, so the push
+# text would tell the lead the branch is ahead of its upstream, which is false.
+reset_state "$P_DIRTY"
+rr="$(reason "$(drive "$P_DIRTY" "$SESS_A" "$T_REQ_OK")")"
+if [ -z "$rr" ]; then
+  bad "(s2a-k) dirty tree: the block carried NO reason at all"
+elif ! has "$rr" "$COMMIT_MARK"; then
+  bad "(s2a-k) dirty tree: the reason does NOT name step 2's commit. It reads: $(printf '%s' "$rr" | head -c 120)"
+elif has "$rr" "$PUSH_MARK" || has "$rr" "$RESUME_MARK" || has "$rr" "$TEAM_MARK"; then
+  bad "(s2a-k) dirty tree: the reason names step 2 AND another step — the dispatch is not exclusive"
+elif ! has "$rr" "seed.txt"; then
+  bad "(s2a-k) dirty tree: the reason does not list the uncommitted path seed.txt"
+else
+  ok "(s2a-k) dirty tree: the emitted reason is the STEP 2 text alone and lists seed.txt"
+fi
+_lg="$P_DIRTY/_bmad-output/pipeline-continuation-log.md"
+grep -qF "step 2's commit has not landed (1 uncommitted path(s) outside _bmad-output)" "$_lg" 2>/dev/null \
+  && ok "(s2a-log) the HANDOFF_GUARD_BLOCK row names step 2 and counts 1 path" \
+  || bad "(s2a-log) the block row does not name step 2's commit with a count of 1"
+
+# (s2c) THE LEGITIMATE DIRT, PRODUCED BY THE HOOK. A tracked continuation log under the root; the
+# first drive (no resume block) BLOCKS and appends its row to that tracked file, which is the
+# write a correct handoff leaves behind. The second drive is compliant and must ALLOW over it.
+reset_state "$P_STATEDIRTY"
+git -C "$P_STATEDIRTY" checkout -q -- _bmad-output/pipeline-continuation-log.md 2>/dev/null
+r="$(verdict "$(drive "$P_STATEDIRTY" "$SESS_A" "$T_REQ_NOBLK")")"
+[ "$r" = block ] && ok "(s2c) control: the tracked-root tree BLOCKS a missing resume block — the hook runs here and writes its row" \
+                 || bad "(s2c) control: the tracked-root tree returned $r for a missing resume block — the hook did not run, so (s2c) below is unreadable"
+_st="$(git -C "$P_STATEDIRTY" status --porcelain -- _bmad-output/pipeline-continuation-log.md 2>/dev/null)"
+_ex="$(ps_excl "$P_STATEDIRTY")"
+{ [ "$_st" = " M _bmad-output/pipeline-continuation-log.md" ] && [ "$_ex" = "0" ]; } || \
+  broken "(s2c) premise: the hook's own row did not leave the tracked log MODIFIED with nothing outside the root (status '$_st', excluded $_ex) — the case would not exercise the exclusion"
+r="$(verdict "$(drive "$P_STATEDIRTY" "$SESS_A" "$T_REQ_OK")")"
+[ "$r" = allow ] && ok "(s2c) tracked pipeline root MODIFIED by the hook's own block row -> ALLOW (pipeline state is not step 2's subject)" \
+                 || bad "(s2c) a compliant handoff was BLOCKED over the hook's OWN write to the tracked continuation log (got $r) — with the root in scope every block dirties the tree and wedges the next Stop"
+
+# (s2d)-(s2g) CLAUDE CODE'S OWN FILES, in a tree whose .gitignore does not cover .claude/. Two
+# exclusions, each with an ALLOW case and a BLOCK twin one property away: a tracked dirty
+# settings.json is still work, and `.claude/worktrees-not/` is a sibling the worktrees
+# exclusion must not swallow. Each tree's one dirty path is asserted before it is driven.
+P_CL_LOCAL="$ROOT/proj-claude-local"; P_CL_WT="$ROOT/proj-claude-wt"
+P_CL_TRACKED="$ROOT/proj-claude-tracked"; P_CL_NEAR="$ROOT/proj-claude-near"
+for _pair in "$P_CL_LOCAL|?? .claude/settings.local.json" "$P_CL_WT|?? .claude/worktrees/" \
+             "$P_CL_TRACKED| M .claude/settings.json" "$P_CL_NEAR|?? .claude/worktrees-not/"; do
+  _pd="${_pair%%|*}"; _want="${_pair#*|}"
+  reset_state "$_pd"
+  _got="$(git -C "$_pd" status --porcelain -- .claude 2>/dev/null)"
+  _a="$(git -C "$_pd" rev-list --count '@{u}..HEAD' 2>/dev/null)"
+  { [ "$_got" = "$_want" ] && [ "$_a" = "0" ]; } || \
+    broken ".claude probe $_pd: status under .claude/ is '$_got' (want '$_want') and ${_a:-<unreadable>} ahead (want 0) — the case would not isolate its one path"
+done
+ok "probe shape: the four .claude/ trees each carry exactly their one dirty path, 0 ahead"
+
+push_case "(s2d) untracked .claude/settings.local.json -> ALLOW (Claude Code's per-user file is never work)" \
+  "$P_CL_LOCAL" allow \
+  "a compliant handoff was BLOCKED on .claude/settings.local.json — the lead is told to commit a per-user harness file" \
+  "the settings.local.json tree did not block a missing resume block either"
+push_case "(s2e) untracked .claude/worktrees/agent-1/ -> ALLOW (an agent worktree is its own checkout)" \
+  "$P_CL_WT" allow \
+  "a compliant handoff was BLOCKED on an agent worktree under .claude/worktrees/ — the lead is told to git add another checkout" \
+  "the worktrees tree did not block a missing resume block either"
+push_case "(s2f) TRACKED .claude/settings.json modified -> BLOCK (only the two named paths are excluded)" \
+  "$P_CL_TRACKED" block \
+  "a handoff with an uncommitted edit to the tracked .claude/settings.json was ALLOWED — the exclusion swallowed all of .claude/" \
+  ""
+push_case "(s2g) untracked .claude/worktrees-not/x -> BLOCK (a sibling prefix is not the worktrees directory)" \
+  "$P_CL_NEAR" block \
+  "a handoff with untracked work in .claude/worktrees-not/ was ALLOWED — the worktrees exclusion matches by prefix, not by directory" \
+  ""
+
+# (s2h) THE PROJECT DIR BELOW THE REPOSITORY TOP. The exclusions are relative to the project
+# dir, so reset_state's untracked `sub/_bmad-output` is excluded and a clean tree ALLOWS; the
+# same tree with tracked `sub/notes.md` modified BLOCKS.
+P_SUB="$ROOT/proj-subrepo"
+reset_state "$P_SUB/sub"
+_raw="$(git -C "$P_SUB" status --porcelain 2>/dev/null)"
+[ "$_raw" = "?? sub/_bmad-output/" ] || \
+  broken "(s2h) premise: the subdirectory repo's only dirt should be '?? sub/_bmad-output/', got '$_raw'"
+push_case "(s2h) project dir is a SUBDIRECTORY, only <sub>/_bmad-output untracked -> ALLOW" \
+  "$P_SUB/sub" allow \
+  "a compliant handoff from a subdirectory project was BLOCKED on its own pipeline root — the exclusion is anchored at the repo top, not the project dir" \
+  "the subdirectory project did not block a missing resume block either"
+echo "edited" >> "$P_SUB/sub/notes.md"
+push_case "(s2h') the same subdirectory project, tracked sub/notes.md modified -> BLOCK" \
+  "$P_SUB/sub" block \
+  "a subdirectory project with an uncommitted tracked edit was ALLOWED" \
+  ""
+git -C "$P_SUB" checkout -q -- sub/notes.md
+
 # --- (k) the block REASON names the right STEP ------------------------------------------
 #
 # THE DISPATCH-ORDERING REGRESSION, and the one a careless rewrite reintroduces. With two arms
@@ -1631,6 +1765,34 @@ if mkmut m2b-ahead-allowed "$CONF" -e 's|^            \*) PUSH_OK=0 ;;$|        
   [ "$r" = allow ] && ok "  mutant [m2b] KILLED by assertion (e): a branch 1 commit ahead is now ALLOWED" \
                    || bad "MUTANT SURVIVED [m2b]: the branch 1 ahead still returned $r"
   mut_ctl m2b "$MUT_DIR"
+fi
+
+# M36 — the commit arm's working-tree test removed, which is BL-159 claim 1's state: a tree 0
+#       ahead with an uncommitted tracked edit passes. Killed by (s2a); ALLOW-shaped, so the
+#       control is not optional.
+if mkmut m36-no-commit-test "$CONF" -e 's|^      \[ -n "$COMMIT_DIRTY" \] && COMMIT_OK=0$|      :|'; then
+  reset_state "$P_DIRTY"
+  r="$(verdict "$(drive "$P_DIRTY" "$SESS_A" "$T_REQ_OK" "$MUT_DIR")")"
+  [ "$r" = allow ] && ok "  mutant [m36] KILLED by assertion (s2a): with the working-tree test gone, an uncommitted tracked edit 0 ahead is ALLOWED" \
+                   || bad "MUTANT SURVIVED [m36]: the dirty tree still returned $r — (s2a) does not depend on the working-tree test"
+  mut_ctl m36 "$MUT_DIR"
+fi
+
+# M37 / M38 — each .claude/ exclusion removed on its own. Each kill is BLOCK-shaped on the one
+#       tree whose only dirt that exclusion covers, and touches no other tree.
+if mkmut m37-no-settings-local-exclusion "$CONF" -e '/(exclude)\.claude\/settings\.local\.json/d'; then
+  reset_state "$P_CL_LOCAL"
+  r="$(verdict "$(drive "$P_CL_LOCAL" "$SESS_A" "$T_REQ_OK" "$MUT_DIR")")"
+  [ "$r" = block ] && ok "  mutant [m37] KILLED by assertion (s2d): without the exclusion, settings.local.json BLOCKS a compliant handoff" \
+                   || bad "MUTANT SURVIVED [m37]: the settings.local.json tree still returned $r — (s2d) does not depend on the exclusion"
+  mut_ctl m37 "$MUT_DIR"
+fi
+if mkmut m38-no-worktrees-exclusion "$CONF" -e '/(exclude)\.claude\/worktrees/d'; then
+  reset_state "$P_CL_WT"
+  r="$(verdict "$(drive "$P_CL_WT" "$SESS_A" "$T_REQ_OK" "$MUT_DIR")")"
+  [ "$r" = block ] && ok "  mutant [m38] KILLED by assertion (s2e): without the exclusion, an agent worktree BLOCKS a compliant handoff" \
+                   || bad "MUTANT SURVIVED [m38]: the worktrees tree still returned $r — (s2e) does not depend on the exclusion"
+  mut_ctl m38 "$MUT_DIR"
 fi
 
 # M3 — restore the OLD two-arm dispatch, which inferred the cause from RESUME_OK. The verdict

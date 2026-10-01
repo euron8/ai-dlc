@@ -9,6 +9,8 @@ nextStepFile: STOP or next sprint
 
 **Purpose:** Deploy all sprint changes to production, validate the
 deployment, and present the Production Validation Checkpoint to the human.
+Each remedial dispatch is one repair between two smoke or validation runs: Rule 28
+"Split dispatch" serial exception 2.
 
 ## EXECUTION SEQUENCE
 
