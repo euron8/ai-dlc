@@ -636,8 +636,9 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   the instrument's own base spread of 2. Every other arm unchanged. HIGH reading 3196 plus
 #   the usual 6.
 #
-#   RAISED TO 3214 FOR ONE NEW ARM. `fork-profile.sh --stable` under `env -i`, in one worktree:
-#   base (BL-401's prune applied, no I118) 3200-3202, tip 3208-3208, so +6..+8. I118 is 7 by
+#   RAISED TO 3214 FOR ONE NEW ARM. `fork-profile.sh --section by-arm --stable` under `env -i`,
+#   base `origin/main` 54a45c25 then the BL-127 tip, in ONE clean detached worktree at the same
+#   path: base 3202 (spread 3202-3202), tip 3208 (spread 3207-3208), so +6. I118 is 7 by
 #   arm: one `mktemp`, one `mkdir`, one awk over the probe, one `rm`, one awk over the map and
 #   every fixture `.sh`, one awk testing whether the map maps the control fixture. Its first draft
 #   built the file list in a shell loop and cost 329; one glob filtered inside awk replaced it.
