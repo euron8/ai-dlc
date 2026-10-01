@@ -544,7 +544,7 @@ mut_memo() { # mut_memo <name> <mode> -> mutant dir on stdout
   case "$2" in
     readback|both)
       # Delete the FILL's `return` inside memo_has_path only (four-space indent; the hit's is two),
-      # so a fill falls through to `_st="$(<"$_f.s")"` as it did before the fix.
+      # so a fill falls through to the hit's read-back of `.s` as it did before the fix.
       LC_ALL=C awk '/^memo_has_path\(\) \{/{inf=1} inf && /^}/{inf=0} inf && !done && $0=="    return \"$_st\"" {done=1; next} {print}' \
         "$d/lib.sh.in" > "$d/lib.sh.r" || { echo "FIXTURE ERROR: mutation $1 DID NOT APPLY (awk died)" >&2; exit 2; }
       before="$(wc -l < "$d/lib.sh.in")"; after="$(wc -l < "$d/lib.sh.r")"
@@ -571,6 +571,79 @@ mut_memo() { # mut_memo <name> <mode> -> mutant dir on stdout
   esac
 done
 chmod 755 "$RO"
+
+# =============================================================================
+# BL-403(d) -- A CACHED STATUS THAT CANNOT BE READ IS 125, NEVER A STATUS
+# =============================================================================
+# Every memo's HIT path read its `.s` as `_st="$(<"$_f.s")"; return "$_st"`, unchecked. Two states
+# reach that line, each owned by one guard in `_ai_dlc_memo_status`:
+#   E<fn>  the `.s` is EMPTY (`_ai_dlc_memo_commit` writes it with its error discarded): the bare read
+#          returned "" -> 255. The shape guard answers 125.
+#   U<fn>  the `.s` is mode 000, read under the caller's `set -e`: the failed assignment ended the
+#          script with 1 -- memo_rev_parse's ABSENT -- before any check. The read-status guard answers 125.
+# <fn> is S show, P has_path, R rev_parse, L ls_tree, D diff_name_status. Each cell first fills a
+# fresh memo with the real call (rc 0), then damages the one `.s` that call wrote.
+D_PFX() { case "$1" in S) echo 's ' ;; P) echo 'e ' ;; R) echo 'r ' ;; L) echo 't ' ;; D) echo 'd%20' ;; esac; }
+d_call() { # d_call <recon> <memo> <S|P|R|L|D> <errexit 0|1> -> prints rc=<n>, or REACHED/exit=<n>
+  ( cd "$WORK" && AI_DLC_RECONCILE_MEMO="$2" bash -c '
+      . "$1/lib.sh" 2>/dev/null; command -v memo_show >/dev/null || exit 97
+      [ "$2" = 1 ] && set -e
+      case "$3" in
+        S) memo_show dist "$4" core/fixtures/probe/run.sh ;; P) memo_has_path dist "$4" core/fixtures/probe/run.sh ;;
+        R) memo_rev_parse dist "$4:core/fixtures/probe/run.sh" ;; L) memo_ls_tree dist "$4" ;;
+        D) memo_diff_name_status dist "$5" "$4" core/fixtures ;;
+      esac > /dev/null 2>&1
+      echo "rc=$?"' _ "$1" "$4" "$3" "$THEIRS" "$BASE" 2>/dev/null ); echo "exit=$?"
+}
+score_403d() { # score_403d <recon> -> failing cells, then `.`
+  local r="" fn w m f o
+  for fn in S P R L D; do
+    for w in E U; do
+      m="$(mktemp -d "$WORK/d403.XXXXXX")" || { echo "BROKEN mktemp"; return; }
+      o="$(d_call "$1" "$m" "$fn" 0)"
+      case "$o" in *rc=0*) ;; *) echo "BROKEN $fn fill read [$(printf '%s' "$o" | tr '\n' ' ')]"; return ;; esac
+      f="$(cd "$m" && ls | LC_ALL=C grep -F "$(D_PFX "$fn")" | LC_ALL=C grep '\.s$')"
+      [ -n "$f" ] && [ "$(printf '%s\n' "$f" | grep -c .)" -eq 1 ] || { echo "BROKEN $fn left no single .s"; return; }
+      if [ "$w" = E ]; then : > "$m/$f"; o="$(d_call "$1" "$m" "$fn" 0)"
+        case "$o" in *rc=125*) ;; *) r="$r E$fn" ;; esac
+      else chmod 000 "$m/$f"; o="$(d_call "$1" "$m" "$fn" 1)"; chmod 644 "$m/$f"
+        case "$o" in *exit=125*) ;; *) r="$r U$fn" ;; esac
+      fi
+    done
+  done
+  printf '%s.' "$r"
+}
+got="$(score_403d "$RECON")"
+case "$got" in
+  .)  ok "BL-403(d) E/U x 5: an empty .s and an unreadable .s under set -e each answer 125 on every memo's hit path" ;;
+  *.) bad "BL-403(d) cell(s) [${got%.}] failed: a cached status that could not be read was taken as a status" ;;
+  *)  bad "FIXTURE BROKEN -- BL-403(d): $got" ;;
+esac
+d_mut() { # d_mut <name> <want> <find> <replace>
+  local d="$WORK/d403-$1" g
+  cp -R "$RECON" "$d" || { bad "MUTANT HARNESS BROKEN [BL-403d $1]: copy failed"; return; }
+  if ! python3 - "$RECON/lib.sh" "$d/lib.sh" "$3" "$4" <<'PY'
+import sys
+src, dst, f, r = sys.argv[1:5]
+s = open(src, encoding="utf-8").read()
+if s.count(f) != 1: sys.exit(1)
+open(dst, "w", encoding="utf-8").write(s.replace(f, r))
+PY
+  then bad "FIXTURE STALE [BL-403d $1]: its anchor did not match exactly once in lib.sh -- re-anchor on the same observable"; return; fi
+  if cmp -s "$RECON/lib.sh" "$d/lib.sh" || ! bash -n "$d/lib.sh" 2>/dev/null; then bad "FIXTURE STALE [BL-403d $1]: did not apply or does not parse"; return; fi
+  g="$(score_403d "$d")"
+  case "$g" in
+    "$2.") ok "MUTANT (BL-403d $1) fails exactly [$2 ]" ;;
+    .)     bad "MUTANT SURVIVED [BL-403d $1]: every E/U cell still passed" ;;
+    *)     bad "MUTANT [BL-403d $1] scored [$g], expected exactly [$2.]" ;;
+  esac
+}
+if [ "$got" = . ]; then
+  # the read's own status unread: a failed read under set -e ends the script with 1
+  d_mut read-status " US UP UR UL UD" '  { _s="$(<"$1")"; } 2>/dev/null || return 125' '  { _s="$(<"$1")"; } 2>/dev/null'
+  # the shape guard dropped: an empty .s is `return ""`, 255
+  d_mut shape " ES EP ER EL ED" $'  case "$_s" in \'\'|*[!0-9]*|????*) return 125 ;; esac\n' ''
+fi
 
 # =============================================================================
 # BL-374 / BL-310 -- A READ FAILURE IS NEVER CACHED, OR ANSWERED, AS AN ABSENCE

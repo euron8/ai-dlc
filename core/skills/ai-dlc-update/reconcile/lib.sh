@@ -1120,6 +1120,19 @@ _ai_dlc_memo_open() {
   _t="$_f.c.$$.$RANDOM"
   { : > "$_t"; } 2>/dev/null
 }
+# _ai_dlc_memo_status <status-file> -- every HIT's read of `.s`, single-sourced. It returns the cached
+# status, or 125 when the file cannot be read or does not hold one. The bare `_st="$(<"$_f.s")"; return
+# "$_st"` it replaces had two wrong answers. A `.s` that is EMPTY -- `_ai_dlc_memo_commit` writes it
+# with its error discarded, so a full disk leaves one -- read as `return ""`, which is 255 with a
+# "numeric argument required" on stderr. A `.s` that cannot be READ took the same path, and under a
+# caller's `set -e` the failed assignment instead ended the script with 1 -- `memo_rev_parse`'s ABSENT.
+# Two guards, one per wrong answer: the read's own status, and the shape of what it read.
+_ai_dlc_memo_status() {
+  local _s
+  { _s="$(<"$1")"; } 2>/dev/null || return 125
+  case "$_s" in ''|*[!0-9]*|????*) return 125 ;; esac
+  return "$_s"
+}
 _ai_dlc_memo_serve() { # <tmp> -> serve an uncacheable fill and discard it; 125 when the serve failed
   local _sv=0
   cat "$1" || _sv=125
@@ -1156,8 +1169,7 @@ memo_show() {
   # serving bytes; the git call this replaces costs far more. A failed serve is 125, not the
   # cached status (see the memo header above).
   cat "$_f.c" || return 125
-  _st="$(<"$_f.s")"
-  return "$_st"
+  _ai_dlc_memo_status "$_f.s"
 }
 
 # memo_has_path <dist> <ref> <path> -- 0 when the path exists at the ref, 128 when it is CONFIRMED
@@ -1190,8 +1202,7 @@ memo_has_path() {
     fi
     return "$_st"
   fi
-  _st="$(<"$_f.s")"
-  return "$_st"
+  _ai_dlc_memo_status "$_f.s"
 }
 
 # memo_rev_parse <dist> <spec> -- `git rev-parse -q --verify <spec>`'s stdout (a sha, or
@@ -1235,8 +1246,7 @@ memo_rev_parse() {
   # a bare newline rather than as nothing. A failed serve is 125, never cat's own 1: here 1 is
   # `-q --verify`'s ABSENT, and a present path must not read as missing.
   cat "$_f.c" || return 125
-  _st="$(<"$_f.s")"
-  return "$_st"
+  _ai_dlc_memo_status "$_f.s"
 }
 
 # memo_ls_tree <dist> <ref> -- the FULL recursive `ls-tree -r --name-only <ref>`
@@ -1268,8 +1278,7 @@ memo_ls_tree() {
     return "$_st"
   fi
   cat "$_f.c" || return 125
-  _st="$(<"$_f.s")"
-  return "$_st"
+  _ai_dlc_memo_status "$_f.s"
 }
 
 # memo_diff_name_status <dist> <base> <theirs> <pathspec...> -- `git diff --no-renames
@@ -1291,8 +1300,7 @@ memo_diff_name_status() {
     return "$_st"
   fi
   cat "$_f.c" || return 125
-  _st="$(<"$_f.s")"
-  return "$_st"
+  _ai_dlc_memo_status "$_f.s"
 }
 
 # ledger_entry_line_close_awk() — the ENTRY-LINE close rule, lifted from the same single home.
