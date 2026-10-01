@@ -1099,8 +1099,8 @@ otherwise, and where any older paragraph in this file reads narrower, these win.
 otherwise.**
 
 - **An operator-named entry ships FIRST, alone if it is a bootstrapping file, and anything else
-  ready by then rides it.** Operator ruling, batch 179: "BL-400 first and highest priority," and
-  "BL-400 can ship with anything else that is ready by the time BL-400 is." Its contract and
+  ready by then rides it.** Operator ruling, batch 179, about the entry it then named: "first and highest priority," and
+  it "can ship with anything else that is ready by the time" it is. Its contract and
   adversary go in the batch's FIRST spawn block beside the sweep.
 - **Spawn many hands, and stop forcing the full pre-push suite.** Operator rulings, batch 179: "I
   assumed more subagents would have spawned," and a push lets the hook gate once
