@@ -15972,3 +15972,77 @@ carry-over gate's 3052). The banked ruling stands: report the gap and write no r
 Batch 170's next-work list and delivery gap are spent: batch 171's block above replaces both, and
 carries the operator priority forward.
 
+**BATCH 172 SHIPPED `v0.663.0` (`f217daa0`, #903) AND CLOSED `BL-365`..`BL-368` AND `BL-026`. IT
+DISCHARGES NO CONSUMER CANDIDATE.** It was invoked by peer handoff and took the four entries the
+operator set as highest priority. The opening sweep matched batch 171's prediction on every figure:
+live 29 on 1 qualifying ref (the `BL-369` id, discharged at 0.662.0), unfiled 12, worklist 5,
+TERMINAL 147. Live backlog **104 -> 103** (five rotated, `BL-370`..`BL-373` filed), archive **264 ->
+269**. The receipt histogram, diffed by id between `origin/main` and the release, moved exactly the
+four subjects 1 -> 0.
+
+**THE SUBJECT IS THE LEAD WAITING ON ONE SUBAGENT, ACROSS EVERY ROLE. OPERATOR CORRECTION, MID-BATCH:
+"we aren't solving for just the remediator so don't myopically scope to just one role."** The
+all-role census reproduced the headline exactly (823 agents, 144.4h solo, parallelism 1.28) and
+ranked reachable solo time: remediator ~24h, adversary ~15h, dev ~11h (already required parallel by
+`_dispatch-protocol.md`, so a conduct gap, not a missing rule), dev-escalated ~9h, gate-adjudicator
+~7h, analyst ~4.5h. No single role rule reproduces the per-role figures the four entries carried;
+their archived close notes say so. **The operator then ruled option A: file-level sharding now,
+single-document section sharding deferred** — filed as `BL-372`, a ruled deferral and not a
+narrowing to reopen.
+
+**WHAT SHIPPED.** `rule-bodies/rule-28.md` carries `**Split dispatch: one agent per independent
+part.**`: four axes (files, derived worklist items, declared surfaces, seats × parts), a derived
+partition, a join that is a PROGRAM, and four serial exceptions. Every per-role site cites it.
+The three joins are `merge-adversarial-shards.sh` (ordinal shards + cross, verdict recomputed from
+summed counts), `join-remediator-shards.sh` (parts keyed on the files their `edit:` lines cite
+against a record-then-allow write ledger in the remediation guard), and `validate-gate-adjudication.sh
+--expected --shard i/N` and `--merge`. The dispatch guard records a brief's `shard:` line; Check 22
+WARNs without one; Check 24 arm K fails a post-install TERMINAL pass over a multi-file artifact
+that was not sharded. `FORK_BUDGET` went **3299 -> 3152**, because I75 read each chain twice.
+
+**EVERY ROUND FOUND SOMETHING, AND EVERY FIND WAS A REAL-CORPUS SHAPE THE SEEDS DID NOT HOLD.** The
+contract adversary: all four receipts closed on "Never shard it." and exited 9 on a correct
+rewording; shard files beside pass files break Check 24 and both hooks. The merge's `<epic>-<n>` key
+parsed 23 of 1045 real story files (now an ordinal). The join keyed on an agent id a subagent cannot
+be shown to see (now on files). The adversary and repair shards shared one directory (repair parts
+now at `shards/<artifact>-repair-p<M>/`). 4 of 317 real passes stamp fractional seconds. The tip
+adversary: arm K keyed on every pass, so its own remedy could not clear it; the join refused 16 of
+24 real repair records, which edit `epics/epics.md`. **Build every seed from the consumer's real
+files before trusting a hand-seeded one** — every one of these passed a seeded world first.
+
+**THE FIRST GATE FAILED ON TWO OF THIS RELEASE'S OWN LINES.** `check-24-adversarial-convergence`
+gained a `git init` without sourcing `../lib/preamble.sh` (`validate-fixture-git-env` ceiling 0), and
+a new hook line ended `>> "$LEDGER" 2>/dev/null || true`, which `procsub-staged-refusal`'s r3 rule
+catches. Gate on `62b3ca1c`: 22 phases, 24 PASS, 0 FAIL, 1 SKIP (pole, no fresh measurement), 216
+ok, `all gates green`, every changed fixture `ok` by name against an impossible-name control of 0,
+`ls-remote` matching, squash tree identical to the gated tip. **The operator ran the owed read-set
+trace** on the five changed fixtures; only their rows moved, and the map ships in this close.
+
+**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
+- `BL-372` (single-document sharding, operator-deferred) is the continuation of this batch's subject
+  and the largest remaining lever on lead wait; the design constraints are in its body.
+- `BL-370` (a bad `theirs` ref disarms adjudication at rc 0) is split out of `BL-360` and ships alone,
+  because `layer-drift.sh` is bootstrapping. `BL-360`'s bootstrapping half follows, each file alone;
+  `BL-364` rides with its joins. `BL-371` (arm G, same-second fraction) is small and can ride any
+  release touching the convergence validator.
+- Filings owed when a close frees room: the lists in the batch 169, 170 and 171 records below,
+  unchanged; then this batch's NOTEs — a merged pass's multi-value `artifact_sha` fails
+  `validate-provenance-block.sh` (not run on pass files today); `.verdict-writes.jsonl` is
+  undeclared like `BL-373`'s ledger; the Check 24 README's case list omits the three arm K cases;
+  and `validate-backlog-receipts.sh`'s compiled-in floors (`DEFAULT_MIN_SH=76`,
+  `DEFAULT_MIN_ENTRIES=88`) fail R5 on a bare run, including on `origin/main`, while the gate passes
+  its own `--min-sh-receipts 54 --min-entries 72`.
+- `BL-230` needs a mechanism for E1, E2 and E9.
+
+**THE DELIVERY GAP IS ONE RELEASE.** The consumer pulled 0.659.0 -> 0.661.0 -> 0.662.0 on its
+carry-over branch while batch 172 ran (#1125 self-update, #1126 and #1127 reconciles, all dated
+2026-09-29), so its stamp reads 0.662.0 (`79546d70`) against `VERSION` 0.663.0. Measured by the
+fresh-resume check, which is the only reason this paragraph is right: the first draft said four
+releases. v0.663.0 changes two HOOKS every consumer dispatch runs through (record-then-allow,
+measured identical on 817 real prompts). PENDING is 1: `BL-369`'s id, first named at 0.662.0 and
+still live in the consumer's ledger after its pull. The banked ruling stands: report the gap and
+write no runbook.
+
+Batch 171's next-work list and delivery gap are spent: batch 172's block above replaces both, and
+carries the operator priority forward as `BL-372`.
+
