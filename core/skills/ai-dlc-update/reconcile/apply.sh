@@ -1760,10 +1760,13 @@ fi
 # writes. It is a mechanical failure for the same reason as the other direction -- preclassify's
 # `mode_at_theirs` already reads 100644-plus-exec as NOT at theirs, and a stamp claiming theirs
 # over it would disagree with the classifier the next pull runs.
+# The listing is staged BEFORE the loop, never piped into it: a `| while` runs the loop in a
+# subshell that drops its refusals (procsub-staged-refusal's spelling arm, r2).
+NE_LIST="$(git -C "$DIST" ls-tree -r "$THEIRS" -- core/ 2>/dev/null \
+  | awk '$1=="100755" || $1=="100644" { m = $1; sub(/^[^\t]*\t/, ""); print m "\t" $0 }')"
 NOEXEC="$(
-  git -C "$DIST" ls-tree -r "$THEIRS" -- core/ 2>/dev/null \
-    | awk '$1=="100755" || $1=="100644" { m = $1; sub(/^[^\t]*\t/, ""); print m "\t" $0 }' \
-    | while IFS="$TAB_CH" read -r mode cp; do
+  while IFS="$TAB_CH" read -r mode cp; do
+        [ -n "$mode" ] || continue
         rel="${cp#core/}"
         cons="$(consumer_path "$rel" 2>/dev/null)" || continue
         # Not every shipped file lands on every consumer (ci-templates only with
@@ -1775,7 +1778,7 @@ NOEXEC="$(
         if [ "$mode" = 100755 ] && [ ! -x "$cons" ]; then printf 'N\t%s\n' "$cons"
         elif [ "$mode" = 100644 ] && [ -x "$cons" ]; then printf 'X\t%s\n' "$cons"
         fi
-      done
+  done <<< "$NE_LIST"
 )"
 
 if [ -n "$NOEXEC" ]; then
@@ -2255,6 +2258,7 @@ for c in cmds:
   # without the template there is nothing to say a name is absent from, so today's row stands.
   hr_tmpl="$(git -C "$DIST" show "${THEIRS}:templates/settings.json.template" 2>/dev/null)"; hr_tmpl_rc=$?
   hr_orphan=""; hr_merge_names=""
+  hr_name_list="$(printf '%s\n' "$hr_names" | tr ' ' '\n')"
   while IFS= read -r _hn; do
     [ -n "$_hn" ] || continue
     if [ "$hr_tmpl_rc" -eq 0 ] \
@@ -2266,7 +2270,7 @@ for c in cmds:
     else
       hr_merge_names="${hr_merge_names}${_hn} "
     fi
-  done <<< "$(printf '%s\n' "$hr_names" | tr ' ' '\n')"
+  done <<< "$hr_name_list"
   hr_names="$hr_merge_names"
   if [ "$hr_rc" = "1" ] && [ -n "$hr_orphan" ]; then
     say WORKLIST hook-unshipped ".claude/hooks/" \
