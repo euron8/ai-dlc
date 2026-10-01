@@ -1118,9 +1118,22 @@ prose is itself generated rather than composed.
      honour different token sets.
      Read it as "upstream named it", not "upstream took it": a commit can name an id to record
      a rejection or a split. Confirm which, then re-anchor or drop the stale receipt.
+   - `NAMED-UPSTREAM-DOCS-ONLY` → upstream's history names this entry's id, and **none** of the
+     naming commits changes a path under `core/` or `templates/` — the two trees a consumer
+     installs — or cuts a release (changes `VERSION`). A plan, a review or a ledger drain that
+     cross-references an id matches the message search exactly as a fix does; this kind keeps
+     the row and its full sha list but says the naming is not evidence of an absorption. **Not
+     a close on its own** — read the commits for a withdrawal or a split, then read the entry's
+     subject at `theirs`, because a fix that never names the id is invisible to this search.
+     A release commit that names the id counts as reaching even when it changes only
+     `CHANGELOG.md` and `VERSION`: that is the release a consumer pulls, and its parent usually
+     carries the fix. The converse does not hold: a commit that touches `core/` can still merely
+     mention an id, so a plain `NAMED-UPSTREAM` remains "upstream named it", never "upstream
+     took it".
    - `NAMED-UPSTREAM-AMBIGUOUS` → upstream's history cites this entry's SPRINT prefix
      (`PC-S<n>`), but two or more ledger entries share that prefix and the commit does not say
-     which it absorbed. **Deliberately NOT attributed.** Upstream writes the short id, not the
+     which it absorbed. The row names EVERY citing commit, newest first, and says when none of
+     them changes `core/` or `templates/`. **Deliberately NOT attributed.** Upstream writes the short id, not the
      full slug — measured against it at 0.328.0, the slug search found 20 of 128 entries while
      20 of 29 prefixes appeared, and of those 20 prefixes only 9 named a single entry. Matching
      the prefix regardless would tell you to close entries upstream never touched, which is
@@ -1146,6 +1159,12 @@ prose is itself generated rather than composed.
        `verify: manual` if the entry is a proposal nobody has built yet. **Never drain on
        this verdict.** A DETAIL reporting reachability NOT checked means unchecked, not
        clean.
+     - *unreadable* — git could not READ the receipt's path or blob at theirs or at base and
+       could not confirm it absent (a missing object in the distribution checkout, or an
+       unresolvable ref). The predicate was not evaluated and no basename was guessed, because an
+       unread blob reads exactly like an empty one. Repair the distribution (`git fsck`, re-fetch)
+       and re-run; the entry is untouched. A `VERSION` at theirs that is unreadable refuses the
+       whole run instead, because every close row names that version.
      - *mis-anchored predicate* — a `theirs_lacks` substring absent at base AND at theirs
        while a near-miss spelling of it is absent at base and PRESENT at theirs: upstream
        moved, and the receipt anchors on a token the fix was not written with. Re-anchor on
@@ -2379,9 +2398,15 @@ declared sites, not everywhere unconditionally.
        — a fix that lands before its bump reads one release early there. The row deliberately
        stopped guessing it, because a version read off a commit that merely NAMES the id is a
        claim about the wrong event and the annotation it lands in is permanent.
-     - `NAMED-UPSTREAM-AMBIGUOUS` — the commit cites the sprint prefix and two or more entries
+     - `NAMED-UPSTREAM-AMBIGUOUS` — the commits cite the sprint prefix and two or more entries
        share it. Deliberately NOT attributed: read the named commit and decide per entry.
        Annotate nothing on the strength of the row alone.
+     - `NAMED-UPSTREAM-DOCS-ONLY` — upstream's history names the id but no naming commit
+       changes `core/` or `templates/` or cuts a release. Read the commits for a withdrawal or a
+       split and act on that if there is one. Then read the entry's own subject against
+       `theirs`: the naming is not evidence of an absorption, but a fix landed under a commit
+       that does not name the id still closes it. Annotate only what that reading establishes,
+       with the release that contains the change; otherwise leave the entry open.
      - `HAND-REVIEW` — the entry declares `verify: manual` and no mechanical predicate exists
        for it by design. Adjudicate the body against `theirs`; annotate only what that
        adjudication establishes.

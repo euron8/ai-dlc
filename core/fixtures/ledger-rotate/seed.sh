@@ -134,14 +134,24 @@ BASE="$(git -C "$WORK/dist" rev-parse HEAD)"
 # naming `PC-S900-ALPHA` would suppress the ambiguous row this seed exists to produce. The
 # prefix search is anchored (`PC-S900([^0-9A-Za-z-]|$)`), so the trailing space is what makes
 # it match.
-git -C "$WORK/dist" -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -q --allow-empty \
+#
+# EACH NAMING COMMIT CHANGES A FILE UNDER core/, AND ITS OWN FILE. `ledger-reverify.sh` reports a
+# naming set that changes nothing a consumer installs as `NAMED-UPSTREAM-DOCS-ONLY`, and an empty
+# commit changes nothing, so `--allow-empty` naming commits would turn every attribution this
+# seed asserts into that other kind. A file of its own per commit keeps `thing.sh`, which every
+# receipt here reads, byte-identical across both.
+printf 's900\n' > core/scripts/s900-landed.sh
+git -C "$WORK/dist" -c user.email=f@f -c user.name=f -c commit.gpgsign=false add -A
+git -C "$WORK/dist" -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -q \
   -m 'upstream sprint work landed: PC-S900 and PC-S901 absorbed'
 # PC-S910 GETS ITS OWN COMMIT, and that is not cosmetic. `named_ambiguous()` prints the sha it
 # found and `named_absorbed()` prints how many commits named the id, so folding a third prefix
 # into the message above would move the DETAIL column of every PC-S900 and PC-S901 row. The
 # assertion that reads those details (`pfx_n`, the 3 -> 3 arm) would then be reading a string
 # this addition changed rather than one the rotation changed.
-git -C "$WORK/dist" -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -q --allow-empty \
+printf 's910\n' > core/scripts/s910-landed.sh
+git -C "$WORK/dist" -c user.email=f@f -c user.name=f -c commit.gpgsign=false add -A
+git -C "$WORK/dist" -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -q \
   -m 'upstream sprint work landed: PC-S910 absorbed'
 git -C "$WORK/dist" -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -q --allow-empty -m theirs
 THEIRS="$(git -C "$WORK/dist" rev-parse HEAD)"

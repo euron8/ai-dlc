@@ -245,6 +245,25 @@ row_is "Entry SH-SUBJECT-GONE" NEEDS-REVIEW "an && chain short-circuiting on a M
 # this one names a distribution path inside a rev-spec and must not be. An extractor that sees
 # neither passes the first arm alone; one that sees both passes the second alone.
 row_is "Entry SH-DIST-PATH" CLOSE-CANDIDATE "a \`core/scripts/<x>\` rev-spec names no consumer subject; reading one out of it withholds the close on a receipt that works"
+row_is "Entry SH-DIST-BARE-CORE" CLOSE-CANDIDATE "a bare \`core/scripts/<x>\` pathspec is a distribution path; the whitelist's first-character test is what keeps it out"
+# A `docs/` PATH AT A REF IS A DISTRIBUTION PATH TOO, AND `docs/` IS A CONSUMER PREFIX. Splitting
+# the rev-spec at its colon left `docs/zz-dist-only-a.md` standing, the whitelist admitted it, it is
+# absent on the consumer, and a receipt that works read as naming a missing subject. Five spellings
+# of the ref in one receipt, so a strip that handles only one leaves the row NEEDS-REVIEW.
+# THE B2 ARMS SHIP AHEAD OF THEIR SUBJECT. This fixture reaches a consumer a pull before the
+# engine it tests, so every arm below that reads a B2 behaviour (the rev-spec strip, the reach
+# kind, the full citing-commit list, the unreadable refusal) SKIPs on an installed engine that
+# predates it. Keyed on a token only the fixed engine carries, and decided on the RESOLVED engine
+# directory: in the distribution the arms always run, so a pre-fix engine there goes red.
+B2_ISDIST=0
+[ "$(cd "$(dirname "$CLOSER")" && pwd)" = "$(cd "$DIR/../../skills/ai-dlc-update/reconcile" 2>/dev/null && pwd)" ] && B2_ISDIST=1
+B2_RUN=1
+if ! grep -qF 'NAMED-UPSTREAM-DOCS-ONLY' "$CLOSER" && [ "$B2_ISDIST" = 0 ]; then B2_RUN=0; fi
+if [ "$B2_RUN" = 1 ]; then
+row_is "Entry SH-REVPATH-DOCS" CLOSE-CANDIDATE "every <ref>:<path> token is a distribution read, whatever prefix its right-hand side carries"
+else
+  printf '  SKIP  SH-REVPATH-DOCS -- the installed ledger-reverify.sh predates the rev-spec strip; it lands with the pull that carries this fixture\n'
+fi
 # `.git/` IS A CONSUMER HOME THE WHITELIST DID NOT CARRY, AND IT IS THE ONE A FRESH CHECKOUT MOST
 # OFTEN LACKS. `git clone` does not carry `.git/hooks/`, so the receipt exits non-zero for the
 # ABSENCE and the tip read it as a fix. Measured on the reference consumer: the 0.471.0→0.479.0
@@ -655,7 +674,7 @@ else
 fi
 
 # MUTATION — widen receipt_absent_subjects' prefix test to a substring test, which is the shape
-# the defect had. SH-DIST-PATH must flip to NEEDS-REVIEW and SH-SUBJECT-GONE must stay
+# the defect had. SH-DIST-BARE-CORE must flip to NEEDS-REVIEW and SH-SUBJECT-GONE must stay
 # NEEDS-REVIEW: a mutant that reddens both is telling you the extractor went blind rather than
 # that it stopped anchoring.
 #
@@ -672,7 +691,7 @@ cp "$(dirname "$CLOSER")"/*.sh "$MUTP/" 2>/dev/null
 # a subset of the line matches nothing the day an alternation is added, `cmp -s` reports DID NOT
 # APPLY, and the arm below fails on the commit that fixes a defect — which reads exactly like the
 # fix being wrong. The widened form keeps `.git/?*` widened too, so SH-GITHOOK-GONE stays
-# NEEDS-REVIEW under this mutant and only SH-DIST-PATH moves.
+# NEEDS-REVIEW under this mutant and only SH-DIST-BARE-CORE moves.
 sed 's@      docs/\*|_bmad-output/\*|scripts/\*|\.claude/\*|\.git/?\*) ;;@      *docs/*|*_bmad-output/*|*scripts/*|*.claude/*|*.git/?*) ;;@' \
   "$CLOSER" > "$MUTP/ledger-reverify.sh"
 
@@ -682,7 +701,7 @@ if cmp -s "$CLOSER" "$MUTP/ledger-reverify.sh"; then
   printf '  FAIL  %-22s the mutation matched nothing, so the anchoring assertion is unproven\n' "mutation-prefix"
 else
   mp_out="$(bash "$MUTP/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>/dev/null)"
-  mp_dist="$(printf '%s\n' "$mp_out" | awk -F'\t' '$2 ~ /Entry SH-DIST-PATH/ {print $1; exit}')"
+  mp_dist="$(printf '%s\n' "$mp_out" | awk -F'\t' '$2 ~ /Entry SH-DIST-BARE-CORE/ {print $1; exit}')"
   mp_gone="$(printf '%s\n' "$mp_out" | awk -F'\t' '$2 ~ /Entry SH-SUBJECT-GONE/ {print $1; exit}')"
   mp_hook="$(printf '%s\n' "$mp_out" | awk -F'\t' '$2 ~ /Entry SH-GITHOOK-GONE/ {print $1; exit}')"
   if [ -z "$mp_out" ]; then
@@ -690,7 +709,7 @@ else
     printf '  FAIL  %-22s the mutant produced NO rows — a dead copy scores every absence as a kill\n' "mutation-prefix"
   elif [ "$mp_dist" != "NEEDS-REVIEW" ]; then
     FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s SH-DIST-PATH read %s under the substring test, so the arm above is not watching the anchoring\n' "mutation-prefix" "${mp_dist:-<none>}"
+    printf '  FAIL  %-22s SH-DIST-BARE-CORE read %s under the substring test, so the arm above is not watching the anchoring\n' "mutation-prefix" "${mp_dist:-<none>}"
   elif [ "$mp_gone" != "NEEDS-REVIEW" ]; then
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s the mutant also moved SH-SUBJECT-GONE to %s — it blinded the extractor instead of widening it\n' "mutation-prefix" "${mp_gone:-<none>}"
@@ -698,7 +717,7 @@ else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s the mutant moved SH-GITHOOK-GONE to %s — it did not widen the `.git/` alternation with the others, so this mutation is a PARTIAL one and its kill is not the anchoring\n' "mutation-prefix" "${mp_hook:-<none>}"
   else
-    printf '  ok    %-22s a substring prefix test reads a consumer subject out of a distribution rev-spec, and only SH-DIST-PATH moves\n' "mutation-prefix"
+    printf '  ok    %-22s a substring prefix test reads a consumer subject out of a bare distribution pathspec, and only SH-DIST-BARE-CORE moves\n' "mutation-prefix"
   fi
 fi
 
@@ -1541,7 +1560,9 @@ row_has "PC-S902" NAMED-UPSTREAM-AMBIGUOUS \
 # ONE ROW, NOT ONE PER ENTRY. Per-entry emission produced 45 rows from 11 prefixes on the
 # reference consumer, all saying the same unresolvable thing — noise added by the fix for a
 # signal that was missing, which is the trade the naive prefix-match makes one level along.
-ambig_n="$(printf '%s\n' "$OUT" | awk -F'\t' '$1=="NAMED-UPSTREAM-AMBIGUOUS"{n++} END{print n+0}')"
+# COUNTED PER PREFIX. The seed carries a second shared prefix (PC-S953) for the reach arms below,
+# so a count over every AMBIGUOUS row would read 2 and say nothing about repetition.
+ambig_n="$(printf '%s\n' "$OUT" | awk -F'\t' '$1=="NAMED-UPSTREAM-AMBIGUOUS" && $2=="PC-S902"{n++} END{print n+0}')"
 ASSERTIONS=$((ASSERTIONS+1))
 if [ "$ambig_n" = "1" ]; then
   printf '  ok    %-22s exactly one ambiguous row for the two entries sharing PC-S902\n' "ambiguous-collapse"
@@ -1556,6 +1577,266 @@ row_lacks "PC-S903-NEVER-CITED-AT-ALL" NAMED-UPSTREAM \
   "never cited in either form -> silent, so the prefix arm joins on evidence and not on shape"
 row_lacks "PC-S903-NEVER-CITED-AT-ALL" NAMED-UPSTREAM-AMBIGUOUS \
   "and not reported as ambiguous either — an uncited prefix is not an unresolvable one"
+
+# --- WHAT A NAMING SET CHANGED (BL-145) AND EVERY CITING COMMIT OF A PREFIX (BL-066) --------
+# A naming commit that changes nothing under core/ or templates/ cannot have shipped a fix, and a
+# plan that cross-references an id matched the message search exactly as the fix did. The row is
+# KEPT under its own kind, with every sha: a wrong fix that deletes the row instead passes every
+# arm keyed on the absence of NAMED-UPSTREAM, which is why S950 is asserted on PRESENCE.
+if [ "$B2_RUN" = 0 ]; then
+  printf '  SKIP  BL-145/BL-066 reach and citing-commit arms -- the installed ledger-reverify.sh predates them; they land with the pull that carries this fixture\n'
+else
+row_has   "PC-S950-DOCS-ONLY-NAMING" NAMED-UPSTREAM-DOCS-ONLY \
+  "the one naming commit is a docs(plan): commit -> the row stays, under the kind that says it is no absorption"
+row_lacks "PC-S950-DOCS-ONLY-NAMING" NAMED-UPSTREAM \
+  "and it is never reported as the plain kind a pull session reads as 'upstream took it'"
+row_has   "PC-S951-TEMPLATES-ONLY-NAMING" NAMED-UPSTREAM \
+  "templates/ is installed on a consumer -> a templates-only commit can be the absorption (a core/-only predicate demotes it)"
+row_has   "PC-S952-MERGE-NAMING" NAMED-UPSTREAM \
+  "a MERGE whose side branch changed core/ -> listed with -m, so the merge is not scored as touching nothing"
+row_has   "PC-S954-RELEASE-COMMIT-NAMING" NAMED-UPSTREAM \
+  "the only naming commit is a RELEASE (VERSION + CHANGELOG.md, fix in its parent) -> the plain kind, because that release is what a consumer pulls"
+row_lacks "PC-S954-RELEASE-COMMIT-NAMING" NAMED-UPSTREAM-DOCS-ONLY \
+  "and never the docs-only kind, whose row would send the operator away from a real absorption"
+row_has   "PC-S905-ONE-NAMING-COMMIT-ONLY" NAMED-UPSTREAM \
+  "the control: a core-touching single naming commit keeps the plain kind"
+# THE AMBIGUOUS ROW: every citing commit, and the reach. Derived from the repo, not from the row:
+# the commits whose MESSAGE carries `PC-S902` as a token (no seeded message carries a longer
+# PC-S902 slug, so the fixed-string set is the token set).
+s902_set="$(git -C "$DIST" log -F --grep='PC-S902' --format=%h "$THEIRS" 2>/dev/null)"
+s902_n="$(printf '%s\n' "$s902_set" | grep -c . )" || s902_n=0
+s902_row="$(printf '%s\n' "$OUT" | awk -F'\t' '$1=="NAMED-UPSTREAM-AMBIGUOUS" && $2=="PC-S902" {print $3; exit}')"
+s953_row="$(printf '%s\n' "$OUT" | awk -F'\t' '$1=="NAMED-UPSTREAM-AMBIGUOUS" && $2=="PC-S953" {print $3; exit}')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ "$s902_n" -ne 2 ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s FIXTURE BROKEN — PC-S902 is cited by %s commit(s) in the seed, want 2; the list arm has nothing to get wrong\n' "ambiguous-lists-all" "$s902_n"
+else
+  _miss=0; for _s in $s902_set; do case "$s902_row" in *"$_s"*) ;; *) _miss=$((_miss + 1)) ;; esac; done
+  case "$s902_row" in
+    *"in 2 commits, ALL of them:"*"and 2 entries in this ledger carry it"*)
+      if [ "$_miss" -eq 0 ]; then
+        printf '  ok    %-22s PC-S902 names BOTH citing commits and the commit count, and keeps the entry-count phrase ledger-rotate parses\n' "ambiguous-lists-all"
+      else
+        FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s PC-S902 says two commits but lacks %s of their shas\n' "ambiguous-lists-all" "$_miss"
+      fi ;;
+    *) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s PC-S902 row does not name its 2 citing commits and the 2 entries: %s\n' "ambiguous-lists-all" "${s902_row:-<no row>}" ;;
+  esac
+fi
+ASSERTIONS=$((ASSERTIONS + 1))
+case "$s953_row|$s902_row" in
+  *"NONE of them changes a path under core/ or templates/"*"|"*"NONE of them changes"*)
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s PC-S902 (cited by a core commit) also reads docs-only — the reach is not discriminating\n' "ambiguous-reach" ;;
+  *"NONE of them changes a path under core/ or templates/"*"|"*)
+    printf '  ok    %-22s PC-S953 (one docs-only citation) says no citing commit changes core/ or templates/; PC-S902 does not\n' "ambiguous-reach" ;;
+  *) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s PC-S953 row does not carry the docs-only reach: %s\n' "ambiguous-reach" "${s953_row:-<no row>}" ;;
+esac
+
+# THE MUTANTS, run over a ledger holding only the entries they read, so each costs a fraction of
+# a full run. Built in a copy of the whole reconcile directory, guarded with cmp -s, and preceded
+# by an UNMUTATED control over the same small ledger that must reproduce every observable.
+RCH="$(dirname "$DIST")/reach"; mkdir -p "$RCH"
+awk '/^- \*\*PC-S9(02|05|5[0-4])-/ {p=1} /^- \*\*/ && !/^- \*\*PC-S9(02|05|5[0-4])-/ {p=0} p' \
+  "$CONS/_bmad-output/ai-dlc-update/push-candidate-ledger.md" > "$RCH/ledger.md"
+reach_mut() { # <tag> <awk-anchor-line> <replacement-line> -> path of the mutant, or empty
+  local _d="$RCH/$1"; rm -rf "$_d"; mkdir -p "$_d"
+  cp "$(dirname "$CLOSER")"/*.sh "$_d/" 2>/dev/null
+  A="$2" B="$3" awk '$0 == ENVIRON["A"] { print ENVIRON["B"]; n++; next } { print } END { exit (n == 1) ? 0 : 3 }' \
+    "$CLOSER" > "$_d/ledger-reverify.sh" || return 0
+  cmp -s "$CLOSER" "$_d/ledger-reverify.sh" || printf '%s' "$_d/ledger-reverify.sh"
+}
+reach_rows() { bash "$1" "$DIST" "$BASE" "$CONS" "$THEIRS" "$RCH/ledger.md" 2>/dev/null; }
+reach_kind() { printf '%s\n' "$1" | awk -F'\t' -v l="$2" '$2 == l && $1 ~ /^NAMED-UPSTREAM(-DOCS-ONLY)?$/ {print $1; exit}'; }
+rc_ctl="$(reach_rows "$CLOSER")"
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ "$(reach_kind "$rc_ctl" PC-S950-DOCS-ONLY-NAMING)" = NAMED-UPSTREAM-DOCS-ONLY ] \
+   && [ "$(reach_kind "$rc_ctl" PC-S951-TEMPLATES-ONLY-NAMING)" = NAMED-UPSTREAM ] \
+   && [ "$(reach_kind "$rc_ctl" PC-S952-MERGE-NAMING)" = NAMED-UPSTREAM ] \
+   && [ "$(reach_kind "$rc_ctl" PC-S954-RELEASE-COMMIT-NAMING)" = NAMED-UPSTREAM ] \
+   && grep -q "in 2 commits, ALL of them:" <<<"$rc_ctl"; then
+  printf '  ok    %-22s the UNMUTATED engine over the small ledger reproduces S950/S951/S952/S954 and the two-commit S902 row\n' "reach-control"
+  # <tag> <anchor> <replacement> <entry> <kind it must take under the mutant> <what it proves>
+  reach_case() {
+    local _m _r _k
+    ASSERTIONS=$((ASSERTIONS + 1))
+    _m="$(reach_mut "$1" "$2" "$3")"
+    if [ -z "$_m" ]; then FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the mutation DID NOT APPLY (anchor matched nothing or twice)\n' "mutation-$1"; return; fi
+    _r="$(reach_rows "$_m")"; _k="$(reach_kind "$_r" "$4")"
+    if [ "$_k" = "$5" ]; then printf '  ok    %-22s %s\n' "mutation-$1" "$6"
+    else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s %s read %s under the mutant, want %s — the arm cannot see it\n' "mutation-$1" "$4" "${_k:-<no row>}" "$5"; fi
+  }
+  reach_case reach-off "    *) printf 'docs' ;;" "    *) printf 'code' ;;" PC-S950-DOCS-ONLY-NAMING NAMED-UPSTREAM \
+    "with no reach predicate the docs-only naming reads NAMED-UPSTREAM again — the defect, reproduced"
+  reach_case reach-core-only "templates/\"*) printf 'code' ;;" "zz-never-a-prefix/\"*) printf 'code' ;;" PC-S951-TEMPLATES-ONLY-NAMING NAMED-UPSTREAM-DOCS-ONLY \
+    "a core/-only predicate demotes the templates-only absorption, and S951 is what sees it"
+  reach_case reach-no-m \
+    "  _files=\"\$(printf '%s\\n' \"\$1\" | git -C \"\$DIST\" log --no-walk --stdin -m --name-only --format= 2>/dev/null)\" \\" \
+    "  _files=\"\$(printf '%s\\n' \"\$1\" | git -C \"\$DIST\" log --no-walk --stdin --name-only --format= 2>/dev/null)\" \\" \
+    PC-S952-MERGE-NAMING NAMED-UPSTREAM-DOCS-ONLY \
+    "without -m a merge lists no files and its core/ side branch reads docs-only, and S952 is what sees it"
+  # THE VERSION CONJUNCT, and ONLY S954 may see it go. The mutant renames the matched line to one
+  # no listing carries, so a release commit falls through to the core/templates test. The same run
+  # is then read for S950 and S951: if either moved, the mutant broke more than the conjunct and
+  # S954 is not the cell that isolates it.
+  ASSERTIONS=$((ASSERTIONS + 1))
+  _vm="$(reach_mut reach-no-version 'VERSION' 'zz-never-a-listed-path')"
+  if [ -z "$_vm" ]; then
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the mutation DID NOT APPLY (anchor matched nothing or twice)\n' "mutation-reach-no-version"
+  else
+    _vr="$(reach_rows "$_vm")"
+    _v4="$(reach_kind "$_vr" PC-S954-RELEASE-COMMIT-NAMING)"
+    _v0="$(reach_kind "$_vr" PC-S950-DOCS-ONLY-NAMING)"
+    _v1="$(reach_kind "$_vr" PC-S951-TEMPLATES-ONLY-NAMING)"
+    _v2="$(reach_kind "$_vr" PC-S952-MERGE-NAMING)"
+    if [ "$_v4" = NAMED-UPSTREAM-DOCS-ONLY ] && [ "$_v0" = NAMED-UPSTREAM-DOCS-ONLY ] \
+       && [ "$_v1" = NAMED-UPSTREAM ] && [ "$_v2" = NAMED-UPSTREAM ]; then
+      printf '  ok    %-22s %s\n' "mutation-reach-no-version" "without the VERSION conjunct the release-only naming reads docs-only, S954 is what sees it, and S950/S951/S952 keep their kinds"
+    else
+      FAILURES=$((FAILURES + 1))
+      printf '  FAIL  %-22s want S954 docs-only and S950/S951/S952 unchanged; read S954=%s S950=%s S951=%s S952=%s\n' "mutation-reach-no-version" "${_v4:-<no row>}" "${_v0:-<no row>}" "${_v1:-<no row>}" "${_v2:-<no row>}"
+    fi
+  fi
+  # BL-066's mutant: the newest citing commit only, the shape this row shipped with.
+  ASSERTIONS=$((ASSERTIONS + 1))
+  _al="  _hits=\"\$(git -C \"\$DIST\" log -E --grep=\"\${_pfx}([^0-9A-Za-z-]|\\\$)\" --format=%h \"\$THEIRS\" 2>/dev/null)\""
+  _am="$(reach_mut ambig-newest "$_al" "${_al%)\"} | head -1)\"")"
+  if [ -z "$_am" ]; then
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the mutation DID NOT APPLY, so ambiguous-lists-all is unproven\n' "mutation-ambig-newest"
+  else
+    _ar="$(reach_rows "$_am" | awk -F'\t' '$1=="NAMED-UPSTREAM-AMBIGUOUS" && $2=="PC-S902" {print $3; exit}')"
+    case "$_ar" in
+      *"in one commit,"*"and 2 entries in this ledger carry it"*) printf '  ok    %-22s newest-only names one of PC-S902'"'"'s two citing commits, and ambiguous-lists-all is what sees it\n' "mutation-ambig-newest" ;;
+      *) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the newest-only mutant did not read as one commit: %s\n' "mutation-ambig-newest" "${_ar:-<no row>}" ;;
+    esac
+  fi
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s FIXTURE BROKEN — the unmutated engine over the small ledger does not reproduce the reach rows, so no mutant below is attributable\n' "reach-control"
+fi
+fi
+
+# --- AN UNREADABLE PATH IS REFUSED, NEVER READ AS ABSENT OR EMPTY (BL-310) -----------------
+# `memo_has_path` returns 125 when git said no and the path could not be confirmed absent; every
+# read site used to fold that into "absent" (a basename guess, or "does not resolve") and every
+# `memo_show` read discarded its status, so an unread blob read as EMPTY content. Five worlds, each
+# a tiny dist with ONE object moved aside, each the subject of one layer:
+#   W-blob    theirs blob of the entry's path missing             -> unreadable (has or show layer)
+#   W-tree    theirs SUBTREE missing: ls-tree -r fails too         -> unreadable (has layer alone)
+#   W-cached  `has` cached healthy, theirs blob then missing,
+#             base readable and holding the anchor                 -> unreadable (show layer alone;
+#             without it, theirs_has reads a CLOSE on an unread blob)
+#   W-base    base blob missing, anchor at both refs               -> unreadable (base layer; without
+#             it, a vacuous theirs_lacks reads CLOSE-CANDIDATE)
+#   W-ver     VERSION blob missing at a resolvable theirs          -> the run refuses, exit 2
+# Near-miss controls in the same worlds: a path new at theirs (confirmed ABSENT at base) and a path
+# that resolves nowhere both decide as before.
+#
+# SHIPS AHEAD OF ITS SUBJECT: a consumer's installed engine may predate the refusal, and there the
+# arms SKIP. Decided on the RESOLVED engine directory, never on a path glob.
+if ! grep -qF '"unreadable: path' "$CLOSER" && [ "$B2_ISDIST" = 0 ]; then
+  printf '  SKIP  BL-310 unreadable arms -- the installed ledger-reverify.sh predates the refusal; it lands with the pull that carries this fixture\n'
+else
+  UW="$(dirname "$DIST")/unreadable"; mkdir -p "$UW"
+  # u_world <name> -> builds <UW>/<name>/{d,c}: base commit B, theirs commit T, each with
+  # top.txt, a/b/f.txt, keep.txt and VERSION; theirs also adds new.txt. Prints nothing.
+  u_world() {
+    local w="$UW/$1"
+    mkdir -p "$w/d/a/b" "$w/c" "$w/m"
+    ug() { git -C "$w/d" -c user.name=u -c user.email=u@u -c commit.gpgsign=false "$@"; }
+    git init -q "$w/d"
+    printf 'MARK base\n' > "$w/d/top.txt"; printf 'MARK\n' > "$w/d/a/b/f.txt"
+    printf 'KEEP base\n' > "$w/d/keep.txt"; printf '1.0.0\n' > "$w/d/VERSION"
+    ug add -A; ug commit -qm base
+    printf 'MARK theirs\n' > "$w/d/top.txt"; printf 'KEEP theirs\n' > "$w/d/keep.txt"
+    printf 'NEWMARK\n' > "$w/d/new.txt"; printf '1.1.0\n' > "$w/d/VERSION"
+    ug add -A; ug commit -qm theirs
+    printf '%s' "$(ug rev-parse HEAD~1)" > "$w/B"; printf '%s' "$(ug rev-parse HEAD)" > "$w/T"
+    printf -- '# ledger\n\n- **Entry U-HAS** -- has.\n  verify: theirs_has top.txt "MARK"\n\n- **Entry U-TREE** -- subtree.\n  verify: theirs_has a/b/f.txt "MARK"\n\n- **Entry U-KEEP** -- vacuous lacks.\n  verify: theirs_lacks keep.txt "KEEP"\n\n- **Entry U-NEW** -- new at theirs.\n  verify: theirs_has new.txt "NEWMARK"\n\n- **Entry U-NOWHERE** -- resolves nowhere.\n  verify: theirs_has no/such/zz-file.txt "X"\n' > "$w/c/ledger.md"
+  }
+  u_obj() { # <world> <ref-file B|T> <path> -> absolute object path
+    local w="$UW/$1" s
+    s="$(git -C "$w/d" rev-parse "$(cat "$w/$2"):$3")" || return 1
+    printf '%s/d/.git/objects/%s/%s' "$w" "${s%"${s#??}"}" "${s#??}"
+  }
+  u_run() { # <engine> <world> -> "rc<TAB>rows"; a fresh memo per run unless U_MEMO is set
+    local w="$UW/$2" m="${U_MEMO:-}" o rc
+    [ -n "$m" ] || m="$(mktemp -d "$w/m/r.XXXX")"
+    o="$(AI_DLC_RECONCILE_MEMO="$m" bash "$1" "$w/d" "$(cat "$w/B")" "$w/c" "$(cat "$w/T")" "$w/c/ledger.md" 2>"$w/err")"; rc=$?
+    printf '%s\n%s' "$rc" "$o"
+  }
+  u_row() { printf '%s\n' "$1" | awk -F'\t' -v l="$2" 'NR > 1 && $2 == l {print $1 "|" $3; exit}'; }
+  u_unread() { case "$(u_row "$1" "$2")" in NEEDS-REVIEW\|unreadable:*) return 0 ;; esac; return 1; }
+  for _w in blob tree cached base ver; do u_world "$_w"; done
+  # Healthy control on an untouched world: every entry decides as before, nothing reads unreadable.
+  u_world healthy; U_H="$(u_run "$CLOSER" healthy)"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  case "$(u_row "$U_H" "Entry U-HAS")|$(u_row "$U_H" "Entry U-KEEP")|$(u_row "$U_H" "Entry U-NEW")|$(u_row "$U_H" "Entry U-NOWHERE")" in
+    STILL-LIVE*"|NEEDS-REVIEW|vacuous predicate:"*"|STILL-LIVE"*"|NEEDS-REVIEW|unresolved:"*)
+      if grep -q 'unreadable' <<<"$U_H"; then FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the HEALTHY world reads unreadable somewhere — the refusal fires on readable objects\n' "unreadable-control"
+      else printf '  ok    %-22s healthy world: has STILL-LIVE, keep vacuous, new-at-theirs STILL-LIVE, nowhere unresolved, no unreadable row\n' "unreadable-control"; fi ;;
+    *) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s FIXTURE BROKEN — the healthy world does not decide as seeded: %s\n' "unreadable-control" "$(printf '%s\n' "$U_H" | cut -f1,2 | tr '\n' ' ')" ;;
+  esac
+  # Break each world, ONCE, and keep it broken: the mutants below re-read the same worlds.
+  mv "$(u_obj blob T top.txt)" "$UW/blob/moved" \
+    && mv "$(u_obj tree T a/b)" "$UW/tree/moved" \
+    && { U_MEMO="$UW/cached/m/primed"; mkdir -p "$U_MEMO"
+         AI_DLC_RECONCILE_MEMO="$U_MEMO" bash -c '. "$1/lib.sh" >/dev/null 2>&1 && memo_has_path "$2" "$3" top.txt' _ \
+           "$(dirname "$CLOSER")" "$UW/cached/d" "$(cat "$UW/cached/T")"; } \
+    && mv "$(u_obj cached T top.txt)" "$UW/cached/moved" \
+    && mv "$(u_obj base B keep.txt)" "$UW/base/moved" \
+    && mv "$(u_obj ver T VERSION)" "$UW/ver/moved" \
+    || { FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s FIXTURE BROKEN — an object could not be moved aside, so no unreadable world exists\n' "unreadable-worlds"; }
+  # u_score <engine> -> "blob tree cached base ver" verdict letters: R = refused as unreadable
+  u_score() {
+    local b t c k v
+    b="$(u_run "$1" blob)";  u_unread "$b" "Entry U-HAS"  && b=R || b="$(u_row "$b" "Entry U-HAS" | cut -d'|' -f1)"
+    t="$(u_run "$1" tree)";  u_unread "$t" "Entry U-TREE" && t=R || t="$(u_row "$t" "Entry U-TREE" | cut -d'|' -f1)"
+    c="$(U_MEMO="$UW/cached/m/primed" u_run "$1" cached)"; u_unread "$c" "Entry U-HAS" && c=R || c="$(u_row "$c" "Entry U-HAS" | cut -d'|' -f1)"
+    k="$(u_run "$1" base)";  u_unread "$k" "Entry U-KEEP" && k=R || k="$(u_row "$k" "Entry U-KEEP" | cut -d'|' -f1)"
+    v="$(u_run "$1" ver)";   if [ "${v%%
+*}" = 2 ] && grep -q 'VERSION at theirs' "$UW/ver/err"; then v=R; else v="rc${v%%
+*}"; fi
+    printf '%s %s %s %s %s' "${b:-none}" "${t:-none}" "${c:-none}" "${k:-none}" "${v:-none}"
+  }
+  U_S="$(u_score "$CLOSER")"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ "$U_S" = "R R R R R" ]; then
+    printf '  ok    %-22s missing blob, missing subtree, unread blob behind a cached has, unread base blob, unread VERSION: all refused (%s)\n' "unreadable-refused" "$U_S"
+  else
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s want R R R R R (blob tree cached base ver), got %s\n' "unreadable-refused" "$U_S"
+  fi
+  # Near-miss in a BROKEN world: the new-at-theirs path and the path that resolves nowhere still
+  # decide as in the healthy world, so the refusal is keyed on unreadability, not on any failure.
+  _bw="$(u_run "$CLOSER" base)"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  case "$(u_row "$_bw" "Entry U-NEW")|$(u_row "$_bw" "Entry U-NOWHERE")" in
+    STILL-LIVE*"|NEEDS-REVIEW|unresolved:"*) printf '  ok    %-22s beside an unreadable base blob, a path new at theirs and a path that resolves nowhere decide as before\n' "unreadable-near-miss" ;;
+    *) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the near-misses moved in the broken world: %s\n' "unreadable-near-miss" "$(u_row "$_bw" "Entry U-NEW") / $(u_row "$_bw" "Entry U-NOWHERE")" ;;
+  esac
+  # ONE MUTANT PER LAYER. Each must move ITS world's letter and no other.
+  # <tag> <anchor> <replacement> <expected score>
+  u_mut() {
+    local _d="$UW/mut-$1" _s
+    ASSERTIONS=$((ASSERTIONS + 1))
+    rm -rf "$_d"; mkdir -p "$_d"; cp "$(dirname "$CLOSER")"/*.sh "$_d/" 2>/dev/null
+    A="$2" B="$3" awk '$0 == ENVIRON["A"] { print ENVIRON["B"]; n++; next } { print } END { exit (n == 1) ? 0 : 3 }' \
+      "$CLOSER" > "$_d/ledger-reverify.sh"
+    if [ "$?" -ne 0 ] || cmp -s "$CLOSER" "$_d/ledger-reverify.sh"; then
+      FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the mutation DID NOT APPLY, so its layer is unproven\n' "mutation-$1"; return
+    fi
+    _s="$(u_score "$_d/ledger-reverify.sh")"
+    if [ "$_s" = "$4" ]; then printf '  ok    %-22s %s (%s)\n' "mutation-$1" "$5" "$_s"
+    else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s want %s, got %s — the layer is not what its world sees\n' "mutation-$1" "$4" "$_s"; fi
+  }
+  u_mut unread-has '      if [ "$_hp" -eq 125 ]; then' '      if [ "$_hp" -eq 9999 ]; then' "R NEEDS-REVIEW R R R" \
+    "with the has-layer refusal gone a missing subtree is a path that does not resolve"
+  u_mut unread-show '      if [ "$_ts" -ne 0 ]; then' '      if false; then' "R R CLOSE-CANDIDATE R R" \
+    "with the theirs show status discarded an unread blob is empty content and theirs_has reads a CLOSE"
+  u_mut unread-base '        if [ "$_bh" -ne 128 ]; then' '        if false; then' "R R R CLOSE-CANDIDATE R" \
+    "with the base refusal gone an unread base blob is 'absent at base' and a vacuous theirs_lacks reads a CLOSE"
+  u_mut unread-version '  if [ "$_tv_h" -ne 128 ] && git -C "$DIST" rev-parse -q --verify "${THEIRS}^{commit}" >/dev/null 2>&1; then' '  if false; then' "R R R R rc0" \
+    "with the VERSION refusal gone the run reports versions read off nothing, exit 0"
+fi
 
 # MUTATION 2 — drop the id-shape guard. Entry A's prose label then matches the pre-base commit
 # that quotes it, and a wall of word-matched rows is exactly the lint an operator switches off.
@@ -1683,8 +1964,12 @@ named_set() { # <id> -> newline-separated SHORT shas, newest first
     git -C "$DIST" rev-parse --short "$_h" 2>/dev/null
   done
 }
-named_detail() { # <rows> <id> -> field 3 of that id's NAMED-UPSTREAM row, or empty
-  printf '%s\n' "$1" | awk -F'\t' -v l="^$2\$" '$1=="NAMED-UPSTREAM" && $2 ~ l {print $3; exit}'
+# BOTH NAMING KINDS CARRY THE SHA LIST, so both are read. Once a naming set that changes nothing
+# under core/ or templates/ became `NAMED-UPSTREAM-DOCS-ONLY`, an election mutant that keeps only a
+# docs commit flips the KIND as well as the list; reading NAMED-UPSTREAM alone then scored that
+# mutant NOROW and lost the sha it kept, which is the observable these arms grade.
+named_detail() { # <rows> <id> -> field 3 of that id's NAMED-UPSTREAM(-DOCS-ONLY) row, or empty
+  printf '%s\n' "$1" | awk -F'\t' -v l="^$2\$" '($1=="NAMED-UPSTREAM" || $1=="NAMED-UPSTREAM-DOCS-ONLY") && $2 ~ l {print $3; exit}'
 }
 # <rows> <id> -> how many of that id's naming shas are ABSENT from its row, or NOROW.
 # NOROW is distinguished from 0 deliberately: a row that never appeared hides nothing and reports

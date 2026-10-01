@@ -647,6 +647,12 @@ if [ -n "$REVERIFY" ] && [ -n "$REAL_LEDGER" ]; then
   ( cd "$TMP/j1" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m real >/dev/null 2>&1 )
   j1_out="$(run_v "" "$TMP/j1" --max-prose-closable 9999 --max-unscorable 9999 --max-out-of-population 9999 --min-sh-receipts 0 --min-entries 0)"
   j1_arm="$(printf '%s\n' "$j1_out" | sed -n 's/^SUMMARY .*sh-receipts=\([0-9][0-9]*\) .*/\1/p')"
+  # R2 REFUSES BEFORE THE SUMMARY when this tree can score none of the real ledger's receipts,
+  # and that is a property of THIS tree, not of the ledger: it carries only the validator, lib.sh
+  # and ledger-reverify.sh, so most real receipts exit 9 or 0 here. When the last receipt it
+  # could bind is closed by a correct fix, the scored set empties and the SUMMARY line vanishes.
+  # The population this arm compares is still printed, in R2's own refusal, so it is read there.
+  [ -n "$j1_arm" ] || j1_arm="$(printf '%s\n' "$j1_out" | sed -n 's/^FAIL: R2: .*produced ZERO scored receipts (.*sh receipts \([0-9][0-9]*\),.*/\1/p')"
   # Reverify's own view: one row per entry, id in field 2, restricted to the rows whose verb
   # it resolved as `sh` -- which are exactly the ones it reports STILL-LIVE or CLOSE-CANDIDATE
   # from an sh receipt. Counting its distinct ids for those statuses is its population.

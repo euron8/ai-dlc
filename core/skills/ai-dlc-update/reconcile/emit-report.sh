@@ -433,7 +433,9 @@ render() {
           # crash, and before this it rendered `RETIRED-CONTRACT-TOKEN: none` -- the BL-230 class
           # (batch 160: a detector that did not run rendered as one that found nothing). The bare
           # run's stdout is captured whole and projected afterwards, so `$?` is the detector's and
-          # not the projection's. Its exit-0-with-stderr refusal is its own contract, not decided here.
+          # not the projection's. Its refusal is no longer exit-0-with-stderr: a run that scanned
+          # nothing (no CLASSIFY rows, a ref that did not resolve) now exits 2, so it reaches the
+          # DETECTOR-REFUSED line below like any other non-zero status.
           if [ -n "$rt_pc" ]; then
             rt="$(bash "$SELF/retired-tokens.sh" --bucket-rows "$rt_pc" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" "$cp" 2>/dev/null)"
             rt_rc=$?
@@ -530,11 +532,28 @@ render() {
   # yet. A temp copy is safe here only because the validator resolves everything it reads from
   # its `--root` argument and nothing from its own location — running a validator from /tmp is
   # otherwise how a missing sibling gets reported as a failed check.
+  #
+  # BUT THE VALIDATOR PRINTS ITS OWN PATH, AND THE TEMP PATH CHANGES EVERY RENDER. Its FIX block
+  # ends `bash <self> --root <consumer>`, and `<self>` was this mktemp copy -- so with any ai-dlc
+  # hook unregistered, two renders differed in that line, `--verify` failed on every render, and
+  # the union gate could not pass on that consumer state at all. The line is rewritten to the
+  # consumer's INSTALLED path, `scripts/ai-dlc/validate-hook-registration.sh`: stable across
+  # renders, and the path the remedy is run from once this pull is applied. The validator derives
+  # `<self>` as `cd dirname && pwd` of the copy, which need not equal `$hrv` byte for byte (a
+  # TMPDIR symlink or trailing slash), so the rewrite keys on the copy's BASENAME at the end of
+  # the `bash` word, never on `$hrv`.
   sub "Hook registration (every shipped ai-dlc hook is wired in .claude/settings.json — a present-but-unregistered hook never fires):"
   local hrv hro
   hrv="$(mktemp)"
   if git -C "$DIST" show "$THEIRS:core/scripts/validate-hook-registration.sh" > "$hrv" 2>/dev/null && [ -s "$hrv" ]; then
     hro="$(bash "$hrv" --root "$CONSUMER" 2>&1)"
+    # A rewrite that FAILED keeps the validator's own text: an unstable path line fails
+    # `--verify` loudly, while an empty section would read as "nothing unregistered".
+    local hrs
+    hrs="$(printf '%s\n' "$hro" | HRB="${hrv##*/}" HRI="$CONSUMER/scripts/ai-dlc/validate-hook-registration.sh" \
+      awk '{ i = index($0, "bash /"); if (i) { r = substr($0, i + 5); s = index(r, " "); w = s ? substr(r, 1, s - 1) : r
+               n = length(ENVIRON["HRB"]); if (length(w) > n && substr(w, length(w) - n) == "/" ENVIRON["HRB"]) $0 = substr($0, 1, i + 4) ENVIRON["HRI"] (s ? substr(r, s) : "") }
+             print }')" && [ -n "$hrs" ] && hro="$hrs"
   elif [ -x "$CONSUMER/scripts/ai-dlc/validate-hook-registration.sh" ]; then
     hro="$(bash "$CONSUMER/scripts/ai-dlc/validate-hook-registration.sh" --root "$CONSUMER" 2>&1)"
   else
@@ -667,7 +686,7 @@ render() {
   # HAND-REVIEW is exempt: its detail is one constant sentence, so carrying it repeats the same
   # line once per manual entry — nine times on the reference consumer — and says nothing the
   # status has not already said.
-  sub "Push-candidate ledger — CLOSE-CANDIDATE / NAMED-UPSTREAM / NAMED-UPSTREAM-AMBIGUOUS / NEEDS-REVIEW / RECEIPTS-UNDECIDED / INPUT-UNRESOLVED (upstream absorbed the entry; the operator confirms and annotates, never auto-closed):"
+  sub "Push-candidate ledger — CLOSE-CANDIDATE / NAMED-UPSTREAM / NAMED-UPSTREAM-DOCS-ONLY / NAMED-UPSTREAM-AMBIGUOUS / NEEDS-REVIEW / RECEIPTS-UNDECIDED / INPUT-UNRESOLVED (upstream absorbed the entry; the operator confirms and annotates, never auto-closed):"
   #
   # A LEDGER RUN THAT DIED RENDERED `none`, AND THAT ONE WAS DRIVEN. Batch 160, BL-230: a stub
   # `ledger-reverify.sh` exiting 2 turned the fixture's two NEEDS-REVIEW rows into `none`, render
