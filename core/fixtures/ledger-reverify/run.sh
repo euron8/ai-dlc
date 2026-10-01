@@ -1670,8 +1670,8 @@ if [ "$(reach_kind "$rc_ctl" PC-S950-DOCS-ONLY-NAMING)" = NAMED-UPSTREAM-DOCS-ON
   reach_case reach-core-only "templates/\"*) printf 'code' ;;" "zz-never-a-prefix/\"*) printf 'code' ;;" PC-S951-TEMPLATES-ONLY-NAMING NAMED-UPSTREAM-DOCS-ONLY \
     "a core/-only predicate demotes the templates-only absorption, and S951 is what sees it"
   reach_case reach-no-m \
-    "  _files=\"\$(printf '%s\\n' \"\$1\" | git -C \"\$DIST\" log --no-walk --stdin -m --name-only --format= 2>/dev/null)\" \\" \
-    "  _files=\"\$(printf '%s\\n' \"\$1\" | git -C \"\$DIST\" log --no-walk --stdin --name-only --format= 2>/dev/null)\" \\" \
+    "  _files=\"\$(printf '%s\\n' \"\$1\" | git -C \"\$DIST\" log --no-walk --stdin -m --no-renames --name-only --format= 2>/dev/null)\" \\" \
+    "  _files=\"\$(printf '%s\\n' \"\$1\" | git -C \"\$DIST\" log --no-walk --stdin --no-renames --name-only --format= 2>/dev/null)\" \\" \
     PC-S952-MERGE-NAMING NAMED-UPSTREAM-DOCS-ONLY \
     "without -m a merge lists no files and its core/ side branch reads docs-only, and S952 is what sees it"
   # THE VERSION CONJUNCT, and ONLY S954 may see it go. The mutant renames the matched line to one
@@ -3324,7 +3324,7 @@ sfx_kill mut-emitreset "$(sfx_mutant emitreset '/^emit\(\) \{ printf / { print "
   "reset inside emit(), which clears the leak by stripping legitimate rows of their ordinal"
 sfx_kill mut-swallowedonly "$(sfx_mutant swallowedonly '/^      emit ENTRY-SWALLOWED "\$sw_label" "this entry opens a fenced/ { print "      RSFX=\"\""; print; next }')" \
   "reset beside one ENTRY-SWALLOWED emit only, leaving every sibling row leaking"
-sfx_kill mut-comment-only "$(sfx_mutant comment-only '/^done <<< "\$ENTRIES"$/ { print; print ""; print "# RSFX still holds the last entry receipt suffix here."; next }')" \
+sfx_kill mut-comment-only "$(sfx_mutant comment-only '/^done < "\$LR_STAGE\/entries"$/ { print; print ""; print "# RSFX still holds the last entry receipt suffix here."; next }')" \
   "a COMMENT naming RSFX beside the loop and no code change"
 
 # THE ACQUITTALS, AND THEY ARE WHAT STOPS THE SEVEN KILLS ABOVE READING AS A GUARD THAT REFUSES
@@ -3373,7 +3373,7 @@ sfx_pass acquit-shipped "$SFX_SHIPPED" \
   "the reset immediately after the loop (as shipped)"
 sfx_pass acquit-before-if "$(sfx_mutant before-if '/^if \[ "\$\{th_undecided:-0\}" -gt 0 \]; then$/ { print "RSFX=\"\""; print; next }')" \
   "the reset moved down to just above the undecided if"
-sfx_pass acquit-cond-ord "$(sfx_mutant cond-ord '/^done <<< "\$ENTRIES"$/ { print; print "case \"${ord:-}\" in 1\/1|\"\") RSFX=\"\" ;; esac"; next }')" \
+sfx_pass acquit-cond-ord "$(sfx_mutant cond-ord '/^done < "\$LR_STAGE\/entries"$/ { print; print "case \"${ord:-}\" in 1\/1|\"\") RSFX=\"\" ;; esac"; next }')" \
   "a reset guarded on the leftover ordinal, which read fires unconditionally clears at EOF"
 
 # --- A BACKSLASH IN THE ANCHOR — PC-S308-LEDGER-REVERIFY-READS-ESCAPED-BACKTICKS-LITERALLY -----

@@ -121,7 +121,9 @@
 #   NAMED-UPSTREAM   upstream's own history NAMES this entry's id. Emitted IN ADDITION to the
 #                    receipt's verdict, never instead of it — see THE NAME IS THE THIRD SIGNAL.
 #   NAMED-UPSTREAM-DOCS-ONLY  the same, but NO naming commit changes a path under core/ or
-#                    templates/ or cuts a release (changes VERSION) (`named_reach`).
+#                    templates/ that a consumer installs (a path inside a `core/fixtures/<name>/`
+#                    carrying a `.dist-only` marker at theirs is not installed) or cuts a release
+#                    (changes VERSION) (`named_reach`).
 #   STILL-LIVE      the entry still reproduces at theirs; stays open (filtered from the report).
 #   HAND-REVIEW      the entry declares `verify: manual` — no mechanical predicate by design.
 #   NEEDS-REVIEW     the receipt itself is at fault, and the DETAIL names the cause by its
@@ -655,7 +657,8 @@ named_absorbed() { # <label> -> "<how> <n> <sha>,<sha>,... <code|docs>" if upstr
 }
 
 # named_reach <newline-separated shas> -> `code` when at least one of them changes a path under
-# `core/` or `templates/` or changes `VERSION`, `docs` when none does.
+# `core/` or `templates/` or changes `VERSION`, `docs` when none does. A path inside a
+# distribution-only fixture (`core/fixtures/<name>/` marked `.dist-only` at THEIRS) does not count.
 #
 # A COMMIT THAT CHANGES NOTHING A CONSUMER INSTALLS CANNOT HAVE ABSORBED A CONSUMER DEFECT ON ITS
 # OWN. `core/` and `templates/` are the two trees `install.sh` copies into a consumer, and `VERSION`
@@ -681,7 +684,11 @@ named_absorbed() { # <label> -> "<how> <n> <sha>,<sha>,... <code|docs>" if upstr
 # real absorption on a git error.
 named_reach() {
   local _files
-  _files="$(printf '%s\n' "$1" | git -C "$DIST" log --no-walk --stdin -m --name-only --format= 2>/dev/null)" \
+  # `--no-renames`, because a RENAME LISTS ONLY ITS DESTINATION. `git mv core/scripts/b.sh
+  # core/fixtures/<dist-only>/b.sh` deletes an installed script, and with rename detection on (the
+  # default) the listing carried only the dist-only path, which the filter below drops -- the
+  # commit then read docs-only. Without detection a rename is a delete plus an add, both listed.
+  _files="$(printf '%s\n' "$1" | git -C "$DIST" log --no-walk --stdin -m --no-renames --name-only --format= 2>/dev/null)" \
     || { printf 'code'; return 0; }
   # A NAMING COMMIT THAT CHANGES `VERSION` IS A RELEASE, and the release is what a consumer pulls.
   # This distribution's own convention: the release commit names the id and touches only
@@ -697,6 +704,24 @@ $_files
 VERSION
 "*) printf 'code'; return 0 ;;
   esac
+  # A DISTRIBUTION-ONLY FIXTURE IS UNDER `core/` AND IS NOT INSTALLED. `install.sh` copies every
+  # `core/fixtures/<name>/` EXCEPT one carrying a `.dist-only` marker, so a commit touching only such
+  # a fixture changes nothing a consumer receives -- and the `core/` prefix test below scored it
+  # `code`. Those paths are dropped before that test, against `$LR_DIST_ONLY`, the marker set read
+  # at THEIRS once in the main shell (see its derivation). A SHIPPING fixture keeps scoring `code`:
+  # it is installed. If the filter itself fails the answer is `code`, the direction this function
+  # already fails towards.
+  #
+  # THE SET IS NEWLINE-SEPARATED AND SPLIT ON NEWLINES, because a fixture name may carry a space: a
+  # set joined and split on " " turned `sp ace` into the keys `sp` and `ace`, so the real dist-only
+  # fixture kept scoring `code` and a SHIPPING fixture named `sp` was demoted. Passed through
+  # ENVIRON, not `-v`, which processes escapes in the value.
+  if [ -n "$LR_DIST_ONLY" ]; then
+    _files="$(printf '%s\n' "$_files" | LR_D="$LR_DIST_ONLY" awk '
+      BEGIN { n = split(ENVIRON["LR_D"], a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "") drop[a[i]] = 1 }
+      /^core\/fixtures\// { f = substr($0, 15); sub(/\/.*/, "", f); if (f in drop) next }
+      { print }')" || { printf 'code'; return 0; }
+  fi
   case "
 $_files" in
     *"
@@ -795,15 +820,21 @@ named_ambiguous() { # <label> -> "<n-commits> <sha>,<sha>,... <n-entries> <code|
 # So the per-LINE semantics are not being traded away -- there is no input on which they differ.
 # If a future edit lets a needle carry a newline, this becomes a false NEGATIVE (a substring
 # reported absent when grep would have found one of its lines), which is the false-close
-# direction this file exists to refuse. Restore `grep -qF -- "$_one" <<<"$_c"` if that day comes.
+# direction this file exists to refuse. Restore a `grep -qF` against a STAGED copy of `$_c` if that day comes.
+#
+# THE NEEDLES ARE READ FROM A STAGED FILE WHOSE WRITE STATUS IS READ, NEVER A HEREDOC. bash 3.2
+# stages a heredoc to a temp file too, and when that write fails it runs the loop on EMPTY stdin:
+# zero needles, `_ok` stays 1, and every predicate reads PRESENT -- a CLOSE-CANDIDATE for
+# `theirs_lacks` on bytes nobody compared. A failed write here refuses the run. MAIN SHELL ONLY:
+# both callers run in the entry loop's body, where `lr_refuse` can end the run.
 all_present() {
   _c="$1"; _ok=1
+  printf '%s\n' "$2" > "$LR_STAGE/all-present" \
+    || lr_refuse "the substrings of a receipt could not be staged, so whether they are present could not be decided"
   while IFS= read -r _one; do
     [ -n "$_one" ] || continue
     case "$_c" in *"$_one"*) ;; *) _ok=0 ;; esac
-  done <<EOF
-$2
-EOF
+  done < "$LR_STAGE/all-present"
   [ "$_ok" -eq 1 ]
 }
 
@@ -1255,9 +1286,10 @@ CORE_MAP_WHY=""      # why it is unavailable, rendered verbatim into the undecid
 # `rm`. `THEIRS_TREE_OWNED` is written ONLY beside the `mktemp -d` that created the directory, so
 # the handler can only ever remove a directory this process made.
 THEIRS_TREE_OWNED=""
-# THE STAGING DIRECTORY for every producer this file used to read through `< <( )`. ONE per run,
-# LAZY (the `core_map()` pattern: a ledger with no `sh` receipt pays nothing, and this engine's
-# fixture is the suite pole), made ONLY in the main shell -- the two receipt readers run inside a
+# THE STAGING DIRECTORY for every producer this file used to read through `< <( )`, and for every
+# here-string and heredoc it used to read. ONE per run, made ONLY in the main shell, and no longer
+# lazy: the entry loop stages its own input here, so every run makes it once, just before that
+# loop. The call sites below still call this first; a second call is a no-op. The two receipt readers run inside a
 # caller's `$( )`, where a directory made on first use would be forgotten when the subshell ends,
 # so the caller calls `lr_stage_ready` first. Removed by `core_map_cleanup`, through
 # `LR_STAGE_OWNED`, for the reason `THEIRS_TREE_OWNED` records.
@@ -1630,23 +1662,35 @@ anchor_variants() { # <anchor> -> candidate spellings, the original excluded by 
 # blob was "contains no variant" and an unreadable base blob "lacks every variant" -- the second
 # is half of the near-miss test passing on bytes nobody read. `<path>` stays in the signature
 # for the call site's readability; the caller sets both blobs for it before calling.
+#
+# THE VARIANTS ARE STAGED, AND BOTH THE PRODUCER'S STATUS AND THE WRITE'S ARE READ. This read a
+# heredoc whose body was `$(anchor_variants …)`: a failed generator and a heredoc bash 3.2 could not
+# stage both gave ZERO variants, which is "no near-miss" and lets the row fall through to a decided
+# verdict. This runs inside the caller's `$( )`, so it cannot refuse the run itself: it returns 3
+# and the CALLER refuses. `$LR_STAGE` is made in the main shell before the entry loop.
 near_miss_spelling() { # <path> <anchor> <subs>
   local _a="$2" _subs="$3" _v _tb _bb
   case "$_subs" in ""|*"
 "*) return 0 ;; esac
   _tb="$LR_TB"; _bb="$LR_BB"
+  anchor_variants "$_a" > "$LR_STAGE/near-miss-variants" || return 3
   while IFS= read -r _v; do
     [ -n "$_v" ] && [ "$_v" != "$_a" ] || continue
     case "$_tb" in *"$_v"*) ;; *) continue ;; esac
     case "$_bb" in *"$_v"*) continue ;; esac
     printf '%s' "$_v"; return 0
-  done <<EOF
-$(anchor_variants "$_a")
-EOF
+  done < "$LR_STAGE/near-miss-variants"
+  return 0
 }
 
+# THE SUBSTRINGS ARE STAGED, AND A FAILED WRITE REFUSES THE RUN. A heredoc bash 3.2 could not
+# stage ran this loop zero times and returned 0, "every substring reachable", which turns an
+# UNFALSIFIABLE predicate into a decided STILL-LIVE. `return 2` is not used for it: its row says no
+# tracked file list exists at the consumer, which would name the wrong cause. MAIN SHELL ONLY.
 consumer_reachable() {
   consumer_scannable || return 2
+  printf '%s\n' "$1" > "$LR_STAGE/reachable-subs" \
+    || lr_refuse "the substrings of a receipt could not be staged, so their reachability in the consumer could not be checked"
   while IFS= read -r _one; do
     [ -n "$_one" ] || continue
     # NEVER emit a bare `:(exclude)`. Empty means the ledger is outside the tree, so there is
@@ -1664,9 +1708,7 @@ consumer_reachable() {
       1) return 1 ;;
       *) return 2 ;;
     esac
-  done <<EOF
-$1
-EOF
+  done < "$LR_STAGE/reachable-subs"
   return 0
 }
 
@@ -1690,6 +1732,19 @@ if [ "$_tv_s" -ne 0 ]; then
 fi
 TV="$(printf '%s' "$TV" | tr -d '[:space:]')"
 [ -n "$TV" ] || TV="$THEIRS"
+
+# `$LR_DIST_ONLY`: the names of every `core/fixtures/<name>/` carrying a `.dist-only` marker AT
+# THEIRS, ONE PER LINE (a name may carry a space), read by `named_reach`. Derived from the markers -- the declaration
+# `install.sh` derives its own copy loop from -- never hand-listed. AT THEIRS, NOT FROM THE DIST
+# WORKING TREE, for the reason `preclassify.sh`'s `dist_only()` records: the checkout is whatever
+# the operator last checked out. Derived HERE, in the main shell, because `named_reach` runs
+# inside `$( )` where a lazily-built set would be rebuilt on every call. `sed -n`, not `grep`: no
+# marker at all is an answer, and grep's 1 for it would read as a failed listing.
+#
+# A FAILED LISTING EXCLUDES NOTHING. The set is then empty, every `core/` path scores `code` as it
+# did before this existed, and no naming is demoted on a git error.
+LR_DIST_ONLY="$(git -C "$DIST" ls-tree -r --name-only "${THEIRS}" -- core/fixtures/ 2>/dev/null \
+  | sed -n 's#^core/fixtures/\([^/]*\)/\.dist-only$#\1#p')" || LR_DIST_ONLY=""
 
 # Extract (label<TAB>ordinal<TAB>directive) for each OPEN entry carrying a verify: line, plus
 # ONE `0/0` row (directive `-`) for each OPEN id-keyed entry carrying none -- that row reaches
@@ -1903,8 +1958,27 @@ ENTRIES="$(awk -v DASH=' — ' "$(ledger_entry_awk)"'
 # down into a `< <(…)`) keeps every line of that program where it is, so this change is a
 # rewiring and not a hundred-line move. `mapfile` is still not an option: bash 3.2 on macOS.
 #
-# An EMPTY extraction herestrings as one empty line, which the guard on the first line of the
-# body already drops — the same guard that has always dropped awk's blank output.
+# A STAGED FILE NOW, NOT A HERESTRING, AND ITS WRITE STATUS IS READ. bash 3.2 stages a herestring
+# to a temp file too; when that write fails (`ulimit -f`, a full or read-only TMPDIR) it runs the
+# loop on EMPTY stdin -- zero entries, zero rows, rc 0, a ledger reading as clean. The loop still
+# runs in the main shell, so the tally keeps its reason above. `printf '%s\n'` writes the bytes the
+# herestring fed, so an EMPTY extraction is still one empty line, which the guard on the first line
+# of the body drops. The refusal message is a plain string: after a failed write bash 3.2 can leak
+# that failure into a later `$( )` capture, so nothing is captured on the way out.
+#
+# THE STAGING DIRECTORY IS MADE HERE FOR EVERY RUN, which ends `lr_stage_ready`'s laziness: the
+# per-entry readers (`all_present`, `consumer_reachable`, `near_miss_spelling`) stage into it too,
+# and the last of them runs inside a `$( )` where a directory made on first use would be lost.
+#
+# AN UNUSABLE TMPDIR REFUSES THE WHOLE RUN, DELIBERATELY, AND THE MESSAGE NAMES IT. There is no
+# fallback: every directory this run owns is itself made under TMPDIR, the consumer tree is never
+# written, and the only other candidate is a SHARED path like /tmp -- which is exactly where bash
+# 3.2 silently put the here-string this replaced, and why the old engine produced rows under a
+# missing TMPDIR. A refusal (exit 2) is what `emit-report.sh` renders as `DETECTOR-REFUSED`, never
+# as `none`; the path is named here so the operator running it directly sees the cause.
+lr_stage_ready || lr_refuse "a staging directory could not be created under TMPDIR=${TMPDIR:-/tmp} (missing or not writable), so the ledger's entries could not be staged"
+printf '%s\n' "$ENTRIES" > "$LR_STAGE/entries" \
+  || lr_refuse "the ledger's entries could not be staged (a failed write would have read as an empty ledger)"
 while IFS="$(printf '\t')" read -r label ord directive; do
   [ -n "$directive" ] || continue
   # Empty suffix for a single-receipt entry, so those rows are unchanged.
@@ -1960,7 +2034,7 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       # "upstream took it" closed an entry on a `docs(plan):` commit that only cross-referenced it.
       # It does NOT say the entry is unabsorbed -- a fix that never names the id is invisible to the
       # message search -- so the text sends the operator to the subject, never forbids a close.
-      emit NAMED-UPSTREAM-DOCS-ONLY "$label" "upstream's own history NAMES this entry's id ${na_where}, and NONE of those commits changes a path under core/ or templates/ -- the two trees a consumer installs -- and none of them cuts a release (changes VERSION). A plan, a review or a ledger drain mentioning the id matches the same way a fix does, so this row is not evidence of an absorption.${na_note} It is NOT a close on its own. The fix can still have landed in a commit that does not name the id: read the commit(s) -- one may record a withdrawal or a split, which IS something to act on -- then read the entry's own subject at theirs. Annotate only what that reading establishes, and otherwise leave the entry open."
+      emit NAMED-UPSTREAM-DOCS-ONLY "$label" "upstream's own history NAMES this entry's id ${na_where}, and NONE of those commits changes a path a consumer installs under core/ or templates/ (a path inside a distribution-only fixture, one carrying a .dist-only marker at theirs, is not installed and does not count) -- and none of them cuts a release (changes VERSION). A plan, a review or a ledger drain mentioning the id matches the same way a fix does, so this row is not evidence of an absorption.${na_note} It is NOT a close on its own. The fix can still have landed in a commit that does not name the id: read the commit(s) -- one may record a withdrawal or a split, which IS something to act on -- then read the entry's own subject at theirs. Annotate only what that reading establishes, and otherwise leave the entry open."
     elif [ "$ord" = "0/0" ]; then
       # RECEIPT-LESS: there is no receipt to be blind to it and none to re-anchor, so the receipt
       # clauses of the sibling detail would be false here. The close is the annotation alone.
@@ -1982,7 +2056,7 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       nam_where="one commit, $nam_c"
     fi
     if [ "$nam_r" = docs ]; then
-      nam_where="$nam_where -- and NONE of them changes a path under core/ or templates/ or cuts a release (changes VERSION)"
+      nam_where="$nam_where -- and NONE of them changes a path under core/ or templates/ (a path inside a distribution-only fixture does not count) or cuts a release (changes VERSION)"
     fi
     nam_p="$(printf '%s' "$label" | sed -n 's/^\(PC-S[0-9][0-9]*\)-.*/\1/p')"
     # ONE ROW PER PREFIX, NOT PER ENTRY, and the label IS the prefix because that is the
@@ -2123,6 +2197,7 @@ while IFS="$(printf '\t')" read -r label ord directive; do
             # near-miss anchor is reachable through unrelated consumer prose, so asking the
             # question second means never asking it at all.
             _nm="$(near_miss_spelling "$path" "$sub" "$subs")"
+            [ "$?" -eq 0 ] || lr_refuse "the near-miss spellings of $label's anchor could not be generated or staged"
             if [ -n "$_nm" ]; then
               emit NEEDS-REVIEW "$label" "mis-anchored predicate: \"$sub\" is absent at base AND at theirs ($TV), but the near-miss spelling \"$_nm\" is absent at base and PRESENT at theirs — so upstream DID move, and this receipt anchors on a token the fix was not written with. It reports STILL-LIVE forever as written. Re-anchor on \"$_nm\" and re-run; this is a finding about the RECEIPT, not a verdict on the entry, and the spelling is NOT adopted automatically.$note"
               continue
@@ -2297,8 +2372,8 @@ while IFS="$(printf '\t')" read -r label ord directive; do
             continue
           fi ;;
       esac
-      # STDIN IS `/dev/null`, BECAUSE OTHERWISE IT IS THE ENTRY LOOP'S HERESTRING. This runs inside
-      # `while … read …; done <<< "$ENTRIES"`, so a receipt inherits fd 0 positioned at the NEXT
+      # STDIN IS `/dev/null`, BECAUSE OTHERWISE IT IS THE ENTRY LOOP'S STAGED FILE. This runs inside
+      # `while … read …; done < "$LR_STAGE/entries"`, so a receipt inherits fd 0 positioned at the NEXT
       # entry, and any receipt that reads stdin -- a bare `cat`, a `grep` with no file operand, a
       # `read` -- consumes every entry after its own. Those entries then emit NO ROW, and rc is 0
       # with stderr empty. Measured on a three-entry ledger whose first receipt was
@@ -2363,7 +2438,7 @@ while IFS="$(printf '\t')" read -r label ord directive; do
           # THE STAGING DIRECTORY IS MADE HERE, IN THIS SHELL, because the reader runs inside `$( )`.
           # A failed split is status 3 from the reader and a refusal of the run: an empty list is
           # the every-path-exists answer, and the next line would turn it into a CLOSE-CANDIDATE.
-          lr_stage_ready || lr_refuse "a staging directory could not be created, so the paths $label's sh receipt names could not be checked"
+          lr_stage_ready || lr_refuse "a staging directory could not be created under TMPDIR=${TMPDIR:-/tmp} (missing or not writable), so the paths $label's sh receipt names could not be checked"
           # The assignment stays one line on its own (the fixture's mutation-subject mutant anchors
           # on it); its status is the substitution's, read on the next line.
           _gone="$(receipt_absent_subjects "$rest")"
@@ -2462,7 +2537,7 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       emit NEEDS-REVIEW "$label" "unresolved: unknown verify verb '$verb' (expected theirs_lacks | theirs_has | sh | manual)"
       ;;
   esac
-done <<< "$ENTRIES"
+done < "$LR_STAGE/entries"
 
 # RESET, BECAUSE THE LOOP LEAVES ITS LAST ENTRY'S SUFFIX BEHIND. `RSFX` is set per receipt
 # INSIDE the loop above and read by `emit()` everywhere, so whatever the final iteration left in
