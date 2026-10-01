@@ -35,7 +35,9 @@ so it carries several subjects.
   carry the closest honest form rather than a measured fit. No hook or validator reads the sub-step, so
   the replacement receipt is its only mechanical carrier.
 - **`BL-159`**, claim 1. The Stop hook's handoff check now reads the working tree beside `PUSH_OK`:
-  uncommitted work outside `_bmad-output/` blocks a handoff that reads as pushed.
+  uncommitted work outside `_bmad-output/`, `.claude/settings.local.json` and `.claude/worktrees/` blocks
+  a handoff that reads as pushed. The last two are Claude Code's own per-user files, which a consumer
+  that does not ignore `.claude/` would otherwise be told to commit.
 - **`BL-127`**. Invariant `I118` binds a mapped fixture's read-set rows to the `core/hooks/` paths its
   `run.sh` or `seed.sh` names on a code line. The false-positive set on the real corpus is empty.
   `FORK_BUDGET` 3202 to 3214 on a clean same-path measurement of +6.
