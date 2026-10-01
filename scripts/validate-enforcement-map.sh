@@ -5980,7 +5980,13 @@ fi
 # trip the zero guard below on every assertion in enforcement-map-sites rather
 # than on a real defect. A walk also sees a script that is written but not yet
 # added, which is exactly when this idiom gets introduced.
-i54_files="$(find "$REPO_ROOT" -name .git -prune -o -type f -name '*.sh' -print 2>/dev/null)"
+# `.claude/worktrees/` IS PRUNED BY ITS EXACT PATH, AND NOT BY NAME. It holds gitignored agent
+# worktrees, each a full checkout carrying a builder's UNCOMMITTED work, and a run from the main
+# checkout walked into them and failed I54b on a file no commit carried (BL-401). The prune is
+# keyed on `-path "$REPO_ROOT/.claude/worktrees"` so a sibling such as `.claude/worktrees-not/`
+# is still scanned; a `-name worktrees` prune would also drop any tracked directory of that
+# name anywhere in the tree.
+i54_files="$(find "$REPO_ROOT" \( -name .git -o -path "$REPO_ROOT/.claude/worktrees" \) -prune -o -type f -name '*.sh' -print 2>/dev/null)"
 i54_n="$(printf '%s\n' "$i54_files" | grep -c .)"
 i54_fmt="'%""s'"
 i54_re="(printf[[:space:]]+${i54_fmt%\'}(\\\\n)?'|echo)[[:space:]]+\"[^\"]*\"[[:space:]]*[|][[:space:]]*grep[[:space:]]+-[A-Za-z]*q"
