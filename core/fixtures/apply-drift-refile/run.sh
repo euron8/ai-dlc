@@ -432,7 +432,19 @@ if [ "$R_RUN" = 1 ]; then
   }
   [ "$R_GOT" = NOROW ] || {
     r_mut r-M1 're-run apply' 'ROW|1|-|-|-|bare'
-    r_mut r-M2 'advance the stamp with apply.sh --finish' 'ROW|0|-|-|-|finish'
+    # r-M2's pin is BL-402's behaviour: an installed apply.sh that predates the finisher re-check
+    # still stamps here, so on a consumer it SKIPs until the pull that carries the subject. In the
+    # distribution it always runs and must go red against an engine without the re-check.
+    if grep -qF 'finish_reapply_owed' "$APPLY"; then
+      r_mut r-M2 'advance the stamp with apply.sh --finish' 'ROW|0|-|-|-|finish'
+    else
+      case "$APPLY" in
+        */core/skills/ai-dlc-update/reconcile/apply.sh)
+          printf '  --    (BL-402: this apply.sh carries no finish_reapply_owed; in the distribution r-M2 runs anyway and must go red)\n'
+          r_mut r-M2 'advance the stamp with apply.sh --finish' 'ROW|0|-|-|-|finish' ;;
+        *) printf '  SKIP  BL-336 r-M2 -- the installed apply.sh predates the BL-402 finisher re-check; it lands with the pull that carries this fixture\n' ;;
+      esac
+    fi
   }
 fi
 
