@@ -2579,6 +2579,17 @@ under the skill root — are left untouched entirely and queued to the
 push-candidate ledger; core-overwrite by construction only ever touches paths
 `theirs` actually has.
 
+**The file-grain rows step 3 printed are acted on here too, and the bucket list
+above never reaches them.** `ALREADY-AT-THEIRS` → write nothing.
+`BOTH-CHANGED->CLASSIFY` → the per-block list above. `UPSTREAM-ONLY-ADD` →
+write theirs' copy (path-mapped, through mask/reinject if manifest-listed) AND
+set its exec bit from theirs. That bucket also holds a copy already carrying
+base's bytes with the wrong bit, in either direction; for it the content write
+changes nothing and the mode IS the action. Read the mode with `git -C <dist>
+ls-tree <theirs> -- core/<path>`: `100755` → `chmod +x`, `100644` → `chmod -x`,
+anything else → leave the bit alone. The same rule binds every file this step
+writes: a file the write creates takes the umask's mode, not theirs'.
+
 **7v. Runtime-verification gate — hard, unconditional, blocks delivery on any
 failure.** Byte-equality is not sufficient evidence the migration worked (this
 is exactly what the reverted attempt got wrong). Before delivery:
