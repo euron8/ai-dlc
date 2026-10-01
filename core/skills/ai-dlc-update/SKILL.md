@@ -218,9 +218,13 @@ prose is itself generated rather than composed.
    For the two push-resolvable states (no-upstream, ahead-only) auto-push and
    report what was pushed in one line; for BEHIND/DIVERGED put the exact
    ahead/behind counts and the `git pull`/rebase remedy in the STOP so the
-   operator knows what to run, then re-invoke. A clean tree on a branch in sync
-   with its upstream — reached directly or via the auto-push — is the only state
-   that proceeds to step 2's push or to `apply`.
+   operator knows what to run, then re-invoke. A branch in sync with its
+   upstream — reached directly or via the auto-push — is the only state that
+   proceeds to step 2's push or to `apply`. **Step 1 does not check the working
+   tree**, because it runs on every bare dry-run and a dirty tree does not make a
+   read-only report wrong. A dirty tree is refused for `apply` at step 6, and step 2
+   never commits a path it did not write: it stages by explicit pathspec, so an
+   uncommitted consumer edit is never swept into the self-update commit.
 
    **An UN-SYNCED branch, one whose step-1 auto-push failed on THIS invocation,
    proceeds to the dry-run only.** Step 2 DEFERS on it: it cuts no self-update
@@ -516,11 +520,35 @@ prose is itself generated rather than composed.
      **That holds only when step 1 reached sync**: the preflight then confirmed the
      branch is in sync with `origin`, so this merge cannot strand local commits.
      This bullet is never reached on an UN-SYNCED branch: step 2 deferred above,
-     before the gate. If there is no remote / push fails, commit locally and note it; do
-     not block the run. Advancing `skill_version` here is what keeps the stamp an honest record
+     before the gate. With no remote configured there is nothing to push: commit locally and
+     note it. A push that fails is the next paragraph's case and never ends in a kept commit.
+     Advancing `skill_version` here is what keeps the stamp an honest record
      of the installed tool version — it is bookkeeping tied to the (already
      autonomous) self-update, and never touches `version`/`commit` (the rulebook
      base stays put until a gated apply).
+
+     **A PUSH THAT FAILS HERE DISCARDS THE CYCLE; it never keeps a local commit.**
+     This is a transport failure — auth, network, a remote rejection — after the
+     gate's pre-push probe passed, and a kept commit is the orphan `PC-S308` describes:
+     `skill_version` advanced on a branch that never merges. The commit above stages ONLY the
+     paths this cycle wrote,
+     each named by explicit pathspec:
+     the slice at its `map_consumer()` destinations, the covering `tests/fixtures/<dir>/`, the
+     stamp, and the two records. Never `git add -A` or `git add .`, which sweep an uncommitted
+     consumer edit into the commit. On the failed push, in this order: report the `git push`
+     error in one line;
+     run `git checkout <original-branch>`, the branch step 1 confirmed in sync;
+     list every file the self-update branch's commits touch with `git diff --name-only <original-branch> <self-update-branch>`;
+     only when every listed path is in the written set above, delete it with `git branch -D <self-update-branch>`.
+     If any path falls outside that set, do NOT delete it: STOP and name the branch,
+     because it holds work this cycle did not write. After the delete,
+     report that step 2 DEFERRED because its push failed,
+     and mark the branch UN-SYNCED for this invocation exactly as a failed step-1 push does:
+     steps 3–5 run and write the report,
+     and step 6 refuses `apply`, because the machinery this pull ships did not land.
+     `skill_version`/`skill_commit` stay where they were, because the stamp rewrite lived only on the discarded commit.
+     The two records left with that commit, so the one-line report carries the push error. The
+     next invocation, after the operator fixes the push, derives the slice again.
 
      **The pair advances even on a cycle that CARRIED a path, and that is what the gate's
      `GATE_CARRY_STATE` refusal compensates for.** A carried path is the one thing this cycle
@@ -1479,7 +1507,7 @@ prose is itself generated rather than composed.
      An upstream-less branch has nothing to fetch and is refused below as
      upstream-less; a fetch that fails STOPs `apply` with the fetch error. If the
      branch is not in sync with its upstream — ahead, behind, diverged or
-     upstream-less — or step 1 left it UN-SYNCED on this invocation, **STOP
+     upstream-less — or step 1 or step 2 left it UN-SYNCED on this invocation, **STOP
      `apply`** and report the ahead/behind counts and the remedy: the push step 1
      names for ahead-only or upstream-less, `git pull`/rebase for behind or
      diverged; then re-invoke with `apply`. This is the ONE place a failed step-1

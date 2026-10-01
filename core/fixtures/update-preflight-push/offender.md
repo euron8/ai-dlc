@@ -32,6 +32,17 @@
      (Not auto-resolved: a rebase/merge can conflict; a bare push would be
      rejected.)
 
+   Detect with: `git remote` (empty → no remote); `git symbolic-ref -q HEAD`
+   (fails → detached); `git rev-parse --abbrev-ref --symbolic-full-name @{u}`
+   (non-zero exit → no upstream on this branch); and
+   `git rev-list --left-right --count @{u}...HEAD` (prints `<behind>\t<ahead>`).
+   For the two push-resolvable states (no-upstream, ahead-only) auto-push and
+   report what was pushed in one line; for BEHIND/DIVERGED put the exact
+   ahead/behind counts and the `git pull`/rebase remedy in the STOP so the
+   operator knows what to run, then re-invoke. A clean tree on a branch in sync
+   with its upstream — reached directly or via the auto-push — is the only state
+   that proceeds.
+
 6. **Isolate — branch before ANY write (apply only, MANDATORY).** The reconcile
    MUST NOT mutate the consumer's live branch in place. Before the first write
    in step 7:
@@ -52,3 +63,30 @@
    This is a hard requirement, symmetric with the pipeline's own branch-per-unit
    discipline; the `_divergence/` archive (step 9) is a backstop, not a
    substitute for the branch.
+
+   - **Run the self-update cycle autonomously:** cut a dedicated branch
+     `ai-dlc-update/self-update-<theirs-version>-<ts>`, write from `theirs` **only the paths
+     that diff names AND that survived both subtractions above** — never a path carried by a
+     `SELF-UPDATE-CARRY` row — each at the consumer destination `map_consumer()` gives it, and
+     `tests/fixtures/<dir>/` for the covering fixtures — never the derived set per
+     directory, **update the stamp's
+     `skill_version`/`skill_commit` to `theirs`** (rewrite the stamp in schema,
+     preserving `version`/`commit`/`installed_at`/`upstream`), commit
+     (`chore(ai-dlc-update): self-update <base-skill-ver> → <theirs-ver>`) — **including the
+     gate record and the fixture log, which are this cycle's approval artifact** — **run the
+     derived fixtures through
+     `reconcile/self-update-fixtures.sh <dist> <base> <theirs> <consumer> <fixture>...`
+     — each `<fixture>` is a bare fixture DIRECTORY NAME, one per argument; the
+     `core/fixtures/<name>` and `tests/fixtures/<name>` forms this step derives the set in are
+     also accepted, with or without a trailing slash, and the runner logs each rewrite. Any
+     other slash form, and any single argument holding more than one name, is refused —
+     **word-split the derived list explicitly**, because an unquoted variable holding a
+     newline-joined list arrives as ONE argument under zsh —
+     **and require green BEFORE the push**, push,
+     open a PR, and **auto-merge (squash, delete branch)** — no operator gate (the
+     step-1 git preflight confirmed the branch is in sync with `origin`, so this
+     merge cannot strand local commits). If there is no remote / push fails,
+     commit locally and note it; do not block the run. Advancing `skill_version` here is what keeps the stamp an honest record
+     of the installed tool version — it is bookkeeping tied to the (already
+     autonomous) self-update, and never touches `version`/`commit` (the rulebook
+     base stays put until a gated apply).

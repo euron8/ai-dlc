@@ -2603,7 +2603,38 @@ self-update commit as the PC-S308 orphan: `skill_version` advanced on a commit t
 path is a push failing AFTER the gate returned OK on an in-sync branch, so it is not the UN-SYNCED case
 BL-389 fixed and 0.673.0 did not make it worse. Discharges no consumer candidate.
 
-verify: manual
+**Held note (batch 178): fixed on branch `b178-b5`, not landed.** The cycle bullet now keeps
+commit-locally only for a consumer with no remote. A push that fails after the gate's pre-push
+probe passed discards the cycle, in a new paragraph under the bullet. The self-update commit stages
+only the paths the cycle wrote, by explicit pathspec, never `git add -A`. On the failed push the
+agent runs `git checkout <original-branch>`, lists the branch's files with `git diff --name-only`, and
+deletes the branch only when every file is in the written set. Otherwise it STOPs and names the
+branch. Step 2 reports DEFER, the branch is marked UN-SYNCED for the invocation as BL-389 does,
+step 6's refusal clause now names step 2 as a source, and the stamp stays put because its rewrite
+lived on the discarded commit. Step 1's "A clean tree on a branch in sync" claim is CORRECTED, not
+enforced. Step 1 has no porcelain check and gets none, because it runs on every bare dry-run, which
+a dirty tree does not make wrong. Step 6 refuses a dirty tree before `apply`, and pathspec staging
+removes the `git add -A` affordance at the one write site. `update-preflight-push` gains arms 7-9
+and 14 single-line mutants (26 total, each killed by its own arm alone). A consumer whose
+installed text predates this SKIPs those arms. The fixture ships in the same self-update slice as
+the text, so it lands green on the pull that delivers it. The prose itself protects only the pull
+after that one. NOTE, not built: `reconcile/self-update-gate.sh` (~:995 and ~:1002) and
+`core/fixtures/self-update-gate/run.sh:2508` still describe the old "commit locally" disposition
+in comments. Scored in fresh `mktemp -d` trees, all variant pairs `cmp`-distinct, receipt under
+`bash -c 'set -uo pipefail; …'`:
+
+| variant | want | receipt | fixture arms 1-9 |
+|---|---|---|---|
+| tip (`origin/main` 297f7499) | 1 | 1 | 000100111 |
+| the fix | 0 | 0 | 000000000 |
+| wrongA: the commit-locally sentence deleted, nothing added | 1 | 1 | 000100111 |
+| wrongB: the fix with an unconditional `git branch -D` | 1 | 1 | 000000001 |
+| wrongC: the fix, cycle bullet still commits locally on a failed push | 1 | 1 | 000000010 |
+| wrongD: the fix, false clean-tree claim restored | 1 | 1 | 000000100 |
+| rightE: discard paragraph respelled and wrapped | 0 | 0 | 000000000 |
+| no `SKILL.md` at the root | 9 | 9 | n/a |
+
+verify: sh P=core/skills/ai-dlc-update/SKILL.md; [ -f "$P" ] || exit 9; grep -q 'AUTO-PUSH' "$P" || exit 9; LC_ALL=C awk 'function fin() { if (t == "") return; gsub(/[*]/, "", t); gsub(/[ \t]+/, " ", t); l = tolower(t); t = ""; if (index(l, "detect with")) { nd++; if (index(l, "clean tree on a branch") || !(l ~ /(not|never)[^.;]*(check|inspect)[^.;]*working tree/) || !index(l, "step 6")) bad = 1 } if (index(l, "run the self-update cycle autonomously")) { nc++; if (l ~ /push (that )?fails?[^.;]*commits? locally|commits? locally[^.;]*push (that )?fails?/ || !(l ~ /push (that )?fails?|failed push/)) bad = 1 } if (index(l, "re-confirm the step-1 git preflight")) { nr++; if (!(l ~ /un-synced[^.;]*(stop|refuse)[^.;]*apply/) || !(l ~ /step 2[^.;]*un-synced/)) bad = 1 } if (index(l, "a push that fails here discards the cycle")) { nx++; if (l ~ /commits? (it )?locally/ || !index(l, "pathspec") || !(l ~ /git checkout <original.*branch -d/) || !index(l, "git diff --name-only") || !(l ~ /only (when|if)[^.;]*branch -d/) || !(l ~ /(stop|refuse)[^.;]*name the branch|name the branch[^.;]*(stop|refuse)/) || !(l ~ /step 2 defer/) || !index(l, "un-synced") || !(l ~ /stay where (they|it) w(ere|as)|stamp unchanged/)) bad = 1 } } /^[ \t]*- / { fin(); t = $0; next } /^[ \t]+[^ \t]/ { t = (t == "" ? $0 : t " " $0); next } { fin() } END { fin(); if (nd != 1 || nc != 1 || nr != 1 || nx > 1) exit 9; if (nx != 1) exit 1; exit bad }' "$P"
 
 
 ## BL-399 — the `--cite` stdout vocabulary of `validate-steering-budget.sh` has no owner in the vocabulary index
