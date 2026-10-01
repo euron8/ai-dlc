@@ -34,7 +34,7 @@ installed copy, so this takes effect on the pull after the one that delivers it.
   operator kept by hand no longer raise a wrong remedy. The withheld-stamp row names re-render, re-approve or
   apply instead of `--finish` while a fresh ordinary run is owed.
 - **`BL-360`**, share for this file, left open. `apply.sh` has no here-strings or heredocs outside comments
-  (14 on base). Every loop input is staged through `ap_stage`, which writes through a pipe so a failed write
+  (15 on base). Every loop input is staged through `ap_stage`, which writes through a pipe so a failed write
   cannot leave bytes in the shell's output buffer, and the first failed write stops later staging and becomes
   a `staging-refused` row. `finish_verify_tree` reads a staged file too: under `ulimit -f` it used to run
   zero times and stamp over an unapplied tree, and it now withholds the stamp. The relabel call's `|| true`
