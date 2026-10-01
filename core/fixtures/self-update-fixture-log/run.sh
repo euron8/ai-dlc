@@ -2720,9 +2720,10 @@ if mkmutant "$N1" '  _nb="$_na"
   # The remainder is a NAME when it is non-empty and carries no slash and no whitespace — a
   # negation over what cannot be in one directory name, never an ASCII enumeration of what may.
   # `*[!A-Za-z0-9._-]*` refused `core/fixtures/café`, which the coverage join names under its raw
-  # spelling, so a correct path-form set was convicted as unparsable.
+  # spelling, so a correct path-form set was convicted as unparsable. `.` and `..` carry no
+  # slash and name no directory, so they are refused as non-names too.
   case "$_nc" in
-    ""|*/*|*[[:space:]]*) ;;
+    ""|.|..|*/*|*[[:space:]]*) ;;
     *) _nb="$_nc" ;;
   esac' \
                   '  case "$_na" in
@@ -2749,9 +2750,10 @@ if mkmutant "$N2" '  _nb="$_na"
   # The remainder is a NAME when it is non-empty and carries no slash and no whitespace — a
   # negation over what cannot be in one directory name, never an ASCII enumeration of what may.
   # `*[!A-Za-z0-9._-]*` refused `core/fixtures/café`, which the coverage join names under its raw
-  # spelling, so a correct path-form set was convicted as unparsable.
+  # spelling, so a correct path-form set was convicted as unparsable. `.` and `..` carry no
+  # slash and name no directory, so they are refused as non-names too.
   case "$_nc" in
-    ""|*/*|*[[:space:]]*) ;;
+    ""|.|..|*/*|*[[:space:]]*) ;;
     *) _nb="$_nc" ;;
   esac' \
                   '  _nb="${_na#core/}"'; then
@@ -3992,7 +3994,7 @@ else
   bad "FIXTURE ERROR: the coverage diff anchor no longer occurs exactly once in the runner — Part Q1 proves nothing"
 fi
 QM2="$MUTDIR/q-ascii-name.sh"
-if mkmutant "$QM2" '    ""|*/*|*[[:space:]]*) ;;' '    ""|*[!A-Za-z0-9._-]*) ;;'; then
+if mkmutant "$QM2" '    ""|.|..|*/*|*[[:space:]]*) ;;' '    ""|*[!A-Za-z0-9._-]*) ;;'; then
   got="$(q_run "$QM2" c green-one plain-touched "core/fixtures/$QU/")"
   case "$got" in
     rc=2*) ok "MUTATION — with the ASCII name class the path form core/fixtures/$QU/ is refused under LC_ALL=C: Part Q3 (c) is what catches that" ;;
@@ -4000,6 +4002,17 @@ if mkmutant "$QM2" '    ""|*/*|*[[:space:]]*) ;;' '    ""|*[!A-Za-z0-9._-]*) ;;'
   esac
 else
   bad "FIXTURE ERROR: the name-shape anchor no longer occurs exactly once in the runner — Part Q3 proves nothing"
+fi
+# Part Q4: `core/fixtures/..` is not a name. It carries no slash after the prefix is stripped, so
+# without the explicit `.|..` arm it was normalised to `..` and convicted as a DELETED DRIVER — a
+# row sending the operator after an upstream deletion that never happened.
+ERRQ4="$CONS2/err-partq4.txt"; rm -f "$LOGDIR2"/self-update-fixtures-*.md
+bash "$RUNNER" "$QD" "$QD_B" "$QD_T" "$CONS2" green-one plain-touched "$QU" "core/fixtures/.." >/dev/null 2>"$ERRQ4"
+rcq4=$?
+if [ "$rcq4" -eq 2 ] && grep -qF '  core/fixtures/.. — not a fixture NAME' "$ERRQ4" && ! grep -qF 'no run.sh at' "$ERRQ4"; then
+  ok "Part Q4: core/fixtures/.. is refused as not a fixture NAME, never as a deleted driver"
+else
+  bad "Part Q4: core/fixtures/.. was not refused as a non-name (rc=$rcq4, stderr: $(grep -F 'core/fixtures/..' "$ERRQ4" 2>/dev/null | head -1))"
 fi
 rm -rf "$CONS2/tests/fixtures/plain-touched" "$CONS2/tests/fixtures/$QU" "$QD"
 

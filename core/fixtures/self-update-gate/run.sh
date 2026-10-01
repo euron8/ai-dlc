@@ -2768,7 +2768,7 @@ qw_world() {
     # NEAR-MISSES for the widened name class: a path ended by `;`, one inside double quotes, one
     # inside single quotes, and two on one line joined by `&&`. Each must yield exactly its own
     # name — an over-capture would emit one joined row, or a row carrying the delimiter.
-    for nm in semi dq sq a1 a2; do
+    for nm in semi dq sq a1 a2 ca cb ka kb ea eb ha hb; do
       printf '#!/bin/sh\nexit 0\n' > "$w/dist/core/scripts/$nm.sh"
       printf '#!/bin/sh\nexit 0\n' > "$w/cons/scripts/ai-dlc/$nm.sh"
     done
@@ -2776,7 +2776,14 @@ qw_world() {
     { printf '#!/usr/bin/env bash\nbash scripts/ai-dlc/plain.sh\nbash scripts/ai-dlc/%s.sh\n' "$QU"
       printf 'bash scripts/ai-dlc/semi.sh;\nbash "scripts/ai-dlc/dq.sh"\n'
       printf "bash 'scripts/ai-dlc/sq.sh'\n"
-      printf 'bash scripts/ai-dlc/a1.sh && bash scripts/ai-dlc/a2.sh\n'; } > "$w/cons/.githooks/pre-push"
+      printf 'bash scripts/ai-dlc/a1.sh && bash scripts/ai-dlc/a2.sh\n'
+      # SEPARATOR near-misses: a name followed by `,` `:` `=` `#` must stop there. The second
+      # member is a BARE name, because that is the shape that joins: before a `/` the old class
+      # backtracks and splits correctly, so a full-path second member cannot discriminate.
+      printf 'L=scripts/ai-dlc/ca.sh,cb.sh\n'
+      printf 'P=scripts/ai-dlc/ka.sh:kb.sh\n'
+      printf 'bash scripts/ai-dlc/ea.sh=eb.sh\n'
+      printf 'bash scripts/ai-dlc/ha.sh#hb.sh\n'; } > "$w/cons/.githooks/pre-push"
   else
     printf '#!/usr/bin/env bash\n# invokes no scripts/ai-dlc/ validator\nexit 0\n' > "$w/cons/.githooks/pre-push"
     # A fixture whose non-comment code resolves a rulebook file in the live tree: both of R2's
@@ -2793,7 +2800,7 @@ qw_world() {
   if [ "$2" = script ]; then
     printf '#!/bin/sh\n# reworded, still passes\nexit 0\n' > "$w/dist/core/scripts/plain.sh"
     printf '#!/bin/sh\n# the new check finds something\nexit 1\n' > "$w/dist/core/scripts/$QU.sh"
-    for nm in semi dq sq a1 a2; do printf '#!/bin/sh\n# reworded\nexit 0\n' > "$w/dist/core/scripts/$nm.sh"; done
+    for nm in semi dq sq a1 a2 ca cb ka kb ea eb ha hb; do printf '#!/bin/sh\n# reworded\nexit 0\n' > "$w/dist/core/scripts/$nm.sh"; done
   else
     printf '# step at theirs\n' > "$w/dist/core/skills/ai-dlc/steps/$QU.md"
     # The consumer ALREADY holds theirs' copy, so the rulebook is NOT about to change for it.
@@ -2837,8 +2844,8 @@ qr_scan() {
 for qloc in utf8 c; do
   ss_assert "quote-script-$qloc" "$(qs_scan "$GATE" "$qloc")" "plain=SELF-UPDATE-OK cafe=SELF-UPDATE-DEFER" \
     "($qloc) a changed gating script named café.sh is invoked, changed and deferred on, beside a plain one that passes"
-  ss_assert "quote-names-$qloc" "$(qn_scan "$GATE" "$qloc")" "a1.sh,a2.sh,$QU.sh,dq.sh,plain.sh,semi.sh,sq.sh," \
-    "($qloc) every delimited hook name yields exactly its own row, and two on one line yield two"
+  ss_assert "quote-names-$qloc" "$(qn_scan "$GATE" "$qloc")" "a1.sh,a2.sh,ca.sh,$QU.sh,dq.sh,ea.sh,ha.sh,ka.sh,plain.sh,semi.sh,sq.sh," \
+    "($qloc) every delimited hook name yields exactly its own row, two on one line yield two, and , : = # end a name"
   ss_assert "quote-r2-$qloc" "$(qr_scan "$GATE" "$qloc")" "r2=0 ok=1" \
     "($qloc) a consumer already holding theirs' café.md is not about to change it, so no rulebook DEFER"
 done
@@ -2885,6 +2892,28 @@ qw_mut "quote-mut-changed" 'git -C "$DIST" -c core.quotePath=false diff --name-o
 qw_mut "quote-mut-r2" 'R2_CAND="$(git -C "$DIST" -c core.quotePath=false diff --name-only' \
   'R2_CAND="$(git -C "$DIST" diff --name-only "${BASE}..${THEIRS}" -- \' \
   qr_scan "r2=1 ok=0" "a C-quoted rulebook candidate maps to no consumer path and reads as about to change"
+# The class BEFORE the separators joined it: `, : = # ! @ % + ~` continued a token, so each
+# separator line read as ONE joined row and its first name dropped out of INVOKED.
+qw_mut_names() {
+  local mrc=0 got
+  QW_OLDC="$1" QW_NEWC="$2" python3 -c 'import os,sys
+o, n = os.environ["QW_OLDC"], os.environ["QW_NEWC"]
+s = open(sys.argv[1]).read()
+if s.count(o) != 1: sys.exit(3)
+open(sys.argv[2], "w").write(s.replace(o, n, 1))' "$GATE" "$QW/m/self-update-gate.sh" 2>/dev/null || mrc=$?
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ "$mrc" -ne 0 ] || cmp -s "$GATE" "$QW/m/self-update-gate.sh"; then
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s mutation matched nothing (anchor moved)\n' "quote-mut-sep"
+  else
+    got="$(qn_scan "$QW/m/self-update-gate.sh" c)"
+    case "$got" in
+      *,ca.sh,*|*,ka.sh,*|*,ea.sh,*|*,ha.sh,*) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED: the old class still split a separator pair [%s]\n' "quote-mut-sep" "$got" ;;
+      *) printf '  ok    %-16s KILLED (with , : = # inside the class the pairs read as joined tokens: %s)\n' "quote-mut-sep" "$got" ;;
+    esac
+  fi
+  cp "$GATE" "$QW/m/self-update-gate.sh"
+}
+qw_mut_names '/,:=#!@%+~]+' '/]+'
 rm -rf "$QW"
 
 echo
