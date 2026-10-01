@@ -19,6 +19,33 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.681.0] - 2026-09-30
+
+Batch 178's seventh release: the reconcile memo in `lib.sh` and `preclassify.sh`, together because
+`preclassify.sh` reads the memo's new status. Both are bootstrapping.
+
+### Backlog
+
+- **`BL-374`**. The reconcile memo no longer caches a read failure as an absent path. Its absence
+  check uses `layer-drift.sh`'s `have()` rules — a non-canonical spelling, a `..` component, an
+  absolute path and a pathspec-magic spelling read absent — and `memo_has_path` and `memo_rev_parse`
+  return 125, uncached, when git says "not there" and the absence cannot be confirmed: a missing
+  blob, a missing subtree, or a rev that does not resolve. `preclassify.sh` now refuses (exit 2) on
+  each of those, and on a `.dist-only` marker it cannot confirm, where it bucketed rows `MISSING` or
+  "not dist-only".
+- **`BL-100`**. `preclassify.sh --untangle` gives a consumer copy holding base's content with the
+  wrong exec bit `UPSTREAM-ONLY-ADD`, not `ALREADY-AT-THEIRS`, and lists the manifest under
+  `core.quotePath=false` (one site of `BL-364`, which stays open).
+- **`BL-355`**. `norm_lines` folds case in the caller's locale when the text is valid UTF-8 and a
+  probe shows the folder in use turns a multibyte capital into its lowercase. GNU `tr` folds byte by
+  byte and fails the probe, so the fold falls back to awk, then to the C fold; the verdict no longer
+  depends on which `tr` resolves.
+- **`BL-310`**, `lib.sh` half. The 125 status is what the `ledger-reverify.sh` release will refuse
+  on; until it ships, `ledger-reverify.sh` reads 125 as absent, exactly as it read 1 or 128 before.
+
+On a scratch copy of the reference consumer, 43 pulled ranges in all three modes give identical exit
+codes old against new, and byte-identical default and `--templates` output.
+
 ## [0.680.0] - 2026-09-30
 
 Batch 178's sixth release: the two retired-layer detectors alone, because a consumer's installed
