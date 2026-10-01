@@ -121,7 +121,9 @@
 #   NAMED-UPSTREAM   upstream's own history NAMES this entry's id. Emitted IN ADDITION to the
 #                    receipt's verdict, never instead of it — see THE NAME IS THE THIRD SIGNAL.
 #   NAMED-UPSTREAM-DOCS-ONLY  the same, but NO naming commit changes a path under core/ or
-#                    templates/ or cuts a release (changes VERSION) (`named_reach`).
+#                    templates/ that a consumer installs (a path inside a `core/fixtures/<name>/`
+#                    carrying a `.dist-only` marker at theirs is not installed) or cuts a release
+#                    (changes VERSION) (`named_reach`).
 #   STILL-LIVE      the entry still reproduces at theirs; stays open (filtered from the report).
 #   HAND-REVIEW      the entry declares `verify: manual` — no mechanical predicate by design.
 #   NEEDS-REVIEW     the receipt itself is at fault, and the DETAIL names the cause by its

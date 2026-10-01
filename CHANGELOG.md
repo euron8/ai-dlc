@@ -19,6 +19,25 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.689.0] - 2026-10-01
+
+Batch 179's sixth release: `ledger-reverify.sh` alone, with its new fixture. Bootstrapping, so it ships
+alone. A consumer runs its installed copy, so this takes effect on the pull after the one that delivers it.
+
+### Backlog
+
+- **`BL-405`**, part (a); parts (b) and (c) shipped in 0.684.0 and (d) is a record. A commit that touches
+  only a `core/fixtures/<name>/` carrying a `.dist-only` marker at theirs no longer scores as reaching
+  `core/`, so a naming commit that changes nothing a consumer installs reads `NAMED-UPSTREAM-DOCS-ONLY`.
+  The marker set is read once per run from `git ls-tree` at theirs, one name per line, so a fixture name
+  containing a space stays one key; a failed listing excludes nothing. The file listing passes
+  `--no-renames`, so `git mv core/scripts/b.sh core/fixtures/<dist-only>/b.sh` lists both paths and still
+  reads as touching an installed script. New shipping fixture `ledger-reverify-dist-only-reach`.
+- **`BL-360`**, share for this file, left open. The entry loop and the helper loops read files staged
+  under one per-run directory with each write's status read; a failed write ends the run at exit 2, and an
+  unusable `TMPDIR` is a refusal that names it when the engine is run directly (`emit-report.sh` renders
+  it as `DETECTOR-REFUSED` with the exit code only). Non-comment here-strings and heredocs: 4 on base, 0.
+
 ## [0.688.0] - 2026-10-01
 
 Batch 179's fifth release: the predicate-sites declaration and the fork-budget fixture's floor. No
