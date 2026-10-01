@@ -635,7 +635,15 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   grep over core/, and its mktemp self-probe. I13 +1, I82 +1 and I116 -1 net to +1, inside
 #   the instrument's own base spread of 2. Every other arm unchanged. HIGH reading 3196 plus
 #   the usual 6.
-FORK_BUDGET=3202
+#
+#   RAISED TO 3214 FOR ONE NEW ARM. `fork-profile.sh --section by-arm --stable` under `env -i`,
+#   base `origin/main` 54a45c25 then the BL-127 tip, in ONE clean detached worktree at the same
+#   path: base 3202 (spread 3202-3202), tip 3208 (spread 3207-3208), so +6. I118 is 7 by
+#   arm: one `mktemp`, one `mkdir`, one awk over the probe, one `rm`, one awk over the map and
+#   every fixture `.sh`, one awk testing whether the map maps the control fixture. Its first draft
+#   built the file list in a shell loop and cost 329; one glob filtered inside awk replaced it.
+#   HIGH reading 3208 plus the usual 6.
+FORK_BUDGET=3214
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
@@ -5980,7 +5988,13 @@ fi
 # trip the zero guard below on every assertion in enforcement-map-sites rather
 # than on a real defect. A walk also sees a script that is written but not yet
 # added, which is exactly when this idiom gets introduced.
-i54_files="$(find "$REPO_ROOT" -name .git -prune -o -type f -name '*.sh' -print 2>/dev/null)"
+# `.claude/worktrees/` IS PRUNED BY ITS EXACT PATH, AND NOT BY NAME. It holds gitignored agent
+# worktrees, each a full checkout carrying a builder's UNCOMMITTED work, and a run from the main
+# checkout walked into them and failed I54b on a file no commit carried (BL-401). The prune is
+# keyed on `-path "$REPO_ROOT/.claude/worktrees"` so a sibling such as `.claude/worktrees-not/`
+# is still scanned; a `-name worktrees` prune would also drop any tracked directory of that
+# name anywhere in the tree.
+i54_files="$(find "$REPO_ROOT" \( -name .git -o -path "$REPO_ROOT/.claude/worktrees" \) -prune -o -type f -name '*.sh' -print 2>/dev/null)"
 i54_n="$(printf '%s\n' "$i54_files" | grep -c .)"
 i54_fmt="'%""s'"
 i54_re="(printf[[:space:]]+${i54_fmt%\'}(\\\\n)?'|echo)[[:space:]]+\"[^\"]*\"[[:space:]]*[|][[:space:]]*grep[[:space:]]+-[A-Za-z]*q"
@@ -11769,6 +11783,152 @@ core/scripts/validate-adversarial-convergence.sh:"*) i117_ctl=1 ;;
           [ -z "$i117_j_off" ] || err "I117: --cite verdict(s) outside the MATCH / NOMATCH-<WORD> shape:$i117_j_off. The reader scan can only see compares of verdicts in that shape, and the owner keeps \`NOMATCH\` as the prefix so a \`case NOMATCH*\` reader is unmoved. Rename the verdict into the shape."
           [ -z "$i117_j_stray" ] || err "I117: a core script compares --cite stdout against a verdict core/scripts/validate-steering-budget.sh does not print:$i117_j_stray That compare can never be true, so whatever branch it guards is dead -- which is how an acquittal becomes a deny with every gate green. Compare against a member of the set in docs/vocabulary-index.md, or restore the emitter."
         fi
+      fi
+    fi
+  fi
+fi
+
+# --- I118: a mapped fixture's read-set rows carry every core/hooks/ path its run.sh or seed.sh names on a code line ---
+#
+# WHAT IT BINDS. `.ai-dlc-fixture-readsets.tsv` decides which fixtures a push runs, and the
+# pre-push runner TRUSTS a mapped fixture's rows: it runs that fixture only when a changed path
+# is among them. A row set missing a hook the fixture drives skips the fixture on exactly the
+# push that edits that hook (BL-127). The motivating instance was `pause-hook-origin`, which
+# resolves `core/hooks/ai-dlc-continue.sh` and once did not list it; the map is trace-derived and
+# a `--list` re-derivation refreshes only the fixtures it names, so a row set goes stale whenever
+# a fixture starts reading a hook between full re-traces.
+#
+# THE GRAMMAR. A NON-COMMENT line of a MAPPED fixture`s `run.sh` or `seed.sh` naming a
+# distribution-rooted hook path -- `core/hooks/<name>.sh`, or `../../hooks/<name>.sh` from the
+# fixture directory -- where `<name>.sh` really exists under core/hooks/. The pair is satisfied
+# when the fixture has the row `core/hooks/<name>.sh`. `seed.sh` is in the corpus because a
+# fixture can resolve the hook there and name it in `run.sh` only inside messages, which is the
+# shape `postcompact-rulebook-recovery` had. One awk over the map and every fixture file; the
+# existence test is an awk `getline` open, memoised per hook, so nothing forks per pair.
+#
+# FALSE-POSITIVE SET, MEASURED ON THE TREE THAT SHIPPED THIS: 0 findings, 46 satisfied pairs. The
+# narrowings that got it there, each measured on the same tree:
+#   - A BASENAME grammar (any line naming `ai-dlc-*.sh`) reads 27 omissions. 22 are comment-only
+#     mentions, which the comment rule drops by derivation, not by a list. The other 5 name a
+#     hook on a code line without opening the core copy: a consumer `.claude/hooks/` path in
+#     core-write-guard and upstream-routing, a bare `hooks/<name>` argument in
+#     layer-readopt-gate, a grep for the name in settings-merge-unparseable-template, and prose
+#     in gate-repair-record. The PATH grammar drops all five because none of them spells a
+#     distribution-rooted path. Gating the basename grammar on "the file names a distribution
+#     hook directory somewhere" brought three of the five back, so it was not taken.
+#   - Eleven path-shaped names are hooks a fixture SEEDS into its own tree (`ai-dlc-delta.sh`,
+#     `guard.sh`, ...) and that do not exist under core/hooks/. The existence test drops them; a
+#     row for a file the distribution does not carry would never match a changed path.
+#
+# THE RECORDED LIMIT: A HOOK REACHED THROUGH A VARIABLE-HELD DIRECTORY IS INVISIBLE. 15 satisfied
+# pairs on this tree are spelled `"$hd/ai-dlc-continue.sh"`, `resolve ai-dlc-x.sh` or a `pick`
+# list over `$HERE/../../hooks/$n`, and the path grammar cannot see them. Widening to bare
+# basenames would bring the five non-openers above back. An omission in that shape stays a
+# silent skip until the fixture is re-traced.
+#
+# A SEEDED COPY OF THE DISTRIBUTION HAS NO MAP, AND THAT IS NOT A FINDING. Every fixture driving
+# this validator copies `core scripts .githooks templates` into a mktemp root with no `.git`, and
+# the map lives at the repository root. So a missing map with no `.git` beside it stands the
+# corpus scan down; a missing or empty map in a tree that IS a repository fails. The self-probe
+# runs in both cases.
+#
+# ONE GLOB, FILTERED IN awk, NEVER A SHELL LOOP BUILDING A FILE LIST. The first draft appended
+# each existing run.sh/seed.sh to an array, and fork-profile.sh charged every append as a traced
+# command: 329 for this arm alone. `core/fixtures/*/*.sh` expands only to files that exist, and
+# the awk program skips every one whose basename is not run.sh or seed.sh.
+i118_scan() { # <root> -> "P<TAB>fx<TAB>hook" per satisfied pair, "B<TAB>fx<TAB>hook<TAB>file:line" per omission
+  awk -F'\t' -v root="$1" '
+    function exists(p,   x, r) { r = (getline x < p); close(p); return r >= 0 }
+    FNR == NR { if ($0 !~ /^#/ && NF >= 2) { mapped[$1] = 1; row[$1, $2] = 1 }; next }
+    FNR == 1 {
+      n = split(FILENAME, seg, "/"); fx = seg[n - 1]
+      use = (seg[n] == "run.sh" || seg[n] == "seed.sh")
+      rel = FILENAME; if (index(rel, root "/") == 1) rel = substr(rel, length(root) + 2)
+    }
+    !use { next }
+    /^[[:space:]]*#/ { next }
+    (fx in mapped) {
+      l = $0
+      while (match(l, /(core|\.\.\/\.\.)\/hooks\/[A-Za-z0-9_.-]+\.sh/)) {
+        h = substr(l, RSTART, RLENGTH); l = substr(l, RSTART + RLENGTH)
+        sub(/^.*\//, "", h)
+        if ((fx SUBSEP h) in seen) continue
+        if (!(h in real)) real[h] = exists(root "/core/hooks/" h)
+        if (!real[h]) continue
+        seen[fx, h] = 1
+        if ((fx SUBSEP "core/hooks/" h) in row) print "P\t" fx "\t" h
+        else print "B\t" fx "\t" h "\t" rel ":" FNR
+      }
+    }
+  ' "$1/.ai-dlc-fixture-readsets.tsv" "$1"/core/fixtures/*/*.sh 2>/dev/null
+}
+# `<scan output>` -> i118_b, i118_pp: breaches and satisfied pairs as `fx>hook ` strings, in
+# scan order, plus the breach detail for the message. Pure shell over a string in memory.
+i118_split() {
+  i118_b=""; i118_pp=""; i118_detail=""
+  while IFS="$(printf '\t')" read -r i118_k i118_x i118_h i118_w; do
+    case "$i118_k" in
+      B) i118_b="${i118_b}${i118_x}>${i118_h} "; i118_detail="${i118_detail} ${i118_x} omits core/hooks/${i118_h} (named at ${i118_w});" ;;
+      P) i118_pp="${i118_pp}${i118_x}>${i118_h} " ;;
+    esac
+  done <<EOF
+$1
+EOF
+}
+# SELF-PROBE FIRST, BOTH DIRECTIONS, under mktemp. Offenders: a mapped fixture naming
+# `core/hooks/<h>` in run.sh, and `../../hooks/<h>` in seed.sh, with no row for either.
+# Near-misses, each one property away from an offender: the same full path on a COMMENT line; a
+# consumer `.claude/hooks/` path; a bare `hooks/<h>` argument; the basename in prose; a path to a
+# hook that does not exist under core/hooks/; the same offender line in an UNMAPPED fixture; the
+# same offender line in a mapped fixture's `lib.sh`, which the glob reaches and the basename
+# filter must drop; and a pair whose row IS present, which must read back as satisfied.
+i118_probe="$(mktemp -d 2>/dev/null)"
+if [ -z "$i118_probe" ] || [ ! -d "$i118_probe" ]; then
+  err "I118 could not create its probe directory, so its self-probe did not run. A scan whose probe did not fire reports a clean corpus it never read; this fails instead."
+else
+  mkdir -p "$i118_probe/core/hooks" "$i118_probe/core/fixtures/user" "$i118_probe/core/fixtures/loose"
+  for i118_h in miss seedmiss carried cmt cons arg prose libonly; do : > "$i118_probe/core/hooks/ai-dlc-$i118_h.sh"; done
+  printf '%s\n' '# GENERATED probe map' 'user	core/fixtures/user/run.sh' 'user	core/hooks/ai-dlc-carried.sh' > "$i118_probe/.ai-dlc-fixture-readsets.tsv"
+  printf '%s\n' 'H="$D/core/hooks/ai-dlc-miss.sh"' 'bash "$D/core/hooks/ai-dlc-carried.sh"' \
+    '  # bash "$D/core/hooks/ai-dlc-cmt.sh"' 'cp x "$C/.claude/hooks/ai-dlc-cons.sh"' \
+    'bash "$REG" hooks/ai-dlc-arg.sh --apply' 'echo "ai-dlc-prose.sh is named here"' \
+    'bash "$D/core/hooks/ai-dlc-ghost.sh"' > "$i118_probe/core/fixtures/user/run.sh"
+  printf '%s\n' 'S="$HERE/../../hooks/ai-dlc-seedmiss.sh"' > "$i118_probe/core/fixtures/user/seed.sh"
+  printf '%s\n' 'bash "$D/core/hooks/ai-dlc-miss.sh"' > "$i118_probe/core/fixtures/loose/run.sh"
+  # A hook of its OWN, so the `seen` memo cannot absorb it into run.sh's offender.
+  printf '%s\n' 'bash "$D/core/hooks/ai-dlc-libonly.sh"' > "$i118_probe/core/fixtures/user/lib.sh"
+  i118_split "$(i118_scan "$i118_probe")"
+  rm -rf "$i118_probe" 2>/dev/null || true
+  if [ "$i118_b" != "user>ai-dlc-miss.sh user>ai-dlc-seedmiss.sh " ]; then
+    err "I118 SELF-PROBE FAILED: omissions read '${i118_b}', expected exactly 'user>ai-dlc-miss.sh user>ai-dlc-seedmiss.sh '. Either a mapped fixture naming a core hook path in run.sh or seed.sh with no row was not reported, or a near-miss (a comment, a consumer .claude/hooks/ path, a bare hooks/ argument, a basename in prose, a hook absent from core/hooks/, an unmapped fixture, a fixture file that is neither run.sh nor seed.sh) was. Every verdict below is unattributable."
+  elif [ "$i118_pp" != "user>ai-dlc-carried.sh " ]; then
+    err "I118 SELF-PROBE FAILED: satisfied pairs read '${i118_pp}', expected exactly 'user>ai-dlc-carried.sh '. The scan does not see a row that IS present, so the omission arm above passed on a scan that reads nothing but the offenders."
+  else
+    i118_map="$REPO_ROOT/.ai-dlc-fixture-readsets.tsv"
+    if [ ! -f "$i118_map" ] && [ ! -e "$REPO_ROOT/.git" ]; then
+      : # a seeded copy of the distribution: no map by construction, see the header
+    elif [ ! -s "$i118_map" ]; then
+      err "I118: $i118_map is missing or empty in a tree that is a repository. The pre-push runner reads it to decide which fixtures a push runs, so nothing here can say whether a mapped fixture's rows carry the hooks it drives."
+    else
+      # NO "ZERO PAIRS" GUARD HERE, DELIBERATELY. A fixture world whose map maps one synthetic
+      # fixture with only a commented mention scans to zero pairs CORRECTLY, and a guard on that
+      # failed it. The control below is what proves the scan reaches the real tree.
+      i118_split "$(i118_scan "$REPO_ROOT")"
+      # IN-CORPUS CONTROL, CONDITIONAL ON THE MAP: when pause-hook-origin is mapped, its use of
+      # core/hooks/ai-dlc-continue.sh must be SEEN as a pair, satisfied or not. A grammar that
+      # stopped reaching the real tree would otherwise report zero omissions forever. A map
+      # that does not map that fixture (a fixture world) has nothing to say about it.
+      i118_ctl=1
+      if awk -F'\t' '$1 == "pause-hook-origin" { f = 1; exit } END { exit !f }' "$i118_map"; then
+        case " $i118_b $i118_pp " in
+          *" pause-hook-origin>ai-dlc-continue.sh "*) : ;;
+          *) i118_ctl=0 ;;
+        esac
+      fi
+      if [ "$i118_ctl" -ne 1 ]; then
+        err "I118 IN-CORPUS CONTROL FAILED: pause-hook-origin is mapped and resolves core/hooks/ai-dlc-continue.sh, but the scan did not see that pair. The grammar no longer reaches the real tree, so zero omissions here prove nothing."
+      elif [ -n "$i118_b" ]; then
+        err "I118: a mapped fixture's read-set rows omit a core/hooks/ path its own run.sh or seed.sh names on a code line:${i118_detail} The pre-push runner runs a MAPPED fixture only when a changed path is in its rows, so a push touching only that hook skips the fixture that drives it. Re-trace the fixture (bash core/scripts/derive-fixture-readsets.sh --list <fixture> --tracer sandbox) and commit the map; never hand-edit a row, because the next derivation reverts it."
       fi
     fi
   fi

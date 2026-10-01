@@ -135,3 +135,4 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I115 | no file that sources reconcile/lib.sh can take the memo's EXIT cleanup away |
 | I116 | a SHIPPING fixture that uses a sibling fixture requires that sibling to ship |
 | I117 | the `--cite` verdict set is ONE set across its emitter and every reader that compares it |
+| I118 | a mapped fixture's read-set rows carry every core/hooks/ path its run.sh or seed.sh names on a code line |
