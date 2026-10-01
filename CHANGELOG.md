@@ -19,6 +19,26 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.695.0] - 2026-10-01
+
+Batch 181's third release: `preclassify.sh` alone. Bootstrapping, so it ships alone; a consumer runs its installed
+copy, so this takes effect on the pull after the one that delivers it.
+
+### Backlog
+
+- `BL-360` (partial): `preclassify.sh` feeds no decision from a here-string or heredoc. `setup_sited` and
+  `is_machinery` tested membership with `grep -qxF` over a here-string and a heredoc; under a write limit bash
+  could not create the temp file, grep read nothing, and the run exited 0 with a setup-sited file bucketed
+  `UPSTREAM-ONLY-ADD` and a machinery file at the consumer's own `skill_commit` bucketed `BOTH-CHANGED->CLASSIFY`.
+  Both now use an in-shell `case` test (`pc_has_line`, the shape of `layer-drift.sh`'s `ld_has_line`), which
+  writes nothing and forks nothing (one `grep` fork per call removed). The RELOCATIONS heredoc is a `for` over
+  its three literal entries. An invalid-UTF-8 path, which `grep` refused under a UTF-8 locale and read as "not a
+  member", is now answered.
+- `BL-364` (partial): `mode_at_theirs` lists raw paths. It reads only the mode field, so no output moves.
+- `procsub-staged-refusal-boot`: forced cells P2 and P3 under `ulimit -f 1`, a calibration probe, mutants
+  restoring each base spelling, and a spelling arm holding `preclassify.sh` at zero here-strings, heredoc openers
+  and `< <(` (which also rejects `done < <(printf …)`).
+
 ## [0.694.0] - 2026-10-01
 
 Batch 181's second release: `self-update-gate.sh` with its fixture runner `self-update-fixtures.sh`. Bootstrapping,
