@@ -26,7 +26,8 @@ stylesheet, runs the accessibility/device check, writes the result to
 (present) and section 5 (proceed). **Sections 3 and 5 stay inline** — reading
 the artifact, presenting it non-blocking to the human, and routing to
 implementation are lead actions. An absent artifact at the returned path is
-non-delivery; the lead re-dispatches (Rule 24 delivery discipline).
+non-delivery; the lead re-dispatches (Rule 24 delivery discipline). One `ux` agent: Rule 28
+"Split dispatch" serial exception 3, as section 2 checks the mockups section 1 produces.
 
 ### 1. Generate Mockups
 

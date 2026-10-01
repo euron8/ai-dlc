@@ -13,7 +13,7 @@ user handoff request (directly, or in response to a Rule 2(b)/(c)
 reminder), or by auto-handoff (SKILL.md "Auto-handoff") executing the
 path (a) procedure unchanged at a safe seam. Rule 11(b) preamble
 applies. Only path (a) initiates a handoff; paths (b)/(c) are reminders
-only.
+only. `shard: n/a (no dispatch)`.
 
 Reading this file recorded `_bmad-output/.handoff-in-progress`
 (`ai-dlc-handoff-entry.sh`). You do not create it. A compaction can land on

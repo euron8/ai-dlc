@@ -21,7 +21,8 @@ analysis and writes the inventory + gap report to
 `_bmad-output/planning-artifacts/brownfield-inventory.md`, returning
 only `{artifact_path, summary, gaps}`. Then resume at section 4 (Gate
 Validation). If `planning_offload: off`, run all sections inline. Per
-SKILL.md Rule 24.
+SKILL.md Rule 24 (Rule 28, "Split dispatch": surfaces axis; a single-surface scope stays one
+analyst).
 
 ### 1. Codebase Scan
 

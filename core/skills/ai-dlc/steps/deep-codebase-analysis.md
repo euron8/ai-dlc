@@ -21,7 +21,8 @@ sections 1–5 — it performs the full codebase exploration and writes
 the complete analysis to
 `_bmad-output/planning-artifacts/codebase-analysis.md`, returning only
 `{artifact_path, summary, gaps}`. Then resume at section 6 (Route). If
-`planning_offload: off`, run all sections inline. Per SKILL.md Rule 24.
+`planning_offload: off`, run all sections inline. Per SKILL.md Rule 24 (Rule 28, "Split
+dispatch": surfaces axis; a single-surface scope stays one analyst).
 
 ### 1. Structure and Stack
 

@@ -100,7 +100,8 @@ entire sprint implementation. The round is sharded per `_gate-procedures.md`, "V
 cycle" item 1 (Rule 28, "Split dispatch": seats x parts axis). That means one persona agent per
 (seat, story ordinal) from `merge-adversarial-shards.sh --map` over the sprint's stories, plus
 one cross-story round. The lead's join counts the per-seat files against that map before
-dispositioning.
+dispositioning, only files that item names; its seats x sections axis applies to a single-document
+subject, not to this one.
 - Does the implementation match the requirements?
 - Are there cross-cutting concerns?
 - Is the test coverage adequate across the sprint as a whole?

@@ -78,6 +78,8 @@ in one bounded-join beat (Rule 29). The axes:
   per surface, no cross-part agent.
 - **seats x parts** -- a party-mode round over a files-axis subject: one
   persona agent per (seat, part) plus one cross-part round.
+- **seats x sections** -- a party-mode round over a sections-axis subject:
+  one persona agent per (seat, part) plus one cross-part round per seat.
 
 **The partition is derived, never listed.** The part set comes from a
 program or from the tree -- the artifact directory's listing, the

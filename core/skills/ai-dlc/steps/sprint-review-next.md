@@ -51,7 +51,8 @@ Run the validation cycle (`_gate-procedures.md`, "Validation cycle") on this
 sprint's stories — its passes use the **Adversarial review dispatch** and
 **Adversarial repair dispatch** sub-routines. Parameters:
 - **party-mode seats / subject:** SM, Dev, Architect, TEA — every story in this
-  sprint: every acceptance criterion, every edge case, every dependency.
+  sprint: every acceptance criterion, every edge case, every dependency
+  (Rule 28, "Split dispatch": seats x parts axis).
 - **cross-sprint check:** for each story, verify it accounts for patterns, APIs,
   and components introduced in the previous sprint.
 - **adversarial focus:** missing acceptance criteria, untestable criteria, scope

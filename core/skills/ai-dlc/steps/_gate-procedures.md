@@ -255,8 +255,17 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    (seat, story ordinal) plus one cross-story round scoped to interactions between stories. The
    ordinals are the ones `scripts/ai-dlc/merge-adversarial-shards.sh --map <shards-dir>` prints
    (`<shards-dir>` is the next review pass's `s<N>/shards/<artifact>-p<M>/`, which must exist),
-   and each agent's brief carries its `shard:` line. The lead's join COUNTS the files against
-   seats x the `--map` line count, plus one cross file per seat, before it proceeds.
+   and each agent's brief carries its `shard:` line.
+   **When the subject is a single document** (one path), the round is sharded (Rule 28,
+   "Split dispatch": seats x sections axis) over the parts
+   `scripts/ai-dlc/partition-document.sh --map <doc>` prints: one persona agent per (seat,
+   part ordinal) plus one cross-part round per seat scoped to interactions between sections. A `SERIAL:` answer keeps one agent per seat
+   (Rule 28 serial exception 4). `PART_CAP` in `partition-document.sh` bounds a round at 8 parts:
+   36 spawns at four seats, 45 at five.
+   A subject that meets neither case keeps one agent per seat.
+   The lead's join COUNTS, before it proceeds, only files named `<step>-<seat>-<ordinal>.md` and
+   `<step>-<seat>-cross.md` for this step, seats taken from the step's seat list and never from
+   directory entries, against seats x the `--map` line count plus one cross file per seat.
    `/bmad-party-mode` internals are not ai-dlc's, so that count is the only check available.
    **Both flags are load-bearing and neither is optional — SKILL.md Rule 20 (i)
    owns why.**

@@ -39,7 +39,8 @@ Run the validation cycle (`_gate-procedures.md`, "Validation cycle") on all
 repaired and backfilled artifacts — its passes use the **Adversarial review
 dispatch** and **Adversarial repair dispatch** sub-routines. Parameters:
 - **party-mode seats / subject:** PM, Architect, Dev — all artifacts against the
-  codebase: do they accurately represent reality?
+  codebase: do they accurately represent reality? Rule 28 "Split dispatch" has no axis for a
+  multi-artifact subject, so the round keeps one agent per seat.
 - **adversarial focus:** none beyond the adversary's default contract.
 - **`Seam D` label:** `doc-repair-backfill adversarial pass <N>`.
 - **on convergence:** append a changelog for each modified artifact to

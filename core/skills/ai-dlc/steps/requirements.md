@@ -207,6 +207,8 @@ Run the validation cycle (`_gate-procedures.md`, "Validation cycle") — its pas
 product brief, the spec kernel, and the PRD as ONE subject. Parameters:
 - **party-mode seats / subject:** Architect, Dev — walk all three artifacts. The Architect
   seat challenges every `architecture_impact: none` line in `architecture-impact.md`.
+  Rule 28 "Split dispatch" has no axis for a multi-artifact subject, so the round keeps one
+  agent per seat.
 - **source-fidelity check:** where features originate from carry-over items or user
   instructions with specific details, verify those details are preserved and flag any
   generalization (`discovery.md` §5's brief bullet); verify each requirement implements what
