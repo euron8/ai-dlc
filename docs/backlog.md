@@ -1823,7 +1823,22 @@ a read-set row the operator must derive with root.
 
 Discharges nothing upstream; this is distribution-internal and ranks below any PC-backed entry.
 
-verify: sh h=core/fixtures/gate-verdict-grep-shape/run.sh; [ -f "$h" ] || exit 9; b=core/fixtures/backlog-receipt-binding/run.sh; [ -f "$b" ] || exit 9; [ -f core/fixtures/backlog-receipt-binding/.dist-only ] || exit 9; grep -q 'docs/backlog.md' "$h" && exit 9; grep -qE 'BL-040|CHECK_LOADED: 5' "$b" && exit 0; exit 1
+Held note (batch 178): the join now lives as arms `rj-*` in `core/fixtures/backlog-receipt-binding`
+(`.dist-only`). BL-040's receipt is DERIVED from `docs/backlog.archive.md` by entry id at run time and
+run over every `mode == "..."` branch of gate-verdict-grep-shape's seed builder; a shape it closes
+over (exit 0) must carry a row in that fixture's verdict tables whose verdict its own oracle
+reproduces. Re-derived at this tip: **8 of 10** seeded shapes are receipt-blind (the entry's "three
+of the six" predates the bound and near-miss seeds); `no-read` (exit 1) and `no-anchor6` (exit 2)
+are receipt-owned. Self-probes in three directions before the corpus: the `comment` row deleted is
+reported UNCOVERED, the receipt-owned `no-read` row deleted stays quiet, and `comment` relabelled
+GREEN is reported UNREPRODUCED. Known limit: a seed branch deleted together with its row is
+invisible. The old receipt's `grep -qE 'BL-040|CHECK_LOADED: 5'` was closable by a comment; the
+replacement requires the archive path and the sibling fixture on a non-comment line AND BL-040's
+receipt body absent from the fixture. Scored: base 1, fix 0, archive named only in a comment 1,
+body pasted 1, sibling fixture absent 9. A read-set re-trace is owed for `backlog-receipt-binding`
+(three new reads: the archive, gate-verdict-grep-shape/run.sh, gate-validation.md).
+
+verify: sh h=core/fixtures/gate-verdict-grep-shape/run.sh; b=core/fixtures/backlog-receipt-binding/run.sh; a=docs/backlog.archive.md; [ -f "$h" ] && [ -f "$b" ] && [ -f "$a" ] || exit 9; [ -f core/fixtures/backlog-receipt-binding/.dist-only ] || exit 9; grep -q 'docs/backlog.md' "$h" && exit 9; r="$(awk '$0 == "## BL-040" || index($0, "## BL-040 ") == 1 { f = 1; next } f && /^## / { exit } f && /^verify: sh / { sub(/^verify: sh /, ""); print; exit }' "$a")"; [ -n "$r" ] || exit 9; grep -qF "$r" "$b" && exit 1; grep -qF 'CHECK_LOADED: 5 /,/CHECK_LOADED: 6' "$b" && exit 1; c="$(grep -v '^[[:space:]]*#' "$b")"; grep -qF 'docs/backlog.archive.md' <<<"$c" && grep -qF 'gate-verdict-grep-shape/run.sh' <<<"$c" && exit 0; exit 1
 
 ## BL-301 — the gate runs no shipped fixture in the consumer layout, so a fixture red on every consumer ships green
 
