@@ -698,15 +698,18 @@ ap_ks_added() {
 # upstream retired a skill, then carried the retired name on the consumer side, and `--finish` told
 # the operator to add it to the extension -- bringing back a skill upstream removed. Both modes now
 # ask this one function whether the schema is an in-place edit at all.
+#
+# The bucket rows are handed down through `UD_FLAG`/`UD_PC`, which each caller sets first (phase 0
+# from `$PC`, `--finish` from finish_verify_tree's staged rows); empty `UD_FLAG` derives them.
 ud_capture() {
-  if [ -n "${1:-}" ]; then
-    detector_run ud unregistered-drift.sh --bucket-rows "$1" "$DIST" "$BASE" "$CONSUMER" "$THEIRS"
+  if [ -n "$UD_FLAG" ]; then
+    detector_run ud unregistered-drift.sh "$UD_FLAG" "$UD_PC" "$DIST" "$BASE" "$CONSUMER" "$THEIRS"
   else
     detector_run ud unregistered-drift.sh "$DIST" "$BASE" "$CONSUMER" "$THEIRS"
   fi
   UD_RC=$?
   UD=""; UD_NA=""
-  [ "$UD_RC" -eq 0 ] || return 0
+  [ "$UD_RC" = 0 ] || return 0
   UD="$(awk -F'\t' '$1=="HARD-UNREGISTERED-CORE-DRIFT"{print $2}' "$DT_DIR/ud.out")"
   UD_NA="$(awk -F'\t' '$1=="HARD-DRIFT-SCAN-UNAVAILABLE"{print $3; exit}' "$DT_DIR/ud.out")"
   return 0
@@ -805,11 +808,13 @@ fi
 # handed the drift loop below an empty list -- read as
 # "no in-place core edit" -- and the run went on to overwrite core. Either now draws a DECISION
 # row, which withholds the re-stamp; `detector_refused` is the one spelling of it.
-ud_capture "${UD_FLAG:+$UD_PC}"
+ud_capture
 if [ "$UD_RC" -ne 0 ]; then
   detector_refused unregistered-drift unregistered-drift.sh "-" "$UD_RC" ud
-elif [ -n "$UD_NA" ]; then
-  say DECISION unregistered-drift-refused "-" "DETECTOR-REFUSED: unregistered-drift.sh emitted HARD-DRIFT-SCAN-UNAVAILABLE — this section is NOT a finding of 'none'; ${UD_NA}"
+else
+  if [ -n "$UD_NA" ]; then
+    say DECISION unregistered-drift-refused "-" "DETECTOR-REFUSED: unregistered-drift.sh emitted HARD-DRIFT-SCAN-UNAVAILABLE — this section is NOT a finding of 'none'; ${UD_NA}"
+  fi
 fi
 [ -n "$UD_PC" ] && rm -f "$UD_PC"
 
@@ -2160,7 +2165,7 @@ finish_verify_tree() {
 # A schema byte-equal to theirs adds nothing, and the detector is not run for it. A diff or a
 # drift scan that could not run is a withhold, never a pass.
 finish_reapply_owed() {
-  local _rel=schemas/provenance-block.json _cons _ext _owed _s _added _ud_rows=""
+  local _rel=schemas/provenance-block.json _cons _ext _owed _s _added
   # An unresolvable <theirs> is write_stamp()'s `restamp-unresolvable` refusal, as in
   # finish_verify_tree(); a row here would pre-empt it with a withheld row naming the wrong cause.
   git -C "$DIST" rev-parse -q --verify "${THEIRS}^{commit}" >/dev/null 2>&1 || return 0
@@ -2170,10 +2175,11 @@ finish_reapply_owed() {
     if [ "$ap_drc" = 1 ]; then
       # finish_verify_tree's staged rows are the same preclassify call, handed down as phase 0
       # hands $PC down; absent (it returned early) the detector derives them itself.
-      [ "$ap_stage_dead" = 0 ] && [ -f "$AP_TMP/fv-rows" ] && _ud_rows="$AP_TMP/fv-rows"
-      ud_capture "$_ud_rows"
-      if [ "$UD_RC" -ne 0 ] || [ -n "$UD_NA" ]; then
-        say WORKLIST finish-refile-unverified "$_rel" "unregistered-drift.sh $([ "$UD_RC" -ne 0 ] && printf 'exited %s' "$UD_RC" || printf 'could not scan (%s)' "$UD_NA"), so whether this schema is an in-place edit -- and so whether a known_skills entry is still unrefiled -- is UNKNOWN and the stamp is not advanced. Re-run reconcile/unregistered-drift.sh with the same four arguments, fix what it reports, then re-run --finish."
+      UD_FLAG=""; UD_PC=""
+      if [ "$ap_stage_dead" = 0 ] && [ -f "$AP_TMP/fv-rows" ]; then UD_FLAG="--bucket-rows"; UD_PC="$AP_TMP/fv-rows"; fi
+      ud_capture
+      if [ "$UD_RC" != 0 ] || [ -n "$UD_NA" ]; then
+        say WORKLIST finish-refile-unverified "$_rel" "unregistered-drift.sh $([ "$UD_RC" != 0 ] && printf 'exited %s' "$UD_RC" || printf 'could not scan (%s)' "$UD_NA"), so whether this schema is an in-place edit -- and so whether a known_skills entry is still unrefiled -- is UNKNOWN and the stamp is not advanced. Re-run reconcile/unregistered-drift.sh with the same four arguments, fix what it reports, then re-run --finish."
         ap_drc=refused
       else
         case "${NL_CH}${UD}${NL_CH}" in
