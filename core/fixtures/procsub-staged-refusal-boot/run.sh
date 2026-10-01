@@ -1659,7 +1659,12 @@ fi
 # tip alike. This spelling count is its guard, and it also refuses `done < <(printf …)`, which
 # passes every forced cell because a `printf` producer cannot fail to stage. Probed on mktemp copies
 # BEFORE the corpus, in both directions, with the 1749b545 engine as the positive control.
-pc_spell() { awk '/^[[:space:]]*#/ { next } { l = $0; gsub(/<<<<+/, "", l) } l ~ /<<</ || l ~ /<<-?[\047"]?[A-Za-z_]/ || l ~ /< <\(/ { n++ } END { print n + 0 }' "$1"; }
+# The program spans lines so the `gsub` and the octal quote escape never share one: S7 of
+# validate-shell-portability.sh reads `sub(` plus a later backslash-digit as a backreference.
+pc_spell() { awk '/^[[:space:]]*#/ { next }
+  { l = $0; gsub(/<<<<+/, "", l) }
+  l ~ /<<</ || l ~ /<<-?[\047"]?[A-Za-z_]/ || l ~ /< <\(/ { n++ }
+  END { print n + 0 }' "$1"; }
 cp "$RECON/preclassify.sh" "$_sp/pc-offender.sh" && cp "$RECON/preclassify.sh" "$_sp/pc-nearmiss.sh" \
   && git -C "$TREE_TOP" show "1749b545:core/skills/ai-dlc-update/reconcile/preclassify.sh" > "$_sp/pc-base.sh" 2>/dev/null \
   || { echo "FIXTURE ERROR: preclassify spell probe copies" >&2; exit 2; }
