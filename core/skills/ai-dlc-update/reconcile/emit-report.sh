@@ -137,6 +137,26 @@ er_pdiff() {
   [ "$_c" -eq 0 ] || return 2
   return "$_d"
 }
+# NO HERE-STRING FEEDS A DECISION IN THIS FILE (BL-360). bash 3.2 stages every `<<<` to a temp file,
+# and when that write fails -- `ulimit -f`, a full TMPDIR -- it runs the command on EMPTY stdin at
+# the command's own exit: an awk sample read a real diff as `ONLY IN …: none`, the retired-token
+# projection rendered `RETIRED-CONTRACT-TOKEN: none`, and `--verify` never saw preclassify's
+# refusal and passed a region nobody classified. Each site now reads a file this helper wrote,
+# with the write's status read and a named refusal on failure.
+#
+# er_stage <name> <value> -- writes the bytes a here-string would feed (`printf '%s\n'`) to
+# $_er_tmp/<name> and returns the write's status; 125 when there is no staging directory. The
+# builtin `printf` writes into a PIPE, never into the file, for apply.sh's `ap_stage` reason: a
+# failed builtin write to a file leaves its unflushed bytes in this shell's stdout buffer, and in
+# print mode the next stdout write is the REGION (measured on bash 3.2.57 under `ulimit -f 1`: a
+# 2000-byte value, 1024 bytes landed, the other 977 came out ahead of the next echo). `cat`, a
+# child, takes the write error, and `pipefail` (set above) hands its status back. There is no
+# "first failure ends staging" flag as in `ap_stage`: the orientation loop is a pipeline subshell,
+# so a flag set there dies with the iteration -- every site refuses on its own write instead.
+er_stage() {
+  [ -n "$_er_tmp" ] || return 125
+  printf '%s\n' "$2" | cat > "$_er_tmp/$1"
+}
 
 sub() { printf '\n**%s**\n' "$1"; }
 none_or() { if [ -n "$1" ]; then printf '%s\n' "$1"; else echo "none"; fi; }
@@ -239,7 +259,7 @@ render() {
   if [ "$pc_rc" -ne 0 ]; then
     pc_refused="exited ${pc_rc} without classifying"
   elif [ -z "$pc" ]; then
-    pc_rng="$(git -C "$DIST" diff --name-only "$BASE" "$THEIRS" -- core/ 2>/dev/null)"
+    pc_rng="$(git -C "$DIST" -c core.quotePath=false diff --name-only "$BASE" "$THEIRS" -- core/ 2>/dev/null)"
     pc_rng_rc=$?
     if [ "$pc_rng_rc" -ne 0 ]; then
       pc_refused="returned no rows and whether \`${BASE}..${THEIRS}\` changes \`core/\` could not be read (git diff exited ${pc_rng_rc})"
@@ -300,8 +320,10 @@ render() {
     # to stderr, which this call discards. `retired-contract-token/run.sh` asserts both halves.
     local rt_pc=""
     rt_pc="$(mktemp 2>/dev/null)" || rt_pc=""
+    # Through a pipe, for `er_stage`'s reason: a failed builtin write into the file would carry its
+    # unflushed bytes into the region on the next stdout write.
     if [ -n "$rt_pc" ]; then
-      printf '%s\n' "$pc" > "$rt_pc" || rt_pc=""
+      printf '%s\n' "$pc" | cat > "$rt_pc" 2>/dev/null || { rm -f "$rt_pc"; rt_pc=""; }
     fi
     sub "Semantic worklist orientation — OURS = consumer, THEIRS = upstream at theirs. Every ours/theirs claim in the resolution prose MUST be derived from this block, never from recall:"
     printf '%s\n' "$pc" | awk -F'\t' 'NF>=4 && $4 ~ /CLASSIFY/ {print $2"\t"$3}' | sort -u \
@@ -340,7 +362,7 @@ render() {
         # with no row for the first and non-zero only for the second. An empty `t` from a SUCCESSFUL
         # show (an empty file) keeps its old rendering, so no healthy region moves.
         t=""; t_rc=0
-        t_ls="$(git -C "$DIST" ls-tree "$THEIRS" -- "$cp" 2>/dev/null)"; t_ls_rc=$?
+        t_ls="$(git -C "$DIST" -c core.quotePath=false ls-tree "$THEIRS" -- "$cp" 2>/dev/null)"; t_ls_rc=$?
         if [ "$t_ls_rc" -eq 0 ] && [ -n "$t_ls" ]; then
           t="$(git -C "$DIST" show "${THEIRS}:${cp}" 2>/dev/null)"; t_rc=$?
         fi
@@ -360,7 +382,7 @@ render() {
           # is the refusal diff would have given, never an empty diff.
           # Piped through `er_pdiff`, whose header says why a two-path diff would move the region.
           d=""; d_rc=0
-          if [ -z "$_er_tmp" ] || ! printf '%s\n' "$t" > "$_er_tmp/orient.theirs" 2>/dev/null; then
+          if ! er_stage orient.theirs "$t" 2>/dev/null; then
             d_rc=staging-failed
           else
             d="$(er_pdiff "$_er_tmp/orient.theirs" "$local_ours" 2>/dev/null)"; d_rc=$?
@@ -379,9 +401,15 @@ render() {
             # line and the sample after it, so the count is read off the same run as the lines and
             # a count that is not a number refuses rather than defaulting to 0. Same filter as the
             # chain it replaces: lines opening `< ` / `> `, marker stripped, whitespace-only dropped.
+            # The diff is STAGED once per side and the awk reads the file (BL-360, `er_stage`): a
+            # failed staging write is the refusal below, named `staging-<rc>`, never an empty diff.
+            samp=""; samp_rc=0
+            er_stage orient.diff "$d" 2>/dev/null || samp_rc="staging-$?"
+            if [ "$samp_rc" = 0 ]; then
             samp="$(awk -v m="$marker" '
               substr($0, 1, 2) == m " " { x = substr($0, 3); if (x ~ /[^[:space:]]/) { c++; s = s x "\n" } }
-              END { printf "%d\n%s", c, s }' <<<"$d")"; samp_rc=$?
+              END { printf "%d\n%s", c, s }' "$_er_tmp/orient.diff")"; samp_rc=$?
+            fi
             # `$nl`, not `$'\n'` inside the double-quoted expansion: bash 3.2 does not expand
             # ANSI-C quoting there, and the pattern would match a literal `$'\n'`.
             nl='
@@ -443,7 +471,15 @@ render() {
             rt="$(bash "$SELF/retired-tokens.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" "$cp" 2>/dev/null)"
             rt_rc=$?
           fi
-          [ "$rt_rc" -eq 0 ] && { rt="$(awk -F'\t' '{print $3}' <<<"$rt")" || rt_rc="projection-$?"; }
+          # The projection reads a STAGED copy of the rows (BL-360, `er_stage`); a failed write is
+          # `staging-<rc>`, which the refusal below renders, never an empty token list.
+          if [ "$rt_rc" -eq 0 ]; then
+            if er_stage orient.rt "$rt" 2>/dev/null; then
+              rt="$(awk -F'\t' '{print $3}' "$_er_tmp/orient.rt")" || rt_rc="projection-$?"
+            else
+              rt_rc="staging-$?"
+            fi
+          fi
           if [ "$rt_rc" != 0 ]; then
             echo "DETECTOR-REFUSED  retired-tokens.sh exited ${rt_rc} for ${cp} without scanning, so its RETIRED-CONTRACT-TOKEN line is NOT a finding of 'none'. Run it directly: reconcile/retired-tokens.sh <dist> <base> <theirs> <consumer> ${cp}"
           elif [ -n "$rt" ]; then
@@ -609,8 +645,12 @@ render() {
   bash "$SELF/layer-drift.sh"        "$DIST" "$BASE" "$THEIRS" "$CONSUMER" >"$ld_raw" 2>/dev/null
   ld_rc=$?
   ud_pc="$(mktemp 2>/dev/null)" || ud_pc=""
+  # The write's status is READ (BL-360): a partial bucket file handed down as the flag would be
+  # read as the whole classification. A failed write passes no flag, the re-deriving path above.
+  if [ -n "$ud_pc" ] && ! printf '%s\n' "$pc" | cat > "$ud_pc" 2>/dev/null; then
+    rm -f "$ud_pc"; ud_pc=""
+  fi
   if [ -n "$ud_pc" ]; then
-    printf '%s\n' "$pc" > "$ud_pc"
     bash "$SELF/unregistered-drift.sh" --bucket-rows "$ud_pc" \
          "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >"$ud_raw" 2>/dev/null
     ud_rc=$?
@@ -854,14 +894,29 @@ fi
 # The `--templates` refusal is a different line (`preclassify.sh --templates exited`) and is not
 # matched either; it is decided by the byte-compare like every other detector's.
 #
-# HERE-STRINGS, NOT `printf | grep -q`: `grep -q` leaves at its first match while printf is still
-# writing a render that can exceed the pipe buffer, and the reader must not depend on the writer's
-# status (I54/I54b). The cause-line extraction reads the same here-string and takes the first
-# line itself, so no stage of it can close early on a writer either.
-if grep -Eq '^DETECTOR-REFUSED  preclassify\.sh (exited|returned) ' <<<"$want"; then
+# A STAGED FILE, NOT `printf | grep -q` AND NOT A HERE-STRING. `grep -q` leaves at its first match
+# while printf is still writing a render that can exceed the pipe buffer (I54/I54b). The here-string
+# that replaced it is staged by bash itself, and a failed staging write ran grep on EMPTY stdin --
+# "no refusal line" -- so a render whose classifier refused verified as present, current and
+# complete, and apply.sh writes on that 0 (BL-360). The render is staged once with its status read,
+# and ONE grep both decides and extracts: 0 = the refusal is there, 1 = it is not, >=2 = grep could
+# not read, which is a refusal too and never "not there". The cause is cut with parameter expansion,
+# so no third reader exists. A failed staging or read decides nothing: UNDECIDED, exit 1 -- never 3,
+# which tells apply.sh the difference is safe.
+if er_stage verify.render "$want" 2>/dev/null; then
+  _pc_cause="$(grep -m1 -E '^DETECTOR-REFUSED  preclassify\.sh (exited|returned) ' "$_er_tmp/verify.render")"; _pc_rc=$?
+else
+  _pc_rc="staging-$?"
+fi
+if [ "$_pc_rc" != 0 ] && [ "$_pc_rc" != 1 ]; then
+  echo "FAIL: the fresh render could not be checked for a preclassify refusal (${_pc_rc}), so whether its buckets, worklist and deletions were classified on this run is unknown — the region cannot be verified." >&2
+  echo "  cause: UNDECIDED — the fresh render could not be staged or read for the preclassify check (${_pc_rc}); check that TMPDIR (${TMPDIR:-/tmp}) is writable and has space and that no file-size limit is set, then re-run --verify. Do not re-approve on this run's reading." >&2
+  exit 1
+fi
+if [ "$_pc_rc" = 0 ]; then
   echo "FAIL: preclassify.sh did not classify on this run, so the mechanical region cannot be verified — its buckets, worklist and deletions are unknown, not empty." >&2
-  _pc_cause="$(grep -m1 -E '^DETECTOR-REFUSED  preclassify\.sh (exited|returned) ' <<<"$want")"
-  _pc_cause="$(sed -E 's/^DETECTOR-REFUSED  //; s/, so this section.*//' <<<"$_pc_cause")"
+  _pc_cause="${_pc_cause#DETECTOR-REFUSED  }"
+  _pc_cause="${_pc_cause%%, so this section*}"
   echo "  cause: PRECLASSIFY-REFUSED — ${_pc_cause}. Run reconcile/preclassify.sh <dist> <base> <theirs> <consumer> directly, fix what it reports, then re-render and re-approve." >&2
   exit 1
 fi
@@ -926,7 +981,7 @@ er_sets_why=""
 only_render=""; only_report=""
 if [ -z "$_er_tmp" ]; then
   er_sets_why="no staging directory could be created"
-elif ! printf '%s\n' "$want" > "$_er_tmp/sets.want" || ! printf '%s\n' "$got" > "$_er_tmp/sets.got"; then
+elif ! er_stage sets.want "$want" 2>/dev/null || ! er_stage sets.got "$got" 2>/dev/null; then
   er_sets_why="the two regions could not be staged"
 elif ! norm_rows < "$_er_tmp/sets.want" > "$_er_tmp/sets.want-rows"; then
   er_sets_why="normalising the fresh render's rows failed"
@@ -989,8 +1044,7 @@ echo "  Diff (want vs report):" >&2
 # Staged, not `<( )`, for the fd race the orientation diff states (3-8 in 2000 under 4 bash 3.2
 # workers). This diff is the operator's only view of WHAT differs, so a failed one says so
 # instead of printing an empty section under the heading above.
-if [ -n "$_er_tmp" ] && printf '%s\n' "$want" > "$_er_tmp/verify.want" 2>/dev/null \
-   && printf '%s\n' "$got" > "$_er_tmp/verify.got" 2>/dev/null; then
+if er_stage verify.want "$want" 2>/dev/null && er_stage verify.got "$got" 2>/dev/null; then
   # Piped through `er_pdiff`, not two paths, so the diagnostic reads exactly as it did.
   er_pdiff "$_er_tmp/verify.want" "$_er_tmp/verify.got" >&2; _vd_rc=$?
   [ "$_vd_rc" -ge 2 ] && echo "  (the diff itself failed, exit ${_vd_rc}: the difference above is decided, but its lines are not shown)" >&2
