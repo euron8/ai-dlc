@@ -658,8 +658,9 @@ named_absorbed() { # <label> -> "<how> <n> <sha>,<sha>,... <code|docs>" if upstr
 # `core/` or `templates/` or changes `VERSION`, `docs` when none does.
 #
 # A COMMIT THAT CHANGES NOTHING A CONSUMER INSTALLS CANNOT HAVE ABSORBED A CONSUMER DEFECT ON ITS
-# OWN. `core/` and `templates/` are the two trees `install.sh` copies into a consumer; a commit
-# touching neither is a plan, a review or a ledger drain that MENTIONS the id. Measured against
+# OWN. `core/` and `templates/` are the two trees `install.sh` copies into a consumer, and `VERSION`
+# marks the release that carries them; a commit touching none of the three is a plan, a review or
+# a ledger drain that MENTIONS the id. Measured against
 # this distribution's history for the reference consumer's live ledger: PC-S295's only naming
 # commit is a `docs(plan):` commit with one file changed and zero `core/` paths, and it read as
 # NAMED-UPSTREAM -- the signal a pull session reads as "upstream took it". Control in the same
