@@ -682,7 +682,11 @@ named_absorbed() { # <label> -> "<how> <n> <sha>,<sha>,... <code|docs>" if upstr
 # real absorption on a git error.
 named_reach() {
   local _files
-  _files="$(printf '%s\n' "$1" | git -C "$DIST" log --no-walk --stdin -m --name-only --format= 2>/dev/null)" \
+  # `--no-renames`, because a RENAME LISTS ONLY ITS DESTINATION. `git mv core/scripts/b.sh
+  # core/fixtures/<dist-only>/b.sh` deletes an installed script, and with rename detection on (the
+  # default) the listing carried only the dist-only path, which the filter below drops -- the
+  # commit then read docs-only. Without detection a rename is a delete plus an add, both listed.
+  _files="$(printf '%s\n' "$1" | git -C "$DIST" log --no-walk --stdin -m --no-renames --name-only --format= 2>/dev/null)" \
     || { printf 'code'; return 0; }
   # A NAMING COMMIT THAT CHANGES `VERSION` IS A RELEASE, and the release is what a consumer pulls.
   # This distribution's own convention: the release commit names the id and touches only
@@ -705,9 +709,14 @@ VERSION
   # at THEIRS once in the main shell (see its derivation). A SHIPPING fixture keeps scoring `code`:
   # it is installed. If the filter itself fails the answer is `code`, the direction this function
   # already fails towards.
+  #
+  # THE SET IS NEWLINE-SEPARATED AND SPLIT ON NEWLINES, because a fixture name may carry a space: a
+  # set joined and split on " " turned `sp ace` into the keys `sp` and `ace`, so the real dist-only
+  # fixture kept scoring `code` and a SHIPPING fixture named `sp` was demoted. Passed through
+  # ENVIRON, not `-v`, which processes escapes in the value.
   if [ -n "$LR_DIST_ONLY" ]; then
-    _files="$(printf '%s\n' "$_files" | awk -v d="$LR_DIST_ONLY" '
-      BEGIN { n = split(d, a, " "); for (i = 1; i <= n; i++) if (a[i] != "") drop[a[i]] = 1 }
+    _files="$(printf '%s\n' "$_files" | LR_D="$LR_DIST_ONLY" awk '
+      BEGIN { n = split(ENVIRON["LR_D"], a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "") drop[a[i]] = 1 }
       /^core\/fixtures\// { f = substr($0, 15); sub(/\/.*/, "", f); if (f in drop) next }
       { print }')" || { printf 'code'; return 0; }
   fi
@@ -1723,7 +1732,7 @@ TV="$(printf '%s' "$TV" | tr -d '[:space:]')"
 [ -n "$TV" ] || TV="$THEIRS"
 
 # `$LR_DIST_ONLY`: the names of every `core/fixtures/<name>/` carrying a `.dist-only` marker AT
-# THEIRS, space-separated, read by `named_reach`. Derived from the markers -- the declaration
+# THEIRS, ONE PER LINE (a name may carry a space), read by `named_reach`. Derived from the markers -- the declaration
 # `install.sh` derives its own copy loop from -- never hand-listed. AT THEIRS, NOT FROM THE DIST
 # WORKING TREE, for the reason `preclassify.sh`'s `dist_only()` records: the checkout is whatever
 # the operator last checked out. Derived HERE, in the main shell, because `named_reach` runs
@@ -1733,7 +1742,7 @@ TV="$(printf '%s' "$TV" | tr -d '[:space:]')"
 # A FAILED LISTING EXCLUDES NOTHING. The set is then empty, every `core/` path scores `code` as it
 # did before this existed, and no naming is demoted on a git error.
 LR_DIST_ONLY="$(git -C "$DIST" ls-tree -r --name-only "${THEIRS}" -- core/fixtures/ 2>/dev/null \
-  | sed -n 's#^core/fixtures/\([^/]*\)/\.dist-only$#\1#p' | tr '\n' ' ')" || LR_DIST_ONLY=""
+  | sed -n 's#^core/fixtures/\([^/]*\)/\.dist-only$#\1#p')" || LR_DIST_ONLY=""
 
 # Extract (label<TAB>ordinal<TAB>directive) for each OPEN entry carrying a verify: line, plus
 # ONE `0/0` row (directive `-`) for each OPEN id-keyed entry carrying none -- that row reaches
@@ -1958,7 +1967,14 @@ ENTRIES="$(awk -v DASH=' — ' "$(ledger_entry_awk)"'
 # THE STAGING DIRECTORY IS MADE HERE FOR EVERY RUN, which ends `lr_stage_ready`'s laziness: the
 # per-entry readers (`all_present`, `consumer_reachable`, `near_miss_spelling`) stage into it too,
 # and the last of them runs inside a `$( )` where a directory made on first use would be lost.
-lr_stage_ready || lr_refuse "a staging directory could not be created, so the ledger's entries could not be staged"
+#
+# AN UNUSABLE TMPDIR REFUSES THE WHOLE RUN, DELIBERATELY, AND THE MESSAGE NAMES IT. There is no
+# fallback: every directory this run owns is itself made under TMPDIR, the consumer tree is never
+# written, and the only other candidate is a SHARED path like /tmp -- which is exactly where bash
+# 3.2 silently put the here-string this replaced, and why the old engine produced rows under a
+# missing TMPDIR. A refusal (exit 2) is what `emit-report.sh` renders as `DETECTOR-REFUSED`, never
+# as `none`; the path is named here so the operator running it directly sees the cause.
+lr_stage_ready || lr_refuse "a staging directory could not be created under TMPDIR=${TMPDIR:-/tmp} (missing or not writable), so the ledger's entries could not be staged"
 printf '%s\n' "$ENTRIES" > "$LR_STAGE/entries" \
   || lr_refuse "the ledger's entries could not be staged (a failed write would have read as an empty ledger)"
 while IFS="$(printf '\t')" read -r label ord directive; do
@@ -2420,7 +2436,7 @@ while IFS="$(printf '\t')" read -r label ord directive; do
           # THE STAGING DIRECTORY IS MADE HERE, IN THIS SHELL, because the reader runs inside `$( )`.
           # A failed split is status 3 from the reader and a refusal of the run: an empty list is
           # the every-path-exists answer, and the next line would turn it into a CLOSE-CANDIDATE.
-          lr_stage_ready || lr_refuse "a staging directory could not be created, so the paths $label's sh receipt names could not be checked"
+          lr_stage_ready || lr_refuse "a staging directory could not be created under TMPDIR=${TMPDIR:-/tmp} (missing or not writable), so the paths $label's sh receipt names could not be checked"
           # The assignment stays one line on its own (the fixture's mutation-subject mutant anchors
           # on it); its status is the substitution's, read on the next line.
           _gone="$(receipt_absent_subjects "$rest")"

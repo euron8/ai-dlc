@@ -18,6 +18,18 @@
 #            kills the obvious wrong fix, "drop all of core/fixtures/".
 #   PC-S804  touches the `.dist-only` fixture AND core/scripts -> NAMED-UPSTREAM. Kills a filter
 #            that drops a whole COMMIT for carrying one dist-only path.
+#   PC-S805  touches ONLY the `.dist-only` fixture `sp ace` (a name with a space) -> DOCS-ONLY
+#   PC-S806  touches ONLY the SHIPPING fixture `sp`, the first word of `sp ace` -> NAMED-UPSTREAM.
+#            S805/S806 kill a marker set joined or split on " " (M-A5), which loses `sp ace` and
+#            demotes `sp` -- both directions of one defect.
+#   PC-S807  `git mv core/scripts/b.sh core/fixtures/distonly-fx/b.sh` -> NAMED-UPSTREAM. It deletes
+#            an installed script; with rename detection the listing carries only the destination,
+#            which the filter drops, and the commit read docs-only (M-A6).
+#
+# PART D -- AN UNUSABLE TMPDIR REFUSES, NAMING IT. The staging directory has no fallback by design
+# (see the engine's comment at its first `lr_stage_ready` call): a missing and a read-only TMPDIR
+# must each exit 2 with no row and a stderr line naming that TMPDIR, beside the usable-TMPDIR
+# control that part A's own run already is.
 #
 # The marker is read AT THEIRS. The distribution's working tree is checked out at BASE, where the
 # marker does not exist yet, so a derivation that reads the checkout instead of the ref finds no
@@ -66,18 +78,22 @@ echo "ledger-reverify-dist-only-reach:"
 # PART A -- the world
 # =================================================================================================
 DIST="$W/dist"; CONS="$W/consumer"
-mkdir -p "$DIST/core/scripts" "$DIST/core/fixtures/shipping-fx" || broken "could not build the dist tree"
+mkdir -p "$DIST/core/scripts" "$DIST/core/fixtures/shipping-fx" "$DIST/core/fixtures/sp" || broken "could not build the dist tree"
 g "$DIST" init -q . 2>/dev/null || git init -q "$DIST" || broken "git init failed"
 printf '0.1.0\n' > "$DIST/VERSION"
 printf '#!/bin/sh\necho a\n' > "$DIST/core/scripts/a.sh"
+printf '#!/bin/sh\necho b, an installed script the S807 commit moves into distonly-fx\n' > "$DIST/core/scripts/b.sh"
 printf '#!/bin/sh\necho shipping\n' > "$DIST/core/fixtures/shipping-fx/run.sh"
+printf '#!/bin/sh\necho sp ships\n' > "$DIST/core/fixtures/sp/run.sh"
 g "$DIST" add -A && g "$DIST" commit -qm base || broken "base commit failed"
 BASE="$(git -C "$DIST" rev-parse HEAD)"
-# The dist-only fixture arrives AFTER base, marker and all, in a commit that names nothing.
-mkdir -p "$DIST/core/fixtures/distonly-fx"
+# The dist-only fixtures arrive AFTER base, markers and all, in a commit that names nothing.
+mkdir -p "$DIST/core/fixtures/distonly-fx" "$DIST/core/fixtures/sp ace"
 printf 'Distribution-only: its subject is a program a consumer does not have.\n' > "$DIST/core/fixtures/distonly-fx/.dist-only"
 printf '#!/bin/sh\necho distonly\n' > "$DIST/core/fixtures/distonly-fx/run.sh"
-g "$DIST" add -A && g "$DIST" commit -qm 'test: add distonly-fx' || broken "marker commit failed"
+printf 'Distribution-only: a name carrying a space.\n' > "$DIST/core/fixtures/sp ace/.dist-only"
+printf '#!/bin/sh\necho sp ace\n' > "$DIST/core/fixtures/sp ace/run.sh"
+g "$DIST" add -A && g "$DIST" commit -qm 'test: add distonly-fx and sp ace' || broken "marker commit failed"
 printf 'echo edited\n' >> "$DIST/core/fixtures/distonly-fx/run.sh"
 g "$DIST" add -A && g "$DIST" commit -qm 'test: tighten distonly-fx, cites PC-S801-DISTONLY-FIXTURE' || broken "S801 commit failed"
 printf 'echo fixed\n' >> "$DIST/core/scripts/a.sh"
@@ -87,6 +103,13 @@ g "$DIST" add -A && g "$DIST" commit -qm 'test: shipping-fx covers PC-S803-SHIPP
 printf 'echo again\n' >> "$DIST/core/fixtures/distonly-fx/run.sh"
 printf 'echo also\n' >> "$DIST/core/scripts/a.sh"
 g "$DIST" add -A && g "$DIST" commit -qm 'fix: absorb PC-S804-MIXED-COMMIT' || broken "S804 commit failed"
+printf 'echo edited\n' >> "$DIST/core/fixtures/sp ace/run.sh"
+g "$DIST" add -A && g "$DIST" commit -qm 'test: tighten sp ace, cites PC-S805-SPACE-DISTONLY' || broken "S805 commit failed"
+printf 'echo edited\n' >> "$DIST/core/fixtures/sp/run.sh"
+g "$DIST" add -A && g "$DIST" commit -qm 'test: sp covers PC-S806-SP-SHIPPING' || broken "S806 commit failed"
+g "$DIST" mv core/scripts/b.sh core/fixtures/distonly-fx/b.sh || broken "git mv failed"
+g "$DIST" commit -qm 'refactor: retire b.sh into distonly-fx, cites PC-S807-RENAME-OUT' || broken "S807 commit failed"
+S807_SHA="$(git -C "$DIST" rev-parse HEAD)"
 THEIRS="$(git -C "$DIST" rev-parse HEAD)"
 # THE CHECKOUT SITS AT BASE, so the working tree has no marker and only the ref does.
 g "$DIST" checkout -q --detach "$BASE" || broken "could not check the dist out at base"
@@ -103,6 +126,12 @@ cat > "$LED" <<'EOM'
 - **PC-S803-SHIPPING-FIXTURE** — named only by a commit touching a fixture that ships.
 
 - **PC-S804-MIXED-COMMIT** — named by a commit touching the dist-only fixture and a core script.
+
+- **PC-S805-SPACE-DISTONLY** — named only by a commit touching the dist-only fixture `sp ace`.
+
+- **PC-S806-SP-SHIPPING** — named only by a commit touching the shipping fixture `sp`.
+
+- **PC-S807-RENAME-OUT** — named by a commit moving an installed script into a dist-only fixture.
 EOM
 g "$CONS" init -q . 2>/dev/null || git init -q "$CONS" || broken "consumer git init failed"
 g "$CONS" add -A && g "$CONS" commit -qm consumer || broken "consumer commit failed"
@@ -116,16 +145,39 @@ git -C "$DIST" cat-file -e "${BASE}:core/fixtures/distonly-fx/.dist-only" 2>/dev
   && broken "the marker is in the checkout, so the checkout-vs-ref mutant cannot discriminate"
 git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/shipping-fx/.dist-only" 2>/dev/null \
   && broken "shipping-fx carries a marker, so it is not the shipping near-miss"
-ok "before: distonly-fx's marker is at theirs only (not at base, not in the checkout); shipping-fx has none"
+git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/sp ace/.dist-only" 2>/dev/null \
+  || broken "the 'sp ace' marker is not at theirs"
+[ -e "$DIST/core/fixtures/sp ace/.dist-only" ] \
+  && broken "the 'sp ace' marker is in the checkout, so the checkout-vs-ref mutant cannot discriminate"
+git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/sp/.dist-only" 2>/dev/null \
+  && broken "sp carries a marker, so it is not the shipping near-miss of 'sp ace'"
+# THE RENAME WORLD MUST BE A RENAME UNDER DETECTION, or M-A6 below survives for a reason that is
+# not the engine (a `diff.renames=false` config, a similarity below the threshold). Both listings,
+# same commit, same invocation: with detection core/scripts/b.sh is absent, without it present.
+_s807_det="$(git -C "$DIST" log --no-walk -m --name-only --format= "$S807_SHA" 2>/dev/null)"
+_s807_raw="$(git -C "$DIST" log --no-walk -m --no-renames --name-only --format= "$S807_SHA" 2>/dev/null)"
+case "
+$_s807_det
+" in *"
+core/scripts/b.sh
+"*) broken "the S807 listing WITH rename detection already carries core/scripts/b.sh, so the rename world cannot discriminate M-A6" ;; esac
+case "
+$_s807_raw
+" in *"
+core/scripts/b.sh
+"*) : ;; *) broken "the S807 listing with --no-renames does not carry core/scripts/b.sh (read '$_s807_raw')" ;; esac
+ok "before: distonly-fx's and sp ace's markers are at theirs only (not at base, not in the checkout); shipping-fx and sp have none; S807 lists core/scripts/b.sh only without rename detection"
 
 kind_of() { # <rows> <label> -> the NAMED-UPSTREAM kind of that label's row, or empty
   printf '%s\n' "$1" | awk -F'\t' -v l="$2" '$2 == l && $1 ~ /^NAMED-UPSTREAM(-DOCS-ONLY)?$/ {print $1; exit}'; }
 run_a() { bash "$1" "$DIST" "$BASE" "$CONS" "$THEIRS" "$LED" 2>/dev/null; }
-# want: S801 S802 S803 S804
-WANT_A="NAMED-UPSTREAM-DOCS-ONLY NAMED-UPSTREAM NAMED-UPSTREAM NAMED-UPSTREAM"
-kinds_a() { # <rows> -> the four kinds, space-separated, <none> for a missing row
+# want: S801 S802 S803 S804 S805 S806 S807
+DO=NAMED-UPSTREAM-DOCS-ONLY; NU=NAMED-UPSTREAM
+WANT_A="$DO $NU $NU $NU $DO $NU $NU"
+kinds_a() { # <rows> -> the seven kinds, space-separated, <none> for a missing row
   local _r="$1" _k _out=""
-  for _l in PC-S801-DISTONLY-FIXTURE PC-S802-INSTALLED-SCRIPT PC-S803-SHIPPING-FIXTURE PC-S804-MIXED-COMMIT; do
+  for _l in PC-S801-DISTONLY-FIXTURE PC-S802-INSTALLED-SCRIPT PC-S803-SHIPPING-FIXTURE PC-S804-MIXED-COMMIT \
+            PC-S805-SPACE-DISTONLY PC-S806-SP-SHIPPING PC-S807-RENAME-OUT; do
     _k="$(kind_of "$_r" "$_l")"; _out="$_out ${_k:-<none>}"
   done
   printf '%s' "${_out# }"; }
@@ -133,14 +185,14 @@ kinds_a() { # <rows> -> the four kinds, space-separated, <none> for a missing ro
 A_ROWS="$(run_a "$RV")"
 A_GOT="$(kinds_a "$A_ROWS")"
 if [ "$A_GOT" = "$WANT_A" ]; then
-  ok "A: S801 (dist-only fixture only) -> DOCS-ONLY; S802 (core script), S803 (shipping fixture), S804 (mixed) -> NAMED-UPSTREAM"
+  ok "A: S801 (dist-only fixture), S805 (dist-only 'sp ace') -> DOCS-ONLY; S802 (core script), S803 (shipping fixture), S804 (mixed), S806 (shipping 'sp'), S807 (installed script renamed into a dist-only fixture) -> NAMED-UPSTREAM"
 else
-  bad "A: kinds S801..S804 read '$A_GOT', want '$WANT_A'"
+  bad "A: kinds S801..S807 read '$A_GOT', want '$WANT_A'"
 fi
 
 # --- PART A mutants. Each in a copy of the WHOLE reconcile directory (the engine sources lib.sh
 # beside itself), each a single exact-line swap that must match exactly once, each scored on all
-# four labels so a mutant that moves more than its own cell is reported as entangled.
+# seven labels so a mutant that moves more than its own cells is reported as entangled.
 mut_line() { # <tag> <old exact line> <new line> -> path of the mutant engine, or empty
   local _d="$W/mut-$1"
   mkdir -p "$_d" && cp "$RECON"/*.sh "$_d/" 2>/dev/null || return 0
@@ -153,8 +205,8 @@ mut_line() { # <tag> <old exact line> <new line> -> path of the mutant engine, o
 # kinds, so a copy that cannot run reads BROKEN rather than scoring every mutant as a kill.
 CTL_D="$W/mut-control"; mkdir -p "$CTL_D" && cp "$RECON"/*.sh "$CTL_D/" 2>/dev/null
 [ "$(kinds_a "$(run_a "$CTL_D/ledger-reverify.sh")")" = "$WANT_A" ] \
-  || broken "the UNMUTATED copy in a scratch directory does not reproduce the four kinds, so every mutant verdict below would be unreadable"
-ok "A control: the unmutated engine copied whole reproduces all four kinds"
+  || broken "the UNMUTATED copy in a scratch directory does not reproduce the seven kinds, so every mutant verdict below would be unreadable"
+ok "A control: the unmutated engine copied whole reproduces all seven kinds"
 
 score_a() { # <tag> <mutant path> <want kinds> <what it proves>
   local _got
@@ -164,17 +216,31 @@ score_a() { # <tag> <mutant path> <want kinds> <what it proves>
   else bad "A mutant $1 read '$_got', want '$3'"; fi
 }
 score_a M-A1 "$(mut_line a1 '  if [ -n "$LR_DIST_ONLY" ]; then' '  if false; then')" \
-  "NAMED-UPSTREAM NAMED-UPSTREAM NAMED-UPSTREAM NAMED-UPSTREAM" \
-  "with the filter off S801 reads NAMED-UPSTREAM again (the defect) and only S801 moves"
+  "$NU $NU $NU $NU $NU $NU $NU" \
+  "with the filter off S801 and S805 read NAMED-UPSTREAM again (the defect) and only those two move"
 score_a M-A2 "$(mut_line a2 '      /^core\/fixtures\// { f = substr($0, 15); sub(/\/.*/, "", f); if (f in drop) next }' '      /^core\/fixtures\// { next }')" \
-  "NAMED-UPSTREAM-DOCS-ONLY NAMED-UPSTREAM NAMED-UPSTREAM-DOCS-ONLY NAMED-UPSTREAM" \
-  "dropping every core/fixtures/ path demotes the SHIPPING fixture's S803, and only S803 moves"
+  "$DO $NU $DO $NU $DO $DO $NU" \
+  "dropping every core/fixtures/ path demotes the SHIPPING fixtures' S803 and S806, and only those two move"
 score_a M-A3 "$(mut_line a3 'LR_DIST_ONLY="$(git -C "$DIST" ls-tree -r --name-only "${THEIRS}" -- core/fixtures/ 2>/dev/null \' 'LR_DIST_ONLY="$( (cd "$DIST" && find core/fixtures -name .dist-only) 2>/dev/null \')" \
-  "NAMED-UPSTREAM NAMED-UPSTREAM NAMED-UPSTREAM NAMED-UPSTREAM" \
-  "reading the markers from the CHECKOUT (at base) instead of THEIRS loses the marker and S801 reads NAMED-UPSTREAM"
+  "$NU $NU $NU $NU $NU $NU $NU" \
+  "reading the markers from the CHECKOUT (at base) instead of THEIRS loses both markers and S801, S805 read NAMED-UPSTREAM"
+# M-A4 moves S807 as well as S804, and both are its subject: the rename listing without detection
+# is itself a mixed commit (the dist-only destination sorts before core/scripts/b.sh).
 score_a M-A4 "$(mut_line a4 '      /^core\/fixtures\// { f = substr($0, 15); sub(/\/.*/, "", f); if (f in drop) next }' '      /^core\/fixtures\// { f = substr($0, 15); sub(/\/.*/, "", f); if (f in drop) exit }')" \
-  "NAMED-UPSTREAM-DOCS-ONLY NAMED-UPSTREAM NAMED-UPSTREAM NAMED-UPSTREAM-DOCS-ONLY" \
-  "a filter that stops at the first dist-only path loses the mixed commit's core script, and only S804 moves"
+  "$DO $NU $NU $DO $DO $NU $DO" \
+  "a filter that stops at the first dist-only path loses the mixed commits' core scripts, and only S804 and S807 move"
+# M-A5: FIX 1 REVERTED. The set is collapsed to spaces and split on " ", exactly the shipped defect
+# (the derivation's `tr` and the awk split were its two layers; this restores both effects at the
+# one line that consumes the set). `sp ace` becomes the keys `sp` and `ace`.
+score_a M-A5 "$(mut_line a5 '      BEGIN { n = split(ENVIRON["LR_D"], a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "") drop[a[i]] = 1 }' '      BEGIN { d = ENVIRON["LR_D"]; gsub(/\n/, " ", d); n = split(d, a, " "); for (i = 1; i <= n; i++) if (a[i] != "") drop[a[i]] = 1 }')" \
+  "$DO $NU $NU $NU $NU $DO $NU" \
+  "a space-split marker set leaves the dist-only 'sp ace' (S805) at NAMED-UPSTREAM and demotes the shipping 'sp' (S806), and only those two move"
+# M-A6: FIX 2 REVERTED. Rename detection back on, so S807 lists only its dist-only destination.
+L6_FIX='  _files="$(printf '"'"'%s\n'"'"' "$1" | git -C "$DIST" log --no-walk --stdin -m --no-renames --name-only --format= 2>/dev/null)" \'
+L6_MUT='  _files="$(printf '"'"'%s\n'"'"' "$1" | git -C "$DIST" log --no-walk --stdin -m --name-only --format= 2>/dev/null)" \'
+score_a M-A6 "$(mut_line a6 "$L6_FIX" "$L6_MUT")" \
+  "$DO $NU $NU $NU $DO $NU $DO" \
+  "with rename detection the commit moving an installed script into a dist-only fixture reads docs-only, and only S807 moves"
 
 # =================================================================================================
 # PART B -- a failed staging write of the entry loop's input refuses
@@ -191,7 +257,7 @@ PAD="$(awk 'BEGIN { s = "x"; while (length(s) < 26000) s = s s; print substr(s, 
     printf -- '- **PC-S81%s-BIG** — a manual entry with a long receipt\n  verify: manual %s\n\n' "$_n" "$PAD"
   done
 } > "$BIG_LED" || broken "could not write the big ledger"
-LIM=64   # 512-byte blocks: 32 KB
+LIM=64   # bash's ulimit -f counts 1024-byte blocks: measured, a 65536-byte write succeeds and a 65537-byte one fails
 OUT="$W/b.out"; ERR="$W/b.err"
 run_b() { # <engine> <limit or ""> -> rc on stdout; rows in $OUT, stderr in $ERR
   local _rc=0
@@ -250,6 +316,29 @@ else
     bad "B mutant M-B1 exited $rc with $n row(s) under the limit; want rc 0 and 0 rows (the defect). If rows survived, the limit no longer forces the here-string's staging"
   fi
 fi
+
+# =================================================================================================
+# PART D -- an unusable TMPDIR refuses the run and names it
+# =================================================================================================
+# Part A's run is the usable-TMPDIR control (seven rows). Each unusable shape must exit 2 with no
+# NAMED-UPSTREAM row and a stderr line carrying the TMPDIR value, so an engine that silently fell
+# back, or refused without saying where, fails a presence-shaped cell.
+RO="$W/ro-tmp"; mkdir -p "$RO" && chmod 555 "$RO" || broken "could not make a read-only TMPDIR"
+if ( : > "$RO/probe" ) 2>/dev/null; then
+  rm -f "$RO/probe"; chmod 755 "$RO"
+  broken "a chmod 555 directory is still writable here (running as root?), so the read-only cell cannot discriminate"
+fi
+for _shape in "missing:$W/no-such-tmp" "read-only:$RO"; do
+  _td="${_shape#*:}"
+  _rc=0; TMPDIR="$_td" bash "$RV" "$DIST" "$BASE" "$CONS" "$THEIRS" "$LED" > "$W/d.out" 2> "$W/d.err" || _rc=$?
+  _nrows="$(awk -F'\t' '$1 ~ /^NAMED-UPSTREAM/ {c++} END {print c+0}' "$W/d.out")"
+  if [ "$_rc" = 2 ] && [ "$_nrows" = 0 ] && grep -qF "could not be created under TMPDIR=$_td " "$W/d.err"; then
+    ok "D: a ${_shape%%:*} TMPDIR refuses (rc 2, 0 rows) naming TMPDIR=$_td"
+  else
+    bad "D: a ${_shape%%:*} TMPDIR exited $_rc with $_nrows row(s); want rc 2, 0 rows and a refusal naming TMPDIR=$_td ($(head -c 300 "$W/d.err"))"
+  fi
+done
+chmod 755 "$RO"
 
 # =================================================================================================
 # PART C -- no here-string and no heredoc in the engine's non-comment lines
