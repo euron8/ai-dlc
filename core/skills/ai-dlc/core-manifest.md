@@ -254,6 +254,7 @@ core_manifest:
   - fixtures/ledger-reverify/**
   - fixtures/ledger-status-vocabulary/**
   - fixtures/ledger-reverify-unfalsifiable/**
+  - fixtures/ledger-reverify-dist-only-reach/**
   - fixtures/fixture-drivability/**
   - fixtures/ledger-rotate/**
   - fixtures/mandatory-rules-clean-tree/**

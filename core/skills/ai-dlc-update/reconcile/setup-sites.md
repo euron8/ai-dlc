@@ -182,6 +182,7 @@ core_manifest:
   - core/fixtures/ledger-reverify/**
   - core/fixtures/ledger-status-vocabulary/**
   - core/fixtures/ledger-reverify-unfalsifiable/**
+  - core/fixtures/ledger-reverify-dist-only-reach/**
   - core/fixtures/fixture-drivability/**
   - core/fixtures/ledger-rotate/**
   - core/fixtures/mandatory-rules-clean-tree/**
