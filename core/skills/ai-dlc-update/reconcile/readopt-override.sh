@@ -562,8 +562,8 @@ case "$MODE" in
     ids="$(printf '%s\n' "$SHADOWS" | tr ',' '\n' | sed -n 's/.*#//p' | sed 's/^ *//; s/ *$//' | grep -v '^$')"
 
     # EVERY WRITE BELOW HAS ITS STATUS READ, AND THE OVERRIDE IS REPLACED BY A RENAME. This block
-    # used to read no write status and end in `{ cat fmf; cat out; } > "$OVR"`, which truncates the
-    # override before writing it: under a write limit or a full disk the override was left cut short,
+    # used to read no write status and end in a redirect straight onto the override, which truncates
+    # it before writing it: under a write limit or a full disk the override was left cut short,
     # or the merge was assembled from a body file that had silently lost its tail and the operator's
     # sections were gone from the result, and the run still printed its merged/unchanged count. Every
     # temp file lives in RO_T, which the EXIT trap removes; the result is staged beside the override
@@ -848,9 +848,10 @@ printf '%s\n' \
 # NOT A PIPELINE, deliberately. A `while` on the last stage of a pipeline runs in a
 # SUBSHELL and the counters below would die with it, leaving the panel reporting zero
 # anchors on every entry. The anchor list is resolved into a variable first and split into
-# RO_L in the main shell -- no heredoc, which bash 3.2 stages to a temp file and which, when
-# that write failed, ran the loop ZERO times and printed the "NO ANCHOR could be read" line
-# over an entry whose anchors were all readable. Each side is staged by `ro_section`, whose
+# RO_L in the main shell -- no heredoc, which bash 3.2 stages to a temp file and which, if that
+# write failed, would run the loop ZERO times and print the "NO ANCHOR could be read" line over
+# an entry whose anchors were all readable. Not forced: `shadow_ids` writes the same ids to a
+# file earlier in every run, so no world makes this the one write past a limit. Each side is staged by `ro_section`, whose
 # status is read: 128 (the path absent at the ref) is an empty side as it always read, and
 # anything else refuses, where an unchecked `section_of > file` that failed read as an
 # UNRESOLVED anchor.
