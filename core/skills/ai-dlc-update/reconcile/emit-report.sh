@@ -801,11 +801,13 @@ render() {
     fi
   }
   local a0_raw a0_rc
-  sub "Predicate reclassification (the incoming release moves an adjudication predicate over artifacts already stored):"
+  sub "Predicate reclassification (the incoming release moves an adjudication predicate over artifacts already stored; a STABLE site renders as one line carrying only its population and counts):"
   a0_raw="$(mktemp)"
   bash "$SELF/predicate-differential.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" >"$a0_raw" 2>/dev/null
   a0_rc=$?
-  a0_render "$a0_rc" "$a0_raw" '$1!="PREDICATE-STABLE"{print $1"  "$2"  "$3}' "predicate-differential.sh <dist> <base> <theirs> <consumer>"
+  # A STABLE row is not dropped: its population definition and counts are what let a second
+  # party re-derive the null, and a bare `none` carries neither. Its prose is cut to that tail.
+  a0_render "$a0_rc" "$a0_raw" '$1!="PREDICATE-STABLE"{print $1"  "$2"  "$3; next} match($3, /population: .*$/){print $1"  "$2"  "substr($3, RSTART); next} {print $1"  "$2}' "predicate-differential.sh <dist> <base> <theirs> <consumer>"
 
   sub "Retired core fixtures the consumer still carries (core stopped shipping them; the operator retires the orphan):"
   a0_raw="$(mktemp)"

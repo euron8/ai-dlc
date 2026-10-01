@@ -678,6 +678,53 @@ else
   fi
 fi
 
+# --- A8: A STABLE PREDICATE SITE RENDERS ITS POPULATION, NEVER `none` -------------------------
+# The step-5 projection used to drop every PREDICATE-STABLE row, so a differential whose every site
+# was STABLE rendered `none`: the null reached the operator with no population definition and no
+# count, and could not be re-derived. A stub differential with FIXED rows drives the copy, so the
+# cell is about the projection alone. The non-STABLE row's rendering is held byte-for-byte.
+A8_STABLE="$(printf 'PREDICATE-STABLE\tvalidate-x.sh\tthe read-set moved and NO stored artifact changes verdict, long prose. population: root=_bmad-output corpus=*p* series=s/$//; records=3 series=3 compared=1 notoken=2.')"
+A8_RECL="$(printf 'PREDICATE-RECLASSIFIES\tvalidate-y.sh\tAT LEAST 1 of 2 stored series change verdict. population: root=_bmad-output corpus=*q* series=s/$//; records=2 series=2 compared=2 notoken=0.')"
+a8_prog() { # a8_prog <dir> <emit-source> <rows...> -> a reconcile/ copy whose differential prints <rows>
+  local d="$1" e="$2"; shift 2
+  rm -rf "$d"; cp -R "$RDIR" "$d" && cp "$e" "$d/emit-report.sh" || return 1
+  { echo '#!/usr/bin/env bash'; for r in "$@"; do printf "printf '%%s\\\\n' '%s'\n" "$r"; done; echo 'exit 0'; } > "$d/predicate-differential.sh"
+}
+a8_sect() { # a8_sect <dir> -> the rendered Predicate reclassification section
+  bash "$1/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$1.out" 2>/dev/null
+  sect "$1.out" '**Predicate reclassification'
+}
+# The mutant restores the pre-fix projection, built by whole-line replacement (awk, ENVIRON), so
+# no sed escaping can make it a no-op; it must apply to exactly one line.
+A8_OLD="  a0_render \"\$a0_rc\" \"\$a0_raw\" '\$1!=\"PREDICATE-STABLE\"{print \$1\"  \"\$2\"  \"\$3}' \"predicate-differential.sh <dist> <base> <theirs> <consumer>\""
+A8_KEY='  a0_render "$a0_rc" "$a0_raw" '"'"'$1!="PREDICATE-STABLE"{print $1"  "$2"  "$3; next}'
+A8_OLD="$A8_OLD" A8_KEY="$A8_KEY" awk 'index($0, ENVIRON["A8_KEY"]) == 1 { print ENVIRON["A8_OLD"]; n++; next } { print } END { exit (n == 1) ? 0 : 3 }' \
+  "$EMIT" > "$R/a8-mut.sh"
+a8_mrc=$?
+a8_prog "$R/a8-stable" "$EMIT" "$A8_STABLE" && a8_s="$(a8_sect "$R/a8-stable")"
+a8_prog "$R/a8-both" "$EMIT" "$A8_STABLE" "$A8_RECL" && a8_b="$(a8_sect "$R/a8-both")"
+a8_want_s="PREDICATE-STABLE  validate-x.sh  population: root=_bmad-output corpus=*p* series=s/\$//; records=3 series=3 compared=1 notoken=2."
+a8_want_r="$(printf '%s' "$A8_RECL" | awk -F'\t' '{print $1"  "$2"  "$3}')"
+if [ "$a8_s" = "$a8_want_s" ]; then
+  ok "A8 a STABLE-only differential renders its site's population and counts in one line, not 'none'"
+else
+  bad "A8 a STABLE-only differential rendered [$(printf '%s' "$a8_s" | head -2 | tr '\n' '|' | cut -c1-160)], want its population line"
+fi
+a8_n="$(grep -c . <<<"$a8_b")" || a8_n=0
+a8_r="$(grep -F 'PREDICATE-RECLASSIFIES' <<<"$a8_b")" || a8_r=""
+if [ "$a8_n" = 2 ] && [ "$a8_r" = "$a8_want_r" ] && grep -qxF "$a8_want_s" <<<"$a8_b"; then
+  ok "A8 beside a STABLE row, the RECLASSIFIES row renders byte-for-byte as before (status, subject, whole detail)"
+else
+  bad "A8 the mixed render was [$(printf '%s' "$a8_b" | tr '\n' '|' | cut -c1-200)]"
+fi
+if [ "$a8_mrc" -ne 0 ] || cmp -s "$EMIT" "$R/a8-mut.sh"; then
+  bad "A8 mutant DID NOT APPLY (the projection line moved), so the STABLE arm is unproven -- re-anchor on the same line"
+else
+  a8_prog "$R/a8-mut" "$R/a8-mut.sh" "$A8_STABLE" && a8_m="$(a8_sect "$R/a8-mut")"
+  [ "$a8_m" = none ] && ok "A8 mutant [STABLE filter restored] KILLED: the STABLE-only differential renders 'none' again" \
+    || bad "A8 mutant [STABLE filter restored] SURVIVED or never ran: rendered [$(printf '%s' "$a8_m" | head -1 | cut -c1-100)]"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "emit-report-refusal: PASS"; exit 0; fi
 echo "emit-report-refusal: $fails assertion(s) FAILED" >&2

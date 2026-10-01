@@ -1339,6 +1339,14 @@ prose is itself generated rather than composed.
      reported rather than folded into `PREDICATE-STABLE`. **A detector that cannot read its own
      subject must not return clean.**
 
+   **Every row carries its population.** `population: root=… corpus=… series=…` names the
+   consumer directory, file pattern and series key the site used; a row whose corpus was read adds
+   `records= series= compared= notoken=`. `notoken` counts series that yielded no verdict token on
+   either side and were scored unchanged without being classified — for a grammar that spells only
+   failures it includes series that passed on both sides. In the step-5 report a STABLE site renders
+   as one line carrying only that population tail, so a null can be re-derived rather than read as
+   `none`.
+
    **This check cannot be sited upstream and that is structural, not an oversight.**
    `consumer-boundary.md` is unconditional: no gate in the distribution reaches a consumer tree.
    The distribution DID run the same differential over its own fixture seeds before shipping
