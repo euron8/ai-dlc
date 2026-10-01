@@ -2299,7 +2299,7 @@ prose is itself generated rather than composed.
 
      **Every row `--finish` can emit that withholds the stamp**, derived from the `say WORKLIST`
      sites outside `apply.sh`'s resolution phases, plus `staging-refused`, which
-     `ap_staging_refused` emits as a `WORKLIST` under `--finish`: `finish-base-unverified`,
+     `ap_staging_refused` emits as a `WORKLIST` under `--finish`: `finish-marker-directory` (the marker's path is a directory), `finish-base-unverified`,
      `finish-unverified-tree`, `finish-unapplied`, `finish-classify-unmerged`,
      `finish-classify-unverified`, `finish-refile-owed`, `finish-refile-unverified`,
      `finish-exec-owed`, `staging-refused`, `hook-unshipped`, `settings-merge`,

@@ -2163,6 +2163,10 @@ fi  # ---- end of the resolution phases; see the `--finish` guard that opens the
 # nothing; write_stamp() prints the rows. finish_verify_tree() reads the same answer, so the
 # comparison exists in one place and the tree check never runs against a ref the record disputes.
 finish_identity() {
+  # A DIRECTORY AT THE MARKER'S PATH is neither a marker nor its absence: every `-f` reader skips it,
+  # so without this the finisher stamps unchecked over an unmerged tree, says "fixture suite
+  # re-enabled", and its `rm -f` then fails on the directory. A WORKLIST row, because that withholds.
+  [ -d "$APPLYING" ] && { say WORKLIST finish-marker-directory "${APPLYING#"$CONSUMER"/}" "the in-flight marker's path is a DIRECTORY, so the record of which ref this tree was written from and which handed-back merges were untouched cannot be read, and the stamp is not advanced. Move that directory aside, restore the marker file if you have it (otherwise re-run apply with the same four arguments), then re-run --finish."; return 0; }
   if [ ! -f "$APPLYING" ]; then
     finish_id_note="no \`${APPLYING##*/}\` on the consumer, so the ref this tree was actually written from is not recorded anywhere and \`${THEIRS}\` could not be checked against it"
   else

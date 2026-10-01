@@ -731,7 +731,9 @@ fi
 #   Yl  the per-line exit: one file's own `classify:` line deleted, the other still untouched ->
 #       WITHHELD naming only the other, marker kept; after merging it          -> STAMPED, marker gone
 #   Yn  a DIRECTORY at the marker's path -> DECISION applying-marker-unwritten and nothing moved into it
-# Cell: "Ym|Yp|Ys|Yd|Yx|Yl|Yn"; a world whose ordinary run drew no semantic-merge row for its subject
+#   Yf  the marker became a DIRECTORY after a successful ordinary run, merge undone, then --finish
+#       -> WITHHELD with WORKLIST finish-marker-directory (it used to stamp identity-unchecked)
+# Cell: "Ym|Yp|Ys|Yd|Yx|Yl|Yn|Yf"; a world whose ordinary run drew no semantic-merge row for its subject
 # is BROKEN.
 yg() { git -c user.email=f@f -c user.name=fixture "$@"; }
 y_init() { # -> a fresh world: dist/ (a git repo with VERSION 9.9.9) and cons/
@@ -826,6 +828,13 @@ y_drive() { # y_drive <rec> <m|p|s|d|x|l|n> -> that world's cell, or BROKEN
       printf "$M" > "$w/cons/scripts/ai-dlc/n.sh"
       y_run "$rec" "$w" T --finish >/dev/null
       printf '%s>%s:%s' "$o" "$(y_stamp "$w")" "$([ -e "$w/cons/.claude/.ai-dlc-applying" ] && echo kept || echo gone)" ;;
+    f)
+      y_two "$w" || { printf BROKEN; return; }
+      y_run "$rec" "$w" T | y_sm scripts/m.sh || { printf BROKEN; return; }
+      [ -f "$w/cons/.claude/.ai-dlc-applying" ] || { printf BROKEN; return; }
+      mv "$w/cons/.claude/.ai-dlc-applying" "$w/marker.saved" && mkdir "$w/cons/.claude/.ai-dlc-applying" || { printf BROKEN; return; }
+      fo="$(y_run "$rec" "$w" T --finish)"
+      printf '%s/%s' "$(y_stamp "$w")" "$(awk -F'\t' '$1=="WORKLIST" && $2=="finish-marker-directory" {f=1} END {print (f ? "ROW" : "-")}' <<<"$fo")" ;;
     n)
       y_two "$w" || { printf BROKEN; return; }
       mkdir -p "$w/cons/.claude/.ai-dlc-applying" || { printf BROKEN; return; }
@@ -837,14 +846,14 @@ y_drive() { # y_drive <rec> <m|p|s|d|x|l|n> -> that world's cell, or BROKEN
 }
 y_score() { # y_score <reconcile-dir> [<case>...] -> "|"-joined cells, or BROKEN
   local c g out=""
-  for c in ${2:-m p s d x l n}; do
+  for c in ${2:-m p s d x l n f}; do
     g="$(y_drive "$1" "$c")"
     [ "$g" = BROKEN ] && { printf BROKEN; return; }
     out="${out:+$out|}$g"
   done
   printf '%s' "$out"
 }
-Y_WANT='STAMPED|STAMPED|STAMPED|STAMPED/NOTE|STAMPED/0|WITHHELD:scripts/ai-dlc/n.sh,:kept>STAMPED:gone|REFUSED/empty'
+Y_WANT='STAMPED|STAMPED|STAMPED|STAMPED/NOTE|STAMPED/0|WITHHELD:scripts/ai-dlc/n.sh,:kept>STAMPED:gone|REFUSED/empty|WITHHELD/ROW'
 Y_RUN=1
 if ! grep -qF '_unrec' "$APPLY"; then
   case "$APPLY" in
@@ -856,8 +865,8 @@ if [ "$Y_RUN" = 1 ]; then
   Y_GOT="$(y_score "$(dirname "$APPLY")")"
   case "$Y_GOT" in
     BROKEN)   bad "FIXTURE BROKEN [BL-413 arm y]: a world could not be seeded, or its ordinary run drew no semantic-merge row for its subject" ;;
-    "$Y_WANT") ok "BL-413 arm y: a chmod-only merge stamps; a re-pointed pull, a second same-base pull and the delivering pull keep the record and stamp after the merge; kept UPSTREAM-DELETED/ORPHANED copies do not withhold; the per-line exit withholds only the other file and keeps the marker; a directory at the marker's path is refused" ;;
-    *)        bad "BL-413 arm y: $Y_GOT (want $Y_WANT; cells: Ym|Yp|Ys|Yd|Yx|Yl|Yn)" ;;
+    "$Y_WANT") ok "BL-413 arm y: a chmod-only merge stamps; a re-pointed pull, a second same-base pull and the delivering pull keep the record and stamp after the merge; kept UPSTREAM-DELETED/ORPHANED copies do not withhold; the per-line exit withholds only the other file and keeps the marker; a directory at the marker's path is refused by the ordinary run and withholds --finish" ;;
+    *)        bad "BL-413 arm y: $Y_GOT (want $Y_WANT; cells: Ym|Yp|Ys|Yd|Yx|Yl|Yn|Yf)" ;;
   esac
   [ "$Y_GOT" = BROKEN ] || {
     # Each mutant reverts ONE engine change and is scored on the worlds it must move plus Ym or Yl as
@@ -901,6 +910,13 @@ if [ "$Y_RUN" = 1 ]; then
         || bad "BL-413 y-M5 SURVIVED or misfired: $g (want -/FILLED|STAMPED)"
     else
       bad "BL-413 y-M5 DID NOT APPLY -- the directory test is not in apply.sh exactly once, or the copy does not parse"
+    fi
+    if mut_copy "$WORK/y-M6" '  [ -d "$APPLYING" ] && { say WORKLIST finish-marker-directory' '  false && { say WORKLIST finish-marker-directory'; then
+      g="$(y_score "$WORK/y-M6" 'f n')"
+      [ "$g" = 'STAMPED/-|REFUSED/empty' ] && ok "BL-413 y-M6 killed (finisher's directory refusal removed): --finish stamps unchecked over the unmerged tree ($g)" \
+        || bad "BL-413 y-M6 SURVIVED or misfired: $g (want STAMPED/-|REFUSED/empty)"
+    else
+      bad "BL-413 y-M6 DID NOT APPLY -- the finisher's directory test is not in apply.sh exactly once, or the copy does not parse"
     fi
   }
 fi
