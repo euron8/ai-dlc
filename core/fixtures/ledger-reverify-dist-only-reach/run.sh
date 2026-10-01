@@ -9,7 +9,7 @@
 # PART A -- A NAMING COMMIT THAT TOUCHES ONLY A DISTRIBUTION-ONLY FIXTURE DID NOT REACH A CONSUMER.
 # `named_reach` scored any `core/` path as `code`, so a commit changing only
 # `core/fixtures/<name>/` where `<name>` carries a `.dist-only` marker -- a directory `install.sh`
-# never copies -- read NAMED-UPSTREAM, the row an operator reads as "upstream took it". Four
+# never copies -- read NAMED-UPSTREAM, the row an operator reads as "upstream took it". Seven
 # naming commits, one property apart:
 #
 #   PC-S801  touches ONLY a `.dist-only` fixture            -> NAMED-UPSTREAM-DOCS-ONLY
