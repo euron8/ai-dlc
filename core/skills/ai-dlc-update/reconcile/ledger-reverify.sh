@@ -688,7 +688,9 @@ named_reach() {
   # core/fixtures/<dist-only>/b.sh` deletes an installed script, and with rename detection on (the
   # default) the listing carried only the dist-only path, which the filter below drops -- the
   # commit then read docs-only. Without detection a rename is a delete plus an add, both listed.
-  _files="$(printf '%s\n' "$1" | git -C "$DIST" log --no-walk --stdin -m --no-renames --name-only --format= 2>/dev/null)" \
+  # `core.quotePath=false`, because a C-quoted non-ASCII path opens with `"`, not `core/`, so the
+  # prefix test below scored an installed `core/scripts/café.sh` docs-only.
+  _files="$(printf '%s\n' "$1" | git -C "$DIST" -c core.quotePath=false log --no-walk --stdin -m --no-renames --name-only --format= 2>/dev/null)" \
     || { printf 'code'; return 0; }
   # A NAMING COMMIT THAT CHANGES `VERSION` IS A RELEASE, and the release is what a consumer pulls.
   # This distribution's own convention: the release commit names the id and touches only
@@ -1136,7 +1138,7 @@ refs_differ() { # 0 = base..theirs is a real, non-empty differential; 1 = there 
   # NOT PIPED INTO `grep -c`: this file runs under `pipefail`, and the emptiness of the output is
   # the whole answer, so it is read as a STRING rather than as a status.
   local _d
-  _d="$(git -C "$DIST" diff --name-only "$BASE" "$THEIRS" 2>/dev/null)"
+  _d="$(git -C "$DIST" -c core.quotePath=false diff --name-only "$BASE" "$THEIRS" 2>/dev/null)"
   [ -n "$_d" ] || return 1
   SH_DIFF_STATE=yes
   return 0
@@ -1437,7 +1439,7 @@ core_map() { # 0 = $CORE_MAP holds the table; 1 = UNDECIDABLE, nothing was built
   CORE_MAP_WHY="a staging directory for the theirs listing could not be created"
   lr_stage_ready || return 1
   CORE_MAP_WHY="'git ls-tree -r ${THEIRS} -- core/' failed in '$DIST', so the derived consumer→core table would be partial or empty"
-  git -C "$DIST" ls-tree -r --name-only "${THEIRS}" -- core/ > "$LR_STAGE/core-map-ls-tree" 2>/dev/null || return 1
+  git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "${THEIRS}" -- core/ > "$LR_STAGE/core-map-ls-tree" 2>/dev/null || return 1
   while IFS= read -r _cp; do
     [ -n "$_cp" ] || continue
     printf '%s\t%s\n' "$(map_consumer "$_cp")" "$_cp"
@@ -1501,9 +1503,10 @@ receipt_named_subjects() {
 }
 
 # Every path at THEIRS whose basename equals $1. Compared as a fixed string after splitting
-# on "/", so a basename carrying '.' or '-' needs no regex escaping to get wrong.
+# on "/", so a basename carrying '.' or '-' needs no regex escaping to get wrong. Listed with
+# `core.quotePath=false`: a C-quoted line ends `caf\303\251.sh"` and matches no raw basename.
 theirs_basename_matches() {
-  git -C "$DIST" ls-tree -r --name-only "$THEIRS" 2>/dev/null |
+  git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "$THEIRS" 2>/dev/null |
     awk -v b="$1" '{ n=split($0, p, "/"); if (p[n] == b) print }'
 }
 
@@ -1590,7 +1593,7 @@ consumer_scannable() {
   if [ -z "$CONSUMER_SCANNABLE" ]; then
     CONSUMER_SCANNABLE=1
     if git -C "$CONSUMER" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
-       && [ -n "$(git -C "$CONSUMER" ls-files 2>/dev/null | head -1)" ]; then
+       && [ -n "$(git -C "$CONSUMER" -c core.quotePath=false ls-files 2>/dev/null | head -1)" ]; then
       CONSUMER_SCANNABLE=0
     fi
   fi
@@ -1743,7 +1746,10 @@ TV="$(printf '%s' "$TV" | tr -d '[:space:]')"
 #
 # A FAILED LISTING EXCLUDES NOTHING. The set is then empty, every `core/` path scores `code` as it
 # did before this existed, and no naming is demoted on a git error.
-LR_DIST_ONLY="$(git -C "$DIST" ls-tree -r --name-only "${THEIRS}" -- core/fixtures/ 2>/dev/null \
+#
+# `core.quotePath=false`: a C-quoted marker line opens with `"`, the `sed` anchor rejects it, and a
+# dist-only fixture with a non-ASCII name dropped out of the set and kept scoring `code`.
+LR_DIST_ONLY="$(git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "${THEIRS}" -- core/fixtures/ 2>/dev/null \
   | sed -n 's#^core/fixtures/\([^/]*\)/\.dist-only$#\1#p')" || LR_DIST_ONLY=""
 
 # Extract (label<TAB>ordinal<TAB>directive) for each OPEN entry carrying a verify: line, plus
