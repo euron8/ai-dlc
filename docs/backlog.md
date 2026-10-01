@@ -540,6 +540,10 @@ with the report disabled. The scan reads the sibling `-archive.md`'s highest spr
 the live/archive seam is caught. Holes inside the archive are not scanned. The
 `core/fixtures/check5-anchor-base` contiguity battery carries three mutants, one per property.
 
+**Operator decision, 2026-10-01: the archive interior is not scanned.** The open half below stays
+unbuilt and the entry stays live: the receipt still exits 1 and STILL-LIVE is the true reading.
+The reference consumer's archive carries 13 interior holes that nothing reports.
+
 **STILL OPEN ON ONE HALF, and the receipt is a conjunction for that reason.** Landed in 5634d7a0: a
 hole below the prior sprint is reported while it sits in the live file or at the live/archive seam.
 Not landed: once retro Step 5b prunes a hole past the seam into the archive INTERIOR, it becomes
@@ -841,6 +845,11 @@ verify: manual -- this entry records a gap, not a receipt. Do not close it on a 
 
 ## BL-132 — the safe-stop acquittal answers a question about BEHAVIOUR with a test on ancestry
 
+**Operator decision, 2026-10-01: left open and unscheduled.** The reference consumer archived
+`PC-S340` as `CLOSED AS REJECTED — BY DESIGN, adjudicated 2026-09-29` in
+`_bmad-output/ai-dlc-update/push-candidate-ledger.archive.md`, so it is no longer a live candidate
+and this entry does not outrank distribution-internal work on its provenance.
+
 Carries the reference consumer's `PC-S340-SAFE-STOP-ACQUITTAL-TESTS-ANCESTRY-NOT-CONTENT`, so it is
 PC-backed and ranks above any distribution-internal entry under the provenance-first rule. **The
 candidate's DEFECT is real and its stated REMEDY is refuted — both halves were measured, and the
@@ -1122,6 +1131,10 @@ verify: sh L="$PWD/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh"; [ -f
 
 
 ## BL-195 — Check 2's suppression-lifetime arm reads a verdict the CURRENT gate has not yet written, and all four candidate remedies are refuted by measurement
+
+**Operator decision, 2026-10-01: left open, receipt `manual`, no remedy rebuilt.** The reference
+consumer archived `PC-S308` as `ADOPTED UPSTREAM (v0.568.0)`; that annotation is not evidence the
+defect is fixed, because the stale read below still reproduces.
 
 **Provenance.** `PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER`, filed by the reference
 consumer 2026-09-06. **This entry is FILED AND DELIBERATELY NOT FIXED.** The defect is real and
