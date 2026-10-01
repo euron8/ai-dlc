@@ -74,6 +74,61 @@ Then apply the **mask/reinject transform**. Note that a domain-local block is
 written with `push_candidate: false` when it is extracted.
 EOF
 
+# --- STEP 7u's FILE-GRAIN ROWS (BL-403(b)) -------------------------------------------
+# Each probe holds a `**7u.` section and the `**7v.` section after it, because the
+# section extractor must stop at 7v: 7v-only text satisfying the 7u arm is the false
+# green probe `7u-scope` exists for.
+#
+# OFFENDER: the shipped 7u before the fix -- a per-block bucket list, the overwrite
+# sentence, and no file-grain bucket and no exec-bit instruction at all.
+cat > "$WORK/probe/7u-offender.md" <<'EOF'
+**7u. Extract + mask-aware overwrite — reached ONLY when the invocation
+carried `apply`.** Per classify bucket, act:
+- **rewording** → discard the consumer's version.
+- **conflict** → extract to `overrides/`, then restore core to `theirs`.
+
+Then apply the **mask/reinject transform** to every manifest-listed file as
+part of its final overwrite.
+
+**7v. Runtime-verification gate.** Check each entry.
+EOF
+
+# NEAR-MISS: compliant, in wording that shares no sentence with the shipped fix.
+cat > "$WORK/probe/7u-nearmiss.md" <<'EOF'
+**7u. Extract + mask-aware overwrite — reached ONLY when the invocation
+carried `apply`.** Per classify bucket, act:
+- **rewording** → discard the consumer's version.
+
+Rows bucketed UPSTREAM-ONLY-ADD are copied from theirs, after which the copy's
+mode is made to match theirs' tree entry: a 100755 entry gets `chmod +x`, a
+100644 entry gets `chmod -x`.
+
+**7v. Runtime-verification gate.** Check each entry.
+EOF
+
+# ONE DIRECTION ONLY: names the bucket and grants the bit, never clears it.
+# preclassify buckets a wrong bit in BOTH directions, so this must be reported.
+cat > "$WORK/probe/7u-onedir.md" <<'EOF'
+**7u. Extract + mask-aware overwrite — reached ONLY when the invocation
+carried `apply`.** Per classify bucket, act:
+- **rewording** → discard the consumer's version.
+
+Rows bucketed UPSTREAM-ONLY-ADD are copied from theirs, then `chmod +x` where
+theirs ships 100755.
+
+**7v. Runtime-verification gate.** Check each entry.
+EOF
+
+# SCOPE PROBE: 7u names the bucket; the exec-bit text sits in 7v only. An extractor
+# that ran past the `**7v.` heading would score this compliant.
+cat > "$WORK/probe/7u-scope.md" <<'EOF'
+**7u. Extract + mask-aware overwrite — reached ONLY when the invocation
+carried `apply`.** Rows bucketed UPSTREAM-ONLY-ADD are copied from theirs.
+
+**7v. Runtime-verification gate.** Confirm the mode: `chmod +x` a file theirs
+ships 100755, `chmod -x` one it ships 100644.
+EOF
+
 cat > "$WORK/env.sh" <<EOF
 PROBE="$WORK/probe"
 export PROBE

@@ -2,7 +2,9 @@
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # extract-push-flag-decision — prove the untangle extract site DECIDES `push_candidate`
 # on the `domain-local` bullet instead of leaving it defaulted, and that `domain-local`
-# gains no push route of its own.
+# gains no push route of its own. A second subject in the same step: 7u must act on the
+# file-grain `UPSTREAM-ONLY-ADD` rows `--untangle` prints, exec bit included (BL-403(b);
+# its arm sits above CWD INVARIANCE).
 #
 # WHAT THE SUBJECT IS, AND WHAT THIS CANNOT OBSERVE. The subject is the bucket action
 # list in `ai-dlc-update/SKILL.md` step 7u — the site where the extract decision is
@@ -268,6 +270,69 @@ if [ -n "$DLV" ] && [ -n "$UPV" ] && [ "$DLV" = "$UPV" ]; then
   bad "both bucket bullets write '$DLV' — the flag no longer distinguishes the two buckets"
 else
   ok "the two bullets write different values ('${DLV:-<none>}' vs '${UPV:-<none>}')"
+fi
+
+# --- STEP 7u's FILE-GRAIN ROWS (BL-403(b)) -------------------------------------------
+# `preclassify.sh --untangle` buckets a manifest file UPSTREAM-ONLY-ADD when the consumer
+# lacks it AND when the consumer holds base's bytes with the wrong exec bit, in either
+# direction. `apply.sh` is not run in untangle mode, so 7u's prose is the only writer
+# instruction those rows get. Before the fix 7u carried no file-grain bucket and no
+# exec-bit line: a missing 100755 file landed at the umask's mode, and a wrong-bit row's
+# only needed action was never stated. The arm requires, inside the 7u section, the
+# bucket name and BOTH chmod directions.
+#
+# The section runs from the `**7u.` heading to the `**7v.` heading. rc 3 = no section,
+# rc 1 = a section missing one of the three tokens.
+step7u() { # step7u <file> -> the 7u section's text
+  LC_ALL=C awk '/^[*][*]7u[.]/ { f=1 } /^[*][*]7v[.]/ { exit } f { print }' "$1"
+}
+step7u_ok() { # step7u_ok <file>
+  s="$(step7u "$1")"
+  [ -n "$s" ] || return 3
+  grep -qF 'UPSTREAM-ONLY-ADD' <<<"$s" || return 1
+  grep -qF 'chmod +x' <<<"$s" || return 1
+  grep -qF 'chmod -x' <<<"$s" || return 1
+}
+
+step7u_ok "$PROBE/7u-offender.md"; rc=$?
+if [ "$rc" -eq 1 ]; then ok "probe 7u-1: the pre-fix 7u is reported (rc 1)"
+else bad "probe 7u-1: the pre-fix 7u returned rc $rc, not 1 — the arm cannot see its own subject"; fi
+if step7u_ok "$PROBE/7u-nearmiss.md"; then ok "probe 7u-2: a differently-worded compliant 7u is accepted"
+else bad "probe 7u-2: a compliant 7u in other wording was reported — the arm is keyed on a spelling"; fi
+step7u_ok "$PROBE/7u-onedir.md"; rc=$?
+if [ "$rc" -eq 1 ]; then ok "probe 7u-3: a 7u that only grants the bit is reported (both directions required)"
+else bad "probe 7u-3: a one-direction 7u returned rc $rc, not 1"; fi
+step7u_ok "$PROBE/7u-scope.md"; rc=$?
+if [ "$rc" -eq 1 ]; then ok "probe 7u-4: exec-bit text in 7v does not satisfy 7u (extraction stops at 7v)"
+else bad "probe 7u-4: 7v's text satisfied the 7u arm (rc $rc) — the extractor runs past 7v"; fi
+step7u_ok "$PROBE/offender.md"; rc=$?
+if [ "$rc" -eq 3 ]; then ok "probe 7u-5: a file with no 7u section returns rc 3, never the rc 1 of a silent section"
+else bad "probe 7u-5: a file with no 7u section returned rc $rc"; fi
+
+# The corpus.
+step7u_ok "$SUBJ"; rc=$?
+case "$rc" in
+  0) ok "step 7u names UPSTREAM-ONLY-ADD and sets the exec bit in both directions" ;;
+  3) bad "FIXTURE STALE: no **7u. section found in $SUBJ" ;;
+  *) bad "step 7u lacks UPSTREAM-ONLY-ADD, \`chmod +x\` or \`chmod -x\`: an untangle UPSTREAM-ONLY-ADD row is written at the umask's mode, and a wrong-bit row's whole action goes unstated" ;;
+esac
+
+# MUTANT, keyed on the predicate's own tokens rather than on a list of sites: every 7u
+# line carrying one of them is deleted from a COPY of the resolved subject. The token
+# count inside 7u must be non-zero before and zero after, or the mutation removed
+# less than the property and its verdict means nothing.
+M7U="$WORK/7u-mutant.md"
+LC_ALL=C awk '/^[*][*]7u[.]/ { f=1 } /^[*][*]7v[.]/ { f=0 }
+  f && (index($0, "UPSTREAM-ONLY-ADD") || index($0, "chmod +x") || index($0, "chmod -x")) { next }
+  { print }' "$SUBJ" > "$M7U"
+n_pre="$(step7u "$SUBJ" | grep -cE 'UPSTREAM-ONLY-ADD|chmod [+-]x')" || n_pre=0
+n_post="$(step7u "$M7U" | grep -cE 'UPSTREAM-ONLY-ADD|chmod [+-]x')" || n_post=0
+if cmp -s "$SUBJ" "$M7U" || [ "$n_pre" -eq 0 ] || [ "$n_post" -ne 0 ]; then
+  bad "FIXTURE BROKEN — the 7u mutant did not apply to $SUBJ (token lines in 7u: $n_pre before, $n_post after)"
+else
+  step7u_ok "$M7U"; rc=$?
+  if [ "$rc" -eq 1 ]; then ok "mutant 7u: stripping the 7u token lines from $SUBJ is reported (rc 1)"
+  else bad "mutant 7u: the stripped copy returned rc $rc, not 1 — the arm survives deleting its own subject"; fi
 fi
 
 # --- CWD INVARIANCE ------------------------------------------------------------------
