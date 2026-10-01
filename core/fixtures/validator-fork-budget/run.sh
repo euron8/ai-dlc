@@ -14,14 +14,15 @@
 # load-independent, which is what lets arm A2 assert EQUALITY across two runs rather than a
 # tolerance -- and a tolerance is how a gate becomes the flaky thing people push past.
 #
-# THE ARMS, IN THIS ORDER, ALL OF THEM REQUIRED. Drop any one and the gate passes vacuously.
+# THE ARMS, IN THE ORDER `judge` EVALUATES THEM, ALL OF THEM REQUIRED. Drop any one and the
+# gate passes vacuously.
 #
 #   A0  self-probe   the profiler counts a known-50 script as 50 and a fork-free one as 0
-#   A1  floor        a measurement at or below 40% of FORK_BUDGET is a BROKEN tracer
 #   A2  determinism  the reading was REPRODUCED; an unreproduced one is BROKEN, never a red
+#   A1  floor        a measurement at or below what a BROKEN subject measures, profiled live
+#   A5  wholeness    the traced run exited 0 and reached past the LAST arm header's line
 #   A3  ceiling      measured <= FORK_BUDGET
 #   A4  stale-high   measured >= 70% of FORK_BUDGET, or the budget has ratcheted out of reach
-#   A5  wholeness    the traced run exited 0 and reached past the LAST arm header's line
 #
 # A1 AND A5 ARE THE TWO THAT MAKE THE OTHERS MEAN ANYTHING. A validator that dies at line 400
 # forks almost nothing and sails under any ceiling; an unbounded-below gate reads that as an
@@ -34,7 +35,8 @@
 # question this repository's mutant rule asks of every absence-shaped arm, and m1 profiles with
 # the PS4 marker neutered. m2-m6 drive `judge`, one per arm, each with exactly one field moved
 # and its own budget derived from the live reading, so no mutant can fail on another's arm.
-# m7 drives `stable_verdict` with a profiler that accepts `--stable` and ignores it.
+# m7 drives `stable_verdict` with a profiler that accepts `--stable` and ignores it. m8 and m9
+# drive `judge` at the COMMITTED budget: m8 inside A4's window, m9 one fork above the floor.
 #
 # WHERE THIS FIXTURE'S TIME GOES, because it became the suite's second-longest unit and the
 # obvious guess is wrong. Instrumented solo, 32.2s wall / 36.0 CPU-seconds: the `--stable`
@@ -45,7 +47,7 @@
 # only lever on it is how the reading is taken. That lever lives in scripts/fork-profile.sh,
 # which now takes its reps two at a time.
 #
-# Exit 0 iff the live verdict is PASS and all eight mutants are killed by their own arm.
+# Exit 0 iff the live verdict is PASS and every mutant is killed by its own arm.
 set -u
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -104,15 +106,21 @@ NFX="$(find "$FXROOT" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | grep -c .)"
 
 # --- judge: the whole verdict, one implementation -----------------------------------------
 # judge <total> <exit> <maxline> <lastarm> <budget> -> "PASS" | "RED <why>" | "BROKEN <why>"
+# Reads the global `$FLOOR`, which is profiled live below before the first call.
 # Arm order is the order in the header and it is load-bearing: a subject that died early is
-# caught by A1 when it died at the top and by A5 when it died at the bottom, and A3/A4 are
-# only meaningful once both of those have been ruled out.
+# caught by A1 when it died at the top and by A5 when it died anywhere else, and A3/A4 are
+# only meaningful once both of those have been ruled out -- which is why A5 now runs BEFORE
+# them. With the floor near zero, a validator that dies after a few hundred forks passes A1;
+# evaluated after A4 it read "stale-high, lower the budget", a broken subject with a remedy
+# that would ratchet the budget onto it.
 judge() {
   local t="$1" ex="$2" mx="$3" la="$4" b="$5"
   case "$t" in ''|*[!0-9]*) echo "BROKEN the profiler reported no numeric TOTAL ('$t'); a tracer that produced nothing is not a validator that forked nothing"; return ;; esac
   case "$b" in ''|*[!0-9]*) echo "BROKEN no numeric FORK_BUDGET ('$b')"; return ;; esac
-  # A1 floor -- PROPORTIONAL TO THE BUDGET, never a constant.
+  case "${FLOOR:-}" in ''|*[!0-9]*) echo "BROKEN no numeric broken-subject FLOOR ('${FLOOR:-}')"; return ;; esac
+  # A1 floor -- WHAT A BROKEN SUBJECT MEASURES, profiled in this run, never a fraction.
   #
+  # HISTORY, BECAUSE BOTH EARLIER FORMS FAILED.
   # IT WAS A HARDCODED 5000, SIZED WHEN THE VALIDATOR FORKED 8225, AND IT BROKE TWICE OVER.
   # First directly: the release that took I59 and I60 from 1724 forks to 66 landed the true
   # reading at 4767, BELOW the constant, so the fixture reported the subject's own improvement
@@ -129,26 +137,24 @@ judge() {
   # not see it because it drives `judge` with a budget derived from `$T1`, where the window
   # is never empty; a mutant wired to a derived value keeps a dead arm looking alive.
   #
-  # 40% OF THE BUDGET, AND THE TWO SIDES ARE MEASURED RATHER THAN CHOSEN. Below: the three
-  # inputs A1 exists to refuse read 0 (a subject that forks nothing), 0 (the marker neutered
-  # -- the profiler's own self-probe refuses first), and 1 (the validator truncated at line
-  # 400, the case this arm's header names), so any floor above single digits refuses all of
-  # them and 40% is nowhere near them. Above: 0.4b < 0.7b for every positive budget, so A4's
-  # window is non-empty at EVERY budget this can ever carry -- which the constant could not
-  # promise. The two arms now move together when the budget ratchets down, which is the
-  # property that failed here.
-  if [ "$t" -le "$((b * 4 / 10))" ]; then
-    echo "BROKEN measured $t fork(s), at or below the floor of $((b * 4 / 10)) (40% of FORK_BUDGET=$b). That is a broken tracer, an unmatched marker or a validator that exited early -- not a fast validator. An unbounded-below gate reads a dead subject as an infinitely fast one."
-    return
-  fi
-  # A3 ceiling
-  if [ "$t" -gt "$b" ]; then
-    echo "RED measured $t fork(s) against FORK_BUDGET=$b ($((t - b)) over). Across $NFX fixture directories that is $((t / (NFX > 0 ? NFX : 1))) fork(s) per fixture. The suite runs this validator well over a hundred times per full push, so this is a change to the suite's wall clock. Either remove the forks (scripts/fork-profile.sh --section by-line names the sites) or raise FORK_BUDGET in $VAL as a deliberate one-line diff."
-    return
-  fi
-  # A4 stale-high
-  if [ "$((t * 10))" -lt "$((b * 7))" ]; then
-    echo "RED measured $t fork(s) against FORK_BUDGET=$b -- under 70% of it. The budget is stale-high; lower it to near $t. A ceiling nothing can reach is a check that cannot fire, and it reads exactly like one that passed."
+  # The next form was 40% of the budget, which fixed both of those and was still a fraction of
+  # the CEILING standing in for a property of the TRACER. Nothing joined `4/10` to what a broken
+  # subject reads, so a ratchet far enough down would have put a broken reading above it, and a
+  # receipt keyed on the literal `b * 4 / 10` was satisfied by respelling it `b * 2 / 5`.
+  #
+  # NOW THE FLOOR IS THE MEASUREMENT. The largest TOTAL this run's profiler reports for the
+  # broken subjects, profiled below: a script that forks nothing, and a copy of the validator
+  # cut at line 400 that dies at its required-input check. Measured: 0 and 1. The third broken
+  # case, the PS4 marker neutered, yields no TOTAL at all because the profiler's self-probe
+  # refuses first (m1), so it cannot contribute a number. A deeper truncation reads hundreds or
+  # thousands of forks and is not this arm's subject: it exits non-zero or stops short of the
+  # last arm, and A5 refuses it.
+  #
+  # A4's window is `FLOOR < t < 0.7b`, non-empty for every budget above 10*FLOOR/7 -- a
+  # handful of forks today. m8 constructs its midpoint at the committed budget, so a floor
+  # that ever rises to meet the ceiling fails the push rather than silencing A4.
+  if [ "$t" -le "$FLOOR" ]; then
+    echo "BROKEN measured $t fork(s), at or below the floor of $FLOOR (the most a broken subject reads under this profiler, measured this run). That is a broken tracer, an unmatched marker or a validator that exited early -- not a fast validator. An unbounded-below gate reads a dead subject as an infinitely fast one."
     return
   fi
   # A5 wholeness
@@ -164,6 +170,16 @@ judge() {
   case "$mx" in ''|*[!0-9]*) echo "BROKEN no numeric MAXLINE"; return ;; esac
   if [ "$mx" -lt "$la" ]; then
     echo "BROKEN the trace's highest source line is $mx but the last arm header is at line $la, so the run never reached the final arm. A validator that dies partway forks very little and would sail under any ceiling."
+    return
+  fi
+  # A3 ceiling
+  if [ "$t" -gt "$b" ]; then
+    echo "RED measured $t fork(s) against FORK_BUDGET=$b ($((t - b)) over). Across $NFX fixture directories that is $((t / (NFX > 0 ? NFX : 1))) fork(s) per fixture. The suite runs this validator well over a hundred times per full push, so this is a change to the suite's wall clock. Either remove the forks (scripts/fork-profile.sh --section by-line names the sites) or raise FORK_BUDGET in $VAL as a deliberate one-line diff."
+    return
+  fi
+  # A4 stale-high
+  if [ "$((t * 10))" -lt "$((b * 7))" ]; then
+    echo "RED measured $t fork(s) against FORK_BUDGET=$b -- under 70% of it. The budget is stale-high; lower it to near $t. A ceiling nothing can reach is a check that cannot fire, and it reads exactly like one that passed."
     return
   fi
   echo "PASS"
@@ -206,6 +222,34 @@ fi
 note "ok    A0 self-probe   -- a known-50 script counts 50, a fork-free one counts 0"
 
 # ==========================================================================================
+# THE FLOOR -- what a BROKEN subject reads under THIS profiler, measured before the corpus.
+# `judge`'s A1 explains why it is a measurement and not a fraction. Two subjects: a script that
+# runs almost nothing (also m0's subject, so m0 reads this same profile), and the validator cut
+# at line 400 under $TMP, where its root resolves to nowhere and it dies at its required-input
+# check. Both must yield a numeric TOTAL; a floor taken from a profile that produced none is
+# a floor of zero by accident.
+# ==========================================================================================
+printf '%s\n' '#!/usr/bin/env bash' 'x=1' 'exit 0' > "$TMP/tiny.sh"
+mkdir -p "$TMP/cut/scripts"
+head -400 "$VAL" > "$TMP/cut/scripts/validate-enforcement-map.sh"
+FLOOR=""
+for fs in tiny:"$TMP/tiny.sh" cut:"$TMP/cut/scripts/validate-enforcement-map.sh"; do
+  fs_name="${fs%%:*}"; fs_path="${fs#*:}"
+  if ! bash "$PROFILER" --target "$fs_path" --section total > "$TMP/floor-$fs_name.out" 2>"$TMP/floor-$fs_name.err"; then
+    note "FIXTURE BROKEN: the profiler could not profile the broken subject '$fs_name' at all, so the floor is unknown."
+    sed 's/^/      /' "$TMP/floor-$fs_name.err" | head -3
+    exit 1
+  fi
+  fs_t="$(field "$TMP/floor-$fs_name.out" TOTAL)"
+  case "$fs_t" in ''|*[!0-9]*)
+    note "FIXTURE BROKEN: the broken subject '$fs_name' produced no numeric TOTAL ('$fs_t'), so the floor is unknown."
+    exit 1 ;;
+  esac
+  if [ -z "$FLOOR" ] || [ "$fs_t" -gt "$FLOOR" ]; then FLOOR="$fs_t"; fi
+done
+cp "$TMP/floor-tiny.out" "$TMP/m0.out"
+
+# ==========================================================================================
 # THE CORPUS -- `--stable`, which re-profiles the real validator until a total repeats.
 # ==========================================================================================
 if ! bash "$PROFILER" --section total --stable > "$TMP/r1.out" 2>"$TMP/r1.err"; then
@@ -244,7 +288,7 @@ note "ok    A2 determinism  -- $T1 fork(s) reproduced ${N_STABLE}x over $N_REPS 
 VERDICT="$(judge "$T1" "$EX" "$MX" "$LA" "$BUDGET")"
 case "$VERDICT" in
   PASS)
-    note "ok    A1 floor       -- $T1 forks is above the broken-tracer floor of $((BUDGET * 4 / 10)) (40% of $BUDGET)"
+    note "ok    A1 floor       -- $T1 forks is above the broken-subject floor of $FLOOR (the most a broken subject read this run)"
     note "ok    A3 ceiling     -- $T1 <= FORK_BUDGET=$BUDGET ($((BUDGET - T1)) of headroom, $NFX fixture dirs)"
     note "ok    A4 stale-high  -- $T1 is at least 70% of $BUDGET, so the ceiling is still reachable"
     note "ok    A5 wholeness   -- traced run exited $EX and reached line $MX, past the last arm header at $LA"
@@ -273,18 +317,14 @@ kill_j() { # kill_j <name> <expected-class> <expected-substring> <judge args...>
 
 # m0 -- THE WHOLE PIPELINE against a subject that runs almost nothing. This is the mutant the
 # repository's rule demands of any absence-shaped arm: would the gate print `ok` for a program
-# that emits nothing? It must not.
-printf '%s\n' '#!/usr/bin/env bash' 'x=1' 'exit 0' > "$TMP/tiny.sh"
-if bash "$PROFILER" --target "$TMP/tiny.sh" --section total > "$TMP/m0.out" 2>&1; then
-  m0_v="$(judge "$(field "$TMP/m0.out" TOTAL)" "$(field "$TMP/m0.out" EXIT)" \
-                "$(field "$TMP/m0.out" MAXLINE)" "$(field "$TMP/m0.out" LASTARM)" "$BUDGET")"
-  case "$m0_v" in
-    BROKEN*floor*) note "ok    m0 empty-subject  -- a subject that forks nothing is BROKEN, not a pass" ;;
-    *) note "FAIL  m0 empty-subject -- a near-forkless subject produced: $m0_v"; rc=1 ;;
-  esac
-else
-  note "FAIL  m0 empty-subject -- the profiler could not profile a trivial script at all"; rc=1
-fi
+# that emits nothing? It must not. It reads the profile the floor derivation already took of
+# the same subject, so the subject is profiled once.
+m0_v="$(judge "$(field "$TMP/m0.out" TOTAL)" "$(field "$TMP/m0.out" EXIT)" \
+              "$(field "$TMP/m0.out" MAXLINE)" "$(field "$TMP/m0.out" LASTARM)" "$BUDGET")"
+case "$m0_v" in
+  BROKEN*floor*) note "ok    m0 empty-subject  -- a subject that forks nothing is BROKEN, not a pass" ;;
+  *) note "FAIL  m0 empty-subject -- a near-forkless subject produced: $m0_v"; rc=1 ;;
+esac
 
 # m1 -- THE MARKER NEUTERED. `PS4` is what separates trace from the subject's own stderr, and
 # there is no fd to separate them by on bash 3.2. A profiler whose marker no longer matches
@@ -333,8 +373,8 @@ kill_j "m2 ceiling      budget one below the truth" RED "over" \
        "$T1" "$EX" "$MX" "$LA" "$((T1 - 1))"
 kill_j "m3 stale-high   budget at twice the truth"  RED "stale-high" \
        "$T1" "$EX" "$MX" "$LA" "$((T1 * 2))"
-kill_j "m4 floor        a zero measurement"          BROKEN "floor" \
-       "0" "$EX" "$MX" "$LA" "$T1"
+kill_j "m4 floor        a measurement AT the floor"  BROKEN "floor" \
+       "$FLOOR" "$EX" "$MX" "$LA" "$T1"
 kill_j "m5 wholeness    trace stops before the last arm" BROKEN "never reached the final arm" \
        "$T1" "$EX" "$((LA - 1))" "$LA" "$T1"
 kill_j "m6 wholeness    the traced run exited non-zero" BROKEN "exited 2" \
@@ -354,7 +394,7 @@ kill_j "m6 wholeness    the traced run exited non-zero" BROKEN "exited 2" \
 # Constructed rather than asserted: the midpoint of A4's window at the LIVE budget. If the
 # window is empty the midpoint is not inside it, no arm fires, and `kill_j` reports the
 # mutant as unkilled -- which is the reading this mutant exists to produce.
-M8_LO="$((BUDGET * 4 / 10))"
+M8_LO="$FLOOR"
 M8_HI="$((BUDGET * 7 / 10))"
 M8_T="$(( (M8_LO + M8_HI) / 2 ))"
 if [ "$M8_LO" -lt "$M8_HI" ] && [ "$M8_T" -gt "$M8_LO" ] && [ "$M8_T" -lt "$M8_HI" ]; then
@@ -364,6 +404,14 @@ else
   note "FAIL  m8 A4-reachable -- A4 has NO window at FORK_BUDGET=$BUDGET (floor $M8_LO, stale-high below $M8_HI). The stale-high arm cannot fire for any measurement whatsoever, and a check that cannot fire reads exactly like one that passed."
   rc=1
 fi
+
+# m9 -- THE FLOOR IS THE MEASURED ONE, NOT A FRACTION OF THE CEILING. One fork above what a
+# broken subject reads, at the committed budget, must clear A1 and land on A4. Any fraction of
+# the budget puts the floor in the hundreds or thousands and refuses this input as BROKEN, so
+# respelling the old `4/10` in any form fails here. That is the input m4 and m8 cannot supply:
+# m4 sits at the floor, and m8 sits at a midpoint every fraction below 0.7 also clears.
+kill_j "m9 floor-tight  one fork above the measured floor" RED "stale-high" \
+       "$((FLOOR + 1))" "$EX" "$MX" "$LA" "$BUDGET"
 
 # m7 -- A PROFILER THAT ACCEPTS `--stable` AND IGNORES IT. Without this, A2 is a guard with no
 # subject: on exit 0 the profiler's own contract already guarantees a repeated reading, so the
@@ -394,7 +442,7 @@ fi
 # reads when a refactor deletes the mutants -- two inert runs compare equal. The floor is the
 # count this file is known to carry; it rises with a new mutant and refuses a run that
 # silently lost one.
-EXPECTED_MUTANTS=9
+EXPECTED_MUTANTS=10
 if [ "$rc" -eq 0 ] && [ "$N_KILLED" -lt "$EXPECTED_MUTANTS" ]; then
   note "FAIL  validator-fork-budget -- only $N_KILLED of $EXPECTED_MUTANTS mutants were killed. A battery that lost a mutant reports the same green line as one that killed them all."
   rc=1
