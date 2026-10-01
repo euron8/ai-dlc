@@ -1773,3 +1773,15 @@ verify: manual -- no receipt has been scored; the claim is the adversary's measu
 Discharges no consumer candidate.
 
 verify: manual -- the claim is the builder's and adversary's reading of the two files and has not been re-derived by the lead.
+
+## BL-416 — `retired-layer-passage`'s `norm-fallthrough` mutant survives when the caller hands down open fds 3-9
+
+**DEFECT. Carries the reference consumer's `PC-S316-RETIRED-LAYER-PASSAGE-NORM-FALLTHROUGH-MUTANT-DEPENDS-ON-INHERITED-FDS`**,
+filed during its 0.683.0 → 0.691.0 pull. `f_drive` lowered the limit to `ulimit -n 7` assuming only `norm_lines`' own
+fds 3-5 would be held. The consumer's pre-push pool hands its children open fds 3-9, which left no fd for `norm_lines`'
+`mktemp` substitution, so the real `lib.sh` and the mutant both refused 125, F1 scored identically, and the push was
+blocked by `MUTANT SURVIVED [norm-fallthrough]`. Reproduced here: `ok` with clean fds, `FAIL` with 3-9 opened by the
+caller. The fix is fixture-only: `f_drive` closes 3-9 before it lowers the limit, and a new arm re-scores both cells
+with 3-9 held. That arm fails (`./.`) with the close removed; `lib.sh` is unchanged.
+
+verify: sh o="$(exec 3</dev/null 4</dev/null 5</dev/null 6</dev/null 7</dev/null 8</dev/null 9</dev/null; bash core/fixtures/retired-layer-passage/run.sh 2>&1)"; ! grep -qF 'MUTANT SURVIVED [norm-fallthrough]' <<<"$o" && grep -qF 'norm_lines F0-F1 with fds 3-9 inherited' <<<"$o"

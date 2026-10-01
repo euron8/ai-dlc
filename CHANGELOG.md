@@ -19,6 +19,18 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.692.0] - 2026-10-01
+
+Batch 180's only release: one shipped fixture. It touches no bootstrapping file, so it takes effect on the
+pull that delivers it.
+
+### `PC-S316-RETIRED-LAYER-PASSAGE-NORM-FALLTHROUGH-MUTANT-DEPENDS-ON-INHERITED-FDS` (`BL-416`)
+
+- `core/fixtures/retired-layer-passage/run.sh`: `f_drive` closes fds 3-9 before `ulimit -n 7`, so the fd-limit
+  fold cell measures `lib.sh` rather than the caller's fd table. Under the consumer's pre-push pool, which hands
+  children open fds, the `norm-fallthrough` mutant had survived because both sides refused 125. A new arm drives
+  both cells with 3-9 held and requires real `.` and mutant `F1.`; with the close removed it fails `./.`.
+
 ## [0.691.0] - 2026-10-01
 
 Batch 179's eighth release: `apply.sh` alone. Bootstrapping, so it ships alone. A consumer runs its
