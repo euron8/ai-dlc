@@ -355,6 +355,86 @@ if [ "$H_RUN" = 1 ]; then
   fi
 fi
 
+# --- BL-336 arm r: THE REFILE'S "DID NOT RUN" ROW PRESCRIBES A PROCEDURE THAT FINISHES THE WORK ---
+# When the provenance refile's diff cannot run, apply raises `DECISION drift … did not run` and
+# withholds the stamp. Its remedy read "re-run apply" -- and on a consumer carrying the approved
+# report, a bare re-run is refused by the union gate (rc 1), because this run already wrote the tree
+# that report describes. `--finish`, which the restamp-withheld row offers, stamps theirs WITHOUT
+# refiling. The row now names re-render / re-approve / apply.
+#
+# THE STATE IS FORCED BY `chmod 000` on the consumer's schema, after the report is rendered and
+# before the run; the mode is restored before the remedy is followed. (An unwritable TMPDIR does
+# not reach this row: preclassify refuses first and apply stops before writing.)
+#
+# THE ARM FOLLOWS WHATEVER THE ROW SAYS, it does not grep for the right words: re-render+apply if
+# it names emit-report.sh, `--finish` if it names that, a bare re-run otherwise. It then reads the
+# TREE -- the extension holds the skill, the schema equals theirs, the stamp advanced -- so a row
+# naming a remedy that does not finish the work fails here however it is worded.
+# A root user reads a mode-000 file, so the row never appears: SKIP, never a pass.
+r_follow() { # r_follow <reconcile-dir> -> "<row?>|<rc2>|<ext>|<schema>|<stamp>|<remedy>"
+  local rec="$1" w row rem rc2
+  w="$(TMPDIR="$WORK" bash "$HERE/seed.sh")" || { printf 'BROKEN'; return; }
+  eval "$(sed 's/^/R_/' "$w/env.sh")"
+  mkdir -p "$R_CONSUMER/_bmad-output/ai-dlc-update"
+  r_render() { { printf '# reconcile report (fixture)\n\n'; bash "$rec/emit-report.sh" "$R_DIST" "$R_BASE" "$R_CONSUMER" "$R_THEIRS" 2>/dev/null; } \
+                 > "$R_CONSUMER/_bmad-output/ai-dlc-update/reconcile-report.md"; }
+  r_render
+  chmod 000 "$R_SCHEMA"
+  row="$(bash "$rec/apply.sh" "$R_DIST" "$R_BASE" "$R_CONSUMER" "$R_THEIRS" 2>/dev/null \
+         | awk -F'\t' '$1=="DECISION" && $2=="drift" && $3=="schemas/provenance-block.json" && index($4, "did not run") {print $4; exit}')"
+  chmod 644 "$R_SCHEMA"
+  if [ -z "$row" ]; then printf 'NOROW'; return; fi
+  # `--finish` FIRST: a row naming both a re-render and `--finish` sends the operator to the
+  # finisher, so that is what it is scored on.
+  case "$row" in
+    *"--finish"*)       rem=finish; bash "$rec/apply.sh" --finish "$R_DIST" "$R_BASE" "$R_CONSUMER" "$R_THEIRS" >/dev/null 2>&1; rc2=$? ;;
+    *"emit-report.sh"*) rem=rerender; r_render; bash "$rec/apply.sh" "$R_DIST" "$R_BASE" "$R_CONSUMER" "$R_THEIRS" >/dev/null 2>&1; rc2=$? ;;
+    *)                  rem=bare; bash "$rec/apply.sh" "$R_DIST" "$R_BASE" "$R_CONSUMER" "$R_THEIRS" >/dev/null 2>&1; rc2=$? ;;
+  esac
+  printf 'ROW|%s|%s|%s|%s|%s' "$rc2" \
+    "$(grep -q my-persona-skill "$R_EXT" 2>/dev/null && echo EXT || echo -)" \
+    "$(git -C "$R_DIST" show "${R_THEIRS}:core/schemas/provenance-block.json" | cmp -s - "$R_SCHEMA" && echo SCHEMA || echo -)" \
+    "$(grep -qE '^version: 9\.9\.9$' "$R_STAMP" && echo STAMPED || echo -)" "$rem"
+}
+R_RUN=1
+if ! grep -qF 'reapply_remedy=' "$APPLY"; then
+  case "$APPLY" in
+    */core/skills/ai-dlc-update/reconcile/apply.sh) printf '  --    (BL-336: this apply.sh carries no reapply_remedy; in the distribution arm r runs anyway and must go red)\n' ;;
+    *) R_RUN=0; printf '  SKIP  BL-336 arm r -- the installed apply.sh predates the re-render remedy; it lands with the pull that carries this fixture\n' ;;
+  esac
+fi
+if [ "$R_RUN" = 1 ]; then
+  R_GOT="$(r_follow "$(dirname "$APPLY")")"
+  case "$R_GOT" in
+    NOROW) printf '  SKIP  BL-336 arm r -- a mode-000 schema was still readable (running as root?), so the did-not-run row never appeared\n' ;;
+    "ROW|0|EXT|SCHEMA|STAMPED|rerender") ok "BL-336 arm r: the did-not-run row prescribes re-render/re-approve/apply, and following it refiles my-persona-skill, reverts the schema to theirs and advances the stamp" ;;
+    *) bad "BL-336 arm r: following the did-not-run row's remedy did not finish the refile ($R_GOT; want ROW|0|EXT|SCHEMA|STAMPED|rerender)" ;;
+  esac
+  # MUTANTS, each a copy of the whole reconcile dir. r-M1 restores the old bare re-run text (the
+  # union gate refuses it); r-M2 points the row at the --finish the withheld row prints (it stamps
+  # with nothing refiled). Both must leave the work undone, read off the tree.
+  r_mut() { # <label> <replacement for ${reapply_remedy} in the did-not-run row> <want-prefix>
+    local d="$WORK/r-$1" a='the consumer copy unreadable, or no staging directory), then ${reapply_remedy}"' n
+    n="$(grep -cF -- "$a" "$APPLY")" || n=0
+    if [ "$n" != 1 ]; then bad "BL-336 $1 DID NOT APPLY -- the did-not-run row's remedy anchor is not in apply.sh exactly once"; return; fi
+    cp -R "$(dirname "$APPLY")" "$d" || { bad "BL-336 $1 could not copy the reconcile dir"; return; }
+    R_A="$a" R_R="the consumer copy unreadable, or no staging directory), then $2\"" \
+      awk '{ i = index($0, ENVIRON["R_A"]); if (i) $0 = substr($0, 1, i-1) ENVIRON["R_R"] substr($0, i + length(ENVIRON["R_A"])); print }' \
+      "$APPLY" > "$d/apply.sh"
+    if cmp -s "$APPLY" "$d/apply.sh" || ! bash -n "$d/apply.sh"; then bad "BL-336 $1 DID NOT APPLY or does not parse"; return; fi
+    local g; g="$(r_follow "$d")"
+    case "$g" in
+      NOROW) printf '  SKIP  BL-336 %s -- the row did not appear\n' "$1" ;;
+      "$3"*) ok "BL-336 $1 killed: following its remedy leaves the work undone ($g)" ;;
+      *)     bad "BL-336 $1 SURVIVED or misfired: $g (want $3...)" ;;
+    esac
+  }
+  [ "$R_GOT" = NOROW ] || {
+    r_mut r-M1 're-run apply' 'ROW|1|-|-|-|bare'
+    r_mut r-M2 'advance the stamp with apply.sh --finish' 'ROW|0|-|-|STAMPED|finish'
+  }
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "apply-drift-refile: PASS"; exit 0; fi
 echo "apply-drift-refile: $fails assertion(s) FAILED" >&2

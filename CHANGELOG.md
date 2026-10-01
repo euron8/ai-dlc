@@ -19,6 +19,33 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.677.0] - 2026-09-30
+
+Batch 178's third release, and the first of its bootstrapping releases: `apply.sh` alone, because
+a consumer's installed copy runs the pull that delivers it.
+
+### Backlog
+
+- **`BL-099`**. The exec-bit audit checks both directions. A file upstream ships non-executable
+  (100644) whose consumer copy is executable now raises `DECISION extra-executable` and withholds the
+  stamp; before, it was never reported. On the distribution's HEAD there are 0 `100644` `.sh` files
+  under `core/`. `install.sh` chmods whole globs, so a future `100644` `.sh` there would trip this row
+  on every consumer. A `case` inside `$( )` that had silently disabled the audit under bash 3.2 is
+  rewritten with `if`.
+- **`BL-103`**. An unregistered `ai-dlc-` hook that theirs neither ships nor registers gets its own
+  gating `WORKLIST hook-unshipped` row: delete it, rename it out of `ai-dlc-`, or register it in
+  `settings.local.json`. Before, it was sent to a settings merge that cannot register it, and
+  `--finish` withheld forever.
+- **`BL-119`**. A recorded `retire` or `contradicts-core` verdict on an extension gets its own NOTE
+  naming who must act. A verdict the driver does not recognise is reported, never read as keep.
+- **`BL-336`**. The provenance refile's `did not run` row and both exec-bit rows prescribe
+  re-render, re-approve, apply, with the run's arguments filled in. Measured: a bare re-run is
+  refused by the union gate, and `--finish` stamps theirs with the work undone, because it skips
+  the resolution phases.
+
+The reference consumer's last real pull (`144c41b8` → `f7eec6f5`), applied old and new on two
+fresh clones, emits 46 rows on each side; the only difference is the clone path in one row.
+
 ## [0.676.0] - 2026-09-30
 
 Batch 178's second release: distribution-internal backlog work from the whole-backlog adjudication.

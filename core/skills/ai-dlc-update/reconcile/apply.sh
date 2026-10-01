@@ -195,6 +195,17 @@ say() {
 }
 err() { echo "apply: $*" >&2; exit 1; }
 
+# THE REMEDY FOR A ROW THAT ONLY A FRESH ORDINARY RUN CAN CLEAR, STATED ONCE. Four rows used to end
+# in "re-run" or "re-run apply": the provenance refile whose diff did not run, and the three
+# exec-bit rows. Each is printed by a run that has ALREADY WRITTEN the tree, so a bare re-run is
+# refused by the union gate above (the approved report describes the tree before this run moved
+# it) -- measured on both shapes, rc 1 and the stamp left at base. And `--finish`, which the
+# restamp-withheld row offers, skips every resolution phase: measured, it stamped theirs with the
+# known_skills edit unrefiled and the schema still drifted, and it stamped theirs over a 100755
+# validator still not executable. The procedure whose SUCCESS implies the work was done is the
+# union gate's own: re-render, re-approve, apply -- that run refiles, and that run re-audits.
+reapply_remedy="re-render the report with \`emit-report.sh ${DIST} ${BASE} ${CONSUMER} ${THEIRS}\` from the tree as it now stands, re-approve it, then re-run apply with the same four arguments. A bare re-run is refused by the union gate, because this run already wrote the tree the approved report describes; and the finish mode the withheld-stamp row offers does not redo this step, so it would stamp theirs over the tree exactly as it is."
+
 # --- MECHANICAL UNION GATE, CONDITION (1), DRIVEN HERE RATHER THAN NARRATED ----
 # SKILL.md step 7 lets `apply` write only after
 # `emit-report.sh --verify <report> <dist> <base> <consumer> <theirs>` exits 0. That gate was
@@ -955,7 +966,7 @@ while IFS= read -r rel; do
         ap_d="$(ap_pdiff "$AP_TMP/theirs" "$cons" 2>/dev/null)"; ap_drc=$?
       fi
       if [ "$ap_drc" = staging-failed ] || [ "$ap_drc" -ge 2 ]; then
-        say DECISION drift "$rel" "the diff against ${THEIRS} did not run (${ap_drc}) — whether this edit is an additive known_skills entry is UNKNOWN, not no; re-run apply"
+        say DECISION drift "$rel" "the diff against ${THEIRS} did not run (${ap_drc}) — whether this edit is an additive known_skills entry is UNKNOWN, not no. Fix what stopped it (the consumer copy unreadable, or no staging directory), then ${reapply_remedy}"
         mech_fail=$((mech_fail+1)); continue
       fi
       added="$(printf '%s\n' "$ap_d" | sed -n 's/^> *//p' | grep -oE '"[^"]+"' | tr -d '"' | grep -v '^known_skills$' | sort -u)"
@@ -1266,7 +1277,28 @@ while IFS="$TAB_CH" read -r ext detail; do
   case "$detail" in
     "$ADJ_ROW_TOKEN"=*)
       adj_v="${detail#"$ADJ_ROW_TOKEN"=}"; adj_v="${adj_v%% ::*}"
-      say NOTE extension-adjudicated "$ext" "this entry's hooked core file changed, and this project has ALREADY RECORDED a verdict of '${adj_v}' for this exact subject in the layer adjudication register. No re-read is prescribed: the reading has been done. The row is reported so the drift stays visible. The verdict is digest-keyed over this entry AND the core file it hooks as of this pull, so it is spent when either changes NEXT -- which may be several pulls away, or never: this is not a decision that expires on its own schedule."
+      # A RECORDED VERDICT DISCHARGES THE RE-READ, BUT ONLY THE KEEP VERDICT DISCHARGES THE ENTRY.
+      # `retire` and `contradicts-core` are honest answers that AUTHORIZE work, and this loop used to
+      # print the keep NOTE for all three -- "no re-read is prescribed" -- so a consumer that recorded
+      # `retire` was told nothing about the retirement it had just decided on. Each now names its
+      # actor. NOTE, not WORKLIST: an extension retired at SECTION grain (the retired passage cut,
+      # the entry kept) leaves a file this loop cannot tell from an unretired one, and a gating row
+      # would withhold the stamp forever over work already done. The members are unquoted `case`
+      # labels; the keep member is never spelled here at all, it is resolved from layer-drift.sh.
+      # The `*)` arm is a verdict this driver does not route -- a register value outside the
+      # schema's enum, or a member a later schema adds -- and it says so rather than reading as keep.
+      if [ "$adj_v" = "$ADJ_KEEP_VERDICT" ]; then  # extension keep test
+        say NOTE extension-adjudicated "$ext" "this entry's hooked core file changed, and this project has ALREADY RECORDED a verdict of '${adj_v}' for this exact subject in the layer adjudication register. No re-read is prescribed: the reading has been done. The row is reported so the drift stays visible. The verdict is digest-keyed over this entry AND the core file it hooks as of this pull, so it is spent when either changes NEXT -- which may be several pulls away, or never: this is not a decision that expires on its own schedule."
+      else
+        case "$adj_v" in
+          retire)
+            say NOTE extension-retire "$ext" "this project has RECORDED the verdict 'retire' for this entry against its hooked core file as of this pull, and that verdict authorizes the retirement: delete the entry per Rule 27(b), or cut the retired section from it; either edit respends the digest, so the verdict is spent by the act it authorizes. Nothing else carries this decision -- no later pull re-raises it while the digest holds." ;;
+          contradicts-core)
+            say NOTE extension-contradicts-core "$ext" "this project has RECORDED the verdict 'contradicts-core' for this entry against its hooked core file as of this pull: the entry no longer adds to core, it disagrees with it, and an extension is additive-only. Refile the entry as an override with a base_sha (extensions/README.md, LC-E5), or edit it so it adds to the new core text; either edit respends the digest. Nothing else carries this decision -- no later pull re-raises it while the digest holds." ;;
+          *)
+            say NOTE extension-adjudicated-unrouted "$ext" "this entry's hooked core file changed, and the register records a verdict of '${adj_v}' for it, which this driver does not route to any remedy. It is NOT read as a keep: check the register entry against the verdict enum in .claude/schemas/layer-adjudication-register.json." ;;
+        esac
+      fi
       ;;
     *)
       say WORKLIST extension-reread "$ext" "hooked core file changed; re-read this entry against the new core text and record a verdict (still-additive / contradicts-core / retire)"
@@ -1523,7 +1555,7 @@ for dest in $(manifest_dests); do
   want="$(git -C "$DIST" ls-tree "$THEIRS" -- "core/scripts/${base}" 2>/dev/null | awk '{print $1}')"
   if [ "$want" = "100755" ] && [ ! -x "$target" ]; then
     say DECISION declared-not-executable "$dest" \
-      "shipped 100755 upstream but not executable here — installed and inert. \`chmod +x\` and re-run."
+      "shipped 100755 upstream but not executable here — installed and inert. \`chmod +x\` it, then ${reapply_remedy}"
     declared_bad=$((declared_bad+1))
   fi
 done
@@ -1715,25 +1747,49 @@ fi
 # anywhere. The budget validator's scan channels had to be moved out of the project
 # root in v0.118.2 for exactly that reason -- nothing gitignored them, and a killed
 # run left litter a broad `git add -A` then committed.
+#
+# BOTH DIRECTIONS, ONE WALK. The audit kept `100755` alone, so a path upstream ships `100644`
+# whose consumer copy IS executable produced no finding anywhere, ever. `sync_mode_from_theirs`
+# clears that bit only on a file a pull APPLIES, so a bit left set by an earlier pull -- one that
+# predates the classifier's mode conjunct -- is invisible to every later one: an EDGE-triggered
+# check in the direction this block's own header says must be LEVEL. Each line below carries its
+# direction (`N` = 100755 not executable, `X` = 100644 executable) so each gets its own row kind:
+# `not-executable`'s text says "upstream ships this 100755", which is false of the mirror case.
+# FALSE-POSITIVE FLOOR, measured at the distribution's HEAD before shipping: 0 `100644` `*.sh`
+# files under core/ against 434 `100755` entries, so the mirror names nothing a fresh install
+# writes. It is a mechanical failure for the same reason as the other direction -- preclassify's
+# `mode_at_theirs` already reads 100644-plus-exec as NOT at theirs, and a stamp claiming theirs
+# over it would disagree with the classifier the next pull runs.
+# The listing is staged BEFORE the loop, never piped into it: a `| while` runs the loop in a
+# subshell that drops its refusals (procsub-staged-refusal's spelling arm, r2).
+NE_LIST="$(git -C "$DIST" ls-tree -r "$THEIRS" -- core/ 2>/dev/null \
+  | awk '$1=="100755" || $1=="100644" { m = $1; sub(/^[^\t]*\t/, ""); print m "\t" $0 }')"
 NOEXEC="$(
-  git -C "$DIST" ls-tree -r "$THEIRS" -- core/ 2>/dev/null \
-    | awk '$1=="100755"{ sub(/^[^\t]*\t/,""); print }' \
-    | while IFS= read -r cp; do
+  while IFS="$TAB_CH" read -r mode cp; do
+        [ -n "$mode" ] || continue
         rel="${cp#core/}"
         cons="$(consumer_path "$rel" 2>/dev/null)" || continue
         # Not every shipped file lands on every consumer (ci-templates only with
         # .github/, for one). Absent is a different finding, covered above.
         [ -f "$cons" ] || continue
-        [ -x "$cons" ] && continue
-        printf '%s\n' "$cons"
-      done
+        # `if`, never `case`: a `case` pattern's `)` inside `$( )` is where bash 3.2's parser
+        # breaks (see ap_pdiff), and here it broke SILENTLY -- the substitution came back empty
+        # and the audit named nothing in either direction.
+        if [ "$mode" = 100755 ] && [ ! -x "$cons" ]; then printf 'N\t%s\n' "$cons"
+        elif [ "$mode" = 100644 ] && [ -x "$cons" ]; then printf 'X\t%s\n' "$cons"
+        fi
+  done <<< "$NE_LIST"
 )"
 
 if [ -n "$NOEXEC" ]; then
-  while IFS= read -r cons; do
+  while IFS="$TAB_CH" read -r dir cons; do
     [ -n "$cons" ] || continue
-    say DECISION not-executable "${cons#"$CONSUMER"/}" \
-      "upstream ships this 100755 but the consumer copy is not executable — installed and inert. \`chmod +x\` it and re-run; every call site that invokes it directly fails until then."
+    case "$dir" in
+      N) say DECISION not-executable "${cons#"$CONSUMER"/}" \
+           "upstream ships this 100755 but the consumer copy is not executable — installed and inert; every call site that invokes it directly fails until it is fixed. \`chmod +x\` it, then ${reapply_remedy}" ;;
+      X) say DECISION extra-executable "${cons#"$CONSUMER"/}" \
+           "upstream ships this 100644 but the consumer copy is executable — a bit upstream does not grant, left by an earlier pull or by hand, and no later pull clears it unless it happens to rewrite this file. \`chmod -x\` it, then ${reapply_remedy}" ;;
+    esac
     mech_fail=$((mech_fail+1))
   done <<EOF
 $NOEXEC
@@ -2188,6 +2244,38 @@ for c in cmds:
                     case "$hr_inlocal" in *" ${_hn} "*) hr_dangle_local="${hr_dangle_local}${_hn} " ;; esac ;;
     esac
   done <<< "$(printf '%s\n' "$hr_blocks" | awk '$1 == "D" { print $2 }')"
+  # AN UNREGISTERED HOOK THEIRS NEITHER SHIPS NOR REGISTERS IS NOT THE SETTINGS MERGE'S TO CLEAR.
+  # `settings-merge.sh` re-applies the TEMPLATE's hook blocks and strips every other `ai-dlc-*`
+  # block from settings.json, so the remedy the settings-merge row prints cannot register a name
+  # the template does not carry -- measured: the validator stays at exit 1 after it, this row
+  # stays, and `--finish` withholds on every run with no in-band exit. Reachable because a hook
+  # upstream retires is a `DECISION deletion` this driver never acts on, so the file persists.
+  # Such a name gets its own WORKLIST row, still GATING: the consumer's pre-push runs the same
+  # validator, so a finisher that stamped past it would hand the operator a red push instead.
+  # A name in `${THEIRS}:core/hooks/` keeps the merge row whether or not the template registers
+  # it -- that is the shipped set I13 binds to the template, and the sourced libraries there are
+  # the validator's own exemption, not this row's. UNREADABLE TEMPLATE AT THEIRS -> no partition:
+  # without the template there is nothing to say a name is absent from, so today's row stands.
+  hr_tmpl="$(git -C "$DIST" show "${THEIRS}:templates/settings.json.template" 2>/dev/null)"; hr_tmpl_rc=$?
+  hr_orphan=""; hr_merge_names=""
+  hr_name_list="$(printf '%s\n' "$hr_names" | tr ' ' '\n')"
+  while IFS= read -r _hn; do
+    [ -n "$_hn" ] || continue
+    if [ "$hr_tmpl_rc" -eq 0 ] \
+       && ! git -C "$DIST" cat-file -e "${THEIRS}:core/hooks/${_hn}" 2>/dev/null; then
+      case "$hr_tmpl" in
+        *"/hooks/${_hn}"[!A-Za-z0-9._-]*) hr_merge_names="${hr_merge_names}${_hn} " ;;
+        *)                                 hr_orphan="${hr_orphan}${_hn} " ;;
+      esac
+    else
+      hr_merge_names="${hr_merge_names}${_hn} "
+    fi
+  done <<< "$hr_name_list"
+  hr_names="$hr_merge_names"
+  if [ "$hr_rc" = "1" ] && [ -n "$hr_orphan" ]; then
+    say WORKLIST hook-unshipped ".claude/hooks/" \
+      "hook(s) present and UNREGISTERED in the ai-dlc- namespace that theirs neither ships (core/hooks/) nor registers (templates/settings.json.template): ${hr_orphan}— the settings reconcile cannot clear this, because it registers only the template's hooks and strips every other ai-dlc- block from .claude/settings.json. Three exits, one per hook: (1) DELETE the file, if it is a hook upstream retired; (2) RENAME it out of the \`ai-dlc-\` namespace, if it is your own, and register it under the new name; (3) keep it and register it in .claude/settings.local.json, which settings-merge.sh never touches. Re-run scripts/ai-dlc/validate-hook-registration.sh afterwards; it must exit 0 before delivery."
+  fi
   # ONE ROW PER REMEDY. Unregistered and dangling-in-settings.json are both cleared by the same
   # merge, so they share the one `settings-merge` row -- whose unregistered wording is unchanged.
   # A dangling registration held in settings.local.json is a different act on a different file,
