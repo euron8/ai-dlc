@@ -1,0 +1,8 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+It is the MUTATION BATTERY behind the shard protocol of the shipped `ledger-reverify` fixture
+(BL-406): it copies core's own sources and that fixture into temp trees, re-deals the copy small,
+breaks one protocol arm at a time (J0, J1, J2, the unit floor, the shared-control count) and
+requires the fixture to go red on exactly that arm. Every verdict is a question about whether THIS
+repository's fixture still discriminates, which a consumer cannot act on, and shipping it would put
+a unit into the consumer's suite schedule that tests nothing of theirs.

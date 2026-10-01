@@ -180,6 +180,9 @@ core_manifest:
   - core/fixtures/layer-debt-ledger/**
   - core/fixtures/layer-readopt-gate/**
   - core/fixtures/ledger-reverify/**
+  - core/fixtures/ledger-reverify-b/**
+  - core/fixtures/ledger-reverify-c/**
+  - core/fixtures/ledger-reverify-d/**
   - core/fixtures/ledger-status-vocabulary/**
   - core/fixtures/ledger-reverify-unfalsifiable/**
   - core/fixtures/ledger-reverify-dist-only-reach/**

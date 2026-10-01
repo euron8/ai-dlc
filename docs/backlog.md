@@ -1742,7 +1742,7 @@ which unit became the new pole.
 
 Discharges no consumer candidate.
 
-verify: sh F=core/fixtures/ledger-reverify/run.sh; [ -f "$F" ] || exit 9; C="$(grep -v '^[[:blank:]]*#' "$F")"; [ -n "$C" ] || exit 9; L="$(grep -E '^SHARDS="[a-z ]+"$' <<<"$C" | tail -1)"; [ -n "$L" ] || exit 1; G="$(sed -E 's/^SHARDS="([a-z ]+)"$/\1/' <<<"$L")"; n=0; for g in $G; do n=$((n+1)); [ "$g" = a ] && continue; R="core/fixtures/ledger-reverify-$g/run.sh"; [ -f "$R" ] || exit 1; grep -v '^[[:blank:]]*#' "$R" | grep -qE -- "--group[[:blank:]]+$g([[:blank:]]|\$)" || exit 1; done; [ "$n" -ge 2 ]
+verify: sh F=core/fixtures/ledger-reverify/run.sh; [ -f "$F" ] || exit 9; C="$(grep -v '^[[:blank:]]*#' "$F")"; [ -n "$C" ] || exit 9; G="$(sed -nE 's/^SHARDS="([a-z ]+)".*$/\1/p' <<<"$C" | tail -1)"; [ -n "$G" ] || exit 1; D="$(sed -nE 's/^lr_unit_([a-z0-9_]+)\(\) \{.*$/\1/p' <<<"$C" | sort)"; [ -n "$D" ] || exit 1; U=""; n=0; for g in $G; do n=$((n+1)); P="$(bash "$F" --plan "$g" 2>/dev/null)" || exit 1; [ -n "$P" ] || exit 1; U="$U$P"$'\n'; [ "$g" = a ] && continue; R="core/fixtures/ledger-reverify-$g/run.sh"; [ -f "$R" ] || exit 1; K="$(grep -v '^[[:blank:]]*#' "$R" | sed -E 's/[[:blank:]]+#.*$//')"; grep -qE "bash \"\\\$IMPL\" --group $g([[:blank:]]|\$)" <<<"$K" || exit 1; grep -qF "in shard '$g'" <<<"$K" || exit 1; grep -qE '^exec ' <<<"$K" && exit 1; done; U="$(printf '%s' "$U" | grep . | sort)"; [ -z "$(uniq -d <<<"$U")" ] || exit 1; [ "$U" = "$D" ] || exit 1; [ "$n" -ge 2 ]
 
 
 ## BL-409 — `predicate-differential.sh` cannot reach `docs/escalations/pending.md`, so the suppression-lifetime site reports UNDECIDABLE on every consumer
