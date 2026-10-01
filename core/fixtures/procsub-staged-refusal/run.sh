@@ -442,6 +442,55 @@ for _q in plain "$QU"; do printf 'v2\n' > "$QCD/core/skills/ai-dlc-update/$_q.md
 gitq -C "$QCD" add -A; gitq -C "$QCD" commit -qm theirs
 QC_THEIRS="$(git -C "$QCD" rev-parse HEAD)"
 for _q in plain "$QU"; do printf 'v1\nmy local edit\n' > "$QCC/.claude/skills/ai-dlc-update/$_q.md"; done
+# QD: two core fixtures marked `.dist-only` at theirs, both still installed in the consumer. retired-
+# fixtures.sh reads the marker set through lib.sh's memo_ls_tree, whose `grep '^core/fixtures/'` and
+# `grep '/\.dist-only$'` both reject a C-quoted line, so under the default core.quotePath the non-ASCII
+# orphan's row is lost at rc 0. QD_RO is an unwritable memo: lib.sh borrows it, cannot create the fill
+# file, and takes memo_ls_tree's DIRECT line -- the second git call the fix had to change.
+QD="$W/qd"; QDD="$QD/dist"; QDC="$QD/consumer"; QD_RO="$QD/ro-memo"
+for _q in plain "$QU"; do mkdir -p "$QDD/core/fixtures/$_q" "$QDC/tests/fixtures/$_q"; printf 'dist-only\n' > "$QDD/core/fixtures/$_q/.dist-only"; done
+gitq -C "$QDD" init -q; gitq -C "$QDD" add -A; gitq -C "$QDD" commit -qm theirs
+QD_THEIRS="$(git -C "$QDD" rev-parse HEAD)"
+mkdir -p "$QD_RO" && chmod 555 "$QD_RO"
+QD_ROOT=0; ( : > "$QD_RO/probe" ) 2>/dev/null && QD_ROOT=1
+# QF: memo_ls_tree's four FALLBACK listings, the `git ls-tree` each detector runs when lib.sh did not
+# load. Each world holds a plain and a non-ASCII member, and each detector must report both on the
+# memo path (the tree's own directory) AND on the fallback path (QF_NL, a copy of reconcile/ with no
+# lib.sh). Under the default core.quotePath the fallback loses the non-ASCII row at rc 0. Seeded with
+# `core.quotePath` unset, its default.
+#   QF-RF retired-fixtures: two dist-only fixtures, both installed
+#   QF-UD unregistered-drift: two core hooks, the consumer byte-identical to base (CORE-OK rows)
+#   QF-LT retired-layer-token: a joined token retired from each of two step files, both quoted
+#   QF-LC retired-layer-contract: a labelled shape retired from each of two role files, both carried
+QF="$W/qf"
+mkdir -p "$QF/rf/d" "$QF/rf/c"
+for _q in plain "$QU"; do mkdir -p "$QF/rf/d/core/fixtures/$_q" "$QF/rf/c/tests/fixtures/$_q"; printf 'x\n' > "$QF/rf/d/core/fixtures/$_q/.dist-only"; done
+gitq -C "$QF/rf/d" init -q; gitq -C "$QF/rf/d" add -A; gitq -C "$QF/rf/d" commit -qm theirs
+QF_RF_T="$(git -C "$QF/rf/d" rev-parse HEAD)"
+mkdir -p "$QF/ud/d/core/hooks" "$QF/ud/c/.claude/hooks"
+for _q in plain "$QU"; do printf 'echo %s\n' "$_q" > "$QF/ud/d/core/hooks/$_q.sh"; cp "$QF/ud/d/core/hooks/$_q.sh" "$QF/ud/c/.claude/hooks/$_q.sh"; done
+gitq -C "$QF/ud/d" init -q; gitq -C "$QF/ud/d" add -A; gitq -C "$QF/ud/d" commit -qm base
+QF_UD_B="$(git -C "$QF/ud/d" rev-parse HEAD)"
+mkdir -p "$QF/lt/d/core/skills/ai-dlc/steps" "$QF/lt/c/.claude/skills/ai-dlc/extensions"
+printf '# s\n\nUse PLAIN_GONE here.\nKEEP_ME stays.\n' > "$QF/lt/d/core/skills/ai-dlc/steps/plain.md"
+printf '# s\n\nUse CAFE_GONE here.\n' > "$QF/lt/d/core/skills/ai-dlc/steps/$QU.md"
+gitq -C "$QF/lt/d" init -q; gitq -C "$QF/lt/d" add -A; gitq -C "$QF/lt/d" commit -qm base
+QF_LT_B="$(git -C "$QF/lt/d" rev-parse HEAD)"
+printf '# s\n\nKEEP_ME stays.\n' > "$QF/lt/d/core/skills/ai-dlc/steps/plain.md"
+printf '# s\n\nNothing.\n' > "$QF/lt/d/core/skills/ai-dlc/steps/$QU.md"
+gitq -C "$QF/lt/d" commit -qam theirs
+QF_LT_T="$(git -C "$QF/lt/d" rev-parse HEAD)"
+printf '# Ext\n\nStill says PLAIN_GONE and CAFE_GONE.\n' > "$QF/lt/c/.claude/skills/ai-dlc/extensions/e.md"
+mkdir -p "$QF/lc/d/core/team-roles" "$QF/lc/c/.claude/skills/ai-dlc/overrides"
+printf '# Role\n\n- Plain: `/plainy`\n' > "$QF/lc/d/core/team-roles/plain.md"
+printf '# Role\n\n- Cafe: `/cafey`\n' > "$QF/lc/d/core/team-roles/$QU.md"
+gitq -C "$QF/lc/d" init -q; gitq -C "$QF/lc/d" add -A; gitq -C "$QF/lc/d" commit -qm base
+QF_LC_B="$(git -C "$QF/lc/d" rev-parse HEAD)"
+printf '# Role\n\nnone\n' > "$QF/lc/d/core/team-roles/plain.md"
+printf '# Role\n\nnone\n' > "$QF/lc/d/core/team-roles/$QU.md"
+gitq -C "$QF/lc/d" commit -qam theirs
+QF_LC_T="$(git -C "$QF/lc/d" rev-parse HEAD)"
+printf -- '---\nshadows: team-roles/x.md#Identity\n---\n- Plain: `/plainy`\n- Cafe: `/cafey`\n' > "$QF/lc/c/.claude/skills/ai-dlc/overrides/r.md"
 
 # ================================================================================================
 # ARMS. Each takes a script path, returns 0 when the arm's assertion holds, and leaves ARM_WHY.
@@ -1182,6 +1231,48 @@ arm_qc_plain() { local rc=0; qc_run "$1" || rc=$?; qc_why "$rc"
   grep -qF "$(QC_ROW plain)" "$OUT"; }
 arm_qc_cafe() { local rc=0; qc_run "$1" || rc=$?; qc_why "$rc"
   grep -qF "$(QC_ROW plain)" "$OUT" && grep -qF "$(QC_ROW "$QU")" "$OUT"; }
+# QD drives retired-fixtures.sh with a fresh private memo (the fill) or the unwritable QD_RO (the
+# direct line). The plain row is the positive conjunct in every cell, so a copy that never reached
+# arm A fails rather than scoring an absence.
+qd_run() { if [ "$2" = direct ]; then AI_DLC_RECONCILE_MEMO="$QD_RO" bash "$1" "$QDD" "$QD_THEIRS" "$QDC" > "$OUT" 2> "$ERR"
+  else bash "$1" "$QDD" "$QD_THEIRS" "$QDC" > "$OUT" 2> "$ERR"; fi; }
+qd_why() { ARM_WHY="rc=$1 rows=[$(LC_ALL=C cut -f1,2 "$OUT" | LC_ALL=C cat -v | tr '\n\t' '| ')] $(grep -v '^$' "$ERR" | tail -1 | cut -c1-80)"; }
+QD_ROW() { printf 'RETIRED-FIXTURE-ORPHAN\ttests/fixtures/%s\t' "$1"; }
+arm_qd_plain() { local rc=0; qd_run "$1" fill || rc=$?; qd_why "$rc"
+  [ "$rc" -eq 0 ] && grep -qF "$(QD_ROW plain)" "$OUT"; }
+arm_qd_cafe() { local rc=0; qd_run "$1" fill || rc=$?; qd_why "$rc"
+  [ "$rc" -eq 0 ] && grep -qF "$(QD_ROW plain)" "$OUT" && grep -qF "$(QD_ROW "$QU")" "$OUT"; }
+arm_qd_direct() { local rc=0; qd_run "$1" direct || rc=$?; qd_why "$rc"
+  [ "$rc" -eq 0 ] && grep -qF "$(QD_ROW plain)" "$OUT" && grep -qF "$(QD_ROW "$QU")" "$OUT"; }
+# QF arms: one runner per detector, then a PLAIN arm (the positive conjunct alone) and a BOTH arm.
+# Each is run on the tree's script (memo path) and on the same script in QF_NL (fallback path).
+qf_run() { # qf_run <kind> <script> -> stdout to $OUT. Keyed on the KIND, never the basename: a
+  # mutant is `_m_<id>.sh` and would match no detector name.
+  case "$1" in
+    rf) bash "$2" "$QF/rf/d" "$QF_RF_T" "$QF/rf/c" ;;
+    ud) bash "$2" "$QF/ud/d" "$QF_UD_B" "$QF/ud/c" ;;
+    lt) bash "$2" "$QF/lt/d" "$QF_LT_B" "$QF_LT_T" "$QF/lt/c" ;;
+    lc) bash "$2" "$QF/lc/d" "$QF_LC_B" "$QF_LC_T" "$QF/lc/c" ;;
+    *)  return 99 ;;
+  esac > "$OUT" 2> "$ERR"; }
+qf_rows() { # qf_rows <kind> <member> -> the row text that member must produce
+  case "$1" in
+    rf) printf 'RETIRED-FIXTURE-ORPHAN\ttests/fixtures/%s\t' "$2" ;;
+    ud) printf 'CORE-OK\thooks/%s.sh\t' "$2" ;;
+    lt) [ "$2" = plain ] && printf 'PLAIN_GONE' || printf 'CAFE_GONE' ;;
+    lc) [ "$2" = plain ] && printf 'Plain:/plainy' || printf 'Cafe:/cafey' ;;
+  esac; }
+qf_arm() { # qf_arm <kind> <script> <plain|both>
+  local rc=0; qf_run "$1" "$2" || rc=$?
+  ARM_WHY="rc=$rc lib=$([ -f "$(dirname "$2")/lib.sh" ] && echo present || echo absent) rows=[$(LC_ALL=C cut -f1-3 "$OUT" | LC_ALL=C cat -v | tr '\n\t' '| ' | cut -c1-200)]"
+  [ "$rc" -eq 0 ] && grep -qF "$(qf_rows "$1" plain)" "$OUT" || return 1
+  [ "$3" = plain ] || grep -qF "$(qf_rows "$1" "$QU")" "$OUT"; }
+arm_qf_rf_plain() { qf_arm rf "$1" plain; }; arm_qf_rf() { qf_arm rf "$1" both; }
+arm_qf_ud_plain() { qf_arm ud "$1" plain; }; arm_qf_ud() { qf_arm ud "$1" both; }
+arm_qf_lt_plain() { qf_arm lt "$1" plain; }; arm_qf_lt() { qf_arm lt "$1" both; }
+arm_qf_lc_plain() { qf_arm lc "$1" plain; }; arm_qf_lc() { qf_arm lc "$1" both; }
+arm_qd_hx_fill()   { arm_qd_plain "$1" && arm_qd_direct "$1"; }
+arm_qd_hx_direct() { arm_qd_plain "$1" && arm_qd_cafe "$1"; }
 
 # --- r5: NO NON-COMMENT HERE-STRING in a file this release converted ------------------------------
 # The seven files 2f598a86 converted, and only those: the bootstrapping files (apply.sh, lib.sh,
@@ -1380,6 +1471,25 @@ run_arm arm_qb_cafe  "$S_PC" "preclassify, pre-relocation consumer: caf\\303\\25
 S_SUG="$RC_/self-update-gate.sh"
 run_arm arm_qc_plain "$S_SUG" "self-update-gate arm C: the consumer-edited ASCII machinery file plain.md is carried (SELF-UPDATE-CARRY, raw path)"
 run_arm arm_qc_cafe  "$S_SUG" "self-update-gate arm C: the consumer-edited machinery file caf\\303\\251.md is carried under its RAW path beside plain.md"
+S_RF="$RC_/retired-fixtures.sh"
+run_arm arm_qd_plain "$S_RF" "retired-fixtures arm A through memo_ls_tree's fill: the ASCII dist-only orphan tests/fixtures/plain is reported"
+run_arm arm_qd_cafe  "$S_RF" "retired-fixtures arm A through memo_ls_tree's fill: the non-ASCII orphan tests/fixtures/caf\\303\\251 is reported beside plain"
+if [ "$QD_ROOT" -eq 1 ]; then
+  skip "arm_qd_direct -- a chmod 555 memo is writable here (root?), so memo_ls_tree's direct line cannot be forced (this is not a pass)"
+else
+  run_arm arm_qd_direct "$S_RF" "retired-fixtures arm A through memo_ls_tree's DIRECT line (unwritable memo): caf\\303\\251 is reported beside plain"
+fi
+# The fallback path: a copy of reconcile/ with lib.sh REMOVED, asserted absent, so `command -v
+# memo_ls_tree` fails and each detector runs its own `git ls-tree`. The memo path is the tree itself.
+QF_NL="$W/qf-nolib"
+if cp -R "$RC_" "$QF_NL" && rm -f "$QF_NL/lib.sh" && [ ! -e "$QF_NL/lib.sh" ] && [ -f "$QF_NL/preclassify.sh" ]; then
+  for _k in rf:retired-fixtures ud:unregistered-drift lt:retired-layer-token lc:retired-layer-contract; do
+    run_arm "arm_qf_${_k%%:*}" "$RC_/${_k#*:}.sh"   "${_k#*:} MEMO path (lib.sh loaded): the non-ASCII member's row stands beside plain's"
+    run_arm "arm_qf_${_k%%:*}" "$QF_NL/${_k#*:}.sh" "${_k#*:} FALLBACK path (no lib.sh): its own ls-tree lists raw, so the non-ASCII row stands beside plain's"
+  done
+else
+  bad "FIXTURE BROKEN -- the no-lib.sh copy of reconcile/ for the QF fallback cells could not be built"
+fi
 
 if [ "$SELF_TREE" -ne 1 ]; then
   skip "spelling arm and mutants -- they run only against this fixture's own tree, not $TREE"
@@ -1802,6 +1912,7 @@ else bad "control hl/warn-shadowed-local-validators.sh: the heredoc lib.sh (HL) 
 control reconcile preclassify.sh                arm_qb_plain arm_qb_cafe
 libcontrol retired-tokens.sh        arm_qa_plain arm_qa_cafe
 libcontrol self-update-gate.sh      arm_qc_plain arm_qc_cafe
+[ "$QD_ROOT" -eq 1 ] || libcontrol retired-fixtures.sh arm_qd_plain arm_qd_cafe arm_qd_direct
 control reconcile retired-tokens.sh             arm_fx_rt_healthy arm_fx_rt arm_r5 arm_nw_both arm_nw_theirs arm_nw_cmt arm_lw_c arm_lw_trstatus
 [ "$LW_UTF8" -eq 1 ] && control reconcile retired-tokens.sh arm_lw_utf8
 control reconcile readopt-override.sh           arm_ro_healthy arm_r5
@@ -1896,7 +2007,7 @@ echo "== mutants: a staged FUNCTION whose body is a pipeline (each restores the 
 # output is STAGED (the iconv-gated case fold reads it twice), the mutation drops the staged sed's
 # own status read, which leaves `tr` folding an empty file at 0 -- the same observable.
 libmutant RLP-NORMLINES retired-layer-passage.sh arm_rlp_healthy "arm_rlp_norm arm_rlp_removed" \
-  $'          s/[.[:space:]]+$//\' > "$_nt" || _rc=$?\n' $'          s/[.[:space:]]+$//\' > "$_nt"\n'
+  $'          s/[.[:space:]]+$//\' >&3 || _rc=$?\n' $'          s/[.[:space:]]+$//\' >&3\n'
 # The deleted-line side read through a pipeline again, so its status is the LAST stage's.
 mutant RLP-REMOVED reconcile retired-layer-passage.sh arm_rlp_healthy "arm_rlp_removed" \
   'norm_lines < "$RLP_T/removed-raw" > "$RLP_T/removed-norm" || _rlp_rc=$?' \
@@ -2090,6 +2201,39 @@ lmutant EM-LABEL  arm_em_hx_label  "arm_em_label arm_lh"  "${EM_LABEL[@]}"
 libmutant QP-DIFF retired-tokens.sh arm_qa_plain "arm_qa_cafe" \
   $'{ git -C "$_dist" -c core.quotePath=false diff' $'{ git -C "$_dist" diff' \
   $'    git -C "$_dist" -c core.quotePath=false diff' $'    git -C "$_dist" diff'
+# memo_ls_tree lists under the default core.quotePath again, one git call per mutant: each must be
+# killed by the cell that reaches that call and by no other (the healthy twin is the other cell).
+if [ "$QD_ROOT" -eq 1 ]; then
+  skip "mutants QP-MEMO-FILL / QP-MEMO-DIRECT -- the direct line cannot be forced as root (this is not a pass)"
+else
+  libmutant QP-MEMO-FILL retired-fixtures.sh arm_qd_hx_fill "arm_qd_cafe" \
+    $'    git -C "$_dist" -c core.quotePath=false ls-tree -r --name-only "$_ref" > "$_t"' $'    git -C "$_dist" ls-tree -r --name-only "$_ref" > "$_t"'
+  libmutant QP-MEMO-DIRECT retired-fixtures.sh arm_qd_hx_direct "arm_qd_direct" \
+    $'{ git -C "$_dist" -c core.quotePath=false ls-tree -r --name-only "$_ref" 2>/dev/null; return $?; }' $'{ git -C "$_dist" ls-tree -r --name-only "$_ref" 2>/dev/null; return $?; }'
+fi
+# Each detector's FALLBACK listing loses its flag again, one mutant per file, built in a no-lib.sh copy
+# so the fallback is the path that runs. The healthy twin is that detector's plain row on the mutant;
+# the kill is the non-ASCII row. A control first: the unmutated no-lib copy passes every QF arm.
+mkdir -p "$MT/nolib" && cp -R "$MT/reconcile/." "$MT/nolib/" && rm -f "$MT/nolib/lib.sh"
+if [ -e "$MT/nolib/lib.sh" ] || [ ! -f "$MT/nolib/preclassify.sh" ]; then bad "control nolib: the no-lib.sh mutant directory could not be built"
+else
+  _qfc=""; for _k in rf:retired-fixtures ud:unregistered-drift lt:retired-layer-token lc:retired-layer-contract; do
+    "arm_qf_${_k%%:*}" "$MT/nolib/${_k#*:}.sh" || _qfc="$_qfc ${_k#*:}"; done
+  if [ -z "$_qfc" ]; then ok "control nolib: an unmutated no-lib.sh copy reports both members' rows for all four detectors"
+  else bad "control nolib: an UNMUTATED no-lib.sh copy failed for$_qfc -- the fallback mutant harness is broken"; fi
+  mutant QP-FB-RF nolib retired-fixtures.sh arm_qf_rf_plain "arm_qf_rf" \
+    '  || git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "$THEIRS" -- core/fixtures' \
+    '  || git -C "$DIST" ls-tree -r --name-only "$THEIRS" -- core/fixtures'
+  mutant QP-FB-UD nolib unregistered-drift.sh arm_qf_ud_plain "arm_qf_ud" \
+    '    git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "$BASE" -- \' \
+    '    git -C "$DIST" ls-tree -r --name-only "$BASE" -- \'
+  mutant QP-FB-LT nolib retired-layer-token.sh arm_qf_lt_plain "arm_qf_lt" \
+    'else tree="$(git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "$ref"' \
+    'else tree="$(git -C "$DIST" ls-tree -r --name-only "$ref"'
+  mutant QP-FB-LC nolib retired-layer-contract.sh arm_qf_lc_plain "arm_qf_lc" \
+    'else git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "$1" > "$2"' \
+    'else git -C "$DIST" ls-tree -r --name-only "$1" > "$2"'
+fi
 # preclassify's relocation listing reads names under the default core.quotePath again.
 mutant QP-LSTREE reconcile preclassify.sh arm_qb_plain "arm_qb_cafe" \
   'git -C "$DIST" -c core.quotePath=false ls-tree --name-only "$THEIRS" core/scripts/' \

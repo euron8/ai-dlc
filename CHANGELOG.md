@@ -19,6 +19,25 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.687.0] - 2026-10-01
+
+Batch 179's fourth release: `lib.sh` and the four detectors whose fallback listings must change with its
+memo. Bootstrapping, so it ships alone. A consumer runs its installed copy, so this takes effect on the
+pull after the one that delivers it.
+
+### Backlog
+
+- **`BL-364`**, `lib.sh` half and the four fallbacks, left open. `memo_ls_tree` lists with
+  `-c core.quotePath=false` on both git calls, and the fallback listings in `retired-fixtures.sh`,
+  `retired-layer-contract.sh`, `retired-layer-token.sh` and `unregistered-drift.sh` carry the same flag,
+  so the memo path and the fallback path give the same rows on a non-ASCII path (2 and 2 on a scratch
+  world with one `plain` and one `café` member; 2 and 1 before). 22 sites in other files remain.
+- **`BL-403`**, parts (c) and (d), left open. `norm_lines` opens its temp file on fds 3, 4 and 5, removes
+  the name before `sed` starts and again after, so a killed `sed` leaves nothing behind (0 files; 1 on
+  base), and an unanswered fold probe is a refusal (125) instead of a silent C fold. The five cached-status
+  reads go through one checked helper that returns 125 on an unreadable, empty or non-numeric value. Parts
+  (a) and (e) shipped in 0.686.0 and (b) in 0.685.0.
+
 ## [0.686.0] - 2026-10-01
 
 Batch 179's third release: `self-update-fixtures.sh` and `self-update-gate.sh`. Bootstrapping, so it ships

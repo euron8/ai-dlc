@@ -200,7 +200,7 @@ RLC_WHY=""
 rlc_tree() {   # rlc_tree <ref> <out> -- the full recursive listing at <ref> into <out>
   local rc=0
   if command -v memo_ls_tree >/dev/null 2>&1; then memo_ls_tree "$DIST" "$1" > "$2" || rc=$?
-  else git -C "$DIST" ls-tree -r --name-only "$1" > "$2" 2>/dev/null || rc=$?; fi
+  else git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "$1" > "$2" 2>/dev/null || rc=$?; fi
   # The phrase `refusing to report clean` is the one the unreadable-base warning always carried
   # (retired-layer-contract/run.sh assertion 6 reads it); the exit is now 2, not 0.
   [ "$rc" -eq 0 ] || { RLC_WHY="the rulebook tree listing at $1 (refusing to report clean, because 'no shapes' and 'nothing retired' are the same output)"; return "$rc"; }
