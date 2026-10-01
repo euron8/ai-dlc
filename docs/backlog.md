@@ -2629,3 +2629,40 @@ recorded limit is that an unquoted compare is invisible. Pinned by renderer prob
 existing arm 1, three-member extractor 1, hand-typed index row 1.
 
 verify: sh O=core/scripts/validate-steering-budget.sh; [ -f "$O" ] && grep -q '^if (CITE) {$' "$O" || exit 9; B="$(printf '\140')"; R="$(grep -F "| ${B}${O}${B} |" docs/vocabulary-index.md)"; [ -n "$R" ] || exit 1; bash scripts/render-vocabulary-index.sh --check >/dev/null 2>&1 || exit 1; M="$(printf '%s' "$R" | cut -d'|' -f3)"; for v in MATCH NOMATCH NOMATCH-NO-RECORDS NOMATCH-TRANSCRIPT-PRUNED; do case "$M" in *"${B}${v}${B}"*) ;; *) exit 1 ;; esac; done; I="$(printf '%s' "$R" | cut -d'|' -f5 | tr -d ' ')"; case "$I" in I[0-9]*) ;; *) exit 1 ;; esac; D="$(mktemp -d)" || exit 9; for x in core scripts .githooks templates VERSION; do cp -R "$x" "$D/$x" || exit 9; done; awk '/^  console\.log\("NOMATCH"\); process\.exit\(2\);$/ && !d { print "  console.log(v); process.exit(2);"; d = 1 } { print }' "$O" > "$D/$O"; cmp -s "$O" "$D/$O" && exit 9; out="$(cd "$D" && bash scripts/validate-enforcement-map.sh --arms "$I" 2>&1)"; grep -q "^FAIL: $I" <<<"$out"
+
+## BL-400 — a party-mode round over a single document is never sharded, and thirteen step files never declare a split-dispatch axis
+
+**DEFECT. Found at batch 178 by the operator, watching the reference consumer's sprint-316 carry-over
+evaluation.** Rule 28's "Split dispatch" (`core/skills/ai-dlc/rule-bodies/rule-28.md:53`) shards a
+party-mode round only on the **seats x parts** axis, and `_gate-procedures.md`'s party-mode sub-step
+applies it only "when the subject is two or more files (`stories/`)". The **sections** axis that 0.665.0
+added for a single document reaches review and repair passes and never reached party mode: the
+sub-step's span names `partition-document.sh --map` 0 times, against 4 in the same file. So a
+single-document planning artifact gets one agent per seat over the whole document.
+
+Measured on the consumer, read only: `_bmad-output/party-mode/s316/` holds exactly
+`carry-over-evaluation-{architect,dev,pm,tea}.md`, four whole-document seats over a 61967-byte evaluation
+that the consumer's own installed `partition-document.sh --map` splits into **4 parts**, not SERIAL.
+That is the rule text followed correctly, not a lead miss. The same document's §3a adversarial passes
+are specified sharded by section and had not started when this was filed, so whether they fan out is
+not yet measured.
+
+**The second claim is a census, not a defect yet.** Thirteen step files cite neither "Split dispatch"
+nor a `shard: none (…)` exception: `architecture`, `artifact-consolidation`, `codebase-inventory`,
+`deep-codebase-analysis`, `deploy-validate`, `doc-reconciliation`, `doc-repair-backfill`, `handoff`,
+`implementation`, `research-requirements`, `route`, `sprint-review-next`, `ui-direction`. Several are
+single-author or an ordered chain, so serial exception 3 may be the right answer for each; some reach
+sharding indirectly (`architecture`'s passes inherit it through `_gate-procedures.md`, and
+`implementation`'s dev dispatch is parallel under `_dispatch-protocol.md`). Each needs a recorded axis
+or a named exception.
+
+**Remedy shape, the adjudicator's to confirm.**
+- Extend the party-mode sub-step to the sections axis: one persona agent per (seat, part) that
+  `partition-document.sh --map` prints, plus one cross-part round, with the join counting files the
+  way the files-axis join already does; SERIAL keeps one agent per seat (exception 4).
+- Add the seats x sections line to Rule 28's axis list rather than a second copy of the rule.
+- For each of the thirteen steps, record its axis or which of exceptions 1-4 keeps it whole.
+
+Discharges no consumer candidate. The consumer has not filed one.
+
+verify: sh G=core/skills/ai-dlc/steps/_gate-procedures.md; [ -f "$G" ] || exit 9; SP="$(awk '/^1\. `\/bmad-party-mode --mode subagent --non-interactive`/{f=1} f&&/^2\. /{exit} f' "$G")"; [ -n "$SP" ] || exit 9; grep -q 'seats x parts' <<<"$SP" || exit 9; grep -q 'partition-document\.sh --map' <<<"$SP" || exit 1; grep -qi 'single document' <<<"$SP" || exit 1
