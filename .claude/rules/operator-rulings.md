@@ -49,6 +49,13 @@ Spawn agents liberally and in parallel. Background anything long. Never justify 
 terms of token cost. When ordering work, profile the SCHEDULE per unit first: measurement
 decides the ORDER, never the membership.
 
+## Read-set traces use the sandbox tracer, and the session runs them
+
+Every read-set trace runs as `bash core/scripts/derive-fixture-readsets.sh --list "<names>"
+--tracer sandbox`, from a normal account with no `sudo`, in the main checkout detached at the
+commit to trace. It needs no root, so a session owing a trace runs it and commits the map rather
+than handing the operator a command. `fs_usage` and `--tracer both` are for the operator alone.
+
 ## Reaching the operator
 
 `AskUserQuestion` when a decision is genuinely theirs and the answer changes what happens
