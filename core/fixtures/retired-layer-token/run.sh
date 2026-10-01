@@ -513,7 +513,7 @@ else
   bad "a renamed witness file was read as a deletion: rows='$(printf '%s' "$r_out" | tr '\n' ' ' | head -c 100)' err='$(head -c 160 "$WORK/rename.err")'"
 fi
 MREN="$WORK/m-rename.sh"
-sed 's#^  RENAMES="$(git -C "$DIST" diff -M .*#  RENAMES=""#' "$SCRIPT" > "$MREN"
+sed 's#^  RENAMES="$(git -C "$DIST" .*diff -M .*#  RENAMES=""#' "$SCRIPT" > "$MREN"
 if cmp -s "$MREN" "$SCRIPT"; then
   bad "FIXTURE BROKEN — the rename-map mutation matched nothing, so the arm above has no mutant"
 else
@@ -524,6 +524,146 @@ else
     ok "  MUTATION: with the rename map disabled the same world ROWS the word, so the arm above is what holds"
   else
     bad "  the rename-map mutant produced no row — the arm above cannot fail and proves nothing"
+  fi
+fi
+
+# --- A MEMO THAT CANNOT SERVE ONE KEY REFUSES, IT NEVER DECIDES THE ROWS -------------------------
+# lib.sh's memo returns 125 when a cached blob, listing or status cannot be served. The detector
+# used to discard it (`files_at`'s `|| return 0`, `show_at`'s `|| true`), and one lost key then
+# moved the rows at exit 0. Each cell warms a memo on the main world, damages ONE key, and demands
+# the refusal: exit 2, no stdout, the memo named on stderr. The three keys are the three wrong
+# answers measured on the pre-fix engine: a theirs rulebook blob lost (a FALSE row, `MEASURED`), a
+# base witness program lost (five TRUE rows dropped), a base rulebook blob lost (the retired-NOTHING
+# NOTE). The warm HIT with nothing damaged must reproduce the control's rows, or the damaged cells
+# would be comparing against a memo that never served anything.
+rlt_memo_warm() { local m; m="$(mktemp -d "$WORK/rlt-memo.XXXXXX")" || return 1
+  ( cd "$NEUTRAL" && AI_DLC_RECONCILE_MEMO="$m" bash "$SCRIPT" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" >/dev/null 2>&1 ); printf '%s' "$m"; }
+rlt_memo_run() { ( cd "$NEUTRAL" && AI_DLC_RECONCILE_MEMO="$1" bash "$SCRIPT" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" >"$WORK/mm.out" 2>"$WORK/mm.err" ); echo $?; }
+MM="$(rlt_memo_warm)"
+mm_rc="$(rlt_memo_run "$MM")"
+if [ "$mm_rc" = 0 ] && cmp -s "$WORK/mm.out" "$CTL/main.out" && [ -s "$WORK/mm.out" ]; then
+  ok "a warm memo HIT with nothing damaged reproduces the control's rows at exit 0"
+else
+  bad "FIXTURE BROKEN — the warm memo hit did not reproduce the control (rc=$mm_rc), so the damaged-key cells below compare against nothing"
+fi
+for mm_cell in \
+  "theirs-blob:$THEIRS:core%2Fskills%2Fai-dlc%2Fsteps%2Fdemo.md:c0:a theirs rulebook blob" \
+  "base-witness:$BASE:core%2Fscripts%2Fvalidate-ci-gates.sh:cs:a base witness program" \
+  "base-blob:$BASE:core%2Fskills%2Fai-dlc%2Fsteps%2Fdemo.md:cs:a base rulebook blob" \
+  "base-blob-status:$BASE:core%2Fskills%2Fai-dlc%2Fsteps%2Fdemo.md:s0:a base rulebook blob's status alone"; do
+  IFS=: read -r mm_id mm_ref mm_path mm_mode mm_what <<EOF
+$mm_cell
+EOF
+  MM="$(rlt_memo_warm)"
+  mm_n=0
+  for mm_f in "$MM"/"s "*" ${mm_ref}:${mm_path}.s"; do
+    [ -f "$mm_f" ] || continue
+    mm_k="${mm_f%.s}"; mm_n=$((mm_n + 1))
+    case "$mm_mode" in
+      c0) chmod 000 "$mm_k.c" ;;
+      cs) : > "$mm_k.s"; : > "$mm_k.c" ;;
+      s0) : > "$mm_k.s" ;;
+    esac
+  done
+  if [ "$mm_n" -ne 1 ]; then
+    bad "FIXTURE BROKEN — memo cell $mm_id found $mm_n key(s) for ${mm_path} at ${mm_ref}, not 1; the memo key grammar moved"
+    continue
+  fi
+  mm_rc="$(rlt_memo_run "$MM")"
+  chmod -R u+rw "$MM" 2>/dev/null
+  if [ "$mm_rc" = 2 ] && [ ! -s "$WORK/mm.out" ] && grep -qF 'could not be served by the reconcile memo' "$WORK/mm.err"; then
+    ok "memo cell $mm_id: $mm_what the memo cannot serve REFUSES — exit 2, no rows, the memo named"
+  else
+    bad "memo cell $mm_id: $mm_what the memo cannot serve gave rc=$mm_rc and $(grep -c . "$WORK/mm.out") row(s) — a lost cached object decided the rows (stderr: $(head -c 140 "$WORK/mm.err" | tr '\n' ' '))"
+  fi
+done
+
+# --- A NON-ASCII WITNESS FILE RENAMED AT THEIRS IS STILL A RENAME -----------------------------------
+# The rename map is a `diff -M --name-status` listing. Under the default `core.quotePath` git
+# C-quotes a non-ASCII path, the `$1==f` lookup against the raw path `files_at` listed misses, and
+# the renamed witness reads as DELETED -- which retires a word the renamed program still prints.
+# The ASCII arm above is this world's near-miss: the same rename with a name the default never quotes.
+DIST4="$WORK/dist-rename-cafe"
+mkdir -p "$DIST4/core/skills/ai-dlc" "$DIST4/core/scripts"
+git -C "$DIST4" init -q . 2>/dev/null
+printf '# Engine\n\nThe lead ALWAYS records it. The run is RENAMEDWORD when nothing was read.\n' > "$DIST4/core/skills/ai-dlc/SKILL.md"
+printf 'echo "RENAMEDWORD: nothing read" >&2\n' > "$DIST4/core/scripts/validate-café.sh"
+git -C "$DIST4" add -A; git -C "$DIST4" -c user.email=f@f -c user.name=f commit -qm base
+BASE4="$(git -C "$DIST4" rev-parse HEAD)"
+printf '# Engine\n\nThe lead ALWAYS records it. The run is EMPTY-READ when nothing was read.\n' > "$DIST4/core/skills/ai-dlc/SKILL.md"
+git -C "$DIST4" mv "core/scripts/validate-café.sh" "core/scripts/validate-crème.sh"
+git -C "$DIST4" add -A; git -C "$DIST4" -c user.email=f@f -c user.name=f commit -qm theirs
+THEIRS4="$(git -C "$DIST4" rev-parse HEAD)"
+c4_q="$(git -C "$DIST4" diff -M --name-status --diff-filter=R "$BASE4" "$THEIRS4" | grep -c '\\303')" || c4_q=0
+c4_out="$(bash "$SCRIPT" "$DIST4" "$BASE4" "$THEIRS4" "$RENC" 2>"$WORK/rename-cafe.err")"; c4_rc=$?
+if [ "$c4_q" -lt 1 ]; then
+  bad "FIXTURE BROKEN — this git did not C-quote the non-ASCII rename under the default core.quotePath, so the cell cannot express the defect"
+elif [ "$c4_rc" = 0 ] && [ -z "$c4_out" ] && grep -qE 'read as emphasis, not status: .*RENAMEDWORD' "$WORK/rename-cafe.err"; then
+  ok "a witness file with a NON-ASCII name renamed at theirs is read as a rename: the word is acquitted, not rowed"
+else
+  bad "a non-ASCII renamed witness was read as a deletion (rc=$c4_rc): rows='$(printf '%s' "$c4_out" | tr '\n' ' ' | head -c 100)'"
+fi
+
+# --- THE RENAME MAP THAT CANNOT BE STAGED REFUSES (a full disk, modelled) -----------------------------
+# `trap '' XFSZ; ulimit -f N` is the full-disk model: the write fails with EFBIG and the ignored
+# signal keeps the script alive. The rename map is calibrated PAST the limit and every other file
+# the run writes (the memo's tree listings, the staged sets) BELOW it, so the only write that can
+# fail is the map's. /bin/bash, because bash 3.2 stages a here-string to a file and a newer bash may
+# feed a small one through a pipe. The cell accepts the complete healthy answer (no row, the word
+# acquitted) or the detector's own named refusal at a non-zero exit, and nothing else. The
+# pre-fix engine read the map from a `<<<` that could not be staged: an empty lookup, the renamed
+# witness read as deleted, and a FALSE row at exit 0.
+DIST5="$WORK/dist-rename-big"
+mkdir -p "$DIST5/core/skills/ai-dlc" "$DIST5/core/scripts" "$DIST5/core/zz"
+git -C "$DIST5" init -q . 2>/dev/null
+printf '# Engine\n\nThe lead ALWAYS records it. The run is RENAMEDWORD when nothing was read.\n' > "$DIST5/core/skills/ai-dlc/SKILL.md"
+printf 'echo "RENAMEDWORD: nothing read" >&2\n' > "$DIST5/core/scripts/validate-a.sh"
+r5_pad="$(printf '%0180d' 0)"
+r5_i=0
+while [ "$r5_i" -lt 40 ]; do
+  printf 'filler %s, unique so the rename pairing is exact\n' "$r5_i" > "$DIST5/core/zz/a${r5_i}-${r5_pad}.md"
+  r5_i=$((r5_i + 1))
+done
+git -C "$DIST5" add -A; git -C "$DIST5" -c user.email=f@f -c user.name=f commit -qm base
+BASE5="$(git -C "$DIST5" rev-parse HEAD)"
+printf '# Engine\n\nThe lead ALWAYS records it. The run is EMPTY-READ when nothing was read.\n' > "$DIST5/core/skills/ai-dlc/SKILL.md"
+git -C "$DIST5" mv core/scripts/validate-a.sh core/scripts/validate-b.sh
+r5_i=0
+while [ "$r5_i" -lt 40 ]; do
+  git -C "$DIST5" mv "core/zz/a${r5_i}-${r5_pad}.md" "core/zz/b${r5_i}-${r5_pad}.md"
+  r5_i=$((r5_i + 1))
+done
+git -C "$DIST5" add -A; git -C "$DIST5" -c user.email=f@f -c user.name=f commit -qm theirs
+THEIRS5="$(git -C "$DIST5" rev-parse HEAD)"
+r5_map="$(git -C "$DIST5" -c core.quotePath=false diff -M --name-status --diff-filter=R "$BASE5" "$THEIRS5" | awk -F'\t' '$1 ~ /^R/ {print $2"\t"$3}' | wc -c | tr -d ' ')"
+r5_ls="$(git -C "$DIST5" ls-tree -r --name-only "$THEIRS5" | wc -c | tr -d ' ')"
+r5_blk="$( ( trap '' XFSZ; ulimit -f 1; printf '%08192d' 0 > "$WORK/r5-blk" ) 2>/dev/null; wc -c < "$WORK/r5-blk" | tr -d ' ')"
+r5_lim=""
+case "$r5_blk" in ''|*[!0-9]*|0) ;; *) r5_lim=$(( (r5_ls + (r5_map - r5_ls) / 2) / r5_blk )) ;; esac
+# THE CALIBRATION: under the limit a here-string of the map's size must fail, and a write of the
+# listing's size must land whole. Either one not holding means this host cannot express the cell.
+r5_cal=""
+if [ -n "$r5_lim" ] && [ "$r5_lim" -gt 0 ]; then
+  r5_hs="$(/bin/bash -c 'trap "" XFSZ; ulimit -f "$1" || exit 97; wc -c <<<"$2"' _ "$r5_lim" "$(printf "%0${r5_map}d" 0)" 2>/dev/null)"
+  /bin/bash -c 'trap "" XFSZ; ulimit -f "$1" || exit 97; printf "%0${2}d" 0 > "$3"' _ "$r5_lim" "$r5_ls" "$WORK/r5-cal" 2>/dev/null
+  r5_w="$(wc -c < "$WORK/r5-cal" 2>/dev/null | tr -d ' ')"
+  case "$r5_hs" in *[1-9]*) ;; *) [ "$r5_w" = "$r5_ls" ] && r5_cal=ok ;; esac
+fi
+if [ "$r5_cal" != ok ]; then
+  bad "FIXTURE BROKEN — calibration: under ulimit -f ${r5_lim:-?} (block ${r5_blk:-?} B) a ${r5_map}-byte here-string did not fail or a ${r5_ls}-byte write did not land whole, so the forced cell below cannot discriminate"
+else
+  r5_u="$(bash "$SCRIPT" "$DIST5" "$BASE5" "$THEIRS5" "$RENC" 2>"$WORK/r5-u.err")"; r5_urc=$?
+  if [ "$r5_urc" = 0 ] && [ -z "$r5_u" ] && grep -qE 'read as emphasis, not status: .*RENAMEDWORD' "$WORK/r5-u.err"; then
+    ok "unforced control: the ${r5_map}-byte rename map pairs the witness and the word is acquitted"
+  else
+    bad "FIXTURE BROKEN — unforced control: rc=$r5_urc rows='$(printf '%s' "$r5_u" | head -c 80)'; the forced cell has no healthy answer to accept"
+  fi
+  r5_f="$(/bin/bash -c 'trap "" XFSZ; ulimit -f "$1" || exit 97; shift; exec /bin/bash "$@"' _ "$r5_lim" "$SCRIPT" "$DIST5" "$BASE5" "$THEIRS5" "$RENC" 2>"$WORK/r5-f.err")"; r5_frc=$?
+  if { [ "$r5_frc" = 0 ] && [ -z "$r5_f" ] && grep -qE 'read as emphasis, not status: .*RENAMEDWORD' "$WORK/r5-f.err"; } \
+     || { [ "$r5_frc" -ne 0 ] && [ "$r5_frc" -ne 97 ] && [ -z "$r5_f" ] && grep -q '^retired-layer-token: staging the rename map did not run' "$WORK/r5-f.err"; }; then
+    ok "forced: a rename map that cannot be staged under ulimit -f $r5_lim gives the healthy answer or the named refusal (rc=$r5_frc)"
+  else
+    bad "forced: a rename map that cannot be staged under ulimit -f $r5_lim gave rc=$r5_frc rows='$(printf '%s' "$r5_f" | tr '\n' ' ' | head -c 100)' — an unstaged map read as empty"
   fi
 fi
 
