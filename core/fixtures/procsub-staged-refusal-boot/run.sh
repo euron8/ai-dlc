@@ -1258,11 +1258,11 @@ LR=ledger-reverify.sh
          '  receipt_path_tokens "$1" > "$LR_STAGE/named-tokens" || return 3' '  done < "$LR_STAGE/named-tokens"')" \
     && score M-L2 L2 "$d" \
     || mutreport M-L2
-  d="$(DROP1='  git -C "$DIST" ls-tree -r --name-only "${THEIRS}" -- core/ > "$LR_STAGE/core-map-ls-tree" 2>/dev/null || return 1' DROP2='ZZ-PSB-NONE' \
+  d="$(DROP1='  git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "${THEIRS}" -- core/ > "$LR_STAGE/core-map-ls-tree" 2>/dev/null || return 1' DROP2='ZZ-PSB-NONE' \
        OLD='  done < "$LR_STAGE/core-map-ls-tree" > "$CORE_MAP"' \
-       NEW='  done < <(git -C "$DIST" ls-tree -r --name-only "${THEIRS}" -- core/ 2>/dev/null) > "$CORE_MAP"' \
-       mut M-L3 "$LR" "$SWAP" '  done < <(git -C "$DIST" ls-tree -r --name-only "${THEIRS}" -- core/ 2>/dev/null) > "$CORE_MAP"' 'core-map-ls-tree' \
-         '  git -C "$DIST" ls-tree -r --name-only "${THEIRS}" -- core/ > "$LR_STAGE/core-map-ls-tree" 2>/dev/null || return 1' \
+       NEW='  done < <(git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "${THEIRS}" -- core/ 2>/dev/null) > "$CORE_MAP"' \
+       mut M-L3 "$LR" "$SWAP" '  done < <(git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "${THEIRS}" -- core/ 2>/dev/null) > "$CORE_MAP"' 'core-map-ls-tree' \
+         '  git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "${THEIRS}" -- core/ > "$LR_STAGE/core-map-ls-tree" 2>/dev/null || return 1' \
          '  done < "$LR_STAGE/core-map-ls-tree" > "$CORE_MAP"')" \
     && score M-L3 L3 "$d" \
     || mutreport M-L3

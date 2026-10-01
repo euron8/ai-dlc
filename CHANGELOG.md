@@ -19,6 +19,32 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.693.0] - 2026-10-01
+
+Batch 181's first release: `ledger-reverify.sh` alone. Bootstrapping, so it ships alone. A consumer runs its
+installed copy, so this takes effect on the pull after the one that delivers it.
+
+### Backlog
+
+- `BL-364` (partial): `ledger-reverify.sh` stops C-quoting non-ASCII paths (`-c core.quotePath=false`) at all six
+  of its listing sites. A name carrying a TAB, a `"` or a backslash is still quoted, on base and tip alike. Five are the receipt's own grammar (1139, 1440, 1506, 1593, and 1746, which 0.689.0 added). The sixth
+  is `named_reach`'s `log -m --name-only`, which that grammar cannot see. Under the default quoting a
+  non-ASCII core path opened with `"`, failed the `core/` prefix test, and read the candidate as
+  `NAMED-UPSTREAM-DOCS-ONLY`. A non-ASCII `.dist-only` fixture fell out of the marker set, and
+  `theirs_has` failed to resolve a non-ASCII basename. The receipt now reads 18 unflagged sites of 38, down
+  from 23; `ledger-reverify.sh` carries none.
+- The raw listing reaches two text tools that abort on an invalid UTF-8 byte under a UTF-8 locale: the
+  `LR_DIST_ONLY` marker `sed` and `named_reach`'s filter `awk`. Each `||` then read the abort as a result,
+  emptying the whole dist-only set or scoring the commit as code, so an ASCII dist-only candidate read
+  `NAMED-UPSTREAM`. Both run under `LC_ALL=C`, as the file's other `awk` readers already did. Found by the
+  release's tip adversary.
+- `core/fixtures/ledger-reverify-dist-only-reach`: Part E seeds a `café.sh` world with sanity arms (the
+  default listing must quote it), cells that fail on the base engine, and one mutant per observable site,
+  each scored against Part A's ASCII kinds as well. Cell E5 builds Latin-1 fixture names through git
+  plumbing and runs under `LC_ALL=en_US.UTF-8` and under an unset `LC_ALL` with `LANG=en_US.UTF-8`; a mutant
+  dropping either `LC_ALL=C` is killed. Four mutants elsewhere were re-anchored on the new
+  spellings and still kill.
+
 ## [0.692.0] - 2026-10-01
 
 Batch 180's only release: one shipped fixture. It touches no bootstrapping file, so it takes effect on the
