@@ -646,11 +646,13 @@ verify: sh D=$(mktemp -d) || exit 9; trap 'rm -rf "$D"' EXIT; git clone -q --loc
 
 ## BL-093 — the ledger ceiling bounds one member of a wider unbounded population
 
-`scripts/validate-backlog-size.sh` bounds `docs/backlog.md`. Derived by ranking every tracked
-file by `wc -c`, it is the **5th** largest and not the largest unbounded queue in the tree:
-`CHANGELOG.md` is **2004483 bytes / 504 release headings**; `.ai-dlc-fixture-readsets.tsv` is a
-**tracked, machine-appended 1638114-byte / 21107-line register**; `docs/plans/retire-graph-consumer-layer.md`
-is **384817 bytes**; and `docs/context-hardening-notes.md` is **104394 bytes** and is the file
+`scripts/validate-backlog-size.sh` bounds `docs/backlog.md`. Re-derived at batch 178 by ranking
+every tracked file by `wc -c` at `297f7499`: `docs/backlog.md` is **194366 bytes, 10th**, and the
+larger files are `CHANGELOG.md` (**3190562 bytes / 764 release headings**), `docs/backlog.archive.md`,
+`.ai-dlc-fixture-readsets.tsv` (**tracked, regenerated whole, 1726310 bytes / 26311 lines**), two
+archived plans, `scripts/validate-enforcement-map.sh` and two fixture drivers.
+`docs/plans/retire-graph-consumer-layer.md` has since moved to `docs/plans/archive/` (333144 bytes)
+and is not part of this entry. `docs/context-hardening-notes.md` is **108317 bytes** and is the file
 `.claude/rules/resident-context.md` directs every session to append stories to. The only other
 ceiling in the repo is A6's `DURABLE_MAX` over `CLAUDE.md` + `.claude/rules/`.
 
@@ -663,7 +665,18 @@ to append to it and nothing bounding it.
 Decide per file whether it is a QUEUE (bound it) or a LOG (say so, in its own header, so the next
 audit stops). The plans corpus is NOT part of this entry — it is `BL-006`'s surviving half.
 
-verify: manual — the disposition is a judgment per file, not a predicate.
+Held note (batch 178): disposition taken under the batch-177 operator ruling
+(`docs/plans/graph-ledger-full-drain.md`, OPERATOR RULINGS THIS BATCH) that
+`docs/context-hardening-notes.md` is a LOG, unbounded like `CHANGELOG.md`. All three are LOGs.
+`CHANGELOG.md` and `docs/context-hardening-notes.md` carry a bold
+`**LOG — unbounded by design; rotation does not apply.**` paragraph above their first `## `
+heading; the CHANGELOG's is deliberately NOT a `## [` heading, which `validate-release-version.sh`
+keys on. The map's line is emitted by the deriver's write block as a `#` comment, which every map
+reader skips; the map was not hand-edited, so the line lands in `.ai-dlc-fixture-readsets.tsv` at
+the next `fs_usage` or `sandbox` trace (`--tracer both` never writes the map). The receipt binds the
+emitter LINE inside the `{ … } > "$MAP"` block, not a whole-file grep, which a comment satisfies.
+
+verify: sh D=core/scripts/derive-fixture-readsets.sh; for f in "$D" CHANGELOG.md docs/context-hardening-notes.md; do [ -f "$f" ] || exit 9; done; E="$(awk '/^\{$/ {f=1; next} /^\} > "\$MAP"$/ {f=0} f' "$D")"; [ -n "$E" ] || exit 9; grep -q '^  echo "# LOG -- unbounded by design; rotation does not apply' <<<"$E" || exit 1; for f in CHANGELOG.md docs/context-hardening-notes.md; do P="$(awk '/^## / {exit} {print}' "$f")"; grep -q '^\*\*LOG — unbounded by design; rotation does not apply\.\*\*' <<<"$P" || exit 1; done; exit 0
 ## BL-004 — the nine inner pools are owed, and the hook records them as owed
 
 66 workers sit on top of the outer pool. They cannot be swept with an environment variable —
