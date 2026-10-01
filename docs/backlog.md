@@ -839,77 +839,6 @@ unmeasured false-positive set and must not ship before that set is enumerated.
 verify: manual -- this entry records a gap, not a receipt. Do not close it on a green
 `layer-drift.sh` run; that green is the defect.
 
-## BL-127 — a fixture is skipped by the read-set map on exactly the change that breaks it
-
-**`.ai-dlc-fixture-readsets.tsv` decides which fixtures a push runs, and a MAPPED fixture whose row
-omits a file its `run.sh` actually opens is skipped on the one change most likely to break it.** The
-fail-closed arm in `.githooks/pre-push` rescues only UNMAPPED fixtures — a mapped row with a hole
-is trusted, so the hole is silent.
-
-**Measured on the working tree, filtered to files that really exist under `core/hooks/`: 20
-(fixture, hook) pairs across 15 distinct fixtures.** Control in the same derivation: the map does
-carry hook paths — `ai-dlc-pause.sh` appears in 35 rows — so a zero would have meant the grammar,
-not the corpus.
-
-The instance that motivated this entry: **`pause-hook-origin` parses `ai-dlc-continue.sh` at four
-sites and does not list it.** That fixture owns the `cat > "$LOG_FILE" <<'EOF'` log legend, 2860
-bytes required byte-identical across FIVE hooks, and it is the only thing guarding that invariant.
-A push touching only `ai-dlc-continue.sh` does not select it. `v0.441.0` edited that hook and
-passed only because the release was gated with `AI_DLC_FIXTURE_NO_SKIP=1` by hand.
-
-**THE FALSE-POSITIVE SET IS NOT MEASURED, AND MEASURING IT IS THE FIRST THING THIS ENTRY OWES.**
-"Parses" here means the `run.sh` mentions the basename, and at least one hit is known to be
-path-as-data rather than a read — `layer-readopt-gate` passes `hooks/ai-dlc-continue.sh` as an
-ARGUMENT to the override-registration script and never opens it. So 20 is a CEILING on the real
-population, not a count of defects, and this entry must not be closed on a fix whose FP set was
-never taken. The discriminator is whether the path is OPENED, which a mention-grep cannot see.
-
-**Do NOT fix this by hand-editing 20 rows.** The map is trace-derived; hand-patching it puts a
-second, drifting declaration beside the derivation and the next regeneration silently reverts it.
-The fix belongs at the point the map is GENERATED, or in an arm that fails the push when a mapped
-fixture's row omits a `core/hooks/` path its `run.sh` opens — which is the same shape as the
-existing bidirectional joins and is why the receipt below keys on an arm existing rather than on
-the count reaching zero.
-
-**A count-reaching-zero receipt would be unattainable and is deliberately not used.** Until the FP
-set is enumerated, some of the 20 are legitimate, so "the gap is 0" is a criterion that can never
-go green — the documented failure mode for acceptance criteria in this repo.
-
-Discovered while shipping `v0.441.0`, which addressed the reference consumer's
-`PC-S307-CONTINUE-HOOK-CANNOT-DISTINGUISH-A-DIRECTED-SESSION-FROM-AN-UNATTENDED-ONE`. Not filed by
-that consumer and carries no `PC-` id of its own; it is an ai-dlc-internal discovery and ranks
-below any PC-backed entry under the provenance-first rule.
-
-**Tiered DEFECT.** It does not corrupt anything; it removes a guard silently, and the symptom of a
-missing guard is a green push.
-
-Held note (batch 178): the false-positive set this entry owes is now MEASURED, and it does NOT
-support re-tiering to NOTE. Re-derived at this tip: **25** (mapped fixture, `core/hooks/` basename)
-pairs where `run.sh` names the hook and the fixture's rows omit `core/hooks/<name>` (control in the
-same derivation: 61 pairs where the row DOES carry it). **19** are comment-only mentions (an
-earlier count read 18). The **6** non-comment ones were inspected by hand. Five do not open the
-core hook: `layer-readopt-gate` passes `hooks/ai-dlc-continue.sh` as an argument,
-`core-write-guard` puts a consumer path in tool-call JSON, `upstream-routing` truncates a stub in
-its own consumer tree, `settings-merge-unparseable-template` greps a template for the name, and
-`gate-repair-record` quotes it in prose. **The sixth is a live instance:**
-`postcompact-rulebook-recovery` resolves `core/hooks/ai-dlc-postcompact.sh` in `seed.sh:46` and
-executes it at `run.sh:1762`. Its rows carry four other hooks and not that one. They were last
-derived on 2026-09-15; the arm that reads that hook landed on 2026-09-22 (0.620.0), and none of the
-22 map commits since then changed a `postcompact-rulebook-recovery` row (the largest re-derived 11
-fixtures, so each was a `--list` partial, not a full re-trace). A push
-touching only `ai-dlc-postcompact.sh` skips the one fixture guarding the defect 0.620.0 fixed. The
-motivating instance is closed: `pause-hook-origin`'s rows now carry `core/hooks/ai-dlc-continue.sh`.
-Two corrections to the method above: a `run.sh`-only mention grep misses reads resolved in a
-sibling `seed.sh` (this instance names the hook in `run.sh` only in messages), and the remedy is a
-re-trace of `postcompact-rulebook-recovery`, not a hand-edited row. Tier stays **DEFECT**.
-
-The receipt is STRUCTURAL: it exits 1 while no arm in `scripts/validate-enforcement-map.sh` binds a
-fixture's read-set row to the `core/hooks/` paths its `run.sh` resolves, 0 once one does, and 9 if
-the map or the read-set file cannot be located, so a relocated map reports a moved precondition
-rather than a false close.
-
-verify: sh m=scripts/validate-enforcement-map.sh; r=.ai-dlc-fixture-readsets.tsv; [ -f "$m" ] || exit 9; [ -f "$r" ] || exit 9; grep -q ai-dlc-pause.sh "$r" || exit 9; h=$(grep -cE "^# --- I[0-9]+[a-z]?:" "$m"); [ "${h:-0}" -ge 10 ] || exit 9; grep -qiE "^# --- I[0-9]+[a-z]?:.*(read-set|readset)" "$m" && exit 0; exit 1
-
 ## BL-132 — the safe-stop acquittal answers a question about BEHAVIOUR with a test on ancestry
 
 Carries the reference consumer's `PC-S340-SAFE-STOP-ACQUITTAL-TESTS-ANCESTRY-NOT-CONTENT`, so it is
@@ -1190,54 +1119,6 @@ docs-only, S951 templates-only, S952 merge, S953 ambiguous reach, each with a mu
 
 verify: sh L="$PWD/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh"; [ -f "$L" ] || exit 9; w="$(mktemp -d)" || exit 9; g() { git -C "$w/d" -c user.name=r -c user.email=r@r -c commit.gpgsign=false "$@"; }; git init -q "$w/d" || exit 9; mkdir -p "$w/d/core" "$w/d/docs" "$w/d/templates" "$w/c" || exit 9; echo 1.0.0 > "$w/d/VERSION"; echo M > "$w/d/core/s.md"; echo t > "$w/d/core/subj.sh"; g add -A && g commit -qm base || exit 9; B="$(g rev-parse HEAD)"; echo p > "$w/d/docs/plan.md"; g add -A && g commit -qm "docs(plan): cross-reference PC-S870-DOCS-NAMED" || exit 9; echo t > "$w/d/templates/x.template"; g add -A && g commit -qm "fix: absorb PC-S871-TEMPLATE-NAMED" || exit 9; echo u > "$w/d/core/other.sh"; g add -A && g commit -qm "release: discharges PC-S872-CORE-MENTION by another route" || exit 9; T="$(g rev-parse HEAD)"; [ -z "$(g show --name-only --format= HEAD~2 | grep -E '^(core|templates)/')" ] || exit 9; g show --name-only --format= HEAD | grep -q '^core/other.sh$' || exit 9; g show --name-only --format= HEAD | grep -q 'subj.sh' && exit 9; printf -- '# l\n\n- **PC-S870-DOCS-NAMED** -- a.\n  verify: theirs_lacks core/s.md "ZZ"\n\n- **PC-S871-TEMPLATE-NAMED** -- b.\n  verify: theirs_lacks core/s.md "ZZ"\n\n- **PC-S872-CORE-MENTION** -- subject is core/subj.sh, which the naming commit never touches.\n  verify: theirs_lacks core/s.md "ZZ"\n' > "$w/c/l.md"; o="$(bash "$L" "$w/d" "$B" "$w/c" "$T" "$w/c/l.md" 2>/dev/null)"; k() { printf '%s\n' "$o" | awk -F'\t' -v l="$1" '$2==l && $1 ~ /^NAMED-UPSTREAM/ {print $1; exit}'; }; a="$(k PC-S870-DOCS-NAMED)"; b="$(k PC-S871-TEMPLATE-NAMED)"; c="$(k PC-S872-CORE-MENTION)"; [ -n "$b" ] && [ -n "$c" ] || exit 9; [ "$a" = NAMED-UPSTREAM-DOCS-ONLY ] && [ "$b" = NAMED-UPSTREAM ] || { echo "BL145-DOCS-ONLY-NAMING-READ-AS-ABSORPTION docs=${a:-<no row>} templates=$b" >&2; exit 1; }; [ "$c" = NAMED-UPSTREAM ] || exit 0; echo "BL145-CORE-TOUCHING-MENTION-STILL-NAMED-UPSTREAM (the third class: a commit that touches core/ but not the entry's subject)" >&2; exit 1
 
-
-
-## BL-159 — four handoff-completion defects adjacent to `BL-158`, found by the batch-49 hands and deliberately not fixed there
-
-**PARTIAL IN v0.668.0.** Claim 3 FIXED: auto-handoff step 5 in `_gate-procedures.md` now runs
-`rm -f _bmad-output/.handoff-in-progress` beside the pause-flag touch, spelled as `handoff.md` step 5
-spells it; `handoff-resume-guard` pins it with a span arm keyed on the step-5 line, self-probed both
-ways. Claim 2 DEAD-PREMISE: the consumer tracks the marker 0 times against 5381 tracked paths under
-`_bmad-output/`, and `git check-ignore` exits 0 on it. Claims 1 and 4 SURVIVE: `ai-dlc-continue.sh`
-still has no working-tree test beside its `PUSH_OK=` lines, and `HANDOFF_ON_DISK`'s only reader sits
-inside the transcript-present block. The receipt keys on claim 1 and stays.
-
-Held note (batch 178): claim 4 fixed on this branch. Check 0 in `core/hooks/ai-dlc-continue.sh` now
-enters on `HANDOFF_VOCAB_OK` AND (a readable transcript OR `HANDOFF_ON_DISK` OR the sticky
-`.handoff-guard-armed` record). With no transcript the resume arm reads 1 = unknown, the In-Flight
-arm keeps its existing `-f "$TRANSCRIPT"` fail-open, the block row carries `[no transcript: …]`,
-and the completion stamp is not written. `handoff-completion-assertion` arms (nt0)-(nt5) pin the
-entry condition, the resume-unknown line, the stamp decision and the sticky entry; mutants m31
-(transcript gate restored), m32 (resume parsed from the unread transcript), m33 (stamp without a
-transcript) and m34 (sticky not an entry condition) each die on their arm. Claim 1 stays open and
-the receipt below still keys on it; claim 4's receipt is the fixture, not this line.
-
-Distribution-internal, no `PC-` id; ranks below any PC-backed entry. Filed together because they
-share one subject and one release would otherwise have widened past its scope. NOTE tier for each
-until one is measured to have moved a verdict on the consumer.
-
-1. **`PUSH_OK` counts COMMITS, so a skipped step 2 reads `ahead 0` and passes.**
-   `core/hooks/ai-dlc-continue.sh`'s push arm reads `git rev-list --count '@{u}..HEAD'`; an
-   uncommitted tree is zero commits ahead. The consumer at batch 49 read `ahead 0` with 7 dirty
-   files. `handoff.md:64-65` names the trap in prose. A working-tree test beside the ref test is
-   the shape; its false-positive set on a consumer whose `_bmad-output/` is deliberately dirty
-   mid-sprint has not been measured, which is why it is filed and not shipped.
-2. **The entry marker is TRACKED in the consumer although the schema declares it ignored.**
-   `core/schemas/pipeline-state-paths.json` marks `_bmad-output/.handoff-in-progress` transient
-   with an `ignore` pattern; on the consumer `git ls-files` returns it and `git check-ignore` exits
-   1. Two of the schema's 14 transient patterns are missing from the consumer's `.gitignore`
-   (control: 12 present). `core/scripts/sync-transient-ignore.sh` is the producer; whether it was
-   never run there or predates the two entries is a consumer-side question.
-3. **The auto-handoff twin never clears the marker.** `_gate-procedures.md`'s auto-handoff step 5
-   creates the pause flag and omits `rm -f _bmad-output/.handoff-in-progress` (control: it names
-   `pipeline-paused.flag` once). Today that is inert — an auto-handoff reads no `handoff.md`, so
-   no marker exists — and becomes a wedge only if a marker from an interrupted manual handoff
-   survives into an auto-handoff, which `BL-158`'s marker arm would then block on correctly.
-4. **Check 0's on-disk trigger sits behind a readable-transcript test.** `ai-dlc-continue.sh:288`
-   requires `$TRANSCRIPT` to exist before any arm runs, including the `HANDOFF_ON_DISK` path built
-   for the case the transcript cannot see. A Stop with no transcript path skips the guard.
-
-verify: sh h=core/hooks/ai-dlc-continue.sh; [ -f "$h" ] || exit 9; grep -q 'PUSH_OK=' "$h" || exit 9; grep -qE 'git -C "\$PROJECT_DIR" (status --porcelain|diff --quiet)' "$h" && exit 0; exit 1
 
 
 ## BL-195 — Check 2's suppression-lifetime arm reads a verdict the CURRENT gate has not yet written, and all four candidate remedies are refuted by measurement
@@ -1870,104 +1751,6 @@ this phase on the pool-width mismatch, because the operator's shell profile sets
 
 verify: manual
 
-## BL-391 — step 2 still commits locally when its gated push fails, which the same file calls the stranded-branch shape
-
-**NOTE. Found by the BL-389 correction hand at batch 176, not shipped.** The step-2 cycle bullet in
-`core/skills/ai-dlc-update/SKILL.md` reads "If there is no remote / push fails, commit locally and note
-it". The UN-SYNCED paragraph 0.673.0 added, and the gate paragraph beside it, both describe a local
-self-update commit as the PC-S308 orphan: `skill_version` advanced on a commit that never merges. This
-path is a push failing AFTER the gate returned OK on an in-sync branch, so it is not the UN-SYNCED case
-BL-389 fixed and 0.673.0 did not make it worse. Discharges no consumer candidate.
-
-**Held note (batch 178): fixed on branch `b178-b5`, not landed.** The cycle bullet now keeps
-commit-locally only for a consumer with no remote. A push that fails after the gate's pre-push
-probe passed discards the cycle, in a new paragraph under the bullet. The self-update commit stages
-only the paths the cycle wrote, by explicit pathspec, never `git add -A`. On the failed push the
-agent runs `git checkout <original-branch>`, lists the branch's files with `git diff --name-only`, and
-deletes the branch only when every file is in the written set. Otherwise it STOPs and names the
-branch. Step 2 reports DEFER, the branch is marked UN-SYNCED for the invocation as BL-389 does,
-step 6's refusal clause now names step 2 as a source, and the stamp stays put because its rewrite
-lived on the discarded commit. Step 1's "A clean tree on a branch in sync" claim is CORRECTED, not
-enforced. Step 1 has no porcelain check and gets none, because it runs on every bare dry-run, which
-a dirty tree does not make wrong. Step 6 refuses a dirty tree before `apply`, and pathspec staging
-removes the `git add -A` affordance at the one write site. `update-preflight-push` gains arms 7-9
-and 14 single-line mutants (26 total, each killed by its own arm alone). A consumer whose
-installed text predates this SKIPs those arms. The fixture ships in the same self-update slice as
-the text, so it lands green on the pull that delivers it. The prose itself protects only the pull
-after that one. NOTE, not built: `reconcile/self-update-gate.sh` (~:995 and ~:1002) and
-`core/fixtures/self-update-gate/run.sh:2508` still describe the old "commit locally" disposition
-in comments. Scored in fresh `mktemp -d` trees, all variant pairs `cmp`-distinct, receipt under
-`bash -c 'set -uo pipefail; …'`:
-
-| variant | want | receipt | fixture arms 1-9 |
-|---|---|---|---|
-| tip (`origin/main` 297f7499) | 1 | 1 | 000100111 |
-| the fix | 0 | 0 | 000000000 |
-| wrongA: the commit-locally sentence deleted, nothing added | 1 | 1 | 000100111 |
-| wrongB: the fix with an unconditional `git branch -D` | 1 | 1 | 000000001 |
-| wrongC: the fix, cycle bullet still commits locally on a failed push | 1 | 1 | 000000010 |
-| wrongD: the fix, false clean-tree claim restored | 1 | 1 | 000000100 |
-| rightE: discard paragraph respelled and wrapped | 0 | 0 | 000000000 |
-| no `SKILL.md` at the root | 9 | 9 | n/a |
-
-verify: sh P=core/skills/ai-dlc-update/SKILL.md; [ -f "$P" ] || exit 9; grep -q 'AUTO-PUSH' "$P" || exit 9; LC_ALL=C awk 'function fin() { if (t == "") return; gsub(/[*]/, "", t); gsub(/[ \t]+/, " ", t); l = tolower(t); t = ""; if (index(l, "detect with")) { nd++; if (index(l, "clean tree on a branch") || !(l ~ /(not|never)[^.;]*(check|inspect)[^.;]*working tree/) || !index(l, "step 6")) bad = 1 } if (index(l, "run the self-update cycle autonomously")) { nc++; if (l ~ /push (that )?fails?[^.;]*commits? locally|commits? locally[^.;]*push (that )?fails?/ || !(l ~ /push (that )?fails?|failed push/)) bad = 1 } if (index(l, "re-confirm the step-1 git preflight")) { nr++; if (!(l ~ /un-synced[^.;]*(stop|refuse)[^.;]*apply/) || !(l ~ /step 2[^.;]*un-synced/)) bad = 1 } if (index(l, "a push that fails here discards the cycle")) { nx++; if (l ~ /commits? (it )?locally/ || !index(l, "pathspec") || !(l ~ /git checkout <original.*branch -d/) || !index(l, "git diff --name-only") || !(l ~ /only (when|if)[^.;]*branch -d/) || !(l ~ /(stop|refuse)[^.;]*name the branch|name the branch[^.;]*(stop|refuse)/) || !(l ~ /step 2 defer/) || !index(l, "un-synced") || !(l ~ /stay where (they|it) w(ere|as)|stamp unchanged/)) bad = 1 } } /^[ \t]*- / { fin(); t = $0; next } /^[ \t]+[^ \t]/ { t = (t == "" ? $0 : t " " $0); next } { fin() } END { fin(); if (nd != 1 || nc != 1 || nr != 1 || nx > 1) exit 9; if (nx != 1) exit 1; exit bad }' "$P"
-
-
-## BL-400 — a party-mode round over a single document is never sharded, and thirteen step files never declare a split-dispatch axis
-
-**DEFECT. Found at batch 178 by the operator, watching the reference consumer's sprint-316 carry-over
-evaluation.** Rule 28's "Split dispatch" (`core/skills/ai-dlc/rule-bodies/rule-28.md:53`) shards a
-party-mode round only on the **seats x parts** axis, and `_gate-procedures.md`'s party-mode sub-step
-applies it only "when the subject is two or more files (`stories/`)". The **sections** axis that 0.665.0
-added for a single document reaches review and repair passes and never reached party mode: the
-sub-step's span names `partition-document.sh --map` 0 times, against 4 in the same file. So a
-single-document planning artifact gets one agent per seat over the whole document.
-
-Measured on the consumer, read only: `_bmad-output/party-mode/s316/` holds exactly
-`carry-over-evaluation-{architect,dev,pm,tea}.md`, four whole-document seats over a 61967-byte evaluation
-that the consumer's own installed `partition-document.sh --map` splits into **4 parts**, not SERIAL.
-That is the rule text followed correctly, not a lead miss. The same document's §3a adversarial passes
-are specified sharded by section and had not started when this was filed, so whether they fan out is
-not yet measured.
-
-**The second claim is a census, not a defect yet.** Thirteen step files cite neither "Split dispatch"
-nor a `shard: none (…)` exception: `architecture`, `artifact-consolidation`, `codebase-inventory`,
-`deep-codebase-analysis`, `deploy-validate`, `doc-reconciliation`, `doc-repair-backfill`, `handoff`,
-`implementation`, `research-requirements`, `route`, `sprint-review-next`, `ui-direction`. Several are
-single-author or an ordered chain, so serial exception 3 may be the right answer for each; some reach
-sharding indirectly (`architecture`'s passes inherit it through `_gate-procedures.md`, and
-`implementation`'s dev dispatch is parallel under `_dispatch-protocol.md`). Each needs a recorded axis
-or a named exception.
-
-**Remedy shape, the adjudicator's to confirm.**
-- Extend the party-mode sub-step to the sections axis: one persona agent per (seat, part) that
-  `partition-document.sh --map` prints, plus one cross-part round, with the join counting files the
-  way the files-axis join already does; SERIAL keeps one agent per seat (exception 4).
-- Add the seats x sections line to Rule 28's axis list rather than a second copy of the rule.
-- For each of the thirteen steps, record its axis or which of exceptions 1-4 keeps it whole.
-
-Discharges no consumer candidate. The consumer has not filed one.
-
-**Shipped with a census of 21, not 13.** The derived set is every `steps/[!_]*.md`; `gate-validation`
-also said "Split dispatch" with no axis. Four rows are the closest honest form and not a measured fit:
-`ui-direction`, `deploy-validate`, `requirements` and `doc-repair-backfill` (the last two declare that
-Rule 28 has no axis for a multi-artifact subject). No hook or validator reads the party-mode sub-step, so
-this receipt is the only mechanical carrier. It reads the axis list, the sub-step span, the carry-over
-citation and every step file, and rejects a bare "Split dispatch" mention, a declaration inside an HTML
-comment and the Unicode spelling of the axis.
-
-verify: sh set -uo pipefail; G=core/skills/ai-dlc/steps/_gate-procedures.md; R=core/skills/ai-dlc/rule-bodies/rule-28.md; C=core/skills/ai-dlc/steps/carry-over-evaluation.md; for f in "$G" "$R" "$C"; do [ -f "$f" ] || exit 9; done; n=0; for f in core/skills/ai-dlc/steps/[!_]*.md; do [ -f "$f" ] && n=$((n+1)); done; [ "$n" -ge 13 ] || exit 9; SP="$(awk '/^1\. `\/bmad-party-mode --mode subagent --non-interactive`/{f=1} f&&/^2\. /{exit} f' "$G")"; [ -n "$SP" ] || exit 9; grep -qF 'seats x parts' <<<"$SP" || exit 9; AX="$(awk '/^\*\*Split dispatch/{f=1} f&&/^\*\*The partition is derived/{exit} f&&/^- \*\*[a-z ]+\*\* --/{s=$0; sub(/^- \*\*/,"",s); sub(/\*\*.*/,"",s); print s}' "$R")"; grep -qxF 'seats x parts' <<<"$AX" || exit 9; grep -qxF 'seats x sections' <<<"$AX" || exit 1; for t in 'seats x sections' 'partition-document.sh --map' 'SERIAL'; do grep -qF "$t" <<<"$SP" || exit 1; done; grep -qE 'exception 4|serial-document' <<<"$SP" || exit 1; CS="$(awk '/^### 3\. Party Mode Evaluation/{f=1;next} f&&/^#{1,3} /{exit} f' "$C")"; [ -n "$CS" ] || exit 9; grep -qF 'seats x sections' <<<"$CS" || exit 1; ALT="$(sed 's/[.]/[.]/g' <<<"$AX" | paste -sd'|' -)"; DECL="Split dispatch\"?[:,]? *(($ALT) axis|serial exception [1-4]|has no axis for a multi-artifact subject)|shard: none \(([1-4]|data-dependency|pass-repair-pass|authoring-chain|serial-document)\)|shard: n/a \(no dispatch\)"; bad=""; for f in core/skills/ai-dlc/steps/*.md; do   case "${f##*/}" in _*) continue ;; esac;   [ -f "$f" ] || continue;   body="$(awk '/<!--/{c=1} !c{print} /-->/{c=0}' "$f" | tr '\n' ' ' | tr -s ' ')";   grep -qE "$DECL" <<<"$body" || bad="$bad ${f##*/}"; done; [ -z "$bad" ] || { echo "undeclared:$bad" >&2; exit 1; }; exit 0
-
-## BL-401 — a validator run from the main checkout scans gitignored agent worktrees under `.claude/worktrees/`, so a builder's uncommitted work fails the gate
-
-**DEFECT. Found at batch 178 by the lead, on 0.675.0's first gate run.** I54b in `scripts/validate-enforcement-map.sh` failed on `.claude/worktrees/agent-…/core/fixtures/retired-contract-token/run.sh:348`, a builder's uncommitted work in a gitignored agent worktree, and four fixtures that baseline on that validator failed with it. The same validator in a clean worktree exited 0.
-
-The cause is one shared walk. `i54_files` at `scripts/validate-enforcement-map.sh:5983` is `find "$REPO_ROOT" -name .git -prune -o -type f -name '*.sh' -print`, which prunes only `.git`, and it feeds both I54 (`:6054`) and I54b (`:6153`). Measured on an extract of `origin/main`: a `.claude/worktrees/x/core/hooks/y.sh` carrying an I54b offender gives `FAIL: I54b found 1` and exit 1; the clean copy exits 0. The comment at `:5976-5982` explains why the walk is not `git ls-files` — the validator runs inside seeded fixture trees that are not repositories — so the fix is a prune on this walk, not a switch to git. No other walk the gate runs starts at the repo root. Same class as `BL-264`.
-
-Discharges no consumer candidate.
-
-verify: sh V=scripts/validate-enforcement-map.sh; [ -f "$V" ] || exit 9; D="$(mktemp -d)" || exit 9; for x in core scripts .githooks templates VERSION; do cp -R "$x" "$D/$x" || exit 9; done; (cd "$D" && bash "$V" --arms I54,I54b >/dev/null 2>&1) || exit 9; B="$(printf 'set -uo pipefail\nv=x\nif printf %s "$v" | grep -q x; then :; fi\nif git log | grep -q TOKEN; then :; fi\n' "'%s'")"; mkdir -p "$D/.claude/worktrees/agent-x/core/hooks" && printf '%s\n' "$B" > "$D/.claude/worktrees/agent-x/core/hooks/y.sh" || exit 9; (cd "$D" && bash "$V" --arms I54,I54b >/dev/null 2>&1); r=$?; mkdir -p "$D/scripts/zz-ctl" && printf '%s\n' "$B" > "$D/scripts/zz-ctl/y.sh" || exit 9; c="$(cd "$D" && bash "$V" --arms I54,I54b 2>&1)"; grep -q '^FAIL: I54 found' <<<"$c" && grep -q '^FAIL: I54b found' <<<"$c" || exit 1; exit "$r"
-
 ## BL-402 — `apply.sh --finish` skips the resolution phases, so it stamps theirs over a tree whose DECISION remedy was never performed
 
 **DEFECT. Found at batch 178 by the B3 builder and its tip adversary.** The residue `BL-336` left. That release pointed the provenance refile's did-not-run row at re-render, re-approve and apply instead of `--finish` (`reapply_remedy`, `core/skills/ai-dlc-update/reconcile/apply.sh:198-207`), but the finisher itself still accepts the tree. The `FINISH=0` span (`:532-1799`) holds the drift refile (`:947`) and the NOEXEC audit (`:1767`). Under `--finish` the only tree check is `finish_verify_tree` (`:1886`), which reads preclassify's pure-apply buckets and nothing else, so no DECISION row's remedy is re-checked; the withheld-stamp row at `:1981` still prints `apply.sh --finish` as the next step.
@@ -2046,3 +1829,25 @@ Discharges no consumer candidate.
 
 verify: sh F=core/fixtures/ledger-reverify/run.sh; [ -f "$F" ] || exit 9; C="$(grep -v '^[[:blank:]]*#' "$F")"; [ -n "$C" ] || exit 9; L="$(grep -E '^SHARDS="[a-z ]+"$' <<<"$C" | tail -1)"; [ -n "$L" ] || exit 1; G="$(sed -E 's/^SHARDS="([a-z ]+)"$/\1/' <<<"$L")"; n=0; for g in $G; do n=$((n+1)); [ "$g" = a ] && continue; R="core/fixtures/ledger-reverify-$g/run.sh"; [ -f "$R" ] || exit 1; grep -v '^[[:blank:]]*#' "$R" | grep -qE -- "--group[[:blank:]]+$g([[:blank:]]|\$)" || exit 1; done; [ "$n" -ge 2 ]
 
+
+## BL-408 — update `SKILL.md` step 8 lists Commit, Push, Open a PR and Merge before the ledger work, so a following agent merges with dispositions owed
+
+**DEFECT. Carries the reference consumer's `PC-S316-UPDATE-STEP8-ORDERS-THE-LEDGER-DISPOSITIONS-AFTER-THE-PUSH-AND-MERGE`**, filed 2026-09-30 during its 0.673.0 to 0.674.0 pull. Step 8 ("Deliver") puts the ledger drain, re-verify, closes, `NAMED-UPSTREAM` dispositions and rotation after the Commit, Push, Open a PR and Merge bullets. On that pull the agent merged PR #1147 with 22 `NAMED-UPSTREAM` rows undisposed and needed a third branch and push to dispose of them. `core-paths.sh --is-core` routes the installed `SKILL.md` to core (stdout `core:`; a non-core control prints `not-core:`).
+
+**Built, held, not shipped.** `b179-skillmd` (`777dda58`) moves every ledger-writing bullet before Commit with the bullet text byte-identical (sorted lines and byte count unchanged). The update `SKILL.md` is bootstrapping, so it ships alone. Not established: whether the Commit bullet's "all step-7 writes" should now also name the step-8 ledger writes, and a mechanical check (`apply.sh --finish` refusing while an undisposed `NAMED-UPSTREAM` remains) is the candidate's stronger remedy and is not built.
+
+Scored under `set -uo pipefail` on the base revision (1), the fix (0), `origin/main` (1) and a copy with the Commit bullet renamed (9).
+
+verify: sh S=core/skills/ai-dlc-update/SKILL.md; [ -f "$S" ] || exit 9; n=$(grep -n -m1 -F -- "- \`NAMED-UPSTREAM\` — upstream" "$S" | cut -d: -f1); c=$(grep -n -m1 -F -- "- **Commit**" "$S" | cut -d: -f1); p=$(grep -n -m1 -F -- "- **Open a PR** into" "$S" | cut -d: -f1); [ -n "$n" ] && [ -n "$c" ] && [ -n "$p" ] || exit 9; [ "$n" -lt "$c" ] && [ "$n" -lt "$p" ]
+
+## BL-409 — `predicate-differential.sh` cannot reach `docs/escalations/pending.md`, so the suppression-lifetime site reports UNDECIDABLE on every consumer
+
+**NOTE. Found by the BL-129 hand at batch 179, not fixed there.** The suppression-lifetime site added to `predicate-sites.md` names `docs/escalations/pending.md` as its subject, and the reader only looks under `_bmad-output/`. Run directly on the reference consumer's `pending.md` over `1f838777~1..HEAD`, the block gives `OK` on both sides, so the block works once the reader can reach the file. The hand's scoring scripts are not committed; re-derive before building.
+
+verify: manual -- no receipt has been scored against the reader; the claim is the BL-129 hand's report and is unverified by the lead.
+
+## BL-410 — the provenance-block predicate site has no walk-up marker in its probe root, so a schema-only change reads STABLE without the comparison happening
+
+**NOTE. Found by the BL-129 hand at batch 179, not fixed there.** The materialized `validate-provenance-block.sh` resolves `SCHEMA=<consumer>/.claude/schemas/provenance-block.json`, the consumer's installed schema, on both sides of the differential, so the v0.382.0 case the site exists to catch (a schema-only change) reports STABLE. `predicate-reclassification` Part 10 cannot see it because its seed creates no `.claude/schemas/`. Re-derive before building; the claim is the hand's report.
+
+verify: manual -- no receipt has been scored; the claim is the BL-129 hand's report and is unverified by the lead.
