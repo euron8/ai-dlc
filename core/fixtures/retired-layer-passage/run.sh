@@ -372,12 +372,18 @@ fi
 #   F1 under en_US.UTF-8, stdin and stdout opened BEFORE the limit, `ulimit -n 7`: rc 125, or rc 0 with
 #      the accented capital folded. rc 0 with it unfolded is the silent C fold and fails.
 #   F0 control: the same driver with no limit folds it, rc 0 -- so F1 is not a driver that never folds.
+# THE DRIVER CLOSES FDS 3-9 BEFORE IT LOWERS THE LIMIT. The cell assumes norm_lines' own 3-5 are the
+# only fds held; a caller that hands down open 3-9 (the consumer's pre-push pool does) leaves no fd
+# for even norm_lines' `mktemp` substitution, so the real lib.sh and the mutant both refuse 125 and
+# the mutant survives. Measured on the reference consumer's 16-way pool at 0.691.0, 1 of 199 units
+# red. The held-fds arm below drives both cells with 3-9 open to prove the close holds.
 f_drive() { # f_drive <reconcile-dir> <limit or -> -> "<rc>|<output, cat -v>"
   local t
   t="$(mktemp -d "$WORK/f-tmp.XXXXXX")" || { echo BROKEN; return; }
   printf '\303\211lan X\n' > "$t.in"
   env -u AI_DLC_RECONCILE_MEMO TMPDIR="$t" LC_ALL=en_US.UTF-8 bash -c '. "$1/lib.sh" || exit 90
-    exec 0<"$2" 1>"$3"; [ "$4" = - ] || ulimit -n "$4"; norm_lines; echo "rc=$?"' _ "$1" "$t.in" "$t.out" "$2" 2>/dev/null
+    exec 0<"$2" 1>"$3" 3>&- 4>&- 5>&- 6>&- 7>&- 8>&- 9>&-
+    [ "$4" = - ] || ulimit -n "$4"; norm_lines; echo "rc=$?"' _ "$1" "$t.in" "$t.out" "$2" 2>/dev/null
   tr '\n' '|' < "$t.out" | LC_ALL=C cat -v
 }
 f_score() { # f_score <reconcile-dir> -> failing cells then `.`
@@ -416,6 +422,14 @@ PY
       F1.) ok "MUTANT (norm-fallthrough) fails exactly [F1]: the C-fold default returns rc 0 with the capital unfolded" ;;
       .)   bad "MUTANT SURVIVED [norm-fallthrough]: F1 still passed -- the cell cannot see the silent fold" ;;
       *)   bad "MUTANT [norm-fallthrough] scored [$got], expected exactly [F1.]" ;;
+    esac
+    # HELD FDS: the same two scores with fds 3-9 already open in the caller, as a pool hands them down.
+    # Without the driver's close the mutant scores `.` here and survives; with it, the scores match above.
+    held="$( exec 3</dev/null 4</dev/null 5</dev/null 6</dev/null 7</dev/null 8</dev/null 9</dev/null
+             printf '%s/%s' "$(f_score "$RLP_SRC")" "$(f_score "$FM")" )"
+    case "$held" in
+      ./F1.) ok "norm_lines F0-F1 with fds 3-9 inherited: real lib.sh passes and the norm-fallthrough mutant still fails exactly [F1]" ;;
+      *)     bad "norm_lines cells depend on inherited fds: with 3-9 held, real/mutant scored [$held], expected [./F1.]" ;;
     esac
   fi
 fi
