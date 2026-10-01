@@ -2395,7 +2395,23 @@ The batch-173 harness is kept outside the tree at
 `~/.claude/projects/-Users-n8-git-ai-dlc/b173-sandbox-tracer/`: `trace2.sh` (the scoped tracer),
 `mktree.sh`, `micro3.sh`, `compare.sh` and `load.sh`. It is evidence, not the implementation.
 
-verify: manual
+Held note (batch 178): the comparison mode is BUILT and the operator's fixed command now parses:
+`sudo bash core/scripts/derive-fixture-readsets.sh --all --tracer both` (or `--list "<fixtures>"`).
+It needs root, runs each fixture ONCE as `sudo -n -u "$SUDO_USER" sandbox-exec` under both tracers,
+prints `sandbox-missed` and `fs_usage-missed` per fixture, and ends `SANDBOX-MISSES-NOTHING` (0),
+`SANDBOX-MISSES <n> path(s) across <m> fixture(s)` (1, paths listed in `$WORK/both.missed`) or
+`REFUSED` (2). Every refusal in that mode is 2, including not-root and a linked worktree, and so is
+compared < listed, naming each uncompared fixture and why. It never writes the map. Miss = fs_usage
+minus sandbox, after excluding `.git`/`.git/**` by prefix and the `git check-ignore` set; the
+tracked FILE `.gitignore` is NOT excluded. The deriver's header states each choice and its reason.
+`core/fixtures/readset-skip` drives the verdict span, the refusals, and a full stub-world run whose
+map md5 must not move, with a mutant deleting the exit to prove the md5 would move. NOT run with
+root: whether root `log stream` sees a `sudo -u` child's Sandbox reports is unmeasured; if it does
+not, every fixture reads `sandbox set empty` and the run REFUSES rather than passing. Stays open
+for the operator's run. The receipt reads the entry's real close: no `fs_usage -w` and no uid-0
+check left in the deriver while `sandbox-exec -f` remains. It reads 1 on this branch by design.
+
+verify: sh D=core/scripts/derive-fixture-readsets.sh; [ -f "$D" ] || exit 9; B="$(grep -v '^[[:space:]]*#' "$D")"; grep -q 'sandbox-exec -f' <<<"$B" || exit 1; grep -q 'fs_usage -w' <<<"$B" && exit 1; grep -qF '"$(id -u)" = "0"' <<<"$B" && exit 1; exit 0
 
 ## BL-376 — `layer-drift.sh`'s unguarded BASE reads turn a missing base blob into more drift
 
