@@ -168,10 +168,12 @@ fi
 #   N0 control: a same-case accented reproduction, under a C caller -> its row
 #   N3 the N1 run with a BYTE-WISE `tr` stub first on PATH -> the same rows and exit as the system `tr`
 N_SKIP=0
-if ! grep -qF 'iconv -f UTF-8 -t UTF-8' "$RLP_SRC/lib.sh"; then
+# Keyed on the PROBED fold, the newest subject these cells and mutants need: an engine carrying the
+# iconv gate without the probe would run N3 and STALE every re-anchored mutant on a consumer.
+if ! grep -qF 'then _nf="$(_norm_fold_probe)"; fi' "$RLP_SRC/lib.sh"; then
   case "$RLP_SRC" in
-    */core/skills/ai-dlc-update/reconcile) echo "  --    (BL-355: this lib.sh carries no iconv-gated fold; in the distribution N0-N2 run anyway and must go red)" ;;
-    *) echo "  SKIP  BL-355 N0-N2 -- the installed lib.sh predates the locale-aware fold; it lands with the pull that carries this fixture"; N_SKIP=1 ;;
+    */core/skills/ai-dlc-update/reconcile) echo "  --    (BL-355: this lib.sh carries no probed locale fold; in the distribution N0-N3 run anyway and must go red)" ;;
+    *) echo "  SKIP  BL-355 N0-N3 -- the installed lib.sh predates the probed locale fold; it lands with the pull that carries this fixture"; N_SKIP=1 ;;
   esac
 fi
 # Captured, never `locale -a | grep -q`: under pipefail grep's early exit gives `locale` an EPIPE

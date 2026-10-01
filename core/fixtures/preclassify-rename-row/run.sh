@@ -602,12 +602,14 @@ chmod 755 "$RO"
 # non-zero, is a failure") reads as failures, and a ledger path spelled that way would then refuse.
 N_RUN=1
 case "$RECON" in */core/skills/ai-dlc-update/reconcile) N_DIST=1 ;; *) N_DIST=0 ;; esac
-if ! grep -qF '_ai_dlc_rev_absent' "$RECON/lib.sh"; then
+# Keyed on the discriminator's NEWEST clause, the literal ls-tree read cells m-n and their mutants
+# need: an engine carrying `_ai_dlc_rev_absent` without it would run m-n red on a consumer.
+if ! grep -qF 'git -C "$1" --literal-pathspecs ls-tree -z --full-tree' "$RECON/lib.sh"; then
   if [ "$N_DIST" = 0 ]; then
-    printf '  SKIP  BL-374/BL-310 arms a-l -- the installed lib.sh predates the ls-tree discriminator; it lands with the pull that carries this fixture\n'
+    printf '  SKIP  BL-374/BL-310 arms a-n -- the installed lib.sh predates the literal ls-tree discriminator; it lands with the pull that carries this fixture\n'
     N_RUN=0
   else
-    printf '  --    (BL-374/BL-310: this lib.sh carries no ls-tree discriminator; in the distribution the arms run anyway and must go red)\n'
+    printf '  --    (BL-374/BL-310: this lib.sh carries no literal ls-tree discriminator; in the distribution the arms run anyway and must go red)\n'
   fi
 fi
 if [ "$N_RUN" = 1 ]; then
