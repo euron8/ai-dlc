@@ -81,6 +81,22 @@ fi
 
 SELF="$(cd "$(dirname "$0")" && pwd)"
 
+# lib.sh IS SOURCED FOR `memo_has_path`, the one `.dist-only` oracle `preclassify.sh` already
+# uses (see the over-completeness arm below). Sourcing it also builds lib.sh's memo directory and
+# arms its cleanup on EXIT; this file's own EXIT trap below goes through lib.sh's `trap` shadow,
+# which composes the two rather than letting the later one replace the earlier. A runner that
+# cannot source it has no oracle, and the arm reading `.dist-only` would then fail on every name
+# with 127 — so it refuses here, before anything is run, rather than inside that arm.
+# shellcheck source=lib.sh
+. "$SELF/lib.sh" || {
+  echo "self-update-fixtures: cannot source $SELF/lib.sh, so the .dist-only probe has no oracle. Nothing was run." >&2
+  exit 2; }
+# lib.sh EXPORTS its memo directory so a child reconcile script borrows it. The children of THIS
+# runner are the consumer's fixtures, which the consumer's pre-push runs with no such variable,
+# so the export is withdrawn: a fixture must not run here in an environment its gate never gives
+# it. The memo stays usable in this shell, which holds it in unexported variables.
+unset AI_DLC_RECONCILE_MEMO
+
 # The consumer's fixture root, DERIVED from the mapper rather than written here — the
 # same probe `retired-fixtures.sh` uses, and for the same reason: `install.sh` splits
 # what shares a parent in `core/`, and I33 fails the build on anything that reaches one
@@ -119,6 +135,42 @@ mkdir -p "$OUT_DIR" 2>/dev/null || { echo "self-update-fixtures: cannot create $
   echo "# Nothing below is reproducible from the tree once that has happened."
   echo ""
 } >> "$LOG"
+
+# --- NO HERE-STRING AND NO HEREDOC IN THIS FILE, AND THIS IS WHY -------------------------
+# bash 3.2 stages every `<<<` and every `<<EOF` body to a temp file of its own, and when that
+# write fails (`ulimit -f`, a full or read-only TMPDIR) it prints `cannot create temp file for
+# here document` and runs the command on EMPTY stdin at the command's own exit status. A loop
+# then runs zero times and a `grep -q` answers "absent" — and every loop here reads its empty
+# input as the clean answer: no gate record, no required input missing, no uncovered fixture.
+# `layer-drift.sh` carries the same partition (BL-359), and this file takes its two shapes:
+#   * a whole-line MEMBERSHIP test is `su_has_line` — a `case`, no file and no fork, so it
+#     cannot fail at all;
+#   * a LOOP reads a file `su_stage` wrote into this run's own `$SU_T`, and the write's status
+#     is read. The FIRST failed write ends the run with exit 2, before anything is run: a run
+#     whose join could not read its input is a run that could not happen.
+# `su_stage` writes exactly the bytes the heredoc fed (`printf '%s\n'`), so a healthy run is
+# byte-identical to the heredoc spelling.
+SU_T="$(mktemp -d "${TMPDIR:-/tmp}/su-stage.XXXXXX" 2>/dev/null)" || SU_T=""
+if [ -z "$SU_T" ] || [ ! -d "$SU_T" ]; then
+  echo "self-update-fixtures: could not create a staging directory under ${TMPDIR:-/tmp}. Nothing was run." >&2
+  { echo "STAGING: REFUSED — no staging directory could be created under ${TMPDIR:-/tmp}. Nothing was run."; } >> "$LOG"
+  exit 2
+fi
+trap 'rm -rf "$SU_T"' EXIT
+SU_NL='
+'
+su_has_line() { # su_has_line <haystack> <needle> -> 0 when <needle> is a WHOLE line of <haystack>
+  case "$SU_NL$1$SU_NL" in *"$SU_NL$2$SU_NL"*) return 0 ;; esac
+  return 1
+}
+su_stage() { # su_stage <file-name> <value> <what> -- MAIN SHELL ONLY; exit 2 when the write fails
+  local _rc=0
+  printf '%s\n' "$2" > "$SU_T/$1" || _rc=$?
+  [ "$_rc" -eq 0 ] && return 0
+  echo "self-update-fixtures: REFUSED — $3 could not be staged (exit $_rc), so the join reading it would read an EMPTY input as a clean one. Nothing was run." >&2
+  { echo "STAGING: REFUSED — $3 could not be staged (exit $_rc). Nothing was run."; } >> "$LOG" 2>/dev/null
+  exit 2
+}
 
 # --- THE ARGUMENT IS A BARE NAME, AND THE STEP THAT DERIVES IT SPELLS A PATH -------------
 # Step 2's fixture term is derived as `core/fixtures/<dir>/` — that is the form the reader is
@@ -322,6 +374,7 @@ if [ -z "$gr_base" ] || [ -z "$gr_theirs" ]; then
 else
   gr_cands="$(ls "$OUT_DIR"/self-update-gate-*.md 2>/dev/null | sort -r)"
   gr_seen=0
+  su_stage gr-cands "$gr_cands" "the gate-record candidate list"
   while IFS= read -r gr_f; do
     [ -n "$gr_f" ] || continue
     [ -f "$gr_f" ] || continue
@@ -332,9 +385,7 @@ else
     [ "$gr_rb" = "$gr_base" ] && [ "$gr_rt" = "$gr_theirs" ] || continue
     GATE_REC="$gr_f"
     break
-  done <<GRECEOF
-$gr_cands
-GRECEOF
+  done < "$SU_T/gr-cands"
 
   if [ -n "$GATE_REC" ]; then
     # THE STAMP AS THE GATE SAW IT. Read once, here, beside the other header fields rather than
@@ -616,10 +667,7 @@ $gr_p"
                     done
                   } | sort -u
                 )"
-                if grep -qxF "$gr_h" <<GRHISTEOF
-$gr_hist
-GRHISTEOF
-                then
+                if su_has_line "$gr_hist" "$gr_h"; then
                   : # the written slice, over a content this path genuinely carried
                 else
                   gr_moved="$gr_moved
@@ -638,23 +686,19 @@ GRHISTEOF
         esac
       done < "$GATE_REC"
 
-      # ARM 1, scored after the read so the record is parsed once. The membership test is a
-      # here-string rather than a pipe: `grep -q` fed from a pipe answers with the writer's EPIPE
-      # under `pipefail` and reports NOT-FOUND on input that contains the pattern.
+      # ARM 1, scored after the read so the record is parsed once. The membership test is
+      # `su_has_line`, a `case`: not a pipe, whose `grep -q` answers with the writer's EPIPE under
+      # `pipefail` and reports NOT-FOUND on input that contains the pattern, and not a heredoc,
+      # whose staging failure reads every required input as MISSING (see `su_has_line`).
       if [ -f "$gr_hook" ]; then
-        grep -qxF "$gr_hook_key" <<GRHOOKEOF || gr_required="$gr_required
+        su_has_line "$gr_have" "$gr_hook_key" || gr_required="$gr_required
   $gr_hook_key — the pre-push hook itself, which decides WHICH scripts can block the push"
-$gr_have
-GRHOOKEOF
+        su_stage gr-invoked "$gr_invoked" "the hook's invoked-script list"
         while IFS= read -r gr_iv; do
           [ -n "$gr_iv" ] || continue
-          grep -qxF "$gr_iv" <<GRINVEOF || gr_required="$gr_required
+          su_has_line "$gr_have" "$gr_iv" || gr_required="$gr_required
   $gr_iv — named by the consumer's pre-push hook, so the verdict had to read it"
-$gr_have
-GRINVEOF
-        done <<GRINVLIST
-$gr_invoked
-GRINVLIST
+        done < "$SU_T/gr-invoked"
       fi
 
       if [ -n "$gr_bad" ]; then
@@ -868,9 +912,25 @@ fi
 # where it matters and agree on the control. The guards above cannot catch it: the containing
 # TREE is not filtered and resolves fine, which is why this needed its own repair rather than a
 # third guard.
+#
+# THE `.dist-only` PROBE IS `memo_has_path`, NOT `rev-parse`, AND THE SPLIT IS DELIBERATE.
+# `rev-parse -q --verify` answers 1 for an absent marker AND for a `core/fixtures/<d>/` subtree
+# that could not be read, so an unreadable tree read as "not dist-only" — the oracle
+# `preclassify.sh`'s `dist_only()` retired in 0.681.0. `memo_has_path` (lib.sh) answers 0 present,
+# 128 CONFIRMED absent, and 125 when git said no and the absence could not be confirmed; anything
+# but 0 and 128 is a refusal here, as it is there. On the blob-filtered clone above a present
+# marker whose BLOB is filtered out is `cat-file -e` 1, which `memo_has_path` turns into 125 — a
+# REFUSAL naming the directory, never a wrong verdict, and the same answer `preclassify.sh` gives
+# on that tree. The `run.sh` probe keeps `rev-parse`: a deleted driver is a whole missing
+# DIRECTORY, which no tree-unreadable state can be confused with in the direction that acquits.
 unshippable=""
 for d in "$@"; do
-  if git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${d}/.dist-only" >/dev/null 2>&1; then
+  _do_rc=0
+  memo_has_path "$DIST" "$THEIRS" "core/fixtures/${d}/.dist-only" || _do_rc=$?
+  if [ "$_do_rc" -ne 0 ] && [ "$_do_rc" -ne 128 ]; then
+    unshippable="$unshippable
+  $d — its .dist-only marker at ${THEIRS} could not be confirmed present or absent (exit $_do_rc): a tree on that path could not be read, so whether a consumer can hold it is unknown"
+  elif [ "$_do_rc" -eq 0 ]; then
     unshippable="$unshippable
   $d — carries .dist-only at ${THEIRS}: never shipped, so no consumer can hold it"
   elif [ "$d" != "$(printf '%s' "$d" | tr -d '[:space:]/')" ] || [ -z "$d" ]; then
@@ -941,27 +1001,61 @@ cov_raw="$(git -C "$DIST" diff --name-only "$BASE" "$THEIRS" -- core/fixtures/)"
 # Both are read AT THEIRS. Reading them from the distribution checkout instead answers for
 # whatever is on disk, which is a different tree from the one being delivered.
 #
-# The `grep` before the `sed` is not decoration: a path directly under `core/fixtures/` with
-# no directory component does not match the substitution, and `sed` passes a non-match through
-# UNCHANGED — so the whole path would enter the set as a bogus directory name. It would then
-# be swallowed by the deleted-upstream exemption and report as nothing at all.
+# The directory set is derived by `sed -n …p`, which prints ONLY the paths that carry a
+# directory component under `core/fixtures/`: a path directly under it does not match, and a
+# substitution without `-n`/`p` would pass it through UNCHANGED as a bogus directory name, which
+# the deleted-upstream exemption would then swallow and report as nothing at all. The `sed` and
+# the `sort` are separate staged steps, each with its status read — this file runs without
+# `pipefail`, so a one-pipeline stage would report the `sort`'s status alone.
+#
+# THE SET IS STAGED, NOT FED BY A HEREDOC whose body was `$(…)`: that substitution's status was
+# lost, and a heredoc whose temp file could not be written ran this loop ZERO times — `uncovered`
+# empty, the join reporting a complete set having compared nothing (see `su_stage`).
+su_stage cov-raw "$cov_raw" "the base..theirs fixture diff"
+_cov_rc=0
+sed -n -E 's#^core/fixtures/([^/]+)/.*#\1#p' "$SU_T/cov-raw" > "$SU_T/cov-dirs" || _cov_rc=$?
+[ "$_cov_rc" -eq 0 ] && { sort -u "$SU_T/cov-dirs" > "$SU_T/cov-set" || _cov_rc=$?; }
+if [ "$_cov_rc" -ne 0 ]; then
+  echo "self-update-fixtures: the diff-touched fixture set could not be derived (exit $_cov_rc), so the" >&2
+  echo "  diff-side coverage join could not run. Nothing was run." >&2
+  { echo "COVERAGE: UNRESOLVABLE — the diff-touched fixture set could not be derived (exit $_cov_rc)."; } >> "$LOG"
+  exit 2
+fi
 uncovered=""
+cov_refused=""
 while IFS= read -r d; do
   [ -n "$d" ] || continue
-  # `rev-parse -q --verify`, not `cat-file -e`, for the reason spelled out at the over-arm
-  # above — and HERE the same defect is SILENT rather than loud. On a blob-filtered clone both
-  # probes fail, so every diff-touched dir takes the `|| continue` and `uncovered` stays empty:
-  # the join reports nothing having compared nothing, which is byte-identical to a complete set.
-  # Measured on the same clone, range 0.443.0 -> 0.446.0 with an empty named set: a full clone
-  # exits 2 naming `predicate-reclassification`, the filtered one exits 0 with "1 green, 0 red".
-  git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${d}/.dist-only" >/dev/null 2>&1 && continue
+  # `memo_has_path` for the marker, for the reason spelled out at the over-arm above — and HERE
+  # an unconfirmed answer is SILENT rather than loud unless it is refused. `rev-parse`'s 1 for an
+  # unreadable subtree took `&& continue`'s other branch and read as "not dist-only", and on a
+  # blob-filtered clone the old `cat-file -e` spelling failed both probes, so every diff-touched
+  # dir took `|| continue` and `uncovered` stayed empty: the join reported nothing having
+  # compared nothing. Measured on the same clone, range 0.443.0 -> 0.446.0 with an empty named
+  # set: a full clone exits 2 naming `predicate-reclassification`, the filtered one exited 0 with
+  # "1 green, 0 red". A 125 is collected and refused below, never skipped.
+  _do_rc=0
+  memo_has_path "$DIST" "$THEIRS" "core/fixtures/${d}/.dist-only" || _do_rc=$?
+  case "$_do_rc" in
+    0)   continue ;;
+    128) ;;
+    *)   cov_refused="$cov_refused $d"; continue ;;
+  esac
   git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${d}/run.sh" >/dev/null 2>&1 || continue
   case " $* " in *" ${d} "*) continue ;; esac
   uncovered="$uncovered $d"
-done <<COVEOF
-$(printf '%s\n' "$cov_raw" | grep -E '^core/fixtures/[^/]+/' \
-  | sed -E 's#^core/fixtures/([^/]+)/.*#\1#' | sort -u)
-COVEOF
+done < "$SU_T/cov-set"
+
+if [ -n "$cov_refused" ]; then
+  { echo "COVERAGE: UNCONFIRMED — the .dist-only marker of these diff-touched fixtures could not be confirmed present or absent at ${THEIRS}:"
+    for d in $cov_refused; do echo "  $d"; done
+    echo ""; } >> "$LOG"
+  echo "self-update-fixtures: whether these diff-touched fixtures ship could not be decided:${cov_refused}" >&2
+  echo "  A tree on the path of each one's .dist-only marker at ${THEIRS} could not be read, so the" >&2
+  echo "  coverage join cannot say whether the slice must carry it. Repair the distribution clone" >&2
+  echo "  (a missing object, or an offline promisor) and re-run. Nothing was run." >&2
+  echo "  log: $LOG" >&2
+  exit 2
+fi
 
 if [ -n "$uncovered" ]; then
   { echo "COVERAGE: the diff changes these shippable fixtures and the named set omits them:"

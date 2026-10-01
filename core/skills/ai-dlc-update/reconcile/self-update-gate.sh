@@ -12,10 +12,12 @@
 # Observed at v0.183.0 on the reference consumer, filed as
 # `PC-S308-SELF-UPDATE-INSTALLS-THE-VALIDATOR-THAT-BLOCKS-ITS-OWN-PUSH`. The ERROR tier shipped in
 # that release fires on three pre-existing declaration defects; step 2 would have installed it and
-# then been unable to push. It does not deadlock — SKILL.md says a failed push commits locally and
-# does not block the run — which is worse in one respect: what it leaves behind is an orphaned local
-# branch whose push is PERMANENTLY blocked and a `skill_version` advanced on a commit that will
-# never merge. The operator who hit this had to derive the collapsed ordering by hand.
+# then been unable to push. When this was filed, SKILL.md had a failed push commit locally and
+# continue, which left an orphaned local branch whose push was PERMANENTLY blocked and a
+# `skill_version` advanced on a commit that would never merge. Step 2 now discards the cycle on a
+# failed push and marks the branch UN-SYNCED for the invocation, so steps 3–5 still report and step
+# 6 refuses `apply` — no orphan, but no self-update either, on every pull until the layer state is
+# fixed by hand. The operator who hit this had to derive the collapsed ordering by hand.
 #
 # THE GATING SET IS DERIVED, NEVER LISTED. Which scripts can block a push is a property of the
 # consumer's pre-push hook, so it is read out of that hook: every `scripts/ai-dlc/<name>.sh` it
@@ -360,6 +362,49 @@ emit() {
   printf '%s\n' "$_row"
   [ -n "$GATE_REC" ] && printf '%s\n' "$_row" >> "$GATE_REC"
   return 0
+}
+
+# NO HERE-STRING AND NO HEREDOC IN THIS FILE, AND THIS IS WHY. bash 3.2 stages every `<<<` and
+# every `<<EOF` body to a temp file of its own, and when that write fails (`ulimit -f`, a full or
+# read-only TMPDIR) it prints `cannot create temp file for here document` and runs the command on
+# EMPTY stdin at the command's own exit status. Here that empty input was the ACQUITTING answer at
+# every site: arm C's loop ran zero times and carried nothing, its membership test rejected every
+# path, arm R2's coupling greps answered "no rulebook subject", the hook's script list recorded no
+# input, and the differential loop compared nothing. `layer-drift.sh` carries the same partition
+# (BL-359), and this file takes its three shapes:
+#   * a whole-line MEMBERSHIP test is `gate_has_line` — a `case`, no file and no fork;
+#   * a TEST over a captured value is `gate_has`, fed by a pipe from `printf` (immune to staging)
+#     into a `grep -c`, which reads its whole input so no writer can take an EPIPE; its status
+#     separates match, no match, and a reader that failed;
+#   * a LOOP reads a file `gate_stage` wrote into this run's `$TMP`, and the write's status is read.
+# A staging or reader failure is SELF-UPDATE-UNDECIDED and the run ends there, at the FIRST failed
+# write: a verdict whose input could not be read must not read as OK, and nothing after a failed
+# write is trusted. `gate_stage` writes exactly the bytes the heredoc fed (`printf '%s\n'`).
+GATE_NL='
+'
+gate_has_line() { # gate_has_line <haystack> <needle> -> 0 when <needle> is a WHOLE line of <haystack>
+  case "$GATE_NL$1$GATE_NL" in *"$GATE_NL$2$GATE_NL"*) return 0 ;; esac
+  return 1
+}
+gate_has() { # gate_has <ERE> <value> -> 0 a line matches, 1 none does, 2 the reader failed
+  local _n _rc=0
+  _n="$(printf '%s\n' "$2" | grep -cE "$1")" || _rc=$?
+  case "$_rc" in
+    0) return 0 ;;
+    1) [ "$_n" = 0 ] && return 1 ;;
+  esac
+  return 2
+}
+gate_stage() { # gate_stage <file-name> <value> <what> -- MAIN SHELL ONLY; UNDECIDED and exit 0 on a failed write
+  local _rc=0
+  if [ -z "${TMP:-}" ] || [ ! -d "$TMP" ]; then
+    _rc="no staging directory"
+  else
+    printf '%s\n' "$2" > "$TMP/$1" || _rc=$?
+  fi
+  [ "$_rc" = 0 ] && return 0
+  emit SELF-UPDATE-UNDECIDED "-" "$3 could not be staged (${_rc}), so the arm reading it would read an EMPTY input — and every arm here reads an empty input as the clean answer. A gate that could not read its own subject must not return OK; treat as DEFER and re-run."
+  exit 0
 }
 
 # NO RECORD INSIDE A --safe-stop WALK, and this is the guard's own spelling rather than a
@@ -732,12 +777,11 @@ if [ -z "${AI_DLC_GATE_IN_SAFE_STOP:-}" ]; then
   # answer for one layout and be silently wrong in the other. The CORE path is what the loop
   # already holds, so column 3 costs nothing and no inverse mapping is needed anywhere.
   if [ -n "$C_PATHS" ] && command -v map_consumer >/dev/null 2>&1; then
+    gate_stage c-paths "$C_PATHS" "the machinery path set"
     while IFS= read -r c_mp; do
       [ -n "$c_mp" ] || continue
       gate_input "$(map_consumer "$c_mp")" "$c_mp"
-    done <<EOF
-$C_PATHS
-EOF
+    done < "$TMP/c-paths"
   fi
   # A SILENT EMPTY SET IS THIS ARM'S OTHER FALSE ZERO. `C_PATHS` empty makes the membership
   # test below reject every path, so the arm reports no divergence having compared nothing --
@@ -773,26 +817,23 @@ EOF
       # would overwrite the `carried` the loop just set, and the acquittal would return on exactly
       # the runs this exists to stop.
       GATE_CARRY_STATE=clean
+      gate_stage c-out "$c_out" "the preclassify bucket rows"
       while IFS="$(printf '\t')" read -r c_st c_path c_cons c_bucket; do
         [ -n "${c_bucket:-}" ] && [ -n "${c_path:-}" ] || continue
         case "$c_bucket" in
           *'->CLASSIFY'*|*consumer-edited*) ;;
           *) continue ;;
         esac
-        grep -qxF "$c_path" <<EOF || continue
-$C_PATHS
-EOF
+        gate_has_line "$C_PATHS" "$c_path" || continue
         # THE ROW AND THE STATE ARE ONE STATEMENT, so they are written on adjacent lines and the
         # state is set from the same branch that emits. `machinery_at_or_past` reads it to withhold
         # the SAFE-STOP acquittal, whose sentence claims this consumer's machinery has landed --
-        # false of exactly the path this row is carrying. The loop is fed by a HEREDOC and not a
+        # false of exactly the path this row is carrying. The loop reads a STAGED FILE and not a
         # pipe, so this assignment survives into the caller; a `|` here would lose it to a
         # subshell and the acquittal would return with nothing saying so.
         GATE_CARRY_STATE=carried
         emit SELF-UPDATE-CARRY "$c_path" "the consumer's copy at ${c_cons:-?} has DIVERGED (status ${c_st:-?}, bucket $c_bucket). This is a machinery path, so the self-update would write \`theirs\` over it autonomously and auto-merge the result. Do NOT write it: drop it from the slice, report it, and carry it to the step-7 gated apply, which emits a WORKLIST semantic-merge row for it. The rest of the slice is unaffected by this row."
-      done <<EOF
-$c_out
-EOF
+      done < "$TMP/c-out"
     fi
   fi
 fi
@@ -825,12 +866,14 @@ for cand in "$CONSUMER/.claude/skills/ai-dlc/steps/gate-validation.md" \
   [ -f "$cand" ] && { R1_GV_OURS="$(cat "$cand")"; break; }
 done
 if [ -n "$R1_GV_THEIRS" ] && [ -n "$R1_GV_OURS" ]; then
-  r1_theirs="$(grep -oE '^<!-- CHECK_LOADED: [^ ]+ -->' <<<"$R1_GV_THEIRS" | sed 's/.*: //; s/ -->//' | sort -u)"
-  r1_ours="$(grep -oE '^<!-- CHECK_LOADED: [^ ]+ -->' <<<"$R1_GV_OURS" | sed 's/.*: //; s/ -->//' | sort -u)"
+  # Fed by a pipe from `printf`, not a here-string (see `gate_has_line`); an empty capture from
+  # any cause is refused just below, so the pipeline's status needs no reader of its own.
+  r1_theirs="$(printf '%s\n' "$R1_GV_THEIRS" | grep -oE '^<!-- CHECK_LOADED: [^ ]+ -->' | sed 's/.*: //; s/ -->//' | sort -u)"
+  r1_ours="$(printf '%s\n' "$R1_GV_OURS" | grep -oE '^<!-- CHECK_LOADED: [^ ]+ -->' | sed 's/.*: //; s/ -->//' | sort -u)"
   # A zero here must not be a false zero: if either side parsed to nothing the anchor grammar
   # moved, and comparing an empty set to anything reports agreement it never computed.
   if [ -z "$r1_theirs" ] || [ -z "$r1_ours" ]; then
-    emit SELF-UPDATE-UNDECIDED "gate-validation.md" "could not parse CHECK_LOADED anchors from one side (theirs=$(grep -c . <<<"$r1_theirs"), ours=$(grep -c . <<<"$r1_ours")). An empty anchor set compares equal to nothing, so this must not read as agreement."
+    emit SELF-UPDATE-UNDECIDED "gate-validation.md" "could not parse CHECK_LOADED anchors from one side (theirs=$(printf '%s\n' "$r1_theirs" | grep -c .), ours=$(printf '%s\n' "$r1_ours" | grep -c .)). An empty anchor set compares equal to nothing, so this must not read as agreement."
   else
     # STAGED, NOT `comm <( ) <( )`. A side that failed to materialise was an EMPTY side: an empty
     # `theirs` set leaves nothing missing, so the arm read as agreement and the gate went on to OK
@@ -901,13 +944,24 @@ if [ -n "$R2_RB" ]; then
   R2_HITS=""
   for fx in "$DIST"/core/fixtures/*/; do
     [ -d "$fx" ] || continue
-    # Read once into a variable and feed the readers a HERE-STRING. `... | grep -q` under
-    # `pipefail` reports the WRITER's EPIPE once the upstream's output past the match
-    # exceeds the pipe buffer, so the test answers "not found" on input that contains the
-    # pattern -- a size threshold, wrong permanently and with no symptom. I54b catches it.
+    # Read once into a variable and test it with `gate_has`: a `grep -c` fed by `printf`, which
+    # reads its WHOLE input. Never `... | grep -q`: under `pipefail` that reports the WRITER's
+    # EPIPE once the upstream's output past the match exceeds the pipe buffer, so the test
+    # answers "not found" on input that contains the pattern -- a size threshold, wrong
+    # permanently and with no symptom (I54b). Never a here-string either: a temp file that could
+    # not be written answers "not found" too (see `gate_has_line`). A reader that FAILED is
+    # neither answer, and is UNDECIDED.
     r2_body="$(grep -hv '^[[:space:]]*#' "$fx"*.sh 2>/dev/null || true)"
-    grep -qE '(SKILL\.md|escalations\.md|rule-authoring\.md|skills/ai-dlc/steps/)' <<<"$r2_body" || continue
-    grep -qE '\$\{?(D_ROOT|ROOT|REPO_ROOT|AI_DLC_ROOT)\b' <<<"$r2_body" || continue
+    for r2_re in '(SKILL\.md|escalations\.md|rule-authoring\.md|skills/ai-dlc/steps/)' \
+                 '\$\{?(D_ROOT|ROOT|REPO_ROOT|AI_DLC_ROOT)\b'; do
+      r2_rc=0; gate_has "$r2_re" "$r2_body" || r2_rc=$?
+      [ "$r2_rc" -eq 0 ] || break
+    done
+    if [ "$r2_rc" -gt 1 ]; then
+      emit SELF-UPDATE-UNDECIDED "rulebook-coupled-fixtures" "the rulebook-coupling scan of $(basename "${fx%/}") could not be read (grep exited ${r2_rc}), so whether a fixture asserts on rulebook this pull changes is UNKNOWN. An unread fixture reads as an uncoupled one, which is the OK this arm exists to withhold; treat as DEFER and re-run."
+      exit 0
+    fi
+    [ "$r2_rc" -eq 0 ] || continue
     R2_HITS="$R2_HITS $(basename "${fx%/}")"
   done
   if [ -n "$R2_HITS" ]; then
@@ -943,12 +997,11 @@ INVOKED="$(grep -oE 'scripts/ai-dlc/[A-Za-z0-9._-]+\.sh' "$HOOK" | sed 's|.*/||'
 # only the intersection would leave the hook's own membership unrecorded — and an absent script
 # that later APPEARS changes the gating set, which is why `gate_input` records ABSENT rather
 # than omitting the line.
+gate_stage invoked "$INVOKED" "the hook's invoked-script list"
 while IFS= read -r gi_name; do
   [ -n "$gi_name" ] || continue
   gate_input "scripts/ai-dlc/$gi_name" "core/scripts/$gi_name"
-done <<EOF
-$INVOKED
-EOF
+done < "$TMP/invoked"
 
 # ---- ARM P: CAN THIS CONSUMER PUSH AT ALL? ----------------------------------------------
 # Every other arm in this file is DIFFERENTIAL: it asks whether the INCOMING slice fails where
@@ -999,8 +1052,9 @@ EOF
 #
 # NOT THE REMOTE. The probe does not contact origin: a rejection on the remote side — auth,
 # a protected branch, the network — is environmental, transient, and already has a disposition
-# in step 2 (commit locally, note it). The hook is the deterministic local half and the one
-# both filings hit.
+# in step 2: the failed push discards the cycle and marks the branch UN-SYNCED, so `apply` is
+# refused this invocation and the next one derives the slice again. The hook is the deterministic
+# local half and the one both filings hit.
 #
 # ITS INPUTS ARE NOT ENUMERATED IN THE RECORD, deliberately. The hook reads the whole tree, so
 # one `# input:` row naming its entry point would claim a completeness the row does not have.
@@ -1176,6 +1230,7 @@ fi
 # runner reads as a refusal. `gate_exit_cleanup` removes `$TMP` for that reason.
 
 deferred=0
+gate_stage gating "$GATING" "the gating-script set"
 while IFS= read -r name; do
   [ -n "$name" ] || continue
 
@@ -1292,9 +1347,7 @@ while IFS= read -r name; do
     deferred=1
     emit SELF-UPDATE-UNDECIDED "$name" "both versions exit non-zero (current $rc_cur, incoming $rc_new), so the failure is pre-existing or a harness artifact and is NOT attributable to this pull. Treat as defer — acting autonomously on an unattributable failure is what this gate exists to prevent."
   fi
-done <<EOF
-$GATING
-EOF
+done < "$TMP/gating"
 
 if [ "$deferred" -ne 0 ]; then
   emit SELF-UPDATE-DEFER "-" "at least one gating script defers; step 2 must not push. Fold the machinery slice into the gated apply."
