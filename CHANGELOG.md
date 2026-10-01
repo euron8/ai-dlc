@@ -19,6 +19,26 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.690.0] - 2026-10-01
+
+Batch 179's seventh release: the `ledger-reverify` fixture, the suite's pole, split into four shards. No
+bootstrapping file changes; four new shipping fixture directories and one distribution-only battery.
+
+### Backlog
+
+- **`BL-406`**. `core/fixtures/ledger-reverify/run.sh` is 28 derived `lr_unit_<slug>` functions dealt across
+  `SHARDS="a b c d"`, and `ledger-reverify-b`, `-c` and `-d` are drivers that re-enter it with `--group`.
+  Solo, the shards run 97 to 181 seconds against about 367 for the whole fixture, and their assertions
+  total 364, which is the unsharded 346 plus the six-assertion control every shard repeats. Every base
+  assertion label appears in exactly one shard's output. Each shard runs a coverage join with a self-probe
+  (every unit dealt once, every declared shard has a driver), compares the set of units it entered with the
+  set dealt to it, scans each unit's stderr for an undefined helper, and fails a unit that asserts nothing.
+  A driver requires the sibling's verdict line to name its own shard, and an exit from inside a unit before
+  the final verdict is exit 2. `--plan <g>` prints a shard's units. A `.dist-only` battery,
+  `ledger-reverify-shard-mutants`, kills each of those checks with a mutant. `FORK_BUDGET` stays at 3214.
+- **`BL-378`** stays open. The pole baseline `docs/suite-pole-baseline.tsv` is re-taken from three serial
+  loaded runs after this release has run once; the new pole is a measurement, not a claim made here.
+
 ## [0.689.0] - 2026-10-01
 
 Batch 179's sixth release: `ledger-reverify.sh` alone, with its new fixture. Bootstrapping, so it ships
