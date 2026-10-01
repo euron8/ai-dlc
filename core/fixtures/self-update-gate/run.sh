@@ -12,6 +12,9 @@
 # agreement and therefore no signal at all (OK, v0.297.0), 1 -> 2 is a real change nobody can
 # attribute (UNDECIDED).
 set -u
+# HERMETIC (I10): the gate reads AI_DLC_* tunables (e.g. AI_DLC_GATE_IN_SAFE_STOP in
+# gate_record_open), so an operator's exported value would change what every cell measures.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
 GATE=""; LOOKED=""
