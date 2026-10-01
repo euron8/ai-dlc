@@ -67,6 +67,30 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
 
+**BATCH 180 SHIPPED ONE RELEASE, `v0.692.0` (`08655178`, #960), AND DISCHARGED ONE CONSUMER CANDIDATE:
+`PC-S316-RETIRED-LAYER-PASSAGE-NORM-FALLTHROUGH-MUTANT-DEPENDS-ON-INHERITED-FDS`** (`BL-416`), filed by the reference
+consumer during its 0.683.0 → 0.691.0 pull. It was invoked by peer handoff; the operator then named that candidate
+and ruled the batch to it alone, "as quickly as possible". The opening sweep and the whole-backlog adjudication were
+stopped on that ruling before they reported, so this batch derived no worklist, no unfiled set and no adjudication.
+
+- The fix is fixture-only: `f_drive` in `core/fixtures/retired-layer-passage/run.sh` closes fds 3-9 before
+  `ulimit -n 7`, and a new arm re-scores both cells with 3-9 held. Base failed `MUTANT SURVIVED` with 3-9 inherited;
+  the tip passes both ways; with the close removed the new arm fails `./.`. `BL-416`'s receipt scored tip 0, base 1,
+  close-removed 1. No other fixture lowers the fd limit (control: 4 hits in the fixed file).
+- No tip adversary ran, on the operator's speed ruling.
+
+Live backlog **25**, archive **390**: `BL-416` filed and rotated in the batch. Every entry batch 179 recorded as
+filed or open is unchanged.
+
+**THE DELIVERY GAP IS ONE RELEASE.** The consumer pulled to 0.691.0 on its sprint branch
+(`ai-dlc/carry-over/phase-316-rebalancer-repoint`, `dec3e1cd`, #1151), not yet on its `main`, against `VERSION`
+0.692.0. 0.692.0 touches no bootstrapping file. PENDING is 1, the id above. That pull archived both batch-179 PENDING
+ids as `ADOPTED UPSTREAM`. The banked ruling stands: report the gap and write no runbook.
+
+**OPERATOR DECISIONS STILL OPEN** are batch 179's list below, unchanged.
+
+Batch 179's block below is history: batch 180's block replaces its delivery gap.
+
 **BATCH 179 SHIPPED EIGHT RELEASES, `v0.684.0` THROUGH `v0.691.0`, AND DISCHARGED NO CONSUMER CANDIDATE.** It was
 invoked by peer handoff and ran autonomously. Each squash tree was identical to its gated tip. Four close commits
 followed (`642beab0`, `87fc541d`, `0c8e34af`, `6d5adaf2`); each rotated its landed entries and reset the R5 floors.
