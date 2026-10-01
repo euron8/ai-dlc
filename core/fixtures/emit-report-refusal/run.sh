@@ -535,15 +535,18 @@ fi
 # shipping function and not a restatement of it.
 RB="$R/race-body.sh"; RF="$R/race-fn.sh"
 awk '/^          echo "    THEIRS \$\{THEIRS\}:\$\{cp\}/ { f = 1; next } f && /^          if .*\$d_rc/ { exit } f' "$EMIT" > "$RB"
-awk '/^er_pdiff\(\) \{/ { f = 1 } f { print } f && /^}$/ { exit }' "$EMIT" > "$RF"
+# Since BL-360 the THEIRS staging write is `er_stage`, a second helper cut the same way.
+awk '/^(er_pdiff|er_stage)\(\) \{/ { f = 1 } f { print } f && /^}$/ { f = 0 }' "$EMIT" > "$RF"
 _rbc="$(grep -c 'd_rc=\$?' "$RB")" || _rbc=0
 _rfc="$(grep -c '^er_pdiff() {' "$RF")" || _rfc=0
-# The helper is required only when the body CALLS it: an engine whose site diffs inline (the
+_rsc="$(grep -c '^er_stage() {' "$RF")" || _rsc=0
+# A helper is required only when the body CALLS it: an engine whose site diffs inline (the
 # `<( )` spelling before 0.647.0) is driven as it is, and must then FAIL the forced half rather
 # than stop at a harness refusal. Measured that way against 1f0a81f3's engine.
 _rbu="$(grep -c 'er_pdiff' "$RB")" || _rbu=0
-if [ "$_rbc" -ne 1 ] || { [ "$_rbu" -gt 0 ] && [ "$_rfc" -ne 1 ]; }; then
-  bad "A7 HARNESS BROKEN: the cut from emit-report.sh carries $_rbc 'd_rc=\$?' reads (want 1), calls er_pdiff $_rbu time(s) and $_rfc definition(s) of it were cut — re-anchor the cut, never relax it"
+_rbs="$(grep -c 'er_stage' "$RB")" || _rbs=0
+if [ "$_rbc" -ne 1 ] || { [ "$_rbu" -gt 0 ] && [ "$_rfc" -ne 1 ]; } || { [ "$_rbs" -gt 0 ] && [ "$_rsc" -ne 1 ]; }; then
+  bad "A7 HARNESS BROKEN: the cut from emit-report.sh carries $_rbc 'd_rc=\$?' reads (want 1), calls er_pdiff $_rbu time(s) with $_rfc definition(s) cut and er_stage $_rbs time(s) with $_rsc cut — re-anchor the cut, never relax it"
 else
   printf 'shared line\nSENTINEL-OURS-ONLY consumer domain class\n' > "$R/race-ours"
   printf '%s\n' 'd="$(diff <(printf '"'"'%s\n'"'"' "$t") "$local_ours" 2>/dev/null)"; d_rc=$?' > "$R/ref-procsub.sh"
