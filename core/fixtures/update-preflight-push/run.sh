@@ -5,9 +5,10 @@
 # re-confirm bullet never pushes and is the one place `apply` is refused.
 #
 # WHAT THE SUBJECT IS, AND WHAT THIS CANNOT OBSERVE. The subject is prose in
-# `ai-dlc-update/SKILL.md`, five units: the two AUTO-PUSH bullets of step 1's git preflight
-# (no-upstream, ahead-only), step 1's UN-SYNCED paragraph, step 2's UN-SYNCED DEFER paragraph,
-# and step 6's "Re-confirm the step-1 git preflight" bullet. No executable reads that text, so
+# `ai-dlc-update/SKILL.md`, eight units: the two AUTO-PUSH bullets of step 1's git preflight
+# (no-upstream, ahead-only), step 1's detect paragraph, step 1's UN-SYNCED paragraph, step 2's
+# UN-SYNCED DEFER paragraph, step 2's cycle bullet and its push-failure discard paragraph, and
+# step 6's "Re-confirm the step-1 git preflight" bullet. No executable reads that text, so
 # nothing here observes whether a running update actually continued past a failed push. The
 # observable is the declared text, and every assertion is scoped to it.
 #
@@ -40,8 +41,9 @@
 # continue; the no-push sentence; UN-SYNCED and the refusal in one clause; DEFER in the step-2
 # clause), keeps a widened forbidden list beside it, and a negated fatal verb ("not stop", "not a
 # halt") is normalised to the token `negfatal` before either list runs. `git push` is not
-# forbidden in step 6: naming the remedy command is allowed. BL-389's `verify: sh` receipt
-# carries the same regexes; change both together.
+# forbidden in step 6: naming the remedy command is allowed. BL-389's archived receipt carried
+# the arm 1-6 regexes; BL-391's `verify: sh` receipt carries arms 4 and 7-9. Change the live
+# receipt with the arms it restates.
 #
 # WHY BULLET-SCOPED. The BEHIND and DIVERGED bullets sit beside the AHEAD bullet and say STOP,
 # correctly, in the fixed text too. A list- or file-scoped grep for STOP flags the fixed text
@@ -49,7 +51,7 @@
 #
 # WHY WHITESPACE-COLLAPSED. A bullet is joined across its continuation lines before any
 # pattern runs, so an anchor or a forbidden phrase split by a line wrap is still seen.
-# `nearmiss.md` wraps all three anchors, and probe direction 4 asserts it really is wrapped.
+# `nearmiss.md` wraps all eight unit anchors, and probe direction 4 asserts it really is wrapped.
 #
 # Usage: run.sh
 # Exit:  0 = every assertion holds (or the subject is absent: SKIP), 1 = the subject regressed,
@@ -142,7 +144,7 @@ A_DETECT='detect with'
 A_CYCLE='run the self-update cycle autonomously'
 A_DISCARD='a push that fails here discards the cycle'
 
-# THE GRAMMAR, stated once. BL-389's receipt carries the same five regexes.
+# THE GRAMMAR, stated once. BL-389's archived receipt carried the same five regexes.
 FATAL='(^|[^a-z])(stop|stops|stopped|halt|halts|halted|abort|aborts|terminate|terminates)([^a-z]|$)|run ends|ends the run|end the run|do not proceed|does not proceed'
 NONFATAL='not fatal|non-fatal|negfatal'
 CONT='continue|keep going|carry on|carries on|(proceed|proceeds|continues) to the dry-run'
