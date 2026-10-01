@@ -29,11 +29,22 @@
 #   opens a fence, so an odd count of ``` lines in a comment cannot swallow the document.
 #   A `<!--` opened mid-line is not tracked. Setext headings are not atoms.
 #   The preamble joins atom 1. A `##` atom over
-#   half the document's bytes splits at its own `### ` headings. Consecutive atoms are packed
+#   half the document's bytes splits at its own `### ` headings. A piece STILL over MAX_SHARE_PCT
+#   after that splits once more, before every line k where lines k-2, k-1 and k all begin with
+#   `|` outside a fence or comment -- markdown TABLE ROWS, so one wide table carrying the bytes no
+#   longer forces a single remediator. Each such piece repeats its parent's heading in column 4.
+#   No header row is re-emitted: a cut may leave a table's header and separator rows in the
+#   previous piece, which is safe because every reader treats a part as a byte slice of the
+#   document (the split self-check below refuses anything else, and a remediator that re-added
+#   the header would duplicate it on --assemble). Nothing splits at a blank line, inside a
+#   fence, or inside a line. Consecutive atoms are packed
 #   greedily against a target of max(largest atom, total/PART_CAP); when that yields more than
 #   PART_CAP parts the target is RAISED to the smallest value that yields at most PART_CAP (a
 #   binary search -- the greedy part count only falls as the target rises). SERIAL when fewer than
-#   two parts result, or the largest part is over MAX_SHARE_PCT of the bytes. A part's heading is
+#   two parts result, or the largest part is over MAX_SHARE_PCT of the bytes; that second answer
+#   reads `SERIAL: largest part is NN% of the document (lines a-b, NN%, <why>)`, naming the
+#   blocking part, where <why> is `single-line` when one line in it is itself over the cap and
+#   `no-boundary` otherwise. A part's heading is
 #   the heading line that OPENED its first atom, never a line found by scanning the part, so a
 #   fenced `## ` can be neither a boundary nor a heading. Trailing CR is stripped from the heading
 #   and a TAB in it becomes a space -- a heading must not break the TSV every caller parses.
@@ -109,6 +120,7 @@ map_of() { # <doc> -> map on stdout (rc 0) or one SERIAL line (rc 3)
     cmt { if (index($0, "-->")) cmt = 0; next }
     /^[ \t]*(```|~~~)/ { match($0, /(`+|~+)/); fence = substr($0, RSTART, RLENGTH); next }
     /^[ \t]*<!--/ { if (!index(substr($0, index($0, "<!--") + 4), "-->")) cmt = 1; next }
+    /^\|/   { TR[NR] = 1; next }
     /^## /  { n2++; h2[n2] = NR; h2t[n2] = $0; next }
     /^### / { n3++; h3[n3] = NR; h3t[n3] = $0; next }
     END {
@@ -126,6 +138,17 @@ map_of() { # <doc> -> map on stdout (rc 0) or one SERIAL line (rc 3)
           na++; A1[na] = st; A2[na] = z; AH[na] = stt
         } else { na++; A1[na] = a; A2[na] = z; AH[na] = h2t[i] }
       }
+      nb = 0
+      for (i = 1; i <= na; i++) {
+        s = 0; for (k = A1[i]; k <= A2[i]; k++) s += B[k]
+        st = A1[i]
+        if (s * 100 > tot * maxpct)
+          for (k = A1[i] + 2; k <= A2[i]; k++) if (TR[k] && TR[k - 1] && TR[k - 2]) {
+            nb++; C1[nb] = st; C2[nb] = k - 1; CH[nb] = AH[i]; st = k
+          }
+        nb++; C1[nb] = st; C2[nb] = A2[i]; CH[nb] = AH[i]
+      }
+      na = nb; for (i = 1; i <= na; i++) { A1[i] = C1[i]; A2[i] = C2[i]; AH[i] = CH[i] }
       mx = 0
       for (i = 1; i <= na; i++) {
         s = 0; for (k = A1[i]; k <= A2[i]; k++) s += B[k]
@@ -142,9 +165,14 @@ map_of() { # <doc> -> map on stdout (rc 0) or one SERIAL line (rc 3)
         if (PS[np] > 0 && PS[np] + AS[i] > target) { np++; P1[np] = A1[i]; PH[np] = AH[i]; PS[np] = 0 }
         PS[np] += AS[i]; P2[np] = A2[i]
       }
-      big = 0; for (i = 1; i <= np; i++) if (PS[i] > big) big = PS[i]
+      big = 0; for (i = 1; i <= np; i++) if (PS[i] > big) { big = PS[i]; bi = i }
       if (np < 2) { print "SERIAL: one part"; exit 3 }
-      if (big * 100 > tot * maxpct) { printf "SERIAL: largest part is %d%% of the document\n", int(big * 100 / tot); exit 3 }
+      if (big * 100 > tot * maxpct) {
+        why = "no-boundary"
+        for (k = P1[bi]; k <= P2[bi]; k++) if (B[k] * 100 > tot * maxpct) why = "single-line"
+        printf "SERIAL: largest part is %d%% of the document (lines %d-%d, %d%%, %s)\n", int(big * 100 / tot), P1[bi], P2[bi], int(big * 100 / tot), why
+        exit 3
+      }
       fmt = "%0" length(np "") "d\t%d\t%d\t%s\n"
       for (i = 1; i <= np; i++) printf fmt, i, P1[i], P2[i], head_of(PH[i])
     }' "$1"
