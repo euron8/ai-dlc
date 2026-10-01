@@ -613,14 +613,14 @@ readset_both_compare() {
 # whatever subset happened to finish -- a comparison passing having compared almost nothing.
 readset_both_verdict() {
   local list="$1" results="$2" missed="$3" scratch="$4" f
-  [ -r "$results" ] || { echo "REFUSED: the results file $results is unreadable -- nothing was compared"; return 2; }
+  [ -r "$results" ] || { echo "REFUSED: EXAMINED NOTHING -- the results file $results is unreadable"; return 2; }
   : > "$scratch/both.listed" || { echo "REFUSED: cannot write $scratch/both.listed"; return 2; }
   for f in $list; do printf '%s\n' "$f" >> "$scratch/both.listed"; done
   awk -F'\t' -v missed="$missed" '
     FILENAME == ARGV[1] { if ($0 != "") listed[++n] = $0; next }
     { st[$1] = $2; sb[$1] = $3; why[$1] = $5 }
     END {
-      if (n == 0) { print "REFUSED: no fixture was listed -- a comparison over nothing is not a verdict"; exit 2 }
+      if (n == 0) { print "REFUSED: EXAMINED NOTHING -- no fixture was listed, and a comparison over none is not a verdict"; exit 2 }
       c = 0; u = ""; N = 0; M = 0
       for (i = 1; i <= n; i++) {
         f = listed[i]

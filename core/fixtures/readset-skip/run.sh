@@ -1034,7 +1034,7 @@ MUT
     V="$(both_verdict_with "$BOTH_SPAN" "" "$BW/res.clean")"
     BOTH_ARMS=$((BOTH_ARMS+1))
     case "$V" in
-      "2|REFUSED: no fixture was listed"*) ok "an empty fixture list REFUSES at exit 2 rather than reading clean over nothing" ;;
+      "2|REFUSED: EXAMINED NOTHING -- no fixture was listed"*) ok "an empty fixture list REFUSES at exit 2 rather than reading clean over nothing" ;;
       *) bad "an empty list was not refused at exit 2: '$V'" ;;
     esac
     # MUTANTS on the span, each a cmp -s guarded copy. Each names the one arm it must move.
