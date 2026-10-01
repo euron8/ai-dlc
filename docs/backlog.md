@@ -1043,7 +1043,24 @@ because text about a program is not the program. It exits 9 — STILL-LIVE, the 
 the install did not produce a tree, so a broken probe cannot read as a fix.
 
 
-verify: sh R="$PWD"; D=$(mktemp -d) || exit 9; mkdir -p "$D/_bmad"; bash scripts/install.sh "$D" >/dev/null 2>&1; [ -d "$D/tests/fixtures" ] || { rm -rf "$D"; exit 9; }; n=$(find "$D" -name VERSION -type f 2>/dev/null | wc -l | tr -d ' '); rm -rf "$D"; [ "$n" -gt 0 ] && exit 0; c=$(grep -l '/VERSION"' "$R"/core/fixtures/*/run.sh 2>/dev/null | wc -l | tr -d ' '); k=$(grep -l 'FIXTURE' "$R"/core/fixtures/*/run.sh 2>/dev/null | wc -l | tr -d ' '); [ "$k" -gt 0 ] || exit 9; [ "$c" -eq 0 ]
+Held note (batch 178): the rule is corrected and the population claim is refuted, so this entry
+CLOSES at the close commit. The section now names `ai_dlc_resolve_root()` at
+`core/scripts/validate-provenance-block.sh:138` (the `:98` above is stale) and
+`core/fixtures/validator-path-resolution`, states `VERSION` exists only in the distribution, and
+does not restate the marker set. Population re-derived at this tip: **32** fixture `run.sh` files
+carry `/VERSION"` (control: 216 carry `FIXTURE`) — **19** `.dist-only`, **13** shipping. Every
+shipping hit was read: all are seed writes (`>`, `echo`, `printf`, `cp`) except one comment, two
+`cat "$DIST/VERSION"` reads of a seeded dist, and one `test -f "$THEIRS_TREE/VERSION"` inside a
+seeded receipt string. **0 shipping fixture walkers**; the walker pattern matches 11 lines in the
+`.dist-only` set, and an any-case `[ -f "$VAR/VERSION" ]` test matches 0 shipping files against 9
+`.dist-only` ones. The
+"16 shipped fixtures test a `/VERSION` marker" paragraph above counted seed-writers as walkers. A6
+after the edit: 64721/67584. The receipt below replaces the install-driving one, which could only
+close by a fix this entry no longer asks for; it is keyed on the SECTION span, bounded at 40
+lines. Scored: base 1, fix 0, name added elsewhere in the file 1, name added inside the section
+with "Walk up for `VERSION`" kept 1, section unbounded to EOF 9, heading renamed 9.
+
+verify: sh f=.claude/rules/verification-discipline.md; [ -f "$f" ] || exit 9; s="$(awk '/^## Resolve the repo root/ { f = 1; print; next } f && /^## / { exit } f' "$f")"; [ -n "$s" ] || exit 9; [ "$(printf '%s\n' "$s" | wc -l)" -lt 40 ] || exit 9; grep -qF 'ai_dlc_resolve_root' <<<"$s" || exit 1; grep -qF 'Walk up for `VERSION`' <<<"$s" && exit 1; exit 0
 
 
 ## BL-103 — an `ai-dlc-*.sh` hook the settings template cannot register withholds `--finish` forever
@@ -1252,6 +1269,19 @@ objections are why it is recorded as a candidate rather than a plan:
 shipped predicates adjudicate persisted artifacts a consumer already holds — that population is the
 entry's real subject and it has not been derived.
 
+Held note (batch 178): PREMISE CORRECTION, and the entry is re-scoped. The differential this
+entry calls "not missing" SHIPPED: `core/skills/ai-dlc-update/reconcile/predicate-differential.sh`
+landed in v0.444.0 (`0ca1d0e9`) and is wired as update `SKILL.md` step 3g, driven by the site
+manifest `reconcile/predicate-sites.md`. That manifest declares two sites today
+(`validate-adversarial-convergence.sh`, `validate-provenance-block.sh`). What remains is (1) three
+shipped validators that adjudicate a consumer's STORED artifacts and are not declared there —
+`core/scripts/validate-gate-adjudication.sh` (named in the manifest's prose at `:53`, but given no
+site block), `core/scripts/validate-snapshot-conservation.sh`, and
+`core/scripts/validate-suppression-lifetime.sh`; and (2) the population field the "consequence for
+scoping" paragraph above asks for: a site's output does not carry the population definition it used
+or how many artifacts it could not classify, so a second party cannot re-derive the figure. The
+characterization-corpus candidate is unchanged and still not chosen. No code in this batch.
+
 verify: unscoped — this entry records a gap and names a candidate, not a receipt. Do not close it
 on a green `check-24` run or a green suite; that green is exactly what failed to see the defect.
 
@@ -1327,6 +1357,26 @@ below any PC-backed entry under the provenance-first rule.
 
 **Tiered DEFECT.** It does not corrupt anything; it removes a guard silently, and the symptom of a
 missing guard is a green push.
+
+Held note (batch 178): the false-positive set this entry owes is now MEASURED, and it does NOT
+support re-tiering to NOTE. Re-derived at this tip: **25** (mapped fixture, `core/hooks/` basename)
+pairs where `run.sh` names the hook and the fixture's rows omit `core/hooks/<name>` (control in the
+same derivation: 61 pairs where the row DOES carry it). **19** are comment-only mentions (an
+earlier count read 18). The **6** non-comment ones were inspected by hand. Five do not open the
+core hook: `layer-readopt-gate` passes `hooks/ai-dlc-continue.sh` as an argument,
+`core-write-guard` puts a consumer path in tool-call JSON, `upstream-routing` truncates a stub in
+its own consumer tree, `settings-merge-unparseable-template` greps a template for the name, and
+`gate-repair-record` quotes it in prose. **The sixth is a live instance:**
+`postcompact-rulebook-recovery` resolves `core/hooks/ai-dlc-postcompact.sh` in `seed.sh:46` and
+executes it at `run.sh:1762`. Its rows carry four other hooks and not that one. They were last
+derived on 2026-09-15; the arm that reads that hook landed on 2026-09-22 (0.620.0), and none of the
+22 map commits since then changed a `postcompact-rulebook-recovery` row (the largest re-derived 11
+fixtures, so each was a `--list` partial, not a full re-trace). A push
+touching only `ai-dlc-postcompact.sh` skips the one fixture guarding the defect 0.620.0 fixed. The
+motivating instance is closed: `pause-hook-origin`'s rows now carry `core/hooks/ai-dlc-continue.sh`.
+Two corrections to the method above: a `run.sh`-only mention grep misses reads resolved in a
+sibling `seed.sh` (this instance names the hook in `run.sh` only in messages), and the remedy is a
+re-trace of `postcompact-rulebook-recovery`, not a hand-edited row. Tier stays **DEFECT**.
 
 The receipt is STRUCTURAL: it exits 1 while no arm in `scripts/validate-enforcement-map.sh` binds a
 fixture's read-set row to the `core/hooks/` paths its `run.sh` resolves, 0 once one does, and 9 if
@@ -1833,7 +1883,22 @@ a read-set row the operator must derive with root.
 
 Discharges nothing upstream; this is distribution-internal and ranks below any PC-backed entry.
 
-verify: sh h=core/fixtures/gate-verdict-grep-shape/run.sh; [ -f "$h" ] || exit 9; b=core/fixtures/backlog-receipt-binding/run.sh; [ -f "$b" ] || exit 9; [ -f core/fixtures/backlog-receipt-binding/.dist-only ] || exit 9; grep -q 'docs/backlog.md' "$h" && exit 9; grep -qE 'BL-040|CHECK_LOADED: 5' "$b" && exit 0; exit 1
+Held note (batch 178): the join now lives as arms `rj-*` in `core/fixtures/backlog-receipt-binding`
+(`.dist-only`). BL-040's receipt is DERIVED from `docs/backlog.archive.md` by entry id at run time and
+run over every `mode == "..."` branch of gate-verdict-grep-shape's seed builder; a shape it closes
+over (exit 0) must carry a row in that fixture's verdict tables whose verdict its own oracle
+reproduces. Re-derived at this tip: **8 of 10** seeded shapes are receipt-blind (the entry's "three
+of the six" predates the bound and near-miss seeds); `no-read` (exit 1) and `no-anchor6` (exit 2)
+are receipt-owned. Self-probes in three directions before the corpus: the `comment` row deleted is
+reported UNCOVERED, the receipt-owned `no-read` row deleted stays quiet, and `comment` relabelled
+GREEN is reported UNREPRODUCED. Known limit: a seed branch deleted together with its row is
+invisible. The old receipt's `grep -qE 'BL-040|CHECK_LOADED: 5'` was closable by a comment; the
+replacement requires the archive path and the sibling fixture on a non-comment line AND BL-040's
+receipt body absent from the fixture. Scored: base 1, fix 0, archive named only in a comment 1,
+body pasted 1, sibling fixture absent 9. A read-set re-trace is owed for `backlog-receipt-binding`
+(three new reads: the archive, gate-verdict-grep-shape/run.sh, gate-validation.md).
+
+verify: sh h=core/fixtures/gate-verdict-grep-shape/run.sh; b=core/fixtures/backlog-receipt-binding/run.sh; a=docs/backlog.archive.md; [ -f "$h" ] && [ -f "$b" ] && [ -f "$a" ] || exit 9; [ -f core/fixtures/backlog-receipt-binding/.dist-only ] || exit 9; grep -q 'docs/backlog.md' "$h" && exit 9; r="$(awk '$0 == "## BL-040" || index($0, "## BL-040 ") == 1 { f = 1; next } f && /^## / { exit } f && /^verify: sh / { sub(/^verify: sh /, ""); print; exit }' "$a")"; [ -n "$r" ] || exit 9; grep -qF "$r" "$b" && exit 1; grep -qF 'CHECK_LOADED: 5 /,/CHECK_LOADED: 6' "$b" && exit 1; c="$(grep -v '^[[:space:]]*#' "$b")"; grep -qF 'docs/backlog.archive.md' <<<"$c" && grep -qF 'gate-verdict-grep-shape/run.sh' <<<"$c" && exit 0; exit 1
 
 ## BL-301 — the gate runs no shipped fixture in the consumer layout, so a fixture red on every consumer ships green
 
@@ -2016,21 +2081,8 @@ early-exiting reader: `printf | grep -q` on a 206 KB haystack under `pipefail` a
 spelling arm holding the non-comment `<<<` count at zero.
 
 **Findings carried here**, held in this entry because the live ceiling admitted one filing after
-`BL-359` rotated. The first is DEFECT-tier on its own; split it out at the next close:
+`BL-359` rotated. All three are NOTE-tier.
 
-- **A bad `theirs` ref or a missing contract blob reads as an ABSENT contract, so the adjudication
-  tier switches off at rc 0.** `layer-drift.sh`'s `have` (`:593`) is `memo_has_path`, a
-  `cat-file -e` that returns non-zero for an absent path, an unresolvable ref and a missing object
-  alike. The v0.658.0 fix deliberately keeps an absent contract as an empty one, so each of these
-  now takes that branch. Forced by the batch 167 tip adversary on both 0.657.0 and 0.658.0: with
-  the contract blob removed from the object store (`rev-parse --verify` 0, `cat-file -e` 1, `show`
-  128), `--adjudicated-codes` returns an empty set at rc 0 (control, blob intact:
-  `EXTENSION-TITLE-MATCHES-CORE`); with a nonexistent `theirs`, classify returns 50 rows at rc 0,
-  the only signal a skeleton-heading WARNING (control, good ref: 4 codes). Nothing in
-  `layer-drift.sh`, `apply.sh` or `emit-report.sh` checks that `theirs` resolves before
-  classifying. Remedy: refuse at startup unless `rev-parse -q --verify "${BASE}^{commit}"` and
-  `"${THEIRS}^{commit}"` both resolve, and in `have` treat "the path is in the tree but
-  `cat-file -e` fails" as a refusal, not an absence.
 - **NOTE — the W3 contradiction-awk count has no fixture cell.** A mutant replacing
   `adj_register_contradictions`' `PIPESTATUS[1]` read with `_rc=0` silently loses a
   `HARD-REGISTER-CONTRADICTION` row; `mk_ld_world` never writes a register, and neither the
@@ -2043,6 +2095,12 @@ spelling arm holding the non-comment `<<<` count at zero.
 - **NOTE — two early-exit readers fed by a pipe remain in `layer-drift.sh`** (`adj_verdict … | head
   -1` and `shadow_parts … | head -1`), status unread and inputs small, so no current risk; the
   v0.658.0 partition covered `<<<` sites only.
+
+Held note (batch 178): the carried DEFECT bullet — a bad `theirs` ref or a missing contract blob
+read as an absent contract, switching adjudication off at rc 0 — is struck. It was split out as
+`BL-370` and shipped in v0.664.0 (verified bf998dfb): `layer-drift.sh:290` refuses an unresolvable
+ref at startup through `ld_resolve_ref`, and `have()` at `:690-705` refuses a path the tree names
+but cannot read. The three NOTE bullets stay; this entry stays open for the bootstrapping half.
 
 **Amended at batch 169 (v0.660.0): the non-bootstrapping half is converted, and this entry stays
 live for the bootstrapping half.** Line numbers are at `322ef42c` unless marked tip.
