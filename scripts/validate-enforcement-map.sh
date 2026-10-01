@@ -627,7 +627,15 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   subject of every per-hook arm: I14 +4, I13 +2, I84 +2, I93 +2, I83 +1. I75 +10 is one more
 #   inline root block, in `validate-steering-budget.sh` (BL-390), hashed once like every copy.
 #   Every other arm unchanged. HIGH reading 3188 plus the usual 6.
-FORK_BUDGET=3194
+#
+#   RAISED TO 3202 FOR ONE NEW ARM. `fork-profile.sh --section by-arm --stable`, base
+#   `origin/main` 297f7499 in a clean detached worktree against the BL-399 tip: base 3186
+#   (spread 3186-3188), tip 3196 (spread 3195-3196), so +10. I117 +9 is new: the `--cite`
+#   verdict set, one awk lift of its grammar out of the renderer, one awk over the owner, one
+#   grep over core/, and its mktemp self-probe. I13 +1, I82 +1 and I116 -1 were not
+#   attributed to a line. Every other arm unchanged. HIGH reading 3196 plus
+#   the usual 6.
+FORK_BUDGET=3202
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
