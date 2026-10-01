@@ -362,6 +362,97 @@ score_e M-E3 "$(mut_line e3 "$L06_FIX" "$L06_MUT")" \
   "$DO $NU $NU unresolved resolved" \
   "with the basename listing C-quoted scripts/ai-dlc/café.sh matches no basename while its ASCII control still resolves"
 
+# --- E5: A NAME THAT IS NOT VALID UTF-8 MUST NOT ABORT THE TOOLS THAT READ THE RAW LISTING. Under a
+# UTF-8 locale BSD `sed` exits 1 (`illegal byte sequence`) and BSD awk exits 2 (`towc`) on such a
+# line. At the marker `sed` that emptied the WHOLE dist-only set; in `named_reach`'s awk it read as
+# `code`. Latin-1 names are built by plumbing (APFS refuses them on disk), so nothing below runs
+# `add -A` after they exist. Three namings, run under LC_ALL=en_US.UTF-8 AND under LANG alone:
+#   S831 touches only the ASCII dist-only `asc-dist`       -> DOCS-ONLY  (sed abort -> NAMED-UPSTREAM)
+#   S832 touches only the Latin-1 dist-only `latD\351`     -> DOCS-ONLY  (either abort -> NAMED-UPSTREAM)
+#   S833 touches only the Latin-1 SHIPPING `latS\351`      -> NAMED-UPSTREAM
+E5="$W/e5"; E5D="$E5/dist"; E5C="$E5/consumer"
+mkdir -p "$E5D/core/scripts" "$E5D/core/fixtures/asc-dist" || broken "E5: could not build the dist tree"
+git init -q "$E5D" || broken "E5: git init failed"
+printf '0.1.0\n' > "$E5D/VERSION"
+printf 'x\n' > "$E5D/core/scripts/plain.sh"
+printf 'Distribution-only: ASCII.\n' > "$E5D/core/fixtures/asc-dist/.dist-only"
+printf 'r\n' > "$E5D/core/fixtures/asc-dist/run.sh"
+g "$E5D" add -A || broken "E5: add failed"
+e5_put() { # <latin-1 path> <content> -> stage that blob at that path by plumbing
+  local _b; _b="$(printf '%s\n' "$2" | git -C "$E5D" hash-object -w --stdin)" || return 1
+  printf '100644 %s\t%s\n' "$_b" "$1" | git -C "$E5D" update-index --index-info; }
+E5_LD="$(printf 'core/fixtures/latD\351')"; E5_LS="$(printf 'core/fixtures/latS\351')"
+e5_put "$E5_LD/.dist-only" 'Distribution-only: Latin-1.' && e5_put "$E5_LD/run.sh" 'd' \
+  && e5_put "$E5_LS/run.sh" 's' || broken "E5: plumbing the Latin-1 paths failed"
+g "$E5D" commit -qm base || broken "E5: base commit failed"
+E5_BASE="$(git -C "$E5D" rev-parse HEAD)"
+printf 'echo e\n' >> "$E5D/core/fixtures/asc-dist/run.sh"
+g "$E5D" add core/fixtures/asc-dist/run.sh && g "$E5D" commit -qm 'test: cites PC-S831-ASC-DISTONLY' || broken "E5: S831 commit failed"
+e5_put "$E5_LD/run.sh" 'd2' && g "$E5D" commit -qm 'test: cites PC-S832-LATIN1-DISTONLY' || broken "E5: S832 commit failed"
+e5_put "$E5_LS/run.sh" 's2' && g "$E5D" commit -qm 'test: cites PC-S833-LATIN1-SHIPPING' || broken "E5: S833 commit failed"
+E5_THEIRS="$(git -C "$E5D" rev-parse HEAD)"
+mkdir -p "$E5C/_bmad-output/ai-dlc-update"
+E5_LED="$E5C/_bmad-output/ai-dlc-update/push-candidate-ledger.md"
+printf '%s\n' '# Push-candidate ledger' '' \
+  '- **PC-S831-ASC-DISTONLY** — named only by a commit touching an ASCII dist-only fixture.' '' \
+  '- **PC-S832-LATIN1-DISTONLY** — named only by a commit touching a Latin-1 dist-only fixture.' '' \
+  '- **PC-S833-LATIN1-SHIPPING** — named only by a commit touching a Latin-1 shipping fixture.' > "$E5_LED" \
+  || broken "E5: could not write the ledger"
+git init -q "$E5C" && g "$E5C" add -A && g "$E5C" commit -qm consumer || broken "E5: consumer commit failed"
+# SANITY: the Latin-1 paths are in the tree at theirs, byte-raw under the engine's flag.
+case "$(git -C "$E5D" -c core.quotePath=false ls-tree -r --name-only "$E5_THEIRS" -- core/fixtures/)" in
+  *"$E5_LD/.dist-only"*"$E5_LS/run.sh"*) : ;;
+  *) broken "E5: the raw listing at theirs does not carry both Latin-1 paths" ;;
+esac
+E5_WANT="$DO $DO $NU"
+kinds_e5() { local _r="$1" _out="" _l _k
+  for _l in PC-S831-ASC-DISTONLY PC-S832-LATIN1-DISTONLY PC-S833-LATIN1-SHIPPING; do
+    _k="$(kind_of "$_r" "$_l")"; _out="$_out ${_k:-<none>}"; done
+  printf '%s' "${_out# }"; }
+run_e5() { # <engine> <utf8|lang> -> rows
+  case "$2" in
+    utf8) LC_ALL=en_US.UTF-8 bash "$1" "$E5D" "$E5_BASE" "$E5C" "$E5_THEIRS" "$E5_LED" 2>/dev/null ;;
+    lang) env -u LC_ALL LANG=en_US.UTF-8 bash "$1" "$E5D" "$E5_BASE" "$E5C" "$E5_THEIRS" "$E5_LED" 2>/dev/null ;;
+  esac; }
+for _sh in utf8 lang; do
+  _got="$(kinds_e5 "$(run_e5 "$RV" "$_sh")")"
+  if [ "$_got" = "$E5_WANT" ]; then
+    ok "E5 ($_sh): S831 (ASCII dist-only) and S832 (Latin-1 dist-only) -> DOCS-ONLY, S833 (Latin-1 shipping) -> NAMED-UPSTREAM"
+  else
+    bad "E5 ($_sh): read '$_got', want '$E5_WANT'"
+  fi
+done
+# CALIBRATION: the mutants below discriminate only where this platform's sed and awk ABORT on an
+# invalid-UTF-8 line under that locale (BSD does; GNU passes the bytes through). Where they do not,
+# a mutant cannot be told from the fix, and that is reported as such -- never as a kill.
+# Each probe is the engine's OWN expression: a `sed` without the `[^/]*` class does not abort, and
+# calibrating on one read `sed-ok` here while the engine's sed aborted.
+e5_cal="$(printf 'core/fixtures/lat\351/.dist-only\n' | LC_ALL=en_US.UTF-8 sed -n 's#^core/fixtures/\([^/]*\)/\.dist-only$#\1#p' >/dev/null 2>&1 && echo sed-ok || echo sed-abort)"
+e5_cal="$e5_cal $(printf 'core/fixtures/lat\351/x\n' | LC_ALL=en_US.UTF-8 awk '{ f = substr($0, 15); sub(/\/.*/, "", f) }' >/dev/null 2>&1 && echo awk-ok || echo awk-abort)"
+L53_FIX='  | LC_ALL=C sed -n '"'"'s#^core/fixtures/\([^/]*\)/\.dist-only$#\1#p'"'"')" || LR_DIST_ONLY=""'
+L53_MUT='  | sed -n '"'"'s#^core/fixtures/\([^/]*\)/\.dist-only$#\1#p'"'"')" || LR_DIST_ONLY=""'
+L22_FIX='    _files="$(printf '"'"'%s\n'"'"' "$_files" | LR_D="$LR_DIST_ONLY" LC_ALL=C awk '"'"
+L22_MUT='    _files="$(printf '"'"'%s\n'"'"' "$_files" | LR_D="$LR_DIST_ONLY" awk '"'"
+score_e5() { # <tag> <calibration word> <mutant> <want> <what>
+  local _sh _got _fails=0 _ga
+  if [ -z "$3" ]; then bad "E5 mutant $1 DID NOT APPLY (its anchor matched nothing or more than once)"; return; fi
+  case " $e5_cal " in
+    *" $2 "*) : ;;
+    *) ok "E5 mutant $1 NOT SCORED: this platform's tools do not abort on invalid UTF-8 ($e5_cal), so the mutant cannot be told from the fix here"; return ;;
+  esac
+  for _sh in utf8 lang; do
+    _got="$(kinds_e5 "$(run_e5 "$3" "$_sh")")"
+    [ "$_got" = "$4" ] || { bad "E5 mutant $1 ($_sh) read '$_got', want '$4'"; _fails=1; }
+  done
+  _ga="$(kinds_a "$(run_a "$3")")"
+  [ "$_ga" = "$WANT_A" ] || { bad "E5 mutant $1 moved part A: '$_ga'"; _fails=1; }
+  [ "$_fails" -eq 0 ] && ok "E5 mutant $1 killed: $5"
+}
+score_e5 M-E5S sed-abort "$(mut_line e5s "$L53_FIX" "$L53_MUT")" "$NU $NU $NU" \
+  "with the marker sed in the caller's UTF-8 locale one Latin-1 name empties the whole dist-only set and BOTH dist-only namings, the ASCII one included, read NAMED-UPSTREAM"
+score_e5 M-E5A awk-abort "$(mut_line e5a "$L22_FIX" "$L22_MUT")" "$DO $NU $NU" \
+  "with named_reach's filter awk in the caller's UTF-8 locale the Latin-1 dist-only naming aborts it and reads NAMED-UPSTREAM, while the ASCII one stays DOCS-ONLY"
+
 # =================================================================================================
 # PART B -- a failed staging write of the entry loop's input refuses
 # =================================================================================================

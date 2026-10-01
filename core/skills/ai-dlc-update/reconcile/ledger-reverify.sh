@@ -718,8 +718,11 @@ VERSION
   # set joined and split on " " turned `sp ace` into the keys `sp` and `ace`, so the real dist-only
   # fixture kept scoring `code` and a SHIPPING fixture named `sp` was demoted. Passed through
   # ENVIRON, not `-v`, which processes escapes in the value.
+  #
+  # `LC_ALL=C`, because the listing is raw bytes: under a UTF-8 locale BSD awk aborts on a name that
+  # is not valid UTF-8 (`towc: multibyte conversion failure`), and the abort reads as `code`.
   if [ -n "$LR_DIST_ONLY" ]; then
-    _files="$(printf '%s\n' "$_files" | LR_D="$LR_DIST_ONLY" awk '
+    _files="$(printf '%s\n' "$_files" | LR_D="$LR_DIST_ONLY" LC_ALL=C awk '
       BEGIN { n = split(ENVIRON["LR_D"], a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "") drop[a[i]] = 1 }
       /^core\/fixtures\// { f = substr($0, 15); sub(/\/.*/, "", f); if (f in drop) next }
       { print }')" || { printf 'code'; return 0; }
@@ -1748,9 +1751,12 @@ TV="$(printf '%s' "$TV" | tr -d '[:space:]')"
 # did before this existed, and no naming is demoted on a git error.
 #
 # `core.quotePath=false`: a C-quoted marker line opens with `"`, the `sed` anchor rejects it, and a
-# dist-only fixture with a non-ASCII name dropped out of the set and kept scoring `code`.
+# dist-only fixture with a non-ASCII name dropped out of the set and kept scoring `code`. And
+# `LC_ALL=C` on the `sed`, because those bytes are now raw: under a UTF-8 locale BSD `sed` exits 1
+# with `illegal byte sequence` on ANY fixture name that is not valid UTF-8, and the `||` below then
+# empties the WHOLE set, so every dist-only naming scored `code` again.
 LR_DIST_ONLY="$(git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "${THEIRS}" -- core/fixtures/ 2>/dev/null \
-  | sed -n 's#^core/fixtures/\([^/]*\)/\.dist-only$#\1#p')" || LR_DIST_ONLY=""
+  | LC_ALL=C sed -n 's#^core/fixtures/\([^/]*\)/\.dist-only$#\1#p')" || LR_DIST_ONLY=""
 
 # Extract (label<TAB>ordinal<TAB>directive) for each OPEN entry carrying a verify: line, plus
 # ONE `0/0` row (directive `-`) for each OPEN id-keyed entry carrying none -- that row reaches
