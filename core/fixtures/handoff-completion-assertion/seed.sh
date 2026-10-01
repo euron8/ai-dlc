@@ -166,6 +166,45 @@ git -C "$ROOT/proj-statedirty" commit -q --no-verify -m "tracked pipeline root"
 attach "$ROOT/proj-statedirty" "$ROOT/remote-statedirty.git"
 git -C "$ROOT/proj-statedirty" push -q --no-verify -u origin HEAD
 
+# (i) Claude Code's own per-user files, in a consumer whose .gitignore does NOT cover .claude/
+#     (the distribution installs no such rule). Each tree is pushed, 0 ahead, tracks a
+#     .claude/settings.json, and differs from its siblings in exactly one path:
+#       claude-local     untracked .claude/settings.local.json      (excluded)
+#       claude-wt        untracked .claude/worktrees/agent-1/       (excluded)
+#       claude-tracked   TRACKED .claude/settings.json modified     (still work)
+#       claude-near      untracked .claude/worktrees-not/x          (near-miss, still work)
+mkclaude() { # mkclaude <name>
+  local d="$ROOT/proj-$1"
+  mkrepo "$d"
+  mkdir -p "$d/.claude"
+  printf '{}\n' > "$d/.claude/settings.json"
+  git -C "$d" add .claude/settings.json
+  git -C "$d" commit -q --no-verify -m "tracked settings.json"
+  attach "$d" "$ROOT/remote-$1.git"
+  git -C "$d" push -q --no-verify -u origin HEAD
+}
+mkclaude claude-local
+printf '{"permissions":{}}\n' > "$ROOT/proj-claude-local/.claude/settings.local.json"
+mkclaude claude-wt
+mkdir -p "$ROOT/proj-claude-wt/.claude/worktrees/agent-1"
+echo "agent checkout" > "$ROOT/proj-claude-wt/.claude/worktrees/agent-1/f.txt"
+mkclaude claude-tracked
+printf '{"hooks":{}}\n' > "$ROOT/proj-claude-tracked/.claude/settings.json"
+mkclaude claude-near
+mkdir -p "$ROOT/proj-claude-near/.claude/worktrees-not"
+echo "not a worktree" > "$ROOT/proj-claude-near/.claude/worktrees-not/x"
+
+# (j) The project dir is a SUBDIRECTORY of the repository. The hook's exclusions are relative
+#     to the project dir, so `sub/_bmad-output` (which reset_state creates untracked) must be
+#     excluded; `sub/notes.md`, tracked and modified, must not be.
+mkrepo "$ROOT/proj-subrepo"
+mkdir -p "$ROOT/proj-subrepo/sub"
+echo notes > "$ROOT/proj-subrepo/sub/notes.md"
+git -C "$ROOT/proj-subrepo" add sub/notes.md
+git -C "$ROOT/proj-subrepo" commit -q --no-verify -m "sub project"
+attach "$ROOT/proj-subrepo" "$ROOT/remote-subrepo.git"
+git -C "$ROOT/proj-subrepo" push -q --no-verify -u origin HEAD
+
 # The on-disk battery's tree. NOT a git repo, deliberately: the push arm is then skipped
 # entirely and the only thing that can move those verdicts is the state under _bmad-output.
 # It carries a steps/ directory because key 1's marker is produced by driving
