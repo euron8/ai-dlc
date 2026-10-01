@@ -19,6 +19,28 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.683.0] - 2026-10-01
+
+Batch 178's ninth release: `ledger-reverify.sh` with the `emit-report.sh` and update `SKILL.md`
+sites its new row kind needs. Bootstrapping, so it ships alone.
+
+### Backlog
+
+- **`BL-310`** (with 0.681.0's `lib.sh` half). `ledger-reverify.sh` refuses an unreadable path or
+  blob as `NEEDS-REVIEW unreadable:` at every read site, and an unreadable `VERSION` at a theirs ref
+  that resolves refuses the run, instead of reading either as absent or empty.
+- **`BL-066`**. `NAMED-UPSTREAM-AMBIGUOUS` names every citing commit and the commit count, not the
+  newest commit alone.
+- **`BL-092`**. A distribution path read at a ref (`$THEIRS:docs/…`, `${THEIRS}:`, a sha, `HEAD`) is
+  no longer reported as a missing consumer subject.
+- **`BL-145`**, narrowed and open. A naming set in which no commit changes `core/`, `templates/` or
+  `VERSION` is reported as `NAMED-UPSTREAM-DOCS-ONLY`, keeping its full sha list, and the row tells
+  the operator to read the entry's subject at theirs rather than treating the naming as evidence. A
+  release commit that names an id and changes only `VERSION` and `CHANGELOG.md` still reaches. On the
+  reference consumer's reopened archive, 5 of 233 named rows move.
+- `emit-report.sh` prints the hook validator's remedy with the consumer's installed path, so a pull
+  with an unregistered hook can pass `--verify`; before, every render differed and it never could.
+
 ## [0.682.0] - 2026-09-30
 
 Batch 178's eighth release: `layer-drift.sh` alone, because a consumer's installed copy runs the pull

@@ -841,7 +841,7 @@ base_holds() { all_present "$LR_BB" "$2"; }
 #
 # SPLITTING AT THE COLON IS NOT A DEFENCE AGAINST A REV-SPEC, AND THIS PARAGRAPH USED TO SAY IT
 # WAS. It held only while every rev-path's right-hand side began `core/`, which no prefix below
-# admits. `"$THEIRS:docs/backlog.md"` splits into `$THEIRS` and `docs/backlog.md`, and the second
+# admits. `"$THEIRS:docs/notes.md"` splits into `$THEIRS` and `docs/notes.md`, and the second
 # half is a perfectly good consumer prefix: a DISTRIBUTION path at a ref, reported as a missing
 # consumer subject, withholding a close the receipt earned. So `receipt_absent_subjects` deletes
 # every `<ref>:<path>` token BEFORE the split -- `$VAR:`, `${VAR}:`, a 7-40 digit hex sha and
