@@ -19,6 +19,27 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.686.0] - 2026-10-01
+
+Batch 179's third release: `self-update-fixtures.sh` and `self-update-gate.sh`. Bootstrapping, so it ships
+alone. A consumer runs its installed copy of both, so these changes take effect on the pull after the one
+that delivers them.
+
+### Backlog
+
+- **`BL-403`**, parts (a) and (e), left open. The two `.dist-only` probes in the fixture runner use
+  `memo_has_path` with the 125 refusal captured: a status other than present or absent refuses the
+  directory as "could not be confirmed" (`COVERAGE: UNCONFIRMED` on the diff side), where a
+  blob-filtered clone with the marker blob filtered out was excused before. The runner sources `lib.sh`
+  and withdraws its exported memo variable from the consumer's fixtures. The comments at
+  `self-update-gate.sh` `:15` and `:1002` describe the failed-push UN-SYNCED behaviour; `:995` and
+  `self-update-gate/run.sh:2508` are correct as written, because `SKILL.md` still prescribes committing
+  locally when no remote is configured. Parts (b), (c) and (d) ride other releases.
+- **`BL-360`**, share for these two files. Both are free of here-strings and heredocs outside comments
+  (16 on base). Loops read staged files whose write status is read, and the first failed write ends the
+  run: exit 2 in the runner, `SELF-UPDATE-UNDECIDED` in the gate. `BL-360` stays open for the files no
+  release has converted.
+
 ## [0.685.0] - 2026-10-01
 
 Batch 179's second release: the update `SKILL.md` alone. Bootstrapping, so it ships alone. Its step-8
