@@ -878,8 +878,10 @@ rr="$(reason "$(drive "$P_DISK" "$SESS_A" "$T_QUIET")")"
   && ok "  control: the same key WITH a transcript lacking the resume block still BLOCKS on the resume text, unannotated" \
   || bad "  the transcript-present resume case did not block on the resume text, or carried the no-transcript annotation — the unknown reading has leaked into the transcript path"
 
-# (nt4) NEAR-MISS: the pause flag, NO key, NO transcript -> ALLOW, and nothing armed.
-dsetup
+# (nt4) NEAR-MISS: the pause flag, NO key, NO transcript -> ALLOW, and nothing armed. The
+#       driver signal is REMOVED so a hook that entered on the flag alone would BLOCK on step 4;
+#       with it present every disk arm is satisfied and the ALLOW would discriminate nothing.
+dsetup; rm -f "$P_DISK/_bmad-output/.driver/handoff"
 r="$(ntdisk)"
 { [ "$r" = allow ] && [ ! -f "$ARMED" ]; } \
   && ok "(nt4) pause flag, no key, no transcript -> ALLOW, and no arming record (the flag alone never enters the guard)" \
