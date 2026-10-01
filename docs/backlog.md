@@ -520,7 +520,28 @@ must still be reported — so a fix that deletes the guard fails it.
 main shell, and returns 3 without one. The first 0.651.0 gate failed R4 on this receipt, which
 read exit 9 at its control and measured nothing.
 
-verify: sh S=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -f "$S" ] || exit 9; D="$(mktemp -d)" || exit 9; trap 'rm -rf "$D"' EXIT; mkdir -p "$D/c/docs" "$D/s" || exit 9; printf 'x\n' > "$D/c/docs/present.md" || exit 9; f="$(awk '/^receipt_path_tokens\(\) \{/,/^\}/' "$S")"; [ -n "$f" ] || exit 9; printf '%s\n' "$f" > "$D/lib.sh"; grep -q 'receipt_path_tokens()' "$D/lib.sh" || exit 9; grep -q 'receipt_absent_subjects()' "$D/lib.sh" || exit 9; bash -n "$D/lib.sh" 2>/dev/null || exit 9; probe() { CONSUMER="$D/c" LR_STAGE="$D/s" bash -c '. "$1"; receipt_absent_subjects "$2"' _ "$D/lib.sh" "$1" 2>/dev/null; }; ctl="$(probe 'grep -q x "$CONSUMER/docs/gone.md"')"; [ -n "$ctl" ] || exit 9; pres="$(probe 'grep -q x "$CONSUMER/docs/present.md"')"; [ -z "$pres" ] || exit 9; bad="$(probe 'git -C "$DIST" show "$THEIRS:docs/backlog.md" | diff - x')"; [ -z "$bad" ]
+**Held note (batch 178):** fixed on `b178-b2`. `receipt_absent_subjects` now deletes every
+`<ref>:<path>` token before the split: `$VAR:`, `${VAR}:`, a 7-40 digit hex sha and `HEAD`, each with
+an optional `~N`/`^N` suffix and a closing quote allowed before the colon. The strip happens only
+where the ref begins a word, so `docs/a.md:12` keeps its `docs/a.md`. It lives inside
+`receipt_absent_subjects` alone, because the second reader of the shared split,
+`receipt_named_subjects`, reads the right-hand side of `$THEIRS:core/scripts/x.sh` as the upstream
+file a receipt names. The false comment that claimed the colon split was the defence is corrected.
+A failed `sed` returns 3, like the `tr` beside it. The fixture's `SH-DIST-PATH` seed lost its role
+as the anchoring mutant's subject, because a `core/` rev-spec is now stripped whole before the
+whitelist sees it. `SH-DIST-BARE-CORE`, a bare `core/scripts/<x>` pathspec, took that role, and
+`SH-REVPATH-DOCS` carries the five ref spellings.
+
+The replacement receipt drives `ledger-reverify.sh` end to end over a world with four rev-path
+receipts (unbraced, braced, sha, `HEAD`) against a distribution `docs/` path and a control receipt
+naming a genuinely missing consumer path. Scored under `bash -c 'set -uo pipefail; …'`: B1+B5 tip 1
+(all four NEEDS-REVIEW), fix 0, a strip of the unbraced form only 1, and `docs/` dropped from the
+whitelist 1 (the control closes). The old receipt was the last one in this ledger that
+`backlog-receipt-binding`'s j1 tree (which carries only `ledger-reverify.sh` and `lib.sh`) could
+score, so its close leaves j1 with zero scored receipts, and R2 refuses before printing a SUMMARY.
+Any correct fix does that. j1 now reads the receipt population from R2's refusal line as well.
+
+verify: sh L="$PWD/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh"; [ -f "$L" ] || exit 9; w="$(mktemp -d)" || exit 9; g() { git -C "$w/d" -c user.name=r -c user.email=r@r -c commit.gpgsign=false "$@"; }; git init -q "$w/d" || exit 9; mkdir -p "$w/d/docs" "$w/c/docs" || exit 9; echo 1.0.0 > "$w/d/VERSION"; echo x > "$w/d/docs/backlog.md"; g add -A && g commit -qm base || exit 9; H="$(g rev-parse HEAD)"; [ ! -e "$w/c/docs/backlog.md" ] && [ ! -e "$w/c/docs/gone.md" ] || exit 9; printf -- '# l\n\n- **Entry RP-A** -- unbraced.\n  verify: sh git -C "$DIST" show "$THEIRS:docs/backlog.md" | grep -q zz-never\n\n- **Entry RP-B** -- braced.\n  verify: sh git -C "$DIST" show "${THEIRS}:docs/backlog.md" | grep -q zz-never\n\n- **Entry RP-C** -- sha.\n  verify: sh git -C "$DIST" show %s:docs/backlog.md | grep -q zz-never\n\n- **Entry RP-D** -- HEAD.\n  verify: sh git -C "$DIST" show HEAD:docs/backlog.md | grep -q zz-never\n\n- **Entry RP-GONE** -- a real missing consumer subject.\n  verify: sh grep -q x "$CONSUMER/docs/gone.md"\n' "$(printf %s "$H" | cut -c1-12)" > "$w/c/l.md"; o="$(cd "$w/c" && bash "$L" "$w/d" "$H" "$w/c" "$H" "$w/c/l.md" 2>/dev/null)"; v() { printf '%s\n' "$o" | awk -F'\t' -v l="$1" '$2==l {print $1; exit}'; }; [ -n "$(v 'Entry RP-GONE')" ] || exit 9; bad=""; [ "$(v 'Entry RP-GONE')" = NEEDS-REVIEW ] || bad=" RP-GONE=$(v 'Entry RP-GONE')(a missing consumer subject no longer withholds the close)"; for e in RP-A RP-B RP-C RP-D; do [ "$(v "Entry $e")" = CLOSE-CANDIDATE ] || bad="$bad $e=$(v "Entry $e")"; done; [ -z "$bad" ] && exit 0; echo "BL092-REVPATH-READ-AS-MISSING-CONSUMER-SUBJECT$bad" >&2; exit 1
 
 ## BL-087 — ANSWERED: `PreToolUse` does NOT fire on a tool call that fails INPUT VALIDATION, so a guard whose predicate is the malformation is unbuildable
 
@@ -996,7 +1017,18 @@ filed by the graph consumer session. That id appears in **0** commits of this re
 (control in the same invocation: `PC-S303` appears in **8**), so nothing upstream can be read as
 having answered it.
 
-verify: sh L=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; f=$(sed -n "/^named_absorbed() {/,/^}/p" "$L"); case "$f" in *"named_absorbed()"*) : ;; *) exit 9 ;; esac; d=$(mktemp -d); u="$d/u"; mkdir -p "$u/docs"; git init -q "$u"; git -C "$u" config user.email a@b; git -C "$u" config user.name a; printf "0.1.0\n" > "$u/VERSION"; printf "x\n" > "$u/subj"; printf "p\n" > "$u/docs/plan.md"; git -C "$u" add -A; git -C "$u" commit -q -m "chore: seed"; printf "0.2.0\n" > "$u/VERSION"; printf "pp\n" > "$u/docs/plan.md"; git -C "$u" add -A; git -C "$u" commit -q -m "docs(plan): a handoff that MENTIONS PC-S999-PROBE-SLUG and touches no subject"; printf "0.3.0\n" > "$u/VERSION"; printf "fixed\n" > "$u/subj"; git -C "$u" add -A; git -C "$u" commit -q -m "fix: absorb PC-S999-PROBE-SLUG"; o=$(git -C "$u" show HEAD~1:VERSION); n=$(git -C "$u" show HEAD:VERSION); [ "$o" != "$n" ] || { rm -rf "$d"; exit 9; }; case "$(git -C "$u" log -1 --format=%B HEAD~1)" in *PC-S999-PROBE-SLUG*) : ;; *) rm -rf "$d"; exit 9 ;; esac; case "$(git -C "$u" show HEAD~1 --format= --name-only)" in *subj*) rm -rf "$d"; exit 9 ;; esac; case "$(git -C "$u" show HEAD --format= --name-only)" in *subj*) : ;; *) rm -rf "$d"; exit 9 ;; esac; r=$(DIST="$u" THEIRS=HEAD bash -c "$f; prefix_entry_count(){ echo 0; }; named_absorbed PC-S999-PROBE-SLUG"); rm -rf "$d"; [ -n "$r" ] || exit 9; [ "$(printf "%s" "$r" | awk "{print \$1}")" = "0.3.0" ]
+**Held note (batch 178):** fixed on `b178-b2`. `named_ambiguous` now returns
+`<n-commits> <sha,sha,…> <n-entries> <reach>`, reading `%h` directly (no per-sha `rev-parse
+--short`). The row names every citing commit, newest first, and keeps the phrase "and N entries in
+this ledger carry it", which `ledger-rotate`'s fixture parses. New fixture arms: `ambiguous-lists-all`
+(PC-S902 now has two citing commits, and the row must name both plus the count), `ambiguous-reach`,
+and the `mutation-ambig-newest` mutant (`| head -1` on the hits), which only the list arm sees. The
+old receipt was dead and is replaced: it drives `ledger-reverify.sh` over a three-entry, two-commit
+world. Three entries against two commits means a wrong fix printing the commit count where the
+entry count belongs cannot pass. Scored: B1+B5 tip 1, fix 0, newest-only 1, commit count in the
+entry-count slot 1.
+
+verify: sh L="$PWD/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh"; [ -f "$L" ] || exit 9; w="$(mktemp -d)" || exit 9; g() { git -C "$w/d" -c user.name=r -c user.email=r@r -c commit.gpgsign=false "$@"; }; git init -q "$w/d" || exit 9; mkdir -p "$w/d/core" "$w/d/docs" "$w/c" || exit 9; echo 1.0.0 > "$w/d/VERSION"; echo M > "$w/d/core/s.md"; g add -A && g commit -qm base || exit 9; B="$(g rev-parse HEAD)"; echo a > "$w/d/core/a.sh"; g add -A && g commit -qm "fix: PC-S880 first" || exit 9; echo b > "$w/d/docs/b.md"; g add -A && g commit -qm "docs(ledger): PC-S880 drained" || exit 9; T="$(g rev-parse HEAD)"; n="$(g log -E --grep='PC-S880([^0-9A-Za-z-]|$)' --format=%h "$T" | grep -c .)"; [ "$n" = 2 ] || exit 9; printf -- '# l\n\n- **PC-S880-ONE** -- a.\n  verify: theirs_lacks core/s.md "ZZ"\n\n- **PC-S880-TWO** -- b.\n  verify: theirs_lacks core/s.md "ZZ"\n\n- **PC-S880-THREE** -- c.\n  verify: theirs_lacks core/s.md "ZZ"\n' > "$w/c/l.md"; o="$(bash "$L" "$w/d" "$B" "$w/c" "$T" "$w/c/l.md" 2>/dev/null)"; r="$(printf '%s\n' "$o" | awk -F'\t' '$1=="NAMED-UPSTREAM-AMBIGUOUS" && $2=="PC-S880" {print $3; exit}')"; [ -n "$r" ] || { echo "BL066-NO-AMBIGUOUS-ROW" >&2; exit 1; }; m=0; for s in $(g log -E --grep='PC-S880([^0-9A-Za-z-]|$)' --format=%h "$T"); do case "$r" in *"$s"*) ;; *) m=$((m+1)) ;; esac; done; case "$r" in *"in 2 commits, ALL of them:"*"and 3 entries in this ledger carry it"*) [ "$m" = 0 ] && exit 0 ;; esac; echo "BL066-AMBIGUOUS-ROW-ELECTS-ONE-COMMIT missing=$m row=$r" >&2; exit 1
 
 
 ## BL-071 — `ledger-rotate.sh`'s split-refusal can be silenced by a body line that mentions the annotation form
@@ -1694,7 +1726,31 @@ an impossible id exits 9 rather than reporting a false close. The first cut of t
 written the other way round, carrying `ledger-reverify.sh`'s opposite convention into a
 `docs/backlog.md` entry, and it read as an incidental close in the histogram.
 
-verify: sh set -e; r="$PWD"; id='PC-S295-RETRO-PARALLEL-OPEN-COUNT-METHOD'; n=0; c_core=0; for c in $(git -C "$r" log --format=%H -F --grep="$id" origin/main); do n=$((n+1)); git -C "$r" show --name-only --format='' "$c" | grep -q '^core/' && c_core=$((c_core+1)); done; [ "$n" -gt 0 ] || exit 9; [ "$c_core" -eq 0 ] || exit 0; w=$(mktemp -d); mkdir -p "$w/c/_bmad-output/ai-dlc-update" "$w/c/.claude"; printf '%s\n' '# l' '' "## $id — probe" '' 'Body.' '' 'verify: sh cd "$CONSUMER" && grep -q zzz-never-present README.md' > "$w/c/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; printf 'version: 0.471.0\ncommit: 31b51d48\nskill_version: 0.471.0\nskill_commit: 31b51d48\n' > "$w/c/.claude/.ai-dlc-version"; h="$(git -C "$r" rev-parse HEAD)"; o="$(cd "$w/c" && bash "$r/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh" "$r" 31b51d48 "$w/c" "$h" 2>/dev/null)"; grep -q "$id" <<<"$o" || exit 9; grep -qE "^NAMED-UPSTREAM[[:space:]]+$id" <<<"$o" && exit 1; exit 0
+**Held note (batch 178): NARROWED, STAYS OPEN.** On `b178-b2`, a naming set in which no commit
+changes a path under `core/` or `templates/` (the two trees `install.sh` copies into a consumer) is
+emitted as `NAMED-UPSTREAM-DOCS-ONLY`. The row is kept, with the full sha list. `named_reach` lists
+files with `git log --no-walk --stdin -m`, because a merge lists none without `-m`. If the listing
+fails, the answer is the old kind, never docs-only. The same predicate is folded into the
+`NAMED-UPSTREAM-AMBIGUOUS` detail. The new kind is documented in SKILL.md step 3f and step 8 and in
+emit-report's heading, which satisfies I39, and `docs/vocabulary-index.md` was re-rendered. On the
+reference consumer's archive with its close annotations stripped (the population where upstream
+named entries), 33 of 214 NAMED-UPSTREAM rows move to DOCS-ONLY. Re-derived with `git diff-tree -m`,
+none of the 33 has a naming commit that touches `core/` or `templates/`. The control: the first 8
+rows that stayed each have one. The live ledger moves 0 rows, because it has no open entry upstream
+names. **What survives is the third class.** A commit that changes `core/` but not the entry's
+subject (`b3debba3` for PC-S308) still reads NAMED-UPSTREAM, because a per-id subject path is
+recorded nowhere.
+
+The replacement receipt drives `ledger-reverify.sh` over three single-commit entries: docs-only,
+templates-only, and a core commit that mentions an id whose subject it never touches. It exits 1
+while that third class reads NAMED-UPSTREAM, which today is by design, so the entry stays open. It
+exits 1 too if the docs-only entry is not emitted as DOCS-ONLY or the templates-only entry is
+demoted. Scored: B1+B5 tip 1 (docs read as NAMED-UPSTREAM), fix 1 (third class only), a
+`core/`-only predicate 1, and the delete-the-row fix 1 (`docs=<no row>`). Fixture arms: S950
+docs-only, S951 templates-only, S952 merge, S953 ambiguous reach, each with a mutant (`reach-off`,
+`reach-core-only`, `reach-no-m`).
+
+verify: sh L="$PWD/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh"; [ -f "$L" ] || exit 9; w="$(mktemp -d)" || exit 9; g() { git -C "$w/d" -c user.name=r -c user.email=r@r -c commit.gpgsign=false "$@"; }; git init -q "$w/d" || exit 9; mkdir -p "$w/d/core" "$w/d/docs" "$w/d/templates" "$w/c" || exit 9; echo 1.0.0 > "$w/d/VERSION"; echo M > "$w/d/core/s.md"; echo t > "$w/d/core/subj.sh"; g add -A && g commit -qm base || exit 9; B="$(g rev-parse HEAD)"; echo p > "$w/d/docs/plan.md"; g add -A && g commit -qm "docs(plan): cross-reference PC-S870-DOCS-NAMED" || exit 9; echo t > "$w/d/templates/x.template"; g add -A && g commit -qm "fix: absorb PC-S871-TEMPLATE-NAMED" || exit 9; echo u > "$w/d/core/other.sh"; g add -A && g commit -qm "release: discharges PC-S872-CORE-MENTION by another route" || exit 9; T="$(g rev-parse HEAD)"; [ -z "$(g show --name-only --format= HEAD~2 | grep -E '^(core|templates)/')" ] || exit 9; g show --name-only --format= HEAD | grep -q '^core/other.sh$' || exit 9; g show --name-only --format= HEAD | grep -q 'subj.sh' && exit 9; printf -- '# l\n\n- **PC-S870-DOCS-NAMED** -- a.\n  verify: theirs_lacks core/s.md "ZZ"\n\n- **PC-S871-TEMPLATE-NAMED** -- b.\n  verify: theirs_lacks core/s.md "ZZ"\n\n- **PC-S872-CORE-MENTION** -- subject is core/subj.sh, which the naming commit never touches.\n  verify: theirs_lacks core/s.md "ZZ"\n' > "$w/c/l.md"; o="$(bash "$L" "$w/d" "$B" "$w/c" "$T" "$w/c/l.md" 2>/dev/null)"; k() { printf '%s\n' "$o" | awk -F'\t' -v l="$1" '$2==l && $1 ~ /^NAMED-UPSTREAM/ {print $1; exit}'; }; a="$(k PC-S870-DOCS-NAMED)"; b="$(k PC-S871-TEMPLATE-NAMED)"; c="$(k PC-S872-CORE-MENTION)"; [ -n "$b" ] && [ -n "$c" ] || exit 9; [ "$a" = NAMED-UPSTREAM-DOCS-ONLY ] && [ "$b" = NAMED-UPSTREAM ] || { echo "BL145-DOCS-ONLY-NAMING-READ-AS-ABSORPTION docs=${a:-<no row>} templates=$b" >&2; exit 1; }; [ "$c" = NAMED-UPSTREAM ] || exit 0; echo "BL145-CORE-TOUCHING-MENTION-STILL-NAMED-UPSTREAM (the third class: a commit that touches core/ but not the entry's subject)" >&2; exit 1
 
 
 
@@ -2039,7 +2095,24 @@ cached healthy before the blob went (the `:1947` read). Scored from a `git archi
 origin/main 1; B1 alone (this branch) 1, so it stays open; B1 plus a stand-in B2 at `:1935` and
 `:1947` 0; that stand-in over a lib keyed on 128 1 (`has(blob)=1`); B2 at `:1935` only 1.
 
-verify: sh L="$PWD/core/skills/ai-dlc-update/reconcile"; [ -f "$L/lib.sh" ] && [ -f "$L/ledger-reverify.sh" ] || exit 9; w="$(mktemp -d)" || exit 9; g() { git -C "$w/d" -c user.name=r -c user.email=r@r "$@"; }; git init -q "$w/d" || exit 9; mkdir -p "$w/d/a/b" "$w/c" "$w/k" "$w/m1" "$w/m2" "$w/m3" || exit 9; echo MARK > "$w/d/a/b/f.txt" && echo MARK > "$w/d/top.txt" && echo 1.0.0 > "$w/d/VERSION" || exit 9; g add -A && g commit -qm s || exit 9; H="$(g rev-parse HEAD)" || exit 9; printf -- '# ledger\n\n- **Entry QB** -- blob.\n  verify: theirs_has top.txt "MARK"\n\n- **Entry QS** -- subtree.\n  verify: theirs_has a/b/f.txt "MARK"\n' > "$w/c/ledger.md" || exit 9; ob() { local s; s="$(g rev-parse "HEAD:$1")" || return 1; printf '%s' "$w/d/.git/objects/$(printf %s "$s" | cut -c1-2)/$(printf %s "$s" | cut -c3-)"; }; B="$(ob top.txt)" && T="$(ob a/b)" || exit 9; [ -f "$B" ] && [ -f "$T" ] || exit 9; q() { AI_DLC_RECONCILE_MEMO="$1" bash -c '. "$1/lib.sh" >/dev/null 2>&1 || exit 97; memo_has_path "$2" "$4" "$3"; echo "$?"' _ "$L" "$w/d" "$2" "$H" 2>/dev/null; }; lr() { AI_DLC_RECONCILE_MEMO="$1" bash "$L/ledger-reverify.sh" "$w/d" "$H" "$w/c" "$H" "$w/c/ledger.md" 2>/dev/null | LC_ALL=C awk -F'\t' -v e="$2" '$2==e {print $1 "|" $3; exit}'; }; [ "$(q "$w/k" top.txt)" = 0 ] || exit 9; case "$(lr "$w/k" "Entry QB")" in STILL-LIVE*) ;; *) exit 9 ;; esac; case "$(lr "$w/k" "Entry QS")" in STILL-LIVE*) ;; *) exit 9 ;; esac; [ "$(q "$w/m3" top.txt)" = 0 ] || exit 9; mv "$B" "$w/blob" || exit 9; g cat-file -e HEAD:top.txt 2>/dev/null; [ "$?" = 1 ] || exit 9; hb="$(q "$w/m1" top.txt)"; vb="$(lr "$w/m2" "Entry QB")"; vw="$(lr "$w/m3" "Entry QB")"; mv "$w/blob" "$B" || exit 9; mv "$T" "$w/tree" || exit 9; hs="$(q "$w/m1" a/b/f.txt)"; vs="$(lr "$w/m2" "Entry QS")"; mv "$w/tree" "$T" || exit 9; [ "$(q "$w/m1" top.txt)" = 0 ] && [ "$(q "$w/m1" a/b/f.txt)" = 0 ] || hb="$hb-cached"; ur() { case "$1" in NEEDS-REVIEW\|*unreadable*) return 0 ;; esac; return 1; }; [ "$hb" = 125 ] && [ "$hs" = 125 ] && ur "$vb" && ur "$vs" && ur "$vw" && exit 0; echo "BL310-UNREADABLE-READ-AS-ABSENT has(blob)=$hb has(subtree)=$hs ledger(blob)=${vb%%|*} ledger(subtree)=${vs%%|*} ledger(has-cached,blob-gone)=${vw%%|*}" >&2; exit 1
+**Held note (batch 178), the B2 half:** fixed on `b178-b2`, together with B1's lib half. All four
+`ledger-reverify.sh` sites now read the status. A 125 from `theirs_has_path` emits `NEEDS-REVIEW
+unreadable: path …` and is never sent to the basename retry. Theirs and base blobs are each read once
+per entry, with the status. A failed theirs show of a resolved path is `unreadable:`. A failed base
+show is `unreadable:` unless `memo_has_path` at base returns 128, which is a confirmed absence, and
+that branch keeps the empty-content behaviour for a path new at theirs. `base_holds` and
+`near_miss_spelling` now read those checked bytes and no longer re-read git. `TV` refuses the run
+(exit 2) when VERSION at a resolvable theirs is unreadable and not confirmed absent; an unresolvable
+theirs keeps the old ref fallback, so each entry refuses on its own. SKILL.md step 3f documents the
+`unreadable` cause. Fixture: five broken worlds (blob, subtree, unread blob behind a cached `has`,
+unread base blob, unread VERSION) plus a healthy control and near-misses, with one mutant per layer.
+Each mutant moves only its own world.
+
+The receipt is extended with a base-blob world, so a fix that guards only the theirs reads cannot
+pass, and each world now gets its own memo. Scored: B1 alone 1, B1+B2 0, B2 without the
+theirs-show refusal 1, B2 without the `:1935` refusal 1, B2 without the base refusal 1.
+
+verify: sh L="$PWD/core/skills/ai-dlc-update/reconcile"; [ -f "$L/lib.sh" ] && [ -f "$L/ledger-reverify.sh" ] || exit 9; w="$(mktemp -d)" || exit 9; g() { git -C "$w/d" -c user.name=r -c user.email=r@r -c commit.gpgsign=false "$@"; }; git init -q "$w/d" || exit 9; mkdir -p "$w/d/a/b" "$w/c" "$w/k" "$w/m1" "$w/m2" "$w/m3" "$w/m4" "$w/m5" || exit 9; echo 'MARK base' > "$w/d/top.txt"; echo MARK > "$w/d/a/b/f.txt"; echo 'KEEP base' > "$w/d/keep.txt"; echo 1.0.0 > "$w/d/VERSION"; g add -A && g commit -qm b || exit 9; B="$(g rev-parse HEAD)"; echo 'MARK theirs' > "$w/d/top.txt"; echo 'KEEP theirs' > "$w/d/keep.txt"; echo 1.1.0 > "$w/d/VERSION"; g add -A && g commit -qm t || exit 9; T="$(g rev-parse HEAD)"; printf -- '# l\n\n- **Entry QB** -- blob.\n  verify: theirs_has top.txt "MARK"\n\n- **Entry QS** -- subtree.\n  verify: theirs_has a/b/f.txt "MARK"\n\n- **Entry QK** -- base blob.\n  verify: theirs_lacks keep.txt "KEEP"\n' > "$w/c/l.md" || exit 9; ob() { local s; s="$(g rev-parse "$1:$2")" || return 1; printf '%s' "$w/d/.git/objects/$(printf %s "$s" | cut -c1-2)/$(printf %s "$s" | cut -c3-)"; }; TB="$(ob "$T" top.txt)" && TT="$(ob "$T" a/b)" && BK="$(ob "$B" keep.txt)" || exit 9; [ -f "$TB" ] && [ -f "$TT" ] && [ -f "$BK" ] || exit 9; q() { AI_DLC_RECONCILE_MEMO="$1" bash -c '. "$1/lib.sh" >/dev/null 2>&1 || exit 97; memo_has_path "$2" "$4" "$3"; echo "$?"' _ "$L" "$w/d" "$2" "$T" 2>/dev/null; }; lr() { AI_DLC_RECONCILE_MEMO="$1" bash "$L/ledger-reverify.sh" "$w/d" "$B" "$w/c" "$T" "$w/c/l.md" 2>/dev/null | LC_ALL=C awk -F'\t' -v e="$2" '$2==e {print $1 "|" $3; exit}'; }; case "$(lr "$w/k" "Entry QB")|$(lr "$w/k" "Entry QS")|$(lr "$w/k" "Entry QK")" in STILL-LIVE*"|STILL-LIVE"*"|NEEDS-REVIEW|vacuous"*) ;; *) exit 9 ;; esac; [ "$(q "$w/m3" top.txt)" = 0 ] || exit 9; mv "$TB" "$w/tb" || exit 9; hb="$(q "$w/m1" top.txt)"; vb="$(lr "$w/m2" "Entry QB")"; vw="$(lr "$w/m3" "Entry QB")"; mv "$w/tb" "$TB" || exit 9; mv "$TT" "$w/tt" || exit 9; hs="$(q "$w/m1" a/b/f.txt)"; vs="$(lr "$w/m5" "Entry QS")"; mv "$w/tt" "$TT" || exit 9; mv "$BK" "$w/bk" || exit 9; vk="$(lr "$w/m4" "Entry QK")"; mv "$w/bk" "$BK" || exit 9; [ "$(q "$w/m1" top.txt)" = 0 ] && [ "$(q "$w/m1" a/b/f.txt)" = 0 ] || hb="$hb-cached"; ur() { case "$1" in NEEDS-REVIEW\|unreadable*) return 0 ;; esac; return 1; }; [ "$hb" = 125 ] && [ "$hs" = 125 ] && ur "$vb" && ur "$vs" && ur "$vw" && ur "$vk" && exit 0; echo "BL310-UNREADABLE-READ-AS-ABSENT has(blob)=$hb has(subtree)=$hs ledger(blob)=${vb%%|*} ledger(subtree)=${vs%%|*} ledger(has-cached,theirs-blob-gone)=${vw%%|*} ledger(base-blob-gone)=${vk%%|*}" >&2; exit 1
 
 ## BL-333 — three "0 ALWAYS" detectors refuse with exit 0 and a stderr line, so the report renders `none` for a scan that never ran
 
