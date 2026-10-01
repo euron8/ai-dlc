@@ -183,8 +183,8 @@ su_stage() { # su_stage <file-name> <value> <what> -- MAIN SHELL ONLY; exit 2 wh
 # fifteen-name joined list to its last name and run ONE fixture green — the acquitting
 # direction of the very defect the shape probe below exists to catch. What may be stripped is
 # the `core/fixtures/` or `tests/fixtures/` prefix and at most one trailing slash, and only
-# when what remains is a single `[A-Za-z0-9._-]` name. Whitespace, a second slash, an empty
-# name, and every other slash form fall through untouched and are refused below.
+# when what remains is a single name: non-empty, no slash, no whitespace. A second slash, an
+# empty name, and every other slash form fall through untouched and are refused below.
 #
 # THE REWRITE IS A ROTATION, NEVER `set -- $list`. Word-splitting the positionals is exactly
 # what the joined-list refusal detects the absence of, so re-introducing it here would delete
@@ -208,8 +208,13 @@ while [ "$_norm_i" -lt "$_norm_n" ]; do
     core/fixtures/*)  _nc="${_na%/}"; _nc="${_nc#core/fixtures/}" ;;
     tests/fixtures/*) _nc="${_na%/}"; _nc="${_nc#tests/fixtures/}" ;;
   esac
+  # The remainder is a NAME when it is non-empty and carries no slash and no whitespace — a
+  # negation over what cannot be in one directory name, never an ASCII enumeration of what may.
+  # `*[!A-Za-z0-9._-]*` refused `core/fixtures/café`, which the coverage join names under its raw
+  # spelling, so a correct path-form set was convicted as unparsable. `.` and `..` carry no
+  # slash and name no directory, so they are refused as non-names too.
   case "$_nc" in
-    ""|*[!A-Za-z0-9._-]*) ;;
+    ""|.|..|*/*|*[[:space:]]*) ;;
     *) _nb="$_nc" ;;
   esac
   if [ "$_nb" != "$_na" ]; then
@@ -460,7 +465,10 @@ else
       fi
       gr_required=""
       if [ -f "$gr_hook" ]; then
-        gr_invoked="$(grep -oE 'scripts/ai-dlc/[A-Za-z0-9._-]+\.sh' "$gr_hook" | sort -u)"
+        # The same negated name class as self-update-gate.sh's INVOKED, byte for byte: the
+        # required set here must be the set the gate recorded, and an ASCII-only class would
+        # drop a non-ASCII script the gate now records.
+        gr_invoked="$(grep -oE 'scripts/ai-dlc/[^]['"'"'"`[:space:];|&()<>$*?{}\\/,:=#!@%+~]+\.sh' "$gr_hook" | sort -u)"
       else
         gr_invoked=""
       fi
@@ -989,7 +997,7 @@ fi
 # inside a `$( )` fed to a heredoc it would be lost to a subshell, and a diff that failed
 # would arrive as an empty set — the coverage join reporting nothing to cover, which is the
 # exact silent pass the ref resolution above refuses.
-cov_raw="$(git -C "$DIST" diff --name-only "$BASE" "$THEIRS" -- core/fixtures/)" || {
+cov_raw="$(git -C "$DIST" -c core.quotePath=false diff --name-only "$BASE" "$THEIRS" -- core/fixtures/)" || {
   echo "self-update-fixtures: git diff ${BASE}..${THEIRS} failed in $DIST, so the diff-side" >&2
   echo "  coverage join could not run. Nothing was run." >&2
   { echo "COVERAGE: UNRESOLVABLE — git diff ${BASE}..${THEIRS} failed in $DIST."; } >> "$LOG"
