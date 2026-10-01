@@ -185,6 +185,23 @@ printf 'a ledger note\n' > "$DIST/docs/s953-note.md"
 git -C "$DIST" add -A
 git -C "$DIST" commit -q -m 'docs(ledger): PC-S953 cited for both entries, no fix'
 
+#   PC-S954  THE RELEASE SHAPE this distribution ships: the parent carries the core/ fix and names
+#            nothing, and the ONLY naming commit is the release, which changes VERSION and
+#            CHANGELOG.md and nothing else -> NAMED-UPSTREAM. A predicate keyed on core/ and
+#            templates/ alone reads it docs-only, and that row told the operator not to close a
+#            real absorption.
+printf '#!/bin/sh\necho s954 fixed\n' > "$DIST/core/scripts/s954-subject.sh"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'fix(reconcile): the subject the next release discharges'
+printf '0.099.5\n' > "$DIST/VERSION"
+printf '# Changelog\n\n## 0.099.5\n\n- PC-S954 discharged.\n' > "$DIST/CHANGELOG.md"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m '0.099.5 -- discharges PC-S954-RELEASE-COMMIT-NAMING'
+[ "$(git -C "$DIST" show --name-only --format= HEAD | sort | tr '\n' ' ')" = 'CHANGELOG.md VERSION ' ] \
+  || { echo 'seed: the PC-S954 naming commit does not change exactly VERSION and CHANGELOG.md' >&2; exit 1; }
+git -C "$DIST" log -1 --format=%B HEAD~1 | grep -q 'PC-S954' \
+  && { echo 'seed: the PC-S954 fix commit names the id, so the release is not the only naming commit' >&2; exit 1; }
+
 printf '#!/bin/sh\necho s902 second\n' > "$DIST/core/scripts/s902-second.sh"
 git -C "$DIST" add -A
 git -C "$DIST" commit -q -m 'fix: a second change citing PC-S902'
@@ -378,6 +395,11 @@ cat > "$LED" <<'LEDGER'
 
 - **PC-S952-MERGE-NAMING** — named by a MERGE whose side branch changes `core/`. It must stay
   NAMED-UPSTREAM.
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+- **PC-S954-RELEASE-COMMIT-NAMING** — named ONLY by a release commit that changes `VERSION` and
+  `CHANGELOG.md`; its parent carries the `core/` fix and names nothing. It must read
+  NAMED-UPSTREAM, never NAMED-UPSTREAM-DOCS-ONLY.
   verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
 
 - **PC-S953-SHARED-DOCS-FIRST** — shares `PC-S953` with the entry below; the one citing commit is

@@ -121,7 +121,7 @@
 #   NAMED-UPSTREAM   upstream's own history NAMES this entry's id. Emitted IN ADDITION to the
 #                    receipt's verdict, never instead of it — see THE NAME IS THE THIRD SIGNAL.
 #   NAMED-UPSTREAM-DOCS-ONLY  the same, but NO naming commit changes a path under core/ or
-#                    templates/, so none of them can have shipped a fix (`named_reach`).
+#                    templates/ or cuts a release (changes VERSION) (`named_reach`).
 #   STILL-LIVE      the entry still reproduces at theirs; stays open (filtered from the report).
 #   HAND-REVIEW      the entry declares `verify: manual` — no mechanical predicate by design.
 #   NEEDS-REVIEW     the receipt itself is at fault, and the DETAIL names the cause by its
@@ -655,7 +655,7 @@ named_absorbed() { # <label> -> "<how> <n> <sha>,<sha>,... <code|docs>" if upstr
 }
 
 # named_reach <newline-separated shas> -> `code` when at least one of them changes a path under
-# `core/` or `templates/`, `docs` when none does.
+# `core/` or `templates/` or changes `VERSION`, `docs` when none does.
 #
 # A COMMIT THAT CHANGES NOTHING A CONSUMER INSTALLS CANNOT HAVE ABSORBED A CONSUMER DEFECT ON ITS
 # OWN. `core/` and `templates/` are the two trees `install.sh` copies into a consumer; a commit
@@ -682,6 +682,20 @@ named_reach() {
   local _files
   _files="$(printf '%s\n' "$1" | git -C "$DIST" log --no-walk --stdin -m --name-only --format= 2>/dev/null)" \
     || { printf 'code'; return 0; }
+  # A NAMING COMMIT THAT CHANGES `VERSION` IS A RELEASE, and the release is what a consumer pulls.
+  # This distribution's own convention: the release commit names the id and touches only
+  # CHANGELOG.md and VERSION, while its parent carries the core/ fix and names nothing. Without
+  # this arm that release read docs-only. Measured on the reference consumer's archive with its
+  # close annotations stripped: at least 6 of 32 docs-only rows were named by such a release, and
+  # the version it cut is the one the consumer had annotated ADOPTED UPSTREAM. `$( )` strips the
+  # trailing newline, so the list is wrapped on both sides before the whole-line match.
+  case "
+$_files
+" in
+    *"
+VERSION
+"*) printf 'code'; return 0 ;;
+  esac
   case "
 $_files" in
     *"
@@ -1939,11 +1953,13 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       *)      na_note="" ;;
     esac
     if [ "$na_r" = docs ]; then
-      # A NAMING SET THAT CHANGES NOTHING A CONSUMER INSTALLS. See `named_reach` for the predicate
-      # and what it does not decide. The row is kept, with every sha, and its kind says it cannot
-      # be the absorption on its own: an operator reading NAMED-UPSTREAM as "upstream took it"
-      # closed an entry on a `docs(plan):` commit that only cross-referenced it.
-      emit NAMED-UPSTREAM-DOCS-ONLY "$label" "upstream's own history NAMES this entry's id ${na_where}, and NONE of those commits changes a path under core/ or templates/ -- the two trees a consumer installs. A plan, a review or a ledger drain mentioning the id matches the same way a fix does, and none of these can have shipped the fix.${na_note} This is NOT an absorption and NOT a close: annotate nothing on the strength of it. Read the commit(s) -- one may record a withdrawal or a split, which IS something to act on -- and leave the entry open unless they say why it should close."
+      # A NAMING SET THAT CHANGES NOTHING A CONSUMER INSTALLS AND CUTS NO RELEASE. See `named_reach`
+      # for the predicate and what it does not decide. The row is kept, with every sha, and its kind
+      # says the naming is not evidence of an absorption: an operator reading NAMED-UPSTREAM as
+      # "upstream took it" closed an entry on a `docs(plan):` commit that only cross-referenced it.
+      # It does NOT say the entry is unabsorbed -- a fix that never names the id is invisible to the
+      # message search -- so the text sends the operator to the subject, never forbids a close.
+      emit NAMED-UPSTREAM-DOCS-ONLY "$label" "upstream's own history NAMES this entry's id ${na_where}, and NONE of those commits changes a path under core/ or templates/ -- the two trees a consumer installs -- and none of them cuts a release (changes VERSION). A plan, a review or a ledger drain mentioning the id matches the same way a fix does, so this row is not evidence of an absorption.${na_note} It is NOT a close on its own. The fix can still have landed in a commit that does not name the id: read the commit(s) -- one may record a withdrawal or a split, which IS something to act on -- then read the entry's own subject at theirs. Annotate only what that reading establishes, and otherwise leave the entry open."
     elif [ "$ord" = "0/0" ]; then
       # RECEIPT-LESS: there is no receipt to be blind to it and none to re-anchor, so the receipt
       # clauses of the sibling detail would be false here. The close is the annotation alone.
@@ -1965,7 +1981,7 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       nam_where="one commit, $nam_c"
     fi
     if [ "$nam_r" = docs ]; then
-      nam_where="$nam_where -- and NONE of them changes a path under core/ or templates/, so none can have shipped a fix"
+      nam_where="$nam_where -- and NONE of them changes a path under core/ or templates/ or cuts a release (changes VERSION)"
     fi
     nam_p="$(printf '%s' "$label" | sed -n 's/^\(PC-S[0-9][0-9]*\)-.*/\1/p')"
     # ONE ROW PER PREFIX, NOT PER ENTRY, and the label IS the prefix because that is the

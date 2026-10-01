@@ -1594,6 +1594,10 @@ row_has   "PC-S951-TEMPLATES-ONLY-NAMING" NAMED-UPSTREAM \
   "templates/ is installed on a consumer -> a templates-only commit can be the absorption (a core/-only predicate demotes it)"
 row_has   "PC-S952-MERGE-NAMING" NAMED-UPSTREAM \
   "a MERGE whose side branch changed core/ -> listed with -m, so the merge is not scored as touching nothing"
+row_has   "PC-S954-RELEASE-COMMIT-NAMING" NAMED-UPSTREAM \
+  "the only naming commit is a RELEASE (VERSION + CHANGELOG.md, fix in its parent) -> the plain kind, because that release is what a consumer pulls"
+row_lacks "PC-S954-RELEASE-COMMIT-NAMING" NAMED-UPSTREAM-DOCS-ONLY \
+  "and never the docs-only kind, whose row would send the operator away from a real absorption"
 row_has   "PC-S905-ONE-NAMING-COMMIT-ONLY" NAMED-UPSTREAM \
   "the control: a core-touching single naming commit keeps the plain kind"
 # THE AMBIGUOUS ROW: every citing commit, and the reach. Derived from the repo, not from the row:
@@ -1632,7 +1636,7 @@ esac
 # a full run. Built in a copy of the whole reconcile directory, guarded with cmp -s, and preceded
 # by an UNMUTATED control over the same small ledger that must reproduce every observable.
 RCH="$(dirname "$DIST")/reach"; mkdir -p "$RCH"
-awk '/^- \*\*PC-S9(02|05|5[0-3])-/ {p=1} /^- \*\*/ && !/^- \*\*PC-S9(02|05|5[0-3])-/ {p=0} p' \
+awk '/^- \*\*PC-S9(02|05|5[0-4])-/ {p=1} /^- \*\*/ && !/^- \*\*PC-S9(02|05|5[0-4])-/ {p=0} p' \
   "$CONS/_bmad-output/ai-dlc-update/push-candidate-ledger.md" > "$RCH/ledger.md"
 reach_mut() { # <tag> <awk-anchor-line> <replacement-line> -> path of the mutant, or empty
   local _d="$RCH/$1"; rm -rf "$_d"; mkdir -p "$_d"
@@ -1648,8 +1652,9 @@ ASSERTIONS=$((ASSERTIONS + 1))
 if [ "$(reach_kind "$rc_ctl" PC-S950-DOCS-ONLY-NAMING)" = NAMED-UPSTREAM-DOCS-ONLY ] \
    && [ "$(reach_kind "$rc_ctl" PC-S951-TEMPLATES-ONLY-NAMING)" = NAMED-UPSTREAM ] \
    && [ "$(reach_kind "$rc_ctl" PC-S952-MERGE-NAMING)" = NAMED-UPSTREAM ] \
+   && [ "$(reach_kind "$rc_ctl" PC-S954-RELEASE-COMMIT-NAMING)" = NAMED-UPSTREAM ] \
    && grep -q "in 2 commits, ALL of them:" <<<"$rc_ctl"; then
-  printf '  ok    %-22s the UNMUTATED engine over the small ledger reproduces S950/S951/S952 and the two-commit S902 row\n' "reach-control"
+  printf '  ok    %-22s the UNMUTATED engine over the small ledger reproduces S950/S951/S952/S954 and the two-commit S902 row\n' "reach-control"
   # <tag> <anchor> <replacement> <entry> <kind it must take under the mutant> <what it proves>
   reach_case() {
     local _m _r _k
@@ -1669,6 +1674,28 @@ if [ "$(reach_kind "$rc_ctl" PC-S950-DOCS-ONLY-NAMING)" = NAMED-UPSTREAM-DOCS-ON
     "  _files=\"\$(printf '%s\\n' \"\$1\" | git -C \"\$DIST\" log --no-walk --stdin --name-only --format= 2>/dev/null)\" \\" \
     PC-S952-MERGE-NAMING NAMED-UPSTREAM-DOCS-ONLY \
     "without -m a merge lists no files and its core/ side branch reads docs-only, and S952 is what sees it"
+  # THE VERSION CONJUNCT, and ONLY S954 may see it go. The mutant renames the matched line to one
+  # no listing carries, so a release commit falls through to the core/templates test. The same run
+  # is then read for S950 and S951: if either moved, the mutant broke more than the conjunct and
+  # S954 is not the cell that isolates it.
+  ASSERTIONS=$((ASSERTIONS + 1))
+  _vm="$(reach_mut reach-no-version 'VERSION' 'zz-never-a-listed-path')"
+  if [ -z "$_vm" ]; then
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the mutation DID NOT APPLY (anchor matched nothing or twice)\n' "mutation-reach-no-version"
+  else
+    _vr="$(reach_rows "$_vm")"
+    _v4="$(reach_kind "$_vr" PC-S954-RELEASE-COMMIT-NAMING)"
+    _v0="$(reach_kind "$_vr" PC-S950-DOCS-ONLY-NAMING)"
+    _v1="$(reach_kind "$_vr" PC-S951-TEMPLATES-ONLY-NAMING)"
+    _v2="$(reach_kind "$_vr" PC-S952-MERGE-NAMING)"
+    if [ "$_v4" = NAMED-UPSTREAM-DOCS-ONLY ] && [ "$_v0" = NAMED-UPSTREAM-DOCS-ONLY ] \
+       && [ "$_v1" = NAMED-UPSTREAM ] && [ "$_v2" = NAMED-UPSTREAM ]; then
+      printf '  ok    %-22s %s\n' "mutation-reach-no-version" "without the VERSION conjunct the release-only naming reads docs-only, S954 is what sees it, and S950/S951/S952 keep their kinds"
+    else
+      FAILURES=$((FAILURES + 1))
+      printf '  FAIL  %-22s want S954 docs-only and S950/S951/S952 unchanged; read S954=%s S950=%s S951=%s S952=%s\n' "mutation-reach-no-version" "${_v4:-<no row>}" "${_v0:-<no row>}" "${_v1:-<no row>}" "${_v2:-<no row>}"
+    fi
+  fi
   # BL-066's mutant: the newest citing commit only, the shape this row shipped with.
   ASSERTIONS=$((ASSERTIONS + 1))
   _al="  _hits=\"\$(git -C \"\$DIST\" log -E --grep=\"\${_pfx}([^0-9A-Za-z-]|\\\$)\" --format=%h \"\$THEIRS\" 2>/dev/null)\""

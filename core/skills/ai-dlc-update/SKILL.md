@@ -1120,12 +1120,16 @@ prose is itself generated rather than composed.
      a rejection or a split. Confirm which, then re-anchor or drop the stale receipt.
    - `NAMED-UPSTREAM-DOCS-ONLY` → upstream's history names this entry's id, and **none** of the
      naming commits changes a path under `core/` or `templates/` — the two trees a consumer
-     installs — so none of them can have shipped a fix. A plan, a review or a ledger drain that
+     installs — or cuts a release (changes `VERSION`). A plan, a review or a ledger drain that
      cross-references an id matches the message search exactly as a fix does; this kind keeps
-     the row and its full sha list but says it is not an absorption. **Not a close, and not
-     grounds to annotate** — read the commits for a withdrawal or a split, which can be. The
-     converse does not hold: a commit that touches `core/` can still merely mention an id, so a
-     plain `NAMED-UPSTREAM` remains "upstream named it", never "upstream took it".
+     the row and its full sha list but says the naming is not evidence of an absorption. **Not
+     a close on its own** — read the commits for a withdrawal or a split, then read the entry's
+     subject at `theirs`, because a fix that never names the id is invisible to this search.
+     A release commit that names the id counts as reaching even when it changes only
+     `CHANGELOG.md` and `VERSION`: that is the release a consumer pulls, and its parent usually
+     carries the fix. The converse does not hold: a commit that touches `core/` can still merely
+     mention an id, so a plain `NAMED-UPSTREAM` remains "upstream named it", never "upstream
+     took it".
    - `NAMED-UPSTREAM-AMBIGUOUS` → upstream's history cites this entry's SPRINT prefix
      (`PC-S<n>`), but two or more ledger entries share that prefix and the commit does not say
      which it absorbed. The row names EVERY citing commit, newest first, and says when none of
@@ -2398,9 +2402,11 @@ declared sites, not everywhere unconditionally.
        share it. Deliberately NOT attributed: read the named commit and decide per entry.
        Annotate nothing on the strength of the row alone.
      - `NAMED-UPSTREAM-DOCS-ONLY` — upstream's history names the id but no naming commit
-       changes `core/` or `templates/`. Read the commits for a withdrawal or a split and act on
-       that if there is one; otherwise leave the entry open. Never annotate an absorption on
-       this row — no commit it lists can have shipped one.
+       changes `core/` or `templates/` or cuts a release. Read the commits for a withdrawal or a
+       split and act on that if there is one. Then read the entry's own subject against
+       `theirs`: the naming is not evidence of an absorption, but a fix landed under a commit
+       that does not name the id still closes it. Annotate only what that reading establishes,
+       with the release that contains the change; otherwise leave the entry open.
      - `HAND-REVIEW` — the entry declares `verify: manual` and no mechanical predicate exists
        for it by design. Adjudicate the body against `theirs`; annotate only what that
        adjudication establishes.
