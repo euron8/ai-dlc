@@ -2453,4 +2453,16 @@ reader compares one member exactly (`validate-adversarial-convergence.sh` agains
 or reads the exit status only, so a new member cannot silently pass a gate. Discharges no consumer
 candidate.
 
-verify: manual
+Held note (batch 178): new arm **I117** in `scripts/validate-enforcement-map.sh` owns the set and carries the
+`# vocabulary:` marker; the row renders all four members from the owner. The emitter grammar is
+`CITE_VERDICTS_AWK` in `scripts/render-vocabulary-index.sh` (slug `cite-verdicts`), lifted and run by I117
+rather than copied. It reads every `console.log` inside the `if (CITE) {` block: ternary arms, a template
+literal's leading word, and plain literals. I117 refuses an emitter that grammar cannot spell, a member
+outside the `MATCH` / `NOMATCH-<WORD>` shape, and a quoted verdict-shaped literal in any core `.sh` that is
+not a member. Its false-positive set was 15 sites and 0 findings, and the owner's own sites are skipped. The
+recorded limit is that an unquoted compare is invisible. Pinned by renderer probes in both directions,
+`vocabulary-index` (I814 seed), and `enforcement-map-derivations` A46-A51. The suite pays for it in
+`FORK_BUDGET` 3194 -> 3202 (base 3186, tip 3196, I117 +9). Receipt scored: tip 1, fix 0, marker on an
+existing arm 1, three-member extractor 1, hand-typed index row 1.
+
+verify: sh O=core/scripts/validate-steering-budget.sh; [ -f "$O" ] && grep -q '^if (CITE) {$' "$O" || exit 9; B="$(printf '\140')"; R="$(grep -F "| ${B}${O}${B} |" docs/vocabulary-index.md)"; [ -n "$R" ] || exit 1; bash scripts/render-vocabulary-index.sh --check >/dev/null 2>&1 || exit 1; M="$(printf '%s' "$R" | cut -d'|' -f3)"; for v in MATCH NOMATCH NOMATCH-NO-RECORDS NOMATCH-TRANSCRIPT-PRUNED; do case "$M" in *"${B}${v}${B}"*) ;; *) exit 1 ;; esac; done; I="$(printf '%s' "$R" | cut -d'|' -f5 | tr -d ' ')"; case "$I" in I[0-9]*) ;; *) exit 1 ;; esac; D="$(mktemp -d)" || exit 9; for x in core scripts .githooks templates VERSION; do cp -R "$x" "$D/$x" || exit 9; done; awk '/^  console\.log\("NOMATCH"\); process\.exit\(2\);$/ && !d { print "  console.log(v); process.exit(2);"; d = 1 } { print }' "$O" > "$D/$O"; cmp -s "$O" "$D/$O" && exit 9; out="$(cd "$D" && bash scripts/validate-enforcement-map.sh --arms "$I" 2>&1)"; grep -q "^FAIL: $I" <<<"$out"
