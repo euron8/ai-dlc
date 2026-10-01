@@ -19,6 +19,25 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.680.0] - 2026-09-30
+
+Batch 178's sixth release: the two retired-layer detectors alone, because a consumer's installed
+copies run inside the pull that delivers them.
+
+### Backlog
+
+- **`BL-333`**. `retired-layer-contract.sh` no longer stops early when the base rulebook carries no
+  contract shape. That exit swallowed the retired-path row for a release that deletes a rulebook
+  file a layer file cites: 0 rows before, now 1 per citing file. An unreadable rulebook still
+  refuses with exit 2. `retired-tokens.sh` now refuses with exit 2 when preclassify lists nothing,
+  so `emit-report.sh` renders `DETECTOR-REFUSED` and `apply.sh` a `retired-tokens-refused`
+  DECISION, instead of a clean result. A no-op pull never reaches that refusal: `SKILL.md` stops a
+  base == theirs pull before either detector runs. Fixtures: `retired-layer-contract` S1 with a
+  mutant restoring the exit; `retired-contract-token` p8 asserts rc 2.
+
+On a real classification world over the reference consumer, the refusal renders as three
+`DETECTOR-REFUSED` lines and three refusal DECISIONs; three real ranges are unchanged old against new.
+
 ## [0.679.0] - 2026-09-30
 
 Batch 178's fifth release: the update skill's `SKILL.md` alone, because a consumer's installed copy

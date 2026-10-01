@@ -2039,7 +2039,27 @@ read the same detectors' stdout with stderr discarded: `retired-tokens.sh` at `a
 and calls it the safe direction. `apply.sh` calls neither `retired-layer-contract.sh`,
 `retired-fixtures.sh` nor `predicate-differential.sh`.
 
-verify: manual
+Held note (batch 178): all three detector subjects are addressed on this branch, so the entry is a
+close candidate. `retired-layer-passage.sh` already refused with exit 2 before this release (its
+rulebook-list refusal, `:88`), and `apply.sh` reads it through `detector_refused` (`:785`).
+`retired-tokens.sh` now exits 2 on the preclassify-listed-nothing refusal (message unchanged, the
+docs-only-release and base == theirs cause kept); `emit-report.sh:445-446` renders a non-zero exit as
+`DETECTOR-REFUSED` and `apply.sh:698-700` as `detector_refused`. No program caller reaches that state:
+both call it from inside a CLASSIFY arm, and the update skill stops a base == theirs pull at its
+ref check. `retired-layer-contract.sh`'s exit-0 line was not a refusal at all: every unreadable
+rulebook case already exits 2, so the branch that printed "could not read any rulebook contract
+shape" fired only on a rulebook that WAS read and carried no shape, and it swallowed a true path
+row. It is deleted, so that world reaches the path arm: on a shapeless base plus a retired cited
+rulebook file, 0 rows became 1 row per citing file, an unresolvable base ref still exits 2, and
+base == base still ends at the nothing-retired NOTE. Fixtures: `retired-layer-contract` S1 (the
+shapeless world, the row asserted by value, and a mutant restoring the exit, killed by S1 alone), and
+`retired-contract-token` p8 now asserts rc 2 (mutant `refusal-exits-0`, vector 1110). Receipt
+scored under `bash -c 'set -uo pipefail; …'`: origin/main 1, the fix 0, rlc keeping the exit but
+at 2 → 1, rt falling through to the NOTE → 1, rt left at exit 0 → 1, a reconcile dir missing
+`preclassify.sh` → 9. Residue NOT built, outside this release's files: `emit-report.sh:432-436`
+still says retired-tokens' "exit-0-with-stderr refusal is its own contract", which is now stale.
+
+verify: sh R="${B7_RC:-core/skills/ai-dlc-update/reconcile}"; for f in retired-layer-contract.sh retired-tokens.sh preclassify.sh lib.sh setup-sites.md; do [ -f "$R/$f" ] || exit 9; done; D="$(mktemp -d)" || exit 9; trap 'rm -rf "$D"' EXIT; g() { git -C "$D/d" -c user.email=r@r -c user.name=r "$@" >/dev/null 2>&1; }; mkdir -p "$D/d/core/team-roles" "$D/d/core/skills/ai-dlc/steps" "$D/c/.claude/skills/ai-dlc/extensions" || exit 9; g init -q || exit 9; printf -- '- Personal: `/model x`\n' > "$D/d/core/team-roles/r.md"; printf 'x\n' > "$D/d/core/skills/ai-dlc/steps/gone.md"; g add -A && g commit -qm b0 || exit 9; B0="$(git -C "$D/d" rev-parse HEAD)"; g rm -q core/skills/ai-dlc/steps/gone.md && g commit -qm t0 || exit 9; T0="$(git -C "$D/d" rev-parse HEAD)"; g checkout -q "$B0" || exit 9; printf -- '- `/effort high`\n- The model is `opus`.\n' > "$D/d/core/team-roles/r.md"; g add -A && g commit -qm s || exit 9; S="$(git -C "$D/d" rev-parse HEAD)"; g rm -q core/skills/ai-dlc/steps/gone.md && g commit -qm t || exit 9; T="$(git -C "$D/d" rev-parse HEAD)"; printf 'hooks: steps/gone.md\n' > "$D/c/.claude/skills/ai-dlc/extensions/e.md"; row() { bash "$R/retired-layer-contract.sh" "$D/d" "$1" "$2" "$D/c" 2>/dev/null | awk -F'\t' '$2==".claude/skills/ai-dlc/extensions/e.md" && $3=="path:core/skills/ai-dlc/steps/gone.md"' | grep -c .; }; [ "$(row "$B0" "$T0")" = 1 ] || exit 9; [ "$(row "$S" "$T")" = 1 ] || exit 1; bash "$R/retired-tokens.sh" "$D/d" "$S" "$S" "$D/c" >/dev/null 2>"$D/e"; x=$?; grep -q 'produced no rows' "$D/e" || exit 9; [ "$x" = 2 ]
 
 ## BL-336 — `apply.sh`'s refile refusal tells the operator to re-run apply, which the union gate refuses
 

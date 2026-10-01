@@ -155,8 +155,10 @@ rlc_refuse() { # rlc_refuse <what> <status>
 # calls staged empty sets and the run took the empty-`BASE_SET` branch, exit 0 with 0 stdout bytes
 # (measured at mode 000), which `emit-report.sh` renders as "none". The declaration always lists at
 # least one glob, so an empty list is never a legitimate rulebook and refuses too. The function
-# keeps its name and prints the cached list, so its two callers are unchanged. The empty-`BASE_SET`
-# exit further down is NOT this case -- a rulebook that carries no contract shape is legitimate.
+# keeps its name and prints the cached list, so its two callers are unchanged. An empty `BASE_SET`
+# further down is NOT this case -- a rulebook that carries no contract shape is legitimate, and it
+# is not a refusal either: that run still has a rulebook FILE SET to subtract, so it goes on to the
+# path arm and ends at the nothing-retired NOTE only when neither subtraction retired anything.
 _rlc_rc=0
 RLC_GLOBS="$(awk '/^rulebook:/{on=1;next} on && /^[a-z_]+:/{exit} on && /^  - /{sub(/^  - /,"");print}' \
   "$SITES" 2>/dev/null)" || _rlc_rc=$?
@@ -325,12 +327,15 @@ collect "$THEIRS" "$RLC_T/collect-theirs" || rlc_refuse "$RLC_WHY" "$?"
 BASE_SET="$(cat "$RLC_T/collect-base")" || rlc_refuse "reading the staged base shape set" "$?"
 THEIRS_SET="$(cat "$RLC_T/collect-theirs")" || rlc_refuse "reading the staged theirs shape set" "$?"
 
-# A release that retires nothing has nothing to report. Distinguish that from an
-# unresolvable rulebook list, which would silently report clean for every release.
-if [ -z "$BASE_SET" ]; then
-  echo "retired-layer-contract: could not read any rulebook contract shape at base ($BASE) — refusing to report clean, because 'no shapes' and 'nothing retired' are the same output" >&2
-  exit 0
-fi
+# A BASE RULEBOOK WITH NO CONTRACT SHAPE IS A RESULT, NOT A REFUSAL, AND IT DOES NOT END THE RUN.
+# Every way the base rulebook can fail to be READ already refuses with exit 2 above: an unreadable
+# or empty glob list, a failed tree listing, a failed blob read. What reaches here with an empty
+# `BASE_SET` read every rulebook file and found no shape -- so the shape subtraction is empty, and
+# the PATH subtraction below still has a subject. This used to exit 0 right here with one stderr
+# line and no row, which swallowed a true path row: a shapeless base rulebook plus a release that
+# deleted a rulebook file a layer file cites read 0 rows, where the same world with one shape at
+# base read 1. It now falls through; a base that also resolves no rulebook FILE is stated by the
+# path arm's own line, and a run that retired neither ends at the nothing-retired NOTE.
 
 count_of() { printf '%s\n' "$1" | sed '/^$/d' | wc -l | tr -d ' '; }
 
@@ -373,18 +378,18 @@ if [ -n "$RB_BASE" ]; then
   [ "$_rlc_rc" -eq 0 ] || rlc_refuse "the retired-path subtraction" "$_rlc_rc"
   RETIRED_PATHS="$(cat "$RLC_T/rb-retired")"
 else
-  # The same refusal `BASE_SET` gets, for the same reason: an unreadable rulebook at base
-  # and a rulebook that retired nothing produce the identical empty set, and only one of
-  # them is a result. Without this the arm reports clean on every release the moment the
-  # glob resolution breaks.
+  # A base whose globs resolve no rulebook file and a rulebook that retired nothing produce
+  # the identical empty set, and only one of them is a result. A FAILED listing already
+  # refused above; this line states the resolved-to-nothing case so the arm's silence is
+  # never read as a clean subtraction.
   echo "retired-layer-contract: could not resolve any rulebook FILE at base ($BASE) — the retired-path arm is SILENT for this run, which is not the same as finding no retired path" >&2
 fi
 
 
 # A ZERO THAT NEVER OPENED A FILE MUST NOT READ LIKE A ZERO THAT SCANNED EVERYTHING.
-# The guard above refuses to report clean when the rulebook is unreadable, on the ground
-# that "no shapes" and "nothing retired" are the same output. The empty-retired-set case
-# has the SAME ambiguity and had no such guard: the script exited here, silently, having
+# The reads above refuse with exit 2 when the rulebook is unreadable, on the ground that
+# "no shapes" and "nothing retired" are the same output. The empty-retired-set case has
+# the SAME ambiguity and had no such guard: the script exited here, silently, having
 # opened no layer file, and its output was byte-identical to a full scan that matched
 # nothing. MEASURED on the 0.356.0 -> 0.357.0 consumer pull: the retired set was empty,
 # this branch was taken, and the run was read as evidence that no layer file carried

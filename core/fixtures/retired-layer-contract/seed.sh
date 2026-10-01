@@ -259,6 +259,37 @@ git -C "$DIST" rm -q "core/skills/ai-dlc/escalations.md"
 GIT_AUTHOR_DATE='2026-06-03T00:00:00Z' GIT_COMMITTER_DATE='2026-06-03T00:00:00Z' \
   git -C "$DIST" -c user.email=f@f -c user.name=fixture commit -q -m "retire a rulebook PATH and no shape"
 PATH_ONLY="$(git -C "$DIST" rev-parse HEAD)"
+
+# --- TWO MORE REFS: A SHAPELESS BASE RULEBOOK, AND A RELEASE OFF IT THAT RETIRES A PATH ---
+#
+# THE STATE A REFUSAL USED TO SWALLOW. A base whose rulebook was READ and carries no contract
+# shape made the detector print one stderr line and exit 0 before the path arm ran, so a layer
+# file citing a rulebook file the release deleted got no row. `$SHAPELESS_BASE` is BASE with the
+# role file's two labelled directives rewritten away; `$SHAPELESS_THEIRS` is that minus route.md.
+#
+# THE REWRITE KEEPS ITS BACKTICKS AND DROPS ONLY THE LABEL SHAPE. `shapes_of` matches
+# `- <Label>: ` followed by a backticked `/directive`; a seed with no backtick anywhere is
+# shapeless for a trivial reason and would also read 0 on the pre-fix detector for the SAME
+# trivial reason -- both worlds 0 rows, nothing discriminated. The effort line keeps its
+# backticked `/effort` and the model line keeps a backticked value, so the file looks like the
+# shaped one to every reader except the shape grammar. run.sh asserts the shapeless property
+# against the shaped BASE copy before it reads a verdict off either world.
+git -C "$DIST" checkout -q "$BASE"
+cat > "$DIST/core/team-roles/architect.md" <<'ROLE'
+# Role: Architect (fixture)
+
+**Model and effort.**
+- `/effort high`
+- The model is `opus`, read from `aiDlcModels`.
+ROLE
+git -C "$DIST" -c user.email=f@f -c user.name=fixture add -A
+GIT_AUTHOR_DATE='2026-06-04T00:00:00Z' GIT_COMMITTER_DATE='2026-06-04T00:00:00Z' \
+  git -C "$DIST" -c user.email=f@f -c user.name=fixture commit -q -m "a rulebook carrying no contract shape"
+SHAPELESS_BASE="$(git -C "$DIST" rev-parse HEAD)"
+git -C "$DIST" rm -q "core/skills/ai-dlc/steps/route.md"
+GIT_AUTHOR_DATE='2026-06-05T00:00:00Z' GIT_COMMITTER_DATE='2026-06-05T00:00:00Z' \
+  git -C "$DIST" -c user.email=f@f -c user.name=fixture commit -q -m "retire a rulebook PATH off a shapeless base"
+SHAPELESS_THEIRS="$(git -C "$DIST" rev-parse HEAD)"
 git -C "$DIST" checkout -q "$THEIRS"
 
 cat > "$WORK/env.sh" <<ENV
@@ -267,6 +298,8 @@ DIST="$DIST"
 BASE="$BASE"
 THEIRS="$THEIRS"
 PATH_ONLY="$PATH_ONLY"
+SHAPELESS_BASE="$SHAPELESS_BASE"
+SHAPELESS_THEIRS="$SHAPELESS_THEIRS"
 CONSUMER="$CONSUMER"
 ENV
 
