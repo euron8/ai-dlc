@@ -11596,6 +11596,176 @@ else
   fi
 fi
 
+# --- I117: the `--cite` verdict set is ONE set across its emitter and every reader that compares it ---
+# vocabulary: steering-budget --cite verdicts
+# vocabulary-invariant: I117
+# vocabulary-owner: core/scripts/validate-steering-budget.sh
+# vocabulary-extract: cite-verdicts
+# vocabulary-readers: core/scripts/validate-adversarial-convergence.sh
+#
+# WHAT IT BINDS. `validate-steering-budget.sh --cite` answers on stdout with one token from a
+# closed set, and the set is DECLARED NOWHERE: it is whatever the `console.log` calls inside
+# the `if (CITE) {` block print -- a ternary with two literal arms, a template literal whose
+# leading word is the verdict, and two plain literals. Four readers call it; three read the
+# exit status only, and validate-adversarial-convergence.sh EXACT-COMPARES one member to decide
+# whether a corpus held nothing. Before this arm the set had no row in docs/vocabulary-index.md
+# and nothing joined that compare to the emitter, so renaming the member it keys on would have
+# turned an acquittal into a deny with every gate green.
+#
+# THE SET IS DERIVED FROM THE EMITTER, NEVER HAND-LISTED HERE. The grammar is
+# `CITE_VERDICTS_AWK` in scripts/render-vocabulary-index.sh, LIFTED out of that file by its own
+# quoting and run, the way I112 lifts `SCHEMA_PY`. The set this arm compares readers against
+# and the set the index renders are therefore one program, not two copies that agree today.
+#
+# THREE FINDINGS, EACH WITH ITS OWN SUBJECT:
+#   1. an emitter in the block that yields no member -- `console.log(verdict)` from a variable.
+#      The grammar cannot spell it, so the set would be short by a member while looking whole.
+#   2. a member the READER grammar below cannot spell. The reader scan only sees tokens shaped
+#      `MATCH` or `NOMATCH-...`; a member outside that shape is one whose compares this arm is
+#      blind to, and the owner states `NOMATCH` stays the prefix so a `case NOMATCH*` reader is
+#      unmoved. A new verdict breaking that shape is refused here rather than invisible.
+#   3. a QUOTED `MATCH`/`NOMATCH-...` literal anywhere in a core `.sh` that is not a member --
+#      a reader comparing stdout against a verdict the emitter no longer prints.
+#
+# THE READER SCAN'S FALSE-POSITIVE SET WAS MEASURED BEFORE IT SHIPPED: over every core `.sh` the
+# quoted-literal grammar matched 15 sites, every one a member -- the emitter's own four
+# literals, the convergence validator's compare, and fixture assertions in
+# check-24-adversarial-convergence and askuserquestion-citation. Empty with no exclusion list.
+# QUOTED is the narrowing: the same tokens appear unquoted in prose and comments by the dozen.
+#
+# THE RECORDED LIMIT: AN UNQUOTED COMPARE IS INVISIBLE. A `case "$out" in NOMATCH-FOO)` arm
+# carries no quote, and widening to bare words would report every comment that mentions a
+# verdict. No reader has that shape today; finding 2 keeps every member inside the shape a
+# quoted compare of it would have.
+#
+# ONE AWK OVER THE OWNER AND ONE GREP OVER core/, NEVER A LOOP OVER FILES. Membership is
+# `in_lines` against a string already in memory. CLAUDE.md records what a nested arm did to
+# this validator's wall clock once.
+i117_owner="$REPO_ROOT/core/scripts/validate-steering-budget.sh"
+i117_renderer="$REPO_ROOT/scripts/render-vocabulary-index.sh"
+i117_tab="$(printf '\t')"
+# `<root> <subdir>` -> `<path>:<line>:<quoted token>` for every quoted verdict-shaped literal.
+i117_readers() {
+  ( cd "$1" 2>/dev/null && /usr/bin/grep -rnoE --include='*.sh' "[\"'](NO)?MATCH(-[A-Z]+)*[\"']" "$2" 2>/dev/null ) || true
+}
+# `<emitter awk output> <reader scan> <owner rel path>` -> sets i117_j_set, i117_j_un,
+# i117_j_off, i117_j_stray. Pure shell over strings already in memory: no fork per member or
+# per site. THE OWNER IS NOT A READER and its sites are skipped: its in-block literals are the
+# members, and a quoted verdict-shaped literal outside the block -- a log line, a diagnostic --
+# compares nothing. Measured: without the skip, a `console.log` of a non-member appended after
+# the block was reported as a reader comparing a dead verdict, which names the wrong remedy.
+i117_judge() {
+  i117_j_set=""; i117_j_un=""; i117_j_off=""; i117_j_stray=""
+  while IFS="$i117_tab" read -r i117_k i117_v i117_w; do
+    case "$i117_k" in
+      M) in_lines "$i117_v" "$i117_j_set" && continue
+         if [ -z "$i117_j_set" ]; then i117_j_set="$i117_v"; else i117_j_set="$i117_j_set
+$i117_v"; fi
+         case "$i117_v" in
+           MATCH|NOMATCH|NOMATCH-*) case "$i117_v" in *[!A-Z-]*|*-|*--*) i117_j_off="$i117_j_off $i117_v" ;; esac ;;
+           *) i117_j_off="$i117_j_off $i117_v" ;;
+         esac ;;
+      U) i117_j_un="$i117_j_un line $i117_v;" ;;
+    esac
+  done <<EOF
+$1
+EOF
+  while IFS= read -r i117_site; do
+    [ -n "$i117_site" ] || continue
+    case "$i117_site" in "$3":*) continue ;; esac
+    i117_tok="${i117_site##*:}"; i117_tok="${i117_tok#?}"; i117_tok="${i117_tok%?}"
+    in_lines "$i117_tok" "$i117_j_set" || i117_j_stray="$i117_j_stray ${i117_site%:*} compares $i117_tok;"
+  done <<EOF
+$2
+EOF
+}
+
+if [ ! -f "$i117_owner" ]; then
+  err "I117: $i117_owner is missing. Its \`if (CITE) {\` block is the only declaration of the --cite verdict set, so there is nothing to compare readers against and a clean result here would mean nothing."
+elif [ ! -f "$i117_renderer" ]; then
+  err "I117: $i117_renderer is missing. Its CITE_VERDICTS_AWK is this arm's emitter grammar, lifted rather than copied, so without it the set cannot be derived."
+else
+  i117_awk="$(awk "/^CITE_VERDICTS_AWK='\$/ { on = 1; next } on && /^'\$/ { exit } on { print }" "$i117_renderer")"
+  if [ -z "$i117_awk" ]; then
+    err "I117 could not lift CITE_VERDICTS_AWK out of scripts/render-vocabulary-index.sh. Its opening line or its lone closing quote moved, and an empty grammar derives an empty set that every reader then fails against -- or, worse, an empty scan that passes."
+  else
+    # SELF-PROBE, ALL THREE FINDINGS AND THE QUIET DIRECTION, ON A mktemp TREE BEFORE THE
+    # CORPUS. Tokens are ASSEMBLED, never typed: this file is not in the corpus the reader scan
+    # walks, but a typed non-member here is one copy-paste from being in one that is.
+    i117_probe="$(mktemp -d 2>/dev/null)"
+    if [ -z "$i117_probe" ] || [ ! -d "$i117_probe" ]; then
+      err "I117 could not create its probe directory, so none of its three findings was proven this run. A scan whose probe did not fire reports a clean corpus it never read; this fails instead."
+    else
+      i117_q='"'; i117_nm="NO"; i117_nm="${i117_nm}MATCH"
+      i117_ma="${i117_nm}-PROBEA"; i117_mb="${i117_nm}-PROBEB"; i117_gone="${i117_nm}-PROBEGONE"
+      i117_low="probe-lower"
+      mkdir -p "$i117_probe/core/a" "$i117_probe/core/b"
+      { printf '%s\n' "console.log(${i117_q}${i117_nm}-PROBEOUTSIDE${i117_q});" 'if (CITE) {'
+        printf '%s\n' "  console.log(n ? ${i117_q}${i117_ma}${i117_q} : ${i117_q}${i117_nm}${i117_q});"
+        printf '%s\n' "  console.log(${i117_q}${i117_mb}${i117_q});" '  console.log(verdict);'
+        printf '%s\n' "  console.log(${i117_q}${i117_low}${i117_q});" '}'
+      } > "$i117_probe/owner.js"
+      # READERS: a member compare (quiet), a non-member compare (loud), the same non-member
+      # UNQUOTED in a comment (quiet -- the narrowing), and a quoted non-member in a file that
+      # is not `.sh` (quiet -- the corpus is shell).
+      printf '%s\n' "[ \"\$o\" = ${i117_q}${i117_ma}${i117_q} ] && x" > "$i117_probe/core/a/ok.sh"
+      printf '%s\n' "[ \"\$o\" = ${i117_q}${i117_gone}${i117_q} ] && x" "# ${i117_gone} in a comment" > "$i117_probe/core/b/bad.sh"
+      printf '%s\n' "${i117_q}${i117_gone}${i117_q}" > "$i117_probe/core/b/notes.md"
+      # The OWNER's own quoted non-member outside the block: quiet, because the owner is skipped.
+      printf '%s\n' "console.log(${i117_q}${i117_gone}${i117_q});" > "$i117_probe/core/a/own.sh"
+      i117_pe="$(awk "$i117_awk" "$i117_probe/owner.js")"
+      i117_pr="$(i117_readers "$i117_probe" core)"
+      rm -rf "$i117_probe" 2>/dev/null || true
+      i117_judge "$i117_pe" "$i117_pr" core/a/own.sh
+      i117_pf=""
+      { in_lines "$i117_ma" "$i117_j_set" && in_lines "$i117_nm" "$i117_j_set" && in_lines "$i117_mb" "$i117_j_set"; } || \
+        i117_pf="${i117_pf} the emitter grammar did not read a ternary's two arms and a plain literal back (got '$i117_j_set'), so it cannot spell its own subject."
+      in_lines "${i117_nm}-PROBEOUTSIDE" "$i117_j_set" && \
+        i117_pf="${i117_pf} the emitter grammar read a console.log OUTSIDE the \`if (CITE) {\` block. The owner prints a finding count and a report there, and neither is a verdict."
+      [ "$i117_j_un" = " line 5;" ] || \
+        i117_pf="${i117_pf} finding 1 reported '$i117_j_un' where the seed's only unspellable emitter is line 5."
+      [ "$i117_j_off" = " $i117_low" ] || \
+        i117_pf="${i117_pf} finding 2 reported '$i117_j_off' where exactly one seeded member is outside the verdict shape."
+      case "$i117_j_stray" in
+        *"core/b/bad.sh:1 compares $i117_gone;") : ;;
+        *) i117_pf="${i117_pf} finding 3 reported '$i117_j_stray' where exactly one quoted non-member compare was seeded, at core/b/bad.sh:1." ;;
+      esac
+      case "$i117_j_stray" in
+        *ok.sh*|*notes.md*|*bad.sh:2*|*own.sh*) i117_pf="${i117_pf} finding 3 reported a near-miss -- a member compare, a non-shell file, the same token unquoted in a comment, or the owner itself -- so its false-positive set is not empty." ;;
+      esac
+      if [ -n "$i117_pf" ]; then
+        err "I117 SELF-PROBE FAILED:${i117_pf}"
+      else
+        i117_e="$(awk "$i117_awk" "$i117_owner")"
+        i117_r="$(i117_readers "$REPO_ROOT" core)"
+        i117_judge "$i117_e" "$i117_r" core/scripts/validate-steering-budget.sh
+        i117_n=0
+        while IFS= read -r i117_l; do [ -n "$i117_l" ] && i117_n=$((i117_n + 1)); done <<EOF
+$i117_j_set
+EOF
+        # IN-CORPUS CONTROL: the compare this arm exists for must be SEEN, member or not. A scan
+        # that stopped reaching the tree would report zero strays forever.
+        case "
+$i117_r
+" in
+          *"
+core/scripts/validate-adversarial-convergence.sh:"*) i117_ctl=1 ;;
+          *) i117_ctl=0 ;;
+        esac
+        if [ "$i117_n" -lt 2 ]; then
+          err "I117 derived $i117_n --cite verdict(s) from the \`if (CITE) {\` block of core/scripts/validate-steering-budget.sh. The block's opening line moved or its emitters changed shape; a set of one or none compares equal to almost anything, so this reports rather than passing."
+        elif [ "$i117_ctl" -ne 1 ]; then
+          err "I117 IN-CORPUS CONTROL FAILED: the reader scan did not see validate-adversarial-convergence.sh's quoted compare of a --cite verdict, which is the reader this arm exists for. The scan no longer reaches the tree, so zero strays below prove nothing."
+        else
+          [ -z "$i117_j_un" ] || err "I117: a console.log in the \`if (CITE) {\` block of core/scripts/validate-steering-budget.sh prints no literal verdict:$i117_j_un The set is derived from the literals those calls print, so a verdict built from a variable is a member nothing can see -- not docs/vocabulary-index.md, and not this arm's reader scan. Print a literal, or a template literal whose leading word is the verdict."
+          [ -z "$i117_j_off" ] || err "I117: --cite verdict(s) outside the MATCH / NOMATCH-<WORD> shape:$i117_j_off. The reader scan can only see compares of verdicts in that shape, and the owner keeps \`NOMATCH\` as the prefix so a \`case NOMATCH*\` reader is unmoved. Rename the verdict into the shape."
+          [ -z "$i117_j_stray" ] || err "I117: a core script compares --cite stdout against a verdict core/scripts/validate-steering-budget.sh does not print:$i117_j_stray That compare can never be true, so whatever branch it guards is dead -- which is how an acquittal becomes a deny with every gate green. Compare against a member of the set in docs/vocabulary-index.md, or restore the emitter."
+        fi
+      fi
+    fi
+  fi
+fi
+
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"

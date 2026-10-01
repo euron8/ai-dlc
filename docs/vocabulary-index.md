@@ -28,6 +28,7 @@ invariant because the set kept getting restated from memory somewhere else.
 | In-Flight Teammates row statuses | `delivered-reachable` `in-flight` `stopped` | `core/scripts/validate-artifact-budget.sh` | I110 | — | `core/skills/ai-dlc/steps/route.md`, `core/skills/ai-dlc/steps/gate-validation.md`, `core/skills/ai-dlc/steps/_gate-procedures.md`, `core/skills/ai-dlc/steps/implementation.md`, `core/skills/ai-dlc/steps/handoff.md`, `core/skills/ai-dlc/SKILL.md`, `core/hooks/ai-dlc-continue.sh`, `core/hooks/ai-dlc-recover.sh` |
 | reasoning effort levels | `high` `low` `max` `medium` `xhigh` | `core/hooks/ai-dlc-dispatch-guard.sh` | I111 | — | `scripts/validate-enforcement-map.sh`, `core/scripts/render-agent-definitions.sh` |
 | code-review verdicts | `APPROVED` `BLOCKED` `NEEDS_REWORK` | `core/team-roles/code-reviewer.md` | I112 | — | `core/skills/ai-dlc/steps/gate-validation.md` |
+| steering-budget --cite verdicts | `MATCH` `NOMATCH` `NOMATCH-NO-RECORDS` `NOMATCH-TRANSCRIPT-PRUNED` | `core/scripts/validate-steering-budget.sh` | I117 | — | `core/scripts/validate-adversarial-convergence.sh` |
 
 ## Schema enums
 
