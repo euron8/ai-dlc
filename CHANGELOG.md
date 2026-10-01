@@ -19,6 +19,40 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.675.0] - 2026-09-30
+
+Batch 178's first release. One consumer candidate, filed by the reference consumer during its
+0.673.0 → 0.674.0 pull. It touches no file under the update skill's machinery.
+
+### Consumer candidate
+
+- **`PC-S316-ACKNOWLEDGE-HOOK-DENIES-UPDATER-EDITS-OUTSIDE-ITS-OWN-DIRECTORY`**. Check 3 of
+  `ai-dlc-acknowledge.sh` now exempts an `/ai-dlc-update` session's writes under `_bmad-output/`
+  from the Rule 29 pause. The dispatch arm already made that exemption and the write arm never did,
+  so the updater's own prescribed Edit under `planning-artifacts/` was denied on every operator
+  reply. An updater session's write is neither denied nor logged; a teammate in a pipeline session
+  is still allowed and logged, and a pipeline lead is still denied. `rule-29.md` names the exemption.
+  Suppressing the flag in `ai-dlc-pause.sh` instead was refuted: the Stop hook lets an updater
+  session stop only while the flag is up.
+- The same release anchors the typed-invocation signal the exemption depends on. The bare
+  `<command-name>` marker also matched QUOTATIONS of it, and the consumer's own push-candidate
+  ledger carries one that pipeline sessions are sent to read, so the exemption alone would have
+  switched the pause off for a pipeline session's writes after it read the ledger. The hook now
+  matches the harness's whole user record, `"role":"user"` included. Over the consumer's 1182
+  transcripts it matched 296 of 296 real typed invocations and none of the 19 mentions the bare
+  marker matched. A pipeline dispatch after such a mention, allowed before this release, is now
+  denied.
+
+### Fixtures
+
+- `updater-session-signals`: write-surface and mention arms, each read by value (verdict,
+  `ACK_DENIED` and `ACK_TEAMMATE_WRITE` rows, `File:` line). Typed seeds use the harness's record
+  shape, as do those in `route-read-required` and `route-read-required-mutants`.
+- `updater-session-signals-mutants`: four new mutants (the write arm's updater branch unreachable,
+  made unconditional, the anchor reverted to the bare marker, the anchor's role prefix dropped),
+  and the typed-alternative mutant re-keyed.
+- `route-read-required-mutants`: `teammate-write-arm-dropped` re-keyed onto the teammate branch.
+
 ## [0.674.0] - 2026-09-30
 
 Batch 177's first release. Seven consumer candidates filed by the reference consumer's sprint-315
