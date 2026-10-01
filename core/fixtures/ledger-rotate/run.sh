@@ -969,8 +969,8 @@ fi
 # pre-rotation ledger, where closed and open entries are interleaved by construction — the
 # whole reason it is being run — so "a real entry directly below a closed one" is the ordinary
 # case and not an edge one. The reference consumer's LIVE ledger reports 0 suspects only
-# because it has already been rotated; its ARCHIVE holds 22 boundary-shaped lines inside closed
-# entries, and all 22 escape refusal on ONE clause (a later close annotation of their own).
+# because it has already been rotated; its ARCHIVE holds 27 suspect boundary lines inside closed
+# entries (distribution 0.674.0), and all 27 escape refusal on ONE clause (a close of their own).
 fp_check() { # <name> <tier> <why>
   if rg_refused "$1"; then
     bad "$2 — the guard REFUSES here: $3"
@@ -1764,6 +1764,182 @@ else
   fi
 fi
 rm -rf "$BLM" "$BLW"
+
+# --- BL-071: A COLON LEAD-IN IS NOT SILENCED BY A BODY LINE THAT MERELY QUOTES THE FORM ------
+#
+# The suppressor that clears a suspect used to be the LOOSE close rule for every suspect, so a
+# `- **Note:**` lead-in inside a closed entry, whose body QUOTES the annotation form, scored as
+# carrying its own close and the split shipped. A label ending in a colon is a lead-in by shape,
+# so for THAT suspect the suppressor is the archive grammar. The colon-less mention (fp-quotes
+# above) keeps the loose rule, and it must still stay silent -- that half is the surviving one.
+#
+# THIS FIXTURE SHIPS AHEAD OF THE ROTATOR IT GUARDS, so a consumer whose installed rotator
+# predates the fix SKIPS these arms; in the distribution they run and a pre-fix rotator goes red.
+case "$ROT" in */core/skills/ai-dlc-update/reconcile/ledger-rotate.sh) C71_ISDIST=1 ;; *) C71_ISDIST=0 ;; esac
+C71_RUN=1
+if ! grep -qF 'susp_colon ? ledger_body_archives($0) : ledger_entry_line_closes($0)' "$ROT"; then
+  if [ "$C71_ISDIST" = 0 ]; then
+    printf '  SKIP  BL-071 colon arms -- the installed ledger-rotate.sh predates the colon suppressor; it lands with the pull that carries this fixture\n'
+    C71_RUN=0
+  else
+    printf '  --    (BL-071: this ledger-rotate.sh carries no colon suppressor; in the distribution the arms run anyway and must go red)\n'
+  fi
+fi
+if [ "$C71_RUN" = 1 ]; then
+  rg_write colon-mention '- **Note:** an annotation lead-in whose body QUOTES the annotation form
+
+  Annotate it `ADOPTED UPSTREAM (vX.Y.Z, verified <date>)` once the grep is non-zero.
+
+  verify: theirs_has core/scripts/thing.sh "MARKER_A"
+'
+  rg_write colon-closed '- **Note:** a colon-titled line that carries a genuine bolded close of its own
+
+  **ADOPTED UPSTREAM (v0.100.0, verified 2026-01-01).** Upstream took it.
+
+  verify: theirs_has core/scripts/thing.sh "MARKER_A"
+'
+  c71_arms() { # <rotator> -> prints three verdict letters: colon-mention colon-closed fp-quotes (R refused, S silent)
+    local r f out rc
+    for f in colon-mention colon-closed fp-quotes; do
+      out="$(bash "$1" "$RG/$f.md" 2>&1)"; rc=$?
+      if [ "$rc" -ne 0 ] && grep -q 'REFUSING to rotate' <<<"$out"; then r="${r:-}R"; else r="${r:-}S"; fi
+    done
+    printf '%s\n' "$r"
+  }
+  c71_ship="$(c71_arms "$ROT")"
+  case "$c71_ship" in
+    R??) ok "BL-071: a COLON lead-in whose body only QUOTES the annotation form is REFUSED — a mention no longer silences the guard for a lead-in" ;;
+    *)   bad "BL-071: a colon lead-in inside a closed entry, whose body only QUOTES the close form, was NOT refused — the quotation silenced the guard and the split strands the receipt" ;;
+  esac
+  case "$c71_ship" in
+    ?S?) ok "  and a colon-titled line with a GENUINE bolded close of its own still rotates — the archive grammar honours a real close" ;;
+    *)   bad "  a colon-titled line carrying a genuine bolded close was REFUSED — the colon suppressor is too tight and wedges a correct rotation" ;;
+  esac
+  case "$c71_ship" in
+    ??S) ok "  and the colon-LESS quoting entry (fp-quotes) still rotates — the loose rule stays for every non-colon suspect" ;;
+    *)   bad "  the colon-less fp-quotes entry was REFUSED — the fix widened past the colon subclass and re-opened the false positive" ;;
+  esac
+
+  # MUTANT: revert the colon suppressor to the loose rule for every suspect. ONLY the
+  # colon-mention cell may move; the other two are the controls that it is not entangled.
+  C71M="$WORK/c71-mutant"; rm -rf "$C71M"; mkdir -p "$C71M"
+  cp "$(dirname "$ROT")"/*.sh "$C71M"/ 2>/dev/null
+  sed 's@if (susp_at \&\& (susp_colon ? ledger_body_archives(\$0) : ledger_entry_line_closes(\$0))) susp_closed = 1@if (ledger_entry_line_closes($0) \&\& susp_at) susp_closed = 1@' \
+    "$ROT" > "$C71M/ledger-rotate.sh"
+  if cmp -s "$ROT" "$C71M/ledger-rotate.sh"; then
+    bad "  FIXTURE BROKEN — the BL-071 revert mutation matched nothing, so the colon arm is unproven"
+  elif [ ! -f "$C71M/lib.sh" ]; then
+    bad "  FIXTURE BROKEN — the BL-071 mutant copy has no lib.sh beside it, so its verdicts are a copy that cannot run"
+  else
+    c71_mut="$(c71_arms "$C71M/ledger-rotate.sh")"
+    c71_ctl="$(bash "$C71M/ledger-rotate.sh" "$RG/splitter.md" 2>&1)"
+    if ! grep -q 'REFUSING to rotate' <<<"$c71_ctl"; then
+      bad "  MUTATION BL-071: the mutant no longer refuses the plain splitter, so it is not a working rotator and its verdict is not attributable"
+    elif [ "$c71_mut" = "SSS" ]; then
+      ok "  MUTATION BL-071: with the loose suppressor restored ONLY the colon-mention cell moves (R->S) — the arm is bound to the colon subclass"
+    else
+      bad "  MUTATION BL-071: expected SSS under the reverted suppressor and read $c71_mut — the colon arm is not attributable to the line it guards"
+    fi
+  fi
+fi
+
+# --- BL-006: AN ENTRY-COUNT CEILING THAT WARNS AND STILL ROTATES -----------------------------
+#
+# The rotator is the ONLY thing that shrinks the ledger, so the ceiling on what STAYS after
+# rotation must warn and never refuse. Every arm below drives the shipping rotator. The ceiling is
+# READ from the rotator, never spelled here, so the at-ceiling near miss tracks it.
+# Entries are BULLETS, which is how the reference consumer writes most of them: a count of
+# `^## ` headings reads 0 on these ledgers, so a heading-keyed ceiling cannot pass the over arm.
+case "$ROT" in */core/skills/ai-dlc-update/reconcile/ledger-rotate.sh) C6_ISDIST=1 ;; *) C6_ISDIST=0 ;; esac
+C6_RUN=1
+C6_MAX="$(sed -n 's/^LEDGER_MAX_OPEN_ENTRIES=\([0-9][0-9]*\)$/\1/p' "$ROT")"
+if [ -z "$C6_MAX" ]; then
+  if [ "$C6_ISDIST" = 0 ]; then
+    printf '  SKIP  BL-006 ceiling arms -- the installed ledger-rotate.sh predates the entry-count ceiling; it lands with the pull that carries this fixture\n'
+    C6_RUN=0
+  else
+    bad "BL-006: ledger-rotate.sh declares no LEDGER_MAX_OPEN_ENTRIES ceiling — the live ledger is unbounded in what stays open"
+    C6_RUN=0
+  fi
+fi
+if [ "$C6_RUN" = 1 ]; then
+  C6="$WORK/c6"; rm -rf "$C6"; mkdir -p "$C6"
+  c6_ledger() { # <path> <open entries> <closed entries>
+    { printf '# Push-candidate ledger\n\nPreamble prose that belongs to no entry.\n\n'
+      awk -v o="$2" -v c="$3" 'BEGIN{
+        for (i = 1; i <= c; i++) printf "- **PC-S900-C%04d** — a closed push candidate\n\n  **ADOPTED UPSTREAM (v0.1.0, verified 2026-01-01).** Upstream took it.\n\n", i
+        for (i = 1; i <= o; i++) printf "- **PC-S900-O%04d** — an open push candidate\n\n  Body text.\n\n", i }'
+    } > "$1"
+  }
+  c6_ledger "$C6/over.md"  "$((C6_MAX + 1))" 3
+  c6_ledger "$C6/at.md"    "$C6_MAX"         3
+  c6_ledger "$C6/over0.md" "$((C6_MAX + 1))" 0
+  # 0 iff: rc 0, WARN present, and the ledger rotates (dry: would move; apply: archive gains the
+  # closed entries and the ledger loses them). <rotator> <ledger> <mode: dry|apply|none>
+  c6_check() {
+    local out rc
+    cp "$2" "$C6/run.md"; rm -f "$C6/arch.md"
+    if [ "$3" = apply ]; then out="$(bash "$1" "$C6/run.md" --archive "$C6/arch.md" --apply 2>&1)"; rc=$?
+    else out="$(bash "$1" "$C6/run.md" --archive "$C6/arch.md" 2>&1)"; rc=$?; fi
+    [ "$rc" -eq 0 ] || return 3
+    grep -q "WARN — .* entries stay in the live ledger after rotation, above the ceiling of ${C6_MAX}" <<<"$out" || return 1
+    case "$3" in
+      dry)   grep -q '3 closed entries would move' <<<"$out" || return 2 ;;
+      apply) [ "$(grep -c 'PC-S900-C' "$C6/arch.md" 2>/dev/null)" = 3 ] || return 2
+             [ "$(grep -c 'PC-S900-C' "$C6/run.md")" = 0 ] || return 2 ;;
+      none)  grep -q 'nothing to rotate' <<<"$out" || return 2 ;;
+    esac
+    return 0
+  }
+  c6_quiet() { # <rotator> <ledger> -> 0 iff rc 0 and NO warning
+    local out rc
+    out="$(bash "$1" "$2" --archive "$C6/arch.md" 2>&1)"; rc=$?
+    [ "$rc" -eq 0 ] && ! grep -q 'WARN' <<<"$out" && grep -q 'closed entries would move' <<<"$out"
+  }
+  c6_cells() { # <rotator> -> four letters: over-dry over-apply over-zero-closed at-quiet (P pass, F fail)
+    local r=""
+    c6_check "$1" "$C6/over.md" dry   && r="${r}P" || r="${r}F"
+    c6_check "$1" "$C6/over.md" apply && r="${r}P" || r="${r}F"
+    c6_check "$1" "$C6/over0.md" none && r="${r}P" || r="${r}F"
+    c6_quiet "$1" "$C6/at.md"         && r="${r}P" || r="${r}F"
+    printf '%s\n' "$r"
+  }
+  c6_ship="$(c6_cells "$ROT")"
+  case "$c6_ship" in P???) ok "BL-006: a ledger with $((C6_MAX + 1)) open entries WARNS on a dry run, exits 0, and still reports the closed entries it would move" ;;
+    *) bad "BL-006: the over-ceiling dry run did not WARN-and-rotate (cells $c6_ship)" ;; esac
+  case "$c6_ship" in ?P??) ok "  and under --apply it WARNS, exits 0, and the closed entries MOVE — the ceiling never refuses the one lever that shrinks the ledger" ;;
+    *) bad "  under --apply the over-ceiling ledger did not warn, exit 0 AND move its closed entries (cells $c6_ship) — a refusing ceiling blocks the only thing that shrinks the ledger" ;; esac
+  case "$c6_ship" in ??P?) ok "  and a ledger over the ceiling with NOTHING closed still warns — the warning precedes the nothing-to-rotate exit" ;;
+    *) bad "  an over-ceiling ledger with zero closed entries did not warn (cells $c6_ship) — the unrotatable case, the one the ceiling exists for, is silent" ;; esac
+  case "$c6_ship" in ???P) ok "  and a ledger AT the ceiling (${C6_MAX} open) rotates with no warning — the bound is strictly-above" ;;
+    *) bad "  a ledger exactly at the ceiling warned or failed (cells $c6_ship) — the comparison is off by one" ;; esac
+
+  # MUTANTS, one per arm, each built in a copy of the whole reconcile dir with an unmutated control.
+  c6_mut() { # <name> <sed expr> <expected cells>
+    local d="$WORK/c6-mut-$1" got
+    rm -rf "$d"; mkdir -p "$d"; cp "$(dirname "$ROT")"/*.sh "$d"/ 2>/dev/null
+    if ! sed "$2" "$ROT" > "$d/ledger-rotate.sh"; then bad "  MUTATION BL-006 $1: sed DID NOT APPLY"; return; fi
+    if cmp -s "$ROT" "$d/ledger-rotate.sh"; then bad "  FIXTURE BROKEN — BL-006 mutation $1 matched nothing"; return; fi
+    got="$(c6_cells "$d/ledger-rotate.sh")"
+    if [ "$got" = "$3" ]; then ok "  MUTATION BL-006 $1: cells $c6_ship -> $got, only its own arm moves"
+    else bad "  MUTATION BL-006 $1: expected cells $3 and read $got"; fi
+  }
+  c6_ctl="$WORK/c6-ctl"; rm -rf "$c6_ctl"; mkdir -p "$c6_ctl"; cp "$(dirname "$ROT")"/*.sh "$c6_ctl"/ 2>/dev/null
+  if [ "$(c6_cells "$c6_ctl/ledger-rotate.sh")" = PPPP ]; then
+    ok "  unmutated control copy in a sibling dir reads PPPP (the mutant harness runs a working rotator)"
+  else
+    bad "  FIXTURE BROKEN — the unmutated copy does not read PPPP, so no mutant verdict below is attributable"
+  fi
+  # delete the warning: the three over arms go F, the at arm is still quiet
+  c6_mut no-warn  's@^if \[ "\$n_kept_entries" -gt "\$LEDGER_MAX_OPEN_ENTRIES" \]; then@if false; then@' FFFP
+  # off by one: only the at-ceiling arm moves
+  c6_mut ge       's@^if \[ "\$n_kept_entries" -gt "\$LEDGER_MAX_OPEN_ENTRIES" \]; then@if [ "$n_kept_entries" -ge "$LEDGER_MAX_OPEN_ENTRIES" ]; then@' PPPF
+  # refuse instead of warn: every over arm exits non-zero
+  c6_mut refuse   's@^  echo "  is done (bold annotation), then rotate again. This is a warning: the rotation still runs."@&; exit 1@' FFFP
+  # count headings instead of the rotator walk: bullet seeds read 0, no warning anywhere
+  c6_mut headings 's@^n_kept_entries="\$(wc -l < "\$TMPD/kept-entries" | tr -d .*@n_kept_entries="$(grep -c "^## " "$LEDGER")"@' FFFP
+  rm -rf "$C6"
+fi
 
 echo
 if [ "$fails" -eq 0 ]; then
