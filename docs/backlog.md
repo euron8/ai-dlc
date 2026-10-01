@@ -2031,8 +2031,10 @@ no verdict.
 
 The receipt drives `memo_has_path` and `ledger-reverify.sh` through two worlds, a missing BLOB
 (`cat-file -e` 1, `rev-parse` 0) and a missing SUBTREE (`cat-file -e` 128), and requires 125 from
-`memo_has_path` in both, the memo serving 0 after each restore, and an explicit unreadable
-`NEEDS-REVIEW` row from `ledger-reverify.sh` for both entries, including one whose `has` lookup was
+`memo_has_path` in both, the memo serving 0 after each restore, and a `NEEDS-REVIEW` row from
+`ledger-reverify.sh` whose DETAIL column carries the literal word `unreadable` for both entries
+(B2's refusal text must contain it; today's blob-missing row is also `NEEDS-REVIEW`, a "vacuous
+predicate", and only that word separates the two), including one whose `has` lookup was
 cached healthy before the blob went (the `:1947` read). Scored from a `git archive` extraction:
 origin/main 1; B1 alone (this branch) 1, so it stays open; B1 plus a stand-in B2 at `:1935` and
 `:1947` 0; that stand-in over a lib keyed on 128 1 (`has(blob)=1`); B2 at `:1935` only 1.
