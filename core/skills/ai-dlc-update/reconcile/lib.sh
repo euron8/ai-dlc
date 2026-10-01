@@ -154,8 +154,24 @@ norm() { printf '%s' "$1" | tr 'A-Z' 'a-z' | tr -d '`*' | sed -E 's/[^a-z0-9]+/ 
 # that byte), so a Latin-1 layer file would refuse the run where it is read today. Reading the
 # stream twice -- once to validate, once to fold -- is why the `sed` output is staged rather than
 # piped. A caller whose locale is C folds ASCII only, as before.
+#
+# WHICH FOLDER RUNS IS PROBED, NEVER ASSUMED FROM THE LOCALE. GNU coreutils `tr` first on PATH folds
+# BYTE BY BYTE under a UTF-8 locale: `É` (\303\211) came out \343\211, invalid UTF-8, so a deleted
+# `Élan must …` matched nothing and the verdict depended on which `tr` resolved (measured with GNU tr
+# 9.11). `_norm_fold_probe` folds a known multibyte capital with each candidate in the caller's
+# locale and takes the first that returns exactly `é`: the PATH's `tr`, then `awk`'s `tolower`, then
+# the C fold. Both candidates emit one line per input line, so the line-preserving contract holds.
+_norm_fold_probe() { # -> tr | awk | c
+  local _want _got
+  _want="$(printf '\303\251')"
+  _got="$(printf '\303\211' | tr '[:upper:]' '[:lower:]' 2>/dev/null)"
+  [ "$_got" = "$_want" ] && { echo tr; return 0; }
+  _got="$(printf '\303\211\n' | awk '{ print tolower($0) }' 2>/dev/null)"
+  [ "$_got" = "$_want" ] && { echo awk; return 0; }
+  echo c
+}
 norm_lines() {
-  local _nt _rc=0
+  local _nt _rc=0 _nf=c
   _nt="$(mktemp "${TMPDIR:-/tmp}/norm-lines.XXXXXX" 2>/dev/null)" || return 125
   [ -n "$_nt" ] || return 125
   LC_ALL=C sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//
@@ -165,11 +181,12 @@ norm_lines() {
           s/[[:space:]]+/ /g
           s/[.[:space:]]+$//' > "$_nt" || _rc=$?
   if [ "$_rc" -eq 0 ]; then
-    if iconv -f UTF-8 -t UTF-8 < "$_nt" > /dev/null 2>&1; then
-      tr '[:upper:]' '[:lower:]' < "$_nt" || _rc=$?
-    else
-      LC_ALL=C tr '[:upper:]' '[:lower:]' < "$_nt" || _rc=$?
-    fi
+    if iconv -f UTF-8 -t UTF-8 < "$_nt" > /dev/null 2>&1; then _nf="$(_norm_fold_probe)"; fi
+    case "$_nf" in
+      tr)  tr '[:upper:]' '[:lower:]' < "$_nt" || _rc=$? ;;
+      awk) awk '{ print tolower($0) }' < "$_nt" || _rc=$? ;;
+      *)   LC_ALL=C tr '[:upper:]' '[:lower:]' < "$_nt" || _rc=$? ;;
+    esac
   fi
   rm -f "$_nt"
   return "$_rc"

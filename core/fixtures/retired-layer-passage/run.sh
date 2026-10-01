@@ -166,6 +166,7 @@ fi
 #      line -> exit 0 and the Latin-1 file's row (a fold run in the caller's locale on Latin-1 bytes
 #      dies with "Illegal byte sequence" and the run refuses)
 #   N0 control: a same-case accented reproduction, under a C caller -> its row
+#   N3 the N1 run with a BYTE-WISE `tr` stub first on PATH -> the same rows and exit as the system `tr`
 N_SKIP=0
 if ! grep -qF 'iconv -f UTF-8 -t UTF-8' "$RLP_SRC/lib.sh"; then
   case "$RLP_SRC" in
@@ -198,6 +199,29 @@ if [ "$N_SKIP" = 0 ]; then
   # SEED CONTROL: the Latin-1 file really is invalid UTF-8, or N2 cannot express the refusal.
   iconv -f UTF-8 -t UTF-8 < "$N2C/.claude/skills/ai-dlc/extensions/latin1.md" >/dev/null 2>&1 \
     && { bad "FIXTURE BROKEN -- the Latin-1 seed validates as UTF-8, so N2 expresses nothing"; N_SKIP=1; }
+  # N3's world: a BYTE-WISE `tr` first on PATH, the shape GNU coreutils `tr` has under a UTF-8
+  # locale (measured: `É` = \303\211 folds to \343\211). The stub handles only the case fold in a
+  # UTF-8 locale -- +0x20 on A-Z and on \300-\336 -- and execs the real `tr` for everything else, so
+  # `norm()`'s `tr 'A-Z' 'a-z'`, `tr -d` and the C fold run the system binary.
+  N_REAL_TR="$(command -v tr)" || N_REAL_TR=""
+  NSTUB="$NW/trstub"; mkdir -p "$NSTUB" || exit 2
+  cat > "$NSTUB/tr" <<'TRSTUB'
+#!/usr/bin/env bash
+_lc="${LC_ALL:-${LC_CTYPE:-${LANG:-}}}"
+case "$_lc" in *UTF-8*|*utf8*|*UTF8*|*utf-8*)
+  if [ "$#" -eq 2 ] && [ "$1" = '[:upper:]' ] && [ "$2" = '[:lower:]' ]; then
+    [ -n "${FX_TR_HITS:-}" ] && echo hit >> "$FX_TR_HITS"
+    LC_ALL=C exec "$FX_REAL_TR" 'A-Z\300-\336' 'a-z\340-\376'
+  fi ;;
+esac
+exec "$FX_REAL_TR" "$@"
+TRSTUB
+  chmod +x "$NSTUB/tr" || exit 2
+  # SEED CONTROL: the stub resolves first and really corrupts the multibyte capital, or N3 expresses nothing.
+  _sb="$(printf '\303\211' | PATH="$NSTUB:$PATH" FX_REAL_TR="$N_REAL_TR" LC_ALL=en_US.UTF-8 tr '[:upper:]' '[:lower:]' 2>/dev/null)"
+  if [ -z "$N_REAL_TR" ] || [ "$_sb" != "$(printf '\343\211')" ]; then
+    bad "FIXTURE BROKEN -- the byte-wise tr stub does not fold \\303\\211 to \\343\\211, so N3 expresses nothing"; N_SKIP=1
+  fi
 fi
 if [ "$N_SKIP" = 0 ]; then
   score_355() { # score_355 <reconcile-dir> -> failing cells, then `.`
@@ -208,12 +232,23 @@ if [ "$N_SKIP" = 0 ]; then
     grep -q 'extensions/lowered.md' <<<"$_o" || _r="${_r}N1"
     _o="$(env -u LANG LC_ALL=en_US.UTF-8 bash "$1/retired-layer-passage.sh" "$ND" "$NB" "$NT" "$N2C" 2>/dev/null)"; _rc=$?
     { [ "$_rc" -eq 0 ] && grep -q 'extensions/latin1.md' <<<"$_o"; } || _r="${_r}N2"
+    # N3: the N1 run with the byte-wise stub first on PATH reads exactly what the system `tr` reads --
+    # the same rows and the same exit (no red, no silent wrong match). Whether that verdict is the
+    # RIGHT one is N1's; N3 owns only its independence from the `tr` implementation.
+    local _s _src
+    _s="$(env -u LANG LC_ALL=en_US.UTF-8 bash "$1/retired-layer-passage.sh" "$ND" "$NB" "$NT" "$N1C" 2>/dev/null)"; _src=$?
+    _o="$(env -u LANG LC_ALL=en_US.UTF-8 PATH="$NSTUB:$PATH" FX_REAL_TR="$N_REAL_TR" FX_TR_HITS="$NW/stub.hits" \
+      bash "$1/retired-layer-passage.sh" "$ND" "$NB" "$NT" "$N1C" 2>/dev/null)"; _rc=$?
+    { [ "$_rc" -eq "$_src" ] && [ -n "$_o" ] && [ "$_o" = "$_s" ]; } || _r="${_r}N3"
     printf '%s.' "$_r"
   }
+  : > "$NW/stub.hits"
   got="$(score_355 "$RLP_SRC")"
+  # POSITIVE CONTROL for N3: the subject's fold reached the stub, or N3 compared two system-tr runs.
+  [ -s "$NW/stub.hits" ] || bad "FIXTURE BROKEN -- the byte-wise tr stub was never invoked, so N3 compared two system-tr runs"
   case "$got" in
-    .) ok "BL-355 N0-N2: an accented capital folds under a UTF-8 caller, a same-case control matches under C, and a Latin-1 layer file is still read (exit 0)" ;;
-    *.) bad "BL-355 cell(s) [${got%.}] failed: an accented reproduction is missed, or a Latin-1 file refuses the run" ;;
+    .) ok "BL-355 N0-N3: an accented capital folds under a UTF-8 caller, a same-case control matches under C, a Latin-1 layer file is still read (exit 0), and a byte-wise tr first on PATH changes no verdict" ;;
+    *.) bad "BL-355 cell(s) [${got%.}] failed: an accented reproduction is missed, a Latin-1 file refuses the run, or the verdict depends on which tr resolves" ;;
     *) bad "FIXTURE BROKEN -- the BL-355 cells did not complete" ;;
   esac
   n355_mut() { # n355_mut <name> <want> <find> <replace>
@@ -236,10 +271,28 @@ PY
       *)     bad "MUTANT [BL-355 $1] failed [${got%.}], expected exactly [$2]" ;;
     esac
   }
+  # THE HOST's `tr` DECIDES WHAT TWO OF THESE MUTANTS CAN EXPRESS, so their vectors are derived from
+  # it, never hardcoded. Measured with GNU tr 9.11 first on PATH: it folds byte by byte (so trusting it
+  # misses N1 as well) and passes a Latin-1 byte through rather than dying (so dropping the C locale
+  # from the fallback breaks nothing on that host). Both facts are probed here, in the cells' locale.
+  H_TR_FOLDS=0; H_TR_REFUSES=0
+  [ "$(printf '\303\211' | LC_ALL=en_US.UTF-8 tr '[:upper:]' '[:lower:]' 2>/dev/null)" = "$(printf '\303\251')" ] && H_TR_FOLDS=1
+  [ "$(printf 'caf\351\n' | LC_ALL=en_US.UTF-8 tr '[:upper:]' '[:lower:]' 2>/dev/null)" = "$(printf 'caf\351')" ] || H_TR_REFUSES=1
+  echo "  --    (BL-355 host: tr=$(command -v tr) folds-multibyte=$H_TR_FOLDS refuses-latin1=$H_TR_REFUSES)"
   # the 0.652.0 shape: the fold always byte-wise
-  n355_mut c-fold N1 "      tr '[:upper:]' '[:lower:]' < \"\$_nt\" || _rc=\$?" "      LC_ALL=C tr '[:upper:]' '[:lower:]' < \"\$_nt\" || _rc=\$?"
-  # the ungated fix: LC_ALL=C dropped from tr, no iconv validation
-  n355_mut no-gate N2 "      LC_ALL=C tr '[:upper:]' '[:lower:]' < \"\$_nt\" || _rc=\$?" "      tr '[:upper:]' '[:lower:]' < \"\$_nt\" || _rc=\$?"
+  n355_mut c-fold N1 '; then _nf="$(_norm_fold_probe)"; fi' '; then _nf=c; fi'
+  # the ungated fix: LC_ALL=C dropped from the C fold, so a Latin-1 file is folded in the caller's locale
+  if [ "$H_TR_REFUSES" = 1 ]; then
+    n355_mut no-gate N2 "      *)   LC_ALL=C tr '[:upper:]' '[:lower:]' < \"\$_nt\" || _rc=\$? ;;" "      *)   tr '[:upper:]' '[:lower:]' < \"\$_nt\" || _rc=\$? ;;"
+  else
+    echo "  SKIP  MUTANT (BL-355 no-gate) -- this host's tr reads a Latin-1 byte under UTF-8 without refusing, so the mutant expresses nothing here"
+  fi
+  # the unprobed fold: the locale `tr` trusted whatever resolves on PATH (the tip shape GNU tr broke)
+  if [ "$H_TR_FOLDS" = 1 ]; then w_np=N3; else w_np=N1N3; fi
+  n355_mut no-probe "$w_np" '; then _nf="$(_norm_fold_probe)"; fi' '; then _nf=tr; fi'
+  # the probe without its awk candidate: a byte-wise tr falls to the C fold and misses the accent
+  if [ "$H_TR_FOLDS" = 1 ]; then w_na=N3; else w_na=N1; fi
+  n355_mut no-awk "$w_na" '  [ "$_got" = "$_want" ] && { echo awk; return 0; }' '  :'
 fi
 
 echo
