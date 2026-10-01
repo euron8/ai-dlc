@@ -442,6 +442,17 @@ for _q in plain "$QU"; do printf 'v2\n' > "$QCD/core/skills/ai-dlc-update/$_q.md
 gitq -C "$QCD" add -A; gitq -C "$QCD" commit -qm theirs
 QC_THEIRS="$(git -C "$QCD" rev-parse HEAD)"
 for _q in plain "$QU"; do printf 'v1\nmy local edit\n' > "$QCC/.claude/skills/ai-dlc-update/$_q.md"; done
+# QD: two core fixtures marked `.dist-only` at theirs, both still installed in the consumer. retired-
+# fixtures.sh reads the marker set through lib.sh's memo_ls_tree, whose `grep '^core/fixtures/'` and
+# `grep '/\.dist-only$'` both reject a C-quoted line, so under the default core.quotePath the non-ASCII
+# orphan's row is lost at rc 0. QD_RO is an unwritable memo: lib.sh borrows it, cannot create the fill
+# file, and takes memo_ls_tree's DIRECT line -- the second git call the fix had to change.
+QD="$W/qd"; QDD="$QD/dist"; QDC="$QD/consumer"; QD_RO="$QD/ro-memo"
+for _q in plain "$QU"; do mkdir -p "$QDD/core/fixtures/$_q" "$QDC/tests/fixtures/$_q"; printf 'dist-only\n' > "$QDD/core/fixtures/$_q/.dist-only"; done
+gitq -C "$QDD" init -q; gitq -C "$QDD" add -A; gitq -C "$QDD" commit -qm theirs
+QD_THEIRS="$(git -C "$QDD" rev-parse HEAD)"
+mkdir -p "$QD_RO" && chmod 555 "$QD_RO"
+QD_ROOT=0; ( : > "$QD_RO/probe" ) 2>/dev/null && QD_ROOT=1
 
 # ================================================================================================
 # ARMS. Each takes a script path, returns 0 when the arm's assertion holds, and leaves ARM_WHY.
@@ -1182,6 +1193,21 @@ arm_qc_plain() { local rc=0; qc_run "$1" || rc=$?; qc_why "$rc"
   grep -qF "$(QC_ROW plain)" "$OUT"; }
 arm_qc_cafe() { local rc=0; qc_run "$1" || rc=$?; qc_why "$rc"
   grep -qF "$(QC_ROW plain)" "$OUT" && grep -qF "$(QC_ROW "$QU")" "$OUT"; }
+# QD drives retired-fixtures.sh with a fresh private memo (the fill) or the unwritable QD_RO (the
+# direct line). The plain row is the positive conjunct in every cell, so a copy that never reached
+# arm A fails rather than scoring an absence.
+qd_run() { if [ "$2" = direct ]; then AI_DLC_RECONCILE_MEMO="$QD_RO" bash "$1" "$QDD" "$QD_THEIRS" "$QDC" > "$OUT" 2> "$ERR"
+  else bash "$1" "$QDD" "$QD_THEIRS" "$QDC" > "$OUT" 2> "$ERR"; fi; }
+qd_why() { ARM_WHY="rc=$1 rows=[$(LC_ALL=C cut -f1,2 "$OUT" | LC_ALL=C cat -v | tr '\n\t' '| ')] $(grep -v '^$' "$ERR" | tail -1 | cut -c1-80)"; }
+QD_ROW() { printf 'RETIRED-FIXTURE-ORPHAN\ttests/fixtures/%s\t' "$1"; }
+arm_qd_plain() { local rc=0; qd_run "$1" fill || rc=$?; qd_why "$rc"
+  [ "$rc" -eq 0 ] && grep -qF "$(QD_ROW plain)" "$OUT"; }
+arm_qd_cafe() { local rc=0; qd_run "$1" fill || rc=$?; qd_why "$rc"
+  [ "$rc" -eq 0 ] && grep -qF "$(QD_ROW plain)" "$OUT" && grep -qF "$(QD_ROW "$QU")" "$OUT"; }
+arm_qd_direct() { local rc=0; qd_run "$1" direct || rc=$?; qd_why "$rc"
+  [ "$rc" -eq 0 ] && grep -qF "$(QD_ROW plain)" "$OUT" && grep -qF "$(QD_ROW "$QU")" "$OUT"; }
+arm_qd_hx_fill()   { arm_qd_plain "$1" && arm_qd_direct "$1"; }
+arm_qd_hx_direct() { arm_qd_plain "$1" && arm_qd_cafe "$1"; }
 
 # --- r5: NO NON-COMMENT HERE-STRING in a file this release converted ------------------------------
 # The seven files 2f598a86 converted, and only those: the bootstrapping files (apply.sh, lib.sh,
@@ -1380,6 +1406,14 @@ run_arm arm_qb_cafe  "$S_PC" "preclassify, pre-relocation consumer: caf\\303\\25
 S_SUG="$RC_/self-update-gate.sh"
 run_arm arm_qc_plain "$S_SUG" "self-update-gate arm C: the consumer-edited ASCII machinery file plain.md is carried (SELF-UPDATE-CARRY, raw path)"
 run_arm arm_qc_cafe  "$S_SUG" "self-update-gate arm C: the consumer-edited machinery file caf\\303\\251.md is carried under its RAW path beside plain.md"
+S_RF="$RC_/retired-fixtures.sh"
+run_arm arm_qd_plain "$S_RF" "retired-fixtures arm A through memo_ls_tree's fill: the ASCII dist-only orphan tests/fixtures/plain is reported"
+run_arm arm_qd_cafe  "$S_RF" "retired-fixtures arm A through memo_ls_tree's fill: the non-ASCII orphan tests/fixtures/caf\\303\\251 is reported beside plain"
+if [ "$QD_ROOT" -eq 1 ]; then
+  skip "arm_qd_direct -- a chmod 555 memo is writable here (root?), so memo_ls_tree's direct line cannot be forced (this is not a pass)"
+else
+  run_arm arm_qd_direct "$S_RF" "retired-fixtures arm A through memo_ls_tree's DIRECT line (unwritable memo): caf\\303\\251 is reported beside plain"
+fi
 
 if [ "$SELF_TREE" -ne 1 ]; then
   skip "spelling arm and mutants -- they run only against this fixture's own tree, not $TREE"
@@ -1802,6 +1836,7 @@ else bad "control hl/warn-shadowed-local-validators.sh: the heredoc lib.sh (HL) 
 control reconcile preclassify.sh                arm_qb_plain arm_qb_cafe
 libcontrol retired-tokens.sh        arm_qa_plain arm_qa_cafe
 libcontrol self-update-gate.sh      arm_qc_plain arm_qc_cafe
+[ "$QD_ROOT" -eq 1 ] || libcontrol retired-fixtures.sh arm_qd_plain arm_qd_cafe arm_qd_direct
 control reconcile retired-tokens.sh             arm_fx_rt_healthy arm_fx_rt arm_r5 arm_nw_both arm_nw_theirs arm_nw_cmt arm_lw_c arm_lw_trstatus
 [ "$LW_UTF8" -eq 1 ] && control reconcile retired-tokens.sh arm_lw_utf8
 control reconcile readopt-override.sh           arm_ro_healthy arm_r5
@@ -2090,6 +2125,16 @@ lmutant EM-LABEL  arm_em_hx_label  "arm_em_label arm_lh"  "${EM_LABEL[@]}"
 libmutant QP-DIFF retired-tokens.sh arm_qa_plain "arm_qa_cafe" \
   $'{ git -C "$_dist" -c core.quotePath=false diff' $'{ git -C "$_dist" diff' \
   $'    git -C "$_dist" -c core.quotePath=false diff' $'    git -C "$_dist" diff'
+# memo_ls_tree lists under the default core.quotePath again, one git call per mutant: each must be
+# killed by the cell that reaches that call and by no other (the healthy twin is the other cell).
+if [ "$QD_ROOT" -eq 1 ]; then
+  skip "mutants QP-MEMO-FILL / QP-MEMO-DIRECT -- the direct line cannot be forced as root (this is not a pass)"
+else
+  libmutant QP-MEMO-FILL retired-fixtures.sh arm_qd_hx_fill "arm_qd_cafe" \
+    $'    git -C "$_dist" -c core.quotePath=false ls-tree -r --name-only "$_ref" > "$_t"' $'    git -C "$_dist" ls-tree -r --name-only "$_ref" > "$_t"'
+  libmutant QP-MEMO-DIRECT retired-fixtures.sh arm_qd_hx_direct "arm_qd_direct" \
+    $'{ git -C "$_dist" -c core.quotePath=false ls-tree -r --name-only "$_ref" 2>/dev/null; return $?; }' $'{ git -C "$_dist" ls-tree -r --name-only "$_ref" 2>/dev/null; return $?; }'
+fi
 # preclassify's relocation listing reads names under the default core.quotePath again.
 mutant QP-LSTREE reconcile preclassify.sh arm_qb_plain "arm_qb_cafe" \
   'git -C "$DIST" -c core.quotePath=false ls-tree --name-only "$THEIRS" core/scripts/' \

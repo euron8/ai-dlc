@@ -1233,12 +1233,18 @@ memo_rev_parse() {
 # byte-identical to asking git to filter it a second time, and it is what lets several
 # call sites across several files, each with a DIFFERENT pathspec (or none), share one
 # cached read of the same `<dist,ref>` pair instead of one cached read per pathspec.
+#
+# `core.quotePath=false` on BOTH calls, as memo_diff_name_status carries it: under the default a
+# non-ASCII path is listed C-quoted (`"core/fixtures/caf\303\251/.dist-only"`), and every reader's
+# literal-prefix grep or raw-path compare drops that line at rc 0. The flag sits BEFORE the
+# subcommand; the direct line and the fill must agree, or a memo that cannot be written answers
+# differently from one that can.
 memo_ls_tree() {
   local _dist="$1" _ref="$2" _k _f _st _t
   _k="t $_dist $_ref"; _k="${_k//%/%25}"; _k="${_k//\//%2F}"
-  _ai_dlc_memo_open "$_k" || { git -C "$_dist" ls-tree -r --name-only "$_ref" 2>/dev/null; return $?; }
+  _ai_dlc_memo_open "$_k" || { git -C "$_dist" -c core.quotePath=false ls-tree -r --name-only "$_ref" 2>/dev/null; return $?; }
   if [ -n "$_t" ]; then
-    git -C "$_dist" ls-tree -r --name-only "$_ref" > "$_t" 2>/dev/null
+    git -C "$_dist" -c core.quotePath=false ls-tree -r --name-only "$_ref" > "$_t" 2>/dev/null
     _st=$?
     if [ "$_st" -eq 0 ]; then _ai_dlc_memo_commit "$_f" "$_t" "$_st" || return 125
     else _ai_dlc_memo_serve "$_t" || return 125; fi
