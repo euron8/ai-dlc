@@ -345,7 +345,8 @@ p7() {
 # refusal: this fixture ships a pull ahead of the code. In the distribution it always binds.
 case "$DETECT" in */core/skills/ai-dlc-update/reconcile/retired-tokens.sh) P8_ISDIST=1 ;; *) P8_ISDIST=0 ;; esac
 P8_RC=1
-if [ "$P8_ISDIST" = 0 ] && ! sed -n '/produced no rows/,/^fi$/p' "$DETECT" | grep -q '^  exit 2$'; then
+P8_BLOCK="$(sed -n '/produced no rows/,/^fi$/p' "$DETECT")" || P8_BLOCK=""
+if [ "$P8_ISDIST" = 0 ] && ! grep -q '^  exit 2$' <<<"$P8_BLOCK"; then
   printf '  SKIP  p8 exit-code conjunct -- the installed retired-tokens.sh predates the exit-2 refusal; it lands with the pull that carries this fixture (this is not a pass)\n'
   P8_RC=0
 fi
