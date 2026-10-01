@@ -186,8 +186,8 @@ from a subdirectory, and from a fixture sandbox that copied it — and the sandb
 usually the silent one. `VERSION` exists only in the distribution, so a walk keyed on it cannot
 resolve an installed tree. Walk up the way `ai_dlc_resolve_root()` at
 `core/scripts/validate-provenance-block.sh:138` does; `core/fixtures/validator-path-resolution`
-holds both layouts to one answer. No shipping fixture walks up for `VERSION` — the ones that name
-it write a seed.
+holds both layouts to one answer. No shipping fixture walks up for `VERSION`; the ones that name it
+write or read a tree they seeded.
 
 ## A glob that matches nothing must not report success
 

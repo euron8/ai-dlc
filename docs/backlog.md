@@ -1048,11 +1048,14 @@ CLOSES at the close commit. The section now names `ai_dlc_resolve_root()` at
 `core/scripts/validate-provenance-block.sh:138` (the `:98` above is stale) and
 `core/fixtures/validator-path-resolution`, states `VERSION` exists only in the distribution, and
 does not restate the marker set. Population re-derived at this tip: **32** fixture `run.sh` files
-carry `/VERSION"` (control: 216 carry `FIXTURE`) — **19** `.dist-only`, **13** shipping, and all 13
-shipping hits are seed WRITES (`>`, `echo`, `printf`, `cp`). **0 shipping fixture walkers**; the same
-walker pattern matches 11 lines in the `.dist-only` set, so the zero is not the pattern's. The
+carry `/VERSION"` (control: 216 carry `FIXTURE`) — **19** `.dist-only`, **13** shipping. Every
+shipping hit was read: all are seed writes (`>`, `echo`, `printf`, `cp`) except one comment, two
+`cat "$DIST/VERSION"` reads of a seeded dist, and one `test -f "$THEIRS_TREE/VERSION"` inside a
+seeded receipt string. **0 shipping fixture walkers**; the walker pattern matches 11 lines in the
+`.dist-only` set, and an any-case `[ -f "$VAR/VERSION" ]` test matches 0 shipping files against 9
+`.dist-only` ones. The
 "16 shipped fixtures test a `/VERSION` marker" paragraph above counted seed-writers as walkers. A6
-after the edit: 64704/67584. The receipt below replaces the install-driving one, which could only
+after the edit: 64721/67584. The receipt below replaces the install-driving one, which could only
 close by a fix this entry no longer asks for; it is keyed on the SECTION span, bounded at 40
 lines. Scored: base 1, fix 0, name added elsewhere in the file 1, name added inside the section
 with "Walk up for `VERSION`" kept 1, section unbounded to EOF 9, heading renamed 9.
@@ -1365,8 +1368,10 @@ core hook: `layer-readopt-gate` passes `hooks/ai-dlc-continue.sh` as an argument
 its own consumer tree, `settings-merge-unparseable-template` greps a template for the name, and
 `gate-repair-record` quotes it in prose. **The sixth is a live instance:**
 `postcompact-rulebook-recovery` resolves `core/hooks/ai-dlc-postcompact.sh` in `seed.sh:46` and
-executes it at `run.sh:1762`. Its rows carry four other hooks and not that one, because they were
-last derived on 2026-09-15 and the arm that reads that hook landed on 2026-09-22 (0.620.0). A push
+executes it at `run.sh:1762`. Its rows carry four other hooks and not that one. They were last
+derived on 2026-09-15; the arm that reads that hook landed on 2026-09-22 (0.620.0), and none of the
+22 map commits since then changed a `postcompact-rulebook-recovery` row (the largest re-derived 11
+fixtures, so each was a `--list` partial, not a full re-trace). A push
 touching only `ai-dlc-postcompact.sh` skips the one fixture guarding the defect 0.620.0 fixed. The
 motivating instance is closed: `pause-hook-origin`'s rows now carry `core/hooks/ai-dlc-continue.sh`.
 Two corrections to the method above: a `run.sh`-only mention grep misses reads resolved in a
