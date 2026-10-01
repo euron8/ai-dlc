@@ -19,6 +19,35 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.682.0] - 2026-09-30
+
+Batch 178's eighth release: `layer-drift.sh` alone, because a consumer's installed copy runs the pull
+that delivers it.
+
+### Backlog
+
+- **`BL-376`**. `layer-drift.sh` gates its five base reads (the numbered catalog, unnumbered titles
+  and `extends:` span at `$BASE`, and the supersession surplus and override section at `base_sha`) on
+  `BL-370`'s `have`. A base object the tree names but git cannot read now refuses at rc 1 with `have`'s
+  own line. Before, it read as an empty file: a pre-existing duplicate was tagged NEW-THIS-PULL and an
+  unmoved span read as ANCHOR-DRIFT. A path absent at base keeps its empty read, so a core file new
+  this pull still reads NEW-THIS-PULL. The surplus gate sits in the main shell ahead of
+  `sup_measure`'s `$( )`, so the refusal is no longer reported as a staging failure.
+  `layer-absorption-retire` part 2 owns it: five one-site refusing worlds, a near-miss on a file new
+  this pull, a healthy control and eleven mutants.
+
+### Fixtures
+
+- `layer-adjudication-tier` Part 11 arm C requires the startup refusal's own words, because the new
+  base-read gate refuses an unresolvable base a second time and the bad ref alone no longer separated
+  the two; mutants m1 and m2 own the cell again.
+- `procsub-staged-refusal-boot` C2w drops the base existence key from its warm memo, so the
+  staging-status mutant reaches its own outcome rather than a `have` refusal read off a status the
+  failed write corrupted.
+
+On a scratch copy of the reference consumer, three ranges give byte-identical rows at rc 0 on both
+engines.
+
 ## [0.681.0] - 2026-09-30
 
 Batch 178's seventh release: the reconcile memo in `lib.sh` and `preclassify.sh`, together because
