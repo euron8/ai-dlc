@@ -1358,6 +1358,104 @@ A42_i112_owner_grammar_is_anchored() {
   fi
 }
 
+# ============================================================================
+# I117 — the `--cite` verdict set, across its emitter and every reader that compares it
+# ============================================================================
+# Same home as I112, for I112's reason: the subject is an arm of the validator this fixture
+# already drives, and the shard partition deals new assertions out by itself.
+#
+# EVERY SEEDED TOKEN IS ASSEMBLED, AND HERE THAT IS NOT STYLE. I117's reader scan walks every
+# `.sh` under core/ for a QUOTED verdict-shaped literal, and this file is one of them: a typed
+# non-member in a quoted string here would be a finding against the real tree. `"${CV_NM}..."`
+# carries a `$` after the quote and the scan's grammar cannot read it.
+#
+# THREE FINDINGS AND THREE FIRING ASSERTIONS, each moving exactly one cell, plus two ALLOW
+# twins one property away from A49 -- the reader-compare finding is the one with an absence
+# shape on the real tree, so it is the one that needs the twins.
+CV_OWNER="core/scripts/validate-steering-budget.sh"
+CV_READER="core/scripts/validate-escalation-resolution.sh"
+CV_NM="NO"; CV_NM="${CV_NM}MATCH"
+# The awk program that inserts one line ABOVE the block's final plain `NOMATCH` emitter, the
+# last statement in the `if (CITE) {` block -- so the inserted line is inside the block.
+cv_insert_in_block() {
+  printf '%s' "BEGIN { q = sprintf(\"%c\", 34) } /^  console\\.log\\(\"${CV_NM}\"\\); process\\.exit\\(2\\);\$/ && !d { print $1; d = 1 } { print }"
+}
+cv_append() { # <line built with q as the quote> -> awk program appending it
+  printf '%s' "BEGIN { q = sprintf(\"%c\", 34) } { print } END { print $1 }"
+}
+
+# --- Assertion 46: I117 — the motivating drift ----------------------------
+# The owner renames the member validate-adversarial-convergence.sh exact-compares. That
+# compare can then never be true and the acquittal it guards becomes a deny, with every gate
+# green before this arm. One finding: the stray compare. The rename stays in the verdict shape,
+# so finding 2 cannot also fire.
+A46_i117_compared_member_renamed() {
+  t="$(fresh)"
+  local was now
+  was="${CV_NM}-NO-RECORDS"; now="${CV_NM}-EMPTY-CORPUS"
+  if edit "$t/$CV_OWNER" "{ sub(/\"${was}\" :/, \"\\\"${now}\\\" :\") } { print }"; then
+    assert_fires_n "I117 renaming the member a reader exact-compares REPORTS the reader's dead compare" \
+                   "validate-adversarial-convergence.sh:" 1
+  fi
+}
+
+# --- Assertion 47: I117 — an emitter the grammar cannot spell --------------
+A47_i117_variable_emitter() {
+  t="$(fresh)"
+  if edit "$t/$CV_OWNER" "$(cv_insert_in_block '"  if (z) { console.log(cv_v); process.exit(2); }"')"; then
+    assert_fires_n "I117 a console.log of a variable inside the --cite block is REPORTED, not dropped" \
+                   "prints no literal verdict" 1
+  fi
+}
+
+# --- Assertion 48: I117 — a member outside the verdict shape ---------------
+# A NEW emitter rather than a rename, so no reader compares it and the stray finding cannot
+# also fire: the off-shape cell moves alone.
+A48_i117_offshape_member() {
+  t="$(fresh)"
+  if edit "$t/$CV_OWNER" "$(cv_insert_in_block '"  if (z) { console.log(" q "Unverified" q "); process.exit(2); }"')"; then
+    assert_fires_n "I117 a verdict outside the MATCH / NOMATCH-<WORD> shape is REPORTED" \
+                   "shape: Unverified" 1
+  fi
+}
+
+# --- Assertion 49: I117 — a reader comparing a non-member ------------------
+A49_i117_reader_compares_nonmember() {
+  t="$(fresh)"
+  local tok
+  tok="${CV_NM}-NOT-A-VERDICT"
+  if edit "$t/$CV_READER" "$(cv_append "\"[ \" q \"\$o\" q \" = \" q \"${tok}\" q \" ] && :\"")"; then
+    assert_fires_n "I117 a core script comparing --cite stdout against a non-member is REPORTED" \
+                   "compares ${tok};" 1
+  fi
+}
+
+# --- Assertion 50: I117 — A49's ALLOW twin: the same compare of a NEW member -
+# One property apart from A49: the token is now a member, because the owner prints it inside
+# the block. A scan that reported every quoted verdict-shaped literal would fire here.
+A50_i117_new_member_compared_is_silent() {
+  t="$(fresh)"
+  local tok
+  tok="${CV_NM}-NOT-A-VERDICT"
+  if edit "$t/$CV_OWNER" "$(cv_insert_in_block "\"  if (z) { console.log(\" q \"${tok}\" q \"); process.exit(2); }\"")" \
+     && edit "$t/$CV_READER" "$(cv_append "\"[ \" q \"\$o\" q \" = \" q \"${tok}\" q \" ] && :\"")"; then
+    assert_silent "I117 the same compare is silent once the owner emits the token (A49's twin)"
+  fi
+}
+
+# --- Assertion 51: I117 — A49's second ALLOW twin: the token UNQUOTED -------
+# One property apart from A49 the other way: the same non-member, same file, no quotes -- a
+# comment mentioning a verdict. This is the narrowing that took the false-positive set to
+# zero, asserted so it cannot be widened back without a red here.
+A51_i117_unquoted_mention_is_silent() {
+  t="$(fresh)"
+  local tok
+  tok="${CV_NM}-NOT-A-VERDICT"
+  if edit "$t/$CV_READER" "$(cv_append "\"# ${tok} is only mentioned here\"")"; then
+    assert_silent "I117 the same non-member UNQUOTED in a comment is silent (A49's twin)"
+  fi
+}
+
 # THE ASSERTION LIST IS DERIVED FROM THIS FILE'S OWN DEFINITIONS, in source order. A
 # hand-written list here would be this fixture's own subject defect one level out: an
 # assertion dropped from the list runs nothing and prints nothing, and a suite reporting 14

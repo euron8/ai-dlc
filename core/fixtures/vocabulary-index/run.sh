@@ -168,9 +168,23 @@ seed() {
                 '## Communication' \
                 '- Send your full verdict (SEED_ONE | SEED_TWO | SEED_FOUR, with severity).' \
                 '- SEED_FIVE is named only in this bullet.' > "$d/owners/reviewer.md"
+  # The `--cite` verdict owner: the three emitter shapes the real owner uses inside its
+  # `if (CITE) {` block -- a ternary with two literal arms, a template literal whose leading
+  # word is the verdict, a plain literal -- beside the shapes that are NOT verdicts: a
+  # `console.log` before and after the block (the real owner prints a count and a report
+  # there), a `console.error` inside it, and a commented-out emitter. `CITE-OUT` is demanded
+  # ABSENT below; presence of `CITE-ONE` and absence of `CITE-OUT` are one assertion in two
+  # halves. The members are deliberately NOT MATCH-shaped: I117 scans every core `.sh` for a
+  # quoted MATCH/NOMATCH literal, and this file is one.
+  printf '%s\n' 'console.log("CITE-OUT-BEFORE");' 'if (CITE) {' \
+                '  console.error("CITE-OUT-STDERR");' '  // console.log("CITE-OUT-COMMENT");' \
+                '  console.log(n ? "CITE-ONE" : "CITE-TWO"); process.exit(2);' \
+                '    console.log(`CITE-THREE ${r.ts}`); process.exit(0);' \
+                '  console.log("CITE-FOUR"); process.exit(2);' '}' \
+                'console.log("CITE-OUT-AFTER");' > "$d/owners/cite.js"
 
   # --- the readers each vocabulary is joined to ---
-  for r in ledger kinds contract cycle skill hook emap budget guard reviewer; do
+  for r in ledger kinds contract cycle skill hook emap budget guard reviewer cite; do
     printf 'reader\n' > "$d/readers/$r.md"
   done
 
@@ -254,6 +268,13 @@ err "I812 fired"
 # vocabulary-extract: review-verdicts
 # vocabulary-readers: readers/reviewer.md
 err "I813 fired"
+# --- I814: the cite verdict vocabulary is one set ----------------------------
+# vocabulary: cite verdicts
+# vocabulary-invariant: I814
+# vocabulary-owner: owners/cite.js
+# vocabulary-extract: cite-verdicts
+# vocabulary-readers: readers/cite.md
+err "I814 fired"
 # --- I808: an ordinary arm, and a NEAR MISS -- it binds ONE string, not a set -
 # The wording is deliberate. `one string` is one character-class away from `one set`, which
 # is what the demand arm keys on, so this line is the seed's standing proof that the arm
@@ -266,7 +287,7 @@ EOF
   # --- the invariant index the markers' citations resolve against ---
   {
     printf '# Invariant index\n\n| ID | What it binds |\n|----|---------------|\n'
-    for i in 801 802 803 804 805 806 807 808 810 811 812 813; do printf '| I%s | seeded |\n' "$i"; done
+    for i in 801 802 803 804 805 806 807 808 810 811 812 813 814; do printf '| I%s | seeded |\n' "$i"; done
   } > "$d/docs/invariant-index.md"
 
   # --- one schema, so the second table is non-empty ---
@@ -291,8 +312,8 @@ fi
 # --- controlB: the synthetic seed renders and round-trips --------------------
 seed "$TMP/controlB"
 outB="$(render_in "$TMP/controlB")"
-if ! grep -q "11 cross-file vocabular(ies), 1 schema enum(s)" <<<"$outB"; then
-  note "FIXTURE BROKEN: the synthetic seed did not render 11 vocabularies and 1 schema enum."
+if ! grep -q "12 cross-file vocabular(ies), 1 schema enum(s)" <<<"$outB"; then
+  note "FIXTURE BROKEN: the synthetic seed did not render 12 vocabularies and 1 schema enum."
   printf '%s\n' "$outB" | sed 's/^/      /' | head -6
   exit 1
 fi
@@ -300,7 +321,8 @@ fi
 # marker reader ran; six extractors could each be returning nothing and the row count would
 # be identical.
 missing=""
-for want in 'ALPHA' 'kind-one' 'CODE-A' 'keyone' 'heavy' 'one/\*.sh' 'YES' 'SEEDED NOTHING' 'seed-one' 'SEED_ONE'; do
+for want in 'ALPHA' 'kind-one' 'CODE-A' 'keyone' 'heavy' 'one/\*.sh' 'YES' 'SEEDED NOTHING' 'seed-one' 'SEED_ONE' \
+            'CITE-ONE' 'CITE-TWO' 'CITE-THREE' 'CITE-FOUR'; do
   grep -qE "$want" "$TMP/controlB/docs/vocabulary-index.md" || missing="$missing $want"
 done
 if [ -n "$missing" ]; then
@@ -329,6 +351,14 @@ fi
 if grep -qE 'SEED_FOUR|SEED_FIVE' "$TMP/controlB/docs/vocabulary-index.md"; then
   note "FIXTURE BROKEN: the review-verdicts extractor rendered a member the seeded owner carries only in a parenthesised prose alternation or in a bullet. It is reading what the role file SAYS rather than the \`## Verdict\` template a review file is written FROM."
   grep 'code-review' "$TMP/controlB/docs/vocabulary-index.md" | sed 's/^/      /'
+  exit 1
+fi
+# AND THE CITE ROW MUST NOT CARRY A NON-VERDICT. Every `CITE-OUT-*` token is a `console.log`
+# outside the block, a `console.error`, or a commented-out emitter -- the shapes the real
+# owner carries beside its verdicts. The template-literal timestamp must not leak either.
+if grep -qE 'CITE-OUT|r\.ts' "$TMP/controlB/docs/vocabulary-index.md"; then
+  note "FIXTURE BROKEN: the cite-verdicts extractor rendered a token from outside the \`if (CITE) {\` block, from stderr, from a comment, or the value after a template literal's leading word."
+  grep 'cite' "$TMP/controlB/docs/vocabulary-index.md" | sed 's/^/      /'
   exit 1
 fi
 # The consumer-owned row must render WITHOUT members and must not have shifted its fields.
@@ -580,7 +610,7 @@ fi
 seed "$TMP/n1"
 if mutate "$TMP/n1/$MAP" '/^# --- I802: the kind vocabulary is one set/d'; then
   green_check "n1  block-scope    two adjacent blocks, one field each" "$TMP/n1" \
-    "11 cross-file vocabular(ies), 1 schema enum(s)" '| ledger statuses |' '| kinds |'
+    "12 cross-file vocabular(ies), 1 schema enum(s)" '| ledger statuses |' '| kinds |'
 else
   note "SKIP  n1 -- sed matched nothing; no mutation occurred"; rc=1
 fi
@@ -809,7 +839,7 @@ fi
 seed "$TMP/n2"
 if mutate "$TMP/n2/$MAP" 's|^# vocabulary: adjudicated codes$|# vocabulary: ledger statuses two|'; then
   green_check "n2  name-prefix    two names sharing a prefix" "$TMP/n2" \
-    "11 cross-file vocabular(ies), 1 schema enum(s)" '| ledger statuses |' '| ledger statuses two |'
+    "12 cross-file vocabular(ies), 1 schema enum(s)" '| ledger statuses |' '| ledger statuses two |'
 else
   note "SKIP  n2 -- sed matched nothing; no mutation occurred"; rc=1
 fi
@@ -829,7 +859,7 @@ printf '%s\n' '{"fields": [{"name": "verdict", "enum": ["YES", "NO"], "enum2": [
 # The backtick is built, not typed: I85 scans for one inside a quoted operator-facing string.
 N3_BT="$(printf '\140')"
 green_check "n3  key-prefix     enum/enum2 in one object, enum in a sibling" "$TMP/n3" \
-  "11 cross-file vocabular(ies), 2 schema enum(s)" \
+  "12 cross-file vocabular(ies), 2 schema enum(s)" \
   "| ${N3_BT}seeded.json${N3_BT} | ${N3_BT}verdict${N3_BT} | ${N3_BT}YES${N3_BT} ${N3_BT}NO${N3_BT} |" \
   "| ${N3_BT}seeded.json${N3_BT} | ${N3_BT}other${N3_BT} | ${N3_BT}UP${N3_BT} |"
 
