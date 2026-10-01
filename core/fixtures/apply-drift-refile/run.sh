@@ -636,6 +636,86 @@ if [ "$T_RUN" = 1 ]; then
   }
 fi
 
+# --- BL-413 arm v: `--finish` WITHHOLDS OVER A HANDED-BACK SEMANTIC MERGE NOBODY DID ---------------
+# arm t's Ap world, driven the way a consumer drives it: the ORDINARY run first, then `--finish`. The
+# ordinary run buckets the schema BOTH-CHANGED->CLASSIFY and hands it back as `semantic-merge`; it
+# must leave the schema's bytes alone (asserted per world -- arm t's comment says so, this measures
+# it). `--finish` used to raise no row there and stamp 9.9.9 over the unmerged schema.
+#   Vu  untouched, then --finish                                   -> WITHHOLDS, finish-classify-unmerged
+#   Vm  hand-merged (retired-skill dropped), then --finish          -> STAMPS
+#   Vr  hand-merged, a SECOND ordinary run, then --finish           -> STAMPS (first write wins: the
+#       re-run's record must not make the merged copy the reference)
+#   Vo  untouched, the marker rewritten as the previous engine wrote it (no classify-hashes:) -> STAMPS,
+#       with NOTE finish-classify-unrecorded (the fix cannot fire on the pull that delivers it)
+# Cell: "<Vu stamp>|<Vu row>|<Vm stamp>|<Vr stamp>|<Vo stamp>|<Vo note>" ; a world whose ordinary run moved
+# the schema, or drew no semantic-merge row, is BROKEN.
+v_drive() { # v_drive <reconcile-dir> <u|m|r|o> -> "<stamp>|<unmerged row?>|<unrecorded note?>"
+  local rec="$1" w b t sch h0 o fo
+  w="$(t_aworld 1)" && [ -d "$w/cons" ] || { printf 'BROKEN'; return; }
+  b="$(cat "$w/.B")"; t="$(cat "$w/.T")"; sch="$w/cons/.claude/schemas/provenance-block.json"
+  h0="$(git hash-object "$sch")" || { printf 'BROKEN'; return; }
+  o="$(bash "$rec/apply.sh" "$w/dist" "$b" "$w/cons" "$t" 2>/dev/null)"
+  awk -F'\t' '$1=="WORKLIST" && $2=="semantic-merge" && $3=="schemas/provenance-block.json" {f=1} END {exit !f}' <<<"$o" \
+    && [ "$(git hash-object "$sch")" = "$h0" ] || { printf 'BROKEN'; return; }
+  case "$2" in
+    m|r) printf '{\n  "known_skills": [\n    "bmad-party-mode",\n    "my-persona-skill"\n  ]\n}\n' > "$sch" || { printf 'BROKEN'; return; } ;;
+  esac
+  [ "$2" = r ] && bash "$rec/apply.sh" "$w/dist" "$b" "$w/cons" "$t" >/dev/null 2>&1
+  [ "$2" = o ] && { printf 'base: %s\ntheirs: %s\n' "$b" "$t" > "$w/cons/.claude/.ai-dlc-applying" || { printf 'BROKEN'; return; }; }
+  fo="$(bash "$rec/apply.sh" --finish "$w/dist" "$b" "$w/cons" "$t" 2>/dev/null)"
+  printf '%s|%s|%s' \
+    "$(grep -qE '^version: 9\.9\.9$' "$w/cons/.claude/.ai-dlc-version" && echo STAMPED || echo WITHHELD)" \
+    "$(awk -F'\t' '$1=="WORKLIST" && $2=="finish-classify-unmerged" && $3==".claude/schemas/provenance-block.json" {f=1} END {print (f ? "UNMERGED" : "-")}' <<<"$fo")" \
+    "$(awk -F'\t' '$1=="NOTE" && $2=="finish-classify-unrecorded" {f=1} END {print (f ? "NOTE" : "-")}' <<<"$fo")"
+}
+v_score() { # v_score <reconcile-dir> -> the cell above, or BROKEN
+  local u m r o
+  u="$(v_drive "$1" u)"; m="$(v_drive "$1" m)"; r="$(v_drive "$1" r)"; o="$(v_drive "$1" o)"
+  case "$u$m$r$o" in *BROKEN*) printf 'BROKEN'; return ;; esac
+  printf '%s|%s|%s|%s|%s|%s' "${u%%|*}" "$(printf '%s' "$u" | cut -d'|' -f2)" "${m%%|*}" "${r%%|*}" "${o%%|*}" "${o##*|}"
+}
+V_WANT='WITHHELD|UNMERGED|STAMPED|STAMPED|STAMPED|NOTE'
+V_RUN=1
+if ! grep -qF 'finish_classify_unmerged' "$APPLY"; then
+  case "$APPLY" in
+    */core/skills/ai-dlc-update/reconcile/apply.sh) printf '  --    (BL-413: this apply.sh records no CLASSIFY blobs; in the distribution arm v runs anyway and must go red)\n' ;;
+    *) V_RUN=0; printf '  SKIP  BL-413 arm v -- the installed apply.sh predates the CLASSIFY record; it lands with the pull that carries this fixture\n' ;;
+  esac
+fi
+if [ "$V_RUN" = 1 ]; then
+  V_GOT="$(v_score "$(dirname "$APPLY")")"
+  case "$V_GOT" in
+    BROKEN)   bad "FIXTURE BROKEN [BL-413 arm v]: a world could not be seeded, or its ordinary run moved the schema or drew no semantic-merge row" ;;
+    "$V_WANT") ok "BL-413 arm v: --finish withholds over an untouched handed-back merge (finish-classify-unmerged), stamps a hand-merged one, stamps it after a second ordinary run (first write wins), and stamps with a NOTE over a previous-engine marker" ;;
+    *)        bad "BL-413 arm v: $V_GOT (want $V_WANT; cells: Vu-stamp|Vu-row|Vm-stamp|Vr-stamp|Vo-stamp|Vo-note)" ;;
+  esac
+  [ "$V_GOT" = BROKEN ] || {
+    # v-M1 drops the withhold row (base behaviour); v-M2 lets a later run replace the record (first
+    # write lost); v-M3 compares against theirs' blob instead of the record (the refuted alternative).
+    if mut_copy "$WORK/v-M1" '    elif [ "$_now" = "$_h" ]; then' '    elif false; then'; then
+      g="$(v_score "$WORK/v-M1")"
+      [ "$g" = 'STAMPED|-|STAMPED|STAMPED|STAMPED|NOTE' ] && ok "BL-413 v-M1 killed (withhold row removed): Vu stamps over the unmerged schema ($g)" \
+        || bad "BL-413 v-M1 SURVIVED or misfired: $g (want STAMPED|-|STAMPED|STAMPED|STAMPED|NOTE)"
+    else
+      bad "BL-413 v-M1 DID NOT APPLY -- the hash-equal test is not in apply.sh exactly once, or the copy does not parse"
+    fi
+    if mut_copy "$WORK/v-M2" '        _keep="$(printf' '        : "$(printf'; then
+      g="$(v_score "$WORK/v-M2")"
+      [ "$g" = 'WITHHELD|UNMERGED|STAMPED|WITHHELD|STAMPED|NOTE' ] && ok "BL-413 v-M2 killed (first write lost): the re-run records the merged copy and Vr withholds forever ($g)" \
+        || bad "BL-413 v-M2 SURVIVED or misfired: $g (want WITHHELD|UNMERGED|STAMPED|WITHHELD|STAMPED|NOTE)"
+    else
+      bad "BL-413 v-M2 DID NOT APPLY -- the first-write-wins keep is not in apply.sh exactly once, or the copy does not parse"
+    fi
+    if mut_copy "$WORK/v-M3" '    elif [ "$_now" = "$_h" ]; then' '    elif [ "$_now" = "$(git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/${_c#.claude/}" 2>/dev/null)" ]; then'; then
+      g="$(v_score "$WORK/v-M3")"
+      [ "$g" = 'STAMPED|-|STAMPED|STAMPED|STAMPED|NOTE' ] && ok "BL-413 v-M3 killed (compared to theirs, not the record): an untouched CLASSIFY file never equals theirs, so Vu stamps ($g)" \
+        || bad "BL-413 v-M3 SURVIVED or misfired: $g (want STAMPED|-|STAMPED|STAMPED|STAMPED|NOTE)"
+    else
+      bad "BL-413 v-M3 DID NOT APPLY -- the hash-equal test is not in apply.sh exactly once, or the copy does not parse"
+    fi
+  }
+fi
+
 # --- arm u: A `--finish` WHOSE FINISH-CHECK INPUT CANNOT BE STAGED WITHHOLDS THE STAMP ---------------
 # finish_verify_tree read preclassify's rows from a heredoc. Under a file-size limit bash 3.2 cannot
 # write the heredoc's temp file and runs the loop on EMPTY stdin: no finish-unapplied row, and the
@@ -719,6 +799,185 @@ if [ "$U_RUN" = 1 ]; then
       fi
     fi
   fi
+fi
+
+# --- BL-414 arm w: A BUCKET-ROW HAND-DOWN THAT CANNOT BE WRITTEN LEAKS NO PARTIAL ROW -------------
+# apply.sh wrote preclassify's rows to the unregistered-drift and retired-tokens hand-down files with
+# a builtin `printf … > file`. Under a file-size limit the write fails, its unflushed tail stays in
+# the shell's stdout buffer, and the next manifest row carries it: one line such as
+# `ddd…/f064<TAB>UPSTREAM-ONLY`. arm u's 100-file world makes the rows (~22 KB) exceed 14 and 20 KB.
+# A line is MALFORMED when it is non-empty and its first field is none of the four row kinds.
+# Cell per limit: "<malformed lines>|<hand-down staging-refused rows>|<stamp>"
+w_cell() { # w_cell <world> <apply.sh> <limit|none>
+  local w="$1" b t o
+  b="$(cat "$w/.B")"; t="$(cat "$w/.T")"
+  printf 'version: 0.0.1\ncommit: %s\n' "$b" > "$w/cons/.claude/.ai-dlc-version"
+  rm -f "$w/cons/.claude/.ai-dlc-applying"
+  local i=0 ld; ld="$(printf '%075d' 0 | tr 0 d)"
+  while [ "$i" -lt 100 ]; do printf 'v1 %s\n' "$i" > "$w/cons/.claude/session-driver/$ld/f$(printf %03d "$i")"; i=$((i+1)); done
+  if [ "$3" = none ]; then
+    o="$(bash "$2" "$w/dist" "$b" "$w/cons" "$t" 2>/dev/null)"
+  else
+    o="$(trap '' XFSZ; ulimit -f "$3"; bash "$2" "$w/dist" "$b" "$w/cons" "$t" 2>/dev/null)"
+  fi
+  printf '%s|%s|%s' \
+    "$(awk -F'\t' 'NF && $1!="RESOLVED" && $1!="WORKLIST" && $1!="DECISION" && $1!="NOTE" {n++} END {print n+0}' <<<"$o")" \
+    "$(awk -F'\t' '$2=="staging-refused" && index($4, "bucket rows handed to") {n++} END {print n+0}' <<<"$o")" \
+    "$(sed -n 's/^version: //p' "$w/cons/.claude/.ai-dlc-version")"
+}
+W_RUN=1
+if ! grep -qF 'ap_stage ud-bucket-rows' "$APPLY"; then
+  case "$APPLY" in
+    */core/skills/ai-dlc-update/reconcile/apply.sh) printf '  --    (BL-414: this apply.sh does not stage the bucket-row hand-downs; in the distribution arm w runs anyway and must go red)\n' ;;
+    *) W_RUN=0; printf '  SKIP  BL-414 arm w -- the installed apply.sh predates the staged hand-downs; it lands with the pull that carries this fixture\n' ;;
+  esac
+fi
+if [ "$W_RUN" = 1 ]; then
+  WW="$(u_world)"
+  if [ -z "$WW" ] || [ ! -d "$WW/cons" ]; then
+    bad "FIXTURE BROKEN [BL-414 arm w]: the many-files world could not be seeded"
+  else
+    W_CTL="$(w_cell "$WW" "$APPLY" none)"
+    if [ "$W_CTL" != '0|0|9.9.9' ]; then
+      bad "BL-414 arm w control: with no limit the ordinary apply read $W_CTL (want 0|0|9.9.9) -- the world does not apply cleanly, so the limited runs prove nothing"
+    else
+      ok "BL-414 arm w control: with no limit the ordinary apply prints no malformed line, refuses nothing and stamps 9.9.9"
+      for W_L in 14 20; do
+        w="$(w_cell "$WW" "$APPLY" "$W_L")"
+        case "$w" in
+          0\|2\|0.0.1) ok "BL-414 arm w (ulimit -f $W_L): no partial row leaks; both hand-downs refuse by name and the stamp is withheld ($w)" ;;
+          *) bad "BL-414 arm w (ulimit -f $W_L): $w (want 0|2|0.0.1) -- a hand-down that could not be written leaked a row into the manifest, or refused silently" ;;
+        esac
+      done
+      # One mutant per site: each restores that site's builtin redirect, the shape base shipped. Each
+      # must print a malformed line at BOTH limits -- the cells above are only evidence if base fails them.
+      for W_M in ud rt; do
+        if mut_copy "$WORK/w-M-$W_M" "${W_M}_pc_rc=0; ap_stage ${W_M}-bucket-rows \"\$PC\" || ${W_M}_pc_rc=\$?" \
+                                     "${W_M}_pc_rc=0; printf '%s\\n' \"\$PC\" > \"\$AP_TMP/${W_M}-bucket-rows\" || ${W_M}_pc_rc=\$?"; then
+          wm14="$(w_cell "$WW" "$WORK/w-M-$W_M/apply.sh" 14)"; wm20="$(w_cell "$WW" "$WORK/w-M-$W_M/apply.sh" 20)"
+          case "$wm14/$wm20" in
+            [1-9]*\|*\|0.0.1/[1-9]*\|*\|0.0.1) ok "BL-414 w-M-$W_M killed (builtin redirect restored at the $W_M hand-down): a partial row leaks at 14 and 20 ($wm14, $wm20)" ;;
+            *) bad "BL-414 w-M-$W_M SURVIVED or misfired: 14=$wm14 20=$wm20 (want a non-zero malformed count at both, stamp 0.0.1)" ;;
+          esac
+        else
+          bad "BL-414 w-M-$W_M DID NOT APPLY -- the $W_M hand-down stage is not in apply.sh exactly once, or the copy does not parse"
+        fi
+      done
+    fi
+  fi
+fi
+
+# --- BL-364 arm x: A NON-ASCII core/ PATH REACHES apply.sh's LISTING READERS RAW ---------------------
+# Under the default core.quotePath git lists `core/scripts/café.sh` as `"core/scripts/caf\303\251.sh"`,
+# and a reader that strips `core/`, maps the name or matches it against a consumer path loses the row
+# at rc 0. Each world holds `plain.sh` beside `café.sh`, so the ASCII row is the same-run control.
+#   XA  both 100755 upstream, unchanged in the range, consumer copies 0644 at scripts/ai-dlc/
+#       -> exec_audit `not-executable` (the `ls-tree -r` mode listing) and the declared-set
+#          `declared-not-executable` (manifest_dests' glob expansion, then a per-file mode lookup)
+#   XB  both at the PRE-0.126.0 path scripts/<x> only -> `relocate` places each at scripts/ai-dlc/
+#       (manifest_dests' glob expansion)
+#   XC  both changed in the range; one artifact per file records a `derived` command naming it
+#       -> artifact-derivations counts 2 (vd_join's moved-path needles); and, as GUARDS that quoting
+#       cannot move (base passes them too): the written copies are executable (sync_mode_from_theirs's
+#       mode lookup), and a tracked transient directory `café-state/` is counted (the ls-files count)
+# Cell: "<XA café N>|<XA café D>|<XA plain N+D>|<XB café>|<XB plain>|<XC hits>|<XC café +x>|<XC tracked>"
+x_world() { # x_world <A|B|C> -> path of a fresh world, refs in .B/.T
+  local _w _d _c _cf _f
+  _w="$(mktemp -d "$WORK/x.XXXXXX")" || return 1
+  _d="$_w/dist"; _c="$_w/cons"; _cf="$(printf 'caf\303\251')"
+  mkdir -p "$_d/core/scripts" "$_d/core/session-driver" "$_c/scripts/ai-dlc" "$_c/.claude/session-driver" || return 1
+  for _f in validate-synthetic plain "$_cf"; do
+    printf '#!/usr/bin/env bash\necho %s v1\n' "$_f" > "$_d/core/scripts/$_f.sh" && chmod 755 "$_d/core/scripts/$_f.sh" || return 1
+  done
+  printf '#!/usr/bin/env bash\n# driver v1\n' > "$_d/core/session-driver/d.sh"
+  printf '9.9.9\n' > "$_d/VERSION"
+  git -C "$_d" init -q && git -C "$_d" -c user.email=f@f -c user.name=fixture add -A \
+    && git -C "$_d" -c user.email=f@f -c user.name=fixture commit -qm base || return 1
+  git -C "$_d" rev-parse HEAD > "$_w/.B"
+  printf '#!/usr/bin/env bash\n# driver v2\n' > "$_d/core/session-driver/d.sh"
+  if [ "$1" = C ]; then
+    for _f in plain "$_cf"; do printf '#!/usr/bin/env bash\necho %s v2\n' "$_f" > "$_d/core/scripts/$_f.sh"; done
+  fi
+  git -C "$_d" -c user.email=f@f -c user.name=fixture add -A \
+    && git -C "$_d" -c user.email=f@f -c user.name=fixture commit -qm theirs || return 1
+  git -C "$_d" rev-parse HEAD > "$_w/.T"
+  printf '#!/usr/bin/env bash\n# driver v1\n' > "$_c/.claude/session-driver/d.sh"
+  git -C "$_d" show "$(cat "$_w/.B"):core/scripts/validate-synthetic.sh" > "$_c/scripts/ai-dlc/validate-synthetic.sh" || return 1
+  chmod 755 "$_c/scripts/ai-dlc/validate-synthetic.sh"
+  for _f in plain "$_cf"; do
+    case "$1" in
+      A|C) git -C "$_d" show "$(cat "$_w/.B"):core/scripts/$_f.sh" > "$_c/scripts/ai-dlc/$_f.sh" && chmod 644 "$_c/scripts/ai-dlc/$_f.sh" || return 1 ;;
+      B)   git -C "$_d" show "$(cat "$_w/.B"):core/scripts/$_f.sh" > "$_c/scripts/$_f.sh" || return 1 ;;
+    esac
+  done
+  if [ "$1" = C ]; then
+    mkdir -p "$_c/_bmad-output" "$_c/.claude/schemas" "$_c/$_cf-state" || return 1
+    for _f in plain "$_cf"; do
+      printf '# %s\n\n```derived\n$ bash scripts/ai-dlc/%s.sh\n```\n' "$_f" "$_f" > "$_c/_bmad-output/$_f.md" || return 1
+    done
+    printf '{"paths":[{"transient":true,"ignore":"%s-state/"}]}\n' "$_cf" > "$_c/.claude/schemas/pipeline-state-paths.json"
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$_c/scripts/ai-dlc/sync-transient-ignore.sh"
+    printf 'x\n' > "$_c/$_cf-state/x"
+    git -C "$_c" init -q && git -C "$_c" -c user.email=f@f -c user.name=fixture add -A \
+      && git -C "$_c" -c user.email=f@f -c user.name=fixture commit -qm consumer || return 1
+  fi
+  printf 'version: 0.0.1\ncommit: %s\n' "$(cat "$_w/.B")" > "$_c/.claude/.ai-dlc-version"
+  printf '%s' "$_w"
+}
+x_score() { # x_score <reconcile-dir> -> the cell above, or BROKEN
+  local rec="$1" w o cf c1 c2 c3 c4 c5 c6 c7 c8
+  cf="$(printf 'caf\303\251')"
+  w="$(x_world A)" && [ -d "$w/cons" ] || { printf 'BROKEN'; return; }
+  o="$(bash "$rec/apply.sh" "$w/dist" "$(cat "$w/.B")" "$w/cons" "$(cat "$w/.T")" 2>/dev/null)"
+  c1="$(awk -F'\t' -v p="scripts/ai-dlc/$cf.sh" '$1=="DECISION" && $2=="not-executable" && $3==p {f=1} END {print (f ? "N" : "-")}' <<<"$o")"
+  c2="$(awk -F'\t' -v p="scripts/ai-dlc/$cf.sh" '$1=="DECISION" && $2=="declared-not-executable" && $3==p {f=1} END {print (f ? "D" : "-")}' <<<"$o")"
+  c3="$(awk -F'\t' '$1=="DECISION" && ($2=="not-executable" || $2=="declared-not-executable") && $3=="scripts/ai-dlc/plain.sh" {n++} END {print n+0}' <<<"$o")"
+  w="$(x_world B)" && [ -d "$w/cons" ] || { printf 'BROKEN'; return; }
+  o="$(bash "$rec/apply.sh" "$w/dist" "$(cat "$w/.B")" "$w/cons" "$(cat "$w/.T")" 2>/dev/null)"
+  c4="$(awk -F'\t' -v p="scripts/ai-dlc/$cf.sh" '$1=="RESOLVED" && $2=="relocate" && $3==p {f=1} END {print (f ? "PLACED" : "-")}' <<<"$o")"
+  c5="$(awk -F'\t' '$1=="RESOLVED" && $2=="relocate" && $3=="scripts/ai-dlc/plain.sh" {f=1} END {print (f ? "PLACED" : "-")}' <<<"$o")"
+  w="$(x_world C)" && [ -d "$w/cons" ] || { printf 'BROKEN'; return; }
+  o="$(bash "$rec/apply.sh" "$w/dist" "$(cat "$w/.B")" "$w/cons" "$(cat "$w/.T")" 2>/dev/null)"
+  c6="$(awk -F'\t' '$2=="artifact-derivations" || $2=="artifact-derivations-unchecked" {split($4, a, " "); print a[1]; f=1; exit} END {if (!f) print "-"}' <<<"$o")"
+  c7="$([ -x "$w/cons/scripts/ai-dlc/$cf.sh" ] && grep -q "$cf v2" "$w/cons/scripts/ai-dlc/$cf.sh" && echo X || echo -)"
+  c8="$(awk -F'\t' -v p="$cf-state/(1)" '$1=="WORKLIST" && $2=="transient-ignore-tracked" && index($4, p) {f=1} END {print (f ? "T" : "-")}' <<<"$o")"
+  printf '%s|%s|%s|%s|%s|%s|%s|%s' "$c1" "$c2" "$c3" "$c4" "$c5" "$c6" "$c7" "$c8"
+}
+X_WANT='N|D|2|PLACED|PLACED|2|X|T'
+X_RUN=1
+if ! grep -qF -- '-c core.quotePath=false ls-tree -r "$THEIRS" -- core/' "$APPLY"; then
+  case "$APPLY" in
+    */core/skills/ai-dlc-update/reconcile/apply.sh) printf '  --    (BL-364: this apply.sh lists paths under the default core.quotePath; in the distribution arm x runs anyway and must go red)\n' ;;
+    *) X_RUN=0; printf '  SKIP  BL-364 arm x -- the installed apply.sh predates the quotePath listings; it lands with the pull that carries this fixture\n' ;;
+  esac
+fi
+if [ "$X_RUN" = 1 ] && ! command -v jq >/dev/null 2>&1; then
+  X_RUN=0; printf '  SKIP  BL-364 arm x -- jq is absent, so the transient-ignore guard cell cannot run (this is not a pass)\n'
+fi
+if [ "$X_RUN" = 1 ]; then
+  X_GOT="$(x_score "$(dirname "$APPLY")")"
+  case "$X_GOT" in
+    BROKEN)   bad "FIXTURE BROKEN [BL-364 arm x]: a world could not be seeded" ;;
+    "$X_WANT") ok "BL-364 arm x: café.sh is audited for its exec bit, declared, relocated and matched as a derivation needle under its raw name beside plain.sh; the mode lookups and the tracked count hold for it too" ;;
+    *)        bad "BL-364 arm x: $X_GOT (want $X_WANT; cells: XA-café-N|XA-café-D|XA-plain-N+D|XB-café|XB-plain|XC-hits|XC-café+x|XC-tracked)" ;;
+  esac
+  # One mutant per reader quoting can move, each restoring the default at that site alone. The guard
+  # cells (XC-café+x, XC-tracked) carry no mutant: their readers take the mode column or a line count,
+  # which a C-quoted name does not change, so a mutant there survives by construction.
+  [ "$X_GOT" = BROKEN ] || {
+    x_mut() { # <label> <anchor> <want>
+      if mut_copy "$WORK/x-$1" "$2" "${2/ -c core.quotePath=false/}"; then
+        g="$(x_score "$WORK/x-$1")"
+        [ "$g" = "$3" ] && ok "BL-364 x-$1 killed (default quotePath at that site): $g" \
+          || bad "BL-364 x-$1 SURVIVED or misfired: $g (want $3)"
+      else
+        bad "BL-364 x-$1 DID NOT APPLY -- its listing line is not in apply.sh exactly once, or the copy does not parse"
+      fi
+    }
+    x_mut exec-audit '_ne="$(git -C "$DIST" -c core.quotePath=false ls-tree -r "$THEIRS" -- core/' '-|D|2|PLACED|PLACED|2|X|T'
+    x_mut manifest   'git -C "$DIST" -c core.quotePath=false ls-tree --name-only "$THEIRS" -- core/scripts/' 'N|-|2|-|PLACED|2|X|T'
+    x_mut vd-moved   'VD_MOVED="$(git -C "$1" -c core.quotePath=false diff --name-only' 'N|D|2|PLACED|PLACED|1|X|T'
+  }
 fi
 
 # --- BL-360 arm s: A RELABEL TOOL THAT REFUSED IS A ROW, NOT "NOTHING TO RELABEL" -----------------

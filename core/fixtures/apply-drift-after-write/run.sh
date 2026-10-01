@@ -554,7 +554,7 @@ fi
 # the earlier shape had; a mutation that matched nothing is caught by the `mut_ud_line` check
 # below, which is why that check reads the MUTANT rather than the original.
 awk '
-  /^UD_PC="\$\(mktemp/                             { cap=1 }
+  /^UD_PC=""$/                                     { cap=1 }
   cap==1                                           { blk = blk $0 "\n"
                                                      if ($0 ~ /^\[ -n "\$UD_PC" \] && rm -f "\$UD_PC"$/) cap=2
                                                      next }
@@ -566,7 +566,7 @@ awk '
 # would score a false PASS for a reason unrelated to ordering.
 cp "$NOGUARD" "$MUTDIR/unregistered-drift.sh"
 
-mut_ud_line="$(grep -n '^UD_PC="\$(mktemp' "$MUTDIR/apply.sh" | cut -d: -f1)"
+mut_ud_line="$(grep -n '^UD_PC=""$' "$MUTDIR/apply.sh" | cut -d: -f1)"
 mut_loop_line="$(grep -n '^# -* 1\. buckets' "$MUTDIR/apply.sh" | cut -d: -f1)"
 W2="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: second seed failed" >&2; exit 2; }
 eval "$(sed 's/^/M_/' "$W2/env.sh")"
@@ -705,7 +705,10 @@ m6restore
 # being read as "no buckets, nothing carried".
 M5DIR="$WORK/mut-emptyrows"
 mkdir -p "$M5DIR"; cp "$RECONCILE"/*.sh "$RECONCILE"/*.md "$M5DIR/" 2>/dev/null
-awk '/^  printf .%s\\n. "\$PC" > "\$UD_PC"$/ { print "  : > \"$UD_PC\""; next } {print}' \
+# Anchored on the hand-down's STAGE line: the mutant keeps the flag and the file, and writes the file
+# empty -- "flag passed, nothing in it", the state the scan must not read as "no buckets".
+M5_A='ud_pc_rc=0; ap_stage ud-bucket-rows "$PC" || ud_pc_rc=$?' M5_R='ud_pc_rc=0; : > "$AP_TMP/ud-bucket-rows"' \
+  awk '{ i = index($0, ENVIRON["M5_A"]); if (i) $0 = substr($0, 1, i-1) ENVIRON["M5_R"] substr($0, i + length(ENVIRON["M5_A"])); print }' \
   "$APPLY" > "$M5DIR/apply.sh" 2>/dev/null
 if cmp -s "$APPLY" "$M5DIR/apply.sh"; then
   bad "MUTANT m5 DID NOT APPLY — apply.sh's rows-file write was renamed, so the pass-through is untested"
