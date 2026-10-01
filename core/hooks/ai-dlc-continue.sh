@@ -778,19 +778,28 @@ EOF
     # remote conjunct: step 3 forgives a push that cannot land, and handoff.md says in as many
     # words that the fallback is false whenever step 2 was also skipped.
     #
-    # THE PIPELINE ROOT IS EXCLUDED, WHOLE, AND THAT IS THE FALSE-POSITIVE STORY. Every path a
-    # shipped hook writes resolves under it, step 3 commits it only "if the project tracks"
-    # it, and on the reference consumer mid-sprint 33 of 34 porcelain entries sat under it
-    # against 1 outside. It is also self-dirtying: this hook appends a row to the tracked
-    # continuation log on every block, so with the root in scope the first block would dirty
-    # the tree and every later Stop would block on the hook's own write. Untracked files
-    # outside it count -- step 2 names work teammates left in the working tree. The exclusion
-    # is relative to the project dir, where the root lives, and `:/` keeps the rest of the
-    # repository in scope; an unreadable status is not a finding.
+    # THREE EXCLUSIONS, AND THEY ARE THE WHOLE FALSE-POSITIVE STORY. The false-positive set was
+    # measured on a consumer whose .gitignore already covers .claude/, so that measurement could
+    # not see Claude Code's own per-user files; the distribution installs no such rule.
+    #  - The pipeline root, WHOLE. Every path a shipped hook writes resolves under it, step 3
+    #    commits it only "if the project tracks" it, and it is self-dirtying: this hook appends a
+    #    row to the tracked continuation log on every block, so with the root in scope the first
+    #    block would dirty the tree and every later Stop would block on the hook's own write.
+    #  - `.claude/settings.local.json`, which Claude Code writes per user and which is never work.
+    #  - `.claude/worktrees`, where agent worktrees live; each is its own checkout, not this
+    #    tree's uncommitted work. A sibling such as `.claude/worktrees-not/` is NOT excluded.
+    # Everything else under .claude/ -- a dirty tracked settings.json included -- still blocks.
+    # Untracked files outside the exclusions count: step 2 names work teammates left in the
+    # working tree. The exclusions are relative to the project dir, where all three live, so a
+    # project dir below the repo top excludes its own `<sub>/_bmad-output` and `<sub>/.claude/...`;
+    # `:/` keeps the rest of the repository in scope. An unreadable status is not a finding.
     COMMIT_OK=1
     COMMIT_DIRTY=""
     if command -v git >/dev/null 2>&1 && git -C "$PROJECT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
-      COMMIT_DIRTY="$(git -C "$PROJECT_DIR" status --porcelain -- ':/' ":(exclude)${LOG_DIR##*/}" 2>/dev/null)" || COMMIT_DIRTY=""
+      COMMIT_DIRTY="$(git -C "$PROJECT_DIR" status --porcelain -- ':/' ":(exclude)${LOG_DIR##*/}" \
+          ':(exclude).claude/settings.local.json' \
+          ':(exclude).claude/worktrees' \
+          2>/dev/null)" || COMMIT_DIRTY=""
       [ -n "$COMMIT_DIRTY" ] && COMMIT_OK=0
     fi
 
