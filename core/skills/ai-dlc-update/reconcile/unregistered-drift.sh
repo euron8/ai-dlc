@@ -604,7 +604,7 @@ else
     fi
   fi
   if [ "$ud_memo_rc" != 0 ]; then
-    git -C "$DIST" ls-tree -r --name-only "$BASE" -- \
+    git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "$BASE" -- \
       core/skills/ai-dlc core/skills/ai-dlc-setup core/team-roles core/hooks core/schemas > "$UD_DIFF_TMP/scan-sub" 2>/dev/null
     ud_rc=$?
     [ "$ud_rc" -eq 0 ] || ud_scan_why="the tree listing of ${BASE} failed (memo_ls_tree exited ${ud_memo_rc}, git ls-tree exited ${ud_rc})"

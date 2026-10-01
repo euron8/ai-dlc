@@ -166,7 +166,7 @@ code_toks() {
 files_at() {
   local ref="$1" glob tree; shift
   if command -v memo_ls_tree >/dev/null 2>&1; then tree="$(memo_ls_tree "$DIST" "$ref")" || return 0
-  else tree="$(git -C "$DIST" ls-tree -r --name-only "$ref" 2>/dev/null)" || return 0; fi
+  else tree="$(git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "$ref" 2>/dev/null)" || return 0; fi
   set -f
   for glob in "$@"; do
     printf '%s\n' "$tree" \

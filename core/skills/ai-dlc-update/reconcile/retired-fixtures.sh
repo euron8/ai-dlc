@@ -83,7 +83,7 @@ fi
 # GROUPED so `||`'s short-circuit selects only the SOURCE of the tree listing, not the whole
 # downstream pipe: `A || B | C` would otherwise skip `| C` entirely whenever `A` succeeds.
 { { command -v memo_ls_tree >/dev/null 2>&1 && memo_ls_tree "$DIST" "$THEIRS" | grep '^core/fixtures/'; } \
-  || git -C "$DIST" ls-tree -r --name-only "$THEIRS" -- core/fixtures 2>/dev/null; } \
+  || git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "$THEIRS" -- core/fixtures 2>/dev/null; } \
   | grep '/\.dist-only$' \
   | while IFS= read -r marker; do
       n="${marker#core/fixtures/}"; n="${n%/.dist-only}"
