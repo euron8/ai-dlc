@@ -224,6 +224,18 @@ ro_section() {
 # fail; a loop reads a file staged by `shadow_ids`, whose status is read and returns 3.
 NL='
 '
+# ro_lines <text> -- split <text> on newlines into RO_L, in the main shell, with no file and no fork.
+# The `--merge` span plan and the dossier's drift panel iterate RO_L. They read `done <<EOF`
+# heredocs, which bash 3.2 stages to a temp file: when that write failed the loop ran ZERO times.
+# Globbing is off for the split, so an anchor carrying `*` is an anchor, not a pattern. Empty lines
+# are dropped, which both loops already skipped. Read it as `${RO_L[@]+"${RO_L[@]}"}`, the bash 3.2
+# spelling that does not trip `set -u` on an empty list.
+ro_lines() {
+  local _ifs="$IFS"
+  set -f; IFS="$NL"
+  RO_L=($1)
+  IFS="$_ifs"; set +f
+}
 ro_has_line() { # ro_has_line <haystack> <needle> -> 0 when <needle> is a WHOLE line of <haystack>
   case "$NL$1$NL" in *"$NL$2$NL"*) return 0 ;; esac
   return 1
@@ -549,25 +561,36 @@ case "$MODE" in
 
     ids="$(printf '%s\n' "$SHADOWS" | tr ',' '\n' | sed -n 's/.*#//p' | sed 's/^ *//; s/ *$//' | grep -v '^$')"
 
-    fmf="$(mktemp)"; body="$(mktemp)"
+    # EVERY WRITE BELOW HAS ITS STATUS READ, AND THE OVERRIDE IS REPLACED BY A RENAME. This block
+    # used to read no write status and end in `{ cat fmf; cat out; } > "$OVR"`, which truncates the
+    # override before writing it: under a write limit or a full disk the override was left cut short,
+    # or the merge was assembled from a body file that had silently lost its tail and the operator's
+    # sections were gone from the result, and the run still printed its merged/unchanged count. Every
+    # temp file lives in RO_T, which the EXIT trap removes; the result is staged beside the override
+    # so the final `mv` is a rename and the override is never half-written.
+    ro_merge_refuse() { # ro_merge_refuse <what failed>
+      echo "readopt-override: --merge could not $1, so nothing was written; $(basename "$OVR") is unchanged. Re-run once the fault is gone." >&2
+      [ -n "${staged:-}" ] && rm -f "$staged"
+      exit 2
+    }
+    fmf="$RO_T/merge-fm"; body="$RO_T/merge-body"; plan="$RO_T/merge-plan"; out="$RO_T/merge-out"; staged=""
     awk 'NR==1 && /^---$/ {infm=1; print; next}
          infm && /^---$/ {print; infm=0; done=1; next}
-         infm {print}' "$OVR" > "$fmf"
+         infm {print}' "$OVR" > "$fmf" || ro_merge_refuse "stage the override's frontmatter"
     awk 'BEGIN{fm=0; started=0}
          NR==1 && /^---$/ {fm=1; next}
          fm && /^---$/ {fm=0; started=1; next}
          fm {next}
-         started {print}' "$OVR" > "$body"
+         started {print}' "$OVR" > "$body" || ro_merge_refuse "stage the override's body"
 
     # Locate each anchor's span IN THE BODY, then walk the body in line order.
-    plan="$(mktemp)"; : > "$plan"
-    while IFS= read -r id; do
+    : > "$plan" || ro_merge_refuse "create the span plan"
+    ro_lines "$ids"
+    for id in ${RO_L[@]+"${RO_L[@]}"}; do
       [ -n "$id" ] || continue
-      sp="$(span_of "$id" < "$body")"
-      [ -n "$sp" ] && printf '%s %s\n' "$sp" "$id" >> "$plan"
-    done <<EOF
-$ids
-EOF
+      sp="$(span_of "$id" < "$body")" || ro_merge_refuse "locate #${id} in the body"
+      if [ -n "$sp" ]; then printf '%s %s\n' "$sp" "$id" >> "$plan" || ro_merge_refuse "record #${id} in the span plan"; fi
+    done
 
     # A body that restates no shadowed heading is the single-anchor shape: the whole body
     # IS the section. Treat it as one span so that case merges exactly as it always has.
@@ -575,35 +598,35 @@ EOF
       if [ "$(printf '%s\n' "$ids" | grep -c .)" -ne 1 ]; then
         echo "REFUSED  $(basename "$OVR"): shadows $(printf '%s\n' "$ids" | grep -c .) anchors and the body restates none of their headings, so no span can be located." >&2
         echo "  anchors: $(printf '%s' "$ids" | tr '\n' ' ')" >&2
-        rm -f "$fmf" "$body" "$plan"
         exit 2
       fi
-      printf '1 %s %s\n' "$(grep -c '' "$body")" "$ids" >> "$plan"
+      printf '1 %s %s\n' "$(grep -c '' "$body")" "$ids" >> "$plan" || ro_merge_refuse "record the whole-body span"
       WHOLE_BODY=1
     else
       WHOLE_BODY=0
     fi
-    sort -n -k1,1 "$plan" -o "$plan"
+    sort -n -k1,1 "$plan" -o "$plan" || ro_merge_refuse "order the span plan"
 
-    out="$(mktemp)"; : > "$out"
+    : > "$out" || ro_merge_refuse "create the merged body"
     prev=0; n_merged=0; n_conflict=0; n_unchanged=0
+    ours="$RO_T/merge-ours"; base="$RO_T/merge-base"; theirs="$RO_T/merge-theirs"; merged="$RO_T/merge-merged"
     while read -r s e id; do
       [ -n "$id" ] || continue
       # Everything between the previous span and this one is consumer prose no anchor
       # covers -- a preamble, a section core never had. It is copied byte-for-byte.
-      [ "$s" -gt $((prev + 1)) ] && sed -n "$((prev + 1)),$((s - 1))p" "$body" >> "$out"
+      if [ "$s" -gt $((prev + 1)) ]; then
+        sed -n "$((prev + 1)),$((s - 1))p" "$body" >> "$out" || ro_merge_refuse "copy the body before #${id}"
+      fi
       prev="$e"
 
-      ours="$(mktemp)"; base="$(mktemp)"; theirs="$(mktemp)"
-      sed -n "${s},${e}p" "$body" > "$ours"
-      git -C "$DIST" show "${BASE_SHA}:${CORE}" | section_of "$id" > "$base"
-      git -C "$DIST" show "${THEIRS}:${CORE}"   | section_of "$id" > "$theirs"
+      sed -n "${s},${e}p" "$body" > "$ours" || ro_merge_refuse "stage the body's #${id}"
+      git -C "$DIST" show "${BASE_SHA}:${CORE}" | section_of "$id" > "$base" || ro_merge_refuse "stage core's #${id} at ${BASE_SHA}"
+      git -C "$DIST" show "${THEIRS}:${CORE}"   | section_of "$id" > "$theirs" || ro_merge_refuse "stage core's #${id} at ${THEIRS}"
 
       if cmp -s "$base" "$theirs"; then
-        cat "$ours" >> "$out"
+        cat "$ours" >> "$out" || ro_merge_refuse "copy the body's unchanged #${id}"
         n_unchanged=$((n_unchanged + 1))
         echo "  UNCHANGED  #${id} — core is byte-identical base..theirs; body left untouched."
-        rm -f "$ours" "$base" "$theirs"
         continue
       fi
 
@@ -617,36 +640,50 @@ EOF
       lead="$(awk '{ if (NF) exit; c++ } END { print c+0 }' "$ours")"
       tail_n="$(awk '{a[NR]=$0} END {n=NR; c=0; while (n>0 && a[n]=="") {c++; n--}; print c+0}' "$ours")"
       for f in "$ours" "$base" "$theirs"; do
-        awk 'NF {p=1} p' "$f" | awk '{a[NR]=$0} END {n=NR; while (n>0 && a[n]=="") n--; for(i=1;i<=n;i++) print a[i]}' > "$f.n"
-        mv "$f.n" "$f"
+        awk 'NF {p=1} p' "$f" | awk '{a[NR]=$0} END {n=NR; while (n>0 && a[n]=="") n--; for(i=1;i<=n;i++) print a[i]}' > "$f.n" \
+          || ro_merge_refuse "align the three sides of #${id}"
+        mv "$f.n" "$f" || ro_merge_refuse "align the three sides of #${id}"
       done
 
-      merged="$(mktemp)"; cp "$ours" "$merged"
-      if git merge-file -L "override (yours)" -L "core@${BASE_SHA}" -L "core@${THEIRS_SHA}" \
-           "$merged" "$base" "$theirs"; then
+      cp "$ours" "$merged" || ro_merge_refuse "stage the merge of #${id}"
+      # git merge-file exits with the conflict count (capped at 127) and a negative value -- 255 --
+      # when it could not run or write, which used to be counted as a conflict.
+      _mrc=0
+      git merge-file -L "override (yours)" -L "core@${BASE_SHA}" -L "core@${THEIRS_SHA}" \
+           "$merged" "$base" "$theirs" || _mrc=$?
+      if [ "$_mrc" -eq 0 ]; then
         n_merged=$((n_merged + 1))
         echo "  MERGED     #${id} — upstream's change applied, the consumer delta preserved."
-      else
+      elif [ "$_mrc" -le 127 ]; then
         n_conflict=$((n_conflict + 1))
         echo "  CONFLICT   #${id} — upstream and the consumer changed the same lines." >&2
+      else
+        ro_merge_refuse "merge #${id} (git merge-file exited ${_mrc})"
       fi
-      i=0; while [ "$i" -lt "$lead" ]; do echo >> "$out"; i=$((i + 1)); done
-      cat "$merged" >> "$out"
-      i=0; while [ "$i" -lt "$tail_n" ]; do echo >> "$out"; i=$((i + 1)); done
-      rm -f "$ours" "$base" "$theirs" "$merged"
+      { i=0; while [ "$i" -lt "$lead" ]; do echo; i=$((i + 1)); done
+        cat "$merged"
+        i=0; while [ "$i" -lt "$tail_n" ]; do echo; i=$((i + 1)); done
+      } >> "$out" || ro_merge_refuse "append the merged #${id}"
     done < "$plan"
 
     # Trailing body after the last span.
     total="$(grep -c '' "$body")"
-    [ "$total" -gt "$prev" ] && sed -n "$((prev + 1)),\$p" "$body" >> "$out"
+    if [ "$total" -gt "$prev" ]; then
+      sed -n "$((prev + 1)),\$p" "$body" >> "$out" || ro_merge_refuse "copy the body after the last span"
+    fi
 
     # No separator line is invented here. Overrides do not agree on whether a blank follows
     # the `---` fence -- the reference consumer's has none -- and emitting one unconditionally
     # is a whitespace edit to a file whose whole promise is that sections core did not touch
     # come out byte-for-byte. The body extractor already starts at the byte after the fence,
     # so concatenating reproduces whatever the file had.
-    { cat "$fmf"; cat "$out"; } > "$OVR"
-    rm -f "$fmf" "$body" "$plan" "$out"
+    staged="$(mktemp "${OVR}.merge.XXXXXX")" || ro_merge_refuse "create a staging file beside the override"
+    # `cp -p` first so the override keeps its own mode (`mktemp` creates 0600); the write then
+    # truncates the copy, never the override.
+    cp -p "$OVR" "$staged" || ro_merge_refuse "stage a copy of the override"
+    cat "$fmf" "$out" > "$staged" || ro_merge_refuse "write the merged override"
+    mv -f "$staged" "$OVR" || ro_merge_refuse "move the merged override into place"
+    staged=""
 
     echo "$(basename "$OVR"): ${n_merged} merged, ${n_unchanged} unchanged, ${n_conflict} conflicted."
     if [ "$n_conflict" -gt 0 ]; then
@@ -761,19 +798,24 @@ esac
 # to compare a count against the bound, which is two reads of one file that can disagree; the END
 # rule already holds `NR`, so one pass answers both. ASCII ONLY in that string: the suite runs awk
 # under `LC_ALL=C`, where a multibyte character in the program text has aborted a scan mid-file.
-cat <<EOF
-================================================================================
-RE-ADOPTION DOSSIER — $(basename "$OVR")
-================================================================================
-shadows   : ${SHADOWS}
-base_sha  : ${BASE_SHA}  ->  theirs: ${THEIRS_SHA}
-core file : ${CORE}
-
---- WHY THIS OVERRIDE EXISTS (its own stated reason) --------------------------
-$(fm_block "$OVR" reason | fold -s -w 78 | sed 's/^/  /' | awk 'NR<=20{print} END{if (NR>20) printf "  [... %d further line(s) NOT SHOWN. Read the override file named above for the whole reason.]\n", NR-20}')
-
---- WHAT UPSTREAM CHANGED IN THE SHADOWED SECTION (${BASE_SHA}..${THEIRS_SHA}) ---
-EOF
+#
+# THE DOSSIER'S FIXED TEXT IS `printf '%s\n'` OF ITS LINES, NEVER A HEREDOC. bash 3.2 stages every
+# heredoc to a temp file, and when that write failed -- `ulimit -f`, a full TMPDIR -- `cat` never ran:
+# the header, the panel titles and THE ONE QUESTION's three commands vanished from the dossier at
+# rc 0, and the panels below them read as belonging to the panel above. Each argument is one line of
+# the heredoc it replaces, so the healthy output is byte-identical.
+printf '%s\n' \
+  '================================================================================' \
+  "RE-ADOPTION DOSSIER — $(basename "$OVR")" \
+  '================================================================================' \
+  "shadows   : ${SHADOWS}" \
+  "base_sha  : ${BASE_SHA}  ->  theirs: ${THEIRS_SHA}" \
+  "core file : ${CORE}" \
+  '' \
+  '--- WHY THIS OVERRIDE EXISTS (its own stated reason) --------------------------' \
+  "$(fm_block "$OVR" reason | fold -s -w 78 | sed 's/^/  /' | awk 'NR<=20{print} END{if (NR>20) printf "  [... %d further line(s) NOT SHOWN. Read the override file named above for the whole reason.]\n", NR-20}')" \
+  '' \
+  "--- WHAT UPSTREAM CHANGED IN THE SHADOWED SECTION (${BASE_SHA}..${THEIRS_SHA}) ---"
 
 # THIS PANEL HAS NOW FAILED IN BOTH DIRECTIONS, AND THE REMEDY IS ONE PARTITION RATHER
 # THAN TWO GUARDS.
@@ -805,35 +847,38 @@ EOF
 #
 # NOT A PIPELINE, deliberately. A `while` on the last stage of a pipeline runs in a
 # SUBSHELL and the counters below would die with it, leaving the panel reporting zero
-# anchors on every entry. The anchor list is resolved into a variable first and fed in by
-# here-string, which also appends the newline direction 1 was about.
+# anchors on every entry. The anchor list is resolved into a variable first and split into
+# RO_L in the main shell -- no heredoc, which bash 3.2 stages to a temp file and which, when
+# that write failed, ran the loop ZERO times and printed the "NO ANCHOR could be read" line
+# over an entry whose anchors were all readable. Each side is staged by `ro_section`, whose
+# status is read: 128 (the path absent at the ref) is an empty side as it always read, and
+# anything else refuses, where an unchecked `section_of > file` that failed read as an
+# UNRESOLVED anchor.
 _ids="$(printf '%s\n' "$SHADOWS" | tr ',' '\n' | sed -n 's/.*#//p' \
         | sed 's/^ *//; s/ *$//' | grep -v '^$')"
-_panel="$(mktemp)"
+_panel="$RO_T/panel"
+: > "$_panel" || ro_refuse "creating the drift panel"
 _n_anchors=0; _n_drifted=0; _n_unres=0; _unresolved=""
-while IFS= read -r id; do
+ro_lines "$_ids"
+for id in ${RO_L[@]+"${RO_L[@]}"}; do
   [ -n "$id" ] || continue
   _n_anchors=$((_n_anchors + 1))
-  _bf="$(mktemp)"; _tf="$(mktemp)"
-  git -C "$DIST" show "${BASE_SHA}:${CORE}" 2>/dev/null | section_of "$id" > "$_bf"
-  git -C "$DIST" show "${THEIRS}:${CORE}"   2>/dev/null | section_of "$id" > "$_tf"
+  ro_section "$BASE_SHA" "$id" panel-base || ro_refuse "the drift panel's read of #${id} at ${BASE_SHA}"
+  ro_section "$THEIRS" "$id" panel-theirs || ro_refuse "the drift panel's read of #${id} at ${THEIRS}"
+  _bf="$RO_T/panel-base.sec"; _tf="$RO_T/panel-theirs.sec"
   # AN UNRESOLVABLE ANCHOR IS NOT AN UNCHANGED ONE. Both sides empty makes `diff` silent,
   # and folding that into "did not drift" is a false reassurance about the one anchor the
   # operator most needs told about -- it is the same vacuity `--stamp readopt` refuses on.
   if [ ! -s "$_bf" ] && [ ! -s "$_tf" ]; then
     _unresolved="${_unresolved:+$_unresolved, }#${id}"
     _n_unres=$((_n_unres + 1))
-    rm -f "$_bf" "$_tf"
     continue
   fi
   _d="$(diff -u "$_bf" "$_tf" | tail -n +3 | sed 's/^/    /')"
-  rm -f "$_bf" "$_tf"
   [ -n "$_d" ] || continue
   _n_drifted=$((_n_drifted + 1))
-  { echo "  ## ${id}"; printf '%s\n' "$_d"; } >> "$_panel"
-done <<EOF
-$_ids
-EOF
+  { echo "  ## ${id}"; printf '%s\n' "$_d"; } >> "$_panel" || ro_refuse "appending #${id} to the drift panel"
+done
 
 # THE "byte-identical" SENTENCE MAY ONLY COUNT ANCHORS THAT WERE ACTUALLY COMPARED.
 # Caught by this change's own control: an entry whose single anchor resolves nowhere
@@ -858,12 +903,8 @@ else
 fi
 [ -n "$_unresolved" ] && printf '%s\n' \
   "  UNRESOLVED: ${_unresolved} -- resolves to no heading at either ref, so it was NOT compared and its absence above is not a reading."
-rm -f "$_panel"
 
-cat <<EOF
-
---- SUPERSEDED CORE TEXT STILL IN THIS OVERRIDE'S BODY -------------------------
-EOF
+printf '%s\n' '' "--- SUPERSEDED CORE TEXT STILL IN THIS OVERRIDE'S BODY -------------------------"
 if [ "$N_STALE" -gt 0 ]; then
   printf '%s\n' "$STALE" | sed 's/^/    | /'
   echo ""
@@ -873,10 +914,7 @@ else
   echo "    (none — the body carries no text upstream has superseded)"
 fi
 
-cat <<EOF
-
---- CORE TEXT ${THEIRS_SHA} ADDS THAT THIS BODY DOES NOT CARRY -------------------------
-EOF
+printf '%s\n' '' "--- CORE TEXT ${THEIRS_SHA} ADDS THAT THIS BODY DOES NOT CARRY -------------------------"
 if [ "$N_UNADOPTED" -gt 0 ]; then
   printf '%s\n' "$UNADOPTED" | sed 's/^/    | /'
   echo ""
@@ -888,26 +926,25 @@ else
   echo "    (none — the body carries everything upstream added to the shadowed section)"
 fi
 
-cat <<EOF
-
---- THE ONE QUESTION -----------------------------------------------------------
-  Does upstream's change SUPERSEDE the reason this override exists?
-
-  YES, entirely      -> retire    the override is redundant; core now does this.
-       readopt-override.sh <dist> ${THEIRS} <consumer> ${OVR} --stamp retire
-
-  NO, but core's new text must be carried into it
-                     -> readopt   merge the new core text into the body, preserving
-                                  the consumer's delta, THEN stamp. The stamp is
-                                  REFUSED while superseded core lines remain.
-       \$EDITOR ${OVR}
-       readopt-override.sh <dist> ${THEIRS} <consumer> ${OVR} --stamp readopt
-
-  NO, and the old clause still stands as written
-                     -> reaffirm  requires a note; it goes into the record.
-       readopt-override.sh <dist> ${THEIRS} <consumer> ${OVR} --stamp reaffirm --note "..."
-
-  DOING NOTHING IS NOT AN OUTCOME. The HARD block persists until base_sha is
-  re-stamped, and a bare re-stamp is refused while the body is stale.
-================================================================================
-EOF
+printf '%s\n' \
+  '' \
+  '--- THE ONE QUESTION -----------------------------------------------------------' \
+  "  Does upstream's change SUPERSEDE the reason this override exists?" \
+  '' \
+  '  YES, entirely      -> retire    the override is redundant; core now does this.' \
+  "       readopt-override.sh <dist> ${THEIRS} <consumer> ${OVR} --stamp retire" \
+  '' \
+  "  NO, but core's new text must be carried into it" \
+  '                     -> readopt   merge the new core text into the body, preserving' \
+  "                                  the consumer's delta, THEN stamp. The stamp is" \
+  '                                  REFUSED while superseded core lines remain.' \
+  "       \$EDITOR ${OVR}" \
+  "       readopt-override.sh <dist> ${THEIRS} <consumer> ${OVR} --stamp readopt" \
+  '' \
+  '  NO, and the old clause still stands as written' \
+  '                     -> reaffirm  requires a note; it goes into the record.' \
+  "       readopt-override.sh <dist> ${THEIRS} <consumer> ${OVR} --stamp reaffirm --note \"...\"" \
+  '' \
+  '  DOING NOTHING IS NOT AN OUTCOME. The HARD block persists until base_sha is' \
+  '  re-stamped, and a bare re-stamp is refused while the body is stale.' \
+  '================================================================================'

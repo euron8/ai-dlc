@@ -113,8 +113,16 @@ SELF="$(cd "$(dirname "$0")" && pwd)"
 # sections, Alpha and Beta, the diff failing only for Beta -- rc 0, `skipped: Beta`, the override
 # carried Alpha alone, core was reverted, and Beta's edit was gone with no line on stderr.
 # The exit status is checked AND the awk refuses an empty stream, because either failure alone
-# reaches `yes`. The captured variable loses only diff's trailing newline, which the here-string
-# restores.
+# reaches `yes`. The captured variable loses only diff's trailing newline, which the `printf '%s\n'`
+# feeding the awk restores.
+#
+# THE HUNKS REACH THE AWK THROUGH A PIPE, NEVER A HERE-STRING. bash 3.2 stages every `<<<` to a temp
+# file, and when that write fails -- `ulimit -f`, a full TMPDIR -- the awk reads EMPTY stdin and
+# answers `unknown`, so the caller refused with "diff did not run" about a diff that ran. A section
+# diff is the sum of both sides' lines, so it is the largest thing this function holds: measured on a
+# 40-line section edited whole (a 1671-byte file) under 2- and 3-block limits, the dry run refused
+# with that false message where the same run completes once the here-string is gone. The awk reads to
+# EOF, so no early-exiting reader sits on the pipe and there is nothing to stage.
 #
 # ONE TOKEN DOES NOT EXEMPT A WHOLE HUNK. `diff` coalesces adjacent changed lines into one hunk,
 # so a real edit on the line beside a token site shares the token's hunk. Exempting any hunk with
@@ -145,7 +153,7 @@ substitution_only() { # <consumer-section-text> <dist-section-text>
   # Core piped through `rd_pdiff`; a failed `cat` is 2, which is `unknown` below.
   d="$(rd_pdiff "$SO_TMP/core.section" "$SO_TMP/consumer.section" 2>/dev/null)"; drc=$?
   if [ "$drc" -ne 1 ] || [ -z "$d" ]; then printf 'unknown'; return 0; fi
-  awk '
+  printf '%s\n' "$d" | awk '
     function endh(   k) {
       if (!inh) return
       inh = 0
@@ -156,7 +164,7 @@ substitution_only() { # <consumer-section-text> <dist-section-text>
     /^</     { if ($0 ~ /\{[a-z_][a-z0-9_]*\}/) tok = 1; else { ntf++; TF[ntf] = substr($0, 3) } }
     /^>/     { GT[substr($0, 3)] = 1 }
     END      { endh(); if (!nh) { print "unknown"; exit } print (bad ? "no" : "yes") }
-  ' <<<"$d"
+  '
 }
 
 # A refusal names the section and exits 2 with core NOT reverted. It is the only safe answer
@@ -183,11 +191,29 @@ hl="$(headings_of "$CONS_FILE")"; hrc=$?
 SO_TMP="$(mktemp -d "${TMPDIR:-/tmp}/register-drift.XXXXXX" 2>/dev/null)" || SO_TMP=""
 trap '[ -n "$SO_TMP" ] && rm -rf "$SO_TMP"; :' EXIT
 
+# rd_lines <text> -- split <text> on newlines into RD_L, in the main shell, with no file and no fork.
+# THE LOOPS BELOW ITERATE RD_L, NEVER A HERE-STRING. bash 3.2 stages every `<<<` to a temp file, and
+# when that write fails -- `ulimit -f`, a full TMPDIR -- the loop runs ZERO times and carries on:
+# over the heading list that read as "no ## / ### section differs", exit 1, on a file whose sections
+# did differ. A word split cannot fail. Globbing is off for the split, so a heading carrying `*` is
+# a heading and not a pattern; IFS is restored before any loop body runs. Empty lines are dropped,
+# which every loop below already skipped. Callers read RD_L through `${RD_L[@]+"${RD_L[@]}"}`, the
+# bash 3.2 spelling that does not trip `set -u` on an empty list.
+RD_NL='
+'
+rd_lines() {
+  local _ifs="$IFS"
+  set -f; IFS="$RD_NL"
+  RD_L=($1)
+  IFS="$_ifs"; set +f
+}
+
 changed=""
 skipped=""
 added=""
 unaddressable=""
-while IFS= read -r line; do
+rd_lines "$hl"
+for line in ${RD_L[@]+"${RD_L[@]}"}; do
   h="${line#*:}"
   [ -n "$h" ] || continue
   # section_of returns non-zero when its temp file cannot be made, and `git show` fails the
@@ -235,7 +261,7 @@ while IFS= read -r line; do
     *)   refuse "cannot classify section '${h}': diff did not run" ;;
   esac
   changed="${changed}${changed:+$'\n'}${h}"
-done <<<"$hl"
+done
 
 [ -n "$skipped" ] && echo "── skipped (template substitution only, not a consumer change): ${skipped}"
 [ -n "$unaddressable" ] && echo "── headings no override can anchor to (the name normalizes to nothing; conserved only if unchanged): ${unaddressable}"
@@ -251,7 +277,6 @@ fi
 
 n_changed="$(printf '%s\n' "$changed" | grep -c .)"
 slug="$(printf '%s' "$REL" | sed 's|/|__|g; s|\.md$||')"
-first="$(head -1 <<<"$changed")"
 OUT="$OVR_DIR/$(printf '%s' "$slug" | sed 's|skills__ai-dlc__||')__consumer-drift.md"
 
 shadow_line="$SHADOW_TGT#$(printf '%s\n' "$changed" | paste -sd '@' - | sed "s|@|, ${SHADOW_TGT}#|g")"
@@ -261,16 +286,17 @@ body="$(printf '%s\n' "$changed" | while IFS= read -r h; do
           section_of "$h" < "$CONS_FILE"; echo
         done)"
 
+# A `printf` of the lines, not a heredoc: bash 3.2 stages a heredoc to a temp file, a second write
+# that can fail where the override's own write is the only one that has to land. Byte-identical to
+# the heredoc it replaces -- each argument is one of its lines, newline-terminated.
 render() {
-  cat <<EOF
----
-shadows: ${shadow_line}
-base_sha: ${BASE}
-reason: TODO — one line: why this consumer changes the core rule. Registered by register-drift.sh; this text was carried as an UNREGISTERED in-place edit of core/${REL} (no override entry, no base_sha, invisible to layer-drift.sh, and destroyed by the next apply). Content is unchanged from what the consumer was already running; only its registration is new.
----
-
-${body}
-EOF
+  printf '%s\n' '---' \
+    "shadows: ${shadow_line}" \
+    "base_sha: ${BASE}" \
+    "reason: TODO — one line: why this consumer changes the core rule. Registered by register-drift.sh; this text was carried as an UNREGISTERED in-place edit of core/${REL} (no override entry, no base_sha, invisible to layer-drift.sh, and destroyed by the next apply). Content is unchanged from what the consumer was already running; only its registration is new." \
+    '---' \
+    '' \
+    "${body}"
 }
 
 # Everything is STAGED in temp files first and checked before anything is published -- in a dry
@@ -297,7 +323,13 @@ stage() { # <target> -> path of a fresh temp file to stage it in
   fi
 }
 OUT_TMP="$(stage "$OUT")" || refuse "cannot stage the override ${OUT#$CONSUMER/}"
-render > "$OUT_TMP" || refuse "cannot write the override ${OUT#$CONSUMER/}"
+# A SUBSHELL WHOSE OWN STDOUT IS THE FILE, so a failed write cannot leak. bash 3.2's `printf` keeps
+# what it could not write in its stdout buffer and flushes it into the NEXT thing the shell prints:
+# measured under a write limit, the unwritten override text landed on stderr glued to the front of
+# the refusal line below. With the redirect INSIDE the subshell it was flushed instead to the
+# subshell's inherited stdout on exit -- the script's own output -- so the redirect is outside: the
+# exit flush goes to the same file, fails again, and is discarded.
+( render ) > "$OUT_TMP" || refuse "cannot write the override ${OUT#$CONSUMER/}"
 
 # Consumer-only sections go to extensions/ — additive, file-hooked, no anchor to break.
 # Dropping them would DELETE consumer content when core is overwritten; putting them in
@@ -312,14 +344,15 @@ if [ -n "$added" ]; then
   ext_id="$(printf '%s' "$REL" | sed 's|.*/||; s|\.md$||')-consumer"
   EXT_OUT="$EXT_DIR/${ext_id}.md"
   EXT_TMP="$(stage "$EXT_OUT")" || refuse "cannot stage the extension ${EXT_OUT#$CONSUMER/}"
-  {
+  # A subshell redirected from OUTSIDE, for the same reason as the override's write above.
+  (
     printf -- '---\nkind: %s\nhooks: %s\nid: %s\n' "$EXT_KIND" "$SHADOW_TGT" "$ext_id"
     printf 'reason: TODO — one line: why this consumer ADDS these sections. Written by register-drift.sh; core defines no heading for them, so they are additive and cannot be an override (an override anchors to a core heading; one that resolves to nothing is drift detection that is silently dead).\n---\n\n'
     printf '%s\n' "$added" | while IFS= read -r h; do
       [ -n "$h" ] || continue
       section_of "$h" < "$CONS_FILE"; echo
     done
-  } > "$EXT_TMP" || refuse "cannot write the extension ${EXT_OUT#$CONSUMER/}"
+  ) > "$EXT_TMP" || refuse "cannot write the extension ${EXT_OUT#$CONSUMER/}"
 fi
 
 # Core at BASE, exactly as the revert will write it. Staged in a FILE, not a process
@@ -378,13 +411,20 @@ fi
 #     evidence-contract edit was still lost, because nothing shadows core's evidence section.
 # Files are told apart by FNR resets, which an EMPTY file never produces -- hence the -s guards.
 shadow_spans=""
-while IFS= read -r h; do
+rd_lines "$changed"
+for h in ${RD_L[@]+"${RD_L[@]}"}; do
   [ -n "$h" ] || continue
   s="$(span_of "$h" < "$rtmp")" || refuse "conservation: cannot resolve core's span for '${h}'"
   [ -n "$s" ] || refuse_fixed "conservation: the override shadows '${h}', which resolves to no heading in core at ${BASE}"
   shadow_spans="${shadow_spans}${shadow_spans:+,}${s% *}-${s#* }"
-done <<<"$changed"
-cons_check="$(awk -v nw="$nw" -v shadow="$shadow_spans" '
+done
+# The whole-file diff reaches the awk through a PIPE, not a here-string. It is both sides of every
+# changed hunk, so it is the largest input this run holds -- larger than any file it stages -- and a
+# here-string of it was the one write that failed first under a write limit: the awk then read no
+# fourth input, and a registrable file was refused as "the whole-file diff was not read". The awk
+# reads every input to EOF, so nothing exits early on the pipe; under `pipefail` a failed `printf`
+# would surface as a non-zero `crc`, which the `case` below refuses.
+cons_check="$(printf '%s\n' "$core_d" | awk -v nw="$nw" -v shadow="$shadow_spans" '
   function spans(   i, j, m, k, SR, rr) {
     sp = 1
     for (i = 1; i <= nc; i++) {
@@ -469,7 +509,7 @@ cons_check="$(awk -v nw="$nw" -v shadow="$shadow_spans" '
     if (bad != "") { print bad; exit 1 }
     print "ok " nh
   }
-' "$CONS_FILE" "$OUT_TMP" ${EXT_TMP:+"$EXT_TMP"} - <<<"$core_d")"; crc=$?
+' "$CONS_FILE" "$OUT_TMP" ${EXT_TMP:+"$EXT_TMP"} -)"; crc=$?
 # Exit 1 is a VERDICT on the file and refuses without "re-run"; anything else is a check that did
 # not complete, which running again can fix.
 case "$crc" in

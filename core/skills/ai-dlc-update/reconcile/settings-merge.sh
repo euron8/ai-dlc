@@ -97,7 +97,13 @@ if [ ! -r "$CONSUMER" ]; then
 else
   BASE_JSON="$(cat "$CONSUMER")"
 fi
-jq -e . >/dev/null 2>&1 <<<"$BASE_JSON" || { echo "FAIL: consumer settings.json is not valid JSON; left untouched" >&2; exit 1; }
+# Validated through a PIPE, not a here-string. bash 3.2 stages every `<<<` to a temp file, and when
+# that write fails -- `ulimit -f`, a full TMPDIR -- jq reads EMPTY stdin, `jq -e .` exits non-zero,
+# and a valid settings.json was refused as "not valid JSON". The run already refused, so no file was
+# written; the defect was the message, which sends the operator to repair a file that is fine. jq
+# reads to EOF, so nothing exits early on the pipe, and `printf '%s\n'` restores the newline the
+# here-string appended. Every other read of BASE_JSON below is already a pipe.
+printf '%s\n' "$BASE_JSON" | jq -e . >/dev/null 2>&1 || { echo "FAIL: consumer settings.json is not valid JSON; left untouched" >&2; exit 1; }
 
 # Does the template wire the context sensor? Only then is a window declaration meaningful.
 #
@@ -220,7 +226,9 @@ fi
 jq -e . "$OUT" >/dev/null 2>&1 || { echo "FAIL: merge produced invalid JSON; consumer left untouched" >&2; exit 1; }
 
 mkdir -p "$(dirname "$CONSUMER")" 2>/dev/null || true
-mv "$OUT" "$CONSUMER"
+# The move's status is read: an unchecked `mv` that failed printed "settings.json reconciled" below
+# over a consumer file nothing had written.
+mv "$OUT" "$CONSUMER" || { echo "FAIL: could not move the merged settings into place at $CONSUMER; consumer left untouched" >&2; exit 1; }
 trap - EXIT
 
 echo "settings.json reconciled (ai-dlc hooks upserted; user config preserved)"

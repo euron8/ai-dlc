@@ -78,16 +78,22 @@ if [ -n "$APPLY" ] && [ -z "$GTS" ] && [ -z "$ENTRY_GTS" ]; then
   exit 2
 fi
 
+# THE PROGRAM IS AN ARGUMENT, NOT A HEREDOC, AND ITS EXIT IS THE SCRIPT'S. It was fed as
+# `python3 - <<'PY'`, which bash 3.2 stages to a temp file; when that write failed -- `ulimit -f`,
+# a full TMPDIR -- bash printed `cannot create temp file for here document`, never ran python, and
+# the script exited 1, which this script's own contract reads as "adoptable checks found and NOT
+# applied": a dry run reported work outstanding over a tree it never scanned, and `--apply` exited
+# 1 having written nothing. An argument needs no staging. The program's apostrophes are spelled
+# `'\''`, the same escape lib.sh's emitters use; the bytes python receives are the heredoc body's.
 CONSUMER="$CONSUMER" SKILL_DIR="$SKILL_DIR" EXT_DIR="$EXT_DIR" APPLY="${APPLY:-}" GTS="$GTS" \
-  ENTRY_GTS="$ENTRY_GTS" python3 - <<'PY'
-import os, re, sys, glob
+  ENTRY_GTS="$ENTRY_GTS" python3 -c 'import os, re, sys, glob
 
 SKILL = os.environ["SKILL_DIR"]; EXT = os.environ["EXT_DIR"]
 CONSUMER = os.environ["CONSUMER"]
 # --entry PATH --gate-types LIST, repeatable. `gate_types:` is ENTRY frontmatter and the
 # right answer differs per entry -- the reference consumer needed four different values
 # across four entries. A single global flag could not express the per-entry question this
-# tool's own header documents, and applied one answer to every entry in one pass: a silent
+# tool'\''s own header documents, and applied one answer to every entry in one pass: a silent
 # wrong-value write on entries the operator never considered.
 ENTRY_GTS = {}
 for _line in os.environ.get("ENTRY_GTS", "").splitlines():
@@ -125,9 +131,9 @@ def resolve_manifest(rel):
 
     `team-roles/<role>.md` maps to `.claude/team-roles/<role>.md` -- OUTSIDE the skill
     dir -- while `steps/<x>.md` and bare `SKILL.md` live inside it. This is the case
-    split `validate-layer-entries.sh`'s `resolve_target()` already implements and that
+    split `validate-layer-entries.sh`'\''s `resolve_target()` already implements and that
     `ai-dlc-update/SKILL.md` §7v criterion 2 already documents, warning in as many words
-    that "a naive skill-relative join would falsely report every role extension's target
+    that "a naive skill-relative join would falsely report every role extension'\''s target
     MISSING". This tool shipped that naive join anyway, and it did worse than misreport:
     an unresolvable hook was FATAL, so on any consumer carrying a `team-roles/*` hook the
     tool exited 2 having scanned NOTHING -- and an empty run of a tool whose whole job is
@@ -140,7 +146,7 @@ def resolve_manifest(rel):
         if os.path.isfile(cand): return cand
     return None
 
-# THE SUBJECT SET IS GM1'S, NOT A NARROWER ONE OF THIS TOOL'S OWN.
+# THE SUBJECT SET IS GM1'\''S, NOT A NARROWER ONE OF THIS TOOL'\''S OWN.
 # `validate-gate-manifest.sh` never reads `kind:` — its UNLOADABLE set is every
 # extensions/ entry whose `hooks:` names the manifest, whatever kind it declares. A
 # `kind: check` filter here would therefore make this tool unable to adopt something
@@ -167,16 +173,16 @@ total_adoptable = 0
 for hook, group in sorted(by_hook.items()):
     mpath = resolve_manifest(hook)
     if mpath is None:
-        # NOT fatal. This tool's subject is the gate manifest; an entry hooking something
+        # NOT fatal. This tool'\''s subject is the gate manifest; an entry hooking something
         # else -- or something this consumer does not carry -- is out of scope, not a
         # reason to abandon every other entry. Exiting here made the tool scan nothing on
         # any consumer with a `team-roles/*` hook, and print nothing while doing it.
-        print(f"  note: entries hook '{hook}', which resolves to no file here — skipped "
+        print(f"  note: entries hook '\''{hook}'\'', which resolves to no file here — skipped "
               f"(not the gate manifest, or not installed)")
         continue
     mtext = read(mpath)
 
-    # The legal gate types, DERIVED from the rendered manifest's own first column
+    # The legal gate types, DERIVED from the rendered manifest'\''s own first column
     # rather than from a literal here. A literal would be a fifth copy of an enum the
     # step file already declares, and the one that rots first.
     mrows = re.search(r"<!--\s*GATE_MANIFEST\b.*?-->(.*?)<!--\s*GATE_MANIFEST_END\s*-->", mtext, re.S)
@@ -205,7 +211,7 @@ for hook, group in sorted(by_hook.items()):
         core_anchors |= set(LOADED_RE.findall(read(f)))
 
     print(f"manifest source: {os.path.relpath(mpath, SKILL)}")
-    print(f"gate-type enum : {' '.join(enum)}")
+    print(f"gate-type enum : {'\'' '\''.join(enum)}")
 
     # PHASE 1 -- what would be WRITTEN. The refusal below has to count the entries this
     # tool would actually touch, not every entry lacking `gate_types:`: an entry whose
@@ -247,9 +253,9 @@ for hook, group in sorted(by_hook.items()):
             # Nothing adoptable. Two structurally different reasons, and only one of
             # them is a finding:
             #   - the entry carries its OWN anchors but no `gate_types:` — that is
-            #     GM2's state, the missing half of this tool's own write. Report it.
+            #     GM2'\''s state, the missing half of this tool'\''s own write. Report it.
             #   - the entry carries no anchors either, because every heading id is one
-            #     CORE already anchors: it AUGMENTS a core check and inherits core's
+            #     CORE already anchors: it AUGMENTS a core check and inherits core'\''s
             #     row. Nothing to adopt, nothing to declare. Silent.
             if own and not declared:
                 print(f"  {rel}: anchors present, `gate_types:` MISSING — declare it or the anchors are ORPHANs")
@@ -263,7 +269,7 @@ for hook, group in sorted(by_hook.items()):
         # `gate_types:` into a `step-domain` entry would pick one by accident.
         if frontmatter(t, "kind") != "check":
             print(f"  {rel}: NEEDS DECISION — hooks the manifest and defines check heading(s) "
-                  f"{' '.join(i for i, _ in todo)}, but declares `kind: {frontmatter(t, 'kind') or '(none)'}`. "
+                  f"{'\'' '\''.join(i for i, _ in todo)}, but declares `kind: {frontmatter(t, '\''kind'\'') or '\''(none)'\''}`. "
                   f"GM1 counts these and this tool will not write a `gate_types:` into a non-check "
                   f"entry. Either correct `kind:` to `check` and re-run, or rename the heading so it "
                   f"is not read as a check id.")
@@ -273,8 +279,8 @@ for hook, group in sorted(by_hook.items()):
         total_adoptable += len(todo)
         rc = 1 if not APPLY else rc
         print(f"  {rel}")
-        print(f"    adoptable check id(s): {' '.join(i for i, _ in todo)}")
-        print(f"    gate_types: {declared or 'NOT DECLARED — this is the question only you can answer'}")
+        print(f"    adoptable check id(s): {'\'' '\''.join(i for i, _ in todo)}")
+        print(f"    gate_types: {declared or '\''NOT DECLARED — this is the question only you can answer'\''}")
 
         if not APPLY:
             continue
@@ -293,13 +299,13 @@ for hook, group in sorted(by_hook.items()):
         gts = [g.strip() for g in re.split(r"[,\s]+", raw) if g.strip()]
         bad = [g for g in gts if g not in enum]
         if bad:
-            print(f"adopt-extension-checks: gate type(s) not in the manifest's own enum: {' '.join(bad)}\n"
-                  f"  Legal: {' '.join(enum)}. Writing an unrecognised one does not adopt the check,\n"
+            print(f"adopt-extension-checks: gate type(s) not in the manifest'\''s own enum: {'\'' '\''.join(bad)}\n"
+                  f"  Legal: {'\'' '\''.join(enum)}. Writing an unrecognised one does not adopt the check,\n"
                   f"  it moves the failure to GM2.", file=sys.stderr)
             sys.exit(2)
 
         out = t
-        # (1) anchor directly under each heading, matching core's own placement.
+        # (1) anchor directly under each heading, matching core'\''s own placement.
         for i, ln in todo:
             out = out.replace(ln + "\n", ln + "\n" + f"<!-- CHECK_LOADED: {i} -->\n", 1)
         # (2) gate_types into the entry frontmatter, if absent.
@@ -313,7 +319,7 @@ for hook, group in sorted(by_hook.items()):
                   f"report an adoption that did not happen", file=sys.stderr)
             sys.exit(2)
         with open(f, "w", encoding="utf-8") as fh: fh.write(out)
-        print(f"    APPLIED: {len(todo)} anchor(s)" + ("" if declared else f" + gate_types: [{', '.join(gts)}]"))
+        print(f"    APPLIED: {len(todo)} anchor(s)" + ("" if declared else f" + gate_types: [{'\'', '\''.join(gts)}]"))
 
 if total_adoptable == 0 and rc == 0:
     print("adopt-extension-checks: every extension check is already loadable — nothing to adopt")
@@ -325,4 +331,4 @@ if APPLY:
 print(f"adopt-extension-checks: {total_adoptable} check(s) adoptable. Re-run with "
       f"--apply --gate-types <list> per the enum above.")
 sys.exit(1)
-PY
+'
