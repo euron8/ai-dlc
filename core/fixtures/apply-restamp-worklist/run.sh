@@ -2336,7 +2336,13 @@ fi
 if hr_arm_f "$HR_C" "$HR_V"; then
   ok "HR-f near-misses: a clean tree draws no hook-registration row and stamps $THEIRS_VER; a LIVE hook listed under the validator's settings.local.json NOTE is named in neither WORKLIST row, while that tree's real dangling hook still draws one"
 else
-  bad "HR-f a near-miss fired: clean rows=$(hr_any "$HR_C") stamp='$(stamp_ver "$HR_C")'; live-local tree rows=$(hr_any "$HR_V"), settings-merge detail names alpha: $(case "$(hr_det "$HR_V" WORKLIST settings-merge)$(hr_det "$HR_V" WORKLIST settings-local-dangling)" in *ai-dlc-hra-alpha.sh*) echo yes ;; *) echo no ;; esac)"
+  # The yes/no is computed BEFORE the message: a `case` inside `$( )` prints its own text instead
+  # of its result under /bin/bash 3.2.57 (apply.sh documents the same hazard).
+  HR_F_ALPHA=no
+  case "$(hr_det "$HR_V" WORKLIST settings-merge)$(hr_det "$HR_V" WORKLIST settings-local-dangling)" in
+    *ai-dlc-hra-alpha.sh*) HR_F_ALPHA=yes ;;
+  esac
+  bad "HR-f a near-miss fired: clean rows=$(hr_any "$HR_C") stamp='$(stamp_ver "$HR_C")'; live-local tree rows=$(hr_any "$HR_V"), settings-merge detail names alpha: $HR_F_ALPHA"
 fi
 if hr_arm_g "$HR_G"; then
   ok "HR-g a dangling hook registered in BOTH settings.json and settings.local.json is named in the settings-merge row AND in a settings-local-dangling row on .claude/settings.local.json — the merge alone leaves the local block and the validator at exit 1"

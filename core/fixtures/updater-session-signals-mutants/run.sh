@@ -88,8 +88,9 @@ expect_set payload-arm-deleted 2 'PC-S331 is back|stays exempt forever' \
 
 # 2. THE TOOL_USE CASE ARM. Covers everything AFTER the dispatch — the updater's own
 #    per-file fan-out, which no payload carries a skill field for, and every Write it makes
-#    after the dispatch (an Edit carries no skill field either).
-expect_set tooluse-case-deleted 2 'per-file Agent dispatch was DENIED|WRITE \(ii\)' \
+#    after the dispatch (an Edit carries no skill field either). It also reds both cells of
+#    the pipeline-then-updater session, whose only updater signal is that tool_use line.
+expect_set tooluse-case-deleted 4 'per-file Agent dispatch was DENIED|WRITE \(ii\)|WRITE \(iii-b\)|RECENCY \(other order\)' \
   '/"skill":"ai-dlc-update".)/d'
 
 # 3. THE TYPED ALTERNATIVE. The pre-existing arm, and the ONLY signal a typed invocation
@@ -104,8 +105,9 @@ expect_set marker-alternative-deleted 3 'typed by the operator was DENIED|WRITE 
 
 # 6. THE WRITE ARM's UPDATER CONJUNCT, made unreachable. The defect as filed: an updater
 #    session's Edit under planning-artifacts/ is denied again, typed or Skill-invoked, and a
-#    teammate in one is logged as a pipeline teammate.
-expect_set write-updater-conjunct-dropped 3 'WRITE \(i\)|WRITE \(ii\)|WRITE \(vi\)' \
+#    teammate in one is logged as a pipeline teammate. The pipeline-then-updater session's
+#    Edit is an updater write too, so WRITE (iii-b) reds with them.
+expect_set write-updater-conjunct-dropped 4 'WRITE \(i\)|WRITE \(ii\)|WRITE \(iii-b\)|WRITE \(vi\)' \
   's/if \[ "\$UPDATER_SESSION" -eq 1 \]; then :$/if false; then :/'
 
 # 7. ...and made UNCONDITIONAL — the leak. Every paused write under _bmad-output/ passes
@@ -126,6 +128,13 @@ expect_set typed-anchor-reverted-to-bare 6 'MENTION (read|text|head) (Edit|Agent
 #    tell the two anchors apart — and it must be the only thing that moves.
 expect_set typed-anchor-role-dropped 2 'MENTION head (Edit|Agent): LEAK' \
   '/^  LAST_SKILL=/s#"role":"user","content":"<command-message>#"content":"<command-message>#'
+
+# 10. THE LAST-SKILL RULE REVERSED to the FIRST skill (BL-404). Both orders are seeded, so a
+#    first-match scan reds both: updater-then-/ai-dlc reads as the updater (the two resumed
+#    LEAK arms), and /ai-dlc-then-updater reads as the pipeline (the two other-order arms).
+#    Before the other order was seeded this mutant moved only the first pair.
+expect_set last-skill-reversed-to-first 4 'order-blind|WRITE \(iii\): LEAK|WRITE \(iii-b\)|RECENCY \(other order\)' \
+  '/^  LAST_SKILL=/s/| tail -1)$/| head -1)/'
 
 # 4. THE PAYLOAD ARM WIDENED to any ai-dlc* skill — the leak that turns the Rule 29 pause
 #    off for the pipeline skill it exists to stop.
