@@ -30,6 +30,13 @@ mkdir -p "$DIST/$SKILL_REL/steps" "$DIST/core/schemas"
 git -C "$DIST" init -q
 git -C "$DIST" config user.email f@x
 git -C "$DIST" config user.name f
+# NO AUTO-MAINTENANCE IN THE DISTRIBUTION STORE. run.sh Part 11 world E needs the contract's blob
+# LOOSE so it can move it aside, and every `commit` here and in run.sh ends in `git maintenance run
+# --auto`, which on git 2.54 repacks the store once two loose objects sit in the objects/17 sample
+# bucket. `gc.auto` does not govern that call, so `gc.auto=0` leaves the flake in place; only
+# `maintenance.auto` does. Set here, in the repo's own config, every writer below and every `cp -R`
+# world run.sh builds from $DIST inherits it. run.sh Part 12 forces the trigger and holds this line.
+git -C "$DIST" config maintenance.auto false
 
 # ---------------------------------------------------------------------------
 # The contract. Two clauses, one adjudicable and one NOT, so every assertion
