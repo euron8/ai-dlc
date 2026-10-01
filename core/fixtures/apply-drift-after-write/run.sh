@@ -187,6 +187,95 @@ EOF
     ok "and no WORKLIST extension-reread survives — apply can reach clean on a fully-adjudicated tree"
   fi
   rm -f "$REG_DIR/layer-adjudication-register.jsonl"
+
+  # --- Assertion 2d (BL-119): EACH VERDICT REACHES ITS OWN ACTOR -----------------------------
+  # 2c proved a recorded verdict closes the re-read. But the loop printed the KEEP note for all
+  # three verdicts -- "no re-read is prescribed" -- so a consumer that recorded `retire` or
+  # `contradicts-core` was told nothing about the work that verdict authorizes. Each verdict is
+  # now asserted on its OWN run, by KIND and by the actor text it must carry, so an inverted fix
+  # (the remedy on the keep verdict, the keep note on retire) fails a cell rather than passing a
+  # "the outputs differ" test. Mutants: 2d-M1 the keep comparison deleted, 2d-M2 the two remedy
+  # labels swapped, 2d-M3 every recorded verdict read as keep (the unfixed program).
+  if ! grep -qF 'say NOTE extension-retire' "$APPLY"; then
+    case "$APPLY" in
+      */core/skills/ai-dlc-update/reconcile/apply.sh)
+        printf '  --    (BL-119: this apply.sh carries no extension-retire row; in the distribution 2d runs anyway and must go red)\n'
+        V2D_RUN=1 ;;
+      *) printf '  SKIP  %s\n' "2d (BL-119) -- the installed apply.sh predates the per-verdict extension rows; it lands with the pull that carries this fixture"
+        V2D_RUN=0 ;;
+    esac
+  else
+    V2D_RUN=1
+  fi
+  if [ "$V2D_RUN" = 1 ]; then
+    # v2d_run <apply.sh> <verdict> -> the manifest of one apply over this consumer with every
+    # adjudicable digest recorded under <verdict>. The register is removed after each run.
+    v2d_run() {
+      : > "$REG_DIR/layer-adjudication-register.jsonl"
+      while IFS= read -r d; do
+        [ -n "$d" ] || continue
+        printf '{"clause":"LC-E4","entry":"x","subject_digest":"%s","verdict":"%s","recorded_utc":"2026-01-01T00:00:00Z","reason":"fixture"}\n' \
+          "$d" "$2" >> "$REG_DIR/layer-adjudication-register.jsonl"
+      done <<EOF
+$EXT_DIGS
+EOF
+      bash "$1" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null
+      rm -f "$REG_DIR/layer-adjudication-register.jsonl"
+    }
+    # v2d_kind <manifest> -> the extension-* NOTE kinds on alpha-domain, space-joined
+    v2d_kind() { awk -F'\t' '$1=="NOTE" && $2 ~ /^extension-/ && index($3, "alpha-domain") {printf "%s ", $2}' <<<"$1"; }
+    v2d_det()  { awk -F'\t' -v k="$2" '$1=="NOTE" && $2==k && index($3, "alpha-domain") {print $4; exit}' <<<"$1"; }
+    # v2d_vec <apply.sh> -> "keep retire contradicts" (1 = holds)
+    v2d_vec() {
+      local mk mr mc v
+      mk="$(v2d_run "$1" still-additive)"; mr="$(v2d_run "$1" retire)"; mc="$(v2d_run "$1" contradicts-core)"
+      [ "$(v2d_kind "$mk")" = "extension-adjudicated " ] && v=1 || v=0
+      if [ "$(v2d_kind "$mr")" = "extension-retire " ] \
+         && case "$(v2d_det "$mr" extension-retire)" in *"delete the entry per Rule 27(b), or cut the retired section"*) true ;; *) false ;; esac; then
+        v="$v 1"; else v="$v 0"; fi
+      if [ "$(v2d_kind "$mc")" = "extension-contradicts-core " ] \
+         && case "$(v2d_det "$mc" extension-contradicts-core)" in *"Refile the entry as an override with a base_sha"*) true ;; *) false ;; esac; then
+        v="$v 1"; else v="$v 0"; fi
+      printf '%s' "$v"
+    }
+    V2D="$(v2d_vec "$APPLY")"
+    set -- $V2D
+    [ "${1:-0}" = 1 ] && ok "2d keep: a recorded still-additive verdict draws NOTE extension-adjudicated alone" \
+                      || bad "2d keep: still-additive drew '$(v2d_kind "$(v2d_run "$APPLY" still-additive)")', not extension-adjudicated alone"
+    [ "${2:-0}" = 1 ] && ok "2d retire: a recorded retire verdict draws NOTE extension-retire naming the deletion per Rule 27(b) or the section cut" \
+                      || bad "2d retire: a recorded retire verdict reached no actor ($V2D) — the decision is recorded and nobody is told to act on it"
+    [ "${3:-0}" = 1 ] && ok "2d contradicts-core: a recorded contradicts-core verdict draws NOTE extension-contradicts-core naming the override refile" \
+                      || bad "2d contradicts-core: the verdict reached no actor ($V2D)"
+    set --
+    # MUTANTS -- copies of the whole reconcile directory (layer-drift.sh is resolved beside apply.sh).
+    V2D_REC="$(dirname "$APPLY")"
+    V2D_CTL="$WORK/v2d-ctl"; mkdir -p "$V2D_CTL" && cp "$V2D_REC"/* "$V2D_CTL"/ 2>/dev/null
+    v2d_c="$(v2d_vec "$V2D_CTL/apply.sh")"
+    [ "$v2d_c" = "1 1 1" ] && ok "2d CONTROL: an unmutated copy scores $v2d_c" \
+                           || bad "2d CONTROL: the unmutated copy scored '$v2d_c', want '1 1 1' — every 2d mutant verdict is unreadable"
+    v2d_mut() { # <label> <anchor> <replacement> <want> <what>
+      local d="$WORK/v2d-$1" n v
+      n="$(grep -cF -- "$2" "$APPLY")" || n=0
+      if [ "$n" != 1 ]; then bad "2d $1 DID NOT APPLY — \`$2\` is not in apply.sh exactly once"; return; fi
+      mkdir -p "$d" && cp "$V2D_REC"/* "$d"/ 2>/dev/null
+      V_A="$2" V_R="$3" awk '{ i = index($0, ENVIRON["V_A"]); if (i) $0 = substr($0, 1, i-1) ENVIRON["V_R"] substr($0, i + length(ENVIRON["V_A"])); print }' "$APPLY" > "$d/apply.sh"
+      if cmp -s "$APPLY" "$d/apply.sh" || ! bash -n "$d/apply.sh"; then bad "2d $1 DID NOT APPLY or does not parse"; return; fi
+      v="$(v2d_vec "$d/apply.sh")"
+      if [ "$v" = "$4" ]; then ok "2d $1 ($5): keep retire contradicts = $v — killed exactly its cells"
+      elif [ "$v" = "1 1 1" ]; then bad "2d $1 SURVIVED ($5)"
+      else bad "2d $1 ($5) scored $v, want $4"; fi
+    }
+    # The anchor is the extension loop's own comparison, tagged with a trailing comment because the
+    # override loop spells the same compare; the tag is what makes it unique, and v2d_mut refuses
+    # unless it matches exactly once.
+    V2D_KEEP='if [ "$adj_v" = "$ADJ_KEEP_VERDICT" ]; then  # extension keep test'
+    # M1: the keep verdict falls to the routing `case`, whose default arm is a DISTINCT kind --
+    # which is the only reason this mutant can die: were the default the keep note, deleting the
+    # comparison would print byte-identical rows.
+    v2d_mut M1 "$V2D_KEEP" 'if false; then' "0 1 1" "the keep comparison deleted"
+    v2d_mut M2 '          retire)' '          __swapped__)' "1 0 1" "the retire label unmatched (retire falls to the unrouted arm)"
+    v2d_mut M3 "$V2D_KEEP" 'if true; then' "1 0 0" "every recorded verdict read as keep (the unfixed program)"
+  fi
 fi
 
 # --- Assertion 3: THE SECOND DEFENCE — the detector refuses the poisoned reading ---

@@ -2432,6 +2432,166 @@ fi  # ---- end of HR_PRESENT
 fi  # ---- end of the BL-292 block
 
 # ==============================================================================================
+# BL-103 -- AN UNREGISTERED ai-dlc- HOOK THEIRS NEITHER SHIPS NOR REGISTERS GETS ITS OWN ROW
+# ==============================================================================================
+#
+# THE DEFECT. The `settings-merge` row prescribed the settings reconcile for every unregistered
+# hook, and that merge registers only the TEMPLATE's hooks -- it strips every other `ai-dlc-*`
+# block from settings.json. A hook upstream retired (apply emits `DECISION deletion` and never
+# removes the file) therefore left the validator at exit 1 after the row's own remedy, and
+# `--finish` withheld on every run with no in-band exit.
+#
+# ITS OWN DIST, because the partition is keyed on THEIRS' `templates/settings.json.template` and
+# `core/hooks/`, and the global DIST carries neither -- which is also why every HR arm above is
+# unchanged: with no template at THEIRS there is nothing to partition against, and the old row
+# stands. Every world is FINISHED and driven through `--finish` with the REAL validator.
+#
+# THE CELLS, each presence-shaped:
+#   (a) orphan            ai-dlc-gone.sh on disk, in neither set -> WORKLIST hook-unshipped naming
+#                         it, NOT named in a settings-merge row, and the stamp WITHHELD on the tree.
+#   (b) exit 3            (a)'s tree, the hook then registered in settings.local.json -> stamps.
+#   (c) exit 1            an orphan deleted -> stamps.
+#   (t) near-misses       ai-dlc-tmplonly.sh (template, not core/hooks) and ai-dlc-shipped.sh
+#                         (core/hooks, not template), both unregistered -> ONE settings-merge row
+#                         naming both, and no hook-unshipped row. Each name is the only seed that
+#                         kills one half of the partition.
+# MUTANTS: HU-M1 partition switched off, HU-M2 the core/hooks conjunct dropped, HU-M3 the template
+# test made to match nothing, HU-M4 the row demoted to NOTE, HU-M5 the merge list not narrowed.
+HU_RUN=1
+if [ -n "${HR_SKIP:-}" ]; then
+  HU_RUN=0
+  if [ "$IS_DIST" = 1 ]; then bad "HU setup: ${HR_SKIP} — HARD in the distribution"
+  else printf '  SKIP  %s\n' "HU-a..HU-t — $HR_SKIP"; fi
+elif ! grep -qF 'say WORKLIST hook-unshipped' "$APPLY"; then
+  if [ "$IS_DIST" = 1 ]; then
+    printf '  --    (BL-103: this apply.sh carries no hook-unshipped row; in the distribution the HU arms run anyway and must go red)\n'
+  else
+    HU_RUN=0
+    printf '  SKIP  %s\n' "HU-a..HU-t — the installed apply.sh predates the hook-unshipped row; it lands with the pull that carries this fixture"
+  fi
+fi
+if [ "$HU_RUN" = 1 ]; then
+HU_D="$WORK/hu-dist"
+mkdir -p "$HU_D/core/hooks" "$HU_D/core/session-driver" "$HU_D/templates" || exit 2
+hu_g() { git -C "$HU_D" -c user.email=f@f -c user.name=fixture "$@"; }
+hu_hook() { printf '#!/usr/bin/env bash\n# hu: a synthetic hook seeded by apply-restamp-worklist\nexit 0\n' > "$1" && chmod +x "$1"; }
+hu_reg() { # hu_reg <file> <names...> -- in the template's own command spelling
+  local f="$1" n first=1; shift
+  { printf '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":['
+    for n in "$@"; do [ "$first" = 1 ] || printf ','; first=0
+      printf '{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/%s"}' "$n"; done
+    printf ']}]}}\n'; } > "$f"
+}
+hu_hook "$HU_D/core/hooks/ai-dlc-kept.sh"; hu_hook "$HU_D/core/hooks/ai-dlc-shipped.sh"
+hu_reg "$HU_D/templates/settings.json.template" ai-dlc-kept.sh ai-dlc-tmplonly.sh
+printf '#!/usr/bin/env bash\n# hu s v1\n' > "$HU_D/core/session-driver/hu.sh"
+printf '1.0.0\n' > "$HU_D/VERSION"
+git -C "$HU_D" init -q 2>/dev/null && hu_g add -A && hu_g commit -qm base || { echo "FIXTURE BROKEN — HU base" >&2; exit 2; }
+HU_B="$(git -C "$HU_D" rev-parse HEAD)"
+printf '2.0.0\n' > "$HU_D/VERSION"; printf '#!/usr/bin/env bash\n# hu s v2\n' > "$HU_D/core/session-driver/hu.sh"
+hu_g add -A && hu_g commit -qm theirs || { echo "FIXTURE BROKEN — HU theirs" >&2; exit 2; }
+HU_T="$(git -C "$HU_D" rev-parse HEAD)"
+# hu_world <kind> -> a FRESH finished consumer; rows of one --finish land in <dir>/.rows
+hu_world() {
+  local c main="ai-dlc-kept.sh ai-dlc-shipped.sh ai-dlc-tmplonly.sh"
+  c="$(mktemp -d "$WORK/hu.XXXXXX")" || return 1
+  mkdir -p "$c/.claude/hooks" "$c/.claude/session-driver" "$c/scripts/ai-dlc" "$c/.claude/skills/ai-dlc-update/reconcile" || return 1
+  git -C "$HU_D" show "${HU_T}:core/session-driver/hu.sh" > "$c/.claude/session-driver/hu.sh" || return 1
+  cp "$HR_VAL_SRC" "$c/scripts/ai-dlc/validate-hook-registration.sh" && chmod +x "$c/scripts/ai-dlc/validate-hook-registration.sh" || return 1
+  cp "$REC/settings-merge.sh" "$c/.claude/skills/ai-dlc-update/reconcile/" || return 1
+  hu_hook "$c/.claude/hooks/ai-dlc-kept.sh"; hu_hook "$c/.claude/hooks/ai-dlc-shipped.sh"; hu_hook "$c/.claude/hooks/ai-dlc-tmplonly.sh"
+  case "$1" in
+    orphan) hu_hook "$c/.claude/hooks/ai-dlc-gone.sh" ;;
+    near)   main="ai-dlc-kept.sh" ;;
+    *)      return 1 ;;
+  esac
+  hu_reg "$c/.claude/settings.json" $main
+  printf 'version: 1.0.0\ncommit: %s\n' "$HU_B" > "$c/.claude/.ai-dlc-version"
+  printf 'base: %s\ntheirs: %s\n' "$HU_B" "$HU_T" > "$c/.claude/.ai-dlc-applying"
+  printf '%s' "$c"
+}
+hu_fin() { bash "$1" --finish "$HU_D" "$HU_B" "$2" "$HU_T" > "$2/.rows" 2>/dev/null; }
+hu_n()   { awk -F'\t' -v a="$2" -v b="$3" '$1==a && $2==b {n++} END {print n+0}' "$1/.rows" 2>/dev/null || echo 0; }
+hu_det() { awk -F'\t' -v a="$2" -v b="$3" '$1==a && $2==b {print $4; exit}' "$1/.rows" 2>/dev/null; }
+# hu_vec <apply.sh> -> "a b c t", 1 = holds
+hu_vec() {
+  local A="$1" w1 w2 w3 v=""
+  w1="$(hu_world orphan)"; w2="$(hu_world orphan)"; w3="$(hu_world near)"
+  for x in "$w1" "$w2" "$w3"; do [ -d "$x" ] || { printf 'BROKEN'; return; }; done
+  hu_fin "$A" "$w1"
+  if [ "$(hu_n "$w1" WORKLIST hook-unshipped)" = 1 ] \
+     && case "$(hu_det "$w1" WORKLIST hook-unshipped)" in *": ai-dlc-gone.sh "*) true ;; *) false ;; esac \
+     && ! case "$(hu_det "$w1" WORKLIST settings-merge)" in *ai-dlc-gone.sh*) true ;; *) false ;; esac \
+     && [ "$(stamp_ver "$w1")" = 1.0.0 ] && [ "$(marker "$w1")" = PRESENT ]; then v=1; else v=0; fi
+  # (b) exit 3 on (a)'s own tree: the row's remedy, then --finish again.
+  hu_reg "$w1/.claude/settings.local.json" ai-dlc-gone.sh
+  hu_fin "$A" "$w1"
+  if [ "$(stamp_ver "$w1")" = 2.0.0 ] && [ "$(marker "$w1")" = GONE ]; then v="$v 1"; else v="$v 0"; fi
+  # (c) exit 1.
+  rm -f "$w2/.claude/hooks/ai-dlc-gone.sh"; hu_fin "$A" "$w2"
+  if [ "$(stamp_ver "$w2")" = 2.0.0 ] && [ "$(marker "$w2")" = GONE ]; then v="$v 1"; else v="$v 0"; fi
+  # (t) near-misses.
+  hu_fin "$A" "$w3"
+  if [ "$(hu_n "$w3" WORKLIST hook-unshipped)" = 0 ] && [ "$(hu_n "$w3" WORKLIST settings-merge)" = 1 ] \
+     && case "$(hu_det "$w3" WORKLIST settings-merge)" in *ai-dlc-shipped.sh*) true ;; *) false ;; esac \
+     && case "$(hu_det "$w3" WORKLIST settings-merge)" in *ai-dlc-tmplonly.sh*) true ;; *) false ;; esac; then
+    v="$v 1"; else v="$v 0"; fi
+  printf '%s' "$v"
+}
+HU_WANT="1 1 1 1"
+# SELF-PROBE: the real validator exits 1 on the orphan world and 0 once it is registered locally,
+# or (a)/(b) would score the validator rather than the row.
+HU_P="$(hu_world orphan)"
+hu_p1="$(bash "$HU_P/scripts/ai-dlc/validate-hook-registration.sh" --root "$HU_P" >/dev/null 2>&1; echo $?)"
+hu_reg "$HU_P/.claude/settings.local.json" ai-dlc-gone.sh
+hu_p2="$(bash "$HU_P/scripts/ai-dlc/validate-hook-registration.sh" --root "$HU_P" >/dev/null 2>&1; echo $?)"
+if [ "$hu_p1" = 1 ] && [ "$hu_p2" = 0 ]; then
+  ok "HU-0 the real validator exits 1 on an orphan ai-dlc- hook and 0 once settings.local.json registers it — exit 3 is a real exit"
+else
+  bad "HU-0 the validator read $hu_p1 on the orphan world and $hu_p2 after a local registration (want 1 then 0) — the HU arms would score the validator, not the row"
+fi
+HU_V="$(hu_vec "$APPLY")"
+set -- $HU_V
+[ "${1:-0}" = 1 ] && ok "HU-a an ai-dlc- hook theirs neither ships nor registers draws WORKLIST hook-unshipped naming it, the settings-merge row does not claim it, and --finish withholds on the tree" \
+                  || bad "HU-a the orphan hook did not draw its own gating row (vector '$HU_V') — the operator is sent to a merge that cannot clear it"
+[ "${2:-0}" = 1 ] && ok "HU-b exit 3 — registering it in .claude/settings.local.json — lets --finish stamp 2.0.0 and clear the marker" \
+                  || bad "HU-b the row's own exit 3 left the finisher withheld (vector '$HU_V')"
+[ "${3:-0}" = 1 ] && ok "HU-c exit 1 — deleting the file — lets --finish stamp" \
+                  || bad "HU-c deleting the orphan left the finisher withheld (vector '$HU_V')"
+[ "${4:-0}" = 1 ] && ok "HU-t a hook in the template only and one in core/hooks only both stay on the ONE settings-merge row, and no hook-unshipped row fires" \
+                  || bad "HU-t a template-carried or shipped hook was routed off the settings-merge row (vector '$HU_V')"
+set --
+if build_rec "$WORK/hu-ctl"; then
+  HUC="$(hu_vec "$WORK/hu-ctl/apply.sh")"
+  [ "$HUC" = "$HU_WANT" ] && ok "HU-CTL an unmutated copy scores every HU arm ($HUC)" \
+                          || bad "HU-CTL the unmutated copy scored '$HUC', want '$HU_WANT' — every HU mutant verdict below is unreadable"
+else
+  bad "HU-CTL could not stage a copy of $REC"
+fi
+hu_score() { # <label> <dir> <want> <what>
+  local v; v="$(hu_vec "$2/apply.sh")"
+  if [ "$v" = "$3" ]; then ok "$1 ($4): HU vector a b c t = $v — killed exactly the arms it owns"
+  elif [ "$v" = "$HU_WANT" ]; then bad "$1 SURVIVED ($4): every HU arm still holds"
+  else bad "$1 ($4) scored $v, want $3 — entangled or vacuous"; fi
+}
+hu_mut() { # <dir> <anchor-literal> <replacement-literal>
+  local n; n="$(grep -cF -- "$2" "$REC/apply.sh")" || n=0
+  [ "$n" = 1 ] || return 1
+  HU_A="$2" HU_R="$3" awk '{ i = index($0, ENVIRON["HU_A"]); if (i) $0 = substr($0, 1, i-1) ENVIRON["HU_R"] substr($0, i + length(ENVIRON["HU_A"])); print }' \
+    "$REC/apply.sh" | mut_apply "$1"
+}
+hu_try() { # <label> <dir> <anchor> <replacement> <want> <what>
+  if hu_mut "$2" "$3" "$4"; then hu_score "$1" "$2" "$5" "$6"
+  else bad "$1 DID NOT APPLY — \`$3\` is not in apply.sh exactly once; re-anchor it"; fi
+}
+hu_try HU-M1 "$WORK/hu-m1" 'if [ "$hr_tmpl_rc" -eq 0 ] \' 'if false \' "0 1 1 1" "the partition switched off"
+hu_try HU-M2 "$WORK/hu-m2" '&& ! git -C "$DIST" cat-file -e "${THEIRS}:core/hooks/${_hn}" 2>/dev/null; then' '; then' "1 1 1 0" "the core/hooks conjunct dropped"
+hu_try HU-M3 "$WORK/hu-m3" '*"/hooks/${_hn}"[!A-Za-z0-9._-]*) hr_merge_names=' '__hu_never__) hr_merge_names=' "1 1 1 0" "the template test matches nothing"
+hu_try HU-M4 "$WORK/hu-m4" 'say WORKLIST hook-unshipped' 'say NOTE hook-unshipped' "0 1 1 1" "the row demoted to a non-gating NOTE"
+hu_try HU-M5 "$WORK/hu-m5" '  hr_names="$hr_merge_names"' '  :' "0 1 1 1" "the settings-merge list not narrowed"
+fi  # ---- end of the BL-103 block
+
+# ==============================================================================================
 # VF -- `--finish` VERIFIES THE TREE IT STAMPS
 # ==============================================================================================
 #

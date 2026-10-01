@@ -413,7 +413,20 @@ Tiered **DEFECT**.
 Found while closing `BL-033` at `v0.423.0`; not a `PC-` candidate, so it ranks below the
 PC-backed set.
 
-verify: sh P=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$P" ] || exit 9; B="$(awk '/^NOEXEC="\$\($/{f=1} f{ sub(/#.*/,""); print } f && /^\)"$/{exit}' "$P")"; grep -q '100755' <<<"$B" || exit 1; grep -q '\[ -x' <<<"$B" || exit 1; grep -q '100644' <<<"$B"
+Held note (batch 178): the audit walks both modes in one `ls-tree` pass and emits `DECISION
+extra-executable` (counted into `mech_fail`, so the stamp is withheld) for a `100644` blob whose
+consumer copy is executable; `not-executable` is unchanged. False-positive floor measured at the
+distribution's HEAD: 0 `100644` `*.sh` under `core/` against 434 `100755` entries. Caveat:
+`install.sh:343/:375/:381` chmod whole globs (`reconcile/*.sh`, `hooks/*.sh`,
+`session-driver/*.sh`), so a future `100644` `.sh` in one of those directories trips this row on
+every consumer. The exec-bit rows now name re-render/re-approve/apply rather than a bare re-run:
+measured, a bare re-run is refused rc 1 by the union gate, and `--finish` stamps with the bit still
+wrong because it skips the audit. Fixture: `apply-legacy-script-path` case 12, seeds (i)-(iii) and
+remedy arm (r), mutants XE-M1..M5. The text-keyed receipt below is replaced by one that drives
+`apply.sh` through a three-file world; scored tip 1, fix 0, b177's wrong fix 1 (`[ ! -x ]` for both
+modes) 1, wrong fix 2 (mirror test inverted) 1.
+
+verify: sh R=core/skills/ai-dlc-update/reconcile; [ -f "$R/apply.sh" ] || exit 9; W=$(mktemp -d) || exit 9; D="$W/d"; C="$W/c"; mkdir -p "$D/core/scripts" "$D/core/session-driver" "$C/scripts/ai-dlc" "$C/.claude/session-driver"; g() { git -C "$D" -c user.email=f@f -c user.name=f "$@" >/dev/null 2>&1; }; printf '#!/bin/sh\n' > "$D/core/scripts/validate-x.sh"; chmod +x "$D/core/scripts/validate-x.sh"; for f in e p m; do printf '# %s\n' "$f" > "$D/core/session-driver/$f.sh"; done; echo 1.0.0 > "$D/VERSION"; git -C "$D" init -q && g add -A && g commit -qm b || exit 9; B=$(git -C "$D" rev-parse HEAD); echo 2.0.0 > "$D/VERSION"; echo v2 >> "$D/core/session-driver/m.sh"; g commit -qam t || exit 9; T=$(git -C "$D" rev-parse HEAD); cp "$D/core/scripts/validate-x.sh" "$C/scripts/ai-dlc/"; chmod -x "$C/scripts/ai-dlc/validate-x.sh"; for f in e p m; do printf '# %s\n' "$f" > "$C/.claude/session-driver/$f.sh"; done; chmod +x "$C/.claude/session-driver/e.sh"; printf 'version: 1.0.0\ncommit: %s\n' "$B" > "$C/.claude/.ai-dlc-version"; o=$(bash "$R/apply.sh" "$D" "$B" "$C" "$T" 2>/dev/null); h() { awk -F'\t' -v k="$1" -v p="$2" '$1=="DECISION" && (k=="*" || $2==k) && $3==p {f=1} END {exit !f}' <<<"$o"; }; h not-executable scripts/ai-dlc/validate-x.sh || exit 9; h '*' .claude/session-driver/p.sh && exit 1; h extra-executable .claude/session-driver/e.sh || exit 1; grep -q '^version: 1\.0\.0$' "$C/.claude/.ai-dlc-version" || exit 1; exit 0
 
 ## BL-100 — `--untangle` gives a mode-drifted consumer copy the same verdict as a correct one
 
@@ -1104,7 +1117,17 @@ state today.
 Found by an adversarial pass on `v0.426.0`. Not a `PC-` candidate, so it ranks below the
 PC-backed set.
 
-verify: sh s=core/skills/ai-dlc-update/reconcile/settings-merge.sh; a=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$s" ] && [ -f "$a" ] || exit 9; grep -q 'say WORKLIST settings-merge' "$a" || exit 9; grep -q 'worklist_n' "$a" || exit 9; code=$(sed 's/#.*//' "$s"); grep -q 'jq' <<<"$code" || exit 9; grep -qE '(echo|printf|say)[^#]*(retired hook|not carried by the template|cannot be registered)' <<<"$code" && exit 0; exit 1
+Held note (batch 178): `hook_registration_row` partitions the validator's UNREGISTERED names. A
+name in neither `${THEIRS}:core/hooks/` nor THEIRS' `templates/settings.json.template` gets
+`WORKLIST hook-unshipped`, still gating because the consumer's pre-push runs the same validator,
+naming three exits: delete, rename out of `ai-dlc-`, or register in `.claude/settings.local.json`.
+Every other name keeps the `settings-merge` row, and an unreadable template at THEIRS keeps today's
+behaviour. `settings-merge.sh` is unchanged, so the old receipt (which grepped it) is replaced by a
+finisher world. Population on the distribution is empty. Fixture: `apply-restamp-worklist`
+HU-0/a/b/c/t on its own dist, mutants HU-M1..M5. Scored tip 1, fix 0, wrong fix 1 (template-only
+partition) 1, wrong fix 2 (row demoted to NOTE) 1.
+
+verify: sh R=core/skills/ai-dlc-update/reconcile; V=core/scripts/validate-hook-registration.sh; [ -f "$R/apply.sh" ] && [ -f "$R/settings-merge.sh" ] && [ -f "$V" ] || exit 9; command -v python3 >/dev/null || exit 9; W=$(mktemp -d) || exit 9; D="$W/d"; mkdir -p "$D/core/hooks" "$D/core/session-driver" "$D/templates"; g() { git -C "$D" -c user.email=f@f -c user.name=f "$@" >/dev/null 2>&1; }; hk() { printf '#!/bin/sh\nexit 0\n' > "$1"; chmod +x "$1"; }; reg() { f="$1"; shift; s=""; for n in "$@"; do s="$s${s:+,}{\"type\":\"command\",\"command\":\"\$CLAUDE_PROJECT_DIR/.claude/hooks/$n\"}"; done; printf '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[%s]}]}}\n' "$s" > "$f"; }; hk "$D/core/hooks/ai-dlc-kept.sh"; hk "$D/core/hooks/ai-dlc-shipped.sh"; reg "$D/templates/settings.json.template" ai-dlc-kept.sh ai-dlc-tmplonly.sh; echo v1 > "$D/core/session-driver/s.sh"; echo 1.0.0 > "$D/VERSION"; git -C "$D" init -q && g add -A && g commit -qm b || exit 9; B=$(git -C "$D" rev-parse HEAD); echo 2.0.0 > "$D/VERSION"; echo v2 > "$D/core/session-driver/s.sh"; g commit -qam t || exit 9; T=$(git -C "$D" rev-parse HEAD); mk() { c="$W/$1"; mkdir -p "$c/.claude/hooks" "$c/.claude/session-driver" "$c/scripts/ai-dlc" "$c/.claude/skills/ai-dlc-update/reconcile"; echo v2 > "$c/.claude/session-driver/s.sh"; cp "$V" "$c/scripts/ai-dlc/"; chmod +x "$c/scripts/ai-dlc/validate-hook-registration.sh"; cp "$R/settings-merge.sh" "$c/.claude/skills/ai-dlc-update/reconcile/"; for h in kept shipped tmplonly; do hk "$c/.claude/hooks/ai-dlc-$h.sh"; done; printf 'version: 1.0.0\ncommit: %s\n' "$B" > "$c/.claude/.ai-dlc-version"; printf 'base: %s\ntheirs: %s\n' "$B" "$T" > "$c/.claude/.ai-dlc-applying"; }; fin() { bash "$R/apply.sh" --finish "$D" "$B" "$W/$1" "$T" 2>/dev/null; }; v() { sed -n 's/^version: //p' "$W/$1/.claude/.ai-dlc-version"; }; mk near; reg "$W/near/.claude/settings.json" ai-dlc-kept.sh; n=$(fin near); m=$(awk -F'\t' '$1=="WORKLIST" && $2=="settings-merge" {print $4}' <<<"$n"); case "$m" in *ai-dlc-tmplonly.sh*) ;; *) exit 9 ;; esac; case "$m" in *ai-dlc-shipped.sh*) ;; *) exit 1 ;; esac; awk -F'\t' '$1=="WORKLIST" && $2=="hook-unshipped" {f=1} END {exit !f}' <<<"$n" && exit 1; mk o; hk "$W/o/.claude/hooks/ai-dlc-gone.sh"; reg "$W/o/.claude/settings.json" ai-dlc-kept.sh ai-dlc-shipped.sh ai-dlc-tmplonly.sh; a=$(fin o); awk -F'\t' '$1=="WORKLIST" && $2=="hook-unshipped" && index($4, ": ai-dlc-gone.sh ") {f=1} END {exit !f}' <<<"$a" || exit 1; [ "$(v o)" = 1.0.0 ] || exit 1; reg "$W/o/.claude/settings.local.json" ai-dlc-gone.sh; fin o >/dev/null; [ "$(v o)" = 2.0.0 ] || exit 1; exit 0
 
 ---
 
@@ -1146,7 +1169,19 @@ therefore differ by construction. Keyed on the row SEVERITY and KIND instead it 
 0 against a mutant that emits any distinct row for a non-keep verdict. Exit 9 if the loop cannot
 be located or the keep run emits nothing.
 
-verify: sh set -e; a=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$a" ] || exit 9; t=$(mktemp -d); sed -n '/^while IFS="$TAB_CH" read -r ext detail; do$/,/^EOF$/p' "$a" > "$t/l.sh"; [ -s "$t/l.sh" ] || exit 9; { echo 'TAB_CH="$(printf "\t")"'; echo 'say(){ printf "%s %s\n" "$1" "$2"; }'; echo 'ADJ_ROW_TOKEN=adjudicated'; echo 'ADJ_KEEP_VERDICT=still-additive'; echo 'LD_HOOK="$(printf "extensions/e.md\t%s" "$D")"'; echo '. "$T/l.sh"'; } > "$t/d.sh"; r=$(T="$t" D="adjudicated=retire :: p" bash "$t/d.sh" 2>&1) || exit 9; k=$(T="$t" D="adjudicated=still-additive :: p" bash "$t/d.sh" 2>&1) || exit 9; rm -rf "$t"; [ -n "$k" ] || exit 9; [ "$r" = "$k" ] && exit 1; exit 0
+Held note (batch 178): the extension loop routes a recorded verdict. The keep verdict (resolved
+from `layer-drift.sh`, never spelled in `apply.sh`) keeps `NOTE extension-adjudicated`; `retire`
+emits `NOTE extension-retire` (delete per Rule 27(b), or cut the retired section); `contradicts-core`
+emits `NOTE extension-contradicts-core` (refile as an override with a `base_sha`, LC-E5, or edit
+it); any other value emits `NOTE extension-adjudicated-unrouted` rather than reading as keep. All
+NOTE, so neither `handback` nor `worklist_n` counts them and `--finish` is unaffected. Fixture:
+`apply-drift-after-write` 2d, per-verdict cells, mutants M1 (keep comparison deleted), M2 (retire
+label unmatched), M3 (every verdict read as keep). The old differential receipt accepted the
+inverted fix; the replacement drives the real seed once per verdict and asserts each kind and its
+actor text. Scored tip 1, fix 0, wrong fix 1 (inverted keep test) 1, wrong fix 2 (contradicts-core
+unrouted) 1.
+
+verify: sh S=core/fixtures/apply-drift-after-write/seed.sh; [ -f "$S" ] && command -v jq >/dev/null || exit 9; W=$(bash "$S") && [ -f "$W/env.sh" ] || exit 9; . "$W/env.sh"; L="$(dirname "$APPLY")/layer-drift.sh"; K=$(bash "$L" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null | awk -F'\t' '$1=="ADJUDICABLE"{print $4}' | grep -x '[0-9a-f]\{40\}'); [ -n "$K" ] || exit 9; G="$CONSUMER/_bmad-output/ai-dlc-update"; mkdir -p "$G"; run() { : > "$G/layer-adjudication-register.jsonl"; for d in $K; do printf '{"clause":"LC-E4","entry":"x","subject_digest":"%s","verdict":"%s","recorded_utc":"2026-01-01T00:00:00Z","reason":"r"}\n' "$d" "$1" >> "$G/layer-adjudication-register.jsonl"; done; bash "$APPLY" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | awk -F'\t' '$1=="NOTE" && $2 ~ /^extension-/ && index($3, "alpha-domain") {print $2 "|" $4}'; }; k=$(run still-additive); [ -n "$k" ] || exit 9; [ "$(grep -c . <<<"$k")" = 1 ] || exit 1; case "$k" in extension-adjudicated\|*) ;; *) exit 1 ;; esac; r=$(run retire); [ "$(grep -c . <<<"$r")" = 1 ] || exit 1; case "$r" in "extension-retire|"*"delete the entry per Rule 27(b), or cut the retired section"*) ;; *) exit 1 ;; esac; c=$(run contradicts-core); [ "$(grep -c . <<<"$c")" = 1 ] || exit 1; case "$c" in "extension-contradicts-core|"*"Refile the entry as an override with a base_sha"*) ;; *) exit 1 ;; esac; exit 0
 
 ## BL-129 — a change to an adjudication predicate has no mechanism that can see what it RECLASSIFIES
 
@@ -2009,7 +2044,20 @@ approval, and that refusal names the procedure that works (re-render, re-approve
 own comment at `:852-859` calls a remedy of this shape a defect. Reachable only through a
 transient staging or diff failure; `--finish` gates on WORKLIST rows and does not stop on it.
 
-verify: manual
+Held note (batch 178): remedy (a) shipped, chosen by measurement on the forced state. The state
+was forced with `chmod 000` on the consumer's `schemas/provenance-block.json`, an approved report
+present, and the mode restored before the remedy was followed. An unwritable TMPDIR does not reach
+the row, because preclassify refuses first. Bare re-run: rc 1 (union gate), stamp stays. (a)
+re-render, re-approve, apply: rc 0, refiled, schema at theirs, stamp advanced. (b) `--finish`: rc 0
+and stamp advanced with nothing refiled and the schema still drifted, so it was not shipped. The
+`did not run` row and its exec-bit siblings (`declared-not-executable`, `not-executable`) now share
+one `reapply_remedy` text interpolating the run's four arguments; the siblings were driven in an
+exec-bit world with the same three outcomes. Fixture: `apply-drift-refile` arm r follows whatever
+the row prescribes and reads the tree, mutants r-M1 (bare re-run) and r-M2 (`--finish`). Scored tip
+1, fix 0, wrong fix 1 (`--finish` remedy) 1, wrong fix 2 (bare re-run) 1; exit 9 when the row does
+not appear (e.g. run as root).
+
+verify: sh S=core/fixtures/apply-drift-refile/seed.sh; [ -f "$S" ] || exit 9; W=$(bash "$S") && [ -f "$W/env.sh" ] || exit 9; . "$W/env.sh"; Q="$(dirname "$APPLY")"; G="$CONSUMER/_bmad-output/ai-dlc-update"; mkdir -p "$G"; rr() { { printf '# r\n\n'; bash "$Q/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null; } > "$G/reconcile-report.md"; }; rr; chmod 000 "$SCHEMA"; row=$(bash "$APPLY" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | awk -F'\t' '$1=="DECISION" && $2=="drift" && index($4, "did not run") {print $4; exit}'); chmod 644 "$SCHEMA"; [ -n "$row" ] || exit 9; case "$row" in *--finish*) bash "$APPLY" --finish "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>&1 ;; *emit-report.sh*) rr; bash "$APPLY" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>&1 ;; *) bash "$APPLY" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>&1 ;; esac || exit 1; grep -q my-persona-skill "$EXT" 2>/dev/null || exit 1; git -C "$DIST" show "${THEIRS}:core/schemas/provenance-block.json" | cmp -s - "$SCHEMA" || exit 1; grep -qE '^version: 9\.9\.9$' "$STAMP" || exit 1; exit 0
 
 ## BL-355 — `norm_lines` folds case byte-wise, so an accented capital no longer matches its lower-case form
 

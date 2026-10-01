@@ -398,6 +398,105 @@ else
   ok "  and no manifest-unreadable row is raised for the form that actually ships"
 fi
 
+# --- 12. BL-099: THE EXEC-BIT AUDIT READS BOTH DIRECTIONS ---------------------------------------
+# The audit kept 100755 alone, so a path upstream ships 100644 whose consumer copy IS executable
+# was never reported -- a bit left by an earlier pull stays forever. Three seeds, ONE world, each
+# a different file so every cell is read off the same run:
+#   (i)   m-exec.sh   100644, consumer +x       -> named under `extra-executable`, stamp withheld
+#   (ii)  m-plain.sh  100644, consumer not +x   -> named in NO DECISION row (the near-miss a fix
+#                                                  testing only "not executable" would name)
+#   (iii) validate-x.sh 100755, consumer -x     -> still named under `not-executable`
+# And (r): every exec-bit row's remedy is the union gate's own procedure, interpolated with this
+# run's arguments -- never a bare "re-run", which that gate refuses once this run has written.
+# OWN DIST, so cases 1-11 keep theirs. Mutants: XE-M1..M5 below.
+X_ISDIST=0; [ -f "$ROOT/core/skills/ai-dlc-update/reconcile/apply.sh" ] && X_ISDIST=1
+X_RUN=1
+if ! grep -qF 'say DECISION extra-executable' "$APPLY"; then
+  if [ "$X_ISDIST" = 1 ]; then
+    printf '  --    (BL-099: this apply.sh carries no extra-executable row; in the distribution case 12 runs anyway and must go red)\n'
+  else
+    X_RUN=0
+    printf '  SKIP  %s\n' "case 12 (BL-099) -- the installed apply.sh predates the mirror exec-bit arm; it lands with the pull that carries this fixture"
+  fi
+fi
+if [ "$X_RUN" = 1 ]; then
+  XD="$WORK/x-dist"
+  mkdir -p "$XD/core/scripts" "$XD/core/session-driver" || exit 2
+  xg() { git -C "$XD" -c user.email=f@f -c user.name=fixture "$@"; }
+  printf '#!/usr/bin/env bash\necho x\n' > "$XD/core/scripts/validate-x.sh"; chmod +x "$XD/core/scripts/validate-x.sh"
+  for f in m-exec m-plain m-moved; do printf '#!/usr/bin/env bash\n# %s v1\n' "$f" > "$XD/core/session-driver/$f.sh"; done
+  printf '1.0.0\n' > "$XD/VERSION"
+  git -C "$XD" init -q 2>/dev/null && xg add -A && xg commit -qm base || { echo "FIXTURE ERROR: case 12 base" >&2; exit 2; }
+  XB="$(git -C "$XD" rev-parse HEAD)"
+  printf '2.0.0\n' > "$XD/VERSION"; printf '#!/usr/bin/env bash\n# m-moved v2\n' > "$XD/core/session-driver/m-moved.sh"
+  xg add -A && xg commit -qm theirs || { echo "FIXTURE ERROR: case 12 theirs" >&2; exit 2; }
+  XT="$(git -C "$XD" rev-parse HEAD)"
+  # x_vec <apply.sh> -> "i ii iii r" (1 = holds); one fresh consumer per call.
+  x_vec() {
+    local c o v="" d
+    c="$(mktemp -d "$WORK/x.XXXXXX")" || { printf 'BROKEN'; return; }
+    mkdir -p "$c/.claude/session-driver" "$c/scripts/ai-dlc"
+    cp "$XD/core/scripts/validate-x.sh" "$c/scripts/ai-dlc/validate-x.sh"; chmod -x "$c/scripts/ai-dlc/validate-x.sh"
+    for f in m-exec m-plain m-moved; do git -C "$XD" show "${XB}:core/session-driver/$f.sh" > "$c/.claude/session-driver/$f.sh"; done
+    chmod +x "$c/.claude/session-driver/m-exec.sh"; chmod -x "$c/.claude/session-driver/m-plain.sh"
+    printf 'version: 1.0.0\ncommit: %s\n' "$XB" > "$c/.claude/.ai-dlc-version"
+    o="$(bash "$1" "$XD" "$XB" "$c" "$XT" 2>/dev/null)"
+    printf '%s\n' "$o" > "$c/.rows"
+    if awk -F'\t' '$1=="DECISION" && $2=="extra-executable" && $3==".claude/session-driver/m-exec.sh" {f=1} END {exit !f}' <<<"$o" \
+       && grep -q '^DECISION	restamp-withheld' <<<"$o" && grep -q '^version: 1\.0\.0$' "$c/.claude/.ai-dlc-version"; then
+      v=1; else v=0; fi
+    if ! awk -F'\t' '$1=="DECISION" && index($3, "m-plain.sh") {f=1} END {exit !f}' <<<"$o" \
+       && grep -q '^DECISION	' <<<"$o"; then v="$v 1"; else v="$v 0"; fi
+    if awk -F'\t' '$1=="DECISION" && $2=="not-executable" && $3=="scripts/ai-dlc/validate-x.sh" {f=1} END {exit !f}' <<<"$o"; then
+      v="$v 1"; else v="$v 0"; fi
+    # (r) every exec-bit row, by kind, carries the procedure with THIS run's four arguments.
+    d=1
+    for k in not-executable extra-executable declared-not-executable; do
+      awk -F'\t' -v k="$k" '$1=="DECISION" && $2==k {f=1} END {exit !f}' <<<"$o" || continue
+      awk -F'\t' -v k="$k" -v w="emit-report.sh $XD $XB $c $XT" '$1=="DECISION" && $2==k && index($4, w) && index($4, "re-approve it, then re-run apply") {f=1} END {exit !f}' <<<"$o" || d=0
+      awk -F'\t' -v k="$k" '$1=="DECISION" && $2==k && $4 ~ /and re-run[.;]/ {f=1} END {exit !f}' <<<"$o" && d=0
+    done
+    printf '%s %s' "$v" "$d"
+  }
+  X_WANT="1 1 1 1"
+  XV="$(x_vec "$APPLY")"
+  set -- $XV
+  [ "${1:-0}" = 1 ] && ok "case 12 (i): a 100644 file the consumer holds executable is named under extra-executable and the re-stamp is withheld" \
+                    || bad "case 12 (i): an executable copy of a 100644 file was not reported, or the stamp advanced over it ($XV)"
+  [ "${2:-0}" = 1 ] && ok "case 12 (ii): a non-executable 100644 sibling is named in no DECISION row" \
+                    || bad "case 12 (ii): a correctly non-executable 100644 file was reported -- the mirror arm names every 100644 file ($XV)"
+  [ "${3:-0}" = 1 ] && ok "case 12 (iii): a 100755 file left -x is still named under not-executable" \
+                    || bad "case 12 (iii): the original direction stopped firing ($XV)"
+  [ "${4:-0}" = 1 ] && ok "case 12 (r): every exec-bit row names re-render/re-approve/apply with this run's arguments, and none ends in a bare re-run" \
+                    || bad "case 12 (r): an exec-bit row still prescribes a bare re-run, which the union gate refuses after this run has written ($XV)"
+  set --
+  # CONTROL: an unmutated copy of the reconcile dir scores the same vector.
+  XC="$WORK/x-ctl"; mkdir -p "$XC" && cp "$RECON"/* "$XC"/ 2>/dev/null
+  XCV="$(x_vec "$XC/apply.sh")"
+  [ "$XCV" = "$X_WANT" ] && ok "case 12 CONTROL: an unmutated copy scores $XCV" \
+                         || bad "case 12 CONTROL: the unmutated copy scored '$XCV', want '$X_WANT' -- every mutant below is unreadable"
+  # x_mut <label> <anchor> <replacement> <want> <what> -- a copy of the whole reconcile dir.
+  x_mut() {
+    local d="$WORK/x-$1" n
+    n="$(grep -cF -- "$2" "$APPLY")" || n=0
+    if [ "$n" != 1 ]; then bad "$1 DID NOT APPLY -- \`$2\` is not in apply.sh exactly once"; return; fi
+    mkdir -p "$d" && cp "$RECON"/* "$d"/ 2>/dev/null
+    X_A="$2" X_R="$3" awk '{ i = index($0, ENVIRON["X_A"]); if (i) $0 = substr($0, 1, i-1) ENVIRON["X_R"] substr($0, i + length(ENVIRON["X_A"])); print }' "$APPLY" > "$d/apply.sh"
+    if cmp -s "$APPLY" "$d/apply.sh" || ! bash -n "$d/apply.sh"; then bad "$1 DID NOT APPLY or does not parse"; return; fi
+    local v; v="$(x_vec "$d/apply.sh")"
+    if [ "$v" = "$4" ]; then ok "$1 ($5): vector i ii iii r = $v -- killed exactly its arms"
+    elif [ "$v" = "$X_WANT" ]; then bad "$1 SURVIVED ($5)"
+    else bad "$1 ($5) scored $v, want $4"; fi
+  }
+  # M1 is b177's wrong fix 1: every non-executable file named, whatever its mode.
+  x_mut XE-M1 'if [ "$mode" = 100755 ] && [ ! -x "$cons" ]; then' 'if [ ! -x "$cons" ]; then' "1 0 1 1" "the 100755 conjunct dropped (names every non-exec file)"
+  # M2 is wrong fix 2: the mirror's exec test inverted.
+  x_mut XE-M2 'elif [ "$mode" = 100644 ] && [ -x "$cons" ]; then' 'elif [ "$mode" = 100644 ] && [ ! -x "$cons" ]; then' "0 0 1 1" "the mirror test inverted"
+  x_mut XE-M3 'elif [ "$mode" = 100644 ] && [ -x "$cons" ]; then' 'elif false; then' "0 1 1 1" "the mirror arm removed"
+  x_mut XE-M4 'if [ "$mode" = 100755 ] && [ ! -x "$cons" ]; then' 'if false; then' "1 1 0 1" "the original direction removed"
+  x_mut XE-M5 'installed and inert. \`chmod +x\` it, then ${reapply_remedy}"' 'installed and inert. \`chmod +x\` and re-run."' "1 1 1 0" "declared-not-executable's bare re-run restored"
+fi
+
 echo ""
 if [ "$fails" -eq 0 ]; then
   echo "apply-legacy-script-path: PASS"
