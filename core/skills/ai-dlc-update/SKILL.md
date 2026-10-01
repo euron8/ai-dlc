@@ -2279,7 +2279,8 @@ prose is itself generated rather than composed.
      and gating on one that cannot clear would wedge the consumer with no exit.
 
      **Every row `--finish` can emit that withholds the stamp**, derived from the `say WORKLIST`
-     sites outside `apply.sh`'s resolution phases: `finish-base-unverified`,
+     sites outside `apply.sh`'s resolution phases, plus `staging-refused`, which
+     `ap_staging_refused` emits as a `WORKLIST` under `--finish`: `finish-base-unverified`,
      `finish-unverified-tree`, `finish-unapplied`, `finish-classify-unmerged`,
      `finish-classify-unverified`, `finish-refile-owed`, `finish-refile-unverified`,
      `finish-exec-owed`, `staging-refused`, `hook-unshipped`, `settings-merge`,
