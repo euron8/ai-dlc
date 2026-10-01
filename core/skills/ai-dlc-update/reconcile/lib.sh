@@ -1001,6 +1001,19 @@ fi
 #   `a/./b/f.txt` `a//b/f.txt`        128           1           0, one line naming    ABSENT
 #     `a/b/../b/f.txt`                                           the CANONICAL path
 #   `../x` (climbs out of the tree)   128           128         128, no line          ABSENT
+#   `/etc/passwd` (absolute, outside) 128           1           128, no line          ABSENT
+#   `<repo>/a/f` (absolute, inside)   128           1           0, one line naming    ABSENT
+#                                                               the RELATIVE path
+#   `:(glob)a/**` (pathspec magic)    128           1           128 without, 0 and    ABSENT
+#                                                               no line with
+#                                                               `--literal-pathspecs`
+#
+# THE PATHSPEC IS READ LITERALLY (`--literal-pathspecs`), as `cat-file -e <ref>:<path>` reads it.
+# Without the flag `:(glob)…` and `:!…` are magic `ls-tree` refuses at 128, so a spelling no tree
+# entry can carry read as a failure; with it they list nothing and are absent, and a tree entry
+# literally named `:(glob)x` is still found by name. An ABSOLUTE path is refused at 128 as "outside
+# repository" before any object is read, like `..`, so it is absent too; one pointing INTO the
+# repository lists the relative name, which mismatches the spelling and is absent at rc 0.
 #
 # A NON-CANONICAL SPELLING IS ABSENT, NOT A FAILURE. `ls-tree` normalises its pathspec and `cat-file`
 # does not, so the line it prints names a different path; every later read of the caller's spelling
@@ -1038,13 +1051,14 @@ _ai_dlc_memo_absent() { # <dist> <ref> <path> -> 0 only when the path is CONFIRM
   # One `ls-tree` entry at most: a pathspec naming one path lists that entry or nothing. `$( )`
   # drops the NUL `-z` ends it with; a newer bash warns on its own stderr, hence the group redirect.
   local _e _lr=0
-  { _e="$(git -C "$1" ls-tree -z --full-tree "$2" -- "$3" 2>/dev/null)"; } 2>/dev/null || _lr=$?
+  { _e="$(git -C "$1" --literal-pathspecs ls-tree -z --full-tree "$2" -- "$3" 2>/dev/null)"; } 2>/dev/null || _lr=$?
   if [ "$_lr" -eq 0 ]; then
     [ -n "$_e" ] || return 0
     [ "${_e#*$'\t'}" = "$3" ] && return 1
     return 0
   fi
   case "/$3/" in */../*) return 0 ;; esac
+  case "$3" in /*) return 0 ;; esac
   return 1
 }
 _ai_dlc_memo_commit() { # <file-stem> <tmp> <status> -> cache the fill; always serves it

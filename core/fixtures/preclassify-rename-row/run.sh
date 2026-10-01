@@ -589,13 +589,16 @@ chmod 755 "$RO"
 #   c memo_rev_parse, a/b tree missing, writable memo  -> 125     d  the same, chmod-555 memo -> 125
 #   e the writable memo queried while missing, after restore -> memo_has_path 0 AND memo_rev_parse 0
 #   f memo_has_path, top.txt's BLOB missing, writable  -> 125     g  the same, chmod-555 memo -> 125
-#   h a NON-CANONICAL spelling (a/./b/f.txt) on a healthy tree -> memo_has_path 128, memo_rev_parse 1
+#   h a NON-CANONICAL spelling (a/./b/f.txt) on a healthy tree -> memo_has_path 128, memo_rev_parse 1;
+#     an absolute path INTO the repository (<dist>/top.txt) -> memo_has_path 128
 #   i a `..` spelling that climbs out (../x) on a healthy tree -> memo_has_path 128
+#   m an absolute path OUTSIDE the repository (/etc/passwd) -> memo_has_path 128, memo_rev_parse 1
+#   n a pathspec-magic spelling (:(glob)a/**) -> memo_has_path 128, memo_rev_parse 1
 #   j preclassify --untangle AND --templates, each with its subject's tree missing -> exit 2, named
 #   k preclassify --untangle with an unresolvable rev -> exit 2 (it bucketed every row before)
 #   l preclassify's dist_only(), the .dist-only marker read as cat-file 128 / rev-parse 1 / ls-tree 1
 #     (the missing-subtree signature, forced by a shim) -> exit 2, not "not dist-only"
-# h and i are the NEAR-MISSES: both are absences the naive rule ("ls-tree rc 0 with a line, or any
+# h, i, m and n are the NEAR-MISSES: all are absences the naive rule ("ls-tree rc 0 with a line, or any
 # non-zero, is a failure") reads as failures, and a ledger path spelled that way would then refuse.
 N_RUN=1
 case "$RECON" in */core/skills/ai-dlc-update/reconcile) N_DIST=1 ;; *) N_DIST=0 ;; esac
@@ -651,7 +654,7 @@ NSHIMEOF
   chmod +x "$NSHIM/git" || exit 2
   # n_pc <recon> <out-prefix> <base> <theirs> <mode> -> rc
   n_pc() { AI_DLC_RECONCILE_MEMO="" bash "$1/preclassify.sh" "$ND" "$3" "$4" "$NC" "$5" > "$2.rows" 2> "$2.err"; }
-  score_n() { # score_n <recon> <tag> -> failing cells a-l then `.`, or BROKEN(...)
+  score_n() { # score_n <recon> <tag> -> failing cells a-n then `.`, or BROKEN(...)
     local _d="$1" _o="$NW/s-$2" _r="" _m _x _y _rc
     mkdir -p "$_o"
     # CONTROLS on the healthy tree, every one PRESENCE-shaped
@@ -691,8 +694,20 @@ NSHIMEOF
     mkdir -p "$_o/mh"
     lq "$_d" "$_o/mh" memo_has_path dist HEAD a/./b/f.txt;  _x=$?
     lq "$_d" "$_o/mh" memo_rev_parse dist HEAD:a//b/f.txt; _y=$?
-    { [ "$_x" = 128 ] && [ "$_y" = 1 ]; } || _r="${_r}h"
+    # and an absolute path INTO the repository: ls-tree lists the RELATIVE name, a different path
+    lq "$_d" "$_o/mh" memo_has_path dist HEAD "$ND/top.txt"; _z=$?
+    { [ "$_x" = 128 ] && [ "$_y" = 1 ] && [ "$_z" = 128 ]; } || _r="${_r}h"
     lq "$_d" "$_o/mh" memo_has_path dist HEAD ../x;         _x=$?; [ "$_x" = 128 ] || _r="${_r}i"
+    # --- m: an absolute path OUTSIDE the repository is refused before any object is read, like `..`
+    mkdir -p "$_o/mm"
+    lq "$_d" "$_o/mm" memo_has_path dist HEAD /etc/passwd;  _x=$?
+    lq "$_d" "$_o/mm" memo_rev_parse dist HEAD:/etc/passwd; _y=$?
+    { [ "$_x" = 128 ] && [ "$_y" = 1 ]; } || _r="${_r}m"
+    # --- n: a pathspec-magic spelling names no tree entry; ls-tree reads it literally, as cat-file does
+    mkdir -p "$_o/mn"
+    lq "$_d" "$_o/mn" memo_has_path dist HEAD ':(glob)a/**';  _x=$?
+    lq "$_d" "$_o/mn" memo_rev_parse dist 'HEAD::(glob)a/**'; _y=$?
+    { [ "$_x" = 128 ] && [ "$_y" = 1 ]; } || _r="${_r}n"
     # --- j: each mode with its subject's tree missing
     aside "$O_RULES"; n_pc "$_d" "$_o/ju" "$NH" "$NH" --untangle; _x=$?; back "$O_RULES"
     aside "$O_TPL";   n_pc "$_d" "$_o/jt" "$NH" "$NH" --templates; _y=$?; back "$O_TPL"
@@ -719,7 +734,8 @@ NSHIMEOF
   n_subj="$got"
   if [ -z "$got" ]; then
     ok "BL-374/BL-310 a-g: a missing subtree or blob reads 125 from memo_has_path and memo_rev_parse, writable or chmod-555 memo, and is never cached"
-    ok "BL-374/BL-310 h-i: a non-canonical spelling and a climbing \`..\` are still ABSENT (128 / 1), never a refusal"
+    ok "BL-374/BL-310 h-i: a non-canonical spelling, an absolute path into the repository and a climbing \`..\` are still ABSENT (128 / 1), never a refusal"
+    ok "BL-310 m-n: an absolute path outside the repository and a pathspec-magic spelling are ABSENT (128 / 1), never a refusal"
     ok "BL-374 j-l: preclassify refuses (exit 2) on a missing subtree in --untangle and --templates, an unresolvable rev, and an unconfirmable .dist-only marker"
   else
     bad "BL-374/BL-310 cell(s) [$got] failed -- a read failure is still answered or cached as an absence (see the cell table above)"
@@ -752,13 +768,14 @@ PY
     echo "  (BL-374 mutants not scored: the subject itself fails [$n_subj])"
   else
     N_ABS_BODY='  local _e _lr=0
-  { _e="$(git -C "$1" ls-tree -z --full-tree "$2" -- "$3" 2>/dev/null)"; } 2>/dev/null || _lr=$?
+  { _e="$(git -C "$1" --literal-pathspecs ls-tree -z --full-tree "$2" -- "$3" 2>/dev/null)"; } 2>/dev/null || _lr=$?
   if [ "$_lr" -eq 0 ]; then
     [ -n "$_e" ] || return 0
     [ "${_e#*$'"'"'\t'"'"'}" = "$3" ] && return 1
     return 0
   fi
   case "/$3/" in */../*) return 0 ;; esac
+  case "$3" in /*) return 0 ;; esac
   return 1'
     # the pre-fix oracle: rev-parse -q --verify answering 1
     n_mut revparse-oracle abcdeijkl lib.sh "$N_ABS_BODY" '  git -C "$1" rev-parse -q --verify "$2:$3" >/dev/null 2>&1
@@ -768,9 +785,14 @@ PY
     return 0' '    return 1'
     # no `..` clause: every non-zero ls-tree is a failure
     n_mut no-dotdot i lib.sh '  case "/$3/" in */../*) return 0 ;; esac
+  case "$3" in /*) return 0 ;; esac' '  case "$3" in /*) return 0 ;; esac'
+    # no absolute-path clause: git's "outside repository" 128 on /etc/passwd reads as a failure
+    n_mut no-abs m lib.sh '  case "$3" in /*) return 0 ;; esac
   return 1
 }' '  return 1
 }'
+    # pathspecs read as magic again: ls-tree refuses `:(glob)…` at 128, read as a failure
+    n_mut no-literal n lib.sh 'git -C "$1" --literal-pathspecs ls-tree -z' 'git -C "$1" ls-tree -z'
     # the direct lines keep git's raw status (an unwritable memo answers differently)
     n_mut raw-direct bdg lib.sh \
       '    [ "$_st" -eq 0 ] || _ai_dlc_memo_absent "$_dist" "$_ref" "$_path" || return 125; return "$_st"; }' '    return "$_st"; }' \
