@@ -1697,7 +1697,10 @@ if [ "$p12_live" = yes ]; then
   if cmp -s "$HERE/seed.sh" "$P12M/seed.sh" || [ "$p12_orig" -ne 1 ] || [ "$p12_left" -ne 0 ]; then
     bad "FIXTURE ERROR: the Part 12 mutation did not remove exactly the one config line (original $p12_orig, left $p12_left), so the mutant proves nothing. Update the sed to seed.sh's real line"
   else
-    p12_mr="$(bash "$P12M/seed.sh" 2>/dev/null)" || p12_mr=""
+    # The mutant seed's own commits run auto-maintenance, so make them SYNCHRONOUS: a detached
+    # repack still writing while the copy below reads the store is the flake this part guards.
+    p12_mr="$(GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=maintenance.autoDetach GIT_CONFIG_VALUE_0=false \
+              bash "$P12M/seed.sh" 2>/dev/null)" || p12_mr=""
     if [ -z "$p12_mr" ] || [ ! -d "$p12_mr/dist/.git" ]; then
       bad "FIXTURE ERROR: the Part 12 mutant seed built no distribution ('$p12_mr'), so no mutant verdict is attributable"
     else
