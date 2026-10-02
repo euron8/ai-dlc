@@ -563,8 +563,54 @@ prefix_entry_count() { # <PC-S<n>> -> integer
   } | sort -u | grep -cE "^$1-" 2>/dev/null || true
 }
 
-named_absorbed() { # <label> -> "<how> <n> <sha>,<sha>,... <code|docs>" if upstream's history names it, else ""
-  local _id="$1" _hits _list _n _pfx _how _h
+# named_cited_filter <shas> <fixed-needle> <short-prefix> -> the RESIDUE: the shas, in input order,
+# whose message still names the id once every canonical NOT-DISCHARGED line is stripped.
+#
+# THE PRODUCER-SIDE FORM, AND WHY A JOIN OVER MESSAGES NEEDS ONE. A distribution release that
+# cites an entry it did NOT discharge -- a rejection, a cross-reference, an entry discharged by
+# another route -- carries the id on its own body line, column 0, exactly
+#
+#     Not-discharged: PC-S<n>            or            Not-discharged: PC-S<n>-<SLUG>
+#
+# no backticks, no bullet, never the subject. Before this form existed the message search could
+# not tell such a citation from a fix: `b3debba3` cited PC-S308 with the true sentence
+# "discharged by an archived entry and cited by no release commit until now", touched six core/
+# paths, read NAMED-UPSTREAM, and the consumer closed the entry on it. The form is the one channel
+# the writer controls; nothing in a historical message is rewritten, so this is forward-only.
+#
+# ALL canonical lines are stripped, every id's, not only this one's: a longer-slug sibling's form
+# line would otherwise keep a shorter id present as a substring. What survives is tested with the
+# SAME predicate as the query that produced the set -- a fixed substring for the slug walk, the
+# anchored short-id ERE for the prefix walks -- because a fixed-substring test at a prefix site
+# re-imports the `PC-S3021` defect the prefix fallback's own comment documents.
+#
+# THE GRAMMAR IS PAIRED, BYTE FOR BYTE, WITH ARM F OF scripts/validate-release-version.sh, which
+# refuses a near-miss spelling in a release range. The engine ships to consumers and that validator
+# does not, so the two copies cannot be one file; change both or neither.
+#
+# ONE git CALL FOR THE WHOLE SET, `--no-walk=unsorted` so the residue keeps the caller's
+# newest-first order. Records are opened by a \001 byte rather than NUL: BSD awk truncates a line at
+# a NUL (measured: `\0aaa` read as an empty header), and \001 is a byte no commit message carries.
+#
+# FAILS TOWARDS THE OLD KIND. This runs inside the caller's `$( )`, where `lr_refuse` cannot end
+# the run, so a git or awk failure returns the UNFILTERED set -- the rows this file produced before
+# the form existed -- never an empty one, which would manufacture a CITED-ONLY row from a tool error.
+named_cited_filter() {
+  local _out
+  [ -n "$1" ] || return 0
+  _out="$(printf '%s\n' "$1" | git -C "$DIST" log --no-walk=unsorted --stdin --format='%x01%h%n%B' 2>/dev/null \
+    | LR_N="$2" LR_P="$3" LC_ALL=C awk '
+    function flush() { if (h != "" && keep) print h }
+    BEGIN { n = ENVIRON["LR_N"]; p = ENVIRON["LR_P"]; re = p "([^0-9A-Za-z-]|$)" }
+    substr($0, 1, 1) == "\001" { flush(); h = substr($0, 2); keep = 0; next }
+    $0 ~ /^Not-discharged: PC-S[0-9]+(-[A-Z0-9]+)*$/ { next }
+    (p == "" && index($0, n)) || (p != "" && $0 ~ re) { keep = 1 }
+    END { flush() }')" || { printf '%s\n' "$1"; return 0; }
+  printf '%s\n' "$_out" | grep . || true
+}
+
+named_absorbed() { # <label> -> "<how> <n> <sha>,<sha>,... <code|docs|cited>" if upstream's history names it, else ""
+  local _id="$1" _hits _all _list _n _pfx _how _h
   case "$_id" in
     *[!A-Z0-9-]*|'') return 0 ;;              # not id-shaped: prose label, nothing to ask
   esac
@@ -614,7 +660,13 @@ named_absorbed() { # <label> -> "<how> <n> <sha>,<sha>,... <code|docs>" if upstr
   # SHAS, NOT SUBJECTS. `emit()` is a THREE-FIELD TSV row on one line, and a commit subject may
   # contain a tab. A sha cannot, so the list cannot corrupt the row that carries it.
   _hits="$(git -C "$DIST" log -F --grep="$_id" --format=%h "$THEIRS" 2>/dev/null)"
-  if [ -z "$_hits" ]; then
+  # THE CITED-ONLY SPLIT, before anything is counted or reached. `_all` is every commit naming the
+  # id; `_hits` becomes the residue -- the ones still naming it once canonical `Not-discharged:`
+  # lines are stripped (see `named_cited_filter`). The fallback below asks only when NOTHING names
+  # the slug, exactly as before: a slug named only in the form is a CITED-ONLY row, not a miss.
+  _all="$_hits"
+  _hits="$(named_cited_filter "$_all" "$_id" "")"
+  if [ -z "$_all" ]; then
     # FALLBACK: the short id upstream actually writes. Only when it names ONE entry.
     _pfx=""
     case "$_id" in
@@ -640,9 +692,18 @@ named_absorbed() { # <label> -> "<how> <n> <sha>,<sha>,... <code|docs>" if upstr
     # extend the id, so a digit, a letter or a dash all disqualify. The SLUG search above stays `-F`
     # -- a full slug is already specific, and a fixed string is the right tool for it.
     _hits="$(git -C "$DIST" log -E --grep="${_pfx}([^0-9A-Za-z-]|\$)" --format=%h "$THEIRS" 2>/dev/null)"
+    _all="$_hits"
+    _hits="$(named_cited_filter "$_all" "" "$_pfx")"
     _how=prefix
   fi
-  [ -n "$_hits" ] || return 0
+  [ -n "$_all" ] || return 0
+  # EVERY NAMING COMMIT CITES THE ID IN THE NOT-DISCHARGED FORM. Reported, with the full list, as
+  # its own kind (`cited`), never as nothing: the citation is still a fact the operator may need --
+  # it can record a rejection, a withdrawal or a split -- and dropping the row would delete it.
+  if [ -z "$_hits" ]; then
+    _n="$(printf '%s\n' "$_all" | grep -c . 2>/dev/null || true)"
+    printf '%s %s %s cited' "$_how" "${_n:-1}" "$(printf '%s\n' "$_all" | tr '\n' ',' | sed 's/,$//')"; return 0
+  fi
   _n="$(printf '%s\n' "$_hits" | grep -c . 2>/dev/null || true)"
   # Newest-first, which is `git log`'s own order and therefore the order the operator reads them
   # in. No end is privileged: the list is emitted whole and the caller elects nothing.
@@ -770,6 +831,10 @@ named_ambiguous() { # <label> -> "<n-commits> <sha>,<sha>,... <n-entries> <code|
   # ambiguous -- a wrong row rather than a missing one.
   local _slug_hit
   _slug_hit="$(git -C "$DIST" log -F --grep="$_id" --format=%H "$THEIRS" 2>/dev/null)"
+  # THE SAME CITED-ONLY FILTER as `named_absorbed`, so the two cannot disagree about which commits
+  # name the slug. Reached only when that function returned empty, which now means the slug names
+  # nothing at all -- a form-only slug returned a CITED-ONLY answer there and never arrives here.
+  _slug_hit="$(named_cited_filter "$_slug_hit" "$_id" "")"
   [ -z "$_slug_hit" ] || return 0
   # ANCHORED, for the same reason as the sibling call in `named_absorbed`: `-F` is an unanchored
   # fixed-substring search, so it claims a commit that mentions the prefix only inside a DIFFERENT
@@ -788,6 +853,9 @@ named_ambiguous() { # <label> -> "<n-commits> <sha>,<sha>,... <n-entries> <code|
   # `rev-parse --short` is paid, then the entry count the row's "and N entries in this ledger carry
   # it" is built from (ledger-rotate's fixture parses that phrase), then the reach.
   _hits="$(git -C "$DIST" log -E --grep="${_pfx}([^0-9A-Za-z-]|\$)" --format=%h "$THEIRS" 2>/dev/null)"
+  # A prefix cited ONLY in the not-discharged form is SILENT here, not a row: this row attributes
+  # nothing to any entry already, and a citation that disowns the discharge adds nothing to read.
+  _hits="$(named_cited_filter "$_hits" "" "$_pfx")"
   [ -n "$_hits" ] || return 0
   _c="$(printf '%s\n' "$_hits" | grep -c . 2>/dev/null || true)"
   printf '%s %s %s %s' "${_c:-1}" "$(printf '%s\n' "$_hits" | tr '\n' ',' | sed 's/,$//')" "$_n" "$(named_reach "$_hits")"
@@ -2039,7 +2107,13 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       prefix) na_note=" Matched on the SHORT id \`$(printf '%s' "$label" | sed -n 's/^\(PC-S[0-9][0-9]*\)-.*/\1/p')\`, which is the form upstream writes, and that prefix names exactly ONE entry in this ledger -- so the attribution is unambiguous. The full-slug search found nothing, which is normal and is not evidence of anything." ;;
       *)      na_note="" ;;
     esac
-    if [ "$na_r" = docs ]; then
+    if [ "$na_r" = cited ]; then
+      # EVERY NAMING COMMIT CITES THE ID ONLY ON A CANONICAL `Not-discharged:` LINE. Decided before
+      # the reach split because it is a property of the naming set, not of the receipt or of what the
+      # commits touched: a release that changes core/ and disowns the discharge is exactly the
+      # third class `named_reach` cannot see. The row is kept, with every sha.
+      emit NAMED-UPSTREAM-CITED-ONLY "$label" "upstream's own history NAMES this entry's id ${na_where}, and EVERY one of those commits names it ONLY on a \`Not-discharged:\` line -- the form a distribution release uses to cite an entry it did NOT discharge. This row is NOT an absorption claim.${na_note} Read the commit(s): the citation may record a rejection, a withdrawal or a split, which IS something to act on. Then read the entry's own subject at theirs, because a fix that never names the id is invisible to this search. Annotate only what that reading establishes, and otherwise leave the entry open."
+    elif [ "$na_r" = docs ]; then
       # A NAMING SET THAT CHANGES NOTHING A CONSUMER INSTALLS AND CUTS NO RELEASE. See `named_reach`
       # for the predicate and what it does not decide. The row is kept, with every sha, and its kind
       # says the naming is not evidence of an absorption: an operator reading NAMED-UPSTREAM as

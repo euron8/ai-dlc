@@ -202,6 +202,53 @@ git -C "$DIST" commit -q -m '0.099.5 -- discharges PC-S954-RELEASE-COMMIT-NAMING
 git -C "$DIST" log -1 --format=%B HEAD~1 | grep -q 'PC-S954' \
   && { echo 'seed: the PC-S954 fix commit names the id, so the release is not the only naming commit' >&2; exit 1; }
 
+# --- pre-base: THE NOT-DISCHARGED CITATION FORM (BL-145's producer half) ---
+#
+# A release that cites an entry it did NOT discharge names it on a body line reading exactly
+# `Not-discharged: PC-S<n>[-<SLUG>]`, column 0. Every commit below touches core/, so the reach
+# predicate scores each `code` and only the citation filter can tell them apart:
+#
+#   PC-S955  ONE core commit, names the id ONLY in the form   -> NAMED-UPSTREAM-CITED-ONLY
+#   PC-S956  ONE core commit, names it in the SUBJECT and in the form -> NAMED-UPSTREAM (both forms:
+#            the ordinary mention still counts)
+#   PC-S957  ONE core commit discharging -X in the subject and citing -Y in the form: X reads
+#            NAMED-UPSTREAM, Y reads CITED-ONLY -- a filter that drops a whole commit for ANY form
+#            line would take X with it
+#   PC-S958  a core commit naming it only in the form, plus a DOCS commit naming it ordinarily ->
+#            NAMED-UPSTREAM-DOCS-ONLY: reach is computed over the RESIDUE, never the whole set
+#   PC-S959  ONE core commit carrying the form INLINE (not at column 0) -> NAMED-UPSTREAM: only the
+#            canonical line form is a citation
+printf '#!/bin/sh\necho s955\n' > "$DIST/core/scripts/s955-other.sh"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m '0.099.6 -- a release that fixes something else' \
+  -m 'Not-discharged: PC-S955-FORM-ONLY-CITATION'
+printf '#!/bin/sh\necho s956\n' > "$DIST/core/scripts/s956-subject.sh"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'fix: absorb PC-S956-BOTH-FORMS-CITATION' \
+  -m 'Not-discharged: PC-S956-BOTH-FORMS-CITATION'
+printf '#!/bin/sh\necho s957\n' > "$DIST/core/scripts/s957-subject.sh"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'fix: absorb PC-S957-ORDINARY-X' \
+  -m 'Not-discharged: PC-S957-FORM-Y'
+printf '#!/bin/sh\necho s958\n' > "$DIST/core/scripts/s958-other.sh"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'fix(reconcile): a change to another subject' \
+  -m 'Not-discharged: PC-S958-FORM-CORE-ORDINARY-DOCS'
+printf 'a plan that cross-references s958\n' > "$DIST/docs/s958-plan.md"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'docs(plan): cross-reference PC-S958-FORM-CORE-ORDINARY-DOCS'
+printf '#!/bin/sh\necho s959\n' > "$DIST/core/scripts/s959-other.sh"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'fix: an unrelated change' \
+  -m 'The text Not-discharged: PC-S959-INLINE-FORM-CITATION sits mid-line here.'
+# THE SHAPES, ASSERTED AGAINST THE REPO. One column-0 form line for each of S955/S956/S957-Y/S958,
+# and NONE for S959, whose only mention is the inline one.
+s95x_form="$(git -C "$DIST" log -5 --format=%B HEAD~1 | grep -cE '^Not-discharged: PC-S95[5-8]-[A-Z0-9-]+$')" || s95x_form=0
+s959_form="$(git -C "$DIST" log -1 --format=%B HEAD | grep -cE '^Not-discharged: ')" || s959_form=0
+s959_any="$(git -C "$DIST" log -1 --format=%B HEAD | grep -c 'Not-discharged: PC-S959-INLINE-FORM-CITATION')" || s959_any=0
+[ "$s95x_form" = 4 ] && [ "$s959_form" = 0 ] && [ "$s959_any" = 1 ] \
+  || { echo "seed: the not-discharged shapes are wrong (column-0 form lines $s95x_form want 4; S959 column-0 $s959_form want 0, inline $s959_any want 1)" >&2; exit 1; }
+
 printf '#!/bin/sh\necho s902 second\n' > "$DIST/core/scripts/s902-second.sh"
 git -C "$DIST" add -A
 git -C "$DIST" commit -q -m 'fix: a second change citing PC-S902'
@@ -400,6 +447,30 @@ cat > "$LED" <<'LEDGER'
 - **PC-S954-RELEASE-COMMIT-NAMING** — named ONLY by a release commit that changes `VERSION` and
   `CHANGELOG.md`; its parent carries the `core/` fix and names nothing. It must read
   NAMED-UPSTREAM, never NAMED-UPSTREAM-DOCS-ONLY.
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+- **PC-S955-FORM-ONLY-CITATION** — named ONLY on a `Not-discharged:` line of a core commit. It
+  must read NAMED-UPSTREAM-CITED-ONLY.
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+- **PC-S956-BOTH-FORMS-CITATION** — named in a core commit's subject AND on its form line. It must
+  stay NAMED-UPSTREAM.
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+- **PC-S957-ORDINARY-X** — discharged in the subject of a commit whose form line cites another id.
+  It must stay NAMED-UPSTREAM.
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+- **PC-S957-FORM-Y** — cited only on that commit's form line. It must read
+  NAMED-UPSTREAM-CITED-ONLY.
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+- **PC-S958-FORM-CORE-ORDINARY-DOCS** — cited on a core commit's form line and named ordinarily by
+  a docs commit. It must read NAMED-UPSTREAM-DOCS-ONLY.
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+- **PC-S959-INLINE-FORM-CITATION** — the form appears mid-line, not at column 0. It must stay
+  NAMED-UPSTREAM.
   verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
 
 - **PC-S953-SHARED-DOCS-FIRST** — shares `PC-S953` with the entry below; the one citing commit is
