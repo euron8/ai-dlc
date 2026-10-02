@@ -1243,3 +1243,58 @@ one `.dist-only` while keeping the packaging edits 1, for both `consumer-machine
 `self-update-join-gate`.
 
 verify: sh T=$(mktemp -d) || exit 9; mkdir -p "$T/_bmad" && git -C "$T" init -q || exit 9; bash scripts/install.sh "$T" >/dev/null 2>&1 || exit 9; [ -f "$T/tests/fixtures/ledger-reverify/run.sh" ] || exit 9; s=0; for n in consumer-machinery-home layer-contract-conformance layer-contract-conformance-b ledger-status-vocabulary release-version-triple self-update-join-gate; do [ -e "$T/tests/fixtures/$n" ] && s=1; done; exit $s
+
+## BL-428 — `preclassify.sh` does not recognise a fixture file step 2 wrote at the skill_commit, so it reads BOTH-CHANGED->CLASSIFY and halts the next hop
+
+**DEFECT.**
+
+Filed by the consumer as PC-S316-PRECLASSIFY-SELF-UPDATE-RECOGNITION-OMITS-FIXTURES.
+
+**What happens.** `at_self_update()` exempts a path whose consumer bytes match the distribution at
+the stamp's `skill_commit`, but only if the path is in the MACHINERY set. Step 2 writes a second
+term too: every `core/fixtures/<dir>/` that the hop's own diff touched (SKILL.md step 2, term 2). A
+fixture file that step 2 wrote at the intermediate ref therefore matches neither base nor theirs,
+falls through to `BOTH-CHANGED->CLASSIFY`, and step 2's agreement check between the slice and the
+CLASSIFY set halts the next hop. Reproduced at `f0cf026b` on a `file://` clone of the reference
+consumer at `83a5098c` (stamp `commit: 08655178`, `skill_commit: 4fe79281`), base `08655178`,
+theirs `abe3afb7`. Exactly the five filed fixtures read `BOTH-CHANGED->CLASSIFY`, and the control
+`reconcile/emit-report.sh` reads `ALREADY-AT-THEIRS`.
+
+**The fix shape.** Add one disjunct to `at_self_update()`, `core/fixtures/*/*`, that still requires
+the content match against the `skill_commit` blob. `ours == blob@skill_commit` and `ours != blob@base`
+mean the consumer holds upstream's own bytes at a ref neither endpoint names, so `UPSTREAM-ONLY`
+writing theirs over them loses nothing consumer-authored. That is the acquittal, not "step 2 wrote
+it": the disjunct also covers `core/fixtures/lib/` and nested files in driverless dirs, which step 2
+never writes. No `.dist-only` check is needed, because `DIST-ONLY-SKIP` is decided before every
+bucket arm. The alternative that scopes the arm through a `setup-sites.md` key is unbuildable
+against invariant I28's ghost arm.
+
+**Three findings for the consumer:**
+
+- The filed `verify:` keys on the unbuilt mechanism (a `setup-sites.md` `machinery:` key that
+  covers fixtures). Under this fix it stays STILL-LIVE by design, so the consumer closes its
+  candidate on its own adjudication.
+- A consumer that is already stranded with a fixture blob from an OLDER `skill_commit` is not
+  cleared by this fix. One operator accept of that CLASSIFY row clears it.
+- This is a bootstrapping fix. On the pull that delivers it, `skill_commit == commit`, so
+  `SELF_UPDATE_REF` is cleared and both arms are inert under either engine. The fix takes effect
+  from the hop AFTER the one that delivers it. The reference consumer has since left the state the
+  filing measured: its stamp now reads `commit: abe3afb7` / `skill_commit: abe3afb7` (graph commit
+  `aeeae8a5`, the 0.701.0 to 0.704.0 reconcile), so its next pull starts unsplit.
+
+**The receipt** builds a synthetic consumer from the distribution's own blobs. It holds
+`self-update-gate/run.sh` at the `4fe79281` blob, which is step 2's write and must read
+`UPSTREAM-ONLY`. It also holds `document-partition/run.sh` with a local edit, which must stay
+`BOTH-CHANGED->CLASSIFY` so that a disjunct which stopped comparing bytes cannot close the entry.
+Scored under `set -uo pipefail`: shipped `f0cf026b` exits 1, the fix exits 0, the fix with the
+`core/fixtures/*/*` disjunct dropped exits 1, and a variant returning on `core/fixtures/*` BEFORE
+the content check exits 1.
+
+**The receipt does not kill a mutant that drops the machinery conjunct** (exit 0). Killing it needs
+a non-machinery, non-fixture core path changed in both `08655178..4fe79281` and `4fe79281..abe3afb7`.
+Derived over that range there is none: 11 paths changed on both sides, 7 are under `core/fixtures/`
+and 4 are machinery (control: the shipped `machinery_paths()` resolves 136 paths, including
+`preclassify.sh`). That mutant is killed by `su-mut-unscoped` in `core/fixtures/self-update-gate`,
+whose seeded `artifact-path-grammar.md` is that path.
+
+verify: sh c="$(mktemp -d)" || exit 9; mkdir -p "$c/.claude" "$c/tests/fixtures/self-update-gate" "$c/tests/fixtures/document-partition" || exit 9; git show 4fe79281:core/fixtures/self-update-gate/run.sh > "$c/tests/fixtures/self-update-gate/run.sh" || exit 9; { git show 4fe79281:core/fixtures/document-partition/run.sh; echo '# local'; } > "$c/tests/fixtures/document-partition/run.sh" || exit 9; printf 'version: 0.692.0\ncommit: 08655178\nskill_version: 0.700.0\nskill_commit: 4fe79281\n' > "$c/.claude/.ai-dlc-version" || exit 9; out="$(bash core/skills/ai-dlc-update/reconcile/preclassify.sh . 08655178 abe3afb7 "$c" 2>/dev/null)" || exit 9; T="$(printf '\t')"; [ "$(printf '%s\n' "$out" | grep -c "^M${T}core/fixtures/document-partition/run.sh${T}.*${T}BOTH-CHANGED->CLASSIFY\$")" = 1 ] || exit 1; [ "$(printf '%s\n' "$out" | grep -c "^M${T}core/fixtures/self-update-gate/run.sh${T}.*${T}UPSTREAM-ONLY\$")" = 1 ]

@@ -348,15 +348,22 @@ self_update_hash() { # <core-rel-path> -> blob sha at the consumer's own skill_c
 
 # --- THE MACHINERY SET, RESOLVED ONCE AND OWNED HERE -------------------------------------
 #
-# The `skill_commit` arms below are SCOPED to this set, and the scoping is load-bearing
-# rather than tidy. Their whole justification is "step 2's autonomous self-update wrote this
-# file from an intermediate ref" — and step 2 writes the MACHINERY set and nothing else. A
-# non-machinery core file sitting at an intermediate ref got there by some route this arm
-# cannot name, so suppressing it is an exemption with no reason attached, and `apply.sh` then
-# writes theirs over it with no operator review. Measured on the discriminating input, base
-# 0.437.0 / skill 0.442.0 / theirs 0.443.0 with the consumer holding
-# `core/fixtures/check-24-adversarial-convergence/run.sh` at the intermediate blob: unscoped
-# the arm reclassifies it, scoped it does not, and the path is not in the machinery set.
+# The `skill_commit` arms below are SCOPED to this set plus files under `core/fixtures/`, and
+# the scoping is load-bearing rather than tidy. Step 2's autonomous self-update writes the
+# MACHINERY set and, as its second term, the `core/fixtures/<dir>/` trees that hop's diff
+# touched (SKILL.md step 2). A core file outside both subtrees sitting at an intermediate ref
+# got there by some route this arm cannot name, so suppressing it is an exemption with no
+# reason attached, and `apply.sh` then writes theirs over it with no operator review.
+#
+# THE FIXTURE SCOPE IS WIDER THAN STEP 2's TERM, AND THE REASON IS NOT "STEP 2 WROTE IT". Step 2
+# never writes `core/fixtures/lib/` or a nested path in a dir with no `run.sh` at theirs, yet the
+# disjunct covers them. What acquits every path it covers is the reason the M-arm comment below
+# gives: the consumer's bytes are UPSTREAM's own bytes at a ref neither endpoint names, so
+# `UPSTREAM-ONLY` writing theirs over them loses nothing the consumer authored. Measured on a
+# reference consumer, base 0.692.0 / skill 0.700.0 / theirs 0.704.0: five
+# `tests/fixtures/<d>/run.sh` held byte-for-byte at the skill_commit blob all read
+# BOTH-CHANGED->CLASSIFY, and step 2's slice/CLASSIFY agreement check halts the next hop on
+# exactly that.
 #
 # ONE DERIVATION, OWNED BY THE LOWEST SCRIPT. `self-update-gate.sh` needs the same set for its
 # CARRY arm's population and used to resolve it inline; it now `eval`s this function, the way
@@ -431,11 +438,20 @@ is_machinery() { pc_has_line "$MACHINERY_PATHS" "$1"; }
 
 # The whole predicate, in one place so the three call sites cannot disagree about it: this
 # consumer's copy is byte-identical to the distribution at the consumer's own `skill_commit`,
-# on a path step 2's self-update is the one thing that writes.
+# on a machinery path or a path under `core/fixtures/`.
+#
+# THE FIXTURE DISJUNCT IS ACQUITTED BY THE CONTENT MATCH, NOT BY STEP 2 HAVING WRITTEN THE FILE.
+# It covers paths step 2 never writes (`core/fixtures/lib/`, a nested file in a dir with no
+# `run.sh` driver), and that is safe for the reason the M-arm gives: `ours` equals upstream's own
+# blob at a ref neither endpoint names, so writing theirs over it loses nothing consumer-authored.
+# A fixture the consumer edited matches no ref and still reaches ->CLASSIFY. No `.dist-only`
+# check here: `DIST-ONLY-SKIP` is decided before any bucket arm.
 at_self_update() { # <core-rel-path> <ours-hash>
   [ -n "$SELF_UPDATE_REF" ] || return 1
   [ "$2" = "$(self_update_hash "$1")" ] || return 1
-  is_machinery "$1"
+  is_machinery "$1" && return 0
+  case "$1" in core/fixtures/*/*) return 0 ;; esac
+  return 1
 }
 
 # BOTH HASHES ABOVE ARE CONTENT-ONLY, AND THE MODE IS PART OF WHAT A PULL DELIVERS. A blob
