@@ -402,25 +402,34 @@ verify: manual
 
 ---
 
-## BL-005 — `validator-arm-selection` shard `b` has a ~47.8s solo floor set by three serial units; two routes below it were measured and neither taken
+## BL-005 — `validator-arm-selection` shard `b` now overlaps its seeded run with the attribution sweep; the third-directory route stays untaken
 
-Its shard `b` has a measured floor of ~47.8s solo, set by three serial units: a seeded run at
-16s, an attribution sweep at 11s, and a mutant's three parallel full runs at 18s. Going below
-it needs either a third directory duplicating the 27s prerequisite, or overlapping the seeded
-run with the attribution sweep. Both were measured; neither was taken.
+Shard `b` was a floor set by three serial units: a seeded run at 16s, an attribution sweep at
+11s, and a mutant's three parallel full runs at 18s (per-block serial costs, recorded in the
+timing table at the head of `core/fixtures/validator-arm-selection/run.sh`). Two routes below it
+were measured: a third directory duplicating the 27s prerequisite, or overlapping the seeded run
+with the attribution sweep.
+
+**The overlap is TAKEN.** Arm 6 of that file now backgrounds exactly the two raw commands — the
+seeded tree's plain validator run and `attrib` — waits each pid on its own, and reads both
+statuses in the parent before any guard or assignment runs: a seeded-run exit other than 0 or 1
+and a non-zero sweep exit each report FIXTURE BROKEN. The seeded run's stderr moved from the
+scanned tree into the fixture's own scratch dir, so neither unit writes where the other reads.
+No wall-clock gain is claimed for it: shard `b` is far from the suite's pole, so the suite's
+makespan does not move, and the solo base-against-tip figures were taken under load with ranges
+the size of the effect. **The third-directory route stays untaken.**
 
 **THIS ENTRY IS NOT ABOUT THE POLE, AND ITS HEADING SAID IT WAS UNTIL `v0.583.0`.** The pre-push
-pole is `ledger-reverify` at **628s loaded** — pool 12, full suite under
-`AI_DLC_FIXTURE_NO_SKIP=1`, taken as the MAX of three calibrated serial runs in a `file://`
-clone of `origin/main` at `83747ef4`: **628s** (wall 743s, load average 50.56 at start), **563s**
-(wall 629s, load 9.06), **562s** (wall 627s, load 5.30). Since `v0.583.0` that figure is watched
-by `scripts/validate-suite-pole.sh` against the tracked baseline
-`docs/suite-pole-baseline.tsv`, which is what `BL-257` built. The **166s / 217s** figures this
-entry's heading carried were displaced at **v0.541.0** by `BL-088`, whose own landing paragraph
-records the pole falling to `ledger-reverify` in the same change — four releases before
-`BL-255` read the heading and found it still asserting them. A session scoping performance work
-off this entry optimizes a fixture that is not the pole; shard `b`'s floor is a real and
-separate subject, and it is the only subject this entry has.
+pole is watched by `scripts/validate-suite-pole.sh` against its tracked baseline, which is what
+`BL-257` built. That validator prints a NOTE — *"the pole has moved to …; the baseline still
+names …"* — when the longest unit in a run is not the one the baseline names, so the current
+pole is read off that NOTE or off the top of `.git/ai-dlc-fixture-durations` (a LOADED cost),
+never off a figure quoted here. Every pole figure this entry has carried went stale: the
+**166s / 217s** in its old heading were displaced at **v0.541.0** by `BL-088`, four releases
+before `BL-255` read the heading and found it still asserting them, and the `ledger-reverify`
+figure that replaced them was itself displaced when that unit was sharded. A session scoping
+performance work off this entry optimizes a fixture that is not the pole; shard `b`'s floor is
+a real and separate subject, and it is the only subject this entry has.
 
 Carried over from `docs/plans/pre-push-wall-clock.md`. This is a program, not a single fix.
 
