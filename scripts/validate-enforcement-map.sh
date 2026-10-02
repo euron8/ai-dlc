@@ -11939,6 +11939,123 @@ else
   fi
 fi
 
+# --- I119: no shipped prompt prescribes a whole fan-out "in ONE message" ---------
+# The harness runs at most CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS subagents at once and REJECTS
+# every spawn past that ("Do not retry") instead of queueing it. A rule telling the lead to
+# dispatch a whole part set in one message is therefore an instruction to launch a partial
+# round: the reference consumer's sharded party round went out as one message of 72 `Agent`
+# calls, 24 launched, 48 were rejected, and the join it was given counted files. Rule 28
+# "Split dispatch" now owns the wave rule; every fan-out site CITES it. This arm stops the
+# whole-set imperative coming back at a site that never read Rule 28.
+#
+# NO FILE IS EXEMPT, RULE 28 INCLUDED. The wave paragraph is phrased without the refused
+# words ("its spawns go out together as parallel `Agent` calls"), so the owner needs no
+# carve-out and the arm acquits nothing by location. An exemption for the owner would be a
+# path an offender could be pasted into unseen.
+#
+# THE GRAMMAR: "in one message" / "in a single message", case-folded, whitespace collapsed,
+# markdown emphasis (`*`, `_`, backtick) stripped, the word "in" not preceded by a letter, and
+# "message" not followed by one. A match may STRADDLE a line break -- measured, one of the nine
+# pre-fix sites (`implementation.md`, "A wave dispatched in one / message") was wrapped, and a
+# per-line `grep -rn` over the same tree reported eight. Each line is therefore also tested
+# joined to its predecessor, and a straddling match is reported at the line that completes it,
+# only when the predecessor alone did not match (so one occurrence is never reported twice).
+#
+# FALSE-POSITIVE SET MEASURED AT 0 over core/skills/**, core/team-roles and core/rules after
+# the sites were repointed; the same scan read 9 before (rule-24, rule-28, rule-29,
+# implementation, _dispatch-protocol x2, _gate-procedures x3). THE NARROWING: "message" alone
+# is everywhere in this corpus (a hook's operator message, "one message each", the SAME
+# message a route is sent in), so the grammar requires the preposition AND the cardinal.
+# `bug-investigation.md` "in the SAME message" and SKILL.md "IN THE SAME response" are not
+# fan-outs and do not match. OUT OF SCOPE, deliberately: "within one message" (the letter
+# before "in" refuses it, and no shipped prompt carries it) and any imperative that dispatches
+# a whole set without naming the message ("all at once") -- a model reading either is still
+# bound by Rule 28's wave paragraph, which is the carrier; this arm guards the one spelling
+# that shipped.
+#
+# PROBE FIRST, BOTH WAYS, IN THE SAME awk RUN AS THE CORPUS. The probe cases arrive on stdin
+# ("-" is the first operand, so awk reads them before any corpus file), separated by
+# `#I119CASE <name>` lines, and each case's hit count is compared against its expectation
+# before the corpus verdict is read. ZERO extra forks for the probe: no mktemp, no rm. The
+# in-corpus control is a token known present in the scanned corpus -- Rule 28's own
+# "Split dispatch" heading -- counted by the same pass, so a corpus the scan never opened
+# cannot read as a clean one, and the scanned-file count is held to a floor.
+i119_files=()
+for i119_f in "$REPO_ROOT"/core/skills/*/*.md "$REPO_ROOT"/core/skills/*/*/*.md \
+              "$REPO_ROOT"/core/skills/*/*/*/*.md "$REPO_ROOT"/core/team-roles/*.md \
+              "$REPO_ROOT"/core/rules/*.md; do
+  # -s, not -f: awk opens an empty file without ever reaching FNR == 1, so an empty prompt
+  # would be counted as listed-but-unscanned. It holds nothing to scan either way.
+  [ -s "$i119_f" ] && i119_files[${#i119_files[@]}]="$i119_f"
+done
+i119_probe='#I119CASE fire-inline
+the lead dispatches one agent per part in ONE message, plus one
+#I119CASE fire-wrapped
+dispatch every shard in ONE
+message, then join them all
+#I119CASE fire-emphasis
+send the whole wave in **one** message and stop
+#I119CASE fire-single
+dispatch every analyst in a single message
+#I119CASE quiet-citation
+dispatch one shard per story in waves (Rule 28, "Split dispatch").
+#I119CASE quiet-beat
+**Each wave is joined in ONE beat** -- pass every path to one call.
+#I119CASE quiet-same
+3. Route below in the SAME message as that dispatch when no FAILing
+#I119CASE quiet-response
+IN THE SAME response as any status recap. A response that contains
+#I119CASE quiet-each
+# --- Part 2: the authoring arms fire, one message each ---
+#I119CASE quiet-within
+the operator correcting a misreading within one message of it'
+if [ "${#i119_files[@]}" -lt 20 ]; then
+  err "I119 found ${#i119_files[@]} prompt file(s) under core/skills, core/team-roles and core/rules; at least 20 are expected. The glob no longer reaches the shipped prompts, so a clean result here would describe an empty corpus."
+else
+  i119_out="$(awk '
+    function norm(s) { s = tolower(s); gsub(/[*_`]/, "", s); gsub(/[[:blank:]]+/, " ", s); return s }
+    function hit(s) { return s ~ /(^|[^a-z])in (one|a single) message([^a-z]|$)/ }
+    FNR == 1 { prev = ""; if (FILENAME != "-") nfiles++ }
+    FILENAME == "-" && /^#I119CASE / { cur = $2; seen[cur] = 0; order = order " " cur; prev = ""; next }
+    {
+      line = norm($0)
+      if (hit(line) || (prev != "" && !hit(prev) && hit(prev " " line))) {
+        if (FILENAME == "-") seen[cur]++
+        else printf "H %s:%d\n", FILENAME, FNR
+      }
+      if (FILENAME != "-" && index($0, "**Split dispatch:")) ctl++
+      prev = line
+    }
+    END {
+      n = split(order, o, " "); p = ""
+      for (i = 1; i <= n; i++) p = p o[i] "=" seen[o[i]] " "
+      printf "P %s\nC %d\nN %d\n", p, ctl + 0, nfiles + 0
+    }' - "${i119_files[@]}" <<<"$i119_probe" 2>&1)"
+  i119_p=""; i119_c=""; i119_n=""; i119_hits=""
+  while IFS= read -r i119_l; do
+    case "$i119_l" in
+      "P "*) i119_p="${i119_l#P }" ;;
+      "C "*) i119_c="${i119_l#C }" ;;
+      "N "*) i119_n="${i119_l#N }" ;;
+      "H "*) i119_hits="${i119_hits}
+  ${i119_l#H }" ;;
+      *) i119_hits="${i119_hits}
+  awk: ${i119_l}" ;;
+    esac
+  done <<<"$i119_out"
+  i119_want="fire-inline=1 fire-wrapped=1 fire-emphasis=1 fire-single=1 quiet-citation=0 quiet-beat=0 quiet-same=0 quiet-response=0 quiet-each=0 quiet-within=0 "
+  if [ "$i119_p" != "$i119_want" ]; then
+    err "I119 SELF-PROBE FAILED: the probe read '${i119_p}', expected exactly '${i119_want}'. Either a seeded whole-set imperative (inline, wrapped across a line break, emphasised, or 'a single') was not reported, or a near-miss (a Rule 28 waves citation, 'in ONE beat', 'in the SAME message', 'IN THE SAME response', 'one message each', 'within one message') was. Every verdict below is unattributable."
+  elif [ "${i119_n:-0}" != "${#i119_files[@]}" ]; then
+    err "I119 scanned ${i119_n:-0} file(s) of the ${#i119_files[@]} listed. A listed prompt the scan never opened reads exactly like a clean one.${i119_hits}"
+  elif [ "${i119_c:-0}" -lt 1 ] 2>/dev/null || [ -z "$i119_c" ]; then
+    err "I119 IN-CORPUS CONTROL FAILED: the scan did not see Rule 28's '**Split dispatch:' clause in core/skills/ai-dlc/rule-bodies/rule-28.md. Either the clause was renamed (move this control and every citation with it) or the scan no longer reaches the real tree, so zero findings here prove nothing."
+  elif [ -n "$i119_hits" ]; then
+    err "I119 a shipped prompt tells the lead to dispatch a whole set 'in one message':${i119_hits}
+The harness rejects every spawn past CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS rather than queueing it, so a fan-out sent whole launches only part of its round. Cite Rule 28 \"Split dispatch\" (its waves paragraph) at that site instead of restating it."
+  fi
+fi
+
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
