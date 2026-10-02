@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 476..539. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 479..517. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,51 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 182 SHIPPED TWO RELEASES, `v0.703.0` (`fb4328e4`, #973) AND `v0.704.0` (`09691a05`, #974), AND DISCHARGED NO
+CONSUMER CANDIDATE.** It was invoked by peer handoff and ran autonomously. The opening sweep found no candidate work:
+live 2 on 7 qualifying refs, both DISCHARGED here at 0.697.0 and 0.702.0, unfiled 0, worklist 0, TERMINAL 183, every
+control passing. Scope came from the whole-backlog adjudication (22 entries: 0 CLOSE, 4 PARTIAL, 18 LIVE).
+
+- `v0.703.0`: `BL-419` (Check 24's K2 runs the partitioner in force at the terminal pass, read from the stamped
+  root's git history, and is PENDING where a merge re-dated the install), `BL-421` (a row cut needs a GFM separator
+  row), `BL-417` (`fork-profile.sh` scores `name[…]=` and `+=`; `FORK_BUDGET` 3144).
+- `v0.704.0` (bootstrapping): `BL-418` (a failed machinery or sited-path producer returns 4 and every caller
+  refuses), `BL-425` (filed and fixed: the carry join ran once per HARD row and leaked a `ud-carry.*` directory
+  each time), `BL-422`, `BL-420`.
+
+Live backlog **22 -> 16**, archive **401 -> 408**: seven landed and rotated, one filed (`BL-425`). Net closed minus
+filed: **6**. R5's `--min-entries` floor is 16, measured after rotation; `--min-sh-receipts` stays 5.
+
+**EVERY ADVERSARY FOUND SOMETHING ON A GATE-GREEN SHAPE, AGAIN.** The K2 contract keyed on the spawn ledger's
+`shard` field, which the lead writes about its own dispatch; refuted before building. K2's first cut acquitted a
+series once a sprint branch's partitioner install was squash-merged, because first-parent history re-dates it.
+`v0.704.0`'s first cut aborted a pre-0.704.0 `apply.sh` beside the new `preclassify.sh` (its extractor's awk range
+ran to EOF). **A bootstrapping release owes a cell running the PREVIOUS release's extractor against the new file**;
+`apply-restamp-theirs` assertion 11 is the pattern.
+
+**THE `ud-carry.*` LEAK STILL GROWS UNTIL THE CONSUMER PULLS.** 81996 directories in the operator's `$TMPDIR` at the
+batch open, 82973 at its close (control: 10749 `tmp.*`), because installed 0.692.0 engines still run the leaking
+code. Nothing was deleted; removing them is the operator's call.
+
+**READ-SET TRACE OWED, AND THE ONE TAKEN WAS DISCARDED.** The sandbox tracer at `09691a05`, under load 17-31, dropped
+`apply-drift-after-write`, `enforcement-map-sites` and `validator-fork-budget` and deleted their 2216 rows, so the map
+was not committed. Re-run when `uptime` reads under 10: `bash core/scripts/derive-fixture-readsets.sh --list
+"apply-drift-after-write apply-drift-refile apply-restamp-theirs apply-worklist-rows check-24-adversarial-convergence
+document-partition enforcement-map-sites procsub-staged-refusal self-update-fixture-log self-update-gate
+validator-fork-budget ledger-reverify-shard-mutants" --tracer sandbox`, and commit only a diff with no OMITTED line.
+
+**THE DELIVERY GAP IS TWELVE RELEASES, WHICH IS WIDE.** The consumer is installed at 0.692.0 (skill 0.700.0, a
+self-update in progress) against `VERSION` 0.704.0. PENDING is 2, batch 181's ids. On a scratch clone the installed
+engine and 0.704.0 emitted byte-identical rows over the range delivering it. The banked ruling stands: report the gap
+and write no runbook.
+
+**OPERATOR DECISIONS STILL OPEN.** `BL-007`, `BL-132` and `BL-195` carry a 2026-10-01 decision in their bodies and
+are closed questions. Open: `BL-145` (a buildable producer half: a non-fix citation form `named_absorbed()` excludes,
+bootstrapping, size M), `BL-087` (needs an interactive Claude Code experiment), and batch 179's four census steps.
+`BL-127` is no longer live.
+
+Batch 181's block below is history: batch 182's block replaces its delivery gap and its decisions list.
 
 **BATCH 181 SHIPPED TEN RELEASES, `v0.693.0` THROUGH `v0.702.0` (#962-#971), AND DISCHARGED TWO CONSUMER
 CANDIDATES**, both filed by the reference consumer during the batch and each shipped as its own release:
@@ -434,45 +479,6 @@ moved).
 **`docs/reviews/graph-consumer-owned-close-brief.md` IS APPLIED.** Its fourteen candidates, eleven
 naming only non-core paths and three adjudicated here, are all in the consumer's archive, 14 of 14,
 measured by the fresh-resume sweep against `origin/main` `02e890e0`.
-
-**BATCH 174 ALSO SHIPPED `v0.667.0` (`23af7954`, #915) AND DISCHARGED
-`PC-S315-DERIVE-FIXTURE-READSETS-COPIES-THE-WHOLE-WORKING-TREE` (`BL-379`).** It carried the
-branches still building when `v0.666.0` shipped. Its close rotated 28 entries: live backlog
-**84 -> 58** (`BL-381`, `BL-382` filed), archive **295 -> 323**, R5 floors set to the measured
-36 sh receipts over 58 live entries. `BL-007` and `BL-338` are fixed in part and stay open; the
-operator ruled that `BL-007` stays open for a hole inside the archive.
-
-**`BL-308` IS FIXED IN `v0.667.0` AND COULD NOT ROTATE.** Its receipt exits 0 alone and 1 through
-`backlog-reverify.sh`, which exports `AI_DLC_RECONCILE_MEMO` from `reconcile/lib.sh` into every
-receipt it evaluates; the cached rename status defeats `preclassify-rename-row`'s `--no-renames`
-mutant. Filed as `BL-382`, whose receipt exits 1 on the tree and 0 with the variable unset around
-the eval. The leak predates this batch: the pre-0.667.0 fixture fails the same way with it set.
-
-**THE `v0.667.0` GATE FAILED TWICE BEFORE IT PASSED.** First `validator-fork-budget` at 3168
-against 3152, from new invariant `I116` and one more `I75` subject; `FORK_BUDGET` is 3174 with the
-measurement beside it. Then the budget edit dropped the validator's executable bit (`I77`), taking
-four fixtures with it. The same run failed `layer-adjudication-tier` Part 11 world E, a packed-store
-setup flake this release did not touch, filed as `BL-381`. Gate on `63c640fa`: 22 phases PASS, 218
-fixtures ok, every changed fixture `ok` by name, squash tree identical to the gated tip. The
-operator's read-set trace for the six fixtures that read new files ships in this close; only their
-rows moved, and `layer-contract-conformance` lost its 2128 stale `.claude/worktrees/` rows.
-
-**BUILT BRANCHES HELD UNMERGED, EACH TOUCHING A BOOTSTRAPPING FILE SO EACH SHIPS ALONE IF PICKED.**
-`b174-bl085` (`BL-085`, `layer-drift.sh`): the operator ruled `contract_version` stays 20, and its
-CHANGELOG entry states that `LC-E11` was widened in place. `b174-bl329` (`BL-329`,
-`sync-transient-ignore.sh`, which `apply.sh` runs in a pull). **Uninstall keeps a tuned
-`aiDlcModels`/`aiDlcRoles` entry and any file whose bytes differ from core's copy** (operator ruling
-and tip-adversary fix, both shipped in `v0.667.0`).
-
-**THE DELIVERY GAP IS ZERO.** The consumer pulled to 0.667.0 (`23af7954`) while the close ran, on
-`b6b68b3c` (#1136), so its stamp equals `VERSION`. This batch's three discharged ids are still live
-in its ledger until its own ledger-reverify closes them. It filed three candidates on 2026-09-29 and
-2026-09-30 that no backlog entry cites yet: `PC-S315-ARTIFACT-WRITE-LEDGER-DROPS-PARALLEL-SHARD-ROWS`,
-`PC-S315-AUDIT-LAYER-DEBT-CUE-ARM-READS-CORE-FIELD-VOCABULARY-AS-AN-OBLIGATION` and
-`PC-S315-NO-AMENDMENT-PATH-FOR-A-NOTARIZED-ARTIFACT-AFTER-A-STORY-DECISION`. The fresh-resume sweep
-read live 18 on 8 qualifying refs, unfiled 4, worklist 1, TERMINAL 151.
-
-Batch 173's next-work list and delivery gap are spent: batch 174's block above replaces both.
 
 ### Derive the state; do not trust the numbers below
 
