@@ -422,8 +422,10 @@ cat > "$LED" <<'LEDGER'
 entry's receipt paths reads NAMED-UPSTREAM-OFF-SUBJECT, so a receipt left on SKILL.md moves the
 plain-kind rows to that kind -- and the docs-only and cited-only entries too, under every mutant
 that lifts them back to the plain kind (reach-off, filter-off, reach-unfiltered, cited-fail-open).
-Every substring stays MARKER_A, which none of those files carries, so each STILL-LIVE verdict is
-unchanged. The two PC-S953 entries keep SKILL.md: their row is the per-prefix AMBIGUOUS one, which
+The subject test reads the RESIDUE after the citation filter, so S958 anchors on the docs file its
+residue (the ordinary docs mention) touches, not on the core file its filtered-out form commit
+touches. Every substring stays MARKER_A, which none of those files carries, so each STILL-LIVE
+verdict is unchanged. The two PC-S953 entries keep SKILL.md: their row is the per-prefix AMBIGUOUS one, which
 the subject predicate does not read. -->
 
 
@@ -477,7 +479,7 @@ the subject predicate does not read. -->
 
 - **PC-S958-FORM-CORE-ORDINARY-DOCS** — cited on a core commit's form line and named ordinarily by
   a docs commit. It must read NAMED-UPSTREAM-DOCS-ONLY.
-  verify: theirs_lacks core/scripts/s958-other.sh "MARKER_A"
+  verify: theirs_lacks docs/s958-plan.md "MARKER_A"
 
 - **PC-S959-INLINE-FORM-CITATION** — the form appears mid-line, not at column 0. It must stay
   NAMED-UPSTREAM.
