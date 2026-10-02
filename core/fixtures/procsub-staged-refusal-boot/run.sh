@@ -1895,6 +1895,23 @@ nopd() { # nopd <stub-dir>
     printf '%s\n' "case \"\$*\" in *'/predicate-differential.sh '*) echo x >> \"$d/PD_FIRED\"; exit 0 ;; esac"
     tail -n +3 "$d/bash"; } > "$d/bash.nopd" && mv "$d/bash.nopd" "$d/bash" && chmod +x "$d/bash"
 }
+# THE PUSH-CANDIDATE LEDGER HEADING IS LIKEWISE NOT A BL-360 SITE, and a later release moved it on
+# purpose: 0.706.0 added `NAMED-UPSTREAM-CITED-ONLY` to the status list it names. Tip and base would
+# otherwise render that heading differently for a reason that is not BL-360, so the tip's one heading
+# line is carried into the staged base, by awk keyed on the line's prefix -- never sed, whose
+# replacement would read any `&` in the heading as the whole match. Exactly ONE line must be
+# replaced: zero means the heading moved and the carry stopped matching; two means the prefix is no
+# longer a single site. Both are FIXTURE BROKEN, never a silent skip. The `<<<"$want"` count below
+# still proves the staged engine is the pre-fix one, which this carry does not touch.
+_erh="$("$REAL_GREP" -F '  sub "Push-candidate ledger — ' "$RECON/emit-report.sh")" || _erh=""
+_erhn="$(printf '%s\n' "$_erh" | "$REAL_GREP" -c .)" || _erhn=0
+if [ "$_erhn" -ne 1 ]; then
+  echo "FIXTURE BROKEN: the tip emit-report.sh carries $_erhn push-candidate ledger heading line(s), want exactly 1 to carry into the staged base" >&2; exit 2
+fi
+ERH="$_erh" awk 'index($0, "  sub \"Push-candidate ledger — ") == 1 { print ENVIRON["ERH"]; n++; next } { print } END { exit (n == 1) ? 0 : 3 }' \
+  "$ER_BASE/emit-report.sh" > "$ER_BASE/emit-report.sh.carry" \
+  && mv "$ER_BASE/emit-report.sh.carry" "$ER_BASE/emit-report.sh" \
+  || { echo "FIXTURE BROKEN: the push-candidate ledger heading did not replace exactly ONE line of the staged ${ER_BASE_SHA} emit-report.sh" >&2; exit 2; }
 _h="$("$REAL_GREP" -cF '<<<"$want"' "$ER_BASE/emit-report.sh")" || _h=0
 if cmp -s "$RECON/emit-report.sh" "$ER_BASE/emit-report.sh" || [ "$_h" -ne 2 ]; then
   echo "FIXTURE BROKEN: the staged ${ER_BASE_SHA} emit-report.sh is not the pre-fix engine (identical to tip, or it carries $_h \`<<<\"\$want\"\` line(s), want 2)" >&2; exit 2
