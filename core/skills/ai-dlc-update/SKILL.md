@@ -1130,6 +1130,18 @@ prose is itself generated rather than composed.
      carries the fix. The converse does not hold: a commit that touches `core/` can still merely
      mention an id, so a plain `NAMED-UPSTREAM` remains "upstream named it", never "upstream
      took it".
+   - `NAMED-UPSTREAM-OFF-SUBJECT` → upstream's history names this entry's id and the naming
+     commits change installed paths, but **none** of them changes any of the entry's own
+     `theirs_has` / `theirs_lacks` receipt paths, which the row names. A naming commit that
+     changes `VERSION` is judged over its whole release span — every commit after the previous
+     `VERSION` change up to it — so a release whose fix sits in an unnamed parent still counts
+     as touching. A consumer-layout receipt path is resolved by unique basename at `theirs`;
+     an entry with no path receipt, or with any path that does not resolve, keeps
+     `NAMED-UPSTREAM`. **Not a close and not a refusal**: the id may already have been
+     dispositioned by an earlier release with this naming a later mention, or the fix may sit
+     on a path the receipt does not name. Read the commits, then the entry's subject at
+     `theirs`. A plain `NAMED-UPSTREAM` with a path receipt means a naming commit changed the
+     receipt's FILE — never that it changed the receipt's substring.
    - `NAMED-UPSTREAM-CITED-ONLY` → upstream's history names this entry's id, and **every**
      naming commit names it only on a body line reading exactly `Not-discharged: PC-S<n>` or
      `Not-discharged: PC-S<n>-<SLUG>` — the form a distribution release uses to cite an entry
@@ -2474,6 +2486,12 @@ declared sites, not everywhere unconditionally.
        `theirs`: the naming is not evidence of an absorption, but a fix landed under a commit
        that does not name the id still closes it. Annotate only what that reading establishes,
        with the release that contains the change; otherwise leave the entry open.
+     - `NAMED-UPSTREAM-OFF-SUBJECT` — the naming commits change installed paths but none
+       changes the receipt path(s) the row names, a release judged over its span. Read the
+       commits: the id may have been dispositioned by an earlier release and this naming be a
+       later mention. Then read the named subject against `theirs`. Annotate only what that
+       reading establishes, with the release that contains the change; otherwise leave the
+       entry open.
      - `NAMED-UPSTREAM-CITED-ONLY` — every naming commit cites the id only on a
        `Not-discharged:` line, so upstream says it did not discharge the entry there. Read the
        commits for a rejection, a withdrawal or a split and act on that if there is one, then

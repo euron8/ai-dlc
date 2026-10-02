@@ -49,7 +49,7 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 # counts must sum, less three repeats of the shared six, to the unsharded total.
 SHARDS="a b c d"
 UNITS_a="close_anchor unicode_escape receipt_suffix"
-UNITS_b="nonid_manual caller_error sh_base_control every_receipt name_signal short_id named_commits no_colon_swallow backslash_anchor dist_checkout bootstrap_window receiptless_named"
+UNITS_b="nonid_manual caller_error sh_base_control every_receipt name_signal short_id off_subject named_commits no_colon_swallow backslash_anchor dist_checkout bootstrap_window receiptless_named"
 UNITS_c="cwd_invariance sh_missing_subject receipts_undecided naming_set unreadable_path nonid_wrong_fixes bare_bold_record"
 UNITS_d="consumer_root entry_swallowed midline_receipt fenced_entries two_line_sh memo_lifecycle cited_only"
 
@@ -1880,7 +1880,7 @@ reach_mut() { # <tag> <awk-anchor-line> <replacement-line> -> path of the mutant
   cmp -s "$CLOSER" "$_d/ledger-reverify.sh" || printf '%s' "$_d/ledger-reverify.sh"
 }
 reach_rows() { bash "$1" "$DIST" "$BASE" "$CONS" "$THEIRS" "$RCH/ledger.md" 2>/dev/null; }
-reach_kind() { printf '%s\n' "$1" | awk -F'\t' -v l="$2" '$2 == l && $1 ~ /^NAMED-UPSTREAM(-DOCS-ONLY)?$/ {print $1; exit}'; }
+reach_kind() { printf '%s\n' "$1" | awk -F'\t' -v l="$2" '$2 == l && $1 ~ /^NAMED-UPSTREAM(-DOCS-ONLY|-OFF-SUBJECT)?$/ {print $1; exit}'; }
 rc_ctl="$(reach_rows "$CLOSER")"
 ASSERTIONS=$((ASSERTIONS + 1))
 if [ "$(reach_kind "$rc_ctl" PC-S950-DOCS-ONLY-NAMING)" = NAMED-UPSTREAM-DOCS-ONLY ] \
@@ -1994,7 +1994,7 @@ co_mut() { # <tag> <exact line> <replacement line> -> path of the mutant, or emp
   cmp -s "$CLOSER" "$_d/ledger-reverify.sh" || printf '%s' "$_d/ledger-reverify.sh"
 }
 co_rows() { bash "$1" "$DIST" "$BASE" "$CONS" "$THEIRS" "$COD/ledger.md" 2>/dev/null; }
-co_kind() { printf '%s\n' "$1" | awk -F'\t' -v l="$2" '$2 == l && $1 ~ /^NAMED-UPSTREAM(-DOCS-ONLY|-CITED-ONLY)?$/ {print $1; exit}'; }
+co_kind() { printf '%s\n' "$1" | awk -F'\t' -v l="$2" '$2 == l && $1 ~ /^NAMED-UPSTREAM(-DOCS-ONLY|-CITED-ONLY|-OFF-SUBJECT)?$/ {print $1; exit}'; }
 CO_IDS="PC-S955-FORM-ONLY-CITATION PC-S956-BOTH-FORMS-CITATION PC-S957-ORDINARY-X PC-S957-FORM-Y PC-S958-FORM-CORE-ORDINARY-DOCS PC-S959-INLINE-FORM-CITATION"
 CO_WANT="NAMED-UPSTREAM-CITED-ONLY NAMED-UPSTREAM NAMED-UPSTREAM NAMED-UPSTREAM-CITED-ONLY NAMED-UPSTREAM-DOCS-ONLY NAMED-UPSTREAM"
 co_read() { # <rows> -> "id=kind ..." for the six ids
@@ -2113,6 +2113,277 @@ else
   printf '  FAIL  %-22s ledger_close_awk_pattern over this ledger-reverify.sh: rc=%s lines=%s fn=%s -- the previous engine would refuse the pull that delivers it\n' "boot-close-extract" "$co_prc" "$co_np" "${co_fn:+present}"
 fi
 } # end lr_unit_cited_only
+lr_unit_off_subject() {
+# --- THE OFF-SUBJECT KIND (BL-145's third class, cells S960-S970) ------------------------------
+# A naming set that reaches code (core/, templates/, or a release) but changes NONE of the entry's
+# own `theirs_has|theirs_lacks` receipt paths reads NAMED-UPSTREAM-OFF-SUBJECT; a naming commit
+# that changes VERSION is judged over its RELEASE SPAN (previous VERSION change, exclusive, up to
+# the commit). Every other shape keeps the kind it had before `named_subject` existed.
+#
+# ITS OWN WORLD, NOT THE SHARED SEED. Every shard pays the shared seed, its sub-ledgers are cut by
+# PC-S9 prefix regexes and PC-S902's commit count is asserted, so these cells live in a dist this
+# unit builds under the run's temp root and a ledger holding only them. Each mutant then costs one
+# run over eleven entries. The cells, each the subject of one mutant:
+#
+#   S960  third class: a core commit names it and changes another file   -> OFF-SUBJECT  (subject-off)
+#   S961  squash release: one commit changes the subject AND VERSION     -> NAMED-UPSTREAM (subject-inverted)
+#   S962  branch release: an unnamed parent fixes the subject, the naming
+#         child changes only CHANGELOG.md and VERSION                     -> NAMED-UPSTREAM (span-off)
+#   S963  merge-shaped release: the fix arrives on the second parent and
+#         the merge commit itself changes VERSION                          -> NAMED-UPSTREAM (hold)
+#   S964  over-expansion: a release, then an unnamed commit touching the
+#         subject, then a NON-release naming commit touching other core   -> OFF-SUBJECT  (span-expand-all)
+#   S965  two receipt paths, only the SECOND touched                       -> NAMED-UPSTREAM (first-path-only)
+#   S966  consumer-layout receipt path whose dist file is touched          -> NAMED-UPSTREAM
+#   S967  consumer-layout receipt path whose dist file is untouched        -> OFF-SUBJECT, and the row
+#         names BOTH the written path and the dist path it resolved to
+#   S968  an ambiguous-basename path beside a resolvable untouched one     -> old kind (unresolvable-dropped)
+#   S969  untouched subject, the subject listing FAILS under a git shim   -> old kind (listing-fail-new-kind)
+#   S970  `verify: manual`, no path receipt (the control)                  -> NAMED-UPSTREAM
+#
+# SHIPS AHEAD OF ITS SUBJECT like the cited-only arms: a consumer whose installed engine predates
+# the kind SKIPs, keyed on the status only the fixed engine emits; in the distribution it always runs.
+if ! grep -qF 'NAMED-UPSTREAM-OFF-SUBJECT' "$CLOSER" && [ "$B2_ISDIST" = 0 ]; then
+  LR_SKIPPED=1
+  printf '  SKIP  BL-145 off-subject arms -- the installed ledger-reverify.sh predates them; they land with the pull that carries this fixture\n'
+  return 0
+fi
+OSW="$(dirname "$DIST")/off-subject"; rm -rf "$OSW"; mkdir -p "$OSW/dist"
+OSD="$OSW/dist"
+ASSERTIONS=$((ASSERTIONS + 1))
+# THE WORLD, built under `set -e` in a subshell so any failed step is one refusal, not a half-seed.
+# The status is captured AFTER the subshell, never tested by `if !`: bash ignores `set -e` inside
+# any command whose status a condition reads, so the guarded form would build a half-seed silently.
+os_rc=0
+( set -e
+  g() { git -C "$OSD" -c user.email=seed@fixture -c user.name=seed -c commit.gpgsign=false "$@"; }
+  c() { g add -A; g commit -q -m "$1"; }
+  g init -q
+  mkdir -p "$OSD/core/scripts" "$OSD/core/skills/x"
+  printf '0.1.0\n' > "$OSD/VERSION"
+  for f in other os-third os-sq os-br os-mg os-ox os-two-a os-two-b os-lf os-cl os-cl2 os-amb os-amb-other os-man; do
+    printf '#!/bin/sh\necho %s\n' "$f" > "$OSD/core/scripts/$f.sh"
+  done
+  # The SECOND `os-amb.sh`: a consumer-layout path naming that basename resolves to nothing.
+  printf '#!/bin/sh\necho amb two\n' > "$OSD/core/skills/x/os-amb.sh"
+  c 'root: every subject exists, VERSION 0.1.0'
+  echo 1 >> "$OSD/core/scripts/other.sh"; c 'fix: an unrelated core change that mentions PC-S960-THIRD-CLASS'
+  echo fix >> "$OSD/core/scripts/os-sq.sh"; printf '0.2.0\n' > "$OSD/VERSION"
+  c '0.2.0 -- absorbs PC-S961-SQUASH-RELEASE'
+  echo fix >> "$OSD/core/scripts/os-br.sh"; c 'fix(reconcile): the subject the next release discharges'
+  printf '0.3.0\n' > "$OSD/VERSION"; printf '## 0.3.0\n\n- discharged\n' > "$OSD/CHANGELOG.md"
+  c '0.3.0 -- discharges PC-S962-BRANCH-RELEASE'
+  m="$(g symbolic-ref --short HEAD)"
+  g checkout -q -b os-side
+  echo fix >> "$OSD/core/scripts/os-mg.sh"; c 'side work, names no entry'
+  g checkout -q "$m"
+  printf 'a main-line note\n' > "$OSD/note.md"; c 'docs: a main-line note, names no entry'
+  g merge -q --no-ff --no-commit os-side
+  printf '0.4.0\n' > "$OSD/VERSION"; c '0.4.0 -- merge discharging PC-S963-MERGE-RELEASE'
+  g branch -q -D os-side
+  printf '0.5.0\n' > "$OSD/VERSION"; c '0.5.0 -- a release naming no entry'
+  echo unrelated >> "$OSD/core/scripts/os-ox.sh"; c 'refactor: touches a subject and names nothing'
+  echo 2 >> "$OSD/core/scripts/other.sh"; c 'fix: another core change that mentions PC-S964-OVER-EXPANSION'
+  echo fix >> "$OSD/core/scripts/os-two-b.sh"; c 'fix: absorb PC-S965-TWO-PATHS-SECOND-TOUCHED'
+  echo fix >> "$OSD/core/scripts/os-cl.sh"; c 'fix: absorb PC-S966-CONSUMER-PATH-TOUCHED'
+  echo 3 >> "$OSD/core/scripts/other.sh"; c 'fix: a core change that mentions PC-S967-CONSUMER-PATH-UNTOUCHED'
+  echo 4 >> "$OSD/core/scripts/other.sh"; c 'fix: a core change that mentions PC-S968-AMBIGUOUS-BASENAME'
+  echo 5 >> "$OSD/core/scripts/other.sh"; c 'fix: a core change that mentions PC-S969-LISTING-FAILURE'
+  echo 6 >> "$OSD/core/scripts/other.sh"; c 'fix: absorb PC-S970-MANUAL-RECEIPT'
+) >/dev/null 2>&1 || os_rc=$?
+if [ "$os_rc" -ne 0 ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s FIXTURE BROKEN -- the off-subject world could not be built\n' "off-subject-seed"
+  return 0
+fi
+OSB="$(git -C "$OSD" rev-list --max-parents=0 HEAD 2>/dev/null)"
+OST="$(git -C "$OSD" rev-parse HEAD 2>/dev/null)"
+# THE SHAPES, ASSERTED AGAINST THE REPO: S962's naming commit changes exactly CHANGELOG.md and
+# VERSION and its parent names nothing; S963's naming commit is a merge that changes VERSION.
+os_s962="$(git -C "$OSD" log -F --grep=PC-S962-BRANCH-RELEASE --format=%H "$OST")"
+os_s963="$(git -C "$OSD" log -F --grep=PC-S963-MERGE-RELEASE --format=%H "$OST")"
+os_s962_files="$(git -C "$OSD" show --name-only --format= "$os_s962" 2>/dev/null | sort | tr '\n' ' ')"
+os_s962_parmsg="$(git -C "$OSD" log -1 --format=%B "${os_s962}^" 2>/dev/null)"
+os_s963_np="$(git -C "$OSD" rev-list --parents -n 1 "$os_s963" 2>/dev/null | wc -w | tr -d ' ')"
+os_s963_files="$(git -C "$OSD" log --no-walk -m --name-only --format= "$os_s963" 2>/dev/null)"
+if [ -z "$OSB" ] || [ -z "$OST" ] || [ "$os_s962_files" != 'CHANGELOG.md VERSION ' ] || [ "$os_s963_np" != 3 ]; then
+  os_shape=bad
+else
+  os_shape=ok
+  case "$os_s962_parmsg" in *PC-S962*) os_shape=bad ;; esac
+  case "
+$os_s963_files
+" in *"
+VERSION
+"*) : ;; *) os_shape=bad ;; esac
+fi
+if [ "$os_shape" != ok ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s FIXTURE BROKEN -- the release shapes are wrong (S962 branch release, S963 merge release)\n' "off-subject-seed"
+  return 0
+fi
+printf '  ok    %-22s the world carries a branch-shaped release (S962) and a merge that changes VERSION (S963)\n' "off-subject-seed"
+cat > "$OSW/ledger.md" <<'OSLED'
+# Push-candidate ledger
+
+- **PC-S960-THIRD-CLASS** — a core commit names it and changes none of its receipt path.
+  verify: theirs_lacks core/scripts/os-third.sh "MARKER_OS"
+
+- **PC-S961-SQUASH-RELEASE** — one release commit changes the subject and VERSION.
+  verify: theirs_lacks core/scripts/os-sq.sh "MARKER_OS"
+
+- **PC-S962-BRANCH-RELEASE** — the fix is in an unnamed parent, the naming release changes only CHANGELOG.md and VERSION.
+  verify: theirs_lacks core/scripts/os-br.sh "MARKER_OS"
+
+- **PC-S963-MERGE-RELEASE** — the fix arrives on a merge's second parent and the merge changes VERSION.
+  verify: theirs_lacks core/scripts/os-mg.sh "MARKER_OS"
+
+- **PC-S964-OVER-EXPANSION** — a non-release naming commit after an unnamed commit that touched the subject.
+  verify: theirs_lacks core/scripts/os-ox.sh "MARKER_OS"
+
+- **PC-S965-TWO-PATHS-SECOND-TOUCHED** — two receipt paths, only the second touched.
+  verify: theirs_lacks core/scripts/os-two-a.sh "MARKER_OS"
+  verify: theirs_lacks core/scripts/os-two-b.sh "MARKER_OS"
+
+- **PC-S966-CONSUMER-PATH-TOUCHED** — a consumer-layout receipt path whose dist file is touched.
+  verify: theirs_lacks scripts/ai-dlc/os-cl.sh "MARKER_OS"
+
+- **PC-S967-CONSUMER-PATH-UNTOUCHED** — a consumer-layout receipt path whose dist file is untouched.
+  verify: theirs_lacks scripts/ai-dlc/os-cl2.sh "MARKER_OS"
+
+- **PC-S968-AMBIGUOUS-BASENAME** — one path resolves to two files, the other resolves and is untouched.
+  verify: theirs_lacks scripts/ai-dlc/os-amb.sh "MARKER_OS"
+  verify: theirs_lacks core/scripts/os-amb-other.sh "MARKER_OS"
+
+- **PC-S969-LISTING-FAILURE** — untouched subject; the subject listing is forced to fail under a shim.
+  verify: theirs_lacks core/scripts/os-lf.sh "MARKER_OS"
+
+- **PC-S970-MANUAL-RECEIPT** — no path receipt at all.
+  verify: manual
+OSLED
+os_rows() { bash "$1" "$OSD" "$OSB" "$CONS" "$OST" "$OSW/ledger.md" 2>/dev/null; }
+os_kind() { printf '%s\n' "$1" | awk -F'\t' -v l="$2" '$2 == l && $1 ~ /^NAMED-UPSTREAM(-DOCS-ONLY|-CITED-ONLY|-OFF-SUBJECT)?$/ {print $1; exit}'; }
+OS_IDS="PC-S960-THIRD-CLASS PC-S961-SQUASH-RELEASE PC-S962-BRANCH-RELEASE PC-S963-MERGE-RELEASE PC-S964-OVER-EXPANSION PC-S965-TWO-PATHS-SECOND-TOUCHED PC-S966-CONSUMER-PATH-TOUCHED PC-S967-CONSUMER-PATH-UNTOUCHED PC-S968-AMBIGUOUS-BASENAME PC-S969-LISTING-FAILURE PC-S970-MANUAL-RECEIPT"
+OS_WANT="NAMED-UPSTREAM-OFF-SUBJECT NAMED-UPSTREAM NAMED-UPSTREAM NAMED-UPSTREAM NAMED-UPSTREAM-OFF-SUBJECT NAMED-UPSTREAM NAMED-UPSTREAM NAMED-UPSTREAM-OFF-SUBJECT NAMED-UPSTREAM NAMED-UPSTREAM-OFF-SUBJECT NAMED-UPSTREAM"
+os_expect() { # <id> -> the kind the UNMUTATED engine must give it
+  local _i _k _w="$OS_WANT"
+  for _i in $OS_IDS; do _k="${_w%% *}"; _w="${_w#* }"; [ "$_i" = "$1" ] && { printf '%s' "$_k"; return; }; done
+}
+os_read() { local _i _s=""; for _i in $OS_IDS; do _s="$_s $_i=$(os_kind "$1" "$_i")"; done; printf '%s' "${_s# }"; }
+# THE CONTROL IS PRESENCE-SHAPED: every one of the eleven ids must carry a NAMED- row of exactly
+# the expected kind, so an engine that emits nothing fails it rather than matching an absence.
+os_ctl="$(os_rows "$CLOSER")"
+os_ctl_read="$(os_read "$os_ctl")"
+os_ctl_want=""; for _i in $OS_IDS; do os_ctl_want="$os_ctl_want $_i=$(os_expect "$_i")"; done; os_ctl_want="${os_ctl_want# }"
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ "$os_ctl_read" != "$os_ctl_want" ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the shipped engine over the S960-S970 world read {%s}, want {%s}; no mutant below is attributable\n' "off-subject-control" "$os_ctl_read" "$os_ctl_want"
+  return 0
+fi
+printf '  ok    %-22s the shipped engine reproduces every S960-S970 kind: third class, over-expansion, untouched consumer path and listing cell OFF-SUBJECT; squash, branch and merge releases, second-path, touched consumer path, ambiguous basename and manual NAMED-UPSTREAM\n' "off-subject-control"
+# THE ROW TEXT NAMES THE SUBJECT, and a basename-resolved one by BOTH spellings.
+os_det() { printf '%s\n' "$os_ctl" | awk -F'\t' -v l="$1" '$1 == "NAMED-UPSTREAM-OFF-SUBJECT" && $2 == l {print $3; exit}'; }
+ASSERTIONS=$((ASSERTIONS + 1))
+case "$(os_det PC-S967-CONSUMER-PATH-UNTOUCHED)" in
+  *"scripts/ai-dlc/os-cl2.sh resolved by basename to core/scripts/os-cl2.sh"*)
+    printf '  ok    %-22s S967 names the receipt'"'"'s consumer-layout spelling AND the dist path it resolved to\n' "off-subject-basename" ;;
+  *) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s S967 does not name both scripts/ai-dlc/os-cl2.sh and core/scripts/os-cl2.sh: %s\n' "off-subject-basename" "$(os_det PC-S967-CONSUMER-PATH-UNTOUCHED | cut -c1-200)" ;;
+esac
+ASSERTIONS=$((ASSERTIONS + 1))
+case "$(os_det PC-S960-THIRD-CLASS)" in
+  *"resolved by basename"*) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s S960 says its path was basename-resolved, but it is present at theirs as written\n' "off-subject-path" ;;
+  *"core/scripts/os-third.sh"*) printf '  ok    %-22s S960 names its receipt path as written and claims no basename resolution\n' "off-subject-path" ;;
+  *) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s S960 does not name core/scripts/os-third.sh: %s\n' "off-subject-path" "$(os_det PC-S960-THIRD-CLASS | cut -c1-200)" ;;
+esac
+# THE LISTING FAILURE CELL: a git shim refuses ONLY the per-commit subject listing (`--no-walk`
+# with `-m` and without `--stdin`; `named_reach` passes `--stdin`, so reach stays `code`) and leaves
+# a sentinel. No sentinel is BROKEN, never a verdict.
+OS_SHIM="$OSW/shim"; mkdir -p "$OS_SHIM"
+printf '#!/bin/sh\nnw=0; m=0; st=0\nfor a in "$@"; do case "$a" in --no-walk) nw=1 ;; -m) m=1 ;; --stdin) st=1 ;; esac; done\nif [ "$nw" = 1 ] && [ "$m" = 1 ] && [ "$st" = 0 ]; then : > "%s/fired"; exit 128; fi\nexec "%s" "$@"\n' \
+  "$OS_SHIM" "$(command -v git)" > "$OS_SHIM/git"
+chmod +x "$OS_SHIM/git"
+os_lf() { # <engine> -> S969's kind with the subject listing failing, or BROKEN
+  local _r; rm -f "$OS_SHIM/fired"
+  _r="$(PATH="$OS_SHIM:$PATH" os_rows "$1")"
+  [ -f "$OS_SHIM/fired" ] || { printf 'BROKEN'; return; }
+  os_kind "$_r" PC-S969-LISTING-FAILURE
+}
+ASSERTIONS=$((ASSERTIONS + 1))
+os_lfk="$(os_lf "$CLOSER")"
+if [ "$os_lfk" = NAMED-UPSTREAM ]; then
+  printf '  ok    %-22s with the subject listing failing, S969 keeps the old kind NAMED-UPSTREAM -- a git error is never an OFF-SUBJECT row\n' "off-subject-listfail"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s with the subject listing failing S969 read %s, want NAMED-UPSTREAM (BROKEN = the shim never fired)\n' "off-subject-listfail" "${os_lfk:-<no row>}"
+fi
+# THE MUTANTS: a copy of the whole reconcile directory, each anchor matched EXACTLY once (two
+# anchors for a two-line swap), `bash -n` clean and byte-different, or the arm is FIXTURE BROKEN.
+os_mut() { # <tag> <old> <new> [<old2> <new2>] -> path of the mutant, or empty
+  local _d="$OSW/$1"; rm -rf "$_d"; mkdir -p "$_d"
+  cp "$(dirname "$CLOSER")"/*.sh "$_d/" 2>/dev/null
+  [ -f "$_d/lib.sh" ] || return 0
+  A1="$2" B1="$3" A2="${4:-}" B2="${5:-}" awk '
+    $0 == ENVIRON["A1"] { print ENVIRON["B1"]; n1++; next }
+    ENVIRON["A2"] != "" && $0 == ENVIRON["A2"] { print ENVIRON["B2"]; n2++; next }
+    { print }
+    END { exit (n1 == 1 && (ENVIRON["A2"] == "" || n2 == 1)) ? 0 : 3 }' "$CLOSER" > "$_d/ledger-reverify.sh" || return 0
+  bash -n "$_d/ledger-reverify.sh" 2>/dev/null || return 0
+  cmp -s "$CLOSER" "$_d/ledger-reverify.sh" || printf '%s' "$_d/ledger-reverify.sh"
+}
+# <tag> <killing cell> <kind under the mutant> <cells that must hold> <why> <old> <new> [<old2> <new2>]
+os_case() {
+  local _m _r _k _h _bad=""
+  ASSERTIONS=$((ASSERTIONS + 1))
+  _m="$(os_mut "$1" "$6" "$7" "${8:-}" "${9:-}")"
+  if [ -z "$_m" ]; then FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s FIXTURE BROKEN -- the mutation DID NOT APPLY (anchor matched nothing or twice, or the mutant does not parse)\n' "mutation-$1"; return; fi
+  _r="$(os_rows "$_m")"; _k="$(os_kind "$_r" "$2")"
+  for _h in $4; do [ "$(os_kind "$_r" "$_h")" = "$(os_expect "$_h")" ] || _bad="$_bad $_h=$(os_kind "$_r" "$_h")"; done
+  if [ "$_k" = "$3" ] && [ -z "$_bad" ]; then printf '  ok    %-22s %s\n' "mutation-$1" "$5"
+  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s %s read %s under the mutant (want %s); cells that should hold but moved:%s\n' "mutation-$1" "$2" "${_k:-<no row>}" "$3" "${_bad:- none}"; fi
+}
+os_case subject-off PC-S960-THIRD-CLASS NAMED-UPSTREAM \
+  "PC-S961-SQUASH-RELEASE PC-S962-BRANCH-RELEASE PC-S963-MERGE-RELEASE PC-S965-TWO-PATHS-SECOND-TOUCHED PC-S966-CONSUMER-PATH-TOUCHED PC-S968-AMBIGUOUS-BASENAME PC-S970-MANUAL-RECEIPT" \
+  "with no off state the third class reads NAMED-UPSTREAM again -- the defect, reproduced, and S960 is what sees it" \
+  '  NS_STATE=off' '  NS_STATE=old'
+os_case subject-inverted PC-S961-SQUASH-RELEASE NAMED-UPSTREAM-OFF-SUBJECT \
+  "PC-S968-AMBIGUOUS-BASENAME PC-S970-MANUAL-RECEIPT" \
+  "with the touched test inverted the genuine squash release reads OFF-SUBJECT, and S961 is what sees it" \
+  '      0) NS_STATE=touched; return 0 ;;' '      0) : ;;' \
+  '      1) : ;;' '      1) NS_STATE=touched; return 0 ;;'
+os_case span-off PC-S962-BRANCH-RELEASE NAMED-UPSTREAM-OFF-SUBJECT \
+  "PC-S960-THIRD-CLASS PC-S961-SQUASH-RELEASE PC-S963-MERGE-RELEASE PC-S964-OVER-EXPANSION PC-S965-TWO-PATHS-SECOND-TOUCHED PC-S966-CONSUMER-PATH-TOUCHED PC-S967-CONSUMER-PATH-UNTOUCHED PC-S968-AMBIGUOUS-BASENAME PC-S969-LISTING-FAILURE PC-S970-MANUAL-RECEIPT" \
+  "without the release span the branch-shaped release (fix in an unnamed parent) reads OFF-SUBJECT, S962 is what sees it, and the squash and merge releases hold" \
+  '    if [ "$_st" -eq 0 ]; then' '    if false; then'
+os_case span-expand-all PC-S964-OVER-EXPANSION NAMED-UPSTREAM \
+  "PC-S960-THIRD-CLASS PC-S961-SQUASH-RELEASE PC-S962-BRANCH-RELEASE PC-S963-MERGE-RELEASE PC-S965-TWO-PATHS-SECOND-TOUCHED PC-S966-CONSUMER-PATH-TOUCHED PC-S967-CONSUMER-PATH-UNTOUCHED PC-S968-AMBIGUOUS-BASENAME PC-S969-LISTING-FAILURE PC-S970-MANUAL-RECEIPT" \
+  "expanding a NON-release naming commit over the span credits it with an unnamed neighbour's change, and S964 is what sees it" \
+  '    if [ "$_st" -eq 0 ]; then' '    if true; then'
+os_case first-path-only PC-S965-TWO-PATHS-SECOND-TOUCHED NAMED-UPSTREAM-OFF-SUBJECT \
+  "PC-S960-THIRD-CLASS PC-S961-SQUASH-RELEASE PC-S962-BRANCH-RELEASE PC-S963-MERGE-RELEASE PC-S964-OVER-EXPANSION PC-S966-CONSUMER-PATH-TOUCHED PC-S967-CONSUMER-PATH-UNTOUCHED PC-S969-LISTING-FAILURE PC-S970-MANUAL-RECEIPT" \
+  "a subject set holding only the first receipt path misses the touched second one, and S965 is what sees it" \
+  "  LR_L=\"\$_label\" LC_ALL=C awk -F'\\t' '\$1 == ENVIRON[\"LR_L\"] { printf \"\\001%s\\n\", \$2 }' \\" \
+  "  LR_L=\"\$_label\" LC_ALL=C awk -F'\\t' '\$1 == ENVIRON[\"LR_L\"] { printf \"\\001%s\\n\", \$2; exit }' \\"
+os_case unresolvable-dropped PC-S968-AMBIGUOUS-BASENAME NAMED-UPSTREAM-OFF-SUBJECT \
+  "PC-S960-THIRD-CLASS PC-S961-SQUASH-RELEASE PC-S962-BRANCH-RELEASE PC-S963-MERGE-RELEASE PC-S964-OVER-EXPANSION PC-S965-TWO-PATHS-SECOND-TOUCHED PC-S966-CONSUMER-PATH-TOUCHED PC-S967-CONSUMER-PATH-UNTOUCHED PC-S969-LISTING-FAILURE PC-S970-MANUAL-RECEIPT" \
+  "dropping the unresolvable path and testing the rest demotes the entry on the path that happened to resolve, and S968 is what sees it" \
+  '      [ "$_nm" -eq 1 ] || return 0' '      [ "$_nm" -eq 1 ] || continue'
+# listing-fail-new-kind is scored under the shim, on S969 alone.
+ASSERTIONS=$((ASSERTIONS + 1))
+os_lfm="$(os_mut listing-fail-new-kind \
+  '      > "$LR_STAGE/ns-files" 2>/dev/null || { NS_STATE=old; return 0; }' \
+  '      > "$LR_STAGE/ns-files" 2>/dev/null || { NS_STATE=off; return 0; }')"
+if [ -z "$os_lfm" ]; then
+  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s FIXTURE BROKEN -- the mutation DID NOT APPLY, so off-subject-listfail is unproven\n' "mutation-listing-fail-new-kind"
+else
+  os_lfmk="$(os_lf "$os_lfm")"
+  if [ "$os_lfmk" = NAMED-UPSTREAM-OFF-SUBJECT ]; then
+    printf '  ok    %-22s a listing failure answered with the new kind turns a git error into an OFF-SUBJECT row, and off-subject-listfail is what sees it\n' "mutation-listing-fail-new-kind"
+  else
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s under the mutant and the shim S969 read %s, want NAMED-UPSTREAM-OFF-SUBJECT (BROKEN = the shim never fired)\n' "mutation-listing-fail-new-kind" "${os_lfmk:-<no row>}"
+  fi
+fi
+} # end lr_unit_off_subject
 lr_unit_unreadable_path() {
 # --- AN UNREADABLE PATH IS REFUSED, NEVER READ AS ABSENT OR EMPTY (BL-310) -----------------
 # `memo_has_path` returns 125 when git said no and the path could not be confirmed absent; every
@@ -2370,7 +2641,7 @@ named_set() { # <id> -> newline-separated SHORT shas, newest first
 # docs commit flips the KIND as well as the list; reading NAMED-UPSTREAM alone then scored that
 # mutant NOROW and lost the sha it kept, which is the observable these arms grade.
 named_detail() { # <rows> <id> -> field 3 of that id's NAMED-UPSTREAM(-DOCS-ONLY) row, or empty
-  printf '%s\n' "$1" | awk -F'\t' -v l="^$2\$" '($1=="NAMED-UPSTREAM" || $1=="NAMED-UPSTREAM-DOCS-ONLY") && $2 ~ l {print $3; exit}'
+  printf '%s\n' "$1" | awk -F'\t' -v l="^$2\$" '($1=="NAMED-UPSTREAM" || $1=="NAMED-UPSTREAM-DOCS-ONLY" || $1=="NAMED-UPSTREAM-OFF-SUBJECT") && $2 ~ l {print $3; exit}'
 }
 # <rows> <id> -> how many of that id's naming shas are ABSENT from its row, or NOROW.
 # NOROW is distinguished from 0 deliberately: a row that never appeared hides nothing and reports

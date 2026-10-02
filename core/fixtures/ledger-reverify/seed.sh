@@ -417,61 +417,73 @@ cat > "$LED" <<'LEDGER'
   matching on shape rather than on evidence.
   verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
 
+<!-- Each PC-S904..S906 and PC-S950..S959 entry anchors its receipt on a file its OWN naming commit
+(or, for S954, its release span) touches. A naming set that reaches code and changes none of the
+entry's receipt paths reads NAMED-UPSTREAM-OFF-SUBJECT, so a receipt left on SKILL.md moves the
+plain-kind rows to that kind -- and the docs-only and cited-only entries too, under every mutant
+that lifts them back to the plain kind (reach-off, filter-off, reach-unfiltered, cited-fail-open).
+The subject test reads the RESIDUE after the citation filter, so S958 anchors on the docs file its
+residue (the ordinary docs mention) touches, not on the core file its filtered-out form commit
+touches. Every substring stays MARKER_A, which none of those files carries, so each STILL-LIVE
+verdict is unchanged. The two PC-S953 entries keep SKILL.md: their row is the per-prefix AMBIGUOUS one, which
+the subject predicate does not read. -->
+
+
 - **PC-S904-ABSORBED-IN-THE-MIDDLE-COMMIT** — THREE commits name this id and the one that
   absorbed it is the MIDDLE. Its two ends are a docs handoff and a withdrawal, so the pair the
   two-ends form advertised is exactly the pair that did not land the fix.
-  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+  verify: theirs_lacks core/scripts/s904-subject.sh "MARKER_A"
 
 - **PC-S905-ONE-NAMING-COMMIT-ONLY** — one naming commit, so there is no list to get wrong. The
   single-commit branch has to stay unchanged, or the fix rewrites every row it was not about.
-  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+  verify: theirs_lacks core/scripts/s905-subject.sh "MARKER_A"
 
 - **PC-S906-TWO-NAMING-COMMITS-NOTHING-HIDDEN** — TWO naming commits, so the two ends ARE the
   whole set and nothing is hidden. The near-miss for the entry three above, deliberately in the
   same ledger and carrying the same receipt: both emit a STILL-LIVE and a NAMED-UPSTREAM row,
   both take the `n > 1` branch, and only the SHA SET tells them apart.
-  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+  verify: theirs_lacks core/scripts/s906-subject.sh "MARKER_A"
 
 - **PC-S950-DOCS-ONLY-NAMING** — named by ONE `docs(plan):` commit that changes nothing under
   `core/` or `templates/`. It must read NAMED-UPSTREAM-DOCS-ONLY and never NAMED-UPSTREAM.
-  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+  verify: theirs_lacks docs/s950-plan.md "MARKER_A"
 
 - **PC-S951-TEMPLATES-ONLY-NAMING** — named by ONE commit that changes only `templates/`, which a
   consumer installs. It must stay NAMED-UPSTREAM.
-  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+  verify: theirs_lacks templates/s951.md.template "MARKER_A"
 
 - **PC-S952-MERGE-NAMING** — named by a MERGE whose side branch changes `core/`. It must stay
   NAMED-UPSTREAM.
-  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+  verify: theirs_lacks core/scripts/s952-subject.sh "MARKER_A"
 
 - **PC-S954-RELEASE-COMMIT-NAMING** — named ONLY by a release commit that changes `VERSION` and
   `CHANGELOG.md`; its parent carries the `core/` fix and names nothing. It must read
   NAMED-UPSTREAM, never NAMED-UPSTREAM-DOCS-ONLY.
-  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+  verify: theirs_lacks core/scripts/s954-subject.sh "MARKER_A"
 
 - **PC-S955-FORM-ONLY-CITATION** — named ONLY on a `Not-discharged:` line of a core commit. It
   must read NAMED-UPSTREAM-CITED-ONLY.
-  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+  verify: theirs_lacks core/scripts/s955-other.sh "MARKER_A"
 
 - **PC-S956-BOTH-FORMS-CITATION** — named in a core commit's subject AND on its form line. It must
   stay NAMED-UPSTREAM.
-  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+  verify: theirs_lacks core/scripts/s956-subject.sh "MARKER_A"
 
 - **PC-S957-ORDINARY-X** — discharged in the subject of a commit whose form line cites another id.
   It must stay NAMED-UPSTREAM.
-  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+  verify: theirs_lacks core/scripts/s957-subject.sh "MARKER_A"
 
 - **PC-S957-FORM-Y** — cited only on that commit's form line. It must read
   NAMED-UPSTREAM-CITED-ONLY.
-  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+  verify: theirs_lacks core/scripts/s957-subject.sh "MARKER_A"
 
 - **PC-S958-FORM-CORE-ORDINARY-DOCS** — cited on a core commit's form line and named ordinarily by
   a docs commit. It must read NAMED-UPSTREAM-DOCS-ONLY.
-  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+  verify: theirs_lacks docs/s958-plan.md "MARKER_A"
 
 - **PC-S959-INLINE-FORM-CITATION** — the form appears mid-line, not at column 0. It must stay
   NAMED-UPSTREAM.
-  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+  verify: theirs_lacks core/scripts/s959-other.sh "MARKER_A"
 
 - **PC-S953-SHARED-DOCS-FIRST** — shares `PC-S953` with the entry below; the one citing commit is
   docs-only.

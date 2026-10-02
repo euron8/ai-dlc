@@ -397,7 +397,7 @@ xc_write() { # <path> <2 to annotate the sibling, anything else not to>
 
 ## PC-S910-ALPHA — open throughout, and the SURVIVOR whose row flips
 
-verify: theirs_has core/scripts/thing.sh "MARKER_A"
+verify: theirs_has core/scripts/s910-landed.sh "s910"
 
 ## PC-S910-BETA — the sibling: open at state 1, annotated at state 2, archived at state 3
 
@@ -409,7 +409,7 @@ XCL
 
 ## PC-S910-ALPHA — open throughout, and the SURVIVOR whose row flips
 
-verify: theirs_has core/scripts/thing.sh "MARKER_A"
+verify: theirs_has core/scripts/s910-landed.sh "s910"
 
 ## PC-S910-BETA — the sibling: open at state 1, annotated at state 2, archived at state 3
 
@@ -1433,7 +1433,7 @@ cat > "$PC/led/push-candidate-ledger.md" <<'PCLED'
 
 ## PC-S901-ALPHA — open, and the only LIVE member of its prefix once the sibling is archived
 
-verify: theirs_has core/scripts/thing.sh "MARKER_A"
+verify: theirs_has core/scripts/s900-landed.sh "s900"
 
 ## PC-S901-BETA — closed and archivable: the sibling the rotation moves
 

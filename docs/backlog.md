@@ -439,61 +439,6 @@ verify: manual
 
 ---
 
-## BL-007 — the audit-anchor chain is a 1-deep link, so an old gap is permanently invisible
-
-`--prior-sprint-sha` computes `prior = current - 1` and exact-matches it
-(`core/scripts/validate-audit-anchors.sh`). There is no contiguity assertion anywhere in the
-anchor path — control: monotonicity language exists elsewhere in the corpus
-(`core/scripts/validate-spec-join.sh` "non-monotonic; ids must ascend and never renumber"), so
-the grep that found none in this path was working.
-
-Consequence: a gap at sprint N−1 is fatal, and a gap at N−2 or older is undetectable. Two
-sprints after a hole nothing revisits it, and `retro.md` Step 5b prunes the live file to the 3
-most recent entries into an archive with, in its own words, "no rendered schema region, no
-validator, no budget".
-
-Scoped OUT of the v0.372.0 close-record work on the operator's decision: that release makes a
-non-retro close RECORDABLE, which is what the consumer filed. Detecting historical holes is a
-different check and would fire on every consumer whose chain already has one, so it needs a
-PENDING/SKIP posture for pre-migration state before it could ship.
-
-The receipt is BEHAVIOURAL and carries its own control. It builds a chain with sprints 10 and
-12 and asks for sprint 13's prior: the resolver answers 12 happily and never sees that 11 is
-missing, so a zero exit there IS the defect. Asking for 12's prior on the same file exits 1,
-which is the control that the resolver does fire on an N−1 absence — the two together are what
-distinguish "no contiguity check" from "no check ran". An anchor on the `current - 1` source
-line would have closed itself on a reformat.
-
-**The receipt was rewritten at v0.666.0, because it demanded the posture this entry forbids.** It closed
-on a NON-ZERO exit for `{10,12} -> 13`, and both callers read non-zero as "the anchor did not resolve":
-Check 18 fails closed and Check 5 SKIPs. So the only fix it could accept was the gate-wedging one. The
-fix reports the hole as a `PENDING — contiguity` line on stderr and leaves exit 0 and the sha on
-stdout unchanged. The receipt now requires that line naming 11 with exit 0 and the sha on stdout. The
-near-miss `{10,12,11} -> 13`, out of order with no hole, must carry no such line, and `12`'s prior
-exiting 1 is kept as the control that the resolver still fires on an N-1 absence (exit 9 if either
-control moves). Scored: exit 1 on the base resolver, exit 0 at the fix, exit 1 on a copy of the fix
-with the report disabled. The scan reads the sibling `-archive.md`'s highest sprint so that a hole at
-the live/archive seam is caught. Holes inside the archive are not scanned. The
-`core/fixtures/check5-anchor-base` contiguity battery carries three mutants, one per property.
-
-**Operator decision, 2026-10-01: the archive interior is not scanned.** The open half below stays
-unbuilt and the entry stays live: the receipt still exits 1 and STILL-LIVE is the true reading.
-The reference consumer's archive carries 13 interior holes that nothing reports.
-
-**STILL OPEN ON ONE HALF, and the receipt is a conjunction for that reason.** Landed in 5634d7a0: a
-hole below the prior sprint is reported while it sits in the live file or at the live/archive seam.
-Not landed: once retro Step 5b prunes a hole past the seam into the archive INTERIOR, it becomes
-invisible again, which is this entry's heading claim ("permanently invisible") in a narrower window.
-The receipt's final clause seeds live `{13,14,15}` with archive `{9,10,12}` and asks for 16, requiring
-11 to be named. It exits 1 today, so the entry reads STILL-LIVE. Whether to scan the archive interior
-is a scope decision: the archive is contracted as "no validator, no budget", and the reference
-consumer's archive today carries 13 interior holes (189, 204, 205, 239-246, 300, 301), which a
-PENDING posture would print at every gate.
-
-verify: sh t=$(mktemp -d) || exit 9; f="$t/a.md"; n="$t/n.md"; H=$(git rev-parse HEAD); printf -- '- sprint: 10\n  sha: %s\n- sprint: 12\n  sha: %s\n' "$H" "$H" > "$f"; printf -- '- sprint: 10\n  sha: %s\n- sprint: 12\n  sha: %s\n- sprint: 11\n  sha: %s\n' "$H" "$H" "$H" > "$n"; V=core/scripts/validate-audit-anchors.sh; bash "$V" --prior-sprint-sha "$f" 12 >/dev/null 2>&1; c=$?; o=$(bash "$V" --prior-sprint-sha "$f" 13 2>"$t/e"); r=$?; bash "$V" --prior-sprint-sha "$n" 13 >/dev/null 2>"$t/ne"; nr=$?; e=$(cat "$t/e"); ne=$(cat "$t/ne"); rm -rf "$t"; [ "$c" -eq 1 ] && [ "$nr" -eq 0 ] || exit 9; grep -q 'contiguity' <<<"$ne" && exit 1; [ "$r" -eq 0 ] && [ "$o" = "$H" ] && grep -q 'PENDING — contiguity: no entry for 1 sprint(s) between 10 and prior 12: 11\.' <<<"$e" || exit 1; u=$(mktemp -d) || exit 9; printf -- '- sprint: 13\n  sha: %s\n- sprint: 14\n  sha: %s\n- sprint: 15\n  sha: %s\n' "$H" "$H" "$H" > "$u/a.md"; printf -- '- sprint: 9\n  sha: %s\n- sprint: 10\n  sha: %s\n- sprint: 12\n  sha: %s\n' "$H" "$H" "$H" > "$u/a-archive.md"; ae=$(bash "$V" --prior-sprint-sha "$u/a.md" 16 2>&1 >/dev/null); rm -rf "$u"; grep -q 'PENDING — contiguity.*: 11' <<<"$ae"
-
----
-
 ## BL-024 — the `implementation-push` row was adjudicated and recorded, but no reconcile program reads the record
 
 **This repo already adjudicated all five blocks of the `implementation-push` row, wrote
@@ -720,159 +665,6 @@ into a validator.
 verify: manual -- this entry records a gap, not a receipt. Do not close it on a green
 `layer-drift.sh` run; that green is the defect.
 
-## BL-132 — the safe-stop acquittal answers a question about BEHAVIOUR with a test on ancestry
-
-**Operator decision, 2026-10-01: left open and unscheduled.** The reference consumer archived
-`PC-S340` as `CLOSED AS REJECTED — BY DESIGN, adjudicated 2026-09-29` in
-`_bmad-output/ai-dlc-update/push-candidate-ledger.archive.md`, so it is no longer a live candidate
-and this entry does not outrank distribution-internal work on its provenance.
-
-Carries the reference consumer's `PC-S340-SAFE-STOP-ACQUITTAL-TESTS-ANCESTRY-NOT-CONTENT`, so it is
-PC-backed and ranks above any distribution-internal entry under the provenance-first rule. **The
-candidate's DEFECT is real and its stated REMEDY is refuted — both halves were measured, and the
-adjudication has been carried back in `docs/reviews/graph-s340-adjudication-brief.md` §1b.**
-
-`self-update-gate.sh`'s `advise_safe_stop` acquits a split with "SPLIT BUYS NOTHING HERE", gated on
-`machinery_at_or_past()` (`:205-213`), which is `git merge-base --is-ancestor` on the stamp's
-`skill_commit` and nothing else. The sentence it emits is a claim about what the CLASSIFIER will
-do; the test underneath it is about where a sha sits in the graph.
-
-**DO NOT BUILD THE CONTENT/BYTE-EQUALITY ARM. It was scored and it does not fire on the pull that
-filed the candidate.** The filing state was reconstructed from the consumer's own stamp history and
-the shipping gate driven against it, giving a real candidate of 0.454.0. A byte arm stays quiet at
-every candidate in the range, and the filing-state consumer matched **0 of 3** paths a hop would
-write. Currency by set: machinery set (123) NO — 3 differ, 1 absent; `reconcile/` subtree (27) NO —
-`setup-sites.md` differs; `reconcile/` executables (23) YES, 23 of 23. Control: the same scorer with
-the candidate set to BASE returns 120 match / 0 differ, so it discriminates. `setup-sites.md` is a
-genuine classifier input — `preclassify.sh` reads it at `:117`, `:218` and `:329` — and it genuinely
-changed, so byte equality is FALSE at every scope above the executable subset.
-
-**The claim measures TRUE behaviourally, which is what makes this a defect rather than a bad
-filing.** The consumer's installed engine and the engine at 0.454.0, run against one tree with one
-set of arguments: **0 changed classifier rows over 59 paths, against a control of 4** changed rows
-versus a 0.432.0 engine, with `diff -rq` confirming the two engine directories differ. The hop's
-engine change was inert and the gate could not say so.
-
-**THE BEHAVIOURAL DIFFERENTIAL IS REFUTED AS THE REMEDY, MEASURED AT BATCH 137 BY A CONTRACT
-ADVERSARY AND RE-DERIVED BY THE LEAD. DO NOT BUILD IT.** It was the predicate this entry named,
-and it fails for the same reason as the byte arm it was meant to replace, only harder:
-
-- **The filed INSTANCE is not an instance.** Reconstructed filing state (consumer at
-  `8e53e4b41^`, stamp `0.452.0` / `11bdeb8e`; control: `HEAD` stamp reads `0.608.0` / `03c04e74`,
-  so the extraction is genuinely historical), driving the consumer's own installed engine with
-  `11bdeb8e cb3ac04d`: `SPLIT BUYS NOTHING HERE` rows = **0**. The run takes the `else` branch.
-  `machinery_at_or_past` is FALSE there (`--is-ancestor b634e42d 11bdeb8e` rc=1; control:
-  `--is-ancestor b634e42d cb3ac04d` rc=0) because the stamp is BEHIND the candidate. The
-  acquittal never fired on the pull this entry was filed from, so a new conjunct ANDed under
-  that guard changes nothing on the motivating case, in either direction.
-- **The central measurement had a subject side byte-identical to its own baseline.**
-  `preclassify.sh` is blob `860ed5494c38` at 0.452.0, 0.454.0 AND 0.456.0 (control:
-  `setup-sites.md` differs across the same pair, `ba22836977` vs `88a0b4a50e`). The "0 changed
-  classifier rows against a control of 4" was two runs of the SAME program; `diff -rq` proved the
-  DIRECTORIES differ and never that the CLASSIFIER did.
-- **The 59-row population is not the one the gate runs on.** On the real range the classifier
-  emits **10** rows, all `UPSTREAM-ONLY` (6) or `UPSTREAM-ONLY-ADD` (4) — no consumer delta, so
-  no judgement for two engines to disagree about. 59 came from a synthetic `0.432.0..0.456.0`.
-- **The false-positive set is 92%.** Over the last 40 release hops `preclassify.sh` is UNCHANGED
-  on **37** (control: the same walk over all of `core/` shows 34 of 40 hops changed, so the walk
-  discriminates). The arm this entry banned the byte predicate for was vacuous on 7 of 39; this
-  one is vacuous on 37 of 40.
-- **No control-engine rule is derivable, and that half is a PROOF and not a bug.** Control = the
-  engine at BASE is byte-identical to the installed engine exactly when it is needed. Control =
-  N releases back is a magic number: the first differing `preclassify.sh` sits **7** releases
-  back from the candidate, and N moves with cadence. A resolution control needs a KNOWN-DIFFERENT
-  engine, establishable only by the byte comparison this entry bans or by an unbounded walk.
-
-**THE DEFECT IS STILL REAL AND THE ENTRY STAYS LIVE.** Nothing above contradicts the finding that
-the emitted sentence is a claim about BEHAVIOUR while the test underneath is graph-topological.
-What is refuted is that a behavioural differential can carry it.
-
-**THE DIRECTION THAT SURVIVES EVERY MEASUREMENT IS NARROWER: REFUSE, DO NOT ACQUIT.** Withhold the
-acquittal when the classifier is byte-identical across `installed -> candidate`, because then the
-ancestry test is the ONLY evidence and the sentence it licenses — "its machinery has already
-landed" — is unsupported. One `git rev-parse` pair, no control engine, and it fires on the 37 of
-40 hops where the differential is silent. It is NOT the banned byte-equality arm: that one gated
-the PULL's content, this gates the ACQUITTAL's own evidence. It weakens an acquittal rather than
-strengthening one, which is the asymmetry `self-update-gate.sh` already states for itself —
-refusing costs less than firing wrongly. **Scope is the operator's; this is recorded as the
-measured direction, not taken.**
-
-**THREE THINGS ARE UNMEASURED AND THEY ARE WHY THIS IS FILED RATHER THAN BUILT.** Shipping a check
-whose false-positive set has not been run is forbidden here, and this one has three open questions:
-
-- **The new predicate's own FP set has not been run.** It needs its own battery.
-- **A 10-ROW POPULATION CANNOT RESOLVE THIS DIFFERENTIAL.** Measured: at the filing range the
-  subject read `0` and **the control also read `0`** — two demonstrably different engines producing
-  identical output. That null was worthless and was nearly shipped as a result. Only at 59 rows did
-  the control fire. **An arm of this shape must assert its own resolution in the same run or report
-  UNDECIDED**, which is already this gate's doctrine for an unattributable answer.
-- **COST IS NOT THE BLOCKER, AND AN EARLIER REVISION OF THIS ENTRY SAID IT MIGHT BE.** That
-  revision put the resolution control at "a third, deliberately-older engine extracted per candidate
-  ref" with a cost "not yet a number". **"Per candidate" was the load-bearing half and it is
-  wrong**: `advise_safe_stop()` returns early on `AI_DLC_GATE_IN_SAFE_STOP`,
-  which `:125` exports before the `--safe-stop` walk begins, so every per-candidate recursion
-  short-circuits before reaching the acquittal and the differential is evaluated exactly once, on
-  the single candidate the walk elected. Measured at **≈7s per invocation, independent of range
-  length** — two subtree extractions at 0.03s each plus three `preclassify.sh` runs at ~2.3s over a
-  59-row population, three interleaved reps. What blocks this is the unmeasured FP set above and the
-  absence of a rule for CHOOSING the control engine, not the price.
-
-**A byte predicate would also be VACUOUSLY TRUE on a large minority of hops**, which is a second
-reason the refuted remedy must not come back: **7 of 39 consecutive release hops change ZERO
-machinery paths** (0.427→0.428, 0.433→0.434, 0.437→0.438, 0.445→0.446, 0.453→0.454, 0.458→0.459,
-0.464→0.465), against a control of **0 of 39** having an empty full diff.
-
-**ONE CONJUNCT OF THE EVENTUAL ARM ALREADY SHIPPED, IN `v0.466.0`, AND MUST NOT BE REBUILT HERE.**
-The acquittal now refuses on a tree carrying `.claude/.ai-dlc-applying`. That was filed as part of
-this entry and then found to have a subject TODAY under the current ancestry route — a withheld
-apply leaves `skill_commit` advanced beside a `commit` at base, and the acquittal fired on that
-partial tree. It survives the switch to a behavioural predicate, because a partial tree can classify
-identically and still not be a tree to acquit. **This entry is now only about the ancestry-vs-
-behaviour predicate**, and closing it requires that, not the marker guard.
-
-**Tiered DEFECT.** It wrongly advises a split on a consumer whose engine is already behaviourally
-current. It is bounded: `advise_safe_stop` is called at exactly two sites, each immediately after
-an `emit SELF-UPDATE-DEFER` inside a deferral block, so the acquittal is unreachable except behind
-a DEFER and a wrong answer can only mis-advise a consumer already deferring — never one on the
-happy path. **The bound re-derives TRUE; the line numbers this entry used to cite did not.** Every
-anchor here had moved by `5540c7c6` — the acquittal, `machinery_at_or_past`, both call sites and
-the early return — so the citations are given by NAME above and the reader greps for them. An
-entry citing `path:line` into a file that moves is `BL-133`'s own subject, occurring here.
-
-**THERE ARE TWO `SPLIT BUYS NOTHING HERE` EMITTERS AND ONLY ONE IS THE SUBJECT.** The second is
-the push-refusal case with candidate `"-"`, whose window carries **0** non-comment references to
-`machinery_at_or_past` or `advise_safe_stop` (control: 4 `emit` calls in the same window, so the
-grep works) — its only textual hit is a comment explaining why the walk is deliberately skipped
-there. Same banner, different premise, no ancestry test. **Name the subject by its
-`machinery_at_or_past` guard, never by the banner text**, and note that the fixture asserts
-`grep -c 'SPLIT BUYS NOTHING'` against expected counts at six sites: a fix landing on the wrong
-emitter moves those counts and satisfies a banner-counting receipt while changing nothing.
-
-**THE FIXTURE'S OWN MUTATION ANCHOR IS AIMED AT THE LINE A FIX MUST RESHAPE.**
-`core/fixtures/self-update-gate/run.sh`'s `SC_A3` anchors on the literal
-`    if machinery_at_or_past "$_ss"; then`, which matches the shipping gate exactly **1** time
-(control: a bogus anchor matches 0). Any fix that rewrites that line empties the mutant silently —
-it applies to nothing, the file stays byte-identical, and the battery reads SURVIVED. Assert
-`! cmp -s` before scoring, and re-anchor the mutant on the predicate that DECIDES.
-
-**THE RECEIPT IS REFUTED: IT REJECTS THE CORRECT FIX AND CLOSES ON THE DESTRUCTIVE INVERSE.**
-Six candidates built from the shipping file, each asserted applied by `cmp -s` first. A real
-differential — extract the candidate engine, run both `preclassify.sh`, compare — scores **1**,
-REJECTED, because the receipt demands `show|archive|worktree` and `preclassify` on ONE line with
-no `|` between them, and the extraction is necessarily two lines: `preclassify.sh` sources
-`lib.sh` at `:47` and reads `setup-sites.md` via `dirname "$0"`, so it cannot be extracted as a
-single file. Meanwhile the same line inside an UNCALLED function, the same line under `if false`,
-an unconditional `: "$(git show … | head -0)"` consulting nothing, AND a mutant replacing the
-guard with `git archive … || true` — which acquits **every** consumer unconditionally — all score
-**0**, closed. The inverse mutant emits 1 `SPLIT BUYS NOTHING` row on the motivating case against
-the shipping tree's 0, so the FIXTURE separates them and the receipt does not. **Key the
-replacement on the EMISSION SITE** — that the acquittal's own guard consults a behaviour term —
-plus a non-vacuity arm, and score it against all six before filing it.
-
-**Receipt replaced: it now drives the acquittal's EMISSION, not the text of its guard.** It builds a mini-distribution in which r1 changes `preclassify.sh` and r2 defers, then runs the shipping gate three times against one consumer: stamp at r1 with the r1 engine installed (`current`), stamp at r1 with the base engine still installed (`stale`), and stamp at base (`behind`). It exits 0 only when `stale` withholds `SPLIT BUYS NOTHING HERE` on the SAFE-STOP row naming r1, `current` still prints it and `behind` withholds it. It reads that row by its ref and never by its banner, so the `-` emitter cannot satisfy it. It exits 9 when the walk stops naming r1, when a run emits CARRY or UNDECIDED, or when there is not exactly one row naming r1. Scored under `set -uo pipefail` in copies of `core/`, with every edit asserted applied: tree as-is 1 (`stale=acquit`); the fix as a content check inside `machinery_at_or_past` 0; the fix as a separate `installed_matches` helper at the emission site 0; `git archive … || true` 1; `if false` 1; the helper defined but uncalled 1; `head -0` 1; the content check inverted 1; the content check comparing the candidate against itself 1; engine absent 9. The narrower direction recorded above (withhold when `preclassify.sh` is byte-identical across the hop) reads 1, because the classifier changes in this world. A behavioural-differential remedy was not scored: the mini-distribution's `preclassify.sh` is a stub, not a classifier, so a differential has nothing to compare here. **This receipt contradicts the body.** Both fixes that close it compare the consumer's installed bytes against the candidate, which is the content arm this entry says not to build, and on a hop that changes no machinery path their loop is empty and they acquit. A CLOSE-CANDIDATE from this receipt is therefore a prompt to settle that contradiction, not a close.
-
-verify: sh G="$PWD/core/skills/ai-dlc-update/reconcile/self-update-gate.sh"; [ -f "$G" ] || exit 9; w="$(mktemp -d)" || exit 9; P=skills/ai-dlc-update/reconcile/preclassify.sh; S=skills/ai-dlc/steps/gate-validation.md; g() { git -C "$w/d" -c user.name=r -c user.email=r@r -c commit.gpgsign=false "$@"; }; v() { printf '# gate\n'; for a in "$@"; do printf '<!-- CHECK_LOADED: %s -->\n' "$a"; done; }; mkdir -p "$w/d/core/skills/ai-dlc-update/reconcile" "$w/d/core/skills/ai-dlc/steps" "$w/c/.claude/skills/ai-dlc-update/reconcile" "$w/c/.claude/skills/ai-dlc/steps" "$w/c/.githooks" || exit 9; git init -q "$w/d" || exit 9; echo 1.0.0 > "$w/d/VERSION"; v 1 2 > "$w/d/core/$S"; echo "engine v0" > "$w/d/core/$P"; g add -A && g commit -qm base || exit 9; B="$(g rev-parse HEAD)"; echo 1.1.0 > "$w/d/VERSION"; echo "engine v1" > "$w/d/core/$P"; g add -A && g commit -qm r1 || exit 9; R="$(g rev-parse HEAD)"; echo 1.2.0 > "$w/d/VERSION"; v 1 2 3 > "$w/d/core/$S"; g add -A && g commit -qm r2 || exit 9; T="$(g rev-parse HEAD)"; v 1 2 > "$w/c/.claude/$S"; printf '#!/usr/bin/env bash\nexit 0\n' > "$w/c/.githooks/pre-push" || exit 9; k() { printf 'version: 1.0.0\ncommit: %s\nskill_version: 1.1.0\nskill_commit: %s\n' "$B" "$1" > "$w/c/.claude/.ai-dlc-version"; echo "engine $2" > "$w/c/.claude/$P"; [ "$(bash "$G" --safe-stop "$w/d" "$B" "$T" "$w/c" 2>/dev/null)" = "$R" ] || { echo walk; return; }; bash "$G" "$w/d" "$B" "$T" "$w/c" 2>/dev/null | awk -F'\t' -v r="$R" '$1 ~ /^SELF-UPDATE-(CARRY|UNDECIDED)$/ {u++} $1=="SELF-UPDATE-SAFE-STOP" && $2==r {n++; if (index($3, "SPLIT BUYS NOTHING HERE")) a++} END {print (u ? "undecided" : (n == 1 ? (a ? "acquit" : "withheld") : "none"))}'; }; st="$(k "$R" v0)"; cu="$(k "$R" v1)"; bh="$(k "$B" v0)"; for x in "$st" "$cu" "$bh"; do case "$x" in acquit|withheld) ;; *) echo "BL132-PRECONDITION stale=$st current=$cu behind=$bh" >&2; exit 9 ;; esac; done; [ "$st" = withheld ] && [ "$cu" = acquit ] && [ "$bh" = withheld ] && exit 0; echo "BL132-ACQUITTAL-ON-ANCESTRY stale=$st current=$cu behind=$bh" >&2; exit 1
-
 ## BL-145 — a docs commit that MENTIONS a candidate id is reported to the consumer as upstream having absorbed it
 
 **Found while scoping batch 43**, 2026-09-02, and NOT fixed here — the fix is a change to
@@ -949,9 +741,9 @@ the citation. **Clearing that row is what caused the false close**, so the two o
 direct conflict and only one of them is mechanised.
 
 **What this means for the fix.** The real predicate is not "did the commit change something the
-consumer installs" but "does the commit change something THIS id's subject depends on", and a
-per-id subject path is a datum nothing currently records. Scope that before building either
-version. A weaker but constructible half: a release commit citing an id it does not FIX needs a
+consumer installs" but "does the commit change something THIS id's subject depends on". The
+engine now takes a per-id subject path from the entry's own receipt paths (see the batch-185
+paragraph below), and that datum does not separate `b3debba3`, which touches its receipt file. A weaker but constructible half: a release commit citing an id it does not FIX needs a
 distinguishable form, so the join can exclude it — which is a producer-side change, where there
 is one writer, rather than a reader-side heuristic over every historical message.
 
@@ -979,8 +771,10 @@ named entries), 33 of 214 NAMED-UPSTREAM rows move to DOCS-ONLY. Re-derived with
 none of the 33 has a naming commit that touches `core/` or `templates/`. The control: the first 8
 rows that stayed each have one. The live ledger moves 0 rows, because it has no open entry upstream
 names. **What survives is the third class.** A commit that changes `core/` but not the entry's
-subject (`b3debba3` for PC-S308) still reads NAMED-UPSTREAM, because a per-id subject path is
-recorded nowhere.
+subject (`b3debba3` for PC-S308) still reads NAMED-UPSTREAM. Batch 185 closes the part of it that
+touches no receipt file. `b3debba3` touches PC-S308's receipt file and leaves only the receipt
+substring unchanged, and substring matching is refuted (see below), so PC-S308 still reads
+NAMED-UPSTREAM.
 
 **Amended on `b178-b2-rel`: a naming commit that changes `VERSION` also reaches.** In this repo's
 release convention the release commit names the id and changes only `CHANGELOG.md` and `VERSION`,
@@ -1016,7 +810,9 @@ its false-positive set over 2001 `origin/main` messages is 0. This closes only t
 writer knows the citation is not a discharge. It is forward-only, so `b3debba3` still reads
 NAMED-UPSTREAM. A consumer's installed engine reads the form as an ordinary mention until it
 pulls. A core-touching commit that BELIEVES it discharged an id, and touched none of that id's
-subject, still reads NAMED-UPSTREAM, because a per-id subject path is recorded nowhere. The
+subject, read NAMED-UPSTREAM here. Batch 185 demotes it when the commit touches none of the entry's
+receipt files. It still reads NAMED-UPSTREAM when the commit touches a receipt file without changing
+the receipt substring, which is the PC-S308 shape. The
 receipt below drives the fixed engine over four shapes: form-only, both forms, inline form, and
 form-on-core plus an ordinary docs mention. It also uses a never-named control. Scored under
 `set -uo pipefail`: tip (`abe3afb7`) 1, fix 0, mutants `filter-off`, `filter-any-form-line`,
@@ -1028,159 +824,28 @@ mutants. The citation must appear in the BODY of the squash or release commit th
 
 **Receipt replaced: the producer half shipped and the previous receipt exits 0, so it now tests the open half, claim 3.** It drives the shipping `ledger-reverify.sh` over four entries whose receipt subject is `core/subject.sh`: a core commit naming an id and changing only `core/other.sh` (the third class), a commit naming an id and changing the subject together with another core file (genuine), a docs-only naming, and a never-named control. It exits 0 only when the third class still has a `NAMED-` row whose kind is none of NAMED-UPSTREAM, -DOCS-ONLY, -CITED-ONLY or -AMBIGUOUS, while the genuine naming still reads NAMED-UPSTREAM and the docs naming still reads NAMED-UPSTREAM-DOCS-ONLY. Relabelling the third class as DOCS-ONLY does not satisfy it, because that row's text says no naming commit changes `core/`, which would be false here. The receipt also assumes the subject is taken from the entry's receipt path, which is the only per-id datum the seed carries. A fix that reads another datum has to re-anchor this receipt. It exits 9 when the engine is absent or the never-named control gains a `NAMED-` row. Scored under `set -uo pipefail` in copies of `core/`, with every edit asserted applied: tree as-is 1 (`third=NAMED-UPSTREAM`); a fix in the main loop that reads the receipt path and emits a new kind 0; a fix with a `named_touches` helper and a differently named kind 0; demote every core naming on a receipt-bearing entry 1; drop the row 1; relabel it DOCS-ONLY 1; the subject test inverted 1; a test for the subject existing at theirs instead of being touched 1; engine absent 9.
 
-verify: sh L="$PWD/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh"; [ -f "$L" ] || exit 9; w="$(mktemp -d)" || exit 9; g() { git -C "$w/d" -c user.name=r -c user.email=r@r -c commit.gpgsign=false "$@"; }; git init -q "$w/d" || exit 9; mkdir -p "$w/d/core" "$w/d/docs" "$w/c" || exit 9; echo 1.0.0 > "$w/d/VERSION"; echo M > "$w/d/core/subject.sh"; echo o > "$w/d/core/other.sh"; g add -A && g commit -qm base || exit 9; B="$(g rev-parse HEAD)"; echo x >> "$w/d/core/other.sh"; g add -A && g commit -qm "fix: absorb PC-S880-THIRD-CLASS" || exit 9; echo y >> "$w/d/core/subject.sh"; echo z > "$w/d/core/aux.sh"; g add -A && g commit -qm "fix: absorb PC-S883-GENUINE" || exit 9; echo p > "$w/d/docs/p.md"; g add -A && g commit -qm "docs(plan): mention PC-S881-DOCS-CTL" || exit 9; T="$(g rev-parse HEAD)"; printf -- '# l\n\n- **PC-S880-THIRD-CLASS** -- subject core/subject.sh.\n  verify: theirs_has core/subject.sh "M"\n\n- **PC-S883-GENUINE** -- subject core/subject.sh.\n  verify: theirs_has core/subject.sh "M"\n\n- **PC-S881-DOCS-CTL** -- subject core/subject.sh.\n  verify: theirs_has core/subject.sh "M"\n\n- **PC-S882-NEVER** -- control.\n  verify: theirs_has core/subject.sh "M"\n' > "$w/c/l.md" || exit 9; o="$(bash "$L" "$w/d" "$B" "$w/c" "$T" "$w/c/l.md" 2>/dev/null)"; k() { printf '%s\n' "$o" | awk -F'\t' -v l="$1" '$2==l && $1 ~ /^NAMED-/ {print $1; exit}'; }; n() { printf '%s\n' "$o" | awk -F'\t' -v l="$1" '$2==l {c++} END {print c+0}'; }; [ "$(n PC-S882-NEVER)" -gt 0 ] && [ -z "$(k PC-S882-NEVER)" ] || exit 9; t="$(k PC-S880-THIRD-CLASS)"; e="$(k PC-S883-GENUINE)"; d="$(k PC-S881-DOCS-CTL)"; case "$t" in ""|NAMED-UPSTREAM|NAMED-UPSTREAM-DOCS-ONLY|NAMED-UPSTREAM-CITED-ONLY|NAMED-UPSTREAM-AMBIGUOUS) ;; *) [ "$e" = NAMED-UPSTREAM ] && [ "$d" = NAMED-UPSTREAM-DOCS-ONLY ] && exit 0 ;; esac; echo "BL145-OFF-SUBJECT-NAMING-READ-AS-ABSORBED third=${t:-<no row>} genuine=${e:-<no row>} docs=${d:-<no row>}" >&2; exit 1
+**Batch 185: a naming set that reaches code and touches NO receipt file is closed, and the PC-S308 shape stays open.** `named_subject` in `ledger-reverify.sh` takes the entry's subject set from the union of its `theirs_has|theirs_lacks` receipt paths, staged once before the entry loop. A path absent at theirs is resolved by unique basename at theirs, the way the verb dispatch already resolves a consumer-layout path. A path that matches 0 or more than 1 file, or that git could not read, is unresolvable, and any unresolvable path keeps the whole entry at the old kind. A naming commit that changes `VERSION` is judged over its release span: from the previous commit that changed `VERSION` (exclusive) through the naming commit. A naming commit that is not a release is judged on its own listing. Any listing failure answers the old kind. When the reach is `code`, the subject set is non-empty and resolved, and no naming commit changes any subject path, the row is `NAMED-UPSTREAM-OFF-SUBJECT`. That kind is decided after `cited` and `docs`, keeps every sha, and is never a close. An entry with no path receipt keeps its prior kind byte-for-byte. The ambiguous row does not take the predicate, because it stands for two or more entries with different receipt paths. **What stays open is the real PC-S308 shape.** `b3debba3` touches PC-S308's receipt file `core/skills/ai-dlc/steps/gate-validation.md` (1 in its `diff-tree -m` listing, against 0 for `validate-suppression-lifetime.sh`). None of the 32 changed lines in that file carries the receipt substring `gate-metrics.jsonl`, which occurs 4 times in the file at HEAD. A per-file test therefore scores it `touched`, and it still reads NAMED-UPSTREAM. **Substring matching is refuted, so do not build it.** The contract adversary modelled "did a naming commit change the receipt substring" in Python over the reference consumer's archive. It demoted 16 of 50 on-subject rows that were genuine absorptions whose anchors had gone stale. That figure comes from the model and not from a shipped engine. A fix for the remainder needs a datum that separates a cross-reference from a fix on the same file.
+
+**Ship gate, measured over the reference consumer's archive with close annotations stripped.** The base engine `c18897d9` and the fix engine `d7bdcc41` each emitted 576 rows over that population. 570 are byte-identical and 6 moved to `NAMED-UPSTREAM-OFF-SUBJECT`. Five of the six are true off-subject rows. Each is named only by `e939a925` (`v0.373.0`), whose 43-commit release span touches none of the five receipt paths: PC-S295-RETRO-LEAD-SOLO-EVAL-LLM-CHECK, PC-S297-RETRO-MD-CLAIMS-NONEXISTENT-GHA-WORKFLOW, PC-S297-VALIDATE-MANDATORY-RULES-CHECK3-CHECK4-DEAD, PC-S299-UNREGISTERED-DRIFT-SCAN-SKIPS-CORE-FIXTURES-AND-CORE-SCRIPTS and PC-S302-ADJUDICATION-RERUN-BASE-DISARMS-LC-A1. The archive annotates each of them FALSIFIED, ALREADY-FIXED or DUPLICATE at an earlier version. The sixth, PC-S298-SETUP-SUBSTITUTION-EATS-SITE-DECLARATION-COMMENT, is a genuine absorption. `362f6840` (`v0.144.0`) adds the fix to `core/skills/ai-dlc-setup/SKILL.md`, while the receipt anchors on a structural precondition, `core/team-roles/dev-escalated.md`. Its sibling PC-S298-SETUP-NEVER-INSTRUCTS-REMEDIATOR-MODEL-FILL is named by the same commit and stays NAMED-UPSTREAM, which is the in-commit control. The measured set is therefore 6 movers: 5 true, and 1 of a named class. When an author picks a receipt path as a precondition rather than as the subject, a genuine absorption reads OFF-SUBJECT, and only that author can tell the two apart. The row text allows for that case, and no suppression heuristic is built, for the same reason substring matching was refused. Over the live ledger at the sprint tip, 0 of 12 rows moved. The engines' wall-clock difference was not resolved: under load 12-100 each engine's spread was about 105s against a gap of about 5s.
+
+**Receipt replaced again: the previous one exits 0 on the per-file fix (scored on the R1 tip under `set -uo pipefail`) while PC-S308 is still open, which would retire a live entry.** The new receipt drives the shipping `ledger-reverify.sh` over seven entries in one repo. Clause (i) is a core commit that touches the entry's receipt file and leaves the receipt substring unchanged. The receipt exits 0 only when that entry has a `NAMED-` row outside NAMED-UPSTREAM, -DOCS-ONLY, -CITED-ONLY and -AMBIGUOUS, so it exits 1 while the PC-S308 shape stays open. Five controls each exit 1 and name their own clause on stderr when they fail. (ii) A core commit touching no receipt file must read NAMED-UPSTREAM-OFF-SUBJECT. (iii) A squash-shaped release, on an entry with two receipt paths where only the second is touched, must read NAMED-UPSTREAM. (iv) A branch-shaped release must read NAMED-UPSTREAM; its fix parent names nothing, and the naming child changes only `CHANGELOG.md` and `VERSION`. (v) A non-release naming commit must read OFF-SUBJECT; an unnamed neighbour in the same span touched its subject. (vi) A docs-only naming must read DOCS-ONLY. (vii) A never-named control that gains a `NAMED-` row exits 9, and so does an absent engine. The controls run before clause (i), so a broken engine never reports as the open entry. Scored under `set -uo pipefail` from the repo root, in scratch copies of `core/` with every mutation asserted applied: R1 tip 1 (`i-RECEIPT-FILE-TOUCHED-SUBSTRING-UNCHANGED-READ-AS-ABSORBED filetouched=NAMED-UPSTREAM`); base `c18897d9` 1 (`CONTROL-ii`); `span-off` 1 (`CONTROL-iv`); `span-expand-all` 1 (`CONTROL-v`); `subject-inverted` 1 (`CONTROL-ii`); `first-path-only` 1 (`CONTROL-iii`); a hand-built substring fix 0; engine absent 9; never-named control given a `NAMED-` row 9. The receipt carries no cleanup trap, matching the one it replaces. Its scratch repo is left under `TMPDIR`.
+
+verify: sh L="$PWD/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh"; [ -f "$L" ] || exit 9; w="$(mktemp -d)" || exit 9; g() { git -C "$w/d" -c user.name=r -c user.email=r@r -c commit.gpgsign=false "$@"; }; c() { g add -A && g commit -qm "$1"; }; git init -q "$w/d" || exit 9; mkdir -p "$w/d/core" "$w/d/docs" "$w/c" || exit 9; echo 1.0.0 > "$w/d/VERSION"; for f in a s o q r x; do echo "ANCH_$f" > "$w/d/core/$f.sh"; done; c base || exit 9; B="$(g rev-parse HEAD)"; echo pad >> "$w/d/core/a.sh"; c "fix: absorb PC-S890-FILE-TOUCHED" || exit 9; echo x >> "$w/d/core/o.sh"; c "fix: absorb PC-S891-THIRD-CLASS" || exit 9; echo "ANCH_s fixed" >> "$w/d/core/s.sh"; echo 1.1.0 > "$w/d/VERSION"; c "1.1.0 -- absorb PC-S892-SQUASH" || exit 9; echo "ANCH_r fixed" >> "$w/d/core/r.sh"; c "fix: unnamed" || exit 9; echo n > "$w/d/CHANGELOG.md"; echo 1.2.0 > "$w/d/VERSION"; c "1.2.0 -- absorb PC-S893-BRANCH" || exit 9; echo "ANCH_x fixed" >> "$w/d/core/x.sh"; c "fix: unnamed neighbour" || exit 9; echo y >> "$w/d/core/o.sh"; c "fix: absorb PC-S894-OVER-EXPAND" || exit 9; echo p > "$w/d/docs/p.md"; c "docs(plan): mention PC-S895-DOCS-CTL" || exit 9; T="$(g rev-parse HEAD)"; e() { printf -- '- **%s** -- control.\n' "$1"; shift; for p in "$@"; do printf -- '  verify: theirs_has core/%s.sh "ANCH_%s"\n' "$p" "$p"; done; printf '\n'; }; { printf '# l\n\n'; e PC-S890-FILE-TOUCHED a; e PC-S891-THIRD-CLASS s; e PC-S892-SQUASH q s; e PC-S893-BRANCH r; e PC-S894-OVER-EXPAND x; e PC-S895-DOCS-CTL s; e PC-S896-NEVER s; } > "$w/c/l.md" || exit 9; o="$(bash "$L" "$w/d" "$B" "$w/c" "$T" "$w/c/l.md" 2>/dev/null)"; k() { printf '%s\n' "$o" | awk -F'\t' -v l="$1" '$2==l && $1 ~ /^NAMED-/ {print $1; exit}'; }; n() { printf '%s\n' "$o" | awk -F'\t' -v l="$1" '$2==l {c++} END {print c+0}'; }; [ "$(n PC-S896-NEVER)" -gt 0 ] && [ -z "$(k PC-S896-NEVER)" ] || exit 9; f() { v="$(k "$3")"; echo "BL145-$1 $2=${v:-<no row>}" >&2; exit 1; }; [ "$(k PC-S891-THIRD-CLASS)" = NAMED-UPSTREAM-OFF-SUBJECT ] || f "CONTROL-ii-FILE-UNTOUCHED-NOT-OFF-SUBJECT" third PC-S891-THIRD-CLASS; [ "$(k PC-S892-SQUASH)" = NAMED-UPSTREAM ] || f "CONTROL-iii-GENUINE-SQUASH-TWO-PATH-DEMOTED" squash PC-S892-SQUASH; [ "$(k PC-S893-BRANCH)" = NAMED-UPSTREAM ] || f "CONTROL-iv-BRANCH-RELEASE-SPAN-DEMOTED" branch PC-S893-BRANCH; [ "$(k PC-S894-OVER-EXPAND)" = NAMED-UPSTREAM-OFF-SUBJECT ] || f "CONTROL-v-NON-RELEASE-SPAN-EXPANDED" over PC-S894-OVER-EXPAND; [ "$(k PC-S895-DOCS-CTL)" = NAMED-UPSTREAM-DOCS-ONLY ] || f "CONTROL-vi-DOCS-NOT-DOCS-ONLY" docs PC-S895-DOCS-CTL; case "$(k PC-S890-FILE-TOUCHED)" in ""|NAMED-UPSTREAM|NAMED-UPSTREAM-DOCS-ONLY|NAMED-UPSTREAM-CITED-ONLY|NAMED-UPSTREAM-AMBIGUOUS) f "i-RECEIPT-FILE-TOUCHED-SUBSTRING-UNCHANGED-READ-AS-ABSORBED" filetouched PC-S890-FILE-TOUCHED ;; esac; exit 0
 
 
 
-## BL-195 — Check 2's suppression-lifetime arm reads a verdict the CURRENT gate has not yet written, and all four candidate remedies are refuted by measurement
+## BL-375 — the sandbox read-set tracer drops reports and omits fixtures on real runs, so the root-requiring `fs_usage` tracer cannot yet be retired
 
-**Operator decision, 2026-10-01: left open, receipt `manual`, no remedy rebuilt.** The reference
-consumer archived `PC-S308` as `ADOPTED UPSTREAM (v0.568.0)`; that annotation is not evidence the
-defect is fixed, because the stale read below still reproduces.
-
-**Provenance.** `PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER`, filed by the reference
-consumer 2026-09-06. **This entry is FILED AND DELIBERATELY NOT FIXED.** The defect is real and
-better evidenced than the filing claims; every remedy proposed for it — the filing's two, plus two
-derived here — was built or measured and refuted. It is recorded so the next session does not
-rebuild any of them.
-
-**The defect, verified against the consumer's own committed history.** Check 2 invokes
-`validate-suppression-lifetime.sh` (`core/skills/ai-dlc/steps/gate-validation.md:245`), which
-decides whether a suppression's named check is still failing by reading the newest recorded
-verdict in `gate-metrics.jsonl` (`core/scripts/validate-suppression-lifetime.sh:471`). That file
-is written ONLY by Check 12 (`gate-validation.md:736`), which runs after. So Check 2 necessarily
-reads the PREVIOUS gate's verdict, and a fix landing between two gates is invisible to it.
-
-The filing's cited case reproduces exactly: the FAIL row at `2026-09-05T22:58:00Z` carries sha
-`7729b544a…`, and `git merge-base --is-ancestor` puts that tree strictly BEFORE the reword fix at
-`33f925bcf` (exit 0; reverse direction exit 1 as control).
-
-**THE CONSUMER DIAGNOSED THIS ELEVEN DAYS BEFORE FILING IT, AND CHOSE TO SUPPRESS.**
-`docs/escalations/pending.md:3684`, 2026-08-26: *"Check 16 itself passed cleanly THIS gate on its
-own merits … but that PASS has not yet been recorded to `gate-log.md` (Check 12 runs after this
-adoption), so `validate-suppression-lifetime.sh` still reads story 2.1 gate-3's real 23-finding
-check-16 FAIL as the last recorded verdict and reactivates these two unrelated older entries."*
-That entry's own options list reads *"(a) fresh SUPPRESSED for check 16, this gate only [chosen];
-(b) investigate/fix the Check 12-before-Check 2 ordering instead"*. A sibling entry at the S305
-sprint-review gate does the same on check 22. **The recurrence is the choice, not the mechanism.**
-
-**Recurrence: 3 distinct gate events across 2 sprints (S305 ×2, S308 ×1),** derived by scanning
-both escalation corpora for entries naming a Check-2 suppression-lifetime FAIL together with a
-last-recorded-verdict cause; 4 entries resolve to 3 gates. Impossible-phrase control returns
-nothing. **An earlier reading of this batch narrowed it to 1 and was wrong** — that reading rested
-on an ancestry test which cannot answer the question, because it asks whether the FAIL row was
-written before the fix, which is necessarily true of every entry: the row IS the record of the
-failing gate. The staleness is in the READ, not the write.
-
-**THE FINDING THAT OUTRANKS THE FILING'S OWN CLAIM.** The metrics file is not merely stale at
-unlucky moments; it is the LOSSY artifact in principle. Check-2 verdicts, full population:
-
-| source | PASS | FAIL |
-|---|---|---|
-| per-gate `*.verdict.json` | 158 | **38** |
-| `gate-metrics.jsonl` | 93 | **3** |
-
-**A 12.7× undercount**, and the cause is structural: a gate that FAILs Check 2 halts before
-reaching Check 12, so the row recording that failure is never written. Control — check 16, which
-does not halt the gate, agrees far better (18 verdict FAILs against 5 metrics FAILs). The arm
-consults the one artifact that structurally cannot record the failures that matter most.
-
-**THE FOUR REFUTED REMEDIES. Do not rebuild these.**
-
-**(a) Re-sequence Check 2's read to after Check 12's write — A CYCLE.** Check 12's own instruction
-(`gate-validation.md:750`) is to emit a row for *every other check the manifest loaded*, which
-includes Check 2. Measured: 12 rows carry `"check":"2"`, against an impossible-id control of 0.
-Check 12 cannot write until Check 2 has produced a verdict to record, so "read after the writer
-writes" is self-referential.
-
-**(b) Re-run the underlying check live — FAILS OPEN ON 22 OF 57 CHECKS.** `enforcement-map.yaml`
-gives 22 ids `enforcer: []` against 35 with one (57 total, partitioning exactly; impossible-key
-control 0): `1 1c 3 3a 4 6 7 8 9 10 11 11a 12 13 14 15 19 20 21 27 29 H1`. **`[core] 11` is
-suppressed twice in the live corpus and has no enforcer to run.** Treating "cannot re-run" as PASS
-acquits every suppression on those 22 ids; treating it as FAIL fabricates blocks on them. The 35
-that do have enforcers resolve to distinct CLI contracts with no generic invocation, so (b) would
-additionally need a hand-written per-check invocation table.
-
-**(c) Refuse when the recorded row's `sha` is not current — DISARMS ON A SQUASH-MERGE CONSUMER.**
-Over the live metrics: 11 distinct shas, **0 ancestors of HEAD**, 10 orphans, 1 unresolvable;
-control `merge-base --is-ancestor HEAD HEAD` exit 0. The consumer squash-merges, so the commit a
-gate records is orphaned by the merge that lands the work. This shape reports NOT-APPLICABLE for
-every row on a healthy tree — a total disarm that reads as green. `tool-hazards.md` states the
-general rule: never test whether work landed by ancestry in a squash-merge repo.
-
-**(d) Read the CURRENT gate's `*.verdict.json` instead — NO JOIN EXISTS.** 198 verdict files carry
-the right answer (the file the S305 entry names records `check_id 16 → PASS` at the exact gate
-where the metrics said FAIL), and they cover every suppressed id including the ones (b) cannot
-reach — `2` (196 files), `16` (195), `11` (69), `22` (69), `24` (1), `30` (1), impossible-id
-control 0. But **96 distinct gate events in the metrics against 197 distinct verdict
-`generated_at` values intersect at 9**, control (ts ∩ ts) = 96. `generated_at` is the
-adjudicator's write time, not the gate's `ts`. With no key, the fix either wedges 87 of 96 gates
-or falls back to the stale row and reintroduces the defect. `gate_nonce` identifies a file
-uniquely (197 of 198) but is not available to the validator, and "newest verdict.json" picks the
-wrong file within two hours at the S305 gate — the original defect one file over. The directory
-is also absent on a fresh consumer.
-
-**What a fix would actually require**, stated so the next attempt starts from the real
-constraint rather than from the filing's framing: a gate-scoped identifier that both the verdict
-artifact and the suppression validator can see, passed IN by the caller rather than discovered.
-That is a change to Check 2's invocation line in a resident skill file plus a new flag, and it is
-fail-open the moment one caller omits it. **Nothing here is a small fix, and the smallest honest
-change is documentation** — Check 2's body stating that its verdict source is the PREVIOUS gate's
-record, and the arm reporting the `ts` of the row it read so a false positive is legible when it
-fires.
-
-**The consumer-owned half is not upstream work.** Why the 2026-07-22 failure happened at all, and
-whether their sprints should keep suppressing rather than escalating, is that consumer's own
-carry-over.
-
-**The smallest honest change shipped in v0.666.0; the defect stands.** The expiry FAIL now names
-the `ts` of the row `latest_verdict` selected and the metrics file, and says that this is the
-PREVIOUS gate's recorded verdict because Check 12 writes this gate's row after Check 2 runs.
-`gate-validation.md` Check 2 and `escalations.md` state the same thing. Fixture arms 18a-18d in
-`core/fixtures/suppression-lifetime/run.sh` pin the exact ts: the newest core row, not a newer
-extension row, and not the last row read in file order. Mutants K (ts dropped) and L (last-read
-ts) are killed. The stale read itself is unchanged, so this entry stays open and its receipt
-stays `manual`: an `sh` receipt over the mitigation exits 0 and would score the entry
-CLOSE-CANDIDATE for a defect that still reproduces. The fixture carries the mitigation.
-
-verify: manual
-
-## BL-301 — the gate runs no shipped fixture in the consumer layout, so a fixture red on every consumer ships green
-
-**DEFECT.** Found by the batch 150 contract adversary. It discharges no consumer candidate.
-
-**THE GAP `BL-299` FELL THROUGH.** The distribution's pre-push runs `core/fixtures/*/run.sh` in
-the distribution tree. `install.sh` splits what shares a parent here, so `core/scripts/<x>`
-lands at `scripts/ai-dlc/<x>` and `core/schemas/` at `.claude/schemas/`. A fixture that resolves
-a sibling through the distribution's relative layout therefore passes here and fails on every
-consumer. That is what happened to story-provenance's arm R, which went red in every consumer
-install from 0.628.0 while every distribution push stayed green. The consumer found it on its
-own tree, three releases later. The installer-driving fixtures here (`consumer-machinery-home`,
-`layer-crosswalk-home`, `shipped-rule-version-floor` and five more, located by grepping
-`core/fixtures/*/run.sh` for `scripts/install.sh`) each assert one property of the installed
-tree. None of them runs the shipped fixture set there.
-
-**THE SHAPE OF A FIX, AND WHY IT IS NOT A SMALL ONE.** A gate phase would install HEAD into a
-`mktemp -d` consumer with `_bmad/`, then run every shipped fixture there through the consumer's
-own installed runner, `core/git-hooks/pre-push`, which is the program a consumer runs. It has to
-use that runner so that the pool and the verdict accounting match. The shipped set is the
-fixtures carrying no `.dist-only` marker. The cost is a second full pass over most of the suite,
-and the suite is pole-bound, so the phase has to be scheduled against the existing pole rather
-than appended serially. **Measure that cost before choosing** between a full consumer-layout
-pass and a pass limited to the fixtures whose read-set crosses a path that `install.sh` remaps.
-
-**`verify: manual`, because no behavioural receipt is constructible at receipt scale.** The
-property is that the GATE runs the shipped set in a consumer layout. The only behavioural test
-is to seed a fixture that fails only in the consumer layout and run the gate, which means running
-the suite from inside a receipt, and the receipt runner itself runs from inside that gate. A
-grep of `.githooks/pre-push` for `install.sh` would be satisfied by a comment, and
-`scripts/validate-backlog-receipts.sh` would correctly report it as PROSE-CLOSABLE. Close this
-entry by hand on the release whose gate shows the new phase failing on a seeded consumer-only
-fixture and passing on its removal.
-
-verify: manual
-
-## BL-375 — the read-set deriver needs root for `fs_usage`, and a scoped `sandbox-exec` tracer measured as a root-free replacement
+**RE-SCOPED ON THE OPERATOR'S BATCH-185 RULING: THE FIRST DELIVERABLE IS A SANDBOX TRACE THAT
+DOES NOT DROP.** The sandbox mode is built: `--tracer sandbox` refuses root and runs every fixture
+under `sandbox-exec`, and `operator-rulings.md` already requires sessions to trace with it. It is
+not yet a replacement, because real `--list` runs lose reports. Recorded in the plan's resume block,
+not re-measured here: at batch 183, 6 of 12 fixtures were OMITTED at load 7-10; at batch 184, 11 of
+18 were OMITTED at load 3-8 with zero agent worktrees, with dropped-report counts from 7 to 1254.
+Both maps were discarded. Load and worktrees alone do not explain the drops. Until a multi-fixture
+`--list` run under the sandbox tracer finishes with no OMITTED line, `fs_usage` is the only tracer
+that produces a committable map. Removing it, and running the `--tracer both` comparison, both wait
+on that. The receipt below still names the end state, so it reads 1 throughout.
 
 **DEFECT.** Operator-scheduled on 2026-09-29 as its own release, after v0.665.0.
 `core/scripts/derive-fixture-readsets.sh` requires root (`[ "$(id -u)" = "0" ]`) because `fs_usage`
