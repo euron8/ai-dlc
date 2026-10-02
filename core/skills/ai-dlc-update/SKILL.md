@@ -2415,8 +2415,17 @@ declared sites, not everywhere unconditionally.
 8. **Deliver — branch → commit → push → PR → merge.** The reconcile is landed
    through the consumer's normal review flow, never force-written to the working
    branch:
-   - Drain any `push_candidate`-flagged extensions into the push-candidate ledger
-     for a later upstream push-mine (spec §8.1).
+   - **Drain `push_candidate` extensions through the reader, never by hand.** Run
+     `reconcile/push-drain.sh <dist> <theirs> <consumer>`. It splits every extension whose
+     frontmatter says `push_candidate: true` into blocks and emits one row per block,
+     `PUSH-REFUSED` or `PUSH-CANDIDATE`, keyed on the block's digest against
+     `reconcile/push-refusals.tsv` at `theirs`. Drain ONLY the `PUSH-CANDIDATE` rows into the
+     push-candidate ledger for a later upstream push-mine (spec §8.1). A `PUSH-REFUSED` row is a
+     block upstream already adjudicated and declined; re-proposing it re-opens a settled verdict.
+     A block whose body has changed since it was refused digests differently and comes back as a
+     `PUSH-CANDIDATE`, which is correct: it is a new proposal. **On exit 2 the reader REFUSED**:
+     report its `push-drain: REFUSED —` line and drain NOTHING from this run, because a partial
+     or unread record re-proposes refused blocks exactly as the prose drain did.
    - **Drain the defects this run found in UPSTREAM's own tooling** into the same ledger,
      one entry each, with a `verify:` line. Every other drain here moves a CONSUMER
      artifact; this is the other source, and it had no path. A pull is the best detector
@@ -2467,6 +2476,12 @@ declared sites, not everywhere unconditionally.
      them is a close.** `reconcile/emit-report.sh` renders the set the operator acts on and
      this is the step that acts, so a status named there and not here is a duty with no actor.
      Step 3f says what each status MEANS; these say what to DO with it.
+     - **An entry whose every live block reads `PUSH-REFUSED`** in this run's
+       `push-drain.sh` output can never close on its receipt, because upstream will never ship
+       what it declined. Annotate it by hand with `**CLOSED AS REJECTED — BY DESIGN, adjudicated
+       <date>**`, the same manual `Edit` and never automatic, as the close bullet above requires.
+       Do this only when every block of the entry's extension is refused; one `PUSH-CANDIDATE`
+       block leaves the entry open.
      - `NAMED-UPSTREAM` — upstream's history names the id. Read the named commit and decide
        whether it ABSORBED the entry or recorded a rejection or a split. On absorption,
        annotate by hand in the form `ledger-rotate.sh` accepts — bolded, version immediately
@@ -2569,8 +2584,9 @@ collapses:
   invisible to it. Step 3c's `layer-drift.sh` reports `EXTENSION-HOOK-DRIFT` when
   the hooked core file changed, and `EXTENSION-RETIRE-CANDIDATE` when upstream has
   absorbed a section the extension defines (Rule 27(b) — the consumer retires it;
-  the pull never deletes a layer entry). Drain entries flagged
-  `push_candidate: true` into the push-candidate ledger (spec §8.1).
+  the pull never deletes a layer entry). Entries flagged `push_candidate: true`
+  are drained at step 8 through `reconcile/push-drain.sh`, block by block, and
+  only its `PUSH-CANDIDATE` rows enter the push-candidate ledger (spec §8.1).
 - **overrides/** → the ONLY genuine three-way surface. For each override, its
   base is the core rule it shadows (`base_sha` in the entry). If theirs changed
   that core rule between `base_sha` and HEAD, surface the override for operator

@@ -664,7 +664,13 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   path: base 3154 (spread 3154-3154), tip 3159 (spread 3157-3159), so +5. The only arm that moved
 #   is I39, 57 -> 62: `NAMED-UPSTREAM-OFF-SUBJECT` is one more member it joins across the emitter,
 #   step 3f, step 8 and emit-report's heading. HIGH reading 3159 plus the usual 6.
-FORK_BUDGET=3165
+#
+#   RAISED TO 3172 FOR ONE NEW SHIPPED RECONCILE SCRIPT, NOT FOR A NEW ARM. `fork-profile.sh
+#   --section by-arm --stable`, base `origin/main` b4d1bbee then the BL-024 tip, in ONE worktree at
+#   the same path: base 3159 (spread 3157-3159), tip 3166 (spread 3166-3166), so +7. Every arm that
+#   moved is a per-file walk counting `reconcile/push-drain.sh` once more: I105 84 -> 87, I84
+#   285 -> 287, I83 141 -> 142, I21 26 -> 27. HIGH reading 3166 plus the usual 6.
+FORK_BUDGET=3172
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

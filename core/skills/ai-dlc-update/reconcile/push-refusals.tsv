@@ -1,0 +1,9 @@
+# push-refusals.tsv — push_candidate blocks the distribution has already adjudicated and declined.
+# Read by push-drain.sh at the ref being pulled. Row existence IS the refusal; the join is on the
+# digest alone, so a refused block whose body changes becomes a candidate again.
+# Columns: <sha1 of the block, from `push-drain.sh --digest <file>`> TAB <entry id> TAB <reason>
+8a28c2eff8ca8d6787aa3709e120f055058e64bf	implementation-push	Absorbed: core carries this as "Worktree-explicit dev dispatch" in core/skills/ai-dlc/steps/_dispatch-protocol.md, including the git worktree add base ref and the git stash ban.
+be4a103123893e3982eec96f040202b573eb3dc4	implementation-push	Absorbed: core carries this as "Dev-brief bug-class checklist" in core/skills/ai-dlc/steps/_dispatch-protocol.md.
+6793424087adfd0efb4eb1fbc6733283a660242e	implementation-push	Declined as consumer-local: the done-pending-liveness status is tied to this consumer's own liveness tooling and has no core equivalent to land in.
+e5cc0af2856505c9cde5eda4d0101e35218089b1	implementation-push	Declined as consumer-local: the story-status consistency check runs a validator that exists only in this consumer.
+3205b9313b8ade6027d2c2e4bd0cf33fff66a622	implementation-push	Declined: the mid-sprint scope re-check overlaps core's existing per-commit Scope Verification in steps/implementation.md.
