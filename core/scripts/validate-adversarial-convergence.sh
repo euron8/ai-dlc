@@ -1839,7 +1839,9 @@ fi
 #              (4) the file's bytes on disk ARE the bytes the pass notarized: its sha256 equals
 #                  the pass's `artifact_sha`. The map is a property of the CURRENT bytes, and a
 #                  repaired document may partition differently from the one reviewed;
-#              (5) `--map` exits 0. Exit 3 (`SERIAL:`) is exception 4 and passes, silently.
+#              (5) `--map` exits 0, asked of the partitioner IN FORCE at the terminal pass
+#                  (`k2_pd_in_force`, below), or of today's copy with a FALLBACK line printed.
+#                  Exit 3 (`SERIAL:`) is exception 4 and passes, silently.
 #   FAIL       the series' FIRST pass is at or after the first commit stamping
 #              `.claude/.ai-dlc-version` at K2_RELEASE or later (`k_stamp_parse`).
 #   PENDING    printed, never counted: the program is absent, it answered with neither 0 nor
@@ -1866,8 +1868,72 @@ fi
 # is PENDING and none fails. `K_RELEASE` is rebound for the one `k_stamp_parse` call rather
 # than the parser being copied; the probe below includes K_RELEASE's own successor as a
 # near-miss, so a rebinding that silently did not take reads as a probe failure, not a pass.
+#
+# THE MAP IS ASKED OF THE PARTITIONER IN FORCE AT THE PASS, NOT OF TODAY'S. A consumer's
+# self-update replaces `partition-document.sh`, and a document the installed copy called SERIAL
+# when the lead dispatched one adversary can partition under the copy installed since -- so a
+# today's-map read convicts a dispatch that obeyed the program it ran under. Measured on the
+# reference consumer: its `docs/architecture.md` at the bytes one series reviewed is SERIAL
+# (rc 3) under the copy installed when that series ran and an 8-part map (rc 0) under the copy
+# one self-update later. The rule, and why each choice is the deterministic one:
+#   time    the TERMINAL pass's `invoked_at` -- the dispatch this arm judges. The stamp gate
+#           below keys on the FIRST pass instead, and the two are different questions: whether
+#           the rule was owed for this series at all, against which program this dispatch was
+#           made. Do not "align" them.
+#   commit  the newest commit on HEAD's FIRST-PARENT chain whose committer date is at or before
+#           that time (`rev-list -1 --first-parent --before=`, inclusive, `Z` parsed as UTC).
+#           Committer date is when a change landed; first-parent is what the branch carried.
+#           Known limit: a sprint branch that had not yet merged a self-update when it
+#           dispatched reads the copy main carried, which can only be the newer one.
+#   copy    the blob at THIS validator's own partitioner path relative to the root, read as
+#           `<commit>:./<rel>` with `git -C <root>` (so a root below the git toplevel resolves),
+#           both sides compared under `pwd -P`. Run from a staged file under $AC_T, so it holds
+#           in either layout; it needs no sibling. A copy that fails the map probe is PENDING.
+#   NOT     the spawn ledger's `shard` field. It is parsed from the lead's own prompt and folds
+#           to `none (N)`, and it joins a pass by tool_use_id for a small minority of passes: an
+#           input the reviewed party writes about itself is not evidence of the program in force.
+# FALLBACK, MARKED. No root, no git, a terminal `invoked_at` that is not ISO 8601 UTC, this
+# validator not under the root (the distribution layout), no commit at or before the time
+# (empty or shallow history), or the path not tracked at that commit: the map is asked of
+# today's copy and the run prints `FALLBACK (K2 partitioner): <reason>` beside the verdict --
+# including a SILENT one -- so a verdict read off the wrong program is never indistinguishable
+# from one read off the right program.
 K2_RELEASE="0.665.0"
 K2_PD="$(cd "$(dirname "$0")" && pwd)/partition-document.sh"
+
+k2_pd_in_force() {  # $1 root ("" = none)  $2 terminal invoked_at -> K2_RUN, K2_PD_FROM, K2_PD_FALLBACK
+  K2_RUN="$K2_PD"; K2_PD_FROM="the CURRENT ${K2_PD}"; K2_PD_FALLBACK=""
+  local pdp rootp rel c
+  if [ -z "$1" ]; then
+    K2_PD_FALLBACK="no directory above the series carries .claude/.ai-dlc-version, so no install history can be read"; return 0
+  fi
+  if ! command -v git >/dev/null 2>&1; then K2_PD_FALLBACK="git is not on PATH"; return 0; fi
+  case "$2" in
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) ;;
+    *) K2_PD_FALLBACK="the terminal pass has no ISO 8601 UTC invoked_at ('$2') to date the install against"; return 0 ;;
+  esac
+  pdp="$(cd "$(dirname "$K2_PD")" 2>/dev/null && pwd -P)"
+  rootp="$(cd "$1" 2>/dev/null && pwd -P)"
+  if [ -z "$pdp" ] || [ -z "$rootp" ]; then K2_PD_FALLBACK="the root or this validator's directory does not resolve"; return 0; fi
+  if [ "$pdp" = "$rootp" ]; then rel="partition-document.sh"
+  else
+    case "$pdp" in
+      "$rootp"/*) rel="${pdp#"$rootp"/}/partition-document.sh" ;;
+      *) K2_PD_FALLBACK="this validator is not installed under $1 (the distribution layout), so no copy of its partitioner is tracked there"; return 0 ;;
+    esac
+  fi
+  c="$( ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+          git -C "$1" rev-list -1 --first-parent --before="$2" HEAD 2>/dev/null ) )"
+  if [ -z "$c" ]; then
+    K2_PD_FALLBACK="no commit in $1 at or before $2 (no work tree, an empty history, or a shallow one)"; return 0
+  fi
+  if ! ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+         git -C "$1" cat-file blob "${c}:./${rel}" 2>/dev/null ) > "$AC_T/k2-pd-in-force.sh"; then
+    K2_PD_FALLBACK="${rel} is not tracked at ${c:0:12}, the commit in force at $2"; return 0
+  fi
+  K2_RUN="$AC_T/k2-pd-in-force.sh"
+  K2_PD_FROM="the copy of ${rel} in force at ${c:0:12}"
+}
 
 # THE STAMP HISTORY, READ ONCE PER ROOT. K2 and J2 both date a series against the first commit
 # stamping `.claude/.ai-dlc-version`; each parses the same `git log -p` text with its own release
@@ -1957,21 +2023,35 @@ EOF
         echo "PENDING (K2 -- SECTIONS): the terminal pass ${k2_term} reviews ${K2_FILE} and carries no shard_tool_use_ids:,"
         echo "      but the document on disk (${k2_disk}) is not the bytes it notarized (${k2h_lc}) -- judged only on reviewed bytes."
       else
+        # The root, walked up from the FIRST pass as the stamp gate below walks it, then the
+        # partitioner in force at the TERMINAL pass (see the header above K2_RELEASE).
+        k2_root=""
+        k2_walk="$(dirname "${P_FILE[0]}")"
+        k2_walk="$(cd "$k2_walk" 2>/dev/null && pwd)"
+        while [ -n "$k2_walk" ]; do
+          if [ -f "$k2_walk/.claude/.ai-dlc-version" ]; then k2_root="$k2_walk"; break; fi
+          k2_walk="${k2_walk%/*}"
+        done
+        k2_pd_in_force "$k2_root" "${P_AT[$((N - 1))]:-}"
+        if [ -n "$K2_PD_FALLBACK" ]; then
+          echo "FALLBACK (K2 partitioner): ${k2_term} is judged by ${K2_PD_FROM}, not the copy in force at the pass --"
+          echo "      ${K2_PD_FALLBACK}."
+        fi
         # The map interface, probed once, immediately before its first real use.
         printf '## a\nx\n## b\ny\n' > "$AC_T/k2-two.md" && printf '## a\nx\n' > "$AC_T/k2-one.md" || {
           echo "validate-adversarial-convergence.sh: arm K2 map probe could not stage; no verdict" >&2; exit 2; }
-        bash "$K2_PD" --map "$AC_T/k2-two.md" >/dev/null 2>&1; k2q2=$?
-        bash "$K2_PD" --map "$AC_T/k2-one.md" >/dev/null 2>&1; k2q1=$?
+        bash "$K2_RUN" --map "$AC_T/k2-two.md" >/dev/null 2>&1; k2q2=$?
+        bash "$K2_RUN" --map "$AC_T/k2-one.md" >/dev/null 2>&1; k2q1=$?
         if [ "$k2q2" -ne 0 ] || [ "$k2q1" -ne 3 ]; then
-          echo "PENDING (K2 -- SECTIONS): ${K2_PD} failed its map probe (two-part document exited ${k2q2}, want 0;"
+          echo "PENDING (K2 -- SECTIONS): ${K2_PD_FROM} failed its map probe (two-part document exited ${k2q2}, want 0;"
           echo "      one-part document exited ${k2q1}, want 3) -- its answer about ${K2_FILE} is not read."
         else
-          k2_map="$(bash "$K2_PD" --map "$K2_FILE" 2>&1)"; k2rc=$?
+          k2_map="$(bash "$K2_RUN" --map "$K2_FILE" 2>&1)"; k2rc=$?
           if [ "$k2rc" -eq 0 ]; then
             k2_parts="$(printf '%s\n' "$k2_map" | grep -c .)" || k2_parts=0
             K2_CAND="${K2_FILE}	${k2_parts}"
           elif [ "$k2rc" -ne 3 ]; then
-            echo "PENDING (K2 -- SECTIONS): ${K2_PD} --map ${K2_FILE} exited ${k2rc}, neither a map (0) nor SERIAL (3):"
+            echo "PENDING (K2 -- SECTIONS): ${K2_PD_FROM} --map ${K2_FILE} exited ${k2rc}, neither a map (0) nor SERIAL (3):"
             echo "      $(printf '%s\n' "$k2_map" | head -1)"
           fi
         fi
@@ -1984,13 +2064,7 @@ if [ -n "$K2_CAND" ]; then
   k2_doc="${K2_CAND%	*}"; k2_parts="${K2_CAND##*	}"
   k2_first="$(basename "${P_FILE[0]}")"
   k2_at="${P_AT[0]:-}"
-  k2_root=""
-  k2_walk="$(dirname "${P_FILE[0]}")"
-  k2_walk="$(cd "$k2_walk" 2>/dev/null && pwd)"
-  while [ -n "$k2_walk" ]; do
-    if [ -f "$k2_walk/.claude/.ai-dlc-version" ]; then k2_root="$k2_walk"; break; fi
-    k2_walk="${k2_walk%/*}"
-  done
+  # k2_root was walked above, before the partitioner in force was resolved.
   # The rebinding is probed with K_RELEASE's successor as the near-miss: under a rebinding that
   # did not take, 0.664.0 would satisfy K_RELEASE and this probe would report it.
   k2_probe="$(printf '%s\n' 'C 2026-01-02T00:00:00Z' '+version: 0.665.0' 'C 2026-01-01T00:00:00Z' '+version: 0.664.0' \
@@ -2020,7 +2094,7 @@ if [ -n "$K2_CAND" ]; then
     echo "      and the series opened (${k2_first}, ${k2_at}) before ${K2_RELEASE} was stamped (${k2_stamp}). Legacy series."
   else
     err "K2 -- SECTIONS" "${k2_term} reviews ${k2_doc}, which partition-document.sh --map splits into
-      ${k2_parts} parts, and its provenance block carries no 'shard_tool_use_ids:'. The series opened
+      ${k2_parts} parts (asked of ${K2_PD_FROM}), and its provenance block carries no 'shard_tool_use_ids:'. The series opened
       (${k2_at}) after ${K2_RELEASE} was stamped (${k2_stamp}), so Rule 28's sections axis binds it:
       one adversary per part plus one cross-section adversary, joined by
       scripts/ai-dlc/merge-adversarial-shards.sh --document, which writes this pass file and that
