@@ -161,14 +161,20 @@
 #   `shard:`; the VALUE is strict. Lines inside a ``` or ~~~ fence are not read, so a brief
 #   may quote the grammar. Recorded in the spawn ledger as `shard`, canonicalised (blank runs
 #   collapsed to one space): `"<i>/<N> <part-key>"`, `"cross/<N> <part-key>"` or
-#   `"none (<1-4>)"`. ZERO matching lines, MORE THAN ONE, or one
+#   `"none (<1-4>)"`. For `none` only the FIRST parenthesised group is the value, and text after
+#   it is ignored: `none (serial-document). Files you may edit...` records `none (4)`. ANY other
+#   value beginning `none` -- an unknown number, an invented reason, or no parentheses at all --
+#   records `"invalid-exception"` plus `shard_raw`, the lead text (blanks collapsed, first 160
+#   bytes), and that wins over every other shard line in the brief, so a repeated line cannot
+#   launder it. Otherwise ZERO matching lines, MORE THAN ONE, or one
 #   that does not parse all record `shard: null`. A row with no `shard` KEY at all was written
 #   by a guard older than this field, and `validate-spawn-ledger.sh` reads that absence as
 #   PENDING, not as an omission.
 #
 #   RECORD-THEN-ALLOW ONLY. Nothing here denies, corrects or annotates a dispatch on the shard
 #   line: whether a scope is ONE part or several is a judgment about intent, and no act at
-#   dispatch separates the two. The line is a record Check 22 reads at the gate.
+#   dispatch separates the two. The line is a record Check 22 reads at the gate, where arm S3
+#   FAILS an `invalid-exception` row and arm S1 WARNs on a null one.
 #
 # INSTALL: wired by templates/settings.json.template (PreToolUse matcher
 #   "Agent|Task"); upserted by reconcile/settings-merge.sh on pull.
@@ -565,7 +571,16 @@ SPAWN_TUI="$(printf '%s' "$INPUT" | jq -r '.tool_use_id // empty' 2>/dev/null ||
 # row, which would cost every other field for the sake of this one. Only the short canonical
 # result reaches jq. Any failure here is an empty SPAWN_SHARD, recorded as null, and the
 # dispatch proceeds exactly as before.
-SPAWN_SHARD="$(printf '%s\n' "$PROMPT" | awk '
+#
+# AN INVENTED EXCEPTION IS RECORDED AS ITSELF, NEVER AS NULL. Any value beginning `none` whose
+# FIRST parenthesised group is not one of the four exceptions -- `none (5)`, `none (serial
+# cross-file repair: ...)`, `none -- serial because ...` -- records `invalid-exception`, and the
+# lead text rides beside it as `shard_raw` (blank runs collapsed, first 160 bytes) so Check 22
+# can print what was claimed. One such line wins over every other line in the brief: a second,
+# valid line must not launder the first back to null. Text AFTER a valid first group is the
+# brief continuing, not part of the value: `none (serial-document). Files you may edit...`
+# records `none (4)`. Two lines out: the value, then the raw text when the value is invalid.
+SPAWN_SHARD_OUT="$(printf '%s\n' "$PROMPT" | LC_ALL=C awk '
   /^[ \t]*(```|~~~)/ { fence = !fence; next }
   fence { next }
   {
@@ -584,17 +599,24 @@ SPAWN_SHARD="$(printf '%s\n' "$PROMPT" | awk '
     } else if (line ~ /^cross\/[0-9]+ [^ ]/) {
       pos = index(line, " "); k = substr(line, pos + 1); n = substr(line, 7, pos - 7) + 0
       if (n >= 1) val = "cross/" n " " k
-    } else if (line ~ /^none[ \t]*\([^)]*\)$/) {
-      e = line; sub(/^none[ \t]*\([ \t]*/, "", e); sub(/[ \t]*\)$/, "", e)
+    } else if (line ~ /^none/) {
+      e = ""
+      if (match(line, /^none ?\([^)]*\)/)) {
+        e = substr(line, RSTART, RLENGTH); sub(/^none ?\( ?/, "", e); sub(/ ?\)$/, "", e)
+      }
       if (e == "1" || e == "data-dependency") val = "none (1)"
       else if (e == "2" || e == "pass-repair-pass") val = "none (2)"
       else if (e == "3" || e == "authoring-chain") val = "none (3)"
       else if (e == "4" || e == "serial-document" || e == "one-file") val = "none (4)"
+      if (val == "" && bad == 0) { bad = 1; raw = substr(line, 1, 160) }
     }
     if (val != "") { good++; out = val }
   }
-  END { if (keys == 1 && good == 1) print out }
+  END { if (bad) { print "invalid-exception"; print raw } else if (keys == 1 && good == 1) print out }
 ' 2>/dev/null || true)"
+SPAWN_SHARD="$(printf '%s\n' "$SPAWN_SHARD_OUT" | sed -n 1p)"
+SPAWN_SHARD_RAW=""
+[ "$SPAWN_SHARD" = "invalid-exception" ] && SPAWN_SHARD_RAW="$(printf '%s\n' "$SPAWN_SHARD_OUT" | sed -n 2p)"
 
 # THE DELETED NAME IS RECORDED, NEVER MERELY DROPPED. A lead reading the ledger back sees
 # `name` as the dispatch's identity across every sprint of history; a definition-bound row
@@ -647,6 +669,7 @@ jq -nc \
    --arg stripped "${SPAWN_NAME_STRIPPED:-}" \
    --arg via "${CONTRACT_VIA:-}" \
    --arg shard "${SPAWN_SHARD:-}" \
+   --arg shardraw "${SPAWN_SHARD_RAW:-}" \
    --argjson cited "$ROLE_CONTRACT_CITED" \
    --argjson readable "$ROLE_FILE_READABLE" \
    --argjson defbound "$DEFINITION_BOUND" \
@@ -677,7 +700,10 @@ jq -nc \
      # The brief shard line, canonicalised; null when absent, repeated or unparseable. The KEY
      # is always written, because its absence is how Check 22 recognises an older guard row.
      shard: (if $shard == "" then null else $shard end)
-   }' >> "$SPAWN_LEDGER" 2>/dev/null || true
+   }
+   # The lead text of an invented exception, written ONLY beside that value, so its presence
+   # is itself the marker Check 22 arm S3 prints from. NO APOSTROPHE HERE either.
+   | if $shard == "invalid-exception" then . + {shard_raw: $shardraw} else . end' >> "$SPAWN_LEDGER" 2>/dev/null || true
 # --- end SPAWN LEDGER ---------------------------------------------------------
 
 [ "$ROLE_FILE_READABLE" = true ] || exit 0   # recorded above; never correct blind

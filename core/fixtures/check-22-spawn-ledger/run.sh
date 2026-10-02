@@ -960,6 +960,23 @@ row dev sonnet sonnet true false cp-unread                     >> "$WORK/cp-unre
 row  dev sonnet sonnet true true cp-epoch                      >  "$WORK/cp-eff.jsonl"
 erow dev sonnet true true cp-eff true high toolu_CP            >> "$WORK/cp-eff.jsonl"
 prow toolu_CP low claude-sonnet-5 2.1.269                      >  "$WORK/cp-eff.probe"
+# THE FIFTH ROUTE, arm S3: a shardable row recording an invented Rule 28 serial exception. The
+# epoch row is a clean dev row, so the shard row is not first; the shard row is otherwise
+# Rule 19-clean (adversary pins opus and is bound opus, cited, readable), so S3 is the only
+# route that can produce its exit 1.
+row dev sonnet sonnet true true  cp-epoch                      >  "$WORK/cp-shard.jsonl"
+jq -nc '{v:1,sprint:900,name:"cp-shard",role:"adversary",model_bound:"opus",model_requested:"opus",
+  role_contract_cited:true,role_file_readable:true,shard:"invalid-exception",
+  shard_raw:"none (serial cross-file repair: a, b)"}'           >> "$WORK/cp-shard.jsonl"
+# The same ledger with only a VALID exception carrying trailing prose, as the guard records it.
+row dev sonnet sonnet true true  cp-epoch                      >  "$WORK/cp-shard-ok.jsonl"
+jq -nc '{v:1,sprint:900,name:"cp-shard-ok",role:"adversary",model_bound:"opus",model_requested:"opus",
+  role_contract_cited:true,role_file_readable:true,shard:"none (4)"}' >> "$WORK/cp-shard-ok.jsonl"
+# THE WORLD WHERE NOTHING IS IN RULE 19 SCOPE: settings with no aiDlcRoles block and an UNCITED
+# shard row, so CHECKED is 0 and the exit-3 branch is reachable. S3 must still exit 1 here.
+jq -nc '{v:1,sprint:900,name:"cp-shard-oos",role:"adversary",model_bound:"opus",model_requested:"opus",
+  role_contract_cited:false,role_file_readable:true,shard:"invalid-exception",
+  shard_raw:"none (made-up)"}'                                   >  "$WORK/cp-shard-oos.jsonl"
 
 # The sentence every FAIL route owes its reader. Spelled ONCE, here, and read by the class
 # verdict below -- a per-arm copy is a second chance to drift.
@@ -996,17 +1013,18 @@ cleanv() { # script -> CLEAN | clean(rc=N,disp=N)
   fi
 }
 
-# cpvec <script> -> five space-separated cells, one per class plus the clean control.
+# cpvec <script> -> six space-separated cells, one per class plus the clean control.
 cpvec() {
-  printf '%s %s %s %s %s' \
+  printf '%s %s %s %s %s %s' \
     "$(cleanv "$1")" \
     "$(cverdict "$1" cp-tier.jsonl   'Rule 19(a) tier')" \
     "$(cverdict "$1" cp-cite.jsonl   'role_contract_cited=false')" \
     "$(cverdict "$1" cp-unread.jsonl 'role_file_readable=false')" \
-    "$(cverdict "$1" cp-eff.jsonl    'records effort=' cp-eff.probe)"
+    "$(cverdict "$1" cp-eff.jsonl    'records effort=' cp-eff.probe)" \
+    "$(cverdict "$1" cp-shard.jsonl  'shard: none (serial cross-file repair: a, b)')"
 }
-CP_EXPECTED="CLEAN LIVE+NAMED LIVE+NAMED LIVE+NAMED LIVE+NAMED"
-CP_NAMES="clean tier cite unread effort"
+CP_EXPECTED="CLEAN LIVE+NAMED LIVE+NAMED LIVE+NAMED LIVE+NAMED LIVE+NAMED"
+CP_NAMES="clean tier cite unread effort shard"
 
 cpmoved() { # got -> names of the differing cells
   local got="$1" i=1 e m n out=""
@@ -1022,7 +1040,7 @@ cpmoved() { # got -> names of the differing cells
 # --- C1. every VIOL route FAILS, names its own class, AND names the clearing path ---
 CPGOT="$(cpvec "$VSL")"
 if [ "$CPGOT" = "$CP_EXPECTED" ]; then
-  ok "C1 all four routes into VIOL -- a Rule 19(a) tier mismatch, a missing Rule 19(b) citation, an unreadable role file, and an effort mismatch under --probe -- each exit 1, name their own class, and name Check 22's four-arm clearing path in the SAME run, against a clean two-row control that exits 0 with the OK row present and no clearing sentence at all"
+  ok "C1 all five FAIL routes -- a Rule 19(a) tier mismatch, a missing Rule 19(b) citation, an unreadable role file, an effort mismatch under --probe, and an invalid Rule 28 serial exception (S3, printing the brief's own text) -- each exit 1, name their own class, and name Check 22's four-arm clearing path in the SAME run, against a clean two-row control that exits 0 with the OK row present and no clearing sentence at all"
 else
   bad "C1 the clearing path is not named on every VIOL route: expected [$CP_EXPECTED], got [$CPGOT] (differing: $(cpmoved "$CPGOT"))"
 fi
@@ -1056,7 +1074,7 @@ stepverdict() {
   # other three are out of scope, whatever its body goes on to list.
   case "$(sed -n "${h}p" "$F")" in *'Rule 19(a)'*) printf 'HEADER-SCOPED-TO-TIER'; return ;; esac
   sec="$(sed -n "${h},${e}p" "$F")"
-  for t in 'tier mismatch' 'role_contract_cited=false' 'role_file_readable=false' 'effort mismatch'; do
+  for t in 'tier mismatch' 'role_contract_cited=false' 'role_file_readable=false' 'effort mismatch' 'invalid serial exception'; do
     grep -qF -- "$t" <<<"$sec" || miss="$miss $t"
   done
   [ -n "$miss" ] && { printf 'MISSING:%s' "$miss"; return; }
@@ -1160,7 +1178,7 @@ cpscore() {
   if [ "$mv" = "$cell" ]; then
     ok "MUTANT $n: $desc -- and it moves ONLY the $cell cell"
   elif [ -z "$mv" ]; then
-    bad "MUTANT $n survived: $desc left all five cells unchanged, so the $cell arm cannot fire"
+    bad "MUTANT $n survived: $desc left all six cells unchanged, so the $cell arm cannot fire"
   else
     bad "MUTANT $n moved [$mv], expected only [$cell] -- entangled assertions, at least one of them vacuous"
   fi
@@ -1170,10 +1188,10 @@ cpscore() {
 # emission count must be non-zero, or every "dropped it" mutant is dropping nothing. Derived
 # from the resolved script, never quoted.
 CPSRC="$(grep -cF -- "$DISP" "$WORK/mut/control.sh")" || CPSRC=0
-if [ "$CPSRC" -ge 4 ]; then
+if [ "$CPSRC" -ge 5 ]; then
   ok "CONTROL: the resolved validator at $VSL emits the clearing sentence $CPSRC times, so a mutant that removes one has a subject"
 else
-  bad "CONTROL: the validator emits the clearing sentence $CPSRC time(s); with fewer than four the mutants below remove nothing"
+  bad "CONTROL: the validator emits the clearing sentence $CPSRC time(s); with fewer than five the mutants below remove nothing"
 fi
 
 if cpmut m1 'Rule 19(b) line in neither its prompt nor the definition it selected.'; then
@@ -1229,6 +1247,65 @@ else
     bad "MUTANT m5 survived: the tier-only header scored [$M5], so C2 is not reading the header"
   fi
 fi
+fi
+
+# --- S3. AN INVALID RULE 28 SERIAL EXCEPTION FAILS, AND A VALID ONE DOES NOT ------------------
+# C1's shard cell above is the FAIL direction on a Rule 19-clean ledger. These two arms add the
+# near-miss (the same shape carrying a VALID exception exits 0) and the world the exit-3 branch
+# owns (no row in Rule 19 scope, so CHECKED is 0) where S3 must still exit 1.
+s3ok() { # script -> OK | rc=N...
+  local o rc
+  o="$(bash "$1" --ledger "$WORK/cp-shard-ok.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"; rc=$?
+  if [ "$rc" -eq 0 ] && grep -q '1 shardable row(s) carry a shard line, 0 FAILED' <<<"$o" \
+     && ! grep -q 'declared a serial exception' <<<"$o"; then printf 'OK'; else printf 'rc=%s' "$rc"; fi
+}
+s3oos() { # script -> FAIL1 | rc=N...
+  local o rc
+  o="$(bash "$1" --ledger "$WORK/cp-shard-oos.jsonl" --sprint 900 --settings "$WORK/norolepins.json" 2>&1)"; rc=$?
+  if [ "$rc" -eq 1 ] && grep -qF '[cp-shard-oos] role '"'"'adversary'"'"' declared a serial exception' <<<"$o" \
+     && grep -qF 'shard: none (made-up)' <<<"$o"; then printf 'FAIL1'; else printf 'rc=%s' "$rc"; fi
+}
+[ "$(s3ok "$VSL")" = OK ] \
+  && ok "S3 near-miss: a shardable row recording the VALID none (4) exits 0 with the row counted as carrying a shard line and no S3 FAIL" \
+  || bad "S3 near-miss: a valid none (4) row scored [$(s3ok "$VSL")], expected OK"
+[ "$(s3oos "$VSL")" = FAIL1 ] \
+  && ok "S3 exit-3 world: with no row in Rule 19 scope (CHECKED=0), an invalid-exception row still exits 1 and the FAIL names the row and prints its shard_raw" \
+  || bad "S3 exit-3 world: scored [$(s3oos "$VSL")], expected FAIL1 -- S3 is being decided under the exit-3 branch"
+
+# S3 MUTANTS. Anchored OUTSIDE shard_scan on purpose: the self-probe calls shard_scan, so a
+# mutation there exits 2 before the corpus and moves every cell, which reads as entanglement.
+# (a) the reader ignores the new record kind. Moves C1 shard cell; it also moves the exit-3
+#     arm, which needs a counted S3 row too -- overlap stated, (c) proves that arm on its own.
+# (c) S3 decided only where CHECKED > 0, which is S3 under the exit-3 branch. Moves the exit-3
+#     arm alone: the C1 shard ledger has a row in Rule 19 scope.
+s3mut() { # name sed-expr -> path, or empty when it did not apply
+  local M="$WORK/s3-$1.sh"
+  sed "$2" "$WORK/mut/control.sh" > "$M" 2>/dev/null || return 1
+  cmp -s "$WORK/mut/control.sh" "$M" && return 1
+  bash -n "$M" 2>/dev/null || return 1
+  printf '%s' "$M"
+}
+S3A="$(s3mut a 's/^      X) SHARD_VIOL=\$((SHARD_VIOL + 1))$/      Xdisabled) SHARD_VIOL=$((SHARD_VIOL + 1))/')"
+if [ -z "$S3A" ]; then
+  bad "FIXTURE BROKEN: S3 mutant (a) did not apply -- the reader branch was renamed"
+else
+  a_mv="$(cpmoved "$(cpvec "$S3A")")"; a_ok="$(s3ok "$S3A")"; a_oos="$(s3oos "$S3A")"
+  if [ "$a_mv" = "shard" ] && [ "$a_ok" = OK ] && [ "$a_oos" != FAIL1 ]; then
+    ok "S3 MUTANT (a) killed: a validator that ignores invalid-exception passes the invented exception -- C1's shard cell moves (and the exit-3 arm, stated overlap); the near-miss stays OK"
+  else
+    bad "S3 MUTANT (a): moved [$a_mv] near-miss [$a_ok] exit-3 [$a_oos]; expected [shard] OK and not FAIL1"
+  fi
+fi
+S3C="$(s3mut c 's/^if \[ "\$SHARD_VIOL" -gt 0 \]; then$/if [ "$SHARD_VIOL" -gt 0 ] \&\& [ "$CHECKED" -gt 0 ]; then/')"
+if [ -z "$S3C" ]; then
+  bad "FIXTURE BROKEN: S3 mutant (c) did not apply -- the S3 exit guard was renamed"
+else
+  c_mv="$(cpmoved "$(cpvec "$S3C")")"; c_ok="$(s3ok "$S3C")"; c_oos="$(s3oos "$S3C")"
+  if [ -z "$c_mv" ] && [ "$c_ok" = OK ] && [ "$c_oos" = "rc=3" ]; then
+    ok "S3 MUTANT (c) killed: S3 under the exit-3 branch reads exit 3 (nothing compared) on a sprint carrying an invented exception -- the exit-3 arm alone catches it"
+  else
+    bad "S3 MUTANT (c): moved [$c_mv] near-miss [$c_ok] exit-3 [$c_oos]; expected [] OK rc=3"
+  fi
 fi
 
 echo

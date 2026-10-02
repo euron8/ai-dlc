@@ -30,7 +30,8 @@
 #   * EVERY recorded violation this script FAILS on has the SAME CLEARING PATH with
 #     four arms -- a Rule 19(a) tier mismatch, a missing Rule 19(b) role-contract
 #     citation, an unreadable role file, and an effort mismatch, which are four routes
-#     into one exit code and not four dispositions. Arm 4 -- the escalation entry states
+#     into one exit code and not four dispositions -- and a fifth, an invalid Rule 28 serial
+#     exception (arm S3), clears the same way. Arm 4 -- the escalation entry states
 #     the remediation and names its artifact -- is a judgement about content. Arm 3 is
 #     `validate-escalation-resolution.sh`, which this script does not invoke: the two
 #     answer different questions about different files and the gate runs both. This
@@ -98,9 +99,11 @@
 #   0  every row for this sprint carries a resolvable role file, a Rule 19(b) contract
 #      citation, and a model matching its role's configured pin
 #   1  at least one row does not, or its effort_bound disagrees with its own transcript
-#      (a Rule 19 violation on any of those four routes, clearable only per Check 22's
-#      four-arm disposition, which covers every one of them)
-#   2  bad arguments, an unreadable settings.json, or no jq -- nothing was compared
+#      (a Rule 19 violation on any of those four routes), or a shardable row declared a
+#      serial exception outside Rule 28's four (arm S3, decided even where exit 3 would
+#      otherwise apply) -- clearable only per Check 22's four-arm disposition, which covers
+#      every one of these five
+#   2  bad arguments, an unreadable settings.json or ledger, or no jq -- nothing was compared
 #   3  NOTHING WAS COMPARED. Either PRE-LEDGER (the ledger names no row for this sprint)
 #      or every row it does name is outside Rule 19 scope. Not a pass either way.
 #
@@ -874,8 +877,13 @@ matches_pin() {
 }
 # --- end shared ----------------------------------------------------------------
 
-# --- THE SHARD ARM (Rule 28 split dispatch). WARN ONLY; IT NEVER CHANGES THE EXIT. -------
-# Two questions about a record the dispatch guard writes and the lead does not:
+# --- THE SHARD ARM (Rule 28 split dispatch). S1/S2 WARN; S3 FAILS (exit 1). ----------------
+# Three questions about a record the dispatch guard writes and the lead does not:
+#
+#   S3  a SHARDABLE row whose shard is `invalid-exception`: the brief named a serial exception
+#       outside the four (an unknown number, an invented reason, or `none` with no parentheses).
+#       FAILS, counted in SHARD_VIOL, printed with the row's `shard_raw`, and decided on its
+#       own before the exit-3 branch, because the shardable set is not Rule 19 scope.
 #
 #   S1  a SHARDABLE row whose dispatch carried no parseable `shard:` line (`shard: null`).
 #       The grammar is defined once, in ai-dlc-dispatch-guard.sh (THE SHARD LINE, in its
@@ -892,10 +900,21 @@ matches_pin() {
 # `model` -- the definition ai-dlc-dispatch-guard.sh already uses (PARTY PERSONAS in its
 # header). A consumer adding a seat gets it here with no edit.
 #
-# WHY A WARNING AND NOT A FAILURE. Whether a scope is one part or several is a judgment about
+# WHY S1 WARNS AND S3 FAILS. Whether a scope is one part or several is a judgment about
 # intent; `shard: none (<exception>)` is the lead declaring it, and nothing at dispatch can
 # check the declaration. A missing line is therefore evidence for the adjudicator, never a
-# verdict. The deny is unconstructible for the same reason.
+# verdict, and the deny is unconstructible for the same reason. An exception OUTSIDE the four
+# is not a judgment the lead is entitled to make: Rule 28 names a closed set, so a reason the
+# set does not hold is a violation on its face. It FAILS, and clears through the same
+# four-arm disposition as every other Check 22 route.
+#
+# S3's FALSE-POSITIVE SET, and how it reached zero. Keyed on a value only a guard at or after
+# this release writes, so every row already on any ledger is null or valid and S3 reads 0 on
+# them -- no in-flight sprint wedges. The narrowing that made the new value safe is in the
+# guard: only the FIRST parenthesised group is the value, so `none (serial-document). Files
+# you may edit...`, which a whole-line-anchored parse rejected, records `none (4)`. Measured
+# against the reference consumer briefs under this parse: the invalid rows were all genuinely
+# outside the four exceptions.
 #
 # PRE-RELEASE ROWS ARE PENDING, KEYED ON THE STAMPED GUARD ITSELF. Only a guard at or after
 # the release that introduced the field writes the `shard` KEY (always, null or not), so a
@@ -914,6 +933,7 @@ NL='
 '
 
 # shard_scan <ledger> <sprint> <" role role ... "> <pass-dir> -> machine lines on stdout:
+#   X <name> <role> <shard_raw>   S3 offender (an invented serial exception; never an S line)
 #   U <name> <role>   S1 offender         P <name>   PENDING (pre-field row)
 #   S <name> <value>  shard recorded      N <pass> <id>   S2 offender     J <id>   joined
 #   E <pass>          a pass file listed and not openable (awk getline -1), never read as clean
@@ -925,7 +945,9 @@ shard_scan() {
           | "R\t" + ((.name // "<unnamed>") | tostring) + "\t" + ((.role // "") | tostring) + "\t"
             + (if has("shard") | not then "__NOKEY__"
                elif (.shard // "") == "" then "__NULL__"
-               else (.shard | tostring) end) ),
+               else (.shard | tostring) end)
+            + "\t" + ((.shard_raw // "") | tostring | gsub("[\t\n]"; " ")
+                      | if . == "" then "__NONE__" else . end) ),
         ( $all[] | select((.v | type) == "number") | select((.tool_use_id // "") != "")
           | "I\t" + (.tool_use_id | tostring) )
     ' "$1" 2>/dev/null)" || return 2
@@ -942,6 +964,7 @@ shard_scan() {
       if (index(roles, " " $3 " ") == 0) next
       if ($4 == "__NOKEY__") print "P\t" $2
       else if ($4 == "__NULL__") print "U\t" $2 "\t" $3
+      else if ($4 == "invalid-exception") print "X\t" $2 "\t" $3 "\t" $5
       else print "S\t" $2 "\t" $4
     }
     END {
@@ -976,6 +999,8 @@ shard_self_probe() {
   printf '%s\n' \
     '{"v":1,"sprint":7,"name":"adv-a","role":"adversary","tool_use_id":"toolu_A","shard":null}' \
     '{"v":1,"sprint":7,"name":"adv-b","role":"adversary","tool_use_id":"toolu_B","shard":"1/2 01"}' \
+    '{"v":1,"sprint":7,"name":"adv-inv","role":"adversary","tool_use_id":"toolu_I","shard":"invalid-exception","shard_raw":"none (made up)"}' \
+    '{"v":1,"sprint":7,"name":"adv-ok3","role":"adversary","tool_use_id":"toolu_K","shard":"none (3)"}' \
     '{"v":1,"sprint":7,"name":"adv-c","role":"adversary","tool_use_id":"toolu_C"}' \
     '{"v":1,"sprint":7,"name":"seat","role":"tea","tool_use_id":"toolu_D","shard":null}' \
     '{"v":1,"sprint":7,"name":"dev-a","role":"dev","tool_use_id":"toolu_E","shard":null}' \
@@ -996,6 +1021,11 @@ shard_self_probe() {
   sp_want "U${TAB}seat${TAB}tea" "a party seat with shard:null to WARN"
   sp_want "P${TAB}adv-c" "a row with no shard KEY to read as PENDING"
   sp_want "S${TAB}adv-b${TAB}1/2 01" "a recorded shard line to be read"
+  sp_want "X${TAB}adv-inv${TAB}adversary${TAB}none (made up)" "an invalid-exception row to FAIL under S3 with its raw text"
+  sp_want "S${TAB}adv-ok3${TAB}none (3)" "a valid serial exception to read as a carried shard line"
+  sp_not "S${TAB}adv-inv" "an invalid-exception row was counted as a carried shard line"
+  sp_not "X${TAB}adv-ok3" "a valid serial exception was FAILED under S3"
+  sp_not "X${TAB}adv-c" "a row with no shard KEY was FAILED under S3"
   sp_want "N${TAB}${sp_d}/pl/stories-adversarial-p1.md${TAB}toolu_GONE" "a merged id with no ledger row to WARN"
   sp_want "N${TAB}${sp_d}/pl/stories-adversarial-p1.md${TAB}toolu_F" "a merged id carried only by a row the guard did not write to WARN"
   sp_want "J${TAB}toolu_B" "a merged id with a ledger row to join"
@@ -1436,19 +1466,33 @@ echo "  ${OUTSCOPE} row(s) out of Rule 19 scope${OUTSCOPE_LIST:+ (roles: ${OUTSC
 echo "  ${SUSPECT} of them named after a declared role and NOTED above,"
 echo "  ${FOREIGN} row(s) the dispatch guard did not write${FOREIGN_LIST:+ (roles: ${FOREIGN_LIST})} -- not dispatch records."
 
-# THE SHARD ARM (header above shard_scan). Its lines are WARN/PENDING and one summary line;
-# nothing it finds reaches VIOL or the exit code.
+# THE SHARD ARM (header above shard_scan). S1 and S2 are WARN/PENDING lines; S3 counts into
+# SHARD_VIOL, which is decided below on its own, BEFORE the exit-3 branch, because the
+# shardable set is not Rule 19 scope and a sprint whose rows are all out of that scope can
+# still carry an invented serial exception.
 SHARD_PASSDIR="$(dirname "$LEDGER")/planning-artifacts/s${SPRINT_NUM}"
 SHARD_SET=" ${SHARD_ROLES} $(jq -r '.aiDlcRoles // {} | to_entries[] | select((.value.model // "") == "") | .key' "$SETTINGS" 2>/dev/null | tr '\n' ' ')"
 SH_OUT=""
 SH_RC=0
 SH_OUT="$(shard_scan "$LEDGER" "$SPRINT_NUM" "$SHARD_SET" "$SHARD_PASSDIR")" || SH_RC=$?
-SH_WARN=0; SH_PENDING=0; SH_OK=0; SH_JOINED=0; SH_ORPHAN=0
+SH_WARN=0; SH_PENDING=0; SH_OK=0; SH_JOINED=0; SH_ORPHAN=0; SHARD_VIOL=0
 if [ "$SH_RC" -ne 0 ]; then
-  echo "WARN: the shard arm could not read ${LEDGER} (rc=${SH_RC}); nothing was checked for Rule 28 split dispatch."
+  # EXIT 2, NOT A WARNING. Since S3 can FAIL, an unreadable ledger here is an arm that did not
+  # run, and a warning would let the run exit 0 over it.
+  echo "FAIL: the shard arm could not read ${LEDGER} (rc=${SH_RC}); nothing was checked for Rule 28 split" >&2
+  echo "      dispatch, and arm S3 can fail, so this is exit 2 and not a pass." >&2
+  exit 2
 else
-  while IFS="$(printf '\t')" read -r sh_k sh_a sh_b; do
+  while IFS="$(printf '\t')" read -r sh_k sh_a sh_b sh_c; do
     case "$sh_k" in
+      X) SHARD_VIOL=$((SHARD_VIOL + 1))
+         echo "FAIL: [${sh_a}] role '${sh_b}' declared a serial exception that is not one of Rule 28's four:" >&2
+         echo "      shard: ${sh_c}" >&2
+         echo "      'shard: none (<1-4>)' names data-dependency, pass-repair-pass, authoring-chain or" >&2
+         echo "      serial-document; any other reason is an invented exception (grammar: ai-dlc-dispatch-guard.sh," >&2
+         echo "      THE SHARD LINE). Re-dispatch sharded, or name the exception and verify the output." >&2
+         echo "      The spawn that already ran is a fact about the past: clear it only through" >&2
+         echo "      Check 22's four-arm disposition, never by re-running the gate." >&2 ;;
       U) SH_WARN=$((SH_WARN + 1))
          echo "WARN: [${sh_a}] role '${sh_b}' is shardable and its brief carried no parseable 'shard:' line."
          echo "      Rule 28: one agent per independent part (files, or the sections partition-document.sh --map"
@@ -1466,7 +1510,7 @@ else
 $SH_OUT
 EOF
 fi
-echo "  shard: ${SH_OK} shardable row(s) carry a shard line, ${SH_WARN} WARNED without one,"
+echo "  shard: ${SH_OK} shardable row(s) carry a shard line, ${SHARD_VIOL} FAILED on an invented serial exception (S3), ${SH_WARN} WARNED without one,"
 echo "  ${SH_PENDING} PENDING (written before the guard recorded the field); merged-pass ids: ${SH_JOINED} joined,"
 echo "  ${SH_ORPHAN} WARNED with no ledger row (passes read from ${SHARD_PASSDIR})."
 
@@ -1477,6 +1521,12 @@ echo "  ${SH_ORPHAN} WARNED with no ledger row (passes read from ${SHARD_PASSDIR
 # it takes exit 3 rather than a new code the gate does not document. Without this arm the
 # filter above would turn a settings.json that lost its `aiDlcRoles` block into a silent
 # exit 0 on a sprint full of uncited dispatches.
+if [ "$SHARD_VIOL" -gt 0 ]; then
+  echo "FAIL: ${SHARD_VIOL} Rule 28 invalid serial exception(s) across the S${SPRINT_NUM} shardable row(s) (arm S3)." >&2
+  [ "$VIOL" -gt 0 ] && echo "FAIL: ${VIOL} Rule 19 violation(s) across ${CHECKED} S${SPRINT_NUM} spawn row(s)." >&2
+  exit 1
+fi
+
 if [ "$CHECKED" -eq 0 ]; then
   echo "NO ROLE-BOUND ROWS: EXAMINED NOTHING — ${INSPRINT} S${SPRINT_NUM} row(s) exist and NONE of them was judged"
   echo "  -- ${OUTSCOPE} out of Rule 19 scope${OUTSCOPE_LIST:+ (roles: ${OUTSCOPE_LIST})} and ${FOREIGN} not written by the dispatch"

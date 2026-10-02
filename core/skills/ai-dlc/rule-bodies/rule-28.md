@@ -172,7 +172,10 @@ carries one line `shard: <i>/<N> <part-key>` (the cross-part agent:
 `shard: cross/<N> cross`) or `shard: none (<exception 1-4>)`. A
 sections-axis part key is the part's heading from the map, as in
 `shard: 2/5 ## Functional Requirements`; a document the map reports
-SERIAL is `shard: none (serial-document)`.
+SERIAL is `shard: none (serial-document)`. Only the first parenthesised
+group is read, so text may follow it on the line. A `none` naming anything
+other than (1)-(4) is recorded as an invalid exception and FAILS Check 22;
+omitting the line is a warning.
 
 **Minimum mechanism (Rule 26(c)) -- split dispatch.** Failure caught:
 the lead blocked on one agent reviewing, repairing or adjudicating a
