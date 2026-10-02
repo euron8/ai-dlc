@@ -1877,6 +1877,19 @@ ER_BASE="$WORK/er-base"
 mkdir -p "$ER_BASE" && cp -R "$RECON/." "$ER_BASE/" \
   && git -C "$TREE_TOP" show "${ER_BASE_SHA}:core/skills/ai-dlc-update/reconcile/emit-report.sh" > "$ER_BASE/emit-report.sh" 2>/dev/null \
   || { echo "FIXTURE BROKEN: could not stage emit-report.sh at ${ER_BASE_SHA}, the failing control of every BL-360 cell" >&2; exit 2; }
+# THE PREDICATE SECTION IS KEPT OUT OF EVERY BL-360 WORLD. BL-360's sites are the orientation, token
+# and verify stagings; the predicate section is a different detector whose projection a later release
+# changed on purpose (STABLE rows now render their population), so tip and base render it differently
+# for a reason that is not BL-360. Every BL-360 render already runs under a `bash` PATH stub, so that
+# stub answers `predicate-differential.sh` with no rows: tip, base and every mutant render `none` there.
+# Its firings are logged apart, and a run where it never fired is refused below: an exclusion that
+# stopped matching would otherwise read as a healthy-path regression.
+nopd() { # nopd <stub-dir>
+  local d="$1"
+  { head -2 "$d/bash"
+    printf '%s\n' "case \"\$*\" in *'/predicate-differential.sh '*) echo x >> \"$d/PD_FIRED\"; exit 0 ;; esac"
+    tail -n +3 "$d/bash"; } > "$d/bash.nopd" && mv "$d/bash.nopd" "$d/bash" && chmod +x "$d/bash"
+}
 _h="$("$REAL_GREP" -cF '<<<"$want"' "$ER_BASE/emit-report.sh")" || _h=0
 if cmp -s "$RECON/emit-report.sh" "$ER_BASE/emit-report.sh" || [ "$_h" -ne 2 ]; then
   echo "FIXTURE BROKEN: the staged ${ER_BASE_SHA} emit-report.sh is not the pre-fix engine (identical to tip, or it carries $_h \`<<<\"\$want\"\` line(s), want 2)" >&2; exit 2
@@ -1921,6 +1934,7 @@ B360_LIM_O=8; B360_LIM_V=3
 # own render under the same refusal and no limit, so the region matches and only the refusal can fail it.
 B360_PC_STUB="$B360/pc-stub"
 stub "$B360_PC_STUB" bash "$REAL_BASH" "*'/preclassify.sh '*" "case \"\$*\" in *' --templates') ;; *) $LOGF; exit 2 ;; esac"
+nopd "$B360_PC_STUB"
 PATH="$B360_PC_STUB:$PATH" "$REAL_BASH" "$RECON/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$B360/ev-region" 2>/dev/null
 B360_REPORT="$B360/ev-report.md"
 { echo "# Reconcile report (fixture)"; echo; cat "$B360/ev-region"; } > "$B360_REPORT"
@@ -1967,6 +1981,7 @@ b360_run() {
     *)     stub "$sd" bash "$REAL_BASH" "*'/preclassify.sh '*" "case \"\$*\" in *' --templates') ;; *) $LOGF; exit 2 ;; esac"
            [ "$m" = forced ] && lim="$B360_LIM_V" ;;
   esac
+  nopd "$sd"
   ( ( trap '' XFSZ; [ -z "$lim" ] || ulimit -f "$lim"; PATH="$sd:$PATH"; export PATH
       case "$w" in
         eo|ek) "$REAL_BASH" "$R/emit-report.sh" "$W/dist" "$(cat "$W/B")" "$W/consumer" "$(cat "$W/T")" ;;
@@ -2067,7 +2082,10 @@ _unfired=""
 for _j in $B360_JOBS; do
   _t="$(printf '%s' "$_j" | tr ':' '-')"
   [ "$(fired "$B360/$_t.stub")" -gt 0 ] && [ -s "$B360/$_t.rc" ] || _unfired="$_unfired $_t"
+  # Every render reaches the predicate section, so the exclusion must have fired in every run.
+  [ -s "$B360/$_t.stub/PD_FIRED" ] || _unfired="$_unfired $_t(predicate-exclusion)"
 done
+[ -s "$B360_PC_STUB/PD_FIRED" ] || _unfired="$_unfired ev-region(predicate-exclusion)"
 if [ -n "$_unfired" ]; then
   echo "FIXTURE BROKEN: BL-360 runs whose stub never fired or that wrote no exit status:$_unfired -- their shapes say nothing about the site" >&2; exit 2
 fi
