@@ -16046,3 +16046,67 @@ write no runbook.
 Batch 171's next-work list and delivery gap are spent: batch 172's block above replaces both, and
 carries the operator priority forward as `BL-372`.
 
+**BATCH 173 SHIPPED `v0.664.0` (`bf998dfb`, #906) AND `v0.665.0` (`c14be470`, #907), AND CLOSED
+`BL-370`..`BL-373`. IT DISCHARGES NO CONSUMER CANDIDATE.** It was invoked by peer handoff. The
+opening sweep matched batch 172's prediction on every figure: live 29 on 1 qualifying ref, unfiled
+12, worklist 5, TERMINAL 147, ledger md5 `bcbb3db1…` on the consumer's carry-over branch. Live
+backlog **103 -> 104** (`BL-374`..`BL-378` filed, four rotated), archive **269 -> 273**.
+
+**OPERATOR DIRECTION, MID-BATCH: "I want it done" — THE SHARDING FEATURE SHIPPED WHOLE IN ONE
+RELEASE.** `BL-372`'s deferral was lifted. v0.665.0 carries section sharding of a single document
+(`partition-document.sh`, `merge-adversarial-shards.sh --document`, `join-remediator-shards.sh
+--document`, Check 24 arm K2, Rule 28 exception (4) rewritten), plus `BL-371` and `BL-373` and the
+merged-pass readers. One design pass, one contract adversary, six parallel builders, one tip
+adversary, one correction. **Cap the adversary loop at one contract pass and one tip pass; a
+finding in code a release did not make worse is a filed NOTE, not another round.**
+
+**v0.664.0 SHIPPED `BL-370` ALONE, BECAUSE `layer-drift.sh` IS BOOTSTRAPPING.** An unresolvable
+ref, or a contract object the tree names but cannot read, refuses at exit 1 instead of disarming
+adjudication at rc 0. Its tip adversary found the fallback read a consumer's non-canonical path
+spelling as a store fault, which would have blocked a pull on a typo; corrected before merge.
+
+**EVERY TIP ADVERSARY FOUND A REAL DEFECT IN A GATE-GREEN RELEASE, AGAIN.** v0.665.0's: a
+remediator's derivation fence over its section file went stale when assembly removed the file,
+failing a correct repair at the gate (0 stale before the join, 2 after). The fence now names the
+document. **Drive the whole flow end to end on a real consumer document before the gate** — every
+builder's fixture passed alone.
+
+**THE READ-SET DERIVER RUNS FROM THE MAIN CHECKOUT, NEVER A LINKED WORKTREE**, whose `.git` is a
+file; it refuses there. Detach the main checkout at the commit to trace. Traced this batch by the
+operator: seven fixtures on v0.665.0, 0 unrelated rows moved each time. **`BL-375` is the
+operator-scheduled next release**: a scoped `sandbox-exec` tracer measured as a root-free
+replacement for `fs_usage` on four fixtures, open on a 218-fixture comparison.
+
+Gates: v0.664.0 on `ba0968f5`, 22 PASS, 0 FAIL, 1 SKIP (pole, 6-way), 216 ok; v0.665.0 on
+`77706f9f`, 22 PASS, 0 FAIL, 0 SKIP, 217 ok, every changed fixture `ok` by name against an
+impossible-name control of 0. Both squash trees identical to the gated tips.
+
+**THE FRESH-RESUME SWEEP FOUND A NEW CONSUMER FILING, SO THE FIGURES ABOVE ARE THE BATCH-OPEN
+ONES.** Re-derived from `origin/main` at `dd8e8e65`, every control at its expected value: live
+**30** on **2** qualifying refs (`ai-dlc/carry-over/phase-315-aggregator-ui-cutover` and
+`ai-dlc-update/ledger-named-upstream-review-20260929`, each adding the same 2), unfiled **13**,
+worklist 5, TERMINAL 147, consumer HEAD ledger md5 `7dcc3d24…`. The new id is
+`PC-S315-AGENT-DEFINITION-RENDER-ENTANGLEMENT-ARM-FIRES-UNDER-THE-PRE-PUSH-POOL`, filed 2026-09-29
+during the consumer's 0.663.0 -> 0.664.0 pull: `agent-definition-render`'s `MUTANT
+check-is-presence-only` independence arm went red once under the consumer's 12-way push probe, 1 of
+190 units, and `self-update-gate.sh` scored `SELF-UPDATE-DEFER`. It did not reproduce in 3 serial and
+12 concurrent runs. `--is-core` routes it to core (exit 0; control exit 1).
+
+**NEXT WORK: THE CONSUMER'S PUSH-CANDIDATE LEDGER, ALL OF IT, UNDER THE STANDING RULING AT THE HEAD
+OF `### NEXT ACTIONS`.** Every live candidate the sweep derives is in scope for the next release:
+the 13 unfiled, the 5 worklist rows, and the 11 discharged awaiting the consumer's close. Branch
+hygiene is NOT scheduled: the operator never prioritized it.
+
+**NO BATCH-174 DRAFT EXISTS. BUILD EVERY SUBJECT FROM `origin/main`.** An unrequested batch-174
+start left branches and saved diffs behind; the operator had every one of them destroyed, on origin
+and locally, and the next session started over. Do not look for them.
+
+**THE DELIVERY GAP IS ONE RELEASE.** The consumer pulled twice during this batch, 0.662.0 ->
+0.663.0 and then 0.663.0 -> 0.664.0 once v0.664.0 merged, so its stamp reads 0.664.0 (`bf998dfb`)
+against `VERSION` 0.665.0. Its installed engine therefore now carries `BL-370`'s refusals for every
+pull after this one. v0.665.0 touches no bootstrapping file. PENDING is 0: neither release names a
+`PC-` id (0 of the commits in `dd7e40ad..origin/main`, against 9 naming `BL-370` as the control).
+The banked ruling stands: report the gap and write no runbook.
+
+Batch 172's next-work list and delivery gap are spent: batch 173's block above replaces both.
+

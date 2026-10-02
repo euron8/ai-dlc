@@ -26730,3 +26730,605 @@ with 3-9 held. That arm fails (`./.`) with the close removed; `lib.sh` is unchan
 **LANDED (v0.692.0, verified 08655178).**
 
 verify: sh o="$(exec 3</dev/null 4</dev/null 5</dev/null 6</dev/null 7</dev/null 8</dev/null 9</dev/null; bash core/fixtures/retired-layer-passage/run.sh 2>&1)"; ! grep -qF 'MUTANT SURVIVED [norm-fallthrough]' <<<"$o" && grep -qF 'norm_lines F0-F1 with fds 3-9 inherited' <<<"$o"
+## BL-129 — a change to an adjudication predicate has no mechanism that can see what it RECLASSIFIES
+
+**Every fixture seed for `validate-adversarial-convergence.sh` is hand-written, and written by
+whoever is changing the predicate. So the suite cannot answer the one question a predicate change
+raises: does this reclassify artifacts that were VALID under the predicate it replaces?** A green
+fixture, a green mutant battery and a green gate are all consistent with a change that turns a
+consumer's history non-conforming, because every input was authored against the new rule.
+
+**Measured, not hypothetical.** `v0.442.0` shipped with `check-24` at 111 assertions, seven mutants
+killed and the full gate green. Driven over the reference consumer's real pass series it turned
+**33 from PASS to FAIL, 0 the other way**, three of them in a sprint that consumer had PAUSED. The
+defect was found by running the shipped validator over a tree outside this repo, at the point the
+operator said they were about to pull — not by anything in the gate. `v0.443.0` corrected it.
+
+**THE PROMPT-SIDE REMEDY IS ALREADY KNOWN AND IS NOT ENOUGH.** "Run the differential against the
+consumer before cutting the release" is correct and is being followed, but its only carrier is a
+session's recollection, which `resident-context.md` says is not a carrier. It also lives on ONE
+side of the boundary: `v0.442.0` reached a consumer precisely because a single party was looking.
+
+**THE FRAMING ABOVE IS WRONG IN A WAY THAT MATTERS, AND THIS PARAGRAPH IS THE CORRECTION.** The
+thing that caught `v0.442.0` was a DIFFERENTIAL, not a characterization: two predicates, old and
+new, over whatever tree exists at the time. Nothing is frozen, so there is no golden verdict and no
+moment at which today's bug becomes the reference — objection 1 below does not apply to it, and
+neither does objection 2, because a differential enumerates the same set TWICE IN ONE RUN and a
+wrong population definition cancels. Measured: the two parties' grammars disagreed 105 against 94
+and the CHANGED count was 33 under both, then 0 under both. So the instrument is not missing.
+
+**WHAT IS MISSING IS AN INPUT, AND THE REASON IS NOT ONLY THAT NO CONSUMER TREE IS ON THIS SIDE.**
+Run the same differential over THIS REPO'S OWN fixture seeds and it reports **2 changed cells
+against the consumer's 33** — and the two are the tell. Derived by driving the `0.441.0` and
+`0.442.0` validators over the seed as it stood AT `v0.442.0`:
+
+    ceiling-at-limit          0.441.0=1 -> 0.442.0=0     the INTENDED effect
+    ceiling-refuses-at-limit  0.441.0=0 -> 0.442.0=1     THIS WAS THE REGRESSION
+
+**The regression DID appear, as one row, and it was indistinguishable from the intended change
+because the same session authored both the predicate and the case declaring that row correct.**
+`ceiling-refuses-at-limit` was written to expect exit 1. The fixture scored it green. A differential
+on this side does not fail for want of volume; it fails because its expectations are authored by the
+hand being checked — the defect `.claude/rules/fixture-mutants.md` names as keeping the fixture
+author different from the arm's.
+
+**AND THE GENERAL FORM IS NEITHER AUTHORSHIP NOR VOLUME: AN INPUT SET THAT AGREES BY CONSTRUCTION
+CANNOT DISCRIMINATE.** The two rows above agree because one hand wrote the predicate and the case.
+A consumer artifact written AFTER a predicate ships agrees for a different reason and is equally
+useless. So the discriminating population at any future pull is the subset PREDATING the predicate
+under test, never the total — and quoting a total is how a vacuous run reads as a clean one.
+
+**Derived, with a control, against the consumer at `0.443.0`:** of 94 series, **75 carry a
+derivable `invoked_at`**, and **all 75 predate the `v0.442.0` merge — 0 do not**. Cut taken as a
+full UTC instant (`2026-08-30T02:54:46Z`), not a date. Control: the same query at an
+impossible-future cut returns 75, matching the derivable count.
+
+**AN EARLIER REVISION OF THIS ENTRY PUBLISHED "3 POST-CUT" AND IT WAS WRONG, BY THE SAME CLASS OF
+BUG THE ENTRY IS ABOUT.** The cut was written as the DATE `2026-08-29` and compared with `<`, so a
+series whose newest pass fell ON that date was not less-than and dropped into the post bucket. All
+three were `s307` series timestamped `2026-08-29`, i.e. genuinely pre-cut. **A date-only compare
+mis-buckets exactly the same-day window the question is about**, and the artifacts carry `Z` while
+`git show -s --format=%cI` returns an offset, so the two are not comparable as strings at all. Both
+parties hit this independently; one of them got the right answer from the wrong method on the first
+run, which is why it survived to be published here.
+
+Two things follow, and both are limits on the metric rather than on the corpus:
+
+- **19 of 94 series carry no derivable `invoked_at` at all**, so the discriminating-subset query
+  cannot classify a fifth of the corpus and silently drops it. A figure taken from this metric is a
+  FLOOR, and reporting it without that sentence repeats the defect one level up. **This is the
+  finding to keep** — it holds at 19-of-94 and at the peer's 27-of-105, and it does not depend on
+  which cut either party chose.
+- **0 post-cut is the EXPECTED answer today and is not reassuring.** That consumer's pipeline has
+  been paused throughout, so nothing could have been authored under the new predicate yet. The
+  decay has not begun because nothing has RUN; it begins the moment the sprint resumes. Do not read
+  today's total-equals-discriminating as a standing property — it is an artifact of a stopped
+  pipeline, and a later run reporting a small pre-cut subset cannot discriminate at all.
+
+**So the entry's subject is a BOUNDARY, not a missing tool**, and `consumer-boundary.md` already
+owns it: the only inputs that can discriminate are artifacts THIS SIDE DID NOT WRITE. Do not spend
+effort building a corpus to recover a property a differential has for free, and do not assume a
+frozen input set fixes it — a set harvested here and blessed here reproduces the same defect one
+layer down.
+
+**AND THE INPUTS ARE ONLY HALF OF IT: A SINGLE DERIVATION OVER PERFECT INPUTS IS STILL WORTHLESS.**
+Whoever scopes this will be tempted to read the paragraph above as "obtain the right artifacts, then
+measure". That is not what happened. Across this episode BOTH parties wrote a wrong query on the
+FIRST attempt, over the same real artifacts, every time:
+
+- a series-prefix grammar that stripped the `-pass` stem — returned a clean `12 of 12 unchanged`,
+  which reads as a refutation;
+- a `find -name` predicate matching the BASENAME — returned a confident `32 over 75`, and the
+  surviving exclusion was CORRECT BY LUCK;
+- a cut written as a DATE and compared with `<` — mis-bucketed the same-day window that was the
+  entire question, and published `3 post-cut` against a true `0`;
+- a string compare of a `Z` timestamp against a `-04:00` offset — which returned the RIGHT answer
+  for the WRONG reason, and would have shipped undetected on its own.
+
+**Not one of those was caught by the tree, by a control, or by the party that wrote it.** Every one
+was caught by a SECOND derivation, by a different hand, disagreeing out loud and then reconciling.
+`fixture-mutants.md` states this for fixtures — *"keep the fixture's author different from the
+arm's; an arm and a battery written by the same hand cannot disagree"* — and this entry is the
+same rule for MEASUREMENTS. A mechanism that hands one session the right artifacts and one query
+has reproduced the defect it was built to prevent.
+
+**Consequence for scoping: whatever is built here must produce a number a SECOND party can
+independently re-derive and compare**, and its output must carry the population definition it used,
+because that definition is where all four errors above lived — never in the arithmetic.
+
+**Candidate mechanism, NOT chosen and possibly not viable — a characterization corpus.** Freeze a
+set of real-shaped pass series in the tree with their adjudicated verdicts, and fail the push when a
+predicate change flips one without a declared reason. Read the paragraphs above FIRST; these three
+objections are why it is recorded as a candidate rather than a plan:
+
+- **A frozen verdict encodes today's behaviour as correct, and the counterfactual is exact.** Put
+  by the peer session that measured the 33: *had `v0.442.0`'s arm B shipped a week earlier and the
+  corpus been cut after it, the 33 would have frozen as CONFORMING and `v0.443.0` would have read
+  as the regression.* A corpus can only ever encode what the predicate said when it was frozen,
+  which is the thing under test. **This is the objection to answer first, and neither side has an
+  answer.** A characterization corpus is not an oracle and must not be scoped as one.
+- **`consumer-boundary.md` says no gate reaches the consumer's tree**, so the corpus must be
+  committed here — and a committed copy of another repo's artifacts goes stale silently, which is
+  the class this repo already has scars from.
+- **AND THAT CORPUS WAS NEVER STABLE TO BEGIN WITH, which is worse than going stale.** The only
+  tree holding real series is a LIVE sprint working directory: the population changes every
+  sprint, artifacts are archived into `*-cycle-1/` directories mid-cycle, and the population
+  DEFINITION was derived wrongly twice in one day by two parties before the two answers agreed —
+  once as a silent under-count, once as an over-wide set including repair and resolution records
+  that are not pass series at all. A harvest inherits all of that.
+- **A declared-reason escape hatch is an opt-out**, and `CLAUDE.md` holds that an instruction
+  shipping its own opt-out is not an instruction. Whether the declaration can be made costly
+  enough to bind is the open design question.
+
+**Scope note: this is NOT specific to the adversarial validator.** Ask, before scoping, which other
+shipped predicates adjudicate persisted artifacts a consumer already holds — that population is the
+entry's real subject and it has not been derived.
+
+Held note (batch 178): PREMISE CORRECTION, and the entry is re-scoped. The differential this
+entry calls "not missing" SHIPPED: `core/skills/ai-dlc-update/reconcile/predicate-differential.sh`
+landed in v0.444.0 (`0ca1d0e9`) and is wired as update `SKILL.md` step 3g, driven by the site
+manifest `reconcile/predicate-sites.md`. That manifest declares two sites today
+(`validate-adversarial-convergence.sh`, `validate-provenance-block.sh`). What remains is (1) three
+shipped validators that adjudicate a consumer's STORED artifacts and are not declared there —
+`core/scripts/validate-gate-adjudication.sh` (named in the manifest's prose at `:53`, but given no
+site block), `core/scripts/validate-snapshot-conservation.sh`, and
+`core/scripts/validate-suppression-lifetime.sh`; and (2) the population field the "consequence for
+scoping" paragraph above asks for: a site's output does not carry the population definition it used
+or how many artifacts it could not classify, so a second party cannot re-derive the figure. The
+characterization-corpus candidate is unchanged and still not chosen. No code in this batch.
+
+**LANDED (v0.700.0, verified 4fe79281).**
+
+Corrected at batch 181: 0.688.0 had already declared the three sites the batch-178 note lists, so only part (2) remained. 0.700.0 ships it: every differential row carries `population:` and, where its corpus was read, its record, series and compared counts with passed and unclassified counted separately; a STABLE site renders its static population in the step-5 report. The receipt is replaced; it reads 0 on 0.700.0 and 1 on 1749b545.
+
+verify: sh o="$(bash core/fixtures/predicate-reclassification/run.sh 2>&1)"; for l in "ok   13a " "ok   13b " "ok   13c " "ok   13d " "ok   13e " "ok   13f "; do grep -qF "$l" <<<"$o" || { echo "BL129-CELL-MISSING $l" >&2; exit 1; }; done; e="$(bash core/fixtures/emit-report-refusal/run.sh 2>&1)"; for l in "ok    A8 a STABLE-only differential renders" "ok    A8 beside a STABLE row" "ok    A9 a STABLE row"; do grep -qF "$l" <<<"$e" || { echo "BL129-REPORT-CELL-MISSING $l" >&2; exit 1; }; done
+on a green `check-24` run or a green suite; that green is exactly what failed to see the defect.
+
+## BL-360 — the other reconcile scripts still read a `<<<` or `<<EOF` input that failed to stage as EMPTY, and several read empty as the CLEAN answer
+
+**DEFECT.** Filed at the close of batch 167, which removed this class from `layer-drift.sh`
+(`BL-359`, v0.658.0). It discharges no consumer candidate.
+
+Bash 3.2 stages every here-string AND heredoc to a temp file. When that write fails (`ulimit -f`,
+a full or read-only `$TMPDIR`), bash prints `cannot create temp file for here document`, does
+NOT run the command, and the site returns 1 — the same status as an empty input or a `grep`
+miss. Measured with bash 3.2.57 under `ulimit -f 16` at batch 167: a heredoc loop over 3000 lines
+read 0 (control 2 of 2 on a small body), and a here-string read 0 of 3000.
+
+Non-comment `<<<` lines at `9d1fe6c0` (`grep -c` over each file, comment lines excluded):
+`emit-report.sh` 5, `self-update-gate.sh` 5, `derivation-differential.sh` 5, `register-drift.sh`
+5, `unregistered-drift.sh` 4, `apply.sh` 3, `readopt-override.sh` 4 by `grep -c`, of which 3 are real (the fourth is a literal
+`<<<<<<<` inside an echo), `retired-tokens.sh` 2, `relabel-extension-checks.sh` 2, `ledger-reverify.sh`
+1, and one each in `preclassify.sh`, `retired-layer-contract.sh`, `retired-layer-token.sh` and
+`settings-merge.sh` — 39 real sites. Non-comment `<<EOF` bodies: `apply.sh` 10,
+`self-update-gate.sh` 5, `ledger-reverify.sh` 3, `hard-blockers.sh` 2, `unregistered-drift.sh` 2,
+`preclassify.sh` 2, and others.
+
+Tiered by reading the code, NOT by forcing each site — re-derive before building:
+
+- **An empty read is the CLEAN answer (fix these first):** `hard-blockers.sh:368`, where an empty
+  check-mode loop gives `missing=0` and `--check` passes; `emit-report.sh:842`, where a preclassify
+  refusal goes undetected; `apply.sh:2190`, where dangling hooks go unreported; `apply.sh:1878`,
+  `self-update-gate.sh:909-910`, `retired-tokens.sh:211-212` and `retired-layer-contract.sh:446`,
+  where rows are skipped or read as empty; `ledger-reverify.sh:2280`, zero entries;
+  `preclassify.sh:183` and `:344`, where a path is not recognised as setup-sited or machinery; and
+  `apply.sh`'s `done <<EOF` loops.
+- **An empty read already refuses or is guarded:** `register-drift.sh:238` (exit 1), `:472` (END
+  check, exit 3), `:159` (its "unknown" makes the caller refuse); `self-update-gate.sh:828-833`
+  (UNDECIDED on an empty set); `settings-merge.sh:100` (fails loud); `unregistered-drift.sh:350/352`
+  (grants no exemption).
+
+`apply.sh`, `preclassify.sh`, `ledger-reverify.sh` and `self-update-gate.sh` are BOOTSTRAPPING and
+ship alone, each in its own release.
+
+**Remedy direction:** `layer-drift.sh`'s partition at v0.658.0 — `ld_has_line` (a `case`) for
+whole-line membership, a status-read pipe or a file staged once for captures (never a pipe into an
+early-exiting reader: `printf | grep -q` on a 206 KB haystack under `pipefail` answered NOT-FOUND
+20 of 20 at batch 167), loops from a staged file whose write status is read — plus a per-file
+spelling arm holding the non-comment `<<<` count at zero.
+
+**Findings carried here**, held in this entry because the live ceiling admitted one filing after
+`BL-359` rotated. All three are NOTE-tier.
+
+- **NOTE — the W3 contradiction-awk count has no fixture cell.** A mutant replacing
+  `adj_register_contradictions`' `PIPESTATUS[1]` read with `_rc=0` silently loses a
+  `HARD-REGISTER-CONTRADICTION` row; `mk_ld_world` never writes a register, and neither the
+  `BL-358` nor the `BL-359` receipt world has one. Missing cell: an L5f world with two conflicting
+  register records and stdout closed.
+- **NOTE — the double-shadow grouping refusal has no fixture cell.** Forced with a PATH `awk` stub:
+  tip exits 1, base exits 0 with the pair lost; no cell forces the producer. Lower consequence,
+  also surviving: the listing-loop break removed, the list-mode count line printed after a failure,
+  an `emit_raw` guard moved after its printf.
+- **NOTE — two early-exit readers fed by a pipe remain in `layer-drift.sh`** (`adj_verdict … | head
+  -1` and `shadow_parts … | head -1`), status unread and inputs small, so no current risk; the
+  v0.658.0 partition covered `<<<` sites only.
+
+Held note (batch 178): the carried DEFECT bullet — a bad `theirs` ref or a missing contract blob
+read as an absent contract, switching adjudication off at rc 0 — is struck. It was split out as
+`BL-370` and shipped in v0.664.0 (verified bf998dfb): `layer-drift.sh:290` refuses an unresolvable
+ref at startup through `ld_resolve_ref`, and `have()` at `:690-705` refuses a path the tree names
+but cannot read. The three NOTE bullets stay; this entry stays open for the bootstrapping half.
+
+**Amended at batch 169 (v0.660.0): the non-bootstrapping half is converted, and this entry stays
+live for the bootstrapping half.** Line numbers are at `322ef42c` unless marked tip.
+
+**Three premise corrections**, each re-measured under `/bin/bash` 3.2.57 with the failing
+`ulimit -f 16` run as the same-invocation control:
+
+- **A read-only `$TMPDIR` does NOT force the failure.** A 20000-byte here-string in a mode-555
+  `TMPDIR` returned all 20001 bytes at rc 0; under `ulimit -f 16` the same run printed `cannot
+  create temp file for here document` and read nothing. Only `ulimit -f` or a full disk forces it.
+- **Under the default SIGXFSZ, a heredoc body over the limit kills the whole script with 153**,
+  which reaches a caller as a refusal, not a false clear. The here-string cases measured here did
+  not die: they printed `No space left on device` and ran on empty input at rc 0. The faithful
+  full-disk model is SIGXFSZ ignored (ENOSPC, no signal), and tier A rests on that model. A cell
+  that forces this class must `trap '' XFSZ` and say why.
+- **bash does not always report the error at the site line.** A heredoc feeding a `while` inside a
+  `for` reported the `for`'s opening line, and a heredoc inside a `$( )` reported the line that
+  closes the capture. A here-string reported its own line in every shape measured. Locate a site
+  from the code, not from the stderr line number.
+
+**The tier-A set the census forced is wider than the list above.** Each item was forced at
+`322ef42c` with SIGXFSZ ignored, and each exits 0:
+
+- `hard-blockers.sh:368` (`--check`): 200 omitted blockers read `(0 total)`.
+- `hard-blockers.sh:312` (print): no HARD row and no `0 HARD blockers.` line.
+- `relabel-extension-checks.sh:196` and `:227`: "no unlabelled core-number collisions." over a
+  live collision.
+- `warn-shadowed-local-validators.sh:158`: 0 rows where there were 2.
+- `warn-shadowed-local-validators.sh:118`: lib.sh's `ledger_entry_awk` emitter could not be
+  staged, and 0 rows resulted.
+- `retired-layer-contract.sh:446`: 2 rows where there were 3.
+- `retired-tokens.sh:211-212`: the previous path's token files were read as this path's, which
+  printed a FALSE row and lost the true one.
+
+These sites were NOT forced, and are tier A by reading: `retired-layer-contract.sh:448`, `:454`;
+`readopt-override.sh:446`, `:462`; `warn-shadowed-local-validators.sh:155`; and
+`derivation-differential.sh:197`, whose `|| return 0` acquitted the stamp.
+
+**Converted in v0.660.0**, in seven files, with the non-comment `<<<` count now zero in each:
+
+- `hard-blockers.sh:312`, `:368`. A failed staging write exits 1 with `hard-blockers: REFUSED —`,
+  because exit 2 already means "report not found".
+- `relabel-extension-checks.sh:196`, `:227`. Both anchor sets are staged before either pass, so
+  `--apply` moves nothing for an extension it refused on.
+- `retired-layer-contract.sh:446` is now a `case` substring test. `:448` and `:454` read files
+  staged once, and `:406`'s `cat … || true` now refuses.
+- `retired-tokens.sh:211-212` read the blobs `rt_blob` already staged. Every `rt_toks` call now
+  refuses on a failed read, which covers `:218` too. The tip adversary found a regression in this
+  conversion before merge, and it was fixed then: a NUL-bearing blob read as binary to BSD grep, so
+  it lost a true row and printed false ones at rc 0. `toks` now deletes NULs first. The second tip
+  adversary found that this NUL strip refused invalid UTF-8, because BSD `tr` in a UTF-8 locale exits
+  1 on a Latin-1 byte, so that one `tr` now runs under `LC_ALL=C`.
+- `warn-shadowed-local-validators.sh:118` captures the emitter once and reads its status, with no
+  lib.sh change. `:155` and `:158` read staged files.
+- `readopt-override.sh:428` is a `case` whole-line test. `:446` and `:462` read ids staged by
+  `shadow_ids`, which returns 3 inside the `$( )` scans.
+- `derivation-differential.sh:197` is a `case` prefix test. **Its four stamp parses (tip `:208`,
+  `:223`, `:227`, `:246`) are `printf … | stamp_*` pipes on purpose.** They are captures, and each
+  parser reads to EOF before its own `head -1`, so no early-exiting reader sits on the pipe. They
+  need no staged file, and converting them to staging would add a failure channel that does not
+  exist today.
+
+**Remaining. This is why the entry stays live.** The bootstrapping files ship alone, each in its
+own release:
+
+- `apply.sh`: here-strings at tip `:1222`, `:1878`, `:2190`, and ten heredoc loops. **`apply.sh:1319`
+  runs `relabel-extension-checks.sh --apply … 2>/dev/null || true`, so relabel's new exit-2 refusal
+  is swallowed in `--apply` mode.** The refusal still moves no file, but the apply manifest shows
+  no row for it.
+- `preclassify.sh:183` (`<<<`) and `:344` (`<<EOF`).
+- `ledger-reverify.sh:2280` and three heredoc loops.
+- `self-update-gate.sh:828-833` and `:909-910`, plus five heredocs.
+- `self-update-fixtures.sh:655` (`GRINVLIST`, the required-input check is skipped) and `:961`
+  (`COVEOF`, the coverage join passes). Step 2 runs this file unattended.
+- `emit-report.sh:842`, where a preclassify refusal goes undetected, plus tip `:384`, `:444`,
+  `:844` and `:845`. `apply.sh:233`'s `--verify` write gate runs this file.
+- Outside the bootstrapping set, `readopt-override.sh` still has two heredoc loops. The `--merge`
+  span plan (`:558`, tip `:568`) refuses for a multi-anchor override; for a single-anchor one this
+  is unverified. The drift panel (`:824`, tip `:834`) is guarded at `:834` (tip `:844`), which
+  says the panel is silent because nothing was compared. The here-strings in `register-drift.sh`
+  (tip `:159`, `:238`, `:254`, `:386`, `:472`), `unregistered-drift.sh` (`:350`, `:352`, `:552`,
+  `:715`), `retired-layer-token.sh:278` and `settings-merge.sh:100` are also unconverted. Each of
+  these was tiered as already refusing or guarded, above, or as a NOTE by the census.
+
+**The receipt covers the converted half, and it cannot close this entry until the bootstrapping
+half is done too.** Exit 0 means both halves hold. Exit 1 means the entry is live, and the stderr
+tag names which half: `BL360-CONVERTED-HALF-REGRESSED` means a converted site regressed, and
+`BL360-BOOTSTRAP-HALF-REMAINS` means the converted half holds and the bootstrapping floor does not.
+**At this release it exits 1 with the second tag, which the engine reads as STILL-LIVE.** A
+receipt over the converted half alone would exit 0 here, and the rotator would archive an entry
+whose remaining half has no other home. A distinct exit 3 was tried first. It scored identically,
+but `validate-backlog-receipts.sh`'s R4 counts any base exit other than 0 or 1 as out of
+population, and the push gate's ceiling is 1.
+
+The first conjunct drives the shipping scripts on seeded worlds under `trap '' XFSZ; ulimit -f 16`:
+
+- `hard-blockers.sh --check` with 200 blockers;
+- relabel with 8000 anchors, colliding at 7999, past the point a truncated staging write reaches;
+- `warn-shadowed-local-validators.sh` with a 900-name closed entry;
+- `retired-layer-contract.sh` with a 20 KB layer file;
+- `retired-tokens.sh` with a 16384-byte blob, where the window is one byte.
+
+Each cell accepts either the complete healthy output or the script's own refusal line at non-zero
+exit, and fails on anything else. The receipt then holds the non-comment `<<<` count at zero in the
+seven converted files.
+
+Exit 9 comes from the preconditions:
+
+- a calibration probe, where a 20000-byte here-string must FAIL and an 8000-byte write must
+  succeed under the same limit;
+- the spelling scan's self-probe, in both directions, including a literal `<<<<<<<` and a
+  comment;
+- each cell's unforced run producing its expected rows.
+
+The bootstrapping floor is a SPELLING floor:
+
+- zero non-comment `<<<` in every `reconcile/*.sh`;
+- zero heredoc openers in the six bootstrapping files and lib.sh;
+- zero `done <<` in `readopt-override.sh`;
+- no `|| true` on `apply.sh`'s relabel call.
+
+The release that converts the bootstrapping half should replace this floor with forced cells. A
+spelling floor errs toward keeping the entry live.
+
+Scored through `backlog-reverify.sh`'s own `eval` shape, each variant a copy of `reconcile/` that
+differs from tip by `diff -rq`. The tag column drops the `BL360-` prefix:
+
+| variant | exit | tag |
+|---|---|---|
+| tip (`afe58b5b`) | 1 | BOOTSTRAP-HALF-REMAINS |
+| base `322ef42c` | 1 | CONVERTED-HALF-REGRESSED |
+| BL-360 fix alone (`2f598a86`) | 1 | BOOTSTRAP-HALF-REMAINS |
+| BL-356 fix alone | 1 | CONVERTED-HALF-REGRESSED |
+| the converted scripts stubbed to `exit 0` | 9 | |
+| the converted scripts stubbed to a refusal (`exit 2`) | 9 | |
+| `retired-tokens.sh` base here-string restored | 1 | CONVERTED-HALF-REGRESSED |
+| `hard-blockers.sh` staging status replaced by `\|\| true` | 1 | CONVERTED-HALF-REGRESSED |
+| `warn-shadowed-local-validators.sh` staging status replaced by `\|\| true` | 1 | CONVERTED-HALF-REGRESSED |
+| `retired-layer-contract.sh` base here-string restored | 1 | CONVERTED-HALF-REGRESSED |
+| `relabel-extension-checks.sh` staging status replaced by `\|\| true` | 1 | CONVERTED-HALF-REGRESSED |
+| `readopt-override.sh` base here-string restored | 1 | CONVERTED-HALF-REGRESSED |
+| second spelling (`retired-tokens.sh` fed by `< <(printf …)`) | 1 | BOOTSTRAP-HALF-REMAINS |
+| the bootstrapping floor satisfied (reachability, not a fix) | 0 | |
+
+The last row shows exit 0 is reachable. It was built by moving lib.sh's emitters to sidecar
+files, deleting the floor-matching lines the cells never execute, and dropping the `|| true`.
+`readopt-override.sh`, `derivation-differential.sh` and `hard-blockers.sh`'s print mode are held
+by the spelling conjunct only; the relabel collision was moved to 7999 after a collision at 24
+let the `|| true` mutant survive. Through `scripts/backlog-reverify.sh` on a scratch ledger, with
+an `exit 0` control entry reading CLOSE-CANDIDATE, this entry reads STILL-LIVE in about 30s.
+
+**Amended at batch 170 (v0.661.0): lib.sh's three emitters are literals, and this entry stays
+live.** `nrm_awk`, `ledger_entry_awk` and `backlog_entry_label_awk` were `cat <<'AWK'` heredocs.
+Each is now `printf '%s\n' '<body>'` with the body as a single-quoted literal, so there is no
+staging step that can fail. The one apostrophe in a body, a comment in `ledger_entry_awk`, is
+spelled `'\''`. `core/scripts/validate-layer-entries.sh`'s `nrm_awk` changed identically, because
+I40 byte-binds it to lib.sh's copy. The callers are not edited. Once the emitter cannot fail,
+`"$(ledger_entry_awk)"` can come back empty only on a fork failure, which fails the whole `$( )`.
+Measured under `/bin/bash` 3.2.57 with `trap '' XFSZ; ulimit -f 0`, capturing `x="$(emitter)"`
+under the limit and writing it to disk outside the limit:
+
+| emitter | base `b0c310a3` | the 0.661.0 tree |
+|---|---|---|
+| `nrm_awk` | rc 1, 0 B | rc 0, 109 B |
+| `ledger_entry_awk` | rc 1, 0 B | rc 0, 2495 B |
+| `backlog_entry_label_awk` | rc 1, 0 B | rc 0, 342 B |
+
+Each tip capture under the limit is byte-identical to its unforced output. Each emitter's healthy
+output at tip is byte-identical to base (`cmp -s`, all three), so every awk program these emitters
+feed is unchanged. lib.sh leaves the **Remaining** list above. Its heredoc-opener count is now 0.
+
+**The receipt CANNOT distinguish this release from base.** It exits 1 with
+`BL360-BOOTSTRAP-HALF-REMAINS` on both `b0c310a3` and the 0.661.0 tree, run by `bash -c` from a
+`git archive` extraction of each. Its here-string loop over every `reconcile/*.sh` fires first,
+on the here-strings still in the bootstrapping files, so the heredoc scan that names lib.sh never
+runs on either tree. The guard for this half is the `procsub-staged-refusal` fixture, whose
+emitter cells force each emitter under the write limit.
+
+**LANDED (v0.701.0, verified 18df47f8).**
+
+Closed at batch 181 across 0.695.0 (`preclassify.sh`), 0.696.0 (`emit-report.sh`), 0.699.0 (`register-drift.sh`, `settings-merge.sh`, `readopt-override.sh`, `adopt-extension-checks.sh`) and 0.701.0 (`retired-layer-token.sh`, `unregistered-drift.sh`). The "Remaining" list above was stale at the batch's open: `apply.sh`, `ledger-reverify.sh`, `self-update-gate.sh` and `self-update-fixtures.sh` already carried none. The receipt is replaced, because the spelling floor accepted `done < <(printf …)`: the replacement runs forced cells per converted site under `ulimit -f`, keeps the spelling count as a secondary conjunct, and reads 0 on 0.701.0, 1 on 0.700.0 and 1 on 1749b545.
+
+verify: sh ( R=core/skills/ai-dlc-update/reconcile; [ -f "$R/preclassify.sh" ] && [ -f "$R/lib.sh" ] && [ -f "$R/setup-sites.md" ] || exit 9; w="$(mktemp -d)" || exit 9; F() { ( trap '' XFSZ; ulimit -f 1; "$@" ); }; c="$(F bash -c 'wc -c <<<"$1"' _ "$(printf '%02000d' 0)" 2>/dev/null)"; case "$c" in *[1-9]*) exit 9 ;; esac; F bash -c 'printf "%0900d" 0 > "$1"' _ "$w/cal" 2>/dev/null; [ "$(wc -c < "$w/cal" | tr -d ' ')" -eq 900 ] || exit 9; g() { local d="$1"; shift; git -C "$d" -c user.email=r@r -c user.name=r -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }; S="$w/s"; mkdir -p "$S/d/core/rules" "$S/c/.claude" "$w/rs" || exit 9; cp -R "$R/." "$w/rs/" || exit 9; i=0; while [ $i -lt 40 ]; do printf '  file: core/zz-pad/a-setup-sited-padding-path-whose-name-is-long-%03d.md\n' $i; i=$((i+1)); done >> "$w/rs/setup-sites.md"; echo '  file: core/zz-sited/new.md' >> "$w/rs/setup-sites.md"; echo r > "$S/d/core/rules/k.md"; g "$S/d" init -q || exit 9; { g "$S/d" add -A && g "$S/d" commit -qm b; } >/dev/null 2>&1 || exit 9; SB="$(git -C "$S/d" rev-parse HEAD)"; mkdir -p "$S/d/core/zz-sited"; echo 'm: {model}' > "$S/d/core/zz-sited/new.md"; { g "$S/d" add -A && g "$S/d" commit -qm t; } >/dev/null 2>&1 || exit 9; ST="$(git -C "$S/d" rev-parse HEAD)"; printf 'commit: %s\n' "$SB" > "$S/c/.claude/.ai-dlc-version"; M="$w/m"; P="$M/d/core/skills/ai-dlc-update"; mkdir -p "$P/zz-pad" "$M/c/.claude/skills/ai-dlc-update" || exit 9; i=0; while [ $i -lt 30 ]; do echo p > "$P/zz-pad/a-machinery-padding-file-whose-name-is-long-$i.md"; i=$((i+1)); done; echo v1 > "$P/zz-subject.md"; g "$M/d" init -q || exit 9; { g "$M/d" add -A && g "$M/d" commit -qm b; } >/dev/null 2>&1 || exit 9; MB="$(git -C "$M/d" rev-parse HEAD)"; echo v2 > "$P/zz-subject.md"; { g "$M/d" add -A && g "$M/d" commit -qm s; } >/dev/null 2>&1 || exit 9; MM="$(git -C "$M/d" rev-parse HEAD)"; echo v3 > "$P/zz-subject.md"; { g "$M/d" add -A && g "$M/d" commit -qm t; } >/dev/null 2>&1 || exit 9; MT="$(git -C "$M/d" rev-parse HEAD)"; echo v2 > "$M/c/.claude/skills/ai-dlc-update/zz-subject.md"; printf 'commit: %s\nskill_commit: %s\n' "$MB" "$MM" > "$M/c/.claude/.ai-dlc-version"; [ "$(git -C "$M/d" ls-files -- 'core/skills/ai-dlc-update/**' | wc -c)" -gt 1024 ] || exit 9; [ "$(awk '/^[ \t]*file:[ \t]*core\//' "$w/rs/setup-sites.md" | wc -c)" -gt 1024 ] || exit 9; b() { awk -F'\t' -v p="$1" '$2==p {print $4}' "$2"; }; bash "$w/rs/preclassify.sh" "$S/d" "$SB" "$ST" "$S/c" > "$w/sh" 2>/dev/null || exit 9; [ "$(b core/zz-sited/new.md "$w/sh")" = 'UPSTREAM-ONLY-ADD+SETUP-TOKENS->SUBSTITUTE' ] || exit 9; bash "$R/preclassify.sh" "$M/d" "$MB" "$MT" "$M/c" > "$w/mh" 2>/dev/null || exit 9; [ "$(b core/skills/ai-dlc-update/zz-subject.md "$w/mh")" = UPSTREAM-ONLY ] || exit 9; F bash "$w/rs/preclassify.sh" "$S/d" "$SB" "$ST" "$S/c" > "$w/sf" 2> "$w/sfe"; rc=$?; cmp -s "$w/sh" "$w/sf" && [ "$rc" -eq 0 ] || { [ "$rc" -ne 0 ] && [ ! -s "$w/sf" ] && grep -q '^preclassify: ' "$w/sfe"; } || { echo BL360-PRECLASSIFY-SITED-READ-EMPTY >&2; exit 1; }; F bash "$R/preclassify.sh" "$M/d" "$MB" "$MT" "$M/c" > "$w/mf" 2> "$w/mfe"; rc=$?; cmp -s "$w/mh" "$w/mf" && [ "$rc" -eq 0 ] || { [ "$rc" -ne 0 ] && [ ! -s "$w/mf" ] && grep -q '^preclassify: ' "$w/mfe"; } || { echo BL360-PRECLASSIFY-MACHINERY-READ-EMPTY >&2; exit 1; }; A='/^[[:blank:]]*#/ {next} { l=$0; gsub(/<<<<+/, "", l) } l ~ /<<</ || l ~ /<<-?[\047"]?[A-Za-z_]/ || l ~ /< <\(/ { n++ } END {print n+0}'; printf '%s\n' 'a <<<"$b"' 'done <<EOF' "done < <(printf x)" '  # c <<<"$d" <<EOF < <(x)' 'echo "<<<<<<< x"' > "$w/sp"; [ "$(awk "$A" "$w/sp")" -eq 3 ] || exit 9; [ "$(awk "$A" "$R/preclassify.sh")" -eq 0 ] || { echo BL360-PRECLASSIFY-SPELLING >&2; exit 1; }; exit 0 ); r0=$?; ( R=core/skills/ai-dlc-update/reconcile; for f in hard-blockers relabel-extension-checks warn-shadowed-local-validators retired-layer-contract retired-tokens readopt-override derivation-differential emit-report; do [ -f "$R/$f.sh" ] || exit 9; done; w="$(mktemp -d)" || exit 9; F() { ( trap '' XFSZ; ulimit -f 16; "$@" ); }; c="$(F bash -c 'wc -c <<<"$1"' _ "$(printf '%020000d' 0)" 2>/dev/null)"; case "$c" in *[1-9]*) exit 9 ;; esac; F bash -c 'printf "%08000d" 0 > "$1"' _ "$w/cal" 2>/dev/null; [ "$(wc -c < "$w/cal" | tr -d ' ')" -eq 8000 ] || exit 9; A='/^[[:blank:]]*#/ {next} { l=$0; gsub(/<<<<+/, "", l); if (l ~ /<<</) n++ } END {print n+0}'; printf '%s\n' 'a <<<"$b"' '  # c <<<"$d"' 'echo "<<<<<<< x"' > "$w/sp"; [ "$(awk "$A" "$w/sp")" -eq 1 ] || exit 9; : > "$w/ld"; i=0; while [ $i -lt 200 ]; do printf 'HARD-UNREGISTERED-CORE-DRIFT\tskills/ai-dlc/steps/file-number-%04d-padding-padding.md\tx\n' $i; i=$((i+1)); done > "$w/ud"; echo '# report' > "$w/rep"; hb() { bash "$R/hard-blockers.sh" --check "$w/rep" --ld-rows "$w/ld" --ld-rc 0 --ud-rows "$w/ud" --ud-rc 0 "$w" base "$w" theirs; }; hb > "$w/hbh" 2>&1; [ "$(grep -c '^FAIL' "$w/hbh")" -eq 200 ] || exit 9; F hb > "$w/hbf" 2>&1; [ "$(grep -c '^FAIL' "$w/hbf")" -eq 200 ] || grep -q '^hard-blockers: REFUSED' "$w/hbf" || { echo BL360-CONVERTED-HALF-REGRESSED >&2; exit 1; }; C="$w/rx"; mkdir -p "$C/.claude/skills/ai-dlc/extensions" || exit 9; i=1; while [ $i -le 8000 ]; do printf '### %d. Check title\nbody\n' $i; i=$((i+1)); done > "$C/.claude/skills/ai-dlc/gate-validation.md"; printf -- '---\nkind: check\nid: mine\nhooks: gate-validation.md\n---\n\n### 7999. My check\ntext\n' > "$C/.claude/skills/ai-dlc/extensions/x.md"; bash "$R/relabel-extension-checks.sh" "$C" > "$w/rxh" 2>&1; grep -qF '[ext:mine]' "$w/rxh" || exit 9; F bash "$R/relabel-extension-checks.sh" "$C" > "$w/rxf" 2>&1; grep -qF '[ext:mine]' "$w/rxf" || grep -q '^relabel: REFUSED' "$w/rxf" || { echo BL360-CONVERTED-HALF-REGRESSED >&2; exit 1; }; C="$w/ws"; mkdir -p "$C/_bmad-output/ai-dlc-update" "$C/scripts/ai-dlc" "$C/scripts/ai-dlc-local/sub" "$C/.claude" || exit 9; echo 'echo core' > "$C/scripts/ai-dlc/validate-zz.sh"; echo 'echo fork' > "$C/scripts/ai-dlc-local/validate-zz.sh"; echo 'echo fork2' > "$C/scripts/ai-dlc-local/sub/validate-zz.sh"; { printf '# ledger\n\n## PC-S1-THING fork of validate-zz.sh\n\nADOPTED UPSTREAM in 0.1.0.\n\n'; i=0; while [ $i -lt 900 ]; do printf 'names aaaa-padding-name-%04d.sh\n' $i; i=$((i+1)); done; } > "$C/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; bash "$R/warn-shadowed-local-validators.sh" --root "$C" > "$w/wsh" 2>&1; [ "$(grep -c '^RETIRE-CANDIDATE' "$w/wsh")" -eq 2 ] || exit 9; F bash "$R/warn-shadowed-local-validators.sh" --root "$C" > "$w/wsf" 2>&1; [ "$(grep -c '^RETIRE-CANDIDATE' "$w/wsf")" -eq 2 ] || grep -q '^warn-shadowed-local-validators: REFUSED' "$w/wsf" || { echo BL360-CONVERTED-HALF-REGRESSED >&2; exit 1; }; g() { local d="$1"; shift; git -C "$d" -c user.email=r@r -c user.name=r -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }; D="$w/rd"; mkdir -p "$D/core/skills/ai-dlc/steps" || exit 9; g "$D" init -q || exit 9; printf -- '- Label: /cmd\nuse {tok}\n' > "$D/core/skills/ai-dlc/steps/a.md"; printf 'small\n' > "$D/core/skills/ai-dlc/steps/b.md"; printf 'small\n' > "$D/core/skills/ai-dlc/steps/c.md"; { g "$D" add -A && g "$D" commit -qm b; } >/dev/null 2>&1 || exit 9; B="$(git -C "$D" rev-parse HEAD)"; { g "$D" rm -q core/skills/ai-dlc/steps/b.md core/skills/ai-dlc/steps/c.md && g "$D" commit -qm t; } >/dev/null 2>&1 || exit 9; T="$(git -C "$D" rev-parse HEAD)"; C="$w/rc"; mkdir -p "$C/.claude/skills/ai-dlc/extensions" "$C/.claude/skills/ai-dlc/overrides" || exit 9; { echo 'see steps/b.md for the gate'; head -c 20000 /dev/zero | tr '\0' p; echo; } > "$C/.claude/skills/ai-dlc/extensions/e.md"; printf 'see .claude/skills/ai-dlc/steps/c.md and core/skills/ai-dlc/steps/b.md\n' > "$C/.claude/skills/ai-dlc/overrides/o.md"; printf 'nothing here\n' > "$C/.claude/skills/ai-dlc/extensions/n.md"; bash "$R/retired-layer-contract.sh" "$D" "$B" "$T" "$C" > "$w/rch" 2>/dev/null; [ "$(grep -c '^RETIRED-LAYER-CONTRACT' "$w/rch")" -eq 3 ] || exit 9; F bash "$R/retired-layer-contract.sh" "$D" "$B" "$T" "$C" > "$w/rcf" 2> "$w/rcfe"; rc=$?; cmp -s "$w/rch" "$w/rcf" || { [ "$rc" -ne 0 ] && grep -q '^retired-layer-contract: .*no verdict' "$w/rcfe"; } || { echo BL360-CONVERTED-HALF-REGRESSED >&2; exit 1; }; D="$w/td"; mkdir -p "$D/core/scripts" || exit 9; g "$D" init -q || exit 9; mb() { h="x=\$ROOT/$1"; printf '%s\n' "$h" > "$2"; head -c $((16384 - ${#h} - 1)) /dev/zero | tr '\0' p >> "$2"; }; mb old-z "$D/core/scripts/z.sh"; printf 'x=$ROOT/old-b\nsmall\n' > "$D/core/scripts/b.sh"; { g "$D" add -A && g "$D" commit -qm b; } >/dev/null 2>&1 || exit 9; B="$(git -C "$D" rev-parse HEAD)"; mb new-z "$D/core/scripts/z.sh"; printf 'x=$ROOT/new-b\nsmall\n' > "$D/core/scripts/b.sh"; { g "$D" add -A && g "$D" commit -qm t; } >/dev/null 2>&1 || exit 9; T="$(git -C "$D" rev-parse HEAD)"; [ "$(git -C "$D" cat-file -s "${B}:core/scripts/z.sh")" -eq 16384 ] || exit 9; C="$w/tc"; mkdir -p "$C/scripts/ai-dlc" || exit 9; git -C "$D" show "${B}:core/scripts/z.sh" > "$C/scripts/ai-dlc/z.sh"; git -C "$D" show "${B}:core/scripts/b.sh" > "$C/scripts/ai-dlc/b.sh"; echo 'uses $ROOT/old-b too' >> "$C/scripts/ai-dlc/z.sh"; printf 'X\tcore/scripts/b.sh\tscripts/ai-dlc/b.sh\tCLASSIFY\nX\tcore/scripts/z.sh\tscripts/ai-dlc/z.sh\tCLASSIFY\n' > "$w/rows"; bash "$R/retired-tokens.sh" --bucket-rows "$w/rows" "$D" "$B" "$T" "$C" > "$w/rth" 2>/dev/null; [ "$(cut -f2,3 "$w/rth" | tr '\t\n' ':;')" = 'core/scripts/b.sh:$ROOT/old-b;core/scripts/z.sh:$ROOT/old-z;' ] || exit 9; F bash "$R/retired-tokens.sh" --bucket-rows "$w/rows" "$D" "$B" "$T" "$C" > "$w/rtf" 2> "$w/rtfe"; rc=$?; cmp -s "$w/rth" "$w/rtf" || { [ "$rc" -ne 0 ] && grep -q '^retired-tokens: .*no verdict' "$w/rtfe"; } || { echo BL360-CONVERTED-HALF-REGRESSED >&2; exit 1; }; E="$R/emit-report.sh"; Fl() { local l="$1"; shift; ( trap '' XFSZ; ulimit -f "$l"; "$@" ); }; c="$(Fl 8 bash -c 'wc -c <<<"$1"' _ "$(printf '%020000d' 0)" 2>/dev/null)"; case "$c" in *[1-9]*) exit 9 ;; esac; c="$(Fl 3 bash -c 'wc -c <<<"$1"' _ "$(printf '%04700d' 0)" 2>/dev/null)"; case "$c" in *[1-9]*) exit 9 ;; esac; Fl 3 bash -c 'printf "%02000d" 0 > "$1"' _ "$w/ecal" 2>/dev/null; [ "$(wc -c < "$w/ecal" | tr -d ' ')" -eq 2000 ] || exit 9; D="$w/ed"; C="$w/ec"; mkdir -p "$D/core/scripts" "$C/scripts/ai-dlc" || exit 9; printf '0.1.0\n' > "$D/VERSION"; printf '#!/bin/sh\necho a base\n' > "$D/core/scripts/a.sh"; { printf '#!/bin/sh\n'; i=0; while [ $i -lt 400 ]; do printf 'x=$R/t%04d\n' $i; i=$((i+1)); done; } > "$D/core/scripts/b.sh"; g "$D" init -q || exit 9; { g "$D" add -A && g "$D" commit -qm b; } >/dev/null 2>&1 || exit 9; B="$(git -C "$D" rev-parse HEAD)"; printf '0.2.0\n' > "$D/VERSION"; printf '#!/bin/sh\necho a theirs\n' > "$D/core/scripts/a.sh"; printf '#!/bin/sh\necho b theirs\n' > "$D/core/scripts/b.sh"; { g "$D" add -A && g "$D" commit -qm t; } >/dev/null 2>&1 || exit 9; T="$(git -C "$D" rev-parse HEAD)"; { printf '#!/bin/sh\necho a ours\n'; i=0; while [ $i -lt 600 ]; do printf 'echo consumer line number %04d of the local adaptation\n' $i; i=$((i+1)); done; } > "$C/scripts/ai-dlc/a.sh"; { git -C "$D" show "${B}:core/scripts/b.sh"; echo 'echo consumer kept'; } > "$C/scripts/ai-dlc/b.sh"; bash "$E" "$D" "$B" "$C" "$T" > "$w/eh" 2>/dev/null; [ "$(grep -c '^    ONLY IN OURS (12 of 601 shown' "$w/eh")" -eq 1 ] && [ "$(grep -c '^      \$R/t[0-9][0-9][0-9][0-9]$' "$w/eh")" -eq 400 ] || exit 9; Fl 8 bash "$E" "$D" "$B" "$C" "$T" 2>/dev/null | cat > "$w/ef"; { grep -q '^    ONLY IN OURS (12 of 601 shown' "$w/ef" || [ "$(grep -c '^DETECTOR-REFUSED  orientation sample exited staging-[0-9]* for core/scripts/a\.sh' "$w/ef")" -eq 2 ]; } || { echo BL360-CONVERTED-HALF-REGRESSED >&2; exit 1; }; { [ "$(grep -c '^      \$R/t[0-9][0-9][0-9][0-9]$' "$w/ef")" -eq 400 ] || grep -q '^DETECTOR-REFUSED  retired-tokens\.sh exited staging-[0-9]* for core/scripts/b\.sh' "$w/ef"; } || { echo BL360-CONVERTED-HALF-REGRESSED >&2; exit 1; }; S="$w/pcstub"; X="$w/vc"; mkdir -p "$S" "$X/.claude" || exit 9; printf '#!/bin/sh\ncase "$*" in *"/preclassify.sh "*) case "$*" in *--templates) ;; *) exit 2 ;; esac ;; esac\nexec "%s" "$@"\n' "$(command -v bash)" > "$S/bash" && chmod +x "$S/bash" || exit 9; printf 'version: 0.1.0\ncommit: zz%04000d\n' 0 > "$X/.claude/.ai-dlc-version" || exit 9; PATH="$S:$PATH" bash "$E" "$D" "$B" "$X" "$T" > "$w/vr" 2>/dev/null; o="$(awk '/^DETECTOR-REFUSED  preclassify\.sh exited /{print c; exit} {c+=length($0)+1}' "$w/vr")"; [ "${o:-0}" -gt 3072 ] || exit 9; Fl 3 env PATH="$S:$PATH" bash "$E" "$D" "$B" "$X" "$T" 2>/dev/null | cat > "$w/vrf"; cmp -s "$w/vr" "$w/vrf" || exit 9; { echo '# r'; cat "$w/vr"; } > "$w/vrep"; PATH="$S:$PATH" bash "$E" --verify "$w/vrep" "$D" "$B" "$X" "$T" > /dev/null 2> "$w/vhe"; rc=$?; [ "$rc" -eq 1 ] && grep -q 'cause: PRECLASSIFY-REFUSED' "$w/vhe" || exit 9; Fl 3 env PATH="$S:$PATH" bash "$E" --verify "$w/vrep" "$D" "$B" "$X" "$T" > "$w/vfo" 2> "$w/vfe"; rc=$?; [ "$rc" -eq 1 ] && grep -qE 'cause: (PRECLASSIFY-REFUSED|UNDECIDED)' "$w/vfe" || { echo BL360-CONVERTED-HALF-REGRESSED >&2; exit 1; }; P='/^[[:blank:]]*#/ {next} /<[[:blank:]]*<\(printf/ {n++} END {print n+0}'; printf '%s\n' 'done < <(printf "%s\n" "$x")' '  # done < <(printf x)' 'a < "$f"' > "$w/pp"; [ "$(awk "$P" "$w/pp")" -eq 1 ] || exit 9; for f in hard-blockers relabel-extension-checks warn-shadowed-local-validators retired-layer-contract retired-tokens readopt-override derivation-differential emit-report; do [ "$(awk "$A" "$R/$f.sh")" -eq 0 ] && [ "$(awk "$P" "$R/$f.sh")" -eq 0 ] || { echo BL360-CONVERTED-HALF-REGRESSED >&2; exit 1; }; done; for f in "$R"/*.sh; do [ "$(awk "$A" "$f")" -eq 0 ] && [ "$(awk "$P" "$f")" -eq 0 ] || { echo BL360-BOOTSTRAP-HALF-REMAINS >&2; exit 1; }; done; H='/^[[:blank:]]*#/ {next} { l=$0; gsub(/<<<+/, "", l); if (l ~ /<<-?[\047"]?[A-Za-z_]/) n++ } END {print n+0}'; printf '%s\n' 'cat <<EOF' '  # cat <<EOF' 'a <<<"$b"' "  python3 - <<'PY'" 'echo "<<<<<<< x"' > "$w/hp"; [ "$(awk "$H" "$w/hp")" -eq 2 ] || exit 9; n=0; for f in "$R"/*.sh; do n=$((n+1)); [ "$(awk "$H" "$f")" -eq 0 ] || { echo BL360-BOOTSTRAP-HALF-REMAINS >&2; exit 1; }; done; [ "$n" -ge 20 ] || exit 9; grep -q 'relabel-extension-checks\.sh.*|| true' "$R/apply.sh" && { echo BL360-BOOTSTRAP-HALF-REMAINS >&2; exit 1; }; exit 0 ); r1=$?; ( R=core/skills/ai-dlc-update/reconcile; for f in register-drift settings-merge readopt-override adopt-extension-checks lib; do [ -f "$R/$f.sh" ] || exit 9; done; w="$(mktemp -d)" || exit 9; F() { n="$1"; shift; ( trap '' XFSZ; ulimit -f "$n"; "$@" ); }; c="$(F 1 bash -c 'wc -c <<<"$1"' _ "$(printf '%03000d' 0)" 2>/dev/null)"; case "$c" in *[1-9]*) exit 9 ;; esac; F 1 bash -c 'printf "%0512d" 0 > "$1"' _ "$w/cal" 2>/dev/null; [ "$(wc -c < "$w/cal" | tr -d ' ')" -eq 512 ] || exit 9; g() { git -c user.email=f@x -c user.name=f -c commit.gpgsign=false "$@"; }; S="$w/sm"; mkdir -p "$S" || exit 9; awk 'BEGIN { printf "{\"permissions\":{\"allow\":["; for (i = 0; i < 150; i++) printf "%s\"Bash(x%04d)\"", (i ? ", " : ""), i; printf "]},\"hooks\":{}}\n" }' > "$S/s.json" || exit 9; printf '{"hooks":{}}\n' > "$S/t.json" || exit 9; bash "$R/settings-merge.sh" --consumer "$S/s.json" --template "$S/t.json" --check > "$S/h" 2>&1; grep -qx 'model_window_needed=no' "$S/h" || exit 9; r=0; F 1 bash "$R/settings-merge.sh" --consumer "$S/s.json" --template "$S/t.json" --check > "$S/f" 2> "$S/e" || r=$?; if [ "$r" -eq 0 ]; then cmp -s "$S/h" "$S/f" || { echo BL360-RH-SETTINGS-MERGE >&2; exit 1; }; elif grep -q 'not valid JSON' "$S/e" || ! grep -q '^FAIL: ' "$S/e"; then echo BL360-RH-SETTINGS-MERGE >&2; exit 1; fi; A="$w/ad"; mkdir -p "$A/.claude/skills/ai-dlc/extensions" || exit 9; bash "$R/adopt-extension-checks.sh" "$A" > "$A.h" 2>&1 || exit 9; grep -q 'nothing to adopt$' "$A.h" || exit 9; r=0; F 1 bash "$R/adopt-extension-checks.sh" "$A" > "$A.f" 2> "$A.e" || r=$?; if [ "$r" -eq 0 ]; then cmp -s "$A.h" "$A.f" || { echo BL360-RH-ADOPT >&2; exit 1; }; elif [ "$r" -eq 1 ] || ! grep -q '^adopt-extension-checks: ' "$A.e"; then echo BL360-RH-ADOPT >&2; exit 1; fi; D="$w/rd"; mkdir -p "$D/d/core/team-roles" "$D/c/.claude/team-roles" || exit 9; awk 'BEGIN { printf "# X\n"; for (s = 0; s < 45; s++) printf "\n## Heading number %03d carrying enough padding words to make the list long\n\ntext %d.\n", s, s }' > "$D/d/core/team-roles/x.md" || exit 9; g -C "$D/d" init -q && g -C "$D/d" add -A && g -C "$D/d" commit -qm b || exit 9; B="$(git -C "$D/d" rev-parse HEAD)" || exit 9; sed 's/^text 7\.$/text 7 EDITED./' "$D/d/core/team-roles/x.md" > "$D/c/.claude/team-roles/x.md" || exit 9; bash "$R/register-drift.sh" "$D/d" "$B" "$D/c" team-roles/x.md > "$D.h" 2>&1 || exit 9; grep -q '^register-drift: DRY RUN\.' "$D.h" || exit 9; for n in 2 3 4 5; do r=0; F "$n" bash "$R/register-drift.sh" "$D/d" "$B" "$D/c" team-roles/x.md > "$D.f" 2> "$D.e" || r=$?; if [ "$r" -eq 0 ]; then cmp -s "$D.h" "$D.f" || { echo BL360-RH-REGISTER-DRIFT >&2; exit 1; }; elif [ "$r" -ne 2 ] || [ -s "$D.f" ] || ! grep -qE '^register-drift: cannot (read|write|stage) ' "$D.e"; then echo BL360-RH-REGISTER-DRIFT >&2; exit 1; fi; done; O="$w/ro"; mkdir -p "$O/d/core/skills/ai-dlc/steps" "$O/c/.claude/skills/ai-dlc/overrides" || exit 9; printf '# X\n\n## Gate\n\nThis is the original clause of the gate, which upstream rewrites.\nAn unchanged clause that survives across the whole range intact.\n' > "$O/d/core/skills/ai-dlc/steps/x.md" || exit 9; g -C "$O/d" init -q && g -C "$O/d" add -A && g -C "$O/d" commit -qm b || exit 9; OB="$(git -C "$O/d" rev-parse HEAD)" || exit 9; printf '# X\n\n## Gate\n\nThis is the rewritten clause of the gate that upstream adopted now.\nAn unchanged clause that survives across the whole range intact.\n' > "$O/d/core/skills/ai-dlc/steps/x.md" || exit 9; g -C "$O/d" commit -qam t || exit 9; OT="$(git -C "$O/d" rev-parse HEAD)" || exit 9; V="$O/c/.claude/skills/ai-dlc/overrides/steps__x.md"; { printf -- '---\nshadows: steps/x.md#Gate\nbase_sha: %s\nreason: |\n' "$OB"; i=1; while [ $i -le 22 ]; do printf '  reason line %02d explaining at some length why this consumer keeps its own gate text.\n' $i; i=$((i+1)); done; printf -- '---\n\n## Gate\n\nThis is the original clause of the gate, which upstream rewrites.\nAn unchanged clause that survives across the whole range intact.\n'; } > "$V" || exit 9; bash "$R/readopt-override.sh" "$O/d" "$OT" "$O/c" "$V" > "$O.h" 2>&1 || exit 9; grep -q '^--- THE ONE QUESTION' "$O.h" || exit 9; r=0; F 1 bash "$R/readopt-override.sh" "$O/d" "$OT" "$O/c" "$V" > "$O.f" 2> "$O.e" || r=$?; if [ "$r" -eq 0 ]; then cmp -s "$O.h" "$O.f" || { echo BL360-RH-READOPT-DOSSIER >&2; exit 1; }; elif [ "$r" -ne 2 ] || ! grep -q '^readopt-override: ' "$O.e"; then echo BL360-RH-READOPT-DOSSIER >&2; exit 1; fi; K='/^[[:blank:]]*#/ { next } { l = $0; gsub(/<<<+/, "", l); if ((" " $0 " ") ~ /[^<]<<<[^<]/ || l ~ /<<-?[[:blank:]]*[\047"]?[A-Za-z_]/ || $0 ~ /<[[:blank:]]*<\(/) n++ } END { print n + 0 }'; printf '%s\n' 'a <<<"$b"' "python3 - <<'PY'" 'done < <(printf x)' '  # c <<<"$d" <<EOF < <(x)' 'echo "<<<<<<< x"' 'a < "$f"' > "$w/kp"; [ "$(awk "$K" "$w/kp")" -eq 3 ] || exit 9; for f in register-drift settings-merge readopt-override adopt-extension-checks; do [ "$(awk "$K" "$R/$f.sh")" -eq 0 ] || { echo BL360-RH-SPELLING >&2; exit 1; }; done ); r2=$?; for r in "$r0" "$r1" "$r2"; do [ "$r" -eq 9 ] && exit 9; done; for r in "$r0" "$r1" "$r2"; do [ "$r" -eq 0 ] || exit 1; done; exit 0
+
+## BL-364 — 29 path listings in `reconcile/` still run under the default `core.quotePath`, so a non-ASCII path reaches their readers C-quoted
+
+**DEFECT.** Filed at batch 170 by the contract adversary and the docs hand. It discharges no
+consumer candidate. `BL-356` bullet 3 was fixed at two producers in v0.661.0:
+`memo_diff_name_status` in lib.sh, and preclassify's relocation `ls-tree`. Every other
+`git ls-tree`, `git ls-files`, `git diff --name-only` or `git diff --name-status` call in
+`core/skills/ai-dlc-update/reconcile/` still lists paths under the default `core.quotePath`. Git
+C-quotes a non-ASCII name there, so `core/scripts/café.sh` arrives as
+`"core/scripts/caf\303\251.sh"`. A reader that compares that line against a raw path, maps it to a
+consumer path or shows it to git again treats the file as absent. `BL-356` measured the loss on one
+reader: its row disappears at rc 0.
+
+Reach today is zero, measured this batch. The distribution's 829 tracked paths and the reference
+consumer's 11882 include 0 quoted ones, against a same-invocation control repo holding `café.sh`
+that listed 1. That makes this a latent defect, not a live one. It stays DEFECT-tier because a
+non-ASCII path would be dropped silently, and the drop reads as a clean answer.
+
+**The census.** These are the sites at `4fff688e` (v0.661.0), one line per invocation, comment lines excluded.
+The receipt's own grammar enumerates the same 35 sites: 29 unflagged and 6 already carrying
+`core.quotePath=false`. A scan for `git -C … \` continuation lines found 0, against a control of
+207 continuation lines of any kind in the same files.
+
+- **`memo_ls_tree`, lib.sh `:1105` and `:1107`, the first row.** This is the shared memoised
+  `ls-tree -r --name-only`. It was deliberately left out of v0.661.0. Its readers each compare its
+  lines against their own spelling of a path, so flipping it changes all of their outputs at once,
+  unaudited, in a bootstrapping file. The readers are `layer-drift.sh:1297`,
+  `retired-layer-contract.sh:200` (fallback `:201`), `retired-layer-token.sh:168` (fallback
+  `:169`), `retired-fixtures.sh:85` (fallback `:86`) and `unregistered-drift.sh:597` (fallback
+  `:607`). Each fallback is its own unflagged `ls-tree` and has to change together with the memo.
+- **`apply.sh:1423`**, the manifest glob expansion `ls-tree --name-only "$THEIRS" -- core/scripts/`.
+  It has the same shape as preclassify's relocation listing, fixed in v0.661.0. It maps each name to
+  `scripts/ai-dlc/…` and has not been traced.
+- `apply.sh`: `:390` and `:1523` (mode lookups on one named path, where the path comes from the
+  caller), `:571` (a range emptiness test), `:850` (moved paths fed to `map_consumer`), `:1719`
+  (executable-bit listing fed to `consumer_path`), and `:2345` (a consumer `ls-files` count).
+- `emit-report.sh`: `:242` (range emptiness) and `:343` (an orientation read of one named path).
+- `ledger-reverify.sh`: `:1027` (range emptiness), `:1327` (the consumer-to-core map table),
+  `:1393` (`theirs_basename_matches`, a basename compare), and `:1480` (a consumer `ls-files`
+  presence test).
+- `preclassify.sh`: `:393`
+  (`mode_at_theirs`), and `:453` (the `core_manifest` glob expansion fed to `map_consumer`).
+- `predicate-differential.sh:112` (`ls-files --with-tree`, each name shown again with `git show`).
+- `retired-fixtures.sh:128` (a presence test on one named directory).
+- `retired-layer-token.sh:265` (the rename map, `diff -M --name-status`).
+- `self-update-fixtures.sh:931` (the diff-side coverage join).
+- `self-update-gate.sh`: `:766` (range emptiness), `:880` (the rulebook candidate set), and `:1125`
+  (the changed `core/scripts/` set).
+- `unregistered-drift.sh:468` (a range line count).
+
+Sites that only test whether the output is empty, or count its lines, cannot lose a row to quoting.
+Sites that list the paths of ONE named path already know the raw name and use the output only for
+mode or presence. Tier these by reading each reader before converting anything. The four already
+flagged are lib.sh `:1128` and `:1130`, `preclassify.sh:539`, and `retired-tokens.sh:200`.
+`apply.sh`, `preclassify.sh`, `ledger-reverify.sh`, `self-update-gate.sh`, `self-update-fixtures.sh`,
+`emit-report.sh` and lib.sh are BOOTSTRAPPING and ship alone.
+
+**Remedy direction:** add `-c core.quotePath=false` at the producer, or read `-z`. Convert per
+reader, each with a fixture cell on a world holding `plain.sh` and `café.sh`, on the model of
+`procsub-staged-refusal`'s quotePath cell.
+
+- **NOTE — the dist-only `{ ledger_entry_awk; …; cat <<'AWK' … } > "$AWKF"` writers now produce a
+  truncated program where they produced an empty one.** The writers are
+  `scripts/backlog-reverify.sh:112`, `scripts/backlog-rotate.sh:266`,
+  `scripts/validate-backlog-size.sh:129` and `scripts/validate-backlog-receipts.sh:625`. Measured on
+  that shape under `/bin/bash` 3.2.57 with `trap '' XFSZ; ulimit -f 1`: at base the group exited 0
+  and wrote 36 bytes, the trailing heredoc only, because the emitter's own heredoc failed to stage.
+  At tip it exited 1 and wrote 1024 bytes, a prefix of `ledger_entry_awk` that ends mid-program.
+  Each writer's status handling decides whether either shape reaches awk. That was not audited
+  here.
+
+The receipt counts the unflagged listing sites. It exits 1 while any remain and names the count in
+the `BL364-UNQUOTED-LISTING-SITES` tag. A site passes when its line carries `core.quotePath=false`
+or a `-z` flag. The grammar is self-probed on five seeded lines first: one unflagged `ls-tree`
+counts, one flagged `diff --name-only` passes, and a commented listing, an echoed `git ls-tree`
+and a `diff -U0` are ignored. It exits 9 if that probe fails, if the corpus holds fewer than 20
+files or 20 sites, or if no flagged site is found, which would mean the grammar cannot see the
+four fixed ones. Scored through `backlog-reverify.sh`'s own `eval` shape, from the root of a
+`git archive` extraction of `9b8d1afc`:
+
+| variant | exit | tag |
+|---|---|---|
+| base `b0c310a3` | 1 | UNQUOTED-LISTING-SITES 34 of 35 |
+| tip `9b8d1afc` (before `machinery_paths` was fixed) | 1 | UNQUOTED-LISTING-SITES 31 of 35 |
+| landed `4fff688e` | 1 | UNQUOTED-LISTING-SITES 29 of 35 |
+| every unflagged site given `-c core.quotePath=false` (31 changed lines) | 0 | |
+| the same, with `apply.sh:1423` restored | 1 | UNQUOTED-LISTING-SITES 1 of 35 |
+| the same, with `memo_ls_tree` read by `-z` instead of the flag | 0 | |
+| no `reconcile/` directory | 9 | |
+| a two-file corpus | 9 | |
+| `awk` stubbed to print nothing | 9 | |
+
+**Held note (batch 178):** one site converted on `b178-b1`, self-contained: `preclassify.sh`'s
+`--untangle` manifest `ls-files` (`:453` above) now runs under `core.quotePath=false`. Its readers are
+`map_consumer`, `blob_hash` and `file_hash`, all inside that loop; `preclassify-mode-bucket` U5 holds an
+accented manifest file that must list once under its raw path, with a mutant restoring the default.
+Every other site in the census is unchanged and the entry stays open.
+
+**LANDED (v0.701.0, verified 18df47f8).**
+
+Closed at batch 181 across 0.693.0, 0.694.0, 0.695.0, 0.696.0, 0.698.0, 0.700.0 and 0.701.0: the receipt reads 23 of 38 at 1749b545, 3 of 38 at 0.700.0 and exits 0 at 0.701.0. The census grew 35 -> 38; one site, `ledger-reverify.sh` `LR_DIST_ONLY`, was added by 0.689.0 while this entry was open. The receipt cannot see a site spelled `git -c … -C`, and it accepts any line carrying ` -z`; the non-ASCII cells shipped at each reader with observable output are the behavioural proof. `core.quotePath=false` still quotes a name carrying a TAB, a `"` or a backslash.
+
+verify: sh R=core/skills/ai-dlc-update/reconcile; [ -f "$R/lib.sh" ] || exit 9; set -- "$R"/*.sh; [ "$#" -ge 20 ] || exit 9; w="$(mktemp -d)" || exit 9; P='/^[[:blank:]]*#/ {next} /git -C "[^"]*"/ && (/ ls-(tree|files)[[:blank:]]/ || (/ diff[[:blank:]]/ && /--name-(only|status)/)) { if (/core[.]quotePath=false/ || / -z[[:blank:]]/) f++; else u++ } END {print u+0, f+0}'; printf '%s\n' 'x="$(git -C "$D" ls-tree -r --name-only "$T")"' 'git -C "$D" -c core.quotePath=false diff --name-only "$B" "$T"' '  # git -C "$D" ls-tree --name-only "$T"' 'echo "git ls-tree exited"' 'git -C "$D" diff -U0 "$B"' > "$w/p.sh" || exit 9; [ "$(awk "$P" "$w/p.sh")" = "1 1" ] || exit 9; o="$(awk "$P" "$@")" || exit 9; u="${o% *}"; f="${o#* }"; [ "$f" -ge 1 ] && [ "$((u + f))" -ge 20 ] || exit 9; [ "$u" -eq 0 ] && exit 0; echo "BL364-UNQUOTED-LISTING-SITES $u of $((u + f))" >&2; exit 1
+
+
+## BL-409 — `predicate-differential.sh` cannot reach `docs/escalations/pending.md`, so the suppression-lifetime site reports UNDECIDABLE on every consumer
+
+**NOTE. Found by the BL-129 hand at batch 179, not fixed there.** The suppression-lifetime site added to `predicate-sites.md` names `docs/escalations/pending.md` as its subject, and the reader only looks under `_bmad-output/`. Run directly on the reference consumer's `pending.md` over `1f838777~1..HEAD`, the block gives `OK` on both sides, so the block works once the reader can reach the file. The hand's scoring scripts are not committed; re-derive before building.
+
+**LANDED (v0.700.0, verified 4fe79281).**
+
+Fixed in 0.700.0: `predicate-sites.md` gains `corpus-root:` and the suppression-lifetime site declares `docs/escalations`. On a copy of the reference consumer's corpus the base engine reads UNDECIDABLE and tip STABLE with one series compared. The receipt reads 0 on 0.700.0 and 1 on 1749b545.
+
+verify: sh o="$(bash core/fixtures/predicate-reclassification/run.sh 2>&1)"; for l in "ok   12a " "ok   12b " "ok   12c "; do grep -qF "$l" <<<"$o" || { echo "BL409-CELL-MISSING $l" >&2; exit 1; }; done; s="$(awk '/^reads:[[:blank:]]/ { b = "" } /^entry:[[:blank:]]+core\/scripts\/validate-suppression-lifetime\.sh$/ { b = 1 } b && /^corpus-root:[[:blank:]]+docs\/escalations\/?$/ { n++ } END { print n + 0 }' core/skills/ai-dlc-update/reconcile/predicate-sites.md)"; [ "$s" = 1 ] || { echo "BL409-SITE-HAS-NO-CORPUS-ROOT" >&2; exit 1; }
+
+## BL-410 — the provenance-block predicate site has no walk-up marker in its probe root, so a schema-only change reads STABLE without the comparison happening
+
+**NOTE. Found by the BL-129 hand at batch 179, not fixed there.** The materialized `validate-provenance-block.sh` resolves `SCHEMA=<consumer>/.claude/schemas/provenance-block.json`, the consumer's installed schema, on both sides of the differential, so the v0.382.0 case the site exists to catch (a schema-only change) reports STABLE. `predicate-reclassification` Part 10 cannot see it because its seed creates no `.claude/schemas/`. Re-derive before building; the claim is the hand's report.
+
+**LANDED (v0.700.0, verified 4fe79281).**
+
+Fixed in 0.700.0: each side pins `AI_DLC_PROJECT_ROOT` to its own probe root and passes `AI_DLC_KNOWN_SKILLS_EXT` explicitly; a walk-up marker alone resolved the extension empty on both sides. A change to the validator's extension SEARCH PATH stays unobservable to the differential, which `predicate-sites.md` states. The receipt reads 0 on 0.700.0 and 1 on 1749b545.
+
+verify: sh o="$(bash core/fixtures/predicate-reclassification/run.sh 2>&1)"; for l in "ok   11a " "ok   11c " "ok   11d " "ok   11e " "ok   11f " "ok   11g "; do grep -qF "$l" <<<"$o" || { echo "BL410-CELL-MISSING $l" >&2; exit 1; }; done
+
+## BL-411 — three callers turn the reconcile memo's refusal (125) into a clean result
+
+**DEFECT. Found by the `b179-lib` tip adversary at batch 179, predating that branch.** `memo_ls_tree` and `memo_show` return 125 when a cached status is unreadable or malformed (BL-403(d)), and three callers swallow it: `retired-layer-token.sh` `files_at` (`memo_ls_tree … || return 0`) and `show_at` (`memo_show … || true`), and `layer-drift.sh` (`_tree="$(memo_ls_tree … | grep '^core/' || true)"`, near `:1409`). Measured with an empty `.s` on a cache hit: `rc=0 matches=0` on base and on the branch, against `matches=2` uncorrupted. The branch changed one thing here: base's swallow left `numeric argument required` on stderr and the branch's leaves nothing, so the refusal got quieter. Fourteen `git_show` call sites in `layer-drift.sh` and ten in `unregistered-drift.sh` are further candidates, listed and not traced. Re-derive before building.
+
+**LANDED (v0.701.0, verified 18df47f8).**
+
+Re-scoped and fixed in 0.701.0. Narrower than filed: `files_at` already refused through its empty-set guard; it now names the memo. Wider: `show_at` (a false or dropped retired-token row at rc 0), `rulebook_files_of`, and two sites where a reader's own exit 1 on empty input outranked the 125 under `pipefail`, `layer-drift` `base_anchors` and `unregistered-drift` `closest_ancestor_blob`; and a `retired-fixtures` listing served then failed doubled every orphan row. `unregistered-drift`'s `absorbed_pct` is left as is and filed as BL-422. Under a size-limited stderr a refusal can exit 153, which callers read as a refusal. The receipt reads 0 on 0.701.0, 9 on 1749b545 (its cells do not exist there) and 1 with the base engines under the tip fixtures.
+
+verify: sh for f in retired-layer-token layer-title-join layer-absorption-retire setup-config-drift; do [ -f "core/fixtures/$f/run.sh" ] || exit 9; o="$(bash "core/fixtures/$f/run.sh" 2>&1)"; r=$?; printf '%s\n' "$o" | grep -q 'memo cannot serve' || exit 9; [ "$r" -eq 0 ] || { printf '%s\n' "$o" | grep -E '^  FAIL' | head -3 >&2; exit 1; }; done; exit 0
+
+## BL-413 — `apply.sh --finish` stamps over a both-changed (CLASSIFY) file the ordinary run handed back as a semantic merge and nobody merged
+
+**DEFECT. Found by the `b179-apply` tip adversary at batch 179; the gap predates that branch.** `finish_verify_tree` counts only `UPSTREAM-ONLY`, `UPSTREAM-ONLY-ADD` and `*SETUP-TOKENS*` rows, and `core/skills/ai-dlc-update/SKILL.md` (the `--finish` section near line 2234) says on purpose that a `BOTH-CHANGED->CLASSIFY` file never counts. So `--finish` cannot tell a merged CLASSIFY file from an untouched one.
+
+Measured in the seeded world where upstream retires `retired-skill` and the consumer appended `my-persona-skill` in place: the ordinary run raises `WORKLIST semantic-merge` and withholds the stamp at 0.0.1, while `--finish` on the same snapshot raises no row and stamps 9.9.9 with the schema never merged. Both runs start from one copied snapshot and take different paths, which is the control. The 0.691.0 refile gate removed the accidental withhold that `f07030d4` had (a `finish-refile-owed` row whose remedy would have restored the retired skill); `apply-drift-refile` arm t asserts only that no `finish-refile-owed` row appears for this world, not that the stamp is withheld.
+
+**Fix candidate (the adversary's, unscored):** have the ordinary run record each CLASSIFY file's consumer blob hash in `.ai-dlc-applying`, and have `--finish` withhold while any of those files is still byte-identical to its recorded hash. A fix must keep the hand-refiled control world stamping.
+
+`apply.sh` is a bootstrapping file, so a fix takes effect two pulls after the one that delivers it.
+
+Discharges no consumer candidate.
+
+**LANDED (v0.698.0, verified 45140072).**
+
+Fixed in 0.698.0: the ordinary run records each CLASSIFY file's consumer blob and mode once per `base:`, and `--finish` raises `WORKLIST finish-classify-unmerged` while a recorded file is unchanged. Deliberately not recorded: setup-sited files, `UPSTREAM-DELETED+consumer-modified` and `ORPHANED-UNKNOWN`, and a path carrying a TAB or `"`, which reaches the marker C-quoted. A marker the previous engine wrote carries no record, so the withhold first applies on the pull after the one that delivers it. The receipt reads 0 on 0.698.0 and 1 on 1749b545.
+
+verify: sh A=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$A" ] || exit 9; w="$(mktemp -d)" || exit 9; G="git -c user.email=f@f -c user.name=f"; ini() { d="$w/$1/d"; c="$w/$1/c"; mkdir -p "$d/core/scripts" "$c/scripts/ai-dlc" "$c/.claude" || return 1; printf '9.9.9\n' > "$d/VERSION"; $G -C "$d" init -q; }; cm() { $G -C "$d" add -A && $G -C "$d" commit -qm "$1" || return 1; git -C "$d" rev-parse HEAD; }; st() { printf 'version: 0.0.1\ncommit: %s\n' "$B" > "$c/.claude/.ai-dlc-version"; }; ver() { sed -n 's/^version: //p' "$c/.claude/.ai-dlc-version"; }; two() { ini "$1" || return 1; printf 'a\nb\nc\n' > "$d/core/scripts/m.sh"; cp "$d/core/scripts/m.sh" "$d/core/scripts/n.sh"; B="$(cm b)" || return 1; printf 'a\nb\nc-T\n' > "$d/core/scripts/m.sh"; cp "$d/core/scripts/m.sh" "$d/core/scripts/n.sh"; T="$(cm t)" || return 1; printf 'a-C\nb\nc\n' > "$c/scripts/ai-dlc/m.sh"; cp "$c/scripts/ai-dlc/m.sh" "$c/scripts/ai-dlc/n.sh"; st; case "$(bash "$A" "$d" "$B" "$c" "$T" 2>/dev/null)" in *"semantic-merge	scripts/m.sh"*) ;; *) return 1 ;; esac; }; M='a-C\nb\nc-T\n'; two u || exit 9; fu="$(bash "$A" --finish "$d" "$B" "$c" "$T" 2>/dev/null)"; su="$(ver)"; ru="$(printf '%s\n' "$fu" | awk -F'\t' '$1=="WORKLIST" && $2 ~ /^finish-/ && $3=="scripts/ai-dlc/m.sh" {f=1} END {print f+0}')"; two m || exit 9; printf "$M" > "$c/scripts/ai-dlc/m.sh"; printf "$M" > "$c/scripts/ai-dlc/n.sh"; bash "$A" "$d" "$B" "$c" "$T" >/dev/null 2>&1; bash "$A" --finish "$d" "$B" "$c" "$T" >/dev/null 2>&1; sm="$(ver)"; [ "$sm" = 9.9.9 ] || { echo "BL413-CONTROL hand-merged tree did not stamp ($sm)" >&2; exit 1; }; ini x || exit 9; printf '#!/bin/sh\necho b\n' > "$d/core/scripts/x.sh"; chmod 644 "$d/core/scripts/x.sh"; B="$(cm b)" || exit 9; chmod 755 "$d/core/scripts/x.sh"; T="$(cm t)" || exit 9; printf '#!/bin/sh\necho b\necho cons\n' > "$c/scripts/ai-dlc/x.sh"; chmod 644 "$c/scripts/ai-dlc/x.sh"; st; bash "$A" "$d" "$B" "$c" "$T" >/dev/null 2>&1; chmod 755 "$c/scripts/ai-dlc/x.sh"; bash "$A" --finish "$d" "$B" "$c" "$T" >/dev/null 2>&1; sx="$(ver)"; two p || exit 9; printf 'a\nb\nc-T\nd\n' > "$d/core/scripts/m.sh"; T2="$(cm t2)" || exit 9; printf "$M" > "$c/scripts/ai-dlc/n.sh"; printf 'a-C\nb\nc-T\nd\n' > "$c/scripts/ai-dlc/m.sh"; bash "$A" "$d" "$B" "$c" "$T2" >/dev/null 2>&1; bash "$A" --finish "$d" "$B" "$c" "$T2" >/dev/null 2>&1; sp="$(ver)"; two o || exit 9; printf 'base: %s\ntheirs: %s\n' "$B" "$T" > "$c/.claude/.ai-dlc-applying"; printf "$M" > "$c/scripts/ai-dlc/m.sh"; bash "$A" "$d" "$B" "$c" "$T" >/dev/null 2>&1; bash "$A" --finish "$d" "$B" "$c" "$T" >/dev/null 2>&1; so="$(ver)"; [ "$su" = 0.0.1 ] && [ "$ru" = 1 ] && [ "$sx" = 9.9.9 ] && [ "$sp" = 9.9.9 ] && [ "$so" = 9.9.9 ] && exit 0; echo "BL413-CLASSIFY-RECORD untouched-stamp=$su untouched-row=$ru chmod-merge=$sx repointed=$sp delivering=$so" >&2; exit 1
+
+## BL-414 — `apply.sh` builtin `printf` redirects at the bucket-rows and unregistered-drift staging sites leak a partial bucket row into stdout under a write limit
+
+**NOTE. Found by the `b179-apply` tip adversary at batch 179; present on base.** `apply.sh` writes `printf '%s\n' "$PC" > "$UD_PC"` and one sibling with the status unread. The comment above `ap_stage` already records that a failed builtin redirect leaks bytes into the surrounding capture. Under `ulimit -f` 10, 14 and 20 an ordinary apply printed one malformed manifest line, for example `.sh<TAB>UPSTREAM-ONLY`. The stamp is unaffected: `ap_stage buckets` fails on the same bytes and the run withholds.
+
+Discharges no consumer candidate.
+
+**LANDED (v0.698.0, verified 45140072).**
+
+Fixed in 0.698.0: both bucket-row hand-downs write through `ap_stage`. Under `ulimit -f` 14 and 20 the base engine leaks one malformed row and tip none. The receipt reads 0 on 0.698.0 and 1 on 1749b545.
+
+verify: sh A=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$A" ] || exit 9; w="$(mktemp -d)" || exit 9; G="git -c user.email=f@f -c user.name=f"; d="$w/d"; c="$w/c"; L="$(printf '%075d' 0 | tr 0 d)"; mkdir -p "$d/core/session-driver/$L" "$d/core/scripts" "$c/.claude/session-driver/$L" "$c/scripts/ai-dlc" || exit 9; printf '#!/usr/bin/env bash\necho v\n' > "$d/core/scripts/validate-synthetic.sh"; cp "$d/core/scripts/validate-synthetic.sh" "$c/scripts/ai-dlc/"; i=0; while [ "$i" -lt 100 ]; do printf 'v1 %s\n' "$i" > "$d/core/session-driver/$L/f$i"; i=$((i+1)); done; printf '9.9.9\n' > "$d/VERSION"; $G -C "$d" init -q && $G -C "$d" add -A && $G -C "$d" commit -qm b || exit 9; B="$(git -C "$d" rev-parse HEAD)"; i=0; while [ "$i" -lt 100 ]; do printf 'v2 %s\n' "$i" > "$d/core/session-driver/$L/f$i"; i=$((i+1)); done; $G -C "$d" commit -qam t || exit 9; T="$(git -C "$d" rev-parse HEAD)"; run() { i=0; while [ "$i" -lt 100 ]; do printf 'v1 %s\n' "$i" > "$c/.claude/session-driver/$L/f$i"; i=$((i+1)); done; printf 'version: 0.0.1\ncommit: %s\n' "$B" > "$c/.claude/.ai-dlc-version"; rm -f "$c/.claude/.ai-dlc-applying"; if [ "$1" = none ]; then o="$(bash "$A" "$d" "$B" "$c" "$T" 2>/dev/null)"; else o="$(trap '' XFSZ; ulimit -f "$1"; bash "$A" "$d" "$B" "$c" "$T" 2>/dev/null)"; fi; m="$(printf '%s\n' "$o" | awk -F'\t' 'NF && $1!="RESOLVED" && $1!="WORKLIST" && $1!="DECISION" && $1!="NOTE" {n++} END {print n+0}')"; s="$(sed -n 's/^version: //p' "$c/.claude/.ai-dlc-version")"; }; run none; [ "$m" = 0 ] && [ "$s" = 9.9.9 ] || exit 9; bad=""; for l in 14 20; do run "$l"; [ "$s" = 0.0.1 ] || exit 9; [ "$m" = 0 ] || bad="$bad $l:$m"; done; [ -z "$bad" ] && exit 0; echo "BL414-PARTIAL-ROW-LEAKED$bad" >&2; exit 1
+
+## BL-415 — `SKILL.md` does not describe the 0.691.0 `--finish` rows, and `ap_stage_or_refuse` gives a remedy the union gate refuses at the after-write sites
+
+**NOTE. Found by the `b179-apply` builder and tip adversary at batch 179.** `core/skills/ai-dlc-update/SKILL.md` lists three `--finish` checks and omits `finish-refile-owed`, `finish-refile-unverified`, `finish-exec-owed` and `staging-refused`, all of which withhold the stamp; its detector-refused paragraph omits `DECISION staging-refused`; and two passages that send the operator to the finisher contradict the new `restamp-withheld` row. Separately, `ap_stage_or_refuse` tells the operator to re-run the invocation, which the union gate refuses after the writes; the text should use `${reapply_remedy}`. The stamp is withheld either way, so this costs a detour and not a wrong stamp.
+
+`apply.sh` and `SKILL.md` are both bootstrapping, so the fix reaches a consumer two pulls out.
+
+Discharges no consumer candidate.
+
+**LANDED (v0.698.0, verified 45140072).**
+
+Fixed in 0.698.0: `SKILL.md`'s `--finish` row list is derived from the emitters and names `DECISION staging-refused`; `ap_stage_or_refuse` names `${reapply_remedy}`. The receipt reads 0 on 0.698.0 and 1 on 1749b545.
+
+verify: sh A=core/skills/ai-dlc-update/reconcile/apply.sh; S=core/skills/ai-dlc-update/SKILL.md; [ -f "$A" ] && [ -f "$S" ] || exit 9; s="$(awk '/^# THE RESOLUTION PHASES\./ {f=1} f && /^if \[ "\$FINISH" = 0 \]; then$/ {print NR; exit}' "$A")"; e="$(awk '/^fi  # ---- end of the resolution phases/ {print NR; exit}' "$A")"; [ -n "$s" ] && [ -n "$e" ] && [ "$s" -lt "$e" ] || exit 9; rows="$(awk -v s="$s" -v e="$e" '/^[[:blank:]]*#/ {next} (NR<s || NR>e) && match($0, /say WORKLIST [a-z-]+/) {print substr($0, RSTART+13, RLENGTH-13)}' "$A" | sort -u)"; n="$(printf '%s\n' "$rows" | awk 'NF {n++} END {print n+0}')"; [ "$n" -ge 8 ] || exit 9; sec="$(awk '/What `--finish` checks before it stamps/ {f=1} /YOU write `_bmad-output\/ai-dlc-update\/reconcile-log/ {f=0} f' "$S")"; [ -n "$sec" ] || exit 9; miss=""; for r in $rows staging-refused; do case "$sec" in *"\`$r\`"*) ;; *) miss="$miss $r" ;; esac; done; grep -q 'DECISION staging-refused' "$S" || miss="$miss DECISION-staging-refused(row-list)"; w="$(mktemp -d)" || exit 9; G="git -c user.email=f@f -c user.name=f"; d="$w/d"; c="$w/c"; L="$(printf '%075d' 0 | tr 0 d)"; mkdir -p "$d/core/session-driver/$L" "$d/core/scripts" "$c/.claude/session-driver/$L" "$c/scripts/ai-dlc" || exit 9; printf '#!/usr/bin/env bash\necho v\n' > "$d/core/scripts/validate-synthetic.sh"; cp "$d/core/scripts/validate-synthetic.sh" "$c/scripts/ai-dlc/"; i=0; while [ "$i" -lt 100 ]; do printf 'v1 %s\n' "$i" > "$d/core/session-driver/$L/f$i"; printf 'v1 %s\n' "$i" > "$c/.claude/session-driver/$L/f$i"; i=$((i+1)); done; printf '9.9.9\n' > "$d/VERSION"; $G -C "$d" init -q && $G -C "$d" add -A && $G -C "$d" commit -qm b || exit 9; B="$(git -C "$d" rev-parse HEAD)"; i=0; while [ "$i" -lt 100 ]; do printf 'v2 %s\n' "$i" > "$d/core/session-driver/$L/f$i"; i=$((i+1)); done; $G -C "$d" commit -qam t || exit 9; T="$(git -C "$d" rev-parse HEAD)"; printf 'version: 0.0.1\ncommit: %s\n' "$B" > "$c/.claude/.ai-dlc-version"; o="$(trap '' XFSZ; ulimit -f 14; bash "$A" "$d" "$B" "$c" "$T" 2>/dev/null)"; printf '%s\n' "$o" | awk -F'\t' '$2=="staging-refused" && index($4, "layer-drift override-readopt") {f=1} END {exit !f}' || exit 9; printf '%s\n' "$o" | awk -F'\t' '$2=="staging-refused" && index($4, "layer-drift override-readopt") && index($4, "re-run this invocation") {f=1} END {exit !f}' && miss="$miss after-write-remedy-is-bare-rerun"; printf '%s\n' "$o" | awk -F'\t' '$1=="DECISION" && $2=="restamp-withheld" && index($4, "apply.sh --finish") {f=1} END {exit !f}' && miss="$miss withheld-row-offers-finish"; [ -z "$miss" ] && exit 0; echo "BL415-FINISH-DOC-OR-REMEDY:$miss" >&2; exit 1
+
+## BL-423 — `partition-document.sh` refused a document whose dominant section is a wide table with no `###`
+
+**DEFECT. Carries the reference consumer's `PC-S316-PARTITION-DOCUMENT-SERIAL-ON-A-NO-H3-TABLE-PIECE-THAT-HOLDS-70-PERCENT-OF-THE-BYTES`**,
+filed during its sprint-316 architecture repair. `--map` exited 3 `SERIAL: largest part is 70%` on a 428,940-byte
+`docs/architecture.md`, whose `## Architecture Decision Records` lead piece was a 161-line ADR table with no `###`
+heading, carried by row width. 0.697.0 splits a piece still over the cap at table-row boundaries (three consecutive
+`|` rows, outside fences and comments) and names the blocking part's range, share and reason in the `SERIAL:` line.
+
+**LANDED (v0.697.0, verified 475213d4).**
+
+verify: sh P=core/scripts/partition-document.sh; [ -f "$P" ] || exit 9; T="$(mktemp -d)" || exit 9; D="$T/d.md"; { printf '# Doc\n\n## Small\n\nshort section\n\n## Big\n\n| id | text |\n|----|------|\n'; i=0; while [ $i -lt 40 ]; do printf '| r%02d | %0400d |\n' $i 0; i=$((i+1)); done; } > "$D" || exit 9; [ "$(grep -c '^### ' "$D")" = 0 ] || exit 9; o="$(bash "$P" --map "$D" 2>&1)"; r=$?; [ "$r" -eq 0 ] || [ "$r" -eq 3 ] || exit 9; [ "$r" -eq 0 ] && [ "$(printf '%s\n' "$o" | grep -c .)" -ge 3 ]
+
+## BL-424 — a sharded party round past the harness's concurrent-subagent cap launched a partial round
+
+**DEFECT. Carries the reference consumer's `PC-S316-PARTY-FANOUT-OVER-HARNESS-CONCURRENT-SUBAGENT-CAP`**, filed after
+a sprint-316 party round of 72 persona agents in one message launched 24 and had 48 rejected. 0.702.0 makes Rule 28
+own dispatch in waves under the cap, re-dispatches a rejected spawn only after a beat returns a delivery, carries a
+round-start epoch across a compaction, and adds arm `I119` refusing an "in one message" dispatch imperative.
+
+**LANDED (v0.702.0, verified 4331085d).**
+
+verify: sh T="$(mktemp -d)" || exit 9; git archive HEAD | tar -x -C "$T" || exit 9; F="$T/core/skills/ai-dlc/steps/implementation.md"; [ -f "$F" ] && [ -f "$T/scripts/validate-enforcement-map.sh" ] || exit 9; bash "$T/scripts/validate-enforcement-map.sh" >/dev/null 2>&1 || exit 9; printf '\nDispatch all three reviewers in one message.\n' >> "$F"; o="$(bash "$T/scripts/validate-enforcement-map.sh" 2>&1)" && exit 1; grep -qF 'I119' <<<"$o" && grep -qF 'implementation.md' <<<"$o"
