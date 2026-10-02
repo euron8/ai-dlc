@@ -416,8 +416,7 @@ statuses in the parent before any guard or assignment runs: a seeded-run exit ot
 and a non-zero sweep exit each report FIXTURE BROKEN. The seeded run's stderr moved from the
 scanned tree into the fixture's own scratch dir, so neither unit writes where the other reads.
 No wall-clock gain is claimed for it: shard `b` is far from the suite's pole, so the suite's
-makespan does not move, and the solo base-against-tip figures were taken under load with ranges
-the size of the effect. **The third-directory route stays untaken.**
+makespan does not move. **The third-directory route stays untaken.**
 
 **THIS ENTRY IS NOT ABOUT THE POLE, AND ITS HEADING SAID IT WAS UNTIL `v0.583.0`.** The pre-push
 pole is watched by `scripts/validate-suite-pole.sh` against its tracked baseline, which is what
