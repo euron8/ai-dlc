@@ -27576,3 +27576,154 @@ pool 16)`. A seeded 891s pole exited 1 and 890s exited 0; `--jobs 8` SKIPped nam
 
 verify: manual
 
+## BL-426 — `suite-pole-guard` grew from 68s to 279s pooled in 0.705.0
+
+**NOTE. Found at batch 183's 0.705.0 gate.** `BL-378`'s fixture now seeds arms over a 227-directory probe tree
+(the coverage predicate's realistic shape) and grew from 25 to 44 assertions and 13 to 18 mutants. Its recorded
+loaded cost moved from 68s (`.git/ai-dlc-fixture-durations` before the release) to 279s in the 0.705.0 gate's
+`.last`, the top unit of that partial dispatch. That is far under the width-16 pole (`gate-adjudication-mutants`,
+702-760s) and the 890s ceiling, so it cannot trip the guard, but it adds about 210 pool-seconds to every run that
+dispatches it.
+
+**Batch 184 correction: the filing's sub-claim that the fixture "rebuilds a 227-directory template every run" was
+false.** The template is built once, at `core/fixtures/suite-pole-guard/run.sh:719-721` at `f0cf026b`, and shared
+read-only as `--root`, so the filed remedy was already the shipped state. Measured per arm on one live pass, the
+four arms that drive the guard over 227 directories cost 0.21-0.40s each, the same as the 3-directory arms; the
+whole pass is about 10.6s. The cost was the SUBJECT: `run_arms` drives `scripts/validate-suite-pole.sh` about 58
+times per pass across 20 passes (live, 18 mutants, control), and every invocation forked a `printf` command
+substitution for the TAB on each pattern test of `parse_baseline`, plus a subshell per `pole_verdict` call in the
+self-probe. Base solo `sys` time was 100s against 38s `user`.
+
+**Batch 184 remedy.** The tab is a local constant and the ceiling arithmetic lives once in `pole_ceiling_v`, which
+sets a variable. No mutation anchor moved and the fixture is unchanged except a stale comment. Solo, interleaved,
+from the worktree, three reps each: base real 176.5/176.3/174.1s (CPU 138.4/140.8/139.5s), tip real
+69.6/69.7/71.0s (CPU 58.7/59.6/61.5s), at 1-minute loads 5.4-7.7. The kill matrix (18 mutants, owning arm and
+declared co-kills, plus the control) is byte-identical at base and tip. **Still open:** the close condition is a
+LOADED cost, which only the gate measures. Read `suite-pole-guard` in the next gate's
+`.git/ai-dlc-fixture-durations.last` and compare it with 279s before closing this.
+
+**LANDED (v0.707.0, verified fb1fcb8d).** The 0.707.0 gate recorded `suite-pole-guard` at 181s loaded in
+`.git/ai-dlc-fixture-durations.last`, against the 279s this entry was filed on. Receipt exits 0 on `origin/main`.
+
+verify: sh V=scripts/validate-suite-pole.sh; t=$(mktemp -d) || exit 9; mkdir -p "$t/core/fixtures/fx1" || exit 9; printf 'exit 0\n' > "$t/core/fixtures/fx1/run.sh"; printf '# band: 15\n# jobs: 12\n# fixtures: 1\nfx1 100\n' > "$t/b.tsv"; printf 'fx1 105\n' > "$t/d.tsv"; PS4='+${BASH_SUBSHELL} ' bash -x "$V" --root "$t" --baseline "$t/b.tsv" --durations "$t/d.tsv" --record "$t/d.tsv" --jobs 12 > "$t/o" 2> "$t/x"; r=$?; v=$(grep -c 'pole fx1 105s' "$t/o"); a=$(grep -cE '^[+]+1 ' "$t/x"); tb=$(grep -cE "^[+]+[1-9][0-9]* printf '.t'$" "$t/x"); pc=$(grep -cE '^[+]+[1-9][0-9]* pole_ceiling ' "$t/x"); rm -rf "$t"; [ "$r" -eq 0 ] && [ "$v" -eq 1 ] && [ "$a" -gt 0 ] || exit 9; [ "$tb" -eq 0 ] && [ "$pc" -le 1 ]
+
+The receipt traces one passing run of the subject and counts subshell-depth trace lines that are a `printf` of the
+tab or a `pole_ceiling` call. Its control (exit 9) demands the run passed, printed its verdict, and traced at least
+one subshell line, so a trace that captured nothing cannot read as the fix. Scored under `set -uo pipefail`: base
+`f0cf026b` exits 1, tip exits 0, and two mutants of tip each exit 1 — the tab fork restored at its 3 sites, and
+`pole_verdict` reading its ceiling through a subshell again.
+
+## BL-427 — Rule 28's shard line accepts an invented serial exception and records it as null, so Check 22 only warns
+
+**DEFECT.**
+
+Filed by the consumer as PC-S316-RULE-28-SHARD-LINE-ACCEPTS-AN-INVENTED-SERIAL-EXCEPTION-AND-ONLY-WARNS.
+
+`core/hooks/ai-dlc-dispatch-guard.sh` parsed `shard: none (<exception>)` only when the whole line was one parenthesised group naming exception 1-4. Any other `none` value, whether an invented reason such as `none (serial cross-file repair: …)`, `none (5)`, or `none — serial because…`, recorded `shard: null`. That is the same value as an omitted line, so `validate-spawn-ledger.sh` arm S1 WARNed and the exit stayed 0. The same whole-line anchor also nulled correct briefs that carried prose after a valid group (`none (serial-document). Files you may edit…`). Repeating the line reset the value to null as well, which laundered an invented exception.
+
+Fix: the guard reads the first parenthesised group, records `invalid-exception` plus `shard_raw` for any other `none` value, and lets an invalid line win over repeats. It case-folds the key and the `none` token, and unwraps a `none` value from `*`, `_`, backticks and straight double quotes, because `SHARD:`, `Shard: None (…)` and `shard: **none (…)**` otherwise launder an invented exception to null. No consumer brief carries those spellings today. The validator's new arm S3 FAILS such a row (exit 1, decided before the exit-3 branch). It prints the row's name with its `tool_use_id`, because clearing arm 1 keys on the name and names repeat. It also prints `shard_raw` and names `shard: 1/1 <key>` as the form for a single-voice or unsharded dispatch. An unreadable ledger in the shard arm is exit 2. Gate prose and the enforcement map add a fifth clearable class, **invalid serial exception**. Rows written by older guards are null, so nothing in flight wedges. Run against the consumer's real ledger, S316 and S315 both exit 0 with S3 at 0.
+
+**Residual, not fixed here:** omitting the shard line entirely still only WARNs under S1, so a lead can avoid the FAIL by dropping the line.
+
+Receipt scored under `set -uo pipefail` on extracted trees. It drives three invented exceptions, one with a colon and two without (`none (5)` and bare `none`); each must FAIL. A valid `none (serial-document). Files…` must pass, and a brief with no shard line must stay a WARN at exit 0. Scores:
+
+| Tree | Exit |
+|---|---|
+| base `f0cf026b` | 1 |
+| tip | 0 |
+| mutant (a): the validator reader ignores `invalid-exception` | 1 |
+| mutant (b): the whole-line-anchored parse | 1 |
+| a guard that marks invalid only when the group carries `:` | 1 |
+| a validator whose S1 null also FAILS | 1 |
+
+The receipt's impossible-token control returns exit 9 if it ever matches.
+
+**LANDED (v0.707.0, verified fb1fcb8d).** Receipt exits 0 on `origin/main`; the release commit names the candidate.
+
+verify: sh G=core/hooks/ai-dlc-dispatch-guard.sh; V=core/scripts/validate-spawn-ledger.sh; [ -f "$G" ] && [ -f "$V" ] || exit 9; d="$(mktemp -d)"; mkdir -p "$d/.claude/team-roles" "$d/_bmad-output"; echo 'version: 0.0.0' > "$d/.claude/.ai-dlc-version"; echo '# Role: remediator' > "$d/.claude/team-roles/remediator.md"; echo '{"aiDlcModels":{"opus":"claude-opus-5"},"aiDlcRoles":{"remediator":{"model":"opus"}}}' > "$d/.claude/settings.json"; drive() { printf -- '- sprint_id: %s\n' "$1" > "$d/_bmad-output/pipeline-snapshot.md"; jq -nc --arg s "$2" '{tool_name:"Agent",tool_input:{name:"r",model:"opus",prompt:("Your operating contract is `.claude/team-roles/remediator.md`. Read it.\n" + $s + "\nDo the work.")}}' | CLAUDE_PROJECT_DIR="$d" bash "$G" >/dev/null 2>&1; }; vl() { bash "$V" --ledger "$d/_bmad-output/spawn-ledger.jsonl" --sprint "$1" --settings "$d/.claude/settings.json" 2>&1; }; drive 5 'shard: none (serial cross-file repair: a, b)'; drive 6 'shard: none (serial-document). Files you may edit: a.md'; drive 7 'shard: none (5)'; drive 8 'shard: none'; drive 9 'no shard line in this brief'; o5="$(vl 5)"; r5=$?; o6="$(vl 6)"; r6=$?; o7="$(vl 7)"; r7=$?; o8="$(vl 8)"; r8=$?; o9="$(vl 9)"; r9=$?; n="$(grep -c 'ZQ-IMPOSSIBLE-SHARD-7731' <<<"$o5$o7$o8")" || n=0; [ "$n" -eq 0 ] || exit 9; grep -q 'carry a shard line' <<<"$o6" || exit 9; grep -q 'carry a shard line' <<<"$o9" || exit 9; [ "$r5" -eq 1 ] && grep -qF 'shard: none (serial cross-file repair: a, b)' <<<"$o5" && [ "$r6" -eq 0 ] && grep -q '1 shardable row(s) carry a shard line, 0 FAILED' <<<"$o6" && [ "$r7" -eq 1 ] && grep -qF 'shard: none (5)' <<<"$o7" && [ "$r8" -eq 1 ] && grep -qF 'shard: none' <<<"$o8" && [ "$r9" -eq 0 ] && grep -q '1 WARNED without one' <<<"$o9"
+
+## BL-429 — six shipping fixtures SKIP and exit 0 on every consumer because their subject is distribution-only, so the consumer pool records them `ok` while they test nothing
+
+**DEFECT. Found at batch 184** by a hand that installed `f0cf026b` into a scratch consumer and ran
+every shipped runnable fixture there. `consumer-machinery-home`, `layer-contract-conformance`,
+`layer-contract-conformance-b`, `ledger-status-vocabulary` and `release-version-triple` have a
+distribution-only validator as their subject (`scripts/validate-enforcement-map.sh` or
+`scripts/validate-release-version.sh`, neither installed). `self-update-join-gate`'s gate ships, but
+its seed derives BASE/THEIRS from the distribution's own git history, which a consumer does not
+hold. All six print a SKIP and exit 0 in the consumer layout, re-measured from the consumer root as
+the consumer hook runs them, and that pool reads 0 as `ok`. Under
+`.claude/rules/fixture-ship-decl.md`'s criterion each is `.dist-only`: the subject is not present
+on a consumer.
+
+**The fix** gives each a reasoned `.dist-only`, removes it from `scripts/uninstall.sh`'s shipped
+loop and from both manifest copies (`core-manifest.md`, `setup-sites.md`), and moves it to
+uninstall's retired list so an uninstall still removes a copy installed earlier. A consumer that
+already holds the six gets a `RETIRED-FIXTURE-ORPHAN` row from `retired-fixtures.sh` arm A on its
+next pull. That detector reports and never deletes, so the operator removes the copies by hand.
+
+**The receipt is behavioural:** it installs the tree into a scratch consumer and fails while any of
+the six lands there. It exits 9 if the install fails or the shipped control `ledger-reverify` is
+absent. Scored under `set -uo pipefail`: base `f0cf026b` 1, fix 0, and a mutant that deletes only
+one `.dist-only` while keeping the packaging edits 1, for both `consumer-machinery-home` and
+`self-update-join-gate`.
+
+**LANDED (v0.707.0, verified fb1fcb8d).** Receipt exits 0 on `origin/main`: a fresh install carries none of the six.
+
+verify: sh T=$(mktemp -d) || exit 9; mkdir -p "$T/_bmad" && git -C "$T" init -q || exit 9; bash scripts/install.sh "$T" >/dev/null 2>&1 || exit 9; [ -f "$T/tests/fixtures/ledger-reverify/run.sh" ] || exit 9; s=0; for n in consumer-machinery-home layer-contract-conformance layer-contract-conformance-b ledger-status-vocabulary release-version-triple self-update-join-gate; do [ -e "$T/tests/fixtures/$n" ] && s=1; done; exit $s
+
+## BL-428 — `preclassify.sh` does not recognise a fixture file step 2 wrote at the skill_commit, so it reads BOTH-CHANGED->CLASSIFY and halts the next hop
+
+**DEFECT.**
+
+Filed by the consumer as PC-S316-PRECLASSIFY-SELF-UPDATE-RECOGNITION-OMITS-FIXTURES.
+
+**What happens.** `at_self_update()` exempts a path whose consumer bytes match the distribution at
+the stamp's `skill_commit`, but only if the path is in the MACHINERY set. Step 2 writes a second
+term too: every `core/fixtures/<dir>/` that the hop's own diff touched (SKILL.md step 2, term 2). A
+fixture file that step 2 wrote at the intermediate ref therefore matches neither base nor theirs,
+falls through to `BOTH-CHANGED->CLASSIFY`, and step 2's agreement check between the slice and the
+CLASSIFY set halts the next hop. Reproduced at `f0cf026b` on a `file://` clone of the reference
+consumer at `83a5098c` (stamp `commit: 08655178`, `skill_commit: 4fe79281`), base `08655178`,
+theirs `abe3afb7`. Exactly the five filed fixtures read `BOTH-CHANGED->CLASSIFY`, and the control
+`reconcile/emit-report.sh` reads `ALREADY-AT-THEIRS`.
+
+**The fix shape.** Add one disjunct to `at_self_update()`, `core/fixtures/*/*`, that still requires
+the content match against the `skill_commit` blob. `ours == blob@skill_commit` and `ours != blob@base`
+mean the consumer holds upstream's own bytes at a ref neither endpoint names, so `UPSTREAM-ONLY`
+writing theirs over them loses nothing consumer-authored. That is the acquittal, not "step 2 wrote
+it": the disjunct also covers `core/fixtures/lib/` and nested files in driverless dirs, which step 2
+never writes. No `.dist-only` check is needed, because `DIST-ONLY-SKIP` is decided before every
+bucket arm. The alternative that scopes the arm through a `setup-sites.md` key is unbuildable
+against invariant I28's ghost arm.
+
+**Three findings for the consumer:**
+
+- The filed `verify:` keys on the unbuilt mechanism (a `setup-sites.md` `machinery:` key that
+  covers fixtures). Under this fix it stays STILL-LIVE by design, so the consumer closes its
+  candidate on its own adjudication.
+- A consumer that is already stranded with a fixture blob from an OLDER `skill_commit` is not
+  cleared by this fix. One operator accept of that CLASSIFY row clears it.
+- This is a bootstrapping fix. On the pull that delivers it, `skill_commit == commit`, so
+  `SELF_UPDATE_REF` is cleared and both arms are inert under either engine. The fix takes effect
+  from the hop AFTER the one that delivers it. The reference consumer has since left the state the
+  filing measured: its stamp now reads `commit: abe3afb7` / `skill_commit: abe3afb7` (graph commit
+  `aeeae8a5`, the 0.701.0 to 0.704.0 reconcile), so its next pull starts unsplit.
+
+**The receipt** builds a synthetic consumer from the distribution's own blobs. It holds
+`self-update-gate/run.sh` at the `4fe79281` blob, which is step 2's write and must read
+`UPSTREAM-ONLY`. It also holds `document-partition/run.sh` with a local edit, which must stay
+`BOTH-CHANGED->CLASSIFY` so that a disjunct which stopped comparing bytes cannot close the entry.
+Scored under `set -uo pipefail`: shipped `f0cf026b` exits 1, the fix exits 0, the fix with the
+`core/fixtures/*/*` disjunct dropped exits 1, and a variant returning on `core/fixtures/*` BEFORE
+the content check exits 1.
+
+**The receipt does not kill a mutant that drops the machinery conjunct** (exit 0). Killing it needs
+a non-machinery, non-fixture core path changed in both `08655178..4fe79281` and `4fe79281..abe3afb7`.
+Derived over that range there is none: 11 paths changed on both sides, 7 are under `core/fixtures/`
+and 4 are machinery (control: the shipped `machinery_paths()` resolves 136 paths, including
+`preclassify.sh`). That mutant is killed by `su-mut-unscoped` in `core/fixtures/self-update-gate`,
+whose seeded `artifact-path-grammar.md` is that path.
+
+**LANDED (v0.708.0, verified b8aa77b7).** Receipt exits 0 on `origin/main`; the release commit names the candidate.
+
+verify: sh c="$(mktemp -d)" || exit 9; mkdir -p "$c/.claude" "$c/tests/fixtures/self-update-gate" "$c/tests/fixtures/document-partition" || exit 9; git show 4fe79281:core/fixtures/self-update-gate/run.sh > "$c/tests/fixtures/self-update-gate/run.sh" || exit 9; { git show 4fe79281:core/fixtures/document-partition/run.sh; echo '# local'; } > "$c/tests/fixtures/document-partition/run.sh" || exit 9; printf 'version: 0.692.0\ncommit: 08655178\nskill_version: 0.700.0\nskill_commit: 4fe79281\n' > "$c/.claude/.ai-dlc-version" || exit 9; out="$(bash core/skills/ai-dlc-update/reconcile/preclassify.sh . 08655178 abe3afb7 "$c" 2>/dev/null)" || exit 9; T="$(printf '\t')"; [ "$(printf '%s\n' "$out" | grep -c "^M${T}core/fixtures/document-partition/run.sh${T}.*${T}BOTH-CHANGED->CLASSIFY\$")" = 1 ] || exit 1; [ "$(printf '%s\n' "$out" | grep -c "^M${T}core/fixtures/self-update-gate/run.sh${T}.*${T}UPSTREAM-ONLY\$")" = 1 ]
