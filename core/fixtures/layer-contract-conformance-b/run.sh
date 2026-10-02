@@ -15,14 +15,13 @@
 # refuses to pass in shard 'a' if a declared shard has no driver directory beside it — so
 # deleting this file cannot quietly shrink the suite.
 #
-# THIS SHARD SHIPS, AND THAT IS THE OPPOSITE OF enforcement-map-sites-b. It carries NO
-# `.dist-only` marker, because a shard's packaging is its sibling's packaging and the sibling
-# ships: it is named in scripts/uninstall.sh's removal loop and in both core_manifest copies,
-# and I8 joins all three against the derived shippable set in both directions. What makes that
-# safe on a consumer is the sibling's own SKIP — validate-enforcement-map.sh is
-# distribution-only, so the resolution there finds nothing and both directories declare
-# themselves inapplicable and exit 0. The sibling's shard protocol is deliberately placed
-# AFTER that SKIP so this stays true no matter which directories a consumer received.
+# THIS SHARD IS `.dist-only`, LIKE enforcement-map-sites-b, AND SO IS ITS SIBLING. A shard's
+# packaging is its sibling's packaging, and the sibling's subject, validate-enforcement-map.sh,
+# is not shipped. Both directories once shipped and SKIPped on every consumer, which the
+# consumer's pool recorded as two `ok` verdicts over nothing tested; the markers stop that.
+# I116 refuses a shipped user of a sibling that does not ship, so the two must move together.
+# The SKIP in the sibling stays, for a consumer still holding a copy installed before the
+# markers, and its shard protocol stays placed AFTER that SKIP for the same reason.
 #
 # Resolved as a SIBLING inside core/fixtures/, never by walking up into a core subtree —
 # the same resolution `trunk-audit-mutants` uses for its own subject fixture, and the one

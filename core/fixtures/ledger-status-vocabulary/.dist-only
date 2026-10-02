@@ -1,0 +1,9 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Its subject is I39 in scripts/validate-enforcement-map.sh, which install.sh does not ship.
+ledger-reverify.sh and SKILL.md step 3f ship; the invariant that joins their status sets does
+not. On a consumer the fixture resolves no validator, prints a SKIP and exits 0, so the
+consumer's pool recorded it `ok` on every push while it tested nothing.
+
+The consumer's ledger engine is covered there by ledger-reverify, ledger-rotate and
+ledger-reverify-unfalsifiable, which ship. This one must not be confused for those.

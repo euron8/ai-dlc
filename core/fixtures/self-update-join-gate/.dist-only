@@ -1,0 +1,12 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+THE GATE SHIPS, AND THAT IS NOT THE SUBJECT THIS FIXTURE NEEDS. self-update-gate.sh lands at
+.claude/skills/ai-dlc-update/reconcile/ on every consumer. What a consumer lacks is the
+distribution's GIT HISTORY: seed.sh clones the distribution, finds the commit that added a
+`<!-- CHECK_LOADED:` anchor with `git log -S`, and installs two consumer trees from that
+commit's parent and a few releases past it. A consumer repository holds its own history, not
+core's, so there is no range to derive. This is the "corpus only this repo holds" shape.
+
+On a consumer the fixture resolves no core/skills/ path and no distribution .git, prints a
+SKIP and exits 0, so the consumer's pool recorded it `ok` on every push while it tested
+nothing. The shipped gate's consumer-side behaviour is covered by self-update-gate, which ships.

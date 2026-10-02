@@ -1,0 +1,9 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Its subject is I36/I37/I38/I41/I42 in scripts/validate-enforcement-map.sh, which install.sh does
+not ship. layer-contract.yaml ships; the validator that holds it to its READMEs does not. On a
+consumer the fixture resolves no validator, prints a SKIP and exits 0, so the consumer's pool
+recorded it `ok` on every push while it tested nothing.
+
+Its shard, layer-contract-conformance-b, carries its own marker for the same reason. The two
+must move together: I116 refuses a shipped fixture that uses a sibling which does not ship.

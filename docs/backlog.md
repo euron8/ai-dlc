@@ -1184,3 +1184,30 @@ Fix: the guard reads the first parenthesised group, records `invalid-exception` 
 Receipt scored under `set -uo pipefail` on extracted trees: base `f0cf026b` exit 1, tip exit 0, mutant (a) (the validator reader ignores `invalid-exception`) exit 1, and mutant (b) (the whole-line-anchored parse) exit 1. The receipt's impossible-token control returns exit 9 if it ever matches.
 
 verify: sh G=core/hooks/ai-dlc-dispatch-guard.sh; V=core/scripts/validate-spawn-ledger.sh; [ -f "$G" ] && [ -f "$V" ] || exit 9; d="$(mktemp -d)"; mkdir -p "$d/.claude/team-roles" "$d/_bmad-output"; echo 'version: 0.0.0' > "$d/.claude/.ai-dlc-version"; echo '# Role: remediator' > "$d/.claude/team-roles/remediator.md"; echo '{"aiDlcModels":{"opus":"claude-opus-5"},"aiDlcRoles":{"remediator":{"model":"opus"}}}' > "$d/.claude/settings.json"; drive() { printf -- '- sprint_id: %s\n' "$1" > "$d/_bmad-output/pipeline-snapshot.md"; jq -nc --arg s "$2" '{tool_name:"Agent",tool_input:{name:"r",model:"opus",prompt:("Your operating contract is `.claude/team-roles/remediator.md`. Read it.\nshard: " + $s + "\nDo the work.")}}' | CLAUDE_PROJECT_DIR="$d" bash "$G" >/dev/null 2>&1; }; drive 5 'none (serial cross-file repair: a, b)'; drive 6 'none (serial-document). Files you may edit: a.md'; o5="$(bash "$V" --ledger "$d/_bmad-output/spawn-ledger.jsonl" --sprint 5 --settings "$d/.claude/settings.json" 2>&1)"; r5=$?; o6="$(bash "$V" --ledger "$d/_bmad-output/spawn-ledger.jsonl" --sprint 6 --settings "$d/.claude/settings.json" 2>&1)"; r6=$?; n="$(grep -c 'ZQ-IMPOSSIBLE-SHARD-7731' <<<"$o5")" || n=0; [ "$n" -eq 0 ] || exit 9; grep -q 'carry a shard line' <<<"$o6" || exit 9; [ "$r5" -eq 1 ] && grep -qF 'shard: none (serial cross-file repair: a, b)' <<<"$o5" && [ "$r6" -eq 0 ] && grep -q '1 shardable row(s) carry a shard line, 0 FAILED' <<<"$o6"
+
+## BL-429 — six shipping fixtures SKIP and exit 0 on every consumer because their subject is distribution-only, so the consumer pool records them `ok` while they test nothing
+
+**DEFECT. Found at batch 184** by a hand that installed `f0cf026b` into a scratch consumer and ran
+every shipped runnable fixture there. `consumer-machinery-home`, `layer-contract-conformance`,
+`layer-contract-conformance-b`, `ledger-status-vocabulary` and `release-version-triple` have a
+distribution-only validator as their subject (`scripts/validate-enforcement-map.sh` or
+`scripts/validate-release-version.sh`, neither installed). `self-update-join-gate`'s gate ships, but
+its seed derives BASE/THEIRS from the distribution's own git history, which a consumer does not
+hold. All six print a SKIP and exit 0 in the consumer layout, re-measured from the consumer root as
+the consumer hook runs them, and that pool reads 0 as `ok`. Under
+`.claude/rules/fixture-ship-decl.md`'s criterion each is `.dist-only`: the subject is not present
+on a consumer.
+
+**The fix** gives each a reasoned `.dist-only`, removes it from `scripts/uninstall.sh`'s shipped
+loop and from both manifest copies (`core-manifest.md`, `setup-sites.md`), and moves it to
+uninstall's retired list so an uninstall still removes a copy installed earlier. A consumer that
+already holds the six gets a `RETIRED-FIXTURE-ORPHAN` row from `retired-fixtures.sh` arm A on its
+next pull. That detector reports and never deletes, so the operator removes the copies by hand.
+
+**The receipt is behavioural:** it installs the tree into a scratch consumer and fails while any of
+the six lands there. It exits 9 if the install fails or the shipped control `ledger-reverify` is
+absent. Scored under `set -uo pipefail`: base `f0cf026b` 1, fix 0, and a mutant that deletes only
+one `.dist-only` while keeping the packaging edits 1, for both `consumer-machinery-home` and
+`self-update-join-gate`.
+
+verify: sh T=$(mktemp -d) || exit 9; mkdir -p "$T/_bmad" && git -C "$T" init -q || exit 9; bash scripts/install.sh "$T" >/dev/null 2>&1 || exit 9; [ -f "$T/tests/fixtures/ledger-reverify/run.sh" ] || exit 9; s=0; for n in consumer-machinery-home layer-contract-conformance layer-contract-conformance-b ledger-status-vocabulary release-version-triple self-update-join-gate; do [ -e "$T/tests/fixtures/$n" ] && s=1; done; exit $s
