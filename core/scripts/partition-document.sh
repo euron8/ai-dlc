@@ -32,7 +32,18 @@
 #   half the document's bytes splits at its own `### ` headings. A piece STILL over MAX_SHARE_PCT
 #   after that splits once more, before every line k where lines k-2, k-1 and k all begin with
 #   `|` outside a fence or comment -- markdown TABLE ROWS, so one wide table carrying the bytes no
-#   longer forces a single remediator. Each such piece repeats its parent's heading in column 4.
+#   longer forces a single remediator -- AND the unbroken run of such lines holding k also holds
+#   a GFM SEPARATOR ROW at or before line k-1. A separator row is a `|` line whose every cell is
+#   dashes with an optional colon at either end, spaces and tabs around them, an optional final
+#   `|`, and an optional trailing CR (stripped before the match, so a CRLF table cuts as an LF
+#   one does). Because the separator must sit at or before k-1, it is never the first line of a
+#   new piece: a header row and its separator stay together. The run is broken by any line that
+#   is not a row, so a fence line between a separator and fenced `|` lines leaves those lines
+#   uncuttable. Each such piece repeats its parent's heading in column 4.
+#   THE CLAIM IS NARROW: a `|` run with no separator row (prose lines that begin with `|`) is
+#   never cut. A run that DOES carry one still can be, whatever encloses it -- a `<pre>` block or
+#   a comment opened mid-line holding a real table is cut like any table, because neither is
+#   tracked (the comment tracker's blind spot above). Assembly is byte-exact either way.
 #   No header row is re-emitted: a cut may leave a table's header and separator rows in the
 #   previous piece, which is safe because every reader treats a part as a byte slice of the
 #   document (the split self-check below refuses anything else, and a remediator that re-added
@@ -110,7 +121,8 @@ map_of() { # <doc> -> map on stdout (rc 0) or one SERIAL line (rc 3)
       return n
     }
     function head_of(line) { sub(/\r$/, "", line); gsub(/\t/, " ", line); return line }
-    { B[NR] = length($0) + 1; tot += B[NR] }
+    { B[NR] = length($0) + 1; tot += B[NR]
+      r = $0; sub(/\r$/, "", r); SEP[NR] = (r ~ /^\|[ \t]*:?-+:?[ \t]*(\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$/) }
     fence != "" {
       t = $0; sub(/^[ \t]*/, "", t); c = substr(fence, 1, 1); n = 0
       while (substr(t, n + 1, 1) == c) n++
@@ -138,12 +150,13 @@ map_of() { # <doc> -> map on stdout (rc 0) or one SERIAL line (rc 3)
           na++; A1[na] = st; A2[na] = z; AH[na] = stt
         } else { na++; A1[na] = a; A2[na] = z; AH[na] = h2t[i] }
       }
+      for (k = 1; k <= NR; k++) RUNSEP[k] = (TR[k] ? (RUNSEP[k - 1] || SEP[k]) : 0)
       nb = 0
       for (i = 1; i <= na; i++) {
         s = 0; for (k = A1[i]; k <= A2[i]; k++) s += B[k]
         st = A1[i]
         if (s * 100 > tot * maxpct)
-          for (k = A1[i] + 2; k <= A2[i]; k++) if (TR[k] && TR[k - 1] && TR[k - 2]) {
+          for (k = A1[i] + 2; k <= A2[i]; k++) if (TR[k] && TR[k - 1] && TR[k - 2] && RUNSEP[k - 1]) {
             nb++; C1[nb] = st; C2[nb] = k - 1; CH[nb] = AH[i]; st = k
           }
         nb++; C1[nb] = st; C2[nb] = A2[i]; CH[nb] = AH[i]
