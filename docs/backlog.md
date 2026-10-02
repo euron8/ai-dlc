@@ -1229,10 +1229,11 @@ the normal dispatch, so it is the defect rather than the safeguard.
 
 **Batch 183 measurements, each with its control.**
 
-- **C1, how often VERDICT 5 is reached.** The batch 183 adversary counted gate logs since 2026-09-22
-  and found the comparison line printed once (09-29, the filing gate). Every other run stopped at
-  the row-count SKIP (`:377`, `dur_rows -ne fx_count`) or the width SKIP (`:381`). The step
-  title is the positive control in the same scan.
+- **C1, how often VERDICT 5 is reached.** This is the batch 183 adversary's count, not re-derived
+  by the fix hand. Across gate logs since 2026-09-22 it found the comparison line printed once
+  (09-29, the filing gate). Every other run stopped at the row-count SKIP
+  (`abe3afb7:scripts/validate-suite-pole.sh:377`, `dur_rows -ne fx_count`) or the width SKIP
+  (`:381` at the same revision).
 - **C2, whether a full dispatch occurs.** The one `.last` on disk holds 220 rows against 227
   fixture directories (`/usr/bin/find core/fixtures -mindepth 2 -maxdepth 2 -name run.sh`). The 7
   missing units cost 18s of the merged record's 12931s over the on-disk set. This is a single data

@@ -908,7 +908,9 @@ mut on-disk-join-dropped \
   's/ && (\$1 in d) { s += \$2 }/ { s += $2 }/' \
   ghost_record
 
-# M11: THE DIVISOR LEAVES OUT THE OBSERVED POLE -- the pole on ONE side of the ratio only.
+# M11: THE DIVISOR LEAVES OUT THE OBSERVED POLE -- the pole on ONE side of the ratio only. The
+# label names the defect class the contract asked for ("a term depending on the observed pole
+# asymmetrically"); the literal `DEN = OBS_SECS` reads every run >100% and dies in every arm.
 # On the 220-of-227 seed (others 12294, missing units W=16, pole 830) that prints 106.6% where
 # the right figure is 99.87%, and every verdict in the arm is unchanged.
 mut divisor-is-observed-pole \
