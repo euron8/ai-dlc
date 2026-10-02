@@ -636,6 +636,291 @@ if [ "$T_RUN" = 1 ]; then
   }
 fi
 
+# --- BL-413 arm v: `--finish` WITHHOLDS OVER A HANDED-BACK SEMANTIC MERGE NOBODY DID ---------------
+# arm t's Ap world, driven the way a consumer drives it: the ORDINARY run first, then `--finish`. The
+# ordinary run buckets the schema BOTH-CHANGED->CLASSIFY and hands it back as `semantic-merge`; it
+# must leave the schema's bytes alone (asserted per world -- arm t's comment says so, this measures
+# it). `--finish` used to raise no row there and stamp 9.9.9 over the unmerged schema.
+#   Vu  untouched, then --finish                                   -> WITHHOLDS, finish-classify-unmerged
+#   Vm  hand-merged (retired-skill dropped), then --finish          -> STAMPS
+#   Vr  hand-merged, a SECOND ordinary run, then --finish           -> STAMPS (first write wins: the
+#       re-run's record must not make the merged copy the reference)
+#   Vo  untouched, the marker rewritten as the previous engine wrote it (no classify-hashes:) -> STAMPS,
+#       with NOTE finish-classify-unrecorded (the fix cannot fire on the pull that delivers it)
+# Cell: "<Vu stamp>|<Vu row>|<Vm stamp>|<Vr stamp>|<Vo stamp>|<Vo note>" ; a world whose ordinary run moved
+# the schema, or drew no semantic-merge row, is BROKEN.
+v_drive() { # v_drive <reconcile-dir> <u|m|r|o> -> "<stamp>|<unmerged row?>|<unrecorded note?>"
+  local rec="$1" w b t sch h0 o fo
+  w="$(t_aworld 1)" && [ -d "$w/cons" ] || { printf 'BROKEN'; return; }
+  b="$(cat "$w/.B")"; t="$(cat "$w/.T")"; sch="$w/cons/.claude/schemas/provenance-block.json"
+  h0="$(git hash-object "$sch")" || { printf 'BROKEN'; return; }
+  o="$(bash "$rec/apply.sh" "$w/dist" "$b" "$w/cons" "$t" 2>/dev/null)"
+  awk -F'\t' '$1=="WORKLIST" && $2=="semantic-merge" && $3=="schemas/provenance-block.json" {f=1} END {exit !f}' <<<"$o" \
+    && [ "$(git hash-object "$sch")" = "$h0" ] || { printf 'BROKEN'; return; }
+  case "$2" in
+    m|r) printf '{\n  "known_skills": [\n    "bmad-party-mode",\n    "my-persona-skill"\n  ]\n}\n' > "$sch" || { printf 'BROKEN'; return; } ;;
+  esac
+  [ "$2" = r ] && bash "$rec/apply.sh" "$w/dist" "$b" "$w/cons" "$t" >/dev/null 2>&1
+  [ "$2" = o ] && { printf 'base: %s\ntheirs: %s\n' "$b" "$t" > "$w/cons/.claude/.ai-dlc-applying" || { printf 'BROKEN'; return; }; }
+  fo="$(bash "$rec/apply.sh" --finish "$w/dist" "$b" "$w/cons" "$t" 2>/dev/null)"
+  printf '%s|%s|%s' \
+    "$(grep -qE '^version: 9\.9\.9$' "$w/cons/.claude/.ai-dlc-version" && echo STAMPED || echo WITHHELD)" \
+    "$(awk -F'\t' '$1=="WORKLIST" && $2=="finish-classify-unmerged" && $3==".claude/schemas/provenance-block.json" {f=1} END {print (f ? "UNMERGED" : "-")}' <<<"$fo")" \
+    "$(awk -F'\t' '$1=="NOTE" && $2=="finish-classify-unrecorded" {f=1} END {print (f ? "NOTE" : "-")}' <<<"$fo")"
+}
+v_score() { # v_score <reconcile-dir> -> the cell above, or BROKEN
+  local u m r o
+  u="$(v_drive "$1" u)"; m="$(v_drive "$1" m)"; r="$(v_drive "$1" r)"; o="$(v_drive "$1" o)"
+  case "$u$m$r$o" in *BROKEN*) printf 'BROKEN'; return ;; esac
+  printf '%s|%s|%s|%s|%s|%s' "${u%%|*}" "$(printf '%s' "$u" | cut -d'|' -f2)" "${m%%|*}" "${r%%|*}" "${o%%|*}" "${o##*|}"
+}
+V_WANT='WITHHELD|UNMERGED|STAMPED|STAMPED|STAMPED|NOTE'
+V_RUN=1
+if ! grep -qF 'finish_classify_unmerged' "$APPLY"; then
+  case "$APPLY" in
+    */core/skills/ai-dlc-update/reconcile/apply.sh) printf '  --    (BL-413: this apply.sh records no CLASSIFY blobs; in the distribution arm v runs anyway and must go red)\n' ;;
+    *) V_RUN=0; printf '  SKIP  BL-413 arm v -- the installed apply.sh predates the CLASSIFY record; it lands with the pull that carries this fixture\n' ;;
+  esac
+fi
+if [ "$V_RUN" = 1 ]; then
+  V_GOT="$(v_score "$(dirname "$APPLY")")"
+  case "$V_GOT" in
+    BROKEN)   bad "FIXTURE BROKEN [BL-413 arm v]: a world could not be seeded, or its ordinary run moved the schema or drew no semantic-merge row" ;;
+    "$V_WANT") ok "BL-413 arm v: --finish withholds over an untouched handed-back merge (finish-classify-unmerged), stamps a hand-merged one, stamps it after a second ordinary run (first write wins), and stamps with a NOTE over a previous-engine marker" ;;
+    *)        bad "BL-413 arm v: $V_GOT (want $V_WANT; cells: Vu-stamp|Vu-row|Vm-stamp|Vr-stamp|Vo-stamp|Vo-note)" ;;
+  esac
+  [ "$V_GOT" = BROKEN ] || {
+    # v-M1 drops the withhold row (base behaviour); v-M2 lets a later run replace the record (first
+    # write lost); v-M3 compares against theirs' blob instead of the record (the refuted alternative).
+    if mut_copy "$WORK/v-M1" '    elif [ "$_now" = "$_h" ] && { [ -z "$_m" ] || [ "$_nm" = "$_m" ]; }; then' '    elif false; then'; then
+      g="$(v_score "$WORK/v-M1")"
+      [ "$g" = 'STAMPED|-|STAMPED|STAMPED|STAMPED|NOTE' ] && ok "BL-413 v-M1 killed (withhold row removed): Vu stamps over the unmerged schema ($g)" \
+        || bad "BL-413 v-M1 SURVIVED or misfired: $g (want STAMPED|-|STAMPED|STAMPED|STAMPED|NOTE)"
+    else
+      bad "BL-413 v-M1 DID NOT APPLY -- the hash-equal test is not in apply.sh exactly once, or the copy does not parse"
+    fi
+    if mut_copy "$WORK/v-M2" ' _keep="$(printf' ' : "$(printf'; then
+      g="$(v_score "$WORK/v-M2")"
+      [ "$g" = 'WITHHELD|UNMERGED|STAMPED|WITHHELD|STAMPED|NOTE' ] && ok "BL-413 v-M2 killed (first write lost): the re-run records the merged copy and Vr withholds forever ($g)" \
+        || bad "BL-413 v-M2 SURVIVED or misfired: $g (want WITHHELD|UNMERGED|STAMPED|WITHHELD|STAMPED|NOTE)"
+    else
+      bad "BL-413 v-M2 DID NOT APPLY -- the first-write-wins keep is not in apply.sh exactly once, or the copy does not parse"
+    fi
+    if mut_copy "$WORK/v-M3" '    elif [ "$_now" = "$_h" ] && { [ -z "$_m" ] || [ "$_nm" = "$_m" ]; }; then' '    elif [ "$_now" = "$(git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/${_c#.claude/}" 2>/dev/null)" ]; then'; then
+      g="$(v_score "$WORK/v-M3")"
+      [ "$g" = 'STAMPED|-|STAMPED|STAMPED|STAMPED|NOTE' ] && ok "BL-413 v-M3 killed (compared to theirs, not the record): an untouched CLASSIFY file never equals theirs, so Vu stamps ($g)" \
+        || bad "BL-413 v-M3 SURVIVED or misfired: $g (want STAMPED|-|STAMPED|STAMPED|STAMPED|NOTE)"
+    else
+      bad "BL-413 v-M3 DID NOT APPLY -- the hash-equal test is not in apply.sh exactly once, or the copy does not parse"
+    fi
+  }
+fi
+
+# --- BL-413 arm y: THE CLASSIFY RECORD READS A MERGE THAT IS ONLY A chmod, SURVIVES A RE-POINTED OR
+# DELIVERING PULL, STANDS DOWN WHERE KEEPING THE CONSUMER COPY IS THE NORMAL OUTCOME, AND REFUSES A
+# DIRECTORY AT THE MARKER'S PATH ---------------------------------------------------------------------
+# Each world is driven the way a consumer drives it (ordinary run, the operator's hand, --finish):
+#   Ym  theirs adds ONLY +x to a script the consumer edited; the merge is `chmod +x`     -> STAMPED
+#   Yp  merge done, then the pull is re-pointed at a theirs that moves only another file -> STAMPED
+#   Ys  both files merged for T, a second ordinary run on the SAME base at T2 (which moves one of them
+#       again), that one merged again                                                  -> STAMPED
+#   Yd  the DELIVERING pull: the first ordinary run was the previous engine (marker with no
+#       `classify-hashes:`), one file merged, the re-run is this engine     -> STAMPED with the NOTE
+#   Yx  theirs DELETED one consumer-modified file and never shipped another (ORPHANED-UNKNOWN); both
+#       kept, the one real both-changed file merged                       -> STAMPED, no unmerged row
+#   Yl  the per-line exit: one file's own `classify:` line deleted, the other still untouched ->
+#       WITHHELD naming only the other, marker kept; after merging it          -> STAMPED, marker gone
+#   Yn  a DIRECTORY at the marker's path -> DECISION applying-marker-unwritten and nothing moved into it
+#   Yf  the marker became a DIRECTORY after a successful ordinary run, merge undone, then --finish
+#       -> WITHHELD with WORKLIST finish-marker-directory (it used to stamp identity-unchecked)
+# Cell: "Ym|Yp|Ys|Yd|Yx|Yl|Yn|Yf"; a world whose ordinary run drew no semantic-merge row for its subject
+# is BROKEN.
+yg() { git -c user.email=f@f -c user.name=fixture "$@"; }
+y_init() { # -> a fresh world: dist/ (a git repo with VERSION 9.9.9) and cons/
+  local _w; _w="$(mktemp -d "$WORK/y.XXXXXX")" || return 1
+  mkdir -p "$_w/dist/core/scripts" "$_w/cons/scripts/ai-dlc" "$_w/cons/.claude" || return 1
+  printf '9.9.9\n' > "$_w/dist/VERSION" && yg -C "$_w/dist" init -q && printf '%s' "$_w"
+}
+y_commit() { # y_commit <world> <label> -- commit dist, record the sha in <world>/.<label>
+  yg -C "$1/dist" add -A && yg -C "$1/dist" commit -qm "$2" && yg -C "$1/dist" rev-parse HEAD > "$1/.$2"
+}
+y_stampat() { printf 'version: 0.0.1\ncommit: %s\n' "$(cat "$1/.B")" > "$1/cons/.claude/.ai-dlc-version"; }
+y_run() { # y_run <rec> <world> <theirs-label> [--finish] -> manifest on stdout
+  if [ "${4:-}" = --finish ]; then
+    bash "$1/apply.sh" --finish "$2/dist" "$(cat "$2/.B")" "$2/cons" "$(cat "$2/.$3")" 2>/dev/null
+  else
+    bash "$1/apply.sh" "$2/dist" "$(cat "$2/.B")" "$2/cons" "$(cat "$2/.$3")" 2>/dev/null
+  fi
+}
+y_sm() { awk -F'\t' -v p="$1" '$1=="WORKLIST" && $2=="semantic-merge" && $3==p {f=1} END {exit !f}'; }
+y_stamp() { grep -qE '^version: 9\.9\.9$' "$1/cons/.claude/.ai-dlc-version" && printf STAMPED || printf WITHHELD; }
+y_two() { # y_two <world> -- m.sh and n.sh, both changed by theirs at T and by the consumer
+  printf 'a\nb\nc\n' > "$1/dist/core/scripts/m.sh"; printf 'a\nb\nc\n' > "$1/dist/core/scripts/n.sh"
+  y_commit "$1" B || return 1
+  printf 'a\nb\nc-T\n' > "$1/dist/core/scripts/m.sh"; printf 'a\nb\nc-T\n' > "$1/dist/core/scripts/n.sh"
+  y_commit "$1" T || return 1
+  printf 'a-C\nb\nc\n' > "$1/cons/scripts/ai-dlc/m.sh"; printf 'a-C\nb\nc\n' > "$1/cons/scripts/ai-dlc/n.sh"
+  y_stampat "$1"
+}
+y_drive() { # y_drive <rec> <m|p|s|d|x|l|n> -> that world's cell, or BROKEN
+  local rec="$1" w o fo M="a-C\nb\nc-T\n"
+  w="$(y_init)" && [ -d "$w/cons" ] || { printf BROKEN; return; }
+  case "$2" in
+    m)
+      printf '#!/bin/sh\necho base\n' > "$w/dist/core/scripts/x.sh"; chmod 644 "$w/dist/core/scripts/x.sh"
+      y_commit "$w" B || { printf BROKEN; return; }
+      chmod 755 "$w/dist/core/scripts/x.sh"; y_commit "$w" T || { printf BROKEN; return; }
+      [ -n "$(yg -C "$w/dist" diff --name-only "$(cat "$w/.B")" "$(cat "$w/.T")")" ] || { printf BROKEN; return; }
+      printf '#!/bin/sh\necho base\necho consumer-line\n' > "$w/cons/scripts/ai-dlc/x.sh"; chmod 644 "$w/cons/scripts/ai-dlc/x.sh"
+      y_stampat "$w"
+      y_run "$rec" "$w" T | y_sm scripts/x.sh || { printf BROKEN; return; }
+      chmod 755 "$w/cons/scripts/ai-dlc/x.sh"
+      y_run "$rec" "$w" T --finish >/dev/null; y_stamp "$w" ;;
+    p)
+      printf 'a\nb\nc\n' > "$w/dist/core/scripts/m.sh"; printf 'o\n' > "$w/dist/core/scripts/other.sh"
+      y_commit "$w" B || { printf BROKEN; return; }
+      printf 'a\nb\nc-T\n' > "$w/dist/core/scripts/m.sh"; y_commit "$w" T || { printf BROKEN; return; }
+      printf 'o-T2\n' > "$w/dist/core/scripts/other.sh"; y_commit "$w" T2 || { printf BROKEN; return; }
+      printf 'a-C\nb\nc\n' > "$w/cons/scripts/ai-dlc/m.sh"; printf 'o\n' > "$w/cons/scripts/ai-dlc/other.sh"
+      y_stampat "$w"
+      y_run "$rec" "$w" T | y_sm scripts/m.sh || { printf BROKEN; return; }
+      printf "$M" > "$w/cons/scripts/ai-dlc/m.sh"
+      y_run "$rec" "$w" T2 >/dev/null
+      y_run "$rec" "$w" T2 --finish >/dev/null; y_stamp "$w" ;;
+    s)
+      y_two "$w" || { printf BROKEN; return; }
+      printf 'a\nb\nc-T\nd-T2\n' > "$w/dist/core/scripts/m.sh"; y_commit "$w" T2 || { printf BROKEN; return; }
+      y_run "$rec" "$w" T | y_sm scripts/n.sh || { printf BROKEN; return; }
+      printf "$M" > "$w/cons/scripts/ai-dlc/m.sh"; printf "$M" > "$w/cons/scripts/ai-dlc/n.sh"
+      y_run "$rec" "$w" T2 >/dev/null
+      printf 'a-C\nb\nc-T\nd-T2\n' > "$w/cons/scripts/ai-dlc/m.sh"
+      y_run "$rec" "$w" T2 --finish >/dev/null; y_stamp "$w" ;;
+    d)
+      y_two "$w" || { printf BROKEN; return; }
+      y_run "$rec" "$w" T | y_sm scripts/m.sh || { printf BROKEN; return; }
+      # The previous engine's marker: `base:` and `theirs:` and nothing else.
+      printf 'base: %s\ntheirs: %s\n' "$(cat "$w/.B")" "$(cat "$w/.T")" > "$w/cons/.claude/.ai-dlc-applying" || { printf BROKEN; return; }
+      printf "$M" > "$w/cons/scripts/ai-dlc/m.sh"
+      y_run "$rec" "$w" T >/dev/null
+      fo="$(y_run "$rec" "$w" T --finish)"
+      printf '%s/%s' "$(y_stamp "$w")" "$(awk -F'\t' '$1=="NOTE" && $2=="finish-classify-unrecorded" {f=1} END {print (f ? "NOTE" : "-")}' <<<"$fo")" ;;
+    x)
+      printf 'a\nb\nc\n' > "$w/dist/core/scripts/m.sh"; printf 'gone\n' > "$w/dist/core/scripts/del.sh"
+      y_commit "$w" B || { printf BROKEN; return; }
+      printf 'a\nb\nc-T\n' > "$w/dist/core/scripts/m.sh"; yg -C "$w/dist" rm -q core/scripts/del.sh
+      y_commit "$w" T || { printf BROKEN; return; }
+      printf 'a-C\nb\nc\n' > "$w/cons/scripts/ai-dlc/m.sh"; printf 'gone\nconsumer-still-uses-this\n' > "$w/cons/scripts/ai-dlc/del.sh"
+      mkdir -p "$w/cons/.claude/fixtures/mine" && printf 'consumer-authored\n' > "$w/cons/.claude/fixtures/mine/run.sh"
+      y_stampat "$w"
+      o="$(y_run "$rec" "$w" T)"
+      y_sm scripts/del.sh <<<"$o" && y_sm fixtures/mine/run.sh <<<"$o" && y_sm scripts/m.sh <<<"$o" || { printf BROKEN; return; }
+      printf "$M" > "$w/cons/scripts/ai-dlc/m.sh"
+      fo="$(y_run "$rec" "$w" T --finish)"
+      printf '%s/%s' "$(y_stamp "$w")" "$(awk -F'\t' '$1=="WORKLIST" && $2=="finish-classify-unmerged" {n++} END {print n+0}' <<<"$fo")" ;;
+    l)
+      y_two "$w" || { printf BROKEN; return; }
+      y_run "$rec" "$w" T | y_sm scripts/m.sh || { printf BROKEN; return; }
+      grep -q '	scripts/ai-dlc/m\.sh$' "$w/cons/.claude/.ai-dlc-applying" || { printf BROKEN; return; }
+      awk '!/^classify: .*\tscripts\/ai-dlc\/m\.sh$/' "$w/cons/.claude/.ai-dlc-applying" > "$w/mk" \
+        && cat "$w/mk" > "$w/cons/.claude/.ai-dlc-applying" || { printf BROKEN; return; }
+      fo="$(y_run "$rec" "$w" T --finish)"
+      o="$(y_stamp "$w"):$(awk -F'\t' '$1=="WORKLIST" && $2=="finish-classify-unmerged" {printf "%s,", $3}' <<<"$fo"):$([ -f "$w/cons/.claude/.ai-dlc-applying" ] && echo kept || echo gone)"
+      printf "$M" > "$w/cons/scripts/ai-dlc/n.sh"
+      y_run "$rec" "$w" T --finish >/dev/null
+      printf '%s>%s:%s' "$o" "$(y_stamp "$w")" "$([ -e "$w/cons/.claude/.ai-dlc-applying" ] && echo kept || echo gone)" ;;
+    f)
+      y_two "$w" || { printf BROKEN; return; }
+      y_run "$rec" "$w" T | y_sm scripts/m.sh || { printf BROKEN; return; }
+      [ -f "$w/cons/.claude/.ai-dlc-applying" ] || { printf BROKEN; return; }
+      mv "$w/cons/.claude/.ai-dlc-applying" "$w/marker.saved" && mkdir "$w/cons/.claude/.ai-dlc-applying" || { printf BROKEN; return; }
+      fo="$(y_run "$rec" "$w" T --finish)"
+      printf '%s/%s' "$(y_stamp "$w")" "$(awk -F'\t' '$1=="WORKLIST" && $2=="finish-marker-directory" {f=1} END {print (f ? "ROW" : "-")}' <<<"$fo")" ;;
+    n)
+      y_two "$w" || { printf BROKEN; return; }
+      mkdir -p "$w/cons/.claude/.ai-dlc-applying" || { printf BROKEN; return; }
+      o="$(y_run "$rec" "$w" T)"
+      y_sm scripts/m.sh <<<"$o" || { printf BROKEN; return; }
+      printf '%s/%s' "$(awk -F'\t' '$1=="DECISION" && $2=="applying-marker-unwritten" {f=1} END {print (f ? "REFUSED" : "-")}' <<<"$o")" \
+        "$([ -z "$(ls -A "$w/cons/.claude/.ai-dlc-applying")" ] && echo empty || echo FILLED)" ;;
+  esac
+}
+y_score() { # y_score <reconcile-dir> [<case>...] -> "|"-joined cells, or BROKEN
+  local c g out=""
+  for c in ${2:-m p s d x l n f}; do
+    g="$(y_drive "$1" "$c")"
+    [ "$g" = BROKEN ] && { printf BROKEN; return; }
+    out="${out:+$out|}$g"
+  done
+  printf '%s' "$out"
+}
+Y_WANT='STAMPED|STAMPED|STAMPED|STAMPED/NOTE|STAMPED/0|WITHHELD:scripts/ai-dlc/n.sh,:kept>STAMPED:gone|REFUSED/empty|WITHHELD/ROW'
+Y_RUN=1
+if ! grep -qF '_unrec' "$APPLY"; then
+  case "$APPLY" in
+    */core/skills/ai-dlc-update/reconcile/apply.sh) printf '  --    (BL-413 arm y: this apply.sh records no mode, keys the record on theirs, or has no marker-directory refusal; in the distribution arm y runs anyway and must go red)\n' ;;
+    *) Y_RUN=0; printf '  SKIP  BL-413 arm y -- the installed apply.sh predates the mode/base-keyed CLASSIFY record; it lands with the pull that carries this fixture\n' ;;
+  esac
+fi
+if [ "$Y_RUN" = 1 ]; then
+  Y_GOT="$(y_score "$(dirname "$APPLY")")"
+  case "$Y_GOT" in
+    BROKEN)   bad "FIXTURE BROKEN [BL-413 arm y]: a world could not be seeded, or its ordinary run drew no semantic-merge row for its subject" ;;
+    "$Y_WANT") ok "BL-413 arm y: a chmod-only merge stamps; a re-pointed pull, a second same-base pull and the delivering pull keep the record and stamp after the merge; kept UPSTREAM-DELETED/ORPHANED copies do not withhold; the per-line exit withholds only the other file and keeps the marker; a directory at the marker's path is refused by the ordinary run and withholds --finish" ;;
+    *)        bad "BL-413 arm y: $Y_GOT (want $Y_WANT; cells: Ym|Yp|Ys|Yd|Yx|Yl|Yn|Yf)" ;;
+  esac
+  [ "$Y_GOT" = BROKEN ] || {
+    # Each mutant reverts ONE engine change and is scored on the worlds it must move plus Ym or Yl as
+    # the unmoved control. y-M2 restores base's reset exactly -- keyed on base AND theirs, and a marker
+    # with no `classify-hashes:` started fresh -- so it must move Yp, Ys and Yd; y-M3 drops only the
+    # unrecorded-stays-unrecorded half, and must move Yd alone.
+    if mut_copy "$WORK/y-M1" '    elif [ "$_now" = "$_h" ] && { [ -z "$_m" ] || [ "$_nm" = "$_m" ]; }; then' '    elif [ "$_now" = "$_h" ]; then'; then
+      g="$(y_score "$WORK/y-M1" 'm l')"
+      [ "$g" = 'WITHHELD|WITHHELD:scripts/ai-dlc/n.sh,:kept>STAMPED:gone' ] && ok "BL-413 y-M1 killed (mode ignored): the chmod-only merge withholds forever ($g)" \
+        || bad "BL-413 y-M1 SURVIVED or misfired: $g (want WITHHELD|WITHHELD:scripts/ai-dlc/n.sh,:kept>STAMPED:gone)"
+    else
+      bad "BL-413 y-M1 DID NOT APPLY -- the blob-and-mode test is not in apply.sh exactly once, or the copy does not parse"
+    fi
+    if mut_copy "$WORK/y-M2" \
+        '       && [ "$(git -C "$DIST" rev-parse -q --verify "${_ob}:core" 2>/dev/null)" = "$_bt" ]; then' \
+        '       && [ "$(git -C "$DIST" rev-parse -q --verify "${_ob}:core" 2>/dev/null)" = "$_bt" ] && grep -qx "theirs: ${THEIRS}" "$APPLYING"; then' \
+        '        *) _unrec=1 ;;' '        *) : ;;'; then
+      g="$(y_score "$WORK/y-M2" 'p s d m')"
+      [ "$g" = 'WITHHELD|WITHHELD|WITHHELD/-|STAMPED' ] && ok "BL-413 y-M2 killed (record reset on base AND theirs, as base shipped): the re-pointed, second and delivering pulls each adopt a merged copy and withhold ($g)" \
+        || bad "BL-413 y-M2 SURVIVED or misfired: $g (want WITHHELD|WITHHELD|WITHHELD/-|STAMPED)"
+    else
+      bad "BL-413 y-M2 DID NOT APPLY -- the base-keyed keep or the unrecorded arm is not in apply.sh exactly once, or the copy does not parse"
+    fi
+    if mut_copy "$WORK/y-M3" '        *) _unrec=1 ;;' '        *) : ;;'; then
+      g="$(y_score "$WORK/y-M3" 'd p')"
+      [ "$g" = 'WITHHELD/-|STAMPED' ] && ok "BL-413 y-M3 killed (a previous-engine marker re-recorded): the delivering pull records the merged copy and withholds ($g)" \
+        || bad "BL-413 y-M3 SURVIVED or misfired: $g (want WITHHELD/-|STAMPED)"
+    else
+      bad "BL-413 y-M3 DID NOT APPLY -- the unrecorded arm is not in apply.sh exactly once, or the copy does not parse"
+    fi
+    if mut_copy "$WORK/y-M4" '    case "$_b" in UPSTREAM-DELETED*|ORPHANED-UNKNOWN*) continue ;; esac' '    :'; then
+      g="$(y_score "$WORK/y-M4" 'x m')"
+      [ "$g" = 'WITHHELD/2|STAMPED' ] && ok "BL-413 y-M4 killed (keep-consumer buckets recorded): both kept copies withhold ($g)" \
+        || bad "BL-413 y-M4 SURVIVED or misfired: $g (want WITHHELD/2|STAMPED)"
+    else
+      bad "BL-413 y-M4 DID NOT APPLY -- the keep-consumer exclusion is not in apply.sh exactly once, or the copy does not parse"
+    fi
+    if mut_copy "$WORK/y-M5" '  if [ -d "$APPLYING" ]; then' '  if false; then'; then
+      g="$(y_score "$WORK/y-M5" 'n m')"
+      [ "$g" = '-/FILLED|STAMPED' ] && ok "BL-413 y-M5 killed (marker-directory refusal removed): mv -f files the marker INSIDE the directory and no row says so ($g)" \
+        || bad "BL-413 y-M5 SURVIVED or misfired: $g (want -/FILLED|STAMPED)"
+    else
+      bad "BL-413 y-M5 DID NOT APPLY -- the directory test is not in apply.sh exactly once, or the copy does not parse"
+    fi
+    if mut_copy "$WORK/y-M6" '  [ -d "$APPLYING" ] && { say WORKLIST finish-marker-directory' '  false && { say WORKLIST finish-marker-directory'; then
+      g="$(y_score "$WORK/y-M6" 'f n')"
+      [ "$g" = 'STAMPED/-|REFUSED/empty' ] && ok "BL-413 y-M6 killed (finisher's directory refusal removed): --finish stamps unchecked over the unmerged tree ($g)" \
+        || bad "BL-413 y-M6 SURVIVED or misfired: $g (want STAMPED/-|REFUSED/empty)"
+    else
+      bad "BL-413 y-M6 DID NOT APPLY -- the finisher's directory test is not in apply.sh exactly once, or the copy does not parse"
+    fi
+  }
+fi
+
 # --- arm u: A `--finish` WHOSE FINISH-CHECK INPUT CANNOT BE STAGED WITHHOLDS THE STAMP ---------------
 # finish_verify_tree read preclassify's rows from a heredoc. Under a file-size limit bash 3.2 cannot
 # write the heredoc's temp file and runs the loop on EMPTY stdin: no finish-unapplied row, and the
@@ -719,6 +1004,185 @@ if [ "$U_RUN" = 1 ]; then
       fi
     fi
   fi
+fi
+
+# --- BL-414 arm w: A BUCKET-ROW HAND-DOWN THAT CANNOT BE WRITTEN LEAKS NO PARTIAL ROW -------------
+# apply.sh wrote preclassify's rows to the unregistered-drift and retired-tokens hand-down files with
+# a builtin `printf … > file`. Under a file-size limit the write fails, its unflushed tail stays in
+# the shell's stdout buffer, and the next manifest row carries it: one line such as
+# `ddd…/f064<TAB>UPSTREAM-ONLY`. arm u's 100-file world makes the rows (~22 KB) exceed 14 and 20 KB.
+# A line is MALFORMED when it is non-empty and its first field is none of the four row kinds.
+# Cell per limit: "<malformed lines>|<hand-down staging-refused rows>|<stamp>"
+w_cell() { # w_cell <world> <apply.sh> <limit|none>
+  local w="$1" b t o
+  b="$(cat "$w/.B")"; t="$(cat "$w/.T")"
+  printf 'version: 0.0.1\ncommit: %s\n' "$b" > "$w/cons/.claude/.ai-dlc-version"
+  rm -f "$w/cons/.claude/.ai-dlc-applying"
+  local i=0 ld; ld="$(printf '%075d' 0 | tr 0 d)"
+  while [ "$i" -lt 100 ]; do printf 'v1 %s\n' "$i" > "$w/cons/.claude/session-driver/$ld/f$(printf %03d "$i")"; i=$((i+1)); done
+  if [ "$3" = none ]; then
+    o="$(bash "$2" "$w/dist" "$b" "$w/cons" "$t" 2>/dev/null)"
+  else
+    o="$(trap '' XFSZ; ulimit -f "$3"; bash "$2" "$w/dist" "$b" "$w/cons" "$t" 2>/dev/null)"
+  fi
+  printf '%s|%s|%s' \
+    "$(awk -F'\t' 'NF && $1!="RESOLVED" && $1!="WORKLIST" && $1!="DECISION" && $1!="NOTE" {n++} END {print n+0}' <<<"$o")" \
+    "$(awk -F'\t' '$2=="staging-refused" && index($4, "bucket rows handed to") {n++} END {print n+0}' <<<"$o")" \
+    "$(sed -n 's/^version: //p' "$w/cons/.claude/.ai-dlc-version")"
+}
+W_RUN=1
+if ! grep -qF 'ap_stage ud-bucket-rows' "$APPLY"; then
+  case "$APPLY" in
+    */core/skills/ai-dlc-update/reconcile/apply.sh) printf '  --    (BL-414: this apply.sh does not stage the bucket-row hand-downs; in the distribution arm w runs anyway and must go red)\n' ;;
+    *) W_RUN=0; printf '  SKIP  BL-414 arm w -- the installed apply.sh predates the staged hand-downs; it lands with the pull that carries this fixture\n' ;;
+  esac
+fi
+if [ "$W_RUN" = 1 ]; then
+  WW="$(u_world)"
+  if [ -z "$WW" ] || [ ! -d "$WW/cons" ]; then
+    bad "FIXTURE BROKEN [BL-414 arm w]: the many-files world could not be seeded"
+  else
+    W_CTL="$(w_cell "$WW" "$APPLY" none)"
+    if [ "$W_CTL" != '0|0|9.9.9' ]; then
+      bad "BL-414 arm w control: with no limit the ordinary apply read $W_CTL (want 0|0|9.9.9) -- the world does not apply cleanly, so the limited runs prove nothing"
+    else
+      ok "BL-414 arm w control: with no limit the ordinary apply prints no malformed line, refuses nothing and stamps 9.9.9"
+      for W_L in 14 20; do
+        w="$(w_cell "$WW" "$APPLY" "$W_L")"
+        case "$w" in
+          0\|2\|0.0.1) ok "BL-414 arm w (ulimit -f $W_L): no partial row leaks; both hand-downs refuse by name and the stamp is withheld ($w)" ;;
+          *) bad "BL-414 arm w (ulimit -f $W_L): $w (want 0|2|0.0.1) -- a hand-down that could not be written leaked a row into the manifest, or refused silently" ;;
+        esac
+      done
+      # One mutant per site: each restores that site's builtin redirect, the shape base shipped. Each
+      # must print a malformed line at BOTH limits -- the cells above are only evidence if base fails them.
+      for W_M in ud rt; do
+        if mut_copy "$WORK/w-M-$W_M" "${W_M}_pc_rc=0; ap_stage ${W_M}-bucket-rows \"\$PC\" || ${W_M}_pc_rc=\$?" \
+                                     "${W_M}_pc_rc=0; printf '%s\\n' \"\$PC\" > \"\$AP_TMP/${W_M}-bucket-rows\" || ${W_M}_pc_rc=\$?"; then
+          wm14="$(w_cell "$WW" "$WORK/w-M-$W_M/apply.sh" 14)"; wm20="$(w_cell "$WW" "$WORK/w-M-$W_M/apply.sh" 20)"
+          case "$wm14/$wm20" in
+            [1-9]*\|*\|0.0.1/[1-9]*\|*\|0.0.1) ok "BL-414 w-M-$W_M killed (builtin redirect restored at the $W_M hand-down): a partial row leaks at 14 and 20 ($wm14, $wm20)" ;;
+            *) bad "BL-414 w-M-$W_M SURVIVED or misfired: 14=$wm14 20=$wm20 (want a non-zero malformed count at both, stamp 0.0.1)" ;;
+          esac
+        else
+          bad "BL-414 w-M-$W_M DID NOT APPLY -- the $W_M hand-down stage is not in apply.sh exactly once, or the copy does not parse"
+        fi
+      done
+    fi
+  fi
+fi
+
+# --- BL-364 arm x: A NON-ASCII core/ PATH REACHES apply.sh's LISTING READERS RAW ---------------------
+# Under the default core.quotePath git lists `core/scripts/café.sh` as `"core/scripts/caf\303\251.sh"`,
+# and a reader that strips `core/`, maps the name or matches it against a consumer path loses the row
+# at rc 0. Each world holds `plain.sh` beside `café.sh`, so the ASCII row is the same-run control.
+#   XA  both 100755 upstream, unchanged in the range, consumer copies 0644 at scripts/ai-dlc/
+#       -> exec_audit `not-executable` (the `ls-tree -r` mode listing) and the declared-set
+#          `declared-not-executable` (manifest_dests' glob expansion, then a per-file mode lookup)
+#   XB  both at the PRE-0.126.0 path scripts/<x> only -> `relocate` places each at scripts/ai-dlc/
+#       (manifest_dests' glob expansion)
+#   XC  both changed in the range; one artifact per file records a `derived` command naming it
+#       -> artifact-derivations counts 2 (vd_join's moved-path needles); and, as GUARDS that quoting
+#       cannot move (base passes them too): the written copies are executable (sync_mode_from_theirs's
+#       mode lookup), and a tracked transient directory `café-state/` is counted (the ls-files count)
+# Cell: "<XA café N>|<XA café D>|<XA plain N+D>|<XB café>|<XB plain>|<XC hits>|<XC café +x>|<XC tracked>"
+x_world() { # x_world <A|B|C> -> path of a fresh world, refs in .B/.T
+  local _w _d _c _cf _f
+  _w="$(mktemp -d "$WORK/x.XXXXXX")" || return 1
+  _d="$_w/dist"; _c="$_w/cons"; _cf="$(printf 'caf\303\251')"
+  mkdir -p "$_d/core/scripts" "$_d/core/session-driver" "$_c/scripts/ai-dlc" "$_c/.claude/session-driver" || return 1
+  for _f in validate-synthetic plain "$_cf"; do
+    printf '#!/usr/bin/env bash\necho %s v1\n' "$_f" > "$_d/core/scripts/$_f.sh" && chmod 755 "$_d/core/scripts/$_f.sh" || return 1
+  done
+  printf '#!/usr/bin/env bash\n# driver v1\n' > "$_d/core/session-driver/d.sh"
+  printf '9.9.9\n' > "$_d/VERSION"
+  git -C "$_d" init -q && git -C "$_d" -c user.email=f@f -c user.name=fixture add -A \
+    && git -C "$_d" -c user.email=f@f -c user.name=fixture commit -qm base || return 1
+  git -C "$_d" rev-parse HEAD > "$_w/.B"
+  printf '#!/usr/bin/env bash\n# driver v2\n' > "$_d/core/session-driver/d.sh"
+  if [ "$1" = C ]; then
+    for _f in plain "$_cf"; do printf '#!/usr/bin/env bash\necho %s v2\n' "$_f" > "$_d/core/scripts/$_f.sh"; done
+  fi
+  git -C "$_d" -c user.email=f@f -c user.name=fixture add -A \
+    && git -C "$_d" -c user.email=f@f -c user.name=fixture commit -qm theirs || return 1
+  git -C "$_d" rev-parse HEAD > "$_w/.T"
+  printf '#!/usr/bin/env bash\n# driver v1\n' > "$_c/.claude/session-driver/d.sh"
+  git -C "$_d" show "$(cat "$_w/.B"):core/scripts/validate-synthetic.sh" > "$_c/scripts/ai-dlc/validate-synthetic.sh" || return 1
+  chmod 755 "$_c/scripts/ai-dlc/validate-synthetic.sh"
+  for _f in plain "$_cf"; do
+    case "$1" in
+      A|C) git -C "$_d" show "$(cat "$_w/.B"):core/scripts/$_f.sh" > "$_c/scripts/ai-dlc/$_f.sh" && chmod 644 "$_c/scripts/ai-dlc/$_f.sh" || return 1 ;;
+      B)   git -C "$_d" show "$(cat "$_w/.B"):core/scripts/$_f.sh" > "$_c/scripts/$_f.sh" || return 1 ;;
+    esac
+  done
+  if [ "$1" = C ]; then
+    mkdir -p "$_c/_bmad-output" "$_c/.claude/schemas" "$_c/$_cf-state" || return 1
+    for _f in plain "$_cf"; do
+      printf '# %s\n\n```derived\n$ bash scripts/ai-dlc/%s.sh\n```\n' "$_f" "$_f" > "$_c/_bmad-output/$_f.md" || return 1
+    done
+    printf '{"paths":[{"transient":true,"ignore":"%s-state/"}]}\n' "$_cf" > "$_c/.claude/schemas/pipeline-state-paths.json"
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$_c/scripts/ai-dlc/sync-transient-ignore.sh"
+    printf 'x\n' > "$_c/$_cf-state/x"
+    git -C "$_c" init -q && git -C "$_c" -c user.email=f@f -c user.name=fixture add -A \
+      && git -C "$_c" -c user.email=f@f -c user.name=fixture commit -qm consumer || return 1
+  fi
+  printf 'version: 0.0.1\ncommit: %s\n' "$(cat "$_w/.B")" > "$_c/.claude/.ai-dlc-version"
+  printf '%s' "$_w"
+}
+x_score() { # x_score <reconcile-dir> -> the cell above, or BROKEN
+  local rec="$1" w o cf c1 c2 c3 c4 c5 c6 c7 c8
+  cf="$(printf 'caf\303\251')"
+  w="$(x_world A)" && [ -d "$w/cons" ] || { printf 'BROKEN'; return; }
+  o="$(bash "$rec/apply.sh" "$w/dist" "$(cat "$w/.B")" "$w/cons" "$(cat "$w/.T")" 2>/dev/null)"
+  c1="$(awk -F'\t' -v p="scripts/ai-dlc/$cf.sh" '$1=="DECISION" && $2=="not-executable" && $3==p {f=1} END {print (f ? "N" : "-")}' <<<"$o")"
+  c2="$(awk -F'\t' -v p="scripts/ai-dlc/$cf.sh" '$1=="DECISION" && $2=="declared-not-executable" && $3==p {f=1} END {print (f ? "D" : "-")}' <<<"$o")"
+  c3="$(awk -F'\t' '$1=="DECISION" && ($2=="not-executable" || $2=="declared-not-executable") && $3=="scripts/ai-dlc/plain.sh" {n++} END {print n+0}' <<<"$o")"
+  w="$(x_world B)" && [ -d "$w/cons" ] || { printf 'BROKEN'; return; }
+  o="$(bash "$rec/apply.sh" "$w/dist" "$(cat "$w/.B")" "$w/cons" "$(cat "$w/.T")" 2>/dev/null)"
+  c4="$(awk -F'\t' -v p="scripts/ai-dlc/$cf.sh" '$1=="RESOLVED" && $2=="relocate" && $3==p {f=1} END {print (f ? "PLACED" : "-")}' <<<"$o")"
+  c5="$(awk -F'\t' '$1=="RESOLVED" && $2=="relocate" && $3=="scripts/ai-dlc/plain.sh" {f=1} END {print (f ? "PLACED" : "-")}' <<<"$o")"
+  w="$(x_world C)" && [ -d "$w/cons" ] || { printf 'BROKEN'; return; }
+  o="$(bash "$rec/apply.sh" "$w/dist" "$(cat "$w/.B")" "$w/cons" "$(cat "$w/.T")" 2>/dev/null)"
+  c6="$(awk -F'\t' '$2=="artifact-derivations" || $2=="artifact-derivations-unchecked" {split($4, a, " "); print a[1]; f=1; exit} END {if (!f) print "-"}' <<<"$o")"
+  c7="$([ -x "$w/cons/scripts/ai-dlc/$cf.sh" ] && grep -q "$cf v2" "$w/cons/scripts/ai-dlc/$cf.sh" && echo X || echo -)"
+  c8="$(awk -F'\t' -v p="$cf-state/(1)" '$1=="WORKLIST" && $2=="transient-ignore-tracked" && index($4, p) {f=1} END {print (f ? "T" : "-")}' <<<"$o")"
+  printf '%s|%s|%s|%s|%s|%s|%s|%s' "$c1" "$c2" "$c3" "$c4" "$c5" "$c6" "$c7" "$c8"
+}
+X_WANT='N|D|2|PLACED|PLACED|2|X|T'
+X_RUN=1
+if ! grep -qF -- '-c core.quotePath=false ls-tree -r "$THEIRS" -- core/' "$APPLY"; then
+  case "$APPLY" in
+    */core/skills/ai-dlc-update/reconcile/apply.sh) printf '  --    (BL-364: this apply.sh lists paths under the default core.quotePath; in the distribution arm x runs anyway and must go red)\n' ;;
+    *) X_RUN=0; printf '  SKIP  BL-364 arm x -- the installed apply.sh predates the quotePath listings; it lands with the pull that carries this fixture\n' ;;
+  esac
+fi
+if [ "$X_RUN" = 1 ] && ! command -v jq >/dev/null 2>&1; then
+  X_RUN=0; printf '  SKIP  BL-364 arm x -- jq is absent, so the transient-ignore guard cell cannot run (this is not a pass)\n'
+fi
+if [ "$X_RUN" = 1 ]; then
+  X_GOT="$(x_score "$(dirname "$APPLY")")"
+  case "$X_GOT" in
+    BROKEN)   bad "FIXTURE BROKEN [BL-364 arm x]: a world could not be seeded" ;;
+    "$X_WANT") ok "BL-364 arm x: café.sh is audited for its exec bit, declared, relocated and matched as a derivation needle under its raw name beside plain.sh; the mode lookups and the tracked count hold for it too" ;;
+    *)        bad "BL-364 arm x: $X_GOT (want $X_WANT; cells: XA-café-N|XA-café-D|XA-plain-N+D|XB-café|XB-plain|XC-hits|XC-café+x|XC-tracked)" ;;
+  esac
+  # One mutant per reader quoting can move, each restoring the default at that site alone. The guard
+  # cells (XC-café+x, XC-tracked) carry no mutant: their readers take the mode column or a line count,
+  # which a C-quoted name does not change, so a mutant there survives by construction.
+  [ "$X_GOT" = BROKEN ] || {
+    x_mut() { # <label> <anchor> <want>
+      if mut_copy "$WORK/x-$1" "$2" "${2/ -c core.quotePath=false/}"; then
+        g="$(x_score "$WORK/x-$1")"
+        [ "$g" = "$3" ] && ok "BL-364 x-$1 killed (default quotePath at that site): $g" \
+          || bad "BL-364 x-$1 SURVIVED or misfired: $g (want $3)"
+      else
+        bad "BL-364 x-$1 DID NOT APPLY -- its listing line is not in apply.sh exactly once, or the copy does not parse"
+      fi
+    }
+    x_mut exec-audit '_ne="$(git -C "$DIST" -c core.quotePath=false ls-tree -r "$THEIRS" -- core/' '-|D|2|PLACED|PLACED|2|X|T'
+    x_mut manifest   'git -C "$DIST" -c core.quotePath=false ls-tree --name-only "$THEIRS" -- core/scripts/' 'N|-|2|-|PLACED|2|X|T'
+    x_mut vd-moved   'VD_MOVED="$(git -C "$1" -c core.quotePath=false diff --name-only' 'N|D|2|PLACED|PLACED|1|X|T'
+  }
 fi
 
 # --- BL-360 arm s: A RELABEL TOOL THAT REFUSED IS A ROW, NOT "NOTHING TO RELABEL" -----------------

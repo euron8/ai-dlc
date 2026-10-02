@@ -1641,6 +1641,10 @@ prose is itself generated rather than composed.
      its rows, so its section is **NOT a finding of "none"**. The detail carries its exit and its
      own `REFUSED` line. Run the named script directly against this consumer, clear the cause
      that line names, and re-run the apply. Never dispose of it as "no drift".
+   - `DECISION staging-refused` — the apply could not write one of its own staging files (a full
+     or read-only `TMPDIR`, or a file-size limit), so the section that file feeds is **UNKNOWN,
+     not clean**, and no row it would have produced was emitted. The detail names the section and
+     the remedy that clears it. Under `--finish` the same row is a `WORKLIST` and withholds.
 
    Do NOT re-do a `RESOLVED` row by hand. Work only the `WORKLIST` and `DECISION` rows. **This is
    what makes the update end-to-end**: the operator runs it and it lands; you handle the semantic
@@ -1649,9 +1653,11 @@ prose is itself generated rather than composed.
    **IF THE MANIFEST CARRIES ANY `WORKLIST` OR `DECISION` ROW, THE RE-STAMP WAS WITHHELD AND THE
    PULL IS NOT OVER WHEN THE ROWS ARE.** You will see `DECISION restamp-withheld` in place of
    `RESOLVED restamp`, and `.claude/.ai-dlc-applying` is still on the consumer, blocking its
-   fixture suite on purpose. Dispose of every row, then run the finisher — the re-stamp bullet at
-   the end of this step has the command and the reason. A pull left un-finished leaves the
-   consumer at `<base>` with its own gate refusing to run.
+   fixture suite on purpose. Dispose of every row, then do what the `restamp-withheld` row says:
+   it names the finisher, or — when a row only a fresh ordinary run clears is outstanding — the
+   re-render / re-approve / re-run procedure instead, and in that case the finisher is NOT the next
+   step. The re-stamp bullet at the end of this step has both and the reason. A pull left
+   un-finished leaves the consumer at `<base>` with its own gate refusing to run.
 
    Do NOT hand the operator a list of blockers and ask them how to respond. A blocker
    list is a to-do list with extra steps: it makes them hand-merge prose, hand-author
@@ -2200,6 +2206,14 @@ prose is itself generated rather than composed.
      through to it if the first run had it; the withheld row prints the exact command,
      flag included.
 
+     **`restamp-withheld` has two forms, and one of them does NOT name `--finish`.** When an
+     outstanding row's remedy is a step only a fresh ordinary run performs — the known_skills
+     refile whose diff did not run, an exec-bit finding, a staging refusal after the writes — the
+     row says to re-render the report with `emit-report.sh`, re-approve it, and re-run apply with
+     the same four arguments, and that `--finish` is not the next step. Follow that: the finisher
+     re-checks those rows and withholds while they are undone, and a bare re-run is refused by the
+     union gate because this run already moved the tree the approved report describes.
+
      *Why a second invocation rather than a smarter first one.* The rows are work YOU
      complete after this program has exited, so there is no moment during the first run
      at which the stamp is true. And the finisher cannot simply re-run the phases: a file
@@ -2231,21 +2245,69 @@ prose is itself generated rather than composed.
         arguments, and every row still bucketed `UPSTREAM-ONLY`, `UPSTREAM-ONLY-ADD` or
         `…SETUP-TOKENS…` is a `WORKLIST finish-unapplied` row naming the file — missing,
         still at base, or lacking theirs' exec bit. Write theirs' copy and re-run `--finish`.
-        A file you merged by hand buckets `BOTH-CHANGED->CLASSIFY` and never counts, so a
-        semantic merge cannot wedge the finisher; a `.dist-only` fixture at `<theirs>` is
-        skipped. If `preclassify.sh` fails, or returns nothing while the range moves
-        `core/`, that is `WORKLIST finish-unverified-tree`, never a pass.
+        A file bucketed `…CLASSIFY` never counts HERE, so a merged file — which keeps a
+        consumer delta by definition — cannot wedge this check; a `.dist-only` fixture at
+        `<theirs>` is skipped. If `preclassify.sh` fails, or returns nothing while the range
+        moves `core/`, that is `WORKLIST finish-unverified-tree`, never a pass.
+     4. **No file handed back as a semantic merge is still untouched.** The ordinary run
+        records, in `.claude/.ai-dlc-applying`, the consumer blob AND exec bit of every file it
+        handed back under a `…CLASSIFY` bucket, as `classify: <blob> <755|644><TAB><path>`. A
+        recorded file whose blob and mode both still match is `WORKLIST finish-classify-unmerged`:
+        the merge was never done. Do it and re-run `--finish`. A file you merged by hand differs
+        from the record in its bytes or its mode (a merge that is only `chmod +x` counts), so it
+        does not hold the finisher up; one you deleted does not either. An unreadable record or
+        file is `WORKLIST finish-classify-unverified`.
+
+        The record is written once per BASE: a later ordinary run from the same `base:` — the
+        re-run a withheld row prescribes, a pull re-pointed at a newer `<theirs>`, a second pull
+        before finishing — keeps every line already there and adds only new paths, so a copy you
+        already merged never becomes the reference. `UPSTREAM-DELETED+consumer-modified` and
+        `ORPHANED-UNKNOWN` files are still handed back but are NOT recorded, because keeping the
+        consumer's copy is their normal disposition.
+
+        **If keeping a recorded copy as it is IS the disposition** — the merge is deliberately a
+        no-op, which is common for `BOTH-ADDED` — delete that file's own `classify: … <path>`
+        line from `.claude/.ai-dlc-applying` and re-run `--finish`. Every other check still runs,
+        and the marker keeps the fixture suite blocked until the stamp clears it. Removing the
+        whole marker (`rm .claude/.ai-dlc-applying`) is the LAST resort: it unblocks the fixture
+        suite on a tree that may still be mid-pull, and stamps with
+        `DECISION restamp-identity-unchecked`, forfeiting check 1 and this check for every other
+        handed-back file.
+
+        A marker written by an apply that predates the record carries no `classify-hashes:`
+        line, and a later run from the same base leaves it that way (the tree may already hold
+        your merges, so nothing read then is the copy the apply found). `--finish` then says so on
+        a `NOTE finish-classify-unrecorded` and does not withhold, so this check cannot fire on
+        the pull that delivers it. A path carrying a TAB or a `"` reaches the record C-quoted by
+        `preclassify.sh` and is not recorded either; confirm such a file's merge by hand.
+     5. **The two remedies only a fresh ordinary run performs are done.** A known_skills entry
+        the consumer added in place and never refiled is `WORKLIST finish-refile-owed`; a refile
+        check that could not run is `WORKLIST finish-refile-unverified`; a shipped file whose
+        exec bit disagrees with upstream is `WORKLIST finish-exec-owed`.
 
      A changed setup-sited file never byte-matches base or theirs, so it usually buckets
-     CLASSIFY; `--finish` names it on a `NOTE finish-unverified` row and does not withhold.
-     Confirm those by hand. Nothing here checks that a merge is CORRECT — only that no file
-     the ordinary run would have overwritten from theirs is still waiting for it.
+     CLASSIFY; `--finish` names it on a `NOTE finish-unverified` row and does not withhold,
+     and check 4 does not record it. Confirm those by hand. Nothing here checks that a merge is
+     CORRECT — only that no file the ordinary run would have overwritten from theirs is still
+     waiting for it, and that no handed-back file is still the copy the apply found.
 
      It also runs the hook-registration validator and withholds again on a
      `WORKLIST settings-merge` row, because by then the settings merge has happened and
      the answer is verifiable rather than attested. It does not gate on a `DECISION` row:
      those you have already adjudicated, or they are the tool saying it could not look,
      and gating on one that cannot clear would wedge the consumer with no exit.
+
+     **Every row `--finish` can emit that withholds the stamp**, derived from the `say WORKLIST`
+     sites outside `apply.sh`'s resolution phases, plus `staging-refused`, which
+     `ap_staging_refused` emits as a `WORKLIST` under `--finish`: `finish-marker-directory` (the marker's path is a directory), `finish-base-unverified`,
+     `finish-unverified-tree`, `finish-unapplied`, `finish-classify-unmerged`,
+     `finish-classify-unverified`, `finish-refile-owed`, `finish-refile-unverified`,
+     `finish-exec-owed`, `staging-refused`, `hook-unshipped`, `settings-merge`,
+     `settings-local-dangling`, `transient-ignore`, `transient-ignore-tracked`,
+     `agent-definitions`. Three `DECISION` rows stop it without stamping, because they write
+     nothing: `restamp-identity-mismatch`, `restamp-unresolvable` and `restamp-absent` (no stamp
+     file at all). `restamp-failed` and `skill-restamp-failed` also leave the stamp short of
+     `<theirs>`, but only after a write was attempted.
 
    - **YOU write `_bmad-output/ai-dlc-update/reconcile-log-<ts>.md`, and `apply.sh` does NOT.**
      Write it LAST, after the post-apply re-runs, because it records them. It carries the gates

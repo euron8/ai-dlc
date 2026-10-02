@@ -103,7 +103,9 @@ set -uo pipefail
 # still reading as a pure apply is a WORKLIST row and the stamp is withheld. Without that, it
 # stamped theirs over a tree where nothing had been applied. See finish_verify_tree(). It then
 # re-checks the two DECISION remedies only a fresh ordinary run performs -- the known_skills refile
-# and the exec-bit audit -- and withholds while either is still owed. See finish_reapply_owed().
+# and the exec-bit audit -- and withholds while either is still owed. See finish_reapply_owed(). And
+# it withholds while a file the ordinary run handed back as a semantic merge is still byte-identical
+# to the copy that run recorded in the marker. See finish_classify_unmerged().
 CARRIED_MACHINERY=0
 FINISH=0
 _pos_n=0
@@ -411,7 +413,7 @@ consumer_path() { # <core-stripped rel> -> absolute consumer path
 # adds a hook, which is precisely the case that is already broken.
 sync_mode_from_theirs() { # <core-rel> <consumer-path>
   local mode
-  mode="$(git -C "$DIST" ls-tree "$THEIRS" -- "core/$1" 2>/dev/null | awk '{print $1}')"
+  mode="$(git -C "$DIST" -c core.quotePath=false ls-tree "$THEIRS" -- "core/$1" 2>/dev/null | awk '{print $1}')"
   case "$mode" in
     100755) chmod +x "$2" 2>/dev/null || true ;;
     100644) chmod -x "$2" 2>/dev/null || true ;;
@@ -580,13 +582,135 @@ ap_staging_refused() {
 # staging-refused row plus a mechanical failure on the ordinary run. Returns 1 when the caller's
 # loop must not run: it would read a file that was never written. The row-rendering loops of
 # phase 3 use this; a loop that feeds the stamp decision states its own routing at its site.
+#
+# THE REMEDY IS THE ONE THAT CAN CLEAR THE ROW IN THIS MODE. These sites run AFTER the ordinary
+# run's writes, where a bare re-run is refused by the union gate (the approved report describes the
+# tree before this run moved it), so the ordinary run names `reapply_remedy` -- which `say` counts
+# into `reapply_owed`, and the withheld row then names that procedure rather than `--finish`. Under
+# `--finish` nothing was written and re-running it is the exit.
+ap_rerun_remedy="$reapply_remedy"
+[ "$FINISH" = 1 ] && ap_rerun_remedy="re-run --finish."
 ap_stage_or_refuse() {
   local _rc=0
   ap_stage "$1" "$2" || _rc=$?
   [ "$_rc" -ne 0 ] || return 0
-  ap_staging_refused "$3" "$4" "$_rc" "re-run this invocation."
+  ap_staging_refused "$3" "$4" "$_rc" "$ap_rerun_remedy"
   [ "$FINISH" = 1 ] || mech_fail=$((mech_fail+1))
   return 1
+}
+
+# --- THE IN-FLIGHT MARKER, AND THE CLASSIFY FILES IT RECORDS -----------------------------------
+#
+# A FILE HANDED BACK AS A SEMANTIC MERGE KEEPS A CONSUMER DELTA WHETHER OR NOT ANYONE MERGED IT, so
+# preclassify buckets it `*CLASSIFY*` on every later run and `--finish` cannot read "merged" off the
+# bucket. Measured in apply-drift-refile arm t's both-changed world: the ordinary run withheld on
+# `WORKLIST semantic-merge`, and `--finish` on the untouched tree raised no row and stamped theirs
+# with the merge never done. The tree carries no other trace of the merge, so the ordinary run
+# records one: per `*CLASSIFY*` row -- the apply loop's own pattern, so a bucket that loop hands back
+# is a bucket this records -- the consumer path's blob as it stood BEFORE any write. `--finish`
+# withholds while a recorded file is still byte-identical to that blob (finish_classify_unmerged).
+#
+# KEYED ON THE CONSUMER PATH, column 3 of preclassify's row, because that is the file the operator
+# edits. A SETUP-SITED path is excluded: setup fills its tokens, so it already gets `NOTE
+# finish-unverified` and never withholds, and this record must not start withholding it. A path that
+# is ABSENT on the consumer is not recorded: nothing can be byte-identical to it, and a deletion is a
+# disposition. An existing path whose blob cannot be read records `-`, which `--finish` withholds on.
+#
+# THE BLOB AND THE EXEC BIT, BOTH. A range can change only a file's mode: theirs adds +x to a script
+# the consumer edited, preclassify buckets it BOTH-CHANGED->CLASSIFY, and the whole merge is a
+# `chmod +x` that leaves the blob alone. A blob-only record read that finished merge as untouched and
+# withheld forever. The line is `classify: <blob> <755|644><TAB><path>`; a change in either is touched.
+#
+# NOT RECORDED WHERE THEIRS HAS NOTHING AT THE PATH TO MERGE IN: `UPSTREAM-DELETED+consumer-modified`
+# (theirs deleted it) and `ORPHANED-UNKNOWN` (no release ever shipped it). Keeping the consumer's copy
+# byte-for-byte is the NORMAL disposition for both, so a record would withhold on the ordinary
+# outcome and send every such pull through the no-op exit. They are still handed back as
+# `semantic-merge` and still listed there; only this check stands down for them.
+#
+# FIRST WRITE WINS, ACROSS EVERY RUN THAT STARTS FROM THE SAME BASE. The re-run that `reapply_remedy`
+# prescribes runs this again over a tree where the operator may already have merged; recording that
+# run's blob would make the merged copy the reference and the finisher would then withhold on the
+# merge itself. The blob being recorded is a fact about the tree the pull STARTED from, so it is keyed
+# on `base:` alone -- compared by `core/` tree -- and NOT on `theirs:`: a pull re-pointed at a newer
+# theirs after a merge, or a second pull from the same base, still started from the same tree. Only a
+# marker from another base is started fresh.
+#
+# A SAME-BASE MARKER WITH NO `classify-hashes:` LINE STAYS UNRECORDED. That is a marker an engine
+# without this record wrote -- on the pull that DELIVERS this engine, the first ordinary run is the old
+# one -- and the tree may already carry the operator's merges, so any blob read now could be a merged
+# copy. This run writes no hash lines and no `classify-hashes:` line, and `--finish` says so on a NOTE.
+#
+# `classify-hashes: <n>` IS OTHERWISE ALWAYS WRITTEN, zero included. Without it a marker from this
+# engine with no CLASSIFY row is byte-identical to one the previous engine wrote. The lines are SORTED
+# so a re-run over the same state writes the same bytes: `self-update-gate.sh` records this file's
+# digest and its runner compares it strictly, so a marker whose bytes moved without an apply having
+# run would read as one that had.
+#
+# A DIRECTORY AT THE MARKER'S PATH IS A REFUSAL. `mv -f` moves the new file INTO it and exits 0, so the
+# write reports success, nothing reads the record, and `core/git-hooks/pre-push` (which tests `-f`)
+# never blocks.
+#
+# WRITTEN THROUGH A PIPE AND RENAMED, NEVER A BUILTIN REDIRECT. A failed builtin `printf > file`
+# leaves its unflushed bytes in this shell's stdout and the next manifest row carries them (see
+# ap_stage). A marker that could not be written is a DECISION: the fixture suite would then run over
+# a mid-pull tree, and `--finish` would have no record to check the merges against.
+ap_write_marker() {
+  local _old="" _keep="" _rows="" _st _p _c _b _h _m _tab _n _ob _bt _tmp _rc=0 _sited _rest _l _unrec=0
+  _tab="$(printf '\t')"
+  if [ -d "$APPLYING" ]; then
+    say DECISION applying-marker-unwritten "${APPLYING#"$CONSUMER"/}" "the in-flight marker's path is a DIRECTORY, so the marker cannot be written there: the fixture suite will not block on this mid-pull tree (\`core/git-hooks/pre-push\` tests for a file) and \`--finish\` has no record of which handed-back merges were still untouched. Remove that directory, then re-run apply with the same four arguments."
+    return 0
+  fi
+  if [ -f "$APPLYING" ]; then
+    _old="$(cat "$APPLYING" 2>/dev/null)" || _old=""
+    _ob="$(printf '%s\n' "$_old" | sed -n 's/^base:[[:space:]]*//p' | head -1)"
+    _bt="$(git -C "$DIST" rev-parse -q --verify "${BASE}:core" 2>/dev/null)"
+    if [ -n "$_ob" ] && [ -n "$_bt" ] \
+       && [ "$(git -C "$DIST" rev-parse -q --verify "${_ob}:core" 2>/dev/null)" = "$_bt" ]; then
+      case "${NL_CH}${_old}" in
+        *"${NL_CH}classify-hashes: "*) _keep="$(printf '%s\n' "$_old" | awk '/^classify: /')" ;;
+        *) _unrec=1 ;;
+      esac
+    fi
+  fi
+  SETUP_SITED_PATHS=""
+  eval "$(awk '/^SETUP_SITED_PATHS=/,/sort -u\)"$/' "$SELF/preclassify.sh" 2>/dev/null)"
+  _sited="$SETUP_SITED_PATHS"
+  # Walked by parameter expansion over the rows already in memory: no heredoc or here-string whose
+  # staging could fail and read as "no CLASSIFY rows".
+  _rest="$PC"
+  while [ -n "$_rest" ]; do
+    _l="${_rest%%"$NL_CH"*}"
+    case "$_rest" in *"$NL_CH"*) _rest="${_rest#*"$NL_CH"}" ;; *) _rest="" ;; esac
+    _st="${_l%%"$_tab"*}"; _l="${_l#*"$_tab"}"
+    _p="${_l%%"$_tab"*}";  _l="${_l#*"$_tab"}"
+    _c="${_l%%"$_tab"*}";  _b="${_l#*"$_tab"}"
+    [ "$_unrec" = 0 ] || break
+    case "$_b" in *CLASSIFY*) ;; *) continue ;; esac
+    case "$_b" in UPSTREAM-DELETED*|ORPHANED-UNKNOWN*) continue ;; esac
+    [ -n "$_c" ] || continue
+    case "${NL_CH}${_sited}${NL_CH}" in *"${NL_CH}${_p}${NL_CH}"*) continue ;; esac
+    case "${NL_CH}${_keep}${NL_CH}" in *"${_tab}${_c}${NL_CH}"*) continue ;; esac
+    [ -e "$CONSUMER/$_c" ] || continue
+    _h="$(git hash-object "$CONSUMER/$_c" 2>/dev/null)" || _h=""
+    _m=644; [ -x "$CONSUMER/$_c" ] && _m=755
+    _rows="${_rows}classify: ${_h:--} ${_m}${_tab}${_c}${NL_CH}"
+  done
+  _rows="$(printf '%s\n%s' "$_keep" "$_rows" | awk 'NF' | sort -t "$_tab" -k2,2 -u)"
+  _n="$(printf '%s' "$_rows" | awk 'NF {n++} END {print n+0}')"
+  _tmp="$APPLYING.incoming.$$"
+  { printf 'base: %s\ntheirs: %s\n' "$BASE" "$THEIRS"
+    if [ "$_unrec" = 0 ]; then
+      printf 'classify-hashes: %s\n' "$_n"
+      [ -z "$_rows" ] || printf '%s\n' "$_rows"
+    fi
+  } | cat > "$_tmp" 2>/dev/null || _rc=$?
+  [ "$_rc" -eq 0 ] && { mv -f "$_tmp" "$APPLYING" 2>/dev/null || _rc=$?; }
+  if [ "$_rc" -ne 0 ]; then
+    rm -f "$_tmp" 2>/dev/null
+    say DECISION applying-marker-unwritten "${APPLYING#"$CONSUMER"/}" "the in-flight marker could not be written (exit ${_rc}), so the fixture suite will not block on this mid-pull tree and \`--finish\` has no record of which handed-back merges were still untouched. Check that .claude/ is writable and that no file-size limit is set, then re-run apply with the same four arguments."
+  fi
+  return 0
 }
 
 # --- THE EXEC-BIT AUDIT, ONE BODY FOR BOTH MODES -----------------------------------------------
@@ -604,17 +728,17 @@ ap_stage_or_refuse() {
 exec_audit() {
   local _ne _rc=0 mode _cp _rel cons _tab _dir
   _tab="$(printf '\t')"
-  _ne="$(git -C "$DIST" ls-tree -r "$THEIRS" -- core/ 2>/dev/null \
+  _ne="$(git -C "$DIST" -c core.quotePath=false ls-tree -r "$THEIRS" -- core/ 2>/dev/null \
     | awk '$1=="100755" || $1=="100644" { m = $1; sub(/^[^\t]*\t/, ""); print m "\t" $0 }')" || _rc=$?
   if [ "$_rc" -eq 0 ] && [ -z "$_ne" ]; then _rc=empty; fi
   if [ "$_rc" != 0 ]; then
-    ap_staging_refused "core/" "the mode listing of \`${THEIRS}:core/\` (git ls-tree)" "$_rc" "re-run this invocation."
+    ap_staging_refused "core/" "the mode listing of \`${THEIRS}:core/\` (git ls-tree)" "$_rc" "$ap_rerun_remedy"
     [ "$FINISH" = 1 ] || mech_fail=$((mech_fail+1))
     return 0
   fi
   _rc=0; ap_stage exec-audit "$_ne" || _rc=$?
   if [ "$_rc" -ne 0 ]; then
-    ap_staging_refused "core/" "the mode listing of \`${THEIRS}:core/\`" "$_rc" "re-run this invocation."
+    ap_staging_refused "core/" "the mode listing of \`${THEIRS}:core/\`" "$_rc" "$ap_rerun_remedy"
     [ "$FINISH" = 1 ] || mech_fail=$((mech_fail+1))
     return 0
   fi
@@ -774,15 +898,16 @@ if [ "$PC_RC" -ne 0 ]; then
   err "preclassify.sh exited ${PC_RC} without classifying, so which files this pull writes, merges or deletes is UNKNOWN. NOTHING HAS BEEN WRITTEN to core. Run reconcile/preclassify.sh $DIST $BASE $THEIRS $CONSUMER directly, fix what it reports, then re-run apply with the same four arguments."
 fi
 if [ -z "$PC" ]; then
-  PC_RNG="$(git -C "$DIST" diff --name-only "$BASE" "$THEIRS" -- core/ 2>/dev/null)" \
+  PC_RNG="$(git -C "$DIST" -c core.quotePath=false diff --name-only "$BASE" "$THEIRS" -- core/ 2>/dev/null)" \
     || err "preclassify.sh returned no rows and whether \`${BASE}..${THEIRS}\` changes \`core/\` could not be read. NOTHING HAS BEEN WRITTEN to core. Re-run apply with the same four arguments."
   [ -z "$PC_RNG" ] \
     || err "preclassify.sh returned no rows while \`${BASE}..${THEIRS}\` changes \`core/\`, which is not the same as nothing to apply. NOTHING HAS BEEN WRITTEN to core. Run reconcile/preclassify.sh $DIST $BASE $THEIRS $CONSUMER directly, fix what it reports, then re-run apply with the same four arguments."
 fi
 
-# The in-flight marker (see IN-FLIGHT MARKER above): ahead of every core write below.
-printf 'base: %s\ntheirs: %s\n' "$BASE" "$THEIRS" > "$APPLYING" 2>/dev/null || true
-
+# The in-flight marker (see IN-FLIGHT MARKER above): ahead of every core write below. It also
+# records the consumer blob of every file this run hands back as a semantic merge, so `--finish`
+# can tell a merged file from one nobody touched (see ap_write_marker / finish_classify_unmerged).
+ap_write_marker
 # THE BUCKETS ARE HANDED DOWN, NOT RE-DERIVED. `unregistered-drift.sh`'s CORE-MACHINERY-CARRIED
 # arm needs exactly the rows already in `$PC` -- same four arguments, same program -- and running
 # preclassify a second time costs ~1.1s on any pull where the scan reaches a file past its
@@ -795,11 +920,20 @@ printf 'base: %s\ntheirs: %s\n' "$BASE" "$THEIRS" > "$APPLYING" 2>/dev/null || t
 # AN EMPTY FILE IS NOT AN ACQUITTAL. The scan's own guard refuses to read "no buckets" as "nothing
 # diverged" while the range still moves core/, so a write that failed here leaves every carried
 # path at its HARD row rather than silently clearing it.
-UD_PC="$(mktemp "${TMPDIR:-/tmp}/apply-pc.XXXXXX" 2>/dev/null)" || UD_PC=""
+#
+# STAGED THROUGH ap_stage, NOT A BUILTIN REDIRECT. `printf … > "$UD_PC"` with its status unread
+# left the bytes a failed write could not flush in this shell's stdout, and the next manifest row
+# carried them: under `ulimit -f` 14 and 20 an ordinary apply printed a malformed row such as
+# `.sh<TAB>UPSTREAM-ONLY`. A failed stage is a refusal; the scan then derives its own rows.
+UD_PC=""
 UD_FLAG=""
-if [ -n "$UD_PC" ]; then
-  printf '%s\n' "$PC" > "$UD_PC"
+ud_pc_rc=0; ap_stage ud-bucket-rows "$PC" || ud_pc_rc=$?
+if [ "$ud_pc_rc" -eq 0 ]; then
+  UD_PC="$AP_TMP/ud-bucket-rows"
   UD_FLAG="--bucket-rows"
+else
+  ap_staging_refused "core/" "the preclassify bucket rows handed to unregistered-drift.sh" "$ud_pc_rc" "re-run apply with the same four arguments."
+  mech_fail=$((mech_fail+1))
 fi
 # THE DETECTOR'S STDOUT, STDERR AND EXIT ARE STAGED AND READ, NOT PIPED PAST. This was
 # `$(bash unregistered-drift.sh … 2>/dev/null | awk …)`: a detector that exited non-zero with
@@ -834,8 +968,7 @@ PC="$(printf '%s\n' "$PC" | awk -F'\t' '
 
 # `--bucket-rows` FOR retired-tokens.sh, THE SAME HAND-DOWN `unregistered-drift.sh` GETS ABOVE.
 # That detector ran `preclassify.sh "$DIST" "$BASE" "$THEIRS" "$CONSUMER"` itself -- byte-for-byte
-# `:486` -- once per CLASSIFY row of the loop below. `$UD_PC` is already unlinked at `:511`, so
-# this is its own file.
+# `:486` -- once per CLASSIFY row of the loop below. It gets its own staged file, beside `$UD_PC`'s.
 #
 # MATERIALISED AFTER THE FIXTURES-LAST REORDER, which is safe because the detector derives its
 # subject set through `sort -u`: the rows it receives are the same SET in a different order, and
@@ -845,9 +978,18 @@ PC="$(printf '%s\n' "$PC" | awk -F'\t' '
 # for a real derivation -- "no rows" and "no retired token" are the same stdout, and the
 # detector's refusal goes to stderr, which the call below discards. It falls back to deriving on
 # an empty file for exactly that reason.
-RT_PC="$(mktemp "${TMPDIR:-/tmp}/apply-rt.XXXXXX" 2>/dev/null)" || RT_PC=""
-if [ -n "$RT_PC" ]; then
-  printf '%s\n' "$PC" > "$RT_PC" || RT_PC=""
+#
+# STAGED THROUGH ap_stage FOR THE REASON THE `UD_PC` STAGE ABOVE GIVES. The redirect's status was
+# read here, but a failed builtin write still leaked its tail into the next manifest row. A failed
+# stage is a refusal row and a mechanical failure, not a quiet fall-back: the run already withholds
+# (ap_stage_dead makes the bucket stage below refuse too), so the row names the cause.
+RT_PC=""
+rt_pc_rc=0; ap_stage rt-bucket-rows "$PC" || rt_pc_rc=$?
+if [ "$rt_pc_rc" -eq 0 ]; then
+  RT_PC="$AP_TMP/rt-bucket-rows"
+else
+  ap_staging_refused "core/" "the preclassify bucket rows handed to retired-tokens.sh" "$rt_pc_rc" "re-run apply with the same four arguments."
+  mech_fail=$((mech_fail+1))
 fi
 
 # ---------------------------------------------------------------- 1. buckets (preclassify)
@@ -1052,7 +1194,7 @@ vd_join() {
   # Consumer-relative, because that is how an artifact writes a path. `map_consumer` is the one
   # mapper this program has (loaded from preclassify.sh above); a private table here is the
   # defect I17 exists to prevent.
-  VD_MOVED="$(git -C "$1" diff --name-only "$2" "$3" -- core/ 2>/dev/null \
+  VD_MOVED="$(git -C "$1" -c core.quotePath=false diff --name-only "$2" "$3" -- core/ 2>/dev/null \
     | while IFS= read -r _vp; do [ -n "$_vp" ] && map_consumer "$_vp"; done | sort -u | paste -sd'|' -)"
   VD_LISTED="$(find "$4" -type f -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
   case "${VD_LISTED:-0}" in ''|*[!0-9]*) VD_LISTED=0 ;; esac
@@ -1669,7 +1811,7 @@ manifest_dests() { # -> consumer-relative destinations declared under scripts/ai
       case "$decl" in
         # A glob entry names the directory; its members come from THEIRS' tree.
         scripts/ai-dlc/\*)
-          git -C "$DIST" ls-tree --name-only "$THEIRS" -- core/scripts/ 2>/dev/null \
+          git -C "$DIST" -c core.quotePath=false ls-tree --name-only "$THEIRS" -- core/scripts/ 2>/dev/null \
             | sed -n 's#^core/scripts/#scripts/ai-dlc/#p' ;;
         # A literal entry passes through, so a future single-file entry still works.
         *) printf '%s\n' "$decl" ;;
@@ -1769,7 +1911,7 @@ for dest in $(manifest_dests); do
     declared_bad=$((declared_bad+1))
     continue
   fi
-  want="$(git -C "$DIST" ls-tree "$THEIRS" -- "core/scripts/${base}" 2>/dev/null | awk '{print $1}')"
+  want="$(git -C "$DIST" -c core.quotePath=false ls-tree "$THEIRS" -- "core/scripts/${base}" 2>/dev/null | awk '{print $1}')"
   if [ "$want" = "100755" ] && [ ! -x "$target" ]; then
     say DECISION declared-not-executable "$dest" \
       "shipped 100755 upstream but not executable here — installed and inert. \`chmod +x\` it, then ${reapply_remedy}"
@@ -2021,6 +2163,10 @@ fi  # ---- end of the resolution phases; see the `--finish` guard that opens the
 # nothing; write_stamp() prints the rows. finish_verify_tree() reads the same answer, so the
 # comparison exists in one place and the tree check never runs against a ref the record disputes.
 finish_identity() {
+  # A DIRECTORY AT THE MARKER'S PATH is neither a marker nor its absence: every `-f` reader skips it,
+  # so without this the finisher stamps unchecked over an unmerged tree, says "fixture suite
+  # re-enabled", and its `rm -f` then fails on the directory. A WORKLIST row, because that withholds.
+  [ -d "$APPLYING" ] && { say WORKLIST finish-marker-directory "${APPLYING#"$CONSUMER"/}" "the in-flight marker's path is a DIRECTORY, so the record of which ref this tree was written from and which handed-back merges were untouched cannot be read, and the stamp is not advanced. Move that directory aside, restore the marker file if you have it (otherwise re-run apply with the same four arguments), then re-run --finish."; return 0; }
   if [ ! -f "$APPLYING" ]; then
     finish_id_note="no \`${APPLYING##*/}\` on the consumer, so the ref this tree was actually written from is not recorded anywhere and \`${THEIRS}\` could not be checked against it"
   else
@@ -2051,9 +2197,11 @@ finish_identity() {
 # a row counts only when its bucket is one phase 1 answers by overwriting from theirs -- the two
 # families its `case` spells. A pure-apply bucket after the apply means the consumer copy still
 # matches base, or is missing, or lacks theirs' exec bit: work the ordinary run would have done
-# mechanically. A CLASSIFY row never counts, so a file the operator merged by hand -- which keeps a
-# consumer delta by definition -- cannot wedge the finisher. Comparing each copy against theirs'
-# blob instead was built and refuted: it withholds every merged file forever.
+# mechanically. A CLASSIFY row never counts HERE, so a file the operator merged by hand -- which
+# keeps a consumer delta by definition -- cannot wedge the finisher. Comparing each copy against
+# theirs' blob instead was built and refuted: it withholds every merged file forever. Whether a
+# CLASSIFY file was merged AT ALL is finish_classify_unmerged()'s question, answered against the
+# blob the ordinary run recorded, never against theirs.
 #
 # EACH ROW IS A WORKLIST, WHICH IS WHAT `--finish` GATES ON, and it clears when the file is
 # written. No new counter: `say` counts it.
@@ -2135,6 +2283,59 @@ finish_verify_tree() {
         esac ;;
     esac
   done < "$AP_TMP/fv-rows"
+  return 0
+}
+
+# --- `--finish`: IS A HANDED-BACK SEMANTIC MERGE STILL UNTOUCHED? (BL-413) ----------------------
+#
+# finish_verify_tree() cannot see this, by design: a `*CLASSIFY*` file never counts there, because a
+# merged copy keeps a consumer delta and would withhold forever. The ordinary run therefore recorded
+# each such file's consumer blob in the marker before it wrote anything (ap_write_marker). A file
+# still byte-identical to that blob is a merge nobody did, and is a WORKLIST row -- what this mode
+# gates on -- that clears the moment the file changes. A file that is now ABSENT is not withheld: a
+# deletion is a disposition. A `-` record, or a blob that cannot be read now, withholds: unknown is
+# not merged.
+#
+# TOUCHED MEANS THE BLOB OR THE EXEC BIT MOVED. A range that changes only a file's mode is merged by a
+# `chmod`, which leaves the blob alone. A line with no mode field is compared on the blob alone.
+#
+# A DELIBERATE NO-OP MERGE HAS AN EXIT FOR THAT FILE ALONE, AND IT IS NAMED IN THE ROW: delete that
+# file's own `classify:` line from the marker and re-run `--finish`. The identity check and every
+# other file's check still run, and the marker -- which keeps the fixture suite blocked -- stays until
+# the stamp clears it. Removing the WHOLE marker also stamps, but it unblocks the fixture suite on a
+# tree that may still be mid-pull and forfeits both checks, so the row names it last.
+#
+# A MARKER WITH NO `classify-hashes:` LINE WAS WRITTEN BY AN ENGINE THAT RECORDED NOTHING, or by this
+# one over a same-base marker that engine wrote (see ap_write_marker). It gets a NOTE and the
+# behaviour that engine had: this check cannot fire on the pull that delivers it.
+finish_classify_unmerged() {
+  local _ml _l _h _m _c _now _nm _tab
+  [ -f "$APPLYING" ] || return 0
+  _tab="$(printf '\t')"
+  if ! grep -q '^classify-hashes: ' "$APPLYING" 2>/dev/null; then
+    say NOTE finish-classify-unrecorded "${APPLYING#"$CONSUMER"/}" "this marker records no \`classify-hashes:\` line -- it was written by an apply that predates the record -- so whether a file handed back as a semantic merge was ever merged cannot be checked here. Confirm each \`semantic-merge\` row of that run by hand."
+    return 0
+  fi
+  _ml="$(awk '/^classify: /' "$APPLYING" 2>/dev/null)" || {
+    say WORKLIST finish-classify-unverified "${APPLYING#"$CONSUMER"/}" "the marker's semantic-merge record could not be read, so whether a handed-back merge is still undone is UNKNOWN and the stamp is not advanced. Make the file readable, then re-run --finish."
+    return 0
+  }
+  while [ -n "$_ml" ]; do
+    _l="${_ml%%"$NL_CH"*}"
+    case "$_ml" in *"$NL_CH"*) _ml="${_ml#*"$NL_CH"}" ;; *) _ml="" ;; esac
+    _l="${_l#classify: }"
+    _h="${_l%%"$_tab"*}"; _c="${_l#*"$_tab"}"
+    [ -n "$_c" ] && [ "$_c" != "$_l" ] || continue
+    _m=""; case "$_h" in *" "*) _m="${_h#* }"; _h="${_h%% *}" ;; esac
+    [ -e "$CONSUMER/$_c" ] || continue
+    _now="$(git hash-object "$CONSUMER/$_c" 2>/dev/null)" || _now=""
+    _nm=644; [ -x "$CONSUMER/$_c" ] && _nm=755
+    if [ "$_h" = "-" ] || [ -z "$_now" ]; then
+      say WORKLIST finish-classify-unverified "$_c" "handed back as a semantic merge, and its blob could not be read $([ "$_h" = "-" ] && printf 'when the apply recorded it' || printf 'now'), so whether the merge was done is UNKNOWN and the stamp is not advanced. Make the file readable, then re-run --finish."
+    elif [ "$_now" = "$_h" ] && { [ -z "$_m" ] || [ "$_nm" = "$_m" ]; }; then
+      say WORKLIST finish-classify-unmerged "$_c" "handed back as a semantic merge and still byte-identical to the copy the apply found (${_h}${_m:+, mode ${_m}}), so the merge was never done and the stamp would claim \`${THEIRS}\` over it. Merge theirs' changes into it (the \`semantic-merge\` row's 3-way merge, mode included), then re-run --finish. IF KEEPING THIS COPY AS IT IS IS THE DISPOSITION -- the merge is deliberately a no-op -- delete this file's own line from .claude/.ai-dlc-applying (the \`classify: … ${_c}\` line) and re-run --finish: every other check still runs, and the marker stays until the stamp clears it. A later ordinary run records the file again. Removing the whole marker (\`rm .claude/.ai-dlc-applying\`) is the last resort: it unblocks the fixture suite on a tree that may still be mid-pull, and stamps with \`DECISION restamp-identity-unchecked\`, forfeiting the check that \`${THEIRS}\` is the ref this tree was written from and this check over every other handed-back file."
+    fi
+  done
   return 0
 }
 
@@ -2250,6 +2451,7 @@ finish_id_note=""
 if [ "$FINISH" = 1 ]; then
   finish_identity
   [ -z "$finish_id_mismatch" ] && finish_verify_tree
+  [ -z "$finish_id_mismatch" ] && finish_classify_unmerged
   [ -z "$finish_id_mismatch" ] && finish_reapply_owed
 fi
 if [ "$FINISH" = 1 ]; then outstanding="$worklist_n"; else outstanding="$handback"; fi
@@ -2529,7 +2731,7 @@ for c in cmds:
   [ "$hr_rc2" -eq 0 ] && { ap_stage hr-dangling "$hr_d_list" || hr_rc2=$?; }
   [ "$hr_rc2" -eq 0 ] && { ap_stage hr-names "${hr_names// /$NL_CH}" || hr_rc2=$?; }
   if [ "$hr_rc2" -ne 0 ]; then
-    ap_staging_refused ".claude/settings.json" "the hook-registration validator's name lists" "$hr_rc2" "re-run scripts/ai-dlc/validate-hook-registration.sh by hand, act on what it names, and re-run this invocation."
+    ap_staging_refused ".claude/settings.json" "the hook-registration validator's name lists" "$hr_rc2" "re-run scripts/ai-dlc/validate-hook-registration.sh by hand, act on what it names, and then ${ap_rerun_remedy}"
     return 0
   fi
   while IFS= read -r _hn; do
@@ -2729,7 +2931,7 @@ if [ -f "$TI_RENDERER" ]; then
     ap_stage_or_refuse ti-pats "$ti_pats" ".gitignore" "the transient path patterns of pipeline-state-paths.json" \
     && while IFS= read -r ti_p; do
       [ -n "$ti_p" ] || continue
-      ti_n="$(git -C "$CONSUMER" ls-files -- "$ti_p" "${ti_p%/}" 2>/dev/null | wc -l | tr -d ' ')"
+      ti_n="$(git -C "$CONSUMER" -c core.quotePath=false ls-files -- "$ti_p" "${ti_p%/}" 2>/dev/null | wc -l | tr -d ' ')"
       [ "${ti_n:-0}" -gt 0 ] && ti_tracked="$ti_tracked ${ti_p}(${ti_n})"
     done < "$AP_TMP/ti-pats"
     if [ -n "${ti_tracked// /}" ]; then

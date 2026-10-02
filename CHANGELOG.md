@@ -19,6 +19,40 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.698.0] - 2026-10-01
+
+Batch 181's sixth release: `apply.sh` with the update `SKILL.md` and the consumer pre-push hook's `applying_guard`
+text. Bootstrapping, so it ships alone; a consumer runs its installed copy, so this takes effect on the pull after
+the one that delivers it.
+
+### Backlog
+
+- `BL-413`: `apply.sh --finish` no longer stamps over a CLASSIFY file nobody merged. The ordinary run records, per
+  CLASSIFY row and keyed on the consumer path, that file's blob and mode in `.claude/.ai-dlc-applying`;
+  `--finish` raises `WORKLIST finish-classify-unmerged <path>` while a recorded file is still unchanged in both.
+  The record is written once per `base:` and kept across re-runs, so a hand merge followed by the re-run the
+  remedy prescribes still stamps; a chmod-only merge counts as a merge. Excluded from the record, because keeping
+  the consumer's copy is their normal disposition: setup-sited files (they keep `NOTE finish-unverified`),
+  `UPSTREAM-DELETED+consumer-modified` and `ORPHANED-UNKNOWN`. A path carrying a TAB or `"` reaches the marker
+  C-quoted and goes unrecorded, as before. A marker the previous engine wrote carries no record, so on the pull
+  that delivers this fix `--finish` gives `NOTE finish-classify-unrecorded` and today's behaviour; the withhold
+  first applies on the pull after.
+- A deliberate keep-the-consumer's-bytes resolution exits by deleting that file's own `classify:` line from the
+  marker, which keeps the identity check and every other file's check. `rm .claude/.ai-dlc-applying` is named
+  last, as the exit that also unblocks the fixture suite on a tree that may still be mid-pull. A directory at the
+  marker path is refused by the ordinary run and by `--finish` (`WORKLIST finish-marker-directory`).
+- `BL-414`: the two bucket-row hand-downs (`ud` and `rt`) write through `ap_stage`, so a failed write under a
+  file-size limit cannot leak a partial row into the manifest; the `rt` site's designed fallback becomes a
+  refusal, and the run already withholds there.
+- `BL-415`: `SKILL.md`'s `--finish` section lists every row that withholds the stamp, derived from the emitters
+  (15 WORKLIST names plus `staging-refused`, and the three DECISION rows that stop without writing), names
+  `DECISION staging-refused`, and both `restamp-withheld` forms. `ap_stage_or_refuse` names `${reapply_remedy}`
+  on the ordinary run and `--finish` under `--finish`.
+- `BL-364` (partial): seven `apply.sh` listing sites pass `-c core.quotePath=false`, with a `café.sh` cell and a
+  killed mutant at each reader whose output quoting changes.
+- `core/fixtures/apply-drift-refile`: arms v, w, x and y. `apply-drift-after-write` mutants re-anchored on the
+  same sites.
+
 ## [0.697.0] - 2026-10-01
 
 Batch 181's fifth release: `partition-document.sh` alone. It is under the update skill's machinery glob, so it
