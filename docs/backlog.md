@@ -450,9 +450,11 @@ is "## 4. Tier-3 (weak / verify / heavy de-graph — likely leave)", `:346-348` 
 leave' assumption HELD for all five — none absorbed. Verdicts + evidence recorded so the next
 reconciliation does not re-triage", and `:350-355` disposes of the mid-sprint scope re-check
 trigger (`PI-S241-2`) as **LEAVE**, overlapping core's existing per-commit scope verification.
-The remaining two are absorbed: `core/skills/ai-dlc/steps/implementation.md:86` is
-"**Worktree-explicit dev dispatch.**" and `:225` is "**Dev-brief bug-class checklist.**", with
-`:101`, `:113` and `:117` carrying the `git worktree add` base-ref and `git stash` ban verbatim.
+The remaining two are absorbed: `core/skills/ai-dlc/steps/_dispatch-protocol.md:18` is
+"**Worktree-explicit dev dispatch.**" and `:191` is "**Dev-brief bug-class checklist.**", with
+`:33`, `:47` and `:51` carrying the `git worktree add` base-ref and `git stash` ban verbatim;
+`implementation.md:110` only cites the checklist. (Re-measured at batch 186: the earlier
+`implementation.md:86`/`:225` citations predate the split into `_dispatch-protocol.md`.)
 Measured with a control in the same invocation: files under `core/` naming `done-pending-liveness`
 = **0**, `validate-story-status-consistency` = **0**, `Mid-Sprint Scope Re-Check` = **0**;
 `git worktree add` = **2**, `bug-class checklist` = **1**. **Nothing reads the record.** Across
@@ -480,8 +482,8 @@ CHANGELOG line that recorded the spec's own creation, which is precisely an anch
 fix quotes back. The control is `layer-drift` under the same subtree, which matches today, so a
 mistyped path fails loudly instead of reporting a green absence.
 
-Discharges the consumer entry `extensions/steps-domain/implementation-push.md` at pinned ledger
-line 259. That row is a withdrawal candidate on its own terms; this entry is the ai-dlc-side
+Discharges the consumer entry `extensions/steps-domain/implementation-push.md`, at ledger lines
+179-183 in the reference consumer at `0f1d74f5` (pinned at line 259 when filed). That row is a withdrawal candidate on its own terms; this entry is the ai-dlc-side
 mechanism whose absence let it survive.
 
 **Receipt replaced at batch 174: the old one closed on a comment.** Driven through
@@ -496,8 +498,40 @@ shipped under `core/` and read by a reconcile program that, in one run on a seed
 reports a block the record refuses as refused and a block it does not name as a push candidate.
 Swap this receipt for one driving that program when it exists.
 
+**The reverifier's unfalsifiable-predicate guard does not reach this row's receipt shape.** The
+consumer row's receipt (ledger line 183) is `verify: sh`, names both `$DIST` and `$THEIRS`, and
+exits 0 while `core/` lacks `done-pending-liveness` and `Mid-Sprint Scope Re-Check` — tokens
+upstream declined and will never ship, so it reports STILL-LIVE on every pull forever. In
+`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh` the three-ref unfalsifiable check runs
+for `theirs_has`/`theirs_lacks` (`:2461`), and the consumer-only partition of `sh` receipts gets
+its own unfalsifiable emit (`:2682`); an `sh` receipt naming `$THEIRS` or `$DIST` lands in bucket
+1 (`:2656-2664`) and is emitted STILL-LIVE with no reachability check at all. A refused
+proposal's receipt is exactly that shape, which is why this row could never close on its own.
+The remedy below routes around it — the all-refused state is now decided by the drain reader,
+not by the receipt — but the guard's gap for bucket-1 `sh` receipts stands.
 
-verify: manual -- no program drains push_candidate rows yet, so nothing can be driven; see above.
+**Remedy as shipped (batch 186).** `core/skills/ai-dlc-update/reconcile/push-drain.sh` splits
+every extension whose FRONTMATTER says `push_candidate: true` into `##`/`###` blocks and emits
+`PUSH-REFUSED` or `PUSH-CANDIDATE` per block, joined on a whitespace-collapsed sha1 of the block
+alone — not the path, heading or index, so a changed body under an old heading is a new
+candidate and a refused block that moves stays refused. The record is
+`reconcile/push-refusals.tsv`, read at `theirs` through `git show` and never from the installed
+copy or the working tree; it seeds five rows, the two absorbed blocks and the three declined
+ones, and cites no `docs/` path. Every fail-closed state exits 2. SKILL.md step 8 drains only
+`PUSH-CANDIDATE` rows, drains nothing on exit 2, and hand-annotates an entry whose every block
+is refused `CLOSED AS REJECTED`. Measured on the reference consumer at `0f1d74f5`, 14 candidate
+files: **5** `PUSH-REFUSED` (all five `implementation-push.md` blocks) and **23**
+`PUSH-CANDIDATE`, 28 rows, against a record of 5 rows.
+
+The receipt seeds a consumer and a committed record and drives the shipped reader: refused stays
+refused, an unnamed block and a changed body under the same heading in another file are
+candidates, `push_candidate: false` is ignored, exactly three rows; the same file with the same
+heading and a changed body is a candidate; a refused block moved to another index is still
+refused; an emptied working-tree record is still honoured at `theirs`; a missing ref and a
+malformed row exit 2. Scored at batch 186: fix 0, base 1, and 1 under each of a title-keyed,
+working-tree-reading, entry-keyed, path+heading and path+index mutant of the shipped reader.
+
+verify: sh grep -qF 'reconcile/push-drain.sh' core/skills/ai-dlc-update/SKILL.md || exit 1; R="$PWD/core/skills/ai-dlc-update/reconcile/push-drain.sh"; [ -f "$R" ] || exit 1; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; W="$(mktemp -d)" || exit 9; trap 'rm -rf "$W"' EXIT; T="$W/d/core/skills/ai-dlc-update/reconcile/push-refusals.tsv"; E="$W/c/.claude/skills/ai-dlc/extensions/steps-domain"; mkdir -p "${T%/*}" "$E" || exit 9; F='---\nid: %s\npush_candidate: %s\n---\n\n'; { printf -- "$F" x-push true; printf -- '## A refused\n\nalpha body one.\n\n## B unnamed\n\nbeta body two.\n'; } > "$E/x-push.md"; { printf -- "$F" y-push true; printf -- '## A refused\n\nalpha body CHANGED.\n'; } > "$E/y-push.md"; { printf -- "$F" z-off false; printf -- '## A refused\n\nalpha body one.\n'; } > "$E/z-off.md"; dA="$(bash "$R" --digest "$E/x-push.md" | awk -F'\t' '$3=="## A refused"{print $2}')"; [ "${#dA}" -eq 40 ] || exit 1; printf '%s\tx-push\tseeded refusal\n' "$dA" > "$T"; g() { git -C "$W/d" -c user.email=r@r -c user.name=r -c commit.gpgsign=false "$@"; }; git init -q "$W/d" && g add -A && g commit -qm s || exit 9; run() { o="$(cd / && bash "$R" "$W/d" "$1" "$W/c")"; }; has() { awk -F'\t' -v s="$1" -v e="$2" -v i="${3:-}" -v d="${4:-}" -v h="${5:-}" '$1==s && $2 ~ ("/" e "$") && (i=="" || $3==i) && (d=="" || $4==d) && (h=="" || $5==h) {f=1} END {exit !f}' <<<"$o"; }; run HEAD || exit 1; has PUSH-REFUSED x-push.md 1 "$dA" '## A refused' || exit 1; has PUSH-CANDIDATE x-push.md 2 '' '## B unnamed' || exit 1; has PUSH-CANDIDATE y-push.md 1 '' '## A refused' || exit 1; has PUSH-CANDIDATE '[^/]*' '' "$dA" '' && exit 1; has PUSH-CANDIDATE z-off.md && exit 1; has PUSH-REFUSED z-off.md && exit 1; [ "$(grep -c . <<<"$o")" -eq 3 ] || exit 1; { printf -- "$F" x-push true; printf -- '## A refused\n\nalpha body CHANGED in place.\n\n## B unnamed\n\nbeta body two.\n'; } > "$E/x-push.md"; run HEAD || exit 1; has PUSH-CANDIDATE x-push.md 1 '' '## A refused' || exit 1; has PUSH-REFUSED '[^/]*' && exit 1; { printf -- "$F" x-push true; printf -- '## C inserted\n\ngamma.\n\n## A refused\n\nalpha body one.\n\n## B unnamed\n\nbeta body two.\n'; } > "$E/x-push.md"; run HEAD || exit 1; has PUSH-REFUSED x-push.md 2 "$dA" '## A refused' || exit 1; has PUSH-CANDIDATE x-push.md 2 && exit 1; : > "$T"; run HEAD || exit 1; has PUSH-REFUSED x-push.md 2 "$dA" || exit 1; g checkout -q -- . || exit 9; bash "$R" "$W/d" refs/heads/no-such-ref "$W/c" >/dev/null 2>&1; [ $? -eq 2 ] || exit 1; printf 'not-a-digest\tx\tr\n' >> "$T"; g commit -qam m || exit 9; bash "$R" "$W/d" HEAD "$W/c" >/dev/null 2>&1; [ $? -eq 2 ] || exit 1; exit 0
 ## BL-071 — `ledger-rotate.sh`'s split-refusal can be silenced by a body line that mentions the annotation form
 
 **`ledger-rotate.sh`'s split-refusal can still be silenced by a body line that merely MENTIONS the

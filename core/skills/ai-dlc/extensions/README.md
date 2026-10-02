@@ -229,7 +229,11 @@ state of your tree, so a pull that changes nothing here still reports it.
   `EXTENSION-CHECK-NUMBER-COLLISION` [LC-N4] at pull time when an incoming release creates one.
 - **`push_candidate: true`** marks a generalizable improvement. `ai-dlc-update`
   drains flagged extensions as the push backlog (spec §8.1) — the pull tool
-  produces the push queue as a side effect.
+  produces the push queue as a side effect. The drain runs through
+  `reconcile/push-drain.sh`, block by block: a block upstream already declined
+  reads `PUSH-REFUSED` and is not re-proposed; only `PUSH-CANDIDATE` blocks
+  enter the push-candidate ledger. Changing a refused block's body makes it a
+  new candidate.
 - **Retire on absorption (Rule 27(b)).** When upstream lands your entry's content
   in core, DELETE the entry. `/ai-dlc-update` flags it as
   `EXTENSION-RETIRE-CANDIDATE` [LC-E6] (absorbed by this pull) or `EXTENSION-RESTATES-CORE`
