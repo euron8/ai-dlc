@@ -417,11 +417,15 @@ cat > "$LED" <<'LEDGER'
   matching on shape rather than on evidence.
   verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
 
-<!-- Each PC-S904..S906 and PC-S951..S959 entry that must read plain NAMED-UPSTREAM anchors its
-receipt on the file its OWN naming commit (or, for S954, its release span) touches. A naming set
-that reaches code and changes none of the entry's receipt paths reads NAMED-UPSTREAM-OFF-SUBJECT,
-so a receipt left on SKILL.md would move these rows to that kind. Every substring stays MARKER_A,
-which none of those files carries, so each STILL-LIVE verdict is unchanged. -->
+<!-- Each PC-S904..S906 and PC-S950..S959 entry anchors its receipt on a file its OWN naming commit
+(or, for S954, its release span) touches. A naming set that reaches code and changes none of the
+entry's receipt paths reads NAMED-UPSTREAM-OFF-SUBJECT, so a receipt left on SKILL.md moves the
+plain-kind rows to that kind -- and the docs-only and cited-only entries too, under every mutant
+that lifts them back to the plain kind (reach-off, filter-off, reach-unfiltered, cited-fail-open).
+Every substring stays MARKER_A, which none of those files carries, so each STILL-LIVE verdict is
+unchanged. The two PC-S953 entries keep SKILL.md: their row is the per-prefix AMBIGUOUS one, which
+the subject predicate does not read. -->
+
 
 - **PC-S904-ABSORBED-IN-THE-MIDDLE-COMMIT** — THREE commits name this id and the one that
   absorbed it is the MIDDLE. Its two ends are a docs handoff and a withdrawal, so the pair the
@@ -440,7 +444,7 @@ which none of those files carries, so each STILL-LIVE verdict is unchanged. -->
 
 - **PC-S950-DOCS-ONLY-NAMING** — named by ONE `docs(plan):` commit that changes nothing under
   `core/` or `templates/`. It must read NAMED-UPSTREAM-DOCS-ONLY and never NAMED-UPSTREAM.
-  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+  verify: theirs_lacks docs/s950-plan.md "MARKER_A"
 
 - **PC-S951-TEMPLATES-ONLY-NAMING** — named by ONE commit that changes only `templates/`, which a
   consumer installs. It must stay NAMED-UPSTREAM.
@@ -457,7 +461,7 @@ which none of those files carries, so each STILL-LIVE verdict is unchanged. -->
 
 - **PC-S955-FORM-ONLY-CITATION** — named ONLY on a `Not-discharged:` line of a core commit. It
   must read NAMED-UPSTREAM-CITED-ONLY.
-  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+  verify: theirs_lacks core/scripts/s955-other.sh "MARKER_A"
 
 - **PC-S956-BOTH-FORMS-CITATION** — named in a core commit's subject AND on its form line. It must
   stay NAMED-UPSTREAM.
@@ -469,11 +473,11 @@ which none of those files carries, so each STILL-LIVE verdict is unchanged. -->
 
 - **PC-S957-FORM-Y** — cited only on that commit's form line. It must read
   NAMED-UPSTREAM-CITED-ONLY.
-  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+  verify: theirs_lacks core/scripts/s957-subject.sh "MARKER_A"
 
 - **PC-S958-FORM-CORE-ORDINARY-DOCS** — cited on a core commit's form line and named ordinarily by
   a docs commit. It must read NAMED-UPSTREAM-DOCS-ONLY.
-  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+  verify: theirs_lacks core/scripts/s958-other.sh "MARKER_A"
 
 - **PC-S959-INLINE-FORM-CITATION** — the form appears mid-line, not at column 0. It must stay
   NAMED-UPSTREAM.
