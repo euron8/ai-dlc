@@ -17,7 +17,8 @@
 # THE ARMS, IN THE ORDER `judge` EVALUATES THEM, ALL OF THEM REQUIRED. Drop any one and the
 # gate passes vacuously.
 #
-#   A0  self-probe   the profiler counts a known-50 script as 50 and a fork-free one as 0
+#   A0  self-probe   the profiler counts a known-50 script as 50, a fork-free one as 0, and
+#                    an assignment probe as exactly its 3 near-misses
 #   A2  determinism  the reading was REPRODUCED; an unreproduced one is BROKEN, never a red
 #   A1  floor        a measurement at or below what a BROKEN subject measures, profiled live
 #   A5  wholeness    the traced run exited 0 and reached past the LAST arm header's line
@@ -37,6 +38,8 @@
 # and its own budget derived from the live reading, so no mutant can fail on another's arm.
 # m7 drives `stable_verdict` with a profiler that accepts `--stable` and ignores it. m8 and m9
 # drive `judge` at the COMMITTED budget: m8 inside A4's window, m9 one fork above the floor.
+# m10-m12 drive the profiler's own assignment probe with its classifier mutated three ways --
+# reverted, `+=` dropped, widened -- so the classifier fix cannot be undone without a red.
 #
 # WHERE THIS FIXTURE'S TIME GOES, because it became the suite's second-longest unit and the
 # obvious guess is wrong. Instrumented solo, 32.2s wall / 36.0 CPU-seconds: the `--stable`
@@ -215,11 +218,14 @@ if ! bash "$PROFILER" --probe-only > "$TMP/probe.out" 2>"$TMP/probe.err"; then
 fi
 P_POS="$(field "$TMP/probe.out" PROBEPOS)"
 P_NEG="$(field "$TMP/probe.out" PROBENEG)"
-if [ "$P_POS" != "50" ] || [ "$P_NEG" != "0" ]; then
-  note "FIXTURE BROKEN: self-probe returned PROBEPOS=$P_POS PROBENEG=$P_NEG; must be 50 and 0."
+# PROBEASG is the assignment probe: its assignment shapes score 0 and its three near-misses 1
+# each. It is a separate reading with its own expected count, so PROBEPOS still means 50.
+P_ASG="$(field "$TMP/probe.out" PROBEASG)"
+if [ "$P_POS" != "50" ] || [ "$P_NEG" != "0" ] || [ "$P_ASG" != "3" ]; then
+  note "FIXTURE BROKEN: self-probe returned PROBEPOS=$P_POS PROBENEG=$P_NEG PROBEASG=$P_ASG; must be 50, 0 and 3."
   exit 1
 fi
-note "ok    A0 self-probe   -- a known-50 script counts 50, a fork-free one counts 0"
+note "ok    A0 self-probe   -- a known-50 script counts 50, a fork-free one counts 0, the assignment probe counts only its 3 near-misses"
 
 # ==========================================================================================
 # THE FLOOR -- what a BROKEN subject reads under THIS profiler, measured before the corpus.
@@ -438,11 +444,56 @@ else
   note "SKIP  m7 -- the --stable sed matched nothing; no mutation occurred, so nothing was proven"; rc=1
 fi
 
+# m10-m12 -- THE ASSIGNMENT CLASSIFIER IS LOAD-BEARING, IN BOTH DIRECTIONS. Each is a copy of
+# the profiler with `is_assign` changed one way, run `--probe-only` from a root that carries a
+# VERSION, and each must be refused by the ASSIGNMENT probe and by nothing else -- a refusal from
+# the positive or negative probe would be a kill this arm did not earn.
+#   m10  the classifier before the fix: one regex, brackets holding no `]`, an `=` tail only
+#   m11  balanced brackets kept, the `+=` tail dropped
+#   m12  widened: anything after a bracket, then an `=` -- scores the near-miss `a[1]x=3` as
+#        an assignment, which is the direction a too-generous fix would take
+# The unmutated copy in the same root must PASS and print PROBEASG 3 first, so a root the
+# profiler cannot run from cannot score three kills.
+mkdir -p "$TMP/fake3/scripts"
+echo "0.0.0" > "$TMP/fake3/VERSION"
+cp "$PROFILER" "$TMP/fake3/scripts/fp-ctl.sh"
+# `--target` names a file that exists: the profiler refuses a missing target before any probe.
+if bash "$TMP/fake3/scripts/fp-ctl.sh" --target "$TMP/tiny.sh" --probe-only > "$TMP/asgctl.out" 2>"$TMP/asgctl.err" \
+   && [ "$(field "$TMP/asgctl.out" PROBEASG)" = "3" ]; then
+  ASG_LINE='  if (is_assign(cmd)) next'
+  if [ "$(grep -cxF -- "$ASG_LINE" "$PROFILER")" != "1" ] \
+     || [ "$(grep -cxF -- '  if (substr(w, i, 2) == "+=") return 1' "$PROFILER")" != "1" ]; then
+    note "FAIL  m10-m12 -- an anchor line is not unique in $PROFILER; no mutation can be trusted"; rc=1
+  else
+    asg_mut() { # asg_mut <name> <sed-expression>
+      local n="$1" f="$TMP/fake3/scripts/fp-$1.sh"
+      if ! sed "$2" "$PROFILER" > "$f" || cmp -s "$PROFILER" "$f"; then
+        note "SKIP  $n -- the sed did not apply; no mutation occurred, so nothing was proven"; rc=1; return
+      fi
+      if bash "$f" --target "$TMP/tiny.sh" --probe-only > "$TMP/$n.out" 2>"$TMP/$n.err"; then
+        note "FAIL  $n -- the mutated classifier passed the self-probe (PROBEASG=$(field "$TMP/$n.out" PROBEASG))"; rc=1
+      elif grep -q 'the assignment probe must score' "$TMP/$n.err" \
+           && ! grep -q 'positive probe\|fork-free probe' "$TMP/$n.err"; then
+        note "ok    $n -- killed by the assignment probe"
+      else
+        note "FAIL  $n -- the profiler refused, but not on the assignment probe:"
+        sed 's/^/      /' "$TMP/$n.err" | head -3; rc=1
+      fi
+    }
+    asg_mut "m10 asg-preBL417" 's|^  if (is_assign(cmd)) next$|  if (cmd ~ /^[A-Za-z_][A-Za-z0-9_]*(\\[[^]]*\\])?=/) next|'
+    asg_mut "m11 asg-no-plus"  '/^  if (substr(w, i, 2) == "+=") return 1$/d'
+    asg_mut "m12 asg-widened"  's|^  if (is_assign(cmd)) next$|  if (cmd ~ /^[A-Za-z_][A-Za-z0-9_]*(\\[.*)?=/) next|'
+  fi
+else
+  note "FAIL  m10-m12 -- the UNMUTATED profiler copy did not pass --probe-only with PROBEASG 3 from its sandbox root, so no mutant verdict means anything"
+  sed 's/^/      /' "$TMP/asgctl.err" | head -3; rc=1
+fi
+
 # THE MUTANT FLOOR. `rc` is 0 when every mutant that RAN was killed, which is also what it
 # reads when a refactor deletes the mutants -- two inert runs compare equal. The floor is the
 # count this file is known to carry; it rises with a new mutant and refuses a run that
 # silently lost one.
-EXPECTED_MUTANTS=10
+EXPECTED_MUTANTS=13
 if [ "$rc" -eq 0 ] && [ "$N_KILLED" -lt "$EXPECTED_MUTANTS" ]; then
   note "FAIL  validator-fork-budget -- only $N_KILLED of $EXPECTED_MUTANTS mutants were killed. A battery that lost a mutant reports the same green line as one that killed them all."
   rc=1

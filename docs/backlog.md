@@ -1234,13 +1234,15 @@ The receipt is manual because its subject is the harness's own transcript format
 
 verify: manual -- the failure did not reproduce solo or on a second gate, so there is no receipt to score; the claim is the lead's measurement and the cause is unestablished.
 
-## BL-417 — `fork-profile.sh` scores a `name[${#a[@]}]=` array append as a fork
+## BL-417 — `fork-profile.sh` scores a `name[${#a[@]}]=` array append, and any `+=`, as a fork
 
-**NOTE. Found at batch 181 by the R-Q builder and confirmed by its tip adversary.** `scripts/fork-profile.sh:115` classifies an xtrace line as an assignment only when its brackets hold no `]`, so `a[${#a[@]}]=x` is scored as an external command. Arm `I119` was written around it; one phantom remains in `scripts/validate-enforcement-map.sh` (`esv_paths[${#esv_paths[@]}]=`). The fix is to admit nested brackets in that classifier, with a probe line of each shape.
+**NOTE. Found at batch 181 by the R-Q builder and confirmed by its tip adversary.** `scripts/fork-profile.sh:115` classifies an xtrace line as an assignment only when its brackets hold no `]` and the `=` follows directly, so `a[${#a[@]}]=x` and every `+=` (`a+=(x)`, `s+=1`, `a[1]+=x`) are scored as external commands. Arm `I119` was written around the first shape. Two phantoms remain in `scripts/validate-enforcement-map.sh`, not one: `esv_paths[${#esv_paths[@]}]=` (25 forks) and `i82_corpus+=("$f")` (47 forks), 72 of a 3210 reading at `f6fdb3e5`. The fix is to admit a balanced subscript at any depth and a `+=` tail in that classifier, with a probe line of each shape.
 
 Discharges no consumer candidate.
 
-verify: manual -- a profiler classification; the measurement is the builder's and adversary's xtrace reading.
+**Held note (batch 182): fixed on b182-r2-bl417** — `is_assign` in the classifier admits a NAME, an optional bracket-balanced subscript, then `=` or `+=`; a subscript containing a space is the stated limit (0 instances in the default target). A separate assignment probe (`PROBEASG 3`, its own expected count; `PROBEPOS` stays 50) asserts the forked set is exactly its three near-misses. `--stable` in one worktree: base 3210 (spread 3209-3210), tip 3138 (spread 3137-3138); diffed by row, the only rows gone are the 26 at those two sites and none is new. `FORK_BUDGET` 3214 -> 3144. `validator-fork-budget` gains m10 (the old regex), m11 (`+=` dropped) and m12 (widened past the bracket), each killed by the assignment probe alone. Receipt scored under `bash -c 'set -uo pipefail; …'` from the repo root: tip 0, base 1, a brackets-only fix without `+=` (its own self-probe passing) 1.
+
+verify: sh P=scripts/fork-profile.sh; [ -f "$P" ] || exit 9; t=$(mktemp -d) || exit 9; printf '%s\n' 'a=(); b=(1 2); c=(z)' 'a[3]=x' 'a[${#a[@]}]=x' 'a[${b[${#c[@]}]}]=x' 'a[1]+=q' 's=1; s+=2' 'a+=(r)' '/usr/bin/true' > "$t/s.sh"; o=$(bash "$P" --target "$t/s.sh" --section total 2>/dev/null) || exit 9; n=$(awk '$1 == "TOTAL" { print $2 }' <<<"$o"); case "$n" in ''|*[!0-9]*) exit 9 ;; esac; [ "$n" -ge 1 ] || exit 9; [ "$n" -eq 1 ]
 
 ## BL-418 — `machinery_paths()` and `SETUP_SITED_PATHS` read a failed producer as an empty set at rc 0
 

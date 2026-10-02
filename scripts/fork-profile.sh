@@ -90,6 +90,21 @@ trap 'rm -rf "$WORK"' EXIT
 # `c="hello world"` traces as `c='hello world'` and whitespace-splitting makes `world'` the
 # second field. Counting token 1 blindly instead would score every assignment as a fork.
 #
+# WHAT COUNTS AS ASSIGNMENT-SHAPED is `is_assign` below: a NAME, optionally one subscript whose
+# brackets BALANCE at any depth, then `=` or `+=`. Both halves were once missing, and each cost
+# phantom forks on the real subject. A subscript class that refused any `]` inside the brackets
+# scored `a[${#a[@]}]=x` -- the idiomatic array append -- as an external command, once per
+# append; and an `=`-only tail scored every `a+=(x)` and `s+=1` the same way. Measured on
+# validate-enforcement-map.sh: 72 of 3210 forks were those two shapes, 47 from one `+=` append
+# loop and 25 from one `[${#a[@]}]` append loop. The assignment probe below carries one line of
+# each shape and a near-miss that must still count, so a regression in either half fails the
+# self-probe rather than inflating the budget.
+#
+# KNOWN LIMIT: A SUBSCRIPT CONTAINING A SPACE. xtrace prints the subscript as written and does
+# not quote it, so `a[$i + 1]=x` arrives as the word `a[$i` and is scored as a fork. Measured:
+# no line of the default target has that shape. A subject that adopts it will read high, never
+# low -- the error direction a budget ceiling can see.
+#
 # TOKEN 1 IS UNQUOTED FIRST. bash quotes any traced word containing a metacharacter, so the
 # `[` builtin appears as `'['` and would otherwise be scored as an external command -- once
 # per loop iteration. That single omission read as 81 forks on a probe built to produce 50.
@@ -99,6 +114,24 @@ trap 'rm -rf "$WORK"' EXIT
 # ---------------------------------------------------------------------------------------
 CLASSIFY_AWK='
 BEGIN { total = 0; ntrace = 0; maxline = 0 }
+# A NAME, then an optional subscript whose brackets balance, then = or +=. An unbalanced
+# subscript walks i past the end of the word, where both tail tests read the empty string.
+function is_assign(w,   n, i, d, c) {
+  if (!match(w, /^[A-Za-z_][A-Za-z0-9_]*/)) return 0
+  n = length(w)
+  i = RLENGTH + 1
+  if (substr(w, i, 1) == "[") {
+    for (d = 0; i <= n; i++) {
+      c = substr(w, i, 1)
+      if (c == "[") d++
+      else if (c == "]") { d--; if (d == 0) break }
+    }
+    i++
+  }
+  if (substr(w, i, 1) == "=") return 1
+  if (substr(w, i, 2) == "+=") return 1
+  return 0
+}
 NR == FNR { known[$1] = 1; next }
 {
   if ($1 !~ /^\++@[0-9]+@$/) next
@@ -112,7 +145,7 @@ NR == FNR { known[$1] = 1; next }
   cmd = $2
   sub(/^\$?\047/, "", cmd)
   sub(/\047$/, "", cmd)
-  if (cmd ~ /^[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?=/) next
+  if (is_assign(cmd)) next
   if (cmd in known) next
   # KEYED ON (line, command), NOT ON LINE. A pipeline`s stages are separate processes and
   # bash emits their trace lines in whatever order they start, so `grep ... | sort` on one
@@ -239,11 +272,50 @@ neg_n="$(meta_field "$WORK/probe/neg" 1)"
 neg_t="$(meta_field "$WORK/probe/neg" 2)"
 [ "${neg_t:-0}" -ge 8 ] || probe_fail "the fork-free probe traced only ${neg_t:-0} line(s); 0 forks out of no trace is not evidence of 0 forks."
 
-# BOTH PROBE READINGS ARE REPORTED FROM THE SAME INVOCATION that reports TOTAL, so a caller
+# ASSIGNMENT: every shape `is_assign` must admit scores 0, and three NEAR-MISSES that really
+# fork score exactly one each. It is a SEPARATE probe, not lines added to the positive one, so
+# PROBEPOS keeps meaning what it always meant and this reading carries its own expected count.
+#
+# THE NEAR-MISSES ARE REAL EXECUTABLES NAMED LIKE ASSIGNMENTS. `a[1]x` and `a[1]x=3` are
+# symlinks to /usr/bin/true on a probe-local PATH, so bash runs them as commands and traces
+# them as command words. `a[1]x=3` carries every property a too-wide classifier would key on --
+# a name, balanced brackets, an `=` -- and differs from an assignment only in what follows the
+# closing bracket. `grep` reads /dev/null, never stdin, so the probe cannot wait on a caller.
+#
+# THE SET IS ASSERTED, NOT ONLY THE COUNT. A classifier that dropped a near-miss AND scored one
+# assignment would still total 3; the forked commands must be exactly the three near-misses.
+mkdir -p "$WORK/probe/bin"
+ln -s /usr/bin/true "$WORK/probe/bin/a[1]x"
+ln -s /usr/bin/true "$WORK/probe/bin/a[1]x=3"
+{
+  echo 'PATH="'"$WORK/probe/bin"':$PATH"'
+  echo 'a=(); b=(1 2); c=(z)'
+  echo 'a[3]=x'
+  echo 'a[${#a[@]}]=x'
+  echo 'a[${b[${#c[@]}]}]=x'
+  echo 'a[1]+=q'
+  echo 's=1; s+=2'
+  echo 'a+=(r)'
+  echo 'grep -c x /dev/null >/dev/null'
+  echo 'a[1]x'
+  echo 'a[1]x=3'
+  echo '[[ -n "$s" ]]'
+} > "$WORK/probe/asg.sh"
+
+profile "$WORK/probe/asg.sh" "$WORK/probe/asg" || probe_fail "the assignment probe did not profile"
+asg_n="$(meta_field "$WORK/probe/asg" 1)"
+asg_t="$(meta_field "$WORK/probe/asg" 2)"
+asg_set="$(awk '{ print $3 }' "$WORK/probe/asg/by-line" | LC_ALL=C sort | tr '\n' ' ')"
+[ "${asg_t:-0}" -ge 14 ] || probe_fail "the assignment probe traced only ${asg_t:-0} line(s); a classifier scoring 0 assignments out of no trace has shown nothing."
+[ "$asg_n" = "3" ] && [ "$asg_set" = "a[1]x a[1]x=3 grep " ] \
+  || probe_fail "the assignment probe must score exactly its three near-misses (a[1]x, a[1]x=3, grep) and none of its assignments, got $asg_n fork(s): '$asg_set'. is_assign has stopped admitting a balanced nested subscript or a += tail, or has widened to a word that is not an assignment."
+
+# EVERY PROBE READING IS REPORTED FROM THE SAME INVOCATION that reports TOTAL, so a caller
 # cannot end up asserting a probe from one run against a corpus number from another.
 printf 'PROBEPOS %s\n' "$pos_n"
 printf 'PROBENEG %s\n' "$neg_n"
 printf 'PROBENEGTRACE %s\n' "$neg_t"
+printf 'PROBEASG %s\n' "$asg_n"
 if [ "$SECTION" = probe-only ]; then exit 0; fi
 
 # ---------------------------------------------------------------------------------------
