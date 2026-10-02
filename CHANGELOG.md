@@ -19,6 +19,45 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.709.0] - 2026-10-02
+
+Batch 185's first release. It discharges no consumer candidate: the opening sweep found none live and unshipped. It
+touches no bootstrapping file. Net closed minus filed is 0: no entry closes outright and `BL-430` is filed.
+
+### Stall predicate in core prose, and a fourth stop state the hooks mislabelled
+
+- `BL-128`: the census its body asked for is recorded. 57 validator scripts against 49 consumer layer bodies, joined
+  on numeric value: 51 lines, 2 genuine restatements, both agreeing with the validator. The case the entry was filed
+  on is not override drift: the override restated core's own STALL sentence, which v0.443.0 left stale in four core
+  sites. A numeric detector would match 49 false positives and miss that case, so none is built.
+- Those sites now state the validator's predicate by constant name, with no digit: `SKILL.md`, both hooks' comments
+  and deny messages, the validator's own arm-E comment, the `divergence-hard-block` header and I96's quoted
+  near-miss. Both hooks gain explicit `STALLED)` and `CEILING)` branches. CEILING, the validator's fourth exit-3
+  state, previously fell through to a message saying the cycle had STALLED, and its remedy now names `CUT_SCOPE` or
+  `REVERT_REPAIR`. A catch-all branch names the state it got. `divergence-hard-block` gains a `ceiling` seed driven
+  through both hooks, and a mutant that collapses CEILING into STALLED.
+
+### Failure records survive the next red run
+
+- `BL-412` (PARTIAL): both pre-push hooks keep a stamped copy of every red run's failure record,
+  `ai-dlc-fixture-failures.<UTC stamp>.<pid>`, beside the primary record, and prune to the newest 20. The prune
+  matches only a generated name: the stamp prefix AND an all-digit last field, so a copy saved by hand
+  (`.clean`, `.keep`) is never touched. Copying never changes the gate's exit. `consumer-suite-pool` gains arm 2c
+  and five mutants. The entry stays open, because the red it was filed on left no surviving record and remains
+  undiagnosed.
+
+### `validator-arm-selection` shard b overlaps two serial units
+
+- `BL-005`: the seeded validator run and the attribution sweep are dispatched together. Each pid is waited on
+  separately, and every guard reads its status in the parent. No wall-clock gain is claimed, because shard b is
+  not the pole.
+
+### Backlog figures
+
+- `BL-004` and `BL-230` now state each count beside the command and the set it was taken over. `BL-430` (NOTE)
+  is filed: the 12-way block of `docs/suite-pole-baseline.tsv` still names `ledger-reverify` at 628s, and that unit
+  has since been sharded.
+
 ## [0.708.0] - 2026-10-02
 
 Batch 184's second release: `preclassify.sh` in the update skill. Bootstrapping, so it ships as its own file set. A

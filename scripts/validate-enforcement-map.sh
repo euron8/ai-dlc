@@ -2983,10 +2983,10 @@ fi
 # until it was reworded to the validator's predicate -- "a blocking MAJOR count above
 # `MAJOR_EXIT_CEILING`, at no more than `CRITICAL_EXIT_CEILING` CRITICAL, not reduced across
 # more than `STALL_THRESHOLD` consecutive passes" -- which names the threshold and carries no
-# digit, so it no longer reaches `i96_cnt` at all. Of the other four quoted above, only
-# `gate-validation.md`'s "seed H1 passes means" is still in the tree; it, and any near-miss
-# of that shape, must stay silent -- if one ever fires, the grammar has been widened to a
-# single token.
+# digit, so it no longer reaches `i96_cnt` at all. Of the other four quoted above, two are
+# still in the tree, `gate-validation.md`'s "seed H1 passes means" and `remediator.md`'s
+# "Measured: 13 passes"; they, and any near-miss of that shape, must stay silent -- if one
+# ever fires, the grammar has been widened to a single token.
 #
 # WHAT IT DOES NOT CATCH, stated because an unstated limit is read as coverage: a bare
 # count in running prose that names no adversarial token on its own line. Widening to one

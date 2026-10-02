@@ -69,7 +69,8 @@ entry**: none of the recorded extra-world shapes came from these four sites, and
 used `<( )`. Citations moved: E1 is at `run.sh:2336` on 0.668.0 (not `:1129`), E8 `:2377`, `v_render`
 `:1718`, the RAW-lines arm `:2294`, each shifting further with this release. Non-comment
 `core/fixtures/*/run.sh` lines containing `<(` number 75 across 26 files (comment lines
-included, the same glob reads 93). They are not all live process substitutions: 34 of the 75
+included, the same glob reads 93; derived with `grep -n '<(' core/fixtures/*/run.sh`, dropping
+lines whose first non-blank character is `#`). They are not all live process substitutions: 34 of the 75
 sit in `procsub-staged-refusal` and `procsub-staged-refusal-boot`, 17 each, most of them as
 mutation strings that seed the defect. So a lint cannot ship yet, and it would need to tell
 those strings from real reads before it could.
@@ -379,7 +380,9 @@ verify: manual
 **What the figure counts, and over which set.** Per SOURCE FILE: eleven fixture `run.sh` files
 open their own pool — non-comment lines matching `xargs … -P` under `core/fixtures/*/*.sh`,
 excluding `consumer-suite-pool/run.sh:395`, which is a mutation string and not a pool — and
-their `-P` constants sum to 70 workers. That is the figure `.githooks/pre-push`'s pool-width
+their `-P` constants sum to 70 workers (derived with `grep -nE 'xargs.*-P' core/fixtures/*/*.sh`,
+dropping comment lines and that one mutation string, then summing each pool's width constant).
+That is the figure `.githooks/pre-push`'s pool-width
 comment cites. Per DISPATCHED DIRECTORY the set is larger: five shard directories
 (`enforcement-map-derivations-b`, `enforcement-map-sites-b`/`-c`,
 `layer-contract-conformance-b`, `validator-arm-selection-b`) re-enter four of those files, so
@@ -405,7 +408,7 @@ verify: manual
 ## BL-005 — `validator-arm-selection` shard `b` now overlaps its seeded run with the attribution sweep; the third-directory route stays untaken
 
 Shard `b` was a floor set by three serial units: a seeded run at 16s, an attribution sweep at
-11s, and a mutant's three parallel full runs at 18s (per-block serial costs, recorded in the
+11s, and a mutant's three parallel full runs at 18s (per-block serial costs taken solo, recorded in the
 timing table at the head of `core/fixtures/validator-arm-selection/run.sh`). Two routes below it
 were measured: a third directory duplicating the 27s prerequisite, or overlapping the seeded run
 with the attribution sweep.

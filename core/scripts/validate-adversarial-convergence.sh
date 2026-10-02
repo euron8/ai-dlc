@@ -157,9 +157,11 @@ STEER_SCRIPT="$(cd "$(dirname "$0")" && pwd)/validate-steering-budget.sh"
 #              resolution record for it exists. The VERIFICATION pass is permitted.
 #   DIVERGENT  the terminal pass stamps DIVERGENT_HARD_BLOCK, unresolved.
 #   STALLED    arm E fires, unresolved.
+#   REOPENED   arm J fires: a pass ran after EXIT_CONDITION_MET on different artifact bytes.
+#   CEILING    arm I fires: the resolution ceiling is spent on unanchored resolution kinds.
 #
 # exit 0  CONTINUE | CONVERGED | RESOLVED  -- another pass is permitted
-# exit 3  DIVERGENT | STALLED              -- another pass is NOT the remedy
+# exit 3  DIVERGENT | STALLED | REOPENED | CEILING  -- another pass is NOT the remedy
 # exit 1  no series, or the series is un-adjudicable (ordering/vocabulary broken)
 #
 # THE HOOKS HOLD NO LOGIC. They shell out, read the exit code, and deny on 3. They
