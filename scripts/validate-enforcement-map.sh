@@ -11961,7 +11961,7 @@ fi
 # joined to its predecessor, and a straddling match is reported at the line that completes it,
 # only when the predecessor alone did not match (so one occurrence is never reported twice).
 #
-# FALSE-POSITIVE SET MEASURED AT 0 over core/skills/**, core/team-roles and core/rules after
+# FALSE-POSITIVE SET MEASURED AT 0 over core/skills/**, core/team-roles, core/rules, core/hooks and the CLAUDE.md template after
 # the sites were repointed; the same scan read 9 before (rule-24, rule-28, rule-29,
 # implementation, _dispatch-protocol x2, _gate-procedures x3). THE NARROWING: "message" alone
 # is everywhere in this corpus (a hook's operator message, "one message each", the SAME
@@ -11980,10 +11980,20 @@ fi
 # in-corpus control is a token known present in the scanned corpus -- Rule 28's own
 # "Split dispatch" heading -- counted by the same pass, so a corpus the scan never opened
 # cannot read as a clean one, and the scanned-file count is held to a floor.
-i119_files=(); i119_k=0
+#
+# THE CORPUS ALSO TAKES THE TWO OTHER THINGS A LEAD IS HANDED AS INSTRUCTION: the consumer's
+# `templates/CLAUDE.md.template`, and `core/hooks/*.sh`, whose echo/heredoc text is injected
+# into the session. A hook is scanned WHOLE, comments and code included -- separating its
+# prompt text from its code would need a shell parser, and the measured false-positive set over
+# all 24 hooks and the template is 0 with the whole file scanned. Each class carries its own
+# listed-count floor (the template exactly 1, the hooks at least 10), because the in-corpus
+# control below counts a token only rule-28.md carries and so cannot see a class go missing.
+# Two probe cases are shaped like those classes -- a hook's `echo` line and a template bullet.
+i119_files=(); i119_k=0; i119_nhook=0; i119_ntmpl=0
 for i119_f in "$REPO_ROOT"/core/skills/*/*.md "$REPO_ROOT"/core/skills/*/*/*.md \
               "$REPO_ROOT"/core/skills/*/*/*/*.md "$REPO_ROOT"/core/team-roles/*.md \
-              "$REPO_ROOT"/core/rules/*.md; do
+              "$REPO_ROOT"/core/rules/*.md "$REPO_ROOT"/core/hooks/*.sh \
+              "$REPO_ROOT"/templates/CLAUDE.md.template; do
   # -s, not -f: awk opens an empty file without ever reaching FNR == 1, so an empty prompt
   # would be counted as listed-but-unscanned. It holds nothing to scan either way.
   # A NUMERIC index, not `[${#i119_files[@]}]`: fork-profile.sh reads an assignment by
@@ -11991,6 +12001,10 @@ for i119_f in "$REPO_ROOT"/core/skills/*/*.md "$REPO_ROOT"/core/skills/*/*/*.md 
   # an external command -- measured, 71 phantom forks, one per prompt, on validator-fork-budget.
   [ -s "$i119_f" ] || continue
   i119_files[$i119_k]="$i119_f"; i119_k=$((i119_k + 1))
+  case "$i119_f" in
+    */core/hooks/*.sh) i119_nhook=$((i119_nhook + 1)) ;;
+    */templates/CLAUDE.md.template) i119_ntmpl=$((i119_ntmpl + 1)) ;;
+  esac
 done
 i119_probe='#I119CASE fire-inline
 the lead dispatches one agent per part in ONE message, plus one
@@ -12001,6 +12015,10 @@ message, then join them all
 send the whole wave in **one** message and stop
 #I119CASE fire-single
 dispatch every analyst in a single message
+#I119CASE fire-hook
+  echo "Re-dispatch every undelivered teammate in ONE message, then beat-join them."
+#I119CASE fire-template
+- Fan review work out to one agent per story, all in one message.
 #I119CASE quiet-citation
 dispatch one shard per story in waves (Rule 28, "Split dispatch").
 #I119CASE quiet-beat
@@ -12014,7 +12032,9 @@ IN THE SAME response as any status recap. A response that contains
 #I119CASE quiet-within
 the operator correcting a misreading within one message of it'
 if [ "${#i119_files[@]}" -lt 20 ]; then
-  err "I119 found ${#i119_files[@]} prompt file(s) under core/skills, core/team-roles and core/rules; at least 20 are expected. The glob no longer reaches the shipped prompts, so a clean result here would describe an empty corpus."
+  err "I119 found ${#i119_files[@]} prompt file(s) under core/skills, core/team-roles, core/rules, core/hooks and templates; at least 20 are expected. The glob no longer reaches the shipped prompts, so a clean result here would describe an empty corpus."
+elif [ "$i119_ntmpl" -ne 1 ] || [ "$i119_nhook" -lt 10 ]; then
+  err "I119 listed ${i119_ntmpl} templates/CLAUDE.md.template (exactly 1 expected) and ${i119_nhook} core/hooks/*.sh (at least 10 expected). A class the glob no longer reaches is a class whose silence here means nothing."
 else
   i119_out="$(awk '
     function norm(s) { s = tolower(s); gsub(/[*_`]/, "", s); gsub(/[[:blank:]]+/, " ", s); return s }
@@ -12047,9 +12067,9 @@ else
   awk: ${i119_l}" ;;
     esac
   done <<<"$i119_out"
-  i119_want="fire-inline=1 fire-wrapped=1 fire-emphasis=1 fire-single=1 quiet-citation=0 quiet-beat=0 quiet-same=0 quiet-response=0 quiet-each=0 quiet-within=0 "
+  i119_want="fire-inline=1 fire-wrapped=1 fire-emphasis=1 fire-single=1 fire-hook=1 fire-template=1 quiet-citation=0 quiet-beat=0 quiet-same=0 quiet-response=0 quiet-each=0 quiet-within=0 "
   if [ "$i119_p" != "$i119_want" ]; then
-    err "I119 SELF-PROBE FAILED: the probe read '${i119_p}', expected exactly '${i119_want}'. Either a seeded whole-set imperative (inline, wrapped across a line break, emphasised, or 'a single') was not reported, or a near-miss (a Rule 28 waves citation, 'in ONE beat', 'in the SAME message', 'IN THE SAME response', 'one message each', 'within one message') was. Every verdict below is unattributable."
+    err "I119 SELF-PROBE FAILED: the probe read '${i119_p}', expected exactly '${i119_want}'. Either a seeded whole-set imperative (inline, wrapped across a line break, emphasised, 'a single', a hook echo line, or a template bullet) was not reported, or a near-miss (a Rule 28 waves citation, 'in ONE beat', 'in the SAME message', 'IN THE SAME response', 'one message each', 'within one message') was. Every verdict below is unattributable."
   elif [ "${i119_n:-0}" != "${#i119_files[@]}" ]; then
     err "I119 scanned ${i119_n:-0} file(s) of the ${#i119_files[@]} listed. A listed prompt the scan never opened reads exactly like a clean one.${i119_hits}"
   elif [ "${i119_c:-0}" -lt 1 ] 2>/dev/null || [ -z "$i119_c" ]; then
