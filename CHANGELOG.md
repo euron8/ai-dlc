@@ -19,6 +19,37 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.704.0] - 2026-10-02
+
+Batch 182's second release: `preclassify.sh`, `apply.sh`, `self-update-gate.sh` and `unregistered-drift.sh`.
+Bootstrapping machinery, so it ships as its own file set; a consumer runs its installed copy, so this takes effect
+on the pull after the one that delivers it. Discharges no consumer candidate.
+
+### Backlog
+
+- `BL-418`: `machinery_paths()` read each producer under `2>/dev/null` without its status, so one failed
+  `ls-files` gave a NARROWER set at rc 0. Forced on base with a `git` shim failing one listing: the self-update gate
+  read `SELF-UPDATE-OK` with a CARRY row dropped, `preclassify` emitted `BOTH-ADDED->CLASSIFY` at rc 0, and
+  `unregistered-drift` called a carried path `HARD-UNREGISTERED`. The function is now self-contained and returns 4
+  on any failed producer, including a missing `setup-sites.md`, and each caller refuses in its own form (gate
+  `SELF-UPDATE-UNDECIDED`; `apply.sh` `applying-marker-unwritten` / `finish-unverified-tree`; `pc_refuse`;
+  `ud_read_refuse`). A healthy empty set now returns 0 under `pipefail`, where the old tail returned 1.
+  `SETUP_SITED_PATHS` became `setup_sited_paths()` with the same discipline; a one-line compatibility assignment
+  keeps a pre-0.704.0 `apply.sh` extractor reading the sited set, and a new `apply.sh` beside an older
+  `preclassify.sh` refuses naming the version skew.
+- `BL-425`: `unregistered-drift.sh` derived its carry join inside `$( )` per HARD candidate, so `preclassify.sh` ran
+  once per row and every run left a `ud-carry.*` directory behind; 81996 were measured in one `$TMPDIR`. It is now
+  derived once in the main shell: on the reference consumer, six HARD candidates ran preclassify 6 times on base and
+  once on the fix, with byte-identical rows and no directory left. Directories already leaked are not removed.
+- `BL-422`: `absorbed_pct` reads the blobs `unregistered-drift.sh` has already staged, so a reconcile memo failure
+  refuses by name at staging and can no longer reach it as `CLASSIFIER DID NOT RUN`.
+- `BL-420`: the self-update fixtures and arm `I50` accept the hook-script class 0.694.0 widened; a comment that
+  became an `I50` false positive was respelled. The gate's rulebook loop reads a staged file line by line, so a
+  path holding a space is one path, and a failed rulebook `diff` reads UNDECIDED rather than "no change".
+
+On a scratch clone of the reference consumer, its installed engine and this one emit byte-identical rows over the
+range that delivers this release, with nothing refused.
+
 ## [0.703.0] - 2026-10-02
 
 Batch 182's first release: Check 24's K2 arm, the document partitioner's row split, and the fork profiler.
