@@ -128,12 +128,20 @@ COV_MIN=90
 # floor 0 -> ceiling 4 (so an honest 5 fails), ceil 1 -> ceiling 5. Rounding is wrong the same
 # way one step out: B=7 band=15 is 105, round 1 -> ceiling 8, ceil 2 -> ceiling 9.
 # ---------------------------------------------------------------------------------------
+#
+# THE ARITHMETIC LIVES ONCE, in `pole_ceiling_v`, which sets `_CEIL` rather than printing it, so
+# the probe's ten-odd `pole_verdict` calls fork no subshell. `pole_ceiling` prints the same value
+# for the one caller that reports it.
+pole_ceiling_v() { # <baseline-seconds> <band-percent> -> sets _CEIL
+  _CEIL="$(( $1 + ($1 * $2 + 99) / 100 ))"
+}
 pole_ceiling() { # <baseline-seconds> <band-percent> -> ceiling
-  printf '%s\n' "$(( $1 + ($1 * $2 + 99) / 100 ))"
+  pole_ceiling_v "$1" "$2"
+  printf '%s\n' "$_CEIL"
 }
 # 0 = within band (pass), 1 = grown past the ceiling.
 pole_verdict() { # <observed> <baseline> <band>
-  local c; c="$(pole_ceiling "$2" "$3")"
+  local c; pole_ceiling_v "$2" "$3"; c="$_CEIL"
   [ "$1" -gt "$c" ] && return 1
   return 0
 }
@@ -160,6 +168,11 @@ pole_verdict() { # <observed> <baseline> <band>
 # everybody's push edits. The suite is pole-bound; one row per width is the whole of it.
 # ---------------------------------------------------------------------------------------
 parse_baseline() { # <file>
+  # THE TAB IS A CONSTANT, NEVER A printf COMMAND SUBSTITUTION INSIDE THE LOOPS BELOW. Spelled
+  # that way it forked on every pattern test of every directive line, which made the parser
+  # the larger half of this program's cost; the suite-pole-guard fixture drives this program over
+  # a thousand times per run, so that fork was most of the fixture's wall clock (BL-426).
+  local tab=$'\t'
   local f="$1" band="" jobs="" fixtures="" n=0 line key val prev secs out="" seen=" "
   if [ ! -f "$f" ]; then
     printf '%s: REFUSE -- baseline not readable: %s\n' "$ME" "$f" >&2; return 2
@@ -183,7 +196,7 @@ parse_baseline() { # <file>
         while :; do
           case "$key" in
             ' '*)  key="${key# }" ;;
-            "$(printf '\t')"*) key="${key#"$(printf '\t')"}" ;;
+            "$tab"*) key="${key#"$tab"}" ;;
             *) break ;;
           esac
         done
@@ -200,14 +213,14 @@ parse_baseline() { # <file>
         while :; do
           case "$val" in
             ' '*)  val="${val# }" ;;
-            "$(printf '\t')"*) val="${val#"$(printf '\t')"}" ;;
+            "$tab"*) val="${val#"$tab"}" ;;
             *) break ;;
           esac
         done
         while :; do
           case "$val" in
             *' ')  val="${val% }" ;;
-            *"$(printf '\t')") val="${val%"$(printf '\t')"}" ;;
+            *"$tab") val="${val%"$tab"}" ;;
             *) break ;;
           esac
         done
