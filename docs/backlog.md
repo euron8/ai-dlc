@@ -600,6 +600,87 @@ second restatement — `mechanism-design.md` warns that a rule restating a mecha
 tighter than the mechanism. A detector keyed on "this override names a threshold" has an
 unmeasured false-positive set and must not ship before that set is enumerated.
 
+**Census (batch 185). Every figure below was taken over two named sets: the distribution's
+`core/scripts/*.sh` at `c18897d9` (57 tracked files; `git ls-files` and `/usr/bin/find` agree), and
+the reference consumer's layer at its `34f02449`, which means the 49 bodies `layer_files()` in
+`layer-drift.sh` would read (9 under `overrides/` and 40 under `extensions/`, README excluded, every
+body non-empty after `body_of`). These counts move with either tree, so re-derive them rather than
+quote them.**
+
+**THE MOTIVATING INSTANCE IS NOT OVERRIDE DRIFT. IT IS CORE PROSE THAT THE VALIDATOR LEFT BEHIND,
+INHERITED VERBATIM.** The override's sentence (`overrides/SKILL__Rule-8.md`, body lines 25-26: "A
+nonzero MAJOR held at zero CRITICAL across 2+ passes is a STALL") is byte-identical to live core
+`core/skills/ai-dlc/SKILL.md:261-262`. The same predicate appears in `core/hooks/ai-dlc-acknowledge.sh:337,479`
+and `core/hooks/ai-dlc-continue.sh:1012,1173`, and the consumer's installed copies of all three
+carry it too. `39f0cb0b` (v0.443.0) moved arm E to `blocking > MAJOR_EXIT_CEILING` and touched
+only the validator, `core/team-roles/adversary.md`, check-24 and docs, so all four core prose
+sites still state the old predicate. `OVERRIDE-OK` is therefore correct in the strongest sense,
+because the override matches current core. **DEFECT, not this entry's to fix: core `SKILL.md`
+Rule 8 and two hook messages state a STALL predicate the validator no longer implements.** It is
+filed here as a measured fact for the operator to schedule.
+
+**(1) The migrated side.** One grep finds upper-case `NAME=<int>` assignments in the 57 files whose
+name matches `CEIL|MAX|MIN|LIMIT|FLOOR|THRESH|BUDGET|CAP|BOUND|TOL|WINDOW|SLACK`. It returns 33
+rows, 29 distinct names and 13 files. That is a floor and it is impure. Seven rows are
+accumulators or flags initialised to 0 (`CEILING_LIVE`, `CEILING_COUNT`, `CITE_UNBOUNDED`,
+`RESOLVED_TERMINAL`, `TERMINAL`, `UNBOUNDED`, `GA_UNBOUNDED_CITES`), not limits. The name grammar
+cannot express a table, so `validate-artifact-budget.sh`'s six `name|bytes|remedy` rows (for
+example `pipeline-snapshot.md|6000|trim`) were added by hand. The 85 literal `-gt/-ge/-lt/-le N`
+comparisons with non-zero N, across 29 files, were counted but not joined. Control:
+`MAJOR_EXIT_CEILING=3` is present (1). An impossible name returns 0.
+
+**(2) The layer side.** A threshold-phrase grep (`≥ ≤ >= <=`, `at least/most N`, `N+`, `N%`,
+`nonzero`, `ceiling|threshold|budget`, and similar) over the 49 bodies returns 95 lines in 21
+files. The known line is present (Rule-8's "nonzero MAJOR", count 1). Only one layer body names
+a validator constant by its identifier: `TERMINAL`, which is an English word in a retro step
+heading and so a false positive. Basename references to `core/scripts/*.sh` give 43 (file, script)
+pairs over 19 files and 18 scripts. These are citations, not restatements of a value.
+
+**(3) The join, keyed on the numeric value.** Joining the integers on threshold-phrase lines
+against the validator value set gives 63 (line, value) hits on 51 lines. Grouped by (value,
+subject), only TWO are true restatements of an enforced value, and BOTH AGREE. The first is
+`extensions/steps-domain/retro-domain-close-out-sweep.md` citing `pipeline-snapshot.md|6000|trim`
+(6000 = 6000). The second is Rule-8's "2+ passes" against `STALL_THRESHOLD=2` (2 = 2). **The
+override's only number agrees with the validator. Its staleness lives in "nonzero MAJOR" against
+`blocking > MAJOR_EXIT_CEILING`, which carries no digit in the override, so a numeric detector
+scores the case this entry was filed on as CLEAN.** The FP set, by value:
+- **10.** The adversary's ten-findings floor (`bug-investigation-push.md`) lives only in
+  `adversary.md` prose. A grep for its enforcement returned 7 hits, all 7 `findings_minor` or
+  unrelated loop bounds, so the real count is 0. The other 10s (`DENSITY_MIN=10` in the stub audit,
+  `N≥10` harness reps, `≤~10-line` edits, `≤$10`) are unrelated subjects.
+- **3 and 2.** These are Rule 8's intensity story-count thresholds (`≥3`, `≤2`, "exceeds 2").
+  Enforcement in `core/scripts`+`core/hooks` is 0 (`carry-over-single` appears 0 times there and
+  13 times in `SKILL.md`+`steps/`), so these are prose rules with no validator.
+- **8.** A deploy cluster count, not `PART_CAP=8`.
+- **50.** A wire-byte reduction percentage and a proposal rate, not `MAX_SHARE_PCT=50`.
+- **6.** A section number, not `MAX_BEATS=6`.
+- **0, 1, 2 and 3 everywhere else.** These are ordinary prose (`≥1 test file`, `N≥2 fixture`,
+  exit codes).
+Small integers collide with everything, and that is the structural reason this key cannot work.
+**Verdict on the numeric key: constructible, with an FP set of 49 of 51 lines, and blind to its own
+motivating subject. Do not build it.**
+
+**A key that DOES reach the motivating instance: core files the override BODY cites, diffed
+`base_sha..theirs`.** No arm does this today. Line 1838 diffs only the SHADOWED file, and
+`OVERRIDE-DELEGATES-INTO-SHADOW` asks about reachability, not drift. `retired-layer-passage.sh`
+matches core lines DELETED base..theirs, and the stale sentence is still live in core, so it
+cannot fire. Measured with HEAD standing in for the pull's `theirs` (a real run would use the
+pull's ref): over the 9 overrides, backticked `*.md|*.sh|*.yaml` tokens that resolve to a core
+file give 7 citations in 3 overrides, and 6 of them changed since their `base_sha`. **3 of 9
+overrides would fire.** One is the known true positive: Rule-8 cites `team-roles/adversary.md`,
+which `39f0cb0b` edited. The other two (`check-5` citing `implementation.md`, and `domain-sections`
+citing `gate-validation.md`, `route.md` and `validate-artifact-budget.sh`) are unadjudicated:
+"changed since base" is a drift signal, not a staleness verdict. **The key reached Rule-8 only
+because `39f0cb0b` happened to co-edit `adversary.md`. A validator-only migration would have been
+invisible to it too, so it narrows the blind set without closing it.** Size, if scheduled: one
+report-only arm in `layer-drift.sh` (OVERRIDE-CITED-CORE-DRIFT, never blocking), reusing the
+existing `git diff --quiet base_sha THEIRS -- <path>` shape, plus a fixture seeding one cited file
+changed and one unchanged. Its FP set must be adjudicated on the two non-Rule-8 hits before it
+ships. **The direct fix for the measured defect is cheaper and lies on the distribution side:
+reword the four core prose sites to the arm-E predicate. The consumer then inherits it through the
+existing `HARD-OVERRIDE-DRIFT-SECTION` on its next pull, because the shadowed section will finally
+move.**
+
 verify: manual -- this entry records a gap, not a receipt. Do not close it on a green
 `layer-drift.sh` run; that green is the defect.
 
