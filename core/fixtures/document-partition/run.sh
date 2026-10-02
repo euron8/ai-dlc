@@ -17,7 +17,11 @@
 #   - an odd ``` inside a comment and a `<!--` inside a fence -- neither may open the other;
 #   - a dominant `##` section with no `### ` (SERIAL) beside its twin WITH `### ` (shards);
 #   - twelve equal atoms and no preamble, where the uncapped greedy pack yields twelve parts;
-#   - LF, CRLF and no-trailing-newline documents through split + assemble, compared by `cmp`.
+#   - LF, CRLF and no-trailing-newline documents through split + assemble, compared by `cmp`;
+#   - the row cut's separator rule, one world per guard so no two guards cover each other: a
+#     whole table inside a fence (the fence guard alone stands -- its separator is textually
+#     there), `|` prose with a separator above it but outside its run (the separator-in-run guard
+#     alone), separator rows at k (the k-1 boundary), and separator-led pairs (the three-row guard).
 #
 # THE MUTANTS AT THE END are copies of the partitioner, each scored against EVERY predicate and
 # the kill set compared for EQUALITY with the one arm that owns the property. An unmutated copy
@@ -133,11 +137,45 @@ doc_fence_table() { # the same table inside a ``` fence: no row is a boundary
   printf '## Decisions\n\n```markdown\n'; table r 15 12; printf '```\n\n'
   printf '## Small B\n'; body b 5
 }
-doc_two_row() { # a dominant section of header+separator pairs and prose: never three rows in a row
+sep() { # <cells> -> one GFM separator row of that many cells, the alignment colons included
+  local i=1
+  printf '|'
+  while [ "$i" -le "$1" ]; do printf ' :-----: |'; i=$((i + 1)); done
+  printf '\n'
+}
+doc_sep_outside_fence() { # header + separator OUTSIDE a ``` fence, the data rows inside it
+  printf '# Wide\n\n## Small A\n'; body a 5
+  printf '## Decisions\n\n| Id | Decision |\n|----|----------|\n```markdown\n'
+  local i=1; while [ "$i" -le 15 ]; do row "r$i" 12; i=$((i + 1)); done
+  printf '```\n\n## Small B\n'; body b 5
+}
+doc_two_row() { # a dominant section of separator+row pairs and prose: never three rows in a row
+  # Each pair OPENS with its separator, so the row after it has the separator at k-1 and only
+  # the three-row condition refuses the cut there (a header-led pair has prose at k, and a
+  # separator-less pair is refused by the separator rule, so neither reaches that condition).
   local i=1
   printf '# Pairs\n\n## Small A\n'; body a 5
   printf '## Pairs\n'
-  while [ "$i" -le 8 ]; do row "h$i" 6; row "s$i" 6; body "p$i" 3; i=$((i + 1)); done
+  while [ "$i" -le 8 ]; do sep 6; row "s$i" 6; body "p$i" 3; i=$((i + 1)); done
+  printf '## Small B\n'; body b 5
+}
+doc_prose_run() { # a dominant section whose `|`-led lines are PROSE: no separator in their run
+  # A header+separator pair with no data row sits above it, so a separator seen EARLIER in the
+  # section but outside the run is present -- a run that does not reset on a non-row line cuts.
+  local i=1
+  printf '# Prose\n\n## Small A\n'; body a 5
+  printf '## Notes\n\n'; row hd 3; sep 3; printf '\nThe quoted log follows.\n\n'
+  while [ "$i" -le 15 ]; do row "log$i" 6; i=$((i + 1)); done
+  printf '\n## Small B\n'; body b 5
+}
+doc_sep_at_k() { # a `|` line above the header: rows at k-2, k-1, k with the SEPARATOR at k
+  # Lead text sized so the part ending before the table is the largest atom: the next part then
+  # opens exactly at the first cut, which is the first data row (separator line + 1), and opens
+  # at the separator itself when the cut is allowed there.
+  printf '# Sep\n\n## Small A\n'; body a 5
+  printf '## Decisions\n'; body lead 20
+  row note 2; row hdr 24; sep 24
+  row r1 24; row r2 24; row r3 24; row r4 24; row r5 24; row r6 24
   printf '## Small B\n'; body b 5
 }
 doc_one_wide_row() { # a table split at rows whose one row is itself over the cap
@@ -214,10 +252,31 @@ p_fence_table() { # the same table inside a fence: no row is a boundary, so it s
   m="$(bash "$1" --map "$w/d.md" 2>/dev/null)"; rc=$?
   [ "$rc" -eq 3 ] && [ "${m#SERIAL: largest part is }" != "$m" ] && [ "${m%, no-boundary)}" != "$m" ]
 }
+p_sep_outside_fence() { # separator outside the fence, rows inside: the fence line ends the run, no cut
+  local w m rc; w="$(world)"; doc_sep_outside_fence > "$w/d.md"
+  m="$(bash "$1" --map "$w/d.md" 2>/dev/null)"; rc=$?
+  [ "$rc" -eq 3 ] && [ "${m#SERIAL: largest part is }" != "$m" ] && [ "${m%, no-boundary)}" != "$m" ]
+}
 p_two_row() { # never three table rows in a row: no cut, SERIAL no-boundary
   local w m rc; w="$(world)"; doc_two_row > "$w/d.md"
   m="$(bash "$1" --map "$w/d.md" 2>/dev/null)"; rc=$?
   [ "$rc" -eq 3 ] && [ "${m#SERIAL: largest part is }" != "$m" ] && [ "${m%, no-boundary)}" != "$m" ]
+}
+p_prose_run() { # fifteen `|`-led prose lines with no separator in their run: no cut, SERIAL no-boundary
+  local w m rc n; w="$(world)"; doc_prose_run > "$w/d.md"
+  # Control: the run really is 15 `|` lines, and the section really carries a separator above it.
+  n="$(grep -c '^| log' "$w/d.md")" || n=0
+  [ "$n" -eq 15 ] && has "$w/d.md" "| :-----: |" || return 1
+  m="$(bash "$1" --map "$w/d.md" 2>/dev/null)"; rc=$?
+  [ "$rc" -eq 3 ] && [ "${m#SERIAL: largest part is }" != "$m" ] && [ "${m%, no-boundary)}" != "$m" ]
+}
+p_sep_at_k() { # the header and separator stay together: no part opens at the separator, one opens after it
+  local w s firsts; w="$(world)"; doc_sep_at_k > "$w/d.md"
+  s="$(grep -n '^| :-----: |' "$w/d.md" | cut -d: -f1)"
+  [ -n "$s" ] && [ "$(sed -n "$((s - 1))p;$((s - 2))p" "$w/d.md" | grep -c '^|')" -eq 2 ] || return 1
+  bash "$1" --map "$w/d.md" > "$w/m" 2>/dev/null || return 1
+  firsts="|$(cut -f2 "$w/m" | tr '\n' '|')"
+  [ "${firsts#*|$s|}" = "$firsts" ] && [ "${firsts#*|$((s + 1))|}" != "$firsts" ]
 }
 p_single_line() { # one row over the cap: cut around it, and still SERIAL `single-line` naming that line
   local w m rc; w="$(world)"; doc_one_wide_row > "$w/d.md"
@@ -351,7 +410,7 @@ p_no_overwrite() { # a second split over a live sections/ is refused
   [ "$rc" -eq 2 ] && has "$w/e" "already exists"
 }
 
-P_ALL="fence longfence comment cfence serial_dominant wide_table fence_table two_row single_line fm_crlf_table serial_one roundtrip crlf_map cap manifest sha_moved missing newline refused_intact removed unchanged expect_sha relative no_overwrite"
+P_ALL="fence longfence comment cfence serial_dominant wide_table fence_table sep_outside_fence two_row prose_run sep_at_k single_line fm_crlf_table serial_one roundtrip crlf_map cap manifest sha_moved missing newline refused_intact removed unchanged expect_sha relative no_overwrite"
 
 arm() { # <predicate> <label>
   if "p_$1" "$PD"; then ok "$2"; else bad "$2"; fi
@@ -363,7 +422,10 @@ arm cfence           "A19: an odd \`\`\` inside a comment opens no fence, and a 
 arm serial_dominant  "A2: a dominant ## section with no ### and no table -> exit 3 'SERIAL: largest part is', naming lines 9-69 and 'no-boundary'; its ### twin shards"
 arm wide_table       "A20: a dominant ## led by a wide table, no ### -> cut at table rows into 2+ parts under one heading; split + assemble byte-identical"
 arm fence_table      "A21: the same table inside a \`\`\` fence -> no row is a boundary; SERIAL 'no-boundary'"
-arm two_row          "A22: never three table rows in a row -> no cut; SERIAL 'no-boundary'"
+arm sep_outside_fence "A25: header + separator outside a \`\`\` fence, rows inside it -> the fence line ends the run; SERIAL 'no-boundary'"
+arm two_row          "A22: never three table rows in a row (each pair opens with its separator) -> no cut; SERIAL 'no-boundary'"
+arm prose_run        "A26: fifteen \`|\`-led prose lines with no separator in their run (one sits above it, outside) -> no cut; SERIAL 'no-boundary'"
+arm sep_at_k         "A27: rows at k-2, k-1, k with the separator at k -> no part opens at the separator; one opens on the row after it"
 arm single_line      "A23: one table row over the cap -> SERIAL naming 'lines 15-15' and 'single-line'"
 arm fm_crlf_table    "A24: front matter + CRLF + no trailing newline, row-split -> split + assemble byte-identical"
 arm serial_one       "A3: one ## section -> exit 3 'SERIAL: one part', and --split creates nothing"
@@ -462,13 +524,21 @@ mutant "MX6 the section files not removed after assembly" "removed" \
   'for o in $ORDS; do rm -f "$DIR/sections/$o.md"; done' ':'
 mutant "MX11 a table row inside a fence counts as a cut point" "fence_table" \
   '      if (n >= length(fence)) fence = ""' '      if (n >= length(fence)) fence = ""; else if ($0 ~ /^\|/) TR[NR] = 1'
-mutant "MX12 a cut before every table row (the three-row condition dropped)" "two_row" \
-  'if (TR[k] && TR[k - 1] && TR[k - 2])' 'if (TR[k])'
-mutant "MX13 the row split removed" "wide_table single_line fm_crlf_table" \
+mutant "MX12 the three-row condition dropped (a cut right after a run-opening separator)" "two_row" \
+  'if (TR[k] && TR[k - 1] && TR[k - 2] && RUNSEP[k - 1])' 'if (TR[k] && RUNSEP[k - 1])'
+mutant "MX16 the separator requirement removed (any three \`|\` lines cut)" "prose_run sep_at_k" \
+  'if (TR[k] && TR[k - 1] && TR[k - 2] && RUNSEP[k - 1])' 'if (TR[k] && TR[k - 1] && TR[k - 2])'
+mutant "MX17 the separator may be line k itself (the k-1 boundary off by one)" "sep_at_k" \
+  'TR[k - 2] && RUNSEP[k - 1])' 'TR[k - 2] && RUNSEP[k])'
+mutant "MX18 a separator run that does not reset on a non-row line" "prose_run" \
+  'RUNSEP[k] = (TR[k] ? (RUNSEP[k - 1] || SEP[k]) : 0)' 'RUNSEP[k] = (RUNSEP[k - 1] || SEP[k])'
+mutant "MX19 the trailing CR not stripped before the separator match" "fm_crlf_table" \
+  'r = $0; sub(/\r$/, "", r); SEP[NR]' 'r = $0; SEP[NR]'
+mutant "MX13 the row split removed" "wide_table sep_at_k single_line fm_crlf_table" \
   '        if (s * 100 > tot * maxpct)
           for' '        if (0)
           for'
-mutant "MX14 the blocking part dropped from the SERIAL line" "serial_dominant fence_table two_row single_line" \
+mutant "MX14 the blocking part dropped from the SERIAL line" "serial_dominant fence_table sep_outside_fence two_row prose_run single_line" \
   ' (lines %d-%d, %d%%, %s)\n", int(big * 100 / tot), P1[bi], P2[bi], int(big * 100 / tot), why' '\n", int(big * 100 / tot)'
 mutant "MX15 the single-line reason never given" "single_line" \
   'why = "single-line"' 'why = "no-boundary"'

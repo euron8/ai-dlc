@@ -1303,6 +1303,264 @@ k2_mutate k2-sha-gate \
   '      elif false; then' \
   "FAIL PENDING SILENT SILENT FAIL"
 
+# --- ARM K2 asks the partitioner IN FORCE AT THE PASS, not today's --------------------------
+# Every world above holds the validator OUTSIDE the world (the distribution layout), so each of
+# them is judged by today's copy and must SAY so -- beside a SILENT verdict as much as a FAIL.
+expect_says k2-shardable-post prd-adversarial-p "K2-fallback-marked-fail" \
+  "FALLBACK (K2 partitioner): prd-adversarial-p1.md is judged by the CURRENT" "the distribution layout"
+expect_says k2-serial prd-adversarial-p "K2-fallback-marked-silent" \
+  "FALLBACK (K2 partitioner): prd-adversarial-p1.md is judged by the CURRENT" "the distribution layout"
+#
+# The HISTORY worlds hold the validator INSIDE a stamped git root, beside a partitioner the root
+# TRACKS, and commit two copies of it: the shipped one and a stub that maps a two-section probe
+# (so it passes K2's map probe) and calls anything larger SERIAL. The stub is self-contained on
+# purpose -- a copy derived by editing the shipped partitioner breaks whenever those lines move.
+# The document has four sections: the shipped copy maps it (FAIL), the stub calls it SERIAL.
+#
+#   world          layout          10:00         12:00       pass(es)       in force   today
+#   old-serial     scripts/ai-dlc  stub+stamp    shipped     11:00          stub       shipped
+#   old-splits     core/scripts    shipped+stamp stub        11:00          shipped    stub
+#   terminal       scripts/ai-dlc  stub+stamp    shipped     11:00, 13:00   shipped    shipped
+#   untracked      scripts/ai-dlc  stamp only    --          11:00          (none)     shipped
+#
+# old-serial and old-splits are the two DISAGREEMENT DIRECTIONS (an update, and a downgrade): a
+# today's-map read inverts both. terminal pins the TIME KEY: its first pass predates the shipped
+# copy and its terminal pass follows it, so keying on the first pass reads the stub. untracked
+# cannot resolve a copy and must fall back to today's AND say so.
+K2H="$ROOT/k2-hist"; mkdir -p "$K2H"
+k2h_commit() {  # $1 world  $2 iso time  $3 message -- every tracked change in the world
+  ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+    cd "$1" || exit 1
+    git add -A . >/dev/null || exit 1
+    GIT_COMMITTER_DATE="$2" GIT_AUTHOR_DATE="$2" \
+      git -c user.email=fixture@example.invalid -c user.name=fixture -c commit.gpgsign=false \
+          -c core.hooksPath=/dev/null commit -q -m "$3" >/dev/null )
+}
+k2h_stub() {  # $1 path -- a partitioner that maps exactly two `## ` sections, SERIAL otherwise
+  printf '%s\n' '#!/usr/bin/env bash' \
+    '[ "${1:-}" = --map ] || exit 2' \
+    'n="$(grep -c "^## " "$2")" || n=0' \
+    'if [ "$n" -eq 2 ]; then printf "1\t1\t2\t## a\n2\t3\t4\t## b\n"; exit 0; fi' \
+    'echo "SERIAL: stub partitioner"; exit 3' > "$1"
+}
+k2h_pass() {  # $1 file  $2 n  $3 major  $4 verdict  $5 invoked_at  $6 artifact_sha
+  {
+    printf '# prd -- adversarial pass %s\n\n' "$2"
+    printf '<!-- SKILL_INVOCATION_PROVENANCE v1\n'
+    printf 'skill: ai-dlc-adversary-review\n'
+    printf 'invoked_at: %s\n' "$5"
+    printf 'tool_use_id: toolu_fixture_k2h%s\n' "$2"
+    printf 'mode: subagent\n'
+    printf 'lead_role: pm\n'
+    printf 'artifact: prd.md\n'
+    printf 'artifact_sha: %s\n' "$6"
+    printf 'findings_critical: 0\n'
+    printf 'findings_critical_prior_scope: 0\n'
+    printf 'findings_major: %s\n' "$3"
+    printf 'findings_major_underived: 0\n'
+    printf 'findings_minor: 0\n'
+    printf 'verdict: %s\n' "$4"
+    printf 'SKILL_INVOCATION_PROVENANCE_END -->\n'
+  } > "$1"
+}
+k2h_world() {  # $1 world  $2 layout dir  $3 copy at 10:00 (stub|shipped|none)  $4 copy at 12:00 (stub|shipped|none)
+  local w="$K2H/$1" l="$K2H/$1/$2" c
+  mkdir -p "$w/.claude" "$l" || return 1
+  printf 'version: 0.665.0\n' > "$w/.claude/.ai-dlc-version"
+  ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; cd "$w" && git init -q . >/dev/null ) || return 1
+  for c in "$3:2026-09-29T10:00:00Z" "$4:2026-09-29T12:00:00Z"; do
+    case "${c%%:*}" in
+      stub)    k2h_stub "$l/partition-document.sh" ;;
+      shipped) cp "$K2_PD" "$l/partition-document.sh" ;;
+      none)    [ "${c#*:}" = 2026-09-29T10:00:00Z ] || continue ;;
+    esac
+    k2h_commit "$w" "${c#*:}" "at ${c#*:}" || return 1
+  done
+  # Untracked from here on: the validator, its steering sibling, the document and the passes.
+  # The untracked world's partitioner is today's copy and is never committed.
+  [ "$3" = none ] && cp "$K2_PD" "$l/partition-document.sh"
+  cp "$VALIDATOR" "$l/validate-adversarial-convergence.sh"
+  cp "$(dirname "$VALIDATOR")/validate-steering-budget.sh" "$l/validate-steering-budget.sh"
+  printf '# PRD\n\n## One\n\nalpha alpha\n\n## Two\n\nbravo bravo\n\n## Three\n\ncharlie charlie\n\n## Four\n\ndelta delta\n' > "$w/prd.md"
+  K2H_SHA="$(shasum -a 256 "$w/prd.md" 2>/dev/null | cut -d' ' -f1)"
+  [ -n "$K2H_SHA" ] || K2H_SHA="$(sha256sum "$w/prd.md" | cut -d' ' -f1)"
+  printf '%s\n' "$2" > "$w/.layout"
+}
+K2H_OK=1
+k2h_world old-serial scripts/ai-dlc stub shipped || K2H_OK=0
+k2h_pass "$K2H/old-serial/prd-adversarial-p1.md" 1 0 EXIT_CONDITION_MET 2026-09-29T11:00:00Z "$K2H_SHA"
+k2h_world old-splits core/scripts shipped stub || K2H_OK=0
+k2h_pass "$K2H/old-splits/prd-adversarial-p1.md" 1 0 EXIT_CONDITION_MET 2026-09-29T11:00:00Z "$K2H_SHA"
+k2h_world terminal scripts/ai-dlc stub shipped || K2H_OK=0
+k2h_pass "$K2H/terminal/prd-adversarial-p1.md" 1 0 EXIT_CONDITION_MET 2026-09-29T11:00:00Z "$K2H_SHA"
+k2h_pass "$K2H/terminal/prd-adversarial-p2.md" 2 0 EXIT_CONDITION_MET 2026-09-29T13:00:00Z "$K2H_SHA"
+k2h_world untracked scripts/ai-dlc none none || K2H_OK=0
+k2h_pass "$K2H/untracked/prd-adversarial-p1.md" 1 0 EXIT_CONDITION_MET 2026-09-29T11:00:00Z "$K2H_SHA"
+
+# THE MERGE WORLDS. Main installs the stub at 10:00; a sprint branch installs the shipped copy at
+# 10:30, writes the pass (dispatched 11:00) and commits it at 11:05; main then takes the sprint at
+# 12:00 by a SQUASH or by a TRUE merge (--no-ff). On main's first-parent chain the shipped copy is
+# dated 12:00, after the pass, so the time key alone reads the stub -- SERIAL, an acquittal of a
+# dispatch made under the copy that maps the document. The commit that ADDED the pass file
+# carries the shipped copy, so the two disagree and K2 must be PENDING, never silent.
+k2h_merge_world() {  # $1 world  $2 squash|true
+  local w="$K2H/$1" l="$K2H/$1/scripts/ai-dlc" main
+  mkdir -p "$w/.claude" "$l" || return 1
+  printf 'version: 0.665.0\n' > "$w/.claude/.ai-dlc-version"
+  ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; cd "$w" && git init -q . >/dev/null ) || return 1
+  printf '# PRD\n\n## One\n\nalpha alpha\n\n## Two\n\nbravo bravo\n\n## Three\n\ncharlie charlie\n\n## Four\n\ndelta delta\n' > "$w/prd.md"
+  k2h_stub "$l/partition-document.sh"
+  k2h_commit "$w" 2026-09-29T10:00:00Z "install stub" || return 1
+  main="$( ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; git -C "$w" symbolic-ref --short HEAD ) )"
+  [ -n "$main" ] || return 1
+  ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; git -C "$w" checkout -q -b sprint ) || return 1
+  cp "$K2_PD" "$l/partition-document.sh"
+  k2h_commit "$w" 2026-09-29T10:30:00Z "self-update on sprint" || return 1
+  K2H_SHA="$(shasum -a 256 "$w/prd.md" 2>/dev/null | cut -d' ' -f1)"
+  [ -n "$K2H_SHA" ] || K2H_SHA="$(sha256sum "$w/prd.md" | cut -d' ' -f1)"
+  k2h_pass "$w/prd-adversarial-p1.md" 1 0 EXIT_CONDITION_MET 2026-09-29T11:00:00Z "$K2H_SHA"
+  k2h_commit "$w" 2026-09-29T11:05:00Z "pass p1" || return 1
+  ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+    cd "$w" || exit 1
+    git checkout -q "$main" || exit 1
+    if [ "$2" = squash ]; then
+      git merge -q --squash sprint >/dev/null 2>&1 || exit 1
+      GIT_COMMITTER_DATE=2026-09-29T12:00:00Z GIT_AUTHOR_DATE=2026-09-29T12:00:00Z \
+        git -c user.email=fixture@example.invalid -c user.name=fixture -c commit.gpgsign=false \
+            -c core.hooksPath=/dev/null commit -q -m "squash sprint" >/dev/null || exit 1
+    else
+      GIT_COMMITTER_DATE=2026-09-29T12:00:00Z GIT_AUTHOR_DATE=2026-09-29T12:00:00Z \
+        git -c user.email=fixture@example.invalid -c user.name=fixture -c commit.gpgsign=false \
+            -c core.hooksPath=/dev/null merge -q --no-ff -m "merge sprint" sprint >/dev/null 2>&1 || exit 1
+    fi ) || return 1
+  cp "$VALIDATOR" "$l/validate-adversarial-convergence.sh"
+  cp "$(dirname "$VALIDATOR")/validate-steering-budget.sh" "$l/validate-steering-budget.sh"
+  printf 'scripts/ai-dlc\n' > "$w/.layout"
+}
+k2h_merge_world merge-squash squash || K2H_OK=0
+k2h_merge_world merge-true true || K2H_OK=0
+
+# THE WORLDS ARE WHAT THEY CLAIM, or every cell below scores a world nobody built: the two
+# directions really do disagree (today's copy on disk answers the opposite of the copy at 10:00),
+# and the untracked world tracks no partitioner.
+k2h_rc() { bash "$1" --map "$2" >/dev/null 2>&1; echo $?; }
+ASSERTIONS=$((ASSERTIONS + 1))
+K2H_TMP="$K2H/.probe"; mkdir -p "$K2H_TMP"
+k2h_blob() { ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+  git -C "$K2H/$1" cat-file blob "$(git -C "$K2H/$1" rev-list -1 --before=2026-09-29T11:00:00Z HEAD):./$(cat "$K2H/$1/.layout")/partition-document.sh" ) > "$K2H_TMP/$1.sh" 2>/dev/null; }
+k2h_blob old-serial; k2h_blob old-splits
+k2h_disk() { echo "$K2H/$1/$(cat "$K2H/$1/.layout")/partition-document.sh"; }
+k2h_shape="$(k2h_rc "$K2H_TMP/old-serial.sh" "$K2H/old-serial/prd.md")$(k2h_rc "$(k2h_disk old-serial)" "$K2H/old-serial/prd.md")"
+k2h_shape="$k2h_shape $(k2h_rc "$K2H_TMP/old-splits.sh" "$K2H/old-splits/prd.md")$(k2h_rc "$(k2h_disk old-splits)" "$K2H/old-splits/prd.md")"
+k2h_untr="$( ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; git -C "$K2H/untracked" ls-files -- scripts/ai-dlc ) | grep -c .)" || k2h_untr=0
+# The merge worlds: the first-parent copy at the pass's time must be the stub (rc 3) and the copy
+# at the commit that added the pass the shipped one (rc 0), or the world cannot express the defect.
+k2h_mshape=""
+for k2h_mw in merge-squash merge-true; do
+  ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+    git -C "$K2H/$k2h_mw" cat-file blob "$(git -C "$K2H/$k2h_mw" rev-list -1 --first-parent --before=2026-09-29T11:00:00Z HEAD):./scripts/ai-dlc/partition-document.sh"
+  ) > "$K2H_TMP/$k2h_mw-time.sh" 2>/dev/null
+  ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+    git -C "$K2H/$k2h_mw" cat-file blob "$(git -C "$K2H/$k2h_mw" log --diff-filter=A --format=%H HEAD -- prd-adversarial-p1.md | tail -1):./scripts/ai-dlc/partition-document.sh"
+  ) > "$K2H_TMP/$k2h_mw-add.sh" 2>/dev/null
+  k2h_mshape="$k2h_mshape$(k2h_rc "$K2H_TMP/$k2h_mw-time.sh" "$K2H/$k2h_mw/prd.md")$(k2h_rc "$K2H_TMP/$k2h_mw-add.sh" "$K2H/$k2h_mw/prd.md") "
+done
+k2h_mshape="$(echo $k2h_mshape)"
+if [ "$K2H_OK" -ne 1 ] || [ "$k2h_shape" != "30 03" ] || [ "$k2h_untr" -ne 0 ] || [ "$k2h_mshape" != "30 30" ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-28s FIXTURE BROKEN: built=%s, in-force/today rc per direction [%s] want [30 03], untracked tracks %s file(s), merge time/added rc [%s] want [30 30]\n' \
+    "k2-history-worlds" "$K2H_OK" "$k2h_shape" "$k2h_untr" "$k2h_mshape"
+else
+  printf '  ok    %-28s both directions disagree [%s]; untracked tracks nothing; merges: time vs added [%s]\n' "k2-history-worlds" "$k2h_shape" "$k2h_mshape"
+fi
+
+# One cell per world: the K2 verdict, suffixed `/FB` when the FALLBACK line printed. Driven by
+# a script copied INTO the world's layout dir, because the copy in force is resolved from where
+# the validator sits.
+K2H_WORLDS="old-serial old-splits terminal untracked merge-squash merge-true"
+K2H_REAL="SILENT FAIL FAIL FAIL/FB PENDING PENDING"
+k2h_cell() {  # $1 script basename  $2 world
+  local out v
+  out="$(bash "$K2H/$2/$(cat "$K2H/$2/.layout")/$1" --series "$K2H/$2/prd-adversarial-p" 2>&1)"
+  case "$out" in
+    *"FAIL (K2 -- SECTIONS)"*)    v=FAIL ;;
+    *"PENDING (K2 -- SECTIONS)"*) v=PENDING ;;
+    *)                            v=SILENT ;;
+  esac
+  case "$out" in *"FALLBACK (K2 partitioner)"*) v="$v/FB" ;; esac
+  printf '%s\n' "$v"
+}
+k2h_score() {  # $1 label  $2 script basename  $3 expected row
+  local got="" w
+  ASSERTIONS=$((ASSERTIONS + 1))
+  for w in $K2H_WORLDS; do got="$got $(k2h_cell "$2" "$w")"; done
+  if [ "$(echo $got)" = "$(echo $3)" ]; then
+    printf '  ok    %-28s [%s]\n' "$1" "$(echo $got)"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s got [%s] want [%s]\n' "$1" "$(echo $got)" "$(echo $3)"
+  fi
+}
+k2h_score "K2 in-force copy" validate-adversarial-convergence.sh "$K2H_REAL"
+expect_says_k2h() {  # $1 world  $2 label  $3... required substrings
+  local w="$1" label="$2" out missing="" want; shift 2
+  ASSERTIONS=$((ASSERTIONS + 1))
+  out="$(bash "$K2H/$w/$(cat "$K2H/$w/.layout")/validate-adversarial-convergence.sh" --series "$K2H/$w/prd-adversarial-p" 2>&1)"
+  for want in "$@"; do grep -qF -- "$want" <<<"$out" || missing="$missing \"$want\""; done
+  if [ -z "$missing" ]; then printf '  ok    %-28s %s\n' "$label" "says what it must"
+  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s missing:%s\n' "$label" "$missing"; fi
+}
+expect_says_k2h old-splits "K2h-names-copy-in-force" \
+  "asked of the copy of core/scripts/partition-document.sh in force at"
+expect_says_k2h untracked "K2h-untracked-reason" \
+  "FALLBACK (K2 partitioner):" "scripts/ai-dlc/partition-document.sh is not tracked at"
+expect_says_k2h merge-squash "K2h-squash-ambiguous" \
+  "PENDING (K2 -- SECTIONS): in-force partitioner ambiguous ("
+expect_says_k2h merge-true "K2h-merge-ambiguous" \
+  "PENDING (K2 -- SECTIONS): in-force partitioner ambiguous ("
+
+# MUTANTS, each built from the validator under test and dropped into every history world beside
+# the real copy. Each moves only the cells its own clause owns; the revert takes out the WHOLE
+# layer (resolution and marker), so a revert leaving the marker in place cannot pass as one.
+k2h_mutate() {  # $1 label  $2 anchor (unique)  $3 replacement  $4 expected row
+  local mut="$K2H/.mut-$1.sh" n ctl w
+  n="$(grep -cF -- "$2" "$VALIDATOR")" || n=0
+  ctl="$(grep -cF -- "$2 # no-such-line" "$VALIDATOR")" || ctl=0
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ "$n" -ne 1 ] || [ "$ctl" -ne 0 ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s the anchor matches %s line(s) (want 1; impossible-anchor control %s, want 0)\n' "MUTATION $1" "$n" "$ctl"
+    return
+  fi
+  MUT_OLD="$2" MUT_NEW="$3" python3 -c 'import os,sys; s=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(s.replace(os.environ["MUT_OLD"],os.environ["MUT_NEW"],1))' \
+    "$VALIDATOR" "$mut"
+  if cmp -s "$VALIDATOR" "$mut" || ! bash -n "$mut" 2>/dev/null; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s the mutation DID NOT APPLY or does not parse -- this assertion proves nothing\n' "MUTATION $1"
+    return
+  fi
+  ASSERTIONS=$((ASSERTIONS - 1))
+  for w in $K2H_WORLDS; do cp "$mut" "$K2H/$w/$(cat "$K2H/$w/.layout")/mutant-$1.sh"; done
+  k2h_score "MUTATION $1" "mutant-$1.sh" "$4"
+}
+k2h_mutate k2-current-map-revert \
+  '        k2_pd_in_force "$k2_root" "${P_AT[$((N - 1))]:-}" "$LAST_FILE"' \
+  '        K2_RUN="$K2_PD"; K2_PD_FROM="the CURRENT ${K2_PD}"; K2_PD_FALLBACK=""; K2_PD_AMBIG=""' \
+  "FAIL SILENT FAIL FAIL FAIL FAIL"
+k2h_mutate k2-fallback-unmarked \
+  '        if [ -n "$K2_PD_FALLBACK" ]; then' \
+  '        if false; then' \
+  "SILENT FAIL FAIL FAIL PENDING PENDING"
+k2h_mutate k2-first-pass-time \
+  '        k2_pd_in_force "$k2_root" "${P_AT[$((N - 1))]:-}" "$LAST_FILE"' \
+  '        k2_pd_in_force "$k2_root" "${P_AT[0]:-}" "$LAST_FILE"' \
+  "SILENT FAIL SILENT FAIL/FB PENDING PENDING"
+# The added-commit cross-check dropped: ONLY the two merge worlds move, both to the acquittal.
+k2h_mutate k2-added-commit-dropped \
+  '  cmp -s "$AC_T/k2-pd-in-force.sh" "$AC_T/k2-pd-at-add.sh" || K2_PD_AMBIG="${c:0:12} vs ${a:0:12}"' \
+  '  :' \
+  "SILENT FAIL FAIL FAIL/FB SILENT SILENT"
+
 echo
 # --- PASS 1 HAS NO PREVIOUS PASS -----------------------------------------------
 # THE SEED GAP THESE CLOSE. Every case above declares pass 1 with prior == crit, and that

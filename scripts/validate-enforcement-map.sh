@@ -641,9 +641,18 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   path: base 3202 (spread 3202-3202), tip 3208 (spread 3207-3208), so +6. I118 is 7 by
 #   arm: one `mktemp`, one `mkdir`, one awk over the probe, one `rm`, one awk over the map and
 #   every fixture `.sh`, one awk testing whether the map maps the control fixture. Its first draft
-#   built the file list in a shell loop and cost 329; one glob filtered inside awk replaced it.
+#   built the file list in a shell loop and read 329 (a profiler that then scored `+=` appends
+#   as forks; see BL-417 below); one glob filtered inside awk replaced it.
 #   HIGH reading 3208 plus the usual 6.
-FORK_BUDGET=3214
+#
+#   LOWERED TO 3144 BY A CLASSIFIER FIX, NOT BY ANY CHANGE HERE. `fork-profile.sh --section
+#   by-arm --stable --dump`, base `origin/main` f6fdb3e5 then the BL-417 tip, in ONE worktree at
+#   the same path: base 3210 (spread 3209-3210), tip 3138 (spread 3137-3138), so -72. Diffed by
+#   row, exactly 26 base rows are absent at tip and none is new: 47 forks at the `i82_corpus+=`
+#   append and 25 at the `esv_paths[${#esv_paths[@]}]=` append, both assignments the old
+#   classifier scored as commands. Every arm keeps its real cost. HIGH reading 3138 plus the
+#   usual 6.
+FORK_BUDGET=3144
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
@@ -11837,10 +11846,11 @@ fi
 # corpus scan down; a missing or empty map in a tree that IS a repository fails. The self-probe
 # runs in both cases.
 #
-# ONE GLOB, FILTERED IN awk, NEVER A SHELL LOOP BUILDING A FILE LIST. The first draft appended
-# each existing run.sh/seed.sh to an array, and fork-profile.sh charged every append as a traced
-# command: 329 for this arm alone. `core/fixtures/*/*.sh` expands only to files that exist, and
-# the awk program skips every one whose basename is not run.sh or seed.sh.
+# ONE GLOB, FILTERED IN awk, NEVER A SHELL LOOP BUILDING A FILE LIST. `core/fixtures/*/*.sh`
+# expands only to files that exist, and the awk program skips every one whose basename is not
+# run.sh or seed.sh, so the list is built without a per-fixture `[ -f ]` and append. The first
+# draft's loop read 329 forks under a profiler that scored each `+=` append as a command, which
+# it no longer does; that reading is not a measurement of what such a loop costs.
 i118_scan() { # <root> -> "P<TAB>fx<TAB>hook" per satisfied pair, "B<TAB>fx<TAB>hook<TAB>file:line" per omission
   awk -F'\t' -v root="$1" '
     function exists(p,   x, r) { r = (getline x < p); close(p); return r >= 0 }
@@ -11996,9 +12006,6 @@ for i119_f in "$REPO_ROOT"/core/skills/*/*.md "$REPO_ROOT"/core/skills/*/*/*.md 
               "$REPO_ROOT"/templates/CLAUDE.md.template; do
   # -s, not -f: awk opens an empty file without ever reaching FNR == 1, so an empty prompt
   # would be counted as listed-but-unscanned. It holds nothing to scan either way.
-  # A NUMERIC index, not `[${#i119_files[@]}]`: fork-profile.sh reads an assignment by
-  # `name[...]=` with no `]` inside the brackets, so the `[@]` spelling scored every append as
-  # an external command -- measured, 71 phantom forks, one per prompt, on validator-fork-budget.
   [ -s "$i119_f" ] || continue
   i119_files[$i119_k]="$i119_f"; i119_k=$((i119_k + 1))
   case "$i119_f" in

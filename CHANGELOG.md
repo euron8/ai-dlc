@@ -19,6 +19,35 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.703.0] - 2026-10-02
+
+Batch 182's first release: Check 24's K2 arm, the document partitioner's row split, and the fork profiler.
+`validate-adversarial-convergence.sh` and `partition-document.sh` are machinery a consumer runs from its installed
+copy; neither is a bootstrapping file of the update skill. Discharges no consumer candidate.
+
+### Backlog
+
+- `BL-419`: K2 decided whether a reviewed document partitions by running TODAY's `partition-document.sh`, so a
+  series that converged while the document was SERIAL was retro-failed once a later engine split it. K2 now runs
+  the partitioner that was in force when the series' terminal pass was dispatched: the blob at the validator's own
+  partitioner path in the newest first-parent commit of the stamped root at or before that pass's `invoked_at`,
+  staged to a temp file. A merge or squash re-dates a branch's install on the first-parent chain, so K2 also
+  reads the partitioner at the commit that first added the pass file; where the two copies differ it prints
+  `PENDING (K2 -- SECTIONS): in-force partitioner ambiguous (<a> vs <b>)` rather than acquitting. The spawn ledger's `shard` field is not used, because the lead writes it about its own
+  dispatch. Where no historic copy resolves (no root or git, the distribution layout, an untracked partitioner, a
+  non-UTC time, no commit at that time) K2 runs today's copy and prints `FALLBACK (K2 partitioner): <reason>`
+  beside its verdict. On the reference consumer the motivating document's reviewed pass read `FAIL (K2)` on base
+  and is silent on the fix; its three live series read `PENDING (K2)` both ways.
+- `BL-421`: the row split cut any run of three `|`-led lines. A cut before line k now needs a GFM separator row at or
+  before k-1 inside the same run, so a header never leaves its separator and a `|` run with no separator is never
+  cut. Separator detection reads the raw line, independent of the fence tracker, which keeps mutant MX11 killable.
+  On the reference consumer's 7971 tracked `.md` files: 0 verdict changes and 0 map changes.
+- `BL-417`: `scripts/fork-profile.sh` scored `name[${#a[@]}]=` and `name+=` assignments as forks. An xtrace word that
+  is a name, an optional subscript balanced at any depth, then `=` or `+=`, is now an assignment. The two phantoms
+  in `validate-enforcement-map.sh` were 72 forks (47 `i82_corpus+=`, 25 `esv_paths[…]=`); the stable count fell
+  from 3210 to 3138 with exactly those rows removed, and `FORK_BUDGET` is 3144. A subscript holding a space is
+  still scored as a fork (0 instances), stated in the header.
+
 ## [0.702.0] - 2026-10-01
 
 Batch 181's tenth release: the rulebook's fan-out rule, and one validator arm. Rulebook files, not machinery, so a
