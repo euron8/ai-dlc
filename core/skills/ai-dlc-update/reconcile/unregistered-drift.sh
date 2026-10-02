@@ -234,19 +234,23 @@ ud_trim_floor() { # ud_trim_floor <in> <out> -- trimmed, floored, sorted-unique 
   case "$ps" in '0 0 0'|'0 1 0') return 0 ;; esac
   return 3
 }
+#
+# BOTH BLOBS ARE THE SCAN LOOP'S STAGED COPIES, NEVER A SECOND READ. `blob-base` and `blob-theirs`
+# were each staged once by `ud_stage_blob` in the main shell, where a memo that cannot serve them
+# REFUSES naming the memo. A second `git_show` here ran inside `$( )`, where the same 125 could
+# only return 3, and the row read "CLASSIFIER DID NOT RUN" with nothing naming the cause. The
+# caller reaches this only when `ud_theirs` says the theirs blob was staged this iteration.
 absorbed_pct() { # absorbed_pct <core-rel-path> <consumer-file> -> "<hits> <total>"; 3 = did not run
   local cp="$1" cons="$2" only hits total t="$UD_DIFF_TMP"
   [ -n "$t" ] || return 3
   ud_trim_floor "$cons" "$t/ap-cons" || return 3
-  git_show "${BASE}" "${cp}" > "$t/ap-base-blob" || return 3
-  ud_trim_floor "$t/ap-base-blob" "$t/ap-base" || return 3
+  ud_trim_floor "$t/blob-base" "$t/ap-base" || return 3
   comm -23 "$t/ap-cons" "$t/ap-base" > "$t/ap-only" || return 3
   only="$(cat "$t/ap-only")"
   total="$(printf '%s' "$only" | grep -c . || true)"
   [ "${total:-0}" -eq 0 ] && { printf '0 0'; return; }
   printf '%s\n' "$only" | sort -u > "$t/ap-only-sorted" || return 3
-  git_show "${THEIRS}" "${cp}" > "$t/ap-theirs-blob" || return 3
-  sed 's/^[[:space:]]*//; s/[[:space:]]*$//' "$t/ap-theirs-blob" | sort -u > "$t/ap-theirs" || return 3
+  sed 's/^[[:space:]]*//; s/[[:space:]]*$//' "$t/blob-theirs" | sort -u > "$t/ap-theirs" || return 3
   comm -12 "$t/ap-only-sorted" "$t/ap-theirs" > "$t/ap-hits" || return 3
   hits="$(grep -c . "$t/ap-hits" || true)"
   printf '%s %s' "${hits:-0}" "$total"
@@ -492,12 +496,25 @@ ud_pdiff() {
 _carry_cleanup() { [ -n "$CARRY_TMP" ] && rm -rf "$CARRY_TMP"; [ -n "$UD_DIFF_TMP" ] && rm -rf "$UD_DIFF_TMP"; :; }
 trap _carry_cleanup EXIT
 
-# carried_bucket <core-rel-path> -> prints the preclassify BUCKET when arm C would carry this
-# path, and returns 1 otherwise. Returning 1 is the fail-closed answer for every uncertainty:
-# no theirs, no preclassify, no machinery set, an unreadable rows file, or a bucket derivation
-# that produced nothing over a range that DOES move core/.
-carried_bucket() {
-  _cb_p="$1"
+# ud_carry_derive -- MAIN SHELL ONLY. Resolves the carried-path join ONCE per run, and returns 4
+# when `machinery_paths` could not resolve the set; the scan loop refuses on that through
+# `ud_read_refuse`. Every other uncertainty leaves `CARRY_STATE=unknown`, which `carried_bucket`
+# reads as "not carried": no theirs, no preclassify, an unreadable rows file, or a bucket
+# derivation that produced nothing over a range that DOES move core/.
+#
+# IT USED TO RUN INSIDE `carried_bucket`, AND `carried_bucket` RUNS INSIDE `$( )`. So the state it
+# set and the directory it made never reached this shell: `cold` was still `cold` on the next row,
+# the whole derivation -- `bash preclassify.sh` included -- re-ran for EVERY row that reached the
+# carried test, and the EXIT trap here never saw a `CARRY_TMP` to remove. Measured on one machine:
+# 81996 `ud-carry.*` directories left in `$TMPDIR` (control: 10643 `tmp.*` beside them). Called
+# from the scan loop, which reads a staged file in this shell, the state persists, preclassify runs
+# once, and the trap removes the one directory.
+#
+# A MACHINERY SET THAT FAILED TO RESOLVE IS NOT AN EMPTY ONE. `machinery_paths` returns 4 when its
+# manifest or either `ls-files` listing failed; a listing that failed at one ref used to come back
+# as the other ref's paths, a NARROWER set that drops a carried path back to a HARD row whose
+# remedy contradicts the worklist. That is a scan that cannot decide its row, so it refuses.
+ud_carry_derive() {
   if [ "$CARRY_STATE" = "cold" ]; then
     CARRY_STATE=unknown
     CARRY_TMP="$(mktemp -d "${TMPDIR:-/tmp}/ud-carry.XXXXXX" 2>/dev/null)" || CARRY_TMP=""
@@ -507,7 +524,7 @@ carried_bucket() {
     if [ -n "$THEIRS" ] && [ -f "$PRECLASSIFY_SRC" ] && [ -n "$CARRY_TMP" ]; then
       eval "$(awk '/^machinery_paths\(\) \{/,/^\}/' "$PRECLASSIFY_SRC" 2>/dev/null)"
       if command -v machinery_paths >/dev/null 2>&1; then
-        machinery_paths > "$CARRY_TMP/mach" 2>/dev/null || : > "$CARRY_TMP/mach"
+        machinery_paths > "$CARRY_TMP/mach" 2>/dev/null || return 4
         if [ -n "$BUCKET_ROWS" ]; then
           cat "$BUCKET_ROWS" > "$CARRY_TMP/pc" 2>/dev/null || : > "$CARRY_TMP/pc"
         else
@@ -542,6 +559,15 @@ carried_bucket() {
       fi
     fi
   fi
+  return 0
+}
+
+# carried_bucket <core-rel-path> -> prints the preclassify BUCKET when arm C would carry this
+# path, and returns 1 otherwise. A pure READER of what `ud_carry_derive` resolved in the main
+# shell: it runs inside `$( )`, so it derives nothing and creates nothing. `unknown` and `cold`
+# both return 1, the fail-closed answer.
+carried_bucket() {
+  _cb_p="$1"
   [ "$CARRY_STATE" = "ready" ] && [ -n "$CARRY_JOIN" ] || return 1
   _cb_b="$(awk -F'\t' -v p="$_cb_p" '$1 == p { print $2; exit }' "$CARRY_JOIN")"
   [ -n "$_cb_b" ] || return 1
@@ -710,8 +736,15 @@ while IFS= read -r cp; do
       # the guard for when it is not: a file that already IS theirs cannot be drift against
       # theirs, whatever base was passed, so the wrong-base mistake announces itself here
       # instead of arriving as a plausible HARD row.
-      if [ -n "$THEIRS" ] && git -C "$DIST" cat-file -e "${THEIRS}:${cp}" 2>/dev/null \
-         && ud_stage_blob "${THEIRS}" "${cp}" "$UD_DIFF_TMP/blob-theirs" && cmp -s "$UD_DIFF_TMP/blob-theirs" "$cons"; then
+      #
+      # `ud_theirs` RECORDS THAT THIS ITERATION STAGED THE THEIRS BLOB, and `absorbed_pct` below reads
+      # that staged copy rather than reading git a second time; the absorption test keys on the flag,
+      # so the two can never disagree about whether a theirs blob exists for this path.
+      ud_theirs=0
+      [ -n "$THEIRS" ] && git -C "$DIST" cat-file -e "${THEIRS}:${cp}" 2>/dev/null \
+        && ud_stage_blob "${THEIRS}" "${cp}" "$UD_DIFF_TMP/blob-theirs" && ud_theirs=1
+      if [ "$ud_theirs" -eq 1 ] \
+         && cmp -s "$UD_DIFF_TMP/blob-theirs" "$cons"; then
         emit CORE-AT-THEIRS "$rel" "byte-identical to ${THEIRS} — already at the incoming core, not drift. If you expected drift here, the base is stale: post-apply, re-run with base == theirs."
         continue
       fi
@@ -752,8 +785,12 @@ while IFS= read -r cp; do
       # IS THIS PATH ONE ARM C CARRIED? Asked HERE, before absorption, and USED at three
       # different points below, because two of the three arms that follow have to know the
       # answer before they can decide whether their own remedy is still the right one.
-      # `carried_bucket` resolves the whole derivation at most once and returns 1 for every
-      # uncertainty, so a row reaches its ordinary HARD status whenever the answer is unknown.
+      # `ud_carry_derive` resolves the whole derivation at most once, HERE in the main shell so its
+      # state and its directory persist; `carried_bucket` then only reads it and returns 1 for every
+      # uncertainty, so a row reaches its ordinary HARD status whenever the answer is unknown. A
+      # machinery set that could not be resolved (4) is not an unknown answer -- it refuses.
+      _cd=0; ud_carry_derive || _cd=$?
+      [ "$_cd" -eq 0 ] || ud_read_refuse "the machinery path set (machinery_paths() over setup-sites.md, listed at ${BASE} and ${THEIRS})" "$_cd"
       carried_b="$(carried_bucket "$cp")" || carried_b=""
 
       # Absorption beats plain drift: if upstream took the change, the remedy is a
@@ -767,7 +804,7 @@ while IFS= read -r cp; do
       # for the same file. Ten consumer lines with three absorbed is a merge, not a revert. When
       # hits == total the consumer's delta is entirely upstream's now, the revert loses nothing,
       # and ABSORBED remains the more specific and more useful claim.
-      if [ -n "$THEIRS" ] && git -C "$DIST" cat-file -e "${THEIRS}:${cp}" 2>/dev/null; then
+      if [ "$ud_theirs" -eq 1 ]; then
         if ! ap_out="$(absorbed_pct "$cp" "$cons")"; then
           # The same row, and for the same reason, as a diff that did not run above: absorption
           # decides which HARD remedy is printed, so an unmeasured one is reported, not guessed.

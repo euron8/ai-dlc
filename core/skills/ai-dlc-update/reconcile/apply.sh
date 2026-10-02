@@ -673,9 +673,18 @@ ap_write_marker() {
       esac
     fi
   fi
-  SETUP_SITED_PATHS=""
-  eval "$(awk '/^SETUP_SITED_PATHS=/,/sort -u\)"$/' "$SELF/preclassify.sh" 2>/dev/null)"
-  _sited="$SETUP_SITED_PATHS"
+  # The setup-sited set, loaded by preclassify's own `setup_sited_paths()` and status-checked at
+  # every step: a function that did not load, or a manifest it could not read (4), would make every
+  # sited path look unsited and record a CLASSIFY hash for a file `--finish` must not judge by bytes.
+  _sited=""; _rc=0
+  eval "$(awk '/^setup_sited_paths\(\) \{/,/^\}/' "$SELF/preclassify.sh" 2>/dev/null)" || _rc=$?
+  command -v setup_sited_paths >/dev/null 2>&1 || _rc=127
+  [ "$_rc" -ne 0 ] || _sited="$(setup_sited_paths)" || _rc=$?
+  if [ "$_rc" -ne 0 ]; then
+    say DECISION applying-marker-unwritten "${APPLYING#"$CONSUMER"/}" "the setup-sited path set could not be loaded out of preclassify.sh's \`setup_sited_paths()\` (exit ${_rc}), so which handed-back merges are setup-filled is unknown and the in-flight marker was not written: the fixture suite will not block on this mid-pull tree and \`--finish\` has no record to check the merges against. Check that reconcile/setup-sites.md and preclassify.sh are present and readable, then re-run apply with the same four arguments."
+    return 0
+  fi
+  _rc=0
   # Walked by parameter expansion over the rows already in memory: no heredoc or here-string whose
   # staging could fail and read as "no CLASSIFY rows".
   _rest="$PC"
@@ -2252,12 +2261,19 @@ finish_verify_tree() {
     say WORKLIST finish-unverified-tree "" "preclassify.sh returned no rows while \`${BASE}..${THEIRS}\` changes \`core/\`, which is not the same as nothing being unapplied, so the stamp is not advanced. Re-run it by hand with the same four arguments and fix what it reports, then re-run --finish."
     return 0
   fi
-  # The setup-sited set, read by preclassify's OWN assignment rather than a second grammar -- the
-  # same load map_consumer() gets above. `$0` in it resolves to this file, which sits beside
-  # setup-sites.md exactly as preclassify.sh does.
-  SETUP_SITED_PATHS=""
-  eval "$(awk '/^SETUP_SITED_PATHS=/,/sort -u\)"$/' "$SELF/preclassify.sh" 2>/dev/null)"
-  _fv_sited="$SETUP_SITED_PATHS"
+  # The setup-sited set, read by preclassify's OWN `setup_sited_paths()` rather than a second
+  # grammar -- the same load map_consumer() gets above. `$0` in it resolves to this file, which sits
+  # beside setup-sites.md exactly as preclassify.sh does. Every step's status is read: a function
+  # that did not load, or a manifest it could not read (4), is not an empty set -- it would drop
+  # every setup-sited row below and the stamp would advance over files nobody verified.
+  _fv_sited=""; _fv_rc=0
+  eval "$(awk '/^setup_sited_paths\(\) \{/,/^\}/' "$SELF/preclassify.sh" 2>/dev/null)" || _fv_rc=$?
+  command -v setup_sited_paths >/dev/null 2>&1 || _fv_rc=127
+  [ "$_fv_rc" -ne 0 ] || _fv_sited="$(setup_sited_paths)" || _fv_rc=$?
+  if [ "$_fv_rc" -ne 0 ]; then
+    say WORKLIST finish-unverified-tree "" "the setup-sited path set could not be loaded out of preclassify.sh's \`setup_sited_paths()\` (exit ${_fv_rc}), so which changed files --finish cannot verify by bytes is UNKNOWN and the stamp is not advanced. Check that reconcile/setup-sites.md and preclassify.sh are present and readable, then re-run --finish."
+    return 0
+  fi
   [ -n "$_fv_sited" ] || say NOTE finish-unverified "reconcile/setup-sites.md" "the setup-sited path set came back empty, so no changed setup-sited path can be named here as unverified."
   # STAGED, AND A FAILED STAGE WITHHOLDS. This loop fed from a heredoc, and under a file-size limit
   # bash 3.2 could not write the heredoc's temp file and ran the loop on EMPTY stdin: zero rows, no

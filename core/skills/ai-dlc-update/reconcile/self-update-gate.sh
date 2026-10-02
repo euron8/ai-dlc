@@ -763,7 +763,17 @@ if [ -z "${AI_DLC_GATE_IN_SAFE_STOP:-}" ]; then
     eval "$(awk '/^machinery_paths\(\) \{/,/^\}/' "$C_PRE_SRC" 2>/dev/null)"
     eval "$(awk '/^map_consumer\(\) \{/,/^\}/' "$C_PRE_SRC" 2>/dev/null)"
     if command -v machinery_paths >/dev/null 2>&1; then
-      C_PATHS="$(machinery_paths)"
+      # A PRODUCER THAT FAILED IS NOT A SMALLER SET. `machinery_paths` returns 4 when its manifest
+      # or either `ls-files` listing failed, and a listing that failed at ONE ref used to come back
+      # as the other ref's paths at rc 0 -- non-empty, so the EMPTY guard below never saw it, and a
+      # carried path missing from the population drew no CARRY row: SELF-UPDATE-OK on a pull that
+      # overwrites a consumer edit. UNDECIDED, a wording of its own, and the run ends here.
+      c_mrc=0; C_PATHS="$(machinery_paths)" || c_mrc=$?
+      if [ "$c_mrc" -ne 0 ]; then
+        GATE_CARRY_STATE=undecided
+        emit SELF-UPDATE-UNDECIDED "setup-sites.md" "the machinery path set could not be RESOLVED (machinery_paths returned ${c_mrc}: setup-sites.md unreadable, or an ls-files listing at ${BASE} or ${THEIRS} failed), so whether any machinery path is consumer-modified is UNKNOWN. A listing that failed at one ref yields a NARROWER set that reads as complete; a gate that could not read its own subject must not return OK. Treat as DEFER and re-run."
+        exit 0
+      fi
     fi
   fi
 
@@ -920,14 +930,28 @@ fi
 # header warns about and which the fixture's assertion 3 exists to catch. What matters is
 # whether the consumer's OWN rulebook is about to change, so each candidate is compared by
 # CONTENT against theirs and only genuine differences count.
+#
+# THE LISTING'S STATUS IS READ, AND THE LOOP READS A STAGED FILE LINE BY LINE. A failed `diff`
+# printed nothing under `2>/dev/null`, which is exactly "this pull changes no rulebook file" --
+# the arm's acquitting answer -- so it is UNDECIDED instead, the form the coupling scan below
+# uses. And `for r2p in $R2_CAND` split each candidate on whitespace: a rulebook path carrying a
+# space became two halves that each mapped to no consumer file, so a consumer ALREADY holding
+# theirs' copy read as missing it -- a false DEFER that strands the machinery slice.
+R2_RC=0
 R2_CAND="$(git -C "$DIST" -c core.quotePath=false diff --name-only "${BASE}..${THEIRS}" -- \
            core/skills/ai-dlc/SKILL.md \
            core/skills/ai-dlc/steps/ \
            core/skills/ai-dlc/escalations.md \
            core/skills/ai-dlc/rule-authoring.md \
-           core/team-roles/ 2>/dev/null)"
+           core/team-roles/ 2>/dev/null)" || R2_RC=$?
+if [ "$R2_RC" -ne 0 ]; then
+  emit SELF-UPDATE-UNDECIDED "rulebook-coupled-fixtures" "the rulebook candidate listing of ${BASE}..${THEIRS} failed (git diff exited ${R2_RC}), so whether this pull changes a rulebook file is UNKNOWN. A listing that failed prints nothing, which reads exactly like a pull that changes no rulebook -- the OK this arm exists to withhold; treat as DEFER and re-run."
+  exit 0
+fi
 R2_RB=""
-for r2p in $R2_CAND; do
+gate_stage r2-cand "$R2_CAND" "the rulebook candidate list"
+while IFS= read -r r2p; do
+  [ -n "$r2p" ] || continue
   r2_consumer="$CONSUMER/.claude/${r2p#core/}"
   # Absent at the consumer means this pull ADDS it, which is a change by definition.
   if [ ! -f "$r2_consumer" ]; then
@@ -936,7 +960,7 @@ for r2p in $R2_CAND; do
   if ! git -C "$DIST" show "${THEIRS}:${r2p}" 2>/dev/null | cmp -s - "$r2_consumer"; then
     R2_RB="$R2_RB $(basename "$r2p")"
   fi
-done
+done < "$TMP/r2-cand"
 R2_RB="$(printf '%s' "${R2_RB# }")"
 if [ -n "$R2_RB" ]; then
   # Fixtures whose NON-COMMENT code resolves a rulebook file in the LIVE tree. A comment
@@ -992,7 +1016,7 @@ fi
 # Scripts the hook invokes, by basename. Derived from the hook text.
 #
 # THE NAME CLASS IS A NEGATION OVER WHAT ENDS A PATH IN A HOOK LINE, never an enumeration of what
-# may appear in one. `[A-Za-z0-9._-]` captured no `scripts/ai-dlc/café.sh` under any locale, so a
+# may appear in one. `[A-Za-z0-9._-]` captured no hook-named `café.sh` under any locale, so a
 # changed non-ASCII gating script left GATING empty and the gate emitted SELF-UPDATE-OK for the
 # pull that replaced it. The excluded set is whitespace, quotes, backtick, the shell operators,
 # `$ * ? { } \ /` so a variable, a glob or a deeper path is still not read as a name, and
