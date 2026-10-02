@@ -1009,7 +1009,9 @@ fi
 # Minimum mechanism (Rule 26(c)).
 #   Failure caught: an adversarial cycle reaches a state where another pass cannot help --
 #     it DIVERGED (the repair is injecting defects into text a previous pass had already
-#     cleared) or it STALLED (a nonzero MAJOR held at zero CRITICAL, pass after pass) --
+#     cleared) or it STALLED (a blocking MAJOR count above MAJOR_EXIT_CEILING, at no more
+#     than CRITICAL_EXIT_CEILING CRITICAL, not reduced across more than STALL_THRESHOLD
+#     consecutive passes) --
 #     and the lead runs another pass anyway. Rule 8 says stop and escalate. Check 24 reads
 #     the state, but Check 24 runs at the GATE, after the cycle is over, so the one signal
 #     that means STOP had no teeth at the only moment it mattered.
@@ -1169,8 +1171,12 @@ if [ "$CYCLE_RC" -eq 3 ] && [ "$(cat "$ADVERSARIAL_STOP" 2>/dev/null)" != "${CYC
       WHAT="\`$(basename "$CYCLE_PASS")\` stamps \`verdict: DIVERGENT_HARD_BLOCK\`: it found CRITICALs in scope a previous pass had ALREADY cleared. Those are defects the REPAIR injected, and the next pass only finds the next wave." ;;
     REOPENED)
       WHAT="This series had ALREADY stamped \`EXIT_CONDITION_MET\`, and \`$(basename "$CYCLE_PASS")\` ran after it reporting CRITICAL/MAJOR work. A non-zero residue after MET is proof the artifact moved after it was signed off -- a RE-OPEN, costing a fresh sub-cycle nobody scheduled. Declare it with \`resolution: REOPEN_AFTER_MET\` naming what moved, or defer the improvement to the next step's artifact." ;;
+    STALLED)
+      WHAT="The cycle has held a blocking MAJOR count above \`MAJOR_EXIT_CEILING\`, at no more than \`CRITICAL_EXIT_CEILING\` CRITICAL, without reducing it across more than \`STALL_THRESHOLD\` consecutive passes. It is neither converging nor diverging -- it is STALLED. Each repair rewrites the prose around a claim nobody verified, and the next pass falsifies the rewrite with one more counterexample. Passes are buying counterexamples, not convergence." ;;
+    CEILING)
+      WHAT="This series has taken the sanctioned resolution exit more times than \`RESOLUTION_CEILING\` allows without converging, and its newest record (through \`$(basename "$CYCLE_PASS")\`) declares an UNANCHORED kind -- \`CHANGE_APPROACH\` or \`RESTART_CYCLE\`, which no byte-level predicate can check. The cycle is being RELEASED too cheaply. Another record of either unanchored kind does NOT lift this: re-adjudicate to \`CUT_SCOPE\` (the artifact must shrink) or \`REVERT_REPAIR\` (\`artifact_sha_after\` must match bytes an earlier pass notarized)." ;;
     *)
-      WHAT="The cycle has held a nonzero MAJOR at ZERO CRITICAL for pass after pass. It is neither converging nor diverging -- it is STALLED. Each repair rewrites the prose around a claim nobody verified, and the next pass falsifies the rewrite with one more counterexample. Passes are buying counterexamples, not convergence." ;;
+      WHAT="The convergence validator reported stop state \`${CYCLE_STATE}\` at \`$(basename "$CYCLE_PASS")\`, and this hook carries no description of that state. Do not guess its remedy from the list below: run \`scripts/ai-dlc/validate-adversarial-convergence.sh\` on this series and read the arm it names." ;;
   esac
 
   # THE SENTENCE THAT USED TO STAND HERE READ: "Do NOT dispatch another adversarial pass,

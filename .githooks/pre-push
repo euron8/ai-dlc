@@ -450,7 +450,16 @@ VERIFIED_RECORD="$GITDIR/ai-dlc-fixture-verified"
 # "it went red, I pushed again, it went green" -- a green run that cleaned up would destroy the
 # evidence at exactly the moment the operator went looking for it. The record names the run that
 # wrote it, and nothing points a reader at it unless THIS run is red.
+#
+# AND IT IS OVERWRITTEN BY THE NEXT RED RUN, so every red run also leaves its own copy:
+# `ai-dlc-fixture-failures.<UTC %Y%m%dT%H%M%SZ>.<pid>`, pruned to the newest FAILLOG_KEEP of that
+# shape. Measured at batch 179: one intermittent red's got-vector was the only evidence of its
+# cause, and it lived in a file the next red run would have replaced. The prune takes a name only
+# if it starts with a year and month AND its last dot-field is all digits, so a record saved by
+# hand is safe when its name fails either test -- `.clean` fails the first, a retained copy
+# renamed with a `.keep` suffix fails the second. A hand-saved name passing both is not.
 FAILLOG_RECORD="$GITDIR/ai-dlc-fixture-failures"
+FAILLOG_KEEP=20
 
 # Reduce "$1" (the dispatch list) to the fixtures a change can actually affect, using the
 # trace-derived read-sets in $READSET_MAP. Announces what it skipped and why; leaves the list
@@ -961,13 +970,34 @@ run_fixtures() {
   # question a later reader cannot answer from anything else -- the durations record holds
   # costs, not co-scheduling, and it has already been overwritten by this run.
   if [ -s "$out/.failures" ]; then
+    fl_wrote=0
     { printf '===== fixture failures -- %s, pool width %s, %s of %s units red =====\n' \
         "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$FIXTURE_JOBS" \
         "$(grep -c '^===== ' "$out/.failures")" "$n_expected"
       cat "$out/.failures"
       printf '===== dispatch order this run (longest-first) =====\n'
-      cat "$out/.order"; } > "$FAILLOG_RECORD" 2>/dev/null
+      cat "$out/.order"; :; } > "$FAILLOG_RECORD" 2>/dev/null && fl_wrote=1
     printf '   captured output for the failing unit(s): %s\n' "$FAILLOG_RECORD"
+    # THIS RUN'S RETAINED COPY, chained on the PRIMARY write having opened its file. The `:` that
+    # ends the brace group is load-bearing: without it the group's status is `cat .order`'s, not
+    # the redirect's. A `cp` after a failed primary write would file the PREVIOUS run's record
+    # under this run's stamp -- a misattribution, which is worse than a gap. Nothing in this block
+    # touches `rc`, and nothing here may trip `set -u`: an abort here skips the `rm -rf` below.
+    fl_stamp="$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null)" || fl_stamp=""
+    fl_copy="$GITDIR/ai-dlc-fixture-failures.$fl_stamp.$$"
+    if [ "$fl_wrote" = 1 ] && [ -n "$fl_stamp" ] && cp "$FAILLOG_RECORD" "$fl_copy" 2>/dev/null; then printf '   retained copy of this run: %s\n' "$fl_copy"; fi
+    # PRUNE BY NAME, newest FAILLOG_KEEP survive. Reverse sort + `tail -n +K` rather than
+    # `head -n -N`, which BSD head does not have. The glob anchors the FRONT on the generated
+    # shape; `ai-dlc-fixture-failures.*` would also match `.clean`, the operator's own saved
+    # record. The `case` anchors the END: without it `<stamp>.<pid>.keep` and
+    # `<yyyymm>-bisect-Z.notes` both matched the glob and were deleted in an adversary's probe,
+    # each also taking a slot from a real copy. Only an all-digit last field (the pid) is ours.
+    for fl_f in "$GITDIR"/ai-dlc-fixture-failures.2[0-9][0-9][0-9][01][0-9]*Z.*; do
+      case "${fl_f##*.}" in ''|*[!0-9]*) continue ;; esac
+      [ -e "$fl_f" ] && printf '%s\n' "$fl_f"
+    done | sort -r | tail -n +$((FAILLOG_KEEP + 1)) | while IFS= read -r fl_f; do
+      [ -e "$fl_f" ] && rm -f "$fl_f" 2>/dev/null
+    done
   fi
 
   rm -rf "$out"

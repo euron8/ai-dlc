@@ -5,8 +5,9 @@
 # THE DEFECT THIS CATCHES, IN TWO HALVES.
 #
 # STOP. `DIVERGENT_HARD_BLOCK` means the REPAIR is injecting defects into text a previous
-# pass had already cleared; a STALL means a nonzero MAJOR held at zero CRITICAL, pass after
-# pass. Rule 8: stop, escalate, change approach — never another pass. Check 24 reads both,
+# pass had already cleared; a STALL means a blocking MAJOR count above MAJOR_EXIT_CEILING, at
+# no more than CRITICAL_EXIT_CEILING CRITICAL, not reduced across more than STALL_THRESHOLD
+# consecutive passes. Rule 8: stop, escalate, change approach — never another pass. Check 24 reads both,
 # but Check 24 runs at the GATE, after the cycle is over.
 #
 # v0.57.0 put the guard in the Stop hook, and that was the wrong hook. `Stop` fires only
@@ -119,9 +120,78 @@ rm -rf "$W"
 # of its own — it is a property of the series. So it denied nothing.
 W="$(bash "$HERE/seed.sh" stalled)"
 OUT="$(drive_ack "$W" Agent)"
-if denied "$OUT"; then ok "STALLED: the Agent dispatch is DENIED (a plateau is not a reason for another pass)"
+if denied "$OUT"; then
+  ok "STALLED: the Agent dispatch is DENIED (a plateau is not a reason for another pass)"
+  # The message must state the validator's predicate by constant NAME. The old text said "a
+  # nonzero MAJOR held at zero CRITICAL", which a plateau at or below the exit ceiling also
+  # satisfies -- and that plateau is a MET exit condition, not a stall.
+  case "$OUT" in
+    *"(STALLED)"*MAJOR_EXIT_CEILING*STALL_THRESHOLD*) ok "STALLED: the deny names the stall predicate by its constants" ;;
+    *) bad "STALLED: the deny does not state the validator's predicate (MAJOR_EXIT_CEILING / STALL_THRESHOLD)" ;;
+  esac
 else bad "STALLED: dispatch ALLOWED — the cycle held 0C/4M -- above the exit ceiling -- for four passes and nothing stopped it"; fi
 rm -rf "$W"
+
+# --- CEILING is the validator's fourth rc-3 state, and both hooks once described it as a
+# STALL: their `case` had DIVERGENT and REOPENED branches and a catch-all asserting STALLED.
+# A deny that misnames the state hands the operator the wrong remedy with a confident verdict
+# -- another CHANGE_APPROACH record, which is exactly what this state refuses.
+# Each message is classified PRESENCE-first, so a copy that died and printed nothing reads
+# `none` -- never a kill. `ceiling` = the CEILING text and no stall text; `stalled` = the
+# CEILING header carrying the STALL text, which is exactly what the mutant must produce.
+ceiling_msg_class() { # <out> -> ceiling | stalled | none
+  case "$1" in *"(CEILING)"*) ;; *) echo none; return ;; esac
+  case "$1" in *"it is STALLED"*) echo stalled; return ;; esac
+  case "$1" in *RESOLUTION_CEILING*CUT_SCOPE*) echo ceiling; return ;; esac
+  echo none
+}
+drive_ceiling() { # <ack-hook> <stop-hook> -> "<ack-verdict> <ack-class> <stop-class>"
+  local w a s r=""
+  w="$(bash "$HERE/seed.sh" ceiling)"
+  a="$(printf '{"session_id":"t","transcript_path":"","tool_name":"Agent","tool_input":{"file_path":""}}' \
+        | CLAUDE_PROJECT_DIR="$w" bash "$1" 2>/dev/null)"
+  s="$(printf '{"session_id":"t","transcript_path":""}' | CLAUDE_PROJECT_DIR="$w" bash "$2" 2>/dev/null)"
+  if denied "$a"; then r="deny"; else r="allow"; fi
+  r="$r $(ceiling_msg_class "$a") $(ceiling_msg_class "$s")"
+  rm -rf "$w"
+  printf '%s' "$r"
+}
+CEIL="$(drive_ceiling "$ACK_HOOK" "$STOP_HOOK")"
+case "$CEIL" in
+  "deny "*) ok "CEILING: the Agent dispatch is DENIED" ;;
+  *) bad "CEILING: dispatch ALLOWED on a series past the resolution ceiling ($CEIL)" ;;
+esac
+case "$CEIL" in
+  *" ceiling "*) ok "CEILING: the PreToolUse deny names the resolution ceiling, not a stall" ;;
+  *) bad "CEILING: the PreToolUse deny misnames the state ($CEIL)" ;;
+esac
+case "$CEIL" in
+  *" ceiling") ok "CEILING: the Stop-hook block names the resolution ceiling, not a stall" ;;
+  *) bad "CEILING: the Stop-hook block misnames the state ($CEIL)" ;;
+esac
+
+# MUTANT: collapse CEILING into STALLED in BOTH hooks. Built in a copy of the WHOLE hooks
+# directory, because the continue hook resolves a sibling beside itself; `cmp -s` refuses a
+# mutation that matched nothing. The message arms above must both go red.
+MUTD="$(mktemp -d "${TMPDIR:-/tmp}/divergence-mut-XXXXXX")"
+cp -R "$(dirname "$ACK_HOOK")/." "$MUTD/"
+MUT_OK=1
+for h in "$(basename "$ACK_HOOK")" "$(basename "$STOP_HOOK")"; do
+  sed 's/^\([[:space:]]*\)STALLED)$/\1STALLED|CEILING)/' "$MUTD/$h" > "$MUTD/$h.mut" \
+    && mv "$MUTD/$h.mut" "$MUTD/$h" || MUT_OK=0
+  cmp -s "$MUTD/$h" "$(dirname "$ACK_HOOK")/$h" && MUT_OK=0
+done
+if [ "$MUT_OK" -ne 1 ] || [ ! -f "$MUTD/$(basename "$STOP_HOOK")" ]; then
+  bad "FIXTURE BROKEN: the ceiling-collapsed-into-stalled mutant did not apply to both hooks"
+else
+  MCEIL="$(drive_ceiling "$MUTD/$(basename "$ACK_HOOK")" "$MUTD/$(basename "$STOP_HOOK")")"
+  case "$MCEIL" in
+    "deny stalled stalled") ok "mutant ceiling-as-stalled is KILLED by both message arms (both copies ran and printed the STALL text under a CEILING header)" ;;
+    *" none"*) bad "FIXTURE BROKEN: a mutant hook copy printed no CEILING message at all ($MCEIL) -- it did not run, so no kill is scored" ;;
+    *) bad "mutant ceiling-as-stalled SURVIVED ($MCEIL) -- the CEILING message arms cannot tell CEILING from STALLED" ;;
+  esac
+fi
+rm -rf "$MUTD"
 
 # =============================================================================
 # 2. THE RESUME — a resolved cycle CAN dispatch. If this fails, the deadlock is back.

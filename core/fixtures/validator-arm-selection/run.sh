@@ -55,6 +55,11 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 #     arm 7 the neutered selector, 3 reps   18s
 #     everything else (seed, mutants, ids)   2s
 #
+# Those are the SERIAL costs of each block. Arm 6's two units -- the seeded plain run and its
+# attribution sweep -- no longer run back to back: they are dispatched concurrently and each is
+# waited on its own (see arm 6). Each still costs what the table says; this file claims nothing
+# about the wall clock that overlap buys, and shard 'b' is not the suite's pole.
+#
 # So it is FOUR near-full validator runs and two 94-id sweeps, not "the 94 ids" -- the sweeps
 # are 26% of it. That rules out trimming: every one of those units is a total derivation, and
 # the only way to make one cheaper is to run it over fewer ids, which turns it into a sample.
@@ -391,18 +396,43 @@ groups() {
 # across several arms.
 #
 # PREREQUISITE, and it is the expensive half of shard 'b': one plain run of the seeded tree's
-# validator (16s) and one 94-id attribution sweep (11s). The `N_SEEDED < 3` guard inside it is
+# validator (16s serial) and one 94-id attribution sweep (11s serial), dispatched together. The
+# `N_SEEDED < 3` guard inside it is
 # THIS SHARD'S CONTROL -- a validator that had stopped running produces no findings on a tree
 # seeded to make several arms speak, and the shard reports FIXTURE BROKEN rather than a clean
 # differential over an empty set.
+#
+# THE TWO UNITS RUN CONCURRENTLY, and only the two raw commands are backgrounded. Neither reads
+# the other's output: the plain run writes `$TMP/seeded.err`, the sweep writes `$TMP/at.sel` and
+# `$TMP/sel.*`, and both only READ the seeded tree -- which is why `seeded.err` lives in `$TMP`
+# and never in `$T`, where the sweep would be scanning a file the plain run was still writing.
+# Each pid is waited on its own and its status read on the next line; a bare `wait` would
+# return 0 over a sweep that died. Every guard and every assignment runs HERE, in the parent,
+# after both waits -- a `broke` inside a background job would end the job, not the fixture.
 if want_any attrib union partition m2; then
-bash "$TV" > /dev/null 2>"$T/seeded.err"
-grep '^FAIL:' "$T/seeded.err" | sort > "$TMP/seeded.fails"
+bash "$TV" > /dev/null 2>"$TMP/seeded.err" &
+seeded_pid=$!
+attrib "$TV" sel "$IDS" &
+attrib_pid=$!
+wait "$seeded_pid"
+seeded_rc=$?
+wait "$attrib_pid"
+attrib_rc=$?
+# The seeded run exits 1 BY DESIGN -- the tree is seeded to produce findings -- so 0 and 1 are
+# both a run that completed; anything else is a validator that could not run at all.
+if [ "$seeded_rc" -ne 0 ] && [ "$seeded_rc" -ne 1 ]; then
+  broke "the seeded tree's plain validator run exited $seeded_rc (0 or 1 expected); the differential below would compare against a run that did not complete. stderr: $(head -2 "$TMP/seeded.err" | cut -c1-140)"
+fi
+# THE SWEEP'S STATUS IS THE ONLY WITNESS TO ITS DEATH. A sweep killed part-way leaves a partial
+# `sel.ids`, and the floors below read a short list exactly as they read a long one.
+if [ "$attrib_rc" -ne 0 ]; then
+  broke "the seeded tree's attribution sweep exited $attrib_rc; its per-id findings are partial and every differential below would read them as complete"
+fi
+grep '^FAIL:' "$TMP/seeded.err" | sort > "$TMP/seeded.fails"
 N_SEEDED="$(grep -c . "$TMP/seeded.fails" || true)"
 if [ "${N_SEEDED:-0}" -lt 3 ]; then
   broke "the seeded tree produced only ${N_SEEDED:-0} finding(s); this differential needs at least three arms speaking at once and the mutation no longer reaches them"
 fi
-attrib "$TV" sel "$IDS"
 N_ATTRIB="$(grep -c . "$TMP/sel.ids" || true)"
 N_GROUPS="$(groups sel)"
 fi

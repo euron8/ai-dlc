@@ -67,8 +67,13 @@ Forced, not sampled: an EBADF on the section read put 3 FAILs at base blaming th
 sandbox render exiting 3 scored A3a `ok` at base and `FIXTURE BROKEN` at tip. **This does not close the
 entry**: none of the recorded extra-world shapes came from these four sites, and the kill-set arms never
 used `<( )`. Citations moved: E1 is at `run.sh:2336` on 0.668.0 (not `:1129`), E8 `:2377`, `v_render`
-`:1718`, the RAW-lines arm `:2294`, each shifting further with this release. 73 live `<(` remain across
-28 fixture files, so a lint cannot ship yet.
+`:1718`, the RAW-lines arm `:2294`, each shifting further with this release. Non-comment
+`core/fixtures/*/run.sh` lines containing `<(` number 75 across 26 files (comment lines
+included, the same glob reads 93; derived with `grep -n '<(' core/fixtures/*/run.sh`, dropping
+lines whose first non-blank character is `#`). They are not all live process substitutions: 34 of the 75
+sit in `procsub-staged-refusal` and `procsub-staged-refusal-boot`, 17 each, most of them as
+mutation strings that seed the defect. So a lint cannot ship yet, and it would need to tell
+those strings from real reads before it could.
 
 **Found 2026-09-11** during batch 85, when E1 failed a gate run on a branch whose change cannot
 reach it. Two separate defects in one arm; the second is what makes the first expensive.
@@ -370,9 +375,22 @@ detectors' `<( )` sites, but that is not measured. The render fix's own receipt 
 
 verify: manual
 
-## BL-004 — the nine inner pools are owed, and the hook records them as owed
+## BL-004 — the fixtures' inner pools are owed a sweep, and the hook records them as owed
 
-66 workers sit on top of the outer pool. They cannot be swept with an environment variable —
+**What the figure counts, and over which set.** Per SOURCE FILE: eleven fixture `run.sh` files
+open their own pool — non-comment lines matching `xargs … -P` under `core/fixtures/*/*.sh`,
+excluding `consumer-suite-pool/run.sh:395`, which is a mutation string and not a pool — and
+their `-P` constants sum to 70 workers (derived with `grep -nE 'xargs.*-P' core/fixtures/*/*.sh`,
+dropping comment lines and that one mutation string, then summing each pool's width constant).
+That is the figure `.githooks/pre-push`'s pool-width
+comment cites. Per DISPATCHED DIRECTORY the set is larger: five shard directories
+(`enforcement-map-derivations-b`, `enforcement-map-sites-b`/`-c`,
+`layer-contract-conformance-b`, `validator-arm-selection-b`) re-enter four of those files, so
+up to sixteen directories can open an inner pool on top of the outer one. Whether each shard
+reaches its file's pool line was not measured. The heading's earlier "nine" and "66" were
+taken over the per-source-file set before two pools were added.
+
+Those workers sit on top of the outer pool. They cannot be swept with an environment variable —
 `enforcement-map-sites` scrubs every ambient `AI_DLC_*` name for I10, and I87 binds any key a
 shipped program dereferences — so sweeping them means editing the constants on a throwaway
 branch that is never pushed.
@@ -387,25 +405,33 @@ verify: manual
 
 ---
 
-## BL-005 — `validator-arm-selection` shard `b` has a ~47.8s solo floor set by three serial units; two routes below it were measured and neither taken
+## BL-005 — `validator-arm-selection` shard `b` now overlaps its seeded run with the attribution sweep; the third-directory route stays untaken
 
-Its shard `b` has a measured floor of ~47.8s solo, set by three serial units: a seeded run at
-16s, an attribution sweep at 11s, and a mutant's three parallel full runs at 18s. Going below
-it needs either a third directory duplicating the 27s prerequisite, or overlapping the seeded
-run with the attribution sweep. Both were measured; neither was taken.
+Shard `b` was a floor set by three serial units: a seeded run at 16s, an attribution sweep at
+11s, and a mutant's three parallel full runs at 18s (per-block serial costs taken solo, recorded in the
+timing table at the head of `core/fixtures/validator-arm-selection/run.sh`). Two routes below it
+were measured: a third directory duplicating the 27s prerequisite, or overlapping the seeded run
+with the attribution sweep.
+
+**The overlap is TAKEN.** Arm 6 of that file now backgrounds exactly the two raw commands — the
+seeded tree's plain validator run and `attrib` — waits each pid on its own, and reads both
+statuses in the parent before any guard or assignment runs: a seeded-run exit other than 0 or 1
+and a non-zero sweep exit each report FIXTURE BROKEN. The seeded run's stderr moved from the
+scanned tree into the fixture's own scratch dir, so neither unit writes where the other reads.
+No wall-clock gain is claimed for it: shard `b` is far from the suite's pole, so the suite's
+makespan does not move. **The third-directory route stays untaken.**
 
 **THIS ENTRY IS NOT ABOUT THE POLE, AND ITS HEADING SAID IT WAS UNTIL `v0.583.0`.** The pre-push
-pole is `ledger-reverify` at **628s loaded** — pool 12, full suite under
-`AI_DLC_FIXTURE_NO_SKIP=1`, taken as the MAX of three calibrated serial runs in a `file://`
-clone of `origin/main` at `83747ef4`: **628s** (wall 743s, load average 50.56 at start), **563s**
-(wall 629s, load 9.06), **562s** (wall 627s, load 5.30). Since `v0.583.0` that figure is watched
-by `scripts/validate-suite-pole.sh` against the tracked baseline
-`docs/suite-pole-baseline.tsv`, which is what `BL-257` built. The **166s / 217s** figures this
-entry's heading carried were displaced at **v0.541.0** by `BL-088`, whose own landing paragraph
-records the pole falling to `ledger-reverify` in the same change — four releases before
-`BL-255` read the heading and found it still asserting them. A session scoping performance work
-off this entry optimizes a fixture that is not the pole; shard `b`'s floor is a real and
-separate subject, and it is the only subject this entry has.
+pole is watched by `scripts/validate-suite-pole.sh` against its tracked baseline, which is what
+`BL-257` built. That validator prints a NOTE — *"the pole has moved to …; the baseline still
+names …"* — when the longest unit in a run is not the one the baseline names, so the current
+pole is read off that NOTE or off the top of `.git/ai-dlc-fixture-durations` (a LOADED cost),
+never off a figure quoted here. Every pole figure this entry has carried went stale: the
+**166s / 217s** in its old heading were displaced at **v0.541.0** by `BL-088`, four releases
+before `BL-255` read the heading and found it still asserting them, and the `ledger-reverify`
+figure that replaced them was itself displaced when that unit was sharded. A session scoping
+performance work off this entry optimizes a fixture that is not the pole; shard `b`'s floor is
+a real and separate subject, and it is the only subject this entry has.
 
 Carried over from `docs/plans/pre-push-wall-clock.md`. This is a program, not a single fix.
 
@@ -599,6 +625,97 @@ blind set), and whether an override's prose can be bound to a validator at all w
 second restatement — `mechanism-design.md` warns that a rule restating a mechanism drifts
 tighter than the mechanism. A detector keyed on "this override names a threshold" has an
 unmeasured false-positive set and must not ship before that set is enumerated.
+
+**Census (batch 185). Every figure below was taken over two named sets: the distribution's
+`core/scripts/*.sh` at `c18897d9` (57 tracked files; `git ls-files` and `/usr/bin/find` agree), and
+the reference consumer's layer at its `34f02449`, which means the 49 bodies `layer_files()` in
+`layer-drift.sh` would read (9 under `overrides/` and 40 under `extensions/`, README excluded, every
+body non-empty after `body_of`). These counts move with either tree, so re-derive them rather than
+quote them.**
+
+**THE MOTIVATING INSTANCE IS NOT OVERRIDE DRIFT. IT IS CORE PROSE THAT THE VALIDATOR LEFT BEHIND,
+INHERITED VERBATIM.** The override's sentence (`overrides/SKILL__Rule-8.md`, body lines 25-26: "A
+nonzero MAJOR held at zero CRITICAL across 2+ passes is a STALL") is byte-identical to live core
+`core/skills/ai-dlc/SKILL.md:261-262`. The same predicate appears in `core/hooks/ai-dlc-acknowledge.sh:337,479`
+and `core/hooks/ai-dlc-continue.sh:1012,1173`, and the consumer's installed copies of all three
+carry it too. `39f0cb0b` (v0.443.0) moved arm E to `blocking > MAJOR_EXIT_CEILING` and touched
+only the validator, `core/team-roles/adversary.md`, check-24 and docs, so all four core prose
+sites still state the old predicate. `OVERRIDE-OK` is therefore correct in the strongest sense,
+because the override matches current core. **DEFECT, not this entry's to fix: core `SKILL.md`
+Rule 8 and two hook messages state a STALL predicate the validator no longer implements.** It is
+filed here as a measured fact for the operator to schedule.
+
+**(1) The migrated side.** One grep finds upper-case `NAME=<int>` assignments in the 57 files whose
+name matches `CEIL|MAX|MIN|LIMIT|FLOOR|THRESH|BUDGET|CAP|BOUND|TOL|WINDOW|SLACK`. It returns 33
+rows, 29 distinct names and 13 files. That is a floor and it is impure. Seven rows are
+accumulators or flags initialised to 0 (`CEILING_LIVE`, `CEILING_COUNT`, `CITE_UNBOUNDED`,
+`RESOLVED_TERMINAL`, `TERMINAL`, `UNBOUNDED`, `GA_UNBOUNDED_CITES`), not limits. The name grammar
+cannot express a table, so `validate-artifact-budget.sh`'s six `name|bytes|remedy` rows (for
+example `pipeline-snapshot.md|6000|trim`) were added by hand. The 85 literal `-gt/-ge/-lt/-le N`
+comparisons with non-zero N, across 29 files, were counted but not joined. Control:
+`MAJOR_EXIT_CEILING=3` is present (1). An impossible name returns 0.
+
+**(2) The layer side.** A threshold-phrase grep (`≥ ≤ >= <=`, `at least/most N`, `N+`, `N%`,
+`nonzero`, `ceiling|threshold|budget`, and similar) over the 49 bodies returns 95 lines in 21
+files. The known line is present (Rule-8's "nonzero MAJOR", count 1). Only one layer body names
+a validator constant by its identifier: `TERMINAL`, which is an English word in a retro step
+heading and so a false positive. Basename references to `core/scripts/*.sh` give 43 (file, script)
+pairs over 19 files and 18 scripts. These are citations, not restatements of a value.
+
+**(3) The join, keyed on the numeric value.** Joining the integers on threshold-phrase lines
+against the validator value set gives 63 (line, value) hits on 51 lines. Grouped by (value,
+subject), only TWO are true restatements of an enforced value, and BOTH AGREE. The first is
+`extensions/steps-domain/retro-domain-close-out-sweep.md` citing `pipeline-snapshot.md|6000|trim`
+(6000 = 6000). The second is Rule-8's "2+ passes" against `STALL_THRESHOLD=2` (2 = 2). **The
+override's only number agrees with the validator. Its staleness lives in "nonzero MAJOR" against
+`blocking > MAJOR_EXIT_CEILING`, which carries no digit in the override, so a numeric detector
+scores the case this entry was filed on as CLEAN.** The FP set, by value:
+- **10.** The adversary's ten-findings floor (`bug-investigation-push.md`) lives only in
+  `adversary.md` prose. A grep for its enforcement returned 7 hits, all 7 `findings_minor` or
+  unrelated loop bounds, so the real count is 0. The other 10s (`DENSITY_MIN=10` in the stub audit,
+  `N≥10` harness reps, `≤~10-line` edits, `≤$10`) are unrelated subjects.
+- **3 and 2.** These are Rule 8's intensity story-count thresholds (`≥3`, `≤2`, "exceeds 2").
+  Enforcement in `core/scripts`+`core/hooks` is 0 (`carry-over-single` appears 0 times there and
+  13 times in `SKILL.md`+`steps/`), so these are prose rules with no validator.
+- **8.** A deploy cluster count, not `PART_CAP=8`.
+- **50.** A wire-byte reduction percentage and a proposal rate, not `MAX_SHARE_PCT=50`.
+- **6.** A section number, not `MAX_BEATS=6`.
+- **0, 1, 2 and 3 everywhere else.** These are ordinary prose (`≥1 test file`, `N≥2 fixture`,
+  exit codes).
+Small integers collide with everything, and that is the structural reason this key cannot work.
+**Verdict on the numeric key: constructible, with an FP set of 49 of 51 lines, and blind to its own
+motivating subject. Do not build it.**
+
+**A key that DOES reach the motivating instance: core files the override BODY cites, diffed
+`base_sha..theirs`.** No arm does this today. Line 1838 diffs only the SHADOWED file, and
+`OVERRIDE-DELEGATES-INTO-SHADOW` asks about reachability, not drift. `retired-layer-passage.sh`
+matches core lines DELETED base..theirs, and the stale sentence is still live in core, so it
+cannot fire. Measured with HEAD standing in for the pull's `theirs` (a real run would use the
+pull's ref): over the 9 overrides, backticked `*.md|*.sh|*.yaml` tokens that resolve to a core
+file give 7 citations in 3 overrides, and 6 of them changed since their `base_sha`. **3 of 9
+overrides would fire.** One is the known true positive: Rule-8 cites `team-roles/adversary.md`,
+which `39f0cb0b` edited. The other two (`check-5` citing `implementation.md`, and `domain-sections`
+citing `gate-validation.md`, `route.md` and `validate-artifact-budget.sh`) are unadjudicated:
+"changed since base" is a drift signal, not a staleness verdict. **The key reached Rule-8 only
+because `39f0cb0b` happened to co-edit `adversary.md`. A validator-only migration would have been
+invisible to it too, so it narrows the blind set without closing it.** Size, if scheduled: one
+report-only arm in `layer-drift.sh` (OVERRIDE-CITED-CORE-DRIFT, never blocking), reusing the
+existing `git diff --quiet base_sha THEIRS -- <path>` shape, plus a fixture seeding one cited file
+changed and one unchanged. Its FP set must be adjudicated on the two non-Rule-8 hits before it
+ships. **The direct fix for the measured defect is cheaper and lies on the distribution side:
+reword the four core prose sites to the arm-E predicate. The consumer then inherits it through the
+existing `HARD-OVERRIDE-DRIFT-SECTION` on its next pull, because the shadowed section will finally
+move.**
+
+**Batch 185: the motivating case was core-prose staleness, and that half is fixed.** The stale
+STALL predicate ("a nonzero MAJOR held at zero CRITICAL") was reworded at every core site to the
+validator's arm-E predicate, citing `MAJOR_EXIT_CEILING`, `CRITICAL_EXIT_CEILING` and
+`STALL_THRESHOLD` by name and carrying no digit: `core/skills/ai-dlc/SKILL.md`, both hooks'
+comments and deny messages, the validator's own arm-E comment, and `divergence-hard-block`. Both
+hooks also gained an explicit `CEILING)` branch, because their catch-all had described the
+validator's fourth rc-3 state as a stall. The detector question is unchanged and stays open as
+the census above leaves it: no layer-drift arm sees an override restating a threshold that moved
+into a validator.
 
 verify: manual -- this entry records a gap, not a receipt. Do not close it on a green
 `layer-drift.sh` run; that green is the defect.
@@ -1152,7 +1269,23 @@ The receipt is manual because its subject is the harness's own transcript format
 
 ## BL-412 — `layer-reference-resolution` went red once under the pool on a close commit that touches none of its inputs, and the cause is not established
 
-**NOTE. Seen at batch 179, not diagnosed.** The first gate of the second close commit (`d7cb330a`, which changed only `docs/backlog.md`, `docs/backlog.archive.md` and `.githooks/pre-push`) failed on one unit of 216 at pool width 16 and a 1-minute load near 40: mutant `hook-resolve-mention` read `w12shadow5=W` where the fixture expects `-`. That fixture reads none of the three files and its read-set rows name none of them. Run alone from the main checkout it passed three times (42 assertions, about 55s), and the unchanged commit passed a second gate with 216 of 216 ok. No ordering or timing construct in `vector.sh` or `worker.sh` was found that would explain it, and the recorded loaded cost is 148s against 55s solo. A load-dependent fault is a hypothesis, not a finding. The hook's failure record (`.git/ai-dlc-fixture-failures`) holds the full got-vector and is overwritten by the next red run, so copy it before the next gate if this recurs.
+**NOTE. Seen at batch 179, not diagnosed.** The first gate of the second close commit (`d7cb330a`, which changed only `docs/backlog.md`, `docs/backlog.archive.md` and `.githooks/pre-push`) failed on one unit of 216 at pool width 16 and a 1-minute load near 40: mutant `hook-resolve-mention` read `w12shadow5=W` where the fixture expects `-`. That fixture reads none of the three files and its read-set rows name none of them. Run alone from the main checkout it passed three times (42 assertions, about 55s), and the unchanged commit passed a second gate with 216 of 216 ok. No ordering or timing construct in `vector.sh` or `worker.sh` was found that would explain it, and the recorded loaded cost is 148s against 55s solo. A load-dependent fault is a hypothesis, not a finding. The batch-179 got-vector did not survive: the hook's failure record (`.git/ai-dlc-fixture-failures`) is overwritten by the next red run.
 
-verify: manual -- the failure did not reproduce solo or on a second gate, so there is no receipt to score; the claim is the lead's measurement and the cause is unestablished.
+**PARTIAL IN BATCH 185: EVERY RED RUN NOW RETAINS ITS OWN RECORD.** Both pre-push hooks copy the record, on a successful primary write only, to `.git/ai-dlc-fixture-failures.<UTC %Y%m%dT%H%M%SZ>.<pid>` and prune to the newest `FAILLOG_KEEP` copies of that exact shape. Hand-saved records under other names (`.clean` on this machine) are outside the anchored prune pattern. `core/fixtures/consumer-suite-pool` arm 2c and mutants `retain-off`, `retain-fixed-name`, `prune-off`, `prune-glob-wide` hold it. **This does not close the entry**: the cause was never established, and retention only guarantees that the next recurrence leaves its got-vector on disk. Read the newest stamped copy whose header names `layer-reference-resolution` when it recurs. A hand-saved copy is safe from the prune if its name gains a non-numeric suffix (`.keep`).
+
+verify: manual -- retention is held by core/fixtures/consumer-suite-pool (arm 2c and its five mutants); the open half, the cause of the red, has nothing to score until a recurrence leaves a retained record.
+
+## BL-430 — `docs/suite-pole-baseline.tsv`'s pool-12 block still names `ledger-reverify` at 628s, a unit that has since been sharded
+
+**NOTE. Found at batch 185 while restating BL-005's pole paragraph.** The jobs-12 block of
+`docs/suite-pole-baseline.tsv` (its data row and the v0.583.0 ratchet-history line) records
+`ledger-reverify 628`, taken at `83747ef4` over 201 fixture directories. `ledger-reverify` has
+since been sharded: `ledger-reverify-b`, `-c` and `-d` re-enter its `run.sh`, so the
+`ledger-reverify` directory now carries one shard of the assertion set the 628s figure timed
+whole. At pool 12 `scripts/validate-suite-pole.sh` therefore compares the live pole against a
+figure taken on a different partition. Its pole-moved NOTE (`:611-613`) says so on a run where
+another unit is longest, and it does not fail. The pool-16 block (`gate-adjudication-mutants`, v0.705.0) is current and
+unaffected.
+
+verify: manual -- re-taking the row needs the file's own calibration recipe: three serial full runs under `AI_DLC_FIXTURE_NO_SKIP=1` at pool 12. That forced full run is one the operator has not authorised, so no session can produce the measurement that would close this, and a receipt keyed on the row's text would close it on an edit with no measurement behind it.
 

@@ -258,8 +258,10 @@ pass's findings landed.
 
 **Divergence is a HARD_BLOCK, not a reason for another pass.** Pass N+1's
 `findings_critical_prior_scope` above pass N's `findings_critical` means the repair
-is injecting defects. STOP and escalate. A nonzero MAJOR held at zero CRITICAL across
-2+ passes is a STALL, and stops the cycle the same way. CRITICALs in scope ADDED
+is injecting defects. STOP and escalate. A blocking MAJOR count above
+`MAJOR_EXIT_CEILING`, at no more than `CRITICAL_EXIT_CEILING` CRITICAL, not reduced
+across more than `STALL_THRESHOLD` consecutive passes is a STALL, and stops the cycle
+the same way. CRITICALs in scope ADDED
 mid-cycle are NOT divergence: no cycle converges on a growing artifact -- freeze
 scope, shrink the sprint, restart. Contract: `team-roles/adversary.md`.
 
