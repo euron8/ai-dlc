@@ -19,6 +19,38 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.700.0] - 2026-10-01
+
+Batch 181's eighth release: `predicate-differential.sh` and `predicate-sites.md`, with text-only hunks in
+`emit-report.sh`'s step-5 projection and the update `SKILL.md` step 3g. Bootstrapping, so it ships alone; a consumer
+runs its installed copy, so this takes effect on the pull after the one that delivers it.
+
+### Backlog
+
+- `BL-409`: a site may declare `corpus-root:` in `predicate-sites.md`, and the suppression-lifetime site declares
+  `docs/escalations`, so its subject `pending.md` is reached instead of reading `UNDECIDABLE` on every consumer. A
+  value carrying `..`, a leading `/` or whitespace is refused with an `UNDECIDABLE` row naming the field.
+- `BL-410`: each side of the differential runs with `AI_DLC_PROJECT_ROOT` pinned to its own probe root and
+  `AI_DLC_KNOWN_SKILLS_EXT` passed explicitly, so a schema-only change is compared on each side's own schema. A
+  walk-up marker alone would have resolved the extension empty on both sides. With the extension passed by path,
+  a change to the validator's extension SEARCH PATH is not observable to the differential; `predicate-sites.md`
+  says so.
+- `BL-129`: every differential row carries its population definition, and where its corpus was read, its
+  record, series and compared counts, with passed and unclassified counted separately. A site whose verdict
+  grammar captures a pass token counts from that; a site whose validator prints a pass line declares it with
+  `pass:`. A STABLE site now reaches the step-5 report as one line carrying its static population only; the live
+  counts stay in the detector's rows, so a corpus that grows between approval and apply does not fail `--verify`.
+  The report heading is unchanged. A region rendered by the previous `emit-report.sh` does not `--verify` under
+  this one, and the reverse, because a STABLE site's line differs. On the pull that delivers this release the
+  installed `apply.sh` verifies at step 7 with the installed `emit-report.sh` before any write, so the approved
+  report verifies; the step-2 self-update stop and the union gate's post-apply refusal already re-render on
+  every later path that could cross engines.
+- `core/fixtures/procsub-staged-refusal-boot`: the BL-360 worlds stub `predicate-differential.sh` to no rows,
+  record that the stub fired and refuse if it never does, so those cells measure `emit-report.sh` alone.
+- `BL-364` (partial): the differential's `ls-files` lists raw paths.
+- `core/fixtures/predicate-reclassification` Parts 11-15 and `core/fixtures/emit-report-refusal` arms A8 and A9,
+  each failing on the base engine or projection.
+
 ## [0.699.0] - 2026-10-01
 
 Batch 181's seventh release: four reconcile helpers outside the bootstrapping core, plus one hook fixture cell.
