@@ -714,7 +714,8 @@ jq -nc \
    }
    # The lead text of an invented exception, written ONLY beside that value, so its presence
    # is itself the marker Check 22 arm S3 prints from. NO APOSTROPHE HERE either.
-   | if $shard == "invalid-exception" then . + {shard_raw: $shardraw} else . end' >> "$SPAWN_LEDGER" 2>/dev/null || true
+   | if $shard == "invalid-exception" then . + {shard_raw: $shardraw} else . end' >> "$SPAWN_LEDGER" 2>/dev/null || _sl_rc=$?
+# A failed append is recorded in _sl_rc and never blocks a dispatch: nothing reads it, and the hook goes on.
 # --- end SPAWN LEDGER ---------------------------------------------------------
 
 [ "$ROLE_FILE_READABLE" = true ] || exit 0   # recorded above; never correct blind
