@@ -2053,6 +2053,46 @@ else
   printf '  FAIL  %-22s FIXTURE BROKEN — the unmutated engine over the six-entry ledger read {%s}, want {%s}; no mutant below is attributable\n' "cited-control" "$co_ctl_read" "$co_ctl_want"
 fi
 
+# --- THE FAIL-OPEN PATH. When the filter's own git call fails, the naming set must come back
+# UNFILTERED -- the row this engine produced before the form existed -- never empty, which would
+# turn a tool error into a CITED-ONLY row. Forced with a `git` shim on PATH that refuses only the
+# filter's `--no-walk=unsorted` call and leaves a sentinel, so the cell can prove the failure
+# happened. Under the shim S955 must read the PRE-FILTER kind, NAMED-UPSTREAM.
+CO_SHIM="$COD/shim"; rm -rf "$CO_SHIM"; mkdir -p "$CO_SHIM"
+CO_REALGIT="$(command -v git)"
+printf '#!/bin/sh\nfor a in "$@"; do case "$a" in --no-walk=unsorted) : > "%s/fired"; exit 128 ;; esac; done\nexec "%s" "$@"\n' \
+  "$CO_SHIM" "$CO_REALGIT" > "$CO_SHIM/git"
+chmod +x "$CO_SHIM/git"
+co_failopen() { # <engine> -> S955's kind with the filter's git call failing, or BROKEN
+  rm -f "$CO_SHIM/fired"
+  local _r
+  _r="$(PATH="$CO_SHIM:$PATH" bash "$1" "$DIST" "$BASE" "$CONS" "$THEIRS" "$COD/ledger.md" 2>/dev/null)"
+  [ -f "$CO_SHIM/fired" ] || { printf 'BROKEN'; return; }
+  co_kind "$_r" PC-S955-FORM-ONLY-CITATION
+}
+ASSERTIONS=$((ASSERTIONS + 1))
+co_fo="$(co_failopen "$CLOSER")"
+if [ "$co_fo" = NAMED-UPSTREAM ]; then
+  printf '  ok    %-22s with the filter'"'"'s git call failing, S955 reads the pre-filter NAMED-UPSTREAM -- a tool error is never a CITED-ONLY row\n' "cited-fail-open"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s with the filter'"'"'s git call failing S955 read %s, want NAMED-UPSTREAM (BROKEN = the shim never fired)\n' "cited-fail-open" "${co_fo:-<no row>}"
+fi
+ASSERTIONS=$((ASSERTIONS + 1))
+co_fom="$(co_mut fail-closed \
+  '    END { flush() }'"'"')" || { printf '"'"'%s\n'"'"' "$1"; return 0; }' \
+  '    END { flush() }'"'"')" || { return 0; }')"
+if [ -z "$co_fom" ]; then
+  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the mutation DID NOT APPLY, so cited-fail-open is unproven\n' "mutation-fail-closed"
+else
+  co_fok="$(co_failopen "$co_fom")"
+  if [ "$co_fok" = NAMED-UPSTREAM-CITED-ONLY ]; then
+    printf '  ok    %-22s a fallback returning EMPTY turns the git failure into a CITED-ONLY row, and cited-fail-open is what sees it\n' "mutation-fail-closed"
+  else
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s under the fail-closed mutant S955 read %s, want NAMED-UPSTREAM-CITED-ONLY\n' "mutation-fail-closed" "${co_fok:-<no row>}"
+  fi
+fi
+
 # --- THE BOOTSTRAPPING CELL. `ledger-reverify.sh` is read by the ENGINE THE CONSUMER LAST INSTALLED:
 # `lib.sh`'s `ledger_close_awk_pattern` lifts the close rule out of this file by structure, and the
 # pull that delivers this file runs the previous release's lib.sh against it. That extractor must

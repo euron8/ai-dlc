@@ -590,7 +590,9 @@ prefix_entry_count() { # <PC-S<n>> -> integer
 #
 # ONE git CALL FOR THE WHOLE SET, `--no-walk=unsorted` so the residue keeps the caller's
 # newest-first order. Records are opened by a \001 byte rather than NUL: BSD awk truncates a line at
-# a NUL (measured: `\0aaa` read as an empty header), and \001 is a byte no commit message carries.
+# a NUL (measured: `\0aaa` read as an empty header). \001 appears in 0 of 2001 messages on the
+# distribution's main, and arm F of validate-release-version.sh refuses a release message carrying
+# one, because a message that did could forge a record boundary here.
 #
 # FAILS TOWARDS THE OLD KIND. This runs inside the caller's `$( )`, where `lr_refuse` cannot end
 # the run, so a git or awk failure returns the UNFILTERED set -- the rows this file produced before
