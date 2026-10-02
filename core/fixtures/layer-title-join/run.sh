@@ -713,6 +713,55 @@ else
   bad "only $E20N of 2 Part 8 mutants were scored — a mutation that never became a mutant leaves its arm unproven, and this fixture would report PASS over it"
 fi
 
+# =======================================================================================
+# Part 9: A MEMO THAT CANNOT SERVE ONE KEY REFUSES; IT NEVER MOVES THE SKELETON SET
+#
+# lib.sh's memo returns 125 when a cached listing, blob or status cannot be served. The skeleton
+# derivation discarded it at the tree listing (`| grep '^core/' || true`), at the manifest read and
+# at every rulebook blob, so ONE unreadable cached object changed which headings count as skeletal
+# and the title arm moved at rc 0: measured on this world, the listing, the manifest or beta.md lost
+# each added a FALSE row on `## Shared Skeleton`. The verdict schema lost emptied the vocabulary the
+# same way. Each cell warms a memo, damages ONE key, and demands exit 1 with the memo named.
+# =======================================================================================
+ltj_memo_warm() { local m; m="$(mktemp -d "$ROOT/ltj-memo.XXXXXX")" || return 1
+  AI_DLC_RECONCILE_MEMO="$m" bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" > "$m.ctl" 2>/dev/null; printf '%s' "$m"; }
+LM="$(ltj_memo_warm)"
+AI_DLC_RECONCILE_MEMO="$LM" bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" > "$ROOT/lm.out" 2>/dev/null; lm_rc=$?
+if [ "$lm_rc" = 0 ] && [ -s "$ROOT/lm.out" ] && cmp -s "$ROOT/lm.out" "$LM.ctl"; then
+  ok "Part 9 control: a warm memo HIT with nothing damaged reproduces the fill's rows at rc 0"
+else
+  bad "FIXTURE BROKEN — Part 9's warm memo hit did not reproduce its fill (rc=$lm_rc), so the damaged-key cells compare against nothing"
+fi
+for lm_cell in \
+  "listing:t:${THEIRS}:-:c0:the tree listing at theirs" \
+  "manifest:s:${THEIRS}:core%2Fskills%2Fai-dlc%2Fcore-manifest.md:cs:core-manifest.md at theirs" \
+  "role-blob:s:${THEIRS}:core%2Fteam-roles%2Fbeta.md:c0:a rulebook role file at theirs" \
+  "verdicts:s:${THEIRS}:core%2Fschemas%2Flayer-adjudication-register.json:c0:the verdict schema at theirs"; do
+  IFS=: read -r lm_id lm_cls lm_ref lm_path lm_mode lm_what <<EOF
+$lm_cell
+EOF
+  LM="$(ltj_memo_warm)"
+  lm_n=0
+  if [ "$lm_cls" = t ]; then set -- "$LM"/"t "*" ${lm_ref}"*.s; else set -- "$LM"/"s "*" ${lm_ref}"*":${lm_path}.s"; fi
+  for lm_f in "$@"; do
+    [ -f "$lm_f" ] || continue
+    lm_k="${lm_f%.s}"; lm_n=$((lm_n + 1))
+    case "$lm_mode" in c0) chmod 000 "$lm_k.c" ;; cs) : > "$lm_k.s"; : > "$lm_k.c" ;; esac
+  done
+  if [ "$lm_n" -ne 1 ]; then
+    bad "FIXTURE BROKEN — Part 9 cell $lm_id found $lm_n memo key(s), not 1; the memo key grammar moved"
+    continue
+  fi
+  AI_DLC_RECONCILE_MEMO="$LM" bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" > "$ROOT/lm.out" 2> "$ROOT/lm.err"; lm_rc=$?
+  chmod -R u+rw "$LM" 2>/dev/null
+  if [ "$lm_rc" = 1 ] && grep -qF 'could not be served by the reconcile memo' "$ROOT/lm.err" \
+     && ! grep -q 'shared skeleton' "$ROOT/lm.out"; then
+    ok "Part 9 $lm_id: $lm_what the memo cannot serve REFUSES rc 1, the memo named, no skeleton row"
+  else
+    bad "Part 9 $lm_id: $lm_what the memo cannot serve gave rc=$lm_rc, $(grep -c . "$ROOT/lm.out") row(s), $(grep -c 'shared skeleton' "$ROOT/lm.out") skeleton row(s) — a lost cached object moved the rows"
+  fi
+done
+
 echo ""
 if [ "$fails" -eq 0 ]; then echo "layer-title-join: PASS"; exit 0; fi
 echo "layer-title-join: FAIL ($fails)"; exit 1

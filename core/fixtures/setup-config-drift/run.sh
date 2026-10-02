@@ -199,7 +199,7 @@ sed -e '/if \[ "\$drc" -ne 1 \] || \[ -z "\$d" \]; then printf .unknown.; return
     -e 's/if \[ "\$unreg" != "yes" \] && \[ "\$unreg" != "no" \]; then/if false; then/' \
     "$SCRIPT" > "$FC/mA/unregistered-drift.sh"
 # mB reverts the ancestor-search fix: a failed candidate diff is scored instead of skipped.
-sed 's/\[ "\$?" -le 1 \] || continue/: || continue/' "$SCRIPT" > "$FC/mB/unregistered-drift.sh"
+sed 's/\[ "\$_as" -le 1 \] || continue/: || continue/' "$SCRIPT" > "$FC/mB/unregistered-drift.sh"
 # Counted from a FILE, never from a pipe: `diff` exits 1 on the difference it is being asked for,
 # and under pipefail a `diff | grep -c` pipeline then "fails" and `|| n=0` overwrites the count.
 # mA is one deletion plus two in-place edits (1 + 2x2 marker lines); mB is one edit (2).
@@ -259,6 +259,127 @@ r="$(drive "$FC/mB/unregistered-drift.sh" "$WORK/shim-all" "$SCHEMA_REL")"
   || bad "mutant B moved the classifier arm to '${r%%	*}' — the two arms are entangled"
 git -C "$DIST" show "$BASE:core/$SCHEMA_REL" > "$SCF"   # restore
 git -C "$DIST" show "$BASE:core/$REL" > "$CF"           # restore
+
+# --- A MEMO THAT CANNOT SERVE THE BASE BLOB REFUSES; IT NEVER CLASSIFIES -------------------------
+# `git_show … | cmp -s - "$cons"` read no status, so a cached base blob lib.sh could not serve (its
+# 125) fed `cmp` nothing and a byte-identical file fell through to HARD-UNREGISTERED-CORE-DRIFT at
+# rc 0 -- a remedy telling the operator to refile or revert an edit nobody made. The blob is now
+# staged with its status read; a 125 is `unregistered-drift: REFUSED`, exit 2, the memo named.
+cp "$BASECONTENT" "$CF"
+UM="$(mktemp -d "$WORK/ud-memo.XXXXXX")"
+AI_DLC_RECONCILE_MEMO="$UM" bash "$SCRIPT" "$DIST" "$BASE" "$CONSUMER" > "$WORK/um.ctl" 2>/dev/null; um_rc=$?
+um_n=0
+for um_f in "$UM"/"s "*" ${BASE}:core%2Fteam-roles%2Fdev.md.s"; do [ -f "$um_f" ] || continue; um_n=$((um_n + 1)); : > "$um_f"; : > "${um_f%.s}.c"; done
+AI_DLC_RECONCILE_MEMO="$UM" bash "$SCRIPT" "$DIST" "$BASE" "$CONSUMER" > "$WORK/um.out" 2> "$WORK/um.err"; um_frc=$?
+if [ "$um_rc" != 0 ] || ! grep -q "^CORE-OK	$REL	" "$WORK/um.ctl" || [ "$um_n" -ne 1 ]; then
+  bad "FIXTURE BROKEN — the memo cell's warm run was rc=$um_rc with no CORE-OK row for $REL, or found $um_n memo key(s) for it (want 1)"
+elif [ "$um_frc" = 2 ] && grep -qF 'could not be served by the reconcile memo' "$WORK/um.err" \
+     && ! grep -q "	$REL	" "$WORK/um.out"; then
+  ok "a base blob the memo cannot serve REFUSES — exit 2, the memo named, no row decided for the file"
+else
+  bad "a base blob the memo cannot serve gave rc=$um_frc and '$(awk -F'\t' -v f="$REL" '$2==f {print $1}' "$WORK/um.out")' for a byte-identical file — a lost cached object decided its row"
+fi
+
+# --- A MEMO THAT CANNOT SERVE AN ANCESTOR BLOB REFUSES; IT NEVER RE-ROUTES THE STALE COPY ---------
+# `closest_ancestor_blob` piped each candidate into `diff -`. A memo serve that failed EMPTY (125)
+# lost to diff's own 1 under pipefail, the candidate scored as wholly different, and the stale copy's
+# HARD-CORE-BEHIND ("take theirs") fell to HARD-UNREGISTERED-CORE-DRIFT ("refile or revert") at rc 0.
+# The candidate is now staged with its read status read. Warm on the STALE consumer, then empty the
+# OLD-release blob's `.s` and `.c` -- the empty-serve mode; a full serve already propagated 125.
+AM="$(mktemp -d "$WORK/ud-anc-memo.XXXXXX")"
+AI_DLC_RECONCILE_MEMO="$AM" bash "$SCRIPT" "$DIST" "$BASE" "$STALE" > "$WORK/am.ctl" 2>/dev/null; am_rc=$?
+am_n=0
+for am_f in "$AM"/"s "*" ${OLD}:core%2Fteam-roles%2Fdev.md.s"; do [ -f "$am_f" ] || continue; am_n=$((am_n + 1)); : > "$am_f"; : > "${am_f%.s}.c"; done
+AI_DLC_RECONCILE_MEMO="$AM" bash "$SCRIPT" "$DIST" "$BASE" "$STALE" > "$WORK/am.out" 2> "$WORK/am.err"; am_frc=$?
+if [ "$am_rc" != 0 ] || ! grep -q "^HARD-CORE-BEHIND	$REL	" "$WORK/am.ctl" || [ "$am_n" -ne 1 ]; then
+  bad "FIXTURE BROKEN — the ancestor memo cell's warm run was rc=$am_rc with no HARD-CORE-BEHIND row for $REL, or found $am_n memo key(s) for its ancestor blob (want 1)"
+elif [ "$am_frc" = 2 ] && grep -qF 'could not be served by the reconcile memo' "$WORK/am.err" \
+     && ! grep -q "	$REL	" "$WORK/am.out"; then
+  ok "an ancestor blob the memo cannot serve REFUSES — exit 2, the memo named, the stale copy not re-routed to drift"
+else
+  bad "an ancestor blob the memo cannot serve gave rc=$am_frc and '$(awk -F'\t' -v f="$REL" '$2==f {print $1}' "$WORK/am.out")' for the stale copy — a lost cached object chose its remedy"
+fi
+
+# --- THE EXEMPTION READS A BASE THAT CANNOT BE STAGED: HEALTHY OR REFUSED, NEVER DRIFT ----------
+# `exempt_ranges` searched the base blob through two `<<<"$base"`s and read its site list from a
+# `done <<EOF`. Under a full disk (modelled: `trap '' XFSZ; ulimit -f N`, so the write fails with
+# EFBIG and the script lives) a here-string that cannot be staged is EMPTY: no heading found, no
+# exemption, and a declared config edit reported HARD at rc 0. The base blob here is calibrated past
+# the limit and the scan listing below it. Accepted: CORE-TEMPLATE-SUBSTITUTED (healthy) or the
+# detector's own `unregistered-drift: REFUSED` at a non-zero exit. /bin/bash: 3.2 stages every `<<<`.
+# On the tip the refusal is `ud_stage_blob`'s, at the scan loop's one staging of the base blob that
+# `exempt_ranges` now reads; the exemption itself no longer stages anything the limit can reach.
+FD="$WORK/forced"; mkdir -p "$FD"
+cp -R "$DIST" "$FD/dist"; mkdir -p "$FD/cons/.claude/team-roles"
+i=0; { cat "$BASECONTENT"; while [ "$i" -lt 400 ]; do printf 'padding prose line %03d that makes this core role file larger than the limit\n' "$i"; i=$((i+1)); done; } > "$FD/dist/core/$REL"
+git -C "$FD/dist" -c user.email=f@f -c user.name=fixture add -A
+git -C "$FD/dist" -c user.email=f@f -c user.name=fixture commit -qm padded
+FB="$(git -C "$FD/dist" rev-parse HEAD)"
+sed 's|- `src/` (application source code)|- `lib/` (this project keeps its source here)|' "$FD/dist/core/$REL" > "$FD/cons/.claude/$REL"
+f_blob="$(wc -c < "$FD/dist/core/$REL" | tr -d ' ')"
+f_ls="$(git -C "$FD/dist" ls-tree -r --name-only "$FB" | wc -c | tr -d ' ')"
+f_blk="$( ( trap '' XFSZ; ulimit -f 1; printf '%08192d' 0 > "$FD/blk" ) 2>/dev/null; wc -c < "$FD/blk" | tr -d ' ')"
+f_lim=""; case "$f_blk" in ''|*[!0-9]*|0) ;; *) f_lim=$(( (f_blob / 2) / f_blk )) ;; esac
+f_cal=""
+if [ -n "$f_lim" ] && [ "$f_lim" -gt 0 ]; then
+  f_hs="$(/bin/bash -c 'trap "" XFSZ; ulimit -f "$1" || exit 97; wc -c <<<"$2"' _ "$f_lim" "$(cat "$FD/dist/core/$REL")" 2>/dev/null)"
+  /bin/bash -c 'trap "" XFSZ; ulimit -f "$1" || exit 97; printf "%0${2}d" 0 > "$3"' _ "$f_lim" "$f_ls" "$FD/cal" 2>/dev/null
+  case "$f_hs" in *[1-9]*) ;; *) [ "$(wc -c < "$FD/cal" | tr -d ' ')" = "$f_ls" ] && f_cal=ok ;; esac
+fi
+f_st() { awk -F'\t' -v f="$REL" '$2==f {print $1; exit}' "$1"; }
+if [ "$f_cal" != ok ]; then
+  bad "FIXTURE BROKEN — calibration: under ulimit -f ${f_lim:-?} a ${f_blob}-byte here-string did not fail or a ${f_ls}-byte write did not land whole; the forced cell cannot discriminate"
+else
+  bash "$SCRIPT" "$FD/dist" "$FB" "$FD/cons" > "$FD/u.out" 2>/dev/null; f_urc=$?
+  if [ "$f_urc" = 0 ] && [ "$(f_st "$FD/u.out")" = CORE-TEMPLATE-SUBSTITUTED ]; then
+    ok "unforced control: the ownership edit on the ${f_blob}-byte role file reads CORE-TEMPLATE-SUBSTITUTED"
+  else
+    bad "FIXTURE BROKEN — unforced control rc=$f_urc status '$(f_st "$FD/u.out")'; the forced cell has no healthy answer"
+  fi
+  /bin/bash -c 'trap "" XFSZ; ulimit -f "$1" || exit 97; shift; exec /bin/bash "$@"' _ "$f_lim" "$SCRIPT" "$FD/dist" "$FB" "$FD/cons" > "$FD/f.out" 2> "$FD/f.err"; f_frc=$?
+  if { [ "$f_frc" = 0 ] && [ "$(f_st "$FD/f.out")" = CORE-TEMPLATE-SUBSTITUTED ]; } \
+     || { [ "$f_frc" -ne 0 ] && [ "$f_frc" -ne 97 ] && grep -q '^unregistered-drift: REFUSED' "$FD/f.err" && [ -z "$(f_st "$FD/f.out")" ]; }; then
+    ok "forced: a base blob that cannot be staged under ulimit -f $f_lim gives the healthy row or the named refusal (rc=$f_frc)"
+  else
+    bad "forced: a base blob that cannot be staged under ulimit -f $f_lim gave rc=$f_frc status '$(f_st "$FD/f.out")' — an unstaged base read as empty"
+  fi
+fi
+
+# --- THE DIFF HUNKS THAT CANNOT BE STAGED: HEALTHY OR REFUSED, NEVER DRIFT ------------------------
+# `is_unregistered` fed its hunk classifier from `<<<"$d"`. A here-string that could not be staged
+# fed the awk an EMPTY stream, which reads `unknown`, and `unknown` blocks as HARD at rc 0 -- a
+# declared config edit reported as unregistered drift. The world: the base blob is SMALL, and the
+# consumer's edit is a large insertion INSIDE `## Ownership`, so the diff is calibrated past the limit
+# while the blob, the listing and the rows fit under it; the only write that can fail is the hunks'.
+FH="$WORK/forced-hunks"; mkdir -p "$FH/cons/.claude/team-roles"
+awk '{ print } /^- `src\/` \(application source code\)$/ { for (i = 0; i < 300; i++) printf "- `zz%03d/` (a directory this project keeps, one config line of many)\n", i }' \
+  "$BASECONTENT" > "$FH/cons/.claude/$REL"
+h_blob="$(wc -c < "$BASECONTENT" | tr -d ' ')"
+h_diff="$(git -C "$DIST" show "$BASE:core/$REL" | diff - "$FH/cons/.claude/$REL" | wc -c | tr -d ' ')"
+h_ls="$(git -C "$DIST" ls-tree -r --name-only "$BASE" | wc -c | tr -d ' ')"
+h_lim=""; case "$f_blk" in ''|*[!0-9]*|0) ;; *) h_lim=$(( (h_diff / 2) / f_blk )) ;; esac
+h_cal=""
+if [ -n "$h_lim" ] && [ "$h_lim" -gt 0 ] && [ $(( h_lim * f_blk )) -gt "$h_blob" ] && [ $(( h_lim * f_blk )) -gt "$h_ls" ]; then
+  h_hs="$(/bin/bash -c 'trap "" XFSZ; ulimit -f "$1" || exit 97; wc -c <<<"$2"' _ "$h_lim" "$(printf "%0${h_diff}d" 0)" 2>/dev/null)"
+  case "$h_hs" in *[1-9]*) ;; *) h_cal=ok ;; esac
+fi
+if [ "$h_cal" != ok ]; then
+  bad "FIXTURE BROKEN — calibration: under ulimit -f ${h_lim:-?} (block ${f_blk:-?} B) a ${h_diff}-byte here-string did not fail, or the ${h_blob}-byte blob or ${h_ls}-byte listing does not fit; the hunks cell cannot discriminate"
+else
+  bash "$SCRIPT" "$DIST" "$BASE" "$FH/cons" > "$FH/u.out" 2>/dev/null; h_urc=$?
+  if [ "$h_urc" = 0 ] && [ "$(f_st "$FH/u.out")" = CORE-TEMPLATE-SUBSTITUTED ]; then
+    ok "unforced control: a ${h_diff}-byte diff inside ## Ownership reads CORE-TEMPLATE-SUBSTITUTED"
+  else
+    bad "FIXTURE BROKEN — hunks unforced control rc=$h_urc status '$(f_st "$FH/u.out")'; the forced cell has no healthy answer"
+  fi
+  /bin/bash -c 'trap "" XFSZ; ulimit -f "$1" || exit 97; shift; exec /bin/bash "$@"' _ "$h_lim" "$SCRIPT" "$DIST" "$BASE" "$FH/cons" > "$FH/f.out" 2> "$FH/f.err"; h_frc=$?
+  if { [ "$h_frc" = 0 ] && [ "$(f_st "$FH/f.out")" = CORE-TEMPLATE-SUBSTITUTED ]; } \
+     || { [ "$h_frc" -ne 0 ] && [ "$h_frc" -ne 97 ] && grep -q '^unregistered-drift: REFUSED' "$FH/f.err" && [ -z "$(f_st "$FH/f.out")" ]; }; then
+    ok "forced: diff hunks that cannot be staged under ulimit -f $h_lim give the healthy row or the named refusal (rc=$h_frc)"
+  else
+    bad "forced: diff hunks that cannot be staged under ulimit -f $h_lim gave rc=$h_frc status '$(f_st "$FH/f.out")' — an unstaged hunk stream read as drift"
+  fi
+fi
 
 echo
 if [ "$fails" -eq 0 ]; then echo "setup-config-drift: PASS"; exit 0; fi

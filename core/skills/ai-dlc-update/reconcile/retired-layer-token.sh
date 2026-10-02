@@ -163,10 +163,23 @@ code_toks() {
 # PATHSPECS, and unquoted in `for` they are subject to shell pathname expansion first, so
 # a caller whose cwd contains matching files gets real paths from the WRONG tree and a
 # rulebook file that exists at the ref but not in the cwd is silently skipped.
+#
+# A 125 FROM THE MEMO IS A REFUSAL, NEVER AN EMPTY TREE OR AN EMPTY BLOB. 125 is lib.sh's "the
+# cached answer could not be SERVED" sentinel: a `.c` that cannot be read, a `.s` that is empty or
+# malformed. Both readers used to swallow it -- `files_at`'s `|| return 0`, `show_at`'s `|| true` --
+# and a memo that lost ONE blob then decided the rows. Measured on this fixture's world with one
+# key's `.c` unreadable, every run exit 0: a theirs rulebook blob lost printed a FALSE row
+# (`MEASURED`, `MOVER-TOKEN`, `LEDGER-ROW`), the base witness program lost deleted five true rows,
+# and a base rulebook blob lost printed the retired-nothing NOTE. So 125 returns
+# 125 from here and every caller refuses by name, exit 2. Any OTHER failure keeps its old meaning:
+# an unresolvable ref lists nothing, and the empty-set guards below refuse that with their own
+# message; a blob git could not show is the caller's to read (see the witness loop).
 files_at() {
-  local ref="$1" glob tree; shift
-  if command -v memo_ls_tree >/dev/null 2>&1; then tree="$(memo_ls_tree "$DIST" "$ref")" || return 0
-  else tree="$(git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "$ref" 2>/dev/null)" || return 0; fi
+  local ref="$1" glob tree _ft=0; shift
+  if command -v memo_ls_tree >/dev/null 2>&1; then tree="$(memo_ls_tree "$DIST" "$ref")" || _ft=$?
+  else tree="$(git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "$ref" 2>/dev/null)" || _ft=$?; fi
+  [ "$_ft" -ne 125 ] || return 125
+  [ "$_ft" -eq 0 ] || return 0
   set -f
   for glob in "$@"; do
     printf '%s\n' "$tree" \
@@ -174,21 +187,33 @@ files_at() {
   done
   set +f
 }
+# show_at <ref> <path> -- the blob on stdout and the reader's own status: 0, git's non-zero for a
+# path it could not show, or the memo's 125. Every caller reads it.
 show_at() {
-  if command -v memo_show >/dev/null 2>&1; then memo_show "$DIST" "$1" "$2" || true
-  else git -C "$DIST" show "${1}:${2}" 2>/dev/null || true; fi
+  if command -v memo_show >/dev/null 2>&1; then memo_show "$DIST" "$1" "$2"
+  else git -C "$DIST" show "${1}:${2}" 2>/dev/null; fi
 }
 
-# collect <ref> -> every rulebook token at that ref.
+# collect <ref> -> every rulebook token at that ref; 125 when the listing or a listed file could
+# not be served by the memo. Runs inside `$( )`, so it RETURNS the status and the caller refuses:
+# an exit here would end only the capture. The two PRODUCER stages are read by index and the
+# last stage's status is the function's otherwise, as it always was -- this file does not set
+# `pipefail`, and a filter stage's "no match" is not a read failure.
 collect() {
   local ref="$1" f
   set -f
+  local _cs _ps
   # shellcheck disable=SC2046
   files_at "$ref" $(rulebook_globs) | { set +f; while IFS= read -r f; do
     [ -n "$f" ] || continue
     show_at "$ref" "$f"
+    _cs=$?; [ "$_cs" -ne 125 ] || exit 125
   done; } | toks
+  _ps=("${PIPESTATUS[@]}")
   set +f
+  [ "${_ps[0]}" -ne 125 ] || return 125
+  [ "${_ps[1]}" -ne 125 ] || return 125
+  return "${_ps[${#_ps[@]}-1]}"
 }
 
 if [ -z "$(rulebook_globs)" ]; then
@@ -196,8 +221,19 @@ if [ -z "$(rulebook_globs)" ]; then
   exit 2
 fi
 
-BASE_SET="$(collect "$BASE")"
-THEIRS_SET="$(collect "$THEIRS")"
+# rlt_read_refuse <what> <status> -- a corpus read that failed. 125 is named as the memo's.
+rlt_read_refuse() {
+  if [ "$2" -eq 125 ]; then
+    echo "retired-layer-token: REFUSED — $1 could not be served by the reconcile memo (lib.sh exit 125: a cached blob or status that cannot be read); refusing, because a corpus with a file missing reports rows that are not there and drops rows that are" >&2
+  else
+    echo "retired-layer-token: REFUSED — $1 could not be read (exit $2); refusing, because a corpus with a file missing reports rows that are not there and drops rows that are" >&2
+  fi
+  exit 2
+}
+_cs=0; BASE_SET="$(collect "$BASE")" || _cs=$?
+[ "$_cs" -eq 0 ] || rlt_read_refuse "the rulebook at base ($BASE)" "$_cs"
+_cs=0; THEIRS_SET="$(collect "$THEIRS")" || _cs=$?
+[ "$_cs" -eq 0 ] || rlt_read_refuse "the rulebook at theirs ($THEIRS)" "$_cs"
 
 # EVERY SET OPERAND AND LOOP FEED BELOW IS STAGED TO A FILE AND ITS PRODUCER'S STATUS IS READ.
 # They used to read `comm <(…) <(…)` and `done < <(…)`, which discard the producer's status: a
@@ -260,23 +296,38 @@ WITNESSED=""; opened=0
 if [ -n "$PLAIN" ]; then
   set -f
   # shellcheck disable=SC2046
-  PROGRAMS="$(files_at "$BASE" $(program_globs))"
+  _cs=0; PROGRAMS="$(files_at "$BASE" $(program_globs))" || _cs=$?
   set +f
-  RENAMES="$(git -C "$DIST" diff -M --name-status --diff-filter=R "$BASE" "$THEIRS" 2>/dev/null | awk -F'\t' '$1 ~ /^R/ {print $2"\t"$3}')"
+  [ "$_cs" -eq 0 ] || rlt_read_refuse "the program file list at base ($BASE)" "$_cs"
+  # `core.quotePath=false`: under the default a renamed non-ASCII path arrives C-quoted, the
+  # `$1==f` join below never matches the raw path `files_at` listed, and a renamed witness reads
+  # as a DELETED one -- which retires a word the renamed program still prints.
+  RENAMES="$(git -C "$DIST" -c core.quotePath=false diff -M --name-status --diff-filter=R "$BASE" "$THEIRS" 2>/dev/null | awk -F'\t' '$1 ~ /^R/ {print $2"\t"$3}')"
+  # Staged, never a here-string: a `<<<` that could not be staged fed the lookup EMPTY, so a
+  # renamed witness read as deleted. The write's status is read.
+  printf '%s\n' "$RENAMES" > "$RLT_T/renames" || rlt_refuse "staging the rename map" "$?"
   printf '%s\n' "$PLAIN" > "$RLT_T/plain" || rlt_refuse "staging the plain candidate set" "$?"
   printf '%s\n' "$PROGRAMS" > "$RLT_T/programs" || rlt_refuse "staging the program file list" "$?"
   while IFS= read -r f; do
     [ -n "$f" ] || continue
-    b="$(show_at "$BASE" "$f")"
+    # Only the memo's 125 refuses in this loop. A program git cannot show keeps its old reading
+    # -- skipped here, and the opened-nothing refusal below catches a base where every one was.
+    _cs=0; b="$(show_at "$BASE" "$f")" || _cs=$?
+    [ "$_cs" -ne 125 ] || rlt_read_refuse "the program $f at base ($BASE)" 125
     [ -n "$b" ] || continue
     opened=$((opened + 1))
     rlt_toks "$b" "$RLT_T/prog-base-toks"
     hit="$(comm -12 "$RLT_T/plain" "$RLT_T/prog-base-toks")" || rlt_refuse "the witness intersection for $f" "$?"
     [ -n "$hit" ] || continue
-    t="$(show_at "$THEIRS" "$f")"
+    # A program ABSENT at theirs is git's 128 and an empty text -- the deletion this loop reads
+    # as a witness. Only the memo's 125 refuses.
+    _cs=0
+    t="$(show_at "$THEIRS" "$f")" || _cs=$?
+    [ "$_cs" -ne 125 ] || rlt_read_refuse "the program $f at theirs ($THEIRS)" 125
     if [ -z "$t" ]; then
-      to="$(awk -F'\t' -v f="$f" '$1==f {print $2; exit}' <<<"$RENAMES")"
-      [ -z "$to" ] || t="$(show_at "$THEIRS" "$to")"
+      to="$(awk -F'\t' -v f="$f" '$1==f {print $2; exit}' "$RLT_T/renames")" || rlt_refuse "the rename lookup for $f" "$?"
+      _cs=0; [ -z "$to" ] || t="$(show_at "$THEIRS" "$to")" || _cs=$?
+      [ "$_cs" -ne 125 ] || rlt_read_refuse "the program $to at theirs ($THEIRS)" 125
     fi
     printf '%s\n' "$hit" > "$RLT_T/prog-hit" || rlt_refuse "staging the witnessed candidates for $f" "$?"
     rlt_toks "$t" "$RLT_T/prog-theirs-toks"

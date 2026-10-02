@@ -2481,8 +2481,8 @@ else
   if [ -z "$_qfc" ]; then ok "control nolib: an unmutated no-lib.sh copy reports both members' rows for all four detectors"
   else bad "control nolib: an UNMUTATED no-lib.sh copy failed for$_qfc -- the fallback mutant harness is broken"; fi
   mutant QP-FB-RF nolib retired-fixtures.sh arm_qf_rf_plain "arm_qf_rf" \
-    '  || git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "$THEIRS" -- core/fixtures' \
-    '  || git -C "$DIST" ls-tree -r --name-only "$THEIRS" -- core/fixtures'
+    'rf_tree="$(git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "$THEIRS" -- core/fixtures' \
+    'rf_tree="$(git -C "$DIST" ls-tree -r --name-only "$THEIRS" -- core/fixtures'
   mutant QP-FB-UD nolib unregistered-drift.sh arm_qf_ud_plain "arm_qf_ud" \
     '    git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "$BASE" -- \' \
     '    git -C "$DIST" ls-tree -r --name-only "$BASE" -- \'

@@ -338,9 +338,22 @@ LD_T="$(mktemp -d "${TMPDIR:-/tmp}/layer-drift.XXXXXX")" || {
 }
 trap 'rm -rf "$LD_T"' EXIT
 ld_refuse() { # ld_refuse <what did not run> <its exit status>
+  # A ROW ALREADY LOST TO A FAILED WRITE OWNS THE EXIT. After one, bash 3.2 can leak the unwritten
+  # stdout buffer into a later `$( )` capture, so whatever fails next is reading garbage; the
+  # refusal that is TRUE is `ld_finish`'s named write failure, exit 2. Measured: a lost row
+  # followed by a skeleton read of that leaked text refused as a memo failure, exit 1.
+  [ "${ld_emit_failed:-0}" -eq 0 ] || ld_finish
+  # 125 is lib.sh's memo sentinel: a cached blob, listing or status that could not be SERVED. Named
+  # here, once, so every refusal that carries it says so whichever call site raised it.
+  [ "$2" != 125 ] || echo "layer-drift: REFUSED — $1 could not be served by the reconcile memo (lib.sh exit 125: a cached blob, listing or status that cannot be read); refusing rather than reading a core file that was never read as an empty one" >&2
   echo "layer-drift: $1 did not run (exit $2), so this run has no rows to give; refusing" >&2
   exit 1
 }
+# ld_memo_ok <status> <what> -- MAIN SHELL ONLY. For a `git_show … | reader` capture whose other
+# failures keep their historical meaning (an ABSENT path is git's 128 and an empty text, which the
+# base-side reads below rely on): only the memo's 125 refuses. Every reader fed this way reads to
+# EOF, so a 125 is a read that failed, never a serve cut short by the reader.
+ld_memo_ok() { [ "$1" -ne 125 ] || ld_refuse "$2" 125; }
 
 # NO HERE-STRING ANYWHERE IN THIS FILE, AND THIS IS WHY. bash 3.2 stages every `<<<` to a temp
 # file, and when that write fails -- `ulimit -f`, a full or read-only TMPDIR -- it prints `cannot
@@ -365,7 +378,8 @@ ld_refuse() { # ld_refuse <what did not run> <its exit status>
 NL='
 '
 ld_refuse_staging() { # ld_refuse_staging <what> <its exit status>
-  echo "layer-drift: REFUSED — $1 could not be staged (exit $2); refusing rather than reading an empty input as clean" >&2
+  # A 125 is the memo failing to SERVE the input, not a staging write failing; `ld_refuse` names it.
+  [ "$2" = 125 ] || echo "layer-drift: REFUSED — $1 could not be staged (exit $2); refusing rather than reading an empty input as clean" >&2
   ld_refuse "$1" "$2"
 }
 ld_stage() { # ld_stage <file> <value> <what> -- MAIN SHELL ONLY; the bytes a here-string would feed
@@ -861,7 +875,16 @@ adj_clause_of() { # $1 status -> the clause id, or nothing
 # The anchor is the PROPERTY (`"verdict": {`), not the token: `"verdict"` also appears in the
 # schema's `required` array, and anchoring on the bare token would start the scan at whichever
 # of the two came first in the file.
-ADJ_VERDICTS="$(git_show "$THEIRS" "$ADJ_SCHEMA_REL" | awk '
+#
+# THE SCHEMA IS READ ONCE, ITS STATUS READ, AND ONLY THEN FED TO THE EXTRACTOR. The extractor
+# `exit`s at the enum's closing bracket, so a memo serve piped straight into it can be cut short
+# on a large schema and report 125 for a read that succeeded; and the 125 a real serve failure
+# returns was discarded, so a schema `.c` that could not be read emptied the vocabulary at rc 0.
+# An ABSENT schema keeps its old reading (git's 128, an empty text, the guard below).
+_av_rc=0
+_av_text="$(git_show "$THEIRS" "$ADJ_SCHEMA_REL")" || _av_rc=$?
+[ "$_av_rc" -ne 125 ] || ld_refuse "reading $ADJ_SCHEMA_REL at $THEIRS" 125
+ADJ_VERDICTS="$(printf '%s\n' "$_av_text" | awk '
   /"verdict"[[:space:]]*:[[:space:]]*\{/ { inv=1; next }
   inv && /"enum"[[:space:]]*:/           { f=1; next }
   f && /\]/                              { exit }
@@ -1392,12 +1415,21 @@ glob_lines() { # glob_lines <shell-glob>  < lines -> the non-empty lines the glo
     case "$_p" in $1) printf '%s\n' "$_p" ;; esac
   done
 }
+#
+# A 125 FROM THE MEMO RETURNS 125, from the manifest read, the tree listing, and every rulebook
+# blob `skeleton_titles_of` reads; its caller refuses. It used to be discarded at all three, and
+# one unreadable cached object moved the skeleton set at rc 0: measured on the layer-title-join
+# world, the tree listing, the manifest, or one role file whose `.c` could not be read each added
+# a FALSE EXTENSION-TITLE-MATCHES-CORE row on the document skeleton `## Shared Skeleton`, and the
+# other role file's dropped a true one. Any OTHER failure keeps its old reading: 1, and the warning.
 rulebook_files_of() {
+  local _gr=0 _lt=0
   _globs="$(git_show "$1" core/skills/ai-dlc/core-manifest.md | awk '
     /^rulebook:/ { inblk=1; next }
     inblk && /^[a-z_]+:/ { inblk=0 }
     !inblk { next }
-    /^[[:space:]]*-[[:space:]]*/ { g=$0; sub(/^[[:space:]]*-[[:space:]]*/,"",g); print g }')"
+    /^[[:space:]]*-[[:space:]]*/ { g=$0; sub(/^[[:space:]]*-[[:space:]]*/,"",g); print g }')" || _gr=$?
+  [ "$_gr" -ne 125 ] || return 125
   [ -n "$_globs" ] || return 1
   # memo_ls_tree (lib.sh) caches the FULL, unfiltered `ls-tree -r --name-only <ref>` per
   # <dist,ref> in the SHARED cross-process cache, so every other call site in this render
@@ -1406,7 +1438,9 @@ rulebook_files_of() {
   # pathspec is applied here instead, on the cached full listing -- `ls-tree` matches a
   # pathspec by literal PREFIX (never a glob), so this is byte-identical to what git would
   # have returned for `-- core/`.
-  _tree="$(memo_ls_tree "$DIST" "$1" | grep '^core/' || true)"
+  _tree="$(memo_ls_tree "$DIST" "$1")" || _lt=$?
+  [ "$_lt" -ne 125 ] || return 125
+  _tree="$(printf '%s\n' "$_tree" | grep '^core/' || true)"
   [ -n "$_tree" ] || return 1
   # FED BY A PIPE, AND ITS STATUS IS READ. This runs in a pipeline stage inside `$( )`, where a
   # staged file would have nowhere to refuse from; a pipe has no temp file to lose, the loop reads
@@ -1429,7 +1463,8 @@ rulebook_files_of() {
 skeleton_titles_of() {
   rulebook_files_of "$1" | while IFS= read -r _p; do
     [ -n "$_p" ] || continue
-    git_show "$1" "$_p" | heading_titles_of_stream | titles_only
+    # Both readers run to EOF, so the serve cannot be cut short; a 125 is a read that failed.
+    git_show "$1" "$_p" | heading_titles_of_stream | titles_only || { [ "$?" -ne 125 ] || exit 125; }
   done | sort | uniq -d
 }
 
@@ -1747,7 +1782,8 @@ while IFS= read -r f; do
         local a fpart es cs en cn on
         fpart="${1%%#*}"; a="${1#*#}"
         es="$(section_of "$a" < "$f" 2>/dev/null)"
-        cs="$(git_show "$base_sha" "$(dist_path "$fpart")" 2>/dev/null | section_of "$a" 2>/dev/null)"
+        cs="$(git_show "$base_sha" "$(dist_path "$fpart")" 2>/dev/null | section_of "$a" 2>/dev/null)" \
+          || { [ "$?" -ne 125 ] || return 125; }
         if [ -z "$es" ] || [ -z "$cs" ]; then
           printf '%s' "The surplus under that anchor could NOT be measured here (this entry's span or core's span at ${base_sha} was unreadable), so decide it by reading both rather than by assuming the spans match."
           return 0
@@ -1914,7 +1950,7 @@ while IFS= read -r f; do
       continue
     fi
     have "$base_sha" "$a_cp" || :
-    s_base="$(git_show "$base_sha" "$a_cp" | section_of "$id")"
+    s_base="$(git_show "$base_sha" "$a_cp" | section_of "$id")" || ld_memo_ok "$?" "reading ${a_cp} at ${base_sha} for ${entry} #${id}"
     if [ "$s_base" != "$s_theirs" ]; then
       worst=HARD-OVERRIDE-DRIFT-SECTION
       drifted="${drifted:+$drifted, }#$id"
@@ -2044,6 +2080,7 @@ unset base_sha
 _sk_rc=0
 SKELETON_TITLES="$(skeleton_titles_of "$THEIRS")" || _sk_rc=$?
 [ "$_sk_rc" -eq 3 ] && ld_refuse_staging "the rulebook tree listing at $THEIRS for the skeleton-heading set" 3
+[ "$_sk_rc" -eq 125 ] && ld_refuse "the rulebook read at $THEIRS for the skeleton-heading set" 125
 [ -n "$SKELETON_TITLES" ] || printf '%s\n' \
   "layer-drift: WARNING — derived NO skeleton headings from core-manifest.md's rulebook: list at $THEIRS. The unnumbered title arm is running WITHOUT its shared-heading exclusion, so expect rows on structural headings (Identity, Responsibilities). Check that core-manifest.md is readable at that ref." >&2
 
@@ -2105,7 +2142,12 @@ while IFS= read -r f; do
     # hooked on a new core file. The same gate, same reason, sits before the other base reads
     # (the unnumbered title arm, the extends: span compare, and both override base_sha reads).
     have "$BASE" "$cp" || :
-    base_anchors="$(git_show "$BASE" "$cp" | anchors_of_stream)"
+    base_anchors="$(git_show "$BASE" "$cp")" || ld_memo_ok "$?" "reading ${cp} at ${BASE} for ${entry}"
+    # READ, STATUS READ, THEN HARVESTED. `anchors_of_stream` ends in a `grep -E '.'` that exits 1
+    # on an empty stream, and under pipefail that 1 is the rightmost failure, so a memo serve that
+    # failed EMPTY (125) reached the guard as 1 and every same-number anchor read NEW-THIS-PULL:
+    # measured, a PRE-EXISTING duplicate turned EXTENSION-RETIRE-CANDIDATE ("retire your copy") at rc 0.
+    base_anchors="$(printf '%s\n' "$base_anchors" | anchors_of_stream)"
     # THE BLOB IS STAGED ONCE PER FILE AND READ FROM THE FILE. `heading_text_for` exits its awk at
     # the first match, so a pipe would EPIPE its writer; a here-string, the previous spelling, read
     # a blob that could not be staged as EMPTY, so every same-number check read as untitled. The
@@ -2218,9 +2260,9 @@ while IFS= read -r f; do
   ext_titles="$(unnumbered_titles_of_file "$f")" || _ut_rc=$?
   [ "$_ut_rc" -eq 3 ] && ld_refuse_staging "the anchors of ${entry} for the unnumbered title arm" 3
   if [ -n "$ext_titles" ]; then
-    theirs_titles="$(git_show "$THEIRS" "$cp" | heading_titles_of_stream | titles_only)"
+    theirs_titles="$(git_show "$THEIRS" "$cp" | heading_titles_of_stream | titles_only)" || ld_memo_ok "$?" "reading ${cp} at ${THEIRS} for ${entry}"
     have "$BASE" "$cp" || :
-    base_titles="$(git_show "$BASE" "$cp" | heading_titles_of_stream | titles_only)"
+    base_titles="$(git_show "$BASE" "$cp" | heading_titles_of_stream | titles_only)" || ld_memo_ok "$?" "reading ${cp} at ${BASE} for ${entry}"
     # Each loop feed staged with its write status read (see `ld_has_line` for why not `<<<`).
     ld_stage "$LD_T/ext-titles" "$ext_titles" "the unnumbered headings of ${entry}"
     ld_stage "$LD_T/theirs-titles" "$theirs_titles" "the headings of ${cp} at ${THEIRS}"
@@ -2423,13 +2465,13 @@ while IFS= read -r f; do
     while IFS= read -r ext_anc; do
       [ -n "$ext_anc" ] || continue
       ext_all="${ext_all}${ext_all:+, }'${ext_anc}'"
-      ext_new="$(git_show "$THEIRS" "$cp" | section_of "$ext_anc")"
+      ext_new="$(git_show "$THEIRS" "$cp" | section_of "$ext_anc")" || ld_memo_ok "$?" "reading ${cp} at ${THEIRS} for ${entry}"
       if [ -z "$ext_new" ]; then
         ext_missing="${ext_missing}${ext_missing:+, }'${ext_anc}'"
         continue
       fi
       have "$BASE" "$cp" || :
-      ext_old="$(git_show "$BASE" "$cp" | section_of "$ext_anc")"
+      ext_old="$(git_show "$BASE" "$cp" | section_of "$ext_anc")" || ld_memo_ok "$?" "reading ${cp} at ${BASE} for ${entry}"
       [ "$ext_old" = "$ext_new" ] || ext_moved="${ext_moved}${ext_moved:+, }'${ext_anc}'"
     done < "$LD_T/ext-ancs"
     if [ -n "$ext_missing" ]; then

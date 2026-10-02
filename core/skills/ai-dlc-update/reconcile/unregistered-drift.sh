@@ -31,6 +31,9 @@
 #         `unregistered-drift: REFUSED — a row could not be written to stdout after N row(s)
 #         were; ...` on stderr, N the rows that DID land. The scan STOPS at the first failed
 #         write, so a truncated row set is not a finding of "no drift". See `ud_finish` below.
+#         Also 2 when a core blob or listing it must read could not be read or served by the
+#         reconcile memo (`ud_read_refuse`), with a named `REFUSED` line: an unread input is not
+#         an empty one.
 #
 # Statuses
 #   HARD-CORE-DRIFT-ABSORBED      the consumer's in-place delta is NOW PRESENT UPSTREAM:
@@ -149,7 +152,8 @@ THEIRS="${4:-}"
 
 # shellcheck source=lib.sh
 # NOT `|| exit 1`: this script exits non-zero only when its own output could not be written
-# (`ud_finish`), never for what it found or failed to cache, and every git_show/git_tree call
+# (`ud_finish`) or an input it must read could not be read (`ud_read_refuse`), never for what it
+# found or failed to cache, and every git_show/git_tree call
 # below falls back to a direct `git` call when the memo helpers are unavailable, so an
 # unsourceable lib.sh degrades this to its pre-cache behavior.
 SELF="$(cd "$(dirname "$0")" && pwd)"
@@ -261,9 +265,15 @@ absorbed_pct() { # absorbed_pct <core-rel-path> <consumer-file> -> "<hits> <tota
 #
 # Ties break toward the NEWER commit — if two ancestors are equidistant, the later one is the
 # more useful thing to tell an operator, because the residual is what they must read.
+# The base blob is the one the scan loop staged for this iteration (`blob-base`), never a second
+# read. Runs inside `$( )`: an ancestor blob the memo could not serve RETURNS 125 and the caller
+# refuses -- skipping it would score the remaining candidates and could miss the stale-copy match.
 closest_ancestor_blob() {
-  local cp="$1" cons="$2" sha best_sha="" best_n="" n base_n
-  base_n="$(git_show "${BASE}" "${cp}" | diff - "$cons" 2>/dev/null | grep -c '^[<>]' || true)"
+  local cp="$1" cons="$2" sha best_sha="" best_n="" n base_n _as
+  # PIPED into `diff -`, as the ancestor candidates below are: Apple diff hunks a pipe and a file
+  # differently from two regular files (see `ud_pdiff`), and the two counts must be comparable.
+  # `grep -c` prints its count whatever diff's 1 does to the pipeline status, so the status is unread.
+  base_n="$(ud_pdiff "$UD_DIFF_TMP/blob-base" "$cons" 2>/dev/null | grep -c '^[<>]')"
   [ "${base_n:-0}" -gt 0 ] || return 0
   for sha in $(git -C "$DIST" log --format=%H "${BASE}" -- "$cp" 2>/dev/null); do
     [ "$sha" = "$(git -C "$DIST" rev-parse "$BASE" 2>/dev/null)" ] && continue
@@ -274,8 +284,16 @@ closest_ancestor_blob() {
     # on the older blob moved an in-place edit from HARD-UNREGISTERED-CORE-DRIFT to HARD-CORE-BEHIND.
     # A candidate whose diff did not run is skipped, never scored; exit 0 (identical) and 1 are the
     # only readings.
-    n="$(git_show "${sha}" "${cp}" | diff - "$cons" 2>/dev/null)"
-    [ "$?" -le 1 ] || continue
+    # The candidate is STAGED and its read status read BEFORE the diff. Piped straight into
+    # `diff -`, a memo serve that failed EMPTY (125) lost to diff's own 1 under pipefail, the
+    # candidate scored as wholly different, and HARD-CORE-BEHIND fell to HARD-UNREGISTERED-CORE-DRIFT
+    # at rc 0 -- measured with the ancestor blob's `.s` and `.c` emptied.
+    _ag=0; git_show "${sha}" "${cp}" > "$UD_DIFF_TMP/blob-anc" || _ag=$?
+    [ "$_ag" -ne 125 ] || return 125
+    [ "$_ag" -eq 0 ] || continue
+    n="$(ud_pdiff "$UD_DIFF_TMP/blob-anc" "$cons" 2>/dev/null)"
+    _as=$?
+    [ "$_as" -le 1 ] || continue
     n="$(printf '%s\n' "$n" | grep -c '^[<>]')" || n=0
     if [ -z "$best_n" ] || [ "${n:-0}" -lt "$best_n" ]; then best_n="$n"; best_sha="$sha"; fi
   done
@@ -326,6 +344,35 @@ ud_finish() {
   fi
   exit 0
 }
+# ud_read_refuse <what> <status> -- MAIN SHELL ONLY. A core blob this scan must compare could not be
+# read or staged, so the file's row cannot be decided: refuse, exit 2, the code `ud_finish` already
+# gives its readers. 125 is lib.sh's memo sentinel (a cached blob or status that cannot be SERVED)
+# and is named as such. Every path passed here is one `cat-file -e` just confirmed is present, so
+# no status here is an absence.
+#
+# WHY A REFUSAL AND NOT A ROW. These reads were `git_show … | cmp -s - "$cons"` and the `$( )`
+# captures beside them, whose status nothing read. A memo serve that failed fed `cmp` a short or
+# empty blob, and the file fell through to whatever the next arm decided -- measured with one cached
+# base blob's `.s` emptied: a byte-identical CORE-OK file was reported HARD-UNREGISTERED-CORE-DRIFT
+# at rc 0, telling the operator to refile or revert an edit nobody made.
+ud_read_refuse() {
+  if [ "$2" -eq 125 ]; then
+    printf 'unregistered-drift: REFUSED — %s could not be served by the reconcile memo (lib.sh exit 125: a cached blob or status that cannot be read); no row can be decided for it, so the scan stops here and its output is INCOMPLETE. Re-run unregistered-drift.sh.\n' "$1" >&2
+  else
+    printf 'unregistered-drift: REFUSED — %s could not be read or staged (exit %s); no row can be decided for it, so the scan stops here and its output is INCOMPLETE. Re-run unregistered-drift.sh.\n' "$1" "$2" >&2
+  fi
+  exit 2
+}
+# ud_stage_blob <ref> <path> <file> -- MAIN SHELL ONLY. The blob, read ONCE into a staged file with
+# its status read, for every reader of this iteration. A FILE and not a pipe: `cmp -s` stops at the
+# first differing byte, and a memo serve cut short there returns 125 for a read that succeeded --
+# measured on a 560 KB blob differing at byte 1, `memo_show | cmp -s -` answered `125 1` on every
+# run, fill and hit alike.
+ud_stage_blob() {
+  local _r=0
+  git_show "$1" "$2" > "$3" || _r=$?
+  [ "$_r" -eq 0 ] || ud_read_refuse "$2 at $1" "$_r"
+}
 
 # setup-sites.md is this script's SIBLING — ai-dlc-update is self-contained and never reads
 # pipeline files, so the drift check reads the SAME setup-site manifest gate-validation.md's
@@ -338,18 +385,36 @@ SITES_FILE="$(cd "$(dirname "$0")" && pwd)/setup-sites.md"
 # this file. A hunk whose base-side lines fall inside one is operator config, not drift — the
 # same exemption core-layer-immutability already grants a heading-block site. `single-line`
 # {token} sites need no range: the {token} on the base side already exempts their hunk below.
+#
+# STAGED FILES, NEVER A HERE-STRING OR HEREDOC. The base blob is the scan loop's `blob-base`, read
+# once with its status read; the site list is staged with the awk's status read. A `<<<"$base"` that
+# could not be staged searched an EMPTY base, found no heading and granted no exemption; the
+# `done <<EOF` site list that could not be staged looped zero times. Both read as "no setup site
+# here", and the file's config edits were then reported as unregistered drift. Runs inside `$( )`
+# (is_unregistered's), so a failure RETURNS 3 and the scan loop refuses.
 exempt_ranges() {
-  local cp="$1" base heading nexth hs ns nl out=""
+  local cp="$1" heading nexth hs ns nl out="" _er=0
   [ -f "$SITES_FILE" ] || { printf ''; return; }
-  base="$(git_show "${BASE}" "${cp}")" || { printf ''; return; }
+  awk -v want="$cp" '
+  /^[[:space:]]*-[[:space:]]*id:/  { f=""; sh=""; hd=""; nh="" }
+  /^[[:space:]]*file:/         { f=$0;  sub(/^[[:space:]]*file:[[:space:]]*/,"",f) }
+  /^[[:space:]]*shape:/        { sh=$0; sub(/^[[:space:]]*shape:[[:space:]]*/,"",sh) }
+  /^[[:space:]]*heading:/      { hd=$0; sub(/^[[:space:]]*heading:[[:space:]]*/,"",hd) }
+  /^[[:space:]]*next_heading:/ { nh=$0; sub(/^[[:space:]]*next_heading:[[:space:]]*/,"",nh);
+                                 if (sh=="heading-block" && f==want && hd!="" && nh!="") print hd "\t" nh }
+' "$SITES_FILE" > "$UD_DIFF_TMP/er-sites" || _er=$?
+  [ "$_er" -eq 0 ] || return 3
   while IFS="$(printf '\t')" read -r heading nexth; do
     [ -n "$heading" ] || continue
     # setup-sites values are YAML single-quoted; strip the surrounding quotes here (not in awk).
     heading="${heading#\'}"; heading="${heading%\'}"
     nexth="${nexth#\'}";     nexth="${nexth%\'}"
-    hs="$(grep -nxF -- "$heading" <<<"$base" | head -1 | cut -d: -f1)"
+    # `grep -m1` reads its own FILE, so no writer can be cut short; 0 found, 1 not found.
+    _er=0; hs="$(grep -m1 -nxF -- "$heading" "$UD_DIFF_TMP/blob-base")" || _er=$?
+    [ "$_er" -le 1 ] || return 3
+    hs="${hs%%:*}"
     [ -n "$hs" ] || continue
-    ns="$(awk -v s="$hs" -v nh="$nexth" 'NR>s && $0==nh {print NR; exit}' <<<"$base")"
+    ns="$(awk -v s="$hs" -v nh="$nexth" 'NR>s && $0==nh {print NR; exit}' "$UD_DIFF_TMP/blob-base")" || return 3
     # An unresolvable terminator grants NO exemption — it used to widen the span to EOF.
     # Both failure directions are silent, but they are not equal: exempting to EOF turns one
     # stale anchor into a blanket exemption over the whole rest of the file, and the drift it
@@ -361,16 +426,7 @@ exempt_ranges() {
       continue
     fi
     out="${out}${out:+,}${hs}-$(( ns - 1 ))"
-  done <<EOF
-$(awk -v want="$cp" '
-  /^[[:space:]]*-[[:space:]]*id:/  { f=""; sh=""; hd=""; nh="" }
-  /^[[:space:]]*file:/         { f=$0;  sub(/^[[:space:]]*file:[[:space:]]*/,"",f) }
-  /^[[:space:]]*shape:/        { sh=$0; sub(/^[[:space:]]*shape:[[:space:]]*/,"",sh) }
-  /^[[:space:]]*heading:/      { hd=$0; sub(/^[[:space:]]*heading:[[:space:]]*/,"",hd) }
-  /^[[:space:]]*next_heading:/ { nh=$0; sub(/^[[:space:]]*next_heading:[[:space:]]*/,"",nh);
-                                 if (sh=="heading-block" && f==want && hd!="" && nh!="") print hd "\t" nh }
-' "$SITES_FILE")
-EOF
+  done < "$UD_DIFF_TMP/er-sites"
   printf '%s' "$out"
 }
 
@@ -465,7 +521,7 @@ carried_bucket() {
         # test, as `self-update-gate.sh`'s own preclassify-empty guard: believe the emptiness
         # only when the range is genuinely empty. With `--bucket-rows` this is also the guard
         # for a caller that passed the flag and wrote no file.
-        _cb_rng="$(git -C "$DIST" diff --name-only "${BASE}..${THEIRS}" -- core/ 2>/dev/null | grep -c .)" || _cb_rng=0
+        _cb_rng="$(git -C "$DIST" -c core.quotePath=false diff --name-only "${BASE}..${THEIRS}" -- core/ 2>/dev/null | grep -c .)" || _cb_rng=0
         if [ "$_cb_nm" -gt 0 ] && { [ "$_cb_np" -gt 0 ] || [ "$_cb_rng" -eq 0 ]; }; then
           # The two conjuncts, joined ONCE: a row whose bucket is in arm C's class AND whose
           # path is in the machinery set. `grep -xF -f` is the same membership test arm C spells
@@ -521,18 +577,21 @@ carried_bucket() {
 # HARD-UNREGISTERED-CORE-DRIFT unshimmed into CORE-TEMPLATE-SUBSTITUTED, and the same row was
 # caught moving in the pooled `reconcile-emit-report` run. The exit status is checked AND the awk
 # refuses an empty stream, because either failure alone reaches `no`.
+#
+# Runs inside `$( )`. A failure that is not the diff's own -- the exemption ranges, or the hunk
+# stream's staging -- RETURNS 3 and the scan loop refuses (`ud_read_refuse`), because an exemption
+# set that was never computed would grant none and report config edits as drift.
 is_unregistered() {
   local cp="$1" cons="$2" ranges d drc
-  ranges="$(exempt_ranges "$cp")"
-  # The captured variable loses only diff's trailing newline, which the here-string restores; the
-  # BLOB is streamed from git into a staged FILE, never through a `$( )`, so the phantom-final-hunk
-  # hazard above does not apply. A file and not `<( )`: the fd race exits 2 at 3-8 in 2000 under 4
-  # bash 3.2 workers (batch 160). A failed staging is `unknown`, the same answer as a failed diff.
-  # Piped through `ud_pdiff`; a failed `cat` is 2, which is `unknown` below.
-  [ -n "$UD_DIFF_TMP" ] && git_show "${BASE}" "${cp}" > "$UD_DIFF_TMP/base" 2>/dev/null \
-    || { printf 'unknown'; return 0; }
-  d="$(ud_pdiff "$UD_DIFF_TMP/base" "$cons" 2>/dev/null)"; drc=$?
+  ranges="$(exempt_ranges "$cp")" || return 3
+  # The BLOB is the scan loop's `blob-base`, read once with its status read, never through a `$( )`,
+  # so the phantom-final-hunk hazard above does not apply. A file and not `<( )`: the fd race exits
+  # 2 at 3-8 in 2000 under 4 bash 3.2 workers (batch 160). Piped through `ud_pdiff`; a failed `cat`
+  # is 2, which is `unknown` below. The captured diff is staged back to a FILE for the awk, with the
+  # write's status read -- a `<<<` that could not be staged fed the awk an empty stream, `unknown`.
+  d="$(ud_pdiff "$UD_DIFF_TMP/blob-base" "$cons" 2>/dev/null)"; drc=$?
   if [ "$drc" -ne 1 ] || [ -z "$d" ]; then printf 'unknown'; return 0; fi
+  printf '%s\n' "$d" > "$UD_DIFF_TMP/hunks" || return 3
   awk -v ranges="$ranges" '
     function left_exempt(h,   p,left,n,LR,ls,le,m,RG,i,rr) {
       p = match(h, /[acd]/); if (p == 0) return 0
@@ -549,7 +608,7 @@ is_unregistered() {
     /^[0-9]/ { if (hunk && !tok) bad=1; hunk=1; tok=0; if (left_exempt($0)) tok=1; next }
     /^</     { if ($0 ~ /\{[a-z_][a-z0-9_]*\}/) tok=1 }
     END      { if (!hunk) { print "unknown"; exit } if (hunk && !tok) bad=1; print (bad ? "yes" : "no") }
-  ' <<<"$d"
+  ' "$UD_DIFF_TMP/hunks" || return 3
 }
 
 # Scan set. Prose/schema core a consumer could edit and silently drift — overwrite-on-pull, so
@@ -630,7 +689,11 @@ while IFS= read -r cp; do
 
       git -C "$DIST" cat-file -e "${BASE}:${cp}" 2>/dev/null || continue
 
-      if git_show "${BASE}" "${cp}" | cmp -s - "$cons"; then
+      # Every blob this iteration compares is staged once, its read status read (`ud_stage_blob`).
+      # `blob-base` is ALSO what `is_unregistered`, `exempt_ranges`, `closest_ancestor_blob` and the
+      # line count below read, so a base blob that could not be read refuses here, in the main shell.
+      ud_stage_blob "${BASE}" "${cp}" "$UD_DIFF_TMP/blob-base"
+      if cmp -s "$UD_DIFF_TMP/blob-base" "$cons"; then
         emit CORE-OK "$rel" "byte-identical to ${BASE}"
         continue
       fi
@@ -648,7 +711,7 @@ while IFS= read -r cp; do
       # theirs, whatever base was passed, so the wrong-base mistake announces itself here
       # instead of arriving as a plausible HARD row.
       if [ -n "$THEIRS" ] && git -C "$DIST" cat-file -e "${THEIRS}:${cp}" 2>/dev/null \
-         && git_show "${THEIRS}" "${cp}" | cmp -s - "$cons"; then
+         && ud_stage_blob "${THEIRS}" "${cp}" "$UD_DIFF_TMP/blob-theirs" && cmp -s "$UD_DIFF_TMP/blob-theirs" "$cons"; then
         emit CORE-AT-THEIRS "$rel" "byte-identical to ${THEIRS} — already at the incoming core, not drift. If you expected drift here, the base is stale: post-apply, re-run with base == theirs."
         continue
       fi
@@ -660,12 +723,13 @@ while IFS= read -r cp; do
       # with theirs, and nothing consumer-authored is at stake. Reported rather than silent,
       # because a row the operator can see is how they learn the hop happened.
       if [ -n "$SELF_UPDATE_REF" ] && git -C "$DIST" cat-file -e "${SELF_UPDATE_REF}:${cp}" 2>/dev/null \
-         && git_show "${SELF_UPDATE_REF}" "${cp}" | cmp -s - "$cons"; then
+         && ud_stage_blob "${SELF_UPDATE_REF}" "${cp}" "$UD_DIFF_TMP/blob-self" && cmp -s "$UD_DIFF_TMP/blob-self" "$cons"; then
         emit CORE-AT-SELF-UPDATE "$rel" "byte-identical to ${SELF_UPDATE_REF}, the \`skill_commit\` in this consumer's own stamp — the autonomous self-update (step 2) wrote it, so it is upstream content at an intermediate ref, not consumer drift. No action: \`apply\` carries it to ${THEIRS:-theirs} with the rest of the machinery step 2 wrote. Step 2 writes the base→theirs diff restricted to the machinery set, minus the paths arm C carried; a carried path is not this row, it is CORE-MACHINERY-CARRIED."
         continue
       fi
 
-      unreg="$(is_unregistered "$cp" "$cons")"
+      _ur=0; unreg="$(is_unregistered "$cp" "$cons")" || _ur=$?
+      [ "$_ur" -eq 0 ] || ud_read_refuse "the setup-site exemption ranges or the diff hunks of ${cp} at ${BASE}" "$_ur"
       # A classifier that could not run blocks under the SAME status as real drift, and stops here
       # rather than falling through: every arm below diffs this file again, and `apply.sh`'s drift
       # loop and `hard-blockers.sh` both key on this exact spelling, so a new status would be a row
@@ -683,7 +747,7 @@ while IFS= read -r cp; do
       fi
 
       nl_c="$(wc -l < "$cons" | tr -d ' ')"
-      nl_b="$(git_show "${BASE}" "${cp}" | wc -l | tr -d ' ')"
+      nl_b="$(wc -l < "$UD_DIFF_TMP/blob-base" | tr -d ' ')"
 
       # IS THIS PATH ONE ARM C CARRIED? Asked HERE, before absorption, and USED at three
       # different points below, because two of the three arms that follow have to know the
@@ -712,7 +776,9 @@ while IFS= read -r cp; do
             "CLASSIFIER DID NOT RUN — this file differs from core@${BASE}, but whether core@${THEIRS} ABSORBED the consumer's delta could not be measured (a line-set producer failed), so no remedy is chosen for it. Re-run unregistered-drift.sh; if this row persists, compare the file against core@${THEIRS} by hand before reverting or refiling it."
           continue
         fi
-        read -r hits total <<<"$ap_out"
+        # Split by parameter expansion, never a `<<<`: a here-string that could not be staged read
+        # as two EMPTY fields, which the `:-0` defaults below turned into "nothing absorbed".
+        hits="${ap_out%% *}"; total="${ap_out#* }"
         if [ "${total:-0}" -gt 0 ] && [ "${hits:-0}" -ge 3 ] \
            && [ $(( hits * 100 / total )) -ge 10 ] \
            && { [ -z "$carried_b" ] || [ "${hits:-0}" -eq "${total:-0}" ]; }; then
@@ -733,11 +799,13 @@ while IFS= read -r cp; do
       # to merge is nothing and "take theirs" is exactly right. Telling that operator to perform
       # a semantic merge sends them to reconcile a file against itself. The bucket said CLASSIFY
       # because preclassify compares against BASE, which is the same reason this arm exists.
-      anc="$(closest_ancestor_blob "$cp" "$cons")"
+      _ca=0; anc="$(closest_ancestor_blob "$cp" "$cons")" || _ca=$?
+      [ "$_ca" -eq 0 ] || ud_read_refuse "an ancestor blob of ${cp} before ${BASE}" "$_ca"
       if [ -n "$anc" ]; then
-        read -r a_sha a_date a_n b_n <<EOF
-$anc
-EOF
+        # Four fields split by parameter expansion, never a heredoc: one that could not be staged
+        # read four EMPTY fields into the row below.
+        a_sha="${anc%% *}"; anc="${anc#* }"; a_date="${anc%% *}"; anc="${anc#* }"
+        a_n="${anc%% *}"; b_n="${anc#* }"
         emit HARD-CORE-BEHIND "$rel" \
           "NOT A FORK — THIS COPY IS STALE. It differs from core@${BASE} by ${b_n} lines, but from ${a_sha} (${a_date}), an ancestor of your own base, by only ${a_n}. The gap is upstream's change since ${a_date}, which this file never took — a file excluded from apply freezes while the stamp advances. The remedy is TAKE THEIRS: git -C ${DIST} show ${THEIRS:-$BASE}:${cp} > <consumer>/${cons#$CONSUMER/}. This still blocks because the ${a_n}-line residual against ${a_sha} IS yours: read it first (git -C ${DIST} show ${a_sha}:${cp} | diff - <consumer>/${cons#$CONSUMER/}) and confirm nothing in it is still wanted."
         continue

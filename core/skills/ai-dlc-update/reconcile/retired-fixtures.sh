@@ -80,10 +80,25 @@ fi
 # would be the fourth restatement this program has had to unpick.
 # memo_ls_tree (lib.sh) caches the FULL unfiltered listing per <dist,ref>; `-- core/fixtures`
 # becomes a literal-prefix grep on the cached read, byte-identical to git's own pathspec match.
-# GROUPED so `||`'s short-circuit selects only the SOURCE of the tree listing, not the whole
-# downstream pipe: `A || B | C` would otherwise skip `| C` entirely whenever `A` succeeds.
-{ { command -v memo_ls_tree >/dev/null 2>&1 && memo_ls_tree "$DIST" "$THEIRS" | grep '^core/fixtures/'; } \
-  || git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "$THEIRS" -- core/fixtures 2>/dev/null; } \
+# THE MEMO'S LISTING IS CAPTURED AND ITS STATUS READ BEFORE ANYTHING IS FILTERED. This was
+# `{ memo | grep; } || git ls-tree`, and a memo that served its bytes and THEN failed -- lib.sh's
+# 125 for a `.s` it cannot read -- ran the fallback too, so every marker was listed twice and every
+# arm-A orphan printed two rows at rc 0 (measured with the cached `.s` emptied). A memo that fails
+# is not taken as the answer: the direct listing is read instead, and a direct listing that ALSO
+# fails is reported as the scan-unavailable row, never as a tree with no marker.
+rf_tree="" rf_mrc=-
+if command -v memo_ls_tree >/dev/null 2>&1; then
+  rf_mrc=0; rf_tree="$(memo_ls_tree "$DIST" "$THEIRS")" || rf_mrc=$?
+fi
+if [ "$rf_mrc" != 0 ]; then
+  rf_drc=0; rf_tree="$(git -C "$DIST" -c core.quotePath=false ls-tree -r --name-only "$THEIRS" -- core/fixtures 2>/dev/null)" || rf_drc=$?
+  if [ "$rf_drc" -ne 0 ]; then
+    rf_tree=""
+    emit HARD-RETIRED-FIXTURE-SCAN-UNAVAILABLE "-" \
+      "the tree listing of ${THEIRS} could not be read (memo_ls_tree exited ${rf_mrc}, git ls-tree exited ${rf_drc}), so arm A (fixtures core marked .dist-only) did not run. An unread listing prints the same empty result as a tree with no orphan, so this is reported instead of that silence."
+  fi
+fi
+printf '%s\n' "$rf_tree" | grep '^core/fixtures/' \
   | grep '/\.dist-only$' \
   | while IFS= read -r marker; do
       n="${marker#core/fixtures/}"; n="${n%/.dist-only}"
@@ -125,7 +140,9 @@ else
     # Still shipped, or dist-only? Arm A owns it either way. NOT `ls-tree … | grep -q`:
     # this file enables pipefail, so the reader's early exit would answer with the writer's
     # EPIPE on a large enough tree. I54b bans exactly that and v0.231.0 swept 22 of them.
-    core_has="$(git -C "$DIST" ls-tree -d --name-only "$THEIRS" -- "core/fixtures/${n}" 2>/dev/null)"
+    # `core.quotePath=false` for the listing's own sake; the reader is an emptiness test, so a
+    # C-quoted name still reads as present and the flag moves no row here.
+    core_has="$(git -C "$DIST" -c core.quotePath=false ls-tree -d --name-only "$THEIRS" -- "core/fixtures/${n}" 2>/dev/null)"
     [ -n "$core_has" ] && continue
     # Core does not have it at THEIRS. Did it ever?
     [ -n "$(git -C "$DIST" log --all --format=%H -1 -- "core/fixtures/${n}" 2>/dev/null)" ] || continue

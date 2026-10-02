@@ -252,6 +252,31 @@ fi
 # that cannot run emits no FAIL lines, and "no output" would otherwise score as a kill on
 # every mutant at once.
 #
+# --- A memo listing that is SERVED and then FAILS does not double arm A -------------------------
+# lib.sh's memo returns 125 when a cached status cannot be read, AFTER its bytes reached stdout.
+# Arm A read `{ memo | grep; } || git ls-tree`, so that failure ran the fallback too and every
+# marker was listed twice: two identical orphan rows at rc 0. One row per orphan, whatever the memo.
+# The detector copy under test sits in the scratch dist with no lib.sh beside it, so it never loads
+# the memo; this cell runs it from its own directory WITH lib.sh. Keyed on DOUBLING: a detector whose
+# arm A emits nothing is arm A's own arm above, not this one.
+RD="$WORK/rfo-memo-dir"; mkdir -p "$RD"
+cp "$UNDER_TEST" "$RD/retired-fixtures.sh"; cp "$DIST/core/skills/ai-dlc-update/reconcile/preclassify.sh" "$RD/"
+cp "$SRC_DIR/lib.sh" "$RD/lib.sh"
+RM="$(mktemp -d "$WORK/rfo-memo.XXXXXX")"
+AI_DLC_RECONCILE_MEMO="$RM" bash "$RD/retired-fixtures.sh" "$DIST" "$THEIRS" "$CONS" > "$WORK/rm.ctl" 2>/dev/null
+rm_c="$(grep -c '^RETIRED-FIXTURE-ORPHAN.*tests/fixtures/will-be-distonly' "$WORK/rm.ctl")" || rm_c=0
+rm_n=0
+for rm_f in "$RM"/"t "*.s; do [ -f "$rm_f" ] || continue; : > "$rm_f"; rm_n=$((rm_n + 1)); done
+rm_out="$(AI_DLC_RECONCILE_MEMO="$RM" bash "$RD/retired-fixtures.sh" "$DIST" "$THEIRS" "$CONS" 2>/dev/null)"
+rm_a="$(printf '%s\n' "$rm_out" | grep -c '^RETIRED-FIXTURE-ORPHAN.*tests/fixtures/will-be-distonly')" || rm_a=0
+if [ "$rm_n" -lt 1 ]; then
+  bad "FIXTURE BROKEN — no tree-listing memo key was written, so the served-then-failed memo cell asserts nothing"
+elif [ "$rm_a" -le 1 ] && [ "$rm_a" -eq "$rm_c" ]; then
+  ok "a memo listing whose status cannot be read yields the same arm-A rows as a healthy one ($rm_a), never a doubled set"
+else
+  bad "a memo listing whose status cannot be read printed the arm-A orphan $rm_a time(s) against $rm_c healthy — the fallback listing ran on top of the served one"
+fi
+
 # Re-entrancy: this whole section runs the fixture's own assertion body against a swapped
 # detector, so it is driven by re-executing THIS script with AI_DLC_RFO_DETECT set. The
 # recursion is one level deep and the guard below is what ends it.
