@@ -95,7 +95,10 @@ fi
 # with the guard. The mutant needs work left to fail at.
 MUTDIR="$WORK/reconcile-mutant"
 mkdir -p "$MUTDIR"
-cp "$(dirname "$APPLY")"/*.sh "$MUTDIR/" 2>/dev/null
+# The `.md` siblings travel too: preclassify reads `setup-sites.md` beside itself, and a missing
+# manifest is a refusal (a broken install), not an empty set -- a copy without it refuses before the
+# mapper is ever reached.
+cp "$(dirname "$APPLY")"/*.sh "$(dirname "$APPLY")"/*.md "$MUTDIR/" 2>/dev/null
 sed 's|^\( *\)local m; m=.*|\1local m; m=""|' "$APPLY" > "$MUTDIR/apply.sh"
 W2="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: second seed failed" >&2; exit 2; }
 eval "$(sed 's/^/M_/' "$W2/env.sh")"
