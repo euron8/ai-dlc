@@ -1216,16 +1216,48 @@ check left in the deriver while `sandbox-exec -f` remains. It reads 1 on this br
 
 verify: sh D=core/scripts/derive-fixture-readsets.sh; [ -f "$D" ] || exit 9; B="$(grep -v '^[[:space:]]*#' "$D")"; grep -q 'sandbox-exec -f' <<<"$B" || exit 1; grep -q 'fs_usage -w' <<<"$B" && exit 1; grep -qF '"$(id -u)" = "0"' <<<"$B" && exit 1; exit 0
 
-## BL-378 — the suite-pole baseline still names `ledger-reverify` after the pole moved
+## BL-378 — the suite-pole guard could not reach its comparison on a real push, and its baseline names a pole that moved
 
-**NOTE.** v0.665.0's 12-way gate reported the pole as `gate-adjudication-mutants` at 490s against a
+**DEFECT.** v0.665.0's 12-way gate reported the pole as `gate-adjudication-mutants` at 490s against a
 baseline row for `ledger-reverify` at 628s (band 20%, ceiling 754s), with the note "a row pinned to
-a unit that is no longer longest passes while watching the wrong number". Re-baseline
-`docs/suite-pole-baseline.tsv` from a quiet 12-way run. The 6-way gates earlier in batch 173 skipped
-this phase on the pool-width mismatch, because the operator's shell profile sets
-`AI_DLC_FIXTURE_JOBS=6`.
+a unit that is no longer longest passes while watching the wrong number". Batch 183 found the larger
+defect behind it: the guard almost never compares at all.
 
-**Batch 181:** the contract adversary measured `validate-suite-pole.sh`'s partial-dispatch SKIP as correct: `20 of 227` was a real partial dispatch, and `228 of 227` came from a merged file the hook never passes. Still owed: one quiet 12-way run to re-baseline from.
+**Batch 181:** the contract adversary measured `validate-suite-pole.sh`'s partial-dispatch SKIP as
+correct for the `20 of 227` it was shown. Batch 183 established that the same SKIP also fires on
+the normal dispatch, so it is the defect rather than the safeguard.
+
+**Batch 183 measurements, each with its control.**
+
+- **C1, how often VERDICT 5 is reached.** The batch 183 adversary counted gate logs since 2026-09-22
+  and found the comparison line printed once (09-29, the filing gate). Every other run stopped at
+  the row-count SKIP (`:377`, `dur_rows -ne fx_count`) or the width SKIP (`:381`). The step
+  title is the positive control in the same scan.
+- **C2, whether a full dispatch occurs.** The one `.last` on disk holds 220 rows against 227
+  fixture directories (`/usr/bin/find core/fixtures -mindepth 2 -maxdepth 2 -name run.sh`). The 7
+  missing units cost 18s of the merged record's 12931s over the on-disk set. This is a single data
+  point, not a rate: the hook keeps one `.last` and overwrites it on every green run.
+- **C3, the pool width.** `.githooks/pre-push:402` resolves `FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-12}"`,
+  and this session's environment carries `AI_DLC_FIXTURE_JOBS=16` from the launcher. `~/.zshrc`,
+  `~/.zprofile`, `~/.zshenv` and `~/.claude/settings.json` were grepped for the name and returned
+  nothing, so the earlier claim that "the shell profile sets 6" no longer holds. The control in the
+  same call is the session's own value, which printed 16. The baseline's `# jobs: 12` therefore
+  SKIPs every gate at the hook's actual width.
+
+**Batch 183 fix (validator, fixture, hook).** The row-count equality is replaced by cost coverage.
+The numerator is this run's costs, and the denominator is the merged record passed by the new
+`--record` flag; both are joined to the fixture directories on disk, and a run needs at least 90%.
+On the real files this reads 99.86% (12913s of 12931s). A copy of the record carrying
+`zz-no-such-fixture-378 100000` also reads 99.86%, because the ghost row is joined out, while the
+same 100000s on `requirements-step` (on disk, undispatched) reads 11.43% and SKIPs. Growth past the
+ceiling FAILS whichever unit carries it. If the baseline pole was not dispatched and the max is
+within band, the guard SKIPs with "not dispatched" instead of passing. The baseline now carries one
+block per pool width, and a width with no row SKIPs naming the widths that have one.
+
+**Closes in this release** once the width-16 row is committed to `docs/suite-pole-baseline.tsv` and the
+guard, driven against a real 220-of-227 `.last` at `--jobs 16`, prints a comparison (VERDICT 5)
+line. Until that row exists, every gate at width 16 prints `SKIP -- pool width 16 has no baseline
+row (widths with a row: 12)`.
 
 verify: manual
 
