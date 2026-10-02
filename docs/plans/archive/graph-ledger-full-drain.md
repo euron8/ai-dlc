@@ -16238,3 +16238,51 @@ traced.
 
 Batch 174's delivery gap and held-branch record are spent: batch 175's block above replaces both.
 
+**BATCH 176 SHIPPED `v0.671.0` (`8e697587`, #925), `v0.672.0` (`9a9b8146`, #926) AND `v0.673.0`
+(`72b1ea2a`, #927), AND DISCHARGED ONE CONSUMER CANDIDATE:**
+`PC-S336-STEP-1-AUTOPUSH-IS-THE-UNGUARDED-TWIN-OF-THE-PUSH-STEP-2-HARDENED` (`BL-389`). It was
+invoked by peer handoff. The two held batch-174 branches shipped as `v0.671.0` (`BL-329`) and
+`v0.672.0` (`BL-085`), each alone. Its close rotated 8 entries (`BL-329`, `BL-085`, `BL-389`,
+`BL-142`, `BL-214`, `BL-238`, `BL-264`, `BL-091`) and filed `BL-391`: live backlog **46 -> 39**,
+archive **343 -> 351**, net closed minus filed **7**. R5 floors set to the measured 18 sh receipts
+over 39 live entries.
+
+**THE OPENING SWEEP AND THE WHOLE-BACKLOG ADJUDICATION.** Live 18 on 19 qualifying refs at the batch open (25 at its close), unfiled 1
+(`PC-S309-VALIDATE-MANDATORY-RULES-CHECK5-TEST-ONLY-WEB-DIFF-FALSE-FAIL`, shipped at 0.542.0), worklist
+2 (`BL-145` and `BL-389`, both citing S336), TERMINAL 153, DISCHARGED 15 overlap-corrected. Four hands
+adjudicated all 46 live entries: 4 CLOSE, 5 PARTIAL, 37 LIVE, 0 dead premise. **An archive-side
+bare-token grep scored S336 as closed upstream; it is not** — both archive hits are prose mentions,
+and the entry-form grammar reads 0 in the archive and 1 in the live ledger. **`BL-265`'s receipt
+exited 0 while its own body keeps it open**; it is re-keyed to require the literal floor gone (1 on
+the tree, 0 on a derived floor, 1 on a deleted floor).
+
+**`BL-389` TOOK THE CANDIDATE'S REMEDY (ii), NOT (i), ON MEASUREMENT.** Gating the step-1 push with
+`self-update-gate.sh` was built and refuted by the contract adversary: the gate's coupling arms defer
+and exit before its push probe on every check-adding range, so it would refuse pushes the hook
+accepts. A failed step-1 push now marks the branch UN-SYNCED, step 2 DEFERS, and step 6 fetches and
+refuses `apply`. The consumer's non-fatal receipt is discharged; its gate-in-span receipt stays
+unsatisfied by design, which its re-verify will show as partly live. The tip adversary found the
+first cut left step 2 committing locally on an UN-SYNCED branch — the PC-S308 orphan — fixed before
+merge. New shipping fixture `update-preflight-push`, twelve mutants.
+
+**THE `v0.672.0` GATE FAILED ONCE, ON LINES THE HELD BRANCH CARRIED.** `b174-bl085` added two
+`<<<` loops to `layer-drift.sh`; `procsub-staged-refusal`'s SPELL and added-line arms refused both.
+Staged through `ld_stage`, and `layer-extends-grain`'s m5 re-anchored. Gates: `v0.671.0` on
+`ef5b4b57`, `v0.672.0` on `62d1be89`, `v0.673.0` on `9ebb9f6a`; each 22 phases, 24 PASS, 1 SKIP,
+0 FAIL, every changed fixture `ok` by name, squash tree identical to the gated tip.
+
+**OPERATOR DECISIONS OFFERED IN BATCH 176's PINGS** were answered in batch 177; its block above records
+the rulings.
+
+**READ-SET TRACE OWED**: `sudo bash core/scripts/derive-fixture-readsets.sh --list
+"update-preflight-push"` — the new fixture is unmapped, so the runner runs it on every push. The
+operator's batch-176 trace of the eleven fixtures batch 175 owed ships in this close; only their rows
+moved, and the map's `.claude/worktrees/` rows went 6384 -> 0.
+
+**THE DELIVERY GAP IS SIX RELEASES, WHICH IS WIDE.** The consumer is at 0.667.0 against `VERSION`
+0.673.0, and 0.670.0, 0.671.0, 0.672.0 and 0.673.0 each change a bootstrapping file. PENDING is 5:
+the four batch-175 ids plus S336. The banked ruling stands: report the gap and write no runbook.
+
+Batch 175's delivery gap and held-branch record are spent: batch 176's block above replaces both.
+No built branch is held.
+
