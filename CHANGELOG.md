@@ -19,6 +19,25 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.708.0] - 2026-10-02
+
+Batch 184's second release: `preclassify.sh` in the update skill. Bootstrapping, so it ships as its own file set. A
+consumer runs its installed copy, so this takes effect on the pull after the one that delivers it.
+
+### PC-S316-PRECLASSIFY-SELF-UPDATE-RECOGNITION-OMITS-FIXTURES
+
+- `BL-428`: after a self-update, `at_self_update()` recognised only the machinery set. A fixture step 2 had written
+  at the `skill_commit` blob therefore read `BOTH-CHANGED->CLASSIFY` once upstream moved it again. Arm C carries only
+  machinery, so step 2 then halted on a slice/CARRY disagreement. It now also acquits a `core/fixtures/*/*` path
+  whose consumer bytes equal the `skill_commit` blob. A fixture the consumer edited still reads CLASSIFY.
+  `setup-sites.md`'s `machinery:` list is unchanged: adding fixtures there fails I28 and would widen every pull's
+  slice. Rehearsed on a clone of the reference consumer at its self-update commit (base `08655178`, theirs
+  `abe3afb7`): 51 rows from each engine, and exactly the five filed fixtures move from `BOTH-CHANGED->CLASSIFY` to
+  `UPSTREAM-ONLY`. `emit-report.sh` stays `ALREADY-AT-THEIRS` as the control. The three functions older engines
+  extract from this file are byte-identical. The consumer's filed `verify:` keys on the `machinery:` list and will
+  keep reading STILL-LIVE by design. A consumer already holding a fixture from an older `skill_commit` clears it with
+  one CLASSIFY accept.
+
 ## [0.707.0] - 2026-10-02
 
 Batch 184's first release: the dispatch guard and Check 22, six fixture ship declarations, the suite-pole
