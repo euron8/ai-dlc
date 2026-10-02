@@ -658,7 +658,13 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   at the same path: base 3142 (spread 3142-3142), tip 3149 (spread 3149-3149), so +7. I8 +6 is
 #   its per-marker `grep -qx` against uninstall's list, one per newly marked fixture; I82b 8 -> 9
 #   is the only other arm that moved. HIGH reading 3149 plus the usual 6.
-FORK_BUDGET=3155
+#
+#   RAISED TO 3165 FOR ONE NEW LEDGER-STATUS KIND, NOT FOR A NEW ARM. `fork-profile.sh --section
+#   by-arm --stable`, base `origin/main` 0414a98e then the BL-145 tip, in ONE worktree at the same
+#   path: base 3154 (spread 3154-3154), tip 3159 (spread 3157-3159), so +5. The only arm that moved
+#   is I39, 57 -> 62: `NAMED-UPSTREAM-OFF-SUBJECT` is one more member it joins across the emitter,
+#   step 3f, step 8 and emit-report's heading. HIGH reading 3159 plus the usual 6.
+FORK_BUDGET=3165
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

@@ -19,6 +19,44 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.710.0] - 2026-10-02
+
+Batch 185's second release: `ledger-reverify.sh` in the update skill. Bootstrapping, so it ships as its own file set. A
+consumer runs its installed copy, so this takes effect on the pull after the one that delivers it. It discharges no
+consumer candidate. Net closed minus filed is 4: `BL-007`, `BL-132`, `BL-195` and `BL-301` close on the operator's
+batch-185 rulings, nothing is filed, and `BL-145` stays open on a narrower remainder.
+
+### Upstream-naming rows: a naming set that changes none of the entry's receipt paths
+
+- `BL-145`: a naming set that reached `core/` read `NAMED-UPSTREAM` even when no naming commit changed anything
+  the entry tests. `ledger-reverify.sh` now takes each entry's subject set from the union of its
+  `theirs_has|theirs_lacks` receipt paths, resolving a consumer-layout path by unique basename at theirs. A path
+  that resolves to 0 or more than 1 file keeps the whole entry at its old kind. A naming commit that changes
+  `VERSION` is judged over its release span, back to the previous `VERSION` change; any other naming commit is
+  judged on its own listing, and a listing failure keeps the old kind. When the set reaches code and no naming
+  commit changes a subject path, the row is the new kind `NAMED-UPSTREAM-OFF-SUBJECT`. It keeps every sha, is
+  decided after CITED-ONLY and DOCS-ONLY, names a basename-resolved path both as written and as resolved, and is
+  never a close. An entry with no path receipt, and the ambiguous row, are unchanged. The kind is carried in
+  SKILL.md steps 3f and 8, `emit-report.sh`'s heading and `docs/vocabulary-index.md`.
+- Measured with the base and fix engines over the reference consumer's archive with close annotations stripped:
+  of 576 rows, 570 are byte-identical and 6 move to the new kind. Five are true off-subject rows, all named only
+  by one later release whose span touches none of their receipt paths. One is a genuine absorption whose receipt
+  anchors on a structural precondition instead of the file the fix changed, and only the entry's author can tell
+  that case apart. The row text allows for it, and no suppression heuristic is built. Over the live ledger, 0 of
+  12 rows move. The ledger-reverify fixture family is re-seeded so each naming commit touches its receipt path,
+  and gains eleven cells and seven mutants for subject, span, consumer layout and listing failure.
+- Residual, so the entry stays open: a naming commit that touches the receipt file and leaves its receipt
+  substring unchanged still reads `NAMED-UPSTREAM`. Matching on the substring instead was modelled over the same
+  archive and demoted 16 of 50 genuine absorptions, so it was not built.
+
+### Backlog closes on operator rulings
+
+- `BL-007` closes on its built half: a hole in the live file or at the live/archive seam is reported, and the
+  archive interior is out of scope. Its receipt is re-keyed to the seam.
+- `BL-132`, `BL-195` and `BL-301` close by adjudication, with no build. Each archived entry keeps its measured
+  refutations and states what would re-open it.
+- `BL-375` is re-scoped: the sandbox tracer drops reports on real runs, and that blocks retiring `fs_usage`.
+
 ## [0.709.0] - 2026-10-02
 
 Batch 185's first release. It discharges no consumer candidate: the opening sweep found none live and unshipped. It
