@@ -69,7 +69,12 @@ member. A site whose `reads:` resolves to nothing at BOTH refs is refused, not s
   preserves these paths, so the incoming script runs against the incoming schema. Comparison is
   over the whole set; if ANY member moved, the predicate moved.
 - `entry:` — which member of `reads:` is the executable, dist-relative.
-- `corpus:` — a `find`-style name pattern, resolved under the consumer root.
+- `corpus-root:` — OPTIONAL, consumer-relative directory the `corpus:` pattern is searched under.
+  Defaults to `_bmad-output`. A site whose stored subject lives elsewhere declares it here;
+  without it that subject is unreachable and the site reads UNDECIDABLE on every consumer. A
+  value with a `..` component, a leading `/` or any whitespace is refused, and the site reports
+  UNDECIDABLE naming the field.
+- `corpus:` — a `find`-style name pattern, resolved under `<consumer>/<corpus-root>`.
   **DERIVE IT FROM THE SHIPPED GRAMMAR, NOT BY INVENTION.** The first cut used `*pass[0-9]*` and
   reached 16 series where the live-series glob between `core/hooks/ai-dlc-continue.sh`'s
   `I81 LIVE-SERIES BLOCK` markers reaches 119
@@ -80,21 +85,40 @@ member. A site whose `reads:` resolves to nothing at BOTH refs is refused, not s
   own gate uses; where they disagree the CONSUMER's is right and this field is stale.
 - `verdict:` — a `sed -nE` expression extracting the comparable verdict tokens from the
   predicate's combined stdout+stderr. The compared value is the SORTED SET of what it prints.
+- `pass:` — OPTIONAL `sed -nE` expression matching the line the predicate prints when it
+  PASSES, copied from the validator's own emitter. It lets the row split a series that yielded
+  no verdict token into `passed` (pass line on both sides) and `unclassified` (neither). A site
+  without it prints `unclassified=n/a (grammar spells failures only)`, because its tokenless
+  series are passes and unparseable outputs mixed. The value `in-verdict` declares that
+  `verdict:` already extracts the pass verdict as a token (`PASS`, `OK`, a verdict class), so a
+  pass is counted in `compared` and every tokenless series is unclassified. Never write a pass
+  line the validator does not print.
 
-## Three of these sites carry arguments the probe root forces
+## Each side runs rooted at its own probe root, so consumer DATA must be passed in
 
-The probe root a site runs from has no `.git` and no `.claude/`, so a predicate that resolves
-its project root by walking up from ITSELF finds nothing there and falls back to the cwd, which
-is the consumer. Two consequences, each written into a block below rather than left to that
-fallback:
+`predicate-differential.sh` runs each side with `AI_DLC_PROJECT_ROOT` set to that side's probe
+root and the cwd at the consumer. Without the pin, a predicate resolving its schema under its
+project root fell through to the consumer's INSTALLED `.claude/schemas/` on both sides — the
+probe root carries no walk-up marker, and the cwd, `CLAUDE_PROJECT_DIR` and any inherited
+`AI_DLC_PROJECT_ROOT` all name the consumer — so a schema-only change compared one schema with
+itself. A walk-up marker alone is not the fix: an inherited `AI_DLC_PROJECT_ROOT` beats the walk.
 
+The cost of the pin is that consumer data a predicate looks up under its root is no longer found
+there. Every such input is therefore passed explicitly:
+
+- the known-skills extension is passed as `AI_DLC_KNOWN_SKILLS_EXT`, resolved once from the
+  consumer's `.claude/skills/ai-dlc/extensions/known-skills.json`. Searched under the probe root
+  it resolves to nothing on BOTH sides, an identical empty input that parses as agreement.
+  **This makes a change to the validator's extension SEARCH PATH unobservable to the
+  differential**: both sides are handed the file by path, so a release that moves where the
+  validator looks for it compares identically. Only a change to how the file's CONTENT is read
+  is still seen.
 - `validate-gate-adjudication.sh` resolves its schema, `enforcement-map.yaml` and its
-  `validate-adversarial-convergence.sh` sibling under the walked-up root. The walk stops at the
-  probe root only because `core/skills/ai-dlc/` exists there, which it does because
-  `enforcement-map.yaml` is in `reads:`. Drop that member and the incoming script reads the
-  consumer's INSTALLED schema and map, so both sides compare the same data. `--series` is the
-  form the consumer's own gate runs; the per-pass form needs a gate type per file, which the
-  `invoke:` grammar cannot derive.
+  `validate-adversarial-convergence.sh` sibling under the pinned root, which is why all three
+  are in `reads:`. Drop one and that side has no copy of it. `--series` is the form the
+  consumer's own gate runs; the per-pass form needs a gate type per file, which the `invoke:`
+  grammar cannot derive. Its escalations default (`$GA_MAP_ROOT/docs/escalations/pending.md`)
+  is read only in its adjudicate mode, which no site invokes.
 - `validate-snapshot-conservation.sh` gets `--root .` and `validate-suppression-lifetime.sh`
   gets an explicit `--gate-metrics`. Without them, a predicate that cannot find its inputs reports
   NOT-APPLICABLE or an uncounted lifetime on both sides, and that parses as agreement.
@@ -103,11 +127,16 @@ The verdict grammars extract the verdict CLASS and the subject each finding name
 count. `catalog=57` against `catalog=58` is the catalog growing, not a stored artifact being
 reclassified.
 
-**The suppression-lifetime site reports UNDECIDABLE whenever its read-set moves, and STABLE
-(byte-identical) otherwise, on the shipped `docs/escalations/` layout; that is the reader's limit,
-not this block's.** Its subject is `docs/escalations/pending.md`, and
-`predicate-differential.sh` resolves `corpus:` only under `_bmad-output/`. The block is declared
-so the gap is reported as a row instead of being absent from the population.
+**The suppression-lifetime site declares `corpus-root: docs/escalations`.** Its subject is
+`docs/escalations/pending.md`, outside `_bmad-output/`. Before the field existed the reader
+searched only `_bmad-output/` and the site reported UNDECIDABLE whenever its read-set moved.
+
+Every row past the manifest carries `population: root=… corpus=… series=…`, each value
+backticked. Every row whose corpus was read also carries `records= series= compared=` and either
+`passed= unclassified=` (a site with `pass:`) or `unclassified=n/a (grammar spells failures
+only)`. The population is static; the counts come from a live corpus, so `emit-report.sh`
+carries only the population into the byte-compared report region and the counts stay in the
+detector's own rows.
 
 ## Sites
 
@@ -116,6 +145,7 @@ entry: core/scripts/validate-adversarial-convergence.sh
 corpus: *adversarial*p*.md
 series: s/(pass|p)[0-9]+\.md$//
 invoke: --series {series}
+pass: s/^PASS: the cycle converged.*/PASS/p
 verdict: s/^FAIL \(([A-Z0-9]+) --.*/\1/p
 
 reads: core/scripts/validate-provenance-block.sh core/schemas/provenance-block.json
@@ -123,6 +153,7 @@ entry: core/scripts/validate-provenance-block.sh
 corpus: *adversarial*p*.md
 series: s/$//
 invoke: {series}
+pass: s/^VALIDATE-PROVENANCE-BLOCK: PASS .*/PASS/p
 verdict: s/^FAIL: ([A-Za-z0-9_-]+).*/\1/p
 
 reads: core/scripts/validate-gate-adjudication.sh core/schemas/gate-adjudication-verdict.json core/skills/ai-dlc/enforcement-map.yaml core/scripts/validate-adversarial-convergence.sh
@@ -130,6 +161,7 @@ entry: core/scripts/validate-gate-adjudication.sh
 corpus: *.verdict.json
 series: s|/[^/]*\.verdict\.json$||
 invoke: --series {series}
+pass: in-verdict
 verdict: s/^VALIDATE-GATE-ADJUDICATION: (PASS|FAIL).*/\1/p; s/^  - STALLED: series '([^']+)'.* check '([^']+)' has held FAIL.*/STALLED \1 \2/p; s/^  - (MISSING|UNSTRUCTURED) REPAIR RECORD: series '([^']+)' \([^)]*\) pass ([0-9]+).*/\1 REPAIR RECORD \2 p\3/p; s/^  - SPLIT SERIES: check '([^']+)'.* between series '([^']+)'.*/SPLIT SERIES \2 \1/p; s/^  - series '([^']+)' (has two passes|spans gate_types).*/\2 \1/p; s/^  - ([^ ]+): (gate_nonce|carries no gate_series_id).*/\2 \1/p
 
 reads: core/scripts/validate-snapshot-conservation.sh
@@ -137,11 +169,14 @@ entry: core/scripts/validate-snapshot-conservation.sh
 corpus: pipeline-snapshot.md
 series: s/$//
 invoke: --root . --snapshot {series}
+pass: in-verdict
 verdict: s/^verdict[[:space:]]+: ([A-Z-]+).*/\1/p; s/^(FAIL|WARN): .*/\1/p
 
 reads: core/scripts/validate-suppression-lifetime.sh core/skills/ai-dlc/enforcement-map.yaml
 entry: core/scripts/validate-suppression-lifetime.sh
+corpus-root: docs/escalations
 corpus: pending.md
 series: s/$//
 invoke: --escalations {series} --gate-metrics _bmad-output/implementation-artifacts/gate-metrics.jsonl
+pass: in-verdict
 verdict: s/^OK: EXAMINED NOTHING.*/EXAMINED-NOTHING/p; s/^OK: .*/OK/p; s/^FAIL: suppression of check '([^']+)' is past its lifetime.*/EXPIRED \1/p; s/^FAIL: a ([A-Z_]+) entry names check\(s\) *(.*), which are recorded FAILING.*/TERMINAL \1 \2/p; s/^FAIL: malformed SUPPRESSED entry -- missing:(.*)/MALFORMED\1/p; s/^FAIL: \*\*Suppresses:\*\* names '([^']+)'.*/UNKNOWN-CHECK \1/p; s/^FAIL: \*\*Expires after:\*\* ([^ ]+) gates is outside.*/EXPIRY-RANGE \1/p; s/^FAIL: suppression fields on an entry that does not classify.*/FIELDS-ON-NON-SUPPRESSED/p; s/^FAIL: baselined key no longer reproduces: (.*)/STALE-BASELINE \1/p

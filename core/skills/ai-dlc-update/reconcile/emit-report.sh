@@ -805,7 +805,11 @@ render() {
   a0_raw="$(mktemp)"
   bash "$SELF/predicate-differential.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" >"$a0_raw" 2>/dev/null
   a0_rc=$?
-  a0_render "$a0_rc" "$a0_raw" '$1!="PREDICATE-STABLE"{print $1"  "$2"  "$3}' "predicate-differential.sh <dist> <base> <theirs> <consumer>"
+  # A STABLE row is not dropped: its population definition is what lets a second party re-derive
+  # the null, and a bare `none` carries none. ONLY THE STATIC DEFINITION is rendered, never the
+  # counts after it: `--verify` byte-compares this region at step 7, the counts come from a live
+  # corpus, and an artifact written between approve and verify would fail it as hand-edited.
+  a0_render "$a0_rc" "$a0_raw" '$1!="PREDICATE-STABLE"{print $1"  "$2"  "$3; next} match($3, /population: root=`[^`]*` corpus=`[^`]*` series=`[^`]*`/){print $1"  "$2"  "substr($3, RSTART, RLENGTH); next} {print $1"  "$2}' "predicate-differential.sh <dist> <base> <theirs> <consumer>"
 
   sub "Retired core fixtures the consumer still carries (core stopped shipping them; the operator retires the orphan):"
   a0_raw="$(mktemp)"

@@ -678,6 +678,103 @@ else
   fi
 fi
 
+# --- A8: A STABLE PREDICATE SITE RENDERS ITS POPULATION, NEVER `none` -------------------------
+# The step-5 projection used to drop every PREDICATE-STABLE row, so a differential whose every site
+# was STABLE rendered `none`: the null reached the operator with no population definition, and
+# could not be re-derived. A stub differential with FIXED rows drives the copy, so the cell is
+# about the projection alone. The non-STABLE row's rendering is held byte-for-byte. Only the
+# STATIC definition renders on the STABLE line; the live counts after it do not (A9 says why).
+A8_STABLE="$(printf 'PREDICATE-STABLE\tvalidate-x.sh\tthe read-set moved and NO stored artifact changes verdict, long prose. population: root=`_bmad-output` corpus=`*p*` series=`s/$//`; records=3 series=3 compared=1 passed=1 unclassified=1.')"
+A8_RECL="$(printf 'PREDICATE-RECLASSIFIES\tvalidate-y.sh\tAT LEAST 1 of 2 stored series change verdict. population: root=`_bmad-output` corpus=`*q*` series=`s/$//`; records=2 series=2 compared=2 unclassified=n/a (grammar spells failures only).')"
+a8_prog() { # a8_prog <dir> <emit-source> <rows...> -> a reconcile/ copy whose differential prints <rows>
+  local d="$1" e="$2"; shift 2
+  rm -rf "$d"; cp -R "$RDIR" "$d" && cp "$e" "$d/emit-report.sh" || return 1
+  { echo '#!/usr/bin/env bash'; for r in "$@"; do printf "printf '%%s\\\\n' '%s'\n" "$r"; done; echo 'exit 0'; } > "$d/predicate-differential.sh"
+}
+a8_sect() { # a8_sect <dir> -> the rendered Predicate reclassification section
+  bash "$1/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$1.out" 2>/dev/null
+  sect "$1.out" '**Predicate reclassification'
+}
+# The mutant restores the pre-fix projection, built by whole-line replacement (awk, ENVIRON), so
+# no sed escaping can make it a no-op; it must apply to exactly one line.
+A8_OLD="  a0_render \"\$a0_rc\" \"\$a0_raw\" '\$1!=\"PREDICATE-STABLE\"{print \$1\"  \"\$2\"  \"\$3}' \"predicate-differential.sh <dist> <base> <theirs> <consumer>\""
+A8_KEY='  a0_render "$a0_rc" "$a0_raw" '"'"'$1!="PREDICATE-STABLE"{print $1"  "$2"  "$3; next}'
+A8_OLD="$A8_OLD" A8_KEY="$A8_KEY" awk 'index($0, ENVIRON["A8_KEY"]) == 1 { print ENVIRON["A8_OLD"]; n++; next } { print } END { exit (n == 1) ? 0 : 3 }' \
+  "$EMIT" > "$R/a8-mut.sh"
+a8_mrc=$?
+a8_prog "$R/a8-stable" "$EMIT" "$A8_STABLE" && a8_s="$(a8_sect "$R/a8-stable")"
+a8_prog "$R/a8-both" "$EMIT" "$A8_STABLE" "$A8_RECL" && a8_b="$(a8_sect "$R/a8-both")"
+a8_want_s='PREDICATE-STABLE  validate-x.sh  population: root=`_bmad-output` corpus=`*p*` series=`s/$//`'
+a8_want_r="$(printf '%s' "$A8_RECL" | awk -F'\t' '{print $1"  "$2"  "$3}')"
+if [ "$a8_s" = "$a8_want_s" ]; then
+  ok "A8 a STABLE-only differential renders its site's population definition in one line, not 'none'"
+else
+  bad "A8 a STABLE-only differential rendered [$(printf '%s' "$a8_s" | head -2 | tr '\n' '|' | cut -c1-160)], want its population line"
+fi
+a8_n="$(grep -c . <<<"$a8_b")" || a8_n=0
+a8_r="$(grep -F 'PREDICATE-RECLASSIFIES' <<<"$a8_b")" || a8_r=""
+if [ "$a8_n" = 2 ] && [ "$a8_r" = "$a8_want_r" ] && grep -qxF "$a8_want_s" <<<"$a8_b"; then
+  ok "A8 beside a STABLE row, the RECLASSIFIES row renders byte-for-byte as before (status, subject, whole detail)"
+else
+  bad "A8 the mixed render was [$(printf '%s' "$a8_b" | tr '\n' '|' | cut -c1-200)]"
+fi
+if [ "$a8_mrc" -ne 0 ] || cmp -s "$EMIT" "$R/a8-mut.sh"; then
+  bad "A8 mutant DID NOT APPLY (the projection line moved), so the STABLE arm is unproven -- re-anchor on the same line"
+else
+  a8_prog "$R/a8-mut" "$R/a8-mut.sh" "$A8_STABLE" && a8_m="$(a8_sect "$R/a8-mut")"
+  [ "$a8_m" = none ] && ok "A8 mutant [STABLE filter restored] KILLED: the STABLE-only differential renders 'none' again" \
+    || bad "A8 mutant [STABLE filter restored] SURVIVED or never ran: rendered [$(printf '%s' "$a8_m" | head -1 | cut -c1-100)]"
+fi
+
+# --- A9: A CORPUS THAT GROWS BETWEEN APPROVE AND VERIFY DOES NOT FAIL --verify ------------------
+# `apply.sh` runs `--verify` at step 7 against the region approved at step 5, byte-compared. The
+# differential's counts come from the LIVE corpus, so a projection carrying them fails verify as
+# stale/hand-edited the moment the consumer's own pipeline writes one artifact in between. The
+# stub counts a real pattern under its consumer argument, so growing the corpus is a real write.
+# Control: the same world verifies at rc 0 before the write, so a later failure is the write's.
+a9_world() { # a9_world <dir> <emit-source> -> a reconcile/ copy and a private consumer copy
+  local d="$1"
+  rm -rf "$d" "$d.c"; cp -R "$RDIR" "$d" && cp "$2" "$d/emit-report.sh" && cp -R "$CONSUMER" "$d.c" || return 1
+  mkdir -p "$d.c/_bmad-output/a9" && printf 'a9\n' > "$d.c/_bmad-output/a9/a9-pass1.md" || return 1
+  cat > "$d/predicate-differential.sh" <<'A9STUB'
+#!/usr/bin/env bash
+n="$(find "$4/_bmad-output/a9" -type f -name 'a9-pass*' | wc -l | tr -d ' ')"
+printf 'PREDICATE-STABLE\tvalidate-a9.sh\tthe read-set moved and NO stored artifact changes verdict. population: root=`_bmad-output` corpus=`a9-pass*` series=`s/$//`; records=%s series=%s compared=0 unclassified=n/a (grammar spells failures only).\n' "$n" "$n"
+exit 0
+A9STUB
+}
+a9_run() { # a9_run <dir> -> "<rc-before-write> <rc-after-write>"
+  local d="$1" r1 r2
+  bash "$d/emit-report.sh" "$DIST" "$BASE" "$d.c" "$THEIRS" > "$d.region" 2>/dev/null
+  { echo "# Reconcile report (fixture)"; echo; cat "$d.region"; } > "$d.report"
+  bash "$d/emit-report.sh" --verify "$d.report" "$DIST" "$BASE" "$d.c" "$THEIRS" >/dev/null 2>&1; r1=$?
+  printf 'a9\n' > "$d.c/_bmad-output/a9/a9-pass2.md"
+  bash "$d/emit-report.sh" --verify "$d.report" "$DIST" "$BASE" "$d.c" "$THEIRS" >/dev/null 2>&1; r2=$?
+  printf '%s %s' "$r1" "$r2"
+}
+# The mutant puts the counts back into the projection: the match runs to end of line again.
+A9_NEW='match($3, /population: root=`[^`]*` corpus=`[^`]*` series=`[^`]*`/){print $1"  "$2"  "substr($3, RSTART, RLENGTH); next}'
+A9_OLD='match($3, /population: .*$/){print $1"  "$2"  "substr($3, RSTART); next}'
+A9_NEW="$A9_NEW" A9_OLD="$A9_OLD" awk '{ i = index($0, ENVIRON["A9_NEW"]); if (i) { $0 = substr($0, 1, i - 1) ENVIRON["A9_OLD"] substr($0, i + length(ENVIRON["A9_NEW"])); n++ } print }
+  END { exit (n == 1) ? 0 : 3 }' "$EMIT" > "$R/a9-mut.sh"
+a9_mrc=$?
+if a9_world "$R/a9-ship" "$EMIT"; then
+  a9_s="$(a9_run "$R/a9-ship")"
+  grep -qF 'records=1 ' "$R/a9-ship.region" && { bad "A9 FIXTURE BROKEN: the shipping region carries the live count, so the cell cannot separate the projections"; }
+  [ "$a9_s" = "0 0" ] && ok "A9 a STABLE row's region survives a corpus write between approve and verify (verify rc 0 before and after; control rc 0 before)" \
+    || bad "A9 verify before/after the corpus write read [$a9_s], want [0 0]"
+else
+  bad "A9 HARNESS BROKEN: the shipping world could not be built"
+fi
+if [ "$a9_mrc" -ne 0 ] || cmp -s "$EMIT" "$R/a9-mut.sh"; then
+  bad "A9 mutant DID NOT APPLY (the projection line moved), so the verify arm is unproven -- re-anchor on the same line"
+elif a9_world "$R/a9-mut" "$R/a9-mut.sh"; then
+  a9_m="$(a9_run "$R/a9-mut")"
+  # The control half must hold under the mutant too, or the kill is the harness's, not the write's.
+  [ "$a9_m" = "0 1" ] && ok "A9 mutant [counts back in the projection] KILLED: verify passes before the write and fails after it" \
+    || bad "A9 mutant [counts back in the projection] read [$a9_m], want [0 1]"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "emit-report-refusal: PASS"; exit 0; fi
 echo "emit-report-refusal: $fails assertion(s) FAILED" >&2
