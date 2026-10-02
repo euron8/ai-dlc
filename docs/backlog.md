@@ -374,8 +374,8 @@ verify: manual
 
 **THE ANSWER.** A tool call whose input fails the tool's own schema is rejected before any hook
 sees it, and it is invisible to the hook system ENTIRELY — not merely to `PreToolUse`. Measured
-on **Claude Code 2.1.266**; a refactor of the dispatch chain could move it, which is why the
-build is named.
+on 2.1.266; re-measured and extended on **Claude Code 2.1.287**. A refactor of the dispatch
+chain could move it, which is why the build is named.
 
 **The measurement, with its positive control in the SAME session.** A scratch project driving
 real Claude Code as `claude -p --settings <scratch>/settings.json`, hook body three lines
@@ -405,16 +405,30 @@ zero evidentiary value, which is the empty-file-without-a-control failure this r
 `Read` is valid because the validation site is shared by every tool. The literal 1-option
 `AskUserQuestion` case needs an interactive run; nothing in the mechanism suggests it differs.
 
-**"MALFORMED" IS TWO CLASSES AND ONLY ONE IS MEASURED.** `coerceInput` is an optional per-tool
-hook that runs BEFORE `safeParse`, and its telemetry has a `coerced_still_invalid` outcome, so
-it is permitted to fail. Hook-invisible: anything `safeParse` still refuses after coercion, or
-with no `coerceInput` at all (measured: `Read` with `{"path": …}`), plus unparseable JSON
-rejected upstream. Hook-visible: anything a tool's `coerceInput` repairs into a valid shape —
-**existence follows from the mechanism; there is NO measured instance.** The nine `coerceInput`
-implementations are **not enumerated**, so which malformations are visible cannot be predicted
-from this entry. A candidate instance was measured and RETRACTED: re-reading the raw wire bytes
-with `repr()` showed the input was a STRING containing brackets, schema-valid on arrival and
-failing at the filesystem, not an array being coerced.
+**"MALFORMED" IS TWO CLASSES, AND BOTH ARE MEASURED on Claude Code 2.1.287.** `coerceInput` runs
+before `safeParse`. `strings -n 6` over the 2.1.287 bundle finds 12 per-tool implementations
+(Read, Write, Edit, Bash, WebSearch, TaskCreate, TaskUpdate, Artifact, Project, SendMessage,
+Workflow, plus one generic wrapper) and 4 shared call sites. The raw `coerceInput` count is 21,
+because `coerceInputBeforePluginHooks` contains the token. Same headless method, the wire
+`tool_use` input compared against the hook's `tool_input` by `tool_use_id`, in one session:
+
+```
+Read  {"file_path":"target.txt","length":1}  coerced, valid          -> Pre+Post fire, tool_input {"file_path":<abs>,"limit":1}
+Read  {"path":"target.txt","length":1}       coerced, still invalid  -> InputValidationError, 0 lines across Pre/Post/PostFailure
+Write {"path":"out.txt","content":…}         coerced, valid          -> Pre+Post fire, tool_input carries file_path, no path
+Read  {"file_path":"does-not-exist.txt"}     PostToolUseFailure positive control, same session -> 1 line
+```
+
+A `PreToolUse` hook therefore sees the POST-coercion input, on a tool carrying
+`coerceInputBeforePluginHooks` (Write) and on one without it (Read). Whether a malformation is
+hook-visible is a property of the tool's repair set, which can be read in the bundle: Read's
+repairs `length`→`limit` and one-element-array `offset`/`limit`, and does NOT include `path`. The
+earlier sentence that `Read` has no `coerceInput` at all was wrong on 2.1.287. What
+`coerceInputBeforePluginHooks` changes is not visible to settings-file command hooks and is
+unmeasured. Unparseable JSON and the fewer-than-2-option `AskUserQuestion` remain unmeasured
+headless. **A model can silently normalize the input it was asked to emit** — `[1]` was sent as the
+string `"[1]"` twice, the same failure that retracted the first candidate instance — so a coercion
+arm is valid only after its wire bytes have been read.
 
 **THE DOCUMENTATION HAS MOVED SINCE THIS ENTRY WAS FILED, AND THE SENTENCE IT RESTED ON IS
 GONE.** Re-checked: the hooks reference 301s to a new host, and `PreToolUse` now reads only
@@ -451,10 +465,11 @@ The general lesson is the one this repo already carries — an empty hook file i
 beside a positive control that wrote to the same file, in the same session, through the same
 registration.
 
-**This entry stays LIVE and is not a fix.** There is nothing to ship: the answer is recorded,
-no shipped guard depends on it, and the next author of a malformation-predicated guard needs to
-meet this text before building. Its remaining unmeasured half is the coercion partition — nine
-`coerceInput` implementations unread, and no measured instance of a repaired call.
+**This entry closes as a version-pinned recorded answer, not a fix.** The coercion partition it
+held open is measured above on 2.1.287. No tree arm can hold it, because the bundle is outside the
+hashed tree; the receipt is the method written here — the isolated three-event settings, the
+decisive wire/hook/result lines, and the `strings` counts — re-run on the next build that matters.
+The next author of a malformation-predicated guard reads this text in the archive.
 
   verify: manual
 
