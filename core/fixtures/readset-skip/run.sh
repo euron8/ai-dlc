@@ -396,7 +396,7 @@ ALL5="alpha apos beta delta stamp"
 NEW_ARMS=0
 seed2() {
   local t="$1" i=0 f
-  mkdir -p "$t/aaa" "$t/src" "$t/zzz" "$t/.claude" "$t/_bmad-output/ai-dlc-update/sub" || return 1
+  mkdir -p "$t/aaa" "$t/src" "$t/zzz" "$t/.claude" "$t/sub/.claude" "$t/_bmad-output/ai-dlc-update/sub" || return 1
   for f in alpha apos beta delta stamp; do
     mkdir -p "$t/core/fixtures/$f" && printf 'exit 0\n' > "$t/core/fixtures/$f/run.sh" || return 1
   done
@@ -405,6 +405,7 @@ seed2() {
   while [ "$i" -lt 210 ]; do printf '%s\n' "$i" > "$t/aaa/f$i"; i=$((i+1)); done
   printf 'v1\n' > "$t/src/a.sh"; printf 'v1\n' > "$t/zzz/b.sh"; printf 'q\n' > "$t/$APOS"; printf 'c\n' > "$t/$CAFE"
   printf 's\n' > "$t/.claude/settings.json"; printf 'version: 1\n' > "$t/.claude/.ai-dlc-version"
+  printf 'version: 1\n' > "$t/sub/.claude/.ai-dlc-version"
   printf 'o\n' > "$t/_bmad-output/other.md"; printf 'x\n' > "$t/_bmad-output/ai-dlc-update/sub/x.md"
   printf 'l\n' > "$t/_bmad-output/ai-dlc-update/ledger.md"
   ( cd "$t" && git init -q . && git add -A && \
@@ -417,7 +418,7 @@ TPL="$WORK/tpl"; seed2 "$TPL" || broken "the manifest seed failed"
 # never listed; and an apostrophe in the first batch, or one sorting after zzz/b.sh, would make
 # the "after it" arm agree with the broken manifest.
 N_TR="$( cd "$TPL" && git ls-files | grep -c . )" || N_TR=0
-[ "$N_TR" -eq 225 ] || broken "the manifest seed tracks $N_TR files, not 225 — something (a global excludesFile?) dropped seeded paths"
+[ "$N_TR" -eq 226 ] || broken "the manifest seed tracks $N_TR files, not 226 — something (a global excludesFile?) dropped seeded paths"
 ( cd "$TPL" && git check-ignore -q _bmad-output/ai-dlc-update/reconcile-log-1.md ) \
   && broken "the untracked bookkeeping file the bookkeeping arm creates is git-ignored here, so the manifest would never list it"
 SP0="$(mktemp -d "$WORK/p.XXXXXX")" || broken "mktemp failed"
@@ -514,6 +515,18 @@ for _nm in ".claude/settings.json" "_bmad-output/ai-dlc-update/sub/x.md" "_bmad-
     bad "  near-miss $_nm beside the bookkeeping did not run all as the single named orphan (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
   fi
 done
+# THE NESTED NEAR-MISS is the only input that separates an anchored pattern from one that lost
+# its `^`: every near-miss above differs from the bookkeeping at its START or past its last `/`,
+# so an unanchored pattern drops none of them and they pass either way. A version stamp under a
+# subdirectory ENDS like the real one and must still run all.
+NESTED="sub/.claude/.ai-dlc-version"
+R="$(drive "$POOL" n4.nested "$BK; printf 'version: 2\n' > '$NESTED'")"
+NEW_ARMS=$((NEW_ARMS+1))
+if holds "$R" "$ALL5" 0 "$(NM1 "$NESTED")"; then
+  ok "  NEAR-MISS $NESTED beside the bookkeeping is still an orphan and runs all — the exemption is anchored at the root"
+else
+  bad "  near-miss $NESTED beside the bookkeeping did not run all as the single named orphan (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
+fi
 
 R="$(drive "$POOL" n5 'printf "c2\n" > "$CAFE"')"
 NEW_ARMS=$((NEW_ARMS+1))
@@ -549,6 +562,16 @@ if [ -f "$WORK/w.n8/src/back\\slash" ] && holds "$R" "$ALL5" 0 "$UNHASH"; then
 else
   bad "  a backslash-named file did not fail closed, or was not seeded (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
 fi
+# AN OPTION-SHAPED NAME. Without `--`, shasum reads a top-level `-x.sh` as an unknown option,
+# exits non-zero, and the manifest is emptied on every push: correct, and the skip never fires.
+DASH_SEED='printf t > ./-x.sh'
+R="$(drive "$POOL" n9 'printf "v2\n" > src/a.sh' "" "$DASH_SEED")"
+NEW_ARMS=$((NEW_ARMS+1))
+if [ -f "$WORK/w.n9/-x.sh" ] && holds "$R" "alpha delta" 0 "SKIPPING"; then
+  ok "a top-level file named -x.sh is hashed as a file, and an edit to a mapped sibling still selects its reader (alpha) plus delta"
+else
+  bad "with a top-level -x.sh present an edit to src/a.sh did not select 'alpha delta', or -x.sh was not seeded (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
+fi
 
 # MUTANTS of the manifest and the exemption, each a LITERAL replacement with an exact expected
 # occurrence count, so a lost anchor reads as DID NOT APPLY rather than as a kill. The strings
@@ -579,8 +602,8 @@ killed() {
 }
 
 NEW_ARMS=$((NEW_ARMS+1))
-if lit_mut noz 1 "tr '\\n' '\\000' < \"\$out/.files\" | xargs -0 -n 200 shasum -a 256" \
-                    "xargs -n 200 shasum -a 256 < \"\$out/.files\""; then M="$LM"
+if lit_mut noz 1 "tr '\\n' '\\000' < \"\$out/.files\" | xargs -0 -n 200 shasum -a 256 --" \
+                    "xargs -n 200 shasum -a 256 -- < \"\$out/.files\""; then M="$LM"
   killed noz "the after-apostrophe arm" "$(drive "$M" m.noz 'printf "v2\n" > zzz/b.sh')" "beta delta" 0 "SKIPPING"
 fi
 NEW_ARMS=$((NEW_ARMS+1))
@@ -628,6 +651,23 @@ NEW_ARMS=$((NEW_ARMS+1))
 if lit_mut wholeskip 1 'if [ -s "$out/.orphan" ]; then' \
          "if ! grep -qvE $BKRE \"\$out/.changed\"; then READSET_NO_CHANGE=1; return 0; fi; if [ -s \"\$out/.orphan\" ]; then"; then M="$LM"
   killed wholeskip "the bookkeeping-only arm" "$(drive "$M" m.wholeskip "$BK")" "delta stamp" 0 "SKIPPING"
+fi
+# The exemption pattern without its leading `^` drops a nested stamp too; only the nested
+# near-miss can see it.
+NEW_ARMS=$((NEW_ARMS+1))
+if lit_mut nocaret 1 "grep -vE '^(\\.claude" "grep -vE '(\\.claude"; then M="$LM"
+  killed nocaret "the nested near-miss arm" "$(drive "$M" m.nocaret "$BK; printf 'version: 2\n' > '$NESTED'")" "$ALL5" 0 "$(NM1 "$NESTED")"
+fi
+# Without the quoted-path test a tab-named file is listed in its quoted spelling, never reaches
+# `.files`, and the line counts still agree, so the manifest is NOT emptied.
+NEW_ARMS=$((NEW_ARMS+1))
+if lit_mut noquote 1 " || grep -q '^\"' \"\$out/.paths\"" ""; then M="$LM"
+  killed noquote "the tab-name arm" "$(drive "$M" m.noquote 'printf "v2\n" > src/a.sh' stale "printf t > 'src/tab	name'")" "$ALL5" 0 "$UNHASH"
+fi
+# Without `--`, a top-level -x.sh is an unknown option to shasum and the manifest is emptied.
+NEW_ARMS=$((NEW_ARMS+1))
+if lit_mut nodashdash 1 "shasum -a 256 -- >" "shasum -a 256 >"; then M="$LM"
+  killed nodashdash "the option-shaped-name arm" "$(drive "$M" m.nodashdash 'printf "v2\n" > src/a.sh' "" "$DASH_SEED")" "alpha delta" 0 "SKIPPING"
 fi
 
 # UNMUTATED CONTROL for the battery above, driven by the same helper: a baseline row must be

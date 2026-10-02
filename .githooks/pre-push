@@ -552,13 +552,14 @@ readset_manifest() {
   # edit to any later path read as "nothing changed" and skipped the whole suite. A name git
   # still has to quote (tab, newline, `"` or `\`) cannot be hashed by its listed spelling, and
   # an unreadable file fails shasum; both empty it too, so such a file runs the whole suite on
-  # every push until it is renamed or made readable.
+  # every push until it is renamed or made readable. `--` ends shasum's options, so a top-level
+  # name beginning with `-` is hashed as a file rather than refused as an option.
   { git -c core.quotePath=false ls-files 2>/dev/null
     git -c core.quotePath=false ls-files --others --exclude-standard 2>/dev/null
     [ -s "$READSET_MAP" ] && grep -v '^#' "$READSET_MAP" | cut -f2
   } | grep -v '^\.git/' | grep -v '^\.git$' | readset_drop_excluded | sort -u > "$out/.paths"
   while IFS= read -r p; do [ -f "$p" ] && printf '%s\n' "$p"; done < "$out/.paths" > "$out/.files"
-  tr '\n' '\000' < "$out/.files" | xargs -0 -n 200 shasum -a 256 > "$out/.sums" 2>/dev/null
+  tr '\n' '\000' < "$out/.files" | xargs -0 -n 200 shasum -a 256 -- > "$out/.sums" 2>/dev/null
   hash_rc=$?
   awk '{ path = $0; sub(/^[0-9a-f]+  /, "", path); print path "\t" $1 }' "$out/.sums" | sort > "$out/.now"
   if [ "$hash_rc" -ne 0 ] || grep -q '^"' "$out/.paths" \
