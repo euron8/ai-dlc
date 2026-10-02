@@ -439,107 +439,6 @@ verify: manual
 
 ---
 
-## BL-024 — the `implementation-push` row was adjudicated and recorded, but no reconcile program reads the record
-
-**This repo already adjudicated all five blocks of the `implementation-push` row, wrote
-"recorded so the next reconciliation does not re-triage" beside the verdicts, and shipped no
-reader — so the reconciliation re-triaged them.** `docs/v0.13.0-consumer-absorption-spec.md:385`
-is "## 5. Explicitly NOT backported (graph-local — install would destroy these)", and `:393`
-names **`done-pending-liveness`** and the **`story-status-consistency script`** inside it. `:344`
-is "## 4. Tier-3 (weak / verify / heavy de-graph — likely leave)", `:346-348` reads "The 'likely
-leave' assumption HELD for all five — none absorbed. Verdicts + evidence recorded so the next
-reconciliation does not re-triage", and `:350-355` disposes of the mid-sprint scope re-check
-trigger (`PI-S241-2`) as **LEAVE**, overlapping core's existing per-commit scope verification.
-The remaining two are absorbed: `core/skills/ai-dlc/steps/_dispatch-protocol.md:18` is
-"**Worktree-explicit dev dispatch.**" and `:191` is "**Dev-brief bug-class checklist.**", with
-`:33`, `:47` and `:51` carrying the `git worktree add` base-ref and `git stash` ban verbatim;
-`implementation.md:110` only cites the checklist. (Re-measured at batch 186: the earlier
-`implementation.md:86`/`:225` citations predate the split into `_dispatch-protocol.md`.)
-Measured with a control in the same invocation: files under `core/` naming `done-pending-liveness`
-= **0**, `validate-story-status-consistency` = **0**, `Mid-Sprint Scope Re-Check` = **0**;
-`git worktree add` = **2**, `bug-class checklist` = **1**. **Nothing reads the record.** Across
-the whole tracked tree, files naming `v0.13.0-consumer-absorption-spec` = **2**, and they are
-`CHANGELOG.md` and `.ai-dlc-fixture-readsets.tsv` — a provenance note and a readset row, neither
-a mechanism. Files under `core/` naming `consumer-absorption` = **0**, against a control of **29**
-files under `core/scripts/` that name some `docs/` path, so the search can find a core-side
-reference to `docs/` when one exists.
-
-**The row's own claim is dead in every part, and the correction is that the defect is on this
-side of the boundary.** Five blocks named: two absorbed, two under a standing "explicitly NOT
-backported" ruling, one under a standing "LEAVE". As a push-candidate row it is a withdrawal
-candidate, not a filing. What survives is an ai-dlc defect the row is evidence FOR: the
-distribution keeps its absorption verdicts in a `docs/` design record marked `Status: PROPOSED`
-that the reconcile machinery cannot reach, so every drain re-proposes items already refused, and
-the refusal has to be re-derived by hand each time — which is what produced this entry. This is
-the check-cannot-fire shape inverted: not a check that never fires, but a verdict with no
-consumer.
-
-The anchor is `consumer-absorption` under `core/skills/ai-dlc-update/`, because the fix is that
-the reconcile machinery names the standing-verdict record — the join cannot be built without the
-reference existing there. A tree-wide anchor was rejected on measurement: `v0.13.0-consumer-absorption-spec`
-already matches two tracked files, so any receipt keyed on mere mention is satisfied by the
-CHANGELOG line that recorded the spec's own creation, which is precisely an anchor on text the
-fix quotes back. The control is `layer-drift` under the same subtree, which matches today, so a
-mistyped path fails loudly instead of reporting a green absence.
-
-Discharges the consumer entry `extensions/steps-domain/implementation-push.md`, at ledger lines
-179-183 in the reference consumer at `0f1d74f5` (pinned at line 259 when filed). That row is a withdrawal candidate on its own terms; this entry is the ai-dlc-side
-mechanism whose absence let it survive.
-
-**Receipt replaced at batch 174: the old one closed on a comment.** Driven through
-`scripts/backlog-reverify.sh` on a copy of the tree where
-`# see docs/v0.13.0-consumer-absorption-spec.md` was appended to `reconcile/lib.sh` and
-nothing else changed, it read CLOSE-CANDIDATE; on the real tree, STILL-LIVE. No behavioural
-receipt can be built yet: no program drains `push_candidate` rows today (the drain is prose at
-`core/skills/ai-dlc-update/SKILL.md` "Drain entries flagged `push_candidate: true`"), so there
-is no output to assert on, and the old anchor assumed a fix in which `core/` cites a `docs/`
-file, which the consumer boundary rules out. **What closes it:** a standing-verdict record
-shipped under `core/` and read by a reconcile program that, in one run on a seeded consumer,
-reports a block the record refuses as refused and a block it does not name as a push candidate.
-Swap this receipt for one driving that program when it exists.
-
-**The reverifier's unfalsifiable-predicate guard does not reach this row's receipt shape.** The
-consumer row's receipt (ledger line 183) is `verify: sh`, names both `$DIST` and `$THEIRS`, and
-exits 0 while `core/` lacks `done-pending-liveness` and `Mid-Sprint Scope Re-Check` — tokens
-upstream declined and will never ship, so it reports STILL-LIVE on every pull forever. In
-`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh` the three-ref unfalsifiable check runs
-for `theirs_has`/`theirs_lacks` (`:2461`), and the consumer-only partition of `sh` receipts gets
-its own unfalsifiable emit (`:2682`); an `sh` receipt naming `$THEIRS` or `$DIST` lands in bucket
-1 (`:2656-2664`) and is emitted STILL-LIVE with no reachability check at all. A refused
-proposal's receipt is exactly that shape, which is why this row could never close on its own.
-The remedy below routes around it — the all-refused state is now decided by the drain reader,
-not by the receipt — but the guard's gap for bucket-1 `sh` receipts stands.
-
-**Remedy as shipped (batch 186).** `core/skills/ai-dlc-update/reconcile/push-drain.sh` splits
-every extension whose FRONTMATTER says `push_candidate: true` into `##`/`###` blocks and emits
-`PUSH-REFUSED` or `PUSH-CANDIDATE` per block, joined on a whitespace-collapsed sha1 of the block
-alone — not the path, heading or index, so a changed body under an old heading is a new
-candidate and a refused block that moves stays refused. The record is
-`reconcile/push-refusals.tsv`, read at `theirs` through `git show` and never from the installed
-copy or the working tree; it seeds five rows, the two absorbed blocks and the three declined
-ones, and cites no `docs/` path. Every fail-closed state exits 2. SKILL.md step 8 drains only
-`PUSH-CANDIDATE` rows, drains nothing on exit 2, and hand-annotates an entry whose every block
-is refused `CLOSED AS REJECTED`. Measured on the reference consumer at `0f1d74f5`, 14 candidate
-files: **5** `PUSH-REFUSED` (all five `implementation-push.md` blocks) and **23**
-`PUSH-CANDIDATE`, 28 rows, against a record of 5 rows.
-
-The receipt seeds a consumer and a committed record and drives the shipped reader: refused stays
-refused, an unnamed block and a changed body under the same heading in another file are
-candidates, `push_candidate: false` is ignored, exactly three rows; the same file with the same
-heading and a changed body is a candidate; a refused block moved to another index is still
-refused; an emptied working-tree record is still honoured at `theirs`; a missing ref and a
-malformed row exit 2. Every run reads the FIRST of two dist commits, the second of which empties
-the record, so a reader of the dist's HEAD instead of `theirs` loses the refusal. Scored at batch
-186 under `bash -c 'set -uo pipefail; …'`: fix 0, base 1, and 1 under each of a title-keyed,
-working-tree-reading, entry-keyed, path+heading, path+index, HEAD-reading and
-no-whitespace-collapse mutant of the shipped reader.
-
-**NOTE.** A heading-only block at EOF has an empty body, reads `PUSH-CANDIDATE`, and can hold an
-otherwise all-refused entry open. **NOTE.** The push-candidate ledger's grain is per file while
-the drain's is per block — 6 of the 14 candidate files on the reference consumer already carry
-ledger entries.
-
-verify: sh grep -qF 'reconcile/push-drain.sh' core/skills/ai-dlc-update/SKILL.md || exit 1; R="$PWD/core/skills/ai-dlc-update/reconcile/push-drain.sh"; [ -f "$R" ] || exit 1; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; W="$(mktemp -d)" || exit 9; trap 'rm -rf "$W"' EXIT; T="$W/d/core/skills/ai-dlc-update/reconcile/push-refusals.tsv"; E="$W/c/.claude/skills/ai-dlc/extensions/steps-domain"; mkdir -p "${T%/*}" "$E" || exit 9; F='---\nid: %s\npush_candidate: %s\n---\n\n'; { printf -- "$F" x-push true; printf -- '## A refused\n\nalpha body one.\n\n## B unnamed\n\nbeta body two.\n'; } > "$E/x-push.md"; { printf -- "$F" y-push true; printf -- '## A refused\n\nalpha body CHANGED.\n'; } > "$E/y-push.md"; { printf -- "$F" z-off false; printf -- '## A refused\n\nalpha body one.\n'; } > "$E/z-off.md"; dA="$(bash "$R" --digest "$E/x-push.md" | awk -F'\t' '$3=="## A refused"{print $2}')"; [ "${#dA}" -eq 40 ] || exit 1; printf '%s\tx-push\tseeded refusal\n' "$dA" > "$T"; g() { git -C "$W/d" -c user.email=r@r -c user.name=r -c commit.gpgsign=false "$@"; }; git init -q "$W/d" && g add -A && g commit -qm s || exit 9; S1="$(g rev-parse HEAD)" || exit 9; : > "$T"; g commit -qam e || exit 9; run() { o="$(cd / && bash "$R" "$W/d" "$1" "$W/c")"; }; has() { awk -F'\t' -v s="$1" -v e="$2" -v i="${3:-}" -v d="${4:-}" -v h="${5:-}" '$1==s && $2 ~ ("/" e "$") && (i=="" || $3==i) && (d=="" || $4==d) && (h=="" || $5==h) {f=1} END {exit !f}' <<<"$o"; }; run "$S1" || exit 1; has PUSH-REFUSED x-push.md 1 "$dA" '## A refused' || exit 1; has PUSH-CANDIDATE x-push.md 2 '' '## B unnamed' || exit 1; has PUSH-CANDIDATE y-push.md 1 '' '## A refused' || exit 1; has PUSH-CANDIDATE '[^/]*' '' "$dA" '' && exit 1; has PUSH-CANDIDATE z-off.md && exit 1; has PUSH-REFUSED z-off.md && exit 1; [ "$(grep -c . <<<"$o")" -eq 3 ] || exit 1; { printf -- "$F" x-push true; printf -- '## A refused\n\nalpha body CHANGED in place.\n\n## B unnamed\n\nbeta body two.\n'; } > "$E/x-push.md"; run "$S1" || exit 1; has PUSH-CANDIDATE x-push.md 1 '' '## A refused' || exit 1; has PUSH-REFUSED '[^/]*' && exit 1; { printf -- "$F" x-push true; printf -- '## C inserted\n\ngamma.\n\n## A refused\n\nalpha body one.\n\n## B unnamed\n\nbeta body two.\n'; } > "$E/x-push.md"; run "$S1" || exit 1; has PUSH-REFUSED x-push.md 2 "$dA" '## A refused' || exit 1; has PUSH-CANDIDATE x-push.md 2 && exit 1; : > "$T"; run "$S1" || exit 1; has PUSH-REFUSED x-push.md 2 "$dA" || exit 1; g checkout -q -- . || exit 9; bash "$R" "$W/d" refs/heads/no-such-ref "$W/c" >/dev/null 2>&1; [ $? -eq 2 ] || exit 1; printf 'not-a-digest\tx\tr\n' >> "$T"; g commit -qam m || exit 9; bash "$R" "$W/d" HEAD "$W/c" >/dev/null 2>&1; [ $? -eq 2 ] || exit 1; exit 0
 ## BL-071 — `ledger-rotate.sh`'s split-refusal can be silenced by a body line that mentions the annotation form
 
 **`ledger-rotate.sh`'s split-refusal can still be silenced by a body line that merely MENTIONS the
@@ -703,6 +602,17 @@ hooks also gained an explicit `CEILING)` branch, because their catch-all had des
 validator's fourth rc-3 state as a stall. The detector question is unchanged and stays open as
 the census above leaves it: no layer-drift arm sees an override restating a threshold that moved
 into a validator.
+
+**Batch 186 prototyped the citation-key arm and did not build it.** A report-only
+`OVERRIDE-CITED-CORE-DRIFT` row, keyed on a qualified grammar of core paths cited in an
+override's body and fired when a cited file changes across the pull range. Run with the real
+`layer-drift.sh` against the reference consumer's installed overrides on its 0.706.0 → 0.709.0
+pull, it produced 17 hits under bare basenames. A qualified grammar cut that to 5, and the pull
+range instead of each override's `base_sha` cut it to 1. That one hit, `gate-validation.md` cited
+by the domain-sections override, is a false positive: 0 changed lines carry the tokens the
+override relies on. True positives on real data: 0. The motivating Rule-8 case fires identically
+with theirs set before the arm-E migration, so its hit comes from an unrelated prose edit, not the
+migration. The arm would narrow nothing measurable, and `layer-drift.sh` is bootstrapping.
 
 verify: manual -- this entry records a gap, not a receipt. Do not close it on a green
 `layer-drift.sh` run; that green is the defect.
@@ -996,48 +906,3 @@ unaffected.
 
 verify: manual -- re-taking the row needs the file's own calibration recipe: three serial full runs under `AI_DLC_FIXTURE_NO_SKIP=1` at pool 12. That forced full run is one the operator has not authorised, so no session can produce the measurement that would close this, and a receipt keyed on the row's text would close it on an edit with no measurement behind it.
 
-## BL-431 — the reconcile report's `_stamp_` row compared the stamp's abbreviated `commit:` to BASE as strings, so every consumer report carried a false "NOT the base" row
-
-**DEFECT.** Carries the reference consumer's `PC-S316-EMIT-REPORT-STAMP-BASE-MISMATCH-FALSE-ON-ABBREVIATED-SHA`, filed in its push-candidate ledger from the 0.704.0 → 0.706.0 pull. That candidate's own derivation: the stamp's `abe3afb7` resolves in this repo to the full BASE of the same run, whose region still carried the row, while the same pull's `apply.sh --finish` base check passed.
-
-**THE STAMP IS ALWAYS SHORT, SO THE ROW WAS ALWAYS THERE.** At `b4d1bbee`, `core/skills/ai-dlc-update/reconcile/emit-report.sh:194-196` rendered `_stamp_ records ... which is NOT the base above` whenever the stamp's `commit:` field was not byte-equal to the `<base>` argument. Both stamp writers record `rev-parse --short` (`reconcile/apply.sh:2516`, `scripts/install.sh:20`), and BASE is whatever the caller typed, usually a full sha. So the row fired on every real consumer render, including every correct one, and a consumer learned to ignore the one line whose job is to stop a wrong-base range. Driven at `b4d1bbee` by the receipt below, the row renders falsely in four of the eight cases: a short stamp against a full BASE, a full stamp against a short BASE, a short stamp against an annotated-tag BASE, and an uppercase short stamp. The two true-row controls (a different commit, a `-dirty` stamp) render it at base as well.
-
-**The delivering pull still shows the row.** A consumer renders a pull's report with its INSTALLED `emit-report.sh`, so the pull that delivers this fix carries the false row one last time.
-
-**Remedy, as shipped.** The row renders iff the stamp is non-empty, is not string-equal to BASE, and either does not resolve via `git -C "$DIST" rev-parse -q --verify "<stamp>^{commit}"` or resolves to a different commit than `"$BASE^{commit}"`. Both sides are peeled to commits and compared as full object ids. A stamp that does not resolve (`<sha>-dirty`, `unknown`) still renders the row, and every failed `rev-parse` is absorbed by its `||`. The verdict depends on DIST's object store: a stamp naming a commit DIST does not hold renders the row. A BASE that does not resolve renders the row too. The receipt rejects nine wrong fixes, each built as a one-site mutant of the fix and each exiting 1: a string prefix match, resolving the stamp only, silence on an unresolvable stamp, no `^{commit}` peel, deleting the row, a case-folded string compare, comparing the two commits' `core/` trees (a docs-only commit shares its parent's `core/` tree and is still a different base), resolving BASE then prefix-matching the stamp (an uppercase short stamp resolves, and a case-sensitive prefix does not match it), and silence when BASE does not resolve (a 40-hex sha the dist does not hold, asserted absent first). A render missing either the BEGIN or the END marker of its region exits 9, so a truncated render never reads as `none`. `core/fixtures/reconcile-emit-report` carries the same worlds as its SB battery, with each of the nine wrong fixes as a mutant killed by a named cell and the V-S `STAMP-MOVED` cell as the unmoved control.
-
-verify: sh E=core/skills/ai-dlc-update/reconcile/emit-report.sh; [ -f "$E" ] && [ -f "${E%/*}/preclassify.sh" ] || exit 9; w="$(mktemp -d)" || exit 9; trap 'rm -rf "$w"' EXIT; g() { GIT_AUTHOR_DATE='2001-01-01T00:00:00Z' GIT_COMMITTER_DATE='2001-01-01T00:00:00Z' git -C "$w/d" -c user.name=r -c user.email=r@r -c commit.gpgsign=false -c tag.gpgsign=false "$@"; }; mkdir -p "$w/d/core" "$w/c/.claude" && git init -q "$w/d" || exit 9; echo 1 > "$w/d/core/a.md"; echo 1.0.0 > "$w/d/VERSION"; g add -A && g commit -qm b && g tag -a -m t vb || exit 9; echo 2 > "$w/d/core/a.md"; echo 2.0.0 > "$w/d/VERSION"; g add -A && g commit -qm t || exit 9; mkdir -p "$w/d/docs"; echo n > "$w/d/docs/n.md"; g add -A && g commit -qm docs || exit 9; DC="$(g rev-parse HEAD)"; B="$(g rev-parse HEAD~2)"; T="$(g rev-parse HEAD~1)"; Bs="$(g rev-parse --short HEAD~2)"; Bu="$(printf %s "$Bs" | tr a-f A-F)"; Ts="$(g rev-parse --short HEAD)"; [ -n "$B" ] && [ "$Bs" != "$B" ] && [ "$Bu" != "$Bs" ] && [ "$(g rev-parse vb)" != "$B" ] && [ "$(g rev-parse "${DC}:core")" = "$(g rev-parse "${T}:core")" ] || exit 9; row() { printf 'version: 1.0.0\ncommit: %s\n' "$1" > "$w/c/.claude/.ai-dlc-version" || return 9; o="$(bash "$E" "$w/d" "$2" "$w/c" "$T" 2>/dev/null)"; grep -qF 'BEGIN GENERATED: reconcile-mechanical' <<<"$o" && grep -qF 'END GENERATED: reconcile-mechanical' <<<"$o" || return 9; if grep -qF '_stamp_ records' <<<"$o"; then echo row; else echo none; fi; }; f=0; chk() { r="$(row "$2" "$3")" || { echo "BL-431 NO-REGION stamp=$2 base=$3" >&2; exit 9; }; [ "$r" = "$1" ] || { echo "BL-431 $4: want $1 got $r" >&2; f=1; }; }; chk none "$B" "$B" control-literal-equal; chk row "$Ts" "$B" control-other-commit; chk none "$Bs" "$B" short-stamp-full-base; chk none "$B" "$Bs" full-stamp-short-base; chk none "$Bs" vb annotated-tag-base; chk row "${Bs}-dirty" "$B" unresolvable-stamp; chk none "$Bu" "$B" uppercase-short-stamp; chk row "$T" "$DC" docs-only-commit-same-core; NB=0123456789abcdef0123456789abcdef01234567; g rev-parse -q --verify "${NB}^{commit}" && exit 9; chk row "$Bs" "$NB" unresolvable-base; exit $f
-
-## BL-432 — the read-set manifest stopped hashing at the first apostrophe-named file, dropped quotePath-escaped names, and had no partial-hash fail-closed, so an edit past that file skipped the whole suite
-
-**DEFECT, fail-open. Found at batch 186 while scoping BL-433; no consumer candidate carries it.** Both hooks (`.githooks/pre-push`, `core/git-hooks/pre-push`) build the read-set manifest in `readset_manifest`. At `b4d1bbee` it piped newline-delimited paths into `xargs -n 200 shasum -a 256` with stderr discarded. `xargs` without `-0` treats an apostrophe as an opening quote, aborts with `unterminated quote`, and every path after it is never hashed. `git ls-files` also quoted any non-ASCII or control-character name by default, so such a path could not be hashed by its listed spelling. Nothing compared what was hashed against what was listed. A short manifest therefore read as a complete one: a path missing from both the record and the current manifest is never "changed", and the no-change branch skips every fixture.
-
-**Measured on a `file://` clone of the reference consumer**, driving the real pool block extracted from each side: base hashed 9600 of 12561 listed files, none under `scripts/` (490 there), and an edit to `scripts/ai-dlc/artifact-path-config.sh` printed `NOTHING in any fixture read-set changed ... skipping all 193`. The fix hashed 12561 of 12561, and the same edit selected 38 of 193.
-
-**Remedy, as shipped in both hooks' FIXTURE_POOL block (executable lines byte-identical, I66).** Paths are listed with `git -c core.quotePath=false`; hashing runs `tr '\n' '\000' | xargs -0`; the manifest is emptied, so the existing guard prints `could not hash the working tree -- running all`, when the hash status is non-zero, when any listed path still begins with `"`, or when `.now` and `.files` differ in line count.
-
-**A tree carrying a tab- or newline-named file never writes a usable record and runs all fixtures on every push.** Git still quotes such a name under `quotePath=false`, so the manifest is emptied on every run. A permanently unreadable file has the same consequence through the shasum status. Both persist until the file is renamed or made readable.
-
-The receipt seeds 210 files before an apostrophe-named file and mapped files after it. Arms: an edit after the apostrophe selects only its reader, an edit to the apostrophe-named file itself selects its reader, an edit to an unmapped `café` file runs all, and an unreadable mapped file runs all. Scored under `bash -c 'set -uo pipefail; …'` from the repo root: fix 0, base 1, and each wrong fix 1 — hashing without `-0`, listing with `quotePath` on, no fail-closed block, and `grep -v "'"` dropping apostrophe lines before hashing.
-
-verify: sh unset AI_DLC_FIXTURE_NO_SKIP GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; H=.githooks/pre-push; [ -f "$H" ] || exit 9; command -v shasum >/dev/null || exit 9; w="$(mktemp -d)" || exit 9; sed -n '/^# FIXTURE_POOL_BEGIN/,/^# FIXTURE_POOL_END/p' "$H" > "$w/pool.sh"; grep -q '^readset_manifest()' "$w/pool.sh" && grep -q '^apply_readset_skip()' "$w/pool.sh" || exit 9; A="bbb/x$(printf '\047')s.snap"; ALL='0:alpha,beta,apos,stamp,gamma,'; BK='echo "version: 2" > .claude/.ai-dlc-version; echo l2 >> _bmad-output/ai-dlc-update/push-candidate-ledger.md; echo r > _bmad-output/ai-dlc-update/reconcile-log-1.md'; p() { t="$w/$1"; o="$w/$1.o"; mkdir -p "$o" "$t/aaa" "$t/bbb" "$t/src" "$t/zzz" "$t/.claude" "$t/_bmad-output/ai-dlc-update/sub" || return 9; i=0; while [ "$i" -lt 210 ]; do echo "$i" > "$t/aaa/f$i"; i=$((i+1)); done; echo q > "$t/$A"; echo v > "$t/src/a.sh"; echo v > "$t/zzz/b.sh"; echo c > "$t/src/café.md"; echo 'version: 1' > "$t/.claude/.ai-dlc-version"; echo s > "$t/.claude/settings.json"; echo l > "$t/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; echo x > "$t/_bmad-output/ai-dlc-update/sub/x.md"; echo o > "$t/_bmad-output/other.md"; printf 'alpha\tsrc/a.sh\nbeta\tzzz/b.sh\napos\t%s\nstamp\t.claude/.ai-dlc-version\n' "$A" > "$t/.ai-dlc-fixture-readsets.tsv"; ( cd "$t" && git init -q . && git add -A && git -c user.name=r -c user.email=r@r -c commit.gpgsign=false commit -qm s ) >/dev/null 2>&1 || return 9; ( cd "$t" || exit 9; . "$w/pool.sh" >/dev/null 2>&1; readset_manifest "$o"; cp "$o/.now" .git/ai-dlc-fixture-verified || exit 9; eval "$2" || exit 9; printf 'x/%s/\n' alpha beta apos stamp gamma > "$o/list"; READSET_NO_CHANGE=0; apply_readset_skip "$o/list" "$o" >/dev/null 2>&1; printf '%s:%s' "$READSET_NO_CHANGE" "$(sed 's|^x/||; s|/$||' "$o/list" | tr '\n' ,)" ); }; f=0; chk() { r="$(p "$1" "$2")" || { echo "NO-RUN $1" >&2; exit 9; }; [ "$r" = "$3" ] || { echo "$1: want $3 got $r" >&2; f=1; }; }; chk after-apos 'echo v2 > zzz/b.sh' '0:beta,gamma,'; chk apos-file 'echo q2 > "$A"' '0:apos,gamma,'; chk cafe 'echo c2 > src/café.md' "$ALL"; chk unreadable 'chmod 000 src/a.sh; [ ! -r src/a.sh ]' "$ALL"; exit $f
-
-## BL-433 — a bookkeeping-only update commit forced the whole fixture suite, because the update skill's own stamp and records are in no fixture read-set
-
-**NOTE.** Wall clock only; no gate verdict was ever wrong. **Carries the reference consumer's `PC-S316-UPDATE-DELIVERY-PUSH-RUNS-FULL-SUITE-ON-BOOKKEEPING-ONLY-COMMITS`.** The orphan test in `apply_readset_skip` runs every fixture when any changed path is in no read-set. Every reconcile commit writes `.claude/.ai-dlc-version` and flat files under `_bmad-output/ai-dlc-update/`, which no trace records as an input. So a push whose changes are only that bookkeeping ran the whole suite.
-
-**Remedy, as shipped with BL-432 in both hooks.** Before the orphan test, changed paths matching exactly `^(\.claude/\.ai-dlc-version|_bmad-output/ai-dlc-update/[^/]+)$` are dropped from the orphan set only. A fixture the map names as a reader of one of those paths is still selected, and unmapped fixtures still run. Anything else beside them forces all, including the near-misses `.claude/settings.json`, `_bmad-output/ai-dlc-update/sub/x.md` and `_bmad-output/other.md`. The NO_SKIP, no-map, no-record and unhashable guards are unchanged.
-
-**The consumer's suggested remedy, `--no-verify` on the update's delivery push, was not taken.** It bypasses all 12 of the consumer hook's validators, including the one that reads the version stamp, to save the fixture phase.
-
-**The two defects ship together because the narrowing alone makes things worse.** Without the narrowing, a bookkeeping-only push never reached selection: the orphan test ran all. With the narrowing alone, that push reaches selection, and a manifest that stopped at the first apostrophe never sees an edit to any later file, so that file's readers are skipped.
-
-**Measured on a `file://` clone of the reference consumer, at `6e7f2a0a` (a 0.704.0 → 0.706.0 reconcile commit touching only the stamp and four flat files under `_bmad-output/ai-dlc-update/`).** With the record taken at its parent, base printed `7 changed path(s) are in NO fixture read-set ... running all 199` and the fix printed `5 changed path(s) select 23 of 199 fixtures`. The same clone's HEAD carries 193 fixtures. There, the stamp plus an edit to an EXISTING flat record selected 22 of 193 where base ran all 193. The stamp plus a NEW flat record selects 23, because a file appearing adds its parent `_bmad-output/ai-dlc-update` to the match set and the map names `exclusion-importer` as that directory's reader.
-
-**How often it applies there: 29 of 193 qualifying commits.** Derivation: in the clone's `pc316-4IbRgu/g`, `git log --grep='^chore(ai-dlc-update)' HEAD` returns 193 commits; for each, `git -c core.quotePath=false diff-tree -m --first-parent --no-commit-id --name-only -r` lists its paths, and a commit qualifies when every path matches the pattern above. 29 qualify. An impossible-subject control in the same script returns 0. The figure depends on the population: first-parent only reads 26 of 153, and `--all` reads 32 of 206. `6e7f2a0a` itself is not reachable from that clone's HEAD and is not among the 193.
-
-**Transition.** The push that delivers the new hook changes machinery, so it runs all fixtures, and the record it writes is the first one hashed by the fixed manifest. The first saving arrives on the SECOND bookkeeping-only push after delivery.
-
-The receipt seeds the same tree as BL-432's. Arms: bookkeeping-only selects only the stamp's mapped reader plus the unmapped fixture; bookkeeping plus a mapped edit past the apostrophe file selects that reader too; bookkeeping plus each of the four near-misses runs all, the fourth being a nested `sub/.claude/.ai-dlc-version` that only an anchored pattern can tell from the real stamp. Scored under `bash -c 'set -uo pipefail; …'` from the repo root: fix 0, base 1, and each wrong fix 1 — the pattern without its leading `^`, the pattern without its trailing `$`, an over-broad `^(\.claude/|_bmad-output/)` pattern, clearing every orphan when some changed paths are bookkeeping, skipping the whole suite when every changed path is bookkeeping, and the orphan narrowing without the `-0` fix.
-
-verify: sh unset AI_DLC_FIXTURE_NO_SKIP GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; H=.githooks/pre-push; [ -f "$H" ] || exit 9; command -v shasum >/dev/null || exit 9; w="$(mktemp -d)" || exit 9; sed -n '/^# FIXTURE_POOL_BEGIN/,/^# FIXTURE_POOL_END/p' "$H" > "$w/pool.sh"; grep -q '^readset_manifest()' "$w/pool.sh" && grep -q '^apply_readset_skip()' "$w/pool.sh" || exit 9; A="bbb/x$(printf '\047')s.snap"; ALL='0:alpha,beta,apos,stamp,gamma,'; BK='echo "version: 2" > .claude/.ai-dlc-version; echo l2 >> _bmad-output/ai-dlc-update/push-candidate-ledger.md; echo r > _bmad-output/ai-dlc-update/reconcile-log-1.md'; p() { t="$w/$1"; o="$w/$1.o"; mkdir -p "$o" "$t/aaa" "$t/bbb" "$t/src" "$t/zzz" "$t/.claude" "$t/sub/.claude" "$t/_bmad-output/ai-dlc-update/sub" || return 9; i=0; while [ "$i" -lt 210 ]; do echo "$i" > "$t/aaa/f$i"; i=$((i+1)); done; echo q > "$t/$A"; echo v > "$t/src/a.sh"; echo v > "$t/zzz/b.sh"; echo c > "$t/src/café.md"; echo 'version: 1' > "$t/.claude/.ai-dlc-version"; echo 'version: 1' > "$t/sub/.claude/.ai-dlc-version"; echo s > "$t/.claude/settings.json"; echo l > "$t/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; echo x > "$t/_bmad-output/ai-dlc-update/sub/x.md"; echo o > "$t/_bmad-output/other.md"; printf 'alpha\tsrc/a.sh\nbeta\tzzz/b.sh\napos\t%s\nstamp\t.claude/.ai-dlc-version\n' "$A" > "$t/.ai-dlc-fixture-readsets.tsv"; ( cd "$t" && git init -q . && git add -A && git -c user.name=r -c user.email=r@r -c commit.gpgsign=false commit -qm s ) >/dev/null 2>&1 || return 9; ( cd "$t" || exit 9; . "$w/pool.sh" >/dev/null 2>&1; readset_manifest "$o"; cp "$o/.now" .git/ai-dlc-fixture-verified || exit 9; eval "$2" || exit 9; printf 'x/%s/\n' alpha beta apos stamp gamma > "$o/list"; READSET_NO_CHANGE=0; apply_readset_skip "$o/list" "$o" >/dev/null 2>&1; printf '%s:%s' "$READSET_NO_CHANGE" "$(sed 's|^x/||; s|/$||' "$o/list" | tr '\n' ,)" ); }; f=0; chk() { r="$(p "$1" "$2")" || { echo "NO-RUN $1" >&2; exit 9; }; [ "$r" = "$3" ] || { echo "$1: want $3 got $r" >&2; f=1; }; }; chk bk-only "$BK" '0:stamp,gamma,'; chk bk+after-apos "$BK; echo v2 > zzz/b.sh" '0:beta,stamp,gamma,'; chk bk+settings "$BK; echo s2 > .claude/settings.json" "$ALL"; chk bk+sub "$BK; echo x2 > _bmad-output/ai-dlc-update/sub/x.md" "$ALL"; chk bk+other "$BK; echo o2 > _bmad-output/other.md" "$ALL"; chk bk+nested "$BK; echo 'version: 2' > sub/.claude/.ai-dlc-version" "$ALL"; exit $f
