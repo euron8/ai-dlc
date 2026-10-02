@@ -982,7 +982,7 @@ verify: sh unset AI_DLC_FIXTURE_NO_SKIP GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; H=
 
 ## BL-433 — a bookkeeping-only update commit forced the whole fixture suite, because the update skill's own stamp and records are in no fixture read-set
 
-**Carries the reference consumer's `PC-S316-UPDATE-DELIVERY-PUSH-RUNS-FULL-SUITE-ON-BOOKKEEPING-ONLY-COMMITS`.** The orphan test in `apply_readset_skip` runs every fixture when any changed path is in no read-set. Every reconcile commit writes `.claude/.ai-dlc-version` and flat files under `_bmad-output/ai-dlc-update/`, which no trace records as an input. So a push whose changes are only that bookkeeping ran the whole suite.
+**NOTE.** Wall clock only; no gate verdict was ever wrong. **Carries the reference consumer's `PC-S316-UPDATE-DELIVERY-PUSH-RUNS-FULL-SUITE-ON-BOOKKEEPING-ONLY-COMMITS`.** The orphan test in `apply_readset_skip` runs every fixture when any changed path is in no read-set. Every reconcile commit writes `.claude/.ai-dlc-version` and flat files under `_bmad-output/ai-dlc-update/`, which no trace records as an input. So a push whose changes are only that bookkeeping ran the whole suite.
 
 **Remedy, as shipped with BL-432 in both hooks.** Before the orphan test, changed paths matching exactly `^(\.claude/\.ai-dlc-version|_bmad-output/ai-dlc-update/[^/]+)$` are dropped from the orphan set only. A fixture the map names as a reader of one of those paths is still selected, and unmapped fixtures still run. Anything else beside them forces all, including the near-misses `.claude/settings.json`, `_bmad-output/ai-dlc-update/sub/x.md` and `_bmad-output/other.md`. The NO_SKIP, no-map, no-record and unhashable guards are unchanged.
 
