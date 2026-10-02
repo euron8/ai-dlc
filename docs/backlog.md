@@ -834,7 +834,18 @@ verify: sh L="$PWD/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh"; [ -f
 
 
 
-## BL-375 — the read-set deriver needs root for `fs_usage`, and a scoped `sandbox-exec` tracer measured as a root-free replacement
+## BL-375 — the sandbox read-set tracer drops reports and omits fixtures on real runs, so the root-requiring `fs_usage` tracer cannot yet be retired
+
+**RE-SCOPED ON THE OPERATOR'S BATCH-185 RULING: THE FIRST DELIVERABLE IS A SANDBOX TRACE THAT
+DOES NOT DROP.** The sandbox mode is built: `--tracer sandbox` refuses root and runs every fixture
+under `sandbox-exec`, and `operator-rulings.md` already requires sessions to trace with it. It is
+not yet a replacement, because real `--list` runs lose reports. Recorded in the plan's resume block,
+not re-measured here: at batch 183, 6 of 12 fixtures were OMITTED at load 7-10; at batch 184, 11 of
+18 were OMITTED at load 3-8 with zero agent worktrees, with dropped-report counts from 7 to 1254.
+Both maps were discarded. Load and worktrees alone do not explain the drops. Until a multi-fixture
+`--list` run under the sandbox tracer finishes with no OMITTED line, `fs_usage` is the only tracer
+that produces a committable map. Removing it, and running the `--tracer both` comparison, both wait
+on that. The receipt below still names the end state, so it reads 1 throughout.
 
 **DEFECT.** Operator-scheduled on 2026-09-29 as its own release, after v0.665.0.
 `core/scripts/derive-fixture-readsets.sh` requires root (`[ "$(id -u)" = "0" ]`) because `fs_usage`
