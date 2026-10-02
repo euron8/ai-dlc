@@ -11980,13 +11980,17 @@ fi
 # in-corpus control is a token known present in the scanned corpus -- Rule 28's own
 # "Split dispatch" heading -- counted by the same pass, so a corpus the scan never opened
 # cannot read as a clean one, and the scanned-file count is held to a floor.
-i119_files=()
+i119_files=(); i119_k=0
 for i119_f in "$REPO_ROOT"/core/skills/*/*.md "$REPO_ROOT"/core/skills/*/*/*.md \
               "$REPO_ROOT"/core/skills/*/*/*/*.md "$REPO_ROOT"/core/team-roles/*.md \
               "$REPO_ROOT"/core/rules/*.md; do
   # -s, not -f: awk opens an empty file without ever reaching FNR == 1, so an empty prompt
   # would be counted as listed-but-unscanned. It holds nothing to scan either way.
-  [ -s "$i119_f" ] && i119_files[${#i119_files[@]}]="$i119_f"
+  # A NUMERIC index, not `[${#i119_files[@]}]`: fork-profile.sh reads an assignment by
+  # `name[...]=` with no `]` inside the brackets, so the `[@]` spelling scored every append as
+  # an external command -- measured, 71 phantom forks, one per prompt, on validator-fork-budget.
+  [ -s "$i119_f" ] || continue
+  i119_files[$i119_k]="$i119_f"; i119_k=$((i119_k + 1))
 done
 i119_probe='#I119CASE fire-inline
 the lead dispatches one agent per part in ONE message, plus one
