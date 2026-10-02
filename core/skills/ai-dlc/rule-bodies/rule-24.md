@@ -45,8 +45,8 @@ expected path is the check (Rule 26: audit before adding mechanism).
 **Shard by surface (Rule 28, "Split dispatch": surfaces axis).** When a
 Section 0 scope declares more than one independent surface (directories,
 repos, or question groups), the lead derives the surface list from that
-Section 0 and dispatches one analyst per surface in ONE message, each
-brief carrying `shard: <i>/<N> <surface>`. Each writes its part to
+Section 0 and dispatches one analyst per surface in waves (Rule 28,
+"Split dispatch"), each brief carrying `shard: <i>/<N> <surface>`. Each writes its part to
 `<area>/s<N>/<base>-parts/<surface>.md`, where `<surface>` carries no
 sprint token, and returns the same `{artifact_path, summary, gaps}`. The
 join: one `scripts/ai-dlc/wait-for-deliverable.sh` call over every part

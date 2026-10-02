@@ -311,8 +311,8 @@ state so a `/compact` or handoff mid-implementation does not lose
 visibility into which stories are in-flight.
 
 **And the lead MUST run one AT DISPATCH — in the same turn as the
-`Agent` call, before the first wait beat.** A wave dispatched in one
-message writes one update covering every teammate in it: a row per
+`Agent` call, before the first wait beat.** Each wave (Rule 28, "Split
+dispatch") writes one update covering every teammate it launched: a row per
 teammate in **In-Flight Teammates**, carrying its deliverable path.
 
 A transition-time write cannot substitute: a teammate is at risk from
