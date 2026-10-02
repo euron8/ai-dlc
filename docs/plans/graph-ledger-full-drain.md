@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 501..532. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 479..535. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,46 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 184 SHIPPED TWO RELEASES, `v0.707.0` (`fb1fcb8d`, #979) AND `v0.708.0` (`b8aa77b7`, #980), AND DISCHARGED
+BOTH CONSUMER CANDIDATES BATCH 183 RECORDED AS UNSCOPED.** It was invoked by peer handoff and ran autonomously.
+
+- `v0.707.0`: `PC-S316-RULE-28-SHARD-LINE-ACCEPTS-AN-INVENTED-SERIAL-EXCEPTION-AND-ONLY-WARNS` as `BL-427` (the dispatch
+  guard records `invalid-exception` plus `shard_raw`; Check 22 arm S3 FAILS it; a fifth clearable class), `BL-429`
+  (six shipping fixtures that SKIP on every consumer became `.dist-only`), `BL-426` (the suite-pole validator's
+  forks; the fixture's cost moved from 279s to 181s loaded), plus `BL-145` and `BL-132` receipts re-keyed on behaviour.
+- `v0.708.0` (bootstrapping): `PC-S316-PRECLASSIFY-SELF-UPDATE-RECOGNITION-OMITS-FIXTURES` as `BL-428`.
+  `at_self_update()` acquits a fixture at the `skill_commit` blob.
+
+Live backlog **15 -> 14**, archive **410 -> 414**: `BL-426`..`BL-429` landed and rotated; `BL-427`, `BL-428` and
+`BL-429` were filed in the batch. Net closed minus filed: **1**. R5's `--min-entries` floor is 14; `--min-sh-receipts`
+stays 5.
+
+**S3 IS A FAIL AND THE CONSUMER WILL FEEL IT.** Replayed over the consumer's 853 joined dispatches, 13 rows on roles
+S3 judges become `invalid-exception`, so about a dozen habitual brief shapes FAIL Check 22 after the pull. The
+operator was told before the release and did not reply; the batch proceeded on its own recommendation.
+
+**`BL-132`'S NEW RECEIPT CLOSES ONLY ON THE CONTENT CHECK ITS OWN BODY BANS.** The entry says so. Which wins is the
+operator's decision; the remedy stays parked on the 2026-10-01 decision either way.
+
+**`BL-301` IS THE OPERATOR'S CHOICE.** Measured: a consumer-layout pass costs about one more full shipped-set pass
+(650-700s at 12-way, work-bound), and remap-limiting removes nothing (176 of 179 fixtures cross a relocated prefix).
+No shipped fixture is red in the consumer layout at `f0cf026b`. The batch kept the entry LIVE and built nothing.
+
+**THE DELIVERY GAP IS FOUR RELEASES.** The consumer is installed at 0.704.0 (stamp `commit: abe3afb7`, `skill_commit`
+equal) against `VERSION` 0.708.0. 0.706.0 and 0.708.0 are bootstrapping. PENDING is 1: the preclassify id, still live
+on the consumer's carry-over branch. The Rule 28 id was never committed by the consumer and the derive block cannot see
+it. The banked ruling stands: report the gap and write no runbook.
+
+**READ-SET TRACE OWED, AND BOTH ATTEMPTS IN THIS BATCH WERE DISCARDED.** The second ran with zero agent worktrees, at
+1-minute load 3-8, and still OMITTED 11 of 18 fixtures, with dropped report counts from 7 to 1254. So the drops do not
+come from load or worktrees alone. Owed: batch 183's list plus `dispatch-model-guard` and `check-22-spawn-ledger`.
+Commit only a diff with no OMITTED line.
+
+**OPERATOR DECISIONS STILL OPEN.** `BL-132`'s receipt-versus-body question, `BL-301`'s remedy, `BL-375`'s `--tracer
+both` run, and batch 179's four census steps. `BL-007` and `BL-195` remain closed questions.
+
+Batch 183's block below is history: batch 184's block replaces its delivery gap and its decisions list.
 
 **BATCH 183 SHIPPED TWO RELEASES, `v0.705.0` (`ae453f5d`, #976) AND `v0.706.0` (`762fd464`, #977), AND DISCHARGED NO
 CONSUMER CANDIDATE.** It was invoked by peer handoff and ran autonomously. The opening sweep found no candidate work:
@@ -440,63 +480,6 @@ the four batch-175 ids plus S336. The banked ruling stands: report the gap and w
 
 Batch 175's delivery gap and held-branch record are spent: batch 176's block above replaces both.
 No built branch is held.
-
-**BATCH 175 SHIPPED `v0.668.0` (`1eca2ed2`, #919), `v0.669.0` (`627916ac`, #921) AND `v0.670.0`
-(`ab5d0735`, #923), AND DISCHARGED FOUR CONSUMER CANDIDATES:**
-`PC-S315-AUDIT-LAYER-DEBT-CUE-ARM-READS-CORE-FIELD-VOCABULARY-AS-AN-OBLIGATION` (`BL-383`),
-`PC-S315-ARTIFACT-WRITE-LEDGER-DROPS-PARALLEL-SHARD-ROWS` (`BL-384`),
-`PC-S315-NO-AMENDMENT-PATH-FOR-A-NOTARIZED-ARTIFACT-AFTER-A-STORY-DECISION` (`BL-385`) and
-`PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY` (`BL-388`). It was invoked by peer handoff,
-and the operator's batch-174 rulings were written into `### NEXT ACTIONS` first (#918). Closes #920,
-#922 and this one rotated 20 entries: live backlog **58 -> 46** (`BL-383`..`BL-390` filed, six of them
-closed in the batch), archive **323 -> 343**. Net closed minus filed: **12**.
-`docs/reviews/graph-consumer-close-brief-2.md`, rehearsed on a clone, closes thirteen more candidates
-upstream already fixed that the consumer's engine never reported; it is the consumer session's to
-apply.
-
-**THE OPENING SWEEP AND THE WHOLE-BACKLOG ADJUDICATION.** Live 18 on 12 qualifying refs, unfiled 4,
-worklist 1, TERMINAL 151, ledger md5 `3450b81c…`. Four hands adjudicated all 58 live entries: 2 CLOSE,
-15 PARTIAL, 41 LIVE, 0 dead premise. Three receipts cannot close on a correct fix: `BL-066`'s is dead
-(field 1 is now a slug, never a version), `BL-083`'s counts seed files a rule fix cannot move, and
-`BL-103`'s greps `settings-merge.sh` where the fix belongs in `apply.sh`.
-
-**HELD, UNSHIPPED, EACH BOOTSTRAPPING, AND THE BATCH CLOSED AT ITS LAST COLLECTED RELEASE.**
-`b174-bl085` (`BL-085`) and `b174-bl329` (`BL-329`) both `git merge-tree` cleanly onto `ab5d0735`
-(re-verified at this close). `BL-389` owns
-`PC-S336-STEP-1-AUTOPUSH-IS-THE-UNGUARDED-TWIN-OF-THE-PUSH-STEP-2-HARDENED`, which no entry owned; its
-fix is to the update `SKILL.md`. The adjudicators also found small bootstrapping fixes for `BL-066`,
-`BL-092`, `BL-099`, `BL-103`, `BL-119`, `BL-310`, `BL-336`, `BL-355`, `BL-374` and `BL-376`, recorded in
-each entry's body.
-
-**THE GATE FAILED ONCE, ON A LINE THIS BATCH WROTE.** `remediator-shard-join` A1, A3 and A4 failed on
-0.668.0's first gate: macOS's `TMPDIR` ends in `/`, so every path under it reads `T//x`, while the
-join's strip prefix came from `pwd`, which collapses it. The builder's tree passed only because its
-`TMPDIR` had no trailing slash. Fixed at `ba97e4da` (arm A7, mutant JX10). `BL-385`'s receipt then read
-STILL-LIVE through `backlog-reverify.sh` and blocked the rotation: an unguarded `$3` under the engine's
-`set -u`. No other live receipt changes exit under `set -u`.
-
-**A HAND WROTE `core.worktree` INTO THE SHARED `.git/config`.** Every worktree then read one builder's
-files: the release branch's `git status` showed 19 phantom modifications with a clean reflog, and two
-cherry-picks refused. Unset and re-hashed clean; the release commits were unaffected, verified by
-content against each builder commit. Every later brief forbade a bare `git config`.
-
-**THE DELIVERY GAP IS THREE RELEASES.** The consumer is at 0.667.0 against `VERSION` 0.670.0. 0.670.0
-changes `ledger-reverify.sh`, `lib.sh`, `ledger-rotate.sh` and the update `SKILL.md`, so under
-SELF-UPDATE-DEFER its rows first appear on the pull after the one that delivers it. PENDING is 4, the
-four ids above. The banked ruling stands: report the gap and write no runbook. The re-derived sweep at
-this close: live 18 on 17 qualifying refs, unfiled 1
-(`PC-S309-VALIDATE-MANDATORY-RULES-CHECK5-TEST-ONLY-WEB-DIFF-FALSE-FAIL`, shipped at 0.542.0 and closed
-by the close brief), worklist 2 (`BL-145` and `BL-389`, both citing S336), TERMINAL 153, ledger md5
-unchanged.
-
-**READ-SET TRACES OWED**, one command: `sudo bash core/scripts/derive-fixture-readsets.sh --list
-"remediator-shard-join stray-party-mode-provenance prepush-ssh-keepalive derivation-capture
-derivation-capture-mutants backlog-receipt-binding check-24-adversarial-convergence ledger-reverify
-validator-fork-budget validator-arm-selection layer-contract-conformance-b"`. The last three clear
-`BL-264`'s residue; `prepush-ssh-keepalive` is unmapped, so the runner runs it on every push until
-traced.
-
-Batch 174's delivery gap and held-branch record are spent: batch 175's block above replaces both.
 
 ### Derive the state; do not trust the numbers below
 

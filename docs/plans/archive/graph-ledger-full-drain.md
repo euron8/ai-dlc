@@ -16181,3 +16181,60 @@ moved).
 naming only non-core paths and three adjudicated here, are all in the consumer's archive, 14 of 14,
 measured by the fresh-resume sweep against `origin/main` `02e890e0`.
 
+**BATCH 175 SHIPPED `v0.668.0` (`1eca2ed2`, #919), `v0.669.0` (`627916ac`, #921) AND `v0.670.0`
+(`ab5d0735`, #923), AND DISCHARGED FOUR CONSUMER CANDIDATES:**
+`PC-S315-AUDIT-LAYER-DEBT-CUE-ARM-READS-CORE-FIELD-VOCABULARY-AS-AN-OBLIGATION` (`BL-383`),
+`PC-S315-ARTIFACT-WRITE-LEDGER-DROPS-PARALLEL-SHARD-ROWS` (`BL-384`),
+`PC-S315-NO-AMENDMENT-PATH-FOR-A-NOTARIZED-ARTIFACT-AFTER-A-STORY-DECISION` (`BL-385`) and
+`PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY` (`BL-388`). It was invoked by peer handoff,
+and the operator's batch-174 rulings were written into `### NEXT ACTIONS` first (#918). Closes #920,
+#922 and this one rotated 20 entries: live backlog **58 -> 46** (`BL-383`..`BL-390` filed, six of them
+closed in the batch), archive **323 -> 343**. Net closed minus filed: **12**.
+`docs/reviews/graph-consumer-close-brief-2.md`, rehearsed on a clone, closes thirteen more candidates
+upstream already fixed that the consumer's engine never reported; it is the consumer session's to
+apply.
+
+**THE OPENING SWEEP AND THE WHOLE-BACKLOG ADJUDICATION.** Live 18 on 12 qualifying refs, unfiled 4,
+worklist 1, TERMINAL 151, ledger md5 `3450b81c…`. Four hands adjudicated all 58 live entries: 2 CLOSE,
+15 PARTIAL, 41 LIVE, 0 dead premise. Three receipts cannot close on a correct fix: `BL-066`'s is dead
+(field 1 is now a slug, never a version), `BL-083`'s counts seed files a rule fix cannot move, and
+`BL-103`'s greps `settings-merge.sh` where the fix belongs in `apply.sh`.
+
+**HELD, UNSHIPPED, EACH BOOTSTRAPPING, AND THE BATCH CLOSED AT ITS LAST COLLECTED RELEASE.**
+`b174-bl085` (`BL-085`) and `b174-bl329` (`BL-329`) both `git merge-tree` cleanly onto `ab5d0735`
+(re-verified at this close). `BL-389` owns
+`PC-S336-STEP-1-AUTOPUSH-IS-THE-UNGUARDED-TWIN-OF-THE-PUSH-STEP-2-HARDENED`, which no entry owned; its
+fix is to the update `SKILL.md`. The adjudicators also found small bootstrapping fixes for `BL-066`,
+`BL-092`, `BL-099`, `BL-103`, `BL-119`, `BL-310`, `BL-336`, `BL-355`, `BL-374` and `BL-376`, recorded in
+each entry's body.
+
+**THE GATE FAILED ONCE, ON A LINE THIS BATCH WROTE.** `remediator-shard-join` A1, A3 and A4 failed on
+0.668.0's first gate: macOS's `TMPDIR` ends in `/`, so every path under it reads `T//x`, while the
+join's strip prefix came from `pwd`, which collapses it. The builder's tree passed only because its
+`TMPDIR` had no trailing slash. Fixed at `ba97e4da` (arm A7, mutant JX10). `BL-385`'s receipt then read
+STILL-LIVE through `backlog-reverify.sh` and blocked the rotation: an unguarded `$3` under the engine's
+`set -u`. No other live receipt changes exit under `set -u`.
+
+**A HAND WROTE `core.worktree` INTO THE SHARED `.git/config`.** Every worktree then read one builder's
+files: the release branch's `git status` showed 19 phantom modifications with a clean reflog, and two
+cherry-picks refused. Unset and re-hashed clean; the release commits were unaffected, verified by
+content against each builder commit. Every later brief forbade a bare `git config`.
+
+**THE DELIVERY GAP IS THREE RELEASES.** The consumer is at 0.667.0 against `VERSION` 0.670.0. 0.670.0
+changes `ledger-reverify.sh`, `lib.sh`, `ledger-rotate.sh` and the update `SKILL.md`, so under
+SELF-UPDATE-DEFER its rows first appear on the pull after the one that delivers it. PENDING is 4, the
+four ids above. The banked ruling stands: report the gap and write no runbook. The re-derived sweep at
+this close: live 18 on 17 qualifying refs, unfiled 1
+(`PC-S309-VALIDATE-MANDATORY-RULES-CHECK5-TEST-ONLY-WEB-DIFF-FALSE-FAIL`, shipped at 0.542.0 and closed
+by the close brief), worklist 2 (`BL-145` and `BL-389`, both citing S336), TERMINAL 153, ledger md5
+unchanged.
+
+**READ-SET TRACES OWED**, one command: `sudo bash core/scripts/derive-fixture-readsets.sh --list
+"remediator-shard-join stray-party-mode-provenance prepush-ssh-keepalive derivation-capture
+derivation-capture-mutants backlog-receipt-binding check-24-adversarial-convergence ledger-reverify
+validator-fork-budget validator-arm-selection layer-contract-conformance-b"`. The last three clear
+`BL-264`'s residue; `prepush-ssh-keepalive` is unmapped, so the runner runs it on every push until
+traced.
+
+Batch 174's delivery gap and held-branch record are spent: batch 175's block above replaces both.
+
