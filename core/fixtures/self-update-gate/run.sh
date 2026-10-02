@@ -1149,7 +1149,8 @@ fi
 # THE PREDICATE IS `at_self_update`, NOT AN `elif`, and the mutants below are keyed on the
 # function for that reason. It has THREE conjuncts and each is a separate way to be wrong:
 # a self-update ref exists, the consumer's bytes match the distribution AT that ref, and the path
-# is in the MACHINERY set -- the only set step 2's self-update writes. Two branch arms call it.
+# is one step 2's self-update writes -- the MACHINERY set, or a shipped fixture file (step 2's
+# second term: every `core/fixtures/<dir>/` the hop's own diff touched). Two branch arms call it.
 #
 # ITS OWN MINIATURE DISTRIBUTION, WITH THREE REFS. Every tree above has exactly two, and a two-ref
 # tree cannot express the defect at all -- the third sha IS the bug.
@@ -1164,6 +1165,9 @@ fi
 #                            M  ours == dist@MID but NOT machinery            -> ->CLASSIFY
 #   core/session-driver/modeflip.sh  content fixed, 644->755, consumer HAS the bit -> ALREADY-AT-THEIRS
 #   core/session-driver/modeneed.sh  same, consumer LACKS the bit                  -> UPSTREAM-ONLY
+#   core/fixtures/fx-mod/run.sh   M  ours == dist@MID, NOT machinery            -> UPSTREAM-ONLY
+#   core/fixtures/fx-add/run.sh   A  born at MID, changed at THEIRS, ours == MID -> UPSTREAM-ONLY-ADD
+#   core/fixtures/fx-edit/run.sh  M  ours matches NOTHING -- a local fixture edit -> ->CLASSIFY
 #
 # THE NEGATIVES SIT IN THE SAME TREE AND THE SAME RUN AS THE POSITIVES, and there are three of
 # them, each differing from a real carry in exactly ONE respect. `edited.md` differs in the BYTES.
@@ -1177,8 +1181,16 @@ fi
 # `artifact-path-grammar.md` IS THE SCOPING SUBJECT AND NOTHING ELSE REACHES IT. Unscoped, a
 # non-machinery core file at an intermediate ref is reclassified to UPSTREAM-ONLY and `apply.sh`
 # writes theirs over it with no operator review -- an exemption with no reason attached, since
-# only the machinery set has a story for how it got to that ref. Every OTHER seeded path here is
-# machinery, so dropping the `is_machinery` conjunct moves this cell and no other.
+# only step 2's two terms have a story for how a file got to that ref. It is the ONLY seeded path
+# that is neither machinery nor a fixture file, so dropping the `is_machinery` conjunct moves this
+# cell and no other.
+#
+# THE THREE `core/fixtures/` SEEDS ARE THE FIXTURE DISJUNCT'S SUBJECT, and none of them is
+# machinery (asserted below), so only that disjunct can carry `fx-mod` and `fx-add` out of
+# ->CLASSIFY. `fx-edit` is the bytes near-miss inside the same scope: the disjunct must not
+# exempt a fixture the consumer actually edited. `fx-add` changes again at THEIRS, or the
+# `ours_h = theirs_h` arm would claim it before the predicate is reached. Filed by the reference
+# consumer, where five fixture files held at the skill_commit blob read BOTH-CHANGED->CLASSIFY.
 #
 # `doomed.md` CARRIES THE DELIBERATE ABSENCE. There is no `D`-branch arm, measured rather than
 # forgotten, and its verdict must stay `UPSTREAM-DELETED+consumer-modified->CLASSIFY`. Asserting
@@ -1200,8 +1212,11 @@ fi
 SU="$(dirname "$DIST")/su"
 rm -rf "$SU"
 mkdir -p "$SU/dist/core/rules" "$SU/dist/core/session-driver" "$SU/dist/core/skills/ai-dlc" \
+         "$SU/dist/core/fixtures/fx-mod" "$SU/dist/core/fixtures/fx-add" "$SU/dist/core/fixtures/fx-edit" \
          "$SU/cons/.claude/rules" "$SU/cons/.claude/session-driver" "$SU/cons/.claude/skills/ai-dlc" "$SU/cons/.githooks" \
-         "$SU/nostamp/.claude/rules" "$SU/nostamp/.claude/session-driver" "$SU/nostamp/.claude/skills/ai-dlc" "$SU/nostamp/.githooks"
+         "$SU/cons/tests/fixtures/fx-mod" "$SU/cons/tests/fixtures/fx-add" "$SU/cons/tests/fixtures/fx-edit" \
+         "$SU/nostamp/.claude/rules" "$SU/nostamp/.claude/session-driver" "$SU/nostamp/.claude/skills/ai-dlc" "$SU/nostamp/.githooks" \
+         "$SU/nostamp/tests/fixtures/fx-mod" "$SU/nostamp/tests/fixtures/fx-add" "$SU/nostamp/tests/fixtures/fx-edit"
 
 # A probe repo is only a probe if git agrees. `GIT_DIR` outranks `git -C`, so an exported one
 # would send every write below into whatever repository the caller was standing in.
@@ -1227,6 +1242,8 @@ printf 'doomed base\n'  > "$SU/dist/core/rules/doomed.md"
 printf 'grammar base\n' > "$SU/dist/core/skills/ai-dlc/artifact-path-grammar.md"
 printf 'driver body\n'  > "$SU/dist/core/session-driver/modeflip.sh"
 printf 'driver body\n'  > "$SU/dist/core/session-driver/modeneed.sh"
+printf 'fx-mod base\n'  > "$SU/dist/core/fixtures/fx-mod/run.sh"
+printf 'fx-edit base\n' > "$SU/dist/core/fixtures/fx-edit/run.sh"
 chmod 644 "$SU/dist/core/session-driver/modeflip.sh" "$SU/dist/core/session-driver/modeneed.sh"
 SU_BASE="$(su_commit base)"
 
@@ -1241,6 +1258,9 @@ printf 'indexed mid\n'  > "$SU/dist/core/rules/indexed.md"
 printf 'doomed mid\n'   > "$SU/dist/core/rules/doomed.md"
 printf 'added mid\n'    > "$SU/dist/core/rules/added.md"
 printf 'grammar mid\n'  > "$SU/dist/core/skills/ai-dlc/artifact-path-grammar.md"
+printf 'fx-mod mid\n'   > "$SU/dist/core/fixtures/fx-mod/run.sh"
+printf 'fx-add mid\n'   > "$SU/dist/core/fixtures/fx-add/run.sh"
+printf 'fx-edit mid\n'  > "$SU/dist/core/fixtures/fx-edit/run.sh"
 chmod 755 "$SU/dist/core/session-driver/modeflip.sh" "$SU/dist/core/session-driver/modeneed.sh"
 SU_MID="$(su_commit mid)"
 
@@ -1251,6 +1271,9 @@ printf 'steady theirs\n'  > "$SU/dist/core/rules/steady.md"
 printf 'indexed theirs\n' > "$SU/dist/core/rules/indexed.md"
 printf 'added theirs\n'   > "$SU/dist/core/rules/added.md"
 printf 'grammar theirs\n' > "$SU/dist/core/skills/ai-dlc/artifact-path-grammar.md"
+printf 'fx-mod theirs\n'  > "$SU/dist/core/fixtures/fx-mod/run.sh"
+printf 'fx-add theirs\n'  > "$SU/dist/core/fixtures/fx-add/run.sh"
+printf 'fx-edit theirs\n' > "$SU/dist/core/fixtures/fx-edit/run.sh"
 rm -f "$SU/dist/core/rules/doomed.md"
 SU_THEIRS="$(su_commit theirs)"
 
@@ -1274,6 +1297,9 @@ su_seed_cons() {
   printf 'added mid\n'         > "$1/.claude/rules/added.md"
   printf 'doomed mid\n'        > "$1/.claude/rules/doomed.md"
   printf 'grammar mid\n'       > "$1/.claude/skills/ai-dlc/artifact-path-grammar.md"
+  printf 'fx-mod mid\n'        > "$1/tests/fixtures/fx-mod/run.sh"
+  printf 'fx-add mid\n'        > "$1/tests/fixtures/fx-add/run.sh"
+  printf 'fx-edit LOCAL EDIT\n' > "$1/tests/fixtures/fx-edit/run.sh"
   printf 'driver body\n' > "$1/.claude/session-driver/modeflip.sh"; chmod 755 "$1/.claude/session-driver/modeflip.sh"
   printf 'driver body\n' > "$1/.claude/session-driver/modeneed.sh"; chmod 644 "$1/.claude/session-driver/modeneed.sh"
   printf '#!/usr/bin/env bash\n# invokes no scripts/ai-dlc/ validator, so the gating set is empty\nexit 0\n' \
@@ -1315,15 +1341,25 @@ SU_MF_UO='core/session-driver/modeflip.sh=UPSTREAM-ONLY,'
 SU_MN='core/session-driver/modeneed.sh=UPSTREAM-ONLY,'
 SU_GR_CL='core/skills/ai-dlc/artifact-path-grammar.md=BOTH-CHANGED->CLASSIFY,'
 SU_GR_UO='core/skills/ai-dlc/artifact-path-grammar.md=UPSTREAM-ONLY,'
+# The fixture cells sort FIRST (`core/fixtures/` < `core/rules/`), so each set opens with them.
+SU_FA_ADD='core/fixtures/fx-add/run.sh=UPSTREAM-ONLY-ADD,'
+SU_FA_CL='core/fixtures/fx-add/run.sh=BOTH-ADDED->CLASSIFY,'
+SU_FE_CL='core/fixtures/fx-edit/run.sh=BOTH-CHANGED->CLASSIFY,'
+SU_FE_UO='core/fixtures/fx-edit/run.sh=UPSTREAM-ONLY,'
+SU_FM_UO='core/fixtures/fx-mod/run.sh=UPSTREAM-ONLY,'
+SU_FM_CL='core/fixtures/fx-mod/run.sh=BOTH-CHANGED->CLASSIFY,'
+SU_FX_LIVE="${SU_FA_ADD}${SU_FE_CL}${SU_FM_UO}"                  # the disjunct reaches both fixture positives
+SU_FX_INERT="${SU_FA_CL}${SU_FE_CL}${SU_FM_CL}"                  # no fixture is exempted
 SU_TAIL="${SU_DO}${SU_ED_CL}${SU_IX_CL}${SU_ST}${SU_MF_OK}${SU_MN}${SU_GR_CL}"
-SU_LIVE="${SU_A_ADD}${SU_CA_UO}${SU_TAIL}"                       # both branch arms reach their subject
-SU_INERT="${SU_A_CL}${SU_CA_CL}${SU_TAIL}"                       # the predicate is unreachable
-SU_NO_M="${SU_A_ADD}${SU_CA_CL}${SU_TAIL}"                       # the M-branch arm is gone
-SU_NO_A="${SU_A_CL}${SU_CA_UO}${SU_TAIL}"                        # the A-branch arm is gone
-SU_WIDE="${SU_A_ADD}${SU_CA_UO}${SU_DO}${SU_ED_UO}${SU_IX_UO}${SU_ST}${SU_MF_OK}${SU_MN}${SU_GR_CL}"
-SU_UNSCOPED="${SU_A_ADD}${SU_CA_UO}${SU_DO}${SU_ED_CL}${SU_IX_CL}${SU_ST}${SU_MF_OK}${SU_MN}${SU_GR_UO}"
-SU_ORDER="${SU_A_ADD}${SU_CA_UO}${SU_DO}${SU_ED_CL}${SU_IX_CL}${SU_ST}${SU_MF_UO}${SU_MN}${SU_GR_CL}"
-SU_IDXH="${SU_A_CL}${SU_CA_CL}${SU_DO}${SU_ED_CL}${SU_IX_UO}${SU_ST}${SU_MF_OK}${SU_MN}${SU_GR_CL}"
+SU_LIVE="${SU_FX_LIVE}${SU_A_ADD}${SU_CA_UO}${SU_TAIL}"          # both branch arms reach their subject
+SU_INERT="${SU_FX_INERT}${SU_A_CL}${SU_CA_CL}${SU_TAIL}"         # the predicate is unreachable
+SU_NO_M="${SU_FA_ADD}${SU_FE_CL}${SU_FM_CL}${SU_A_ADD}${SU_CA_CL}${SU_TAIL}"   # the M-branch arm is gone
+SU_NO_A="${SU_FA_CL}${SU_FE_CL}${SU_FM_UO}${SU_A_CL}${SU_CA_UO}${SU_TAIL}"     # the A-branch arm is gone
+SU_WIDE="${SU_FA_ADD}${SU_FE_UO}${SU_FM_UO}${SU_A_ADD}${SU_CA_UO}${SU_DO}${SU_ED_UO}${SU_IX_UO}${SU_ST}${SU_MF_OK}${SU_MN}${SU_GR_CL}"
+SU_UNSCOPED="${SU_FX_LIVE}${SU_A_ADD}${SU_CA_UO}${SU_DO}${SU_ED_CL}${SU_IX_CL}${SU_ST}${SU_MF_OK}${SU_MN}${SU_GR_UO}"
+SU_ORDER="${SU_FX_LIVE}${SU_A_ADD}${SU_CA_UO}${SU_DO}${SU_ED_CL}${SU_IX_CL}${SU_ST}${SU_MF_UO}${SU_MN}${SU_GR_CL}"
+SU_IDXH="${SU_FX_INERT}${SU_A_CL}${SU_CA_CL}${SU_DO}${SU_ED_CL}${SU_IX_UO}${SU_ST}${SU_MF_OK}${SU_MN}${SU_GR_CL}"
+SU_NOFX="${SU_FX_INERT}${SU_A_ADD}${SU_CA_UO}${SU_TAIL}"         # the fixture disjunct is gone, machinery untouched
 
 # PRECONDITION. The mode seed is the whole subject of the ordering mutant, and git records a mode
 # only if the filesystem carried one -- a tree where both refs read 100644 makes that mutant
@@ -1367,6 +1403,9 @@ ss_assert "su-seed-scope" \
 ss_assert "su-seed-scope-control" \
   "$(printf '%s\n' "$SU_MACH" | grep -cx 'core/rules/carried.md')" "1" \
   "...and the carried path IS, so that zero is a membership decision rather than an empty set"
+ss_assert "su-seed-fx-scope" \
+  "$(printf '%s\n' "$SU_MACH" | grep -c '^core/fixtures/')" "0" \
+  "no seeded fixture file is machinery, so only the core/fixtures disjunct can exempt one"
 
 # THE POSITIVES AND THEIR THREE NEGATIVES, ONE EXACT SET, ONE RUN. Both branch arms, the D-branch
 # deliberate absence, the bytes near-miss and the membership near-miss are all in this one cell
@@ -1436,6 +1475,9 @@ SU_M_NOARM_A='index($0,"at_self_update \"$path\" \"$ours_h\"") && index($0,"buck
 SU_M_WIDE='index($0,"[ \"$2\" = \"$(self_update_hash \"$1\")\" ] || return 1") { next } { print }'
 SU_M_UNSCOPED='{ if (index($0,"at_self_update() {")) inf=1
   if (inf && index($0,"  is_machinery \"$1\"")) { print "  return 0"; inf=0; next } print }'
+# Anchored on the disjunct's own `case` line, which appears once in the file; the mutant keeps
+# the machinery conjunct and the content match, so only the fixture cells can move.
+SU_M_NOFX='index($0,"  case \"$1\" in core/fixtures/*/*) return 0 ;; esac") { next } { print }'
 SU_M_ORDER='{ L[NR]=$0
   if (index($0,"at_self_update \"$path\" \"$ours_h\"") && index($0,"bucket=\"UPSTREAM-ONLY\"")) A=NR
   if (index($0,"ALREADY-AT-THEIRS") && index($0,"mode_at_theirs")) B=NR }
@@ -1464,10 +1506,10 @@ index($0,"NO-SELF-UPDATE-REF") { next }
 SU_M_SPELL='index($0,"at_self_update() {") {
   print "at_self_update() { # <core-rel-path> <ours-hash>"
   print "  [ -n \"$SELF_UPDATE_REF\" ] || return 1"
-  print "  is_machinery \"$1\" || return 1"
+  print "  case \"$1\" in core/fixtures/?*/?*) ;; *) is_machinery \"$1\" || return 1 ;; esac"
   print "  git -C \"$DIST\" show \"${SELF_UPDATE_REF}:$1\" 2>/dev/null | git -C \"$DIST\" hash-object --stdin | grep -qxF \"$2\""
   print "}"
-  s=4; next }
+  s=6; next }
 s>0 { s--; next }
 { print }'
 
@@ -1488,6 +1530,8 @@ su_kill "su-mut-wide" "$SU_M_WIDE" "$SU_MID" "$SU_WIDE" \
   "a predicate that stops comparing BYTES swallows the genuine consumer edit beside it -- the negative is what catches this"
 su_kill "su-mut-unscoped" "$SU_M_UNSCOPED" "$SU_MID" "$SU_UNSCOPED" \
   "dropping the is_machinery conjunct suppresses a NON-machinery path, which apply.sh then overwrites with no operator review"
+su_kill "su-mut-nofixture" "$SU_M_NOFX" "$SU_MID" "$SU_NOFX" \
+  "dropping the core/fixtures disjunct sends a fixture file step 2 wrote at the skill_commit back to a semantic-merge obligation, and moves no machinery cell"
 su_kill "su-mut-order" "$SU_M_ORDER" "$SU_MID" "$SU_ORDER" \
   "moved above ALREADY-AT-THEIRS the arm pre-empts the mode conjunct and calls a consumer that HAS the bit indistinguishable from one that needs it"
 su_kill "su-mut-unresolvable" "$SU_M_UNRES" "$SU_TREE" "$SU_LIVE" \
