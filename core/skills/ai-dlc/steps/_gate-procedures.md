@@ -27,7 +27,9 @@ When a step file says "run sub-step snapshot update", execute:
    artifact touched (e.g., `2026-04-17T15:22Z — /bmad-party-mode
    completed on PRD — _bmad-output/planning-artifacts/prd.md`).
 2. Refresh **Open Items** from current state of
-   `docs/escalations/pending.md` and any open triage items.
+   `docs/escalations/pending.md` and any open triage items. Keep any
+   `fan-out round <subject> since <epoch>` line until that round's join has
+   completed (Rule 28, "Split dispatch").
 3. Reconcile **In-Flight Teammates**: add a row for every teammate
    dispatched since the last update (`agent name | role | deliverable
    path | dispatched-at | status`, `status: in-flight`) — the deliverable
@@ -268,7 +270,8 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    The lead's join, before it proceeds, derives the EXPECTED set — `<step>-<seat>-<ordinal>.md`
    for every seat on the step's seat list (never from directory entries) and every ordinal the
    `--map` prints, plus `<step>-<seat>-cross.md` per seat — and takes as delivered only the paths
-   this round's beats printed as `DELIVERED`, never a count of files in the directory. It names
+   a beat armed with `--since <round epoch>` reports as `DELIVERED` (Rule 28 owns the epoch and
+   where it is recorded), never a count of files in the directory. It names
    expected minus delivered as the MISSING (seat, ordinal) members, and the next wave carries
    exactly those plus any spawn the harness rejected. `/bmad-party-mode` internals are not
    ai-dlc's, so this file-level join is the only check available.

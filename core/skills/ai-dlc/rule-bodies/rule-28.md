@@ -101,11 +101,25 @@ writes nothing. Every fan-out in ai-dlc therefore goes out in waves: a
 wave is at most the cap minus the agents already running in this
 session, its spawns go out together as parallel `Agent` calls, and each
 wave is joined with
-one bounded-join beat (Rule 29) before the next wave spawns. A slot
-frees when an agent EXITS, not when its deliverable lands, so a wave
-sized from deliveries can over-dispatch slightly; the rejected-spawn
-rule below absorbs that. Every per-role site that fans out cites this
-paragraph and does not restate it.
+one bounded-join beat (Rule 29) before the next wave spawns. Until a
+rejection has shown the cap, the first wave is the whole set; its
+rejections are the probe. A slot frees when an agent EXITS, not when its
+deliverable lands, so a wave sized from deliveries can over-dispatch
+slightly; the rejected-spawn rule below absorbs that. Every per-role
+site that fans out cites this paragraph and does not restate it.
+
+**The round's epoch is written down before wave 1.** Before the first
+wave spawns, the lead records the round's start as an epoch in the
+snapshot's Open Items -- one line, `fan-out round <subject> since
+<epoch>` -- and passes `--since <epoch>` on every beat of the round.
+That line stays through every Open Items refresh until the round's join
+has completed, and is deleted then. The In-Flight Teammates row cannot
+carry it: a row is deleted when its deliverable is consumed, so it is
+gone for exactly the parts already delivered, and Recent Activity
+rotates. `wait-for-deliverable.sh` drops a path's own epoch when it
+reports it `DELIVERED`, so a path re-armed after a compaction without
+`--since` reads its finished file as pre-existing and waits to
+NON-DELIVERY, spending the Rule 20 budget on an agent that is done.
 
 **A rejected spawn is undelivered, and holding it is not a retry.** Read
 the rejected set synchronously from the `Agent` tool results of the
@@ -113,21 +127,35 @@ message that dispatched the wave. Never pass a rejected spawn's
 deliverable path to `wait-for-deliverable.sh`: nothing is writing it, so
 the join would exhaust its whole beat sequence and then spend the Rule 20
 one-re-dispatch budget on an agent that never ran. Arm only the paths of
-launched agents. Hold the rejected set, and re-dispatch exactly that set
-only after a bounded-join beat has returned with at least one `DELIVERED`
-line -- never in the next message. This is not the retry the harness
-forbids: its "Do not retry" forbids re-spawning into a pool that is still
-full, and the beat is what frees a slot. A rejected spawn's re-dispatch is
-its first launch, so it never spends the Rule 20 re-dispatch budget.
+launched agents, and arm one beat over every outstanding path from all
+waves, never one beat per wave. Hold the rejected set, and re-dispatch
+exactly that set only after a bounded-join beat has returned with at
+least one `DELIVERED` line -- never in the next message. This is not the
+retry the harness forbids: its "Do not retry" forbids re-spawning with
+no evidence anything has changed, and a re-dispatch here waits for
+evidence of progress, a `DELIVERED` line, which is the sign that an agent
+of this round has finished its work and will exit. A spawn rejected twice
+waits for a further beat with a fresh `DELIVERED` before it is tried
+again. A rejected spawn's re-dispatch is its first launch, so it never
+spends the Rule 20 re-dispatch budget, and its path is armed in the next
+beat without `--reset` -- a `--reset` in that call would also restart the
+clock on every other path it names.
+
+**A wave that launched nothing still owes a beat.** `wait-for-deliverable.sh`
+refuses an empty path list, and Rule 29 forbids ending the turn on an
+outstanding join with no live beat. So a wave whose every spawn was
+rejected arms one beat over every still-outstanding path from earlier
+waves. If none is outstanding, the cap is held by agents this round does
+not own: HARD_BLOCK, naming them.
 
 **The join names what is missing, never what it counted.** It derives the
 expected part set from the same program as the dispatch, takes as
-delivered only the paths a beat of this round printed as `DELIVERED` --
-`wait-for-deliverable.sh` reports a path delivered only when it was
-written since its join armed, so a previous sprint's file at the same
-path is not a delivery -- and names expected minus delivered. That
-missing set, with the held rejected set, is what the next wave carries.
-A count of files in a directory is not a join.
+delivered every expected path that is non-empty and written since the
+round's epoch -- which is what a beat armed with `--since <epoch>`
+reports as `DELIVERED`, and a previous sprint's file at the same path is
+older than the epoch -- and names expected minus delivered. That missing
+set, with the held rejected set, is what the next wave carries. A count
+of files in a directory is not a join.
 
 **What stays serial, and only this:** (1) a true data dependency as
 `_dispatch-protocol.md` defines it, and the protected-path
