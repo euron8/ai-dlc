@@ -53,9 +53,9 @@ subagent context and the lead in orchestration (Rule 23).
 **Split dispatch: one agent per independent part.** Rule 28 decides
 WHETHER work is delegated; this clause decides the SHAPE of a
 delegation. When a dispatch's scope partitions along an independent
-axis, the lead dispatches one agent per part in ONE message, plus one
-cross-part agent where the axis says parts interact, and joins them all
-in one bounded-join beat (Rule 29). The axes:
+axis, the lead dispatches one agent per part, plus one cross-part agent
+where the axis says parts interact, in the waves described below, and
+joins each wave in one bounded-join beat (Rule 29). The axes:
 
 - **files** -- an artifact that is two or more files (`stories/`): one
   agent per file plus one cross-part agent scoped to interactions
@@ -91,6 +91,72 @@ once and every finding respects the partition, and only then writes
 the single file the gate already reads. Readers of that file do not
 change; a lead that assembles the file by hand has not joined.
 
+**Waves: the harness caps concurrent subagents.** The harness runs at
+most `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` subagents at once in a
+session and rejects every spawn past that with `Concurrent subagent
+limit reached. You can run <N> subagents at once. Do not retry.`; that
+rejection text carries the live value, so read the cap from it and
+never from a number written here. A rejected spawn launches nothing and
+writes nothing. Every fan-out in ai-dlc therefore goes out in waves: a
+wave is at most the cap minus the agents already running in this
+session, its spawns go out together as parallel `Agent` calls, and each
+wave is joined with
+one bounded-join beat (Rule 29) before the next wave spawns. Until a
+rejection has shown the cap, the first wave is the whole set; its
+rejections are the probe. A slot frees when an agent EXITS, not when its
+deliverable lands, so a wave sized from deliveries can over-dispatch
+slightly; the rejected-spawn rule below absorbs that. Every per-role
+site that fans out cites this paragraph and does not restate it.
+
+**The round's epoch is written down before wave 1.** Before the first
+wave spawns, the lead records the round's start as an epoch in the
+snapshot's Open Items -- one line, `fan-out round <subject> since
+<epoch>` -- and passes `--since <epoch>` on every beat of the round.
+That line stays through every Open Items refresh until the round's join
+has completed, and is deleted then. The In-Flight Teammates row cannot
+carry it: a row is deleted when its deliverable is consumed, so it is
+gone for exactly the parts already delivered, and Recent Activity
+rotates. `wait-for-deliverable.sh` drops a path's own epoch when it
+reports it `DELIVERED`, so a path re-armed after a compaction without
+`--since` reads its finished file as pre-existing and waits to
+NON-DELIVERY, spending the Rule 20 budget on an agent that is done.
+
+**A rejected spawn is undelivered, and holding it is not a retry.** Read
+the rejected set synchronously from the `Agent` tool results of the
+message that dispatched the wave. Never pass a rejected spawn's
+deliverable path to `wait-for-deliverable.sh`: nothing is writing it, so
+the join would exhaust its whole beat sequence and then spend the Rule 20
+one-re-dispatch budget on an agent that never ran. Arm only the paths of
+launched agents, and arm one beat over every outstanding path from all
+waves, never one beat per wave. Hold the rejected set, and re-dispatch
+exactly that set only after a bounded-join beat has returned with at
+least one `DELIVERED` line -- never in the next message. This is not the
+retry the harness forbids: its "Do not retry" forbids re-spawning with
+no evidence anything has changed, and a re-dispatch here waits for
+evidence of progress, a `DELIVERED` line, which is the sign that an agent
+of this round has finished its work and will exit. A spawn rejected twice
+waits for a further beat with a fresh `DELIVERED` before it is tried
+again. A rejected spawn's re-dispatch is its first launch, so it never
+spends the Rule 20 re-dispatch budget, and its path is armed in the next
+beat without `--reset` -- a `--reset` in that call would also restart the
+clock on every other path it names.
+
+**A wave that launched nothing still owes a beat.** `wait-for-deliverable.sh`
+refuses an empty path list, and Rule 29 forbids ending the turn on an
+outstanding join with no live beat. So a wave whose every spawn was
+rejected arms one beat over every still-outstanding path from earlier
+waves. If none is outstanding, the cap is held by agents this round does
+not own: HARD_BLOCK, naming them.
+
+**The join names what is missing, never what it counted.** It derives the
+expected part set from the same program as the dispatch, takes as
+delivered every expected path that is non-empty and written since the
+round's epoch -- which is what a beat armed with `--since <epoch>`
+reports as `DELIVERED`, and a previous sprint's file at the same path is
+older than the epoch -- and names expected minus delivered. That missing
+set, with the held rejected set, is what the next wave carries. A count
+of files in a directory is not a join.
+
 **What stays serial, and only this:** (1) a true data dependency as
 `_dispatch-protocol.md` defines it, and the protected-path
 one-at-a-time rule in `stories-test-strategy.md`; (2) a convergence
@@ -111,13 +177,17 @@ SERIAL is `shard: none (serial-document)`.
 **Minimum mechanism (Rule 26(c)) -- split dispatch.** Failure caught:
 the lead blocked on one agent reviewing, repairing or adjudicating a
 whole multi-part subject while every other lane sits idle, with the
-agent's wall clock growing with the parts named in its brief. False-
-positive cost: one fixed per-agent load cost per extra part, one
-cross-part agent, and one join program run -- paid in spawn overhead,
-recovered in wall clock. Removal condition: retire once the harness
-parallelises a single agent's independent sub-scopes itself, or once
-the join programs report that parts routinely arrive no faster than
-one whole-subject agent.
+agent's wall clock growing with the parts named in its brief; and a
+fan-out wider than the harness's concurrent-subagent cap launching only
+its first cap's worth while the lead joins the rest as if they had run,
+which proceeds on a partial round. False-positive cost: one fixed
+per-agent load cost per extra part, one cross-part agent, one join
+program run, and one extra beat per wave past the first -- paid in spawn
+overhead, recovered in wall clock. Removal condition: retire the split
+once the harness parallelises a single agent's independent sub-scopes
+itself, or once the join programs report that parts routinely arrive no
+faster than one whole-subject agent; retire the waves once the harness
+queues a spawn past its cap instead of rejecting it.
 
 **`SendMessage` reaches a resident teammate; it does not create a context.**
 A teammate you can still message is NOT a blank slate: its original dispatch

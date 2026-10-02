@@ -27,7 +27,9 @@ When a step file says "run sub-step snapshot update", execute:
    artifact touched (e.g., `2026-04-17T15:22Z — /bmad-party-mode
    completed on PRD — _bmad-output/planning-artifacts/prd.md`).
 2. Refresh **Open Items** from current state of
-   `docs/escalations/pending.md` and any open triage items.
+   `docs/escalations/pending.md` and any open triage items. Keep any
+   `fan-out round <subject> since <epoch>` line until that round's join has
+   completed (Rule 28, "Split dispatch").
 3. Reconcile **In-Flight Teammates**: add a row for every teammate
    dispatched since the last update (`agent name | role | deliverable
    path | dispatched-at | status`, `status: in-flight`) — the deliverable
@@ -183,8 +185,8 @@ just wrote — its own role file governs what a non-zero exit obliges it to do, 
 nothing about the gate.
 
 **Shard the worklist (Rule 28, "Split dispatch": worklist-items axis).** When `--expected
-<gate_type>` prints more than one check, dispatch N `gate-adjudicator` shards in ONE message
-instead of one, with N no greater than that count (`--shard` refuses a larger N). All N share this
+<gate_type>` prints more than one check, dispatch N `gate-adjudicator` shards in waves
+(Rule 28, "Split dispatch") instead of one, with N no greater than that count (`--shard` refuses a larger N). All N share this
 ONE `gate_nonce`. Each shard derives its own slice with
 `scripts/ai-dlc/validate-gate-adjudication.sh --expected <gate_type> --shard <i>/<N>` and writes
 `<gate_nonce>.part-<i>of<N>.jsonl` beside the verdict path, never a `.json` (`--series` walks
@@ -263,10 +265,16 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    (Rule 28 serial exception 4). `PART_CAP` in `partition-document.sh` bounds the parts, so a round
    spawns at most seats x (`PART_CAP` + 1) agents.
    A subject that meets neither case keeps one agent per seat.
-   The lead's join COUNTS, before it proceeds, only files named `<step>-<seat>-<ordinal>.md` and
-   `<step>-<seat>-cross.md` for this step, seats taken from the step's seat list and never from
-   directory entries, against seats x the `--map` line count plus one cross file per seat.
-   `/bmad-party-mode` internals are not ai-dlc's, so that count is the only check available.
+   The round goes out in waves (Rule 28, "Split dispatch"): seats x parts routinely exceeds
+   the harness's concurrent-subagent cap, and a spawn past the cap is rejected, not queued.
+   The lead's join, before it proceeds, derives the EXPECTED set — `<step>-<seat>-<ordinal>.md`
+   for every seat on the step's seat list (never from directory entries) and every ordinal the
+   `--map` prints, plus `<step>-<seat>-cross.md` per seat — and takes as delivered only the paths
+   a beat armed with `--since <round epoch>` reports as `DELIVERED` (Rule 28 owns the epoch and
+   where it is recorded), never a count of files in the directory. It names
+   expected minus delivered as the MISSING (seat, ordinal) members, and the next wave carries
+   exactly those plus any spawn the harness rejected. `/bmad-party-mode` internals are not
+   ai-dlc's, so this file-level join is the only check available.
    **Both flags are load-bearing and neither is optional — SKILL.md Rule 20 (i)
    owns why.**
    **Every per-seat deliverable this invocation produces is written under
@@ -356,7 +364,7 @@ series by the `p<M>` token.
 
 **Shard a multi-file artifact (Rule 28, "Split dispatch": files axis).** When the artifact under
 review is two or more files (`stories/`), dispatch one `adversary` shard per story plus one
-cross-story shard, all in ONE message. The part set is derived: create
+cross-story shard, in waves (Rule 28, "Split dispatch"). The part set is derived: create
 `_bmad-output/planning-artifacts/s<N>/shards/<artifact>-p<M>/`, then run
 `scripts/ai-dlc/merge-adversarial-shards.sh --map <that dir>`, which prints
 `<ordinal>\t<basename>` per story. Each per-story shard gets its ordinal and basename, the line
@@ -376,8 +384,8 @@ review is one file, run `scripts/ai-dlc/partition-document.sh --map <artifact pa
 `SERIAL:` line means the document does not partition: dispatch ONE adversary whose brief carries
 `shard: none (serial-document)` (Rule 28 exception 4). Otherwise the map prints
 `<ordinal>\t<first-line>\t<last-line>\t<heading>` per part; create
-`_bmad-output/planning-artifacts/s<N>/shards/<artifact>-p<M>/` and dispatch, in ONE message, one
-`adversary` per part plus one cross-section shard. Each part shard gets its ordinal, its line
+`_bmad-output/planning-artifacts/s<N>/shards/<artifact>-p<M>/` and dispatch, in waves (Rule 28,
+"Split dispatch"), one `adversary` per part plus one cross-section shard. Each part shard gets its ordinal, its line
 range and heading, the line `shard: <ordinal>/<K> <heading>`, and the output path
 `<that dir>/<ordinal>.md`; it reads its line range of the REAL document, read-only, never a copy.
 The cross-section shard gets `shard: cross/<K> cross`, the whole map, a scope limited to

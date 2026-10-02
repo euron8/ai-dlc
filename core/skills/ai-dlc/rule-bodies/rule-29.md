@@ -66,8 +66,8 @@ What this does NOT change:
   live beat is sleeping. **The one hard invariant: never end your turn on an
   outstanding join without a live backgrounded beat armed** -- that, not the
   yield itself, is what would trade a queued prompt for a dead pipeline.
-- **Parallelism is preserved.** Dispatch the whole wave in ONE message, then
-  beat-join each teammate (`implementation.md`).
+- **Parallelism is preserved.** Dispatch in waves (Rule 28, "Split dispatch",
+  its waves paragraph), then beat-join each teammate (`implementation.md`).
 
 `run_in_background: true` is now the DEFAULT for every spawn, not an exception.
 

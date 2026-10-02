@@ -125,7 +125,8 @@ live the Stop hook (`ai-dlc-continue.sh` Check 2b) allows the turn to
 end — a yielded lead is reachable *immediately*, better than mid-beat,
 not worse.
 
-**A wave dispatched in one message is joined in ONE beat.** Pass every
+**Each wave is joined in ONE beat** (Rule 28, "Split dispatch", says how
+large a wave may be). Pass every
 teammate's deliverable to a single invocation — they poll inside the
 same beat. Never chain beats (`wait a.md; wait b.md`) into one `Bash`
 call: two beats is two budgets and the call overruns.
@@ -148,8 +149,8 @@ the gate on it.
 waits on a dev, NOT how MANY run at once. This is Rule 28's "Split
 dispatch" files axis applied to dev work; the real dependency defined
 below is that clause's serial exception 1. Independent stories MUST be
-dispatched in parallel — in ONE message, each in its own worktree, then
-beat-joined on all results. Parallelism comes from per-story worktrees
+dispatched in parallel — in waves (Rule 28, "Split dispatch"), each in
+its own worktree, then beat-joined on all results. Parallelism comes from per-story worktrees
 plus the join. The lead SHALL serialize two stories ONLY on a
 real dependency: a shared source file both stories write, or a
 by-content gate dependency (story B's gate-1 reads story A's merged
