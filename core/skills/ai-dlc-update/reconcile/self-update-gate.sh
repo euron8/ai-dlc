@@ -743,8 +743,9 @@ if [ -z "${AI_DLC_GATE_IN_SAFE_STOP:-}" ]; then
   # per release candidate in the range buys nothing. Same reasoning as advise_safe_stop's guard.
 
   # THE MACHINERY SET IS RESOLVED BY `preclassify.sh`, NOT HERE, AND THE MOVE IS THE POINT.
-  # This arm's population and preclassify's `skill_commit` suppression scope are the SAME set,
-  # and the two resolutions drifting apart is silent in both directions: a narrower copy leaves
+  # This arm's population is the machinery SUBSET of preclassify's `skill_commit` suppression
+  # scope, which also covers `core/fixtures/` paths. On the machinery paths the two must agree,
+  # and two resolutions drifting apart is silent in both directions: a narrower copy leaves
   # a false CARRY row standing, a wider one suppresses beyond the reason it was given. So the
   # derivation has ONE owner, and it is the script this arm already runs. Loaded the way
   # `self-update-fixtures.sh` already loads `map_consumer()` out of the same file -- an `eval`

@@ -1149,8 +1149,8 @@ fi
 # THE PREDICATE IS `at_self_update`, NOT AN `elif`, and the mutants below are keyed on the
 # function for that reason. It has THREE conjuncts and each is a separate way to be wrong:
 # a self-update ref exists, the consumer's bytes match the distribution AT that ref, and the path
-# is one step 2's self-update writes -- the MACHINERY set, or a shipped fixture file (step 2's
-# second term: every `core/fixtures/<dir>/` the hop's own diff touched). Two branch arms call it.
+# is machinery or sits under `core/fixtures/` -- where a copy at upstream's own bytes for a ref
+# neither endpoint names holds nothing consumer-authored. Two branch arms call it.
 #
 # ITS OWN MINIATURE DISTRIBUTION, WITH THREE REFS. Every tree above has exactly two, and a two-ref
 # tree cannot express the defect at all -- the third sha IS the bug.
