@@ -420,7 +420,9 @@ seeded
 # every directive read as absent -- so the "missing directive" refusals above all passed while
 # the parser could not read a conforming file at all. Three absent directives and three
 # unreadable ones are the same output; only a POSITIVE seed separates them.
-printf '# a prose line the parser must ignore\n#band:9\n#   jobs:   4\n# fixtures: 7\n# another prose line\nsome-fixture 42\n' > "$PROBE_DIR/spacing.tsv"
+# The fixtures directive is TAB-spaced before the key, before the value and after it, so each of
+# the three tab-stripping sites in the parser has a seed it must strip or the row loses a directive.
+printf '# a prose line the parser must ignore\n#band:9\n#   jobs:   4\n#\tfixtures:\t7\t\n# another prose line\nsome-fixture 42\n' > "$PROBE_DIR/spacing.tsv"
 probe_sp="$(parse_baseline "$PROBE_DIR/spacing.tsv" 2>/dev/null)" || probe_fail 'the parser refused a conforming baseline whose directives carry non-canonical spacing'
 [ "$probe_sp" = "some-fixture 42 9 4 7" ] || probe_fail "the parser read non-canonically spaced directives as '$probe_sp', not 'some-fixture 42 9 4 7'"
 seeded
