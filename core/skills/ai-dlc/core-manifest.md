@@ -240,6 +240,7 @@ core_manifest:
   - fixtures/fold-architect-ledger-join/**
   - fixtures/foreground-budget-deny/**
   - fixtures/update-preflight-push/**
+  - fixtures/push-drain-refusals/**
   - fixtures/inflight-row-shape/**
   - fixtures/known-skills-extension/**
   - fixtures/layer-anchor-declaration/**

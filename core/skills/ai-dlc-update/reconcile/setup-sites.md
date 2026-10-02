@@ -168,6 +168,7 @@ core_manifest:
   - core/fixtures/fold-architect-ledger-join/**
   - core/fixtures/foreground-budget-deny/**
   - core/fixtures/update-preflight-push/**
+  - core/fixtures/push-drain-refusals/**
   - core/fixtures/inflight-row-shape/**
   - core/fixtures/known-skills-extension/**
   - core/fixtures/layer-anchor-declaration/**
