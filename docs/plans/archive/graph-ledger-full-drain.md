@@ -16110,3 +16110,42 @@ The banked ruling stands: report the gap and write no runbook.
 
 Batch 172's next-work list and delivery gap are spent: batch 173's block above replaces both.
 
+**BATCH 174 ALSO SHIPPED `v0.667.0` (`23af7954`, #915) AND DISCHARGED
+`PC-S315-DERIVE-FIXTURE-READSETS-COPIES-THE-WHOLE-WORKING-TREE` (`BL-379`).** It carried the
+branches still building when `v0.666.0` shipped. Its close rotated 28 entries: live backlog
+**84 -> 58** (`BL-381`, `BL-382` filed), archive **295 -> 323**, R5 floors set to the measured
+36 sh receipts over 58 live entries. `BL-007` and `BL-338` are fixed in part and stay open; the
+operator ruled that `BL-007` stays open for a hole inside the archive.
+
+**`BL-308` IS FIXED IN `v0.667.0` AND COULD NOT ROTATE.** Its receipt exits 0 alone and 1 through
+`backlog-reverify.sh`, which exports `AI_DLC_RECONCILE_MEMO` from `reconcile/lib.sh` into every
+receipt it evaluates; the cached rename status defeats `preclassify-rename-row`'s `--no-renames`
+mutant. Filed as `BL-382`, whose receipt exits 1 on the tree and 0 with the variable unset around
+the eval. The leak predates this batch: the pre-0.667.0 fixture fails the same way with it set.
+
+**THE `v0.667.0` GATE FAILED TWICE BEFORE IT PASSED.** First `validator-fork-budget` at 3168
+against 3152, from new invariant `I116` and one more `I75` subject; `FORK_BUDGET` is 3174 with the
+measurement beside it. Then the budget edit dropped the validator's executable bit (`I77`), taking
+four fixtures with it. The same run failed `layer-adjudication-tier` Part 11 world E, a packed-store
+setup flake this release did not touch, filed as `BL-381`. Gate on `63c640fa`: 22 phases PASS, 218
+fixtures ok, every changed fixture `ok` by name, squash tree identical to the gated tip. The
+operator's read-set trace for the six fixtures that read new files ships in this close; only their
+rows moved, and `layer-contract-conformance` lost its 2128 stale `.claude/worktrees/` rows.
+
+**BUILT BRANCHES HELD UNMERGED, EACH TOUCHING A BOOTSTRAPPING FILE SO EACH SHIPS ALONE IF PICKED.**
+`b174-bl085` (`BL-085`, `layer-drift.sh`): the operator ruled `contract_version` stays 20, and its
+CHANGELOG entry states that `LC-E11` was widened in place. `b174-bl329` (`BL-329`,
+`sync-transient-ignore.sh`, which `apply.sh` runs in a pull). **Uninstall keeps a tuned
+`aiDlcModels`/`aiDlcRoles` entry and any file whose bytes differ from core's copy** (operator ruling
+and tip-adversary fix, both shipped in `v0.667.0`).
+
+**THE DELIVERY GAP IS ZERO.** The consumer pulled to 0.667.0 (`23af7954`) while the close ran, on
+`b6b68b3c` (#1136), so its stamp equals `VERSION`. This batch's three discharged ids are still live
+in its ledger until its own ledger-reverify closes them. It filed three candidates on 2026-09-29 and
+2026-09-30 that no backlog entry cites yet: `PC-S315-ARTIFACT-WRITE-LEDGER-DROPS-PARALLEL-SHARD-ROWS`,
+`PC-S315-AUDIT-LAYER-DEBT-CUE-ARM-READS-CORE-FIELD-VOCABULARY-AS-AN-OBLIGATION` and
+`PC-S315-NO-AMENDMENT-PATH-FOR-A-NOTARIZED-ARTIFACT-AFTER-A-STORY-DECISION`. The fresh-resume sweep
+read live 18 on 8 qualifying refs, unfiled 4, worklist 1, TERMINAL 151.
+
+Batch 173's next-work list and delivery gap are spent: batch 174's block above replaces both.
+
