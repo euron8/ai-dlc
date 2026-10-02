@@ -27416,3 +27416,163 @@ verify: manual -- the leak is a count over a temp directory the suite does not o
 
 **Held note (batch 182): fixed on b182-r1**, not landed. `ud_carry_derive` runs once, in the main shell from the scan loop, so its state and directory persist and the trap removes the directory; `carried_bucket` only reads. The arm (`mp-ud-once` in `self-update-gate`) counts through a `mktemp` shim in a private TMPDIR: `preclassify=1 derived=1 left=0 carried=3` on the fix. Mutant `mp-mut-perrow` puts the derivation back inside `carried_bucket` and reads `preclassify=3 derived=3 left=3`. The leaked directories already on disk are not removed by this change.
 
+## BL-087 — ANSWERED: `PreToolUse` does NOT fire on a tool call that fails INPUT VALIDATION, so a guard whose predicate is the malformation is unbuildable
+
+**THE ANSWER.** A tool call whose input fails the tool's own schema is rejected before any hook
+sees it, and it is invisible to the hook system ENTIRELY — not merely to `PreToolUse`. Measured
+on 2.1.266; re-measured and extended on **Claude Code 2.1.287**. A refactor of the dispatch
+chain could move it, which is why the build is named.
+
+**The measurement, with its positive control in the SAME session.** A scratch project driving
+real Claude Code as `claude -p --settings <scratch>/settings.json`, hook body three lines
+(append stdin to a file, exit 0). The decisive arm put both calls in one session, so the control
+cannot differ in registration, settings, model or session from the test:
+
+```
+Read {"path": "target.txt"}        schema-invalid   -> InputValidationError, NO hook payload
+Read {"file_path": "target.txt"}   well-formed      -> executed, ONE hook line
+```
+
+With `PreToolUse`, `PostToolUse` and `PostToolUseFailure` all registered on `Read`
+simultaneously, a schema-invalid call produced **zero lines across all three**. An
+isolated malformed-only run wrote zero; an isolated well-formed-only run wrote one.
+
+**The mechanism agrees and is the weaker source.** In the shipped bundle, dispatch is a hook
+middleware chain whose INNERMOST step is the function carrying both `inputSchema.safeParse` and
+the `InputValidationError` emission — so the chain's outer hook handlers are never entered for a
+call that fails it. Controls on the extraction: `PreToolUse` 107 hits, `InputValidationError`
+11, impossible token 0. That reading is what extends the result from `Read` to all tools, and it
+is minified text ABOUT a program rather than the program; the measurement covers `Read` on
+2.1.266 and nothing more.
+
+**Subject substitution, stated because the entry prescribed `AskUserQuestion`.** That tool is
+not offered under `claude -p`, so the model emitted no tool call at all — zero hook lines with
+zero evidentiary value, which is the empty-file-without-a-control failure this repo names.
+`Read` is valid because the validation site is shared by every tool. The literal 1-option
+`AskUserQuestion` case needs an interactive run; nothing in the mechanism suggests it differs.
+
+**"MALFORMED" IS TWO CLASSES, AND BOTH ARE MEASURED on Claude Code 2.1.287.** `coerceInput` runs
+before `safeParse`. `strings -n 6` over the 2.1.287 bundle finds 12 per-tool implementations
+(Read, Write, Edit, Bash, WebSearch, TaskCreate, TaskUpdate, Artifact, Project, SendMessage,
+Workflow, plus one generic wrapper) and 4 shared call sites. The raw `coerceInput` count is 21,
+because `coerceInputBeforePluginHooks` contains the token. Same headless method, the wire
+`tool_use` input compared against the hook's `tool_input` by `tool_use_id`, in one session:
+
+```
+Read  {"file_path":"target.txt","length":1}  coerced, valid          -> Pre+Post fire, tool_input {"file_path":<abs>,"limit":1}
+Read  {"path":"target.txt","length":1}       coerced, still invalid  -> InputValidationError, 0 lines across Pre/Post/PostFailure
+Write {"path":"out.txt","content":…}         coerced, valid          -> Pre+Post fire, tool_input carries file_path, no path
+Read  {"file_path":"does-not-exist.txt"}     PostToolUseFailure positive control, same session -> 1 line
+```
+
+A `PreToolUse` hook therefore sees the POST-coercion input, on a tool carrying
+`coerceInputBeforePluginHooks` (Write) and on one without it (Read). Whether a malformation is
+hook-visible is a property of the tool's repair set, which can be read in the bundle: Read's
+repairs `length`→`limit` and one-element-array `offset`/`limit`, and does NOT include `path`. The
+earlier sentence that `Read` has no `coerceInput` at all was wrong on 2.1.287. What
+`coerceInputBeforePluginHooks` changes is not visible to settings-file command hooks and is
+unmeasured. Unparseable JSON and the fewer-than-2-option `AskUserQuestion` remain unmeasured
+headless. **A model can silently normalize the input it was asked to emit** — `[1]` was sent as the
+string `"[1]"` twice, the same failure that retracted the first candidate instance — so a coercion
+arm is valid only after its wire bytes have been read.
+
+**THE DOCUMENTATION HAS MOVED SINCE THIS ENTRY WAS FILED, AND THE SENTENCE IT RESTED ON IS
+GONE.** Re-checked: the hooks reference 301s to a new host, and `PreToolUse` now reads only
+"Before a tool call executes. Can block it." The quoted "after Claude creates tool parameters
+and before processing the tool call" is **deleted**. The ordering is still unstated, so the
+entry's conclusion holds — but it no longer leans either way, and a session citing that sentence
+is citing text that no longer exists.
+
+**WHAT IS UNBUILDABLE, AND WHAT IS NOT AT RISK TODAY.** The unbuildable class is a `PreToolUse`
+guard whose predicate is the malformation itself — the `<2`-option `AskUserQuestion` deny
+dropped at v0.407.0, and any "refuse a call the schema will reject anyway" guard. **Nothing
+shipped depends on it.** Derived over `templates/settings.json.template`: all five `PreToolUse`
+groups (`ctx_*` MCP tools; `Edit|Write|MultiEdit`; `Agent|Task`; the acknowledge matcher; `*`)
+read `.tool_input.<field>` on a call they assume is already valid — each decides on CONTENT,
+none on VALIDITY. The only `AskUserQuestion` matcher in the template is under `PostToolUse`
+(`ai-dlc-answer-capture.sh`), which records answers to SUCCESSFUL calls. A grep for
+`tool_input.questions`/`.options` across `core/hooks/` returns 0 against a control of 9 files
+containing `tool_input`. So this entry closes a question and forecloses a future design; it
+fixes no live defect, and it ships as a recorded answer rather than as code.
+
+**The rejections are real and reachable**, which is what makes the experiment cheap to validate:
+parsing session transcripts finds `<2`-option `AskUserQuestion` calls that received an
+`InputValidationError` tool_result with `is_error: true`. The reference consumer's sprint 305
+carried three, one per session, each losing an operator decision to a compaction within minutes.
+
+**Where it came from.** RC-3 of `docs/plans/graph-s305-triage.md` filed a `PreToolUse` deny on a
+`<2`-option `AskUserQuestion`. It was DROPPED at v0.407.0 on the operator's decision, on the
+grounds that it could not be shown able to fire AND would duplicate a rejection the lead already
+sees in-band. The second ground is independent of this question; only the first depends on it.
+
+**The experiment RAN and the answer is at the top of this entry.** The prescription was right
+about method and wrong about one detail: `AskUserQuestion` cannot serve as the subject headless.
+The general lesson is the one this repo already carries — an empty hook file is evidence only
+beside a positive control that wrote to the same file, in the same session, through the same
+registration.
+
+**This entry closes as a version-pinned recorded answer, not a fix.** The coercion partition it
+held open is measured above on 2.1.287. No tree arm can hold it, because the bundle is outside the
+hashed tree; the receipt is the method written here — the isolated three-event settings, the
+decisive wire/hook/result lines, and the `strings` counts — re-run on the next build that matters.
+The next author of a malformation-predicated guard reads this text in the archive.
+
+**LANDED (v0.705.0, verified ae453f5d).**
+
+  verify: manual
+
+---
+
+## BL-378 — the suite-pole guard could not reach its comparison on a real push, and its baseline names a pole that moved
+
+**DEFECT.** v0.665.0's 12-way gate reported the pole as `gate-adjudication-mutants` at 490s against a
+baseline row for `ledger-reverify` at 628s (band 20%, ceiling 754s), with the note "a row pinned to
+a unit that is no longer longest passes while watching the wrong number". Batch 183 found the larger
+defect behind it: the guard almost never compares at all.
+
+**Batch 181:** the contract adversary measured `validate-suite-pole.sh`'s partial-dispatch SKIP as
+correct for the `20 of 227` it was shown. Batch 183 established that the same SKIP also fires on
+the normal dispatch, so it is the defect rather than the safeguard.
+
+**Batch 183 measurements, each with its control.**
+
+- **C1, how often VERDICT 5 is reached.** This is the batch 183 adversary's count, not re-derived
+  by the fix hand. Across gate logs since 2026-09-22 it found the comparison line printed once
+  (09-29, the filing gate). Every other run stopped at the row-count SKIP
+  (`abe3afb7:scripts/validate-suite-pole.sh:377`, `dur_rows -ne fx_count`) or the width SKIP
+  (`:381` at the same revision).
+- **C2, whether a full dispatch occurs.** The one `.last` on disk holds 220 rows against 227
+  fixture directories (`/usr/bin/find core/fixtures -mindepth 2 -maxdepth 2 -name run.sh`). The 7
+  missing units cost 18s of the merged record's 12931s over the on-disk set. This is a single data
+  point, not a rate: the hook keeps one `.last` and overwrites it on every green run.
+- **C3, the pool width.** `.githooks/pre-push:402` resolves `FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-12}"`,
+  and this session's environment carries `AI_DLC_FIXTURE_JOBS=16` from the launcher. `~/.zshrc`,
+  `~/.zprofile`, `~/.zshenv` and `~/.claude/settings.json` were grepped for the name and returned
+  nothing, so the earlier claim that "the shell profile sets 6" no longer holds. The control in the
+  same call is the session's own value, which printed 16. The baseline's `# jobs: 12` therefore
+  SKIPs every gate at the hook's actual width.
+
+**Batch 183 fix (validator, fixture, hook).** The row-count equality is replaced by cost coverage.
+The numerator is this run's costs, and the denominator is the merged record passed by the new
+`--record` flag; both are joined to the fixture directories on disk, and a run needs at least 90%.
+On the real files this reads 99.86% (12913s of 12931s). A copy of the record carrying
+`zz-no-such-fixture-378 100000` also reads 99.86%, because the ghost row is joined out, while the
+same 100000s on `requirements-step` (on disk, undispatched) reads 11.43% and SKIPs. Growth past the
+ceiling FAILS whichever unit carries it. If the baseline pole was not dispatched and the max is
+within band, the guard SKIPs with "not dispatched" instead of passing. The baseline now carries one
+block per pool width, and a width with no row SKIPs naming the widths that have one.
+
+**Closes in this release** once the width-16 row is committed to `docs/suite-pole-baseline.tsv` and the
+guard, driven against a real 220-of-227 `.last` at `--jobs 16`, prints a comparison (VERDICT 5)
+line. Until that row exists, every gate at width 16 prints `SKIP -- pool width 16 has no baseline
+row (widths with a row: 12)`.
+
+Met before the release was cut: the width-16 block `gate-adjudication-mutants 760` band 17 is committed,
+and driven against the real 220-of-227 `.last` at `--jobs 16` the guard printed `pole
+gate-adjudication-mutants 619s against baseline gate-adjudication-mutants 760s (band 17%, ceiling 890s,
+pool 16)`. A seeded 891s pole exited 1 and 890s exited 0; `--jobs 8` SKIPped naming widths 12 and 16.
+
+**LANDED (v0.705.0, verified ae453f5d).**
+
+verify: manual
+
