@@ -3136,7 +3136,7 @@ awk '!/^[ \t]*file:[ \t]*core\//' "$MP_SN/setup-sites.md" > "$MP_SN/.t" && mv "$
 ss_assert "mp-sited-none" "$(mp_pc "$MP_SN/preclassify.sh" - "$PCS" | cut -d' ' -f1,3)" "rc=0 refused=-" \
   "a manifest declaring no setup-sited file is an empty answer, rc 0"
 e="$(mp_mut sitedrc preclassify.sh \
-  'SETUP_SITED_PATHS="$(setup_sited_paths)" \' 'SETUP_SITED_PATHS="$(setup_sited_paths)" || : \')" \
+  'if _pc_ssp="$(setup_sited_paths)"; then' 'if _pc_ssp="$(setup_sited_paths)" || :; then')" \
   && { rm -f "$e/setup-sites.md"; got="$(mp_pc "$e/preclassify.sh" - "$PCS" | cut -d' ' -f1,3)"; } || got="DID-NOT-APPLY"
 mp_killed "mp-mut-sitedrc" "$got" "rc=0 refused=-" \
   "the sited set's status unread: a missing manifest classifies the whole tree as unsited at rc 0"

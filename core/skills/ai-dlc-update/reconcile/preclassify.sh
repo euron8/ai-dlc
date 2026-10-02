@@ -205,8 +205,26 @@ setup_sited_paths() { # -> one core-relative setup-sited path per line; 4 = the 
   printf '%s\n' "$_ssp_out" | sort -u || return 4
   return 0
 }
-SETUP_SITED_PATHS="$(setup_sited_paths)" \
-  || pc_refuse "the setup-sited path set could not be read from $(dirname "$0")/setup-sites.md (setup_sited_paths returned $?), so no file could be told apart from a setup-filled one"
+#
+# THE ONE-LINE ASSIGNMENT BELOW IS A COMPATIBILITY SHIM FOR AN OLDER `apply.sh`, AND NOTHING HERE READS
+# IT. A consumer's installed apply.sh can predate `setup_sited_paths()`; it loads this set with
+# `awk '/^SETUP_SITED_PATHS=/,/sort -u\)"$/'` and evals the range in its OWN shell. With no line
+# opening `SETUP_SITED_PATHS=` and ending `sort -u)"`, that range ran to EOF, evaluated this script's
+# top level under that shell's `set -u`, and aborted the apply on `CONS: unbound variable`. So this
+# file keeps exactly one column-0 `SETUP_SITED_PATHS=` line, it opens and closes its own range on one
+# line, and it names nothing of this script -- the old engine gets the value it always got, by the
+# grammar it always read. This script then OVERWRITES it with the status-checked answer, assigned on
+# an INDENTED line so the old range cannot restart on it. Remove neither: the shim is what a mixed
+# pull runs, and the fixture `apply-restamp-theirs` drives that range against this file. Spelled with
+# `[[:blank:]]` rather than the function's `[ \t]`: same set, but a distinct program text, so a probe
+# keyed on the function's grammar counts the function's reads and not this one.
+SETUP_SITED_PATHS="$(awk '/^[[:blank:]]*file:[[:blank:]]*core\//{sub(/^[[:blank:]]*file:[[:blank:]]*/,""); print}' "$(dirname "$0")/setup-sites.md" 2>/dev/null | sort -u)"
+if _pc_ssp="$(setup_sited_paths)"; then
+  SETUP_SITED_PATHS="$_pc_ssp"
+else
+  _pc_ssp_rc=$?
+  pc_refuse "the setup-sited path set could not be read from $(dirname "$0")/setup-sites.md (setup_sited_paths returned ${_pc_ssp_rc}), so no file could be told apart from a setup-filled one"
+fi
 # --- WHOLE-LINE MEMBERSHIP IS A `case`, NEVER A HERE-STRING OR A HEREDOC -----------------------
 # Both membership tests below were `grep -qxF "$1"` fed by `<<<` or `<<EOF`. bash 3.2 stages
 # either one to a temp file under the SAME file-size limit as everything else, and when that write

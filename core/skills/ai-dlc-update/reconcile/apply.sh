@@ -681,7 +681,12 @@ ap_write_marker() {
   command -v setup_sited_paths >/dev/null 2>&1 || _rc=127
   [ "$_rc" -ne 0 ] || _sited="$(setup_sited_paths)" || _rc=$?
   if [ "$_rc" -ne 0 ]; then
-    say DECISION applying-marker-unwritten "${APPLYING#"$CONSUMER"/}" "the setup-sited path set could not be loaded out of preclassify.sh's \`setup_sited_paths()\` (exit ${_rc}), so which handed-back merges are setup-filled is unknown and the in-flight marker was not written: the fixture suite will not block on this mid-pull tree and \`--finish\` has no record to check the merges against. Check that reconcile/setup-sites.md and preclassify.sh are present and readable, then re-run apply with the same four arguments."
+    # 127 IS VERSION SKEW, NOT AN UNREADABLE FILE: the preclassify.sh beside this apply.sh loaded and
+    # defines no `setup_sited_paths()`, because it predates it. Naming "present and readable" there
+    # sends the operator to check a file that is fine.
+    if [ "$_rc" -eq 127 ]; then _why="reconcile/preclassify.sh beside this apply.sh predates \`setup_sited_paths()\` (version skew: a newer apply.sh next to an older preclassify.sh). Merge or update reconcile/preclassify.sh to the same release as apply.sh"
+    else _why="Check that reconcile/setup-sites.md and preclassify.sh are present and readable"; fi
+    say DECISION applying-marker-unwritten "${APPLYING#"$CONSUMER"/}" "the setup-sited path set could not be loaded out of preclassify.sh's \`setup_sited_paths()\` (exit ${_rc}), so which handed-back merges are setup-filled is unknown and the in-flight marker was not written: the fixture suite will not block on this mid-pull tree and \`--finish\` has no record to check the merges against. ${_why}, then re-run apply with the same four arguments."
     return 0
   fi
   _rc=0
@@ -2271,7 +2276,9 @@ finish_verify_tree() {
   command -v setup_sited_paths >/dev/null 2>&1 || _fv_rc=127
   [ "$_fv_rc" -ne 0 ] || _fv_sited="$(setup_sited_paths)" || _fv_rc=$?
   if [ "$_fv_rc" -ne 0 ]; then
-    say WORKLIST finish-unverified-tree "" "the setup-sited path set could not be loaded out of preclassify.sh's \`setup_sited_paths()\` (exit ${_fv_rc}), so which changed files --finish cannot verify by bytes is UNKNOWN and the stamp is not advanced. Check that reconcile/setup-sites.md and preclassify.sh are present and readable, then re-run --finish."
+    if [ "$_fv_rc" -eq 127 ]; then _fv_why="reconcile/preclassify.sh beside this apply.sh predates \`setup_sited_paths()\` (version skew: a newer apply.sh next to an older preclassify.sh). Merge or update reconcile/preclassify.sh to the same release as apply.sh"
+    else _fv_why="Check that reconcile/setup-sites.md and preclassify.sh are present and readable"; fi
+    say WORKLIST finish-unverified-tree "" "the setup-sited path set could not be loaded out of preclassify.sh's \`setup_sited_paths()\` (exit ${_fv_rc}), so which changed files --finish cannot verify by bytes is UNKNOWN and the stamp is not advanced. ${_fv_why}, then re-run --finish."
     return 0
   fi
   [ -n "$_fv_sited" ] || say NOTE finish-unverified "reconcile/setup-sites.md" "the setup-sited path set came back empty, so no changed setup-sited path can be named here as unverified."
