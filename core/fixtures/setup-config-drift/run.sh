@@ -307,6 +307,8 @@ fi
 # exemption, and a declared config edit reported HARD at rc 0. The base blob here is calibrated past
 # the limit and the scan listing below it. Accepted: CORE-TEMPLATE-SUBSTITUTED (healthy) or the
 # detector's own `unregistered-drift: REFUSED` at a non-zero exit. /bin/bash: 3.2 stages every `<<<`.
+# On the tip the refusal is `ud_stage_blob`'s, at the scan loop's one staging of the base blob that
+# `exempt_ranges` now reads; the exemption itself no longer stages anything the limit can reach.
 FD="$WORK/forced"; mkdir -p "$FD"
 cp -R "$DIST" "$FD/dist"; mkdir -p "$FD/cons/.claude/team-roles"
 i=0; { cat "$BASECONTENT"; while [ "$i" -lt 400 ]; do printf 'padding prose line %03d that makes this core role file larger than the limit\n' "$i"; i=$((i+1)); done; } > "$FD/dist/core/$REL"
@@ -340,6 +342,42 @@ else
     ok "forced: a base blob that cannot be staged under ulimit -f $f_lim gives the healthy row or the named refusal (rc=$f_frc)"
   else
     bad "forced: a base blob that cannot be staged under ulimit -f $f_lim gave rc=$f_frc status '$(f_st "$FD/f.out")' — an unstaged base read as empty"
+  fi
+fi
+
+# --- THE DIFF HUNKS THAT CANNOT BE STAGED: HEALTHY OR REFUSED, NEVER DRIFT ------------------------
+# `is_unregistered` fed its hunk classifier from `<<<"$d"`. A here-string that could not be staged
+# fed the awk an EMPTY stream, which reads `unknown`, and `unknown` blocks as HARD at rc 0 -- a
+# declared config edit reported as unregistered drift. The world: the base blob is SMALL, and the
+# consumer's edit is a large insertion INSIDE `## Ownership`, so the diff is calibrated past the limit
+# while the blob, the listing and the rows fit under it; the only write that can fail is the hunks'.
+FH="$WORK/forced-hunks"; mkdir -p "$FH/cons/.claude/team-roles"
+awk '{ print } /^- `src\/` \(application source code\)$/ { for (i = 0; i < 300; i++) printf "- `zz%03d/` (a directory this project keeps, one config line of many)\n", i }' \
+  "$BASECONTENT" > "$FH/cons/.claude/$REL"
+h_blob="$(wc -c < "$BASECONTENT" | tr -d ' ')"
+h_diff="$(git -C "$DIST" show "$BASE:core/$REL" | diff - "$FH/cons/.claude/$REL" | wc -c | tr -d ' ')"
+h_ls="$(git -C "$DIST" ls-tree -r --name-only "$BASE" | wc -c | tr -d ' ')"
+h_lim=""; case "$f_blk" in ''|*[!0-9]*|0) ;; *) h_lim=$(( (h_diff / 2) / f_blk )) ;; esac
+h_cal=""
+if [ -n "$h_lim" ] && [ "$h_lim" -gt 0 ] && [ $(( h_lim * f_blk )) -gt "$h_blob" ] && [ $(( h_lim * f_blk )) -gt "$h_ls" ]; then
+  h_hs="$(/bin/bash -c 'trap "" XFSZ; ulimit -f "$1" || exit 97; wc -c <<<"$2"' _ "$h_lim" "$(printf "%0${h_diff}d" 0)" 2>/dev/null)"
+  case "$h_hs" in *[1-9]*) ;; *) h_cal=ok ;; esac
+fi
+if [ "$h_cal" != ok ]; then
+  bad "FIXTURE BROKEN — calibration: under ulimit -f ${h_lim:-?} (block ${f_blk:-?} B) a ${h_diff}-byte here-string did not fail, or the ${h_blob}-byte blob or ${h_ls}-byte listing does not fit; the hunks cell cannot discriminate"
+else
+  bash "$SCRIPT" "$DIST" "$BASE" "$FH/cons" > "$FH/u.out" 2>/dev/null; h_urc=$?
+  if [ "$h_urc" = 0 ] && [ "$(f_st "$FH/u.out")" = CORE-TEMPLATE-SUBSTITUTED ]; then
+    ok "unforced control: a ${h_diff}-byte diff inside ## Ownership reads CORE-TEMPLATE-SUBSTITUTED"
+  else
+    bad "FIXTURE BROKEN — hunks unforced control rc=$h_urc status '$(f_st "$FH/u.out")'; the forced cell has no healthy answer"
+  fi
+  /bin/bash -c 'trap "" XFSZ; ulimit -f "$1" || exit 97; shift; exec /bin/bash "$@"' _ "$h_lim" "$SCRIPT" "$DIST" "$BASE" "$FH/cons" > "$FH/f.out" 2> "$FH/f.err"; h_frc=$?
+  if { [ "$h_frc" = 0 ] && [ "$(f_st "$FH/f.out")" = CORE-TEMPLATE-SUBSTITUTED ]; } \
+     || { [ "$h_frc" -ne 0 ] && [ "$h_frc" -ne 97 ] && grep -q '^unregistered-drift: REFUSED' "$FH/f.err" && [ -z "$(f_st "$FH/f.out")" ]; }; then
+    ok "forced: diff hunks that cannot be staged under ulimit -f $h_lim give the healthy row or the named refusal (rc=$h_frc)"
+  else
+    bad "forced: diff hunks that cannot be staged under ulimit -f $h_lim gave rc=$h_frc status '$(f_st "$FH/f.out")' — an unstaged hunk stream read as drift"
   fi
 fi
 
