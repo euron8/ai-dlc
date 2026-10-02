@@ -27969,3 +27969,135 @@ The defect reproducer, kept verbatim and no longer this entry's receipt (it exit
 
 verify: manual -- closed by adjudication on the operator's batch-185 ruling, with no build; the reproducer above still exits 1 and that is the recorded state, not a pending fix.
 
+## BL-195 — Check 2's suppression-lifetime arm reads a verdict the CURRENT gate has not yet written, and all four candidate remedies are refuted by measurement
+
+**Operator decision, 2026-10-01: left open, receipt `manual`, no remedy rebuilt.** The reference
+consumer archived `PC-S308` as `ADOPTED UPSTREAM (v0.568.0)`; that annotation is not evidence the
+defect is fixed, because the stale read below still reproduces.
+
+**Provenance.** `PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER`, filed by the reference
+consumer 2026-09-06. **This entry is FILED AND DELIBERATELY NOT FIXED.** The defect is real and
+better evidenced than the filing claims; every remedy proposed for it — the filing's two, plus two
+derived here — was built or measured and refuted. It is recorded so the next session does not
+rebuild any of them.
+
+**The defect, verified against the consumer's own committed history.** Check 2 invokes
+`validate-suppression-lifetime.sh` (`core/skills/ai-dlc/steps/gate-validation.md:245`), which
+decides whether a suppression's named check is still failing by reading the newest recorded
+verdict in `gate-metrics.jsonl` (`core/scripts/validate-suppression-lifetime.sh:471`). That file
+is written ONLY by Check 12 (`gate-validation.md:736`), which runs after. So Check 2 necessarily
+reads the PREVIOUS gate's verdict, and a fix landing between two gates is invisible to it.
+
+The filing's cited case reproduces exactly: the FAIL row at `2026-09-05T22:58:00Z` carries sha
+`7729b544a…`, and `git merge-base --is-ancestor` puts that tree strictly BEFORE the reword fix at
+`33f925bcf` (exit 0; reverse direction exit 1 as control).
+
+**THE CONSUMER DIAGNOSED THIS ELEVEN DAYS BEFORE FILING IT, AND CHOSE TO SUPPRESS.**
+`docs/escalations/pending.md:3684`, 2026-08-26: *"Check 16 itself passed cleanly THIS gate on its
+own merits … but that PASS has not yet been recorded to `gate-log.md` (Check 12 runs after this
+adoption), so `validate-suppression-lifetime.sh` still reads story 2.1 gate-3's real 23-finding
+check-16 FAIL as the last recorded verdict and reactivates these two unrelated older entries."*
+That entry's own options list reads *"(a) fresh SUPPRESSED for check 16, this gate only [chosen];
+(b) investigate/fix the Check 12-before-Check 2 ordering instead"*. A sibling entry at the S305
+sprint-review gate does the same on check 22. **The recurrence is the choice, not the mechanism.**
+
+**Recurrence: 3 distinct gate events across 2 sprints (S305 ×2, S308 ×1),** derived by scanning
+both escalation corpora for entries naming a Check-2 suppression-lifetime FAIL together with a
+last-recorded-verdict cause; 4 entries resolve to 3 gates. Impossible-phrase control returns
+nothing. **An earlier reading of this batch narrowed it to 1 and was wrong** — that reading rested
+on an ancestry test which cannot answer the question, because it asks whether the FAIL row was
+written before the fix, which is necessarily true of every entry: the row IS the record of the
+failing gate. The staleness is in the READ, not the write.
+
+**THE FINDING THAT OUTRANKS THE FILING'S OWN CLAIM.** The metrics file is not merely stale at
+unlucky moments; it is the LOSSY artifact in principle. Check-2 verdicts, full population:
+
+| source | PASS | FAIL |
+|---|---|---|
+| per-gate `*.verdict.json` | 158 | **38** |
+| `gate-metrics.jsonl` | 93 | **3** |
+
+**A 12.7× undercount**, and the cause is structural: a gate that FAILs Check 2 halts before
+reaching Check 12, so the row recording that failure is never written. Control — check 16, which
+does not halt the gate, agrees far better (18 verdict FAILs against 5 metrics FAILs). The arm
+consults the one artifact that structurally cannot record the failures that matter most.
+
+**THE FOUR REFUTED REMEDIES. Do not rebuild these.**
+
+**(a) Re-sequence Check 2's read to after Check 12's write — A CYCLE.** Check 12's own instruction
+(`gate-validation.md:750`) is to emit a row for *every other check the manifest loaded*, which
+includes Check 2. Measured: 12 rows carry `"check":"2"`, against an impossible-id control of 0.
+Check 12 cannot write until Check 2 has produced a verdict to record, so "read after the writer
+writes" is self-referential.
+
+**(b) Re-run the underlying check live — FAILS OPEN ON 22 OF 57 CHECKS.** `enforcement-map.yaml`
+gives 22 ids `enforcer: []` against 35 with one (57 total, partitioning exactly; impossible-key
+control 0): `1 1c 3 3a 4 6 7 8 9 10 11 11a 12 13 14 15 19 20 21 27 29 H1`. **`[core] 11` is
+suppressed twice in the live corpus and has no enforcer to run.** Treating "cannot re-run" as PASS
+acquits every suppression on those 22 ids; treating it as FAIL fabricates blocks on them. The 35
+that do have enforcers resolve to distinct CLI contracts with no generic invocation, so (b) would
+additionally need a hand-written per-check invocation table.
+
+**(c) Refuse when the recorded row's `sha` is not current — DISARMS ON A SQUASH-MERGE CONSUMER.**
+Over the live metrics: 11 distinct shas, **0 ancestors of HEAD**, 10 orphans, 1 unresolvable;
+control `merge-base --is-ancestor HEAD HEAD` exit 0. The consumer squash-merges, so the commit a
+gate records is orphaned by the merge that lands the work. This shape reports NOT-APPLICABLE for
+every row on a healthy tree — a total disarm that reads as green. `tool-hazards.md` states the
+general rule: never test whether work landed by ancestry in a squash-merge repo.
+
+**(d) Read the CURRENT gate's `*.verdict.json` instead — NO JOIN EXISTS.** 198 verdict files carry
+the right answer (the file the S305 entry names records `check_id 16 → PASS` at the exact gate
+where the metrics said FAIL), and they cover every suppressed id including the ones (b) cannot
+reach — `2` (196 files), `16` (195), `11` (69), `22` (69), `24` (1), `30` (1), impossible-id
+control 0. But **96 distinct gate events in the metrics against 197 distinct verdict
+`generated_at` values intersect at 9**, control (ts ∩ ts) = 96. `generated_at` is the
+adjudicator's write time, not the gate's `ts`. With no key, the fix either wedges 87 of 96 gates
+or falls back to the stale row and reintroduces the defect. `gate_nonce` identifies a file
+uniquely (197 of 198) but is not available to the validator, and "newest verdict.json" picks the
+wrong file within two hours at the S305 gate — the original defect one file over. The directory
+is also absent on a fresh consumer.
+
+**What a fix would actually require**, stated so the next attempt starts from the real
+constraint rather than from the filing's framing: a gate-scoped identifier that both the verdict
+artifact and the suppression validator can see, passed IN by the caller rather than discovered.
+That is a change to Check 2's invocation line in a resident skill file plus a new flag, and it is
+fail-open the moment one caller omits it. **Nothing here is a small fix, and the smallest honest
+change is documentation** — Check 2's body stating that its verdict source is the PREVIOUS gate's
+record, and the arm reporting the `ts` of the row it read so a false positive is legible when it
+fires.
+
+**The consumer-owned half is not upstream work.** Why the 2026-07-22 failure happened at all, and
+whether their sprints should keep suppressing rather than escalating, is that consumer's own
+carry-over.
+
+**The smallest honest change shipped in v0.666.0; the defect stands.** The expiry FAIL now names
+the `ts` of the row `latest_verdict` selected and the metrics file, and says that this is the
+PREVIOUS gate's recorded verdict because Check 12 writes this gate's row after Check 2 runs.
+`gate-validation.md` Check 2 and `escalations.md` state the same thing. Fixture arms 18a-18d in
+`core/fixtures/suppression-lifetime/run.sh` pin the exact ts: the newest core row, not a newer
+extension row, and not the last row read in file order. Mutants K (ts dropped) and L (last-read
+ts) are killed. The stale read itself is unchanged, so this entry stays open and its receipt
+stays `manual`: an `sh` receipt over the mitigation exits 0 and would score the entry
+CLOSE-CANDIDATE for a defect that still reproduces. The fixture carries the mitigation.
+
+**CLOSED BY ADJUDICATION, NO BUILD, on the operator's batch-185 ruling.** The stale read is
+unchanged: `validate-suppression-lifetime.sh` still reads `gate-metrics.jsonl`, and Check 12 writes
+that file after Check 2. It is closed because of what was measured against the reference consumer,
+read only, from its per-gate `*.verdict.json` files (`verdicts[].check_id`):
+- 250 Check-2 verdicts, 41 of them FAIL. 6 name the suppression-lifetime arm, and the newest of those
+  is dated 2026-09-07.
+- Since then, 50 Check-2 verdicts have been recorded with 2 FAILs. Both came from the
+  escalation-status vocabulary sub-check, and neither came from the stale read.
+- The consumer is installed at 0.704.0, so it carries the v0.666.0 mitigation, which names the `ts`
+  of the row it read.
+- All four remedies above stay refuted. The only buildable fix needs a gate-scoped identifier that
+  every caller passes in, and it fails open as soon as one caller omits it.
+
+Re-open from this record if a suppression-lifetime FAIL caused by the stale read appears in the
+consumer's verdicts again.
+
+**LANDED (v0.666.0, verified d41d47d0).** The mitigation that names the stale row's `ts` landed
+there, and the stale read itself was adjudicated not worth building against.
+
+verify: manual
+
