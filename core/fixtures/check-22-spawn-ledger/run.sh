@@ -976,7 +976,7 @@ jq -nc '{v:1,sprint:900,name:"cp-shard-ok",role:"adversary",model_bound:"opus",m
 # shard row, so CHECKED is 0 and the exit-3 branch is reachable. S3 must still exit 1 here.
 jq -nc '{v:1,sprint:900,name:"cp-shard-oos",role:"adversary",model_bound:"opus",model_requested:"opus",
   role_contract_cited:false,role_file_readable:true,shard:"invalid-exception",
-  shard_raw:"none (made-up)"}'                                   >  "$WORK/cp-shard-oos.jsonl"
+  shard_raw:"none (made-up)",tool_use_id:"toolu_OOS7"}'          >  "$WORK/cp-shard-oos.jsonl"
 
 # The sentence every FAIL route owes its reader. Spelled ONCE, here, and read by the class
 # verdict below -- a per-arm copy is a second chance to drift.
@@ -1235,7 +1235,7 @@ fi
 # m5 reverts the step file's section header to the tier-only wording -- the exact state the
 # fix replaced. It is C2's mutant and must move C2 alone; it edits no script, so C1's five
 # cells cannot move and are not re-scored here.
-awk '{ sub(/\*\*Dispositioning a recorded Rule 19 violation that already happened\.\*\*/, "**Dispositioning a Rule 19(a) violation that already happened.**"); print }' \
+awk '{ sub(/\*\*Dispositioning a recorded Check 22 violation that already happened\.\*\*/, "**Dispositioning a Rule 19(a) violation that already happened.**"); print }' \
   "$GV" > "$WORK/cp-m5.md"
 if cmp -s "$GV" "$WORK/cp-m5.md"; then
   bad "FIXTURE BROKEN: mutation m5 matched nothing -- the disposition section's header was renamed, so this mutant proves nothing"
@@ -1262,14 +1262,15 @@ s3ok() { # script -> OK | rc=N...
 s3oos() { # script -> FAIL1 | rc=N...
   local o rc
   o="$(bash "$1" --ledger "$WORK/cp-shard-oos.jsonl" --sprint 900 --settings "$WORK/norolepins.json" 2>&1)"; rc=$?
-  if [ "$rc" -eq 1 ] && grep -qF '[cp-shard-oos] role '"'"'adversary'"'"' declared a serial exception' <<<"$o" \
-     && grep -qF 'shard: none (made-up)' <<<"$o"; then printf 'FAIL1'; else printf 'rc=%s' "$rc"; fi
+  if [ "$rc" -eq 1 ] && grep -qF '[cp-shard-oos] (tool_use_id toolu_OOS7) role '"'"'adversary'"'"' declared a serial exception' <<<"$o" \
+     && grep -qF 'shard: none (made-up)' <<<"$o" \
+     && grep -qF "'shard: 1/1 <key>'" <<<"$o"; then printf 'FAIL1'; else printf 'rc=%s' "$rc"; fi
 }
 [ "$(s3ok "$VSL")" = OK ] \
   && ok "S3 near-miss: a shardable row recording the VALID none (4) exits 0 with the row counted as carrying a shard line and no S3 FAIL" \
   || bad "S3 near-miss: a valid none (4) row scored [$(s3ok "$VSL")], expected OK"
 [ "$(s3oos "$VSL")" = FAIL1 ] \
-  && ok "S3 exit-3 world: with no row in Rule 19 scope (CHECKED=0), an invalid-exception row still exits 1 and the FAIL names the row and prints its shard_raw" \
+  && ok "S3 exit-3 world: with no row in Rule 19 scope (CHECKED=0), an invalid-exception row still exits 1, and the FAIL names the row WITH its tool_use_id, prints its shard_raw, and names the 'shard: 1/1 <key>' form" \
   || bad "S3 exit-3 world: scored [$(s3oos "$VSL")], expected FAIL1 -- S3 is being decided under the exit-3 branch"
 
 # S3 MUTANTS. Anchored OUTSIDE shard_scan on purpose: the self-probe calls shard_scan, so a

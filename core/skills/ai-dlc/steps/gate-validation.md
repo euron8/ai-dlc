@@ -1779,9 +1779,10 @@ or how an escalated role's values compare to its base role's — per Rule 19(a)
 those are operator config, and an equal or lower escalated value is not a
 finding.
 
-**Dispositioning a recorded Rule 19 violation that already happened.** A spawn
+**Dispositioning a recorded Check 22 violation that already happened.** A spawn
 that ran on the wrong tier, or with no contract cited, or against an unreadable
-role file, or at a level nothing bound is a fact about the past. No later action
+role file, or at a level nothing bound, or under an invented serial exception is
+a fact about the past. No later action
 changes it, so without a clearing path this check fails forever on a sprint where
 it fired once — the gate becomes unpassable by any consumer action, which is a
 defect in the check and not a finding about the sprint. (Exactly that happened: a
@@ -1803,10 +1804,10 @@ route that fails forever, which is the defect this section exists to prevent.
 
 **The effort route fires only when `--probe` is passed**, which the invocation
 published above does not pass, so it is probe-only today and a gate running that
-command reaches the other three routes alone.
+command reaches the other four routes alone.
 
 A recorded tier mismatch is CLEARED when **all four** hold, and so is a recorded
-violation of any of the other three:
+violation of any of the other four:
 
 1. An escalation entry for the CURRENT sprint in `docs/escalations/pending.md`
    NAMES the offending spawn — its dispatch `name` / agent id appears verbatim
@@ -1846,7 +1847,8 @@ violation of any of the other three:
    which is the forgeable-evidence shape Check 26 exists to reject.
 
 **`DECIDED_AUTONOMOUSLY` does NOT clear this**, and that exclusion is the point:
-it is the lead dispositioning its own Rule 19 violation. A self-report is the
+it is the lead dispositioning its own recorded violation, whether under Rule 19
+or Rule 28. A self-report is the
 right conduct and is not a clearing path. Missing any of the four arms → the
 violation still FAILS, whichever class it belongs to.
 

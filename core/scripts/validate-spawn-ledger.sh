@@ -913,8 +913,11 @@ matches_pin() {
 # them -- no in-flight sprint wedges. The narrowing that made the new value safe is in the
 # guard: only the FIRST parenthesised group is the value, so `none (serial-document). Files
 # you may edit...`, which a whole-line-anchored parse rejected, records `none (4)`. Measured
-# against the reference consumer briefs under this parse: the invalid rows were all genuinely
-# outside the four exceptions.
+# against the reference consumer briefs under this parse: the invalid rows were outside the
+# four exceptions as WRITTEN, but not all outside them in substance -- one architect brief
+# read `none (ordered authoring chain; ...)`, which is exception 3 in prose. That row is not
+# an S3 finding (architect is not shardable), and on a shardable role the same spelling FAILS
+# by design: the value is the short name or number, and the remedy is to write it.
 #
 # PRE-RELEASE ROWS ARE PENDING, KEYED ON THE STAMPED GUARD ITSELF. Only a guard at or after
 # the release that introduced the field writes the `shard` KEY (always, null or not), so a
@@ -933,7 +936,7 @@ NL='
 '
 
 # shard_scan <ledger> <sprint> <" role role ... "> <pass-dir> -> machine lines on stdout:
-#   X <name> <role> <shard_raw>   S3 offender (an invented serial exception; never an S line)
+#   X <name> <role> <shard_raw> <tool_use_id>   S3 offender (an invented exception; never an S line)
 #   U <name> <role>   S1 offender         P <name>   PENDING (pre-field row)
 #   S <name> <value>  shard recorded      N <pass> <id>   S2 offender     J <id>   joined
 #   E <pass>          a pass file listed and not openable (awk getline -1), never read as clean
@@ -947,7 +950,8 @@ shard_scan() {
                elif (.shard // "") == "" then "__NULL__"
                else (.shard | tostring) end)
             + "\t" + ((.shard_raw // "") | tostring | gsub("[\t\n]"; " ")
-                      | if . == "" then "__NONE__" else . end) ),
+                      | if . == "" then "__NONE__" else . end)
+            + "\t" + ((.tool_use_id // "") | tostring | if . == "" then "__NONE__" else . end) ),
         ( $all[] | select((.v | type) == "number") | select((.tool_use_id // "") != "")
           | "I\t" + (.tool_use_id | tostring) )
     ' "$1" 2>/dev/null)" || return 2
@@ -964,7 +968,7 @@ shard_scan() {
       if (index(roles, " " $3 " ") == 0) next
       if ($4 == "__NOKEY__") print "P\t" $2
       else if ($4 == "__NULL__") print "U\t" $2 "\t" $3
-      else if ($4 == "invalid-exception") print "X\t" $2 "\t" $3 "\t" $5
+      else if ($4 == "invalid-exception") print "X\t" $2 "\t" $3 "\t" $5 "\t" $6
       else print "S\t" $2 "\t" $4
     }
     END {
@@ -1021,7 +1025,7 @@ shard_self_probe() {
   sp_want "U${TAB}seat${TAB}tea" "a party seat with shard:null to WARN"
   sp_want "P${TAB}adv-c" "a row with no shard KEY to read as PENDING"
   sp_want "S${TAB}adv-b${TAB}1/2 01" "a recorded shard line to be read"
-  sp_want "X${TAB}adv-inv${TAB}adversary${TAB}none (made up)" "an invalid-exception row to FAIL under S3 with its raw text"
+  sp_want "X${TAB}adv-inv${TAB}adversary${TAB}none (made up)${TAB}toolu_I" "an invalid-exception row to FAIL under S3 with its raw text and tool_use_id"
   sp_want "S${TAB}adv-ok3${TAB}none (3)" "a valid serial exception to read as a carried shard line"
   sp_not "S${TAB}adv-inv" "an invalid-exception row was counted as a carried shard line"
   sp_not "X${TAB}adv-ok3" "a valid serial exception was FAILED under S3"
@@ -1483,15 +1487,19 @@ if [ "$SH_RC" -ne 0 ]; then
   echo "      dispatch, and arm S3 can fail, so this is exit 2 and not a pass." >&2
   exit 2
 else
-  while IFS="$(printf '\t')" read -r sh_k sh_a sh_b sh_c; do
+  while IFS="$(printf '\t')" read -r sh_k sh_a sh_b sh_c sh_d; do
     case "$sh_k" in
+      # The tool_use_id prints BESIDE the name: clearing arm 1 keys on the name, and names
+      # repeat across a sprint, so the id is what tells two same-named rows apart.
       X) SHARD_VIOL=$((SHARD_VIOL + 1))
          [ "$sh_c" = "__NONE__" ] && sh_c="<no shard_raw recorded>"
-         echo "FAIL: [${sh_a}] role '${sh_b}' declared a serial exception that is not one of Rule 28's four:" >&2
+         [ -n "${sh_d:-}" ] && [ "$sh_d" != "__NONE__" ] || sh_d="<no tool_use_id recorded>"
+         echo "FAIL: [${sh_a}] (tool_use_id ${sh_d}) role '${sh_b}' declared a serial exception that is not one of Rule 28's four:" >&2
          echo "      shard: ${sh_c}" >&2
          echo "      'shard: none (<1-4>)' names data-dependency, pass-repair-pass, authoring-chain or" >&2
          echo "      serial-document; any other reason is an invented exception (grammar: ai-dlc-dispatch-guard.sh," >&2
-         echo "      THE SHARD LINE). Re-dispatch sharded, or name the exception and verify the output." >&2
+         echo "      THE SHARD LINE). A single-voice or unsharded dispatch is 'shard: 1/1 <key>', which the" >&2
+         echo "      grammar accepts (N may be 1). Re-dispatch sharded, or name the exception and verify the output." >&2
          echo "      The spawn that already ran is a fact about the past: clear it only through" >&2
          echo "      Check 22's four-arm disposition, never by re-running the gate." >&2 ;;
       U) SH_WARN=$((SH_WARN + 1))
