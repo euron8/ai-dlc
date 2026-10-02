@@ -19,6 +19,24 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.711.0] - 2026-10-02
+
+Batch 186's first release: `emit-report.sh` in the update skill. Bootstrapping, so it ships alone. A consumer renders
+a pull's report with its installed copy, so the pull that delivers this still carries the false row once. It
+discharges one consumer candidate. `BL-431` is filed for it and closes in the batch's close commit.
+
+### PC-S316-EMIT-REPORT-STAMP-BASE-MISMATCH-FALSE-ON-ABBREVIATED-SHA
+
+- `BL-431`: the reconcile report's `_stamp_` row compared the stamp's `commit:` field to BASE as strings. Both stamp
+  writers (`apply.sh` and `install.sh`) record `rev-parse --short`, so every consumer report carried a false "NOT the
+  base above" row. The row now renders only when the stamp does not resolve as a commit in the distribution, or
+  resolves to a different commit than BASE. Both sides are peeled with `^{commit}`, so a short sha, an uppercase short
+  sha, a full sha against a short BASE and an annotated-tag BASE all read as the same base. A stamp that does not
+  resolve (`<sha>-dirty`, `unknown`) still renders the row. A docs-only commit with the same `core/` tree as BASE is a
+  different base and renders it.
+- `core/fixtures/reconcile-emit-report` gains an SB battery: a precondition arm asserting each case discriminates,
+  eight render cells, an unmutated-copy control, and eight mutants, each killed by a named cell.
+
 ## [0.710.0] - 2026-10-02
 
 Batch 185's second release: `ledger-reverify.sh` in the update skill. Bootstrapping, so it ships as its own file set. A
