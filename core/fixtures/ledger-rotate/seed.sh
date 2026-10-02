@@ -139,7 +139,13 @@ BASE="$(git -C "$WORK/dist" rev-parse HEAD)"
 # naming set that changes nothing a consumer installs as `NAMED-UPSTREAM-DOCS-ONLY`, and an empty
 # commit changes nothing, so `--allow-empty` naming commits would turn every attribution this
 # seed asserts into that other kind. A file of its own per commit keeps `thing.sh`, which every
-# receipt here reads, byte-identical across both.
+# receipt in THIS ledger reads, byte-identical across both.
+#
+# AND A RECEIPT WHOSE ROW MUST READ PLAIN NAMED-UPSTREAM NAMES ITS NAMING COMMIT'S OWN FILE. A naming
+# set that reaches code but changes none of the entry's receipt paths reads
+# NAMED-UPSTREAM-OFF-SUBJECT, so run.sh's PC-S901-ALPHA and PC-S910-ALPHA ledgers anchor on
+# `s900-landed.sh` / `s910-landed.sh`, not on `thing.sh`. Pointing them back at `thing.sh` turns
+# both prefix-counter mutants red for a reason unrelated to the counter.
 printf 's900\n' > core/scripts/s900-landed.sh
 git -C "$WORK/dist" -c user.email=f@f -c user.name=f -c commit.gpgsign=false add -A
 git -C "$WORK/dist" -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -q \

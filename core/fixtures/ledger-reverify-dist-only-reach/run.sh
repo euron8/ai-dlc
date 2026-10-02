@@ -511,10 +511,16 @@ awk '
   END { exit (n1 == 1 && n2 == 1 && n3 == 1) ? 0 : 3 }' "$RV" > "$MB/ledger-reverify.sh"
 mb_rc=$?
 # The residue check reads CODE lines only: the engine's comments name the staged file too.
-mb_left="$(grep -v '^[[:blank:]]*#' "$MB/ledger-reverify.sh" | grep -cF '"$LR_STAGE/entries"')" || mb_left=0
+# ONE LEGITIMATE SECOND READER IS EXCLUDED, BY NAME AND BY COUNT: the subject-set staging awk reads
+# the staged entries into `$LR_STAGE/subjects`. It is not a layer of the here-string conversion --
+# with the staging write gone it reads a missing file, its own `else` arm keeps every row at its
+# prior kind, and the run continues. The exclusion keys on the line that writes `subjects`, and
+# the unmutated engine must carry EXACTLY ONE such line, so the exclusion cannot widen silently.
+mb_subj="$(grep -v '^[[:blank:]]*#' "$RV" | grep -F '"$LR_STAGE/entries"' | grep -cF '"$LR_STAGE/subjects"')" || mb_subj=0
+mb_left="$(grep -v '^[[:blank:]]*#' "$MB/ledger-reverify.sh" | grep -F '"$LR_STAGE/entries"' | grep -cvF '"$LR_STAGE/subjects"')" || mb_left=0
 mb_here="$(grep -c '^done <<< "\$ENTRIES"$' "$MB/ledger-reverify.sh")" || mb_here=0
-if [ "$mb_rc" -ne 0 ] || cmp -s "$RV" "$MB/ledger-reverify.sh" || [ "$mb_left" -ne 0 ] || [ "$mb_here" -ne 1 ]; then
-  bad "B mutant M-B1 DID NOT APPLY in full (awk rc $mb_rc, staged-file code lines left $mb_left, here-string lines $mb_here), so the refusal arm is unproven"
+if [ "$mb_rc" -ne 0 ] || cmp -s "$RV" "$MB/ledger-reverify.sh" || [ "$mb_left" -ne 0 ] || [ "$mb_here" -ne 1 ] || [ "$mb_subj" -ne 1 ]; then
+  bad "B mutant M-B1 DID NOT APPLY in full (awk rc $mb_rc, staged-file code lines left $mb_left, here-string lines $mb_here, subject-staging readers in the engine $mb_subj want 1), so the refusal arm is unproven"
 else
   rc="$(run_b "$MB/ledger-reverify.sh" "")"; n="$(hand_rows)"
   if [ "$rc" != 0 ] || [ "$n" != 3 ]; then

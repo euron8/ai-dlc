@@ -813,7 +813,8 @@ templates/"*) printf 'code' ;;
 #   old      no decision -- the entry has no path receipt, a receipt path is unresolvable, or a
 #            listing or staging step failed. The caller keeps the kind it emitted before this
 #            predicate existed.
-# NS_PATHS is the resolved subject set, space-joined, for the row text.
+# NS_PATHS is the subject set as the row SHOWS it, joined by "; ": a path present at theirs as
+# written, a basename-resolved path as "<written> resolved by basename to <dist path>".
 #
 # THE THIRD CLASS `named_reach` CANNOT SEE. A release that changes core/ and names an id it did not
 # discharge (it cross-references the entry, or records that an archived entry discharged it) reads
@@ -851,7 +852,7 @@ templates/"*) printf 'code' ;;
 # subject). Every listing is written to a staged file and its status read; ANY failure answers `old`
 # -- towards NAMED-UPSTREAM, never towards the new kind.
 named_subject() {
-  local _label="$1" _shas _raw _p _hp _m _nm _resolved="" _c _par _prev _st
+  local _label="$1" _shas _raw _p _hp _m _nm _resolved="" _shown="" _d _c _par _prev _st
   NS_STATE=old; NS_PATHS=""
   [ "${LR_SUBJ_OK:-0}" = 1 ] || return 0
   [ -n "$2" ] || return 0
@@ -864,14 +865,19 @@ named_subject() {
     _p="${_raw#?}"
     case "$_p" in ''|*\\*) return 0 ;; esac
     _hp=0; theirs_has_path "$_p" || _hp=$?
+    # `_d` is what the row SHOWS for this path. A basename-resolved path is shown as BOTH the path
+    # the receipt wrote and the distribution path it resolved to: the operator reads the receipt's
+    # spelling in the ledger and must open the resolved one at theirs, and naming only one of them
+    # leaves the join between the two for the operator to redo.
     if [ "$_hp" -eq 0 ]; then
-      :
+      _d="$_p"
     elif [ "$_hp" -eq 125 ]; then
       return 0
     else
       _m="$(theirs_basename_matches "${_p##*/}")" || return 0
       _nm="$(printf '%s' "$_m" | grep -c . )" || _nm=0
       [ "$_nm" -eq 1 ] || return 0
+      _d="$_p resolved by basename to $_m"
       _p="$_m"
     fi
     case "
@@ -880,9 +886,15 @@ $_resolved
 $_p
 "*) : ;; *) _resolved="${_resolved:+$_resolved
 }$_p" ;; esac
+    case "
+$_shown
+" in *"
+$_d
+"*) : ;; *) _shown="${_shown:+$_shown
+}$_d" ;; esac
   done < "$LR_STAGE/ns-raw"
   [ -n "$_resolved" ] || return 0
-  NS_PATHS="$(printf '%s\n' "$_resolved" | tr '\n' ' ' | sed 's/ $//')"
+  NS_PATHS="$(printf '%s\n' "$_shown" | awk 'NR > 1 { printf "; " } { printf "%s", $0 }')"
   _shas="$(printf '%s' "$2" | tr ',' '\n')"
   printf '%s\n' "$_shas" > "$LR_STAGE/ns-shas" 2>/dev/null || return 0
   NS_STATE=off
@@ -2270,7 +2282,7 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       # only for a resolved, non-empty subject set -- see `named_subject`. The row keeps every sha.
       # It is not "not absorbed": a fix can land on a path the receipt does not name, and the id
       # may have been dispositioned by an EARLIER release, the naming here being a later mention.
-      emit NAMED-UPSTREAM-OFF-SUBJECT "$label" "upstream's own history NAMES this entry's id ${na_where}, and those commits change paths a consumer installs -- but NONE of them changes this entry's own receipt path(s): ${NS_PATHS} (a naming commit that cuts a release is judged over its whole release span, back to the previous VERSION change).${na_note} A release that cross-references an entry, or records that some other route discharged it, matches the message search the same way a fix does, so this row is NOT evidence of an absorption -- and it is not evidence against one either: the id may already have been dispositioned by an earlier release and this naming be a later mention, or the fix may have landed on a path the receipt does not name. It is NOT a close on its own. Read the commit(s), then read the entry's subject (${NS_PATHS}) at theirs. Annotate only what that reading establishes, with the release that contains the change, and otherwise leave the entry open."
+      emit NAMED-UPSTREAM-OFF-SUBJECT "$label" "upstream's own history NAMES this entry's id ${na_where}, and those commits change a path a consumer installs under core/ or templates/, or cut a release (change VERSION) -- but NONE of them changes this entry's own receipt path(s): ${NS_PATHS} (a naming commit that cuts a release is judged over its whole release span, back to the previous VERSION change).${na_note} A release that cross-references an entry, or records that some other route discharged it, matches the message search the same way a fix does, so this row is NOT evidence of an absorption -- and it is not evidence against one either: the id may already have been dispositioned by an earlier release and this naming be a later mention, or the fix may have landed on a path the receipt does not name. It is NOT a close on its own. Read the commit(s), then read the entry's subject (${NS_PATHS}) at theirs. Annotate only what that reading establishes, with the release that contains the change, and otherwise leave the entry open."
     elif [ "$ord" = "0/0" ]; then
       # RECEIPT-LESS: there is no receipt to be blind to it and none to re-anchor, so the receipt
       # clauses of the sibling detail would be false here. The close is the annotation alone.
