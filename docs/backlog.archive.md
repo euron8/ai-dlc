@@ -27727,3 +27727,68 @@ whose seeded `artifact-path-grammar.md` is that path.
 **LANDED (v0.708.0, verified b8aa77b7).** Receipt exits 0 on `origin/main`; the release commit names the candidate.
 
 verify: sh c="$(mktemp -d)" || exit 9; mkdir -p "$c/.claude" "$c/tests/fixtures/self-update-gate" "$c/tests/fixtures/document-partition" || exit 9; git show 4fe79281:core/fixtures/self-update-gate/run.sh > "$c/tests/fixtures/self-update-gate/run.sh" || exit 9; { git show 4fe79281:core/fixtures/document-partition/run.sh; echo '# local'; } > "$c/tests/fixtures/document-partition/run.sh" || exit 9; printf 'version: 0.692.0\ncommit: 08655178\nskill_version: 0.700.0\nskill_commit: 4fe79281\n' > "$c/.claude/.ai-dlc-version" || exit 9; out="$(bash core/skills/ai-dlc-update/reconcile/preclassify.sh . 08655178 abe3afb7 "$c" 2>/dev/null)" || exit 9; T="$(printf '\t')"; [ "$(printf '%s\n' "$out" | grep -c "^M${T}core/fixtures/document-partition/run.sh${T}.*${T}BOTH-CHANGED->CLASSIFY\$")" = 1 ] || exit 1; [ "$(printf '%s\n' "$out" | grep -c "^M${T}core/fixtures/self-update-gate/run.sh${T}.*${T}UPSTREAM-ONLY\$")" = 1 ]
+## BL-007 — the audit-anchor chain is a 1-deep link, so an old gap is permanently invisible
+
+`--prior-sprint-sha` computes `prior = current - 1` and exact-matches it
+(`core/scripts/validate-audit-anchors.sh`). There is no contiguity assertion anywhere in the
+anchor path — control: monotonicity language exists elsewhere in the corpus
+(`core/scripts/validate-spec-join.sh` "non-monotonic; ids must ascend and never renumber"), so
+the grep that found none in this path was working.
+
+Consequence: a gap at sprint N−1 is fatal, and a gap at N−2 or older is undetectable. Two
+sprints after a hole nothing revisits it, and `retro.md` Step 5b prunes the live file to the 3
+most recent entries into an archive with, in its own words, "no rendered schema region, no
+validator, no budget".
+
+Scoped OUT of the v0.372.0 close-record work on the operator's decision: that release makes a
+non-retro close RECORDABLE, which is what the consumer filed. Detecting historical holes is a
+different check and would fire on every consumer whose chain already has one, so it needs a
+PENDING/SKIP posture for pre-migration state before it could ship.
+
+The receipt is BEHAVIOURAL and carries its own control. It builds a chain with sprints 10 and
+12 and asks for sprint 13's prior: the resolver answers 12 happily and never sees that 11 is
+missing, so a zero exit there IS the defect. Asking for 12's prior on the same file exits 1,
+which is the control that the resolver does fire on an N−1 absence — the two together are what
+distinguish "no contiguity check" from "no check ran". An anchor on the `current - 1` source
+line would have closed itself on a reformat.
+
+**The receipt was rewritten at v0.666.0, because it demanded the posture this entry forbids.** It closed
+on a NON-ZERO exit for `{10,12} -> 13`, and both callers read non-zero as "the anchor did not resolve":
+Check 18 fails closed and Check 5 SKIPs. So the only fix it could accept was the gate-wedging one. The
+fix reports the hole as a `PENDING — contiguity` line on stderr and leaves exit 0 and the sha on
+stdout unchanged. The receipt now requires that line naming 11 with exit 0 and the sha on stdout. The
+near-miss `{10,12,11} -> 13`, out of order with no hole, must carry no such line, and `12`'s prior
+exiting 1 is kept as the control that the resolver still fires on an N-1 absence (exit 9 if either
+control moves). Scored: exit 1 on the base resolver, exit 0 at the fix, exit 1 on a copy of the fix
+with the report disabled. The scan reads the sibling `-archive.md`'s highest sprint so that a hole at
+the live/archive seam is caught. Holes inside the archive are not scanned. The
+`core/fixtures/check5-anchor-base` contiguity battery carries three mutants, one per property.
+
+**Operator decision, 2026-10-01: the archive interior is not scanned.** The open half below stays
+unbuilt and the entry stays live: the receipt still exits 1 and STILL-LIVE is the true reading.
+The reference consumer's archive carries 13 interior holes that nothing reports.
+
+**CLOSED ON THE OPERATOR'S RULING, batch 185: the built half is the whole scope.** Landed in
+5634d7a0: a hole below the prior sprint is reported while it sits in the live file or at the
+live/archive seam. Not built, by that ruling: once retro Step 5b prunes a hole past the seam into
+the archive INTERIOR, nothing reports it. That is a narrower window than the heading claims, and it is
+accepted: the archive is contracted as "no validator, no budget". Re-measured at the close against the
+reference consumer (read only): live 313-315 is contiguous, and the archive holds 133 entries over
+167-312 with 13 interior holes, 189, 204, 205, 239-246, 300 and 301. Those are the same 13 that the
+2026-10-01 decision recorded. Consumer commits name each sampled hole sprint (impossible-sprint
+control: 0). Every hole predates the seam scan: 300 and 301 were already holes when sprint 302's anchor
+was written on 2026-08-13, and the scan shipped at 0.665.0 on 2026-09-29.
+
+The receipt's archive-interior clause was a conjunction that the ruling made permanently unsatisfiable,
+so it read STILL-LIVE forever. It is re-keyed to the seam. Live `{13,14,15}` sits over archive
+`{9,10,11}` and the receipt asks for 16, so 12 must be named. Scored under `set -uo pipefail`: tip 0,
+the pre-fix resolver (`5634d7a0^`) 1, and a copy with the seam arm disabled 1. The near-miss and
+N-1 controls are unchanged.
+
+**LANDED (v0.665.0, verified 5634d7a0).** The seam and live-file halves were built there. The archive
+interior was ruled out of scope on 2026-10-01 and confirmed at batch 185.
+
+verify: sh t=$(mktemp -d) || exit 9; f="$t/a.md"; n="$t/n.md"; H=$(git rev-parse HEAD); printf -- '- sprint: 10\n  sha: %s\n- sprint: 12\n  sha: %s\n' "$H" "$H" > "$f"; printf -- '- sprint: 10\n  sha: %s\n- sprint: 12\n  sha: %s\n- sprint: 11\n  sha: %s\n' "$H" "$H" "$H" > "$n"; V=core/scripts/validate-audit-anchors.sh; bash "$V" --prior-sprint-sha "$f" 12 >/dev/null 2>&1; c=$?; o=$(bash "$V" --prior-sprint-sha "$f" 13 2>"$t/e"); r=$?; bash "$V" --prior-sprint-sha "$n" 13 >/dev/null 2>"$t/ne"; nr=$?; e=$(cat "$t/e"); ne=$(cat "$t/ne"); rm -rf "$t"; [ "$c" -eq 1 ] && [ "$nr" -eq 0 ] || exit 9; grep -q 'contiguity' <<<"$ne" && exit 1; [ "$r" -eq 0 ] && [ "$o" = "$H" ] && grep -q 'PENDING — contiguity: no entry for 1 sprint(s) between 10 and prior 12: 11\.' <<<"$e" || exit 1; u=$(mktemp -d) || exit 9; printf -- '- sprint: 13\n  sha: %s\n- sprint: 14\n  sha: %s\n- sprint: 15\n  sha: %s\n' "$H" "$H" "$H" > "$u/a.md"; printf -- '- sprint: 9\n  sha: %s\n- sprint: 10\n  sha: %s\n- sprint: 11\n  sha: %s\n' "$H" "$H" "$H" > "$u/a-archive.md"; ae=$(bash "$V" --prior-sprint-sha "$u/a.md" 16 2>&1 >/dev/null); rm -rf "$u"; grep -q 'PENDING — contiguity.*: 12' <<<"$ae"
+
+---
+
