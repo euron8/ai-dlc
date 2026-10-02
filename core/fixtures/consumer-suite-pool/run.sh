@@ -136,6 +136,35 @@ exit 0
 FX
 }
 
+# Seed what twenty EARLIER red runs would have retained, plus two records an operator saved by
+# hand. The seeds carry year-2000 stamps so this run's own copy sorts newest, and each holds
+# distinct content so "survived" is a content claim rather than an existence one.
+#
+# TWO DECOYS, AND ONLY ONE OF THEM CAN DISCRIMINATE A WIDE GLOB. The prune sorts by NAME, and
+# `.clean` sorts ABOVE every digit-stamped copy, so under `ai-dlc-fixture-failures.*` it reads
+# as the newest entry and survives anyway -- an arm keyed on it alone passes against the very
+# mutant it exists for. `.179.saved` sorts BELOW the year-2000 seeds, so a wide prune takes it
+# first. `.clean` stays because it is the operator's real file on this machine; the kill comes
+# from `.179.saved`.
+seed_retained() {              # seed_retained <tree>
+  local g="$1/.git" i
+  for i in 00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19; do
+    printf 'SEED-%s-CONTENT\n' "$i" > "$g/ai-dlc-fixture-failures.20000101T0000${i}Z.1" || return 1
+  done
+  printf 'OPERATOR-CLEAN\n' > "$g/ai-dlc-fixture-failures.clean" || return 1
+  printf 'OPERATOR-179\n'   > "$g/ai-dlc-fixture-failures.179.saved" || return 1
+}
+
+# Every name of the GENERATED shape, written with a stricter grammar than the hook's glob so
+# the two cannot agree by sharing a mistake.
+retained_names() {             # retained_names <tree>
+  ls "$1/.git" | grep -E '^ai-dlc-fixture-failures\.2[0-9]{3}[01][0-9][0-3][0-9]T[0-9]{6}Z\.[0-9]+$'
+}
+# This run's copies: the shaped names that are not year-2000 seeds.
+new_retained() {               # new_retained <tree>
+  retained_names "$1" | grep -v '^ai-dlc-fixture-failures\.2000'
+}
+
 # Drive the hook. stdin is /dev/null, never a terminal: on a terminal the hook's own
 # `[ -t 0 ]` guard leaves PUSH_REFS empty and arm 0 says so, which is a different run
 # from the one a real push makes.
@@ -213,12 +242,54 @@ grep -q 'captured output for the failing unit(s): .git/ai-dlc-fixture-failures' 
 T="$WORK/evidence-green"; seed "$T" "$HOOK" || broken "seed failed"
 mkfx "$T" alpha 0; mkfx_noisy "$T" bravo 0 GREENTOKEN; mkfx "$T" charlie 0
 rc="$(drive "$T" "$WORK/evidence-green.out")"
+g_ret="$(retained_names "$T" | wc -l | tr -d ' ')"
 if [ "$rc" = 0 ] && ! grep -q 'GREENTOKEN' "$T/.git/ai-dlc-fixture-failures" 2>/dev/null \
-   && ! grep -q 'captured output for the failing unit' "$WORK/evidence-green.out"; then
-  ok "CONTROL: an all-green run records no failure and names no record — the selector is the verdict, not every unit"
+   && ! grep -q 'captured output for the failing unit' "$WORK/evidence-green.out" \
+   && [ "$g_ret" = 0 ]; then
+  ok "CONTROL: an all-green run records no failure, names no record and retains no copy — the selector is the verdict, not every unit"
 else
-  bad "a green run wrote a failure record or announced one (rc=$rc) — the capture fires on units that passed"
+  bad "a green run wrote a failure record, announced one, or retained $g_ret copies (rc=$rc) — the capture fires on units that passed"
 fi
+
+# ------------------------- 2c. every red run keeps its OWN record, pruned to twenty ----
+# THE DEFECT. The record above is OVERWRITTEN by the next red run, so two reds in a row left
+# only the second. Measured at batch 179: one intermittent red's got-vector was the only
+# evidence of its cause, and it sat in a file the next red would replace. Seeded with twenty
+# earlier copies and two hand-saved records, then ONE red drive: that is the N+1 case without
+# twenty-one drives of the hook.
+T="$WORK/retain"; seed "$T" "$HOOK" || broken "seed failed"
+seed_retained "$T" || broken "seeding retained copies failed"
+[ "$(retained_names "$T" | wc -l | tr -d ' ')" = 20 ] || broken "the retained-copy seed did not produce 20 shaped names — every arm below would read a world nobody built"
+mkfx "$T" alpha 0; mkfx_noisy "$T" bravo 1 RETAINTOKEN
+rc="$(drive "$T" "$WORK/retain.out")"
+R_NEW="$(new_retained "$T")"
+R_NEWN="$(printf '%s' "$R_NEW" | grep -c . )" || R_NEWN=0
+if [ "$rc" = 1 ] && [ "$R_NEWN" = 1 ] && grep -q 'RETAINTOKEN-stdout' "$T/.git/$R_NEW" \
+   && cmp -s "$T/.git/$R_NEW" "$T/.git/ai-dlc-fixture-failures"; then
+  ok "a red run retains exactly one copy of its own record under a stamped name, byte-identical to the primary"
+else
+  bad "the red run did not retain one stamped copy of its record (rc=$rc, new copies $R_NEWN) — the next red overwrites the only evidence"
+fi
+
+R_ALL="$(retained_names "$T" | wc -l | tr -d ' ')"
+if [ "$R_ALL" = 20 ] && [ ! -e "$T/.git/ai-dlc-fixture-failures.20000101T000000Z.1" ] \
+   && [ "$(cat "$T/.git/ai-dlc-fixture-failures.20000101T000019Z.1" 2>/dev/null)" = SEED-19-CONTENT ] \
+   && [ "$(cat "$T/.git/ai-dlc-fixture-failures.20000101T000001Z.1" 2>/dev/null)" = SEED-01-CONTENT ]; then
+  ok "the twenty-first copy prunes the OLDEST by name; every younger earlier record survives with its own content"
+else
+  bad "the prune bound did not hold (shaped copies $R_ALL, expected 20; oldest seed $( [ -e "$T/.git/ai-dlc-fixture-failures.20000101T000000Z.1" ] && echo kept || echo gone)) — retention grows without bound or deletes the wrong records"
+fi
+
+if [ "$(cat "$T/.git/ai-dlc-fixture-failures.clean" 2>/dev/null)" = OPERATOR-CLEAN ] \
+   && [ "$(cat "$T/.git/ai-dlc-fixture-failures.179.saved" 2>/dev/null)" = OPERATOR-179 ]; then
+  ok "records an operator saved under their own names survive the prune byte-intact"
+else
+  bad "the prune took a hand-saved record (.clean or .179.saved) — its pattern is wider than the shape the hook generates"
+fi
+
+grep -q "retained copy of this run: .git/$R_NEW" "$WORK/retain.out" \
+  && ok "the run names its retained copy, so the operator knows which file is this run's" \
+  || bad "the red run never named its retained copy"
 
 # ------------------------------------------------- 3. the empty-suite guard, twice --
 # FORM 1: tests/fixtures exists and the glob matches no directory.
@@ -419,12 +490,77 @@ if mut m4 '/= ok \] && continue/d'; then M="$MUT"
   fi
 fi
 
+# RETENTION MUTANTS. Each drives the arm-2c world -- twenty seeds, two decoys, one red -- and
+# asserts the observable its own removal PRODUCES, never the absence of arm 2c's message.
+#
+# retain-off — the copy statement deleted. The primary record must still carry the token (so
+# the run did go red and record) while no stamped copy appears.
+if mut retain-off '/cp "\$FAILLOG_RECORD" "\$fl_copy"/d'; then M="$MUT"
+  T="$WORK/retain-off"; seed "$T" "$M" || broken "seed failed"
+  seed_retained "$T" || broken "seeding retained copies failed"
+  mkfx "$T" alpha 0; mkfx_noisy "$T" bravo 1 ROFFTOKEN
+  rc="$(drive "$T" "$WORK/retain-off.out")"
+  n="$(new_retained "$T" | grep -c .)" || n=0
+  if [ "$rc" = 1 ] && grep -q 'ROFFTOKEN-stdout' "$T/.git/ai-dlc-fixture-failures" && [ "$n" = 0 ]; then
+    ok "retain-off without the copy a red run records only the overwritable primary — the copy statement is what retains"
+  else
+    bad "retain-off did not behave as a removed copy (rc=$rc, new copies $n)"
+  fi
+fi
+
+# retain-fixed-name — every run copies to ONE name, the overwrite this release exists to stop.
+# The fixed name is a seed's, so the overwrite is visible as that seed's content changing.
+if mut retain-fixed-name 's|fl_copy="\$GITDIR/ai-dlc-fixture-failures\.\$fl_stamp\.\$\$"|fl_copy="$GITDIR/ai-dlc-fixture-failures.20000101T000019Z.1"|'; then M="$MUT"
+  T="$WORK/retain-fixed"; seed "$T" "$M" || broken "seed failed"
+  seed_retained "$T" || broken "seeding retained copies failed"
+  mkfx "$T" alpha 0; mkfx_noisy "$T" bravo 1 RFIXTOKEN
+  rc="$(drive "$T" "$WORK/retain-fixed.out")"
+  n="$(new_retained "$T" | grep -c .)" || n=0
+  if [ "$rc" = 1 ] && grep -q 'RFIXTOKEN-stdout' "$T/.git/ai-dlc-fixture-failures.20000101T000019Z.1" && [ "$n" = 0 ]; then
+    ok "retain-fixed-name with one fixed copy name the earlier record is OVERWRITTEN — the per-run stamp is what keeps both"
+  else
+    bad "retain-fixed-name did not overwrite the earlier record (rc=$rc, new copies $n)"
+  fi
+fi
+
+# prune-off — the prune loop deleted whole (five lines, so the body still parses). Twenty-one
+# shaped copies must remain, the oldest seed among them.
+if mut prune-off '/^    for fl_f in "\$GITDIR"/,+4d'; then M="$MUT"
+  T="$WORK/prune-off"; seed "$T" "$M" || broken "seed failed"
+  seed_retained "$T" || broken "seeding retained copies failed"
+  mkfx "$T" alpha 0; mkfx_noisy "$T" bravo 1 POFFTOKEN
+  rc="$(drive "$T" "$WORK/prune-off.out")"
+  n="$(retained_names "$T" | wc -l | tr -d ' ')"
+  if [ "$rc" = 1 ] && [ "$n" = 21 ] && [ -e "$T/.git/ai-dlc-fixture-failures.20000101T000000Z.1" ]; then
+    ok "prune-off without the prune the twenty-first copy is kept too — the prune is what bounds retention"
+  else
+    bad "prune-off did not leave 21 shaped copies (rc=$rc, shaped $n)"
+  fi
+fi
+
+# prune-glob-wide — the anchored pattern widened to `ai-dlc-fixture-failures.*`. Under name
+# order the hand-saved `.179.saved` sorts below every stamped copy and is the first thing a
+# wide prune deletes; that deletion is this mutant's observable. `.clean` sorts above them and
+# survives even here, which is why it cannot be the arm that kills this mutant.
+if mut prune-glob-wide 's|ai-dlc-fixture-failures\.2\[0-9\]\[0-9\]\[0-9\]\[01\]\[0-9\]\*Z\.\*|ai-dlc-fixture-failures.*|'; then M="$MUT"
+  T="$WORK/prune-wide"; seed "$T" "$M" || broken "seed failed"
+  seed_retained "$T" || broken "seeding retained copies failed"
+  mkfx "$T" alpha 0; mkfx_noisy "$T" bravo 1 PWIDETOKEN
+  rc="$(drive "$T" "$WORK/prune-wide.out")"
+  if [ "$rc" = 1 ] && [ ! -e "$T/.git/ai-dlc-fixture-failures.179.saved" ] \
+     && [ "$(cat "$T/.git/ai-dlc-fixture-failures.clean" 2>/dev/null)" = OPERATOR-CLEAN ]; then
+    ok "prune-glob-wide with the pattern widened a hand-saved record is DELETED — the anchor is what protects it"
+  else
+    bad "prune-glob-wide did not delete the low-sorting hand-saved record (rc=$rc)"
+  fi
+fi
+
 # ------------------------------------------------------------------- floor ---------
 # EXPECTED_ASSERTIONS, mandatory since v0.217.0 for any fixture whose arms are
 # emitted from inside a conditional: an assertion that never executed prints nothing,
 # and a short green report reads exactly like a complete one. This is the same
 # property the hook itself now asserts about its own workers, one layer out.
-EXPECTED_ASSERTIONS=18
+EXPECTED_ASSERTIONS=26
 if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf '  FAIL  %s assertions ran, %s expected — an arm did not execute, and a short green report reads exactly like a complete one\n' \
     "$asserts" "$EXPECTED_ASSERTIONS"
