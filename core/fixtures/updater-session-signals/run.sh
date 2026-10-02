@@ -291,6 +291,19 @@ wexpect pipethenupd "ALLOW 0 0 0" Edit "$TR_PIPE_THEN_UPD" "" \
 PTU="$(acell pipethenupd "$TR_PIPE_THEN_UPD")"
 if [ "$PTU" = "ALLOW 0" ]; then ok "RECENCY (other order): a routed /ai-dlc session that then calls Skill(ai-dlc-update) dispatches — the LAST skill wins in this direction too"
 else bad "RECENCY (other order): a pipeline session's later Skill(ai-dlc-update) did not exempt its Agent dispatch — the transcript scan is not reading the LAST skill (cell '$PTU', expected 'ALLOW 0')"; fi
+# THE OTHER ORDER AT THE DISPATCH ITSELF (BL-404). The two cells above read the transcript AFTER the
+# updater's tool_use line was flushed. At the Skill(ai-dlc-update) call that line does not exist yet,
+# so the transcript's last word is still the typed `/ai-dlc`: the payload is the only signal, and the
+# documented rule -- the current call is newer than anything the transcript holds -- makes it win.
+# So the dispatch is ALLOWED and logs nothing, and from it on the pause stops binding until `/ai-dlc`
+# is invoked again, which the contract accepts. A payload arm that deferred to a transcript skill
+# would deny this one call and allow every call after it, a split nothing above can see.
+SPU_W="$(seed s-pipethenupd)"
+SPU_OUT="$(drive "$SPU_W" Skill "$TR_PIPE_ROUTED" ai-dlc-update)"
+if paused_deny "$SPU_OUT"; then SPU=DENY; elif denied "$SPU_OUT"; then SPU=OTHER; else SPU=ALLOW; fi
+SPU="$SPU $(rows "$SPU_W" ACK_DENIED)"
+if [ "$SPU" = "ALLOW 0" ]; then ok "DISPATCH (other order): a routed typed /ai-dlc session's own Skill(ai-dlc-update) call is ALLOWED and logs nothing — the payload outranks the transcript's last skill"
+else bad "DISPATCH (other order): a routed typed /ai-dlc session's Skill(ai-dlc-update) call was not a silent allow — the transcript's last skill overrode the newer payload (cell '$SPU', expected 'ALLOW 0')"; fi
 wexpect notranscript "DENY 1 0 1" Edit "$WORK/does-not-exist.jsonl" "" \
   "WRITE (iv): an unreadable transcript's Edit is DENIED (absence of evidence is not the updater)" \
   "WRITE (iv): LEAK — a missing transcript exempts a write from the pause"

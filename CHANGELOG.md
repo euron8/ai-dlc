@@ -19,6 +19,32 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.699.0] - 2026-10-01
+
+Batch 181's seventh release: four reconcile helpers outside the bootstrapping core, plus one hook fixture cell.
+They are machinery under the update skill's glob, so they ship as their own file set; a consumer runs its
+installed copy, so this takes effect on the pull after the one that delivers it.
+
+### Backlog
+
+- `BL-360` (partial): `register-drift.sh`, `settings-merge.sh`, `readopt-override.sh` and
+  `adopt-extension-checks.sh` stage no input bash can fail to write. Each here-string or heredoc that fed a
+  decision is now a pipe, an array or a staged file with its status read, and each write refuses by name.
+  Under a write limit the base scripts reported "diff did not run" over a diff that ran, "no section differs" at
+  exit 1, "not valid JSON" over valid JSON, ran no python at exit 1, lost the readopt dossier's header, and cut
+  an override to 1 KiB at rc 0. `adopt-extension-checks.sh` passes its python program as `python3 -c`, which
+  python receives byte-identically.
+- `settings-merge.sh` stages its merge beside `settings.json` (`mktemp "${CONSUMER}.merge.XXXXXX"`, seeded with
+  the existing file's mode), so the final `mv` is a same-directory rename. Staged in TMPDIR, a cross-volume `mv`
+  became copy-then-unlink: on a full consumer volume the base engine lost `settings.json` and reported success.
+  Each refusal's "left untouched" is now true where it prints.
+- `readopt-override.sh --merge` reads a failed `cat` inside its append group; the group's status had been its
+  trailing loop's, so the merged section could be dropped from the override at rc 0.
+- `BL-404` (claim 2): `updater-session-signals` asserts the other order, a typed `/ai-dlc` followed by
+  `Skill(ai-dlc-update)`, against the acknowledge hook's documented last-call rule.
+- `procsub-staged-refusal`: forced cells per converted site, a calibration probe each, and a killed mutant per
+  site; `arm_sm_stage` and `arm_rom_cat` for the two staging defects.
+
 ## [0.698.0] - 2026-10-01
 
 Batch 181's sixth release: `apply.sh` with the update `SKILL.md` and the consumer pre-push hook's `applying_guard`

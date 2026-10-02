@@ -82,9 +82,17 @@ else
 fi
 
 # 1. THE PAYLOAD ARM, removed whole. It is the only signal that exists at the dispatch
-#    itself, and it is also what lets a resume override a stale transcript.
-expect_set payload-arm-deleted 2 'PC-S331 is back|stays exempt forever' \
+#    itself, and it is also what lets a resume override a stale transcript. The other-order
+#    dispatch reds with it: its transcript's last skill is the typed `/ai-dlc`.
+expect_set payload-arm-deleted 3 'PC-S331 is back|stays exempt forever|DISPATCH \(other order\)' \
   "/jq -r '\.tool_input\.skill/,/^esac\$/d"
+
+# 1b. THE PAYLOAD DEFERRING TO THE TRANSCRIPT (BL-404). The updater payload grants only where the
+#    transcript named no `/ai-dlc`, so the current call no longer outranks the transcript's last
+#    skill. Only the other-order DISPATCH can see it: every other Skill(ai-dlc-update) drive has a
+#    transcript that names no pipeline skill, and every later call reads the flushed tool_use line.
+expect_set payload-defers-to-transcript 1 'DISPATCH \(other order\)' \
+  's/^  ai-dlc-update) UPDATER_SESSION=1 ;;$/  ai-dlc-update) [ "$AIDLC_SESSION" -eq 1 ] || UPDATER_SESSION=1 ;;/'
 
 # 2. THE TOOL_USE CASE ARM. Covers everything AFTER the dispatch — the updater's own
 #    per-file fan-out, which no payload carries a skill field for, and every Write it makes
