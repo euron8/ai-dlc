@@ -19,6 +19,43 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.707.0] - 2026-10-02
+
+Batch 184's first release: the dispatch guard and Check 22, six fixture ship declarations, the suite-pole
+validator, and two backlog receipts. No bootstrapping file of the update skill changes.
+
+### PC-S316-RULE-28-SHARD-LINE-ACCEPTS-AN-INVENTED-SERIAL-EXCEPTION-AND-ONLY-WARNS
+
+- `BL-427`: the dispatch guard recorded a `shard: none (<reason>)` line naming none of Rule 28's four serial
+  exceptions as `shard: null`, the same value as an omitted line, so Check 22 only warned. The guard now reads the
+  first parenthesised group and ignores trailing prose, so `none (serial-document). Files you may edit…` records
+  `none (4)`. Any other `none` value records `invalid-exception` plus `shard_raw`, the lead's text cut at 160 bytes.
+  An invalid line wins over a repeated one. The key and the `none` token match in any case, and a value wrapped in
+  `*`, `_`, backticks or double quotes is unwrapped first. Check 22's new arm S3 FAILS such a row on a shardable role
+  and prints its name, `tool_use_id` and `shard_raw`. Its remedy names `shard: 1/1 <key>` for a single-voice
+  dispatch. An unreadable ledger in the shard arm exits 2. The gate's disposition prose and the enforcement map add a
+  fifth clearable class, **invalid serial exception**. Record-then-allow is unchanged: nothing is denied at dispatch.
+  Rows written by older guards are null, so no sprint in flight can fail. Replayed read-only over the reference
+  consumer's 853 joined dispatches, 4 rows move from null to `none (4)` and 14 to `invalid-exception`. 13 of those 14
+  sit on roles S3 judges. Residual: omitting the shard line still only warns.
+
+### Backlog
+
+- `BL-429`: six shipping fixtures (`consumer-machinery-home`, `layer-contract-conformance`,
+  `layer-contract-conformance-b`, `ledger-status-vocabulary`, `release-version-triple`, `self-update-join-gate`)
+  printed a SKIP and exited 0 on every consumer, because their subject is distribution-only. Each is now `.dist-only`
+  and leaves the uninstall loop and both manifest copies. A consumer that already holds them gets a
+  `RETIRED-FIXTURE-ORPHAN` row on its next pull and removes them by hand. `FORK_BUDGET` is 3155 (I8 +6, I82b +1). A
+  fresh install ships 176 fixture directories, down from 182. Every shipped runnable fixture was run in a scratch
+  consumer at the base and none was red.
+- `BL-426`: `suite-pole-guard`'s cost was its subject, not its 227-directory template. `validate-suite-pole.sh`
+  forked a subshell per tab test and per ceiling call. The fixture now runs in about 70s solo, down from about 176s,
+  with an identical kill matrix. Its self-probe seed carries tab-spaced directives. The entry stays open until a gate
+  records the loaded cost.
+- `BL-145` and `BL-132`: receipts re-keyed on behaviour. `BL-145`'s receipt read 0 on its open per-id subject-path half
+  and now reads 1. `BL-132`'s receipt closed on a destructive `|| true` mutant and no longer does. The entry records
+  that it closes only on the content check its own body bans.
+
 ## [0.706.0] - 2026-10-02
 
 Batch 183's second release: `ledger-reverify.sh` and `emit-report.sh` in the update skill, plus arm F of
