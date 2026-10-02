@@ -1883,8 +1883,14 @@ fi
 #   commit  the newest commit on HEAD's FIRST-PARENT chain whose committer date is at or before
 #           that time (`rev-list -1 --first-parent --before=`, inclusive, `Z` parsed as UTC).
 #           Committer date is when a change landed; first-parent is what the branch carried.
-#           Known limit: a sprint branch that had not yet merged a self-update when it
-#           dispatched reads the copy main carried, which can only be the newer one.
+#           That key is WRONG after a merge: a sprint branch that self-updated, dispatched, and
+#           was then squash- or true-merged has its update dated at the merge on main's
+#           first-parent chain, after the pass, so the time key reads the OLDER copy -- and an
+#           older copy calling the document SERIAL would acquit. So the commit that first ADDED
+#           the terminal pass file (`log --diff-filter=A`, full history) is resolved too, and its
+#           copy compared: when they differ, the arm prints `PENDING (K2 -- SECTIONS): in-force
+#           partitioner ambiguous (<time> vs <added>)` and judges nothing. An untracked pass file
+#           has no added commit and keeps the time key alone.
 #   copy    the blob at THIS validator's own partitioner path relative to the root, read as
 #           `<commit>:./<rel>` with `git -C <root>` (so a root below the git toplevel resolves),
 #           both sides compared under `pwd -P`. Run from a staged file under $AC_T, so it holds
@@ -1900,9 +1906,11 @@ fi
 # from one read off the right program.
 K2_RELEASE="0.665.0"
 K2_PD="$(cd "$(dirname "$0")" && pwd)/partition-document.sh"
+K2_PD_AMBIG=""
 
-k2_pd_in_force() {  # $1 root ("" = none)  $2 terminal invoked_at -> K2_RUN, K2_PD_FROM, K2_PD_FALLBACK
-  K2_RUN="$K2_PD"; K2_PD_FROM="the CURRENT ${K2_PD}"; K2_PD_FALLBACK=""
+k2_pd_in_force() {  # $1 root ("" = none)  $2 terminal invoked_at  $3 terminal pass file
+                    # -> K2_RUN, K2_PD_FROM, K2_PD_FALLBACK, K2_PD_AMBIG
+  K2_RUN="$K2_PD"; K2_PD_FROM="the CURRENT ${K2_PD}"; K2_PD_FALLBACK=""; K2_PD_AMBIG=""
   local pdp rootp rel c
   if [ -z "$1" ]; then
     K2_PD_FALLBACK="no directory above the series carries .claude/.ai-dlc-version, so no install history can be read"; return 0
@@ -1933,6 +1941,21 @@ k2_pd_in_force() {  # $1 root ("" = none)  $2 terminal invoked_at -> K2_RUN, K2_
   fi
   K2_RUN="$AC_T/k2-pd-in-force.sh"
   K2_PD_FROM="the copy of ${rel} in force at ${c:0:12}"
+  # THE ADDED-COMMIT CROSS-CHECK. The commit that first ADDED the terminal pass file on HEAD's
+  # history carries the branch the pass was written on: the sprint commit through a true merge,
+  # the squash commit through a squash. Its partitioner differing from the time-resolved one
+  # means a merge re-dated the install, and the time key cannot say which copy ran.
+  local passp passrel a
+  passp="$(cd "$(dirname "$3")" 2>/dev/null && pwd -P)/$(basename "$3")"
+  case "$passp" in "$rootp"/*) passrel="${passp#"$rootp"/}" ;; *) return 0 ;; esac
+  a="$( ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+          git -C "$1" log --diff-filter=A --format=%H HEAD -- "./${passrel}" 2>/dev/null ) | tail -1)"
+  [ -n "$a" ] || return 0
+  if ! ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+         git -C "$1" cat-file blob "${a}:./${rel}" 2>/dev/null ) > "$AC_T/k2-pd-at-add.sh"; then
+    : > "$AC_T/k2-pd-at-add.sh"
+  fi
+  cmp -s "$AC_T/k2-pd-in-force.sh" "$AC_T/k2-pd-at-add.sh" || K2_PD_AMBIG="${c:0:12} vs ${a:0:12}"
 }
 
 # THE STAMP HISTORY, READ ONCE PER ROOT. K2 and J2 both date a series against the first commit
@@ -2016,6 +2039,7 @@ EOF
         *) k2hok=0 ;;
       esac
       k2h_lc="$(printf '%s' "$k2h" | tr 'A-F' 'a-f')"
+      k2_bytes_ok=0
       if [ "$k2hok" -eq 0 ] || [ "${#k2h}" -ne 64 ]; then
         echo "PENDING (K2 -- SECTIONS): the terminal pass ${k2_term} reviews ${K2_FILE} and carries no shard_tool_use_ids:,"
         echo "      but its artifact_sha ('${k2h}') is not one sha256, so the bytes it reviewed cannot be named."
@@ -2032,11 +2056,18 @@ EOF
           if [ -f "$k2_walk/.claude/.ai-dlc-version" ]; then k2_root="$k2_walk"; break; fi
           k2_walk="${k2_walk%/*}"
         done
-        k2_pd_in_force "$k2_root" "${P_AT[$((N - 1))]:-}"
+        k2_pd_in_force "$k2_root" "${P_AT[$((N - 1))]:-}" "$LAST_FILE"
         if [ -n "$K2_PD_FALLBACK" ]; then
           echo "FALLBACK (K2 partitioner): ${k2_term} is judged by ${K2_PD_FROM}, not the copy in force at the pass --"
           echo "      ${K2_PD_FALLBACK}."
         fi
+        k2_bytes_ok=1
+      fi
+      # Only reviewed bytes reach here; an ambiguous copy is PENDING before any map is asked.
+      if [ "$k2_bytes_ok" -eq 1 ] && [ -n "$K2_PD_AMBIG" ]; then
+        echo "PENDING (K2 -- SECTIONS): in-force partitioner ambiguous (${K2_PD_AMBIG}) -- the terminal pass ${k2_term} was"
+        echo "      dated under one copy and committed under another (a merge re-dated the install); not judged."
+      elif [ "$k2_bytes_ok" -eq 1 ]; then
         # The map interface, probed once, immediately before its first real use.
         printf '## a\nx\n## b\ny\n' > "$AC_T/k2-two.md" && printf '## a\nx\n' > "$AC_T/k2-one.md" || {
           echo "validate-adversarial-convergence.sh: arm K2 map probe could not stage; no verdict" >&2; exit 2; }
