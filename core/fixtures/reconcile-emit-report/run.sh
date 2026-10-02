@@ -2366,6 +2366,179 @@ else
   bad "V-S scored $v_vs (want 1|STAMP-MOVED|0|0|1|0 with the _stamp_ line in the diff) — a stamp folded into the base/theirs key reads as UPSTREAM-MOVED with both disjuncts false, and a stamp left out of every key reads as BLOCKERS-RESOLVED on a post-apply re-run, which tells the operator to re-approve and apply a range this tree already carries"
 fi
 
+# --- SB: THE STAMP'S `commit:` IS COMPARED TO BASE AS A COMMIT, NEVER AS A STRING -------------
+#
+# THE DEFECT. Both stamp writers (apply.sh's re-stamp, install.sh) record `rev-parse --short`,
+# and the `_stamp_ records ... NOT the base above` line compared that field to BASE as strings,
+# so every real consumer report carried a false row. V-S above stays the control on the --verify
+# side: its cell must not move. These worlds own the RENDER side, and they live in their OWN
+# three-commit dist, because the seeded DIST is shared by every V-world and V-M commits to it.
+#
+#   b ── t ── dc       b tagged `sb-vb` (ANNOTATED); dc touches docs/ only, so dc:core == t:core
+#
+#   case      stamp            BASE     want   the wrong fix it alone (or first) separates
+#   SHORT     short(b)         b        none   W6 (case fold on raw strings)
+#   FULL-SB   b                short(b) none   W1 (prefix match), W2 (stamp resolved, BASE not)
+#   UPPER     SHORT(B) upper   b        none   W8 (BASE resolved, stamp prefix-matched)
+#   TAG       short(b)         sb-vb    none   W4 (no ^{commit} peel)
+#   DOCS      t                dc       row    W7 (core/ trees compared)
+#   DIRTY     short(b)-dirty   b        row    W3 (an unresolvable stamp renders nothing)
+#   OTHER     short(t)         b        row    CONTROL: the row renders at all (W5 deletes it)
+#   EQUAL     b                b        none   CONTROL: string-equal is settled without git
+#
+# EVERY CELL MUST PROVE IT RENDERED. A program that emits nothing reads `none` on five of the
+# eight cases, so a cell with no reconcile-mechanical region is BROKEN, never `none`. Cells are
+# computed in background jobs that write files; every verdict is read in the foreground.
+SB="$WORK/stamp-base"; mkdir -p "$SB/d/core" "$SB/mut" "$SB/c"
+sbg() { git -C "$SB/d" -c user.name=fixture -c user.email=f@f -c commit.gpgsign=false -c tag.gpgsign=false "$@"; }
+SB_OK=1
+{ sbg init -q && printf '1\n' > "$SB/d/core/a.md" && printf '1.0.0\n' > "$SB/d/VERSION" \
+  && sbg add -A && sbg commit -q -m sb-base && sbg tag -a -m sb-tag sb-vb \
+  && printf '2\n' > "$SB/d/core/a.md" && sbg add -A && sbg commit -q -m sb-theirs \
+  && mkdir -p "$SB/d/docs" && printf 'n\n' > "$SB/d/docs/n.md" && sbg add -A && sbg commit -q -m sb-docs-only; } >/dev/null 2>&1 || SB_OK=0
+SB_B="$(sbg rev-parse -q --verify 'HEAD~2^{commit}' 2>/dev/null)" || SB_B=""
+SB_T="$(sbg rev-parse -q --verify 'HEAD~1^{commit}' 2>/dev/null)" || SB_T=""
+SB_DC="$(sbg rev-parse -q --verify 'HEAD^{commit}' 2>/dev/null)" || SB_DC=""
+SB_TS="$(sbg rev-parse --short "$SB_T" 2>/dev/null)" || SB_TS=""
+# The upper-case case needs a hex LETTER in the abbreviation: a 7-char all-digit prefix (about
+# one commit in 27) upper-cases to itself and the case collapses into SHORT. Lengthen until it has one.
+SB_BS=""; _sb_n=7
+while [ "$_sb_n" -le 40 ]; do
+  SB_BS="$(sbg rev-parse --short="$_sb_n" "$SB_B" 2>/dev/null)" || SB_BS=""
+  case "$SB_BS" in *[abcdef]*) break ;; esac
+  _sb_n=$((_sb_n+1))
+done
+SB_BU="$(printf '%s' "$SB_BS" | tr abcdef ABCDEF)"
+sb_rp() { sbg rev-parse -q --verify "$1" 2>/dev/null || true; }
+
+# PRECONDITIONS: each is what makes one case discriminate, so each is asserted before a cell is read.
+SB_PRE=""
+[ "$SB_OK" = 1 ] && [ -n "$SB_B" ] && [ -n "$SB_T" ] && [ -n "$SB_DC" ] || SB_PRE="$SB_PRE the three-commit dist did not build;"
+case "$SB_B" in "$SB_BS"?*) : ;; *) SB_PRE="$SB_PRE short(b) [$SB_BS] is not a strict prefix of b;" ;; esac
+[ "$SB_BU" != "$SB_BS" ] && [ "$(sb_rp "${SB_BU}^{commit}")" = "$SB_B" ] || SB_PRE="$SB_PRE the upper-case abbreviation [$SB_BU] is not distinct from [$SB_BS] or does not resolve to b in this git;"
+[ "$(sb_rp sb-vb)" != "$SB_B" ] && [ "$(sb_rp 'sb-vb^{commit}')" = "$SB_B" ] || SB_PRE="$SB_PRE sb-vb is not an annotated tag peeling to b;"
+[ "$SB_DC" != "$SB_T" ] && [ -n "$(sb_rp "${SB_T}:core")" ] && [ "$(sb_rp "${SB_DC}:core")" = "$(sb_rp "${SB_T}:core")" ] || SB_PRE="$SB_PRE dc does not share t's core/ tree as a different commit;"
+[ -z "$(sb_rp "${SB_BS}-dirty^{commit}")" ] && [ -n "$(sb_rp "${SB_BS}^{commit}")" ] || SB_PRE="$SB_PRE [${SB_BS}-dirty] resolves (or [$SB_BS] does not), so DIRTY is not an unresolvable stamp;"
+if [ -n "$SB_PRE" ]; then
+  bad "FIXTURE BROKEN — SB world:$SB_PRE no SB cell below can discriminate"
+else
+  ok "SBP the SB dist expresses every case: short(b) is a strict prefix of b, its upper-case form is distinct and resolves to b, sb-vb is an annotated tag peeling to b, dc and t are different commits with one core/ tree, and short(b)-dirty does not resolve while short(b) does"
+fi
+
+SB_CASES="SHORT FULL-SB UPPER TAG DOCS DIRTY OTHER EQUAL"
+sb_stamp() { case "$1" in SHORT|TAG) printf '%s' "$SB_BS" ;; FULL-SB|EQUAL) printf '%s' "$SB_B" ;; UPPER) printf '%s' "$SB_BU" ;; DOCS) printf '%s' "$SB_T" ;; DIRTY) printf '%s-dirty' "$SB_BS" ;; OTHER) printf '%s' "$SB_TS" ;; esac; }
+sb_base()  { case "$1" in FULL-SB) printf '%s' "$SB_BS" ;; TAG) printf 'sb-vb' ;; DOCS) printf '%s' "$SB_DC" ;; *) printf '%s' "$SB_B" ;; esac; }
+sb_want()  { case "$1" in DOCS|DIRTY|OTHER) printf 'row' ;; *) printf 'none' ;; esac; }
+sb_cell() { # sb_cell <emit> <case> <tag> -> row | none | BROKEN
+  local d="$SB/c/$3.$2" o
+  mkdir -p "$d/.claude" || { echo BROKEN; return 0; }
+  printf 'version: 1.0.0\ncommit: %s\n' "$(sb_stamp "$2")" > "$d/.claude/.ai-dlc-version"
+  o="$(bash "$1" "$SB/d" "$(sb_base "$2")" "$d" "$SB_T" 2>/dev/null)"
+  case "$o" in *'BEGIN GENERATED: reconcile-mechanical'*) : ;; *) echo BROKEN; return 0 ;; esac
+  case "$o" in *"_stamp_ records"*) echo row ;; *) echo none ;; esac
+}
+sb_emit_of() { case "$1" in ship) printf '%s\n' "$EMIT" ;; *) printf '%s\n' "$SB/mut/$1/mutant-emit.sh" ;; esac; }
+sb_sig() { local t="$1" e c; e="$(sb_emit_of "$t")"; for c in $SB_CASES; do sb_cell "$e" "$c" "$t" > "$SB/cell.$t.$c"; done; }
+sb_of() { cat "$SB/cell.$2.$1" 2>/dev/null; }
+sb_sigstr() { local c out=""; for c in $SB_CASES; do out="$out$c=$(sb_of "$c" "$1") "; done; printf '%s' "${out% }"; }
+
+# THE MUTANTS. Each is a copy of the WHOLE reconcile directory (emit-report.sh shells to siblings
+# beside itself) with mutant-emit.sh beside them. Anchored on an EXACT line of the fix — the line
+# must occur exactly once, and an impossible line must occur zero times — and replaced through
+# awk's ENVIRON, so the `&&`, `|` and `/` the replacements carry are never re-read as syntax.
+# Every mutant that swaps the decision rewrites the line that RENDERS, and its replacement reads
+# nothing the fix computed: a partial revert would prove the layer it left in.
+SB_APPLIED=""
+sb_count() { SB_O="$2" awk '$0 == ENVIRON["SB_O"] { n++ } END { print n+0 }' "$1"; }
+sb_mk() { # sb_mk <name> <exact-old-line> <new-line> [<exact-old-line> <new-line>]...
+  local n="$1" d="$SB/mut/$1" hits; shift
+  cp -R "$(dirname "$EMIT")" "$d" && cp "$EMIT" "$d/mutant-emit.sh" || { bad "FIXTURE BROKEN — $n could not copy the reconcile directory"; return 1; }
+  [ -f "$d/preclassify.sh" ] || { bad "$n did not stage its siblings — a copy missing preclassify.sh emits nothing and its silence would score as a kill"; return 1; }
+  hits="$(sb_count "$EMIT" 'ZZ-NO-SUCH-LINE-IN-EMIT-REPORT-ZZ')"
+  [ "$hits" = 0 ] || { bad "$n the impossible-line control matched $hits lines in emit-report.sh, so the anchor count below means nothing"; return 1; }
+  while [ "$#" -ge 2 ]; do
+    hits="$(sb_count "$d/mutant-emit.sh" "$1")"
+    if [ "$hits" != 1 ]; then
+      bad "$n's anchor matches $hits line(s) in emit-report.sh, not 1 — the fix was respelled and this mutant edits something other than what it names. Re-anchor it; do NOT relax the assertion. Anchor: $1"; return 1
+    fi
+    SB_O="$1" SB_N="$2" awk '$0 == ENVIRON["SB_O"] { print ENVIRON["SB_N"]; next } { print }' "$d/mutant-emit.sh" > "$d/mutant-emit.next" \
+      && mv "$d/mutant-emit.next" "$d/mutant-emit.sh" || { bad "$n DID NOT APPLY — awk failed, so no mutant exists and the arm it guards is unproven"; return 1; }
+    shift 2
+  done
+  [ "$#" -eq 0 ] || { bad "FIXTURE BROKEN — $n was given an odd number of line arguments"; return 1; }
+  if cmp -s "$EMIT" "$d/mutant-emit.sh"; then bad "$n DID NOT APPLY — the edit changed nothing, so the arm it guards is unproven"; return 1; fi
+  SB_APPLIED="$SB_APPLIED $n"
+}
+SB_L_RENDER='    if [ "$_stamp_moved" -eq 1 ]; then'
+SB_L_STAMPRP='      _stamp_obj="$(git -C "$DIST" rev-parse -q --verify "${_rendered_base}^{commit}" 2>/dev/null)" || _stamp_obj=""'
+SB_L_BASERP='        _base_obj="$(git -C "$DIST" rev-parse -q --verify "${BASE}^{commit}" 2>/dev/null)" || _base_obj=""'
+SB_L_CMP='        [ "$_stamp_obj" = "$_base_obj" ] || _stamp_moved=1'
+SB_L_UNRES='        _stamp_moved=1'
+mkdir -p "$SB/mut/ctl" && cp -R "$(dirname "$EMIT")/." "$SB/mut/ctl/" && cp "$EMIT" "$SB/mut/ctl/mutant-emit.sh" || bad "FIXTURE BROKEN — could not stage the SB control copy"
+sb_mk W1 "$SB_L_RENDER" '    if [ -n "$_rendered_base" ] && case "$BASE" in "$_rendered_base"*) false ;; *) true ;; esac; then'
+sb_mk W2 "$SB_L_CMP" '        [ "$_stamp_obj" = "$BASE" ] || _stamp_moved=1'
+sb_mk W3 "$SB_L_UNRES" '        _stamp_moved=0'
+sb_mk W4 "$SB_L_STAMPRP" '      _stamp_obj="$(git -C "$DIST" rev-parse -q --verify "${_rendered_base}" 2>/dev/null)" || _stamp_obj=""' \
+         "$SB_L_BASERP"  '        _base_obj="$(git -C "$DIST" rev-parse -q --verify "${BASE}" 2>/dev/null)" || _base_obj=""'
+sb_mk W5 "$SB_L_RENDER" '    if false; then'
+sb_mk W6 "$SB_L_RENDER" '    if [ -n "$_rendered_base" ] && [ "$(printf %s "$_rendered_base" | tr ABCDEF abcdef)" != "$(printf %s "$BASE" | tr ABCDEF abcdef)" ]; then'
+sb_mk W7 "$SB_L_RENDER" '    _rb_t="$(git -C "$DIST" rev-parse -q --verify "${_rendered_base}^{commit}:core" 2>/dev/null)" || _rb_t=""; _b_t="$(git -C "$DIST" rev-parse -q --verify "${BASE}^{commit}:core" 2>/dev/null)" || _b_t=""; if [ -n "$_rendered_base" ] && { [ -z "$_rb_t" ] || [ "$_rb_t" != "$_b_t" ]; }; then'
+sb_mk W8 "$SB_L_RENDER" '    _b_c="$(git -C "$DIST" rev-parse -q --verify "${BASE}^{commit}" 2>/dev/null)" || _b_c=""; if [ -n "$_rendered_base" ] && case "$_b_c" in "$_rendered_base"*) false ;; *) true ;; esac; then'
+
+if [ -z "$SB_PRE" ]; then
+  _sb_n=0
+  for _sb_t in ship ctl $SB_APPLIED; do
+    ( sb_sig "$_sb_t" ) &
+    _sb_n=$((_sb_n+1)); if [ "$_sb_n" -ge 5 ]; then wait; _sb_n=0; fi
+  done
+  wait
+  for _sb_c in $SB_CASES; do
+    _sb_got="$(sb_of "$_sb_c" ship)"; _sb_w="$(sb_want "$_sb_c")"
+    if [ "$_sb_got" = "$_sb_w" ]; then
+      ok "SB-$_sb_c stamp [$(sb_stamp "$_sb_c")] against BASE [$(sb_base "$_sb_c")] renders $_sb_w — the stamp is compared to the base as a commit"
+    else
+      bad "SB-$_sb_c stamp [$(sb_stamp "$_sb_c")] against BASE [$(sb_base "$_sb_c")] rendered [${_sb_got:-nothing}], want $_sb_w — a false _stamp_ row tells the operator to re-derive a base that is right, and a missing one hides a consumer whose recorded position is not the range being rendered"
+    fi
+  done
+  SB_SHIP="$(sb_sigstr ship)"; SB_CTL="$(sb_sigstr ctl)"
+  if [ "$SB_CTL" = "$SB_SHIP" ] && [ "$(sb_of OTHER ctl)" = row ] && [ "$(sb_of SHORT ctl)" = none ]; then
+    ok "SB-CONTROL an unmutated copy of the reconcile directory reproduces every SB cell, including OTHER's row and SHORT's none, so a mutant's moved cell is the mutation and not the copy"
+  else
+    bad "SB-CONTROL the unmutated copy did not reproduce the shipped SB cells — every SB mutant verdict is unreadable. shipped: $SB_SHIP / copy: $SB_CTL"
+  fi
+  # sb_kill <name> <exact set of cases it must move> <what that set means>
+  sb_kill() {
+    local n="$1" want="$2" why="$3" c got="" brk=""
+    case " $SB_APPLIED " in *" $n "*) : ;; *) return 0 ;; esac
+    for c in $SB_CASES; do
+      [ "$(sb_of "$c" "$n")" = BROKEN ] && brk="$brk$c "
+      [ "$(sb_of "$c" "$n")" = "$(sb_of "$c" ship)" ] || got="$got$c "
+    done
+    got="${got% }"
+    if [ -n "$brk" ]; then
+      bad "FIXTURE BROKEN — $n rendered no region on [${brk% }], so its moved cells are a copy that died and not a verdict"
+    elif [ "$got" = "$want" ]; then
+      ok "$n KILLED by SB-$(printf '%s' "$want" | sed 's/ /, SB-/g'): $why"
+    else
+      bad "$n moved the SB cells [${got:-none}] and had to move exactly [$want] — $([ -z "$got" ] && echo 'MUTANT SURVIVED: no SB arm depends on the code it changed' || echo 'the arms are entangled, or the case meant to own this mutant does not')"
+    fi
+  }
+  sb_kill W1 "FULL-SB UPPER TAG" "a prefix match acquits only a stamp that is a literal prefix of the BASE string, so a full stamp against a short BASE, an upper-case stamp and a tag BASE all render a false row"
+  sb_kill W2 "FULL-SB TAG" "resolving the stamp and comparing it to the BASE STRING fails whenever BASE is not already a full sha — a short BASE or a tag"
+  sb_kill W3 "DIRTY" "an unresolvable stamp rendering nothing hides a -dirty stamp, which records no base this render can confirm"
+  sb_kill W4 "TAG" "without the ^{commit} peel an annotated-tag BASE resolves to the TAG object, which is never the stamp's commit"
+  sb_kill W5 "DOCS DIRTY OTHER" "the row deleted: every case that must render it goes quiet, including the plain different-commit control"
+  sb_kill W6 "SHORT FULL-SB UPPER TAG" "a case fold on the raw strings still compares an abbreviation to a full sha as text — SHORT is the case the defect was filed on"
+  sb_kill W7 "DOCS" "comparing core/ trees acquits a docs-only commit, which shares t's core/ tree and is still a different base"
+  sb_kill W8 "UPPER" "resolving BASE and prefix-matching the stamp is case-sensitive against a lower-case sha, so an upper-case abbreviation of the base renders a false row"
+  _sb_n=0; for _sb_t in $SB_APPLIED; do _sb_n=$((_sb_n+1)); done
+  if [ "$_sb_n" -eq 8 ]; then
+    ok "SB all 8 stamp-comparison mutants (W1-W8) were built and applied (cmp -s) and scored"
+  else
+    bad "SB only $_sb_n of 8 stamp-comparison mutants applied ([${SB_APPLIED# }]) — each missing one leaves a wrong fix nothing here can reject"
+  fi
+fi
+
 v_vu="$(v_of V-U ship)"
 if [ "$v_vu" = "3|BLOCKERS-RESOLVED|1|1|1|1" ] && grep -q '^    unseen: OVERRIDE-ANCHOR-UNRESOLVED' "$VW/V-U/stderr.ship"; then
   ok "V-U a resolution that leaves a NON-HARD row the approval never saw still refuses, and the row is COUNTED and NAMED rather than asserted away — one, against V-R's zero on the same verdict"
