@@ -1144,7 +1144,10 @@ pole_guard_step() {
     bash scripts/validate-suite-pole.sh --durations /dev/null --jobs "$FIXTURE_JOBS"
     return
   fi
-  bash scripts/validate-suite-pole.sh --durations "$LASTRUN_RECORD" --jobs "$FIXTURE_JOBS"
+  # --record IS THE MERGED CUMULATIVE FILE, already folded with this run by the pool above, and
+  # it is what the guard's coverage denominator is read from: the share of the suite's cost
+  # this run timed, not a row count one skipped fixture defeats.
+  bash scripts/validate-suite-pole.sh --durations "$LASTRUN_RECORD" --record "$DURATIONS_RECORD" --jobs "$FIXTURE_JOBS"
 }
 step "suite pole (this run's loaded cost of the longest fixture against docs/suite-pole-baseline.tsv)" pole_guard_step
 
