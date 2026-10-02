@@ -636,8 +636,12 @@ cc_mut prompt-only \
 #   dash  `none — serial because`                   -> invalid-exception|<that text>
 #   two   an invented line AND a valid line         -> invalid-exception (a repeat cannot launder it)
 #   ord   `3/7 x`                                   -> 3/7 x|null        (the awk ran at all)
+#   upper `SHARD: none (made up)`                   -> invalid-exception (the KEY is case-folded)
+#   wrap  `shard: **none (made up)**`               -> invalid-exception (the VALUE is unwrapped)
+#   title `Shard: None (4)`                         -> none (4)          (key AND token folded)
 # `ord` is in the scored vector so a mutant whose awk dies reads as every cell moving, never
-# as a clean kill of one.
+# as a clean kill of one. The last three are spellings no consumer brief carries today; each
+# laundered an invented exception to null before the fold and the unwrap existed.
 SHARD_EPOCH="$(mkjson Agent gate-adjudicator opus)"
 shard_payload() { # shard_payload <brief lines...> -> a remediator dispatch carrying them
   local p; p="Your operating contract is \`.claude/team-roles/remediator.md\`. Read it first."
@@ -650,6 +654,9 @@ SH_SD="$(shard_payload 'shard: none (serial-document). Files you may edit: docs/
 SH_DASH="$(shard_payload 'shard: none — serial because the files interlock')"
 SH_TWO="$(shard_payload 'shard: none (invented reason)' 'shard: none (4)')"
 SH_ORD="$(shard_payload 'shard: 3/7 x')"
+SH_UPPER="$(shard_payload 'SHARD: none (made up)')"
+SH_WRAP="$(shard_payload 'shard: **none (made up)**')"
+SH_TITLE="$(shard_payload 'Shard: None (4)')"
 # scell <guard> <json> -> "<shard>|<shard_raw>" of the subject row (row 2), or a diagnostic.
 scell() {
   local n
@@ -661,9 +668,10 @@ scell() {
   tail -1 "$LEDGER" | jq -r 'if .role == "remediator" then "\(.shard | tostring)|\(.shard_raw | tostring)" else "WRONGROW:\(.role)" end' 2>/dev/null
 }
 svec() {
-  printf 'inv=%s;ac=%s;sd=%s;dash=%s;two=%s;ord=%s' \
+  printf 'inv=%s;ac=%s;sd=%s;dash=%s;two=%s;ord=%s;upper=%s;wrap=%s;title=%s' \
     "$(scell "$1" "$SH_INV")" "$(scell "$1" "$SH_AC")" "$(scell "$1" "$SH_SD")" \
-    "$(scell "$1" "$SH_DASH")" "$(scell "$1" "$SH_TWO")" "$(scell "$1" "$SH_ORD")"
+    "$(scell "$1" "$SH_DASH")" "$(scell "$1" "$SH_TWO")" "$(scell "$1" "$SH_ORD")" \
+    "$(scell "$1" "$SH_UPPER")" "$(scell "$1" "$SH_WRAP")" "$(scell "$1" "$SH_TITLE")"
 }
 SV_INV='inv=invalid-exception|none (serial cross-file repair: a, b)'
 SV_AC='ac=none (3)|null'
@@ -671,9 +679,13 @@ SV_SD='sd=none (4)|null'
 SV_DASH='dash=invalid-exception|none — serial because the files interlock'
 SV_TWO='two=invalid-exception|none (invented reason)'
 SV_ORD='ord=3/7 x|null'
-SV_WANT="$SV_INV;$SV_AC;$SV_SD;$SV_DASH;$SV_TWO;$SV_ORD"
+SV_UPPER='upper=invalid-exception|none (made up)'
+SV_WRAP='wrap=invalid-exception|none (made up)'
+SV_TITLE='title=none (4)|null'
+SV_FOLD="$SV_UPPER;$SV_WRAP;$SV_TITLE"
+SV_WANT="$SV_INV;$SV_AC;$SV_SD;$SV_DASH;$SV_TWO;$SV_ORD;$SV_FOLD"
 SV_TIP="$(svec "$HOOK")"
-for _c in "$SV_INV" "$SV_AC" "$SV_SD" "$SV_DASH" "$SV_TWO" "$SV_ORD"; do
+for _c in "$SV_INV" "$SV_AC" "$SV_SD" "$SV_DASH" "$SV_TWO" "$SV_ORD" "$SV_UPPER" "$SV_WRAP" "$SV_TITLE"; do
   case ";$SV_TIP;" in
     *";$_c;"*) ok "SHARD ${_c%%=*}: recorded '${_c#*=}' (shard|shard_raw)" ;;
     *) bad "SHARD ${_c%%=*}: expected '${_c#*=}', got vector '$SV_TIP'" ;;
@@ -692,10 +704,10 @@ case "$_mbc" in
 esac
 
 # MUTANTS on the shard parse, each a copy of the whole hooks dir, exact-line anchored, scored
-# on the EXACT six-cell vector so a mutant that moves a cell it does not own is visible.
+# on the EXACT nine-cell vector so a mutant that moves a cell it does not own is visible.
 SV_CTL_G="$(mk_hooks_copy shard-control)"
 if [ -n "$SV_CTL_G" ] && [ "$(svec "$SV_CTL_G")" = "$SV_WANT" ]; then
-  ok "SHARD MUTANT CONTROL: an unmutated hooks copy records the full expected six-cell vector, invalid-exception included (positive)"
+  ok "SHARD MUTANT CONTROL: an unmutated hooks copy records the full expected nine-cell vector, invalid-exception included (positive)"
 else
   bad "SHARD MUTANT CONTROL is dead: an unmutated copy recorded '$(svec "$SV_CTL_G")'"
 fi
@@ -719,15 +731,30 @@ sh_mut() {
 sh_mut whole-line \
   '      if (match(line, /^none ?\([^)]*\)/)) {' \
   '      if (match(line, /^none ?\([^)]*\)$/)) {' \
-  "$SV_INV;$SV_AC;sd=invalid-exception|none (serial-document). Files you may edit: docs/a.md;$SV_DASH;$SV_TWO;$SV_ORD" \
+  "$SV_INV;$SV_AC;sd=invalid-exception|none (serial-document). Files you may edit: docs/a.md;$SV_DASH;$SV_TWO;$SV_ORD;$SV_FOLD" \
   "a whole-line-anchored parse FAILS a valid exception followed by prose — arm sd alone catches it"
 # (d) the repeated-line rule from before this release: more than one key line resets to null,
 # so a second, valid line launders an invented one. Arm two alone catches it.
 sh_mut repeat-resets \
   '  END { if (bad) { print "invalid-exception"; print raw } else if (keys == 1 && good == 1) print out }' \
   '  END { if (keys == 1 && bad) { print "invalid-exception"; print raw } else if (keys == 1 && good == 1) print out }' \
-  "$SV_INV;$SV_AC;$SV_SD;$SV_DASH;two=null|null;$SV_ORD" \
+  "$SV_INV;$SV_AC;$SV_SD;$SV_DASH;two=null|null;$SV_ORD;$SV_FOLD" \
   "a repeated shard line resetting to null launders the invented exception — arm two alone catches it"
+# (e) no case-fold: the key and the `none` token match lower case only, so `SHARD:` and
+# `Shard: None` are skipped and record null. Arms upper and title alone catch it; wrap is
+# lower case and does not move.
+sh_mut no-casefold \
+  '  function fold(s) { return tolower(s) }' \
+  '  function fold(s) { return s }' \
+  "$SV_INV;$SV_AC;$SV_SD;$SV_DASH;$SV_TWO;$SV_ORD;upper=null|null;$SV_WRAP;title=null|null" \
+  "dropping the case-fold launders an upper-case key to null — arms upper and title alone catch it"
+# (f) no unwrap: an emphasised `**none (...)**` value matches no branch and records null. Arm
+# wrap alone catches it, so the fold and the unwrap each have a subject the other cannot see.
+sh_mut no-unwrap \
+  '    v = line; sub(/^[*_`"]+/, "", v); sub(/[*_`"]+$/, "", v)' \
+  '    v = line' \
+  "$SV_INV;$SV_AC;$SV_SD;$SV_DASH;$SV_TWO;$SV_ORD;$SV_UPPER;wrap=null|null;$SV_TITLE" \
+  "dropping the unwrap launders an emphasised invented exception to null — arm wrap alone catches it"
 
 # --- SPRINT STAMP: THE READER MUST NOT SPELL THE DECORATION -------------------
 # EVERY SEED HERE USED TO BE THE EMPHASISED BULLET, WHICH IS THE FORM THE READER

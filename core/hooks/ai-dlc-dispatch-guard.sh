@@ -166,7 +166,9 @@
 #   value beginning `none` -- an unknown number, an invented reason, or no parentheses at all --
 #   records `"invalid-exception"` plus `shard_raw`, the lead text (blanks collapsed, first 160
 #   bytes), and that wins over every other shard line in the brief, so a repeated line cannot
-#   launder it. Otherwise ZERO matching lines, MORE THAN ONE, or one
+#   launder it. The key and the `none` token match in any case, and a `none` value wrapped in
+#   `*`, `_`, backticks or straight double quotes is unwrapped before it is read.
+#   Otherwise ZERO matching lines, MORE THAN ONE, or one
 #   that does not parse all record `shard: null`. A row with no `shard` KEY at all was written
 #   by a guard older than this field, and `validate-spawn-ledger.sh` reads that absence as
 #   PENDING, not as an omission.
@@ -580,18 +582,27 @@ SPAWN_TUI="$(printf '%s' "$INPUT" | jq -r '.tool_use_id // empty' 2>/dev/null ||
 # valid line must not launder the first back to null. Text AFTER a valid first group is the
 # brief continuing, not part of the value: `none (serial-document). Files you may edit...`
 # records `none (4)`. Two lines out: the value, then the raw text when the value is invalid.
+# THE KEY AND THE `none` TOKEN ARE CASE-FOLDED, AND A `none` VALUE IS UNWRAPPED FIRST, because
+# each of `SHARD:`, `Shard: None (...)` and `shard: **none (...)**` otherwise misses the parse and
+# records null -- an invented exception laundered to the omitted-line state. The unwrap strips
+# a run of `*`, `_`, backticks and straight double quotes from both ends of the value, and is
+# applied only when what remains begins with `none`, so an ordinal part key keeps its text.
 SPAWN_SHARD_OUT="$(printf '%s\n' "$PROMPT" | LC_ALL=C awk '
+  function fold(s) { return tolower(s) }
   /^[ \t]*(```|~~~)/ { fence = !fence; next }
   fence { next }
   {
     line = $0
     sub(/^[ \t]*([-*][ \t]+)?/, "", line)
+    if (match(fold(line), /^[*_`]*shard[*_`]*:/)) line = "shard:" substr(line, RLENGTH + 1)
     if (line !~ /^[*_`]*shard[*_`]*:/) next
     keys++
     sub(/^[*_`]*shard[*_`]*:[*_`]*[ \t]*/, "", line)
     sub(/[ \t]+$/, "", line)
     val = ""
     gsub(/[ \t]+/, " ", line)
+    v = line; sub(/^[*_`"]+/, "", v); sub(/[*_`"]+$/, "", v)
+    if (fold(v) ~ /^none/) line = "none" substr(v, 5)
     if (line ~ /^[0-9]+\/[0-9]+ [^ ]/) {
       pos = index(line, " "); k = substr(line, pos + 1); split(substr(line, 1, pos - 1), f, "/")
       i = f[1] + 0; n = f[2] + 0
