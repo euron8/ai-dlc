@@ -1280,6 +1280,43 @@ arm_fx_rom() { local ck
     ARM_WHY="refused: rc=2, $(grep -E '^readopt-override: --merge could not ' "$ERR" | head -1 | cut -c1-90), the override byte-identical"; return 0; fi
   ARM_WHY="rc=$FX_RC, override $([ "$(cksum < "$ROMF")" = "$ck" ] && echo unchanged || echo CHANGED) at $(fx_sz "$ROMF") B, prose $(grep -c '^consumer prose line ' "$ROMF")/$ROM_P: $(grep -v '^$' "$ERR" | tail -1 | sed 's#.*/##' | cut -c1-90)"
   return 1; }
+# --merge's append group, with `cat` failing on the merged section ONLY (a PATH shim). The Gate
+# section ends the body with no trailing blank, so `tail_n` is 0 and the group's last command is a
+# zero-trip `while`: a group whose status is its last command's read the failed `cat` as success and
+# wrote an override with `## Gate` deleted at rc 0. Complete is impossible here; refused is rc 2, the
+# append's own refusal, and the override byte-identical.
+ROM_SHIM="$FW/rom-catshim"; mkdir -p "$ROM_SHIM"
+printf '#!/bin/sh\nfor a in "$@"; do case "$a" in */merge-merged) echo "cat: $a: shim write failure" >&2; exit 1 ;; esac; done\nexec /bin/cat "$@"\n' > "$ROM_SHIM/cat"
+chmod +x "$ROM_SHIM/cat"
+arm_rom_cat() { local ck
+  arm_fx_rom_healthy "$1" || { ARM_WHY="no healthy baseline: $ARM_WHY"; return 1; }
+  rom_copy || { ARM_WHY="could not copy the merge world"; return 1; }
+  ck="$(cksum < "$ROMF")"; FX_RC=0
+  PATH="$ROM_SHIM:$PATH" "$FBASH" "$1" "$ROD2" "$RO2_THEIRS" "$ROMC" "$ROMF" --merge > "$OUT" 2> "$ERR" || FX_RC=$?
+  if [ "$FX_RC" -eq 2 ] && grep -q '^readopt-override: --merge could not append the merged #Gate' "$ERR" && [ "$(cksum < "$ROMF")" = "$ck" ]; then
+    ARM_WHY="refused: rc=2, the append's refusal, the override byte-identical"; return 0; fi
+  ARM_WHY="rc=$FX_RC, override $([ "$(cksum < "$ROMF")" = "$ck" ] && echo unchanged || echo CHANGED), '## Gate' lines $(grep -c '^## Gate' "$ROMF"), shim fired $(grep -c 'shim write failure' "$ERR")"
+  return 1; }
+# settings-merge's write: the merge is staged BESIDE the target, so the final `mv` is a rename. A
+# TMPDIR staging file on another volume makes `mv` copy-then-unlink, and a full consumer volume then
+# loses settings.json under a "left untouched" message. A cross-volume world needs a mounted image,
+# which a fixture cannot build portably, so the cell asserts the property that removes the hazard: a
+# PATH shim records `mv`'s source, whose directory must be the target's, with TMPDIR pointed
+# elsewhere. The merged file keeps the target's mode (0640 here; `mktemp` creates 0600).
+SMS="$FW/sms"; mkdir -p "$SMS/cons/.claude" "$SMS/tmp" "$SMS/shim"
+printf '#!/bin/sh\nprintf "%%s\\n" "$1" >> "$SMS_MV_LOG"\nexec /bin/mv "$@"\n' > "$SMS/shim/mv"; chmod +x "$SMS/shim/mv"
+printf '{"hooks":{}}\n' > "$SMS/tmpl.json"
+arm_sm_stage() { local d="$SMS/run.$((FXA_N+=1))" got
+  mkdir -p "$d/.claude" || { ARM_WHY="could not make the world"; return 1; }
+  printf '{"permissions":{"allow":["Bash(x)"]}}\n' > "$d/.claude/settings.json"; chmod 640 "$d/.claude/settings.json"
+  : > "$d/mv.log"; FX_RC=0
+  SMS_MV_LOG="$d/mv.log" TMPDIR="$SMS/tmp" PATH="$SMS/shim:$PATH" "$FBASH" "$1" --consumer "$d/.claude/settings.json" \
+    --template "$SMS/tmpl.json" > "$OUT" 2> "$ERR" || FX_RC=$?
+  got="$(head -1 "$d/mv.log")"
+  ARM_WHY="rc=$FX_RC, mv source '${got:-<none>}', mode $(stat -f %Lp "$d/.claude/settings.json" 2>/dev/null || stat -c %a "$d/.claude/settings.json" 2>/dev/null)"
+  [ "$FX_RC" -eq 0 ] && [ -n "$got" ] && [ "$(dirname "$got")" = "$d/.claude" ] \
+    && grep -q '^settings.json reconciled' "$OUT" && jq -e '.permissions.allow[0] == "Bash(x)"' "$d/.claude/settings.json" >/dev/null 2>&1 \
+    && [ "$(stat -f %Lp "$d/.claude/settings.json" 2>/dev/null || stat -c %a "$d/.claude/settings.json" 2>/dev/null)" = 640 ]; }
 RLC_ROW='extensions/e\.md.path:core/skills/ai-dlc/steps/b\.md$'
 arm_fx_rlc_healthy() { fx_healthy "$1" 0 "$RLC_ROW" "$RFD" "$RF_BASE" "$RF_THEIRS" "$RFC"; }
 arm_fx_rlc() { fx_cell "$1" "$FX_N" 0 "$RLC_ROW" 2 '^retired-layer-contract: .*no verdict' "$RFD" "$RF_BASE" "$RF_THEIRS" "$RFC"; }
@@ -1586,6 +1623,8 @@ run_arm arm_fx_smw       "$S_SM"  "settings-merge --check, a valid 2.3 KB settin
 run_arm arm_fx_adw       "$S_AD"  "adopt-extension-checks dry run: 'nothing to adopt' at exit 0 -- never exit 1 ('adoptable checks found') over a tree python never scanned"
 run_arm arm_fx_rod       "$S_RO"  "readopt-override dossier, a 22-line reason: the whole dossier through THE ONE QUESTION, or a named refusal -- never a dossier missing its header"
 run_arm arm_fx_rom       "$S_RO"  "readopt-override --merge, the rewritten override past the limit: merged with every prose line, or refused with the override byte-identical"
+run_arm arm_rom_cat      "$S_RO"  "readopt-override --merge, cat failing on the merged section with tail_n 0: refused with the override byte-identical -- never rc 0 with ## Gate deleted"
+run_arm arm_sm_stage     "$S_SM"  "settings-merge write, TMPDIR elsewhere: the merge is staged in the target's directory (mv is a rename) and keeps the target's 0640 mode"
 if [ "$(id -u)" -eq 0 ]; then
   skip "arm_rlc_unread_layer: running as root, which reads a mode-000 layer file, so the world is not expressible (this is not a pass)"
 else
@@ -2034,6 +2073,8 @@ else
     rhb_fail arm_fx_adw adopt-extension-checks.sh "python never ran and the script exited 1, 'adoptable checks found'"
     rhb_fail arm_fx_rod readopt-override.sh     "the dossier lost its header and THE ONE QUESTION at exit 1"
     rhb_fail arm_fx_rom readopt-override.sh     "the override rewritten in place and cut short"
+    rhb_fail arm_rom_cat readopt-override.sh    "base names its merge file by bare mktemp, so the shim never fires and base rewrites in place at rc 0 -- no refusal; the pre-fix group itself is mutant RO-APPEND"
+    rhb_fail arm_sm_stage settings-merge.sh     "the merge staged in TMPDIR, so mv is copy-then-unlink across volumes, at mode 0600"
     for _rh in $RH_FILES; do
       if arm_r5 "$RHB/$_rh" && arm_lh "$RHB/$_rh"; then
         bad "1749b545 differential: r5 and LH both PASS against the base $_rh, so the floor cannot see its spellings"
@@ -2132,9 +2173,9 @@ control reconcile retired-tokens.sh             arm_fx_rt_healthy arm_fx_rt arm_
 control reconcile readopt-override.sh           arm_ro_healthy arm_r5
 control reconcile derivation-differential.sh    arm_dd_usage arm_r5
 control reconcile register-drift.sh             arm_fx_rds_healthy arm_fx_rds arm_fx_rdo arm_fx_rdh_healthy arm_fx_rdh arm_fx_rdw_healthy arm_fx_rdw arm_r5 arm_lh
-control reconcile settings-merge.sh             arm_fx_smw_healthy arm_fx_smw arm_r5 arm_lh
+control reconcile settings-merge.sh             arm_fx_smw_healthy arm_fx_smw arm_sm_stage arm_r5 arm_lh
 control reconcile adopt-extension-checks.sh     arm_fx_adw_healthy arm_fx_adw arm_r5 arm_lh
-control reconcile readopt-override.sh           arm_fx_rod_healthy arm_fx_rod arm_fx_rom_healthy arm_fx_rom arm_r5 arm_lh
+control reconcile readopt-override.sh           arm_fx_rod_healthy arm_fx_rod arm_fx_rom_healthy arm_fx_rom arm_rom_cat arm_r5 arm_lh
 
 echo "== mutants (each restores a discarded status at one site) =="
 mutant CI-RETRO scripts validate-ci-gates.sh arm_ci_healthy "arm_ci_retro" \
@@ -2512,6 +2553,13 @@ mutant RO-INPLACE reconcile readopt-override.sh arm_fx_rom_healthy "arm_fx_rom" 
   $'    cp -p "$OVR" "$staged" || ro_merge_refuse "stage a copy of the override"\n' '' \
   $'    cat "$fmf" "$out" > "$staged" || ro_merge_refuse "write the merged override"\n    mv -f "$staged" "$OVR" || ro_merge_refuse "move the merged override into place"' \
   $'    cat "$fmf" "$out" > "$OVR"'
+# readopt-override: the append group's failed cat unseen again (a { } group, cat's status discarded).
+mutant RO-APPEND reconcile readopt-override.sh arm_fx_rom_healthy "arm_rom_cat" \
+  $'      ( i=0; while [ "$i" -lt "$lead" ]; do echo || exit 1; i=$((i + 1)); done\n        cat "$merged" || exit 1\n        i=0; while [ "$i" -lt "$tail_n" ]; do echo || exit 1; i=$((i + 1)); done\n      ) >> "$out"' \
+  $'      { i=0; while [ "$i" -lt "$lead" ]; do echo; i=$((i + 1)); done\n        cat "$merged"\n        i=0; while [ "$i" -lt "$tail_n" ]; do echo; i=$((i + 1)); done\n      } >> "$out"'
+# settings-merge: the merge staged in TMPDIR again.
+mutant SM-TMPDIR reconcile settings-merge.sh arm_fx_smw_healthy "arm_sm_stage" \
+  'OUT="$(mktemp "${CONSUMER}.merge.XXXXXX" 2>/dev/null)" ||' 'OUT="$(mktemp 2>/dev/null)" ||'
 
 echo
 if [ "$fails" -eq 0 ]; then echo "procsub-staged-refusal: PASS"; exit 0; fi
