@@ -7,10 +7,15 @@
 # number: one shard has measured 442s loaded against 112s solo. A solo timing and a loaded
 # timing are not two readings of one quantity and must never be written into the same row.
 #
-# WHY ONE ROW. The suite is POLE-BOUND: its wall clock tracks the single longest DIRECTORY,
-# not the sum over the pool. A file with a row per fixture is a file every push edits and
-# nobody reads, and the rows for units that are not the pole rot in place. The guard refuses a
-# second data row for that reason.
+# WHY ONE ROW PER POOL WIDTH, AND NEVER ONE PER FIXTURE. The suite is POLE-BOUND: its wall
+# clock tracks the single longest DIRECTORY, not the sum over the pool. A file with a row per
+# fixture is a file every push edits and nobody reads, and the rows for units that are not the
+# pole rot in place. But a loaded cost is a property of the pool width it was taken under --
+# `gate-adjudication-mutants` read 490-500s at 12 and 727-760s at 16 -- so each width carries
+# its OWN block: its `# band:`, `# jobs:` and `# fixtures:` lines followed by exactly one data
+# row. The guard selects the block whose `# jobs:` equals the running width, SKIPs naming the
+# widths present when none does, and refuses (exit 2) a width given twice, a directive repeated
+# before a row consumes its block, and a row whose block is missing a directive.
 #
 # THE RATCHET RULE. The row moves DOWN freely -- a faster suite needs no ceremony. It moves UP
 # only as a reviewed edit carrying a MEASUREMENT and the load average it was taken under, in
@@ -19,8 +24,8 @@
 #
 # `# band:` is the percent of growth tolerated above the row before the push fails. It is the
 # calibrated run-to-run spread plus stated headroom -- not a number chosen for comfort.
-# `# jobs:` is the pool width the figure was taken under; the guard SKIPS rather than compares
-# when the running width differs, because a different width is a different measurement.
+# `# jobs:` is the pool width the figure was taken under; the guard compares only against the
+# block taken at the running width, because a different width is a different measurement.
 # `# fixtures:` is the fixture-directory count of the tree the figure was taken on. It is
 # reported and never compared -- it is there so a later reader can see whether the suite has
 # grown under the figure.
@@ -54,10 +59,33 @@
 # vintage, each a floor of unknown age. They are not three measurements of one quantity either,
 # which is why the calibration above was run rather than read off the record.
 #
+# CALIBRATION AT POOL 16 -- the same recipe, in a file:// clone of origin/main at abe3afb7, pool
+# 16, 227 fixture directories, durations seeded from the operator clone's record before each run.
+# Every run exited 1 on the release-version phase alone, because a file:// clone has no
+# origin/main for the range arm to diff against; the fixture suite's verdict is read separately:
+#
+#   run 1: gate-adjudication-mutants 760s, wall 1105s, load average  4.49 at start, suite 227/227
+#   run 2: NO READING -- stray-party-mode-provenance FIXTURE BROKEN (hdiutil: Operation not
+#          permitted) at load 85.09, so the pool was red and the hook wrote no durations
+#   run 3: gate-adjudication-mutants 727s, wall 1068s, load average 47.85 at start, suite 227/227
+#   run 4: gate-adjudication-mutants 702s, wall 1041s, load average 36.56 at start, suite 227/227
+#
+# The next four rows moved together across the three readings: procsub-staged-refusal-boot
+# 633/615/606, reconcile-emit-report 595/577/578, procsub-staged-refusal 589/572/570,
+# apply-drift-refile 523/511/512. Row = max 760; band = ceil((760-702)/702*100) = 9 plus 8 points
+# of headroom = 17; ceiling 760 + ceil(760*17/100) = 890. Two other sessions' fixture work ran
+# alongside runs 3 and 4, so the row is a LOADED ceiling and moves down freely on a quieter run.
+#
 # RATCHET HISTORY -- one line per change to the row, with its measurement and the load beside it.
 #   v0.583.0  ledger-reverify 628  band 20  jobs 12  fixtures 201  (max of 628/563/562, loads 50.56/9.06/5.30)
+#   v0.705.0  gate-adjudication-mutants 760  band 17  jobs 16  fixtures 227  (max of 760/727/702, loads 4.49/47.85/36.56)
 #
 # band: 20
 # jobs: 12
 # fixtures: 201
 ledger-reverify 628
+#
+# band: 17
+# jobs: 16
+# fixtures: 227
+gate-adjudication-mutants 760

@@ -19,6 +19,26 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.705.0] - 2026-10-02
+
+Batch 183's first release: the suite-pole guard and one recorded answer. `validate-suite-pole.sh` and the pre-push
+hook are distribution-side; no bootstrapping file of the update skill changes. Discharges no consumer candidate.
+
+### Backlog
+
+- `BL-378`: the suite-pole guard reached its comparison once on a real push since 2026-09-22. Two preconditions
+  stopped it on every other run: a row-count equality that any undispatched fixture defeats (the normal dispatch is
+  220 of 227), and a width check against a baseline taken at 12 while sessions run at 16. A run is now comparable when
+  it timed at least 90% of the merged record's cost, both sides joined to the fixture directories on disk (the real
+  run reads 99.86%). Growth past the ceiling fails whichever fixture carries it, and an undispatched baseline pole
+  SKIPs instead of passing. `docs/suite-pole-baseline.tsv` carries one block per pool width; the width-16 block,
+  `gate-adjudication-mutants 760` band 17, comes from a forced three-reading calibration on a scratch clone. Driven
+  against the real 220-of-227 run at width 16 the guard prints a comparison; a pole of 891s fails and 890s passes.
+- `BL-087`: the coercion partition is measured on Claude Code 2.1.287. A `PreToolUse` hook sees the input after the
+  harness repairs it (Read `length` became `limit`; Write `path` became `file_path`), and a call still invalid after
+  repair reaches no hook at all, with a same-session `PostToolUseFailure` control. The bundle carries 12 per-tool
+  repair implementations, and Read has one. Closes as a version-pinned recorded answer.
+
 ## [0.704.0] - 2026-10-02
 
 Batch 182's second release: `preclassify.sh`, `apply.sh`, `self-update-gate.sh` and `unregistered-drift.sh`.
