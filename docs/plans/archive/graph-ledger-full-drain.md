@@ -16286,3 +16286,73 @@ the four batch-175 ids plus S336. The banked ruling stands: report the gap and w
 Batch 175's delivery gap and held-branch record are spent: batch 176's block above replaces both.
 No built branch is held.
 
+**BATCH 177 SHIPPED `v0.674.0` (`f7eec6f5`, #930) AND DISCHARGED SEVEN CONSUMER CANDIDATES**, every
+one the reference consumer filed at its sprint-315 retro, all in one release because none touches the
+update skill's machinery (`setup-sites.md` gains two fixture lines only):
+`PC-S315-VALIDATE-MANDATORY-RULES-CHECK5-HEAD-200-TRUNCATES-A-LONG-SPRINT-SECTION` (`BL-392`),
+`PC-S315-PREPUSH-REQUIRES-RENDERED-AGENT-DEFS-IN-FRESH-WORKTREE` (`BL-393`),
+`PC-S315-RETRO-STEP1-SQUASH-CUT-LACKS-POST-SQUASH-EVIDENCE` (`BL-394`),
+`PC-S315-STEERING-BUDGET-COUNTS-BUT-DOES-NOT-PREVENT` (`BL-395`),
+`PC-S315-DEPLOY-VALIDATE-HAS-NO-ONE-VARIABLE-PER-SMOKE-RUN-RULE` (`BL-396`),
+`PC-S315-DEV-AND-QA-ROLE-CHECKLISTS-LET-A-STORY-REACH-GATE-1-WITHOUT-THE-EVIDENCE-SECTIONS-AND-THE-FULL-SUITE`
+(`BL-397`) and
+`PC-S315-STORIES-TEST-STRATEGY-CASE-LETTERS-AND-RE-POINT-CONSUMERS-ARE-NOT-BOUND-TO-A-TEST-AT-AUTHORING`
+(`BL-398`). It also shipped `BL-390`'s operator-ruled remedy. It was invoked by peer handoff. Its
+close rotated those 8 and filed `BL-399`: live backlog **46 -> 39**, archive **351 -> 359**, net
+closed minus filed **7**. R5 floors unchanged at the measured 18 sh receipts over 39 live entries.
+
+**THE OPERATOR RE-SCOPED THE BATCH MID-FLIGHT, AND THE RULING STANDS: A NEW CONSUMER FILING THAT BIT
+THE CONSUMER'S SPRINT PRE-EMPTS BACKLOG WORK, AND BACKLOG WORK IS STOPPED FOR IT.** The opening sweep
+found the PC-backed worklist empty, so the batch scoped eight backlog releases from a whole-backlog
+adjudication. The seven filings then landed on the consumer's retro branch; the operator ruled them
+first and had the backlog work stopped, to be picked up by a later session. The eight unbuilt release
+contracts, with the one adversary pass that reported (R4, `apply.sh`), are recorded in
+`docs/reviews/b177-backlog-release-contracts.md` as a record to re-derive from, not a plan.
+
+**THE WHOLE-BACKLOG ADJUDICATION: 39 entries, 0 CLOSE, 5 PARTIAL, 34 LIVE, 0 dead premise.** Every
+`sh` receipt exited 1 and none 9. Findings a later batch needs, each in the entry's body or the
+contracts record: `BL-333` is worse than filed (`retired-layer-contract.sh:332` swallows a true
+retired-path row); `BL-360`'s carried DEFECT bullet shipped as `BL-370` and can be struck; `BL-066`'s,
+`BL-083`'s, `BL-127`'s, `BL-132`'s and `BL-145`'s receipts reject a correct fix.
+
+**THE TIP ADVERSARY FOUND A BLOCKER IN A GATE-GREEN-SHAPED RELEASE, AGAIN.** The new
+`ai-dlc-foreground-budget.sh` denied the foreground `git push` with `timeout: 600000` that four shipped
+instructions mandate (`_gate-procedures.md`, `handoff.md`, `retro.md` Step 6b, the continue hook's
+HANDOFF GUARD), and both remedies its deny offered break that call. Fixed before merge: a push whose
+first word is `git push` and teammate calls (`agent_id`) are exempt. **Grep the step files for every
+instruction a new deny hook would refuse before shipping it** — the fixture's own OVER arm scored the
+wedge as correct.
+
+**THE GATE FAILED TWICE BEFORE IT PASSED.** First on the unfixed hook tree, stopped mid-run. Then
+`validator-fork-budget` at 3188 against 3174: measured by arm against base, +11 from the new hook as a
+subject of every per-hook arm and +10 from `BL-390`'s inline root block (I75); `FORK_BUDGET` is 3194
+with the measurement beside it, exec bit checked committed at `100755` before the push. The same run
+failed `stray-party-mode-provenance` S10-C (`hdiutil create failed - Directory not empty`), which
+passed alone and passed in the next gate; not this release. Gate on `f9ad0e70`: 22 sections, 222
+fixtures ok, 0 FAIL, `all gates green`, every changed fixture `ok` by name against an impossible-name
+control of 0, `ls-remote` matching, squash tree identical to the gated tip.
+
+**`BL-395`'s RECEIPT BLOCKED ITS OWN ROTATION**: an unguarded `$3` under the engine's `set -u`, exit 0
+alone and 1 through `backlog-reverify.sh` — the batch-175 `BL-385` shape exactly. Guarded to `${3:-}`
+and rescored under `set -uo pipefail`: fix 0, no hook 1, the pre-exemption hook 1, a warn-only mutant 1.
+**Score every new receipt under `set -uo pipefail`, not in a bare shell.**
+
+**OPERATOR RULINGS THIS BATCH:** `BL-007` stays open for the archive-interior hole; `BL-390` took the
+distinct verdict (shipped); `BL-132` is left unbuilt; `docs/context-hardening-notes.md` is a LOG,
+unbounded like `CHANGELOG.md`, so `BL-093` closes on a header once built. **`BL-375` is the operator's
+to schedule**, with the command fixed as `sudo bash core/scripts/derive-fixture-readsets.sh --all
+--tracer both`; that mode is in R1's contract and is NOT yet built, so the command refuses today.
+
+**THE READ-SET MAP IS CURRENT.** The operator traced `update-preflight-push` and the eight fixtures
+0.674.0 changed; it shipped in the release. No trace is owed.
+
+**THE DELIVERY GAP IS ONE RELEASE.** The consumer is at 0.673.0 against `VERSION` 0.674.0, which
+touches no bootstrapping file. PENDING is 9: the seven ids above, plus
+`PC-S315-ARTIFACT-WRITE-LEDGER-DROPS-PARALLEL-SHARD-ROWS` and
+`PC-S315-NO-AMENDMENT-PATH-FOR-A-NOTARIZED-ARTIFACT-AFTER-A-STORY-DECISION`, shipped at 0.668.0 and
+0.669.0 and filed after the consumer's last pull base, so its re-verify never evaluated them.
+`docs/reviews/graph-consumer-close-brief-2.md` still closes thirteen more on the consumer's side and is
+unapplied. The banked ruling stands: report the gap and write no runbook.
+
+Batch 176's operator-decisions list is spent: batch 177's rulings above replace it.
+
