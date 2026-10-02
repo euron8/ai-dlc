@@ -134,7 +134,9 @@ fi
 # with the old `${detail#replaces_with=}` + equality guard it yields `env_key=retire_anchor=<...>`
 # and instructs the operator to write that string into settings.json as an environment key.
 build_rec() { # build_rec <dir>
-  mkdir -p "$1" && cp "$REC"/*.sh "$1"/ || return 1
+  # The `.md` siblings travel too: preclassify reads `setup-sites.md` beside itself, and a missing
+  # manifest is a refusal (a broken install), not an empty set.
+  mkdir -p "$1" && cp "$REC"/*.sh "$REC"/*.md "$1"/ || return 1
   # THE STUB CARRIES THE REAL SCRIPT'S `ADJ_` DECLARATIONS, COPIED. See the derivation above for
   # why they are copied rather than written out here.
   #

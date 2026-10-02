@@ -183,8 +183,48 @@ opted_out() { # opted_out <consumer-path> -> 0 if this file must be skipped
 # Paths that setup-sites.md declares a substitution site for. Read once: these are the
 # core files whose `{token}` placeholders `ai-dlc-setup` fills with the consumer's real
 # model strings / ownership paths / deploy commands.
-SETUP_SITED_PATHS="$(awk '/^[ \t]*file:[ \t]*core\//{sub(/^[ \t]*file:[ \t]*/,""); print}' \
-  "$(dirname "$0")/setup-sites.md" 2>/dev/null | sort -u)"
+#
+# A FUNCTION, NOT AN ASSIGNMENT, AND IT IS EXTRACTED BY ITS OWN `^setup_sited_paths() {`…`^}` RANGE.
+# `apply.sh` loads this set out of this file twice; as an assignment it was extracted by an awk
+# range keyed on the assignment's own closing text, so a respelling ran that range to EOF. The body
+# is SELF-CONTAINED for the same reason `machinery_paths()` is: it names no helper and no variable
+# of this script, so it means the same thing in every shell that evals it.
+#
+# RETURNS 4 WHEN THE PRODUCER FAILED, AND THE CALLER REFUSES. The assignment dropped `awk`'s status
+# under `2>/dev/null | sort -u`, so an unreadable manifest was an EMPTY set at rc 0 -- every sited
+# file read as "not setup-sited", and a token-filled file then bucketed as plain content. A missing
+# `setup-sites.md` is the same failure, not a legitimate empty set: the manifest ships in this
+# directory in both install layouts, and every caller resolves it beside itself. 4 is the code no
+# other status here uses (1-3, 125, 127 and 128 are taken). An EMPTY set from a readable manifest
+# is an answer, and returns 0 under `pipefail` too.
+setup_sited_paths() { # -> one core-relative setup-sited path per line; 4 = the manifest could not be read
+  _ssp_mm="$(dirname "$0")/setup-sites.md"
+  [ -f "$_ssp_mm" ] || return 4
+  _ssp_out="$(awk '/^[ \t]*file:[ \t]*core\//{sub(/^[ \t]*file:[ \t]*/,""); print}' "$_ssp_mm")" || return 4
+  [ -n "$_ssp_out" ] || return 0
+  printf '%s\n' "$_ssp_out" | sort -u || return 4
+  return 0
+}
+#
+# THE ONE-LINE ASSIGNMENT BELOW IS A COMPATIBILITY SHIM FOR AN OLDER `apply.sh`, AND NOTHING HERE READS
+# IT. A consumer's installed apply.sh can predate `setup_sited_paths()`; it loads this set with
+# `awk '/^SETUP_SITED_PATHS=/,/sort -u\)"$/'` and evals the range in its OWN shell. With no line
+# opening `SETUP_SITED_PATHS=` and ending `sort -u)"`, that range ran to EOF, evaluated this script's
+# top level under that shell's `set -u`, and aborted the apply on `CONS: unbound variable`. So this
+# file keeps exactly one column-0 `SETUP_SITED_PATHS=` line, it opens and closes its own range on one
+# line, and it names nothing of this script -- the old engine gets the value it always got, by the
+# grammar it always read. This script then OVERWRITES it with the status-checked answer, assigned on
+# an INDENTED line so the old range cannot restart on it. Remove neither: the shim is what a mixed
+# pull runs, and the fixture `apply-restamp-theirs` drives that range against this file. Spelled with
+# `[[:blank:]]` rather than the function's `[ \t]`: same set, but a distinct program text, so a probe
+# keyed on the function's grammar counts the function's reads and not this one.
+SETUP_SITED_PATHS="$(awk '/^[[:blank:]]*file:[[:blank:]]*core\//{sub(/^[[:blank:]]*file:[[:blank:]]*/,""); print}' "$(dirname "$0")/setup-sites.md" 2>/dev/null | sort -u)"
+if _pc_ssp="$(setup_sited_paths)"; then
+  SETUP_SITED_PATHS="$_pc_ssp"
+else
+  _pc_ssp_rc=$?
+  pc_refuse "the setup-sited path set could not be read from $(dirname "$0")/setup-sites.md (setup_sited_paths returned ${_pc_ssp_rc}), so no file could be told apart from a setup-filled one"
+fi
 # --- WHOLE-LINE MEMBERSHIP IS A `case`, NEVER A HERE-STRING OR A HEREDOC -----------------------
 # Both membership tests below were `grep -qxF "$1"` fed by `<<<` or `<<EOF`. bash 3.2 stages
 # either one to a temp file under the SAME file-size limit as everything else, and when that write
@@ -341,11 +381,24 @@ self_update_hash() { # <core-rel-path> -> blob sha at the consumer's own skill_c
 # every globbed entry, reports no error, and rejects `:(glob)` outright. Resolved at BOTH refs,
 # because a machinery path DELETED at theirs is absent from one of them and is exactly the case
 # where the consumer's copy is the only copy left.
-machinery_paths() { # -> one core-relative machinery path per line, resolved at BASE and THEIRS
+#
+# A PRODUCER THAT FAILED RETURNS 4, NEVER A NARROWER SET. Both `ls-files` ran under `2>/dev/null`
+# with their status unread, so a listing that failed at ONE ref returned the other ref's paths at
+# rc 0: a set narrower than the truth, and non-empty, so no emptiness guard downstream could see
+# it. In this script that drops a path added at theirs out of the `skill_commit` scope; in the
+# gate it drops a carried path out of arm C's population and the gate says SELF-UPDATE-OK. So the
+# manifest read, both listings and the final sort are each status-checked, and any failure is 4 --
+# the code no other status here uses. A MISSING `setup-sites.md` is 4 as well: it ships beside
+# this file in both layouts and nothing installs one without the other, so its absence is a broken
+# install, not a pre-migration state. `set -f` is restored BEFORE the return, so a failure leaves
+# the caller's globbing as it found it. An EMPTY set from a readable manifest is an answer and
+# returns 0, under `pipefail` too. SELF-CONTAINED: no helper or variable of this script is named,
+# because three other scripts and three fixtures `eval` this body where none of them exist.
+machinery_paths() { # -> one core-relative machinery path per line, resolved at BASE and THEIRS; 4 = a producer failed
   _mm="$(dirname "$0")/setup-sites.md"
-  [ -f "$_mm" ] || return 0
-  _mgs="$(awk '/^machinery:/{f=1;next} f&&/^  - /{sub(/^  - /,"");print;next} f{exit}' "$_mm")"
-  _mout=""; _mgnorm=""; _mb=""; _mt=""
+  [ -f "$_mm" ] || return 4
+  _mgs="$(awk '/^machinery:/{f=1;next} f&&/^  - /{sub(/^  - /,"");print;next} f{exit}' "$_mm")" || return 4
+  _mout=""; _mgnorm=""; _mb=""; _mt=""; _mrc=0
   case "$-" in *f*) _mf=1 ;; *) _mf=0 ;; esac
   set -f
   for _mg in $_mgs; do
@@ -355,20 +408,25 @@ machinery_paths() { # -> one core-relative machinery path per line, resolved at 
   if [ -n "$_mgnorm" ]; then
     # `core.quotePath=false`: the CLASSIFY rows carry raw paths, and arm C and `carried_bucket`
     # join them against this set with `grep -xF` -- a C-quoted set matches no non-ASCII row.
-    _mb="$(git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$BASE" -- $_mgnorm 2>/dev/null)"
-    _mt="$(git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$THEIRS" -- $_mgnorm 2>/dev/null)"
+    _mb="$(git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$BASE" -- $_mgnorm 2>/dev/null)" || _mrc=4
+    _mt="$(git -C "$DIST" -c core.quotePath=false ls-files --with-tree="$THEIRS" -- $_mgnorm 2>/dev/null)" || _mrc=4
     _mout="$_mb
 $_mt"
   fi
   [ "$_mf" = 1 ] || set +f
-  printf '%s\n' "$_mout" | grep -v '^$' | sort -u
+  [ "$_mrc" -eq 0 ] || return 4
+  printf '%s\n' "$_mout" | awk 'length' | sort -u || return 4
+  return 0
 }
 
 # Resolved ONCE, and only when there is a self-update ref to scope. With no ref the arms are
 # already inert, and paying two `ls-files` per manifest glob on every ordinary pull would be a
-# cost with no reader.
-MACHINERY_PATHS=""
-[ -n "$SELF_UPDATE_REF" ] && MACHINERY_PATHS="$(machinery_paths)"
+# cost with no reader. One line, so the assignment and its status read stay together; a failed
+# producer refuses the run rather than scoping the arms to a narrower set.
+MACHINERY_PATHS=""; _pc_mrc=0
+[ -n "$SELF_UPDATE_REF" ] && MACHINERY_PATHS="$(machinery_paths)" || _pc_mrc=$?
+[ -z "$SELF_UPDATE_REF" ] || [ "$_pc_mrc" -eq 0 ] \
+  || pc_refuse "the machinery path set could not be resolved (machinery_paths returned ${_pc_mrc}: setup-sites.md unreadable, or an ls-files listing at ${BASE} or ${THEIRS} failed), so the skill_commit arms could not be scoped"
 is_machinery() { pc_has_line "$MACHINERY_PATHS" "$1"; }
 
 # The whole predicate, in one place so the three call sites cannot disagree about it: this

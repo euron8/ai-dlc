@@ -2337,10 +2337,24 @@ ss_assert "rec-inputs-unique" \
 # REWRITES `$VR_C1`'s hook to a script naming nothing -- deliberately, that is its whole subject --
 # and a hook naming no scripts intersects the machinery set in zero members, so this control would
 # read `none` and fail while describing a tree nobody was asserting about.
+# THE HOOK-NAME CLASS IS READ OUT OF THE GATE, never retyped here. An ASCII copy of it could not
+# spell a hook-named `café.sh`, so the intersection below would come out short for exactly the
+# names the gate's widened class records, and the two counts would disagree for a reason that is
+# the fixture's. Extracted from the gate's own INVOKED line; an extraction that finds nothing is a
+# broken fixture, not an empty hook.
+VR_HOOK_CLASS="$(awk -v q="'" 'index($0,"INVOKED=\"$(grep -oE " q) == 1 { s = substr($0, length("INVOKED=\"$(grep -oE " q) + 1); e = index(s, q " \"$HOOK\""); if (e) print substr(s, 1, e - 1); exit }' "$GATE")"
+VR_Q="'"; VR_QQ="'\"'\"'"
+VR_HOOK_CLASS="${VR_HOOK_CLASS//$VR_QQ/$VR_Q}"
+# PROBED BY WHAT IT CAPTURES, not by its spelling: the extracted class must take a non-ASCII hook
+# name whole and stop at `;`. An extraction that found nothing reads the impossible default and
+# captures 0; an ASCII class captures 0 too, which is the narrowing this replaced.
+vr_cls_n="$(printf 'bash scripts/ai-dlc/caf\303\251.sh;\n' | grep -oE "${VR_HOOK_CLASS:-NO-CLASS-WAS-READ}" | grep -cx "scripts/ai-dlc/caf$(printf '\303\251').sh")" || vr_cls_n=0
+ss_assert "rec-hook-class-read" "$vr_cls_n" "1" \
+  "the hook-name class both intersections below use is the gate's own, extracted rather than retyped, and it spells a non-ASCII name"
 ss_assert "rec-inputs-unique-control" \
   "$(bash "$SU/mach/list-machinery.sh" "$DIST" "$BASE" "$THEIRS" 2>/dev/null \
      | sed -n 's|^core/scripts/||p' | sort -u \
-     | grep -Fxf <(grep -oE 'scripts/ai-dlc/[A-Za-z0-9._-]+\.sh' "$CONS/.githooks/pre-push" | sed 's|.*/||' | sort -u) \
+     | grep -Fxf <(grep -oE "$VR_HOOK_CLASS" "$CONS/.githooks/pre-push" | sed 's|.*/||' | sort -u) \
      | grep -c . | awk '{print ($1 > 0) ? "overlap" : "none"}')" \
   "overlap" "...and the two recording sites really do overlap on some script, so the collapse is agreement rather than a set the second site never touched"
 
@@ -2367,7 +2381,7 @@ else
   # sites -- the scripts the hook names AND the machinery set covers. `not-invoked.sh` is in the
   # machinery set and not in the hook, so it is recorded once and cannot duplicate; a literal here
   # would go vacuous the day the seed's hook gains a line.
-  vr_m10_dup="$(grep -oE 'scripts/ai-dlc/[A-Za-z0-9._-]+\.sh' "$CONS/.githooks/pre-push" | sed 's|.*/||' | sort -u \
+  vr_m10_dup="$(grep -oE "$VR_HOOK_CLASS" "$CONS/.githooks/pre-push" | sed 's|.*/||' | sort -u \
                 | grep -Fxf <(bash "$SU/mach/list-machinery.sh" "$DIST" "$BASE" "$THEIRS" 2>/dev/null \
                               | sed -n 's|^core/scripts/||p' | sort -u) | grep -c .)" || vr_m10_dup=0
   vr_m10_want="-|core/git-hooks/pre-push|dup=$vr_m10_dup"
@@ -2792,6 +2806,10 @@ qw_world() {
     printf '#!/usr/bin/env bash\ncat "$D_ROOT/core/skills/ai-dlc/steps/%s.md"\n' "$QU" > "$w/dist/core/fixtures/qw-coupled/run.sh"
     mkdir -p "$w/dist/core/skills/ai-dlc/steps"
     printf '# step at base\n' > "$w/dist/core/skills/ai-dlc/steps/$QU.md"
+    # A rulebook path carrying a SPACE, changed in the range and already held at theirs by the
+    # consumer. A `for` over the candidate list split it into `steps/a` and `b.md`, neither of
+    # which is a consumer file, and the arm deferred a pull whose rulebook was already current.
+    printf '# spaced step at base\n' > "$w/dist/core/skills/ai-dlc/steps/a b.md"
   fi
   chmod +x "$w/cons/.githooks/pre-push"
   qw_git "$w/dist" add -A >/dev/null 2>&1; qw_git "$w/dist" commit -qm base >/dev/null 2>&1
@@ -2806,6 +2824,8 @@ qw_world() {
     # The consumer ALREADY holds theirs' copy, so the rulebook is NOT about to change for it.
     mkdir -p "$w/cons/.claude/skills/ai-dlc/steps"
     printf '# step at theirs\n' > "$w/cons/.claude/skills/ai-dlc/steps/$QU.md"
+    printf '# spaced step at theirs\n' > "$w/dist/core/skills/ai-dlc/steps/a b.md"
+    printf '# spaced step at theirs\n' > "$w/cons/.claude/skills/ai-dlc/steps/a b.md"
   fi
   qw_git "$w/dist" add -A >/dev/null 2>&1; qw_git "$w/dist" commit -qm theirs >/dev/null 2>&1
   git -C "$w/dist" rev-parse HEAD > "$w/T"
@@ -2914,7 +2934,280 @@ open(sys.argv[2], "w").write(s.replace(o, n, 1))' "$GATE" "$QW/m/self-update-gat
   cp "$GATE" "$QW/m/self-update-gate.sh"
 }
 qw_mut_names '/,:=#!@%+~]+' '/]+'
+
+# --- THE RULEBOOK CANDIDATE LOOP READS A STAGED FILE, AND A FAILED LISTING REFUSES (BL-420) -----
+# `steps/a b.md` is changed in the range and the consumer already holds theirs' copy, so the
+# quote-r2-* cells above demand r2=0 ok=1 WITH it present. A `for` over the candidate list split it
+# into `steps/a` and `b.md`, which name no consumer file, and the arm deferred a pull whose
+# rulebook was already current. Each mutant below restores one of the base's two defects.
+# qw_mut_pairs <label> <scanner> <want> <why> <old> <new> [<old> <new>]... -- each <old> must
+# occur EXACTLY once in the gate, or the anchor moved and the mutant is refused.
+qw_mut_pairs() {
+  local label="$1" scan="$2" want="$3" why="$4" mrc=0 got
+  shift 4
+  python3 -c 'import sys
+s = open(sys.argv[1]).read(); p = sys.argv[3:]
+for i in range(0, len(p), 2):
+    if s.count(p[i]) != 1: sys.exit(3)
+    s = s.replace(p[i], p[i + 1], 1)
+open(sys.argv[2], "w").write(s)' "$GATE" "$QW/m/self-update-gate.sh" "$@" 2>/dev/null || mrc=$?
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ "$mrc" -ne 0 ] || cmp -s "$GATE" "$QW/m/self-update-gate.sh"; then
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s mutation matched nothing (anchor moved)\n' "$label"
+  else
+    got="$("$scan" "$QW/m/self-update-gate.sh" utf8)"
+    if [ "$got" = "$want" ]; then printf '  ok    %-16s KILLED (%s: %s)\n' "$label" "$why" "$got"
+    else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED: got [%s], want [%s]\n' "$label" "$got" "$want"; fi
+  fi
+  cp "$GATE" "$QW/m/self-update-gate.sh"
+}
+qw_mut_pairs "quote-mut-r2split" qr_scan "r2=1 ok=0" \
+  "a for over the candidate list splits steps/a b.md into halves that name no consumer file" \
+  'while IFS= read -r r2p; do' 'for r2p in $R2_CAND; do' \
+  'done < "$TMP/r2-cand"' 'done'
+# A FAILED CANDIDATE LISTING IS UNDECIDED, NEVER "NO RULEBOOK CHANGE". The consumer's café.md is held
+# out, so the rulebook IS about to change and the healthy answer is the DEFER `quote-r2-control`
+# asserts; a listing that failed printed nothing, and nothing read as a pull that changes no rulebook.
+# The shim fails ONLY the R2 listing (the one `diff --name-only` naming rule-authoring.md) and drops
+# a marker, so the cell cannot pass on a shim that never ran.
+QR_SH="$QW/r2shim"; mkdir -p "$QR_SH"
+printf '#!/bin/sh\ncase "$*" in *" diff --name-only "*"rule-authoring.md"*) : > "%s/fired"; exit 128 ;; esac\nexec "%s" "$@"\n' \
+  "$QR_SH" "$(command -v git)" > "$QR_SH/git"
+chmod +x "$QR_SH/git"
+qr_fail() { # qr_fail <gate> [locale] -> "und=<n> defer=<n> ok=<n> fired=<0|1>"
+  local o
+  rm -f "$QR_SH/fired"
+  mv "$QW/r/cons/.claude/skills/ai-dlc/steps/$QU.md" "$QW/r/held.md"
+  o="$(PATH="$QR_SH:$PATH" LC_ALL=en_US.UTF-8 bash "$1" "$QW/r/dist" "$(cat "$QW/r/B")" "$(cat "$QW/r/T")" "$QW/r/cons" 2>/dev/null)"
+  mv "$QW/r/held.md" "$QW/r/cons/.claude/skills/ai-dlc/steps/$QU.md"
+  printf 'und=%s defer=%s ok=%s fired=%s\n' \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1 == "SELF-UPDATE-UNDECIDED" && $3 ~ /^the rulebook candidate listing/' | grep -c .)" \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1 == "SELF-UPDATE-DEFER" && $2 == "rulebook-coupled-fixtures"' | grep -c .)" \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1 == "SELF-UPDATE-OK" && $2 == "-"' | grep -c .)" \
+    "$([ -f "$QR_SH/fired" ] && echo 1 || echo 0)"
+}
+ss_assert "quote-r2-diff-failed" "$(qr_fail "$GATE")" "und=1 defer=0 ok=0 fired=1" \
+  "a rulebook candidate listing that failed is UNDECIDED, and the shim that failed it is shown to fire"
+qw_mut_pairs "quote-mut-r2rc" qr_fail "und=0 defer=0 ok=1 fired=1" \
+  "with the listing's status unread a failed diff reads as no rulebook change and the gate says OK" \
+  'core/team-roles/ 2>/dev/null)" || R2_RC=$?' 'core/team-roles/ 2>/dev/null)"'
 rm -rf "$QW"
+
+# --- A FAILED MACHINERY PRODUCER IS NOT A NARROWER SET (BL-418) ---------------------------------
+# `machinery_paths()` ran both `ls-files --with-tree` listings with their status unread, so a listing
+# that failed at ONE ref returned the other ref's paths at rc 0 -- a NARROWER set, and non-empty, so
+# the EMPTY guard never saw it. The discriminating input is a machinery path present at BASE and
+# DELETED at theirs, consumer-modified: only the BASE listing carries it, so a shim failing only that
+# listing drops its CARRY row and the gate says OK over a pull that deletes a consumer edit. Each
+# caller is driven through the same shape of shim, and each shim leaves a marker it fired.
+MP="$(mktemp -d "${TMPDIR:-/tmp}/su-gate-mp.XXXXXX")"
+mp_git() { git -C "$1" -c user.email=f@x -c user.name=f -c commit.gpgsign=false "${@:2}"; }
+mp_shim() { # mp_shim <dir> <ref> -- a git that fails only `ls-files --with-tree=<ref>`
+  mkdir -p "$1"
+  printf '#!/bin/sh\ncase "$*" in *"ls-files --with-tree=%s "*) : > "%s/fired"; exit 128 ;; esac\nexec "%s" "$@"\n' \
+    "$2" "$1" "$(command -v git)" > "$1/git"
+  chmod +x "$1/git"
+}
+# mp_engine <name> -> a whole copy of the reconcile dir, so a mutant resolves its siblings
+mp_engine() { rm -rf "$MP/e-$1"; mkdir -p "$MP/e-$1"; cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$MP/e-$1"/ 2>/dev/null; printf '%s' "$MP/e-$1"; }
+# mp_mut <name> <file> <old> <new> [<old> <new>]... -> an engine with <file> mutated; refuses a moved anchor
+mp_mut() {
+  local e f="$2" n="$1" mrc=0
+  e="$(mp_engine "$n")"; shift 2
+  python3 -c 'import sys
+s = open(sys.argv[1]).read(); p = sys.argv[3:]
+for i in range(0, len(p), 2):
+    if s.count(p[i]) != 1: sys.exit(3)
+    s = s.replace(p[i], p[i + 1], 1)
+open(sys.argv[2], "w").write(s)' "$(dirname "$GATE")/$f" "$e/$f" "$@" 2>/dev/null || mrc=$?
+  if [ "$mrc" -ne 0 ] || cmp -s "$(dirname "$GATE")/$f" "$e/$f" || ! bash -n "$e/$f" 2>/dev/null; then printf ''; return 1; fi
+  printf '%s' "$e"
+}
+mp_killed() { # mp_killed <label> <got> <want> <why> -- a mutant whose engine could not be built is a FAIL
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ "$2" = "$3" ]; then printf '  ok    %-16s KILLED (%s)\n' "$1" "$4"
+  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED or DID NOT APPLY: got [%s], want [%s]\n' "$1" "$2" "$3"; fi
+}
+
+# The gate world: kappa diverged-and-untouched, omega deleted at theirs and consumer-modified.
+GD="$MP/gd"; GC="$MP/gc"; mkdir -p "$GD/core/rules" "$GC/.claude/rules" "$GC/.githooks"
+git -C "$GD" init -q
+printf 'omega base\n' > "$GD/core/rules/omega.md"; printf 'kappa base\n' > "$GD/core/rules/kappa.md"; printf '0.1.0\n' > "$GD/VERSION"
+mp_git "$GD" add -A; mp_git "$GD" commit -qm base; MP_GB="$(git -C "$GD" rev-parse HEAD)"
+rm -f "$GD/core/rules/omega.md"; printf 'kappa theirs\n' > "$GD/core/rules/kappa.md"; printf '0.2.0\n' > "$GD/VERSION"
+mp_git "$GD" add -A; mp_git "$GD" commit -qm theirs; MP_GT="$(git -C "$GD" rev-parse HEAD)"
+printf 'omega LOCAL EDIT\n' > "$GC/.claude/rules/omega.md"; printf 'kappa base\n' > "$GC/.claude/rules/kappa.md"
+printf '#!/usr/bin/env bash\n# invokes no scripts/ai-dlc/ validator\nexit 0\n' > "$GC/.githooks/pre-push"; chmod +x "$GC/.githooks/pre-push"
+mp_shim "$MP/gs" "$MP_GB"
+mp_gate() { # mp_gate <gate> <shim-dir|-> -> "resolved=<n> empty=<n> carry=<paths> ok=<n> fired=<0|1>"
+  local o p="$PATH"
+  rm -f "$MP/gs/fired"; [ "$2" = - ] || p="$2:$PATH"
+  o="$(PATH="$p" bash "$1" "$GD" "$MP_GB" "$MP_GT" "$GC" 2>/dev/null)"
+  printf 'resolved=%s empty=%s carry=%s ok=%s fired=%s\n' \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1 == "SELF-UPDATE-UNDECIDED" && $3 ~ /could not be RESOLVED/' | grep -c .)" \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1 == "SELF-UPDATE-UNDECIDED" && $3 ~ /resolved EMPTY/' | grep -c .)" \
+    "$(su_carry "$o")" \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1 == "SELF-UPDATE-OK" && $2 == "-"' | grep -c .)" \
+    "$([ -f "$MP/gs/fired" ] && echo 1 || echo 0)"
+}
+ss_assert "mp-gate-healthy" "$(mp_gate "$GATE" -)" "resolved=0 empty=0 carry=core/rules/omega.md, ok=1 fired=0" \
+  "unshimmed, the path deleted upstream over a consumer edit is CARRIED and the gate goes on to OK"
+ss_assert "mp-gate-basefail" "$(mp_gate "$GATE" "$MP/gs")" "resolved=1 empty=0 carry= ok=0 fired=1" \
+  "the BASE listing failing is UNDECIDED with its own wording, not an OK over a set missing the carried path"
+# THE HEALTHY-EMPTY CONTROL, under the gate's own `pipefail`: a manifest whose `machinery:` block is
+# empty is an ANSWER, rc 0, and reaches the EMPTY row -- never the producer-failure row.
+MP_EE="$(mp_engine empty)"
+awk '/^machinery:/{print; skip=1; next} skip && /^[a-z_]+:/{skip=0} !skip' "$MP_EE/setup-sites.md" > "$MP_EE/.t" && mv "$MP_EE/.t" "$MP_EE/setup-sites.md"
+ss_assert "mp-gate-empty" "$(mp_gate "$MP_EE/self-update-gate.sh" -)" "resolved=0 empty=1 carry= ok=1 fired=0" \
+  "an empty machinery set from a readable manifest returns 0 under pipefail and reads as EMPTY, not as a failed producer"
+e="$(mp_mut basestatus preclassify.sh \
+  '--with-tree="$BASE" -- $_mgnorm 2>/dev/null)" || _mrc=4' '--with-tree="$BASE" -- $_mgnorm 2>/dev/null)"')" \
+  && got="$(mp_gate "$e/self-update-gate.sh" "$MP/gs")" || got="DID-NOT-APPLY"
+mp_killed "mp-mut-basestat" "$got" "resolved=0 empty=0 carry= ok=1 fired=1" \
+  "the BASE listing's status unread: the narrower set drops omega's CARRY row and the gate says OK"
+e="$(mp_mut gaterc self-update-gate.sh \
+  'c_mrc=0; C_PATHS="$(machinery_paths)" || c_mrc=$?' 'c_mrc=0; C_PATHS="$(machinery_paths)"')" \
+  && got="$(mp_gate "$e/self-update-gate.sh" "$MP/gs")" || got="DID-NOT-APPLY"
+mp_killed "mp-mut-gaterc" "$got" "resolved=0 empty=1 carry= ok=1 fired=1" \
+  "the gate reading no status: a failed producer is reported as an EMPTY set, which is a different fault"
+e="$(mp_mut oldtail preclassify.sh \
+  "  printf '%s\\n' \"\$_mout\" | awk 'length' | sort -u || return 4
+  return 0" \
+  "  printf '%s\\n' \"\$_mout\" | grep -v '^\$' | sort -u")" \
+  && { awk '/^machinery:/{print; skip=1; next} skip && /^[a-z_]+:/{skip=0} !skip' "$e/setup-sites.md" > "$e/.t" && mv "$e/.t" "$e/setup-sites.md"; } \
+  && got="$(mp_gate "$e/self-update-gate.sh" -)" || got="DID-NOT-APPLY"
+mp_killed "mp-mut-oldtail" "$got" "resolved=1 empty=0 carry= ok=0 fired=0" \
+  "the base's tail exits 1 under pipefail on a healthy EMPTY set, which then reads as a failed producer"
+
+# The preclassify world: `added.md` is born at the stamp's `skill_commit`, the consumer holds that
+# copy, and the dist checkout has moved PAST theirs and dropped it -- so only the THEIRS listing puts
+# it in the machinery set. Unshimmed it buckets UPSTREAM-ONLY-ADD; with that listing failing, the base
+# scoped the arm to a set without it and bucketed BOTH-ADDED->CLASSIFY at rc 0.
+PD="$MP/pd"; PCN="$MP/pc"; mkdir -p "$PD/core/rules" "$PCN/.claude/rules"
+git -C "$PD" init -q
+printf 'steady base\n' > "$PD/core/rules/steady.md"; printf '0.1.0\n' > "$PD/VERSION"
+mp_git "$PD" add -A; mp_git "$PD" commit -qm base; MP_PB="$(git -C "$PD" rev-parse HEAD)"
+printf 'added mid\n' > "$PD/core/rules/added.md"; printf '0.2.0\n' > "$PD/VERSION"
+mp_git "$PD" add -A; mp_git "$PD" commit -qm mid; MP_PM="$(git -C "$PD" rev-parse HEAD)"
+printf 'added theirs\n' > "$PD/core/rules/added.md"; printf '0.3.0\n' > "$PD/VERSION"
+mp_git "$PD" add -A; mp_git "$PD" commit -qm theirs; MP_PT="$(git -C "$PD" rev-parse HEAD)"
+rm -f "$PD/core/rules/added.md"; printf '0.4.0\n' > "$PD/VERSION"; mp_git "$PD" add -A; mp_git "$PD" commit -qm ahead
+printf 'steady base\n' > "$PCN/.claude/rules/steady.md"; printf 'added mid\n' > "$PCN/.claude/rules/added.md"
+printf 'version: 0.1.0\ncommit: %s\nskill_commit: %s\n' "$MP_PB" "$MP_PM" > "$PCN/.claude/.ai-dlc-version"
+mp_shim "$MP/ps" "$MP_PT"
+mp_pc() { # mp_pc <preclassify> <shim-dir|-> [consumer] -> "rc=<n> rows=<path=bucket,...> refused=<what> fired=<0|1>"
+  local p="$PATH" rows rc
+  rm -f "$MP/ps/fired"; [ "$2" = - ] || p="$2:$PATH"
+  rows="$(PATH="$p" bash "$1" "$PD" "$MP_PB" "$MP_PT" "${3:-$PCN}" 2> "$MP/pc.err")"; rc=$?
+  printf 'rc=%s rows=%s refused=%s fired=%s\n' "$rc" \
+    "$(printf '%s\n' "$rows" | awk -F'\t' '$2 ~ /^core\// {print $2 "=" $4}' | sort | tr '\n' ',')" \
+    "$(awk '/refusing to classify: the machinery path set/ {m=1} /refusing to classify: the setup-sited path set/ {s=1} END {print (m ? "machinery" : (s ? "sited" : "-"))}' "$MP/pc.err")" \
+    "$([ -f "$MP/ps/fired" ] && echo 1 || echo 0)"
+}
+ss_assert "mp-pc-healthy" "$(mp_pc "$SU_PC" -)" "rc=0 rows=core/rules/added.md=UPSTREAM-ONLY-ADD, refused=- fired=0" \
+  "unshimmed, the path born at skill_commit is suppressed by the machinery-scoped arm"
+ss_assert "mp-pc-theirsfail" "$(mp_pc "$SU_PC" "$MP/ps")" "rc=2 rows= refused=machinery fired=1" \
+  "the THEIRS listing failing refuses the run, never scopes the arm to a set without the added path"
+MP_PE="$(mp_engine pcempty)"
+awk '/^machinery:/{print; skip=1; next} skip && /^[a-z_]+:/{skip=0} !skip' "$MP_PE/setup-sites.md" > "$MP_PE/.t" && mv "$MP_PE/.t" "$MP_PE/setup-sites.md"
+ss_assert "mp-pc-empty" "$(mp_pc "$MP_PE/preclassify.sh" -)" "rc=0 rows=core/rules/added.md=BOTH-ADDED->CLASSIFY, refused=- fired=0" \
+  "an empty machinery set is an answer: rc 0, and the unscoped path classifies"
+e="$(mp_mut theirsstat preclassify.sh \
+  '--with-tree="$THEIRS" -- $_mgnorm 2>/dev/null)" || _mrc=4' '--with-tree="$THEIRS" -- $_mgnorm 2>/dev/null)"')" \
+  && got="$(mp_pc "$e/preclassify.sh" "$MP/ps")" || got="DID-NOT-APPLY"
+mp_killed "mp-mut-thrstat" "$got" "rc=0 rows=core/rules/added.md=BOTH-ADDED->CLASSIFY, refused=- fired=1" \
+  "the THEIRS listing's status unread: the narrower set re-buckets the self-updated path as a consumer edit"
+e="$(mp_mut pcrefuse preclassify.sh \
+  '[ -z "$SELF_UPDATE_REF" ] || [ "$_pc_mrc" -eq 0 ] \' '[ -z "$SELF_UPDATE_REF" ] || [ "$_pc_mrc" -ge 0 ] \')" \
+  && got="$(mp_pc "$e/preclassify.sh" "$MP/ps")" || got="DID-NOT-APPLY"
+mp_killed "mp-mut-pcrefuse" "$got" "rc=0 rows=core/rules/added.md=BOTH-ADDED->CLASSIFY, refused=- fired=1" \
+  "preclassify reading 4 and not refusing: an empty scope classifies a file nobody edited"
+# THE SETUP-SITED SET, the other producer this file owns. No stamp, so the machinery set is never
+# asked for and the sited read is the only thing that can refuse. A MISSING manifest refuses (it
+# ships beside preclassify in both layouts, so its absence is a broken install); a manifest
+# declaring no sited file is an answer. Removed rather than `chmod 000`: root reads a mode-000
+# file, and a consumer suite run as root would score this cell red for a reason it does not own.
+PCS="$MP/pcs"; mkdir -p "$PCS/.claude/rules"; cp "$PCN/.claude/rules/"* "$PCS/.claude/rules/"
+MP_SU="$(mp_engine sitedgone)"; rm -f "$MP_SU/setup-sites.md"
+ss_assert "mp-sited-missing" "$(mp_pc "$MP_SU/preclassify.sh" - "$PCS")" "rc=2 rows= refused=sited fired=0" \
+  "a missing setup-sites.md refuses, never reads as a tree with no setup-sited file"
+MP_SN="$(mp_engine sitednone)"
+awk '!/^[ \t]*file:[ \t]*core\//' "$MP_SN/setup-sites.md" > "$MP_SN/.t" && mv "$MP_SN/.t" "$MP_SN/setup-sites.md"
+ss_assert "mp-sited-none" "$(mp_pc "$MP_SN/preclassify.sh" - "$PCS" | cut -d' ' -f1,3)" "rc=0 refused=-" \
+  "a manifest declaring no setup-sited file is an empty answer, rc 0"
+e="$(mp_mut sitedrc preclassify.sh \
+  'if _pc_ssp="$(setup_sited_paths)"; then' 'if _pc_ssp="$(setup_sited_paths)" || :; then')" \
+  && { rm -f "$e/setup-sites.md"; got="$(mp_pc "$e/preclassify.sh" - "$PCS" | cut -d' ' -f1,3)"; } || got="DID-NOT-APPLY"
+mp_killed "mp-mut-sitedrc" "$got" "rc=0 refused=-" \
+  "the sited set's status unread: a missing manifest classifies the whole tree as unsited at rc 0"
+
+# unregistered-drift: the same partial failure, and the carry derivation run ONCE (BL-425). Three
+# machinery hooks the consumer edited, all in the range: omega deleted at theirs, kappa and sigma
+# changed. Each reaches the carried test, so each row used to re-run the whole derivation inside
+# `$( )` -- `bash preclassify.sh` included -- and leave an `ud-carry.*` directory behind. Counted
+# through a `mktemp` shim in a private TMPDIR: every preclassify run makes one `preclassify-stage`
+# directory and every derivation one `ud-carry`, so one log answers both counts.
+UD="$MP/ud"; UDD="$UD/dist"; UDC="$UD/cons"; mkdir -p "$UDD/core/hooks" "$UDC/.claude/hooks" "$UD/tmp" "$UD/mk"
+git -C "$UDD" init -q
+for h in omega kappa sigma; do
+  printf '#!/usr/bin/env bash\n# the %s hook records each dispatched beat exactly once in the sprint.\n' "$h" > "$UDD/core/hooks/ai-dlc-$h.sh"
+done
+printf '0.1.0\n' > "$UDD/VERSION"
+mp_git "$UDD" add -A; mp_git "$UDD" commit -qm base; MP_UB="$(git -C "$UDD" rev-parse HEAD)"
+rm -f "$UDD/core/hooks/ai-dlc-omega.sh"
+for h in kappa sigma; do printf '# upstream added a line of its own to %s at theirs, long enough.\n' "$h" >> "$UDD/core/hooks/ai-dlc-$h.sh"; done
+printf '0.2.0\n' > "$UDD/VERSION"
+mp_git "$UDD" add -A; mp_git "$UDD" commit -qm theirs; MP_UT="$(git -C "$UDD" rev-parse HEAD)"
+for h in omega kappa sigma; do
+  git -C "$UDD" show "$MP_UB:core/hooks/ai-dlc-$h.sh" > "$UDC/.claude/hooks/ai-dlc-$h.sh"
+  printf '# CONSUMER HARDENING on %s: a line the distribution never carried here.\n' "$h" >> "$UDC/.claude/hooks/ai-dlc-$h.sh"
+done
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s/log"\nexec "%s" "$@"\n' "$UD/mk" "$(command -v mktemp)" > "$UD/mk/mktemp"
+chmod +x "$UD/mk/mktemp"
+mp_shim "$MP/us" "$MP_UB"
+mp_ud() { # mp_ud <unregistered-drift> <shim-dir|-> -> "rc=<n> rows=<status:path,...> refused=<0|1> fired=<0|1>"
+  local p="$PATH" o rc
+  rm -f "$MP/us/fired"; [ "$2" = - ] || p="$2:$PATH"
+  o="$(PATH="$p" bash "$1" "$UDD" "$MP_UB" "$UDC" "$MP_UT" 2> "$MP/ud.err")"; rc=$?
+  printf 'rc=%s rows=%s refused=%s fired=%s\n' "$rc" \
+    "$(printf '%s\n' "$o" | awk -F'\t' 'NF >= 2 {print $1 ":" $2}' | sort | tr '\n' ',')" \
+    "$(grep -c 'REFUSED.*the machinery path set (machinery_paths' "$MP/ud.err")" \
+    "$([ -f "$MP/us/fired" ] && echo 1 || echo 0)"
+}
+mp_leak() { # mp_leak <unregistered-drift> -> "preclassify=<n> derived=<n> left=<n> carried=<n>"
+  local o
+  rm -rf "$UD/tmp"; mkdir -p "$UD/tmp"; : > "$UD/mk/log"
+  o="$(PATH="$UD/mk:$PATH" TMPDIR="$UD/tmp/" bash "$1" "$UDD" "$MP_UB" "$UDC" "$MP_UT" 2>/dev/null)"
+  printf 'preclassify=%s derived=%s left=%s carried=%s\n' \
+    "$(grep -c 'preclassify-stage' "$UD/mk/log")" "$(grep -c 'ud-carry' "$UD/mk/log")" \
+    "$(ls "$UD/tmp" | grep -c '^ud-carry')" \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1 == "CORE-MACHINERY-CARRIED"' | grep -c .)"
+}
+MP_UD_CARRIED="rows=CORE-MACHINERY-CARRIED:hooks/ai-dlc-kappa.sh,CORE-MACHINERY-CARRIED:hooks/ai-dlc-omega.sh,CORE-MACHINERY-CARRIED:hooks/ai-dlc-sigma.sh,"
+MP_UD_BASEFAIL="rows=CORE-MACHINERY-CARRIED:hooks/ai-dlc-kappa.sh,CORE-MACHINERY-CARRIED:hooks/ai-dlc-sigma.sh,HARD-UNREGISTERED-CORE-DRIFT:hooks/ai-dlc-omega.sh,"
+ss_assert "mp-ud-healthy" "$(mp_ud "$(dirname "$GATE")/unregistered-drift.sh" -)" "rc=0 $MP_UD_CARRIED refused=0 fired=0" \
+  "unshimmed, all three edited machinery hooks in the range are CARRIED"
+ss_assert "mp-ud-basefail" "$(mp_ud "$(dirname "$GATE")/unregistered-drift.sh" "$MP/us")" "rc=2 rows= refused=1 fired=1" \
+  "the BASE listing failing refuses the scan, never drops omega back to a HARD row whose remedy contradicts the worklist"
+ss_assert "mp-ud-once" "$(mp_leak "$(dirname "$GATE")/unregistered-drift.sh")" "preclassify=1 derived=1 left=0 carried=3" \
+  "three rows reach the carried test, and preclassify runs ONCE and its directory is removed by the trap"
+e="$(mp_mut udrc unregistered-drift.sh \
+  'machinery_paths > "$CARRY_TMP/mach" 2>/dev/null || return 4' 'machinery_paths > "$CARRY_TMP/mach" 2>/dev/null || : > "$CARRY_TMP/mach"')" \
+  && got="$(mp_ud "$e/unregistered-drift.sh" "$MP/us")" || got="DID-NOT-APPLY"
+mp_killed "mp-mut-udrc" "$got" "rc=0 rows=HARD-UNREGISTERED-CORE-DRIFT:hooks/ai-dlc-kappa.sh,HARD-UNREGISTERED-CORE-DRIFT:hooks/ai-dlc-omega.sh,HARD-UNREGISTERED-CORE-DRIFT:hooks/ai-dlc-sigma.sh, refused=0 fired=1" \
+  "a failed machinery producer read as an empty set: every carried hook falls back to HARD at rc 0"
+e="$(mp_mut udperrow unregistered-drift.sh \
+  '_cd=0; ud_carry_derive || _cd=$?' '_cd=0' \
+  "  _cb_p=\"\$1\"
+  [ \"\$CARRY_STATE\" = \"ready\" ]" \
+  "  _cb_p=\"\$1\"
+  ud_carry_derive || return 1
+  [ \"\$CARRY_STATE\" = \"ready\" ]")" \
+  && got="$(mp_leak "$e/unregistered-drift.sh")" || got="DID-NOT-APPLY"
+mp_killed "mp-mut-perrow" "$got" "preclassify=3 derived=3 left=3 carried=3" \
+  "the derivation back inside \$( ): preclassify re-runs per row and every ud-carry directory leaks"
+chmod -R u+rwX "$MP" 2>/dev/null
+rm -rf "$MP"
 
 echo
 if [ "$FAILURES" -gt 0 ]; then

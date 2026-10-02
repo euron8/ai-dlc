@@ -615,6 +615,20 @@ arm_ud_absorbed() { local rc=0; mkstub grep '*".{0,24}"*' 0 2; ud_run "$1" "$STU
   ARM_WHY="rc=$rc fired=$(fired) status=$(ud_status)"
   failed_call 0 && [ "$(ud_status)" = HARD-UNREGISTERED-CORE-DRIFT ] \
     && grep -q 'ABSORBED the consumer.s delta could not be measured' "$OUT"; }
+# absorbed_pct reads the scan loop's STAGED theirs blob, never a second serve of it (BL-422). The
+# memo serves a blob by `cat`-ing its cached `.c` file, once per read; this stub fails the SECOND
+# serve of guard.sh's theirs blob. The scan loop's staging is the first, so a second read can only
+# come from absorbed_pct -- whose 125 then surfaced as CLASSIFIER DID NOT RUN, naming no memo.
+# The fixed scan reads the theirs blob once, the stub never reaches its index, and the row is the
+# healthy ABSORBED. `fired` >= 1 shows the stub saw the staging read, so the cell is not passing on
+# a stub that matched nothing.
+# Keyed on the `s ` (show) memo key: the `r ` (rev-parse) key for the same <ref:path> also ends in
+# `.c` and is served too, so a pattern without the prefix counts a read that is not a blob serve.
+arm_ud_memo2() { local rc=0 m; m="$(mktemp -d "$W/udmemo.XXXXXX")"
+  mkstub cat "*\"/s \"*\"${UW_THEIRS}:core%2Fhooks%2Fguard.sh.c\"" 2 1
+  AI_DLC_RECONCILE_MEMO="$m" PATH="$STUB:$PATH" bash "$1" "$UWD" "$UW_BASE" "$UWC" "$UW_THEIRS" > "$OUT" 2> "$ERR" || rc=$?
+  ARM_WHY="rc=$rc fired=$(fired) status=$(ud_status)"
+  [ "$(fired)" -ge 1 ] && [ "$rc" -eq 0 ] && [ "$(ud_status)" = HARD-CORE-DRIFT-ABSORBED ]; }
 
 # --- migrate-artifact-paths ----------------------------------------------------------------------
 mg_run() { local p="$PATH"; [ -n "${2:-}" ] && p="$2:$PATH"
@@ -1527,6 +1541,7 @@ run_arm arm_rt_ours      "$S_RT"  "retired-tokens: the CONSUMER token scan alone
 run_arm arm_ro_sort      "$S_RO"  "readopt-override: the stale scan's FROM set (sort, inside \$( )) fails -> exit 2, not OK"
 run_arm arm_ro_git       "$S_RO"  "readopt-override: git show exits 127 in ro_section -> exit 2, not OK"
 run_arm arm_ud_absorbed  "$S_UD"  "unregistered-drift: absorbed_pct's line set (grep, inside \$( )) fails -> CLASSIFIER DID NOT RUN"
+run_arm arm_ud_memo2     "$S_UD"  "unregistered-drift: a second memo serve of the theirs blob fails -> absorbed_pct never asks for one, the row is ABSORBED"
 run_arm arm_mg_ls        "$S_MG"  "migrate-artifact-paths: failed git ls-files -> exit 2, not 'nothing to migrate' (3)"
 run_arm arm_ac_segment   "$S_AC"  "validate-ac-falsifiability: failed AC segmentation (awk) -> exit 2, not PASS"
 run_arm arm_le_all       "$S_LE"  "validate-layer-entries: every layer walk fails -> exit 2, not '0 error(s)'"
@@ -2148,7 +2163,7 @@ control reconcile retired-layer-contract.sh     arm_rg_healthy arm_rg_theirs_ls 
 control reconcile readopt-override.sh           arm_ro_healthy arm_ro_sort arm_ro_git arm_ro_span
 libcontrol retired-layer-passage.sh arm_rlp_healthy arm_rlp_norm arm_rlp_removed arm_rlp_latin1
 libcontrol readopt-override.sh      arm_ro_healthy arm_ro_span
-control reconcile unregistered-drift.sh         arm_ud_healthy arm_ud_absorbed
+control reconcile unregistered-drift.sh         arm_ud_healthy arm_ud_absorbed arm_ud_memo2
 control scripts   migrate-artifact-paths.sh     arm_mg_healthy arm_mg_ls
 control scripts   validate-ac-falsifiability.sh arm_ac_healthy arm_ac_segment
 control scripts   validate-layer-entries.sh     arm_le_healthy arm_le_census arm_lr_healthy arm_la_healthy arm_wt_healthy arm_lr_rules arm_la_anchors arm_wt_prov arm_wt_line
@@ -2218,10 +2233,16 @@ mutant RO-SUBSHELL reconcile readopt-override.sh arm_ro_healthy "arm_ro_sort arm
 mutant RO-SECTION reconcile readopt-override.sh arm_ro_healthy "arm_ro_git" \
   $'    128) : > "$RO_T/$3.raw" ;;\n    *) return 3 ;;' $'    *) : > "$RO_T/$3.raw" ;;'
 mutant UD-SITE reconcile unregistered-drift.sh arm_ud_healthy "arm_ud_absorbed" \
-  $'  ud_trim_floor "$cons" "$t/ap-cons" || return 3\n  git_show "${BASE}" "${cp}" > "$t/ap-base-blob" || return 3\n  ud_trim_floor "$t/ap-base-blob" "$t/ap-base" || return 3\n  comm -23 "$t/ap-cons" "$t/ap-base" > "$t/ap-only" || return 3\n  only="$(cat "$t/ap-only")"' \
+  $'  ud_trim_floor "$cons" "$t/ap-cons" || return 3\n  ud_trim_floor "$t/blob-base" "$t/ap-base" || return 3\n  comm -23 "$t/ap-cons" "$t/ap-base" > "$t/ap-only" || return 3\n  only="$(cat "$t/ap-only")"' \
   $'  only="$(comm -23 \\\n    <(sed \'s/^[[:space:]]*//; s/[[:space:]]*$//\' "$cons" | grep -vE \'^.{0,24}$\' | sort -u) \\\n    <(git_show "${BASE}" "${cp}" | sed \'s/^[[:space:]]*//; s/[[:space:]]*$//\' | grep -vE \'^.{0,24}$\' | sort -u))"'
 mutant UD-SUBSHELL reconcile unregistered-drift.sh arm_ud_healthy "arm_ud_absorbed" \
   'if ! ap_out="$(absorbed_pct "$cp" "$cons")"; then' 'if ! ap_out="$(absorbed_pct "$cp" "$cons")" && false; then'
+# absorbed_pct reads both blobs through git_show a second time again (the base's shape, BL-422).
+mutant UD-MEMO reconcile unregistered-drift.sh arm_ud_healthy "arm_ud_memo2" \
+  '  ud_trim_floor "$t/blob-base" "$t/ap-base" || return 3' \
+  $'  git_show "${BASE}" "${cp}" > "$t/ap-base-blob" || return 3\n  ud_trim_floor "$t/ap-base-blob" "$t/ap-base" || return 3' \
+  $'sed \'s/^[[:space:]]*//; s/[[:space:]]*$//\' "$t/blob-theirs" | sort -u' \
+  $'git_show "${THEIRS}" "${cp}" > "$t/ap-theirs-blob" || return 3\n  sed \'s/^[[:space:]]*//; s/[[:space:]]*$//\' "$t/ap-theirs-blob" | sort -u'
 mutant MG-LS scripts migrate-artifact-paths.sh arm_mg_healthy "arm_mg_ls" \
   'git ls-files -- $(printf '"'"'%s '"'"' $SCAN_ROOTS) 2>/dev/null > "$TMP/tracked" || LS_RC=$?' ':' \
   'done < "$TMP/tracked"' 'done < <(git ls-files -- $(printf '"'"'%s '"'"' $SCAN_ROOTS) 2>/dev/null)'

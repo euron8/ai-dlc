@@ -4121,8 +4121,13 @@ fi
 # validator that is not there is exactly what several of them test. templates/ IS in the
 # corpus — it is installed into the consumer's tree, so a dead citation there is dead in
 # the same place, for the same reader.
+#
+# THE NAME CLASS IS THE GATE'S NEGATION, NOT AN ASCII ENUMERATION. `[A-Za-z0-9_.-]` could not spell
+# a validator named `café.sh`, so a citation of a non-ASCII ghost was simply not a citation and the
+# arm passed it. The class is `self-update-gate.sh`'s INVOKED class -- everything but whitespace,
+# quotes, shell operators and the separators that end a name -- with I50's own `\.(sh|js)` ending.
 i50_have="$(ls "$REPO_ROOT/core/scripts" 2>/dev/null | sed 's@^@scripts/ai-dlc/@' | sort -u)"
-i50_cited="$(grep -rhoE 'scripts/ai-dlc/[A-Za-z0-9_.-]+\.(sh|js)' \
+i50_cited="$(grep -rhoE 'scripts/ai-dlc/[^]['"'"'"`[:space:];|&()<>$*?{}\\/,:=#!@%+~]+\.(sh|js)' \
   "$REPO_ROOT/core" "$REPO_ROOT/templates" 2>/dev/null --exclude-dir=fixtures | sort -u)"
 if [ -z "$i50_have" ] || [ -z "$i50_cited" ]; then
   err "I50 derived an EMPTY set: $(printf '%s' "$i50_have" | grep -c .) script(s) under core/scripts/, $(printf '%s' "$i50_cited" | grep -c .) citation(s) across core/ and templates/. Every citation is a member of a set that contains everything, so this fails closed rather than reporting an agreement it never computed."

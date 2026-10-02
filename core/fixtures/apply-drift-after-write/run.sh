@@ -304,8 +304,15 @@ NOGUARD="$WORK/drift-noguard.sh"
 # The script resolves map_consumer() from its SIBLING preclassify.sh and refuses to scan at
 # all without it. A mutant copied away from that sibling therefore reports nothing, which
 # reads here as "the hazard did not reproduce" — a vacuous PASS of the wrong assertion.
-cp "$(dirname "$DRIFT")/preclassify.sh" "$WORK/preclassify.sh"
-awk '/^      if \[ -n "\$THEIRS" \] && git -C "\$DIST" cat-file -e "\$\{THEIRS\}:\$\{cp\}" 2>\/dev\/null \\$/ {skip=6}
+# `setup-sites.md` TRAVELS TOO. The scan evals `machinery_paths()` out of that sibling, and a
+# missing manifest is a refusal (a broken install), not an empty set -- so a copy without it
+# exits 2 before any row and reads here as "the hazard did not reproduce".
+cp "$(dirname "$DRIFT")/preclassify.sh" "$(dirname "$DRIFT")/setup-sites.md" "$WORK/"
+# THE STRIP TAKES THE COMPARE-AND-CONTINUE BLOCK ONLY. The theirs blob is STAGED one block above
+# (`ud_theirs`), and absorption reads that staged copy, so the staging must survive the strip or
+# the ABSORBED row this assertion demands could never return. Keyed on the `if` that ends in a
+# continuation, which absorption's own `if [ "$ud_theirs" -eq 1 ]; then` does not.
+awk '/^      if \[ "\$ud_theirs" -eq 1 \] \\$/ {skip=5}
      skip > 0 {skip--; next}
      {print}' "$DRIFT" > "$NOGUARD"
 # KEYED ON THE EMITTER, NOT ON A WHOLE-FILE MENTION COUNT. The count was `> 1` when the file

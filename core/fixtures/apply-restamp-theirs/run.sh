@@ -281,6 +281,167 @@ else
 fi
 fi
 
+# --- Assertions 9/10: THE SETUP-SITED SET apply.sh LOADS IS STATUS-CHECKED (BL-418) -----------
+# apply.sh loads preclassify's `setup_sited_paths()` twice: for the in-flight marker's CLASSIFY
+# hashes, and for `--finish`'s setup-sited NOTE rows. Both used to eval an assignment whose awk
+# status nothing read, so an unreadable manifest was an EMPTY set and the run went on: the marker
+# was written with no sited exclusion, and `--finish` advanced the stamp having verified nothing.
+# Forced with an `awk` stub failing the Nth call whose program carries the sited grammar. In both
+# modes call 1 is preclassify's own read and call 2 is apply.sh's, so N=2 is the cell; the stub
+# logs every call, so a cell whose stub never reached call 2 reads as broken, not as a pass.
+if ! grep -q '^setup_sited_paths() {' "$(dirname "$APPLY")/preclassify.sh" 2>/dev/null; then
+  skip "setup-sited set status" "the installed preclassify.sh predates setup_sited_paths(); it lands with this same pull"
+else
+SS="$WORK/sited"; SSD="$SS/dist"; SSC="$SS/cons"
+mkdir -p "$SSD/core/session-driver" "$SSD/core/scripts" "$SSC/.claude/session-driver" "$SSC/scripts/ai-dlc" "$SS/sh" || exit 2
+ssg() { git -C "$SSD" -c user.email=f@f -c user.name=fixture -c commit.gpgsign=false "$@"; }
+git -C "$SSD" init -q
+printf '1.0.0\n' > "$SSD/VERSION"
+printf '#!/usr/bin/env bash\n# driver v1\n' > "$SSD/core/session-driver/ai-dlc-session-driver.sh"
+printf '#!/usr/bin/env bash\necho v\n' > "$SSD/core/scripts/validate-synthetic.sh"
+ssg add -A && ssg commit -qm base; SS_B="$(git -C "$SSD" rev-parse HEAD)"
+printf '2.0.0\n' > "$SSD/VERSION"
+printf '#!/usr/bin/env bash\n# driver v2 UPSTREAM\n' > "$SSD/core/session-driver/ai-dlc-session-driver.sh"
+ssg add -A && ssg commit -qm theirs; SS_T="$(git -C "$SSD" rev-parse HEAD)"
+printf '#!/usr/bin/env bash\n# driver v1\n' > "$SSC/.claude/session-driver/ai-dlc-session-driver.sh"
+printf '#!/usr/bin/env bash\necho v\n' > "$SSC/scripts/ai-dlc/validate-synthetic.sh"
+printf 'version: 1.0.0\ncommit: %s\n' "$SS_B" > "$SSC/.claude/.ai-dlc-version"
+cat > "$SS/sh/awk" <<SH
+#!/bin/sh
+case "\$*" in *'file:[ \\t]*core'*)
+  n=\$(( \$(wc -l < "$SS/sh/LOG") + 1 )); printf '%s\n' "\$n" >> "$SS/sh/LOG"
+  [ "\$n" = 2 ] && exit 2 ;;
+esac
+exec "$(command -v awk)" "\$@"
+SH
+chmod +x "$SS/sh/awk"
+ss_apply() { # ss_apply <apply.sh> -> "calls=<n> unwritten=<n> stamp=<v>" for an ordinary apply, call 2 failed
+  local c="$SS/c.$RANDOM" o
+  cp -R "$SSC" "$c"; : > "$SS/sh/LOG"
+  o="$(PATH="$SS/sh:$PATH" bash "$1" "$SSD" "$SS_B" "$c" "$SS_T" 2>&1)"
+  printf 'calls=%s unwritten=%s stamp=%s' "$(grep -c . "$SS/sh/LOG")" \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1=="DECISION" && $2=="applying-marker-unwritten" && index($4,"setup_sited_paths")' | grep -c .)" \
+    "$(sed -n 's/^version: //p' "$c/.claude/.ai-dlc-version")"
+}
+ss_finish() { # ss_finish <apply.sh> -> "calls=<n> unverified=<n> stamp=<v>" for --finish over a tree AT theirs
+  local c="$SS/f.$RANDOM" o
+  cp -R "$SSC" "$c"; : > "$SS/sh/LOG"
+  git -C "$SSD" show "$SS_T:core/session-driver/ai-dlc-session-driver.sh" > "$c/.claude/session-driver/ai-dlc-session-driver.sh"
+  printf 'base: %s\ntheirs: %s\n' "$SS_B" "$SS_T" > "$c/.claude/.ai-dlc-applying"
+  o="$(PATH="$SS/sh:$PATH" bash "$1" --finish "$SSD" "$SS_B" "$c" "$SS_T" 2>&1)"
+  printf 'calls=%s unverified=%s stamp=%s' "$(grep -c . "$SS/sh/LOG")" \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1=="WORKLIST" && $2=="finish-unverified-tree" && index($4,"setup_sited_paths")' | grep -c .)" \
+    "$(sed -n 's/^version: //p' "$c/.claude/.ai-dlc-version")"
+}
+r="$(ss_apply "$APPLY")"
+[ "$r" = "calls=2 unwritten=1 stamp=1.0.0" ] \
+  && ok "a sited set apply.sh cannot load withholds the in-flight marker and the stamp ($r)" \
+  || bad "a failed sited-set load in the marker was read as an empty set: got [$r], want [calls=2 unwritten=1 stamp=1.0.0]"
+r="$(ss_finish "$APPLY")"
+[ "$r" = "calls=2 unverified=1 stamp=1.0.0" ] \
+  && ok "--finish over a tree at theirs withholds the stamp when its sited set cannot be loaded ($r)" \
+  || bad "--finish advanced or verified nothing with no sited set: got [$r], want [calls=2 unverified=1 stamp=1.0.0]"
+# MUTANTS, each a whole copy of reconcile/ with ONE status read dropped; an anchor that moved refuses.
+ss_mut() { # ss_mut <name> <old> <new> -> apply.sh path in a mutated copy, or nothing
+  local d="$SS/m-$1"
+  mkdir -p "$d" && cp "$(dirname "$APPLY")"/* "$d/" 2>/dev/null || return 1
+  python3 -c 'import sys
+s = open(sys.argv[1]).read()
+if s.count(sys.argv[3]) != 1: sys.exit(3)
+open(sys.argv[2], "w").write(s.replace(sys.argv[3], sys.argv[4], 1))' "$APPLY" "$d/apply.sh" "$2" "$3" 2>/dev/null || return 1
+  cmp -s "$APPLY" "$d/apply.sh" && return 1
+  bash -n "$d/apply.sh" 2>/dev/null || return 1
+  printf '%s' "$d/apply.sh"
+}
+if m="$(ss_mut marker '_sited="$(setup_sited_paths)" || _rc=$?' '_sited="$(setup_sited_paths)" || :')"; then
+  r="$(ss_apply "$m")"
+  [ "$r" = "calls=2 unwritten=0 stamp=2.0.0" ] \
+    && ok "mutant (marker's sited status unread) killed: the marker is written over an empty sited set and the stamp advances ($r)" \
+    || bad "mutant (marker's sited status unread) SURVIVED: got [$r], want [calls=2 unwritten=0 stamp=2.0.0]"
+else
+  bad "mutant (marker's sited status unread) DID NOT APPLY -- its anchor moved in apply.sh"
+fi
+if m="$(ss_mut finish '_fv_sited="$(setup_sited_paths)" || _fv_rc=$?' '_fv_sited="$(setup_sited_paths)" || :')"; then
+  r="$(ss_finish "$m")"
+  [ "$r" = "calls=2 unverified=0 stamp=2.0.0" ] \
+    && ok "mutant (--finish's sited status unread) killed: the stamp advances having verified no sited file ($r)" \
+    || bad "mutant (--finish's sited status unread) SURVIVED: got [$r], want [calls=2 unverified=0 stamp=2.0.0]"
+else
+  bad "mutant (--finish's sited status unread) DID NOT APPLY -- its anchor moved in apply.sh"
+fi
+
+# --- Assertions 11/12: A MIXED PULL, IN BOTH DIRECTIONS ------------------------------------------
+# A consumer runs its OWN installed engine, so one pull can pair an apply.sh and a preclassify.sh
+# from different releases. OLD apply.sh + NEW preclassify.sh: the old engine loads the sited set with
+# the literal range below and evals it under its own `set -u`; without a one-line assignment that
+# closes that range, the range ran to EOF, evaluated preclassify's top level and aborted the apply on
+# an unbound variable. The cell evals exactly that range in a foreign shell carrying none of
+# preclassify's variables, and demands rc 0, a statement AFTER the eval, and the real sited set.
+OLD_RANGE='/^SETUP_SITED_PATHS=/,/sort -u\)"$/'
+ss_old_extract() { # ss_old_extract <reconcile-dir> -> "rc=<n> after=<0|1> lines=<n> match=<0|1>"
+  local want
+  # The sited set derived here, from the manifest beside the subject, by this file's own grammar.
+  want="$(awk '/^[ \t]*file:[ \t]*core\//{sub(/^[ \t]*file:[ \t]*/,""); print}' "$1/setup-sites.md" 2>/dev/null | sort -u)"
+  OLD_RANGE="$OLD_RANGE" SELF="$1" WANT="$want" bash -c '
+    set -uo pipefail
+    SETUP_SITED_PATHS=""
+    eval "$(awk "$OLD_RANGE" "$SELF/preclassify.sh" 2>/dev/null)"; rc=$?
+    printf "rc=%s after=1 lines=%s match=%s" "$rc" "$(printf "%s\n" "$SETUP_SITED_PATHS" | grep -c .)" \
+      "$([ -n "$WANT" ] && [ "$SETUP_SITED_PATHS" = "$WANT" ] && echo 1 || echo 0)"' "$1/apply.sh" 2>/dev/null \
+    || printf ' aborted'
+}
+r="$(ss_old_extract "$(dirname "$APPLY")")"
+case "$r" in
+  "rc=0 after=1 lines="*" match=1") case "$r" in *"lines=0 "*) bad "the pre-R1 apply.sh extractor read an EMPTY sited set from this preclassify.sh ($r)" ;;
+                                      *) ok "a pre-R1 apply.sh extractor evals this preclassify.sh's range cleanly and reads the real sited set ($r)" ;; esac ;;
+  *) bad "a pre-R1 apply.sh extractor against this preclassify.sh did not close its range cleanly: [$r] -- a mixed pull aborts the apply" ;;
+esac
+# MUTANT: the shim gone, the set assigned only by the status-checked call -- the shape that aborted.
+SHIMD="$SS/m-noshim"; mkdir -p "$SHIMD" && cp "$(dirname "$APPLY")"/* "$SHIMD/" 2>/dev/null
+if python3 -c 'import sys
+s = open(sys.argv[1]).read()
+a = s.find("\nSETUP_SITED_PATHS=\"$(awk "); b = s.find("\nfi\n", a)
+if a < 0 or b < 0 or s.count("\nSETUP_SITED_PATHS=\"$(awk ") != 1: sys.exit(3)
+new = "\nSETUP_SITED_PATHS=\"$(setup_sited_paths)\" \\\n  || pc_refuse \"the setup-sited path set could not be read\""
+open(sys.argv[2], "w").write(s[:a] + new + s[b + 3:])' "$(dirname "$APPLY")/preclassify.sh" "$SHIMD/preclassify.sh" 2>/dev/null \
+   && ! cmp -s "$(dirname "$APPLY")/preclassify.sh" "$SHIMD/preclassify.sh" && bash -n "$SHIMD/preclassify.sh" 2>/dev/null; then
+  r="$(ss_old_extract "$SHIMD")"
+  case "$r" in
+    "rc=0 after=1 "*" match=1") bad "mutant (compatibility shim removed) SURVIVED: the old extractor still read the set ($r)" ;;
+    *) ok "mutant (compatibility shim removed) killed: the old extractor's range runs past its assignment [$r]" ;;
+  esac
+else
+  bad "mutant (compatibility shim removed) DID NOT APPLY -- the shim line or its if-block moved"
+fi
+# NEW apply.sh + OLD preclassify.sh: no `setup_sited_paths()` to load. Failing closed is right; the
+# remedy must name the version skew, not "present and readable". The old preclassify is synthesised
+# from this one: the function deleted and the status-checked block deleted, leaving the shim line --
+# which is exactly the assignment a pre-R1 preclassify.sh carried.
+OLDPD="$SS/old-pre"; mkdir -p "$OLDPD" && cp "$(dirname "$APPLY")"/* "$OLDPD/" 2>/dev/null
+awk '/^setup_sited_paths\(\) \{/ {s=1} s && /^\}/ {s=0; next} s {next}
+     /^if _pc_ssp="\$\(setup_sited_paths\)"; then$/ {f=1} f && /^fi$/ {f=0; next} f {next} {print}' \
+  "$(dirname "$APPLY")/preclassify.sh" > "$OLDPD/preclassify.sh"
+old_live="$(grep -v '^[[:space:]]*#' "$OLDPD/preclassify.sh" | grep -c 'setup_sited_paths\|_pc_ssp')" || old_live=0
+if [ "$old_live" -ne 0 ] \
+   || ! grep -q '^SETUP_SITED_PATHS="\$(awk ' "$OLDPD/preclassify.sh" \
+   || ! bash -n "$OLDPD/preclassify.sh" 2>/dev/null; then
+  bad "FIXTURE BROKEN: could not synthesise a pre-R1 preclassify.sh (function or block anchors moved)"
+else
+  c="$SS/skew.$RANDOM"; cp -R "$SSC" "$c"
+  o="$(bash "$OLDPD/apply.sh" "$SSD" "$SS_B" "$c" "$SS_T" 2>&1)"
+  r="$(printf '%s\n' "$o" | awk -F'\t' '$1=="DECISION" && $2=="applying-marker-unwritten" && index($4,"(exit 127)") && index($4,"predates") && index($4,"version skew") && !index($4,"present and readable")' | grep -c .)"
+  [ "$r" = 1 ] && ok "a newer apply.sh beside a pre-R1 preclassify.sh fails closed and names the version skew, not an unreadable file" \
+    || bad "a newer apply.sh beside a pre-R1 preclassify.sh did not name the version skew: $(printf '%s\n' "$o" | awk -F'\t' '$2=="applying-marker-unwritten" {print $4}' | cut -c1-200)"
+  c="$SS/skewf.$RANDOM"; cp -R "$SSC" "$c"
+  git -C "$SSD" show "$SS_T:core/session-driver/ai-dlc-session-driver.sh" > "$c/.claude/session-driver/ai-dlc-session-driver.sh"
+  printf 'base: %s\ntheirs: %s\n' "$SS_B" "$SS_T" > "$c/.claude/.ai-dlc-applying"
+  o="$(bash "$OLDPD/apply.sh" --finish "$SSD" "$SS_B" "$c" "$SS_T" 2>&1)"
+  r="$(printf '%s\n' "$o" | awk -F'\t' '$1=="WORKLIST" && $2=="finish-unverified-tree" && index($4,"(exit 127)") && index($4,"version skew") && !index($4,"present and readable")' | grep -c .)"
+  [ "$r" = 1 ] && ok "--finish with a pre-R1 preclassify.sh withholds the stamp and names the version skew" \
+    || bad "--finish with a pre-R1 preclassify.sh did not name the version skew: $(printf '%s\n' "$o" | awk -F'\t' '$2=="finish-unverified-tree" {print $4}' | cut -c1-200)"
+fi
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then
   echo "PASS  apply-restamp-theirs: the stamp is computed from theirs, so a distribution"
