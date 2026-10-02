@@ -834,41 +834,6 @@ verify: sh L="$PWD/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh"; [ -f
 
 
 
-## BL-301 — the gate runs no shipped fixture in the consumer layout, so a fixture red on every consumer ships green
-
-**DEFECT.** Found by the batch 150 contract adversary. It discharges no consumer candidate.
-
-**THE GAP `BL-299` FELL THROUGH.** The distribution's pre-push runs `core/fixtures/*/run.sh` in
-the distribution tree. `install.sh` splits what shares a parent here, so `core/scripts/<x>`
-lands at `scripts/ai-dlc/<x>` and `core/schemas/` at `.claude/schemas/`. A fixture that resolves
-a sibling through the distribution's relative layout therefore passes here and fails on every
-consumer. That is what happened to story-provenance's arm R, which went red in every consumer
-install from 0.628.0 while every distribution push stayed green. The consumer found it on its
-own tree, three releases later. The installer-driving fixtures here (`consumer-machinery-home`,
-`layer-crosswalk-home`, `shipped-rule-version-floor` and five more, located by grepping
-`core/fixtures/*/run.sh` for `scripts/install.sh`) each assert one property of the installed
-tree. None of them runs the shipped fixture set there.
-
-**THE SHAPE OF A FIX, AND WHY IT IS NOT A SMALL ONE.** A gate phase would install HEAD into a
-`mktemp -d` consumer with `_bmad/`, then run every shipped fixture there through the consumer's
-own installed runner, `core/git-hooks/pre-push`, which is the program a consumer runs. It has to
-use that runner so that the pool and the verdict accounting match. The shipped set is the
-fixtures carrying no `.dist-only` marker. The cost is a second full pass over most of the suite,
-and the suite is pole-bound, so the phase has to be scheduled against the existing pole rather
-than appended serially. **Measure that cost before choosing** between a full consumer-layout
-pass and a pass limited to the fixtures whose read-set crosses a path that `install.sh` remaps.
-
-**`verify: manual`, because no behavioural receipt is constructible at receipt scale.** The
-property is that the GATE runs the shipped set in a consumer layout. The only behavioural test
-is to seed a fixture that fails only in the consumer layout and run the gate, which means running
-the suite from inside a receipt, and the receipt runner itself runs from inside that gate. A
-grep of `.githooks/pre-push` for `install.sh` would be satisfied by a comment, and
-`scripts/validate-backlog-receipts.sh` would correctly report it as PROSE-CLOSABLE. Close this
-entry by hand on the release whose gate shows the new phase failing on a seeded consumer-only
-fixture and passing on its removal.
-
-verify: manual
-
 ## BL-375 — the read-set deriver needs root for `fs_usage`, and a scoped `sandbox-exec` tracer measured as a root-free replacement
 
 **DEFECT.** Operator-scheduled on 2026-09-29 as its own release, after v0.665.0.

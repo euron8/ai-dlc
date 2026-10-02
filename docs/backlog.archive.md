@@ -28101,3 +28101,57 @@ there, and the stale read itself was adjudicated not worth building against.
 
 verify: manual
 
+## BL-301 — the gate runs no shipped fixture in the consumer layout, so a fixture red on every consumer ships green
+
+**DEFECT.** Found by the batch 150 contract adversary. It discharges no consumer candidate.
+
+**THE GAP `BL-299` FELL THROUGH.** The distribution's pre-push runs `core/fixtures/*/run.sh` in
+the distribution tree. `install.sh` splits what shares a parent here, so `core/scripts/<x>`
+lands at `scripts/ai-dlc/<x>` and `core/schemas/` at `.claude/schemas/`. A fixture that resolves
+a sibling through the distribution's relative layout therefore passes here and fails on every
+consumer. That is what happened to story-provenance's arm R, which went red in every consumer
+install from 0.628.0 while every distribution push stayed green. The consumer found it on its
+own tree, three releases later. The installer-driving fixtures here (`consumer-machinery-home`,
+`layer-crosswalk-home`, `shipped-rule-version-floor` and five more, located by grepping
+`core/fixtures/*/run.sh` for `scripts/install.sh`) each assert one property of the installed
+tree. None of them runs the shipped fixture set there.
+
+**THE SHAPE OF A FIX, AND WHY IT IS NOT A SMALL ONE.** A gate phase would install HEAD into a
+`mktemp -d` consumer with `_bmad/`, then run every shipped fixture there through the consumer's
+own installed runner, `core/git-hooks/pre-push`, which is the program a consumer runs. It has to
+use that runner so that the pool and the verdict accounting match. The shipped set is the
+fixtures carrying no `.dist-only` marker. The cost is a second full pass over most of the suite,
+and the suite is pole-bound, so the phase has to be scheduled against the existing pole rather
+than appended serially. **Measure that cost before choosing** between a full consumer-layout
+pass and a pass limited to the fixtures whose read-set crosses a path that `install.sh` remaps.
+
+**`verify: manual`, because no behavioural receipt is constructible at receipt scale.** The
+property is that the GATE runs the shipped set in a consumer layout. The only behavioural test
+is to seed a fixture that fails only in the consumer layout and run the gate, which means running
+the suite from inside a receipt, and the receipt runner itself runs from inside that gate. A
+grep of `.githooks/pre-push` for `install.sh` would be satisfied by a comment, and
+`scripts/validate-backlog-receipts.sh` would correctly report it as PROSE-CLOSABLE. Close this
+entry by hand on the release whose gate shows the new phase failing on a seeded consumer-only
+fixture and passing on its removal.
+
+**CLOSED BY ADJUDICATION, NO BUILD, on the operator's batch-185 ruling.** No upstream phase was
+built, and the gap remains latency, not blindness. The reference consumer's installed pre-push runs
+the shipped set in the real layout on every push. Read only:
+- Its `.git/ai-dlc-fixture-durations` and `ai-dlc-fixture-verified` were both written by a gate on
+  the day of this close.
+- Its newest failure record reads "1 of 199 units red" and names `retired-layer-passage`. That red
+  was filed and shipped as `BL-416`.
+
+The class this entry describes has one recorded instance in the archive, `BL-299`: three releases
+red on every consumer before the consumer reported it. Impossible-token control: 0.
+
+The cost of the upstream phase stands as measured: about 650-700s more per gate at 12-way. Limiting
+the pass to fixtures that cross a remapped prefix saves nothing, because 176 of 179 do. The
+unmeasured alternative, a pass scoped by the runner's recorded read sets, is the starting point if
+this class recurs. `consumer-boundary.md` already requires a path-resolution change to be verified
+on a tree built by `install.sh`.
+
+**LANDED (v0.709.0, verified 0414a98e).** Adjudicated against that tree; nothing was built.
+
+verify: manual
+
