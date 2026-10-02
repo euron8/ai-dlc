@@ -31,6 +31,9 @@
 #         `unregistered-drift: REFUSED — a row could not be written to stdout after N row(s)
 #         were; ...` on stderr, N the rows that DID land. The scan STOPS at the first failed
 #         write, so a truncated row set is not a finding of "no drift". See `ud_finish` below.
+#         Also 2 when a core blob or listing it must read could not be read or served by the
+#         reconcile memo (`ud_read_refuse`), with a named `REFUSED` line: an unread input is not
+#         an empty one.
 #
 # Statuses
 #   HARD-CORE-DRIFT-ABSORBED      the consumer's in-place delta is NOW PRESENT UPSTREAM:
@@ -149,7 +152,8 @@ THEIRS="${4:-}"
 
 # shellcheck source=lib.sh
 # NOT `|| exit 1`: this script exits non-zero only when its own output could not be written
-# (`ud_finish`), never for what it found or failed to cache, and every git_show/git_tree call
+# (`ud_finish`) or an input it must read could not be read (`ud_read_refuse`), never for what it
+# found or failed to cache, and every git_show/git_tree call
 # below falls back to a direct `git` call when the memo helpers are unavailable, so an
 # unsourceable lib.sh degrades this to its pre-cache behavior.
 SELF="$(cd "$(dirname "$0")" && pwd)"

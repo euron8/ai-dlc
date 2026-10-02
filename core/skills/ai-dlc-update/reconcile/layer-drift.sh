@@ -378,7 +378,8 @@ ld_memo_ok() { [ "$1" -ne 125 ] || ld_refuse "$2" 125; }
 NL='
 '
 ld_refuse_staging() { # ld_refuse_staging <what> <its exit status>
-  echo "layer-drift: REFUSED — $1 could not be staged (exit $2); refusing rather than reading an empty input as clean" >&2
+  # A 125 is the memo failing to SERVE the input, not a staging write failing; `ld_refuse` names it.
+  [ "$2" = 125 ] || echo "layer-drift: REFUSED — $1 could not be staged (exit $2); refusing rather than reading an empty input as clean" >&2
   ld_refuse "$1" "$2"
 }
 ld_stage() { # ld_stage <file> <value> <what> -- MAIN SHELL ONLY; the bytes a here-string would feed
