@@ -1130,6 +1130,13 @@ prose is itself generated rather than composed.
      carries the fix. The converse does not hold: a commit that touches `core/` can still merely
      mention an id, so a plain `NAMED-UPSTREAM` remains "upstream named it", never "upstream
      took it".
+   - `NAMED-UPSTREAM-CITED-ONLY` → upstream's history names this entry's id, and **every**
+     naming commit names it only on a body line reading exactly `Not-discharged: PC-S<n>` or
+     `Not-discharged: PC-S<n>-<SLUG>` — the form a distribution release uses to cite an entry
+     it did NOT discharge. The row keeps the full sha list and is **not an absorption claim**.
+     Read the commits for a rejection, a withdrawal or a split, then read the entry's subject
+     at `theirs`. A commit carrying both that line and an ordinary mention of the id still
+     reads `NAMED-UPSTREAM`; commits older than the form read as they always did.
    - `NAMED-UPSTREAM-AMBIGUOUS` → upstream's history cites this entry's SPRINT prefix
      (`PC-S<n>`), but two or more ledger entries share that prefix and the commit does not say
      which it absorbed. The row names EVERY citing commit, newest first, and says when none of
@@ -2467,6 +2474,11 @@ declared sites, not everywhere unconditionally.
        `theirs`: the naming is not evidence of an absorption, but a fix landed under a commit
        that does not name the id still closes it. Annotate only what that reading establishes,
        with the release that contains the change; otherwise leave the entry open.
+     - `NAMED-UPSTREAM-CITED-ONLY` — every naming commit cites the id only on a
+       `Not-discharged:` line, so upstream says it did not discharge the entry there. Read the
+       commits for a rejection, a withdrawal or a split and act on that if there is one, then
+       read the entry's subject at `theirs`. Annotate only what that reading establishes;
+       otherwise leave the entry open.
      - `HAND-REVIEW` — the entry declares `verify: manual` and no mechanical predicate exists
        for it by design. Adjudicate the body against `theirs`; annotate only what that
        adjudication establishes.

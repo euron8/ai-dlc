@@ -137,6 +137,34 @@
 #      question about those commits, and this arm's subject is the tree that is
 #      about to be pushed either way.
 #
+# A FOURTH JOIN, ON THE MESSAGES THE CONSUMER'S ENGINE READS.
+#
+#   F. A release that cites a ledger id it did NOT discharge names it on a body
+#      line reading exactly `Not-discharged: PC-S<n>` or
+#      `Not-discharged: PC-S<n>-<SLUG>` -- column 0, no backticks, no bullet,
+#      never the subject. `ledger-reverify.sh`'s `named_cited_filter` strips that
+#      line before asking whether the commit names the id, so the consumer reads
+#      the citation as NAMED-UPSTREAM-CITED-ONLY rather than as an absorption.
+#      A NEAR-MISS SPELLING IS SILENTLY AN ORDINARY MENTION to that filter, which
+#      is the false absorption the form exists to prevent, so this arm refuses any
+#      LINE-LEADING `not discharg...` line (case-insensitive, after optional
+#      whitespace, `>`, `*`, `-` and one backtick) in a range message that is not
+#      exactly canonical, and refuses the form in a SUBJECT outright.
+#
+#      THE GRAMMAR IS PAIRED, BYTE FOR BYTE, with the canonical regex in
+#      `named_cited_filter`. The engine ships to consumers and this validator does
+#      not, so they cannot be one file; change both or neither.
+#
+#      FALSE-POSITIVE SET, measured over all 2001 commit messages on origin/main
+#      at the commit that added this arm: ZERO line-leading near-misses, zero
+#      canonical lines. Controls in the same run: a synthetic `  - not discharged:`
+#      line fires, 1685 `Co-Authored-By:` lines are found, an impossible token
+#      returns 0. The narrowing that got it there: the phrase occurs 3 times
+#      ANYWHERE in a line, all mid-sentence prose (e.g. 7665d11a, "The candidate
+#      is NOT discharged."), so the grammar is LINE-LEADING only -- the engine's own form is
+#      column-0, and a mid-line phrase is something neither side treats as a
+#      citation. The self-probe below pins that acquittal.
+#
 # USAGE
 #   scripts/validate-release-version.sh [--range A..B] [--commit SHA]
 #
@@ -146,10 +174,10 @@
 #
 # EXIT
 #   0  every checked commit's three names agree, the range carries one release,
-#      the branch inherits nothing unpushed from local main, and no tracked file
-#      carries conflict markers
+#      the branch inherits nothing unpushed from local main, no tracked file
+#      carries conflict markers, and no not-discharged citation is misspelled
 #   1  a disagreement, a multi-release range, an unpushed-main inheritance, a
-#      committed conflict, or a commit that could not be read
+#      committed conflict, a misspelled citation, or a commit that could not be read
 
 set -uo pipefail
 
@@ -376,6 +404,75 @@ else
   fi
 fi
 
+# ---------------------------------------------------------------------------
+# F. A NOT-DISCHARGED CITATION IS SPELLED EXACTLY, OR NOT AT ALL.
+#
+# See the header for the grammar, its pairing with `named_cited_filter`, and the
+# measured false-positive set. Evaluated over the same commit list as A and B.
+# ---------------------------------------------------------------------------
+form_findings_in() { # <repo-dir> <newline-separated shas> -> "<short> <line>" per finding
+  local d="$1" c msg
+  for c in $2; do
+    msg="$(git -C "$d" log -1 --format=%B "$c" 2>/dev/null)" || { printf '%s <message could not be read>\n' "$c"; continue; }
+    printf '%s\n' "$msg" | C="$(git -C "$d" rev-parse --short "$c" 2>/dev/null)" LC_ALL=C awk '
+      # A \001 byte opens a record in the engine`s message stream, so a message carrying one
+      # can forge a commit boundary. Refused wherever it appears.
+      index($0, "\001") { print ENVIRON["C"] " carries a \\001 byte (the engine record separator) on line " NR; next }
+      { l = tolower($0) }
+      l ~ /^[[:space:]>*-]*`?not[[:space:]_-]*discharg/ {
+        if (NR == 1) { print ENVIRON["C"] " subject: " $0; next }
+        if ($0 !~ /^Not-discharged: PC-S[0-9]+(-[A-Z0-9]+)*$/) print ENVIRON["C"] " body: " $0
+      }'
+  done
+}
+
+# THE SELF-PROBE RUNS BEFORE THE CORPUS, both directions, under mktemp. Offenders:
+# a bulleted lowercase spelling, a backticked canonical line, a canonical line in
+# the SUBJECT. Near-misses, each one property from an offender: the canonical
+# body line itself, and the same phrase MID-line (the 3 corpus occurrences are
+# that shape).
+form_fail=0
+arm_f_ran=0
+probe_f="$(mktemp -d 2>/dev/null)" || {
+  echo "FAIL: arm F could not create its probe directory" >&2; exit 1; }
+trap 'rm -rf "$probe_e" "$probe_f"' EXIT
+(
+  cd "$probe_f" || exit 1
+  git init -q . || exit 1
+  git config user.email probe@example.com
+  git config user.name probe
+  git config commit.gpgsign false
+  git commit -q --allow-empty -m 'rel: bulleted' -m '  - not discharged: PC-S1-BULLET'
+  git commit -q --allow-empty -m 'rel: backticked' -m 'Not-discharged: `PC-S1-TICK`'
+  git commit -q --allow-empty -m 'Not-discharged: PC-S1-SUBJECT'
+  # TRAILING TEXT after a canonical-looking id: the engine reads this line as an ORDINARY mention,
+  # so it must be reported. It is the offender that kills a canonical regex missing its `$`.
+  git commit -q --allow-empty -m 'rel: trailing' -m 'Not-discharged: PC-S1-TRAIL (rejected, see BL-9)'
+  git commit -q --allow-empty -m 'rel: separator' -m "$(printf 'Body PC-S1-SEPBYTE \001 forged')"
+  git commit -q --allow-empty -m 'rel: canonical' -m 'Not-discharged: PC-S1-CANON'
+  git commit -q --allow-empty -m 'rel: midline' -m 'This entry was not discharged by this release.'
+) >/dev/null 2>&1
+probe_f_hits="$(form_findings_in "$probe_f" "$(git -C "$probe_f" rev-list HEAD 2>/dev/null)")"
+probe_f_bad=""
+for tok in PC-S1-BULLET PC-S1-TICK PC-S1-SUBJECT PC-S1-TRAIL 'carries a \001 byte'; do
+  grep -qF -- "$tok" <<<"$probe_f_hits" || probe_f_bad="${probe_f_bad:+$probe_f_bad; }the offender $tok was NOT reported"
+done
+for tok in PC-S1-CANON 'not discharged by this release'; do
+  grep -qF -- "$tok" <<<"$probe_f_hits" && probe_f_bad="${probe_f_bad:+$probe_f_bad; }the near-miss '$tok' WAS reported"
+done
+if [ -n "$probe_f_bad" ]; then
+  echo "FAIL  arm F's own probe did not discriminate -- $probe_f_bad. A clean range below would then be a scan that cannot find an offender." >&2
+  form_fail=1
+else
+  arm_f_ran=1
+  form_list="$(form_findings_in . "$COMMITS")"
+  if [ -n "$form_list" ]; then
+    echo "FAIL  a not-discharged citation is misspelled or misplaced:" >&2
+    printf '%s\n' "$form_list" | sed 's/^/        /' >&2
+    form_fail=1
+  fi
+fi
+
 for c in $COMMITS; do
   short="$(git rev-parse --short "$c")"
   subject="$(git log -1 --format=%s "$c" 2>/dev/null)"
@@ -471,8 +568,22 @@ if [ "$conflict_fail" -ne 0 ]; then
 EOF
 fi
 
+if [ "$form_fail" -ne 0 ]; then
+  cat >&2 <<'EOF'
+
+      The consumer's ledger-reverify.sh reads a not-discharged citation only in its
+      exact form. Any other spelling is an ordinary mention to it, and an ordinary
+      mention reads as NAMED-UPSTREAM -- the false absorption the form exists to
+      prevent.
+
+      Remedy: put each cited id on its own BODY line, column 0, exactly
+      `Not-discharged: PC-S<n>` or `Not-discharged: PC-S<n>-<SLUG>` -- no backticks,
+      no bullet, never in the subject -- and amend the commit.
+EOF
+fi
+
 if [ "$fails" -ne 0 ] || [ "$range_fail" -ne 0 ] || [ "$base_fail" -ne 0 ] \
-  || [ "$conflict_fail" -ne 0 ]; then
+  || [ "$conflict_fail" -ne 0 ] || [ "$form_fail" -ne 0 ]; then
   exit 1
 fi
 
@@ -488,5 +599,7 @@ elif [ "$arm_d_why" = "scoped-out" ]; then summary="$summary; branch-base arm n/
 else                            summary="$summary; BRANCH-BASE ARM NOT EVALUATED"; fi
 if [ "$arm_e_ran" -eq 1 ]; then summary="$summary; no committed conflict markers (probe fired both ways)"
 else                            summary="$summary; CONFLICT-MARKER ARM NOT EVALUATED"; fi
+if [ "$arm_f_ran" -eq 1 ]; then summary="$summary; no misspelled not-discharged citation (probe fired both ways)"
+else                            summary="$summary; CITATION-FORM ARM NOT EVALUATED"; fi
 echo "$summary."
 exit 0

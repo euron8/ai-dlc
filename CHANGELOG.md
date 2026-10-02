@@ -19,6 +19,27 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.706.0] - 2026-10-02
+
+Batch 183's second release: `ledger-reverify.sh` and `emit-report.sh` in the update skill, plus arm F of
+`validate-release-version.sh`. Bootstrapping machinery, so it ships as its own file set; a consumer runs its installed
+copy, so this takes effect on the pull after the one that delivers it. Discharges no consumer candidate.
+
+### Backlog
+
+- `BL-145`, producer half: a distribution commit that names a candidate while reporting it, rather than discharging
+  it, read as `NAMED-UPSTREAM`. A release now marks such a citation with a column-0 body line,
+  `Not-discharged: PC-S<n>` or `Not-discharged: PC-S<n>-<SLUG>`, and the closer filters it out at all four
+  message-query sites before counting and before reach. A naming set that is citation-only emits
+  `NAMED-UPSTREAM-CITED-ONLY` with every sha, never no row, and a failed filter keeps today's row. Arm F refuses a
+  near-miss spelling and a `\001` byte in a release range; its grammar is bound byte-for-byte to the engine's. Forward
+  only: historical citations stay `NAMED-UPSTREAM`, a citation its author believed was a discharge is not covered, and
+  the consumer's installed engine reads the line as an ordinary mention until it pulls. The per-id subject-path half
+  of `BL-145` stays open.
+
+Run read-only against the reference consumer's real ledger, this engine and the 0.704.0 engine emit byte-identical
+rows, and the 0.704.0 `lib.sh` extractor reads one close rule from the new file, byte-equal to the old.
+
 ## [0.705.0] - 2026-10-02
 
 Batch 183's first release: the suite-pole guard and one recorded answer. `validate-suite-pole.sh` and the pre-push

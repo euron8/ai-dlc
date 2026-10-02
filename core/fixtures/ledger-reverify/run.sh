@@ -51,7 +51,7 @@ SHARDS="a b c d"
 UNITS_a="close_anchor unicode_escape receipt_suffix"
 UNITS_b="nonid_manual caller_error sh_base_control every_receipt name_signal short_id named_commits no_colon_swallow backslash_anchor dist_checkout bootstrap_window receiptless_named"
 UNITS_c="cwd_invariance sh_missing_subject receipts_undecided naming_set unreadable_path nonid_wrong_fixes bare_bold_record"
-UNITS_d="consumer_root entry_swallowed midline_receipt fenced_entries two_line_sh memo_lifecycle"
+UNITS_d="consumer_root entry_swallowed midline_receipt fenced_entries two_line_sh memo_lifecycle cited_only"
 
 GROUP=a; LR_PLAN=0
 case "${1:-}" in
@@ -1950,6 +1950,169 @@ fi
 fi
 
 } # end lr_unit_naming_set
+lr_unit_cited_only() {
+# --- THE NOT-DISCHARGED CITATION FORM (BL-145's producer half) --------------------------------
+# A release citing an entry it did NOT discharge names it on a column-0 body line,
+# `Not-discharged: PC-S<n>[-<SLUG>]`, and `named_cited_filter` drops a commit from the naming set
+# when nothing but such lines names the id. Every seeded commit touches core/, so `named_reach`
+# scores all of them `code`, and only the filter separates the five shapes (seed.sh, S955-S959).
+#
+# SHIPS AHEAD OF ITS SUBJECT like the B2 arms: a consumer whose installed engine predates the form
+# SKIPs, keyed on the status only the fixed engine emits; in the distribution the arms always run.
+if ! grep -qF 'NAMED-UPSTREAM-CITED-ONLY' "$CLOSER" && [ "$B2_ISDIST" = 0 ]; then
+  LR_SKIPPED=1
+  printf '  SKIP  BL-145 not-discharged citation arms -- the installed ledger-reverify.sh predates them; they land with the pull that carries this fixture\n'
+  return 0
+fi
+row_has   "PC-S955-FORM-ONLY-CITATION" NAMED-UPSTREAM-CITED-ONLY \
+  "named ONLY on a Not-discharged: line of a core commit -> the citation kind, which is no absorption claim"
+row_lacks "PC-S955-FORM-ONLY-CITATION" NAMED-UPSTREAM \
+  "and never the plain kind a pull session reads as 'upstream took it' -- the third class this closes"
+row_has   "PC-S956-BOTH-FORMS-CITATION" NAMED-UPSTREAM \
+  "named in the subject AND on a form line -> the ordinary mention still counts"
+row_has   "PC-S957-ORDINARY-X" NAMED-UPSTREAM \
+  "discharged in a subject whose commit cites ANOTHER id in the form -> this one is untouched"
+row_has   "PC-S957-FORM-Y" NAMED-UPSTREAM-CITED-ONLY \
+  "the other id on that same commit, cited only in the form -> the citation kind"
+row_has   "PC-S958-FORM-CORE-ORDINARY-DOCS" NAMED-UPSTREAM-DOCS-ONLY \
+  "form on a core commit plus an ordinary docs mention -> reach is read over the residue, which is docs-only"
+row_has   "PC-S959-INLINE-FORM-CITATION" NAMED-UPSTREAM \
+  "the form appears mid-line, not at column 0 -> not a citation, the plain kind"
+
+# THE MUTANTS, over a ledger holding only the six entries, each a copy of the whole reconcile
+# directory, each line-anchored (exactly one match, `cmp -s` refuses a no-op), and preceded by an
+# UNMUTATED control over the same ledger that must reproduce every kind first.
+COD="$(dirname "$DIST")/cited-only"; mkdir -p "$COD"
+awk '/^- \*\*PC-S95[5-9]-/ {p=1} /^- \*\*/ && !/^- \*\*PC-S95[5-9]-/ {p=0} p' \
+  "$CONS/_bmad-output/ai-dlc-update/push-candidate-ledger.md" > "$COD/ledger.md"
+co_mut() { # <tag> <exact line> <replacement line> -> path of the mutant, or empty
+  local _d="$COD/$1"; rm -rf "$_d"; mkdir -p "$_d"
+  cp "$(dirname "$CLOSER")"/*.sh "$_d/" 2>/dev/null
+  A="$2" B="$3" awk '$0 == ENVIRON["A"] { print ENVIRON["B"]; n++; next } { print } END { exit (n == 1) ? 0 : 3 }' \
+    "$CLOSER" > "$_d/ledger-reverify.sh" || return 0
+  bash -n "$_d/ledger-reverify.sh" 2>/dev/null || return 0
+  cmp -s "$CLOSER" "$_d/ledger-reverify.sh" || printf '%s' "$_d/ledger-reverify.sh"
+}
+co_rows() { bash "$1" "$DIST" "$BASE" "$CONS" "$THEIRS" "$COD/ledger.md" 2>/dev/null; }
+co_kind() { printf '%s\n' "$1" | awk -F'\t' -v l="$2" '$2 == l && $1 ~ /^NAMED-UPSTREAM(-DOCS-ONLY|-CITED-ONLY)?$/ {print $1; exit}'; }
+CO_IDS="PC-S955-FORM-ONLY-CITATION PC-S956-BOTH-FORMS-CITATION PC-S957-ORDINARY-X PC-S957-FORM-Y PC-S958-FORM-CORE-ORDINARY-DOCS PC-S959-INLINE-FORM-CITATION"
+CO_WANT="NAMED-UPSTREAM-CITED-ONLY NAMED-UPSTREAM NAMED-UPSTREAM NAMED-UPSTREAM-CITED-ONLY NAMED-UPSTREAM-DOCS-ONLY NAMED-UPSTREAM"
+co_read() { # <rows> -> "id=kind ..." for the six ids
+  local _i _s=""
+  for _i in $CO_IDS; do _s="$_s $_i=$(co_kind "$1" "$_i")"; done
+  printf '%s' "${_s# }"
+}
+co_expect() { # <id> -> the kind the UNMUTATED engine must give it
+  local _i _k _w="$CO_WANT"
+  for _i in $CO_IDS; do _k="${_w%% *}"; _w="${_w#* }"; [ "$_i" = "$1" ] && { printf '%s' "$_k"; return; }; done
+}
+co_ctl="$(co_rows "$CLOSER")"
+co_ctl_read="$(co_read "$co_ctl")"
+co_ctl_want=""; for _i in $CO_IDS; do co_ctl_want="$co_ctl_want $_i=$(co_expect "$_i")"; done; co_ctl_want="${co_ctl_want# }"
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ "$co_ctl_read" = "$co_ctl_want" ]; then
+  printf '  ok    %-22s the UNMUTATED engine over the six-entry ledger reproduces every S955-S959 kind\n' "cited-control"
+  # <tag> <anchor> <replacement> <cell that must move> <kind it must take> <cells that must hold> <why>
+  co_case() {
+    local _m _r _k _h _bad=""
+    ASSERTIONS=$((ASSERTIONS + 1))
+    _m="$(co_mut "$1" "$2" "$3")"
+    if [ -z "$_m" ]; then FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the mutation DID NOT APPLY (anchor matched nothing or twice, or the mutant does not parse)\n' "mutation-$1"; return; fi
+    _r="$(co_rows "$_m")"; _k="$(co_kind "$_r" "$4")"
+    for _h in $6; do [ "$(co_kind "$_r" "$_h")" = "$(co_expect "$_h")" ] || _bad="$_bad $_h=$(co_kind "$_r" "$_h")"; done
+    if [ "$_k" = "$5" ] && [ -z "$_bad" ]; then printf '  ok    %-22s %s\n' "mutation-$1" "$7"
+    else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s %s read %s under the mutant (want %s); cells that should hold but moved:%s\n' "mutation-$1" "$4" "${_k:-<no row>}" "$5" "${_bad:- none}"; fi
+  }
+  co_case filter-off \
+    '  [ -n "$1" ] || return 0' \
+    '  printf '"'"'%s\n'"'"' "$1"; return 0' \
+    PC-S955-FORM-ONLY-CITATION NAMED-UPSTREAM "PC-S956-BOTH-FORMS-CITATION PC-S957-ORDINARY-X PC-S959-INLINE-FORM-CITATION" \
+    "with no filter the form-only citation reads NAMED-UPSTREAM again -- the third class, reproduced, and S955 is what sees it"
+  co_case filter-any-form-line \
+    '    $0 ~ /^Not-discharged: PC-S[0-9]+(-[A-Z0-9]+)*$/ { next }' \
+    '    $0 ~ /^Not-discharged: PC-S[0-9]+(-[A-Z0-9]+)*$/ && ((p == "" && index($0, n)) || (p != "" && $0 ~ re)) { h = ""; next }' \
+    PC-S956-BOTH-FORMS-CITATION NAMED-UPSTREAM-CITED-ONLY "PC-S955-FORM-ONLY-CITATION PC-S957-ORDINARY-X PC-S957-FORM-Y PC-S958-FORM-CORE-ORDINARY-DOCS PC-S959-INLINE-FORM-CITATION" \
+    "dropping any commit that carries a form line for the id demotes a commit that ALSO names it ordinarily, and S956 is what sees it"
+  co_case filter-unanchored \
+    '    $0 ~ /^Not-discharged: PC-S[0-9]+(-[A-Z0-9]+)*$/ { next }' \
+    '    $0 ~ /Not-discharged: PC-S[0-9]+(-[A-Z0-9]+)*/ { next }' \
+    PC-S959-INLINE-FORM-CITATION NAMED-UPSTREAM-CITED-ONLY "PC-S955-FORM-ONLY-CITATION PC-S956-BOTH-FORMS-CITATION PC-S957-ORDINARY-X PC-S957-FORM-Y PC-S958-FORM-CORE-ORDINARY-DOCS" \
+    "an unanchored strip eats a mid-line mention and demotes it to a citation, and S959 is what sees it"
+  co_case reach-unfiltered \
+    '  printf '"'"'%s %s %s %s'"'"' "$_how" "${_n:-1}" "$_list" "$(named_reach "$_hits")"' \
+    '  printf '"'"'%s %s %s %s'"'"' "$_how" "${_n:-1}" "$_list" "$(named_reach "$_all")"' \
+    PC-S958-FORM-CORE-ORDINARY-DOCS NAMED-UPSTREAM "PC-S955-FORM-ONLY-CITATION PC-S956-BOTH-FORMS-CITATION PC-S957-ORDINARY-X PC-S957-FORM-Y PC-S959-INLINE-FORM-CITATION" \
+    "reach read over the whole set lets the form-only core commit lift a docs-only naming to the plain kind, and S958 is what sees it"
+  co_case cited-only-no-row \
+    '    printf '"'"'%s %s %s cited'"'"' "$_how" "${_n:-1}" "$(printf '"'"'%s\n'"'"' "$_all" | tr '"'"'\n'"'"' '"'"','"'"' | sed '"'"'s/,$//'"'"')"; return 0' \
+    '    return 0' \
+    PC-S955-FORM-ONLY-CITATION "" "PC-S956-BOTH-FORMS-CITATION PC-S957-ORDINARY-X PC-S958-FORM-CORE-ORDINARY-DOCS PC-S959-INLINE-FORM-CITATION" \
+    "a filter that deletes the row instead of qualifying it loses the citation, and S955 is what sees it (want no row)"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s FIXTURE BROKEN — the unmutated engine over the six-entry ledger read {%s}, want {%s}; no mutant below is attributable\n' "cited-control" "$co_ctl_read" "$co_ctl_want"
+fi
+
+# --- THE FAIL-OPEN PATH. When the filter's own git call fails, the naming set must come back
+# UNFILTERED -- the row this engine produced before the form existed -- never empty, which would
+# turn a tool error into a CITED-ONLY row. Forced with a `git` shim on PATH that refuses only the
+# filter's `--no-walk=unsorted` call and leaves a sentinel, so the cell can prove the failure
+# happened. Under the shim S955 must read the PRE-FILTER kind, NAMED-UPSTREAM.
+CO_SHIM="$COD/shim"; rm -rf "$CO_SHIM"; mkdir -p "$CO_SHIM"
+CO_REALGIT="$(command -v git)"
+printf '#!/bin/sh\nfor a in "$@"; do case "$a" in --no-walk=unsorted) : > "%s/fired"; exit 128 ;; esac; done\nexec "%s" "$@"\n' \
+  "$CO_SHIM" "$CO_REALGIT" > "$CO_SHIM/git"
+chmod +x "$CO_SHIM/git"
+co_failopen() { # <engine> -> S955's kind with the filter's git call failing, or BROKEN
+  rm -f "$CO_SHIM/fired"
+  local _r
+  _r="$(PATH="$CO_SHIM:$PATH" bash "$1" "$DIST" "$BASE" "$CONS" "$THEIRS" "$COD/ledger.md" 2>/dev/null)"
+  [ -f "$CO_SHIM/fired" ] || { printf 'BROKEN'; return; }
+  co_kind "$_r" PC-S955-FORM-ONLY-CITATION
+}
+ASSERTIONS=$((ASSERTIONS + 1))
+co_fo="$(co_failopen "$CLOSER")"
+if [ "$co_fo" = NAMED-UPSTREAM ]; then
+  printf '  ok    %-22s with the filter'"'"'s git call failing, S955 reads the pre-filter NAMED-UPSTREAM -- a tool error is never a CITED-ONLY row\n' "cited-fail-open"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s with the filter'"'"'s git call failing S955 read %s, want NAMED-UPSTREAM (BROKEN = the shim never fired)\n' "cited-fail-open" "${co_fo:-<no row>}"
+fi
+ASSERTIONS=$((ASSERTIONS + 1))
+co_fom="$(co_mut fail-closed \
+  '    END { flush() }'"'"')" || { printf '"'"'%s\n'"'"' "$1"; return 0; }' \
+  '    END { flush() }'"'"')" || { return 0; }')"
+if [ -z "$co_fom" ]; then
+  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the mutation DID NOT APPLY, so cited-fail-open is unproven\n' "mutation-fail-closed"
+else
+  co_fok="$(co_failopen "$co_fom")"
+  if [ "$co_fok" = NAMED-UPSTREAM-CITED-ONLY ]; then
+    printf '  ok    %-22s a fallback returning EMPTY turns the git failure into a CITED-ONLY row, and cited-fail-open is what sees it\n' "mutation-fail-closed"
+  else
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s under the fail-closed mutant S955 read %s, want NAMED-UPSTREAM-CITED-ONLY\n' "mutation-fail-closed" "${co_fok:-<no row>}"
+  fi
+fi
+
+# --- THE BOOTSTRAPPING CELL. `ledger-reverify.sh` is read by the ENGINE THE CONSUMER LAST INSTALLED:
+# `lib.sh`'s `ledger_close_awk_pattern` lifts the close rule out of this file by structure, and the
+# pull that delivers this file runs the previous release's lib.sh against it. That extractor must
+# still find EXACTLY ONE rule here and lift a non-empty pattern that awk compiles, or apply and
+# rotation refuse on the pull that carries the fix. Driven through the shipped lib.sh, sourced in a
+# subshell with SELF pointed at a copy of this directory.
+ASSERTIONS=$((ASSERTIONS + 1))
+CO_BOOT="$COD/boot"; rm -rf "$CO_BOOT"; mkdir -p "$CO_BOOT"
+cp "$(dirname "$CLOSER")"/*.sh "$CO_BOOT/" 2>/dev/null
+co_pat="$( SELF="$CO_BOOT"; . "$CO_BOOT/lib.sh" >/dev/null 2>&1; ledger_close_awk_pattern 2>/dev/null )"; co_prc=$?
+co_fn="$( SELF="$CO_BOOT"; . "$CO_BOOT/lib.sh" >/dev/null 2>&1; ledger_close_awk 2>/dev/null )" || co_fn=""
+co_np="$(printf '%s\n' "$co_pat" | grep -c .)" || co_np=0
+if [ "$co_prc" = 0 ] && [ "$co_np" = 1 ] && [ -n "$co_fn" ] \
+   && printf '**ADOPTED UPSTREAM (v1.0.0, verified x)**\nplain\n' | awk "$co_fn"' { if (ledger_body_closes($0)) c++ } END { exit (c == 1) ? 0 : 1 }'; then
+  printf '  ok    %-22s the shipped lib.sh extractor lifts exactly one close rule from this ledger-reverify.sh, and it compiles and closes one of two probe lines\n' "boot-close-extract"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s ledger_close_awk_pattern over this ledger-reverify.sh: rc=%s lines=%s fn=%s -- the previous engine would refuse the pull that delivers it\n' "boot-close-extract" "$co_prc" "$co_np" "${co_fn:+present}"
+fi
+} # end lr_unit_cited_only
 lr_unit_unreadable_path() {
 # --- AN UNREADABLE PATH IS REFUSED, NEVER READ AS ABSENT OR EMPTY (BL-310) -----------------
 # `memo_has_path` returns 125 when git said no and the path could not be confirmed absent; every
