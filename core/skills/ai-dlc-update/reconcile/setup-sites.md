@@ -92,7 +92,6 @@ core_manifest:
   - core/fixtures/snapshot-archive-rotate/**
   - core/fixtures/snapshot-conservation/**
   - core/fixtures/suppression-lifetime/**
-  - core/fixtures/self-update-join-gate/**
   - core/fixtures/self-update-fixture-log/**
   - core/fixtures/snapshot-supersession-marker/**
   - core/fixtures/artifact-path-migration/**
@@ -125,7 +124,6 @@ core_manifest:
   - core/fixtures/check5-anchor-base/**
   - core/fixtures/check-22-spawn-ledger/**
   - core/fixtures/ci-gates-resolution/**
-  - core/fixtures/consumer-machinery-home/**
   - core/fixtures/consumer-suite-pool/**
   - core/fixtures/readset-skip/**
   - core/fixtures/layer-qualifier-grain/**
@@ -174,8 +172,6 @@ core_manifest:
   - core/fixtures/known-skills-extension/**
   - core/fixtures/layer-anchor-declaration/**
   - core/fixtures/layer-catalog-collision/**
-  - core/fixtures/layer-contract-conformance/**
-  - core/fixtures/layer-contract-conformance-b/**
   - core/fixtures/layer-debt-due-and-discharge/**
   - core/fixtures/layer-debt-ledger/**
   - core/fixtures/layer-readopt-gate/**
@@ -183,7 +179,6 @@ core_manifest:
   - core/fixtures/ledger-reverify-b/**
   - core/fixtures/ledger-reverify-c/**
   - core/fixtures/ledger-reverify-d/**
-  - core/fixtures/ledger-status-vocabulary/**
   - core/fixtures/ledger-reverify-unfalsifiable/**
   - core/fixtures/ledger-reverify-dist-only-reach/**
   - core/fixtures/fixture-drivability/**
@@ -214,7 +209,6 @@ core_manifest:
   - core/fixtures/reconcile-emit-report/**
   - core/fixtures/emit-report-refusal/**
   - core/fixtures/relabel-theirs-collision/**
-  - core/fixtures/release-version-triple/**
   - core/fixtures/relocation-preclassify/**
   - core/fixtures/preclassify-rename-row/**
   - core/fixtures/requirements-step/**

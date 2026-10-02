@@ -1757,8 +1757,12 @@ that made it.
 **Exit 0 = clean. Exit 1 FAILS**, clearable only by the four-arm disposition
 below — which covers every class of recorded violation that reaches this exit
 code: a Rule 19(a) tier mismatch, a missing Rule 19(b) role-contract citation,
-an unreadable role file, and an effort mismatch. **Exit 2 FAILS** — a fumbled
-invocation, an unreadable settings.json, or
+an unreadable role file, an effort mismatch, and an **invalid serial
+exception** (arm S3: a shardable row whose `shard:` line named a Rule 28
+exception outside the four, recorded as `invalid-exception`; the script prints
+the brief's own text from `shard_raw`). S3 is decided before exit 3, so it
+fails a sprint whose rows are all outside Rule 19 scope too. **Exit 2 FAILS** — a fumbled
+invocation, an unreadable settings.json or ledger, or
 no `jq`; nothing was compared. **Exit 3 says nothing was compared** — either
 PRE-LEDGER, or every in-sprint row was out of scope; it is not a pass in
 either case. **The disposition is in the script's own message, which names
@@ -1775,9 +1779,10 @@ or how an escalated role's values compare to its base role's — per Rule 19(a)
 those are operator config, and an equal or lower escalated value is not a
 finding.
 
-**Dispositioning a recorded Rule 19 violation that already happened.** A spawn
+**Dispositioning a recorded Check 22 violation that already happened.** A spawn
 that ran on the wrong tier, or with no contract cited, or against an unreadable
-role file, or at a level nothing bound is a fact about the past. No later action
+role file, or at a level nothing bound, or under an invented serial exception is
+a fact about the past. No later action
 changes it, so without a clearing path this check fails forever on a sprint where
 it fired once — the gate becomes unpassable by any consumer action, which is a
 defect in the check and not a finding about the sprint. (Exactly that happened: a
@@ -1786,22 +1791,23 @@ self-reported it, and four gate attempts failed with nothing anyone could do —
 the operator could not clear it either, because this check did not read the
 escalation where an authorization would live.)
 
-These four arms clear EVERY class of recorded Rule 19 violation the script fails
-on, and the classes are its four FAIL routes into that one exit code, not four
+These four arms clear EVERY class of recorded violation the script fails
+on, and the classes are its five FAIL routes into that one exit code, not five
 dispositions: a Rule 19(a) **tier mismatch**; a **missing Rule 19(b)
 role-contract citation** (`role_contract_cited=false`: the line reached the
 teammate neither in the prompt nor in the definition the dispatch selected); an **unreadable role
-file** (`role_file_readable=false`, Rule 19's fail-closed case); and an **effort
+file** (`role_file_readable=false`, Rule 19's fail-closed case); an **effort
 mismatch**, where the row's `effort_bound` disagrees with the effort the
-teammate's own transcript records. A class the arms did not cover would be a
+teammate's own transcript records; and an **invalid serial exception**
+(`shard: invalid-exception`, Rule 28). A class the arms did not cover would be a
 route that fails forever, which is the defect this section exists to prevent.
 
 **The effort route fires only when `--probe` is passed**, which the invocation
 published above does not pass, so it is probe-only today and a gate running that
-command reaches the other three routes alone.
+command reaches the other four routes alone.
 
 A recorded tier mismatch is CLEARED when **all four** hold, and so is a recorded
-violation of any of the other three:
+violation of any of the other four:
 
 1. An escalation entry for the CURRENT sprint in `docs/escalations/pending.md`
    NAMES the offending spawn — its dispatch `name` / agent id appears verbatim
@@ -1834,12 +1840,15 @@ violation of any of the other three:
    **unreadable role file**: likewise — the role file the dispatch should have
    resolved is named, and the output is verified against its contract. For an
    **effort mismatch**: the work was redone at the pinned effort, or the output
-   was independently verified. An `OVERRIDDEN` carrying no remediation is a
+   was independently verified. For an **invalid serial exception**: the work was
+   re-dispatched sharded, or the exception that actually applied (one of Rule
+   28's four) is named and the output verified. An `OVERRIDDEN` carrying no remediation is a
    content-free waiver — writable without anyone having looked at the output,
    which is the forgeable-evidence shape Check 26 exists to reject.
 
 **`DECIDED_AUTONOMOUSLY` does NOT clear this**, and that exclusion is the point:
-it is the lead dispositioning its own Rule 19 violation. A self-report is the
+it is the lead dispositioning its own recorded violation, whether under Rule 19
+or Rule 28. A self-report is the
 right conduct and is not a clearing path. Missing any of the four arms → the
 violation still FAILS, whichever class it belongs to.
 

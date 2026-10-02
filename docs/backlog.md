@@ -752,7 +752,9 @@ the shipping tree's 0, so the FIXTURE separates them and the receipt does not. *
 replacement on the EMISSION SITE** — that the acquittal's own guard consults a behaviour term —
 plus a non-vacuity arm, and score it against all six before filing it.
 
-verify: sh g=core/skills/ai-dlc-update/reconcile/self-update-gate.sh; [ -f "$g" ] || exit 9; grep -q "advise_safe_stop" "$g" || exit 9; grep -vE "^[[:space:]]*#" "$g" | grep -qE "(show|archive|worktree)[^|]*preclassify" && exit 0; exit 1
+**Receipt replaced: it now drives the acquittal's EMISSION, not the text of its guard.** It builds a mini-distribution in which r1 changes `preclassify.sh` and r2 defers, then runs the shipping gate three times against one consumer: stamp at r1 with the r1 engine installed (`current`), stamp at r1 with the base engine still installed (`stale`), and stamp at base (`behind`). It exits 0 only when `stale` withholds `SPLIT BUYS NOTHING HERE` on the SAFE-STOP row naming r1, `current` still prints it and `behind` withholds it. It reads that row by its ref and never by its banner, so the `-` emitter cannot satisfy it. It exits 9 when the walk stops naming r1, when a run emits CARRY or UNDECIDED, or when there is not exactly one row naming r1. Scored under `set -uo pipefail` in copies of `core/`, with every edit asserted applied: tree as-is 1 (`stale=acquit`); the fix as a content check inside `machinery_at_or_past` 0; the fix as a separate `installed_matches` helper at the emission site 0; `git archive … || true` 1; `if false` 1; the helper defined but uncalled 1; `head -0` 1; the content check inverted 1; the content check comparing the candidate against itself 1; engine absent 9. The narrower direction recorded above (withhold when `preclassify.sh` is byte-identical across the hop) reads 1, because the classifier changes in this world. A behavioural-differential remedy was not scored: the mini-distribution's `preclassify.sh` is a stub, not a classifier, so a differential has nothing to compare here. **This receipt contradicts the body.** Both fixes that close it compare the consumer's installed bytes against the candidate, which is the content arm this entry says not to build, and on a hop that changes no machinery path their loop is empty and they acquit. A CLOSE-CANDIDATE from this receipt is therefore a prompt to settle that contradiction, not a close.
+
+verify: sh G="$PWD/core/skills/ai-dlc-update/reconcile/self-update-gate.sh"; [ -f "$G" ] || exit 9; w="$(mktemp -d)" || exit 9; P=skills/ai-dlc-update/reconcile/preclassify.sh; S=skills/ai-dlc/steps/gate-validation.md; g() { git -C "$w/d" -c user.name=r -c user.email=r@r -c commit.gpgsign=false "$@"; }; v() { printf '# gate\n'; for a in "$@"; do printf '<!-- CHECK_LOADED: %s -->\n' "$a"; done; }; mkdir -p "$w/d/core/skills/ai-dlc-update/reconcile" "$w/d/core/skills/ai-dlc/steps" "$w/c/.claude/skills/ai-dlc-update/reconcile" "$w/c/.claude/skills/ai-dlc/steps" "$w/c/.githooks" || exit 9; git init -q "$w/d" || exit 9; echo 1.0.0 > "$w/d/VERSION"; v 1 2 > "$w/d/core/$S"; echo "engine v0" > "$w/d/core/$P"; g add -A && g commit -qm base || exit 9; B="$(g rev-parse HEAD)"; echo 1.1.0 > "$w/d/VERSION"; echo "engine v1" > "$w/d/core/$P"; g add -A && g commit -qm r1 || exit 9; R="$(g rev-parse HEAD)"; echo 1.2.0 > "$w/d/VERSION"; v 1 2 3 > "$w/d/core/$S"; g add -A && g commit -qm r2 || exit 9; T="$(g rev-parse HEAD)"; v 1 2 > "$w/c/.claude/$S"; printf '#!/usr/bin/env bash\nexit 0\n' > "$w/c/.githooks/pre-push" || exit 9; k() { printf 'version: 1.0.0\ncommit: %s\nskill_version: 1.1.0\nskill_commit: %s\n' "$B" "$1" > "$w/c/.claude/.ai-dlc-version"; echo "engine $2" > "$w/c/.claude/$P"; [ "$(bash "$G" --safe-stop "$w/d" "$B" "$T" "$w/c" 2>/dev/null)" = "$R" ] || { echo walk; return; }; bash "$G" "$w/d" "$B" "$T" "$w/c" 2>/dev/null | awk -F'\t' -v r="$R" '$1 ~ /^SELF-UPDATE-(CARRY|UNDECIDED)$/ {u++} $1=="SELF-UPDATE-SAFE-STOP" && $2==r {n++; if (index($3, "SPLIT BUYS NOTHING HERE")) a++} END {print (u ? "undecided" : (n == 1 ? (a ? "acquit" : "withheld") : "none"))}'; }; st="$(k "$R" v0)"; cu="$(k "$R" v1)"; bh="$(k "$B" v0)"; for x in "$st" "$cu" "$bh"; do case "$x" in acquit|withheld) ;; *) echo "BL132-PRECONDITION stale=$st current=$cu behind=$bh" >&2; exit 9 ;; esac; done; [ "$st" = withheld ] && [ "$cu" = acquit ] && [ "$bh" = withheld ] && exit 0; echo "BL132-ACQUITTAL-ON-ANCESTRY stale=$st current=$cu behind=$bh" >&2; exit 1
 
 ## BL-145 — a docs commit that MENTIONS a candidate id is reported to the consumer as upstream having absorbed it
 
@@ -907,7 +909,9 @@ mutants. The citation must appear in the BODY of the squash or release commit th
 `main`, which is the message a consumer's engine reads, and a misspelling there is caught by running
 `scripts/validate-release-version.sh --commit <squash sha>` after the merge.
 
-verify: sh L="$PWD/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh"; [ -f "$L" ] || exit 9; w="$(mktemp -d)" || exit 9; g() { git -C "$w/d" -c user.name=r -c user.email=r@r -c commit.gpgsign=false "$@"; }; git init -q "$w/d" || exit 9; mkdir -p "$w/d/core" "$w/d/docs" "$w/c" || exit 9; echo 1.0.0 > "$w/d/VERSION"; echo M > "$w/d/core/s.md"; g add -A && g commit -qm base || exit 9; B="$(g rev-parse HEAD)"; echo a > "$w/d/core/a.sh"; g add -A && g commit -qm "release: fixes something else" -m "Not-discharged: PC-S873-FORM-ONLY" || exit 9; echo b > "$w/d/core/b.sh"; g add -A && g commit -qm "fix: absorb PC-S874-BOTH-FORMS" -m "Not-discharged: PC-S874-BOTH-FORMS" || exit 9; echo c > "$w/d/core/c.sh"; g add -A && g commit -qm "fix: unrelated" -m "Mid-line Not-discharged: PC-S875-INLINE-FORM is prose." || exit 9; echo d > "$w/d/core/d.sh"; g add -A && g commit -qm "fix: another subject" -m "Not-discharged: PC-S876-FORM-PLUS-DOCS" || exit 9; echo p > "$w/d/docs/p.md"; g add -A && g commit -qm "docs(plan): cross-reference PC-S876-FORM-PLUS-DOCS" || exit 9; T="$(g rev-parse HEAD)"; printf -- '# l\n\n- **PC-S873-FORM-ONLY** -- a.\n  verify: theirs_lacks core/s.md "ZZ"\n\n- **PC-S874-BOTH-FORMS** -- b.\n  verify: theirs_lacks core/s.md "ZZ"\n\n- **PC-S875-INLINE-FORM** -- c.\n  verify: theirs_lacks core/s.md "ZZ"\n\n- **PC-S876-FORM-PLUS-DOCS** -- d.\n  verify: theirs_lacks core/s.md "ZZ"\n\n- **PC-S877-NEVER-NAMED** -- control.\n  verify: theirs_lacks core/s.md "ZZ"\n' > "$w/c/l.md"; o="$(bash "$L" "$w/d" "$B" "$w/c" "$T" "$w/c/l.md" 2>/dev/null)"; k() { printf '%s\n' "$o" | awk -F'\t' -v l="$1" '$2==l && $1 ~ /^NAMED-UPSTREAM/ {print $1; exit}'; }; a="$(k PC-S873-FORM-ONLY)"; b="$(k PC-S874-BOTH-FORMS)"; c="$(k PC-S875-INLINE-FORM)"; d="$(k PC-S876-FORM-PLUS-DOCS)"; z="$(k PC-S877-NEVER-NAMED)"; [ -n "$b" ] && [ -n "$c" ] && [ -n "$d" ] && [ -z "$z" ] || exit 9; [ "$a" = NAMED-UPSTREAM-CITED-ONLY ] && [ "$b" = NAMED-UPSTREAM ] && [ "$c" = NAMED-UPSTREAM ] && [ "$d" = NAMED-UPSTREAM-DOCS-ONLY ] && exit 0; echo "BL145-NOT-DISCHARGED-CITATION-READ-AS-NAMING form-only=${a:-<no row>} both=$b inline=$c form+docs=$d" >&2; exit 1
+**Receipt replaced: the producer half shipped and the previous receipt exits 0, so it now tests the open half, claim 3.** It drives the shipping `ledger-reverify.sh` over four entries whose receipt subject is `core/subject.sh`: a core commit naming an id and changing only `core/other.sh` (the third class), a commit naming an id and changing the subject together with another core file (genuine), a docs-only naming, and a never-named control. It exits 0 only when the third class still has a `NAMED-` row whose kind is none of NAMED-UPSTREAM, -DOCS-ONLY, -CITED-ONLY or -AMBIGUOUS, while the genuine naming still reads NAMED-UPSTREAM and the docs naming still reads NAMED-UPSTREAM-DOCS-ONLY. Relabelling the third class as DOCS-ONLY does not satisfy it, because that row's text says no naming commit changes `core/`, which would be false here. The receipt also assumes the subject is taken from the entry's receipt path, which is the only per-id datum the seed carries. A fix that reads another datum has to re-anchor this receipt. It exits 9 when the engine is absent or the never-named control gains a `NAMED-` row. Scored under `set -uo pipefail` in copies of `core/`, with every edit asserted applied: tree as-is 1 (`third=NAMED-UPSTREAM`); a fix in the main loop that reads the receipt path and emits a new kind 0; a fix with a `named_touches` helper and a differently named kind 0; demote every core naming on a receipt-bearing entry 1; drop the row 1; relabel it DOCS-ONLY 1; the subject test inverted 1; a test for the subject existing at theirs instead of being touched 1; engine absent 9.
+
+verify: sh L="$PWD/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh"; [ -f "$L" ] || exit 9; w="$(mktemp -d)" || exit 9; g() { git -C "$w/d" -c user.name=r -c user.email=r@r -c commit.gpgsign=false "$@"; }; git init -q "$w/d" || exit 9; mkdir -p "$w/d/core" "$w/d/docs" "$w/c" || exit 9; echo 1.0.0 > "$w/d/VERSION"; echo M > "$w/d/core/subject.sh"; echo o > "$w/d/core/other.sh"; g add -A && g commit -qm base || exit 9; B="$(g rev-parse HEAD)"; echo x >> "$w/d/core/other.sh"; g add -A && g commit -qm "fix: absorb PC-S880-THIRD-CLASS" || exit 9; echo y >> "$w/d/core/subject.sh"; echo z > "$w/d/core/aux.sh"; g add -A && g commit -qm "fix: absorb PC-S883-GENUINE" || exit 9; echo p > "$w/d/docs/p.md"; g add -A && g commit -qm "docs(plan): mention PC-S881-DOCS-CTL" || exit 9; T="$(g rev-parse HEAD)"; printf -- '# l\n\n- **PC-S880-THIRD-CLASS** -- subject core/subject.sh.\n  verify: theirs_has core/subject.sh "M"\n\n- **PC-S883-GENUINE** -- subject core/subject.sh.\n  verify: theirs_has core/subject.sh "M"\n\n- **PC-S881-DOCS-CTL** -- subject core/subject.sh.\n  verify: theirs_has core/subject.sh "M"\n\n- **PC-S882-NEVER** -- control.\n  verify: theirs_has core/subject.sh "M"\n' > "$w/c/l.md" || exit 9; o="$(bash "$L" "$w/d" "$B" "$w/c" "$T" "$w/c/l.md" 2>/dev/null)"; k() { printf '%s\n' "$o" | awk -F'\t' -v l="$1" '$2==l && $1 ~ /^NAMED-/ {print $1; exit}'; }; n() { printf '%s\n' "$o" | awk -F'\t' -v l="$1" '$2==l {c++} END {print c+0}'; }; [ "$(n PC-S882-NEVER)" -gt 0 ] && [ -z "$(k PC-S882-NEVER)" ] || exit 9; t="$(k PC-S880-THIRD-CLASS)"; e="$(k PC-S883-GENUINE)"; d="$(k PC-S881-DOCS-CTL)"; case "$t" in ""|NAMED-UPSTREAM|NAMED-UPSTREAM-DOCS-ONLY|NAMED-UPSTREAM-CITED-ONLY|NAMED-UPSTREAM-AMBIGUOUS) ;; *) [ "$e" = NAMED-UPSTREAM ] && [ "$d" = NAMED-UPSTREAM-DOCS-ONLY ] && exit 0 ;; esac; echo "BL145-OFF-SUBJECT-NAMING-READ-AS-ABSORBED third=${t:-<no row>} genuine=${e:-<no row>} docs=${d:-<no row>}" >&2; exit 1
 
 
 
@@ -1152,15 +1156,90 @@ The receipt is manual because its subject is the harness's own transcript format
 
 verify: manual -- the failure did not reproduce solo or on a second gate, so there is no receipt to score; the claim is the lead's measurement and the cause is unestablished.
 
-## BL-426 — `suite-pole-guard` grew from 68s to 279s pooled in 0.705.0 and rebuilds a 227-directory template every run
+## BL-426 — `suite-pole-guard` grew from 68s to 279s pooled in 0.705.0
 
 **NOTE. Found at batch 183's 0.705.0 gate.** `BL-378`'s fixture now seeds arms over a 227-directory probe tree
 (the coverage predicate's realistic shape) and grew from 25 to 44 assertions and 13 to 18 mutants. Its recorded
 loaded cost moved from 68s (`.git/ai-dlc-fixture-durations` before the release) to 279s in the 0.705.0 gate's
 `.last`, the top unit of that partial dispatch. That is far under the width-16 pole (`gate-adjudication-mutants`,
 702-760s) and the 890s ceiling, so it cannot trip the guard, but it adds about 210 pool-seconds to every run that
-dispatches it. Candidate remedy: build the 227-directory template once per run and share it across arms, or seed
-the coverage arms with fewer, heavier directories that reach the same ratio. Measure the loaded cost before and
-after, in clean worktrees at the same path.
+dispatches it.
 
-verify: manual -- a cost regression, not a defect with a predicate; close it on a measured loaded cost.
+**Batch 184 correction: the filing's sub-claim that the fixture "rebuilds a 227-directory template every run" was
+false.** The template is built once, at `core/fixtures/suite-pole-guard/run.sh:719-721` at `f0cf026b`, and shared
+read-only as `--root`, so the filed remedy was already the shipped state. Measured per arm on one live pass, the
+four arms that drive the guard over 227 directories cost 0.21-0.40s each, the same as the 3-directory arms; the
+whole pass is about 10.6s. The cost was the SUBJECT: `run_arms` drives `scripts/validate-suite-pole.sh` about 58
+times per pass across 20 passes (live, 18 mutants, control), and every invocation forked a `printf` command
+substitution for the TAB on each pattern test of `parse_baseline`, plus a subshell per `pole_verdict` call in the
+self-probe. Base solo `sys` time was 100s against 38s `user`.
+
+**Batch 184 remedy.** The tab is a local constant and the ceiling arithmetic lives once in `pole_ceiling_v`, which
+sets a variable. No mutation anchor moved and the fixture is unchanged except a stale comment. Solo, interleaved,
+from the worktree, three reps each: base real 176.5/176.3/174.1s (CPU 138.4/140.8/139.5s), tip real
+69.6/69.7/71.0s (CPU 58.7/59.6/61.5s), at 1-minute loads 5.4-7.7. The kill matrix (18 mutants, owning arm and
+declared co-kills, plus the control) is byte-identical at base and tip. **Still open:** the close condition is a
+LOADED cost, which only the gate measures. Read `suite-pole-guard` in the next gate's
+`.git/ai-dlc-fixture-durations.last` and compare it with 279s before closing this.
+
+verify: sh V=scripts/validate-suite-pole.sh; t=$(mktemp -d) || exit 9; mkdir -p "$t/core/fixtures/fx1" || exit 9; printf 'exit 0\n' > "$t/core/fixtures/fx1/run.sh"; printf '# band: 15\n# jobs: 12\n# fixtures: 1\nfx1 100\n' > "$t/b.tsv"; printf 'fx1 105\n' > "$t/d.tsv"; PS4='+${BASH_SUBSHELL} ' bash -x "$V" --root "$t" --baseline "$t/b.tsv" --durations "$t/d.tsv" --record "$t/d.tsv" --jobs 12 > "$t/o" 2> "$t/x"; r=$?; v=$(grep -c 'pole fx1 105s' "$t/o"); a=$(grep -cE '^[+]+1 ' "$t/x"); tb=$(grep -cE "^[+]+[1-9][0-9]* printf '.t'$" "$t/x"); pc=$(grep -cE '^[+]+[1-9][0-9]* pole_ceiling ' "$t/x"); rm -rf "$t"; [ "$r" -eq 0 ] && [ "$v" -eq 1 ] && [ "$a" -gt 0 ] || exit 9; [ "$tb" -eq 0 ] && [ "$pc" -le 1 ]
+
+The receipt traces one passing run of the subject and counts subshell-depth trace lines that are a `printf` of the
+tab or a `pole_ceiling` call. Its control (exit 9) demands the run passed, printed its verdict, and traced at least
+one subshell line, so a trace that captured nothing cannot read as the fix. Scored under `set -uo pipefail`: base
+`f0cf026b` exits 1, tip exits 0, and two mutants of tip each exit 1 — the tab fork restored at its 3 sites, and
+`pole_verdict` reading its ceiling through a subshell again.
+
+## BL-427 — Rule 28's shard line accepts an invented serial exception and records it as null, so Check 22 only warns
+
+**DEFECT.**
+
+Filed by the consumer as PC-S316-RULE-28-SHARD-LINE-ACCEPTS-AN-INVENTED-SERIAL-EXCEPTION-AND-ONLY-WARNS.
+
+`core/hooks/ai-dlc-dispatch-guard.sh` parsed `shard: none (<exception>)` only when the whole line was one parenthesised group naming exception 1-4. Any other `none` value, whether an invented reason such as `none (serial cross-file repair: …)`, `none (5)`, or `none — serial because…`, recorded `shard: null`. That is the same value as an omitted line, so `validate-spawn-ledger.sh` arm S1 WARNed and the exit stayed 0. The same whole-line anchor also nulled correct briefs that carried prose after a valid group (`none (serial-document). Files you may edit…`). Repeating the line reset the value to null as well, which laundered an invented exception.
+
+Fix: the guard reads the first parenthesised group, records `invalid-exception` plus `shard_raw` for any other `none` value, and lets an invalid line win over repeats. It case-folds the key and the `none` token, and unwraps a `none` value from `*`, `_`, backticks and straight double quotes, because `SHARD:`, `Shard: None (…)` and `shard: **none (…)**` otherwise launder an invented exception to null. No consumer brief carries those spellings today. The validator's new arm S3 FAILS such a row (exit 1, decided before the exit-3 branch). It prints the row's name with its `tool_use_id`, because clearing arm 1 keys on the name and names repeat. It also prints `shard_raw` and names `shard: 1/1 <key>` as the form for a single-voice or unsharded dispatch. An unreadable ledger in the shard arm is exit 2. Gate prose and the enforcement map add a fifth clearable class, **invalid serial exception**. Rows written by older guards are null, so nothing in flight wedges. Run against the consumer's real ledger, S316 and S315 both exit 0 with S3 at 0.
+
+**Residual, not fixed here:** omitting the shard line entirely still only WARNs under S1, so a lead can avoid the FAIL by dropping the line.
+
+Receipt scored under `set -uo pipefail` on extracted trees. It drives three invented exceptions, one with a colon and two without (`none (5)` and bare `none`); each must FAIL. A valid `none (serial-document). Files…` must pass, and a brief with no shard line must stay a WARN at exit 0. Scores:
+
+| Tree | Exit |
+|---|---|
+| base `f0cf026b` | 1 |
+| tip | 0 |
+| mutant (a): the validator reader ignores `invalid-exception` | 1 |
+| mutant (b): the whole-line-anchored parse | 1 |
+| a guard that marks invalid only when the group carries `:` | 1 |
+| a validator whose S1 null also FAILS | 1 |
+
+The receipt's impossible-token control returns exit 9 if it ever matches.
+
+verify: sh G=core/hooks/ai-dlc-dispatch-guard.sh; V=core/scripts/validate-spawn-ledger.sh; [ -f "$G" ] && [ -f "$V" ] || exit 9; d="$(mktemp -d)"; mkdir -p "$d/.claude/team-roles" "$d/_bmad-output"; echo 'version: 0.0.0' > "$d/.claude/.ai-dlc-version"; echo '# Role: remediator' > "$d/.claude/team-roles/remediator.md"; echo '{"aiDlcModels":{"opus":"claude-opus-5"},"aiDlcRoles":{"remediator":{"model":"opus"}}}' > "$d/.claude/settings.json"; drive() { printf -- '- sprint_id: %s\n' "$1" > "$d/_bmad-output/pipeline-snapshot.md"; jq -nc --arg s "$2" '{tool_name:"Agent",tool_input:{name:"r",model:"opus",prompt:("Your operating contract is `.claude/team-roles/remediator.md`. Read it.\n" + $s + "\nDo the work.")}}' | CLAUDE_PROJECT_DIR="$d" bash "$G" >/dev/null 2>&1; }; vl() { bash "$V" --ledger "$d/_bmad-output/spawn-ledger.jsonl" --sprint "$1" --settings "$d/.claude/settings.json" 2>&1; }; drive 5 'shard: none (serial cross-file repair: a, b)'; drive 6 'shard: none (serial-document). Files you may edit: a.md'; drive 7 'shard: none (5)'; drive 8 'shard: none'; drive 9 'no shard line in this brief'; o5="$(vl 5)"; r5=$?; o6="$(vl 6)"; r6=$?; o7="$(vl 7)"; r7=$?; o8="$(vl 8)"; r8=$?; o9="$(vl 9)"; r9=$?; n="$(grep -c 'ZQ-IMPOSSIBLE-SHARD-7731' <<<"$o5$o7$o8")" || n=0; [ "$n" -eq 0 ] || exit 9; grep -q 'carry a shard line' <<<"$o6" || exit 9; grep -q 'carry a shard line' <<<"$o9" || exit 9; [ "$r5" -eq 1 ] && grep -qF 'shard: none (serial cross-file repair: a, b)' <<<"$o5" && [ "$r6" -eq 0 ] && grep -q '1 shardable row(s) carry a shard line, 0 FAILED' <<<"$o6" && [ "$r7" -eq 1 ] && grep -qF 'shard: none (5)' <<<"$o7" && [ "$r8" -eq 1 ] && grep -qF 'shard: none' <<<"$o8" && [ "$r9" -eq 0 ] && grep -q '1 WARNED without one' <<<"$o9"
+
+## BL-429 — six shipping fixtures SKIP and exit 0 on every consumer because their subject is distribution-only, so the consumer pool records them `ok` while they test nothing
+
+**DEFECT. Found at batch 184** by a hand that installed `f0cf026b` into a scratch consumer and ran
+every shipped runnable fixture there. `consumer-machinery-home`, `layer-contract-conformance`,
+`layer-contract-conformance-b`, `ledger-status-vocabulary` and `release-version-triple` have a
+distribution-only validator as their subject (`scripts/validate-enforcement-map.sh` or
+`scripts/validate-release-version.sh`, neither installed). `self-update-join-gate`'s gate ships, but
+its seed derives BASE/THEIRS from the distribution's own git history, which a consumer does not
+hold. All six print a SKIP and exit 0 in the consumer layout, re-measured from the consumer root as
+the consumer hook runs them, and that pool reads 0 as `ok`. Under
+`.claude/rules/fixture-ship-decl.md`'s criterion each is `.dist-only`: the subject is not present
+on a consumer.
+
+**The fix** gives each a reasoned `.dist-only`, removes it from `scripts/uninstall.sh`'s shipped
+loop and from both manifest copies (`core-manifest.md`, `setup-sites.md`), and moves it to
+uninstall's retired list so an uninstall still removes a copy installed earlier. A consumer that
+already holds the six gets a `RETIRED-FIXTURE-ORPHAN` row from `retired-fixtures.sh` arm A on its
+next pull. That detector reports and never deletes, so the operator removes the copies by hand.
+
+**The receipt is behavioural:** it installs the tree into a scratch consumer and fails while any of
+the six lands there. It exits 9 if the install fails or the shipped control `ledger-reverify` is
+absent. Scored under `set -uo pipefail`: base `f0cf026b` 1, fix 0, and a mutant that deletes only
+one `.dist-only` while keeping the packaging edits 1, for both `consumer-machinery-home` and
+`self-update-join-gate`.
+
+verify: sh T=$(mktemp -d) || exit 9; mkdir -p "$T/_bmad" && git -C "$T" init -q || exit 9; bash scripts/install.sh "$T" >/dev/null 2>&1 || exit 9; [ -f "$T/tests/fixtures/ledger-reverify/run.sh" ] || exit 9; s=0; for n in consumer-machinery-home layer-contract-conformance layer-contract-conformance-b ledger-status-vocabulary release-version-triple self-update-join-gate; do [ -e "$T/tests/fixtures/$n" ] && s=1; done; exit $s

@@ -652,7 +652,13 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   append and 25 at the `esv_paths[${#esv_paths[@]}]=` append, both assignments the old
 #   classifier scored as commands. Every arm keeps its real cost. HIGH reading 3138 plus the
 #   usual 6.
-FORK_BUDGET=3144
+#
+#   RAISED TO 3155 FOR SIX NEW `.dist-only` MARKERS, NOT FOR A NEW ARM. `fork-profile.sh
+#   --section by-arm --stable`, base `origin/main` f0cf026b then the BL-429 tip, in ONE worktree
+#   at the same path: base 3142 (spread 3142-3142), tip 3149 (spread 3149-3149), so +7. I8 +6 is
+#   its per-marker `grep -qx` against uninstall's list, one per newly marked fixture; I82b 8 -> 9
+#   is the only other arm that moved. HIGH reading 3149 plus the usual 6.
+FORK_BUDGET=3155
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

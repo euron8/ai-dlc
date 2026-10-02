@@ -1,0 +1,10 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Its subject is scripts/validate-release-version.sh, which governs ai-dlc's own release triple
+(commit subject, VERSION, CHANGELOG heading) and is not installed: a consumer writes no ai-dlc
+CHANGELOG entry. On a consumer the fixture resolves no validator and prints
+"PASS (skipped -- distribution-only validator)", so the consumer's pool recorded it `ok` on
+every push while it tested nothing.
+
+Its arms 20/21 bind the validator's citation regex to the shipped ledger-reverify.sh. That
+binding needs both files, and only this repo holds both.

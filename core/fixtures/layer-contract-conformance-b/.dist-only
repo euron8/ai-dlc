@@ -1,0 +1,9 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+It is shard 'b' of layer-contract-conformance and inherits that fixture's reason without
+qualification: the subject is scripts/validate-enforcement-map.sh, which is not shipped to
+consumers. On a consumer both directories printed a SKIP and exited 0, so the consumer's pool
+recorded two `ok` verdicts on every push while nothing was tested.
+
+A SHARD INHERITS ITS SIBLING'S MARKER BY CARRYING ITS OWN, NOT BY POINTING AT IT. The exemption
+is derived per directory, so a shard without one is shippable by every reader that matters.

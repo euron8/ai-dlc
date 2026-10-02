@@ -1,0 +1,10 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Its subject is I43 and I44 in scripts/validate-enforcement-map.sh, which install.sh does not
+ship: the repo-root scripts/ is never copied, only core/scripts/. On a consumer the fixture
+resolves no validator, prints a SKIP and exits 0, so the consumer's pool recorded it `ok`
+on every push while it tested nothing.
+
+The surfaces I43 and I44 bind (the core guard's deny text, warn-shadowed-local-validators.sh's
+LOCAL_DIR default, core-manifest.md) do ship, but the check that joins them does not, and a
+fixture whose subject is the CHECK cannot run where the check is absent.

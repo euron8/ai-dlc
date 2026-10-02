@@ -714,7 +714,7 @@ orphan_block stale_second_block record_pole_skipped jobs_canonical width_exact"
 ARM_COUNT=0
 for _a in $ARMS; do ARM_COUNT=$((ARM_COUNT + 1)); done
 
-# THE 227-DIRECTORY TEMPLATE, built once and copied by `mkbig`. Asserted here, before any arm
+# THE 227-DIRECTORY TEMPLATE, built once and shared read-only as `--root`. Asserted here, before any arm
 # reads it, so a short template is FIXTURE BROKEN rather than a coverage figure off by a unit.
 TPL="$WORK/tpl227"
 mktree "$TPL" "$BIG_N" || broken "could not build the $BIG_N-directory template"

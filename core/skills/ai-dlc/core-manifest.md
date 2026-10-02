@@ -176,7 +176,6 @@ core_manifest:
   - fixtures/snapshot-archive-rotate/**
   - fixtures/snapshot-conservation/**
   - fixtures/suppression-lifetime/**
-  - fixtures/self-update-join-gate/**
   - fixtures/self-update-fixture-log/**
   - fixtures/snapshot-supersession-marker/**
   - fixtures/audit-anchors-schema/**
@@ -197,7 +196,6 @@ core_manifest:
   - fixtures/check5-anchor-base/**
   - fixtures/check-22-spawn-ledger/**
   - fixtures/ci-gates-resolution/**
-  - fixtures/consumer-machinery-home/**
   - fixtures/consumer-suite-pool/**
   - fixtures/readset-skip/**
   - fixtures/layer-qualifier-grain/**
@@ -246,8 +244,6 @@ core_manifest:
   - fixtures/known-skills-extension/**
   - fixtures/layer-anchor-declaration/**
   - fixtures/layer-catalog-collision/**
-  - fixtures/layer-contract-conformance/**
-  - fixtures/layer-contract-conformance-b/**
   - fixtures/layer-debt-due-and-discharge/**
   - fixtures/layer-debt-ledger/**
   - fixtures/layer-readopt-gate/**
@@ -255,7 +251,6 @@ core_manifest:
   - fixtures/ledger-reverify-b/**
   - fixtures/ledger-reverify-c/**
   - fixtures/ledger-reverify-d/**
-  - fixtures/ledger-status-vocabulary/**
   - fixtures/ledger-reverify-unfalsifiable/**
   - fixtures/ledger-reverify-dist-only-reach/**
   - fixtures/fixture-drivability/**
@@ -286,7 +281,6 @@ core_manifest:
   - fixtures/reconcile-emit-report/**
   - fixtures/emit-report-refusal/**
   - fixtures/relabel-theirs-collision/**
-  - fixtures/release-version-triple/**
   - fixtures/relocation-preclassify/**
   - fixtures/preclassify-rename-row/**
   - fixtures/requirements-step/**
