@@ -1018,6 +1018,50 @@ else
 fi
 mv "$TPL.orig" "$TPL"
 
+# ARM 2b — A NON-ASCII GHOST. The citation class was `[A-Za-z0-9_.-]`, which cannot spell
+# `café.sh`, so a role file naming a non-ASCII validator core does not ship was not a citation
+# at all and I50 passed it. The ghost is assembled from octal escapes so this file carries no
+# literal of it. Its mutant restores the ASCII class in the SEEDED validator copy and must go
+# silent on the same mutation, so the kill is the class and not the corpus.
+ghost_c="$(printf 'validate-caf\303\251')-gone.sh"
+cp "$DEV" "$DEV.orig"
+sed "s@scripts/ai-dlc/validate-mutation-red\\.sh@scripts/ai-dlc/${ghost_c}@" "$DEV.orig" > "$DEV"
+if cmp -s "$DEV.orig" "$DEV"; then
+  bad "FIXTURE BROKEN: the I50 non-ASCII ghost mutation matched nothing, so arm 2b is unproven"
+else
+  out="$(vrun)"
+  if grep -qF "$ghost_c" <<<"$out"; then
+    ok "a role file naming a NON-ASCII validator core does not ship FAILS I50 (the class spells it)"
+  else
+    bad "a role file named a non-ASCII validator core does not ship and I50 stayed silent — its class cannot spell the name"
+  fi
+  cp "$V" "$V.orig"
+  # The class is rewritten BY POSITION on the one `i50_cited=` line -- from `scripts/ai-dlc/[` to
+  # the `]+\.(sh|js)` that closes it -- so this file carries no retyped copy of the shipped class.
+  python3 -c 'import sys
+L = open(sys.argv[1]).read().split("\n")
+hit = [i for i, l in enumerate(L) if l.startswith("i50_cited=")]
+if len(hit) != 1: sys.exit(3)
+l = L[hit[0]]; a = l.find("scripts/ai-dlc/["); b = l.find("]+\\.(sh|js)", a + 16)
+if a < 0 or b < 0: sys.exit(4)
+L[hit[0]] = l[:a] + "scripts/ai-dlc/[A-Za-z0-9_.-" + l[b:]
+open(sys.argv[1], "w").write("\n".join(L))' "$V" 2>/dev/null; m_rc=$?
+  if [ "$m_rc" -ne 0 ] || cmp -s "$V.orig" "$V"; then
+    bad "FIXTURE BROKEN: the I50 ASCII-class mutant did not apply (rc=$m_rc) -- the citation grep was respelled"
+  else
+    out="$(vrun)"
+    if grep -qF "$ghost_c" <<<"$out"; then
+      bad "mutant (I50 ASCII class) SURVIVED: the restored class still reported the non-ASCII ghost"
+    elif grep -q "I50 derived an EMPTY set" <<<"$out"; then
+      bad "mutant (I50 ASCII class) went EMPTY instead of narrow -- the mutation broke the grep, not the class"
+    else
+      ok "mutant (I50 ASCII class) killed: the restored class cannot spell the non-ASCII ghost and I50 goes silent"
+    fi
+  fi
+  mv "$V.orig" "$V"
+fi
+mv "$DEV.orig" "$DEV"
+
 # ARM 3 — VACUITY. I50 reports an ABSENCE (nothing cited that is not shipped). With the
 # shipped set empty every citation is a ghost, and without the zero guard `comm` compares
 # against nothing and reports an agreement it never computed. Other invariants also error

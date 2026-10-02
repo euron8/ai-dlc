@@ -1252,6 +1252,8 @@ Discharges no consumer candidate.
 
 verify: manual -- not yet forced; the claim is the builder's reading of the code.
 
+**Held note (batch 182): fixed on b182-r1**, not landed. `machinery_paths()` and the new `setup_sited_paths()` (which replaces the `SETUP_SITED_PATHS` assignment) are self-contained, return 4 on any producer failure (manifest missing or unreadable, either `ls-files`, the sort), and end in an explicit 0, so a healthy empty set is rc 0 under `pipefail`. A missing `setup-sites.md` is 4, not an empty set: it ships beside preclassify in both layouts. Callers refuse in forms they already own: preclassify `pc_refuse`, the gate `SELF-UPDATE-UNDECIDED` (its own wording, distinct from the EMPTY row), apply `applying-marker-unwritten` / `finish-unverified-tree`, unregistered-drift `ud_read_refuse`. Forced with a `git` shim failing only one ref's `ls-files --with-tree`: base gives the gate `SELF-UPDATE-OK` with omega's CARRY row dropped, preclassify `BOTH-ADDED->CLASSIFY` at rc 0, and unregistered-drift omega as `HARD-UNREGISTERED-CORE-DRIFT` at rc 0; the fix gives UNDECIDED, rc 2 and rc 2. Arms and mutants live in `self-update-gate` (`mp-*`) and `apply-restamp-theirs` (assertions 9 and 10).
+
 ## BL-419 — Check 24 K2 judges a pass by the current partition map, not the map at dispatch
 
 **NOTE. Found at batch 181 by the R-P tip adversary.** `validate-adversarial-convergence.sh` K2 re-derives whether a reviewed document partitions from the engine installed now, with no record of what the map said when the pass was dispatched. After 0.697.0 moved 90 of the reference consumer's documents from SERIAL to partitioned, a series that converged on one of them after the stamp would be retro-failed and owe a sectioned re-review. Instances today: 0 of 101 series (the one flip is the motivating document's own live series). Fix: key K2 on the spawn ledger's `shard: none (serial-document)` row, or record the map verdict in the pass's provenance block.
@@ -1270,6 +1272,8 @@ Discharges no consumer candidate.
 
 verify: manual -- no shipped name carries a non-ASCII or space-bearing script path, so no receipt can fail today.
 
+**Held note (batch 182): fixed on b182-r1**, not landed. `sr_required_inputs` uses the gate's INVOKED class and reads line by line; `cov_set`/`uns_set` use `[^[:space:]/]`, so a non-ASCII name is spelled and a slash row is still not a bare name. `vr_m10`'s two cells read the class out of the gate rather than retyping it, behind a probe that it captures a non-ASCII name. I50 takes the gate's class with its own `\.(sh|js)` ending; the measured false-positive set of the widening was one, the `scripts/ai-dlc/café.sh` example in a `self-update-gate.sh` comment, which is respelled. `for r2p in $R2_CAND` is now `gate_stage r2-cand` plus `while read`, and a failed candidate `diff` is `SELF-UPDATE-UNDECIDED`. A held `steps/a b.md` world reads `r2=1 ok=0` on base and `r2=0 ok=1` on the fix. Mutants: `quote-mut-r2split`, `quote-mut-r2rc`, and the I50 ASCII-class mutant in `enforcement-map-sites`.
+
 ## BL-421 — `partition-document.sh` can cut a run of `|`-led lines that is not a table
 
 **NOTE. Found at batch 181 by the R-P tip adversary.** 0.697.0's row split cuts before line k when k-2, k-1 and k begin with `|` outside a fence or a tracked comment. Prose lines that begin with `|`, a comment opened mid-line (the tracker's declared blind spot) and a `<pre>` block can therefore be cut. Assembly stays byte-exact; a remediator's section opens mid-construct. Fix, if wanted: require the run to contain a `|---|` separator row before the cut point.
@@ -1287,4 +1291,16 @@ verify: manual -- assembly is exact either way; the cost is a remediator's view,
 Discharges no consumer candidate.
 
 verify: manual -- the row blocks either way; the gap is the message, not the outcome.
+
+**Held note (batch 182): fixed on b182-r1**, not landed. `absorbed_pct` reads the scan loop's staged `blob-base` and `blob-theirs` instead of calling `git_show`, so a memo that cannot serve a blob refuses at the staging site, where `ud_read_refuse` names the memo. The theirs blob's staging now sets `ud_theirs`, and the absorption test keys on that flag instead of a second `cat-file -e`, so the two conditions cannot disagree. Status and message text are unchanged. Arm `arm_ud_memo2` in `procsub-staged-refusal` fails the second memo serve of the theirs blob: the fix reads ABSORBED, and mutant `UD-MEMO` (the base's `git_show` reads restored) is killed by it.
+
+## BL-425 — `unregistered-drift.sh` re-ran preclassify for every carried-test row and leaked an `ud-carry.*` directory each time
+
+**DEFECT. Found at batch 182 while fixing BL-418.** `carried_bucket` ran the whole carry derivation, including `bash preclassify.sh`, and ran inside `$( )`. So `CARRY_STATE` and `CARRY_TMP` never reached the parent shell: every row that reached the carried test re-ran the derivation, and the EXIT trap never saw a directory to remove. Measured on the operator's machine: 81996 `ud-carry.*` directories under `$TMPDIR`, with a control of 10643 `tmp.*` directories beside them. On a seeded world with three carried rows, base runs preclassify 3 times and leaves 3 directories.
+
+Discharges no consumer candidate.
+
+verify: manual -- the leak is a count over a temp directory the suite does not own; the arm is the receipt.
+
+**Held note (batch 182): fixed on b182-r1**, not landed. `ud_carry_derive` runs once, in the main shell from the scan loop, so its state and directory persist and the trap removes the directory; `carried_bucket` only reads. The arm (`mp-ud-once` in `self-update-gate`) counts through a `mktemp` shim in a private TMPDIR: `preclassify=1 derived=1 left=0 carried=3` on the fix. Mutant `mp-mut-perrow` puts the derivation back inside `carried_bucket` and reads `preclassify=3 derived=3 left=3`. The leaked directories already on disk are not removed by this change.
 

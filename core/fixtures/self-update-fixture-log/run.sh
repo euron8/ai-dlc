@@ -109,7 +109,11 @@ sr_required_inputs() { # $1=consumer root -> the record's input block for a clea
   sr_h="$1/.githooks/pre-push"
   [ -f "$sr_h" ] || return 0
   printf '# input: .githooks/pre-push\t%s\t-\n' "$(git hash-object "$sr_h" 2>/dev/null)"
-  for sr_iv in $(grep -oE 'scripts/ai-dlc/[A-Za-z0-9._-]+\.sh' "$sr_h" | sort -u); do
+  # THE GATE'S OWN NAME CLASS, READ LINE BY LINE. An ASCII `[A-Za-z0-9._-]` class could not spell a
+  # hook-named `café.sh`, so the seed left out an input the runner demands; and a `for` over the
+  # capture split a name on whitespace. The class is self-update-gate.sh's INVOKED negation.
+  grep -oE 'scripts/ai-dlc/[^]['"'"'"`[:space:];|&()<>$*?{}\\/,:=#!@%+~]+\.sh' "$sr_h" | sort -u \
+  | while IFS= read -r sr_iv; do
     sr_n="${sr_iv#scripts/ai-dlc/}"
     if [ -f "$1/$sr_iv" ]; then
       printf '# input: %s\t%s\tcore/scripts/%s\n' "$sr_iv" "$(git hash-object "$1/$sr_iv" 2>/dev/null)" "$sr_n"
@@ -179,13 +183,16 @@ seed_ranges() { # $1=log dir
   seed_record "$1" "$DIST" "$D_THEIRS" "$D_BASE"   OK 013 >/dev/null || return 1
 }
 
-# The refusal list, read back as a SET rather than as N greps. An equality against the whole
+# The refusal list, read back as a SET rather than as N greps. The name class is a NEGATION --
+# anything but whitespace and `/` -- because an ASCII enumeration could not spell a directory named
+# `café` and read its row as absent; `/` stays out so a path-shaped row is still not a bare name.
+# An equality against the whole
 # list is what carries the exemptions: a `.dist-only` directory that stopped being exempt
 # appears here, and no absence-shaped assertion has to be written for it separately.
 cov_set() {
   { [ -n "${1:-}" ] && [ -f "$1" ]; } || return 0
   sed -n '/^COVERAGE: the diff changes/,/^$/p' "$1" \
-    | sed -n 's/^  \([A-Za-z0-9._-][A-Za-z0-9._-]*\)$/\1/p' | sort | tr '\n' ','
+    | sed -n 's/^  \([^[:space:]/][^[:space:]/]*\)$/\1/p' | sort | tr '\n' ','
 }
 
 # The OVER-completeness refusal list, read the same way and for the same reason. Its rows carry
@@ -198,11 +205,11 @@ cov_set() {
 uns_set() {
   { [ -n "${1:-}" ] && [ -f "$1" ]; } || return 0
   sed -n '/^COVERAGE: the named set contains/,/^$/p' "$1" \
-    | sed -n 's/^  \([A-Za-z0-9._-][A-Za-z0-9._-]*\) .*$/\1/p' | sort | tr '\n' ','
+    | sed -n 's/^  \([^[:space:]/][^[:space:]/]*\) .*$/\1/p' | sort | tr '\n' ','
 }
 
 # THE SAME LIST READ WITHOUT A CHARACTER CLASS, and it exists because `uns_set` above CANNOT
-# SPELL THE SUBJECT OF A SLASH ROW. Its capture is `[A-Za-z0-9._-]` followed by a space, so a
+# SPELL THE SUBJECT OF A SLASH ROW. Its capture is `[^[:space:]/]` followed by a space, so a
 # row opening `core/fixtures/ — ...` matches nothing at all and the reader returns EMPTY —
 # byte-identical to a run that refused nothing. Measured on this branch: a path-shape refusal
 # scored `uns_set` empty while the row was present and correct. The subject an empty-name
@@ -1054,7 +1061,7 @@ p_pathshape "core/fixtures/deep/er" "a DEEPER path under an accepted prefix"
 # the refusal ABSENT. A run that refused correctly and a run that refused nothing then read the
 # same, which is the acquitting direction.
 #
-# READ WITH `uns_subj`, NOT `uns_set`: the latter's capture is a `[A-Za-z0-9._-]` class and
+# READ WITH `uns_subj`, NOT `uns_set`: the latter's capture is a `[^[:space:]/]` class and
 # cannot spell a subject carrying slashes, so it returns empty on a perfectly good row. The
 # CONTROL for that is the same reader over Part 14's run, which must still show the bare name —
 # a reader that returned everything, or nothing, would pass this arm either way.
