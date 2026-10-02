@@ -16149,3 +16149,35 @@ read live 18 on 8 qualifying refs, unfiled 4, worklist 1, TERMINAL 151.
 
 Batch 173's next-work list and delivery gap are spent: batch 174's block above replaces both.
 
+**BATCH 174 SHIPPED `v0.666.0` (`d41d47d0`, #913) AND DISCHARGED TWO CONSUMER CANDIDATES:
+`PC-S315-AGENT-DEFINITION-RENDER-ENTANGLEMENT-ARM-FIRES-UNDER-THE-PRE-PUSH-POOL` (`BL-258`) and
+`PC-S309-ADR-DEFERRED-WORK-HAS-NO-CARRIER-INTO-BACKLOG` (`BL-215`).** It was invoked by peer
+handoff. The opening sweep: live 31 on 1 qualifying ref, unfiled 14, worklist 5, TERMINAL 147. Live
+backlog **104 -> 84** (22 closed and rotated, `BL-379` and `BL-380` filed), archive **273 -> 295**.
+
+**THE OPERATOR RE-DIRECTED THE BATCH TWICE, AND BOTH RULINGS STAND.** First, every live backlog
+entry was adjudicated, not only the PC-backed set: seven hands swept 88 entries, finding 9 closes
+with no build and about 45 live entries with a small fix. Second, packaging split into
+releases as work finished rather than one monolithic release: `v0.666.0` shipped what was
+collected, `v0.667.0` takes the rest. **Adjudicate the whole backlog every batch; ship each
+release the moment its builders are collected.**
+
+**A LANDED ANNOTATION MADE INSIDE A RELEASE FAILS ITS OWN PUSH.** `validate-backlog-receipts.sh`
+excludes a LANDED entry from the live sh-receipt population, so annotating closes inside the release
+drops R5 below `--min-sh-receipts`; and the branch shas builders cite die on squash. Builders' close
+lines were rewritten to a held note in the release and the post-merge close commit annotated each
+with the squash sha, rotated them, and set both R5 floors to the measured post-rotation population
+(`--min-sh-receipts 45 --min-entries 84`), which is R5's own stated remedy.
+
+**THE FIRST GATE FAILED ON A LINE THE RELEASE ADDED**: a shipped comment cited `docs/backlog.md`,
+which `validate-no-dead-doc-refs.sh` refuses because consumers do not get that file. Gate on
+`61236bce`: 22 phases PASS, 218 fixtures ok, 0 FAIL, every changed fixture `ok` by name against an
+impossible-name control of 0, `ls-remote` matching, squash tree identical to the gated tip. The
+tip adversary found no BLOCKER; its two DEFECTs were read-set traces, which the operator ran on
+`d41d47d0` and which ship in this close (only `requirements-step` and `review-carry-over-clauses`
+moved).
+
+**`docs/reviews/graph-consumer-owned-close-brief.md` IS APPLIED.** Its fourteen candidates, eleven
+naming only non-core paths and three adjudicated here, are all in the consumer's archive, 14 of 14,
+measured by the fresh-resume sweep against `origin/main` `02e890e0`.
+
