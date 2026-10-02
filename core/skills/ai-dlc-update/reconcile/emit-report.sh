@@ -174,8 +174,10 @@ render() {
   # THE BASE IS TAKEN ON FAITH WHILE THE TREE RECORDS THE ANSWER. `THEIRS` is rev-parsed and
   # refused if it does not resolve; `BASE` is `${2:?}` and validated nowhere, against a stamp whose
   # `commit:` field is exactly "the ref this tree was last reconciled to". The block below is the
-  # one place that compares the two; the stamp is read in four other scripts and every one of them
-  # reads `skill_commit`, never `commit`, except the post-write read-back in `apply.sh`.
+  # only comparison of the two in this REPORT; it is not the only one in the engine. `apply.sh`
+  # reads `commit:` and compares it to BASE by `core/` tree (the `--finish` row
+  # `finish-base-unverified`), and `derivation-differential.sh` reads `commit:` and compares it to
+  # BASE as a commit through `resolves_to_base`.
   #
   # COMPARED AS COMMITS, NEVER AS STRINGS. Both stamp writers (`apply.sh`'s re-stamp and
   # `install.sh`) record `rev-parse --short`, while BASE is whatever the caller typed -- a full sha,
@@ -185,7 +187,8 @@ render() {
   # Never a prefix match, a case fold or a `core/` tree comparison: a docs-only commit shares its
   # `core/` tree with its parent and is still a different base. A stamp that does not resolve --
   # `<sha>-dirty`, `unknown`, garbage -- STILL renders the row: it records no base this render can
-  # confirm. Every failed `rev-parse` is absorbed by its `||`, so none reaches `pipefail`.
+  # confirm. A BASE that does not resolve renders it too: no commit is the stamp's commit.
+  # Every failed `rev-parse` is absorbed by its `||`, so none reaches `pipefail`.
   # The verdict depends on DIST's object store: a stamp naming a commit DIST does not hold renders the row.
   #
   # THE TRAP IS THAT THE STAMP CARRIES TWO SHA-SHAPED FIELDS AND BOTH LOOK LIKE PLAUSIBLE BASES.

@@ -2385,9 +2385,13 @@ fi
 #   DIRTY     short(b)-dirty   b        row    W3 (an unresolvable stamp renders nothing)
 #   OTHER     short(t)         b        row    CONTROL: the row renders at all (W5 deletes it)
 #   EQUAL     b                b        none   CONTROL: string-equal is settled without git
+#   NOBASE    short(b)         nb       row    W9 (an unresolvable BASE acquits the stamp)
+#
+# nb is a 40-hex sha no object in the SB dist carries, asserted absent before any cell is read.
 #
 # EVERY CELL MUST PROVE IT RENDERED. A program that emits nothing reads `none` on five of the
-# eight cases, so a cell with no reconcile-mechanical region is BROKEN, never `none`. Cells are
+# nine cases, so a cell whose reconcile-mechanical region is absent or TRUNCATED -- BEGIN with no
+# END -- is BROKEN, never `none`. Cells are
 # computed in background jobs that write files; every verdict is read in the foreground.
 SB="$WORK/stamp-base"; mkdir -p "$SB/d/core" "$SB/mut" "$SB/c"
 sbg() { git -C "$SB/d" -c user.name=fixture -c user.email=f@f -c commit.gpgsign=false -c tag.gpgsign=false "$@"; }
@@ -2409,6 +2413,7 @@ while [ "$_sb_n" -le 40 ]; do
   _sb_n=$((_sb_n+1))
 done
 SB_BU="$(printf '%s' "$SB_BS" | tr abcdef ABCDEF)"
+SB_NB=0123456789abcdef0123456789abcdef01234567
 sb_rp() { sbg rev-parse -q --verify "$1" 2>/dev/null || true; }
 
 # PRECONDITIONS: each is what makes one case discriminate, so each is asserted before a cell is read.
@@ -2419,22 +2424,24 @@ case "$SB_B" in "$SB_BS"?*) : ;; *) SB_PRE="$SB_PRE short(b) [$SB_BS] is not a s
 [ "$(sb_rp sb-vb)" != "$SB_B" ] && [ "$(sb_rp 'sb-vb^{commit}')" = "$SB_B" ] || SB_PRE="$SB_PRE sb-vb is not an annotated tag peeling to b;"
 [ "$SB_DC" != "$SB_T" ] && [ -n "$(sb_rp "${SB_T}:core")" ] && [ "$(sb_rp "${SB_DC}:core")" = "$(sb_rp "${SB_T}:core")" ] || SB_PRE="$SB_PRE dc does not share t's core/ tree as a different commit;"
 [ -z "$(sb_rp "${SB_BS}-dirty^{commit}")" ] && [ -n "$(sb_rp "${SB_BS}^{commit}")" ] || SB_PRE="$SB_PRE [${SB_BS}-dirty] resolves (or [$SB_BS] does not), so DIRTY is not an unresolvable stamp;"
+[ -z "$(sb_rp "${SB_NB}^{commit}")" ] || SB_PRE="$SB_PRE nb [$SB_NB] resolves in the SB dist, so NOBASE is not an unresolvable BASE;"
 if [ -n "$SB_PRE" ]; then
   bad "FIXTURE BROKEN — SB world:$SB_PRE no SB cell below can discriminate"
 else
-  ok "SBP the SB dist expresses every case: short(b) is a strict prefix of b, its upper-case form is distinct and resolves to b, sb-vb is an annotated tag peeling to b, dc and t are different commits with one core/ tree, and short(b)-dirty does not resolve while short(b) does"
+  ok "SBP the SB dist expresses every case: short(b) is a strict prefix of b, its upper-case form is distinct and resolves to b, sb-vb is an annotated tag peeling to b, dc and t are different commits with one core/ tree, short(b)-dirty does not resolve while short(b) does, and nb resolves to nothing"
 fi
 
-SB_CASES="SHORT FULL-SB UPPER TAG DOCS DIRTY OTHER EQUAL"
-sb_stamp() { case "$1" in SHORT|TAG) printf '%s' "$SB_BS" ;; FULL-SB|EQUAL) printf '%s' "$SB_B" ;; UPPER) printf '%s' "$SB_BU" ;; DOCS) printf '%s' "$SB_T" ;; DIRTY) printf '%s-dirty' "$SB_BS" ;; OTHER) printf '%s' "$SB_TS" ;; esac; }
-sb_base()  { case "$1" in FULL-SB) printf '%s' "$SB_BS" ;; TAG) printf 'sb-vb' ;; DOCS) printf '%s' "$SB_DC" ;; *) printf '%s' "$SB_B" ;; esac; }
-sb_want()  { case "$1" in DOCS|DIRTY|OTHER) printf 'row' ;; *) printf 'none' ;; esac; }
+SB_CASES="SHORT FULL-SB UPPER TAG DOCS DIRTY OTHER EQUAL NOBASE"
+sb_stamp() { case "$1" in SHORT|TAG|NOBASE) printf '%s' "$SB_BS" ;; FULL-SB|EQUAL) printf '%s' "$SB_B" ;; UPPER) printf '%s' "$SB_BU" ;; DOCS) printf '%s' "$SB_T" ;; DIRTY) printf '%s-dirty' "$SB_BS" ;; OTHER) printf '%s' "$SB_TS" ;; esac; }
+sb_base()  { case "$1" in FULL-SB) printf '%s' "$SB_BS" ;; TAG) printf 'sb-vb' ;; DOCS) printf '%s' "$SB_DC" ;; NOBASE) printf '%s' "$SB_NB" ;; *) printf '%s' "$SB_B" ;; esac; }
+sb_want()  { case "$1" in DOCS|DIRTY|OTHER|NOBASE) printf 'row' ;; *) printf 'none' ;; esac; }
 sb_cell() { # sb_cell <emit> <case> <tag> -> row | none | BROKEN
   local d="$SB/c/$3.$2" o
   mkdir -p "$d/.claude" || { echo BROKEN; return 0; }
   printf 'version: 1.0.0\ncommit: %s\n' "$(sb_stamp "$2")" > "$d/.claude/.ai-dlc-version"
   o="$(bash "$1" "$SB/d" "$(sb_base "$2")" "$d" "$SB_T" 2>/dev/null)"
   case "$o" in *'BEGIN GENERATED: reconcile-mechanical'*) : ;; *) echo BROKEN; return 0 ;; esac
+  case "$o" in *'END GENERATED: reconcile-mechanical'*) : ;; *) echo BROKEN; return 0 ;; esac
   case "$o" in *"_stamp_ records"*) echo row ;; *) echo none ;; esac
 }
 sb_emit_of() { case "$1" in ship) printf '%s\n' "$EMIT" ;; *) printf '%s\n' "$SB/mut/$1/mutant-emit.sh" ;; esac; }
@@ -2484,6 +2491,7 @@ sb_mk W5 "$SB_L_RENDER" '    if false; then'
 sb_mk W6 "$SB_L_RENDER" '    if [ -n "$_rendered_base" ] && [ "$(printf %s "$_rendered_base" | tr ABCDEF abcdef)" != "$(printf %s "$BASE" | tr ABCDEF abcdef)" ]; then'
 sb_mk W7 "$SB_L_RENDER" '    _rb_t="$(git -C "$DIST" rev-parse -q --verify "${_rendered_base}^{commit}:core" 2>/dev/null)" || _rb_t=""; _b_t="$(git -C "$DIST" rev-parse -q --verify "${BASE}^{commit}:core" 2>/dev/null)" || _b_t=""; if [ -n "$_rendered_base" ] && { [ -z "$_rb_t" ] || [ "$_rb_t" != "$_b_t" ]; }; then'
 sb_mk W8 "$SB_L_RENDER" '    _b_c="$(git -C "$DIST" rev-parse -q --verify "${BASE}^{commit}" 2>/dev/null)" || _b_c=""; if [ -n "$_rendered_base" ] && case "$_b_c" in "$_rendered_base"*) false ;; *) true ;; esac; then'
+sb_mk W9 "$SB_L_CMP" '        [ -z "$_base_obj" ] || [ "$_stamp_obj" = "$_base_obj" ] || _stamp_moved=1'
 
 if [ -z "$SB_PRE" ]; then
   _sb_n=0
@@ -2527,15 +2535,16 @@ if [ -z "$SB_PRE" ]; then
   sb_kill W2 "FULL-SB TAG" "resolving the stamp and comparing it to the BASE STRING fails whenever BASE is not already a full sha — a short BASE or a tag"
   sb_kill W3 "DIRTY" "an unresolvable stamp rendering nothing hides a -dirty stamp, which records no base this render can confirm"
   sb_kill W4 "TAG" "without the ^{commit} peel an annotated-tag BASE resolves to the TAG object, which is never the stamp's commit"
-  sb_kill W5 "DOCS DIRTY OTHER" "the row deleted: every case that must render it goes quiet, including the plain different-commit control"
+  sb_kill W5 "DOCS DIRTY OTHER NOBASE" "the row deleted: every case that must render it goes quiet, including the plain different-commit control"
   sb_kill W6 "SHORT FULL-SB UPPER TAG" "a case fold on the raw strings still compares an abbreviation to a full sha as text — SHORT is the case the defect was filed on"
   sb_kill W7 "DOCS" "comparing core/ trees acquits a docs-only commit, which shares t's core/ tree and is still a different base"
   sb_kill W8 "UPPER" "resolving BASE and prefix-matching the stamp is case-sensitive against a lower-case sha, so an upper-case abbreviation of the base renders a false row"
+  sb_kill W9 "NOBASE" "an unresolvable BASE acquitting the stamp hides a range rendered from a base nothing in DIST names, so no commit is the stamp's commit and the row must still render"
   _sb_n=0; for _sb_t in $SB_APPLIED; do _sb_n=$((_sb_n+1)); done
-  if [ "$_sb_n" -eq 8 ]; then
-    ok "SB all 8 stamp-comparison mutants (W1-W8) were built and applied (cmp -s) and scored"
+  if [ "$_sb_n" -eq 9 ]; then
+    ok "SB all 9 stamp-comparison mutants (W1-W9) were built and applied (cmp -s) and scored"
   else
-    bad "SB only $_sb_n of 8 stamp-comparison mutants applied ([${SB_APPLIED# }]) — each missing one leaves a wrong fix nothing here can reject"
+    bad "SB only $_sb_n of 9 stamp-comparison mutants applied ([${SB_APPLIED# }]) — each missing one leaves a wrong fix nothing here can reject"
   fi
 fi
 
