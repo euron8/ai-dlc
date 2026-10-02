@@ -472,6 +472,9 @@ if bash "$TMP/fake3/scripts/fp-ctl.sh" --target "$TMP/tiny.sh" --probe-only > "$
       fi
       if bash "$f" --target "$TMP/tiny.sh" --probe-only > "$TMP/$n.out" 2>"$TMP/$n.err"; then
         note "FAIL  $n -- the mutated classifier passed the self-probe (PROBEASG=$(field "$TMP/$n.out" PROBEASG))"; rc=1
+      # The second conjunct has no subject while the assignment probe runs last (the profiler
+      # exits at its first failing probe); it guards a reordering that would let one mutant
+      # trip two probes and be credited to this one.
       elif grep -q 'the assignment probe must score' "$TMP/$n.err" \
            && ! grep -q 'positive probe\|fork-free probe' "$TMP/$n.err"; then
         note "ok    $n -- killed by the assignment probe"
