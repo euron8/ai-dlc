@@ -1156,18 +1156,39 @@ The receipt is manual because its subject is the harness's own transcript format
 
 verify: manual -- the failure did not reproduce solo or on a second gate, so there is no receipt to score; the claim is the lead's measurement and the cause is unestablished.
 
-## BL-426 — `suite-pole-guard` grew from 68s to 279s pooled in 0.705.0 and rebuilds a 227-directory template every run
+## BL-426 — `suite-pole-guard` grew from 68s to 279s pooled in 0.705.0
 
 **NOTE. Found at batch 183's 0.705.0 gate.** `BL-378`'s fixture now seeds arms over a 227-directory probe tree
 (the coverage predicate's realistic shape) and grew from 25 to 44 assertions and 13 to 18 mutants. Its recorded
 loaded cost moved from 68s (`.git/ai-dlc-fixture-durations` before the release) to 279s in the 0.705.0 gate's
 `.last`, the top unit of that partial dispatch. That is far under the width-16 pole (`gate-adjudication-mutants`,
 702-760s) and the 890s ceiling, so it cannot trip the guard, but it adds about 210 pool-seconds to every run that
-dispatches it. Candidate remedy: build the 227-directory template once per run and share it across arms, or seed
-the coverage arms with fewer, heavier directories that reach the same ratio. Measure the loaded cost before and
-after, in clean worktrees at the same path.
+dispatches it.
 
-verify: manual -- a cost regression, not a defect with a predicate; close it on a measured loaded cost.
+**Batch 184 correction: the filing's sub-claim that the fixture "rebuilds a 227-directory template every run" was
+false.** The template is built once, at `core/fixtures/suite-pole-guard/run.sh:719-721` at `f0cf026b`, and shared
+read-only as `--root`, so the filed remedy was already the shipped state. Measured per arm on one live pass, the
+four arms that drive the guard over 227 directories cost 0.21-0.40s each, the same as the 3-directory arms; the
+whole pass is about 10.6s. The cost was the SUBJECT: `run_arms` drives `scripts/validate-suite-pole.sh` about 58
+times per pass across 20 passes (live, 18 mutants, control), and every invocation forked a `printf` command
+substitution for the TAB on each pattern test of `parse_baseline`, plus a subshell per `pole_verdict` call in the
+self-probe. Base solo `sys` time was 100s against 38s `user`.
+
+**Batch 184 remedy.** The tab is a local constant and the ceiling arithmetic lives once in `pole_ceiling_v`, which
+sets a variable. No mutation anchor moved and the fixture is unchanged except a stale comment. Solo, interleaved,
+from the worktree, three reps each: base real 176.5/176.3/174.1s (CPU 138.4/140.8/139.5s), tip real
+69.6/69.7/71.0s (CPU 58.7/59.6/61.5s), at 1-minute loads 5.4-7.7. The kill matrix (18 mutants, owning arm and
+declared co-kills, plus the control) is byte-identical at base and tip. **Still open:** the close condition is a
+LOADED cost, which only the gate measures. Read `suite-pole-guard` in the next gate's
+`.git/ai-dlc-fixture-durations.last` and compare it with 279s before closing this.
+
+verify: sh V=scripts/validate-suite-pole.sh; t=$(mktemp -d) || exit 9; mkdir -p "$t/core/fixtures/fx1" || exit 9; printf 'exit 0\n' > "$t/core/fixtures/fx1/run.sh"; printf '# band: 15\n# jobs: 12\n# fixtures: 1\nfx1 100\n' > "$t/b.tsv"; printf 'fx1 105\n' > "$t/d.tsv"; PS4='+${BASH_SUBSHELL} ' bash -x "$V" --root "$t" --baseline "$t/b.tsv" --durations "$t/d.tsv" --record "$t/d.tsv" --jobs 12 > "$t/o" 2> "$t/x"; r=$?; v=$(grep -c 'pole fx1 105s' "$t/o"); a=$(grep -cE '^[+]+1 ' "$t/x"); tb=$(grep -cE "^[+]+[1-9][0-9]* printf '.t'$" "$t/x"); pc=$(grep -cE '^[+]+[1-9][0-9]* pole_ceiling ' "$t/x"); rm -rf "$t"; [ "$r" -eq 0 ] && [ "$v" -eq 1 ] && [ "$a" -gt 0 ] || exit 9; [ "$tb" -eq 0 ] && [ "$pc" -le 1 ]
+
+The receipt traces one passing run of the subject and counts subshell-depth trace lines that are a `printf` of the
+tab or a `pole_ceiling` call. Its control (exit 9) demands the run passed, printed its verdict, and traced at least
+one subshell line, so a trace that captured nothing cannot read as the fix. Scored under `set -uo pipefail`: base
+`f0cf026b` exits 1, tip exits 0, and two mutants of tip each exit 1 — the tab fork restored at its 3 sites, and
+`pole_verdict` reading its ceiling through a subshell again.
 
 ## BL-427 — Rule 28's shard line accepts an invented serial exception and records it as null, so Check 22 only warns
 
