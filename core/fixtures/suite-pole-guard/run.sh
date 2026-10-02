@@ -94,8 +94,33 @@ mkdur() { # <file> <n-fixtures> <pole-name> <pole-seconds>
     i=$((i + 1))
   done
   grep -qF -- "$name $secs" "$f" || return 1
+  cp "$f" "$f.rec" || return 1
   return 0
 }
+
+# ---------------------------------------------------------------------------------------
+# THE REAL-SHAPED WORLD. 227 fixture directories, the population the suite had when the
+# row-count predicate was measured skipping nearly every push. Built ONCE and shared READ-ONLY
+# as `--root` by every arm that needs it: those arms write their seeds under their own `$w`,
+# never under the template, so sharing it costs no isolation, and run_arms re-runs every arm for
+# every mutant -- a per-arm copy of 227 directories was the bulk of this fixture's wall clock.
+#
+# Costs: fx100 is the baseline pole; seven units are the ones a content-key dispatch leaves out
+# -- deliberately NOT the first seven, so a reader keyed on the head of the list cannot pass --
+# costing W=16 between them; the other 219 cost 12294 (218 at 56, fx2 at 86).
+# ---------------------------------------------------------------------------------------
+BIG_N=227
+BIG_MISSING='^fx(50|80|110|140|170|200|226) '
+big_rows() { # <pole-secs> [<fx2-secs>] -> all 227 rows, as the hook's merged record holds them
+  awk -v p="$1" -v two="${2:-86}" 'BEGIN { for (i = 1; i <= 227; i++) {
+    if (i == 100) c = p
+    else if (i == 50 || i == 80 || i == 110 || i == 140 || i == 170) c = 2
+    else if (i == 200 || i == 226) c = 3
+    else if (i == 2) c = two
+    else c = 56
+    print "fx" i, c } }'
+}
+TPL=""
 
 mkbase() { # <file> <pole-name> <secs> <band> <jobs> <fixtures>
   printf '# a prose comment the parser ignores\n# band: %s\n# jobs: %s\n# fixtures: %s\n%s %s\n' \
@@ -112,10 +137,25 @@ mkbase() { # <file> <pole-name> <secs> <band> <jobs> <fixtures>
 # initial 0 for the whole run: every arm expecting a refusal or a growth exit read 0, NINE
 # arms failed at once, and the unmutated control failed with them, which is the only reason
 # this was visible rather than a battery certifying a subject it never judged.
+#
+# THE CUMULATIVE RECORD RIDES BESIDE THE DURATIONS FILE. `mkdur` writes `<file>.rec` holding the
+# same rows, which is what the hook's merge produces after a run that dispatched every unit, and
+# `drive` passes it as `--record` unless the arm named one itself. Arms about coverage write their
+# own record and pass it explicitly; every other arm is a full dispatch and reads 100%.
 RC=0
 OUT=""
 drive() { # <args...> -> output in $OUT, exit code in $RC
-  OUT="$(bash "$SUBJ" "$@" 2>&1)"; RC=$?
+  local a prev="" dur="" has_rec=0
+  for a in "$@"; do
+    [ "$prev" = "--durations" ] && dur="$a"
+    [ "$a" = "--record" ] && has_rec=1
+    prev="$a"
+  done
+  if [ "$has_rec" -eq 0 ] && [ -n "$dur" ] && [ -f "$dur.rec" ]; then
+    OUT="$(bash "$SUBJ" "$@" --record "$dur.rec" 2>&1)"; RC=$?
+  else
+    OUT="$(bash "$SUBJ" "$@" 2>&1)"; RC=$?
+  fi
 }
 
 SUBJ="$V"
@@ -299,45 +339,139 @@ arm_no_measurement() {
   [ "$rc_absent" -eq 0 ] && [ "$rc_empty" -eq 0 ]
 }
 
-# PARTIAL DISPATCH -> 0 with SKIP naming `partial`. THE FALSE RED THIS GUARD WOULD OTHERWISE
-# PRODUCE ON MOST PUSHES: the read-set skip narrows the dispatch list in place, so the pole is
-# timed beside thirty units rather than two hundred and the figure is near-solo.
-#
-# THE NEAR-MISS IS IN THE SAME ARM and it is what makes this discriminate: a full-length file
-# over the same tree must be COMPARED, not skipped. Without it, an implementation that skips
-# everything passes.
-arm_partial_dispatch() {
-  local w="$1" out rc_partial rc_full
-  mktree "$w" 5 || return 1
-  mkbase "$w/base.tsv" fx1 100 15 12 5 || return 1
-  mkdur "$w/full.tsv" 5 fx1 100 || return 1
-  # Three rows against five fixture directories.
-  printf 'fx1 100\nfx2 1\nfx3 1\n' > "$w/partial.tsv" || return 1
-  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/partial.tsv" --jobs 12; out="$OUT"; rc_partial=$RC
-  grep -qF 'SKIP' <<<"$out" || return 1
-  grep -qF 'partial' <<<"$out" || return 1
-  grep -qF '3 of 5' <<<"$out" || return 1
-  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/full.tsv" --jobs 12; out="$OUT"; rc_full=$RC
-  grep -qF 'pole fx1 100s' <<<"$out" || return 1
-  [ "$rc_partial" -eq 0 ] && [ "$rc_full" -eq 0 ]
+# THE REALISTIC PARTIAL DISPATCH IS COMPARED. 220 rows against 227 directories, the seven
+# missing units costing 16s of the record's 13140 -- the shape a content-key push actually
+# produces, and the one the old row-count equality skipped on nearly every push. A grown pole
+# FAILS; the within-band near-miss passes; and the COVERAGE FIGURE IS ASSERTED EXACTLY, because
+# a predicate that divides by the wrong thing can still clear 90% and only the printed figure
+# shows it: (12294 + 830) / (12294 + 830 + 16) = 99.87%.
+arm_coverage_partial() {
+  local w="$1" out rc_grown rc_near
+  [ -d "$TPL/core/fixtures/fx227" ] || return 1
+  mkbase "$w/base.tsv" fx100 830 15 12 227 || return 1
+  big_rows 830  > "$w/rec830.tsv"  || return 1
+  big_rows 1000 > "$w/rec1000.tsv" || return 1
+  grep -vE "$BIG_MISSING" "$w/rec830.tsv"  > "$w/last830.tsv"  || return 1
+  grep -vE "$BIG_MISSING" "$w/rec1000.tsv" > "$w/last1000.tsv" || return 1
+  [ "$(grep -c . "$w/last1000.tsv")" -eq 220 ] || return 1
+  drive --root "$TPL" --baseline "$w/base.tsv" --durations "$w/last830.tsv" --record "$w/rec830.tsv" --jobs 12; out="$OUT"; rc_near=$RC
+  grep -qF 'coverage 99.87%' <<<"$out" || return 1
+  grep -qF 'pole fx100 830s' <<<"$out" || return 1
+  drive --root "$TPL" --baseline "$w/base.tsv" --durations "$w/last1000.tsv" --record "$w/rec1000.tsv" --jobs 12; out="$OUT"; rc_grown=$RC
+  grep -qF 'GROWN' <<<"$out" || return 1
+  grep -qF 'fx100 at 1000s' <<<"$out" || return 1
+  [ "$rc_near" -eq 0 ] && [ "$rc_grown" -eq 1 ]
 }
 
-# `--jobs` DISAGREEING WITH `# jobs:` -> 0 with SKIP naming `pool width`. A different width is
-# a different machine for a loaded figure. The near-miss — the matching width — is the FULL
-# COMPARISON, asserted in the same arm for the same reason as above.
-arm_jobs_mismatch() {
-  local w="$1" out rc_mismatch rc_match
+# A NEAR-SOLO DISPATCH SKIPS NAMING COVERAGE, EVEN WITH A GROWN POLE. Thirty units of 227, the
+# pole among them at a figure far past its ceiling: that is the 442s-loaded/112s-solo shape in
+# the other direction, and comparing it is the false red this guard must never produce.
+#
+# THE NEAR-MISS IS IN THE SAME ARM: the identical grown pole in a FULL dispatch over the same
+# tree and record is compared and fails. Without it, an implementation skipping everything passes.
+arm_partial_dispatch() {
+  local w="$1" out rc_solo rc_full
+  [ -d "$TPL/core/fixtures/fx227" ] || return 1
+  mkbase "$w/base.tsv" fx100 830 15 12 227 || return 1
+  big_rows 1000 > "$w/rec.tsv" || return 1
+  { grep '^fx100 ' "$w/rec.tsv"; grep -v '^fx100 ' "$w/rec.tsv" | sed -n '1,29p'; } > "$w/solo.tsv" || return 1
+  [ "$(grep -c . "$w/solo.tsv")" -eq 30 ] || return 1
+  drive --root "$TPL" --baseline "$w/base.tsv" --durations "$w/solo.tsv" --record "$w/rec.tsv" --jobs 12; out="$OUT"; rc_solo=$RC
+  grep -qF 'SKIP' <<<"$out" || return 1
+  grep -qF 'coverage' <<<"$out" || return 1
+  grep -qF 'below 90%' <<<"$out" || return 1
+  grep -qF 'GROWN' <<<"$out" && return 1
+  drive --root "$TPL" --baseline "$w/base.tsv" --durations "$w/rec.tsv" --record "$w/rec.tsv" --jobs 12; out="$OUT"; rc_full=$RC
+  grep -qF 'GROWN' <<<"$out" || return 1
+  [ "$rc_solo" -eq 0 ] && [ "$rc_full" -eq 1 ]
+}
+
+# A GHOST ROW IN THE RECORD IS NOT WORK THIS RUN FAILED TO DO. The hook's merge keeps a key for
+# a deleted fixture forever; a 100000s ghost in the denominator would read a full dispatch as
+# 12% coverage and skip a grown pole. Joined to the directories on disk, it is compared and FAILS.
+#
+# THE NEAR-MISS CARRIES THE SAME 100000s ON A FIXTURE THAT EXISTS and was not dispatched, which
+# MUST count against coverage -- so the join is "on disk", not "present in this run".
+arm_ghost_record() {
+  local w="$1" out rc_ghost rc_real
+  [ -d "$TPL/core/fixtures/fx227" ] || return 1
+  mkbase "$w/base.tsv" fx100 830 15 12 227 || return 1
+  [ -d "$TPL/core/fixtures/fx-deleted-ghost" ] && return 1
+  big_rows 1000 > "$w/last.tsv" || return 1
+  { cat "$w/last.tsv"; printf 'fx-deleted-ghost 100000\n'; } > "$w/rec-ghost.tsv" || return 1
+  drive --root "$TPL" --baseline "$w/base.tsv" --durations "$w/last.tsv" --record "$w/rec-ghost.tsv" --jobs 12; out="$OUT"; rc_ghost=$RC
+  grep -qF 'GROWN' <<<"$out" || return 1
+  # The near-miss asserts the DENOMINATOR, not the verdict: 12208 + 1000 + 16 + 100000 = 113224
+  # with the undispatched fx2 counted. Keyed on the verdict it would also die to the threshold
+  # mutant, and keyed on the percentage to the numerator-side mutants; the near-solo arm and the
+  # coverage-partial arm own those. A join on "present in this run" prints 13224 here.
+  big_rows 1000 100000 > "$w/rec-real.tsv" || return 1
+  grep -v '^fx2 ' "$w/rec-real.tsv" > "$w/last-real.tsv" || return 1
+  drive --root "$TPL" --baseline "$w/base.tsv" --durations "$w/last-real.tsv" --record "$w/rec-real.tsv" --jobs 12; out="$OUT"; rc_real=$RC
+  grep -qF '113224s' <<<"$out" || return 1
+  [ "$rc_ghost" -eq 1 ] && [ "$rc_real" -ne 2 ]
+}
+
+# THE BASELINE POLE ABSENT, ASYMMETRICALLY. Within band with the watched unit not timed is a
+# SKIP naming it -- before this, it printed a false-green PASS with a "pole moved" NOTE. Over the
+# ceiling with the watched unit absent still FAILS: growth past the ceiling is growth whichever
+# unit carries it, and absence is never an acquittal.
+#
+# EACH .last CARRIES A ROW FOR A FIXTURE THAT IS NOT ON DISK, so its row count equals the
+# directory count. Without it, a restored row-count equality would skip this arm too and the
+# arm would die to a mutant the coverage-partial arm owns.
+arm_pole_absent() {
+  local w="$1" out rc_within rc_over
+  mktree "$w" 3 || return 1
+  mkbase "$w/base.tsv" fx1 100 15 12 3 || return 1
+  printf 'fx1 5\nfx2 105\nfx3 100\n'        > "$w/rec-within.tsv" || return 1
+  printf 'fx2 105\nfx3 100\nfx-gone 1\n'    > "$w/last-within.tsv" || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/last-within.tsv" --record "$w/rec-within.tsv" --jobs 12; out="$OUT"; rc_within=$RC
+  grep -qF 'baseline pole not dispatched' <<<"$out" || return 1
+  grep -qF 'pole fx2' <<<"$out" && return 1
+  printf 'fx1 5\nfx2 200\nfx3 100\n'        > "$w/rec-over.tsv" || return 1
+  printf 'fx2 200\nfx3 100\nfx-gone 1\n'    > "$w/last-over.tsv" || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/last-over.tsv" --record "$w/rec-over.tsv" --jobs 12; out="$OUT"; rc_over=$RC
+  grep -qF 'GROWN' <<<"$out" || return 1
+  grep -qF 'fx2 at 200s' <<<"$out" || return 1
+  [ "$rc_within" -eq 0 ] && [ "$rc_over" -eq 1 ]
+}
+
+# NO CUMULATIVE RECORD -> SKIP BY NAME, absent and empty alike. The near-miss is the same run
+# with its record present, which is compared and fails.
+arm_no_record() {
+  local w="$1" out rc_absent rc_empty rc_present
   mktree "$w" 3 || return 1
   mkbase "$w/base.tsv" fx1 100 15 12 3 || return 1
   mkdur "$w/dur.tsv" 3 fx1 1000 || return 1
-  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 4; out="$OUT"; rc_mismatch=$RC
-  grep -qF 'SKIP' <<<"$out" || return 1
-  grep -qF 'pool width' <<<"$out" || return 1
-  # THE SAME GROWN FIGURE AT THE MATCHING WIDTH MUST FAIL. This is the conjunct that stops a
-  # skip-everything implementation from passing: the only difference between the two drives
-  # is the width.
-  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 12; out="$OUT"; rc_match=$RC
-  [ "$rc_mismatch" -eq 0 ] && [ "$rc_match" -eq 1 ]
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --record "$w/no-record-here.tsv" --jobs 12; out="$OUT"; rc_absent=$RC
+  grep -qF 'no cumulative durations record' <<<"$out" || return 1
+  : > "$w/empty-rec.tsv" || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --record "$w/empty-rec.tsv" --jobs 12; out="$OUT"; rc_empty=$RC
+  grep -qF 'no cumulative durations record' <<<"$out" || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --record "$w/dur.tsv.rec" --jobs 12; out="$OUT"; rc_present=$RC
+  grep -qF 'GROWN' <<<"$out" || return 1
+  [ "$rc_absent" -eq 0 ] && [ "$rc_empty" -eq 0 ] && [ "$rc_present" -eq 1 ]
+}
+
+# ONE ROW PER POOL WIDTH. A baseline with a block at width 12 (fx1 100) and one at width 16
+# (fx1 2000), driven with the same 1000s pole at three widths:
+#   --jobs 16 compares against the SECOND block and passes -- the case a first-row reader fails;
+#   --jobs 12 compares against the FIRST and fails -- the case a last-row reader fails;
+#   --jobs 4  has no row and SKIPs naming the widths that do, at exit 0 and never a FAIL.
+arm_jobs_mismatch() {
+  local w="$1" out rc16 rc12 rc4
+  mktree "$w" 3 || return 1
+  printf '# band: 15\n# jobs: 12\n# fixtures: 3\nfx1 100\n# band: 15\n# jobs: 16\n# fixtures: 3\nfx1 2000\n' > "$w/base.tsv" || return 1
+  mkdur "$w/dur.tsv" 3 fx1 1000 || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 16; out="$OUT"; rc16=$RC
+  grep -qF 'baseline fx1 2000s' <<<"$out" || return 1
+  grep -qF 'pool 16' <<<"$out" || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 12; out="$OUT"; rc12=$RC
+  grep -qF 'GROWN' <<<"$out" || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 4; out="$OUT"; rc4=$RC
+  grep -qF 'pool width 4 has no baseline row (widths with a row: 12 16)' <<<"$out" || return 1
+  [ "$rc16" -eq 0 ] && [ "$rc12" -eq 1 ] && [ "$rc4" -eq 0 ]
 }
 
 # THE REFUSALS, all exit 2. A malformed baseline is a broken instrument, and a growth figure
@@ -351,7 +485,12 @@ arm_refusals() {
   mkdur "$w/dur.tsv" 3 fx1 100 || return 1
   printf '# band: 15\n# jobs: 12\n# fixtures: 3\nfx1 100\nfx2 350\n' > "$w/two.tsv" || return 1
   drive --root "$w" --baseline "$w/two.tsv" --durations "$w/dur.tsv" --jobs 12; out="$OUT"; rc_two=$RC
-  grep -qF 'ONE data row' <<<"$out" || return 1
+  grep -qF 'in its own block' <<<"$out" || return 1
+  # TWO BLOCKS FOR ONE WIDTH: refused by name, never resolved by taking the first.
+  printf '# band: 15\n# jobs: 12\n# fixtures: 3\nfx1 100\n# band: 15\n# jobs: 12\n# fixtures: 3\nfx1 300\n' > "$w/dupw.tsv" || return 1
+  drive --root "$w" --baseline "$w/dupw.tsv" --durations "$w/dur.tsv" --jobs 12; out="$OUT"
+  [ "$RC" -eq 2 ] || return 1
+  grep -qF 'second row for pool width 12' <<<"$out" || return 1
   printf '# jobs: 12\n# fixtures: 3\nfx1 100\n' > "$w/noband.tsv" || return 1
   drive --root "$w" --baseline "$w/noband.tsv" --durations "$w/dur.tsv" --jobs 12; out="$OUT"; rc_noband=$RC
   grep -qF 'band' <<<"$out" || return 1
@@ -365,7 +504,126 @@ arm_refusals() {
   mkbase "$w/stale.tsv" fx-that-was-deleted 100 15 12 3 || return 1
   drive --root "$w" --baseline "$w/stale.tsv" --durations "$w/dur.tsv" --jobs 12; out="$OUT"; rc_stale=$RC
   grep -qF 'fx-that-was-deleted' <<<"$out" || return 1
+  # A ZERO-SECOND ROW (ceiling zero, every run reads as growth) and a band past 1000% (a ceiling
+  # nothing reaches, and past the shell's integer range a negative one) are not calibrations.
+  printf '# band: 15\n# jobs: 12\n# fixtures: 3\nfx1 0\n' > "$w/zero.tsv" || return 1
+  drive --root "$w" --baseline "$w/zero.tsv" --durations "$w/dur.tsv" --jobs 12; out="$OUT"
+  [ "$RC" -eq 2 ] || return 1
+  grep -qF 'zero seconds' <<<"$out" || return 1
+  printf '# band: 1001\n# jobs: 12\n# fixtures: 3\nfx1 100\n' > "$w/hugeband.tsv" || return 1
+  drive --root "$w" --baseline "$w/hugeband.tsv" --durations "$w/dur.tsv" --jobs 12; out="$OUT"
+  [ "$RC" -eq 2 ] || return 1
+  grep -qF 'above 1000%' <<<"$out" || return 1
+  # AN EXPLICIT EMPTY --jobs IS REFUSED, NOT DEFAULTED to 12 -- an unset "$FIXTURE_JOBS" in the
+  # hook would otherwise compare against the 12-width row whatever the pool ran at.
+  mkbase "$w/ok.tsv" fx1 100 15 12 3 || return 1
+  drive --root "$w" --baseline "$w/ok.tsv" --durations "$w/dur.tsv" --jobs ''; out="$OUT"
+  [ "$RC" -eq 2 ] || return 1
+  grep -qF -- '--jobs "" is not a number' <<<"$out" || return 1
   [ "$rc_two" -eq 2 ] && [ "$rc_noband" -eq 2 ] && [ "$rc_nojobs" -eq 2 ] && [ "$rc_stale" -eq 2 ]
+}
+
+# AN ORPHANED BLOCK IS REFUSED WHEREVER IT SITS, NOT ONLY AT EOF. Three seeds, each a block left
+# without its row MID-FILE, so a later directive would overwrite an earlier one and the next row
+# would inherit terms nobody wrote beside it:
+#   (1) a whole block at width 12 then a whole block at width 16, ONE row -- read last-wins it
+#       becomes a width-16 file and --jobs 12 SKIPs with exit 0;
+#   (2) a valid width-12 row, an orphan "band 50 / jobs 16", then "band 20 / fixtures" and a row
+#       -- read last-wins the row compares at width 16 on band 20;
+#   (3) one block carrying `# jobs: 12` AND `# jobs: 16` -- read last-wins --jobs 12 SKIPs.
+# Each must exit 2 naming the repeat. The NEAR-MISS is the well-formed two-block file in
+# `jobs_mismatch`, which parses.
+arm_orphan_block() {
+  local w="$1" out s
+  mktree "$w" 3 || return 1
+  mkdur "$w/dur.tsv" 3 fx1 100 || return 1
+  printf '# band: 20\n# jobs: 12\n# fixtures: 3\n# band: 25\n# jobs: 16\n# fixtures: 3\nfx1 100\n' > "$w/s1.tsv" || return 1
+  printf '# band: 20\n# jobs: 12\n# fixtures: 3\nfx2 999\n# band: 50\n# jobs: 16\n# band: 20\n# fixtures: 3\nfx1 100\n' > "$w/s2.tsv" || return 1
+  printf '# band: 20\n# jobs: 12\n# jobs: 16\n# fixtures: 3\nfx1 100\n' > "$w/s3.tsv" || return 1
+  for s in s1:12 s2:16 s3:12; do
+    drive --root "$w" --baseline "$w/${s%%:*}.tsv" --durations "$w/dur.tsv" --jobs "${s#*:}"; out="$OUT"
+    [ "$RC" -eq 2 ] || return 1
+    grep -qF 'appears twice before a data row consumes its block' <<<"$out" || return 1
+  done
+  return 0
+}
+
+# THE STALE-POLE CHECK COVERS EVERY BLOCK, NOT ONLY THE ONE SELECTED. A width-16 row naming a
+# deleted fixture is never compared on a width-12 push, so without this it rots until the width
+# changes. The stale row is the SECOND block, so a check of the first row alone cannot see it.
+# The near-miss is the same file with the second pole pointing at a real directory.
+arm_stale_second_block() {
+  local w="$1" out rc_stale rc_ok
+  mktree "$w" 3 || return 1
+  mkdur "$w/dur.tsv" 3 fx1 100 || return 1
+  printf '# band: 15\n# jobs: 12\n# fixtures: 3\nfx1 100\n# band: 15\n# jobs: 16\n# fixtures: 3\nfx-gone-at-16 100\n' > "$w/stale.tsv" || return 1
+  drive --root "$w" --baseline "$w/stale.tsv" --durations "$w/dur.tsv" --jobs 12; out="$OUT"; rc_stale=$RC
+  grep -qF 'fx-gone-at-16' <<<"$out" || return 1
+  printf '# band: 15\n# jobs: 12\n# fixtures: 3\nfx1 100\n# band: 15\n# jobs: 16\n# fixtures: 3\nfx2 100\n' > "$w/ok.tsv" || return 1
+  drive --root "$w" --baseline "$w/ok.tsv" --durations "$w/dur.tsv" --jobs 12; out="$OUT"; rc_ok=$RC
+  grep -qF 'pole fx1 100s' <<<"$out" || return 1
+  [ "$rc_stale" -eq 2 ] && [ "$rc_ok" -eq 0 ]
+}
+
+# THE OBSERVED POLE IS THIS RUN'S MAX, NEVER THE RECORD'S. The record keeps the last cost of
+# every unit the content key skipped; one of those can exceed anything this run timed. Here
+# fx50 (skipped) carries 1000s in the record, above fx100's 955s ceiling, while this run's max is
+# fx100 at 830 and coverage is 13138/14138 -- comparable. Read from the record, a unit this run
+# never timed would FAIL the push: a false red on a stale figure.
+#
+# THE SEED IS SHAPED SO ONLY THE POLE SOURCE CAN MOVE IT. The .last holds 227 rows -- every unit
+# but fx50, plus one row for a fixture not on disk -- so a restored row-count equality still
+# compares it, and the arm asserts the VERDICT rather than the coverage figure, so a mis-scaled
+# divisor (still above 90%) leaves it standing. coverage_partial owns both of those.
+arm_record_pole_skipped() {
+  local w="$1" out
+  [ -d "$TPL/core/fixtures/fx227" ] || return 1
+  [ -d "$TPL/core/fixtures/fx-off-disk" ] && return 1
+  mkbase "$w/base.tsv" fx100 830 15 12 227 || return 1
+  big_rows 830 | awk '$1 == "fx50" { $2 = 1000 } { print }' > "$w/rec.tsv" || return 1
+  { big_rows 830 | grep -v '^fx50 '; printf 'fx-off-disk 1\n'; } > "$w/last.tsv" || return 1
+  grep -qF 'fx50 1000' "$w/rec.tsv" || return 1
+  [ "$(grep -c . "$w/last.tsv")" -eq 227 ] || return 1
+  drive --root "$TPL" --baseline "$w/base.tsv" --durations "$w/last.tsv" --record "$w/rec.tsv" --jobs 12; out="$OUT"
+  [ "$RC" -eq 0 ] || return 1
+  grep -qF 'pole fx100 830s against baseline fx100 830s' <<<"$out" || return 1
+  grep -qF 'GROWN' <<<"$out" && return 1
+  return 0
+}
+
+# WIDTHS ARE CANONICAL INTEGERS. `# jobs: 012` is width 12: a second block at `# jobs: 12` is a
+# DUPLICATE and refuses, and `--jobs 12` selects the `012` row. A CRLF-saved baseline parses
+# exactly as its LF twin does. Without canonical keys the duplicate is two "widths" and the
+# guard picks whichever block an awk numeric compare happens to match first.
+arm_jobs_canonical() {
+  local w="$1" out rc_dup rc_one rc_crlf
+  mktree "$w" 3 || return 1
+  mkdur "$w/dur.tsv" 3 fx1 100 || return 1
+  printf '# band: 15\n# jobs: 012\n# fixtures: 3\nfx1 100\n# band: 15\n# jobs: 12\n# fixtures: 3\nfx1 300\n' > "$w/dup.tsv" || return 1
+  drive --root "$w" --baseline "$w/dup.tsv" --durations "$w/dur.tsv" --jobs 12; out="$OUT"; rc_dup=$RC
+  grep -qF 'second row for pool width 12' <<<"$out" || return 1
+  printf '# band: 15\n# jobs: 012\n# fixtures: 3\nfx1 100\n' > "$w/one.tsv" || return 1
+  drive --root "$w" --baseline "$w/one.tsv" --durations "$w/dur.tsv" --jobs 12; out="$OUT"; rc_one=$RC
+  grep -qF 'pole fx1 100s against baseline fx1 100s' <<<"$out" || return 1
+  printf '# band: 15\r\n# jobs: 12\r\n# fixtures: 3\r\nfx1 100\r\n' > "$w/crlf.tsv" || return 1
+  drive --root "$w" --baseline "$w/crlf.tsv" --durations "$w/dur.tsv" --jobs 12; out="$OUT"; rc_crlf=$RC
+  grep -qF 'pole fx1 100s against baseline fx1 100s' <<<"$out" || return 1
+  [ "$rc_dup" -eq 2 ] && [ "$rc_one" -eq 0 ] && [ "$rc_crlf" -eq 0 ]
+}
+
+# WIDTH SELECTION IS EXACT INTEGER EQUALITY. `--jobs 1` against rows at 12 and 16 has no row:
+# a substring or regex match would select 12, and a pool of one compared against a twelve-way
+# loaded figure reads as a dramatic improvement. The near-miss is `--jobs 12` selecting row 12.
+arm_width_exact() {
+  local w="$1" out rc1 rc12
+  mktree "$w" 3 || return 1
+  printf '# band: 15\n# jobs: 12\n# fixtures: 3\nfx1 100\n# band: 15\n# jobs: 16\n# fixtures: 3\nfx1 200\n' > "$w/base.tsv" || return 1
+  mkdur "$w/dur.tsv" 3 fx1 100 || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 1; out="$OUT"; rc1=$RC
+  grep -qF 'pool width 1 has no baseline row (widths with a row: 12 16)' <<<"$out" || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 12; out="$OUT"; rc12=$RC
+  grep -qF 'pole fx1 100s against baseline fx1 100s' <<<"$out" || return 1
+  [ "$rc1" -eq 0 ] && [ "$rc12" -eq 0 ]
 }
 
 # S*2 < B -> exit 0 AND the lower-the-row NOTE. THERE IS NO DOWNWARD FAIL, deliberately: a
@@ -396,8 +654,10 @@ arm_pole_moved() {
   local w="$1" out
   mktree "$w" 3 || return 1
   mkbase "$w/base.tsv" fx1 100 15 12 3 || return 1
-  # fx2 is now the longest, at a figure inside fx1's band.
+  # fx2 is now the longest, at a figure inside fx1's band. fx1 is still DISPATCHED: a run that
+  # did not time it SKIPs instead, which `pole_absent` owns.
   printf 'fx1 50\nfx2 105\nfx3 1\n' > "$w/dur.tsv" || return 1
+  cp "$w/dur.tsv" "$w/dur.tsv.rec" || return 1
   drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 12; out="$OUT"
   [ "$RC" -eq 0 ] || return 1
   grep -qF 'NOTE' <<<"$out" || return 1
@@ -434,8 +694,8 @@ arm_cwd_invariance() {
   mkbase "$w/base.tsv" fx1 100 15 12 3 || return 1
   mkdur "$w/dur.tsv" 3 fx1 105 || return 1
   drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 12; o_root="$OUT"; r_root=$RC
-  o_sub="$( cd "$w/core/fixtures/fx1" && bash "$SUBJ" --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 12 2>&1 )"; r_sub=$?
-  o_slash="$( cd / && bash "$SUBJ" --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 12 2>&1 )"; r_slash=$?
+  o_sub="$( cd "$w/core/fixtures/fx1" && bash "$SUBJ" --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 12 --record "$w/dur.tsv.rec" 2>&1 )"; r_sub=$?
+  o_slash="$( cd / && bash "$SUBJ" --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 12 --record "$w/dur.tsv.rec" 2>&1 )"; r_slash=$?
   [ "$r_root" -eq 0 ] && [ "$r_sub" -eq 0 ] && [ "$r_slash" -eq 0 ] || return 1
   # IDENTICAL VERDICT, not merely three zeros: three runs that all printed nothing would be
   # three equal exits. The verdict line itself has to match, and it has to be the real one.
@@ -447,10 +707,19 @@ arm_cwd_invariance() {
 ARMS="grown equal within_band ceiling_boundary ceil_arithmetic
 probe_catches_broken_comparator
 env_override baseline_flag no_measurement partial_dispatch jobs_mismatch refusals
-lower_the_row_note pole_moved probe_before_corpus cwd_invariance"
+lower_the_row_note pole_moved probe_before_corpus cwd_invariance
+coverage_partial ghost_record pole_absent no_record
+orphan_block stale_second_block record_pole_skipped jobs_canonical width_exact"
 
 ARM_COUNT=0
 for _a in $ARMS; do ARM_COUNT=$((ARM_COUNT + 1)); done
+
+# THE 227-DIRECTORY TEMPLATE, built once and copied by `mkbig`. Asserted here, before any arm
+# reads it, so a short template is FIXTURE BROKEN rather than a coverage figure off by a unit.
+TPL="$WORK/tpl227"
+mktree "$TPL" "$BIG_N" || broken "could not build the $BIG_N-directory template"
+[ "$(find "$TPL/core/fixtures" -mindepth 2 -maxdepth 2 -name run.sh | wc -l | tr -d ' ')" = "$BIG_N" ] \
+  || broken "the template does not carry $BIG_N fixture directories"
 
 run_arms() { # <subject> -> "<name>:<0|1>" per arm, each in its own fresh probe tree
   local subj="$1" name w rc
@@ -480,9 +749,18 @@ while IFS=: read -r name rc; do
     env_override)        msg="AI_DLC_POLE_BASELINE is read, against a DECOY at the default path that gives the opposite verdict" ;;
     baseline_flag)       msg="--baseline is read, against the same decoy" ;;
     no_measurement)      msg="a durations file that is absent, and one that is EMPTY, each SKIP at exit 0" ;;
-    partial_dispatch)    msg="a partial dispatch SKIPs naming the counts, while a full-length file over the same tree is COMPARED" ;;
-    jobs_mismatch)       msg="a pool width differing from the baseline's SKIPs naming 'pool width', while the same figure at the matching width fails" ;;
-    refusals)            msg="two data rows, a missing band, a missing jobs, and a pole naming no fixture directory each exit 2 and name the cause" ;;
+    partial_dispatch)    msg="a near-solo dispatch (30 of 227) with a grown pole SKIPs naming coverage below 90%, while the same pole in a full dispatch FAILS" ;;
+    jobs_mismatch)       msg="one baseline row per pool width: --jobs 16 compares against the SECOND block, --jobs 12 against the first, and a width with no row SKIPs naming the widths that have one" ;;
+    refusals)            msg="a row with no block of its own, two rows for one width, a missing band, a missing jobs, a pole naming no fixture directory, a zero-second row, a band over 1000%, and an empty --jobs each exit 2 and name the cause" ;;
+    orphan_block)        msg="a block left without its row MID-FILE (two whole blocks, an orphan between rows, a repeated jobs line) exits 2 naming the repeat" ;;
+    stale_second_block)  msg="a stale pole in the SECOND, unselected block exits 2 naming it, while the same file with a real directory there is compared" ;;
+    record_pole_skipped) msg="a skipped unit costing more than the ceiling in the RECORD does not become the observed pole: this run's max (fx100 830s) is compared and passes" ;;
+    jobs_canonical)      msg="'# jobs: 012' is width 12: beside a '# jobs: 12' block it is a duplicate (exit 2), alone it is selected by --jobs 12, and a CRLF baseline parses as its LF twin" ;;
+    width_exact)         msg="width selection is exact: --jobs 1 against rows at 12 and 16 SKIPs naming both, while --jobs 12 selects row 12" ;;
+    coverage_partial)    msg="a realistic 220-of-227 dispatch is COMPARED at coverage 99.87%: a grown pole FAILS and the within-band near-miss passes" ;;
+    ghost_record)        msg="a 100000s ghost row for a deleted fixture leaves a full dispatch compared (FAIL), while the same cost on an undispatched fixture on disk is counted in the 113224s denominator" ;;
+    pole_absent)         msg="the baseline pole absent: within band SKIPs 'not dispatched', above the ceiling still FAILS" ;;
+    no_record)           msg="an absent and an empty cumulative record each SKIP by name, while the present record is compared and FAILS" ;;
     lower_the_row_note)  msg="a figure under half the baseline exits 0 WITH the lower-the-row NOTE, and one just over half gets no note (there is no downward FAIL)" ;;
     pole_moved)          msg="the pole moving to another fixture within band exits 0 and NAMES BOTH fixtures" ;;
     probe_before_corpus) msg="with a CORRUPT baseline the self-probe's line still precedes the refusal (asserted on output order)" ;;
@@ -540,9 +818,19 @@ MUT_TABLE=""
 # rule cannot silently widen as arms are added.
 co_kills_ok() { # <label> -> the arms allowed to die beside the owner
   case "$1" in
-    probe-then-exit-0)          printf '%s' "equal within_band ceiling_boundary ceil_arithmetic env_override baseline_flag no_measurement partial_dispatch jobs_mismatch refusals lower_the_row_note pole_moved probe_before_corpus cwd_invariance" ;;
+    probe-then-exit-0)          printf '%s' "equal within_band ceiling_boundary ceil_arithmetic env_override baseline_flag no_measurement partial_dispatch jobs_mismatch refusals lower_the_row_note pole_moved probe_before_corpus cwd_invariance coverage_partial ghost_record pole_absent no_record orphan_block stale_second_block record_pole_skipped jobs_canonical width_exact" ;;
     downward-note-becomes-fail) printf '%s' "cwd_invariance" ;;
     partial-dispatch-compared)  printf '%s' "cwd_invariance" ;;
+    # DIVIDING WITHOUT THE OBSERVED POLE puts the pole on one side of the ratio only, so the
+    # ghost arm's printed denominator loses the pole's 1000s and no longer reads 113224. That is
+    # a TRUE finding about the same defect; coverage_partial owns it because it is the arm whose
+    # figure moves while every verdict in it stays the same.
+    divisor-is-observed-pole)   printf '%s' "ghost_record" ;;
+    # A FIRST-ROW SELECTOR IS ALSO AN INEXACT ONE: `--jobs 1` against rows at 12 and 16 selects
+    # row 12 under it, exactly as a regex selector does. Both findings are true; jobs_mismatch
+    # owns the first-row reader (it is the only arm whose SECOND block must be the one compared)
+    # and width_exact stands down for it, owning the regex mutant alone.
+    width-selects-first-row)    printf '%s' "width_exact" ;;
     *) printf '' ;;
   esac
 }
@@ -718,13 +1006,105 @@ mut downward-note-becomes-fail \
   1 \
   'MUTANT-DOWNWARD-FAIL'
 
-# M7: THE PARTIAL-DISPATCH SKIP REMOVED, so a narrowed run is COMPARED against a full-suite
-# baseline. This is the false red the guard would produce on most pushes, and the mutation is
-# the "simplification" a reader reaches for on seeing a skip that fires often.
+# M7: THE COVERAGE SKIP REMOVED, so a near-solo run is COMPARED against a loaded baseline.
+# This is the false red the guard would produce on most pushes, and the mutation is the
+# "simplification" a reader reaches for on seeing a skip that fires often.
 mut partial-dispatch-compared \
-  'if [ "$dur_rows" -ne "$fx_count" ]; then' \
-  's/if \[ "\$dur_rows" -ne "\$fx_count" \]; then/if false; then/' \
+  'if [ "$((NUM * 100))" -lt "$((DEN * COV_MIN))" ]; then' \
+  's/if \[ "\$((NUM \* 100))" -lt "\$((DEN \* COV_MIN))" \]; then/if false; then/' \
   partial_dispatch
+
+# M8: THE THRESHOLD SET TO ZERO. The predicate still computes and prints a coverage figure, so
+# every arm reading the figure stays green; only a near-solo run being compared shows it.
+mut coverage-threshold-zero \
+  'COV_MIN=90' \
+  's/^COV_MIN=90$/COV_MIN=0/' \
+  partial_dispatch
+
+# M9: THE ROW-COUNT EQUALITY RESTORED -- the defect this predicate replaced. Injected after the
+# coverage line, so a 220-of-227 dispatch is skipped again although its coverage is 99.87%.
+mut row-count-equality-restored \
+  '"$COV_TXT" "$NUM" "$DEN" "$fx_count" "$COV_MIN"' \
+  '/"\$COV_TXT" "\$NUM" "\$DEN" "\$fx_count" "\$COV_MIN"$/a\
+[ "$(awk '"'"'NF == 2 { n++ } END { print n + 0 }'"'"' "$DUR")" -eq "$fx_count" ] || { printf "   SKIP -- partial dispatch\\n"; exit 0; } # MUTANT-ROW-EQUALITY' \
+  coverage_partial \
+  1 \
+  'MUTANT-ROW-EQUALITY'
+
+# M10: THE ON-DISK JOIN DROPPED, so a ghost key the hook's merge never prunes counts as work
+# this run failed to do and a full dispatch reads as 12% covered.
+mut on-disk-join-dropped \
+  '&& ($1 in d) { s += $2 }' \
+  's/ && (\$1 in d) { s += \$2 }/ { s += $2 }/' \
+  ghost_record
+
+# M11: THE DIVISOR LEAVES OUT THE OBSERVED POLE -- the pole on ONE side of the ratio only. The
+# label names the defect class the contract asked for ("a term depending on the observed pole
+# asymmetrically"); the literal `DEN = OBS_SECS` reads every run >100% and dies in every arm.
+# On the 220-of-227 seed (others 12294, missing units W=16, pole 830) that prints 106.6% where
+# the right figure is 99.87%, and every verdict in the arm is unchanged.
+mut divisor-is-observed-pole \
+  'COV_BP=$((NUM * 10000 / DEN))' \
+  's|^COV_BP=\$((NUM \* 10000 / DEN))$|DEN=$((DEN - OBS_SECS)); COV_BP=$((NUM * 10000 / DEN)) # MUTANT-DIVISOR|' \
+  coverage_partial \
+  1 \
+  'MUTANT-DIVISOR'
+
+# M12: THE BASELINE POLE ABSENT ACQUITS GROWTH. The absent-pole SKIP moved above the ceiling
+# comparison, so a unit that is not the watched one growing past the ceiling is skipped.
+mut absent-pole-skips-growth \
+  'CEIL="$(pole_ceiling "$BL_SECS" "$BL_BAND")"' \
+  '/^CEIL="\$(pole_ceiling "\$BL_SECS" "\$BL_BAND")"$/a\
+[ -z "$BL_PRESENT" ] \&\& { printf "   SKIP -- baseline pole not dispatched\\n"; exit 0; } # MUTANT-ABSENT-SKIP' \
+  pole_absent \
+  1 \
+  'MUTANT-ABSENT-SKIP'
+
+# M14: THE MISSING-RECORD SKIP DELETED. The program still exits 0 on an absent record, via the
+# zero-denominator SKIP below it -- so only an arm demanding the record be NAMED can see it.
+mut no-record-skip-deleted \
+  'if [ ! -s "$REC" ]; then' \
+  's/if \[ ! -s "\$REC" \]; then/if false; then/' \
+  no_record
+
+# M15: THE REPEATED-DIRECTIVE REFUSAL DROPPED, so a later directive silently overwrites an
+# earlier one and an orphaned block's terms bind to the next row.
+mut repeat-directive-accepted \
+  'if [ -n "$prev" ]; then' \
+  's/if \[ -n "\$prev" \]; then/if false; then/' \
+  orphan_block
+
+# M16: THE STALE-POLE CHECK LOOKS AT THE FIRST ROW ONLY -- the single-row reader it replaced.
+mut stale-check-first-row-only \
+  'STALE_SCAN="$BL_ALL"' \
+  's/^STALE_SCAN="\$BL_ALL"$/STALE_SCAN="${BL_ALL%%$'"'"'\\n'"'"'*}"/' \
+  stale_second_block
+
+# M17: THE OBSERVED POLE READ FROM THE MERGED RECORD instead of this run's file.
+mut observed-pole-from-record \
+  'OBS="$(max_row "$DUR")"' \
+  's/^OBS="\$(max_row "\$DUR")"$/OBS="$(max_row "$REC")"/' \
+  record_pole_skipped
+
+# M18: THE PARSER'S WIDTH CANONICALISATION REMOVED, so `012` and `12` are two widths.
+mut jobs-canonicalisation-noop \
+  'jobs="$((10#$jobs))"' \
+  's/^\( *\)jobs="\$((10#\$jobs))"$/\1: # MUTANT-NO-CANON/' \
+  jobs_canonical \
+  1 \
+  'MUTANT-NO-CANON'
+
+# M19: WIDTH SELECTION BY REGEX, so `--jobs 1` matches the row at 12.
+mut width-selects-by-regex \
+  "awk -v j=\"\$2\" '\$4 == j'" \
+  "s/awk -v j=\"\\\$2\" '\\\$4 == j'/awk -v j=\"\$2\" '\$4 ~ j'/" \
+  width_exact
+
+# M13: THE WIDTH SELECTOR TAKES THE FIRST ROW whatever the width -- every pre-width reader.
+mut width-selects-first-row \
+  "awk -v j=\"\$2\" '\$4 == j'" \
+  "s/awk -v j=\"\\\$2\" '\\\$4 == j'/awk -v j=\"\$2\" 'NR == 1'/" \
+  jobs_mismatch
 
 # UNMUTATED CONTROL, WITH A POSITIVE CONJUNCT. A control asserting only "nothing went wrong"
 # passes against a subject replaced by `exit 0`, because rc=0 with nothing reported is exactly

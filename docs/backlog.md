@@ -374,8 +374,8 @@ verify: manual
 
 **THE ANSWER.** A tool call whose input fails the tool's own schema is rejected before any hook
 sees it, and it is invisible to the hook system ENTIRELY — not merely to `PreToolUse`. Measured
-on **Claude Code 2.1.266**; a refactor of the dispatch chain could move it, which is why the
-build is named.
+on 2.1.266; re-measured and extended on **Claude Code 2.1.287**. A refactor of the dispatch
+chain could move it, which is why the build is named.
 
 **The measurement, with its positive control in the SAME session.** A scratch project driving
 real Claude Code as `claude -p --settings <scratch>/settings.json`, hook body three lines
@@ -405,16 +405,30 @@ zero evidentiary value, which is the empty-file-without-a-control failure this r
 `Read` is valid because the validation site is shared by every tool. The literal 1-option
 `AskUserQuestion` case needs an interactive run; nothing in the mechanism suggests it differs.
 
-**"MALFORMED" IS TWO CLASSES AND ONLY ONE IS MEASURED.** `coerceInput` is an optional per-tool
-hook that runs BEFORE `safeParse`, and its telemetry has a `coerced_still_invalid` outcome, so
-it is permitted to fail. Hook-invisible: anything `safeParse` still refuses after coercion, or
-with no `coerceInput` at all (measured: `Read` with `{"path": …}`), plus unparseable JSON
-rejected upstream. Hook-visible: anything a tool's `coerceInput` repairs into a valid shape —
-**existence follows from the mechanism; there is NO measured instance.** The nine `coerceInput`
-implementations are **not enumerated**, so which malformations are visible cannot be predicted
-from this entry. A candidate instance was measured and RETRACTED: re-reading the raw wire bytes
-with `repr()` showed the input was a STRING containing brackets, schema-valid on arrival and
-failing at the filesystem, not an array being coerced.
+**"MALFORMED" IS TWO CLASSES, AND BOTH ARE MEASURED on Claude Code 2.1.287.** `coerceInput` runs
+before `safeParse`. `strings -n 6` over the 2.1.287 bundle finds 12 per-tool implementations
+(Read, Write, Edit, Bash, WebSearch, TaskCreate, TaskUpdate, Artifact, Project, SendMessage,
+Workflow, plus one generic wrapper) and 4 shared call sites. The raw `coerceInput` count is 21,
+because `coerceInputBeforePluginHooks` contains the token. Same headless method, the wire
+`tool_use` input compared against the hook's `tool_input` by `tool_use_id`, in one session:
+
+```
+Read  {"file_path":"target.txt","length":1}  coerced, valid          -> Pre+Post fire, tool_input {"file_path":<abs>,"limit":1}
+Read  {"path":"target.txt","length":1}       coerced, still invalid  -> InputValidationError, 0 lines across Pre/Post/PostFailure
+Write {"path":"out.txt","content":…}         coerced, valid          -> Pre+Post fire, tool_input carries file_path, no path
+Read  {"file_path":"does-not-exist.txt"}     PostToolUseFailure positive control, same session -> 1 line
+```
+
+A `PreToolUse` hook therefore sees the POST-coercion input, on a tool carrying
+`coerceInputBeforePluginHooks` (Write) and on one without it (Read). Whether a malformation is
+hook-visible is a property of the tool's repair set, which can be read in the bundle: Read's
+repairs `length`→`limit` and one-element-array `offset`/`limit`, and does NOT include `path`. The
+earlier sentence that `Read` has no `coerceInput` at all was wrong on 2.1.287. What
+`coerceInputBeforePluginHooks` changes is not visible to settings-file command hooks and is
+unmeasured. Unparseable JSON and the fewer-than-2-option `AskUserQuestion` remain unmeasured
+headless. **A model can silently normalize the input it was asked to emit** — `[1]` was sent as the
+string `"[1]"` twice, the same failure that retracted the first candidate instance — so a coercion
+arm is valid only after its wire bytes have been read.
 
 **THE DOCUMENTATION HAS MOVED SINCE THIS ENTRY WAS FILED, AND THE SENTENCE IT RESTED ON IS
 GONE.** Re-checked: the hooks reference 301s to a new host, and `PreToolUse` now reads only
@@ -451,10 +465,11 @@ The general lesson is the one this repo already carries — an empty hook file i
 beside a positive control that wrote to the same file, in the same session, through the same
 registration.
 
-**This entry stays LIVE and is not a fix.** There is nothing to ship: the answer is recorded,
-no shipped guard depends on it, and the next author of a malformation-predicated guard needs to
-meet this text before building. Its remaining unmeasured half is the coercion partition — nine
-`coerceInput` implementations unread, and no measured instance of a repaired call.
+**This entry closes as a version-pinned recorded answer, not a fix.** The coercion partition it
+held open is measured above on 2.1.287. No tree arm can hold it, because the bundle is outside the
+hashed tree; the receipt is the method written here — the isolated three-event settings, the
+decisive wire/hook/result lines, and the `strings` counts — re-run on the next build that matters.
+The next author of a malformation-predicated guard reads this text in the archive.
 
   verify: manual
 
@@ -1201,16 +1216,49 @@ check left in the deriver while `sandbox-exec -f` remains. It reads 1 on this br
 
 verify: sh D=core/scripts/derive-fixture-readsets.sh; [ -f "$D" ] || exit 9; B="$(grep -v '^[[:space:]]*#' "$D")"; grep -q 'sandbox-exec -f' <<<"$B" || exit 1; grep -q 'fs_usage -w' <<<"$B" && exit 1; grep -qF '"$(id -u)" = "0"' <<<"$B" && exit 1; exit 0
 
-## BL-378 — the suite-pole baseline still names `ledger-reverify` after the pole moved
+## BL-378 — the suite-pole guard could not reach its comparison on a real push, and its baseline names a pole that moved
 
-**NOTE.** v0.665.0's 12-way gate reported the pole as `gate-adjudication-mutants` at 490s against a
+**DEFECT.** v0.665.0's 12-way gate reported the pole as `gate-adjudication-mutants` at 490s against a
 baseline row for `ledger-reverify` at 628s (band 20%, ceiling 754s), with the note "a row pinned to
-a unit that is no longer longest passes while watching the wrong number". Re-baseline
-`docs/suite-pole-baseline.tsv` from a quiet 12-way run. The 6-way gates earlier in batch 173 skipped
-this phase on the pool-width mismatch, because the operator's shell profile sets
-`AI_DLC_FIXTURE_JOBS=6`.
+a unit that is no longer longest passes while watching the wrong number". Batch 183 found the larger
+defect behind it: the guard almost never compares at all.
 
-**Batch 181:** the contract adversary measured `validate-suite-pole.sh`'s partial-dispatch SKIP as correct: `20 of 227` was a real partial dispatch, and `228 of 227` came from a merged file the hook never passes. Still owed: one quiet 12-way run to re-baseline from.
+**Batch 181:** the contract adversary measured `validate-suite-pole.sh`'s partial-dispatch SKIP as
+correct for the `20 of 227` it was shown. Batch 183 established that the same SKIP also fires on
+the normal dispatch, so it is the defect rather than the safeguard.
+
+**Batch 183 measurements, each with its control.**
+
+- **C1, how often VERDICT 5 is reached.** This is the batch 183 adversary's count, not re-derived
+  by the fix hand. Across gate logs since 2026-09-22 it found the comparison line printed once
+  (09-29, the filing gate). Every other run stopped at the row-count SKIP
+  (`abe3afb7:scripts/validate-suite-pole.sh:377`, `dur_rows -ne fx_count`) or the width SKIP
+  (`:381` at the same revision).
+- **C2, whether a full dispatch occurs.** The one `.last` on disk holds 220 rows against 227
+  fixture directories (`/usr/bin/find core/fixtures -mindepth 2 -maxdepth 2 -name run.sh`). The 7
+  missing units cost 18s of the merged record's 12931s over the on-disk set. This is a single data
+  point, not a rate: the hook keeps one `.last` and overwrites it on every green run.
+- **C3, the pool width.** `.githooks/pre-push:402` resolves `FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-12}"`,
+  and this session's environment carries `AI_DLC_FIXTURE_JOBS=16` from the launcher. `~/.zshrc`,
+  `~/.zprofile`, `~/.zshenv` and `~/.claude/settings.json` were grepped for the name and returned
+  nothing, so the earlier claim that "the shell profile sets 6" no longer holds. The control in the
+  same call is the session's own value, which printed 16. The baseline's `# jobs: 12` therefore
+  SKIPs every gate at the hook's actual width.
+
+**Batch 183 fix (validator, fixture, hook).** The row-count equality is replaced by cost coverage.
+The numerator is this run's costs, and the denominator is the merged record passed by the new
+`--record` flag; both are joined to the fixture directories on disk, and a run needs at least 90%.
+On the real files this reads 99.86% (12913s of 12931s). A copy of the record carrying
+`zz-no-such-fixture-378 100000` also reads 99.86%, because the ghost row is joined out, while the
+same 100000s on `requirements-step` (on disk, undispatched) reads 11.43% and SKIPs. Growth past the
+ceiling FAILS whichever unit carries it. If the baseline pole was not dispatched and the max is
+within band, the guard SKIPs with "not dispatched" instead of passing. The baseline now carries one
+block per pool width, and a width with no row SKIPs naming the widths that have one.
+
+**Closes in this release** once the width-16 row is committed to `docs/suite-pole-baseline.tsv` and the
+guard, driven against a real 220-of-227 `.last` at `--jobs 16`, prints a comparison (VERDICT 5)
+line. Until that row exists, every gate at width 16 prints `SKIP -- pool width 16 has no baseline
+row (widths with a row: 12)`.
 
 verify: manual
 
