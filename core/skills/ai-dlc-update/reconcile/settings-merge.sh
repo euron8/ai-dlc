@@ -172,8 +172,25 @@ if [ "$CHECK" -eq 1 ]; then
   exit 0
 fi
 
-OUT="$(mktemp)"
-trap 'rm -f "$OUT"' EXIT
+# THE MERGE IS STAGED BESIDE THE TARGET, NEVER IN TMPDIR. A `mktemp` in TMPDIR on another volume
+# turns the final `mv` into copy-then-unlink: measured on a full consumer volume, the copy failed
+# after the old file was gone, and the run printed "consumer left untouched" over a settings.json
+# that no longer existed. Staged in the target's own directory the `mv` is a rename, which either
+# happens whole or leaves the old file in place, so every refusal below is true as printed. The
+# staging file starts as a `cp -p` of the existing file so the merge keeps its mode (`mktemp`
+# creates 0600); a fresh target gets the umask default, as `cp` from install.sh would give it.
+OUT=""
+trap '[ -n "$OUT" ] && rm -f "$OUT"' EXIT
+mkdir -p "$(dirname "$CONSUMER")" 2>/dev/null || true
+OUT="$(mktemp "${CONSUMER}.merge.XXXXXX" 2>/dev/null)" || {
+  OUT=""; echo "FAIL: could not create a staging file beside $CONSUMER; consumer left untouched" >&2; exit 1; }
+if [ -e "$CONSUMER" ]; then
+  cp -p "$CONSUMER" "$OUT" 2>/dev/null || {
+    echo "FAIL: could not stage a copy of $CONSUMER beside it; consumer left untouched" >&2; exit 1; }
+else
+  chmod "$(printf '%o' $(( 0666 & ~0$(umask) )))" "$OUT" 2>/dev/null || {
+    echo "FAIL: could not set the staging file's mode beside $CONSUMER; nothing was written" >&2; exit 1; }
+fi
 
 if ! printf '%s' "$BASE_JSON" | jq \
       --slurpfile tmpl "$TEMPLATE" '
@@ -225,9 +242,8 @@ fi
 
 jq -e . "$OUT" >/dev/null 2>&1 || { echo "FAIL: merge produced invalid JSON; consumer left untouched" >&2; exit 1; }
 
-mkdir -p "$(dirname "$CONSUMER")" 2>/dev/null || true
 # The move's status is read: an unchecked `mv` that failed printed "settings.json reconciled" below
-# over a consumer file nothing had written.
+# over a consumer file nothing had written. It is a same-directory rename (see the staging above).
 mv "$OUT" "$CONSUMER" || { echo "FAIL: could not move the merged settings into place at $CONSUMER; consumer left untouched" >&2; exit 1; }
 trap - EXIT
 

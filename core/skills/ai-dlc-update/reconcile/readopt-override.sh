@@ -660,10 +660,14 @@ case "$MODE" in
       else
         ro_merge_refuse "merge #${id} (git merge-file exited ${_mrc})"
       fi
-      { i=0; while [ "$i" -lt "$lead" ]; do echo; i=$((i + 1)); done
-        cat "$merged"
-        i=0; while [ "$i" -lt "$tail_n" ]; do echo; i=$((i + 1)); done
-      } >> "$out" || ro_merge_refuse "append the merged #${id}"
+      # EVERY WRITE IN THE GROUP EXITS ON FAILURE. A `{ }` group's status is its LAST command's, so a
+      # failed `cat "$merged"` followed by a zero-trip `while` read as success: the run stamped
+      # `--stamp readopt` advice at rc 0 over an override whose merged section was gone. A subshell
+      # redirected from outside, for the same reason as register-drift's override write.
+      ( i=0; while [ "$i" -lt "$lead" ]; do echo || exit 1; i=$((i + 1)); done
+        cat "$merged" || exit 1
+        i=0; while [ "$i" -lt "$tail_n" ]; do echo || exit 1; i=$((i + 1)); done
+      ) >> "$out" || ro_merge_refuse "append the merged #${id}"
     done < "$plan"
 
     # Trailing body after the last span.
