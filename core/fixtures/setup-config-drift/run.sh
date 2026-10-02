@@ -280,6 +280,26 @@ else
   bad "a base blob the memo cannot serve gave rc=$um_frc and '$(awk -F'\t' -v f="$REL" '$2==f {print $1}' "$WORK/um.out")' for a byte-identical file — a lost cached object decided its row"
 fi
 
+# --- A MEMO THAT CANNOT SERVE AN ANCESTOR BLOB REFUSES; IT NEVER RE-ROUTES THE STALE COPY ---------
+# `closest_ancestor_blob` piped each candidate into `diff -`. A memo serve that failed EMPTY (125)
+# lost to diff's own 1 under pipefail, the candidate scored as wholly different, and the stale copy's
+# HARD-CORE-BEHIND ("take theirs") fell to HARD-UNREGISTERED-CORE-DRIFT ("refile or revert") at rc 0.
+# The candidate is now staged with its read status read. Warm on the STALE consumer, then empty the
+# OLD-release blob's `.s` and `.c` -- the empty-serve mode; a full serve already propagated 125.
+AM="$(mktemp -d "$WORK/ud-anc-memo.XXXXXX")"
+AI_DLC_RECONCILE_MEMO="$AM" bash "$SCRIPT" "$DIST" "$BASE" "$STALE" > "$WORK/am.ctl" 2>/dev/null; am_rc=$?
+am_n=0
+for am_f in "$AM"/"s "*" ${OLD}:core%2Fteam-roles%2Fdev.md.s"; do [ -f "$am_f" ] || continue; am_n=$((am_n + 1)); : > "$am_f"; : > "${am_f%.s}.c"; done
+AI_DLC_RECONCILE_MEMO="$AM" bash "$SCRIPT" "$DIST" "$BASE" "$STALE" > "$WORK/am.out" 2> "$WORK/am.err"; am_frc=$?
+if [ "$am_rc" != 0 ] || ! grep -q "^HARD-CORE-BEHIND	$REL	" "$WORK/am.ctl" || [ "$am_n" -ne 1 ]; then
+  bad "FIXTURE BROKEN — the ancestor memo cell's warm run was rc=$am_rc with no HARD-CORE-BEHIND row for $REL, or found $am_n memo key(s) for its ancestor blob (want 1)"
+elif [ "$am_frc" = 2 ] && grep -qF 'could not be served by the reconcile memo' "$WORK/am.err" \
+     && ! grep -q "	$REL	" "$WORK/am.out"; then
+  ok "an ancestor blob the memo cannot serve REFUSES — exit 2, the memo named, the stale copy not re-routed to drift"
+else
+  bad "an ancestor blob the memo cannot serve gave rc=$am_frc and '$(awk -F'\t' -v f="$REL" '$2==f {print $1}' "$WORK/am.out")' for the stale copy — a lost cached object chose its remedy"
+fi
+
 # --- THE EXEMPTION READS A BASE THAT CANNOT BE STAGED: HEALTHY OR REFUSED, NEVER DRIFT ----------
 # `exempt_ranges` searched the base blob through two `<<<"$base"`s and read its site list from a
 # `done <<EOF`. Under a full disk (modelled: `trap '' XFSZ; ulimit -f N`, so the write fails with

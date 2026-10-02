@@ -490,6 +490,28 @@ B376PY
   fi
 fi
 
+# --- A MEMO THAT CANNOT SERVE THE BASE CATALOG REFUSES; IT NEVER RE-TAGS A DUPLICATE ---------------
+# The numbered arm's base catalog was `git_show | anchors_of_stream`, whose final `grep -E '.'` exits 1
+# on an empty stream. Under pipefail that 1 outranked a memo serve that failed EMPTY (125), so the
+# base read as no catalog and PREEXISTING's LC-E5 became LC-E6 -- "retire your copy" -- at rc 0. A
+# warm memo, the base blob of steps/widget.md emptied (`.s` and `.c`), and the refusal demanded.
+LM="$ROOT/lar-memo"; mkdir -p "$LM"
+AI_DLC_RECONCILE_MEMO="$LM" bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" > "$ROOT/lm.ctl" 2>/dev/null; lm_rc=$?
+lm_n=0
+for lm_f in "$LM"/"s "*" ${BASE}:core%2Fskills%2Fai-dlc%2Fsteps%2Fwidget.md.s"; do
+  [ -f "$lm_f" ] || continue; lm_n=$((lm_n + 1)); : > "$lm_f"; : > "${lm_f%.s}.c"
+done
+AI_DLC_RECONCILE_MEMO="$LM" bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" > "$ROOT/lm.out" 2> "$ROOT/lm.err"; lm_frc=$?
+if [ "$lm_rc" != 0 ] || ! awk -F'\t' '$1=="EXTENSION-RESTATES-CORE" && $2 ~ /PREEXISTING\.md$/ {f=1} END {exit !f}' "$ROOT/lm.ctl" \
+   || [ "$lm_n" -ne 1 ]; then
+  bad "FIXTURE BROKEN — the base-catalog memo cell's warm run was rc=$lm_rc without PREEXISTING's LC-E5 row, or found $lm_n memo key(s) for the base blob (want 1)"
+elif [ "$lm_frc" = 1 ] && grep -qF 'could not be served by the reconcile memo' "$ROOT/lm.err" \
+     && ! grep -q 'EXTENSION-RETIRE-CANDIDATE' "$ROOT/lm.out"; then
+  ok "a base catalog the memo cannot serve REFUSES — exit 1, the memo named, no LC-E6 row"
+else
+  bad "a base catalog the memo cannot serve gave rc=$lm_frc and PREEXISTING '$(awk -F'\t' '$2 ~ /PREEXISTING\.md$/ {print $1}' "$ROOT/lm.out" | tr '\n' ' ')' — a lost cached object re-tagged a duplicate"
+fi
+
 echo ""
 if [ "$fails" -eq 0 ]; then echo "layer-absorption-retire: PASS"; exit 0; fi
 echo "layer-absorption-retire: FAIL ($fails)"; exit 1
