@@ -983,6 +983,11 @@ ld_shape() {
   elif [ "$rc" -eq 0 ] && [ "$nsub" -lt "$full" ] && [ "$nm" -eq 0 ]; then echo XFSZ-RC0-LOST
   elif [ "$rc" -eq 2 ] && [ "$nsub" -lt "$full" ] && [ "$nm" -eq 1 ] && [ "$nn" -eq "$nw" ] && [ "$nit" -eq 0 ]; then echo XFSZ-RC2-NAMED
   elif [ "$rc" -eq 2 ] && [ "$nsub" -lt "$full" ] && [ "$nm" -eq 1 ] && [ "$nit" -gt 0 ]; then echo XFSZ-RC2-NOSTOP
+  # A row lost UNCOUNTED, and the scan ran on into a memo read the leaked stdout buffer corrupted:
+  # the memo's own refusal at rc 1, never the write-failure line. Only an engine that stops counting
+  # failed writes can reach it -- the tip's `ld_refuse` defers to `ld_finish` once a row is lost.
+  elif [ "$rc" -eq 1 ] && [ "$nsub" -lt "$full" ] && [ "$nm" -eq 0 ] \
+       && awk '!/^\+/ && /could not be served by the reconcile memo/ { f=1 } END { exit !f }' <<<"$err"; then echo XFSZ-RC1-MEMO
   else echo "OTHER(rc=$rc,whole=$nw,N=$nn,iterations=$nit,subject=$nsub,named=$nm,bytes=$nb)"; fi
 }
 # A non-precondition L cell that hit the here-string floor ends the run BROKEN. Only a pre-fix copy
@@ -1740,7 +1745,7 @@ LD_PROBE='( exec 3>&1 ) 2>/dev/null || ld_emit_failed=1'
   d="$(E="$LD_FAILBR" P="$LD_PROBE" mut M-LD-probe "$LDS" '$0==ENVIRON["E"] {print "  else :; fi"; next}
          $0=="ld_emit_failed=0" {print; print ENVIRON["P"]; next} {print}' \
          "$LD_PROBE" 'else ld_emit_failed=$((' "$LD_FAILBR" 'ld_emit_failed=0')" \
-    && score_as M-LD-probe ld "$d" L5b=XFSZ-RC0-LOST L5b-hard=XFSZ-RC0-LOST L5d=XFSZ-RC0-LOST L5e=XFSZ-RC0-LOST \
+    && score_as M-LD-probe ld "$d" L5b=XFSZ-RC0-LOST L5b-hard=XFSZ-RC0-LOST L5d=XFSZ-RC1-MEMO L5e=XFSZ-RC0-LOST \
     || mutreport M-LD-probe
 # m3: the OVERRIDE-DOUBLE-SHADOW block back in its `| while | while` subshells, the pre-fix shape
 # restored line for line: the emit's count lands in a copy that is thrown away. L5d owns it.

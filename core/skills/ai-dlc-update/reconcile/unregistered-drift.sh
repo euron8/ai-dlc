@@ -268,7 +268,8 @@ closest_ancestor_blob() {
   local cp="$1" cons="$2" sha best_sha="" best_n="" n base_n _as
   # PIPED into `diff -`, as the ancestor candidates below are: Apple diff hunks a pipe and a file
   # differently from two regular files (see `ud_pdiff`), and the two counts must be comparable.
-  base_n="$(cat "$UD_DIFF_TMP/blob-base" | diff - "$cons" 2>/dev/null | grep -c '^[<>]' || true)"
+  # `grep -c` prints its count whatever diff's 1 does to the pipeline status, so the status is unread.
+  base_n="$(ud_pdiff "$UD_DIFF_TMP/blob-base" "$cons" 2>/dev/null | grep -c '^[<>]')"
   [ "${base_n:-0}" -gt 0 ] || return 0
   for sha in $(git -C "$DIST" log --format=%H "${BASE}" -- "$cp" 2>/dev/null); do
     [ "$sha" = "$(git -C "$DIST" rev-parse "$BASE" 2>/dev/null)" ] && continue
@@ -279,9 +280,15 @@ closest_ancestor_blob() {
     # on the older blob moved an in-place edit from HARD-UNREGISTERED-CORE-DRIFT to HARD-CORE-BEHIND.
     # A candidate whose diff did not run is skipped, never scored; exit 0 (identical) and 1 are the
     # only readings.
-    n="$(git_show "${sha}" "${cp}" | diff - "$cons" 2>/dev/null)"
+    # The candidate is STAGED and its read status read BEFORE the diff. Piped straight into
+    # `diff -`, a memo serve that failed EMPTY (125) lost to diff's own 1 under pipefail, the
+    # candidate scored as wholly different, and HARD-CORE-BEHIND fell to HARD-UNREGISTERED-CORE-DRIFT
+    # at rc 0 -- measured with the ancestor blob's `.s` and `.c` emptied.
+    _ag=0; git_show "${sha}" "${cp}" > "$UD_DIFF_TMP/blob-anc" || _ag=$?
+    [ "$_ag" -ne 125 ] || return 125
+    [ "$_ag" -eq 0 ] || continue
+    n="$(ud_pdiff "$UD_DIFF_TMP/blob-anc" "$cons" 2>/dev/null)"
     _as=$?
-    [ "$_as" -ne 125 ] || return 125
     [ "$_as" -le 1 ] || continue
     n="$(printf '%s\n' "$n" | grep -c '^[<>]')" || n=0
     if [ -z "$best_n" ] || [ "${n:-0}" -lt "$best_n" ]; then best_n="$n"; best_sha="$sha"; fi

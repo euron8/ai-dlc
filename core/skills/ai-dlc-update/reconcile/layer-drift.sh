@@ -338,6 +338,11 @@ LD_T="$(mktemp -d "${TMPDIR:-/tmp}/layer-drift.XXXXXX")" || {
 }
 trap 'rm -rf "$LD_T"' EXIT
 ld_refuse() { # ld_refuse <what did not run> <its exit status>
+  # A ROW ALREADY LOST TO A FAILED WRITE OWNS THE EXIT. After one, bash 3.2 can leak the unwritten
+  # stdout buffer into a later `$( )` capture, so whatever fails next is reading garbage; the
+  # refusal that is TRUE is `ld_finish`'s named write failure, exit 2. Measured: a lost row
+  # followed by a skeleton read of that leaked text refused as a memo failure, exit 1.
+  [ "${ld_emit_failed:-0}" -eq 0 ] || ld_finish
   # 125 is lib.sh's memo sentinel: a cached blob, listing or status that could not be SERVED. Named
   # here, once, so every refusal that carries it says so whichever call site raised it.
   [ "$2" != 125 ] || echo "layer-drift: REFUSED — $1 could not be served by the reconcile memo (lib.sh exit 125: a cached blob, listing or status that cannot be read); refusing rather than reading a core file that was never read as an empty one" >&2
@@ -2136,7 +2141,12 @@ while IFS= read -r f; do
     # hooked on a new core file. The same gate, same reason, sits before the other base reads
     # (the unnumbered title arm, the extends: span compare, and both override base_sha reads).
     have "$BASE" "$cp" || :
-    base_anchors="$(git_show "$BASE" "$cp" | anchors_of_stream)" || ld_memo_ok "$?" "reading ${cp} at ${BASE} for ${entry}"
+    base_anchors="$(git_show "$BASE" "$cp")" || ld_memo_ok "$?" "reading ${cp} at ${BASE} for ${entry}"
+    # READ, STATUS READ, THEN HARVESTED. `anchors_of_stream` ends in a `grep -E '.'` that exits 1
+    # on an empty stream, and under pipefail that 1 is the rightmost failure, so a memo serve that
+    # failed EMPTY (125) reached the guard as 1 and every same-number anchor read NEW-THIS-PULL:
+    # measured, a PRE-EXISTING duplicate turned EXTENSION-RETIRE-CANDIDATE ("retire your copy") at rc 0.
+    base_anchors="$(printf '%s\n' "$base_anchors" | anchors_of_stream)"
     # THE BLOB IS STAGED ONCE PER FILE AND READ FROM THE FILE. `heading_text_for` exits its awk at
     # the first match, so a pipe would EPIPE its writer; a here-string, the previous spelling, read
     # a blob that could not be staged as EMPTY, so every same-number check read as untitled. The
