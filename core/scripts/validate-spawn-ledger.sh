@@ -1486,6 +1486,7 @@ else
   while IFS="$(printf '\t')" read -r sh_k sh_a sh_b sh_c; do
     case "$sh_k" in
       X) SHARD_VIOL=$((SHARD_VIOL + 1))
+         [ "$sh_c" = "__NONE__" ] && sh_c="<no shard_raw recorded>"
          echo "FAIL: [${sh_a}] role '${sh_b}' declared a serial exception that is not one of Rule 28's four:" >&2
          echo "      shard: ${sh_c}" >&2
          echo "      'shard: none (<1-4>)' names data-dependency, pass-repair-pass, authoring-chain or" >&2

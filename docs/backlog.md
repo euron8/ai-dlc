@@ -1171,7 +1171,9 @@ verify: manual -- a cost regression, not a defect with a predicate; close it on 
 
 ## BL-427 — Rule 28's shard line accepts an invented serial exception and records it as null, so Check 22 only warns
 
-**DEFECT.** Filed by the consumer as PC-S316-RULE-28-SHARD-LINE-ACCEPTS-AN-INVENTED-SERIAL-EXCEPTION-AND-ONLY-WARNS.
+**DEFECT.**
+
+Filed by the consumer as PC-S316-RULE-28-SHARD-LINE-ACCEPTS-AN-INVENTED-SERIAL-EXCEPTION-AND-ONLY-WARNS.
 
 `core/hooks/ai-dlc-dispatch-guard.sh` parsed `shard: none (<exception>)` only when the whole line was one parenthesised group naming exception 1-4. Any other `none` value, whether an invented reason such as `none (serial cross-file repair: …)`, `none (5)`, or `none — serial because…`, recorded `shard: null`. That is the same value as an omitted line, so `validate-spawn-ledger.sh` arm S1 WARNed and the exit stayed 0. The same whole-line anchor also nulled correct briefs that carried prose after a valid group (`none (serial-document). Files you may edit…`). Repeating the line reset the value to null as well, which laundered an invented exception.
 
