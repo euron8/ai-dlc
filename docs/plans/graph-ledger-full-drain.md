@@ -93,9 +93,9 @@ operator's decision; the remedy stays parked on the 2026-10-01 decision either w
 No shipped fixture is red in the consumer layout at `f0cf026b`. The batch kept the entry LIVE and built nothing.
 
 **THE DELIVERY GAP IS FOUR RELEASES.** The consumer is installed at 0.704.0 (stamp `commit: abe3afb7`, `skill_commit`
-equal) against `VERSION` 0.708.0. 0.706.0 and 0.708.0 are bootstrapping. PENDING is 1: the preclassify id, still live
-on the consumer's carry-over branch. The Rule 28 id was never committed by the consumer and the derive block cannot see
-it. The banked ruling stands: report the gap and write no runbook.
+equal) against `VERSION` 0.708.0. 0.706.0 and 0.708.0 are bootstrapping. PENDING is 2: both ids, live on the consumer's
+carry-over branch `ai-dlc/carry-over/phase-316-rebalancer-repoint`, where the consumer committed the Rule 28 filing
+during the batch. The banked ruling stands: report the gap and write no runbook.
 
 **READ-SET TRACE OWED, AND BOTH ATTEMPTS IN THIS BATCH WERE DISCARDED.** The second ran with zero agent worktrees, at
 1-minute load 3-8, and still OMITTED 11 of 18 fixtures, with dropped report counts from 7 to 1254. So the drops do not
