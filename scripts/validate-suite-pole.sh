@@ -61,13 +61,13 @@ ME="validate-suite-pole"
 # against the root -- because the fixture and the filed receipt both hand this program files
 # under mktemp that exist nowhere near a repo.
 # ---------------------------------------------------------------------------------------
-OPT_DUR=""; OPT_REC=""; OPT_BASE=""; OPT_JOBS=""; OPT_ROOT=""
+OPT_DUR=""; OPT_REC=""; OPT_BASE=""; OPT_JOBS=""; OPT_ROOT=""; JOBS_GIVEN=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --durations) [ "$#" -ge 2 ] || { printf '%s: REFUSE -- --durations needs a value\n' "$ME" >&2; exit 2; }; OPT_DUR="$2"; shift 2 ;;
     --record)    [ "$#" -ge 2 ] || { printf '%s: REFUSE -- --record needs a value\n'    "$ME" >&2; exit 2; }; OPT_REC="$2"; shift 2 ;;
     --baseline)  [ "$#" -ge 2 ] || { printf '%s: REFUSE -- --baseline needs a value\n'  "$ME" >&2; exit 2; }; OPT_BASE="$2"; shift 2 ;;
-    --jobs)      [ "$#" -ge 2 ] || { printf '%s: REFUSE -- --jobs needs a value\n'      "$ME" >&2; exit 2; }; OPT_JOBS="$2"; shift 2 ;;
+    --jobs)      [ "$#" -ge 2 ] || { printf '%s: REFUSE -- --jobs needs a value\n'      "$ME" >&2; exit 2; }; OPT_JOBS="$2"; JOBS_GIVEN=1; shift 2 ;;
     --root)      [ "$#" -ge 2 ] || { printf '%s: REFUSE -- --root needs a value\n'      "$ME" >&2; exit 2; }; OPT_ROOT="$2"; shift 2 ;;
     -h|--help)   sed -n '2,54p' "$0"; exit 0 ;;
     *) printf '%s: REFUSE -- unknown argument %s\n' "$ME" "$1" >&2; exit 2 ;;
@@ -95,11 +95,22 @@ else
   ROOT="$(resolve_root)" || { printf '%s: REFUSE -- no VERSION found walking up from %s; pass --root\n' "$ME" "$(pwd -P)" >&2; exit 2; }
 fi
 
-DUR="${OPT_DUR:-$ROOT/.git/ai-dlc-fixture-durations.last}"
-REC="${OPT_REC:-$ROOT/.git/ai-dlc-fixture-durations}"
+# THE DEFAULT RECORDS LIVE IN THE COMMON GIT DIR, which is what the hook's `$GITDIR` is. In a
+# linked worktree `$ROOT/.git` is a FILE, so a default built on it names nothing and every
+# default run would SKIP as "no measurement". Resolved only when a default is actually needed,
+# and falling back to `$ROOT/.git` where the root is not a repository (a probe tree).
+if [ -z "$OPT_DUR" ] || [ -z "$OPT_REC" ]; then
+  GITDIR="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || GITDIR=""
+  [ -n "$GITDIR" ] && [ -d "$GITDIR" ] || GITDIR="$ROOT/.git"
+fi
+DUR="${OPT_DUR:-$GITDIR/ai-dlc-fixture-durations.last}"
+REC="${OPT_REC:-$GITDIR/ai-dlc-fixture-durations}"
 BASE="${OPT_BASE:-${AI_DLC_POLE_BASELINE:-$ROOT/docs/suite-pole-baseline.tsv}}"
-JOBS="${OPT_JOBS:-12}"
-case "$JOBS" in ''|*[!0-9]*) printf '%s: REFUSE -- --jobs %s is not a number\n' "$ME" "$JOBS" >&2; exit 2 ;; esac
+# AN EXPLICIT EMPTY `--jobs` IS REFUSED, NOT DEFAULTED. The hook passes "$FIXTURE_JOBS"; an
+# unset variable there reaching this program as 12 would compare against the 12-width row
+# while the pool ran at some other width.
+if [ "$JOBS_GIVEN" -eq 1 ]; then JOBS="$OPT_JOBS"; else JOBS=12; fi
+case "$JOBS" in ''|*[!0-9]*) printf '%s: REFUSE -- --jobs "%s" is not a number\n' "$ME" "$JOBS" >&2; exit 2 ;; esac
 # Canonical decimal, so `--jobs 016` selects the row keyed 16 rather than reading as no row.
 JOBS="$((10#$JOBS))"
 
@@ -149,11 +160,15 @@ pole_verdict() { # <observed> <baseline> <band>
 # everybody's push edits. The suite is pole-bound; one row per width is the whole of it.
 # ---------------------------------------------------------------------------------------
 parse_baseline() { # <file>
-  local f="$1" band="" jobs="" fixtures="" n=0 line key val out="" seen=" "
+  local f="$1" band="" jobs="" fixtures="" n=0 line key val prev secs out="" seen=" "
   if [ ! -f "$f" ]; then
     printf '%s: REFUSE -- baseline not readable: %s\n' "$ME" "$f" >&2; return 2
   fi
   while IFS= read -r line || [ -n "$line" ]; do
+    # A CRLF-saved baseline carries a CR on every line, which would otherwise read as a
+    # non-integer value on every directive and every row. Stripped, not refused: the bytes
+    # the reader sees are then the bytes the writer meant.
+    line="${line%$'\r'}"
     case "$line" in
       '#'*)
         # Directive or free comment, parsed WITHOUT a regex alternation. BSD `sed` BRE has no
@@ -201,6 +216,19 @@ parse_baseline() { # <file>
             printf '%s: REFUSE -- baseline directive "# %s:" has a non-integer value "%s" (%s)\n' "$ME" "$key" "$val" "$f" >&2
             return 2 ;;
         esac
+        # A DIRECTIVE SEEN TWICE BEFORE A ROW CONSUMES ITS BLOCK IS REFUSED. Without this, a later
+        # directive silently overwrites an earlier one, and a block left without a row has its
+        # surviving terms inherited by the next row -- a figure compared under a band or width
+        # nobody wrote beside it. The EOF check below only ever saw the LAST orphaned block.
+        case "$key" in
+          band)     prev="$band" ;;
+          jobs)     prev="$jobs" ;;
+          fixtures) prev="$fixtures" ;;
+        esac
+        if [ -n "$prev" ]; then
+          printf '%s: REFUSE -- baseline directive "# %s:" appears twice before a data row consumes its block (%s then %s) (%s). Each block is one "# band:", one "# jobs:", one "# fixtures:" and then its row; a repeat means a block was left without a row, and its terms would otherwise bind to the next one.\n' "$ME" "$key" "$prev" "$val" "$f" >&2
+          return 2
+        fi
         case "$key" in
           band)     band="$val" ;;
           jobs)     jobs="$val" ;;
@@ -221,6 +249,13 @@ parse_baseline() { # <file>
         case "$val" in
           ''|*[!0-9]*) printf '%s: REFUSE -- baseline seconds field is not an integer: %s (%s)\n' "$ME" "$line" "$f" >&2; return 2 ;;
         esac
+        # A ZERO-SECOND ROW is a ceiling of zero: every run reads as growth. Refused, not compared.
+        # Canonical decimal too: `0628` would otherwise reach the ceiling arithmetic as octal.
+        secs="$((10#$val))"
+        if [ "$secs" -le 0 ]; then
+          printf '%s: REFUSE -- baseline row "%s" carries zero seconds; its ceiling would be zero and every run would read as growth (%s).\n' "$ME" "$line" "$f" >&2
+          return 2
+        fi
         for key in band jobs fixtures; do
           case "$key" in
             band)     val="$band" ;;
@@ -236,6 +271,13 @@ parse_baseline() { # <file>
           printf '%s: REFUSE -- baseline band is %s; a band of zero or less is a zero-tolerance check on a LOADED figure, which fires on load rather than on growth (%s).\n' "$ME" "$band" "$f" >&2
           return 2
         fi
+        # A BAND OVER 1000% is a ceiling an elevenfold slowdown cannot reach -- a ratchet that
+        # cannot fire -- and a long enough digit string overflows the shell's arithmetic into a
+        # negative ceiling that fails every run. Either way the figure is not a calibration.
+        if [ "${#band}" -gt 4 ] || [ "$((10#$band))" -gt 1000 ]; then
+          printf '%s: REFUSE -- baseline band is %s%%; above 1000%% the ceiling cannot be reached by any real regression (%s).\n' "$ME" "$band" "$f" >&2
+          return 2
+        fi
         jobs="$((10#$jobs))"
         case "$seen" in
           *" $jobs "*)
@@ -246,7 +288,7 @@ parse_baseline() { # <file>
         # FIVE FIELDS PER ROW, ONE ROW PER LINE. Written with four specifiers, `printf` RECYCLES
         # the format and splits one row across two lines; the probe's exact-string assertion on
         # a well-formed baseline is what caught that, which a "did it parse" assertion would not.
-        out="$out$(printf '%s %s %s %s %s' "${line%% *}" "${line#* }" "$band" "$jobs" "$fixtures")
+        out="$out$(printf '%s %s %s %s %s' "${line%% *}" "$secs" "$((10#$band))" "$jobs" "$fixtures")
 "
         band=""; jobs=""; fixtures=""
         ;;
@@ -418,6 +460,7 @@ BL_ALL="$(parse_baseline "$BASE")" || exit 2
 
 # EVERY ROW, NOT ONLY THE ONE THIS RUN SELECTS. A row for a width the hook is not running at
 # today is never compared, so a stale pole in it would otherwise rot until the width changed.
+STALE_SCAN="$BL_ALL"
 while IFS=' ' read -r _pole _rest; do
   [ -n "$_pole" ] || continue
   if [ ! -d "$ROOT/core/fixtures/$_pole" ]; then
@@ -426,7 +469,7 @@ while IFS=' ' read -r _pole _rest; do
     exit 2
   fi
 done <<EOF
-$BL_ALL
+$STALE_SCAN
 EOF
 
 # ---------------------------------------------------------------------------------------
