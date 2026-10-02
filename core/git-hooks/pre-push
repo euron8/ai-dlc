@@ -369,8 +369,10 @@ VERIFIED_RECORD="$GITDIR/ai-dlc-fixture-verified"
 # red run. Two reds in a row used to leave only the second, so an intermittent failure was gone
 # the moment anything else failed. Each copy is named
 # `ai-dlc-fixture-failures.<UTC %Y%m%dT%H%M%SZ>.<pid>`, and only the newest FAILLOG_KEEP of
-# that exact shape are kept. Any other file you put beside them -- a copy you saved under your
-# own name -- is outside the prune's pattern and is never touched.
+# that shape are kept. The prune takes a name only if it starts with a year and month AND ends
+# in a dot followed by digits alone. A copy you save beside them is safe if its name fails either
+# test -- add any non-numeric suffix (`.keep`, `.notes`) to a retained copy and the prune skips
+# it. A hand-saved name that passes both tests is indistinguishable from a retained copy.
 FAILLOG_RECORD="$GITDIR/ai-dlc-fixture-failures"
 FAILLOG_KEEP=20
 
@@ -892,11 +894,14 @@ run_fixtures() {
     fl_stamp="$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null)" || fl_stamp=""
     fl_copy="$GITDIR/ai-dlc-fixture-failures.$fl_stamp.$$"
     if [ "$fl_wrote" = 1 ] && [ -n "$fl_stamp" ] && cp "$FAILLOG_RECORD" "$fl_copy" 2>/dev/null; then printf '   retained copy of this run: %s\n' "$fl_copy"; fi
-    # PRUNE TO THE NEWEST FAILLOG_KEEP, BY NAME. The pattern is ANCHORED on the generated shape --
-    # a year, a month, then a `Z.` -- never `ai-dlc-fixture-failures.*`, which would also take a
-    # record an operator saved beside these under a name of their own. `[ -e ]` keeps an
-    # unmatched glob's literal text from ever reaching `rm`.
+    # PRUNE TO THE NEWEST FAILLOG_KEEP, BY NAME, ANCHORED AT BOTH ENDS. The glob anchors the
+    # front -- a year, a month -- and never `ai-dlc-fixture-failures.*`, which would also take a
+    # record saved under a name of its own. The glob alone cannot anchor the END: a copy saved
+    # as `<stamp>.<pid>.keep` matches it, gets deleted, and takes a slot from a real copy. The
+    # `case` is that end anchor -- only an all-digit last field (the pid) is a generated name.
+    # `[ -e ]` keeps an unmatched glob's literal text from ever reaching `rm`.
     for fl_f in "$GITDIR"/ai-dlc-fixture-failures.2[0-9][0-9][0-9][01][0-9]*Z.*; do
+      case "${fl_f##*.}" in ''|*[!0-9]*) continue ;; esac
       [ -e "$fl_f" ] && printf '%s\n' "$fl_f"
     done | sort -r | tail -n +$((FAILLOG_KEEP + 1)) | while IFS= read -r fl_f; do
       [ -e "$fl_f" ] && rm -f "$fl_f" 2>/dev/null

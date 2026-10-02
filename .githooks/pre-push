@@ -453,10 +453,11 @@ VERIFIED_RECORD="$GITDIR/ai-dlc-fixture-verified"
 #
 # AND IT IS OVERWRITTEN BY THE NEXT RED RUN, so every red run also leaves its own copy:
 # `ai-dlc-fixture-failures.<UTC %Y%m%dT%H%M%SZ>.<pid>`, pruned to the newest FAILLOG_KEEP of that
-# exact shape. Measured at batch 179: one intermittent red's got-vector was the only evidence
-# of its cause, and it lived in a file the next red run would have replaced. A record saved by
-# hand under any other name beside these (`.clean` is one on this machine) is outside the prune's
-# anchored pattern and is never touched.
+# shape. Measured at batch 179: one intermittent red's got-vector was the only evidence of its
+# cause, and it lived in a file the next red run would have replaced. The prune takes a name only
+# if it starts with a year and month AND its last dot-field is all digits, so a record saved by
+# hand is safe when its name fails either test -- `.clean` fails the first, a retained copy
+# renamed with a `.keep` suffix fails the second. A hand-saved name passing both is not.
 FAILLOG_RECORD="$GITDIR/ai-dlc-fixture-failures"
 FAILLOG_KEEP=20
 
@@ -986,9 +987,13 @@ run_fixtures() {
     fl_copy="$GITDIR/ai-dlc-fixture-failures.$fl_stamp.$$"
     if [ "$fl_wrote" = 1 ] && [ -n "$fl_stamp" ] && cp "$FAILLOG_RECORD" "$fl_copy" 2>/dev/null; then printf '   retained copy of this run: %s\n' "$fl_copy"; fi
     # PRUNE BY NAME, newest FAILLOG_KEEP survive. Reverse sort + `tail -n +K` rather than
-    # `head -n -N`, which BSD head does not have. The glob is anchored on the generated shape;
-    # `ai-dlc-fixture-failures.*` would also match `.clean`, the operator's own saved record.
+    # `head -n -N`, which BSD head does not have. The glob anchors the FRONT on the generated
+    # shape; `ai-dlc-fixture-failures.*` would also match `.clean`, the operator's own saved
+    # record. The `case` anchors the END: without it `<stamp>.<pid>.keep` and
+    # `<yyyymm>-bisect-Z.notes` both matched the glob and were deleted in an adversary's probe,
+    # each also taking a slot from a real copy. Only an all-digit last field (the pid) is ours.
     for fl_f in "$GITDIR"/ai-dlc-fixture-failures.2[0-9][0-9][0-9][01][0-9]*Z.*; do
+      case "${fl_f##*.}" in ''|*[!0-9]*) continue ;; esac
       [ -e "$fl_f" ] && printf '%s\n' "$fl_f"
     done | sort -r | tail -n +$((FAILLOG_KEEP + 1)) | while IFS= read -r fl_f; do
       [ -e "$fl_f" ] && rm -f "$fl_f" 2>/dev/null

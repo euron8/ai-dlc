@@ -140,19 +140,27 @@ FX
 # hand. The seeds carry year-2000 stamps so this run's own copy sorts newest, and each holds
 # distinct content so "survived" is a content claim rather than an existence one.
 #
-# TWO DECOYS, AND ONLY ONE OF THEM CAN DISCRIMINATE A WIDE GLOB. The prune sorts by NAME, and
+# THREE DECOYS, AND ONLY ONE OF THE FIRST TWO CAN DISCRIMINATE A WIDE GLOB. The prune sorts by NAME, and
 # `.clean` sorts ABOVE every digit-stamped copy, so under `ai-dlc-fixture-failures.*` it reads
 # as the newest entry and survives anyway -- an arm keyed on it alone passes against the very
-# mutant it exists for. `.179.saved` sorts BELOW the year-2000 seeds, so a wide prune takes it
+# mutant it exists for. `.179.1` sorts BELOW the year-2000 seeds, so a wide prune takes it
 # first. `.clean` stays because it is the operator's real file on this machine; the kill comes
-# from `.179.saved`.
+# from `.179.1`. ITS LAST FIELD IS ALL DIGITS ON PURPOSE: spelled `.179.saved` it was skipped by
+# the end anchor even under a widened glob, so the wide-glob mutant survived. It has to fail the
+# FRONT anchor only, which is the one that mutant removes.
 seed_retained() {              # seed_retained <tree>
   local g="$1/.git" i
   for i in 00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19; do
     printf 'SEED-%s-CONTENT\n' "$i" > "$g/ai-dlc-fixture-failures.20000101T0000${i}Z.1" || return 1
   done
   printf 'OPERATOR-CLEAN\n' > "$g/ai-dlc-fixture-failures.clean" || return 1
-  printf 'OPERATOR-179\n'   > "$g/ai-dlc-fixture-failures.179.saved" || return 1
+  printf 'OPERATOR-179\n'   > "$g/ai-dlc-fixture-failures.179.1" || return 1
+  # THE THIRD DECOY: a retained copy an operator kept by appending `.keep`. It passes the glob's
+  # FRONT anchor and sorts between the two oldest seeds, inside the band a prune of 22 shaped
+  # names removes, so only the hook's end anchor (the all-digit last field) stands between it
+  # and the prune. Neither decoy above can see that anchor. The fixture's own `retained_names`
+  # grammar excludes it, so it never counts toward the bound of 20.
+  printf 'OPERATOR-KEEP\n'  > "$g/ai-dlc-fixture-failures.20000101T000000Z.1.keep" || return 1
 }
 
 # Every name of the GENERATED shape, written with a stricter grammar than the hook's glob so
@@ -281,11 +289,15 @@ else
 fi
 
 if [ "$(cat "$T/.git/ai-dlc-fixture-failures.clean" 2>/dev/null)" = OPERATOR-CLEAN ] \
-   && [ "$(cat "$T/.git/ai-dlc-fixture-failures.179.saved" 2>/dev/null)" = OPERATOR-179 ]; then
+   && [ "$(cat "$T/.git/ai-dlc-fixture-failures.179.1" 2>/dev/null)" = OPERATOR-179 ]; then
   ok "records an operator saved under their own names survive the prune byte-intact"
 else
-  bad "the prune took a hand-saved record (.clean or .179.saved) — its pattern is wider than the shape the hook generates"
+  bad "the prune took a hand-saved record (.clean or .179.1) — its pattern is wider than the shape the hook generates"
 fi
+
+[ "$(cat "$T/.git/ai-dlc-fixture-failures.20000101T000000Z.1.keep" 2>/dev/null)" = OPERATOR-KEEP ] \
+  && ok "a retained copy kept under a non-numeric suffix (.keep) survives — the prune is anchored at the name's END too" \
+  || bad "the prune took a stamp-prefixed hand-saved copy (.1.keep) — the pattern is anchored at the front only"
 
 grep -q "retained copy of this run: .git/$R_NEW" "$WORK/retain.out" \
   && ok "the run names its retained copy, so the operator knows which file is this run's" \
@@ -523,9 +535,9 @@ if mut retain-fixed-name 's|fl_copy="\$GITDIR/ai-dlc-fixture-failures\.\$fl_stam
   fi
 fi
 
-# prune-off — the prune loop deleted whole (five lines, so the body still parses). Twenty-one
+# prune-off — the prune loop deleted whole (six lines, so the body still parses). Twenty-one
 # shaped copies must remain, the oldest seed among them.
-if mut prune-off '/^    for fl_f in "\$GITDIR"/,+4d'; then M="$MUT"
+if mut prune-off '/^    for fl_f in "\$GITDIR"/,+5d'; then M="$MUT"
   T="$WORK/prune-off"; seed "$T" "$M" || broken "seed failed"
   seed_retained "$T" || broken "seeding retained copies failed"
   mkfx "$T" alpha 0; mkfx_noisy "$T" bravo 1 POFFTOKEN
@@ -539,7 +551,7 @@ if mut prune-off '/^    for fl_f in "\$GITDIR"/,+4d'; then M="$MUT"
 fi
 
 # prune-glob-wide — the anchored pattern widened to `ai-dlc-fixture-failures.*`. Under name
-# order the hand-saved `.179.saved` sorts below every stamped copy and is the first thing a
+# order the hand-saved `.179.1` sorts below every stamped copy and is the first thing a
 # wide prune deletes; that deletion is this mutant's observable. `.clean` sorts above them and
 # survives even here, which is why it cannot be the arm that kills this mutant.
 if mut prune-glob-wide 's|ai-dlc-fixture-failures\.2\[0-9\]\[0-9\]\[0-9\]\[01\]\[0-9\]\*Z\.\*|ai-dlc-fixture-failures.*|'; then M="$MUT"
@@ -547,11 +559,28 @@ if mut prune-glob-wide 's|ai-dlc-fixture-failures\.2\[0-9\]\[0-9\]\[0-9\]\[01\]\
   seed_retained "$T" || broken "seeding retained copies failed"
   mkfx "$T" alpha 0; mkfx_noisy "$T" bravo 1 PWIDETOKEN
   rc="$(drive "$T" "$WORK/prune-wide.out")"
-  if [ "$rc" = 1 ] && [ ! -e "$T/.git/ai-dlc-fixture-failures.179.saved" ] \
+  if [ "$rc" = 1 ] && [ ! -e "$T/.git/ai-dlc-fixture-failures.179.1" ] \
      && [ "$(cat "$T/.git/ai-dlc-fixture-failures.clean" 2>/dev/null)" = OPERATOR-CLEAN ]; then
     ok "prune-glob-wide with the pattern widened a hand-saved record is DELETED — the anchor is what protects it"
   else
     bad "prune-glob-wide did not delete the low-sorting hand-saved record (rc=$rc)"
+  fi
+fi
+
+# prune-suffix-unanchored — the end anchor (the all-digit last-field `case`) deleted. The
+# `.1.keep` decoy then passes the glob, sorts between the two oldest seeds, and is pruned
+# with the oldest one.
+# `.179.1` still survives here, which is why it cannot be the arm that kills this mutant.
+if mut prune-suffix-unanchored '/case "\${fl_f##\*\.}" in/d'; then M="$MUT"
+  T="$WORK/prune-suffix"; seed "$T" "$M" || broken "seed failed"
+  seed_retained "$T" || broken "seeding retained copies failed"
+  mkfx "$T" alpha 0; mkfx_noisy "$T" bravo 1 PSUFTOKEN
+  rc="$(drive "$T" "$WORK/prune-suffix.out")"
+  if [ "$rc" = 1 ] && [ ! -e "$T/.git/ai-dlc-fixture-failures.20000101T000000Z.1.keep" ] \
+     && [ "$(cat "$T/.git/ai-dlc-fixture-failures.179.1" 2>/dev/null)" = OPERATOR-179 ]; then
+    ok "prune-suffix-unanchored without the end anchor a .keep copy is DELETED — the all-digit last field is what protects it"
+  else
+    bad "prune-suffix-unanchored did not delete the .1.keep decoy (rc=$rc)"
   fi
 fi
 
@@ -560,7 +589,7 @@ fi
 # emitted from inside a conditional: an assertion that never executed prints nothing,
 # and a short green report reads exactly like a complete one. This is the same
 # property the hook itself now asserts about its own workers, one layer out.
-EXPECTED_ASSERTIONS=26
+EXPECTED_ASSERTIONS=28
 if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf '  FAIL  %s assertions ran, %s expected — an arm did not execute, and a short green report reads exactly like a complete one\n' \
     "$asserts" "$EXPECTED_ASSERTIONS"
