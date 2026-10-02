@@ -79,6 +79,7 @@ pass() {
 }
 
 # $1 resolves-basename  $2 kind  $3 sha_before  $4 sha_after  $5 bytes_before  $6 bytes_after
+# $7 the pass number the record resolves (default 2, which every case but `ceiling` uses)
 record() {
   {
     printf '# Divergence resolution — %s\n\n' "$2"
@@ -94,7 +95,7 @@ record() {
     printf 'scope_delta: reverted the p1->p2 repair wholesale\n'
     printf 'operator_authorization: 2026-07-12T03:00:00Z | "revert the p1 to p2 repair wholesale"\n'
     printf 'ADVERSARIAL_RESOLUTION_END -->\n'
-  } > "$ART/brief-resolution-p2.md"
+  } > "$ART/brief-resolution-p${7:-2}.md"
 }
 
 case "$CASE" in
@@ -111,7 +112,8 @@ case "$CASE" in
     record brief-adversarial-p2.md REVERT_REPAIR bbb2 aaa1 4200 4000
     ;;
 
-  # A nonzero MAJOR held at zero CRITICAL. Neither converging nor diverging.
+  # A blocking MAJOR count above MAJOR_EXIT_CEILING, at no more than CRITICAL_EXIT_CEILING
+  # CRITICAL, not reduced across more than STALL_THRESHOLD consecutive passes.
   # THE PLATEAU IS PINNED ABOVE MAJOR_EXIT_CEILING, AND THE NUMBER IS LOAD-BEARING. The exit
   # criteria are 0 CRITICAL and at most 3 blocking MAJOR, so a plateau at 1 is a MET exit
   # condition rather than a stall -- arm B's business, not arm E's. Seeded at 1 this case would
@@ -121,6 +123,21 @@ case "$CASE" in
     pass 2 0 0 4 EXIT_CONDITION_NOT_MET bbb2
     pass 3 0 0 4 EXIT_CONDITION_NOT_MET ccc3
     pass 4 0 0 4 EXIT_CONDITION_NOT_MET ddd4
+    ;;
+
+  # THE FOURTH rc-3 STATE. The series takes the sanctioned resolution exit TWICE, both times
+  # with CHANGE_APPROACH -- a kind no byte-level predicate can check -- and has not converged,
+  # so arm I reports CEILING. Every record is valid and every divergence is resolved, which is
+  # what keeps arms C and E from claiming the stop: only the resolution COUNT separates it.
+  # Same series shape as check-24's `ceiling-unanchored`.
+  ceiling)
+    pass 1 2 2 1 EXIT_CONDITION_NOT_MET aaa1
+    pass 2 3 3 1 DIVERGENT_HARD_BLOCK   bbb2
+    record brief-adversarial-p2.md CHANGE_APPROACH bbb2 ccc3 4000 4100 2
+    pass 3 1 1 1 EXIT_CONDITION_NOT_MET ccc3 brief-resolution-p2.md
+    pass 4 2 2 1 DIVERGENT_HARD_BLOCK   ddd4
+    record brief-adversarial-p4.md CHANGE_APPROACH ddd4 eee5 4100 4200 4
+    pass 5 1 1 1 EXIT_CONDITION_NOT_MET eee5 brief-resolution-p4.md
     ;;
 
   # THE DECOYS. A guard that fires on a cycle that is working gets ripped out.

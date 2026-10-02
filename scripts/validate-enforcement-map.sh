@@ -2974,14 +2974,19 @@ fi
 # said so. A pass COUNT alone flags five lines that use the word in its other sense --
 # `artifact-consolidation.md` "Only Steps 3-4 pass:", `_gate-procedures.md` "preconditions
 # 3-7 pass, fire", `gate-validation.md` "seed H1 passes means", `remediator.md` "Measured:
-# 13 passes, ~12 hours", and SKILL.md's STALL sentence "a nonzero MAJOR held at zero
-# CRITICAL across 2+ passes", whose 2 is arm E's STALL_THRESHOLD and a different number
-# entirely. Requiring the line to ALSO name the adversarial cycle drops all five.
+# 13 passes, ~12 hours", and SKILL.md's STALL sentence as it then read, "a nonzero MAJOR
+# held at zero CRITICAL across 2+ passes", whose 2 was arm E's STALL_THRESHOLD and a
+# different number entirely. Requiring the line to ALSO name the adversarial cycle drops all five.
 #
 # FALSE-POSITIVE SET: measured at 10 hits before the count was retired, every one of them
-# a site that had to change; 0 after. The near-miss control is SKILL.md's STALL sentence,
-# which must stay silent -- if it ever fires, the grammar has been widened to a single
-# token and arm E's threshold is being read as a floor.
+# a site that had to change; 0 after. SKILL.md's STALL sentence was the near-miss control
+# until it was reworded to the validator's predicate -- "a blocking MAJOR count above
+# `MAJOR_EXIT_CEILING`, at no more than `CRITICAL_EXIT_CEILING` CRITICAL, not reduced across
+# more than `STALL_THRESHOLD` consecutive passes" -- which names the threshold and carries no
+# digit, so it no longer reaches `i96_cnt` at all. Of the other four quoted above, only
+# `gate-validation.md`'s "seed H1 passes means" is still in the tree; it, and any near-miss
+# of that shape, must stay silent -- if one ever fires, the grammar has been widened to a
+# single token.
 #
 # WHAT IT DOES NOT CATCH, stated because an unstated limit is read as coverage: a bare
 # count in running prose that names no adversarial token on its own line. Widening to one

@@ -67,8 +67,12 @@ Forced, not sampled: an EBADF on the section read put 3 FAILs at base blaming th
 sandbox render exiting 3 scored A3a `ok` at base and `FIXTURE BROKEN` at tip. **This does not close the
 entry**: none of the recorded extra-world shapes came from these four sites, and the kill-set arms never
 used `<( )`. Citations moved: E1 is at `run.sh:2336` on 0.668.0 (not `:1129`), E8 `:2377`, `v_render`
-`:1718`, the RAW-lines arm `:2294`, each shifting further with this release. 73 live `<(` remain across
-28 fixture files, so a lint cannot ship yet.
+`:1718`, the RAW-lines arm `:2294`, each shifting further with this release. Non-comment
+`core/fixtures/*/run.sh` lines containing `<(` number 75 across 26 files (comment lines
+included, the same glob reads 93). They are not all live process substitutions: 34 of the 75
+sit in `procsub-staged-refusal` and `procsub-staged-refusal-boot`, 17 each, most of them as
+mutation strings that seed the defect. So a lint cannot ship yet, and it would need to tell
+those strings from real reads before it could.
 
 **Found 2026-09-11** during batch 85, when E1 failed a gate run on a branch whose change cannot
 reach it. Two separate defects in one arm; the second is what makes the first expensive.
@@ -370,9 +374,20 @@ detectors' `<( )` sites, but that is not measured. The render fix's own receipt 
 
 verify: manual
 
-## BL-004 — the nine inner pools are owed, and the hook records them as owed
+## BL-004 — the fixtures' inner pools are owed a sweep, and the hook records them as owed
 
-66 workers sit on top of the outer pool. They cannot be swept with an environment variable —
+**What the figure counts, and over which set.** Per SOURCE FILE: eleven fixture `run.sh` files
+open their own pool — non-comment lines matching `xargs … -P` under `core/fixtures/*/*.sh`,
+excluding `consumer-suite-pool/run.sh:395`, which is a mutation string and not a pool — and
+their `-P` constants sum to 70 workers. That is the figure `.githooks/pre-push`'s pool-width
+comment cites. Per DISPATCHED DIRECTORY the set is larger: five shard directories
+(`enforcement-map-derivations-b`, `enforcement-map-sites-b`/`-c`,
+`layer-contract-conformance-b`, `validator-arm-selection-b`) re-enter four of those files, so
+up to sixteen directories can open an inner pool on top of the outer one. Whether each shard
+reaches its file's pool line was not measured. The heading's earlier "nine" and "66" were
+taken over the per-source-file set before two pools were added.
+
+Those workers sit on top of the outer pool. They cannot be swept with an environment variable —
 `enforcement-map-sites` scrubs every ambient `AI_DLC_*` name for I10, and I87 binds any key a
 shipped program dereferences — so sweeping them means editing the constants on a throwaway
 branch that is never pushed.
@@ -680,6 +695,16 @@ ships. **The direct fix for the measured defect is cheaper and lies on the distr
 reword the four core prose sites to the arm-E predicate. The consumer then inherits it through the
 existing `HARD-OVERRIDE-DRIFT-SECTION` on its next pull, because the shadowed section will finally
 move.**
+
+**Batch 185: the motivating case was core-prose staleness, and that half is fixed.** The stale
+STALL predicate ("a nonzero MAJOR held at zero CRITICAL") was reworded at every core site to the
+validator's arm-E predicate, citing `MAJOR_EXIT_CEILING`, `CRITICAL_EXIT_CEILING` and
+`STALL_THRESHOLD` by name and carrying no digit: `core/skills/ai-dlc/SKILL.md`, both hooks'
+comments and deny messages, the validator's own arm-E comment, and `divergence-hard-block`. Both
+hooks also gained an explicit `CEILING)` branch, because their catch-all had described the
+validator's fourth rc-3 state as a stall. The detector question is unchanged and stays open as
+the census above leaves it: no layer-drift arm sees an override restating a threshold that moved
+into a validator.
 
 verify: manual -- this entry records a gap, not a receipt. Do not close it on a green
 `layer-drift.sh` run; that green is the defect.
@@ -1236,4 +1261,18 @@ The receipt is manual because its subject is the harness's own transcript format
 **NOTE. Seen at batch 179, not diagnosed.** The first gate of the second close commit (`d7cb330a`, which changed only `docs/backlog.md`, `docs/backlog.archive.md` and `.githooks/pre-push`) failed on one unit of 216 at pool width 16 and a 1-minute load near 40: mutant `hook-resolve-mention` read `w12shadow5=W` where the fixture expects `-`. That fixture reads none of the three files and its read-set rows name none of them. Run alone from the main checkout it passed three times (42 assertions, about 55s), and the unchanged commit passed a second gate with 216 of 216 ok. No ordering or timing construct in `vector.sh` or `worker.sh` was found that would explain it, and the recorded loaded cost is 148s against 55s solo. A load-dependent fault is a hypothesis, not a finding. The hook's failure record (`.git/ai-dlc-fixture-failures`) holds the full got-vector and is overwritten by the next red run, so copy it before the next gate if this recurs.
 
 verify: manual -- the failure did not reproduce solo or on a second gate, so there is no receipt to score; the claim is the lead's measurement and the cause is unestablished.
+
+## BL-430 — `docs/suite-pole-baseline.tsv`'s pool-12 block still names `ledger-reverify` at 628s, a unit that has since been sharded
+
+**NOTE. Found at batch 185 while restating BL-005's pole paragraph.** The jobs-12 block of
+`docs/suite-pole-baseline.tsv` (its data row and the v0.583.0 ratchet-history line) records
+`ledger-reverify 628`, taken at `83747ef4` over 201 fixture directories. `ledger-reverify` has
+since been sharded: `ledger-reverify-b`, `-c` and `-d` re-enter its `run.sh`, so the
+`ledger-reverify` directory now carries one shard of the assertion set the 628s figure timed
+whole. At pool 12 `scripts/validate-suite-pole.sh` therefore compares the live pole against a
+figure taken on a different partition. Its pole-moved NOTE (`:611-613`) says so on a run where
+another unit is longest, and it does not fail. The pool-16 block (`gate-adjudication-mutants`, v0.705.0) is current and
+unaffected.
+
+verify: manual -- re-taking the row needs the file's own calibration recipe: three serial full runs under `AI_DLC_FIXTURE_NO_SKIP=1` at pool 12. That forced full run is one the operator has not authorised, so no session can produce the measurement that would close this, and a receipt keyed on the row's text would close it on an edit with no measurement behind it.
 

@@ -753,7 +753,8 @@ for f in "${SORTED[@]}"; do
   fi
 
   # --- E. STALL accumulator -------------------------------------------------
-  # A pass that holds a nonzero MAJOR at zero CRITICAL, and did not REDUCE it, is a pass
+  # A pass that holds a blocking MAJOR count above MAJOR_EXIT_CEILING at no more than
+  # CRITICAL_EXIT_CEILING CRITICAL, and did not REDUCE it, is a pass
   # that bought nothing. Count the run; a decrease (or any CRITICAL, which is C's business)
   # resets it. Reset on unparseable counts too -- though arm A now makes that unreachable.
   # KEYED ON THE BLOCKING COUNT, NOT THE RAW ONE. A pass holding only UNDERIVED majors does not
