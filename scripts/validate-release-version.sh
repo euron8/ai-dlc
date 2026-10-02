@@ -415,6 +415,9 @@ form_findings_in() { # <repo-dir> <newline-separated shas> -> "<short> <line>" p
   for c in $2; do
     msg="$(git -C "$d" log -1 --format=%B "$c" 2>/dev/null)" || { printf '%s <message could not be read>\n' "$c"; continue; }
     printf '%s\n' "$msg" | C="$(git -C "$d" rev-parse --short "$c" 2>/dev/null)" LC_ALL=C awk '
+      # A \001 byte opens a record in the engine`s message stream, so a message carrying one
+      # can forge a commit boundary. Refused wherever it appears.
+      index($0, "\001") { print ENVIRON["C"] " carries a \\001 byte (the engine record separator) on line " NR; next }
       { l = tolower($0) }
       l ~ /^[[:space:]>*-]*`?not[[:space:]_-]*discharg/ {
         if (NR == 1) { print ENVIRON["C"] " subject: " $0; next }
@@ -442,12 +445,16 @@ trap 'rm -rf "$probe_e" "$probe_f"' EXIT
   git commit -q --allow-empty -m 'rel: bulleted' -m '  - not discharged: PC-S1-BULLET'
   git commit -q --allow-empty -m 'rel: backticked' -m 'Not-discharged: `PC-S1-TICK`'
   git commit -q --allow-empty -m 'Not-discharged: PC-S1-SUBJECT'
+  # TRAILING TEXT after a canonical-looking id: the engine reads this line as an ORDINARY mention,
+  # so it must be reported. It is the offender that kills a canonical regex missing its `$`.
+  git commit -q --allow-empty -m 'rel: trailing' -m 'Not-discharged: PC-S1-TRAIL (rejected, see BL-9)'
+  git commit -q --allow-empty -m 'rel: separator' -m "$(printf 'Body PC-S1-SEPBYTE \001 forged')"
   git commit -q --allow-empty -m 'rel: canonical' -m 'Not-discharged: PC-S1-CANON'
   git commit -q --allow-empty -m 'rel: midline' -m 'This entry was not discharged by this release.'
 ) >/dev/null 2>&1
 probe_f_hits="$(form_findings_in "$probe_f" "$(git -C "$probe_f" rev-list HEAD 2>/dev/null)")"
 probe_f_bad=""
-for tok in PC-S1-BULLET PC-S1-TICK PC-S1-SUBJECT; do
+for tok in PC-S1-BULLET PC-S1-TICK PC-S1-SUBJECT PC-S1-TRAIL 'carries a \001 byte'; do
   grep -qF -- "$tok" <<<"$probe_f_hits" || probe_f_bad="${probe_f_bad:+$probe_f_bad; }the offender $tok was NOT reported"
 done
 for tok in PC-S1-CANON 'not discharged by this release'; do

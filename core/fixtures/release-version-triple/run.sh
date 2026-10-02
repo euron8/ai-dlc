@@ -54,7 +54,7 @@ bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
 # PASS. Every assertion below reaches the validator through `$( )`, so the same
 # shape is available here. A failed assertion is loud; one that never executed is
 # not, and this is what tells them apart.
-EXPECTED_ASSERTIONS=20
+EXPECTED_ASSERTIONS=23
 
 cd "$WORK" || exit 2
 git init -q . 2>/dev/null || { echo "FIXTURE ERROR: git init failed" >&2; exit 2; }
@@ -402,6 +402,55 @@ if [ "$status" = "0" ] && ! grep -q 'was EMPTY' "$WORK/out.txt"; then
 else
   bad "the empty-range note fired on main, where the fallback is the intended subject -- exit $status"
   sed 's/^/        /' "$WORK/out.txt"
+fi
+
+# --- 20/21. ARM F'S CANONICAL GRAMMAR IS THE ENGINE'S, BYTE FOR BYTE ------------
+# The consumer engine's `named_cited_filter` strips a citation line only in its exact
+# form; arm F refuses every other spelling. Two copies of one regex in two trees (the
+# engine ships, this validator does not), so they are bound here: each file must carry
+# EXACTLY ONE `/^Not-discharged: ...$/` literal, and the two must be byte-identical.
+# A copy that drifts narrower or wider lets arm F acquit a line the engine reads as an
+# ordinary mention -- the false absorption the form exists to prevent.
+ENGINE="$ROOT/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh"
+canon_of() { grep -o '/\^Not-discharged: [^/]*\$/' "$1" 2>/dev/null; }
+pair_ok() { # <engine> <validator> -> 0 when each has exactly one literal and they agree
+  local a b
+  a="$(canon_of "$1")"; b="$(canon_of "$2")"
+  [ "$(printf '%s\n' "$a" | grep -c .)" = 1 ] && [ "$(printf '%s\n' "$b" | grep -c .)" = 1 ] && [ "$a" = "$b" ]
+}
+if [ ! -f "$ENGINE" ]; then
+  bad "the engine is absent at $ENGINE, so the grammar pair cannot be compared"
+elif pair_ok "$ENGINE" "$VALIDATOR"; then
+  ok "arm F's canonical citation regex is byte-identical to the engine's: $(canon_of "$VALIDATOR")"
+else
+  bad "the citation grammar has forked: engine {$(canon_of "$ENGINE" | tr '\n' ' ')} validator {$(canon_of "$VALIDATOR" | tr '\n' ' ')}"
+fi
+MUT_P="$WORK/pair-mutant.sh"
+sed 's|/^Not-discharged: PC-S\[0-9\]+(-\[A-Z0-9\]+)\*\$/|/^Not-discharged: PC-S[0-9]+(-[A-Z0-9]+)*$|' "$VALIDATOR" > "$MUT_P" || exit 2
+if cmp -s "$VALIDATOR" "$MUT_P"; then
+  bad "the pair mutation matched nothing -- the validator's canonical regex was rewritten"
+elif pair_ok "$ENGINE" "$MUT_P"; then
+  bad "a validator whose canonical regex lost its closing anchor still reads as paired -- the binding cannot fire"
+else
+  ok "MUTATION: editing one side of the pair (the validator's closing anchor) breaks the binding"
+fi
+
+# --- 22. ARM F'S OWN PROBE REFUSES A CANONICAL REGEX MISSING ITS \$ ----------------
+# `Not-discharged: PC-S1-TRAIL (rejected, see BL-9)` is an ORDINARY mention to the engine.
+# A validator whose canonical test lost its `$` would acquit it, so the self-probe seeds it
+# as an offender, and this mutant must be refused by that probe before any corpus is read.
+MUT_D="$WORK/drop-dollar.sh"
+sed 's|if (\$0 !~ /^Not-discharged: PC-S\[0-9\]+(-\[A-Z0-9\]+)\*\$/) print|if ($0 !~ /^Not-discharged: PC-S[0-9]+(-[A-Z0-9]+)*/) print|' "$VALIDATOR" > "$MUT_D" || exit 2
+if cmp -s "$VALIDATOR" "$MUT_D"; then
+  bad "the drop-\$ mutation matched nothing -- arm F's canonical test was rewritten"
+else
+  git checkout -q main
+  bash "$MUT_D" --commit HEAD >"$WORK/out.txt" 2>&1; status=$?
+  if [ "$status" = 1 ] && grep -q "arm F's own probe did not discriminate" "$WORK/out.txt"; then
+    ok "MUTATION: a canonical test missing its \$ is refused by arm F's own probe (the trailing-text offender)"
+  else
+    bad "the drop-\$ mutant was not refused by arm F's probe -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
+  fi
 fi
 
 echo ""
