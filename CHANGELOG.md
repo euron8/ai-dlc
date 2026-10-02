@@ -19,6 +19,40 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.712.0] - 2026-10-02
+
+Batch 186's second release: the fixture-suite skip machinery in both pre-push hooks. Not bootstrapping. It discharges
+one consumer candidate and fixes one fail-open defect found while scoping it. `BL-432` and `BL-433` are filed for them
+and close in the batch's close commit.
+
+**The push that delivers this hook runs every fixture**, because it changes machinery. The first saving appears on the
+second bookkeeping-only push, not the first.
+
+### BL-432: the read-set manifest silently stopped hashing, so an edit to a skipped file skipped the whole suite
+
+- `readset_manifest` fed its file list to `xargs` unquoted. A tracked filename containing an apostrophe aborted
+  `xargs` with `unterminated quote`, and the error was discarded. On a `file://` clone of the reference consumer, 9600
+  of 12561 files were hashed and none under `scripts/`; an edit to a `scripts/ai-dlc/` validator printed `NOTHING …
+  changed -- skipping all 193`. The list is now hashed NUL-delimited, listed with `core.quotePath=false`, and passed
+  to `shasum` after `--`. The manifest fails closed and runs every fixture when the hash pipeline exits non-zero, when
+  its line count differs from the file list's, or when any listed path is still git-quoted (a tab, newline, `"` or `\`
+  in a name). On the same clone all 12561 files hash and that edit selects 38 of 193.
+- A tree carrying a permanently unreadable file, or a tab- or newline-named file, now runs every fixture on every
+  push. That is the fail-closed direction and is intended.
+
+### PC-S316-UPDATE-DELIVERY-PUSH-RUNS-FULL-SUITE-ON-BOOKKEEPING-ONLY-COMMITS
+
+- `BL-433`: the orphan test ran every fixture when any changed path was in no read-set, and every update delivery
+  writes `.claude/.ai-dlc-version` and records directly under `_bmad-output/ai-dlc-update/`, which no fixture maps.
+  Those exact paths are now dropped from the orphan set before the test. A fixture that reads one of them is still
+  selected, a nested path under either still counts as an orphan, and any other unmapped path still runs everything.
+  On the consumer's 0.704.0 → 0.706.0 reconcile commit the hook ran all 199 fixtures and now selects 23. The
+  consumer's suggested `--no-verify` was not taken, because it would bypass every validator the hook runs, including
+  the one that reads the stamp.
+- `core/fixtures/readset-skip` gains a 226-file seed with an apostrophe-named file past the first `xargs` batch, arms
+  for the near-misses, `café`, an unreadable file, quoted names and a `-x.sh` file, and ten mutants, each killed by a
+  named arm.
+
 ## [0.711.0] - 2026-10-02
 
 Batch 186's first release: `emit-report.sh` in the update skill. Bootstrapping, so it ships alone. A consumer renders

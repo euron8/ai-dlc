@@ -358,7 +358,9 @@ msg_mutant unnamed "s|printf ': %s' \"\$unmapped_names\"|:|" "UNMAPPED (always r
 flag_mutant nochange_off 's|READSET_NO_CHANGE=1|READSET_NO_CHANGE=0|' "1" ':'
 # Drop untracked files from the universe: arm 11's newcomer goes invisible and the suite skips
 # over a tree nobody hashed. This is the soundness half of the change.
-flag_mutant untracked_blind 's|git ls-files --others --exclude-standard 2>/dev/null||' \
+# The optional `-c core.quotePath=false` keeps the anchor matching whether or not the listing
+# disables git's path quoting; without it the mutant matched nothing on the hook that does.
+flag_mutant untracked_blind 's|git \(-c core\.quotePath=false \)\{0,1\}ls-files --others --exclude-standard 2>/dev/null||' \
   "0" 'printf v1 > src/untracked-newcomer.sh'
 
 # UNMUTATED CONTROL, from the same directory and driven the same way. Without it a mutant that
@@ -370,6 +372,312 @@ if [ "$(sel_of "$R")" = "alpha gamma" ]; then
   ok "CONTROL: an unmutated copy still selects 'alpha gamma', so the kills above are attributable"
 else
   bad "CONTROL: the unmutated copy did not reproduce the baseline ('$(sel_of "$R")') — every mutant above is unattributable"
+fi
+
+# ------------------------------------- the manifest's population and the bookkeeping exemption ----
+# TWO DEFECTS, ONE SEED. The manifest fed its path list to `xargs` without `-0`, and `xargs`
+# aborts at the first apostrophe in a name: every file sorted after it went unhashed, so an
+# edit to any of them read as "nothing changed" and the whole suite was skipped. Separately, a
+# commit touching only the update skill's own bookkeeping -- the version stamp and the flat
+# files under `_bmad-output/ai-dlc-update/` -- hit the orphan branch and ran everything.
+#
+# THE SEED IS SHAPED BY THE FIRST DEFECT'S MECHANICS. `xargs -n 200` runs each batch it has
+# finished reading, so an apostrophe inside the FIRST batch hashes nothing, empties the manifest
+# and falls into "could not hash -- running all", which is safe and hides the defect. Two hundred
+# and ten filler files under `aaa/` push the apostrophe into the second batch, where the first
+# batch is hashed and the rest silently is not. That position is asserted before any verdict.
+#
+# Fixtures: alpha reads src/a.sh, apos reads the apostrophe file, beta reads zzz/b.sh (sorts
+# after it), stamp reads the version stamp, delta is unmapped (always selected).
+APOS="src/x's.snap"
+CAFE="src/caf$(printf '\303\251').md"
+BK='printf "version: 2\n" > .claude/.ai-dlc-version; printf "l2\n" >> _bmad-output/ai-dlc-update/ledger.md; printf "r\n" > _bmad-output/ai-dlc-update/reconcile-log-1.md'
+ALL5="alpha apos beta delta stamp"
+NEW_ARMS=0
+seed2() {
+  local t="$1" i=0 f
+  mkdir -p "$t/aaa" "$t/src" "$t/zzz" "$t/.claude" "$t/sub/.claude" "$t/_bmad-output/ai-dlc-update/sub" || return 1
+  for f in alpha apos beta delta stamp; do
+    mkdir -p "$t/core/fixtures/$f" && printf 'exit 0\n' > "$t/core/fixtures/$f/run.sh" || return 1
+  done
+  printf 'alpha\tsrc/a.sh\napos\t%s\nbeta\tzzz/b.sh\nstamp\t.claude/.ai-dlc-version\n' "$APOS" \
+    > "$t/.ai-dlc-fixture-readsets.tsv"
+  while [ "$i" -lt 210 ]; do printf '%s\n' "$i" > "$t/aaa/f$i"; i=$((i+1)); done
+  printf 'v1\n' > "$t/src/a.sh"; printf 'v1\n' > "$t/zzz/b.sh"; printf 'q\n' > "$t/$APOS"; printf 'c\n' > "$t/$CAFE"
+  printf 's\n' > "$t/.claude/settings.json"; printf 'version: 1\n' > "$t/.claude/.ai-dlc-version"
+  printf 'version: 1\n' > "$t/sub/.claude/.ai-dlc-version"
+  printf 'o\n' > "$t/_bmad-output/other.md"; printf 'x\n' > "$t/_bmad-output/ai-dlc-update/sub/x.md"
+  printf 'l\n' > "$t/_bmad-output/ai-dlc-update/ledger.md"
+  ( cd "$t" && git init -q . && git add -A && \
+    git -c user.email=f@f -c user.name=f commit -qm seed ) >/dev/null 2>&1 || return 1
+}
+TPL="$WORK/tpl"; seed2 "$TPL" || broken "the manifest seed failed"
+
+# THE SEED MUST CARRY EVERY PROPERTY BEFORE ANY VERDICT IS READ. A global excludesFile that
+# ignores `.claude/` or `_bmad-output/` would leave the bookkeeping arms passing over files git
+# never listed; and an apostrophe in the first batch, or one sorting after zzz/b.sh, would make
+# the "after it" arm agree with the broken manifest.
+N_TR="$( cd "$TPL" && git ls-files | grep -c . )" || N_TR=0
+[ "$N_TR" -eq 226 ] || broken "the manifest seed tracks $N_TR files, not 226 — something (a global excludesFile?) dropped seeded paths"
+( cd "$TPL" && git check-ignore -q _bmad-output/ai-dlc-update/reconcile-log-1.md ) \
+  && broken "the untracked bookkeeping file the bookkeeping arm creates is git-ignored here, so the manifest would never list it"
+SP0="$(mktemp -d "$WORK/p.XXXXXX")" || broken "mktemp failed"
+( cd "$TPL" && . "$POOL" 2>/dev/null && readset_manifest "$SP0" )
+IA="$(grep -nxF "$APOS" "$SP0/.files" | cut -d: -f1)"
+IB="$(grep -nxF "zzz/b.sh" "$SP0/.files" | cut -d: -f1)"
+[ -n "$IA" ] && [ -n "$IB" ] && [ "$IA" -gt 200 ] && [ "$IA" -lt "$IB" ] \
+  || broken "the apostrophe file is not past the first 200-path batch and before zzz/b.sh in the hook's own sort (at '${IA:-absent}', zzz/b.sh at '${IB:-absent}') — the arms below could not express the xargs defect"
+
+# drive <pool> <name> <mutation> [stale] [extra seed] -- fresh world per call, scratch at
+# $WORK/x.<name>. `stale` writes a non-empty record no manifest produced, so a world whose
+# manifest is empty from the first run still reaches the "could not hash" guard rather than
+# stopping at "no verified-state record".
+drive() {
+  local pool="$1" name="$2" mut="$3" mode="${4:-}" extra="${5:-}" t="$WORK/w.$2" sc="$WORK/x.$2"
+  cp -Rp "$TPL" "$t" && mkdir -p "$sc" || return 1
+  if [ -n "$extra" ]; then
+    ( cd "$t" && eval "$extra" && git add -A && \
+      git -c user.email=f@f -c user.name=f commit -qm extra ) >/dev/null 2>&1 || return 1
+  fi
+  ( cd "$t" || exit 1
+    # shellcheck disable=SC1090
+    . "$pool" 2>/dev/null
+    for d in core/fixtures/*/; do printf '%s\n' "$d"; done > "$sc/list"
+    readset_manifest "$sc"
+    cp "$sc/.now" "$sc/seed.now"; cp "$sc/.files" "$sc/seed.files"
+    if [ "$mode" = stale ]; then printf 'seed\tstale\n' > "$GITDIR/ai-dlc-fixture-verified"
+    else cp "$sc/.now" "$GITDIR/ai-dlc-fixture-verified"; fi
+    eval "$mut"
+    READSET_NO_CHANGE=0
+    apply_readset_skip "$sc/list" "$sc" > "$sc/msg" 2>&1
+    sed 's|core/fixtures/||g; s|/$||' "$sc/list" | tr '\n' ' '
+    printf '\n---MSG---\n'; cat "$sc/msg"
+    printf '\n---FLAG---\n%s\n' "${READSET_NO_CHANGE:-0}"
+  )
+}
+# holds <result> <selected> <flag> <message needle>: the selected set, the decision flag and a
+# line of the announce, all three. The flag alone cannot tell "skipped whole" from "ran whole";
+# the set alone cannot either, since a whole-suite skip leaves the list untouched.
+holds() {
+  [ "$(sel_of "$1")" = "$2" ] && [ "$(flag_of "$1")" = "$3" ] && grep -qF -- "$4" <<< "$(msg_of "$1")"
+}
+# hashed <scratch>: the seed manifest carries exactly one row for the apostrophe file, one for
+# zzz/b.sh, and as many rows as files it listed.
+hashed() {
+  local na nb nn nf
+  na="$(grep -cF "$APOS	" "$1/seed.now")" || na=0
+  nb="$(grep -c '^zzz/b\.sh	' "$1/seed.now")" || nb=0
+  nn="$(grep -c . "$1/seed.now")" || nn=0
+  nf="$(grep -c . "$1/seed.files")" || nf=0
+  [ "$na" -eq 1 ] && [ "$nb" -eq 1 ] && [ "$nn" -eq "$nf" ] && [ "$nf" -gt 200 ]
+}
+NM1() { printf '1 changed path(s) are in NO fixture read-set (e.g. %s)' "$1"; }
+UNHASH="could not hash the working tree -- running all"
+WHY="$(id -u)"
+
+R="$(drive "$POOL" n1 'printf "q2\n" > "$APOS"')"
+NEW_ARMS=$((NEW_ARMS+1))
+if hashed "$WORK/x.n1"; then
+  ok "the APOSTROPHE-named file is hashed, and so is zzz/b.sh after it — the manifest has a row for every file it listed ($(grep -c . "$WORK/x.n1/seed.now"))"
+else
+  bad "the manifest lost the apostrophe file or what sorts after it: $(grep -c . "$WORK/x.n1/seed.now") hashed of $(grep -c . "$WORK/x.n1/seed.files") listed, apostrophe rows $(grep -cF "$APOS	" "$WORK/x.n1/seed.now")"
+fi
+NEW_ARMS=$((NEW_ARMS+1))
+if holds "$R" "apos delta" 0 "SKIPPING"; then
+  ok "  and an edit to the apostrophe file selects its reader (apos) plus the unmapped delta"
+else
+  bad "  an edit to the apostrophe file did not select 'apos delta' (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
+fi
+
+R="$(drive "$POOL" n2 'printf "v2\n" > zzz/b.sh')"
+NEW_ARMS=$((NEW_ARMS+1))
+if holds "$R" "beta delta" 0 "SKIPPING"; then
+  ok "an edit to a mapped file sorting AFTER the apostrophe selects its reader (beta) — it was hashed, so it is not 'nothing changed'"
+else
+  bad "an edit to zzz/b.sh did not select 'beta delta' (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
+fi
+
+R="$(drive "$POOL" n3 "$BK")"
+NEW_ARMS=$((NEW_ARMS+1))
+if holds "$R" "delta stamp" 0 "SKIPPING"; then
+  ok "a BOOKKEEPING-ONLY change (version stamp, ledger edit, new reconcile log) selects only the stamp's reader and the unmapped fixture — neither all, nor nothing"
+else
+  bad "a bookkeeping-only change did not select exactly 'delta stamp' with the suite running (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
+fi
+
+for _nm in ".claude/settings.json" "_bmad-output/ai-dlc-update/sub/x.md" "_bmad-output/other.md"; do
+  _nn="n4.$(printf '%s' "$_nm" | tr '/.' '__')"
+  R="$(drive "$POOL" "$_nn" "$BK; printf 'n2\n' > '$_nm'")"
+  NEW_ARMS=$((NEW_ARMS+1))
+  if holds "$R" "$ALL5" 0 "$(NM1 "$_nm")"; then
+    ok "  NEAR-MISS $_nm beside the bookkeeping is still an orphan and runs all — the exemption is exact"
+  else
+    bad "  near-miss $_nm beside the bookkeeping did not run all as the single named orphan (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
+  fi
+done
+# THE NESTED NEAR-MISS is the only input that separates an anchored pattern from one that lost
+# its `^`: every near-miss above differs from the bookkeeping at its START or past its last `/`,
+# so an unanchored pattern drops none of them and they pass either way. A version stamp under a
+# subdirectory ENDS like the real one and must still run all.
+NESTED="sub/.claude/.ai-dlc-version"
+R="$(drive "$POOL" n4.nested "$BK; printf 'version: 2\n' > '$NESTED'")"
+NEW_ARMS=$((NEW_ARMS+1))
+if holds "$R" "$ALL5" 0 "$(NM1 "$NESTED")"; then
+  ok "  NEAR-MISS $NESTED beside the bookkeeping is still an orphan and runs all — the exemption is anchored at the root"
+else
+  bad "  near-miss $NESTED beside the bookkeeping did not run all as the single named orphan (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
+fi
+
+R="$(drive "$POOL" n5 'printf "c2\n" > "$CAFE"')"
+NEW_ARMS=$((NEW_ARMS+1))
+if holds "$R" "$ALL5" 0 "$(NM1 "$CAFE")"; then
+  ok "an edit to an unmapped NON-ASCII file is listed by its real name, reads as an orphan and runs all"
+else
+  bad "an edit to the unmapped non-ASCII file did not run all as a named orphan (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
+fi
+
+if [ "$WHY" = 0 ]; then
+  printf '  SKIP  unreadable-file arm and its mutant: running as root, where chmod 000 does not stop a read\n'
+else
+  R="$(drive "$POOL" n6 'chmod 000 aaa/f5')"
+  NEW_ARMS=$((NEW_ARMS+1))
+  if holds "$R" "$ALL5" 0 "$UNHASH"; then
+    ok "an UNREADABLE file fails the hash and the manifest is emptied — 'could not hash', all run"
+  else
+    bad "an unreadable file did not fail closed through 'could not hash' (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
+  fi
+fi
+
+R="$(drive "$POOL" n7 'printf "v2\n" > src/a.sh' stale "printf t > 'src/tab	name'")"
+NEW_ARMS=$((NEW_ARMS+1))
+if holds "$R" "$ALL5" 0 "$UNHASH"; then
+  ok "a TAB-named file git still quotes fails closed — 'could not hash', all run"
+else
+  bad "a tab-named file did not fail closed (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
+fi
+R="$(drive "$POOL" n8 'printf "v2\n" > src/a.sh' stale 'printf t > "src/back\\slash"')"
+NEW_ARMS=$((NEW_ARMS+1))
+if [ -f "$WORK/w.n8/src/back\\slash" ] && holds "$R" "$ALL5" 0 "$UNHASH"; then
+  ok "  and so does a BACKSLASH-named one"
+else
+  bad "  a backslash-named file did not fail closed, or was not seeded (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
+fi
+# AN OPTION-SHAPED NAME. Without `--`, shasum reads a top-level `-x.sh` as an unknown option,
+# exits non-zero, and the manifest is emptied on every push: correct, and the skip never fires.
+DASH_SEED='printf t > ./-x.sh'
+R="$(drive "$POOL" n9 'printf "v2\n" > src/a.sh' "" "$DASH_SEED")"
+NEW_ARMS=$((NEW_ARMS+1))
+if [ -f "$WORK/w.n9/-x.sh" ] && holds "$R" "alpha delta" 0 "SKIPPING"; then
+  ok "a top-level file named -x.sh is hashed as a file, and an edit to a mapped sibling still selects its reader (alpha) plus delta"
+else
+  bad "with a top-level -x.sh present an edit to src/a.sh did not select 'alpha delta', or -x.sh was not seeded (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
+fi
+
+# MUTANTS of the manifest and the exemption, each a LITERAL replacement with an exact expected
+# occurrence count, so a lost anchor reads as DID NOT APPLY rather than as a kill. The strings
+# travel through ENVIRON, not `-v`, which would strip a level of backslashes. Every mutant run
+# must also print the map announce, so a copy that could not be sourced cannot score a kill.
+lit_mut() { # <name> <count> <from> <to>; sets LM. Never call it inside $( ): its `bad` must count.
+  local m="$WORK/pool.lit.$1.sh"; LM=""
+  MF="$3" MT="$4" MC="$WORK/lit.$1.n" awk '
+    BEGIN { f = ENVIRON["MF"]; t = ENVIRON["MT"]; n = 0 }
+    { line = $0; o = ""
+      while ((p = index(line, f)) > 0) { o = o substr(line, 1, p - 1) t; line = substr(line, p + length(f)); n++ }
+      print o line }
+    END { print n > ENVIRON["MC"] }' "$POOL" > "$m" || { bad "MANIFEST MUTANT $1: awk DID NOT APPLY"; return 1; }
+  if [ "$(cat "$WORK/lit.$1.n" 2>/dev/null)" != "$2" ] || cmp -s "$POOL" "$m"; then
+    bad "MANIFEST MUTANT $1: anchor matched $(cat "$WORK/lit.$1.n" 2>/dev/null) time(s), not $2 — DID NOT APPLY"; return 1
+  fi
+  LM="$m"
+}
+# kill <mutant> <arm label> <result> <sel> <flag> <needle>
+killed() {
+  if ! grep -q 'read-set map: derived at' <<< "$(msg_of "$3")"; then
+    bad "MANIFEST MUTANT $1: the copy never reached apply_readset_skip — no verdict, not a kill"
+  elif holds "$3" "$4" "$5" "$6"; then
+    bad "MANIFEST MUTANT $1 SURVIVED $2: '$(sel_of "$3")' flag $(flag_of "$3")"
+  else
+    ok "MANIFEST MUTANT $1 is KILLED by $2: got '$(sel_of "$3")' flag $(flag_of "$3") — $(grep -v 'derived at' <<< "$(msg_of "$3")" | sed 's/^ *\.\. *//' | tr -d '\n' | cut -c1-90)"
+  fi
+}
+
+NEW_ARMS=$((NEW_ARMS+1))
+if lit_mut noz 1 "tr '\\n' '\\000' < \"\$out/.files\" | xargs -0 -n 200 shasum -a 256 --" \
+                    "xargs -n 200 shasum -a 256 -- < \"\$out/.files\""; then M="$LM"
+  killed noz "the after-apostrophe arm" "$(drive "$M" m.noz 'printf "v2\n" > zzz/b.sh')" "beta delta" 0 "SKIPPING"
+fi
+NEW_ARMS=$((NEW_ARMS+1))
+if lit_mut quotepath 2 "git -c core.quotePath=false ls-files" "git ls-files"; then M="$LM"
+  killed quotepath "the non-ASCII arm" "$(drive "$M" m.quotepath 'printf "c2\n" > "$CAFE"')" "$ALL5" 0 "$(NM1 "$CAFE")"
+fi
+if lit_mut nofailclosed 1 ': > "$out/.now"' ':'; then M="$LM"
+  if [ "$WHY" != 0 ]; then
+    NEW_ARMS=$((NEW_ARMS+1))
+    killed nofailclosed "the unreadable-file arm" "$(drive "$M" m.nfc6 'chmod 000 aaa/f5')" "$ALL5" 0 "$UNHASH"
+  fi
+  NEW_ARMS=$((NEW_ARMS+1))
+  killed nofailclosed "the tab-name arm" "$(drive "$M" m.nfc7 'printf "v2\n" > src/a.sh' stale "printf t > 'src/tab	name'")" "$ALL5" 0 "$UNHASH"
+else
+  NEW_ARMS=$((NEW_ARMS+1))
+fi
+NEW_ARMS=$((NEW_ARMS+1))
+if lit_mut aposdrop 1 '| readset_drop_excluded | sort -u > "$out/.paths"' \
+                         "| grep -v \"'\" | readset_drop_excluded | sort -u > \"\$out/.paths\""; then M="$LM"
+  if [ -n "$(drive "$M" m.aposdrop ':')" ] && ! hashed "$WORK/x.m.aposdrop"; then
+    ok "MANIFEST MUTANT aposdrop is KILLED by the apostrophe-hashed arm: $(grep -cF "$APOS	" "$WORK/x.m.aposdrop/seed.now") apostrophe row(s) in the manifest"
+  else
+    bad "MANIFEST MUTANT aposdrop SURVIVED the apostrophe-hashed arm, or never ran"
+  fi
+fi
+BKRE="'^(\\.claude/\\.ai-dlc-version|_bmad-output/ai-dlc-update/[^/]+)\$'"
+if lit_mut broad 1 "$BKRE" "'^(\\.claude/|_bmad-output/)'"; then M="$LM"
+  for _nm in ".claude/settings.json" "_bmad-output/ai-dlc-update/sub/x.md" "_bmad-output/other.md"; do
+    NEW_ARMS=$((NEW_ARMS+1))
+    killed broad "the near-miss arm for $_nm" "$(drive "$M" "m.broad.$(printf '%s' "$_nm" | tr '/.' '__')" "$BK; printf 'n2\n' > '$_nm'")" "$ALL5" 0 "$(NM1 "$_nm")"
+  done
+else
+  NEW_ARMS=$((NEW_ARMS+3))
+fi
+if lit_mut somebk 1 'if [ -s "$out/.orphan" ]; then' \
+         "if [ -s \"\$out/.orphan\" ] && ! grep -qE $BKRE \"\$out/.changed\"; then"; then M="$LM"
+  for _nm in ".claude/settings.json" "_bmad-output/ai-dlc-update/sub/x.md" "_bmad-output/other.md"; do
+    NEW_ARMS=$((NEW_ARMS+1))
+    killed somebk "the near-miss arm for $_nm" "$(drive "$M" "m.somebk.$(printf '%s' "$_nm" | tr '/.' '__')" "$BK; printf 'n2\n' > '$_nm'")" "$ALL5" 0 "$(NM1 "$_nm")"
+  done
+else
+  NEW_ARMS=$((NEW_ARMS+3))
+fi
+NEW_ARMS=$((NEW_ARMS+1))
+if lit_mut wholeskip 1 'if [ -s "$out/.orphan" ]; then' \
+         "if ! grep -qvE $BKRE \"\$out/.changed\"; then READSET_NO_CHANGE=1; return 0; fi; if [ -s \"\$out/.orphan\" ]; then"; then M="$LM"
+  killed wholeskip "the bookkeeping-only arm" "$(drive "$M" m.wholeskip "$BK")" "delta stamp" 0 "SKIPPING"
+fi
+# The exemption pattern without its leading `^` drops a nested stamp too; only the nested
+# near-miss can see it.
+NEW_ARMS=$((NEW_ARMS+1))
+if lit_mut nocaret 1 "grep -vE '^(\\.claude" "grep -vE '(\\.claude"; then M="$LM"
+  killed nocaret "the nested near-miss arm" "$(drive "$M" m.nocaret "$BK; printf 'version: 2\n' > '$NESTED'")" "$ALL5" 0 "$(NM1 "$NESTED")"
+fi
+# Without the quoted-path test a tab-named file is listed in its quoted spelling, never reaches
+# `.files`, and the line counts still agree, so the manifest is NOT emptied.
+NEW_ARMS=$((NEW_ARMS+1))
+if lit_mut noquote 1 " || grep -q '^\"' \"\$out/.paths\"" ""; then M="$LM"
+  killed noquote "the tab-name arm" "$(drive "$M" m.noquote 'printf "v2\n" > src/a.sh' stale "printf t > 'src/tab	name'")" "$ALL5" 0 "$UNHASH"
+fi
+# Without `--`, a top-level -x.sh is an unknown option to shasum and the manifest is emptied.
+NEW_ARMS=$((NEW_ARMS+1))
+if lit_mut nodashdash 1 "shasum -a 256 -- >" "shasum -a 256 >"; then M="$LM"
+  killed nodashdash "the option-shaped-name arm" "$(drive "$M" m.nodashdash 'printf "v2\n" > src/a.sh' "" "$DASH_SEED")" "alpha delta" 0 "SKIPPING"
+fi
+
+# UNMUTATED CONTROL for the battery above, driven by the same helper: a baseline row must be
+# THERE, so a drive that died for a harness reason cannot pass as the clean case.
+R="$(drive "$POOL" ctl2 'printf "v2\n" > zzz/b.sh')"
+NEW_ARMS=$((NEW_ARMS+1))
+if holds "$R" "beta delta" 0 "SKIPPING" && grep -q 'read-set map: derived at' <<< "$(msg_of "$R")"; then
+  ok "CONTROL: the unmutated block, driven the same way, selects 'beta delta' and announces the map — the manifest kills are attributable"
+else
+  bad "CONTROL: the unmutated block did not reproduce 'beta delta' through drive() — every manifest mutant is unattributable"
 fi
 
 # ------------------------------------------------------- the deriver's map merge ----
@@ -1221,7 +1529,7 @@ fi
 # mistake: it printed two thirds of its arms, never reached a verdict line, and exited 0 --
 # which the suite's worker records as `ok`. A fixture that dies silently reads exactly like one
 # that passed, so the arm count is asserted against the number this file actually carries.
-EXPECTED=$(( 18 + MERGE_ARMS + CONTROL_ARMS + TRACE_ARMS + BOTH_ARMS ))
+EXPECTED=$(( 18 + NEW_ARMS + MERGE_ARMS + CONTROL_ARMS + TRACE_ARMS + BOTH_ARMS ))
 if [ "$asserts" -lt "$EXPECTED" ]; then
   printf '  FAIL  only %s assertions ran; this fixture carries %s — it exited early and a short green run reads exactly like a passing one\n' "$asserts" "$EXPECTED"
   fails=$((fails+1))

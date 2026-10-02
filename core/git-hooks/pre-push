@@ -389,8 +389,9 @@ FAILLOG_KEEP=20
 # EVERY BRANCH THAT CANNOT JUSTIFY A SKIP RUNS EVERYTHING. Under-recording one path does not
 # make the suite slow, it makes it SILENTLY SHORT: a fixture that never ran reports nothing
 # and the summary still says green. So absence of evidence is spelled "run it" at every step
-# -- no map, no state, an unreadable either, a changed path no fixture is known to read, or a
-# fixture with no entry of its own.
+# -- no map, no state, an unreadable either, a manifest that hashed fewer files than it listed,
+# a changed path no fixture is known to read (the update skill's own bookkeeping excepted, see
+# the orphan test), or a fixture with no entry of its own.
 # Hash every path whose change could matter, into "$1/.now" as `path<TAB>sha`.
 #
 # THE SUBJECT IS TRACKED FILES *PLUS* EVERY PATH THE MAP NAMES. Tracked files are in it so a
@@ -474,7 +475,7 @@ readset_drop_excluded() { # reads stdin, writes stdout
 }
 
 readset_manifest() {
-  local out="$1"
+  local out="$1" hash_rc
   # UNTRACKED-BUT-UNIGNORED FILES ARE IN THE UNIVERSE, AND THE WHOLE-SUITE SKIP BELOW IS WHY.
   # `git ls-files` alone answers about the COMMITTED tree, which is the right population for
   # "what am I pushing" and the wrong one for "what will a fixture read": a fixture reads the
@@ -484,13 +485,27 @@ readset_manifest() {
   # Git-ignored paths stay out, for the reason the content key states about the same set:
   # hooks and fixtures WRITE INTO them while the suite runs, so a universe covering them would
   # differ from itself across the very run it is keyed on.
-  { git ls-files 2>/dev/null
-    git ls-files --others --exclude-standard 2>/dev/null
+  #
+  # A MANIFEST THAT HASHED LESS THAN IT LISTED IS EMPTIED, so the guard in apply_readset_skip
+  # runs everything. `xargs` without `-0` stops at the first apostrophe in a filename and the
+  # files after it were never hashed -- measured on the reference consumer, 9600 of 12561, so an
+  # edit to any later path read as "nothing changed" and skipped the whole suite. A name git
+  # still has to quote (tab, newline, `"` or `\`) cannot be hashed by its listed spelling, and
+  # an unreadable file fails shasum; both empty it too, so such a file runs the whole suite on
+  # every push until it is renamed or made readable. `--` ends shasum's options, so a top-level
+  # name beginning with `-` is hashed as a file rather than refused as an option.
+  { git -c core.quotePath=false ls-files 2>/dev/null
+    git -c core.quotePath=false ls-files --others --exclude-standard 2>/dev/null
     [ -s "$READSET_MAP" ] && grep -v '^#' "$READSET_MAP" | cut -f2
   } | grep -v '^\.git/' | grep -v '^\.git$' | readset_drop_excluded | sort -u > "$out/.paths"
   while IFS= read -r p; do [ -f "$p" ] && printf '%s\n' "$p"; done < "$out/.paths" > "$out/.files"
-  xargs -n 200 shasum -a 256 < "$out/.files" 2>/dev/null \
-    | awk '{ path = $0; sub(/^[0-9a-f]+  /, "", path); print path "\t" $1 }' | sort > "$out/.now"
+  tr '\n' '\000' < "$out/.files" | xargs -0 -n 200 shasum -a 256 -- > "$out/.sums" 2>/dev/null
+  hash_rc=$?
+  awk '{ path = $0; sub(/^[0-9a-f]+  /, "", path); print path "\t" $1 }' "$out/.sums" | sort > "$out/.now"
+  if [ "$hash_rc" -ne 0 ] || grep -q '^"' "$out/.paths" \
+     || [ "$(wc -l < "$out/.now")" -ne "$(wc -l < "$out/.files")" ]; then
+    : > "$out/.now"
+  fi
 }
 
 # The deriver lands under a different parent on each side (install.sh copies core/scripts/<x>
@@ -642,7 +657,12 @@ apply_readset_skip() {
   # through the other side of the same join.
   grep -v '^#' "$READSET_MAP" | cut -f2 | grep -v '^\.git/' | grep -v '^\.git$' \
     | readset_drop_excluded | sort -u > "$out/.universe"
-  comm -23 "$out/.changed" "$out/.universe" > "$out/.orphan"
+  # EXCEPT THE UPDATE SKILL'S OWN BOOKKEEPING: the version stamp and the flat files directly
+  # under `_bmad-output/ai-dlc-update/`, which every reconcile commit writes. A fixture the map
+  # names as their reader is still selected below. The pattern is exact; anything else beside
+  # them, a subdirectory under that path included, still runs all.
+  comm -23 "$out/.changed" "$out/.universe" \
+    | grep -vE '^(\.claude/\.ai-dlc-version|_bmad-output/ai-dlc-update/[^/]+)$' > "$out/.orphan"
   if [ -s "$out/.orphan" ]; then
     printf '   ..    read-set map: %s changed path(s) are in NO fixture read-set (e.g. %s) -- running all %s\n' \
       "$(grep -c . "$out/.orphan")" "$(head -1 "$out/.orphan")" "$n_all"
