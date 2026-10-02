@@ -19,6 +19,34 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.701.0] - 2026-10-01
+
+Batch 181's ninth release: `retired-layer-token.sh`, `layer-drift.sh`, `unregistered-drift.sh` and
+`retired-fixtures.sh`. Machinery, so it ships as its own file set; a consumer runs its installed copy, so this
+takes effect on the pull after the one that delivers it.
+
+### Backlog
+
+- `BL-411`: a 125 from the reconcile memo (`memo_ls_tree`/`memo_show`, a cached blob, listing or status that
+  cannot be served) now refuses by name at every caller that read it. On base it became a clean or false result
+  at exit 0 at five callers: `show_at`'s `|| true` (a false retired-token row, or five true rows dropped),
+  `rulebook_files_of`'s `|| true` (a false `EXTENSION-TITLE-MATCHES-CORE`), and two sites where a reader's own exit
+  1 on empty input outranked the 125 under `pipefail` — `layer-drift` `base_anchors` (a pre-existing duplicate
+  reported as `EXTENSION-RETIRE-CANDIDATE`) and `unregistered-drift` `closest_ancestor_blob` (`HARD-CORE-BEHIND`
+  reported as `HARD-UNREGISTERED-CORE-DRIFT`). `files_at` already refused through its empty-set guard and now
+  names the memo. A `retired-fixtures` listing served and then failed doubled every orphan row; it now emits
+  `HARD-RETIRED-FIXTURE-SCAN-UNAVAILABLE`. No legitimate memo state reads as 125: an empty blob stays rc 0.
+- `layer-drift.sh`: once a row is lost to a failed write, `ld_refuse` hands the exit to `ld_finish`, so the named
+  write failure (exit 2) is reported rather than a later read of leaked stdout. A memo 125 is no longer also
+  called a staging failure. `unregistered-drift.sh`'s exit contract names its read refusal (exit 2).
+- `BL-364` (partial): three listing sites pass `-c core.quotePath=false`; the count site at `unregistered-drift`
+  only compares to zero, and a C-quoted line still counts once, so no non-ASCII cell can discriminate there.
+- `BL-360` (partial): the here-strings in `retired-layer-token.sh` and `unregistered-drift.sh` are converted, with
+  forced cells.
+- Cells in `retired-layer-token`, `layer-title-join`, `layer-absorption-retire`, `setup-config-drift`,
+  `retired-fixture-orphan`, `procsub-staged-refusal` and `procsub-staged-refusal-boot`, each failing on the base
+  engines for the stated reason.
+
 ## [0.700.0] - 2026-10-01
 
 Batch 181's eighth release: `predicate-differential.sh` and `predicate-sites.md`, with text-only hunks in
