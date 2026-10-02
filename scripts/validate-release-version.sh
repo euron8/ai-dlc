@@ -160,8 +160,8 @@
 #      canonical lines. Controls in the same run: a synthetic `  - not discharged:`
 #      line fires, 1685 `Co-Authored-By:` lines are found, an impossible token
 #      returns 0. The narrowing that got it there: the phrase occurs 3 times
-#      ANYWHERE in a line, all mid-sentence prose ("discharged by an archived
-#      entry"), so the grammar is LINE-LEADING only -- the engine's own form is
+#      ANYWHERE in a line, all mid-sentence prose (e.g. 7665d11a, "The candidate
+#      is NOT discharged."), so the grammar is LINE-LEADING only -- the engine's own form is
 #      column-0, and a mid-line phrase is something neither side treats as a
 #      citation. The self-probe below pins that acquittal.
 #
