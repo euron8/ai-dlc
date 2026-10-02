@@ -85,7 +85,8 @@ SELF="$(cd "$(dirname "$0")" && pwd)"
 
 # --- THE SHARED CROSS-PROCESS MEMO, OWNED HERE FOR THE WHOLE RENDER --------------------------
 #
-# batch 121: a single `render()` call below makes exactly 4 distinct git calls itself, and shells
+# batch 121: a single `render()` call below makes 4 distinct git calls itself -- up to 6 when the
+# stamp's `commit:` is not string-equal to BASE, which is every real render (stamps are short) -- and shells
 # out to roughly a dozen INDEPENDENT reconcile/*.sh sub-detector SCRIPTS (preclassify.sh,
 # hard-blockers.sh -> layer-drift.sh + unregistered-drift.sh, retired-tokens.sh once per CLASSIFY
 # file, relabel-extension-checks.sh, ledger-reverify.sh, predicate-differential.sh,
@@ -172,9 +173,20 @@ render() {
   printf '\n_base_ `%s` → _theirs_ `%s`.\n' "$BASE" "$THEIRS"
   # THE BASE IS TAKEN ON FAITH WHILE THE TREE RECORDS THE ANSWER. `THEIRS` is rev-parsed and
   # refused if it does not resolve; `BASE` is `${2:?}` and validated nowhere, against a stamp whose
-  # `commit:` field is exactly "the ref this tree was last reconciled to". Nothing in this pipeline
-  # compares the two -- the stamp is read in four scripts and every one of them reads
-  # `skill_commit`, never `commit`, except the post-write read-back in `apply.sh`.
+  # `commit:` field is exactly "the ref this tree was last reconciled to". The block below is the
+  # one place that compares the two; the stamp is read in four other scripts and every one of them
+  # reads `skill_commit`, never `commit`, except the post-write read-back in `apply.sh`.
+  #
+  # COMPARED AS COMMITS, NEVER AS STRINGS. Both stamp writers (`apply.sh`'s re-stamp and
+  # `install.sh`) record `rev-parse --short`, while BASE is whatever the caller typed -- a full sha,
+  # a short one, a tag -- so a string comparison put a false row in every consumer report. A
+  # string-equal pair is settled without git; otherwise both sides are peeled with `^{commit}`
+  # (an annotated tag BASE names its commit, not the tag object) and compared as full object ids.
+  # Never a prefix match, a case fold or a `core/` tree comparison: a docs-only commit shares its
+  # `core/` tree with its parent and is still a different base. A stamp that does not resolve --
+  # `<sha>-dirty`, `unknown`, garbage -- STILL renders the row: it records no base this render can
+  # confirm. Every failed `rev-parse` is absorbed by its `||`, so none reaches `pipefail`.
+  # The verdict depends on DIST's object store: a stamp naming a commit DIST does not hold renders the row.
   #
   # THE TRAP IS THAT THE STAMP CARRIES TWO SHA-SHAPED FIELDS AND BOTH LOOK LIKE PLAUSIBLE BASES.
   # Measured on the reference consumer, three times in one session: a cycle run with the PREVIOUS
@@ -192,7 +204,17 @@ render() {
   _rendered_stamp="$CONSUMER/.claude/.ai-dlc-version"
   if [ -f "$_rendered_stamp" ]; then
     _rendered_base="$(sed -n 's/^commit:[[:space:]]*\([^[:space:]]*\).*/\1/p' "$_rendered_stamp" | head -1)"
-    if [ -n "$_rendered_base" ] && [ "$_rendered_base" != "$BASE" ]; then
+    _stamp_moved=0
+    if [ -n "$_rendered_base" ] && ! [ "$BASE" = "$_rendered_base" ]; then
+      _stamp_obj="$(git -C "$DIST" rev-parse -q --verify "${_rendered_base}^{commit}" 2>/dev/null)" || _stamp_obj=""
+      if [ -z "$_stamp_obj" ]; then
+        _stamp_moved=1
+      else
+        _base_obj="$(git -C "$DIST" rev-parse -q --verify "${BASE}^{commit}" 2>/dev/null)" || _base_obj=""
+        [ "$_stamp_obj" = "$_base_obj" ] || _stamp_moved=1
+      fi
+    fi
+    if [ "$_stamp_moved" -eq 1 ]; then
       printf '_stamp_ records `commit: %s`, which is NOT the base above — re-derive the base before trusting this range.\n' "$_rendered_base"
     fi
   fi
