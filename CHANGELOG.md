@@ -19,6 +19,36 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.702.0] - 2026-10-01
+
+Batch 181's tenth release: the rulebook's fan-out rule, and one validator arm. Rulebook files, not machinery, so a
+consumer pull carries them through the gated apply.
+
+### `PC-S316-PARTY-FANOUT-OVER-HARNESS-CONCURRENT-SUBAGENT-CAP`
+
+- `core/skills/ai-dlc/rule-bodies/rule-28.md` ("Split dispatch") owns dispatch in WAVES. The harness runs a fixed
+  number of subagents at once per session (`CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`; its rejection text carries the
+  live value), frees a slot when an agent exits rather than when its deliverable lands, and rejects every spawn
+  past the cap with "Do not retry". Until a rejection has shown the cap, the first wave is the whole set and its
+  rejections are the probe; after that a wave is at most the cap minus agents already running.
+- A rejected spawn is undelivered. It is never armed in `wait-for-deliverable.sh`, and it is re-dispatched only
+  after a bounded-join beat returns a `DELIVERED` line, never in the next message: a re-dispatch waits for evidence
+  of progress, which is not the immediate re-spawn into a full pool the harness forbids. A spawn rejected twice
+  waits for a further fresh `DELIVERED`. A wave that launched nothing arms one beat over every outstanding path from
+  earlier waves; with none outstanding, the cap is held by agents the round does not own, and the lead HARD_BLOCKs
+  naming them. One beat covers every outstanding path from all waves; re-dispatched paths are armed without
+  `--reset`. None of this spends the Rule 20 re-dispatch.
+- The lead records a round-start epoch (`fan-out round <subject> since <epoch>`) in the snapshot's Open Items before
+  wave 1, kept until the round's join completes, and every beat passes `--since <epoch>`. The party-mode join in
+  `_gate-procedures.md` derives the expected (seat, ordinal) set, names the missing members, and counts as delivered
+  only what such a beat reports, so a compaction mid-round cannot re-arm a delivered path into a wait.
+- Nine "in ONE message" dispatch imperatives cite Rule 28's waves instead (`rule-24.md`, `rule-29.md`,
+  `_dispatch-protocol.md`, `implementation.md`, `_gate-procedures.md`).
+- `scripts/validate-enforcement-map.sh` arm `I119` refuses a dispatch imperative "in one message" or "in a single
+  message" across the rulebook, the consumer `CLAUDE.md` template and the hooks. Its self-probe fires on six
+  offenders (inline, wrapped across a line, emphasised, a hook `echo`, a template bullet) and stays quiet on six
+  near-misses ("in the same message", "one message each"), before the corpus is read.
+
 ## [0.701.0] - 2026-10-01
 
 Batch 181's ninth release: `retired-layer-token.sh`, `layer-drift.sh`, `unregistered-drift.sh` and
