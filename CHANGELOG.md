@@ -19,6 +19,33 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.713.0] - 2026-10-02
+
+Batch 186's third release: the update skill's step-8 drain. Bootstrapping, so it ships alone. It activates on the
+first pull whose self-update lands; under `SELF-UPDATE-DEFER` the old step 8 runs and behaves as before, with no false
+refusal. `BL-024` closes in the batch's close commit. No consumer candidate is discharged: the reference consumer's
+ledger row for its `implementation-push` extension becomes closable by the consumer, which annotates it by hand.
+
+### BL-024: step 8 drains `push_candidate` blocks through a reader that honours a refusal record
+
+- Step 8 drained every `push_candidate: true` extension into the push-candidate ledger by hand, so a block upstream
+  had already refused or absorbed was re-proposed on every pull and its ledger row could never close. New
+  `reconcile/push-drain.sh <dist> <theirs> <consumer>` splits each candidate extension into blocks at `##`/`###`
+  headings, digests each block over whitespace-collapsed text, and joins the digests against
+  `reconcile/push-refusals.tsv` read at `theirs`, never from the installed copy. It emits one `PUSH-REFUSED` or
+  `PUSH-CANDIDATE` row per block. Candidates are found from frontmatter only, CR-tolerant. A missing ref, a malformed
+  or duplicate record row, unterminated frontmatter, a missing extensions directory, or a failed write refuses with
+  exit 2 and a `push-drain: REFUSED —` line; zero candidates in an existing directory is a NOTE.
+- The record holds five rows: the reference consumer's three refused `implementation-push` blocks and the two blocks
+  core has absorbed. On that consumer's 14 candidate files the reader reports 5 refused and 23 candidate.
+- Step 8 drains only `PUSH-CANDIDATE` rows, drains nothing when the reader exits non-zero, and closes an entry whose
+  live blocks are all refused with the existing `**CLOSED AS REJECTED — BY DESIGN, adjudicated <date>**` form, by hand.
+  Its close rule now names both closes in one sentence.
+- New shipping fixture `core/fixtures/push-drain-refusals`: 21 arms in both layouts, an arm proving the record is read
+  at `theirs` rather than the distribution's `HEAD`, and eleven mutants, each killed by a named arm. `FORK_BUDGET`
+  rises 3165 → 3172 for the new reconcile script, measured base 3159 against tip 3166.
+- `self-update-gate.sh`'s comments on why its record leaves the tree now hold under both the old hook and 0.712.0's.
+
 ## [0.712.0] - 2026-10-02
 
 Batch 186's second release: the fixture-suite skip machinery in both pre-push hooks. Not bootstrapping. It discharges
