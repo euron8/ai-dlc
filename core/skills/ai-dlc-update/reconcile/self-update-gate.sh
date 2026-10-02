@@ -322,10 +322,15 @@ gate_exit_cleanup() {
     # assembled under `$TMP` for the whole run; a file under `_bmad-output/ai-dlc-update/` is
     # untracked and unignored on the reference consumer, and its hook builds the read-set
     # universe from `git ls-files --others --exclude-standard` — so a record written IN PLACE
-    # before the probe is a changed path in no fixture's read-set, and the hook takes its
-    # run-everything branch on every probe. Measured on a shared clone, one settled tree: 30s
-    # with no record on disk, 257s with one record-shaped file added, 30s again with it removed.
-    # Every claimed warm-cost figure was unreachable by construction until this move.
+    # before the probe is a changed path in no fixture's read-set. A hook predating the
+    # bookkeeping exemption (the orphan test in `core/git-hooks/pre-push`) takes its
+    # run-everything branch on every probe; a hook carrying that exemption drops such a flat
+    # file from the orphan set. The move out of the tree stays either way, because the probe
+    # runs the consumer's INSTALLED hook, which on the pull delivering the exemption is still
+    # the old one. Measured under a hook without the exemption, on a shared clone, one settled
+    # tree: 30s with no record on disk, 257s with one record-shaped file added, 30s again with
+    # it removed. Under such a hook every claimed warm-cost figure was unreachable by
+    # construction until this move.
     #
     # NEVER OVER AN EXISTING RECORD. The name carries a whole-second timestamp, so a second
     # invocation landing inside the same second — a nested classify with its guard removed, or
@@ -1107,17 +1112,20 @@ done < "$TMP/invoked"
 # COST, MEASURED ON THE REFERENCE CONSUMER'S OWN HOOK, fed this line, from a shared clone:
 # 303s with no verified-state record, 244s on the next run (its read-set map could not
 # attribute the changed paths), 30s once the skip engaged. THE THIRD FIGURE WAS UNREACHABLE
-# UNTIL THE RECORD MOVED OUT OF THE TREE: an earlier cut wrote the verdict record in place
-# under `_bmad-output/` BEFORE this probe, the hook's read-set skip saw an untracked path no
-# fixture reads, and every probe ran all 179 fixtures — 287s, 257s, 247s across three runs on a
-# settled tree where the bare hook took 30s. The record is now assembled under `$TMP` and
-# moved into the consumer at exit; the reasoning is at that move. Re-measured after the move:
-# 37s on a settled clone. AND THE NEXT RUN READ 257s, because the record the first run moved
-# in at exit was still UNTRACKED when the second probe fired — the same skip defeat, one gate
-# later. This probe writes nothing before the hook runs; it cannot make the tree settled.
+# UNTIL THE RECORD MOVED OUT OF THE TREE, under a hook without the bookkeeping exemption: an
+# earlier cut wrote the verdict record in place under `_bmad-output/` BEFORE this probe, the
+# hook's read-set skip saw an untracked path no fixture reads, and every probe ran all 179
+# fixtures — 287s, 257s, 247s across three runs on a settled tree where the bare hook took 30s.
+# The record is now assembled under `$TMP` and moved into the consumer at exit; the reasoning,
+# and what a hook carrying the exemption changes, is at that move. Re-measured after the move,
+# still under a hook without the exemption: 37s on a settled clone. AND THE NEXT RUN READ 257s,
+# because the record the first run moved in at exit was still UNTRACKED when the second probe
+# fired — the same skip defeat, one gate later. This probe writes nothing before the hook runs;
+# it cannot make the tree settled.
 # Step 2 commits the record in the self-update commit, and a DEFER leaves it for the consumer's
 # next commit, so on a real consumer the warm figure holds for a probe on a committed tree and
-# the cold one for any tree carrying an untracked path no fixture reads. The push this cycle
+# the cold one for any tree carrying an untracked path no fixture reads and the installed hook
+# does not exempt. The push this cycle
 # makes pays the same hook, so the probe adds one hook run per pull and removes the one that
 # would have stranded a branch.
 if [ -z "${AI_DLC_GATE_IN_SAFE_STOP:-}" ] \

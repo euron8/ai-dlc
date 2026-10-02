@@ -2423,9 +2423,11 @@ declared sites, not everywhere unconditionally.
      push-candidate ledger for a later upstream push-mine (spec §8.1). A `PUSH-REFUSED` row is a
      block upstream already adjudicated and declined; re-proposing it re-opens a settled verdict.
      A block whose body has changed since it was refused digests differently and comes back as a
-     `PUSH-CANDIDATE`, which is correct: it is a new proposal. **On exit 2 the reader REFUSED**:
-     report its `push-drain: REFUSED —` line and drain NOTHING from this run, because a partial
-     or unread record re-proposes refused blocks exactly as the prose drain did.
+     `PUSH-CANDIDATE`, which is correct: it is a new proposal. **On any non-zero exit the reader
+     REFUSED** — its own refusals exit 2, and a closed stdout under the default SIGPIPE
+     disposition exits 141 with no line: report its `push-drain: REFUSED —` line where there is
+     one and drain NOTHING from this run, because a partial or unread record re-proposes refused
+     blocks exactly as the prose drain did.
    - **Drain the defects this run found in UPSTREAM's own tooling** into the same ledger,
      one entry each, with a `verify:` line. Every other drain here moves a CONSUMER
      artifact; this is the other source, and it had no path. A pull is the best detector
@@ -2470,18 +2472,19 @@ declared sites, not everywhere unconditionally.
      **Do NOT delete the entry** — retro and the
      §8.1 fan-in read it. The annotation is an `Edit` under `_bmad-output/ai-dlc-update/**`
      (the updater's own directory, carved out of the Rule 29 acknowledge hook), never a
-     Bash write, and never automatic. Close ONLY `CLOSE-CANDIDATE` rows; a `NEEDS-REVIEW`
-     row is never a close, whatever its detail says.
+     Bash write, and never automatic. Close ONLY `CLOSE-CANDIDATE` rows, or an entry the
+     push-drain bullet below finds all-refused; a `NEEDS-REVIEW` row is never a close, whatever
+     its detail says.
+   - **An entry whose every live block reads `PUSH-REFUSED`** in this run's
+     `push-drain.sh` output can never close on its receipt, because upstream will never ship
+     what it declined. Annotate it by hand with `**CLOSED AS REJECTED — BY DESIGN, adjudicated
+     <date>**`, the same manual `Edit` and never automatic, as the close bullet above requires.
+     Do this only when every block of the entry's extension is refused; one `PUSH-CANDIDATE`
+     block leaves the entry open.
    - **Every other status in the push-candidate heading has a disposition here, and none of
      them is a close.** `reconcile/emit-report.sh` renders the set the operator acts on and
      this is the step that acts, so a status named there and not here is a duty with no actor.
      Step 3f says what each status MEANS; these say what to DO with it.
-     - **An entry whose every live block reads `PUSH-REFUSED`** in this run's
-       `push-drain.sh` output can never close on its receipt, because upstream will never ship
-       what it declined. Annotate it by hand with `**CLOSED AS REJECTED — BY DESIGN, adjudicated
-       <date>**`, the same manual `Edit` and never automatic, as the close bullet above requires.
-       Do this only when every block of the entry's extension is refused; one `PUSH-CANDIDATE`
-       block leaves the entry open.
      - `NAMED-UPSTREAM` — upstream's history names the id. Read the named commit and decide
        whether it ABSORBED the entry or recorded a rejection or a split. On absorption,
        annotate by hand in the form `ledger-rotate.sh` accepts — bolded, version immediately

@@ -94,7 +94,7 @@ gcommit() { git -C "$1" -c user.email=f@f -c user.name=f -c commit.gpgsign=false
 # drive <reader> <world-dir> -- builds a fresh world, runs every arm, writes <world>/arms.
 # Returns 2 when the world itself could not be built (never a verdict about the reader).
 drive() {
-  local R="$1" W="$2" C E D dA dC dD good mal dup rc O
+  local R="$1" W="$2" C E D dA dB dC dD good mal dup alt rc O
   mkdir -p "$W/dist/core/skills/ai-dlc-update/reconcile" "$W/c/$X" "$W/c/$EXTREL/checks" || return 2
   CUR="$W/arms"; : > "$CUR" || return 2
   C="$(cd "$W/c" && pwd)" || return 2
@@ -117,7 +117,8 @@ drive() {
   dA="$(dg "$R" "$E/x-push.md" "## A refused")"
   dC="$(dg "$R" "$E/w-push.md" "## C kept title")"
   dD="$(dg "$R" "$E/m-push.md" "## D moved")"
-  [ -n "$dA" ] && [ -n "$dC" ] && [ -n "$dD" ] || return 2
+  dB="$(dg "$R" "$E/x-push.md" "## B unnamed")"
+  [ -n "$dA" ] && [ -n "$dB" ] && [ -n "$dC" ] && [ -n "$dD" ] || return 2
   printf '%s\n' "$dA" "$dC" "$dD" > "$W/.digests"
   printf -- '---\nid: w-push\npush_candidate: true\n---\n\n## C kept title\n\ngamma body TWO.\n' > "$E/w-push.md"
   printf -- '---\nid: m-push\npush_candidate: true\n---\n\n## E new\n\nepsilon body.\n\n## D moved\n\ndelta body.\n' > "$E/m-push.md"
@@ -135,6 +136,11 @@ drive() {
   mal="$(git -C "$D" rev-parse HEAD)" || return 2
   cp "$W/rec.dup" "$D/$RECREL" && gcommit "$D" dup || return 2
   dup="$(git -C "$D" rev-parse HEAD)" || return 2
+  # The dist's HEAD is a WELL-FORMED record that differs from every ref under test: the good
+  # record plus a row refusing x-push block 2. Only a reader of HEAD sees that row (A19).
+  { cat "$W/rec.good"; printf '%s\tx-push\trefused only at HEAD\n' "$dB"; } > "$W/rec.alt"
+  cp "$W/rec.alt" "$D/$RECREL" && gcommit "$D" alt || return 2
+  alt="$(git -C "$D" rev-parse HEAD)" || return 2
   printf '%s\n' "$good" > "$W/.ref.good"; printf '%s\n' "$mal" > "$W/.ref.mal"; printf '%s\n' "$dup" > "$W/.ref.dup"
   # The working tree holds the record of whichever ref is being read, so a reader of the WORKING
   # TREE fails only the arm built to separate the two (A10).
@@ -178,6 +184,16 @@ drive() {
     eval '[ "$rc" -eq 0 ] && has_row "$W/out.a10" PUSH-REFUSED "$X/x-push.md" 1 "$dA" "## A refused"'
   cp "$W/rec.good" "$D/$RECREL" || return 2
 
+  # ---- A19: the record is read at THEIRS, not at the dist's HEAD. The working tree holds the
+  # good record, so a working-tree reader passes here and only a HEAD reader fails; the arm
+  # first asserts the two sides differ (HEAD is not theirs, and HEAD's record refuses dB).
+  local recH recG
+  recH="$(git -C "$D" show "HEAD:$RECREL")" || return 2
+  recG="$(git -C "$D" show "${good}:$RECREL")" || return 2
+  rc=0; bash "$R" "$D" "$good" "$C" > "$W/out.a19" 2>/dev/null || rc=$?
+  chk A19 "a dist HEAD carrying a different well-formed record does not refuse x-push block 2 at theirs" \
+    eval '[ "$alt" != "$good" ] && [ "$(git -C "$D" rev-parse HEAD)" = "$alt" ] && grep -qF "$dB" <<<"$recH" && ! grep -qF "$dB" <<<"$recG" && [ "$rc" -eq 0 ] && has_row "$W/out.a19" PUSH-CANDIDATE "$X/x-push.md" 2 "*" "## B unnamed"'
+
   # ---- exit-2 arms; the main run (A0) is their exit-0 twin.
   rc=0; bash "$R" "$D" refs/heads/no-such-ref "$C" > "$W/out.a11" 2> "$W/err.a11" || rc=$?
   chk A11 "a theirs ref resolving to no commit exits 2 with a REFUSED line and no rows" \
@@ -216,7 +232,7 @@ echo "push-drain-refusals -- reader: $RD"
 drive "$RD" "$WORK/real" || broken "the world for the shipped reader could not be built"
 cat "$WORK/real/arms"
 n_arms="$(grep -c . "$WORK/real/arms" || true)"
-[ "$n_arms" -eq 20 ] || broken "expected 20 arm lines from the shipped reader, got $n_arms"
+[ "$n_arms" -eq 21 ] || broken "expected 21 arm lines from the shipped reader, got $n_arms"
 n_bad="$(grep -c '^FAIL' "$WORK/real/arms" || true)"
 fails=$((fails + n_bad))
 
@@ -250,6 +266,7 @@ mut_prog() { # mut_prog <id> -> the awk program for that mutant
     M8)  echo '{ if (index($0, "[ \"$pc\" = \"true\" ] || continue")) { $0 = "  [ -n \"$pc\" ] || continue"; n++ } print } END { exit (n == 1 ? 0 : 4) }' ;;
     M9)  echo '{ if (index($0, "[ \"$pc\" = \"true\" ] || continue")) { $0 = "  grep -q \"^push_candidate: true\" \"$f\" || continue"; n++ } print } END { exit (n == 1 ? 0 : 4) }' ;;
     M10) echo '{ if (index($0, "pd_is_refused() {") == 1) { $0 = "pd_is_refused() { return 1; }"; n++ } print } END { exit (n == 1 ? 0 : 4) }' ;;
+    M11) echo '{ if (index($0, "show \"${THEIRS_SHA}:${REC}\" > \"$PD_T/rec\"")) { sub(/\$\{THEIRS_SHA\}:/, "HEAD:"); n++ } print } END { exit (n == 1 ? 0 : 4) }' ;;
   esac
 }
 # id|owner arm|what the mutant does
@@ -262,7 +279,8 @@ M6|A3|path+title-keyed
 M7|A4|path+index-keyed
 M8|A6|ignores the flag value: any push_candidate key is a candidate
 M9|A7|discovers candidates by a whole-file grep, not the frontmatter
-M10|A5|never looks a digest up: every block is a candidate'
+M10|A5|never looks a digest up: every block is a candidate
+M11|A19|reads the record at the dist HEAD, not at theirs'
 
 run_mut() { # run_mut <id> -> sets MP; returns non-zero if the mutant could not be built
   local prog
@@ -274,12 +292,12 @@ run_mut() { # run_mut <id> -> sets MP; returns non-zero if the mutant could not 
 MP=""; run_mut CTL || broken "the unmutated control copy could not be built"
 [ -n "$MP" ] && [ -f "$MP" ] || broken "the unmutated control copy path is empty"
 drive "$MP" "$WORK/w-CTL" || broken "the world for the unmutated control could not be built"
-if grep -q '^FAIL' "$WORK/w-CTL/arms" || [ "$(grep -c '^ok' "$WORK/w-CTL/arms" || true)" -ne 20 ]; then
-  echo "FAIL  CTL  the unmutated copy did not pass all 20 arms -- every mutant verdict below would be unreadable"
+if grep -q '^FAIL' "$WORK/w-CTL/arms" || [ "$(grep -c '^ok' "$WORK/w-CTL/arms" || true)" -ne 21 ]; then
+  echo "FAIL  CTL  the unmutated copy did not pass all 21 arms -- every mutant verdict below would be unreadable"
   sed 's/^/        /' "$WORK/w-CTL/arms"
   fails=$((fails + 1))
 else
-  echo "ok    CTL  an unmutated copy of the reader passes all 20 arms"
+  echo "ok    CTL  an unmutated copy of the reader passes all 21 arms"
 fi
 
 killed=0; n_mut=0
@@ -300,10 +318,10 @@ while IFS='|' read -r mid owner what; do
     echo "FAIL  $mid  SURVIVED its owner arm $owner (fail set: ${fset:-none}) -- $what"; fails=$((fails + 1))
   fi
 done <<<"$MUTANTS"
-[ "$n_mut" -eq 10 ] || broken "expected 10 mutants, iterated $n_mut"
+[ "$n_mut" -eq 11 ] || broken "expected 11 mutants, iterated $n_mut"
 
 if [ "$fails" -eq 0 ]; then
-  echo "PASS  push-drain-refusals -- 20 arms green, $killed/$n_mut mutants killed"
+  echo "PASS  push-drain-refusals -- 21 arms green, $killed/$n_mut mutants killed"
   exit 0
 fi
 echo "FAIL  push-drain-refusals -- $fails failure(s); $killed/$n_mut mutants killed"
