@@ -124,6 +124,9 @@
 #                    templates/ that a consumer installs (a path inside a `core/fixtures/<name>/`
 #                    carrying a `.dist-only` marker at theirs is not installed) or cuts a release
 #                    (changes VERSION) (`named_reach`).
+#   NAMED-UPSTREAM-OFF-SUBJECT  the naming set reaches code, but no naming commit (a release judged
+#                    over its release span) changes any of the entry's own `theirs_has|theirs_lacks`
+#                    receipt paths (`named_subject`). Never a close.
 #   STILL-LIVE      the entry still reproduces at theirs; stays open (filtered from the report).
 #   HAND-REVIEW      the entry declares `verify: manual` — no mechanical predicate by design.
 #   NEEDS-REVIEW     the receipt itself is at fault, and the DETAIL names the cause by its
@@ -738,8 +741,10 @@ named_absorbed() { # <label> -> "<how> <n> <sha>,<sha>,... <code|docs|cited>" if
 #
 # WHAT THIS DOES NOT DECIDE, stated so the kind is not over-read. A commit that touches `core/`
 # can still merely MENTION an id -- a release citing an entry it discharged by some other route --
-# and that commit passes this predicate. Whether a commit changed the entry's OWN subject needs a
-# per-id subject path nothing records. So `code` means "could have absorbed it", never "did".
+# and that commit passes this predicate. Whether a commit changed the entry's OWN subject is asked
+# separately, by `named_subject`, over the entry's receipt paths -- and even a `touched` answer there
+# means "changed the receipt's file", never "absorbed it". So `code` means "could have absorbed it",
+# never "did".
 #
 # FAILS TOWARDS THE OLD KIND. `-m` lists a merge commit's files against each parent (without it a
 # merge lists none and would score as docs-only). If the listing itself fails, the answer is
@@ -797,6 +802,124 @@ core/"*|*"
 templates/"*) printf 'code' ;;
     *) printf 'docs' ;;
   esac
+}
+
+# named_subject <label> <comma-separated residual shas> -> sets NS_STATE and NS_PATHS in the MAIN
+# shell (it is never called inside `$( )`, so the globals survive). NS_STATE is one of
+#   touched  at least one naming commit -- span-expanded when it is a release -- changes at least
+#            one of the entry's receipt paths: the row stays NAMED-UPSTREAM;
+#   off      the entry has a resolved, non-empty subject set and NO naming commit (span-expanded)
+#            changes any path in it: the row becomes NAMED-UPSTREAM-OFF-SUBJECT;
+#   old      no decision -- the entry has no path receipt, a receipt path is unresolvable, or a
+#            listing or staging step failed. The caller keeps the kind it emitted before this
+#            predicate existed.
+# NS_PATHS is the resolved subject set, space-joined, for the row text.
+#
+# THE THIRD CLASS `named_reach` CANNOT SEE. A release that changes core/ and names an id it did not
+# discharge (it cross-references the entry, or records that an archived entry discharged it) reads
+# `code` there, and the row then read NAMED-UPSTREAM -- the kind a pull session reads as "upstream
+# took it". The datum that separates it is the entry's OWN SUBJECT: the paths its `theirs_has` /
+# `theirs_lacks` receipts test. A naming set that reaches code and changes NONE of those paths is
+# reported as its own kind, with every sha, and is never a close.
+#
+# THE SUBJECT SET is the union of every `theirs_has|theirs_lacks` receipt path in the entry, staged
+# once before the entry loop in `$LR_STAGE/subjects` (label TAB raw-path) by the same verb/path split
+# the dispatch below applies, and RESOLVED HERE, lazily, only for a row that reaches this predicate:
+# a path present at theirs is kept; a path absent at theirs is resolved by unique basename, exactly
+# as the dispatch resolves a consumer-layout path; a path carrying a backslash, a path git could not
+# read (125), an empty path, or a basename matching 0 or more than 1 file at theirs is UNRESOLVABLE,
+# and ANY unresolvable path keeps the whole entry at the old kind. Dropping it and testing the rest
+# would demote an entry on the paths that happened to resolve. An entry with no path receipt (sh,
+# manual, a receipt-less 0/0) has an empty set and keeps the old kind byte-for-byte.
+#
+# A PER-FILE TEST, NOT A SUBSTRING TEST, AND THE SUBSTRING TEST WAS MEASURED AND REFUTED. A naming
+# commit can touch the receipt FILE and leave the receipt's substring unchanged (the PC-S308 shape),
+# and this predicate scores that commit `touched`. Asking instead whether the commit changed the
+# receipt SUBSTRING was modelled over the reference consumer archive and demoted 16 of 50 on-subject
+# rows that were genuine absorptions whose anchors had gone stale. Do not build it.
+#
+# THE RELEASE CONVENTION. A naming commit that changes VERSION is a release, and its fix usually sits
+# in a parent that names nothing (see `named_reach`). For such a commit `c` the test runs over its
+# RELEASE SPAN: prev = the newest commit changing VERSION reachable from `c^`
+# (`git log -1 --format=%H "${c}^" -- VERSION`), span = `prev..c`, or every ancestor of `c` when no
+# earlier commit changed VERSION, or `c` alone when `c` has no parent. A NON-release naming commit
+# is tested on its own listing only: expanding every naming commit would credit a commit that merely
+# mentions the id with whatever an unrelated neighbour changed.
+#
+# SAME LISTING DISCIPLINE AS `named_reach`: `-m` (a merge lists against each parent),
+# `--no-renames` (a rename lists both sides), `core.quotePath=false` (a C-quoted path matches no raw
+# subject). Every listing is written to a staged file and its status read; ANY failure answers `old`
+# -- towards NAMED-UPSTREAM, never towards the new kind.
+named_subject() {
+  local _label="$1" _shas _raw _p _hp _m _nm _resolved="" _c _par _prev _st
+  NS_STATE=old; NS_PATHS=""
+  [ "${LR_SUBJ_OK:-0}" = 1 ] || return 0
+  [ -n "$2" ] || return 0
+  # The entry's raw receipt paths, one per line. An empty path is kept as an empty line, which the
+  # loop below scores unresolvable; `\001` marks the record so an empty path is still a record.
+  LR_L="$_label" LC_ALL=C awk -F'\t' '$1 == ENVIRON["LR_L"] { printf "\001%s\n", $2 }' \
+    "$LR_STAGE/subjects" > "$LR_STAGE/ns-raw" 2>/dev/null || return 0
+  [ -s "$LR_STAGE/ns-raw" ] || return 0
+  while IFS= read -r _raw; do
+    _p="${_raw#?}"
+    case "$_p" in ''|*\\*) return 0 ;; esac
+    _hp=0; theirs_has_path "$_p" || _hp=$?
+    if [ "$_hp" -eq 0 ]; then
+      :
+    elif [ "$_hp" -eq 125 ]; then
+      return 0
+    else
+      _m="$(theirs_basename_matches "${_p##*/}")" || return 0
+      _nm="$(printf '%s' "$_m" | grep -c . )" || _nm=0
+      [ "$_nm" -eq 1 ] || return 0
+      _p="$_m"
+    fi
+    case "
+$_resolved
+" in *"
+$_p
+"*) : ;; *) _resolved="${_resolved:+$_resolved
+}$_p" ;; esac
+  done < "$LR_STAGE/ns-raw"
+  [ -n "$_resolved" ] || return 0
+  NS_PATHS="$(printf '%s\n' "$_resolved" | tr '\n' ' ' | sed 's/ $//')"
+  _shas="$(printf '%s' "$2" | tr ',' '\n')"
+  printf '%s\n' "$_shas" > "$LR_STAGE/ns-shas" 2>/dev/null || return 0
+  NS_STATE=off
+  while IFS= read -r _c; do
+    [ -n "$_c" ] || continue
+    git -C "$DIST" -c core.quotePath=false log --no-walk -m --no-renames --name-only --format= "$_c" \
+      > "$LR_STAGE/ns-files" 2>/dev/null || { NS_STATE=old; return 0; }
+    _st=0; grep -qxF 'VERSION' "$LR_STAGE/ns-files" 2>/dev/null || _st=$?
+    [ "$_st" -le 1 ] || { NS_STATE=old; return 0; }
+    if [ "$_st" -eq 0 ]; then
+      # A RELEASE: replace its own listing with its span. A parentless release is its own span.
+      _par="$(git -C "$DIST" rev-list --parents -n 1 "$_c" 2>/dev/null)" || { NS_STATE=old; return 0; }
+      case "$_par" in
+        *' '*)
+          _prev="$(git -C "$DIST" log -1 --format=%H "${_c}^" -- VERSION 2>/dev/null)" || { NS_STATE=old; return 0; }
+          # An EMPTY prev is never written as a range: `..c` is `HEAD..c`.
+          if [ -n "$_prev" ]; then
+            git -C "$DIST" -c core.quotePath=false log -m --no-renames --name-only --format= "${_prev}..${_c}" \
+              > "$LR_STAGE/ns-files" 2>/dev/null || { NS_STATE=old; return 0; }
+          else
+            git -C "$DIST" -c core.quotePath=false log -m --no-renames --name-only --format= "$_c" \
+              > "$LR_STAGE/ns-files" 2>/dev/null || { NS_STATE=old; return 0; }
+          fi ;;
+      esac
+    fi
+    # A WHOLE-LINE FIXED MATCH of any subject path against the listing, with the subject set in a
+    # file so a path carrying a regex byte matches only itself. grep exits 1 on no match and 2 or
+    # more on a read failure, and only the latter is a failure.
+    printf '%s\n' "$_resolved" > "$LR_STAGE/ns-subj" 2>/dev/null || { NS_STATE=old; return 0; }
+    _st=0; grep -qxF -f "$LR_STAGE/ns-subj" "$LR_STAGE/ns-files" 2>/dev/null || _st=$?
+    case "$_st" in
+      0) NS_STATE=touched; return 0 ;;
+      1) : ;;
+      *) NS_STATE=old; return 0 ;;
+    esac
+  done < "$LR_STAGE/ns-shas"
+  return 0
 }
 
 # The ambiguous half, reported rather than guessed. Upstream cites the sprint prefix, two or more
@@ -2061,6 +2184,24 @@ ENTRIES="$(awk -v DASH=' — ' "$(ledger_entry_awk)"'
 lr_stage_ready || lr_refuse "a staging directory could not be created under TMPDIR=${TMPDIR:-/tmp} (missing or not writable), so the ledger's entries could not be staged"
 printf '%s\n' "$ENTRIES" > "$LR_STAGE/entries" \
   || lr_refuse "the ledger's entries could not be staged (a failed write would have read as an empty ledger)"
+# THE SUBJECT SET, staged once for `named_subject`: label TAB raw-path for every
+# `theirs_has|theirs_lacks` receipt, split the way the dispatch below splits it -- the verb is the
+# text up to the first space with leading and trailing non-identifier bytes stripped, the path is
+# the next space-delimited token. Raw tokens only; resolution is lazy, per row that needs it,
+# because the basename fallback lists the whole tree at theirs. A failed write here does NOT refuse
+# the run: it only means no row can reach the new kind, so every row keeps the kind it had before
+# the subject datum existed, and the one stderr line says why.
+LR_SUBJ_OK=0
+if LC_ALL=C awk -F'\t' '
+  $2 == "0/0" { next }
+  { d = $0; sub(/^[^\t]*\t[^\t]*\t/, "", d); v = d; sub(/ .*/, "", v); r = substr(d, length(v) + 1); sub(/^ /, "", r)
+    gsub(/^[^A-Za-z_]+/, "", v); gsub(/[^A-Za-z_]+$/, "", v)
+    if (v != "theirs_has" && v != "theirs_lacks") next
+    p = r; sub(/ .*/, "", p); printf "%s\t%s\n", $1, p }' "$LR_STAGE/entries" > "$LR_STAGE/subjects" 2>/dev/null; then
+  LR_SUBJ_OK=1
+else
+  echo "ledger-reverify: the receipt subject set could not be staged, so no row is classified NAMED-UPSTREAM-OFF-SUBJECT this run; every naming row keeps its prior kind" >&2
+fi
 while IFS="$(printf '\t')" read -r label ord directive; do
   [ -n "$directive" ] || continue
   # Empty suffix for a single-receipt entry, so those rows are unchanged.
@@ -2123,6 +2264,13 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       # It does NOT say the entry is unabsorbed -- a fix that never names the id is invisible to the
       # message search -- so the text sends the operator to the subject, never forbids a close.
       emit NAMED-UPSTREAM-DOCS-ONLY "$label" "upstream's own history NAMES this entry's id ${na_where}, and NONE of those commits changes a path a consumer installs under core/ or templates/ (a path inside a distribution-only fixture, one carrying a .dist-only marker at theirs, is not installed and does not count) -- and none of them cuts a release (changes VERSION). A plan, a review or a ledger drain mentioning the id matches the same way a fix does, so this row is not evidence of an absorption.${na_note} It is NOT a close on its own. The fix can still have landed in a commit that does not name the id: read the commit(s) -- one may record a withdrawal or a split, which IS something to act on -- then read the entry's own subject at theirs. Annotate only what that reading establishes, and otherwise leave the entry open."
+    elif named_subject "$label" "$na_c" && [ "$NS_STATE" = off ]; then
+      # THE NAMING SET REACHES CODE AND CHANGES NONE OF THIS ENTRY'S RECEIPT PATHS, a release
+      # evaluated over its whole span. Decided after `cited` and `docs`, which keep precedence, and
+      # only for a resolved, non-empty subject set -- see `named_subject`. The row keeps every sha.
+      # It is not "not absorbed": a fix can land on a path the receipt does not name, and the id
+      # may have been dispositioned by an EARLIER release, the naming here being a later mention.
+      emit NAMED-UPSTREAM-OFF-SUBJECT "$label" "upstream's own history NAMES this entry's id ${na_where}, and those commits change paths a consumer installs -- but NONE of them changes this entry's own receipt path(s): ${NS_PATHS} (a naming commit that cuts a release is judged over its whole release span, back to the previous VERSION change).${na_note} A release that cross-references an entry, or records that some other route discharged it, matches the message search the same way a fix does, so this row is NOT evidence of an absorption -- and it is not evidence against one either: the id may already have been dispositioned by an earlier release and this naming be a later mention, or the fix may have landed on a path the receipt does not name. It is NOT a close on its own. Read the commit(s), then read the entry's subject (${NS_PATHS}) at theirs. Annotate only what that reading establishes, with the release that contains the change, and otherwise leave the entry open."
     elif [ "$ord" = "0/0" ]; then
       # RECEIPT-LESS: there is no receipt to be blind to it and none to re-anchor, so the receipt
       # clauses of the sibling detail would be false here. The close is the annotation alone.
@@ -2138,6 +2286,11 @@ while IFS="$(printf '\t')" read -r label ord directive; do
     # THE SAME REACH PREDICATE AS THE SIBLING, folded into the detail rather than the kind. This
     # row is already never attributed and never a close, so a docs-only citing set changes what
     # the operator reads first, not what they may do.
+    #
+    # THE SUBJECT PREDICATE (`named_subject`) IS NOT FOLDED IN, EVEN INTO THE DETAIL. This row is
+    # emitted ONCE PER PREFIX and stands for two or more entries whose receipts name different
+    # paths, so there is no single subject set to test the citing commits against; any union or
+    # pick would be a claim about entries the row deliberately does not attribute.
     if [ "${nam_k:-1}" -gt 1 ] 2>/dev/null; then
       nam_where="$nam_k commits, ALL of them: $nam_c (newest first, none elected)"
     else
