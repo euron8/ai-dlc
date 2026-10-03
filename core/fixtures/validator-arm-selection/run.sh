@@ -88,7 +88,8 @@ PHASES_b="attrib union partition m1 m2 m3"
 # with VAS_INNER_POOL_WIDTH=1 (BL-375): at 6 the concurrent `grep -r` sweeps outrun the sandbox
 # tracer's `log stream` and it drops reports, so the trace is OMITTED. The width changes the
 # SCHEDULE, not the work -- every id is still dispatched and every file still read -- so a
-# read-set traced at width 1 is the read-set at width 6. No AI_DLC_ prefix: fixtures scrub it.
+# read-set traced at width 1 is the read-set at width 6. No AI_DLC_ prefix, as
+# future-proofing against the fixture env scrubs keyed on it; none sits on this path today.
 #
 # A value that is not an integer >= 1 is FIXTURE BROKEN (exit 2), never a regression: `xargs -P
 # 0` means UNLIMITED on BSD, and a non-number makes xargs refuse, which the sweep's own guard

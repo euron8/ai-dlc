@@ -741,7 +741,8 @@ for fx in $LIST; do
   # `KNOB=1 sudo ...` / `KNOB=1 sandboxed ...` prefix, is stripped by sudo's env_reset under
   # `fs_usage` and `--tracer both`, and the fixture would silently run at 6. Placed after the
   # privilege drop, `env` sets it in the very process that runs the fixture, under every tracer.
-  # The name carries no AI_DLC_ prefix because fixtures scrub that prefix from their environment.
+  # The name carries no AI_DLC_ prefix as future-proofing: several fixtures scrub that prefix from
+  # the environment they hand their subjects. No scrub sits on this path today.
   # core/fixtures/readset-skip binds this line by running a copy of this deriver.
   if [ "$TRACER" = fs_usage ]; then
     ( cd "$TREE" && sudo -n -u "$RUN_AS" env VAS_INNER_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null

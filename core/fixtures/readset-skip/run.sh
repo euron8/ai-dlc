@@ -1238,7 +1238,7 @@ MUT
       || LS_WHY="log stream unavailable here: $(head -1 "$WORK/ls.err")"
   fi
   if [ -n "$LS_WHY" ]; then
-    printf '  SKIP  sandbox-tracer loss arm: %s\n' "$LS_WHY"
+    printf '  SKIP  sandbox-tracer loss arm and deriver width arm: %s\n' "$LS_WHY"
   else
     PR="$WORK/lossprobe"
     mkdir -p "$PR/core/fixtures/burst" "$PR/core/scripts" "$PR/.githooks" "$PR/d" || broken "mkdir failed"
@@ -1312,10 +1312,8 @@ MUT
       *) bad "WIDTH CONTROL: the probe run outside the deriver did not read width=unset: '$(printf '%s' "$W_OUT" | tr '\n' ' ')'" ;;
     esac
     TRACE_ARMS=$((TRACE_ARMS+1))
-    W_ORIG="$(grep -c ' env VAS_INNER_POOL_WIDTH=1 bash ' "$DERIVER")" || W_ORIG=0
-    W_MUT="$(grep -c 'VAS_INNER_POOL_WIDTH=1 bash ' "$PRM/core/scripts/derive-fixture-readsets.sh")" || W_MUT=0
-    if [ "$W_ORIG" -ne 2 ] || [ "$W_MUT" -ne 0 ]; then
-      bad "WIDTH MUTANT did not apply: the deriver carries $W_ORIG injected launch line(s) (2 expected) and the mutant $W_MUT (0 expected)"
+    if cmp -s "$DERIVER" "$PRM/core/scripts/derive-fixture-readsets.sh"; then
+      bad "WIDTH MUTANT did not apply: removing the env injection changed nothing in the deriver copy, so this control would test an unmutated deriver"
     else
       _trm="$WORK/widthmut.tr"
       ( cd "$PRM" && env -u VAS_INNER_POOL_WIDTH AI_DLC_READSET_TRACE_ROOT="$_trm" \

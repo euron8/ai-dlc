@@ -883,7 +883,8 @@ The fix: `core/scripts/derive-fixture-readsets.sh` launches every traced fixture
 `core/fixtures/validator-arm-selection/run.sh` resolves `JOBS` once from
 `${VAS_INNER_POOL_WIDTH:-6}`, refuses a value that is not an integer >= 1 with exit 2, and prints
 `inner pool width: N`. The width changes the schedule, not the work, so a set traced at width 1
-is the set at width 6. The knob carries no `AI_DLC_` prefix because fixtures scrub that prefix.
+is the set at width 6. The knob carries no `AI_DLC_` prefix as future-proofing against the fixture env scrubs keyed on
+it; no scrub is on this path today.
 Held by `validator-arm-selection` (phase `width`: unset gives 6, 1 gives 1, 0 and `abc` exit 2)
 and `core/fixtures/readset-skip` (a copy of the real deriver traces a probe that echoes the knob
 and must log `width=1`; the same probe outside the deriver logs `unset`; a deriver copy with the
