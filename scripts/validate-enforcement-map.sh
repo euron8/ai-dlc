@@ -159,7 +159,32 @@
 
 set -u
 
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Every arm reads the tree it validates, never the process cwd. I81, I91, I94 and I95 spelled
+# their corpus relative to cwd, so a copy of this validator run from another directory answered
+# about THAT directory: each exited 1 from a scratch cwd and 0 from the root, and the seeded
+# tree in validator-arm-selection's arm 6, run from the repo root, read the LIVE tree and
+# returned a false clean on a planted I91 offender. One cd below keeps every path
+# repo-relative, so the exclusion filters those arms compare against stay byte-identical.
+#
+# The cd invalidates a RELATIVE $0, and `--arms` both re-reads this file by name and re-evals
+# these lines inside the moved shell. So the self path is made absolute ONCE, before the cd,
+# and the re-eval keeps it (it is already absolute) rather than re-joining $0 to the new cwd.
+# Measured without this: from core/, `bash ../scripts/<this> --arms I91` exited 2 with REPO_ROOT
+# resolved to "" and "required input not found: /core/...".
+#
+# VEM_SELF IS HONOURED ONLY WHEN THIS SHELL SET IT. An inherited value would redirect every arm
+# to the tree it names -- measured: VEM_SELF pointing at the live validator, run against a
+# seeded tree carrying an I91 offender, read rc 0 and named nothing. The `--arms` eval runs in
+# this same shell, so `$$` matches there and the absolute path survives. A value inherited from
+# the environment is discarded UNLESS it arrives with a VEM_SELF_PID equal to this shell's pid,
+# which only a caller that exported both and then `exec`ed this file can arrange -- a deliberate
+# override, not an accident, and not guarded against.
+[ "${VEM_SELF_PID:-}" = "$$" ] || unset VEM_SELF
+case "${VEM_SELF:-$0}" in /*) VEM_SELF="${VEM_SELF:-$0}" ;; *) VEM_SELF="$PWD/$0" ;; esac
+VEM_SELF_PID=$$
+REPO_ROOT="$(cd "$(dirname "$VEM_SELF")/.." && pwd)"
+# `cd ""` returns 0 on bash 3.2, so an empty root is refused by name rather than by the cd.
+[ -n "$REPO_ROOT" ] && cd "$REPO_ROOT" || { echo "tool-fail: cannot cd to '$REPO_ROOT'" >&2; exit 2; }
 GV="$REPO_ROOT/core/skills/ai-dlc/steps/gate-validation.md"
 MAP="$REPO_ROOT/core/skills/ai-dlc/enforcement-map.yaml"
 CORE_MANIFEST="$REPO_ROOT/core/skills/ai-dlc/core-manifest.md"
@@ -895,8 +920,8 @@ END {
 
 if [ -n "$ARMS_SEL" ]; then
   arms_renderer="$REPO_ROOT/scripts/render-invariant-index.sh"
-  if [ ! -f "$arms_renderer" ] || [ ! -r "$0" ]; then
-    echo "validate-enforcement-map: --arms needs $arms_renderer and a readable \$0 ('$0'); one is missing." >&2
+  if [ ! -f "$arms_renderer" ] || [ ! -r "$VEM_SELF" ]; then
+    echo "validate-enforcement-map: --arms needs $arms_renderer and a readable \$0 ('$VEM_SELF'); one is missing." >&2
     exit 2
   fi
   # THE SOURCE IS PASSED EXPLICITLY, and that is load-bearing rather than tidy. The renderer
@@ -905,13 +930,13 @@ if [ -n "$ARMS_SEL" ]; then
   # argument-less call walks to / and exits 2 inside every sandbox this mode exists to serve.
   # Measured before this line was written: `--arms I45` inside enforcement-map-sites' own seed
   # failed exactly that way.
-  arms_map="$(bash "$arms_renderer" --arm-lines "$0" 2>&1)"
+  arms_map="$(bash "$arms_renderer" --arm-lines "$VEM_SELF" 2>&1)"
   if [ "$?" -ne 0 ] || [ -z "$arms_map" ]; then
     echo "validate-enforcement-map: --arms cannot resolve arm boundaries — render-invariant-index.sh --arm-lines failed:" >&2
     printf '%s\n' "$arms_map" >&2
     exit 2
   fi
-  arms_prog="$(awk -v want="$ARMS_SEL" -v src="$0" "$ARMS_SELECT_AWK" <<<"$arms_map")"
+  arms_prog="$(awk -v want="$ARMS_SEL" -v src="$VEM_SELF" "$ARMS_SELECT_AWK" <<<"$arms_map")"
   if [ "$?" -ne 0 ] || [ -z "$arms_prog" ]; then
     echo "validate-enforcement-map: EXAMINED NOTHING — --arms '$ARMS_SEL' selected no runnable subprogram. Nothing was checked." >&2
     exit 2

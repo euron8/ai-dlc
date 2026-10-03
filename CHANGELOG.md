@@ -19,6 +19,50 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.716.0] - 2026-10-03
+
+Batch 189's first release: `BL-436` is filed and fixed here, and `BL-375` records two measured levers and stays
+open. No consumer candidate is discharged.
+
+### BL-436: the enforcement-map validator reads the tree it validates from any cwd
+
+`scripts/validate-enforcement-map.sh` arms I81, I91, I94 and I95 spelled their corpus relative to the process cwd.
+From a scratch cwd each exited 1 reporting an input it reads as absent (I91, I94 and I95 a schema, I81 two hooks), and
+from the repo root each exited 0. A
+seeded tree's validator run from the repo root therefore read the LIVE tree. Measured on the base validator: a
+seeded copy carrying a planted I91 offender exited 0 with no finding from the repo root, and 1 naming the planted
+file from the copy's own root. That is the shape `validator-arm-selection`'s arm 6 and the
+`enforcement-map-sites` seeds use, so I91 and I94 could not fire under them.
+
+- The validator `cd`s to `REPO_ROOT` once, right after resolving it, and exits 2 if the root is empty or the `cd`
+  fails (`cd ""` returns 0 on bash 3.2, so the empty root is refused by name). Every path stays
+  repo-relative, so the exclusion filters I91 and I94 compare against are byte-identical.
+- The self path is made absolute once (`VEM_SELF`) before the `cd`, because `--arms` re-reads the file by name.
+  Without it, a relative invocation from `core/` exited 2 with an empty `REPO_ROOT`.
+- `VEM_SELF` is honoured only when the validator's own shell set it. An inherited value naming the live validator
+  redirected every arm to the live tree and read a seeded I91 offender as clean (rc 0, named 0); found by the
+  fixture hand and fixed in this release rather than filed.
+- The new `enforcement-map-sites` cells (`A40_i91_*`, `A41_i94_*`, `A42_i95_*`, `A43_i81_*`) score each id from a
+  scratch cwd, the live root, a relative path and an inherited `VEM_SELF`, with four mutants each moving only the
+  cells their layer owns, plus one FULL-mode cell (no `--arms`, from the live root) with a fifth mutant that moves the
+  `cd` inside the `--arms` block: the four cells read 1111 under it and only the full-mode cell kills it. They are the
+  first battery under which I91 or I94 FIRES. Before this release none of the five enforcement-map drivers named either arm, against an I33 control
+  named in all five.
+
+`BL-375`: the arm-6 serialisation lever is struck. The one on-disk trace (`validator-arm-selection-b`, 0.715.0,
+inner pool width 1) put 0 of its 19 drop notices in arm 6's window and 17 in the seed `cp -R` burst. This fix is
+expected to remove that trace's 166,633 live-tree grep reports, because the seeded tree's greps now land under
+`$TMPDIR`, outside the profile's subpaths.
+
+The seed copy form was measured and no form ships. Each candidate copied the seed's four subtrees, traced alone
+under the deriver's sandbox profile, 3 reps each at load about 28-37 on `9bbc5a50`, every rep byte-equivalent to
+`cp -R`. `cp -R` itself gave 0 drop notices in 3 of 3 reps, so the seed-burst drops come from coinciding traced
+load and this differential cannot show that any form removes them. `cp -RX` cut the burst to about a third of its
+reports with an identical 956-path read set and is the candidate for a real fixture trace. `tar` and
+`ditto --noextattr` dropped. One `cp -R` rep recorded 946 of 956 paths with zero drop notices, so a trace can lose
+reports silently. `BL-375` now records that its close criterion needs a completeness control beside the notice
+count.
+
 ## [0.715.0] - 2026-10-03
 
 Batch 188's second release: `BL-375` PARTIAL. The read-set deriver now runs `validator-arm-selection-b`'s inner

@@ -912,16 +912,53 @@ The deriver omitted the fixture, failed its own `zero fixtures mapped` control, 
 both times. That is down from 222-228 drops at width 6, and still not zero. The diagnosis clone's
 0-drop run at width 1 is a single sample. At width 1 shard b still runs two validators at once,
 the seeded run at `:413` beside the attrib pool, so the K=2 synthetic, which was clean, is the
-nearest analogue and not an equivalent. The next lever is to serialise the seeded run against the
-attrib pool when traced, and it is unmeasured. Stage 1 stays unmet for all four fixtures.
+nearest analogue and not an equivalent. Stage 1 stays unmet for all four fixtures.
+
+**BATCH 189: THE ARM-6 SERIALISATION LEVER IS STRUCK.** ~~Serialise the seeded run against the
+attrib pool when traced.~~ Refuted by the one trace on disk (`validator-arm-selection-b`, 0.715.0,
+inner pool width 1, 19 drop notices). It places 0 of the 19 in arm 6's concurrent window. Of the
+19, 17 fall in the seed `cp -R` burst at `core/fixtures/enforcement-map-sites/seed.sh:27-34`,
+which is one `cp` process at about 4000 reports per 100ms, a third of them xattr reads. One falls
+in an I91/I94-shaped `grep` burst at 09:08:30 and one at a burst tail. This is ONE sample. Two
+levers replace it:
+- (a) **The validator cwd fix, `BL-436`, in 0.716.0.** Arms I81, I91, I94 and I95 of
+  `scripts/validate-enforcement-map.sh` read the process cwd, so a seeded tree's validator run
+  from the repo root grepped the LIVE tree. That trace carries 166,633 such live-tree grep
+  reports. Once the validator `cd`s into its own tree, the seeded tree's greps land under
+  `$TMPDIR`, outside the profile's subpaths, and are expected to leave the stream. That is a
+  prediction from the mechanism. The lead's before/after trace of `validator-arm-selection-b
+  enforcement-map-sites` on the release branch and on the base is the measurement.
+- (b) **The seed copy form: measured, and no form ships.** Each form copied the four subtrees of
+  `seed.sh:27-34` and was traced alone under the deriver's own sandbox profile and stream reader,
+  3 reps per form, at 1-minute load about 28-37 on the base tree `9bbc5a50`. Every rep was
+  byte-equivalent to an untraced `cp -R`. Reports per rep, then drop notices:
+  `cp -R` 8719/8984/6600 (about 2850 xattr), 0/0/0; `cp -RX` 2981/3009/2992 (0 xattr), 0/0/0;
+  `tar` about 28000, 0/47/68; `tar --no-xattrs --no-mac-metadata` about 6000, 0/0/0;
+  `ditto --noextattr` about 10500, 33/0/17. **The control does not drop:** `cp -R` alone gave 0
+  notices in 3 of 3 reps, so the 17 seed-burst drops in the fixture trace come from the burst
+  coinciding with other traced load, not from the copy alone, and this differential cannot show
+  that any form removes them. `cp -RX` cuts the burst to about a third of its reports with an
+  identical read set (956 paths in each rep, 0 missing against the union of `cp -R`'s sets). It is
+  the candidate to try inside a real fixture trace, and it is unproven.
+
+**A TRACE CAN LOSE REPORTS WITH NO DROP NOTICE.** In the batch-189 seed measurement, `cp -R` rep 3
+recorded 946 of the 956 paths it must have read, and 747 `file-read-data` reports against 956, with
+ZERO `Messages dropped` notices. One sample. So a run with no OMITTED line and 0 notices is not
+proof of a complete read set, and the deriver's loss guard keys only on the notice. This is an
+open measurement: the close criterion needs a completeness control as well as a zero-notice count.
+
+**Stage 1's close criterion, as the batch-189 contract states it:** three consecutive
+multi-fixture `--list` traces under the sandbox tracer with no OMITTED line and 0 drop notices,
+with a completeness control beside the notice count.
 
 **Do NOT switch the stream to `--style ndjson` to cut the report rate.** Measured: it lost up to
 two-thirds of per-pid coverage while printing zero `Messages dropped` notices. The deriver's loss
 guard keys on that notice, so ndjson would turn an omitted fixture into a silently smaller
 read-set.
 
-Still open: `enforcement-map-sites`, `apply-drift-refile` and `reconcile-emit-report` drop, so
-no multi-fixture `--list` is yet guaranteed clean, and the stage-1 deliverable is not met.
+Still open: `enforcement-map-sites`, `apply-drift-refile`, `reconcile-emit-report` and
+`validator-arm-selection-b` drop, so no multi-fixture `--list` is yet guaranteed clean, and the
+stage-1 deliverable is not met.
 
 verify: sh D=core/scripts/derive-fixture-readsets.sh; [ -f "$D" ] || exit 9; B="$(grep -v '^[[:space:]]*#' "$D")"; grep -q 'sandbox-exec -f' <<<"$B" || exit 1; grep -q 'fs_usage -w' <<<"$B" && exit 1; grep -qF '"$(id -u)" = "0"' <<<"$B" && exit 1; exit 0
 
@@ -960,4 +997,56 @@ another unit is longest, and it does not fail. The pool-16 block (`gate-adjudica
 unaffected.
 
 verify: manual -- re-taking the row needs the file's own calibration recipe: three serial full runs under `AI_DLC_FIXTURE_NO_SKIP=1` at pool 12. That forced full run is one the operator has not authorised, so no session can produce the measurement that would close this, and a receipt keyed on the row's text would close it on an edit with no measurement behind it.
+
+## BL-436 — `validate-enforcement-map.sh` arms I81, I91, I94 and I95 read the process cwd, so a seeded tree's validator answered about whichever tree it was run from
+
+**DEFECT, false clean.** Found by batch 189's contract adversary while attributing `BL-375`'s
+trace drops to the processes that produced them.
+
+**The defect.** At 0.715.0 the validator set `REPO_ROOT` from its own location and never `cd`'d
+there. Arms I81, I91, I94 and I95 spelled their corpus relative to the process cwd: I91's schema
+test and copy-scan `grep -rlF -- "$pfx" core/ scripts/`, I94's schema test and copy scan, and
+the reads of I81 and I95. Run from any directory other than its own tree, each of the four
+answered about that directory. From a scratch cwd each exited 1 reporting an input it reads as
+absent: I91, I94 and I95 their schema `is missing`, I81 `cannot find hook(s)`. From the repo root
+each exited 0.
+
+**Measured on the base validator (`9bbc5a50`).** In a seeded copy of the tree carrying a planted
+I91 offender (`core/scripts/bl436-probe.sh` holding `# <task-notification`), the copy's own
+validator with `--arms I91` exited 0 with no copy finding when run from the repo root, because it
+grepped the LIVE tree. It exited 1 with `I91: core/schemas/harness-origin.json is missing` from a
+scratch cwd, and 1 with the planted file named when run from the copy's own root (the control).
+That is the shape `validator-arm-selection`'s arm 6 and the `enforcement-map-sites` seeds use:
+a seeded tree's validator, run from the repo root. Under it, I91 and I94 could not fire. Before
+this release, none of the five enforcement-map drivers (`enforcement-map-sites`, `-b`, `-c`,
+`enforcement-map-derivations`, `-b`) names I91 or I94, against I33 named in all five.
+
+**The fix (v0.716.0).** One `cd "$REPO_ROOT"` right after the root is resolved, failing with
+exit 2 if it cannot. Every path stays repo-relative, so the exclusion filters I91 and I94 compare
+against are byte-identical. The `cd` invalidates a relative `$0`, and `--arms` re-reads the file
+by name, so the self path is made absolute once, as `VEM_SELF`, before the `cd`. Without that,
+`bash ../scripts/validate-enforcement-map.sh --arms I91` from `core/` exited 2 with `REPO_ROOT`
+resolved to "".
+
+**The receipt runs the validator and greps none of its text.** It runs `--arms I81,I91,I94,I95`
+from a `mktemp -d` cwd and from the root, requires rc 0 both times and byte-identical output, and
+runs `--arms I91` by relative path from `core/`. It then seeds a copy of `core/`, `scripts/`,
+`templates/` and `.githooks/` with the planted offender, runs the copy's validator from the root
+and from the scratch cwd, and requires rc 1 with exactly one copy line naming the planted file in
+both, and identical output. Last, it runs the seeded copy's validator in FULL mode (no `--arms`) from
+the root and requires rc 1 naming the planted file: the pre-push hook and most seeded callers run
+it that way, and a fix that `cd`s only inside the `--arms` block passed every earlier leg while a
+full-mode run still read the live tree (found by the tip adversary). A real future finding in any of the four arms also reads STILL-LIVE
+here, which is the safe polarity in this file; check the arm's message before reading it as a cwd
+regression.
+
+Scored under `bash -c 'set -uo pipefail; …'` from a copy's root with stdin from /dev/null: the
+fix 0; the base validator 1; the base plus the one `cd` line with no `VEM_SELF` 1 (the relative
+invocation from `core/` exits 2); the base with only the I91 copy-scan grep run under
+`REPO_ROOT` 1; the fix with the `cd` line deleted 1; the fix with the `cd` aimed at the live
+checkout instead of the validator's own tree 1 (the seeded offender reads clean from the root). Added after the tip adversary: the fix with the `cd` moved inside the `--arms` block 1 (the
+full-mode leg, rc 0 with no copy line). An inherited `VEM_SELF` is not scored here; the
+`enforcement-map-sites` cells own that layer (mutant M4).
+
+verify: sh V="$PWD/scripts/validate-enforcement-map.sh"; [ -f "$V" ] || exit 9; S="$(mktemp -d)" || exit 9; A=I81,I91,I94,I95; o1="$(cd "$S" && bash "$V" --arms "$A" 2>&1)"; c1=$?; o2="$(bash "$V" --arms "$A" 2>&1)"; c2=$?; [ "$c1" = 0 ] && [ "$c2" = 0 ] || { echo "BL-436 --arms $A: rc $c1 from a scratch cwd, rc $c2 from the root" >&2; exit 1; }; [ "$o1" = "$o2" ] || { echo "BL-436 the scratch-cwd and root runs differ" >&2; exit 1; }; o3="$(cd core && bash ../scripts/validate-enforcement-map.sh --arms I91 2>&1)" || { echo "BL-436 a relative invocation from core/ failed: $o3" >&2; exit 1; }; T="$S/t"; mkdir "$T" || exit 9; for d in core scripts templates .githooks; do cp -R "$d" "$T/$d" || exit 9; done; printf '# <task-notification\n' > "$T/core/scripts/bl436-probe.sh" || exit 9; W="  <task-notification -> core/scripts/bl436-probe.sh "; o4="$(bash "$T/scripts/validate-enforcement-map.sh" --arms I91 2>&1)"; c4=$?; o5="$(cd "$S" && bash "$T/scripts/validate-enforcement-map.sh" --arms I91 2>&1)"; c5=$?; for p in "root:$c4:$o4" "scratch:$c5:$o5"; do w="${p%%:*}"; r="${p#*:}"; c="${r%%:*}"; o="${r#*:}"; h="$(grep -e ' -> ' <<<"$o")"; [ "$c" = 1 ] && [ "$h" = "$W" ] || { echo "BL-436 seeded I91 offender from the $w cwd: rc $c, copy lines [$h], want rc 1 and only the planted file" >&2; exit 1; }; done; [ "$o4" = "$o5" ] || { echo "BL-436 the seeded tree reads differently from the root and from a scratch cwd" >&2; exit 1; }; o6="$(bash "$T/scripts/validate-enforcement-map.sh" 2>&1)"; c6=$?; h6="$(grep -e ' -> ' <<<"$o6")"; [ "$c6" = 1 ] && grep -qxF -- "$W" <<<"$h6" || { echo "BL-436 seeded I91 offender in FULL mode (no --arms) from the root: rc $c6, copy lines [$h6], want rc 1 naming the planted file" >&2; exit 1; }; exit 0
 

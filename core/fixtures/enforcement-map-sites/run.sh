@@ -145,6 +145,11 @@ mkbak() {
 # is the code the driver already routes to FIXTURE BROKEN rather than to a regression.
 VRUN_LOG=""
 VRUN_BROKEN=""
+# The validator's exit status, for a caller that asserts it. `vrun` runs inside `$( )`, so the
+# status cannot come back as a variable; when this names a file, vrun writes the status there.
+VRUN_RCF=""
+# `vrun [validator-path]` -- the path defaults to "$V". The cwd-invariance cells pass a
+# RELATIVE one, run from a subdirectory of the seeded tree.
 vrun() {
   local frame seg id vout rc
   id=""
@@ -162,7 +167,8 @@ vrun() {
     [ -n "$VRUN_BROKEN" ] && printf 'FIXTURE BROKEN: vrun found no A<nn>_i<id>_ frame to derive an --arms selector from (frames: %s). The naming grammar the selector is derived from has moved, and there is no full-run fallback on purpose.\n' "${FUNCNAME[*]}" >> "$VRUN_BROKEN"
     return 2
   fi
-  vout="$(bash "$V" --arms "$id" 2>&1)"; rc=$?
+  vout="$(bash "${1:-$V}" --arms "$id" 2>&1)"; rc=$?
+  [ -n "$VRUN_RCF" ] && printf '%s\n' "$rc" > "$VRUN_RCF"
   if [ "$rc" = "2" ]; then
     [ -n "$VRUN_BROKEN" ] && printf 'FIXTURE BROKEN: validate-enforcement-map.sh --arms %s exited 2. That is a SELECTION failure -- an unknown id, a malformed flag, or a generated subprogram that never reached the verdict -- not an invariant finding, so it is not scored as a mutant surviving or dying: %s\n' "$id" "$vout" >> "$VRUN_BROKEN"
     return 2
@@ -2434,6 +2440,247 @@ else
 fi
 cp "$esv_bak" "$V"
 rm -f "$esv_bak"
+}
+
+# --- Assertions 40-43: I91 / I94 / I95 / I81 READ THE TREE THEY VALIDATE, FROM ANY CWD ------
+# THE DEFECT. Those four arms spelled their corpus relative to the PROCESS cwd, and the validator
+# never moved there. A seeded copy run from a scratch directory reported the schema or the hooks
+# "missing" (rc 1); the same copy run from the repo root read the LIVE tree and returned a false
+# clean on an offender planted only in the seed. The fix makes the self path absolute once
+# (VEM_SELF), derives REPO_ROOT from it, and cds there.
+#
+# FOUR CELLS PER ID, each against the SEEDED validator with the offender present ONLY in the
+# seed. Every cell requires rc 1 AND the finding naming the seeded file AND output byte-equal
+# to C1 -- a cell keyed on equality alone scores two identical "schema missing" runs as a pass:
+#   C1  from a fresh `mktemp -d` cwd.
+#   C2  from the LIVE distribution root. That is the cwd where the old code read the live tree
+#       and returned a clean, and it is named explicitly rather than inherited, so the cell
+#       discriminates however this fixture itself is invoked.
+#   C3  from "$ROOT/core", by the RELATIVE path ../scripts/validate-enforcement-map.sh. A
+#       cd-only fix broke this one: `--arms` re-reads its own file by name after the cd, so a
+#       relative $0 resolved against the moved cwd and the run exited 2.
+#   C4  from a fresh cwd with VEM_SELF EXPORTED, naming the LIVE validator. The validator
+#       honours VEM_SELF only when its own shell set it; an inherited value redirected every arm
+#       to the live tree and read the seeded offender as clean.
+#
+# SCORED AS A BIT STRING, NOT CELL BY CELL, because each mutant must move a specific SUBSET and
+# nothing else. A mutant that kills C3 alone is told apart from one that kills all three only if
+# every cell is reported.
+#
+# THE MUTANTS edit the seeded validator in place, so its siblings stay beside it, each from a
+# backup held OUTSIDE the tree for A39's reason, each `cmp -s` guarded and each asserting its own
+# post-mutation count, so a `sed` that matched only part of the fix is not scored as the mutant:
+#   M1  the full base: the guard, the VEM_SELF lines, the cd line, and every $VEM_SELF read
+#       back to $0. Expected 0000.
+#   M2  only the cd line deleted. Expected 0000 -- without the cd, no cwd outside the seed reads it.
+#   M3  the cd kept, VEM_SELF taken from $0 WITHOUT absolutisation. Expected 1101: the
+#       absolute-path cells still pass and only the relative one dies.
+#   M4  only the inherited-VEM_SELF guard deleted. Expected 1110: only C4 dies.
+#
+# A MUTANT RUN DOES NOT WRITE THE BROKEN MARKER. M3's relative cell exits 2 BY DESIGN -- that is
+# the failure it must produce -- and vrun would otherwise record it as FIXTURE BROKEN. Control
+# runs keep the marker, so an rc 2 from the UNMUTATED validator is still a broken fixture.
+CWD_SELF_REL="../scripts/validate-enforcement-map.sh"
+
+# cwd_cells <control|mutant> <ERE naming the seeded finding>
+# Sets CW_BITS (e.g. 1111) and CW_RCS, and leaves C1's output in "$CW_DIR/s.out".
+cwd_cells() {
+  local mode="$1" want="$2" s rcf rc_s rc_r rc_rel rc_env b1=0 b2=0 b3=0 b4=0 keep_broken
+  keep_broken="$VRUN_BROKEN"
+  [ "$mode" = control ] || keep_broken=""
+  s="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp -d failed" >&2; exit 2; }
+  rcf="$CW_DIR/rc"
+  printf 'none\n' > "$rcf"
+  (VRUN_BROKEN="$keep_broken"; VRUN_RCF="$rcf"; cd "$s" && vrun) > "$CW_DIR/s.out"
+  rc_s="$(cat "$rcf")"
+  printf 'none\n' > "$rcf"
+  (VRUN_BROKEN="$keep_broken"; VRUN_RCF="$rcf"; cd "$HERE/../../.." && vrun) > "$CW_DIR/r.out"
+  rc_r="$(cat "$rcf")"
+  printf 'none\n' > "$rcf"
+  (VRUN_BROKEN="$keep_broken"; VRUN_RCF="$rcf"; cd "$ROOT/core" && vrun "$CWD_SELF_REL") > "$CW_DIR/rel.out"
+  rc_rel="$(cat "$rcf")"
+  printf 'none\n' > "$rcf"
+  (VRUN_BROKEN="$keep_broken"; VRUN_RCF="$rcf"; export VEM_SELF="$HERE/../../../scripts/validate-enforcement-map.sh"; cd "$s" && vrun) > "$CW_DIR/env.out"
+  rc_env="$(cat "$rcf")"
+  rmdir "$s" 2>/dev/null
+  if [ "$rc_s" = 1 ] && grep -qE -- "$want" "$CW_DIR/s.out"; then b1=1; fi
+  if [ "$rc_r" = 1 ] && grep -qE -- "$want" "$CW_DIR/r.out" && cmp -s "$CW_DIR/s.out" "$CW_DIR/r.out"; then b2=1; fi
+  if [ "$rc_rel" = 1 ] && grep -qE -- "$want" "$CW_DIR/rel.out" && cmp -s "$CW_DIR/s.out" "$CW_DIR/rel.out"; then b3=1; fi
+  if [ "$rc_env" = 1 ] && grep -qE -- "$want" "$CW_DIR/env.out" && cmp -s "$CW_DIR/s.out" "$CW_DIR/env.out"; then b4=1; fi
+  CW_BITS="$b1$b2$b3$b4"
+  CW_RCS="rc scratch=$rc_s live-root=$rc_r relative=$rc_rel inherited-VEM_SELF=$rc_env"
+}
+
+# cwd_mutant <tag> <expected bits> <ERE> <sed program> <post-check ERE> <post-check count>
+cwd_mutant() {
+  local tag="$1" exp="$2" want="$3" prog="$4" pce="$5" pcn="$6" bak n
+  bak="$(mkbak "$V")"
+  if ! sed -e "$prog" "$bak" > "$V"; then
+    bad "$CW_ID $tag DID NOT APPLY: its sed program failed, so no mutant existed to score"
+    cp "$bak" "$V"; rm -f "$bak"; return
+  fi
+  n="$(grep -cE -- "$pce" "$V")" || n=0
+  if cmp -s "$bak" "$V"; then
+    bad "$CW_ID $tag DID NOT APPLY: the mutation matched nothing in the validator, so its verdict would be about the unmutated fix"
+  elif [ "$n" != "$pcn" ]; then
+    bad "$CW_ID $tag applied but is INSUFFICIENT: the post-mutation count of /$pce/ is $n where $pcn was expected, so it is not the mutant its verdict would be read as"
+  else
+    cwd_cells mutant "$want"
+    if [ "$CW_BITS" = "$exp" ]; then
+      ok "$CW_ID $tag scores $CW_BITS on C1 scratch / C2 live root / C3 relative / C4 inherited VEM_SELF, exactly the cells it must kill ($CW_RCS)"
+    else
+      bad "$CW_ID $tag scored $CW_BITS where $exp was expected ($CW_RCS) -- the cells do not discriminate this layer of the fix the way they claim to"
+    fi
+  fi
+  cp "$bak" "$V"; rm -f "$bak"
+}
+
+# The three mutants, defined once for every id so that they are the same mutants.
+cwd_battery() {
+  local want="$1"
+  cwd_mutant M1 0000 "$want" '/^\[ "\${VEM_SELF_PID:-}" = "\$\$" \] || unset VEM_SELF$/d
+/^VEM_SELF_PID=\$\$$/d
+/^case "\${VEM_SELF:-\$0}" in /d
+/^\[ -n "\$REPO_ROOT" \] \&\& cd "\$REPO_ROOT" || {/d
+s/\$VEM_SELF/$0/g' '^[^#]*VEM_SELF|cd "\$REPO_ROOT" \|\|' 0
+  cwd_mutant M2 0000 "$want" '/^\[ -n "\$REPO_ROOT" \] \&\& cd "\$REPO_ROOT" || {/d' 'cd "\$REPO_ROOT" \|\|' 0
+  cwd_mutant M3 1101 "$want" 's/^case "\${VEM_SELF:-\$0}" in .*/VEM_SELF="$0"/' '^VEM_SELF="\$0"$' 1
+  cwd_mutant M4 1110 "$want" '/^\[ "\${VEM_SELF_PID:-}" = "\$\$" \] || unset VEM_SELF$/d' '^\[ "\$\{VEM_SELF_PID:-\}" = "\$\$" \] \|\| unset VEM_SELF$' 0
+}
+
+# The unmutated control. Its positive conjunct is the finding itself: every cell demands it be
+# PRESENT, so a validator that prints nothing cannot score 1111.
+cwd_control() {
+  local want="$1"
+  CW_DIR="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp -d failed" >&2; exit 2; }
+  cwd_cells control "$want"
+  if [ "$CW_BITS" = 1111 ]; then
+    ok "$CW_ID: the seeded offender is named from a scratch cwd, and byte-identically from the live distribution root, from \$ROOT/core by a relative path, and with an inherited VEM_SELF naming the live validator ($CW_RCS)"
+  else
+    bad "$CW_ID: the unmutated validator scored $CW_BITS on the cwd cells ($CW_RCS) -- it does not read the seeded tree from every cwd, or the seeded offender went unreported"
+  fi
+}
+
+# FULL MODE, scored on I91 only. Every cell above runs `--arms`, and so does the BL-436 receipt,
+# but the pre-push hook and most seeded callers run the validator with NO flags. A fix that cds
+# only inside the `--arms` block passed all four cells and the receipt while a full-mode run of
+# the seeded tree from the live root still read the live tree and returned rc 0 -- measured by
+# the tip adversary. One full run from the live root, requiring rc 1 and the seeded finding.
+# M5 moves the cd into the `--arms` block and must leave the four cells at 1111 and kill this.
+cwd_full_bit() { # cwd_full_bit <ERE> -> prints 1 or 0, and leaves the run in "$CW_DIR/full.out"
+  local rc
+  (cd "$HERE/../../.." && bash "$V") > "$CW_DIR/full.out" 2>&1; rc=$?
+  if [ "$rc" = 1 ] && grep -qE -- "$1" "$CW_DIR/full.out"; then echo 1; else echo 0; fi
+}
+cwd_full() {
+  local want="$1" fb bak
+  fb="$(cwd_full_bit "$want")"
+  if [ "$fb" = 1 ]; then
+    ok "$CW_ID FULL MODE: the seeded validator with no --arms, run from the live root, names the seeded offender"
+  else
+    bad "$CW_ID FULL MODE: the seeded validator with no --arms, run from the live root, did not name the seeded offender -- it read the live tree ($(grep -cE '^FAIL' "$CW_DIR/full.out") FAIL line(s))"
+  fi
+  bak="$(mkbak "$V")"
+  sed -e '/^\[ -n "\$REPO_ROOT" \] \&\& cd "\$REPO_ROOT" || {/d' \
+      -e 's/^  eval "\$arms_prog"$/  cd "$REPO_ROOT"; eval "$arms_prog"/' "$bak" > "$V"
+  if cmp -s "$bak" "$V" || [ "$(grep -c '^  cd "\$REPO_ROOT"; eval "\$arms_prog"$' "$V")" != 1 ] \
+     || grep -q '^\[ -n "\$REPO_ROOT" \] && cd' "$V"; then
+    bad "$CW_ID M5 DID NOT APPLY: the cd was not moved into the --arms block, so no mutant existed to score"
+  else
+    cwd_cells mutant "$want"
+    fb="$(cwd_full_bit "$want")"
+    if [ "$CW_BITS$fb" = 11110 ]; then
+      ok "$CW_ID M5 (cd only inside --arms) scores ${CW_BITS}+full=$fb: the four --arms cells cannot see it and the full-mode cell kills it"
+    else
+      bad "$CW_ID M5 (cd only inside --arms) scored ${CW_BITS}+full=$fb where 1111+full=0 was expected ($CW_RCS)"
+    fi
+  fi
+  cp "$bak" "$V"; rm -f "$bak"
+}
+
+cwd_finish() { rm -f "$CW_DIR/s.out" "$CW_DIR/r.out" "$CW_DIR/rel.out" "$CW_DIR/env.out" "$CW_DIR/full.out" "$CW_DIR/rc"; rmdir "$CW_DIR" 2>/dev/null; }
+
+A40_i91_cwd_invariance() {
+CW_ID=I91
+i91_pfx='<task-notification'
+printf 'x="%s"\n' "$i91_pfx" > "$ROOT/core/scripts/zz-i91-cwd-offender.sh"
+# A core/fixtures/ copy for that exemption, and every exempt file asserted to CARRY the prefix:
+# a near-miss without it would be acquitted for having nothing to report, not by the exemption.
+printf 'x="%s"\n' "$i91_pfx" > "$ROOT/core/fixtures/enforcement-map-sites/zz-i91-nearmiss.txt"
+i91_nm_ok=1
+for f in core/schemas/harness-origin.json core/scripts/validate-steering-budget.sh \
+         scripts/validate-enforcement-map.sh core/fixtures/enforcement-map-sites/zz-i91-nearmiss.txt; do
+  grep -qF -- "$i91_pfx" "$ROOT/$f" || { i91_nm_ok=0; bad "FIXTURE BROKEN: exempt file $f does not carry $i91_pfx, so the I91 near-miss would be acquitted for having nothing to report"; }
+done
+want='-> .*core/scripts/zz-i91-cwd-offender\.sh'
+cwd_control "$want"
+if [ "$i91_nm_ok" = 1 ]; then
+  i91_hits="$(grep -E -- ' -> ' "$CW_DIR/s.out")"
+  if [ -z "$i91_hits" ]; then
+    bad "I91 near-miss: the scratch-cwd run printed no copy-hit line at all, so the exemption has nothing to be read against"
+  elif grep -qE 'core/schemas/harness-origin\.json|core/scripts/validate-steering-budget\.sh|scripts/validate-enforcement-map\.sh|core/fixtures/' <<<"$i91_hits"; then
+    bad "I91 near-miss: an exempt file (the schema, the JS predicate, the validator or a core/fixtures/ file) was reported as a copy from a scratch cwd -- the exclusion filters no longer match the paths the scan emits"
+  else
+    ok "I91 near-miss: the schema, validate-steering-budget.sh, the validator and a core/fixtures/ file all carry the prefix and none is reported, beside the seeded offender that is"
+  fi
+fi
+cwd_battery "$want"
+cwd_full "$want"
+cwd_finish
+}
+
+A41_i94_cwd_invariance() {
+CW_ID=I94
+python3 - "$ROOT/core/schemas/pause-routing.json" "$ROOT/core/rules/zz-i94-cwd-offender.md" <<'PY' || { bad "FIXTURE BROKEN: could not seed the I94 offender from the declared pause_branch_text"; return; }
+import json, sys
+v = json.load(open(sys.argv[1]))["pause_branch_text"]
+assert v
+open(sys.argv[2], "w").write(v + "\n")
+PY
+want='pause_branch_text -> .*core/rules/zz-i94-cwd-offender\.md'
+cwd_control "$want"
+i94_hits="$(grep -E -- ' -> ' "$CW_DIR/s.out")"
+if [ -z "$i94_hits" ]; then
+  bad "I94 near-miss: the scratch-cwd run printed no copy-hit line at all, so the schema exclusion has nothing to be read against"
+elif grep -q 'core/schemas/pause-routing\.json' <<<"$i94_hits"; then
+  bad "I94 near-miss: the declaration itself was reported as a copy from a scratch cwd -- the compare against the schema path no longer matches what the scan emits"
+else
+  ok "I94 near-miss: the declaration carries every value and is not reported, beside the seeded copy that is"
+fi
+cwd_battery "$want"
+cwd_finish
+}
+
+A42_i95_cwd_invariance() {
+CW_ID=I95
+printf 'X="${STATE_DIR}/.zz-i95-cwd-undeclared"\n' > "$ROOT/core/hooks/zz-i95-cwd-offender.sh"
+want='I95: \.zz-i95-cwd-undeclared is constructed at core/hooks/zz-i95-cwd-offender\.sh:1'
+cwd_control "$want"
+cwd_battery "$want"
+cwd_finish
+}
+
+# I81 has no copy scan, so its offender is the invariant's own violating shape: the two hooks'
+# live-series blocks made to differ, in the seed only.
+A43_i81_cwd_invariance() {
+CW_ID=I81
+i81_h="$ROOT/core/hooks/ai-dlc-acknowledge.sh"
+i81_bak="$(mkbak "$i81_h")"
+awk '{ print } />>> I81 LIVE-SERIES BLOCK >>>/ { print "  : i81-cwd-seed" }' "$i81_bak" > "$i81_h"
+rm -f "$i81_bak"
+if [ "$(grep -c 'i81-cwd-seed' "$i81_h")" != 1 ]; then
+  bad "FIXTURE BROKEN: the I81 seed did not land exactly once inside acknowledge.sh's live-series block"
+  return
+fi
+want='i81-cwd-seed'
+cwd_control "$want"
+if grep -q 'derive the live adversarial series DIFFERENTLY' "$CW_DIR/s.out"; then
+  ok "I81: the seeded divergence is reported as the two hooks disagreeing, not by another I81 message that happens to echo the block"
+else
+  bad "I81: the scratch-cwd run did not report the seeded block as a divergence between the two hooks"
+fi
+cwd_battery "$want"
+cwd_finish
 }
 
 
