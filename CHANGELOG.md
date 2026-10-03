@@ -21,8 +21,8 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 
 ## [0.715.0] - 2026-10-03
 
-Batch 188's second release: `BL-375` PARTIAL. The sandbox read-set tracer now traces `validator-arm-selection-b`
-without dropping reports. No consumer candidate is discharged, and the entry stays open because three fixtures
+Batch 188's second release: `BL-375` PARTIAL. The read-set deriver now runs `validator-arm-selection-b`'s inner
+pools at width 1 when it traces, which is the width a scratch clone traced with no dropped reports. No consumer candidate is discharged, and the entry stays open because three fixtures
 still drop. Net closed minus filed is 0.
 
 ### BL-375: the read-set deriver traces validator-arm-selection at inner pool width 1
@@ -30,7 +30,8 @@ still drop. Net closed minus filed is 0.
 Every drop in `validator-arm-selection-b` fell inside 1-2s windows running at 14k-46k reports/s, beside up to 118
 concurrent `grep -r` from the fixture's own `xargs -P 6` pools. A synthetic reproduction with the deriver's profile
 drops at 6 and 12 concurrent greps and never at 1 or 2, or serially at 26.6k reports, so the variable is concurrency,
-not volume. At width 1 the fixture traced with 0 drops and 956 paths, starting at load 34.8.
+not volume. In a scratch clone with the pool hand-set to width 1, the fixture traced with 0 drops and 956 paths,
+starting at load 34.8.
 
 - `core/scripts/derive-fixture-readsets.sh` launches each fixture as `env VAS_INNER_POOL_WIDTH=1 bash …` on both
   launch lines, after `sudo` and `sandbox-exec`, because sudo's env_reset would strip an exported variable under
@@ -42,8 +43,9 @@ not volume. At width 1 the fixture traced with 0 drops and 956 paths, starting a
 - `core/fixtures/readset-skip` drives a copy of the real deriver and asserts that the traced probe sees width 1.
   Its controls: the probe run outside the deriver sees `unset`, and a deriver copy without the injection fails the arm.
 
-The other three fixtures stay open in the entry, each with its measured mechanism. `enforcement-map-sites` still
-dropped 1445 reports at width 1, from its parallel `cp -R` seed. `apply-drift-refile` and `reconcile-emit-report`
+The other three fixtures stay open in the entry, each with its measured mechanism. `enforcement-map-sites` drops
+from its own parallel `cp -R` seed under a hard-coded pool of 8, which this knob does not reach; it dropped 1445
+reports in the diagnosis run. `apply-drift-refile` and `reconcile-emit-report`
 drop on load-dependent events upstream of the log client. The entry also records a hazard: `--style ndjson` lost up
 to two-thirds of per-pid coverage while printing zero drop notices, which would silently defeat the deriver's drop guard.
 
