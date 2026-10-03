@@ -373,6 +373,17 @@ the four. Only E3 on V-N is explained by this mechanism. The fd race may reach t
 detectors' `<( )` sites, but that is not measured. The render fix's own receipt lives on
 `BL-334`, because it proves the fix and not this entry's close.
 
+**THE BATCH-116 BARE-`mktemp` LEAD IS DEAD, MEASURED AT BATCH 187.** The precedent it cites (now
+`ledger-reverify.sh:1591-1597`) failed because a FIXTURE counted the host's whole `tmp.*`
+population to ask whether one run had materialized a tree; prefixing the engine's directory made
+that question answerable by name. A bare `mktemp` is harmful only to a reader of that kind.
+`core/fixtures/reconcile-emit-report/run.sh` carries **0** readers of a `tmp.*` population
+(control in the same invocation: 1 such reader elsewhere under `core/fixtures`), and the bare
+calls now sit at `emit-report.sh:608`, `:669` and four more sites, each a private scratch file whose
+path no arm inspects. Prefixing them would change nothing E1, E2, E8 or E9 observe, so it is not a
+remedy for this entry and was not built. What remains open is claim (d) alone: the pool flake on
+E1, E2, E8 and E9, with no named cause.
+
 verify: manual
 
 ## BL-004 — the fixtures' inner pools are owed a sweep, and the hook records them as owed
