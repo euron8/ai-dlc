@@ -61,6 +61,16 @@
 #   starvation. The lead is waiting ON the operator, not blocking them. Counting
 #   it would flag every checkpoint as a violation.
 #
+#   Its SIBLINGS are charged only for the time they block AFTER the answer. A tool
+#   call issued in the same assistant turn returns only once the human answers, so
+#   its raw duration is the same think-time. The join is `message.id`, which every
+#   content block of one turn carries even though the harness writes each block as
+#   its own record; timestamp proximity is NOT the key, because it would acquit an
+#   unrelated call in another turn that merely ends near the answer. A sibling is
+#   charged res - max(start, latest answer in its message), so one that keeps
+#   blocking past the answer is still starvation. A record carrying no message.id
+#   joins nothing and is charged its full duration.
+#
 # NOT AN OPERATOR MESSAGE (excluded from check B)
 #   The auto-compaction resume prompt ("This session is being continued from a
 #   previous conversation..."). It is a HARNESS injection, not a human steer, and
@@ -792,7 +802,8 @@ for (const f of files) {
     if (!Array.isArray(c)) continue;
     for (const b of c) {
       if (b.type === "tool_use")
-        use[b.id] = { n: b.name, t: Date.parse(r.timestamp), bg: b.input?.run_in_background === true };
+        use[b.id] = { n: b.name, t: Date.parse(r.timestamp), bg: b.input?.run_in_background === true,
+                      mid: r.message?.id || "" };
       if (b.type === "tool_result") {
         res[b.tool_use_id] = Date.parse(r.timestamp);
         if (isDenied(b)) denied.add(b.tool_use_id);   // the hook stopped this one
@@ -805,9 +816,24 @@ for (const f of files) {
       }
     }
   }
+  // A SIBLING OF AN AskUserQuestion IS CHARGED ONLY FOR WHAT IT BLOCKS AFTER THE ANSWER. Calls
+  // issued in one assistant turn return together, so a Bash sent beside an AskUserQuestion
+  // gets its result only once the human answers, and its raw duration is think-time. The
+  // harness writes ONE record per content block, so the siblings sit in SEPARATE records and
+  // the join key is `message.id`, which every block of one turn carries -- never the record,
+  // and never timestamp proximity, which acquits an unrelated call in another turn that merely
+  // ends near the answer. The charge is res[sib] - max(use[sib].t, latest answer in that
+  // message): a sibling that keeps blocking past the answer is still starvation. A record with
+  // no message.id joins nothing and is charged in full, as before.
+  const answeredAt = {};
+  for (const [id, u] of Object.entries(use)) {
+    if (u.n !== "AskUserQuestion" || !u.mid || !res[id]) continue;
+    if (!(answeredAt[u.mid] >= res[id])) answeredAt[u.mid] = res[id];
+  }
   for (const [id, u] of Object.entries(use)) {
     if (u.bg || EXEMPT.has(u.n) || !res[id]) continue;
-    const s = (res[id] - u.t) / 1000;
+    const ans = u.mid ? answeredAt[u.mid] : undefined;
+    const s = (res[id] - (ans === undefined ? u.t : Math.max(u.t, ans))) / 1000;
     if (s > TH) starv.push({ f: path.basename(f), n: u.n, s });
   }
 
@@ -905,7 +931,7 @@ log(`transcripts scanned : ${files.length}${SINCE && !one ? ` (${skippedBySince}
 // (`steps/retro.md`), so this goes after it and changes none of its bytes.
 log(`corpus              : ${CORPUS_ID}`);
 log(`transcripts read    : ${files.length ? files.map(f => path.resolve(f)).join("\n                      ") : "(none)"}`);
-log(`exempt from check A : AskUserQuestion (human think-time, not starvation)`);
+log(`exempt from check A : AskUserQuestion (human think-time, not starvation); a call sharing its message.id is charged only after the answer`);
 log("");
 
 let bad = false;
