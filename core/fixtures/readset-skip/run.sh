@@ -1583,14 +1583,18 @@ STUB
     esac
     # THREE MUTANT DERIVERS, each a cmp -s guarded copy of the stub-world deriver, each a wrong
     # fix that the --tracer sandbox width arm above cannot see because no sudo sits on that path:
-    #   m2      the injection moved in FRONT of sudo, on both sudo launches;
-    #   m4      the `sandboxed` launch dropping the knob;
+    #   m2      the injection moved in FRONT of sudo: into both branches of sandboxed(), ahead of
+    #           `sudo -n -u` and ahead of the bare `sandbox-exec`, and ahead of sudo on the fs_usage
+    #           line, so --tracer sandbox still reads width=1;
+    #   m4      the `sandboxed` launch dropping the knob under `--tracer both` only;
     #   prefix  `VAS_INNER_POOL_WIDTH=1 sandboxed ...`, a prefix in front of the function.
     # Each must log width=unset with `fxa ok` present.
     sed -e 's|sudo -n -u "$RUN_AS" sandbox-exec -f "$PROFILE" "$@"|env VAS_INNER_POOL_WIDTH=1 sudo -n -u "$RUN_AS" sandbox-exec -f "$PROFILE" "$@"|' \
+        -e 's|^    sandbox-exec -f "$PROFILE" "$@"$|    env VAS_INNER_POOL_WIDTH=1 sandbox-exec -f "$PROFILE" "$@"|' \
         -e 's|sudo -n -u "$RUN_AS" env VAS_INNER_POOL_WIDTH=1 bash |env VAS_INNER_POOL_WIDTH=1 sudo -n -u "$RUN_AS" bash |' \
         -e 's|sandboxed env VAS_INNER_POOL_WIDTH=1 bash |sandboxed bash |' "$SB/deriver.sh" > "$SB/deriver.m2.sh"
-    sed 's|sandboxed env VAS_INNER_POOL_WIDTH=1 bash |sandboxed bash |' "$SB/deriver.sh" > "$SB/deriver.m4.sh"
+    sed 's|( cd "$TREE" \&\& sandboxed env VAS_INNER_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" )|( cd "$TREE" \&\& if [ "$TRACER" = both ]; then sandboxed bash "$FIXTURE_ROOT/$fx/run.sh"; else sandboxed env VAS_INNER_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh"; fi )|' \
+      "$SB/deriver.sh" > "$SB/deriver.m4.sh"
     sed 's|sandboxed env VAS_INNER_POOL_WIDTH=1 bash |VAS_INNER_POOL_WIDTH=1 sandboxed bash |' "$SB/deriver.sh" > "$SB/deriver.prefix.sh"
     for _wm in m2 m4 prefix; do
       BOTH_ARMS=$((BOTH_ARMS+1))
