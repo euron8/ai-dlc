@@ -19,6 +19,29 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.720.0] - 2026-10-03
+
+Batch 191's second release. It closes `BL-438`. QA declares its own verdict set, and gate
+validation's Check 1 reads each gate's file against the set its owning role declares. It
+discharges no consumer candidate.
+
+### BL-438: QA declares its own verdict set; Check 1 reads each gate against its owner
+
+- `qa.md` gains `## Verdict` with `PASS | NEEDS_REWORK` (operator ruling, batch 190). Its
+  prescribed output is `<story-index>-qa-validation.md`, and `-p<M>` for a re-validation,
+  which is the name the reference consumer already writes.
+- Check 1 reads a gate-1 file against `code-reviewer.md`'s set and a gate-2 file against
+  `qa.md`'s, classified by citation, never by filename. The value is the leading
+  capital/underscore run only when punctuation or whitespace ends it, so a suffixed verdict
+  such as `PASS-pending-PVC` is not its prefix. A tracked higher `-p<M>` sibling of the cited
+  file is read instead, and both are named in the gate log.
+- I112 binds both owner sets, each to its own named bullet, refuses a second bullet for either
+  owner, and self-probes both directions. `docs/vocabulary-index.md` gains a `QA verdicts` row.
+- Check 1 stays model-adjudicated. The new fixture arms (A58-A69) prove the binding of both
+  sets, not Check 1's execution.
+- Replayed over the reference consumer's 22 sprint-316 QA files with Check 1's own rule: 21 read
+  `PASS`, and `1b`'s `NEEDS_REWORK` is superseded by its `-p2` `PASS`.
+
 ## [0.719.0] - 2026-10-03
 
 Batch 191's first release. It closes `BL-071`. A colon-less suspect bullet whose body only
