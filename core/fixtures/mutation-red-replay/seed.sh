@@ -5,6 +5,8 @@
 #
 # Everything here is shell. The replay mechanism is language-agnostic and a fixture that
 # needed pytest to prove it would be testing pytest's availability on the pushing machine.
+# The *.py parse arm and the pytest-exit arm are Python-specific by nature; run.sh builds
+# their worlds itself, and SKIPs them by name when python3 or pytest is absent.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
