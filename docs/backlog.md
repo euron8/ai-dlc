@@ -845,7 +845,13 @@ traced clean, re-run alone as one `--list`, OMITTED 2 different ones (`ledger-re
 `enforcement-map-sites`, `procsub-staged-refusal-boot`, `reconcile-emit-report`,
 `self-update-gate`, `suite-pole-guard`, `validator-arm-selection-b`). Load rose to 35 during that
 pass from processes outside this repo, so it is not a clean low-load reading. The 20 clean
-fixtures' rows were committed; every other fixture's rows are byte-identical.
+fixtures' rows were committed; every other fixture's rows are byte-identical. A second
+one-at-a-time pass over those 7, at `895ac0df` and load 7.3 falling to 3.8, mapped 3 more
+(`procsub-staged-refusal-boot`, `self-update-gate`, `suite-pole-guard`). The other 4 OMITTED again:
+`apply-drift-refile` 39, `enforcement-map-sites` 763, `reconcile-emit-report` 81,
+`validator-arm-selection-b` 228 drops. Those four dropped on every pass. Size does not predict it:
+two carry 858 rows, the other two carry 50 and 52, and the 350-row `procsub-staged-refusal`
+traced clean alone.
 
 verify: sh D=core/scripts/derive-fixture-readsets.sh; [ -f "$D" ] || exit 9; B="$(grep -v '^[[:space:]]*#' "$D")"; grep -q 'sandbox-exec -f' <<<"$B" || exit 1; grep -q 'fs_usage -w' <<<"$B" && exit 1; grep -qF '"$(id -u)" = "0"' <<<"$B" && exit 1; exit 0
 
