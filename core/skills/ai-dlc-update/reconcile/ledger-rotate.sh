@@ -227,6 +227,18 @@ SPLIT_FINDINGS="$(LC_ALL=C awk "$(ledger_entry_awk)$(ledger_entry_id_awk)${CLOSE
     else                    { sub(/^(- )?\*\*/, "", line); sub(/\*\*.*$/, "", line) }
     return line
   }
+  # INLINE CODE IS A QUOTATION, NEVER A CLOSE. The loose suppressor below reads this, and only
+  # the loose one: a colon-less suspect whose body quotes the annotation form inside backticks
+  # is not closed by that quotation. Balanced double-backtick spans go first, so a single
+  # backtick inside one cannot pair with a neighbour; then balanced single spans; then a lone
+  # backtick and everything after it, which is a span the author wrapped onto the next line.
+  # Bold is NOT removed, because a bolded line-leading close is the real annotation form.
+  function ledger_strip_inline_code(l) {
+    gsub(/``([^`]|`[^`])*``/, "", l)
+    gsub(/`[^`]*`/, "", l)
+    sub(/`.*$/, "", l)
+    return l
+  }
   function report() {
     if (susp_at && !susp_closed && !entry_hasv && (susp_colon || susp_hasv))
       printf "  line %d: `%s` sits inside the CLOSED entry `%s` opened at line %d, carries no close annotation of its own, and a verify: receipt follows it at line %d -- rotation would archive that entry head and strand the receipt in the live ledger under no heading\n", susp_at, substr(susp_lab, 1, 55), substr(entry_lab, 1, 55), entry_at, susp_v_at
@@ -281,17 +293,25 @@ SPLIT_FINDINGS="$(LC_ALL=C awk "$(ledger_entry_awk)$(ledger_entry_id_awk)${CLOSE
     # ROTATE -- a false positive on a real entry, and refusal writes nothing at all. The stuck
     # report is fixed either way: 5 rows on the reference consumer under both.
     #
-    # THE COLON SUBCLASS IS CLOSED; THE REST OF THE MISSED-REFUSAL DIRECTION IS STILL FILED.
-    # A suspect whose label ENDS IN A COLON is an annotation lead-in by shape -- a real entry
-    # title does not end in one -- so for that suspect the fp-quotes false positive above cannot
-    # arise, and the suppressor can be the ARCHIVE grammar: only a bolded, line-leading close
-    # silences it, and a body line that merely QUOTES the form no longer does. Every other
-    # suspect keeps the loose rule, because for a colon-less label the mention and the real
-    # entry that discusses the form are still the same shape. Measured on scratch copies,
-    # shipped vs this line reverted: colon lead-in with a quoting body 0 refusals -> 1; the
-    # fp-quotes seed 0/0; a colon-titled suspect with a genuine bolded close 0/0; the colon-less
-    # mention 0/0 (the surviving half); reference consumer live ledger and archive 0/0.
-    if (susp_at && (susp_colon ? ledger_body_archives($0) : ledger_entry_line_closes($0))) susp_closed = 1
+    # TWO SUPPRESSORS, KEYED ON THE SUSPECT LABEL. A suspect whose label ENDS IN A COLON is an
+    # annotation lead-in by shape -- a real entry title does not end in one -- so its suppressor
+    # is the ARCHIVE grammar: only a bolded, line-leading close silences it. Every other suspect
+    # keeps the loose rule, but read against the line with its INLINE CODE REMOVED, so a body
+    # that only QUOTES the form in backticks no longer silences it either.
+    #
+    # THAT REFUSES A REAL COLON-LESS ENTRY WHOSE BODY QUOTES THE FORM, AND THE REFUSAL IS
+    # INTENDED, on the same asymmetry the fixture argues for an open prose-titled entry: such a
+    # line cannot be told from an annotation lead-in, a wrong refusal costs a two-line edit, and
+    # a wrong rotation strands a closed entry`s receipt. The escape is the one the refusal text
+    # names -- the entry gives itself a close or an id. What still silences it: a mention in
+    # straight quotes, inside a fenced block, or an unquoted mention on the same line as a quoted
+    # one. Those are the surviving half of the mention class.
+    #
+    # THE COLON BRANCH IS NOT STRIPPED. `ledger_body_archives` already refuses a quotation by its
+    # own anchor, and stripping there would let `**` + a backticked name + the token archive a
+    # body the archive grammar rejects. Measured on the reference consumer, every live-ledger and
+    # archive revision plus both working files, this line vs the one before it: 0 verdict changes.
+    if (susp_at && (susp_colon ? ledger_body_archives($0) : ledger_entry_line_closes(ledger_strip_inline_code($0)))) susp_closed = 1
     if ($0 ~ /^[ \t]*(<br[ \t]*\/?[ \t]*>)?[ \t]*[-*]?[ \t]*`?verify:/) {
       # A receipt ABOVE the suspect line is already on the archive side, so nothing of this
       # entry`s receipt can be stranded by the split and there is nothing to refuse.
