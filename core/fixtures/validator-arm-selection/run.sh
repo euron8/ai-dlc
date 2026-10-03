@@ -80,8 +80,34 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 # stopped running produces no findings on that tree and the shard reports FIXTURE BROKEN
 # rather than a clean sweep. Neither shard can report green having run nothing.
 SHARDS="a b"
-PHASES_a="unknown-id grammar all-ids sweep"
+PHASES_a="width unknown-id grammar all-ids sweep"
 PHASES_b="attrib union partition m1 m2 m3"
+
+# --- THE INNER POOL WIDTH, resolved in ONE place -------------------------------------------
+# Default 6 (the reasoning is beside the pools below). The read-set deriver runs this fixture
+# with VAS_INNER_POOL_WIDTH=1 (BL-375): at 6 the concurrent `grep -r` sweeps outrun the sandbox
+# tracer's `log stream` and it drops reports, so the trace is OMITTED. The width changes the
+# SCHEDULE, not the work -- every id is still dispatched and every file still read -- so a
+# read-set traced at width 1 is the read-set at width 6. No AI_DLC_ prefix, as
+# future-proofing against the fixture env scrubs keyed on it; none sits on this path today.
+#
+# A value that is not an integer from 1 to 64 is FIXTURE BROKEN (exit 2), never a regression:
+# `xargs -P 0` means UNLIMITED on BSD, and a non-number makes xargs refuse, which the sweep's own
+# guard would report as a pool that did not run -- a false finding about the subject.
+# THE LENGTH IS BOUNDED BEFORE ANY NUMERIC TEST. A 20-digit value overflows `test`, which then
+# errors and returns FALSE, so `-lt 1` alone lets it through to an xargs that refuses it. Three
+# digits cannot overflow, and 64 is the ceiling.
+JOBS="${VAS_INNER_POOL_WIDTH:-6}"
+case "$JOBS" in
+  ''|*[!0-9]*) echo "FIXTURE BROKEN: VAS_INNER_POOL_WIDTH='$JOBS' is not an integer from 1 to 64" >&2; exit 2 ;;
+esac
+if [ "${#JOBS}" -gt 3 ] || [ "$JOBS" -lt 1 ] || [ "$JOBS" -gt 64 ]; then
+  echo "FIXTURE BROKEN: VAS_INNER_POOL_WIDTH='$JOBS' is not an integer from 1 to 64" >&2; exit 2
+fi
+# The cheap re-entry mode the width arms below drive: the resolved width, and nothing else.
+if [ "${1:-}" = "--print-width" ]; then
+  printf '%s\n' "$JOBS"; exit 0
+fi
 
 # THE SHARD ARRIVES AS AN ARGUMENT, NOT AS AN ENVIRONMENT VARIABLE. The re-entrant worker
 # modes below are dispatched by argument too, and a fixture that took its identity from the
@@ -171,6 +197,8 @@ if [ "${1:-}" = "--sweep-one" ]; then
 fi
 
 echo "$NAME fixture"
+# The deriver's traced run is evidenced by THIS line reading 1 in its per-fixture log.
+echo "inner pool width: $JOBS"
 echo
 
 fails=0
@@ -190,7 +218,8 @@ trap 'rm -rf "$TMP"' EXIT
 # the pole. Measured solo, the two sweeps together are 23 of 89 seconds; the other 64 are four
 # near-full validator runs, each of which is a single serial process no inner pool can touch.
 # The directory split above is what those four needed.
-JOBS=6
+#
+# JOBS is resolved once, from VAS_INNER_POOL_WIDTH, near the top of this file; both pools read it.
 
 # The declared id set, taken from the SERVED grammar rather than a fresh grep. The reason is
 # recorded in render-invariant-index.sh: a column-0 pattern finds 83 of the header-shaped
@@ -247,6 +276,82 @@ if [ "$GROUP" = a ]; then
     broke "the shard phase lists and this file's phase guards disagree — some assertion runs in no shard, or a shard names a phase that no longer exists: $(diff "$TMP/cov.sites" "$TMP/cov.declared" | tr '\n' ' ' | cut -c1-160)"
   fi
   ok "COVERAGE: all $cov_s phase(s) of this fixture are dealt to exactly one of the $(printf '%s\n' $SHARDS | grep -c .) shard(s), each of which has a driver directory"
+fi
+
+# --- THE WIDTH KNOB: unset is 6, 1 reaches the pool, a bad value is FIXTURE BROKEN ----------
+# Driven through `--print-width`, which prints the very variable both pools read. Each cell is
+# presence-shaped -- a specific number or a specific exit must APPEAR -- so a resolver that
+# ignored the knob fails the `1` cell, one that ignored the default fails the unset cell, and
+# one that accepted anything fails both refusal cells. `env -u` makes the unset cell hold even
+# when this fixture itself runs under the deriver, where the knob IS set.
+if want width; then
+RAN="$RAN width"
+w_unset="$(env -u VAS_INNER_POOL_WIDTH bash "$0" --print-width 2>/dev/null)"; w_unset_rc=$?
+w_one="$(VAS_INNER_POOL_WIDTH=1 bash "$0" --print-width 2>/dev/null)"; w_one_rc=$?
+VAS_INNER_POOL_WIDTH=0 bash "$0" --print-width >/dev/null 2>&1; w_zero_rc=$?
+VAS_INNER_POOL_WIDTH=abc bash "$0" --print-width >/dev/null 2>&1; w_abc_rc=$?
+# 20 digits overflow `test`, which errors and returns false, so a guard that is only `-lt 1`
+# passes it to xargs. 65 is the ceiling's near-miss; 64 must still resolve.
+VAS_INNER_POOL_WIDTH=99999999999999999999 bash "$0" --print-width >/dev/null 2>&1; w_big_rc=$?
+VAS_INNER_POOL_WIDTH=65 bash "$0" --print-width >/dev/null 2>&1; w_65_rc=$?
+w_64="$(VAS_INNER_POOL_WIDTH=64 bash "$0" --print-width 2>/dev/null)"; w_64_rc=$?
+if [ "$w_unset_rc:$w_unset" = "0:6" ]; then
+  ok "WIDTH: with VAS_INNER_POOL_WIDTH unset the inner pool width resolves to 6"
+else
+  bad "WIDTH: with VAS_INNER_POOL_WIDTH unset --print-width gave rc $w_unset_rc and '$w_unset' (expected 0 and 6) — the pre-push default moved"
+fi
+if [ "$w_one_rc:$w_one" = "0:1" ]; then
+  ok "WIDTH: VAS_INNER_POOL_WIDTH=1 resolves the inner pool width to 1, so the deriver's knob reaches the pool"
+else
+  bad "WIDTH: VAS_INNER_POOL_WIDTH=1 gave rc $w_one_rc and '$w_one' (expected 0 and 1) — the deriver's knob does not reach the pool and a traced run stays at full width"
+fi
+if [ "$w_zero_rc" -eq 2 ] && [ "$w_abc_rc" -eq 2 ]; then
+  ok "WIDTH: VAS_INNER_POOL_WIDTH=0 and =abc both exit 2 (FIXTURE BROKEN), never a regression"
+else
+  bad "WIDTH: a bad width was not refused at exit 2: '0' exited $w_zero_rc, 'abc' exited $w_abc_rc"
+fi
+if [ "$w_big_rc" -eq 2 ] && [ "$w_65_rc" -eq 2 ] && [ "$w_64_rc:$w_64" = "0:64" ]; then
+  ok "WIDTH: a 20-digit width and 65 both exit 2 (FIXTURE BROKEN), and 64 still resolves to 64"
+else
+  bad "WIDTH: the width ceiling is wrong: 20 digits exited $w_big_rc and 65 exited $w_65_rc (expected 2 and 2); 64 gave rc $w_64_rc and '$w_64' (expected 0 and 64)"
+fi
+
+# THE WIDTH IS ALSO CHECKED WHERE THE POOLS USE IT, not only where it is resolved. The cells
+# above drive `--print-width`, which reads JOBS at the resolver; a pool that hard-sets its own
+# width, or a JOBS re-assigned below the resolver, passes every one of them. This is a
+# SOURCE-TEXT check of this file: every pool site reads "$JOBS", there are exactly 2, and JOBS
+# is assigned exactly once. Comment lines are skipped. The patterns are assembled from pieces
+# (`x''args`, `J''OBS=`) so the text of this check cannot match itself, and no assertion
+# message below names the pool command followed by its width flag.
+width_sites() { # $1 file; prints "<pool sites> <of which read JOBS> <JOBS assignments>"
+  awk -v xa='x''args' -v jb='J''OBS=' '
+    /^[[:blank:]]*#/ { next }
+    $0 ~ ("(^|[^A-Za-z0-9_])" xa "[[:blank:]][^|]*-P") {
+      p++
+      if ($0 ~ ("(^|[^A-Za-z0-9_])" xa "[[:blank:]][^|]*-P[[:blank:]]*\"[$]JOBS\"")) j++
+    }
+    $0 ~ ("(^|[^A-Za-z0-9_])" jb) { a++ }
+    END { printf "%d %d %d\n", p, j, a }' "$1"
+}
+width_sites_ok() { [ "$1" = "2 2 1" ]; }
+# SELF-PROBE FIRST, on seeded copies: f1 hard-sets the width at both pool sites, f2 re-assigns
+# JOBS just after the --print-width block. Each must FAIL; each copy is cmp-guarded so an edit
+# that matched nothing cannot score as a kill.
+ws_f1="$TMP/ws.f1.sh"; ws_f2="$TMP/ws.f2.sh"
+sed 's/-P "\$JOBS"/-P 6/' "$0" > "$ws_f1"
+awk '{ print } prev && $0 == "fi" { print "J" "OBS=6"; prev = 0; next }
+     { prev = ($0 ~ /^  printf .*"\$JOBS"; exit 0$/) }' "$0" > "$ws_f2"
+ws_real="$(width_sites "$0")"
+ws_r1="$(width_sites "$ws_f1")"; ws_r2="$(width_sites "$ws_f2")"
+if cmp -s "$0" "$ws_f1" || cmp -s "$0" "$ws_f2"; then
+  bad "WIDTH SITES self-probe: a seeded defect copy is byte-identical to this file (f1 changed: $(cmp -s "$0" "$ws_f1" && echo no || echo yes), f2 changed: $(cmp -s "$0" "$ws_f2" && echo no || echo yes)), so the source-text check below is unproven"
+elif width_sites_ok "$ws_r1" || width_sites_ok "$ws_r2"; then
+  bad "WIDTH SITES self-probe: the source-text check passed a seeded defect: f1 (literal width 6 at both pool sites) read '$ws_r1', f2 (JOBS re-set after --print-width) read '$ws_r2'"
+elif width_sites_ok "$ws_real"; then
+  ok "WIDTH SITES (source-text check): both pool sites of this file read \"\$JOBS\" and JOBS is assigned once ('$ws_real'); the check refuses f1, a literal width at both sites ('$ws_r1'), and f2, JOBS re-set after --print-width ('$ws_r2')"
+else
+  bad "WIDTH SITES (source-text check): this file does not have exactly 2 pool sites all reading \"\$JOBS\" with JOBS assigned once — read '$ws_real' as '<sites> <reading JOBS> <assignments>', expected '2 2 1'. A pool that does not read JOBS, or a JOBS re-set after the resolver, makes the --print-width cells above prove nothing about the pools"
+fi
 fi
 
 # --- Arm 0: CONTROL — the real tree passes a plain run ------------------------------------

@@ -731,11 +731,24 @@ for fx in $LIST; do
   # failures. `-n` and </dev/null are not decoration: backgrounded, sudo reaches for the
   # controlling terminal, the process group takes SIGTTIN and the whole derivation stops dead
   # in state T with no error and no exit code.
+  #
+  # VAS_INNER_POOL_WIDTH=1 NARROWS validator-arm-selection's inner `xargs -P` pool on a traced run
+  # (BL-375). At its pre-push width of 6 the concurrent `grep -r` sweeps push `log stream` past
+  # 14k reports/s and the sandbox tracer drops reports, so the fixture is OMITTED; at width 1 it
+  # traced clean. The width changes the SCHEDULE, not the work -- every id is still run and every
+  # file still read -- so the read-set derived at width 1 is the read-set at width 6.
+  # IT IS PASSED AS `env KNOB=1 bash`, INSIDE sudo and sandbox-exec, ON PURPOSE. An export, or a
+  # `KNOB=1 sudo ...` / `KNOB=1 sandboxed ...` prefix, is stripped by sudo's env_reset under
+  # `fs_usage` and `--tracer both`, and the fixture would silently run at 6. Placed after the
+  # privilege drop, `env` sets it in the very process that runs the fixture, under every tracer.
+  # The name carries no AI_DLC_ prefix as future-proofing: several fixtures scrub that prefix from
+  # the environment they hand their subjects. No scrub sits on this path today.
+  # core/fixtures/readset-skip binds this line by running a copy of this deriver.
   if [ "$TRACER" = fs_usage ]; then
-    ( cd "$TREE" && sudo -n -u "$RUN_AS" bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
+    ( cd "$TREE" && sudo -n -u "$RUN_AS" env VAS_INNER_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
     rc=$?
   else
-    ( cd "$TREE" && sandboxed bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
+    ( cd "$TREE" && sandboxed env VAS_INNER_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
     rc=$?
   fi
 

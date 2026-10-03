@@ -864,6 +864,53 @@ one-at-a-time pass over those 7, at `895ac0df` and load 7.3 falling to 3.8, mapp
 two carry 858 rows, the other two carry 50 and 52, and the 350-row `procsub-staged-refusal`
 traced clean alone.
 
+**PARTIAL IN BATCH 188 (0.715.0): `validator-arm-selection-b`'s drops have a measured mechanism
+and a fix; the other three do not.** Measured by the batch-188 diagnosis hand in a scratch clone
+of `25ac399d`:
+- `validator-arm-selection-b` dropped 222-228 reports on every trace. Every drop fell in a 1-2s
+  window running at 14k-46k reports/s with 26-118 concurrent `grep -r` from the fixture's inner
+  `xargs -P 6` pools. Shard b's concurrency is the attribution pool, run twice, plus the seeded
+  plain run dispatched beside it. A synthetic reproduction dropped at K=6 and K=12 concurrent
+  greps, never at K=1 or K=2, and never serially at 26.6k reports, so concurrency is the variable
+  and volume is not. At inner width 1 it traced clean from load 34.8: 0 drops, 956 paths, covering
+  every committed non-`.git` row except 9 rows for files no longer in the tree, plus 122 new rows.
+- `enforcement-map-sites` dropped 1445 reports on the diagnosis hand's run, made with the sibling
+  pool at width 1. The knob does not reach it: its own pool is a hard-coded `JOBS=8`, so "at
+  width 1" does not describe it. Its drops come from its `cp -R` seed.
+- `apply-drift-refile` and `reconcile-emit-report` drop on load-dependent upstream events.
+
+The fix: `core/scripts/derive-fixture-readsets.sh` launches every traced fixture as
+`... env VAS_INNER_POOL_WIDTH=1 bash <run.sh>` on both launch lines, after `sudo -u` and
+`sandbox-exec`. Under `fs_usage` and `--tracer both` the fixture runs through sudo, whose
+env_reset strips an export or a prefix in front of it. Under `--tracer sandbox` no sudo is on the
+path, so a prefix in front of `sandboxed` would survive there; the `env` form is used on every
+path so that one spelling holds under all three tracers.
+`core/fixtures/validator-arm-selection/run.sh` resolves `JOBS` once from
+`${VAS_INNER_POOL_WIDTH:-6}`, refuses a value that is not an integer from 1 to 64 with exit 2
+(more than 3 digits is refused before any numeric test, which a 20-digit value would overflow),
+and prints `inner pool width: N`. The width changes the schedule, not the work, so a set traced
+at width 1 is the set at width 6. The knob carries no `AI_DLC_` prefix as future-proofing against
+the fixture env scrubs keyed on it; no scrub is on this path today.
+Held by `validator-arm-selection` (phase `width`: unset gives 6, 1 gives 1, 64 gives 64; 0, `abc`,
+65 and a 20-digit value exit 2; and a source-text check that both `xargs` pool sites read
+`"$JOBS"` and `JOBS` is assigned once) and `core/fixtures/readset-skip` (under `--tracer
+sandbox` a copy of the real deriver traces a probe that echoes the knob and must log `width=1`,
+the same probe outside the deriver logs `unset`, and a deriver copy with the injection removed
+fails the arm; under `--tracer both` the stub world's sudo strips the knob as env_reset does, and
+fxa must log `width=1`, which the injection moved in front of sudo, the `sandboxed` launch
+dropping it, and a `VAS_INNER_POOL_WIDTH=1 sandboxed` prefix each fail). The `fs_usage` launch
+line runs only as root and is covered only by the operator's own run.
+The re-trace evidence is PENDING the lead's trace: it is `inner pool width: 1` in
+`$TRACE_ROOT/w/validator-arm-selection-b.log`.
+
+**Do NOT switch the stream to `--style ndjson` to cut the report rate.** Measured: it lost up to
+two-thirds of per-pid coverage while printing zero `Messages dropped` notices. The deriver's loss
+guard keys on that notice, so ndjson would turn an omitted fixture into a silently smaller
+read-set.
+
+Still open: `enforcement-map-sites`, `apply-drift-refile` and `reconcile-emit-report` drop, so
+no multi-fixture `--list` is yet guaranteed clean, and the stage-1 deliverable is not met.
+
 verify: sh D=core/scripts/derive-fixture-readsets.sh; [ -f "$D" ] || exit 9; B="$(grep -v '^[[:space:]]*#' "$D")"; grep -q 'sandbox-exec -f' <<<"$B" || exit 1; grep -q 'fs_usage -w' <<<"$B" && exit 1; grep -qF '"$(id -u)" = "0"' <<<"$B" && exit 1; exit 0
 
 ## BL-404 — the acknowledge hook's typed-invocation anchor depends on the harness's serialisation, and an updater call inside a pipeline session is asserted by no arm
