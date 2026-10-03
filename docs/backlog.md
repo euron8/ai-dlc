@@ -493,3 +493,39 @@ NEEDS_REWORK and one (`4b-qa-validation.md`) matches Check 1's pattern twice. Th
 ships serial-only in BL-437: a QA shard merge would have had to choose a vocabulary first.
 
 verify: manual -- the remedy is a choice between giving qa.md its own declared verdict set and Check 1 a second set, or binding QA to the code-reviewer set; either is a contract change across a consumer's existing review files and is the operator's to make.
+
+**LANDED (v0.720.0, verified TBD).** `qa.md` now declares its own set under a bare `## Verdict`
+heading, in the template shape `code-reviewer.md` uses: `PASS | NEEDS_REWORK`. Check 1 in
+`gate-validation.md` reads each review file against the set of the gate its Gate-status line
+cites it for (the gate comes from the citation, not the filename; a file cited for both gates
+must read a value in both sets). A capital run followed by a hyphen or other qualifier reads as
+the whole token, so `PASS-pending-PVC` fails. Check 1 carries one bullet per owner: `- **Code-review verdict
+values (`code-reviewer.md`)**` and `- **QA verdict values (`qa.md`)**`. I112 binds both sets,
+each owner against its own bullet. It refuses a missing heading or a short template per owner,
+and the span scan's exclusion is the union of the two sets. The arm's self-probe seeds a swapped
+pair of bullets and requires both owners to report both directions on it and to stay quiet on
+the matching pair. `core/fixtures/enforcement-map-derivations` A58-A63 hold the QA half. Each of
+the six scores an unmutated control in its own frame, then requires the exact I112 message and
+finding count. A58: qa.md loses `## Verdict`. A59: qa.md gains an unnamed member. A60:
+`APPROVED` on the QA bullet. A61: `PASS` on the code-review bullet. A62: the two bullets merged,
+which produces two findings. A63: `PASS` added to code-reviewer.md's template. Each cross-gate
+token is derived as a set difference of the two templates.
+
+**Scope narrowed on purpose.** Check 1 stays `adjudication: llm`. The arms prove that both sets
+are bound to Check 1's text, and they say nothing about how a lead executes Check 1 at a gate.
+
+**Consumer replay, read-only on the reference consumer's `docs/reviews/s316/`.** It holds 22 QA
+files, all named `<idx>-qa-validation[-p<k>].md`. Read by Check 1's own rule (its grep, then
+its value rule with the suffix guard), 21 of the 22 read `PASS` and one, `1b-qa-validation.md`,
+reads `NEEDS_REWORK`. Its tracked sibling `1b-qa-validation-p2.md` reads `PASS`, and Check 1's
+re-review rule reads that higher-`p<M>` sibling in place of the cited file and names both. A simpler reader keyed only on `^Verdict:` and a bare heading scores 20 of 22,
+because it misses `B1-qa-validation-p2.md`'s `## Verdict: PASS` line. `4b-qa-validation.md`
+matches the grep twice, and both lines read `PASS`. Every s316 QA value is in the new set.
+
+**The older `-gate2-qa.md` files are history.** The consumer's `docs/` holds 37 files named
+`*-gate2-qa.md` (36 under `docs/reviews/`, `/usr/bin/find`). That is 38 with the broader glob
+`*gate2-qa*`, which adds one `-evidence-summary.md`. No reader in `core/` opens that name. The
+only `core/` hits are fixture seed data: two path-grammar probes in `artifact-path-conformance`
+and one evidence-seed row in `gate-adjudication`. None of them is a reader. Check 1 reads the
+file a story's Gate-status line cites, so none of those 37 files is re-read and none needs
+migrating.

@@ -27,8 +27,8 @@
 # conservation arms do not ride on the verdict mutants.
 #
 # CHECK 1'S PATTERN IS DERIVED from gate-validation.md with the sed gate-verdict-grep-shape uses,
-# and the value is read back Check 1's way (text after `:`, else the next non-blank line) by this
-# fixture's own reader, not by the merge's.
+# and the value is read back by this fixture's own reader, not by the merge's. The value rule is
+# the one gate-validation.md Check 1 states, and it is cited there rather than restated here.
 #
 # The threshold key is named ONCE, in the unset below (fixtures scrub AI_DLC_*; I87). Everywhere
 # else it is DERIVED from the partition script's own dereference site.
@@ -186,7 +186,9 @@ refused_clean() { # <token> <shard-dir>: exit 2, REFUSED:, the token, no file at
   [ "$RC" -eq 2 ] && has "$MO" "REFUSED:" && has "$MO" "$1" && [ ! -e "$o" ] \
     && [ -z "$(find "$(dirname "$o")" -maxdepth 1 -name '*.merge-tmp.*' 2>/dev/null)" ]
 }
-# Check 1's read, written here: the FIRST match, the text after `:`, else the next non-blank line.
+# Check 1's read of the FIRST match, by the value rule gate-validation.md Check 1 states. The merge
+# writes a bare member on the line under `## Verdict`, so the strip below is that rule on every
+# input this fixture produces.
 check1_value() { # <file>
   local m ln txt v
   m="$(grep -inE -- "$PAT" "$1" | sed -n 1p)"; [ -n "$m" ] || return 1

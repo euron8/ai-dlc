@@ -10980,6 +10980,21 @@ fi
 # vocabulary-owner: core/team-roles/code-reviewer.md
 # vocabulary-extract: review-verdicts
 # vocabulary-readers: core/skills/ai-dlc/steps/gate-validation.md
+# vocabulary: QA verdicts
+# vocabulary-invariant: I112
+# vocabulary-owner: core/team-roles/qa.md
+# vocabulary-extract: review-verdicts
+# vocabulary-readers: core/skills/ai-dlc/steps/gate-validation.md
+#
+# TWO OWNERS, TWO SETS, ONE READER. QA declares its own set, `PASS | NEEDS_REWORK`, under
+# `## Verdict` in core/team-roles/qa.md, in the template shape code-reviewer.md uses, so ONE
+# owner grammar reads both. Check 1 reads a gate-1 file against the code-review set and a gate-2
+# file against the QA set, and carries one bullet per owner, each opening with the owner's name.
+# The comparison is PER OWNER, each against its own bullet: a pooled comparison would read a QA
+# member written on the code-review bullet as named, and the self-probe's SWAPPED pair exists to
+# prove it does not. The span scan's exclusion is the UNION of both sets, because a QA member in
+# Check 1's prose is a declared verdict and not a stray. Each owner losing its `## Verdict`
+# heading, or reading fewer than two members, is refused separately rather than compared.
 #
 # WHAT IT BINDS. `APPROVED | NEEDS_REWORK | BLOCKED` is a closed set of three, declared ONCE
 # as the template line under `## Verdict` in core/team-roles/code-reviewer.md -- the line a
@@ -11008,12 +11023,13 @@ fi
 # a set that stays correct-looking after the template has moved. Text about a program is not
 # the program; the template is what a review file is written FROM.
 #
-# THE READER SET IS ONE LINE OF FIXED SHAPE, a deliberate narrowing rather than a convenience.
+# EACH READER SET IS ONE LINE OF FIXED SHAPE, a deliberate narrowing rather than a convenience.
 # Check 1 is prose, and a grammar harvesting every screaming token in it as a "named member"
-# would read `FAILS` and `APPROVED` alike. The bullet beginning `- **Verdict values` is the
-# single place the step states which values pass, so the reader extractor takes the BACKTICKED
-# screaming tokens on that one line. One line, one shape, so a bare member like `BLOCKED` is
-# readable without widening to bare words anywhere else.
+# would read `FAILS` and `APPROVED` alike. The bullets beginning `- **Code-review verdict values (`
+# and `- **QA verdict values (` are the only places the step states which values pass, so the
+# reader extractor takes the BACKTICKED screaming tokens on each, tagged by bullet. One line per
+# owner, one shape, so a bare member like `BLOCKED` is readable without widening to bare words
+# anywhere else.
 #
 # THE SPAN SCAN IS THE THIRD DIRECTION AND IT IS THE ONE THAT CATCHES THE MOTIVATING CASE. A
 # non-member does not have to sit on the bullet to do damage -- `CHANGES-REQUESTED` sat in an
@@ -11028,7 +11044,7 @@ fi
 # UNANCHORED it additionally yields `A-Z`, harvested out of the bracket class inside Check 1's
 # own quoted grep pattern. That is this arm's false-positive measurement, and the exclusions
 # below are what take the anchored two down to zero:
-#   1. the owner set itself, which is what the comparison is about;
+#   1. both owner sets, unioned, which is what the comparison is about;
 #   2. HTML-comment lines -- Check 1 opens with `<!-- CHECK_LOADED: 1 -->`, a step-loader
 #      marker and not a verdict, and every check in that file carries one;
 #   3. the schema enum members, DERIVED by running render-vocabulary-index.sh's own
@@ -11052,8 +11068,14 @@ fi
 # and its span is extracted once into a variable; every later stage reads it from memory.
 # CLAUDE.md records what a nested arm did to this validator's wall clock once.
 i112_owner="$REPO_ROOT/core/team-roles/code-reviewer.md"
+i112_qowner="$REPO_ROOT/core/team-roles/qa.md"
 i112_reader="$REPO_ROOT/core/skills/ai-dlc/steps/gate-validation.md"
 i112_renderer="$REPO_ROOT/scripts/render-vocabulary-index.sh"
+# ONE BULLET PER OWNER, each opening with the owner it answers to. The prefixes are matched with
+# awk's `index()`, not as regexes, so the `**` and `(` in them are literal characters and there
+# is no escaping to get wrong.
+i112_cpfx='- **Code-review verdict values ('
+i112_qpfx='- **QA verdict values ('
 
 # ONE implementation of each grammar, called by the probe and by the corpus. A second copy for
 # the probe would be this arm proving something about a reader other than the one its findings
@@ -11064,35 +11086,100 @@ i112_owner_set() {  # <owner-file> -> one member per line
                                          for (i = 1; i <= n; i++) print m[i]; exit }' "$1" \
     | LC_ALL=C sort -u
 }
+i112_has_heading() {  # <owner-file> -> 0 when a bare `## Verdict` line is present
+  # A SEPARATE REFUSAL FROM THE MEMBER COUNT, because the two say different things to the
+  # author. A missing heading means the section is gone; a heading with a short template means
+  # the template moved. `$(<file)` is read by bash itself, so this costs no external command.
+  case "
+$(<"$1")
+" in *"
+## Verdict
+"*) return 0 ;; esac
+  return 1
+}
+i112_prefix_count() {  # <prefix> <span text> -> i112_pc, lines OPENING with the prefix, fork-free
+  # COLUMN ONE, NOT ANYWHERE ON THE LINE, for the bullet reader's own reason: a sentence quoting a
+  # bullet's prefix is prose about it. The prefix is quoted inside the pattern, so its `**` and
+  # `(` are literal characters.
+  i112_pc=0
+  while IFS= read -r i112_l; do
+    case "$i112_l" in "$1"*) i112_pc=$((i112_pc + 1)) ;; esac
+  done <<EOF
+$2
+EOF
+}
+i112_count() {  # <list> -> i112_cnt, the non-empty lines in it, fork-free
+  i112_cnt=0
+  while IFS= read -r i112_l; do [ -n "$i112_l" ] && i112_cnt=$((i112_cnt + 1)); done <<EOF
+$1
+EOF
+}
 i112_span_of() {  # <reader-file> -> Check 1's span, heading exclusive, to the next `### `
   # THE HTML-COMMENT DROP IS HERE, NOT IN A SECOND PIPELINE BELOW, so the span is filtered
   # once for both readers of it and this arm pays one fork rather than one per scan. It costs
-  # the bullet reader nothing: a `- **Verdict values` line is never inside a comment.
+  # the bullet reader nothing: a verdict-values bullet is never inside a comment.
   awk '/^### 1\. Validation cycle complete\?/ { on = 1; next }
        on && /^### / { exit }
        on && /^[[:blank:]]*<!--/ { next }
        on { print }' "$1"
 }
-i112_reader_set() {  # <span text> -> the backticked screaming tokens on the one bullet
-  # Sorted and de-duplicated INSIDE the awk, for I110's reason: one line's worth of tokens is
-  # not worth a `sort -u` fork, and this arm is charged against FORK_BUDGET above.
-  awk '/^- \*\*Verdict values/ { n = split($0, m, "`")
-                                 for (i = 2; i <= n; i += 2)
-                                   if (m[i] ~ /^[A-Z][A-Z_]*$/ && !(m[i] in s)) {
-                                     s[m[i]] = 1; k++; o[k] = m[i] }
-                                 exit }
+i112_reader_sets() {  # <span text> -> `C <token>` / `Q <token>`, the backticked tokens per bullet
+  # BOTH BULLETS IN ONE PASS, TAGGED, so the second owner costs this arm no second fork. The tag
+  # is what keeps the sets APART: a reader that pooled the two bullets would compare each owner
+  # against both, and a QA member written on the code-review bullet would read as named. The
+  # first line carrying each prefix is the bullet; a later one is prose. Sorted inside the awk,
+  # for I110's reason -- the composite `<tag> <token>` sorts by tag and then by token.
+  awk -v c="$i112_cpfx" -v q="$i112_qpfx" '
+       { t = "" }
+       index($0, c) == 1 && !sc { t = "C"; sc = 1 }
+       index($0, q) == 1 && !sq { t = "Q"; sq = 1 }
+       t != "" { n = split($0, m, "`")
+                 for (i = 2; i <= n; i += 2)
+                   if (m[i] ~ /^[A-Z][A-Z_]*$/ && !((t " " m[i]) in s)) {
+                     s[t " " m[i]] = 1; k++; o[k] = t " " m[i] } }
        END { for (i = 1; i <= k; i++)
                for (j = i + 1; j <= k; j++)
-                 if (o[j] < o[i]) { t = o[i]; o[i] = o[j]; o[j] = t }
+                 if (o[j] < o[i]) { x = o[i]; o[i] = o[j]; o[j] = x }
              for (i = 1; i <= k; i++) print o[i] }' <<<"$1"
 }
+i112_pick() {  # <tag> <tagged lines> -> the tokens carrying that tag, one per line, fork-free
+  i112_pk_out=""
+  while IFS=' ' read -r i112_pk_t i112_pk_v; do
+    [ "$i112_pk_t" = "$1" ] || continue
+    if [ -z "$i112_pk_out" ]; then i112_pk_out="$i112_pk_v"
+    else i112_pk_out="$i112_pk_out
+$i112_pk_v"; fi
+  done <<EOF
+$2
+EOF
+  [ -z "$i112_pk_out" ] || printf '%s\n' "$i112_pk_out"
+}
+i112_compare() {  # <owner set> <reader set> -> i112_cu (owner members unnamed), i112_cn (unowned)
+  # Set equality in both directions, ONE OWNER AT A TIME. Globals rather than output, so the
+  # probe and the corpus both read the two lists without a subshell between them.
+  i112_cu=""; i112_cn=""
+  while IFS= read -r i112_m; do
+    [ -n "$i112_m" ] || continue
+    in_lines "$i112_m" "$2" || i112_cu="$i112_cu $i112_m"
+  done <<EOF
+$1
+EOF
+  while IFS= read -r i112_m; do
+    [ -n "$i112_m" ] || continue
+    in_lines "$i112_m" "$1" || i112_cn="$i112_cn $i112_m"
+  done <<EOF
+$2
+EOF
+}
+i112_in() { case " $2 " in *" $1 "*) return 0 ;; esac; return 1; }  # <token> <space list>
 i112_strays() {  # <span text> <owner set> <enum set> -> unowned screaming compound tokens
   # THE EXCLUSIONS ARE INSIDE THIS FUNCTION, NOT BESIDE ITS CALLER, and the first cut of this
   # arm had them outside -- its probe scanned the raw token list and correctly reported that
   # the seeded schema-enum member was NOT excluded, because the only copy of that exclusion
   # lived in the corpus loop the probe never reached. A probe that exercises a grammar the
   # findings do not come from is the shape verification-discipline.md's "run the shipping code"
-  # rule refuses; this way the acquittal is proven on every run.
+  # rule refuses; this way the acquittal is proven on every run. The owner set passed here is
+  # the UNION of both owners: a QA member in Check 1's prose is a declared verdict, not a stray.
   # THE DEDUPE IS `in_lines` AGAINST THE ACCUMULATING OUTPUT, NOT A `sort -u`. A fork to order
   # a list this size buys an ordering only the finding string depends on, and the fork budget
   # this file declares about itself is measured in exactly these. `grep -oE` emits in document
@@ -11114,12 +11201,15 @@ EOF
 
 if [ ! -f "$i112_owner" ]; then
   err "I112: $i112_owner is missing. It carries the \`## Verdict\` template line, the only declaration of the code-review verdict set, so there is no owner to compare the gate step against and a clean result here would mean nothing."
+elif [ ! -f "$i112_qowner" ]; then
+  err "I112: $i112_qowner is missing. It carries the \`## Verdict\` template line, the only declaration of the QA verdict set, so Check 1's gate-2 bullet would have no owner to compare against and a clean result here would mean nothing."
 elif [ ! -f "$i112_reader" ]; then
-  err "I112: $i112_reader is missing. Check 1 is the only reader of the code-review verdict set, so this arm would have nothing to compare the owner against."
+  err "I112: $i112_reader is missing. Check 1 is the only reader of both verdict sets, so this arm would have nothing to compare either owner against."
 elif [ ! -f "$i112_renderer" ]; then
   err "I112: $i112_renderer is missing. Its SCHEMA_PY walker is where this arm's schema-enum exclusion is derived from, and without it the span scan would report every enum token in Check 1 as an unowned verdict."
 else
   i112_set="$(i112_owner_set "$i112_owner")"
+  i112_qset="$(i112_owner_set "$i112_qowner")"
   i112_span="$(i112_span_of "$i112_reader")"
   # THE SCHEMA ENUM SET, RUN RATHER THAN RESTATED. The walker is lifted out of the renderer by
   # its own quoting -- the assignment line, its body, a lone closing quote -- so a change to
@@ -11140,10 +11230,9 @@ else
                                      for (j = i + 1; j <= k; j++)
                                        if (o[j] < o[i]) { t = o[i]; o[i] = o[j]; o[j] = t }
                                    for (i = 1; i <= k; i++) print o[i] }')"
-  i112_n_set=0; i112_n_enum=0; i112_enum_first=""
-  while IFS= read -r i112_l; do [ -n "$i112_l" ] && i112_n_set=$((i112_n_set + 1)); done <<EOF
-$i112_set
-EOF
+  i112_count "$i112_set"; i112_n_set=$i112_cnt
+  i112_count "$i112_qset"; i112_n_qset=$i112_cnt
+  i112_n_enum=0; i112_enum_first=""
   while IFS= read -r i112_l; do
     [ -n "$i112_l" ] || continue
     i112_n_enum=$((i112_n_enum + 1))
@@ -11151,10 +11240,16 @@ EOF
   done <<EOF
 $i112_enum
 EOF
-  if [ "$i112_n_set" -lt 2 ]; then
+  if ! i112_has_heading "$i112_owner"; then
+    err "I112 could not derive the code-review verdict set: 0 member(s) read, because core/team-roles/code-reviewer.md carries no bare \`## Verdict\` heading. The section a reviewer copies the template from is gone or renamed, and two empty sets compare equal, so this reports rather than passing."
+  elif ! i112_has_heading "$i112_qowner"; then
+    err "I112 could not derive the QA verdict set: 0 member(s) read, because core/team-roles/qa.md carries no bare \`## Verdict\` heading. The section QA writes its verdict from is gone or renamed, and two empty sets compare equal, so this reports rather than passing."
+  elif [ "$i112_n_set" -lt 2 ]; then
     err "I112 could not derive the code-review verdict set: $i112_n_set member(s) read out of the \`## Verdict\` template line in core/team-roles/code-reviewer.md. Its heading or its template shape changed. A set of one or none compares equal to almost anything, so this reports rather than passing."
+  elif [ "$i112_n_qset" -lt 2 ]; then
+    err "I112 could not derive the QA verdict set: $i112_n_qset member(s) read out of the \`## Verdict\` template line in core/team-roles/qa.md. Its template shape changed. A set of one or none compares equal to almost anything, so this reports rather than passing."
   elif [ -z "$i112_span" ]; then
-    err "I112 could not locate Check 1's span in core/skills/ai-dlc/steps/gate-validation.md. The \`### 1. Validation cycle complete?\` heading moved or was reworded, and an empty span reports nothing in every direction -- which reads exactly like a step whose verdict vocabulary agrees with the role file's."
+    err "I112 could not locate Check 1's span in core/skills/ai-dlc/steps/gate-validation.md. The \`### 1. Validation cycle complete?\` heading moved or was reworded, and an empty span reports nothing in every direction -- which reads exactly like a step whose verdict vocabulary agrees with the role files'."
   elif [ "$i112_n_enum" -lt 1 ]; then
     err "I112 derived ZERO screaming-compound schema enum members by running render-vocabulary-index.sh's SCHEMA_PY over core/schemas/. That walker is the whole exclusion for the span scan below, and an empty exclusion makes every enum token in Check 1 a finding. Either the walker's quoting in the renderer changed or python3 refused it."
   else
@@ -11164,12 +11259,18 @@ EOF
     # that arm reporting ITSELF as the forked site for exactly that reason.
     i112_probe="$(mktemp -d 2>/dev/null)"
     if [ -z "$i112_probe" ] || [ ! -d "$i112_probe" ]; then
-      err "I112 could not build its probe tree, so none of its three grammars was proven this run. A grammar that has not been shown to fire is not evidence about the corpus below it."
+      err "I112 could not build its probe tree, so none of its grammars was proven this run. A grammar that has not been shown to fire is not evidence about the corpus below it."
     else
       i112_p="PROBE"
       i112_a="${i112_p}_ALPHA"; i112_b="${i112_p}_BETA"; i112_c="${i112_p}_GAMMA"
       i112_d="${i112_p}_DELTA"; i112_e="${i112_p}_EPSILON"
       i112_h="${i112_p}_HIDDEN"; i112_o="${i112_p}_OUTSIDE"
+      i112_qa="${i112_p}_PI"; i112_qb="${i112_p}_RHO"
+      # The second owner's set is a list, not a file: the owner grammar is the same function
+      # for both owners and is proven on the file seed below. What the second owner adds is
+      # the per-bullet split and the union exclusion, and those are what this set feeds.
+      i112_pq="$i112_qa
+$i112_qb"
       # THE OWNER SEED CARRIES THE TWO SHAPES THAT ARE NOT THE TEMPLATE, and the first is not
       # hypothetical: code-reviewer.md's Communication bullet writes the real three members as
       # a parenthesised alternation inside a sentence. An extractor reading it derives a
@@ -11178,27 +11279,56 @@ EOF
         printf -- '- Send your verdict (%s | %s | %s, with severity).\n' "$i112_a" "$i112_b" "$i112_c"
         printf -- '- %s appears only in this bullet.\n' "$i112_d"
       } > "$i112_probe/owner.md"
-      # THE READER SEED CARRIES ONE OF EVERY INPUT THE SPAN SCAN MUST SEPARATE: a bullet naming
-      # a member AND a non-member; an unowned compound in ordinary prose, which is the
-      # motivating case; a real schema enum member in prose, which the derived exclusion must
-      # acquit; a compound inside an HTML comment, the shape Check 1's own `CHECK_LOADED`
-      # marker has; and a compound AFTER the next `### ` heading, which is the span boundary.
+      # THE HEADING NEAR-MISS carries the word under the same `## ` prefix but not the bare line,
+      # which is the shape a role file reorganised by someone who never heard of this arm has.
+      printf '# seed\n## Verdict Values\n%s | %s\n' "$i112_a" "$i112_b" > "$i112_probe/renamed.md"
+      i112_ph=0; i112_has_heading "$i112_probe/owner.md" && i112_ph=1
+      i112_phn=0; i112_has_heading "$i112_probe/renamed.md" && i112_phn=1
+      # THE READER SEED CARRIES ONE OF EVERY INPUT THE SPAN SCAN MUST SEPARATE: both owner
+      # bullets, the code-review one naming a member AND a non-member; an unowned compound in
+      # ordinary prose, which is the motivating case; a real schema enum member and a SECOND-
+      # owner member in prose, which the derived exclusion and the union must acquit; a
+      # compound inside an HTML comment, the shape Check 1's own `CHECK_LOADED` marker has; and
+      # a compound AFTER the next `### ` heading, which is the span boundary.
       { printf '### 1. Validation cycle complete?\n'
         printf -- '<!-- %s -->\n' "$i112_h"
-        printf -- '- **Verdict values are a set:** `%s` passes; `%s` does not.\n' "$i112_a" "$i112_e"
-        printf -- '- A sentence naming %s and %s.\n' "$i112_c" "$i112_enum_first"
+        printf -- '%s`owner.md`)** -- `%s` passes; `%s` does not.\n' "$i112_cpfx" "$i112_a" "$i112_e"
+        printf -- '%s`qa.md`)** -- `%s` passes.\n' "$i112_qpfx" "$i112_qa"
+        printf -- '- A sentence naming %s, %s and %s.\n' "$i112_c" "$i112_enum_first" "$i112_qb"
         printf '### 2. Something else\n'
         printf -- '- %s lives past the boundary.\n' "$i112_o"
       } > "$i112_probe/reader.md"
       i112_po="$(i112_owner_set "$i112_probe/owner.md")"
       i112_psp="$(i112_span_of "$i112_probe/reader.md")"
-      i112_pr="$(i112_reader_set "$i112_psp")"
-      # THE PROBE SCANS WITH THE SEEDED OWNER SET, NOT WITH THE REAL ONE. The seed's members
-      # are synthetic, so passing the corpus set here would leave every seeded token unowned
+      i112_prs="$(i112_reader_sets "$i112_psp")"
+      i112_pr="$(i112_pick C "$i112_prs")"; i112_prq="$(i112_pick Q "$i112_prs")"
+      # THE PROBE SCANS WITH THE SEEDED OWNER SETS, NOT WITH THE REAL ONES. The seed's members
+      # are synthetic, so passing the corpus sets here would leave every seeded token unowned
       # and the positive direction would pass for the wrong reason.
-      i112_pt="$(i112_strays "$i112_psp" "$i112_po" "$i112_enum")"
+      i112_pt="$(i112_strays "$i112_psp" "$i112_po
+$i112_pq" "$i112_enum")"
+      # THE SWAPPED PAIR: each bullet names the OTHER owner's members. Per-owner equality must
+      # report both directions for both owners, and the same span read the other way round --
+      # each owner against the bullet carrying ITS members -- must be quiet. That quiet half is
+      # the near-miss: a comparison that fired on everything would pass the loud half alone.
+      i112_sw="$(printf '%s`%s` `%s`)**\n%s`%s` `%s`)**\n' \
+                 "$i112_cpfx" "$i112_qa" "$i112_qb" "$i112_qpfx" "$i112_a" "$i112_b")"
+      i112_swr="$(i112_reader_sets "$i112_sw")"
+      i112_swc="$(i112_pick C "$i112_swr")"; i112_swq="$(i112_pick Q "$i112_swr")"
+      # THE DUPLICATE-BULLET SEED. The reader takes the FIRST line carrying each prefix, so a
+      # second bullet for one owner is read by nothing and can teach any value at all. The
+      # counter must see two code-review bullets here and ONE QA bullet, because the QA prefix's
+      # second appearance is mid-line, quoted inside a sentence.
+      i112_dup="$(printf '%s`%s`)**\n%s`%s`)**\n- A sentence quoting %s`x`)** in prose.\n%s`%s`)**\n' \
+                  "$i112_cpfx" "$i112_a" "$i112_cpfx" "$i112_e" "$i112_qpfx" "$i112_qpfx" "$i112_qa")"
+      i112_prefix_count "$i112_cpfx" "$i112_dup"; i112_pdc=$i112_pc
+      i112_prefix_count "$i112_qpfx" "$i112_dup"; i112_pdq=$i112_pc
       rm -rf "$i112_probe" 2>/dev/null || true
       i112_pf=""
+      [ "$i112_ph" = 1 ] || \
+        i112_pf="${i112_pf} the heading grammar did not see the seeded bare \`## Verdict\` line, so its refusal below would fire on every owner, correct or not."
+      [ "$i112_phn" = 0 ] || \
+        i112_pf="${i112_pf} the heading grammar accepted \`## Verdict Values\` as the bare heading. A renamed section would then pass the missing-section refusal and be compared as though it were still there."
       in_lines "$i112_a" "$i112_po" && in_lines "$i112_b" "$i112_po" || \
         i112_pf="${i112_pf} the owner grammar did not read the seeded template line back (got '$i112_po'), so it cannot spell its own subject and every zero below is a floor of unknown depth."
       in_lines "$i112_c" "$i112_po" && \
@@ -11206,50 +11336,86 @@ EOF
       in_lines "$i112_d" "$i112_po" && \
         i112_pf="${i112_pf} the owner grammar read a member named only in a BULLET. The template line is the declaration; a bullet is prose about it."
       in_lines "$i112_a" "$i112_pr" && in_lines "$i112_e" "$i112_pr" || \
-        i112_pf="${i112_pf} the reader grammar did not read both backticked tokens off the seeded \`- **Verdict values\` bullet (got '$i112_pr'). Neither direction of the set comparison below could then fire."
+        i112_pf="${i112_pf} the reader grammar did not read both backticked tokens off the seeded code-review bullet (got '$i112_pr'). Neither direction of that owner's comparison could then fire."
+      in_lines "$i112_qa" "$i112_prq" || \
+        i112_pf="${i112_pf} the reader grammar did not read the backticked token off the seeded QA bullet (got '$i112_prq'). The QA owner's comparison could not fire in either direction."
+      { in_lines "$i112_qa" "$i112_pr" || in_lines "$i112_a" "$i112_prq" || in_lines "$i112_e" "$i112_prq"; } && \
+        i112_pf="${i112_pf} the reader grammar POOLED the two bullets (code-review '$i112_pr', QA '$i112_prq'). Each owner would then be compared against both bullets, and a member written on the wrong gate's bullet would read as named."
       in_lines "$i112_c" "$i112_pt" || \
-        i112_pf="${i112_pf} the span scan did not see a seeded unowned compound token in ordinary prose. That is the motivating case -- a non-member in a sentence, not on the bullet -- so a quiet scan below would be a scan that cannot spell it."
+        i112_pf="${i112_pf} the span scan did not see a seeded unowned compound token in ordinary prose. That is the motivating case -- a non-member in a sentence, not on a bullet -- so a quiet scan below would be a scan that cannot spell it."
       in_lines "$i112_enum_first" "$i112_pt" && \
         i112_pf="${i112_pf} the span scan did not exclude a seeded SCHEMA ENUM member, which the derived exclusion exists to acquit. Check 1 legitimately names one, so without this the arm reports a finding on a correct tree."
       in_lines "$i112_a" "$i112_pt" && \
         i112_pf="${i112_pf} the span scan did not exclude a seeded OWNER MEMBER. Every legitimate verdict value in Check 1's span is a member, so an arm that reported them would fire on a correct tree and be turned off."
+      in_lines "$i112_qb" "$i112_pt" && \
+        i112_pf="${i112_pf} the span scan did not exclude a seeded member of the SECOND owner. The exclusion is the union of both sets, and Check 1's prose names QA members as legitimately as code-review ones."
       in_lines "$i112_h" "$i112_pt" && \
         i112_pf="${i112_pf} the span scan read a compound token out of an HTML COMMENT. Every check in gate-validation.md opens with a \`CHECK_LOADED\` marker of exactly that shape, so this exclusion is what keeps the scan's false-positive set at zero."
       in_lines "$i112_o" "$i112_pt" && \
         i112_pf="${i112_pf} the span scan crossed the next \`### \` heading. Check 1's span ends there, and a scan running past it reports tokens belonging to checks this vocabulary does not bind."
+      i112_compare "$i112_po" "$i112_swc"
+      i112_in "$i112_a" "$i112_cu" && i112_in "$i112_b" "$i112_cu" && \
+        i112_in "$i112_qa" "$i112_cn" && i112_in "$i112_qb" "$i112_cn" || \
+        i112_pf="${i112_pf} the SWAPPED pair did not report both directions for the code-review owner (unnamed '$i112_cu', unowned '$i112_cn'). A bullet carrying the other gate's set would pass."
+      i112_compare "$i112_pq" "$i112_swq"
+      i112_in "$i112_qa" "$i112_cu" && i112_in "$i112_qb" "$i112_cu" && \
+        i112_in "$i112_a" "$i112_cn" && i112_in "$i112_b" "$i112_cn" || \
+        i112_pf="${i112_pf} the SWAPPED pair did not report both directions for the QA owner (unnamed '$i112_cu', unowned '$i112_cn'). A bullet carrying the other gate's set would pass."
+      i112_compare "$i112_po" "$i112_swq"
+      [ -z "$i112_cu$i112_cn" ] || \
+        i112_pf="${i112_pf} the code-review owner compared against a bullet carrying exactly its own members reported (unnamed '$i112_cu', unowned '$i112_cn'). The comparison fires on agreement, so its findings below say nothing."
+      [ "$i112_pdc" = 2 ] || \
+        i112_pf="${i112_pf} the bullet counter read $i112_pdc code-review bullet(s) on a seed carrying two, so a second bullet for one owner -- read by nothing, and free to teach any value -- would pass."
+      [ "$i112_pdq" = 1 ] || \
+        i112_pf="${i112_pf} the bullet counter read $i112_pdq QA bullet(s) on a seed carrying one at column one and one quoted mid-line. It is counting prose that mentions the prefix, and a correct Check 1 quoting its own bullet would be refused."
+      i112_compare "$i112_pq" "$i112_swc"
+      [ -z "$i112_cu$i112_cn" ] || \
+        i112_pf="${i112_pf} the QA owner compared against a bullet carrying exactly its own members reported (unnamed '$i112_cu', unowned '$i112_cn'). The comparison fires on agreement, so its findings below say nothing."
       if [ -n "$i112_pf" ]; then
         err "I112 SELF-PROBE FAILED:${i112_pf}"
       else
-        # THE CORPUS. Set equality both ways, then the span scan, each with its own remedy.
-        i112_rset="$(i112_reader_set "$i112_span")"
-        i112_toks="$(i112_strays "$i112_span" "$i112_set" "$i112_enum")"
-        i112_unread=""; i112_unowned=""; i112_stray=""
-        while IFS= read -r i112_m; do
-          [ -n "$i112_m" ] || continue
-          in_lines "$i112_m" "$i112_rset" || i112_unread="$i112_unread $i112_m"
-        done <<EOF
-$i112_set
-EOF
-        while IFS= read -r i112_m; do
-          [ -n "$i112_m" ] || continue
-          in_lines "$i112_m" "$i112_set" || i112_unowned="$i112_unowned $i112_m"
-        done <<EOF
-$i112_rset
-EOF
+        # THE CORPUS. Each owner's bullet at most once, then per-owner set equality both ways,
+        # then the span scan, each with its own remedy. The bullet count is checked first and
+        # is not a refusal of the rest: a duplicate bullet is reported, and the comparison still
+        # runs against the FIRST bullet, which is the one the reader takes.
+        # ZERO IS OWNED BY THE COMPARISON, NOT BY THIS COUNT. With no bullet, the owner's
+        # direction 1 already names every declared member as unnamed; reporting the zero here
+        # too would put two findings on one subject, and the fixture's bullet-deleted and
+        # bullets-merged assertions would score a two-cell flip. So this refuses MORE than one,
+        # and together with direction 1 the bullet is held to exactly one.
+        i112_prefix_count "$i112_cpfx" "$i112_span"
+        [ "$i112_pc" -le 1 ] || \
+          err "I112: Check 1's span in core/skills/ai-dlc/steps/gate-validation.md carries $i112_pc lines opening with \`$i112_cpfx\` where exactly one is allowed. The comparison reads the first such line only, so a second one is read by nothing and can teach any value. Merge them into one bullet."
+        i112_prefix_count "$i112_qpfx" "$i112_span"
+        [ "$i112_pc" -le 1 ] || \
+          err "I112: Check 1's span in core/skills/ai-dlc/steps/gate-validation.md carries $i112_pc lines opening with \`$i112_qpfx\` where exactly one is allowed. The comparison reads the first such line only, so a second one is read by nothing and can teach any value. Merge them into one bullet."
+        i112_rsets="$(i112_reader_sets "$i112_span")"
+        i112_rset="$(i112_pick C "$i112_rsets")"; i112_rqset="$(i112_pick Q "$i112_rsets")"
+        i112_toks="$(i112_strays "$i112_span" "$i112_set
+$i112_qset" "$i112_enum")"
+        i112_stray=""
         while IFS= read -r i112_m; do
           [ -n "$i112_m" ] || continue
           i112_stray="$i112_stray $i112_m"
         done <<EOF
 $i112_toks
 EOF
-        if [ -n "$i112_unread" ]; then
-          err "I112: core/team-roles/code-reviewer.md declares code-review verdict(s) that gate-validation.md's Check 1 never names:$i112_unread. Check 1 is where a lead learns what a verdict value MEANS for the gate, and a member it does not name is a value the step has no stated behaviour for -- the lead meets it at a gate and decides, which is the recollection Check 1's own \`Read each verdict from its review file\` rule exists to delete. Name it on the \`- **Verdict values\` bullet, or stop declaring it in the role file's \`## Verdict\` template."
+        i112_compare "$i112_set" "$i112_rset"
+        if [ -n "$i112_cu" ]; then
+          err "I112: core/team-roles/code-reviewer.md declares code-review verdict(s) that gate-validation.md's Check 1 never names:$i112_cu. Check 1 is where a lead learns what a verdict value MEANS for the gate, and a member it does not name is a value the step has no stated behaviour for -- the lead meets it at a gate and decides, which is the recollection Check 1's own \`Read each verdict from its review file\` rule exists to delete. Name it on the \`- **Code-review verdict values\` bullet, or stop declaring it in the role file's \`## Verdict\` template."
         fi
-        if [ -n "$i112_unowned" ]; then
-          err "I112: gate-validation.md's Check 1 names verdict value(s) core/team-roles/code-reviewer.md does not declare:$i112_unowned. The \`## Verdict\` template is what a reviewer copies into the review file, so a value only the step knows about is one no review file can carry and one the grep in Check 1 can never read back. Add it to the template, or stop teaching it."
+        if [ -n "$i112_cn" ]; then
+          err "I112: gate-validation.md's Check 1 names code-review verdict value(s) core/team-roles/code-reviewer.md does not declare:$i112_cn. The \`## Verdict\` template is what a reviewer copies into the review file, so a value only the step knows about is one no review file can carry and one the grep in Check 1 can never read back. Add it to the template, or stop teaching it on the code-review bullet."
+        fi
+        i112_compare "$i112_qset" "$i112_rqset"
+        if [ -n "$i112_cu" ]; then
+          err "I112: core/team-roles/qa.md declares QA verdict(s) that gate-validation.md's Check 1 never names:$i112_cu. A gate-2 file is read against this set, and a member Check 1 does not name is a value the step has no stated behaviour for. Name it on the \`- **QA verdict values\` bullet, or stop declaring it in qa.md's \`## Verdict\` template."
+        fi
+        if [ -n "$i112_cn" ]; then
+          err "I112: gate-validation.md's Check 1 names QA verdict value(s) core/team-roles/qa.md does not declare:$i112_cn. QA writes its verdict from qa.md's \`## Verdict\` template, so a value only the step knows about is one no QA file can carry. Add it to the template, or stop teaching it on the QA bullet."
         fi
         if [ -n "$i112_stray" ]; then
-          err "I112: Check 1's span in core/skills/ai-dlc/steps/gate-validation.md carries screaming compound token(s) that are neither a code-review verdict nor a schema enum member:$i112_stray. That is exactly how \`CHANGES-REQUESTED\` lived in the one paragraph in the system about verdict VALUES -- a token no reviewer can write, taught beside a grep that validates a verdict line's SHAPE and never its value. Use a member of the set core/team-roles/code-reviewer.md declares under \`## Verdict\`, or move the token out of Check 1."
+          err "I112: Check 1's span in core/skills/ai-dlc/steps/gate-validation.md carries screaming compound token(s) that are neither a code-review or QA verdict nor a schema enum member:$i112_stray. That is exactly how \`CHANGES-REQUESTED\` lived in the one paragraph in the system about verdict VALUES -- a token no reviewer can write, taught beside a grep that validates a verdict line's SHAPE and never its value. Use a member of a set core/team-roles/code-reviewer.md or core/team-roles/qa.md declares under \`## Verdict\`, or move the token out of Check 1."
         fi
       fi
     fi
