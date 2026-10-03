@@ -19,6 +19,34 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.715.0] - 2026-10-03
+
+Batch 188's second release: `BL-375` PARTIAL. The sandbox read-set tracer now traces `validator-arm-selection-b`
+without dropping reports. No consumer candidate is discharged, and the entry stays open because three fixtures
+still drop. Net closed minus filed is 0.
+
+### BL-375: the read-set deriver traces validator-arm-selection at inner pool width 1
+
+Every drop in `validator-arm-selection-b` fell inside 1-2s windows running at 14k-46k reports/s, beside up to 118
+concurrent `grep -r` from the fixture's own `xargs -P 6` pools. A synthetic reproduction with the deriver's profile
+drops at 6 and 12 concurrent greps and never at 1 or 2, or serially at 26.6k reports, so the variable is concurrency,
+not volume. At width 1 the fixture traced with 0 drops and 956 paths, starting at load 34.8.
+
+- `core/scripts/derive-fixture-readsets.sh` launches each fixture as `env VAS_INNER_POOL_WIDTH=1 bash …` on both
+  launch lines, after `sudo` and `sandbox-exec`, because sudo's env_reset would strip an exported variable under
+  `--tracer both` and `fs_usage`.
+- `core/fixtures/validator-arm-selection/run.sh` resolves its pool width once from `VAS_INNER_POOL_WIDTH`
+  (default 6), refuses anything that is not an integer of 1 or more with exit 2, and prints `inner pool width: N`.
+  It also adds `--print-width` and three arms over it. The width changes the schedule, not the work, so the
+  read-set stays valid.
+- `core/fixtures/readset-skip` drives a copy of the real deriver and asserts that the traced probe sees width 1.
+  Its controls: the probe run outside the deriver sees `unset`, and a deriver copy without the injection fails the arm.
+
+The other three fixtures stay open in the entry, each with its measured mechanism. `enforcement-map-sites` still
+dropped 1445 reports at width 1, from its parallel `cp -R` seed. `apply-drift-refile` and `reconcile-emit-report`
+drop on load-dependent events upstream of the log client. The entry also records a hazard: `--style ndjson` lost up
+to two-thirds of per-pid coverage while printing zero drop notices, which would silently defeat the deriver's drop guard.
+
 ## [0.714.0] - 2026-10-03
 
 Batch 188's release: two consumer filings, both dated 2026-10-03, which the reference consumer had written into its
