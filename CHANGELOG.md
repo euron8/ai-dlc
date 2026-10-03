@@ -19,6 +19,57 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.718.0] - 2026-10-03
+
+Batch 189's third release. It discharges the reference consumer's
+`PC-S316-GATE-1-AND-2-REVIEWS-ARE-NEVER-SHARDED-SO-A-LARGE-CAPITAL-PATH-DIFF-IS-ONE-SERIAL-READ` as `BL-437`. The
+gate-1 code review can now shard by changed-file group. This is opt-in, and gate 2 stays serial. `BL-438` files the QA
+verdict-vocabulary mismatch that keeps gate 2 serial.
+
+### BL-437: gate-1 code review shards by changed-file group, opt-in; gate 2 stays serial
+
+- NEW `core/scripts/partition-review-diff.sh --map <worktree> <base> <frozen-sha> [--min-files N] [--max-parts K]
+  [--shard-dir D]`. It derives a review's part set from `git diff --numstat <base>..<sha>` (two dots, the range of the
+  pre-gate commit-presence check). It drops the paths `artifact-path-config.sh --scan-roots` prints and pairs a test
+  with its one same-stem source. It then splits any group heavier than 1/K of the diff by its next path component and
+  greedy-packs the groups into at most K parts (default 4). With `--shard-dir` it writes `.manifest` (worktree, base,
+  full sha, min-files, max-parts, map). `SERIAL: <reason>` is exit 3 and a refusal is exit 2. It only reads the
+  repository.
+- NEW `core/scripts/merge-review-shards.sh <shard-dir> --gate code-review --out <file>`. It re-runs the partition from
+  the manifest and refuses unless the map byte-matches. It also refuses unless every part and `cross.md` arrived
+  exactly once, each with the frozen sha and one `shard-verdict:`, and unless every `#### ` finding carries one `parts:`
+  line in its shard's scope. It writes the one review file `gate-validation.md` Check 1 reads. The verdict is recomputed
+  as the worst shard verdict (`BLOCKED` > `NEEDS_REWORK` > `APPROVED`), against the set lifted from `code-reviewer.md`.
+  Check 1's pattern is lifted from `gate-validation.md`, and the output must match it exactly once. A refusal writes
+  nothing at `--out`, and an existing `--out` that differs is refused.
+- `implementation.md` runs the partition at the commit-presence check. Above the threshold it dispatches one
+  `shard: <i>/<N> <group>` reviewer per part plus one `shard: cross/<N> cross` reviewer. On SERIAL it dispatches
+  `shard: 1/1 <idx>`. It joins with the merge in the frozen worktree, using the pass-specific `--out`, and the lead
+  persists the shard directory with the merged file. `code-reviewer.md` gains an "As a shard" clause outside the
+  review template. Rule 28's files axis now names a story's changed-file set.
+- **The wall-clock gain is the READING share only.** Part reviewers execute nothing: no tests, no
+  `validate-mutation-red.sh`, no build. The cross reviewer runs the suite and mutation-red once, serially, in the frozen
+  worktree, so a sharded review still costs one full execution pass.
+- **Gate 2 ships serial-only.** QA runs the suite and `validate-mutation-red.sh`. Concurrent QA shards would mutate
+  files in one frozen worktree at the same time. QA's verdict vocabulary (`PASS`) is also outside Check 1's set, so a
+  merge would have to invent or re-map a value (`BL-438`). QA is dispatched `shard: 1/1 <idx>`, `qa.md` says so,
+  `merge-review-shards.sh --gate qa` refuses, and `qa` is not a shardable role.
+- `validate-spawn-ledger.sh`: `SHARD_ROLES` gains `code-reviewer` and `code-reviewer-escalated`, so Check 22's S3 now
+  fails an invented serial exception on a reviewer row. On an existing ledger, a reviewer row with no shard key stays
+  PENDING and a row carrying `shard: null` now WARNs under S1. It never fails. The S1 remedy for those roles names
+  `partition-review-diff.sh` and `shard: 1/1`.
+- **Opt-in, and how a consumer turns it on.** With neither `--min-files` nor `AI_DLC_REVIEW_SHARD_MIN_FILES` set, the
+  partition answers SERIAL naming the variable, so a consumer's review dispatch is unchanged. To shard, a consumer sets
+  `"AI_DLC_REVIEW_SHARD_MIN_FILES": "<N>"` in the `env` block of `.claude/settings.json`. Stories with at least N
+  reviewable files then shard. Making it the default is left to the operator after measured sprints.
+
+### BL-438: QA writes a verdict vocabulary and a file name that Check 1 does not read (NOTE)
+
+Re-counted read-only on the reference consumer's `docs/reviews/s316/`. 0 of its 20 QA files carry the
+`<idx>-gate2-qa.md` name `qa.md` prescribes; all 20 are `-qa-validation*.md`. 18 of the 20 carry a column-0
+`Verdict: PASS`, which is outside the I112 set where only `APPROVED` passes. Filed `verify: manual`, because the remedy
+is a contract choice for the operator.
+
 ## [0.717.0] - 2026-10-03
 
 Batch 189's second release: `BL-004` and `BL-430` close on one nine-run forced sweep, taken on an unpushed branch

@@ -62,6 +62,9 @@ Before reviewing a task, read these files:
    sections. Whole-reading the architecture doc is a Rule 25 violation.
 3. The diff or files changed by the dev teammate
 
+Gate 2 is dispatched serially: your brief carries `shard: 1/1 <story-index>` and
+you validate the whole story.
+
 ## Gate-2 Start Condition (HARD)
 
 Gate-2 validation MUST NOT begin until the lead sends an explicit go-signal of

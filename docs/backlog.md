@@ -1087,3 +1087,89 @@ full-mode leg, rc 0 with no copy line). An inherited `VEM_SELF` is not scored he
 
 verify: sh V="$PWD/scripts/validate-enforcement-map.sh"; [ -f "$V" ] || exit 9; S="$(mktemp -d)" || exit 9; A=I81,I91,I94,I95; o1="$(cd "$S" && bash "$V" --arms "$A" 2>&1)"; c1=$?; o2="$(bash "$V" --arms "$A" 2>&1)"; c2=$?; [ "$c1" = 0 ] && [ "$c2" = 0 ] || { echo "BL-436 --arms $A: rc $c1 from a scratch cwd, rc $c2 from the root" >&2; exit 1; }; [ "$o1" = "$o2" ] || { echo "BL-436 the scratch-cwd and root runs differ" >&2; exit 1; }; o3="$(cd core && bash ../scripts/validate-enforcement-map.sh --arms I91 2>&1)" || { echo "BL-436 a relative invocation from core/ failed: $o3" >&2; exit 1; }; T="$S/t"; mkdir "$T" || exit 9; for d in core scripts templates .githooks; do cp -R "$d" "$T/$d" || exit 9; done; printf '# <task-notification\n' > "$T/core/scripts/bl436-probe.sh" || exit 9; W="  <task-notification -> core/scripts/bl436-probe.sh "; o4="$(bash "$T/scripts/validate-enforcement-map.sh" --arms I91 2>&1)"; c4=$?; o5="$(cd "$S" && bash "$T/scripts/validate-enforcement-map.sh" --arms I91 2>&1)"; c5=$?; for p in "root:$c4:$o4" "scratch:$c5:$o5"; do w="${p%%:*}"; r="${p#*:}"; c="${r%%:*}"; o="${r#*:}"; h="$(grep -e ' -> ' <<<"$o")"; [ "$c" = 1 ] && [ "$h" = "$W" ] || { echo "BL-436 seeded I91 offender from the $w cwd: rc $c, copy lines [$h], want rc 1 and only the planted file" >&2; exit 1; }; done; [ "$o4" = "$o5" ] || { echo "BL-436 the seeded tree reads differently from the root and from a scratch cwd" >&2; exit 1; }; o6="$(bash "$T/scripts/validate-enforcement-map.sh" 2>&1)"; c6=$?; h6="$(grep -e ' -> ' <<<"$o6")"; [ "$c6" = 1 ] && grep -qxF -- "$W" <<<"$h6" || { echo "BL-436 seeded I91 offender in FULL mode (no --arms) from the root: rc $c6, copy lines [$h6], want rc 1 naming the planted file" >&2; exit 1; }; exit 0
 
+
+## BL-437 — gate-1 and gate-2 reviews were never sharded, so a large capital-path diff was one serial read
+
+**DEFECT, wall clock.** Carries the reference consumer's
+`PC-S316-GATE-1-AND-2-REVIEWS-ARE-NEVER-SHARDED-SO-A-LARGE-CAPITAL-PATH-DIFF-IS-ONE-SERIAL-READ`.
+Gate 3 shards `gate-adjudicator` on worklist items and the adversary shards by files or sections,
+but `implementation.md` dispatched one `code-reviewer` and one `qa` per story, whatever the size of
+the diff. Rule 28's files axis covered an artifact of two or more files, not a story diff, and
+`validate-spawn-ledger.sh`'s `SHARD_ROLES` named neither reviewer role, so a reviewer row carrying
+an invented `shard: none (made up)` exited 0, unjudged.
+
+**The fix (v0.718.0). Gate 1 ships opt-in; gate 2 ships serial-only.**
+`partition-review-diff.sh --map <worktree> <base> <frozen-sha>` derives the part set from the
+two-dot range at the pre-gate commit-presence check: scan roots excluded, tests paired with their
+one same-stem source, groups split by adaptive depth, greedy-packed into at most four parts. It
+writes `.manifest` into the shard directory `docs/reviews/s<N>/shards/<idx>-code-review-<sha12>/`.
+`merge-review-shards.sh <dir> --gate code-review --out <file>` re-derives the map from the
+manifest and refuses unless every ordinal and `cross.md` arrived exactly once, each carrying the
+frozen sha and one `shard-verdict:`, and every `#### ` finding carrying one `parts:` line inside
+its shard's own scope. It writes the one review file Check 1 reads, with the verdict recomputed as
+the worst shard verdict. Part reviewers execute nothing; the cross reviewer owns the suite and
+mutation-red, so the wall-clock gain is the READING share only. `SHARD_ROLES` gains
+`code-reviewer` and `code-reviewer-escalated`.
+
+**Opt-in.** With neither `--min-files` nor `AI_DLC_REVIEW_SHARD_MIN_FILES` set, the partition
+answers `SERIAL:` naming the variable, and the lead dispatches `shard: 1/1 <idx>`. A consumer turns
+it on with `"AI_DLC_REVIEW_SHARD_MIN_FILES": "<N>"` in `.claude/settings.json` `env`. Making it the
+default is the operator's call after measured sprints.
+
+**Why gate 2 stays serial (contract adversary).** B1: QA's role runs the suite and
+`validate-mutation-red.sh`, and N concurrent QA shards would run mutation-red concurrently in ONE
+frozen worktree, which mutates files in place. D6: QA's verdict vocabulary is not Check 1's; the
+reference consumer's QA files read `Verdict: PASS`, a value outside the set `code-reviewer.md`
+declares (I112), so a QA merge would have to invent a fourth value or re-map one. `qa` is not
+added to `SHARD_ROLES`, `merge-review-shards.sh --gate qa` refuses, and QA is dispatched
+`shard: 1/1 <idx>`. The vocabulary mismatch is filed separately as BL-438.
+
+**The receipt runs the programs on a seeded repo and greps none of their text.** It seeds a
+six-file, three-directory diff in a scratch repo holding only the artifact-path grammar, and
+requires: `--map --min-files 4 --max-parts 3` exits 0 with three parts and writes `.manifest`;
+a base that is not an ancestor of the frozen sha (a sibling commit minted on the base's tree, so
+its two-dot file set is the same six files) exits 2 naming the ancestry and writes no manifest;
+the same run with the variable unset exits 3 printing `SERIAL:` and naming
+`AI_DLC_REVIEW_SHARD_MIN_FILES`; the variable set to 4 prints the identical map. Over seeded
+shards it merges three cases where a non-first part carries the worst verdict and the cross shard
+and the majority disagree with it: NEEDS_REWORK among APPROVED reads NEEDS_REWORK, BLOCKED among
+NEEDS_REWORK reads BLOCKED, all APPROVED reads APPROVED. Each value is read back from the output
+Check 1's way, with Check 1's pattern lifted from `gate-validation.md` and a seeded `## Verdict`
+control read first. A unique token from every shard must survive into the merged file. Removing
+one part shard, and separately `cross.md`, must exit 2 with no file at `--out`. Check 22 must
+FAIL `code-reviewer` and `code-reviewer-escalated` rows carrying an invented serial exception
+under S3, beside a `remediator` control that fails the same way, and must NOT judge a `qa` row.
+The seeded settings give every role a model, so only S3 can fail them. Exit 9 is a harness
+fault: the validator, `gate-validation.md` or the grammar absent, the remediator control or the
+Check 1 control not behaving, or the seed failing. The SHA-mismatch refusal is the fixture's
+arm, not this receipt's.
+
+Scored by `bash <file>` with `set -uo pipefail` as the first line, from a `git archive` copy's
+root: base `946fb8ce` 1 (scripts absent, so the code-reviewer S3 leg fails first); the fix 0;
+the ancestor check removed 1;
+default-on (no threshold means 1) 1; verdict by majority count 1; short union (the missing-shard
+check removed and absent shards skipped) 1; shard bodies dropped with the conservation guard
+removed 1; cross-wins 1; last-part-wins 1; `SHARD_ROLES` widened with the scripts absent 1;
+scripts present with `SHARD_ROLES` not widened 1; `qa` added to `SHARD_ROLES` 1; a second
+Check-1-matching verdict line with its count guard removed 1. Each wrong build exits at a
+different assertion than the one beside it, measured on a copy of the receipt with every
+`exit 1` numbered.
+
+verify: sh unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; R="$(pwd)"; P="$R/core/scripts/partition-review-diff.sh"; M="$R/core/scripts/merge-review-shards.sh"; V="$R/core/scripts/validate-spawn-ledger.sh"; G="$R/core/skills/ai-dlc/steps/gate-validation.md"; A="$R/core/skills/ai-dlc/artifact-path-grammar.md"; [ -f "$V" ] && [ -f "$G" ] && [ -f "$A" ] && command -v jq >/dev/null || exit 9; d="$(mktemp -d)" || exit 9; printf '%s\n' '{"aiDlcModels":{"opus":"claude-opus-5[1m]","sonnet":"claude-sonnet-5"},"aiDlcRoles":{"dev":{"model":"sonnet"},"code-reviewer":{"model":"sonnet"},"code-reviewer-escalated":{"model":"opus"},"remediator":{"model":"opus"},"qa":{"model":"sonnet"}}}' > "$d/settings.json" || exit 9; E() { { jq -nc '{v:1,sprint:900,name:"epoch",role:"dev",model_bound:"sonnet",model_requested:"sonnet",role_contract_cited:true,role_file_readable:true}' && jq -nc --arg r "$1" --arg b "$2" '{v:1,sprint:900,name:("bl-"+$r),role:$r,model_bound:$b,model_requested:$b,role_contract_cited:true,role_file_readable:true,shard:"invalid-exception",shard_raw:"none (made up)",tool_use_id:("toolu_"+$r)}'; } > "$d/$1.jsonl" || exit 9; o="$(bash "$V" --ledger "$d/$1.jsonl" --sprint 900 --settings "$d/settings.json" 2>&1)"; rc=$?; }; E remediator opus; [ "$rc" = 1 ] && grep -qF "role 'remediator' declared a serial exception" <<<"$o" && grep -qF '1 FAILED on an invented serial exception (S3)' <<<"$o" || exit 9; for r in code-reviewer:sonnet code-reviewer-escalated:opus; do E "${r%%:*}" "${r#*:}"; [ "$rc" = 1 ] && grep -qF "role '${r%%:*}' declared a serial exception" <<<"$o" && grep -qF '1 FAILED on an invented serial exception (S3)' <<<"$o" || exit 1; done; E qa sonnet; [ "$rc" = 0 ] && grep -qF '0 FAILED on an invented serial exception (S3)' <<<"$o" || exit 1; PAT="$(sed -n "s/.*grep -inE '\(.*\)' <review-file>.*/\1/p" "$G")"; [ "$(grep -c . <<<"$PAT")" = 1 ] || exit 9; ck() { n="$(grep -ciE -- "$PAT" "$1")" || n=0; [ "$n" = 1 ] || { printf 'COUNT%s' "$n"; return 0; }; l="$(grep -inE -- "$PAT" "$1")"; ln="${l%%:*}"; t="${l#*:}"; case "$t" in *:*) t="${t#*:}" ;; *) t="$(awk -v s="$ln" 'NR > s && /[^[:blank:]]/ { print; exit }' "$1")" ;; esac; printf '%s' "$t" | sed -e 's/^[[:blank:]*]*//' -e 's/[[:blank:]*]*$//'; }; printf '# x\n\n## Verdict\nAPPROVED\n' > "$d/ctl1.md"; printf 'Verdict: APPROVED\n## Verdict\nBLOCKED\n' > "$d/ctl2.md"; [ "$(ck "$d/ctl1.md")" = APPROVED ] && [ "$(ck "$d/ctl2.md")" = COUNT2 ] || exit 9; [ -f "$P" ] && [ -f "$M" ] || exit 1; w="$d/w"; mkdir -p "$w/.claude/skills/ai-dlc" && cp "$A" "$w/.claude/skills/ai-dlc/" && ( cd "$w" && git init -q . && echo base > README && git add -A && git -c user.name=p -c user.email=p@x commit -qm base ) >/dev/null 2>&1 || exit 9; B="$(git -C "$w" rev-parse HEAD)" || exit 9; mkdir -p "$w/api" "$w/web" "$w/lib" && for f in api/a.py api/b.py web/c.js web/d.js lib/e.go lib/f.go; do printf 'x\ny\nz\n' > "$w/$f" || exit 9; done; ( cd "$w" && git add -A && git -c user.name=p -c user.email=p@x commit -qm six ) >/dev/null 2>&1 || exit 9; T="$(git -C "$w" rev-parse HEAD)" || exit 9; [ "${#T}" = 40 ] || exit 9; s12="$(printf '%s' "$T" | cut -c1-12)"; S0="$d/m/1-code-review-$s12"; oa="$(bash "$P" --map "$w" "$B" "$T" --min-files 4 --max-parts 3 --shard-dir "$S0")"; [ $? = 0 ] && [ "$(grep -c . <<<"$oa")" -ge 2 ] && [ -f "$S0/.manifest" ] || exit 1; X="$(git -c user.name=p -c user.email=p@x -C "$w" commit-tree "$B^{tree}" -p "$B" -m sibling </dev/null)" || exit 9; o="$(bash "$P" --map "$w" "$X" "$T" --min-files 4 --max-parts 3 --shard-dir "$d/anc" 2>&1)"; [ $? = 2 ] && grep -qF 'is not an ancestor of the frozen sha' <<<"$o" && [ ! -e "$d/anc/.manifest" ] || exit 1; o="$(env -u AI_DLC_REVIEW_SHARD_MIN_FILES bash "$P" --map "$w" "$B" "$T" --max-parts 3)"; [ $? = 3 ] && [ "${o#SERIAL:}" != "$o" ] && grep -qF AI_DLC_REVIEW_SHARD_MIN_FILES <<<"$o" || exit 1; o="$(AI_DLC_REVIEW_SHARD_MIN_FILES=4 bash "$P" --map "$w" "$B" "$T" --max-parts 3)"; [ $? = 0 ] && [ "$o" = "$oa" ] || exit 1; O="$(cut -f1 <<<"$oa" | tr '\n' ' ')"; set -- $O; [ "$#" = 3 ] || exit 9; O1="$1"; O2="$2"; K() { printf '# Shard %s\n\nreviewed-sha: %s\nshard-verdict: %s\n\n## Findings\n\n### Important (should fix, can be follow-up)\n\n#### TOK%sZ finding\nparts: %s\n' "$2" "$T" "$3" "$2" "$4" > "$1/$2.md" || exit 9; }; S() { x="$d/$1/1-code-review-$s12"; mkdir -p "$x" && cp "$S0/.manifest" "$x/" || exit 9; for p in $O; do v="$3"; [ "$p" = "$O2" ] && v="$2"; K "$x" "$p" "$v" "$p"; done; K "$x" cross "$4" "$O1, $O2"; }; mg() { o="$(bash "$M" "$d/$1/1-code-review-$s12" --gate code-review --out "$d/$1.md" 2>&1)"; rc=$?; }; S c1 NEEDS_REWORK APPROVED APPROVED; mg c1; [ "$rc" = 0 ] && [ "$(ck "$d/c1.md")" = NEEDS_REWORK ] || exit 1; for p in $O cross; do grep -qF "TOK${p}Z" "$d/c1.md" || exit 1; done; S c2 BLOCKED NEEDS_REWORK NEEDS_REWORK; mg c2; [ "$rc" = 0 ] && [ "$(ck "$d/c2.md")" = BLOCKED ] || exit 1; S c3 APPROVED APPROVED APPROVED; mg c3; [ "$rc" = 0 ] && [ "$(ck "$d/c3.md")" = APPROVED ] || exit 1; S d1 APPROVED APPROVED APPROVED; mv "$d/d1/1-code-review-$s12/$O2.md" "$d/d1-aside.md" || exit 9; mg d1; [ "$rc" = 2 ] && [ ! -e "$d/d1.md" ] || exit 1; S d2 APPROVED APPROVED APPROVED; mv "$d/d2/1-code-review-$s12/cross.md" "$d/d2-aside.md" || exit 9; mg d2; [ "$rc" = 2 ] && [ ! -e "$d/d2.md" ] || exit 1; exit 0
+
+## BL-438 — QA writes a verdict vocabulary and a file name that gate-validation.md Check 1 does not read
+
+**NOTE.** Measured by the batch 189 contract adversary on the reference consumer's
+`docs/reviews/s316/` and re-counted read-only there for this entry. `qa.md:303` prescribes
+`docs/reviews/s<N>/<story-index>-gate2-qa.md`; of the 20 QA files in that directory, 0 carry that
+name (`ls | grep -c -- '-gate2-qa.md'`) and all 20 are named `<idx>-qa-validation.md` or
+`<idx>-qa-validation-p<k>.md`, against 21 `-code-review` files as the same-directory control. 18
+of the 20 carry a column-0 `Verdict: PASS` line (`grep -qE '^Verdict: PASS'`), and 19 of 20 carry
+a PASS on a line Check 1's pattern matches. `gate-validation.md` Check 1 reads verdict values from
+the set `code-reviewer.md` declares under `## Verdict`, where only `APPROVED` passes, and `qa.md`
+declares no `## Verdict` set of its own. So a QA verdict of `PASS` is outside the I112 set, and the
+name the role prescribes is one this consumer never wrote. One file (`1b-qa-validation.md`) reads
+NEEDS_REWORK and one (`4b-qa-validation.md`) matches Check 1's pattern twice. This is why gate 2
+ships serial-only in BL-437: a QA shard merge would have had to choose a vocabulary first.
+
+verify: manual -- the remedy is a choice between giving qa.md its own declared verdict set and Check 1 a second set, or binding QA to the code-reviewer set; either is a contract change across a consumer's existing review files and is the operator's to make.

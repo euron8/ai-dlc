@@ -135,6 +135,28 @@ so a renamed heading or a verdict buried in prose blocks the gate rather than
 degrading quietly. Emit the value alone on the line after the heading, or as
 `## Verdict: <VALUE>`.
 
+## As a Shard
+
+**As a shard** — your brief carries `shard: <ordinal>/<K> <group>` or
+`shard: cross/<K> cross` (Rule 28, "Split dispatch": files axis). Review only
+the files your part of the map lists, or as the cross shard only interactions
+between parts. As a part shard you EXECUTE NOTHING: no tests, no
+`validate-mutation-red.sh`, no build. The cross shard runs every execution step
+this role requires, once, in the frozen worktree. Write to the shard path your
+brief names, never to the review file above. Your shard replaces the template's
+`## Verdict` heading and value with one column-0 line
+`shard-verdict: <VALUE>` (`APPROVED`, `NEEDS_REWORK` or `BLOCKED`), carries one
+column-0 `reviewed-sha: <full frozen sha>`, and writes no line Check 1's grep
+matches. Each finding is a `#### ` heading under its `### Critical`,
+`### Important` or `### Suggestions` container in `## Findings`, never a bullet,
+and carries exactly one `parts: <ordinal>[, <ordinal>...]` line citing ordinals
+from the map: your own ordinal alone, or two or more if you are the cross shard.
+The SHARD GRAMMAR section of `merge-review-shards.sh`'s header defines all of
+this. **Your verdict is advisory:** the merge recomputes the review verdict as
+the worst shard verdict and writes the review file. Dispatched
+`shard: 1/1 <story-index>`, you are the whole review: write the review file in
+the template above.
+
 ## Field Verification (API-Consuming Stories)
 
 When reviewing a story that consumes API data for display, perform a field

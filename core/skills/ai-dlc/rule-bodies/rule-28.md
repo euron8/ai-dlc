@@ -57,11 +57,14 @@ axis, the lead dispatches one agent per part, plus one cross-part agent
 where the axis says parts interact, in the waves described below, and
 joins each wave in one bounded-join beat (Rule 29). The axes:
 
-- **files** -- an artifact that is two or more files (`stories/`): one
-  agent per file plus one cross-part agent scoped to interactions
-  between files only. Every finding or edit names the parts it cites; a
-  per-part agent reports only findings citing its own part alone, the
-  cross-part agent only findings citing two or more.
+- **files** -- an artifact that is two or more files (`stories/`), or a
+  story's changed-file set as `partition-review-diff.sh --map` prints it:
+  one agent per file or part plus one cross-part agent scoped to
+  interactions between them only. Every finding or edit names the parts
+  it cites; a per-part agent reports only findings citing its own part
+  alone, the cross-part agent only findings citing two or more. A review
+  the program answers `SERIAL` is `shard: 1/1 <story-index>`, never
+  `shard: none (…)`.
 - **sections** -- a single document that `partition-document.sh --map`
   partitions: one agent per part the map prints plus one cross-part
   agent scoped to interactions between sections only, citing parts by
