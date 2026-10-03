@@ -836,6 +836,17 @@ not, every fixture reads `sandbox set empty` and the run REFUSES rather than pas
 for the operator's run. The receipt reads the entry's real close: no `fs_usage -w` and no uid-0
 check left in the deriver while `sandbox-exec -f` remains. It reads 1 on this branch by design.
 
+**Batch 186: the drops follow the stream, not the fixture, and a one-fixture `--list` dodges
+them for most units.** Three sandbox runs at `89aef8b5`, no agent worktrees on disk. A 27-fixture
+`--list` at 1-minute load 4.7 on 18 cores OMITTED 6, with drop counts 82 to 748. The 21 that
+traced clean, re-run alone as one `--list`, OMITTED 2 different ones (`ledger-reverify` 73,
+`procsub-staged-refusal` 432), both clean in the first run. Each of the 27 traced alone, as its own
+`--list`: 20 clean, 7 OMITTED with 34 to 2061 drops (`apply-drift-refile`,
+`enforcement-map-sites`, `procsub-staged-refusal-boot`, `reconcile-emit-report`,
+`self-update-gate`, `suite-pole-guard`, `validator-arm-selection-b`). Load rose to 35 during that
+pass from processes outside this repo, so it is not a clean low-load reading. The 20 clean
+fixtures' rows were committed; every other fixture's rows are byte-identical.
+
 verify: sh D=core/scripts/derive-fixture-readsets.sh; [ -f "$D" ] || exit 9; B="$(grep -v '^[[:space:]]*#' "$D")"; grep -q 'sandbox-exec -f' <<<"$B" || exit 1; grep -q 'fs_usage -w' <<<"$B" && exit 1; grep -qF '"$(id -u)" = "0"' <<<"$B" && exit 1; exit 0
 
 ## BL-404 — the acknowledge hook's typed-invocation anchor depends on the harness's serialisation, and an updater call inside a pipeline session is asserted by no arm
