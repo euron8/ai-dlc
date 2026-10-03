@@ -205,8 +205,14 @@ Before starting any task, read these files in order:
           named test before and after, restores byte-identical and verifies
           the restore, and prints the capture to commit. **0** proven, **1**
           unproven (the test stayed GREEN under a real mutation), **2**
-          nothing was mutated — a no-op replay is not a failed one — **3**
-          the restore did not verify and the tree is still mutated.
+          nothing was tested — nothing was mutated, or the mutation broke
+          the file instead of the test (a `*.py` mutant that does not
+          compile, a mutant failing `--syntax-check '<cmd>'`, or pytest
+          exiting outside {0, 1}); a no-op replay is not a failed one —
+          **3** the restore did not verify and the tree is still mutated.
+          For a non-Python target pass `--syntax-check` with the language's
+          parser (`'bash -n'`, `'node --check'`); without it a non-parsing
+          mutant of that file can still read PROVEN.
     - [ ] **Naming-implies-behavior assertion.** A method whose name asserts a
           behavior (`batched`/`bulk`/`atomic`/`chunked`/…) MUST be proven by
           `mock.call_count` / `call_args` on an N≥2 fixture, never by a
