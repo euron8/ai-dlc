@@ -19,6 +19,28 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.717.0] - 2026-10-03
+
+Batch 189's second release: `BL-004` and `BL-430` close on one nine-run forced sweep, taken on an unpushed branch
+of a file:// clone under the operator's batch-188 ruling. Net closed minus filed: 2. No consumer candidate is
+discharged.
+
+### BL-004: the inner pools are swept, and the constants stay
+
+Eleven fixtures' inner-pool constants were edited per cell on an unpushed branch (A as shipped, B every pool at 1, C
+every pool doubled), three runs each at pool 12, cells round-robin, durations reset from one golden copy. Wall
+seconds: A [1097, 1144], B [1179, 1323], C [1082, 1254]. B is the control and separates from A; per unit it ran 1.5x
+to 8x slower (`trunk-audit-mutants` 186-201s against 37-44s). A and C overlap, so doubling buys nothing the sweep can
+resolve; the suite stays bound by `reconcile-emit-report`, which opens no inner pool. `.githooks/pre-push` records the
+table in place of "it is owed". Comment-only: the hook's executable lines are byte-identical, and I66 passes.
+
+### BL-430: the pool-12 suite-pole row is re-taken
+
+`docs/suite-pole-baseline.tsv`'s pool-12 row named `ledger-reverify` at 628s, a unit since sharded. It now names
+`reconcile-emit-report` at 553s, the max of cell A's three runs. The band is taken over all nine sweep runs (533-662s)
+rather than the recipe's three, because that unit opens no pool and every run samples it unchanged; the three-run band
+(ceiling 614s) would already fail two of them. Band 33, ceiling 736s, down from 754s. The file states the deviation.
+
 ## [0.716.0] - 2026-10-03
 
 Batch 189's first release: `BL-436` is filed and fixed here, and `BL-375` records two measured levers and stays
