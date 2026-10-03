@@ -68,9 +68,10 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
 SKILL_REL="core/skills/ai-dlc/SKILL.md"
 
-# I112's two subjects, named once. The arm compares a template line in the OWNER against one
-# bullet in the READER's Check 1 span, and scans that span for unowned tokens.
+# I112's three subjects, named once. The arm compares each OWNER's template line against that
+# owner's own bullet in the READER's Check 1 span, and scans that span for unowned tokens.
 CR_OWNER="core/team-roles/code-reviewer.md"
+QA_OWNER="core/team-roles/qa.md"
 CR_READER="core/skills/ai-dlc/steps/gate-validation.md"
 
 # seed_tree — build this process's own pristine tree and scratch dir. Called by --run-one
@@ -1355,6 +1356,182 @@ A42_i112_owner_grammar_is_anchored() {
     fi
     assert_fires_n "I112 deleting the template line REPORTS, even though the prose alternation survives — the owner grammar is anchored" \
                    "could not derive the code-review verdict set: 0 member(s)" 1
+  fi
+}
+
+# ============================================================================
+# I112 — the SECOND owner: qa.md's `## Verdict` set and Check 1's QA bullet
+# ============================================================================
+# The arm binds two owners, each to its OWN bullet. Every assertion above seeds the code-review
+# owner, so without these the QA half -- its heading refusal, both of its set directions, and
+# the per-owner split that keeps the two bullets apart -- has no subject in this file.
+#
+# EACH ONE SCORES ITS OWN UNMUTATED CONTROL FIRST, IN THE SAME FRAME. `qa_control` runs the arm
+# on the fresh copy and requires it to reach its verdict line with nothing reported; only then
+# is the copy mutated. A kill recorded against a tree the arm was already reporting on is not a
+# kill, and A00's control is a different process.
+#
+# EVERY MUTATION IS KEYED ON A BULLET'S PREFIX OR AN OWNER'S TEMPLATE LINE, NEVER ON A MEMBER.
+# `NEEDS_REWORK` sits on BOTH bullets -- it is A38's sorted-last member and QA's too -- so an
+# edit addressed by that token moves two subjects and scores a two-cell flip as one kill.
+#
+# THE CROSS-OWNER TOKENS ARE DERIVED AS SET DIFFERENCES, never typed. "A code-review member QA
+# does not declare" and "a QA member code-review does not declare" are read out of the two
+# templates, so the assertions stay about the other gate's vocabulary when either set moves.
+
+# qa_control <label> — the in-frame unmutated control. Returns nonzero when it failed, so the
+# caller stops before mutating a tree whose verdict was already wrong.
+qa_control() {
+  local before="$fails"
+  assert_silent "$1"
+  [ "$fails" -eq "$before" ]
+}
+
+# qa_only_in <file A> <file B> — the members of A's `## Verdict` template that B's does not
+# carry, in A's template order.
+qa_only_in() {
+  local a b m
+  a="$(cr_owner_members "$1")"; b="$(cr_owner_members "$2")"
+  [ -n "$a" ] && [ -n "$b" ] || return 1
+  while IFS= read -r m; do
+    [ -n "$m" ] || continue
+    grep -qxF -- "$m" <<<"$b" || printf '%s\n' "$m"
+  done <<<"$a"
+}
+
+# qa_bullets_present <tree> — both owner bullets are in Check 1 exactly once, or FIXTURE BROKEN.
+# A bullet missing from the seed makes every mutation below match nothing or the wrong line.
+qa_bullets_present() {
+  local nc nq
+  nc="$(grep -c '^- \*\*Code-review verdict values (' "$1/$CR_READER")" || nc=0
+  nq="$(grep -c '^- \*\*QA verdict values (' "$1/$CR_READER")" || nq=0
+  if [ "$nc" -ne 1 ] || [ "$nq" -ne 1 ]; then
+    bad "FIXTURE BROKEN — Check 1 carries $nc code-review bullet(s) and $nq QA bullet(s) where one of each was expected, so the mutations below are not the ones they describe."
+    return 1
+  fi
+}
+
+# --- Assertion 58: I112 — qa.md loses its `## Verdict` heading ---------------
+# The QA owner's zero guard, A36's mirror. Two empty sets compare equal, and with the heading
+# gone the QA set is empty and so is nothing on the bullet's side of the comparison that could
+# say so. The refusal is the QA-specific one, not the member-count one beneath it.
+A58_i112_qa_owner_loses_verdict_heading() {
+  t="$(fresh)"
+  qa_control "I112 QA control: the unmutated copy is silent before qa.md loses \`## Verdict\`" || return 0
+  if edit "$t/$QA_OWNER" '/^## Verdict$/ && !d { d=1; next } { print }'; then
+    assert_fires_n "I112 qa.md losing its bare \`## Verdict\` heading REPORTS rather than comparing an empty set" \
+                   "could not derive the QA verdict set: 0 member(s) read, because core/team-roles/qa.md carries no bare" 1
+  fi
+}
+
+# --- Assertion 59: I112 — qa.md gains a member Check 1 does not name ---------
+# The QA owner's direction 1, A31's mirror. A third QA member Check 1 never explains is a value
+# QA can write and the gate has no stated behaviour for. The message names the QA owner, and the
+# count says the code-review comparison did not also move.
+A59_i112_qa_owner_gains_an_untaught_member() {
+  t="$(fresh)"
+  local newm
+  newm="WAI"; newm="${newm}VED"
+  qa_control "I112 QA control: the unmutated copy is silent before qa.md gains a member" || return 0
+  if edit "$t/$QA_OWNER" \
+       "/^[A-Z_]+( \\| [A-Z_]+)+\$/ && !d { \$0 = \$0 \" | $newm\"; d=1 } { print }"; then
+    assert_fires_n "I112 a member added to qa.md's template and never named on the QA bullet is REPORTED" \
+                   "core/team-roles/qa.md declares QA verdict(s) that gate-validation.md's Check 1 never names: $newm" 1
+  fi
+}
+
+# --- Assertion 60: I112 — a code-review member placed on the QA bullet -------
+# THE PER-OWNER SPLIT, READER SIDE. The token is a member of the code-review set, so a reader
+# that POOLED the two bullets, or an owner set built as the union, would read it as declared and
+# stay silent. Per owner, the QA bullet teaches a value qa.md does not declare.
+A60_i112_cr_member_on_the_qa_bullet() {
+  t="$(fresh)"
+  local tok
+  qa_bullets_present "$t" || return 0
+  tok="$(qa_only_in "$t/$CR_OWNER" "$t/$QA_OWNER" | head -1)"
+  if [ -z "$tok" ]; then
+    bad "FIXTURE BROKEN — no code-review verdict is outside qa.md's set, so there is no other-gate member to put on the QA bullet."
+    return
+  fi
+  qa_control "I112 QA control: the unmutated copy is silent before \`$tok\` is put on the QA bullet" || return 0
+  if edit "$t/$CR_READER" \
+       "/^- \\*\\*QA verdict values \\(/ && !d { \$0 = \$0 \" \\\`$tok\\\` also passes it.\"; d=1 } { print }"; then
+    assert_fires_n "I112 a code-review member written on the QA bullet is REPORTED against qa.md — the bullets are compared per owner" \
+                   "names QA verdict value(s) core/team-roles/qa.md does not declare: $tok" 1
+  fi
+}
+
+# --- Assertion 61: I112 — a QA member placed on the code-review bullet -------
+# A60's mirror: the QA-only member on the code-review bullet. Same pooled-reader blindness, the
+# other owner's message.
+A61_i112_qa_member_on_the_cr_bullet() {
+  t="$(fresh)"
+  local tok
+  qa_bullets_present "$t" || return 0
+  tok="$(qa_only_in "$t/$QA_OWNER" "$t/$CR_OWNER" | head -1)"
+  if [ -z "$tok" ]; then
+    bad "FIXTURE BROKEN — no QA verdict is outside code-reviewer.md's set, so there is no other-gate member to put on the code-review bullet."
+    return
+  fi
+  qa_control "I112 QA control: the unmutated copy is silent before \`$tok\` is put on the code-review bullet" || return 0
+  if edit "$t/$CR_READER" \
+       "/^- \\*\\*Code-review verdict values \\(/ && !d { \$0 = \$0 \" \\\`$tok\\\` also passes it.\"; d=1 } { print }"; then
+    assert_fires_n "I112 a QA member written on the code-review bullet is REPORTED against code-reviewer.md — the bullets are compared per owner" \
+                   "names code-review verdict value(s) core/team-roles/code-reviewer.md does not declare: $tok" 1
+  fi
+}
+
+# --- Assertion 62: I112 — the two bullets merged into one --------------------
+# The QA bullet's text is appended to the code-review bullet and its own line deleted, which is
+# what a tidy-up into "one verdict-values bullet" looks like. TWO findings, and both are true:
+# the code-review bullet now teaches the QA-only member, and the QA owner has no bullet, so every
+# QA member is unnamed. The count is 2 by construction, so both messages are asserted -- one
+# message at that count would leave the other cell unread.
+A62_i112_bullets_merged_into_one() {
+  t="$(fresh)"
+  local extra qall
+  qa_bullets_present "$t" || return 0
+  extra="$(qa_only_in "$t/$QA_OWNER" "$t/$CR_OWNER" | LC_ALL=C sort -u | tr '\n' ' ' | sed 's/ $//')"
+  qall="$(cr_owner_members "$t/$QA_OWNER" | LC_ALL=C sort -u | tr '\n' ' ' | sed 's/ $//')"
+  if [ -z "$extra" ] || [ -z "$qall" ]; then
+    bad "FIXTURE BROKEN — the QA template yielded no member outside the code-review set (got '$extra') or no member at all (got '$qall'), so the expected messages cannot be built."
+    return
+  fi
+  qa_control "I112 QA control: the unmutated copy is silent before the two bullets are merged" || return 0
+  if edit "$t/$CR_READER" '
+       /^- \*\*Code-review verdict values \(/ && !c { c = NR; cl = $0; next }
+       /^- \*\*QA verdict values \(/ && !q { q = 1; sub(/^- \*\*QA verdict values \([^)]*\)\*\* — /, ""); cl = cl " " $0; next }
+       c && !p && NR > c { print cl; p = 1 }
+       { print }
+       END { if (c && !p) print cl }'; then
+    if grep -q '^- \*\*QA verdict values (' "$t/$CR_READER"; then
+      bad "FIXTURE BROKEN — the merge left a QA bullet in Check 1, so this is not the merged-bullet tree."
+      return
+    fi
+    assert_fires_n "I112 merging the bullets REPORTS the QA-only member as undeclared by code-reviewer.md" \
+                   "names code-review verdict value(s) core/team-roles/code-reviewer.md does not declare: $extra" 2
+    assert_fires_n "I112 merging the bullets REPORTS every QA member as unnamed — qa.md has no bullet of its own" \
+                   "core/team-roles/qa.md declares QA verdict(s) that gate-validation.md's Check 1 never names: $qall" 2
+  fi
+}
+
+# --- Assertion 63: I112 — a QA member added to code-reviewer.md's template ---
+# THE PER-OWNER SPLIT, OWNER SIDE, and A31 with a token that discriminates. The QA bullet names
+# this token, so a comparison pooling the two bullets would read it as named; per owner, the
+# code-review bullet does not, and the code-review owner's direction 1 fires.
+A63_i112_qa_member_in_cr_template() {
+  t="$(fresh)"
+  local tok
+  tok="$(qa_only_in "$t/$QA_OWNER" "$t/$CR_OWNER" | head -1)"
+  if [ -z "$tok" ]; then
+    bad "FIXTURE BROKEN — no QA verdict is outside code-reviewer.md's set, so there is no QA member to add to the code-review template."
+    return
+  fi
+  qa_control "I112 QA control: the unmutated copy is silent before \`$tok\` joins code-reviewer.md's template" || return 0
+  if edit "$t/$CR_OWNER" \
+       "/^[A-Z_]+( \\| [A-Z_]+)+\$/ && !d { \$0 = \$0 \" | $tok\"; d=1 } { print }"; then
+    assert_fires_n "I112 a QA member added to code-reviewer.md's template is REPORTED as unnamed on the code-review bullet" \
+                   "core/team-roles/code-reviewer.md declares code-review verdict(s) that gate-validation.md's Check 1 never names: $tok" 1
   fi
 }
 
