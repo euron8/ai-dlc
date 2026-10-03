@@ -218,6 +218,88 @@ vrun "$VALIDATOR" --syntax-check 'bash -n' -- "$SUT" 2 "$SH_KILL" bash "$WORK/di
   && ok "--syntax-check 'bash -n' with a mutation that parses and kills still exits 0 (PROVEN), with the -- terminator" \
   || bad "--syntax-check refused a parsing kill (exit $rc) — the check is not differential on the mutant"
 
+# --- Arms 10-14 need no python: each is a shell runner or a stub named pytest. Each is a
+# function of the validator so the mutants further down drive the same arm. Each returns 0
+# when it holds, else sets $why and returns 1.
+lines_of() { [ -f "$1" ] && awk 'END { print NR }' "$1" || echo 0; }
+
+arm_nonpytest_exit2() {  # a NON-pytest runner exiting 2 on a real kill -> 0, PROVEN
+  vrun "$1" "$SUT" 2 "$SH_KILL" bash "$WORK/disc2.sh"
+  why="exit $rc"
+  [ "$rc" -eq 0 ] && grep -q '^PROVEN:' <<<"$out" && grep -q '^  mutated:    RED (exit 2)$' <<<"$out"
+}
+arm_pytest_exit5() {     # a stub named pytest exiting 5 -> 2, with a verified restore
+  vrun "$1" "$SUT" 2 five "$WORK/bin/pytest"
+  why="exit $rc"
+  [ "$rc" -eq 2 ] && grep -q 'UNEVALUABLE (pytest exit)' <<<"$out" \
+    && grep -q '^  restore:    byte-identical$' <<<"$out" && [ "$(cksum < "$SUT")" = "$BEFORE" ]
+}
+arm_pytest_exit2() {     # the same stub exiting 2 -> 2 (the near-miss a refuse-only-2 fix keeps)
+  vrun "$1" "$SUT" 2 bomb "$WORK/bin/pytest"
+  why="exit $rc"
+  [ "$rc" -eq 2 ] && grep -q 'UNEVALUABLE (pytest exit)' <<<"$out"
+}
+arm_pytest_stub_kill() { # the same stub exiting 1 -> 0, so the stub is a working pytest
+  vrun "$1" "$SUT" 2 "$SH_KILL" "$WORK/bin/pytest"
+  why="exit $rc"
+  [ "$rc" -eq 0 ] && grep -q '^PROVEN:' <<<"$out"
+}
+arm_later_pytest_word() { # make-style argv, `pytest` a LATER word, real kill exits 2 -> 0
+  vrun "$1" "$SUT" 2 "$SH_KILL" bash "$WORK/disc2.sh" -C "$WORK" pytest
+  why="exit $rc"
+  [ "$rc" -eq 0 ] && grep -q '^PROVEN:' <<<"$out"
+}
+arm_dash_m_pytest() {    # the ALLOW twin: the same runner with a `-m pytest` pair -> 2
+  vrun "$1" "$SUT" 2 "$SH_KILL" bash "$WORK/disc2.sh" -m pytest
+  why="exit $rc"
+  [ "$rc" -eq 2 ] && grep -q 'UNEVALUABLE (pytest exit)' <<<"$out"
+}
+arm_marker_refused() {   # a syntax-check refusal runs the suite ONCE (the baseline) only
+  rm -f "$WORK/marker"
+  vrun "$1" --syntax-check 'bash -n' "$SUT" 2 "$SH_BROKEN" bash "$WORK/marked.sh"
+  why="exit $rc, $(lines_of "$WORK/marker") run(s)"
+  [ "$rc" -eq 2 ] && grep -q 'UNEVALUABLE (syntax-check)' <<<"$out" && [ "$(lines_of "$WORK/marker")" -eq 1 ]
+}
+arm_marker_control() {   # the marker counts the mutated run: a parsing kill shows 2 runs
+  rm -f "$WORK/marker"
+  vrun "$1" --syntax-check 'bash -n' "$SUT" 2 "$SH_KILL" bash "$WORK/marked.sh"
+  why="exit $rc, $(lines_of "$WORK/marker") run(s)"
+  [ "$rc" -eq 0 ] && [ "$(lines_of "$WORK/marker")" -eq 2 ]
+}
+arm_ws_syntax_check() {  # --syntax-check of only whitespace -> 2 as usage, target untouched
+  vrun "$1" --syntax-check ' ' "$SUT" 2 "$SH_KILL" bash "$WORK/disc.sh"
+  why="exit $rc"
+  [ "$rc" -eq 2 ] && grep -q 'needs a command' <<<"$out" && [ "$(cksum < "$SUT")" = "$BEFORE" ]
+}
+
+arm_nonpytest_exit2 "$VALIDATOR" \
+  && ok "a non-pytest runner whose real kill exits 2 exits 0 (PROVEN): the pytest-exit arm reads pytest only" \
+  || bad "a non-pytest runner exiting 2 on a real kill was not PROVEN ($why) — the pytest-exit arm is applied to every runner"
+arm_pytest_exit5 "$VALIDATOR" \
+  && ok "a stub named pytest exiting 5 exits 2 (pytest exit), after a verified restore" \
+  || bad "a pytest exit 5 was not refused ($why) — the pytest-exit arm refuses only some of 2-5"
+arm_pytest_exit2 "$VALIDATOR" \
+  && ok "the same stub exiting 2 exits 2 (pytest exit)" \
+  || bad "a stub pytest exit 2 was not refused ($why)"
+arm_pytest_stub_kill "$VALIDATOR" \
+  && ok "the same stub exiting 1 exits 0 (PROVEN), so the stub is read as pytest and a test failure is a kill" \
+  || bad "a stub pytest exit 1 was not PROVEN ($why)"
+arm_later_pytest_word "$VALIDATOR" \
+  && ok "a make-style argv with pytest as a LATER word, real kill exiting 2, exits 0 (detection is anchored)" \
+  || bad "a later argv word 'pytest' was read as a pytest runner ($why) — a real kill was refused"
+arm_dash_m_pytest "$VALIDATOR" \
+  && ok "the same runner with a '-m pytest' pair exits 2 (the anchored detector still reads -m pytest)" \
+  || bad "a '-m pytest' argv was not read as pytest ($why)"
+arm_marker_refused "$VALIDATOR" \
+  && ok "a mutant refused by --syntax-check never runs the suite: the marker shows the baseline run only" \
+  || bad "a refused mutant ran the suite ($why)"
+arm_marker_control "$VALIDATOR" \
+  && ok "CONTROL: the marker counts the mutated run (a parsing kill leaves 2 runs)" \
+  || bad "FIXTURE BROKEN — the marked test did not record two runs on a parsing kill ($why); the marker arm is vacuous"
+arm_ws_syntax_check "$VALIDATOR" \
+  && ok "--syntax-check of only whitespace exits 2 as usage, target untouched" \
+  || bad "--syntax-check ' ' did not refuse as usage ($why) — bash 3.2 expands an empty SC_ARGV under set -u"
+
 # --- Python worlds. Built here, not in seed.sh, so the shell arms above need nothing. ---
 # pyworld <name> <m.py body> -> echoes a dir holding m.py, a plain runner t.py and a
 # pytest file test_m.py. All three runners are absolute-path, so no arm depends on cwd.
@@ -288,8 +370,15 @@ if [ "$HAVE_PY" -eq 1 ]; then
   arm_py_badbase "$VALIDATOR" tip \
     && ok "a baseline that does not compile leaves the parse arm off: a killing mutation still exits 0" \
     || bad "a non-compiling baseline with a killing mutation did not exit 0 with 'parse: not checked (baseline does not compile)' ($why) — the parse check is not differential"
+  # A parse refusal never runs the suite either: the runner appends to a marker, so the
+  # refused run leaves the baseline's one line.
+  pmd="$(pyworld marker 'def f():\n    return 2\n')"; rm -f "$WORK/pmarker"
+  vrun "$VALIDATOR" "$pmd/m.py" 1 'def f(:' bash -c 'printf "run\n" >> "$1"; python3 "$2"' marker "$WORK/pmarker" "$pmd/t.py"
+  [ "$rc" -eq 2 ] && grep -q 'UNEVALUABLE (parse)' <<<"$out" && [ "$(lines_of "$WORK/pmarker")" -eq 1 ] \
+    && ok "a mutant refused by the parse arm never runs the suite: the marker shows the baseline run only" \
+    || bad "a parse-refused mutant ran the suite (exit $rc, $(lines_of "$WORK/pmarker") run(s))"
 else
-  skip "python3 not found — the .py parse arms (syntax error, module-level return, non-compiling baseline) did NOT run"
+  skip "python3 not found — the .py parse arms (syntax error, module-level return, non-compiling baseline, parse marker) did NOT run"
 fi
 if [ "$HAVE_PYTEST" -eq 1 ]; then
   arm_pytest_collect "$VALIDATOR" tip \
@@ -397,6 +486,34 @@ if [ "$HAVE_PYTEST" -eq 1 ]; then
 else
   skip "pytest not importable by python3 — mutant 9 of the pytest-exit arm did NOT run"
 fi
+
+# --- MUTANTS 10-14: the tip adversary's wrong fixes. No python needed. -------------------
+# mutant_pair <name> <kill-arm> <near-miss-arm> <label>: the kill arm must FAIL on the
+# mutant, and the near-miss arm (one property apart) must still HOLD on it.
+mutant_pair() {
+  if ! "$2" "$MUT/$1.sh"; then kwhy="$why"
+    if "$3" "$MUT/$1.sh"; then ok "MUTANT ${1#m}: $4 is killed by $2 ($kwhy); $3 still holds"
+    else bad "MUTANT ${1#m} ($4) also failed $3 ($why) — the kill is entangled"; fi
+  else bad "MUTANT ${1#m} ($4) survived $2"; fi
+}
+# M10 (z5): the pytest-exit arm applied to every runner.
+sed 's@^if \[ "\$IS_PYTEST" -eq 1 \] && \[ "\$mut_rc" -ne 1 \]; then$@if [ "$mut_rc" -ne 1 ]; then@' \
+  "$VALIDATOR" > "$MUT/m10.sh"; prc=$?
+mkmut m10 "$prc" && mutant_pair m10 arm_nonpytest_exit2 arm_pytest_exit5 "the pytest-exit arm applied to every runner"
+# M11 (z3): only pytest exit 2 refused.
+sed 's@^if \[ "\$IS_PYTEST" -eq 1 \] && \[ "\$mut_rc" -ne 1 \]; then$@if [ "$IS_PYTEST" -eq 1 ] \&\& [ "$mut_rc" -eq 2 ]; then@' \
+  "$VALIDATOR" > "$MUT/m11.sh"; prc=$?
+mkmut m11 "$prc" && mutant_pair m11 arm_pytest_exit5 arm_pytest_exit2 "refusing only pytest exit 2"
+# M12 (z4): the suite still runs on a refused mutant (the verdict is unchanged).
+sed 's@^if \[ -z "\$REFUSED" \]; then$@if true; then@' "$VALIDATOR" > "$MUT/m12.sh"; prc=$?
+mkmut m12 "$prc" && mutant_pair m12 arm_marker_refused arm_marker_control "running the suite on a refused mutant"
+# M13: unanchored detection, here keyed on the LAST word instead of the first.
+sed 's|^case "\${TEST_CMD\[0\]##\*/}" in$|case "${TEST_CMD[${#TEST_CMD[@]}-1]##*/}" in|' \
+  "$VALIDATOR" > "$MUT/m13.sh"; prc=$?
+mkmut m13 "$prc" && mutant_pair m13 arm_later_pytest_word arm_pytest_stub_kill "pytest detected on a word other than the first"
+# M14: the whitespace-only --syntax-check guard removed.
+sed 's|^  if \[ "\${#SC_ARGV\[@\]}" -eq 0 \]; then$|  if false; then|' "$VALIDATOR" > "$MUT/m14.sh"; prc=$?
+mkmut m14 "$prc" && mutant_pair m14 arm_ws_syntax_check arm_marker_control "no guard on a whitespace-only --syntax-check"
 
 echo
 if [ "$fails" -eq 0 ]; then echo "mutation-red-replay: PASS"; exit 0; fi
