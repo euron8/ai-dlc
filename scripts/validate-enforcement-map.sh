@@ -11268,6 +11268,11 @@ $i112_qb"
         printf -- '- Send your verdict (%s | %s | %s, with severity).\n' "$i112_a" "$i112_b" "$i112_c"
         printf -- '- %s appears only in this bullet.\n' "$i112_d"
       } > "$i112_probe/owner.md"
+      # THE HEADING NEAR-MISS carries the word under the same `## ` prefix but not the bare line,
+      # which is the shape a role file reorganised by someone who never heard of this arm has.
+      printf '# seed\n## Verdict Values\n%s | %s\n' "$i112_a" "$i112_b" > "$i112_probe/renamed.md"
+      i112_ph=0; i112_has_heading "$i112_probe/owner.md" && i112_ph=1
+      i112_phn=0; i112_has_heading "$i112_probe/renamed.md" && i112_phn=1
       # THE READER SEED CARRIES ONE OF EVERY INPUT THE SPAN SCAN MUST SEPARATE: both owner
       # bullets, the code-review one naming a member AND a non-member; an unowned compound in
       # ordinary prose, which is the motivating case; a real schema enum member and a SECOND-
@@ -11301,6 +11306,10 @@ $i112_pq" "$i112_enum")"
       i112_swc="$(i112_pick C "$i112_swr")"; i112_swq="$(i112_pick Q "$i112_swr")"
       rm -rf "$i112_probe" 2>/dev/null || true
       i112_pf=""
+      [ "$i112_ph" = 1 ] || \
+        i112_pf="${i112_pf} the heading grammar did not see the seeded bare \`## Verdict\` line, so its refusal below would fire on every owner, correct or not."
+      [ "$i112_phn" = 0 ] || \
+        i112_pf="${i112_pf} the heading grammar accepted \`## Verdict Values\` as the bare heading. A renamed section would then pass the missing-section refusal and be compared as though it were still there."
       in_lines "$i112_a" "$i112_po" && in_lines "$i112_b" "$i112_po" || \
         i112_pf="${i112_pf} the owner grammar did not read the seeded template line back (got '$i112_po'), so it cannot spell its own subject and every zero below is a floor of unknown depth."
       in_lines "$i112_c" "$i112_po" && \
