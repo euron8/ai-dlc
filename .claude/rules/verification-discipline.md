@@ -212,7 +212,8 @@ forced input beats a larger N.
 ## Verify a release the way the gate runs it
 
 Push, and let the hook's own run be the single gate. Do not force a full run with
-`AI_DLC_FIXTURE_NO_SKIP`. Read each changed fixture by NAME in that run's output. The
+`AI_DLC_FIXTURE_NO_SKIP` to verify a release. A measurement sweep on an unpushed throwaway
+branch may force it; that is the operator's ruling. Read each changed fixture by NAME in that run's output. The
 CONSUMER's hook `core/git-hooks/pre-push` prints a green banner here having run almost
 nothing; the content-key skip prints one too, correctly — neither is evidence your change ran.
 A changed fixture that is ABSENT from the run's output was skipped, which is a read-set gap to
