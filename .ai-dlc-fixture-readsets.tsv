@@ -10,7 +10,7 @@
 # every other fixture's entries alone, so refreshing one fixture costs its own runtime
 # rather than a full re-derivation.
 #
-# fixtures mapped: 230    entries: 27084
+# fixtures mapped: 230    entries: 27065
 absorbed-specifics-survive	.git/HEAD
 absorbed-specifics-survive	.git/config
 absorbed-specifics-survive	.git/index
@@ -1263,26 +1263,19 @@ check-24-adversarial-convergence	core/team-roles/remediator.md
 check-24-adversarial-convergence	s1-resolution-p2.md
 check-24-adversarial-convergence	s1-resolution-p4.md
 check-24-adversarial-convergence	spec-resolution-p1.md
-check-25-steering-conduct	.git/HEAD
-check-25-steering-conduct	.git/config
-check-25-steering-conduct	.git/index
-check-25-steering-conduct	.git/info/exclude
-check-25-steering-conduct	.git/objects/33/a4425c0ed05dea70f881660ffdf01c7c86da33
-check-25-steering-conduct	.git/objects/7f/1479d0f091b8393b8613744a84c3c8229a65a3
-check-25-steering-conduct	.git/objects/info/commit-graphs/commit-graph-chain
-check-25-steering-conduct	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
-check-25-steering-conduct	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
-check-25-steering-conduct	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
-check-25-steering-conduct	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
-check-25-steering-conduct	.git/objects/pack/multi-pack-index
-check-25-steering-conduct	.git/packed-refs
-check-25-steering-conduct	.git/refs/heads/main
-check-25-steering-conduct	.gitignore
+check-25-steering-conduct	.git
 check-25-steering-conduct	core
+check-25-steering-conduct	core/.claude
+check-25-steering-conduct	core/.git
+check-25-steering-conduct	core/core/skills/ai-dlc
 check-25-steering-conduct	core/fixtures
 check-25-steering-conduct	core/fixtures/check-25-steering-conduct
 check-25-steering-conduct	core/fixtures/check-25-steering-conduct/run.sh
 check-25-steering-conduct	core/fixtures/check-25-steering-conduct/seed.sh
+check-25-steering-conduct	core/scripts
+check-25-steering-conduct	core/scripts/.claude
+check-25-steering-conduct	core/scripts/.git
+check-25-steering-conduct	core/scripts/core/skills/ai-dlc
 check-25-steering-conduct	core/scripts/validate-steering-budget.sh
 check-31-ac-falsifiability	.git
 check-31-ac-falsifiability	.git/HEAD
@@ -16943,21 +16936,9 @@ mandatory-rules-snapshot-position	core/scripts/core/skills/ai-dlc
 mandatory-rules-snapshot-position	core/scripts/sprint-status.sh
 mandatory-rules-snapshot-position	core/scripts/validate-audit-anchors.sh
 mandatory-rules-snapshot-position	core/scripts/validate-mandatory-rules.sh
-mutation-red-replay	.git/HEAD
-mutation-red-replay	.git/config
-mutation-red-replay	.git/index
-mutation-red-replay	.git/info/exclude
-mutation-red-replay	.git/objects/33/a4425c0ed05dea70f881660ffdf01c7c86da33
-mutation-red-replay	.git/objects/7f/1479d0f091b8393b8613744a84c3c8229a65a3
-mutation-red-replay	.git/objects/info/commit-graphs/commit-graph-chain
-mutation-red-replay	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
-mutation-red-replay	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
-mutation-red-replay	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
-mutation-red-replay	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
-mutation-red-replay	.git/objects/pack/multi-pack-index
-mutation-red-replay	.git/packed-refs
-mutation-red-replay	.git/refs/heads/main
-mutation-red-replay	.gitignore
+mutation-red-replay	<input>
+mutation-red-replay	<string>
+mutation-red-replay	<unknown>
 mutation-red-replay	core
 mutation-red-replay	core/fixtures
 mutation-red-replay	core/fixtures/mutation-red-replay
