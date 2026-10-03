@@ -277,6 +277,12 @@ argv_for() {
     # quote, so the run reaches the log: the right root finds the seeded entry and answers
     # NOMATCH-TRANSCRIPT-PRUNED, <root>/scripts has no log and answers plain NOMATCH.
     validate-steering-budget.sh)    printf '%s' "--dir $WORK/docs/vpr-steer --cite vpr-steer-pruned-quote" ;;
+    # Its root-keyed reads are gate-validation.md (Check 1's pattern) and code-reviewer.md (the
+    # verdict set), both made before the manifest is opened. A bare run stops at its usage line
+    # from every root; with this argv the shard dir and the --out directory exist, so the run
+    # reaches the gate-file lookup and its refusal names the root it resolved. Same floor as the
+    # entries above: the root is CONSULTED, not that a merge is correct.
+    merge-review-shards.sh)         printf '%s' "$WORK/_bmad-output --gate code-review --out $WORK/docs/vpr-steer/vpr-merged-review.md" ;;
     *)                              printf '%s' "" ;;
   esac
 }

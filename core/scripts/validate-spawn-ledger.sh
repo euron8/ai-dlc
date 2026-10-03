@@ -895,10 +895,18 @@ matches_pin() {
 #       both records carry, written by two different programs. The id set is the WHOLE
 #       ledger, not this sprint, because a shard row with a null sprint is still a dispatch.
 #
-# THE SHARDABLE SET is the four roles named in SHARD_ROLES plus every PARTY SEAT, and the
+# THE SHARDABLE SET is the roles named in SHARD_ROLES plus every PARTY SEAT, and the
 # seats are DERIVED, not listed: a party seat is a declared `aiDlcRoles` entry with no
 # `model` -- the definition ai-dlc-dispatch-guard.sh already uses (PARTY PERSONAS in its
 # header). A consumer adding a seat gets it here with no edit.
+#
+# THE GATE-1 REVIEWERS ARE IN IT, `qa` IS NOT. A code-reviewer (or code-reviewer-escalated)
+# dispatch is one part of `partition-review-diff.sh --map`, the cross shard, or `shard: 1/1
+# <story-index>` when the map is SERIAL -- never `shard: none (...)`, so S3 judges an invented
+# exception on them. Gate 2 dispatches qa serially as `shard: 1/1 <story-index>` and has no
+# shard merge, so qa is outside the set and S1/S3 do not judge it. Consequence on a ledger
+# whose reviewer rows predate this: a keyless row stays PENDING; a row carrying `shard: null`
+# now WARNs under S1 (never fails).
 #
 # WHY S1 WARNS AND S3 FAILS. Whether a scope is one part or several is a judgment about
 # intent; `shard: none (<exception>)` is the lead declaring it, and nothing at dispatch can
@@ -931,7 +939,7 @@ matches_pin() {
 # warns on none; S2 finds no `shard_tool_use_ids:` line and joins nothing. The narrowing is
 # the key-presence test above -- keyed on `shard == null` alone, every shardable row ever
 # written would warn.
-SHARD_ROLES="adversary remediator gate-adjudicator analyst"
+SHARD_ROLES="adversary remediator gate-adjudicator analyst code-reviewer code-reviewer-escalated"
 NL='
 '
 
@@ -1504,9 +1512,16 @@ else
          echo "      Check 22's four-arm disposition, never by re-running the gate." >&2 ;;
       U) SH_WARN=$((SH_WARN + 1))
          echo "WARN: [${sh_a}] role '${sh_b}' is shardable and its brief carried no parseable 'shard:' line."
-         echo "      Rule 28: one agent per independent part (files, or the sections partition-document.sh --map"
-         echo "      prints), or 'shard: none (<1-4>)' naming the serial exception -- 4 is a document the map"
-         echo "      reports SERIAL (grammar: ai-dlc-dispatch-guard.sh, THE SHARD LINE). Not a failure." ;;
+         case "$sh_b" in
+           code-reviewer|code-reviewer-escalated)
+             echo "      Rule 28: one reviewer per part 'partition-review-diff.sh --map' prints for the story diff"
+             echo "      plus 'shard: cross/<N> cross', or 'shard: 1/1 <story-index>' when the map is SERIAL"
+             echo "      (grammar: ai-dlc-dispatch-guard.sh, THE SHARD LINE). Not a failure." ;;
+           *)
+             echo "      Rule 28: one agent per independent part (files, or the sections partition-document.sh --map"
+             echo "      prints), or 'shard: none (<1-4>)' naming the serial exception -- 4 is a document the map"
+             echo "      reports SERIAL (grammar: ai-dlc-dispatch-guard.sh, THE SHARD LINE). Not a failure." ;;
+         esac ;;
       P) SH_PENDING=$((SH_PENDING + 1)) ;;
       S) SH_OK=$((SH_OK + 1)) ;;
       J) SH_JOINED=$((SH_JOINED + 1)) ;;
