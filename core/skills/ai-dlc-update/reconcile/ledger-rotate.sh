@@ -286,12 +286,14 @@ SPLIT_FINDINGS="$(LC_ALL=C awk "$(ledger_entry_awk)$(ledger_entry_id_awk)${CLOSE
     # form states something false about an open entry. This one SUPPRESSES a refusal, so a loose
     # form only lets a split through, while a TIGHT form refuses a real entry and writes nothing.
     #
-    # ROUTING THIS THROUGH ledger_body_closes() WAS BUILT AND MEASURED, AND IT WEDGES ROTATION.
-    # Driven on the false-positive case the fixture already carries: a real entry whose body says
-    # "Annotate it `ADOPTED UPSTREAM (vX.Y.Z...)` once the grep is non-zero", sitting under a
-    # genuinely closed entry. Unanchored, rc=0 and no refusal; anchored, rc=1 and REFUSING TO
-    # ROTATE -- a false positive on a real entry, and refusal writes nothing at all. The stuck
-    # report is fixed either way: 5 rows on the reference consumer under both.
+    # SO THE LOOSE BRANCH STAYS LOOSE, AND THE ANCHORED FORM WAS MEASURED AGAINST IT. A real
+    # colon-less entry under a closed one whose body closes it WITHOUT bold -- a bare
+    # "ADOPTED UPSTREAM (v0.2.0, ...)" line -- rotates under the loose rule (rc=0) and is REFUSED
+    # under the archive grammar (rc=1), and refusal writes nothing at all. What the loose rule
+    # must NOT honour is a QUOTATION of the form, which is why it reads the line with its inline
+    # code removed below; the quoting entry the fixture carries is a refusal by ruling, not a
+    # false positive. The stuck report is fixed either way: 5 rows on the reference consumer
+    # under both, as measured when the anchored form was first tried.
     #
     # TWO SUPPRESSORS, KEYED ON THE SUSPECT LABEL. A suspect whose label ENDS IN A COLON is an
     # annotation lead-in by shape -- a real entry title does not end in one -- so its suppressor
