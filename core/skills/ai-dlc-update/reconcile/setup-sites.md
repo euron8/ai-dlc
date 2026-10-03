@@ -154,6 +154,7 @@ core_manifest:
   - core/fixtures/gate-remediation-deny/**
   - core/fixtures/gate-repair-record/**
   - core/fixtures/adversarial-shard-merge/**
+  - core/fixtures/review-shard-merge/**
   - core/fixtures/remediator-shard-join/**
   - core/fixtures/document-partition/**
   - core/fixtures/gate-series-rung/**

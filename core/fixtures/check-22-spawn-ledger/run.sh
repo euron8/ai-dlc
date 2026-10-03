@@ -1309,6 +1309,108 @@ else
   fi
 fi
 
+# --- S3 ON THE GATE-1 REVIEWERS, AND NOT ON qa ---------------------------------------------------
+# A code-reviewer dispatch is a part of `partition-review-diff.sh --map`, the cross shard, or
+# `shard: 1/1 <idx>`; never `shard: none (...)`. Gate 2 dispatches qa serially and has no shard
+# merge, so qa is outside the shardable set. Settings here PIN A MODEL for every role seeded,
+# qa included: the shardable set also takes every declared role with NO model (a party seat),
+# so an unpinned qa would be judged for that reason and the qa arm could not see SHARD_ROLES.
+# Every offender is Rule 19-clean (bound == pin, cited, readable) and sits after a dev epoch row,
+# so S3 is the only route to its exit 1.
+cat > "$WORK/settings-rev.json" <<'JSON'
+{
+  "aiDlcModels": { "opus": "claude-opus-5[1m]", "sonnet": "claude-sonnet-5" },
+  "aiDlcRoles": {
+    "dev": { "model": "sonnet", "effort": "high" },
+    "code-reviewer": { "model": "opus" },
+    "code-reviewer-escalated": { "model": "opus" },
+    "qa": { "model": "sonnet" },
+    "remediator": { "model": "opus" }
+  }
+}
+JSON
+rvrow() { # role name shard [shard_raw]
+  jq -nc --arg r "$1" --arg n "$2" --arg s "$3" --arg raw "${4:-}" \
+    --arg b "$(jq -r --arg r "$1" '.aiDlcRoles[$r].model' "$WORK/settings-rev.json")" \
+    '{v:1,sprint:900,name:$n,role:$r,model_bound:$b,model_requested:$b,
+      role_contract_cited:true,role_file_readable:true,shard:$s,tool_use_id:("toolu_" + $n)}
+     | if $raw == "" then . else . + {shard_raw:$raw} end'
+}
+for _r in code-reviewer code-reviewer-escalated qa remediator; do
+  { row dev sonnet sonnet true true rv-epoch; rvrow "$_r" "rv-$_r" invalid-exception 'none (made up)'; } > "$WORK/rv-$_r.jsonl"
+done
+{ row dev sonnet sonnet true true rv-epoch; rvrow code-reviewer rv-ok '1/1 3'; } > "$WORK/rv-ok.jsonl"
+
+# rv <script> <role|ok> -> FAIL1 | OK | rc=N
+rv() {
+  local o rc
+  o="$(bash "$1" --ledger "$WORK/rv-$2.jsonl" --sprint 900 --settings "$WORK/settings-rev.json" 2>&1)"; rc=$?
+  if [ "$rc" -eq 1 ] && grep -qF "role '$2' declared a serial exception" <<<"$o" \
+     && grep -qF 'shard: none (made up)' <<<"$o" && grep -qF '(arm S3)' <<<"$o"; then printf 'FAIL1'
+  elif [ "$rc" -eq 0 ] && grep -q 'OK: all 2 S900 spawn row' <<<"$o" \
+     && grep -qF '0 FAILED on an invented serial exception (S3)' <<<"$o" \
+     && ! grep -qF 'declared a serial exception' <<<"$o"; then printf 'OK'
+  else printf 'rc=%s' "$rc"; fi
+}
+# The OK twin's positive conjunct: the 1/1 reviewer row is COUNTED as carrying a shard line.
+rvok() {
+  local o rc
+  o="$(bash "$1" --ledger "$WORK/rv-ok.jsonl" --sprint 900 --settings "$WORK/settings-rev.json" 2>&1)"; rc=$?
+  if [ "$rc" -eq 0 ] && grep -qF '1 shardable row(s) carry a shard line, 0 FAILED' <<<"$o"; then printf 'OK'; else printf 'rc=%s' "$rc"; fi
+}
+rvvec() { printf '%s %s %s %s %s' "$(rv "$1" code-reviewer)" "$(rv "$1" code-reviewer-escalated)" \
+  "$(rv "$1" qa)" "$(rv "$1" remediator)" "$(rvok "$1")"; }
+RV_EXPECTED="FAIL1 FAIL1 OK FAIL1 OK"
+RVGOT="$(rvvec "$VSL")"
+set -- $RVGOT
+[ "$1" = FAIL1 ] && ok "S3-R1 a code-reviewer row (model pinned, Rule 19-clean) with the invented 'shard: none (made up)' FAILS S3: exit 1, the role named, its shard_raw printed" \
+  || bad "S3-R1 a code-reviewer row with an invented exception scored [$1], expected FAIL1"
+[ "$2" = FAIL1 ] && ok "S3-R2 a code-reviewer-escalated row with the same invented exception FAILS S3 the same way" \
+  || bad "S3-R2 a code-reviewer-escalated row with an invented exception scored [$2], expected FAIL1"
+[ "$3" = OK ] && ok "S3-R3 a qa row (model pinned, so NOT a party seat) with the same invented exception is NOT judged: exit 0, the OK row, 0 FAILED under S3 -- gate 2 is serial-only and qa is outside SHARD_ROLES" \
+  || bad "S3-R3 a qa row with an invented exception scored [$3], expected OK -- qa is being judged as shardable"
+[ "$4" = FAIL1 ] && ok "S3-R4 control: a remediator row with the same invented exception FAILS S3, so the qa OK above is about qa's membership and not about the seed" \
+  || bad "S3-R4 the remediator control scored [$4], expected FAIL1 -- the seed does not reach S3, so R3 proves nothing"
+[ "$5" = OK ] && ok "S3-R5 ALLOW twin: a code-reviewer row carrying 'shard: 1/1 3' exits 0 and is counted as carrying a shard line" \
+  || bad "S3-R5 a code-reviewer row with 'shard: 1/1 3' scored [$5], expected OK"
+
+# MUTANTS on the SHARD_ROLES line, each scored against all five cells.
+rvmoved() { local got="$1" i=1 e m out="" names="reviewer escalated qa remediator ok"
+  for e in $RV_EXPECTED; do m="$(printf '%s' "$got" | cut -d' ' -f$i)"
+    [ "$e" != "$m" ] && out="$out $(printf '%s' "$names" | cut -d' ' -f$i)"; i=$((i+1)); done
+  printf '%s' "${out# }"; }
+RVSRC="$(grep -c '^SHARD_ROLES="adversary remediator gate-adjudicator analyst code-reviewer code-reviewer-escalated"$' "$WORK/mut/control.sh")" || RVSRC=0
+if [ "$RVSRC" -ne 1 ]; then
+  bad "FIXTURE BROKEN: the SHARD_ROLES line is not in the validator exactly once ($RVSRC); the reviewer mutants below have no subject"
+else
+  # (rva) drops code-reviewer: the R1 cell moves, and the ALLOW twin with it (stated overlap --
+  # the twin's positive conjunct is that a code-reviewer 1/1 row is COUNTED, which is membership).
+  RVA="$(s3mut rva 's/^SHARD_ROLES="adversary remediator gate-adjudicator analyst code-reviewer code-reviewer-escalated"$/SHARD_ROLES="adversary remediator gate-adjudicator analyst code-reviewer-escalated"/')"
+  if [ -z "$RVA" ]; then bad "FIXTURE BROKEN: reviewer mutant (rva) did not apply"
+  else
+    mv_="$(rvmoved "$(rvvec "$RVA")")"
+    [ "$mv_" = "reviewer ok" ] \
+      && ok "S3 MUTANT (rva) killed: SHARD_ROLES without code-reviewer passes its invented exception and stops counting its 1/1 row -- escalated, qa and the remediator control unmoved" \
+      || bad "S3 MUTANT (rva): moved [$mv_], expected [reviewer ok]"
+  fi
+  RVC="$(s3mut rvc 's/^SHARD_ROLES="adversary remediator gate-adjudicator analyst code-reviewer code-reviewer-escalated"$/SHARD_ROLES="adversary remediator gate-adjudicator analyst code-reviewer"/')"
+  if [ -z "$RVC" ]; then bad "FIXTURE BROKEN: escalated mutant (rvc) did not apply"
+  else
+    mv_="$(rvmoved "$(rvvec "$RVC")")"
+    [ "$mv_" = "escalated" ] \
+      && ok "S3 MUTANT (rvc) killed: SHARD_ROLES without code-reviewer-escalated passes its invented exception -- S3-R2 alone moves" \
+      || bad "S3 MUTANT (rvc): moved [$mv_], expected [escalated]"
+  fi
+  RVB="$(s3mut rvb 's/^SHARD_ROLES="adversary remediator gate-adjudicator analyst code-reviewer code-reviewer-escalated"$/SHARD_ROLES="adversary remediator gate-adjudicator analyst code-reviewer code-reviewer-escalated qa"/')"
+  if [ -z "$RVB" ]; then bad "FIXTURE BROKEN: qa mutant (rvb) did not apply"
+  else
+    mv_="$(rvmoved "$(rvvec "$RVB")")"
+    [ "$mv_" = "qa" ] \
+      && ok "S3 MUTANT (rvb) killed: SHARD_ROLES gaining qa FAILS the qa row -- S3-R3 alone moves" \
+      || bad "S3 MUTANT (rvb): moved [$mv_], expected [qa]"
+  fi
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then
   echo "check-22-spawn-ledger: PASS ($asserted assertions)"

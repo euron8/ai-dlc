@@ -226,6 +226,7 @@ core_manifest:
   - fixtures/gate-remediation-deny/**
   - fixtures/gate-repair-record/**
   - fixtures/adversarial-shard-merge/**
+  - fixtures/review-shard-merge/**
   - fixtures/remediator-shard-join/**
   - fixtures/document-partition/**
   - fixtures/gate-series-rung/**
