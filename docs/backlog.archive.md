@@ -28804,3 +28804,333 @@ The receipt is manual because its subject is the harness's own transcript format
 
 verify: manual -- retention is held by core/fixtures/consumer-suite-pool (arm 2c and its five mutants); the open half, the cause of the red, has nothing to score until a recurrence leaves a retained record.
 
+## BL-230 — `reconcile-emit-report`'s kill-set arms fail intermittently under the pool — E1, E8 and E9 all measured, on three different worlds — and E1's success message describes a different assertion than the one it makes
+
+**LANDED (v0.647.0, verified 1bbf29da).** Claim (d) is explained by forced reproduction at batch 191, and both fixes had already shipped. Under `/bin/bash` 3.2.57, a scratch copy of the 0.624.0 tree (`29291758`) was gated so that the `<( )` diff in `unregistered-drift.sh`'s `is_unregistered()` (`:428` there) fails only in one mutant's render of one world. That failure was read as "clean", so the world's `HARD-UNREGISTERED-CORE-DRIFT` row rendered as `CORE-TEMPLATE-SUBSTITUTED` and the cell moved. Forced on V-HC it reproduced E1 `[V-R V-U V-HC]`, E2 `[V-M V-HC]` and E8 `[V-R V-U V-HC]`, and forced on V-B it reproduced E9 `[V-R V-N V-B V-H V-HA V-S V-U V-HC]`. Each matches its recorded shape; E8 had no recorded extra world. The unforced control passed. The same site existed at 0.547.0, and all four recorded failures (batches 85, 114, 138 and 144) predate both fixes. 0.625.0 (`240d813a`) made a failed diff fail closed: forcing the same site at 0.645.0 moved nothing. 0.647.0 (`1bbf29da`) staged the input and removed the `<( )` site; tip carries no live `<( )` site in `core/` outside fixtures (control: 51 with fixtures included). The post-0.625 pools (378 runs) produced 0 kill-set reds outside E3. Residual NOTE: at tip, a refusal that persists across all three R6 retries still adds V-HC to E1's set, now labelled `FIXTURE BROKEN`, which nothing left in the tree can trigger.
+
+**PARTIAL IN v0.669.0: THE FIXTURE'S OWN FOUR `<( )` READS ARE STAGED.** The A3a/A3b control and
+sandbox renders, CONTROL(T) and B2's diagnostic `diff` each render to a staged file whose exit status is
+read; a non-zero status prints `FIXTURE BROKEN — … exited N`. Healthy runs byte-identical (3 base, 3 tip).
+Forced, not sampled: an EBADF on the section read put 3 FAILs at base blaming the copy and 0 at tip; a
+sandbox render exiting 3 scored A3a `ok` at base and `FIXTURE BROKEN` at tip. **This does not close the
+entry**: none of the recorded extra-world shapes came from these four sites, and the kill-set arms never
+used `<( )`. Citations moved: E1 is at `run.sh:2336` on 0.668.0 (not `:1129`), E8 `:2377`, `v_render`
+`:1718`, the RAW-lines arm `:2294`, each shifting further with this release. Non-comment
+`core/fixtures/*/run.sh` lines containing `<(` number 75 across 26 files (comment lines
+included, the same glob reads 93; derived with `grep -n '<(' core/fixtures/*/run.sh`, dropping
+lines whose first non-blank character is `#`). They are not all live process substitutions: 34 of the 75
+sit in `procsub-staged-refusal` and `procsub-staged-refusal-boot`, 17 each, most of them as
+mutation strings that seed the defect. So a lint cannot ship yet, and it would need to tell
+those strings from real reads before it could.
+
+**Found 2026-09-11** during batch 85, when E1 failed a gate run on a branch whose change cannot
+reach it. Two separate defects in one arm; the second is what makes the first expensive.
+
+**E8 IS THE THIRD ARM, MEASURED AT BATCH 138 UNDER A SIX-WIDE POOL.** `v_kill E8 "V-R V-U"`
+(`run.sh:1596`) failed a gate run whose tree changes only `ai-dlc-handoff-pending.sh`,
+`ai-dlc-continue.sh` and `pipeline-state-paths.json`. Attribution severed in one invocation: the
+fixture names those three files **0**, **0** and **0** times against a control of **22** for
+`emit-report.sh`. Solo from the repo root the same tree exits **0** at 83 assertions with 0
+failures, and the very next pool run at the same width scored it `ok`. So the population is
+arms scored under pool contention at ANY width, not a property of 12-way, and E8 sits between
+the two arms already named — the entry's own reading of its subject reproduces at a third site.
+
+**THE FLAKE.** `v_kill E1 "V-R V-U"` (`run.sh:1129`) asserts a mutant moves EXACTLY two worlds. On
+one 12-way pool run it reported `[V-R V-U V-HC]` and failed; the same tree run solo from the repo
+root passes with E1 green, and a second pool run passed. **It is not caused by the change that was
+in flight**: `reconcile-emit-report` never executes `apply.sh` — `grep -cE 'bash .*apply\.sh|\$APPLY'`
+returns **0** against a control of **24** in `apply-restamp-worklist` — and its scorer
+(`v_render`, `:614`) calls `emit-report.sh` alone. The causal path from the branch's two new
+`say WORKLIST` sites to the region V-HC edits is severed.
+
+**WIDER THAN FILED: E9 FAILS THE SAME WAY, ON A DIFFERENT WORLD, AND SO DOES AN ARM THAT IS NOT A
+KILL-SET AT ALL.** Measured at batch 114, which this arm charged for a second time. Gate run 1
+PASSED the fixture suite and gate run 2 failed `v_kill E9` on a **byte-identical tree** — same tree
+sha `b36117f5`, the two commits differing only in squash topology — and a third run passed. E9's
+expected set is `[V-R V-N V-H V-HA V-S V-U V-HC]` and it reported `[V-R V-N V-B V-H V-HA V-S V-U
+V-HC]`: the extra world was **V-B**, not the V-HC this entry predicts, though both arms score
+through the same `v_kill`/`v_diffset` whole-world set difference. Separately, four copies of the
+fixture run in parallel from **unmodified `origin/main`** put 1 of 4 red on a THIRD arm — the
+docs-only-move `--verify` assertion, which is not a kill set — against 3 green in the same
+invocation. So the population is "arms scored under pool contention", not "E1", and the entry's
+own title understated it.
+
+**THE ATTRIBUTION WAS MEASURED, NOT ASSUMED, AND IT COST THE BATCH A FULL GATE CYCLE.**
+`reconcile-emit-report` seeds **0** `verify: theirs_has` and **0** `verify: sh` receipts — only
+three `theirs_maybe`, which no arm of `ledger-reverify.sh` dispatches (control: an impossible verb
+also 0) — so the batch-114 change to that engine's `sh` arm renders no row in this fixture in
+either revision, and `unseen_rows()` keeps both spellings of the row it renames in any case. The
+causal path is severed for the same KIND of reason it was severed at batch 85, by a different
+mechanism.
+
+**WHY V-HC IS THE PLAUSIBLE UNSTABLE MEMBER.** `v_kill` scores by whole-world set difference, so one
+world with an unstable score pollutes the set. V-HC is built by deleting the first
+`^HARD-UNREGISTERED-CORE-DRIFT` line from a rendered region, and the arm beside it at `:1102` exists
+because *"the difference is being taken over RAW lines"* is its known failure mode. The fixture's own
+`CONTROL(V)` arm already anticipates slot-dependent instability here, in as many words: the control
+and shipped copies *"were computed in different parallel slots, so it is also the arm that would
+catch the scoring racing with itself."*
+
+**THE SECOND DEFECT, AND IT IS THE ONE WITH A RECEIPT.** E1's success message reads *"the THREE
+worlds that read 3 go red and no other"* while its assertion passes `"V-R V-U"` — **two**. Derived:
+the assertion set has 2 members, the message says three. One of them is wrong, and a reader
+debugging a failure reads the message. This is `verification-discipline.md`'s "text about a program
+is not the program", inside an arm whose whole subject is set membership.
+
+**WHY THIS IS FILED RATHER THAN FIXED HERE.** The two defects have different owners. The message/
+assertion mismatch is a one-line correction, but WHICH one is wrong is not derivable from the arm —
+it needs whoever knows whether a third world should be in that set, and if one should, the arm has
+been under-asserting since it was written. The flake needs the pool to reproduce and may be a
+property of `v_diffset` rather than of E1.
+
+**The cost is misattribution, and it was nearly paid.** A gate-green branch was blocked by this arm
+and the first hypothesis was that the change caused it. Two measurements and an adversarial pass
+were spent proving otherwise. **An intermittent arm on a shared fixture charges its cost to whichever
+change happens to be in flight**, which is the failure this entry exists to stop repeating.
+
+**Receipt limits, stated.** The receipt scores ONLY the message/assertion mismatch, because that is
+the half that is mechanically checkable: it counts the worlds in E1's `v_kill` argument and refuses
+while the adjacent `ok` line says "three". **It does not and cannot score the flake** — an
+intermittent failure has no deterministic receipt, and a receipt that ran the fixture once would
+report green on the common case. Closing this needs the mismatch fixed AND a stated finding about
+the flake, and the second half is not receipt-enforceable. Exit 9 if the arm or its message is gone.
+
+**WIDENED AT BATCH 116, AND THE WIDENING CARRIES A LEAD.** Two hands hit the flake independently
+on a gate-green branch whose change cannot reach it, and one reproduced it at `49e5356d`
+(`origin/main`, none of that batch's code): pooled over both hands, tip 0 of 48 red and base 1 of
+48, with the other hand's separate rounds at roughly 2 in 60. At that rate 48 runs expects 0.5
+events, so neither clean sweep discriminates and neither is reported as absence. Two surfaces, both
+in the FALSE direction — assertion 1 (`--verify failed a correct report`, a sound report accused of
+being stale) and the E9 mutant (`the kill is unattributed`) — two arms on two trees, which argues
+one shared cause. Ruled out so nobody repeats it: 48 concurrent `--verify` runs against one stored
+report went 0 red with a serial control at rc=0 in the same invocation, and 12 concurrent renders
+gave one md5, so neither `render()` nor `--verify` alone is the moving part. The lead is already in
+the tree: `ledger-reverify.sh:1089-1096` records this exact class as measured on a busy host and
+fixed it by prefixing its own temp dirs, while `emit-report.sh:331` and `:373` still call bare
+`mktemp`. Not folded into `v0.582.0`, whose subject was the step 3b section; the pre-existing
+intermittent charged to whichever change is in flight is the shape this entry exists to stop.
+
+**A FOURTH ARM AT BATCH 136, AND IT IS `E3` — AN ARM THIS ENTRY DOES NOT NAME.** Two full gate runs
+on the same branch, minutes apart, differing only by one integer pair on a `.githooks/pre-push`
+argument line: run 1 scored `reconcile-emit-report` **ok**, run 2 scored it **FAIL** on
+`E3 moved the worlds [V-N V-HC] and had to move exactly [V-N]`. The same tree run SOLO from the
+repo root exits **0** with **0** failing assertions. Attribution severed the same way as the three
+before it, derived in one invocation: the fixture names `ai-dlc-update/SKILL.md` — the only engine
+file this batch changed — **0** times, against a control of **22** for `emit-report.sh`, and
+`classify-block.md` **0** times. The extra world is **V-HC** again, as E1 predicted and E9 did not,
+which is a third distinct expected-set for one shared cause. The entry's own generalisation from
+batch 114 — the population is "arms scored under pool contention", not any named arm — now has four
+members across three arms, and **E1/E9 in the title remain an enumeration where the finding is a
+class.**
+
+**A FIFTH MEASURED ARM AT BATCH 144, AND IT IS `E2`.** Filed by the consumer as
+`PC-S313-EMIT-REPORT-E2-IS-A-FOURTH-POOL-FLAKE-ARM` during its 0.623.0 → 0.624.0 self-update. Its id
+says fourth; counted against this entry it is the fifth, after E1, E8, E9 and E3. The consumer's
+pre-push under a **6-wide** pool failed `E2 moved the worlds [V-M V-HC] and had to move exactly
+[V-M]`. On the same tree, 3 standalone runs, 6 concurrent standalone copies and a full 185-fixture
+12-way pool all passed. The extra world is **V-HC** again, and it is the extra world in three of the
+five arms.
+
+**CPU LOAD DID NOT REPRODUCE IT, AND THAT ZERO CANNOT DISCRIMINATE.** Batch 144 ran 144 direct
+`--verify` runs, 12 fixture runs and 3432 replayed score cells, and every one agreed. At the
+observed rate of about 1 in 30, 12 fixture runs predict about 0.4 failures, so a clean sweep there
+is what the hypothesis predicts and refutes nothing.
+
+**A FORCED PROCESS CAP DID FLIP THE SHIPPED PROGRAM'S VERDICT.** Under `ulimit -u`, V-HC's verdict
+changed in **4 of 12** rounds. The cause was a sibling fork failure (exit 128) that was rendered as
+DETECTOR-REFUSED. In one of those rounds a RETIRE-CANDIDATE row was silently dropped. So the scorer
+has a real failure mode in which resource exhaustion reads as a verdict. **This is not attributed
+to the consumer's failure.** One fixture run peaks about 63 processes above a baseline of about 600,
+against a limit of 10666, so the consumer's run was nowhere near the cap.
+
+**RELEASE 0.625.0 SHIPS THE INSTRUMENT.** When a kill-set arm fails, it now prints the
+score cells of each world that differs and a diff of that world's stderr, so the next pool failure
+carries its own cause.
+
+**ITS FIRST CATCH NAMED A MECHANISM, AND 0.625.0 FIXES IT.** An unforced E2 failure, in a scratch
+copy with no `.git`, showed V-HC's `HARD-UNREGISTERED-CORE-DRIFT schemas/thing.json` rendered as
+`CORE-TEMPLATE-SUBSTITUTED` with NO DETECTOR-REFUSED line. So that extra world was not the `ulimit`
+refusal above. `unregistered-drift.sh`'s `is_unregistered()` fed `diff ... 2>/dev/null` into an
+awk whose END printed "clean" on no hunk, and it is reached only after `cmp` shows the files differ.
+Forced with a `diff` shim that exits 2: unshimmed HARD, shimmed CORE-TEMPLATE-SUBSTITUTED. A second
+site, `closest_ancestor_blob()`, scored a failed diff as a perfect match: unshimmed HARD drift,
+shimmed `HARD-CORE-BEHIND`. Both now fail closed, each with an arm and a mutant in
+`setup-config-drift`. **This entry stays live**: the E2/V-HC shape matches this mechanism, but E9's
+extra world was V-B, and E1/E8 are not yet shown to share it. Close only when the instrument has
+recorded a pool failure's cause, or a pool run of the size that predicts at least 3 failures at
+base comes back clean at tip.
+
+**E1'S SECOND DEFECT IS SETTLED.** The assertion `"V-R V-U"` is right and the message "three" was
+wrong. The message is corrected in 0.625.0.
+
+**THE RECEIPT IS RETIRED TO `manual`.** The receipt above scored only the message/assertion
+mismatch. Once the message was corrected it would have proposed CLOSE on a flake that is still
+live, which is the one direction that loses the entry. The flake has no mechanical predicate until
+the instrument catches a failure and names its cause.
+
+**MEASURED AT BATCH 151: THE CLOSE CONDITION'S POOL WAS RUN, AND TIP WAS NOT CLEAN.** Base is
+0.624.0 (`29291758`), the release before 0.625.0. The pooled batch-116 rate of 3 in 108 predicts
+3.0 failures in 108 runs. The run used 108 tip runs (`937919e4`) and 48 base runs, interleaved
+two tip to one base under `xargs -P 6`, each from its worktree root. Every one of the 156 logs
+carries a verdict line. Tip scored **2 red of 108** (1.9%) and base **1 of 48** (2.1%), so the
+0.625.0 fix did not move the rate. The box's load average ran from 27 to 78 throughout. None of
+the three reds came from the window in which a 4-wide release gate ran beside the pool.
+
+**THE LIVE CLASS IS NOT THE KILL SETS, AND THE INSTRUMENT CANNOT REACH IT.** No red was a
+kill-set arm: 0 `moved the worlds` lines, against 156 `E2 … ok` and 1716 E-arm `ok` lines as the
+control. So `v_diag`, which is called only from `v_kill`, printed nothing in any log. All three
+reds are the `--verify` false positive this entry recorded at batch 116. It appears as `--verify
+failed a correct report` in tip.3 and base.19, and as the docs-only `--verify` arm in tip.3 and
+tip.18. tip.3 also reports `ORIENTATION INVERTED` with empty labels, and every region-reading arm
+fails in it. The kill-set subclass scored 0 of 108 at tip, but also 0 of 48 at base, so its clean
+tip is not evidence.
+
+**AN UNMEASURED LEAD, STATED AS ONE.** An empty orientation block in tip.3 fits a seed-time render
+whose `preclassify.sh` call failed under load. `emit-report.sh:204` takes that call's result as
+`2>/dev/null || true`, which yields an empty `pc`, no CLASSIFY rows and no orientation block. That
+is the same fail-open shape 0.625.0 fixed for `diff`. It was not confirmed, because the fixture's
+EXIT trap deletes the seed's `WORK` directory. A DIAG path for the render arms, keeping the seed's
+stderr on a red, is the next instrument.
+
+**MEASURED AT BATCH 153: THE LEAD'S MECHANISM IS REAL, AND IT WAS WIDER THAN AN EMPTY `pc`.** The
+adversary forced git failures in a scratch copy with a PATH shim and under `ulimit -Su`.
+`preclassify.sh` exited **0** in almost every case. A failed `diff --name-status` gave EMPTY
+output. A failed `hash-object` or `rev-parse` gave WRONG buckets: a BOTH-ADDED file came out
+`UPSTREAM-ONLY-ADD`, which apply overwrites. There were three causes. The main loop was the
+right-hand side of a pipeline without `pipefail`, so the diff's status was lost. `file_hash` and
+`blob_hash` mapped any failure to `MISSING`, which is a real bucket input. And `lib.sh`'s memo
+cached the failed status, so one transient 128 was served to every later lookup in the same
+render. The fix hand then compared the engines. Under `ulimit -Su` over 90 runs, the old engine
+gave **22** wrong outputs at rc 0 and the new one gave **0** wrong and **13** refused. Under the
+Nth-git-call shim, the old engine exited 0 in **15 of 15** runs with **6** wrong, and the new one
+gave **0** wrong.
+
+**WHAT 0.637.0 SHIPS.** `preclassify.sh` now exits 2 on any failed git call, with one stderr
+line naming the call. The memo caches only a git answer, never a failure. `emit-report.sh` reads
+preclassify's exit status. On a non-zero exit, or on no rows while `base..theirs` changes
+`core/`, it renders `DETECTOR-REFUSED  preclassify.sh …` in all five sections built from those
+rows instead of `none`. `--verify` refuses a fresh render carrying that line with cause
+`PRECLASSIFY-REFUSED`. `apply.sh` stops before writing on the same two conditions, and now writes
+its in-flight marker only after preclassify has classified. The fixture's render arms now print
+`DIAG` lines on a red, so the next pool red carries its own cause.
+
+**THE TIP ADVERSARY FOUND THAT THE EMPTY-RESULT REFUSAL HAD A LEGITIMATE SUBJECT.** A range whose
+only `core/` change deletes a `core/scripts/*` file, pulled by a consumer still holding it at the
+pre-relocation `scripts/<name>`, classified to zero rows because preclassify skipped that path
+silently. The new refusal then stopped the pull in all five sections and in apply, and no re-run
+could clear it. Fixed at the source: preclassify now emits a `PRE-RELOCATION-NOOP` row for the
+skipped path, so an empty result means nothing was classified. `relocation-preclassify` arm G and
+`apply-drift-refile` arm h each fail on the revert. It also found that the memo's temp name is
+about 10 bytes longer than the cache name, so a key of roughly 244 to 253 bytes reads as git's
+"absent" at rc 0. The longest real key measured is 218; `BL-306` closes that window in the next
+release.
+
+**THIS DOES NOT CONFIRM THE POOL CAUSE, AND THE ENTRY STAYS LIVE.** The forced failures show
+that the mechanism exists. They do not show that the pool reaches it. One fixture run peaks at
+about 63 processes against a cap of 10666, so ordinary pool load is nowhere near the `ulimit`
+that forced these failures. The close condition is unchanged: the instrument records a pool
+failure's cause, or a pool run of the size that predicts at least 3 failures at base comes back
+clean at tip.
+
+**MEASURED AT BATCH 155: A PARTIAL POOL, TOO SMALL TO DISCRIMINATE.** Batch 151's shape was rerun
+at tip 0.639.1 (`49330f4a`) against base 0.624.0 (`29291758`), under `xargs -P 6`. The driving hand
+stalled, and the pool died after 66 of 156 runs: 44 tip and 22 base. All 66 exited 0 and end in
+`PASS`. No log carries a `DIAG` line, which is correct, because a `DIAG` prints only on a red. At
+batch 151's rates, 22 base runs predict 0.46 failures and 44 tip runs predict 0.8. Both are below
+one, so this clean result does not separate a fixed tip from an unfixed one, and it is not
+evidence either way. The close condition needs the full 156, which takes about 2.5 hours at the
+observed mean of 359s per run.
+
+**MEASURED AT BATCH 160: THE FULL POOL RAN, AND THE INSTRUMENT RECORDED A RED'S CAUSE.** The pool
+was 156 runs: 108 at tip `975a861c` (0.645.0) and 48 at base 0.624.0 (`29291758`), 6-wide, with
+the box's load average between 20 and 30. It returned **1 red at tip and 1 at base**. Every log
+carries a verdict line. There were **0** `--verify` false positives and **0** kill-set `moved the
+worlds` lines, against **156** `E2 … ok` lines as the control.
+
+**tip.32 was a kill-set red, and its `DIAG` named the world.** Mutant E3 on world V-N scored
+`3|BLOCKERS-RESOLVED|1|1|4|4` where the arm expects `…|0|0`. The approval had four rows that the
+fresh render did not, so `--verify` read the region as resolved blockers with unseen rows.
+
+**THE OUTPUT WAS REPRODUCED BYTE-FOR-BYTE BY FORCING ONE FAILURE AT APPROVE TIME.** In a scratch
+copy, a PATH shim made `diff` exit 2 with no output, or made the first `grep -E '^< '` of the
+orientation sample fail, while V-N's approval was rendered. `emit-report.sh` then printed
+`ONLY IN THEIRS: none` and `ONLY IN OURS: none` and exited 0. Scoring that approval under E3
+reproduced tip.32 exactly: the same four `unseen:` rows and the same `19,22c19,20` hunk. The
+unshimmed control renders `ONLY IN … (1, complete)` on both sides. The cause was the orientation
+block itself. It ran `diff … || true`, which swallows diff's exit 2 along with its exit 1, then a
+`grep | sed | grep … || true` chain, then `grep -c … || true` into `${n:-0}`, so every failed step
+became an empty sample. A failed `git show` read as `THEIRS absent` by the same shape.
+
+**base.2 was the same class one detector over, and 0.625.0 had already fixed it.** Its V-HB world
+rendered 0 HARD copies. That is `unregistered-drift.sh`'s `is_unregistered()` scoring a failed
+`diff` as clean, closed at `240d813a` (`unregistered-drift.sh:450-451` now reads the rc bare). The
+same shim at tip keeps 1 HARD copy.
+
+**WHAT 0.647.0 SHIPS.**
+- The orientation block reads diff's exit status bare: 0 and 1 mean it ran, and 2 or more
+  renders `DETECTOR-REFUSED  orientation diff exited <rc> for <path>` for that file.
+- One `awk` replaces the `grep | sed | grep` chain and the `grep -c`. It prints the count and the
+  sample from one run, and a non-zero exit or a count that is not a number refuses.
+- Absence at theirs is decided by `git ls-tree`, which exits 0 with no row for an absent path.
+  `git show` and `git cat-file -e` both exit 128 for an absent path and for a failed read.
+- Refusals are per file, so one refused file does not blank the others. Every refusal line
+  starts at column 0. `--verify` counts `^DETECTOR-REFUSED` in `refused_new`, so a verify under
+  the same failure reads UNDECIDED instead of BLOCKERS-RESOLVED.
+- `relabel-extension-checks.sh` has its rc read off the bare run. 0 and 1 mean it ran (1 is its
+  collision finding), and 2 or more refuses.
+- `retired-tokens`, `ledger-reverify`, `predicate-differential`, `retired-fixtures`,
+  `retired-layer-contract` and `retired-layer-passage` each say "0 ALWAYS". Each has its rc read
+  off the bare run, and a non-zero rc refuses.
+- The fixture's `v_approve` treats an approved region carrying `^DETECTOR-REFUSED` as a
+  transient world-build failure. It retries the approve up to 3 times and reports
+  `FIXTURE BROKEN` only if every attempt refuses. The retry is legitimate only because the engine
+  now names the refusal. Before this release it would have retried into a silent `none`.
+
+Healthy renders are byte-identical to 0.646.0. Measured on the reference consumer's
+`1115a426..a5cbdf0b` range: 27895 normalised bytes each side, 4 `ONLY IN` lines, 0
+`DETECTOR-REFUSED` lines on either side. This was measured on the first engine commit
+(`1f0a81f3`) and again on the staged-file commit (`9f153a07`). The detectors'
+exit-0-with-stderr refusals are not in this release; they are filed as `BL-333`.
+
+**THE TRIGGER IS A BASH 3.2 FD RACE, AND IT EXPLAINS E3/tip.32.** Under concurrent
+`/bin/bash` 3.2.57 workers, `diff <(printf …) file` exits 2 with `diff: /dev/fd/63: Bad file
+descriptor`. Three hands measured it independently at about 0.15-0.4% under 4 concurrent
+workers (3 and 8 in 2000 in two of the runs). The temp-file spelling measured 0 in 2000 in the
+same loop. `reconcile-emit-report`'s `v_par` runs 4 scorers at once, which is how an approval
+picked up a spontaneous orientation refusal. So the failure behind tip.32 was not load. It was
+this race hitting the orientation `diff`, which then rendered `none`.
+
+0.647.0 removes `<( )` from the five verdict-bearing reconcile diff sites. Each input is staged
+in a per-process `mktemp -d` file, cleaned by an EXIT handler, and `diff`'s status is read
+directly:
+- `emit-report.sh`: the orientation diff, and the `--verify` want/got diagnostic diff.
+- `register-drift.sh`'s `substitution_only()`.
+- `unregistered-drift.sh`'s `is_unregistered()`.
+- `apply.sh`'s drift refile of `provenance-block.json`. That site read no status before, and a
+  failed diff there is now a DECISION row that withholds the stamp.
+
+The staged file is PIPED into `diff -` rather than passed as a second path. That choice is for
+byte-identity: Apple `diff` hunks two regular files differently from a pipe and a file (294
+lines against 293 on a graph pull). A two-path diff would therefore have moved every approved
+region. The piped form reproduces the old `<( )` output.
+
+**BL-230 STAYS LIVE FOR E1, E2, E8 AND E9.** The batch-160 arm hand drove the orientation
+failure at approve time on 0.646.0 against their recorded extra-world shapes (E1
+`[V-R V-U V-HC]`, E2 `[V-M V-HC]`, E8 `V-R V-U`, E9 `[… V-B …]`). It did not reproduce any of
+the four. Only E3 on V-N is explained by this mechanism. The fd race may reach the other
+detectors' `<( )` sites, but that is not measured. The render fix's own receipt lives on
+`BL-334`, because it proves the fix and not this entry's close.
+
+**THE BATCH-116 BARE-`mktemp` LEAD IS DEAD, MEASURED AT BATCH 187.** The precedent it cites (now
+`ledger-reverify.sh:1591-1597`) failed because a FIXTURE counted the host's whole `tmp.*`
+population to ask whether one run had materialized a tree; prefixing the engine's directory made
+that question answerable by name. A bare `mktemp` is harmful only to a reader of that kind.
+`core/fixtures/reconcile-emit-report/run.sh` carries **0** readers of a `tmp.*` population
+(control in the same invocation: 1 such reader elsewhere under `core/fixtures`), and the bare
+calls now sit at `emit-report.sh:608`, `:669` and four more sites, each a private scratch file whose
+path no arm inspects. Prefixing them would change nothing E1, E2, E8 or E9 observe, so it is not a
+remedy for this entry and was not built. What remains open is claim (d) alone: the pool flake on
+E1, E2, E8 and E9, with no named cause.
+
+verify: manual
+
