@@ -211,15 +211,28 @@ H1/H2 stay with the lead — a self-test is never escalated into the mechanism i
   a Git-tracked path `code-reviewer.md` guarantees and the story's Gate-status
   line cites), never from recollection — a lead-asserted gate claim is how a
   sprint ran deploy as APPROVED while its gate-1 review file on disk still read
-  NEEDS_REWORK. The value is the text after `:` on the matched line, or the
-  next non-blank line when the match is a bare heading.
-- **Verdict values are the set `code-reviewer.md` declares under `## Verdict`:** `APPROVED` passes this check; `NEEDS_REWORK` and `BLOCKED` fail it.
+  NEEDS_REWORK. The value is the leading run of capital letters and underscores
+  after the `:` on the matched line, or at the start of the next non-blank line
+  when the match is a bare `## Verdict` heading — so `Verdict: PASS (all ACs)`
+  reads `PASS`, and so does a `PASS.` on the line under the heading.
+- **Each file is read against the set of the gate it is cited for, never by its
+  filename.** A file the story's Gate-status line cites for gate 1 is read
+  against `code-reviewer.md`'s set; a file cited for gate 2 is read against
+  `qa.md`'s. A value from the other gate's set is outside the set and fails.
+- **Code-review verdict values (`code-reviewer.md`)** — the set it declares under `## Verdict`: `APPROVED` passes this check; `NEEDS_REWORK` and `BLOCKED` fail it.
+- **QA verdict values (`qa.md`)** — the set it declares under `## Verdict`: `PASS` passes this check; `NEEDS_REWORK` fails it.
+- **A re-review supersedes the pass before it.** Per story and per gate, read
+  only the file with the highest `p<M>`; an unsuffixed file is pass 1. Order by
+  the number `p<M>` carries, as `artifact-path-grammar.md` rule 5 requires —
+  never by mtime and never by listing order — so `-p2` outranks the
+  unsuffixed file and `-p10` outranks `-p9`.
 - **Zero matches FAILS this check; it is never a fallback to recollection.** An
   unreadable verdict is an unmet validation, not an absent one. Name the file.
   Do not infer the verdict from the review's prose, from its existence, or from
-  the story's Gate-status line. Two matches carrying different values FAIL the
-  same way — the pattern anchors the file's own verdict line, and a per-AC or
-  per-check verdict table is not it.
+  the story's Gate-status line. Two matches FAIL the same way only when the
+  values they read differ — the pattern anchors the file's own verdict line,
+  and a per-AC or per-check verdict table is not it. Two matches reading the
+  same value are one verdict.
 - If any required validation was skipped, run it now before proceeding.
 - **Evidence:** Gate log must record which validations were run and their
   outcomes. "Completed" without evidence is not completed.

@@ -1192,8 +1192,8 @@ A37_i112_reader_bullet_deleted() {
   # The message lists the set SORTED, space-separated, which is the order the arm's own
   # `LC_ALL=C sort -u` produces. Derived here the same way rather than assumed.
   want="$(printf '%s\n' "$members" | LC_ALL=C sort -u | tr '\n' ' ' | sed 's/ $//' | sed 's/^/never names: /')"
-  if edit "$t/$CR_READER" '/^- \*\*Verdict values/ { next } { print }'; then
-    assert_fires_n "I112 deleting Check 1's \`- **Verdict values\` bullet REPORTS every declared member" \
+  if edit "$t/$CR_READER" '/^- \*\*Code-review verdict values/ { next } { print }'; then
+    assert_fires_n "I112 deleting Check 1's \`- **Code-review verdict values\` bullet REPORTS every declared member" \
                    "$want" 1
   fi
 }
@@ -1214,12 +1214,12 @@ A38_i112_bullet_member_loses_its_delimiters() {
     bad "FIXTURE BROKEN — no member read out of the \`## Verdict\` template, so there is nothing to un-delimit on the bullet."
     return
   fi
-  if ! grep -q -- "- \*\*Verdict values.*\`$last\`" "$t/$CR_READER"; then
-    bad "FIXTURE BROKEN — Check 1's \`- **Verdict values\` bullet does not carry \`$last\` backticked, so stripping its delimiters is not the mutation this assertion describes."
+  if ! grep -q -- "- \*\*Code-review verdict values.*\`$last\`" "$t/$CR_READER"; then
+    bad "FIXTURE BROKEN — Check 1's \`- **Code-review verdict values\` bullet does not carry \`$last\` backticked, so stripping its delimiters is not the mutation this assertion describes."
     return
   fi
   if edit "$t/$CR_READER" \
-       "/^- \\*\\*Verdict values/ && !d { gsub(/\`$last\`/, \"$last\"); d=1 } { print }"; then
+       "/^- \\*\\*Code-review verdict values/ && !d { gsub(/\`$last\`/, \"$last\"); d=1 } { print }"; then
     assert_fires_n "I112 a member spelled BARE on the bullet is REPORTED — the backtick delimiters carry the reader set" \
                    "never names: $last" 1
   fi
@@ -1238,7 +1238,7 @@ A39_i112_noncompound_nonmember_on_the_bullet() {
   local tok
   tok="REJ"; tok="${tok}ECTED"
   if edit "$t/$CR_READER" \
-       "/^- \\*\\*Verdict values/ && !d { \$0 = \$0 \" \\\`$tok\\\` also fails it.\"; d=1 } { print }"; then
+       "/^- \\*\\*Code-review verdict values/ && !d { \$0 = \$0 \" \\\`$tok\\\` also fails it.\"; d=1 } { print }"; then
     assert_fires_n "I112 a bare non-compound non-member TAUGHT on the bullet is REPORTED by the set comparison" \
                    "does not declare: $tok" 1
   fi

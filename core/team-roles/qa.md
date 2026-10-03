@@ -300,7 +300,9 @@ For each completed task, verify:
 - Message **architect** if you identify a pattern of quality issues that
   suggests an architectural concern.
 - **When you write the verdict to a file, the path is
-  `docs/reviews/s<N>/<story-index>-gate2-qa.md`** — `<N>` from
+  `docs/reviews/s<N>/<story-index>-qa-validation.md`**, and
+  `docs/reviews/s<N>/<story-index>-qa-validation-p<M>.md` for a re-validation of the same
+  story (`p<M>` is the only pass marker — `artifact-path-grammar.md` rule 5) — `<N>` from
   `scripts/ai-dlc/sprint-status.sh sprint-id`, `<story-index>` the story's index within
   that sprint. **Compose it from that declared sprint; never put the sprint in the
   basename and never search the filesystem for the current one** —
@@ -310,8 +312,19 @@ For each completed task, verify:
 - **`<story-index>` is the BARE INDEX, not the story id.** The pipeline mints ids
   sprint-first (`s306-1`, `S292-1`), so resolving this placeholder to the id puts the
   sprint back into the basename one directory below where it was just removed:
-  `s312/s312-1-gate2-qa.md` is refused by the same rule and denied at the keystroke by the
-  write-time guard. Write `s312/1-gate2-qa.md`.
+  `s312/s312-1-qa-validation.md` is refused by the same rule and denied at the keystroke by
+  the write-time guard. Write `s312/1-qa-validation.md`.
+
+## Verdict
+
+The QA verdict set. `gate-validation.md` Check 1 reads a gate-2 file's verdict against this
+set and no other, so a value outside it is an unmet validation:
+
+PASS | NEEDS_REWORK
+
+Write the file's verdict as ONE line, `Verdict: PASS`, or as a bare `## Verdict` heading with
+the member alone on the next non-blank line. Per-AC PASS/FAIL rows belong in a table under
+their own heading; a second verdict line carrying a different member fails Check 1.
 
 ## Escalation Protocol
 
