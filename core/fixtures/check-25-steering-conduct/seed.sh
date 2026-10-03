@@ -4,7 +4,7 @@
 #
 # Three cases, each a Claude Code session transcript in JSONL. The shapes are
 # lifted from the live consumer's S290 planning phase, which is where the real
-# 11 violations were measured -- not invented. Five sib-* cases follow them, for
+# 11 violations were measured -- not invented. Eight sib-* cases follow them, for
 # the siblings of an AskUserQuestion.
 #
 # Prints the temp root on the last line.
@@ -116,5 +116,29 @@ use_rec "$F" msg_01SibAlpha u-e3 "$T0B" b1 Bash "$BASH_IN"
 res_rec "$F" u-e4 "2026-07-13T13:05:00.000Z" q1 "$ANS"
 res_rec "$F" u-e5 "$TANS" q2 "$ANS"
 res_rec "$F" u-e6 "$TSIB" b1 "ok"
+
+# sib-f: sib-a with a READ sibling. The motivating transcript's sibling is a Read, so a join
+# that admits only a Bash sibling must fail here. Charged 0.5s: count 0.
+mkdir -p "$ROOT/sib-f"; F="$ROOT/sib-f/session.jsonl"; : > "$F"
+use_rec "$F" msg_01SibAlpha u-f1 "$T0"  q1 AskUserQuestion "$AUQ"
+use_rec "$F" msg_01SibAlpha u-f2 "$T0B" r1 Read '{"file_path":"docs/plan.md"}'
+res_rec "$F" u-f3 "$TANS" q1 "$ANS"
+res_rec "$F" u-f4 "$TSIB" r1 "ok"
+
+# sib-g: the sibling's record is written BEFORE the AskUserQuestion's in the same message --
+# 4 of 10 real sibling messages are ordered that way. A single pass that registers an answer
+# only when it reaches the AskUserQuestion record never joins this sibling. Count 0.
+mkdir -p "$ROOT/sib-g"; F="$ROOT/sib-g/session.jsonl"; : > "$F"
+use_rec "$F" msg_01SibAlpha u-g1 "$T0"  b1 Bash "$BASH_IN"
+use_rec "$F" msg_01SibAlpha u-g2 "$T0B" q1 AskUserQuestion "$AUQ"
+res_rec "$F" u-g3 "$TANS" q1 "$ANS"
+res_rec "$F" u-g4 "$TSIB" b1 "ok"
+
+# sib-h: an UNANSWERED AskUserQuestion (no tool_result at all) beside a Bash that blocks 600s.
+# No answer exists to charge from, so the Bash is charged in full: count 1, STARVATION.
+mkdir -p "$ROOT/sib-h"; F="$ROOT/sib-h/session.jsonl"; : > "$F"
+use_rec "$F" msg_01SibAlpha u-h1 "$T0"  q1 AskUserQuestion "$AUQ"
+use_rec "$F" msg_01SibAlpha u-h2 "$T0B" b1 Bash "$BASH_IN"
+res_rec "$F" u-h3 "$TSIB" b1 "ok"
 
 echo "$ROOT"
