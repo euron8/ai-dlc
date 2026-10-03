@@ -10,7 +10,7 @@
 # every other fixture's entries alone, so refreshing one fixture costs its own runtime
 # rather than a full re-derivation.
 #
-# fixtures mapped: 229    entries: 27025
+# fixtures mapped: 230    entries: 27084
 absorbed-specifics-survive	.git/HEAD
 absorbed-specifics-survive	.git/config
 absorbed-specifics-survive	.git/index
@@ -18594,6 +18594,63 @@ review-carry-over-clauses	.gitignore
 review-carry-over-clauses	core/fixtures/review-carry-over-clauses/run.sh
 review-carry-over-clauses	core/skills/ai-dlc/steps/sprint-review.md
 review-carry-over-clauses	core/team-roles/dev.md
+review-shard-merge	.git
+review-shard-merge	core
+review-shard-merge	core/.claude
+review-shard-merge	core/.claude/skills/ai-dlc/artifact-path-grammar.md
+review-shard-merge	core/.claude/skills/ai-dlc/steps/gate-validation.md
+review-shard-merge	core/.claude/skills/ai-dlc/steps/implementation.md
+review-shard-merge	core/.claude/team-roles/code-reviewer.md
+review-shard-merge	core/.git
+review-shard-merge	core/core/scripts/merge-review-shards.sh
+review-shard-merge	core/core/scripts/partition-review-diff.sh
+review-shard-merge	core/core/skills/ai-dlc
+review-shard-merge	core/core/skills/ai-dlc/artifact-path-grammar.md
+review-shard-merge	core/core/skills/ai-dlc/steps/gate-validation.md
+review-shard-merge	core/core/skills/ai-dlc/steps/implementation.md
+review-shard-merge	core/core/team-roles/code-reviewer.md
+review-shard-merge	core/fixtures
+review-shard-merge	core/fixtures/.claude/skills/ai-dlc/artifact-path-grammar.md
+review-shard-merge	core/fixtures/.claude/skills/ai-dlc/steps/gate-validation.md
+review-shard-merge	core/fixtures/.claude/skills/ai-dlc/steps/implementation.md
+review-shard-merge	core/fixtures/.claude/team-roles/code-reviewer.md
+review-shard-merge	core/fixtures/core/scripts/merge-review-shards.sh
+review-shard-merge	core/fixtures/core/scripts/partition-review-diff.sh
+review-shard-merge	core/fixtures/core/skills/ai-dlc/artifact-path-grammar.md
+review-shard-merge	core/fixtures/core/skills/ai-dlc/steps/gate-validation.md
+review-shard-merge	core/fixtures/core/skills/ai-dlc/steps/implementation.md
+review-shard-merge	core/fixtures/core/team-roles/code-reviewer.md
+review-shard-merge	core/fixtures/lib
+review-shard-merge	core/fixtures/lib/preamble.sh
+review-shard-merge	core/fixtures/review-shard-merge
+review-shard-merge	core/fixtures/review-shard-merge/.claude/skills/ai-dlc/artifact-path-grammar.md
+review-shard-merge	core/fixtures/review-shard-merge/.claude/skills/ai-dlc/steps/gate-validation.md
+review-shard-merge	core/fixtures/review-shard-merge/.claude/skills/ai-dlc/steps/implementation.md
+review-shard-merge	core/fixtures/review-shard-merge/.claude/team-roles/code-reviewer.md
+review-shard-merge	core/fixtures/review-shard-merge/core/scripts/merge-review-shards.sh
+review-shard-merge	core/fixtures/review-shard-merge/core/scripts/partition-review-diff.sh
+review-shard-merge	core/fixtures/review-shard-merge/core/skills/ai-dlc/artifact-path-grammar.md
+review-shard-merge	core/fixtures/review-shard-merge/core/skills/ai-dlc/steps/gate-validation.md
+review-shard-merge	core/fixtures/review-shard-merge/core/skills/ai-dlc/steps/implementation.md
+review-shard-merge	core/fixtures/review-shard-merge/core/team-roles/code-reviewer.md
+review-shard-merge	core/fixtures/review-shard-merge/run.sh
+review-shard-merge	core/fixtures/review-shard-merge/scripts/ai-dlc/merge-review-shards.sh
+review-shard-merge	core/fixtures/review-shard-merge/scripts/ai-dlc/partition-review-diff.sh
+review-shard-merge	core/fixtures/scripts/ai-dlc/merge-review-shards.sh
+review-shard-merge	core/fixtures/scripts/ai-dlc/partition-review-diff.sh
+review-shard-merge	core/scripts
+review-shard-merge	core/scripts/.claude
+review-shard-merge	core/scripts/.git
+review-shard-merge	core/scripts/ai-dlc/merge-review-shards.sh
+review-shard-merge	core/scripts/ai-dlc/partition-review-diff.sh
+review-shard-merge	core/scripts/artifact-path-config.sh
+review-shard-merge	core/scripts/core/skills/ai-dlc
+review-shard-merge	core/scripts/merge-review-shards.sh
+review-shard-merge	core/scripts/partition-review-diff.sh
+review-shard-merge	core/skills/ai-dlc/artifact-path-grammar.md
+review-shard-merge	core/skills/ai-dlc/steps/gate-validation.md
+review-shard-merge	core/skills/ai-dlc/steps/implementation.md
+review-shard-merge	core/team-roles/code-reviewer.md
 route-defect-classification	.git/HEAD
 route-defect-classification	.git/config
 route-defect-classification	.git/index
@@ -26773,8 +26830,10 @@ validator-path-resolution	core/scripts/gate-checkpoint.sh
 validator-path-resolution	core/scripts/gate-slice.sh
 validator-path-resolution	core/scripts/join-remediator-shards.sh
 validator-path-resolution	core/scripts/merge-adversarial-shards.sh
+validator-path-resolution	core/scripts/merge-review-shards.sh
 validator-path-resolution	core/scripts/migrate-artifact-paths.sh
 validator-path-resolution	core/scripts/partition-document.sh
+validator-path-resolution	core/scripts/partition-review-diff.sh
 validator-path-resolution	core/scripts/render-agent-definitions.sh
 validator-path-resolution	core/scripts/report-propagation-fanout.sh
 validator-path-resolution	core/scripts/rotate-gate-adjudication.sh

@@ -55,7 +55,8 @@ MERGE="$(find_up core/scripts/merge-review-shards.sh scripts/ai-dlc/merge-review
 GATE_MD="$(find_up core/skills/ai-dlc/steps/gate-validation.md .claude/skills/ai-dlc/steps/gate-validation.md)" || GATE_MD=""
 ROLE_MD="$(find_up core/team-roles/code-reviewer.md .claude/team-roles/code-reviewer.md)" || ROLE_MD=""
 GRAMMAR="$(find_up core/skills/ai-dlc/artifact-path-grammar.md .claude/skills/ai-dlc/artifact-path-grammar.md)" || GRAMMAR=""
-for _p in PART MERGE GATE_MD ROLE_MD GRAMMAR; do
+STEP_MD="$(find_up core/skills/ai-dlc/steps/implementation.md .claude/skills/ai-dlc/steps/implementation.md)" || STEP_MD=""
+for _p in PART MERGE GATE_MD ROLE_MD GRAMMAR STEP_MD; do
   eval "_x=\${$_p}"
   [ -n "$_x" ] || { echo "FIXTURE ERROR: $_p not found above $HERE in either layout; nothing was asserted" >&2; exit 2; }
 done
@@ -315,6 +316,49 @@ arm sha_rev "R7: a shard whose reviewed-sha is not the manifest's sha -> REFUSED
 arm moved "R8: the worktree's scan roots moved after the manifest was written (the re-run still partitions, differently) -> REFUSED 'differs from the map it records', nothing at --out" \
           "R8: a manifest map that no longer matches a re-run partition was not refused cleanly"
 arm a3 "R9: a shard body carrying '## Verdict' -> REFUSED on Check 1's count (2), exit 2, nothing at --out" "R9: a shard verdict heading was not refused"
+
+# THE PROGRAMS ARE NOTHING IF THE LEAD IS NEVER TOLD TO RUN THEM. Every arm above drives the two
+# programs directly, so a release that built them and never rewired the step file passes all of
+# them and every consumer keeps dispatching one reviewer. Keyed on the EMISSION SITE: the
+# paragraph implementation.md opens with `**Gate-1 dispatch:`, read outside fences, must name
+# both programs -- a whole-file grep is satisfied by a mention anywhere, including a fence.
+# The same for the role clause: the `## As a Shard` section must name the three grammar tokens
+# the merge refuses without, or a shard written as the role file says is refused at the join.
+step_para() { # <file> -> the Gate-1 dispatch paragraph, fenced lines dropped
+  awk '/^```/ { f = !f; next } f { next }
+       /^\*\*Gate-1 dispatch:/ { p = 1 } p && /^[[:space:]]*$/ { exit } p { print }' "$1"
+}
+p_step() { # <file>
+  local t; t="$(step_para "$1")"
+  [ -n "$t" ] && grep -qF 'partition-review-diff.sh' <<<"$t" && grep -qF 'merge-review-shards.sh' <<<"$t"
+}
+role_sect() { awk '/^## As a Shard/ { p = 1; next } p && /^## / { exit } p { print }' "$1"; }
+p_role() { # <file>
+  local t; t="$(role_sect "$1")"
+  [ -n "$t" ] && grep -qF 'shard-verdict:' <<<"$t" && grep -qF 'reviewed-sha:' <<<"$t" && grep -qF 'parts:' <<<"$t"
+}
+# Self-probes, both directions, on copies: the names removed from the paragraph, and the names
+# present only inside a fence, must each fail; the shipped file must pass.
+sed -e '/^\*\*Gate-1 dispatch:/,/^[[:space:]]*$/s/merge-review-shards\.sh/MERGE-GONE/g' "$STEP_MD" > "$WORK/step-strip.md"
+{ printf '%s\n' '**Gate-1 dispatch: decoy.** one reviewer.' '' '```' 'partition-review-diff.sh merge-review-shards.sh' '```'; } > "$WORK/step-fence.md"
+sed -e '/^## As a Shard/,/^## /s/reviewed-sha:/REVIEWED-GONE/g' "$ROLE_MD" > "$WORK/role-strip.md"
+if cmp -s "$STEP_MD" "$WORK/step-strip.md" || cmp -s "$ROLE_MD" "$WORK/role-strip.md"; then
+  bad "S0: FIXTURE STALE -- a structural probe's sed matched nothing, so the probe would score the shipped text"
+elif p_step "$WORK/step-strip.md" || p_step "$WORK/step-fence.md" || p_role "$WORK/role-strip.md"; then
+  bad "S0: FIXTURE BROKEN -- a structural predicate passed a copy with a program or token removed, or present only in a fence"
+else
+  ok "S0: the structural predicates refuse a paragraph missing the merge, names only inside a fence, and a role clause missing reviewed-sha:"
+fi
+if p_step "$STEP_MD"; then
+  ok "S1: implementation.md's Gate-1 dispatch paragraph names partition-review-diff.sh and merge-review-shards.sh outside a fence"
+else
+  bad "S1: implementation.md's Gate-1 dispatch paragraph does not name both programs outside a fence -- the lead is never told to shard"
+fi
+if p_role "$ROLE_MD"; then
+  ok "S2: code-reviewer.md's '## As a Shard' clause names shard-verdict:, reviewed-sha: and parts:, the grammar the merge refuses without"
+else
+  bad "S2: code-reviewer.md's '## As a Shard' clause does not carry the merge's shard grammar -- a shard written to it is refused at the join"
+fi
 
 # ------------------------------------------------------------------------------ the mutants
 mutdir() { # <name> -> a dir holding both subjects and the scan-root sibling

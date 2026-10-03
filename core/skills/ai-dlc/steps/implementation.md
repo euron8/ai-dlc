@@ -120,8 +120,12 @@ axis, as `_dispatch-protocol.md` "Bounded-join ≠ serial execution" applies it.
   instead — same review contract, stronger (opus-tier) model. As with
   `dev-escalated`, escalation is a ROLE, not a call-site `model` param: a
   higher `model` on a plain `code-reviewer` dispatch is silently corrected to
-  the standard tier by the dispatch guard.
-- **qa** from `qa.md`. Validates acceptance criteria, runs tests.
+  the standard tier by the dispatch guard. A gate-1 review is Rule 28,
+  "Split dispatch": files axis, over the story's changed-file set:
+  `partition-review-diff.sh --map` derives the parts and
+  `merge-review-shards.sh` joins them (Section 6, gate-1 dispatch).
+- **qa** from `qa.md`. Validates acceptance criteria, runs tests. Gate 2
+  is dispatched serially, `shard: 1/1 <story-index>`.
 
 Spawn additional dev teammates if stories span multiple ownership
 boundaries (e.g., dev-frontend + dev-backend).
@@ -266,6 +270,32 @@ arm's cross-check, because the Scope Verification, Dev Agent Record and
 commit exists. Zero commits = the dev produced no deliverable; resume
 or re-dispatch the dev BEFORE gating. Gating a zero-commit story is a
 process violation; surface at retro.
+
+**Gate-1 dispatch: the review partitions by changed-file group.** At the
+commit-presence check, with the frozen SHA recorded (the freeze below),
+run in the frozen dev worktree
+`partition-review-diff.sh --map <worktree> <base> <frozen-sha> --shard-dir docs/reviews/s<N>/shards/<story-index>-code-review-<sha12>`,
+where `<base>` is the base of the two-dot range the check above logs,
+`<frozen-sha>` is the full SHA and `<sha12>` its first twelve characters.
+Review sharding is opt-in: the program answers `SERIAL:` (exit 3) unless
+`AI_DLC_REVIEW_SHARD_MIN_FILES` is set in `.claude/settings.json` `env`
+and the story's reviewable files reach it. On `SERIAL`, dispatch one
+reviewer with `shard: 1/1 <story-index>`. Otherwise dispatch one reviewer
+per line the map prints, briefed `shard: <i>/<N> <group>` with the map
+and its shard path `<ordinal>.md` in the shard directory, plus one
+`shard: cross/<N> cross` reviewer writing `cross.md` there (Rule 28,
+"Split dispatch": files axis). Part reviewers EXECUTE NOTHING -- no
+tests, no `validate-mutation-red.sh`, no build; they read their part and
+report. The cross reviewer owns every execution step the role requires,
+the suite and mutation-red, run once in the frozen worktree. Join in the
+frozen worktree with
+`merge-review-shards.sh <shard-dir> --gate code-review --out docs/reviews/s<N>/<story-index>-code-review.md`,
+passing the pass-specific name on a later pass (`-p2`, ...). The merge
+re-derives the parts, refuses (exit 2, nothing written) on a missing,
+duplicate or mis-cited shard, and writes the one review file Check 1
+reads, verdict recomputed as the worst shard verdict. The lead persists
+the shard directory together with the merged file. Gate 2 is
+dispatched `shard: 1/1 <story-index>`; it has no shard merge.
 
 **DAR-fold preflight before gate-2 dispatch.** After gate1 (code
 review) approves a story and BEFORE dispatching gate2 (QA), the lead
