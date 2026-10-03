@@ -182,6 +182,207 @@ else
   fi
 fi
 
+# =============================================================================
+# THE MUTATION THAT BREAKS THE FILE INSTEAD OF THE TEST. A replacement that does not parse
+# makes the runner exit non-zero before any test body runs, and a bare `mut_rc != 0` grades
+# that as PROVEN. Every refusal arm below is PRESENCE-shaped: it requires the arm's own
+# `UNEVALUABLE (<arm>)` message, because a validator that refuses the flag as an unknown
+# target also exits 2 and must not score as one that ran the check.
+# =============================================================================
+
+# vrun <validator> <args...> -> sets $rc and $out (stdout and stderr together)
+vrun() {
+  local v="$1"; shift
+  out="$(bash "$v" "$@" 2>&1)"
+  rc=$?
+}
+SH_BROKEN='value() {'                       # does not parse: bash -n fails, the run fails
+SH_KILL="value() { printf '9\n'; }"         # parses, and kills disc.sh
+
+# --- Assertion 8: --syntax-check refuses a non-parsing mutant, no python needed --------
+# Without the flag the same mutation is PROVEN (the run dies on a parse error, which is
+# RED): that is the residue the header states, and the control that the flag is the cause.
+vrun "$VALIDATOR" "$SUT" 2 "$SH_BROKEN" bash "$WORK/disc.sh"
+sh_noflag_rc="$rc"
+vrun "$VALIDATOR" --syntax-check 'bash -n' "$SUT" 2 "$SH_BROKEN" bash "$WORK/disc.sh"
+if [ "$sh_noflag_rc" -eq 0 ] && [ "$rc" -eq 2 ] && grep -q 'UNEVALUABLE (syntax-check)' <<<"$out" \
+   && grep -q '^  restore:    byte-identical$' <<<"$out"; then
+  ok "--syntax-check 'bash -n' turns a non-parsing mutation (PROVEN without the flag) into exit 2, after a verified restore"
+else
+  bad "--syntax-check 'bash -n' on a non-parsing mutation exited $rc (without the flag: $sh_noflag_rc) — a broken file was graded as a claim about the test"
+fi
+
+# --- Assertion 9: the same flag leaves a parsing kill PROVEN ----------------------------
+vrun "$VALIDATOR" --syntax-check 'bash -n' -- "$SUT" 2 "$SH_KILL" bash "$WORK/disc.sh"
+[ "$rc" -eq 0 ] && grep -q '^PROVEN:' <<<"$out" \
+  && ok "--syntax-check 'bash -n' with a mutation that parses and kills still exits 0 (PROVEN), with the -- terminator" \
+  || bad "--syntax-check refused a parsing kill (exit $rc) — the check is not differential on the mutant"
+
+# --- Python worlds. Built here, not in seed.sh, so the shell arms above need nothing. ---
+# pyworld <name> <m.py body> -> echoes a dir holding m.py, a plain runner t.py and a
+# pytest file test_m.py. All three runners are absolute-path, so no arm depends on cwd.
+pyworld() {
+  local d="$WORK/py-$1"
+  mkdir -p "$d"
+  printf '%b' "$2" > "$d/m.py"
+  printf 'import sys\nsys.path.insert(0, %s)\nimport m\nsys.exit(0 if m.f() == 2 else 1)\n' "'$d'" > "$d/t.py"
+  printf 'from m import f\ndef test_f():\n    assert f() == 2\n' > "$d/test_m.py"
+  printf '%s\n' "$d"
+}
+HAVE_PY=0; command -v python3 >/dev/null 2>&1 && HAVE_PY=1
+HAVE_PYTEST=0
+[ "$HAVE_PY" -eq 1 ] && python3 -c 'import pytest' >/dev/null 2>&1 && HAVE_PYTEST=1
+PYTEST=(python3 -m pytest -q -p no:cacheprovider)
+skip() { printf '  SKIP  %s\n' "$1"; }
+
+# Each python arm is a function of the validator, so the mutants below drive the same arm.
+# Each prints nothing and returns 0 when it holds, else sets $why and returns 1.
+arm_py_syntax() {   # a syntax error on a .py target -> 2, restore printed AND on disk
+  local d before; d="$(pyworld "syntax-$2" 'def f():\n    return 2\n')"; before="$(cksum < "$d/m.py")"
+  vrun "$1" "$d/m.py" 1 'def f(:' python3 "$d/t.py"
+  why="exit $rc"
+  [ "$rc" -eq 2 ] && grep -q 'UNEVALUABLE (parse)' <<<"$out" \
+    && grep -q '^  restore:    byte-identical$' <<<"$out" \
+    && [ "$(cksum < "$d/m.py")" = "$before" ]
+}
+arm_py_return() {   # module-level `return 1`: ast.parse accepts it, compile() does not
+  local d; d="$(pyworld "return-$2" 'X = 1\ndef f():\n    return 2\n')"
+  vrun "$1" "$d/m.py" 1 'return 1' python3 "$d/t.py"
+  why="exit $rc"
+  [ "$rc" -eq 2 ] && grep -q 'UNEVALUABLE (parse)' <<<"$out"
+}
+arm_py_badbase() {  # baseline does not compile, killing mutation -> 0, never 2
+  local d; d="$(pyworld "badbase-$2" 'def f(:\nVALUE = 2\n')"
+  vrun "$1" "$d/m.py" 2 'VALUE = 3' grep -q 'VALUE = 2' "$d/m.py"
+  why="exit $rc"
+  [ "$rc" -eq 0 ] && grep -q 'parse: not checked (baseline does not compile)' <<<"$out" \
+    && grep -q '^PROVEN:' <<<"$out"
+}
+arm_pytest_collect() {  # compiles, import fails at module top level: pytest exit 2 -> 2
+  local d; d="$(pyworld "collect-$2" 'X = 1\ndef f():\n    return 2\n')"
+  vrun "$1" "$d/m.py" 1 'raise ImportError("boom")' "${PYTEST[@]}" "$d/test_m.py"
+  why="exit $rc"
+  [ "$rc" -eq 2 ] && grep -q 'UNEVALUABLE (pytest exit)' <<<"$out"
+}
+arm_pytest_green() {    # coverage-only pytest test, mutated run exit 0 -> 1 (UNPROVEN), not 2
+  local d; d="$(pyworld "green-$2" 'def f():\n    return 2\n')"
+  printf 'from m import f\ndef test_f():\n    f()\n' > "$d/test_m.py"
+  vrun "$1" "$d/m.py" 2 '    return 3' "${PYTEST[@]}" "$d/test_m.py"
+  why="exit $rc"
+  [ "$rc" -eq 1 ] && grep -q 'stayed GREEN under a real mutation' <<<"$out"
+}
+arm_pytest_kill() {     # an assertion failure under pytest (exit 1) -> 0, PROVEN
+  local d; d="$(pyworld "kill-$2" 'def f():\n    return 2\n')"
+  vrun "$1" "$d/m.py" 2 '    return 3' "${PYTEST[@]}" "$d/test_m.py"
+  why="exit $rc"
+  [ "$rc" -eq 0 ] && grep -q '^PROVEN:' <<<"$out"
+}
+
+if [ "$HAVE_PY" -eq 1 ]; then
+  arm_py_syntax "$VALIDATOR" tip \
+    && ok "a .py syntax-error mutation exits 2 (parse) and the target restores byte-identical" \
+    || bad "a .py syntax-error mutation was not refused by the parse arm ($why) — a SyntaxError was graded as a kill"
+  arm_py_return "$VALIDATOR" tip \
+    && ok "a module-level 'return 1' under a plain python runner exits 2 (compile() rejects what ast.parse accepts)" \
+    || bad "a module-level 'return 1' was not refused by the parse arm ($why)"
+  arm_py_badbase "$VALIDATOR" tip \
+    && ok "a baseline that does not compile leaves the parse arm off: a killing mutation still exits 0" \
+    || bad "a non-compiling baseline with a killing mutation did not exit 0 ($why) — the parse check is not differential"
+else
+  skip "python3 not found — the .py parse arms (syntax error, module-level return, non-compiling baseline) did NOT run"
+fi
+if [ "$HAVE_PYTEST" -eq 1 ]; then
+  arm_pytest_collect "$VALIDATOR" tip \
+    && ok "a pytest collection error on a mutant that compiles exits 2 (pytest exit 2 is not a test failure)" \
+    || bad "a pytest collection error was graded as a kill ($why)"
+  arm_pytest_green "$VALIDATOR" tip \
+    && ok "a pytest run that stays GREEN under mutation still exits 1 (UNPROVEN outranks the pytest-exit arm)" \
+    || bad "a GREEN pytest mutated run did not exit 1 ($why)"
+  arm_pytest_kill "$VALIDATOR" tip \
+    && ok "a pytest assertion failure (exit 1) under mutation still exits 0 (PROVEN)" \
+    || bad "a pytest assertion failure was not PROVEN ($why) — the pytest-exit arm refuses exit 1"
+else
+  skip "pytest not importable by python3 — the pytest-exit arms did NOT run"
+fi
+
+# --- MUTANTS of the parse, syntax-check and pytest-exit arms ----------------------------
+# mkmut <name> -- reads the mutated copy on stdin; refuses a copy identical to the validator
+# (matched nothing) and reports DID NOT APPLY rather than skipping silently.
+mkmut() {
+  cat > "$MUT/$1.sh"
+  if [ ! -s "$MUT/$1.sh" ] || cmp -s "$VALIDATOR" "$MUT/$1.sh"; then
+    bad "FIXTURE BROKEN: mutant $1 DID NOT APPLY, so its assertion is unproven"
+    return 1
+  fi
+}
+# insert_after <anchor> <line>: print <line> after the one line starting with <anchor>
+insert_after() {
+  A="$1" L="$2" awk 'BEGIN { n = 0 } { print } index($0, ENVIRON["A"]) == 1 { print ENVIRON["L"]; n++ } END { if (n != 1) exit 1 }' "$VALIDATOR"
+}
+
+# M4: syntax-check refusal exits 2 BEFORE the restore. The EXIT trap still restores the
+# file, so rc and the bytes on disk are both right; only the printed verified restore is
+# missing, and that line is what the arm requires.
+if insert_after '  REFUSED="syntax-check"' '  exit 2' | mkmut m4; then
+  vrun "$MUT/m4.sh" --syntax-check 'bash -n' "$SUT" 2 "$SH_BROKEN" bash "$WORK/disc.sh"
+  [ "$rc" -eq 2 ] && [ "$(cksum < "$SUT")" = "$BEFORE" ] && ! grep -q '^  restore:    byte-identical$' <<<"$out" \
+    && ok "MUTANT 4: a syntax-check refusal exiting before the restore prints no verified restore (assertion 8 kills it)" \
+    || bad "MUTANT 4 (exit 2 before restore, syntax-check) exited $rc with a verified-restore line — assertion 8 cannot see the ordering"
+fi
+
+if [ "$HAVE_PY" -eq 1 ]; then
+  # M5: ast.parse instead of compile().
+  sed 's@compile(open(sys.argv\[1\], "rb").read(), sys.argv\[1\], "exec")@__import__("ast").parse(open(sys.argv[1], "rb").read(), sys.argv[1])@' \
+    "$VALIDATOR" | mkmut m5 && {
+    if ! arm_py_return "$MUT/m5.sh" m5 && arm_py_syntax "$MUT/m5.sh" m5; then
+      ok "MUTANT 5: ast.parse in place of compile() passes the syntax-error arm and is killed by the module-level return arm ($why)"
+    else
+      bad "MUTANT 5 (ast.parse) was not killed by the module-level return arm alone"
+    fi; }
+  # M6: non-differential — the baseline gate removed, the arm always on for *.py.
+  sed 's@^    elif py_compiles "\$TARGET" baseline; then$@    elif true; then@' \
+    "$VALIDATOR" | mkmut m6 && {
+    if ! arm_py_badbase "$MUT/m6.sh" m6 && arm_py_syntax "$MUT/m6.sh" m6; then
+      ok "MUTANT 6: a non-differential parse check refuses a killing mutation over a non-compiling baseline ($why) and is killed"
+    else
+      bad "MUTANT 6 (no baseline gate) was not killed by the non-compiling-baseline arm alone"
+    fi; }
+  # M7: the mutant check reads the BACKUP, which always compiles when the baseline did.
+  sed 's@! py_compiles "\$TARGET" mutant; then@! py_compiles "$BACKUP" mutant; then@' \
+    "$VALIDATOR" | mkmut m7 && {
+    if ! arm_py_syntax "$MUT/m7.sh" m7 && arm_py_badbase "$MUT/m7.sh" m7; then
+      ok "MUTANT 7: checking the backup instead of the mutant lets a syntax error through ($why) and is killed"
+    else
+      bad "MUTANT 7 (backup checked) was not killed by the syntax-error arm alone"
+    fi; }
+  # M8: parse refusal exits 2 BEFORE the restore. The EXIT trap still puts the bytes back
+  # and the exit is still 2, so the printed verified restore is the only thing that kills it.
+  if insert_after '  REFUSED="parse"' '  exit 2' | mkmut m8; then
+    m8d="$(pyworld m8 'def f():\n    return 2\n')"; m8before="$(cksum < "$m8d/m.py")"
+    vrun "$MUT/m8.sh" "$m8d/m.py" 1 'def f(:' python3 "$m8d/t.py"
+    if [ "$rc" -eq 2 ] && [ "$(cksum < "$m8d/m.py")" = "$m8before" ] \
+       && ! grep -q '^  restore:    byte-identical$' <<<"$out" && ! arm_py_syntax "$MUT/m8.sh" m8b; then
+      ok "MUTANT 8: a parse refusal exiting before the restore keeps exit 2 and the bytes, prints no verified restore, and is killed"
+    else
+      bad "MUTANT 8 (exit 2 before restore, parse) exited $rc — the syntax-error arm's restore conjunct cannot see the ordering"
+    fi
+  fi
+else
+  skip "python3 not found — mutants 5-8 of the parse arm did NOT run"
+fi
+if [ "$HAVE_PYTEST" -eq 1 ]; then
+  # M9: the pytest arm takes precedence over exit 0, so a GREEN pytest run reads UNEVALUABLE.
+  sed 's@^if \[ "\$mut_rc" -eq 0 \]; then$@if [ "$mut_rc" -eq 0 ] \&\& [ "$IS_PYTEST" -eq 0 ]; then@' \
+    "$VALIDATOR" | mkmut m9 && {
+    if ! arm_pytest_green "$MUT/m9.sh" m9 && arm_pytest_collect "$MUT/m9.sh" m9; then
+      ok "MUTANT 9: a pytest arm treating exit 0 as UNEVALUABLE is killed by the GREEN-under-pytest arm ($why)"
+    else
+      bad "MUTANT 9 (pytest exit 0 refused) was not killed by the GREEN-under-pytest arm alone"
+    fi; }
+else
+  skip "pytest not importable by python3 — mutant 9 of the pytest-exit arm did NOT run"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "mutation-red-replay: PASS"; exit 0; fi
 echo "mutation-red-replay: $fails assertion(s) FAILED" >&2
