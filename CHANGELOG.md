@@ -31,8 +31,9 @@ only, and a measurement sweep on an unpushed throwaway branch may force it.
 
 `core/scripts/validate-mutation-red.sh` graded PROVEN on any non-zero mutated exit. A replacement line that did not
 parse made pytest exit on a collection error before any test body ran, and the script printed `PROVEN ... reproducibly
-kills the named test`. Three arms now refuse that case. Each exits 2 with a one-line message naming the arm, and only
-after the restore is verified byte-identical:
+kills the named test`. Three arms now refuse that case. Each exits 2 with a message whose first line names the arm, and
+only after the restore is verified byte-identical. A mutant refused by the parse or syntax check never runs the
+test command:
 
 - **parse**: automatic for `*.py` targets when python3 is present. It applies builtin `compile(src, path, "exec")` to
   the baseline and the mutant, never `ast.parse` (which accepts a module-level `return`) or `py_compile` (which writes
@@ -40,7 +41,7 @@ after the restore is verified byte-identical:
   `parse: not checked (<reason>)`.
 - **`--syntax-check '<cmd>'`**: a leading flag for any language, run differentially with the target path appended. A
   baseline that fails it prints `syntax-check: not applied`.
-- **pytest exit**: when the test command is pytest, a mutated exit outside {0, 1} refuses. A mutated exit 0 is still
+- **pytest exit**: when the test command's first word is `pytest` or `py.test`, or it runs `-m pytest`, a mutated exit outside {0, 1} refuses. A mutated exit 0 is still
   UNPROVEN.
 
 The parse and syntax checks run before the mutated test run. Exits 0, 1 and 3 are unchanged. `usage()`, the header's
