@@ -1291,8 +1291,12 @@ MUT
     # ------------------------------ the deriver runs a traced fixture at inner pool width 1 ----
     # BL-375: validator-arm-selection's 6-way inner pool outruns `log stream` and its trace drops
     # reports, so the deriver launches every fixture as `... env VAS_INNER_POOL_WIDTH=1 bash`.
-    # Bound on the EMITTING line by running it: the probe fixture echoes the knob, and the log the
-    # deriver captured for attempt 1 above must read `width=1`. Two controls, each presence-shaped
+    # There are TWO EMITTING LINES, one per launch path, and each is bound by running it. This arm
+    # binds the `sandboxed` line under `--tracer sandbox`: the probe fixture echoes the knob, and the
+    # log the deriver captured for attempt 1 above must read `width=1`. The same `sandboxed` line
+    # under `--tracer both` goes through sudo and is bound in the stub world further down. The
+    # `fs_usage` line runs only as root, so no unprivileged fixture can drive it; it stays covered
+    # only by the operator's own `sudo` run. Two controls here, each presence-shaped
     # (`burst ok` must appear, so a run that never reached the fixture cannot score):
     #   * the same probe run OUTSIDE the deriver reads `width=unset`, so the 1 came from the deriver
     #     and not from the probe or the environment;
@@ -1439,7 +1443,8 @@ MUT
     BR="$WORK/bothrepo"
     mkdir -p "$BR/core/fixtures/fxa" "$BR/core/scripts" "$BR/.githooks" "$BR/src" || broken "mkdir failed"
     printf '#!/bin/bash\nfor d in core/fixtures/*/; do :; done\n' > "$BR/.githooks/pre-push"
-    printf '#!/bin/bash\ncat src/a.sh >/dev/null\necho fxa ok\n' > "$BR/core/fixtures/fxa/run.sh"
+    # fxa echoes the width knob, which the stub-world width arm below reads from its log.
+    printf '#!/bin/bash\necho "width=${VAS_INNER_POOL_WIDTH:-unset}"\ncat src/a.sh >/dev/null\necho fxa ok\n' > "$BR/core/fixtures/fxa/run.sh"
     printf 'a\n' > "$BR/src/a.sh"; printf 'o\n' > "$BR/src/other.sh"
     printf '*.log\n' > "$BR/.gitignore"
     printf 'other\tsrc/other.sh\nother\tcore/fixtures/other/run.sh\n' > "$BR/.ai-dlc-fixture-readsets.tsv"
@@ -1500,10 +1505,12 @@ MUT
 [ "$#" -eq 1 ] && [ "$1" = -u ] && { echo 0; exit 0; }
 exec /usr/bin/id "$@"
 STUB
+    # The stub sudo models env_reset for the one variable that matters here: a VAS_INNER_POOL_WIDTH
+    # exported or prefixed in FRONT of sudo does not reach the command it runs.
     cat > "$SB/sudo" <<'STUB'
 #!/bin/bash
 while [ "$#" -gt 0 ]; do case "$1" in -n) shift ;; -u) shift 2 ;; *) break ;; esac; done
-exec "$@"
+exec env -u VAS_INNER_POOL_WIDTH "$@"
 STUB
     cat > "$SB/sandbox-exec" <<'STUB'
 #!/bin/bash
@@ -1545,7 +1552,7 @@ STUB
       local before after r
       cp "$1" "$STUB_DERIVER"
       before="$(sum_of "$BR/.ai-dlc-fixture-readsets.tsv")"
-      ( cd "$BR" && PATH="$SB:$PATH" SUDO_USER="$(id -un)" STUB_ROOT="$BOTH_TR" STUB_FEED="$SB/feed" \
+      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH PATH="$SB:$PATH" SUDO_USER="$(id -un)" STUB_ROOT="$BOTH_TR" STUB_FEED="$SB/feed" \
           STUB_FS="$SB/fs.list" STUB_SB="$2" AI_DLC_READSET_TRACE_ROOT="$BOTH_TR" \
           bash core/scripts/derive-fixture-readsets.sh --list fxa --tracer both ) > "$WORK/stub.out" 2>&1 </dev/null
       r=$?
@@ -1561,6 +1568,43 @@ STUB
         ok "a full stub-world --tracer both run reports 'fxa sandbox-missed 1 fs_usage-missed 0', reads SANDBOX-MISSES at exit 1, and leaves the map's md5 unchanged" ;;
       *) bad "the stub-world --tracer both run did not read exactly one miss with the map unchanged: '$S1' — $(tail -3 "$WORK/stub.out" | tr '\n' ' ')" ;;
     esac
+    # THE WIDTH KNOB UNDER `--tracer both`. This path runs the fixture through `sudo -n -u ...
+    # sandbox-exec`, and the stub sudo strips VAS_INNER_POOL_WIDTH the way env_reset does, so only an
+    # `env KNOB=1` placed AFTER sudo reaches the fixture. The log is read straight after each run,
+    # before the next run clears the trace root. Presence-shaped: `fxa ok` must appear too.
+    stub_width() { # prints "<width line>|<fxa ok count>" from the last stub run's fxa log
+      printf '%s|%s' "$(grep -m1 '^width=' "$BOTH_TR/w/fxa.log" 2>/dev/null)" "$(grep -cx 'fxa ok' "$BOTH_TR/w/fxa.log" 2>/dev/null || :)"
+    }
+    SW0="$(stub_width)"
+    BOTH_ARMS=$((BOTH_ARMS+1))
+    case "$SW0" in
+      "width=1|1") ok "WIDTH under --tracer both: the stub-world run of fxa, launched through sudo's env_reset, logs width=1" ;;
+      *) bad "WIDTH under --tracer both: fxa's log did not read width=1 with 'fxa ok' present: '$SW0' — the knob does not survive the sudo launch" ;;
+    esac
+    # THREE MUTANT DERIVERS, each a cmp -s guarded copy of the stub-world deriver, each a wrong
+    # fix that the --tracer sandbox width arm above cannot see because no sudo sits on that path:
+    #   m2      the injection moved in FRONT of sudo, on both sudo launches;
+    #   m4      the `sandboxed` launch dropping the knob;
+    #   prefix  `VAS_INNER_POOL_WIDTH=1 sandboxed ...`, a prefix in front of the function.
+    # Each must log width=unset with `fxa ok` present.
+    sed -e 's|sudo -n -u "$RUN_AS" sandbox-exec -f "$PROFILE" "$@"|env VAS_INNER_POOL_WIDTH=1 sudo -n -u "$RUN_AS" sandbox-exec -f "$PROFILE" "$@"|' \
+        -e 's|sudo -n -u "$RUN_AS" env VAS_INNER_POOL_WIDTH=1 bash |env VAS_INNER_POOL_WIDTH=1 sudo -n -u "$RUN_AS" bash |' \
+        -e 's|sandboxed env VAS_INNER_POOL_WIDTH=1 bash |sandboxed bash |' "$SB/deriver.sh" > "$SB/deriver.m2.sh"
+    sed 's|sandboxed env VAS_INNER_POOL_WIDTH=1 bash |sandboxed bash |' "$SB/deriver.sh" > "$SB/deriver.m4.sh"
+    sed 's|sandboxed env VAS_INNER_POOL_WIDTH=1 bash |VAS_INNER_POOL_WIDTH=1 sandboxed bash |' "$SB/deriver.sh" > "$SB/deriver.prefix.sh"
+    for _wm in m2 m4 prefix; do
+      BOTH_ARMS=$((BOTH_ARMS+1))
+      if cmp -s "$SB/deriver.sh" "$SB/deriver.$_wm.sh"; then
+        bad "BOTH WIDTH MUTANT $_wm did not apply: the edit matched nothing in the deriver copy"
+        continue
+      fi
+      stub_run "$SB/deriver.$_wm.sh" "$SB/sb.list" >/dev/null
+      _sw="$(stub_width)"
+      case "$_sw" in
+        "width=unset|1") ok "BOTH WIDTH MUTANT $_wm: the stub-world run logs width=unset with 'fxa ok' present — the --tracer both width arm refuses it" ;;
+        *) bad "BOTH WIDTH MUTANT $_wm: expected width=unset with 'fxa ok' present, got '$_sw' — $(tail -2 "$WORK/stub.out" | tr '\n' ' ')" ;;
+      esac
+    done
     S2="$(stub_run "$SB/deriver.sh" "$SB/empty.list")"
     BOTH_ARMS=$((BOTH_ARMS+1))
     case "$S2" in

@@ -91,15 +91,18 @@ PHASES_b="attrib union partition m1 m2 m3"
 # read-set traced at width 1 is the read-set at width 6. No AI_DLC_ prefix, as
 # future-proofing against the fixture env scrubs keyed on it; none sits on this path today.
 #
-# A value that is not an integer >= 1 is FIXTURE BROKEN (exit 2), never a regression: `xargs -P
-# 0` means UNLIMITED on BSD, and a non-number makes xargs refuse, which the sweep's own guard
-# would report as a pool that did not run -- a false finding about the subject.
+# A value that is not an integer from 1 to 64 is FIXTURE BROKEN (exit 2), never a regression:
+# `xargs -P 0` means UNLIMITED on BSD, and a non-number makes xargs refuse, which the sweep's own
+# guard would report as a pool that did not run -- a false finding about the subject.
+# THE LENGTH IS BOUNDED BEFORE ANY NUMERIC TEST. A 20-digit value overflows `test`, which then
+# errors and returns FALSE, so `-lt 1` alone lets it through to an xargs that refuses it. Three
+# digits cannot overflow, and 64 is the ceiling.
 JOBS="${VAS_INNER_POOL_WIDTH:-6}"
 case "$JOBS" in
-  ''|*[!0-9]*) echo "FIXTURE BROKEN: VAS_INNER_POOL_WIDTH='$JOBS' is not an integer >= 1" >&2; exit 2 ;;
+  ''|*[!0-9]*) echo "FIXTURE BROKEN: VAS_INNER_POOL_WIDTH='$JOBS' is not an integer from 1 to 64" >&2; exit 2 ;;
 esac
-if [ "$JOBS" -lt 1 ]; then
-  echo "FIXTURE BROKEN: VAS_INNER_POOL_WIDTH='$JOBS' is not an integer >= 1" >&2; exit 2
+if [ "${#JOBS}" -gt 3 ] || [ "$JOBS" -lt 1 ] || [ "$JOBS" -gt 64 ]; then
+  echo "FIXTURE BROKEN: VAS_INNER_POOL_WIDTH='$JOBS' is not an integer from 1 to 64" >&2; exit 2
 fi
 # The cheap re-entry mode the width arms below drive: the resolved width, and nothing else.
 if [ "${1:-}" = "--print-width" ]; then
@@ -287,6 +290,11 @@ w_unset="$(env -u VAS_INNER_POOL_WIDTH bash "$0" --print-width 2>/dev/null)"; w_
 w_one="$(VAS_INNER_POOL_WIDTH=1 bash "$0" --print-width 2>/dev/null)"; w_one_rc=$?
 VAS_INNER_POOL_WIDTH=0 bash "$0" --print-width >/dev/null 2>&1; w_zero_rc=$?
 VAS_INNER_POOL_WIDTH=abc bash "$0" --print-width >/dev/null 2>&1; w_abc_rc=$?
+# 20 digits overflow `test`, which errors and returns false, so a guard that is only `-lt 1`
+# passes it to xargs. 65 is the ceiling's near-miss; 64 must still resolve.
+VAS_INNER_POOL_WIDTH=99999999999999999999 bash "$0" --print-width >/dev/null 2>&1; w_big_rc=$?
+VAS_INNER_POOL_WIDTH=65 bash "$0" --print-width >/dev/null 2>&1; w_65_rc=$?
+w_64="$(VAS_INNER_POOL_WIDTH=64 bash "$0" --print-width 2>/dev/null)"; w_64_rc=$?
 if [ "$w_unset_rc:$w_unset" = "0:6" ]; then
   ok "WIDTH: with VAS_INNER_POOL_WIDTH unset the inner pool width resolves to 6"
 else
@@ -301,6 +309,48 @@ if [ "$w_zero_rc" -eq 2 ] && [ "$w_abc_rc" -eq 2 ]; then
   ok "WIDTH: VAS_INNER_POOL_WIDTH=0 and =abc both exit 2 (FIXTURE BROKEN), never a regression"
 else
   bad "WIDTH: a bad width was not refused at exit 2: '0' exited $w_zero_rc, 'abc' exited $w_abc_rc"
+fi
+if [ "$w_big_rc" -eq 2 ] && [ "$w_65_rc" -eq 2 ] && [ "$w_64_rc:$w_64" = "0:64" ]; then
+  ok "WIDTH: a 20-digit width and 65 both exit 2 (FIXTURE BROKEN), and 64 still resolves to 64"
+else
+  bad "WIDTH: the width ceiling is wrong: 20 digits exited $w_big_rc and 65 exited $w_65_rc (expected 2 and 2); 64 gave rc $w_64_rc and '$w_64' (expected 0 and 64)"
+fi
+
+# THE WIDTH IS ALSO CHECKED WHERE THE POOLS USE IT, not only where it is resolved. The cells
+# above drive `--print-width`, which reads JOBS at the resolver; a pool that hard-sets its own
+# width, or a JOBS re-assigned below the resolver, passes every one of them. This is a
+# SOURCE-TEXT check of this file: every pool site reads "$JOBS", there are exactly 2, and JOBS
+# is assigned exactly once. Comment lines are skipped. The patterns are assembled from pieces
+# (`x''args`, `J''OBS=`) so the text of this check cannot match itself, and no assertion
+# message below names the pool command followed by its width flag.
+width_sites() { # $1 file; prints "<pool sites> <of which read JOBS> <JOBS assignments>"
+  awk -v xa='x''args' -v jb='J''OBS=' '
+    /^[[:blank:]]*#/ { next }
+    $0 ~ ("(^|[^A-Za-z0-9_])" xa "[[:blank:]][^|]*-P") {
+      p++
+      if ($0 ~ ("(^|[^A-Za-z0-9_])" xa "[[:blank:]][^|]*-P[[:blank:]]*\"[$]JOBS\"")) j++
+    }
+    $0 ~ ("(^|[^A-Za-z0-9_])" jb) { a++ }
+    END { printf "%d %d %d\n", p, j, a }' "$1"
+}
+width_sites_ok() { [ "$1" = "2 2 1" ]; }
+# SELF-PROBE FIRST, on seeded copies: f1 hard-sets the width at both pool sites, f2 re-assigns
+# JOBS just after the --print-width block. Each must FAIL; each copy is cmp-guarded so an edit
+# that matched nothing cannot score as a kill.
+ws_f1="$TMP/ws.f1.sh"; ws_f2="$TMP/ws.f2.sh"
+sed 's/-P "\$JOBS"/-P 6/' "$0" > "$ws_f1"
+awk '{ print } prev && $0 == "fi" { print "J" "OBS=6"; prev = 0; next }
+     { prev = ($0 ~ /^  printf .*"\$JOBS"; exit 0$/) }' "$0" > "$ws_f2"
+ws_real="$(width_sites "$0")"
+ws_r1="$(width_sites "$ws_f1")"; ws_r2="$(width_sites "$ws_f2")"
+if cmp -s "$0" "$ws_f1" || cmp -s "$0" "$ws_f2"; then
+  bad "WIDTH SITES self-probe: a seeded defect copy is byte-identical to this file (f1 changed: $(cmp -s "$0" "$ws_f1" && echo no || echo yes), f2 changed: $(cmp -s "$0" "$ws_f2" && echo no || echo yes)), so the source-text check below is unproven"
+elif width_sites_ok "$ws_r1" || width_sites_ok "$ws_r2"; then
+  bad "WIDTH SITES self-probe: the source-text check passed a seeded defect: f1 (literal width 6 at both pool sites) read '$ws_r1', f2 (JOBS re-set after --print-width) read '$ws_r2'"
+elif width_sites_ok "$ws_real"; then
+  ok "WIDTH SITES (source-text check): both pool sites of this file read \"\$JOBS\" and JOBS is assigned once ('$ws_real'); the check refuses f1, a literal width at both sites ('$ws_r1'), and f2, JOBS re-set after --print-width ('$ws_r2')"
+else
+  bad "WIDTH SITES (source-text check): this file does not have exactly 2 pool sites all reading \"\$JOBS\" with JOBS assigned once — read '$ws_real' as '<sites> <reading JOBS> <assignments>', expected '2 2 1'. A pool that does not read JOBS, or a JOBS re-set after the resolver, makes the --print-width cells above prove nothing about the pools"
 fi
 fi
 
