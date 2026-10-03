@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 491..540. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 490..534. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,50 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 189 SHIPPED THREE RELEASES, `v0.716.0` (`2483dbb8`, #997), `v0.717.0` (`946fb8ce`, #998) AND `v0.718.0`
+(`a366d8ce`, #999), AND DISCHARGED THE ONE CONSUMER CANDIDATE FILED DURING IT.** It was invoked by peer handoff and
+ran autonomously, at `origin/main` `9bbc5a50`. The opening sweep: live 2 on 26 qualifying refs, unfiled 0, worklist
+0, TERMINAL 188, every control passing. The consumer's working-tree ledger differed from `HEAD` by two headings, both
+batch 188's already-shipped ids. Scope came from the whole-backlog adjudication: 9 entries, 0 CLOSE, 2 PARTIAL, 7 LIVE.
+
+- `v0.716.0`: `BL-436` filed and fixed. `scripts/validate-enforcement-map.sh` arms I81, I91, I94 and I95 read the
+  process cwd, so a seeded tree's validator run from the repo root read the LIVE tree and returned a false clean.
+  It now `cd`s to its own root; an inherited `VEM_SELF` is discarded. Found by the BL-375 contract adversary.
+- `v0.717.0`: `BL-004` and `BL-430`, from one nine-run forced sweep on an unpushed branch of a file:// clone
+  (the batch-188 ruling). The width-1 control separated; doubling did not. Pool-12 pole row is now
+  `reconcile-emit-report 553`, band 33 over all nine runs (the three-run band would fail two of them).
+- `v0.718.0`: `PC-S316-GATE-1-AND-2-REVIEWS-ARE-NEVER-SHARDED-SO-A-LARGE-CAPITAL-PATH-DIFF-IS-ONE-SERIAL-READ`
+  as `BL-437`, filed by the consumer mid-batch (uncommitted). Gate-1 review shards by changed-file group, opt-in via
+  `AI_DLC_REVIEW_SHARD_MIN_FILES`; gate 2 stays serial. `BL-438` (NOTE) files the QA verdict-vocabulary mismatch.
+
+Live backlog **9 -> 12 -> 8**, archive **425 -> 429**. Net closed minus filed: **1** (four closed; `BL-436`,
+`BL-437`, `BL-438` filed). R5 `--min-entries 8`; `--min-sh-receipts` stays 3. `FORK_BUDGET` 3188 (+16, the two new
+core scripts counted by the per-file walks I75, I84, I83).
+
+**`BL-375`'S NAMED ARM-6 LEVER WAS REFUTED BEFORE IT WAS BUILT.** The one on-disk trace put 0 of 19 drop notices in
+its window and 17 in the `enforcement-map-sites` seed `cp -R` burst. No copy form was shown to help: `cp -R` traced
+alone dropped 0 of 3. A before/after trace, one sample per side, read `validator-arm-selection-b` OMITTED (108 drops)
+at base and CLEAN at `946fb8ce`, which carries `BL-436`; `enforcement-map-sites` dropped on both. A `cp -R` trace lost
+10 of 956 paths with ZERO drop notices, so the entry's close criterion now needs a completeness control.
+
+**EVERY ADVERSARY FOUND SOMETHING ON A GATE-GREEN SHAPE, AGAIN.** 0.716.0's tip accepted a fix that `cd`s only inside
+`--arms`, while full mode (how the hook runs it) still read the live tree; 0.718.0's tip accepted eight wrong builds
+and a partition that never checked its base was an ancestor (11 of 13 graph s316 story merges have a non-ancestor
+sprint parent). All fixed before merge. 0.718.0's first gate failed `validator-fork-budget` by 9.
+
+**THE DELIVERY GAP IS NINE RELEASES, PAST ACTION 7'S WIDE THRESHOLD.** The consumer is installed at 0.709.0 (stamp
+`commit: 0414a98e`) against `VERSION` 0.718.0; 0.710.0, 0.711.0 and 0.713.0 are bootstrapping. PENDING is 5: the four
+ids batches 186 and 188 shipped, plus `BL-437`'s. Three consumer filings are still uncommitted in its working tree. The
+banked ruling stands: report the gap and write no runbook.
+
+**READ-SET TRACE OWED:** `enforcement-map-sites` (its new cells were never traced; it drops on every pass, `BL-375`),
+`suite-pole-guard`, `mutation-red-replay`, `check-25-steering-conduct`, `readset-skip`. `review-shard-merge`,
+`validator-path-resolution` and `check-22-spawn-ledger` were traced clean at load 2 and the map ships in 0.718.0.
+**OPERATOR DECISIONS STILL OPEN:** whether review sharding becomes default after two or three sprints of measurement,
+and `BL-438`'s QA verdict vocabulary.
+
+Batch 188's block below is history: batch 189's block replaces its delivery gap and its decisions list.
 
 **BATCH 188 SHIPPED TWO RELEASES, `v0.714.0` (`63726788`, #994) AND `v0.715.0` (`9c28d78e`, #995), AND
 DISCHARGED BOTH CONSUMER CANDIDATES IT FOUND.** It was invoked by peer handoff and ran autonomously, at
@@ -442,51 +486,6 @@ ids as `ADOPTED UPSTREAM`. The banked ruling stands: report the gap and write no
 **OPERATOR DECISIONS STILL OPEN** are batch 179's list below, unchanged.
 
 Batch 179's block below is history: batch 180's block replaces its delivery gap.
-
-**BATCH 179 SHIPPED EIGHT RELEASES, `v0.684.0` THROUGH `v0.691.0`, AND DISCHARGED NO CONSUMER CANDIDATE.** It was
-invoked by peer handoff and ran autonomously. Each squash tree was identical to its gated tip. Four close commits
-followed (`642beab0`, `87fc541d`, `0c8e34af`, `6d5adaf2`); each rotated its landed entries and reset the R5 floors.
-
-- `v0.684.0`: `BL-400` (the party-mode sections case, `seats x sections` in rule 28, an axis declared in every step file),
-  with `BL-127`, `BL-159`, `BL-401` and the `BL-404`/`BL-405` fixture residue; `BL-391` landed.
-- `v0.685.0` update `SKILL.md`: `BL-408`, `BL-403` part b.
-- `v0.686.0` self-update runner and gate: `BL-403` parts a and e, a `BL-360` share.
-- `v0.687.0` `lib.sh` and four fallback detectors: `BL-364` lib half, `BL-403` parts c and d.
-- `v0.688.0` predicate sites and the fork-budget floor: a `BL-129` part, `BL-265`.
-- `v0.689.0` `ledger-reverify.sh`: `BL-405` part a, a `BL-360` share.
-- `v0.690.0`: `BL-406`, the `ledger-reverify` fixture is four derived shards.
-- `v0.691.0` `apply.sh`: `BL-402`, a `BL-360` share.
-
-Live backlog **25**, archive **389**. Filed and open: `BL-409`, `BL-410`, `BL-411`, `BL-412` (a one-off red
-`layer-reference-resolution`, cause unestablished), `BL-413` (DEFECT: `apply.sh --finish` stamps over a both-changed
-CLASSIFY file nobody merged), `BL-414`, `BL-415`. Still open with a stated reason: `BL-360`, `BL-364` (29 path listings
-under the default `core.quotePath`), `BL-129`, and `BL-378` (the pole baseline is re-taken from three serial loaded runs).
-
-**EVERY TIP ADVERSARY FOUND A DEFECT IN A GATE-GREEN BRANCH, AGAIN.** `0.691.0`'s first cut stamped over an unapplied
-tree under a file-size limit because a here-string was fed from a failed write; a second `python3 - <<'PY'` heredoc was
-missed by a counter whose tag class lacked the single quote. A mutant whose anchor line is renamed reads "did not
-apply": three releases lost fixture mutants to a rename and each was re-anchored on the same site.
-
-**THE GATE'S OWN HAZARDS, EACH HIT TWICE.** A commit that edits `.githooks/` runs the OLD hook when it is pushed from a
-linked worktree, so closes one and four were blocked by R5; push such a commit from the main checkout detached at it.
-A multi-commit branch squash-merged without `--subject` took the last fix-up's subject (`ced16e8b`); pass the release
-subject every time. A green gate with exit 141 and no remote ref was re-pushed `--no-verify` with an `ls-remote` check.
-
-**READ-SET MAP.** Traced this batch: `ledger-reverify-b`, `-d` and `-dist-only-reach`. Still unmapped and always-run:
-`ledger-reverify-c` and `ledger-reverify-shard-mutants`. The sandbox tracer drops its stream under load and a trace that
-drops a fixture also deletes that fixture's old rows, so a map diff with deletions is discarded and never committed.
-Nine fixtures that invoke `validate-enforcement-map.sh` dropped on the last try and keep rows that predate its fixture-file
-read (`I118`); re-trace them when `uptime` reads under 10.
-
-**THE DELIVERY GAP IS WIDE.** At batch 179's last look the consumer was at 0.674.0 and `VERSION` read 0.691.0; re-derive
-it. PENDING was 2: the S316 acknowledge-hook candidate and the step-8 ordering candidate. Seven of the eight releases
-change a bootstrapping file. The banked ruling stands: report the gap and write no runbook.
-
-**OPERATOR DECISIONS STILL OPEN**, each with its recommendation already stated in the batch's pings: `BL-132`, `BL-145`,
-`BL-195`, `BL-007`; the `BL-127` re-tier to NOTE; archiving `BL-087` as answered; and four census steps flagged as closest
-honest, not measured fits (`ui-direction`, `deploy-validate`, `requirements`, `doc-repair-backfill`).
-
-Batch 178's block below is history: batch 179's block replaces its delivery gap and its rulings record.
 
 ### Derive the state; do not trust the numbers below
 
@@ -956,10 +955,10 @@ cat VERSION                                                                     
 # a docs commit naming an id first read S336 as 0.433.0 where 0.673.0 shipped it.
 # Loop over the DISCHARGED set derived above; the id is a variable, never a literal placeholder
 # (a `<id>` typed verbatim matches the string "<id>" and returns a real, meaningless commit).
-for id in $(comm -12 /tmp/live.txt /tmp/closed_here); do
+for id in $(comm -12 /tmp/live.txt /tmp/closed_here) PC-ZZ-IMPOSSIBLE-CONTROL-Q7; do
   sha="$(git log --format='%H' -F --grep="$id" origin/main -- VERSION | tail -1)"
   printf '%s\t%s\n' "$id" "$( [ -n "$sha" ] && git show "${sha}:VERSION" || echo UNNAMED )"
-done                                                                                   # control: an impossible id prints UNNAMED
+done                                    # the last row IS the control, run in the same loop: it must print UNNAMED
 ```
 
 **NO RUNBOOK IS LIVE.** Every `docs/plans/graph-pull-*` file is retitled `DO NOT EXECUTE` at its
@@ -1125,7 +1124,8 @@ otherwise.**
   assumed more subagents would have spawned," and a push lets the hook gate once
   (`verification-discipline.md`, "Verify a release the way the gate runs it"). **Operator ruling,
   batch 188: that prohibition covers RELEASE VERIFICATION only.** A measurement sweep on an unpushed
-  throwaway branch may force `AI_DLC_FIXTURE_NO_SKIP=1`, which makes `BL-004` and `BL-430` buildable.
+  throwaway branch may force `AI_DLC_FIXTURE_NO_SKIP=1`. The design such a sweep follows is recorded in
+  `.githooks/pre-push` beside the pool-width and inner-pool tables.
 - **A commit that edits `.githooks/` is pushed from the main checkout, detached at that commit.**
   A push from a linked worktree runs the OLD hook; closes one and four of batch 179 were blocked by it.
 - **A squash merge passes `--subject` from the release commit.** A multi-commit branch otherwise

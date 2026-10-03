@@ -28433,3 +28433,213 @@ from a tree root:
 **LANDED (v0.714.0, verified bbc83331).**
 
 verify: sh V=core/scripts/validate-steering-budget.sh; [ -f "$V" ] && command -v node >/dev/null || exit 9; d="$(mktemp -d)" || exit 9; u() { m=""; [ -n "$3" ] && m="\"id\":\"$3\","; printf '{"type":"assistant","timestamp":"2026-10-03T00:%s:00Z","message":{%s"role":"assistant","content":[{"type":"tool_use","id":"%s","name":"%s","input":{}}]}}\n' "$1" "$m" "$2" "$4" >> "$d/$5.jsonl"; }; r() { printf '{"type":"user","timestamp":"2026-10-03T00:%s:00Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"%s","content":"ok"}]}}\n' "$1" "$2" >> "$d/$3.jsonl"; }; n() { AI_DLC_STEERING_BUDGET=120 AI_DLC_STEERING_GRACE=30 bash "$V" --transcript "$d/$1.jsonl" --count 2>/dev/null; }; u 00 c1 mc Read ctl; r 05 c1 ctl; u 00 a1 mA AskUserQuestion a; u 00 a2 mA Bash a; r 05 a2 a; r 05 a1 a; u 00 b1 mB1 AskUserQuestion b; u 00 b2 mB2 Bash b; r 05 b2 b; r 05 b1 b; u 00 s1 mC AskUserQuestion c; u 00 s2 mC Bash c; r 05 s1 c; r 08 s2 c; u 00 x1 '' AskUserQuestion x; u 00 x2 '' Bash x; r 05 x2 x; r 05 x1 x; u 00 e1 mE AskUserQuestion e; u 00 e2 mE AskUserQuestion e; u 00 e3 mE Bash e; r 01 e1 e; r 05 e3 e; r 05 e2 e; u 00 f1 mF AskUserQuestion f; u 00 f2 mF Read f; r 05 f1 f; r 05 f2 f; u 00 g2 mG Bash g; u 00 g1 mG AskUserQuestion g; r 05 g1 g; r 05 g2 g; u 00 h1 mH AskUserQuestion h; u 00 h2 mH Bash h; r 05 h2 h; [ "$(n ctl)" = 1 ] || exit 9; [ "$(n a)" = 0 ] && [ "$(n b)" = 1 ] && [ "$(n c)" = 1 ] && [ "$(n x)" = 1 ] && [ "$(n e)" = 0 ] && [ "$(n f)" = 0 ] && [ "$(n g)" = 0 ] && [ "$(n h)" = 1 ]
+## BL-004 — the fixtures' inner pools are owed a sweep, and the hook records them as owed
+
+**What the figure counts, and over which set.** Per SOURCE FILE: eleven fixture `run.sh` files
+open their own pool — non-comment lines matching `xargs … -P` under `core/fixtures/*/*.sh`,
+excluding `consumer-suite-pool/run.sh:395`, which is a mutation string and not a pool — and
+their `-P` constants sum to 70 workers (derived with `grep -nE 'xargs.*-P' core/fixtures/*/*.sh`,
+dropping comment lines and that one mutation string, then summing each pool's width constant).
+That is the figure `.githooks/pre-push`'s pool-width
+comment cites. Per DISPATCHED DIRECTORY the set is larger: five shard directories
+(`enforcement-map-derivations-b`, `enforcement-map-sites-b`/`-c`,
+`layer-contract-conformance-b`, `validator-arm-selection-b`) re-enter four of those files, so
+up to sixteen directories can open an inner pool on top of the outer one. Whether each shard
+reaches its file's pool line was not measured. The heading's earlier "nine" and "66" were
+taken over the per-source-file set before two pools were added.
+
+Those workers sit on top of the outer pool. They cannot be swept with an environment variable —
+`enforcement-map-sites` scrubs every ambient `AI_DLC_*` name for I10, and I87 binds any key a
+shipped program dereferences — so sweeping them means editing the constants on a throwaway
+branch that is never pushed.
+
+The design to use: pin the dispatched set, reset the durations record from one golden copy
+before every run, visit cells round-robin, and take a difference as real only where two cells'
+readings do not overlap.
+
+Carried over from `docs/plans/pre-push-wall-clock.md`, which is otherwise discharged.
+
+verify: manual
+
+**SWEPT AT BATCH 189, ON THE OPERATOR'S BATCH-188 RULING** that a measurement sweep on an unpushed
+throwaway branch may force `AI_DLC_FIXTURE_NO_SKIP=1`. A file:// clone of `9bbc5a50`, pool 12, three
+cells as one commit each on an unpushed branch (all eleven constants, including
+`validator-arm-selection`'s `VAS_INNER_POOL_WIDTH` default): A as shipped, B every pool at 1 (the
+control), C every pool doubled. Durations reset from one golden copy before every run; cells visited
+A B A B C A C B C. Suite 228/228 on every A run; B and C red only on the width self-probes that pin the
+shipped defaults (`validator-arm-selection`, `layer-reference-resolution`), which is the cell, not a
+regression.
+
+| cell | wall s | pole (all nine: `reconcile-emit-report`) s |
+|---|---|---|
+| A shipped | 1126 1144 1097 | 553 545 537 |
+| B all 1 | 1179 1323 1199 | 533 627 541 |
+| C doubled | 1164 1254 1082 | 543 662 534 |
+
+Per pooled unit, seconds (A reps 2-3 / B reps 1-3 / C reps 1-3; rep 1 of A was not captured per unit):
+consumer-machinery-home 67 66 / 249 256 258 / 117 63 57; crosswalk-home-declaration 46 44 / 168 173
+173 / 45 42 45; enforcement-map-derivations 66 61 / 96 94 105 / 66 64 59; enforcement-map-sites 51 47
+/ 66 63 66 / 98 72 58; layer-contract-conformance 63 61 / 111 107 116 / 63 61 54;
+layer-reference-resolution 116 111 / 286 280 285 / 106 91 89; ledger-status-vocabulary 156 152 / 446
+490 456 / 112 161 111; self-update-join-gate 44 37 / 107 115 110 / 36 41 36; trunk-audit-mutants 44 37
+/ 186 201 196 / 27 30 28; wait-stale-deliverable 11 11 / 67 69 68 / 7 8 8; validator-arm-selection 225
+220 / 295 364 303 / 199 265 194.
+
+B separates from A (the control works); A and C overlap. The constants stay: the narrowest setting in
+the indistinguishable band. `.githooks/pre-push` records the table in place of "it is owed".
+
+**LANDED (v0.717.0, verified 946fb8ce).**
+
+---
+
+## BL-430 — `docs/suite-pole-baseline.tsv`'s pool-12 block still names `ledger-reverify` at 628s, a unit that has since been sharded
+
+**NOTE. Found at batch 185 while restating BL-005's pole paragraph.** The jobs-12 block of
+`docs/suite-pole-baseline.tsv` (its data row and the v0.583.0 ratchet-history line) records
+`ledger-reverify 628`, taken at `83747ef4` over 201 fixture directories. `ledger-reverify` has
+since been sharded: `ledger-reverify-b`, `-c` and `-d` re-enter its `run.sh`, so the
+`ledger-reverify` directory now carries one shard of the assertion set the 628s figure timed
+whole. At pool 12 `scripts/validate-suite-pole.sh` therefore compares the live pole against a
+figure taken on a different partition. Its pole-moved NOTE (`:611-613`) says so on a run where
+another unit is longest, and it does not fail. The pool-16 block (`gate-adjudication-mutants`, v0.705.0) is current and
+unaffected.
+
+verify: manual -- re-taking the row needs the file's own calibration recipe: three serial full runs under `AI_DLC_FIXTURE_NO_SKIP=1` at pool 12. That forced full run is one the operator has not authorised, so no session can produce the measurement that would close this, and a receipt keyed on the row's text would close it on an edit with no measurement behind it.
+
+**RE-TAKEN AT BATCH 189**, on the operator's batch-188 ruling, as cell A of BL-004's sweep: three
+serial forced runs in a file:// clone of `9bbc5a50`, pool 12, 231 fixture directories. Pole
+`reconcile-emit-report` 553 / 545 / 537 at loads 3.02 / 6.94 / 17.15; suite 228/228 each. Row 553.
+The band is taken over all nine sweep runs (533-662), because that unit opens no inner pool and was the
+pole in every run, so all nine are load samples of one unchanged unit; the three-run band (11, ceiling
+614) would already be exceeded by two of them. Band 33, ceiling 736, down from 754. The file states
+the deviation beside the row. `validate-suite-pole.sh` against the operator checkout's last green
+record reads pole `gate-adjudication-mutants` 518 under that ceiling and prints the pole-moved NOTE:
+the two units are co-poles at pool 12 (gate-adjudication-mutants ran 483-610 across the sweep).
+
+**LANDED (v0.717.0, verified 946fb8ce).**
+
+## BL-436 — `validate-enforcement-map.sh` arms I81, I91, I94 and I95 read the process cwd, so a seeded tree's validator answered about whichever tree it was run from
+
+**DEFECT, false clean.** Found by batch 189's contract adversary while attributing `BL-375`'s
+trace drops to the processes that produced them.
+
+**The defect.** At 0.715.0 the validator set `REPO_ROOT` from its own location and never `cd`'d
+there. Arms I81, I91, I94 and I95 spelled their corpus relative to the process cwd: I91's schema
+test and copy-scan `grep -rlF -- "$pfx" core/ scripts/`, I94's schema test and copy scan, and
+the reads of I81 and I95. Run from any directory other than its own tree, each of the four
+answered about that directory. From a scratch cwd each exited 1 reporting an input it reads as
+absent: I91, I94 and I95 their schema `is missing`, I81 `cannot find hook(s)`. From the repo root
+each exited 0.
+
+**Measured on the base validator (`9bbc5a50`).** In a seeded copy of the tree carrying a planted
+I91 offender (`core/scripts/bl436-probe.sh` holding `# <task-notification`), the copy's own
+validator with `--arms I91` exited 0 with no copy finding when run from the repo root, because it
+grepped the LIVE tree. It exited 1 with `I91: core/schemas/harness-origin.json is missing` from a
+scratch cwd, and 1 with the planted file named when run from the copy's own root (the control).
+That is the shape `validator-arm-selection`'s arm 6 and the `enforcement-map-sites` seeds use:
+a seeded tree's validator, run from the repo root. Under it, I91 and I94 could not fire. Before
+this release, none of the five enforcement-map drivers (`enforcement-map-sites`, `-b`, `-c`,
+`enforcement-map-derivations`, `-b`) names I91 or I94, against I33 named in all five.
+
+**The fix (v0.716.0).** One `cd "$REPO_ROOT"` right after the root is resolved, failing with
+exit 2 if it cannot. Every path stays repo-relative, so the exclusion filters I91 and I94 compare
+against are byte-identical. The `cd` invalidates a relative `$0`, and `--arms` re-reads the file
+by name, so the self path is made absolute once, as `VEM_SELF`, before the `cd`. Without that,
+`bash ../scripts/validate-enforcement-map.sh --arms I91` from `core/` exited 2 with `REPO_ROOT`
+resolved to "".
+
+**The receipt runs the validator and greps none of its text.** It runs `--arms I81,I91,I94,I95`
+from a `mktemp -d` cwd and from the root, requires rc 0 both times and byte-identical output, and
+runs `--arms I91` by relative path from `core/`. It then seeds a copy of `core/`, `scripts/`,
+`templates/` and `.githooks/` with the planted offender, runs the copy's validator from the root
+and from the scratch cwd, and requires rc 1 with exactly one copy line naming the planted file in
+both, and identical output. Last, it runs the seeded copy's validator in FULL mode (no `--arms`) from
+the root and requires rc 1 naming the planted file: the pre-push hook and most seeded callers run
+it that way, and a fix that `cd`s only inside the `--arms` block passed every earlier leg while a
+full-mode run still read the live tree (found by the tip adversary). A real future finding in any of the four arms also reads STILL-LIVE
+here, which is the safe polarity in this file; check the arm's message before reading it as a cwd
+regression.
+
+Scored under `bash -c 'set -uo pipefail; …'` from a copy's root with stdin from /dev/null: the
+fix 0; the base validator 1; the base plus the one `cd` line with no `VEM_SELF` 1 (the relative
+invocation from `core/` exits 2); the base with only the I91 copy-scan grep run under
+`REPO_ROOT` 1; the fix with the `cd` line deleted 1; the fix with the `cd` aimed at the live
+checkout instead of the validator's own tree 1 (the seeded offender reads clean from the root). Added after the tip adversary: the fix with the `cd` moved inside the `--arms` block 1 (the
+full-mode leg, rc 0 with no copy line). An inherited `VEM_SELF` is not scored here; the
+`enforcement-map-sites` cells own that layer (mutant M4).
+
+verify: sh V="$PWD/scripts/validate-enforcement-map.sh"; [ -f "$V" ] || exit 9; S="$(mktemp -d)" || exit 9; A=I81,I91,I94,I95; o1="$(cd "$S" && bash "$V" --arms "$A" 2>&1)"; c1=$?; o2="$(bash "$V" --arms "$A" 2>&1)"; c2=$?; [ "$c1" = 0 ] && [ "$c2" = 0 ] || { echo "BL-436 --arms $A: rc $c1 from a scratch cwd, rc $c2 from the root" >&2; exit 1; }; [ "$o1" = "$o2" ] || { echo "BL-436 the scratch-cwd and root runs differ" >&2; exit 1; }; o3="$(cd core && bash ../scripts/validate-enforcement-map.sh --arms I91 2>&1)" || { echo "BL-436 a relative invocation from core/ failed: $o3" >&2; exit 1; }; T="$S/t"; mkdir "$T" || exit 9; for d in core scripts templates .githooks; do cp -R "$d" "$T/$d" || exit 9; done; printf '# <task-notification\n' > "$T/core/scripts/bl436-probe.sh" || exit 9; W="  <task-notification -> core/scripts/bl436-probe.sh "; o4="$(bash "$T/scripts/validate-enforcement-map.sh" --arms I91 2>&1)"; c4=$?; o5="$(cd "$S" && bash "$T/scripts/validate-enforcement-map.sh" --arms I91 2>&1)"; c5=$?; for p in "root:$c4:$o4" "scratch:$c5:$o5"; do w="${p%%:*}"; r="${p#*:}"; c="${r%%:*}"; o="${r#*:}"; h="$(grep -e ' -> ' <<<"$o")"; [ "$c" = 1 ] && [ "$h" = "$W" ] || { echo "BL-436 seeded I91 offender from the $w cwd: rc $c, copy lines [$h], want rc 1 and only the planted file" >&2; exit 1; }; done; [ "$o4" = "$o5" ] || { echo "BL-436 the seeded tree reads differently from the root and from a scratch cwd" >&2; exit 1; }; o6="$(bash "$T/scripts/validate-enforcement-map.sh" 2>&1)"; c6=$?; h6="$(grep -e ' -> ' <<<"$o6")"; [ "$c6" = 1 ] && grep -qxF -- "$W" <<<"$h6" || { echo "BL-436 seeded I91 offender in FULL mode (no --arms) from the root: rc $c6, copy lines [$h6], want rc 1 naming the planted file" >&2; exit 1; }; exit 0
+
+**LANDED (v0.716.0, verified 2483dbb8).**
+
+## BL-437 — gate-1 and gate-2 reviews were never sharded, so a large capital-path diff was one serial read
+
+**DEFECT, wall clock.** Carries the reference consumer's
+`PC-S316-GATE-1-AND-2-REVIEWS-ARE-NEVER-SHARDED-SO-A-LARGE-CAPITAL-PATH-DIFF-IS-ONE-SERIAL-READ`.
+Gate 3 shards `gate-adjudicator` on worklist items and the adversary shards by files or sections,
+but `implementation.md` dispatched one `code-reviewer` and one `qa` per story, whatever the size of
+the diff. Rule 28's files axis covered an artifact of two or more files, not a story diff, and
+`validate-spawn-ledger.sh`'s `SHARD_ROLES` named neither reviewer role, so a reviewer row carrying
+an invented `shard: none (made up)` exited 0, unjudged.
+
+**The fix (v0.718.0). Gate 1 ships opt-in; gate 2 ships serial-only.**
+`partition-review-diff.sh --map <worktree> <base> <frozen-sha>` derives the part set from the
+two-dot range at the pre-gate commit-presence check: scan roots excluded, tests paired with their
+one same-stem source, groups split by adaptive depth, greedy-packed into at most four parts. It
+writes `.manifest` into the shard directory `docs/reviews/s<N>/shards/<idx>-code-review-<sha12>/`.
+`merge-review-shards.sh <dir> --gate code-review --out <file>` re-derives the map from the
+manifest and refuses unless every ordinal and `cross.md` arrived exactly once, each carrying the
+frozen sha and one `shard-verdict:`, and every `#### ` finding carrying one `parts:` line inside
+its shard's own scope. It writes the one review file Check 1 reads, with the verdict recomputed as
+the worst shard verdict. Part reviewers execute nothing; the cross reviewer owns the suite and
+mutation-red, so the wall-clock gain is the READING share only. `SHARD_ROLES` gains
+`code-reviewer` and `code-reviewer-escalated`.
+
+**Opt-in.** With neither `--min-files` nor `AI_DLC_REVIEW_SHARD_MIN_FILES` set, the partition
+answers `SERIAL:` naming the variable, and the lead dispatches `shard: 1/1 <idx>`. A consumer turns
+it on with `"AI_DLC_REVIEW_SHARD_MIN_FILES": "<N>"` in `.claude/settings.json` `env`. Making it the
+default is the operator's call after measured sprints.
+
+**Why gate 2 stays serial (contract adversary).** B1: QA's role runs the suite and
+`validate-mutation-red.sh`, and N concurrent QA shards would run mutation-red concurrently in ONE
+frozen worktree, which mutates files in place. D6: QA's verdict vocabulary is not Check 1's; the
+reference consumer's QA files read `Verdict: PASS`, a value outside the set `code-reviewer.md`
+declares (I112), so a QA merge would have to invent a fourth value or re-map one. `qa` is not
+added to `SHARD_ROLES`, `merge-review-shards.sh --gate qa` refuses, and QA is dispatched
+`shard: 1/1 <idx>`. The vocabulary mismatch is filed separately as BL-438.
+
+**The receipt runs the programs on a seeded repo and greps none of their text.** It seeds a
+six-file, three-directory diff in a scratch repo holding only the artifact-path grammar, and
+requires: `--map --min-files 4 --max-parts 3` exits 0 with three parts and writes `.manifest`;
+a base that is not an ancestor of the frozen sha (a sibling commit minted on the base's tree, so
+its two-dot file set is the same six files) exits 2 naming the ancestry and writes no manifest;
+the same run with the variable unset exits 3 printing `SERIAL:` and naming
+`AI_DLC_REVIEW_SHARD_MIN_FILES`; the variable set to 4 prints the identical map. Over seeded
+shards it merges three cases where a non-first part carries the worst verdict and the cross shard
+and the majority disagree with it: NEEDS_REWORK among APPROVED reads NEEDS_REWORK, BLOCKED among
+NEEDS_REWORK reads BLOCKED, all APPROVED reads APPROVED. Each value is read back from the output
+Check 1's way, with Check 1's pattern lifted from `gate-validation.md` and a seeded `## Verdict`
+control read first. A unique token from every shard must survive into the merged file. Removing
+one part shard, and separately `cross.md`, must exit 2 with no file at `--out`. Check 22 must
+FAIL `code-reviewer` and `code-reviewer-escalated` rows carrying an invented serial exception
+under S3, beside a `remediator` control that fails the same way, and must NOT judge a `qa` row.
+The seeded settings give every role a model, so only S3 can fail them. Exit 9 is a harness
+fault: the validator, `gate-validation.md` or the grammar absent, the remediator control or the
+Check 1 control not behaving, or the seed failing. The SHA-mismatch refusal is the fixture's
+arm, not this receipt's.
+
+Scored by `bash <file>` with `set -uo pipefail` as the first line, from a `git archive` copy's
+root: base `946fb8ce` 1 (scripts absent, so the code-reviewer S3 leg fails first); the fix 0;
+the ancestor check removed 1;
+default-on (no threshold means 1) 1; verdict by majority count 1; short union (the missing-shard
+check removed and absent shards skipped) 1; shard bodies dropped with the conservation guard
+removed 1; cross-wins 1; last-part-wins 1; `SHARD_ROLES` widened with the scripts absent 1;
+scripts present with `SHARD_ROLES` not widened 1; `qa` added to `SHARD_ROLES` 1; a second
+Check-1-matching verdict line with its count guard removed 1. Each wrong build exits at a
+different assertion than the one beside it, measured on a copy of the receipt with every
+`exit 1` numbered.
+
+verify: sh unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; R="$(pwd)"; P="$R/core/scripts/partition-review-diff.sh"; M="$R/core/scripts/merge-review-shards.sh"; V="$R/core/scripts/validate-spawn-ledger.sh"; G="$R/core/skills/ai-dlc/steps/gate-validation.md"; A="$R/core/skills/ai-dlc/artifact-path-grammar.md"; [ -f "$V" ] && [ -f "$G" ] && [ -f "$A" ] && command -v jq >/dev/null || exit 9; d="$(mktemp -d)" || exit 9; printf '%s\n' '{"aiDlcModels":{"opus":"claude-opus-5[1m]","sonnet":"claude-sonnet-5"},"aiDlcRoles":{"dev":{"model":"sonnet"},"code-reviewer":{"model":"sonnet"},"code-reviewer-escalated":{"model":"opus"},"remediator":{"model":"opus"},"qa":{"model":"sonnet"}}}' > "$d/settings.json" || exit 9; E() { { jq -nc '{v:1,sprint:900,name:"epoch",role:"dev",model_bound:"sonnet",model_requested:"sonnet",role_contract_cited:true,role_file_readable:true}' && jq -nc --arg r "$1" --arg b "$2" '{v:1,sprint:900,name:("bl-"+$r),role:$r,model_bound:$b,model_requested:$b,role_contract_cited:true,role_file_readable:true,shard:"invalid-exception",shard_raw:"none (made up)",tool_use_id:("toolu_"+$r)}'; } > "$d/$1.jsonl" || exit 9; o="$(bash "$V" --ledger "$d/$1.jsonl" --sprint 900 --settings "$d/settings.json" 2>&1)"; rc=$?; }; E remediator opus; [ "$rc" = 1 ] && grep -qF "role 'remediator' declared a serial exception" <<<"$o" && grep -qF '1 FAILED on an invented serial exception (S3)' <<<"$o" || exit 9; for r in code-reviewer:sonnet code-reviewer-escalated:opus; do E "${r%%:*}" "${r#*:}"; [ "$rc" = 1 ] && grep -qF "role '${r%%:*}' declared a serial exception" <<<"$o" && grep -qF '1 FAILED on an invented serial exception (S3)' <<<"$o" || exit 1; done; E qa sonnet; [ "$rc" = 0 ] && grep -qF '0 FAILED on an invented serial exception (S3)' <<<"$o" || exit 1; PAT="$(sed -n "s/.*grep -inE '\(.*\)' <review-file>.*/\1/p" "$G")"; [ "$(grep -c . <<<"$PAT")" = 1 ] || exit 9; ck() { n="$(grep -ciE -- "$PAT" "$1")" || n=0; [ "$n" = 1 ] || { printf 'COUNT%s' "$n"; return 0; }; l="$(grep -inE -- "$PAT" "$1")"; ln="${l%%:*}"; t="${l#*:}"; case "$t" in *:*) t="${t#*:}" ;; *) t="$(awk -v s="$ln" 'NR > s && /[^[:blank:]]/ { print; exit }' "$1")" ;; esac; printf '%s' "$t" | sed -e 's/^[[:blank:]*]*//' -e 's/[[:blank:]*]*$//'; }; printf '# x\n\n## Verdict\nAPPROVED\n' > "$d/ctl1.md"; printf 'Verdict: APPROVED\n## Verdict\nBLOCKED\n' > "$d/ctl2.md"; [ "$(ck "$d/ctl1.md")" = APPROVED ] && [ "$(ck "$d/ctl2.md")" = COUNT2 ] || exit 9; [ -f "$P" ] && [ -f "$M" ] || exit 1; w="$d/w"; mkdir -p "$w/.claude/skills/ai-dlc" && cp "$A" "$w/.claude/skills/ai-dlc/" && ( cd "$w" && git init -q . && echo base > README && git add -A && git -c user.name=p -c user.email=p@x commit -qm base ) >/dev/null 2>&1 || exit 9; B="$(git -C "$w" rev-parse HEAD)" || exit 9; mkdir -p "$w/api" "$w/web" "$w/lib" && for f in api/a.py api/b.py web/c.js web/d.js lib/e.go lib/f.go; do printf 'x\ny\nz\n' > "$w/$f" || exit 9; done; ( cd "$w" && git add -A && git -c user.name=p -c user.email=p@x commit -qm six ) >/dev/null 2>&1 || exit 9; T="$(git -C "$w" rev-parse HEAD)" || exit 9; [ "${#T}" = 40 ] || exit 9; s12="$(printf '%s' "$T" | cut -c1-12)"; S0="$d/m/1-code-review-$s12"; oa="$(bash "$P" --map "$w" "$B" "$T" --min-files 4 --max-parts 3 --shard-dir "$S0")"; [ $? = 0 ] && [ "$(grep -c . <<<"$oa")" -ge 2 ] && [ -f "$S0/.manifest" ] || exit 1; X="$(git -c user.name=p -c user.email=p@x -C "$w" commit-tree "$B^{tree}" -p "$B" -m sibling </dev/null)" || exit 9; o="$(bash "$P" --map "$w" "$X" "$T" --min-files 4 --max-parts 3 --shard-dir "$d/anc" 2>&1)"; [ $? = 2 ] && grep -qF 'is not an ancestor of the frozen sha' <<<"$o" && [ ! -e "$d/anc/.manifest" ] || exit 1; o="$(env -u AI_DLC_REVIEW_SHARD_MIN_FILES bash "$P" --map "$w" "$B" "$T" --max-parts 3)"; [ $? = 3 ] && [ "${o#SERIAL:}" != "$o" ] && grep -qF AI_DLC_REVIEW_SHARD_MIN_FILES <<<"$o" || exit 1; o="$(AI_DLC_REVIEW_SHARD_MIN_FILES=4 bash "$P" --map "$w" "$B" "$T" --max-parts 3)"; [ $? = 0 ] && [ "$o" = "$oa" ] || exit 1; O="$(cut -f1 <<<"$oa" | tr '\n' ' ')"; set -- $O; [ "$#" = 3 ] || exit 9; O1="$1"; O2="$2"; K() { printf '# Shard %s\n\nreviewed-sha: %s\nshard-verdict: %s\n\n## Findings\n\n### Important (should fix, can be follow-up)\n\n#### TOK%sZ finding\nparts: %s\n' "$2" "$T" "$3" "$2" "$4" > "$1/$2.md" || exit 9; }; S() { x="$d/$1/1-code-review-$s12"; mkdir -p "$x" && cp "$S0/.manifest" "$x/" || exit 9; for p in $O; do v="$3"; [ "$p" = "$O2" ] && v="$2"; K "$x" "$p" "$v" "$p"; done; K "$x" cross "$4" "$O1, $O2"; }; mg() { o="$(bash "$M" "$d/$1/1-code-review-$s12" --gate code-review --out "$d/$1.md" 2>&1)"; rc=$?; }; S c1 NEEDS_REWORK APPROVED APPROVED; mg c1; [ "$rc" = 0 ] && [ "$(ck "$d/c1.md")" = NEEDS_REWORK ] || exit 1; for p in $O cross; do grep -qF "TOK${p}Z" "$d/c1.md" || exit 1; done; S c2 BLOCKED NEEDS_REWORK NEEDS_REWORK; mg c2; [ "$rc" = 0 ] && [ "$(ck "$d/c2.md")" = BLOCKED ] || exit 1; S c3 APPROVED APPROVED APPROVED; mg c3; [ "$rc" = 0 ] && [ "$(ck "$d/c3.md")" = APPROVED ] || exit 1; S d1 APPROVED APPROVED APPROVED; mv "$d/d1/1-code-review-$s12/$O2.md" "$d/d1-aside.md" || exit 9; mg d1; [ "$rc" = 2 ] && [ ! -e "$d/d1.md" ] || exit 1; S d2 APPROVED APPROVED APPROVED; mv "$d/d2/1-code-review-$s12/cross.md" "$d/d2-aside.md" || exit 9; mg d2; [ "$rc" = 2 ] && [ ! -e "$d/d2.md" ] || exit 1; exit 0
+
+**LANDED (v0.718.0, verified a366d8ce).**
+
