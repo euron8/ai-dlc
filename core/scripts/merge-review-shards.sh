@@ -36,6 +36,10 @@
 #       parts: <ordinal>[, <ordinal>...]
 #   before the next heading. A part shard cites ONLY its own ordinal; the cross shard cites two
 #   or more DISTINCT ordinals. Ordinals compare numerically (`1` and `01` are one ordinal).
+#   Every shard carries a `## Findings` section, even an empty one; a shard without one is
+#   REFUSED. A `parts:` line anywhere else -- under another `## ` section, before the first
+#   `#### `, indented, or behind a list bullet (`- parts: 3`) -- is REFUSED, never skipped: a
+#   finding written as a bullet or under `## Critical Issues` would otherwise merge uncited.
 #
 # CHECK 1'S PATTERN IS DERIVED, NEVER RETYPED. It is lifted from gate-validation.md's own
 #   `grep -inE '<pattern>' <review-file>` directive the way core/fixtures/gate-verdict-grep-shape
@@ -214,11 +218,13 @@ parse_shard() {
     fence { next }
     /^reviewed-sha:/ { nr++; if (nr == 1) { v = $0; sub(/^reviewed-sha:[ \t]*/, "", v); sub(/[ \t]+$/, "", v); rv = v } }
     /^shard-verdict:/ { nv++; if (nv == 1) { v = $0; sub(/^shard-verdict:[ \t]*/, "", v); sub(/[ \t]+$/, "", v); vv = v } }
-    /^## / { flush(); infind = ($0 ~ /^## Findings[ \t]*$/); next }
+    /^## / { flush(); infind = ($0 ~ /^## Findings[ \t]*$/); if (infind) hasfind = 1; next }
     /^### / { flush(); next }
     infind && /^#### / { flush(); fl = NR; fn = 0; fst = ""; nfind++; next }
     infind && fl > 0 && /^parts:/ { fn++; v = $0; sub(/^parts:[ \t]*/, "", v); gsub(/[ \t]+/, "", v); fst = v; next }
-    END { flush(); printf "R %d %s\n", nr + 0, (rv == "" ? "-" : rv); printf "V %d %s\n", nv + 0, (vv == "" ? "-" : vv); printf "C %d\n", nfind + 0 }
+    /^[ \t]*([-*+][ \t]+)?parts:/ { if (!stray) stray = NR }
+    END { flush(); printf "R %d %s\n", nr + 0, (rv == "" ? "-" : rv); printf "V %d %s\n", nv + 0, (vv == "" ? "-" : vv); printf "C %d\n", nfind + 0
+          printf "F %d\n", hasfind + 0; printf "S %d\n", stray + 0 }
   ' "$1"
 }
 RE_CITED='^[0-9]+(,[0-9]+)*$'
@@ -239,6 +245,11 @@ for key in $ORDINALS cross; do
   if [ "$r" -gt "$WORST_R" ]; then WORST_R="$r"; WORST="$v"; fi
   printf '| %s | %s |\n' "$key" "$v" >> "$T/vtable" || refuse "cannot stage the verdict table"
   nf="$(awk '$1 == "C" { print $2 }' "$P")"; NFIND=$((NFIND + ${nf:-0}))
+  [ "$(awk '$1 == "F" { print $2 }' "$P")" = "1" ] \
+    || refuse "$sf carries no '## Findings' section; a shard reports its findings there, even when it has none"
+  sl="$(awk '$1 == "S" { print $2 }' "$P")"
+  [ "${sl:-0}" = "0" ] \
+    || refuse "$sf:$sl carries a 'parts:' line outside a '#### ' finding under '## Findings' (indented, bulleted, or under another section); every finding is a '#### ' heading there"
 
   while read -r tag line nlines cited; do
     [ "$tag" = "X" ] || continue

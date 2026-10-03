@@ -16,14 +16,17 @@
 #   and a refusal writes nothing.
 #
 # INPUTS. <worktree> is the frozen dev worktree (any directory git resolves a work tree from).
-#   <base> is any commit-ish and is recorded resolved. <frozen-sha> must be a FULL hex object
+#   <base> is any commit-ish and is recorded resolved; it must be an ANCESTOR of <frozen-sha>
+#   (`git merge-base --is-ancestor`), else REFUSED -- against a diverged base the two-dot range
+#   reviews the base side's commits as the story's. <frozen-sha> must be a FULL hex object
 #   name (40, or 64 under sha256) naming a commit: the freeze is pinned to an immutable name,
 #   never to `HEAD` or an abbreviation that may stop being unique. The program only READS the
 #   repository -- `git rev-parse` and `git diff`, nothing that moves a ref or the index.
 #
 # THRESHOLD, OPT-IN. `--min-files N` wins; otherwise `AI_DLC_REVIEW_SHARD_MIN_FILES`. With
 #   neither set the answer is SERIAL, naming the variable. N must be a positive integer.
-#   `--max-parts K` (default 4) must be an integer >= 2.
+#   `--max-parts K` (default 4) must be an integer >= 2. Either value longer than 9 digits is
+#   REFUSED before any arithmetic, which would otherwise wrap it.
 #
 # THE PART SET -- nothing else in core may restate it; callers read `--map`.
 #   1. FILES. `git -C <worktree> diff --numstat --no-renames <base>..<frozen-sha>` -- TWO dots,
@@ -92,11 +95,13 @@ else
 fi
 if [ -n "$MINF" ]; then
   case "$MINF" in ""|*[!0-9]*) refuse "$MINF_SRC '$MINF' is not a positive integer" ;; esac
+  case "$MINF" in ??????????*) refuse "$MINF_SRC '$MINF' is longer than 9 digits; shell arithmetic would wrap it" ;; esac
   [ "$((10#$MINF))" -ge 1 ] || refuse "$MINF_SRC '$MINF' is not a positive integer"
   MINF=$((10#$MINF))
 fi
 [ -n "$MAXP" ] || MAXP=4
 case "$MAXP" in ""|*[!0-9]*) refuse "--max-parts '$MAXP' is not an integer" ;; esac
+case "$MAXP" in ??????????*) refuse "--max-parts '$MAXP' is longer than 9 digits; shell arithmetic would wrap it" ;; esac
 MAXP=$((10#$MAXP))
 [ "$MAXP" -ge 2 ] || refuse "--max-parts $MAXP is below 2; a one-part review is SERIAL, not a partition"
 
@@ -114,6 +119,8 @@ SHA_FULL="$(git -C "$WT_ABS" rev-parse --verify --quiet "${SHA}^{commit}")" \
 [ "$SHA_FULL" = "$SHA" ] || refuse "frozen sha $SHA resolves to $SHA_FULL; pass the commit object name itself"
 BASE_FULL="$(git -C "$WT_ABS" rev-parse --verify --quiet "${BASE}^{commit}")" \
   || refuse "base '$BASE' names no commit in $WT_ABS"
+git -C "$WT_ABS" merge-base --is-ancestor "$BASE_FULL" "$SHA_FULL" \
+  || refuse "base $BASE_FULL is not an ancestor of the frozen sha $SHA_FULL; the two-dot range would charge the story with every commit on the base's side (pass the merge base)"
 
 T="$(mktemp -d "${TMPDIR:-/tmp}/partition-review-diff.XXXXXX")" || refuse "mktemp failed"
 trap 'rm -rf "$T"' EXIT

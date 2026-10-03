@@ -280,7 +280,10 @@ where `<base>` is the base of the two-dot range the check above logs,
 Review sharding is opt-in: the program answers `SERIAL:` (exit 3) unless
 `AI_DLC_REVIEW_SHARD_MIN_FILES` is set in `.claude/settings.json` `env`
 and the story's reviewable files reach it. On `SERIAL`, dispatch one
-reviewer with `shard: 1/1 <story-index>`. Otherwise dispatch one reviewer
+reviewer with `shard: 1/1 <story-index>`. On exit 2 (a REFUSED line on
+stderr, e.g. a base that is not an ancestor of the frozen SHA), likewise
+dispatch one reviewer with `shard: 1/1 <story-index>` and record the
+refusal line verbatim in the story's gate log. Otherwise dispatch one reviewer
 per line the map prints, briefed `shard: <i>/<N> <group>` with the map
 and its shard path `<ordinal>.md` in the shard directory, plus one
 `shard: cross/<N> cross` reviewer writing `cross.md` there (Rule 28,
