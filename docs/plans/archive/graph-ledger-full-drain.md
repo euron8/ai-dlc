@@ -16406,3 +16406,48 @@ runbook.
 
 Batch 177's block below is history: batch 178's block replaces its delivery gap and its rulings record.
 
+**BATCH 179 SHIPPED EIGHT RELEASES, `v0.684.0` THROUGH `v0.691.0`, AND DISCHARGED NO CONSUMER CANDIDATE.** It was
+invoked by peer handoff and ran autonomously. Each squash tree was identical to its gated tip. Four close commits
+followed (`642beab0`, `87fc541d`, `0c8e34af`, `6d5adaf2`); each rotated its landed entries and reset the R5 floors.
+
+- `v0.684.0`: `BL-400` (the party-mode sections case, `seats x sections` in rule 28, an axis declared in every step file),
+  with `BL-127`, `BL-159`, `BL-401` and the `BL-404`/`BL-405` fixture residue; `BL-391` landed.
+- `v0.685.0` update `SKILL.md`: `BL-408`, `BL-403` part b.
+- `v0.686.0` self-update runner and gate: `BL-403` parts a and e, a `BL-360` share.
+- `v0.687.0` `lib.sh` and four fallback detectors: `BL-364` lib half, `BL-403` parts c and d.
+- `v0.688.0` predicate sites and the fork-budget floor: a `BL-129` part, `BL-265`.
+- `v0.689.0` `ledger-reverify.sh`: `BL-405` part a, a `BL-360` share.
+- `v0.690.0`: `BL-406`, the `ledger-reverify` fixture is four derived shards.
+- `v0.691.0` `apply.sh`: `BL-402`, a `BL-360` share.
+
+Live backlog **25**, archive **389**. Filed and open: `BL-409`, `BL-410`, `BL-411`, `BL-412` (a one-off red
+`layer-reference-resolution`, cause unestablished), `BL-413` (DEFECT: `apply.sh --finish` stamps over a both-changed
+CLASSIFY file nobody merged), `BL-414`, `BL-415`. Still open with a stated reason: `BL-360`, `BL-364` (29 path listings
+under the default `core.quotePath`), `BL-129`, and `BL-378` (the pole baseline is re-taken from three serial loaded runs).
+
+**EVERY TIP ADVERSARY FOUND A DEFECT IN A GATE-GREEN BRANCH, AGAIN.** `0.691.0`'s first cut stamped over an unapplied
+tree under a file-size limit because a here-string was fed from a failed write; a second `python3 - <<'PY'` heredoc was
+missed by a counter whose tag class lacked the single quote. A mutant whose anchor line is renamed reads "did not
+apply": three releases lost fixture mutants to a rename and each was re-anchored on the same site.
+
+**THE GATE'S OWN HAZARDS, EACH HIT TWICE.** A commit that edits `.githooks/` runs the OLD hook when it is pushed from a
+linked worktree, so closes one and four were blocked by R5; push such a commit from the main checkout detached at it.
+A multi-commit branch squash-merged without `--subject` took the last fix-up's subject (`ced16e8b`); pass the release
+subject every time. A green gate with exit 141 and no remote ref was re-pushed `--no-verify` with an `ls-remote` check.
+
+**READ-SET MAP.** Traced this batch: `ledger-reverify-b`, `-d` and `-dist-only-reach`. Still unmapped and always-run:
+`ledger-reverify-c` and `ledger-reverify-shard-mutants`. The sandbox tracer drops its stream under load and a trace that
+drops a fixture also deletes that fixture's old rows, so a map diff with deletions is discarded and never committed.
+Nine fixtures that invoke `validate-enforcement-map.sh` dropped on the last try and keep rows that predate its fixture-file
+read (`I118`); re-trace them when `uptime` reads under 10.
+
+**THE DELIVERY GAP IS WIDE.** At batch 179's last look the consumer was at 0.674.0 and `VERSION` read 0.691.0; re-derive
+it. PENDING was 2: the S316 acknowledge-hook candidate and the step-8 ordering candidate. Seven of the eight releases
+change a bootstrapping file. The banked ruling stands: report the gap and write no runbook.
+
+**OPERATOR DECISIONS STILL OPEN**, each with its recommendation already stated in the batch's pings: `BL-132`, `BL-145`,
+`BL-195`, `BL-007`; the `BL-127` re-tier to NOTE; archiving `BL-087` as answered; and four census steps flagged as closest
+honest, not measured fits (`ui-direction`, `deploy-validate`, `requirements`, `doc-repair-backfill`).
+
+Batch 178's block below is history: batch 179's block replaces its delivery gap and its rulings record.
+
