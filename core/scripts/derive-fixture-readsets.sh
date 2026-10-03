@@ -9,7 +9,8 @@
 # `sandbox-exec` profile read through `log stream`) and needs NO root -- run it WITHOUT sudo.
 # The sandbox cannot see a read by a process outside the fixture's lineage (an XPC or launchd
 # helper), and `log stream` DROPS reports under load; a window carrying a drop notice omits its
-# fixture.
+# fixture, and so does one where the atime leg saw a READ the stream never reported (the LOSS
+# CANARY, beside the drop-notice guard: a loss canary only, never a completeness claim).
 #
 # `--tracer both` IS THE COMPARISON THAT DECIDES WHETHER THE SANDBOX MAY REPLACE fs_usage:
 #     sudo bash core/scripts/derive-fixture-readsets.sh --all --tracer both     (or --list)
@@ -480,6 +481,38 @@ drop_ignored() { # reads paths on stdin (repo-relative), writes the non-ignored 
 }
 # READSET_DROP_END
 
+# READSET_PSEUDO_BEGIN
+# Driven by core/fixtures/readset-skip, under all three tracers through the one call site where
+# their sets meet, and from its sentinels by the backlog receipt; it reads only $TREE and stdin.
+#
+# A PSEUDO-PATH IS AN ARGV STRING THE TRACER SAW AS A LOOKUP, NOT A FILE ANY FIXTURE DEPENDS ON.
+# Fixtures pass placeholder strings such as `<string>` or `sub/<unknown>` to the programs they
+# test; the kernel reports the failed lookup under the tree, and the map then carried rows naming
+# no file. A row is dropped ONLY when BOTH hold: its LAST component is a whole `<...>` token (no
+# `/` inside), and nothing by that name exists in the trace tree, followed or not (`-e` or `-L`).
+# So `a<b>c` and `e<f>g.sh` stay (the brackets do not span the component), `d/<real>` stays when a
+# file of that name was traced (a fixture may genuinely create one), and an absent ordinary path
+# such as `src/missing.sh` stays (a negative lookup on a real name IS a dependency: creating it
+# can change the fixture's outcome).
+# COSMETIC, AND THE ENTRY THAT ADDED IT IS A NOTE. The runner keeps only manifest paths that pass
+# `[ -f ]` (.githooks/pre-push, the manifest build), so such a row could never select a fixture;
+# this only stops the map carrying rows that look like a tracer fault.
+# THE COLON-SHAPED ROWS ARE DELIBERATELY NOT FILTERED (`file:/var/...`, `<hex>:core/...`,
+# `HEAD:core/...`): they are negative lookups of argv strings the runner never hashes, and telling
+# a `rev:path` argument from a real file whose name carries a colon needs its own design.
+readset_drop_pseudo() { # reads repo-relative paths on stdin, writes all but the absent pseudo-paths
+  # The glob is `^<[^/]*>$` applied to the LAST component: `${p##*/}` holds no `/` by construction.
+  local p
+  while IFS= read -r p; do
+    case "${p##*/}" in
+      '<'*'>') if [ -e "$TREE/$p" ] || [ -L "$TREE/$p" ]; then printf '%s\n' "$p"; fi ;;
+      *) printf '%s\n' "$p" ;;
+    esac
+  done
+  return 0
+}
+# READSET_PSEUDO_END
+
 if [ "$TRACER" = fs_usage ]; then
   say "fs_usage runs as root; fixtures run as '$RUN_AS'"
 elif [ "$TRACER" = both ]; then
@@ -743,12 +776,14 @@ for fx in $LIST; do
   # privilege drop, `env` sets it in the very process that runs the fixture, under every tracer.
   # The name carries no AI_DLC_ prefix as future-proofing: several fixtures scrub that prefix from
   # the environment they hand their subjects. No scrub sits on this path today.
-  # core/fixtures/readset-skip binds this line by running a copy of this deriver.
+  # EMS_POOL_WIDTH=1 rides the same `env`, for the same reason and with the same guarantee:
+  # enforcement-map-sites reads it as its own pool width, so a traced run of it is narrowed too.
+  # core/fixtures/readset-skip binds this line by running a copy of this deriver, for both knobs.
   if [ "$TRACER" = fs_usage ]; then
-    ( cd "$TREE" && sudo -n -u "$RUN_AS" env VAS_INNER_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
+    ( cd "$TREE" && sudo -n -u "$RUN_AS" env VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
     rc=$?
   else
-    ( cd "$TREE" && sandboxed env VAS_INNER_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
+    ( cd "$TREE" && sandboxed env VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
     rc=$?
   fi
 
@@ -820,6 +855,35 @@ for fx in $LIST; do
     lost="$(grep -c 'dropped during' "$WORK/$fx.win" 2>/dev/null)" || lost=0
     sandbox_paths < "$WORK/$fx.win" | grep -v '^-\?$' | norm > "$WORK/$fx.fs"
   fi
+  # THE LOSS CANARY: a file the fixture READ (its atime moved off the forced epoch) that the stream
+  # never reported. Under every tracer whose $fx.fs IS the stream set -- `sandbox` and `both`. Under
+  # `both` the fs_usage comparison cannot see a read BOTH tracers lost, so a canary there makes the
+  # fixture UNCOMPARED rather than letting it count toward SANDBOX-MISSES-NOTHING. Under fs_usage
+  # $fx.fs is not a stream set at all, so the canary does not run.
+  # IT IS A CANARY, NOT A COMPLETENESS CONTROL, AND CLAIMS NO COMPLETENESS. atime sees only reads of
+  # files that exist at the scan: a lost stat, a lost negative lookup, a lost exec of a file outside
+  # the tree, and a lost report on a file deleted before the scan are all invisible to it. A zero
+  # here says the stream lost no READ the atime leg could see -- never that the set is whole.
+  # WHY IT EXISTS: the stream can lose reports WITHOUT printing a drop notice -- measured, a `cp -R`
+  # recorded 946 of the 956 paths it read with zero notices -- so the drop-notice guard below cannot
+  # be the only loss guard. Proven by core/fixtures/readset-skip: a deterministic stub-world arm (no
+  # `log stream` needed) and a real unscoped burst of 8 concurrent readers over 1500 files.
+  # FALSE-POSITIVE SET, MEASURED BEFORE SHIPPING, AND NO NARROWING WAS NEEDED: a 33-fixture --list
+  # spread across the map, load 7.7-42, fired the canary on 1 fixture, which also carried 1863
+  # drop notices, and on 0 of the 16 fixtures whose windows had 0 notices. The one firing seen
+  # WITHOUT a notice was a synthetic single-reader burst over 1500 files: 3 of its 4 canary paths
+  # appear nowhere in the raw stream and the 4th matches only as a prefix of other names, so that
+  # was a real silent loss and not a false positive. No path class is exempted.
+  # Read off a STAGED comm, never a pipeline: a comm that could not read either side would make a
+  # piped `grep -c` answer 0, and a zero here maps the fixture -- the fail-open direction.
+  canary=0
+  if [ "$TRACER" != fs_usage ]; then
+    if LC_ALL=C comm -23 "$WORK/$fx.at" "$WORK/$fx.fs" > "$WORK/$fx.canary" 2>/dev/null; then
+      canary="$(grep -c . "$WORK/$fx.canary")" || canary=0
+    else
+      canary=unreadable
+    fi
+  fi
   # Under `both`, the fs_usage capture is extracted exactly as the fs_usage mode extracts it, from
   # its OWN last sentinel line, into $fx.fsu. $fx.fs above is then the sandbox set.
   : > "$WORK/$fx.fsu"
@@ -832,7 +896,7 @@ for fx in $LIST; do
   fi
 
   cat "$WORK/$fx.at" "$WORK/$fx.fs" "$WORK/$fx.fsu" | LC_ALL=C sort -u \
-    | grep -v '^\.readset-sentinel$' | grep -v '^\.readset-end$' | drop_ignored > "$WORK/$fx.set"
+    | grep -v '^\.readset-sentinel$' | grep -v '^\.readset-end$' | readset_drop_pseudo | drop_ignored > "$WORK/$fx.set"
   n="$(grep -c . "$WORK/$fx.set" 2>/dev/null)"; case "$n" in ''|*[!0-9]*) n=0 ;; esac
 
   # FAIL CLOSED. Anything that makes this trace untrustworthy omits the fixture from the map,
@@ -842,6 +906,7 @@ for fx in $LIST; do
   [ "$settled" -eq 1 ] || why="${why:+$why; }tracing never settled"
   [ "$flushed" -eq 1 ] || why="${why:+$why; }no end sentinel in the stream -- the tail of the window is unknown"
   [ "$lost" -eq 0 ]    || why="${why:+$why; }the stream dropped reports $lost time(s) in this window"
+  [ "$canary" = 0 ]    || why="${why:+$why; }LOSS CANARY: $canary path(s) the fixture read (atime) are absent from the stream -- see $WORK/$fx.canary"
   [ "$n" -gt 0 ]      || why="${why:+$why; }empty read-set"
   [ "$dirty" -le "$DIRTY_BASE" ] || why="${why:+$why; }fixture wrote $(( dirty - DIRTY_BASE )) path(s) into the tree"
 

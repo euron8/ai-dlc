@@ -473,6 +473,74 @@ Still open: `enforcement-map-sites`, `apply-drift-refile`, `reconcile-emit-repor
 `validator-arm-selection-b` drop, so no multi-fixture `--list` is yet guaranteed clean, and the
 stage-1 deliverable is not met.
 
+**BATCH 191 (0.721.0): A LOSS CANARY BESIDE THE DROP-NOTICE GUARD, AND `EMS_POOL_WIDTH=1` ON
+EVERY TRACED LAUNCH.** Under `--tracer sandbox`, `core/scripts/derive-fixture-readsets.sh` now
+omits a fixture when `comm -23 $fx.at $fx.fs` is non-empty, that is, when the atime leg saw a read
+the stream never reported. The OMITTED line reads `LOSS CANARY: <n> path(s)` and names the file
+listing them. It is a loss canary and claims no completeness: atime cannot see a lost stat, a lost
+negative lookup, or a lost report on a file deleted before the scan. It runs under both stream
+tracers, `sandbox` and `both`. Under `both` it marks the fixture UNCOMPARED, because a read that
+both tracers lost is invisible to the fs_usage comparison.
+Both launch lines now pass `env VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash`, so a traced
+`enforcement-map-sites` run is narrowed once that fixture reads the knob.
+
+Held by `core/fixtures/readset-skip`:
+- **Stub-world canary arm.** This arm needs no `log stream`, so it runs on every unprivileged run.
+  The stub stream reports `run.sh` alone while fxa really reads `src/a.sh`. The fixture must be
+  OMITTED with `LOSS CANARY: 1 path(s)` and 0 drop notices. With both paths reported it must map.
+  A deriver copy with the guard deleted maps the lossy window, which kills that mutant. This arm is
+  what keeps the guard from being a check that cannot fire.
+- **Real-stream arm.** An 8-reader burst over 1500 files runs under the unscoped profile, which
+  must omit with the canary count, and under the scoped profile, which must map. The guard-deleted
+  mutant is also run. The arm SKIPs, naming which side was not exercised, when no attempt
+  exercises both sides. The adversary's "scoped 0/0" did NOT reproduce here: 0 of 8 scoped
+  attempts traced clean, at 1-minute load 8.3 to 26.8. Two standalone attempts gave 31 and 33
+  notices with 218 and 152 canary paths. So on this box the real-stream arm SKIPs, and it will
+  SKIP under the pre-push pool too. The stub-world arm carries the proof.
+- **`--tracer both` canary arm.** The stub world's empty-stream run must name
+  `LOSS CANARY: 2 path(s)` in its UNCOMPARED reason. A mutant scoping the canary back to
+  `--tracer sandbox` loses the token.
+- **Width arms.** These now require `ems=1` beside `width=1` under both `--tracer sandbox` and
+  `--tracer both`. The four width mutants are re-anchored on the two-knob line.
+
+**False-positive census, taken before the commit.** The run was `bash
+core/scripts/derive-fixture-readsets.sh --list "<33 fixtures>" --tracer sandbox` in a clone of
+`4ea6bb79` with the working deriver overlaid. The list was every 8th mapped fixture plus the five
+stage-1 subjects. The map was restored afterwards. Load was sampled every 15s and joined by each
+fixture's log mtime.
+- 16 fixtures mapped with canary 0 and 0 drop notices, at load 7.7-37.4.
+- 17 were OMITTED for drop notices, with 3 to 2215 notices each.
+- The canary fired on exactly one fixture, `validator-arm-selection-b`: 37 paths, beside 1863
+  notices.
+- The canary fired on 0 of the 16 zero-notice fixtures, so the false-positive set is empty and
+  no narrowing was needed.
+- The one zero-notice firing observed was a synthetic single-reader scoped burst over 1500 files.
+  It produced 4 canary paths, 3 absent from the raw stream entirely and 1 present only as a prefix
+  of other names (`d/f52` against `d/f520`...). That was a real silent loss, the case the batch-189
+  `cp -R` rep 3 showed.
+
+The stage-1 subjects in that run:
+| fixture | drop notices | load |
+|---|---|---|
+| `enforcement-map-sites` | 739 | 15.8 |
+| `enforcement-map-sites-b` | 1002 | 13.7 |
+| `enforcement-map-sites-c` | 871 | 21.6 |
+| `validator-arm-selection` | 2215 | 30.4 |
+| `validator-arm-selection-b` | 1863, canary 37 | 42.1 |
+
+**Stage 1's revised close criterion:** three consecutive multi-fixture `--list` traces under the
+sandbox tracer, each covering `enforcement-map-sites`, `enforcement-map-sites-b`,
+`enforcement-map-sites-c`, `validator-arm-selection` and `validator-arm-selection-b`. Each trace
+must show:
+- no OMITTED line;
+- 0 drop notices;
+- canary 0;
+- an assertion count per fixture equal to an untraced run's;
+- a peak 1-minute load of at least 4.5 during the trace.
+
+The loss canary replaces the "completeness control" the batch-189 contract asked for, with the
+limits stated above.
+
 verify: sh D=core/scripts/derive-fixture-readsets.sh; [ -f "$D" ] || exit 9; B="$(grep -v '^[[:space:]]*#' "$D")"; grep -q 'sandbox-exec -f' <<<"$B" || exit 1; grep -q 'fs_usage -w' <<<"$B" && exit 1; grep -qF '"$(id -u)" = "0"' <<<"$B" && exit 1; exit 0
 
 **BATCH-189 BEFORE/AFTER TRACE, ONE SAMPLE PER SIDE.** `bash core/scripts/derive-fixture-readsets.sh --list "validator-arm-selection-b enforcement-map-sites" --tracer sandbox`, main checkout detached at each sha in turn, map restored and nothing committed. Base `9bbc5a50` (load 4.52): `validator-arm-selection-b` OMITTED with 108 drop notices, `enforcement-map-sites` OMITTED with 894. Tip `946fb8ce`, carrying the BL-436 cwd fix (load 11.46): `validator-arm-selection-b` CLEAN, `enforcement-map-sites` OMITTED with 1036. Lever (a) moved the fixture it was predicted to move, at the higher load; one sample per side is not a close. `enforcement-map-sites` still drops on its seed `cp -R` burst, where no copy form was shown to help. Stage 1 and the three-consecutive-clean-traces criterion with a completeness control stand.
@@ -529,3 +597,33 @@ only `core/` hits are fixture seed data: two path-grammar probes in `artifact-pa
 and one evidence-seed row in `gate-adjudication`. None of them is a reader. Check 1 reads the
 file a story's Gate-status line cites, so none of those 37 files is re-read and none needs
 migrating.
+
+## BL-439 — the read-set map carries pseudo-path rows such as `<string>` and `sub/<unknown>`, which name no file
+
+**NOTE.** All three tracers record a failed lookup on a placeholder argv string a fixture hands
+its subject, so the map carried rows naming no file. The rows are cosmetic: the runner keeps
+only manifest paths that pass `[ -f ]` (`.githooks/pre-push:578`), so such a row can never
+select or skip a fixture. They read like a tracer fault, though.
+
+Shipped: `readset_drop_pseudo` in `core/scripts/derive-fixture-readsets.sh`, between
+`READSET_PSEUDO_BEGIN`/`END`, sits at the one call site where the atime, stream and fs_usage
+sets meet, before `drop_ignored`. It drops a path only when its LAST component is a whole
+`<...>` token (`^<[^/]*>$`) AND nothing by that name exists in the trace tree (`-e` or `-L`).
+The colon-shaped argv rows (`file:/var/...`, `<hex>:core/...`, `HEAD:core/...`) are deliberately
+not filtered. They are negative lookups the runner never hashes, and telling a `rev:path` argument
+from a real file with a colon in its name needs its own design.
+
+Held by `core/fixtures/readset-skip`: in the `--tracer both` stub world six seeds go into both
+tracers' lists, and `fxa.set` must drop `<string>` and `sub/<unknown>` and keep `src/missing.sh`
+(absent), `a<b>c` and `d/<real>` (present) and `e<f>g.sh` (absent). That last seed is the only
+one separating the fix from an unanchored `<[^/]*>`. Five mutants each fail only that arm: the
+filter removed (`111111`), a whole-path anchor (`011111`), the unanchored pattern (`001110`), an
+existence-only filter (`000110`), and the filter on the sandbox set only (`111111`).
+
+The receipt extracts the shipped span, drives it over the same six seeds against a seeded tree,
+and requires the call at the meeting point. Scored under `bash -c 'set -uo pipefail; ...'` from a
+copy of the deriver: the fix 0; base `4ea6bb79` 1; each of the five mutants 1.
+
+verify: sh D=core/scripts/derive-fixture-readsets.sh; [ -f "$D" ] || exit 9; t="$(mktemp -d)" || exit 9; mkdir -p "$t/tree/d" "$t/tree/sub" && printf x > "$t/tree/a<b>c" && printf x > "$t/tree/d/<real>" || exit 9; sed -n '/^# READSET_PSEUDO_BEGIN$/,/^# READSET_PSEUDO_END$/p' "$D" > "$t/span"; n="$(grep -c 'readset_drop_pseudo()' "$t/span")" || n=0; [ "$n" -eq 1 ] || exit 1; c="$(grep -c 'readset_drop_pseudo | drop_ignored > "\$WORK/\$fx.set"' "$D")" || c=0; [ "$c" -eq 1 ] || exit 1; printf '%s\n' '<string>' 'sub/<unknown>' 'src/missing.sh' 'a<b>c' 'd/<real>' 'e<f>g.sh' > "$t/in"; out="$( TREE="$t/tree"; . "$t/span"; readset_drop_pseudo < "$t/in" | tr '\n' ' ' )"; [ "$out" = "src/missing.sh a<b>c d/<real> e<f>g.sh " ] || exit 1; exit 0
+
+**LANDED (v0.721.0, verified TBD).**
