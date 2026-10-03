@@ -287,7 +287,7 @@ if [ "$HAVE_PY" -eq 1 ]; then
     || bad "a module-level 'return 1' was not refused by the parse arm ($why)"
   arm_py_badbase "$VALIDATOR" tip \
     && ok "a baseline that does not compile leaves the parse arm off: a killing mutation still exits 0" \
-    || bad "a non-compiling baseline with a killing mutation did not exit 0 ($why) — the parse check is not differential"
+    || bad "a non-compiling baseline with a killing mutation did not exit 0 with 'parse: not checked (baseline does not compile)' ($why) — the parse check is not differential"
 else
   skip "python3 not found — the .py parse arms (syntax error, module-level return, non-compiling baseline) did NOT run"
 fi
@@ -306,16 +306,19 @@ else
 fi
 
 # --- MUTANTS of the parse, syntax-check and pytest-exit arms ----------------------------
-# mkmut <name> -- reads the mutated copy on stdin; refuses a copy identical to the validator
-# (matched nothing) and reports DID NOT APPLY rather than skipping silently.
+# mkmut <name> <producer-rc> -- checks the copy already written to $MUT/<name>.sh. Called
+# in THIS shell, never as a pipeline stage, so its `bad` reaches $fails: a lost anchor must
+# turn the fixture red, not print FIXTURE BROKEN beside a PASS. Refuses a producer that
+# failed (a dying sed, an anchor matched other than once), an empty copy, and a copy
+# identical to the validator (matched nothing).
 mkmut() {
-  cat > "$MUT/$1.sh"
-  if [ ! -s "$MUT/$1.sh" ] || cmp -s "$VALIDATOR" "$MUT/$1.sh"; then
-    bad "FIXTURE BROKEN: mutant $1 DID NOT APPLY, so its assertion is unproven"
+  if [ "$2" -ne 0 ] || [ ! -s "$MUT/$1.sh" ] || cmp -s "$VALIDATOR" "$MUT/$1.sh"; then
+    bad "FIXTURE BROKEN: mutant $1 DID NOT APPLY (producer exit $2), so its assertion is unproven"
     return 1
   fi
 }
-# insert_after <anchor> <line>: print <line> after the one line starting with <anchor>
+# insert_after <anchor> <line>: print <line> after the one line starting with <anchor>;
+# exits 1 unless the anchor matched exactly once.
 insert_after() {
   A="$1" L="$2" awk 'BEGIN { n = 0 } { print } index($0, ENVIRON["A"]) == 1 { print ENVIRON["L"]; n++ } END { if (n != 1) exit 1 }' "$VALIDATOR"
 }
@@ -323,7 +326,8 @@ insert_after() {
 # M4: syntax-check refusal exits 2 BEFORE the restore. The EXIT trap still restores the
 # file, so rc and the bytes on disk are both right; only the printed verified restore is
 # missing, and that line is what the arm requires.
-if insert_after '  REFUSED="syntax-check"' '  exit 2' | mkmut m4; then
+insert_after '  REFUSED="syntax-check"' '  exit 2' > "$MUT/m4.sh"; prc=$?
+if mkmut m4 "$prc"; then
   vrun "$MUT/m4.sh" --syntax-check 'bash -n' "$SUT" 2 "$SH_BROKEN" bash "$WORK/disc.sh"
   [ "$rc" -eq 2 ] && [ "$(cksum < "$SUT")" = "$BEFORE" ] && ! grep -q '^  restore:    byte-identical$' <<<"$out" \
     && ok "MUTANT 4: a syntax-check refusal exiting before the restore prints no verified restore (assertion 8 kills it)" \
@@ -332,32 +336,41 @@ fi
 
 if [ "$HAVE_PY" -eq 1 ]; then
   # M5: ast.parse instead of compile().
+  # Each mutant: the KILL arm runs first and its $why is captured before the near-miss arm
+  # (which must still hold) overwrites it.
   sed 's@compile(open(sys.argv\[1\], "rb").read(), sys.argv\[1\], "exec")@__import__("ast").parse(open(sys.argv[1], "rb").read(), sys.argv[1])@' \
-    "$VALIDATOR" | mkmut m5 && {
-    if ! arm_py_return "$MUT/m5.sh" m5 && arm_py_syntax "$MUT/m5.sh" m5; then
-      ok "MUTANT 5: ast.parse in place of compile() passes the syntax-error arm and is killed by the module-level return arm ($why)"
-    else
-      bad "MUTANT 5 (ast.parse) was not killed by the module-level return arm alone"
-    fi; }
+    "$VALIDATOR" > "$MUT/m5.sh"; prc=$?
+  if mkmut m5 "$prc"; then
+    if ! arm_py_return "$MUT/m5.sh" m5; then kwhy="$why"
+      if arm_py_syntax "$MUT/m5.sh" m5; then
+        ok "MUTANT 5: ast.parse in place of compile() passes the syntax-error arm and is killed by the module-level return arm ($kwhy)"
+      else bad "MUTANT 5 (ast.parse) also failed the syntax-error arm ($why) — the kill is entangled"; fi
+    else bad "MUTANT 5 (ast.parse) survived the module-level return arm"; fi
+  fi
   # M6: non-differential — the baseline gate removed, the arm always on for *.py.
   sed 's@^    elif py_compiles "\$TARGET" baseline; then$@    elif true; then@' \
-    "$VALIDATOR" | mkmut m6 && {
-    if ! arm_py_badbase "$MUT/m6.sh" m6 && arm_py_syntax "$MUT/m6.sh" m6; then
-      ok "MUTANT 6: a non-differential parse check refuses a killing mutation over a non-compiling baseline ($why) and is killed"
-    else
-      bad "MUTANT 6 (no baseline gate) was not killed by the non-compiling-baseline arm alone"
-    fi; }
+    "$VALIDATOR" > "$MUT/m6.sh"; prc=$?
+  if mkmut m6 "$prc"; then
+    if ! arm_py_badbase "$MUT/m6.sh" m6; then kwhy="$why"
+      if arm_py_syntax "$MUT/m6.sh" m6; then
+        ok "MUTANT 6: a non-differential parse check refuses a killing mutation over a non-compiling baseline ($kwhy) and is killed"
+      else bad "MUTANT 6 (no baseline gate) also failed the syntax-error arm ($why) — the kill is entangled"; fi
+    else bad "MUTANT 6 (no baseline gate) survived the non-compiling-baseline arm"; fi
+  fi
   # M7: the mutant check reads the BACKUP, which always compiles when the baseline did.
   sed 's@! py_compiles "\$TARGET" mutant; then@! py_compiles "$BACKUP" mutant; then@' \
-    "$VALIDATOR" | mkmut m7 && {
-    if ! arm_py_syntax "$MUT/m7.sh" m7 && arm_py_badbase "$MUT/m7.sh" m7; then
-      ok "MUTANT 7: checking the backup instead of the mutant lets a syntax error through ($why) and is killed"
-    else
-      bad "MUTANT 7 (backup checked) was not killed by the syntax-error arm alone"
-    fi; }
+    "$VALIDATOR" > "$MUT/m7.sh"; prc=$?
+  if mkmut m7 "$prc"; then
+    if ! arm_py_syntax "$MUT/m7.sh" m7; then kwhy="$why"
+      if arm_py_badbase "$MUT/m7.sh" m7; then
+        ok "MUTANT 7: checking the backup instead of the mutant lets a syntax error through ($kwhy) and is killed"
+      else bad "MUTANT 7 (backup checked) also failed the non-compiling-baseline arm ($why) — the kill is entangled"; fi
+    else bad "MUTANT 7 (backup checked) survived the syntax-error arm"; fi
+  fi
   # M8: parse refusal exits 2 BEFORE the restore. The EXIT trap still puts the bytes back
   # and the exit is still 2, so the printed verified restore is the only thing that kills it.
-  if insert_after '  REFUSED="parse"' '  exit 2' | mkmut m8; then
+  insert_after '  REFUSED="parse"' '  exit 2' > "$MUT/m8.sh"; prc=$?
+  if mkmut m8 "$prc"; then
     m8d="$(pyworld m8 'def f():\n    return 2\n')"; m8before="$(cksum < "$m8d/m.py")"
     vrun "$MUT/m8.sh" "$m8d/m.py" 1 'def f(:' python3 "$m8d/t.py"
     if [ "$rc" -eq 2 ] && [ "$(cksum < "$m8d/m.py")" = "$m8before" ] \
@@ -373,12 +386,14 @@ fi
 if [ "$HAVE_PYTEST" -eq 1 ]; then
   # M9: the pytest arm takes precedence over exit 0, so a GREEN pytest run reads UNEVALUABLE.
   sed 's@^if \[ "\$mut_rc" -eq 0 \]; then$@if [ "$mut_rc" -eq 0 ] \&\& [ "$IS_PYTEST" -eq 0 ]; then@' \
-    "$VALIDATOR" | mkmut m9 && {
-    if ! arm_pytest_green "$MUT/m9.sh" m9 && arm_pytest_collect "$MUT/m9.sh" m9; then
-      ok "MUTANT 9: a pytest arm treating exit 0 as UNEVALUABLE is killed by the GREEN-under-pytest arm ($why)"
-    else
-      bad "MUTANT 9 (pytest exit 0 refused) was not killed by the GREEN-under-pytest arm alone"
-    fi; }
+    "$VALIDATOR" > "$MUT/m9.sh"; prc=$?
+  if mkmut m9 "$prc"; then
+    if ! arm_pytest_green "$MUT/m9.sh" m9; then kwhy="$why"
+      if arm_pytest_collect "$MUT/m9.sh" m9; then
+        ok "MUTANT 9: a pytest arm treating exit 0 as UNEVALUABLE is killed by the GREEN-under-pytest arm ($kwhy)"
+      else bad "MUTANT 9 (pytest exit 0 refused) also failed the collection-error arm ($why) — the kill is entangled"; fi
+    else bad "MUTANT 9 (pytest exit 0 refused) survived the GREEN-under-pytest arm"; fi
+  fi
 else
   skip "pytest not importable by python3 — mutant 9 of the pytest-exit arm did NOT run"
 fi
