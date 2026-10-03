@@ -80,8 +80,30 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 # stopped running produces no findings on that tree and the shard reports FIXTURE BROKEN
 # rather than a clean sweep. Neither shard can report green having run nothing.
 SHARDS="a b"
-PHASES_a="unknown-id grammar all-ids sweep"
+PHASES_a="width unknown-id grammar all-ids sweep"
 PHASES_b="attrib union partition m1 m2 m3"
+
+# --- THE INNER POOL WIDTH, resolved in ONE place -------------------------------------------
+# Default 6 (the reasoning is beside the pools below). The read-set deriver runs this fixture
+# with VAS_INNER_POOL_WIDTH=1 (BL-375): at 6 the concurrent `grep -r` sweeps outrun the sandbox
+# tracer's `log stream` and it drops reports, so the trace is OMITTED. The width changes the
+# SCHEDULE, not the work -- every id is still dispatched and every file still read -- so a
+# read-set traced at width 1 is the read-set at width 6. No AI_DLC_ prefix: fixtures scrub it.
+#
+# A value that is not an integer >= 1 is FIXTURE BROKEN (exit 2), never a regression: `xargs -P
+# 0` means UNLIMITED on BSD, and a non-number makes xargs refuse, which the sweep's own guard
+# would report as a pool that did not run -- a false finding about the subject.
+JOBS="${VAS_INNER_POOL_WIDTH:-6}"
+case "$JOBS" in
+  ''|*[!0-9]*) echo "FIXTURE BROKEN: VAS_INNER_POOL_WIDTH='$JOBS' is not an integer >= 1" >&2; exit 2 ;;
+esac
+if [ "$JOBS" -lt 1 ]; then
+  echo "FIXTURE BROKEN: VAS_INNER_POOL_WIDTH='$JOBS' is not an integer >= 1" >&2; exit 2
+fi
+# The cheap re-entry mode the width arms below drive: the resolved width, and nothing else.
+if [ "${1:-}" = "--print-width" ]; then
+  printf '%s\n' "$JOBS"; exit 0
+fi
 
 # THE SHARD ARRIVES AS AN ARGUMENT, NOT AS AN ENVIRONMENT VARIABLE. The re-entrant worker
 # modes below are dispatched by argument too, and a fixture that took its identity from the
@@ -171,6 +193,8 @@ if [ "${1:-}" = "--sweep-one" ]; then
 fi
 
 echo "$NAME fixture"
+# The deriver's traced run is evidenced by THIS line reading 1 in its per-fixture log.
+echo "inner pool width: $JOBS"
 echo
 
 fails=0
@@ -190,7 +214,8 @@ trap 'rm -rf "$TMP"' EXIT
 # the pole. Measured solo, the two sweeps together are 23 of 89 seconds; the other 64 are four
 # near-full validator runs, each of which is a single serial process no inner pool can touch.
 # The directory split above is what those four needed.
-JOBS=6
+#
+# JOBS is resolved once, from VAS_INNER_POOL_WIDTH, near the top of this file; both pools read it.
 
 # The declared id set, taken from the SERVED grammar rather than a fresh grep. The reason is
 # recorded in render-invariant-index.sh: a column-0 pattern finds 83 of the header-shaped
@@ -247,6 +272,35 @@ if [ "$GROUP" = a ]; then
     broke "the shard phase lists and this file's phase guards disagree — some assertion runs in no shard, or a shard names a phase that no longer exists: $(diff "$TMP/cov.sites" "$TMP/cov.declared" | tr '\n' ' ' | cut -c1-160)"
   fi
   ok "COVERAGE: all $cov_s phase(s) of this fixture are dealt to exactly one of the $(printf '%s\n' $SHARDS | grep -c .) shard(s), each of which has a driver directory"
+fi
+
+# --- THE WIDTH KNOB: unset is 6, 1 reaches the pool, a bad value is FIXTURE BROKEN ----------
+# Driven through `--print-width`, which prints the very variable both pools read. Each cell is
+# presence-shaped -- a specific number or a specific exit must APPEAR -- so a resolver that
+# ignored the knob fails the `1` cell, one that ignored the default fails the unset cell, and
+# one that accepted anything fails both refusal cells. `env -u` makes the unset cell hold even
+# when this fixture itself runs under the deriver, where the knob IS set.
+if want width; then
+RAN="$RAN width"
+w_unset="$(env -u VAS_INNER_POOL_WIDTH bash "$0" --print-width 2>/dev/null)"; w_unset_rc=$?
+w_one="$(VAS_INNER_POOL_WIDTH=1 bash "$0" --print-width 2>/dev/null)"; w_one_rc=$?
+VAS_INNER_POOL_WIDTH=0 bash "$0" --print-width >/dev/null 2>&1; w_zero_rc=$?
+VAS_INNER_POOL_WIDTH=abc bash "$0" --print-width >/dev/null 2>&1; w_abc_rc=$?
+if [ "$w_unset_rc:$w_unset" = "0:6" ]; then
+  ok "WIDTH: with VAS_INNER_POOL_WIDTH unset the inner pool width resolves to 6"
+else
+  bad "WIDTH: with VAS_INNER_POOL_WIDTH unset --print-width gave rc $w_unset_rc and '$w_unset' (expected 0 and 6) — the pre-push default moved"
+fi
+if [ "$w_one_rc:$w_one" = "0:1" ]; then
+  ok "WIDTH: VAS_INNER_POOL_WIDTH=1 resolves the inner pool width to 1, so the deriver's knob reaches the pool"
+else
+  bad "WIDTH: VAS_INNER_POOL_WIDTH=1 gave rc $w_one_rc and '$w_one' (expected 0 and 1) — the deriver's knob does not reach the pool and a traced run stays at full width"
+fi
+if [ "$w_zero_rc" -eq 2 ] && [ "$w_abc_rc" -eq 2 ]; then
+  ok "WIDTH: VAS_INNER_POOL_WIDTH=0 and =abc both exit 2 (FIXTURE BROKEN), never a regression"
+else
+  bad "WIDTH: a bad width was not refused at exit 2: '0' exited $w_zero_rc, 'abc' exited $w_abc_rc"
+fi
 fi
 
 # --- Arm 0: CONTROL — the real tree passes a plain run ------------------------------------
