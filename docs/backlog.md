@@ -405,40 +405,6 @@ verify: manual
 
 ---
 
-## BL-005 — `validator-arm-selection` shard `b` now overlaps its seeded run with the attribution sweep; the third-directory route stays untaken
-
-Shard `b` was a floor set by three serial units: a seeded run at 16s, an attribution sweep at
-11s, and a mutant's three parallel full runs at 18s (per-block serial costs taken solo, recorded in the
-timing table at the head of `core/fixtures/validator-arm-selection/run.sh`). Two routes below it
-were measured: a third directory duplicating the 27s prerequisite, or overlapping the seeded run
-with the attribution sweep.
-
-**The overlap is TAKEN.** Arm 6 of that file now backgrounds exactly the two raw commands — the
-seeded tree's plain validator run and `attrib` — waits each pid on its own, and reads both
-statuses in the parent before any guard or assignment runs: a seeded-run exit other than 0 or 1
-and a non-zero sweep exit each report FIXTURE BROKEN. The seeded run's stderr moved from the
-scanned tree into the fixture's own scratch dir, so neither unit writes where the other reads.
-No wall-clock gain is claimed for it: shard `b` is far from the suite's pole, so the suite's
-makespan does not move. **The third-directory route stays untaken.**
-
-**THIS ENTRY IS NOT ABOUT THE POLE, AND ITS HEADING SAID IT WAS UNTIL `v0.583.0`.** The pre-push
-pole is watched by `scripts/validate-suite-pole.sh` against its tracked baseline, which is what
-`BL-257` built. That validator prints a NOTE — *"the pole has moved to …; the baseline still
-names …"* — when the longest unit in a run is not the one the baseline names, so the current
-pole is read off that NOTE or off the top of `.git/ai-dlc-fixture-durations` (a LOADED cost),
-never off a figure quoted here. Every pole figure this entry has carried went stale: the
-**166s / 217s** in its old heading were displaced at **v0.541.0** by `BL-088`, four releases
-before `BL-255` read the heading and found it still asserting them, and the `ledger-reverify`
-figure that replaced them was itself displaced when that unit was sharded. A session scoping
-performance work off this entry optimizes a fixture that is not the pole; shard `b`'s floor is
-a real and separate subject, and it is the only subject this entry has.
-
-Carried over from `docs/plans/pre-push-wall-clock.md`. This is a program, not a single fix.
-
-verify: manual
-
----
-
 ## BL-071 — `ledger-rotate.sh`'s split-refusal can be silenced by a body line that mentions the annotation form
 
 **`ledger-rotate.sh`'s split-refusal can still be silenced by a body line that merely MENTIONS the
@@ -613,6 +579,8 @@ by the domain-sections override, is a false positive: 0 changed lines carry the 
 override relies on. True positives on real data: 0. The motivating Rule-8 case fires identically
 with theirs set before the arm-E migration, so its hit comes from an unrelated prose edit, not the
 migration. The arm would narrow nothing measurable, and `layer-drift.sh` is bootstrapping.
+**Operator ruling, batch 186: do not build this arm.** The entry stays open on claim (b); a later
+detector proposal must show a true positive on the consumer's real overrides before it is built.
 
 verify: manual -- this entry records a gap, not a receipt. Do not close it on a green
 `layer-drift.sh` run; that green is the defect.
