@@ -40,8 +40,8 @@
 # THE MUTATION THAT LANDS AND BREAKS THE FILE INSTEAD OF THE TEST. A replacement that does
 # not parse makes the runner exit non-zero on a COLLECTION error: pytest reports
 # `1 error` and a SyntaxError, no test body ran, and a bare `mut_rc != 0` reads that as
-# PROVEN. Three arms refuse it, each with exit 2 and a message naming the arm, each only
-# after the restore has been verified:
+# PROVEN. Three arms refuse it, each with exit 2 and a message whose first line names the
+# arm, each only after the restore has been verified:
 #
 #   - parse         automatic for a *.py target when python3 is present: builtin
 #                   compile(src, path, "exec") on the baseline and on the mutant. Never
@@ -52,8 +52,10 @@
 #                   and run with the target path appended, on the baseline and on the
 #                   mutant. Baseline pass and mutant fail refuses; a baseline that fails it
 #                   prints `syntax-check: not applied (baseline fails it, exit N)`.
-#   - pytest exit   when the test command is pytest (a word whose basename is `pytest` or
-#                   `py.test`, or `-m pytest`), a mutated exit outside {0, 1} refuses.
+#   - pytest exit   when the test command is pytest (its FIRST word's basename is `pytest`
+#                   or `py.test`, or the argv holds `-m pytest`), a mutated exit outside
+#                   {0, 1} refuses. Any other runner's exit codes are its own: a non-zero
+#                   mutated exit from it is RED, whatever the number.
 #                   pytest exits 1 for failed tests and 2-5 for an interrupted run, an
 #                   internal error, a usage error or nothing collected.
 #
@@ -64,7 +66,8 @@
 # is not reachable from an exit code: unittest exits 1 for every failure class, and an
 # import inside a test body that raises NameError is `1 failed` in a file that parses
 # cleanly. PROVEN can still be printed for a mutation no assertion caught when pytest is
-# hidden behind a wrapper the argv does not name (`make test`, `tox`, a `uv run` script),
+# run through a wrapper — any argv whose first word is not pytest and which holds no
+# `-m pytest` (`make test`, `make -C dir pytest`, `tox`, `uv run pytest`),
 # when pytest runs with `--continue-on-collection-errors` (exit 1), when the error is a
 # runtime error inside a test body, and for a non-Python runner given no `--syntax-check`.
 # Read the RED evidence the run prints; the exit code is not the whole claim.
@@ -159,6 +162,18 @@ if [ "$#" -lt 4 ]; then
   exit 2
 fi
 
+# Word-split the checker once, here. A value of only whitespace splits to NO words, and an
+# empty array expansion is an error under set -u on bash 3.2, so it is refused as usage.
+SC_ARGV=()
+if [ -n "$SYNTAX_CHECK" ]; then
+  read -r -a SC_ARGV <<<"$SYNTAX_CHECK"
+  if [ "${#SC_ARGV[@]}" -eq 0 ]; then
+    echo "validate-mutation-red: UNEVALUABLE — --syntax-check needs a command, got only whitespace" >&2
+    usage >&2
+    exit 2
+  fi
+fi
+
 TARGET="$1"
 LINE="$2"
 REPL="$3"
@@ -230,24 +245,25 @@ py_compiles() {
   # $1 = file, $2 = baseline|mutant
   python3 -c 'import sys; compile(open(sys.argv[1], "rb").read(), sys.argv[1], "exec")' "$1" > "$CHECK_LOG" 2>&1
 }
-SC_ARGV=()
-if [ -n "$SYNTAX_CHECK" ]; then
-  read -r -a SC_ARGV <<<"$SYNTAX_CHECK"
-fi
 syntax_checks() {
-  # $1 = file, $2 = baseline|mutant. Only called when SYNTAX_CHECK is set, so SC_ARGV
-  # is non-empty (an empty array expansion is an error under set -u on bash 3.2).
+  # $1 = file, $2 = baseline|mutant. Only called when SYNTAX_CHECK is set, and the flag
+  # parse above refused a value that splits to no words, so SC_ARGV is non-empty.
   "${SC_ARGV[@]}" "$1" > "$CHECK_LOG" 2>&1
 }
 
 # pytest exits 1 for failed tests and 2-5 for everything that is not a test failure.
+# Detection is ANCHORED: the FIRST word's basename is pytest or py.test, or the argv holds
+# `-m pytest` with the word after `-m` exactly `pytest`. A later bare `pytest` word is an
+# argument to some other program (`make -C dir pytest`) whose exit codes are its own.
 IS_PYTEST=0
+case "${TEST_CMD[0]##*/}" in
+  pytest|py.test|pytest-[0-9]*|py.test-[0-9]*) IS_PYTEST=1 ;;
+esac
 prev_word=""
 for word in "${TEST_CMD[@]}"; do
-  case "${word##*/}" in
-    pytest|py.test|pytest-[0-9]*|py.test-[0-9]*|-mpytest) IS_PYTEST=1 ;;
-  esac
-  if [ "$prev_word" = "-m" ] && [ "$word" = "pytest" ]; then IS_PYTEST=1; fi
+  if [ "$word" = "-mpytest" ] || { [ "$prev_word" = "-m" ] && [ "$word" = "pytest" ]; }; then
+    IS_PYTEST=1
+  fi
   prev_word="$word"
 done
 
