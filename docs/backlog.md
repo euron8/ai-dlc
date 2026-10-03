@@ -938,7 +938,11 @@ Filed by the consumer as PC-S316-STEERING-BUDGET-EXEMPTS-ASKUSERQUESTION-BUT-COU
 issued in the same assistant turn gets its result only after the human answers, so its measured duration
 is the operator's think-time, and Check A counted it as STARVATION. Run against the motivating sprint-316
 session transcript (`b3da479a`), `--count` reads **6 at base** (`origin/main`, 0.713.0) and **1 at the fix**.
-The one survivor is a 120s foreground `Bash` with no AskUserQuestion beside it.
+At base that is five Check A findings (`FAIL (A -- STARVATION): 5 foreground tool call(s) blocked longer
+than the 120s steering budget.`) plus one Check B finding. At the fix Check A prints `PASS  (A) no foreground
+call exceeded the budget.`, and the survivor is the Check B finding, which the fix does not touch:
+`FAIL (B -- STEAMROLL): 1 operator message(s) were followed by a pipeline-advancing call issued BEFORE the
+pause flag was cleared.`, naming one `[Edit]`.
 
 **The fix.** Check A records each tool_use's `message.id`. The harness writes one record per content block,
 and every block of one turn carries the same `message.id`, so the join is on `message.id`, never on the
@@ -955,17 +959,20 @@ at 0.713.0, before any fix. Its `! grep -qiE 'sibling|same (assistant )?(turn|me
 the installed `scripts/ai-dlc/validate-steering-budget.sh`, because that file contains the word "sibling"
 at about `:498`. The receipt reads only the installed copy, so it cannot tell the defect from its fix.
 
-**The receipt is behavioural.** It builds six JSONL transcripts in `mktemp -d` and drives the validator's
+**The receipt is behavioural.** It builds nine JSONL transcripts in `mktemp -d` and drives the validator's
 `--count` on each with the budget pinned at 120s plus 30s grace. The arms are an AskUserQuestion with a
 sibling `Bash` ending at the answer (0), the same timing in a different message (1), a sibling running 3
-minutes past the answer (1), the pair with no `message.id` (1), and two AskUserQuestions in one message
-where the sibling ends at the later answer (0). A lone 5-minute `Read` must count 1 or the receipt exits 9.
+minutes past the answer (1), the pair with no `message.id` (1), two AskUserQuestions in one message
+where the sibling ends at the later answer (0), a `Read` sibling ending at the answer (0), a sibling whose
+record is written before the AskUserQuestion's in the same message (0), and an unanswered AskUserQuestion
+beside a `Bash` that blocks 5 minutes (1). The motivating transcript's sibling is a `Read`, and 4 of 10 real
+sibling messages put the sibling first. A lone 5-minute `Read` must count 1 or the receipt exits 9.
 It also exits 9 if the validator or `node` is absent. Scored under `bash -c 'set -uo pipefail; <receipt>'`
 from a tree root:
 
 | Tree | Exit |
 |---|---|
-| tip `bbc83331` | 0 |
+| tip `ca272629` (this script byte-identical to `bbc83331`) | 0 |
 | base `origin/main` (0.713.0) | 1 |
 | the C1 fix branch (this script byte-identical to base) | 1 |
 | `Bash` added to `EXEMPT` | 1 |
@@ -974,8 +981,12 @@ from a tree root:
 | a 2s result-timestamp window | 1 |
 | the earliest answer in the message instead of the latest | 1 |
 | an empty `message.id` treated as a join key | 1 |
+| answers grouped per message, `Math.min` over the list | 1 |
+| only a `Bash` sibling joins (`if (u.n !== "Bash") u.mid = "";`) | 1 |
+| one pass, so only siblings written after the AskUserQuestion join | 1 |
+| an unanswered AskUserQuestion acquits its siblings | 1 |
 | a second correct spelling (answers grouped per message, `Math.max` over the list) | 0 |
 
 **LANDED (v0.714.0, verified bbc83331).**
 
-verify: sh V=core/scripts/validate-steering-budget.sh; [ -f "$V" ] && command -v node >/dev/null || exit 9; d="$(mktemp -d)" || exit 9; u() { m=""; [ -n "$3" ] && m="\"id\":\"$3\","; printf '{"type":"assistant","timestamp":"2026-10-03T00:%s:00Z","message":{%s"role":"assistant","content":[{"type":"tool_use","id":"%s","name":"%s","input":{}}]}}\n' "$1" "$m" "$2" "$4" >> "$d/$5.jsonl"; }; r() { printf '{"type":"user","timestamp":"2026-10-03T00:%s:00Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"%s","content":"ok"}]}}\n' "$1" "$2" >> "$d/$3.jsonl"; }; n() { AI_DLC_STEERING_BUDGET=120 AI_DLC_STEERING_GRACE=30 bash "$V" --transcript "$d/$1.jsonl" --count 2>/dev/null; }; u 00 c1 mc Read ctl; r 05 c1 ctl; u 00 a1 mA AskUserQuestion a; u 00 a2 mA Bash a; r 05 a2 a; r 05 a1 a; u 00 b1 mB1 AskUserQuestion b; u 00 b2 mB2 Bash b; r 05 b2 b; r 05 b1 b; u 00 s1 mC AskUserQuestion c; u 00 s2 mC Bash c; r 05 s1 c; r 08 s2 c; u 00 x1 '' AskUserQuestion x; u 00 x2 '' Bash x; r 05 x2 x; r 05 x1 x; u 00 e1 mE AskUserQuestion e; u 00 e2 mE AskUserQuestion e; u 00 e3 mE Bash e; r 01 e1 e; r 05 e3 e; r 05 e2 e; [ "$(n ctl)" = 1 ] || exit 9; [ "$(n a)" = 0 ] && [ "$(n b)" = 1 ] && [ "$(n c)" = 1 ] && [ "$(n x)" = 1 ] && [ "$(n e)" = 0 ]
+verify: sh V=core/scripts/validate-steering-budget.sh; [ -f "$V" ] && command -v node >/dev/null || exit 9; d="$(mktemp -d)" || exit 9; u() { m=""; [ -n "$3" ] && m="\"id\":\"$3\","; printf '{"type":"assistant","timestamp":"2026-10-03T00:%s:00Z","message":{%s"role":"assistant","content":[{"type":"tool_use","id":"%s","name":"%s","input":{}}]}}\n' "$1" "$m" "$2" "$4" >> "$d/$5.jsonl"; }; r() { printf '{"type":"user","timestamp":"2026-10-03T00:%s:00Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"%s","content":"ok"}]}}\n' "$1" "$2" >> "$d/$3.jsonl"; }; n() { AI_DLC_STEERING_BUDGET=120 AI_DLC_STEERING_GRACE=30 bash "$V" --transcript "$d/$1.jsonl" --count 2>/dev/null; }; u 00 c1 mc Read ctl; r 05 c1 ctl; u 00 a1 mA AskUserQuestion a; u 00 a2 mA Bash a; r 05 a2 a; r 05 a1 a; u 00 b1 mB1 AskUserQuestion b; u 00 b2 mB2 Bash b; r 05 b2 b; r 05 b1 b; u 00 s1 mC AskUserQuestion c; u 00 s2 mC Bash c; r 05 s1 c; r 08 s2 c; u 00 x1 '' AskUserQuestion x; u 00 x2 '' Bash x; r 05 x2 x; r 05 x1 x; u 00 e1 mE AskUserQuestion e; u 00 e2 mE AskUserQuestion e; u 00 e3 mE Bash e; r 01 e1 e; r 05 e3 e; r 05 e2 e; u 00 f1 mF AskUserQuestion f; u 00 f2 mF Read f; r 05 f1 f; r 05 f2 f; u 00 g2 mG Bash g; u 00 g1 mG AskUserQuestion g; r 05 g1 g; r 05 g2 g; u 00 h1 mH AskUserQuestion h; u 00 h2 mH Bash h; r 05 h2 h; [ "$(n ctl)" = 1 ] || exit 9; [ "$(n a)" = 0 ] && [ "$(n b)" = 1 ] && [ "$(n c)" = 1 ] && [ "$(n x)" = 1 ] && [ "$(n e)" = 0 ] && [ "$(n f)" = 0 ] && [ "$(n g)" = 0 ] && [ "$(n h)" = 1 ]

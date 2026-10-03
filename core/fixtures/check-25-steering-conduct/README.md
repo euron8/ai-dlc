@@ -42,10 +42,15 @@ the harness writes them.
 | `sib-c` | same message, Bash blocks 600s past the answer | **1** |
 | `sib-d` | `sib-a`'s timing, no `message.id` | **1** |
 | `sib-e` | two AskUserQuestions in one message, Bash ends at the later answer | **0** |
+| `sib-f` | `sib-a` with a `Read` sibling instead of a `Bash` | **0** |
+| `sib-g` | `sib-a` with the sibling's record written before the AskUserQuestion's | **0** |
+| `sib-h` | an unanswered AskUserQuestion beside a Bash that blocks 600s | **1** |
 
-Mutants, each a copy of the validator asserted as an exact five-case vector: Bash added
+Mutants, each a copy of the validator asserted as an exact eight-case vector: Bash added
 to EXEMPT, keyed on the record's `uuid`, an unbounded sibling exemption, a 2s
-result-proximity window, and the first answer instead of the latest.
+result-proximity window, the first answer instead of the latest, a join admitting only a
+`Bash` sibling, a single pass that joins only siblings written after the AskUserQuestion,
+and an unanswered AskUserQuestion acquitting its siblings.
 
 ## Run
 
