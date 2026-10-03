@@ -745,16 +745,112 @@ if [ -n "$MUTP" ]; then
   else bad_ J-derive-id-unguarded "got '$JV', want 'CNSZTe'"; fi
 fi
 
+# ===========================================================================
+# THE SIBLINGS OF AN AskUserQuestion. Calls issued in one assistant turn return together, so a
+# Bash sent beside an AskUserQuestion gets its result only once the human answers, and its raw
+# duration is the human's think-time. Check A charges such a sibling only for what it blocks
+# AFTER the latest answer in its message. The join key is `message.id`: the harness writes each
+# content block as its OWN record, so the seeds (seed.sh, sib-*) are separate records sharing
+# that id and each carrying its own `uuid`.
+#
+# One token per case, upper case when the case reads as the shipping program must:
+#   A  sib-a  same message, Bash ends at the answer          count 0, no STARVATION
+#   B  sib-b  same timing, Bash in a DIFFERENT message        count 1, STARVATION
+#   C  sib-c  same message, Bash blocks 600s past the answer  count 1, STARVATION
+#   D  sib-d  sib-a's timing, no message.id at all            count 1, STARVATION
+#   E  sib-e  two AskUserQuestions, Bash ends at the LATER    count 0, no STARVATION
+#   F  sib-f  sib-a with a READ sibling                       count 0, no STARVATION
+#   G  sib-g  sib-a with the sibling's record BEFORE the AUQ  count 0, no STARVATION
+#   H  sib-h  UNANSWERED AskUserQuestion, Bash blocks 600s    count 1, STARVATION
+# B is the arm a timestamp-proximity key fails: its Bash ends 0.5s after an answer it never
+# waited on. E is the arm a first-answer key fails. F is the arm a Bash-only join fails, G the
+# arm a join that sees only siblings written AFTER the AskUserQuestion fails, H the arm an
+# unanswered question acquitting its siblings fails. All are positive-shaped: the count must be
+# a bare integer, so a subject that emits nothing reads EMPTY and matches no token.
+echo
+echo "  -- AskUserQuestion siblings --"
+sib() { # sib <validator> <case> -> "<count>/<yes|no>"
+  local c o st=no
+  c="$(bash "$1" --transcript "$ROOT/$2/session.jsonl" --count 2>/dev/null)"
+  o="$(bash "$1" --transcript "$ROOT/$2/session.jsonl" 2>&1)"
+  case "$o" in *"FAIL (A -- STARVATION)"*) st=yes ;; esac
+  printf '%s/%s' "${c:-EMPTY}" "$st"
+}
+svec() {
+  local v="$1" k want got out=""
+  for k in a b c d e f g h; do
+    case "$k" in a|e|f|g) want="0/no" ;; *) want="1/yes" ;; esac
+    got="$(sib "$v" "sib-$k")"
+    if [ "$got" = "$want" ]; then out="$out$(printf '%s' "$k" | tr a-h A-H)"; else out="$out$k"; fi
+  done
+  printf '%s' "$out"
+}
+w sib-a-same-message-acquitted "$(sib "$VALIDATOR" sib-a)" "0/no" \
+  "a Bash sharing an AskUserQuestion's message.id and ending at the answer is think-time, not starvation"
+w sib-b-other-message-charged "$(sib "$VALIDATOR" sib-b)" "1/yes" \
+  "the same timing with the Bash in ANOTHER message is starvation -- the key is message.id, not proximity"
+w sib-c-past-answer-charged "$(sib "$VALIDATOR" sib-c)" "1/yes" \
+  "a same-message Bash blocking 600s past the answer is still starvation -- the exemption is bounded"
+w sib-d-no-message-id-charged "$(sib "$VALIDATOR" sib-d)" "1/yes" \
+  "a record with no message.id joins nothing and is charged its full duration"
+w sib-e-latest-answer "$(sib "$VALIDATOR" sib-e)" "0/no" \
+  "with two AskUserQuestions in one message the sibling is charged from the LATER answer"
+w sib-f-read-sibling-acquitted "$(sib "$VALIDATOR" sib-f)" "0/no" \
+  "a READ sibling ending at the answer is think-time too -- the join is not limited to Bash"
+w sib-g-sibling-written-first "$(sib "$VALIDATOR" sib-g)" "0/no" \
+  "a sibling whose record precedes the AskUserQuestion's in the same message still joins"
+w sib-h-unanswered-charged "$(sib "$VALIDATOR" sib-h)" "1/yes" \
+  "an AskUserQuestion with no answer acquits nothing: its Bash sibling is charged in full"
+# CONTROL: the unmutated copy in the mutant directory reads the shipping vector, so a mutant
+# vector below differs because of its edit and not because a copy cannot run there.
+w sib-control "$(svec "$MCTL")" "ABCDEFGH" \
+  "control: an unmutated copy beside the mutants reads all eight sibling cases as shipped"
+
+# smut <name> <sed-expr> <want-vector> <why>: each mutant asserted as an EXACT vector, so a
+# mutant that moves a case it should not reads as a failure rather than as an extra kill.
+smut() {
+  mut "$1" "$2" || return 0
+  local got; got="$(svec "$MUTP")"
+  if [ "$got" = "$3" ]; then kill_ "S-$1" "$4 ($got)"; else bad_ "S-$1" "got '$got', want '$3' -- $4"; fi
+}
+# MUTANT K -- Bash added to EXEMPT. Every Bash is acquitted: B, C, D and H die.
+smut sib-bash-exempt 's#^const EXEMPT = new Set(\["AskUserQuestion"\]);$#const EXEMPT = new Set(["AskUserQuestion", "Bash"]);#' \
+  AbcdEFGh "with Bash exempt, a starving Bash in another message, past the answer or unjoined all pass"
+# MUTANT L -- keyed on the RECORD (its uuid) rather than message.id. The harness writes each
+# block as its own record, so nothing ever joins: A, E, F and G die, exactly as before the fix.
+smut sib-record-key 's#mid: r.message?.id || ""#mid: r.uuid || ""#' \
+  aBCDefgH "keyed on the record, separate-record siblings never join and a real sibling is charged its think-time"
+# MUTANT M -- the sibling exempted UNBOUNDEDLY. C dies: a Bash blocking past the answer passes.
+smut sib-unbounded 's#^    const s = (res\[id\] - (ans === undefined ? u.t : Math.max(u.t, ans))) / 1000;$#    const s = ans === undefined ? (res[id] - u.t) / 1000 : 0;#' \
+  ABcDEFGH "an unbounded sibling exemption acquits a Bash that kept blocking 600s after the answer"
+# MUTANT N -- a TIMESTAMP WINDOW instead of message.id: a call whose result lands within 2s of
+# any answer is charged from that answer. B and D die; C and H hold, no answer being within 2s.
+smut sib-ts-window 's#^    const ans = u.mid ? answeredAt\[u.mid\] : undefined;$#    const ans = Object.entries(use).filter(([k, v]) => v.n === "AskUserQuestion" \&\& res[k] \&\& Math.abs(res[id] - res[k]) <= 2000).map(([k]) => res[k]).sort((x, y) => y - x)[0];#' \
+  AbCdEFGH "a 2s result-proximity key acquits a Bash in another message and one with no message.id"
+# MUTANT O -- the FIRST answer instead of the latest. E dies: the sibling is charged 300.5s.
+smut sib-first-answer 's#^    if (!(answeredAt\[u.mid\] >= res\[id\])) answeredAt\[u.mid\] = res\[id\];$#    if (!(answeredAt[u.mid] <= res[id])) answeredAt[u.mid] = res[id];#' \
+  ABCDeFGH "charged from the first of two answers, a sibling that waited for the second reads as starvation"
+# MUTANT P -- only a Bash sibling joins. F dies: the motivating transcript's sibling is a Read.
+smut sib-bash-only 's#^    if (u.bg || EXEMPT.has(u.n) || !res\[id\]) continue;$#& if (u.n !== "Bash") u.mid = "";#' \
+  ABCDEfGH "a join admitting only a Bash sibling charges a Read sibling its think-time"
+# MUTANT Q -- ONE pass: an answer registers only when the loop reaches the AskUserQuestion, so a
+# sibling whose record comes first never joins. G dies.
+smut sib-one-pass 's#^    if (u.n !== "AskUserQuestion" || !u.mid || !res\[id\]) continue;$#    continue;#;s#^    if (u.bg || EXEMPT.has(u.n) || !res\[id\]) continue;$#    if (u.n === "AskUserQuestion" \&\& u.mid \&\& res[id] \&\& !(answeredAt[u.mid] >= res[id])) answeredAt[u.mid] = res[id]; &#' \
+  ABCDEFgH "a single pass joins only siblings written after the AskUserQuestion"
+# MUTANT R -- an UNANSWERED AskUserQuestion acquits its siblings. H dies.
+smut sib-unanswered-acquits 's#^    if (u.n !== "AskUserQuestion" || !u.mid || !res\[id\]) continue;$#    if (u.n !== "AskUserQuestion" || !u.mid) continue; if (!res[id]) { answeredAt[u.mid] = Infinity; continue; }#' \
+  ABCDEFGh "an unanswered question acquits a Bash sibling that blocked 600s"
+
 # KILL COUNT. A mutation that applied cleanly to a file this run never loaded reads exactly
 # like an arm that cannot fire, and `cmp -s` cannot tell them apart. Zero kills is that state.
-if [ "$KILLS" -ge 11 ]; then
+if [ "$KILLS" -ge 19 ]; then
   ok_ KILL-COUNT "$KILLS mutant kill(s) -- the arms above can fire"
 else
   bad_ KILL-COUNT "$KILLS kill(s); the mutants changed bytes in a file these arms never loaded"
 fi
 
 if [ "$FAILURES" -eq 0 ]; then
-  echo "PASS: check-25 steering-conduct fixture holds (3 cases + count contract + 9 identity arms + provenance window/isMeta arms + flagless-derivation arms + 10 mutants)."
+  echo "PASS: check-25 steering-conduct fixture holds (3 cases + count contract + 9 identity arms + provenance window/isMeta arms + flagless-derivation arms + 8 AskUserQuestion-sibling arms + 18 mutants)."
   exit 0
 fi
 echo "FAIL: $FAILURES check-25 assertion(s) failed."

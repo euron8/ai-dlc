@@ -1127,7 +1127,9 @@ otherwise.**
   adversary go in the batch's FIRST spawn block beside the sweep.
 - **Spawn many hands, and stop forcing the full pre-push suite.** Operator rulings, batch 179: "I
   assumed more subagents would have spawned," and a push lets the hook gate once
-  (`verification-discipline.md`, "Verify a release the way the gate runs it").
+  (`verification-discipline.md`, "Verify a release the way the gate runs it"). **Operator ruling,
+  batch 188: that prohibition covers RELEASE VERIFICATION only.** A measurement sweep on an unpushed
+  throwaway branch may force `AI_DLC_FIXTURE_NO_SKIP=1`, which makes `BL-004` and `BL-430` buildable.
 - **A commit that edits `.githooks/` is pushed from the main checkout, detached at that commit.**
   A push from a linked worktree runs the OLD hook; closes one and four of batch 179 were blocked by it.
 - **A squash merge passes `--subject` from the release commit.** A multi-commit branch otherwise

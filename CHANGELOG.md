@@ -19,6 +19,59 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.714.0] - 2026-10-03
+
+Batch 188's release: two consumer filings, both dated 2026-10-03, which the reference consumer had written into its
+working-tree ledger and not yet committed when the batch's sweep ran. Neither subject is a bootstrapping file. Both
+close here: `BL-434` and `BL-435` are filed and annotated LANDED in this release and rotate in the batch's close commit.
+The release also records an operator ruling: forcing the full pre-push suite is forbidden for release verification
+only, and a measurement sweep on an unpushed throwaway branch may force it.
+
+### PC-S316-MUTATION-RED-VALIDATOR-SCORES-A-SYNTAX-ERROR-AS-PROVEN
+
+`core/scripts/validate-mutation-red.sh` graded PROVEN on any non-zero mutated exit. A replacement line that did not
+parse made pytest exit on a collection error before any test body ran, and the script printed `PROVEN ... reproducibly
+kills the named test`. Three arms now refuse that case. Each exits 2 with a message whose first line names the arm, and
+only after the restore is verified byte-identical. A mutant refused by the parse or syntax check never runs the
+test command:
+
+- **parse**: automatic for `*.py` targets when python3 is present. It applies builtin `compile(src, path, "exec")` to
+  the baseline and the mutant, never `ast.parse` (which accepts a module-level `return`) or `py_compile` (which writes
+  a `.pyc`). It refuses only when the baseline compiles and the mutant does not; otherwise it prints
+  `parse: not checked (<reason>)`.
+- **`--syntax-check '<cmd>'`**: a leading flag for any language, run differentially with the target path appended. A
+  baseline that fails it prints `syntax-check: not applied`.
+- **pytest exit**: when the test command's first word is `pytest` or `py.test`, or it runs `-m pytest`, a mutated exit outside {0, 1} refuses. A mutated exit 0 is still
+  UNPROVEN.
+
+The parse and syntax checks run before the mutated test run. Exits 0, 1 and 3 are unchanged. `usage()`, the header's
+exit table, `team-roles/dev.md` and `team-roles/code-reviewer.md` list the new causes of exit 2.
+
+The residue, which no exit code can rule out: unittest exits 1 for every failure class. PROVEN can still be printed
+when pytest is hidden behind a wrapper (`make test`, `tox`, a `uv run` script), under `--continue-on-collection-errors`,
+for a runtime error inside a test body, and for a non-Python runner given no `--syntax-check`.
+
+A finding for the consumer: this candidate's `verify:` greps the installed copy for
+`ast.parse\|syntax-check\|collection error`. None of those tokens exists at 0.713.0, so the grep exits 1, which the
+consumer's reverifier reads as CLOSE-CANDIDATE before the fix. Once the fix is installed the grep is satisfied and the
+row reads NEEDS-REVIEW, unfalsifiable. Backlog: `BL-434`.
+
+### PC-S316-STEERING-BUDGET-EXEMPTS-ASKUSERQUESTION-BUT-COUNTS-ITS-PARALLEL-SIBLINGS
+
+`core/scripts/validate-steering-budget.sh` Check A exempted an `AskUserQuestion` tool_use but counted the foreground
+calls issued beside it in the same assistant message. Those calls get their results only after the human answers, so
+the human's think-time was reported as STARVATION. A foreground call sharing `message.id` with an `AskUserQuestion` is
+now charged only for the time it blocks after the answer, `res - max(start, answer)`, using the latest answer when one
+message holds several questions. The join keys on `message.id` across records, never on timestamp proximity. Records
+without `message.id` are counted as before. Checks B, C, D and `--cite` are untouched.
+
+`--count` moves with this fix, and that is intended: on the motivating session it falls from 6 to 1, and the 1 that
+remains is a Check B finding. Check 25 compares counts across gates and fails only on an increase, so the fall does not
+trip it.
+
+A finding for the consumer: this candidate's receipt `! grep -qiE 'sibling|same (assistant )?(turn|message)'` already
+fails at 0.713.0 on an existing comment, so it read CLOSE-CANDIDATE before any fix. Backlog: `BL-435`.
+
 ## [0.713.0] - 2026-10-02
 
 Batch 186's third release: the update skill's step-8 drain. Bootstrapping, so it ships alone. It activates on the

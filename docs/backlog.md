@@ -902,3 +902,91 @@ unaffected.
 
 verify: manual -- re-taking the row needs the file's own calibration recipe: three serial full runs under `AI_DLC_FIXTURE_NO_SKIP=1` at pool 12. That forced full run is one the operator has not authorised, so no session can produce the measurement that would close this, and a receipt keyed on the row's text would close it on an edit with no measurement behind it.
 
+## BL-434 — `validate-mutation-red.sh` printed PROVEN for a mutation that broke the file instead of the test, because any non-zero mutated exit counted as a kill
+
+**DEFECT, false pass.** Carries the reference consumer's `PC-S316-MUTATION-RED-VALIDATOR-SCORES-A-SYNTAX-ERROR-AS-PROVEN`, filed in its push-candidate ledger at sprint 316. That candidate's own derivation: a replacement line that did not parse made pytest print `SyntaxError`, `ERROR <test file>` and `1 error`, and the validator then printed `PROVEN: ... reproducibly kills the named test.` for a test body that never ran. Three compiling mutations of the same line each gave `3 failed`, so the verdict was right for the wrong reason.
+
+**The defect.** At 0.713.0, `core/scripts/validate-mutation-red.sh` graded PROVEN on `mut_rc != 0` alone. A runner exits non-zero on a collection error before any test body runs, so a mutant that does not parse read as a kill. The script is language-agnostic by design and takes an arbitrary test command, so the fix keeps it so.
+
+**Remedy, as shipped.** Three arms, each refusing with exit 2 and a message whose first line names the arm, each only after the restore has been verified byte-identical:
+
+- **parse**, automatic for a `*.py` target when python3 is present: builtin `compile(src, path, "exec")` on the baseline and on the mutant, never `ast.parse` (it accepts a module-level `return`) and never `py_compile` (it writes a `.pyc`). It refuses only when the baseline compiles and the mutant does not; otherwise it prints `parse: not checked (<reason>)`.
+- **syntax-check**, a leading `--syntax-check '<cmd>'` flag for any language: word-split, run with the target path appended, on the baseline and on the mutant. Baseline pass and mutant fail refuses; a baseline that fails it prints `syntax-check: not applied (baseline fails it, exit N)`.
+- **pytest exit**: when the test command's FIRST word's basename is `pytest` or `py.test`, or the argv holds `-m pytest` (the word after `-m` exactly `pytest`), a mutated exit outside {0, 1} refuses. A mutated exit 0 stays UNPROVEN (exit 1). Any other runner's exit codes are its own, so a non-zero mutated exit from it is RED whatever the number; a later bare `pytest` word (`make -C dir pytest`) does not make the runner pytest.
+
+The parse and syntax checks run on the mutant before the mutated test run, so a refused mutant never runs the suite. A `--syntax-check` value of only whitespace splits to no words and is refused as usage, exit 2. Exits 0, 1 and 3 keep their meanings. `usage()`, the header's exit table, `core/team-roles/dev.md` and `core/team-roles/code-reviewer.md` carry the new causes of exit 2.
+
+**Residue, stated in the script header verbatim:**
+
+> "Never PROVEN for an untested mutation" is not reachable from an exit code: unittest exits 1 for every failure class, and an import inside a test body that raises NameError is `1 failed` in a file that parses cleanly. PROVEN can still be printed for a mutation no assertion caught when pytest is run through a wrapper — any argv whose first word is not pytest and which holds no `-m pytest` (`make test`, `make -C dir pytest`, `tox`, `uv run pytest`), when pytest runs with `--continue-on-collection-errors` (exit 1), when the error is a runtime error inside a test body, and for a non-Python runner given no `--syntax-check`.
+
+**Finding on the consumer's receipt, not an instruction.** The candidate's `verify:` is `sh grep -q 'ast.parse\|syntax-check\|collection error'` over the consumer's installed copy. None of those tokens exists at 0.713.0, so the grep exits 1, and the consumer's ledger reverifier reads that as CLOSE-CANDIDATE before any fix has shipped. Once the fix is installed the grep is satisfied, by header prose among other lines, and the row reads NEEDS-REVIEW as unfalsifiable. The receipt reads only the installed copy and keys on text, so neither reading is a verdict on the defect.
+
+The receipt drives the shipped validator in a `mktemp -d` and greps none of its text. Arms: `--syntax-check 'bash -n'` with a non-parsing mutation gives 2 and prints `restore:    byte-identical`, and its marked test command records one run, the baseline's, because a refused mutant never runs the suite; with a parsing kill it gives 0, with a checker the baseline fails (`false`) 0, and with a whitespace-only value 2; a `.py` syntax-error mutation gives 2 and prints the verified restore; a module-level `return 1` mutation gives 2; a compiling `.py` kill gives 0; a baseline that does not compile, with a non-parsing kill, gives 0; through a stub named `pytest`, a surviving mutation gives 1, a mutated exit 2 gives 2, a mutated exit 5 gives 2, and a mutated exit 1 gives 0; a non-pytest runner whose real kill exits 2 gives 0, alone and with `-C <dir> pytest` as later argv words; every target restores byte-identical. With python3 absent it exits 1 and says so, so an absent interpreter never closes it. Scored under `bash -c 'set -uo pipefail; …'` from a copy's root with stdin from /dev/null: the tip fix at `e05c8c9c` 0; a second correct spelling (`builtins.compile` on text read as UTF-8 with `dont_inherit=True`, and the first-word test as two string comparisons) 0; and 1 under everything else: `origin/main`; the prior tip `ca272629`; the pytest-exit arm applied to every runner; refusing only pytest exit 2; running the suite on a refused mutant; a syntax-check refusal exiting before the restore; a parse refusal exiting before the restore; `ast.parse` in place of `compile`; a non-differential check; refusing every `.py` target; the pytest arm refusing exit 0; the mutant check reading the backup; detection keyed on any argv word; and no guard on a whitespace-only `--syntax-check`. With python3 removed from PATH it scores 1.
+
+**LANDED (v0.714.0, verified e05c8c9c).** Receipt exits 0 on the tip fix under `set -uo pipefail`, and 1 on the first fix at `c779affb`; the 0.714.0 release commit names the candidate.
+
+verify: sh V="$PWD/core/scripts/validate-mutation-red.sh"; [ -f "$V" ] || exit 9; command -v python3 >/dev/null 2>&1 || { echo "BL-434 python3 absent: the .py arms cannot run, so this receipt does not close" >&2; exit 1; }; W="$(mktemp -d)" || exit 9; mkdir -p "$W/bin" || exit 9; printf 'x=1\n[ "$x" = 1 ]\n' > "$W/s.sh"; printf 'x = 1\ny = 2\n' > "$W/p.py"; printf 'return 1\nx = 1\n' > "$W/q.py"; printf 'a\nb\n' > "$W/f.txt"; printf '#!/bin/sh\ngrep -qx a "$1" || exit 2\nexit 0\n' > "$W/k.sh"; printf 'echo r >> "%s/mk"\nbash "%s/s.sh"\n' "$W" "$W" > "$W/m.sh"; printf '#!/bin/sh\ngrep -qx a "$1" || exit 1\ngrep -qx bomb "$1" && exit 2\ngrep -qx five "$1" && exit 5\nexit 0\n' > "$W/bin/pytest"; chmod +x "$W/bin/pytest" || exit 9; for x in s.sh p.py q.py f.txt; do cp "$W/$x" "$W/$x.orig" || exit 9; done; f=0; O=""; r() { w="$1"; shift; O="$(bash "$V" "$@" 2>&1)"; c=$?; [ "$c" = "$w" ] || { echo "BL-434 want $w got $c: $*" >&2; f=1; }; }; vr() { grep -q '^  restore:    byte-identical$' <<<"$O" || { echo "BL-434 refusal printed no verified restore: $1" >&2; f=1; }; }; r 2 --syntax-check 'bash -n' "$W/s.sh" 1 'if x=1' bash "$W/m.sh"; vr syntax-check; n="$(grep -c . "$W/mk")" || n=0; [ "$n" = 1 ] || { echo "BL-434 a refused mutant ran the suite: $n run(s), want 1" >&2; f=1; }; r 0 --syntax-check 'bash -n' "$W/s.sh" 1 'x=2' bash "$W/s.sh"; r 0 --syntax-check false "$W/s.sh" 1 'x=2' bash "$W/s.sh"; r 2 --syntax-check ' ' "$W/s.sh" 1 'x=2' bash "$W/s.sh"; r 2 "$W/p.py" 1 'x = (' grep -qx 'x = 1' "$W/p.py"; vr parse; r 2 "$W/p.py" 1 'return 1' grep -qx 'x = 1' "$W/p.py"; r 0 "$W/p.py" 1 'x = 3' grep -qx 'x = 1' "$W/p.py"; r 0 "$W/q.py" 2 'x = (' grep -qx 'x = 1' "$W/q.py"; r 1 "$W/f.txt" 2 c "$W/bin/pytest" "$W/f.txt"; r 2 "$W/f.txt" 2 bomb "$W/bin/pytest" "$W/f.txt"; r 2 "$W/f.txt" 2 five "$W/bin/pytest" "$W/f.txt"; r 0 "$W/f.txt" 1 z "$W/bin/pytest" "$W/f.txt"; r 0 "$W/f.txt" 1 z bash "$W/k.sh" "$W/f.txt"; r 0 "$W/f.txt" 1 z bash "$W/k.sh" "$W/f.txt" -C "$W" pytest; for x in s.sh p.py q.py f.txt; do cmp -s "$W/$x" "$W/$x.orig" || { echo "BL-434 $x not restored" >&2; f=1; }; done; exit $f
+
+## BL-435 — `validate-steering-budget.sh` exempts an AskUserQuestion from Check A but counts the calls issued beside it, whose duration is the same human think-time
+
+**DEFECT.**
+
+Filed by the consumer as PC-S316-STEERING-BUDGET-EXEMPTS-ASKUSERQUESTION-BUT-COUNTS-ITS-PARALLEL-SIBLINGS.
+
+**What happens.** Check A's `EXEMPT` set skips only the `AskUserQuestion` tool_use itself. A tool call
+issued in the same assistant turn gets its result only after the human answers, so its measured duration
+is the operator's think-time, and Check A counted it as STARVATION. Run against the motivating sprint-316
+session transcript (`b3da479a`), `--count` reads **6 at base** (`origin/main`, 0.713.0) and **1 at the fix**.
+At base that is five Check A findings (`FAIL (A -- STARVATION): 5 foreground tool call(s) blocked longer
+than the 120s steering budget.`) plus one Check B finding. At the fix Check A prints `PASS  (A) no foreground
+call exceeded the budget.`, and the survivor is the Check B finding, which the fix does not touch:
+`FAIL (B -- STEAMROLL): 1 operator message(s) were followed by a pipeline-advancing call issued BEFORE the
+pause flag was cleared.`, naming one `[Edit]`.
+
+**The fix.** Check A records each tool_use's `message.id`. The harness writes one record per content block,
+and every block of one turn carries the same `message.id`, so the join is on `message.id`, never on the
+record and never on timestamp proximity. A foreground call sharing a `message.id` with an answered
+AskUserQuestion is charged `res - max(start, latest answer in that message)`, which is the time it blocks
+after the answer, so a sibling that keeps blocking past the answer is still STARVATION. A record without a
+`message.id` joins nothing and is charged in full, as before. The consumer's suggested 2s
+result-timestamp window is not built. It acquits an unrelated call in another turn that merely ends near
+the answer. Checks B, C, D and `--cite` are untouched. `--count` moves with the fix, and Check 25 compares
+that count across gates.
+
+**Finding for the consumer, about its own receipt.** The consumer's `verify:` line reads CLOSE-CANDIDATE
+at 0.713.0, before any fix. Its `! grep -qiE 'sibling|same (assistant )?(turn|message)'` already fails on
+the installed `scripts/ai-dlc/validate-steering-budget.sh`, because that file contains the word "sibling"
+at about `:498`. The receipt reads only the installed copy, so it cannot tell the defect from its fix.
+
+**The receipt is behavioural.** It builds nine JSONL transcripts in `mktemp -d` and drives the validator's
+`--count` on each with the budget pinned at 120s plus 30s grace. The arms are an AskUserQuestion with a
+sibling `Bash` ending at the answer (0), the same timing in a different message (1), a sibling running 3
+minutes past the answer (1), the pair with no `message.id` (1), two AskUserQuestions in one message
+where the sibling ends at the later answer (0), a `Read` sibling ending at the answer (0), a sibling whose
+record is written before the AskUserQuestion's in the same message (0), and an unanswered AskUserQuestion
+beside a `Bash` that blocks 5 minutes (1). The motivating transcript's sibling is a `Read`, and 4 of 10 real
+sibling messages put the sibling first. A lone 5-minute `Read` must count 1 or the receipt exits 9.
+It also exits 9 if the validator or `node` is absent. Scored under `bash -c 'set -uo pipefail; <receipt>'`
+from a tree root:
+
+| Tree | Exit |
+|---|---|
+| tip `ca272629` (this script byte-identical to `bbc83331`) | 0 |
+| base `origin/main` (0.713.0) | 1 |
+| the C1 fix branch (this script byte-identical to base) | 1 |
+| `Bash` added to `EXEMPT` | 1 |
+| the join keyed on the record instead of `message.id` | 1 |
+| an unbounded sibling exemption (no charge after the answer) | 1 |
+| a 2s result-timestamp window | 1 |
+| the earliest answer in the message instead of the latest | 1 |
+| an empty `message.id` treated as a join key | 1 |
+| answers grouped per message, `Math.min` over the list | 1 |
+| only a `Bash` sibling joins (`if (u.n !== "Bash") u.mid = "";`) | 1 |
+| one pass, so only siblings written after the AskUserQuestion join | 1 |
+| an unanswered AskUserQuestion acquits its siblings | 1 |
+| a second correct spelling (answers grouped per message, `Math.max` over the list) | 0 |
+
+**LANDED (v0.714.0, verified bbc83331).**
+
+verify: sh V=core/scripts/validate-steering-budget.sh; [ -f "$V" ] && command -v node >/dev/null || exit 9; d="$(mktemp -d)" || exit 9; u() { m=""; [ -n "$3" ] && m="\"id\":\"$3\","; printf '{"type":"assistant","timestamp":"2026-10-03T00:%s:00Z","message":{%s"role":"assistant","content":[{"type":"tool_use","id":"%s","name":"%s","input":{}}]}}\n' "$1" "$m" "$2" "$4" >> "$d/$5.jsonl"; }; r() { printf '{"type":"user","timestamp":"2026-10-03T00:%s:00Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"%s","content":"ok"}]}}\n' "$1" "$2" >> "$d/$3.jsonl"; }; n() { AI_DLC_STEERING_BUDGET=120 AI_DLC_STEERING_GRACE=30 bash "$V" --transcript "$d/$1.jsonl" --count 2>/dev/null; }; u 00 c1 mc Read ctl; r 05 c1 ctl; u 00 a1 mA AskUserQuestion a; u 00 a2 mA Bash a; r 05 a2 a; r 05 a1 a; u 00 b1 mB1 AskUserQuestion b; u 00 b2 mB2 Bash b; r 05 b2 b; r 05 b1 b; u 00 s1 mC AskUserQuestion c; u 00 s2 mC Bash c; r 05 s1 c; r 08 s2 c; u 00 x1 '' AskUserQuestion x; u 00 x2 '' Bash x; r 05 x2 x; r 05 x1 x; u 00 e1 mE AskUserQuestion e; u 00 e2 mE AskUserQuestion e; u 00 e3 mE Bash e; r 01 e1 e; r 05 e3 e; r 05 e2 e; u 00 f1 mF AskUserQuestion f; u 00 f2 mF Read f; r 05 f1 f; r 05 f2 f; u 00 g2 mG Bash g; u 00 g1 mG AskUserQuestion g; r 05 g1 g; r 05 g2 g; u 00 h1 mH AskUserQuestion h; u 00 h2 mH Bash h; r 05 h2 h; [ "$(n ctl)" = 1 ] || exit 9; [ "$(n a)" = 0 ] && [ "$(n b)" = 1 ] && [ "$(n c)" = 1 ] && [ "$(n x)" = 1 ] && [ "$(n e)" = 0 ] && [ "$(n f)" = 0 ] && [ "$(n g)" = 0 ] && [ "$(n h)" = 1 ]

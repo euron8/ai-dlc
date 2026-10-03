@@ -5,6 +5,8 @@
 #
 # Everything here is shell. The replay mechanism is language-agnostic and a fixture that
 # needed pytest to prove it would be testing pytest's availability on the pushing machine.
+# The *.py parse arm and the pytest-exit arm are Python-specific by nature; run.sh builds
+# their worlds itself, and SKIPs them by name when python3 or pytest is absent.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -63,7 +65,36 @@ printf '%s\n' "\$n" > "$WORK/hard-count"
 exit 0
 SUT
 
-chmod +x "$WORK"/*.sh "$WORK/hard/sut.sh"
+# --- a NON-pytest runner whose real kill exits 2, not 1. Its exit codes are its own, so
+# the pytest-exit arm must not read them; a mutation that changes line 2 is a kill.
+cat > "$WORK/disc2.sh" <<SUT
+#!/usr/bin/env bash
+[ "\$(bash "$WORK/sut.sh")" = "42" ] || exit 2
+SUT
+
+# --- a stub NAMED pytest (first word's basename), keyed on line 2 of the target: the
+# unmutated line exits 0, the token `five` exits 5 (nothing collected), `bomb` exits 2
+# (a collection error), and any other change exits 1 (a test failed).
+mkdir -p "$WORK/bin"
+cat > "$WORK/bin/pytest" <<SUT
+#!/usr/bin/env bash
+case "\$(sed -n 2p "$WORK/sut.sh")" in
+  five) exit 5 ;;
+  bomb) exit 2 ;;
+  *42*) exit 0 ;;
+  *)    exit 1 ;;
+esac
+SUT
+
+# --- a MARKED discriminating test: one line in \$WORK/marker per invocation. A refused
+# mutant must leave exactly the baseline's line, because the suite never ran on it.
+cat > "$WORK/marked.sh" <<SUT
+#!/usr/bin/env bash
+printf 'run\n' >> "$WORK/marker"
+[ "\$(bash "$WORK/sut.sh")" = "42" ]
+SUT
+
+chmod +x "$WORK"/*.sh "$WORK/hard/sut.sh" "$WORK/bin/pytest"
 
 cat > "$WORK/env.sh" <<ENV
 VALIDATOR="$VALIDATOR"
