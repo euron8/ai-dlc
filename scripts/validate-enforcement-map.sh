@@ -695,7 +695,14 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   the same path: base 3159 (spread 3157-3159), tip 3166 (spread 3166-3166), so +7. Every arm that
 #   moved is a per-file walk counting `reconcile/push-drain.sh` once more: I105 84 -> 87, I84
 #   285 -> 287, I83 141 -> 142, I21 26 -> 27. HIGH reading 3166 plus the usual 6.
-FORK_BUDGET=3172
+#
+#   RAISED TO 3188 FOR TWO NEW SHIPPED CORE SCRIPTS, NOT FOR A NEW ARM. `fork-profile.sh
+#   --section by-arm --stable` under `env -i`, base `origin/main` 946fb8ce then the BL-437 tip, in
+#   ONE worktree at the same path: base 3166 (spread 3166-3166), tip 3182 (spread 3181-3182), so
+#   +16. Every arm that moved is a per-file walk counting `partition-review-diff.sh` and
+#   `merge-review-shards.sh`: I75 341 -> 351, I84 287 -> 291, I83 142 -> 144. HIGH reading 3182
+#   plus the usual 6.
+FORK_BUDGET=3188
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
