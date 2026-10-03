@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 490..534. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 502..525. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,42 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 190 SHIPPED NO RELEASE AND DISCHARGED NO CONSUMER CANDIDATE, BECAUSE NOTHING BUILDABLE WAS FOUND.** It
+was invoked by peer handoff (`ai-dlc-40`) and ran autonomously, at `origin/main` `b53f93fd` (`VERSION` 0.718.0). The
+opening sweep: live 2 on 28 qualifying refs, both shipped (0.711.0 and 0.712.0), unfiled 0, worklist 0, TERMINAL 188,
+every control passing. The consumer's working-tree ledger differs from its `HEAD` by three `## PC-` headings, all
+already filed and shipped here (`BL-434`, `BL-435`, `BL-437`).
+
+**THE SESSION HAD NO `Agent` OR `ListAgents` TOOL.** Neither was offered by the harness or by `ToolSearch`, so action 0
+could not spawn hands and the lead ran the derive block, the adjudication and the traces itself. For the same reason
+action 9's handoff could not run.
+
+The whole-backlog adjudication covered 8 entries: 0 CLOSE, 3 PARTIAL (`BL-230`, `BL-375`, `BL-412`) and 5 LIVE. None
+has a buildable remedy:
+- An operator decision blocks `BL-128` and `BL-438`.
+- `BL-071` and `BL-145` need a signal the parse does not compute; both `sh` receipts exit 1.
+- `BL-404`'s open claim is the harness transcript format, which no file in this tree holds.
+- `BL-412` has no recurrence. Both stamped red-run records name only `validator-fork-budget`.
+- `BL-230`'s claim (d) has no named cause.
+- `BL-375`'s `enforcement-map-sites` dropped again (below).
+
+Live backlog **8**, archive **429**. Net closed minus filed: **0**.
+
+**READ-SET TRACE, COMMITTED AS `ff6b5c9c`.** Four fixtures, one per deriver run at load 3-16, each with 0 OMITTED
+lines and 0 drop notices. `suite-pole-guard` and `readset-skip` came back byte-identical. `mutation-red-replay` (21 to
+9 rows) and `check-25-steering-conduct` (21 to 14) lost only the 2026-09-15 trace's `.git/**` and `.gitignore` rows,
+and every script each `run.sh` names is still in its set. That is the completeness control. Three python `compile()`
+pseudo-paths (`<input>`, `<string>`, `<unknown>`) entered `mutation-red-replay`'s rows; they match no file. The deriver
+should filter them, but it was not filed. `enforcement-map-sites` was OMITTED with a drop notice again, so its rows are
+unchanged and its trace is still owed.
+
+**THE DELIVERY GAP IS NINE RELEASES.** The consumer is installed at 0.709.0 against `VERSION` 0.718.0. The derive
+block reads PENDING 2. Counting the three discharged ids that are still uncommitted in the consumer's working tree,
+PENDING is 5. The banked ruling stands: report the gap and write no runbook. **OPERATOR DECISIONS STILL OPEN:** batch
+189's two, unchanged.
+
+Batch 189's block below is history: batch 190's block replaces its delivery gap and its decisions list.
 
 **BATCH 189 SHIPPED THREE RELEASES, `v0.716.0` (`2483dbb8`, #997), `v0.717.0` (`946fb8ce`, #998) AND `v0.718.0`
 (`a366d8ce`, #999), AND DISCHARGED THE ONE CONSUMER CANDIDATE FILED DURING IT.** It was invoked by peer handoff and
@@ -462,30 +498,6 @@ on the pull after the one that delivers `v0.698.0`. The banked ruling stands: re
 **OPERATOR DECISIONS STILL OPEN** are batch 179's list, unchanged.
 
 Batch 180's block below is history: batch 181's block replaces its delivery gap.
-
-**BATCH 180 SHIPPED ONE RELEASE, `v0.692.0` (`08655178`, #960), AND DISCHARGED ONE CONSUMER CANDIDATE:
-`PC-S316-RETIRED-LAYER-PASSAGE-NORM-FALLTHROUGH-MUTANT-DEPENDS-ON-INHERITED-FDS`** (`BL-416`), filed by the reference
-consumer during its 0.683.0 → 0.691.0 pull. It was invoked by peer handoff; the operator then named that candidate
-and ruled the batch to it alone, "as quickly as possible". The opening sweep and the whole-backlog adjudication were
-stopped on that ruling before they reported, so this batch derived no worklist, no unfiled set and no adjudication.
-
-- The fix is fixture-only: `f_drive` in `core/fixtures/retired-layer-passage/run.sh` closes fds 3-9 before
-  `ulimit -n 7`, and a new arm re-scores both cells with 3-9 held. Base failed `MUTANT SURVIVED` with 3-9 inherited;
-  the tip passes both ways; with the close removed the new arm fails `./.`. `BL-416`'s receipt scored tip 0, base 1,
-  close-removed 1. No other fixture lowers the fd limit (control: 4 hits in the fixed file).
-- No tip adversary ran, on the operator's speed ruling.
-
-Live backlog **25**, archive **390**: `BL-416` filed and rotated in the batch. Every entry batch 179 recorded as
-filed or open is unchanged.
-
-**THE DELIVERY GAP IS ONE RELEASE.** The consumer pulled to 0.691.0 on its sprint branch
-(`ai-dlc/carry-over/phase-316-rebalancer-repoint`, `dec3e1cd`, #1151), not yet on its `main`, against `VERSION`
-0.692.0. 0.692.0 touches no bootstrapping file. PENDING is 1, the id above. That pull archived both batch-179 PENDING
-ids as `ADOPTED UPSTREAM`. The banked ruling stands: report the gap and write no runbook.
-
-**OPERATOR DECISIONS STILL OPEN** are batch 179's list below, unchanged.
-
-Batch 179's block below is history: batch 180's block replaces its delivery gap.
 
 ### Derive the state; do not trust the numbers below
 
