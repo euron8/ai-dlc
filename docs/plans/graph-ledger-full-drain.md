@@ -102,9 +102,10 @@ The banked ruling stands: report the gap and write no runbook.
 **READ-SET TRACE OWED, NOT TAKEN THIS BATCH.** Batch 185's list, plus `push-drain-refusals` (new, unmapped, so every
 push touching it runs all 228), `readset-skip` and `reconcile-emit-report`. Commit only a diff with no OMITTED line.
 
-**OPERATOR DECISIONS STILL OPEN.** `BL-005`: close as won't-do, recommended, because its only open item buys no
-makespan. `BL-128`: build the arm as report-only coverage anyway, not recommended on the measurement above. Batch
-179's four census steps were not raised.
+**OPERATOR RULINGS AFTER THE CLOSE.** `BL-005` closed as won't-do and rotated. `BL-128`'s citation-key arm is not
+to be built; the entry stays open on its detector gap. Live backlog **10 -> 9**, archive **422 -> 423**, R5
+`--min-entries 9`. **OPERATOR DECISIONS STILL OPEN.** None from this batch. Batch 179's four census steps were not
+raised.
 
 Batch 185's block below is history: batch 186's block replaces its delivery gap and its decisions list.
 

@@ -28309,3 +28309,39 @@ verify: sh unset AI_DLC_FIXTURE_NO_SKIP GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; H=
 The receipt seeds the same tree as BL-432's. Arms: bookkeeping-only selects only the stamp's mapped reader plus the unmapped fixture; bookkeeping plus a mapped edit past the apostrophe file selects that reader too; bookkeeping plus each of the four near-misses runs all, the fourth being a nested `sub/.claude/.ai-dlc-version` that only an anchored pattern can tell from the real stamp. Scored under `bash -c 'set -uo pipefail; …'` from the repo root: fix 0, base 1, and each wrong fix 1 — the pattern without its leading `^`, the pattern without its trailing `$`, an over-broad `^(\.claude/|_bmad-output/)` pattern, clearing every orphan when some changed paths are bookkeeping, skipping the whole suite when every changed path is bookkeeping, and the orphan narrowing without the `-0` fix.
 
 verify: sh unset AI_DLC_FIXTURE_NO_SKIP GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; H=.githooks/pre-push; [ -f "$H" ] || exit 9; command -v shasum >/dev/null || exit 9; w="$(mktemp -d)" || exit 9; sed -n '/^# FIXTURE_POOL_BEGIN/,/^# FIXTURE_POOL_END/p' "$H" > "$w/pool.sh"; grep -q '^readset_manifest()' "$w/pool.sh" && grep -q '^apply_readset_skip()' "$w/pool.sh" || exit 9; A="bbb/x$(printf '\047')s.snap"; ALL='0:alpha,beta,apos,stamp,gamma,'; BK='echo "version: 2" > .claude/.ai-dlc-version; echo l2 >> _bmad-output/ai-dlc-update/push-candidate-ledger.md; echo r > _bmad-output/ai-dlc-update/reconcile-log-1.md'; p() { t="$w/$1"; o="$w/$1.o"; mkdir -p "$o" "$t/aaa" "$t/bbb" "$t/src" "$t/zzz" "$t/.claude" "$t/sub/.claude" "$t/_bmad-output/ai-dlc-update/sub" || return 9; i=0; while [ "$i" -lt 210 ]; do echo "$i" > "$t/aaa/f$i"; i=$((i+1)); done; echo q > "$t/$A"; echo v > "$t/src/a.sh"; echo v > "$t/zzz/b.sh"; echo c > "$t/src/café.md"; echo 'version: 1' > "$t/.claude/.ai-dlc-version"; echo 'version: 1' > "$t/sub/.claude/.ai-dlc-version"; echo s > "$t/.claude/settings.json"; echo l > "$t/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; echo x > "$t/_bmad-output/ai-dlc-update/sub/x.md"; echo o > "$t/_bmad-output/other.md"; printf 'alpha\tsrc/a.sh\nbeta\tzzz/b.sh\napos\t%s\nstamp\t.claude/.ai-dlc-version\n' "$A" > "$t/.ai-dlc-fixture-readsets.tsv"; ( cd "$t" && git init -q . && git add -A && git -c user.name=r -c user.email=r@r -c commit.gpgsign=false commit -qm s ) >/dev/null 2>&1 || return 9; ( cd "$t" || exit 9; . "$w/pool.sh" >/dev/null 2>&1; readset_manifest "$o"; cp "$o/.now" .git/ai-dlc-fixture-verified || exit 9; eval "$2" || exit 9; printf 'x/%s/\n' alpha beta apos stamp gamma > "$o/list"; READSET_NO_CHANGE=0; apply_readset_skip "$o/list" "$o" >/dev/null 2>&1; printf '%s:%s' "$READSET_NO_CHANGE" "$(sed 's|^x/||; s|/$||' "$o/list" | tr '\n' ,)" ); }; f=0; chk() { r="$(p "$1" "$2")" || { echo "NO-RUN $1" >&2; exit 9; }; [ "$r" = "$3" ] || { echo "$1: want $3 got $r" >&2; f=1; }; }; chk bk-only "$BK" '0:stamp,gamma,'; chk bk+after-apos "$BK; echo v2 > zzz/b.sh" '0:beta,stamp,gamma,'; chk bk+settings "$BK; echo s2 > .claude/settings.json" "$ALL"; chk bk+sub "$BK; echo x2 > _bmad-output/ai-dlc-update/sub/x.md" "$ALL"; chk bk+other "$BK; echo o2 > _bmad-output/other.md" "$ALL"; chk bk+nested "$BK; echo 'version: 2' > sub/.claude/.ai-dlc-version" "$ALL"; exit $f
+## BL-005 — `validator-arm-selection` shard `b` now overlaps its seeded run with the attribution sweep; the third-directory route stays untaken
+
+**LANDED (v0.713.0, verified 5e0d942e).** Closed as won't-do by adjudication, on the operator's batch-186 ruling; nothing was built. The overlap half shipped and is in arm 6 of `core/fixtures/validator-arm-selection/run.sh`. The only open item was the third-directory route, which buys no suite makespan because shard `b` is far from the pole. Re-open only if shard `b` becomes the pole, which `scripts/validate-suite-pole.sh` would report.
+
+Shard `b` was a floor set by three serial units: a seeded run at 16s, an attribution sweep at
+11s, and a mutant's three parallel full runs at 18s (per-block serial costs taken solo, recorded in the
+timing table at the head of `core/fixtures/validator-arm-selection/run.sh`). Two routes below it
+were measured: a third directory duplicating the 27s prerequisite, or overlapping the seeded run
+with the attribution sweep.
+
+**The overlap is TAKEN.** Arm 6 of that file now backgrounds exactly the two raw commands — the
+seeded tree's plain validator run and `attrib` — waits each pid on its own, and reads both
+statuses in the parent before any guard or assignment runs: a seeded-run exit other than 0 or 1
+and a non-zero sweep exit each report FIXTURE BROKEN. The seeded run's stderr moved from the
+scanned tree into the fixture's own scratch dir, so neither unit writes where the other reads.
+No wall-clock gain is claimed for it: shard `b` is far from the suite's pole, so the suite's
+makespan does not move. **The third-directory route stays untaken.**
+
+**THIS ENTRY IS NOT ABOUT THE POLE, AND ITS HEADING SAID IT WAS UNTIL `v0.583.0`.** The pre-push
+pole is watched by `scripts/validate-suite-pole.sh` against its tracked baseline, which is what
+`BL-257` built. That validator prints a NOTE — *"the pole has moved to …; the baseline still
+names …"* — when the longest unit in a run is not the one the baseline names, so the current
+pole is read off that NOTE or off the top of `.git/ai-dlc-fixture-durations` (a LOADED cost),
+never off a figure quoted here. Every pole figure this entry has carried went stale: the
+**166s / 217s** in its old heading were displaced at **v0.541.0** by `BL-088`, four releases
+before `BL-255` read the heading and found it still asserting them, and the `ledger-reverify`
+figure that replaced them was itself displaced when that unit was sharded. A session scoping
+performance work off this entry optimizes a fixture that is not the pole; shard `b`'s floor is
+a real and separate subject, and it is the only subject this entry has.
+
+Carried over from `docs/plans/pre-push-wall-clock.md`. This is a program, not a single fix.
+
+verify: manual
+
+---
+
