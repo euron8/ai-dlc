@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 462..531. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 491..540. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,52 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 188 SHIPPED TWO RELEASES, `v0.714.0` (`63726788`, #994) AND `v0.715.0` (`9c28d78e`, #995), AND
+DISCHARGED BOTH CONSUMER CANDIDATES IT FOUND.** It was invoked by peer handoff and ran autonomously, at
+`origin/main` `25ac399d`. The opening sweep's committed-ref view had live 2, unfiled 0, worklist 0 and TERMINAL 188.
+
+**THE SWEEP'S COMMITTED-REF VIEW WAS BLIND TO THIS BATCH'S WHOLE SCOPE.** The two filings were UNCOMMITTED in the
+consumer's working-tree ledger, which a consumer-history hand found because `cmp -s` against `HEAD` exited 1. A
+`git diff HEAD` of the ledger added exactly two `## PC-` headings. Diff the working-tree ledger against `HEAD`
+every batch.
+
+- `v0.714.0`: `PC-S316-MUTATION-RED-VALIDATOR-SCORES-A-SYNTAX-ERROR-AS-PROVEN` as `BL-434`, and
+  `PC-S316-STEERING-BUDGET-EXEMPTS-ASKUSERQUESTION-BUT-COUNTS-ITS-PARALLEL-SIBLINGS` as `BL-435`. Both landed and
+  rotated in the close commit.
+- `v0.715.0`: `BL-375` PARTIAL. The deriver launches each fixture with `env VAS_INNER_POOL_WIDTH=1` after sudo,
+  and validator-arm-selection's inner pool reads it.
+
+Live backlog **9 -> 11 -> 9**, archive **423 -> 425**. Net closed minus filed: **0**.
+
+**BOTH CONSUMER RECEIPTS ALREADY READ CLOSE-CANDIDATE AT 0.713.0, BEFORE ANY FIX.** This was measured with the real
+engine on a scratch consumer, and it is recorded in each archived entry as a finding.
+
+**EVERY ADVERSARY FOUND SOMETHING ON A GATE-GREEN SHAPE, AGAIN.** Each tip pass found six wrong implementations
+that both channels accepted. For 0.714.0, two of them broke on the motivating transcript's own shapes: a `Read`
+sibling, and a sibling written before the question. For 0.715.0, the pools were never checked at the site that
+uses the width, and the stub `sudo` passed the environment through. All were fixed before merge.
+
+**`BL-375`'S RE-TRACE FAILED, AND NO MAP WAS COMMITTED.** At `9c28d78e` the knob reached the traced run: the fixture
+log reads `inner pool width: 1`. The stream still dropped 7 reports at load 24 and 19 at load 6 rising to 25. The
+deriver wrote no map either time. The entry records the next, unmeasured lever.
+
+**OPERATOR RULING: THE NO-FORCED-FULL-SUITE RULE COVERS RELEASE VERIFICATION ONLY.** A measurement sweep on an
+unpushed throwaway branch may force `AI_DLC_FIXTURE_NO_SKIP=1`. That makes `BL-004` (the inner-pool width sweep,
+about 10 full runs) and `BL-430` (the jobs-12 pole recalibration, one forced run) buildable. Neither ran this
+batch, because the release gates needed the box. The ruling is carried in `verification-discipline.md` and in
+`### NEXT ACTIONS`.
+
+**THE DELIVERY GAP IS SIX RELEASES, WHICH IS PAST ACTION 7'S WIDE THRESHOLD OF FIVE.** The consumer is installed at
+0.709.0 (stamp `commit: 0414a98e`) against `VERSION` 0.715.0, and 0.710.0, 0.711.0 and 0.713.0 are bootstrapping.
+Mode-only changes under `core/` since the stamp: 0. PENDING is 4: the two ids batch 186 shipped, plus this batch's
+two. The consumer's two filings are still uncommitted. The banked ruling stands: report the gap and write no runbook.
+
+**READ-SET TRACE OWED:** `mutation-red-replay`, `check-25-steering-conduct`, `readset-skip` and
+`validator-arm-selection`. `validator-arm-selection-b` cannot be mapped until `BL-375` stage 1 holds.
+**OPERATOR DECISIONS STILL OPEN:** none.
+
+Batch 187's block below is history: batch 188's block replaces its delivery gap and its decisions list.
 
 **BATCH 187 SHIPPED NO RELEASE AND DISCHARGED NO CONSUMER CANDIDATE, BECAUSE NOTHING BUILDABLE WAS
 FOUND.** It was invoked by peer handoff and ran autonomously, at `origin/main` `3e464c9e` (`VERSION`
@@ -441,56 +487,6 @@ change a bootstrapping file. The banked ruling stands: report the gap and write 
 honest, not measured fits (`ui-direction`, `deploy-validate`, `requirements`, `doc-repair-backfill`).
 
 Batch 178's block below is history: batch 179's block replaces its delivery gap and its rulings record.
-
-**BATCH 178 SHIPPED NINE RELEASES, `v0.675.0` THROUGH `v0.683.0`, AND DISCHARGED ONE CONSUMER CANDIDATE:
-`PC-S316-ACKNOWLEDGE-HOOK-DENIES-UPDATER-EDITS-OUTSIDE-ITS-OWN-DIRECTORY`** (`v0.675.0`, `512ccb01`, #932),
-filed by the reference consumer during its 0.673.0 → 0.674.0 pull. It was invoked by peer handoff, and the
-operator then directed the rest of the session to run autonomously. Releases, each squash tree identical to
-its gated tip:
-
-- `v0.676.0` (`0dc1eeb5`, #933): `BL-381`, `BL-375` (`--tracer both`), `BL-093`, `BL-399` (I117), `BL-159`
-  claim 4, `BL-278`, `BL-083`; entry corrections to `BL-360`, `BL-129`, `BL-127`.
-- `v0.677.0` (`5f0cf11f`, #934) `apply.sh`: `BL-099`, `BL-103`, `BL-119`, `BL-336`.
-- `v0.678.0` (`0870961e`, #935) `ledger-rotate.sh`: `BL-006`, `BL-071` (narrowed, open).
-- `v0.679.0` (`ee5cf55b`, #937) update `SKILL.md`: `BL-391` (open; its receipt reads prose).
-- `v0.680.0` (`f0139f8b`, #938) retired-layer detectors: `BL-333`.
-- `v0.681.0` (`d0cedeeb`, #939) `lib.sh` + `preclassify.sh`: `BL-374`, `BL-100`, `BL-355`, `BL-310` lib half.
-- `v0.682.0` (`105d43b0`, #940) `layer-drift.sh`: `BL-376`.
-- `v0.683.0` (`e151c238`, #941) `ledger-reverify.sh` + `emit-report.sh`: `BL-092`, `BL-066`, `BL-310`; `BL-145`
-  narrowed and open.
-
-`BL-400` was filed at the operator's request (#936). The close rotated 18 entries and filed `BL-401`..`BL-406`:
-live backlog **39 -> 28** (`BL-400`..`BL-407` filed, `BL-407` closed on filing), archive **359 -> 378**. Net closed minus filed: **11**.
-
-**THE WHOLE-BACKLOG ADJUDICATION: 39 entries, 0 CLOSE, about 9 PARTIAL, about 30 LIVE, 1 stale premise
-(`BL-129`).** Every batch-177 contract carried at least one claim the tree had moved past; `BL-310`'s
-"status 128" was 1, and `BL-374`'s receipt accepted a half-fix. **Re-derive a recorded contract before
-building from it.**
-
-**EVERY TIP ADVERSARY FOUND A DEFECT IN A GATE-GREEN BRANCH, AGAIN.** S316's first cut would have switched the
-pause off for a pipeline session's writes after it read the consumer's ledger (the typed marker matched
-quotations of itself). 0.676.0's Stop-hook change deleted a sticky handoff record it never checked. B1's case
-fold depended on which `tr` resolved. B2's DOCS-ONLY row forbade annotating real releases whose naming commit
-touched only `CHANGELOG.md` and `VERSION`. All fixed before merge.
-
-**THREE GATES FAILED, NONE ON A FIXTURE THE RELEASE CHANGED.** 0.675.0's first gate failed I54b on a builder's
-uncommitted file in `.claude/worktrees/` (filed `BL-401`); gate from a clean `git worktree add` while hands are
-out. 0.677.0's failed `procsub-staged-refusal`'s spelling arm on two new `apply.sh` loops; run that arm's
-grammar over a branch's added lines before pushing. B6's failed two older mutants its new `have` gate covered;
-each was given a cell of its own. Two pushes lost SSH after a green verdict (exit 141); re-pushing the gated sha
-`--no-verify` with an `ls-remote` check landed both.
-
-**READ-SET TRACES OWED**, one command: `sudo bash core/scripts/derive-fixture-readsets.sh --list
-"backlog-receipt-binding vocabulary-index postcompact-rulebook-recovery"`. The first two read new files since
-0.676.0; the third's row omits `ai-dlc-postcompact.sh`, which it runs (`BL-127`). `BL-375`'s command
-`sudo bash core/scripts/derive-fixture-readsets.sh --all --tracer both` now parses; it is the operator's to run.
-
-**THE DELIVERY GAP IS NINE RELEASES, WHICH IS WIDE.** The consumer is at 0.674.0 against `VERSION` 0.683.0, and
-seven of the nine change a bootstrapping file (0.677.0 through 0.683.0 —
-each shipped alone for that reason). PENDING is 1: S316 (`BL-407`). The consumer filed a second candidate at its 0.674.0 ledger close (graph `a06ad9ac`, 2026-09-30), `PC-S316-UPDATE-STEP8-ORDERS-THE-LEDGER-DISPOSITIONS-AFTER-THE-PUSH-AND-MERGE`, unfiled here. The banked ruling stands: report the gap and write no
-runbook.
-
-Batch 177's block below is history: batch 178's block replaces its delivery gap and its rulings record.
 
 ### Derive the state; do not trust the numbers below
 

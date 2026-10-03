@@ -16356,3 +16356,53 @@ unapplied. The banked ruling stands: report the gap and write no runbook.
 
 Batch 176's operator-decisions list is spent: batch 177's rulings above replace it.
 
+**BATCH 178 SHIPPED NINE RELEASES, `v0.675.0` THROUGH `v0.683.0`, AND DISCHARGED ONE CONSUMER CANDIDATE:
+`PC-S316-ACKNOWLEDGE-HOOK-DENIES-UPDATER-EDITS-OUTSIDE-ITS-OWN-DIRECTORY`** (`v0.675.0`, `512ccb01`, #932),
+filed by the reference consumer during its 0.673.0 → 0.674.0 pull. It was invoked by peer handoff, and the
+operator then directed the rest of the session to run autonomously. Releases, each squash tree identical to
+its gated tip:
+
+- `v0.676.0` (`0dc1eeb5`, #933): `BL-381`, `BL-375` (`--tracer both`), `BL-093`, `BL-399` (I117), `BL-159`
+  claim 4, `BL-278`, `BL-083`; entry corrections to `BL-360`, `BL-129`, `BL-127`.
+- `v0.677.0` (`5f0cf11f`, #934) `apply.sh`: `BL-099`, `BL-103`, `BL-119`, `BL-336`.
+- `v0.678.0` (`0870961e`, #935) `ledger-rotate.sh`: `BL-006`, `BL-071` (narrowed, open).
+- `v0.679.0` (`ee5cf55b`, #937) update `SKILL.md`: `BL-391` (open; its receipt reads prose).
+- `v0.680.0` (`f0139f8b`, #938) retired-layer detectors: `BL-333`.
+- `v0.681.0` (`d0cedeeb`, #939) `lib.sh` + `preclassify.sh`: `BL-374`, `BL-100`, `BL-355`, `BL-310` lib half.
+- `v0.682.0` (`105d43b0`, #940) `layer-drift.sh`: `BL-376`.
+- `v0.683.0` (`e151c238`, #941) `ledger-reverify.sh` + `emit-report.sh`: `BL-092`, `BL-066`, `BL-310`; `BL-145`
+  narrowed and open.
+
+`BL-400` was filed at the operator's request (#936). The close rotated 18 entries and filed `BL-401`..`BL-406`:
+live backlog **39 -> 28** (`BL-400`..`BL-407` filed, `BL-407` closed on filing), archive **359 -> 378**. Net closed minus filed: **11**.
+
+**THE WHOLE-BACKLOG ADJUDICATION: 39 entries, 0 CLOSE, about 9 PARTIAL, about 30 LIVE, 1 stale premise
+(`BL-129`).** Every batch-177 contract carried at least one claim the tree had moved past; `BL-310`'s
+"status 128" was 1, and `BL-374`'s receipt accepted a half-fix. **Re-derive a recorded contract before
+building from it.**
+
+**EVERY TIP ADVERSARY FOUND A DEFECT IN A GATE-GREEN BRANCH, AGAIN.** S316's first cut would have switched the
+pause off for a pipeline session's writes after it read the consumer's ledger (the typed marker matched
+quotations of itself). 0.676.0's Stop-hook change deleted a sticky handoff record it never checked. B1's case
+fold depended on which `tr` resolved. B2's DOCS-ONLY row forbade annotating real releases whose naming commit
+touched only `CHANGELOG.md` and `VERSION`. All fixed before merge.
+
+**THREE GATES FAILED, NONE ON A FIXTURE THE RELEASE CHANGED.** 0.675.0's first gate failed I54b on a builder's
+uncommitted file in `.claude/worktrees/` (filed `BL-401`); gate from a clean `git worktree add` while hands are
+out. 0.677.0's failed `procsub-staged-refusal`'s spelling arm on two new `apply.sh` loops; run that arm's
+grammar over a branch's added lines before pushing. B6's failed two older mutants its new `have` gate covered;
+each was given a cell of its own. Two pushes lost SSH after a green verdict (exit 141); re-pushing the gated sha
+`--no-verify` with an `ls-remote` check landed both.
+
+**READ-SET TRACES OWED**, one command: `sudo bash core/scripts/derive-fixture-readsets.sh --list
+"backlog-receipt-binding vocabulary-index postcompact-rulebook-recovery"`. The first two read new files since
+0.676.0; the third's row omits `ai-dlc-postcompact.sh`, which it runs (`BL-127`). `BL-375`'s command
+`sudo bash core/scripts/derive-fixture-readsets.sh --all --tracer both` now parses; it is the operator's to run.
+
+**THE DELIVERY GAP IS NINE RELEASES, WHICH IS WIDE.** The consumer is at 0.674.0 against `VERSION` 0.683.0, and
+seven of the nine change a bootstrapping file (0.677.0 through 0.683.0 —
+each shipped alone for that reason). PENDING is 1: S316 (`BL-407`). The consumer filed a second candidate at its 0.674.0 ledger close (graph `a06ad9ac`, 2026-09-30), `PC-S316-UPDATE-STEP8-ORDERS-THE-LEDGER-DISPOSITIONS-AFTER-THE-PUSH-AND-MERGE`, unfiled here. The banked ruling stands: report the gap and write no
+runbook.
+
+Batch 177's block below is history: batch 178's block replaces its delivery gap and its rulings record.
+
