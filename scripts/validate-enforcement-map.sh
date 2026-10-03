@@ -11097,6 +11097,17 @@ $(<"$1")
 "*) return 0 ;; esac
   return 1
 }
+i112_prefix_count() {  # <prefix> <span text> -> i112_pc, lines OPENING with the prefix, fork-free
+  # COLUMN ONE, NOT ANYWHERE ON THE LINE, for the bullet reader's own reason: a sentence quoting a
+  # bullet's prefix is prose about it. The prefix is quoted inside the pattern, so its `**` and
+  # `(` are literal characters.
+  i112_pc=0
+  while IFS= read -r i112_l; do
+    case "$i112_l" in "$1"*) i112_pc=$((i112_pc + 1)) ;; esac
+  done <<EOF
+$2
+EOF
+}
 i112_count() {  # <list> -> i112_cnt, the non-empty lines in it, fork-free
   i112_cnt=0
   while IFS= read -r i112_l; do [ -n "$i112_l" ] && i112_cnt=$((i112_cnt + 1)); done <<EOF
@@ -11304,6 +11315,14 @@ $i112_pq" "$i112_enum")"
                  "$i112_cpfx" "$i112_qa" "$i112_qb" "$i112_qpfx" "$i112_a" "$i112_b")"
       i112_swr="$(i112_reader_sets "$i112_sw")"
       i112_swc="$(i112_pick C "$i112_swr")"; i112_swq="$(i112_pick Q "$i112_swr")"
+      # THE DUPLICATE-BULLET SEED. The reader takes the FIRST line carrying each prefix, so a
+      # second bullet for one owner is read by nothing and can teach any value at all. The
+      # counter must see two code-review bullets here and ONE QA bullet, because the QA prefix's
+      # second appearance is mid-line, quoted inside a sentence.
+      i112_dup="$(printf '%s`%s`)**\n%s`%s`)**\n- A sentence quoting %s`x`)** in prose.\n%s`%s`)**\n' \
+                  "$i112_cpfx" "$i112_a" "$i112_cpfx" "$i112_e" "$i112_qpfx" "$i112_qpfx" "$i112_qa")"
+      i112_prefix_count "$i112_cpfx" "$i112_dup"; i112_pdc=$i112_pc
+      i112_prefix_count "$i112_qpfx" "$i112_dup"; i112_pdq=$i112_pc
       rm -rf "$i112_probe" 2>/dev/null || true
       i112_pf=""
       [ "$i112_ph" = 1 ] || \
@@ -11345,14 +11364,31 @@ $i112_pq" "$i112_enum")"
       i112_compare "$i112_po" "$i112_swq"
       [ -z "$i112_cu$i112_cn" ] || \
         i112_pf="${i112_pf} the code-review owner compared against a bullet carrying exactly its own members reported (unnamed '$i112_cu', unowned '$i112_cn'). The comparison fires on agreement, so its findings below say nothing."
+      [ "$i112_pdc" = 2 ] || \
+        i112_pf="${i112_pf} the bullet counter read $i112_pdc code-review bullet(s) on a seed carrying two, so a second bullet for one owner -- read by nothing, and free to teach any value -- would pass."
+      [ "$i112_pdq" = 1 ] || \
+        i112_pf="${i112_pf} the bullet counter read $i112_pdq QA bullet(s) on a seed carrying one at column one and one quoted mid-line. It is counting prose that mentions the prefix, and a correct Check 1 quoting its own bullet would be refused."
       i112_compare "$i112_pq" "$i112_swc"
       [ -z "$i112_cu$i112_cn" ] || \
         i112_pf="${i112_pf} the QA owner compared against a bullet carrying exactly its own members reported (unnamed '$i112_cu', unowned '$i112_cn'). The comparison fires on agreement, so its findings below say nothing."
       if [ -n "$i112_pf" ]; then
         err "I112 SELF-PROBE FAILED:${i112_pf}"
       else
-        # THE CORPUS. Per-owner set equality both ways, then the span scan, each with its own
-        # remedy.
+        # THE CORPUS. Each owner's bullet at most once, then per-owner set equality both ways,
+        # then the span scan, each with its own remedy. The bullet count is checked first and
+        # is not a refusal of the rest: a duplicate bullet is reported, and the comparison still
+        # runs against the FIRST bullet, which is the one the reader takes.
+        # ZERO IS OWNED BY THE COMPARISON, NOT BY THIS COUNT. With no bullet, the owner's
+        # direction 1 already names every declared member as unnamed; reporting the zero here
+        # too would put two findings on one subject, and the fixture's bullet-deleted and
+        # bullets-merged assertions would score a two-cell flip. So this refuses MORE than one,
+        # and together with direction 1 the bullet is held to exactly one.
+        i112_prefix_count "$i112_cpfx" "$i112_span"
+        [ "$i112_pc" -le 1 ] || \
+          err "I112: Check 1's span in core/skills/ai-dlc/steps/gate-validation.md carries $i112_pc lines opening with \`$i112_cpfx\` where exactly one is allowed. The comparison reads the first such line only, so a second one is read by nothing and can teach any value. Merge them into one bullet."
+        i112_prefix_count "$i112_qpfx" "$i112_span"
+        [ "$i112_pc" -le 1 ] || \
+          err "I112: Check 1's span in core/skills/ai-dlc/steps/gate-validation.md carries $i112_pc lines opening with \`$i112_qpfx\` where exactly one is allowed. The comparison reads the first such line only, so a second one is read by nothing and can teach any value. Merge them into one bullet."
         i112_rsets="$(i112_reader_sets "$i112_span")"
         i112_rset="$(i112_pick C "$i112_rsets")"; i112_rqset="$(i112_pick Q "$i112_rsets")"
         i112_toks="$(i112_strays "$i112_span" "$i112_set

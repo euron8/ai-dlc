@@ -497,7 +497,9 @@ verify: manual -- the remedy is a choice between giving qa.md its own declared v
 **LANDED (v0.721.0, verified TBD).** `qa.md` now declares its own set under a bare `## Verdict`
 heading, in the template shape `code-reviewer.md` uses: `PASS | NEEDS_REWORK`. Check 1 in
 `gate-validation.md` reads each review file against the set of the gate its Gate-status line
-cites it for, never by filename, and carries one bullet per owner: `- **Code-review verdict
+cites it for (the gate comes from the citation, not the filename; a file cited for both gates
+must read a value in both sets). A capital run followed by a hyphen or other qualifier reads as
+the whole token, so `PASS-pending-PVC` fails. Check 1 carries one bullet per owner: `- **Code-review verdict
 values (`code-reviewer.md`)**` and `- **QA verdict values (`qa.md`)**`. I112 binds both sets,
 each owner against its own bullet. It refuses a missing heading or a short template per owner,
 and the span scan's exclusion is the union of the two sets. The arm's self-probe seeds a swapped
@@ -513,10 +515,10 @@ token is derived as a set difference of the two templates.
 are bound to Check 1's text, and they say nothing about how a lead executes Check 1 at a gate.
 
 **Consumer replay, read-only on the reference consumer's `docs/reviews/s316/`.** It holds 22 QA
-files, all named `<idx>-qa-validation[-p<k>].md`. Read with Check 1's own grep and leading-token
-rule, 21 read `PASS` and one, `1b-qa-validation.md`, reads `NEEDS_REWORK`. Its re-review
-`1b-qa-validation-p2.md` reads `PASS`, and Check 1's re-review rule makes the later pass
-supersede it. A simpler reader keyed only on `^Verdict:` and a bare heading scores 20 of 22,
+files, all named `<idx>-qa-validation[-p<k>].md`. Read by Check 1's own rule (its grep, then
+its value rule with the suffix guard), 21 of the 22 read `PASS` and one, `1b-qa-validation.md`,
+reads `NEEDS_REWORK`. Its tracked sibling `1b-qa-validation-p2.md` reads `PASS`, and Check 1's
+re-review rule reads that higher-`p<M>` sibling in place of the cited file and names both. A simpler reader keyed only on `^Verdict:` and a bare heading scores 20 of 22,
 because it misses `B1-qa-validation-p2.md`'s `## Verdict: PASS` line. `4b-qa-validation.md`
 matches the grep twice, and both lines read `PASS`. Every s316 QA value is in the new set.
 

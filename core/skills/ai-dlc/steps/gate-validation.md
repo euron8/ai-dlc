@@ -211,21 +211,32 @@ H1/H2 stay with the lead — a self-test is never escalated into the mechanism i
   a Git-tracked path `code-reviewer.md` guarantees and the story's Gate-status
   line cites), never from recollection — a lead-asserted gate claim is how a
   sprint ran deploy as APPROVED while its gate-1 review file on disk still read
-  NEEDS_REWORK. The value is the leading run of capital letters and underscores
-  after the `:` on the matched line, or at the start of the next non-blank line
-  when the match is a bare `## Verdict` heading — so `Verdict: PASS (all ACs)`
-  reads `PASS`, and so does a `PASS.` on the line under the heading.
-- **Each file is read against the set of the gate it is cited for, never by its
-  filename.** A file the story's Gate-status line cites for gate 1 is read
-  against `code-reviewer.md`'s set; a file cited for gate 2 is read against
-  `qa.md`'s. A value from the other gate's set is outside the set and fails.
+  NEEDS_REWORK. **Reading the value.** Start after the `:` on the matched line,
+  or at the start of the next non-blank line when the match is a bare
+  `## Verdict` heading, and skip any spaces and `*` first — so `**PASS**` and
+  `Verdict:** PASS` both read `PASS`. Take the run of capital letters and
+  underscores there. It is the value only when the character after it is the
+  end of the line, a space, `.`, `,`, `(`, `)` or `*`; any other character makes
+  the WHOLE whitespace-delimited token the value, and that token is outside
+  both sets. So `Verdict: PASS (all ACs)` and a `PASS.` under the heading read
+  `PASS`.
+- **A suffixed verdict is not its prefix.** `Verdict: PASS-pending-PVC` reads
+  the whole token, which no set declares, so it FAILS this check; so does any
+  member with a hyphenated qualifier on it.
+- **The gate comes from the citation, not the filename.** A file the story's
+  Gate-status line cites for gate 1 is read against `code-reviewer.md`'s set; a
+  file cited for gate 2 is read against `qa.md`'s. A value from the other
+  gate's set is outside the set and fails. A file cited for BOTH gates is read
+  against both sets and fails unless its value is in both.
 - **Code-review verdict values (`code-reviewer.md`)** — the set it declares under `## Verdict`: `APPROVED` passes this check; `NEEDS_REWORK` and `BLOCKED` fail it.
 - **QA verdict values (`qa.md`)** — the set it declares under `## Verdict`: `PASS` passes this check; `NEEDS_REWORK` fails it.
-- **A re-review supersedes the pass before it.** Per story and per gate, read
-  only the file with the highest `p<M>`; an unsuffixed file is pass 1. Order by
-  the number `p<M>` carries, as `artifact-path-grammar.md` rule 5 requires —
-  never by mtime and never by listing order — so `-p2` outranks the
-  unsuffixed file and `-p10` outranks `-p9`.
+- **A re-review supersedes the pass before it.** Read the file the Gate-status
+  line cites. When a tracked `-p<M>` sibling of that basename with a higher M
+  exists, read the sibling instead and name both files in the gate log. An
+  unsuffixed file is pass 1, and M is compared as the number `p<M>` carries, as
+  `artifact-path-grammar.md` rule 5 requires — never by mtime and never by
+  listing order — so `-p2` outranks the unsuffixed file and `-p10` outranks
+  `-p9`.
 - **Zero matches FAILS this check; it is never a fallback to recollection.** An
   unreadable verdict is an unmet validation, not an absent one. Name the file.
   Do not infer the verdict from the review's prose, from its existence, or from

@@ -1399,6 +1399,16 @@ qa_only_in() {
   done <<<"$a"
 }
 
+# qa_first_only_in <file A> <file B> — the first line of qa_only_in, CAPTURED then cut. Piping the
+# loop into `head -1` closes the pipe while the loop may still be printing, and the next printf
+# writes a broken-pipe error into the run's output.
+qa_first_only_in() {
+  local all
+  all="$(qa_only_in "$1" "$2")" || return 1
+  printf '%s\n' "${all%%
+*}"
+}
+
 # qa_bullets_present <tree> — both owner bullets are in Check 1 exactly once, or FIXTURE BROKEN.
 # A bullet missing from the seed makes every mutation below match nothing or the wrong line.
 qa_bullets_present() {
@@ -1448,7 +1458,7 @@ A60_i112_cr_member_on_the_qa_bullet() {
   t="$(fresh)"
   local tok
   qa_bullets_present "$t" || return 0
-  tok="$(qa_only_in "$t/$CR_OWNER" "$t/$QA_OWNER" | head -1)"
+  tok="$(qa_first_only_in "$t/$CR_OWNER" "$t/$QA_OWNER")"
   if [ -z "$tok" ]; then
     bad "FIXTURE BROKEN — no code-review verdict is outside qa.md's set, so there is no other-gate member to put on the QA bullet."
     return
@@ -1468,7 +1478,7 @@ A61_i112_qa_member_on_the_cr_bullet() {
   t="$(fresh)"
   local tok
   qa_bullets_present "$t" || return 0
-  tok="$(qa_only_in "$t/$QA_OWNER" "$t/$CR_OWNER" | head -1)"
+  tok="$(qa_first_only_in "$t/$QA_OWNER" "$t/$CR_OWNER")"
   if [ -z "$tok" ]; then
     bad "FIXTURE BROKEN — no QA verdict is outside code-reviewer.md's set, so there is no other-gate member to put on the code-review bullet."
     return
@@ -1522,7 +1532,7 @@ A62_i112_bullets_merged_into_one() {
 A63_i112_qa_member_in_cr_template() {
   t="$(fresh)"
   local tok
-  tok="$(qa_only_in "$t/$QA_OWNER" "$t/$CR_OWNER" | head -1)"
+  tok="$(qa_first_only_in "$t/$QA_OWNER" "$t/$CR_OWNER")"
   if [ -z "$tok" ]; then
     bad "FIXTURE BROKEN — no QA verdict is outside code-reviewer.md's set, so there is no QA member to add to the code-review template."
     return
@@ -1532,6 +1542,133 @@ A63_i112_qa_member_in_cr_template() {
        "/^[A-Z_]+( \\| [A-Z_]+)+\$/ && !d { \$0 = \$0 \" | $tok\"; d=1 } { print }"; then
     assert_fires_n "I112 a QA member added to code-reviewer.md's template is REPORTED as unnamed on the code-review bullet" \
                    "core/team-roles/code-reviewer.md declares code-review verdict(s) that gate-validation.md's Check 1 never names: $tok" 1
+  fi
+}
+
+# qa_dup_bullet <prefix-regex> <prefix text> <token> — an awk program printing a SECOND bullet with
+# the given prefix directly under the first, teaching <token>. The backtick is built, never typed:
+# this program travels through a double-quoted shell string, where a typed one runs a command.
+qa_dup_bullet() {
+  local bt; bt="$(printf '\140')"
+  printf '%s' "{ print } /^$1/ && !d { print \"$2${bt}x.md${bt})** — ${bt}$3${bt} also passes this check.\"; d=1 }"
+}
+
+# --- Assertion 64: I112 — a second QA bullet ----------------------------------
+# THE READER TAKES THE FIRST LINE PER PREFIX, so a second QA bullet is read by nothing and can
+# teach a code-review member as a gate-2 pass with every comparison green. The count is what
+# says so. One finding: the second bullet's token is not compound, so the span scan cannot move.
+A64_i112_second_qa_bullet() {
+  t="$(fresh)"
+  local tok
+  qa_bullets_present "$t" || return 0
+  tok="$(qa_first_only_in "$t/$CR_OWNER" "$t/$QA_OWNER")"
+  if [ -z "$tok" ]; then
+    bad "FIXTURE BROKEN — no code-review verdict is outside qa.md's set, so the duplicate bullet would teach nothing the first one does not."
+    return
+  fi
+  qa_control "I112 QA control: the unmutated copy is silent before a second QA bullet is added" || return 0
+  if edit "$t/$CR_READER" "$(qa_dup_bullet '- \*\*QA verdict values \(' '- **QA verdict values (' "$tok")"; then
+    assert_fires_n "I112 a SECOND QA bullet in Check 1 is REPORTED — each owner's bullet appears exactly once" \
+                   "carries 2 lines opening with \`- **QA verdict values (\` where exactly one is allowed" 1
+  fi
+}
+
+# --- Assertion 65: I112 — a second code-review bullet -------------------------
+# A64's mirror, teaching the QA-only member on a second code-review bullet.
+A65_i112_second_cr_bullet() {
+  t="$(fresh)"
+  local tok
+  qa_bullets_present "$t" || return 0
+  tok="$(qa_first_only_in "$t/$QA_OWNER" "$t/$CR_OWNER")"
+  if [ -z "$tok" ]; then
+    bad "FIXTURE BROKEN — no QA verdict is outside code-reviewer.md's set, so the duplicate bullet would teach nothing the first one does not."
+    return
+  fi
+  qa_control "I112 QA control: the unmutated copy is silent before a second code-review bullet is added" || return 0
+  if edit "$t/$CR_READER" "$(qa_dup_bullet '- \*\*Code-review verdict values \(' '- **Code-review verdict values (' "$tok")"; then
+    assert_fires_n "I112 a SECOND code-review bullet in Check 1 is REPORTED — each owner's bullet appears exactly once" \
+                   "carries 2 lines opening with \`- **Code-review verdict values (\` where exactly one is allowed" 1
+  fi
+}
+
+# qa_seed_compound_member <owner file> <bullet regex> <token> — add a COMPOUND member to a seeded
+# owner's template, name it on that owner's bullet, and name it in Check 1's prose. Returns
+# nonzero (FIXTURE BROKEN already reported) when any of the three edits matched nothing.
+#
+# WHY A SYNTHESISED MEMBER. Every shipped member a QA-only or code-review-only exclusion could
+# differ on is a BARE word, which the span scan's compound grammar never reads, so on the shipped
+# templates an exclusion keyed on one owner and the union agree on every input. A compound member
+# that only ONE owner declares is the input that separates them.
+qa_seed_compound_member() {
+  local bt; bt="$(printf '\140')"
+  edit "$t/$1" "/^[A-Z_]+( \\| [A-Z_]+)+\$/ && !d { \$0 = \$0 \" | $3\"; d=1 } { print }" || return 1
+  edit "$t/$CR_READER" "/^$2/ && !d { \$0 = \$0 \" ${bt}$3${bt} passes it too.\"; d=1 } { print }" || return 1
+  edit "$t/$CR_READER" "$(cr_after_check1 "- A sentence naming $3.")" || return 1
+}
+
+# --- Assertion 66: I112 — a compound QA member in Check 1's prose is acquitted -
+# THE UNION EXCLUSION, QA HALF. A span scan excusing only the code-review set reports this token;
+# the union, which is what ships, does not. Its FIRE twin is A33: the same insertion point and the
+# same compound shape, belonging to no set.
+A66_i112_qa_compound_member_in_prose_is_acquitted() {
+  t="$(fresh)"
+  local tok
+  tok="HOLD_FOR"; tok="${tok}_PVC"
+  qa_bullets_present "$t" || return 0
+  qa_control "I112 QA control: the unmutated copy is silent before a compound QA member is seeded" || return 0
+  qa_seed_compound_member "$QA_OWNER" '- \*\*QA verdict values \(' "$tok" || return 0
+  assert_silent "I112 a compound member qa.md declares, named on the QA bullet and in Check 1's prose, is acquitted — the span exclusion is the UNION"
+}
+
+# --- Assertion 67: I112 — a compound code-review member in prose is acquitted -
+# A66's mirror: a span scan excusing only the QA set reports this one.
+A67_i112_cr_compound_member_in_prose_is_acquitted() {
+  t="$(fresh)"
+  local tok
+  tok="APPROVED_WITH"; tok="${tok}_NITS"
+  qa_bullets_present "$t" || return 0
+  qa_control "I112 QA control: the unmutated copy is silent before a compound code-review member is seeded" || return 0
+  qa_seed_compound_member "$CR_OWNER" '- \*\*Code-review verdict values \(' "$tok" || return 0
+  assert_silent "I112 a compound member code-reviewer.md declares, named on its bullet and in Check 1's prose, is acquitted — the span exclusion is the UNION"
+}
+
+# --- Assertion 68: I112 — qa.md's template line deleted -----------------------
+# A42's mirror, and the QA owner's member-count guard. With the heading kept and the template line
+# gone, the QA set is empty; without the guard the comparison runs and reports the bullet's members
+# as undeclared, which is a finding about the wrong thing. The refusal is the count one.
+A68_i112_qa_template_line_deleted() {
+  t="$(fresh)"
+  local n
+  n="$(grep -cE '^[A-Z_]+( \| [A-Z_]+)+$' "$t/$QA_OWNER")" || n=0
+  if [ "$n" -ne 1 ]; then
+    bad "FIXTURE BROKEN — $n line(s) in ${QA_OWNER##*/} ARE a verdict template; this assertion deletes the one template line and needs exactly one to delete."
+    return
+  fi
+  qa_control "I112 QA control: the unmutated copy is silent before qa.md's template line is deleted" || return 0
+  if edit "$t/$QA_OWNER" '/^[A-Z_]+( \| [A-Z_]+)+$/ && !d { d=1; next } { print }'; then
+    assert_fires_n "I112 deleting qa.md's template line under a surviving heading REPORTS the member count, not a comparison" \
+                   "could not derive the QA verdict set: 0 member(s) read out of" 1
+  fi
+}
+
+# --- Assertion 69: I112 — the QA prefix quoted mid-line is not the bullet -----
+# THE COLUMN-ONE ANCHOR. A sentence ABOVE the real bullet quotes the QA prefix and a code-review
+# member. A reader matching the prefix anywhere on the line takes that sentence as the QA bullet
+# and reports the member as undeclared by qa.md; anchored at column one it reads the real bullet
+# and the bullet counter does not count the sentence. Silent.
+A69_i112_midline_qa_prefix_is_not_the_bullet() {
+  t="$(fresh)"
+  local tok bt
+  bt="$(printf '\140')"
+  qa_bullets_present "$t" || return 0
+  tok="$(qa_first_only_in "$t/$CR_OWNER" "$t/$QA_OWNER")"
+  if [ -z "$tok" ]; then
+    bad "FIXTURE BROKEN — no code-review verdict is outside qa.md's set, so a misread sentence would carry no token qa.md lacks and the two readers would agree."
+    return
+  fi
+  qa_control "I112 QA control: the unmutated copy is silent before a sentence quotes the QA prefix" || return 0
+  if edit "$t/$CR_READER" "$(cr_after_check1 "- A sentence quoting - **QA verdict values (${bt}qa.md${bt})** beside ${bt}${tok}${bt}.")"; then
+    assert_silent "I112 a sentence quoting the QA bullet's prefix mid-line is not read as the QA bullet"
   fi
 }
 

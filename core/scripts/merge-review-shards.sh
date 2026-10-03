@@ -55,7 +55,7 @@
 #   table of shard verdicts, the part map, then every shard body in ordinal order, cross last.
 #   CONSERVATION: every finding heading of every shard appears in the output, counted.
 #   The assembled file must match Check 1's pattern exactly once, and the value read back Check
-#   1's way (text after `:`, else the next non-blank line) must equal the recomputed verdict.
+#   1's way (the value rule gate-validation.md Check 1 states) must equal the recomputed verdict.
 #
 # EXIT
 #   0  merged (stdout `MERGED: ...`), or <review-file> already exists byte-identical (`UNCHANGED:`)
