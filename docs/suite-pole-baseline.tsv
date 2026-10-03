@@ -76,14 +76,36 @@
 # of headroom = 17; ceiling 760 + ceil(760*17/100) = 890. Two other sessions' fixture work ran
 # alongside runs 3 and 4, so the row is a LOADED ceiling and moves down freely on a quieter run.
 #
+# RECALIBRATION AT POOL 12 -- the pool-12 row above named `ledger-reverify`, which has since been
+# sharded into four directories, so the 628s figure timed a partition that no longer exists. Same
+# recipe, in a file:// clone of origin/main at 9bbc5a50, pool 12, 231 fixture directories, the
+# durations record reset from one golden copy before every run. These three runs are cell A of the
+# inner-pool sweep recorded in .githooks/pre-push, interleaved round-robin with six runs of two
+# other cells (A B A B C A C B C). Every run exited 1 on the release-version phase alone:
+#
+#   run 1: reconcile-emit-report 553s, wall 1126s, load average  3.02 at start, suite 228/228
+#   run 3: reconcile-emit-report 545s, wall 1144s, load average  6.94 at start, suite 228/228
+#   run 6: reconcile-emit-report 537s, wall 1097s, load average 17.15 at start, suite 228/228
+#
+# Row = max 553. THE BAND IS TAKEN OVER ALL NINE RUNS, NOT THE THREE, and that is a deviation from
+# the recipe, stated here so it is not mistaken for one. `reconcile-emit-report` opens no inner
+# pool -- none of the sweep's eleven constant edits touches it -- and it was the pole in all nine
+# runs, so every run is a load sample of the SAME unchanged unit: 553 545 537 | 533 627 541 |
+# 543 662 534 across loads 3.0 to 48.7. The three-run spread alone is ceil((553-537)/537*100) = 3,
+# band 11, ceiling 614 -- which two of these nine readings of an unchanged unit already exceed, so
+# it would be a red on an ordinary busy push. Over nine: ceil((662-533)/533*100) = 25, plus 8
+# points of headroom = 33; ceiling 553 + ceil(553*33/100) = 736. That is still below the 754 the
+# old row allowed, so the ceiling ratchets down.
+#
 # RATCHET HISTORY -- one line per change to the row, with its measurement and the load beside it.
 #   v0.583.0  ledger-reverify 628  band 20  jobs 12  fixtures 201  (max of 628/563/562, loads 50.56/9.06/5.30)
 #   v0.705.0  gate-adjudication-mutants 760  band 17  jobs 16  fixtures 227  (max of 760/727/702, loads 4.49/47.85/36.56)
+#   v0.717.0  reconcile-emit-report 553  band 33  jobs 12  fixtures 231  (max of 553/545/537, loads 3.02/6.94/17.15; band over 9 runs 533-662)
 #
-# band: 20
+# band: 33
 # jobs: 12
-# fixtures: 201
-ledger-reverify 628
+# fixtures: 231
+reconcile-emit-report 553
 #
 # band: 17
 # jobs: 16

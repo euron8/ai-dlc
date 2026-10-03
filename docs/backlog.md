@@ -414,6 +414,33 @@ Carried over from `docs/plans/pre-push-wall-clock.md`, which is otherwise discha
 
 verify: manual
 
+**SWEPT AT BATCH 189, ON THE OPERATOR'S BATCH-188 RULING** that a measurement sweep on an unpushed
+throwaway branch may force `AI_DLC_FIXTURE_NO_SKIP=1`. A file:// clone of `9bbc5a50`, pool 12, three
+cells as one commit each on an unpushed branch (all eleven constants, including
+`validator-arm-selection`'s `VAS_INNER_POOL_WIDTH` default): A as shipped, B every pool at 1 (the
+control), C every pool doubled. Durations reset from one golden copy before every run; cells visited
+A B A B C A C B C. Suite 228/228 on every A run; B and C red only on the width self-probes that pin the
+shipped defaults (`validator-arm-selection`, `layer-reference-resolution`), which is the cell, not a
+regression.
+
+| cell | wall s | pole (all nine: `reconcile-emit-report`) s |
+|---|---|---|
+| A shipped | 1126 1144 1097 | 553 545 537 |
+| B all 1 | 1179 1323 1199 | 533 627 541 |
+| C doubled | 1164 1254 1082 | 543 662 534 |
+
+Per pooled unit, seconds (A reps 2-3 / B reps 1-3 / C reps 1-3; rep 1 of A was not captured per unit):
+consumer-machinery-home 67 66 / 249 256 258 / 117 63 57; crosswalk-home-declaration 46 44 / 168 173
+173 / 45 42 45; enforcement-map-derivations 66 61 / 96 94 105 / 66 64 59; enforcement-map-sites 51 47
+/ 66 63 66 / 98 72 58; layer-contract-conformance 63 61 / 111 107 116 / 63 61 54;
+layer-reference-resolution 116 111 / 286 280 285 / 106 91 89; ledger-status-vocabulary 156 152 / 446
+490 456 / 112 161 111; self-update-join-gate 44 37 / 107 115 110 / 36 41 36; trunk-audit-mutants 44 37
+/ 186 201 196 / 27 30 28; wait-stale-deliverable 11 11 / 67 69 68 / 7 8 8; validator-arm-selection 225
+220 / 295 364 303 / 199 265 194.
+
+B separates from A (the control works); A and C overlap. The constants stay: the narrowest setting in
+the indistinguishable band. `.githooks/pre-push` records the table in place of "it is owed".
+
 ---
 
 ## BL-071 — `ledger-rotate.sh`'s split-refusal can be silenced by a body line that mentions the annotation form
@@ -997,6 +1024,16 @@ another unit is longest, and it does not fail. The pool-16 block (`gate-adjudica
 unaffected.
 
 verify: manual -- re-taking the row needs the file's own calibration recipe: three serial full runs under `AI_DLC_FIXTURE_NO_SKIP=1` at pool 12. That forced full run is one the operator has not authorised, so no session can produce the measurement that would close this, and a receipt keyed on the row's text would close it on an edit with no measurement behind it.
+
+**RE-TAKEN AT BATCH 189**, on the operator's batch-188 ruling, as cell A of BL-004's sweep: three
+serial forced runs in a file:// clone of `9bbc5a50`, pool 12, 231 fixture directories. Pole
+`reconcile-emit-report` 553 / 545 / 537 at loads 3.02 / 6.94 / 17.15; suite 228/228 each. Row 553.
+The band is taken over all nine sweep runs (533-662), because that unit opens no inner pool and was the
+pole in every run, so all nine are load samples of one unchanged unit; the three-run band (11, ceiling
+614) would already be exceeded by two of them. Band 33, ceiling 736, down from 754. The file states
+the deviation beside the row. `validate-suite-pole.sh` against the operator checkout's last green
+record reads pole `gate-adjudication-mutants` 518 under that ceiling and prints the pole-moved NOTE:
+the two units are co-poles at pool 12 (gate-adjudication-mutants ran 483-610 across the sweep).
 
 ## BL-436 — `validate-enforcement-map.sh` arms I81, I91, I94 and I95 read the process cwd, so a seeded tree's validator answered about whichever tree it was run from
 

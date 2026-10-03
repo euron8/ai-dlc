@@ -380,11 +380,28 @@ step "agent definitions (the shipped renderer runs, and says which of its three 
 # is recorded as one; the measurement establishes only that 12 is not slower.
 #
 # WHAT IS NOT ESTABLISHED HERE. That 12 beats 16 -- the ranges overlap and this does not claim
-# it. And the INNER POOLS were not swept: ELEVEN fixtures open their own `xargs -P`
-# totalling 70 workers on top of this one, and they cannot be varied by an environment
-# variable, because `enforcement-map-sites/run.sh` scrubs every ambient AI_DLC_* name for I10
-# and I87 binds any key a shipped program dereferences. Sweeping them means editing constants
-# on a throwaway branch, and it is owed.
+# it.
+#
+# THE INNER POOLS, SWEPT. ELEVEN fixtures open their own `xargs -P`, totalling 70 workers on top
+# of this one. They cannot be varied by an environment variable -- `enforcement-map-sites/run.sh`
+# scrubs every ambient AI_DLC_* name for I10, and I87 binds any key a shipped program
+# dereferences -- so the sweep edited the eleven constants on an unpushed branch of a file://
+# clone, one commit per cell, at this pool of 12, with the same design as above: dispatched set
+# pinned by AI_DLC_FIXTURE_NO_SKIP=1, durations reset from one golden copy before every run, cells
+# visited round-robin (A B A B C A C B C), three runs each. Wall seconds:
+#
+#     B  every inner pool at 1         [1179, 1323]
+#     A  the constants as shipped      [1097, 1144]
+#     C  every inner pool doubled      [1082, 1254]
+#
+# B IS THE CONTROL AND IT SEPARATED: its range does not overlap A's. Per unit it is not close --
+# at width 1 trunk-audit-mutants ran 186-201s against 37-44s, consumer-machinery-home 249-258s
+# against 66-67s, ledger-status-vocabulary 446-490s against 152-156s -- so the response variable
+# does see the pools. A AND C OVERLAP, so doubling every pool buys no wall clock this sweep can
+# resolve. The suite stays bound by `reconcile-emit-report`, which opens no inner pool and was the
+# longest unit in all nine runs. The constants stay as they are: they are the narrowest setting in
+# the indistinguishable band, which leaves the most machine to everything else, the same ruling
+# as the outer pool's. Per-unit costs are recorded in BL-004's archived entry.
 #
 # THE NUMBER IS MEASURED ON ONE MACHINE. That is why it stays the tunable
 # AI_DLC_FIXTURE_JOBS: on a smaller box, re-measure rather than inherit this.
