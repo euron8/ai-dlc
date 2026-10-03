@@ -381,6 +381,10 @@ p_knob() { # E2: a value over 9 digits refuses before arithmetic; a 9-digit thre
   part_refused "$KEY '18446744073709551617' is longer than 9 digits" "$d" || return 1
   run_part "$sd" "$REPO_B" "$B_BASE" "$B_SHA" --min-files 4 --max-parts 18446744073709551617 --shard-dir "$d"
   part_refused "--max-parts '18446744073709551617' is longer than 9 digits" "$d" || return 1
+  # 65, not a 9-digit K: with the ceiling mutated away a 9-digit K spins the packer, and the
+  # arm must die by a map appearing, not by the fixture hanging.
+  run_part "$sd" "$REPO_B" "$B_BASE" "$B_SHA" --min-files 4 --max-parts 65 --shard-dir "$d"
+  part_refused "--max-parts 65 is above 64" "$d" || return 1
   run_part "$sd" "$REPO_B" "$B_BASE" "$B_SHA" --min-files 999999999 --shard-dir "$d"
   [ "$PRC" -eq 3 ] && has "$PO" "SERIAL:" && [ ! -e "$d/.manifest" ]
 }
@@ -598,6 +602,8 @@ mutant "MX18 a shard without ## Findings is not refused" merge-review-shards.sh 
 mutant "MX19 the 9-digit cap removed" partition-review-diff.sh "knob" \
   '  case "$MINF" in ??????????*) refuse' '  case "$MINF" in NEVER) refuse' \
   'case "$MAXP" in ??????????*) refuse' 'case "$MAXP" in NEVER) refuse'
+mutant "MX20 the 64-part ceiling removed" partition-review-diff.sh "knob" \
+  '[ "$MAXP" -le 64 ] || refuse' '[ "$MAXP" -le 64 ] || true'
 
 echo
 if [ "$fails" -eq 0 ]; then echo "$NAME: PASS"; exit 0; fi

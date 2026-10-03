@@ -25,8 +25,8 @@
 #
 # THRESHOLD, OPT-IN. `--min-files N` wins; otherwise `AI_DLC_REVIEW_SHARD_MIN_FILES`. With
 #   neither set the answer is SERIAL, naming the variable. N must be a positive integer.
-#   `--max-parts K` (default 4) must be an integer >= 2. Either value longer than 9 digits is
-#   REFUSED before any arithmetic, which would otherwise wrap it.
+#   `--max-parts K` (default 4) must be an integer from 2 to 64. Either value longer than 9
+#   digits is REFUSED before any arithmetic, which would otherwise wrap it.
 #
 # THE PART SET -- nothing else in core may restate it; callers read `--map`.
 #   1. FILES. `git -C <worktree> diff --numstat --no-renames <base>..<frozen-sha>` -- TWO dots,
@@ -104,6 +104,9 @@ case "$MAXP" in ""|*[!0-9]*) refuse "--max-parts '$MAXP' is not an integer" ;; e
 case "$MAXP" in ??????????*) refuse "--max-parts '$MAXP' is longer than 9 digits; shell arithmetic would wrap it" ;; esac
 MAXP=$((10#$MAXP))
 [ "$MAXP" -ge 2 ] || refuse "--max-parts $MAXP is below 2; a one-part review is SERIAL, not a partition"
+# A CEILING, NOT ONLY A WRAP GUARD. The packer below loops to K, so a 9-digit K passes the cap
+# above and then spins instead of refusing. 64 is far past any reviewer fan-out.
+[ "$MAXP" -le 64 ] || refuse "--max-parts $MAXP is above 64; the packer loops to K"
 
 [ -d "$WT" ] || refuse "no worktree directory at $WT"
 WT_ABS="$(cd "$WT" 2>/dev/null && pwd -P)" || refuse "cannot enter $WT"
