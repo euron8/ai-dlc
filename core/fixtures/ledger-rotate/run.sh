@@ -1045,15 +1045,42 @@ printf '%s' '# Push-candidate ledger
 ' > "$RG/fp-receipt-above.md"
 fp_check fp-receipt-above "SUBJECT DEFECT" "a closed entry that carries its OWN receipt above the boundary still rotates — nothing can be stranded, so there is no damage to refuse on"
 
-# (5) An entry that merely QUOTES the annotation form. The strict close test already refuses to
-# archive on a quotation (PC-S331 above); the refusal guard must not read one as a close either.
+# (5) THIS ONE IS NOT A FALSE POSITIVE EITHER, AND THE ARM REQUIRES THE REFUSAL, on fp-open`s
+# rationale above. A colon-less line inside a closed entry, whose body only QUOTES the
+# annotation form in backticks, carries no close of its own: a quotation is not a close. That
+# leaves it exactly fp-open`s shape -- a prose-titled line with a receipt below it, which
+# nothing can tell from an annotation lead-in -- and the same asymmetry decides it: a wrong
+# refusal costs a two-line edit, a wrong rotation strands the closed entry`s receipt. The
+# escape is the one the refusal text names: give the entry a close or an id. This arm used to
+# require silence; the guard read the backticked quotation as a close, which is the defect.
 rg_write fp-quotes '- **A real entry that QUOTES the annotation form** in its own body
 
   Annotate it `ADOPTED UPSTREAM (vX.Y.Z, verified <date>)` once the grep is non-zero.
 
   verify: theirs_has core/scripts/thing.sh "MARKER_A"
 '
-fp_check fp-quotes "SUBJECT DEFECT" "an entry that merely QUOTES the annotation form still rotates"
+# THIS ARM SHIPS AHEAD OF THE ROTATOR IT GUARDS, as the BL-071 block below does, and is gated on
+# the same key: the loose suppressor reading the line with its inline code removed. A consumer
+# whose installed rotator predates that SKIPS it; in the distribution a missing key is a failure,
+# because a key that matches nothing would otherwise skip these arms on every consumer forever.
+case "$ROT" in */core/skills/ai-dlc-update/reconcile/ledger-rotate.sh) C71_ISDIST=1 ;; *) C71_ISDIST=0 ;; esac
+C71_KEY='ledger_entry_line_closes(ledger_strip_inline_code($0))'
+C71_RUN=1
+if ! grep -qF "$C71_KEY" "$ROT"; then
+  if [ "$C71_ISDIST" = 0 ]; then
+    printf '  SKIP  BL-071 inline-code arms -- the installed ledger-rotate.sh predates the inline-code strip; it lands with the pull that carries this fixture\n'
+  else
+    bad "BL-071: the distribution ledger-rotate.sh does not carry the ship-ahead key '$C71_KEY' -- re-anchor the key on the fixed line, or every consumer SKIPS these arms forever"
+  fi
+  C71_RUN=0
+fi
+if [ "$C71_RUN" = 0 ]; then
+  :
+elif rg_refused fp-quotes; then
+  ok "REFUSES a colon-less entry whose body only QUOTES the annotation form — INTENDED: a quotation is not a close, so the line is as unclassifiable as fp-open"
+else
+  bad "the guard rotated a ledger whose colon-less suspect is silenced only by a backticked QUOTATION of the close form — the quotation was read as a close and the split strands the receipt"
+fi
 
 # --- THE CLOSE VOCABULARY REACHES BOTH SIDES OF THIS GUARD, AND THEY FAIL OPPOSITE WAYS ------
 #
@@ -1765,82 +1792,182 @@ else
 fi
 rm -rf "$BLM" "$BLW"
 
-# --- BL-071: A COLON LEAD-IN IS NOT SILENCED BY A BODY LINE THAT MERELY QUOTES THE FORM ------
+# --- BL-071: A QUOTATION IS NOT A CLOSE, FOR EITHER SUSPECT SHAPE ---------------------------
 #
 # The suppressor that clears a suspect used to be the LOOSE close rule for every suspect, so a
-# `- **Note:**` lead-in inside a closed entry, whose body QUOTES the annotation form, scored as
-# carrying its own close and the split shipped. A label ending in a colon is a lead-in by shape,
-# so for THAT suspect the suppressor is the archive grammar. The colon-less mention (fp-quotes
-# above) keeps the loose rule, and it must still stay silent -- that half is the surviving one.
+# lead-in inside a closed entry, whose body only QUOTES the annotation form, scored as carrying
+# its own close and the split shipped. Two branches now. A label ending in a colon is a lead-in
+# by shape, so its suppressor is the archive grammar, unstripped. Every other suspect keeps the
+# loose rule, read against the line with its inline code removed: balanced double-backtick
+# spans, then balanced single ones, then a lone backtick to end of line.
 #
-# THIS FIXTURE SHIPS AHEAD OF THE ROTATOR IT GUARDS, so a consumer whose installed rotator
-# predates the fix SKIPS these arms; in the distribution they run and a pre-fix rotator goes red.
-case "$ROT" in */core/skills/ai-dlc-update/reconcile/ledger-rotate.sh) C71_ISDIST=1 ;; *) C71_ISDIST=0 ;; esac
-C71_RUN=1
-if ! grep -qF 'susp_colon ? ledger_body_archives($0) : ledger_entry_line_closes($0)' "$ROT"; then
-  if [ "$C71_ISDIST" = 0 ]; then
-    printf '  SKIP  BL-071 colon arms -- the installed ledger-rotate.sh predates the colon suppressor; it lands with the pull that carries this fixture\n'
-    C71_RUN=0
-  else
-    printf '  --    (BL-071: this ledger-rotate.sh carries no colon suppressor; in the distribution the arms run anyway and must go red)\n'
-  fi
-fi
+# EVERY SEED BELOW HAS A SUBJECT NO OTHER SEED COVERS, and the mutants prove it: each one moves
+# only the cells its own seeds own. Gated on C71_RUN, which arm (5) above computes from the
+# ship-ahead key, so a consumer on a pre-fix rotator SKIPS this block with one line.
 if [ "$C71_RUN" = 1 ]; then
+  C71_V='  verify: theirs_has core/scripts/thing.sh "MARKER_A"
+'
   rg_write colon-mention '- **Note:** an annotation lead-in whose body QUOTES the annotation form
 
   Annotate it `ADOPTED UPSTREAM (vX.Y.Z, verified <date>)` once the grep is non-zero.
 
-  verify: theirs_has core/scripts/thing.sh "MARKER_A"
-'
+'"$C71_V"
   rg_write colon-closed '- **Note:** a colon-titled line that carries a genuine bolded close of its own
 
   **ADOPTED UPSTREAM (v0.100.0, verified 2026-01-01).** Upstream took it.
 
-  verify: theirs_has core/scripts/thing.sh "MARKER_A"
-'
-  c71_arms() { # <rotator> -> prints three verdict letters: colon-mention colon-closed fp-quotes (R refused, S silent)
-    local r f out rc
-    for f in colon-mention colon-closed fp-quotes; do
+'"$C71_V"
+  rg_write nocolon '- **Note** a lead-in with no colon
+
+  Annotate it `ADOPTED UPSTREAM (vX.Y.Z, verified <date>)` once the grep is non-zero.
+
+'"$C71_V"
+  # A LONE BACKTICK BEFORE THE TOKEN: the span never closes on this line, so only the
+  # lone-backtick-to-end-of-line deletion removes the token.
+  rg_write nocolon-odd '- **Note** a lead-in with no colon
+
+  Annotate it `ADOPTED UPSTREAM (vX.Y.Z, verified <date>) once the grep is non-zero.
+
+'"$C71_V"
+  # THE MENTION WRAPPED ACROSS TWO LINES: the opening backtick is on the line carrying the token.
+  rg_write nocolon-twoline '- **Note** a lead-in with no colon
+
+  Annotate it `ADOPTED UPSTREAM (vX.Y.Z,
+  verified <date>)` once the grep is non-zero.
+
+'"$C71_V"
+  rg_write nocolon-dbl '- **Note** a lead-in with no colon
+
+  Annotate it ``ADOPTED UPSTREAM (vX.Y.Z, verified <date>)`` once the grep is non-zero.
+
+'"$C71_V"
+  # A REAL BOLDED CLOSE BELOW A QUOTED MENTION: the strip removes the quotation and must leave
+  # the bold span, or a genuinely closed entry is refused.
+  rg_write realclose-afterquote '- **A real entry that QUOTES the form and then closes** in its own right
+
+  Annotate it `ADOPTED UPSTREAM (vX.Y.Z, verified <date>)` once the grep is non-zero.
+
+  **ADOPTED UPSTREAM (v0.2.0, verified 2026-01-02).** closed in its own right
+
+'"$C71_V"
+  # A COLON SUSPECT WHOSE BOLD SPAN OPENS ON A BACKTICKED NAME. The archive grammar rejects it,
+  # because its bold span may not contain a backtick; stripping the colon branch would delete the
+  # name and leave `**  ADOPTED UPSTREAM`, which the archive grammar accepts. The colon branch is
+  # therefore NOT stripped, and this seed is the one that says so.
+  rg_write colon-btbold '- **Note:** a colon lead-in whose bold span opens on a backticked name
+
+  **`foo.sh` ADOPTED UPSTREAM (v0.2.0, verified 2026-01-02).** a name, not a close
+
+'"$C71_V"
+  # A QUOTATION ON THE SUSPECT BOUNDARY LINE ITSELF, for each label shape. The boundary line is
+  # read with its inline code removed too, so neither is silenced by the span it carries.
+  rg_write title-nocolon '- **Note** annotate it `ADOPTED UPSTREAM (vX.Y.Z, verified <date>)` once the grep is non-zero
+
+'"$C71_V"
+  rg_write title-colon '- **Note:** annotate it `ADOPTED UPSTREAM (vX.Y.Z, verified <date>)` once the grep is non-zero
+
+'"$C71_V"
+  # A REAL BARE CLOSE AFTER A SPAN ON THE SAME LINE, in the reference consumer`s own legacy body
+  # shape. The balanced single-span removal must delete the NAME and leave the close; deleting
+  # nothing there lets the lone-backtick rule eat the close and refuses a real entry.
+  rg_write close-after-span '- **A real entry** in the legacy body shape
+
+- `validate-provenance-block.sh` → ADOPTED UPSTREAM (v0.135.0). Stock carries it.
+
+'"$C71_V"
+  # A REAL BARE CLOSE BETWEEN TWO SPANS. Each span is removed on its own; a greedy span from the
+  # first backtick to the last would swallow the close.
+  rg_write close-between-spans '- **A real entry** with spans around a close
+
+  `a.sh` ADOPTED UPSTREAM (v0.2.0, verified 2026-01-02). `b.sh`
+
+'"$C71_V"
+  C71_SEEDS="splitter colon-mention nocolon nocolon-odd nocolon-twoline nocolon-dbl fp-quotes colon-closed fp-legacy fp-versionless realclose-afterquote colon-btbold title-nocolon title-colon close-after-span close-between-spans"
+  C71_WANT=RRRRRRRSSSSRRRSS
+  c71_cells() { # <rotator> -> one letter per seed in C71_SEEDS order (R refused, S rotates, E died)
+    local r="" f out rc
+    set -f
+    for f in $C71_SEEDS; do
       out="$(bash "$1" "$RG/$f.md" 2>&1)"; rc=$?
-      if [ "$rc" -ne 0 ] && grep -q 'REFUSING to rotate' <<<"$out"; then r="${r:-}R"; else r="${r:-}S"; fi
+      if [ "$rc" -ne 0 ] && grep -q 'REFUSING to rotate' <<<"$out"; then r="${r}R"
+      elif [ "$rc" -eq 0 ]; then r="${r}S"
+      else r="${r}E"; fi
     done
+    set +f
     printf '%s\n' "$r"
   }
-  c71_ship="$(c71_arms "$ROT")"
-  case "$c71_ship" in
-    R??) ok "BL-071: a COLON lead-in whose body only QUOTES the annotation form is REFUSED — a mention no longer silences the guard for a lead-in" ;;
-    *)   bad "BL-071: a colon lead-in inside a closed entry, whose body only QUOTES the close form, was NOT refused — the quotation silenced the guard and the split strands the receipt" ;;
-  esac
-  case "$c71_ship" in
-    ?S?) ok "  and a colon-titled line with a GENUINE bolded close of its own still rotates — the archive grammar honours a real close" ;;
-    *)   bad "  a colon-titled line carrying a genuine bolded close was REFUSED — the colon suppressor is too tight and wedges a correct rotation" ;;
-  esac
-  case "$c71_ship" in
-    ??S) ok "  and the colon-LESS quoting entry (fp-quotes) still rotates — the loose rule stays for every non-colon suspect" ;;
-    *)   bad "  the colon-less fp-quotes entry was REFUSED — the fix widened past the colon subclass and re-opened the false positive" ;;
-  esac
-
-  # MUTANT: revert the colon suppressor to the loose rule for every suspect. ONLY the
-  # colon-mention cell may move; the other two are the controls that it is not entangled.
-  C71M="$WORK/c71-mutant"; rm -rf "$C71M"; mkdir -p "$C71M"
-  cp "$(dirname "$ROT")"/*.sh "$C71M"/ 2>/dev/null
-  sed 's@if (susp_at \&\& (susp_colon ? ledger_body_archives(\$0) : ledger_entry_line_closes(\$0))) susp_closed = 1@if (ledger_entry_line_closes($0) \&\& susp_at) susp_closed = 1@' \
-    "$ROT" > "$C71M/ledger-rotate.sh"
-  if cmp -s "$ROT" "$C71M/ledger-rotate.sh"; then
-    bad "  FIXTURE BROKEN — the BL-071 revert mutation matched nothing, so the colon arm is unproven"
-  elif [ ! -f "$C71M/lib.sh" ]; then
-    bad "  FIXTURE BROKEN — the BL-071 mutant copy has no lib.sh beside it, so its verdicts are a copy that cannot run"
-  else
-    c71_mut="$(c71_arms "$C71M/ledger-rotate.sh")"
-    c71_ctl="$(bash "$C71M/ledger-rotate.sh" "$RG/splitter.md" 2>&1)"
-    if ! grep -q 'REFUSING to rotate' <<<"$c71_ctl"; then
-      bad "  MUTATION BL-071: the mutant no longer refuses the plain splitter, so it is not a working rotator and its verdict is not attributable"
-    elif [ "$c71_mut" = "SSS" ]; then
-      ok "  MUTATION BL-071: with the loose suppressor restored ONLY the colon-mention cell moves (R->S) — the arm is bound to the colon subclass"
+  c71_ship="$(c71_cells "$ROT")"
+  c71_i=0
+  set -f
+  for c71_f in $C71_SEEDS; do
+    c71_i=$((c71_i + 1))
+    c71_w="$(printf '%s' "$C71_WANT" | cut -c"$c71_i")"
+    c71_g="$(printf '%s' "$c71_ship" | cut -c"$c71_i")"
+    case "$c71_w" in R) c71_say="REFUSED" ;; *) c71_say="rotates" ;; esac
+    if [ "$c71_g" = "$c71_w" ]; then
+      ok "BL-071 cell $c71_f: $c71_say, as ruled"
     else
-      bad "  MUTATION BL-071: expected SSS under the reverted suppressor and read $c71_mut — the colon arm is not attributable to the line it guards"
+      bad "BL-071 cell $c71_f: expected $c71_w and read $c71_g (cells $c71_ship, want $C71_WANT) — a quotation silenced the guard, or a real close stopped silencing it"
     fi
+  done
+  set +f
+
+  # MUTANTS. Each is a copy of the whole reconcile dir with ONE literal replaced exactly once,
+  # by index rather than by sed, because most of the anchors carry backticks, stars and an
+  # ampersand pair. A replacement count other than 1 is a broken mutation, never a kill.
+  c71_mkmut() { # <dir> <old literal> <new literal> -> 0 iff exactly one replacement
+    rm -rf "$1"; mkdir -p "$1"; cp "$(dirname "$ROT")"/*.sh "$1"/ 2>/dev/null
+    C71_OLD="$2" C71_NEW="$3" awk '
+      BEGIN { o = ENVIRON["C71_OLD"]; n = ENVIRON["C71_NEW"]; c = 0 }
+      { i = index($0, o); if (i > 0) { c++; $0 = substr($0, 1, i - 1) n substr($0, i + length(o)) } print }
+      END { exit (c == 1 ? 0 : 3) }' "$ROT" > "$1/ledger-rotate.sh"
+  }
+  c71_mut() { # <name> <old literal> <new literal> <expected cells>
+    local d="$WORK/c71-mut-$1" got
+    if ! c71_mkmut "$d" "$2" "$3"; then bad "  FIXTURE BROKEN — BL-071 mutation $1 did not replace its anchor exactly once"; return; fi
+    if cmp -s "$ROT" "$d/ledger-rotate.sh"; then bad "  FIXTURE BROKEN — BL-071 mutation $1 changed nothing"; return; fi
+    if [ ! -f "$d/lib.sh" ]; then bad "  FIXTURE BROKEN — BL-071 mutation $1 has no lib.sh beside it"; return; fi
+    got="$(c71_cells "$d/ledger-rotate.sh")"
+    if [ "$got" = "$4" ] && [ "$got" != "$c71_ship" ]; then ok "  MUTATION BL-071 $1: cells $c71_ship -> $got, only its own seeds move"
+    else bad "  MUTATION BL-071 $1: expected cells $4 and read $got"; fi
+  }
+  # THE CONTROL: an unmutated copy in a sibling dir, and a mkmut on an anchor that exists nowhere
+  # must REFUSE -- so a replacement count is genuinely read. Positive conjunct: the control reads
+  # the shipped cells, which carry R cells a copy that cannot run never prints.
+  if c71_mkmut "$WORK/c71-ctl-none" 'C71 NO SUCH ANCHOR' 'x'; then
+    bad "  FIXTURE BROKEN — the BL-071 mutation helper accepted an anchor that exists nowhere, so no mutant below proves its replacement happened"
+  else
+    ok "  BL-071 mutation helper refuses an anchor that exists nowhere (the replacement count is read)"
   fi
+  c71_ctl="$WORK/c71-ctl"; rm -rf "$c71_ctl"; mkdir -p "$c71_ctl"; cp "$(dirname "$ROT")"/*.sh "$c71_ctl"/ 2>/dev/null
+  if [ "$(c71_cells "$c71_ctl/ledger-rotate.sh")" = "$C71_WANT" ]; then
+    ok "  unmutated control copy reads $C71_WANT (the mutant harness runs a working rotator)"
+  else
+    bad "  FIXTURE BROKEN — the unmutated BL-071 copy does not read $C71_WANT, so no mutant verdict below is attributable"
+  fi
+  # strip the colon branch too: colon-btbold archives on a stripped name
+  c71_mut strip-both-branches 'susp_colon ? ledger_body_archives($0) :' \
+    'susp_colon ? ledger_body_archives(ledger_strip_inline_code($0)) :' RRRRRRRSSSSSRRSS
+  # strip bold as well as code: every real bolded close is deleted, on the boundary line too
+  c71_mut strip-also-removes-bold '    sub(/`.*$/, "", l)' \
+    '    sub(/`.*$/, "", l); gsub(/\*\*[^*]*\*\*/, "", l)' RRRRRRRSRRRRRRSS
+  # balanced spans only: a lone or wrapped backtick leaves the token in place
+  c71_mut balanced-only '    sub(/`.*$/, "", l)' '    l = l' RRRSSRRSSSSRRRSS
+  # single spans only: a double-backtick span pairs wrongly and its token survives
+  c71_mut no-double-span '    gsub(/``([^`]|`[^`])*``/, "", l)' '    l = l' RRRRRSRSSSSRRRSS
+  # no balanced single-span removal: the lone-backtick rule eats a real close after a name
+  c71_mut drop-single-span-gsub '    gsub(/`[^`]*`/, "", l)' '    l = l' RRRRRRRSRSSRRRRR
+  # one greedy span: a real close between two spans is swallowed
+  c71_mut greedy-single-gsub '    gsub(/`[^`]*`/, "", l)' '    gsub(/`.*`/, "", l)' RRRRRRRSSSSRRRSR
+  # no strip in the loose body branch: the colon-less half of the mention class is silenced again
+  c71_mut strip-off ': ledger_entry_line_closes(ledger_strip_inline_code($0))' \
+    ': ledger_entry_line_closes($0)' RRSSSSSSSSSRRRSS
+  # the pre-colon rule for every suspect: the colon lead-in is silenced too
+  c71_mut colon-revert 'susp_colon ? ledger_body_archives($0) : ledger_entry_line_closes(ledger_strip_inline_code($0))' \
+    'ledger_entry_line_closes($0)' RSSSSSSSSSSSRRSS
+  # the boundary line read unstripped: a quotation on the suspect line silences both shapes
+  c71_mut boundary-unstripped 'if (ledger_entry_line_closes(ledger_strip_inline_code($0))) susp_closed = 1' \
+    'if (ledger_entry_line_closes($0)) susp_closed = 1' RRRRRRRSSSSRSSSS
 fi
 
 # --- BL-006: AN ENTRY-COUNT CEILING THAT WARNS AND STILL ROTATES -----------------------------

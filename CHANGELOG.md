@@ -19,6 +19,28 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.719.0] - 2026-10-03
+
+Batch 191's first release. It closes `BL-071`. A colon-less suspect bullet whose body only
+quotes the close annotation in backticks no longer silences `ledger-rotate.sh`'s split
+refusal. It ships alone because `ledger-rotate.sh` is a bootstrapping file. It discharges
+no consumer candidate.
+
+### BL-071: a backticked quotation of the close form no longer silences the split refusal
+
+- `ledger_strip_inline_code()` removes double-backtick spans, then single-backtick spans, then
+  a lone backtick to end of line. The loose (colon-less) branch of the suppressor and the
+  suspect's own boundary line are tested on the stripped line. The colon branch is unchanged.
+- Operator ruling at batch 191: the `fp-quotes` seed is now an intended refusal, on `fp-open`'s
+  rationale. Such an entry escapes by giving itself a close or an id, as the refusal text says.
+- `core/fixtures/ledger-rotate` gains seven seeds and re-anchors its ship-ahead key. Nine
+  mutants each move only their own seeds. On a consumer whose installed rotator predates the
+  fix, the new arms SKIP. In the distribution, a missing key FAILS.
+- Consumer differential, base against fix, over 164 live-ledger and 70 archive revisions of the
+  reference consumer plus both working files: 236 inputs, 0 verdict changes.
+- Still silencing the guard: straight quotes, a fenced block, an unquoted mention beside a
+  quoted one, and a token on the continuation line of a wrapped span.
+
 ## [0.718.0] - 2026-10-03
 
 Batch 189's third release. It discharges the reference consumer's
