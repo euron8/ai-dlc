@@ -874,21 +874,33 @@ of `25ac399d`:
   greps, never at K=1 or K=2, and never serially at 26.6k reports, so concurrency is the variable
   and volume is not. At inner width 1 it traced clean from load 34.8: 0 drops, 956 paths, covering
   every committed non-`.git` row except 9 rows for files no longer in the tree, plus 122 new rows.
-- `enforcement-map-sites` still drops at width 1. Its drops come from its `cp -R` seed.
+- `enforcement-map-sites` dropped 1445 reports on the diagnosis hand's run, made with the sibling
+  pool at width 1. The knob does not reach it: its own pool is a hard-coded `JOBS=8`, so "at
+  width 1" does not describe it. Its drops come from its `cp -R` seed.
 - `apply-drift-refile` and `reconcile-emit-report` drop on load-dependent upstream events.
 
 The fix: `core/scripts/derive-fixture-readsets.sh` launches every traced fixture as
 `... env VAS_INNER_POOL_WIDTH=1 bash <run.sh>` on both launch lines, after `sudo -u` and
-`sandbox-exec`, because sudo's env_reset strips an export or a prefix in front of either.
+`sandbox-exec`. Under `fs_usage` and `--tracer both` the fixture runs through sudo, whose
+env_reset strips an export or a prefix in front of it. Under `--tracer sandbox` no sudo is on the
+path, so a prefix in front of `sandboxed` would survive there; the `env` form is used on every
+path so that one spelling holds under all three tracers.
 `core/fixtures/validator-arm-selection/run.sh` resolves `JOBS` once from
-`${VAS_INNER_POOL_WIDTH:-6}`, refuses a value that is not an integer >= 1 with exit 2, and prints
-`inner pool width: N`. The width changes the schedule, not the work, so a set traced at width 1
-is the set at width 6. The knob carries no `AI_DLC_` prefix as future-proofing against the fixture env scrubs keyed on
-it; no scrub is on this path today.
-Held by `validator-arm-selection` (phase `width`: unset gives 6, 1 gives 1, 0 and `abc` exit 2)
-and `core/fixtures/readset-skip` (a copy of the real deriver traces a probe that echoes the knob
-and must log `width=1`; the same probe outside the deriver logs `unset`; a deriver copy with the
-injection removed fails the arm). The re-trace is evidenced by `inner pool width: 1` in
+`${VAS_INNER_POOL_WIDTH:-6}`, refuses a value that is not an integer from 1 to 64 with exit 2
+(more than 3 digits is refused before any numeric test, which a 20-digit value would overflow),
+and prints `inner pool width: N`. The width changes the schedule, not the work, so a set traced
+at width 1 is the set at width 6. The knob carries no `AI_DLC_` prefix as future-proofing against
+the fixture env scrubs keyed on it; no scrub is on this path today.
+Held by `validator-arm-selection` (phase `width`: unset gives 6, 1 gives 1, 64 gives 64; 0, `abc`,
+65 and a 20-digit value exit 2; and a source-text check that both `xargs` pool sites read
+`"$JOBS"` and `JOBS` is assigned once) and `core/fixtures/readset-skip` (under `--tracer
+sandbox` a copy of the real deriver traces a probe that echoes the knob and must log `width=1`,
+the same probe outside the deriver logs `unset`, and a deriver copy with the injection removed
+fails the arm; under `--tracer both` the stub world's sudo strips the knob as env_reset does, and
+fxa must log `width=1`, which the injection moved in front of sudo, the `sandboxed` launch
+dropping it, and a `VAS_INNER_POOL_WIDTH=1 sandboxed` prefix each fail). The `fs_usage` launch
+line runs only as root and is covered only by the operator's own run.
+The re-trace evidence is PENDING the lead's trace: it is `inner pool width: 1` in
 `$TRACE_ROOT/w/validator-arm-selection-b.log`.
 
 **Do NOT switch the stream to `--style ndjson` to cut the report rate.** Measured: it lost up to
