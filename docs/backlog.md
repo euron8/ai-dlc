@@ -902,3 +902,54 @@ unaffected.
 
 verify: manual -- re-taking the row needs the file's own calibration recipe: three serial full runs under `AI_DLC_FIXTURE_NO_SKIP=1` at pool 12. That forced full run is one the operator has not authorised, so no session can produce the measurement that would close this, and a receipt keyed on the row's text would close it on an edit with no measurement behind it.
 
+## BL-435 — `validate-steering-budget.sh` exempts an AskUserQuestion from Check A but counts the calls issued beside it, whose duration is the same human think-time
+
+**DEFECT.**
+
+Filed by the consumer as PC-S316-STEERING-BUDGET-EXEMPTS-ASKUSERQUESTION-BUT-COUNTS-ITS-PARALLEL-SIBLINGS.
+
+**What happens.** Check A's `EXEMPT` set skips only the `AskUserQuestion` tool_use itself. A tool call
+issued in the same assistant turn gets its result only after the human answers, so its measured duration
+is the operator's think-time, and Check A counted it as STARVATION. Run against the motivating sprint-316
+session transcript (`b3da479a`), `--count` reads **6 at base** (`origin/main`, 0.713.0) and **1 at the fix**.
+The one survivor is a 120s foreground `Bash` with no AskUserQuestion beside it.
+
+**The fix.** Check A records each tool_use's `message.id`. The harness writes one record per content block,
+and every block of one turn carries the same `message.id`, so the join is on `message.id`, never on the
+record and never on timestamp proximity. A foreground call sharing a `message.id` with an answered
+AskUserQuestion is charged `res - max(start, latest answer in that message)`, which is the time it blocks
+after the answer, so a sibling that keeps blocking past the answer is still STARVATION. A record without a
+`message.id` joins nothing and is charged in full, as before. The consumer's suggested 2s
+result-timestamp window is not built. It acquits an unrelated call in another turn that merely ends near
+the answer. Checks B, C, D and `--cite` are untouched. `--count` moves with the fix, and Check 25 compares
+that count across gates.
+
+**Finding for the consumer, about its own receipt.** The consumer's `verify:` line reads CLOSE-CANDIDATE
+at 0.713.0, before any fix. Its `! grep -qiE 'sibling|same (assistant )?(turn|message)'` already fails on
+the installed `scripts/ai-dlc/validate-steering-budget.sh`, because that file contains the word "sibling"
+at about `:498`. The receipt reads only the installed copy, so it cannot tell the defect from its fix.
+
+**The receipt is behavioural.** It builds six JSONL transcripts in `mktemp -d` and drives the validator's
+`--count` on each with the budget pinned at 120s plus 30s grace. The arms are an AskUserQuestion with a
+sibling `Bash` ending at the answer (0), the same timing in a different message (1), a sibling running 3
+minutes past the answer (1), the pair with no `message.id` (1), and two AskUserQuestions in one message
+where the sibling ends at the later answer (0). A lone 5-minute `Read` must count 1 or the receipt exits 9.
+It also exits 9 if the validator or `node` is absent. Scored under `bash -c 'set -uo pipefail; <receipt>'`
+from a tree root:
+
+| Tree | Exit |
+|---|---|
+| tip `bbc83331` | 0 |
+| base `origin/main` (0.713.0) | 1 |
+| the C1 fix branch (this script byte-identical to base) | 1 |
+| `Bash` added to `EXEMPT` | 1 |
+| the join keyed on the record instead of `message.id` | 1 |
+| an unbounded sibling exemption (no charge after the answer) | 1 |
+| a 2s result-timestamp window | 1 |
+| the earliest answer in the message instead of the latest | 1 |
+| an empty `message.id` treated as a join key | 1 |
+| a second correct spelling (answers grouped per message, `Math.max` over the list) | 0 |
+
+**LANDED (v0.714.0, verified bbc83331).**
+
+verify: sh V=core/scripts/validate-steering-budget.sh; [ -f "$V" ] && command -v node >/dev/null || exit 9; d="$(mktemp -d)" || exit 9; u() { m=""; [ -n "$3" ] && m="\"id\":\"$3\","; printf '{"type":"assistant","timestamp":"2026-10-03T00:%s:00Z","message":{%s"role":"assistant","content":[{"type":"tool_use","id":"%s","name":"%s","input":{}}]}}\n' "$1" "$m" "$2" "$4" >> "$d/$5.jsonl"; }; r() { printf '{"type":"user","timestamp":"2026-10-03T00:%s:00Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"%s","content":"ok"}]}}\n' "$1" "$2" >> "$d/$3.jsonl"; }; n() { AI_DLC_STEERING_BUDGET=120 AI_DLC_STEERING_GRACE=30 bash "$V" --transcript "$d/$1.jsonl" --count 2>/dev/null; }; u 00 c1 mc Read ctl; r 05 c1 ctl; u 00 a1 mA AskUserQuestion a; u 00 a2 mA Bash a; r 05 a2 a; r 05 a1 a; u 00 b1 mB1 AskUserQuestion b; u 00 b2 mB2 Bash b; r 05 b2 b; r 05 b1 b; u 00 s1 mC AskUserQuestion c; u 00 s2 mC Bash c; r 05 s1 c; r 08 s2 c; u 00 x1 '' AskUserQuestion x; u 00 x2 '' Bash x; r 05 x2 x; r 05 x1 x; u 00 e1 mE AskUserQuestion e; u 00 e2 mE AskUserQuestion e; u 00 e3 mE Bash e; r 01 e1 e; r 05 e3 e; r 05 e2 e; [ "$(n ctl)" = 1 ] || exit 9; [ "$(n a)" = 0 ] && [ "$(n b)" = 1 ] && [ "$(n c)" = 1 ] && [ "$(n x)" = 1 ] && [ "$(n e)" = 0 ]
