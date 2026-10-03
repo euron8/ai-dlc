@@ -1859,8 +1859,31 @@ if [ "$C71_RUN" = 1 ]; then
   **`foo.sh` ADOPTED UPSTREAM (v0.2.0, verified 2026-01-02).** a name, not a close
 
 '"$C71_V"
-  C71_SEEDS="splitter colon-mention nocolon nocolon-odd nocolon-twoline nocolon-dbl fp-quotes colon-closed fp-legacy fp-versionless realclose-afterquote colon-btbold"
-  C71_WANT=RRRRRRRSSSSR
+  # A QUOTATION ON THE SUSPECT BOUNDARY LINE ITSELF, for each label shape. The boundary line is
+  # read with its inline code removed too, so neither is silenced by the span it carries.
+  rg_write title-nocolon '- **Note** annotate it `ADOPTED UPSTREAM (vX.Y.Z, verified <date>)` once the grep is non-zero
+
+'"$C71_V"
+  rg_write title-colon '- **Note:** annotate it `ADOPTED UPSTREAM (vX.Y.Z, verified <date>)` once the grep is non-zero
+
+'"$C71_V"
+  # A REAL BARE CLOSE AFTER A SPAN ON THE SAME LINE, in the reference consumer`s own legacy body
+  # shape. The balanced single-span removal must delete the NAME and leave the close; deleting
+  # nothing there lets the lone-backtick rule eat the close and refuses a real entry.
+  rg_write close-after-span '- **A real entry** in the legacy body shape
+
+- `validate-provenance-block.sh` → ADOPTED UPSTREAM (v0.135.0). Stock carries it.
+
+'"$C71_V"
+  # A REAL BARE CLOSE BETWEEN TWO SPANS. Each span is removed on its own; a greedy span from the
+  # first backtick to the last would swallow the close.
+  rg_write close-between-spans '- **A real entry** with spans around a close
+
+  `a.sh` ADOPTED UPSTREAM (v0.2.0, verified 2026-01-02). `b.sh`
+
+'"$C71_V"
+  C71_SEEDS="splitter colon-mention nocolon nocolon-odd nocolon-twoline nocolon-dbl fp-quotes colon-closed fp-legacy fp-versionless realclose-afterquote colon-btbold title-nocolon title-colon close-after-span close-between-spans"
+  C71_WANT=RRRRRRRSSSSRRRSS
   c71_cells() { # <rotator> -> one letter per seed in C71_SEEDS order (R refused, S rotates, E died)
     local r="" f out rc
     set -f
@@ -1890,7 +1913,7 @@ if [ "$C71_RUN" = 1 ]; then
   set +f
 
   # MUTANTS. Each is a copy of the whole reconcile dir with ONE literal replaced exactly once,
-  # by index rather than by sed, because three of the anchors carry backticks, stars and an
+  # by index rather than by sed, because most of the anchors carry backticks, stars and an
   # ampersand pair. A replacement count other than 1 is a broken mutation, never a kill.
   c71_mkmut() { # <dir> <old literal> <new literal> -> 0 iff exactly one replacement
     rm -rf "$1"; mkdir -p "$1"; cp "$(dirname "$ROT")"/*.sh "$1"/ 2>/dev/null
@@ -1924,20 +1947,27 @@ if [ "$C71_RUN" = 1 ]; then
   fi
   # strip the colon branch too: colon-btbold archives on a stripped name
   c71_mut strip-both-branches 'susp_colon ? ledger_body_archives($0) :' \
-    'susp_colon ? ledger_body_archives(ledger_strip_inline_code($0)) :' RRRRRRRSSSSS
-  # strip bold as well as code: every real bolded close below a suspect is deleted
+    'susp_colon ? ledger_body_archives(ledger_strip_inline_code($0)) :' RRRRRRRSSSSSRRSS
+  # strip bold as well as code: every real bolded close is deleted, on the boundary line too
   c71_mut strip-also-removes-bold '    sub(/`.*$/, "", l)' \
-    '    sub(/`.*$/, "", l); gsub(/\*\*[^*]*\*\*/, "", l)' RRRRRRRSSRRR
+    '    sub(/`.*$/, "", l); gsub(/\*\*[^*]*\*\*/, "", l)' RRRRRRRSRRRRRRSS
   # balanced spans only: a lone or wrapped backtick leaves the token in place
-  c71_mut balanced-only '    sub(/`.*$/, "", l)' '    l = l' RRRSSRRSSSSR
+  c71_mut balanced-only '    sub(/`.*$/, "", l)' '    l = l' RRRSSRRSSSSRRRSS
   # single spans only: a double-backtick span pairs wrongly and its token survives
-  c71_mut no-double-span '    gsub(/``([^`]|`[^`])*``/, "", l)' '    l = l' RRRRRSRSSSSR
-  # no strip at all: the colon-less half of the mention class is silenced again
-  c71_mut strip-off 'ledger_entry_line_closes(ledger_strip_inline_code($0))' \
-    'ledger_entry_line_closes($0)' RRSSSSSSSSSR
+  c71_mut no-double-span '    gsub(/``([^`]|`[^`])*``/, "", l)' '    l = l' RRRRRSRSSSSRRRSS
+  # no balanced single-span removal: the lone-backtick rule eats a real close after a name
+  c71_mut drop-single-span-gsub '    gsub(/`[^`]*`/, "", l)' '    l = l' RRRRRRRSRSSRRRRR
+  # one greedy span: a real close between two spans is swallowed
+  c71_mut greedy-single-gsub '    gsub(/`[^`]*`/, "", l)' '    gsub(/`.*`/, "", l)' RRRRRRRSSSSRRRSR
+  # no strip in the loose body branch: the colon-less half of the mention class is silenced again
+  c71_mut strip-off ': ledger_entry_line_closes(ledger_strip_inline_code($0))' \
+    ': ledger_entry_line_closes($0)' RRSSSSSSSSSRRRSS
   # the pre-colon rule for every suspect: the colon lead-in is silenced too
   c71_mut colon-revert 'susp_colon ? ledger_body_archives($0) : ledger_entry_line_closes(ledger_strip_inline_code($0))' \
-    'ledger_entry_line_closes($0)' RSSSSSSSSSSS
+    'ledger_entry_line_closes($0)' RSSSSSSSSSSSRRSS
+  # the boundary line read unstripped: a quotation on the suspect line silences both shapes
+  c71_mut boundary-unstripped 'if (ledger_entry_line_closes(ledger_strip_inline_code($0))) susp_closed = 1' \
+    'if (ledger_entry_line_closes($0)) susp_closed = 1' RRRRRRRSSSSRSSSS
 fi
 
 # --- BL-006: AN ENTRY-COUNT CEILING THAT WARNS AND STILL ROTATES -----------------------------

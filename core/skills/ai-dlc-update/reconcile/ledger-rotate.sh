@@ -227,11 +227,14 @@ SPLIT_FINDINGS="$(LC_ALL=C awk "$(ledger_entry_awk)$(ledger_entry_id_awk)${CLOSE
     else                    { sub(/^(- )?\*\*/, "", line); sub(/\*\*.*$/, "", line) }
     return line
   }
-  # INLINE CODE IS A QUOTATION, NEVER A CLOSE. The loose suppressor below reads this, and only
-  # the loose one: a colon-less suspect whose body quotes the annotation form inside backticks
-  # is not closed by that quotation. Balanced double-backtick spans go first, so a single
-  # backtick inside one cannot pair with a neighbour; then balanced single spans; then a lone
-  # backtick and everything after it, which is a span the author wrapped onto the next line.
+  # INLINE CODE IS A QUOTATION, NEVER A CLOSE. Two readers: the suspect boundary line itself, for
+  # either label shape, and the loose body suppressor below -- never the colon body branch. A
+  # quotation of the annotation form inside backticks does not close the line carrying it.
+  # Balanced double-backtick spans go first, so a single backtick inside one cannot pair with a
+  # neighbour; then balanced single spans, each removed separately so a real close BETWEEN two
+  # spans survives; then a lone backtick and everything after it, which covers a span wrapped
+  # onto the next line ONLY when the token sits on the opening line. A token on the
+  # continuation line has no backtick before it on that line and is still read as a close.
   # Bold is NOT removed, because a bolded line-leading close is the real annotation form.
   function ledger_strip_inline_code(l) {
     gsub(/``([^`]|`[^`])*``/, "", l)
@@ -263,7 +266,10 @@ SPLIT_FINDINGS="$(LC_ALL=C awk "$(ledger_entry_awk)$(ledger_entry_id_awk)${CLOSE
         # wanted -- what it did not have was the whole token set, so a suspect line closed as
         # WITHDRAWN suppressed nothing and the guard refused a real entry. Lifting the rule keeps
         # the looseness the measurement below prescribes and removes the membership opinion.
-        if (ledger_entry_line_closes($0)) susp_closed = 1
+        # READ WITH ITS INLINE CODE REMOVED, for both label shapes: a boundary line that only
+        # QUOTES the form in backticks is not closed by that quotation. The legacy shape above
+        # survives the strip, because its backticks enclose the NAME and the token sits outside.
+        if (ledger_entry_line_closes(ledger_strip_inline_code($0))) susp_closed = 1
       }
       next
     }
@@ -305,9 +311,10 @@ SPLIT_FINDINGS="$(LC_ALL=C awk "$(ledger_entry_awk)$(ledger_entry_id_awk)${CLOSE
     # INTENDED, on the same asymmetry the fixture argues for an open prose-titled entry: such a
     # line cannot be told from an annotation lead-in, a wrong refusal costs a two-line edit, and
     # a wrong rotation strands a closed entry`s receipt. The escape is the one the refusal text
-    # names -- the entry gives itself a close or an id. What still silences it: a mention in
-    # straight quotes, inside a fenced block, or an unquoted mention on the same line as a quoted
-    # one. Those are the surviving half of the mention class.
+    # names -- the entry gives itself a close or an id. What still silences it, the surviving
+    # half of the mention class: a mention in straight quotes; a mention inside a fenced block;
+    # an unquoted mention on the same line as a quoted one; and a backticked span wrapped across
+    # lines whose token sits on the CONTINUATION line, which carries no backtick before it.
     #
     # THE COLON BRANCH IS NOT STRIPPED. `ledger_body_archives` already refuses a quotation by its
     # own anchor, and stripping there would let `**` + a backticked name + the token archive a
