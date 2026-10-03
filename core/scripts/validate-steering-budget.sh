@@ -15,7 +15,11 @@
 #
 # Agent is the ONLY unbounded foreground primitive. Bash and TaskOutput are
 # already capped by the harness at 10 minutes (their max timeout is 600000ms),
-# and AskUserQuestion's duration is the human's own think-time. That leaves the
+# and AskUserQuestion's duration is the human's own think-time. (The cap is on
+# execution, not on delivery: a call issued beside an AskUserQuestion returns
+# only with the answer, so its wall-clock can far exceed 10 minutes. Check A
+# charges such a sibling only for what it blocks after the answer; see EXEMPT
+# FROM CHECK A below.) That leaves the
 # Agent call as the single mechanism by which ai-dlc can hold the operator's
 # message hostage -- and ai-dlc used to MANDATE it: implementation.md's old
 # "Foreground-dispatch mandate" required gated dev dispatch to be a blocking
