@@ -28643,3 +28643,164 @@ verify: sh unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; R="$(pwd)"; P="$R/core/sc
 
 **LANDED (v0.718.0, verified a366d8ce).**
 
+## BL-128 — an override can restate a threshold that later migrates into a validator, and layer-drift cannot see it
+
+**LANDED (v0.718.0, verified 4ea6bb79).** Closed by adjudication on the operator's batch-190 ruling; nothing was built. The operator ruled at batch 186 that the citation-key arm is not to be built, and no other remedy is named, so the entry recorded a gap with no planned fix. The core half of the motivating instance shipped in 0.709.0. Re-open it if a second override is found restating a rule that has since migrated into a validator.
+
+**An `overrides/` file may restate a rule as prose; `layer-drift.sh` joins that override to the
+`SKILL.md` section it shadows by `base_sha`. When the rule MIGRATES OUT of `SKILL.md` into a
+shell validator, the shadowed section stops moving, the join keeps reporting `OVERRIDE-OK`, and
+the override is now wrong with nothing able to say so.** No override carries a `base_sha`
+against a script, so the migration is invisible to the only mechanism that watches overrides.
+
+**Found by a peer session during the 0.443.0 pull rehearsal, on a live instance, not
+hypothetically.** The reference consumer's `overrides/SKILL__Rule-8.md:31` restates arm E's
+predicate: *"A nonzero MAJOR held at zero CRITICAL across 2+ passes is a STALL."* `v0.443.0`
+moved arm E to `blocking > MAJOR_EXIT_CEILING`, so a plateau at 1–3 blocking MAJOR is no longer
+a stall and that sentence is false. `layer-drift.sh` reported `OVERRIDE-OK` and was CORRECT to:
+the `SKILL.md` section did not move. The rule did.
+
+**The consumer-side reword is the consumer's and is NOT this entry.** This entry is the
+distribution-side gap: nothing here detects an override whose subject has left the file the
+override is joined to.
+
+**Not yet scoped, and the population is unmeasured.** Two things to derive before building:
+how many shipped rules have migrated from a role/skill file into a validator (the join's
+blind set), and whether an override's prose can be bound to a validator at all without a
+second restatement — `mechanism-design.md` warns that a rule restating a mechanism drifts
+tighter than the mechanism. A detector keyed on "this override names a threshold" has an
+unmeasured false-positive set and must not ship before that set is enumerated.
+
+**Census (batch 185). Every figure below was taken over two named sets: the distribution's
+`core/scripts/*.sh` at `c18897d9` (57 tracked files; `git ls-files` and `/usr/bin/find` agree), and
+the reference consumer's layer at its `34f02449`, which means the 49 bodies `layer_files()` in
+`layer-drift.sh` would read (9 under `overrides/` and 40 under `extensions/`, README excluded, every
+body non-empty after `body_of`). These counts move with either tree, so re-derive them rather than
+quote them.**
+
+**THE MOTIVATING INSTANCE IS NOT OVERRIDE DRIFT. IT IS CORE PROSE THAT THE VALIDATOR LEFT BEHIND,
+INHERITED VERBATIM.** The override's sentence (`overrides/SKILL__Rule-8.md`, body lines 25-26: "A
+nonzero MAJOR held at zero CRITICAL across 2+ passes is a STALL") is byte-identical to live core
+`core/skills/ai-dlc/SKILL.md:261-262`. The same predicate appears in `core/hooks/ai-dlc-acknowledge.sh:337,479`
+and `core/hooks/ai-dlc-continue.sh:1012,1173`, and the consumer's installed copies of all three
+carry it too. `39f0cb0b` (v0.443.0) moved arm E to `blocking > MAJOR_EXIT_CEILING` and touched
+only the validator, `core/team-roles/adversary.md`, check-24 and docs, so all four core prose
+sites still state the old predicate. `OVERRIDE-OK` is therefore correct in the strongest sense,
+because the override matches current core. **DEFECT, not this entry's to fix: core `SKILL.md`
+Rule 8 and two hook messages state a STALL predicate the validator no longer implements.** It is
+filed here as a measured fact for the operator to schedule.
+
+**(1) The migrated side.** One grep finds upper-case `NAME=<int>` assignments in the 57 files whose
+name matches `CEIL|MAX|MIN|LIMIT|FLOOR|THRESH|BUDGET|CAP|BOUND|TOL|WINDOW|SLACK`. It returns 33
+rows, 29 distinct names and 13 files. That is a floor and it is impure. Seven rows are
+accumulators or flags initialised to 0 (`CEILING_LIVE`, `CEILING_COUNT`, `CITE_UNBOUNDED`,
+`RESOLVED_TERMINAL`, `TERMINAL`, `UNBOUNDED`, `GA_UNBOUNDED_CITES`), not limits. The name grammar
+cannot express a table, so `validate-artifact-budget.sh`'s six `name|bytes|remedy` rows (for
+example `pipeline-snapshot.md|6000|trim`) were added by hand. The 85 literal `-gt/-ge/-lt/-le N`
+comparisons with non-zero N, across 29 files, were counted but not joined. Control:
+`MAJOR_EXIT_CEILING=3` is present (1). An impossible name returns 0.
+
+**(2) The layer side.** A threshold-phrase grep (`≥ ≤ >= <=`, `at least/most N`, `N+`, `N%`,
+`nonzero`, `ceiling|threshold|budget`, and similar) over the 49 bodies returns 95 lines in 21
+files. The known line is present (Rule-8's "nonzero MAJOR", count 1). Only one layer body names
+a validator constant by its identifier: `TERMINAL`, which is an English word in a retro step
+heading and so a false positive. Basename references to `core/scripts/*.sh` give 43 (file, script)
+pairs over 19 files and 18 scripts. These are citations, not restatements of a value.
+
+**(3) The join, keyed on the numeric value.** Joining the integers on threshold-phrase lines
+against the validator value set gives 63 (line, value) hits on 51 lines. Grouped by (value,
+subject), only TWO are true restatements of an enforced value, and BOTH AGREE. The first is
+`extensions/steps-domain/retro-domain-close-out-sweep.md` citing `pipeline-snapshot.md|6000|trim`
+(6000 = 6000). The second is Rule-8's "2+ passes" against `STALL_THRESHOLD=2` (2 = 2). **The
+override's only number agrees with the validator. Its staleness lives in "nonzero MAJOR" against
+`blocking > MAJOR_EXIT_CEILING`, which carries no digit in the override, so a numeric detector
+scores the case this entry was filed on as CLEAN.** The FP set, by value:
+- **10.** The adversary's ten-findings floor (`bug-investigation-push.md`) lives only in
+  `adversary.md` prose. A grep for its enforcement returned 7 hits, all 7 `findings_minor` or
+  unrelated loop bounds, so the real count is 0. The other 10s (`DENSITY_MIN=10` in the stub audit,
+  `N≥10` harness reps, `≤~10-line` edits, `≤$10`) are unrelated subjects.
+- **3 and 2.** These are Rule 8's intensity story-count thresholds (`≥3`, `≤2`, "exceeds 2").
+  Enforcement in `core/scripts`+`core/hooks` is 0 (`carry-over-single` appears 0 times there and
+  13 times in `SKILL.md`+`steps/`), so these are prose rules with no validator.
+- **8.** A deploy cluster count, not `PART_CAP=8`.
+- **50.** A wire-byte reduction percentage and a proposal rate, not `MAX_SHARE_PCT=50`.
+- **6.** A section number, not `MAX_BEATS=6`.
+- **0, 1, 2 and 3 everywhere else.** These are ordinary prose (`≥1 test file`, `N≥2 fixture`,
+  exit codes).
+Small integers collide with everything, and that is the structural reason this key cannot work.
+**Verdict on the numeric key: constructible, with an FP set of 49 of 51 lines, and blind to its own
+motivating subject. Do not build it.**
+
+**A key that DOES reach the motivating instance: core files the override BODY cites, diffed
+`base_sha..theirs`.** No arm does this today. Line 1838 diffs only the SHADOWED file, and
+`OVERRIDE-DELEGATES-INTO-SHADOW` asks about reachability, not drift. `retired-layer-passage.sh`
+matches core lines DELETED base..theirs, and the stale sentence is still live in core, so it
+cannot fire. Measured with HEAD standing in for the pull's `theirs` (a real run would use the
+pull's ref): over the 9 overrides, backticked `*.md|*.sh|*.yaml` tokens that resolve to a core
+file give 7 citations in 3 overrides, and 6 of them changed since their `base_sha`. **3 of 9
+overrides would fire.** One is the known true positive: Rule-8 cites `team-roles/adversary.md`,
+which `39f0cb0b` edited. The other two (`check-5` citing `implementation.md`, and `domain-sections`
+citing `gate-validation.md`, `route.md` and `validate-artifact-budget.sh`) are unadjudicated:
+"changed since base" is a drift signal, not a staleness verdict. **The key reached Rule-8 only
+because `39f0cb0b` happened to co-edit `adversary.md`. A validator-only migration would have been
+invisible to it too, so it narrows the blind set without closing it.** Size, if scheduled: one
+report-only arm in `layer-drift.sh` (OVERRIDE-CITED-CORE-DRIFT, never blocking), reusing the
+existing `git diff --quiet base_sha THEIRS -- <path>` shape, plus a fixture seeding one cited file
+changed and one unchanged. Its FP set must be adjudicated on the two non-Rule-8 hits before it
+ships. **The direct fix for the measured defect is cheaper and lies on the distribution side:
+reword the four core prose sites to the arm-E predicate. The consumer then inherits it through the
+existing `HARD-OVERRIDE-DRIFT-SECTION` on its next pull, because the shadowed section will finally
+move.**
+
+**Batch 185: the motivating case was core-prose staleness, and that half is fixed.** The stale
+STALL predicate ("a nonzero MAJOR held at zero CRITICAL") was reworded at every core site to the
+validator's arm-E predicate, citing `MAJOR_EXIT_CEILING`, `CRITICAL_EXIT_CEILING` and
+`STALL_THRESHOLD` by name and carrying no digit: `core/skills/ai-dlc/SKILL.md`, both hooks'
+comments and deny messages, the validator's own arm-E comment, and `divergence-hard-block`. Both
+hooks also gained an explicit `CEILING)` branch, because their catch-all had described the
+validator's fourth rc-3 state as a stall. The detector question is unchanged and stays open as
+the census above leaves it: no layer-drift arm sees an override restating a threshold that moved
+into a validator.
+
+**Batch 186 prototyped the citation-key arm and did not build it.** A report-only
+`OVERRIDE-CITED-CORE-DRIFT` row, keyed on a qualified grammar of core paths cited in an
+override's body and fired when a cited file changes across the pull range. Run with the real
+`layer-drift.sh` against the reference consumer's installed overrides on its 0.706.0 → 0.709.0
+pull, it produced 17 hits under bare basenames. A qualified grammar cut that to 5, and the pull
+range instead of each override's `base_sha` cut it to 1. That one hit, `gate-validation.md` cited
+by the domain-sections override, is a false positive: 0 changed lines carry the tokens the
+override relies on. True positives on real data: 0. The motivating Rule-8 case fires identically
+with theirs set before the arm-E migration, so its hit comes from an unrelated prose edit, not the
+migration. The arm would narrow nothing measurable, and `layer-drift.sh` is bootstrapping.
+**Operator ruling, batch 186: do not build this arm.** The entry stays open on claim (b); a later
+detector proposal must show a true positive on the consumer's real overrides before it is built.
+
+verify: manual -- this entry records a gap, not a receipt. Do not close it on a green
+`layer-drift.sh` run; that green is the defect.
+
+## BL-404 — the acknowledge hook's typed-invocation anchor depends on the harness's serialisation, and an updater call inside a pipeline session is asserted by no arm
+
+**LANDED (v0.718.0, verified 4ea6bb79).** Closed by adjudication on the operator's batch-190 ruling; nothing was built. Claim 2 landed in 0.699.0. Claim 1's subject is the harness's own transcript format, which no file in this tree holds or can observe. Re-open it if the harness changes how it serialises a typed command.
+
+**NOTE. Found at batch 178 by the S316 tip adversary.** `core/hooks/ai-dlc-acknowledge.sh:196` recognises a typed `/ai-dlc` or `/ai-dlc-update` only as `"role":"user","content":"<command-message>…</command-message>\n<command-name>/…`. Across the local transcripts all 301 typed-skill records carry that shape (negative control 0); the other user lines with a `<command-name>` are built-in commands with no `<command-message>`, and there are 0 array-content variants. If the harness changes how it serialises a typed command, typed updater sessions are denied writes under the pause again and Check 2z stops gating typed `/ai-dlc` sessions, and nothing in the tree would notice.
+
+Second claim: the last-skill rule (`tail -1`) and the live `Skill` override (`:207-210`) mean a pipeline lead that calls `Skill(ai-dlc-update)` stops pausing writes until `/ai-dlc` is invoked again. Accepted by contract; `updater-session-signals` seeds only the reverse order (`run.sh:109-110`), so no arm asserts it.
+
+Discharges no consumer candidate.
+
+**Batch 181:** claim 2 landed in 0.699.0 (`updater-session-signals` asserts the other order, a typed `/ai-dlc` then `Skill(ai-dlc-update)`). Claim 1 stays open: its subject is the harness's transcript format, which no file in this tree contains.
+
+verify: manual
+
+The receipt is manual because its subject is the harness's own transcript format, which no file in this tree contains: a predicate keyed on the hook's regex would only check the regex against the copy the seeds were written from.
+
+## BL-412 — `layer-reference-resolution` went red once under the pool on a close commit that touches none of its inputs, and the cause is not established
+
+**LANDED (v0.718.0, verified 4ea6bb79).** Closed by adjudication on the operator's batch-190 ruling. The buildable half, retaining every red run's record, shipped in 0.709.0. There has been no recurrence: the two stamped records on this machine at batch 190 each name only `validator-fork-budget`. A recurrence is filed fresh, with its retained record attached.
+
+**NOTE. Seen at batch 179, not diagnosed.** The first gate of the second close commit (`d7cb330a`, which changed only `docs/backlog.md`, `docs/backlog.archive.md` and `.githooks/pre-push`) failed on one unit of 216 at pool width 16 and a 1-minute load near 40: mutant `hook-resolve-mention` read `w12shadow5=W` where the fixture expects `-`. That fixture reads none of the three files and its read-set rows name none of them. Run alone from the main checkout it passed three times (42 assertions, about 55s), and the unchanged commit passed a second gate with 216 of 216 ok. No ordering or timing construct in `vector.sh` or `worker.sh` was found that would explain it, and the recorded loaded cost is 148s against 55s solo. A load-dependent fault is a hypothesis, not a finding. The batch-179 got-vector did not survive: the hook's failure record (`.git/ai-dlc-fixture-failures`) is overwritten by the next red run.
+
+**PARTIAL IN BATCH 185: EVERY RED RUN NOW RETAINS ITS OWN RECORD.** Both pre-push hooks copy the record, on a successful primary write only, to `.git/ai-dlc-fixture-failures.<UTC %Y%m%dT%H%M%SZ>.<pid>` and prune to the newest `FAILLOG_KEEP` copies of that exact shape. Hand-saved records under other names (`.clean` on this machine) are outside the anchored prune pattern. `core/fixtures/consumer-suite-pool` arm 2c and mutants `retain-off`, `retain-fixed-name`, `prune-off`, `prune-glob-wide` hold it. **This does not close the entry**: the cause was never established, and retention only guarantees that the next recurrence leaves its got-vector on disk. Read the newest stamped copy whose header names `layer-reference-resolution` when it recurs. A hand-saved copy is safe from the prune if its name gains a non-numeric suffix (`.keep`).
+
+verify: manual -- retention is held by core/fixtures/consumer-suite-pool (arm 2c and its five mutants); the open half, the cause of the red, has nothing to score until a recurrence leaves a retained record.
+
