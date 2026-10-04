@@ -427,5 +427,19 @@ verify: sh D=core/scripts/derive-fixture-readsets.sh; [ -f "$D" ] || exit 9; B="
 
 **BATCH-189 BEFORE/AFTER TRACE, ONE SAMPLE PER SIDE.** `bash core/scripts/derive-fixture-readsets.sh --list "validator-arm-selection-b enforcement-map-sites" --tracer sandbox`, main checkout detached at each sha in turn, map restored and nothing committed. Base `9bbc5a50` (load 4.52): `validator-arm-selection-b` OMITTED with 108 drop notices, `enforcement-map-sites` OMITTED with 894. Tip `946fb8ce`, carrying the BL-436 cwd fix (load 11.46): `validator-arm-selection-b` CLEAN, `enforcement-map-sites` OMITTED with 1036. Lever (a) moved the fixture it was predicted to move, at the higher load; one sample per side is not a close. `enforcement-map-sites` still drops on its seed `cp -R` burst, where no copy form was shown to help. Stage 1 and the three-consecutive-clean-traces criterion with a completeness control stand.
 
+**BATCH 193 STAGE-1 TRACE, AT `d4354b7c`: NOT MET, BUT THE FILTERED ARM IS NOW SATISFIABLE.** Three consecutive five-fixture `--list` runs under `--tracer sandbox`, main checkout, map restored after each, porcelain 0 after each. Every omission was a drop notice; the canary and the unread control never fired.
+
+| run | start / peak 1-min load | mapped | OMITTED (drop notices) |
+|---|---|---|---|
+| 1 | about 8 / 32.0 | 0 of 5 | `enforcement-map-sites` 1015, `-b` 340, `-c` 33, `validator-arm-selection` 159, `validator-arm-selection-b` 579 |
+| 2 | 8.6 / 12.8 | 2 of 5 | `enforcement-map-sites` 208, `-b` 43, `-c` 18 |
+| 3 | 3.1 / 5.9 | 4 of 5 | `enforcement-map-sites` 238 |
+
+The filtered identical-sets arm was run over the pairs that traced clean twice (runs 2 and 3). It used a self-probe first: an absent-only difference compares equal and a lost present path compares unequal.
+- `validator-arm-selection`: filtered 992 against 992, 0 differences. Raw, 1373 against 1369 with 58 differences. All 58 name paths absent from the traced tree: `core/fixtures/<x>/seed.sh` lookups and `<sha>:<path>` argv rows. The unfiltered arm would have failed this pair on loss the filter is ruled to acquit.
+- `validator-arm-selection-b`: 960 against 960, identical both filtered and raw.
+
+`enforcement-map-sites` dropped in all three runs, at every load, and is now the stage-1 blocker alone. The other four have each traced clean at least once in this batch.
+
 **Batch 193 correction to the `cp -R` prose above.** The seed has copied with `cp -RX` since 0.721.0 (`3efb87d8`, `core/fixtures/enforcement-map-sites/seed.sh:38-45`), so "no form ships" and "its seed `cp -R` burst" describe the tree before that release. The batch-191 stage-1 trace was taken at `3efb87d8` itself, so its drop counts already include the `cp -RX` change.
 
