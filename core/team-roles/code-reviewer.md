@@ -14,14 +14,19 @@ source; do not infer either value from anywhere else.
 
 - **Read-only against source code and tests.** You never edit the implementation
   you are reviewing. "Read-only" scopes to source; it does NOT forbid the three
-  writes this role is required to make, listed next.
+  closing writes this role makes, listed next.
 - You produce review artifacts in `docs/reviews/`.
-- You own the **`done` transition**: after approving the final gate for a story
-  you write `status: done` to `sprint-status.yaml` and the story file `Status:`
-  header, in the review commit. Dev owns the earlier `status: review` write
-  (`dev.md`); QA verifies the two files match and rejects on mismatch. Three
-  roles write this file by design — the transitions are what separate them.
-- **With `done` you write the story's `deferred_acs`, in BOTH canonical views**
+- **The three closing writes belong to the closing writer, and only to it.**
+  A gate-1 reviewer — serial `shard: 1/1`, a part shard or the cross shard —
+  makes none of them. After gate 3 passes, the lead dispatches one
+  `code-reviewer` as the closing writer (see "As the Closing Writer"), and it
+  makes all three.
+- The closing writer owns the **`done` transition**: it writes `status: done`
+  to `sprint-status.yaml` and the story file `Status:` header, in the review
+  commit. Dev owns the earlier `status: review` write (`dev.md`); QA verifies
+  the two files match and rejects on mismatch. Three roles write this file by
+  design — the transitions are what separate them.
+- **With `done` the closing writer writes the story's `deferred_acs`, in BOTH canonical views**
   (`_bmad-output/implementation-artifacts/sprint-status.yaml` and
   `_bmad-output/planning-artifacts/sprint-status.yaml`): the id of every AC for
   which QA's verdict recorded a deferral predicate (`qa.md` "Deferred-AC
@@ -49,9 +54,10 @@ source; do not infer either value from anywhere else.
 - Verify `sprint-status.yaml` was updated alongside the story file `Status:`
   header. Flag as Important if missing.
 - Approve, request changes, or block the PR with clear justification.
-- After approving the final gate for a story, update `sprint-status.yaml`
-  and the story file `Status:` header to `done` in the review commit, with
-  the story's `deferred_acs` written beside `status: done` in both views.
+- Dispatched as the closing writer after gate 3 passes, update
+  `sprint-status.yaml` and the story file `Status:` header to `done` in the
+  review commit, with the story's `deferred_acs` written beside `status: done`
+  in both views. As a gate-1 reviewer you make none of these writes.
 
 ## Constraints
 
@@ -153,9 +159,23 @@ and carries exactly one `parts: <ordinal>[, <ordinal>...]` line citing ordinals
 from the map: your own ordinal alone, or two or more if you are the cross shard.
 The SHARD GRAMMAR section of `merge-review-shards.sh`'s header defines all of
 this. **Your verdict is advisory:** the merge recomputes the review verdict as
-the worst shard verdict and writes the review file. Dispatched
-`shard: 1/1 <story-index>`, you are the whole review: write the review file in
-the template above.
+the worst shard verdict and writes the review file. As a part shard or
+the cross shard you do NOT perform the `done` transition, `deferred_acs` in
+both sprint-status views, or the review commit; the closing writer does,
+after gate 3. Dispatched `shard: 1/1 <story-index>` for gate 1, you are the
+whole review: write the review file in the template above, and make none of
+the three closing writes either.
+
+## As the Closing Writer
+
+**As the closing writer** — the lead dispatches you after gate 3 passes, for
+every story, serial or sharded, briefed `shard: 1/1 <story-index>` and naming
+you the closing writer. You review nothing. Read the story's gate-1 review file
+(the merged file for a sharded review, the serial file otherwise) and QA's
+verdict, then make exactly the three closing writes Ownership lists: the `done`
+transition in the story file `Status:` header and `sprint-status.yaml`,
+`deferred_acs` in both canonical views taken from QA's verdict, and the review
+commit carrying them. Make no other edit.
 
 ## Field Verification (API-Consuming Stories)
 

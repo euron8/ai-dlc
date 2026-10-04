@@ -19,6 +19,43 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.724.0] - 2026-10-04
+
+Batch 194's second release. On the operator's batch-194 ruling, gate-1 review sharding becomes the
+default. It files and lands `BL-440` (net closed minus filed: 0). It discharges no consumer
+candidate.
+
+### BL-440: gate-1 review sharding is on by default at 8 reviewable files
+
+- `partition-review-diff.sh` applies a built-in threshold of 8 when neither `--min-files` nor
+  `AI_DLC_REVIEW_SHARD_MIN_FILES` is set. The flag still beats the variable. To turn sharding off,
+  set `AI_DLC_REVIEW_SHARD_MIN_FILES=0` in the `env` block of `.claude/settings.json`. A variable
+  that is set but empty is refused, which routes the lead to one `shard: 1/1` reviewer with the
+  refusal recorded in the gate log.
+- The manifest records the numeric threshold that was applied, and the merge re-derives the map
+  from it.
+- The three closing writes now belong to a closing writer. These are the `done` transition,
+  `deferred_acs` in both views and the review commit. Once gate 3 passes, the lead dispatches one
+  `code-reviewer` as the closing writer, `shard: 1/1 <idx>`, for every story, serial or sharded. It
+  reads the gate-1 review file and QA's verdict, and makes no other edit. No gate-1 reviewer, serial
+  or shard, makes the three writes, and the lead does not make them either.
+  - Before this release a sharded review left the writes unowned, latent since 0.718.0. A serial
+    reviewer made them at gate 1, before QA had recorded the deferrals that `deferred_acs` copies.
+  - Because the writer is a dispatched agent, the gate-remediation guard allows its story-file edit
+    while another story's verdict is FAIL. A lead edit there is denied.
+  - `implementation.md` (task item 4), `code-reviewer.md` (Ownership, As a Shard, and a new As the
+    Closing Writer section), `qa.md`, `deploy-validate.md` and the `sprint-status` schema say so.
+- **Measured threshold.** Over 26 stories of the reference consumer, a threshold of 8 shards 13 of
+  them. Serial reviews took a median of 10.3 minutes at 8 files or fewer, against 28.6 minutes at 12
+  or more. Above 12 files, reviewer tier is confounded with size.
+- **Consumer impact.** On the next pull, every story with 8 or more reviewable files dispatches its
+  part reviewers plus one cross reviewer. A `-p2` re-review of a story that started serially will
+  shard. A Check 22 replay on the consumer's ledger fails nothing.
+- **Caveat.** The threshold counts files, but the packer weights lines. In 14 of 15 measured large
+  ranges, one unsplittable test file carries 55-69% of the lines, so the reading speed-up is capped
+  near 1.5x. No review gets slower.
+- Gate 2 (QA) stays serial.
+
 ## [0.723.0] - 2026-10-04
 
 Batch 194's first release. It is `BL-375` PARTIAL: the entry stays live. It cuts the traced

@@ -359,7 +359,8 @@ recorded predicate — never a silent pass.
 
 The owed ACs are listed per story in `sprint-status.yaml` as
 `deferred_acs: [AC5, AC6]`, in both canonical views (written by the
-code-reviewer at `done`). Clear each id, in BOTH views, only by one of:
+closing writer, a code-reviewer dispatched after gate 3, at `done`). Clear
+each id, in BOTH views, only by one of:
 
 1. **Discharged GREEN** — its predicate ran against production and returned
    the stated result, recorded under `deferred_ac_discharge`. Remove the id.

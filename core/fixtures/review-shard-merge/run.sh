@@ -70,6 +70,13 @@ echo "$NAME: resolved subjects = $PART , $MERGE"
 # would assert about a name the program no longer reads.
 KEY="$(sed -n 's/.*"\${\(AI_DLC_[A-Z0-9_]*\):-}".*/\1/p' "$PART" | head -1)"
 [ -n "$KEY" ] || { echo "FIXTURE STALE: no \"\${AI_DLC_...:-}\" dereference in $PART" >&2; exit 2; }
+# THE BUILT-IN DEFAULT, derived from its one assignment. The boundary seeds below are built at
+# exactly DFLT-1 and DFLT reviewable files: a seed far from the boundary cannot tell `<` from
+# `<=`, and a seed derived from a restated number goes stale silently when the default moves.
+DFLT_N="$(grep -c '^REVIEW_SHARD_DEFAULT_MIN_FILES=' "$PART")" || DFLT_N=0
+DFLT="$(sed -n 's/^REVIEW_SHARD_DEFAULT_MIN_FILES=\([0-9][0-9]*\)$/\1/p' "$PART")"
+[ "$DFLT_N" = "1" ] && [ -n "$DFLT" ] && [ "$DFLT" -ge 2 ] \
+  || { echo "FIXTURE STALE: $PART carries $DFLT_N 'REVIEW_SHARD_DEFAULT_MIN_FILES=<n>' line(s) (want 1, n >= 2)" >&2; exit 2; }
 
 # CHECK 1'S PATTERN, lifted exactly as core/fixtures/gate-verdict-grep-shape lifts it.
 PAT="$(sed -n "s/.*grep -inE '\(.*\)' <review-file>.*/\1/p" "$GATE_MD" | head -1)"
@@ -139,6 +146,33 @@ done
 G -C "$REPO_C" add -A && G -C "$REPO_C" commit -q -m frozen
 [ -d "$REPO_C/.git" ] || { echo "FIXTURE ERROR: $REPO_C is not a repository" >&2; exit 2; }
 C_BASE="$(G -C "$REPO_C" rev-parse HEAD~1)"; C_SHA="$(G -C "$REPO_C" rev-parse HEAD)"
+# LO / HI: the default's boundary, DFLT-1 and DFLT reviewable files, one top directory each so the
+# map has independent groups. LO ALSO carries one pipeline artifact under a scan root, so its diff
+# holds DFLT files and only the exclusion keeps it below the threshold.
+REPO_LO="$WORK/repo-lo"; REPO_HI="$WORK/repo-hi"
+new_repo "$REPO_LO" && new_repo "$REPO_HI" || { echo "FIXTURE ERROR: git init/commit failed" >&2; exit 2; }
+_i=0; while [ "$_i" -lt "$DFLT" ]; do
+  _i=$((_i + 1))
+  [ "$_i" -lt "$DFLT" ] && lines "$REPO_LO/t$_i/f.txt" 5 "lo-$_i"
+  lines "$REPO_HI/t$_i/f.txt" 5 "hi-$_i"
+done
+lines "$REPO_LO/docs/reviews/s1/0-old-code-review.md" 5 review
+G -C "$REPO_LO" add -A && G -C "$REPO_LO" commit -q -m frozen
+G -C "$REPO_HI" add -A && G -C "$REPO_HI" commit -q -m frozen
+for r in "$REPO_LO" "$REPO_HI"; do
+  [ -d "$r/.git" ] || { echo "FIXTURE ERROR: $r is not a repository" >&2; exit 2; }
+done
+LO_BASE="$(G -C "$REPO_LO" rev-parse HEAD~1)"; LO_SHA="$(G -C "$REPO_LO" rev-parse HEAD)"
+HI_BASE="$(G -C "$REPO_HI" rev-parse HEAD~1)"; HI_SHA="$(G -C "$REPO_HI" rev-parse HEAD)"
+# D: DFLT+2 reviewable files, the default-built MERGE world. Off the boundary on purpose, so the
+# `<`/`<=` mutant is owned by the HI arm alone and this world owns what the manifest records.
+REPO_D="$WORK/repo-d"
+new_repo "$REPO_D" || { echo "FIXTURE ERROR: git init/commit failed" >&2; exit 2; }
+_i=0; while [ "$_i" -lt "$((DFLT + 2))" ]; do _i=$((_i + 1)); lines "$REPO_D/u$_i/f.txt" 5 "d-$_i"; done
+G -C "$REPO_D" add -A && G -C "$REPO_D" commit -q -m frozen
+[ -d "$REPO_D/.git" ] || { echo "FIXTURE ERROR: $REPO_D is not a repository" >&2; exit 2; }
+D_BASE="$(G -C "$REPO_D" rev-parse HEAD~1)"; D_SHA="$(G -C "$REPO_D" rev-parse HEAD)"
+D_SHA12="$(printf '%s' "$D_SHA" | cut -c1-12)"
 
 # --------------------------------------------------------------------------------- worlds
 # A merge world: its own directory, the shard dir `1-code-review-<sha12>/` inside it holding the
@@ -210,11 +244,73 @@ p_part() { # repo A partitions to >= 2 parts, and the dominant app/ was split, n
   awk -F'\t' '{ split($2, k, ","); for (i in k) if (k[i] == "app/") bad = 1 } END { exit bad }' <<<"$out" || return 1
   ! grep -q 'docs/reviews/' <<<"$out"
 }
-p_serial() { # no flag, key unset -> exit 3, SERIAL: naming the key, and no manifest written
-  local sd="$1" out rc d
-  d="$(mktemp -d "$WORK/ser.XXXXXX")/sd"
-  out="$(bash "$sd/partition-review-diff.sh" --map "$REPO_B" "$B_BASE" "$B_SHA" --shard-dir "$d" < /dev/null 2>&1)"; rc=$?
-  [ "$rc" -eq 3 ] && [ "${out#SERIAL:}" != "$out" ] && [ "${out#*"$KEY"}" != "$out" ] && [ ! -e "$d/.manifest" ]
+p_dflt_lo() { # key unset, no flag, DFLT-1 reviewable (DFLT in the diff) -> SERIAL naming the default
+  local sd="$1" d
+  d="$(mktemp -d "$WORK/lo.XXXXXX")/sd"
+  run_part "$sd" "$REPO_LO" "$LO_BASE" "$LO_SHA" --shard-dir "$d"
+  [ "$PRC" -eq 3 ] && has "$PO" "SERIAL: $((DFLT - 1)) reviewable file(s) ($DFLT in the diff" \
+    && has "$PO" "below the threshold of $DFLT (the built-in default" && has "$PO" "$KEY" && [ ! -e "$d/.manifest" ]
+}
+p_dflt_hi() { # key unset, no flag, exactly DFLT reviewable -> partitions
+  local sd="$1" n
+  run_part "$sd" "$REPO_HI" "$HI_BASE" "$HI_SHA"
+  n="$(grep -cE '^[0-9]+	' "$PO")" || n=0
+  [ "$PRC" -eq 0 ] && [ "$n" -ge 2 ]
+}
+p_off() { # the key at 0, and --min-files 0, each -> SERIAL saying sharding is disabled, no manifest
+  local sd="$1" d
+  d="$(mktemp -d "$WORK/off.XXXXXX")/sd"
+  PRC=0; env "$KEY=0" bash "$sd/partition-review-diff.sh" --map "$REPO_HI" "$HI_BASE" "$HI_SHA" \
+    --shard-dir "$d" > "$PO" 2> "$PE" < /dev/null || PRC=$?
+  [ "$PRC" -eq 3 ] && has "$PO" "SERIAL: review sharding is disabled" && has "$PO" "$KEY is 0" \
+    && [ ! -e "$d/.manifest" ] || return 1
+  run_part "$sd" "$REPO_HI" "$HI_BASE" "$HI_SHA" --min-files 0 --shard-dir "$d"
+  [ "$PRC" -eq 3 ] && has "$PO" "SERIAL: review sharding is disabled -- --min-files is 0" && [ ! -e "$d/.manifest" ]
+}
+p_refuse_val() { # the key set but EMPTY, WHITESPACE-only, or abc -> each REFUSED (exit 2), no manifest
+  local sd="$1" d v
+  d="$(mktemp -d "$WORK/rv.XXXXXX")/sd"
+  for v in "" " " abc; do
+    PRC=0; env "$KEY=$v" bash "$sd/partition-review-diff.sh" --map "$REPO_HI" "$HI_BASE" "$HI_SHA" \
+      --shard-dir "$d" > "$PO" 2> "$PE" < /dev/null || PRC=$?
+    part_refused "$KEY '$v' is not a non-negative integer" "$d" || return 1
+  done
+}
+p_prec() { # flag and key both set, disagreeing across DFLT files: the FLAG wins, in both directions
+  local sd="$1" n
+  PRC=0; env "$KEY=4" bash "$sd/partition-review-diff.sh" --map "$REPO_HI" "$HI_BASE" "$HI_SHA" \
+    --min-files "$((DFLT + 1))" > "$PO" 2> "$PE" < /dev/null || PRC=$?
+  [ "$PRC" -eq 3 ] && has "$PO" "below the threshold of $((DFLT + 1)) (--min-files)" || return 1
+  PRC=0; env "$KEY=$((DFLT + 1))" bash "$sd/partition-review-diff.sh" --map "$REPO_HI" "$HI_BASE" "$HI_SHA" \
+    --min-files 4 > "$PO" 2> "$PE" < /dev/null || PRC=$?
+  n="$(grep -cE '^[0-9]+	' "$PO")" || n=0
+  [ "$PRC" -eq 0 ] && [ "$n" -ge 2 ]
+}
+p_dmerge() { # a merge world partitioned with the threshold UNSET, merged end to end
+  local sd="$1" w d o k n mn first second
+  w="$(mktemp -d "$WORK/dm.XXXXXX")" || return 1
+  d="$w/1-code-review-$D_SHA12"
+  bash "$sd/partition-review-diff.sh" --map "$REPO_D" "$D_BASE" "$D_SHA" --shard-dir "$d" \
+    > "$w/map" 2> "$w/map.err" < /dev/null || return 1
+  [ -f "$d/.manifest" ] || return 1
+  # The NUMERIC threshold applied, never a source string: the merge hands it back as --min-files.
+  mn="$(awk -F'\t' '$1 == "min-files" { print $2 }' "$d/.manifest")"
+  case "$mn" in ""|*[!0-9]*) return 1 ;; esac
+  n=0
+  for k in $(cut -f1 "$w/map"); do n=$((n + 1)); shard "$d" "$k" APPROVED "$k" "$D_SHA"; done
+  [ "$n" -ge 2 ] || return 1
+  first="$(cut -f1 "$w/map" | sed -n 1p)"; second="$(cut -f1 "$w/map" | sed -n 2p)"
+  shard "$d" cross APPROVED "$first, $second" "$D_SHA"
+  o="$(out_of "$d")"; run_merge "$sd" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ -f "$o" ] || return 1
+  # A second world with the flag AND the key set, disagreeing: the manifest records the FLAG's
+  # number, the threshold actually applied, because that is what the merge hands back.
+  w="$(mktemp -d "$WORK/dmf.XXXXXX")" || return 1
+  d="$w/1-code-review-$D_SHA12"
+  env "$KEY=4" bash "$sd/partition-review-diff.sh" --map "$REPO_D" "$D_BASE" "$D_SHA" \
+    --min-files "$((DFLT + 1))" --shard-dir "$d" > "$w/map" 2> "$w/map.err" < /dev/null || return 1
+  mn="$(awk -F'\t' '$1 == "min-files" { print $2 }' "$d/.manifest")"
+  [ "$mn" = "$((DFLT + 1))" ]
 }
 p_env() { # the key set to 4 in the environment, no flag -> partitions
   local sd="$1" out n
@@ -390,7 +486,7 @@ p_knob() { # E2: a value over 9 digits refuses before arithmetic; a 9-digit thre
   run_part "$sd" "$REPO_B" "$B_BASE" "$B_SHA" --min-files 999999999 --shard-dir "$d"
   [ "$PRC" -eq 3 ] && has "$PO" "SERIAL:" && [ ! -e "$d/.manifest" ]
 }
-P_ALL="part serial env worst c1 conserve miss_ord miss_cross dup part_cite cross_one sha_dir sha_rev moved a3 rerun anc cross_sha bad_verdict noparts manifest two_sha default_k stray nofind knob"
+P_ALL="part dflt_lo dflt_hi off refuse_val prec dmerge env worst c1 conserve miss_ord miss_cross dup part_cite cross_one sha_dir sha_rev moved a3 rerun anc cross_sha bad_verdict noparts manifest two_sha default_k stray nofind knob"
 
 # ---------------------------------------------------------------------------------- the arms
 echo "$NAME:"
@@ -417,8 +513,18 @@ arm() { # <predicate> <label-ok> <label-bad>
 }
 arm part "P1: repo A (all files under app/) partitions to >= 2 parts above --min-files 4, app/ split across parts, no part keyed on bare app/, the docs/reviews/ artifact excluded" \
          "P1: repo A did not partition by adaptive depth"
-arm serial "P2: no --min-files and the key unset -> exit 3, stdout 'SERIAL:' naming $KEY, no manifest written" \
-           "P2: the unset threshold did not answer SERIAL naming the key"
+arm dflt_lo "P2: key unset, no flag, $((DFLT - 1)) reviewable files ($DFLT in the diff, one under a scan root) -> exit 3, 'SERIAL:' naming the built-in default $DFLT and $KEY, no manifest" \
+             "P2: below the built-in default did not answer SERIAL naming the default"
+arm dflt_hi "P2b: key unset, no flag, exactly $DFLT reviewable files -> partitions to >= 2 parts (the default is ON, and the boundary is inclusive)" \
+            "P2b: exactly the built-in default's file count did not partition"
+arm off "P2c: $KEY=0, and --min-files 0, each on $DFLT files -> exit 3, 'SERIAL: review sharding is disabled' naming the source, no manifest" \
+        "P2c: a zero threshold did not answer SERIAL disabled"
+arm refuse_val "P2d: $KEY set but EMPTY, and $KEY=abc -> each REFUSED exit 2 'is not a non-negative integer', no manifest (empty is NOT unset)" \
+               "P2d: an empty or non-numeric key was not refused"
+arm prec "P2e: --min-files $((DFLT + 1)) with $KEY=4 on $DFLT files -> SERIAL naming --min-files; --min-files 4 with $KEY=$((DFLT + 1)) -> partitions (the flag wins both ways)" \
+         "P2e: the key overrode --min-files"
+arm dmerge "P2f: a repo of $((DFLT + 2)) files partitioned with the threshold UNSET records a NUMERIC min-files in its manifest and merges end to end (the merge hands it back as --min-files)" \
+           "P2f: a default-built partition did not merge, or its manifest did not record the numeric threshold"
 arm env "P3: the key set to 4 in the environment, no flag -> repo B partitions to >= 2 parts" \
         "P3: the environment threshold did not partition"
 arm worst "V1: worst-of -- {B,A,A,xA} merges BLOCKED (cross, last and majority say APPROVED); {NR,B,NR,xA} merges BLOCKED (majority says NR); all-APPROVED merges APPROVED; each read back Check 1's way" \
@@ -490,6 +596,39 @@ elif p_step "$WORK/step-strip.md" || p_step "$WORK/step-fence.md" || p_role "$WO
 else
   ok "S0: the structural predicates refuse a paragraph missing the merge, names only inside a fence, and a role clause missing reviewed-sha:"
 fi
+# THE STEP SAYS SHARDING IS ON BY DEFAULT, in the paragraph the lead acts on. A reverted step
+# ("Review sharding is opt-in: ...") tells every consumer lead the old contract while the script
+# shards anyway. Read as one joined line, so a wrapped sentence still matches; "opt-in" is refused
+# in THIS paragraph only, so the word elsewhere in the file is not a finding.
+p_step_dflt() { # <file>
+  local t; t="$(step_para "$1" | tr '\n' ' ' | tr -s ' ')"
+  [ -n "$t" ] && ! grep -qi 'opt-in' <<<"$t" && grep -qF 'Review sharding is on by default' <<<"$t" \
+    && grep -qF 'setting it to `0` turns review sharding off' <<<"$t"
+}
+# Offender: the W3 wrong build, the paragraph's default-on sentence reverted to the opt-in text.
+awk '/^\*\*Gate-1 dispatch:/ { p = 1 } p && /^[[:space:]]*$/ { p = 0 }
+     p && /^Review sharding is on by default/ { print "Review sharding is opt-in: the program answers `SERIAL:` (exit 3) unless"; next }
+     { print }' "$STEP_MD" > "$WORK/step-optin.md"
+# Offender: default-on kept, "opt-in" added inside the paragraph. Near-miss: "opt-in" in a
+# paragraph of its own after the dispatch paragraph, which the arm must NOT read as a finding.
+awk '/^\*\*Gate-1 dispatch:/ { p = 1 } p && /^[[:space:]]*$/ { if (!done) print "Older releases made review sharding opt-in."; done = 1; p = 0 } { print }' \
+  "$STEP_MD" > "$WORK/step-optin-in.md"
+awk '/^\*\*Gate-1 dispatch:/ { p = 1 } p && /^[[:space:]]*$/ { if (!done) { print; print "Older releases made review sharding opt-in." }; done = 1; p = 0 } { print }' \
+  "$STEP_MD" > "$WORK/step-optin-out.md"
+if cmp -s "$STEP_MD" "$WORK/step-optin.md" || cmp -s "$STEP_MD" "$WORK/step-optin-in.md" || cmp -s "$STEP_MD" "$WORK/step-optin-out.md"; then
+  bad "S6-pre: FIXTURE STALE -- a default-on probe's edit matched nothing, so the probe would score the shipped text"
+elif p_step_dflt "$WORK/step-optin.md" || p_step_dflt "$WORK/step-optin-in.md"; then
+  bad "S6-pre: FIXTURE BROKEN -- the default-on predicate passed a paragraph reverted to opt-in, or one carrying 'opt-in'"
+elif ! p_step_dflt "$WORK/step-optin-out.md"; then
+  bad "S6-pre: FIXTURE BROKEN -- the default-on predicate refused 'opt-in' OUTSIDE the dispatch paragraph (a near-miss)"
+else
+  ok "S6-pre: the default-on predicate refuses the reverted opt-in sentence and 'opt-in' inside the paragraph, and accepts 'opt-in' in the next paragraph"
+fi
+if p_step_dflt "$STEP_MD"; then
+  ok "S6: implementation.md's Gate-1 dispatch paragraph says review sharding is on by default and that \`0\` turns it off, and does not say opt-in"
+else
+  bad "S6: implementation.md's Gate-1 dispatch paragraph does not state default-on sharding, or still says opt-in"
+fi
 if p_step "$STEP_MD"; then
   ok "S1: implementation.md's Gate-1 dispatch paragraph names partition-review-diff.sh and merge-review-shards.sh outside a fence"
 else
@@ -499,6 +638,109 @@ if p_role "$ROLE_MD"; then
   ok "S2: code-reviewer.md's '## As a Shard' clause names shard-verdict:, reviewed-sha: and parts:, the grammar the merge refuses without"
 else
   bad "S2: code-reviewer.md's '## As a Shard' clause does not carry the merge's shard grammar -- a shard written to it is refused at the join"
+fi
+
+# WHO MAKES THE THREE CLOSING WRITES, AND WHEN. The `done` transition, `deferred_acs` (taken from
+# QA's verdict, so unknowable before gate 2) and the review commit are made by ONE `code-reviewer`
+# the lead dispatches AFTER GATE 3, for every story, serial or sharded -- a dispatched agent, so
+# the gate-remediation guard's agent_id arm allows its story-file edit while a verdict is FAIL.
+# No gate-1 reviewer makes them, and the lead does not. Pinned at three sites, each read as one
+# joined line with `**` dropped so a wrapped or emphasised sentence still matches:
+#   - the step's task list, item 4, which names the dispatch and its timing;
+#   - the step's Gate-1 dispatch paragraph, which hands the writes on and gives the lead none;
+#   - the role's Ownership bullet, As a Shard section and As the Closing Writer section.
+# And a REFUSAL: outside As the Closing Writer, no un-negated sentence may give a shard or a
+# gate-1 reviewer one of the three writes -- a contradicting sentence elsewhere in the role file
+# is what a reviewer acts on.
+joined() { tr '\n' ' ' | tr -s ' ' | sed -e 's/\*\*//g'; }
+close_item() { awk '/^4\. Closing writer/ { p = 1 } p && (/^[[:space:]]*$/ || /^### /) { exit } p { print }' "$1"; }
+role_named() { # <file> <section heading text> -> that section's body
+  awk -v h="## $2" '$0 == h { p = 1; next } p && /^## / { exit } p { print }' "$1"; }
+p_own_step() { local t g
+  t="$(close_item "$1" | joined)"; g="$(step_para "$1" | joined)"
+  grep -qF 'Once gate 3 passes, the lead dispatches one `code-reviewer` as the closing writer, `shard: 1/1 <story-index>`, for every story, serial or sharded.' <<<"$t" \
+    && grep -qF 'deferred_acs` in both sprint-status views taken from QA'"'"'s verdict' <<<"$t" \
+    && grep -qF 'The lead does not make these writes itself.' <<<"$t" \
+    && grep -qF 'No gate-1 reviewer, serial or shard, makes the `done` transition, `deferred_acs` or the review commit; the closing writer does, after gate 3.' <<<"$g" \
+    && ! grep -qi 'the lead performs' <<<"$g"; }
+p_own_role() { local o s c
+  o="$(role_named "$1" Ownership | joined)"; s="$(role_sect "$1" | joined)"; c="$(role_named "$1" 'As the Closing Writer' | joined)"
+  grep -qF 'The three closing writes belong to the closing writer, and only to it.' <<<"$o" \
+    && grep -qF 'A gate-1 reviewer — serial `shard: 1/1`, a part shard or the cross shard — makes none of them. After gate 3 passes, the lead dispatches one `code-reviewer` as the closing writer (see "As the Closing Writer")' <<<"$o" \
+    && grep -qF 'you do NOT perform the `done` transition, `deferred_acs` in both sprint-status views, or the review commit; the closing writer does, after gate 3.' <<<"$s" \
+    && grep -qF 'the lead dispatches you after gate 3 passes, for every story, serial or sharded' <<<"$c" \
+    && grep -qF 'make exactly the three closing writes' <<<"$c" && grep -qF 'Make no other edit.' <<<"$c"; }
+p_role_refuse() { # <file>: 0 when NO sentence outside As the Closing Writer hands a shard a write
+  awk '/^## As the Closing Writer$/ { skip = 1; next } skip && /^## / { skip = 0 } !skip { print }' "$1" \
+    | joined | awk '{ gsub(/\. /, ".\n"); print }' \
+    | awk '{ s = tolower($0) }
+           (s ~ /shard/ || s ~ /gate-1 reviewer/) \
+           && (s ~ /review commit/ || s ~ /`done` transition/ || s ~ /deferred_acs/ || s ~ /status: done/) \
+           && !(s ~ / not / || s ~ /none/ || s ~ / no /) { bad = 1 } END { exit bad }'; }
+# The header's THRESHOLD paragraph states the default, derived from the assignment, and the off
+# spelling, and no longer calls sharding opt-in.
+hdr_para() { awk '/^# THRESHOLD/ { p = 1; print; next } p && /^# [^ ]/ { exit } p { print }' "$1"; }
+p_hdr() { local t; t="$(hdr_para "$1" | joined)"
+  [ -n "$t" ] && ! grep -qi 'opt-in' <<<"$t" && grep -qF "the built-in default $DFLT" <<<"$t" && grep -qF "$KEY=0" <<<"$t"; }
+# Offenders, one per pinned property, each built on a copy and each guarded by cmp -s.
+#   W1-shape: the closing dispatch moved before gate 3 ("Once gate 2 passes").
+#   lead-shape: the Gate-1 paragraph hands the writes back to the lead.
+#   W2-shape: the Ownership pointer deleted.
+#   contra: a sentence outside As the Closing Writer gives the cross shard the review commit.
+sed -e 's/Once gate 3 passes, the lead/Once gate 2 passes, the lead/' "$STEP_MD" > "$WORK/own-step-early.md"
+sed -e '/^\*\*Gate-1 dispatch:/,/^[[:space:]]*$/s/the closing writer does, after gate 3\./the lead performs them after the merge./' "$STEP_MD" > "$WORK/own-step-lead.md"
+awk '/^- \*\*The three closing writes belong to the closing writer/ { skip = 1; next }
+     skip && /^- / { skip = 0 } !skip { print }' "$ROLE_MD" > "$WORK/own-role-nopointer.md"
+awk '/^## Constraints$/ { print "Dispatched as the cross shard, you make the review commit once the merge has written the review file."; print "" } { print }' \
+  "$ROLE_MD" > "$WORK/own-role-contra.md"
+# Near-miss for the refusal: the SAME sentence negated ("you do not make the review commit").
+awk '/^## Constraints$/ { print "Dispatched as the cross shard, you do not make the review commit; the closing writer does."; print "" } { print }' \
+  "$ROLE_MD" > "$WORK/own-role-negated.md"
+# Near-miss for the step pin: a different gate-3 phrasing ELSEWHERE in the step must not satisfy it.
+sed -e 's/Once gate 3 passes, the lead/Once gate 2 passes, the lead/' "$STEP_MD" \
+  | awk '/^### 4\. Self-Validate/ { print "Once gate 3 passes, the lead dispatches one `code-reviewer` as the closing writer, `shard: 1/1 <story-index>`, for every story, serial or sharded."; print "" } { print }' \
+  > "$WORK/own-step-elsewhere.md"
+sed -e '/^# THRESHOLD/s/ON BY DEFAULT/OPT-IN/' "$PART" > "$WORK/hdr-optin.sh"
+sed -e "/^# THRESHOLD/,/^# THE PART SET/s/the built-in default $DFLT/the built-in default $((DFLT + 1))/" "$PART" > "$WORK/hdr-num.sh"
+_stale=0
+# own-step-elsewhere is item 4 de-timed PLUS a gate-3 line added elsewhere; cmp -s alone would
+# accept the added line by itself, so assert item 4 itself moved.
+grep -qF 'Once gate 2 passes, the lead' "$WORK/own-step-elsewhere.md" || { _stale=1; echo "  (item 4 not de-timed in own-step-elsewhere.md)"; }
+for _p in "$STEP_MD:own-step-early.md" "$STEP_MD:own-step-lead.md" "$STEP_MD:own-step-elsewhere.md" \
+          "$ROLE_MD:own-role-nopointer.md" "$ROLE_MD:own-role-contra.md" "$ROLE_MD:own-role-negated.md" \
+          "$PART:hdr-optin.sh" "$PART:hdr-num.sh"; do
+  cmp -s "${_p%%:*}" "$WORK/${_p#*:}" && { _stale=1; echo "  (unchanged probe: ${_p#*:})"; }
+done
+if [ "$_stale" -ne 0 ]; then
+  bad "S3-pre: FIXTURE STALE -- an ownership or header probe's edit matched nothing, so the probe would score the shipped text"
+elif p_own_step "$WORK/own-step-early.md" || p_own_step "$WORK/own-step-lead.md" || p_own_step "$WORK/own-step-elsewhere.md" \
+     || p_own_role "$WORK/own-role-nopointer.md" || p_role_refuse "$WORK/own-role-contra.md" \
+     || p_hdr "$WORK/hdr-optin.sh" || p_hdr "$WORK/hdr-num.sh"; then
+  bad "S3-pre: FIXTURE BROKEN -- an ownership or header predicate passed an offender (closing dispatch before gate 3, writes handed to the lead, the dispatch named only outside item 4, the Ownership pointer gone, a shard given a write, OPT-IN restored, another number)"
+elif ! p_role_refuse "$WORK/own-role-negated.md" || ! p_own_role "$WORK/own-role-negated.md"; then
+  bad "S3-pre: FIXTURE BROKEN -- the refusal fired on a NEGATED sentence (a shard told it does NOT make the review commit), a near-miss"
+else
+  ok "S3-pre: the ownership predicates refuse a closing dispatch before gate 3, writes handed to the lead, the dispatch named outside item 4, a missing Ownership pointer and a shard given the review commit; they accept that sentence negated; the header predicate refuses OPT-IN and another number"
+fi
+if p_own_step "$STEP_MD"; then
+  ok "S3: implementation.md's task item 4 dispatches one code-reviewer as the closing writer after gate 3 for every story, deferred_acs from QA's verdict, and the Gate-1 paragraph gives no gate-1 reviewer and not the lead the three writes"
+else
+  bad "S3: implementation.md does not dispatch the closing writer after gate 3, or its Gate-1 paragraph still gives a reviewer or the lead the three writes"
+fi
+if p_own_role "$ROLE_MD"; then
+  ok "S4: code-reviewer.md's Ownership, As a Shard and As the Closing Writer give the three writes to the closing writer alone, dispatched after gate 3"
+else
+  bad "S4: code-reviewer.md does not give the three closing writes to the post-gate-3 closing writer at all three sites"
+fi
+if p_role_refuse "$ROLE_MD"; then
+  ok "S4b: no sentence in code-reviewer.md outside As the Closing Writer gives a shard or a gate-1 reviewer the done transition, deferred_acs or the review commit"
+else
+  bad "S4b: a sentence outside As the Closing Writer gives a shard or a gate-1 reviewer one of the three closing writes"
+fi
+if p_hdr "$PART"; then
+  ok "S5: partition-review-diff.sh's THRESHOLD paragraph states the built-in default $DFLT and $KEY=0, and does not say opt-in"
+else
+  bad "S5: partition-review-diff.sh's THRESHOLD paragraph still says opt-in, or does not state the default $DFLT and the off spelling"
 fi
 
 # ------------------------------------------------------------------------------ the mutants
@@ -602,10 +844,32 @@ mutant "MX17 a stray parts: line is not refused" merge-review-shards.sh "stray" 
 mutant "MX18 a shard without ## Findings is not refused" merge-review-shards.sh "nofind" \
   "  [ \"\$(awk '\$1 == \"F\" { print \$2 }' \"\$P\")\" = \"1\" ] \\" '  true \'
 mutant "MX19 the 9-digit cap removed" partition-review-diff.sh "knob" \
-  '  case "$MINF" in ??????????*) refuse' '  case "$MINF" in NEVER) refuse' \
+  'case "$MINF" in ??????????*) refuse' 'case "$MINF" in NEVER) refuse' \
   'case "$MAXP" in ??????????*) refuse' 'case "$MAXP" in NEVER) refuse'
 mutant "MX20 the 64-part ceiling removed" partition-review-diff.sh "knob" \
   '[ "$MAXP" -le 64 ] || refuse' '[ "$MAXP" -le 64 ] || true'
+# THE DEFAULT-ON THRESHOLD. Each mutant is a wrong build the contract names; the boundary one
+# dies only because P2b's seed sits at exactly the default.
+DFLT_LINE="REVIEW_SHARD_DEFAULT_MIN_FILES=$DFLT"
+mutant "MX21 default 0 (always serial)" partition-review-diff.sh "dflt_lo dflt_hi dmerge" \
+  "$DFLT_LINE" 'REVIEW_SHARD_DEFAULT_MIN_FILES=0'
+mutant "MX22 default 1 (always shards)" partition-review-diff.sh "dflt_lo" \
+  "$DFLT_LINE" 'REVIEW_SHARD_DEFAULT_MIN_FILES=1'
+mutant "MX23 the boundary is exclusive (-le)" partition-review-diff.sh "dflt_hi" \
+  'if [ "$NF_REV" -lt "$MINF" ]; then' 'if [ "$NF_REV" -le "$MINF" ]; then'
+mutant "MX24 a zero threshold refuses" partition-review-diff.sh "off" \
+  'echo "SERIAL: review sharding is disabled -- $MINF_SRC is 0"; exit 3' 'refuse "$MINF_SRC is 0"'
+mutant "MX25 a zero threshold means the default" partition-review-diff.sh "off" \
+  'MINF=$((10#$MINF))' 'MINF=$((10#$MINF)); [ "$MINF" -ne 0 ] || MINF="$REVIEW_SHARD_DEFAULT_MIN_FILES"'
+mutant "MX26 a set-but-empty key reads as unset" partition-review-diff.sh "refuse_val" \
+  'elif [ -n "${AI_DLC_REVIEW_SHARD_MIN_FILES+set}" ]; then' 'elif [ -n "${AI_DLC_REVIEW_SHARD_MIN_FILES:-}" ]; then'
+# Two arms, both true: prec sees the partition answer move, dmerge's flagged world sees the
+# manifest record the key's number instead of the flag's, which the merge would hand back.
+mutant "MX27 the key overrides --min-files" partition-review-diff.sh "prec dmerge" \
+  'if [ "$MINF_SET" -eq 1 ]; then' 'if [ "$MINF_SET" -eq 1 ] && [ -z "${AI_DLC_REVIEW_SHARD_MIN_FILES+set}" ]; then'
+mutant "MX28 the manifest records the default's SOURCE, not its number" partition-review-diff.sh "dmerge" \
+  '  MINF="$REVIEW_SHARD_DEFAULT_MIN_FILES"' '  MINF="$REVIEW_SHARD_DEFAULT_MIN_FILES"; MREC=default' \
+  "printf 'min-files\\t%s\\n' \"\$MINF\"" "printf 'min-files\\t%s\\n' \"\${MREC:-\$MINF}\""
 
 echo
 if [ "$fails" -eq 0 ]; then echo "$NAME: PASS"; exit 0; fi

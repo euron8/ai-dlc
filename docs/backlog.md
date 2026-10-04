@@ -450,3 +450,84 @@ The filtered identical-sets arm was run over the pairs that traced clean twice (
 - Builder evidence: 44 of 44 cells are byte-identical to base, stdout and rc. Assertion counts are 48/36/39, unchanged. The fork total is 3192 of 3196. Shard a ran about 30s faster across two interleaved reps at load 18-24.
 - The entry stays LIVE whatever the trace shows. Stage 1 met advances it to stage 2 (the operator's `--tracer both` run). The expected moved map rows are ZERO. Drops caused by load, like run 1's 680 notices at load 32, are outside this fix.
 
+
+## BL-440 — gate-1 review sharding becomes the default, with a built-in threshold of 8 reviewable files
+
+**Operator ruling, batch 194:** "yes, review sharding becomes the default". This is the decision
+CHANGELOG 0.718.0 and the archived BL-437 entry left to the operator after measured sprints. The
+entry is filed and landed in the same release.
+
+**The change.** `core/scripts/partition-review-diff.sh` now applies a built-in threshold of 8 when
+neither `--min-files` nor `AI_DLC_REVIEW_SHARD_MIN_FILES` is set. The default lives in one
+assignment, `REVIEW_SHARD_DEFAULT_MIN_FILES`, and a SERIAL line below it names the default as its
+source. The flag still beats the variable. `AI_DLC_REVIEW_SHARD_MIN_FILES=0` or `--min-files 0`
+turns sharding off with `SERIAL: review sharding is disabled` (exit 3). A variable that is set but
+EMPTY is refused (exit 2), as is any other non-integer. The refusal routes the lead to one
+`shard: 1/1` reviewer with the refusal line in the gate log, which is safe and visible there.
+Reading empty as unset would shard silently. The manifest records the numeric threshold applied,
+because `merge-review-shards.sh` hands it back as `--min-files`.
+`core/skills/ai-dlc/steps/implementation.md`'s Gate-1 dispatch paragraph states the default-on
+behaviour and the off spelling, and it names no number.
+
+**The three closing writes go to a closing writer dispatched after gate 3.** These are the `done`
+transition, `deferred_acs` in both views and the review commit. Operator ruling, batch 194, option
+B: once gate 3 passes, the lead dispatches one `code-reviewer` as the closing writer,
+`shard: 1/1 <idx>`, for every story, serial or sharded. It reads the gate-1 review file, merged for
+a sharded review, and QA's verdict. It makes exactly the three writes and no other edit. No gate-1
+reviewer, serial or shard, makes them, and the lead does not either. Two defects drove this:
+- A sharded review left the three writes unowned. That gap had been latent since 0.718.0 and
+  became live at default-on. Giving them to the lead was the first fix, and the tip adversary
+  refuted it. `core/hooks/ai-dlc-gate-remediation-guard.sh` denies a lead edit to a story file
+  while the newest gate verdict, read across all stories, records a FAIL. At the consumer's HEAD,
+  87 of the 222 verdict files in `_bmad-output/gate-adjudication/`, the directory the hook reads,
+  record a FAIL. An impossible-verdict control over the same files reads 0.
+- A serial reviewer made the writes at gate 1. `deferred_acs` is copied from QA's verdict at gate
+  2, so it could not be known then. The consumer's own history shows the role text was never
+  followed. `git log -S 'deferred_acs:'` on its implementation-artifacts `sprint-status.yaml`
+  returns 0 commits, against 162 for `status: done`. An impossible token returns 0. Its `done` flips land after gate 3,
+  for example "story-302-6 gate-3 PASSED 16/16, status: done".
+
+The writer is a dispatched agent, so the guard's agent_id arm allows its story-file edit while
+another story's verdict is FAIL. `core/fixtures/gate-remediation-deny` arm (b2) holds this, with
+the lead's identical edit denied in the same run. The writer spawn, driven through the real
+`ai-dlc-dispatch-guard.sh`, records `role: code-reviewer`, `shard: "1/1 3"`, `model_bound: opus`,
+and a cited, readable contract. Check 22 passes that row (exit 0, counted as carrying a shard
+line). An invented-exception row in the same ledger fails S3 (exit 1).
+`implementation.md` task item 4, `code-reviewer.md` (Ownership, As a Shard, As the Closing Writer),
+`qa.md`, `deploy-validate.md` and the `sprint-status` schema state this.
+`code-reviewer-escalated.md` defers to `code-reviewer.md` in full.
+
+Held by `core/fixtures/review-shard-merge`: arms P2 to P2f and mutants MX21 to MX28 for the
+threshold; S3, S4 and S4b for the closing writer; S5 for the script header; S6 for the step's
+default-on sentence. Each structural arm carries offenders and a near-miss in its self-probe. The
+tip adversary's three wrong builds are each killed by these arms: W1 (timing moved to "Before
+running the merge"), W2 (Ownership pointer deleted, a contradicting sentence added outside the
+section) and W3 (step reverted to opt-in).
+
+**Measured threshold.** Measured on the reference consumer's history, read-only from a `file://`
+clone, over 26 stories with a resolvable gate-1 range. Counted with the shipping
+`partition-review-diff.sh --map --min-files 1`. A hand count (`git diff --numstat --no-renames`
+minus scan roots) agreed on all 40 ranges. The exclusion arm discriminated: B1 had 46 files, 33
+under scan roots and 13 reviewable, and both counts agree. Reviewable files per range: min 1, Q1 4,
+median 7.5, Q3 14.75, max 93. A threshold of 8 shards 13 of 26 (50%), and 10 of 23 on s315+s316.
+Serial first-pass reviewer wall clock was a median 10.3 min at 8 files or fewer (n=13), against
+28.6 min at 12 or more (n=9). Above 12 files the reviewer tier (escalated) is confounded with size.
+No gate-1 review in the consumer has ever been sharded (46 of 46 ledger rows `shard: null`), so
+this default is the path's first real use. A Check 22 replay on a scratch copy of the consumer
+ledger fails nothing under default-on: 34 reviewer rows as `shard: 1/1` gave rc 0, and the
+`invalid-exception` control gave rc 1 with 34 S3 findings.
+
+**Caveats.**
+- The threshold counts FILES, while the packer weights LINES. In 14 of 15 measured ranges of 8 or
+  more files, part 01 is a single unpairable test file carrying 55-69% of the lines. The reading
+  gain is therefore capped near 1.5x, not 4x. Nothing regresses.
+- A `-p2` re-review of a story begun serially before the pull will shard after it.
+- Pole fixtures read `implementation.md`, so this release re-runs the pole.
+- Consumer impact: on the next pull, every story with 8 or more reviewable files dispatches N part
+  reviewers plus 1 cross reviewer instead of one reviewer.
+
+The receipt RUNS the partition on two seeded repositories. Unset with 8 reviewable files must
+partition, unset with 7 must answer SERIAL (exit 3), and `=0` with 8 must answer SERIAL disabled.
+
+verify: sh P=core/scripts/partition-review-diff.sh; [ -f "$P" ] || exit 9; W="$(mktemp -d)" || exit 9; G() { git -c user.name=r -c user.email=r@e.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }; mk() { mkdir -p "$W/$1/core/skills/ai-dlc" && G init -q "$W/$1" && cp core/skills/ai-dlc/artifact-path-grammar.md "$W/$1/core/skills/ai-dlc/" && echo s > "$W/$1/README" && G -C "$W/$1" add -A && G -C "$W/$1" commit -qm b || return 1; i=0; while [ "$i" -lt "$2" ]; do i=$((i+1)); mkdir -p "$W/$1/d$i" && echo "x$i" > "$W/$1/d$i/f" || return 1; done; G -C "$W/$1" add -A && G -C "$W/$1" commit -qm f; }; mk r7 7 && mk r8 8 || exit 9; pr() { r="$W/$1"; shift; env "$@" bash "$P" --map "$r" "$(G -C "$r" rev-parse HEAD~1)" "$(G -C "$r" rev-parse HEAD)" < /dev/null 2>&1; }; o="$(pr r8 -u AI_DLC_REVIEW_SHARD_MIN_FILES)" || exit 1; n="$(grep -c '^[0-9]' <<<"$o")" || n=0; [ "$n" -ge 2 ] || exit 1; pr r7 -u AI_DLC_REVIEW_SHARD_MIN_FILES > /dev/null; [ "$?" -eq 3 ] || exit 1; o="$(pr r8 AI_DLC_REVIEW_SHARD_MIN_FILES=0)"; rc=$?; [ "$rc" -eq 3 ] && grep -q 'disabled' <<<"$o" || exit 1; exit 0
+
