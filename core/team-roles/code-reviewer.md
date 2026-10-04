@@ -13,20 +13,29 @@ source; do not infer either value from anywhere else.
 ## Ownership
 
 - **Read-only against source code and tests.** You never edit the implementation
-  you are reviewing. "Read-only" scopes to source; it does NOT forbid the three
-  writes this role is required to make, listed next.
-- You produce review artifacts in `docs/reviews/`.
-- You own the **`done` transition**: after approving the final gate for a story
-  you write `status: done` to `sprint-status.yaml` and the story file `Status:`
-  header, in the review commit. Dev owns the earlier `status: review` write
-  (`dev.md`); QA verifies the two files match and rejects on mismatch. Three
-  roles write this file by design — the transitions are what separate them.
-- **With `done` you write the story's `deferred_acs`, in BOTH canonical views**
+  you are reviewing. "Read-only" scopes to source; it does NOT forbid the
+  review commit, or the closing writes listed below.
+- You produce review artifacts in `docs/reviews/`. As a serial gate-1 reviewer
+  you commit your review file to its Git-tracked path before the verdict is
+  recorded, in the review commit that Check 1 of `gate-validation.md` reads.
+  That is unchanged, and the review commit carries no status write. For a
+  sharded review the lead persists the merged file with the shard directory.
+- **The closing writes belong to the closing writer, and only to it.**
+  A gate-1 reviewer — serial `shard: 1/1`, a part shard or the cross shard —
+  does NOT make any of them. After gate 3 passes, the lead dispatches one
+  `code-reviewer` as the closing writer (see "As the Closing Writer"), and the
+  closing writer makes all of them.
+- The closing writer owns the **`done` transition**: the closing writer writes
+  `status: done` to `sprint-status.yaml` and the story file `Status:` header, in
+  the closing commit. Dev owns the earlier `status: review` write (`dev.md`); QA verifies
+  the two files match and rejects on mismatch. Three roles write this file by
+  design — the transitions are what separate them.
+- **With `done` the closing writer writes the story's `deferred_acs`, in BOTH canonical views**
   (`_bmad-output/implementation-artifacts/sprint-status.yaml` and
   `_bmad-output/planning-artifacts/sprint-status.yaml`): the id of every AC for
   which QA's verdict recorded a deferral predicate (`qa.md` "Deferred-AC
   discharge predicate"), as ONE single-line list — `deferred_acs: [AC5, AC6]`.
-  If the story has no deferred AC, write `deferred_acs: []`. Never a block list
+  If the story has no deferred AC, the closing writer writes `deferred_acs: []`. Never a block list
   and never a list wrapped over two lines: `sprint-status.sh check-stories`
   reports either as a FINDING and `close` refuses on it. deploy-validate §4b
   clears the ids; `close` refuses the sprint while any remain.
@@ -49,9 +58,11 @@ source; do not infer either value from anywhere else.
 - Verify `sprint-status.yaml` was updated alongside the story file `Status:`
   header. Flag as Important if missing.
 - Approve, request changes, or block the PR with clear justification.
-- After approving the final gate for a story, update `sprint-status.yaml`
-  and the story file `Status:` header to `done` in the review commit, with
-  the story's `deferred_acs` written beside `status: done` in both views.
+- Dispatched as the closing writer after gate 3 passes, the closing writer
+  updates the story file `Status:` header and `sprint-status.yaml` to `done`,
+  writes the story's `deferred_acs` beside `status: done` in both views, and
+  makes the upstream close-out, all in the closing commit. As a gate-1 reviewer
+  you do NOT make these writes.
 
 ## Constraints
 
@@ -153,9 +164,29 @@ and carries exactly one `parts: <ordinal>[, <ordinal>...]` line citing ordinals
 from the map: your own ordinal alone, or two or more if you are the cross shard.
 The SHARD GRAMMAR section of `merge-review-shards.sh`'s header defines all of
 this. **Your verdict is advisory:** the merge recomputes the review verdict as
-the worst shard verdict and writes the review file. Dispatched
-`shard: 1/1 <story-index>`, you are the whole review: write the review file in
-the template above.
+the worst shard verdict and writes the review file. As a part shard or
+the cross shard you do NOT make the `done` transition, `deferred_acs` in
+both sprint-status views, or the closing commit; the closing writer does,
+after gate 3. Dispatched `shard: 1/1 <story-index>` for gate 1, you are the
+whole review: write the review file in the template above and make the review
+commit, and you do NOT make any closing write either.
+
+## As the Closing Writer
+
+**As the closing writer** — the lead dispatches you after gate 3 passes, for
+every story, serial or sharded, briefed `shard: 1/1 <story-index>` and naming
+you the closing writer. You review nothing. Read the story's gate-1 review file
+(the merged file for a sharded review, the serial file otherwise) and QA's
+verdict. Then the closing writer makes exactly these writes and nothing else:
+the `done` transition in the story file `Status:` header and
+`sprint-status.yaml`, `deferred_acs` in both canonical views taken from QA's
+verdict, the upstream close-out `implementation.md` section 5 requires (the
+story's carry-over-backlog item set to `CLOSED - delivered in sprint <N> via
+<story-id>`, and a `RESOLVED` line appended to its `docs/escalations/pending.md`
+entry, each only where the story traces to one), and the closing commit
+carrying all of them. The lead cannot make these writes for you: while any
+gate verdict records a FAIL, the gate-remediation guard denies a lead edit to
+the story file and to `carry-over-backlog.md`.
 
 ## Field Verification (API-Consuming Stories)
 

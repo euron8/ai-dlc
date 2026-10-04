@@ -148,6 +148,26 @@ OUT="$(drive "$W" Edit "$W/$ART" "remediator@session-abc123")"
 if denied "$OUT"; then bad "(b) a dispatched remediator was DENIED — the hook blocks the repair it demands"
 else ok "(b) the IDENTICAL edit with agent_id present is ALLOWED (the remediator repairs freely)"; fi
 
+# ARM (b2) — THE CLOSING WRITER. After gate 3 the lead dispatches one `code-reviewer` to make
+# the story's three closing writes (`code-reviewer.md` "As the Closing Writer"), and one of them
+# is the story file's `Status:` header, which sits under a guarded root. The newest pass is read
+# across ALL stories, so another story's FAIL is live while this one closes. The writer is a
+# dispatched agent and must be allowed; the SAME edit from the lead, in the same run, is the
+# control that says the pass really is failing for this path — without it an allow here would
+# also read green on a workspace where nothing is failing.
+STORY="_bmad-output/planning-artifacts/s302/stories/story-302-6-closing.md"
+OUT_LEAD="$(drive "$W" Edit "$W/$STORY")"
+# An OPAQUE agent_id, as the harness mints them: no role prefix, so an allow keyed on a role name
+# (`remediator@*`, `code-reviewer@*`) is killed HERE and not only by arm (b)'s seeded spelling.
+OUT_WRITER="$(drive "$W" Edit "$W/$STORY" "a1b2c3")"
+if ! denied "$OUT_LEAD"; then
+  bad "(b2) CONTROL: the lead's own Edit to a story file was ALLOWED during the FAILing pass, so the writer's allow below proves nothing"
+elif denied "$OUT_WRITER"; then
+  bad "(b2) the post-gate-3 closing writer (a dispatched code-reviewer) was DENIED its story-file Status edit while the newest pass is FAIL"
+else
+  ok "(b2) the closing writer's story-file Edit (opaque agent_id a1b2c3) is ALLOWED while the newest pass is FAIL; the lead's identical Edit is DENIED in the same run"
+fi
+
 # =============================================================================
 # ARM (c) — THE PERMITTED SET (Rule 28(a)). Enumerated, and each one tested.
 # =============================================================================

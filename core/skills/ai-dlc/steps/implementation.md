@@ -138,6 +138,19 @@ follow-up tasks with dependencies:
 2. QA validation task → assigned to qa, blocked by code review
 3. Story validation → blocked by QA. Gate 3 is a lead-run
    `gate-validation.md` declared `[implementation]`; no sub-skill performs it.
+4. Closing writer → blocked by gate 3. **Once gate 3 passes, the lead
+   dispatches one `code-reviewer` as the closing writer, `shard: 1/1
+   <story-index>`, for every story, serial or sharded.** The closing writer
+   reads the gate-1 review file (the merged file for a sharded review) and
+   QA's verdict, and the closing writer makes exactly these writes and nothing
+   else: the `done` transition (story file `Status:` header and
+   `sprint-status.yaml`), `deferred_acs` in both sprint-status views taken from
+   QA's verdict, the upstream close-out section 5 requires, and the closing
+   commit carrying them (`code-reviewer.md` "As the Closing Writer"). The lead
+   does NOT make these writes. **The closing writer is also owed to a story
+   already past gate 3 without its closing writes** — still `review`, or `done`
+   with no `deferred_acs` field in both views, including every such story a
+   pull finds in flight: the lead dispatches it at the lead's next turn.
 
 ### 4. Self-Validate Task List
 
@@ -214,8 +227,9 @@ Instruct all teammates:
     and never writes, because a gate that edits the artifact it is validating
     can pass a tree it just changed. An undeclared list is a worklist line and
     exit 0, so a project that has not adopted this is unaffected.
-- On story transition to `done`, close out any upstream source item the
-  story satisfies — do not defer to retro:
+- On story transition to `done`, the closing writer (item 4 of section 3)
+  closes out any upstream source item the story satisfies, in the closing
+  commit — do not defer to retro:
   - If the story traces to a carry-over backlog item: update
     `_bmad-output/planning-artifacts/carry-over-backlog.md`, change the
     item's status from `IN SPRINT` to `CLOSED - delivered in sprint <N>
@@ -277,9 +291,11 @@ run in the frozen dev worktree
 `partition-review-diff.sh --map <worktree> <base> <frozen-sha> --shard-dir docs/reviews/s<N>/shards/<story-index>-code-review-<sha12>`,
 where `<base>` is the base of the two-dot range the check above logs,
 `<frozen-sha>` is the full SHA and `<sha12>` its first twelve characters.
-Review sharding is opt-in: the program answers `SERIAL:` (exit 3) unless
-`AI_DLC_REVIEW_SHARD_MIN_FILES` is set in `.claude/settings.json` `env`
-and the story's reviewable files reach it. On `SERIAL`, dispatch one
+Review sharding is on by default: the program answers `SERIAL:` (exit 3)
+when the story's reviewable files fall below the threshold, which is the
+built-in default in `partition-review-diff.sh`;
+`AI_DLC_REVIEW_SHARD_MIN_FILES` in `.claude/settings.json` `env` overrides it,
+and setting it to `0` turns review sharding off. On `SERIAL`, dispatch one
 reviewer with `shard: 1/1 <story-index>`. On exit 2 (a REFUSED line on
 stderr, e.g. a base that is not an ancestor of the frozen SHA), likewise
 dispatch one reviewer with `shard: 1/1 <story-index>` and record the
@@ -296,7 +312,11 @@ frozen worktree with
 passing the pass-specific name on a later pass (`-p2`, ...). The merge
 re-derives the parts, refuses (exit 2, nothing written) on a missing,
 duplicate or mis-cited shard, and writes the one review file Check 1
-reads, verdict recomputed as the worst shard verdict. The lead persists
+reads, verdict recomputed as the worst shard verdict. A gate-1 reviewer,
+serial or shard, does NOT make the `done` transition, `deferred_acs` or the
+closing commit; the closing writer does, after gate 3. Persisting the gate-1
+review file is unchanged: a serial reviewer commits it to its Git-tracked path
+before the verdict is recorded, as Check 1 requires. The lead persists
 the shard directory together with the merged file. Gate 2 is
 dispatched `shard: 1/1 <story-index>`; it has no shard merge.
 
@@ -375,7 +395,13 @@ orchestration resumes.
 
 ### 7. All Gates Passed
 
-When ALL sprint stories have passed all three gates AND the entering gate
-that routed into this step has reached PASS — including any check whose
-repair was dispatched in parallel with that routing:
+When ALL sprint stories have passed all three gates AND the closing writer has
+landed every story's closing commit, leaving every story `done` with a
+`deferred_acs` field in both sprint-status views, AND the entering gate that
+routed into this step has reached PASS — including any check whose repair was
+dispatched in parallel with that routing. The closing writer has not run for a
+story past gate 3 that is not `done` or carries no `deferred_acs` field in a
+view: dispatch the closing writer now (section 3, item 4) and route only after
+the closing writer's closing commit lands. The lead does NOT make these writes
+itself.
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/sprint-review.md`

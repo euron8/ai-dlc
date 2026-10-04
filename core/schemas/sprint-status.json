@@ -67,7 +67,7 @@
     "bare `deferred_acs:` with nothing after it is a YAML null, not `[]`, and is refused for the same",
     "reason. Each id matches `keys.deferred_ac_id_re`.",
     "",
-    "WRITERS. code-reviewer writes it at the `done` transition, in BOTH canonical views, from the",
+    "WRITERS. the closing writer (a code-reviewer the lead dispatches after gate 3) writes it at the `done` transition, in BOTH canonical views, from the",
     "deferral predicates QA recorded. deploy-validate section 4b removes an id when its predicate runs",
     "GREEN, or, on re-deferral, after filing it as a carry-over OPEN item. `close` refuses (exit 3)",
     "while any story still carries one, checked across every view before any view is written.",
