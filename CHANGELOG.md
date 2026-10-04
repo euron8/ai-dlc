@@ -19,6 +19,35 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.723.0] - 2026-10-04
+
+Batch 194's first release. On the operator's batch-194 ruling, gate-1 review sharding becomes the
+default. It files and lands `BL-440` (net closed minus filed: 0). It discharges no consumer
+candidate.
+
+### BL-440: gate-1 review sharding is on by default at 8 reviewable files
+
+- `partition-review-diff.sh` applies a built-in threshold of 8 when neither `--min-files` nor
+  `AI_DLC_REVIEW_SHARD_MIN_FILES` is set. The flag still beats the variable. To turn sharding off,
+  set `AI_DLC_REVIEW_SHARD_MIN_FILES=0` in the `env` block of `.claude/settings.json`. A variable
+  that is set but empty is refused, which routes the lead to one `shard: 1/1` reviewer with the
+  refusal recorded in the gate log.
+- The manifest records the numeric threshold that was applied, and the merge re-derives the map
+  from it.
+- For a sharded review, the lead makes the serial reviewer's three writes after the merge, from the
+  merged verdict: the `done` transition, `deferred_acs`, and the review commit. `implementation.md`
+  and `code-reviewer.md` say so. This ownership gap had been latent since 0.718.0.
+- **Measured threshold.** Over 26 stories of the reference consumer, a threshold of 8 shards 13 of
+  them. Serial reviews took a median of 10.3 minutes at 8 files or fewer, against 28.6 minutes at 12
+  or more. Above 12 files, reviewer tier is confounded with size.
+- **Consumer impact.** On the next pull, every story with 8 or more reviewable files dispatches its
+  part reviewers plus one cross reviewer. A `-p2` re-review of a story that started serially will
+  shard. A Check 22 replay on the consumer's ledger fails nothing.
+- **Caveat.** The threshold counts files, but the packer weights lines. In 14 of 15 measured large
+  ranges, one unsplittable test file carries 55-69% of the lines, so the reading speed-up is capped
+  near 1.5x. No review gets slower.
+- Gate 2 (QA) stays serial.
+
 ## [0.722.0] - 2026-10-03
 
 Batch 191's fourth release. It closes `BL-145`, re-scoped on the operator's batch-191 ruling.
