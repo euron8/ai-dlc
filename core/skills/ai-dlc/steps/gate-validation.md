@@ -872,6 +872,11 @@ scoped to the wrong path, or run against an empty set. A row that claims absence
 without a control is incomplete on the same terms as a missing per-check result,
 and is rewritten before proceeding.
 
+**A state claim MUST carry its command.** Any evidence row asserting repository
+state — committed, tracked, gitignored, absent, red, green — MUST carry, in the same
+row, the command that produced it and that command's output. A state claim without
+one is rewritten before proceeding.
+
 **Every per-check row id carries its CATALOG** — `[core] 24 — <title>` for a check
 from this file, `[ext:<id>] 24 — <title>` for one from a consumer
 `extensions/checks/` file (`<id>` = that file's `id:` frontmatter). A bare `24` is
@@ -2001,8 +2006,8 @@ parsed — observed H1s include `Sprint 288`, `Sprint S286`,
 **Out of scope by design** (the script will not flag these): the
 one-shot onboarding artifacts `codebase-analysis.md`,
 `brownfield-inventory.md`, `doc-reconciliation.md` (written once, read
-by path downstream, no sprint key), and `bug-analysis.md` (bug-keyed,
-not sprint-keyed).
+by path downstream, no sprint key), and `bug-analysis.md` with its
+`bug-analysis-adversarial.md` sibling (bug-keyed, not sprint-keyed).
 
 **PASS:** exit 0. **FAIL:** exit 1 — an unstamped draft on disk, or a
 layer declaring an unstamped write path.

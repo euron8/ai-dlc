@@ -198,6 +198,39 @@ written without its derivation — which is the point: the cost of deriving it i
 command, and the cost of not deriving it is a full pass. *Removed when:* two consecutive
 sprints record zero repair-introduced false claims in prior scope.
 
+### An uncited operator attribution is a MAJOR
+
+**An operator attribution missing its quote or its locator is a MAJOR.** Any requirement, AC
+or decision the reviewed artifact attributes to the operator must carry a verbatim quote
+of the operator's message and a locator for it (`rule-bodies/rule-13.md`). You have no
+transcript to check the quote against; check that both are PRESENT. An attribution
+missing either is a MAJOR, and the repair is to supply the citation — never to rephrase
+it. Striking the attribution is a repair only when its author confirms no citable message
+exists (`rule-bodies/rule-13.md`); an attribution with a message behind it is a locked
+requirement, and dropping it needs the `HARD_BLOCK` that rule requires. It is CRITICAL
+only when the artifact grades an AC or locks a requirement against it.
+
+**Minimum mechanism (Rule 26(c)).** *Catches:* an attribution with no citable message
+treated as a locked requirement, so a later pass grades the work against a requirement
+nobody stated. *False-positive cost:* a MAJOR on a genuine attribution whose author
+omitted the locator, repaired by adding one line. *Removed when:* a mechanism verifies
+operator attributions against the session record before the pass is dispatched.
+
+### A premise a later event contradicted is a MAJOR
+
+**An authorization whose named outcome a later event contradicted is a MAJOR.** When
+the reviewed artifact relies on a RESOLVED or OVERRIDDEN authorization, ask whether a
+later sprint event shows that an outcome the authorization relied on did not occur. If
+it does and no new `HARD_BLOCK` entry cites both the authorization and that event
+(`escalations.md` "Authorization-premise invalidation disclosure"), file a MAJOR. A
+change absorbed in gate-log prose is not a disclosure.
+
+**Minimum mechanism (Rule 26(c)).** *Catches:* work proceeding to deploy-validate on an
+authorization whose premise no longer holds, without the operator being asked again.
+*False-positive cost:* a MAJOR on an outcome that changed in a way the authorization
+did not depend on, dismissed by citing the authorization's text. *Removed when:*
+authorizations record their premises in a form a gate can join against later events.
+
 ### A recipe you did not RUN is a claim you did not review
 
 The rung above polices whether a derivation is **present**. This one polices whether you

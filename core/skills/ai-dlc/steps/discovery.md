@@ -176,6 +176,10 @@ Sources to extract from:
 - Any escalation specs or feature docs referenced by the user
 - Project memory entries about user preferences that constrain this feature
 
+**Every operator attribution carries a quote and a locator** (`rule-bodies/rule-13.md`).
+For a project-memory entry, its path is the locator. An attribution with no citable
+message is struck here and never enters `LOCKED_REQUIREMENTS`.
+
 Be exhaustive. Every concrete detail the user specified (placement, scope,
 behavior, approach) is a locked requirement. Do not paraphrase — quote
 verbatim or as close to verbatim as the source allows.

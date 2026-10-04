@@ -67,8 +67,8 @@ per-sprint drafts: `carry-over-evaluation.md`, `discovery-context.md`,
 one-shot onboarding artifacts (`codebase-analysis.md`,
 `brownfield-inventory.md`, `doc-reconciliation.md`) — those are written
 once at the area root, are read by path downstream, and have no sprint
-key — nor to `bug-analysis.md`, which is bug-keyed rather than
-sprint-keyed.
+key — nor to `bug-analysis.md` and its `bug-analysis-adversarial.md` sibling
+(`bug-investigation.md` §2c), which are bug-keyed rather than sprint-keyed.
 
 **AND IT APPLIES TO `test-strategy.md`, WHICH IS NOT A DRAFT — THE LIST ABOVE
 ENUMERATED PRODUCERS AND THE RULE IS ABOUT PATHS.** It is a TEA deliverable

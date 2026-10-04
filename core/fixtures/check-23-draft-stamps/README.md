@@ -48,8 +48,8 @@ Three separate false-positive traps, all in one tree:
    `brownfield-inventory.md`, `doc-reconciliation.md` are written once, are read
    by path downstream (`discovery.md`, `doc-repair-backfill.md`), and have no
    sprint key. They are unstamped **by design**.
-3. **`bug-analysis.md`.** Bug-keyed, not sprint-keyed — two bugs in one sprint
-   would collide on the same stamp.
+3. **`bug-analysis.md` and its `bug-analysis-adversarial.md` sibling.** Bug-keyed,
+   not sprint-keyed — two bugs in one sprint would collide on the same stamp.
 4. **A layer entry hooking `steps/stories-test-strategy.md`.** The step file's own
    name contains `test-strategy`, which entered scope at v0.324.0. This trap sits
    in `extensions/`, which the layer half **does** scan — putting it under
@@ -71,7 +71,8 @@ anyway. It is a TEA deliverable, it IS read downstream, and the failure mode is
 identical because it does not depend on the producer: one basename, one area
 root, one write per sprint, nothing consolidating and nothing rotating.
 
-Out: the three onboarding artifacts and `bug-analysis` (see above).
+Out: the three onboarding artifacts, `bug-analysis` and `bug-analysis-adversarial`
+(see above).
 
 ## Two mutants, and what each proves
 

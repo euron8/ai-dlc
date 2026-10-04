@@ -562,3 +562,217 @@ Range keying is the refused claim A. Dropping the paths from the manifest or fro
 The receipt exits 9 if the seed does not form or the recorded manifest is empty. Scored under `bash -c 'set -uo pipefail; …'` from the repo root: release tip 0; base 1; the two sibling fixes alone 1; each of the six wrong fixes above 1; a cwd with no hook 9.
 
 verify: sh unset AI_DLC_FIXTURE_NO_SKIP GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; H=.githooks/pre-push; K=scripts/suite-content-key.sh; [ -f "$H" ] && [ -f "$K" ] || exit 9; command -v shasum >/dev/null || exit 9; w="$(mktemp -d)" || exit 9; sed -n '/^# FIXTURE_POOL_BEGIN/,/^# FIXTURE_POOL_END/p' "$H" > "$w/pool.sh"; grep -q '^readset_manifest()' "$w/pool.sh" && grep -q '^apply_readset_skip()' "$w/pool.sh" || exit 9; ALL='0:alpha,mstate,gamma,'; p() { t="$w/$1"; o="$w/$1.o"; mkdir -p "$o" "$t/src" "$t/scripts" "$t/.claude" "$t/sub/_bmad-output" "$t/_bmad-output/sub" || return 9; cp "$K" "$t/scripts/" || return 9; echo v > "$t/src/a.sh"; echo s > "$t/.claude/settings.json"; echo m > "$t/_bmad-output/mapped-state.md"; echo l > "$t/_bmad-output/pipeline-continuation-log.md"; echo j > "$t/_bmad-output/arm-log.jsonl"; echo d > "$t/_bmad-output/.pipeline-state"; echo x > "$t/_bmad-output/sub/x.md"; echo n > "$t/sub/_bmad-output/pipeline-continuation-log.md"; printf 'alpha\tsrc/a.sh\nmstate\t_bmad-output/mapped-state.md\n' > "$t/.ai-dlc-fixture-readsets.tsv"; ( cd "$t" && git init -q . && git add -A && git -c user.name=r -c user.email=r@r -c commit.gpgsign=false commit -qm s ) >/dev/null 2>&1 || return 9; ( cd "$t" || exit 9; . "$w/pool.sh" >/dev/null 2>&1; readset_manifest "$o"; [ -s "$o/.now" ] || exit 9; cp "$o/.now" .git/ai-dlc-fixture-verified || exit 9; eval "$2" || exit 9; printf 'x/%s/\n' alpha mstate gamma > "$o/list"; READSET_NO_CHANGE=0; apply_readset_skip "$o/list" "$o" >/dev/null 2>&1; printf '%s:%s' "$READSET_NO_CHANGE" "$(sed 's|^x/||; s|/$||' "$o/list" | tr '\n' ,)" ); }; f=0; chk() { r="$(p "$1" "$2")" || { echo "NO-RUN $1" >&2; exit 9; }; [ "$r" = "$3" ] || { echo "BL-443 $1: want $3 got $r" >&2; f=1; }; }; chk flat-zero 'echo l2 >> _bmad-output/pipeline-continuation-log.md' '0:gamma,'; chk flat-new 'echo s > _bmad-output/story-7-state.md' '0:gamma,'; chk flat-jsonl 'echo j >> _bmad-output/arm-log.jsonl' '0:gamma,'; chk flat-dotfile 'echo d >> _bmad-output/.pipeline-state' '0:gamma,'; chk flat-mapped 'echo m2 >> _bmad-output/mapped-state.md' '0:mstate,gamma,'; chk deeper 'echo x2 >> _bmad-output/sub/x.md' "$ALL"; chk nested 'echo n2 >> sub/_bmad-output/pipeline-continuation-log.md' "$ALL"; chk flat+settings 'echo l2 >> _bmad-output/pipeline-continuation-log.md; echo s2 > .claude/settings.json' "$ALL"; chk uncommitted 'echo v2 > src/a.sh' '0:alpha,gamma,'; exit $f
+
+## BL-444 — an operator attribution and a repository-state claim could each be written with no cited source, and a later pass graded against them
+
+**DEFECT.**
+
+Filed by the consumer as PC-S316-OPERATOR-ATTRIBUTION-AND-STATE-CLAIMS-NEED-A-CITED-SOURCE.
+
+**Two claims, scored separately.**
+- (a) A requirement, AC or decision attributed to the operator carried no quote and no locator, so
+  nothing distinguished a real operator statement from an invented one, and it entered the locked set
+  and was graded against. The operator-citation check core does carry, `gate-validation.md` Check 2a
+  (`validate-escalation-resolution.sh`), has escalation entries as its subject: its header
+  (`core/scripts/validate-escalation-resolution.sh:2-3`) names an operator-gated HARD_BLOCK marked
+  RESOLVED.
+- (b) A gate evidence row asserting repository state (committed, tracked, gitignored, absent, red,
+  green) did not have to carry the command that produced it. Check 12 already required an absence
+  claim to carry a control; it did not require a state claim to carry its command.
+
+**The fix, as landed.**
+- (b) `core/skills/ai-dlc/steps/gate-validation.md:875`, inside Check 12 directly after the
+  absence-control paragraph: `**A state claim MUST carry its command.**` The row carries the command
+  and its output, or it is rewritten before proceeding.
+- (a) `core/skills/ai-dlc/rule-bodies/rule-13.md:18`, inside Rule 13 proper and above `## HANDOFF
+  PROTOCOL`: `**An operator attribution MUST cite the operator's message.**` A verbatim quote plus a
+  locator. An attribution with no citable message never entered the locked set: it is struck at
+  extraction, is not graded against and is not carried forward, and striking it is not a Rule 13
+  divergence. That wording keeps it out of Rule 13's HARD_BLOCK-to-drop path. A project-memory
+  entry's path is an acceptable locator for that source class, which resolves the source line at
+  `discovery.md:177`.
+- Pointer at `core/skills/ai-dlc/steps/discovery.md:179`, inside §4a: `**Every operator attribution
+  carries a quote and a locator**`.
+- Reviewer arm at `core/team-roles/adversary.md:201`, its own rung under `## Severity`: `### An
+  uncited operator attribution is a MAJOR`. It checks that a quote AND a locator are PRESENT, because
+  the adversary has no transcript to check the quote against. CRITICAL only where the artifact grades
+  an AC or locks a requirement against the attribution. Its repair is to supply the citation; striking
+  is allowed only where the author confirms no citable message exists, per `rule-13.md`, because an
+  attribution with a message behind it is a locked requirement and dropping it needs the HARD_BLOCK.
+
+**No mechanism.** Rule 31's own carrier note (`core/skills/ai-dlc/SKILL.md:932-940`) records the
+measurement: a block-grain detector for an uncited claim flagged 6074 blocks across 890 of 998 story
+files, and was passable by adding any unrelated citation. A detector for (a) or (b) has the same
+shape and the same false-positive set, so neither is mechanised and the adversary rung is the carrier.
+
+**The consumer's receipt cannot close against this fix.** Its `verify: theirs_lacks
+core/skills/ai-dlc/steps/gate-validation.md "XAP"` closes only when core's `gate-validation.md`
+carries the consumer's own `XAP` token, and core prose never will: `XAP` occurs 0 times in that file
+at base and at the fix, against 8 for `Check 12` in the same file at the fix. The entry therefore
+needs a hand annotation on the consumer side when this release is pulled. **Do NOT suggest retiring
+the consumer's XAP.** Core's (a) and (b) carry no gate FAIL; they are prose plus an adversary MAJOR.
+The consumer's XAP is universal and FAILS the gate, per the batch-195 contract adversary's reading of
+it, so retiring it on the strength of this release would trade a blocking check for a non-blocking one.
+The layer-drift rehearsal of this release against a scratch copy of the consumer, including XAP's
+row, is reported separately by the measurement hand.
+
+**Wrong fixes rejected.**
+- Widening Check 2a / `validate-escalation-resolution.sh` to every artifact. That script's subject
+  is the RESOLVED/OVERRIDDEN escalation entry and its operator citation; a story's or a gate log's
+  operator attribution is not an escalation entry, so widening it changes the subject rather than
+  extending the check.
+- Folding (b) into Rule 31. Rule 31 binds countable assertions, has no carrier (declared a GAP), and
+  is read nowhere near Check 12's evidence rows. A state claim placed there is out of the section the
+  gate executes. The receipt scores this build 1.
+
+**Receipt.** Paragraph-joined and section-bounded: each file is folded to one line per paragraph
+with fenced and `<!-- -->` lines skipped, then each pin must open a paragraph INSIDE its span: Check
+12 (`### 12.` to `### 13.`), Rule 13 (to `## HANDOFF`), discovery §4a (to `### 4b`), and adversary
+`## Severity`. Scored under `bash -c 'set -uo pipefail; ...'` from the tree root:
+
+| tree | exit |
+|---|---|
+| fix (release tip) | 0 |
+| base `f8384eea` | 1 |
+| base plus every pin text appended as trailing paragraphs to every file the receipt names | 1 |
+| state-claim paragraph moved into SKILL.md Rule 31, Check 12 untouched | 1 |
+| state-claim paragraph wrapped in a fenced block inside Check 12 | 1 |
+| BL-445's fix alone on base | 1 |
+| BL-446's fix alone on base | 1 |
+| rewording: both bold leads kept, bodies rewritten and re-wrapped at 50-60 columns | 0 |
+
+The pin holds the bold leads verbatim and accepts any rewording of the body that keeps the words
+`output` (Check 12) and `locator` (Rule 13).
+
+verify: sh g=core/skills/ai-dlc/steps/gate-validation.md; r=core/skills/ai-dlc/rule-bodies/rule-13.md; d=core/skills/ai-dlc/steps/discovery.md; a=core/team-roles/adversary.md; for f in "$g" "$r" "$d" "$a"; do [ -f "$f" ] || exit 9; done; PJ='function f(){ if(p!=""){gsub(/[[:space:]]+/," ",p); sub(/^ /,"",p); print p}; p="" } /^[[:space:]]*```/{f(); z=!z; next} z{next} /^[[:space:]]*<!--/{f(); if($0!~/-->/)m=1; next} m{if($0~/-->/)m=0; next} /^[[:space:]]*$/{f(); next} /^#/{f(); print; next} {p=p" "$0} END{f()}'; sp(){ awk "$PJ" "$1" | awk -v S="$2" -v E="$3" 'index($0,E)==1&&s{s=0} index($0,S)==1{s=1;next} s'; }; c1(){ awk -v L="$1" -v X="$2" '(L==""||index($0,L)==1)&&(X==""||index($0,X)){c++} END{print c+0}'; }; [ "$(sp "$g" '### 12.' '### 13.' | c1 '**A state claim MUST carry its command.**' 'output')" = 1 ] || exit 1; [ "$(sp "$r" '### Rule 13 --' '## HANDOFF' | c1 '**An operator attribution MUST cite the operator' 'locator')" = 1 ] || exit 1; [ "$(sp "$d" '### 4a.' '### 4b' | c1 '**Every operator attribution carries a quote and a locator**' '')" = 1 ] || exit 1; [ "$(sp "$a" '## Severity' '## ' | awk '$0=="### An uncited operator attribution is a MAJOR"{c++} END{print c+0}')" = 1 ] || exit 1; exit 0
+
+## BL-445 — the bug-analysis root-cause claim reached the fix story with no adversarial pass on its soundness
+
+**DEFECT.**
+
+Filed by the consumer as PC-S316-NO-ADVERSARIAL-PASS-ON-THE-BUG-ANALYSIS-ROOT-CAUSE-CLAIM.
+
+**Claims, scored separately.**
+- `bug-investigation.md` ran no adversarial review between the root-cause analysis (§2) and the fix
+  story (§3). The only review was §4's story validation cycle, which reviews the STORY, so a
+  root cause placed where the defect is observed rather than where the wrong value is produced passed
+  every pass downstream.
+- Any review added there must not hold operator-applicable relief behind it (§2b).
+- The folded-defect routes named the range they run as `0–2b`, so a new §2c would be skipped on
+  both of them.
+
+**The fix, as landed.**
+- `core/skills/ai-dlc/steps/bug-investigation.md:102`, a new `### 2c. Adversarial verification of
+  the root-cause claim` between §2b and `### 3.`, titled to match the consumer's own extension so
+  layer-drift can see the overlap. It dispatches ONE `adversary` (Rule 19) to run
+  `/bmad-review-adversarial-general` on `bug-analysis.md`, one-shot and `mode: subagent`, against the
+  soundness of the root cause: does each falsification-ladder rung rule its layer out, is a layer
+  missing, does the evidence fit another cause equally well, is the defect placed where it is
+  observed rather than produced. Findings go to
+  `_bmad-output/planning-artifacts/bug-analysis-adversarial.md` with a
+  `SKILL_INVOCATION_PROVENANCE v1` block whose `artifact:` names `bug-analysis.md` and which carries
+  no `verdict`. `:122` requires every CRITICAL and MAJOR disposed of before §3, by amending the
+  analysis or recording counter-evidence in the fix story. `:126` copies §4's relief sentence, so a
+  one-shot finding that yields operator relief goes to the operator when it is found.
+- `:100`, §2b's last sentence: relief is not held behind any review between sections 2 and 3, "§2c
+  included".
+- `core/skills/ai-dlc/steps/route.md:421` and `core/skills/ai-dlc/steps/stories-test-strategy.md:505-507`
+  now read `0–2c`, and the stories-test-strategy `0–4` path names §2c explicitly. `grep -rnE
+  '0(–|-)2b' core/ --exclude-dir=fixtures` reads 0, against 2 for `0(–|-)2c` in the same tree.
+  Without the exclusion the counts include `process-rule-pins`' own probe text.
+- The new sibling is bug-keyed, not sprint-keyed, so it joins `bug-analysis.md`'s Rule 24 exemption
+  everywhere that exemption is written: `core/scripts/validate-draft-stamps.sh:53-67`, whose
+  derivation now returns 14 basenames with the command beside the count, and `:112-121`,
+  `core/skills/ai-dlc/rule-bodies/rule-24.md:70`,
+  `core/skills/ai-dlc/steps/gate-validation.md:2009-2010`, and
+  `core/fixtures/check-23-draft-stamps/README.md:51,74`. The check-23 decoy the contract first asked
+  for was DROPPED: `DRAFTS` is an exact-basename whitelist, so a decoy named
+  `bug-analysis-adversarial.md` cannot fail with or without the exemption.
+
+**NOTE: the Check 17 mechanism arm is NOT built.** The arm would fail a gate when a fix story states
+a root cause and `bug-analysis-adversarial.md` is absent. It needs a PENDING arm for fix stories
+written before this release and a false-positive set measured on a scratch copy of the consumer's
+live slot. Neither exists, so this release ships prose and a text-pin fixture only.
+
+**Wrong fixes rejected.**
+- Adding the soundness questions to §4's fix-story validation cycle. §4 reviews the story after the
+  root cause is written into it, which is the gap. The receipt scores the §2c body moved into §4 as 1.
+- Stamping the sibling under `planning-artifacts/s<N>/`. A bug has no sprint key, and two bugs in one
+  sprint would collide on one stamped path; that is the reason `bug-analysis.md` is exempt.
+- §2c placed after `### 3.`. The fix story would already carry the claim. The receipt scores it 1.
+
+**Receipt.** Paragraph-joined and section-bounded, fenced and `<!-- -->` lines skipped. It requires
+the `### 2c.` heading verbatim, immediately after a `### 2b.` heading and immediately before a
+`### 3.` heading; inside §2c, the bold lead, the full findings path and the disposition lead; `§2c
+included` inside §2b; and in `route.md` and `stories-test-strategy.md`, no `0–2b` (either dash) and at
+least one `sections 0–2c`. Scored under `bash -c 'set -uo pipefail; ...'` from the tree root:
+
+| tree | exit |
+|---|---|
+| fix (release tip) | 0 |
+| base `f8384eea` | 1 |
+| base plus every pin text appended as trailing paragraphs to every file the receipt names | 1 |
+| §2c moved to after `### 3.` | 1 |
+| §2c's body folded into §4, heading removed | 1 |
+| BL-444's fix alone on base | 1 |
+| BL-446's fix alone on base | 1 |
+| rewording: three §2c paragraphs re-wrapped at 45-55 columns | 0 |
+
+The alternate build is a re-wrap, not a rewording. The pin intentionally refuses rewording of four
+things: the `### 2c.` title, which layer-drift keys on; the two bold leads; and the full findings
+path. Everything else in §2c may be reworded.
+
+verify: sh b=core/skills/ai-dlc/steps/bug-investigation.md; ro=core/skills/ai-dlc/steps/route.md; st=core/skills/ai-dlc/steps/stories-test-strategy.md; for f in "$b" "$ro" "$st"; do [ -f "$f" ] || exit 9; done; PJ='function f(){ if(p!=""){gsub(/[[:space:]]+/," ",p); sub(/^ /,"",p); print p}; p="" } /^[[:space:]]*```/{f(); z=!z; next} z{next} /^[[:space:]]*<!--/{f(); if($0!~/-->/)m=1; next} m{if($0~/-->/)m=0; next} /^[[:space:]]*$/{f(); next} /^#/{f(); print; next} {p=p" "$0} END{f()}'; sp(){ awk "$PJ" "$1" | awk -v S="$2" -v E="$3" 'index($0,E)==1&&s{s=0} index($0,S)==1{s=1;next} s'; }; c1(){ awk -v L="$1" -v X="$2" '(L==""||index($0,L)==1)&&(X==""||index($0,X)){c++} END{print c+0}'; }; [ "$(awk "$PJ" "$b" | awk '/^### /{if(q&&index($0,"### 3.")==1)ok++; q=(pb&&$0=="### 2c. Adversarial verification of the root-cause claim"); pb=(index($0,"### 2b.")==1)} END{print ok+0}')" = 1 ] || exit 1; [ "$(sp "$b" '### 2c.' '### ' | c1 '**The root-cause claim gets an adversarial pass before section 3.**' 'adversary')" = 1 ] || exit 1; [ "$(sp "$b" '### 2c.' '### ' | c1 '' '_bmad-output/planning-artifacts/bug-analysis-adversarial.md')" -ge 1 ] || exit 1; [ "$(sp "$b" '### 2c.' '### ' | c1 '**Dispose of every CRITICAL and MAJOR before section 3**' '')" = 1 ] || exit 1; [ "$(sp "$b" '### 2b.' '### ' | c1 '' '§2c included')" = 1 ] || exit 1; for f in "$ro" "$st"; do grep -qE '0(–|-)2b' "$f" && exit 1; [ "$(awk "$PJ" "$f" | awk 'index($0,"sections 0–2c")||index($0,"sections 0-2c"){c++} END{print c+0}')" -ge 1 ] || exit 1; done; exit 0
+
+## BL-446 — a later event that invalidates an authorization's premise was absorbed in gate-log prose instead of going back to the operator
+
+**DEFECT.**
+
+Filed by the consumer as PC-S316-LATER-EVENT-INVALIDATING-AN-AUTHORIZATION-PREMISE-MUST-RETURN-TO-THE-OPERATOR.
+
+**Claims, scored separately.**
+- When an outcome a RESOLVED/OVERRIDDEN authorization relied on later failed to occur, nothing
+  required the change to go back to the operator; it could be absorbed in gate-log prose and the
+  authorization kept on.
+- No reviewer was told to look for it.
+
+**The fix, as landed.**
+- `core/skills/ai-dlc/escalations.md:200`, directly after the permanent-default disclosure and
+  before terminal-entry archival: `**Authorization-premise invalidation disclosure.**` File a new
+  `HARD_BLOCK` entry citing the earlier authorization (id and timestamp) and the invalidating event,
+  and put the question back to the operator before the affected work reaches deploy-validate or the
+  Production Validation Checkpoint. The status is `HARD_BLOCK` because the status vocabulary is closed.
+- Reviewer arm at `core/team-roles/adversary.md:219`, its own rung under `## Severity` beside
+  BL-444's: `### A premise a later event contradicted is a MAJOR`.
+- Pointer in `core/skills/ai-dlc/SKILL.md:383-385`, Rule 12, beside the AC verification-category
+  cross-reference.
+
+**No mechanism.** Whether an outcome was the PREMISE of an authorization is a judgment about intent.
+No act separates a premise from an incidental mention, so there is nothing for a gate to deny; the
+adversary rung is the carrier. `escalations.md:207-208` says the same in the shipped text.
+
+**Wrong fixes rejected.**
+- Auto-expiring a RESOLVED entry after N gates. That expires authorizations whose premises still
+  hold and leaves one invalidated in the first gate alive until N.
+- Folding this into the AC verification-category disclosure. That disclosure fires when a resolution
+  changes how an AC is verified; a premise invalidation happens later and to an authorization that
+  may touch no AC. The receipt scores the paragraph folded into it, lead removed, as 1.
+
+**Receipt.** Paragraph-joined and section-bounded, fenced and `<!-- -->` lines skipped. The bold lead
+must open a paragraph between `**Permanent-default change disclosure.**` and `**Terminal-entry
+archival`, and that paragraph must carry `HARD_BLOCK` and `operator`. The adversary rung must sit
+under `## Severity`, and Rule 12 in SKILL.md must name the disclosure. Scored under `bash -c 'set -uo
+pipefail; ...'` from the tree root:
+
+| tree | exit |
+|---|---|
+| fix (release tip) | 0 |
+| base `f8384eea` | 1 |
+| base plus every pin text appended as trailing paragraphs to every file the receipt names | 1 |
+| paragraph moved to after `**Terminal-entry archival` | 1 |
+| paragraph folded into the AC verification-category disclosure, lead removed | 1 |
+| BL-444's fix alone on base | 1 |
+| BL-445's fix alone on base | 1 |
+| rewording: bold lead kept, body rewritten and re-wrapped at 52 columns | 0 |
+
+verify: sh e=core/skills/ai-dlc/escalations.md; a=core/team-roles/adversary.md; k=core/skills/ai-dlc/SKILL.md; for f in "$e" "$a" "$k"; do [ -f "$f" ] || exit 9; done; PJ='function f(){ if(p!=""){gsub(/[[:space:]]+/," ",p); sub(/^ /,"",p); print p}; p="" } /^[[:space:]]*```/{f(); z=!z; next} z{next} /^[[:space:]]*<!--/{f(); if($0!~/-->/)m=1; next} m{if($0~/-->/)m=0; next} /^[[:space:]]*$/{f(); next} /^#/{f(); print; next} {p=p" "$0} END{f()}'; sp(){ awk "$PJ" "$1" | awk -v S="$2" -v E="$3" 'index($0,E)==1&&s{s=0} index($0,S)==1{s=1;next} s'; }; c1(){ awk -v L="$1" -v X="$2" -v Y="$3" '(L==""||index($0,L)==1)&&(X==""||index($0,X))&&(Y==""||index($0,Y)){c++} END{print c+0}'; }; [ "$(sp "$e" '**Permanent-default change disclosure.**' '**Terminal-entry archival' | c1 '**Authorization-premise invalidation disclosure.**' 'HARD_BLOCK' 'operator')" = 1 ] || exit 1; [ "$(sp "$a" '## Severity' '## ' | awk '$0=="### A premise a later event contradicted is a MAJOR"{c++} END{print c+0}')" = 1 ] || exit 1; [ "$(sp "$k" '### Rule 12 ' '### ' | c1 '' 'Authorization-premise invalidation disclosure' '')" -ge 1 ] || exit 1; exit 0

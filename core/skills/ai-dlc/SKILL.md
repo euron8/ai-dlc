@@ -380,6 +380,9 @@ When resolving a HARD_BLOCK changes how an acceptance criterion is
 verified (moving it between verification categories), the resolution MUST
 disclose the change for explicit operator acknowledgement — mechanism in
 `escalations.md` "AC verification-category-change disclosure".
+When a later event shows an outcome an earlier authorization relied on did
+not occur, the question returns to the operator — `escalations.md`
+"Authorization-premise invalidation disclosure".
 
 ### Rule 13 -- Requirements define WHAT; agents have autonomy over HOW
 
