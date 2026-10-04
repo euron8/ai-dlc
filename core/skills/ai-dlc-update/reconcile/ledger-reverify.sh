@@ -127,6 +127,10 @@
 #   NAMED-UPSTREAM-OFF-SUBJECT  the naming set reaches code, but no naming commit (a release judged
 #                    over its release span) changes any of the entry's own `theirs_has|theirs_lacks`
 #                    receipt paths (`named_subject`). Never a close.
+#   NAMED-UPSTREAM-SIBLING-ATTRIBUTED  a naming commit changes the entry's receipt file, but on
+#                    every changed block of that file NONE of the entry's own receipt substrings
+#                    is on a changed line while a SIBLING entry the same commit names in full has
+#                    its receipt substring there (`named_sibling`). Never a close.
 #   STILL-LIVE      the entry still reproduces at theirs; stays open (filtered from the report).
 #   HAND-REVIEW      the entry declares `verify: manual` — no mechanical predicate by design.
 #   NEEDS-REVIEW     the receipt itself is at fault, and the DETAIL names the cause by its
@@ -931,6 +935,223 @@ $_d
       *) NS_STATE=old; return 0 ;;
     esac
   done < "$LR_STAGE/ns-shas"
+  return 0
+}
+
+# lr_sib_resolve <raw receipt path> -> the distribution path it names at theirs, on stdout; status
+# 1 when it names none or more than one. The same rule `named_subject` applies, restated as a
+# function because `named_subject`'s copy is inline in a loop that returns from its caller: a path
+# present at theirs is itself; an absent one resolves by UNIQUE basename; a backslash, an empty
+# path, an unreadable one (125) or a basename matching 0 or 2+ files does not resolve.
+lr_sib_resolve() {
+  local _q="$1" _qrc=0 _qm _qn
+  case "$_q" in ''|*\\*) return 1 ;; esac
+  theirs_has_path "$_q" || _qrc=$?
+  if [ "$_qrc" -eq 0 ]; then printf '%s\n' "$_q"; return 0; fi
+  [ "$_qrc" -ne 125 ] || return 1
+  _qm="$(theirs_basename_matches "${_q##*/}")" || return 1
+  _qn="$(printf '%s' "$_qm" | grep -c . )" || _qn=0
+  [ "$_qn" = 1 ] || return 1
+  printf '%s\n' "$_qm"
+}
+
+# THE RECEIPT SUBSTRING GRAMMAR, ONE COPY. `lr_unquote` strips surrounding whitespace and one
+# optional pair of double quotes; `lr_split_subs` (a filter) splits a multi-substring run on the
+# `" "` boundary, one substring per line. The verb dispatch below and `lr_sib_split` both call these
+# two, so the sibling predicate cannot read a receipt differently from the verdict it qualifies --
+# the two sed programs used to be written out twice with nothing binding them.
+lr_unquote() { printf '%s' "$1" | sed -E 's/^[[:space:]]*"?//; s/"?[[:space:]]*$//'; }
+lr_split_subs() { sed 's/" *"/\
+/g'; }
+
+# lr_sib_split <receipt remainder> -> one substring per line, through the dispatch's own grammar
+# above, so a multi-substring receipt yields each of its quoted parts and a single one yields
+# itself. The remainder is everything after the verb: path, then the quoted substring(s).
+lr_sib_split() {
+  local _sp="${1%% *}" _ss
+  _ss="${1#"$_sp"}"
+  _ss="$(lr_unquote "$_ss")" || return 1
+  printf '%s' "$_ss" | lr_split_subs
+}
+
+# named_sibling <label> <comma-separated residual shas> -> sets NSB_STATE (and NSB_SIBS, the
+# attributed siblings as the row shows them) in the MAIN shell. Asked ONLY for a row `named_subject`
+# answered `touched`; NSB_STATE is `attributed` or `touched`, and every failure is `touched`.
+#
+# THE PC-S308 SHAPE, WHICH THE PER-FILE TEST CANNOT SEE AND THE SUBSTRING TEST WAS REFUTED FOR. A
+# release names two or more entries; it changes entry Y's receipt anchor in file P and touches P
+# nowhere near entry X's anchor, while also naming X -- because it cross-references X, not because
+# it fixed it. `named_subject` scores X `touched` (P is in the listing). Asking "did X's own anchor
+# change" alone demotes genuine absorptions whose anchors are stale (measured: 4 genuine rows on the
+# reference consumer archive). What separates the shape is the SIBLING: some other entry the same
+# commit names IN FULL has its anchor on a changed line of the very block that touched P, and X's
+# own anchor is on none.
+#
+# THE PREDICATE, over EVERY residual naming commit c -- never only the one that made the row
+# `touched`. For each c take its span (a release is judged from the previous VERSION change,
+# exclusive, as `named_subject` does; any other commit alone). For each span commit, each of X's
+# resolved receipt paths P it changes, and each PARENT block of that commit carrying a diff for P (a
+# parent with no diff for P contributes no block), EVERY such block must satisfy BOTH:
+#   - no substring of any of X's receipts on P is on a `+`/`-` content line of the block (headers and
+#     context are not content: the diff is taken at `-U0` and only lines after a hunk header count);
+#   - some Y != X that c names by its FULL SLUG (followed by a byte outside `[0-9A-Za-z-]`, or by the
+#     end of a line) has a `theirs_has|theirs_lacks` receipt resolving to P whose substring is on
+#     such a line of that SAME block.
+# At least one block must exist. Matching is literal (`index`), values travel through ENVIRON and a
+# file read with a checked `getline`, never `awk -v` and never a regex. Receipts are split by the
+# dispatch's own sed (`lr_sib_split`).
+#
+# Y IS DRAWN FROM THE LIVE LEDGER AND THE ARCHIVE, CLOSED ENTRIES INCLUDED (`$LR_STAGE/sibs`, staged
+# once with `lr_entries ... 1`), because the sibling has usually been closed and rotated by the time
+# the pull asks. A Y named only on a `Not-discharged:` line still counts: the message is read whole,
+# and that is harmless here because this kind is never a close.
+#
+# FAILS TOWARDS `touched` -- the row stays NAMED-UPSTREAM -- on an X anchor carrying a backslash (the
+# dispatch refuses such an anchor, so its literal is not known), an X path that does not resolve, a
+# quoted path in the diff header, and any listing, diff, staging or awk failure. A Y anchor with a
+# backslash, an empty Y anchor, or a Y path that does not resolve is simply not a sibling.
+named_sibling() {
+  local _label="$1" _c _msg _yl _yr _yp _yq _ys _xl _xr _xp _xq _xs _sb_rel _par _prev _n1 _n2 _out _pq
+  local -a _ps
+  local _sb_blk=0 _sb_bad=0 _sibs=""
+  NSB_STATE=touched; NSB_SIBS=""
+  [ "${LR_SIB_OK:-0}" = 1 ] || return 0
+  [ -n "$2" ] || return 0
+  # X's own receipts, from the SAME staged entries the verdict loop reads.
+  LR_L="$_label" LC_ALL=C awk -F'\t' '$1 == ENVIRON["LR_L"] { print }' "$LR_STAGE/xrcpt" \
+    > "$LR_STAGE/nsb-x" 2>/dev/null || return 0
+  : > "$LR_STAGE/nsb-xneedles" 2>/dev/null || return 0
+  : > "$LR_STAGE/nsb-xpaths" 2>/dev/null || return 0
+  while IFS="$(printf '\t')" read -r _xl _xr; do
+    _xp="$(lr_sib_resolve "${_xr%% *}")" || return 0
+    _xq="$(lr_sib_split "$_xr")" || return 0
+    [ -n "$_xq" ] || return 0
+    case "$_xq" in *\\*) return 0 ;; esac
+    printf '%s\n' "$_xq" > "$LR_STAGE/nsb-q" 2>/dev/null || return 0
+    while IFS= read -r _xs; do
+      [ -n "$_xs" ] || return 0
+      printf 'X\t%s\t%s\n' "$_xp" "$_xs" >> "$LR_STAGE/nsb-xneedles" || return 0
+    done < "$LR_STAGE/nsb-q"
+    printf '%s\n' "$_xp" >> "$LR_STAGE/nsb-xpaths" || return 0
+  done < "$LR_STAGE/nsb-x"
+  [ -s "$LR_STAGE/nsb-xneedles" ] || return 0
+  # A TRAILING NEWLINE, because `read` drops an unterminated last line -- measured: written with
+  # `printf '%s'` the LAST naming commit was never judged, and on the reference corpus that was the
+  # very commit carrying the sibling.
+  printf '%s\n' "$2" | tr ',' '\n' > "$LR_STAGE/nsb-shas" 2>/dev/null || return 0
+  while IFS= read -r _c; do
+    [ -n "$_c" ] || continue
+    _msg="$(git -C "$DIST" log -1 --format=%B "$_c" 2>/dev/null)" || return 0
+    # The siblings c names in full: every receipt row of every other entry whose slug occurs in the
+    # message with a non-slug byte (or nothing) after it. EVERY occurrence is tried, so a slug that
+    # is a prefix of a longer named slug is named only where it stands alone.
+    LR_M="$_msg" LR_X="$_label" LC_ALL=C awk -F'\t' '
+      function named(m, n,   i, r, c) {
+        r = m
+        while ((i = index(r, n)) > 0) {
+          c = substr(r, i + length(n), 1)
+          if (c == "" || c !~ /[0-9A-Za-z-]/) return 1
+          r = substr(r, i + 1)
+        }
+        return 0
+      }
+      ($1 != ENVIRON["LR_X"]) && named(ENVIRON["LR_M"], $1) { print }' "$LR_STAGE/sibs" \
+      > "$LR_STAGE/nsb-y" 2>/dev/null || return 0
+    cp "$LR_STAGE/nsb-xneedles" "$LR_STAGE/nsb-needles" 2>/dev/null || return 0
+    cp "$LR_STAGE/nsb-xpaths" "$LR_STAGE/nsb-paths" 2>/dev/null || return 0
+    while IFS="$(printf '\t')" read -r _yl _yr; do
+      _yp="$(lr_sib_resolve "${_yr%% *}")" || continue
+      _yq="$(lr_sib_split "$_yr")" || return 0
+      case "$_yq" in ''|*\\*) continue ;; esac
+      printf '%s\n' "$_yq" > "$LR_STAGE/nsb-q" 2>/dev/null || return 0
+      while IFS= read -r _ys; do
+        [ -n "$_ys" ] || continue
+        printf 'Y\t%s\t%s\t%s\n' "$_yp" "$_ys" "$_yl" >> "$LR_STAGE/nsb-needles" || return 0
+      done < "$LR_STAGE/nsb-q"
+      printf '%s\n' "$_yp" >> "$LR_STAGE/nsb-paths" || return 0
+    done < "$LR_STAGE/nsb-y"
+    # The span, exactly as `named_subject` takes it.
+    git -C "$DIST" -c core.quotePath=false diff-tree -m -r --no-renames --root --name-only "$_c" \
+      > "$LR_STAGE/nsb-files" 2>/dev/null || return 0
+    _sb_rel=0; grep -qxF 'VERSION' "$LR_STAGE/nsb-files" 2>/dev/null || _sb_rel=$?
+    case "$_sb_rel" in 0) _sb_rel=1 ;; 1) _sb_rel=0 ;; *) return 0 ;; esac
+    # THE FULL ID, because `diff-tree --stdin` reads only full object names: handed the abbreviated
+    # sha `named_absorbed` reports, it echoes the line and prints NO diff, so every block count is 0.
+    # Measured: every non-release naming commit read `touched` that way, while a release (whose span
+    # comes from `rev-list`, which prints full ids) worked.
+    git -C "$DIST" rev-parse --verify -q "${_c}^{commit}" > "$LR_STAGE/nsb-span" 2>/dev/null || return 0
+    if [ "$_sb_rel" = 1 ]; then
+      _par="$(git -C "$DIST" rev-list --parents -n 1 "$_c" 2>/dev/null)" || return 0
+      case "$_par" in
+        *' '*)
+          _prev="$(git -C "$DIST" log -1 --format=%H "${_c}^" -- VERSION 2>/dev/null)" || return 0
+          if [ -n "$_prev" ]; then
+            git -C "$DIST" rev-list "${_prev}..${_c}" > "$LR_STAGE/nsb-span" 2>/dev/null || return 0
+          else
+            git -C "$DIST" rev-list "$_c" > "$LR_STAGE/nsb-span" 2>/dev/null || return 0
+          fi ;;
+      esac
+    fi
+    # One diff for the whole span, restricted LITERALLY to X's paths and the named siblings' paths.
+    # `-m` gives one block per parent; `-U0` leaves only changed lines inside the hunks.
+    sort -u "$LR_STAGE/nsb-paths" > "$LR_STAGE/nsb-pathset" 2>/dev/null || return 0
+    _ps=()
+    while IFS= read -r _pq; do _ps[${#_ps[@]}]="$_pq"; done < "$LR_STAGE/nsb-pathset"
+    [ "${#_ps[@]}" -gt 0 ] || return 0
+    git -C "$DIST" -c core.quotePath=false --literal-pathspecs diff-tree --stdin -m -r -p -U0 --no-renames --root --no-color --no-ext-diff --no-textconv -- "${_ps[@]}" \
+      < "$LR_STAGE/nsb-span" > "$LR_STAGE/nsb-diff" 2>/dev/null || return 0
+    # Per parent block: bx = an X substring is on a changed line of it, by = a Y substring whose
+    # receipt resolves to the SAME path is. A unit is one parent of one commit (diff-tree prints
+    # the commit id before each parent it has a diff against). Output: "<blocks> <bad blocks>" on
+    # the first line, then one line per sibling whose anchor sat on a changed line of a block that
+    # touched one of X's paths -- the siblings the row NAMES, never every sibling the commit names.
+    _out="$(LR_NF="$LR_STAGE/nsb-needles" LC_ALL=C awk '
+      function shut(   p) {
+        for (p in seen) if (p in isx) {
+          blk++
+          if (bx[p]) bad++
+          else if (!by[p]) bad++
+        }
+        split("", seen); split("", bx); split("", by); bp = ""; hunk = 0
+      }
+      function issha(s) { return length(s) == 40 && s !~ /[^0-9a-f]/ }
+      BEGIN {
+        while ((r = (getline l < ENVIRON["LR_NF"])) > 0) {
+          split(l, f, "\t"); hdr["diff --git a/" f[2] " b/" f[2]] = f[2]
+          if (f[1] == "X") { nx++; xp[nx] = f[2]; xs[nx] = f[3]; isx[f[2]] = 1 }
+          else { ny++; yp[ny] = f[2]; ys[ny] = f[3]; yl[ny] = f[4] }
+        }
+        if (r < 0) { fail = 1; exit 2 }
+      }
+      issha($0) { shut(); cur = $0; next }
+      substr($0, 1, 11) == "diff --git " {
+        hunk = 0; bp = ""
+        if (substr($0, 12, 1) == "\"") { fail = 1; exit 2 }
+        if ($0 in hdr) { bp = hdr[$0]; seen[bp] = 1 }
+        next
+      }
+      substr($0, 1, 2) == "@@" { hunk = 1; next }
+      hunk && bp != "" && (substr($0, 1, 1) == "+" || substr($0, 1, 1) == "-") {
+        t = substr($0, 2)
+        for (k = 1; k <= nx; k++) if (xp[k] == bp && index(t, xs[k])) bx[bp] = 1
+        for (k = 1; k <= ny; k++) if (yp[k] == bp && index(t, ys[k])) { by[bp] = 1; if (bp in isx) hit[yl[k]] = 1 }
+      }
+      END { if (fail) exit 2; shut(); printf "%d %d\n", blk, bad; for (h in hit) print h }' "$LR_STAGE/nsb-diff")" || return 0
+    printf '%s\n' "$_out" > "$LR_STAGE/nsb-out" 2>/dev/null || return 0
+    _yq="$(head -n 1 "$LR_STAGE/nsb-out")" || return 0
+    sed 1d "$LR_STAGE/nsb-out" > "$LR_STAGE/nsb-out-tail" 2>/dev/null || return 0
+    _n1="${_yq%% *}"; _n2="${_yq#* }"
+    while IFS= read -r _yl; do
+      [ -n "$_yl" ] || continue
+      case ", $_sibs," in *", $_yl,"*) : ;; *) _sibs="${_sibs:+$_sibs, }$_yl" ;; esac
+    done < "$LR_STAGE/nsb-out-tail"
+    case "$_n1$_n2" in ''|*[!0-9]*) return 0 ;; esac
+    _sb_blk=$((_sb_blk + _n1)); _sb_bad=$((_sb_bad + _n2))
+  done < "$LR_STAGE/nsb-shas"
+  # A block with no bad verdict carried a sibling hit on X's path, so `attributed` always has at
+  # least one sibling to name; no separate emptiness guard is needed (it could change no outcome).
+  NSB_SIBS="$_sibs"
+  [ "$_sb_bad" -eq 0 ] && [ "$_sb_blk" -gt 0 ] && NSB_STATE=attributed
   return 0
 }
 
@@ -2021,7 +2242,14 @@ if [ -r "$ARCHIVE_PATH" ]; then
   ARCHIVE_LABELS="$(corpus_labels "$ARCHIVE_PATH")"
 fi
 
-ENTRIES="$(awk -v DASH=' — ' "$(ledger_entry_awk)"'
+# ONE EXTRACTION, TWO CALLERS. The verdict loop reads it with KEEP=0 over the live ledger, which is
+# what it always read. `named_sibling` reads it with KEEP=1 over the live ledger AND the archive,
+# because a sibling entry is usually CLOSED by the time a pull asks: measured on the reference
+# consumer, the in-commit sibling of PC-S308 had been rotated to the archive the day before
+# PC-S308 was closed. KEEP changes only whether a closed entry is printed; the close rule itself
+# stays on its one line below, the line `lib.sh` lifts and requires to be unique.
+lr_entries() { # <ledger-file> <keep-closed 0|1> -> label TAB ord TAB directive, one row per receipt
+  awk -v DASH=' — ' -v KEEP="$2" "$(ledger_entry_awk)"'
   # An ENTRY LINE closes its own entry two ways. A marker anywhere on it is one: the withdrawal
   # lives in the heading (`## PC-FOO — **WITHDRAWN …**`) and the fork-retirement records are
   # bullets whose title ends `→ ADOPTED UPSTREAM (v…)`. The retained-copy parenthetical is the
@@ -2057,7 +2285,7 @@ ENTRIES="$(awk -v DASH=' — ' "$(ledger_entry_awk)"'
   # matches by common words. The loop below lets `0/0` emit NAMED-UPSTREAM(-AMBIGUOUS) and then
   # skips the verb dispatch, so no receipt verdict is ever invented for it.
   function flush(){
-    if (has_verify && !closed && label != "")
+    if (has_verify && (!closed || KEEP) && label != "")
       for (di = 1; di <= dn; di++)
         printf "%s\t%s\t%s\n", label, di "/" dn, dv[di]
     if (!has_verify && !closed && label != "" && ledger_entry_id(label) != "")
@@ -2166,7 +2394,9 @@ ENTRIES="$(awk -v DASH=' — ' "$(ledger_entry_awk)"'
     dn++; dv[dn]=directive
   }
   END { flush() }
-' "$LEDGER")"
+' "$1"
+}
+ENTRIES="$(lr_entries "$LEDGER" 0)"
 
 # A HERESTRING, NOT A PIPE, AND THE REASON IS THE TALLY BELOW. `awk … | while read` runs the
 # loop body in a SUBSHELL, so a counter incremented inside it is discarded at the closing
@@ -2203,17 +2433,47 @@ printf '%s\n' "$ENTRIES" > "$LR_STAGE/entries" \
 # because the basename fallback lists the whole tree at theirs. A failed write here does NOT refuse
 # the run: it only means no row can reach the new kind, so every row keeps the kind it had before
 # the subject datum existed, and the one stderr line says why.
+#
+# THE SAME PASS WRITES `xrcpt` (label TAB the whole receipt remainder) for `named_sibling`: one
+# reader of the staged entries, not two, so the split is applied once and cannot diverge between
+# the subject set and the sibling set. `close()` makes a failed write of either file fail the awk.
 LR_SUBJ_OK=0
-if LC_ALL=C awk -F'\t' '
+if LR_XR="$LR_STAGE/xrcpt" LC_ALL=C awk -F'\t' '
+  BEGIN { x = ENVIRON["LR_XR"]; printf "" > x }
   $2 == "0/0" { next }
   { d = $0; sub(/^[^\t]*\t[^\t]*\t/, "", d); v = d; sub(/ .*/, "", v); r = substr(d, length(v) + 1); sub(/^ /, "", r)
     gsub(/^[^A-Za-z_]+/, "", v); gsub(/[^A-Za-z_]+$/, "", v)
     if (v != "theirs_has" && v != "theirs_lacks") next
-    p = r; sub(/ .*/, "", p); printf "%s\t%s\n", $1, p }' "$LR_STAGE/entries" > "$LR_STAGE/subjects" 2>/dev/null; then
+    printf "%s\t%s\n", $1, r > x
+    p = r; sub(/ .*/, "", p); printf "%s\t%s\n", $1, p }
+  END { if (close(x) != 0) exit 2 }' "$LR_STAGE/entries" > "$LR_STAGE/subjects" 2>/dev/null; then
   LR_SUBJ_OK=1
 else
   echo "ledger-reverify: the receipt subject set could not be staged, so no row is classified NAMED-UPSTREAM-OFF-SUBJECT this run; every naming row keeps its prior kind" >&2
 fi
+# THE SIBLING STAGES, for `named_sibling`: label TAB receipt-remainder (path, then the quoted
+# substring(s), split later by the dispatch's own sed) for every `theirs_has|theirs_lacks` receipt.
+# `xrcpt` (written by the subject pass above) is the open live entries the verdict loop reads;
+# `sibs` is a SEPARATE extraction with closed entries kept, over the live ledger and the archive.
+# `sibs` is never fed to the verdict loop. Any failure, including the subject pass failing, leaves
+# LR_SIB_OK=0, so no row reaches the new kind and every row keeps its old one.
+lr_rcpt_rows() { # <entries file> -> label TAB remainder, theirs_has|theirs_lacks only
+  LC_ALL=C awk -F'\t' '
+    $2 == "0/0" { next }
+    { d = $0; sub(/^[^\t]*\t[^\t]*\t/, "", d); v = d; sub(/ .*/, "", v); r = substr(d, length(v) + 1); sub(/^ /, "", r)
+      gsub(/^[^A-Za-z_]+/, "", v); gsub(/[^A-Za-z_]+$/, "", v)
+      if (v != "theirs_has" && v != "theirs_lacks") next
+      printf "%s\t%s\n", $1, r }' "$1"
+}
+LR_SIB_OK=0
+if [ "$LR_SUBJ_OK" = 1 ] && lr_entries "$LEDGER" 1 > "$LR_STAGE/sib-entries" 2>/dev/null; then
+  LR_SIB_OK=1
+  if [ -r "$ARCHIVE_PATH" ]; then
+    lr_entries "$ARCHIVE_PATH" 1 >> "$LR_STAGE/sib-entries" 2>/dev/null || LR_SIB_OK=0
+  fi
+  [ "$LR_SIB_OK" = 1 ] && { lr_rcpt_rows "$LR_STAGE/sib-entries" > "$LR_STAGE/sibs" 2>/dev/null || LR_SIB_OK=0; }
+fi
+[ "$LR_SIB_OK" = 1 ] || echo "ledger-reverify: the sibling receipt set could not be staged, so no row is classified NAMED-UPSTREAM-SIBLING-ATTRIBUTED this run; every naming row keeps its prior kind" >&2
 while IFS="$(printf '\t')" read -r label ord directive; do
   [ -n "$directive" ] || continue
   # Empty suffix for a single-receipt entry, so those rows are unchanged.
@@ -2283,6 +2543,11 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       # It is not "not absorbed": a fix can land on a path the receipt does not name, and the id
       # may have been dispositioned by an EARLIER release, the naming here being a later mention.
       emit NAMED-UPSTREAM-OFF-SUBJECT "$label" "upstream's own history NAMES this entry's id ${na_where}, and those commits change a path a consumer installs under core/ or templates/, or cut a release (change VERSION) -- but NONE of them changes this entry's own receipt path(s): ${NS_PATHS} (a naming commit that cuts a release is judged over its whole release span, back to the previous VERSION change).${na_note} A release that cross-references an entry, or records that some other route discharged it, matches the message search the same way a fix does, so this row is NOT evidence of an absorption -- and it is not evidence against one either: the id may already have been dispositioned by an earlier release and this naming be a later mention, or the fix may have landed on a path the receipt does not name. It is NOT a close on its own. Read the commit(s), then read the entry's subject (${NS_PATHS}) at theirs. Annotate only what that reading establishes, with the release that contains the change, and otherwise leave the entry open."
+    elif [ "$NS_STATE" = touched ] && named_sibling "$label" "$na_c" && [ "$NSB_STATE" = attributed ]; then
+      # A NAMING COMMIT CHANGED THIS ENTRY'S RECEIPT FILE ONLY WHERE A SIBLING'S ANCHOR SITS. Reached
+      # only from `touched` (the branch above called `named_subject` for this row, so NS_STATE is
+      # this row's). See `named_sibling`. The row keeps every sha and is never a close.
+      emit NAMED-UPSTREAM-SIBLING-ATTRIBUTED "$label" "upstream's own history NAMES this entry's id ${na_where}, and a naming commit changes this entry's receipt file (${NS_PATHS}) -- but on every changed block of that file NONE of this entry's own receipt substrings is on a changed line, while a sibling entry the same commit names in full has its receipt substring there: ${NSB_SIBS} (a naming commit that cuts a release is judged over its whole release span, back to the previous VERSION change; every naming commit is judged, not only the first).${na_note} A release that fixes one entry and cross-references another on the same file matches the message search for both, so this row is NOT evidence that THIS entry was absorbed -- and it is not evidence against it either: a fix can leave a stale anchor untouched. It is NOT a close on its own. Read the commit(s) and the sibling's entry, then read this entry's subject (${NS_PATHS}) at theirs. Annotate only what that reading establishes, with the release that contains the change, and otherwise leave the entry open."
     elif [ "$ord" = "0/0" ]; then
       # RECEIPT-LESS: there is no receipt to be blind to it and none to re-anchor, so the receipt
       # clauses of the sibling detail would be false here. The close is the annotation alone.
@@ -2335,16 +2600,16 @@ while IFS="$(printf '\t')" read -r label ord directive; do
     theirs_lacks|theirs_has)
       path="${rest%% *}"
       sub="${rest#"$path"}"
-      # Strip surrounding whitespace and one optional pair of double quotes.
-      sub="$(printf '%s' "$sub" | sed -E 's/^[[:space:]]*"?//; s/"?[[:space:]]*$//')"
+      # Strip surrounding whitespace and one optional pair of double quotes (`lr_unquote`, the one
+      # copy of the substring grammar, shared with `named_sibling`).
+      sub="$(lr_unquote "$sub")"
       # A directive may carry MORE THAN ONE quoted substring; all must match. Splitting on
       # the `" "` boundary is what makes that work. Without the split the whole run is one
       # literal INCLUDING the quotes between them, which matches nothing — so a multi-
       # substring entry reported "still lacks" forever no matter what theirs held. Measured
       # on the reference consumer: two entries used this form, and one of them named two
       # markers upstream ALREADY carries. It would have stayed open permanently.
-      subs="$(printf '%s' "$sub" | sed 's/" *"/\
-/g')"
+      subs="$(printf '%s' "$sub" | lr_split_subs)"
       if [ -z "$path" ] || [ -z "$sub" ]; then
         emit NEEDS-REVIEW "$label" "unresolved: malformed verify: $directive"
         continue

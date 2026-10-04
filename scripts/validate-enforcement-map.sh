@@ -702,7 +702,13 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   +16. Every arm that moved is a per-file walk counting `partition-review-diff.sh` and
 #   `merge-review-shards.sh`: I75 341 -> 351, I84 287 -> 291, I83 142 -> 144. HIGH reading 3182
 #   plus the usual 6.
-FORK_BUDGET=3188
+#
+#   RAISED TO 3196 FOR ONE NEW LEDGER-STATUS KIND, NOT FOR A NEW ARM. `fork-profile.sh --stable`
+#   under `env -i`, base `origin/main` 3efb87d8 then the sibling-attribution tip, in ONE worktree at
+#   the same path: base 3185 (spread 3185-3185), tip 3190 (spread 3190-3190), so +5. The only arm
+#   that moved is I39, 62 -> 67: `NAMED-UPSTREAM-SIBLING-ATTRIBUTED` is one more member it joins
+#   across the emitter, step 3f, step 8 and emit-report's heading. HIGH reading 3190 plus the usual 6.
+FORK_BUDGET=3196
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

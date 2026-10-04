@@ -2383,6 +2383,397 @@ else
     FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s under the mutant and the shim S969 read %s, want NAMED-UPSTREAM-OFF-SUBJECT (BROKEN = the shim never fired)\n' "mutation-listing-fail-new-kind" "${os_lfmk:-<no row>}"
   fi
 fi
+
+# --- SIBLING ATTRIBUTION (cells S1001-S1030, S1099) ---------------------------------------------
+# A naming commit that changes the entry's receipt file X only where a SIBLING entry Y it names IN
+# FULL has its anchor -- on every changed block, X's own anchor on no changed line -- reads
+# NAMED-UPSTREAM-SIBLING-ATTRIBUTED. Its own world and its own ledger, beside an archive at the
+# derived path. Each X cell is the subject of one mutant; Y entries are seeded only to be named.
+#
+#   S1001  offender: Y (closed, live) anchor changed in X's file, X's not   -> SIBLING (keep-closed)
+#   S1003  Y's receipt and change are on a DIFFERENT file                     -> NAMED-UPSTREAM (sibling-any-file)
+#   S1005  in-commit control: X's anchor changed too                          -> NAMED-UPSTREAM (gate-off)
+#   S1007  Y present ONLY in the archive, closed                              -> SIBLING (sibling-live-only)
+#   S1009  release span: an unnamed neighbour changes X's file, no anchor    -> NAMED-UPSTREAM (quantifier-exists)
+#   S1011  X's anchor changed in an unnamed span parent, Y's in the release  -> NAMED-UPSTREAM (span-off-attribution)
+#   S1013  Y named only by its short id                                       -> NAMED-UPSTREAM (sibling-prefix)
+#   S1015  Y's anchor-on-X's-file written into a DIFFERENT file Q             -> NAMED-UPSTREAM (sibling-whole-diff)
+#   S1017  two naming commits; the older changes X's anchor                  -> NAMED-UPSTREAM (first-touching-commit-only)
+#   S1019  merge: Y's change visible only against the SECOND parent          -> SIBLING (first-parent-only)
+#   S1021  merge, parents swapped: Y's change against the first parent      -> SIBLING (control)
+#   S1023  merge: Y's change against one parent, X's file changed elsewhere
+#          against the other                                                 -> NAMED-UPSTREAM (parents-concatenated)
+#   S1025  Y's slug occurs only as a prefix of a longer named slug           -> NAMED-UPSTREAM (slug-unanchored)
+#   S1027  Y's anchor opens with `|` and carries `.` and `*`                  -> SIBLING (sibling-regex)
+#   S1029  X's anchor carries a backslash                                     -> NAMED-UPSTREAM (x-backslash-ignored)
+#   S1031  X has receipts on TWO files; the commit changes Y's anchor on the
+#          first and X's OWN anchor on the second                          -> NAMED-UPSTREAM (x-first-receipt-only)
+#   S1033  X has ONE receipt with two quoted substrings; the commit changes
+#          Y's anchor and X's SECOND substring                              -> NAMED-UPSTREAM (split-off)
+#   S1035  Y's anchor is a substring of its own path; the commit edits only a
+#          filler line, so the anchor occurs only in the diff headers       -> NAMED-UPSTREAM (headers-matched)
+#   S1099  never named (control): must have a row and no NAMED- row
+#
+# SHIPS AHEAD OF ITS SUBJECT, keyed on the status only the fixed engine emits.
+if ! grep -qF 'NAMED-UPSTREAM-SIBLING-ATTRIBUTED' "$CLOSER" && [ "$B2_ISDIST" = 0 ]; then
+  LR_SKIPPED=1
+  printf '  SKIP  sibling-attribution arms -- the installed ledger-reverify.sh predates them; they land with the pull that carries this fixture\n'
+  return 0
+fi
+SBW="$OSW/sib"; mkdir -p "$SBW/dist"
+SBD="$SBW/dist"
+ASSERTIONS=$((ASSERTIONS + 1))
+sb_rc=0
+( set -e
+  g() { git -C "$SBD" -c user.email=seed@fixture -c user.name=seed -c commit.gpgsign=false "$@"; }
+  c() { g add -A; g commit -q -m "$1"; }
+  sw() { # <file> <old line> <new line>: replace one whole line
+    F="$SBD/core/scripts/$1" O="$2" N="$3" awk 'BEGIN{f=ENVIRON["F"]} $0 == ENVIRON["O"] { print ENVIRON["N"]; n++; next } { print } END { exit n == 1 ? 0 : 3 }' "$SBD/core/scripts/$1" > "$SBW/sw.tmp"
+    mv "$SBW/sw.tmp" "$SBD/core/scripts/$1"
+  }
+  g init -q
+  mkdir -p "$SBD/core/scripts"
+  printf '0.1.0\n' > "$SBD/VERSION"
+  for t in A C D E F G I J K N O; do
+    printf '#!/bin/sh\nFILLER_TOP\nf1\nf2\nf3\nf4\nANCHX_%s_\nANCHY_%s_\n' "$t" "$t" > "$SBD/core/scripts/sb-$t.sh"
+  done
+  printf '#!/bin/sh\nFILLER_TOP\nANCHX_B_\n' > "$SBD/core/scripts/sb-B.sh"
+  printf '#!/bin/sh\nANCHY_B_\n' > "$SBD/core/scripts/sb-B2.sh"
+  printf '#!/bin/sh\nFILLER_TOP\nANCHX_H_\nANCHY_H_P_\n' > "$SBD/core/scripts/sb-H.sh"
+  printf '#!/bin/sh\nANCHY_H_Q_\n' > "$SBD/core/scripts/sb-H2.sh"
+  printf '#!/bin/sh\nFILLER_TOP\nf1\nf2\nf3\nf4\nANCHX_L_\nANCHY_L_\n' > "$SBD/core/scripts/sb-L.sh"
+  printf '#!/bin/sh\nFILLER_TOP\nf1\nf2\nf3\nf4\nANCHX_M_\n|SIB.LIT*x\n' > "$SBD/core/scripts/sb-M.sh"
+  printf '#!/bin/sh\nFILLER_TOP\nf1\nf2\nf3\nf4\nANCHX_P_\nANCHY_P_\n' > "$SBD/core/scripts/sb-P.sh"
+  printf '#!/bin/sh\necho never\n' > "$SBD/core/scripts/sb-never.sh"
+  printf '#!/bin/sh\nFILLER_TOP\nf1\nf2\nf3\nf4\nANCHX_Q1_\nANCHY_Q_\n' > "$SBD/core/scripts/sb-Q1.sh"
+  printf '#!/bin/sh\nFILLER_TOP\nf1\nf2\nf3\nf4\nANCHX_Q2_\n' > "$SBD/core/scripts/sb-Q2.sh"
+  printf '#!/bin/sh\nFILLER_TOP\nf1\nf2\nANCH_A4\nf3\nf4\nANCH_B4\nf5\nf6\nANCHY_R_\n' > "$SBD/core/scripts/sb-R.sh"
+  printf '#!/bin/sh\nFILLER_TOP\nf1\nf2\nf3\nf4\nANCHX_S_\n' > "$SBD/core/scripts/yfile.sh"
+  c 'root: every subject exists, VERSION 0.1.0'
+  sw sb-A.sh ANCHY_A_ fixedA; c 'fix: absorb PC-S1002-SIB-CLOSED-LIVE; cross-references PC-S1001-OFFENDER'
+  sw sb-B.sh FILLER_TOP 'filler B'; sw sb-B2.sh ANCHY_B_ fixedB; c 'fix: absorb PC-S1004-SIB-OTHER-FILE; cites PC-S1003-DIFFERENT-FILE'
+  sw sb-C.sh ANCHX_C_ fixedXC; sw sb-C.sh ANCHY_C_ fixedYC; c 'fix: absorb PC-S1006-INCOMMIT-Y and PC-S1005-INCOMMIT-X'
+  sw sb-D.sh ANCHY_D_ fixedD; c 'fix: absorb PC-S1008-SIB-ARCHIVED; cites PC-S1007-ARCHIVE-ONLY'
+  printf '0.2.0\n' > "$SBD/VERSION"; c '0.2.0 -- a release naming no entry'
+  sw sb-E.sh FILLER_TOP 'filler E'; c 'refactor: an unnamed neighbour'
+  sw sb-E.sh ANCHY_E_ fixedE; printf '0.3.0\n' > "$SBD/VERSION"; c '0.3.0 -- absorbs PC-S1010-SPAN-Y; cites PC-S1009-SPAN-NEIGHBOUR'
+  sw sb-F.sh ANCHX_F_ fixedXF; c 'refactor: unnamed, and it moves an anchor'
+  sw sb-F.sh ANCHY_F_ fixedYF; printf '0.4.0\n' > "$SBD/VERSION"; c '0.4.0 -- absorbs PC-S1012-SPANOFF-Y; cites PC-S1011-SPANOFF-X'
+  sw sb-G.sh ANCHY_G_ fixedG; c 'fix: absorb PC-S1014 (short id only); cites PC-S1013-SHORT-ID-X'
+  sw sb-H.sh FILLER_TOP 'filler H'; printf 'ANCHY_H_P_ copied here\n' >> "$SBD/core/scripts/sb-H2.sh"; c 'fix: absorb PC-S1016-WHOLE-DIFF-Y; cites PC-S1015-WHOLE-DIFF-X'
+  sw sb-I.sh ANCHX_I_ fixedXI; c 'fix: part one for PC-S1017-TWO-COMMITS-X'
+  sw sb-I.sh ANCHY_I_ fixedYI; c 'fix: absorb PC-S1018-TWO-COMMITS-Y; cites PC-S1017-TWO-COMMITS-X'
+  m="$(g symbolic-ref --short HEAD)"
+  # S1019: the change is on the MAIN line, so the merge shows it only against its second parent.
+  g checkout -q -b sb-side1; printf 'side\n' > "$SBD/side1.txt"; c 'side work, names no entry'
+  g checkout -q "$m"; sw sb-J.sh ANCHY_J_ fixedJ; c 'main: unnamed, changes an anchor'
+  g merge -q --no-ff -m 'merge: absorbs PC-S1020-MERGE-P2-Y; cites PC-S1019-MERGE-P2-X' sb-side1
+  # S1021: parents swapped -- the change arrives on the side branch.
+  g checkout -q -b sb-side2; sw sb-K.sh ANCHY_K_ fixedK; c 'side: unnamed, changes an anchor'
+  g checkout -q "$m"; printf 'main\n' > "$SBD/main2.txt"; c 'main work, names no entry'
+  g merge -q --no-ff -m 'merge: absorbs PC-S1022-MERGE-P1-Y; cites PC-S1021-MERGE-P1-X' sb-side2
+  # S1023: each parent sees a different change to X's file.
+  g checkout -q -b sb-side3; sw sb-L.sh FILLER_TOP 'filler L'; c 'side: unnamed, changes filler'
+  g checkout -q "$m"; sw sb-L.sh ANCHY_L_ fixedL; c 'main: unnamed, changes an anchor'
+  g merge -q --no-ff -m 'merge: absorbs PC-S1024-MERGE-CONCAT-Y; cites PC-S1023-MERGE-CONCAT-X' sb-side3
+  g branch -q -D sb-side1 sb-side2 sb-side3
+  sw sb-N.sh ANCHY_N_ fixedN; c 'fix: absorb PC-S1026-PRE-LONGER; cites PC-S1025-PREFIX-X'
+  sw sb-M.sh '|SIB.LIT*x' fixedM; c 'fix: absorb PC-S1028-PIPE-Y; cites PC-S1027-PIPE-X'
+  sw sb-O.sh ANCHY_O_ fixedO; c 'fix: absorb PC-S1030-BACKSLASH-Y; cites PC-S1029-BACKSLASH-X'
+  sw sb-Q1.sh ANCHY_Q_ fixedQ; sw sb-Q2.sh ANCHX_Q2_ fixedXQ2; c 'fix: absorb PC-S1032-TWO-PATH-Y; cites PC-S1031-TWO-PATH-X'
+  sw sb-R.sh ANCHY_R_ fixedR; sw sb-R.sh ANCH_B4 fixedB4; c 'fix: absorb PC-S1034-MULTI-SUB-Y; cites PC-S1033-MULTI-SUB-X'
+  sw yfile.sh FILLER_TOP 'filler S'; c 'fix: absorb PC-S1036-HEADER-Y; cites PC-S1035-HEADER-X'
+) >/dev/null 2>&1 || sb_rc=$?
+if [ "$sb_rc" -ne 0 ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s FIXTURE BROKEN -- the sibling world could not be built\n' "sibling-seed"
+  return 0
+fi
+SBB="$(git -C "$SBD" rev-list --max-parents=0 HEAD 2>/dev/null)"
+SBT="$(git -C "$SBD" rev-parse HEAD 2>/dev/null)"
+# THE MERGE SHAPES, ASSERTED AGAINST THE REPO: S1019 shows sb-J.sh against its second parent only,
+# S1021 against its first only, S1023 against both.
+sb_par() { # <id> <parent ordinal> -> 1 when the naming merge has a diff for <file> against it
+  local _m _p
+  _m="$(git -C "$SBD" log -F --grep="$1" --format=%H "$SBT")"
+  _p="$(git -C "$SBD" rev-parse "${_m}^$2" 2>/dev/null)" || { printf 'x'; return; }
+  if git -C "$SBD" diff --quiet "$_p" "$_m" -- "core/scripts/$3" 2>/dev/null; then printf 0; else printf 1; fi
+}
+sb_shape="$(sb_par PC-S1019-MERGE-P2-X 1 sb-J.sh)$(sb_par PC-S1019-MERGE-P2-X 2 sb-J.sh)$(sb_par PC-S1021-MERGE-P1-X 1 sb-K.sh)$(sb_par PC-S1021-MERGE-P1-X 2 sb-K.sh)$(sb_par PC-S1023-MERGE-CONCAT-X 1 sb-L.sh)$(sb_par PC-S1023-MERGE-CONCAT-X 2 sb-L.sh)"
+if [ -z "$SBB" ] || [ -z "$SBT" ] || [ "$sb_shape" != 011011 ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s FIXTURE BROKEN -- the merge shapes are wrong (got %s, want 011011)\n' "sibling-seed" "$sb_shape"
+  return 0
+fi
+printf '  ok    %-22s the world carries a merge seen against its second parent only (S1019), one against its first only (S1021) and one against both (S1023)\n' "sibling-seed"
+cat > "$SBW/ledger.md" <<'SBLED'
+# Push-candidate ledger
+
+- **PC-S1001-OFFENDER** — a sibling's release changes my file only where the sibling's anchor is.
+  verify: theirs_has core/scripts/sb-A.sh "ANCHX_A_"
+
+- **PC-S1002-SIB-CLOSED-LIVE** — the sibling, closed in the live ledger.
+  verify: theirs_lacks core/scripts/sb-A.sh "ANCHY_A_"
+**ADOPTED UPSTREAM (v0.1.0, verified 2026-01-01)**
+
+- **PC-S1003-DIFFERENT-FILE** — the sibling's receipt is on another file.
+  verify: theirs_has core/scripts/sb-B.sh "ANCHX_B_"
+
+- **PC-S1004-SIB-OTHER-FILE** — sibling on sb-B2.sh.
+  verify: theirs_lacks core/scripts/sb-B2.sh "ANCHY_B_"
+
+- **PC-S1005-INCOMMIT-X** — my anchor changed in the same commit.
+  verify: theirs_lacks core/scripts/sb-C.sh "ANCHX_C_"
+
+- **PC-S1006-INCOMMIT-Y** — sibling.
+  verify: theirs_lacks core/scripts/sb-C.sh "ANCHY_C_"
+
+- **PC-S1007-ARCHIVE-ONLY** — my sibling is only in the archive.
+  verify: theirs_has core/scripts/sb-D.sh "ANCHX_D_"
+
+- **PC-S1009-SPAN-NEIGHBOUR** — an unnamed neighbour in the release span touches my file.
+  verify: theirs_has core/scripts/sb-E.sh "ANCHX_E_"
+
+- **PC-S1010-SPAN-Y** — sibling.
+  verify: theirs_lacks core/scripts/sb-E.sh "ANCHY_E_"
+
+- **PC-S1011-SPANOFF-X** — my anchor moved in an unnamed span parent.
+  verify: theirs_lacks core/scripts/sb-F.sh "ANCHX_F_"
+
+- **PC-S1012-SPANOFF-Y** — sibling.
+  verify: theirs_lacks core/scripts/sb-F.sh "ANCHY_F_"
+
+- **PC-S1013-SHORT-ID-X** — my sibling is named only by its short id.
+  verify: theirs_has core/scripts/sb-G.sh "ANCHX_G_"
+
+- **PC-S1014-SHORT-ONLY-Y** — sibling.
+  verify: theirs_lacks core/scripts/sb-G.sh "ANCHY_G_"
+
+- **PC-S1015-WHOLE-DIFF-X** — my sibling's anchor text appears in a different file.
+  verify: theirs_has core/scripts/sb-H.sh "ANCHX_H_"
+
+- **PC-S1016-WHOLE-DIFF-Y** — sibling with receipts on two files.
+  verify: theirs_has core/scripts/sb-H.sh "ANCHY_H_P_"
+  verify: theirs_has core/scripts/sb-H2.sh "ANCHY_H_Q_"
+
+- **PC-S1017-TWO-COMMITS-X** — two naming commits; the older changed my anchor.
+  verify: theirs_lacks core/scripts/sb-I.sh "ANCHX_I_"
+
+- **PC-S1018-TWO-COMMITS-Y** — sibling.
+  verify: theirs_lacks core/scripts/sb-I.sh "ANCHY_I_"
+
+- **PC-S1019-MERGE-P2-X** — merge, the change against the second parent.
+  verify: theirs_has core/scripts/sb-J.sh "ANCHX_J_"
+
+- **PC-S1020-MERGE-P2-Y** — sibling.
+  verify: theirs_lacks core/scripts/sb-J.sh "ANCHY_J_"
+
+- **PC-S1021-MERGE-P1-X** — merge, the change against the first parent.
+  verify: theirs_has core/scripts/sb-K.sh "ANCHX_K_"
+
+- **PC-S1022-MERGE-P1-Y** — sibling.
+  verify: theirs_lacks core/scripts/sb-K.sh "ANCHY_K_"
+
+- **PC-S1023-MERGE-CONCAT-X** — merge, a different change against each parent.
+  verify: theirs_has core/scripts/sb-L.sh "ANCHX_L_"
+
+- **PC-S1024-MERGE-CONCAT-Y** — sibling.
+  verify: theirs_lacks core/scripts/sb-L.sh "ANCHY_L_"
+
+- **PC-S1025-PREFIX-X** — my sibling's slug occurs only inside a longer one.
+  verify: theirs_has core/scripts/sb-N.sh "ANCHX_N_"
+
+- **PC-S1026-PRE** — sibling, whose slug prefixes the named PC-S1026-PRE-LONGER.
+  verify: theirs_lacks core/scripts/sb-N.sh "ANCHY_N_"
+
+- **PC-S1027-PIPE-X** — my sibling's anchor is regex-hostile.
+  verify: theirs_has core/scripts/sb-M.sh "ANCHX_M_"
+
+- **PC-S1028-PIPE-Y** — sibling.
+  verify: theirs_lacks core/scripts/sb-M.sh "|SIB.LIT*x"
+
+- **PC-S1029-BACKSLASH-X** — my anchor carries a backslash.
+  verify: theirs_has core/scripts/sb-O.sh "ANCHX\_O_"
+
+- **PC-S1030-BACKSLASH-Y** — sibling.
+  verify: theirs_lacks core/scripts/sb-O.sh "ANCHY_O_"
+
+- **PC-S1031-TWO-PATH-X** — receipts on two files; my anchor on the second changed.
+  verify: theirs_has core/scripts/sb-Q1.sh "ANCHX_Q1_"
+  verify: theirs_lacks core/scripts/sb-Q2.sh "ANCHX_Q2_"
+
+- **PC-S1032-TWO-PATH-Y** — sibling on the first file.
+  verify: theirs_lacks core/scripts/sb-Q1.sh "ANCHY_Q_"
+
+- **PC-S1033-MULTI-SUB-X** — one receipt, two substrings; the second changed.
+  verify: theirs_has core/scripts/sb-R.sh "ANCH_A4" "ANCH_B4"
+
+- **PC-S1034-MULTI-SUB-Y** — sibling.
+  verify: theirs_lacks core/scripts/sb-R.sh "ANCHY_R_"
+
+- **PC-S1035-HEADER-X** — the commit edits only a filler line of my file.
+  verify: theirs_has core/scripts/yfile.sh "ANCHX_S_"
+
+- **PC-S1036-HEADER-Y** — sibling whose anchor occurs only in the path.
+  verify: theirs_has core/scripts/yfile.sh "yfile.sh"
+
+- **PC-S1099-NEVER** — never named (control).
+  verify: theirs_has core/scripts/sb-never.sh "never"
+SBLED
+cat > "$SBW/push-candidate-ledger.archive.md" <<'SBARC'
+# Push-candidate ledger archive
+
+## PC-S1008-SIB-ARCHIVED — **ADOPTED UPSTREAM (v0.1.0, verified 2026-01-01)** — the archived sibling.
+
+verify: theirs_lacks core/scripts/sb-D.sh "ANCHY_D_"
+SBARC
+sb_rows() { bash "$1" "$SBD" "$SBB" "$CONS" "$SBT" "$SBW/ledger.md" 2>/dev/null; }
+sb_kind() { printf '%s\n' "$1" | awk -F'\t' -v l="$2" '$2 == l && $1 ~ /^NAMED-UPSTREAM(-DOCS-ONLY|-CITED-ONLY|-OFF-SUBJECT|-SIBLING-ATTRIBUTED)?$/ {print $1; exit}'; }
+SB_IDS="PC-S1001-OFFENDER PC-S1003-DIFFERENT-FILE PC-S1005-INCOMMIT-X PC-S1007-ARCHIVE-ONLY PC-S1009-SPAN-NEIGHBOUR PC-S1011-SPANOFF-X PC-S1013-SHORT-ID-X PC-S1015-WHOLE-DIFF-X PC-S1017-TWO-COMMITS-X PC-S1019-MERGE-P2-X PC-S1021-MERGE-P1-X PC-S1023-MERGE-CONCAT-X PC-S1025-PREFIX-X PC-S1027-PIPE-X PC-S1029-BACKSLASH-X PC-S1031-TWO-PATH-X PC-S1033-MULTI-SUB-X PC-S1035-HEADER-X"
+SA=NAMED-UPSTREAM-SIBLING-ATTRIBUTED; NU=NAMED-UPSTREAM
+SB_WANT="$SA $NU $NU $SA $NU $NU $NU $NU $NU $SA $SA $NU $NU $SA $NU $NU $NU $NU"
+sb_expect() { local _i _k _w="$SB_WANT"; for _i in $SB_IDS; do _k="${_w%% *}"; _w="${_w#* }"; [ "$_i" = "$1" ] && { printf '%s' "$_k"; return; }; done; }
+sb_read() { local _i _s=""; for _i in $SB_IDS; do _s="$_s $_i=$(sb_kind "$1" "$_i")"; done; printf '%s' "${_s# }"; }
+# THE CONTROL IS PRESENCE-SHAPED: every X cell must carry a NAMED- row of exactly its kind, the
+# in-commit sibling S1006 must read NAMED-UPSTREAM (its own anchor changed), and the never-named
+# control must have a row and no NAMED- row.
+sb_ctl="$(sb_rows "$CLOSER")"
+sb_ctl_read="$(sb_read "$sb_ctl")"
+sb_ctl_want=""; for _i in $SB_IDS; do sb_ctl_want="$sb_ctl_want $_i=$(sb_expect "$_i")"; done; sb_ctl_want="${sb_ctl_want# }"
+sb_never_rows="$(printf '%s\n' "$sb_ctl" | awk -F'\t' '$2 == "PC-S1099-NEVER" {c++} END {print c+0}')"
+sb_never_named="$(printf '%s\n' "$sb_ctl" | awk -F'\t' '$2 == "PC-S1099-NEVER" && $1 ~ /^NAMED-/ {c++} END {print c+0}')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ "$sb_ctl_read" != "$sb_ctl_want" ] || [ "$(sb_kind "$sb_ctl" PC-S1006-INCOMMIT-Y)" != "$NU" ] || [ "$sb_never_rows" -lt 1 ] || [ "$sb_never_named" != 0 ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the shipped engine over S1001-S1030 read {%s} S1006=%s never=%s/%s, want {%s} S1006=%s never>=1/0; no mutant below is attributable\n' "sibling-control" "$sb_ctl_read" "$(sb_kind "$sb_ctl" PC-S1006-INCOMMIT-Y)" "$sb_never_rows" "$sb_never_named" "$sb_ctl_want" "$NU"
+  return 0
+fi
+printf '  ok    %-22s the shipped engine reproduces every S1001-S1030 kind; the in-commit sibling stays NAMED-UPSTREAM and the never-named control has a row and no NAMED- row\n' "sibling-control"
+# THE ROW NAMES ONLY THE SIBLING WHOSE ANCHOR SAT ON THE CHANGED LINE.
+ASSERTIONS=$((ASSERTIONS + 1))
+sb_det="$(printf '%s\n' "$sb_ctl" | awk -F'\t' '$1 == "NAMED-UPSTREAM-SIBLING-ATTRIBUTED" && $2 == "PC-S1001-OFFENDER" {print $3; exit}')"
+case "$sb_det" in
+  *"receipt substring there: PC-S1002-SIB-CLOSED-LIVE ("*"core/scripts/sb-A.sh"*|*"core/scripts/sb-A.sh"*"receipt substring there: PC-S1002-SIB-CLOSED-LIVE ("*)
+    printf '  ok    %-22s S1001 names its receipt file and exactly the sibling whose anchor changed\n' "sibling-detail" ;;
+  *) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s S1001 does not name sb-A.sh and exactly PC-S1002-SIB-CLOSED-LIVE: %s\n' "sibling-detail" "$(printf '%s' "$sb_det" | cut -c1-240)" ;;
+esac
+# THE CLOSE RULE STAYS SINGLE-HOMED: the shipped lib.sh lifts exactly one body rule and one entry-line
+# rule from this ledger-reverify.sh -- the lift the previous release's lib.sh performs on the pull
+# that delivers this file (lib.sh is unchanged by this arm, so the shipped copy IS that one).
+ASSERTIONS=$((ASSERTIONS + 1))
+SB_BOOT="$SBW/boot"; mkdir -p "$SB_BOOT"; cp "$(dirname "$CLOSER")"/*.sh "$SB_BOOT/" 2>/dev/null
+sb_lift="$( SELF="$SB_BOOT"; . "$SB_BOOT/lib.sh" >/dev/null 2>&1; ledger_close_awk_pattern >/dev/null 2>&1 && ledger_entry_line_close_awk >/dev/null 2>&1 && echo ok )"
+sb_n1="$(grep -cE '^[[:space:]]*/.*ADOPTED UPSTREAM.*closed=1 \}$' "$CLOSER")" || sb_n1=0
+if [ "$sb_lift" = ok ] && [ "$sb_n1" = 1 ]; then
+  printf '  ok    %-22s lib.sh lifts exactly one close rule and one entry-line rule (body-rule matches: %s)\n' "sibling-close-lift" "$sb_n1"
+else
+  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s lift=%s body-rule matches=%s, want ok and 1 -- KEEP must not land on the close-rule line\n' "sibling-close-lift" "${sb_lift:-refused}" "$sb_n1"
+fi
+# THE MUTANTS: a fragment replaced in EXACTLY one place of a copy of the reconcile directory,
+# `bash -n` clean and byte-different, or the arm is FIXTURE BROKEN.
+sb_mut() { # <tag> <old fragment> <new fragment> -> path of the mutant, or empty
+  local _d="$SBW/m-$1"
+  mkdir "$_d" 2>/dev/null || return 0
+  cp "$(dirname "$CLOSER")"/*.sh "$_d/" 2>/dev/null
+  [ -f "$_d/lib.sh" ] || return 0
+  A="$2" B="$3" awk '
+    BEGIN { a = ENVIRON["A"]; b = ENVIRON["B"] }
+    { s = $0; o = ""; while ((i = index(s, a)) > 0) { o = o substr(s, 1, i - 1) b; s = substr(s, i + length(a)); n++ } print o s }
+    END { exit (n == 1) ? 0 : 3 }' "$CLOSER" > "$_d/ledger-reverify.sh" || return 0
+  bash -n "$_d/ledger-reverify.sh" 2>/dev/null || return 0
+  cmp -s "$CLOSER" "$_d/ledger-reverify.sh" || printf '%s' "$_d/ledger-reverify.sh"
+}
+# <tag> <killing cell> <kind under the mutant> <co-moving cells, named, or -> <why> <old> <new>
+#
+# TWO PHASES, BECAUSE EACH MUTANT IS ONE FULL ENGINE RUN (~6s) AND THIS UNIT SITS IN A SHARD THE
+# SUITE POLE WATCHES. `sb_case` builds the mutant and STARTS its run in the background, writing its
+# rows and its spec to files in the mutant directory; `sb_score` waits on every recorded pid and
+# scores each run. A mutant that did not apply records no pid and is reported BROKEN at once. The
+# runs are independent copies, each with its own staging directory, so nothing is shared between them.
+SB_PIDS=""; SB_TAGS=""
+sb_case() {
+  local _m _d="$SBW/m-$1"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  _m="$(sb_mut "$1" "$6" "$7")"
+  if [ -z "$_m" ]; then FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s FIXTURE BROKEN -- the mutation DID NOT APPLY (fragment matched nothing or twice, or the mutant does not parse)\n' "mutation-$1"; return; fi
+  printf '%s\n' "$2" > "$_d/cell"; printf '%s\n' "$3" > "$_d/kind"; printf '%s\n' "$4" > "$_d/co"; printf '%s\n' "$5" > "$_d/why"
+  sb_rows "$_m" > "$_d/rows" &
+  SB_PIDS="$SB_PIDS $!"; SB_TAGS="$SB_TAGS $1"
+}
+sb_score() {
+  local _p _t _d _r _k _h _bad _co _cell _want
+  for _p in $SB_PIDS; do wait "$_p"; done
+  for _t in $SB_TAGS; do
+    _d="$SBW/m-$_t"; _bad=""
+    _r="$(cat "$_d/rows")"; _cell="$(cat "$_d/cell")"; _want="$(cat "$_d/kind")"; _co=" $(cat "$_d/co") "
+    _k="$(sb_kind "$_r" "$_cell")"
+    for _h in $SB_IDS; do
+      [ "$_h" = "$_cell" ] && continue
+      case "$_co" in *" $_h "*) continue ;; esac
+      [ "$(sb_kind "$_r" "$_h")" = "$(sb_expect "$_h")" ] || _bad="$_bad $_h=$(sb_kind "$_r" "$_h")"
+    done
+    if [ "$_k" = "$_want" ] && [ -z "$_bad" ]; then printf '  ok    %-22s %s\n' "mutation-$_t" "$(cat "$_d/why")"
+    else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s %s read %s under the mutant (want %s); cells that should hold but moved:%s\n' "mutation-$_t" "$_cell" "${_k:-<no row>}" "$_want" "${_bad:- none}"; fi
+  done
+}
+sb_case gate-off PC-S1005-INCOMMIT-X "$SA" "PC-S1033-MULTI-SUB-X" \
+  "without the own-anchor gate a commit that changed X's anchor too is credited to the sibling, and S1005 is what sees it (S1033, whose own second substring changed in the sibling's block, co-moves by construction)" \
+  'if (bx[p]) bad++' 'if (0) bad++'
+sb_case sibling-any-file PC-S1003-DIFFERENT-FILE "$SA" - \
+  "a sibling hit on ANY file credited to X's file attributes a change X's file never carried, and S1003 is what sees it" \
+  'index(t, ys[k])) { by[bp] = 1; if (bp in isx) hit[yl[k]] = 1 }' 'index(t, ys[k])) { for (q in isx) by[q] = 1; hit[yl[k]] = 1 }'
+sb_case sibling-whole-diff PC-S1015-WHOLE-DIFF-X "$SA" - \
+  "matching a sibling anchor anywhere in the diff, not in the block for its own path, credits X's file with text written elsewhere, and S1015 is what sees it" \
+  'if (yp[k] == bp && index(t, ys[k])) { by[bp] = 1; if (bp in isx) hit[yl[k]] = 1 }' 'if (index(t, ys[k])) { by[yp[k]] = 1; hit[yl[k]] = 1 }'
+sb_case sibling-live-only PC-S1007-ARCHIVE-ONLY "$NU" - \
+  "without the archive staged an archived sibling is invisible, and S1007 is what sees it" \
+  'lr_entries "$ARCHIVE_PATH" 1 >> "$LR_STAGE/sib-entries" 2>/dev/null || LR_SIB_OK=0' ':'
+sb_case keep-closed PC-S1001-OFFENDER "$NU" "PC-S1007-ARCHIVE-ONLY" \
+  "staging only OPEN entries loses a closed sibling, and S1001 is what sees it (S1007, whose archived sibling is closed too, co-moves by construction)" \
+  '(!closed || KEEP)' '!closed'
+sb_case quantifier-exists PC-S1009-SPAN-NEIGHBOUR "$SA" "PC-S1023-MERGE-CONCAT-X" \
+  "ignoring a block that carries neither anchor attributes a release whose span also touched X's file elsewhere, and S1009 is what sees it (S1023, whose second parent block carries neither, co-moves by construction)" \
+  'else if (!by[p]) bad++' 'else if (!by[p]) blk--'
+sb_case span-off-attribution PC-S1011-SPANOFF-X "$SA" "PC-S1009-SPAN-NEIGHBOUR" \
+  "judging a release on its own diff misses X's anchor change in an unnamed span parent, and S1011 is what sees it (S1009's neighbour is a span parent too and co-moves)" \
+  'if [ "$_sb_rel" = 1 ]; then' 'if false; then'
+sb_case sibling-prefix PC-S1013-SHORT-ID-X "$SA" - \
+  "accepting a short id as naming the sibling attributes on a mention, and S1013 is what sees it" \
+  'named(ENVIRON["LR_M"], $1) { print }' '(named(ENVIRON["LR_M"], $1) || (match($1, /^PC-S[0-9]+/) && named(ENVIRON["LR_M"], substr($1, 1, RLENGTH)))) { print }'
+sb_case slug-unanchored PC-S1025-PREFIX-X "$SA" - \
+  "an unanchored slug test names a sibling whose slug only prefixes a longer named one, and S1025 is what sees it" \
+  'if (c == "" || c !~ /[0-9A-Za-z-]/) return 1' 'return 1'
+sb_case first-touching-commit-only PC-S1017-TWO-COMMITS-X "$SA" - \
+  "judging only the newest naming commit misses an older one that changed X's anchor, and S1017 is what sees it" \
+  "printf '%s\\n' \"\$2\" | tr ',' '\\n' > \"\$LR_STAGE/nsb-shas\"" "printf '%s\\n' \"\${2%%,*}\" > \"\$LR_STAGE/nsb-shas\""
+sb_case sha-list-unterminated PC-S1001-OFFENDER "$NU" "PC-S1007-ARCHIVE-ONLY PC-S1019-MERGE-P2-X PC-S1021-MERGE-P1-X PC-S1027-PIPE-X PC-S1017-TWO-COMMITS-X" \
+  "an unterminated sha list drops the LAST naming commit, which on a one-commit naming set is every commit, and S1001 is what sees it (every other attributed cell co-moves, and S1017 then judges only its newest commit)" \
+  "printf '%s\\n' \"\$2\" | tr ',' '\\n' > \"\$LR_STAGE/nsb-shas\"" "printf '%s' \"\$2\" | tr ',' '\\n' > \"\$LR_STAGE/nsb-shas\""
+sb_case short-sha-span PC-S1001-OFFENDER "$NU" "PC-S1007-ARCHIVE-ONLY PC-S1019-MERGE-P2-X PC-S1021-MERGE-P1-X PC-S1027-PIPE-X" \
+  "handing diff-tree --stdin the abbreviated sha prints no diff, so a non-release naming commit is never judged, and S1001 is what sees it (every other attributed cell is named by a non-release commit and co-moves)" \
+  'git -C "$DIST" rev-parse --verify -q "${_c}^{commit}" > "$LR_STAGE/nsb-span"' 'printf '"'"'%s\n'"'"' "$_c" > "$LR_STAGE/nsb-span"'
+sb_case first-parent-only PC-S1019-MERGE-P2-X "$NU" - \
+  "diffing a merge against its first parent alone never sees a change visible only against the second, and S1019 is what sees it" \
+  'diff-tree --stdin -m -r -p -U0' 'diff-tree --stdin --diff-merges=first-parent -r -p -U0'
+sb_case parents-concatenated PC-S1023-MERGE-CONCAT-X "$SA" - \
+  "one block per merge instead of per parent lets one parent's sibling hit cover the other parent's unattributed change, and S1023 is what sees it" \
+  'issha($0) { shut(); cur = $0; next }' 'issha($0) { if ($0 != cur) shut(); cur = $0; next }'
+sb_case sibling-regex PC-S1027-PIPE-X "$NU" - \
+  "matching a sibling anchor as a regex dies on a leading pipe, the predicate fails to touched, and S1027 is what sees it" \
+  'index(t, ys[k])' 't ~ ys[k]'
+sb_case x-backslash-ignored PC-S1029-BACKSLASH-X "$SA" - \
+  "searching for a backslash-carrying anchor literally finds nothing and credits the sibling, and S1029 is what sees it" \
+  'case "$_xq" in *\\*) return 0 ;; esac' 'case "$_xq" in *\\*) : ;; esac'
+sb_case x-first-receipt-only PC-S1031-TWO-PATH-X "$SA" - \
+  "staging only X's FIRST receipt loses the second file, where X's own anchor changed, and S1031 is what sees it" \
+  '    printf '"'"'%s\n'"'"' "$_xp" >> "$LR_STAGE/nsb-xpaths" || return 0' '    printf '"'"'%s\n'"'"' "$_xp" >> "$LR_STAGE/nsb-xpaths" || return 0; break'
+sb_case split-off PC-S1033-MULTI-SUB-X "$SA" - \
+  "a receipt read as ONE literal (quotes and all) never matches X's second substring, the commit that changed it is credited to the sibling, and S1033 is what sees it" \
+  '  printf '"'"'%s'"'"' "$_ss" | lr_split_subs' '  printf '"'"'%s'"'"' "$_ss"'
+sb_case headers-matched PC-S1035-HEADER-X "$SA" - \
+  "counting the diff headers as changed lines matches a sibling anchor that is only a substring of the path, and S1035 is what sees it" \
+  'hunk && bp != "" && (' 'bp != "" && ('
+sb_score
 } # end lr_unit_off_subject
 lr_unit_unreadable_path() {
 # --- AN UNREADABLE PATH IS REFUSED, NEVER READ AS ABSENT OR EMPTY (BL-310) -----------------

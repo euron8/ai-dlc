@@ -1142,6 +1142,14 @@ prose is itself generated rather than composed.
      on a path the receipt does not name. Read the commits, then the entry's subject at
      `theirs`. A plain `NAMED-UPSTREAM` with a path receipt means a naming commit changed the
      receipt's FILE — never that it changed the receipt's substring.
+   - `NAMED-UPSTREAM-SIBLING-ATTRIBUTED` → a naming commit changes the entry's receipt file,
+     but on every changed block of that file **none** of the entry's own receipt substrings is
+     on a changed line, while a **sibling** entry the same commit names by its full slug has its
+     receipt substring there. The row names the sibling(s). Every naming commit is judged, a
+     release over its span, and the sibling may be a closed or archived entry. **Not a close
+     and not a refusal**: a release that fixed the sibling and cross-referenced this entry reads
+     this way, but so does a fix that left this entry's anchor stale. Read the commits and the
+     sibling's entry, then this entry's subject at `theirs`.
    - `NAMED-UPSTREAM-CITED-ONLY` → upstream's history names this entry's id, and **every**
      naming commit names it only on a body line reading exactly `Not-discharged: PC-S<n>` or
      `Not-discharged: PC-S<n>-<SLUG>` — the form a distribution release uses to cite an entry
@@ -2510,6 +2518,11 @@ declared sites, not everywhere unconditionally.
        later mention. Then read the named subject against `theirs`. Annotate only what that
        reading establishes, with the release that contains the change; otherwise leave the
        entry open.
+     - `NAMED-UPSTREAM-SIBLING-ATTRIBUTED` — a naming commit changed the receipt file only where
+       a sibling entry it names has its anchor. Read the commits and the sibling's entry: the
+       change may be the sibling's fix with this entry merely cross-referenced. Then read this
+       entry's subject against `theirs`. Annotate only what that reading establishes, with the
+       release that contains the change; otherwise leave the entry open.
      - `NAMED-UPSTREAM-CITED-ONLY` — every naming commit cites the id only on a
        `Not-discharged:` line, so upstream says it did not discharge the entry there. Read the
        commits for a rejection, a withdrawal or a split and act on that if there is one, then
