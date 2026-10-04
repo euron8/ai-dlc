@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 502..525. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 499..540. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,45 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 191 SHIPPED FOUR RELEASES, `v0.719.0` (`665cfb3d`, #1003), `v0.720.0` (`c81bb603`, #1004), `v0.721.0`
+(`3efb87d8`, #1005) AND `v0.722.0` (`1f4ad903`, #1006), AND TOOK THE LIVE BACKLOG FROM 8 TO 1.** It continued batch
+190's session on the operator's direct questions. The operator ruled that an entry with no buildable remedy closes
+rather than stays open, and decided `BL-071` (option A: re-rule `fp-quotes` as an intended refusal) and `BL-145`
+(option A: re-scope to sibling attribution). No consumer candidate was live, so none was discharged.
+
+- Closed by adjudication (#1002): `BL-128`, `BL-404`, `BL-412`. `BL-230` closed on its forced reproduction: all four
+  arms reproduce their recorded shapes when the `is_unregistered()` process-substitution diff fails on the 0.624.0
+  tree, and 0.625.0 and 0.647.0 had already fixed and removed that site.
+- `v0.719.0`: `BL-071`. A backticked quotation of the close form no longer silences the split refusal.
+- `v0.720.0`: `BL-438`. QA declares `PASS | NEEDS_REWORK`; Check 1 reads each gate against its owner; I112 binds both.
+- `v0.721.0`: `BL-439` (filed and fixed: pseudo-path rows) and `BL-375`'s stage-1 levers (loss canary, unread
+  control, `cp -RX` seed, traced pool width 1).
+- `v0.722.0`: `BL-145`. New `NAMED-UPSTREAM-SIBLING-ATTRIBUTED` row; sibling receipts staged from the archive.
+
+Live backlog **8 -> 1**, archive **429 -> 437**. Net closed minus filed: **7** (eight closed, `BL-439` filed). R5
+`--min-sh-receipts 1 --min-entries 1`. `FORK_BUDGET` 3196.
+
+**EVERY ADVERSARY FOUND SOMETHING ON A GATE-GREEN SHAPE, AGAIN.** Each of the four releases had a contract or tip
+pass, or both, that showed a wrong build the fixtures accepted, and each was fixed before merge.
+
+**`BL-375` IS THE ONE LIVE ENTRY, AND STAGE 1 WAS TRACED AND NOT MET.** At `3efb87d8`, three five-fixture runs
+started at load 3-11 and peaked at 21-43, because the traced fixtures make their own load. They mapped 4, 1 and 3 of
+5, every omission a drop notice. Two clean traces of `validator-arm-selection` disagreed by 19 `seed.sh` paths with
+no guard firing. The entry records both.
+
+**0.719.0'S GATE EXITED 1 ON THE SUITE-POLE PHASE ALONE:** `gate-adjudication-mutants` 749s against a 736s ceiling,
+at load 35-44 with a second suite on the box; that fixture reads neither changed file. The re-push skipped on the
+content key. The pole was then skipped by coverage on all three later gates (30.69%, 24.83%, 65.82%), so it has not
+been re-measured since. NOTE, not filed: the guard's remedy says "re-run the gate", which an unchanged commit
+cannot do.
+
+**THE DELIVERY GAP IS THIRTEEN RELEASES.** The consumer is installed at 0.709.0 against `VERSION` 0.722.0, and
+0.711.0, 0.713.0, 0.719.0 and 0.722.0 are bootstrapping. PENDING is 2 by the derive block and 5 counting the three
+discharged ids still uncommitted in the consumer's working tree. The banked ruling stands: report the gap and write
+no runbook. **OPERATOR DECISIONS STILL OPEN:** whether review sharding becomes the default.
+
+Batch 190's block below is history: batch 191's block replaces its delivery gap and its decisions list.
 
 **BATCH 190 SHIPPED NO RELEASE AND DISCHARGED NO CONSUMER CANDIDATE, BECAUSE NOTHING BUILDABLE WAS FOUND.** It
 was invoked by peer handoff (`ai-dlc-40`) and ran autonomously, at `origin/main` `b53f93fd` (`VERSION` 0.718.0). The
@@ -456,48 +495,6 @@ bootstrapping, size M), `BL-087` (needs an interactive Claude Code experiment), 
 `BL-127` is no longer live.
 
 Batch 181's block below is history: batch 182's block replaces its delivery gap and its decisions list.
-
-**BATCH 181 SHIPPED TEN RELEASES, `v0.693.0` THROUGH `v0.702.0` (#962-#971), AND DISCHARGED TWO CONSUMER
-CANDIDATES**, both filed by the reference consumer during the batch and each shipped as its own release:
-`PC-S316-PARTITION-DOCUMENT-SERIAL-ON-A-NO-H3-TABLE-PIECE-THAT-HOLDS-70-PERCENT-OF-THE-BYTES` (`v0.697.0`,
-`475213d4`) and `PC-S316-PARTY-FANOUT-OVER-HARNESS-CONCURRENT-SUBAGENT-CAP` (`v0.702.0`, `4331085d`). It was invoked
-by peer handoff and ran autonomously. The opening sweep found no candidate work; scope came from the whole-backlog
-adjudication (25 entries: 0 CLOSE, 3 PARTIAL, 22 LIVE), and every entry with a buildable remedy was built.
-
-- `v0.693.0` `ledger-reverify.sh`, `v0.694.0` the self-update gate and runner, `v0.695.0` `preclassify.sh`,
-  `v0.696.0` `emit-report.sh`: `BL-364` and `BL-360` site by site, each bootstrapping file alone.
-- `v0.698.0` `apply.sh`: `BL-413`, `BL-414`, `BL-415`. `v0.699.0` four reconcile helpers: `BL-360`, `BL-404` claim 2.
-- `v0.700.0` the predicate differential: `BL-409`, `BL-410`, `BL-129`. `v0.701.0` the memo-reading detectors: `BL-411`.
-
-Live backlog **25 -> 22**, archive **390 -> 401**: nine landed and rotated (`BL-129`, `BL-360`, `BL-364`, `BL-409`,
-`BL-410`, `BL-411`, `BL-413`, `BL-414`, `BL-415`), six NOTEs filed from adversary findings outside the release file
-sets (`BL-417`..`BL-422`), and the two discharged candidates filed LANDED and rotated in the close (`BL-423`,
-`BL-424`). Net closed minus filed: **3**. `BL-404` stays open on claim 1 (no file holds its subject),
-`BL-378` on a quiet 12-way baseline run, `BL-375` on the operator's `--tracer both` run.
-
-**EVERY TIP ADVERSARY FOUND A DEFECT IN A GATE-GREEN BRANCH, AGAIN, EXCEPT R-C, R-D AND THE PARTITION RELEASE.** Two
-gates blocked on a fixture a SIBLING release had changed after the blocked branch's point: a hand runs only its own
-fixtures, so **run every fixture that names a changed file, on the REBASED tree, before cutting a release** — the
-boot fixture's BL-360 cells swap in one base engine beside tip siblings. An S7 false positive (an awk `gsub(` and a
-later `\047` on one line) blocked another; **run `validate-shell-portability.sh` on a release tree before pushing**.
-
-**THE SUBAGENT GATEWAY'S `/health` ANSWERS 401 IN EVERY STATE.** After an auth outage killed five hands, polling it
-held the batch after the operator had re-authenticated. **Re-spawn after an auth failure; the spawn is the liveness
-test.**
-
-**READ-SET MAP.** Traced at 0.701.0 with the sandbox tracer: `retired-fixture-orphan` (now reads `reconcile/lib.sh`)
-and `emit-report-refusal` (`core/scripts/validate-hook-registration.sh`). The diff deleted only scratch `.git/`
-rows. The recorded loaded top is `procsub-staged-refusal`, then `procsub-staged-refusal-boot` and
-`reconcile-emit-report`.
-
-**THE DELIVERY GAP IS TEN RELEASES, WHICH IS WIDE.** The consumer is installed at 0.692.0 against `VERSION`
-0.702.0, and every release but 0.697.0 and 0.702.0 changes a bootstrapping or machinery file; 0 mode-only changes
-under `core/` in that range (control: 45 raw rows). PENDING is 2, the ids above. `BL-413`'s withhold first applies
-on the pull after the one that delivers `v0.698.0`. The banked ruling stands: report the gap and write no runbook.
-
-**OPERATOR DECISIONS STILL OPEN** are batch 179's list, unchanged.
-
-Batch 180's block below is history: batch 181's block replaces its delivery gap.
 
 ### Derive the state; do not trust the numbers below
 
