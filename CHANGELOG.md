@@ -19,6 +19,27 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.723.0] - 2026-10-04
+
+Batch 194's first release. It is `BL-375` PARTIAL: the entry stays live. It cuts the traced
+stream of `enforcement-map-sites`, the lone stage-1 blocker, without moving a map row. It
+discharges no consumer candidate, and the fixture is `.dist-only`.
+
+### BL-375 (partial): enforcement-map-sites seeds once and runs its cwd battery from a decoy
+
+- The shard driver seeds one template per shard, and each cell copies that template. Before,
+  each cell re-ran `seed.sh` against the distribution. The template reaches cells as an
+  argument. A missing or empty template exits 2, and it is hashed before and after the pool.
+- The A40 cwd battery (C2, C4, full mode) runs from a decoy: the template plus `VERSION` and a
+  `.git`. Before, it ran from the live distribution root. A `VERSION` walk-up mutant is still
+  caught.
+- New arms: M1's decoy run must reproduce the BL-436 false clean, with an empty-cwd self-probe.
+  `seed.sh` must have exactly one call site.
+- All 44 cells are byte-identical to base, and assertion counts are unchanged. The fork total
+  is 3192 against `FORK_BUDGET` 3196. Shard a is about 30s faster under load.
+- Batch 193's windows put about four-fifths of this fixture's stream in the two removed
+  sources. The stage-1 sandbox trace runs after the merge.
+
 ## [0.722.0] - 2026-10-03
 
 Batch 191's fourth release. It closes `BL-145`, re-scoped on the operator's batch-191 ruling.
