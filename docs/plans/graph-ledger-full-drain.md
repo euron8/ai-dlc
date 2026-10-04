@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 499..540. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 494..538. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,39 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 192 SHIPPED NO RELEASE AND DISCHARGED NO CONSUMER CANDIDATE, BECAUSE NOTHING BUILDABLE WAS FOUND.** It was
+invoked by peer handoff (`ai-dlc-86`) and ran autonomously at `origin/main` `1047e971` (`VERSION` 0.722.0). The `Agent`
+tool was available; one `opus` hand ran the `BL-375` determinism probe. The opening sweep read live 5 on 33 qualifying
+refs, all five already shipped here, with unfiled 0, worklist 0 (a true empty, as batch 191 recorded) and TERMINAL 199.
+Every control passed. The consumer's working-tree ledger equals its `HEAD` (`cmp` 0).
+
+**WHY THE FIVE STAY LIVE, READ FROM THE CONSUMER'S OWN 0.713.0 RECONCILE REPORT** (on
+`origin/ai-dlc-update/0.713.0-reconcile-20261003T221934Z`). None of the five is an engine defect here:
+- `…EMIT-REPORT-STAMP-BASE-MISMATCH…` reads `CLOSE-CANDIDATE` plus `NAMED-UPSTREAM` and awaits the consumer's own annotation.
+- `…MUTATION-RED…` and `…STEERING-BUDGET…` read `CLOSE-CANDIDATE` at 0.713.0, before their 0.714.0 fixes. Batch 188 recorded this.
+- `…UPDATE-DELIVERY-PUSH…` reads `NAMED-UPSTREAM-OFF-SUBJECT`, correctly. The fix is in the pre-push hook, and the
+  consumer's installed hook is byte-identical to `core/git-hooks/pre-push`. The consumer's receipt
+  `theirs_lacks core/skills/ai-dlc-update/SKILL.md "--no-verify"` anchors on its own suggested remedy, so it can never
+  close. That receipt is the consumer's to re-anchor.
+- `…GATE-1-AND-2-REVIEWS…` reads `NEEDS-REVIEW`, an unfalsifiable receipt that reads only the installed copy. It is also
+  the consumer's.
+
+**`BL-375`: the open "non-deterministic or silent loss" question is answered, and the entry is amended.** The reads are
+deterministic: three untraced reps give one md5 outside `.git/**`. The stream silently lost negative-lookup reports for
+`core/fixtures/*/seed.sh` paths that do not exist, and the atime canary cannot see that class by construction. The
+committed map carries 2390 absent-path rows across 129 of 230 fixtures. Tier NOTE: the runner's parent-directory
+ride-along covers an appearing file while the directory row survives. Stage 1's close criterion gains an
+identical-sets-across-traces arm. The op-filter lever (drop xattr reports) was refuted from the entry's own K-series and
+not built.
+
+Live backlog **1**, archive **437**. Net closed minus filed: **0**.
+
+**THE DELIVERY GAP IS NINE RELEASES.** The consumer is installed at 0.713.0 against `VERSION` 0.722.0, and PENDING is 5.
+The banked ruling stands: report the gap and write no runbook. **OPERATOR DECISIONS STILL OPEN:** whether review sharding
+becomes the default.
+
+Batch 191's block below is history: batch 192's block replaces its delivery gap and its decisions list.
 
 **BATCH 191 SHIPPED FOUR RELEASES, `v0.719.0` (`665cfb3d`, #1003), `v0.720.0` (`c81bb603`, #1004), `v0.721.0`
 (`3efb87d8`, #1005) AND `v0.722.0` (`1f4ad903`, #1006), AND TOOK THE LIVE BACKLOG FROM 8 TO 1.** It continued batch
@@ -457,51 +490,6 @@ ruling stands: report the gap and write no runbook.
 decisions. Open: `BL-375` (the operator's `--tracer both` run) and batch 179's four census steps.
 
 Batch 182's block below is history: batch 183's block replaces its delivery gap and its decisions list.
-
-**BATCH 182 SHIPPED TWO RELEASES, `v0.703.0` (`fb4328e4`, #973) AND `v0.704.0` (`09691a05`, #974), AND DISCHARGED NO
-CONSUMER CANDIDATE.** It was invoked by peer handoff and ran autonomously. The opening sweep found no candidate work:
-live 2 on 7 qualifying refs, both DISCHARGED here at 0.697.0 and 0.702.0, unfiled 0, worklist 0, TERMINAL 183, every
-control passing. Scope came from the whole-backlog adjudication (22 entries: 0 CLOSE, 4 PARTIAL, 18 LIVE).
-
-- `v0.703.0`: `BL-419` (Check 24's K2 runs the partitioner in force at the terminal pass, read from the stamped
-  root's git history, and is PENDING where a merge re-dated the install), `BL-421` (a row cut needs a GFM separator
-  row), `BL-417` (`fork-profile.sh` scores `name[…]=` and `+=`; `FORK_BUDGET` 3144).
-- `v0.704.0` (bootstrapping): `BL-418` (a failed machinery or sited-path producer returns 4 and every caller
-  refuses), `BL-425` (filed and fixed: the carry join ran once per HARD row and leaked a `ud-carry.*` directory
-  each time), `BL-422`, `BL-420`.
-
-Live backlog **22 -> 16**, archive **401 -> 408**: seven landed and rotated, one filed (`BL-425`). Net closed minus
-filed: **6**. R5's `--min-entries` floor is 16, measured after rotation; `--min-sh-receipts` stays 5.
-
-**EVERY ADVERSARY FOUND SOMETHING ON A GATE-GREEN SHAPE, AGAIN.** The K2 contract keyed on the spawn ledger's
-`shard` field, which the lead writes about its own dispatch; refuted before building. K2's first cut acquitted a
-series once a sprint branch's partitioner install was squash-merged, because first-parent history re-dates it.
-`v0.704.0`'s first cut aborted a pre-0.704.0 `apply.sh` beside the new `preclassify.sh` (its extractor's awk range
-ran to EOF). **A bootstrapping release owes a cell running the PREVIOUS release's extractor against the new file**;
-`apply-restamp-theirs` assertion 11 is the pattern.
-
-**THE `ud-carry.*` LEAK STILL GROWS UNTIL THE CONSUMER PULLS.** 81996 directories in the operator's `$TMPDIR` at the
-batch open, 82973 at its close (control: 10749 `tmp.*`), because installed 0.692.0 engines still run the leaking
-code. Nothing was deleted; removing them is the operator's call.
-
-**READ-SET TRACE OWED, AND THE ONE TAKEN WAS DISCARDED.** The sandbox tracer at `09691a05`, under load 17-31, dropped
-`apply-drift-after-write`, `enforcement-map-sites` and `validator-fork-budget` and deleted their 2216 rows, so the map
-was not committed. Re-run when `uptime` reads under 10: `bash core/scripts/derive-fixture-readsets.sh --list
-"apply-drift-after-write apply-drift-refile apply-restamp-theirs apply-worklist-rows check-24-adversarial-convergence
-document-partition enforcement-map-sites procsub-staged-refusal self-update-fixture-log self-update-gate
-validator-fork-budget ledger-reverify-shard-mutants" --tracer sandbox`, and commit only a diff with no OMITTED line.
-
-**THE DELIVERY GAP IS TWELVE RELEASES, WHICH IS WIDE.** The consumer is installed at 0.692.0 (skill 0.700.0, a
-self-update in progress) against `VERSION` 0.704.0. PENDING is 2, batch 181's ids. On a scratch clone the installed
-engine and 0.704.0 emitted byte-identical rows over the range delivering it. The banked ruling stands: report the gap
-and write no runbook.
-
-**OPERATOR DECISIONS STILL OPEN.** `BL-007`, `BL-132` and `BL-195` carry a 2026-10-01 decision in their bodies and
-are closed questions. Open: `BL-145` (a buildable producer half: a non-fix citation form `named_absorbed()` excludes,
-bootstrapping, size M), `BL-087` (needs an interactive Claude Code experiment), and batch 179's four census steps.
-`BL-127` is no longer live.
-
-Batch 181's block below is history: batch 182's block replaces its delivery gap and its decisions list.
 
 ### Derive the state; do not trust the numbers below
 

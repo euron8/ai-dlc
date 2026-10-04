@@ -336,7 +336,11 @@ must show:
 - 0 drop notices;
 - canary 0;
 - an assertion count per fixture equal to an untraced run's;
-- a peak 1-minute load of at least 4.5 during the trace.
+- a peak 1-minute load of at least 4.5 during the trace;
+- each fixture's path set outside `.git/**` identical across the three traces. Batch 192 added
+  this arm. The fixtures' reads are deterministic, so any disagreement between traces is loss.
+  It catches lost reports on paths that do not exist, which neither the drop notice nor the
+  canary can see.
 
 The loss canary replaces the "completeness control" the batch-189 contract asked for, with the
 limits stated above.
@@ -357,6 +361,54 @@ in both, 1569 paths against 1548: beyond `.git/**` rows and sha-prefixed argv ro
 no unread-control firing for that fixture. So either its reads are not deterministic across runs,
 or a loss occurred that neither guard sees. Which is open. A single clean trace of
 `validator-arm-selection` is not evidence of a complete read set.
+
+**BATCH 192: THE STREAM LOST THE REPORTS; THE READS ARE DETERMINISTIC.** Run 3 had lost
+reports for paths that do not exist on disk, and neither guard can see that class.
+- **The reads.** Three untraced reps of `validator-arm-selection` were launched exactly as the
+  deriver launches it, without `sandbox-exec`, at `1047e971` and load 2.5-3.3. Each rep exited 0
+  with 12 ok, and each read 784 atime paths and 97 `seed.sh`. Outside `.git/**` the three sets
+  are byte-identical (one md5), and they match run 3's own `.at` file. The 13+13 differences per
+  pair are all loose objects under `.git/objects/**` that the run creates.
+- **The atime controls.** A file read appeared in the scan and an unread file did not, in the
+  same invocation, and every reset scanned 0.
+- **What run 3 lost.** The 19 rows are `core/fixtures/<name>/seed.sh` for fixture directories
+  that carry NO `seed.sh`: 232 directories against 97 files. They come from bash expanding the
+  glob at `scripts/validate-enforcement-map.sh:3251`, which issues a `file-test-existence` on
+  every directory. Run 3's window reported 116 of the 135 absent paths and every one of the 97
+  present ones, with 0 drop notices in 635,078 lines.
+- **Why neither guard fired.** A path with no file has no atime, so `readset_loss_canary` cannot
+  see it by construction. The deriver's own header says so ("a lost stat, a lost negative
+  lookup ... are all invisible to it").
+- **The quiet-box control.** One sandboxed expansion of that glob at load about 3 reported 153,
+  232 and 219 of 232 paths over three reps, with 0 notices each time. So the report channel
+  loses negative lookups silently even when the box is idle. This control cannot separate a
+  drop in `log stream` from the kernel never emitting the report.
+- **Population.** The committed map carries 2390 non-`.git` rows naming a path absent at
+  `1047e971`. That set is negative lookups at trace time plus files deleted since: 671 distinct
+  paths across 129 of 230 mapped fixtures. `validator-arm-selection`
+  carries 311 of them, 126 of which are `seed.sh`. Every sandbox-traced row set in that map is a
+  FLOOR for this class.
+- **Consequence: a NOTE, because the runner already covers this class.** When a file appears,
+  the runner adds its parent directory to the match set (`.githooks/pre-push:697-699`). Driving
+  the runner's selection (`.githooks/pre-push:737-755`) over the committed map for three of the
+  19: `plan-rotate`, whose directory row `validator-arm-selection` carries, selects it, while
+  `ledger-reverify-b` and `story-evidence-scaffold` select 3-4 other fixtures and not that one.
+  The reason is that `validator-arm-selection`'s rows lack BOTH the `seed.sh` row and the
+  directory row for those two. Its rows last moved on 2026-09-30, and 10 fixture directories
+  were born after that (`ledger-reverify-b` on 2026-10-01). That is map age, which the runner
+  already prints, and not stream loss. None of the 19 is orphaned: each path is still carried by
+  at least one other fixture. The validator itself also runs unconditionally as its own gate
+  phase (`.githooks/pre-push:124-125`) over the live tree. So a lost absent-path row costs
+  nothing while its directory row survives.
+  Measured on run 3's own stream set: 232 of 232 `core/fixtures/<name>` directory rows survived
+  beside 213 of 232 `seed.sh` rows, in the same window with 0 notices (impossible-name control 0).
+- **Not built, and why.** The lever would be a deriver change: drop `file-test-existence`
+  reports for paths that do not exist when the window closes. Dropping those rows shrinks the
+  runner's `.universe`, so a path that later appears and is named by no surviving row becomes an
+  orphan and forces a full run. 998 of the 2390 rows are `.dist-only`. That is a runner-behaviour
+  change across about 2400 rows, so it needs a contract pass and an adversary, which makes it a
+  release and not a batch tail. Until then, the identical-sets arm in the revised close criterion
+  is what catches this loss.
 
 verify: sh D=core/scripts/derive-fixture-readsets.sh; [ -f "$D" ] || exit 9; B="$(grep -v '^[[:space:]]*#' "$D")"; grep -q 'sandbox-exec -f' <<<"$B" || exit 1; grep -q 'fs_usage -w' <<<"$B" && exit 1; grep -qF '"$(id -u)" = "0"' <<<"$B" && exit 1; exit 0
 
