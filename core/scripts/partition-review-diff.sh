@@ -23,10 +23,18 @@
 #   never to `HEAD` or an abbreviation that may stop being unique. The program only READS the
 #   repository -- `git rev-parse` and `git diff`, nothing that moves a ref or the index.
 #
-# THRESHOLD, OPT-IN. `--min-files N` wins; otherwise `AI_DLC_REVIEW_SHARD_MIN_FILES`. With
-#   neither set the answer is SERIAL, naming the variable. N must be a positive integer.
-#   `--max-parts K` (default 4) must be an integer from 2 to 64. Either value longer than 9
-#   digits is REFUSED before any arithmetic, which would otherwise wrap it.
+# THRESHOLD, ON BY DEFAULT. `--min-files N` wins; otherwise `AI_DLC_REVIEW_SHARD_MIN_FILES`;
+#   with neither set, N is the built-in default 8 (`REVIEW_SHARD_DEFAULT_MIN_FILES` below, the
+#   one place the number lives), and a SERIAL line names it as the default. N = 0 turns review
+#   sharding OFF: `AI_DLC_REVIEW_SHARD_MIN_FILES=0` or `--min-files 0` answers SERIAL saying so.
+#   Any other value that is not a non-negative integer is REFUSED -- including a variable that
+#   is SET BUT EMPTY, which is not "unset": the refusal routes the lead to one `shard: 1/1`
+#   reviewer with the refusal line in the story's gate log, which is safe and visible there,
+#   where reading empty as unset would silently shard. 8 sits at the median reviewable file
+#   count of the reference consumer's gate-1 ranges, so about half of them shard; the figures
+#   are in the CHANGELOG entry that made sharding the default. `--max-parts K` (default 4) must be an integer from
+#   2 to 64. Either value longer than 9 digits is REFUSED before any arithmetic, which would
+#   otherwise wrap it.
 #
 # THE PART SET -- nothing else in core may restate it; callers read `--map`.
 #   1. FILES. `git -C <worktree> diff --numstat --no-renames <base>..<frozen-sha>` -- TWO dots,
@@ -51,7 +59,7 @@
 #   5. PACKING. Groups in order of weight descending, key ascending, each into the lightest of K
 #      bins (lowest ordinal on a tie). Empty bins are dropped. Within a part, keys and files are
 #      sorted. Ordinals are 1-based, zero-padded to the width of the part count.
-#   SERIAL when: no threshold; fewer reviewable files (after 2) than N; fewer than two groups.
+#   SERIAL when: the threshold is 0 (sharding off); fewer reviewable files (after 2) than N; fewer than two groups.
 #
 # THE MANIFEST (`<dir>/.manifest` -- a dotfile, so no `*.md` glob over the shard dir sees it)
 #   worktree\t<ABSOLUTE physical path>
@@ -88,17 +96,18 @@ while [ "$#" -gt 0 ]; do
 done
 [ -n "$WT" ] && [ -n "$BASE" ] && [ -n "$SHA" ] || refuse "$USAGE"
 
-if [ "$MINF_SET" -eq 0 ] && [ -n "${AI_DLC_REVIEW_SHARD_MIN_FILES:-}" ]; then
-  MINF="$AI_DLC_REVIEW_SHARD_MIN_FILES"; MINF_SRC="AI_DLC_REVIEW_SHARD_MIN_FILES"
-else
+REVIEW_SHARD_DEFAULT_MIN_FILES=8
+if [ "$MINF_SET" -eq 1 ]; then
   MINF_SRC="--min-files"
+elif [ -n "${AI_DLC_REVIEW_SHARD_MIN_FILES+set}" ]; then
+  MINF="${AI_DLC_REVIEW_SHARD_MIN_FILES:-}"; MINF_SRC="AI_DLC_REVIEW_SHARD_MIN_FILES"
+else
+  MINF="$REVIEW_SHARD_DEFAULT_MIN_FILES"
+  MINF_SRC="the built-in default; AI_DLC_REVIEW_SHARD_MIN_FILES overrides it, 0 turns sharding off"
 fi
-if [ -n "$MINF" ]; then
-  case "$MINF" in ""|*[!0-9]*) refuse "$MINF_SRC '$MINF' is not a positive integer" ;; esac
-  case "$MINF" in ??????????*) refuse "$MINF_SRC '$MINF' is longer than 9 digits; shell arithmetic would wrap it" ;; esac
-  [ "$((10#$MINF))" -ge 1 ] || refuse "$MINF_SRC '$MINF' is not a positive integer"
-  MINF=$((10#$MINF))
-fi
+case "$MINF" in ""|*[!0-9]*) refuse "$MINF_SRC '$MINF' is not a non-negative integer (0 turns review sharding off)" ;; esac
+case "$MINF" in ??????????*) refuse "$MINF_SRC '$MINF' is longer than 9 digits; shell arithmetic would wrap it" ;; esac
+MINF=$((10#$MINF))
 [ -n "$MAXP" ] || MAXP=4
 case "$MAXP" in ""|*[!0-9]*) refuse "--max-parts '$MAXP' is not an integer" ;; esac
 case "$MAXP" in ??????????*) refuse "--max-parts '$MAXP' is longer than 9 digits; shell arithmetic would wrap it" ;; esac
@@ -155,9 +164,8 @@ awk -F'\t' '
 NF_REV="$(grep -c . "$T/files")" || NF_REV=0
 NF_ALL="$(grep -c . "$T/numstat")" || NF_ALL=0
 
-if [ -z "$MINF" ]; then
-  echo "SERIAL: no threshold -- neither --min-files nor AI_DLC_REVIEW_SHARD_MIN_FILES is set; review sharding is opt-in"
-  exit 3
+if [ "$MINF" -eq 0 ]; then
+  echo "SERIAL: review sharding is disabled -- $MINF_SRC is 0"; exit 3
 fi
 if [ "$NF_REV" -lt "$MINF" ]; then
   echo "SERIAL: $NF_REV reviewable file(s) ($NF_ALL in the diff, scan roots excluded), below the threshold of $MINF ($MINF_SRC)"

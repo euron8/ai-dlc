@@ -443,3 +443,54 @@ The filtered identical-sets arm was run over the pairs that traced clean twice (
 
 **Batch 193 correction to the `cp -R` prose above.** The seed has copied with `cp -RX` since 0.721.0 (`3efb87d8`, `core/fixtures/enforcement-map-sites/seed.sh:38-45`), so "no form ships" and "its seed `cp -R` burst" describe the tree before that release. The batch-191 stage-1 trace was taken at `3efb87d8` itself, so its drop counts already include the `cp -RX` change.
 
+## BL-440 — gate-1 review sharding becomes the default, with a built-in threshold of 8 reviewable files
+
+**Operator ruling, batch 194:** "yes, review sharding becomes the default". This is the decision
+CHANGELOG 0.718.0 and the archived BL-437 entry left to the operator after measured sprints. The
+entry is filed and landed in the same release.
+
+**The change.** `core/scripts/partition-review-diff.sh` now applies a built-in threshold of 8 when
+neither `--min-files` nor `AI_DLC_REVIEW_SHARD_MIN_FILES` is set. The default lives in one
+assignment, `REVIEW_SHARD_DEFAULT_MIN_FILES`, and a SERIAL line below it names the default as its
+source. The flag still beats the variable. `AI_DLC_REVIEW_SHARD_MIN_FILES=0` or `--min-files 0`
+turns sharding off with `SERIAL: review sharding is disabled` (exit 3). A variable that is set but
+EMPTY is refused (exit 2), as is any other non-integer. The refusal routes the lead to one
+`shard: 1/1` reviewer with the refusal line in the gate log, which is safe and visible there.
+Reading empty as unset would shard silently. The manifest records the numeric threshold applied,
+because `merge-review-shards.sh` hands it back as `--min-files`.
+`core/skills/ai-dlc/steps/implementation.md`'s Gate-1 dispatch paragraph states the default-on
+behaviour and the off spelling, and it names no number. It and `core/team-roles/code-reviewer.md`'s
+As a Shard section now say who makes the serial reviewer's three writes for a sharded review: the
+`done` transition, `deferred_acs` in both views, and the review commit. The lead makes them after
+the merge, from the merged verdict. That ownership gap had been latent since 0.718.0 and becomes
+live at default-on. `code-reviewer-escalated.md` defers to `code-reviewer.md` in full, so the one
+edit covers both. Held by `core/fixtures/review-shard-merge` (arms P2 to P2f, S3 to S5, and mutants
+MX21 to MX28).
+
+**Measured threshold.** Measured on the reference consumer's history, read-only from a `file://`
+clone, over 26 stories with a resolvable gate-1 range. Counted with the shipping
+`partition-review-diff.sh --map --min-files 1`. A hand count (`git diff --numstat --no-renames`
+minus scan roots) agreed on all 40 ranges. The exclusion arm discriminated: B1 had 46 files, 33
+under scan roots and 13 reviewable, and both counts agree. Reviewable files per range: min 1, Q1 4,
+median 7.5, Q3 14.75, max 93. A threshold of 8 shards 13 of 26 (50%), and 10 of 23 on s315+s316.
+Serial first-pass reviewer wall clock was a median 10.3 min at 8 files or fewer (n=13), against
+28.6 min at 12 or more (n=9). Above 12 files the reviewer tier (escalated) is confounded with size.
+No gate-1 review in the consumer has ever been sharded (46 of 46 ledger rows `shard: null`), so
+this default is the path's first real use. A Check 22 replay on a scratch copy of the consumer
+ledger fails nothing under default-on: 34 reviewer rows as `shard: 1/1` gave rc 0, and the
+`invalid-exception` control gave rc 1 with 34 S3 findings.
+
+**Caveats.**
+- The threshold counts FILES, while the packer weights LINES. In 14 of 15 measured ranges of 8 or
+  more files, part 01 is a single unpairable test file carrying 55-69% of the lines. The reading
+  gain is therefore capped near 1.5x, not 4x. Nothing regresses.
+- A `-p2` re-review of a story begun serially before the pull will shard after it.
+- Pole fixtures read `implementation.md`, so this release re-runs the pole.
+- Consumer impact: on the next pull, every story with 8 or more reviewable files dispatches N part
+  reviewers plus 1 cross reviewer instead of one reviewer.
+
+The receipt RUNS the partition on two seeded repositories. Unset with 8 reviewable files must
+partition, unset with 7 must answer SERIAL (exit 3), and `=0` with 8 must answer SERIAL disabled.
+
+verify: sh P=core/scripts/partition-review-diff.sh; [ -f "$P" ] || exit 9; W="$(mktemp -d)" || exit 9; G() { git -c user.name=r -c user.email=r@e.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }; mk() { mkdir -p "$W/$1/core/skills/ai-dlc" && G init -q "$W/$1" && cp core/skills/ai-dlc/artifact-path-grammar.md "$W/$1/core/skills/ai-dlc/" && echo s > "$W/$1/README" && G -C "$W/$1" add -A && G -C "$W/$1" commit -qm b || return 1; i=0; while [ "$i" -lt "$2" ]; do i=$((i+1)); mkdir -p "$W/$1/d$i" && echo "x$i" > "$W/$1/d$i/f" || return 1; done; G -C "$W/$1" add -A && G -C "$W/$1" commit -qm f; }; mk r7 7 && mk r8 8 || exit 9; pr() { r="$W/$1"; shift; env "$@" bash "$P" --map "$r" "$(G -C "$r" rev-parse HEAD~1)" "$(G -C "$r" rev-parse HEAD)" < /dev/null 2>&1; }; o="$(pr r8 -u AI_DLC_REVIEW_SHARD_MIN_FILES)" || exit 1; n="$(grep -c '^[0-9]' <<<"$o")" || n=0; [ "$n" -ge 2 ] || exit 1; pr r7 -u AI_DLC_REVIEW_SHARD_MIN_FILES > /dev/null; [ "$?" -eq 3 ] || exit 1; o="$(pr r8 AI_DLC_REVIEW_SHARD_MIN_FILES=0)"; rc=$?; [ "$rc" -eq 3 ] && grep -q 'disabled' <<<"$o" || exit 1; exit 0
+

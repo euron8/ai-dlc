@@ -277,9 +277,11 @@ run in the frozen dev worktree
 `partition-review-diff.sh --map <worktree> <base> <frozen-sha> --shard-dir docs/reviews/s<N>/shards/<story-index>-code-review-<sha12>`,
 where `<base>` is the base of the two-dot range the check above logs,
 `<frozen-sha>` is the full SHA and `<sha12>` its first twelve characters.
-Review sharding is opt-in: the program answers `SERIAL:` (exit 3) unless
-`AI_DLC_REVIEW_SHARD_MIN_FILES` is set in `.claude/settings.json` `env`
-and the story's reviewable files reach it. On `SERIAL`, dispatch one
+Review sharding is on by default: the program answers `SERIAL:` (exit 3)
+when the story's reviewable files fall below the threshold, which is the
+built-in default in `partition-review-diff.sh` unless
+`AI_DLC_REVIEW_SHARD_MIN_FILES` is set in `.claude/settings.json` `env`;
+setting it to `0` turns review sharding off. On `SERIAL`, dispatch one
 reviewer with `shard: 1/1 <story-index>`. On exit 2 (a REFUSED line on
 stderr, e.g. a base that is not an ancestor of the frozen SHA), likewise
 dispatch one reviewer with `shard: 1/1 <story-index>` and record the
@@ -296,7 +298,11 @@ frozen worktree with
 passing the pass-specific name on a later pass (`-p2`, ...). The merge
 re-derives the parts, refuses (exit 2, nothing written) on a missing,
 duplicate or mis-cited shard, and writes the one review file Check 1
-reads, verdict recomputed as the worst shard verdict. The lead persists
+reads, verdict recomputed as the worst shard verdict. After the merge
+succeeds, the lead performs the `done` transition, `deferred_acs` in both
+sprint-status views, and the review commit, keyed on the merged verdict
+and exactly as `code-reviewer.md` specifies them for a serial reviewer;
+no shard performs them. The lead persists
 the shard directory together with the merged file. Gate 2 is
 dispatched `shard: 1/1 <story-index>`; it has no shard merge.
 

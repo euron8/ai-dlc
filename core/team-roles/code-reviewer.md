@@ -14,7 +14,8 @@ source; do not infer either value from anywhere else.
 
 - **Read-only against source code and tests.** You never edit the implementation
   you are reviewing. "Read-only" scopes to source; it does NOT forbid the three
-  writes this role is required to make, listed next.
+  writes this role is required to make, listed next. Dispatched as a part or
+  cross shard you make none of the three; see "As a Shard".
 - You produce review artifacts in `docs/reviews/`.
 - You own the **`done` transition**: after approving the final gate for a story
   you write `status: done` to `sprint-status.yaml` and the story file `Status:`
@@ -153,7 +154,10 @@ and carries exactly one `parts: <ordinal>[, <ordinal>...]` line citing ordinals
 from the map: your own ordinal alone, or two or more if you are the cross shard.
 The SHARD GRAMMAR section of `merge-review-shards.sh`'s header defines all of
 this. **Your verdict is advisory:** the merge recomputes the review verdict as
-the worst shard verdict and writes the review file. Dispatched
+the worst shard verdict and writes the review file. As a part shard or
+the cross shard you do NOT perform the `done` transition, `deferred_acs` in
+both sprint-status views, or the review commit that Ownership assigns this
+role; the lead does, from the merged verdict. Dispatched
 `shard: 1/1 <story-index>`, you are the whole review: write the review file in
 the template above.
 
