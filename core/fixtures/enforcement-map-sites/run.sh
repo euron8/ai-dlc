@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # enforcement-map-sites — assert I8's site table cannot go quiet.
 #
 # Usage: run.sh
