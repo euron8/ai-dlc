@@ -95,9 +95,10 @@ no guard firing. The entry records both.
 
 **0.719.0'S GATE EXITED 1 ON THE SUITE-POLE PHASE ALONE:** `gate-adjudication-mutants` 749s against a 736s ceiling,
 at load 35-44 with a second suite on the box; that fixture reads neither changed file. The re-push skipped on the
-content key. The pole was then skipped by coverage on all three later gates (30.69%, 24.83%, 65.82%), so it has not
-been re-measured since. NOTE, not filed: the guard's remedy says "re-run the gate", which an unchanged commit
-cannot do.
+content key. The three release gates after it skipped the pole by coverage (30.69%, 24.83%, 65.82%). The close commit's gate
+measured it at 99.88% coverage on a tree carrying all four releases: `gate-adjudication-mutants` 475s against the
+736s ceiling. So 0.719.0's 749s was load. NOTE, not filed: the guard's remedy says "re-run the gate", which an
+unchanged commit cannot do.
 
 **THE DELIVERY GAP IS THIRTEEN RELEASES.** The consumer is installed at 0.709.0 against `VERSION` 0.722.0, and
 0.711.0, 0.713.0, 0.719.0 and 0.722.0 are bootstrapping. PENDING is 2 by the derive block and 5 counting the three
