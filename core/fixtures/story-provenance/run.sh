@@ -177,10 +177,24 @@ expect "unknown profile is refused (exit 2)" 2 "is not a profile in the schema" 
 # green here. Step 2 requires the derived fixtures green BEFORE the push, so that red was a
 # permanent stop on the self-update, not a nuisance.
 SCHEMA_SRC="$(bash "$WRITER" --print-schema 2>/dev/null)"
-MUTROOT="$ROOT/mut"; mkdir -p "$MUTROOT/scripts" "$MUTROOT/schemas"
+# THE MUTANT WRITER IS PINNED TO ITS OWN ROOT, AND IT SITS UNDER A DECOY ROOT ON PURPOSE. Unpinned,
+# the copy's root comes from walking up from its own directory — out of $ROOT, through the ambient
+# TMPDIR, to whatever marker lies above it. Where none does the walk falls to the working
+# directory, which from inside this repo is the repo, and the writer reads the REAL schema
+# (root-first, BL-302): the mutant then has no effect. The arm was green only because one
+# machine's TMPDIR parent carries a stray .claude/. So the tree under the copy is built here,
+# never inherited: DECOY carries a .git marker and its own schema copy, every unpinned walk from
+# the copy stops at DECOY whatever TMPDIR is, and the precondition below proves the pin is what
+# selects MUTROOT's schema — and that, without it, the arm would read DECOY's.
+DECOY="$ROOT/decoy"; MUTROOT="$DECOY/mut"
+mkdir -p "$DECOY/.git" "$DECOY/core/schemas" "$MUTROOT/scripts" "$MUTROOT/schemas"
 cp "$WRITER" "$MUTROOT/scripts/stamp-story-provenance.sh"
-ASSERTIONS=$((ASSERTIONS + 1))
+mut_writer() { # the ONE spelling of the mutant writer's invocation; mut_run and the precondition share it
+  AI_DLC_PROJECT_ROOT="$MUTROOT" bash "$MUTROOT/scripts/stamp-story-provenance.sh" "$@"
+}
+PRE_OK=0
 if [ ! -f "$SCHEMA_SRC" ]; then
+  ASSERTIONS=$((ASSERTIONS + 1))
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-46s\n' "FIXTURE BROKEN: writer --print-schema resolved nothing (got: ${SCHEMA_SRC:-<empty>})"
 else
@@ -197,12 +211,47 @@ else
   mk_mut_story() { printf '# Story mut\n\n## Acceptance Criteria\n- AC(a): thing.\n' > "$MUTROOT/story-mut.md"; }
   mut_run() { # -> the writer's output, resolving the schema from $MUTROOT/schemas/
     mk_mut_story
-    bash "$MUTROOT/scripts/stamp-story-provenance.sh" \
-      --terminal "$MUTROOT/noverdict-p1.md" "$MUTROOT/story-mut.md" 2>&1
+    mut_writer --terminal "$MUTROOT/noverdict-p1.md" "$MUTROOT/story-mut.md" 2>&1
   }
+  cp "$SCHEMA_SRC" "$MUTROOT/schemas/provenance-block.json"
+  cp "$SCHEMA_SRC" "$DECOY/core/schemas/provenance-block.json"
+  # PRECONDITION — which schema the mutant writer loads, asked of the writer by identity. P1 is the
+  # pin the arm runs under; P2 is the same call from / with TMPDIR unset, so the answer is shown
+  # independent of the working directory and of the ambient TMPDIR; P3 is the same copy UNPINNED from
+  # inside DECOY, and it must load DECOY's schema — the proof that P1 can fail, and the exact state
+  # in which the mutant below has no effect. On any of the three the mutation arm stands down: the
+  # precondition owns that failure, so it is reported once.
+  PRE_OK=1
+  ASSERTIONS=$((ASSERTIONS + 1))
+  pre="$(mut_writer --print-schema 2>&1)"
+  if [ -n "$pre" ] && [ "$pre" -ef "$MUTROOT/schemas/provenance-block.json" ]; then
+    printf '  ok    %-46s\n' "mutation precondition: pinned writer loads MUTROOT's schema"
+  else
+    PRE_OK=0; FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-46s\n' "FIXTURE BROKEN: mutant writer resolves $(printf '%s' "$pre" | tr '\n' ' ' | cut -c1-160)"
+  fi
+  ASSERTIONS=$((ASSERTIONS + 1))
+  pre="$( (cd / && unset TMPDIR && mut_writer --print-schema) 2>&1)"
+  if [ -n "$pre" ] && [ "$pre" -ef "$MUTROOT/schemas/provenance-block.json" ]; then
+    printf '  ok    %-46s\n' "mutation precondition: same answer from / with TMPDIR unset"
+  else
+    PRE_OK=0; FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-46s\n' "FIXTURE BROKEN: mutant writer from / resolves $(printf '%s' "$pre" | tr '\n' ' ' | cut -c1-160)"
+  fi
+  ASSERTIONS=$((ASSERTIONS + 1))
+  pre="$(cd "$DECOY" && env -u AI_DLC_PROJECT_ROOT -u CLAUDE_PROJECT_DIR \
+      bash "$MUTROOT/scripts/stamp-story-provenance.sh" --print-schema 2>&1)"
+  if [ -n "$pre" ] && [ "$pre" -ef "$DECOY/core/schemas/provenance-block.json" ]; then
+    printf '  ok    %-46s\n' "mutation precondition: unpinned writer loads the decoy's"
+  else
+    PRE_OK=0; FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-46s\n' "FIXTURE BROKEN: precondition cannot fire, unpinned writer resolves $(printf '%s' "$pre" | tr '\n' ' ' | cut -c1-120)"
+  fi
+fi
+if [ -f "$SCHEMA_SRC" ] && [ "$PRE_OK" -eq 1 ]; then
+  ASSERTIONS=$((ASSERTIONS + 1))
   # CONTROL — the same writer, the same tree, the UNMUTATED schema. It must still refuse, or the
   # harness itself is what kills the guard and the mutant below proves nothing.
-  cp "$SCHEMA_SRC" "$MUTROOT/schemas/provenance-block.json"
   ctl="$(mut_run)"
   # MUTANT — drop `verdict` from the CONVERGENCE profile's batch_invariant and nothing else.
   python3 - "$SCHEMA_SRC" "$MUTROOT/schemas/provenance-block.json" <<'PY'
