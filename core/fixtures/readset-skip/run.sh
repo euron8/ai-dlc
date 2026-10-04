@@ -505,19 +505,57 @@ else
   bad "a bookkeeping-only change did not select exactly 'delta stamp' with the suite running (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
 fi
 
-for _nm in ".claude/settings.json" "_bmad-output/ai-dlc-update/sub/x.md" "_bmad-output/other.md"; do
+# THE FLAT `_bmad-output/` WAIVER. A consumer's pipeline commits flat state files directly under
+# `_bmad-output/`, no fixture reads them, and each one used to force the whole suite. The waiver covers ONLY the "unknown reader" verdict for a FLAT root file: a
+# deeper path, a nested `_bmad-output/` under another top, and a non-bookkeeping `.claude/` file
+# still run all (below), and a flat file the map DOES name still selects its reader.
+# `mkdir -p` sits in the mutation, not in seed2, so the seed's tracked count and the apostrophe
+# position asserted above stay exactly as they were.
+BMNEAR=".claude/settings.json _bmad-output/ai-dlc-update/sub/x.md _bmad-output/sub/x.md sub/_bmad-output/pipeline-continuation-log.md"
+NMK() { printf "%s; mkdir -p \"\$(dirname '%s')\"; printf 'n2\\\\n' > '%s'" "$BK" "$1" "$1"; }
+for _nm in $BMNEAR; do
   _nn="n4.$(printf '%s' "$_nm" | tr '/.' '__')"
-  R="$(drive "$POOL" "$_nn" "$BK; printf 'n2\n' > '$_nm'")"
+  R="$(drive "$POOL" "$_nn" "$(NMK "$_nm")")"
   NEW_ARMS=$((NEW_ARMS+1))
-  if holds "$R" "$ALL5" 0 "$(NM1 "$_nm")"; then
+  if [ -f "$WORK/w.$_nn/$_nm" ] && holds "$R" "$ALL5" 0 "$(NM1 "$_nm")"; then
     ok "  NEAR-MISS $_nm beside the bookkeeping is still an orphan and runs all — the exemption is exact"
   else
-    bad "  near-miss $_nm beside the bookkeeping did not run all as the single named orphan (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
+    bad "  near-miss $_nm beside the bookkeeping did not run all as the single named orphan, or was not written (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
   fi
 done
-# THE NESTED NEAR-MISS is the only input that separates an anchored pattern from one that lost
-# its `^`: every near-miss above differs from the bookkeeping at its START or past its last `/`,
-# so an unanchored pattern drops none of them and they pass either way. A version stamp under a
+# POSITIVE: a flat root file beside the bookkeeping is WAIVED, so the run selects exactly what
+# the bookkeeping alone selects. Before the widening this was a near-miss that ran all.
+R="$(drive "$POOL" n4.flat "$BK; printf 'n2\n' > _bmad-output/other.md")"
+NEW_ARMS=$((NEW_ARMS+1))
+if holds "$R" "delta stamp" 0 "SKIPPING"; then
+  ok "  a FLAT _bmad-output/other.md beside the bookkeeping is waived — 'delta stamp', the bookkeeping's own selection, not all"
+else
+  bad "  a flat _bmad-output/other.md beside the bookkeeping did not select exactly 'delta stamp' (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
+fi
+# POSITIVE: an edit to a zero-reader flat state file ALONE selects only the unmapped fixture.
+PCL="_bmad-output/pipeline-continuation-log.md"
+R="$(drive "$POOL" n4.pcl "printf 'p2\n' > '$PCL'" "" "printf 'p1\n' > '$PCL'")"
+NEW_ARMS=$((NEW_ARMS+1))
+if [ -f "$WORK/w.n4.pcl/$PCL" ] && holds "$R" "delta" 0 "SKIPPING"; then
+  ok "an edit to a zero-reader flat $PCL selects only the unmapped delta — the pipeline's state file no longer forces the suite"
+else
+  bad "an edit to the zero-reader flat $PCL did not select exactly 'delta', or was not seeded (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
+fi
+# POSITIVE: a flat file the map NAMES still selects its reader. This is what separates the waiver
+# from dropping `_bmad-output` out of the manifest or the read-sets, which loses alpha here.
+MAPPED="_bmad-output/mapped-state.md"
+R="$(drive "$POOL" n4.mapped "printf 'm2\n' > '$MAPPED'" "" \
+       "printf 'm1\n' > '$MAPPED'; printf 'alpha\t%s\n' '$MAPPED' >> .ai-dlc-fixture-readsets.tsv")"
+NEW_ARMS=$((NEW_ARMS+1))
+if grep -qxF "alpha	$MAPPED" "$WORK/w.n4.mapped/.ai-dlc-fixture-readsets.tsv" && holds "$R" "alpha delta" 0 "SKIPPING"; then
+  ok "an edit to a MAPPED flat $MAPPED still selects its reader (alpha) plus delta — the waiver touches only unknown readers"
+else
+  bad "an edit to the mapped flat $MAPPED did not select 'alpha delta', or its map row was not seeded (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
+fi
+# THE NESTED NEAR-MISS is the only input for the version stamp that separates an anchored pattern
+# from one that lost its `^`: the near-misses above differ from the stamp at its START or past its
+# last `/` (the nested `sub/_bmad-output/` one guards the flat waiver's anchor, not the stamp's),
+# so an unanchored stamp alternative drops none of them. A version stamp under a
 # subdirectory ENDS like the real one and must still run all.
 NESTED="sub/.claude/.ai-dlc-version"
 R="$(drive "$POOL" n4.nested "$BK; printf 'version: 2\n' > '$NESTED'")"
@@ -629,23 +667,81 @@ if lit_mut aposdrop 1 '| readset_drop_excluded | sort -u > "$out/.paths"' \
     bad "MANIFEST MUTANT aposdrop SURVIVED the apostrophe-hashed arm, or never ran"
   fi
 fi
-BKRE="'^(\\.claude/\\.ai-dlc-version|_bmad-output/ai-dlc-update/[^/]+)\$'"
+BKRE="'^(\\.claude/\\.ai-dlc-version|_bmad-output/ai-dlc-update/[^/]+|_bmad-output/[^/]+)\$'"
+BROADK=".claude/settings.json _bmad-output/ai-dlc-update/sub/x.md _bmad-output/sub/x.md"
 if lit_mut broad 1 "$BKRE" "'^(\\.claude/|_bmad-output/)'"; then M="$LM"
-  for _nm in ".claude/settings.json" "_bmad-output/ai-dlc-update/sub/x.md" "_bmad-output/other.md"; do
+  for _nm in $BROADK; do
     NEW_ARMS=$((NEW_ARMS+1))
-    killed broad "the near-miss arm for $_nm" "$(drive "$M" "m.broad.$(printf '%s' "$_nm" | tr '/.' '__')" "$BK; printf 'n2\n' > '$_nm'")" "$ALL5" 0 "$(NM1 "$_nm")"
+    killed broad "the near-miss arm for $_nm" "$(drive "$M" "m.broad.$(printf '%s' "$_nm" | tr '/.' '__')" "$(NMK "$_nm")")" "$ALL5" 0 "$(NM1 "$_nm")"
   done
 else
   NEW_ARMS=$((NEW_ARMS+3))
 fi
 if lit_mut somebk 1 'if [ -s "$out/.orphan" ]; then' \
          "if [ -s \"\$out/.orphan\" ] && ! grep -qE $BKRE \"\$out/.changed\"; then"; then M="$LM"
-  for _nm in ".claude/settings.json" "_bmad-output/ai-dlc-update/sub/x.md" "_bmad-output/other.md"; do
+  for _nm in $BMNEAR; do
     NEW_ARMS=$((NEW_ARMS+1))
-    killed somebk "the near-miss arm for $_nm" "$(drive "$M" "m.somebk.$(printf '%s' "$_nm" | tr '/.' '__')" "$BK; printf 'n2\n' > '$_nm'")" "$ALL5" 0 "$(NM1 "$_nm")"
+    killed somebk "the near-miss arm for $_nm" "$(drive "$M" "m.somebk.$(printf '%s' "$_nm" | tr '/.' '__')" "$(NMK "$_nm")")" "$ALL5" 0 "$(NM1 "$_nm")"
   done
 else
-  NEW_ARMS=$((NEW_ARMS+3))
+  NEW_ARMS=$((NEW_ARMS+4))
+fi
+# THE FLAT WAIVER'S TWO SHAPE LIMITS, each its own mutant. `.*` in place of `[^/]+` crosses a `/`
+# and waives every path under `_bmad-output/`; the alternation with BOTH anchors removed waives a
+# deeper path by its prefix and a nested `_bmad-output/` under another top by its suffix. Each is
+# killed by a near-miss above that the shipped pattern still runs all on.
+NEW_ARMS=$((NEW_ARMS+1))
+if lit_mut dotstar 1 "|_bmad-output/[^/]+)\$'" "|_bmad-output/.*)\$'"; then M="$LM"
+  killed dotstar "the near-miss arm for _bmad-output/sub/x.md" "$(drive "$M" m.dotstar "$(NMK _bmad-output/sub/x.md)")" "$ALL5" 0 "$(NM1 _bmad-output/sub/x.md)"
+fi
+if lit_mut unanch 1 "$BKRE" "'(\\.claude/\\.ai-dlc-version|_bmad-output/ai-dlc-update/[^/]+|_bmad-output/[^/]+)'"; then M="$LM"
+  for _nm in _bmad-output/sub/x.md sub/_bmad-output/pipeline-continuation-log.md; do
+    NEW_ARMS=$((NEW_ARMS+1))
+    killed unanch "the near-miss arm for $_nm" "$(drive "$M" "m.unanch.$(printf '%s' "$_nm" | tr '/.' '__')" "$(NMK "$_nm")")" "$ALL5" 0 "$(NM1 "$_nm")"
+  done
+else
+  NEW_ARMS=$((NEW_ARMS+2))
+fi
+# ONLY ONE HOOK WIDENED. This fixture drives whichever hook it resolved first, so a waiver
+# present in one copy alone reads green here and reaches only half the population. I66 is the
+# binding; this arm proves it fires on exactly that edit. Run in a copy holding just what
+# `--arms I66` reads, with the unmutated copy first as a presence-shaped control. The validator
+# is distribution-only, so on a consumer this is a SKIP, not a pass.
+VEM="$ROOT/scripts/validate-enforcement-map.sh"
+if [ ! -f "$VEM" ] || [ ! -f "$ROOT/.githooks/pre-push" ] || [ ! -f "$ROOT/core/git-hooks/pre-push" ]; then
+  printf '  SKIP  one-hook-widened I66 arm: validate-enforcement-map.sh or one of the two hooks is absent (a consumer tree)\n'
+else
+  I66T="$WORK/i66"
+  for _f in scripts/validate-enforcement-map.sh scripts/render-invariant-index.sh \
+            core/skills/ai-dlc/steps/gate-validation.md core/skills/ai-dlc/enforcement-map.yaml \
+            core/skills/ai-dlc/core-manifest.md core/skills/ai-dlc-update/reconcile/setup-sites.md \
+            .githooks/pre-push core/git-hooks/pre-push; do
+    mkdir -p "$I66T/$(dirname "$_f")" && cp -p "$ROOT/$_f" "$I66T/$_f" || broken "could not copy $_f for the I66 arm"
+  done
+  I66C="$(bash "$I66T/scripts/validate-enforcement-map.sh" --arms I66 2>&1)"; I66C_RC=$?
+  NEW_ARMS=$((NEW_ARMS+1))
+  if [ "$I66C_RC" -eq 0 ] && grep -q '^OK: enforcement-map.yaml in sync' <<< "$I66C"; then
+    ok "I66 CONTROL: the unmutated copy reads OK at rc 0, so the verdict below is attributable"
+  else
+    bad "I66 CONTROL: the unmutated copy did not read OK at rc 0 (rc $I66C_RC): $(printf '%s' "$I66C" | head -3 | tr '\n' ' ')"
+  fi
+  I66F="$I66T/core/git-hooks/pre-push"
+  MF="|_bmad-output/ai-dlc-update/[^/]+|_bmad-output/[^/]+)\$'" MT="|_bmad-output/ai-dlc-update/[^/]+)\$'" \
+    awk '{ p = index($0, ENVIRON["MF"]); if (p) { $0 = substr($0, 1, p - 1) ENVIRON["MT"] substr($0, p + length(ENVIRON["MF"])) } print }' \
+    "$I66F" > "$I66F.mut"
+  NEW_ARMS=$((NEW_ARMS+1))
+  if cmp -s "$I66F" "$I66F.mut"; then
+    bad "MANIFEST MUTANT onehook: the consumer hook carries no widened alternation to revert — DID NOT APPLY"
+  else
+    mv "$I66F.mut" "$I66F"
+    I66M="$(bash "$I66T/scripts/validate-enforcement-map.sh" --arms I66 2>&1)"; I66M_RC=$?
+    if [ "$I66M_RC" -eq 1 ] && grep -q 'I66 the two pre-push fixture-suite runners have forked' <<< "$I66M" \
+       && grep -qF '.orphan' <<< "$I66M"; then
+      ok "MANIFEST MUTANT onehook is KILLED by I66: the waiver widened in .githooks/pre-push alone exits 1 naming the forked orphan line"
+    else
+      bad "MANIFEST MUTANT onehook SURVIVED I66: one hook widened read rc $I66M_RC: $(printf '%s' "$I66M" | head -3 | tr '\n' ' ')"
+    fi
+  fi
 fi
 NEW_ARMS=$((NEW_ARMS+1))
 if lit_mut wholeskip 1 'if [ -s "$out/.orphan" ]; then' \

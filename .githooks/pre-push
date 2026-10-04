@@ -736,12 +736,25 @@ apply_readset_skip() {
   # through the other side of the same join.
   grep -v '^#' "$READSET_MAP" | cut -f2 | grep -v '^\.git/' | grep -v '^\.git$' \
     | readset_drop_excluded | sort -u > "$out/.universe"
-  # EXCEPT THE UPDATE SKILL'S OWN BOOKKEEPING: the version stamp and the flat files directly
-  # under `_bmad-output/ai-dlc-update/`, which every reconcile commit writes. A fixture the map
-  # names as their reader is still selected below. The pattern is exact; anything else beside
-  # them, a subdirectory under that path included, still runs all.
+  # EXCEPT THE UPDATE SKILL'S OWN BOOKKEEPING AND THE PIPELINE'S FLAT STATE FILES: the version
+  # stamp, the flat files directly under `_bmad-output/ai-dlc-update/`, which every reconcile
+  # commit writes, and the flat files directly under `_bmad-output/`, which a consumer's pipeline
+  # commits as story state and which no fixture reads. Each one landing in this set used to force
+  # the whole suite on a path nothing reads.
+  #
+  # ONLY THE "UNKNOWN READER" VERDICT IS WAIVED, NOTHING ELSE. A flat `_bmad-output/` file the map
+  # DOES name is in `.universe`, never reaches this filter, and still selects its reader below; an
+  # unmapped fixture still runs. The pattern is anchored at both ends and `[^/]+` cannot cross a
+  # `/`, so a deeper path (`_bmad-output/<dir>/...`) and a nested `_bmad-output/` under another
+  # top both remain orphans and still run all. I66 holds this line identical to the consumer's.
+  #
+  # THE CONSUMER'S OWN REMEDY DOES NOT COVER THIS. The EXCLUDE-top remedy stated above
+  # `readset_excluded_re` in core/git-hooks/pre-push, applied to `_bmad-output`, drops the whole
+  # top from the manifest, so a change under it never reaches `.changed` and a fixture that reads
+  # a mapped `_bmad-output/` path is no longer selected when that path changes -- it is fail-open
+  # for this top. Hence a waiver here, not an exclusion.
   comm -23 "$out/.changed" "$out/.universe" \
-    | grep -vE '^(\.claude/\.ai-dlc-version|_bmad-output/ai-dlc-update/[^/]+)$' > "$out/.orphan"
+    | grep -vE '^(\.claude/\.ai-dlc-version|_bmad-output/ai-dlc-update/[^/]+|_bmad-output/[^/]+)$' > "$out/.orphan"
   if [ -s "$out/.orphan" ]; then
     printf '   ..    read-set map: %s changed path(s) are in NO fixture read-set (e.g. %s) -- running all %s\n' \
       "$(grep -c . "$out/.orphan")" "$(head -1 "$out/.orphan")" "$n_all"
