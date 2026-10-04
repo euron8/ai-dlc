@@ -19,6 +19,35 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.721.0] - 2026-10-03
+
+Batch 191's third release. It closes `BL-439`, filed and fixed in this release: the read-set
+deriver drops pseudo-path rows. It also ships `BL-375`'s stage-1 levers: a sandbox loss
+canary, an unread atime control, `cp -RX` seed copies in `enforcement-map-sites`, and a
+traced pool width of 1. `BL-375` stays open. It discharges no consumer candidate.
+
+### BL-439: the read-set map no longer carries pseudo-path rows
+
+- `readset_drop_pseudo` runs where the three tracers' sets meet, before `drop_ignored`. It
+  drops a path only when its last component is `<...>` and no such file or symlink exists in
+  the tree, so python's `<string>` and `sub/<unknown>` lookups leave the map. A dangling
+  symlink named `<link>` and an existing `d/<real>` stay. The argv-shaped colon rows are left
+  in deliberately. The filter is cosmetic, because the runner hashes only regular files.
+
+### BL-375: stage-1 levers for the sandbox tracer's lost reports
+
+- Loss canary: a fixture whose atime set holds a path its report stream does not is OMITTED,
+  with the count named. A canary that cannot read either side omits too. It is a loss canary
+  and claims no completeness. Over a 33-fixture census it fired on 0 of 16 windows that had no
+  drop notices.
+- Unread control: a planted file that no fixture reads must keep its reset atime, or the
+  fixture is omitted. The header claim that relatime is defeated is now checked.
+- A `--list` run that omits a fixture writes the omission and drops that fixture's stale rows.
+- `enforcement-map-sites` copies its seed with `cp -RX` and reads `EMS_POOL_WIDTH` (default 8,
+  1-64). The deriver launches traced fixtures with `EMS_POOL_WIDTH=1`.
+- Measured: at load 35-41 a single `cp -RX` copy still dropped about 30 notices in two of three
+  reps. Stage 1's three clean traces need a quiet machine.
+
 ## [0.720.0] - 2026-10-03
 
 Batch 191's second release. It closes `BL-438`. QA declares its own verdict set, and gate
