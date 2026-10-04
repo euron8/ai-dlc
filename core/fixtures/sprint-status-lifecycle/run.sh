@@ -436,6 +436,35 @@ stories:
     status: done'
   cs_run "$T"
   if ! grep -q 'story-10-late-arrival' <<<"$CS_OUT"; then echo "A22 PASS"; else echo "A22 FAIL"; fi
+
+  # A23 — --require-done (deploy-validate.md section 1). A story still `review`, consistent between
+  # its file and both views, is a NOT DONE finding under the flag: a story past gate 3 whose
+  # closing writer never ran. Its two near-misses ride in the same assertion, because the mutant
+  # below must flip THIS id and no other: the SAME tree without the flag passes (the flag is what
+  # fires, not a mismatch), and a `done` story under the flag passes (the flag keys on status).
+  cs_reset
+  story_fm story-1 review
+  put "$CIMPL/sprint-status.yaml" 'sprint: 291
+status: in_progress
+stories:
+  story-291-1:
+    file: stories/story-1.md
+    status: review'
+  CS_OUT="$(AI_DLC_SPRINT_STATUS_SCHEMA="$SCHEMA" bash "$T" check-stories --require-done --root "$CS" 2>&1)"; a23_rd=$?
+  a23_rd_out="$CS_OUT"
+  cs_run "$T"; a23_plain=$CS_RC
+  cs_reset
+  story_fm story-1 done
+  put "$CIMPL/sprint-status.yaml" 'sprint: 291
+status: in_progress
+stories:
+  story-291-1:
+    file: stories/story-1.md
+    status: done'
+  CS_OUT="$(AI_DLC_SPRINT_STATUS_SCHEMA="$SCHEMA" bash "$T" check-stories --require-done --root "$CS" 2>&1)"; a23_done=$?
+  if [ "$a23_rd" -eq 1 ] && grep -q 'NOT DONE — status `review`' <<<"$a23_rd_out" \
+     && [ "$a23_plain" -eq 0 ] && [ "$a23_done" -eq 0 ] && grep -q 'PASS — 1 comparison(s)' <<<"$CS_OUT"; then
+    echo "A23 PASS"; else echo "A23 FAIL"; fi
 }
 
 echo
@@ -449,7 +478,7 @@ CS_FAILED="$(printf '%s\n' "$BATTERY" | awk '$2=="FAIL"{printf "%s ", $1}')"
 if [ -n "$CS_FAILED" ]; then
   bad "check-stories battery failed on the SHIPPING tool: $CS_FAILED"
 else
-  ok "check-stories: all 10 assertions pass on the shipping tool"
+  ok "check-stories: all 11 assertions pass on the shipping tool"
 fi
 
 # --- Mutants -----------------------------------------------------------------
@@ -493,6 +522,8 @@ mutant A20 "duplicate key detection removed" 's/^            if key in seen:$/  
 mutant A21 "cross-view arm removed" 's/^        if len(vals) > 1 and len(set(vals.values())) > 1:$/        if False:/'
 # A22: widen the index glob to `<stem>*`, the collision that compares story-1 against story-10.
 mutant A22 "id glob widened to a prefix match" 's/stories.glob(stem + "-\*.md")/stories.glob(stem + "*.md")/'
+# A23: the --require-done branch disabled, so a story past gate 3 still `review` deploys.
+mutant A23 "--require-done never fires" 's/^            if os.environ.get("REQUIRE_DONE") and ystatus != "done":$/            if False:/'
 
 # =============================================================================
 # PART 3 — `deferred_acs`: a `done` story still owing ACs to deploy-validate §4b

@@ -20,6 +20,15 @@ Verify all sprint stories have passed all three gates (code review, QA,
 story validation). If any story has not passed, do not deploy — go back
 to implementation.
 
+Then run `scripts/ai-dlc/sprint-status.sh check-stories --require-done` and
+read its exit. `0` — every story is `done`; proceed. `1` — one or more
+findings, each printed; a `NOT DONE` finding is a story past gate 3 whose
+closing writer never ran, so do not deploy: dispatch its closing writer
+(`implementation.md` section 3, item 4) and re-run. `3` or `4` — read them as
+Check 5 of `gate-validation.md` does; neither is a pass. The flag keys on
+`status` only; a `done` story with no `deferred_acs` field is printed as a
+REPORT, and writing that field remains the closing writer's duty.
+
 **Sprint-overall PR pre-staging verification.** Per `sprint-review.md`
 "Sprint-Overall PR Incremental Pre-Staging" mandate, verify that the
 sprint-overall PR was assembled incrementally throughout the sprint,

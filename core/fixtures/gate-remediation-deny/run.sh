@@ -157,13 +157,15 @@ else ok "(b) the IDENTICAL edit with agent_id present is ALLOWED (the remediator
 # also read green on a workspace where nothing is failing.
 STORY="_bmad-output/planning-artifacts/s302/stories/story-302-6-closing.md"
 OUT_LEAD="$(drive "$W" Edit "$W/$STORY")"
-OUT_WRITER="$(drive "$W" Edit "$W/$STORY" "code-reviewer@session-abc123")"
+# An OPAQUE agent_id, as the harness mints them: no role prefix, so an allow keyed on a role name
+# (`remediator@*`, `code-reviewer@*`) is killed HERE and not only by arm (b)'s seeded spelling.
+OUT_WRITER="$(drive "$W" Edit "$W/$STORY" "a1b2c3")"
 if ! denied "$OUT_LEAD"; then
   bad "(b2) CONTROL: the lead's own Edit to a story file was ALLOWED during the FAILing pass, so the writer's allow below proves nothing"
 elif denied "$OUT_WRITER"; then
   bad "(b2) the post-gate-3 closing writer (a dispatched code-reviewer) was DENIED its story-file Status edit while the newest pass is FAIL"
 else
-  ok "(b2) the closing writer's story-file Edit (agent_id code-reviewer@...) is ALLOWED while the newest pass is FAIL; the lead's identical Edit is DENIED in the same run"
+  ok "(b2) the closing writer's story-file Edit (opaque agent_id a1b2c3) is ALLOWED while the newest pass is FAIL; the lead's identical Edit is DENIED in the same run"
 fi
 
 # =============================================================================

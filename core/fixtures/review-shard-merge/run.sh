@@ -597,15 +597,21 @@ else
   ok "S0: the structural predicates refuse a paragraph missing the merge, names only inside a fence, and a role clause missing reviewed-sha:"
 fi
 # THE STEP SAYS SHARDING IS ON BY DEFAULT, in the paragraph the lead acts on. A reverted step
-# ("Review sharding is opt-in: ...") tells every consumer lead the old contract while the script
-# shards anyway. Read as one joined line, so a wrapped sentence still matches; "opt-in" is refused
-# in THIS paragraph only, so the word elsewhere in the file is not a finding.
+# tells every consumer lead the old contract while the script shards anyway. Read as one joined
+# line, so a wrapped sentence still matches. Two refusals inside THIS paragraph only:
+#   - the word "opt-in";
+#   - opt-in BEHAVIOUR without the word: a clause gating the partition on the variable being set,
+#     "only when|if ... is set" or "unless ... is set", up to the clause's end.
+# LIMIT, STATED: this arm pins WORDING, not behaviour. A paraphrase of the opt-in contract outside
+# both shapes ("run the partition after configuring the variable") passes it. The behaviour is
+# held by P2/P2b, which run the shipping script with the variable unset.
 p_step_dflt() { # <file>
   local t; t="$(step_para "$1" | tr '\n' ' ' | tr -s ' ')"
   [ -n "$t" ] && ! grep -qi 'opt-in' <<<"$t" && grep -qF 'Review sharding is on by default' <<<"$t" \
-    && grep -qF 'setting it to `0` turns review sharding off' <<<"$t"
+    && grep -qF 'setting it to `0` turns review sharding off' <<<"$t" \
+    && ! grep -qiE 'only (when|if) [^.;]*is set|unless [^.;]*is set' <<<"$t"
 }
-# Offender: the W3 wrong build, the paragraph's default-on sentence reverted to the opt-in text.
+# Offender: the paragraph's default-on sentence reverted to the opt-in text.
 awk '/^\*\*Gate-1 dispatch:/ { p = 1 } p && /^[[:space:]]*$/ { p = 0 }
      p && /^Review sharding is on by default/ { print "Review sharding is opt-in: the program answers `SERIAL:` (exit 3) unless"; next }
      { print }' "$STEP_MD" > "$WORK/step-optin.md"
@@ -615,19 +621,32 @@ awk '/^\*\*Gate-1 dispatch:/ { p = 1 } p && /^[[:space:]]*$/ { if (!done) print 
   "$STEP_MD" > "$WORK/step-optin-in.md"
 awk '/^\*\*Gate-1 dispatch:/ { p = 1 } p && /^[[:space:]]*$/ { if (!done) { print; print "Older releases made review sharding opt-in." }; done = 1; p = 0 } { print }' \
   "$STEP_MD" > "$WORK/step-optin-out.md"
-if cmp -s "$STEP_MD" "$WORK/step-optin.md" || cmp -s "$STEP_MD" "$WORK/step-optin-in.md" || cmp -s "$STEP_MD" "$WORK/step-optin-out.md"; then
+# Offenders without the word (W4): "only when ... is set" and "unless ... is set" added to the
+# paragraph. Near-miss: the same "only when ... is set" sentence in the NEXT paragraph.
+awk '/^\*\*Gate-1 dispatch:/ { p = 1 } p && /^[[:space:]]*$/ { if (!done) print "Run the partition only when `AI_DLC_REVIEW_SHARD_MIN_FILES` is set; otherwise dispatch one serial reviewer."; done = 1; p = 0 } { print }' \
+  "$STEP_MD" > "$WORK/step-onlywhen.md"
+awk '/^\*\*Gate-1 dispatch:/ { p = 1 } p && /^[[:space:]]*$/ { if (!done) print "Dispatch one serial reviewer unless the variable is set."; done = 1; p = 0 } { print }' \
+  "$STEP_MD" > "$WORK/step-unless.md"
+awk '/^\*\*Gate-1 dispatch:/ { p = 1 } p && /^[[:space:]]*$/ { if (!done) { print; print "Older releases ran the partition only when the variable is set." }; done = 1; p = 0 } { print }' \
+  "$STEP_MD" > "$WORK/step-onlywhen-out.md"
+_s6s=0
+for _f in step-optin.md step-optin-in.md step-optin-out.md step-onlywhen.md step-unless.md step-onlywhen-out.md; do
+  cmp -s "$STEP_MD" "$WORK/$_f" && _s6s=1
+done
+if [ "$_s6s" -ne 0 ]; then
   bad "S6-pre: FIXTURE STALE -- a default-on probe's edit matched nothing, so the probe would score the shipped text"
-elif p_step_dflt "$WORK/step-optin.md" || p_step_dflt "$WORK/step-optin-in.md"; then
-  bad "S6-pre: FIXTURE BROKEN -- the default-on predicate passed a paragraph reverted to opt-in, or one carrying 'opt-in'"
-elif ! p_step_dflt "$WORK/step-optin-out.md"; then
-  bad "S6-pre: FIXTURE BROKEN -- the default-on predicate refused 'opt-in' OUTSIDE the dispatch paragraph (a near-miss)"
+elif p_step_dflt "$WORK/step-optin.md" || p_step_dflt "$WORK/step-optin-in.md" \
+     || p_step_dflt "$WORK/step-onlywhen.md" || p_step_dflt "$WORK/step-unless.md"; then
+  bad "S6-pre: FIXTURE BROKEN -- the default-on predicate passed a paragraph reverted to opt-in, carrying 'opt-in', or gating the partition on the variable being set"
+elif ! p_step_dflt "$WORK/step-optin-out.md" || ! p_step_dflt "$WORK/step-onlywhen-out.md"; then
+  bad "S6-pre: FIXTURE BROKEN -- the default-on predicate refused 'opt-in' or 'only when ... is set' OUTSIDE the dispatch paragraph (near-misses)"
 else
-  ok "S6-pre: the default-on predicate refuses the reverted opt-in sentence and 'opt-in' inside the paragraph, and accepts 'opt-in' in the next paragraph"
+  ok "S6-pre: the default-on predicate refuses the reverted sentence, 'opt-in', 'only when ... is set' and 'unless ... is set' inside the paragraph, and accepts 'opt-in' and 'only when ... is set' in the next paragraph"
 fi
 if p_step_dflt "$STEP_MD"; then
-  ok "S6: implementation.md's Gate-1 dispatch paragraph says review sharding is on by default and that \`0\` turns it off, and does not say opt-in"
+  ok "S6: implementation.md's Gate-1 dispatch paragraph says review sharding is on by default and that \`0\` turns it off, and neither says opt-in nor gates the partition on the variable being set"
 else
-  bad "S6: implementation.md's Gate-1 dispatch paragraph does not state default-on sharding, or still says opt-in"
+  bad "S6: implementation.md's Gate-1 dispatch paragraph does not state default-on sharding, or says opt-in, or gates the partition on the variable being set"
 fi
 if p_step "$STEP_MD"; then
   ok "S1: implementation.md's Gate-1 dispatch paragraph names partition-review-diff.sh and merge-review-shards.sh outside a fence"
@@ -640,102 +659,175 @@ else
   bad "S2: code-reviewer.md's '## As a Shard' clause does not carry the merge's shard grammar -- a shard written to it is refused at the join"
 fi
 
-# WHO MAKES THE THREE CLOSING WRITES, AND WHEN. The `done` transition, `deferred_acs` (taken from
-# QA's verdict, so unknowable before gate 2) and the review commit are made by ONE `code-reviewer`
-# the lead dispatches AFTER GATE 3, for every story, serial or sharded -- a dispatched agent, so
-# the gate-remediation guard's agent_id arm allows its story-file edit while a verdict is FAIL.
-# No gate-1 reviewer makes them, and the lead does not. Pinned at three sites, each read as one
-# joined line with `**` dropped so a wrapped or emphasised sentence still matches:
-#   - the step's task list, item 4, which names the dispatch and its timing;
-#   - the step's Gate-1 dispatch paragraph, which hands the writes on and gives the lead none;
-#   - the role's Ownership bullet, As a Shard section and As the Closing Writer section.
-# And a REFUSAL: outside As the Closing Writer, no un-negated sentence may give a shard or a
-# gate-1 reviewer one of the three writes -- a contradicting sentence elsewhere in the role file
-# is what a reviewer acts on.
+# WHO MAKES THE CLOSING WRITES, AND WHEN. The `done` transition, `deferred_acs` (taken from QA's
+# verdict, so unknowable before gate 2), the upstream close-out and the closing commit are made by
+# ONE `code-reviewer` the lead dispatches AFTER GATE 3, for every story, serial or sharded -- a
+# dispatched agent, so the gate-remediation guard's agent_id arm allows its story-file edit while
+# a verdict is FAIL. No gate-1 reviewer makes them, and the lead does not. The gate-1 REVIEW
+# commit, which persists the review file Check 1 reads, is a different commit and is unchanged.
+#
+# PINS, each read as one joined line with `**` dropped so a wrapped or emphasised sentence still
+# matches: the step's task item 4 (dispatch, timing, the four duties, the catch-up for a story
+# already past gate 3), its Gate-1 paragraph, its section 7 precondition; the role's Ownership
+# pointer, Responsibilities bullet, As a Shard sentence and As the Closing Writer brief.
+#
+# AND A REFUSAL OVER EACH WHOLE FILE, As the Closing Writer included. The file is split into
+# clauses at `. ` and `; `. A clause naming a closing write -- `done` transition, `status: done`,
+# `deferred_acs`, the closing commit, or the review commit beside `done`/`deferred_acs` -- must have the closing
+# writer as its subject, or negate the WRITE VERB itself (`do/does NOT make|perform`). Any other
+# " not " acquits nothing. Clauses that only describe the field or the lifecycle (a value of
+# `deferred_acs`, a `done` story, Dev's earlier write) are acquitted by enumerated shapes below.
+# FALSE-POSITIVE SET, measured on the shipped files before this arm was pinned: every clause the
+# grammar flagged was reworded to name its subject, so the shipped set is 0. The enumerated
+# acquittals are the narrowing story; widening one widens what a wrong build can say.
 joined() { tr '\n' ' ' | tr -s ' ' | sed -e 's/\*\*//g'; }
 close_item() { awk '/^4\. Closing writer/ { p = 1 } p && (/^[[:space:]]*$/ || /^### /) { exit } p { print }' "$1"; }
+sect7() { awk '/^### 7\. All Gates Passed/ { p = 1; next } p && /^### / { exit } p { print }' "$1"; }
 role_named() { # <file> <section heading text> -> that section's body
   awk -v h="## $2" '$0 == h { p = 1; next } p && /^## / { exit } p { print }' "$1"; }
-p_own_step() { local t g
-  t="$(close_item "$1" | joined)"; g="$(step_para "$1" | joined)"
+role_bullet() { # <file> <section> <bullet prefix> -> that bullet, continuation lines included
+  role_named "$1" "$2" | awk -v b="$3" 'index($0, b) == 1 { p = 1; print; next } p && /^- / { exit } p { print }'; }
+p_own_step() { local t g s
+  t="$(close_item "$1" | joined)"; g="$(step_para "$1" | joined)"; s="$(sect7 "$1" | joined)"
   grep -qF 'Once gate 3 passes, the lead dispatches one `code-reviewer` as the closing writer, `shard: 1/1 <story-index>`, for every story, serial or sharded.' <<<"$t" \
-    && grep -qF 'deferred_acs` in both sprint-status views taken from QA'"'"'s verdict' <<<"$t" \
-    && grep -qF 'The lead does not make these writes itself.' <<<"$t" \
-    && grep -qF 'No gate-1 reviewer, serial or shard, makes the `done` transition, `deferred_acs` or the review commit; the closing writer does, after gate 3.' <<<"$g" \
-    && ! grep -qi 'the lead performs' <<<"$g"; }
-p_own_role() { local o s c
+    && grep -qF 'the closing writer makes exactly these writes and nothing else' <<<"$t" \
+    && grep -qF 'deferred_acs` in both sprint-status views taken from QA'"'"'s verdict, the upstream close-out section 5 requires, and the closing commit' <<<"$t" \
+    && grep -qF 'The lead does NOT make these writes.' <<<"$t" \
+    && grep -qF 'The closing writer is also owed to a story already past gate 3 without its closing writes' <<<"$t" \
+    && grep -qF 'the lead dispatches it at the lead'"'"'s next turn' <<<"$t" \
+    && grep -qF 'A gate-1 reviewer, serial or shard, does NOT make the `done` transition, `deferred_acs` or the closing commit; the closing writer does, after gate 3.' <<<"$g" \
+    && grep -qF 'Persisting the gate-1 review file is unchanged' <<<"$g" \
+    && grep -qF 'the closing writer has landed every story'"'"'s closing commit, leaving every story `done` with a `deferred_acs` field in both sprint-status views' <<<"$s" \
+    && grep -qF 'dispatch the closing writer now (section 3, item 4)' <<<"$s"; }
+p_own_role() { local o r s c
   o="$(role_named "$1" Ownership | joined)"; s="$(role_sect "$1" | joined)"; c="$(role_named "$1" 'As the Closing Writer' | joined)"
-  grep -qF 'The three closing writes belong to the closing writer, and only to it.' <<<"$o" \
-    && grep -qF 'A gate-1 reviewer — serial `shard: 1/1`, a part shard or the cross shard — makes none of them. After gate 3 passes, the lead dispatches one `code-reviewer` as the closing writer (see "As the Closing Writer")' <<<"$o" \
-    && grep -qF 'you do NOT perform the `done` transition, `deferred_acs` in both sprint-status views, or the review commit; the closing writer does, after gate 3.' <<<"$s" \
+  r="$(role_bullet "$1" Responsibilities '- Dispatched as the closing writer' | joined)"
+  grep -qF 'The closing writes belong to the closing writer, and only to it.' <<<"$o" \
+    && grep -qF 'A gate-1 reviewer — serial `shard: 1/1`, a part shard or the cross shard — does NOT make any of them. After gate 3 passes, the lead dispatches one `code-reviewer` as the closing writer (see "As the Closing Writer")' <<<"$o" \
+    && grep -qF 'in the review commit that Check 1 of `gate-validation.md` reads. That is unchanged, and the review commit carries no status write.' <<<"$o" \
+    && grep -qF 'the closing writer updates the story file `Status:` header and `sprint-status.yaml` to `done`, writes the story'"'"'s `deferred_acs` beside `status: done` in both views, and makes the upstream close-out, all in the closing commit. As a gate-1 reviewer you do NOT make these writes.' <<<"$r" \
+    && grep -qF 'you do NOT make the `done` transition, `deferred_acs` in both sprint-status views, or the closing commit; the closing writer does, after gate 3.' <<<"$s" \
     && grep -qF 'the lead dispatches you after gate 3 passes, for every story, serial or sharded' <<<"$c" \
-    && grep -qF 'make exactly the three closing writes' <<<"$c" && grep -qF 'Make no other edit.' <<<"$c"; }
-p_role_refuse() { # <file>: 0 when NO sentence outside As the Closing Writer hands a shard a write
-  awk '/^## As the Closing Writer$/ { skip = 1; next } skip && /^## / { skip = 0 } !skip { print }' "$1" \
-    | joined | awk '{ gsub(/\. /, ".\n"); print }' \
-    | awk '{ s = tolower($0) }
-           (s ~ /shard/ || s ~ /gate-1 reviewer/) \
-           && (s ~ /review commit/ || s ~ /`done` transition/ || s ~ /deferred_acs/ || s ~ /status: done/) \
-           && !(s ~ / not / || s ~ /none/ || s ~ / no /) { bad = 1 } END { exit bad }'; }
+    && grep -qF 'the closing writer makes exactly these writes and nothing else' <<<"$c" \
+    && grep -qF 'the upstream close-out `implementation.md` section 5 requires' <<<"$c" \
+    && grep -qF 'and the closing commit carrying all of them.' <<<"$c"; }
+# One clause per line. Fenced lines and headings are dropped; `e.g.`/`i.e.` cannot split.
+clauses() { awk '/^```/ { f = !f; next } f || /^#/ { next } { print }' "$1" | joined \
+  | sed -e 's/e\.g\./eg/g' -e 's/i\.e\./ie/g' | awk '{ gsub(/\. /, ".\n"); gsub(/; /, ";\n"); print }'; }
+# 0 when NO clause gives a closing write to anyone but the closing writer. Prints offenders on fd 3.
+p_write_refuse() { # <file>
+  clauses "$1" | awk '
+    { s = tolower($0) }
+    { w = (s ~ /`done` transition/ || s ~ /status: done/ || s ~ /deferred_acs/ || s ~ /closing commit/ \
+           || (s ~ /review commit/ && (s ~ /`done`/ || s ~ /deferred_acs/))) }
+    !w { next }
+    s ~ /the closing writer/ { next }                                   # its subject is the writer
+    s ~ /(do|does) not (make|perform)/ { next }                         # the WRITE VERB negated
+    # Field and lifecycle descriptions, enumerated (the narrowing story):
+    s ~ /^`?deferred_acs`? is not one single-line/ { next }
+    s ~ /if the story has no deferred ac/ { next }
+    s ~ /never a block list/ { next }
+    s ~ /deploy-validate §4b clears/ { next }
+    s ~ /`?deferred_acs: \[ac5, ac6\]`?\.?$/ { next }
+    s ~ /^dev owns the earlier/ { next }
+    { print > "/dev/fd/3"; bad = 1 } END { exit bad }'; }
 # The header's THRESHOLD paragraph states the default, derived from the assignment, and the off
 # spelling, and no longer calls sharding opt-in.
 hdr_para() { awk '/^# THRESHOLD/ { p = 1; print; next } p && /^# [^ ]/ { exit } p { print }' "$1"; }
 p_hdr() { local t; t="$(hdr_para "$1" | joined)"
   [ -n "$t" ] && ! grep -qi 'opt-in' <<<"$t" && grep -qF "the built-in default $DFLT" <<<"$t" && grep -qF "$KEY=0" <<<"$t"; }
-# Offenders, one per pinned property, each built on a copy and each guarded by cmp -s.
-#   W1-shape: the closing dispatch moved before gate 3 ("Once gate 2 passes").
-#   lead-shape: the Gate-1 paragraph hands the writes back to the lead.
-#   W2-shape: the Ownership pointer deleted.
-#   contra: a sentence outside As the Closing Writer gives the cross shard the review commit.
+# OFFENDERS, one per pinned or refused property, each a copy guarded by cmp -s.
+#   step-early     item 4's dispatch moved before gate 3            (the tip adversary's W1, first round)
+#   step-lead      the Gate-1 paragraph hands the writes to the lead
+#   step-elsewhere item 4 de-timed, the pinned sentence added under another heading
+#   step-noclose   the upstream close-out dropped from item 4's brief          (D1)
+#   step-nocatch   the catch-up for a story already past gate 3 dropped       (D3)
+#   step-s7        a section-7 clause where the LEAD makes the writes          (W3, step half)
+#   role-nopointer the Ownership pointer bullet deleted                         (W2, first round)
+#   role-resp      the Responsibilities bullet reverted to the pre-change text (W2)
+#   role-incw      a clause INSIDE As the Closing Writer giving the serial gate-1 reviewer the writes (W1)
+#   role-notlead   a clause giving the cross shard the writes, carrying an unrelated " not " (W3)
+# NEAR-MISSES, which must pass:
+#   role-negated   the role-notlead clause with its WRITE VERB negated
+#   step-negated   a section-7 clause where the lead does NOT make the writes
 sed -e 's/Once gate 3 passes, the lead/Once gate 2 passes, the lead/' "$STEP_MD" > "$WORK/own-step-early.md"
 sed -e '/^\*\*Gate-1 dispatch:/,/^[[:space:]]*$/s/the closing writer does, after gate 3\./the lead performs them after the merge./' "$STEP_MD" > "$WORK/own-step-lead.md"
-awk '/^- \*\*The three closing writes belong to the closing writer/ { skip = 1; next }
-     skip && /^- / { skip = 0 } !skip { print }' "$ROLE_MD" > "$WORK/own-role-nopointer.md"
-awk '/^## Constraints$/ { print "Dispatched as the cross shard, you make the review commit once the merge has written the review file."; print "" } { print }' \
-  "$ROLE_MD" > "$WORK/own-role-contra.md"
-# Near-miss for the refusal: the SAME sentence negated ("you do not make the review commit").
-awk '/^## Constraints$/ { print "Dispatched as the cross shard, you do not make the review commit; the closing writer does."; print "" } { print }' \
-  "$ROLE_MD" > "$WORK/own-role-negated.md"
-# Near-miss for the step pin: a different gate-3 phrasing ELSEWHERE in the step must not satisfy it.
 sed -e 's/Once gate 3 passes, the lead/Once gate 2 passes, the lead/' "$STEP_MD" \
   | awk '/^### 4\. Self-Validate/ { print "Once gate 3 passes, the lead dispatches one `code-reviewer` as the closing writer, `shard: 1/1 <story-index>`, for every story, serial or sharded."; print "" } { print }' \
   > "$WORK/own-step-elsewhere.md"
+sed -e 's/   QA'"'"'s verdict, the upstream close-out section 5 requires, and the closing/   QA'"'"'s verdict, and the closing/' "$STEP_MD" > "$WORK/own-step-noclose.md"
+sed -e 's/The closing writer is also owed to a story/A story is also owed/' "$STEP_MD" > "$WORK/own-step-nocatch.md"
+awk '/^### 7\. All Gates Passed/ { print; print ""; print "Before routing, the lead writes `status: done` and `deferred_acs` for every story itself and makes the closing commit."; next } { print }' \
+  "$STEP_MD" > "$WORK/own-step-s7.md"
+awk '/^### 7\. All Gates Passed/ { print; print ""; print "Before routing, the lead does NOT make the `done` transition or the closing commit for any story."; next } { print }' \
+  "$STEP_MD" > "$WORK/own-step-negated.md"
+awk '/^- \*\*The closing writes belong to the closing writer/ { skip = 1; next }
+     skip && /^- / { skip = 0 } !skip { print }' "$ROLE_MD" > "$WORK/own-role-nopointer.md"
+awk '/^- Dispatched as the closing writer after gate 3 passes/ { skip = 1
+       print "- After approving the final gate for a story, update `sprint-status.yaml`"
+       print "  and the story file `Status:` header to `done` in the review commit, with"
+       print "  the story'"'"'s `deferred_acs` written beside `status: done` in both views."; next }
+     skip && (/^- / || /^$/) { skip = 0 } !skip { print }' "$ROLE_MD" > "$WORK/own-role-resp.md"
+awk '{ print } /^the story file and to `carry-over-backlog\.md`\.$/ && !d { print "A gate-1 serial reviewer that approves makes the `done` transition, `deferred_acs` and the closing commit itself at gate 1; dispatch a closing writer only for a sharded review."; d = 1 }' \
+  "$ROLE_MD" > "$WORK/own-role-incw.md"
+awk '/^## Constraints$/ { print "As the cross shard you make the closing commit and the `done` transition, not the lead."; print "" } { print }' \
+  "$ROLE_MD" > "$WORK/own-role-notlead.md"
+awk '/^## Constraints$/ { print "As the cross shard you do NOT make the closing commit or the `done` transition."; print "" } { print }' \
+  "$ROLE_MD" > "$WORK/own-role-negated.md"
 sed -e '/^# THRESHOLD/s/ON BY DEFAULT/OPT-IN/' "$PART" > "$WORK/hdr-optin.sh"
 sed -e "/^# THRESHOLD/,/^# THE PART SET/s/the built-in default $DFLT/the built-in default $((DFLT + 1))/" "$PART" > "$WORK/hdr-num.sh"
 _stale=0
-# own-step-elsewhere is item 4 de-timed PLUS a gate-3 line added elsewhere; cmp -s alone would
-# accept the added line by itself, so assert item 4 itself moved.
 grep -qF 'Once gate 2 passes, the lead' "$WORK/own-step-elsewhere.md" || { _stale=1; echo "  (item 4 not de-timed in own-step-elsewhere.md)"; }
 for _p in "$STEP_MD:own-step-early.md" "$STEP_MD:own-step-lead.md" "$STEP_MD:own-step-elsewhere.md" \
-          "$ROLE_MD:own-role-nopointer.md" "$ROLE_MD:own-role-contra.md" "$ROLE_MD:own-role-negated.md" \
+          "$STEP_MD:own-step-noclose.md" "$STEP_MD:own-step-nocatch.md" "$STEP_MD:own-step-s7.md" "$STEP_MD:own-step-negated.md" \
+          "$ROLE_MD:own-role-nopointer.md" "$ROLE_MD:own-role-resp.md" "$ROLE_MD:own-role-incw.md" \
+          "$ROLE_MD:own-role-notlead.md" "$ROLE_MD:own-role-negated.md" \
           "$PART:hdr-optin.sh" "$PART:hdr-num.sh"; do
   cmp -s "${_p%%:*}" "$WORK/${_p#*:}" && { _stale=1; echo "  (unchanged probe: ${_p#*:})"; }
 done
+# Each offender must be refused by the arm that OWNS it; the pins and the refusal are scored apart
+# so a wrong build that slips one is still named.
+_own_fail=""
+for _o in own-step-early own-step-lead own-step-elsewhere own-step-noclose own-step-nocatch; do
+  p_own_step "$WORK/$_o.md" && _own_fail="$_own_fail $_o"
+done
+p_write_refuse "$WORK/own-step-s7.md" 3>/dev/null && _own_fail="$_own_fail own-step-s7"
+p_own_role "$WORK/own-role-nopointer.md" && _own_fail="$_own_fail own-role-nopointer"
+p_own_role "$WORK/own-role-resp.md" && _own_fail="$_own_fail own-role-resp(pin)"
+p_write_refuse "$WORK/own-role-resp.md" 3>/dev/null && _own_fail="$_own_fail own-role-resp(refuse)"
+p_write_refuse "$WORK/own-role-incw.md" 3>/dev/null && _own_fail="$_own_fail own-role-incw"
+p_write_refuse "$WORK/own-role-notlead.md" 3>/dev/null && _own_fail="$_own_fail own-role-notlead"
+p_hdr "$WORK/hdr-optin.sh" && _own_fail="$_own_fail hdr-optin"
+p_hdr "$WORK/hdr-num.sh" && _own_fail="$_own_fail hdr-num"
+_nm_fail=""
+{ p_write_refuse "$WORK/own-role-negated.md" 3>/dev/null && p_own_role "$WORK/own-role-negated.md"; } || _nm_fail="$_nm_fail own-role-negated"
+{ p_write_refuse "$WORK/own-step-negated.md" 3>/dev/null && p_own_step "$WORK/own-step-negated.md"; } || _nm_fail="$_nm_fail own-step-negated"
 if [ "$_stale" -ne 0 ]; then
   bad "S3-pre: FIXTURE STALE -- an ownership or header probe's edit matched nothing, so the probe would score the shipped text"
-elif p_own_step "$WORK/own-step-early.md" || p_own_step "$WORK/own-step-lead.md" || p_own_step "$WORK/own-step-elsewhere.md" \
-     || p_own_role "$WORK/own-role-nopointer.md" || p_role_refuse "$WORK/own-role-contra.md" \
-     || p_hdr "$WORK/hdr-optin.sh" || p_hdr "$WORK/hdr-num.sh"; then
-  bad "S3-pre: FIXTURE BROKEN -- an ownership or header predicate passed an offender (closing dispatch before gate 3, writes handed to the lead, the dispatch named only outside item 4, the Ownership pointer gone, a shard given a write, OPT-IN restored, another number)"
-elif ! p_role_refuse "$WORK/own-role-negated.md" || ! p_own_role "$WORK/own-role-negated.md"; then
-  bad "S3-pre: FIXTURE BROKEN -- the refusal fired on a NEGATED sentence (a shard told it does NOT make the review commit), a near-miss"
+elif [ -n "$_own_fail" ]; then
+  bad "S3-pre: FIXTURE BROKEN -- an ownership or header predicate passed offender(s) [${_own_fail# }]"
+elif [ -n "$_nm_fail" ]; then
+  bad "S3-pre: FIXTURE BROKEN -- a predicate refused near-miss(es) [${_nm_fail# }], a clause whose write verb is negated"
 else
-  ok "S3-pre: the ownership predicates refuse a closing dispatch before gate 3, writes handed to the lead, the dispatch named outside item 4, a missing Ownership pointer and a shard given the review commit; they accept that sentence negated; the header predicate refuses OPT-IN and another number"
+  ok "S3-pre: 12 offenders refused by the arm that owns each (dispatch before gate 3, writes to the lead, dispatch outside item 4, no close-out, no catch-up, a lead-writes clause in section 7, no Ownership pointer, the Responsibilities bullet reverted, a contradiction inside As the Closing Writer, an unrelated 'not', OPT-IN, another number); 2 near-misses with the write verb negated pass"
 fi
 if p_own_step "$STEP_MD"; then
-  ok "S3: implementation.md's task item 4 dispatches one code-reviewer as the closing writer after gate 3 for every story, deferred_acs from QA's verdict, and the Gate-1 paragraph gives no gate-1 reviewer and not the lead the three writes"
+  ok "S3: implementation.md's item 4 dispatches the closing writer after gate 3 for every story with its four duties and the catch-up, the Gate-1 paragraph gives no gate-1 reviewer the writes and keeps review-file persistence, and section 7 routes only after every closing commit"
 else
-  bad "S3: implementation.md does not dispatch the closing writer after gate 3, or its Gate-1 paragraph still gives a reviewer or the lead the three writes"
+  bad "S3: implementation.md does not pin the post-gate-3 closing writer at item 4, the Gate-1 paragraph and section 7"
 fi
 if p_own_role "$ROLE_MD"; then
-  ok "S4: code-reviewer.md's Ownership, As a Shard and As the Closing Writer give the three writes to the closing writer alone, dispatched after gate 3"
+  ok "S4: code-reviewer.md's Ownership, Responsibilities, As a Shard and As the Closing Writer give the closing writes to the closing writer alone, after gate 3, upstream close-out included, and keep the review commit"
 else
-  bad "S4: code-reviewer.md does not give the three closing writes to the post-gate-3 closing writer at all three sites"
+  bad "S4: code-reviewer.md does not give the closing writes to the post-gate-3 closing writer at all four sites"
 fi
-if p_role_refuse "$ROLE_MD"; then
-  ok "S4b: no sentence in code-reviewer.md outside As the Closing Writer gives a shard or a gate-1 reviewer the done transition, deferred_acs or the review commit"
+_sref=""
+p_write_refuse "$ROLE_MD" 3>/dev/null || _sref="$_sref code-reviewer.md"
+p_write_refuse "$STEP_MD" 3>/dev/null || _sref="$_sref implementation.md"
+if [ -z "$_sref" ]; then
+  ok "S4b: no clause in code-reviewer.md or implementation.md, As the Closing Writer included, gives a closing write to anyone but the closing writer unless its write verb is negated"
 else
-  bad "S4b: a sentence outside As the Closing Writer gives a shard or a gate-1 reviewer one of the three closing writes"
+  bad "S4b: a clause in [${_sref# }] gives a closing write to a subject other than the closing writer"
 fi
 if p_hdr "$PART"; then
   ok "S5: partition-review-diff.sh's THRESHOLD paragraph states the built-in default $DFLT and $KEY=0, and does not say opt-in"

@@ -34,23 +34,42 @@ candidate.
   refusal recorded in the gate log.
 - The manifest records the numeric threshold that was applied, and the merge re-derives the map
   from it.
-- The three closing writes now belong to a closing writer. These are the `done` transition,
-  `deferred_acs` in both views and the review commit. Once gate 3 passes, the lead dispatches one
-  `code-reviewer` as the closing writer, `shard: 1/1 <idx>`, for every story, serial or sharded. It
-  reads the gate-1 review file and QA's verdict, and makes no other edit. No gate-1 reviewer, serial
-  or shard, makes the three writes, and the lead does not make them either.
+- The closing writes now belong to a closing writer. They are the `done` transition,
+  `deferred_acs` in both views, the upstream close-out, and the closing commit carrying them. Once
+  gate 3 passes, the lead dispatches one `code-reviewer` as the closing writer, `shard: 1/1 <idx>`,
+  for every story, serial or sharded. It reads the gate-1 review file and QA's verdict, and makes
+  those writes and nothing else. No gate-1 reviewer, serial or shard, makes them, and the lead does
+  not make them either.
+  - The upstream close-out is the carry-over-backlog item set to `CLOSED` and a `RESOLVED` line in
+    `docs/escalations/pending.md`. It moved to the writer because the guard denies the lead
+    `carry-over-backlog.md` while a verdict records a FAIL.
+  - Gate-1 review-file persistence is unchanged. A serial reviewer still commits its review file
+    to the Git-tracked path Check 1 reads, in the review commit, which carries no status write. The
+    post-gate-3 commit is named the closing commit.
   - Before this release a sharded review left the writes unowned, latent since 0.718.0. A serial
     reviewer made them at gate 1, before QA had recorded the deferrals that `deferred_acs` copies.
   - Because the writer is a dispatched agent, the gate-remediation guard allows its story-file edit
     while another story's verdict is FAIL. A lead edit there is denied.
-  - `implementation.md` (task item 4), `code-reviewer.md` (Ownership, As a Shard, and a new As the
-    Closing Writer section), `qa.md`, `deploy-validate.md` and the `sprint-status` schema say so.
+  - `implementation.md` (task item 4, sections 5 and 7), `code-reviewer.md` (Ownership,
+    Responsibilities, As a Shard, and a new As the Closing Writer section), `qa.md`,
+    `deploy-validate.md` and the `sprint-status` schema say so.
+- Nothing routes onward before the closing writes land. `implementation.md` section 7 routes only
+  when every story is `done` with a `deferred_acs` field in both views; otherwise the lead dispatches
+  the closing writer now. A story already past gate 3 without its closing writes, including any a
+  pull finds in flight, gets its closing writer at the lead's next turn.
+- `sprint-status.sh check-stories --require-done` turns any story not `done` into a `NOT DONE`
+  finding, exit 1, and `deploy-validate.md` section 1 runs it. It keys on status only; a `done`
+  story with no `deferred_acs` field stays a REPORT.
 - **Measured threshold.** Over 26 stories of the reference consumer, a threshold of 8 shards 13 of
   them. Serial reviews took a median of 10.3 minutes at 8 files or fewer, against 28.6 minutes at 12
   or more. Above 12 files, reviewer tier is confounded with size.
 - **Consumer impact.** On the next pull, every story with 8 or more reviewable files dispatches its
   part reviewers plus one cross reviewer. A `-p2` re-review of a story that started serially will
   shard. A Check 22 replay on the consumer's ledger fails nothing.
+- **Consumer impact, closing writes.** At the reference consumer's HEAD, all 17 s316 stories are
+  past gate 3 and none is `done`, so the next pull owes 17 closing-writer dispatches before s316
+  routes onward. A `--require-done` replay on a scratch copy flags exactly those 17, and the
+  flagless control on the same copy passes.
 - **Caveat.** The threshold counts files, but the packer weights lines. In 14 of 15 measured large
   ranges, one unsplittable test file carries 55-69% of the lines, so the reading speed-up is capped
   near 1.5x. No review gets slower.

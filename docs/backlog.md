@@ -469,12 +469,20 @@ because `merge-review-shards.sh` hands it back as `--min-files`.
 `core/skills/ai-dlc/steps/implementation.md`'s Gate-1 dispatch paragraph states the default-on
 behaviour and the off spelling, and it names no number.
 
-**The three closing writes go to a closing writer dispatched after gate 3.** These are the `done`
-transition, `deferred_acs` in both views and the review commit. Operator ruling, batch 194, option
-B: once gate 3 passes, the lead dispatches one `code-reviewer` as the closing writer,
-`shard: 1/1 <idx>`, for every story, serial or sharded. It reads the gate-1 review file, merged for
-a sharded review, and QA's verdict. It makes exactly the three writes and no other edit. No gate-1
-reviewer, serial or shard, makes them, and the lead does not either. Two defects drove this:
+**The closing writes go to a closing writer dispatched after gate 3.** These are the `done`
+transition, `deferred_acs` in both views, the upstream close-out that `implementation.md` section 5
+requires, and the closing commit carrying them. Operator ruling, batch 194, option B: once gate 3
+passes, the lead dispatches one `code-reviewer` as the closing writer, `shard: 1/1 <idx>`, for
+every story, serial or sharded. It reads the gate-1 review file, merged for a sharded review, and
+QA's verdict. It makes exactly those writes and nothing else. The upstream close-out is the
+carry-over-backlog item set to `CLOSED` and a `RESOLVED` line in `docs/escalations/pending.md`.
+It is the writer's because the guard denies the lead `carry-over-backlog.md` during a FAIL. No
+gate-1 reviewer, serial or shard, makes the closing writes, and the lead does not either.
+
+The gate-1 review commit is unchanged. A serial reviewer still commits its review file to the
+Git-tracked path Check 1 reads before the verdict is recorded, and that commit carries no status
+write. For a sharded review the lead persists the merged file. The post-gate-3 commit is named the
+closing commit so the two are never confused. Two defects drove this:
 - A sharded review left the three writes unowned. That gap had been latent since 0.718.0 and
   became live at default-on. Giving them to the lead was the first fix, and the tip adversary
   refuted it. `core/hooks/ai-dlc-gate-remediation-guard.sh` denies a lead edit to a story file
@@ -493,16 +501,58 @@ the lead's identical edit denied in the same run. The writer spawn, driven throu
 `ai-dlc-dispatch-guard.sh`, records `role: code-reviewer`, `shard: "1/1 3"`, `model_bound: opus`,
 and a cited, readable contract. Check 22 passes that row (exit 0, counted as carrying a shard
 line). An invented-exception row in the same ledger fails S3 (exit 1).
-`implementation.md` task item 4, `code-reviewer.md` (Ownership, As a Shard, As the Closing Writer),
-`qa.md`, `deploy-validate.md` and the `sprint-status` schema state this.
+`implementation.md` task item 4, `code-reviewer.md` (Ownership, Responsibilities, As a Shard, As
+the Closing Writer), `qa.md`, `deploy-validate.md` and the `sprint-status` schema state this.
 `code-reviewer-escalated.md` defers to `code-reviewer.md` in full.
 
-Held by `core/fixtures/review-shard-merge`: arms P2 to P2f and mutants MX21 to MX28 for the
-threshold; S3, S4 and S4b for the closing writer; S5 for the script header; S6 for the step's
-default-on sentence. Each structural arm carries offenders and a near-miss in its self-probe. The
-tip adversary's three wrong builds are each killed by these arms: W1 (timing moved to "Before
-running the merge"), W2 (Ownership pointer deleted, a contradicting sentence added outside the
-section) and W3 (step reverted to opt-in).
+**Nothing may route onward before the closing writes land.** `implementation.md` section 7 routes
+to sprint review only when the closing writer has landed every story's closing commit, leaving
+every story `done` with a `deferred_acs` field in both views. Otherwise the lead dispatches the
+closing writer now. Item 4 states the catch-up: a story already past gate 3 without its closing
+writes, including every such story a pull finds in flight, gets its closing writer at the lead's
+next turn.
+
+The cheap gate is `sprint-status.sh check-stories --require-done`, which `deploy-validate.md`
+section 1 now runs. It turns every entry whose `status` is not `done` into a `NOT DONE` FINDING,
+exit 1. It keys on status only: a `done` entry with no `deferred_acs` field stays a REPORT, as
+without the flag, because a pre-field envelope would otherwise wedge. The field half of the
+section 7 precondition is therefore prose and the writer's duty, and nothing mechanises it.
+Check 5 is not where this runs. No gate type in the manifest runs at deploy, and Check 5's
+implementation-gate runs happen while stories are legitimately still `review`.
+
+**Consumer impact, measured at graph's HEAD (`73b2943f`, read-only).** All 17 of 17 s316 stories
+are named in a gate-3 section header of `gate-log.md`, and all 17 are still `review`. The
+derivation splits each header's batch list into short names and joins them to each entry's
+`title:` prefix; a control name present in no header joins 0. None carries a `deferred_acs`
+field. All 17 `gate3:` fields read `pending`, and nothing in core writes that field, so no
+check keyed on it could fire today. On the next pull, section 7 owes 17 closing-writer
+dispatches before s316 can route onward. A replay of `check-stories --require-done` on a scratch
+copy of graph's s316 envelope and stories exits 1 with 17 `NOT DONE` findings and no other
+finding. The flagless control on the same copy exits 0 with 17 comparisons and 0 findings. The
+coordinator's working figure was 7; the derivation gives 17.
+
+Held by:
+- `core/fixtures/sprint-status-lifecycle` A23: `review` under the flag fails, the same tree
+  without the flag passes, and `done` under the flag passes. Mutant A23 disables the branch.
+- `core/fixtures/gate-remediation-deny` (b2): the closing writer, seeded with the opaque
+  agent_id `a1b2c3`, is allowed while the lead's identical edit is denied in the same run.
+- `core/fixtures/review-shard-merge`, for the threshold: arms P2 to P2f and mutants MX21 to MX28.
+- `review-shard-merge`, for the closing writer: S3 pins item 4 (dispatch, timing, the four
+  duties, the catch-up), the Gate-1 paragraph and section 7. S4 pins the role's Ownership,
+  Responsibilities, As a Shard and As the Closing Writer.
+- `review-shard-merge` S4b, a refusal over each whole file, As the Closing Writer included. A
+  clause naming a closing write must have the closing writer as its subject, or negate the write
+  verb itself (`do/does NOT make|perform`).
+- `review-shard-merge` S5 for the script header, and S6 for the step's default-on sentence. S6
+  also refuses `only when|if ... is set` and `unless ... is set` inside the paragraph. Its header
+  states that it pins wording, not behaviour.
+- Each structural arm's self-probe refuses 12 offenders and passes 2 negated near-misses.
+
+The second tip adversary's four wrong builds are each killed:
+- W1: a contradiction inside As the Closing Writer.
+- W2: the Responsibilities bullet reverted to the pre-change text.
+- W3: an unrelated " not " acquitting a shard write, plus a lead-writes clause in section 7.
+- W4: opt-in behaviour without the word.
 
 **Measured threshold.** Measured on the reference consumer's history, read-only from a `file://`
 clone, over 26 stories with a resolvable gate-1 range. Counted with the shipping

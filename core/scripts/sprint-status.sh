@@ -16,11 +16,19 @@
 #   sprint-status.sh sprint-id [--root <dir>]  # print the resolved sprint_id (route.md Step 6)
 #   sprint-status.sh roll --sprint <N> [--name <s>] [--variant <s>] [--intensity <s>] [--root <dir>]
 #                                              # atomic freeze-of-closed-sprint + roll-forward
-#   sprint-status.sh check-stories [--sprint <N>] [--root <dir>]
+#   sprint-status.sh check-stories [--require-done] [--sprint <N>] [--root <dir>]
 #                                              # gate-validation.md Check 5: every story entry's
 #                                              # `status:` equals the status in the story file it
 #                                              # names, in every canonical copy; `deferred_acs`
-#                                              # parsed, compared across views, owed ids printed
+#                                              # parsed, compared across views, owed ids printed.
+#                                              # --require-done (deploy-validate.md section 1): an
+#                                              # entry whose `status:` is not `done` is also a
+#                                              # FINDING. It keys on STATUS ONLY: a `done` entry
+#                                              # with no `deferred_acs` field stays a REPORT, as
+#                                              # without the flag, because a pre-field envelope
+#                                              # would otherwise wedge. Measured on the reference
+#                                              # consumer's s316 at 0.723.0: 17 of 17 entries
+#                                              # `review`, every one named in a gate-3 section.
 #   sprint-status.sh derive-stories [--check] [--sprint <N>] [--root <dir>]
 #                                              # the WRITE half of that same join: rewrite each
 #                                              # derivable field's value from the story file
@@ -170,9 +178,11 @@ case "${1:-}" in
   *)          echo "sprint-status: unknown command '$1'" >&2; exit 2 ;;
 esac
 
-DRY=""
+DRY=""; REQUIRE_DONE=""
 while [ $# -gt 0 ]; do
   case "$1" in
+    --require-done) [ "$MODE" = "check-stories" ] || { echo "sprint-status: --require-done is a flag of check-stories" >&2; exit 2; }
+                 REQUIRE_DONE="1"; shift ;;
     --check)     [ "$MODE" = "derive-stories" ] || { echo "sprint-status: --check is a mode of its own, or a flag of derive-stories" >&2; exit 2; }
                  DRY="1"; shift ;;
     --root)      PROJECT_ROOT="${2:-}"; shift 2 ;;
@@ -222,7 +232,7 @@ done
 MODE="$MODE" FILE="$FILE" SCHEMA="$SCHEMA" PROJECT_ROOT="$PROJECT_ROOT" \
 SPRINT="$SPRINT" NAME="$NAME" VARIANT="$VARIANT" INTENSITY="$INTENSITY" \
 EVIDENCE="$EVIDENCE" CLOSED_AT="$CLOSED_AT" RETRO_DOC="$RETRO_DOC" \
-DRY="$DRY" STORY_FIELDS_FILE="${STORY_FIELDS_FILE:-}" \
+DRY="$DRY" REQUIRE_DONE="$REQUIRE_DONE" STORY_FIELDS_FILE="${STORY_FIELDS_FILE:-}" \
 STORY_FIELDS_REL="${STORY_FIELDS_REL:-}" python3 - <<'PY'
 import json, os, re, sys
 from pathlib import Path
@@ -949,6 +959,11 @@ def check_stories():
                 findings.append("[%s/%s] STATUS MISMATCH — %s says `%s` (%s), %s says `%s` "
                                 "(line %d)." % (view, key, resolved.name, fstatus, how,
                                                 p.name, ystatus, lineno))
+            if os.environ.get("REQUIRE_DONE") and ystatus != "done":
+                findings.append("[%s/%s] NOT DONE — status `%s` (line %d) where --require-done "
+                                "wants `done`. A story past gate 3 has not had its closing "
+                                "writes: dispatch its closing writer (implementation.md section 3, "
+                                "item 4) and re-run." % (view, key, ystatus, lineno))
             if ystatus == "done" and dstate == "absent":
                 owed_n = layered_owed(resolved)
                 if owed_n:
