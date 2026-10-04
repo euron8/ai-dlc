@@ -660,8 +660,14 @@ apply_readset_skip() {
   # EXCEPT THE UPDATE SKILL'S OWN BOOKKEEPING AND THE PIPELINE'S FLAT STATE FILES: the version
   # stamp, the flat files directly under `_bmad-output/ai-dlc-update/`, which every reconcile
   # commit writes, and the flat files directly under `_bmad-output/`, which a consumer's pipeline
-  # commits as story state and which no fixture reads. Each one landing in this set used to force
-  # the whole suite on a path nothing reads.
+  # commits as story state and which the map names no reader for. Each one landing in this set
+  # used to force the whole suite on a path the map names no reader for.
+  #
+  # THE COST, AND IT IS THE ONE THE `ai-dlc-update/` WAIVER ALREADY CARRIES. A fixture that starts
+  # reading an unmapped flat file after the map was derived is SKIPPED for a change to that path,
+  # because the waiver reads "the map names no reader" as "no reader". The exposure lasts until the
+  # map is re-derived; a consumer's map can and does name readers of some flat files, and those
+  # are in `.universe` and select normally.
   #
   # ONLY THE "UNKNOWN READER" VERDICT IS WAIVED, NOTHING ELSE. A flat `_bmad-output/` file the map
   # DOES name is in `.universe`, never reaches this filter, and still selects its reader below; an

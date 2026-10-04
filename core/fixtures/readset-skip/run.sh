@@ -506,7 +506,7 @@ else
 fi
 
 # THE FLAT `_bmad-output/` WAIVER. A consumer's pipeline commits flat state files directly under
-# `_bmad-output/`, no fixture reads them, and each one used to force the whole suite. The waiver covers ONLY the "unknown reader" verdict for a FLAT root file: a
+# `_bmad-output/`, the map names no reader for them, and each one used to force the whole suite. The waiver covers ONLY the "unknown reader" verdict for a FLAT root file: a
 # deeper path, a nested `_bmad-output/` under another top, and a non-bookkeeping `.claude/` file
 # still run all (below), and a flat file the map DOES name still selects its reader.
 # `mkdir -p` sits in the mutation, not in seed2, so the seed's tracked count and the apostrophe
@@ -541,6 +541,19 @@ if [ -f "$WORK/w.n4.pcl/$PCL" ] && holds "$R" "delta" 0 "SKIPPING"; then
 else
   bad "an edit to the zero-reader flat $PCL did not select exactly 'delta', or was not seeded (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
 fi
+# POSITIVE, TWO MORE SHAPES: the waiver is `[^/]+`, so it covers a flat file of ANY extension and a
+# flat DOTFILE. With only `.md` seeds, a `[^/]+\.md` waiver and a `[^/.][^/]*` one both passed every
+# arm here on behaviour. Each of these two is the one input that separates one of them.
+for _fp in _bmad-output/arm-log.jsonl _bmad-output/.pipeline-state; do
+  _fn="n4.fp$(printf '%s' "$_fp" | tr '/.' '__')"
+  R="$(drive "$POOL" "$_fn" "printf 'f2\n' > '$_fp'" "" "printf 'f1\n' > '$_fp'")"
+  NEW_ARMS=$((NEW_ARMS+1))
+  if [ -f "$WORK/w.$_fn/$_fp" ] && holds "$R" "delta" 0 "SKIPPING"; then
+    ok "an edit to a zero-reader flat $_fp selects only the unmapped delta — the waiver is not limited to .md or to non-dotfiles"
+  else
+    bad "an edit to the zero-reader flat $_fp did not select exactly 'delta', or was not seeded (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
+  fi
+done
 # POSITIVE: a flat file the map NAMES still selects its reader. This is what separates the waiver
 # from dropping `_bmad-output` out of the manifest or the read-sets, which loses alpha here.
 MAPPED="_bmad-output/mapped-state.md"
@@ -702,6 +715,17 @@ if lit_mut unanch 1 "$BKRE" "'(\\.claude/\\.ai-dlc-version|_bmad-output/ai-dlc-u
 else
   NEW_ARMS=$((NEW_ARMS+2))
 fi
+# THE WAIVER'S TWO NARROWER SHAPES, each killed on BEHAVIOUR by its own flat positive above: the
+# mutant applies (exact count 1), the copy reaches apply_readset_skip, and the flat file it no
+# longer waives runs all instead of selecting 'delta'.
+for _wm in "mdonly|_bmad-output/[^/]+\\.md|_bmad-output/arm-log.jsonl" "nodot|_bmad-output/[^/.][^/]*|_bmad-output/.pipeline-state"; do
+  _wn="${_wm%%|*}"; _wr="${_wm#*|}"; _wf="${_wr#*|}"; _wr="${_wr%|*}"
+  NEW_ARMS=$((NEW_ARMS+1))
+  if lit_mut "$_wn" 1 "|_bmad-output/[^/]+)\$'" "|$_wr)\$'"; then M="$LM"
+    killed "$_wn" "the flat positive for $_wf" \
+      "$(drive "$M" "m.$_wn" "printf 'f2\n' > '$_wf'" "" "printf 'f1\n' > '$_wf'")" "delta" 0 "SKIPPING"
+  fi
+done
 # ONLY ONE HOOK WIDENED. This fixture drives whichever hook it resolved first, so a waiver
 # present in one copy alone reads green here and reaches only half the population. I66 is the
 # binding; this arm proves it fires on exactly that edit. Run in a copy holding just what
@@ -2340,11 +2364,16 @@ x/y/<z>
     #   world S  {fxa/run.sh, src/a.sh, plan-shape/run.sh}: plan-shape is the omitted one, fxa maps
     #            (with both omitted, `--all` dies "zero fixtures mapped"). The fix prints the SKIP
     #            line and writes the map naming plan-shape OMITTED.
-    mkdir -p "$BR/core/fixtures/plan-shape" "$BR/scripts" || broken "mkdir failed"
+    #            A MAPPED `plan-shape-x` sibling sits in both worlds: its rows begin with the string
+    #            `plan-shape`, so a D1 guard that greps `^plan-shape` without the tab reads them as
+    #            plan-shape's own and runs the pair on an omitted plan-shape. Without the sibling
+    #            that mutant passed every arm.
+    mkdir -p "$BR/core/fixtures/plan-shape" "$BR/core/fixtures/plan-shape-x" "$BR/scripts" || broken "mkdir failed"
     printf '#!/bin/bash\ncat scripts/validate-plan-shape.sh >/dev/null\n' > "$BR/core/fixtures/plan-shape/run.sh"
+    printf '#!/bin/bash\nexit 0\n' > "$BR/core/fixtures/plan-shape-x/run.sh"
     printf '#!/bin/bash\nexit 0\n' > "$BR/scripts/validate-plan-shape.sh"
-    printf '%s\n' core/fixtures/fxa/run.sh core/fixtures/plan-shape/run.sh scripts/validate-plan-shape.sh > "$SX/allO.list"
-    printf '%s\n' core/fixtures/fxa/run.sh src/a.sh core/fixtures/plan-shape/run.sh > "$SX/allS.list"
+    printf '%s\n' core/fixtures/fxa/run.sh core/fixtures/plan-shape/run.sh core/fixtures/plan-shape-x/run.sh scripts/validate-plan-shape.sh > "$SX/allO.list"
+    printf '%s\n' core/fixtures/fxa/run.sh src/a.sh core/fixtures/plan-shape/run.sh core/fixtures/plan-shape-x/run.sh > "$SX/allS.list"
     ( cd "$BR" && git add -A && git -c user.email=f@f -c user.name=f commit -qm plan-shape ) >/dev/null 2>&1 || broken "could not seed the plan-shape fixture"
     [ "$(find "$BR/core/fixtures" -mindepth 2 -maxdepth 2 -name run.sh | grep -c .)" -ge 2 ] \
       || broken "the --all world holds fewer than two fixture directories, so the base newline list cannot carry a newline and the arm cannot discriminate"
@@ -2383,6 +2412,9 @@ x/y/<z>
     mut_line "$SB/deriver.sh" "$SX/deriver.inline.sh" "$_o" '  --all)  LIST="$(cd "$TREE" && for d in "$FIXTURE_ROOT"/*/; do [ -f "$d/run.sh" ] && basename "$d"; done)" ;;'
     _o="$(grep -m1 '^if \[ "\${FIXTURE_HAS_PLAN_SHAPE:-yes}" = yes \] && ! grep -q ' "$SB/deriver.sh")"
     mut_line "$SB/deriver.sh" "$SX/deriver.noskip.sh" "$_o" 'if false; then'
+    # notab: the D1 guard greps `^plan-shape` without the tab, so plan-shape-x's rows count as
+    # plan-shape's and the pair runs on an omitted plan-shape -- the world S arm refuses it.
+    mut_line "$SB/deriver.sh" "$SX/deriver.notab.sh" "$_o" "$(printf '%s' "$_o" | sed "s/'^plan-shape	'/'^plan-shape'/")"
     TRACE_ARMS=$((TRACE_ARMS+1))
     if cmp -s "$SB/deriver.sh" "$SX/deriver.inline.sh"; then bad "--all MUTANT inline did not apply"
     else
@@ -2401,6 +2433,18 @@ x/y/<z>
             ok "--all MUTANT noskip: with the D1 guard disabled an omitted plan-shape fails its own control and the --all run dies 'controls failed', unwritten — the world S arm refuses it"
           else bad "--all MUTANT noskip: the run died ('$AN') but not on 'controls failed'"; fi ;;
         *) bad "--all MUTANT noskip: expected a non-zero exit with no header, presence or SKIP line; got '$AN'" ;;
+      esac
+    fi
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    if cmp -s "$SB/deriver.sh" "$SX/deriver.notab.sh"; then bad "--all MUTANT notab did not apply"
+    else
+      AT="$(all_run "$SX/deriver.notab.sh" "$SX/allS.list" plan-shape)"
+      case "$AT" in
+        "0|1|0|1|0") bad "--all MUTANT notab SURVIVED: the tab-less D1 guard still printed the SKIP line, so the plan-shape-x sibling did not discriminate ('$AT')" ;;
+        *"|0|0") if grep -q 'controls failed' "$WORK/all.out"; then
+            ok "--all MUTANT notab: with the D1 guard grepping '^plan-shape' untabbed, plan-shape-x's rows pass for plan-shape's, the pair runs on an omitted plan-shape and the run dies 'controls failed' — the world S arm refuses it"
+          else bad "--all MUTANT notab: no SKIP line, but the run did not die on 'controls failed' ('$AT')"; fi ;;
+        *) bad "--all MUTANT notab: expected no SKIP line and a 'controls failed' death; got '$AT'" ;;
       esac
     fi
 
