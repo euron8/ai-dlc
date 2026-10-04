@@ -493,15 +493,35 @@ Held by `core/fixtures/readset-skip`:
 - **Real-stream arm.** An 8-reader burst over 1500 files runs under the unscoped profile, which
   must omit with the canary count, and under the scoped profile, which must map. The guard-deleted
   mutant is also run. The arm SKIPs, naming which side was not exercised, when no attempt
-  exercises both sides. The adversary's "scoped 0/0" did NOT reproduce here: 0 of 8 scoped
-  attempts traced clean, at 1-minute load 8.3 to 26.8. Two standalone attempts gave 31 and 33
-  notices with 218 and 152 canary paths. So on this box the real-stream arm SKIPs, and it will
-  SKIP under the pre-push pool too. The stub-world arm carries the proof.
+  exercises both sides. The adversary's "scoped 0/0" did NOT reproduce on the 8x1500 burst: 0 of
+  8 scoped attempts traced clean, at 1-minute load 8.3 to 26.8, and two standalone attempts gave
+  31 and 33 notices with 218 and 152 canary paths. The scoped side therefore traces its own small
+  burst, 1 reader over 100 files, and the unscoped side keeps 8x1500. With that split the arm RAN
+  rather than skipped, one run at 1-minute load 3.2: unscoped attempt 1 was forced, a scoped
+  attempt was clean, and the guard-deleted mutant was killed. One sample; the stub-world arm is
+  still the proof that runs everywhere.
 - **`--tracer both` canary arm.** The stub world's empty-stream run must name
   `LOSS CANARY: 2 path(s)` in its UNCOMPARED reason. A mutant scoping the canary back to
   `--tracer sandbox` loses the token.
 - **Width arms.** These now require `ems=1` beside `width=1` under both `--tracer sandbox` and
   `--tracer both`. The four width mutants are re-anchored on the two-knob line.
+  `core/fixtures/enforcement-map-sites` shard a now drives its own knob through `--print-width`.
+  The cells are: unset 8, 1, 64; and 0, `abc`, 65 and a 20-digit value each exit 2. The dead
+  `''` case is gone.
+- **Unreadable canary arm.** `readset_loss_canary` now sits between `READSET_CANARY_BEGIN`/`END`.
+  Called on a missing stream set, it must print `unreadable`, and the deriver's guard must turn
+  that into an omission. Two wrong builds each read `0` and are killed: `unreadable` replaced by
+  `0`, and comm's status discarded.
+- **A one-fixture `--list` whose fixture is omitted now writes the map.** Under `--list`, the
+  "mapped > 0" control reads the MERGED map's fixture count. So the omission is recorded, and that
+  fixture's stale rows are dropped instead of surviving an exit-1 run. The arm seeds a stale row
+  and requires it gone, the other fixtures' rows kept, and the OMITTED header written. The mutant
+  restores the traced-count control and leaves the stale row in place.
+- **The unread control the header always cited now exists.** `.git/readset-unread-control` is
+  planted after the copy and reset with every other file. A fixture whose window moved its atime
+  is OMITTED naming it. The arm reads it from a probe fixture, and the guard-deleted mutant maps
+  that fixture. Before planting it in `.git/`, the census was checked: 0 of 33 fixtures read
+  `.git/description`, against 2 reading `.git/HEAD`.
 
 **False-positive census, taken before the commit.** The run was `bash
 core/scripts/derive-fixture-readsets.sh --list "<33 fixtures>" --tracer sandbox` in a clone of
@@ -613,17 +633,30 @@ The colon-shaped argv rows (`file:/var/...`, `<hex>:core/...`, `HEAD:core/...`) 
 not filtered. They are negative lookups the runner never hashes, and telling a `rev:path` argument
 from a real file with a colon in its name needs its own design.
 
-Held by `core/fixtures/readset-skip`: in the `--tracer both` stub world six seeds go into both
-tracers' lists, and `fxa.set` must drop `<string>` and `sub/<unknown>` and keep `src/missing.sh`
-(absent), `a<b>c` and `d/<real>` (present) and `e<f>g.sh` (absent). That last seed is the only
-one separating the fix from an unanchored `<[^/]*>`. Five mutants each fail only that arm: the
-filter removed (`111111`), a whole-path anchor (`011111`), the unanchored pattern (`001110`), an
-existence-only filter (`000110`), and the filter on the sandbox set only (`111111`).
+Held by `core/fixtures/readset-skip`. In the `--tracer both` stub world, nine seeds go into both
+tracers' lists. `fxa.set` must drop `<string>`, `sub/<unknown>`, `x/y/<z>` and `<>` (all
+absent). It must keep `src/missing.sh` (absent, ordinary), `a<b>c` and `d/<real>` (present),
+`e<f>g.sh` (absent) and `<link>` (a dangling symlink). Signature `001111100`. Eight mutants each
+fail only that arm, and each of the last four seeds is what kills one of them:
+| mutant | signature |
+|---|---|
+| filter removed | `111111111` |
+| whole-path anchor | `011111110` |
+| unanchored `<[^/]*>` (killed by `e<f>g.sh`) | `001110100` |
+| existence-only | `000110100` |
+| sandbox set only | `111111111` |
+| `-e` without `-L` (killed by `<link>`) | `001111000` |
+| first-component strip `${p#*/}` (killed by `x/y/<z>`) | `001111110` |
+| non-empty token `'<'?*'>'` (killed by `<>`) | `001111101` |
 
-The receipt extracts the shipped span, drives it over the same six seeds against a seeded tree,
-and requires the call at the meeting point. Scored under `bash -c 'set -uo pipefail; ...'` from a
-copy of the deriver: the fix 0; base `4ea6bb79` 1; each of the five mutants 1.
+The receipt extracts the shipped span and drives it over the same nine seeds against a seeded
+tree carrying the dangling symlink. It sets `REPO_ROOT` to a decoy, so a filter that tests the
+wrong root keeps nothing it should, and it requires the call at the meeting point. Scored under
+`bash -c 'set -uo pipefail; ...'` from a copy of the deriver: the fix 0; base `4ea6bb79` 1 (at
+the span check). The five original mutants each 1, as are the four the batch-191 adversary found
+passing the earlier receipt: `-e` only, a `REPO_ROOT` root, the first-component strip and the
+non-empty token.
 
-verify: sh D=core/scripts/derive-fixture-readsets.sh; [ -f "$D" ] || exit 9; t="$(mktemp -d)" || exit 9; mkdir -p "$t/tree/d" "$t/tree/sub" && printf x > "$t/tree/a<b>c" && printf x > "$t/tree/d/<real>" || exit 9; sed -n '/^# READSET_PSEUDO_BEGIN$/,/^# READSET_PSEUDO_END$/p' "$D" > "$t/span"; n="$(grep -c 'readset_drop_pseudo()' "$t/span")" || n=0; [ "$n" -eq 1 ] || exit 1; c="$(grep -c 'readset_drop_pseudo | drop_ignored > "\$WORK/\$fx.set"' "$D")" || c=0; [ "$c" -eq 1 ] || exit 1; printf '%s\n' '<string>' 'sub/<unknown>' 'src/missing.sh' 'a<b>c' 'd/<real>' 'e<f>g.sh' > "$t/in"; out="$( TREE="$t/tree"; . "$t/span"; readset_drop_pseudo < "$t/in" | tr '\n' ' ' )"; [ "$out" = "src/missing.sh a<b>c d/<real> e<f>g.sh " ] || exit 1; exit 0
+verify: sh D=core/scripts/derive-fixture-readsets.sh; [ -f "$D" ] || exit 9; t="$(mktemp -d)" || exit 9; mkdir -p "$t/tree/d" "$t/tree/sub" && printf x > "$t/tree/a<b>c" && printf x > "$t/tree/d/<real>" && ln -s nowhere "$t/tree/<link>" || exit 9; sed -n '/^# READSET_PSEUDO_BEGIN$/,/^# READSET_PSEUDO_END$/p' "$D" > "$t/span"; n="$(grep -c 'readset_drop_pseudo()' "$t/span")" || n=0; [ "$n" -eq 1 ] || exit 1; c="$(grep -c 'readset_drop_pseudo | drop_ignored > "\$WORK/\$fx.set"' "$D")" || c=0; [ "$c" -eq 1 ] || exit 1; printf '%s\n' '<string>' 'sub/<unknown>' 'src/missing.sh' 'a<b>c' 'd/<real>' 'e<f>g.sh' '<link>' 'x/y/<z>' '<>' > "$t/in"; out="$( TREE="$t/tree"; REPO_ROOT="$t/decoy"; . "$t/span"; readset_drop_pseudo < "$t/in" | tr '\n' ' ' )"; [ "$out" = "src/missing.sh a<b>c d/<real> e<f>g.sh <link> " ] || exit 1; exit 0
 
 **LANDED (v0.721.0, verified TBD).**

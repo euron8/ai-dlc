@@ -1332,8 +1332,11 @@ MUT
 
     # ------------------------------- the LOSS CANARY against a REAL stream that loses reads ----
     # 1500 files read by 8 concurrent readers. Under an UNSCOPED profile the stream loses reads,
-    # and the canary must name them in the OMITTED line; under the deriver's own SCOPED profile the
-    # same burst must MAP. Probabilistic in both directions, so each side gets up to three attempts
+    # and the canary must name them in the OMITTED line. The SCOPED side traces its OWN small
+    # burst, 1 reader over 100 files: the 8x1500 burst lost reads under the scoped profile too, in
+    # every attempt measured (0 of 8 clean at 1-minute load 8.3-26.8, and 4 of 4 SKIPs at load 2-8),
+    # so a scoped side on the big burst could never be exercised and the arm always skipped.
+    # Probabilistic in both directions, so each side gets up to three attempts
     # and the arm SKIPS, naming why, when no attempt exercised that side -- it never passes on
     # attempts that forced nothing. The deterministic proof is the stub-world canary arm, which runs
     # wherever this fixture runs unprivileged; this one is the real-kernel confirmation.
@@ -1342,21 +1345,23 @@ MUT
     #   scoped:   clean  = an attempt with 0 drop notices and an empty canary; it must be MAPPED.
     #   mutant:   the guard deleted, unscoped: a forced attempt's line must NOT carry the token.
     CP="$WORK/canaryprobe"
-    mkdir -p "$CP/core/fixtures/burst8" "$CP/core/scripts" "$CP/.githooks" "$CP/d" || broken "mkdir failed"
+    mkdir -p "$CP/core/fixtures/burst8" "$CP/core/fixtures/small1" "$CP/core/scripts" "$CP/.githooks" "$CP/d" "$CP/s" || broken "mkdir failed"
     _i=0; while [ "$_i" -lt 1500 ]; do _i=$((_i+1)); echo "$_i" > "$CP/d/f$_i"; done
+    _i=0; while [ "$_i" -lt 100 ]; do _i=$((_i+1)); echo "$_i" > "$CP/s/f$_i"; done
     printf '#!/bin/bash\nfor d in core/fixtures/*/; do :; done\n' > "$CP/.githooks/pre-push"
     printf '#!/bin/bash\nfor _r in 1 2 3 4 5 6 7 8; do cat d/f* >/dev/null & done\nwait\necho burst8 ok\n' > "$CP/core/fixtures/burst8/run.sh"
+    printf '#!/bin/bash\ncat s/f* >/dev/null\necho small1 ok\n' > "$CP/core/fixtures/small1/run.sh"
     cp "$DERIVER" "$CP/core/scripts/derive-fixture-readsets.sh"
     sed '/^  \[ "\$canary" = 0 \]    || why=/d' "$DERIVER" > "$WORK/deriver.nocanary.real.sh"
     ( cd "$CP" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm probe ) >/dev/null 2>&1 \
       || broken "could not seed the canary probe repo"
-    canary_try() { # $1 tag  $2 profile ("" = the deriver's scoped one); prints "<line>|<canary n>|<drops>"
-      local tr="$WORK/cantr.$1" c d
+    canary_try() { # $1 tag  $2 profile ("" = the deriver's scoped one)  $3 fixture (default burst8); prints "<line>|<canary n>|<drops>"
+      local tr="$WORK/cantr.$1" c d f="${3:-burst8}"
       ( cd "$CP" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH AI_DLC_READSET_TRACE_ROOT="$tr" \
-          ${2:+AI_DLC_READSET_SANDBOX_PROFILE="$2"} bash core/scripts/derive-fixture-readsets.sh --list burst8 --tracer sandbox ) > "$WORK/can.$1.out" 2>&1
-      c="$(grep -c . "$tr/w/burst8.canary" 2>/dev/null)" || c=0
-      d="$(grep -c 'dropped during' "$tr/w/burst8.win" 2>/dev/null)" || d=0
-      printf '%s|%s|%s' "$(grep -m1 -E '^  burst8 ' "$WORK/can.$1.out" | tr -s ' ')" "$c" "$d"
+          ${2:+AI_DLC_READSET_SANDBOX_PROFILE="$2"} bash core/scripts/derive-fixture-readsets.sh --list "$f" --tracer sandbox ) > "$WORK/can.$1.out" 2>&1
+      c="$(grep -c . "$tr/w/$f.canary" 2>/dev/null)" || c=0
+      d="$(grep -c 'dropped during' "$tr/w/$f.win" 2>/dev/null)" || d=0
+      printf '%s|%s|%s' "$(grep -m1 -E "^  $f " "$WORK/can.$1.out" | tr -s ' ')" "$c" "$d"
     }
     C_FORCED=0; C_BAD=""; _a=0
     while [ "$_a" -lt 3 ] && [ "$C_FORCED" -eq 0 ]; do
@@ -1371,7 +1376,7 @@ MUT
     done
     S_CLEAN=0; _s=0
     while [ "$_s" -lt 3 ] && [ "$S_CLEAN" -eq 0 ]; do
-      _s=$((_s+1)); _r="$(canary_try "s$_s" "")"
+      _s=$((_s+1)); _r="$(canary_try "s$_s" "" small1)"
       _l="${_r%%|*}"; _rest="${_r#*|}"; _c="${_rest%%|*}"; _d="${_rest#*|}"
       if [ "$_c" -eq 0 ] && [ "$_d" -eq 0 ]; then
         case "$_l" in
@@ -1388,7 +1393,7 @@ MUT
       printf '  SKIP  real-stream canary arm: %s of %s unscoped attempt(s) lost a read, %s of %s scoped attempt(s) traced clean -- a side was not exercised (the stub-world canary arm is the deterministic proof)\n' "$C_FORCED" "$_a" "$S_CLEAN" "$_s"
       TRACE_ARMS=$((TRACE_ARMS-1))
     else
-      ok "REAL CANARY: an unscoped 8-reader burst over 1500 files that lost reads is OMITTED naming the LOSS CANARY count (attempt $_a), and the scoped profile maps the same burst (attempt $_s)"
+      ok "REAL CANARY: an unscoped 8-reader burst over 1500 files that lost reads is OMITTED naming the LOSS CANARY count (attempt $_a), and the scoped profile maps a 1-reader burst over 100 files (attempt $_s)"
       cp "$WORK/deriver.nocanary.real.sh" "$CP/core/scripts/derive-fixture-readsets.sh"
       TRACE_ARMS=$((TRACE_ARMS+1))
       if cmp -s "$DERIVER" "$WORK/deriver.nocanary.real.sh"; then
@@ -1529,6 +1534,9 @@ MUT
     # component, and one that IS a whole `<...>` component but exists in the tree.
     mkdir -p "$BR/d" || broken "mkdir failed"
     printf 'x\n' > "$BR/a<b>c"; printf 'x\n' > "$BR/d/<real>"
+    # A DANGLING symlink with a whole `<...>` name: present by `-L`, absent by `-e`, so it is kept
+    # only by a filter that tests both. Tracked, so readset_copy_tree carries it as a symlink.
+    ln -s nowhere-at-all "$BR/<link>" || broken "could not seed the dangling symlink"
     printf '*.log\n' > "$BR/.gitignore"
     printf 'other\tsrc/other.sh\nother\tcore/fixtures/other/run.sh\n' > "$BR/.ai-dlc-fixture-readsets.tsv"
     cp "$DERIVER" "$BR/core/scripts/derive-fixture-readsets.sh"
@@ -1622,14 +1630,17 @@ exec tail -n 0 -f "$STUB_FEED"
 STUB
     chmod +x "$SB/id" "$SB/sudo" "$SB/sandbox-exec" "$SB/fs_usage" "$SB/logstream"
     : > "$SB/feed"
-    # The six PSEUDO seeds go into BOTH lists, so they cancel in the miss count and every tracer's
+    # The nine PSEUDO seeds go into BOTH lists, so they cancel in the miss count and every tracer's
     # set carries them to the one call site where the sets meet (the pseudo-path arm below).
     PSEUDO_SEEDS='<string>
 sub/<unknown>
 src/missing.sh
 a<b>c
 d/<real>
-e<f>g.sh'
+e<f>g.sh
+<link>
+x/y/<z>
+<>'
     { printf '%s\n' core/fixtures/fxa/run.sh src/a.sh src/miss.sh .git/HEAD build.log; printf '%s\n' "$PSEUDO_SEEDS"; } > "$SB/fs.list"
     { printf '%s\n' core/fixtures/fxa/run.sh src/a.sh; printf '%s\n' "$PSEUDO_SEEDS"; } > "$SB/sb.list"
     : > "$SB/empty.list"
@@ -1663,11 +1674,14 @@ e<f>g.sh'
     # width arm further down must read the UNMUTATED run, not whichever mutant ran last.
     S1_LOG="$WORK/s1.fxa.log"; cp "$BOTH_TR/w/fxa.log" "$S1_LOG" 2>/dev/null || : > "$S1_LOG"
     # THE PSEUDO-PATH FILTER, read off the set the S1 run just wrote, where all three tracers' sets
-    # meet. Six seeds, in seed order: `<string>` and `sub/<unknown>` (absent, last component a whole
+    # meet. Nine seeds, in seed order: `<string>` and `sub/<unknown>` (absent, last component a whole
     # `<...>` token) must be DROPPED; `src/missing.sh` (absent, ordinary), `a<b>c` and `d/<real>`
-    # (present) and `e<f>g.sh` (absent, brackets inside the component) must be KEPT. `e<f>g.sh` is
-    # the one that separates the fix from an unanchored `<[^/]*>`, which every other seed agrees with.
-    # Presence-shaped: four rows must APPEAR, so a run that wrote no set cannot score.
+    # (present), `e<f>g.sh` (absent, brackets inside the component) and `<link>` (a dangling
+    # symlink) must be KEPT; `x/y/<z>` (absent, two directories deep) and `<>` (absent, empty
+    # token) must be DROPPED. Each of the last four separates the fix from one wrong filter:
+    # `e<f>g.sh` from an unanchored `<[^/]*>`, `<link>` from `-e` without `-L`, `x/y/<z>` from a
+    # first-component strip `${p#*/}`, and `<>` from a non-empty token `'<'?*'>'`.
+    # Presence-shaped: five rows must APPEAR, so a run that wrote no set cannot score.
     pseudo_sig() { # prints one 0/1 per seed: is it in the last stub run's fxa.set
       local s out=""
       while IFS= read -r s; do
@@ -1677,10 +1691,10 @@ e<f>g.sh'
     }
     PS0="$(pseudo_sig)"
     BOTH_ARMS=$((BOTH_ARMS+1))
-    if [ "$PS0" = 001111 ]; then
-      ok "PSEUDO: the merged set drops '<string>' and 'sub/<unknown>' (absent whole-<...> last component) and keeps src/missing.sh, a<b>c, d/<real> and e<f>g.sh"
+    if [ "$PS0" = 001111100 ]; then
+      ok "PSEUDO: the merged set drops '<string>' and 'sub/<unknown>' (absent whole-<...> last component) and keeps src/missing.sh, a<b>c, d/<real>, e<f>g.sh and the dangling <link>; x/y/<z> and <> go too"
     else
-      bad "PSEUDO: expected seed signature 001111 in fxa.set, got '$PS0' (order: <string> sub/<unknown> src/missing.sh a<b>c d/<real> e<f>g.sh) — $(tail -2 "$WORK/stub.out" | tr '\n' ' ')"
+      bad "PSEUDO: expected seed signature 001111100 in fxa.set, got '$PS0' (order: <string> sub/<unknown> src/missing.sh a<b>c d/<real> e<f>g.sh <link> x/y/<z> <>) — $(tail -2 "$WORK/stub.out" | tr '\n' ' ')"
     fi
     # FIVE MUTANTS, each a cmp -s guarded copy of the stub-world deriver, each a wrong filter:
     #   nofilter   the call removed from the meeting point;
@@ -1695,7 +1709,13 @@ e<f>g.sh'
     sed -e 's/ | readset_drop_pseudo | drop_ignored > / | drop_ignored > /' \
         -e 's/^    sandbox_paths < "\$WORK\/\$fx.win" | grep -v /    sandbox_paths < "$WORK\/$fx.win" | readset_drop_pseudo | grep -v /' \
         "$SB/deriver.sh" > "$SB/deriver.p.sbonly.sh"
-    for _pm in nofilter wholepath unanch existonly sbonly; do
+    #   eonly      `-e` without `-L`, so the dangling `<link>` goes;
+    #   firststrip `${p#*/}` strips only the FIRST component, so `x/y/<z>` survives;
+    #   nonempty   `'<'?*'>'`, so the empty token `<>` survives.
+    sed 's/if \[ -e "\$TREE\/\$p" \] || \[ -L "\$TREE\/\$p" \]; then/if [ -e "$TREE\/$p" ]; then/' "$SB/deriver.sh" > "$SB/deriver.p.eonly.sh"
+    sed 's/^    case "\${p##\*\/}" in$/    case "${p#*\/}" in/' "$SB/deriver.sh" > "$SB/deriver.p.firststrip.sh"
+    sed "s/^      '<'\*'>') if /      '<'?*'>') if /" "$SB/deriver.sh" > "$SB/deriver.p.nonempty.sh"
+    for _pm in nofilter wholepath unanch existonly sbonly eonly firststrip nonempty; do
       BOTH_ARMS=$((BOTH_ARMS+1))
       if cmp -s "$SB/deriver.sh" "$SB/deriver.p.$_pm.sh"; then
         bad "PSEUDO MUTANT $_pm did not apply: the edit matched nothing in the deriver copy"
@@ -1704,8 +1724,8 @@ e<f>g.sh'
       stub_run "$SB/deriver.p.$_pm.sh" "$SB/sb.list" >/dev/null
       _ps="$(pseudo_sig)"
       case "$_ps" in
-        001111) bad "PSEUDO MUTANT $_pm: the set still reads 001111, so the pseudo arm does not depend on what this mutant removed" ;;
-        *1*) ok "PSEUDO MUTANT $_pm: the set reads '$_ps', not 001111 — the pseudo arm refuses it" ;;
+        001111100) bad "PSEUDO MUTANT $_pm: the set still reads 001111100, so the pseudo arm does not depend on what this mutant removed" ;;
+        *1*) ok "PSEUDO MUTANT $_pm: the set reads '$_ps', not 001111100 — the pseudo arm refuses it" ;;
         *) bad "PSEUDO MUTANT $_pm: the set carries none of the seeds ('$_ps'), so the run wrote no set and scored nothing — $(tail -2 "$WORK/stub.out" | tr '\n' ' ')" ;;
       esac
     done
@@ -1833,6 +1853,110 @@ e<f>g.sh'
       case "$CM" in
         " fxa "*" paths|0") ok "CANARY MUTANT: with the guard deleted the lossy window MAPS fxa — the canary arm depends on that line" ;;
         *) bad "CANARY MUTANT: with the guard deleted the lossy window did not map fxa: '$CM' — $(tail -2 "$WORK/sbx.out" | tr '\n' ' ')" ;;
+      esac
+    fi
+
+    # THE CANARY'S UNREADABLE BRANCH, driven from its sentinels. No real trace produces an
+    # unreadable stream set on demand, so the shipped readset_loss_canary is called on a missing
+    # $fx.fs: it must print `unreadable`, and the deriver's guard must turn that into an OMITTED
+    # reason. Two wrong builds each fail this arm and only this arm:
+    #   C1  `unreadable` replaced by `0`, the fail-open direction;
+    #   C2  comm's status discarded (`; then` -> `|| :; then`), so the empty output counts 0.
+    CAN_SPAN="$WORK/canary.sh"
+    sed -n '/^# READSET_CANARY_BEGIN$/,/^# READSET_CANARY_END$/p' "$DERIVER" > "$CAN_SPAN"
+    printf 'a\nb\n' > "$WORK/can.at"
+    can_with() { ( . "$1"; readset_loss_canary "$WORK/can.at" "$WORK/can.no-such-fs" "$WORK/can.out" ) 2>/dev/null; }
+    can_why() { # $1 canary value; runs the deriver's own guard line on it
+      local canary="$1" why="" fx=fxa WORK="$WORK" g
+      g="$(grep -m1 '^  \[ "\$canary" = 0 \]    || why=' "$DERIVER")"
+      eval "$g"; printf '%s' "$why"
+    }
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    CU="$(can_with "$CAN_SPAN")"; CUW="$(can_why "$CU")"
+    if [ "$CU" = unreadable ] && case "$CUW" in "LOSS CANARY: unreadable path(s)"*) true ;; *) false ;; esac; then
+      ok "CANARY UNREADABLE: a missing stream set makes readset_loss_canary print 'unreadable', and the deriver's guard omits the fixture for it"
+    else
+      bad "CANARY UNREADABLE: expected 'unreadable' and an omission reason, got '$CU' / '$CUW' (span lines: $(grep -c . "$CAN_SPAN"))"
+    fi
+    sed 's/^    printf .unreadable\\n.$/    printf '"'"'0\\n'"'"'/' "$CAN_SPAN" > "$WORK/canary.c1.sh"
+    sed 's/^  if LC_ALL=C comm -23 "\$1" "\$2" > "\$3" 2>\/dev\/null; then$/  if LC_ALL=C comm -23 "$1" "$2" > "$3" 2>\/dev\/null || :; then/' "$CAN_SPAN" > "$WORK/canary.c2.sh"
+    for _cm in c1 c2; do
+      TRACE_ARMS=$((TRACE_ARMS+1))
+      if cmp -s "$CAN_SPAN" "$WORK/canary.$_cm.sh"; then bad "CANARY MUTANT $_cm did not apply"; continue; fi
+      _cv="$(can_with "$WORK/canary.$_cm.sh")"
+      case "$_cv" in
+        0) ok "CANARY MUTANT $_cm: a missing stream set reads '0', which maps the fixture — the unreadable arm refuses it" ;;
+        *) bad "CANARY MUTANT $_cm: expected the fail-open '0', got '$_cv'" ;;
+      esac
+    done
+
+    # A ONE-FIXTURE `--list` WHOSE FIXTURE IS OMITTED STILL WRITES THE MAP, DROPPING ITS STALE ROWS.
+    # Seed a stale `fxa` row the trace can never produce, trace fxa with a lossy stream (the canary
+    # omits it), and read the map: the stale row must be GONE, `other`'s rows kept, and the header
+    # must name fxa as OMITTED. The mutant restores the traced-count control under --list and must
+    # leave the stale row in place (the run dies before the write).
+    printf 'other\tsrc/other.sh\nother\tcore/fixtures/other/run.sh\nthird\tcore/fixtures/third/run.sh\nfxa\tsrc/STALE-ROW\n' > "$BR/.ai-dlc-fixture-readsets.tsv"
+    ( cd "$BR" && git add -A && git -c user.email=f@f -c user.name=f commit -qm stale ) >/dev/null 2>&1 || broken "could not seed the stale map row"
+    omit_run() { # $1 deriver copy; prints "<stale rows>|<other rows>|<OMITTED header rows>"
+      local s o h
+      cp "$1" "$STUB_DERIVER"
+      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$SX/lossy.list" \
+          AI_DLC_READSET_TRACE_ROOT="$SX_TR" bash core/scripts/derive-fixture-readsets.sh --list fxa --tracer sandbox ) > "$WORK/omit.out" 2>&1 </dev/null
+      s="$(grep -c 'STALE-ROW' "$BR/.ai-dlc-fixture-readsets.tsv")" || s=0
+      o="$(grep -c '^other	' "$BR/.ai-dlc-fixture-readsets.tsv")" || o=0
+      h="$(grep -c '^# OMITTED by the last run (always run): fxa$' "$BR/.ai-dlc-fixture-readsets.tsv")" || h=0
+      ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
+      printf '%s|%s|%s' "$s" "$o" "$h"
+    }
+    sed 's/^if \[ "\$MODE" != --list \]; then$/if true; then/' "$SB/deriver.sh" > "$SX/deriver.mappedctl.sh"
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    OR="$(omit_run "$SB/deriver.sh")"
+    if [ "$OR" = "0|2|1" ]; then
+      ok "OMITTED --list: a one-fixture refresh whose fixture is omitted writes the map, drops its stale row, keeps the other fixture's rows and names it OMITTED"
+    else
+      bad "OMITTED --list: expected stale 0, other 2, OMITTED header 1, got '$OR' — $(tail -2 "$WORK/omit.out" | tr '\n' ' ')"
+    fi
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    if cmp -s "$SB/deriver.sh" "$SX/deriver.mappedctl.sh"; then
+      bad "OMITTED --list MUTANT did not apply"
+    else
+      OM="$(omit_run "$SX/deriver.mappedctl.sh")"
+      case "$OM" in
+        "1|2|0") ok "OMITTED --list MUTANT: with the traced-count control restored under --list the run dies unwritten and the stale row survives — the arm depends on that change" ;;
+        *) bad "OMITTED --list MUTANT: expected stale 1, other 2, header 0, got '$OM'" ;;
+      esac
+    fi
+
+    # THE UNREAD CONTROL. A fixture that reads the planted control file is the stand-in for a reset
+    # that did not hold (the file's atime moves either way): it must be OMITTED naming the control.
+    # The ordinary stub run above is the near-miss and already maps (CANARY CONTROL). The mutant
+    # deletes the guard line and must map the reading fixture.
+    mkdir -p "$BR/core/fixtures/fxu" || broken "mkdir failed"
+    printf '#!/bin/bash\ncat .git/readset-unread-control >/dev/null\ncat src/a.sh >/dev/null\n' > "$BR/core/fixtures/fxu/run.sh"
+    printf '%s\n' core/fixtures/fxu/run.sh src/a.sh > "$SX/fxu.list"
+    ( cd "$BR" && git add -A && git -c user.email=f@f -c user.name=f commit -qm fxu ) >/dev/null 2>&1 || broken "could not seed fxu"
+    unread_run() { # $1 deriver copy; prints the fxu line
+      cp "$1" "$STUB_DERIVER"
+      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$SX/fxu.list" \
+          AI_DLC_READSET_TRACE_ROOT="$SX_TR" bash core/scripts/derive-fixture-readsets.sh --list fxu --tracer sandbox ) > "$WORK/unread.out" 2>&1 </dev/null
+      ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
+      grep -m1 -E '^  fxu ' "$WORK/unread.out" | tr -s ' '
+    }
+    sed '/^  \[ "\$unread_moved" -eq 0 \] || why=/d' "$SB/deriver.sh" > "$SX/deriver.nounread.sh"
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    UR="$(unread_run "$SB/deriver.sh")"
+    case "$UR" in
+      " fxu OMITTED ("*"UNREAD CONTROL"*) ok "UNREAD CONTROL: a fixture whose window moved the planted control's atime is OMITTED naming the control" ;;
+      *) bad "UNREAD CONTROL: expected fxu OMITTED naming the UNREAD CONTROL, got '$UR' — $(tail -2 "$WORK/unread.out" | tr '\n' ' ')" ;;
+    esac
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    if cmp -s "$SB/deriver.sh" "$SX/deriver.nounread.sh"; then
+      bad "UNREAD CONTROL MUTANT did not apply"
+    else
+      UM="$(unread_run "$SX/deriver.nounread.sh")"
+      case "$UM" in
+        " fxu "*" paths") ok "UNREAD CONTROL MUTANT: with the guard deleted the same fixture MAPS — the arm depends on that line" ;;
+        *) bad "UNREAD CONTROL MUTANT: expected fxu mapped, got '$UM'" ;;
       esac
     fi
   fi
