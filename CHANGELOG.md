@@ -19,6 +19,33 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.722.0] - 2026-10-03
+
+Batch 191's fourth release. It closes `BL-145`, re-scoped on the operator's batch-191 ruling.
+A receipt-file change is attributed to the sibling entry whose anchor it moved. It ships
+alone, because `ledger-reverify.sh` is a bootstrapping file. It discharges no consumer
+candidate.
+
+### BL-145: a receipt-file change is attributed to the sibling entry whose anchor it moved
+
+- New row kind `NAMED-UPSTREAM-SIBLING-ATTRIBUTED`, which is never a close. An entry reads it
+  when, across every naming commit's span, each diff block touching its receipt path changes
+  none of its own anchors, and some other entry named by full slug in the same commit has a
+  receipt on that path whose anchor did change.
+- Sibling receipts come from the live ledger and the archive, including closed entries, staged
+  by the existing entry parser behind a keep-closed switch. The close rule stays on one line.
+  The substring grammar now exists once and is shared by the verb dispatch and the sibling
+  check.
+- Over the reference consumer's archive, exactly `PC-S308-GATE-METRICS` and
+  `PC-S342-CARRY-OVER` move to the new kind. `PC-S342-CHECK-20`, the sibling, and the four
+  genuine absorptions of the same shape are unchanged. A split run with the sibling present
+  only in the archive moves the same two. On the consumer's real ledger and archive, base and
+  fix output are byte-identical.
+- The single-commit, single-id shape the old receipt tested is recorded as inseparable on this
+  corpus: five candidate data each demoted genuine absorptions. The new kind fires on 1 of 55
+  naming commits, so its zero false-positive figure rests on thin exposure.
+- `FORK_BUDGET` rises from 3188 to 3196, because I39 joins the new kind (measured 3190).
+
 ## [0.721.0] - 2026-10-03
 
 Batch 191's third release. It closes `BL-439`, filed and fixed in this release: the read-set

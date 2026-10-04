@@ -751,7 +751,7 @@ render() {
   # HAND-REVIEW is exempt: its detail is one constant sentence, so carrying it repeats the same
   # line once per manual entry — nine times on the reference consumer — and says nothing the
   # status has not already said.
-  sub "Push-candidate ledger — CLOSE-CANDIDATE / NAMED-UPSTREAM / NAMED-UPSTREAM-DOCS-ONLY / NAMED-UPSTREAM-OFF-SUBJECT / NAMED-UPSTREAM-CITED-ONLY / NAMED-UPSTREAM-AMBIGUOUS / NEEDS-REVIEW / RECEIPTS-UNDECIDED / INPUT-UNRESOLVED (upstream absorbed the entry; the operator confirms and annotates, never auto-closed):"
+  sub "Push-candidate ledger — CLOSE-CANDIDATE / NAMED-UPSTREAM / NAMED-UPSTREAM-DOCS-ONLY / NAMED-UPSTREAM-OFF-SUBJECT / NAMED-UPSTREAM-SIBLING-ATTRIBUTED / NAMED-UPSTREAM-CITED-ONLY / NAMED-UPSTREAM-AMBIGUOUS / NEEDS-REVIEW / RECEIPTS-UNDECIDED / INPUT-UNRESOLVED (upstream absorbed the entry; the operator confirms and annotates, never auto-closed):"
   #
   # A LEDGER RUN THAT DIED RENDERED `none`, AND THAT ONE WAS DRIVEN. Batch 160, BL-230: a stub
   # `ledger-reverify.sh` exiting 2 turned the fixture's two NEEDS-REVIEW rows into `none`, render
