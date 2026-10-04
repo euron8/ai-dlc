@@ -113,8 +113,12 @@ then apply the deriver's DAEMONS filter, `norm`, the sentinel drop and `drop_ign
   Take ONE final `sudo` run that traces all 218 with both tracers in the same pass, and require the
   sandbox's miss set outside `.git/**` and `.gitignore` to be exactly 0. Then remove `fs_usage` and
   the root check.
-- Establish whether the runner's content-key skip reads the `.git/**` rows. If it does, record them
-  without root (e.g. a fixed set for every mapped fixture); do not simply drop them.
+- ~~Establish whether the runner's content-key skip reads the `.git/**` rows.~~ Answered at batch
+  193: it does not. Both hooks strip `^\.git/` and `^\.git$` from the manifest and the universe
+  before any selection (`.githooks/pre-push:577`, `:737`; the same two lines in
+  `core/git-hooks/pre-push`), and `scripts/suite-content-key.sh` never names the map (0 mentions,
+  against 3 in `.githooks/pre-push`). The sandbox tracer's missing `.git/**` rows cost the runner
+  nothing.
 - `log stream --level debug` was tested only from an admin-group account.
 - `sandbox-exec` is documented as deprecated. It works on macOS 27.2.
 - A read by a process outside the sandboxed lineage (an XPC or launchd helper) is invisible by
@@ -337,10 +341,19 @@ must show:
 - canary 0;
 - an assertion count per fixture equal to an untraced run's;
 - a peak 1-minute load of at least 4.5 during the trace;
-- each fixture's path set outside `.git/**` identical across the three traces. Batch 192 added
-  this arm. The fixtures' reads are deterministic, so any disagreement between traces is loss.
-  It catches lost reports on paths that do not exist, which neither the drop notice nor the
-  canary can see.
+- each fixture's path set outside `.git/**`, filtered to the paths that EXIST in the traced tree
+  at window close (`[ -e "$TREE/$p" ] || [ -L "$TREE/$p" ]`), identical across the three traces.
+  Batch 192 added this arm unfiltered. Batch 193 filtered it, by operator ruling: the stream
+  loses negative-lookup reports silently even on an idle box, so an unfiltered comparison is
+  unreachable by construction, and every disagreement it reports is the class batch 192 tiered
+  a NOTE. The filter is applied to the COMPARISON only. The deriver's written map keeps absent
+  rows, because `derive-fixture-readsets.sh` holds a negative lookup on a real name to be a
+  dependency and `core/fixtures/readset-skip`'s `existonly` mutant kills a deriver that drops
+  them. What the filter acquits is a lost absent-path row. That is safe only where the fixture
+  also carries the path's parent-directory row, which the runner's ride-along
+  (`.githooks/pre-push:697-699`) selects on. Measured at `d4354b7c`: 2 rows across the five
+  subjects lack that cover, both malformed-path lookups in `validator-arm-selection`
+  (`core/core/skills/ai-dlc`, `core/scripts/core/skills/ai-dlc`).
 
 The loss canary replaces the "completeness control" the batch-189 contract asked for, with the
 limits stated above.
@@ -413,4 +426,6 @@ reports for paths that do not exist on disk, and neither guard can see that clas
 verify: sh D=core/scripts/derive-fixture-readsets.sh; [ -f "$D" ] || exit 9; B="$(grep -v '^[[:space:]]*#' "$D")"; grep -q 'sandbox-exec -f' <<<"$B" || exit 1; grep -q 'fs_usage -w' <<<"$B" && exit 1; grep -qF '"$(id -u)" = "0"' <<<"$B" && exit 1; exit 0
 
 **BATCH-189 BEFORE/AFTER TRACE, ONE SAMPLE PER SIDE.** `bash core/scripts/derive-fixture-readsets.sh --list "validator-arm-selection-b enforcement-map-sites" --tracer sandbox`, main checkout detached at each sha in turn, map restored and nothing committed. Base `9bbc5a50` (load 4.52): `validator-arm-selection-b` OMITTED with 108 drop notices, `enforcement-map-sites` OMITTED with 894. Tip `946fb8ce`, carrying the BL-436 cwd fix (load 11.46): `validator-arm-selection-b` CLEAN, `enforcement-map-sites` OMITTED with 1036. Lever (a) moved the fixture it was predicted to move, at the higher load; one sample per side is not a close. `enforcement-map-sites` still drops on its seed `cp -R` burst, where no copy form was shown to help. Stage 1 and the three-consecutive-clean-traces criterion with a completeness control stand.
+
+**Batch 193 correction to the `cp -R` prose above.** The seed has copied with `cp -RX` since 0.721.0 (`3efb87d8`, `core/fixtures/enforcement-map-sites/seed.sh:38-45`), so "no form ships" and "its seed `cp -R` burst" describe the tree before that release. The batch-191 stage-1 trace was taken at `3efb87d8` itself, so its drop counts already include the `cp -RX` change.
 
