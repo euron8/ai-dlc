@@ -19,6 +19,41 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.725.0] - 2026-10-04
+
+Batch 195's first release. It discharges three consumer candidates filed during batch 194, each as
+its own entry: `BL-441`, `BL-442` and `BL-443`, all filed and landed here (net closed minus filed: 0).
+No file in it is bootstrapping.
+
+### PC-S316-DERIVE-READSETS-ALL-REFUSES-TO-WRITE-THE-WHOLE-MAP-WHEN-ONE-FIXTURE-IS-OMITTED (BL-441)
+
+- `derive-fixture-readsets.sh --all` built its fixture list newline-separated, so the untraced-fixture
+  guard's `case " $LIST "` matched no fixture and one OMITTED fixture discarded every good trace. The
+  same shape kept the plan-shape controls from ever running under `--all`.
+- The list is now built by `readset_all_list` (space-separated) and the guard by
+  `readset_untraced_lost`, which normalises its own argument and matches exact names. Both sit in
+  sentinel blocks that `readset-skip` drives.
+- The plan-shape controls now SKIP when plan-shape itself is OMITTED, instead of failing the run.
+
+### PC-S316-STORY-PROVENANCE-FIXTURE-FAILS-ITS-SCHEMA-MUTANT-ARM-ONLY-UNDER-THE-READSET-TRACER (BL-442)
+
+- The schema-mutant arm ran its copied writer without a pinned root. With `TMPDIR` unset, as under the
+  deriver's `sudo` invocation, the writer resolved the real schema through its cwd walk and the mutant
+  had no effect. The arm was green elsewhere only because of a stray root marker above `TMPDIR`.
+- The writer is pinned to its mutant root, under a decoy tree the fixture builds itself, and a
+  precondition arm proves the pin resolves the mutant's schema and that the unpinned call would not.
+
+### PC-S316-PRE-PUSH-READSET-KEYS-ON-THE-WORKING-TREE-NOT-THE-PUSHED-RANGE (BL-443)
+
+- Flat `_bmad-output/` files the read-set map names no reader for no longer force the whole fixture
+  suite, in both pre-push hooks. Mapped flat files still select their readers; deeper paths and a
+  nested `_bmad-output/` still run all.
+- Keying selection on the pushed range is refused: fixtures read the working tree, and range keying
+  would skip an uncommitted read file and lose commits pushed with `--no-verify`.
+- Measured on the reference consumer's last 40 commits against its own map: 39 force the whole suite
+  today and 34 still do after this change. The consumer's own receipt anchors on text only the refused
+  fix changes and needs a hand annotation.
+
 ## [0.724.0] - 2026-10-04
 
 Batch 194's second release. On the operator's batch-194 ruling, gate-1 review sharding becomes the
