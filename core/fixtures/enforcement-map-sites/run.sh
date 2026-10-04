@@ -2835,7 +2835,71 @@ fi
 NAME="enforcement-map-sites"
 [ "$GROUP" = a ] || NAME="enforcement-map-sites-$GROUP"
 
+# THE INNER POOL WIDTH, resolved BEFORE the control so a bad value refuses in milliseconds.
+# Default 8 (the reasoning is beside the pool below). The read-set deriver runs every shard with
+# EMS_POOL_WIDTH=1: at 8 the concurrent seed copies push the sandbox tracer's `log stream` into
+# dropping reports, and a window carrying a drop notice is OMITTED from the map. The width changes
+# the SCHEDULE, not the work -- every assertion in the shard is still dispatched and every seed
+# still copied -- so a read-set traced at width 1 is the read-set at width 8.
+# NO AI_DLC_ PREFIX, AND HERE THAT IS LOAD-BEARING: the scrub near the top of this file unsets
+# every ambient AI_DLC_* name, so a prefixed knob would be gone before this line read it and a
+# traced run would silently stay at 8 (the same reason --group is an argument, above).
+# A value that is not an integer from 1 to 64 is FIXTURE BROKEN (exit 2), never a regression:
+# `xargs -P 0` means UNLIMITED on BSD, and a non-number makes xargs refuse, which the verdict
+# loop below would charge as dropped work -- a false finding about the subject. The length is
+# bounded before any numeric test, because a 20-digit value overflows `test` into FALSE.
+# No empty-string case: `${EMS_POOL_WIDTH:-8}` turns an empty or unset knob into 8, so JOBS is
+# never empty here.
+JOBS="${EMS_POOL_WIDTH:-8}"
+case "$JOBS" in
+  *[!0-9]*) echo "FIXTURE BROKEN: EMS_POOL_WIDTH='$JOBS' is not an integer from 1 to 64" >&2; exit 2 ;;
+esac
+if [ "${#JOBS}" -gt 3 ] || [ "$JOBS" -lt 1 ] || [ "$JOBS" -gt 64 ]; then
+  echo "FIXTURE BROKEN: EMS_POOL_WIDTH='$JOBS' is not an integer from 1 to 64" >&2; exit 2
+fi
+SELF_W="$HERE/$(basename "$0")"
+# The cheap re-entry mode the width arm below drives: the resolved width, and nothing else.
+if [ "${1:-}" = "--print-width" ]; then
+  printf '%s\n' "$JOBS"; exit 0
+fi
+
 echo "$NAME:"
+
+# --- THE WIDTH KNOB: unset is 8, 1 reaches the pool, a bad value is FIXTURE BROKEN ----------
+# Shard a only, so the knob is asserted once rather than three times. Driven through
+# `--print-width`, which prints the very variable the pool reads. Each cell is presence-shaped:
+# a resolver that ignored the knob fails the `1` cell, one that ignored the default fails the
+# unset cell, one that accepted anything fails the refusal cells. `env -u` keeps the unset cell
+# true when this fixture itself runs under the read-set deriver, where the knob IS set.
+if [ "$GROUP" = a ]; then
+  w_unset="$(env -u EMS_POOL_WIDTH bash "$SELF_W" --print-width 2>/dev/null)"; w_unset_rc=$?
+  w_one="$(EMS_POOL_WIDTH=1 bash "$SELF_W" --print-width 2>/dev/null)"; w_one_rc=$?
+  EMS_POOL_WIDTH=0 bash "$SELF_W" --print-width >/dev/null 2>&1; w_zero_rc=$?
+  EMS_POOL_WIDTH=abc bash "$SELF_W" --print-width >/dev/null 2>&1; w_abc_rc=$?
+  EMS_POOL_WIDTH=99999999999999999999 bash "$SELF_W" --print-width >/dev/null 2>&1; w_big_rc=$?
+  EMS_POOL_WIDTH=65 bash "$SELF_W" --print-width >/dev/null 2>&1; w_65_rc=$?
+  w_64="$(EMS_POOL_WIDTH=64 bash "$SELF_W" --print-width 2>/dev/null)"; w_64_rc=$?
+  if [ "$w_unset_rc:$w_unset" = "0:8" ]; then
+    ok "WIDTH: with EMS_POOL_WIDTH unset the inner pool width resolves to 8"
+  else
+    bad "WIDTH: with EMS_POOL_WIDTH unset --print-width gave rc $w_unset_rc and '$w_unset' (expected 0 and 8) — the pre-push default moved"
+  fi
+  if [ "$w_one_rc:$w_one" = "0:1" ]; then
+    ok "WIDTH: EMS_POOL_WIDTH=1 resolves the inner pool width to 1, so the deriver's knob reaches the pool"
+  else
+    bad "WIDTH: EMS_POOL_WIDTH=1 gave rc $w_one_rc and '$w_one' (expected 0 and 1) — the deriver's knob does not reach the pool"
+  fi
+  if [ "$w_zero_rc" -eq 2 ] && [ "$w_abc_rc" -eq 2 ]; then
+    ok "WIDTH: EMS_POOL_WIDTH=0 and =abc both exit 2 (FIXTURE BROKEN), never a regression"
+  else
+    bad "WIDTH: a bad width was not refused at exit 2: '0' exited $w_zero_rc, 'abc' exited $w_abc_rc"
+  fi
+  if [ "$w_big_rc" -eq 2 ] && [ "$w_65_rc" -eq 2 ] && [ "$w_64_rc:$w_64" = "0:64" ]; then
+    ok "WIDTH: a 20-digit width and 65 both exit 2 (FIXTURE BROKEN), and 64 still resolves to 64"
+  else
+    bad "WIDTH: the width ceiling is wrong: 20 digits exited $w_big_rc and 65 exited $w_65_rc (expected 2 and 2); 64 gave rc $w_64_rc and '$w_64' (expected 0 and 64)"
+  fi
+fi
 
 OUT="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$OUT"' EXIT
@@ -2854,11 +2918,10 @@ if [ "$ctl_rc" -ne 0 ]; then
   exit 2
 fi
 
-# EIGHT, and it is a fixed number rather than a tunable on purpose: this pool nests inside
-# the pre-push suite's own pool, so a knob here multiplies against a knob there and the
-# product is what lands on the machine. Eight against 18 cores leaves headroom for the
-# seven sibling fixtures the suite runs beside this one.
-JOBS=8
+# EIGHT BY DEFAULT, and the pre-push suite never sets EMS_POOL_WIDTH: this pool nests inside
+# the suite's own pool, so the product is what lands on the machine. Eight against 18 cores
+# leaves headroom for the seven sibling fixtures the suite runs beside this one. The knob
+# exists only so the read-set deriver can narrow the schedule; JOBS is resolved above.
 # Deal the non-control assertions out to the shards in turn. The partition is DERIVED from
 # the same list the control came off, so an assertion added to this file lands in a shard
 # automatically rather than needing a table updated in a second place.

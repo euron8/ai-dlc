@@ -1245,14 +1245,14 @@ MUT
     _i=0; while [ "$_i" -lt 400 ]; do _i=$((_i+1)); echo "$_i" > "$PR/d/f$_i"; done
     printf '#!/bin/bash\nfor d in core/fixtures/*/; do :; done\n' > "$PR/.githooks/pre-push"
     # The probe fixture also ECHOES the width knob, which the width arm below reads from its log.
-    printf '#!/bin/bash\necho "width=${VAS_INNER_POOL_WIDTH:-unset}"\ncat d/f* >/dev/null\nls -lR /usr/share >/dev/null 2>&1\ncat d/f* >/dev/null\necho burst ok\n' > "$PR/core/fixtures/burst/run.sh"
+    printf '#!/bin/bash\necho "width=${VAS_INNER_POOL_WIDTH:-unset}"\necho "ems=${EMS_POOL_WIDTH:-unset}"\ncat d/f* >/dev/null\nls -lR /usr/share >/dev/null 2>&1\ncat d/f* >/dev/null\necho burst ok\n' > "$PR/core/fixtures/burst/run.sh"
     # The width mutant's repo is the same seed with the deriver's env injection removed from both
     # launch lines. It is seeded BEFORE the original's `git init`, so it copies no `.git`.
     PRM="$WORK/widthmut"
     mkdir -p "$PRM" || broken "mkdir failed"
     cp -R "$PR/." "$PRM/" || broken "could not copy the probe repo for the width mutant"
     cp "$DERIVER" "$PR/core/scripts/derive-fixture-readsets.sh"
-    sed 's| env VAS_INNER_POOL_WIDTH=1 bash | bash |' "$DERIVER" > "$PRM/core/scripts/derive-fixture-readsets.sh"
+    sed 's| env VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash | bash |' "$DERIVER" > "$PRM/core/scripts/derive-fixture-readsets.sh"
     ( cd "$PR" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm probe ) >/dev/null 2>&1 \
       || broken "could not seed the loss probe repo"
     ( cd "$PRM" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm probe ) >/dev/null 2>&1 \
@@ -1265,7 +1265,7 @@ MUT
       # (arm (c) above), so the deriver dies after the per-fixture line. That line is the verdict.
       # `env -u` so the width arm below reads what the DERIVER set, never a value inherited from
       # whatever ran this fixture -- under the deriver itself the knob is already 1 out here.
-      ( cd "$PR" && env -u VAS_INNER_POOL_WIDTH AI_DLC_READSET_TRACE_ROOT="$_tr" AI_DLC_READSET_SANDBOX_PROFILE="$WORK/unscoped.sb" \
+      ( cd "$PR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH AI_DLC_READSET_TRACE_ROOT="$_tr" AI_DLC_READSET_SANDBOX_PROFILE="$WORK/unscoped.sb" \
           bash core/scripts/derive-fixture-readsets.sh --list burst --tracer sandbox ) > "$WORK/loss.$_a.out" 2>&1
       _line="$(grep -E '^  burst ' "$WORK/loss.$_a.out")"
       _win="$(find "$_tr" -name burst.win 2>/dev/null | head -1)"
@@ -1304,15 +1304,15 @@ MUT
     #     the arm fails when the injection is gone.
     W_LOG="$WORK/losstr.1/w/burst.log"
     TRACE_ARMS=$((TRACE_ARMS+1))
-    if grep -qx 'burst ok' "$W_LOG" 2>/dev/null && grep -qx 'width=1' "$W_LOG"; then
-      ok "WIDTH: the deriver ran the traced probe fixture with VAS_INNER_POOL_WIDTH=1 (its captured log reads width=1)"
+    if grep -qx 'burst ok' "$W_LOG" 2>/dev/null && grep -qx 'width=1' "$W_LOG" && grep -qx 'ems=1' "$W_LOG"; then
+      ok "WIDTH: the deriver ran the traced probe fixture with VAS_INNER_POOL_WIDTH=1 and EMS_POOL_WIDTH=1 (its captured log reads width=1, ems=1)"
     else
       bad "WIDTH: the deriver's traced run of the probe fixture did not see VAS_INNER_POOL_WIDTH=1 — log reads '$(grep -m1 '^width=' "$W_LOG" 2>/dev/null)', burst ok present: $(grep -cx 'burst ok' "$W_LOG" 2>/dev/null || :). validator-arm-selection would trace at full width and drop reports"
     fi
-    W_OUT="$( cd "$PR" && env -u VAS_INNER_POOL_WIDTH bash core/fixtures/burst/run.sh 2>/dev/null )"
+    W_OUT="$( cd "$PR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH bash core/fixtures/burst/run.sh 2>/dev/null )"
     TRACE_ARMS=$((TRACE_ARMS+1))
     case "$W_OUT" in
-      *"width=unset"*"burst ok"*) ok "WIDTH CONTROL: the same probe run outside the deriver reads width=unset, so the 1 above is the deriver's" ;;
+      *"width=unset"*"ems=unset"*"burst ok"*) ok "WIDTH CONTROL: the same probe run outside the deriver reads width=unset, so the 1 above is the deriver's" ;;
       *) bad "WIDTH CONTROL: the probe run outside the deriver did not read width=unset: '$(printf '%s' "$W_OUT" | tr '\n' ' ')'" ;;
     esac
     TRACE_ARMS=$((TRACE_ARMS+1))
@@ -1320,13 +1320,97 @@ MUT
       bad "WIDTH MUTANT did not apply: removing the env injection changed nothing in the deriver copy, so this control would test an unmutated deriver"
     else
       _trm="$WORK/widthmut.tr"
-      ( cd "$PRM" && env -u VAS_INNER_POOL_WIDTH AI_DLC_READSET_TRACE_ROOT="$_trm" \
+      ( cd "$PRM" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH AI_DLC_READSET_TRACE_ROOT="$_trm" \
           bash core/scripts/derive-fixture-readsets.sh --list burst --tracer sandbox ) > "$WORK/widthmut.out" 2>&1
       WM_LOG="$_trm/w/burst.log"
-      if grep -qx 'burst ok' "$WM_LOG" 2>/dev/null && grep -qx 'width=unset' "$WM_LOG"; then
+      if grep -qx 'burst ok' "$WM_LOG" 2>/dev/null && grep -qx 'width=unset' "$WM_LOG" && grep -qx 'ems=unset' "$WM_LOG"; then
         ok "WIDTH MUTANT: with the env injection removed from both launch lines the traced probe reads width=unset — the arm above depends on that line"
       else
         bad "WIDTH MUTANT: the injection-free deriver's traced run did not read width=unset with 'burst ok' present: '$(tr '\n' ' ' < "$WM_LOG" 2>/dev/null | cut -c1-120)' — $(tail -2 "$WORK/widthmut.out" | tr '\n' ' ')"
+      fi
+    fi
+
+    # ------------------------------- the LOSS CANARY against a REAL stream that loses reads ----
+    # 1500 files read by 8 concurrent readers. Under an UNSCOPED profile the stream loses reads,
+    # and the canary must name them in the OMITTED line. The SCOPED side traces its OWN small
+    # burst, 1 reader over 100 files: the 8x1500 burst lost reads under the scoped profile too, in
+    # every attempt measured (0 of 8 clean at 1-minute load 8.3-26.8, and 4 of 4 SKIPs at load 2-8),
+    # so a scoped side on the big burst could never be exercised and the arm always skipped.
+    # Probabilistic in both directions, so each side gets up to three attempts
+    # and the arm SKIPS, naming why, when no attempt exercised that side -- it never passes on
+    # attempts that forced nothing. The deterministic proof is the stub-world canary arm, which runs
+    # wherever this fixture runs unprivileged; this one is the real-kernel confirmation.
+    #   unscoped: forced = an attempt whose fxa.canary is non-empty; that attempt must be OMITTED
+    #             with `LOSS CANARY: <n>` where n is the canary file's line count.
+    #   scoped:   clean  = an attempt with 0 drop notices and an empty canary; it must be MAPPED.
+    #   mutant:   the guard deleted, unscoped: a forced attempt's line must NOT carry the token.
+    CP="$WORK/canaryprobe"
+    mkdir -p "$CP/core/fixtures/burst8" "$CP/core/fixtures/small1" "$CP/core/scripts" "$CP/.githooks" "$CP/d" "$CP/s" || broken "mkdir failed"
+    _i=0; while [ "$_i" -lt 1500 ]; do _i=$((_i+1)); echo "$_i" > "$CP/d/f$_i"; done
+    _i=0; while [ "$_i" -lt 100 ]; do _i=$((_i+1)); echo "$_i" > "$CP/s/f$_i"; done
+    printf '#!/bin/bash\nfor d in core/fixtures/*/; do :; done\n' > "$CP/.githooks/pre-push"
+    printf '#!/bin/bash\nfor _r in 1 2 3 4 5 6 7 8; do cat d/f* >/dev/null & done\nwait\necho burst8 ok\n' > "$CP/core/fixtures/burst8/run.sh"
+    printf '#!/bin/bash\ncat s/f* >/dev/null\necho small1 ok\n' > "$CP/core/fixtures/small1/run.sh"
+    cp "$DERIVER" "$CP/core/scripts/derive-fixture-readsets.sh"
+    sed '/^  \[ "\$canary" = 0 \]    || why=/d' "$DERIVER" > "$WORK/deriver.nocanary.real.sh"
+    ( cd "$CP" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm probe ) >/dev/null 2>&1 \
+      || broken "could not seed the canary probe repo"
+    canary_try() { # $1 tag  $2 profile ("" = the deriver's scoped one)  $3 fixture (default burst8); prints "<line>|<canary n>|<drops>"
+      local tr="$WORK/cantr.$1" c d f="${3:-burst8}"
+      ( cd "$CP" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH AI_DLC_READSET_TRACE_ROOT="$tr" \
+          ${2:+AI_DLC_READSET_SANDBOX_PROFILE="$2"} bash core/scripts/derive-fixture-readsets.sh --list "$f" --tracer sandbox ) > "$WORK/can.$1.out" 2>&1
+      c="$(grep -c . "$tr/w/$f.canary" 2>/dev/null)" || c=0
+      d="$(grep -c 'dropped during' "$tr/w/$f.win" 2>/dev/null)" || d=0
+      printf '%s|%s|%s' "$(grep -m1 -E "^  $f " "$WORK/can.$1.out" | tr -s ' ')" "$c" "$d"
+    }
+    C_FORCED=0; C_BAD=""; _a=0
+    while [ "$_a" -lt 3 ] && [ "$C_FORCED" -eq 0 ]; do
+      _a=$((_a+1)); _r="$(canary_try "u$_a" "$WORK/unscoped.sb")"
+      _l="${_r%%|*}"; _c="${_r#*|}"; _c="${_c%%|*}"
+      if [ "$_c" -gt 0 ]; then
+        case "$_l" in
+          *"OMITTED ("*"LOSS CANARY: $_c path(s)"*) C_FORCED=$((C_FORCED+1)) ;;
+          *) C_BAD="$C_BAD unscoped attempt $_a lost $_c read(s) and its line does not name them: '$_l';" ;;
+        esac
+      fi
+    done
+    S_CLEAN=0; _s=0
+    while [ "$_s" -lt 3 ] && [ "$S_CLEAN" -eq 0 ]; do
+      _s=$((_s+1)); _r="$(canary_try "s$_s" "" small1)"
+      _l="${_r%%|*}"; _rest="${_r#*|}"; _c="${_rest%%|*}"; _d="${_rest#*|}"
+      if [ "$_c" -eq 0 ] && [ "$_d" -eq 0 ]; then
+        case "$_l" in
+          *" paths") S_CLEAN=$((S_CLEAN+1)) ;;
+          *"LOSS CANARY"*) C_BAD="$C_BAD scoped attempt $_s had an empty canary and was omitted for it: '$_l';" ;;
+          *) : ;;   # omitted for another reason (settle/flush) -- neither direction observed
+        esac
+      fi
+    done
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    if [ -n "$C_BAD" ]; then
+      bad "REAL CANARY:$C_BAD"
+    elif [ "$C_FORCED" -eq 0 ] || [ "$S_CLEAN" -eq 0 ]; then
+      printf '  SKIP  real-stream canary arm: %s of %s unscoped attempt(s) lost a read, %s of %s scoped attempt(s) traced clean -- a side was not exercised (the stub-world canary arm is the deterministic proof)\n' "$C_FORCED" "$_a" "$S_CLEAN" "$_s"
+      TRACE_ARMS=$((TRACE_ARMS-1))
+    else
+      ok "REAL CANARY: an unscoped 8-reader burst over 1500 files that lost reads is OMITTED naming the LOSS CANARY count (attempt $_a), and the scoped profile maps a 1-reader burst over 100 files (attempt $_s)"
+      cp "$WORK/deriver.nocanary.real.sh" "$CP/core/scripts/derive-fixture-readsets.sh"
+      TRACE_ARMS=$((TRACE_ARMS+1))
+      if cmp -s "$DERIVER" "$WORK/deriver.nocanary.real.sh"; then
+        bad "REAL CANARY MUTANT did not apply: deleting the canary guard changed nothing"
+      else
+        _m=0; _mv=""
+        while [ "$_m" -lt 3 ] && [ -z "$_mv" ]; do
+          _m=$((_m+1)); _r="$(canary_try "m$_m" "$WORK/unscoped.sb")"
+          _l="${_r%%|*}"; _c="${_r#*|}"; _c="${_c%%|*}"
+          [ "$_c" -gt 0 ] || continue
+          case "$_l" in *"LOSS CANARY"*) _mv="named" ;; *) _mv="silent" ;; esac
+        done
+        case "$_mv" in
+          silent) ok "REAL CANARY MUTANT: with the guard deleted an unscoped attempt that lost reads carries no LOSS CANARY in its line — the arm depends on that line" ;;
+          named)  bad "REAL CANARY MUTANT: with the guard deleted the line still names the LOSS CANARY: '$_l'" ;;
+          *)      printf '  SKIP  real-stream canary mutant: no unscoped attempt of %s lost a read\n' "$_m"; TRACE_ARMS=$((TRACE_ARMS-1)) ;;
+        esac
       fi
     fi
   fi
@@ -1444,8 +1528,15 @@ MUT
     mkdir -p "$BR/core/fixtures/fxa" "$BR/core/scripts" "$BR/.githooks" "$BR/src" || broken "mkdir failed"
     printf '#!/bin/bash\nfor d in core/fixtures/*/; do :; done\n' > "$BR/.githooks/pre-push"
     # fxa echoes the width knob, which the stub-world width arm below reads from its log.
-    printf '#!/bin/bash\necho "width=${VAS_INNER_POOL_WIDTH:-unset}"\ncat src/a.sh >/dev/null\necho fxa ok\n' > "$BR/core/fixtures/fxa/run.sh"
+    printf '#!/bin/bash\necho "width=${VAS_INNER_POOL_WIDTH:-unset}"\necho "ems=${EMS_POOL_WIDTH:-unset}"\ncat src/a.sh >/dev/null\necho fxa ok\n' > "$BR/core/fixtures/fxa/run.sh"
     printf 'a\n' > "$BR/src/a.sh"; printf 'o\n' > "$BR/src/other.sh"
+    # PRESENT names the pseudo-path arm below must keep: one whose angle pair does not span its last
+    # component, and one that IS a whole `<...>` component but exists in the tree.
+    mkdir -p "$BR/d" || broken "mkdir failed"
+    printf 'x\n' > "$BR/a<b>c"; printf 'x\n' > "$BR/d/<real>"
+    # A DANGLING symlink with a whole `<...>` name: present by `-L`, absent by `-e`, so it is kept
+    # only by a filter that tests both. Tracked, so readset_copy_tree carries it as a symlink.
+    ln -s nowhere-at-all "$BR/<link>" || broken "could not seed the dangling symlink"
     printf '*.log\n' > "$BR/.gitignore"
     printf 'other\tsrc/other.sh\nother\tcore/fixtures/other/run.sh\n' > "$BR/.ai-dlc-fixture-readsets.tsv"
     cp "$DERIVER" "$BR/core/scripts/derive-fixture-readsets.sh"
@@ -1510,7 +1601,7 @@ STUB
     cat > "$SB/sudo" <<'STUB'
 #!/bin/bash
 while [ "$#" -gt 0 ]; do case "$1" in -n) shift ;; -u) shift 2 ;; *) break ;; esac; done
-exec env -u VAS_INNER_POOL_WIDTH "$@"
+exec env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH "$@"
 STUB
     cat > "$SB/sandbox-exec" <<'STUB'
 #!/bin/bash
@@ -1539,8 +1630,19 @@ exec tail -n 0 -f "$STUB_FEED"
 STUB
     chmod +x "$SB/id" "$SB/sudo" "$SB/sandbox-exec" "$SB/fs_usage" "$SB/logstream"
     : > "$SB/feed"
-    printf '%s\n' core/fixtures/fxa/run.sh src/a.sh src/miss.sh .git/HEAD build.log > "$SB/fs.list"
-    printf '%s\n' core/fixtures/fxa/run.sh src/a.sh > "$SB/sb.list"
+    # The nine PSEUDO seeds go into BOTH lists, so they cancel in the miss count and every tracer's
+    # set carries them to the one call site where the sets meet (the pseudo-path arm below).
+    PSEUDO_SEEDS='<string>
+sub/<unknown>
+src/missing.sh
+a<b>c
+d/<real>
+e<f>g.sh
+<link>
+x/y/<z>
+<>'
+    { printf '%s\n' core/fixtures/fxa/run.sh src/a.sh src/miss.sh .git/HEAD build.log; printf '%s\n' "$PSEUDO_SEEDS"; } > "$SB/fs.list"
+    { printf '%s\n' core/fixtures/fxa/run.sh src/a.sh; printf '%s\n' "$PSEUDO_SEEDS"; } > "$SB/sb.list"
     : > "$SB/empty.list"
     STUB_DERIVER="$BR/core/scripts/derive-fixture-readsets.sh"
     sed "s|^LOG_BIN=/usr/bin/log\$|LOG_BIN=\"$SB/logstream\"|" "$DERIVER" > "$SB/deriver.sh"
@@ -1552,7 +1654,7 @@ STUB
       local before after r
       cp "$1" "$STUB_DERIVER"
       before="$(sum_of "$BR/.ai-dlc-fixture-readsets.tsv")"
-      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH PATH="$SB:$PATH" SUDO_USER="$(id -un)" STUB_ROOT="$BOTH_TR" STUB_FEED="$SB/feed" \
+      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SB:$PATH" SUDO_USER="$(id -un)" STUB_ROOT="$BOTH_TR" STUB_FEED="$SB/feed" \
           STUB_FS="$SB/fs.list" STUB_SB="$2" AI_DLC_READSET_TRACE_ROOT="$BOTH_TR" \
           bash core/scripts/derive-fixture-readsets.sh --list fxa --tracer both ) > "$WORK/stub.out" 2>&1 </dev/null
       r=$?
@@ -1568,18 +1670,80 @@ STUB
         ok "a full stub-world --tracer both run reports 'fxa sandbox-missed 1 fs_usage-missed 0', reads SANDBOX-MISSES at exit 1, and leaves the map's md5 unchanged" ;;
       *) bad "the stub-world --tracer both run did not read exactly one miss with the map unchanged: '$S1' — $(tail -3 "$WORK/stub.out" | tr '\n' ' ')" ;;
     esac
+    # S1's own fxa log, captured NOW: the pseudo mutants below each re-run the stub world, and the
+    # width arm further down must read the UNMUTATED run, not whichever mutant ran last.
+    S1_LOG="$WORK/s1.fxa.log"; cp "$BOTH_TR/w/fxa.log" "$S1_LOG" 2>/dev/null || : > "$S1_LOG"
+    # THE PSEUDO-PATH FILTER, read off the set the S1 run just wrote, where all three tracers' sets
+    # meet. Nine seeds, in seed order: `<string>` and `sub/<unknown>` (absent, last component a whole
+    # `<...>` token) must be DROPPED; `src/missing.sh` (absent, ordinary), `a<b>c` and `d/<real>`
+    # (present), `e<f>g.sh` (absent, brackets inside the component) and `<link>` (a dangling
+    # symlink) must be KEPT; `x/y/<z>` (absent, two directories deep) and `<>` (absent, empty
+    # token) must be DROPPED. Each of the last four separates the fix from one wrong filter:
+    # `e<f>g.sh` from an unanchored `<[^/]*>`, `<link>` from `-e` without `-L`, `x/y/<z>` from a
+    # first-component strip `${p#*/}`, and `<>` from a non-empty token `'<'?*'>'`.
+    # Presence-shaped: five rows must APPEAR, so a run that wrote no set cannot score.
+    pseudo_sig() { # prints one 0/1 per seed: is it in the last stub run's fxa.set
+      local s out=""
+      while IFS= read -r s; do
+        if grep -qxF -- "$s" "$BOTH_TR/w/fxa.set" 2>/dev/null; then out="${out}1"; else out="${out}0"; fi
+      done <<< "$PSEUDO_SEEDS"
+      printf '%s' "$out"
+    }
+    PS0="$(pseudo_sig)"
+    BOTH_ARMS=$((BOTH_ARMS+1))
+    if [ "$PS0" = 001111100 ]; then
+      ok "PSEUDO: the merged set drops '<string>' and 'sub/<unknown>' (absent whole-<...> last component) and keeps src/missing.sh, a<b>c, d/<real>, e<f>g.sh and the dangling <link>; x/y/<z> and <> go too"
+    else
+      bad "PSEUDO: expected seed signature 001111100 in fxa.set, got '$PS0' (order: <string> sub/<unknown> src/missing.sh a<b>c d/<real> e<f>g.sh <link> x/y/<z> <>) — $(tail -2 "$WORK/stub.out" | tr '\n' ' ')"
+    fi
+    # FIVE MUTANTS, each a cmp -s guarded copy of the stub-world deriver, each a wrong filter:
+    #   nofilter   the call removed from the meeting point;
+    #   wholepath  the anchor on the whole path, `^<...>$`, so `sub/<unknown>` survives;
+    #   unanch     an unanchored `<[^/]*>` inside the last component, so absent `e<f>g.sh` goes too;
+    #   existonly  the existence test with no shape test, so absent `src/missing.sh` goes too;
+    #   sbonly     the filter on the sandbox set only, so the fs_usage set carries the pseudo rows back.
+    sed 's/ | readset_drop_pseudo | drop_ignored > / | drop_ignored > /' "$SB/deriver.sh" > "$SB/deriver.p.nofilter.sh"
+    sed 's/^    case "\${p##\*\/}" in$/    case "$p" in/' "$SB/deriver.sh" > "$SB/deriver.p.wholepath.sh"
+    sed "s/^      '<'\*'>') if /      *'<'*'>'*) if /" "$SB/deriver.sh" > "$SB/deriver.p.unanch.sh"
+    sed "s/^      '<'\*'>') if /      *) if /" "$SB/deriver.sh" > "$SB/deriver.p.existonly.sh"
+    sed -e 's/ | readset_drop_pseudo | drop_ignored > / | drop_ignored > /' \
+        -e 's/^    sandbox_paths < "\$WORK\/\$fx.win" | grep -v /    sandbox_paths < "$WORK\/$fx.win" | readset_drop_pseudo | grep -v /' \
+        "$SB/deriver.sh" > "$SB/deriver.p.sbonly.sh"
+    #   eonly      `-e` without `-L`, so the dangling `<link>` goes;
+    #   firststrip `${p#*/}` strips only the FIRST component, so `x/y/<z>` survives;
+    #   nonempty   `'<'?*'>'`, so the empty token `<>` survives.
+    sed 's/if \[ -e "\$TREE\/\$p" \] || \[ -L "\$TREE\/\$p" \]; then/if [ -e "$TREE\/$p" ]; then/' "$SB/deriver.sh" > "$SB/deriver.p.eonly.sh"
+    sed 's/^    case "\${p##\*\/}" in$/    case "${p#*\/}" in/' "$SB/deriver.sh" > "$SB/deriver.p.firststrip.sh"
+    sed "s/^      '<'\*'>') if /      '<'?*'>') if /" "$SB/deriver.sh" > "$SB/deriver.p.nonempty.sh"
+    for _pm in nofilter wholepath unanch existonly sbonly eonly firststrip nonempty; do
+      BOTH_ARMS=$((BOTH_ARMS+1))
+      if cmp -s "$SB/deriver.sh" "$SB/deriver.p.$_pm.sh"; then
+        bad "PSEUDO MUTANT $_pm did not apply: the edit matched nothing in the deriver copy"
+        continue
+      fi
+      stub_run "$SB/deriver.p.$_pm.sh" "$SB/sb.list" >/dev/null
+      _ps="$(pseudo_sig)"
+      case "$_ps" in
+        001111100) bad "PSEUDO MUTANT $_pm: the set still reads 001111100, so the pseudo arm does not depend on what this mutant removed" ;;
+        *1*) ok "PSEUDO MUTANT $_pm: the set reads '$_ps', not 001111100 — the pseudo arm refuses it" ;;
+        *) bad "PSEUDO MUTANT $_pm: the set carries none of the seeds ('$_ps'), so the run wrote no set and scored nothing — $(tail -2 "$WORK/stub.out" | tr '\n' ' ')" ;;
+      esac
+    done
     # THE WIDTH KNOB UNDER `--tracer both`. This path runs the fixture through `sudo -n -u ...
     # sandbox-exec`, and the stub sudo strips VAS_INNER_POOL_WIDTH the way env_reset does, so only an
     # `env KNOB=1` placed AFTER sudo reaches the fixture. The log is read straight after each run,
     # before the next run clears the trace root. Presence-shaped: `fxa ok` must appear too.
-    stub_width() { # prints "<width line>|<fxa ok count>" from the last stub run's fxa log
-      printf '%s|%s' "$(grep -m1 '^width=' "$BOTH_TR/w/fxa.log" 2>/dev/null)" "$(grep -cx 'fxa ok' "$BOTH_TR/w/fxa.log" 2>/dev/null || :)"
+    # EMS_POOL_WIDTH rides the same `env` and is read the same way, as a second field.
+    stub_width() { # prints "<width line>|<ems line>|<fxa ok count>" from $1, default the last stub run's fxa log
+      local l="${1:-$BOTH_TR/w/fxa.log}"
+      printf '%s|%s|%s' "$(grep -m1 '^width=' "$l" 2>/dev/null)" "$(grep -m1 '^ems=' "$l" 2>/dev/null)" \
+        "$(grep -cx 'fxa ok' "$l" 2>/dev/null || :)"
     }
-    SW0="$(stub_width)"
+    SW0="$(stub_width "$S1_LOG")"
     BOTH_ARMS=$((BOTH_ARMS+1))
     case "$SW0" in
-      "width=1|1") ok "WIDTH under --tracer both: the stub-world run of fxa, launched through sudo's env_reset, logs width=1" ;;
-      *) bad "WIDTH under --tracer both: fxa's log did not read width=1 with 'fxa ok' present: '$SW0' — the knob does not survive the sudo launch" ;;
+      "width=1|ems=1|1") ok "WIDTH under --tracer both: the stub-world run of fxa, launched through sudo's env_reset, logs width=1 and ems=1" ;;
+      *) bad "WIDTH under --tracer both: fxa's log did not read width=1 and ems=1 with 'fxa ok' present: '$SW0' — a knob does not survive the sudo launch" ;;
     esac
     # THREE MUTANT DERIVERS, each a cmp -s guarded copy of the stub-world deriver, each a wrong
     # fix that the --tracer sandbox width arm above cannot see because no sudo sits on that path:
@@ -1588,14 +1752,14 @@ STUB
     #           line, so --tracer sandbox still reads width=1;
     #   m4      the `sandboxed` launch dropping the knob under `--tracer both` only;
     #   prefix  `VAS_INNER_POOL_WIDTH=1 sandboxed ...`, a prefix in front of the function.
-    # Each must log width=unset with `fxa ok` present.
-    sed -e 's|sudo -n -u "$RUN_AS" sandbox-exec -f "$PROFILE" "$@"|env VAS_INNER_POOL_WIDTH=1 sudo -n -u "$RUN_AS" sandbox-exec -f "$PROFILE" "$@"|' \
-        -e 's|^    sandbox-exec -f "$PROFILE" "$@"$|    env VAS_INNER_POOL_WIDTH=1 sandbox-exec -f "$PROFILE" "$@"|' \
-        -e 's|sudo -n -u "$RUN_AS" env VAS_INNER_POOL_WIDTH=1 bash |env VAS_INNER_POOL_WIDTH=1 sudo -n -u "$RUN_AS" bash |' \
-        -e 's|sandboxed env VAS_INNER_POOL_WIDTH=1 bash |sandboxed bash |' "$SB/deriver.sh" > "$SB/deriver.m2.sh"
-    sed 's|( cd "$TREE" \&\& sandboxed env VAS_INNER_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" )|( cd "$TREE" \&\& if [ "$TRACER" = both ]; then sandboxed bash "$FIXTURE_ROOT/$fx/run.sh"; else sandboxed env VAS_INNER_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh"; fi )|' \
+    # Each must log width=unset and ems=unset with `fxa ok` present: both knobs move together.
+    sed -e 's|sudo -n -u "$RUN_AS" sandbox-exec -f "$PROFILE" "$@"|env VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 sudo -n -u "$RUN_AS" sandbox-exec -f "$PROFILE" "$@"|' \
+        -e 's|^    sandbox-exec -f "$PROFILE" "$@"$|    env VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 sandbox-exec -f "$PROFILE" "$@"|' \
+        -e 's|sudo -n -u "$RUN_AS" env VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash |env VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 sudo -n -u "$RUN_AS" bash |' \
+        -e 's|sandboxed env VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash |sandboxed bash |' "$SB/deriver.sh" > "$SB/deriver.m2.sh"
+    sed 's|( cd "$TREE" \&\& sandboxed env VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" )|( cd "$TREE" \&\& if [ "$TRACER" = both ]; then sandboxed bash "$FIXTURE_ROOT/$fx/run.sh"; else sandboxed env VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh"; fi )|' \
       "$SB/deriver.sh" > "$SB/deriver.m4.sh"
-    sed 's|sandboxed env VAS_INNER_POOL_WIDTH=1 bash |VAS_INNER_POOL_WIDTH=1 sandboxed bash |' "$SB/deriver.sh" > "$SB/deriver.prefix.sh"
+    sed 's|sandboxed env VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash |VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 sandboxed bash |' "$SB/deriver.sh" > "$SB/deriver.prefix.sh"
     for _wm in m2 m4 prefix; do
       BOTH_ARMS=$((BOTH_ARMS+1))
       if cmp -s "$SB/deriver.sh" "$SB/deriver.$_wm.sh"; then
@@ -1605,22 +1769,196 @@ STUB
       stub_run "$SB/deriver.$_wm.sh" "$SB/sb.list" >/dev/null
       _sw="$(stub_width)"
       case "$_sw" in
-        "width=unset|1") ok "BOTH WIDTH MUTANT $_wm: the stub-world run logs width=unset with 'fxa ok' present — the --tracer both width arm refuses it" ;;
-        *) bad "BOTH WIDTH MUTANT $_wm: expected width=unset with 'fxa ok' present, got '$_sw' — $(tail -2 "$WORK/stub.out" | tr '\n' ' ')" ;;
+        "width=unset|ems=unset|1") ok "BOTH WIDTH MUTANT $_wm: the stub-world run logs width=unset and ems=unset with 'fxa ok' present — the --tracer both width arm refuses it" ;;
+        *) bad "BOTH WIDTH MUTANT $_wm: expected width=unset and ems=unset with 'fxa ok' present, got '$_sw' — $(tail -2 "$WORK/stub.out" | tr '\n' ' ')" ;;
       esac
     done
     S2="$(stub_run "$SB/deriver.sh" "$SB/empty.list")"
     BOTH_ARMS=$((BOTH_ARMS+1))
     case "$S2" in
-      "2|REFUSED: compared 0 of 1"*"fxa (sandbox set empty)"*"|same") ok "  and a sandbox that reported nothing for the fixture — how an unseen sudo -u child would look — is REFUSED at exit 2, not compared" ;;
+      "2|REFUSED: compared 0 of 1"*"fxa ("*"sandbox set empty)"*"|same") ok "  and a sandbox that reported nothing for the fixture — how an unseen sudo -u child would look — is REFUSED at exit 2, not compared" ;;
       *) bad "an empty sandbox set was not refused at exit 2 naming fxa: '$S2'" ;;
     esac
+    # THE LOSS CANARY UNDER `--tracer both`. The same empty-stream run: fxa really read run.sh and
+    # src/a.sh, the stream reported neither, so its reason must also carry `LOSS CANARY: 2 path(s)`
+    # -- a read both tracers lost would otherwise be invisible to the fs_usage comparison. The
+    # mutant scopes the canary back to `--tracer sandbox` and must lose the token.
+    BOTH_ARMS=$((BOTH_ARMS+1))
+    case "$S2" in
+      *"fxa (LOSS CANARY: 2 path(s)"*) ok "CANARY under --tracer both: the empty-stream run's UNCOMPARED reason names 'LOSS CANARY: 2 path(s)'" ;;
+      *) bad "CANARY under --tracer both: the empty-stream run's reason does not name 'LOSS CANARY: 2 path(s)': '$S2'" ;;
+    esac
+    sed 's/^  if \[ "\$TRACER" != fs_usage \]; then$/  if [ "$TRACER" = sandbox ]; then/' "$SB/deriver.sh" > "$SB/deriver.cboth.sh"
+    BOTH_ARMS=$((BOTH_ARMS+1))
+    if cmp -s "$SB/deriver.sh" "$SB/deriver.cboth.sh"; then
+      bad "CANARY BOTH MUTANT did not apply: scoping the canary to --tracer sandbox changed nothing"
+    else
+      S2M="$(stub_run "$SB/deriver.cboth.sh" "$SB/empty.list")"
+      case "$S2M" in
+        *"LOSS CANARY"*) bad "CANARY BOTH MUTANT: scoped to --tracer sandbox, the --tracer both run still names the canary: '$S2M'" ;;
+        "2|REFUSED: compared 0 of 1"*"fxa (sandbox set empty)"*) ok "CANARY BOTH MUTANT: scoped to --tracer sandbox, the --tracer both run is refused for the empty set alone, with no canary — the arm above depends on the scope" ;;
+        *) bad "CANARY BOTH MUTANT: the scoped-back run did not read a plain empty-set refusal: '$S2M'" ;;
+      esac
+    fi
     S3="$(stub_run "$SB/deriver.nowrite.sh" "$SB/sb.list")"
     BOTH_ARMS=$((BOTH_ARMS+1))
     case "$S3" in
       *"|MOVED") ok "NOWRITE MUTANT: with the both-mode exit deleted the same run WRITES the map (md5 moved) — that exit is the guard the arm above depends on" ;;
       *) bad "NOWRITE MUTANT: the map did not move with the exit deleted, so the no-write arm proves nothing about it: '$S3' — $(tail -3 "$WORK/stub.out" | tr '\n' ' ')" ;;
     esac
+
+    # THE LOSS CANARY, DETERMINISTICALLY, UNDER `--tracer sandbox`. The real-stream probe further
+    # down needs `log stream` and skips where it cannot run; this arm needs neither, so the canary
+    # is proven on every non-root run of this fixture and is never a check that cannot fire. The
+    # stub sandbox-exec reports ONLY the paths in the list it is handed, while fxa really reads
+    # run.sh and src/a.sh, so the atime leg sees both:
+    #   lossy list  run.sh alone      -> fxa OMITTED naming `LOSS CANARY: 1 path(s)`, 0 drop notices;
+    #   whole list  run.sh + src/a.sh -> fxa MAPPED;
+    #   mutant      the canary guard deleted, lossy list -> fxa MAPPED, so the arm depends on it.
+    # Its own PATH dir carries ONLY the sandbox-exec stub: the `id` stub above answers uid 0, which
+    # `--tracer sandbox` refuses.
+    SX="$WORK/sbxstub"; mkdir -p "$SX" || broken "mkdir failed"
+    cp "$SB/sandbox-exec" "$SX/sandbox-exec" || broken "could not copy the sandbox-exec stub"
+    printf '%s\n' core/fixtures/fxa/run.sh > "$SX/lossy.list"
+    printf '%s\n' core/fixtures/fxa/run.sh src/a.sh > "$SX/whole.list"
+    : > "$SX/feed"
+    SX_TR="$(cd "$WORK" && pwd -P)/sbx.tr"
+    sbx_run() { # $1 deriver copy  $2 stream list; prints "<fxa line>|<drop notices>"
+      local d
+      cp "$1" "$STUB_DERIVER"
+      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$2" \
+          AI_DLC_READSET_TRACE_ROOT="$SX_TR" bash core/scripts/derive-fixture-readsets.sh --list fxa --tracer sandbox ) > "$WORK/sbx.out" 2>&1 </dev/null
+      ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
+      d="$(grep -c 'dropped during' "$SX_TR/w/fxa.win" 2>/dev/null)" || d=0
+      printf '%s|%s' "$(grep -m1 -E '^  fxa ' "$WORK/sbx.out" | tr -s ' ')" "$d"
+    }
+    sed '/^  \[ "\$canary" = 0 \]    || why=/d' "$SB/deriver.sh" > "$SX/deriver.nocanary.sh"
+    CL="$(sbx_run "$SB/deriver.sh" "$SX/lossy.list")"
+    CW="$(sbx_run "$SB/deriver.sh" "$SX/whole.list")"
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    case "$CL" in
+      " fxa OMITTED ("*"LOSS CANARY: 1 path(s)"*"|0") ok "CANARY: a sandbox-tracer window that lost a read with NO drop notice OMITS the fixture, naming 'LOSS CANARY: 1 path(s)'" ;;
+      *) bad "CANARY: the lossy stub window was not omitted naming 'LOSS CANARY: 1 path(s)' with 0 drop notices: '$CL' — $(tail -2 "$WORK/sbx.out" | tr '\n' ' ')" ;;
+    esac
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    case "$CW" in
+      " fxa "*" paths|0") ok "CANARY CONTROL: the same run with the stream reporting every read MAPS fxa — the canary does not fire on a whole window" ;;
+      *) bad "CANARY CONTROL: the whole stub window did not map fxa: '$CW' — atime extras: $(LC_ALL=C comm -23 "$SX_TR/w/fxa.at" "$SX_TR/w/fxa.fs" 2>/dev/null | tr '\n' ' ')" ;;
+    esac
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    if cmp -s "$SB/deriver.sh" "$SX/deriver.nocanary.sh"; then
+      bad "CANARY MUTANT did not apply: deleting the canary guard changed nothing in the deriver copy"
+    else
+      CM="$(sbx_run "$SX/deriver.nocanary.sh" "$SX/lossy.list")"
+      case "$CM" in
+        " fxa "*" paths|0") ok "CANARY MUTANT: with the guard deleted the lossy window MAPS fxa — the canary arm depends on that line" ;;
+        *) bad "CANARY MUTANT: with the guard deleted the lossy window did not map fxa: '$CM' — $(tail -2 "$WORK/sbx.out" | tr '\n' ' ')" ;;
+      esac
+    fi
+
+    # THE CANARY'S UNREADABLE BRANCH, driven from its sentinels. No real trace produces an
+    # unreadable stream set on demand, so the shipped readset_loss_canary is called on a missing
+    # $fx.fs: it must print `unreadable`, and the deriver's guard must turn that into an OMITTED
+    # reason. Two wrong builds each fail this arm and only this arm:
+    #   C1  `unreadable` replaced by `0`, the fail-open direction;
+    #   C2  comm's status discarded (`; then` -> `|| :; then`), so the empty output counts 0.
+    CAN_SPAN="$WORK/canary.sh"
+    sed -n '/^# READSET_CANARY_BEGIN$/,/^# READSET_CANARY_END$/p' "$DERIVER" > "$CAN_SPAN"
+    printf 'a\nb\n' > "$WORK/can.at"
+    can_with() { ( . "$1"; readset_loss_canary "$WORK/can.at" "$WORK/can.no-such-fs" "$WORK/can.out" ) 2>/dev/null; }
+    can_why() { # $1 canary value; runs the deriver's own guard line on it
+      local canary="$1" why="" fx=fxa WORK="$WORK" g
+      g="$(grep -m1 '^  \[ "\$canary" = 0 \]    || why=' "$DERIVER")"
+      eval "$g"; printf '%s' "$why"
+    }
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    CU="$(can_with "$CAN_SPAN")"; CUW="$(can_why "$CU")"
+    if [ "$CU" = unreadable ] && case "$CUW" in "LOSS CANARY: unreadable path(s)"*) true ;; *) false ;; esac; then
+      ok "CANARY UNREADABLE: a missing stream set makes readset_loss_canary print 'unreadable', and the deriver's guard omits the fixture for it"
+    else
+      bad "CANARY UNREADABLE: expected 'unreadable' and an omission reason, got '$CU' / '$CUW' (span lines: $(grep -c . "$CAN_SPAN"))"
+    fi
+    sed 's/^    printf .unreadable\\n.$/    printf '"'"'0\\n'"'"'/' "$CAN_SPAN" > "$WORK/canary.c1.sh"
+    sed 's/^  if LC_ALL=C comm -23 "\$1" "\$2" > "\$3" 2>\/dev\/null; then$/  if LC_ALL=C comm -23 "$1" "$2" > "$3" 2>\/dev\/null || :; then/' "$CAN_SPAN" > "$WORK/canary.c2.sh"
+    for _cm in c1 c2; do
+      TRACE_ARMS=$((TRACE_ARMS+1))
+      if cmp -s "$CAN_SPAN" "$WORK/canary.$_cm.sh"; then bad "CANARY MUTANT $_cm did not apply"; continue; fi
+      _cv="$(can_with "$WORK/canary.$_cm.sh")"
+      case "$_cv" in
+        0) ok "CANARY MUTANT $_cm: a missing stream set reads '0', which maps the fixture — the unreadable arm refuses it" ;;
+        *) bad "CANARY MUTANT $_cm: expected the fail-open '0', got '$_cv'" ;;
+      esac
+    done
+
+    # A ONE-FIXTURE `--list` WHOSE FIXTURE IS OMITTED STILL WRITES THE MAP, DROPPING ITS STALE ROWS.
+    # Seed a stale `fxa` row the trace can never produce, trace fxa with a lossy stream (the canary
+    # omits it), and read the map: the stale row must be GONE, `other`'s rows kept, and the header
+    # must name fxa as OMITTED. The mutant restores the traced-count control under --list and must
+    # leave the stale row in place (the run dies before the write).
+    printf 'other\tsrc/other.sh\nother\tcore/fixtures/other/run.sh\nthird\tcore/fixtures/third/run.sh\nfxa\tsrc/STALE-ROW\n' > "$BR/.ai-dlc-fixture-readsets.tsv"
+    ( cd "$BR" && git add -A && git -c user.email=f@f -c user.name=f commit -qm stale ) >/dev/null 2>&1 || broken "could not seed the stale map row"
+    omit_run() { # $1 deriver copy; prints "<stale rows>|<other rows>|<OMITTED header rows>"
+      local s o h
+      cp "$1" "$STUB_DERIVER"
+      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$SX/lossy.list" \
+          AI_DLC_READSET_TRACE_ROOT="$SX_TR" bash core/scripts/derive-fixture-readsets.sh --list fxa --tracer sandbox ) > "$WORK/omit.out" 2>&1 </dev/null
+      s="$(grep -c 'STALE-ROW' "$BR/.ai-dlc-fixture-readsets.tsv")" || s=0
+      o="$(grep -c '^other	' "$BR/.ai-dlc-fixture-readsets.tsv")" || o=0
+      h="$(grep -c '^# OMITTED by the last run (always run): fxa$' "$BR/.ai-dlc-fixture-readsets.tsv")" || h=0
+      ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
+      printf '%s|%s|%s' "$s" "$o" "$h"
+    }
+    sed 's/^if \[ "\$MODE" != --list \]; then$/if true; then/' "$SB/deriver.sh" > "$SX/deriver.mappedctl.sh"
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    OR="$(omit_run "$SB/deriver.sh")"
+    if [ "$OR" = "0|2|1" ]; then
+      ok "OMITTED --list: a one-fixture refresh whose fixture is omitted writes the map, drops its stale row, keeps the other fixture's rows and names it OMITTED"
+    else
+      bad "OMITTED --list: expected stale 0, other 2, OMITTED header 1, got '$OR' — $(tail -2 "$WORK/omit.out" | tr '\n' ' ')"
+    fi
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    if cmp -s "$SB/deriver.sh" "$SX/deriver.mappedctl.sh"; then
+      bad "OMITTED --list MUTANT did not apply"
+    else
+      OM="$(omit_run "$SX/deriver.mappedctl.sh")"
+      case "$OM" in
+        "1|2|0") ok "OMITTED --list MUTANT: with the traced-count control restored under --list the run dies unwritten and the stale row survives — the arm depends on that change" ;;
+        *) bad "OMITTED --list MUTANT: expected stale 1, other 2, header 0, got '$OM'" ;;
+      esac
+    fi
+
+    # THE UNREAD CONTROL. A fixture that reads the planted control file is the stand-in for a reset
+    # that did not hold (the file's atime moves either way): it must be OMITTED naming the control.
+    # The ordinary stub run above is the near-miss and already maps (CANARY CONTROL). The mutant
+    # deletes the guard line and must map the reading fixture.
+    mkdir -p "$BR/core/fixtures/fxu" || broken "mkdir failed"
+    printf '#!/bin/bash\ncat .git/readset-unread-control >/dev/null\ncat src/a.sh >/dev/null\n' > "$BR/core/fixtures/fxu/run.sh"
+    printf '%s\n' core/fixtures/fxu/run.sh src/a.sh > "$SX/fxu.list"
+    ( cd "$BR" && git add -A && git -c user.email=f@f -c user.name=f commit -qm fxu ) >/dev/null 2>&1 || broken "could not seed fxu"
+    unread_run() { # $1 deriver copy; prints the fxu line
+      cp "$1" "$STUB_DERIVER"
+      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$SX/fxu.list" \
+          AI_DLC_READSET_TRACE_ROOT="$SX_TR" bash core/scripts/derive-fixture-readsets.sh --list fxu --tracer sandbox ) > "$WORK/unread.out" 2>&1 </dev/null
+      ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
+      grep -m1 -E '^  fxu ' "$WORK/unread.out" | tr -s ' '
+    }
+    sed '/^  \[ "\$unread_moved" -eq 0 \] || why=/d' "$SB/deriver.sh" > "$SX/deriver.nounread.sh"
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    UR="$(unread_run "$SB/deriver.sh")"
+    case "$UR" in
+      " fxu OMITTED ("*"UNREAD CONTROL"*) ok "UNREAD CONTROL: a fixture whose window moved the planted control's atime is OMITTED naming the control" ;;
+      *) bad "UNREAD CONTROL: expected fxu OMITTED naming the UNREAD CONTROL, got '$UR' — $(tail -2 "$WORK/unread.out" | tr '\n' ' ')" ;;
+    esac
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    if cmp -s "$SB/deriver.sh" "$SX/deriver.nounread.sh"; then
+      bad "UNREAD CONTROL MUTANT did not apply"
+    else
+      UM="$(unread_run "$SX/deriver.nounread.sh")"
+      case "$UM" in
+        " fxu "*" paths") ok "UNREAD CONTROL MUTANT: with the guard deleted the same fixture MAPS — the arm depends on that line" ;;
+        *) bad "UNREAD CONTROL MUTANT: expected fxu mapped, got '$UM'" ;;
+      esac
+    fi
   fi
 fi
 

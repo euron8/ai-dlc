@@ -9,7 +9,8 @@
 # `sandbox-exec` profile read through `log stream`) and needs NO root -- run it WITHOUT sudo.
 # The sandbox cannot see a read by a process outside the fixture's lineage (an XPC or launchd
 # helper), and `log stream` DROPS reports under load; a window carrying a drop notice omits its
-# fixture.
+# fixture, and so does one where the atime leg saw a READ the stream never reported (the LOSS
+# CANARY, beside the drop-notice guard: a loss canary only, never a completeness claim).
 #
 # `--tracer both` IS THE COMPARISON THAT DECIDES WHETHER THE SANDBOX MAY REPLACE fs_usage:
 #     sudo bash core/scripts/derive-fixture-readsets.sh --all --tracer both     (or --list)
@@ -105,7 +106,8 @@
 # WHY atime IS FORCED OLD FIRST. APFS is relatime-like: measured on this machine, a second
 # read of a file does NOT advance its atime. A naive before/after watermark therefore misses
 # every file read twice, which is the fatal under-record. Forcing atime to 2001 before each
-# fixture defeats relatime by construction, proven each run by the unread control below.
+# fixture defeats relatime by construction, proven each run by the unread control below
+# (UNREAD_CTL: a planted file that must still read the 2001 epoch after every fixture).
 #
 # WHY dtruss IS NOT USED. SIP restricts /bin/bash, and ROOT DOES NOT LIFT THAT:
 # `dtrace: failed to execute /bin/bash: Operation not permitted`. Disabling SIP would buy
@@ -480,6 +482,57 @@ drop_ignored() { # reads paths on stdin (repo-relative), writes the non-ignored 
 }
 # READSET_DROP_END
 
+# READSET_PSEUDO_BEGIN
+# Driven by core/fixtures/readset-skip, under all three tracers through the one call site where
+# their sets meet, and from its sentinels by the backlog receipt; it reads only $TREE and stdin.
+#
+# A PSEUDO-PATH IS AN ARGV STRING THE TRACER SAW AS A LOOKUP, NOT A FILE ANY FIXTURE DEPENDS ON.
+# Fixtures pass placeholder strings such as `<string>` or `sub/<unknown>` to the programs they
+# test; the kernel reports the failed lookup under the tree, and the map then carried rows naming
+# no file. A row is dropped ONLY when BOTH hold: its LAST component is a whole `<...>` token (no
+# `/` inside), and nothing by that name exists in the trace tree, followed or not (`-e` or `-L`).
+# So `a<b>c` and `e<f>g.sh` stay (the brackets do not span the component), `d/<real>` stays when a
+# file of that name was traced (a fixture may genuinely create one), and an absent ordinary path
+# such as `src/missing.sh` stays (a negative lookup on a real name IS a dependency: creating it
+# can change the fixture's outcome).
+# COSMETIC, AND THE ENTRY THAT ADDED IT IS A NOTE. The runner keeps only manifest paths that pass
+# `[ -f ]` (.githooks/pre-push, the manifest build), so such a row could never select a fixture;
+# this only stops the map carrying rows that look like a tracer fault.
+# THE COLON-SHAPED ROWS ARE DELIBERATELY NOT FILTERED (`file:/var/...`, `<hex>:core/...`,
+# `HEAD:core/...`): they are negative lookups of argv strings the runner never hashes, and telling
+# a `rev:path` argument from a real file whose name carries a colon needs its own design.
+readset_drop_pseudo() { # reads repo-relative paths on stdin, writes all but the absent pseudo-paths
+  # The glob is `^<[^/]*>$` applied to the LAST component: `${p##*/}` holds no `/` by construction.
+  local p
+  while IFS= read -r p; do
+    case "${p##*/}" in
+      '<'*'>') if [ -e "$TREE/$p" ] || [ -L "$TREE/$p" ]; then printf '%s\n' "$p"; fi ;;
+      *) printf '%s\n' "$p" ;;
+    esac
+  done
+  return 0
+}
+# READSET_PSEUDO_END
+
+# READSET_CANARY_BEGIN
+# The loss canary's comparison: paths in the atime set ($1) absent from the stream set ($2),
+# written to $3. Prints their COUNT, or `unreadable` when the comparison could not run.
+# Kept between sentinels so readset-skip can reach the unreadable branch, which no real trace
+# produces on demand.
+# READ OFF comm's OWN STATUS, NEVER A PIPELINE'S AND NEVER A DEFAULT OF 0. A comm that could not
+# read either side leaves $3 empty, so a count taken anyway reads 0, and a 0 MAPS the fixture --
+# the fail-open direction. `unreadable` is non-zero to the caller's guard, so it omits.
+readset_loss_canary() {
+  local n
+  if LC_ALL=C comm -23 "$1" "$2" > "$3" 2>/dev/null; then
+    n="$(grep -c . "$3")" || n=0
+    printf '%s\n' "$n"
+  else
+    printf 'unreadable\n'
+  fi
+}
+# READSET_CANARY_END
+
 if [ "$TRACER" = fs_usage ]; then
   say "fs_usage runs as root; fixtures run as '$RUN_AS'"
 elif [ "$TRACER" = both ]; then
@@ -521,6 +574,15 @@ fi
 say "copying the tree to $TREE"
 readset_copy_tree "$REPO_ROOT" "$TREE" "$WORK" || die "copy failed"
 [ -d "$TREE/.git" ] || die "copy carries no .git; git-backed fixtures would fail for the wrong reason"
+# THE UNREAD CONTROL. A file nothing reads, reset with every other file before each fixture and
+# required to be STILL at the 2001 epoch after it. If its atime moved, either the reset did not
+# take (so every "read" in that window is really the copy's own timestamp) or something walked the
+# tree, and either way the atime set is not a set of the fixture's reads: the fixture is omitted.
+# It sits in `.git/` because git never reads an unknown file there and `git status` never lists
+# one. Measured before placing it: 0 of 33 census fixtures read `.git/description`, the nearest
+# file git also ignores, against 2 reading `.git/HEAD`, so no fixture in that set walks `.git/`.
+UNREAD_CTL=".git/readset-unread-control"
+printf 'never read\n' > "$TREE/$UNREAD_CTL" || die "cannot plant the unread control $TREE/$UNREAD_CTL"
 if [ "$TRACER" = fs_usage ] || [ "$TRACER" = both ]; then
   chown -R "$RUN_AS" "$TREE" || die "chown failed"
 fi
@@ -743,12 +805,14 @@ for fx in $LIST; do
   # privilege drop, `env` sets it in the very process that runs the fixture, under every tracer.
   # The name carries no AI_DLC_ prefix as future-proofing: several fixtures scrub that prefix from
   # the environment they hand their subjects. No scrub sits on this path today.
-  # core/fixtures/readset-skip binds this line by running a copy of this deriver.
+  # EMS_POOL_WIDTH=1 rides the same `env`, for the same reason and with the same guarantee:
+  # enforcement-map-sites reads it as its own pool width, so a traced run of it is narrowed too.
+  # core/fixtures/readset-skip binds this line by running a copy of this deriver, for both knobs.
   if [ "$TRACER" = fs_usage ]; then
-    ( cd "$TREE" && sudo -n -u "$RUN_AS" env VAS_INNER_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
+    ( cd "$TREE" && sudo -n -u "$RUN_AS" env VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
     rc=$?
   else
-    ( cd "$TREE" && sandboxed env VAS_INNER_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
+    ( cd "$TREE" && sandboxed env VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
     rc=$?
   fi
 
@@ -789,6 +853,12 @@ for fx in $LIST; do
   # run.sh never runs git. Nothing between the fixture's exit and this line reads the tree.
   find "$TREE" -type f -newerat "2001-01-02" -print 2>/dev/null \
     | sed "s|^$TREE/||" | norm > "$WORK/$fx.at"
+  # The unread control's verdict, read off the same scan; its row never enters the read-set.
+  unread_moved=0
+  if grep -qxF "$UNREAD_CTL" "$WORK/$fx.at"; then
+    unread_moved=1
+    grep -vxF "$UNREAD_CTL" "$WORK/$fx.at" > "$WORK/$fx.at.tmp"; mv "$WORK/$fx.at.tmp" "$WORK/$fx.at"
+  fi
 
   dirty="$( ( cd "$TREE" && git status --porcelain 2>/dev/null | wc -l ) | tr -d ' ')"
 
@@ -820,6 +890,30 @@ for fx in $LIST; do
     lost="$(grep -c 'dropped during' "$WORK/$fx.win" 2>/dev/null)" || lost=0
     sandbox_paths < "$WORK/$fx.win" | grep -v '^-\?$' | norm > "$WORK/$fx.fs"
   fi
+  # THE LOSS CANARY: a file the fixture READ (its atime moved off the forced epoch) that the stream
+  # never reported. Under every tracer whose $fx.fs IS the stream set -- `sandbox` and `both`. Under
+  # `both` the fs_usage comparison cannot see a read BOTH tracers lost, so a canary there makes the
+  # fixture UNCOMPARED rather than letting it count toward SANDBOX-MISSES-NOTHING. Under fs_usage
+  # $fx.fs is not a stream set at all, so the canary does not run.
+  # IT IS A CANARY, NOT A COMPLETENESS CONTROL, AND CLAIMS NO COMPLETENESS. atime sees only reads of
+  # files that exist at the scan: a lost stat, a lost negative lookup, a lost exec of a file outside
+  # the tree, and a lost report on a file deleted before the scan are all invisible to it. A zero
+  # here says the stream lost no READ the atime leg could see -- never that the set is whole.
+  # WHY IT EXISTS: the stream can lose reports WITHOUT printing a drop notice -- measured, a `cp -R`
+  # recorded 946 of the 956 paths it read with zero notices -- so the drop-notice guard below cannot
+  # be the only loss guard. Proven by core/fixtures/readset-skip: a deterministic stub-world arm (no
+  # `log stream` needed) and a real unscoped burst of 8 concurrent readers over 1500 files.
+  # FALSE-POSITIVE SET, MEASURED BEFORE SHIPPING, AND NO NARROWING WAS NEEDED: a 33-fixture --list
+  # spread across the map, load 7.7-42, fired the canary on 1 fixture, which also carried 1863
+  # drop notices, and on 0 of the 16 fixtures whose windows had 0 notices. The one firing seen
+  # WITHOUT a notice was a synthetic single-reader burst over 1500 files: 3 of its 4 canary paths
+  # appear nowhere in the raw stream and the 4th matches only as a prefix of other names, so that
+  # was a real silent loss and not a false positive. No path class is exempted.
+  # The comparison is readset_loss_canary, between sentinels above, so readset-skip drives it.
+  canary=0
+  if [ "$TRACER" != fs_usage ]; then
+    canary="$(readset_loss_canary "$WORK/$fx.at" "$WORK/$fx.fs" "$WORK/$fx.canary")"
+  fi
   # Under `both`, the fs_usage capture is extracted exactly as the fs_usage mode extracts it, from
   # its OWN last sentinel line, into $fx.fsu. $fx.fs above is then the sandbox set.
   : > "$WORK/$fx.fsu"
@@ -832,7 +926,7 @@ for fx in $LIST; do
   fi
 
   cat "$WORK/$fx.at" "$WORK/$fx.fs" "$WORK/$fx.fsu" | LC_ALL=C sort -u \
-    | grep -v '^\.readset-sentinel$' | grep -v '^\.readset-end$' | drop_ignored > "$WORK/$fx.set"
+    | grep -v '^\.readset-sentinel$' | grep -v '^\.readset-end$' | readset_drop_pseudo | drop_ignored > "$WORK/$fx.set"
   n="$(grep -c . "$WORK/$fx.set" 2>/dev/null)"; case "$n" in ''|*[!0-9]*) n=0 ;; esac
 
   # FAIL CLOSED. Anything that makes this trace untrustworthy omits the fixture from the map,
@@ -842,6 +936,8 @@ for fx in $LIST; do
   [ "$settled" -eq 1 ] || why="${why:+$why; }tracing never settled"
   [ "$flushed" -eq 1 ] || why="${why:+$why; }no end sentinel in the stream -- the tail of the window is unknown"
   [ "$lost" -eq 0 ]    || why="${why:+$why; }the stream dropped reports $lost time(s) in this window"
+  [ "$canary" = 0 ]    || why="${why:+$why; }LOSS CANARY: $canary path(s) the fixture read (atime) are absent from the stream -- see $WORK/$fx.canary"
+  [ "$unread_moved" -eq 0 ] || why="${why:+$why; }UNREAD CONTROL: $UNREAD_CTL left the 2001 atime epoch -- the reset did not hold or something walked the tree"
   [ "$n" -gt 0 ]      || why="${why:+$why; }empty read-set"
   [ "$dirty" -le "$DIRTY_BASE" ] || why="${why:+$why; }fixture wrote $(( dirty - DIRTY_BASE )) path(s) into the tree"
 
@@ -911,7 +1007,14 @@ if [ "${FIXTURE_HAS_PLAN_SHAPE:-yes}" = yes ]; then
     echo "  PASS  CONTROL: an unrelated validator is absent from plan-shape's read-set"
   fi
 fi
-[ "$MAPPED" -gt 0 ] || { echo "  FAIL  zero fixtures mapped -- an empty map would skip the whole suite"; FAIL=1; }
+# UNDER `--list` THIS CONTROL READS THE MERGED MAP, BELOW, NOT THIS RUN'S TRACED COUNT. A one-fixture
+# refresh whose fixture is OMITTED maps zero fixtures in this run by construction, and dying here
+# left that fixture's STALE rows in the map -- the map went on asserting a read-set the run had
+# just refused. Written instead, the omission drops those rows and the fixture runs every push.
+# Under `--all` the traced count IS the whole map, so it is read here.
+if [ "$MODE" != --list ]; then
+  [ "$MAPPED" -gt 0 ] || { echo "  FAIL  zero fixtures mapped -- an empty map would skip the whole suite"; FAIL=1; }
+fi
 
 # THE TWO CONTROLS ABOVE NAME A FIXTURE AND A VALIDATOR THAT EXIST ONLY IN THIS DISTRIBUTION,
 # so in an installed tree the whole `if` is skipped and only "mapped > 0" is left -- which is
@@ -959,6 +1062,10 @@ fi
 # such a stale fixture's paths, which would widen the universe. Zero such fixtures today.
 MERGED="$WORK/merged"
 readset_merge_map "$MAP" "$WORK/map" "$LIST" | LC_ALL=C sort -u > "$MERGED"
+if [ "$MODE" = --list ]; then
+  N_MERGED_FIX="$(cut -f1 "$MERGED" | LC_ALL=C sort -u | grep -c .)" || N_MERGED_FIX=0
+  [ "$N_MERGED_FIX" -gt 0 ] || { echo "  FAIL  zero fixtures in the merged map -- an empty map would skip the whole suite"; FAIL=1; }
+fi
 
 # THE MERGE MUST NOT LOSE A FIXTURE IT WAS NOT ASKED ABOUT. Dropping one is SAFE (an unmapped
 # fixture always runs) but it silently costs the skip, which is the entire point of the file --
