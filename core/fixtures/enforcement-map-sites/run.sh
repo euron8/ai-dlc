@@ -72,8 +72,29 @@ fi
 # without it every "it failed as expected" below is a false pass against a validator that
 # is simply broken. Running it concurrently with the assertions it licenses would report
 # them in an order where that licence had not yet been established.
+#
+# SEEDED ONCE PER SHARD, COPIED PER TREE. `seed.sh` copies core/, scripts/, .githooks/ and
+# templates/ out of the LIVE distribution, and every tree here -- one per `--run-one` cell plus
+# one per `restore` -- used to invoke it. Under the read-set deriver's sandbox tracer each of
+# those copies was another full read of the distribution (90k-95k reports per traced run), and a
+# later seed read no path the first had not. So the shard driver runs `seed.sh` ONCE into a
+# template, checks it, and hands its path to every cell as an ARGUMENT; `seed_tree` copies the
+# template. The tree each cell gets is the same tree `seed.sh` would have printed.
+#
+# EMS_TEMPLATE IS AN ARGUMENT SLOT, NEVER AN `AI_DLC_*` ENVIRONMENT NAME: the scrub above unsets
+# those before `--run-one` reads anything (the same reason `--group` and the ledger are arguments).
+# There is NO FALLBACK to `seed.sh` and none to the live root: a cell with no usable template
+# exits 2, because a silent fallback re-creates the cost this removes and reads identically.
+EMS_TEMPLATE=""
 seed_tree() {
-  ROOT="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
+  # Refused HERE as well as at --run-one, because every subject calls this: an empty value would
+  # make the copy below `cp -RX /.`, the whole filesystem.
+  if [ -z "$EMS_TEMPLATE" ] || [ ! -f "$EMS_TEMPLATE/scripts/validate-enforcement-map.sh" ]; then
+    echo "FIXTURE ERROR: seed_tree has no usable seed template (EMS_TEMPLATE='$EMS_TEMPLATE'); there is no fallback to seed.sh or to the live root" >&2
+    exit 2
+  fi
+  ROOT="$(mktemp -d "${TMPDIR:-/tmp}/enforcement-map-sites.XXXXXX")" || { echo "FIXTURE ERROR: seed failed (mktemp)" >&2; exit 2; }
+  cp -RX "$EMS_TEMPLATE/." "$ROOT/" || { echo "FIXTURE ERROR: seed failed (copy of template $EMS_TEMPLATE)" >&2; exit 2; }
   V="$ROOT/scripts/validate-enforcement-map.sh"
   PRECLASS="$ROOT/core/skills/ai-dlc-update/reconcile/preclassify.sh"
   INSTALL="$ROOT/scripts/install.sh"
@@ -2453,15 +2474,28 @@ rm -f "$esv_bak"
 # seed. Every cell requires rc 1 AND the finding naming the seeded file AND output byte-equal
 # to C1 -- a cell keyed on equality alone scores two identical "schema missing" runs as a pass:
 #   C1  from a fresh `mktemp -d` cwd.
-#   C2  from the LIVE distribution root. That is the cwd where the old code read the live tree
-#       and returned a clean, and it is named explicitly rather than inherited, so the cell
-#       discriminates however this fixture itself is invoked.
+#   C2  from a DECOY ROOT: the shard's seed template ($EMS_TEMPLATE), a complete copy of the
+#       distribution tree carrying no offender. It used to be the LIVE distribution root, and it
+#       is not any more because every mutant run from there read the whole live tree (~45 heavy
+#       greps per traced run). The decoy discriminates for the same reason the live root did:
+#       the old code read its CWD's tree, the cwd's tree has every file the validator wants and
+#       no seeded offender, so a cwd-reading validator returns rc 0 there -- the BL-436 false
+#       clean. M1 is REQUIRED to reproduce that rc 0 on C2, which is the standing proof that the
+#       decoy is a complete tree; an empty or partial decoy makes a cwd-reading validator fail
+#       on "missing" files, the bits stay 0, and only that rc tells the two apart.
+#       IT DISCRIMINATES DIRECT CWD READS ONLY. The template carries no VERSION and no .git
+#       (seeds deliberately lack VERSION; see the validator's I45 guard), so a regression that
+#       walks UP for a marker or asks `git rev-parse --show-toplevel` resolves elsewhere from
+#       here and is not what this cell tests -- that would need its own marker-carrying decoy.
+#       The messages still say "live root" for this cell so that output stays byte-comparable
+#       across the change; the word names the cell, and the cell is the decoy.
 #   C3  from "$ROOT/core", by the RELATIVE path ../scripts/validate-enforcement-map.sh. A
 #       cd-only fix broke this one: `--arms` re-reads its own file by name after the cd, so a
 #       relative $0 resolved against the moved cwd and the run exited 2.
-#   C4  from a fresh cwd with VEM_SELF EXPORTED, naming the LIVE validator. The validator
+#   C4  from a fresh cwd with VEM_SELF EXPORTED, naming the DECOY's validator (it named the live
+#       one, for C2's reason). The validator
 #       honours VEM_SELF only when its own shell set it; an inherited value redirected every arm
-#       to the live tree and read the seeded offender as clean.
+#       to the named tree and read the seeded offender as clean.
 #
 # SCORED AS A BIT STRING, NOT CELL BY CELL, because each mutant must move a specific SUBSET and
 # nothing else. A mutant that kills C3 alone is told apart from one that kills all three only if
@@ -2494,13 +2528,13 @@ cwd_cells() {
   (VRUN_BROKEN="$keep_broken"; VRUN_RCF="$rcf"; cd "$s" && vrun) > "$CW_DIR/s.out"
   rc_s="$(cat "$rcf")"
   printf 'none\n' > "$rcf"
-  (VRUN_BROKEN="$keep_broken"; VRUN_RCF="$rcf"; cd "$HERE/../../.." && vrun) > "$CW_DIR/r.out"
+  (VRUN_BROKEN="$keep_broken"; VRUN_RCF="$rcf"; cd "$EMS_TEMPLATE" && vrun) > "$CW_DIR/r.out"
   rc_r="$(cat "$rcf")"
   printf 'none\n' > "$rcf"
   (VRUN_BROKEN="$keep_broken"; VRUN_RCF="$rcf"; cd "$ROOT/core" && vrun "$CWD_SELF_REL") > "$CW_DIR/rel.out"
   rc_rel="$(cat "$rcf")"
   printf 'none\n' > "$rcf"
-  (VRUN_BROKEN="$keep_broken"; VRUN_RCF="$rcf"; export VEM_SELF="$HERE/../../../scripts/validate-enforcement-map.sh"; cd "$s" && vrun) > "$CW_DIR/env.out"
+  (VRUN_BROKEN="$keep_broken"; VRUN_RCF="$rcf"; export VEM_SELF="$EMS_TEMPLATE/scripts/validate-enforcement-map.sh"; cd "$s" && vrun) > "$CW_DIR/env.out"
   rc_env="$(cat "$rcf")"
   rmdir "$s" 2>/dev/null
   if [ "$rc_s" = 1 ] && grep -qE -- "$want" "$CW_DIR/s.out"; then b1=1; fi
@@ -2509,6 +2543,7 @@ cwd_cells() {
   if [ "$rc_env" = 1 ] && grep -qE -- "$want" "$CW_DIR/env.out" && cmp -s "$CW_DIR/s.out" "$CW_DIR/env.out"; then b4=1; fi
   CW_BITS="$b1$b2$b3$b4"
   CW_RCS="rc scratch=$rc_s live-root=$rc_r relative=$rc_rel inherited-VEM_SELF=$rc_env"
+  CW_RC_ROOT="$rc_r"
 }
 
 # cwd_mutant <tag> <expected bits> <ERE> <sed program> <post-check ERE> <post-check count>
@@ -2526,7 +2561,17 @@ cwd_mutant() {
     bad "$CW_ID $tag applied but is INSUFFICIENT: the post-mutation count of /$pce/ is $n where $pcn was expected, so it is not the mutant its verdict would be read as"
   else
     cwd_cells mutant "$want"
-    if [ "$CW_BITS" = "$exp" ]; then
+    # THE DECOY'S PRESENCE PROOF. M1 is the base code, which reads its cwd's tree; run from a
+    # complete decoy carrying no offender it must return the false CLEAN, rc 0, on C2. An empty or
+    # partial decoy fails it on missing files instead (rc 1) while the bits stay 0000, so without
+    # this line a decoy that discriminates nothing scores identically. No ok line of its own: the
+    # M1 line below already reports it, and this file's stdout stays byte-comparable.
+    # NOT I95: its M1 C2 cell exits 1 from the LIVE root too (measured at the base of this change:
+    # rc live-root=1 for I95, 0 for I91, I94 and I81), so rc 0 is not what the base code does there
+    # and demanding it would fail a correct decoy. The other three carry the proof.
+    if [ "$tag" = M1 ] && [ "$CW_ID" != I95 ] && [ "$CW_RC_ROOT" != 0 ]; then
+      bad "$CW_ID M1 on C2 (decoy root $EMS_TEMPLATE) exited $CW_RC_ROOT where the cwd-reading base must return the false clean rc 0 ($CW_RCS) -- the decoy is not a complete tree, so C2 discriminates nothing"
+    elif [ "$CW_BITS" = "$exp" ]; then
       ok "$CW_ID $tag scores $CW_BITS on C1 scratch / C2 live root / C3 relative / C4 inherited VEM_SELF, exactly the cells it must kill ($CW_RCS)"
     else
       bad "$CW_ID $tag scored $CW_BITS where $exp was expected ($CW_RCS) -- the cells do not discriminate this layer of the fix the way they claim to"
@@ -2569,7 +2614,7 @@ cwd_control() {
 # M5 moves the cd into the `--arms` block and must leave the four cells at 1111 and kill this.
 cwd_full_bit() { # cwd_full_bit <ERE> -> prints 1 or 0, and leaves the run in "$CW_DIR/full.out"
   local rc
-  (cd "$HERE/../../.." && bash "$V") > "$CW_DIR/full.out" 2>&1; rc=$?
+  (cd "$EMS_TEMPLATE" && bash "$V") > "$CW_DIR/full.out" 2>&1; rc=$?
   if [ "$rc" = 1 ] && grep -qE -- "$1" "$CW_DIR/full.out"; then echo 1; else echo 0; fi
 }
 cwd_full() {
@@ -2749,6 +2794,15 @@ $FN
   # variable would be unset before the line that read it, the ledger would be silently empty,
   # and the selection control at the foot would report a conversion that never happened.
   VRUN_LOG="${3:-}"
+  # THE TEMPLATE IS THE THIRD ARGUMENT AFTER THE NAME, and it is also the A40-A43 decoy root.
+  # Same predicate `seed.sh` applies to the distribution: a directory carrying the validator.
+  EMS_TEMPLATE="${4:-}"
+  if [ -z "$EMS_TEMPLATE" ] || [ ! -d "$EMS_TEMPLATE" ] || [ ! -f "$EMS_TEMPLATE/scripts/validate-enforcement-map.sh" ]; then
+    echo "FIXTURE ERROR: --run-one needs a seeded template as its 4th argument (EMS_TEMPLATE, after <assertion> and <vrun-ledger>); got '$EMS_TEMPLATE', which is unset, empty, not a directory, or carries no scripts/validate-enforcement-map.sh." >&2
+    echo "  Build one by hand with: T=\"\$(bash core/fixtures/enforcement-map-sites/seed.sh)\"; bash core/fixtures/enforcement-map-sites/run.sh --run-one $FN \"\" \"\$T\"" >&2
+    echo "  There is no fallback to seed.sh or to the live root on purpose." >&2
+    exit 2
+  fi
   VRUN_BROKEN="$(mktemp)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
   seed_tree
   trap 'rm -rf "$ROOT"; rm -f "$VRUN_BROKEN"' EXIT
@@ -2902,13 +2956,39 @@ if [ "$GROUP" = a ]; then
 fi
 
 OUT="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
-trap 'rm -rf "$OUT"' EXIT
+TPL=""
+trap 'rm -rf "$OUT"; [ -n "$TPL" ] && rm -rf "$TPL"' EXIT
 SELF="$HERE/$(basename "$0")"
+
+# THE SHARD'S ONE SEED, built ABOVE the control so the control runs on the same tree as every
+# cell after it. Every `--run-one` copies this; A40-A43 also use it as the C2/C4/full-mode decoy
+# root. Two checks before anything reads it, and the second is repeated after the pool:
+#   presence  -- the validator, preclassify, and templates/ (I22 joins against
+#                templates/settings.json.template; seed.sh copies it for that reason);
+#   integrity -- an md5 over the sorted (path, md5) list of every file in it, derived with
+#                `find` over the template itself (never `git ls-files`, which cannot see an
+#                untracked file and would hash a different set). Re-taken after the pool: a cell
+#                that wrote into the shared template -- rather than its own copy -- changes it,
+#                and every cell after that write ran against a tree nobody seeded.
+TPL="$(bash "$HERE/seed.sh")" || { echo "$NAME: FIXTURE ERROR — seed.sh failed to build the shard template" >&2; exit 2; }
+for _p in scripts/validate-enforcement-map.sh core/skills/ai-dlc-update/reconcile/preclassify.sh templates/settings.json.template; do
+  [ -f "$TPL/$_p" ] || { echo "$NAME: FIXTURE ERROR — the seed template $TPL carries no $_p" >&2; exit 2; }
+done
+tpl_digest() {
+  (cd "$TPL" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 md5 -r) | md5 -q
+}
+tpl_count() { find "$TPL" -type f | grep -c .; }
+TPL_N0="$(tpl_count)"
+TPL_D0="$(tpl_digest)"
+if [ "${TPL_N0:-0}" -lt 100 ] || [ -z "$TPL_D0" ]; then
+  echo "$NAME: FIXTURE ERROR — the seed template $TPL holds ${TPL_N0:-0} file(s) and digest '$TPL_D0'; a partial template is a decoy that discriminates nothing" >&2
+  exit 2
+fi
 
 # The control, first and alone. Its verdict licenses every assertion after it, so a failure
 # here stops the run rather than reporting 28 unattributable kills.
 CTL="$(printf '%s\n' "$NAMES" | head -1)"
-bash "$SELF" --run-one "$CTL" "$OUT/$CTL.vrun" > "$OUT/$CTL" 2>"$OUT/$CTL.err"
+bash "$SELF" --run-one "$CTL" "$OUT/$CTL.vrun" "$TPL" > "$OUT/$CTL" 2>"$OUT/$CTL.err"
 ctl_rc=$?
 cat "$OUT/$CTL"
 if [ "$ctl_rc" -ne 0 ]; then
@@ -2935,13 +3015,21 @@ if [ "$N_MINE" -eq 0 ]; then
   echo "$NAME: FIXTURE ERROR — shard '$GROUP' was dealt no assertions out of $N_LISTED; an empty shard passes every assertion it never made" >&2
   exit 2
 fi
+# The template reaches each worker as a positional argument ($2), never an environment name.
 AI_DLC_EMS_SELF="$SELF" AI_DLC_EMS_OUT="$OUT" \
   xargs -P "$JOBS" -I{} bash -c '
     n="$1"
-    bash "$AI_DLC_EMS_SELF" --run-one "$n" "$AI_DLC_EMS_OUT/$n.vrun" \
+    bash "$AI_DLC_EMS_SELF" --run-one "$n" "$AI_DLC_EMS_OUT/$n.vrun" "$2" \
       > "$AI_DLC_EMS_OUT/$n" 2> "$AI_DLC_EMS_OUT/$n.err"
     printf %s $? > "$AI_DLC_EMS_OUT/$n.rc"
-  ' _ {} < "$OUT/list"
+  ' _ {} "$TPL" < "$OUT/list"
+
+TPL_N1="$(tpl_count)"
+TPL_D1="$(tpl_digest)"
+if [ "$TPL_N1:$TPL_D1" != "$TPL_N0:$TPL_D0" ]; then
+  echo "$NAME: FIXTURE BROKEN — the shared seed template changed during the pool ($TPL_N0 files / $TPL_D0 before, $TPL_N1 / $TPL_D1 after). A cell wrote into the template instead of its own copy, so the cells after that write ran against a tree nobody seeded." >&2
+  exit 2
+fi
 
 # Rendered in SOURCE order, never completion order, so the output is byte-comparable
 # against the serial version and diffable across runs.
