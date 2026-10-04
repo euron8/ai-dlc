@@ -27,8 +27,8 @@
 #                                              # with no `deferred_acs` field stays a REPORT, as
 #                                              # without the flag, because a pre-field envelope
 #                                              # would otherwise wedge. Measured on the reference
-#                                              # consumer's s316 at 0.723.0: 17 of 17 entries
-#                                              # `review`, every one named in a gate-3 section.
+#                                              # consumer's s316 at its HEAD 73b2943f: 17 of 17
+#                                              # entries `review`, each named in a gate-3 section.
 #   sprint-status.sh derive-stories [--check] [--sprint <N>] [--root <dir>]
 #                                              # the WRITE half of that same join: rewrite each
 #                                              # derivable field's value from the story file
@@ -174,7 +174,7 @@ case "${1:-}" in
   close)      MODE="close"; shift ;;
   check-stories) MODE="check-stories"; shift ;;
   derive-stories) MODE="derive-stories"; shift ;;
-  "")         echo "usage: sprint-status.sh --render | --check <file> | sprint-id | roll --sprint <N> | close --evidence <text> | check-stories [--sprint <N>] | derive-stories [--check] [--sprint <N>]" >&2; exit 2 ;;
+  "")         echo "usage: sprint-status.sh --render | --check <file> | sprint-id | roll --sprint <N> | close --evidence <text> | check-stories [--require-done] [--sprint <N>] | derive-stories [--check] [--sprint <N>]" >&2; exit 2 ;;
   *)          echo "sprint-status: unknown command '$1'" >&2; exit 2 ;;
 esac
 
