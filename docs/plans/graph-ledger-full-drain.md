@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 494..538. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 465..514. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,27 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 193 SHIPPED NO RELEASE AND DISCHARGED NO CONSUMER CANDIDATE; IT AMENDED `BL-375` ON AN OPERATOR RULING.** It was
+invoked by peer handoff (`ai-dlc-55`) at `origin/main` `d4354b7c` (`VERSION` 0.722.0). The opening sweep was identical
+to batch 192's: live 5 on 34 qualifying refs, all five shipped here, unfiled 0, worklist 0 (a true empty), TERMINAL 199,
+every control passing, the consumer's working-tree ledger equal to its `HEAD`. One `opus` hand adjudicated `BL-375`.
+
+**OPERATOR RULING (option A): `BL-375`'s stage-1 identical-sets arm compares only paths that exist in the traced tree
+at window close.** The unfiltered arm was unreachable by construction. Batch 192's deriver lever was refuted, not
+deferred: it contradicts the deriver's own contract that a negative lookup is a dependency, and the `existonly` mutant
+in `core/fixtures/readset-skip` kills it. The entry also records the `.git/**` runner question as answered and corrects
+its `cp -R` prose.
+
+**THE STAGE-1 TRACE WAS NOT MET.** Over three runs, at peak loads 32.0, 12.8 and 5.9, the runs mapped 0, 2 and 4 of 5
+fixtures. The filtered arm compared 0 differences on both twice-clean pairs, where the raw arm differed by 58 absent
+paths. `enforcement-map-sites` dropped reports in all three runs and is the lone stage-1 blocker.
+
+Live backlog **1**, archive **437**. Net closed minus filed: **0**. The delivery gap is unchanged at **9** releases
+(installed 0.713.0), with PENDING 5. The banked ruling stands: report the gap and write no runbook. **OPERATOR DECISIONS
+STILL OPEN:** whether review sharding becomes the default.
+
+Batch 192's block below is history: batch 193's block replaces its delivery gap and its decisions list.
 
 **BATCH 192 SHIPPED NO RELEASE AND DISCHARGED NO CONSUMER CANDIDATE, BECAUSE NOTHING BUILDABLE WAS FOUND.** It was
 invoked by peer handoff (`ai-dlc-86`) and ran autonomously at `origin/main` `1047e971` (`VERSION` 0.722.0). The `Agent`
@@ -440,56 +461,6 @@ Commit only a diff with no OMITTED line.
 both` run, and batch 179's four census steps. `BL-007` and `BL-195` remain closed questions.
 
 Batch 183's block below is history: batch 184's block replaces its delivery gap and its decisions list.
-
-**BATCH 183 SHIPPED TWO RELEASES, `v0.705.0` (`ae453f5d`, #976) AND `v0.706.0` (`762fd464`, #977), AND DISCHARGED NO
-CONSUMER CANDIDATE.** It was invoked by peer handoff and ran autonomously. The opening sweep found no candidate work:
-live 2, both discharged at 0.697.0 and 0.702.0, unfiled 0, worklist 0, every control passing. Scope came from the
-whole-backlog adjudication (16 entries: 0 CLOSE, 4 PARTIAL, 12 LIVE).
-
-- `v0.705.0`: `BL-378` (the suite-pole guard reached its comparison once on a real push since 2026-09-22; it now
-  compares at 90% cost coverage, and `docs/suite-pole-baseline.tsv` holds one block per pool width), `BL-087` (the
-  coercion partition measured on Claude Code 2.1.287; closed as a version-pinned recorded answer).
-- `v0.706.0` (bootstrapping): `BL-145`'s producer half. A release names a candidate it did not discharge on a
-  column-0 body line in the form `BL-145` and `ledger-reverify.sh` document; the closer emits
-  `NAMED-UPSTREAM-CITED-ONLY` for such a set, and arm F of `validate-release-version.sh` refuses a near-miss spelling.
-  The citation must be in the SQUASH body; run `validate-release-version.sh --commit <squash sha>` after any merge
-  that uses it. `BL-145` stays open on its per-id subject-path half.
-
-Live backlog **16 -> 15**, archive **408 -> 410**: `BL-087` and `BL-378` landed and rotated; `BL-426` filed (a NOTE:
-`suite-pole-guard` grew from 68s to 279s pooled). Net closed minus filed: **1**. R5's `--min-entries` floor is 15;
-`--min-sh-receipts` stays 5.
-
-**THE WIDTH-16 POLE ROW CAME FROM A FORCED CALIBRATION THE OPERATOR AUTHORIZED IN THIS BATCH**, three
-`AI_DLC_FIXTURE_NO_SKIP=1` runs on a `file://` clone (760/727/702s). It is a one-off authorization for that row,
-not a change to the ruling against forcing the gate. The operator also ruled one baseline row per pool width.
-
-**EVERY ADVERSARY FOUND SOMETHING ON A GATE-GREEN SHAPE, AGAIN.** `BL-378`'s contract adversary showed the guard could
-not fire and that two obvious predicates would have reopened the hole; its tip adversary found the per-width parser
-accepting an orphaned directive mid-file. `BL-145`'s contract adversary found the first design deleted the row; its tip
-adversary found arm F passing a mutant without its end anchor. The first 0.706.0 gate went red on
-`procsub-staged-refusal-boot`, which pins an older `emit-report.sh` and diffs renders: **a release that edits a line
-of `emit-report.sh` owes that fixture's staged base the same line.**
-
-**TWO CONSUMER FILINGS ARRIVED AFTER THIS BATCH'S RELEASES WERE BUILT, AND NEITHER WAS SCOPED.** Both are against
-0.704.0. `PC-S316-PRECLASSIFY-SELF-UPDATE-RECOGNITION-OMITS-FIXTURES` is committed on the consumer's carry-over branch
-(filed 2026-10-02) and is the close sweep's one live, unfiled id. `PC-S316-RULE-28-SHARD-LINE-ACCEPTS-AN-INVENTED-SERIAL-EXCEPTION-AND-ONLY-WARNS`
-was UNCOMMITTED in the consumer's working tree at close, on no ref, so the derive block's live set cannot see it
-until the consumer commits it; read the working-tree ledger to find it. No contract was written for either.
-
-**READ-SET TRACE OWED, AND A SECOND ONE WAS DISCARDED.** At load 7-10 the sandbox tracer omitted 6 of the 12 fixtures
-batch 182 owed (`apply-drift-refile document-partition enforcement-map-sites procsub-staged-refusal
-self-update-fixture-log validator-fork-budget`), so the drops are not load alone. Owed now: those 12 plus
-`ledger-reverify-d suite-pole-guard release-version-triple procsub-staged-refusal-boot`. Commit only a diff with no
-OMITTED line.
-
-**THE DELIVERY GAP IS TWO RELEASES.** The consumer pulled to 0.704.0 during the batch (stamp `commit: abe3afb7`)
-against `VERSION` 0.706.0, and 0.706.0 changes `ledger-reverify.sh` and `emit-report.sh`. PENDING is 0. The banked
-ruling stands: report the gap and write no runbook.
-
-**OPERATOR DECISIONS STILL OPEN.** `BL-007`, `BL-132` and `BL-195` remain closed questions on their 2026-10-01
-decisions. Open: `BL-375` (the operator's `--tracer both` run) and batch 179's four census steps.
-
-Batch 182's block below is history: batch 183's block replaces its delivery gap and its decisions list.
 
 ### Derive the state; do not trust the numbers below
 
