@@ -303,6 +303,67 @@ readset_discrimination_control() {
 }
 # READSET_CONTROL_END
 
+# READSET_ALLLIST_BEGIN
+# The `--all` subject list: every directory directly under $1 that holds a run.sh, by basename,
+# printed SPACE-separated on one line.
+#   $1 the fixtures directory (`$TREE/$FIXTURE_ROOT` at the call site)
+#
+# SPACE-SEPARATED IS THE CONTRACT, AND A NEWLINE-SEPARATED LIST BREAKS TWO GUARDS SILENTLY. Every
+# membership test on `$LIST` below is `case " $LIST " in *" $f "*)`, which needs a space on both
+# sides of each name. The list this replaced was a `for` loop's output -- one name per line -- so
+# under `--all` neither the untraced-fixture guard nor the plan-shape controls ever matched a
+# name: every fixture was classed untouched, so one OMITTED fixture made the merge check die and
+# discard every good trace, and the plan-shape pair never ran on any `--all` derivation. `--list`
+# was always space-separated and always correct, which is why nothing looked broken.
+#
+# Kept between sentinels so core/fixtures/readset-skip drives THIS function on a seeded directory
+# and asserts on its output, rather than on a restatement of it.
+readset_all_list() {
+  local root="$1" d out=""
+  for d in "$root"/*/; do
+    [ -f "${d}run.sh" ] || continue
+    d="${d%/}"
+    out="${out}${out:+ }${d##*/}"
+  done
+  printf '%s' "$out"
+}
+# READSET_ALLLIST_END
+
+# READSET_UNTRACED_BEGIN
+# THE MERGE MUST NOT LOSE A FIXTURE IT WAS NOT ASKED ABOUT. Prints, one per line, every fixture the
+# existing map names that this run did NOT trace and that the merged map no longer carries.
+#   $1 existing map (absent or empty: nothing to lose, prints nothing)
+#   $2 the merged map this run would write
+#   $3 the fixtures this run TRACED -- space- OR newline-separated; normalised here
+# Returns non-zero only when a map could not be read, so the caller can tell "lost nothing" from
+# "did not look".
+#
+# MEMBERSHIP IS BY EXACT NAME ON BOTH SIDES. A traced list holding `fx-b` must not count `fx` as
+# traced, and a merged map row for `fx-b` must not count as a row for `fx`. A substring test passes
+# both, and the second one is the silent direction: `fx` is reported kept while it is gone.
+#
+# NORMALISED HERE rather than at the call site because this block is what the fixture extracts and
+# drives -- the same reasoning as readset_merge_map's normalisation, and the defect it closes is the
+# same one: the `--all` list arrived newline-separated, no name matched, and every fixture read as
+# untraced.
+readset_untraced_lost() {
+  local old="$1" merged="$2" traced="$3"
+  [ -s "$old" ] || return 0
+  [ -r "$merged" ] || return 2
+  traced="$(printf '%s' "$traced" | tr '\n\t' '  ')"
+  awk -F'\t' -v traced=" $traced " '
+    FILENAME == ARGV[1] { if ($0 !~ /^#/) have[$1] = 1; next }
+    /^#/ { next }
+    $1 == "" { next }
+    ($1 in seen) { next }
+    {
+      seen[$1] = 1
+      if (index(traced, " " $1 " ") == 0 && ($1 in have) == 0) print $1
+    }
+  ' "$merged" "$old"
+}
+# READSET_UNTRACED_END
+
 # READSET_COPY_BEGIN
 # Build the trace tree: the whole `.git/`, plus exactly the paths git would call candidate inputs
 # -- `git ls-files --cached --others --exclude-standard`, tracked plus untracked-not-ignored.
@@ -637,7 +698,7 @@ case "$DIRTY_BASE" in ''|*[!0-9]*) DIRTY_BASE=0 ;; esac
 [ "$DIRTY_BASE" -eq 0 ] || say "note: deriving from a tree with $DIRTY_BASE uncommitted path(s); the guard measures growth beyond that"
 
 case "$MODE" in
-  --all)  LIST="$(cd "$TREE" && for d in "$FIXTURE_ROOT"/*/; do [ -f "$d/run.sh" ] && basename "$d"; done)" ;;
+  --all)  LIST="$(readset_all_list "$TREE/$FIXTURE_ROOT")" ;;
   --list) LIST="$LIST_ARG"; [ -n "$LIST" ] || die "--list needs a fixture list" ;;
   *)      die "$USAGE" ;;
 esac
@@ -994,7 +1055,17 @@ FAIL=0
 # with the WRITER's EPIPE once the upstream's post-match output passes the pipe buffer -- a
 # SIZE threshold, so it is correct until it is permanently wrong with no symptom. I54b caught
 # exactly this line in this file. The glob also forks nothing.
+#
+# THE PAIR READS THIS RUN'S TRACED ROWS, SO IT RUNS ONLY WHEN plan-shape HAS ROWS IN THEM. A listed
+# plan-shape that was OMITTED has none by construction; judged anyway, the positive control fails
+# and the run dies "controls failed" -- one omitted fixture discarding every good trace, which is
+# the defect the merge guard below was fixed for. The omission is printed instead, and the fixture
+# runs on every push because it is unmapped. Same shape as the `--list` carve-out after this block.
 case " $LIST " in *" plan-shape "*) ;; *) FIXTURE_HAS_PLAN_SHAPE=no ;; esac
+if [ "${FIXTURE_HAS_PLAN_SHAPE:-yes}" = yes ] && ! grep -q '^plan-shape	' "$WORK/map"; then
+  echo "  SKIP  plan-shape controls: plan-shape OMITTED this run"
+  FIXTURE_HAS_PLAN_SHAPE=no
+fi
 if [ "${FIXTURE_HAS_PLAN_SHAPE:-yes}" = yes ]; then
   if grep -qxF "plan-shape	scripts/validate-plan-shape.sh" "$WORK/map"; then
     echo "  PASS  plan-shape's read-set names its own subject (the v0.293.0 regression case)"
@@ -1059,7 +1130,10 @@ fi
 #
 # THE `--all` READING CHANGES ONLY WHERE THE COMMITTED MAP NAMES A FIXTURE THAT IS NO LONGER ON
 # DISK. Under `--all` every fixture on disk is traced, so the merged map adds nothing except
-# such a stale fixture's paths, which would widen the universe. Zero such fixtures today.
+# such a stale fixture's paths, which would widen the universe. That case is live, not
+# hypothetical: the committed map has carried rows for a fixture with no directory under the
+# fixture root (notify-hook-channel). Such a fixture is untraced and kept by the merge, so the
+# guard below does not die on it -- its rows survive every `--all` run until removed by hand.
 MERGED="$WORK/merged"
 readset_merge_map "$MAP" "$WORK/map" "$LIST" | LC_ALL=C sort -u > "$MERGED"
 if [ "$MODE" = --list ]; then
@@ -1071,26 +1145,16 @@ fi
 # fixture always runs) but it silently costs the skip, which is the entire point of the file --
 # and the first version of `--list` did exactly that, rewriting the whole map from the handful
 # of fixtures it had just traced. Asserted rather than trusted.
+# The comparison is readset_untraced_lost, between sentinels above, so readset-skip drives it. Its
+# output is staged to a file and its status read: a failed read must refuse, never pass as "lost
+# nothing".
 if [ -s "$MAP" ]; then
-  # THE `case` STAYS OUT OF THE COMMAND SUBSTITUTION. bash 3.2 -- which is what /bin/bash is on
-  # macOS -- parses the `)` closing a case pattern as the `)` closing `$( )`, and dies with
-  # "syntax error near unexpected token `newline'". Writing the intermediate to a file instead
-  # of capturing it is the fix; this is the same bash-3.2 constraint the suite already works
-  # under elsewhere.
-  grep -v '^#' "$MAP" | cut -f1 | sort -u > "$WORK/old.fixtures"
-  : > "$WORK/untouched"
-  while IFS= read -r f; do
-    [ -n "$f" ] || continue
-    case " $LIST " in
-      *" $f "*) ;;
-      *) printf '%s\n' "$f" >> "$WORK/untouched" ;;
-    esac
-  done < "$WORK/old.fixtures"
-  while IFS= read -r f; do
-    [ -n "$f" ] || continue
-    grep -q "^$f	" "$MERGED" \
-      || die "merge dropped '$f', which this run never traced -- refusing to write a map that silently stops skipping"
-  done < "$WORK/untouched"
+  readset_untraced_lost "$MAP" "$MERGED" "$LIST" > "$WORK/untraced.lost" \
+    || die "could not compare $MAP against the merged map $MERGED -- refusing to write a map whose losses were never checked"
+  if [ -s "$WORK/untraced.lost" ]; then
+    f="$(head -1 "$WORK/untraced.lost")"
+    die "merge dropped '$f', which this run never traced -- refusing to write a map that silently stops skipping"
+  fi
 fi
 
 readset_discrimination_control "$MERGED" || FAIL=1
