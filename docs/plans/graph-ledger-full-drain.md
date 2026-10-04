@@ -82,9 +82,13 @@ its `cp -R` prose.
 fixtures. The filtered arm compared 0 differences on both twice-clean pairs, where the raw arm differed by 58 absent
 paths. `enforcement-map-sites` dropped reports in all three runs and is the lone stage-1 blocker.
 
-Live backlog **1**, archive **437**. Net closed minus filed: **0**. The delivery gap is unchanged at **9** releases
-(installed 0.713.0), with PENDING 5. The banked ruling stands: report the gap and write no runbook. **OPERATOR DECISIONS
-STILL OPEN:** whether review sharding becomes the default.
+Live backlog **1**, archive **437**. Net closed minus filed: **0**.
+
+**THE DELIVERY GAP IS ZERO: THE CONSUMER PULLED TO 0.722.0 DURING THE BATCH** (stamp `commit: d4354b7c`, its branch
+`ai-dlc-update/0.722.0-reconcile-20261004T120743Z`). The close re-derive from a fresh `origin/main` read 36 qualifying
+refs where the opening read 34; every other figure was unchanged. The five live candidates are therefore all installed
+there, and PENDING is 0. They stay live until the consumer's own reconcile closes them. **OPERATOR DECISIONS STILL
+OPEN:** whether review sharding becomes the default.
 
 Batch 192's block below is history: batch 193's block replaces its delivery gap and its decisions list.
 
