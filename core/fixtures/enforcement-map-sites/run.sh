@@ -2564,7 +2564,7 @@ cwd_cells() {
 # because its M1 run still names the seeded finding from a complete tree; so for I95 the
 # predicate is that the seeded finding is NAMED. Both are presence-shaped against the empty-cwd
 # probe in cwd_mutant, where a cwd-reading validator fails on missing files and names nothing.
-a1_holds() {
+a1_holds() { # a1_holds <rc> <output file> <ERE>
   if [ "$CW_ID" = I95 ]; then grep -qE -- "$3" "$2"; else [ "$1" = 0 ]; fi
 }
 a1_says() {
@@ -2594,18 +2594,28 @@ cwd_mutant() {
     # EMPTY cwd and must NOT hold there -- a predicate keyed on a value nobody sets, or one that
     # holds for any input, holds on both and fails here instead of passing silently. No ok line
     # of its own: the M1 line below reports it, and this file's stdout stays byte-comparable.
+    # ONE CALL SITE FOR THE CHECK AND ITS PROBE. The loop's first pass reads C2's OWN result; the
+    # second overwrites the very same variable and file with M1 run from an empty cwd. The
+    # predicate is evaluated by one expression on both passes, so a predicate -- or an argument
+    # at that call -- keyed on something nobody sets is wrong on both, and the probe fires.
     a1_fail=""
     if [ "$tag" = M1 ]; then
-      local a1_e a1_erc
-      a1_e="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp -d failed" >&2; exit 2; }
-      printf 'none\n' > "$CW_DIR/rc"
-      (VRUN_BROKEN=""; VRUN_RCF="$CW_DIR/rc"; cd "$a1_e" && vrun) > "$CW_DIR/a1e.out"
-      a1_erc="$(cat "$CW_DIR/rc")"
-      rmdir "$a1_e" 2>/dev/null
-      if ! a1_holds "$CW_RC_ROOT" "$CW_DIR/r.out" "$want"; then
-        a1_fail="$CW_ID M1 on C2 (decoy root $EMS_DECOY) does not show what the cwd-reading base shows from a complete tree ($(a1_says), $CW_RCS) -- the decoy is not a complete tree, so C2 discriminates nothing"
-      elif a1_holds "$a1_erc" "$CW_DIR/a1e.out" "$want"; then
-        a1_fail="$CW_ID M1 decoy-proof SELF-PROBE did not fire: the same predicate ($(a1_says)) also holds for M1 run from an EMPTY cwd (rc $a1_erc), so it cannot tell a complete decoy from no tree at all"
+      local a1_pass a1_e a1_decoy=0 a1_empty=0 a1_rc_decoy a1_rc_empty
+      a1_rc_decoy="$CW_RC_ROOT"
+      for a1_pass in decoy empty; do
+        if [ "$a1_pass" = empty ]; then
+          a1_e="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp -d failed" >&2; exit 2; }
+          printf 'none\n' > "$CW_DIR/rc"
+          (VRUN_BROKEN=""; VRUN_RCF="$CW_DIR/rc"; cd "$a1_e" && vrun) > "$CW_DIR/r.out"
+          CW_RC_ROOT="$(cat "$CW_DIR/rc")"; a1_rc_empty="$CW_RC_ROOT"
+          rmdir "$a1_e" 2>/dev/null
+        fi
+        if a1_holds "$CW_RC_ROOT" "$CW_DIR/r.out" "$want"; then eval "a1_$a1_pass=1"; fi
+      done
+      if [ "$a1_decoy" != 1 ]; then
+        a1_fail="$CW_ID M1 on C2 (decoy root $EMS_DECOY) does not show what the cwd-reading base shows from a complete tree ($(a1_says); $CW_RCS) -- the decoy is not a complete tree, so C2 discriminates nothing"
+      elif [ "$a1_empty" != 0 ]; then
+        a1_fail="$CW_ID M1 decoy-proof SELF-PROBE did not fire: the same predicate ($(a1_says)) also holds for M1 run from an EMPTY cwd (rc $a1_rc_empty; decoy rc $a1_rc_decoy), so it cannot tell a complete decoy from no tree at all"
       fi
     fi
     if [ -n "$a1_fail" ]; then
@@ -2682,7 +2692,7 @@ cwd_full() {
   cp "$bak" "$V"; rm -f "$bak"
 }
 
-cwd_finish() { rm -f "$CW_DIR/s.out" "$CW_DIR/r.out" "$CW_DIR/rel.out" "$CW_DIR/env.out" "$CW_DIR/full.out" "$CW_DIR/a1e.out" "$CW_DIR/rc"; rmdir "$CW_DIR" 2>/dev/null; }
+cwd_finish() { rm -f "$CW_DIR/s.out" "$CW_DIR/r.out" "$CW_DIR/rel.out" "$CW_DIR/env.out" "$CW_DIR/full.out" "$CW_DIR/rc"; rmdir "$CW_DIR" 2>/dev/null; }
 
 A40_i91_cwd_invariance() {
 CW_ID=I91
