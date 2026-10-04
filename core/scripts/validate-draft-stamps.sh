@@ -50,12 +50,32 @@
 #       archiving. That is this check's subject, and the five drafts plus
 #       test-strategy are the whole of it on today's tree.
 #
-# Derived, not asserted: over the 11 basenames core prescribes at
-# `_bmad-output/planning-artifacts/` root, (a) accounts for 4, (b) for 1
-# (sprint-status.yaml, route.md Step 1), (c) for 3, and (x) for 2 —
-# test-strategy, requirements-context. bug-analysis is (x) by shape and exempt
-# for a stated reason below, which is the one place the criterion and the
-# exemption disagree.
+# Derived, not asserted. The corpus is every root path core names, from the
+# repo root:
+#
+#   grep -rhoE '_bmad-output/planning-artifacts/[A-Za-z0-9_.-]+\.(md|yaml|jsonl?)' \
+#     core --exclude-dir=fixtures | sort -u
+#
+# It returns 14 basenames, and every one is classified:
+#
+#   (a) 4 — prd · product-brief · architecture · carry-over-backlog.
+#   (b) 1 — sprint-status.yaml (route.md Step 1).
+#   (c) 4 — codebase-analysis · brownfield-inventory · doc-reconciliation, plus
+#       spec-adoption, the operator's single adoption declaration, whose one
+#       instance is held by `validate-spec-adoption.sh` refusing a redeclaration
+#       once the floor is in force rather than by onboarding.
+#   (x) 2 — bug-analysis and its sibling bug-analysis-adversarial
+#       (bug-investigation.md §2c), both exempt for a stated reason below, which
+#       is the one place the criterion and the exemption disagree.
+#   not a prescribed write, 3 — test-strategy (named only as the stranded path
+#       NOT to read, bug-investigation.md §1; it is written at `s<N>/`),
+#       gate-log (a legacy fallback `validate-h2-attestation.sh` probes; Check 12
+#       writes `implementation-artifacts/gate-log.md`), and .artifact-writes.jsonl
+#       (a hook ledger declared transient in `schemas/pipeline-state-paths.json`,
+#       not a planning artifact).
+#
+# No unexempt (x) basename remains at the root: the five drafts and
+# test-strategy are written at `s<N>/`, which is what this script guards.
 #
 # TWO HALVES, because the drift has two surfaces:
 #
@@ -94,7 +114,10 @@
 #     + 1 slot on the reference consumer), and the reason it stays out is that a
 #     bug KEY does not exist to stamp with. Inventing one to satisfy this check
 #     is the speculative mechanism Rule 26(a) forbids. Reopen it when the bug
-#     route carries an id a path can be composed from — not before.
+#     route carries an id a path can be composed from — not before. The same
+#     exemption, on the same terms, covers bug-analysis-adversarial — the §2c
+#     findings file of `bug-investigation.md`, keyed to the one bug-analysis it
+#     reviews and carrying no sprint key of its own.
 #
 # MATCHING IS PATH-ANCHORED, NEVER BASENAME-ANCHORED. `route.md`'s pipeline
 # table legitimately names the STEP FILE `carry-over-evaluation.md`, and every

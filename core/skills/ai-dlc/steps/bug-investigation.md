@@ -97,7 +97,35 @@ continue.
 **The lead cannot apply the relief, so nothing substitutes for asking.** It is
 never written into a story as a substitute for the question, and never recorded
 in the analysis as an autonomous Rule 12 Tier 2 decision. The question is not
-held back behind any review a project adds between section 2 and section 3.
+held back behind any review between section 2 and section 3, §2c included.
+
+### 2c. Adversarial verification of the root-cause claim
+
+**The root-cause claim gets an adversarial pass before section 3.** Dispatch ONE
+`adversary` (Agent tool, bound to `.claude/team-roles/adversary.md` per SKILL.md
+Rule 19) to run `/bmad-review-adversarial-general` on
+`_bmad-output/planning-artifacts/bug-analysis.md`, one-shot and `mode: subagent`,
+targeting the SOUNDNESS of the root cause:
+- For each falsification-ladder rung, does the evidence rule the layer out?
+- Is a layer missing from the ladder?
+- Does the evidence fit another cause equally well, and what observation would
+  discriminate between them?
+- Is the defect placed where it is observed rather than where the wrong value is
+  produced?
+
+It writes findings to `_bmad-output/planning-artifacts/bug-analysis-adversarial.md`.
+The file carries a `SKILL_INVOCATION_PROVENANCE v1` block with
+`skill: bmad-review-adversarial-general`, `mode: subagent`, `artifact:` naming
+`_bmad-output/planning-artifacts/bug-analysis.md`, and the three `findings_*` counts
+— and **no `verdict`**, which a one-shot never stamps.
+
+**Dispose of every CRITICAL and MAJOR before section 3**, by amending
+`bug-analysis.md` or by recording the counter-evidence in the fix story. An
+assertion without evidence is not a disposition.
+
+**A one-shot finding that yields relief the operator can apply** — an existing
+endpoint or admin action that turns the fix into an operator action — goes to the
+operator through section 2b's question WHEN IT IS FOUND, not after the disposition.
 
 ### 3. Create Fix Story
 

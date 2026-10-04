@@ -221,6 +221,7 @@ core_manifest:
   - fixtures/escalation-citation/**
   - fixtures/extension-check-adoption/**
   - fixtures/escalation-status-vocabulary/**
+  - fixtures/process-rule-pins/**
   - fixtures/gate-adjudication/**
   - fixtures/gate-adjudication-rotate/**
   - fixtures/gate-remediation-deny/**

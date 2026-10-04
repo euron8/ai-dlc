@@ -502,8 +502,9 @@ MUST-ASK or by operator direction — is triaged, not written straight into a
 story.** For each one:
 
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/bug-investigation.md`
-sections 0–4 for that defect, then resume here at section 4. A defect that
-`route.md` already took through sections 0–2b runs sections 3–4 here.
+sections 0–4 for that defect, §2c's adversarial verification of the root-cause
+claim included, then resume here at section 4. A defect that `route.md` already
+took through sections 0–2c runs sections 3–4 here.
 
 Sections 5 (Sprint Setup) and 6 (Gate Validation and Proceed) of
 `bug-investigation.md` are NOT run: this sprint already exists and this step

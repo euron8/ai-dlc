@@ -19,6 +19,43 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.726.0] - 2026-10-04
+
+Batch 195's second release. It discharges three consumer candidates filed during batch 194, each a
+core step, rule or role-file change with no mechanism behind it: `BL-444`, `BL-445` and `BL-446`, all
+filed and landed here (net closed minus filed: 0). No file in it is bootstrapping. A new shipping
+fixture, `process-rule-pins`, pins every new rule's opening phrase and binding clause inside its
+section.
+
+### PC-S316-OPERATOR-ATTRIBUTION-AND-STATE-CLAIMS-NEED-A-CITED-SOURCE (BL-444)
+
+- Gate-validation Check 12: an evidence row that asserts repository state (committed, tracked,
+  gitignored, absent, red, green) carries the command that produced it and that command's output.
+- Rule 13 and discovery §4a: a requirement, AC or decision attributed to the operator cites the
+  operator's message with a quote and a locator. An attribution with no citable message never entered
+  the locked set; striking it is not a Rule 13 divergence.
+- `adversary.md` gains a MAJOR rung for an operator attribution missing its quote or locator. Its
+  repair is to supply the citation.
+- The consumer's own receipt keys on its extension's id, which core prose never carries, so it needs a
+  hand annotation. Core carries no gate FAIL for either half, so the consumer's extension is not a
+  retirement candidate.
+
+### PC-S316-NO-ADVERSARIAL-PASS-ON-THE-BUG-ANALYSIS-ROOT-CAUSE-CLAIM (BL-445)
+
+- `bug-investigation.md` gains §2c, "Adversarial verification of the root-cause claim": one
+  adversary, one-shot, reviews the soundness of `bug-analysis.md` before the fix story is written,
+  and every CRITICAL and MAJOR is disposed before section 3.
+- The folded-defect route now runs sections 0–2c (`route.md`, `stories-test-strategy.md`).
+- The findings file joins `bug-analysis.md`'s draft-stamp exemption everywhere it is written.
+
+### PC-S316-LATER-EVENT-INVALIDATING-AN-AUTHORIZATION-PREMISE-MUST-RETURN-TO-THE-OPERATOR (BL-446)
+
+- `escalations.md` gains the authorization-premise invalidation disclosure: when a later event shows
+  an outcome an authorization relied on did not occur, a new `HARD_BLOCK` entry goes back to the
+  operator before deploy-validate.
+- `adversary.md` gains a MAJOR rung for an authorization whose named outcome a later event
+  contradicted.
+
 ## [0.725.0] - 2026-10-04
 
 Batch 195's first release. It discharges three consumer candidates filed during batch 194, each as

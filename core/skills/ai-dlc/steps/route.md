@@ -418,7 +418,7 @@ because the two route to different pipelines (`bug` → repro-first triage;
 operator pre-directed the priority.
 
 **The question MUST offer triage now, then fold the fix** among its options:
-READ AND FOLLOW `bug-investigation.md` sections 0–2b for the defect — so any
+READ AND FOLLOW `bug-investigation.md` sections 0–2c for the defect — so any
 operator-applicable relief reaches the operator first — then return to this
 step and fold the fix story (sections 3–4) into the current sprint: through
 `stories-test-strategy.md` §3a if the sprint has not yet passed that step;

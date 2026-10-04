@@ -197,6 +197,16 @@ path as the sibling above — the `RESOLVED`/`OVERRIDDEN` operator citation
 (`validate-escalation-resolution.sh`) is what makes a fabricated ack fail.
 Governed by SKILL.md Rule 12.
 
+**Authorization-premise invalidation disclosure.** When an event later in
+the sprint shows that an outcome named in an earlier RESOLVED/OVERRIDDEN
+authorization did not occur, do not absorb the change in gate-log prose.
+File a new `HARD_BLOCK` entry citing the earlier authorization (its entry
+header and its timestamp) and the invalidating event, and put the question back to the
+operator before the affected work reaches deploy-validate or the
+Production Validation Checkpoint. The operator may restate the original.
+No mechanism enforces this: whether an outcome was the premise of an
+authorization is a judgment about intent. Governed by SKILL.md Rule 12.
+
 **Terminal-entry archival (Rule 25(a)/(c) — move, never delete).** Once
 an entry reaches a terminal status — RESOLVED or OVERRIDDEN — it is
 MOVED (cut-and-paste, verbatim) out of the live `pending.md` into a dated

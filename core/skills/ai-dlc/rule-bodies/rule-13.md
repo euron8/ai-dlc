@@ -15,6 +15,15 @@ user-specified detail and the proposed change. Agents that rewrite
 user intent into a vaguer form during planning are violating this
 rule.
 
+**An operator attribution MUST cite the operator's message.** A
+requirement, AC or decision attributed to the operator carries a verbatim
+quote of the operator's message and a locator for it. An attribution with
+no citable message never entered the locked set: it is struck at
+extraction (`discovery.md` §4a), is not graded against and is not carried
+forward. Striking it is not a divergence under this rule. For a
+project-memory entry about user preferences, the entry's path is an
+acceptable locator.
+
 Agents have full autonomy over execution decisions: technical
 approach, implementation patterns, UI layout choices (when not
 specified by user), option selection among presented alternatives,
