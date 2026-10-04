@@ -100,10 +100,16 @@ measured it at 99.88% coverage on a tree carrying all four releases: `gate-adjud
 736s ceiling. So 0.719.0's 749s was load. NOTE, not filed: the guard's remedy says "re-run the gate", which an
 unchanged commit cannot do.
 
-**THE DELIVERY GAP IS THIRTEEN RELEASES.** The consumer is installed at 0.709.0 against `VERSION` 0.722.0, and
-0.711.0, 0.713.0, 0.719.0 and 0.722.0 are bootstrapping. PENDING is 2 by the derive block and 5 counting the three
-discharged ids still uncommitted in the consumer's working tree. The banked ruling stands: report the gap and write
-no runbook. **OPERATOR DECISIONS STILL OPEN:** whether review sharding becomes the default.
+**THE DELIVERY GAP IS NINE RELEASES.** The consumer pulled to 0.713.0 during the batch (#1162, stamp
+`commit: 65bf593b`) against `VERSION` 0.722.0; 0.719.0 and 0.722.0 are bootstrapping. It also committed its three
+filings, so its working-tree ledger equals its `HEAD`. The derive block at `de1376c7` reads live 5, unfiled 0,
+TERMINAL 199, and PENDING 5: every live candidate is discharged here (0.711.0, 0.712.0, 0.714.0 twice, 0.718.0). The
+banked ruling stands: report the gap and write no runbook. **OPERATOR DECISIONS STILL OPEN:** whether review sharding
+becomes the default.
+
+**THE WORKLIST BLOCK PRINTS `REFUSE: awk half matched nothing`, AND HERE IT IS A TRUE EMPTY, NOT A GRAMMAR FAILURE.**
+The one live entry, `BL-375`, cites no `PC-` id. The file's only `PC-` token is in the preamble legend
+(`docs/backlog.md:12`), which the awk skips because it starts at the first `## BL-` heading. The worklist is 0.
 
 Batch 190's block below is history: batch 191's block replaces its delivery gap and its decisions list.
 
