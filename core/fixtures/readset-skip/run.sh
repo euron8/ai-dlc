@@ -784,6 +784,206 @@ else
     bad "MERGE MUTANT keepstale: the stale entry did not survive — arm 2 does not depend on the traced filter"
   fi
 
+  # mut_line <src> <dst> <exact old line> <new text> -- an exact-line replacement, never `sed`: the
+  # deriver lines mutated below carry `&&`, `$(` and quotes a sed replacement would re-expand. The
+  # caller derives <old> from the file by an anchored grep and guards with cmp -s, so a vanished
+  # anchor reads as DID NOT APPLY rather than as a kill.
+  mut_line() {
+    local l
+    : > "$2"
+    while IFS= read -r l || [ -n "$l" ]; do
+      if [ -n "$3" ] && [ "$l" = "$3" ]; then printf '%s\n' "$4"; else printf '%s\n' "$l"; fi
+    done < "$1" >> "$2"
+  }
+
+  # ------------------------- the --all subject list and the untraced-loss guard ----
+  # THE `--all` LIST WAS BUILT NEWLINE-SEPARATED, AND TWO GUARDS SILENTLY NEVER MATCHED A NAME. Every
+  # membership test on it is `case " $LIST " in *" $f "*)`, so under `--all` every fixture read as
+  # untraced: one OMITTED fixture made the merge check die "merge dropped" and discard every good
+  # trace, and the plan-shape controls never ran on any `--all` derivation. Three layers normalise
+  # the list now -- the builder, the loss guard's own argument, and the merge -- and each is driven
+  # here from its own sentinels with its own mutant, because a layered fix with one layer reverted
+  # passes on the layers left in place.
+  #
+  # The SEED is the consumer's fixture-root shape, `tests/fixtures`, and it carries a directory with
+  # no run.sh. The membership arms test the MIDDLE member: a list joined by any other separator still
+  # starts and ends with a name, so only a middle member separates a space join from a tab join.
+  AL="$WORK/alllist.sh"; UL="$WORK/untraced.sh"
+  sed -n '/^# READSET_ALLLIST_BEGIN$/,/^# READSET_ALLLIST_END$/p' "$DERIVER" > "$AL"
+  sed -n '/^# READSET_UNTRACED_BEGIN$/,/^# READSET_UNTRACED_END$/p' "$DERIVER" > "$UL"
+  MERGE_ARMS=$((MERGE_ARMS+1))
+  if ! grep -q '^readset_all_list()' "$AL" || ! grep -q '^readset_untraced_lost()' "$UL"; then
+    bad "extracted no readset_all_list (READSET_ALLLIST) or no readset_untraced_lost (READSET_UNTRACED) from $DERIVER — the --all list and the untraced-loss guard cannot be driven, and nothing below them ran"
+  else
+    ok "the deriver carries both the READSET_ALLLIST and READSET_UNTRACED spans, each defining its function"
+    ALR="$WORK/allroot/tests/fixtures"
+    mkdir -p "$ALR/aa" "$ALR/mid" "$ALR/zz" "$ALR/norun" || broken "mkdir failed"
+    : > "$ALR/aa/run.sh"; : > "$ALR/mid/run.sh"; : > "$ALR/zz/run.sh"; : > "$ALR/norun/other.sh"
+    NLC='
+'
+    allist_with() { ( . "$1"; readset_all_list "$ALR" ) 2>/dev/null; }
+    # al_newline / al_middle / al_exact: one verdict word each, so a mutant is scored by the SAME
+    # predicate as the arm it must move.
+    al_newline() { case "$1" in *"$NLC"*) echo newline ;; '') echo empty ;; *) echo clean ;; esac; }
+    al_middle()  { case " $1 " in *" mid "*) echo member ;; *) echo absent ;; esac; }
+    al_exact()   { if [ "$1" = "aa mid zz" ]; then echo exact; else echo wrong; fi; }
+    allist_with "$AL" > "$WORK/al.raw"
+    AV="$(cat "$WORK/al.raw")"
+    MERGE_ARMS=$((MERGE_ARMS+1))
+    if [ "$(al_newline "$AV")" = clean ] && [ "$(wc -c < "$WORK/al.raw" | tr -d ' ')" -eq "${#AV}" ]; then
+      ok "readset_all_list on a tests/fixtures root: the command-substitution value carries no newline, and the raw output has no trailing one either"
+    else
+      bad "readset_all_list output is not one newline-free line ('$AV', $(wc -c < "$WORK/al.raw" | tr -d ' ') raw bytes for ${#AV} chars) — every case \" \$LIST \" membership test in the deriver misses"
+    fi
+    MERGE_ARMS=$((MERGE_ARMS+1))
+    if [ "$(al_middle "$AV")" = member ]; then
+      ok "  and its MIDDLE member is space-delimited on both sides — case \" \$LIST \" in *\" mid \"*) matches"
+    else
+      bad "  the middle member 'mid' is not space-delimited in '$AV' — a list joined by another separator passes the first and last names only"
+    fi
+    MERGE_ARMS=$((MERGE_ARMS+1))
+    if [ "$(al_exact "$AV")" = exact ]; then
+      ok "  and it is EXACTLY 'aa mid zz': the directory with no run.sh is excluded"
+    else
+      bad "  expected exactly 'aa mid zz' (norun/ has no run.sh), got '$AV'"
+    fi
+
+    # readset_untraced_lost: the omitted fixture is NOT first in a NEWLINE-separated list -- the shape
+    # the base `--all` builder produced, where only the first name could ever have matched.
+    printf 'traced-a\tp1\nfx-om\tp2\nkeep\tp3\ntraced-c\tp4\n' > "$WORK/ul.old"
+    printf 'traced-a\tp1\nkeep\tp3\ntraced-c\tp4\n' > "$WORK/ul.m1"
+    printf 'traced-a\tp1\ntraced-c\tp4\n' > "$WORK/ul.m2"
+    printf 'fx\tp1\nfx-b\tp2\n' > "$WORK/ul.old3"; printf 'fx-b\tp2\n' > "$WORK/ul.m3"
+    UL_NL="traced-a${NLC}fx-om${NLC}traced-c"
+    ul_with() { # $1 span copy, $2 old, $3 merged, $4 traced; prints "<rc>|<output, space-joined>"
+      local o r
+      o="$( . "$1"; readset_untraced_lost "$2" "$3" "$4" 2>/dev/null )"; r=$?
+      printf '%s|%s' "$r" "$(printf '%s' "$o" | tr '\n' ' ' | sed 's/ $//')"
+    }
+    MERGE_ARMS=$((MERGE_ARMS+1))
+    U1="$(ul_with "$UL" "$WORK/ul.old" "$WORK/ul.m1" "$UL_NL")"
+    if [ "$U1" = "0|" ]; then
+      ok "m1: a newline-separated traced list whose OMITTED fixture is not first reports no loss — the omitted fixture was traced, and the untouched one was kept"
+    else
+      bad "m1: expected rc 0 and no lost fixture, got '$U1' — under --all one omitted fixture would make the merge check die and discard every good trace"
+    fi
+    MERGE_ARMS=$((MERGE_ARMS+1))
+    U2="$(ul_with "$UL" "$WORK/ul.old" "$WORK/ul.m2" "$UL_NL")"
+    if [ "$U2" = "0|keep" ]; then
+      ok "m2: an UNTOUCHED fixture missing from the merged map is printed ('keep') — the guard still fires"
+    else
+      bad "m2: expected rc 0 printing exactly 'keep', got '$U2' — a merge losing an untraced fixture would be written"
+    fi
+    MERGE_ARMS=$((MERGE_ARMS+1))
+    U3="$(ul_with "$UL" "$WORK/ul.old3" "$WORK/ul.m3" "fx-b")"
+    if [ "$U3" = "0|fx" ]; then
+      ok "m3: traced 'fx-b' does not count 'fx' as traced — membership is by exact name, so the lost 'fx' is printed"
+    else
+      bad "m3: expected 'fx' printed with only 'fx-b' traced, got '$U3' — a substring membership test reports 'fx' kept while it is gone"
+    fi
+    MERGE_ARMS=$((MERGE_ARMS+1))
+    U4="$(ul_with "$UL" "$WORK/ul.old" "$WORK/ul.no-such-merged" "x")"
+    if [ "$U4" = "2|" ]; then
+      ok "an UNREADABLE merged map returns 2 with nothing printed, so the caller can tell 'did not look' from 'lost nothing'"
+    else
+      bad "an unreadable merged map did not return 2 with empty output: '$U4'"
+    fi
+    MERGE_ARMS=$((MERGE_ARMS+1))
+    U5="$(ul_with "$UL" "$WORK/ul.old" "$WORK/ul.m2" "traced-a fx-om traced-c")"
+    if [ "$U5" = "$U2" ] && [ "$U5" = "0|keep" ]; then
+      ok "  and a SPACE-separated list gives the same answer as the newline-separated one"
+    else
+      bad "  the space-separated list answers '$U5' where the newline-separated one answers '$U2'"
+    fi
+
+    # D4 -- ONE MUTANT PER NORMALISATION LAYER, plus the emptied guard (W1) and the two wrong shapes
+    # D2 names. Each is scored by the predicate of the arm it must move; a mutant whose value does
+    # not carry the property it was built to inject is reported as such, not as a kill.
+    MERGE_ARMS=$((MERGE_ARMS+1))
+    _o="$(grep -m1 '^    out="\${out}\${out:+ }' "$AL")"
+    mut_line "$AL" "$WORK/al.newline.sh" "$_o" '    out="${out}${out:+'"$NLC"'}${d##*/}"'
+    if cmp -s "$AL" "$WORK/al.newline.sh"; then bad "ALLLIST MUTANT newline-join did not apply"
+    else
+      _v="$(allist_with "$WORK/al.newline.sh")"
+      case "$(al_newline "$_v")" in
+        newline) ok "ALLLIST MUTANT newline-join (the base builder's shape) moves the no-newline arm: its value carries a newline" ;;
+        *) bad "ALLLIST MUTANT newline-join: the value '$_v' carries no newline, so the no-newline arm is not what it moves" ;;
+      esac
+    fi
+    MERGE_ARMS=$((MERGE_ARMS+1))
+    mut_line "$AL" "$WORK/al.tab.sh" "$_o" '    out="${out}${out:+	}${d##*/}"'
+    if cmp -s "$AL" "$WORK/al.tab.sh"; then bad "ALLLIST MUTANT tab-join did not apply"
+    else
+      _v="$(allist_with "$WORK/al.tab.sh")"
+      if [ "$(al_newline "$_v")" = clean ] && [ "$(al_middle "$_v")" = absent ]; then
+        ok "ALLLIST MUTANT tab-join moves the middle-member arm only: no newline, but ' mid ' no longer matches"
+      else
+        bad "ALLLIST MUTANT tab-join: expected a newline-free value whose middle member does not match, got '$_v'"
+      fi
+    fi
+    MERGE_ARMS=$((MERGE_ARMS+1))
+    _o="$(grep -m1 '^    \[ -f "\${d}run.sh" \] || continue$' "$AL")"
+    mut_line "$AL" "$WORK/al.norun.sh" "$_o" '    :'
+    if cmp -s "$AL" "$WORK/al.norun.sh"; then bad "ALLLIST MUTANT no-run.sh-check did not apply"
+    else
+      _v="$(allist_with "$WORK/al.norun.sh")"
+      case "$(al_exact "$_v"):$(al_middle "$_v")" in
+        wrong:member) ok "ALLLIST MUTANT no-run.sh-check moves the exact-list arm: '$_v' names the directory with no run.sh" ;;
+        *) bad "ALLLIST MUTANT no-run.sh-check: expected a list naming norun with mid still a member, got '$_v'" ;;
+      esac
+    fi
+    MERGE_ARMS=$((MERGE_ARMS+1))
+    _o="$(grep -m1 '^  traced="\$(printf .%s. "\$traced" | tr .\\n\\t. .  .)"$' "$UL")"
+    mut_line "$UL" "$WORK/ul.nonorm.sh" "$_o" '  :'
+    if cmp -s "$UL" "$WORK/ul.nonorm.sh"; then bad "UNTRACED MUTANT no-arg-normalisation did not apply"
+    else
+      _v="$(ul_with "$WORK/ul.nonorm.sh" "$WORK/ul.old" "$WORK/ul.m2" "$UL_NL")"
+      _s="$(ul_with "$WORK/ul.nonorm.sh" "$WORK/ul.old" "$WORK/ul.m2" "traced-a fx-om traced-c")"
+      if [ "$_v" != "0|keep" ] && [ "$_s" = "0|keep" ]; then
+        ok "UNTRACED MUTANT no-arg-normalisation moves m2 for the NEWLINE list only ('$_v'), the space list still answering '$_s' — the guard's own normalisation is load-bearing"
+      else
+        bad "UNTRACED MUTANT no-arg-normalisation: newline list '$_v', space list '$_s' — expected the newline list alone to lose 'keep'"
+      fi
+    fi
+    MERGE_ARMS=$((MERGE_ARMS+1))
+    _o="$(grep -m1 '^      if (index(traced, " " \$1 " ") == 0 && (\$1 in have) == 0) print \$1$' "$UL")"
+    mut_line "$UL" "$WORK/ul.substr.sh" "$_o" '      if (index(traced, $1) == 0 && ($1 in have) == 0) print $1'
+    if cmp -s "$UL" "$WORK/ul.substr.sh"; then bad "UNTRACED MUTANT substring-membership did not apply"
+    else
+      _v="$(ul_with "$WORK/ul.substr.sh" "$WORK/ul.old3" "$WORK/ul.m3" "fx-b")"
+      if [ "$_v" != "0|fx" ] && [ "$(ul_with "$WORK/ul.substr.sh" "$WORK/ul.old" "$WORK/ul.m2" "$UL_NL")" = "0|keep" ]; then
+        ok "UNTRACED MUTANT substring-membership moves m3 only ('$_v'): 'fx' inside 'fx-b' reads as traced, while m2 still prints 'keep'"
+      else
+        bad "UNTRACED MUTANT substring-membership: m3 answered '$_v' — expected it to lose 'fx' with m2 unmoved"
+      fi
+    fi
+    MERGE_ARMS=$((MERGE_ARMS+1))
+    mut_line "$UL" "$WORK/ul.empty.sh" "$_o" '      next'
+    if cmp -s "$UL" "$WORK/ul.empty.sh"; then bad "UNTRACED MUTANT empty-guard (W1) did not apply"
+    else
+      _v="$(ul_with "$WORK/ul.empty.sh" "$WORK/ul.old" "$WORK/ul.m2" "$UL_NL")"
+      if [ "$_v" = "0|" ]; then
+        ok "UNTRACED MUTANT empty-guard (W1) moves m2: a guard that prints nothing writes a merge that lost 'keep'"
+      else
+        bad "UNTRACED MUTANT empty-guard (W1): expected rc 0 and nothing printed, got '$_v'"
+      fi
+    fi
+    # The merge layer: driven with the NEWLINE list, the shape G3 drives -- merge_mutant above passes
+    # a single token, which no normalisation can move.
+    MERGE_ARMS=$((MERGE_ARMS+1))
+    _o="$(grep -m1 '^  traced="\$(printf .%s. "\$traced" | tr .\\n. . .)"$' "$M")"
+    mut_line "$M" "$WORK/merge.nonorm.sh" "$_o" '  :'
+    if cmp -s "$M" "$WORK/merge.nonorm.sh"; then bad "MERGE MUTANT no-normalisation did not apply"
+    else
+      _v="$( . "$WORK/merge.nonorm.sh"; readset_merge_map "$WORK/old.map" "$WORK/new.map" "$(printf 'alpha\ndelta')" 2>/dev/null | LC_ALL=C sort | tr '\n' ' ' )"
+      case "$_v" in
+        *"beta	src/b"*) bad "MERGE MUTANT no-normalisation: the newline-list merge still kept beta ('$_v'), so the newline arm does not depend on the merge's normalisation" ;;
+        *"alpha	src/NEW"*) ok "MERGE MUTANT no-normalisation moves the newline-list merge arm: the untraced fixture's entries are lost" ;;
+        *) bad "MERGE MUTANT no-normalisation: the merge emitted neither beta nor the traced entry ('$_v'), so the mutant scored nothing" ;;
+      esac
+    fi
+  fi
+
   # ------------------------------------------- the deriver's discrimination control ----
   # WHAT THIS CONTROL IS FOR. The map exists to let fixtures be SKIPPED. A map in which every
   # read-set covers every path the map names selects the whole suite on every change and skips
@@ -1061,6 +1261,110 @@ EOF
     ok "the deriver's ONLY call of the control (line $E_CALL) passes the MERGED map, built by the merge at line $E_RUN into the variable assigned at line $E_MERGED, and is read by the die at line $E_DIE — the call site is bound, not just the function"
   fi
   fi
+
+  # (f) THE CALL SITES OF THE TWO NEW SPANS. Every arm on readset_all_list and readset_untraced_lost
+  # above drives the EXTRACTED function; a deriver that defines both and calls neither -- `--all`
+  # back on its inline loop, the loss check deleted or demoted to a warning -- is green on all of
+  # them. This scan reads what the deriver ASKS.
+  #
+  # THE (e) SCANNER CANNOT SEE `LIST="$(readset_all_list ...)"`: it drops quoted text, and that call
+  # sits inside a double-quoted command substitution. This one carries a frame STACK, so a `$(`
+  # inside double quotes returns to code until its own `)` and then back to the quote; balance of
+  # both the quote state and the stack is asserted at END, so an unparseable file refuses to answer.
+  # Both definition spans are skipped, so a definition is never counted as a call.
+  rs_callscan() { # $1 deriver file; prints KEY<TAB>VALUE lines
+    awk '
+      BEGIN { SQ = sprintf("%c", 39); BS = "\\"; k = 0 }
+      index($0, "# READSET_ALLLIST_BEGIN") == 1 || index($0, "# READSET_UNTRACED_BEGIN") == 1 { span = 1; next }
+      span { if (index($0, "# READSET_ALLLIST_END") == 1 || index($0, "# READSET_UNTRACED_END") == 1) span = 0; next }
+      {
+        code = ""; skel = ""; prev = ""; n = length($0)
+        for (i = 1; i <= n; i++) {
+          c = substr($0, i, 1)
+          if (q == SQ) {
+            code = code c
+            if (c == SQ) q = ""
+          } else if (q == "\"") {
+            code = code c
+            if (c == BS && i < n) { i++; code = code substr($0, i, 1); prev = c; continue }
+            if (c == "\"") q = ""
+            else if (c == "$" && substr($0, i + 1, 1) == "(") { i++; code = code "("; k++; fr[k] = "\""; dep[k] = 0; q = "" }
+          } else {
+            if (c == "#" && (i == 1 || prev == " " || prev == "\t")) break
+            code = code c; skel = skel c
+            if (c == BS && i < n) { i++; code = code substr($0, i, 1); skel = skel substr($0, i, 1) }
+            else if (c == "\"" || c == SQ) q = c
+            else if (c == "$" && substr($0, i + 1, 1) == "(") { i++; code = code "("; skel = skel "("; k++; fr[k] = ""; dep[k] = 0 }
+            else if (c == "(" && k > 0) dep[k]++
+            else if (c == ")" && k > 0) { if (dep[k] == 0) { q = fr[k]; k-- } else dep[k]-- }
+          }
+          prev = c
+        }
+        if (index(skel, "readset_all_list")) { nal++; if (nal == 1) { alline = FNR; altext = code } }
+        if (index(skel, "readset_untraced_lost")) { nul++; if (nul == 1) { ulline = FNR; ultext = code } }
+        if (rline == 0 && index(code, "readset_merge_map") && code ~ />[[:blank:]]*"\$MERGED"/) rline = FNR
+        if (cline == 0 && index(code, "die \"could not compare")) cline = FNR
+        if (dline == 0 && index(code, "die \"merge dropped " SQ)) dline = FNR
+        if (wline == 0 && code ~ /^}[[:blank:]]*>[[:blank:]]*"\$MAP"/) wline = FNR
+      }
+      END {
+        printf "BAL\t%s\n", (q == "" && k == 0) ? "ok" : "UNBALANCED"
+        printf "NAL\t%d\nALLINE\t%d\nALTEXT\t%s\n", nal, alline, altext
+        printf "NUL\t%d\nULLINE\t%d\nULTEXT\t%s\n", nul, ulline, ultext
+        printf "RLINE\t%d\nCLINE\t%d\nDLINE\t%d\nWLINE\t%d\n", rline, cline, dline, wline
+      }
+    ' "$1"
+  }
+  cs_get() { printf '%s\n' "$1" | sed -n "s/^$2	//p"; }
+  # rs_callverdict <scan> -> one word per span: AL:<verdict> UL:<verdict>
+  rs_callverdict() {
+    local s="$1" alv ulv t n
+    if [ "$(cs_get "$s" BAL)" != ok ]; then printf 'AL:unparsed UL:unparsed'; return; fi
+    n="$(cs_get "$s" NAL)"; t="$(cs_get "$s" ALTEXT)"
+    if [ "${n:-0}" -ne 1 ]; then alv="calls=$n"
+    else case "$t" in
+      *'--all)'*'LIST="$(readset_all_list "$TREE/$FIXTURE_ROOT")"'*) alv=bound ;;
+      *) alv=wrongcall ;;
+    esac; fi
+    n="$(cs_get "$s" NUL)"; t="$(cs_get "$s" ULTEXT)"
+    local ul r c d w; ul="$(cs_get "$s" ULLINE)"; r="$(cs_get "$s" RLINE)"; c="$(cs_get "$s" CLINE)"; d="$(cs_get "$s" DLINE)"; w="$(cs_get "$s" WLINE)"
+    if [ "${n:-0}" -ne 1 ]; then ulv="calls=$n"
+    else case "$t" in
+      *'readset_untraced_lost "$MAP" "$MERGED" "$LIST"'*)
+        if [ "$r" -eq 0 ] || [ "$r" -ge "$ul" ]; then ulv=beforemerge
+        elif [ "$c" -eq 0 ] || [ "$c" -lt "$ul" ] || [ "$c" -gt $((ul+1)) ]; then ulv=unrefused
+        elif [ "$d" -eq 0 ] || [ "$d" -le "$ul" ] || [ "$w" -eq 0 ] || [ "$d" -ge "$w" ]; then ulv=nodie
+        else ulv=bound; fi ;;
+      *) ulv=wrongcall ;;
+    esac; fi
+    printf 'AL:%s UL:%s' "$alv" "$ulv"
+  }
+  CONTROL_ARMS=$((CONTROL_ARMS+1))
+  CSN="$(rs_callscan "$DERIVER")"
+  CSV="$(rs_callverdict "$CSN")"
+  case "$CSV" in
+    "AL:bound UL:bound") ok "(f) the deriver's only readset_all_list call (line $(cs_get "$CSN" ALLINE)) builds LIST under --all from \$TREE/\$FIXTURE_ROOT, and its only readset_untraced_lost call (line $(cs_get "$CSN" ULLINE)) compares the merged map after the merge (line $(cs_get "$CSN" RLINE)), refuses on a failed compare (line $(cs_get "$CSN" CLINE)) and dies 'merge dropped' (line $(cs_get "$CSN" DLINE)) before the write (line $(cs_get "$CSN" WLINE))" ;;
+    *) bad "(f) the call sites of the two new spans are not bound: $CSV — scan: $(printf '%s' "$CSN" | tr '\n\t' ' =')" ;;
+  esac
+  # Three deriver-copy mutants, each scored by the scan: --all back on the base inline loop (W2/W4
+  # shape: the builder exists and nothing calls it), the loss check's call deleted, and its die
+  # demoted to a warning (W1).
+  _o="$(grep -m1 '^  --all)  LIST="\$(readset_all_list ' "$DERIVER")"
+  mut_line "$DERIVER" "$WORK/cs.inline.sh" "$_o" '  --all)  LIST="$(cd "$TREE" && for d in "$FIXTURE_ROOT"/*/; do [ -f "$d/run.sh" ] && basename "$d"; done)" ;;'
+  _o2="$(grep -m1 '^  readset_untraced_lost "\$MAP" "\$MERGED" "\$LIST" > ' "$DERIVER")"
+  mut_line "$DERIVER" "$WORK/cs.nocall.sh" "$_o2" '  : > "$WORK/untraced.lost" \'
+  _o3="$(grep -m1 "^    die \"merge dropped '" "$DERIVER")"
+  mut_line "$DERIVER" "$WORK/cs.warn.sh" "$_o3" "    echo \"WARNING: merge dropped '\$f'\" >&2"
+  for _cm in inline:AL:calls=0 nocall:UL:calls=0 warn:UL:nodie; do
+    _n="${_cm%%:*}"; _want="${_cm#*:}"
+    CONTROL_ARMS=$((CONTROL_ARMS+1))
+    if cmp -s "$DERIVER" "$WORK/cs.$_n.sh"; then bad "CALL-SITE MUTANT $_n did not apply"; continue; fi
+    _cv="$(rs_callverdict "$(rs_callscan "$WORK/cs.$_n.sh")")"
+    case " $_cv " in
+      *" $_want "*) ok "CALL-SITE MUTANT $_n moves (f): the scan reads '$_cv'" ;;
+      *) bad "CALL-SITE MUTANT $_n: expected '$_want' in the scan verdict, got '$_cv'" ;;
+    esac
+  done
 
   # ------------------------------------------------------- the trace tree's POPULATION ----
   # WHAT THE TRACE TREE HOLDS DECIDES WHAT A FIXTURE CAN READ WHILE IT IS TRACED. It was `cp -a`
@@ -1924,6 +2228,83 @@ x/y/<z>
       case "$OM" in
         "1|2|0") ok "OMITTED --list MUTANT: with the traced-count control restored under --list the run dies unwritten and the stale row survives — the arm depends on that change" ;;
         *) bad "OMITTED --list MUTANT: expected stale 1, other 2, header 0, got '$OM'" ;;
+      esac
+    fi
+
+    # `--all` WITH ONE FIXTURE OMITTED, END TO END. The function arms above drive the extracted spans;
+    # this drives the whole deriver the way the operator runs it. The stale-row map above is still
+    # committed, and a `plan-shape` fixture reading its own subject is seeded beside fxa, so the
+    # world has TWO fixture directories -- with one, the base newline list has no newline and base
+    # does not die. The stub sandbox-exec reports ONE stream list for every launch, so each world is
+    # a union list:
+    #   world O  {fxa/run.sh, plan-shape/run.sh, validate-plan-shape.sh}: fxa's src/a.sh read is
+    #            unreported, so the canary omits fxa and plan-shape maps. The fix writes the map with
+    #            the OMITTED header naming fxa and prints the plan-shape PRESENCE line; base dies
+    #            "merge dropped 'fxa'" and never reaches the plan-shape pair.
+    #   world S  {fxa/run.sh, src/a.sh, plan-shape/run.sh}: plan-shape is the omitted one, fxa maps
+    #            (with both omitted, `--all` dies "zero fixtures mapped"). The fix prints the SKIP
+    #            line and writes the map naming plan-shape OMITTED.
+    mkdir -p "$BR/core/fixtures/plan-shape" "$BR/scripts" || broken "mkdir failed"
+    printf '#!/bin/bash\ncat scripts/validate-plan-shape.sh >/dev/null\n' > "$BR/core/fixtures/plan-shape/run.sh"
+    printf '#!/bin/bash\nexit 0\n' > "$BR/scripts/validate-plan-shape.sh"
+    printf '%s\n' core/fixtures/fxa/run.sh core/fixtures/plan-shape/run.sh scripts/validate-plan-shape.sh > "$SX/allO.list"
+    printf '%s\n' core/fixtures/fxa/run.sh src/a.sh core/fixtures/plan-shape/run.sh > "$SX/allS.list"
+    ( cd "$BR" && git add -A && git -c user.email=f@f -c user.name=f commit -qm plan-shape ) >/dev/null 2>&1 || broken "could not seed the plan-shape fixture"
+    [ "$(find "$BR/core/fixtures" -mindepth 2 -maxdepth 2 -name run.sh | grep -c .)" -ge 2 ] \
+      || broken "the --all world holds fewer than two fixture directories, so the base newline list cannot carry a newline and the arm cannot discriminate"
+    all_run() { # $1 deriver copy  $2 stream list  $3 header name; prints "<rc>|<header rows>|<presence>|<skip>|<merge dropped>"
+      local r h p k m
+      cp "$1" "$STUB_DERIVER"
+      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$2" \
+          AI_DLC_READSET_TRACE_ROOT="$SX_TR" bash core/scripts/derive-fixture-readsets.sh --all --tracer sandbox ) > "$WORK/all.out" 2>&1 </dev/null
+      r=$?
+      h="$(grep -cx "# OMITTED by the last run (always run): $3" "$BR/.ai-dlc-fixture-readsets.tsv")" || h=0
+      p="$(grep -c "^  PASS  plan-shape's read-set names its own subject" "$WORK/all.out")" || p=0
+      k="$(grep -cxF '  SKIP  plan-shape controls: plan-shape OMITTED this run' "$WORK/all.out")" || k=0
+      m="$(grep -c "merge dropped 'fxa'" "$WORK/all.out")" || m=0
+      ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
+      printf '%s|%s|%s|%s|%s' "$r" "$h" "$p" "$k" "$m"
+    }
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    AO="$(all_run "$SB/deriver.sh" "$SX/allO.list" fxa)"
+    if [ "$AO" = "0|1|1|0|0" ]; then
+      ok "--all, fxa OMITTED: the deriver writes the map with the OMITTED header naming fxa, and the plan-shape pair RUNS under --all (its presence line printed)"
+    else
+      bad "--all, fxa OMITTED: expected rc 0, OMITTED header 1, plan-shape presence 1, skip 0, merge-dropped 0; got '$AO' — $(grep -m1 -E 'ERROR|merge dropped' "$WORK/all.out" | tr '\n' ' ')$(tail -2 "$WORK/all.out" | tr '\n' ' ')"
+    fi
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    AS="$(all_run "$SB/deriver.sh" "$SX/allS.list" plan-shape)"
+    if [ "$AS" = "0|1|0|1|0" ]; then
+      ok "--all, plan-shape OMITTED: the deriver prints the exact SKIP line for the plan-shape pair and writes the map naming plan-shape OMITTED"
+    else
+      bad "--all, plan-shape OMITTED: expected rc 0, header 1, presence 0, SKIP line 1, merge-dropped 0; got '$AS' — $(tail -2 "$WORK/all.out" | tr '\n' ' ')"
+    fi
+    # Two whole-deriver mutants. inline: `--all` back on the base newline loop while the fixed guard
+    # stays -- the merge no longer dies, so only the plan-shape PRESENCE line separates it (W2/W4).
+    # noskip: the D1 guard disabled, so an omitted plan-shape fails its own positive control and the
+    # whole --all run dies unwritten.
+    _o="$(grep -m1 '^  --all)  LIST="\$(readset_all_list ' "$SB/deriver.sh")"
+    mut_line "$SB/deriver.sh" "$SX/deriver.inline.sh" "$_o" '  --all)  LIST="$(cd "$TREE" && for d in "$FIXTURE_ROOT"/*/; do [ -f "$d/run.sh" ] && basename "$d"; done)" ;;'
+    _o="$(grep -m1 '^if \[ "\${FIXTURE_HAS_PLAN_SHAPE:-yes}" = yes \] && ! grep -q ' "$SB/deriver.sh")"
+    mut_line "$SB/deriver.sh" "$SX/deriver.noskip.sh" "$_o" 'if false; then'
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    if cmp -s "$SB/deriver.sh" "$SX/deriver.inline.sh"; then bad "--all MUTANT inline did not apply"
+    else
+      AM="$(all_run "$SX/deriver.inline.sh" "$SX/allO.list" fxa)"
+      case "$AM" in
+        "0|1|0|0|0") ok "--all MUTANT inline: with --all back on the newline loop the map is still written, but the plan-shape presence line is gone — the pair is skipped on every --all run, and the world O arm refuses it" ;;
+        *) bad "--all MUTANT inline: expected rc 0, header 1, presence 0; got '$AM'" ;;
+      esac
+    fi
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    if cmp -s "$SB/deriver.sh" "$SX/deriver.noskip.sh"; then bad "--all MUTANT noskip did not apply"
+    else
+      AN="$(all_run "$SX/deriver.noskip.sh" "$SX/allS.list" plan-shape)"
+      case "$AN" in
+        [1-9]*"|0|0|0|0") if grep -q 'controls failed' "$WORK/all.out"; then
+            ok "--all MUTANT noskip: with the D1 guard disabled an omitted plan-shape fails its own control and the --all run dies 'controls failed', unwritten — the world S arm refuses it"
+          else bad "--all MUTANT noskip: the run died ('$AN') but not on 'controls failed'"; fi ;;
+        *) bad "--all MUTANT noskip: expected a non-zero exit with no header, presence or SKIP line; got '$AN'" ;;
       esac
     fi
 
