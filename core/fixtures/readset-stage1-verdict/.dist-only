@@ -1,0 +1,8 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Its two subjects are scripts/readset-stage1-run.sh and scripts/readset-stage1-verdict.sh, which
+live in the repo-root scripts/ and are not in install.sh's copy loop (that loop ships
+core/scripts/ only). They measure the sandbox read-set tracer's completeness on this
+repository's own heaviest fixtures and record the runs in this repository's git common dir; a
+consumer tree has neither script and no stage-1 ledger. On a consumer this fixture would resolve
+no subject and could only refuse with FIXTURE BROKEN.
