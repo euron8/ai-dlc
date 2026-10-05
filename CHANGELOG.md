@@ -19,6 +19,36 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.728.0] - 2026-10-04
+
+Batch 196's release. It closes `BL-448` and takes `BL-375` one step further (net closed minus filed:
+-1). It discharges no consumer candidate: the `--require-done` refusal is unchanged, and only the
+remedy it prints is scoped. No file in it is bootstrapping.
+
+### BL-448
+
+- `sprint-status.sh check-stories --require-done` prints the closing-writer remedy only for a story
+  at `review`. Every other non-`done` status is still a `NOT DONE` finding and still exits 1, with a
+  remedy that names no closing writer: bring the story to `done` under the step or extension that
+  defines its status.
+- `deploy-validate.md` and `implementation.md` §7 scope the same cause and remedy to a `review`
+  story, matching §3 item 4.
+- `sprint-status-lifecycle` gains A24: `--require-done` twins including `in-review`,
+  `review-pending` and `Review` near-misses and a file/yaml disagreement, and eight mutants that
+  each fail exactly A24. A non-`review` line must say it prescribes no remedy and must name neither
+  the closing writer nor `section 3, item 4`, so a reworded remedy fails too.
+- The entry's receipt is now behavioural. The old one closed on two wrong builds and could not
+  measure a third.
+
+### BL-375 (partial)
+
+- The read-set deriver drops an absent row whose last component starts with `-`: an option string a
+  tool took as a file operand. A present file of that name is kept. `readset-skip` gains the seeds
+  and two mutants.
+- `enforcement-map-sites` put `--exclude-dir=fixtures` after `--`, where BSD `grep` reads it as a
+  file and silently does not exclude. The option now precedes `--`.
+- The stage-1 criterion's assertion-count bullet is struck: nothing emits that figure.
+
 ## [0.727.0] - 2026-10-04
 
 Batch 195's third release. It discharges one consumer candidate, filed during this batch while the

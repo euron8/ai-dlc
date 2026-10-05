@@ -1840,7 +1840,7 @@ A34_i60_cited_modes() {
 # ASSEMBLED, never written out: I60 excludes core/fixtures/ from its corpus, but this file
 # is read by other invariants and a literal here is a citation somewhere.
 GHOST="--is-""kore"
-VICTIM="$(grep -rl -- 'core-paths\.sh --is-core' "$ROOT/core" --exclude-dir=fixtures 2>/dev/null | head -1)"
+VICTIM="$(grep -rl --exclude-dir=fixtures -- 'core-paths\.sh --is-core' "$ROOT/core" 2>/dev/null | head -1)"
 if [ -z "$VICTIM" ]; then
   bad "FIXTURE BROKEN: no file in the seed cites 'core-paths.sh --is-core', so the I60 defect arm has no live citation to rename and is unproven"
 else

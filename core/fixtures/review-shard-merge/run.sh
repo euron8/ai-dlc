@@ -698,7 +698,7 @@ p_own_step() { local t g s
     && grep -qF 'A gate-1 reviewer, serial or shard, does NOT make the `done` transition, `deferred_acs` or the closing commit; the closing writer does, after gate 3.' <<<"$g" \
     && grep -qF 'Persisting the gate-1 review file is unchanged' <<<"$g" \
     && grep -qF 'the closing writer has landed every story'"'"'s closing commit, leaving every story `done` with a `deferred_acs` field in both sprint-status views' <<<"$s" \
-    && grep -qF 'dispatch the closing writer now (section 3, item 4)' <<<"$s"; }
+    && grep -qF 'The closing writer has not run for a story past gate 3 that is still `review`, or `done` with no `deferred_acs` field in a view: dispatch the closing writer now (section 3, item 4)' <<<"$s"; }
 p_own_role() { local o r s c
   o="$(role_named "$1" Ownership | joined)"; s="$(role_sect "$1" | joined)"; c="$(role_named "$1" 'As the Closing Writer' | joined)"
   r="$(role_bullet "$1" Responsibilities '- Dispatched as the closing writer' | joined)"
