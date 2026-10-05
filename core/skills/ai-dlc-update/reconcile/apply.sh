@@ -569,6 +569,129 @@ ap_stage() {
   [ "$_rc" -eq 0 ] || ap_stage_dead=1
   return "$_rc"
 }
+
+# --- THE SETUP-SITED MERGE: a `BOTH-CHANGED->CLASSIFY` file whose only consumer delta is its
+# declared setup values -----------------------------------------------------------------------
+#
+# A file `reconcile/setup-sites.md` declares carries values `ai-dlc-setup` filled in, so it never
+# byte-matches base and every upstream change to it buckets `BOTH-CHANGED->CLASSIFY`. Handed back
+# as `semantic-merge`, that is a manual 3-way merge whose whole content is "take theirs, keep the
+# values" -- measured on a real pull, two such files, and `git merge-file` produced bytes identical
+# to the consumer's hand merge for both. This resolves that case and nothing wider.
+#
+# ALL FOUR MUST HOLD, AND EACH IS ASKED OF A PROGRAM RATHER THAN INFERRED:
+#   (a) against BASE, this one file differs only inside its declared spans -- `setup-site-drift.sh
+#       --file`, a per-file answer. Not unregistered-drift's CORE-TEMPLATE-SUBSTITUTED: that exempts
+#       a whole hunk whose base side carries any token, so a consumer edit to the doc comment beside
+#       a site passes it.
+#   (b) `git merge-file` exits 0. A theirs edit to a value line conflicts here.
+#   (c) the merged result, NOT YET WRITTEN, equals theirs outside its spans -- `--ours` on the temp
+#       file. A theirs rename of a span's anchor merges cleanly and is caught only here.
+#   (d) no line theirs ADDED carries a `{token}` outside an HTML comment. A new live occurrence of a
+#       setup token is a site nobody declared: merge-file lands it unfilled and (c) cannot see it,
+#       because the declared site still locates. The grammar is every `{word}` not preceded by `$`
+#       (a shell expansion is not a setup token) -- wider than the declared set, so it refuses in
+#       the safe direction. Comment state is tracked across lines; theirs' doc comments span lines.
+# Any failure, any non-zero exit from setup-site-drift.sh, any unreadable blob: return 1, the file
+# untouched, and the caller emits today's `semantic-merge` row unchanged.
+#
+# ALREADY MERGED IS RESOLVED, NOT A SECOND MERGE. A re-run over a tree this already wrote finds the
+# file equal to theirs outside its spans AND `git merge-file ours base theirs` clean and equal to
+# ours -- ours already carries every theirs change. That is checked FIRST and returns 0 with no
+# content write. Equality outside the spans alone is not enough: a theirs edit INSIDE a span (a
+# value line the locator still finds, a heading block's body) passes it on the first run, and the
+# shortcut would drop that edit. When the re-merge is ambiguous (theirs added a block beside an
+# identical one) and duplicates it, a second acceptance applies: equal to theirs outside the spans,
+# and every span's text identical at base and theirs (`setup-site-drift.sh --span-text`). Theirs'
+# exec bit is still applied, so a mode-only change does not survive a re-run.
+#
+# WRITTEN AS overwrite_from_theirs WRITES: a temp beside the target, the mode carried, then `mv`.
+# `cp -p` seeds the temp with the consumer's own mode first, so a path whose theirs mode cannot be
+# read keeps the bit it had rather than the umask's.
+#
+# `say` IS NOT CALLED HERE. The caller owns the row, so every fallback is the one existing spelling.
+# ssm_ok -- the last setup-site-drift.sh run printed an OK verdict row. Read beside its exit 0, so
+# an exit 0 with no verdict row (a run that compared nothing) is not a pass.
+ssm_ok() { awk -F'\t' '$1 == "SETUP-SITE-OK" {f=1} END {exit f ? 0 : 1}' "$DT_DIR/ssm.out" 2>/dev/null; }
+setup_site_merge() { # <core-path> <core-stripped rel> <consumer-rel column> -> 0 resolved, 1 fall back
+  local _p="$1" _r="$2" _c="$3" _cons _d _tmp _rc _stb _stt
+  [ -n "$DT_DIR" ] || return 1
+  command -v setup_sited_paths >/dev/null 2>&1 \
+    || eval "$(awk '/^setup_sited_paths\(\) \{/,/^\}/' "$SELF/preclassify.sh" 2>/dev/null)" 2>/dev/null
+  command -v setup_sited_paths >/dev/null 2>&1 || return 1
+  case "${NL_CH}$(setup_sited_paths 2>/dev/null)${NL_CH}" in *"${NL_CH}${_p}${NL_CH}"*) ;; *) return 1 ;; esac
+  _cons="$(consumer_path "$_r")" || return 1
+  [ -n "$_c" ] && [ "$_cons" = "$CONSUMER/$_c" ] || return 1
+  [ -f "$_cons" ] && [ ! -L "$_cons" ] || return 1
+  _d="$AP_TMP/ssm"
+  mkdir -p "$_d" 2>/dev/null || return 1
+  # Already merged: no content write. Merging theirs into ours must change NOTHING, as well as ours
+  # reading OK against theirs outside the spans -- that check alone cannot see a theirs change INSIDE
+  # a span, so it would resolve a first run without merging theirs' edit to a value line or a block.
+  git -C "$DIST" show "${BASE}:${_p}" > "$_d/b0" 2>/dev/null && git -C "$DIST" show "${THEIRS}:${_p}" > "$_d/t0" 2>/dev/null || return 1
+  if git merge-file -p "$_cons" "$_d/b0" "$_d/t0" > "$_d/m0" 2>/dev/null && cmp -s "$_d/m0" "$_cons" \
+     && detector_run ssm setup-site-drift.sh --file "$_p" "$DIST" "$CONSUMER" "$THEIRS" \
+     && ssm_ok; then
+    sync_mode_from_theirs "$_r" "$_cons"
+    return 0
+  fi
+  # The second acceptance, for a tree this already merged where a re-merge is AMBIGUOUS: theirs added
+  # a block beside an identical one (a fence), and merge-file over the merged copy places it again --
+  # clean, duplicated, so the cmp above fails on a file that is already exactly right. Accepted when
+  # ours equals theirs outside the spans AND theirs changed nothing INSIDE any span: every declared
+  # span's text is identical at base and at theirs. Then nothing theirs changed is left for ours to
+  # lack. A span absent at either ref yields no SPANTEXT row and is never equal.
+  if detector_run ssm setup-site-drift.sh --file "$_p" "$DIST" "$CONSUMER" "$THEIRS" && ssm_ok \
+     && detector_run ssm setup-site-drift.sh --file "$_p" --span-text "$DIST" "$CONSUMER" "$BASE" \
+     && _stb="$(awk -F'\t' '$1 == "SETUP-SITE-SPANTEXT" {print $3}' "$DT_DIR/ssm.out")" && [ -n "$_stb" ] \
+     && detector_run ssm setup-site-drift.sh --file "$_p" --span-text "$DIST" "$CONSUMER" "$THEIRS" \
+     && _stt="$(awk -F'\t' '$1 == "SETUP-SITE-SPANTEXT" {print $3}' "$DT_DIR/ssm.out")" && [ -n "$_stt" ] \
+     && [ "$_stb" = "$_stt" ]; then
+    sync_mode_from_theirs "$_r" "$_cons"
+    return 0
+  fi
+  # (a)
+  detector_run ssm setup-site-drift.sh --file "$_p" "$DIST" "$CONSUMER" "$BASE" || return 1
+  ssm_ok || return 1
+  git -C "$DIST" show "${BASE}:${_p}" > "$_d/base" 2>/dev/null || return 1
+  git -C "$DIST" show "${THEIRS}:${_p}" > "$_d/theirs" 2>/dev/null || return 1
+  # (d)
+  _rc=0; diff "$_d/base" "$_d/theirs" > "$_d/bt" 2>/dev/null || _rc=$?
+  [ "$_rc" -le 1 ] || return 1
+  _rc=0
+  awk '
+    FNR == NR {
+      if ($0 !~ /^[0-9]/) next
+      h = $0; op = h; gsub(/[0-9,]/, "", op)
+      if (op != "a" && op != "c") next
+      r = h; sub(/^[0-9,]*[ac]/, "", r)
+      n = split(r, ab, ","); lo = ab[1]; hi = (n > 1) ? ab[2] : ab[1]
+      for (i = lo; i <= hi; i++) add[i] = 1
+      next
+    }
+    {
+      s = $0; out = ""
+      while (s != "") {
+        if (incom) { i = index(s, "-->"); if (i == 0) s = ""; else { s = substr(s, i + 3); incom = 0 } }
+        else       { i = index(s, "<!--"); if (i == 0) { out = out s; s = "" } else { out = out substr(s, 1, i - 1); s = substr(s, i + 4); incom = 1 } }
+      }
+      if ((FNR in add) && out ~ /(^|[^$])[{][A-Za-z0-9_]+[}]/) bad = 1
+    }
+    END { exit bad ? 1 : 0 }
+  ' "$_d/bt" "$_d/theirs" || _rc=$?
+  [ "$_rc" -eq 0 ] || return 1
+  # (b)
+  git merge-file -p "$_cons" "$_d/base" "$_d/theirs" > "$_d/merged" 2>/dev/null || return 1
+  # (c)
+  detector_run ssm setup-site-drift.sh --file "$_p" --ours "$_d/merged" "$DIST" "$CONSUMER" "$THEIRS" || return 1
+  ssm_ok || return 1
+  _tmp="$_cons.incoming.$$"
+  cp -p "$_cons" "$_tmp" 2>/dev/null && cat "$_d/merged" > "$_tmp" 2>/dev/null \
+    || { rm -f "$_tmp"; return 1; }
+  sync_mode_from_theirs "$_r" "$_tmp"
+  mv "$_tmp" "$_cons" 2>/dev/null || { rm -f "$_tmp"; return 1; }
+  return 0
+}
 # ap_staging_refused <subject> <what could not be staged> <rc> <remedy> -- the one spelling of the
 # row. A WORKLIST under `--finish`, which gates on WORKLIST alone, so the finisher withholds rather
 # than stamping over a section it could not read; a DECISION on the ordinary run, which withholds
@@ -611,8 +734,9 @@ ap_stage_or_refuse() {
 # withholds while a recorded file is still byte-identical to that blob (finish_classify_unmerged).
 #
 # KEYED ON THE CONSUMER PATH, column 3 of preclassify's row, because that is the file the operator
-# edits. A SETUP-SITED path is excluded: setup fills its tokens, so it already gets `NOTE
-# finish-unverified` and never withholds, and this record must not start withholding it. A path that
+# edits. A SETUP-SITED path is excluded: setup fills its tokens, so `--finish` verifies it with
+# `setup-site-drift.sh --file` instead (a `NOTE finish-unverified` when that does not pass) and never
+# withholds on it, and this record must not start withholding it. A path that
 # is ABSENT on the consumer is not recorded: nothing can be byte-identical to it, and a deletion is a
 # disposition. An existing path whose blob cannot be read records `-`, which `--finish` withholds on.
 #
@@ -1057,6 +1181,19 @@ while IFS="$(printf '\t')" read -r kind path cons bucket; do
       fi
       rt_rc=$?
       rt=""
+      [ "$rt_rc" -eq 0 ] && rt="$(awk -F'\t' '{print $3}' "$DT_DIR/rt.out" | paste -sd' ' -)"
+      # THE SETUP-SITED MERGE (setup_site_merge), tried only where every other reason to hand the
+      # file back is absent: the token check ran and found nothing to re-point. No bucket test: every
+      # other *CLASSIFY* bucket a sited path can carry already fails setup_site_merge's own reads --
+      # BOTH-ADDED has no base blob, UPSTREAM-DELETED no theirs blob, consumer-deleted no consumer
+      # file, ORPHANED no matching consumer path -- so such a test changes no outcome.
+      # On success the row is emitted and the loop moves on; every other outcome falls through to
+      # the hand-back rows below, unchanged.
+      if [ "$rt_rc" -eq 0 ] && [ -z "$rt" ] \
+         && setup_site_merge "$path" "$rel" "$cons"; then
+        say RESOLVED setup-site-merge "$rel"
+        continue
+      fi
       if [ "$rt_rc" -ne 0 ]; then
         say WORKLIST semantic-merge "$rel"
         detector_refused retired-tokens retired-tokens.sh "$rel" "$rt_rc" rt
@@ -2227,13 +2364,15 @@ finish_identity() {
 # too: "no rows" and "nothing unapplied" print the same.
 #
 # A SETUP-SITED PATH is never byte-equal to base on a consumer, since setup filled its tokens, so
-# it usually buckets CLASSIFY and is not counted. It gets a NOTE naming it, so what was not
-# verified is visible rather than silent. NOTE does not count.
+# it usually buckets CLASSIFY and is not counted. `setup-site-drift.sh --file` verifies it against
+# theirs outside its declared spans; one that passes gets no row, and any other gets a NOTE naming
+# it with that script's rows, so what was not verified is visible rather than silent. NOTE does
+# not count.
 #
 # An unresolvable <theirs> is left to write_stamp()'s `restamp-unresolvable` refusal, which
 # already stamps nothing; this check has no ref to classify against.
 finish_verify_tree() {
-  local _fv_rows _fv_rc _fv_st _fv_path _fv_cons _fv_bucket _fv_sc _fv_bt _fv_st_t _fv_sited
+  local _fv_rows _fv_rc _fv_st _fv_path _fv_cons _fv_bucket _fv_sc _fv_bt _fv_st_t _fv_sited _fv_ss_rc _fv_ss_rows
   local _fv_stamp="$CONSUMER/.claude/.ai-dlc-version" _fv_why=""
   git -C "$DIST" rev-parse -q --verify "${THEIRS}^{commit}" >/dev/null 2>&1 || return 0
   if ! git -C "$DIST" rev-parse -q --verify "${BASE}^{commit}" >/dev/null 2>&1; then
@@ -2301,8 +2440,21 @@ finish_verify_tree() {
         case "$_fv_st" in R|O) continue ;; esac
         # A `case` membership test, not `grep -qxF <<<`: no temp file to lose, so a staging
         # failure cannot read as "not setup-sited" and drop the row.
+        # A SITED FILE EQUAL TO THEIRS OUTSIDE ITS DECLARED SPANS IS VERIFIED, and gets no row.
+        # setup-site-drift.sh --file answers that per file; any other answer -- drift, a lost
+        # anchor, a refusal -- keeps the NOTE and carries ssd's own rows. Never a WORKLIST: these
+        # paths are deliberately not in the marker's classify hashes, and a check this mode adds
+        # must not start withholding on them.
         case "${NL_CH}${_fv_sited}${NL_CH}" in *"${NL_CH}${_fv_path}${NL_CH}"*)
-          say NOTE finish-unverified "$_fv_cons" "setup-sited, bucketed ${_fv_bucket}: a setup-filled file never byte-matches base or theirs, so --finish cannot tell a merged copy from an untouched one. Confirm by hand that theirs' changes are in it." ;;
+          _fv_ss_rc=0
+          detector_run fvssd setup-site-drift.sh --file "$_fv_path" "$DIST" "$CONSUMER" "$THEIRS" || _fv_ss_rc=$?
+          if [ "$_fv_ss_rc" -eq 0 ] && awk -F'\t' '$1 == "SETUP-SITE-OK" {f=1} END {exit f ? 0 : 1}' "$DT_DIR/fvssd.out" 2>/dev/null; then
+            :
+          else
+            _fv_ss_rows="$(awk -F'\t' '$1 != "SETUP-SITE-SCANNED" {print $1" "$2}' "$DT_DIR/fvssd.out" 2>/dev/null | paste -sd';' -)"
+            [ -n "$_fv_ss_rows" ] || _fv_ss_rows="$(sed -n '1p' "$DT_DIR/fvssd.err" 2>/dev/null | tr '\t' ' ')"
+            say NOTE finish-unverified "$_fv_cons" "setup-sited, bucketed ${_fv_bucket}: a setup-filled file never byte-matches base or theirs, so --finish cannot tell a merged copy from an untouched one. Confirm by hand that theirs' changes are in it. setup-site-drift.sh --file exited ${_fv_ss_rc}: ${_fv_ss_rows:-(no output)}"
+          fi ;;
         esac ;;
     esac
   done < "$AP_TMP/fv-rows"

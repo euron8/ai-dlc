@@ -1655,7 +1655,10 @@ prose is itself generated rather than composed.
    - `RESOLVED …` — already done, no operator step: pure applies (core overwritten from theirs),
      setup-token defaults (e.g. `gate-adjudicator` ← `adversary`'s model), **known-drift refiles**
      (`provenance-block.json` `known_skills` → `extensions/known-skills.json`, core reverted — the
-     "migrate the drift" chore, automated), catalog relabels, and the version re-stamp.
+     "migrate the drift" chore, automated), catalog relabels, **setup-sited merges**
+     (`setup-site-merge`: a setup-sited file whose only consumer delta is its declared setup
+     values, merged with `git merge-file` and checked against theirs outside its spans), and the
+     version re-stamp.
    - `WORKLIST …` — the only things left for YOU. Work EVERY row, whatever its kind: each one
      names concrete work in its own detail field, and the re-stamp is withheld until all of them
      are disposed. `semantic-merge` is a BOTH-CHANGED 3-way PROSE merge per `classify-block.md`,
@@ -2323,7 +2326,8 @@ prose is itself generated rather than composed.
         exec bit disagrees with upstream is `WORKLIST finish-exec-owed`.
 
      A changed setup-sited file never byte-matches base or theirs, so it usually buckets
-     CLASSIFY; `--finish` names it on a `NOTE finish-unverified` row and does not withhold,
+     CLASSIFY; `--finish` checks it with `setup-site-drift.sh --file` and, when that does not
+     pass, names it on a `NOTE finish-unverified` row and does not withhold,
      and check 4 does not record it. Confirm those by hand. Nothing here checks that a merge is
      CORRECT — only that no file the ordinary run would have overwritten from theirs is still
      waiting for it, and that no handed-back file is still the copy the apply found.
@@ -2377,7 +2381,9 @@ a plain overwrite would destroy them. `reconcile/setup-sites.md` is the
 declared list of every such site (file, anchor, capture pattern). This
 transform is used by BOTH step 7 above (every ordinary pull, once any manifest
 site exists) and by `untangle` mode's core-overwrite below — it is not
-untangle-specific.
+untangle-specific. On an ordinary pull `apply.sh` resolves the clean case itself
+(`RESOLVED setup-site-merge`), so the steps below apply to the setup-sited
+files it still hands back as `semantic-merge`.
 
 For each file listed in `setup-sites.md`, before overwriting with `theirs`:
 1. Locate each declared site in `ours` (its regex `match`, or its

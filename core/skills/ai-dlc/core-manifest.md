@@ -165,6 +165,7 @@ core_manifest:
   - fixtures/apply-legacy-script-path/**
   - fixtures/apply-restamp-theirs/**
   - fixtures/apply-restamp-worklist/**
+  - fixtures/apply-setup-sited-merge/**
   - fixtures/apply-relabel-noop-row/**
   - fixtures/absorbed-specifics-survive/**
   - fixtures/answer-handoff-routing/**

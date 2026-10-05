@@ -81,6 +81,7 @@ core_manifest:
   - core/fixtures/apply-legacy-script-path/**
   - core/fixtures/apply-restamp-theirs/**
   - core/fixtures/apply-restamp-worklist/**
+  - core/fixtures/apply-setup-sited-merge/**
   - core/fixtures/apply-relabel-noop-row/**
   - core/fixtures/absorbed-specifics-survive/**
   - core/fixtures/answer-handoff-routing/**
