@@ -730,7 +730,9 @@ if [ -n "$MUTP" ]; then
 fi
 # MUTANT I -- ONE MODE FOR ALL: --cite and --since derive the FILE. The cited phrase lives in
 # the other session, so --cite NOMATCHes; --since names the file.
-mut derive-one-mode 's|^        if \[ -n "\$CITE" \] [|][|] \[ -n "\$SINCE" \]; then$|        if false; then|'
+# Anchored on the cite-mode test as `--cite` was PASSED (`CITE_SET`), not on its text: an empty
+# needle is still cite mode, so the owner keys this branch on the flag.
+mut derive-one-mode 's|^        if \[ "\$CITE_SET" -eq 1 \] [|][|] \[ -n "\$SINCE" \]; then$|        if false; then|'
 if [ -n "$MUTP" ]; then
   IV="$(dvec "$MUTP")"
   if [ "$IV" = "cNsZTE" ]; then kill_ I-derive-one-mode "I: a file-only default loses a cross-session citation and the sprint window (cNsZTE) -- C and S have teeth"
