@@ -29591,3 +29591,420 @@ partition, unset with 7 must answer SERIAL (exit 3), and `=0` with 8 must answer
 
 verify: sh P=core/scripts/partition-review-diff.sh; [ -f "$P" ] || exit 9; W="$(mktemp -d)" || exit 9; G() { git -c user.name=r -c user.email=r@e.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }; mk() { mkdir -p "$W/$1/core/skills/ai-dlc" && G init -q "$W/$1" && cp core/skills/ai-dlc/artifact-path-grammar.md "$W/$1/core/skills/ai-dlc/" && echo s > "$W/$1/README" && G -C "$W/$1" add -A && G -C "$W/$1" commit -qm b || return 1; i=0; while [ "$i" -lt "$2" ]; do i=$((i+1)); mkdir -p "$W/$1/d$i" && echo "x$i" > "$W/$1/d$i/f" || return 1; done; G -C "$W/$1" add -A && G -C "$W/$1" commit -qm f; }; mk r7 7 && mk r8 8 || exit 9; pr() { r="$W/$1"; shift; env "$@" bash "$P" --map "$r" "$(G -C "$r" rev-parse HEAD~1)" "$(G -C "$r" rev-parse HEAD)" < /dev/null 2>&1; }; o="$(pr r8 -u AI_DLC_REVIEW_SHARD_MIN_FILES)" || exit 1; n="$(grep -c '^[0-9]' <<<"$o")" || n=0; [ "$n" -ge 2 ] || exit 1; pr r7 -u AI_DLC_REVIEW_SHARD_MIN_FILES > /dev/null; [ "$?" -eq 3 ] || exit 1; o="$(pr r8 AI_DLC_REVIEW_SHARD_MIN_FILES=0)"; rc=$?; [ "$rc" -eq 3 ] && grep -q 'disabled' <<<"$o" || exit 1; exit 0
 
+## BL-441 — `derive-fixture-readsets.sh --all` built its fixture list newline-separated, so one OMITTED fixture discarded every good trace and the plan-shape controls never ran under `--all`
+
+**LANDED (v0.725.0, verified 95655e50).**
+
+**DEFECT.** Filed by the consumer as `PC-S316-DERIVE-READSETS-ALL-REFUSES-TO-WRITE-THE-WHOLE-MAP-WHEN-ONE-FIXTURE-IS-OMITTED`. At base `f8384eea`, the `--all` branch of `core/scripts/derive-fixture-readsets.sh:640` built `LIST` from a `for` loop that printed one name per line. Every membership test on that list is `case " $LIST " in *" $f "*)`, which needs a space on both sides of each name, so none of them could match a newline-separated list. `--list` was always space-separated and always correct, which is why nothing looked broken.
+
+**Three distinct claims, each scored:**
+- **The untraced-fixture guard at base `:1084`** classed every fixture as untouched under `--all`. The loss check below it then died `merge dropped '<f>'` on any OMITTED fixture and discarded every good trace in the run. This is the consumer's claim. LIVE at base, and fixed.
+- **A second site at base `:997`**: the plan-shape selectivity controls at `:998-1009` were skipped on every `--all` run, because `case " $LIST " in *" plan-shape "*)` never matched. They could not fire. The consumer did not file this site. LIVE at base, and fixed.
+- **Making `:997` reachable opens a new failure mode.** The plan-shape pair greps this run's traced rows in `$WORK/map`. Once `:997` can match, an OMITTED plan-shape fails the positive control, and the run dies `controls failed; the map was NOT written`. That is the same defect again, reached through one fixture. The contract adversary raised it as amendment D1, and the fix guards it.
+
+**The fix as landed** (`9ff191fe`; line numbers are on the release tip):
+- `readset_all_list <fixtures-dir>`, between `# READSET_ALLLIST_BEGIN/END` at `:306-330`, prints the basenames of directories that hold a `run.sh`, space-separated on one line. The `--all` branch calls it at `:701`.
+- `readset_untraced_lost <old-map> <merged> <traced-list>`, between `# READSET_UNTRACED_BEGIN/END` at `:332-365`, normalises its list argument (space or newline) and tests membership by exact name on both the traced list and the merged map. It prints each lost fixture, one per line, and returns 2 when the merged map cannot be read. The caller at `:1151-1158` stages that output to a file, refuses on a non-zero status, and dies with the existing `merge dropped` message when the output is non-empty.
+- **The D1 OMITTED guard** at `:1064-1068`: the plan-shape pair runs only when plan-shape has rows in `$WORK/map`. Otherwise the run prints `  SKIP  plan-shape controls: plan-shape OMITTED this run` and the fixture stays unmapped, so it runs on every push. This follows the `--list` carve-out beside it.
+- `readset_merge_map` keeps its own newline normalisation. The comment at `:1131-1136` no longer claims that no stale map fixture exists, because `notify-hook-channel` has rows in the committed map and no directory.
+- `core/fixtures/readset-skip/run.sh` drives both sentinel functions, scans both new spans as call sites, and runs an end-to-end `--all --tracer sandbox` arm in the stub world (`d52af4c6`). On the release tip it reads `readset-skip: PASS (157 assertions)`.
+
+**Wrong fixes rejected, each scored 1 by the receipt below:**
+- Inlining a `tr` at the `:1084` guard only (W2). `:997` stays unreachable and the sentinels do not exist.
+- Gutting the loss guard so it reports nothing (W1). A `--list` merge that loses an untraced fixture must still die.
+- A tab-joined all-list, and an all-list that keeps directories with no `run.sh`.
+- Substring membership in `readset_untraced_lost` (`index(traced, $1)`). With `fx-b` traced, it counts `fx` as traced too.
+- Dropping the list normalisation inside `readset_untraced_lost`.
+- Making `:997` reachable without the D1 guard.
+- A D1 guard that greps `^plan-shape` without the tab. A mapped `plan-shape-x` sibling's rows then count as plan-shape's, and the pair runs on an omitted plan-shape. The receipt's omitted-plan-shape map carries that sibling, and `readset-skip`'s world S carries a `plan-shape-x` fixture, whose `notab` mutant dies `controls failed`.
+- `readset_untraced_lost` reading the caller's `$MAP` in place of its first argument. Under the receipt's `set -u`, `$MAP` is unbound inside the extracted function, which aborts and prints nothing, so m2 and m3 fail. That rejection comes from the receipt's harness, not from behaviour. The discriminating kill is world O in `readset-skip`, which runs the whole deriver with `$MAP` bound.
+
+Exempting `$OMITTED` members from the untouched loop (W3) and normalising only inside `readset_merge_map` (W4) leave the tree at base for this receipt: W4 changes nothing, and W3 creates neither sentinel. Both therefore read 1, as base does.
+
+**Receipt.** It extracts both sentinel blocks and the `:1064` plan-shape span from the deriver and drives them on seeded inputs. `readset_all_list` runs on `aa`, `mid`, `zz` and `nope`, where only `nope` lacks a `run.sh`. The receipt asserts space-delimited membership of every member, including the middle one, that `nope` is absent, and that the command-substitution value carries no newline or tab. `readset_untraced_lost` runs three cases on a newline-separated traced list whose omitted fixture is not first. In m1 the omitted fixture is absent from the merged map and the output is empty. In m2 the untouched fixture is lost and the output is exactly `untouched`. In m3, `fx-b` is traced, `fx` and `fx-b` are both in the old map, the merged map lacks `fx`, and the output is exactly `fx`. Finally, the plan-shape span must print its PASS line when plan-shape has rows and its SKIP line when it has none, with `FAIL=0` both times. The map with no plan-shape rows still carries a `plan-shape-x` row. Scored under `bash -c 'set -uo pipefail; …'` from the repo root: release tip 0; base 1; the two sibling fixes alone 1; each of the nine wrong fixes above 1; a cwd with no deriver 9.
+
+verify: sh D=core/scripts/derive-fixture-readsets.sh; [ -f "$D" ] || exit 9; w="$(mktemp -d)" || exit 9; F="$w/fx"; mkdir -p "$F/aa" "$F/mid" "$F/zz" "$F/nope" "$w/psin" "$w/psom" || exit 9; for n in aa mid zz; do echo : > "$F/$n/run.sh"; done; echo n > "$F/nope/notes.md"; [ -f "$F/mid/run.sh" ] && [ ! -f "$F/nope/run.sh" ] || exit 9; T="$(printf '\t')"; NL="$(printf '\nx')"; NL="${NL%x}"; printf '# readsets\nkept%ssrc/a\nomit%ssrc/b\nuntouched%ssrc/c\n' "$T" "$T" "$T" > "$w/o12"; printf 'fx%ssrc/d\nfx-b%ssrc/e\n' "$T" "$T" > "$w/o3"; printf 'kept%ssrc/a\nuntouched%ssrc/c\n' "$T" "$T" > "$w/m1"; printf 'kept%ssrc/a\n' "$T" > "$w/m2"; printf 'fx-b%ssrc/e\n' "$T" > "$w/m3"; printf 'plan-shape%sscripts/validate-plan-shape.sh\nkept%ssrc/a\n' "$T" "$T" > "$w/psin/map"; printf 'kept%ssrc/a\nplan-shape-x%score/fixtures/plan-shape-x/run.sh\n' "$T" "$T" > "$w/psom/map"; [ -s "$w/m3" ] && [ -s "$w/psom/map" ] || exit 9; sed -n '/^# READSET_ALLLIST_BEGIN$/,/^# READSET_ALLLIST_END$/p' "$D" > "$w/al.sh"; sed -n '/^# READSET_UNTRACED_BEGIN$/,/^# READSET_UNTRACED_END$/p' "$D" > "$w/ul.sh"; sed -n '/^case " \$LIST " in \*" plan-shape "\*)/,/^# UNDER /p' "$D" > "$w/ps.sh"; f=0; bad() { echo "BL-441: $1" >&2; f=1; }; v="$( . "$w/al.sh" >/dev/null 2>&1; readset_all_list "$F" 2>/dev/null )"; for n in aa mid zz; do case " $v " in *" $n "*) ;; *) bad "--all list lacks space-delimited $n: [$v]" ;; esac; done; case " $v " in *" nope "*) bad "--all list names a directory with no run.sh" ;; esac; case "$v" in *"$NL"*|*"$T"*) bad "--all list is not space-joined" ;; esac; u() { ( . "$w/ul.sh" >/dev/null 2>&1; readset_untraced_lost "$1" "$2" "$3" ) 2>/dev/null; }; r="$(u "$w/o12" "$w/m1" "kept${NL}omit")"; [ -z "$r" ] || bad "m1: traced-but-omitted fixture reported lost: [$r]"; r="$(u "$w/o12" "$w/m2" "kept${NL}omit")"; [ "$r" = untouched ] || bad "m2: lost untraced fixture not reported: [$r]"; r="$(u "$w/o3" "$w/m3" "fx-b")"; [ "$r" = fx ] || bad "m3: fx counted as traced by substring: [$r]"; ps() { ( WORK="$w/$1"; LIST="kept plan-shape"; FAIL=0; unset FIXTURE_HAS_PLAN_SHAPE; . "$w/ps.sh" 2>&1; echo "FAIL=$FAIL" ); }; r="$(ps psin)"; case "$r" in *"PASS  plan-shape's read-set names its own subject"*"FAIL=0"*) ;; *) bad "plan-shape controls did not pass on a traced plan-shape" ;; esac; r="$(ps psom)"; case "$r" in *"SKIP  plan-shape controls: plan-shape OMITTED this run"*"FAIL=0"*) ;; *) bad "an OMITTED plan-shape fails the controls instead of SKIPping" ;; esac; exit $f
+
+## BL-442 — `story-provenance`'s schema-mutant arm ran its writer unpinned, so the mutant had no effect wherever TMPDIR had no marked ancestor, and the arm was green here by accident
+
+**LANDED (v0.725.0, verified 95655e50).**
+
+**DEFECT.** Filed by the consumer as `PC-S316-STORY-PROVENANCE-FIXTURE-FAILS-ITS-SCHEMA-MUTANT-ARM-ONLY-UNDER-THE-READSET-TRACER`. The consumer saw the arm fail only under the read-set tracer. That symptom is real, and the defect is not specific to the tracer.
+
+**Root cause.** Under its root-run tracers the deriver starts each fixture through `sudo -n -u` (`core/scripts/derive-fixture-readsets.sh:668`, `:873`). That invocation does not carry `TMPDIR`, and the receipt's `-u TMPDIR` leg models the result. The fixture's seed then roots under `/tmp`. At base, arm 18's `mut_run` (`core/fixtures/story-provenance/run.sh:198-202`) invoked the copied writer with no `AI_DLC_PROJECT_ROOT`. The writer resolves its root in this order (`core/scripts/stamp-story-provenance.sh:126-129`): the override, a walk up from the script's own directory, `CLAUDE_PROJECT_DIR`, then a walk up from the cwd. Under `/tmp` the script-dir walk finds no marker and `CLAUDE_PROJECT_DIR` is unset, so the cwd walk finds the repo. Schema lookup is root-first (`:152-156`, BL-302), so the writer loaded the REAL schema and the mutant had no effect. Reproduced with no tracer: `env -u TMPDIR bash core/fixtures/story-provenance/run.sh` reads `55 assertions, 1 failing` at base. From cwd `/` with `TMPDIR` unset, the same arm fails for a related reason. There is no cwd walk to the repo there, so the unpinned writer resolves no root at all, and the arm's own control dies with `FIXTURE BROKEN: control run does not refuse`.
+
+**Normal green was an accident.** This machine's `TMPDIR` is `/var/folders/qr/v63hkc2n6s16yk44l131v9700000gn/T/`, and its parent holds a stray `.claude/` directory, which the writer's walk accepts as a root marker. The walk from the mutant copy stopped there. That marker holds only a `logs/` directory and no schema, so the copy fell through to its script-relative candidate, which is the mutant. On a machine without that stray marker, the arm fails on every run.
+
+**The fix as landed** (`7ceb0cdd`; line numbers are on the release tip):
+- `mut_writer` at `run.sh:192-194` is the one spelling of the mutant writer's invocation, and it pins `AI_DLC_PROJECT_ROOT="$MUTROOT"`, matching the later arms. `mut_run` and the precondition both call it.
+- `MUTROOT` now sits under a decoy root that the fixture builds itself (`:189-190`). The decoy is `$ROOT/decoy` and carries a `.git` marker plus a copy of the schema. So every unpinned walk from the copy stops at the decoy, whatever `TMPDIR` is.
+- The precondition comes after the schema copy, at `:216-250`, as three arms. P1: the pinned writer's `--print-schema` is MUTROOT's schema, compared by identity (`-ef`). P2: the same call from `/` with `TMPDIR` unset. P3: the copy, unpinned, from inside the decoy resolves the decoy's schema, which proves P1 can fail. If any of the three fails, the mutation arm stands down and the fixture reports `FIXTURE BROKEN: mutant writer resolves <path>` once. The tally goes from 55 assertions at base to 58.
+
+**Wrong fixes rejected:**
+- **Pinning `CLAUDE_PROJECT_DIR="$MUTROOT"` instead.** It reads green in four of the five legs below. It fails the decoy leg, because the writer's script-dir walk (`:127`) runs before `CLAUDE_PROJECT_DIR` (`:128`), finds the decoy's `.git`, and loads the decoy's `core/schemas/` copy. Scored 1.
+- **SKIPping the arm when the mutant has no effect.** It reads ` 0 failing` in three legs while dropping to 54 assertions. The assertion floor of 56 and the required presence line kill it. Scored 1.
+- **Reordering the writer's schema lookup script-first.** This reverts BL-302 and fails other arms in every leg. Scored 1.
+- **Pinning `mut_run` alone, with no precondition arm.** It passes every leg at 55 assertions, so only the floor rejects it. Scored 1.
+- **Preserving `TMPDIR` through sudo in the deriver.** The fixture would still depend on its environment. This was not built, because `TMPDIR` unset is already a leg of the receipt and does not route through the deriver.
+
+**Receipt.** It runs the fixture five times, each with `AI_DLC_PROJECT_ROOT` and `CLAUDE_PROJECT_DIR` unset: under the ambient `TMPDIR`; under a fresh `mktemp -d /tmp/spfresh.XXXXXX`; with `-u TMPDIR`; from cwd `/` with `-u TMPDIR`; and with `TMPDIR` under a decoy tree carrying `.git` and `core/schemas/provenance-block.json`. The fresh `TMPDIR` is built under `/tmp` and not under the ambient `TMPDIR`, because the ambient one has the marked ancestor that hides the defect. The receipt exits 9 if any ancestor of that fresh directory carries one of the writer's root markers. Each leg needs rc 0, a tally of ` 0 failing`, at least 56 assertions, and the line `ok    mutation: dropping verdict from the profile disarms the guard`. Scored under `bash -c 'set -uo pipefail; …'` from the repo root: release tip 0; base 1, failing four legs at 55/1 with the ambient leg passing at 55; the two sibling fixes alone 1; each of the four wrong fixes above 1; a cwd with no fixture 9.
+
+verify: sh F=core/fixtures/story-provenance/run.sh; S=core/schemas/provenance-block.json; [ -f "$F" ] && [ -f "$S" ] || exit 9; R="$(pwd)"; w="$(mktemp -d)" || exit 9; fr="$(mktemp -d /tmp/spfresh.XXXXXX)" || exit 9; dc="$(mktemp -d /tmp/spdecoy.XXXXXX)" || exit 9; mkdir -p "$dc/.git" "$dc/core/schemas" "$dc/t" && cp "$S" "$dc/core/schemas/" || exit 9; d="$(dirname "$fr")"; while [ "$d" != / ]; do { [ -e "$d/.git" ] || [ -d "$d/.claude" ] || [ -d "$d/core/skills/ai-dlc" ]; } && exit 9; d="$(dirname "$d")"; done; f=0; L() { n="$1"; c="$2"; shift 2; ( cd "$c" && "$@" ) > "$w/$n.out" 2>&1 </dev/null; rc=$?; t="$(sed -n 's/^ *---- \([0-9][0-9]*\) assertions, \([0-9][0-9]*\) failing ----$/\1 \2/p' "$w/$n.out")"; a="${t% *}"; x="${t#* }"; if [ "$rc" -eq 0 ] && [ -n "$t" ] && [ "$x" = 0 ] && [ "$a" -ge 56 ] && grep -qF 'ok    mutation: dropping verdict from the profile disarms the guard' "$w/$n.out"; then :; else echo "BL-442 leg $n: rc=$rc tally=[$t]" >&2; f=1; fi; }; L ambient "$R" env -u AI_DLC_PROJECT_ROOT -u CLAUDE_PROJECT_DIR bash "$R/$F"; L fresh "$R" env -u AI_DLC_PROJECT_ROOT -u CLAUDE_PROJECT_DIR TMPDIR="$fr" bash "$R/$F"; L unset "$R" env -u AI_DLC_PROJECT_ROOT -u CLAUDE_PROJECT_DIR -u TMPDIR bash "$R/$F"; L root / env -u AI_DLC_PROJECT_ROOT -u CLAUDE_PROJECT_DIR -u TMPDIR bash "$R/$F"; L decoy "$R" env -u AI_DLC_PROJECT_ROOT -u CLAUDE_PROJECT_DIR TMPDIR="$dc/t" bash "$R/$F"; exit $f
+
+## BL-443 — flat `_bmad-output/` pipeline state files the map names no reader for forced the whole fixture suite; keying selection on the pushed range is refused
+
+**LANDED (v0.725.0, verified 95655e50).**
+
+**NOTE.** It affects wall clock only, and no gate verdict was ever wrong. Filed by the consumer as `PC-S316-PRE-PUSH-READSET-KEYS-ON-THE-WORKING-TREE-NOT-THE-PUSHED-RANGE`. The entry makes two claims, and they are dispositioned differently.
+
+**Claim A, that selection keys on the working tree rather than the pushed range, is REFUSED as design.** `core/git-hooks/pre-push:602` builds `.changed` with `comm -3` of the verified record against `.now`, and `readset_manifest` hashes the working tree. That is deliberate, because fixtures read the working tree, not the pushed commits. Range keying would skip an uncommitted edit to a file a fixture reads, and it would lose every commit an earlier push sent with `--no-verify`, because those commits were never verified and are not in the range. The consumer's option (a) is therefore not taken.
+
+**Claim B, that flat `_bmad-output/` state files force the full suite, is LIVE and fixed.** The pipeline writes flat state files directly under `_bmad-output/`, including `pipeline-continuation-log.md`, `arm-log.jsonl` and `operator-requests-history.md`. The map names no reader for them, so each one landed in the orphan set and ran everything. Range keying would not cure this either, because the consumer also commits these files.
+
+**The fix as landed** (`e736263f`): the orphan-filter alternation is widened only, identically in both hooks (I66), at `.githooks/pre-push:757` and `core/git-hooks/pre-push:678`:
+
+    ^(\.claude/\.ai-dlc-version|_bmad-output/ai-dlc-update/[^/]+|_bmad-output/[^/]+)$
+
+It waives only the "unknown reader" verdict, and only for files directly under `_bmad-output/`. A flat file that the map names is in `.universe`, so it never reaches the filter and still selects its reader. Unmapped fixtures still run. A deeper path, and an `_bmad-output/` nested under another top, both remain orphans and still run all. The consumer's own remedy of an EXCLUDE top is fail-open here: excluding `_bmad-output` drops the whole top from the manifest, so a fixture reading a mapped `_bmad-output/` path stops being selected when that path changes. `core/fixtures/readset-skip/run.sh` moves `_bmad-output/other.md` from the near-miss battery to a positive arm, adds the near-misses `_bmad-output/sub/x.md` and `sub/_bmad-output/pipeline-continuation-log.md` (`:514`), adds flat positives for `pipeline-continuation-log.md`, the non-`.md` `arm-log.jsonl`, the dotfile `.pipeline-state` and a mapped `mapped-state.md`, and adds the mutants `dotstar`, `unanch`, `mdonly`, `nodot` and `onehook`. `mdonly` and `nodot` each die on behaviour, on the flat positive they stop waiving. `onehook` is the consumer hook left narrow, and I66 fails it.
+
+**The waiver's cost, stated in both hooks' comment.** The waiver reads "the map names no reader" as "no reader". That is false on a map that is out of date, and a consumer's map does name readers of some flat files: graph's names 20 readers of `_bmad-output/.ai-dlc-context-nonce`. Those flat files are in `.universe` and select normally. A fixture that starts reading an unmapped flat file after the map was derived is skipped for a change to that path until the map is re-derived. That is the same exposure the `ai-dlc-update/` waiver already carries.
+
+**Measured effect on the reference consumer: small.** Over graph's last 40 commits at `1f334be0`, read with `git diff-tree -r` on this hand, 7 non-merge commits touch a flat `_bmad-output/` file. Nine do so if the two merges are read against their first parent. An impossible-path control in the same script read 0. Re-derived read-only against graph's own map at `1f334be0` (`git show 1f334be0:.ai-dlc-fixture-readsets.tsv`, 19942 universe paths). For each of the 40 commits, the derivation took the `diff-tree -m --first-parent` path set, removed everything in the map's universe, and applied the shipped base filter and then the widened one. 39 commits carry an orphan under the base filter and 34 under the widened one, so the widening cures 5. A filter of an impossible path changed 0 of the 40. The 34 still run all on deeper or other paths. Counted per commit, their orphans fall under `_bmad-output/<dir>/` 22 times, `rebalancer/` 10, `docs/` 9, `scripts/` 5, `web/`, `tests/` and `.claude/` 3 each, the map file itself 2, and `.gitleaksignore` 1. The contract adversary had reported 36 with an orphan and 31 left over. The cured count of 5 agrees.
+
+**The consumer must annotate its own receipt by hand.** The consumer's receipt is `grep -qF '/.now" 2>/dev/null | sed'` against `core/git-hooks/pre-push` at the pulled ref. It anchors on line 602's text, and only the rejected range fix would change that line. The release tip still carries that text at `:602`, so under the consumer ledger's polarity, where exit 0 means still reproducing, the entry stays live after the pull. It closes only when someone records the claim-A refusal by hand.
+
+**Wrong fixes rejected, each scored 1 by the receipt below:**
+- `.*` in place of `[^/]+`, which crosses `/`.
+- The pattern without its anchors.
+- Listing `_bmad-output` as an EXCLUDE top in `scripts/suite-content-key.sh`, which is the consumer's remedy and fail-open.
+- Clearing every orphan when any changed path is a flat state file.
+- A `.md`-only waiver, `_bmad-output/[^/]+\.md`.
+- A waiver that excludes dotfiles, `_bmad-output/[^/.][^/]*`.
+
+Range keying is the refused claim A. Dropping the paths from the manifest or from `readset_drop_excluded` is the same fail-open shape as the EXCLUDE top.
+
+**Receipt.** Modelled on BL-432/433's. It extracts `FIXTURE_POOL_BEGIN..END` from `.githooks/pre-push` and seeds a git tree with a copy of `scripts/suite-content-key.sh`. The seed's map has `alpha` reading `src/a.sh` and `mstate` reading `_bmad-output/mapped-state.md`, and `gamma` is unmapped. The receipt records a manifest, makes one edit per arm, and drives `apply_readset_skip`. Nine arms:
+- An edit to the zero-reader flat `_bmad-output/pipeline-continuation-log.md` selects only `gamma`.
+- A new flat state file also selects only `gamma`.
+- An edit to the non-`.md` flat `_bmad-output/arm-log.jsonl` selects only `gamma`.
+- An edit to the flat dotfile `_bmad-output/.pipeline-state` selects only `gamma`.
+- An edit to the mapped flat file selects `mstate` and `gamma`.
+- `_bmad-output/sub/x.md` runs all.
+- `sub/_bmad-output/pipeline-continuation-log.md` runs all.
+- A flat file beside `.claude/settings.json` runs all.
+- An uncommitted edit to `src/a.sh` selects `alpha` and `gamma`.
+
+The receipt exits 9 if the seed does not form or the recorded manifest is empty. Scored under `bash -c 'set -uo pipefail; …'` from the repo root: release tip 0; base 1; the two sibling fixes alone 1; each of the six wrong fixes above 1; a cwd with no hook 9.
+
+verify: sh unset AI_DLC_FIXTURE_NO_SKIP GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; H=.githooks/pre-push; K=scripts/suite-content-key.sh; [ -f "$H" ] && [ -f "$K" ] || exit 9; command -v shasum >/dev/null || exit 9; w="$(mktemp -d)" || exit 9; sed -n '/^# FIXTURE_POOL_BEGIN/,/^# FIXTURE_POOL_END/p' "$H" > "$w/pool.sh"; grep -q '^readset_manifest()' "$w/pool.sh" && grep -q '^apply_readset_skip()' "$w/pool.sh" || exit 9; ALL='0:alpha,mstate,gamma,'; p() { t="$w/$1"; o="$w/$1.o"; mkdir -p "$o" "$t/src" "$t/scripts" "$t/.claude" "$t/sub/_bmad-output" "$t/_bmad-output/sub" || return 9; cp "$K" "$t/scripts/" || return 9; echo v > "$t/src/a.sh"; echo s > "$t/.claude/settings.json"; echo m > "$t/_bmad-output/mapped-state.md"; echo l > "$t/_bmad-output/pipeline-continuation-log.md"; echo j > "$t/_bmad-output/arm-log.jsonl"; echo d > "$t/_bmad-output/.pipeline-state"; echo x > "$t/_bmad-output/sub/x.md"; echo n > "$t/sub/_bmad-output/pipeline-continuation-log.md"; printf 'alpha\tsrc/a.sh\nmstate\t_bmad-output/mapped-state.md\n' > "$t/.ai-dlc-fixture-readsets.tsv"; ( cd "$t" && git init -q . && git add -A && git -c user.name=r -c user.email=r@r -c commit.gpgsign=false commit -qm s ) >/dev/null 2>&1 || return 9; ( cd "$t" || exit 9; . "$w/pool.sh" >/dev/null 2>&1; readset_manifest "$o"; [ -s "$o/.now" ] || exit 9; cp "$o/.now" .git/ai-dlc-fixture-verified || exit 9; eval "$2" || exit 9; printf 'x/%s/\n' alpha mstate gamma > "$o/list"; READSET_NO_CHANGE=0; apply_readset_skip "$o/list" "$o" >/dev/null 2>&1; printf '%s:%s' "$READSET_NO_CHANGE" "$(sed 's|^x/||; s|/$||' "$o/list" | tr '\n' ,)" ); }; f=0; chk() { r="$(p "$1" "$2")" || { echo "NO-RUN $1" >&2; exit 9; }; [ "$r" = "$3" ] || { echo "BL-443 $1: want $3 got $r" >&2; f=1; }; }; chk flat-zero 'echo l2 >> _bmad-output/pipeline-continuation-log.md' '0:gamma,'; chk flat-new 'echo s > _bmad-output/story-7-state.md' '0:gamma,'; chk flat-jsonl 'echo j >> _bmad-output/arm-log.jsonl' '0:gamma,'; chk flat-dotfile 'echo d >> _bmad-output/.pipeline-state' '0:gamma,'; chk flat-mapped 'echo m2 >> _bmad-output/mapped-state.md' '0:mstate,gamma,'; chk deeper 'echo x2 >> _bmad-output/sub/x.md' "$ALL"; chk nested 'echo n2 >> sub/_bmad-output/pipeline-continuation-log.md' "$ALL"; chk flat+settings 'echo l2 >> _bmad-output/pipeline-continuation-log.md; echo s2 > .claude/settings.json' "$ALL"; chk uncommitted 'echo v2 > src/a.sh' '0:alpha,gamma,'; exit $f
+
+## BL-444 — an operator attribution and a repository-state claim could each be written with no cited source, and a later pass graded against them
+
+**LANDED (v0.726.0, verified ab1586db).**
+
+**DEFECT.**
+
+Filed by the consumer as PC-S316-OPERATOR-ATTRIBUTION-AND-STATE-CLAIMS-NEED-A-CITED-SOURCE.
+
+**Two claims, scored separately.**
+- (a) A requirement, AC or decision attributed to the operator carried no quote and no locator, so
+  nothing distinguished a real operator statement from an invented one, and it entered the locked set
+  and was graded against. The operator-citation check core does carry, `gate-validation.md` Check 2a
+  (`validate-escalation-resolution.sh`), has escalation entries as its subject: its header
+  (`core/scripts/validate-escalation-resolution.sh:2-3`) names an operator-gated HARD_BLOCK marked
+  RESOLVED.
+- (b) A gate evidence row asserting repository state (committed, tracked, gitignored, absent, red,
+  green) did not have to carry the command that produced it. Check 12 already required an absence
+  claim to carry a control; it did not require a state claim to carry its command.
+
+**The fix, as landed.**
+- (b) `core/skills/ai-dlc/steps/gate-validation.md:875`, inside Check 12 directly after the
+  absence-control paragraph: `**A state claim MUST carry its command.**` The row carries the command
+  and its output, or it is rewritten before proceeding.
+- (a) `core/skills/ai-dlc/rule-bodies/rule-13.md:18`, inside Rule 13 proper and above `## HANDOFF
+  PROTOCOL`: `**An operator attribution MUST cite the operator's message.**` A verbatim quote plus a
+  locator. An attribution with no citable message never entered the locked set: it is struck at
+  extraction, is not graded against and is not carried forward, and striking it is not a Rule 13
+  divergence. That wording keeps it out of Rule 13's HARD_BLOCK-to-drop path. A project-memory
+  entry's path is an acceptable locator for that source class, which resolves the source line at
+  `discovery.md:177`.
+- Pointer at `core/skills/ai-dlc/steps/discovery.md:179`, inside §4a: `**Every operator attribution
+  carries a quote and a locator**`.
+- Reviewer arm at `core/team-roles/adversary.md:201`, its own rung under `## Severity`: `### An
+  uncited operator attribution is a MAJOR`. It checks that a quote AND a locator are PRESENT, because
+  the adversary has no transcript to check the quote against. CRITICAL only where the artifact grades
+  an AC or locks a requirement against the attribution. Its repair is to supply the citation; striking
+  is allowed only where the author confirms no citable message exists, per `rule-13.md`, because an
+  attribution with a message behind it is a locked requirement and dropping it needs the HARD_BLOCK.
+
+**No mechanism.** Rule 31's own carrier note (`core/skills/ai-dlc/SKILL.md:932-940`) records the
+measurement: a block-grain detector for an uncited claim flagged 6074 blocks across 890 of 998 story
+files, and was passable by adding any unrelated citation. A detector for (a) or (b) has the same
+shape and the same false-positive set, so neither is mechanised and the adversary rung is the carrier.
+
+**The consumer's receipt cannot close against this fix.** Its `verify: theirs_lacks
+core/skills/ai-dlc/steps/gate-validation.md "XAP"` closes only when core's `gate-validation.md`
+carries the consumer's own `XAP` token, and core prose never will: `XAP` occurs 0 times in that file
+at base and at the fix, against 8 for `Check 12` in the same file at the fix. The entry therefore
+needs a hand annotation on the consumer side when this release is pulled. **Do NOT suggest retiring
+the consumer's XAP.** Core's (a) and (b) carry no gate FAIL; they are prose plus an adversary MAJOR.
+The consumer's XAP is universal and FAILS the gate, per the batch-195 contract adversary's reading of
+it, so retiring it on the strength of this release would trade a blocking check for a non-blocking one.
+The layer-drift rehearsal of this release against a scratch copy of the consumer, including XAP's
+row, is reported separately by the measurement hand.
+
+**Wrong fixes rejected.**
+- Widening Check 2a / `validate-escalation-resolution.sh` to every artifact. That script's subject
+  is the RESOLVED/OVERRIDDEN escalation entry and its operator citation; a story's or a gate log's
+  operator attribution is not an escalation entry, so widening it changes the subject rather than
+  extending the check.
+- Folding (b) into Rule 31. Rule 31 binds countable assertions, has no carrier (declared a GAP), and
+  is read nowhere near Check 12's evidence rows. A state claim placed there is out of the section the
+  gate executes. The receipt scores this build 1.
+
+**Receipt.** Paragraph-joined and section-bounded: each file is folded to one line per paragraph
+with fenced and `<!-- -->` lines skipped, then each pin must open a paragraph INSIDE its span: Check
+12 (`### 12.` to `### 13.`), Rule 13 (to `## HANDOFF`), discovery §4a (to `### 4b`), and adversary
+`## Severity`. Scored under `bash -c 'set -uo pipefail; ...'` from the tree root:
+
+| tree | exit |
+|---|---|
+| fix (release tip) | 0 |
+| base `f8384eea` | 1 |
+| base plus every pin text appended as trailing paragraphs to every file the receipt names | 1 |
+| state-claim paragraph moved into SKILL.md Rule 31, Check 12 untouched | 1 |
+| state-claim paragraph wrapped in a fenced block inside Check 12 | 1 |
+| BL-445's fix alone on base | 1 |
+| BL-446's fix alone on base | 1 |
+| rewording: both bold leads kept, bodies rewritten and re-wrapped at 50-60 columns | 0 |
+
+The pin holds the bold leads verbatim and accepts any rewording of the body that keeps the words
+`output` (Check 12) and `locator` (Rule 13).
+
+verify: sh g=core/skills/ai-dlc/steps/gate-validation.md; r=core/skills/ai-dlc/rule-bodies/rule-13.md; d=core/skills/ai-dlc/steps/discovery.md; a=core/team-roles/adversary.md; for f in "$g" "$r" "$d" "$a"; do [ -f "$f" ] || exit 9; done; PJ='function f(){ if(p!=""){gsub(/[[:space:]]+/," ",p); sub(/^ /,"",p); print p}; p="" } /^[[:space:]]*```/{f(); z=!z; next} z{next} /^[[:space:]]*<!--/{f(); if($0!~/-->/)m=1; next} m{if($0~/-->/)m=0; next} /^[[:space:]]*$/{f(); next} /^#/{f(); print; next} {p=p" "$0} END{f()}'; sp(){ awk "$PJ" "$1" | awk -v S="$2" -v E="$3" 'index($0,E)==1&&s{s=0} index($0,S)==1{s=1;next} s'; }; c1(){ awk -v L="$1" -v X="$2" '(L==""||index($0,L)==1)&&(X==""||index($0,X)){c++} END{print c+0}'; }; [ "$(sp "$g" '### 12.' '### 13.' | c1 '**A state claim MUST carry its command.**' 'output')" = 1 ] || exit 1; [ "$(sp "$r" '### Rule 13 --' '## HANDOFF' | c1 '**An operator attribution MUST cite the operator' 'locator')" = 1 ] || exit 1; [ "$(sp "$d" '### 4a.' '### 4b' | c1 '**Every operator attribution carries a quote and a locator**' '')" = 1 ] || exit 1; [ "$(sp "$a" '## Severity' '## ' | awk '$0=="### An uncited operator attribution is a MAJOR"{c++} END{print c+0}')" = 1 ] || exit 1; exit 0
+
+## BL-445 — the bug-analysis root-cause claim reached the fix story with no adversarial pass on its soundness
+
+**LANDED (v0.726.0, verified ab1586db).**
+
+**DEFECT.**
+
+Filed by the consumer as PC-S316-NO-ADVERSARIAL-PASS-ON-THE-BUG-ANALYSIS-ROOT-CAUSE-CLAIM.
+
+**Claims, scored separately.**
+- `bug-investigation.md` ran no adversarial review between the root-cause analysis (§2) and the fix
+  story (§3). The only review was §4's story validation cycle, which reviews the STORY, so a
+  root cause placed where the defect is observed rather than where the wrong value is produced passed
+  every pass downstream.
+- Any review added there must not hold operator-applicable relief behind it (§2b).
+- The folded-defect routes named the range they run as `0–2b`, so a new §2c would be skipped on
+  both of them.
+
+**The fix, as landed.**
+- `core/skills/ai-dlc/steps/bug-investigation.md:102`, a new `### 2c. Adversarial verification of
+  the root-cause claim` between §2b and `### 3.`, titled to match the consumer's own extension so
+  layer-drift can see the overlap. It dispatches ONE `adversary` (Rule 19) to run
+  `/bmad-review-adversarial-general` on `bug-analysis.md`, one-shot and `mode: subagent`, against the
+  soundness of the root cause: does each falsification-ladder rung rule its layer out, is a layer
+  missing, does the evidence fit another cause equally well, is the defect placed where it is
+  observed rather than produced. Findings go to
+  `_bmad-output/planning-artifacts/bug-analysis-adversarial.md` with a
+  `SKILL_INVOCATION_PROVENANCE v1` block whose `artifact:` names `bug-analysis.md` and which carries
+  no `verdict`. `:122` requires every CRITICAL and MAJOR disposed of before §3, by amending the
+  analysis or recording counter-evidence in the fix story. `:126` copies §4's relief sentence, so a
+  one-shot finding that yields operator relief goes to the operator when it is found.
+- `:100`, §2b's last sentence: relief is not held behind any review between sections 2 and 3, "§2c
+  included".
+- `core/skills/ai-dlc/steps/route.md:421` and `core/skills/ai-dlc/steps/stories-test-strategy.md:505-507`
+  now read `0–2c`, and the stories-test-strategy `0–4` path names §2c explicitly. `grep -rnE
+  '0(–|-)2b' core/ --exclude-dir=fixtures` reads 0, against 2 for `0(–|-)2c` in the same tree.
+  Without the exclusion the counts include `process-rule-pins`' own probe text.
+- The new sibling is bug-keyed, not sprint-keyed, so it joins `bug-analysis.md`'s Rule 24 exemption
+  everywhere that exemption is written: `core/scripts/validate-draft-stamps.sh:53-67`, whose
+  derivation now returns 14 basenames with the command beside the count, and `:112-121`,
+  `core/skills/ai-dlc/rule-bodies/rule-24.md:70`,
+  `core/skills/ai-dlc/steps/gate-validation.md:2009-2010`, and
+  `core/fixtures/check-23-draft-stamps/README.md:51,74`. The check-23 decoy the contract first asked
+  for was DROPPED: `DRAFTS` is an exact-basename whitelist, so a decoy named
+  `bug-analysis-adversarial.md` cannot fail with or without the exemption.
+
+**NOTE: the Check 17 mechanism arm is NOT built.** The arm would fail a gate when a fix story states
+a root cause and `bug-analysis-adversarial.md` is absent. It needs a PENDING arm for fix stories
+written before this release and a false-positive set measured on a scratch copy of the consumer's
+live slot. Neither exists, so this release ships prose and a text-pin fixture only.
+
+**Wrong fixes rejected.**
+- Adding the soundness questions to §4's fix-story validation cycle. §4 reviews the story after the
+  root cause is written into it, which is the gap. The receipt scores the §2c body moved into §4 as 1.
+- Stamping the sibling under `planning-artifacts/s<N>/`. A bug has no sprint key, and two bugs in one
+  sprint would collide on one stamped path; that is the reason `bug-analysis.md` is exempt.
+- §2c placed after `### 3.`. The fix story would already carry the claim. The receipt scores it 1.
+
+**Receipt.** Paragraph-joined and section-bounded, fenced and `<!-- -->` lines skipped. It requires
+the `### 2c.` heading verbatim, immediately after a `### 2b.` heading and immediately before a
+`### 3.` heading; inside §2c, the bold lead, the full findings path and the disposition lead; `§2c
+included` inside §2b; and in `route.md` and `stories-test-strategy.md`, no `0–2b` (either dash) and at
+least one `sections 0–2c`. Scored under `bash -c 'set -uo pipefail; ...'` from the tree root:
+
+| tree | exit |
+|---|---|
+| fix (release tip) | 0 |
+| base `f8384eea` | 1 |
+| base plus every pin text appended as trailing paragraphs to every file the receipt names | 1 |
+| §2c moved to after `### 3.` | 1 |
+| §2c's body folded into §4, heading removed | 1 |
+| BL-444's fix alone on base | 1 |
+| BL-446's fix alone on base | 1 |
+| rewording: three §2c paragraphs re-wrapped at 45-55 columns | 0 |
+
+The alternate build is a re-wrap, not a rewording. The pin intentionally refuses rewording of four
+things: the `### 2c.` title, which layer-drift keys on; the two bold leads; and the full findings
+path. Everything else in §2c may be reworded.
+
+verify: sh b=core/skills/ai-dlc/steps/bug-investigation.md; ro=core/skills/ai-dlc/steps/route.md; st=core/skills/ai-dlc/steps/stories-test-strategy.md; for f in "$b" "$ro" "$st"; do [ -f "$f" ] || exit 9; done; PJ='function f(){ if(p!=""){gsub(/[[:space:]]+/," ",p); sub(/^ /,"",p); print p}; p="" } /^[[:space:]]*```/{f(); z=!z; next} z{next} /^[[:space:]]*<!--/{f(); if($0!~/-->/)m=1; next} m{if($0~/-->/)m=0; next} /^[[:space:]]*$/{f(); next} /^#/{f(); print; next} {p=p" "$0} END{f()}'; sp(){ awk "$PJ" "$1" | awk -v S="$2" -v E="$3" 'index($0,E)==1&&s{s=0} index($0,S)==1{s=1;next} s'; }; c1(){ awk -v L="$1" -v X="$2" '(L==""||index($0,L)==1)&&(X==""||index($0,X)){c++} END{print c+0}'; }; [ "$(awk "$PJ" "$b" | awk '/^### /{if(q&&index($0,"### 3.")==1)ok++; q=(pb&&$0=="### 2c. Adversarial verification of the root-cause claim"); pb=(index($0,"### 2b.")==1)} END{print ok+0}')" = 1 ] || exit 1; [ "$(sp "$b" '### 2c.' '### ' | c1 '**The root-cause claim gets an adversarial pass before section 3.**' 'adversary')" = 1 ] || exit 1; [ "$(sp "$b" '### 2c.' '### ' | c1 '' '_bmad-output/planning-artifacts/bug-analysis-adversarial.md')" -ge 1 ] || exit 1; [ "$(sp "$b" '### 2c.' '### ' | c1 '**Dispose of every CRITICAL and MAJOR before section 3**' '')" = 1 ] || exit 1; [ "$(sp "$b" '### 2b.' '### ' | c1 '' '§2c included')" = 1 ] || exit 1; for f in "$ro" "$st"; do grep -qE '0(–|-)2b' "$f" && exit 1; [ "$(awk "$PJ" "$f" | awk 'index($0,"sections 0–2c")||index($0,"sections 0-2c"){c++} END{print c+0}')" -ge 1 ] || exit 1; done; exit 0
+
+## BL-446 — a later event that invalidates an authorization's premise was absorbed in gate-log prose instead of going back to the operator
+
+**LANDED (v0.726.0, verified ab1586db).**
+
+**DEFECT.**
+
+Filed by the consumer as PC-S316-LATER-EVENT-INVALIDATING-AN-AUTHORIZATION-PREMISE-MUST-RETURN-TO-THE-OPERATOR.
+
+**Claims, scored separately.**
+- When an outcome a RESOLVED/OVERRIDDEN authorization relied on later failed to occur, nothing
+  required the change to go back to the operator; it could be absorbed in gate-log prose and the
+  authorization kept on.
+- No reviewer was told to look for it.
+
+**The fix, as landed.**
+- `core/skills/ai-dlc/escalations.md:200`, directly after the permanent-default disclosure and
+  before terminal-entry archival: `**Authorization-premise invalidation disclosure.**` File a new
+  `HARD_BLOCK` entry citing the earlier authorization (id and timestamp) and the invalidating event,
+  and put the question back to the operator before the affected work reaches deploy-validate or the
+  Production Validation Checkpoint. The status is `HARD_BLOCK` because the status vocabulary is closed.
+- Reviewer arm at `core/team-roles/adversary.md:219`, its own rung under `## Severity` beside
+  BL-444's: `### A premise a later event contradicted is a MAJOR`.
+- Pointer in `core/skills/ai-dlc/SKILL.md:383-385`, Rule 12, beside the AC verification-category
+  cross-reference.
+
+**No mechanism.** Whether an outcome was the PREMISE of an authorization is a judgment about intent.
+No act separates a premise from an incidental mention, so there is nothing for a gate to deny; the
+adversary rung is the carrier. `escalations.md:207-208` says the same in the shipped text.
+
+**Wrong fixes rejected.**
+- Auto-expiring a RESOLVED entry after N gates. That expires authorizations whose premises still
+  hold and leaves one invalidated in the first gate alive until N.
+- Folding this into the AC verification-category disclosure. That disclosure fires when a resolution
+  changes how an AC is verified; a premise invalidation happens later and to an authorization that
+  may touch no AC. The receipt scores the paragraph folded into it, lead removed, as 1.
+
+**Receipt.** Paragraph-joined and section-bounded, fenced and `<!-- -->` lines skipped. The bold lead
+must open a paragraph between `**Permanent-default change disclosure.**` and `**Terminal-entry
+archival`, and that paragraph must carry `HARD_BLOCK` and `operator`. The adversary rung must sit
+under `## Severity`, and Rule 12 in SKILL.md must name the disclosure. Scored under `bash -c 'set -uo
+pipefail; ...'` from the tree root:
+
+| tree | exit |
+|---|---|
+| fix (release tip) | 0 |
+| base `f8384eea` | 1 |
+| base plus every pin text appended as trailing paragraphs to every file the receipt names | 1 |
+| paragraph moved to after `**Terminal-entry archival` | 1 |
+| paragraph folded into the AC verification-category disclosure, lead removed | 1 |
+| BL-444's fix alone on base | 1 |
+| BL-445's fix alone on base | 1 |
+| rewording: bold lead kept, body rewritten and re-wrapped at 52 columns | 0 |
+
+verify: sh e=core/skills/ai-dlc/escalations.md; a=core/team-roles/adversary.md; k=core/skills/ai-dlc/SKILL.md; for f in "$e" "$a" "$k"; do [ -f "$f" ] || exit 9; done; PJ='function f(){ if(p!=""){gsub(/[[:space:]]+/," ",p); sub(/^ /,"",p); print p}; p="" } /^[[:space:]]*```/{f(); z=!z; next} z{next} /^[[:space:]]*<!--/{f(); if($0!~/-->/)m=1; next} m{if($0~/-->/)m=0; next} /^[[:space:]]*$/{f(); next} /^#/{f(); print; next} {p=p" "$0} END{f()}'; sp(){ awk "$PJ" "$1" | awk -v S="$2" -v E="$3" 'index($0,E)==1&&s{s=0} index($0,S)==1{s=1;next} s'; }; c1(){ awk -v L="$1" -v X="$2" -v Y="$3" '(L==""||index($0,L)==1)&&(X==""||index($0,X))&&(Y==""||index($0,Y)){c++} END{print c+0}'; }; [ "$(sp "$e" '**Permanent-default change disclosure.**' '**Terminal-entry archival' | c1 '**Authorization-premise invalidation disclosure.**' 'HARD_BLOCK' 'operator')" = 1 ] || exit 1; [ "$(sp "$a" '## Severity' '## ' | awk '$0=="### A premise a later event contradicted is a MAJOR"{c++} END{print c+0}')" = 1 ] || exit 1; [ "$(sp "$k" '### Rule 12 ' '### ' | c1 '' 'Authorization-premise invalidation disclosure' '')" -ge 1 ] || exit 1; exit 0
+
+## BL-447 — `apply.sh` handed back a setup-sited file as a manual semantic merge when its only consumer delta was its setup values
+
+**LANDED (v0.727.0, verified 64f60705).**
+
+**DEFECT.** Filed by the consumer as `PC-S316-APPLY-HANDS-BACK-A-SEMANTIC-MERGE-FOR-A-FILE-WHOSE-ONLY-DELTA-IS-SETUP-SITES`. A file `reconcile/setup-sites.md` declares carries values `ai-dlc-setup` filled in, so it never byte-matches base, and every upstream change to it buckets `BOTH-CHANGED->CLASSIFY`. At base, `apply.sh` handed each such file back as `WORKLIST semantic-merge`, a manual three-way merge whose whole content was "take theirs, keep the values". **This is a bootstrapping engine, and the fix cannot protect the pull that delivers it, though only in one case.** A deferred pull (`--carried-machinery-slice`) runs the consumer's old engine over the range and gets today's rows. A non-deferred pull lands the new `apply.sh` at step 2 and re-invokes it, so that pull is classified by the fixed engine.
+
+**Five claims, each scored.** Line numbers are on the batch's base, where the release's two siblings touched none of these files.
+- **C1, that the `*CLASSIFY*` arm never asks whether the path is setup-sited, is LIVE and fixed.** `preclassify.sh:827` buckets the file `BOTH-CHANGED->CLASSIFY`, and the arm at `apply.sh:1044-1067` emits `semantic-merge` with no sited-path test.
+- **C2, that `unregistered-drift.sh` emits `CORE-TEMPLATE-SUBSTITUTED` for these files, is LIVE.** It is not the defect. It is why that row cannot be the eligibility key (W3 below).
+- **C3, that `apply.sh` performs a mask/reinject transform the fix should extend, is PARTLY FALSE.** The transform exists only as agent prose (`SKILL.md:2370-2403`), and `setup-site-drift.sh:32-35` says in as many words that `apply.sh` has none. The fix is a new mechanism in `apply.sh`, not an extension of an existing one.
+- **C4, that `--finish` cannot verify a hand merge of a sited file, is LIVE and fixed.** `apply.sh:706` excludes sited paths from the in-flight marker, and `:2305` emits `NOTE finish-unverified` for every one of them unconditionally.
+- **C5, that substituting the value for the token text would do, is FALSE as a remedy.** Theirs carries the same token text in doc comments (`deploy-validate.md:45`, `:165`; `qa.md:14` at theirs), so a substitution rewrites those comments too (W2 below).
+
+**The fix as landed** (line numbers are on the release tip):
+- `setup_site_merge` at `apply.sh:616-694` resolves the file only when four predicates, each asked of a program, all hold. **(a)** At `:653-655`, against BASE this one file differs only inside its declared spans. That is a per-file answer from `setup-site-drift.sh --file`; the tree-level exit read 1 on the reproduction while both files were OK. **(d)** At `:658-682`, no line theirs ADDED carries a `{word}` outside an HTML comment, where a `{word}` preceded by `$` is a shell expansion and does not count. Comment state is tracked across lines. **(b)** At `:683-684`, `git merge-file` exits 0. **(c)** At `:685-687`, the merged result, not yet written, equals theirs outside its spans, checked with `--file --ours` on the temp file. Every ssd call needs exit 0 AND an `SETUP-SITE-OK` row (`ssm_ok`, `:615`), so a run that compared nothing is not a pass.
+- **Two already-merged acceptances run before (a)-(d).** If either holds, the function returns 0 with no content write and applies only theirs' exec bit.
+  - The first, at `:628-637`, needs `git merge-file -p ours base theirs` to exit 0 with output byte-equal to ours, AND `setup-site-drift.sh --file` against THEIRS to read OK. The merge-file conjunct is the round-2 repair below.
+  - The second, at `:638-652`, needs ssd `--file` against THEIRS to read OK, AND the text of every declared span to be identical at BASE and at THEIRS. Span text comes from `setup-site-drift.sh --span-text`, each side must be non-empty, and the two strings must be equal. This is the round-3 repair.
+- **Mode and write** at `:688-692`: a `cp -p` seed of `$cons.incoming.$$`, the merged bytes, `sync_mode_from_theirs`, then `mv`, as `overwrite_from_theirs` writes.
+- **The gate** at `:1185-1197` tries the merge only when `retired-tokens.sh` exited 0 (`rt_rc`) and named nothing to re-point (`rt` empty). On success the row is `RESOLVED<TAB>setup-site-merge<TAB><rel>`. Every other outcome falls through to the hand-back rows below it, which the release keeps byte-identical to base.
+- **The exact-bucket test was deleted as vacuous** (round 3), which amends contract D8. Every `*CLASSIFY*` bucket that can name a sited path already falls back inside `setup_site_merge`. BOTH-ADDED has no base blob, UPSTREAM-DELETED+consumer-modified has no theirs blob, and UPSTREAM-MOD+consumer-deleted has no consumer file; the ORPHANED-* rows name no matching consumer path. So the test changed no outcome. The fixture records this at `run.sh:379-383`, and arms D8b and D8 hold the fallbacks. **How the verdict was settled:** the tip was compared end to end against a copy with the bucket test restored.
+  - **The first comparison could not discriminate.** Its line in `r3final-e2e.sh` printed ROWS DIFFER in every world, because its normaliser used `\b`, which BSD `sed -E` does not implement. Commit shas in the `RESOLVED consistent` and `RESOLVED restamp` rows therefore leaked through.
+  - **With explicit non-hex boundaries** (the session's `t4/norm.sh`), all 9 worlds read IDENTICAL for the tip against the restored-bucket copy. A control pair, clean against spanD, still differs.
+  - **A second harness agrees:** `tip3b-e2e.sh` reads identical on clean, d8add, upDel and d8del.
+- **`setup-site-drift.sh --file <core-path> [--ours <path> | --span-text]`** at `:5` and `:70-93`.
+  - `--file` answers for one declared file and refuses an undeclared one.
+  - `--ours` compares a named copy of that file and requires `--file`.
+  - `--span-text` (`:272-300`) prints one `SETUP-SITE-SPANTEXT` row carrying the span count and a checksum of the span lines at that ref. It prints no row when a site does not locate there, so an absent span is never equal to anything. It requires `--file` and takes no `--ours`.
+- **ssd's `c`-hunk arm, the round-4 repair** (`setup-site-drift.sh:327-340`): a `c` hunk with unequal left and right lengths now emits `SETUP-SITE-DRIFT` on every single-line-site line it covers. Block sites are exempt. This is fail-closed only: a tree that read OK solely because an extra or missing line sat next to a filled value now reads DRIFT.
+- **ssd's `a|d` arm, the round-5 repair** (`setup-site-drift.sh:351-363`): a `d` hunk now needs every deleted line, from its first to its last, to sit inside a heading block. An `a` hunk still tests only its insertion point. This is fail-closed only as well.
+- **D4, a lost `next_heading`,** at `setup-site-drift.sh:250-254` now emits `SETUP-SITE-ANCHOR-LOST` and exits 1. Before, it widened the span to EOF and could read OK. The arm is `core/fixtures/setup-site-drift/run.sh:198-216`, and the `eof-widening` mutant is at `:313-324`.
+- **`--finish`** at `apply.sh:2443-2457` runs `setup-site-drift.sh --file` against THEIRS for each sited CLASSIFY path. On OK it emits no row. Otherwise it keeps `NOTE finish-unverified` and carries ssd's own rows. It is never a WORKLIST. Resolved paths stay out of the marker's classify hashes (`:737-739`), because a check this mode adds must not start withholding on them.
+- `SKILL.md:1659` and `:2385` and `layer-contract.yaml:406` name `setup-site-merge`.
+- `core/fixtures/apply-setup-sited-merge/` is a new SHIPPING fixture, registered in `scripts/uninstall.sh` and both manifests. It has 60 arms: 36 behavioural and 24 mutant kills. It prints `SKIP: subject predates setup-site-merge` against an engine without the emission line, and it locates `reconcile/` beside itself with `pick()` rather than walking up for a root. The arms added after the first tip are:
+  - SpD and SpQ (round 2).
+  - SpF and D1f (round 3). In SpF, theirs adds a line inside qa.md's Ownership block away from the value, and the file resolves carrying it. In D1f, run 1 merges a fenced block added beside an existing fence, and run 2 resolves with no write and the block present once.
+  - DlI, DlD and DlB (round 4): theirs deletes a line adjacent to a filled single-line site, and each file falls back.
+  - CAd: a consumer line added right after the filled deploy site is outside every span, and the file falls back.
+  - BLK: a block span that changes length on both sides still resolves, which shows that the length test does not reach block sites.
+  - QD and QDc (round 5): a consumer deletion that runs from inside qa.md's Ownership block through `## Responsibilities` falls back untouched, and the same comment reword without the deletion still resolves.
+  - D+dol, D+ml and D+com, the pass direction for (d): a `${LOGDIR}` shell expansion, a multi-line comment carrying a token, and a comment-only reword each resolve.
+  - M2: after `chmod -x` on the merged file, a re-run restores theirs' exec bit.
+  - FIN, the `--finish` branch.
+  - INC: no driven world holds a `*.incoming.*` temp.
+
+  `untouched()` compares mtime as well as bytes, inode and mode, which is what sees a write-then-restore.
+
+**The fix needed four corrections after the first release tip.**
+
+**Round-2 BLOCKER.** At the first release tip, the already-merged shortcut asked only whether ours equalled theirs outside the spans, and it ran BEFORE (a)-(d). A theirs edit INSIDE a span, made where the locator still matched, therefore passed the shortcut on the FIRST run. The file was reported `RESOLVED setup-site-merge` and theirs' edit was dropped without a write. Two worlds were measured. In spanD, theirs changes the value line to `{deploy_command} --wait`. In spanQ, theirs rewords the doc comment inside qa.md's `## Ownership` block. The repair adds the conjunct that `git merge-file -p ours base theirs` must exit 0 with output byte-equal to ours. SpD and SpQ pin it, and so does the `bareShort` mutant, which is the shortcut as it first shipped (`if true`).
+
+**Round-3 DEFECT.** The repaired shortcut handed back a file it had merged itself, whenever theirs added a fenced block next to an existing fence. On run 2, `git merge-file` placed the block ambiguously, exited 0 and duplicated it, so the `cmp` against ours failed on a file that was already exactly right. The repair is the second acceptance above. D1f pins it, SpF pins its span-identity conjunct, and so do the `spanId` and `rcOnly` mutants.
+
+**Round-4 BLOCKER.** The root cause was ssd's `c`-hunk arm, which checked only a hunk's LEFT-side lines. `diff` folds a line deleted beside a single-line site into the site's own hunk (`6c6,7`), and that hunk's only left line is the allowed site line. So when theirs deleted the line adjacent to a filled site, ssd read the consumer copy, which still carried the line, as OK against THEIRS. The second acceptance then resolved the file on the FIRST run with nothing written, the stamp advanced past theirs' deletion, and the loss was permanent. The measured worlds are delIM, delDV and delDVb. The repair is the length test above. The same change closes the matching blind spot in check (a), where a consumer adds a line right after a filled site. DlI, DlD, DlB and CAd pin it, and so do the `laxC` and `laxCa` mutants. BLK holds the block-site exemption. **Round 4 closed the `c` arm, and round 5 closes the same cause in the `a|d` arm's range test.** That arm tested only the hunk's first line (`in_span "$l1"`). So a consumer deletion that started inside a heading block and ran past its `next_heading` (the qd world) read OK in check (a), and apply emitted `RESOLVED setup-site-merge`. `DECISION drift` still withheld the restamp, but the row was wrong. The repair requires every left line of a `d` hunk to be in span.
+
+**Wrong fixes rejected, each killed on behaviour by a named arm of the fixture:**
+- **W1**, re-bucketing a sited BOTH-CHANGED file as an apply bucket. `overwrite_from_theirs` lands theirs' `{token}` lines over the consumer's values. Killed by C2 (mutant `W1`).
+- **W2**, substituting token text with the value. It rewrites theirs' `<!-- {deploy_command}: … -->` comment. Killed by C2 (mutant `W2`).
+- **W3**, keying eligibility on `CORE-TEMPLATE-SUBSTITUTED`. `unregistered-drift.sh:634-635` exempts a whole hunk whose base side carries any token, so a consumer edit to the doc comment beside a site passes it. Killed by B2t, where consumer and theirs made the same doc-comment edit (mutant `W3`).
+- **W4**, skipping (c). A theirs rewording of the `after_line` anchor passes (a) and (b), and only (c) sees the lost anchor. Killed by B1 and B1b (mutant `W4`). **A theirs edit to a span line was NOT caught by (b) at the first tip**, because the shortcut ran before (b) and resolved it. That is the round-2 BLOCKER above. Since the round-2 repair the shortcut's merge-file conjunct refuses such an edit. (b) then catches it when the consumer filled the same line (arm MF, a merge-file conflict). Where the locator still matches and the merge is clean, it falls back through the shortcut-and-(c) path (arms SpD and SpQ).
+- **The contract adversary's additions:** no (d), killed by D2, where theirs adds `{deploy_command} --retry` outside the site (mutant `noD`). No already-merged shortcut, killed by D1, where the second run falls back on its own write (`noIdem`). A tree-level (a), killed by D6a, where another file's drift hands back the clean target (`treeA`). No mode sync, killed by C3 (`mode`). Reading a non-zero ssd exit as a pass, killed by B1b (`ssdExit`). No retired-token gate, killed by D7 (`noD7`). D8 also holds a consumer-deleted sited path absent.
+- **Added with rounds 3 and 4:** a shortcut that trusts merge-file's exit without comparing its output, killed by SpF (`rcOnly`). The second acceptance without span identity, killed by SpF (`spanId`) and by SpQ (`spanIdQ`). ssd's `c`-hunk test reading left lines only, killed by DlI (`laxC`) and, through (a), by CAd (`laxCa`). ssd's `d`-hunk test reading the first line only, killed by QD (`laxD`). The `*CLASSIFY*` bucket mutant was removed together with the bucket test it mutated.
+- **Added with the round-2 repair:** the bare shortcut, killed by SpD (`bareShort`). (d) without the `$` exclusion, killed by D+dol (`dDol`). (d) resetting comment state per line, killed by D+ml (`dML`). (d) reading comment text as live, killed by D+com (`dCom`). A shortcut without the mode sync, killed by M2 (`idemMode`). A write path that leaks its temp, killed by INC (`leak`). Write-then-restore, killed by B1 through the mtime conjunct (`writeRestore`). `--finish` always dropping the NOTE, killed by FIN (`finNote`).
+
+**Measured on the reference consumer.** On a scratch `file://` clone of graph at `b58e49d0`, with the consumer's report overlay from `1f334be0`, `apply.sh --carried-machinery-slice` ran over `d4354b7c..f8384eea`, once with the base engine and once with the release engine. The base engine emitted `WORKLIST semantic-merge` for `skills/ai-dlc/steps/deploy-validate.md` and `team-roles/qa.md` and left both files at their pre-pull bytes.
+- **The release engine** emitted `RESOLVED setup-site-merge` for both files, and both are byte-equal to the consumer's hand merge in `1f334be0`.
+- **The other rows:** both runs emit 20 rows, and the other 18 of 20 rows are identical to the base engine's run. A `diff` of the sorted (kind, class, path) rows shows exactly two changes: `WORKLIST semantic-merge` becomes `RESOLVED setup-site-merge` for each of the two files. The only full-detail difference is the `restamp-withheld` count, which went from 3 undisposed rows to 1.
+- **Re-run:** a second ordinary run resolves both files with no write.
+- **Breadth across graph's earlier pulls:**
+  - On the 0.722.0 pull, `team-roles/dev.md` and `team-roles/qa.md` resolve, each equal to graph's committed reconcile result.
+  - On the 0.691.0 pull, `deploy-validate.md` resolves, equal.
+  - These are the same five resolutions the first release tip produced, so neither the round-4 nor the round-5 tightening flipped any of them to a hand-back.
+- **The round-4 worlds:** delIM, delDV and delDVb now emit `WORKLIST semantic-merge`. ssd names the site line in each: `implementation.md:6`, `deploy-validate.md:19` and `deploy-validate.md:18`. Each file is left unwritten, with no `.incoming` temp behind it. In the world where the consumer adds a line right after a filled site, check (a) now reads DRIFT.
+
+**Owed: a read-set trace for `apply-setup-sited-merge`.** The fixture is new and has no map entry, so the pre-push runner runs it on every push until someone traces it with `--tracer sandbox` and commits the map.
+
+**Receipt.** It extracts the fixture, `core/fixtures/lib` (the fixture sources its preamble) and `reconcile/` from `${THEIRS:-HEAD}` to a tar FILE, checking git's exit. It refuses with 9 if the fixture is absent at that ref, if the archive is empty, or if the extraction directory sits inside a repository. It then runs the fixture under a fresh `mktemp -d`. It needs `apply-setup-sited-merge: PASS` with rc 0, and a `SKIP` line reads 1, because a SKIP means the engine at that ref predates the fix. `backlog-reverify.sh` sets no `THEIRS`, so the receipt reads HEAD. This differs from BL-441's working-tree receipts because `git archive` needs a ref, so an uncommitted engine edit is invisible to it. Base reads 9 where the siblings read 1, because the fixture does not exist there and the receipt cannot measure the subject. Scored under `bash -c 'set -uo pipefail; …'` from the repo root on the final tip:
+- release tip 0;
+- base `ab1586db` 9, and an unresolvable ref 9;
+- base's `apply.sh` with the new fixture 1 (SKIP);
+- W4 1, killed by B1 and B1b;
+- `bareShort` 1, by SpD, SpQ, SpF and BLK;
+- `rcOnly` 1, by SpF and BLK;
+- `spanId` 1, by SpD, SpQ, SpF and BLK;
+- `laxC` (in `setup-site-drift.sh`) 1, by DlI, DlD, DlB and CAd;
+- `laxD` (in `setup-site-drift.sh`) 1, by QD.
+
+Earlier tips also scored no-(d) 1 (by D2), `--finish` always dropping the NOTE 1 (by FIN), W3 1 (by B2t), tree-level (a) 1 (by D6a and D6b) and the since-removed `*CLASSIFY*` bucket 1 (by D8b). Each wrong build replaces `apply.sh` with the fixture's own mutant of it, so the fixture's mutant anchors for that build also report `DID NOT APPLY`. That makes each exit overdetermined, and those anchor failures come from the harness, not from behaviour. The behavioural kill named beside each build is the discriminating evidence.
+
+verify: sh unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; R="${THEIRS:-HEAD}"; F=core/fixtures/apply-setup-sited-merge; E=core/skills/ai-dlc-update/reconcile; git cat-file -e "${R}:${F}/run.sh" 2>/dev/null || exit 9; w="$(mktemp -d)" || exit 9; git archive --format=tar -o "$w/t.tar" "$R" "$F" core/fixtures/lib "$E" || exit 9; [ -s "$w/t.tar" ] || exit 9; mkdir "$w/x" && tar -xf "$w/t.tar" -C "$w/x" || exit 9; [ -f "$w/x/$F/run.sh" ] && [ -f "$w/x/core/fixtures/lib/preamble.sh" ] && [ -f "$w/x/$E/apply.sh" ] || exit 9; git -C "$w/x" rev-parse --git-dir >/dev/null 2>&1 && exit 9; ( cd "$w/x" && bash "$F/run.sh" ) > "$w/out" 2>&1 </dev/null; rc=$?; if grep -q '^SKIP' "$w/out"; then echo "BL-447: the fixture SKIPped -- the engine at $R predates setup-site-merge" >&2; exit 1; fi; if [ "$rc" -eq 0 ] && grep -qx 'apply-setup-sited-merge: PASS' "$w/out"; then exit 0; fi; echo "BL-447: fixture rc=$rc: $(grep -E 'FAIL|BROKEN' "$w/out" | head -3 | tr '\n' '|')" >&2; exit 1
