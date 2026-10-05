@@ -88,16 +88,17 @@ rewritten line, an assertion the new floor pre-empted, and the fork budget 17 ov
 failed only the suite-pole check, at 2608s, while the operator's laptop slept in transit. The fourth skipped the suite on
 the unchanged content key. `FORK_BUDGET` stays 3204.
 
-**NOT BUILT, PRESENTED AS AN OPERATOR CHOICE, NO REPLY RECEIVED:** a whole operator message under 12 characters
-(`approved`, `yes`) stays uncitable. Recommended: leave it. The best measured rule false-accepted 2 of 3 on the
-consumer's corpus.
+**OPERATOR RULING, BATCH 198: AN OPERATOR CITATION STAYS AT 12 CHARACTERS OR MORE.** In the operator's words: "we
+should continue requiring the longer form (12 character or greater) operator message." A whole operator message under
+12 characters (`approved`, `yes`) stays uncitable, and no short-message citation path is to be built. The best measured
+rule false-accepted 2 of 3 on the consumer's corpus.
 
 **READ-SET TRACES:** `adversarial-citation` traced clean and committed. `readset-stage1-verdict` OMITTED with 272 drop
 notices and stays unmapped.
 
 **THE DELIVERY GAP IS ONE RELEASE.** The consumer is installed at 0.729.0 against `VERSION` 0.730.0; 0.730.0 is not
-bootstrapping. The banked ruling stands: report the gap and write no runbook. **OPERATOR DECISIONS STILL OPEN:** the
-short-message choice above, and whether `refs/recovered/b197` is kept.
+bootstrapping. The banked ruling stands: report the gap and write no runbook. **OPERATOR DECISIONS STILL OPEN:** whether
+`refs/recovered/b197` is kept.
 
 Batch 197's block below is history: batch 198's block replaces its delivery gap and its decisions list.
 
