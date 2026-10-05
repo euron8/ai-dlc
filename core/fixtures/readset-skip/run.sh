@@ -1958,6 +1958,8 @@ MUT
     # component, and one that IS a whole `<...>` component but exists in the tree.
     mkdir -p "$BR/d" || broken "mkdir failed"
     printf 'x\n' > "$BR/a<b>c"; printf 'x\n' > "$BR/d/<real>"
+    # A PRESENT file whose name leads with `-`: the option-shaped arm must keep it, as it keeps d/<real>.
+    printf 'x\n' > "$BR/d/-p"
     # A DANGLING symlink with a whole `<...>` name: present by `-L`, absent by `-e`, so it is kept
     # only by a filter that tests both. Tracked, so readset_copy_tree carries it as a symlink.
     ln -s nowhere-at-all "$BR/<link>" || broken "could not seed the dangling symlink"
@@ -2054,7 +2056,7 @@ exec tail -n 0 -f "$STUB_FEED"
 STUB
     chmod +x "$SB/id" "$SB/sudo" "$SB/sandbox-exec" "$SB/fs_usage" "$SB/logstream"
     : > "$SB/feed"
-    # The nine PSEUDO seeds go into BOTH lists, so they cancel in the miss count and every tracer's
+    # The eleven PSEUDO seeds go into BOTH lists, so they cancel in the miss count and every tracer's
     # set carries them to the one call site where the sets meet (the pseudo-path arm below).
     PSEUDO_SEEDS='<string>
 sub/<unknown>
@@ -2064,7 +2066,9 @@ d/<real>
 e<f>g.sh
 <link>
 x/y/<z>
-<>'
+<>
+q/-x
+d/-p'
     { printf '%s\n' core/fixtures/fxa/run.sh src/a.sh src/miss.sh .git/HEAD build.log; printf '%s\n' "$PSEUDO_SEEDS"; } > "$SB/fs.list"
     { printf '%s\n' core/fixtures/fxa/run.sh src/a.sh; printf '%s\n' "$PSEUDO_SEEDS"; } > "$SB/sb.list"
     : > "$SB/empty.list"
@@ -2104,8 +2108,10 @@ x/y/<z>
     # symlink) must be KEPT; `x/y/<z>` (absent, two directories deep) and `<>` (absent, empty
     # token) must be DROPPED. Each of the last four separates the fix from one wrong filter:
     # `e<f>g.sh` from an unanchored `<[^/]*>`, `<link>` from `-e` without `-L`, `x/y/<z>` from a
-    # first-component strip `${p#*/}`, and `<>` from a non-empty token `'<'?*'>'`.
-    # Presence-shaped: five rows must APPEAR, so a run that wrote no set cannot score.
+    # first-component strip `${p#*/}`, and `<>` from a non-empty token `'<'?*'>'`. Then the
+    # option-shaped pair: `q/-x` (absent, last component leads with `-`, the shape of a grep option
+    # read as an operand) must be DROPPED, and `d/-p` (present, same shape) must be KEPT.
+    # Presence-shaped: six rows must APPEAR, so a run that wrote no set cannot score.
     pseudo_sig() { # prints one 0/1 per seed: is it in the last stub run's fxa.set
       local s out=""
       while IFS= read -r s; do
@@ -2115,10 +2121,10 @@ x/y/<z>
     }
     PS0="$(pseudo_sig)"
     BOTH_ARMS=$((BOTH_ARMS+1))
-    if [ "$PS0" = 001111100 ]; then
-      ok "PSEUDO: the merged set drops '<string>' and 'sub/<unknown>' (absent whole-<...> last component) and keeps src/missing.sh, a<b>c, d/<real>, e<f>g.sh and the dangling <link>; x/y/<z> and <> go too"
+    if [ "$PS0" = 00111110001 ]; then
+      ok "PSEUDO: the merged set drops '<string>' and 'sub/<unknown>' (absent whole-<...> last component) and keeps src/missing.sh, a<b>c, d/<real>, e<f>g.sh and the dangling <link>; x/y/<z> and <> go too; absent option-shaped q/-x goes and present d/-p stays"
     else
-      bad "PSEUDO: expected seed signature 001111100 in fxa.set, got '$PS0' (order: <string> sub/<unknown> src/missing.sh a<b>c d/<real> e<f>g.sh <link> x/y/<z> <>) — $(tail -2 "$WORK/stub.out" | tr '\n' ' ')"
+      bad "PSEUDO: expected seed signature 00111110001 in fxa.set, got '$PS0' (order: <string> sub/<unknown> src/missing.sh a<b>c d/<real> e<f>g.sh <link> x/y/<z> <> q/-x d/-p) — $(tail -2 "$WORK/stub.out" | tr '\n' ' ')"
     fi
     # FIVE MUTANTS, each a cmp -s guarded copy of the stub-world deriver, each a wrong filter:
     #   nofilter   the call removed from the meeting point;
@@ -2135,11 +2141,17 @@ x/y/<z>
         "$SB/deriver.sh" > "$SB/deriver.p.sbonly.sh"
     #   eonly      `-e` without `-L`, so the dangling `<link>` goes;
     #   firststrip `${p#*/}` strips only the FIRST component, so `x/y/<z>` survives;
-    #   nonempty   `'<'?*'>'`, so the empty token `<>` survives.
-    sed 's/if \[ -e "\$TREE\/\$p" \] || \[ -L "\$TREE\/\$p" \]; then/if [ -e "$TREE\/$p" ]; then/' "$SB/deriver.sh" > "$SB/deriver.p.eonly.sh"
+    #   nonempty   `'<'?*'>'`, so the empty token `<>` survives;
+    #   dashgone   the `-*` arm deleted, so the absent option-shaped `q/-x` survives;
+    #   dashany    the `-*` arm dropping with no existence test, so the present `d/-p` goes too.
+    # eonly is ADDRESSED to the `'<'*'>') if ` line: the `-*` arm carries the identical existence
+    # test, and an unaddressed edit would rewrite both arms and score a kill on two subjects.
+    sed "/^      '<'\*'>') if /s/if \[ -e \"\$TREE\/\$p\" \] || \[ -L \"\$TREE\/\$p\" \]; then/if [ -e \"\$TREE\/\$p\" ]; then/" "$SB/deriver.sh" > "$SB/deriver.p.eonly.sh"
     sed 's/^    case "\${p##\*\/}" in$/    case "${p#*\/}" in/' "$SB/deriver.sh" > "$SB/deriver.p.firststrip.sh"
     sed "s/^      '<'\*'>') if /      '<'?*'>') if /" "$SB/deriver.sh" > "$SB/deriver.p.nonempty.sh"
-    for _pm in nofilter wholepath unanch existonly sbonly eonly firststrip nonempty; do
+    sed '/^      -\*) if /d' "$SB/deriver.sh" > "$SB/deriver.p.dashgone.sh"
+    sed 's/^      -\*) if .*$/      -*) ;;/' "$SB/deriver.sh" > "$SB/deriver.p.dashany.sh"
+    for _pm in nofilter wholepath unanch existonly sbonly eonly firststrip nonempty dashgone dashany; do
       BOTH_ARMS=$((BOTH_ARMS+1))
       if cmp -s "$SB/deriver.sh" "$SB/deriver.p.$_pm.sh"; then
         bad "PSEUDO MUTANT $_pm did not apply: the edit matched nothing in the deriver copy"
@@ -2148,10 +2160,19 @@ x/y/<z>
       stub_run "$SB/deriver.p.$_pm.sh" "$SB/sb.list" >/dev/null
       _ps="$(pseudo_sig)"
       case "$_ps" in
-        001111100) bad "PSEUDO MUTANT $_pm: the set still reads 001111100, so the pseudo arm does not depend on what this mutant removed" ;;
-        *1*) ok "PSEUDO MUTANT $_pm: the set reads '$_ps', not 001111100 — the pseudo arm refuses it" ;;
+        00111110001) bad "PSEUDO MUTANT $_pm: the set still reads 00111110001, so the pseudo arm does not depend on what this mutant removed" ;;
+        *1*) ok "PSEUDO MUTANT $_pm: the set reads '$_ps', not 00111110001 — the pseudo arm refuses it" ;;
         *) bad "PSEUDO MUTANT $_pm: the set carries none of the seeds ('$_ps'), so the run wrote no set and scored nothing — $(tail -2 "$WORK/stub.out" | tr '\n' ' ')" ;;
       esac
+      # With no filter at all the absent option-shaped seed must reach the set: otherwise its drop
+      # in the unmutated run came from somewhere other than the `-*` arm, and the arm is unproven.
+      if [ "$_pm" = nofilter ]; then
+        BOTH_ARMS=$((BOTH_ARMS+1))
+        case "$_ps" in
+          ?????????1?) ok "PSEUDO MUTANT nofilter: the absent option-shaped q/-x reaches fxa.set ('$_ps'), so its drop in the unmutated run is the filter's" ;;
+          *) bad "PSEUDO MUTANT nofilter: the absent q/-x did not reach fxa.set even with the filter removed ('$_ps'), so the -* arm's drop is not proven to be its own" ;;
+        esac
+      fi
     done
     # THE WIDTH KNOB UNDER `--tracer both`. This path runs the fixture through `sudo -n -u ...
     # sandbox-exec`, and the stub sudo strips VAS_INNER_POOL_WIDTH the way env_reset does, so only an
