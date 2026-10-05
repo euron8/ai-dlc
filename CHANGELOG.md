@@ -19,6 +19,32 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.729.0] - 2026-10-05
+
+Batch 197's release. It takes `BL-375` one step further and closes nothing (net closed minus filed:
+0). It discharges no consumer candidate. Both new scripts are distribution-only, and no file in it is
+bootstrapping.
+
+### BL-375 (partial)
+
+- `scripts/readset-stage1-run.sh <RUN_DIR>` runs one stage-1 sandbox trace of exactly the five
+  subjects from a clean main checkout. It samples the 1-minute load every 15 seconds, restores the
+  map byte-identically from a trap whatever the deriver's exit, and appends the run to an
+  append-only ledger under the git common dir. It refuses a linked worktree, a dirty checkout and an
+  existing `RUN_DIR`, and exits 3 when the restore fails. It launches the deriver in its own process
+  group and kills the group on TERM, because the deriver has no trap and would orphan its
+  `log stream` and sandboxed fixture.
+- `scripts/readset-stage1-verdict.sh` scores the last three ledger lines against the stage-1 close
+  criterion: MET exits 0, NOT-MET exits 1, REFUSED exits 2. It takes no run directories as
+  arguments, so three good runs cannot be picked out of many. A self-probe runs first and seeds each
+  arm firing alone beside a near-miss.
+- The stage-1 criterion is no longer scored by hand. Stage 1 is still not met; the entry records
+  this batch's single-fixture traces, which dropped reports at load 1.8 to 3.6.
+- New distribution-only fixture `readset-stage1-verdict`: 33 seeded worlds (an all-MET world, every
+  refusal and every arm failing alone, three near-misses), wrapper arms against a trap-less stub
+  deriver, 15 scorer mutants and 4 wrapper mutants, all killed.
+- `FORK_BUDGET` 3196 -> 3204: the two new scripts add 6 forks to the I84 and I83 per-file walks.
+
 ## [0.728.0] - 2026-10-04
 
 Batch 196's release. It closes `BL-448` and takes `BL-375` one step further (net closed minus filed:

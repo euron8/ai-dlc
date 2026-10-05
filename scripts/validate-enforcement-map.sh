@@ -708,7 +708,14 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   the same path: base 3185 (spread 3185-3185), tip 3190 (spread 3190-3190), so +5. The only arm
 #   that moved is I39, 62 -> 67: `NAMED-UPSTREAM-SIBLING-ATTRIBUTED` is one more member it joins
 #   across the emitter, step 3f, step 8 and emit-report's heading. HIGH reading 3190 plus the usual 6.
-FORK_BUDGET=3196
+#
+#   RAISED TO 3204 FOR TWO NEW DISTRIBUTION SCRIPTS, NOT FOR A NEW ARM. `fork-profile.sh --section
+#   all --stable`, base `origin/main` ff325996 then the stage-1 scorer tip 199fff03, interleaved, each
+#   in its own clean detached worktree: base 3192 (spread 3190-3192), tip 3198 (spread 3196-3198), so
+#   +6. Every arm that moved is a per-file walk over `scripts/*.sh` counting
+#   `readset-stage1-run.sh` and `readset-stage1-verdict.sh`: I84 291 -> 295, I83 144 -> 146. HIGH
+#   reading 3198 plus the usual 6.
+FORK_BUDGET=3204
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
