@@ -186,8 +186,12 @@ CITE_OFFSET='2026-07-11T20:00:00-07:00 | "reframe the AC as a class invariant"'
 # `readdirSync` which member comes first and refuses to score if it is the incident file, because
 # a verifier that read one member and stopped would otherwise pass the whole-quote case.
 mkdir -p "$ROOT/corpus-short"
+# The second turn pins the floor's VALUE, not just its presence: `go ahead ok` is eleven
+# characters and must be refused although a genuine turn carries it; `go ahead ok,` is twelve
+# and must MATCH that same turn.
 cat > "$ROOT/corpus-short/a-monday.jsonl" <<'JSONL'
 {"type":"user","timestamp":"2026-10-05T12:00:00Z","message":{"role":"user","content":"Start the planning gate for the release branch."}}
+{"type":"user","timestamp":"2026-10-05T12:05:00Z","message":{"role":"user","content":"Go ahead ok, ship it."}}
 JSONL
 cat > "$ROOT/corpus-short/b-incident.jsonl" <<'JSONL'
 {"parentUuid":"9b1f0c2e-0000-4000-8000-000000000001","isSidechain":false,"type":"assistant","timestamp":"2026-10-05T13:14:18.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Two decisions need you before the gate: 1. Close the item on the organic run? 2. File the follow-up as a NOTE?"}]},"uuid":"9b1f0c2e-0000-4000-8000-000000000002","sessionId":"22e0f5c2-0000-4000-8000-000000000000"}

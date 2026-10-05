@@ -9244,7 +9244,9 @@ else
     fs.writeFileSync(d + "/memn", String(n));
     fs.writeFileSync(d + "/near", "x" + near.join("x") + "x");
     fs.writeFileSync(d + "/nearn", String(near.length));
-    const lens = ["", "plain ascii", "é", "\u{1F600}", "aé\u{1F600}中", "é".repeat(6)];
+    // U+100000 is astral with an F4 lead byte. U+1F600 alone has an F0 lead, so a count of only
+    // `\360` leads agreed with node on every case here until this one was added.
+    const lens = ["", "plain ascii", "é", "\u{1F600}", "aé\u{1F600}中", "é".repeat(6), "\u{100000}", "a\u{100000}b\u{50000}"];
     lens.forEach((s, i) => { fs.writeFileSync(d + "/len" + i, s); fs.writeFileSync(d + "/lenwant" + i, String(s.length)); });
     fs.writeFileSync(d + "/lenn", String(lens.length));
   ' "$i120_tmp" 2>/dev/null
@@ -9275,7 +9277,23 @@ else
     i120_mut="$(I120_D="$i120_tmp" bash -c '
       cite_norm() { printf "%s" "$1" | LC_ALL=C tr -s "[:space:]" " " | sed "s/^ //; s/ \$//"; }
       [ "$(cite_norm "$(cat "$I120_D/mem")")" = "$(cat "$I120_D/memwant")" ] && printf same || printf differs' 2>&1)"
-    if [ "$i120_mut" != "differs" ]; then
+    # SECOND SELF-PROBE: a cite_nlen that doubles only F0-lead (`\360`) characters must disagree
+    # with node on some length case, or the cases cannot tell it from the shipped `\360-\367` body.
+    i120_mutl="$(I120_D="$i120_tmp" I120_C="$i120_lenn" bash -c '
+      cite_nlen() {
+        _cn_c="$(printf "%s" "$1" | LC_ALL=C tr -d "\200-\277" | wc -c)"
+        _cn_a="$(printf "%s" "$1" | LC_ALL=C tr -cd "\360" | wc -c)"
+        printf "%s" "$((_cn_c + _cn_a))"
+      }
+      i=0; r=same
+      while [ "$i" -lt "$I120_C" ]; do
+        [ "$(cite_nlen "$(cat "$I120_D/len$i")")" = "$(cat "$I120_D/lenwant$i")" ] || r=differs
+        i=$((i + 1))
+      done
+      printf "%s" "$r"' 2>&1)"
+    if [ "$i120_mutl" != "differs" ]; then
+      err "I120 SELF-PROBE FAILED: a cite_nlen() counting only F0 (\\360) lead bytes as surrogate pairs compared '${i120_mutl}' against node's .length on every length case, where 'differs' is the only correct answer. The length cases hold no astral character with an F1-F4 lead, so they cannot tell that body from the correct one."
+    elif [ "$i120_mut" != "differs" ]; then
       err "I120 SELF-PROBE FAILED: the ASCII-only \`tr -s '[:space:]'\` rendering -- the one that let an NBSP-padded quote count AUTHORIZED -- compared '${i120_mut}' against node's member set, where 'differs' is the only correct answer. The comparison below cannot tell the hole from its fix."
     elif [ -n "$i120_got" ]; then
       err "I120: the shipped citation-floor measure disagrees with node on:${i120_got}. members: cite_norm() left an ECMAScript \\s character uncollapsed, so a quote padded with it passes the bash floor while the predicate counts it as whitespace -- on --any-authorized that is a padded quote counted AUTHORIZED. near-miss: it collapsed a character node does not. lenN: cite_nlen() counted a length node's .length does not, so the floor sits at a different place in bash. Fix the body at all four I103 sites."
