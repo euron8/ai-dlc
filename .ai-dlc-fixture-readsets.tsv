@@ -10,7 +10,7 @@
 # every other fixture's entries alone, so refreshing one fixture costs its own runtime
 # rather than a full re-derivation.
 #
-# fixtures mapped: 231    entries: 27320
+# fixtures mapped: 232    entries: 27366
 absorbed-specifics-survive	.git/HEAD
 absorbed-specifics-survive	.git/config
 absorbed-specifics-survive	.git/index
@@ -586,6 +586,52 @@ apply-self-overwrite	core/skills/ai-dlc-update/reconcile/setup-sites.md
 apply-self-overwrite	core/skills/ai-dlc-update/reconcile/template-sites.md
 apply-self-overwrite	core/skills/ai-dlc-update/reconcile/unregistered-drift.sh
 apply-self-overwrite	core/skills/ai-dlc-update/reconcile/warn-shadowed-local-validators.sh
+apply-setup-sited-merge	.git
+apply-setup-sited-merge	.git/HEAD
+apply-setup-sited-merge	.git/commondir
+apply-setup-sited-merge	.git/config
+apply-setup-sited-merge	.git/objects
+apply-setup-sited-merge	.git/refs
+apply-setup-sited-merge	core
+apply-setup-sited-merge	core/fixtures
+apply-setup-sited-merge	core/fixtures/apply-setup-sited-merge
+apply-setup-sited-merge	core/fixtures/apply-setup-sited-merge/run.sh
+apply-setup-sited-merge	core/fixtures/lib
+apply-setup-sited-merge	core/fixtures/lib/preamble.sh
+apply-setup-sited-merge	core/skills
+apply-setup-sited-merge	core/skills/ai-dlc-update
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/adopt-extension-checks.sh
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/apply.sh
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/classify-block.md
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/derivation-differential.sh
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/emit-report.sh
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/hard-blockers.sh
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/layer-drift.sh
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/ledger-rotate.sh
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/lib.sh
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/preclassify.sh
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/predicate-differential.sh
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/predicate-sites.md
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/push-drain.sh
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/push-refusals.tsv
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/readopt-override.sh
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/register-drift.sh
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/retired-fixtures.sh
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/retired-layer-contract.sh
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/retired-layer-passage.sh
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/retired-layer-token.sh
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/retired-tokens.sh
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/self-update-gate.sh
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/settings-merge.sh
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/setup-site-drift.sh
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/setup-sites.md
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/template-sites.md
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/unregistered-drift.sh
+apply-setup-sited-merge	core/skills/ai-dlc-update/reconcile/warn-shadowed-local-validators.sh
 apply-worklist-rows	core
 apply-worklist-rows	core/fixtures
 apply-worklist-rows	core/fixtures/apply-worklist-rows
