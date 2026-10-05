@@ -221,7 +221,7 @@ score "M0 control (unmutated)" validate-gate-adjudication.sh "" \
 # block text offers no reason, because as far as the caller knows there was nothing to apply.
 # --------------------------------------------------------------------------
 score "m1 caller never asks the sibling (rows blanked)" validate-gate-adjudication.sh \
-  "S1 S2b S6-idonly S13 S15 S17 S18 S19 S20 S21 S22 S23 S24 S25 S26 S27" \
+  "S1 S2b S6-idonly S13 S15 S17 S18 S19 S20 S21 S22 S23 S24 S25 S26 S27 S28 S29 S28-twin" \
   '        if [ "$supp_rc" -eq 0 ]; then
             GA_IN_FORCE_STATUS="ok:$ESC"' \
   '        if [ "$supp_rc" -eq 0 ]; then
@@ -230,8 +230,8 @@ score "m1 caller never asks the sibling (rows blanked)" validate-gate-adjudicati
   "The carve-out has no input, so a FAIL under a well-formed in-force suppression blocks
   exactly as it did before the fix. The set is wide because the mutation removes the
   carve-out's INPUT rather than a property of the join: S1, S2b, S6-idonly, S13, S15, S17 and
-  S20 assert it FIRED, and S18, S19, S21, S22, S23, S24 and S25 assert the citation check's own
-  tokens, which a validator with no rows to verify never prints. Every case that asserts it did NOT fire is
+  S20 and S28-twin assert it FIRED, and S18, S19, S21, S22, S23, S24, S25, S28 and S29 assert the
+  citation check's own tokens, which a validator with no rows to verify never prints. Every case that asserts it did NOT fire is
   unaffected, which is the point — those cases cannot tell this validator from the fixed one
   on their own, and that is what the rest of this battery is for."
 
@@ -468,12 +468,15 @@ score "m15 caller keeps the rows when it has no corpus to verify them against" \
 # kill set as m14, reached from the other side — the ask happened and the answer was dropped.
 # --------------------------------------------------------------------------
 score "m16 caller verifies the rows and exports the unverified set" \
-  validate-gate-adjudication.sh "S18 S22 S23 S24 S25 S26" \
+  validate-gate-adjudication.sh "S18 S22 S23 S24 S25 S26 S28 S29" \
   '                    GA_IN_FORCE="$GA_VERIFIED"' \
   '                    GA_IN_FORCE="$GA_IN_FORCE"' \
   "The verifier was asked and its answer changed nothing. S18, S22, S23, S24 and S25 are the
   cases where the verified set and the original set DIFFER, so they are the only ones that can
-  tell the program that honours the answer from the one that prints it and moves on."
+  tell the program that honours the answer from the one that prints it and moves on. S28 and S29
+  join them: their rows are dropped by the normalised-length floor before the verifier is asked,
+  and exporting the original set puts the padded and blank rows back. m14 and m20 do NOT reach
+  them, because both act below that floor."
 
 # --------------------------------------------------------------------------
 # m17 — the CALLER scans the corpus's FIRST member and stops. The batch-63 adversary's blocker:
@@ -486,7 +489,7 @@ score "m16 caller verifies the rows and exports the unverified set" \
 # survive too: their verdicts do not depend on the quote being found.
 # --------------------------------------------------------------------------
 score "m17 caller scans only the corpus's first transcript" validate-gate-adjudication.sh \
-  "S1 S2b S6-idonly S13 S15 S17 S22 S27" \
+  "S1 S2b S6-idonly S13 S15 S17 S22 S27 S28-twin" \
   '                if steer_dir_has_transcript "$TRANSCRIPT_DIR"; then
                     STEER_FLAG="--dir"; STEER_ARG="$TRANSCRIPT_DIR"' \
   '                if steer_dir_has_transcript "$TRANSCRIPT_DIR"; then
@@ -494,7 +497,8 @@ score "m17 caller scans only the corpus's first transcript" validate-gate-adjudi
                     for _one in "$TRANSCRIPT_DIR"/*.jsonl; do STEER_ARG="$_one"; break; done' \
   "The corpus is read one file deep, so a genuine authorization in any session but the first
   reads as forged. Every case that asserts the carve-out FIRED needs the quote found in the
-  corpus's second file, which is why the seed carries it there and nowhere else."
+  corpus's second file, which is why the seed carries it there and nowhere else -- S28-twin's
+  TDIR_YES included, whose operator answer is in its second member by readdirSync order."
 
 # --------------------------------------------------------------------------
 # m18 — the CALLER reads the verifier's exit as a BOOLEAN. A verifier that could not run (rc 1)
@@ -556,7 +560,7 @@ score "m20 caller reads the verifier's NOMATCH as verified" validate-gate-adjudi
 # sibling is never invoked at all.
 # --------------------------------------------------------------------------
 score "m10 sibling replaced by 'exit 0'" validate-suppression-lifetime.sh \
-  "S1 S2b S3 S4 S5 S6-idonly S6-mismatch S8 S9 S11 S12 S13 S14 S15 S17 S18 S19 S20 S21 S22 S23 S24 S25 S26 S27" "" "" \
+  "S1 S2b S3 S4 S5 S6-idonly S6-mismatch S8 S9 S11 S12 S13 S14 S15 S17 S18 S19 S20 S21 S22 S23 S24 S25 S26 S27 S28 S29 S28-twin" "" "" \
   "A sibling that emits nothing and exits 0 satisfied a case, which means that case is
   asserting an ABSENCE and would certify a predicate that never ran."
 
