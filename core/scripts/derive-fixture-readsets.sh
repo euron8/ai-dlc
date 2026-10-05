@@ -556,6 +556,12 @@ drop_ignored() { # reads paths on stdin (repo-relative), writes the non-ignored 
 # file of that name was traced (a fixture may genuinely create one), and an absent ordinary path
 # such as `src/missing.sh` stays (a negative lookup on a real name IS a dependency: creating it
 # can change the fixture's outcome).
+# A LAST COMPONENT LEADING WITH `-` IS DROPPED UNDER THE SAME TWO CONDITIONS, and it is exempt from
+# that dependency rule because it is not a name the fixture looked up: it is an option string a
+# tool took as an operand -- a `grep` option written after `--`, read as a file and looked up under
+# the tree. No fixture depends on the absence of a file called `--exclude-dir=fixtures`. A file
+# whose name does start with `-` and exists in the trace tree is kept, exactly as `d/<real>` is.
+# On check-3b-locked-anchor's next trace this drops `core/fixtures/check-3b-locked-anchor/-`.
 # COSMETIC, AND THE ENTRY THAT ADDED IT IS A NOTE. The runner keeps only manifest paths that pass
 # `[ -f ]` (.githooks/pre-push, the manifest build), so such a row could never select a fixture;
 # this only stops the map carrying rows that look like a tracer fault.
@@ -568,6 +574,7 @@ readset_drop_pseudo() { # reads repo-relative paths on stdin, writes all but the
   while IFS= read -r p; do
     case "${p##*/}" in
       '<'*'>') if [ -e "$TREE/$p" ] || [ -L "$TREE/$p" ]; then printf '%s\n' "$p"; fi ;;
+      -*) if [ -e "$TREE/$p" ] || [ -L "$TREE/$p" ]; then printf '%s\n' "$p"; fi ;;
       *) printf '%s\n' "$p" ;;
     esac
   done
