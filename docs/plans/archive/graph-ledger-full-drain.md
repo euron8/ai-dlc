@@ -16707,3 +16707,45 @@ both` run, and batch 179's four census steps. `BL-007` and `BL-195` remain close
 
 Batch 183's block below is history: batch 184's block replaces its delivery gap and its decisions list.
 
+**BATCH 186 SHIPPED THREE RELEASES, `v0.711.0` (`b4160c06`, #986), `v0.712.0` (`fc73139c`, #987) AND `v0.713.0`
+(`65bf593b`, #988), AND DISCHARGED BOTH CONSUMER CANDIDATES BATCH 185 RECORDED AS UNSCOPED.** It was invoked by peer
+handoff and ran autonomously. The opening sweep found live 2 on 13 qualifying refs, both unfiled and dated 2026-10-02,
+worklist 0, every control passing. The whole-backlog adjudication found 11 entries: 0 CLOSE, 5 PARTIAL, 6 LIVE.
+
+- `v0.711.0` (bootstrapping, `emit-report.sh`): `PC-S316-EMIT-REPORT-STAMP-BASE-MISMATCH-FALSE-ON-ABBREVIATED-SHA` as
+  `BL-431`. The `_stamp_` row compares commits, not strings.
+- `v0.712.0` (both pre-push hooks): `PC-S316-UPDATE-DELIVERY-PUSH-RUNS-FULL-SUITE-ON-BOOKKEEPING-ONLY-COMMITS` as
+  `BL-433` (NOTE), plus `BL-432` (DEFECT, fail-open), found while scoping it. The read-set manifest aborted at the
+  first apostrophe-named file: on a clone of the reference consumer 9600 of 12561 files were hashed, and an edit
+  under `scripts/ai-dlc/` skipped all 193 fixtures. The manifest is now NUL-delimited and fails closed.
+- `v0.713.0` (bootstrapping, update step 8): `BL-024`. New `reconcile/push-drain.sh` and `push-refusals.tsv`; the
+  consumer's `implementation-push` ledger row becomes closable by its own hand annotation.
+
+Live backlog **11 -> 10**, archive **418 -> 422**: `BL-024`, `BL-431`, `BL-432` and `BL-433` landed and rotated;
+`BL-431`..`BL-433` were filed in the batch. Net closed minus filed: **1**. R5 floors: `--min-sh-receipts 3`,
+`--min-entries 10`.
+
+**`BL-128`'S CITATION-KEY ARM WAS PROTOTYPED AND NOT BUILT.** Its measured false-positive set is in the entry: 1 hit
+on the consumer's latest pull, a false positive, and 0 true positives.
+
+**EVERY ADVERSARY FOUND SOMETHING ON A GATE-GREEN SHAPE, AGAIN.** Three contract passes and three tip passes, each
+with at least one finding that a receipt or fixture let a wrong fix through. The worst: the BL-024 contract's record
+held 3 rows, and graph's row could never have closed; its tip had step 8 forbidding the close it added. All were fixed
+before merge. **A receipt's wrong-fix list is never complete at contract time; budget a tip pass that scores two new
+wrong fixes of its own.**
+
+**THE DELIVERY GAP IS FOUR RELEASES.** The consumer is installed at 0.709.0 (stamp `commit: 0414a98e`) against
+`VERSION` 0.713.0; 0.710.0, 0.711.0 and 0.713.0 are bootstrapping. PENDING is 2, both ids above. The pull delivering
+0.712.0 runs every fixture once, because it changes the hook; the saving starts on the next bookkeeping-only push.
+The banked ruling stands: report the gap and write no runbook.
+
+**READ-SET TRACE OWED, NOT TAKEN THIS BATCH.** Batch 185's list, plus `push-drain-refusals` (new, unmapped, so every
+push touching it runs all 228), `readset-skip` and `reconcile-emit-report`. Commit only a diff with no OMITTED line.
+
+**OPERATOR RULINGS AFTER THE CLOSE.** `BL-005` closed as won't-do and rotated. `BL-128`'s citation-key arm is not
+to be built; the entry stays open on its detector gap. Live backlog **10 -> 9**, archive **422 -> 423**, R5
+`--min-entries 9`. **OPERATOR DECISIONS STILL OPEN.** None from this batch. Batch 179's four census steps were not
+raised.
+
+Batch 185's block below is history: batch 186's block replaces its delivery gap and its decisions list.
+
