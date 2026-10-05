@@ -489,8 +489,6 @@ Drops occurred this batch at 1-minute loads of 1.8 to 3.6, below the criterion's
 
 ## BL-449 — a padded or blank operator-authorization quote verified against any operator turn, because every caller measured the citation floor on the raw quote
 
-**LANDED (v0.730.0, verified 90351741).**
-
 **DEFECT.** Filed in batch 198 from the reference consumer's candidate
 `PC-S316-ESCALATION-CITATION-FLOOR-REJECTS-A-GENUINE-SHORT-OPERATOR-ANSWER`. The candidate reported
 the opposite symptom, a genuine short answer that could not be cited. Its contract pass found this
@@ -517,7 +515,8 @@ collapses the same whitespace set JavaScript `\s` does (NBSP, U+2000-U+200A, U+3
 and `cite_nlen()` counts UTF-16 units, so the bash floor and the predicate's floor agree on every quote;
 the first cut collapsed ASCII only, and an NBSP-padded quote still counted AUTHORIZED under
 `--any-authorized`, which never calls the predicate. Invariant I120 runs node over every code point and
-fails the push when a `cite_norm()` copy disagrees with `\s`. The guidance in `escalations.md`,
+fails the push when the escalation copy of `cite_norm()` disagrees with `\s` or `cite_nlen()` with
+`.length`; I103 holds the other three copies byte-identical to it. The guidance in `escalations.md`,
 `steps/_gate-procedures.md` and `team-roles/adversary.md`, and the two "words:" FAIL texts, now say
 "a verbatim quote of the operator's message, at least 12 characters after whitespace is collapsed; a
 short message is quoted whole, numbering included".
@@ -537,10 +536,11 @@ entries): a short-whole-line plus context-id rule false-accepts 2 of 3. The lead
 `--authorized-at`, so the window does not bound a forger, and 28 of 117 short typed turns follow text
 naming some id. No mechanism binds a typed "yes" to one decision.
 
-The receipt drives the predicate itself on a one-turn transcript it seeds: a padded and a blank needle
-must each exit 2 with stdout `NOMATCH-SHORT`, and the incident's whole-message quote must still
-`MATCH`, so a predicate that refuses everything fails it.
+The receipt drives the predicate itself on a two-turn transcript it seeds. A padded needle, a blank
+needle, an empty `--cite ""` and an 11-character needle present in a turn must each exit 2 with stdout
+`NOMATCH-SHORT`. A genuine 12-character needle and the incident's whole-message quote must still
+`MATCH`, so a predicate that refuses everything fails it, and so does one whose floor is not 12.
 
-verify: sh S=core/scripts/validate-steering-budget.sh; [ -f "$S" ] || exit 9; command -v node >/dev/null 2>&1 || exit 9; W="$(mktemp -d)" || exit 9; printf '%s\n' '{"type":"user","timestamp":"2026-10-05T13:25:14Z","message":{"content":"1. Yes.\n2. Yes."}}' > "$W/t.jsonl" || exit 9; for q in "$(printf '%10s' '')yes" "$(printf '%12s' '')"; do o="$(bash "$S" --dir "$W" --cite "$q" 2>/dev/null)"; r=$?; { [ "$r" = 2 ] && [ "$o" = NOMATCH-SHORT ]; } || exit 1; done; o="$(bash "$S" --dir "$W" --cite "1. Yes. 2. Yes." 2>/dev/null)"; r=$?; { [ "$r" = 0 ] && [ "${o%% *}" = MATCH ]; } || exit 1; exit 0
+verify: sh S=core/scripts/validate-steering-budget.sh; [ -f "$S" ] || exit 9; command -v node >/dev/null 2>&1 || exit 9; W="$(mktemp -d)" || exit 9; printf '%s\n' '{"type":"user","timestamp":"2026-10-05T13:25:14Z","message":{"content":"1. Yes.\n2. Yes."}}' '{"type":"user","timestamp":"2026-10-05T13:26:00Z","message":{"content":"go ahead ok, ship it now"}}' > "$W/t.jsonl" || exit 9; for q in "$(printf '%10s' '')yes" "$(printf '%12s' '')" "" "go ahead ok"; do o="$(bash "$S" --dir "$W" --cite "$q" 2>/dev/null)"; r=$?; { [ "$r" = 2 ] && [ "$o" = NOMATCH-SHORT ]; } || exit 1; done; for q in "go ahead ok," "1. Yes. 2. Yes."; do o="$(bash "$S" --dir "$W" --cite "$q" 2>/dev/null)"; r=$?; { [ "$r" = 0 ] && [ "${o%% *}" = MATCH ]; } || exit 1; done; exit 0
 
 
