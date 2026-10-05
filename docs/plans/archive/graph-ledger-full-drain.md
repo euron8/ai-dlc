@@ -16749,3 +16749,35 @@ raised.
 
 Batch 185's block below is history: batch 186's block replaces its delivery gap and its decisions list.
 
+**BATCH 187 SHIPPED NO RELEASE AND DISCHARGED NO CONSUMER CANDIDATE, BECAUSE NOTHING BUILDABLE WAS
+FOUND.** It was invoked by peer handoff and ran autonomously, at `origin/main` `3e464c9e` (`VERSION`
+0.713.0). The opening sweep found live 2 on 19 qualifying refs, both shipped by batch 186 (0.711.0
+and 0.712.0), unfiled 0, worklist 0, TERMINAL 188, and every control passing. The consumer's
+working-tree ledger was byte-identical to its HEAD's, so no uncommitted filing existed.
+
+The whole-backlog adjudication covered 9 entries: 0 CLOSE, 1 PARTIAL (`BL-230`) and 8 LIVE. Every
+live half is blocked:
+- An operator ruling blocks `BL-128`.
+- An operator-only run blocks `BL-375` and `BL-430`.
+- Data that does not exist yet blocks `BL-071`, `BL-145`, `BL-404` and `BL-412`.
+- A full-suite width sweep on a throwaway branch blocks `BL-004`.
+
+`BL-230`'s one nominally buildable half, prefixing its bare `mktemp` calls, was measured dead and
+struck in the entry. No fixture arm reads a `tmp.*` population, so the prefix changes nothing the
+flaky arms observe. Live backlog **9**, archive **423**. Net closed minus filed: **0**.
+
+**THE HANDS RAN LOCALLY DESPITE `isolation: "remote"`.** All three landed in `.claude/worktrees/`, and
+there the harness's worktree guard refused every compound `git` command. The sweep hand therefore
+returned nothing, and the lead ran the derive block itself. Brief a sweep hand to expect this.
+
+**THE DELIVERY GAP IS FOUR RELEASES.** The consumer is installed at 0.709.0 (stamp `commit: 0414a98e`)
+against `VERSION` 0.713.0, and 0.710.0, 0.711.0 and 0.713.0 are bootstrapping. PENDING is 2: the two
+ids above, live on the consumer's carry-over and `dev/sprint-316/*` branches. The banked ruling
+stands: report the gap and write no runbook.
+
+**READ-SET TRACE.** Batch 186's owed list was traced by `#991` and `#992`. Both `push-drain-refusals`
+and `readset-skip` rows moved in those commits. `BL-375` records the four fixtures that drop reports
+on every pass. **OPERATOR DECISIONS STILL OPEN:** none.
+
+Batch 186's block below is history: batch 187's block replaces its delivery gap and its decisions list.
+
