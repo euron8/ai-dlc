@@ -13,6 +13,7 @@
 #   $RUN_DIR/rc           the deriver's exit status
 #   $RUN_DIR/load.tsv     epoch<TAB>1-min load, every 15 s, from before the deriver starts to after
 #   $RUN_DIR/map.before   the map snapshot the restore copies back
+#   $RUN_DIR/pgid         the deriver's process group id, written right after the launch
 # Everything the wrapper writes sits BESIDE root/, never under it: the deriver `rm -rf`s its trace
 # root before it starts, and that was measured to unlink a file still held open there.
 #
@@ -25,11 +26,21 @@
 # A run killed by a signal the trap sees is recorded with rc `killed`; one killed by SIGKILL leaves
 # its started line and no terminal. The verdict refuses both, and leaving either out would let the
 # next three good runs read as consecutive when they were not. A refusal BEFORE the deriver starts
-# (worktree, dirty tree, RUN_DIR exists) records nothing, because nothing ran. A SIGKILL also
-# leaves the map unrestored: the checkout is then dirty and the next run refuses on that.
+# (worktree, dirty tree, live orphan, RUN_DIR exists) records nothing, because nothing ran.
 #
-# Exit: the deriver's status; 2 on a refusal before the deriver starts; 3 when the map could not
-# be restored byte-identically (the checkout is then dirty and says so).
+# A SIGKILL DOES NOT LEAVE THE MAP DIRTY AT ONCE. The deriver writes the map LAST
+# (derive-fixture-readsets.sh, the `} > "$MAP"` before its final `say`), and nothing kills its
+# process group when the wrapper dies without a trap, so straight after a `kill -9` the map is clean
+# and the deriver is an ORPHAN, still tracing. The dirty-tree check cannot see that. So a run
+# refuses while any process in the group recorded in `$RUN_DIR/pgid` of the most recent `started`
+# line with no terminal line is still alive (`kill -0 -- -<pgid>`; no process-table grep). Once the
+# orphan has written the map and exited, the dirty-tree check refuses instead. The pgid is written a
+# few instructions after the launch, so a `kill -9` landing inside that window leaves an orphan this
+# check cannot see; the map it later writes is still refused as a dirty tree.
+#
+# Exit: the deriver's status; 2 on a refusal before the deriver starts (a linked worktree, a dirty
+# checkout, a live orphan of a SIGKILLed run, a RUN_DIR that exists or lies inside the checkout); 3
+# when the map could not be restored byte-identically (the checkout is then dirty and says so).
 set -uo pipefail
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR 2>/dev/null
 
@@ -73,6 +84,17 @@ else
   CDIR="$(cd "$CDIR" && pwd -P)" || refuse "cannot resolve the git common dir"
   LEDGER="$CDIR/ai-dlc-readset-stage1.ledger"
 fi
+
+# A LIVE ORPHAN IS REFUSED. The most recent `started` line with no terminal line after it names a
+# run whose wrapper was SIGKILLed; its RUN_DIR/pgid is the deriver's process group. While any
+# member of that group is alive it is still tracing and will still write the map, so a run started
+# now would race it. A missing ledger or pgid file means there is nothing to wait for.
+OPEN_RD="$(awk -F'\t' 'NF == 0 { next } $2 == "started" { o[$1] = NR; next } { delete o[$1] }
+  END { m = 0; for (k in o) { if (o[k] > m) { m = o[k]; r = k } }; if (m > 0) print r }' "$LEDGER" 2>/dev/null)"
+OPEN_PG=""
+[ -z "$OPEN_RD" ] || OPEN_PG="$(cat "$OPEN_RD/pgid" 2>/dev/null)"
+case "$OPEN_PG" in ''|*[!0-9]*|0|1) OPEN_PG="" ;; esac
+if [ -n "$OPEN_PG" ] && kill -0 -- "-$OPEN_PG" 2>/dev/null; then refuse "the deriver of $OPEN_RD (process group $OPEN_PG) is still alive after its wrapper was killed; wait for it or kill -- -$OPEN_PG"; fi
 
 # RUN_DIR MUST NOT EXIST, and `mkdir` without -p is the atomic test. It must also lie OUTSIDE the
 # checkout: the deriver copies untracked files, so a RUN_DIR inside the tree would be copied into
@@ -170,6 +192,7 @@ set -m
 ) > "$RUN_DIR/deriver.log" 2>&1 < /dev/null &
 DPID=$!
 set +m
+printf '%s\n' "$DPID" > "$RUN_DIR/pgid"
 wait "$DPID"
 RC=$?
 DPID=""

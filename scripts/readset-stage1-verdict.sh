@@ -426,6 +426,16 @@ self_probe() {
     printf '%s\tstarted\t50\th\n%s\t0\t50\t60\th\n' "$r3" "$r3"
   } > "$s/l.killed"
   probe "RL refuses a started line with no terminal among the last runs" 1 rl_pairs "$s/l.killed"
+  # A terminal preceded by ANOTHER run's started line: the killed run started between run 1's own
+  # started line (now outside the six) and run 1's terminal. Every line is well-formed, so only the
+  # RUN_DIR/epoch/HEAD equality refuses it.
+  {
+    printf '%s\tstarted\t15\th\n' "$P/killed"
+    printf '%s\t0\t10\t20\th\n' "$r1"
+    printf '%s\tstarted\t30\th\n%s\t0\t30\t40\th\n' "$r2" "$r2"
+    printf '%s\tstarted\t50\th\n%s\t0\t50\t60\th\n' "$r3" "$r3"
+  } > "$s/l.foreign"
+  probe "RL refuses a terminal preceded by another run's started line" 1 rl_pairs "$s/l.foreign"
 
   # R2.
   probe "R2 near-miss: three distinct runs are accepted" 0 r2_distinct "$r1" "$r2" "$r3" 1 2 3 4 5 6

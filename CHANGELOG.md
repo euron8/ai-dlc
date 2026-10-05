@@ -30,8 +30,8 @@ bootstrapping.
 - `scripts/readset-stage1-run.sh <RUN_DIR>` runs one stage-1 sandbox trace of exactly the five
   subjects from a clean main checkout. It samples the 1-minute load every 15 seconds, restores the
   map byte-identically from a trap whatever the deriver's exit, and appends the run to an
-  append-only ledger under the git common dir. It refuses a linked worktree, a dirty checkout and an
-  existing `RUN_DIR`, and exits 3 when the restore fails. It launches the deriver in its own process
+  append-only ledger under the git common dir. It refuses a linked worktree, a dirty checkout, a live
+  orphaned deriver and an existing `RUN_DIR`, and exits 3 when the restore fails. It launches the deriver in its own process
   group and kills the group on TERM, because the deriver has no trap and would orphan its
   `log stream` and sandboxed fixture.
 - `scripts/readset-stage1-verdict.sh` scores the last three ledger lines against the stage-1 close
@@ -42,12 +42,15 @@ bootstrapping.
   this batch's single-fixture traces, which dropped reports at load 1.8 to 3.6.
 - The ledger records two lines per run: a `started` line written before the deriver launches, and
   the terminal line from the trap. A SIGKILLed wrapper leaves its `started` line with no terminal,
-  and the scorer refuses unless the last six lines are three started/terminal pairs. The wrapper
+  and the scorer refuses unless the last six lines are three started/terminal pairs. The deriver it
+  orphans writes the map last, so the map stays clean while the orphan lives; the wrapper records
+  the deriver's process group in `RUN_DIR/pgid` and refuses the next run while that group is alive,
+  then on the dirty checkout once the orphan has written the map. The wrapper
   unsets `AI_DLC_READSET_SANDBOX_PROFILE` before the launch, and the scorer refuses a `sandbox.sb`
   that is not byte-identical to the deriver's default profile for that run's root.
-- New distribution-only fixture `readset-stage1-verdict`: 41 seeded worlds (an all-MET world, every
+- New distribution-only fixture `readset-stage1-verdict`: 44 seeded worlds (an all-MET world, every
   refusal and every arm failing alone, four near-misses), wrapper arms against a trap-less stub
-  deriver including a SIGKILL arm, 22 scorer mutants, 7 wrapper mutants and 8 mutants the scorer's
+  deriver including a SIGKILL arm, 25 scorer mutants, 8 wrapper mutants and 9 mutants the scorer's
   own self-probe must refuse, all killed.
 - `FORK_BUDGET` 3196 -> 3204: the two new scripts add 6 forks to the I84 and I83 per-file walks.
 

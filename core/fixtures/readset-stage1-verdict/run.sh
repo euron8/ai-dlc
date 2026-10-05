@@ -199,6 +199,20 @@ want rl-started-old 0 MET
 # A terminal with no started line before it (a pre-started-line ledger, or a hand-appended line).
 W="$(mkworld rl-nostart)" || broken seed; { lline "$W/r0" 0; lline "$W/r1" 1; lline "$W/r2" 2; printf '%s\t0\t%s\t%s\t%s\n' "$W/r3" $((T0 + 3000)) $((T0 + 3060)) "$TPL_SHA"; } > "$W/ledger"
 want rl-nostart 2 "RL ledger line 6 of the last six: the terminal line for $W/r3 is not preceded by its own started line"
+# A terminal preceded by ANOTHER run's started line: a killed run A started between run 1's own
+# started line and run 1's terminal, so run 1's started line falls outside the six and A's sits
+# where run 1's belongs. Every line is well-formed; only the RUN_DIR equality refuses it.
+W="$(mkworld rl-foreign)" || broken seed
+{ lstarted "$W/r1" $((T0 + 1000)); lstarted "$W/kA" $((T0 + 1500)); printf '%s\t0\t%s\t%s\t%s\n' "$W/r1" $((T0 + 1000)) $((T0 + 1060)) "$TPL_SHA"; lline "$W/r2" 2; lline "$W/r3" 3; } > "$W/ledger"
+want rl-foreign 2 "RL ledger line 2 of the last six: the terminal line for $W/r1 is preceded by the started line of $W/kA ($((T0 + 1500))) -- not its own"
+# The same RUN_DIR with a different start epoch, and then with a different HEAD: each is a started
+# line that is not this terminal's own, and each is refused on that one field alone.
+W="$(mkworld rl-epoch)" || broken seed
+{ lline "$W/r1" 1; lstarted "$W/r2" $((T0 + 2001)); printf '%s\t0\t%s\t%s\t%s\n' "$W/r2" $((T0 + 2000)) $((T0 + 2060)) "$TPL_SHA"; lline "$W/r3" 3; } > "$W/ledger"
+want rl-epoch 2 "RL ledger line 4 of the last six: the terminal line for $W/r2 is preceded by the started line of $W/r2 ($((T0 + 2001))) -- not its own"
+W="$(mkworld rl-head)" || broken seed
+{ lline "$W/r1" 1; lline "$W/r2" 2; printf '%s\tstarted\t%s\t%s\n' "$W/r3" $((T0 + 3000)) 0000000000000000000000000000000000000000; printf '%s\t0\t%s\t%s\t%s\n' "$W/r3" $((T0 + 3000)) $((T0 + 3060)) "$TPL_SHA"; } > "$W/ledger"
+want rl-head 2 "RL ledger line 6 of the last six: the terminal line for $W/r3 is preceded by the started line of $W/r3 ($((T0 + 3000))) -- not its own"
 W="$(mkworld rl-missing)" || broken seed; { lline "$W/r1" 1; lline "$W/nowhere" 2; lline "$W/r3" 3; } > "$W/ledger"
 want rl-missing 2 "RL run 2: $W/nowhere does not exist"
 W="$(mkworld rl-rc)" || broken seed; { lline "$W/r1" 1; lline "$W/r2" 2 1; lline "$W/r3" 3; } > "$W/ledger"
@@ -434,6 +448,12 @@ smut r6-paths-only r6-omitted "$R6_OLD" "$R6_NEW"
 R2_OLD='    if cmp -s "$1/root/w/$fx.raw" "$2/root/w/$fx.raw" || cmp -s "$1/root/w/$fx.raw" "$3/root/w/$fx.raw" \'
 R2_NEW='    if [ "$fx" = "$FIRST_SUBJECT" ] && cmp -s "$1/root/w/$fx.raw" "$2/root/w/$fx.raw" || cmp -s "$1/root/w/$fx.raw" "$3/root/w/$fx.raw" \'
 smut r2-first-only r2-one "$R2_OLD" "$R2_NEW"
+# The pair check itself: unchecked, and with either the epoch or the HEAD conjunct dropped. Each
+# dies on the one world whose started line differs from its terminal in that field alone.
+RLP_OLD='    [ "$sr" = "$tr" ] && [ "$ss" = "$ts" ] && [ "$sh" = "$th" ] \'
+smut rl-pair-unchecked rl-foreign "$RLP_OLD" '    true \'
+smut rl-pair-no-epoch rl-epoch "$RLP_OLD" '    [ "$sr" = "$tr" ] && [ "$sh" = "$th" ] \'
+smut rl-pair-no-head rl-head "$RLP_OLD" '    [ "$sr" = "$tr" ] && [ "$ss" = "$ts" ] \'
 
 # THE SCORER'S OWN SELF-PROBE must refuse each of these mutations too: applied to the SHIPPING
 # scorer, self-probe live, `--self-probe` exits 2.
@@ -456,6 +476,8 @@ pmut r6-paths-only "$R6_OLD" "$R6_NEW"
 pmut r2-first-only "$R2_OLD" "$R2_NEW"
 # The pairing walk with no pair check at all: the self-probe's killed-run ledger must refuse.
 pmut rl-no-pairing '  for k in 3 2 1; do' '  for k in; do'
+# The pair check unchecked: the self-probe's foreign-started ledger must refuse.
+pmut rl-pair-unchecked "$RLP_OLD" '    true \'
 
 # ------------------------------------------------------------------ the wrapper ----
 STUB="$WORK/stub.sh"
@@ -463,22 +485,28 @@ cat > "$STUB" <<'STUB_EOF'
 #!/usr/bin/env bash
 # A stub of core/scripts/derive-fixture-readsets.sh: NO trap, like the real deriver. It records its
 # argv and trace root, rewrites the map, keeps a copy of what it wrote, then exits per STUB_MODE.
+# `hang-late` writes the map AFTER its children end, as the real deriver writes it LAST: that is
+# the SIGKILL arm's shape, where the map is clean while the orphan lives. `hang` writes it FIRST,
+# for the TERM arm, which must show the restore undoing a write -- a trap-less stub TERMed inside
+# its `wait` never reaches a late write, so `hang-late` there would leave the restore with nothing
+# to undo.
 root="$AI_DLC_READSET_TRACE_ROOT"
 mkdir -p "$root/w" "$root/m" "$root/t"
 echo "stub: argv: $*"
 echo "stub: trace root: $root"
 env > "$root/w/stub.env"
-printf 'stub-wrote\n' >> .ai-dlc-fixture-readsets.tsv
-cp .ai-dlc-fixture-readsets.tsv "$root/w/map.written"
+write_map() { printf 'stub-wrote\n' >> .ai-dlc-fixture-readsets.tsv; cp .ai-dlc-fixture-readsets.tsv "$root/w/map.written"; }
+[ "${STUB_MODE:-ok}" = hang-late ] || write_map
 case "${STUB_MODE:-ok}" in
   ok) exit 0 ;;
   fail) exit 1 ;;
-  hang)
+  hang|hang-late)
     sleep 300 & echo "$!" >> "$STUB_PIDS"
     sleep 300 & echo "$!" >> "$STUB_PIDS"
     echo "$$" >> "$STUB_PIDS"
     : > "$STUB_READY"
-    wait ;;
+    wait
+    [ "$STUB_MODE" = hang ] || write_map ;;
 esac
 STUB_EOF
 
@@ -588,35 +616,60 @@ STUB_MODE=ok bash "$R/repo/scripts/readset-stage1-run.sh" "$R/run" > "$R/out" 2>
 n="$(grep -c . "$R/repo/.git/ai-dlc-readset-stage1.ledger" 2>/dev/null)" || n=0
 if [ "$rc" = 0 ] && [ "$n" = 2 ]; then ok "with no override the ledger is the git common dir's (2 lines)"; else bad "default ledger: rc=$rc lines=$n"; fi
 
-# wrap_kill9 <wrapper-source> <tag>: SIGKILL, which no trap sees. The started line must already be
-# in the ledger, alone; the map is left dirty; the next run refuses on the dirty tree and records
-# nothing. The stub's tree and the sampler are orphaned by design and reaped here.
+# wrap_kill9 <wrapper-source> <tag>: SIGKILL, which no trap sees, against a stub that writes the
+# map LAST, as the real deriver does. Three phases, in order:
+#  (a) straight after the kill the map is CLEAN and the deriver is an orphan still alive in its own
+#      process group; the next run refuses on the live orphan, adds no ledger line, makes no RUN_DIR;
+#  (b) the orphan's children are ended, it reaches its final write and exits; the map is now dirty
+#      and the next run refuses on the dirty tree;
+#  (c) the ALLOW twin: the map checked out clean, the orphan gone, the started line still open --
+#      the next run proceeds and exits 0. A wrapper that refused on any open started line, alive or
+#      not, would pass (a) and (b) and wedge here.
+# The sampler is orphaned by design and reaped here.
 wrap_kill9() {
-  local src="$1" t="$2" R="$WORK/wr/$2" rd L f p n out rc2
+  local src="$1" t="$2" R="$WORK/wr/$2" rd L f p n out rc2 pg sp
   mkrepo "$R/repo" "$src" || broken "mkrepo $t"
   rd="$R/run"; L="$R/ledger"; f=0
   : > "$R/pids"
-  AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=hang STUB_PIDS="$R/pids" STUB_READY="$R/ready" \
+  AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=hang-late STUB_PIDS="$R/pids" STUB_READY="$R/ready" \
     bash "$R/repo/scripts/readset-stage1-run.sh" "$rd" > "$R/out" 2>&1 &
   wp=$!
-  n=0; while [ ! -f "$R/ready" ] && [ "$n" -lt 300 ]; do sleep 0.1; n=$((n + 1)); done
-  [ -f "$R/ready" ] || { kill "$wp" 2>/dev/null; cat "$R/pids" >> "$ORPHANS"; broken "[$t] the stub never signalled ready"; }
+  n=0; while { [ ! -f "$R/ready" ] || [ ! -s "$rd/pgid" ]; } && [ "$n" -lt 300 ]; do sleep 0.1; n=$((n + 1)); done
+  [ -f "$R/ready" ] && [ -s "$rd/pgid" ] || { kill "$wp" 2>/dev/null; cat "$R/pids" >> "$ORPHANS"; broken "[$t] the stub never signalled ready, or the wrapper wrote no pgid"; }
   cat "$R/pids" >> "$ORPHANS"; cat "$rd/sampler.pid" >> "$ORPHANS" 2>/dev/null
+  # CONTROL: RUN_DIR/pgid is the stub's own pid, which leads its process group (third STUB_PIDS line).
+  pg="$(cat "$rd/pgid")"; sp="$(sed -n 3p "$R/pids")"
+  [ -n "$pg" ] && [ "$pg" = "$sp" ] || { echo "    [$t] RUN_DIR/pgid reads '$pg', not the stub's pid '$sp'"; f=1; }
   kill -KILL "$wp"; { wait "$wp"; } 2>/dev/null; rc=$?
   [ "$rc" = 137 ] || { echo "    [$t] the SIGKILLed wrapper exited $rc, not 137"; f=1; }
-  while IFS= read -r p; do kill "$p" 2>/dev/null; done < "$R/pids"
   p="$(cat "$rd/sampler.pid" 2>/dev/null)"; [ -n "$p" ] && kill "$p" 2>/dev/null
   awk -F'\t' -v rd="$rd" -v sha="$(git -C "$R/repo" rev-parse HEAD)" \
       'NR == 1 && NF == 4 && $1 == rd && $2 == "started" && $3 ~ /^[0-9]+$/ && $4 == sha { n++ } END { exit !(n == 1 && NR == 1) }' "$L" 2>/dev/null \
     || { echo "    [$t] the ledger does not hold exactly the started line after SIGKILL"; f=1; }
-  cmp -s "$R/repo.map.orig" "$R/repo/.ai-dlc-fixture-readsets.tsv" && { echo "    [$t] the map is clean after SIGKILL, so the dirty-tree arm below proves nothing"; f=1; }
+  # (a) the map is CLEAN here -- the dirty-tree check is checked first and cannot be what refuses.
+  cmp -s "$R/repo.map.orig" "$R/repo/.ai-dlc-fixture-readsets.tsv" || { echo "    [$t] the map is dirty straight after SIGKILL, so (a) cannot show the orphan refusal"; f=1; }
+  kill -0 -- "-$pg" 2>/dev/null || { echo "    [$t] the orphaned process group $pg is not alive after SIGKILL"; f=1; }
   out="$(AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=ok bash "$R/repo/scripts/readset-stage1-run.sh" "$R/run2" 2>&1)"; rc2=$?
-  case "$rc2|$out" in 2*"has uncommitted changes"*) ;; *) echo "    [$t] the run after SIGKILL did not refuse on the dirty map: rc=$rc2 $out"; f=1 ;; esac
-  [ "$(grep -c . "$L")" = 1 ] || { echo "    [$t] the refused run after SIGKILL wrote to the ledger"; f=1; }
-  [ ! -e "$R/run2" ] || { echo "    [$t] the refused run after SIGKILL created its RUN_DIR"; f=1; }
+  case "$rc2|$out" in 2*"(process group $pg) is still alive"*) ;; *) echo "    [$t] (a) the run beside the live orphan did not refuse on it: rc=$rc2 $out"; f=1 ;; esac
+  [ "$(grep -c . "$L")" = 1 ] || { echo "    [$t] (a) the refused run beside the orphan wrote to the ledger"; f=1; }
+  [ ! -e "$R/run2" ] || { echo "    [$t] (a) the refused run beside the orphan created its RUN_DIR"; f=1; }
+  # (b) end the orphan's two children: its `wait` returns, it writes the map LAST and exits.
+  sed -n '1,2p' "$R/pids" | while IFS= read -r p; do kill "$p" 2>/dev/null; done
+  n=0; while kill -0 -- "-$pg" 2>/dev/null && [ "$n" -lt 100 ]; do sleep 0.1; n=$((n + 1)); done
+  kill -0 -- "-$pg" 2>/dev/null && broken "[$t] the orphaned process group $pg did not exit after its children were ended"
+  grep -qx 'stub-wrote' "$rd/root/w/map.written" 2>/dev/null || { echo "    [$t] (b) the orphan never reached its final map write"; f=1; }
+  cmp -s "$R/repo.map.orig" "$R/repo/.ai-dlc-fixture-readsets.tsv" && { echo "    [$t] (b) the map is clean after the orphan exited, so the dirty-tree refusal proves nothing"; f=1; }
+  out="$(AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=ok bash "$R/repo/scripts/readset-stage1-run.sh" "$R/run3" 2>&1)"; rc2=$?
+  case "$rc2|$out" in 2*"has uncommitted changes"*) ;; *) echo "    [$t] (b) the run after the orphan wrote the map did not refuse on the dirty map: rc=$rc2 $out"; f=1 ;; esac
+  [ "$(grep -c . "$L")" = 1 ] || { echo "    [$t] (b) the refused run on the dirty map wrote to the ledger"; f=1; }
+  [ ! -e "$R/run3" ] || { echo "    [$t] (b) the refused run on the dirty map created its RUN_DIR"; f=1; }
+  # (c) the ALLOW twin.
+  git -C "$R/repo" checkout -q -- .ai-dlc-fixture-readsets.tsv || broken "[$t] cannot check the map out clean"
+  out="$(AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=ok bash "$R/repo/scripts/readset-stage1-run.sh" "$R/run4" 2>&1)"; rc2=$?
+  [ "$rc2" = 0 ] || { echo "    [$t] (c) with the orphan gone and the map clean the next run did not proceed: rc=$rc2 $out"; f=1; }
   return "$f"
 }
-if wrap_kill9 "$WRAPPER" kill9; then ok "SIGKILL: exit 137, the ledger holds the started line alone, the map is dirty, and the next run refuses on it"; else bad "the SIGKILL run"; fi
+if wrap_kill9 "$WRAPPER" kill9; then ok "SIGKILL: exit 137, the started line alone; (a) map clean, orphan alive, next run refuses on the orphan; (b) orphan writes the map and exits, next run refuses on the dirty tree; (c) map clean and orphan gone, next run proceeds"; else bad "the SIGKILL run"; fi
 
 # The refusals: exit 2, the reason, and NOTHING recorded or created.
 refusal() { # refusal <tag> <reason> <rundir> <wrapper> -- run with the ledger override
@@ -663,6 +716,14 @@ wmut load-5min \
 wmut profile-passed-through 'unset AI_DLC_READSET_SANDBOX_PROFILE' ': profile left in the environment' ok
 wmut no-started-line "printf '%s\\tstarted\\t%s\\t%s\\n' \"\$RUN_DIR\" \"\$S_EPOCH\" \"\$HEAD_SHA\" >> \"\$LEDGER\" \\" ': \' kill9
 reap
+# No orphan check: the run beside a live SIGKILLed deriver proceeds, which (a) refuses.
+wmut no-orphan-check \
+  'if [ -n "$OPEN_PG" ] && kill -0 -- "-$OPEN_PG" 2>/dev/null; then refuse "the deriver of $OPEN_RD (process group $OPEN_PG) is still alive after its wrapper was killed; wait for it or kill -- -$OPEN_PG"; fi' \
+  ': orphan check removed' kill9
+grep -q '(a) the run beside the live orphan did not refuse' "$WORK/wr/m-no-orphan-check.why" 2>/dev/null \
+  && ok "the no-orphan-check mutant died on arm (a), the live-orphan refusal" \
+  || bad "the no-orphan-check mutant did not die on arm (a)"
+reap
 wmut no-restore '  cp -p "$SNAP" "$MAP" 2>/dev/null' '  :' ok
 wmut no-restore-on-term '  cp -p "$SNAP" "$MAP" 2>/dev/null' '  :' term
 wmut single-pid-kill \
@@ -672,6 +733,19 @@ grep -q 'process tree survived' "$WORK/wr/m-single-pid-kill.why" 2>/dev/null \
   && ok "the single-pid-kill mutant died on the process-tree arm (orphans: $(grep 'process tree' "$WORK/wr/m-single-pid-kill.why" | sed 's/.*TERM://'))" \
   || bad "the single-pid-kill mutant did not die on the process-tree arm"
 reap
+
+# NO STUB PROCESS OUTLIVES THE FIXTURE, counted from the pid file every arm appended to -- never from
+# the process table. The control is that the file holds pids at all. A just-killed pid can read alive
+# for a moment, so the count is retried before it fails.
+NREC="$(grep -c '^[0-9][0-9]*$' "$ORPHANS")" || NREC=0
+n=0
+while :; do
+  alive=0
+  while IFS= read -r p; do case "$p" in ''|*[!0-9]*) ;; *) kill -0 "$p" 2>/dev/null && alive=$((alive + 1)) ;; esac; done < "$ORPHANS"
+  [ "$alive" -eq 0 ] || [ "$n" -ge 20 ] && break
+  sleep 0.1; n=$((n + 1))
+done
+if [ "$NREC" -ge 1 ] && [ "$alive" -eq 0 ]; then ok "no stub or sampler pid is alive: $alive of $NREC recorded in the pid file"; else bad "$alive of $NREC recorded stub/sampler pids are still alive"; fi
 
 echo
 if [ "$FAILS" -ne 0 ]; then
