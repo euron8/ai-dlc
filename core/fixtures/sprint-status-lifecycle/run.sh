@@ -472,14 +472,20 @@ stories:
   # schema leaves un-enumerated) is a wrong instruction. Every twin is one view, file and yaml
   # agreeing unless the twin says otherwise, and each is asserted on ITS OWN NOT DONE line:
   #   review                    — exactly one NOT DONE line, exactly one remedy, on that line;
-  #   done-pending-liveness, in-progress, in-review (the substring near-miss) — the line is there,
-  #                               rc 1, and it does not carry the remedy;
+  #   done-pending-liveness, in-progress, in-review (the substring near-miss), review-pending (the
+  #   prefix near-miss), Review (the case near-miss) — the line is there, rc 1, it carries the
+  #                               no-remedy sentence for ITS status, and no closing-writer remedy;
   #   file `review`, yaml `in-progress` — the branch keys on the YAML status, so no remedy.
+  # "No closing-writer remedy" is three tokens, not the one review-branch phrase: a REWORDED remedy
+  # ("dispatch the closing writer", "its closing writes are owed: run ... section 3, item 4") on a
+  # non-`review` status is the same wrong instruction, and an exact-phrase absence passes it. The
+  # PRESENCE of "prescribes no remedy for `<s>`" is what keeps the arm from passing a build that
+  # simply says nothing.
   # A24 stands down only when NO twin produced any NOT DONE line: that is the flag never firing,
   # which A23 owns, so A23's mutant still fails exactly A23.
   local a24_rem='dispatch its closing writer' a24_nd=0 a24_ok=1 a24_twin a24_f a24_y a24_line a24_out a24_rc a24_n a24_r
   for a24_twin in review:review done-pending-liveness:done-pending-liveness in-progress:in-progress \
-                  in-review:in-review review:in-progress; do
+                  in-review:in-review review-pending:review-pending Review:Review review:in-progress; do
     a24_f="${a24_twin%%:*}"; a24_y="${a24_twin##*:}"
     cs_reset
     story_fm story-1 "$a24_f"
@@ -498,7 +504,9 @@ stories:
       a24_r="$(grep -oF "$a24_rem" <<<"$a24_out" | wc -l | tr -d ' ')"
       if [ "$a24_n" -ne 1 ] || [ "$a24_r" -ne 1 ] || ! grep -qF "$a24_rem" <<<"$a24_line"; then a24_ok=0; fi
     else
-      if grep -qF "$a24_rem" <<<"$a24_line" || grep -qF "$a24_rem" <<<"$a24_out"; then a24_ok=0; fi
+      if ! grep -qF "this check prescribes no remedy for \`$a24_y\`" <<<"$a24_line" \
+         || grep -qF "$a24_rem" <<<"$a24_out" \
+         || grep -qF 'closing writ' <<<"$a24_out" || grep -qF 'section 3, item 4' <<<"$a24_out"; then a24_ok=0; fi
     fi
   done
   if [ "$a24_nd" -eq 0 ] || [ "$a24_ok" -eq 1 ]; then echo "A24 PASS"; else echo "A24 FAIL"; fi
@@ -573,6 +581,18 @@ mutant A24 "remedy unscoped" 's/^                if ystatus == "review":$/      
 mutant A24 "remedy keyed on a substring" 's/^                if ystatus == "review":$/                if "review" in ystatus:/'
 # A24: the remedy deleted from the `review` branch too, so no status is ever told what to do.
 mutant A24 "remedy deleted everywhere" 's/writes: dispatch its closing writer (implementation.md section 3, "/writes: bring it to done ("/'
+# A24: the remedy keyed on a prefix, so `review-pending` is told to dispatch a closing writer.
+mutant A24 "remedy keyed on a prefix" 's/^                if ystatus == "review":$/                if ystatus.startswith("review"):/'
+# A24: the remedy keyed case-insensitively, so `Review` is told to dispatch a closing writer.
+mutant A24 "remedy case-folded" 's/^                if ystatus == "review":$/                if ystatus.lower() == "review":/'
+# A24: the remedy REWORDED onto the else branch in place of the no-remedy sentence, so the exact
+# review-branch phrase is absent (killed by the presence conjunct).
+mutant A24 "remedy reworded onto every status" 's/^                                    "prescribes no remedy for `%s`: bring the story to `done` under "$/                                    "owes its closing writes (implementation.md section 3, item 4) for `%s`: bring it to `done` under "/'
+# A24: the no-remedy sentence KEPT and a closing-writes remedy appended, so presence holds and only
+# the `closing writ` absence can kill it.
+mutant A24 "closing writes appended to the no-remedy sentence" 's/^                                    "the step or extension that defines `%s`, then re-run."$/                                    "the step or extension that defines `%s`, or finish its closing writes, then re-run."/'
+# A24: the same, citing only the section, so only the `section 3, item 4` absence can kill it.
+mutant A24 "section cite appended to the no-remedy sentence" 's/^                                    "the step or extension that defines `%s`, then re-run."$/                                    "the step or extension that defines `%s` (implementation.md section 3, item 4), then re-run."/'
 
 # =============================================================================
 # PART 3 — `deferred_acs`: a `done` story still owing ACs to deploy-validate §4b
