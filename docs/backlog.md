@@ -58,6 +58,31 @@ have gone green, and would have reported "still open" forever.
 never the word anywhere in prose, because an entry that merely discusses landing something is
 not a closed entry.
 
+## BL-450 — gate-2 QA is never sharded, so a large story's QA is one serial read and one serial execution pass
+
+**DEFECT.** Filed in batch 198 on the operator's ruling that sharding is never partial: "If it can be sharded, then
+it should be sharded." It is the surviving half of the reference consumer's
+`PC-S316-GATE-1-AND-2-REVIEWS-ARE-NEVER-SHARDED-SO-A-LARGE-CAPITAL-PATH-DIFF-IS-ONE-SERIAL-READ`. 0.718.0 shipped gate 1
+as `BL-437` and named that id, so the sweep scores the candidate DISCHARGED and cannot see this half. Gate-1 sharding
+became the default at 8 files in 0.724.0.
+
+**What is serial.** `core/team-roles/qa.md` reads "Gate 2 is dispatched serially". `core/scripts/merge-review-shards.sh`
+refuses `--gate qa`. `qa` is not in `SHARD_ROLES` in `core/scripts/validate-spawn-ledger.sh`. `implementation.md`
+dispatches QA as `shard: 1/1 <idx>`.
+
+**The two blockers 0.718.0 recorded, and their state.**
+- QA's verdict vocabulary did not fit the merge (`BL-438`). Fixed in 0.720.0: QA declares `PASS | NEEDS_REWORK`.
+- QA executes. It runs the suite and `validate-mutation-red.sh`, so concurrent QA shards in one frozen worktree would
+  mutate the same files. Gate 1 solved the same problem by splitting reading from executing: part reviewers execute
+  nothing, and one cross reviewer runs the suite and mutation-red once. Gate 2 can take that shape, or give each shard
+  its own worktree at the frozen sha. This is a design to build, not a reason to stay serial.
+
+**Remedy.** Shard gate 2 under Rule 28's files axis with the gate-1 partition. Add a QA merge to
+`merge-review-shards.sh --gate qa`, add `qa` to `SHARD_ROLES`, and give `qa.md` an "As a shard" clause. Fixture arms and
+mutants beside `review-shard-merge`.
+
+verify: sh o="$(bash core/scripts/merge-review-shards.sh "$(mktemp -d)" --gate qa --out /dev/null 2>&1)"; case "$o" in *"dispatched serially"*) exit 1 ;; esac; grep -qE '^SHARD_ROLES="[^"]*[" ]qa[" ]' core/scripts/validate-spawn-ledger.sh
+
 ## BL-375 — the sandbox read-set tracer drops reports and omits fixtures on real runs, so the root-requiring `fs_usage` tracer cannot yet be retired
 
 **RE-SCOPED ON THE OPERATOR'S BATCH-185 RULING: THE FIRST DELIVERABLE IS A SANDBOX TRACE THAT
