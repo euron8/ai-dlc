@@ -143,4 +143,34 @@ cp "$ROOT/silent.jsonl" "$ROOT/dir-silent/session-a.jsonl"
 mkdir -p "$ROOT/dir-real"
 cp "$ROOT/real.jsonl" "$ROOT/dir-real/session-monday.jsonl"
 
+# --- the citation FLOOR is a property of the NORMALISED needle ---------------------------------
+# The caller compared bash `${#auth_quote}` against 12 while the predicate collapses whitespace and
+# trims, so `"          yes"` (13 raw, 3 normalised) and twelve spaces (EMPTY normalised, and
+# `includes("")` is true of every turn) verified against ANY operator turn in the window. dir-yes
+# holds exactly such a turn -- the consumer's free-typed `1. Yes.\n2. Yes.`, written with the keys
+# Claude Code puts on a typed turn -- so the pre-fix build MATCHES both: the cases below separate
+# on the floor and nothing else. TWO members, and the incident is not the first the reader opens.
+mkdir -p "$ROOT/dir-yes"
+cp "$ROOT/silent.jsonl" "$ROOT/dir-yes/a-kickoff.jsonl"
+cat > "$ROOT/dir-yes/b-incident.jsonl" <<'JSONL'
+{"parentUuid":"9b1f0c2e-0000-4000-8000-000000000001","isSidechain":false,"type":"assistant","timestamp":"2026-07-12T02:40:00.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Two decisions need you: 1. Change approach on item-1? 2. Keep the scope delta?"}]},"uuid":"9b1f0c2e-0000-4000-8000-000000000002","sessionId":"22e0f5c2-0000-4000-8000-000000000000"}
+{"parentUuid":"9b1f0c2e-0000-4000-8000-000000000002","isSidechain":false,"promptId":"9b1f0c2e-0000-4000-8000-000000000003","type":"user","message":{"role":"user","content":"1. Yes.\n2. Yes."},"uuid":"9b1f0c2e-0000-4000-8000-000000000004","timestamp":"2026-07-12T03:00:00.171Z","permissionMode":"bypassPermissions","origin":{"kind":"human"},"promptSource":"typed","turnOrigin":"human","userType":"external","entrypoint":"cli","sessionId":"22e0f5c2-0000-4000-8000-000000000000"}
+JSONL
+# One series per citation, in BOTH the gate shape (`resolved-*`) and the hook shape (`terminal-*`):
+# padded and blank must FAIL at the gate and DENY at the hook, and the whole incident quote -- the
+# ALLOW twin, one property apart -- must PASS and RESOLVE over the same corpus.
+for _fl in padded:'          yes' blank:'            ' whole:'1. Yes. 2. Yes.'; do
+  _fn="${_fl%%:*}"; _fq="${_fl#*:}"
+  mkdir -p "$ROOT/resolved-$_fn" "$ROOT/terminal-$_fn"
+  pass "$ROOT/resolved-$_fn/s-adversarial-p1.md" 1 2 1 1 EXIT_CONDITION_NOT_MET aaa1
+  pass "$ROOT/resolved-$_fn/s-adversarial-p2.md" 2 3 1 2 DIVERGENT_HARD_BLOCK   bbb2 "" 2026-07-12T02:00:00Z
+  record "$ROOT/resolved-$_fn/s-resolution-p2.md" \
+    s-adversarial-p2.md CHANGE_APPROACH bbb2 ccc3 "reframed item-1 AC as a class invariant" "2026-07-12T03:00:00Z | \"$_fq\""
+  pass "$ROOT/resolved-$_fn/s-adversarial-p3.md" 3 0 0 1 EXIT_CONDITION_MET ccc3 s-resolution-p2.md 2026-07-12T04:00:00Z
+  pass "$ROOT/terminal-$_fn/s-adversarial-p1.md" 1 2 1 1 EXIT_CONDITION_NOT_MET aaa1
+  pass "$ROOT/terminal-$_fn/s-adversarial-p2.md" 2 3 1 2 DIVERGENT_HARD_BLOCK   bbb2 "" 2026-07-12T02:00:00Z
+  record "$ROOT/terminal-$_fn/s-resolution-p2.md" \
+    s-adversarial-p2.md CHANGE_APPROACH bbb2 ccc3 "reframed item-1 AC as a class invariant" "2026-07-12T03:00:00Z | \"$_fq\""
+done
+
 printf '%s\n' "$ROOT"

@@ -169,4 +169,47 @@ CITE_OFFSET='2026-07-11T20:00:00-07:00 | "reframe the AC as a class invariant"'
 : > "$ROOT/pending-space.md";    entry "$ROOT/pending-space.md"    S50-ITEM-13 RESOLVED "$CITE_SPACE"
 : > "$ROOT/pending-offset.md";   entry "$ROOT/pending-offset.md"   S50-ITEM-14 RESOLVED "$CITE_OFFSET"
 
+# --- the citation FLOOR is a property of the NORMALISED needle ---------------------------------
+# Every caller measured the raw bash `${#quote}` against 12 while the predicate collapses
+# whitespace and trims before matching. So `"          yes"` (13 raw, 3 normalised) and twelve
+# spaces (12 raw, EMPTY normalised -- and `includes("")` is true of every turn) verified against
+# any operator turn in the window. The corpus below holds exactly such a turn, so a reader that
+# measured the raw length WOULD have matched: these entries discriminate only on the floor.
+#
+# THE INCIDENT, SEEDED FROM THE REAL PRODUCER. The consumer's operator answered two numbered
+# questions by free-typing `1. Yes.\n2. Yes.` after an assistant text turn; the record below
+# carries the keys Claude Code writes on such a turn (typed, human origin, not a sidechain, a
+# millisecond stamp, STRING content with the newline). Cited whole it is 15 characters once the
+# newline collapses and verifies; `1. Yes.` alone is 7 and must be refused naming its length.
+#
+# TWO FILES, AND THE INCIDENT IS NOT THE ONE THE READER OPENS FIRST. run.sh asks the reader's own
+# `readdirSync` which member comes first and refuses to score if it is the incident file, because
+# a verifier that read one member and stopped would otherwise pass the whole-quote case.
+mkdir -p "$ROOT/corpus-short"
+cat > "$ROOT/corpus-short/a-monday.jsonl" <<'JSONL'
+{"type":"user","timestamp":"2026-10-05T12:00:00Z","message":{"role":"user","content":"Start the planning gate for the release branch."}}
+JSONL
+cat > "$ROOT/corpus-short/b-incident.jsonl" <<'JSONL'
+{"parentUuid":"9b1f0c2e-0000-4000-8000-000000000001","isSidechain":false,"type":"assistant","timestamp":"2026-10-05T13:14:18.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Two decisions need you before the gate: 1. Close the item on the organic run? 2. File the follow-up as a NOTE?"}]},"uuid":"9b1f0c2e-0000-4000-8000-000000000002","sessionId":"22e0f5c2-0000-4000-8000-000000000000"}
+{"parentUuid":"9b1f0c2e-0000-4000-8000-000000000002","isSidechain":false,"promptId":"9b1f0c2e-0000-4000-8000-000000000003","type":"user","message":{"role":"user","content":"1. Yes.\n2. Yes."},"uuid":"9b1f0c2e-0000-4000-8000-000000000004","timestamp":"2026-10-05T13:25:14.171Z","permissionMode":"bypassPermissions","origin":{"kind":"human"},"promptSource":"typed","turnOrigin":"human","userType":"external","entrypoint":"cli","sessionId":"22e0f5c2-0000-4000-8000-000000000000"}
+JSONL
+
+CITE_PADDED='2026-10-05T13:25:14Z | "          yes"'
+CITE_BLANKQ='2026-10-05T13:25:14Z | "            "'
+CITE_WHOLE='2026-10-05T13:25:14Z | "1. Yes. 2. Yes."'
+CITE_SHORT='2026-10-05T13:25:14Z | "1. Yes."'
+: > "$ROOT/pending-padded.md";         entry "$ROOT/pending-padded.md"         S50-ITEM-20 RESOLVED "$CITE_PADDED"
+: > "$ROOT/pending-blankq.md";         entry "$ROOT/pending-blankq.md"         S50-ITEM-21 RESOLVED "$CITE_BLANKQ"
+: > "$ROOT/pending-incident-whole.md"; entry "$ROOT/pending-incident-whole.md" S50-ITEM-22 RESOLVED "$CITE_WHOLE"
+: > "$ROOT/pending-incident-short.md"; entry "$ROOT/pending-incident-short.md" S50-ITEM-23 RESOLVED "$CITE_SHORT"
+
+# The same two shapes padded with U+00A0, which the predicate's `\s` collapses and an ASCII-only
+# `[[:space:]]` under LC_ALL=C does not: ten NBSP and `yes` is 13 characters to that measure and 3
+# to the predicate, and twelve NBSP is 12 and EMPTY. Built from octal so the bytes are exact.
+NB="$(printf '\302\240')"
+CITE_NBSP_PADDED="2026-10-05T13:25:14Z | \"${NB}${NB}${NB}${NB}${NB}${NB}${NB}${NB}${NB}${NB}yes\""
+CITE_NBSP_BLANK="2026-10-05T13:25:14Z | \"${NB}${NB}${NB}${NB}${NB}${NB}${NB}${NB}${NB}${NB}${NB}${NB}\""
+: > "$ROOT/pending-nbsp-padded.md";    entry "$ROOT/pending-nbsp-padded.md"    S50-ITEM-24 RESOLVED "$CITE_NBSP_PADDED"
+: > "$ROOT/pending-nbsp-blank.md";     entry "$ROOT/pending-nbsp-blank.md"     S50-ITEM-25 RESOLVED "$CITE_NBSP_BLANK"
+
 printf '%s\n' "$ROOT"

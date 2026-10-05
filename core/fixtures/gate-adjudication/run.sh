@@ -631,6 +631,42 @@ else
   bad "S27: the PASS line does not report the unbounded-verify count (rc=$RC) — an unbounded pass and a bounded one are the same bytes"
 fi
 
+# --- S28/S29: the citation FLOOR is measured on the NORMALISED quote --------
+# ONE PROPERTY from S1: same catalog, check, lifetime and timestamp, and only the quote moves. The
+# caller compared bash `${#ga_quote}` against 12 while `--cite` collapses whitespace and trims, so
+# a padded `"          yes"` and twelve spaces verified against ANY in-window operator turn, and
+# TDIR_YES holds one (the consumer's typed `1. Yes.\n2. Yes.`, in its second member). S28-twin is
+# the ALLOW: the whole incident quote over the same corpus covers the FAIL.
+GA_FL_FIRST="$(node -e 'const fs=require("fs");console.log(fs.readdirSync(process.argv[1]).filter(f=>f.endsWith(".jsonl"))[0]||"")' "$TDIR_YES" 2>/dev/null)"
+if [ -n "$GA_FL_FIRST" ] && [ "$GA_FL_FIRST" != "b-incident.jsonl" ]; then
+  ok "S28-pre: the reader opens $GA_FL_FIRST first in TDIR_YES; the operator's turn is in the second member"
+else
+  bad "S28-pre: FIXTURE BROKEN — the reader's first member is '$GA_FL_FIRST', so a first-member-only scan could not be told apart"
+fi
+restore; fail_on "$X"
+runx "$ESC_PADDED" "$GM_BEFORE" "$TDIR_YES"
+if [ "$RC" -eq 1 ] && has "$BLOCK_X" && has "$UNVERIFIED_LINE" \
+   && has "under 12 characters once whitespace is collapsed: 'yes'" && ! has "$SUPP_LINE"; then
+  ok "S28: an in-force entry quoting '          yes' covers nothing → exit 1, and the line names the 3-character normalised quote"
+else
+  bad "S28: a padded quote covered the FAIL or was not named as too short once collapsed (rc=$RC) — the floor is measured on raw bytes"
+fi
+restore; fail_on "$X"
+runx "$ESC_BLANKQ" "$GM_BEFORE" "$TDIR_YES"
+if [ "$RC" -eq 1 ] && has "$BLOCK_X" && has "$UNVERIFIED_LINE" \
+   && has "under 12 characters once whitespace is collapsed: ''" && ! has "$SUPP_LINE"; then
+  ok "S29: an in-force entry quoting twelve spaces covers nothing → exit 1, and the line names the empty normalised quote"
+else
+  bad "S29: a blank quote covered the FAIL or was not named as too short once collapsed (rc=$RC) — includes(\"\") matches every operator turn"
+fi
+restore; fail_on "$X"
+runx "$ESC_WHOLE" "$GM_BEFORE" "$TDIR_YES"
+if [ "$RC" -eq 0 ] && has "$SUPP_LINE"; then
+  ok "S28-twin: the whole incident quote '1. Yes. 2. Yes.' over the same corpus covers the FAIL → exit 0"
+else
+  bad "S28-twin: the operator's whole short answer did not verify (rc=$RC) — S28/S29 cannot tell a floor from a verifier that refuses this corpus"
+fi
+
 # --- restore, once more, after the carve-out arms ---------------------------
 restore
 run "$VERDICT"

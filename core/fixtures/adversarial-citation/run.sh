@@ -272,10 +272,110 @@ if [ -n "${MW:-}" ]; then
   std terminal dir-real    "" RESOLVED  0 "W: the corpus allow is UNCHANGED" "$MW"
 fi
 
+# --- the citation FLOOR is measured on the NORMALISED needle --------------------------------
+# The caller compared bash `${#auth_quote}` against 12 while `--cite` collapses whitespace and
+# trims, so a padded `"          yes"` and twelve spaces verified against ANY in-window operator
+# turn. dir-yes holds the consumer's own free-typed `1. Yes.\n2. Yes.` in its SECOND member, so
+# the pre-fix build MATCHES both, and the whole-quote series is the ALLOW twin over that corpus.
+#
+# SIX CELLS, ONE STRING:
+#   P  gate, padded   -> rc 1, "(3 chars once whitespace is collapsed)"
+#   Q  gate, blank    -> rc 1, "(0 chars once whitespace is collapsed)"
+#   R  gate, whole    -> rc 0
+#   p  hook, padded   -> DIVERGENT/3
+#   q  hook, blank    -> DIVERGENT/3
+#   r  hook, whole    -> RESOLVED/0
+# Every cell is presence-shaped: a named state or message must APPEAR.
+echo
+echo "  -- the citation floor is measured on the NORMALISED needle --"
+FL_SRC_DIR="$(cd "$(dirname "$VALIDATOR")" && pwd)"
+FL_BASE="$(basename "$VALIDATOR")"
+echo "  adversarial-citation: resolved predicate = $FL_SRC_DIR/validate-steering-budget.sh"
+FL_FIRST="$(node -e 'const fs=require("fs");console.log(fs.readdirSync(process.argv[1]).filter(f=>f.endsWith(".jsonl"))[0]||"")' "$ROOT/dir-yes" 2>/dev/null)"
+N=$((N + 1))
+if [ -n "$FL_FIRST" ] && [ "$FL_FIRST" != "b-incident.jsonl" ]; then
+  printf '  ok   %-38s the reader opens %s first; the incident turn is in the second member\n' "dir-yes" "$FL_FIRST"
+else
+  FAIL=$((FAIL + 1)); printf '  FAIL %-38s FIXTURE BROKEN: first member read is "%s"\n' "dir-yes" "$FL_FIRST"
+fi
+FL_CELLS=""
+fl_cells() {  # $1 validator -> FL_CELLS
+  local v="$1" c="" n o rc s
+  for n in padded blank; do
+    o="$(bash "$v" --series "$ROOT/resolved-$n/s-adversarial-p" --transcript-dir "$ROOT/dir-yes" 2>&1)"; rc=$?
+    case "$n" in padded) s="(3 chars once whitespace is collapsed)" ;; *) s="(0 chars once whitespace is collapsed)" ;; esac
+    if [ "$rc" -eq 1 ] && grep -qF -- "$s" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
+  done
+  bash "$v" --series "$ROOT/resolved-whole/s-adversarial-p" --transcript-dir "$ROOT/dir-yes" >/dev/null 2>&1; rc=$?
+  if [ "$rc" -eq 0 ]; then c="${c}1"; else c="${c}0"; fi
+  for n in padded:DIVERGENT:3 blank:DIVERGENT:3 whole:RESOLVED:0; do
+    o="$(bash "$v" --series "$ROOT/terminal-${n%%:*}/s-adversarial-p" --cycle-state --transcript-dir "$ROOT/dir-yes" 2>/dev/null)"; rc=$?
+    s="$(printf '%s' "$o" | cut -f1)"
+    n="${n#*:}"
+    if [ "$s" = "${n%%:*}" ] && [ "$rc" -eq "${n#*:}" ]; then c="${c}1"; else c="${c}0"; fi
+  done
+  FL_CELLS="$c"
+}
+fl_names="P:gate-padded Q:gate-blank R:gate-whole p:hook-padded q:hook-blank r:hook-whole"
+fl_cells "$VALIDATOR"
+i=0
+for nm in $fl_names; do
+  i=$((i + 1)); N=$((N + 1))
+  if [ "$(printf '%s' "$FL_CELLS" | cut -c"$i")" = "1" ]; then printf '  ok   %-38s floor cell %s holds\n' "${nm#*:}" "${nm%%:*}"
+  else FAIL=$((FAIL + 1)); printf '  FAIL %-38s floor cell %s does not hold (cells=%s)\n' "${nm#*:}" "${nm%%:*}" "$FL_CELLS"; fi
+done
+
+# --- floor mutants, each in a copy of the WHOLE scripts dir ------------------------------------
+# The validator resolves its predicate beside itself; a copy without it fails OPEN at the hook and
+# that would read as a mutant working. The unmutated copy must score all six cells first.
+FL_MW="$(mktemp -d)"; trap 'rm -rf "$ROOT" "$MWORK" "$FL_MW"' EXIT
+FL_WHY=""
+fl_mk() {  # $1 name  then pairs of <target basename> <anchor> <replacement> -> FL_DIR
+  local d="$FL_MW/$1" n t
+  FL_DIR=""
+  shift
+  cp -R "$FL_SRC_DIR" "$d" || { FL_WHY="could not copy $FL_SRC_DIR"; return 1; }
+  [ -f "$d/validate-steering-budget.sh" ] && [ -f "$d/$FL_BASE" ] || { FL_WHY="the copy lacks the validator or its predicate"; return 1; }
+  while [ "$#" -ge 3 ]; do
+    t="$1"
+    n="$(grep -cF -- "$2" "$FL_SRC_DIR/$t")" || n=0
+    [ "$n" -eq 1 ] || { FL_WHY="anchor matches $n line(s) in $t, not 1 -- re-anchor it, never relax the arm"; return 1; }
+    A="$2" R="$3" awk '{ i = index($0, ENVIRON["A"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["R"] substr($0, i + length(ENVIRON["A"])); print }' \
+      "$FL_SRC_DIR/$t" > "$d/$t" || { FL_WHY="awk died"; return 1; }
+    cmp -s "$FL_SRC_DIR/$t" "$d/$t" && { FL_WHY="changed no bytes in $t -- it would score as a kill"; return 1; }
+    bash -n "$d/$t" 2>/dev/null || { FL_WHY="$t does not parse"; return 1; }
+    shift 3
+  done
+  FL_DIR="$d"
+}
+fl_score() {  # $1 label  $2 expected cells  $3 name  [<target> <anchor> <replacement>]...
+  local label="$1" want="$2"
+  shift 2
+  N=$((N + 1))
+  if ! fl_mk "$@"; then FAIL=$((FAIL + 1)); printf '  FAIL %-38s DID NOT APPLY: %s\n' "$label" "$FL_WHY"; return 1; fi
+  fl_cells "$FL_DIR/$FL_BASE"
+  if [ "$FL_CELLS" = "$want" ]; then printf '  ok   %-38s %s -> %s\n' "$label" "$want" "$FL_CELLS"; [ "$want" != 111111 ] && KILLS=$((KILLS + 1)); return 0
+  else FAIL=$((FAIL + 1)); printf '  FAIL %-38s scored %s, wanted %s\n' "$label" "$FL_CELLS" "$want"; return 1; fi
+}
+FL_M2_A='  auth_nquote="$(cite_norm "$auth_quote")"'
+FL_M2_R='  auth_nquote="$auth_quote"'
+FL_M1_A='  if (needle.length < CITE_MIN_NORM_CHARS) {'
+fl_score "F-control" 111111 ctl
+# m2: this caller measures the bash length again. The predicate still refuses the short needle
+# (NOMATCH-SHORT), so the verdicts hold and ONLY the gate's normalised-length message is lost.
+fl_score "F-m2 caller raw length" 001111 m2 "$FL_BASE" "$FL_M2_A" "$FL_M2_R"
+# m1: the predicate's floor removed. The caller refuses on the normalised length before asking,
+# so NOTHING here moves -- this is the defence in depth, and it is asserted, not assumed.
+fl_score "F-m1 floor removed (caller holds)" 111111 m1 validate-steering-budget.sh "$FL_M1_A" '  if (false) {'
+# m1+m2: EVERY layer reverted, which is the shipped defect. Padded and blank now verify at both
+# tiers; the whole-quote twin is unmoved.
+fl_score "F-m1+m2 both layers reverted" 001001 m12 "$FL_BASE" "$FL_M2_A" "$FL_M2_R" \
+  validate-steering-budget.sh "$FL_M1_A" '  if (false) {'
+
 # KILL COUNT. A mutation that applied cleanly to a file the run never loaded reads exactly
 # like an arm that cannot fire, and `cmp -s` cannot tell them apart. Zero kills is that state.
 N=$((N + 1))
-if [ "$KILLS" -ge 3 ]; then printf '  ok   %-38s %s mutant kill(s) -- the arms above can fire\n' "KILL-COUNT" "$KILLS"
+if [ "$KILLS" -ge 4 ]; then printf '  ok   %-38s %s mutant kill(s) -- the arms above can fire\n' "KILL-COUNT" "$KILLS"
 else FAIL=$((FAIL + 1)); printf '  FAIL %-38s %s kill(s); the mutants changed bytes in a file these arms never loaded\n' "KILL-COUNT" "$KILLS"; fi
 
 echo
