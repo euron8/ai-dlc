@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 459..490. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 447..492. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,40 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 198 SHIPPED ONE RELEASE, `v0.730.0` (`6692342c`, #1024), AND DISCHARGED ONE CONSUMER CANDIDATE.** It was
+invoked by the operator's one-liner at `origin/main` `efdda1f3` (`VERSION` 0.729.0). The opening sweep read live 4 on 4
+qualifying refs, unfiled 2 (both dated 2026-10-05), worklist 0, TERMINAL 210, every control passing. The consumer had
+pulled to 0.729.0 that morning, so the delivery gap opened at zero. Its working-tree ledger equals its `HEAD`.
+- `v0.730.0`: `PC-S316-ESCALATION-CITATION-FLOOR-REJECTS-A-GENUINE-SHORT-OPERATOR-ANSWER` as `BL-449`, filed and closed.
+  The contract adversary found that a padded quote (`"          yes"`) or twelve spaces verified at every citation gate
+  on the consumer's real corpus, because callers measured the floor on the raw quote. `--cite` now refuses a needle
+  under 12 characters after whitespace is collapsed (`NOMATCH-SHORT`). Callers measure through `cite_norm()` and
+  `cite_nlen()` (I103), bound to node's `\s` by new invariant I120. The incident's answer, quoted whole as
+  `"1. Yes. 2. Yes."`, verifies. The candidate's AskUserQuestion-label remedy was not built: labels were already citable.
+- `v0.730.0`: `BL-375` record only. Three stage-1 wrapper runs scored NOT-MET (2, 1 and 2 of 5 mapped, peak loads 9.23,
+  5.14 and 4.22). `validator-arm-selection` was omitted in all three. No code lever is named.
+
+Live backlog **1**, archive **447**. Net closed minus filed: **0**.
+
+**THE RELEASE TOOK FOUR PUSHES.** The first gate failed three fixtures the release itself broke (a mutant anchored on a
+rewritten line, an assertion the new floor pre-empted, and the fork budget 17 over). The second failed both
+`validator-arm-selection` fixtures, because the fork reshape made I120 call a helper only I103's unit defined. The third
+failed only the suite-pole check, at 2608s, while the operator's laptop slept in transit. The fourth skipped the suite on
+the unchanged content key. `FORK_BUDGET` stays 3204.
+
+**NOT BUILT, PRESENTED AS AN OPERATOR CHOICE, NO REPLY RECEIVED:** a whole operator message under 12 characters
+(`approved`, `yes`) stays uncitable. Recommended: leave it. The best measured rule false-accepted 2 of 3 on the
+consumer's corpus.
+
+**READ-SET TRACES:** `adversarial-citation` traced clean and committed. `readset-stage1-verdict` OMITTED with 272 drop
+notices and stays unmapped.
+
+**THE DELIVERY GAP IS ONE RELEASE.** The consumer is installed at 0.729.0 against `VERSION` 0.730.0; 0.730.0 is not
+bootstrapping. The banked ruling stands: report the gap and write no runbook. **OPERATOR DECISIONS STILL OPEN:** the
+short-message choice above, and whether `refs/recovered/b197` is kept.
+
+Batch 197's block below is history: batch 198's block replaces its delivery gap and its decisions list.
 
 **BATCH 197 SHIPPED ONE RELEASE, `v0.729.0` (`d3d2e481`, #1022), AND DISCHARGED NO CONSUMER CANDIDATE.** It was
 invoked by peer handoff (`ai-dlc-16`) at `origin/main` `ff325996` (`VERSION` 0.728.0). The opening sweep read live 10 on
@@ -409,52 +443,6 @@ banked ruling stands: report the gap and write no runbook.
 and `BL-438`'s QA verdict vocabulary.
 
 Batch 188's block below is history: batch 189's block replaces its delivery gap and its decisions list.
-
-**BATCH 188 SHIPPED TWO RELEASES, `v0.714.0` (`63726788`, #994) AND `v0.715.0` (`9c28d78e`, #995), AND
-DISCHARGED BOTH CONSUMER CANDIDATES IT FOUND.** It was invoked by peer handoff and ran autonomously, at
-`origin/main` `25ac399d`. The opening sweep's committed-ref view had live 2, unfiled 0, worklist 0 and TERMINAL 188.
-
-**THE SWEEP'S COMMITTED-REF VIEW WAS BLIND TO THIS BATCH'S WHOLE SCOPE.** The two filings were UNCOMMITTED in the
-consumer's working-tree ledger, which a consumer-history hand found because `cmp -s` against `HEAD` exited 1. A
-`git diff HEAD` of the ledger added exactly two `## PC-` headings. Diff the working-tree ledger against `HEAD`
-every batch.
-
-- `v0.714.0`: `PC-S316-MUTATION-RED-VALIDATOR-SCORES-A-SYNTAX-ERROR-AS-PROVEN` as `BL-434`, and
-  `PC-S316-STEERING-BUDGET-EXEMPTS-ASKUSERQUESTION-BUT-COUNTS-ITS-PARALLEL-SIBLINGS` as `BL-435`. Both landed and
-  rotated in the close commit.
-- `v0.715.0`: `BL-375` PARTIAL. The deriver launches each fixture with `env VAS_INNER_POOL_WIDTH=1` after sudo,
-  and validator-arm-selection's inner pool reads it.
-
-Live backlog **9 -> 11 -> 9**, archive **423 -> 425**. Net closed minus filed: **0**.
-
-**BOTH CONSUMER RECEIPTS ALREADY READ CLOSE-CANDIDATE AT 0.713.0, BEFORE ANY FIX.** This was measured with the real
-engine on a scratch consumer, and it is recorded in each archived entry as a finding.
-
-**EVERY ADVERSARY FOUND SOMETHING ON A GATE-GREEN SHAPE, AGAIN.** Each tip pass found six wrong implementations
-that both channels accepted. For 0.714.0, two of them broke on the motivating transcript's own shapes: a `Read`
-sibling, and a sibling written before the question. For 0.715.0, the pools were never checked at the site that
-uses the width, and the stub `sudo` passed the environment through. All were fixed before merge.
-
-**`BL-375`'S RE-TRACE FAILED, AND NO MAP WAS COMMITTED.** At `9c28d78e` the knob reached the traced run: the fixture
-log reads `inner pool width: 1`. The stream still dropped 7 reports at load 24 and 19 at load 6 rising to 25. The
-deriver wrote no map either time. The entry records the next, unmeasured lever.
-
-**OPERATOR RULING: THE NO-FORCED-FULL-SUITE RULE COVERS RELEASE VERIFICATION ONLY.** A measurement sweep on an
-unpushed throwaway branch may force `AI_DLC_FIXTURE_NO_SKIP=1`. That makes `BL-004` (the inner-pool width sweep,
-about 10 full runs) and `BL-430` (the jobs-12 pole recalibration, one forced run) buildable. Neither ran this
-batch, because the release gates needed the box. The ruling is carried in `verification-discipline.md` and in
-`### NEXT ACTIONS`.
-
-**THE DELIVERY GAP IS SIX RELEASES, WHICH IS PAST ACTION 7'S WIDE THRESHOLD OF FIVE.** The consumer is installed at
-0.709.0 (stamp `commit: 0414a98e`) against `VERSION` 0.715.0, and 0.710.0, 0.711.0 and 0.713.0 are bootstrapping.
-Mode-only changes under `core/` since the stamp: 0. PENDING is 4: the two ids batch 186 shipped, plus this batch's
-two. The consumer's two filings are still uncommitted. The banked ruling stands: report the gap and write no runbook.
-
-**READ-SET TRACE OWED:** `mutation-red-replay`, `check-25-steering-conduct`, `readset-skip` and
-`validator-arm-selection`. `validator-arm-selection-b` cannot be mapped until `BL-375` stage 1 holds.
-**OPERATOR DECISIONS STILL OPEN:** none.
-
-Batch 187's block below is history: batch 188's block replaces its delivery gap and its decisions list.
 
 ### Derive the state; do not trust the numbers below
 
