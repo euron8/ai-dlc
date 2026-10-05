@@ -98,12 +98,19 @@ stop_sampler() {
 
 # THE RESTORE RUNS FROM THE TRAP, so a killed wrapper restores the map too. The deriver writes the
 # map LAST, so it is killed and reaped BEFORE the copy-back: restoring while it still runs would be
-# undone by its own write. Its `log stream` children are its own to reap; only its pid is named.
+# undone by its own write.
+#
+# THE DERIVER IS KILLED AS A PROCESS GROUP, NEVER BY ITS PID ALONE. It carries no `trap`, and its
+# `log stream` children and the sandboxed fixture are killed only on its normal path, after a
+# fixture finishes -- so a TERM to its pid alone orphans all of them to init, still tracing. It is
+# launched under `set -m`, which in bash 3.2 puts the job in its own process group whose pgid is
+# $DPID, and `kill -- -$DPID` reaches every member. Measured on 3.2.57: the single-pid kill left
+# both background children of a trap-less stub alive; the group kill left neither.
 finish() {
   [ "$FINAL" -eq 0 ] || return 0
   FINAL=1
   trap '' INT TERM
-  if [ -n "$DPID" ]; then kill "$DPID" 2>/dev/null; wait "$DPID" 2>/dev/null; fi
+  if [ -n "$DPID" ]; then kill -TERM -- "-$DPID" 2>/dev/null; wait "$DPID" 2>/dev/null; fi
   stop_sampler
   if [ -n "$START" ] && [ "$RECORDED" -eq 0 ]; then
     [ -f "$RUN_DIR/rc" ] || printf '%s\n' "$RC" > "$RUN_DIR/rc"
@@ -138,11 +145,16 @@ echo "$!" > "$SPID_FILE"
 sample
 
 START="$(date +%s)"
+# `set -m` ONLY AROUND THIS LAUNCH: the deriver's job gets its own process group (pgid = $DPID) so
+# finish() can kill the whole tree. The sampler above was launched with it OFF and stays in the
+# wrapper's group, stopped by its own pid.
+set -m
 (
   cd "$ROOT" || exit 2
   AI_DLC_READSET_TRACE_ROOT="$RUN_DIR/root" exec bash "$DERIVER" --list "$SUBJECTS" --tracer sandbox
 ) > "$RUN_DIR/deriver.log" 2>&1 < /dev/null &
 DPID=$!
+set +m
 wait "$DPID"
 RC=$?
 DPID=""
