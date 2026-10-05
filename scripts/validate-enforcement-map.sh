@@ -9036,6 +9036,13 @@ fi
 # silently drops the bound and verifies against the project's whole session history, which is
 # exactly the state before the bound existed and is invisible in the exit code.
 #
+# `cite_norm()` IS THE FLOOR'S MEASURE, AND IT IS THE FOURTH NEEDLE FOR THE SAME REASON. Every
+# caller's 12-character floor is measured on the quote as `--cite` matches it -- whitespace
+# collapsed and trimmed -- and `cite_quote()`'s own segment pick calls it, so it already had to
+# exist in all four files. A copy that normalised differently would let a padded quote past the
+# floor at one site and not another; the predicate refuses it anyway (NOMATCH-SHORT), but
+# `--any-authorized` never calls the predicate, so there the helper IS the check.
+#
 # WHY IT IS ONE RULE AND NOT THREE. The parse used to be `sed -n 's/.*"\(.*\)".*/\1/p'`, whose
 # leading `.*` is GREEDY: the LAST quoted segment won, and on an odd quote count the capture was
 # the CONNECTIVE BETWEEN two quotes. The repair is one predicate written into four files, and
@@ -9059,7 +9066,8 @@ fi
 # I92 records: a per-file exemption list goes stale the release somebody adds a battery.
 i103_needles='cite_segments
 cite_quote
-cite_ts'
+cite_ts
+cite_norm'
 i103_declared='core/scripts/validate-adversarial-convergence.sh
 core/scripts/validate-escalation-resolution.sh
 core/scripts/validate-gate-adjudication.sh
@@ -9080,15 +9088,15 @@ i103_sites() { i103_re="$1"; shift; grep -rlE -- "$i103_re" "$@" 2>/dev/null; }
 i103_probe_dir="$(mktemp -d "${TMPDIR:-/tmp}/i103-XXXXXX")"
 mkdir -p "$i103_probe_dir/t"
 #  a  the reference bodies, every needle in one file, as the real sites carry them.
-printf 'lead=1\ncite_segments() { # note\n  f "$1"\n}\ncite_quote() { # note\n  g "$1"\n}\ncite_ts() { # note\n  h "$1"\n}\ntail=2\n' > "$i103_probe_dir/t/a.sh"
+printf 'lead=1\ncite_segments() { # note\n  f "$1"\n}\ncite_quote() { # note\n  g "$1"\n}\ncite_ts() { # note\n  h "$1"\n}\ncite_norm() { # note\n  k "$1"\n}\ntail=2\n' > "$i103_probe_dir/t/a.sh"
 #  b  NEAR-MISS for the equality half: identical bodies, different surrounding text. Must
 #     compare EQUAL, or the arm reports drift on every file that is not a copy of its neighbour.
-printf 'other=9\ncite_segments() { # note\n  f "$1"\n}\ncite_quote() { # note\n  g "$1"\n}\ncite_ts() { # note\n  h "$1"\n}\nmore=0\n' > "$i103_probe_dir/t/b.sh"
+printf 'other=9\ncite_segments() { # note\n  f "$1"\n}\ncite_quote() { # note\n  g "$1"\n}\ncite_ts() { # note\n  h "$1"\n}\ncite_norm() { # note\n  k "$1"\n}\nmore=0\n' > "$i103_probe_dir/t/b.sh"
 #  c  DRIFT in the SECOND needle only. Must compare UNEQUAL -- an arm that checked only the
 #     first needle would call this file conforming, and the pick is the half that forked. The
 #     THIRD needle is seeded identical to a/b here, so the +200 arm below can say the needles
 #     are read independently in both directions rather than only for the pair.
-printf 'cite_segments() { # note\n  f "$1"\n}\ncite_quote() { # note\n  g "$2"\n}\ncite_ts() { # note\n  h "$1"\n}\n' > "$i103_probe_dir/t/c.sh"
+printf 'cite_segments() { # note\n  f "$1"\n}\ncite_quote() { # note\n  g "$2"\n}\ncite_ts() { # note\n  h "$1"\n}\ncite_norm() { # note\n  k "$1"\n}\n' > "$i103_probe_dir/t/c.sh"
 #  d  no definition at all. Extraction must be EMPTY -- an extractor that invents a body here
 #     would compare two inventions and call them equal.
 printf 'unrelated_helper() {\n  :\n}\n' > "$i103_probe_dir/t/d.sh"
@@ -9100,7 +9108,8 @@ printf '# routes through cite_quote\n' > "$i103_probe_dir/t/e.sh"
 #     `cite_tsx` is the near-miss for the third needle, and it is the one the boundary class
 #     could plausibly swallow: `cite_ts` is a PREFIX of it where the other two names are not
 #     prefixes of anything in this family.
-printf 'cite_quoted_span() { :; }\ncite_segment_of() { :; }\ncite_tsx() { :; }\n' > "$i103_probe_dir/t/f.sh"
+#     `cite_normalised` is the same near-miss for the fourth needle, which is a prefix of it.
+printf 'cite_quoted_span() { :; }\ncite_segment_of() { :; }\ncite_tsx() { :; }\ncite_normalised() { :; }\n' > "$i103_probe_dir/t/f.sh"
 i103_score=0
 i103_pa_s="$(i103_body "$i103_probe_dir/t/a.sh" cite_segments)"
 i103_pa_q="$(i103_body "$i103_probe_dir/t/a.sh" cite_quote)"
@@ -9109,6 +9118,8 @@ i103_pb_q="$(i103_body "$i103_probe_dir/t/b.sh" cite_quote)"
 i103_pc_s="$(i103_body "$i103_probe_dir/t/c.sh" cite_segments)"
 i103_pc_q="$(i103_body "$i103_probe_dir/t/c.sh" cite_quote)"
 i103_pc_t="$(i103_body "$i103_probe_dir/t/c.sh" cite_ts)"
+i103_pa_n="$(i103_body "$i103_probe_dir/t/a.sh" cite_norm)"
+i103_pc_n="$(i103_body "$i103_probe_dir/t/c.sh" cite_norm)"
 i103_pd_q="$(i103_body "$i103_probe_dir/t/d.sh" cite_quote)"
 # The scan grammar is the one the corpus half uses, word-bounded so `cite_quoted_span` and
 # `cite_segment_of` are not members. `\b` is a GNU extension BSD grep does not honour, so the
@@ -9116,22 +9127,23 @@ i103_pd_q="$(i103_body "$i103_probe_dir/t/d.sh" cite_quote)"
 # what found that: a mention that ENDS the line -- which is what a prose citation of the helper
 # looks like -- has no character after the name at all, so a bracket class alone scored the
 # seeded fourth site as a non-instance and the fourth-copy half went quiet.
-i103_re='(cite_segments|cite_quote|cite_ts)([^A-Za-z0-9_]|$)'
+i103_re='(cite_segments|cite_quote|cite_ts|cite_norm)([^A-Za-z0-9_]|$)'
 i103_pm="$(i103_sites "$i103_re" "$i103_probe_dir/t" | LC_ALL=C sort)"
 i103_pm_want="$i103_probe_dir/t/a.sh
 $i103_probe_dir/t/b.sh
 $i103_probe_dir/t/c.sh
 $i103_probe_dir/t/e.sh"
-[ -n "$i103_pa_s" ] && [ -n "$i103_pa_q" ] && [ -n "$i103_pa_t" ] || i103_score=$((i103_score + 1))
+[ -n "$i103_pa_s" ] && [ -n "$i103_pa_q" ] && [ -n "$i103_pa_t" ] && [ -n "$i103_pa_n" ] || i103_score=$((i103_score + 1))
 [ "$i103_pa_q" = "$i103_pb_q" ]            || i103_score=$((i103_score + 10))
 [ "$i103_pa_q" != "$i103_pc_q" ]           || i103_score=$((i103_score + 100))
 [ "$i103_pa_s" = "$i103_pc_s" ]            || i103_score=$((i103_score + 200))
 [ "$i103_pa_t" = "$i103_pc_t" ]            || i103_score=$((i103_score + 400))
+[ "$i103_pa_n" = "$i103_pc_n" ]            || i103_score=$((i103_score + 800))
 [ -z "$i103_pd_q" ]                        || i103_score=$((i103_score + 1000))
 [ "$i103_pm" = "$i103_pm_want" ]           || i103_score=$((i103_score + 10000))
 rm -rf "$i103_probe_dir"
 if [ "$i103_score" -ne 0 ]; then
-  err "I103's probe scored $i103_score where 0 is the only correct total, so the corpus below was not scanned. +1 the extractor found no body where one is defined; +10 it called two IDENTICAL bodies in differently-surrounded files different, which would report drift on a conforming tree; +100 it called a cite_quote() body differing by one character the SAME, which is the state this arm exists to report; +200 it reported drift in cite_segments() where the probe seeded drift only in cite_quote(), so the two needles are not being read independently and one of them is riding on the other; +400 the same for cite_ts(), the needle that carries the citation's TIMESTAMP half; +1000 it returned a body from a file defining no such function, so the equality half would be comparing two inventions; +10000 the site scan did not name exactly the four probe files that carry a needle -- it either missed the mention-only fourth site or flagged one of the similarly-named near-misses. Any non-zero total means both halves of I103 would report a clean tree for the reason a broken reader does."
+  err "I103's probe scored $i103_score where 0 is the only correct total, so the corpus below was not scanned. +1 the extractor found no body where one is defined; +10 it called two IDENTICAL bodies in differently-surrounded files different, which would report drift on a conforming tree; +100 it called a cite_quote() body differing by one character the SAME, which is the state this arm exists to report; +200 it reported drift in cite_segments() where the probe seeded drift only in cite_quote(), so the two needles are not being read independently and one of them is riding on the other; +400 the same for cite_ts(), the needle that carries the citation's TIMESTAMP half; +800 the same for cite_norm(), the needle the 12-character floor is measured with; +1000 it returned a body from a file defining no such function, so the equality half would be comparing two inventions; +10000 the site scan did not name exactly the four probe files that carry a needle -- it either missed the mention-only fourth site or flagged one of the similarly-named near-misses. Any non-zero total means both halves of I103 would report a clean tree for the reason a broken reader does."
 else
   # HALF ONE: for each needle, the four declared copies are one byte string. Read against the
   # FIRST readable copy rather than pairwise, so N files cost N extractions.
@@ -9156,7 +9168,7 @@ EOF
 $i103_needles
 EOF
   [ -z "$i103_vacuous" ] || err "I103 cannot find a definition for:$i103_vacuous. The check binding the four readings of the operator-citation field just went vacuous -- it must locate every needle at every declared site or fail loudly, never pass by finding nothing. If a helper was renamed or lifted, rename it in i103_needles here in the same change."
-  [ -z "$i103_drift" ] || err "I103: the operator-citation parser has forked:$i103_drift. All four sites feed their extracted quote and its timestamp to the same --cite predicate, so a copy that differs decides the same citation differently with no second piece of evidence anywhere. Three of the four are gate validators; the fourth is the remediation guard, where the permissive direction LIFTS a gate deny on an authorization no operator wrote. Make cite_segments(), cite_quote() and cite_ts() byte-identical across all four."
+  [ -z "$i103_drift" ] || err "I103: the operator-citation parser has forked:$i103_drift. All four sites feed their extracted quote and its timestamp to the same --cite predicate, so a copy that differs decides the same citation differently with no second piece of evidence anywhere. Three of the four are gate validators; the fourth is the remediation guard, where the permissive direction LIFTS a gate deny on an authorization no operator wrote. Make cite_segments(), cite_quote(), cite_ts() and cite_norm() byte-identical across all four."
 
   # HALF TWO: no fourth site. THE POSITIVE CONTROL IS THIS FILE, read in the same invocation --
   # it carries both needles in i103_needles= and throughout the prose above, so a scan that is

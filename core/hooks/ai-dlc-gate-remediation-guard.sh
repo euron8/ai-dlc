@@ -235,6 +235,16 @@ cite_segments() { # $1 authline -> one quoted segment per line
       for (i = 2; i <= n; i += 2) if (p[i] != "") print p[i] }'
 }
 
+# The quote as `validate-steering-budget.sh --cite` will MATCH it: every whitespace run one
+# space, the ends trimmed. The 12-character floor is measured on THIS, never on the raw bytes --
+# a raw `${#quote}` scored `"          yes"` as 13 and twelve spaces as 12, and the predicate then
+# matched 3 characters and the empty string against any operator turn. The predicate owns the
+# floor and refuses a short needle itself (NOMATCH-SHORT); a caller's check is the message, and
+# for `--any-authorized`, which never calls the predicate, the whole check.
+cite_norm() { # $1 text -> whitespace collapsed and trimmed
+  printf '%s' "$1" | LC_ALL=C tr -s '[:space:]' ' ' | sed 's/^ //; s/ $//'
+}
+
 cite_quote() { # $1 authline
   _cq_segs="$(cite_segments "$1")"
   [ -n "$_cq_segs" ] || _cq_segs="$(printf '%s' "${1#*|}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
@@ -242,7 +252,8 @@ cite_quote() { # $1 authline
   _cq_long=""
   while IFS= read -r _cq_seg; do
     [ "${#_cq_seg}" -gt "${#_cq_long}" ] && _cq_long="$_cq_seg"
-    [ "${#_cq_seg}" -ge 12 ] || continue
+    _cq_n="$(cite_norm "$_cq_seg")"
+    [ "${#_cq_n}" -ge 12 ] || continue
     [ -n "$_cq_pick" ] || _cq_pick="$_cq_seg"
   done <<CITEEOF
 $_cq_segs
@@ -830,11 +841,13 @@ ckey() { # <path> -> a digest of the bytes, "-" when absent, "?" when nothing co
 # short to be evidence, a validator tooling error -- returns non-zero, because this answer
 # releases permission to edit and there is no second piece of evidence behind it.
 cite_verifies() { # <auth-line> -> 0 verified, 1 not
-  local q ts flag arg
+  local q nq ts flag arg
   [ -n "${1:-}" ] || return 1
   [ -f "$STEER_SCRIPT" ] || return 1
   q="$(cite_quote "$1")"
-  [ "${#q}" -ge 12 ] || return 1
+  # Measured after whitespace is collapsed and trimmed, as --cite matches it.
+  nq="$(cite_norm "$q")"
+  [ "${#nq}" -ge 12 ] || return 1
   # BOUND THE SCAN TO WHEN THE ENTRY SAYS THE OPERATOR SPOKE. Unbounded, the corpus is the
   # project's entire session history and any phrase the operator ever typed lifts a deny
   # today. `cite_ts` is empty for a field with no parseable timestamp and the bound is then
@@ -1058,7 +1071,9 @@ if [ -f "$AUTH_FILE" ] && [ -f "$STEER_SCRIPT" ]; then
   # anywhere in the project's history. `cite_ts` is empty for a field carrying no parseable
   # timestamp; the bound is then omitted and the answer is the one this arm gave before.
   AUTH_TS="$(cite_ts "$AUTH")"
-  if [ "${#AUTH_QUOTE}" -ge 12 ]; then
+  # Measured after whitespace is collapsed and trimmed, as --cite matches it.
+  AUTH_NQUOTE="$(cite_norm "$AUTH_QUOTE")"
+  if [ "${#AUTH_NQUOTE}" -ge 12 ]; then
     STEER_FLAG=""; STEER_ARG=""
     if [ -n "$TRANSCRIPT" ] && steer_dir_has_transcript "$(dirname "$TRANSCRIPT")"; then
       # THE DIRECTORY, not the file. An authorization outlives the session that

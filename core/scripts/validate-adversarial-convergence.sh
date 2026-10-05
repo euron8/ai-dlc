@@ -868,6 +868,16 @@ cite_segments() { # $1 authline -> one quoted segment per line
       for (i = 2; i <= n; i += 2) if (p[i] != "") print p[i] }'
 }
 
+# The quote as `validate-steering-budget.sh --cite` will MATCH it: every whitespace run one
+# space, the ends trimmed. The 12-character floor is measured on THIS, never on the raw bytes --
+# a raw `${#quote}` scored `"          yes"` as 13 and twelve spaces as 12, and the predicate then
+# matched 3 characters and the empty string against any operator turn. The predicate owns the
+# floor and refuses a short needle itself (NOMATCH-SHORT); a caller's check is the message, and
+# for `--any-authorized`, which never calls the predicate, the whole check.
+cite_norm() { # $1 text -> whitespace collapsed and trimmed
+  printf '%s' "$1" | LC_ALL=C tr -s '[:space:]' ' ' | sed 's/^ //; s/ $//'
+}
+
 cite_quote() { # $1 authline
   _cq_segs="$(cite_segments "$1")"
   [ -n "$_cq_segs" ] || _cq_segs="$(printf '%s' "${1#*|}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
@@ -875,7 +885,8 @@ cite_quote() { # $1 authline
   _cq_long=""
   while IFS= read -r _cq_seg; do
     [ "${#_cq_seg}" -gt "${#_cq_long}" ] && _cq_long="$_cq_seg"
-    [ "${#_cq_seg}" -ge 12 ] || continue
+    _cq_n="$(cite_norm "$_cq_seg")"
+    [ "${#_cq_n}" -ge 12 ] || continue
     [ -n "$_cq_pick" ] || _cq_pick="$_cq_seg"
   done <<CITEEOF
 $_cq_segs
@@ -1081,7 +1092,7 @@ validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -
   #   Failure caught (S290): the lead authored four "operator" resolutions in an
   #   operator-silent window and cleared the divergence block itself. Nothing compared the
   #   claim to the transcript. This is that comparison.
-  local auth_quote cite_rc
+  local auth_quote auth_nquote cite_rc
   if [ -z "$auth" ]; then
     F_WHY="$rec declares 'resolution: $kind' with no 'operator_authorization:'. A resolution
       clears a HARD_BLOCK, which only the operator may adjudicate. Cite the operator's own
@@ -1089,8 +1100,10 @@ validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -
     return 1
   fi
   auth_quote="$(cite_quote "$auth")"
-  if [ "${#auth_quote}" -lt 12 ]; then
-    F_WHY="$rec operator_authorization quotes '${auth_quote}', too short (>=12 chars) to be a
+  # Measured after whitespace is collapsed and trimmed, as --cite matches it.
+  auth_nquote="$(cite_norm "$auth_quote")"
+  if [ "${#auth_nquote}" -lt 12 ]; then
+    F_WHY="$rec operator_authorization quotes '${auth_nquote}' (${#auth_nquote} chars once whitespace is collapsed), too short (>=12 chars) to be a
       verifiable citation. Quote a real span of the operator's message, not a token."
     return 1
   fi

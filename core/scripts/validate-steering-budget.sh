@@ -210,6 +210,9 @@ DIR=""
 QUIET=0
 COUNT=0
 CITE=""
+# Whether --cite was PASSED, which is not whether its text is empty. Every mode test below keys
+# on this: an empty needle keyed on the text fell through to the checks mode and its exit 0.
+CITE_SET=0
 SINCE=""
 AUTH_AT=""
 
@@ -219,7 +222,7 @@ while [ $# -gt 0 ]; do
     --dir)        DIR="${2:-}"; shift 2 ;;
     --quiet)      QUIET=1; shift ;;
     --count)      COUNT=1; shift ;;
-    --cite)       CITE="${2:-}"; shift 2 ;;
+    --cite)       CITE="${2:-}"; CITE_SET=1; shift 2 ;;
     --since)      SINCE="${2:-}"; shift 2 ;;
     --authorized-at) AUTH_AT="${2:-}"; shift 2 ;;
     *) echo "unknown arg: $1" >&2; exit 1 ;;
@@ -268,7 +271,7 @@ if [ -z "$TRANSCRIPT" ] && [ -z "$DIR" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]
         DERIVED_N=$((DERIVED_N + 1)); DERIVED_F="$_dsc"
       done
       if [ "$DERIVED_N" -eq 1 ]; then
-        if [ -n "$CITE" ] || [ -n "$SINCE" ]; then
+        if [ "$CITE_SET" -eq 1 ] || [ -n "$SINCE" ]; then
           DIR="$(dirname "$DERIVED_F")"
         else
           TRANSCRIPT="$DERIVED_F"
@@ -301,7 +304,7 @@ fi
 # and the record counts, but with a READABLE transcript merely lacking the quote it fails
 # CLOSED. Supplying ground truth was strictly worse than supplying none, and a genuine
 # cross-session record was treated exactly like a forged one.
-if [ -n "$CITE" ] && [ -z "$TRANSCRIPT" ] && [ -z "$DIR" ]; then
+if [ "$CITE_SET" -eq 1 ] && [ -z "$TRANSCRIPT" ] && [ -z "$DIR" ]; then
   echo "FAIL: --cite requires --transcript PATH or --dir PATH" >&2
   exit 1
 fi
@@ -310,7 +313,7 @@ fi
 # a bound nothing will apply. Refusing beats ignoring: the same silence would report a
 # fully-unbounded verify with the exit code of a bounded one, which is the defect this flag
 # exists to close, one level up.
-if [ -n "$AUTH_AT" ] && [ -z "$CITE" ]; then
+if [ -n "$AUTH_AT" ] && [ "$CITE_SET" -ne 1 ]; then
   echo "FAIL: --authorized-at bounds --cite and has no meaning without it" >&2
   exit 1
 fi
@@ -360,13 +363,17 @@ SB_ROOT="${AI_DLC_PROJECT_ROOT:-}"
 SB_ROOT="${SB_ROOT:-/nonexistent}"
 # --- end AI_DLC_ROOT --------------------------------------------------------
 
-AI_DLC_LOGROOT="$SB_ROOT" AI_DLC_T="$TRANSCRIPT" AI_DLC_D="$DIR" AI_DLC_TH="$THRESHOLD" AI_DLC_B="$BUDGET" AI_DLC_MB="$MAX_BEATS" AI_DLC_Q="$QUIET" AI_DLC_C="$COUNT" AI_DLC_CITE="$CITE" AI_DLC_SINCE="$SINCE" AI_DLC_AUTH_AT="$AUTH_AT" node <<'NODE'
+AI_DLC_LOGROOT="$SB_ROOT" AI_DLC_T="$TRANSCRIPT" AI_DLC_D="$DIR" AI_DLC_TH="$THRESHOLD" AI_DLC_B="$BUDGET" AI_DLC_MB="$MAX_BEATS" AI_DLC_Q="$QUIET" AI_DLC_C="$COUNT" AI_DLC_CITE="$CITE" AI_DLC_CITE_SET="$CITE_SET" AI_DLC_SINCE="$SINCE" AI_DLC_AUTH_AT="$AUTH_AT" node <<'NODE'
 const fs = require("fs"), path = require("path");
 const TH = +process.env.AI_DLC_TH, BUDGET = +process.env.AI_DLC_B;
 const MAX_BEATS = +process.env.AI_DLC_MB;
 const QUIET = process.env.AI_DLC_Q === "1";
 const COUNT = process.env.AI_DLC_C === "1";
-const CITE = process.env.AI_DLC_CITE || "";
+// WHETHER --cite WAS PASSED, NOT WHAT IT SAID. Keyed on the text, an EMPTY needle skipped the
+// citation block and ran the checks mode instead, whose clean exit 0 is the byte a caller reads
+// as MATCH. The block must be reached for every needle so the floor below can refuse it.
+const CITE = process.env.AI_DLC_CITE_SET === "1";
+const CITE_TEXT = process.env.AI_DLC_CITE || "";
 const SINCE = process.env.AI_DLC_SINCE || "";
 const AUTH_AT = process.env.AI_DLC_AUTH_AT || "";
 // A LITERAL, READ FROM NO ENVIRONMENT AND NO FLAG. Every other tunable in this file is a
@@ -378,6 +385,13 @@ const AUTH_AT = process.env.AI_DLC_AUTH_AT || "";
 // gate deny. 7200 is derived in the --authorized-at note above, from the reference consumer's
 // own citation rows; moving it is a code change reviewed against that corpus.
 const CITE_AUTH_TOLERANCE_S = 7200;
+// THE CITATION FLOOR, measured on the NORMALISED needle and defined only here. Every caller
+// compared its own bash `${#quote}` against 12 while this program collapsed whitespace and
+// trimmed before matching, so `"          yes"` (13 bytes, 3 normalised) and twelve spaces
+// (EMPTY normalised, and `includes("")` is true of every turn) both verified against any
+// operator turn in the window. A caller's length check is a courtesy message; this is the
+// refusal. Like the tolerance above it is a literal with no environment or flag override.
+const CITE_MIN_NORM_CHARS = 12;
 const one = process.env.AI_DLC_T, dir = process.env.AI_DLC_D;
 
 // AskUserQuestion measures the human's think-time, not machine starvation.
@@ -639,7 +653,16 @@ const files = one ? [one]
 // The machine notarizes provenance; the human owns meaning.
 if (CITE) {
   const norm = (s) => (s || "").replace(/\s+/g, " ").trim().toLowerCase();
-  const needle = norm(CITE);
+  const needle = norm(CITE_TEXT);
+  // NOMATCH-SHORT: A PROPERTY OF THE NEEDLE, SO IT IS DECIDED BEFORE ANY RECORD IS READ. It
+  // pre-empts NOMATCH-NO-RECORDS and the pruned-transcript diagnosis, both of which are facts
+  // about a corpus this needle could not have been verified against whatever it held. Exit 2
+  // keeps every reader's contract -- 0 MATCH, 2 NOMATCH, anything else a tooling failure -- and
+  // all of them deny on it; `NOMATCH` stays the prefix so a `case NOMATCH*` reader is unmoved.
+  if (needle.length < CITE_MIN_NORM_CHARS) {
+    console.error(`NOMATCH-SHORT: the cited quote is ${needle.length} character(s) after whitespace is collapsed and trimmed, under the floor of ${CITE_MIN_NORM_CHARS}; a needle that short is carried by too many operator turns to be evidence of any one`);
+    console.log("NOMATCH-SHORT"); process.exit(2);
+  }
   const sinceMs = SINCE ? Date.parse(SINCE) : -Infinity;
   // THE AUTHORIZATION WINDOW. The header carries the measurement that set the tolerance.
   // A value that will not parse is a REFUSAL and not an unbounded scan: every caller reads
