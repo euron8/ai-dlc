@@ -74,7 +74,7 @@ DECIDED_AUTONOMOUSLY entry `OVERRIDDEN`) asserts the operator adjudicated
 it. So the entry MUST carry a citation of the operator's own message —
 not a paraphrase, not the lead's summary:
 
-`**Operator authorization:** <ISO-8601 UTC ts> | "<verbatim substring, ≥12 chars, of the operator's message>"`
+`**Operator authorization:** <ISO-8601 UTC ts> | "<verbatim quote of the operator's message, ≥12 chars after whitespace is collapsed; a short message is quoted whole, numbering included>"`
 
 At the gate, `scripts/ai-dlc/validate-escalation-resolution.sh` verifies that
 substring against the session transcript (this sprint's entries only;
@@ -120,7 +120,7 @@ A `SUPPRESSED` entry MUST carry, in the same edit that sets the status:
 ```
 **Suppresses:** [<catalog>] <check-id> — <check title>
 **Expires after:** <n> gates
-**Operator authorization:** <ISO-8601 UTC ts> | "<verbatim substring, ≥12 chars, of the operator's message>"
+**Operator authorization:** <ISO-8601 UTC ts> | "<verbatim quote of the operator's message, ≥12 chars after whitespace is collapsed; a short message is quoted whole, numbering included>"
 ```
 
 `<n>` defaults to 1 and may not exceed 3. **`<n>` counts gates RECORDED after the

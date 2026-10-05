@@ -423,7 +423,7 @@ while IFS="$(printf '\t')" read -r header status authline; do
   if [ "$authline" = "__MISSING__" ] || [ -z "$authline" ]; then
     echo "FAIL: [$short] is $status but carries no 'Operator authorization:' citation." >&2
     echo "      A $status HARD_BLOCK asserts the operator adjudicated it. Cite the operator's own" >&2
-    echo "      words: Operator authorization: <ISO-8601 UTC ts> | \"<verbatim substring, >=12 chars>\"" >&2
+    echo "      words: Operator authorization: <ISO-8601 UTC ts> | \"<verbatim quote of the operator's message, >=12 chars after whitespace is collapsed; a short message is quoted whole, numbering included>\"" >&2
     echo "      If you decided this yourself, its status is DECIDED_AUTONOMOUSLY, not $status." >&2
     FAIL=1; FAILN=$((FAILN + 1)); continue
   fi

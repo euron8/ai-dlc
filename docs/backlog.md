@@ -480,11 +480,68 @@ The filtered identical-sets arm was run over the pairs that traced clean twice (
 
 Drops occurred this batch at 1-minute loads of 1.8 to 3.6, below the criterion's 4.5 floor. The open question is this: does a five-fixture run at low ambient load clear the criterion's 4.5 peak-load floor? The first wrapper run answers it.
 
+<<<<<<< HEAD
 **BATCH 198: THE FIRST THREE WRAPPER RUNS, SCORED NOT-MET.** Three `scripts/readset-stage1-run.sh` runs at `efdda1f3`, back to back from the clean main checkout, each deriver rc 0 and each map restored byte-identically. `scripts/readset-stage1-verdict.sh` exited 1 with 32 NOT-MET lines.
 - Run 1, peak load 9.23: 2 of 5 mapped. `enforcement-map-sites` (41 drops) and `validator-arm-selection` (60 drops) OMITTED; `enforcement-map-sites-b` OMITTED on the loss canary alone, 3 paths (`core/hooks/ai-dlc-gate-remediation-guard.sh`, `core/hooks/ai-dlc-recover-gate.sh`, `core/scripts/sync-taught-schema.sh`).
 - Run 2, peak load 5.14: 1 of 5 mapped. `enforcement-map-sites` dropped 1171 times; `-b` 20, `validator-arm-selection` 25, `validator-arm-selection-b` 8.
 - Run 3, peak load 4.22: 2 of 5 mapped. `enforcement-map-sites-c` 11 drops, `validator-arm-selection` 17, `validator-arm-selection-b` 34 plus an 18-path loss canary. Arm A4 also failed: the peak load inside the window was below the 4.5 floor.
 - So the open question above is answered both ways: the five subjects do not always raise the box past 4.5 themselves, and every one of the five was omitted at least once across the three. `validator-arm-selection` was omitted in all three. The drops have no attributed mechanism.
 - A single-fixture trace of `readset-stage1-verdict` at load about 5 was OMITTED with 272 drop notices, so that fixture is still unmapped and runs on every push.
+
+## BL-449 — a padded or blank operator-authorization quote verified against any operator turn, because every caller measured the citation floor on the raw quote
+
+**LANDED (v0.730.0, verified 90351741).**
+
+**DEFECT.** Filed in batch 198 from the reference consumer's candidate
+`PC-S316-ESCALATION-CITATION-FLOOR-REJECTS-A-GENUINE-SHORT-OPERATOR-ANSWER`. The candidate reported
+the opposite symptom, a genuine short answer that could not be cited. Its contract pass found this
+bypass instead, and the bypass is the entry's subject.
+
+**The bypass.** Every caller of `core/scripts/validate-steering-budget.sh --cite` compared bash
+`${#quote}` against 12, and `--cite` then collapsed whitespace and trimmed before matching. So
+`"          yes"` (13 bytes, 3 characters normalised) cleared the floor and verified against any
+operator turn containing `yes`. Twelve spaces normalised to the empty string, and `includes("")` is
+true of every turn. Measured by the batch-198 contract adversary on the real gate at `efdda1f3` with
+the reference consumer's real corpus: both returned rc 0 `OK`, unpadded `"yes"` returned rc 1, and a
+fabricated quote returned rc 1. `validate-escalation-resolution.sh --any-authorized` counted the
+padded entry AUTHORIZED. The same raw-length shape sat in `validate-adversarial-convergence.sh`,
+`validate-gate-adjudication.sh` and both citation sites of `core/hooks/ai-dlc-gate-remediation-guard.sh`.
+
+**The fix, in 0.730.0.** The predicate owns the floor. `--cite` normalises the needle and, when it is
+under 12 characters (empty included), prints stdout `NOMATCH-SHORT` and exits 2 before reading any
+record. The floor is the literal `CITE_MIN_NORM_CHARS`, defined once. An empty `--cite ""` now reaches
+that block instead of falling through to the checks mode's exit 0. Exit 2 keeps every caller's
+contract, and all of them deny on it. `NOMATCH-SHORT` joined the I117 `--cite` verdict vocabulary.
+The callers keep a length check for the human message, but measure the normalised quote through
+`cite_norm()` and `cite_nlen()`, which joined the I103 quartet beside `cite_quote()`. `cite_norm()`
+collapses the same whitespace set JavaScript `\s` does (NBSP, U+2000-U+200A, U+3000 and the rest),
+and `cite_nlen()` counts UTF-16 units, so the bash floor and the predicate's floor agree on every quote;
+the first cut collapsed ASCII only, and an NBSP-padded quote still counted AUTHORIZED under
+`--any-authorized`, which never calls the predicate. Invariant I120 runs node over every code point and
+fails the push when a `cite_norm()` copy disagrees with `\s`. The guidance in `escalations.md`,
+`steps/_gate-procedures.md` and `team-roles/adversary.md`, and the two "words:" FAIL texts, now say
+"a verbatim quote of the operator's message, at least 12 characters after whitespace is collapsed; a
+short message is quoted whole, numbering included".
+
+**Half of the consumer's suggested remedy had a dead premise.** It proposed citing the
+AskUserQuestion prompt plus the chosen option label. Option labels are already citable:
+`askUserQuestionAnswers` in `validate-steering-budget.sh` feeds `citableOperatorText`. The incident's
+answer was free-typed prose, `1. Yes.\n2. Yes.`, and quoted whole as `"1. Yes. 2. Yes."` (15
+characters normalised) it verifies today. The lead asked the operator a second time because the
+guidance said "substring" and never said "quote the whole message, numbering included". The guidance
+change above is the surviving half.
+
+**NOT BUILT: a whole operator message under 12 normalised characters** (`approved`, `yes`,
+`proceed`) stays uncitable. That is presented to the operator as a choice, recommended left as it is. Measured by the
+batch-198 contract adversary on the consumer corpus (179 transcripts, 106 id-and-timestamp ledger
+entries): a short-whole-line plus context-id rule false-accepts 2 of 3. The lead writes
+`--authorized-at`, so the window does not bound a forger, and 28 of 117 short typed turns follow text
+naming some id. No mechanism binds a typed "yes" to one decision.
+
+The receipt drives the predicate itself on a one-turn transcript it seeds: a padded and a blank needle
+must each exit 2 with stdout `NOMATCH-SHORT`, and the incident's whole-message quote must still
+`MATCH`, so a predicate that refuses everything fails it.
+
+verify: sh S=core/scripts/validate-steering-budget.sh; [ -f "$S" ] || exit 9; command -v node >/dev/null 2>&1 || exit 9; W="$(mktemp -d)" || exit 9; printf '%s\n' '{"type":"user","timestamp":"2026-10-05T13:25:14Z","message":{"content":"1. Yes.\n2. Yes."}}' > "$W/t.jsonl" || exit 9; for q in "$(printf '%10s' '')yes" "$(printf '%12s' '')"; do o="$(bash "$S" --dir "$W" --cite "$q" 2>/dev/null)"; r=$?; { [ "$r" = 2 ] && [ "$o" = NOMATCH-SHORT ]; } || exit 1; done; o="$(bash "$S" --dir "$W" --cite "1. Yes. 2. Yes." 2>/dev/null)"; r=$?; { [ "$r" = 0 ] && [ "${o%% *}" = MATCH ]; } || exit 1; exit 0
 
 

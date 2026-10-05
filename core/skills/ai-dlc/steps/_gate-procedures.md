@@ -459,7 +459,7 @@ PreToolUse hook denies every `Agent` / `Skill` / `Task` dispatch until step 3 ha
    artifact_bytes_before / artifact_bytes_after: <int>
    scope_delta: <what changed, concretely>
    locked_requirements_touched: <none | entries + the operator's authorization>
-   operator_authorization: <ISO-8601 UTC ts of the operator's message> | "<verbatim substring, >=12 chars, copied from it>"
+   operator_authorization: <ISO-8601 UTC ts of the operator's message> | "<verbatim quote of it, >=12 chars after whitespace is collapsed; a short message is quoted whole, numbering included>"
    options_presented: <int, >=2>   # how many resolution options step 2(b) put to the operator
    recommended_option: <the one you marked (Recommended), named so the operator's reply identifies it>
    archive: <dir>            # RESTART_CYCLE only
@@ -534,7 +534,8 @@ PreToolUse hook denies every `Agent` / `Skill` / `Task` dispatch until step 3 ha
    against the harness-owned session transcript using the genuine-operator predicate (the same
    one Rule 29 uses). If no genuine operator message in the pause window contains those words,
    the gate FAILS: a lead-authored resolution is not an operator adjudication. Quote a real span
-   of what the operator actually typed (≥12 chars) — not a paraphrase, and not a token. The
+   of what the operator actually typed (≥12 chars after whitespace is collapsed; a short message
+   is quoted whole) — not a paraphrase, and not a token. The
    machine notarizes that a human said it; you and the operator own what it means.
 
    **FREEZE is not on this list and is rejected by name.** A hard block means CRITICALs rose in

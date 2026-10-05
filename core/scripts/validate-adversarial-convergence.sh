@@ -1119,7 +1119,7 @@ validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -
   if [ -z "$auth" ]; then
     F_WHY="$rec declares 'resolution: $kind' with no 'operator_authorization:'. A resolution
       clears a HARD_BLOCK, which only the operator may adjudicate. Cite the operator's own
-      words: operator_authorization: <ISO-8601 UTC ts> | \"<verbatim substring, >=12 chars>\""
+      words: operator_authorization: <ISO-8601 UTC ts> | \"<verbatim quote of the operator's message, >=12 chars after whitespace is collapsed; a short message is quoted whole, numbering included>\""
     return 1
   fi
   auth_quote="$(cite_quote "$auth")"
