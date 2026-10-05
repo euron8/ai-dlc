@@ -400,8 +400,8 @@ landed every story's closing commit, leaving every story `done` with a
 `deferred_acs` field in both sprint-status views, AND the entering gate that
 routed into this step has reached PASS — including any check whose repair was
 dispatched in parallel with that routing. The closing writer has not run for a
-story past gate 3 that is not `done` or carries no `deferred_acs` field in a
-view: dispatch the closing writer now (section 3, item 4) and route only after
+story past gate 3 that is still `review`, or `done` with no `deferred_acs` field
+in a view: dispatch the closing writer now (section 3, item 4) and route only after
 the closing writer's closing commit lands. The lead does NOT make these writes
 itself.
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/sprint-review.md`

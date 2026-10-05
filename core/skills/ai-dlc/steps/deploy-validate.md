@@ -22,9 +22,11 @@ to implementation.
 
 Then run `scripts/ai-dlc/sprint-status.sh check-stories --require-done` and
 read its exit. `0` — every story is `done`; proceed. `1` — one or more
-findings, each printed; a `NOT DONE` finding is a story past gate 3 whose
-closing writer never ran, so do not deploy: dispatch its closing writer
-(`implementation.md` section 3, item 4) and re-run. `3` or `4` — read them as
+findings, each printed; a `NOT DONE` finding on a `review` story is a story
+past gate 3 whose closing writer never ran, so do not deploy: dispatch its
+closing writer (`implementation.md` section 3, item 4) and re-run. A `NOT DONE`
+finding on any other status: do not deploy; follow that finding's own text.
+`3` or `4` — read them as
 Check 5 of `gate-validation.md` does; neither is a pass. The flag keys on
 `status` only; a `done` story with no `deferred_acs` field is printed as a
 REPORT, and writing that field remains the closing writer's duty.

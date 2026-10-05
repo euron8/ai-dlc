@@ -960,10 +960,17 @@ def check_stories():
                                 "(line %d)." % (view, key, resolved.name, fstatus, how,
                                                 p.name, ystatus, lineno))
             if os.environ.get("REQUIRE_DONE") and ystatus != "done":
-                findings.append("[%s/%s] NOT DONE — status `%s` (line %d) where --require-done "
-                                "wants `done`. A story past gate 3 has not had its closing "
-                                "writes: dispatch its closing writer (implementation.md section 3, "
-                                "item 4) and re-run." % (view, key, ystatus, lineno))
+                if ystatus == "review":
+                    findings.append("[%s/%s] NOT DONE — status `%s` (line %d) where --require-done "
+                                    "wants `done`. A story past gate 3 has not had its closing "
+                                    "writes: dispatch its closing writer (implementation.md section 3, "
+                                    "item 4) and re-run." % (view, key, ystatus, lineno))
+                else:
+                    findings.append("[%s/%s] NOT DONE — status `%s` (line %d) where --require-done "
+                                    "wants `done`. Only a `done` story deploys, and this check "
+                                    "prescribes no remedy for `%s`: bring the story to `done` under "
+                                    "the step or extension that defines `%s`, then re-run."
+                                    % (view, key, ystatus, lineno, ystatus, ystatus))
             if ystatus == "done" and dstate == "absent":
                 owed_n = layered_owed(resolved)
                 if owed_n:
