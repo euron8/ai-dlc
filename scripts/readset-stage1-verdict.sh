@@ -289,6 +289,11 @@ self_probe() {
   probe "A6: P2 world (run 1 tree lacks d/p, run 2 lost it) compares UNEQUAL" 1 a6_compare "$r1" "$r2" "$r3" "$fx" "$s"
   printf '.gitignore\npresent\n' > "$r1/root/w/$fx.set"; printf 'present\n' > "$r2/root/w/$fx.set"; printf '.gitignore\npresent\n' > "$r3/root/w/$fx.set"
   probe "A6: .gitignore lost in one run compares UNEQUAL" 1 a6_compare "$r1" "$r2" "$r3" "$fx" "$s"
+  # OWN-TREE world: run 1's tree lacks d/p and run 1 REPORTS it; runs 2-3 have d/p and did not.
+  # The P2 world above reads UNEQUAL under a per-run own-tree filter too, so it cannot tell the two
+  # filters apart; this one can -- the own-tree filter drops d/p from run 1 alone and reads EQUAL.
+  printf 'd/p\npresent\n' > "$r1/root/w/$fx.set"; printf 'present\n' > "$r2/root/w/$fx.set"; printf 'present\n' > "$r3/root/w/$fx.set"
+  probe "A6: a path reported only by the run whose tree lacks it compares UNEQUAL (union, not own-tree)" 1 a6_compare "$r1" "$r2" "$r3" "$fx" "$s"
 
   # A1 / A5, field-exact against the prefix-sharing names.
   printf '  %-32s OMITTED (the stream dropped reports 3 time(s) in this window) -- will always run\n' "enforcement-map-sites" > "$s/log.a1"
@@ -385,6 +390,8 @@ fi
 [ -r "$LEDGER" ] || refuse "the ledger $LEDGER is unreadable or absent -- no stage-1 run has been recorded"
 
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/readset-stage1-verdict.XXXXXX")" || refuse "mktemp failed"
+# Cleared on every exit, refusals included, and only under the literal mktemp template.
+trap 'case "$SCRATCH" in */readset-stage1-verdict.??????) rm -rf "$SCRATCH" ;; esac' EXIT
 awk 'NF > 0' "$LEDGER" | tail -n 3 > "$SCRATCH/last3" || refuse "cannot read the ledger $LEDGER"
 NL="$(grep -c . "$SCRATCH/last3")" || NL=0
 [ "$NL" -eq 3 ] || refuse "the ledger $LEDGER holds $NL run(s); stage 1 is scored over three"
