@@ -1103,6 +1103,13 @@ otherwise.**
   result does not fit what was expected, before each release is cut, and before the batch is
   declared closed. A call is never weighed against the work it protects.
 
+**STANDING OPERATOR RULING FROM BATCH 198: NO PARTIAL SHARDING.** In the operator's words: "I dont' want 'partial
+implementations' of sharding. If it can be sharded, then it should be sharded." A release that shards part of a
+fan-out and leaves the rest serial has not finished. A blocker on the serial part is a fix to build, not a reason to
+stop, and only the operator rules a part serial by design. The operator gives this direction directly, so a sharding
+candidate's surviving half is upstream's to file and build, never a question for the consumer. `BL-450` carries
+gate 2, which 0.718.0 left serial.
+
 **0. DISPATCH HANDS BEFORE YOU RUN A SINGLE SWEEP COMMAND YOURSELF.** Operator instruction,
 given at batch 90.
 
