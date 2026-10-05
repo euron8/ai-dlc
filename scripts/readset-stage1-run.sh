@@ -19,10 +19,14 @@
 # THE LEDGER is append-only and outside every root:
 #   $(git rev-parse --git-common-dir)/ai-dlc-readset-stage1.ledger
 #   (AI_DLC_READSET_STAGE1_LEDGER overrides it, for the fixture)
-# one line per run whose deriver was STARTED: RUN_DIR<TAB>rc<TAB>start-epoch<TAB>end-epoch<TAB>HEAD.
-# A killed run is recorded too, with rc `killed` -- the verdict refuses it, and leaving it out
-# would let the next three good runs read as consecutive when they were not. A refusal BEFORE the
-# deriver starts (worktree, dirty tree, RUN_DIR exists) records nothing, because nothing ran.
+# TWO lines per run whose deriver was STARTED:
+#   RUN_DIR<TAB>started<TAB>start-epoch<TAB>HEAD                       before the deriver launches
+#   RUN_DIR<TAB>rc<TAB>start-epoch<TAB>end-epoch<TAB>HEAD              when it ends, from finish()
+# A run killed by a signal the trap sees is recorded with rc `killed`; one killed by SIGKILL leaves
+# its started line and no terminal. The verdict refuses both, and leaving either out would let the
+# next three good runs read as consecutive when they were not. A refusal BEFORE the deriver starts
+# (worktree, dirty tree, RUN_DIR exists) records nothing, because nothing ran. A SIGKILL also
+# leaves the map unrestored: the checkout is then dirty and the next run refuses on that.
 #
 # Exit: the deriver's status; 2 on a refusal before the deriver starts; 3 when the map could not
 # be restored byte-identically (the checkout is then dirty and says so).
@@ -144,7 +148,18 @@ trap 'finish; exit 143' TERM
 echo "$!" > "$SPID_FILE"
 sample
 
-START="$(date +%s)"
+# THE STARTED LINE IS WRITTEN BEFORE THE DERIVER LAUNCHES, so a `kill -9` of this wrapper -- which
+# no trap sees -- still leaves the run in the ledger, as a started line with no terminal, and the
+# scorer refuses it. If it cannot be written the run does not start: START is still empty, so
+# finish() records no terminal for a run the ledger never saw begin.
+S_EPOCH="$(date +%s)"
+printf '%s\tstarted\t%s\t%s\n' "$RUN_DIR" "$S_EPOCH" "$HEAD_SHA" >> "$LEDGER" \
+  || refuse "could not append the started line to the ledger $LEDGER"
+START="$S_EPOCH"
+# THE PROFILE IS THE DERIVER'S DEFAULT. AI_DLC_READSET_SANDBOX_PROFILE replaces it (deriver :684),
+# and a narrower profile reports fewer operations, so an inherited one could score MET for a trace
+# the stage-1 criterion was not written about. The scorer's R0 refuses any other profile too.
+unset AI_DLC_READSET_SANDBOX_PROFILE
 # `set -m` ONLY AROUND THIS LAUNCH: the deriver's job gets its own process group (pgid = $DPID) so
 # finish() can kill the whole tree. The sampler above was launched with it OFF and stays in the
 # wrapper's group, stopped by its own pid.

@@ -81,6 +81,23 @@ TPL_SHA="$(git -C "$TPL" rev-parse HEAD)" || broken "template has no HEAD"
 
 ts() { date -r "$1" '+%Y-%m-%d %H:%M:%S'; }
 
+# THE SANDBOX PROFILE IS SEEDED FROM THE PRODUCER. R0 compares root/w/sandbox.sb byte for byte with
+# the scorer's copy of the deriver's default-profile `printf`, so every run here carries a profile
+# rendered from the format the DERIVER writes, extracted from its own line, and the scorer's copy is
+# required to be the same bytes. A drift in either file fails here rather than at a real run.
+DERIVER="$ROOT/core/scripts/derive-fixture-readsets.sh"
+[ -f "$DERIVER" ] || broken "no deriver at $DERIVER"
+fmt_of() { # $1 file  $2 a fixed string the format line must also carry
+  awk -v k="$2" 'index($0, "printf '"'"'(version 3)") && index($0, k) {
+      s = substr($0, index($0, "'"'"'") + 1); print substr(s, 1, index(s, "'"'"'") - 1) }' "$1"
+}
+DFMT="$(fmt_of "$DERIVER" '"$TREE" "$MARKDIR" > "$PROFILE"')"
+SFMT="$(fmt_of "$SCORER" '"$1/t" "$1/m"')"
+n="$(printf '%s\n' "$DFMT" | grep -c 'with report')" || n=0
+[ "$n" = 1 ] || broken "the deriver carries $n default-profile printf line(s) with a report clause, not 1"
+case "$DFMT" in *'(subpath "%s") (subpath "%s")'*) ;; *) broken "the deriver's default-profile format is not the two-subpath shape: $DFMT" ;; esac
+[ "$DFMT" = "$SFMT" ] || broken "the scorer's default-profile format differs from the deriver's: [$SFMT] vs [$DFMT]"
+
 # relog <rd>: the deriver.log in real shape, its per-fixture counts taken from the .set files.
 relog() {
   local rd="$1" rp fx
@@ -94,11 +111,12 @@ relog() {
 
 # seed_run <rd> <i>: one run in the deriver's real layout, window [base+10, base+51].
 seed_run() {
-  local rd="$1" i="$2" base fx s e
+  local rd="$1" i="$2" base fx s e rp
   base=$((T0 + i * 1000))
   mkdir -p "$rd/root/w" "$rd/root/m" || return 1
   cp -R "$TPL" "$rd/root/t" || return 1
-  printf '(version 1)\n' > "$rd/root/w/sandbox.sb"
+  rp="$(cd "$rd/root" && pwd -P)" || return 1
+  printf "$DFMT" "$rp/t" "$rp/m" > "$rd/root/w/sandbox.sb"
   printf 'a\0b\0' > "$rd/root/w/copy.list"
   s="$(ts $((base + 10)))"; e="$(ts $((base + 50)))"
   for fx in $SUBJ; do
@@ -116,7 +134,10 @@ seed_run() {
   printf '%s\t1.00\n%s\t5.00\n%s\t1.00\n' $((base - 5)) $((base + 20)) $((base + 70)) > "$rd/load.tsv"
   relog "$rd"
 }
-lline() { local base=$((T0 + $2 * 1000)); printf '%s\t%s\t%s\t%s\t%s\n' "$1" "${3:-0}" "$base" $((base + 60)) "$TPL_SHA"; }
+# The wrapper's two ledger lines per run: `started` before the launch, the terminal at the end.
+lpair() { printf '%s\tstarted\t%s\t%s\n%s\t%s\t%s\t%s\t%s\n' "$1" "$3" "$TPL_SHA" "$1" "$2" "$3" "$4" "$TPL_SHA"; }
+lstarted() { printf '%s\tstarted\t%s\t%s\n' "$1" "$2" "$TPL_SHA"; }
+lline() { local base=$((T0 + $2 * 1000)); lpair "$1" "${3:-0}" "$base" $((base + 60)); }
 
 # mkworld <name>: three runs and their ledger. Prints the world dir.
 mkworld() {
@@ -163,10 +184,21 @@ W="$(mkworld met)" || broken "cannot seed the ALL-MET world"
 want met 0 MET
 
 # RL -- the ledger line resolves.
-W="$(mkworld rl-short)" || broken seed; head -2 "$W/ledger" > "$W/l2"; mv "$W/l2" "$W/ledger"
-want rl-short 2 "holds 2 run(s)"
-W="$(mkworld rl-format)" || broken seed; { head -2 "$W/ledger"; printf '%s\t0\t%s\n' "$W/r3" $((T0 + 3000)); } > "$W/l3"; mv "$W/l3" "$W/ledger"
-want rl-format 2 "RL ledger line 3 is not"
+W="$(mkworld rl-short)" || broken seed; head -4 "$W/ledger" > "$W/l2"; mv "$W/l2" "$W/ledger"
+want rl-short 2 "holds 4 line(s)"
+W="$(mkworld rl-format)" || broken seed; { head -4 "$W/ledger"; lstarted "$W/r3" $((T0 + 3000)); printf '%s\t0\t%s\n' "$W/r3" $((T0 + 3000)); } > "$W/l3"; mv "$W/l3" "$W/ledger"
+want rl-format 2 "RL ledger line 6 of the last six is not"
+# A `kill -9` of the wrapper: a started line with no terminal, BETWEEN runs 1 and 2. The six-line
+# tail holds it; a scorer that skipped it would score three non-consecutive runs MET.
+W="$(mkworld rl-started)" || broken seed; { lline "$W/r1" 1; lstarted "$W/k9" $((T0 + 1500)); lline "$W/r2" 2; lline "$W/r3" 3; } > "$W/ledger"
+want rl-started 2 "RL ledger line 2 of the last six: $W/k9 started at $((T0 + 1500)) and recorded no terminal line"
+# Near-miss: the same killed run OLDER than the last three pairs does not block, as an older
+# `killed` terminal does not (rl-skip).
+W="$(mkworld rl-started-old)" || broken seed; { lstarted "$W/k9" $((T0 + 500)); lline "$W/r1" 1; lline "$W/r2" 2; lline "$W/r3" 3; } > "$W/ledger"
+want rl-started-old 0 MET
+# A terminal with no started line before it (a pre-started-line ledger, or a hand-appended line).
+W="$(mkworld rl-nostart)" || broken seed; { lline "$W/r0" 0; lline "$W/r1" 1; lline "$W/r2" 2; printf '%s\t0\t%s\t%s\t%s\n' "$W/r3" $((T0 + 3000)) $((T0 + 3060)) "$TPL_SHA"; } > "$W/ledger"
+want rl-nostart 2 "RL ledger line 6 of the last six: the terminal line for $W/r3 is not preceded by its own started line"
 W="$(mkworld rl-missing)" || broken seed; { lline "$W/r1" 1; lline "$W/nowhere" 2; lline "$W/r3" 3; } > "$W/ledger"
 want rl-missing 2 "RL run 2: $W/nowhere does not exist"
 W="$(mkworld rl-rc)" || broken seed; { lline "$W/r1" 1; lline "$W/r2" 2 1; lline "$W/r3" 3; } > "$W/ledger"
@@ -183,6 +215,9 @@ W="$(mkworld r0-log)" || broken seed; log_sub "$W/r2/deriver.log" 'sandbox trace
 want r0-log 2 "R0 $W/r2: deriver.log carries no 'sandbox tracer"
 W="$(mkworld r0-sb)" || broken seed; rm -f "$W/r3/root/w/sandbox.sb"
 want r0-sb 2 "R0 $W/r3: root/w/sandbox.sb is absent"
+# A NARROWED profile, as AI_DLC_READSET_SANDBOX_PROFILE would substitute: file reads under the tree only.
+W="$(mkworld r0-profile)" || broken seed; printf '(version 3)\n(allow default)\n(allow file-read* (subpath "%s/t") (with report))\n' "$(cd "$W/r2/root" && pwd -P)" > "$W/r2/root/w/sandbox.sb"
+want r0-profile 2 "R0 $W/r2: root/w/sandbox.sb is not the deriver's default profile"
 # R1 -- the log is this root's.
 W="$(mkworld r1)" || broken seed; log_sub "$W/r1/deriver.log" 'copying the tree to' "[00:10:01] copying the tree to /private/tmp/elsewhere/t"
 want r1 2 "R1 $W/r1: deriver.log copied the tree to '/private/tmp/elsewhere/t'"
@@ -191,8 +226,13 @@ W="$(mkworld r2-link)" || broken seed; ln -s "$W/r1" "$W/r1link"; { lline "$W/r1
 want r2-link 2 "R2: two ledger lines resolve to one root"
 W="$(mkworld r2-copy)" || broken seed; for fx in $SUBJ; do cp "$W/r1/root/w/$fx.raw" "$W/r2/root/w/$fx.raw"; done
 want r2-copy 2 "R2: enforcement-map-sites.raw is byte-identical in two runs"
-W="$(mkworld r2-overlap)" || broken seed; { lline "$W/r1" 1; printf '%s\t0\t%s\t%s\t%s\n' "$W/r2" $((T0 + 1030)) $((T0 + 2060)) "$TPL_SHA"; lline "$W/r3" 3; } > "$W/ledger"
+W="$(mkworld r2-overlap)" || broken seed; { lline "$W/r1" 1; lpair "$W/r2" 0 $((T0 + 1030)) $((T0 + 2060)); lline "$W/r3" 3; } > "$W/ledger"
 want r2-overlap 2 "R2: the ledger windows are not time-ordered and disjoint"
+# R2 refuses ONE subject's .raw copied, the other four distinct: the contract requires EVERY
+# subject's .raw to differ. A MIDDLE subject, because the first and last subjects' .raw carry the
+# A4 window, and copying either would move run 2's window onto run 1's load samples (R5).
+W="$(mkworld r2-one)" || broken seed; cp "$W/r1/root/w/enforcement-map-sites-b.raw" "$W/r2/root/w/enforcement-map-sites-b.raw"
+want r2-one 2 "R2: enforcement-map-sites-b.raw is byte-identical in two runs"
 # R3 -- per-subject inputs exist.
 W="$(mkworld r3)" || broken seed; rm -f "$W/r2/root/w/enforcement-map-sites-c.canary"
 want r3 2 "R3 $W/r2: root/w/enforcement-map-sites-c.canary is absent"
@@ -209,13 +249,16 @@ want r5 2 "R5 run 3: no load sample"
 # R6 -- the five subjects and no other.
 W="$(mkworld r6)" || broken seed; printf '  %-32s %5s paths\n' plan-shape 3 >> "$W/r1/deriver.log"
 want r6 2 "R6 $W/r1: deriver.log traced 'plan-shape'"
+W="$(mkworld r6-omitted)" || broken seed; printf '  %-32s OMITTED (fixture exited 1) -- will always run\n' plan-shape >> "$W/r3/deriver.log"
+want r6-omitted 2 "R6 $W/r3: deriver.log traced 'plan-shape'"
 
 # A1 alone, on a PREFIX-SHARING name: `-b` is OMITTED, `enforcement-map-sites` is not. The paths
 # line is kept so A5 stays quiet (see the header).
 W="$(mkworld a1)" || broken seed; printf '  %-32s OMITTED (fixture exited 1) -- will always run\n' enforcement-map-sites-b >> "$W/r2/deriver.log"
 want a1 1 "$(tuples 'run2 enforcement-map-sites-b A1')"
-# A2 alone: the drop notice is in the .win and nowhere in deriver.log.
-W="$(mkworld a2)" || broken seed; printf '=== Messages dropped during live streaming ===\n' > "$W/r1/root/w/validator-arm-selection.win"
+# A2 alone: the drop notice is in the .win and nowhere in deriver.log. It is `log stream`'s own
+# line, byte for byte as a real .win carries it -- never a spelling the reader happens to accept.
+W="$(mkworld a2)" || broken seed; printf '%s\n' '=== Messages dropped during live streaming (use `log show` to see what they were)' > "$W/r1/root/w/validator-arm-selection.win"
 want a2 1 "$(tuples 'run1 validator-arm-selection A2')"
 # A3 alone: a 1-line canary.
 W="$(mkworld a3)" || broken seed; printf 'core/x.sh\n' > "$W/r3/root/w/enforcement-map-sites-c.canary"
@@ -235,6 +278,9 @@ want a4 1 "$(tuples 'run2 - A4')"
 # A4 near-miss: exactly 4.50 inside the window is MET.
 W="$(mkworld a4-edge)" || broken seed; printf '%s\t1.00\n%s\t4.50\n' $((T0 + 1000 - 5)) $((T0 + 1000 + 20)) > "$W/r1/load.tsv"
 want a4-edge 0 MET
+# A4 has an END: 4.40 inside the window, 6.00 nine seconds AFTER its end (base+51, ceiled).
+W="$(mkworld a4-after)" || broken seed; printf '%s\t1.00\n%s\t4.40\n%s\t6.00\n' $((T0 + 3000 - 5)) $((T0 + 3000 + 20)) $((T0 + 3000 + 60)) > "$W/r3/load.tsv"
+want a4-after 1 "$(tuples 'run3 - A4')"
 # A6 alone: run 2 loses a present path; its paths count follows, and its canary stays empty, so
 # neither A5 nor A3 fires.
 W="$(mkworld a6)" || broken seed; printf 'core/fixtures/validator-arm-selection/run.sh\n.gitignore\n.githooks/pre-push\n' > "$W/r2/root/w/validator-arm-selection.set"; relog "$W/r2"
@@ -250,6 +296,12 @@ want a6-owntree 1 "$(tuples '- enforcement-map-sites-b A6')"
 # The contract's P2 world: run 1's tree lacks d/p, run 2 lost it, run 3 reports it.
 W="$(mkworld a6-p2)" || broken seed; rm -f "$W/r1/root/t/d/p"; printf 'd/p\n' >> "$W/r3/root/w/enforcement-map-sites-b.set"; relog "$W/r3"
 want a6-p2 1 "$(tuples '- enforcement-map-sites-b A6')"
+# A6 on a DIRECTORY row: real .set files carry directories (`core`, `.githooks`, each fixture's
+# dir). Runs 1 and 3 report core/fixtures/validator-arm-selection-b, run 2 lost it.
+W="$(mkworld a6-dir)" || broken seed
+for i in 1 3; do printf 'core/fixtures/validator-arm-selection-b\n' >> "$W/r$i/root/w/validator-arm-selection-b.set"; relog "$W/r$i"; done
+[ -d "$W/r2/root/t/core/fixtures/validator-arm-selection-b" ] || broken "the directory row names no directory"
+want a6-dir 1 "$(tuples '- validator-arm-selection-b A6')"
 # A6 near-misses: an ABSENT-only difference, and a `.git/` row in one run, both MET.
 W="$(mkworld a6-absent)" || broken seed; printf 'absent/nowhere\n' >> "$W/r2/root/w/validator-arm-selection-b.set"; relog "$W/r2"
 want a6-absent 0 MET
@@ -345,24 +397,65 @@ smut a5-substring a5 \
   "  logged=\"\$(awk -v f=\"\$3\" 'index(\$1, f) == 1 && \$3 == \"paths\" { print \$2; exit }' \"\$1\")\""
 smut a2-reads-log a2 '    a2_dropped "$rd/root/w/$fx.win" "$fx" "$label" || FAILED=1' '    a2_dropped "$rd/deriver.log" "$fx" "$label" || FAILED=1'
 smut a4-whole-file a4 '  cp="$(window_load "$1" "$2" "$3")"; peak="${cp#* }"' '  cp="$(window_load "$1" 0 99999999999)"; peak="${cp#* }"'
-smut del-R0 r0-log '  why="$(r0_sandbox "$rd")" || refuse "$why"' '  :'
+smut del-R0 r0-log '  why="$(r0_sandbox "$rd" "$SCRATCH")" || refuse "$why"' '  :'
 smut r2-string r2-link \
   '  a="$(cd "$1/root" 2>/dev/null && pwd -P)"; b="$(cd "$2/root" 2>/dev/null && pwd -P)"; c="$(cd "$3/root" 2>/dev/null && pwd -P)"' \
   '  a="$1/root"; b="$2/root"; c="$3/root"'
-smut rl-skip rl-skip \
-  "awk 'NF > 0' \"\$LEDGER\" | tail -n 3 > \"\$SCRATCH/last3\" || refuse \"cannot read the ledger \$LEDGER\"" \
-  "awk -F'\\t' 'NF > 0 && \$2 == \"0\"' \"\$LEDGER\" | tail -n 3 > \"\$SCRATCH/last3\" || refuse \"cannot read the ledger \$LEDGER\""
+# The ledger read, two skip mutants. Each drops the bad run's lines BOTH (started and terminal), so
+# what is left is three well-formed pairs and the mutant scores MET: a skip, not a different refusal.
+L6_OLD="awk 'NF > 0' \"\$LEDGER\" | tail -n 6 > \"\$SCRATCH/last6\" || refuse \"cannot read the ledger \$LEDGER\""
+smut rl-skip rl-skip "$L6_OLD" \
+  "awk -F'\\t' 'NR == FNR { if (\$2 != \"started\" && \$2 != \"0\") b[\$1] = 1; next } NF > 0 && !(\$1 in b)' \"\$LEDGER\" \"\$LEDGER\" | tail -n 6 > \"\$SCRATCH/last6\" || refuse \"cannot read the ledger \$LEDGER\""
+smut rl-skip-started rl-started "$L6_OLD" \
+  "awk -F'\\t' 'NR == FNR { if (\$2 != \"started\") t[\$1] = 1; next } NF > 0 && !(\$2 == \"started\" && !(\$1 in t))' \"\$LEDGER\" \"\$LEDGER\" | tail -n 6 > \"\$SCRATCH/last6\" || refuse \"cannot read the ledger \$LEDGER\""
+# A2 keyed on an ending `log stream` never writes: dies on the producer's verbatim line.
+A2_OLD="  n=\"\$(grep -c 'dropped during' \"\$1\" 2>/dev/null)\""
+A2_NEW="  n=\"\$(grep -c 'dropped during live streaming ===\$' \"\$1\" 2>/dev/null)\""
+smut a2-ending a2 "$A2_OLD" "$A2_NEW"
+# A4 bounded at the start only (15 s of slack past the end): dies on 6.00 sampled after the window.
+A4_OLD='    $1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+(\.[0-9]+)?$/ && $1 + 0 >= s + 0 && $1 + 0 <= e + 0 {'
+A4_NEW='    $1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+(\.[0-9]+)?$/ && $1 + 0 >= s + 0 && $1 + 0 <= e + 15 {'
+smut a4-open-end a4-after "$A4_OLD" "$A4_NEW"
+# A6 with a regular-file-only existence filter: dies on the directory row.
+A6P_OLD='a6_present() { [ -e "$1" ] || [ -L "$1" ]; }'
+A6P_NEW='a6_present() { [ -f "$1" ]; }'
+smut a6-regular-file a6-dir "$A6P_OLD" "$A6P_NEW"
+# R0 without the profile comparison: dies on the narrowed profile.
+R0_OLD='  cmp -s "$2/r0.sb" "$1/root/w/sandbox.sb" \'
+R0_NEW='  true \'
+smut r0-no-profile r0-profile "$R0_OLD" "$R0_NEW"
+# R6 reading only `paths` lines: dies on a foreign OMITTED line.
+R6_OLD="    substr(\$0, 1, 2) == \"  \" && (\$2 == \"OMITTED\" || \$3 == \"paths\") && index(subj, \" \" \$1 \" \") == 0 { print \$1; exit }' \"\$1/deriver.log\")\""
+R6_NEW="    substr(\$0, 1, 2) == \"  \" && \$3 == \"paths\" && index(subj, \" \" \$1 \" \") == 0 { print \$1; exit }' \"\$1/deriver.log\")\""
+smut r6-paths-only r6-omitted "$R6_OLD" "$R6_NEW"
+# R2 comparing run 1 with run 2 for the FIRST subject only (1-3 and 2-3 for all): dies on the one
+# middle subject copied from run 1 to run 2, while r2-copy, which copies all five, cannot tell it
+# from the scorer.
+R2_OLD='    if cmp -s "$1/root/w/$fx.raw" "$2/root/w/$fx.raw" || cmp -s "$1/root/w/$fx.raw" "$3/root/w/$fx.raw" \'
+R2_NEW='    if [ "$fx" = "$FIRST_SUBJECT" ] && cmp -s "$1/root/w/$fx.raw" "$2/root/w/$fx.raw" || cmp -s "$1/root/w/$fx.raw" "$3/root/w/$fx.raw" \'
+smut r2-first-only r2-one "$R2_OLD" "$R2_NEW"
 
-# THE SCORER'S OWN SELF-PROBE must refuse the own-tree A6 filter: the same mutation applied to the
-# SHIPPING scorer, self-probe live, exits 2 on --self-probe.
-export MUT_OLD='    LC_ALL=C comm -12 "$s/a6.$i" "$s/a6.keep" > "$s/a6.f$i"'
-export MUT_NEW='    eval "rd=\"\$$i\""; while IFS= read -r p; do if [ -e "$rd/root/t/$p" ] || [ -L "$rd/root/t/$p" ]; then printf "%s\n" "$p"; fi; done < "$s/a6.$i" > "$s/a6.f$i"'
-if mut "$SCORER" "$MD/probe-owntree.sh"; then
-  sp="$(TMPDIR="$MD" bash "$MD/probe-owntree.sh" --self-probe 2>&1)"; rc=$?
-  if [ "$rc" = 2 ]; then ok "the scorer's --self-probe refuses an own-tree A6 filter (rc 2)"; else bad "the scorer's --self-probe passed an own-tree A6 filter (rc $rc: $sp)"; fi
-else
-  bad "self-probe own-tree mutant DID NOT APPLY"
-fi
+# THE SCORER'S OWN SELF-PROBE must refuse each of these mutations too: applied to the SHIPPING
+# scorer, self-probe live, `--self-probe` exits 2.
+pmut() { # pmut <name> <old> <new>
+  export MUT_OLD="$2" MUT_NEW="$3"
+  if mut "$SCORER" "$MD/probe-$1.sh"; then
+    sp="$(TMPDIR="$MD" bash "$MD/probe-$1.sh" --self-probe 2>&1)"; rc=$?
+    if [ "$rc" = 2 ]; then ok "the scorer's --self-probe refuses $1 (rc 2)"; else bad "the scorer's --self-probe passed $1 (rc $rc: $sp)"; fi
+  else
+    bad "self-probe mutant $1 DID NOT APPLY"
+  fi
+}
+pmut owntree '    LC_ALL=C comm -12 "$s/a6.$i" "$s/a6.keep" > "$s/a6.f$i"' \
+  '    eval "rd=\"\$$i\""; while IFS= read -r p; do if [ -e "$rd/root/t/$p" ] || [ -L "$rd/root/t/$p" ]; then printf "%s\n" "$p"; fi; done < "$s/a6.$i" > "$s/a6.f$i"'
+pmut a2-ending "$A2_OLD" "$A2_NEW"
+pmut a4-open-end "$A4_OLD" "$A4_NEW"
+pmut a6-regular-file "$A6P_OLD" "$A6P_NEW"
+pmut r0-no-profile "$R0_OLD" "$R0_NEW"
+pmut r6-paths-only "$R6_OLD" "$R6_NEW"
+pmut r2-first-only "$R2_OLD" "$R2_NEW"
+# The pairing walk with no pair check at all: the self-probe's killed-run ledger must refuse.
+pmut rl-no-pairing '  for k in 3 2 1; do' '  for k in; do'
 
 # ------------------------------------------------------------------ the wrapper ----
 STUB="$WORK/stub.sh"
@@ -374,6 +467,7 @@ root="$AI_DLC_READSET_TRACE_ROOT"
 mkdir -p "$root/w" "$root/m" "$root/t"
 echo "stub: argv: $*"
 echo "stub: trace root: $root"
+env > "$root/w/stub.env"
 printf 'stub-wrote\n' >> .ai-dlc-fixture-readsets.tsv
 cp .ai-dlc-fixture-readsets.tsv "$root/w/map.written"
 case "${STUB_MODE:-ok}" in
@@ -397,19 +491,40 @@ mkrepo() {
   [ -d "$1/.git" ] && cp "$1/.ai-dlc-fixture-readsets.tsv" "$1.map.orig"
 }
 
-# wrap_ok <wrapper-source> <tag>: the exit-0 run, driven from the dirty decoy. Echoes nothing;
-# records failures. Returns 1 if any property failed (the mutant scorer uses that).
+# A STUB sysctl, first on PATH and alone in its directory so git/awk/date still resolve. It prints
+# three DISTINCT loads, so a wrapper sampling the 5- or 15-minute figure records the wrong one. The
+# wrapper calls `sysctl` by PATH (bare name in sample()), so no override is needed to reach it.
+SBIN="$WORK/sbin"; mkdir -p "$SBIN" || broken "stub sysctl dir"
+printf '#!/bin/sh\n[ "$1 $2" = "-n vm.loadavg" ] || exit 9\necho "{ 1.11 2.22 3.33 }"\n' > "$SBIN/sysctl" && chmod +x "$SBIN/sysctl" || broken "stub sysctl"
+[ "$(PATH="$SBIN:$PATH" sysctl -n vm.loadavg)" = "{ 1.11 2.22 3.33 }" ] || broken "the stub sysctl is not first on PATH"
+# An inherited replacement profile, which the wrapper must not pass to the deriver.
+printf '(version 3)\n(allow default)\n' > "$WORK/narrow.sb"
+
+# wrap_ok <wrapper-source> <tag>: the exit-0 run, driven from the dirty decoy with the stub sysctl
+# first on PATH and AI_DLC_READSET_SANDBOX_PROFILE set. Echoes nothing; records failures. Returns 1
+# if any property failed (the mutant scorer uses that).
 wrap_ok() {
   local src="$1" t="$2" R="$WORK/wr/$2" rd L f
   mkrepo "$R/repo" "$src" || broken "mkrepo $t"
   rd="$R/run"; L="$R/ledger"; f=0
-  ( cd "$DECOY" && AI_DLC_READSET_STAGE1_LEDGER="$L" bash "$R/repo/scripts/readset-stage1-run.sh" "$rd" ) > "$R/out" 2>&1; rc=$?
+  ( cd "$DECOY" && PATH="$SBIN:$PATH" AI_DLC_READSET_SANDBOX_PROFILE="$WORK/narrow.sb" AI_DLC_READSET_STAGE1_LEDGER="$L" \
+      bash "$R/repo/scripts/readset-stage1-run.sh" "$rd" ) > "$R/out" 2>&1; rc=$?
+  # THE ENVIRONMENT ARM, with its control: the stub's env dump must exist and carry the ledger
+  # variable the wrapper DID pass, so an absent profile variable is not an absent dump.
+  grep -q '^AI_DLC_READSET_TRACE_ROOT=' "$rd/root/w/stub.env" 2>/dev/null || { echo "    [$t] the stub recorded no environment (control)"; f=1; }
+  ! grep -q '^AI_DLC_READSET_SANDBOX_PROFILE=' "$rd/root/w/stub.env" 2>/dev/null \
+    || { echo "    [$t] AI_DLC_READSET_SANDBOX_PROFILE reached the deriver"; f=1; }
+  awk -F'\t' '$2 == "1.11" { n++ } END { exit !(n >= 2 && n == NR) }' "$rd/load.tsv" 2>/dev/null \
+    || { echo "    [$t] load.tsv column 2 is not the stub's 1-minute load 1.11 on every sample: $(cut -f2 "$rd/load.tsv" 2>/dev/null | tr '\n' ' ')"; f=1; }
   [ "$rc" = 0 ] || { echo "    [$t] wrapper exited $rc: $(tail -2 "$R/out" | tr '\n' ' ')"; f=1; }
   cmp -s "$R/repo.map.orig" "$R/repo/.ai-dlc-fixture-readsets.tsv" || { echo "    [$t] the map was not restored"; f=1; }
   grep -qx 'stub-wrote' "$rd/root/w/map.written" 2>/dev/null || { echo "    [$t] the stub never rewrote the map (restore arm would be vacuous)"; f=1; }
   [ -z "$(git -C "$R/repo" status --porcelain)" ] || { echo "    [$t] the checkout is dirty after the run"; f=1; }
-  awk -F'\t' -v rd="$rd" -v sha="$(git -C "$R/repo" rev-parse HEAD)" 'NF == 5 && $1 == rd && $2 == "0" && $3 ~ /^[0-9]+$/ && $4 ~ /^[0-9]+$/ && $3 <= $4 && $5 == sha { n++ } END { exit !(n == 1 && NR == 1) }' "$L" 2>/dev/null \
-    || { echo "    [$t] the ledger does not hold exactly one line <rd> 0 <start> <end> <HEAD>"; f=1; }
+  awk -F'\t' -v rd="$rd" -v sha="$(git -C "$R/repo" rev-parse HEAD)" '
+      NR == 1 && NF == 4 && $1 == rd && $2 == "started" && $3 ~ /^[0-9]+$/ && $4 == sha { s = $3; n++ }
+      NR == 2 && NF == 5 && $1 == rd && $2 == "0" && $3 == s && $4 ~ /^[0-9]+$/ && $3 <= $4 && $5 == sha { n++ }
+      END { exit !(n == 2 && NR == 2) }' "$L" 2>/dev/null \
+    || { echo "    [$t] the ledger does not hold exactly <rd> started <start> <HEAD> then <rd> 0 <start> <end> <HEAD>"; f=1; }
   [ ! -e "$R/repo/.git/ai-dlc-readset-stage1.ledger" ] || { echo "    [$t] the default ledger was written although the override was set"; f=1; }
   grep -qF "stub: argv: --list $SUBJ --tracer sandbox" "$rd/deriver.log" 2>/dev/null || { echo "    [$t] deriver.log lacks the five-subject sandbox argv"; f=1; }
   grep -qxF "stub: trace root: $rd/root" "$rd/deriver.log" 2>/dev/null || { echo "    [$t] the deriver was not handed RUN_DIR/root"; f=1; }
@@ -442,8 +557,9 @@ wrap_term() {
   [ "$rc" = 143 ] || { echo "    [$t] the TERMed wrapper exited $rc, not 143"; f=1; }
   cmp -s "$R/repo.map.orig" "$R/repo/.ai-dlc-fixture-readsets.tsv" || { echo "    [$t] the map was not restored after TERM"; f=1; }
   grep -qx 'stub-wrote' "$rd/root/w/map.written" 2>/dev/null || { echo "    [$t] the stub never rewrote the map"; f=1; }
-  awk -F'\t' -v rd="$rd" 'NF == 5 && $1 == rd && $2 == "killed" { n++ } END { exit !(n == 1 && NR == 1) }' "$L" 2>/dev/null \
-    || { echo "    [$t] the ledger does not record the run as killed"; f=1; }
+  awk -F'\t' -v rd="$rd" 'NR == 1 && NF == 4 && $1 == rd && $2 == "started" { s = $3; n++ }
+      NR == 2 && NF == 5 && $1 == rd && $2 == "killed" && $3 == s { n++ } END { exit !(n == 2 && NR == 2) }' "$L" 2>/dev/null \
+    || { echo "    [$t] the ledger does not record the run as started then killed"; f=1; }
   [ "$(cat "$rd/rc" 2>/dev/null)" = killed ] || { echo "    [$t] RUN_DIR/rc is not 'killed'"; f=1; }
   alive=""; n=0
   while IFS= read -r p; do n=$((n + 1)); kill -0 "$p" 2>/dev/null && alive="$alive $p"; done < "$R/pids"
@@ -453,13 +569,14 @@ wrap_term() {
 }
 
 echo " the wrapper, against a stub deriver:"
-if wrap_ok "$WRAPPER" ok; then ok "exit 0 run (driven from a dirty decoy repo): map restored, one ledger line, files beside root/ and not under it, override delivered"; else bad "the exit 0 run"; fi
+if wrap_ok "$WRAPPER" ok; then ok "exit 0 run (driven from a dirty decoy repo, stub sysctl first on PATH, a replacement profile in the env): map restored, started + terminal ledger lines, load.tsv is the 1-min figure, profile not passed on, files beside root/ and not under it, override delivered"; else bad "the exit 0 run"; fi
 
 R="$WORK/wr/fail"; mkrepo "$R/repo" "$WRAPPER" || broken "mkrepo fail"
 AI_DLC_READSET_STAGE1_LEDGER="$R/ledger" STUB_MODE=fail bash "$R/repo/scripts/readset-stage1-run.sh" "$R/run" > "$R/out" 2>&1; rc=$?
 if [ "$rc" = 1 ] && cmp -s "$R/repo.map.orig" "$R/repo/.ai-dlc-fixture-readsets.tsv" && grep -qx 'stub-wrote' "$R/run/root/w/map.written" \
-   && awk -F'\t' 'NF == 5 && $2 == "1" { n++ } END { exit !(n == 1 && NR == 1) }' "$R/ledger" && [ "$(cat "$R/run/rc")" = 1 ]; then
-  ok "exit 1 run: wrapper exits 1, map restored, ledger and RUN_DIR/rc say 1"
+   && awk -F'\t' '(NR == 1 && NF == 4 && $2 == "started") || (NR == 2 && NF == 5 && $2 == "1") { n++ } END { exit !(n == 2 && NR == 2) }' "$R/ledger" \
+   && [ "$(cat "$R/run/rc")" = 1 ]; then
+  ok "exit 1 run: wrapper exits 1, map restored, ledger says started then 1, RUN_DIR/rc says 1"
 else
   bad "exit 1 run: rc=$rc"
 fi
@@ -469,7 +586,37 @@ if wrap_term "$WRAPPER" term; then ok "TERM: exit 143, map restored, ledger says
 R="$WORK/wr/default"; mkrepo "$R/repo" "$WRAPPER" || broken "mkrepo default"
 STUB_MODE=ok bash "$R/repo/scripts/readset-stage1-run.sh" "$R/run" > "$R/out" 2>&1; rc=$?
 n="$(grep -c . "$R/repo/.git/ai-dlc-readset-stage1.ledger" 2>/dev/null)" || n=0
-if [ "$rc" = 0 ] && [ "$n" = 1 ]; then ok "with no override the ledger is the git common dir's"; else bad "default ledger: rc=$rc lines=$n"; fi
+if [ "$rc" = 0 ] && [ "$n" = 2 ]; then ok "with no override the ledger is the git common dir's (2 lines)"; else bad "default ledger: rc=$rc lines=$n"; fi
+
+# wrap_kill9 <wrapper-source> <tag>: SIGKILL, which no trap sees. The started line must already be
+# in the ledger, alone; the map is left dirty; the next run refuses on the dirty tree and records
+# nothing. The stub's tree and the sampler are orphaned by design and reaped here.
+wrap_kill9() {
+  local src="$1" t="$2" R="$WORK/wr/$2" rd L f p n out rc2
+  mkrepo "$R/repo" "$src" || broken "mkrepo $t"
+  rd="$R/run"; L="$R/ledger"; f=0
+  : > "$R/pids"
+  AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=hang STUB_PIDS="$R/pids" STUB_READY="$R/ready" \
+    bash "$R/repo/scripts/readset-stage1-run.sh" "$rd" > "$R/out" 2>&1 &
+  wp=$!
+  n=0; while [ ! -f "$R/ready" ] && [ "$n" -lt 300 ]; do sleep 0.1; n=$((n + 1)); done
+  [ -f "$R/ready" ] || { kill "$wp" 2>/dev/null; cat "$R/pids" >> "$ORPHANS"; broken "[$t] the stub never signalled ready"; }
+  cat "$R/pids" >> "$ORPHANS"; cat "$rd/sampler.pid" >> "$ORPHANS" 2>/dev/null
+  kill -KILL "$wp"; { wait "$wp"; } 2>/dev/null; rc=$?
+  [ "$rc" = 137 ] || { echo "    [$t] the SIGKILLed wrapper exited $rc, not 137"; f=1; }
+  while IFS= read -r p; do kill "$p" 2>/dev/null; done < "$R/pids"
+  p="$(cat "$rd/sampler.pid" 2>/dev/null)"; [ -n "$p" ] && kill "$p" 2>/dev/null
+  awk -F'\t' -v rd="$rd" -v sha="$(git -C "$R/repo" rev-parse HEAD)" \
+      'NR == 1 && NF == 4 && $1 == rd && $2 == "started" && $3 ~ /^[0-9]+$/ && $4 == sha { n++ } END { exit !(n == 1 && NR == 1) }' "$L" 2>/dev/null \
+    || { echo "    [$t] the ledger does not hold exactly the started line after SIGKILL"; f=1; }
+  cmp -s "$R/repo.map.orig" "$R/repo/.ai-dlc-fixture-readsets.tsv" && { echo "    [$t] the map is clean after SIGKILL, so the dirty-tree arm below proves nothing"; f=1; }
+  out="$(AI_DLC_READSET_STAGE1_LEDGER="$L" STUB_MODE=ok bash "$R/repo/scripts/readset-stage1-run.sh" "$R/run2" 2>&1)"; rc2=$?
+  case "$rc2|$out" in 2*"has uncommitted changes"*) ;; *) echo "    [$t] the run after SIGKILL did not refuse on the dirty map: rc=$rc2 $out"; f=1 ;; esac
+  [ "$(grep -c . "$L")" = 1 ] || { echo "    [$t] the refused run after SIGKILL wrote to the ledger"; f=1; }
+  [ ! -e "$R/run2" ] || { echo "    [$t] the refused run after SIGKILL created its RUN_DIR"; f=1; }
+  return "$f"
+}
+if wrap_kill9 "$WRAPPER" kill9; then ok "SIGKILL: exit 137, the ledger holds the started line alone, the map is dirty, and the next run refuses on it"; else bad "the SIGKILL run"; fi
 
 # The refusals: exit 2, the reason, and NOTHING recorded or created.
 refusal() { # refusal <tag> <reason> <rundir> <wrapper> -- run with the ledger override
@@ -510,6 +657,12 @@ echo " wrapper mutants:"
 wmut load-under-root \
   "sample() { printf '%s\\t%s\\n' \"\$(date +%s)\" \"\$(sysctl -n vm.loadavg | awk '{ print \$2 }')\" >> \"\$RUN_DIR/load.tsv\"; }" \
   "sample() { printf '%s\\t%s\\n' \"\$(date +%s)\" \"\$(sysctl -n vm.loadavg | awk '{ print \$2 }')\" >> \"\$RUN_DIR/root/load.tsv\"; }" ok
+wmut load-5min \
+  "sample() { printf '%s\\t%s\\n' \"\$(date +%s)\" \"\$(sysctl -n vm.loadavg | awk '{ print \$2 }')\" >> \"\$RUN_DIR/load.tsv\"; }" \
+  "sample() { printf '%s\\t%s\\n' \"\$(date +%s)\" \"\$(sysctl -n vm.loadavg | awk '{ print \$3 }')\" >> \"\$RUN_DIR/load.tsv\"; }" ok
+wmut profile-passed-through 'unset AI_DLC_READSET_SANDBOX_PROFILE' ': profile left in the environment' ok
+wmut no-started-line "printf '%s\\tstarted\\t%s\\t%s\\n' \"\$RUN_DIR\" \"\$S_EPOCH\" \"\$HEAD_SHA\" >> \"\$LEDGER\" \\" ': \' kill9
+reap
 wmut no-restore '  cp -p "$SNAP" "$MAP" 2>/dev/null' '  :' ok
 wmut no-restore-on-term '  cp -p "$SNAP" "$MAP" 2>/dev/null' '  :' term
 wmut single-pid-kill \

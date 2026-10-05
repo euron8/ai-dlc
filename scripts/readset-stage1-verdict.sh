@@ -9,9 +9,19 @@
 #
 # DISTRIBUTION-ONLY. The ledger is read from
 #   $(git rev-parse --git-common-dir)/ai-dlc-readset-stage1.ledger
-# or from AI_DLC_READSET_STAGE1_LEDGER when set. Each line is
-#   RUN_DIR<TAB>rc<TAB>start-epoch<TAB>end-epoch<TAB>HEAD-sha
+# or from AI_DLC_READSET_STAGE1_LEDGER when set. The wrapper writes TWO lines per run:
+#   RUN_DIR<TAB>started<TAB>start-epoch<TAB>HEAD-sha                  before the deriver launches
+#   RUN_DIR<TAB>rc<TAB>start-epoch<TAB>end-epoch<TAB>HEAD-sha         when it ends (rc may be `killed`)
 # and each RUN_DIR holds root/ (the deriver's trace root), deriver.log, rc and load.tsv.
+#
+# THE LAST SIX NON-EMPTY LINES MUST READ started/terminal three times over, each terminal directly
+# preceded by its OWN started line (same RUN_DIR, start-epoch and HEAD). A `kill -9` of the wrapper
+# writes the started line and no terminal; a ledger that dropped that run would let the three runs
+# either side of it read as consecutive. So a started line with no terminal after it, a terminal
+# with no started line before it, and a malformed line anywhere in those six are each a REFUSAL --
+# never a skip. A killed run OLDER than the last three pairs does not block, exactly as an earlier
+# `killed` terminal does not: the ledger is append-only, and a rule over the whole file would wedge
+# the scorer forever on one `kill -9`.
 #
 # NO ROOTS ON THE COMMAND LINE. Consecutiveness is a property of the ledger; a scorer that took
 # three roots by argument would let a reader pick three good runs out of many. For the same reason
@@ -81,11 +91,56 @@ window_load() { # $1 load.tsv  $2 start  $3 end
 # ------------------------------------------------------------------ refusals ----
 # Each prints a reason and returns 1 when the run must be refused.
 
-r0_sandbox() { # $1 RUN_DIR
+# THE DERIVER'S DEFAULT PROFILE, rendered for a resolved trace root. This is the deriver's own
+# `printf` at :692 with "$TREE" "$MARKDIR" spelled as root/t and root/m (it resolves the root with
+# `pwd -P` at :620 first). It is a COPY of one format string, and the fixture binds the copy: it
+# extracts the format from both files and refuses unless they are byte-identical, and it seeds
+# every run's sandbox.sb from the DERIVER's format, so a drift fails the ALL-MET world.
+render_profile() { # $1 resolved trace root
+  printf '(version 3)\n(allow default)\n(allow file* process-exec* (subpath "%s") (subpath "%s") (with report))\n' "$1/t" "$1/m"
+}
+
+# R0 also refuses a SUBSTITUTED profile. AI_DLC_READSET_SANDBOX_PROFILE (:684) replaces the
+# default, and a narrower one reports fewer operations -- fewer drops, a cleaner canary -- so it
+# could score MET for a profile no stage-1 criterion was written about.
+r0_sandbox() { # $1 RUN_DIR  $2 scratch dir
+  local rr
   grep -qF 'sandbox tracer: fixtures run as' "$1/deriver.log" 2>/dev/null \
     || { echo "R0 $1: deriver.log carries no 'sandbox tracer: fixtures run as' line -- not a sandbox run"; return 1; }
   [ -f "$1/root/w/sandbox.sb" ] || { echo "R0 $1: root/w/sandbox.sb is absent -- not a sandbox run"; return 1; }
   [ -d "$1/root/m" ] || { echo "R0 $1: root/m/ is absent -- not a sandbox run"; return 1; }
+  rr="$(cd "$1/root" 2>/dev/null && pwd -P)" || { echo "R0 $1: root/ does not resolve"; return 1; }
+  render_profile "$rr" > "$2/r0.sb" || { echo "R0 $1: cannot render the default profile"; return 1; }
+  cmp -s "$2/r0.sb" "$1/root/w/sandbox.sb" \
+    || { echo "R0 $1: root/w/sandbox.sb is not the deriver's default profile for this root -- a substituted profile"; return 1; }
+  return 0
+}
+
+# RL: the last six ledger lines are three started/terminal PAIRS. Walked from the END, so the reason
+# names the defect at the position it occupies: a started line where a terminal belongs is a run
+# that recorded no terminal (a `kill -9`); a terminal where a started line belongs, or a started
+# line naming another run, is a terminal not preceded by its own started line.
+rl_pairs() { # $1 a file holding the last six non-empty ledger lines
+  local j k t s tr tc ts te th sr sc ss sh sx tx
+  for k in 3 2 1; do
+    t=$((2 * k)); s=$((t - 1))
+    IFS="$(printf '\t')" read -r tr tc ts te th tx <<EOF
+$(sed -n "${t}p" "$1")
+EOF
+    IFS="$(printf '\t')" read -r sr sc ss sh sx <<EOF
+$(sed -n "${s}p" "$1")
+EOF
+    if [ "$tc" = started ]; then
+      echo "RL ledger line $t of the last six: $tr started at $ts and recorded no terminal line -- a killed run is never skipped"; return 1
+    fi
+    [ -n "$tr" ] && [ -n "$tc" ] && [ -n "$th" ] && [ -z "$tx" ] \
+      || { echo "RL ledger line $t of the last six is not RUN_DIR<TAB>rc<TAB>start<TAB>end<TAB>sha"; return 1; }
+    case "$ts$te" in ''|*[!0-9]*) echo "RL ledger line $t of the last six carries a non-numeric window ($ts-$te)"; return 1 ;; esac
+    [ "$sc" = started ] && [ -n "$sh" ] && [ -z "$sx" ] \
+      || { echo "RL ledger line $t of the last six: the terminal line for $tr is not preceded by its own started line"; return 1; }
+    [ "$sr" = "$tr" ] && [ "$ss" = "$ts" ] && [ "$sh" = "$th" ] \
+      || { echo "RL ledger line $t of the last six: the terminal line for $tr is preceded by the started line of $sr ($ss) -- not its own"; return 1; }
+  done
   return 0
 }
 
@@ -201,6 +256,9 @@ a4_load() { # $1 load.tsv  $2 start  $3 end  $4 label
 
 # A6: the three runs' path sets for fx, `.git` rows dropped by the deriver's own predicate, each
 # kept only if the path exists in ANY run's tree. $1..$3 RUN_DIRs  $4 fx  $5 scratch dir.
+# EXISTENCE IS `-e` OR `-L`, ANY FILE TYPE: a quarter of real `.set` rows are DIRECTORIES (`core`,
+# `.githooks`, every `core/fixtures/<fx>`), so a `-f` filter drops them all from the comparison.
+a6_present() { [ -e "$1" ] || [ -L "$1" ]; }
 a6_compare() {
   local fx="$4" s="$5" i rd p
   for i in 1 2 3; do
@@ -211,8 +269,7 @@ a6_compare() {
   LC_ALL=C sort -u "$s/a6.1" "$s/a6.2" "$s/a6.3" > "$s/a6.union"
   : > "$s/a6.keep"
   while IFS= read -r p; do
-    if [ -e "$1/root/t/$p" ] || [ -L "$1/root/t/$p" ] || [ -e "$2/root/t/$p" ] || [ -L "$2/root/t/$p" ] \
-       || [ -e "$3/root/t/$p" ] || [ -L "$3/root/t/$p" ]; then
+    if a6_present "$1/root/t/$p" || a6_present "$2/root/t/$p" || a6_present "$3/root/t/$p"; then
       printf '%s\n' "$p" >> "$s/a6.keep"
     fi
   done < "$s/a6.union"
@@ -240,7 +297,7 @@ probe() { # $1 name  $2 expected status (0|1)  $3.. command
 seed_run() { # $1 RUN_DIR  $2 a distinguishing token for the raw files  $3 day-second offset
   local rd="$1" fx
   mkdir -p "$rd/root/t" "$rd/root/w" "$rd/root/m" || return 1
-  printf '(version 3)\n' > "$rd/root/w/sandbox.sb"
+  render_profile "$(cd "$rd/root" && pwd -P)" > "$rd/root/w/sandbox.sb"
   {
     echo "[00:10:00] sandbox tracer: fixtures run as 'n8' under sandbox-exec; no root anywhere"
     echo "[00:10:01] copying the tree to $(cd "$rd/root" && pwd -P)/t"
@@ -294,6 +351,11 @@ self_probe() {
   # filters apart; this one can -- the own-tree filter drops d/p from run 1 alone and reads EQUAL.
   printf 'd/p\npresent\n' > "$r1/root/w/$fx.set"; printf 'present\n' > "$r2/root/w/$fx.set"; printf 'present\n' > "$r3/root/w/$fx.set"
   probe "A6: a path reported only by the run whose tree lacks it compares UNEQUAL (union, not own-tree)" 1 a6_compare "$r1" "$r2" "$r3" "$fx" "$s"
+  # DIRECTORY world: `d` is a directory in every tree, reported by runs 1 and 3, lost from run 2. A
+  # regular-file-only existence filter drops `d` from the comparison and reads EQUAL.
+  printf 'd\npresent\n' > "$r1/root/w/$fx.set"; printf 'present\n' > "$r2/root/w/$fx.set"; printf 'd\npresent\n' > "$r3/root/w/$fx.set"
+  probe "A6: a DIRECTORY row lost from one run compares UNEQUAL" 1 a6_compare "$r1" "$r2" "$r3" "$fx" "$s"
+  printf 'present\n' > "$r1/root/w/$fx.set"; printf 'present\n' > "$r3/root/w/$fx.set"
 
   # A1 / A5, field-exact against the prefix-sharing names.
   printf '  %-32s OMITTED (the stream dropped reports 3 time(s) in this window) -- will always run\n' "enforcement-map-sites" > "$s/log.a1"
@@ -310,8 +372,10 @@ self_probe() {
   printf '  %-32s %5s paths\n' "enforcement-map-sites" 2 > "$s/log.a5n"
   probe "A5 fires on a paths count unequal to the .set" 1 a5_paths "$s/log.a5n" "$s/set.1" enforcement-map-sites x
 
-  # A2 reads the .win, never the log.
-  printf '=== Messages dropped during live streaming ===\n' > "$s/win.drop"
+  # A2 reads the .win, never the log. The notice is `log stream`'s own line, byte for byte as a real
+  # .win carries it -- a seed of the reader's accept-set would pass a reader that keys on an ending
+  # the producer never writes.
+  printf '%s\n' '=== Messages dropped during live streaming (use `log show` to see what they were)' > "$s/win.drop"
   : > "$s/win.clean"
   probe "A2 fires on a .win carrying the drop notice (log silent)" 1 a2_dropped "$s/win.drop" enforcement-map-sites x
   probe "A2 near-miss: an empty .win passes" 0 a2_dropped "$s/win.clean" enforcement-map-sites x
@@ -333,13 +397,35 @@ self_probe() {
   printf '%s\t5.00\n%s\t4.50\n' "$((ws - 30))" "$((ws + 5))" > "$s/load.edge"
   probe "A4 fires on 5.0 before the window and 4.4 inside it" 1 a4_load "$s/load.low" "$ws" "$we" x
   probe "A4 passes at exactly 4.5 inside the window" 0 a4_load "$s/load.edge" "$ws" "$we" x
+  # The window has an END: 6.00 sampled five seconds AFTER it must not count.
+  printf '%s\t4.40\n%s\t6.00\n' "$((ws + 5))" "$((we + 5))" > "$s/load.after"
+  probe "A4 fires on 4.4 inside the window and 6.0 after it" 1 a4_load "$s/load.after" "$ws" "$we" x
 
   # R0.
-  probe "R0 near-miss: a sandbox run is accepted" 0 r0_sandbox "$r1"
+  probe "R0 near-miss: a sandbox run is accepted" 0 r0_sandbox "$r1" "$s"
   cp "$r2/deriver.log" "$s/log.keep"
   printf "[00:10:00] fs_usage runs as root; fixtures run as 'n8'\n" > "$r2/deriver.log"
-  probe "R0 refuses an fs_usage-shaped log" 1 r0_sandbox "$r2"
+  probe "R0 refuses an fs_usage-shaped log" 1 r0_sandbox "$r2" "$s"
   cp "$s/log.keep" "$r2/deriver.log"
+  cp "$r2/root/w/sandbox.sb" "$s/sb.keep"
+  printf '(version 3)\n(allow default)\n(allow file-read* (subpath "%s/t") (with report))\n' "$(cd "$r2/root" && pwd -P)" > "$r2/root/w/sandbox.sb"
+  probe "R0 refuses a narrowed (substituted) profile" 1 r0_sandbox "$r2" "$s"
+  cp "$s/sb.keep" "$r2/root/w/sandbox.sb"
+
+  # RL: three started/terminal pairs, and a started line with no terminal among them.
+  {
+    printf '%s\tstarted\t10\th\n%s\t0\t10\t20\th\n' "$r1" "$r1"
+    printf '%s\tstarted\t30\th\n%s\t0\t30\t40\th\n' "$r2" "$r2"
+    printf '%s\tstarted\t50\th\n%s\t0\t50\t60\th\n' "$r3" "$r3"
+  } > "$s/l.good"
+  probe "RL near-miss: three started/terminal pairs are accepted" 0 rl_pairs "$s/l.good"
+  {
+    printf '%s\t0\t10\t20\th\n' "$r1"
+    printf '%s\tstarted\t25\th\n' "$P/killed"
+    printf '%s\tstarted\t30\th\n%s\t0\t30\t40\th\n' "$r2" "$r2"
+    printf '%s\tstarted\t50\th\n%s\t0\t50\t60\th\n' "$r3" "$r3"
+  } > "$s/l.killed"
+  probe "RL refuses a started line with no terminal among the last runs" 1 rl_pairs "$s/l.killed"
 
   # R2.
   probe "R2 near-miss: three distinct runs are accepted" 0 r2_distinct "$r1" "$r2" "$r3" 1 2 3 4 5 6
@@ -351,11 +437,20 @@ self_probe() {
   done
   probe "R2 refuses three byte-identical copies" 1 r2_distinct "$r1" "$P/c2" "$P/c3" 1 2 3 4 5 6
   probe "R2 refuses overlapping ledger windows" 1 r2_distinct "$r1" "$r2" "$r3" 1 3 2 4 5 6
+  # ONE subject copied, the other four distinct: still a copied run, and R2 refuses it.
+  cp "$r2/root/w/enforcement-map-sites-b.raw" "$s/raw.keep"
+  cp "$r1/root/w/enforcement-map-sites-b.raw" "$r2/root/w/enforcement-map-sites-b.raw"
+  probe "R2 refuses ONE subject's .raw byte-identical across two runs" 1 r2_distinct "$r1" "$r2" "$r3" 1 2 3 4 5 6
+  cp "$s/raw.keep" "$r2/root/w/enforcement-map-sites-b.raw"
 
-  # R6.
+  # R6, both verdict-line shapes.
   probe "R6 near-miss: the five subjects are accepted" 0 r6_subjects "$r1"
+  cp "$r3/deriver.log" "$s/log.keep"
   printf '  %-32s %5s paths\n' "plan-shape" 3 >> "$r3/deriver.log"
   probe "R6 refuses a run that traced a sixth fixture" 1 r6_subjects "$r3"
+  cp "$s/log.keep" "$r3/deriver.log"
+  printf '  %-32s OMITTED (fixture exited 1) -- will always run\n' "plan-shape" >> "$r3/deriver.log"
+  probe "R6 refuses a run that OMITTED a sixth fixture" 1 r6_subjects "$r3"
 
   [ "$PROBE_FAIL" -eq 0 ] || { echo "REFUSED: the self-probe failed (worlds kept under $P); the scorer is not trusted"; exit 2; }
   # Cleared only under the literal mktemp template, so no other path can reach the delete.
@@ -392,9 +487,11 @@ fi
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/readset-stage1-verdict.XXXXXX")" || refuse "mktemp failed"
 # Cleared on every exit, refusals included, and only under the literal mktemp template.
 trap 'case "$SCRATCH" in */readset-stage1-verdict.??????) rm -rf "$SCRATCH" ;; esac' EXIT
-awk 'NF > 0' "$LEDGER" | tail -n 3 > "$SCRATCH/last3" || refuse "cannot read the ledger $LEDGER"
-NL="$(grep -c . "$SCRATCH/last3")" || NL=0
-[ "$NL" -eq 3 ] || refuse "the ledger $LEDGER holds $NL run(s); stage 1 is scored over three"
+awk 'NF > 0' "$LEDGER" | tail -n 6 > "$SCRATCH/last6" || refuse "cannot read the ledger $LEDGER"
+NL="$(grep -c . "$SCRATCH/last6")" || NL=0
+[ "$NL" -eq 6 ] || refuse "the ledger $LEDGER holds $NL line(s); stage 1 is scored over three runs, two lines each"
+why="$(rl_pairs "$SCRATCH/last6")" || refuse "$why"
+awk 'NR % 2 == 0' "$SCRATCH/last6" > "$SCRATCH/last3" || refuse "cannot read the ledger $LEDGER"
 
 i=0
 while IFS="$(printf '\t')" read -r rd rc st en sha extra; do
@@ -414,7 +511,7 @@ for i in 1 2 3; do
   [ "$frc" = 0 ] || refuse "RL run $i: $rd/rc reads '${frc:-<absent>}', not 0"
   [ -f "$rd/deriver.log" ] || refuse "RL run $i: $rd/deriver.log is absent"
   [ -f "$rd/load.tsv" ] || refuse "RL run $i: $rd/load.tsv is absent"
-  why="$(r0_sandbox "$rd")" || refuse "$why"
+  why="$(r0_sandbox "$rd" "$SCRATCH")" || refuse "$why"
   why="$(r1_bound "$rd")" || refuse "$why"
   why="$(r3_inputs "$rd")" || refuse "$why"
   why="$(r6_subjects "$rd")" || refuse "$why"

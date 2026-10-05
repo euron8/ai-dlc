@@ -40,9 +40,15 @@ bootstrapping.
   arm firing alone beside a near-miss.
 - The stage-1 criterion is no longer scored by hand. Stage 1 is still not met; the entry records
   this batch's single-fixture traces, which dropped reports at load 1.8 to 3.6.
-- New distribution-only fixture `readset-stage1-verdict`: 33 seeded worlds (an all-MET world, every
-  refusal and every arm failing alone, three near-misses), wrapper arms against a trap-less stub
-  deriver, 15 scorer mutants and 4 wrapper mutants, all killed.
+- The ledger records two lines per run: a `started` line written before the deriver launches, and
+  the terminal line from the trap. A SIGKILLed wrapper leaves its `started` line with no terminal,
+  and the scorer refuses unless the last six lines are three started/terminal pairs. The wrapper
+  unsets `AI_DLC_READSET_SANDBOX_PROFILE` before the launch, and the scorer refuses a `sandbox.sb`
+  that is not byte-identical to the deriver's default profile for that run's root.
+- New distribution-only fixture `readset-stage1-verdict`: 41 seeded worlds (an all-MET world, every
+  refusal and every arm failing alone, four near-misses), wrapper arms against a trap-less stub
+  deriver including a SIGKILL arm, 22 scorer mutants, 7 wrapper mutants and 8 mutants the scorer's
+  own self-probe must refuse, all killed.
 - `FORK_BUDGET` 3196 -> 3204: the two new scripts add 6 forks to the I84 and I83 per-file walks.
 
 ## [0.728.0] - 2026-10-04
