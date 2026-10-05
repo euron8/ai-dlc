@@ -10,8 +10,7 @@
 # every other fixture's entries alone, so refreshing one fixture costs its own runtime
 # rather than a full re-derivation.
 #
-# fixtures mapped: 231    entries: 27329
-# OMITTED by the last run (always run): apply-setup-sited-merge
+# fixtures mapped: 231    entries: 27336
 absorbed-specifics-survive	.git/HEAD
 absorbed-specifics-survive	.git/config
 absorbed-specifics-survive	.git/index
@@ -18161,8 +18160,15 @@ readset-skip	core/fixtures/lib
 readset-skip	core/fixtures/lib/preamble.sh
 readset-skip	core/fixtures/readset-skip
 readset-skip	core/fixtures/readset-skip/run.sh
+readset-skip	core/git-hooks/pre-push
 readset-skip	core/scripts/derive-fixture-readsets.sh
+readset-skip	core/skills/ai-dlc-update/reconcile/setup-sites.md
+readset-skip	core/skills/ai-dlc/core-manifest.md
+readset-skip	core/skills/ai-dlc/enforcement-map.yaml
+readset-skip	core/skills/ai-dlc/steps/gate-validation.md
 readset-skip	scripts/ai-dlc/derive-fixture-readsets.sh
+readset-skip	scripts/render-invariant-index.sh
+readset-skip	scripts/validate-enforcement-map.sh
 reconcile-blocking-list	.git/HEAD
 reconcile-blocking-list	.git/config
 reconcile-blocking-list	.git/index
