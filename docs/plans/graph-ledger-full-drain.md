@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 458..499. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 459..490. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,39 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 197 SHIPPED ONE RELEASE, `v0.729.0` (`d3d2e481`, #1022), AND DISCHARGED NO CONSUMER CANDIDATE.** It was
+invoked by peer handoff (`ai-dlc-16`) at `origin/main` `ff325996` (`VERSION` 0.728.0). The opening sweep read live 10 on
+44 qualifying refs, unfiled 1 (`PC-S316-VACUOUS-VALIDATOR-FAILING-ON-EVERY-STORY-IS-A-FINDING`, dated 2026-10-04), worklist 0,
+TERMINAL 203, every control passing. The consumer's working-tree ledger equals its `HEAD`, and it filed nothing during the
+batch. The whole-backlog adjudication covered the one live entry, `BL-375`: LIVE, with one non-trace remedy buildable.
+- `v0.729.0`: `BL-375` PARTIAL. `scripts/readset-stage1-run.sh` runs one stage-1 sandbox trace and records it in an
+  append-only ledger; `scripts/readset-stage1-verdict.sh` scores the last three runs against the stage-1 close criterion.
+  New `.dist-only` fixture `readset-stage1-verdict`. `FORK_BUDGET` 3196 -> 3204.
+
+Live backlog **1**, archive **446**. Net closed minus filed: **0**.
+
+**EVERY ADVERSARY FOUND SOMETHING ON A GATE-GREEN SHAPE, AGAIN, AND THE TIP TOOK TWO ROUNDS.** The contract pass found a
+BLOCKER (an `fs_usage` or `both` run scored MET vacuously) and nine DEFECTs. Tip round 1 found six DEFECTs, among them a
+SIGKILLed run vanishing from the ledger and a sandbox-profile override passed through. Round 2 found an unguarded pair check
+admitting a wrong MET, and a false SIGKILL claim that a stub writing the map early had hidden. All fixed before merge.
+
+**READ-SET TRACES, ONE FIXTURE PER `--list` RUN AT LOAD 1.8-3.6.** Committed in the release: `readset-skip` (clean on the
+second try, after 19 drop notices), `check-3b-locked-anchor` (its stale `-` row dropped), `apply-setup-sited-merge` (clean
+on the second try, after 13; first mapping, 46 rows) and `apply-drift-refile`. **Owed:** `enforcement-map-sites`, which
+OMITTED twice (30 drops plus a 39-path canary, then 11), and the new `readset-stage1-verdict`, unmapped and run on every
+push. Stage 1 itself is not traced; the wrapper is how it is run now.
+
+**THE BATCH CLEANUP DELETED 227 LOCAL `worktree-agent-*` BRANCHES, MOST OF THEM OLDER BATCHES'.** No worktree held them.
+Every commit left dangling, 12293, is pinned under `refs/recovered/b197/<sha>`; `git fsck --dangling` reads 0 commits.
+The branch names and their reflogs are not recoverable.
+
+**THE DELIVERY GAP IS FIVE RELEASES.** The consumer is installed at 0.724.0 against `VERSION` 0.729.0; 0.727.0 is
+bootstrapping. PENDING is **7** (0.725.0 three, 0.726.0 three, 0.727.0 one). Batch 196's 8 counted the 0.718.0 id, which
+the installed 0.724.0 already carries. The banked ruling stands: report the gap and write no runbook. **OPERATOR DECISIONS
+STILL OPEN:** whether `refs/recovered/b197` is kept.
+
+Batch 196's block below is history: batch 197's block replaces its delivery gap and its decisions list.
 
 **BATCH 196 SHIPPED ONE RELEASE, `v0.728.0` (`a972fddb`, #1020), AND DISCHARGED NO CONSUMER CANDIDATE.** It was
 invoked by peer handoff (`ai-dlc-79`) at `origin/main` `5f54aea5` (`VERSION` 0.727.0). The opening sweep read live 10 on
@@ -422,38 +455,6 @@ two. The consumer's two filings are still uncommitted. The banked ruling stands:
 **OPERATOR DECISIONS STILL OPEN:** none.
 
 Batch 187's block below is history: batch 188's block replaces its delivery gap and its decisions list.
-
-**BATCH 187 SHIPPED NO RELEASE AND DISCHARGED NO CONSUMER CANDIDATE, BECAUSE NOTHING BUILDABLE WAS
-FOUND.** It was invoked by peer handoff and ran autonomously, at `origin/main` `3e464c9e` (`VERSION`
-0.713.0). The opening sweep found live 2 on 19 qualifying refs, both shipped by batch 186 (0.711.0
-and 0.712.0), unfiled 0, worklist 0, TERMINAL 188, and every control passing. The consumer's
-working-tree ledger was byte-identical to its HEAD's, so no uncommitted filing existed.
-
-The whole-backlog adjudication covered 9 entries: 0 CLOSE, 1 PARTIAL (`BL-230`) and 8 LIVE. Every
-live half is blocked:
-- An operator ruling blocks `BL-128`.
-- An operator-only run blocks `BL-375` and `BL-430`.
-- Data that does not exist yet blocks `BL-071`, `BL-145`, `BL-404` and `BL-412`.
-- A full-suite width sweep on a throwaway branch blocks `BL-004`.
-
-`BL-230`'s one nominally buildable half, prefixing its bare `mktemp` calls, was measured dead and
-struck in the entry. No fixture arm reads a `tmp.*` population, so the prefix changes nothing the
-flaky arms observe. Live backlog **9**, archive **423**. Net closed minus filed: **0**.
-
-**THE HANDS RAN LOCALLY DESPITE `isolation: "remote"`.** All three landed in `.claude/worktrees/`, and
-there the harness's worktree guard refused every compound `git` command. The sweep hand therefore
-returned nothing, and the lead ran the derive block itself. Brief a sweep hand to expect this.
-
-**THE DELIVERY GAP IS FOUR RELEASES.** The consumer is installed at 0.709.0 (stamp `commit: 0414a98e`)
-against `VERSION` 0.713.0, and 0.710.0, 0.711.0 and 0.713.0 are bootstrapping. PENDING is 2: the two
-ids above, live on the consumer's carry-over and `dev/sprint-316/*` branches. The banked ruling
-stands: report the gap and write no runbook.
-
-**READ-SET TRACE.** Batch 186's owed list was traced by `#991` and `#992`. Both `push-drain-refusals`
-and `readset-skip` rows moved in those commits. `BL-375` records the four fixtures that drop reports
-on every pass. **OPERATOR DECISIONS STILL OPEN:** none.
-
-Batch 186's block below is history: batch 187's block replaces its delivery gap and its decisions list.
 
 ### Derive the state; do not trust the numbers below
 
