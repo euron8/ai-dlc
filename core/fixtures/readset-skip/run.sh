@@ -2126,7 +2126,7 @@ d/-p'
     else
       bad "PSEUDO: expected seed signature 00111110001 in fxa.set, got '$PS0' (order: <string> sub/<unknown> src/missing.sh a<b>c d/<real> e<f>g.sh <link> x/y/<z> <> q/-x d/-p) — $(tail -2 "$WORK/stub.out" | tr '\n' ' ')"
     fi
-    # FIVE MUTANTS, each a cmp -s guarded copy of the stub-world deriver, each a wrong filter:
+    # TEN MUTANTS, each a cmp -s guarded copy of the stub-world deriver, each a wrong filter:
     #   nofilter   the call removed from the meeting point;
     #   wholepath  the anchor on the whole path, `^<...>$`, so `sub/<unknown>` survives;
     #   unanch     an unanchored `<[^/]*>` inside the last component, so absent `e<f>g.sh` goes too;

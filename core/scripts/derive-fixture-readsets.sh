@@ -569,7 +569,9 @@ drop_ignored() { # reads paths on stdin (repo-relative), writes the non-ignored 
 # `HEAD:core/...`): they are negative lookups of argv strings the runner never hashes, and telling
 # a `rev:path` argument from a real file whose name carries a colon needs its own design.
 readset_drop_pseudo() { # reads repo-relative paths on stdin, writes all but the absent pseudo-paths
-  # The glob is `^<[^/]*>$` applied to the LAST component: `${p##*/}` holds no `/` by construction.
+  # Two arms, both applied to the LAST component (`${p##*/}` holds no `/` by construction): the
+  # glob `^<[^/]*>$` and the option shape `^-`. Both share one existence test, so either shape
+  # survives when it names a file or link in the traced tree.
   local p
   while IFS= read -r p; do
     case "${p##*/}" in
