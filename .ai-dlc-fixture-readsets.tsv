@@ -10,7 +10,7 @@
 # every other fixture's entries alone, so refreshing one fixture costs its own runtime
 # rather than a full re-derivation.
 #
-# fixtures mapped: 232    entries: 27366
+# fixtures mapped: 232    entries: 27365
 absorbed-specifics-survive	.git/HEAD
 absorbed-specifics-survive	.git/config
 absorbed-specifics-survive	.git/index
@@ -249,18 +249,14 @@ apply-drift-after-write	core/skills/ai-dlc-update/reconcile/setup-sites.md
 apply-drift-after-write	core/skills/ai-dlc-update/reconcile/template-sites.md
 apply-drift-after-write	core/skills/ai-dlc-update/reconcile/unregistered-drift.sh
 apply-drift-after-write	core/skills/ai-dlc-update/reconcile/warn-shadowed-local-validators.sh
+apply-drift-refile	.git
 apply-drift-refile	.git/HEAD
+apply-drift-refile	.git/commondir
 apply-drift-refile	.git/config
-apply-drift-refile	.git/index
-apply-drift-refile	.git/info/exclude
-apply-drift-refile	.git/objects/49/330f4a1b67ec0aedaecf2b276983c1287ee47b
-apply-drift-refile	.git/objects/7d/7c68d9a8da8fe97f6ca4a8bda439f717b1a34c
-apply-drift-refile	.git/objects/info/commit-graphs/commit-graph-chain
-apply-drift-refile	.git/objects/info/commit-graphs/graph-93e6403e1d08d4a02b08f717afce6dcbebb27492.graph
-apply-drift-refile	.git/objects/pack/multi-pack-index
-apply-drift-refile	.git/packed-refs
-apply-drift-refile	.git/refs/heads/main
-apply-drift-refile	.gitignore
+apply-drift-refile	.git/info/attributes
+apply-drift-refile	.git/objects
+apply-drift-refile	.git/refs
+apply-drift-refile	.gitattributes
 apply-drift-refile	core
 apply-drift-refile	core/fixtures
 apply-drift-refile	core/fixtures/apply-drift-refile
@@ -274,6 +270,7 @@ apply-drift-refile	core/skills/ai-dlc-update/reconcile
 apply-drift-refile	core/skills/ai-dlc-update/reconcile/adopt-extension-checks.sh
 apply-drift-refile	core/skills/ai-dlc-update/reconcile/apply.sh
 apply-drift-refile	core/skills/ai-dlc-update/reconcile/classify-block.md
+apply-drift-refile	core/skills/ai-dlc-update/reconcile/derivation-differential.sh
 apply-drift-refile	core/skills/ai-dlc-update/reconcile/emit-report.sh
 apply-drift-refile	core/skills/ai-dlc-update/reconcile/hard-blockers.sh
 apply-drift-refile	core/skills/ai-dlc-update/reconcile/layer-drift.sh
@@ -283,6 +280,8 @@ apply-drift-refile	core/skills/ai-dlc-update/reconcile/lib.sh
 apply-drift-refile	core/skills/ai-dlc-update/reconcile/preclassify.sh
 apply-drift-refile	core/skills/ai-dlc-update/reconcile/predicate-differential.sh
 apply-drift-refile	core/skills/ai-dlc-update/reconcile/predicate-sites.md
+apply-drift-refile	core/skills/ai-dlc-update/reconcile/push-drain.sh
+apply-drift-refile	core/skills/ai-dlc-update/reconcile/push-refusals.tsv
 apply-drift-refile	core/skills/ai-dlc-update/reconcile/readopt-override.sh
 apply-drift-refile	core/skills/ai-dlc-update/reconcile/register-drift.sh
 apply-drift-refile	core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh
