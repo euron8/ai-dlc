@@ -868,14 +868,37 @@ cite_segments() { # $1 authline -> one quoted segment per line
       for (i = 2; i <= n; i += 2) if (p[i] != "") print p[i] }'
 }
 
-# The quote as `validate-steering-budget.sh --cite` will MATCH it: every whitespace run one
-# space, the ends trimmed. The 12-character floor is measured on THIS, never on the raw bytes --
-# a raw `${#quote}` scored `"          yes"` as 13 and twelve spaces as 12, and the predicate then
-# matched 3 characters and the empty string against any operator turn. The predicate owns the
-# floor and refuses a short needle itself (NOMATCH-SHORT); a caller's check is the message, and
-# for `--any-authorized`, which never calls the predicate, the whole check.
-cite_norm() { # $1 text -> whitespace collapsed and trimmed
-  printf '%s' "$1" | LC_ALL=C tr -s '[:space:]' ' ' | sed 's/^ //; s/ $//'
+# The quote as `validate-steering-budget.sh --cite` measures it: every run of ECMAScript `\s`
+# whitespace one space, the ends trimmed. The 12-character floor is measured on THIS, never on
+# the raw bytes -- a raw `${#quote}` scored `"          yes"` as 13 and twelve spaces as 12, and
+# the predicate then matched 3 characters and the empty string against any operator turn. The
+# predicate owns the floor and refuses a short needle itself (NOMATCH-SHORT); a caller's check
+# is the message, and for `--any-authorized`, which never calls the predicate, the whole check.
+#
+# THE SET IS NODE'S, RENDERED AS UTF-8 BYTE SEQUENCES, because bash cannot run the predicate's
+# regex without a node fork per segment and `[[:space:]]` under LC_ALL=C is ASCII only: an NBSP-
+# or U+2000-padded `yes` counted AUTHORIZED. The non-ASCII members are U+00A0, U+1680,
+# U+2000-U+200A, U+2028, U+2029, U+202F, U+205F, U+3000 and U+FEFF. Invariant I120 derives the
+# set from node and drives this body against every member and against the near-misses node
+# excludes (U+0085, U+180E, U+200B), so the rendering cannot drift from the definition silently.
+cite_norm() { # $1 text -> ECMAScript-\s runs collapsed to one space, ends trimmed
+  printf '%s' "$1" | LC_ALL=C awk '
+    { s = s (NR > 1 ? " " : "") $0 }
+    END {
+      gsub("\302\240|\341\232\200|\342\200[\200-\212]|\342\200\250|\342\200\251|\342\200\257|\342\201\237|\343\200\200|\357\273\277", " ", s)
+      gsub("[ \t\013\014\015]+", " ", s)
+      sub("^ ", "", s); sub(" $", "", s)
+      printf "%s", s }'
+}
+
+# The length the predicate's floor reads: UTF-16 code units, which is JavaScript's `.length`.
+# `${#}` is neither -- bytes under LC_ALL=C, characters under a UTF-8 locale -- so a six-letter
+# accented quote was 12 to one caller and 6 to the predicate. Every byte that is not a UTF-8
+# continuation byte starts one character, and a four-byte lead starts one that JS counts twice.
+cite_nlen() { # $1 text -> length in UTF-16 code units
+  _cn_c="$(printf '%s' "$1" | LC_ALL=C tr -d '\200-\277' | wc -c)"
+  _cn_a="$(printf '%s' "$1" | LC_ALL=C tr -cd '\360-\367' | wc -c)"
+  printf '%s' "$((_cn_c + _cn_a))"
 }
 
 cite_quote() { # $1 authline
@@ -885,8 +908,8 @@ cite_quote() { # $1 authline
   _cq_long=""
   while IFS= read -r _cq_seg; do
     [ "${#_cq_seg}" -gt "${#_cq_long}" ] && _cq_long="$_cq_seg"
-    _cq_n="$(cite_norm "$_cq_seg")"
-    [ "${#_cq_n}" -ge 12 ] || continue
+    _cq_n="$(cite_nlen "$(cite_norm "$_cq_seg")")"
+    [ "$_cq_n" -ge 12 ] || continue
     [ -n "$_cq_pick" ] || _cq_pick="$_cq_seg"
   done <<CITEEOF
 $_cq_segs
@@ -1092,7 +1115,7 @@ validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -
   #   Failure caught (S290): the lead authored four "operator" resolutions in an
   #   operator-silent window and cleared the divergence block itself. Nothing compared the
   #   claim to the transcript. This is that comparison.
-  local auth_quote auth_nquote cite_rc
+  local auth_quote auth_nquote auth_nqlen cite_rc
   if [ -z "$auth" ]; then
     F_WHY="$rec declares 'resolution: $kind' with no 'operator_authorization:'. A resolution
       clears a HARD_BLOCK, which only the operator may adjudicate. Cite the operator's own
@@ -1102,8 +1125,9 @@ validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -
   auth_quote="$(cite_quote "$auth")"
   # Measured after whitespace is collapsed and trimmed, as --cite matches it.
   auth_nquote="$(cite_norm "$auth_quote")"
-  if [ "${#auth_nquote}" -lt 12 ]; then
-    F_WHY="$rec operator_authorization quotes '${auth_nquote}' (${#auth_nquote} chars once whitespace is collapsed), too short (>=12 chars) to be a
+  auth_nqlen="$(cite_nlen "$auth_nquote")"
+  if [ "$auth_nqlen" -lt 12 ]; then
+    F_WHY="$rec operator_authorization quotes '${auth_nquote}' (${auth_nqlen} chars once whitespace is collapsed), too short (>=12 chars) to be a
       verifiable citation. Quote a real span of the operator's message, not a token."
     return 1
   fi

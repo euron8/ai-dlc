@@ -137,3 +137,4 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I117 | the `--cite` verdict set is ONE set across its emitter and every reader that compares it |
 | I118 | a mapped fixture's read-set rows carry every core/hooks/ path its run.sh or seed.sh names on a code line |
 | I119 | no shipped prompt prescribes a whole fan-out "in ONE message" |
+| I120 | the citation floor's bash measure is node's, member for member |

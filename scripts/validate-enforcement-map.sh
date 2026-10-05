@@ -9041,7 +9041,10 @@ fi
 # collapsed and trimmed -- and `cite_quote()`'s own segment pick calls it, so it already had to
 # exist in all four files. A copy that normalised differently would let a padded quote past the
 # floor at one site and not another; the predicate refuses it anyway (NOMATCH-SHORT), but
-# `--any-authorized` never calls the predicate, so there the helper IS the check.
+# `--any-authorized` never calls the predicate, so there the helper IS the check. `cite_nlen()`
+# is the fifth needle beside it: the floor is counted in UTF-16 units, as the predicate counts,
+# and a copy counting differently moves the floor at one site. Whether the two helpers agree
+# with node at all is I120's subject, not this arm's -- this one says the four copies agree.
 #
 # WHY IT IS ONE RULE AND NOT THREE. The parse used to be `sed -n 's/.*"\(.*\)".*/\1/p'`, whose
 # leading `.*` is GREEDY: the LAST quoted segment won, and on an odd quote count the capture was
@@ -9067,7 +9070,8 @@ fi
 i103_needles='cite_segments
 cite_quote
 cite_ts
-cite_norm'
+cite_norm
+cite_nlen'
 i103_declared='core/scripts/validate-adversarial-convergence.sh
 core/scripts/validate-escalation-resolution.sh
 core/scripts/validate-gate-adjudication.sh
@@ -9088,15 +9092,15 @@ i103_sites() { i103_re="$1"; shift; grep -rlE -- "$i103_re" "$@" 2>/dev/null; }
 i103_probe_dir="$(mktemp -d "${TMPDIR:-/tmp}/i103-XXXXXX")"
 mkdir -p "$i103_probe_dir/t"
 #  a  the reference bodies, every needle in one file, as the real sites carry them.
-printf 'lead=1\ncite_segments() { # note\n  f "$1"\n}\ncite_quote() { # note\n  g "$1"\n}\ncite_ts() { # note\n  h "$1"\n}\ncite_norm() { # note\n  k "$1"\n}\ntail=2\n' > "$i103_probe_dir/t/a.sh"
+printf 'lead=1\ncite_segments() { # note\n  f "$1"\n}\ncite_quote() { # note\n  g "$1"\n}\ncite_ts() { # note\n  h "$1"\n}\ncite_norm() { # note\n  k "$1"\n}\ncite_nlen() { # note\n  m "$1"\n}\ntail=2\n' > "$i103_probe_dir/t/a.sh"
 #  b  NEAR-MISS for the equality half: identical bodies, different surrounding text. Must
 #     compare EQUAL, or the arm reports drift on every file that is not a copy of its neighbour.
-printf 'other=9\ncite_segments() { # note\n  f "$1"\n}\ncite_quote() { # note\n  g "$1"\n}\ncite_ts() { # note\n  h "$1"\n}\ncite_norm() { # note\n  k "$1"\n}\nmore=0\n' > "$i103_probe_dir/t/b.sh"
+printf 'other=9\ncite_segments() { # note\n  f "$1"\n}\ncite_quote() { # note\n  g "$1"\n}\ncite_ts() { # note\n  h "$1"\n}\ncite_norm() { # note\n  k "$1"\n}\ncite_nlen() { # note\n  m "$1"\n}\nmore=0\n' > "$i103_probe_dir/t/b.sh"
 #  c  DRIFT in the SECOND needle only. Must compare UNEQUAL -- an arm that checked only the
 #     first needle would call this file conforming, and the pick is the half that forked. The
 #     THIRD needle is seeded identical to a/b here, so the +200 arm below can say the needles
 #     are read independently in both directions rather than only for the pair.
-printf 'cite_segments() { # note\n  f "$1"\n}\ncite_quote() { # note\n  g "$2"\n}\ncite_ts() { # note\n  h "$1"\n}\ncite_norm() { # note\n  k "$1"\n}\n' > "$i103_probe_dir/t/c.sh"
+printf 'cite_segments() { # note\n  f "$1"\n}\ncite_quote() { # note\n  g "$2"\n}\ncite_ts() { # note\n  h "$1"\n}\ncite_norm() { # note\n  k "$1"\n}\ncite_nlen() { # note\n  m "$1"\n}\n' > "$i103_probe_dir/t/c.sh"
 #  d  no definition at all. Extraction must be EMPTY -- an extractor that invents a body here
 #     would compare two inventions and call them equal.
 printf 'unrelated_helper() {\n  :\n}\n' > "$i103_probe_dir/t/d.sh"
@@ -9108,8 +9112,9 @@ printf '# routes through cite_quote\n' > "$i103_probe_dir/t/e.sh"
 #     `cite_tsx` is the near-miss for the third needle, and it is the one the boundary class
 #     could plausibly swallow: `cite_ts` is a PREFIX of it where the other two names are not
 #     prefixes of anything in this family.
-#     `cite_normalised` is the same near-miss for the fourth needle, which is a prefix of it.
-printf 'cite_quoted_span() { :; }\ncite_segment_of() { :; }\ncite_tsx() { :; }\ncite_normalised() { :; }\n' > "$i103_probe_dir/t/f.sh"
+#     `cite_normalised` and `cite_nlength` are the same near-miss for the fourth and fifth
+#     needles, each of which is a prefix of its near-miss.
+printf 'cite_quoted_span() { :; }\ncite_segment_of() { :; }\ncite_tsx() { :; }\ncite_normalised() { :; }\ncite_nlength() { :; }\n' > "$i103_probe_dir/t/f.sh"
 i103_score=0
 i103_pa_s="$(i103_body "$i103_probe_dir/t/a.sh" cite_segments)"
 i103_pa_q="$(i103_body "$i103_probe_dir/t/a.sh" cite_quote)"
@@ -9120,6 +9125,8 @@ i103_pc_q="$(i103_body "$i103_probe_dir/t/c.sh" cite_quote)"
 i103_pc_t="$(i103_body "$i103_probe_dir/t/c.sh" cite_ts)"
 i103_pa_n="$(i103_body "$i103_probe_dir/t/a.sh" cite_norm)"
 i103_pc_n="$(i103_body "$i103_probe_dir/t/c.sh" cite_norm)"
+i103_pa_l="$(i103_body "$i103_probe_dir/t/a.sh" cite_nlen)"
+i103_pc_l="$(i103_body "$i103_probe_dir/t/c.sh" cite_nlen)"
 i103_pd_q="$(i103_body "$i103_probe_dir/t/d.sh" cite_quote)"
 # The scan grammar is the one the corpus half uses, word-bounded so `cite_quoted_span` and
 # `cite_segment_of` are not members. `\b` is a GNU extension BSD grep does not honour, so the
@@ -9127,23 +9134,24 @@ i103_pd_q="$(i103_body "$i103_probe_dir/t/d.sh" cite_quote)"
 # what found that: a mention that ENDS the line -- which is what a prose citation of the helper
 # looks like -- has no character after the name at all, so a bracket class alone scored the
 # seeded fourth site as a non-instance and the fourth-copy half went quiet.
-i103_re='(cite_segments|cite_quote|cite_ts|cite_norm)([^A-Za-z0-9_]|$)'
+i103_re='(cite_segments|cite_quote|cite_ts|cite_norm|cite_nlen)([^A-Za-z0-9_]|$)'
 i103_pm="$(i103_sites "$i103_re" "$i103_probe_dir/t" | LC_ALL=C sort)"
 i103_pm_want="$i103_probe_dir/t/a.sh
 $i103_probe_dir/t/b.sh
 $i103_probe_dir/t/c.sh
 $i103_probe_dir/t/e.sh"
-[ -n "$i103_pa_s" ] && [ -n "$i103_pa_q" ] && [ -n "$i103_pa_t" ] && [ -n "$i103_pa_n" ] || i103_score=$((i103_score + 1))
+[ -n "$i103_pa_s" ] && [ -n "$i103_pa_q" ] && [ -n "$i103_pa_t" ] && [ -n "$i103_pa_n" ] && [ -n "$i103_pa_l" ] || i103_score=$((i103_score + 1))
 [ "$i103_pa_q" = "$i103_pb_q" ]            || i103_score=$((i103_score + 10))
 [ "$i103_pa_q" != "$i103_pc_q" ]           || i103_score=$((i103_score + 100))
 [ "$i103_pa_s" = "$i103_pc_s" ]            || i103_score=$((i103_score + 200))
 [ "$i103_pa_t" = "$i103_pc_t" ]            || i103_score=$((i103_score + 400))
 [ "$i103_pa_n" = "$i103_pc_n" ]            || i103_score=$((i103_score + 800))
+[ "$i103_pa_l" = "$i103_pc_l" ]            || i103_score=$((i103_score + 20000))
 [ -z "$i103_pd_q" ]                        || i103_score=$((i103_score + 1000))
 [ "$i103_pm" = "$i103_pm_want" ]           || i103_score=$((i103_score + 10000))
 rm -rf "$i103_probe_dir"
 if [ "$i103_score" -ne 0 ]; then
-  err "I103's probe scored $i103_score where 0 is the only correct total, so the corpus below was not scanned. +1 the extractor found no body where one is defined; +10 it called two IDENTICAL bodies in differently-surrounded files different, which would report drift on a conforming tree; +100 it called a cite_quote() body differing by one character the SAME, which is the state this arm exists to report; +200 it reported drift in cite_segments() where the probe seeded drift only in cite_quote(), so the two needles are not being read independently and one of them is riding on the other; +400 the same for cite_ts(), the needle that carries the citation's TIMESTAMP half; +800 the same for cite_norm(), the needle the 12-character floor is measured with; +1000 it returned a body from a file defining no such function, so the equality half would be comparing two inventions; +10000 the site scan did not name exactly the four probe files that carry a needle -- it either missed the mention-only fourth site or flagged one of the similarly-named near-misses. Any non-zero total means both halves of I103 would report a clean tree for the reason a broken reader does."
+  err "I103's probe scored $i103_score where 0 is the only correct total, so the corpus below was not scanned. +1 the extractor found no body where one is defined; +10 it called two IDENTICAL bodies in differently-surrounded files different, which would report drift on a conforming tree; +100 it called a cite_quote() body differing by one character the SAME, which is the state this arm exists to report; +200 it reported drift in cite_segments() where the probe seeded drift only in cite_quote(), so the two needles are not being read independently and one of them is riding on the other; +400 the same for cite_ts(), the needle that carries the citation's TIMESTAMP half; +800 the same for cite_norm(), the needle the 12-character floor is measured with; +20000 the same for cite_nlen(), the needle that counts it in UTF-16 units; +1000 it returned a body from a file defining no such function, so the equality half would be comparing two inventions; +10000 the site scan did not name exactly the four probe files that carry a needle -- it either missed the mention-only fourth site or flagged one of the similarly-named near-misses. Any non-zero total means both halves of I103 would report a clean tree for the reason a broken reader does."
 else
   # HALF ONE: for each needle, the four declared copies are one byte string. Read against the
   # FIRST readable copy rather than pairwise, so N files cost N extractions.
@@ -9168,7 +9176,7 @@ EOF
 $i103_needles
 EOF
   [ -z "$i103_vacuous" ] || err "I103 cannot find a definition for:$i103_vacuous. The check binding the four readings of the operator-citation field just went vacuous -- it must locate every needle at every declared site or fail loudly, never pass by finding nothing. If a helper was renamed or lifted, rename it in i103_needles here in the same change."
-  [ -z "$i103_drift" ] || err "I103: the operator-citation parser has forked:$i103_drift. All four sites feed their extracted quote and its timestamp to the same --cite predicate, so a copy that differs decides the same citation differently with no second piece of evidence anywhere. Three of the four are gate validators; the fourth is the remediation guard, where the permissive direction LIFTS a gate deny on an authorization no operator wrote. Make cite_segments(), cite_quote(), cite_ts() and cite_norm() byte-identical across all four."
+  [ -z "$i103_drift" ] || err "I103: the operator-citation parser has forked:$i103_drift. All four sites feed their extracted quote and its timestamp to the same --cite predicate, so a copy that differs decides the same citation differently with no second piece of evidence anywhere. Three of the four are gate validators; the fourth is the remediation guard, where the permissive direction LIFTS a gate deny on an authorization no operator wrote. Make cite_segments(), cite_quote(), cite_ts(), cite_norm() and cite_nlen() byte-identical across all four."
 
   # HALF TWO: no fourth site. THE POSITIVE CONTROL IS THIS FILE, read in the same invocation --
   # it carries both needles in i103_needles= and throughout the prose above, so a scan that is
@@ -9192,6 +9200,88 @@ $i103_hits
 EOF
     [ -z "$i103_extra" ] || err "I103: file(s) outside the three bound sites name the citation parser:$i103_extra. A fourth copy is an unbound copy -- the equality half above compares only the three it is given, so a fourth drifts in silence and parses the operator's own words its own way. Either resolve it from one of the three bound sites, or add it to i103_declared here in the same change so it is held byte-identical with them. A file that merely CITES the name in prose still counts."
   fi
+fi
+
+# --- I120: the citation floor's bash measure is node's, member for member ---
+# WHAT IT BINDS. `cite_norm()` and `cite_nlen()` -- held byte-identical across the four citation
+# sites by I103 -- are a bash RENDERING of what `validate-steering-budget.sh --cite` does to a
+# needle before its floor: collapse ECMAScript `\s`, trim, count `.length` in UTF-16 units. On
+# every `--cite` path the predicate decides and a lenient caller is caught there; on
+# `validate-escalation-resolution.sh --any-authorized`, which never calls the predicate, the
+# rendering IS the check, so a member it misses is a padded quote counted AUTHORIZED. Measured
+# before this arm: an NBSP- or U+2000-padded `yes` was AUTHORIZED under `[[:space:]]`.
+#
+# CROSS-CHECKED AGAINST WHAT EXECUTES THE DEFINITION, NOT AGAINST A LIST. The member set is
+# derived by node over every code point, and the shipping bodies -- extracted from the escalation
+# site and run, not read -- must turn `x<member>x` into `x x` for all of them at once, leave every
+# near-miss node excludes untouched, and count lengths node's `.length` agrees with. A second
+# hand-written list here would be an opinion that agrees with the first.
+#
+# NOT A VOCABULARY: the set is derived from the runtime, never restated by a second reader.
+i120_site="$REPO_ROOT/core/scripts/validate-escalation-resolution.sh"
+i120_body_n="$(awk '/^cite_norm\(\) \{/,/^\}/' "$i120_site" 2>/dev/null)"
+i120_body_l="$(awk '/^cite_nlen\(\) \{/,/^\}/' "$i120_site" 2>/dev/null)"
+if ! command -v node >/dev/null 2>&1; then
+  err "I120 needs node to derive the ECMAScript whitespace set it binds the bash rendering to; without it nothing was compared. The predicate itself needs node, so this tree cannot run its citation checks either."
+elif [ -z "$i120_body_n" ] || [ -z "$i120_body_l" ]; then
+  err "I120 could not extract cite_norm() and cite_nlen() from core/scripts/validate-escalation-resolution.sh. The rendering of the predicate's floor measure has nothing to be compared, and a missing body is not a matching one. If a helper was renamed, rename it here and in I103's needles in the same change."
+else
+  # One node launch derives every expectation; bash then runs the shipping bodies once per case.
+  # Output: line 1 the member string `x<m1>x<m2>x...`, line 2 its expected normal form, then
+  # one `<units>\t<text>` row per length case.
+  i120_tmp="$(mktemp -d "${TMPDIR:-/tmp}/i120-XXXXXX")"
+  node -e '
+    let mem = "x", n = 0;
+    for (let c = 0; c <= 0x10FFFF; c++) {
+      if (c >= 0xD800 && c <= 0xDFFF) continue;
+      const ch = String.fromCodePoint(c);
+      if (/\s/.test(ch)) { mem += ch + "x"; n++; }
+    }
+    const near = ["\u0085", "᠎", "​", "‌", "⁠"].filter(ch => !/\s/.test(ch));
+    const fs = require("fs"), d = process.argv[1];
+    fs.writeFileSync(d + "/mem", mem);
+    fs.writeFileSync(d + "/memwant", "x" + " x".repeat(n));
+    fs.writeFileSync(d + "/memn", String(n));
+    fs.writeFileSync(d + "/near", "x" + near.join("x") + "x");
+    fs.writeFileSync(d + "/nearn", String(near.length));
+    const lens = ["", "plain ascii", "é", "\u{1F600}", "aé\u{1F600}中", "é".repeat(6)];
+    lens.forEach((s, i) => { fs.writeFileSync(d + "/len" + i, s); fs.writeFileSync(d + "/lenwant" + i, String(s.length)); });
+    fs.writeFileSync(d + "/lenn", String(lens.length));
+  ' "$i120_tmp" 2>/dev/null
+  i120_memn="$(cat "$i120_tmp/memn" 2>/dev/null)"
+  i120_nearn="$(cat "$i120_tmp/nearn" 2>/dev/null)"
+  i120_lenn="$(cat "$i120_tmp/lenn" 2>/dev/null)"
+  # THE PROBE. node's set must be the shape that discriminates: more than the six ASCII members
+  # (or the gap this arm exists for is not in the population), and every near-miss genuinely
+  # outside it (or the "left untouched" direction asserts nothing).
+  if [ "${i120_memn:-0}" -le 6 ] || [ "${i120_nearn:-0}" -lt 3 ] || [ "${i120_lenn:-0}" -lt 5 ]; then
+    err "I120's derivation is not discriminating: node reported ${i120_memn:-0} whitespace member(s), ${i120_nearn:-0} near-miss(es) and ${i120_lenn:-0} length case(s). The non-ASCII members and the near-misses are what separate a correct rendering from \`[[:space:]]\`; without them every comparison below agrees for the wrong reason."
+  else
+    # The shipping bodies, run in a clean bash so nothing in this file's scope can shadow them.
+    i120_got="$(I120_N="$i120_body_n" I120_L="$i120_body_l" I120_D="$i120_tmp" I120_C="$i120_lenn" bash -c '
+      eval "$I120_N"; eval "$I120_L"
+      f=""
+      [ "$(cite_norm "$(cat "$I120_D/mem")")" = "$(cat "$I120_D/memwant")" ] || f="$f members"
+      near="$(cat "$I120_D/near")"
+      [ "$(cite_norm "$near")" = "$near" ] || f="$f near-miss"
+      i=0
+      while [ "$i" -lt "$I120_C" ]; do
+        [ "$(cite_nlen "$(cat "$I120_D/len$i")")" = "$(cat "$I120_D/lenwant$i")" ] || f="$f len$i"
+        i=$((i + 1))
+      done
+      printf "%s" "$f"' 2>&1)"
+    # SELF-PROBE ON A MUTANT RENDERING: the old ASCII-only body must FAIL the members case, or
+    # the comparison cannot tell a correct rendering from the one that shipped the hole.
+    i120_mut="$(I120_D="$i120_tmp" bash -c '
+      cite_norm() { printf "%s" "$1" | LC_ALL=C tr -s "[:space:]" " " | sed "s/^ //; s/ \$//"; }
+      [ "$(cite_norm "$(cat "$I120_D/mem")")" = "$(cat "$I120_D/memwant")" ] && printf same || printf differs' 2>&1)"
+    if [ "$i120_mut" != "differs" ]; then
+      err "I120 SELF-PROBE FAILED: the ASCII-only \`tr -s '[:space:]'\` rendering -- the one that let an NBSP-padded quote count AUTHORIZED -- compared '${i120_mut}' against node's member set, where 'differs' is the only correct answer. The comparison below cannot tell the hole from its fix."
+    elif [ -n "$i120_got" ]; then
+      err "I120: the shipped citation-floor measure disagrees with node on:${i120_got}. members: cite_norm() left an ECMAScript \\s character uncollapsed, so a quote padded with it passes the bash floor while the predicate counts it as whitespace -- on --any-authorized that is a padded quote counted AUTHORIZED. near-miss: it collapsed a character node does not. lenN: cite_nlen() counted a length node's .length does not, so the floor sits at a different place in bash. Fix the body at all four I103 sites."
+    fi
+  fi
+  rm -rf "$i120_tmp"
 fi
 
 # --- I93: an "examined nothing" verdict is ONE token across every emitter of it ----
