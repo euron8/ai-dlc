@@ -986,6 +986,35 @@ LC_YAML="$REPO_ROOT/core/skills/ai-dlc/layer-contract.yaml" # set at I67, read b
 # arm having run -- which is what makes hoisting it a move rather than a reordering.
 em_marker="$(sed -n "s/^EXEMPT_MARKER='\(.*\)'$/\1/p" "$REPO_ROOT/scripts/validate-enforcement-map.sh" | head -1)"
 
+# Function-body extraction, defined here rather than at I103 because I120 reads the same
+# bodies and `--arms I120` runs without I103's unit -- measured: `i103_bodies: command not
+# found`, and the arm then reported the shipping helpers missing. ONE awk per file for every
+# name: a body starts at a column-0 `<name>() {` and runs through the next column-0 `}`, and
+# each defined name comes back as one line, `<name>` \002 `<body lines joined by \001>`.
+# Those are control bytes no shell source here carries, so the join is injective and byte-
+# equality of two joined bodies is byte-equality of the bodies. `index(..) == 1` and not a
+# regex, so no name character needs escaping through awk's dynamic-regex layer; the trailing
+# `() {` keeps `cite_tsx() {` out of `cite_ts`, and I103's probe holds that near-miss.
+# `fn_pick` reads one name's body back with parameter expansion and no fork.
+FN_SEP=$'\002'
+fn_bodies() { # <newline-separated names> <file> -> one line per name the file defines
+  FN_NAMES="$1" LC_ALL=C awk '
+    BEGIN { n = split(ENVIRON["FN_NAMES"], nm, "\n") }
+    cur != "" { b[cur] = b[cur] "\001" $0; if (substr($0, 1, 1) == "}") cur = ""; next }
+    { for (i = 1; i <= n; i++) if (nm[i] != "" && index($0, nm[i] "() {") == 1) {
+        cur = nm[i]; b[cur] = (cur in b) ? b[cur] "\001" $0 : $0; break } }
+    END { for (i = 1; i <= n; i++) if (nm[i] in b) printf "%s\002%s\n", nm[i], b[nm[i]] }' "$2" 2>/dev/null
+}
+fn_pick() { # <fn_bodies output> <name> -> sets fn_picked, empty when the name is undefined
+  fn_picked=''
+  while IFS= read -r fn_pl; do
+    [ "${fn_pl%%"$FN_SEP"*}" = "$2" ] || continue
+    fn_picked="${fn_pl#*"$FN_SEP"}"; return 0
+  done <<EOF
+$1
+EOF
+}
+
 # Defined here rather than at I5 because I8, I26 and I28 need it too, and I5's own use is
 # further down the file. Pure function; its only input is $1.
 norm_core_manifest() {
@@ -9089,24 +9118,11 @@ core/hooks/ai-dlc-gate-remediation-guard.sh'
 # is byte-equality of the bodies. `index(..) == 1` and not a regex, so no needle character needs
 # escaping through awk's dynamic-regex layer; the trailing `() {` is what keeps `cite_tsx() {`
 # out of `cite_ts`, and the probe's f.sh holds that near-miss.
-I103_SEP=$'\002'
-i103_bodies() { # <file> -> one line per needle the file defines
-  I103_NAMES="$i103_needles" LC_ALL=C awk '
-    BEGIN { n = split(ENVIRON["I103_NAMES"], nm, "\n") }
-    cur != "" { b[cur] = b[cur] "\001" $0; if (substr($0, 1, 1) == "}") cur = ""; next }
-    { for (i = 1; i <= n; i++) if (nm[i] != "" && index($0, nm[i] "() {") == 1) {
-        cur = nm[i]; b[cur] = (cur in b) ? b[cur] "\001" $0 : $0; break } }
-    END { for (i = 1; i <= n; i++) if (nm[i] in b) printf "%s\002%s\n", nm[i], b[nm[i]] }' "$1" 2>/dev/null
-}
-i103_pick() { # <bodies output> <needle> -> sets i103_picked, empty when the needle is undefined
-  i103_picked=''
-  while IFS= read -r i103_pl; do
-    [ "${i103_pl%%"$I103_SEP"*}" = "$2" ] || continue
-    i103_picked="${i103_pl#*"$I103_SEP"}"; return 0
-  done <<EOF
-$1
-EOF
-}
+# The extractor itself is `fn_bodies`/`fn_pick`, HOISTED above the first arm header because I120
+# reads the same bodies and `--arms I120` runs without this unit. These wrappers bind it to
+# this arm's needles; a wrapper is a function call, not a fork.
+i103_bodies() { fn_bodies "$i103_needles" "$1"; }
+i103_pick() { fn_pick "$1" "$2"; i103_picked="$fn_picked"; }
 # ONE scan for BOTH needles. Two recursive greps over core/ and scripts/ is a cost the suite
 # pole pays on every shard, and the union answers the same question.
 i103_sites() { i103_re="$1"; shift; grep -rlE -- "$i103_re" "$@" 2>/dev/null; }
@@ -9265,14 +9281,15 @@ fi
 #
 # NOT A VOCABULARY: the set is derived from the runtime, never restated by a second reader.
 #
-# FORKS: one extraction, one mktemp, one node, one bash, one rm. Both bodies come out of I103's
-# single-pass extractor, the three counts come back in one file read by the `read` builtin, and
+# FORKS: one extraction, one mktemp, one node, one bash, one rm. Both bodies come out of the hoisted
+# single-pass extractor `fn_bodies` (never I103's wrapper, which `--arms I120` does not load), the three counts come back in one file read by the `read` builtin, and
 # the shipping run and both self-probes share ONE child bash -- three children and three `cat`s
 # here were 6 of the 17 that pushed the tree over FORK_BUDGET.
 i120_site="$REPO_ROOT/core/scripts/validate-escalation-resolution.sh"
-i120_bodies="$(i103_bodies "$i120_site")"
-i103_pick "$i120_bodies" cite_norm; i120_body_n="${i103_picked//$'\001'/$'\n'}"
-i103_pick "$i120_bodies" cite_nlen; i120_body_l="${i103_picked//$'\001'/$'\n'}"
+i120_bodies="$(fn_bodies "cite_norm
+cite_nlen" "$i120_site")"
+fn_pick "$i120_bodies" cite_norm; i120_body_n="${fn_picked//$'\001'/$'\n'}"
+fn_pick "$i120_bodies" cite_nlen; i120_body_l="${fn_picked//$'\001'/$'\n'}"
 if ! command -v node >/dev/null 2>&1; then
   err "I120 needs node to derive the ECMAScript whitespace set it binds the bash rendering to; without it nothing was compared. The predicate itself needs node, so this tree cannot run its citation checks either."
 elif [ -z "$i120_body_n" ] || [ -z "$i120_body_l" ]; then
