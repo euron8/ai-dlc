@@ -480,7 +480,6 @@ The filtered identical-sets arm was run over the pairs that traced clean twice (
 
 Drops occurred this batch at 1-minute loads of 1.8 to 3.6, below the criterion's 4.5 floor. The open question is this: does a five-fixture run at low ambient load clear the criterion's 4.5 peak-load floor? The first wrapper run answers it.
 
-<<<<<<< HEAD
 **BATCH 198: THE FIRST THREE WRAPPER RUNS, SCORED NOT-MET.** Three `scripts/readset-stage1-run.sh` runs at `efdda1f3`, back to back from the clean main checkout, each deriver rc 0 and each map restored byte-identically. `scripts/readset-stage1-verdict.sh` exited 1 with 32 NOT-MET lines.
 - Run 1, peak load 9.23: 2 of 5 mapped. `enforcement-map-sites` (41 drops) and `validator-arm-selection` (60 drops) OMITTED; `enforcement-map-sites-b` OMITTED on the loss canary alone, 3 paths (`core/hooks/ai-dlc-gate-remediation-guard.sh`, `core/hooks/ai-dlc-recover-gate.sh`, `core/scripts/sync-taught-schema.sh`).
 - Run 2, peak load 5.14: 1 of 5 mapped. `enforcement-map-sites` dropped 1171 times; `-b` 20, `validator-arm-selection` 25, `validator-arm-selection-b` 8.
