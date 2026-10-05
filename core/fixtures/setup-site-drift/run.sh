@@ -193,6 +193,63 @@ else
 fi
 
 # =============================================================================
+# 4b. A LOST next_heading IS A LOST ANCHOR. Theirs renames the heading that closes
+#     a heading-block site. Widened to EOF, the span would cover every later line
+#     and the file would read OK; it must say ANCHOR-LOST and exit 1.
+# =============================================================================
+( cd "$DIST" && git checkout -q -b nexth \
+  && sed 's|^## Responsibilities$|## Duties|' core/team-roles/dev.md > core/team-roles/dev.md.new \
+  && mv core/team-roles/dev.md.new core/team-roles/dev.md \
+  && git commit -q -am nexth && git checkout -q main ) || { echo "FIXTURE ERROR: could not build the nexth ref" >&2; exit 2; }
+NEXTH="$(cd "$DIST" && git rev-parse nexth)"
+seed_nexth() {
+  seed_good
+  git -C "$DIST" show "${NEXTH}:core/team-roles/dev.md" | sed 's|^{ownership_paths}$|src/**\ninfra/**|' \
+    > "$CONS/.claude/team-roles/dev.md"
+}
+seed_nexth
+OUT="$(bash "$SSD" --file core/team-roles/dev.md "$DIST" "$CONS" "$NEXTH" 2>&1)"; RC=$?
+if [ "$RC" -eq 1 ] && grep -qE 'SETUP-SITE-ANCHOR-LOST.*dev\.md#dev-ownership-paths.*next_heading' <<<"$OUT"; then
+  ok "a theirs rename of a heading-block's next_heading is ANCHOR-LOST, exit 1"
+else
+  bad "a lost next_heading exited $RC without ANCHOR-LOST"; printf '%s\n' "$OUT" | sed 's/^/        /'
+fi
+
+# =============================================================================
+# 4c. --file IS A PER-FILE ANSWER. The tree exit folds every declared file into
+#     one bit; a caller deciding about one file needs that file's answer alone.
+# =============================================================================
+seed_defect_dv() {
+  seed_good
+  printf 'a line theirs does not have\n' >> "$CONS/.claude/skills/ai-dlc/steps/deploy-validate.md"
+}
+seed_defect_dv
+OUT="$(run)"; RC=$?
+OUT_F="$(bash "$SSD" --file core/team-roles/dev.md "$DIST" "$CONS" "$THEIRS" 2>&1)"; RC_F=$?
+if [ "$RC" -eq 1 ] && [ "$RC_F" -eq 0 ] && grep -q 'SETUP-SITE-OK.*team-roles/dev.md' <<<"$OUT_F" \
+   && ! grep -q 'deploy-validate' <<<"$OUT_F"; then
+  ok "--file answers for its file alone: dev.md OK (0) while the tree exits 1 on deploy-validate.md"
+else
+  bad "--file was not per-file: tree rc=$RC, --file rc=$RC_F"; printf '%s\n' "$OUT_F" | sed 's/^/        /'
+fi
+seed_good
+cp "$CONS/.claude/skills/ai-dlc/steps/deploy-validate.md" "$W/dv.drifted"
+printf 'a line theirs does not have\n' >> "$W/dv.drifted"
+OUT_F="$(bash "$SSD" --file core/skills/ai-dlc/steps/deploy-validate.md --ours "$W/dv.drifted" "$DIST" "$CONS" "$THEIRS" 2>&1)"; RC_F=$?
+OUT_C="$(bash "$SSD" --file core/skills/ai-dlc/steps/deploy-validate.md "$DIST" "$CONS" "$THEIRS" 2>&1)"; RC_C=$?
+if [ "$RC_F" -eq 1 ] && grep -q 'SETUP-SITE-DRIFT' <<<"$OUT_F" && [ "$RC_C" -eq 0 ]; then
+  ok "--ours compares the named copy, not the consumer's (drifted copy 1, clean consumer 0)"
+else
+  bad "--ours did not compare the named copy: --ours rc=$RC_F, consumer rc=$RC_C"
+fi
+OUT_F="$(bash "$SSD" --file core/team-roles/nonexistent.md "$DIST" "$CONS" "$THEIRS" 2>&1)"; RC_F=$?
+[ "$RC_F" -eq 2 ] && ok "--file naming an undeclared path is a usage error (2), never an OK" \
+                  || bad "--file naming an undeclared path exited $RC_F"
+OUT_F="$(bash "$SSD" --ours "$W/dv.drifted" "$DIST" "$CONS" "$THEIRS" 2>&1)"; RC_F=$?
+[ "$RC_F" -eq 2 ] && ok "--ours without --file is a usage error (2)" \
+                  || bad "--ours without --file exited $RC_F"
+
+# =============================================================================
 # 5. MUTANTS. Each removes ONE mechanism and must flip exactly its own arm.
 #    Every mutant is a guarded COPY laid down beside the reconcile/ files it
 #    reads — the declaration AND preclassify.sh, which owns map_consumer().
@@ -249,6 +306,27 @@ mutate 'no-sites-parsed' ssd \
   seed_good \
   '[ "$rc" -eq 2 ] && grep -q "parsed ZERO sites" <<<"$out"' \
   'a declaration that parses to nothing refuses to answer instead of reporting a clean tree'
+
+# Restore the EOF widening for a missing next_heading. Run against NEXTH, where it is missing.
+seed_nexth_world() { seed_nexth; }
+mutate_nexth() {
+  local d="$MUT/eof-widening" out rc
+  asserts=$((asserts+1))
+  lay "$d"
+  sed -E 's@^        if \[ -z "\$e" \]; then$@        if false; then e="$(grep -c "" "$TMP/theirs")"; fi; if false; then@' "$SSD" > "$d/m.sh.new" && mv "$d/m.sh.new" "$d/m.sh"
+  if cmp -s "$SSD" "$d/m.sh"; then
+    fails=$((fails+1)); printf '  FAIL  MUTANT %-18s sed matched NOTHING — the mutant IS the original\n' eof-widening; return
+  fi
+  sed -E 's@^        if false; then e="\$\(grep -c "" "\$TMP/theirs"\)"; fi; if false; then$@        [ -n "$e" ] || e="$(grep -c "" "$TMP/theirs")"; if false; then@' "$d/m.sh" > "$d/m.sh.new" && mv "$d/m.sh.new" "$d/m.sh"
+  seed_nexth_world
+  out="$(bash "$d/m.sh" --file core/team-roles/dev.md "$DIST" "$CONS" "$NEXTH" 2>&1)"; rc=$?
+  if [ "$rc" -eq 0 ] && ! grep -q 'SETUP-SITE-ANCHOR-LOST' <<<"$out" && grep -q 'SETUP-SITE-OK' <<<"$out"; then
+    printf '  ok    MUTANT %-18s %s\n' eof-widening 'widening a lost next_heading to EOF reads OK and loses ANCHOR-LOST'
+  else
+    fails=$((fails+1)); printf '  FAIL  MUTANT %-18s did NOT flip (rc=%s)\n' eof-widening "$rc"
+  fi
+}
+mutate_nexth
 
 # UNMUTATED CONTROL, from the same directory.
 asserts=$((asserts+1))

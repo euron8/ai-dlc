@@ -2,7 +2,15 @@
 # reconcile-region: exempt — a §7v criterion asserted as a gate with its own exit codes, consumed as a pass/fail rather than as rows the operator reads.
 # setup-site-drift.sh — §7v criterion 5, as a program instead of an instruction.
 #
-#   setup-site-drift.sh <dist> <consumer> <theirs>
+#   setup-site-drift.sh [--file <core-path> [--ours <path>]] <dist> <consumer> <theirs>
+#
+# `--file` ANSWERS FOR ONE DECLARED FILE, and that is a separate question from the tree's. The
+# tree-level exit folds every declared file into one bit, so a caller deciding about ONE file
+# cannot read it: measured on a real pull, it read 1 while both of the files being decided were
+# OK, because a third file drifted. With `--file`, only that core path is compared and the exit
+# is about it alone. A path `setup-sites.md` does not declare is a usage error (2), never an OK.
+# `--ours` compares that file instead of the consumer's copy -- `apply.sh` passes a merge result
+# it has not written yet, so the verdict decides the write rather than inspecting it afterwards.
 #
 # WHAT IT ASSERTS. Every core file carrying a declared setup-substitution site must equal
 # `theirs` byte-for-byte EXCEPT inside the spans `reconcile/setup-sites.md` declares for it. A
@@ -29,10 +37,13 @@
 #     model-option HTML comment lines with criterion 5 green. A checker asking the author whether
 #     the author erred is the shape this repo keeps finding.
 #
-# `apply.sh` IS NOT THE SUBJECT, and the report that raised this said it was. `apply.sh` contains
-# no mask/reinject — the two matches for "mask" in it are both `umask`, against fourteen in
-# SKILL.md. The transform is prose an agent executes. A fix aimed at `apply.sh` would have been a
-# fix aimed at nothing.
+# THE TRANSFORM HAS TWO EXECUTORS, AND THIS CHECKS BOTH. The mask/reinject transform in SKILL.md
+# is prose an agent executes, and it still governs every sited file `apply.sh` hands back. For a
+# sited `BOTH-CHANGED->CLASSIFY` file whose consumer delta lies only inside its spans, `apply.sh`
+# now resolves the merge itself with `git merge-file` -- and it asks THIS script, per file, three
+# times: first against THEIRS on the consumer's copy (with a no-op merge, the already-merged case),
+# then against BASE (is the consumer's delta confined to the spans), then against THEIRS on the
+# unwritten merge result via `--ours`, before it writes anything.
 #
 # HOW A SPAN IS DECIDED, without adding a locator to the declaration:
 #   * heading-block sites are located by their `heading` / `next_heading` in THEIRS. Their body
@@ -43,18 +54,43 @@
 #     site takes what is left. If that assignment is not one-to-one the site is reported
 #     UNLOCATABLE and the run fails, rather than guessing.
 #   * every other line must be identical. A pure insertion or deletion outside a heading block
-#     is a failure whatever it contains: a setup value REPLACES a line, it never adds one.
+#     is a failure whatever it contains: a setup value REPLACES a line, it never adds one. That
+#     holds inside a changed hunk too: a hunk that touches a single-line site and changes the line
+#     count is drift, because diff folds a line added or removed beside the site into the site's
+#     hunk. This verdict is stricter than the one before it, in the fail-closed direction only: a
+#     tree that read OK only because its extra line sat next to a filled value now reads DRIFT.
 #
 # Exit codes:
-#   0  -- every declared file equals theirs outside its declared spans
+#   0  -- every declared file (under --file, that one file) equals theirs outside its declared spans
 #   1  -- drift outside a declared span, a lost anchor, or an unlocatable site
 #   2  -- usage error, or the declaration/theirs could not be read at all
 set -uo pipefail
 
 PROG="setup-site-drift.sh"
-DIST="${1:?usage: $PROG <dist> <consumer> <theirs>}"
-CONSUMER="${2:?}"
-THEIRS="${3:?}"
+USAGE="usage: $PROG [--file <core-path> [--ours <path> | --span-text]] <dist> <consumer> <theirs>"
+FILE=""; OURS=""; SPAN_TEXT=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --file) [ $# -ge 2 ] || { echo "$USAGE" >&2; exit 2; }; FILE="$2"; shift 2 ;;
+    --ours) [ $# -ge 2 ] || { echo "$USAGE" >&2; exit 2; }; OURS="$2"; shift 2 ;;
+    --span-text) SPAN_TEXT=1; shift ;;
+    --*) echo "$PROG: unknown option: $1" >&2; echo "$USAGE" >&2; exit 2 ;;
+    *) break ;;
+  esac
+done
+[ $# -eq 3 ] || { echo "$USAGE" >&2; exit 2; }
+DIST="$1"
+CONSUMER="$2"
+THEIRS="$3"
+if [ -n "$OURS" ] && [ -z "$FILE" ]; then
+  echo "$PROG: --ours names a copy of ONE file, so it needs --file to say which declared file it is." >&2; exit 2
+fi
+if [ -n "$OURS" ] && [ ! -f "$OURS" ]; then
+  echo "$PROG: --ours is not a file: $OURS" >&2; exit 2
+fi
+if [ "$SPAN_TEXT" = 1 ] && { [ -z "$FILE" ] || [ -n "$OURS" ]; }; then
+  echo "$PROG: --span-text answers about one declared file at one ref, so it needs --file and takes no --ours." >&2; exit 2
+fi
 
 SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SITES="$SELF/setup-sites.md"
@@ -102,6 +138,10 @@ if [ "$N_SITES" -eq 0 ]; then
   echo "  verdict about the tree." >&2
   exit 2
 fi
+if [ -n "$FILE" ] && ! awk -F'\t' -v f="$FILE" '$1 == f {h=1} END {exit h ? 0 : 1}' "$TMP/sites"; then
+  echo "$PROG: --file '$FILE' is not a file $SITES declares a site for, so there is no span to compare it inside. A per-file answer about an undeclared file would read as OK." >&2
+  exit 2
+fi
 
 unq() { # strip one layer of surrounding quotes, as the rest of reconcile/ does
   local v="$1"
@@ -118,14 +158,16 @@ n_lines=0
 
 # --- one file at a time -------------------------------------------------------
 for core_path in $(cut -f1 "$TMP/sites" | sort -u); do
+  [ -z "$FILE" ] || [ "$core_path" = "$FILE" ] || continue
   cons_rel="$(map_consumer "$core_path")"
   ours="$CONSUMER/$cons_rel"
+  [ -z "$OURS" ] || ours="$OURS"
 
   if ! git -C "$DIST" show "$THEIRS:$core_path" > "$TMP/theirs" 2>/dev/null; then
     say SETUP-SITE-UNREADABLE "$core_path" "theirs ($THEIRS) has no such path; this file declares setup sites, so a pull cannot have overwritten it from a version that does not exist"
     fail=1; continue
   fi
-  if [ ! -f "$ours" ]; then
+  if [ "$SPAN_TEXT" = 0 ] && [ ! -f "$ours" ]; then
     say SETUP-SITE-ABSENT "$cons_rel" "declared setup sites, but the consumer has no such file — the pull has not placed it, which is apply.sh's business and not this check's verdict"
     continue
   fi
@@ -205,7 +247,13 @@ for core_path in $(cut -f1 "$TMP/sites" | sort -u); do
           fail=1; continue
         fi
         e="$(awk -v s="$s" -v n="$nn" 'NR>s && index($0,n)==1 {print NR; exit}' "$TMP/theirs")"
-        [ -n "$e" ] || e="$(grep -c '' "$TMP/theirs")"
+        # A LOST next_heading IS A LOST ANCHOR, NOT AN OPEN-ENDED SPAN. Widening the block to EOF
+        # made every line after the heading "inside a declared span", so a theirs rename of the
+        # closing heading let the merged file keep OURS anywhere below it and still read OK.
+        if [ -z "$e" ]; then
+          say SETUP-SITE-ANCHOR-LOST "$core_path#$id" "next_heading '$nn' is not in theirs after '$hh' — upstream restructured that section, so where this block ends is unknown. Do not widen it and do not guess; this needs operator adjudication."
+          fail=1; continue
+        fi
         printf '%s %s\n' "$s" "$((e - 1))" >> "$TMP/allowspan" ;;
       *) say SETUP-SITE-UNKNOWN-SHAPE "$core_path#$id" "shape '$shape' is not one this check knows, so its span cannot be computed and any difference inside it would be reported as drift"
          fail=1 ;;
@@ -220,6 +268,36 @@ for core_path in $(cut -f1 "$TMP/sites" | sort -u); do
     done < "$TMP/allowspan"
     return 1
   }
+
+  # --- --span-text: the TEXT of every located span at this ref, and nothing else ----------------
+  # One row carrying the span count and a checksum of the spans' lines in file order, each span
+  # opened by a marker, so two refs compare equal exactly when every declared span reads the same
+  # in both -- whatever moved around them. A site the locator cannot find at this ref has already
+  # failed above with its own row, and no SPANTEXT row is printed: an absent span is never equal
+  # to a present one, and never vacuously equal to another absent one.
+  if [ "$SPAN_TEXT" = 1 ]; then
+    [ "$fail" -eq 0 ] || continue
+    st_n="$(awk 'END {print NR}' "$TMP/allow" "$TMP/allowspan")"
+    st_sum="$(awk -v A="$TMP/allow" -v S="$TMP/allowspan" '
+      BEGIN {
+        while ((r = (getline l < A)) > 0) L[l] = 1
+        if (r < 0) exit 3
+        while ((r = (getline l < S)) > 0) { split(l, x, " "); ns++; s0[ns] = x[1]; s1[ns] = x[2] }
+        if (r < 0) exit 3
+      }
+      { m = ""
+        if (FNR in L) m = "L" FNR
+        else for (i = 1; i <= ns; i++) if (FNR >= s0[i] && FNR <= s1[i]) { m = "B" i; break }
+        if (m == "") { prev = ""; next }
+        if (m != prev) print "@"
+        prev = m; print
+      }' "$TMP/theirs" | cksum | tr -s ' \t' ' ')" || { say SETUP-SITE-UNREADABLE "$core_path" "the span text could not be read"; fail=1; continue; }
+    if [ "${st_n:-0}" -eq 0 ]; then
+      say SETUP-SITE-UNLOCATABLE "$core_path" "no span located at $THEIRS, so there is no span text to compare"; fail=1; continue
+    fi
+    say SETUP-SITE-SPANTEXT "$core_path" "${st_n} span(s) ${st_sum}"
+    continue
+  fi
 
   # --- the comparison -----------------------------------------------------------
   # NORMAL diff format, parsed, because `--old-line-format` and friends are GNU-only and this
@@ -246,6 +324,20 @@ for core_path in $(cut -f1 "$TMP/sites" | sort -u); do
     case "$op" in
       c)
         # A changed line is allowed when it is a single-line site, or sits in a heading block.
+        # A SINGLE-LINE SITE REPLACES EXACTLY ONE LINE, so a `c` hunk that touches one with unequal
+        # left and right lengths is drift, whatever its left lines are. diff folds a line added or
+        # deleted next to the site into the site's own hunk (`6c6,7`), whose only LEFT line is the
+        # allowed site line -- so a left-lines-only check read a consumer line added beside a
+        # filled value, or a theirs deletion beside it the consumer still carries, as OK.
+        rhs="${hunk#*[acd]}"; r1="${rhs%%,*}"; r2="${rhs##*,}"
+        if [ $((l2 - l1)) -ne $((r2 - r1)) ]; then
+          for l in $(seq "$l1" "$l2"); do
+            in_span "$l" && continue
+            grep -qxF "$l" "$TMP/allow" || continue
+            say SETUP-SITE-DRIFT "$cons_rel:$l" "the single-line site at this line sits in a hunk that changes the line count ($((l2 - l1 + 1)) line(s) in theirs, $((r2 - r1 + 1)) here). A setup value replaces one line; a line added or removed beside it is outside every declared span."
+            bad=1
+          done
+        fi
         for l in $(seq "$l1" "$l2"); do
           grep -qxF "$l" "$TMP/allow" && continue
           in_span "$l" && continue
@@ -256,7 +348,16 @@ for core_path in $(cut -f1 "$TMP/sites" | sort -u); do
         # An added or deleted line is allowed only inside a heading block, whose body may change
         # length. Anywhere else it means the overwrite kept OURS's structure: a setup value
         # replaces a line, it never adds or removes one.
-        if ! in_span "$l1"; then
+        # An `a` hunk's left number is the insertion point, so testing it is the whole test. A `d`
+        # hunk's left side is every deleted line, and EACH must sit in a heading block: a deletion
+        # that starts inside a block and runs past its next_heading removes upstream lines too.
+        _ad_ok=1
+        if [ "$op" = d ]; then
+          for l in $(seq "$l1" "$l2"); do in_span "$l" || { _ad_ok=0; break; }; done
+        else
+          in_span "$l1" || _ad_ok=0
+        fi
+        if [ "$_ad_ok" -eq 0 ]; then
           say SETUP-SITE-DRIFT "$cons_rel:~$l1" "line(s) $( [ "$op" = a ] && echo ADDED || echo REMOVED ) relative to theirs, outside every declared span. A setup value replaces a line; it never changes the line count."
           bad=1
         fi ;;

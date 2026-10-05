@@ -19,6 +19,36 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.727.0] - 2026-10-04
+
+Batch 195's third release. It discharges one consumer candidate, filed during this batch while the
+consumer pulled 0.724.0: `BL-447`, filed and landed here (net closed minus filed: 0).
+
+**Bootstrapping: `apply.sh` ships alone.** Only a deferred `--carried-machinery-slice` pull runs the
+old engine; a non-deferred pull lands `apply.sh` at step 2 and re-invokes. The delivering range from
+0.724.0 touches no setup-sited core file (0, against 25 changed files under `core/`), so neither path
+hands anything back on this pull.
+
+### PC-S316-APPLY-HANDS-BACK-A-SEMANTIC-MERGE-FOR-A-FILE-WHOSE-ONLY-DELTA-IS-SETUP-SITES (BL-447)
+
+- `apply.sh` resolves a setup-sited `BOTH-CHANGED->CLASSIFY` file mechanically, as
+  `RESOLVED setup-site-merge`, when the consumer's delta lies only inside its declared sites, theirs
+  adds no live `{token}` outside a comment, `git merge-file` is clean, and the merged result still
+  matches theirs outside the sites. Every other outcome keeps today's `semantic-merge` hand-back,
+  byte-identical, with the file untouched.
+- An already-merged file resolves on a re-run with no write, and only when nothing theirs changed is
+  missing from it.
+- `setup-site-drift.sh` gains `--file <core-path> [--ours <path> | --span-text]`. A lost
+  `next_heading` is now `SETUP-SITE-ANCHOR-LOST`, and a hunk that changes the line count beside a
+  single-line site, or a deletion that runs past a heading block, now reads DRIFT. Both changes are
+  fail-closed only.
+- `--finish` verifies each sited CLASSIFY path against theirs and drops `finish-unverified` when it
+  passes.
+- Measured on the reference consumer's 0.724.0 pull: both files it merged by hand now resolve, byte-equal
+  to its hand merge, with the other 18 of 20 rows unchanged. Its 0.722.0 and 0.691.0 pulls resolve
+  three more, each equal to what it committed.
+- New shipping fixture `apply-setup-sited-merge`: 60 arms, 24 mutants.
+
 ## [0.726.0] - 2026-10-04
 
 Batch 195's second release. It discharges three consumer candidates filed during batch 194, each a
