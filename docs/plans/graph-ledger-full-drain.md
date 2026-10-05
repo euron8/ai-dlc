@@ -83,10 +83,11 @@ batch-194 `PC-S316-*` filing), worklist 0 (a true empty), TERMINAL 203, every co
   hand-merged files resolve byte-equal to its hand merge, 18 of 20 rows unchanged; 0.722.0 and 0.691.0 resolve three
   more, each equal to what it committed. New shipping fixture `apply-setup-sited-merge`.
 
-Live backlog **1 -> 8 -> 1 -> 2**, archive **438 -> 445**. Net closed minus filed: **0** (seven filed and landed;
-`BL-448` NOTE filed at close).
+Live backlog **1 -> 8 -> 1 -> 2**, archive **438 -> 445**. Net closed minus filed: **-1** (seven closed, eight filed).
+`BL-448` is a NOTE carrying a core finding from a declined consumer candidate; it was filed at close because the
+release that could have carried it, `v0.727.0`, ships alone.
 
-**EVERY ADVERSARY FOUND SOMETHING ON A GATE-GREEN SHAPE, AGAIN, AND R3 TOOK FOUR TIP ROUNDS.** R3's rounds found an
+**EVERY ADVERSARY FOUND SOMETHING ON A GATE-GREEN SHAPE, AGAIN, AND `v0.727.0` TOOK FOUR TIP ROUNDS.** Its rounds found an
 already-merged shortcut that dropped a theirs span edit (BLOCKER), a self-merged fence handed back (DEFECT), and a
 `setup-site-drift.sh` `c`-hunk arm reading left lines only, so a theirs deletion beside a single-line site was lost
 permanently (BLOCKER), then its `a|d` twin. All fixed before merge.
@@ -101,16 +102,18 @@ never loads where it targets. The consumer's receipts for `BL-443` and for XAP (
 and need a hand annotation. Its 933 extension gets drift rows, not a retire signal, because core's clause is a bold lead.
 
 **TWO OF THREE FIRST GATE RUNS FAILED ONLY ON THE SUITE-POLE CHECK, AT LOAD 22-63** (`gate-adjudication-mutants` 783s
-and 1062s against a 736s ceiling). Each re-push skipped the suite on the content key; R3's whole-suite run read the pole
+and 1062s against a 736s ceiling). Each re-push skipped the suite on the content key; `v0.727.0`'s whole-suite run read the pole
 at 475s. `procsub-staged-refusal-boot` fails four arms under a scratch `TMPDIR` at base and tip alike, which is
 `BL-442`'s class; not filed.
 
 **READ-SET TRACE, PARTIAL.** One sandbox `--list` run over ten owed fixtures traced five clean (`process-rule-pins`,
 `enforcement-map-sites-c`, `apply-self-overwrite`, `apply-restamp-worklist`, `apply-restamp-theirs`) and OMITTED five on
-dropped reports (`BL-375`): `apply-setup-sited-merge`, `readset-skip`, `enforcement-map-sites`, `enforcement-map-sites-b`
-(loss canary) and `apply-drift-refile`. That map was discarded, because writing it dropped the five omitted fixtures' existing
-rows; the five clean ones were re-traced alone and committed in the close. **Owed:** the five omitted fixtures, one per
-`--list` run. Until then they run unmapped on every push. **OPERATOR RULING, BATCH 195:** every spawn prompt carries the script-only
+dropped reports (`BL-375`). That map was discarded, because writing it dropped the omitted fixtures' existing rows; the five
+clean ones were re-traced alone and committed in the close. The five omitted ones were then tried one per `--list` run:
+`enforcement-map-sites-b` traced clean (858 to 965 rows, the same 965 its two siblings map) and is committed.
+`apply-setup-sited-merge` traced clean alone (46 paths) but OMITTED when re-traced, so it is not committed. **Owed:**
+`apply-setup-sited-merge`, `readset-skip`, `enforcement-map-sites` and `apply-drift-refile`, each one per `--list` run.
+Until then they run unmapped on every push. **OPERATOR RULING, BATCH 195:** every spawn prompt carries the script-only
 sentence under `### NEXT ACTIONS` action 0.
 
 **THE DELIVERY GAP IS THREE RELEASES.** The consumer is installed at 0.724.0 against `VERSION` 0.727.0; 0.727.0 is
