@@ -30024,3 +30024,62 @@ Remedy: name the cause by status. A `review` story owes its closing writer; any 
 - **The first form of the fixture arm and receipt also accepted wrong builds.** Both tested the absence of the one exact phrase `dispatch its closing writer`. Two builds that reword the remedy onto every non-`review` status passed both of them: "dispatch the closing writer (implementation.md section 3, item 4)" and "Its closing writes are owed: run implementation.md section 3, item 4". Builds keying the remedy on `ystatus.startswith("review")` or `ystatus.lower() == "review"` were caught only by accident. A24 now asserts each non-`review` line carries ``this check prescribes no remedy for `<s>` `` and carries neither token, adds the twins `review-pending` and `Review`, and carries mutants for the prefix key, the case fold, the reworded remedy, and each token appended to the no-remedy sentence. Each mutant fails exactly A24. Under `set -uo pipefail` from a `git archive` root, the receipt scores the shipped build 0, a second correct spelling of the else message 0, and script absent 9. It scores 1 on base, delete-everywhere, `if True:`, unconditional-plus-`review`, RELAXED, both rewordings, `startswith`, `lower`, the remedy keyed on `review` or `done-pending-liveness`, the remedy split onto its own line, an ASCII-dash or NBSP else line, and an else line naming the file status.
 
 verify: sh S=core/scripts/sprint-status.sh; [ -f "$S" ] || exit 9; d=$(mktemp -d) || exit 9; trap 'find "$d" -type f \( -name story-1.md -o -name sprint-status.yaml \) -delete; find "$d" -depth -type d -empty -delete' EXIT; m() { o="$d/$1/_bmad-output"; mkdir -p "$o/planning-artifacts/s291/stories" "$o/implementation-artifacts" || exit 9; printf -- '---\nstatus: %s\nsprint: 291\n---\n\n# story\n' "$2" > "$o/planning-artifacts/s291/stories/story-1.md" || exit 9; printf 'sprint: 291\nstatus: in_progress\nstories:\n  story-291-1:\n    file: stories/story-1.md\n    status: %s\n' "$3" > "$o/implementation-artifacts/sprint-status.yaml" || exit 9; }; m r review review; m n done-pending-liveness done-pending-liveness; m p review-pending review-pending; m c Review Review; m f review in-progress; ro=$(bash "$S" check-stories --require-done --root "$d/r" 2>&1); rrc=$?; rl=$(grep -F 'NOT DONE — status `review`' <<<"$ro"); [ -n "$rl" ] || exit 9; [ "$rrc" -eq 1 ] && grep -qF 'dispatch its closing writer' <<<"$rl" || exit 1; for x in n:done-pending-liveness p:review-pending c:Review f:in-progress; do o=$(bash "$S" check-stories --require-done --root "$d/${x%%:*}" 2>&1); orc=$?; [ "$orc" -eq 1 ] && grep -qF "NOT DONE — status \`${x#*:}\`" <<<"$o" && ! grep -qF 'closing writ' <<<"$o" && ! grep -qF 'section 3, item 4' <<<"$o" || exit 1; done; exit 0
+## BL-449 — a padded or blank operator-authorization quote verified against any operator turn, because every caller measured the citation floor on the raw quote
+
+**LANDED (v0.730.0, verified 6692342c).**
+
+**DEFECT.** Filed in batch 198 from the reference consumer's candidate
+`PC-S316-ESCALATION-CITATION-FLOOR-REJECTS-A-GENUINE-SHORT-OPERATOR-ANSWER`. The candidate reported
+the opposite symptom, a genuine short answer that could not be cited. Its contract pass found this
+bypass instead, and the bypass is the entry's subject.
+
+**The bypass.** Every caller of `core/scripts/validate-steering-budget.sh --cite` compared bash
+`${#quote}` against 12, and `--cite` then collapsed whitespace and trimmed before matching. So
+`"          yes"` (13 bytes, 3 characters normalised) cleared the floor and verified against any
+operator turn containing `yes`. Twelve spaces normalised to the empty string, and `includes("")` is
+true of every turn. Measured by the batch-198 contract adversary on the real gate at `efdda1f3` with
+the reference consumer's real corpus: both returned rc 0 `OK`, unpadded `"yes"` returned rc 1, and a
+fabricated quote returned rc 1. `validate-escalation-resolution.sh --any-authorized` counted the
+padded entry AUTHORIZED. The same raw-length shape sat in `validate-adversarial-convergence.sh`,
+`validate-gate-adjudication.sh` and both citation sites of `core/hooks/ai-dlc-gate-remediation-guard.sh`.
+
+**The fix, in 0.730.0.** The predicate owns the floor. `--cite` normalises the needle and, when it is
+under 12 characters (empty included), prints stdout `NOMATCH-SHORT` and exits 2 before reading any
+record. The floor is the literal `CITE_MIN_NORM_CHARS`, defined once. An empty `--cite ""` now reaches
+that block instead of falling through to the checks mode's exit 0. Exit 2 keeps every caller's
+contract, and all of them deny on it. `NOMATCH-SHORT` joined the I117 `--cite` verdict vocabulary.
+The callers keep a length check for the human message, but measure the normalised quote through
+`cite_norm()` and `cite_nlen()`, which joined the I103 quartet beside `cite_quote()`. `cite_norm()`
+collapses the same whitespace set JavaScript `\s` does (NBSP, U+2000-U+200A, U+3000 and the rest),
+and `cite_nlen()` counts UTF-16 units, so the bash floor and the predicate's floor agree on every quote;
+the first cut collapsed ASCII only, and an NBSP-padded quote still counted AUTHORIZED under
+`--any-authorized`, which never calls the predicate. Invariant I120 runs node over every code point and
+fails the push when the escalation copy of `cite_norm()` disagrees with `\s` or `cite_nlen()` with
+`.length`; I103 holds the other three copies byte-identical to it. The guidance in `escalations.md`,
+`steps/_gate-procedures.md` and `team-roles/adversary.md`, and the two "words:" FAIL texts, now say
+"a verbatim quote of the operator's message, at least 12 characters after whitespace is collapsed; a
+short message is quoted whole, numbering included".
+
+**Half of the consumer's suggested remedy had a dead premise.** It proposed citing the
+AskUserQuestion prompt plus the chosen option label. Option labels are already citable:
+`askUserQuestionAnswers` in `validate-steering-budget.sh` feeds `citableOperatorText`. The incident's
+answer was free-typed prose, `1. Yes.\n2. Yes.`, and quoted whole as `"1. Yes. 2. Yes."` (15
+characters normalised) it verifies today. The lead asked the operator a second time because the
+guidance said "substring" and never said "quote the whole message, numbering included". The guidance
+change above is the surviving half.
+
+**NOT BUILT: a whole operator message under 12 normalised characters** (`approved`, `yes`,
+`proceed`) stays uncitable. That is presented to the operator as a choice, recommended left as it is. Measured by the
+batch-198 contract adversary on the consumer corpus (179 transcripts, 106 id-and-timestamp ledger
+entries): a short-whole-line plus context-id rule false-accepts 2 of 3. The lead writes
+`--authorized-at`, so the window does not bound a forger, and 28 of 117 short typed turns follow text
+naming some id. No mechanism binds a typed "yes" to one decision.
+
+The receipt drives the predicate itself on a two-turn transcript it seeds. A padded needle, a blank
+needle, an empty `--cite ""` and an 11-character needle present in a turn must each exit 2 with stdout
+`NOMATCH-SHORT`. A genuine 12-character needle and the incident's whole-message quote must still
+`MATCH`, so a predicate that refuses everything fails it, and so does one whose floor is not 12.
+
+verify: sh S=core/scripts/validate-steering-budget.sh; [ -f "$S" ] || exit 9; command -v node >/dev/null 2>&1 || exit 9; W="$(mktemp -d)" || exit 9; printf '%s\n' '{"type":"user","timestamp":"2026-10-05T13:25:14Z","message":{"content":"1. Yes.\n2. Yes."}}' '{"type":"user","timestamp":"2026-10-05T13:26:00Z","message":{"content":"go ahead ok, ship it now"}}' > "$W/t.jsonl" || exit 9; for q in "$(printf '%10s' '')yes" "$(printf '%12s' '')" "" "go ahead ok"; do o="$(bash "$S" --dir "$W" --cite "$q" 2>/dev/null)"; r=$?; { [ "$r" = 2 ] && [ "$o" = NOMATCH-SHORT ]; } || exit 1; done; for q in "go ahead ok," "1. Yes. 2. Yes."; do o="$(bash "$S" --dir "$W" --cite "$q" 2>/dev/null)"; r=$?; { [ "$r" = 0 ] && [ "${o%% *}" = MATCH ]; } || exit 1; done; exit 0
+
+
