@@ -45,11 +45,20 @@ case "$R" in
 esac
 
 # --- Assertion 2: THE HAZARD — the harness-written COMMAND NAME is not citable --
-# Same record, same bytes. If this matches, a lead can cite `/ai-dlc` as operator authorization.
+# Same record, same bytes. If this matches, a lead can cite the command name as operator
+# authorization. The verdict must be the PLAIN `NOMATCH` -- the records were read and none carried
+# it. `NOMATCH-SHORT` would be the citation floor refusing the needle before any record was read,
+# which says nothing about the extraction; the seeded name is fourteen characters so it cannot.
+CMDNAME_NLEN="$(printf '%s' "$CMDNAME" | tr -s '[:space:]' ' ' | sed 's/^ //; s/ $//' | wc -c | tr -d ' ')"
+if [ "$CMDNAME_NLEN" -ge 12 ]; then
+  ok "the cited command name '$CMDNAME' is $CMDNAME_NLEN characters, above the citation floor, so assertions 2 and 5 and mutant A reach the extraction"
+else
+  bad "FIXTURE BROKEN: the cited command name '$CMDNAME' is $CMDNAME_NLEN characters, under the floor of 12 -- every assertion citing it is decided by NOMATCH-SHORT, not by the extraction"
+fi
 R="$(cite "$CMD" "$CMDNAME")"
 case "$R" in
-  NOMATCH*) ok "the harness-written <command-name> is NOT citable — only the args side is read" ;;
-  *)        bad "FABRICATION VECTOR OPEN ($R): a token no operator composed cites as operator authorization" ;;
+  NOMATCH) ok "the harness-written <command-name> is NOT citable (plain NOMATCH) — only the args side is read" ;;
+  *)       bad "FABRICATION VECTOR OPEN or WRONG REASON ($R): want the plain NOMATCH a read corpus gives" ;;
 esac
 
 # --- Assertion 3: THE HAZARD — a QUOTED args tag in another record is not citable
@@ -70,7 +79,7 @@ esac
 # --- Assertion 5: an argument-less invocation says nothing ---------------------
 R="$(cite "$EMPTY" "$CMDNAME")"
 case "$R" in
-  NOMATCH*) ok "an empty-args invocation carries nothing citable" ;;
+  NOMATCH) ok "an empty-args invocation carries nothing citable (plain NOMATCH, not the floor)" ;;
   *)        bad "the envelope alone made a string citable ($R) — presence of a command is not speech" ;;
 esac
 
@@ -143,7 +152,7 @@ else
   # Mutant B must fail ONLY its own assertion.
   R="$(citeV "$MUT_B" "$CMD" "$CMDNAME")"
   case "$R" in
-    NOMATCH*) ok "mutant B leaves assertion 2 intact — the two assertions are not entangled" ;;
+    NOMATCH) ok "mutant B leaves assertion 2 intact — the two assertions are not entangled" ;;
     *)        bad "mutant B ALSO broke assertion 2 ($R) — the guard and the extraction are entangled, so one of the two assertions is vacuous" ;;
   esac
 fi

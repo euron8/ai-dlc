@@ -304,6 +304,25 @@ cat > "$ESC_FUTURE_TS" <<EOF
 **Operator authorization:** ${A0_FUTURE} | "proceed past this one, file a backlog item"
 EOF
 
+# --- the citation FLOOR is a property of the NORMALISED needle ------------------------------
+# ESC_INFORCE three times, ONE PROPERTY apart: only the quote moves. The caller compared bash
+# `${#ga_quote}` against 12 while the predicate collapses whitespace and trims, so a padded
+# `"          yes"` (3 normalised) and twelve spaces (EMPTY normalised, and `includes("")` is true
+# of every turn) verified against ANY in-window operator turn -- and TDIR_YES holds one. The whole
+# incident quote is the ALLOW twin over the same corpus.
+for _fl in padded:'          yes' blankq:'            ' whole:'1. Yes. 2. Yes.'; do
+  cat > "$WORK/esc/floor-${_fl%%:*}.md" <<EOF
+## [S401 gate — the operator answered a numbered question] [lead] - ${A0}
+**Status:** SUPPRESSED
+**Suppresses:** [core] ${X} — the check the operator waved through
+**Expires after:** 1 gate
+**Operator authorization:** ${A0} | "${_fl#*:}"
+EOF
+done
+ESC_PADDED="$WORK/esc/floor-padded.md"
+ESC_BLANKQ="$WORK/esc/floor-blankq.md"
+ESC_WHOLE="$WORK/esc/floor-whole.md"
+
 ESC_MISSING="$WORK/esc/there-is-no-such-file.md"
 [ -e "$ESC_MISSING" ] && { echo "FIXTURE ERROR: the absent-escalations path exists" >&2; exit 2; }
 
@@ -375,6 +394,17 @@ cat > "$TDIR_META/tuesday.jsonl" <<'EOF'
 {"type":"user","isMeta":true,"timestamp":"2026-07-02T00:00:05Z","message":{"role":"user","content":"proceed past this one, file a backlog item"}}
 EOF
 : > "$TDIR_EMPTY/notes.txt"
+#   TDIR_YES     a genuine operator turn carrying `yes` and nothing twelve characters long: the
+#                consumer's own free-typed `1. Yes.\n2. Yes.` after an assistant text turn, with
+#                the keys Claude Code writes on a typed turn. In the SECOND member; run.sh asks the
+#                reader's own readdirSync which member comes first.
+TDIR_YES="$WORK/transcripts-yes"
+mkdir -p "$TDIR_YES"
+cp "$TFILE" "$TDIR_YES/a-monday.jsonl"
+cat > "$TDIR_YES/b-incident.jsonl" <<'EOF'
+{"parentUuid":"9b1f0c2e-0000-4000-8000-000000000001","isSidechain":false,"type":"assistant","timestamp":"2026-07-02T00:00:01.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Two decisions need you: 1. Suppress this FAIL for one gate? 2. File the follow-up?"}]},"uuid":"9b1f0c2e-0000-4000-8000-000000000002","sessionId":"22e0f5c2-0000-4000-8000-000000000000"}
+{"parentUuid":"9b1f0c2e-0000-4000-8000-000000000002","isSidechain":false,"promptId":"9b1f0c2e-0000-4000-8000-000000000003","type":"user","message":{"role":"user","content":"1. Yes.\n2. Yes."},"uuid":"9b1f0c2e-0000-4000-8000-000000000004","timestamp":"2026-07-02T00:00:05.171Z","permissionMode":"bypassPermissions","origin":{"kind":"human"},"promptSource":"typed","turnOrigin":"human","userType":"external","entrypoint":"cli","sessionId":"22e0f5c2-0000-4000-8000-000000000000"}
+EOF
 
 # Hand run.sh everything it needs, so it does not re-resolve the layout.
 cat > "$WORK/env.sh" <<ENV
@@ -407,6 +437,10 @@ ESC_STALE_TS="$ESC_STALE_TS"
 ESC_FUTURE_TS="$ESC_FUTURE_TS"
 ESC_MISSING="$ESC_MISSING"
 ESC_EMPTY="$ESC_EMPTY"
+ESC_PADDED="$ESC_PADDED"
+ESC_BLANKQ="$ESC_BLANKQ"
+ESC_WHOLE="$ESC_WHOLE"
+TDIR_YES="$TDIR_YES"
 TDIR="$TDIR"
 TDIR_FORGED="$TDIR_FORGED"
 TDIR_META="$TDIR_META"

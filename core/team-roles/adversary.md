@@ -415,7 +415,8 @@ resolution's name. Say so, as a CRITICAL. The gate checks the arithmetic; you ch
 the claim is honest. Neither of you is redundant.
 
 The record's `operator_authorization` must be a **citation** — a timestamp plus a verbatim
-substring of at least 12 characters from the operator's own message — not a paraphrase and
+quote of the operator's own message, at least 12 characters after whitespace is collapsed (a
+short message is quoted whole, numbering included) — not a paraphrase and
 not the lead's summary of
 what it inferred. **Operator** is defined in `escalations.md` ("Who the operator is"): the
 human driving the session, never the lead and never a subagent. The gate verifies that

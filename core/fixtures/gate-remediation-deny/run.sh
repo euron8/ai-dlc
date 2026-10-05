@@ -988,6 +988,114 @@ if [ "$M10_OK" = "1" ]; then
 fi
 rm -rf "$MW13"
 
+# --- THE CITATION FLOOR IS MEASURED ON THE NORMALISED QUOTE, at arm 7b and at arm 9 -------------
+# Both sites compared bash `${#q}` against 12 while `--cite` collapses whitespace and trims, so a
+# padded `"          yes"` (3 normalised) and twelve spaces (EMPTY normalised, and `includes("")`
+# is true of every turn) verified against ANY in-window operator turn -- and lifted a deny. Each
+# corpus below holds exactly one such turn, the consumer's typed `1. Yes.\n2. Yes.`, in a member the
+# reader does not open first, so the pre-fix build LIFTS on both. The whole quote is the ALLOW twin.
+#
+# SIX CELLS, ONE STRING, every one PRESENCE-shaped: D = the deny JSON, S = an allow with
+# GATE_REMEDIATION_SUPPRESSED in the flow log, L = an allow with "Lifted by VERIFIED operator
+# authorization" in it, A = an allow carrying neither (which no correct cell expects).
+#   7b padded, 7b blank, 7b whole, arm-9 padded, arm-9 blank, arm-9 whole  ->  D D S D D L
+# A FRESH WORKSPACE PER DRIVE: arm 7b caches its rows under a key that does not name the hook, so
+# two variants driven in one workspace would read each other's answer.
+echo "  gate-remediation-deny: resolved predicate = $STEER"
+FL_MW="$(mktemp -d)"
+cp "$HOOK" "$FL_MW/control.sh"
+FL_WHY=""
+fl_sub() {  # <src> <dest> <anchor> <replacement> [<anchor> <replacement>]... -> 0 if applied
+  local src="$1" dest="$2" n
+  shift 2
+  cp "$src" "$dest.work" || { FL_WHY="could not copy $src"; return 1; }
+  while [ "$#" -ge 2 ]; do
+    n="$(grep -cF -- "$1" "$dest.work")" || n=0
+    [ "$n" -eq 1 ] || { FL_WHY="anchor matches $n line(s), not 1 -- re-anchor it, never relax the arm: $1"; return 1; }
+    A="$1" R="$2" awk '{ i = index($0, ENVIRON["A"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["R"] substr($0, i + length(ENVIRON["A"])); print }' \
+      "$dest.work" > "$dest.next" || { FL_WHY="awk died"; return 1; }
+    mv "$dest.next" "$dest.work"
+    shift 2
+  done
+  cmp -s "$src" "$dest.work" && { FL_WHY="changed no bytes -- it would score as a kill"; return 1; }
+  bash -n "$dest.work" 2>/dev/null || { FL_WHY="does not parse"; return 1; }
+  mv "$dest.work" "$dest"
+}
+fl_world() {  # <7b|9> <padded|blank|whole> <predicate-floor-off 0|1> -> W, FL_TR; 1 if the world could not be built
+  local q
+  case "$2" in padded) q="          yes" ;; blank) q="            " ;; *) q="1. Yes. 2. Yes." ;; esac
+  if [ "$1" = 7b ]; then
+    seed "suppressed-yes-$2"; FL_TR="$W/$TRC"
+  else
+    seed open-fail
+    cp "$STEER" "$W/scripts/ai-dlc/validate-steering-budget.sh"
+    mkdir -p "$W/sessions-yes"
+    printf '%s\n' '{"type":"user","timestamp":"2026-08-11T19:00:00Z","message":{"content":"/ai-dlc Sprint 302. Kick off."}}' > "$W/sessions-yes/a-monday.jsonl"
+    cat > "$W/sessions-yes/b-incident.jsonl" <<'EOF'
+{"parentUuid":"9b1f0c2e-0000-4000-8000-000000000001","isSidechain":false,"type":"assistant","timestamp":"2026-08-11T19:55:00.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Two decisions need you: 1. Re-stamp it yourself? 2. File the follow-up?"}]},"uuid":"9b1f0c2e-0000-4000-8000-000000000002","sessionId":"22e0f5c2-0000-4000-8000-000000000000"}
+{"parentUuid":"9b1f0c2e-0000-4000-8000-000000000002","isSidechain":false,"promptId":"9b1f0c2e-0000-4000-8000-000000000003","type":"user","message":{"role":"user","content":"1. Yes.\n2. Yes."},"uuid":"9b1f0c2e-0000-4000-8000-000000000004","timestamp":"2026-08-11T19:55:54.171Z","permissionMode":"bypassPermissions","origin":{"kind":"human"},"promptSource":"typed","turnOrigin":"human","userType":"external","entrypoint":"cli","sessionId":"22e0f5c2-0000-4000-8000-000000000000"}
+EOF
+    : > "$W/sessions-yes/c-current.jsonl"
+    printf 'operator_authorization: 2026-08-11T19:55:54Z | "%s"\n' "$q" \
+      > "$W/_bmad-output/gate-adjudication/story-20260811T193044Z.authorization.md"
+    FL_TR="$W/sessions-yes/c-current.jsonl"
+  fi
+  if [ "$3" = 1 ]; then
+    fl_sub "$W/scripts/ai-dlc/validate-steering-budget.sh" "$W/scripts/ai-dlc/validate-steering-budget.sh.m" \
+      '  if (needle.length < CITE_MIN_NORM_CHARS) {' '  if (false) {' || return 1
+    mv "$W/scripts/ai-dlc/validate-steering-budget.sh.m" "$W/scripts/ai-dlc/validate-steering-budget.sh"
+  fi
+}
+FL_CELLS=""
+fl_cells() {  # <hook> <predicate-floor-off 0|1> -> FL_CELLS, or "BROKEN:<why>"
+  local h="$1" off="$2" c="" k n o lg
+  for k in 7b:padded 7b:blank 7b:whole 9:padded 9:blank 9:whole; do
+    if ! fl_world "${k%%:*}" "${k#*:}" "$off"; then FL_CELLS="BROKEN:$FL_WHY"; rm -rf "$W"; return; fi
+    o="$(drive "$W" Edit "$W/$ART" "" "$FL_TR" "$h")"
+    lg="$(cat "$W/_bmad-output/pipeline-continuation-log.md" 2>/dev/null)"
+    if denied "$o"; then c="${c}D"
+    elif grep -qF 'GATE_REMEDIATION_SUPPRESSED' <<<"$lg"; then c="${c}S"
+    elif grep -qF 'Lifted by VERIFIED operator authorization' <<<"$lg"; then c="${c}L"
+    else c="${c}A"; fi
+    rm -rf "$W"
+  done
+  FL_CELLS="$c"
+}
+fl_report() {  # <label> <want> <hook> <predicate-floor-off>
+  fl_cells "$3" "$4"
+  if [ "$FL_CELLS" = "$2" ]; then ok "$1: $2 -> $FL_CELLS"
+  else bad "$1: scored $FL_CELLS, wanted $2"; fi
+}
+# THE INCIDENT IS NOT THE MEMBER THE READER OPENS FIRST, in either corpus. Asked of the reader's
+# own call, because shell glob order and readdirSync order are two different claims.
+fl_first() { node -e 'const fs=require("fs");console.log(fs.readdirSync(process.argv[1]).filter(f=>f.endsWith(".jsonl"))[0]||"")' "$1" 2>/dev/null; }
+FL_PROBE=""
+fl_world 7b whole 0 && FL_PROBE="$(fl_first "$W/sessions-jsonl")"; rm -rf "$W"
+fl_world 9 whole 0 && FL_PROBE="$FL_PROBE $(fl_first "$W/sessions-yes")"; rm -rf "$W"
+case "$FL_PROBE" in
+  *incident*|" "*|*" ") bad "FLOOR-pre: FIXTURE BROKEN — the reader's first members are '$FL_PROBE'; the incident must not be first" ;;
+  *) ok "FLOOR-pre: the reader opens '$FL_PROBE' first; the incident turn is in a later member of each corpus" ;;
+esac
+fl_report "FLOOR (7b padded/blank/whole, arm 9 padded/blank/whole)" DDSDDL "$HOOK" 0
+fl_report "FLOOR-CONTROL: an unmutated copy of the hook" DDSDDL "$FL_MW/control.sh" 0
+# THE CALLER MEASURES RAW BYTES AGAIN, at both sites. The predicate still refuses the short needle
+# (NOMATCH-SHORT), so no verdict moves -- the defence in depth, asserted rather than assumed.
+FL_C7='  [ "$(cite_nlen "$nq")" -ge 12 ] || return 1'
+FL_C9='  if [ "$(cite_nlen "$AUTH_NQUOTE")" -ge 12 ]; then'
+if fl_sub "$HOOK" "$FL_MW/m-caller-raw.sh" "$FL_C7" '  [ "${#q}" -ge 12 ] || return 1' \
+     "$FL_C9" '  if [ "${#AUTH_QUOTE}" -ge 12 ]; then'; then
+  fl_report "FLOOR m-caller-raw: the predicate still refuses, nothing moves" DDSDDL "$FL_MW/m-caller-raw.sh" 0
+  # EVERY LAYER REVERTED -- the shipped defect. Padded and blank now LIFT at both arms; the whole
+  # quote is unmoved. This is the mutant that proves the four deny cells can fire.
+  fl_report "FLOOR m-both-layers: padded and blank LIFT at 7b and arm 9" SSSLLL "$FL_MW/m-caller-raw.sh" 1
+else
+  bad "FLOOR m-caller-raw: DID NOT APPLY: $FL_WHY"
+fi
+# THE PREDICATE'S FLOOR REMOVED, the caller intact: the caller refuses on the normalised length
+# before asking, so nothing moves here either.
+fl_report "FLOOR m-predicate-floor-off: the caller still refuses, nothing moves" DDSDDL "$FL_MW/control.sh" 1
+rm -rf "$FL_MW"
+
 # --- THE MUTANTS ------------------------------------------------------------------------
 # Every arm above is ABSENCE-shaped in one direction ("not denied"), so a hook replaced by
 # `exit 0` passes S1 outright. Only a mutant establishes that these arms discriminate.

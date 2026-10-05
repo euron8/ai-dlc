@@ -726,10 +726,186 @@ else
   er_score "R-readable-always" readable-always 111011 "$ER_G3" 'if true; then'
 fi
 
+# --- the citation FLOOR is measured on the NORMALISED needle, and the predicate owns it ----------
+# Every caller compared bash `${#quote}` against 12 while `--cite` collapses whitespace and trims
+# before matching, so `"          yes"` (13 raw, 3 normalised) and twelve spaces (EMPTY normalised,
+# and `includes("")` is true of every turn) both verified against any operator turn in the window.
+# corpus-short holds a genuine in-window operator turn carrying `yes`, so the pre-fix build MATCHES
+# both: every cell below is about the floor and nothing else.
+#
+# FOURTEEN CELLS, ONE STRING, so each mutant is held to moving only the cells it owns:
+#   P  padded quote                   -> rc 1, "(3 chars once whitespace is collapsed)"
+#   Q  blank quote of 12 spaces       -> rc 1, "(0 chars once whitespace is collapsed)"
+#   R  the incident, quoted WHOLE     -> rc 0, and the PASS names a 2-transcript corpus
+#   S  the incident, half of it       -> rc 1, "(7 chars once whitespace is collapsed)"
+#   T  --any-authorized, padded only  -> rc 1, `NONE: 1 RESOLVED/OVERRIDDEN`
+#   t  --any-authorized, whole quote  -> rc 0, `AUTHORIZED: 1 of 1` (T's ALLOW twin)
+#   U  --cite twelve spaces, corpus   -> rc 2, stdout exactly NOMATCH-SHORT
+#   V  --cite twelve spaces, empty dir-> rc 2, NOMATCH-SHORT (pre-empts the no-records verdict)
+#   W  --cite "yes", corpus           -> rc 2, NOMATCH-SHORT (short in RAW bytes too)
+#   X  --cite the whole incident      -> rc 0, `MATCH 2026-10-05T13:25:14.171Z` (U's ALLOW twin)
+#   Np/Nb   NBSP-padded `yes` / twelve NBSP at the gate   -> rc 1, the normalised length 3 / 0 named
+#   Na/Nab  the same two under --any-authorized           -> rc 1, `NONE: 1 RESOLVED/OVERRIDDEN`
+# Every cell is PRESENCE-shaped, so a subject that prints nothing scores 0 on all fourteen.
+echo
+echo "  -- the citation floor is measured on the NORMALISED needle --"
+FL_SRC_DIR="$(cd "$(dirname "$VALIDATOR")" && pwd)"
+FL_BASE="$(basename "$VALIDATOR")"
+echo "  escalation-citation: resolved predicate = $FL_SRC_DIR/validate-steering-budget.sh"
+# THE INCIDENT FILE IS NOT THE MEMBER THE READER OPENS FIRST. Asked of the reader's own call,
+# because shell glob order and `readdirSync` order are two different claims about one directory.
+FL_FIRST="$(node -e 'const fs=require("fs");console.log(fs.readdirSync(process.argv[1]).filter(f=>f.endsWith(".jsonl"))[0]||"")' "$ROOT/corpus-short" 2>/dev/null)"
+N=$((N + 1))
+if [ -n "$FL_FIRST" ] && [ "$FL_FIRST" != "b-incident.jsonl" ] \
+   && [ "$(ls "$ROOT/corpus-short" | grep -c '\.jsonl$')" -ge 2 ]; then
+  printf '  ok   %-30s the reader opens %s first; the incident turn is in the second member\n' "corpus-short" "$FL_FIRST"
+else
+  FAIL=$((FAIL + 1)); printf '  FAIL %-30s FIXTURE BROKEN: first member read is "%s" -- the incident must not be first in a >=2-file corpus\n' "corpus-short" "$FL_FIRST"
+fi
+FL_CELLS=""
+fl_cells() {  # $1 directory holding the validator and its steering sibling -> FL_CELLS
+  local d="$1" v="$1/$FL_BASE" s="$1/validate-steering-budget.sh" o rc c=""
+  fl_g() { o="$(bash "$v" --escalations "$ROOT/$1" --sprint 50 --transcript-dir "$ROOT/corpus-short" 2>&1)"; rc=$?; }
+  fl_g pending-padded.md
+  if [ "$rc" -eq 1 ] && grep -qF "(3 chars once whitespace is collapsed), too short" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
+  fl_g pending-blankq.md
+  if [ "$rc" -eq 1 ] && grep -qF "(0 chars once whitespace is collapsed), too short" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
+  fl_g pending-incident-whole.md
+  if [ "$rc" -eq 0 ] && grep -qF "cite: scanned 2 transcript(s)" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
+  fl_g pending-incident-short.md
+  if [ "$rc" -eq 1 ] && grep -qF "(7 chars once whitespace is collapsed), too short" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
+  o="$(bash "$v" --any-authorized "$ROOT/pending-padded.md" 2>/dev/null)"; rc=$?
+  if [ "$rc" -eq 1 ] && grep -q '^NONE: 1 RESOLVED/OVERRIDDEN' <<<"$o"; then c="${c}1"; else c="${c}0"; fi
+  o="$(bash "$v" --any-authorized "$ROOT/pending-incident-whole.md" 2>/dev/null)"; rc=$?
+  if [ "$rc" -eq 0 ] && grep -q '^AUTHORIZED: 1 of 1 ' <<<"$o"; then c="${c}1"; else c="${c}0"; fi
+  o="$(bash "$s" --dir "$ROOT/corpus-short" --cite "            " 2>/dev/null)"; rc=$?
+  if [ "$rc" -eq 2 ] && [ "$o" = "NOMATCH-SHORT" ]; then c="${c}1"; else c="${c}0"; fi
+  o="$(bash "$s" --dir "$ROOT/dir-empty" --cite "            " 2>/dev/null)"; rc=$?
+  if [ "$rc" -eq 2 ] && [ "$o" = "NOMATCH-SHORT" ]; then c="${c}1"; else c="${c}0"; fi
+  o="$(bash "$s" --dir "$ROOT/corpus-short" --cite "yes" 2>/dev/null)"; rc=$?
+  if [ "$rc" -eq 2 ] && [ "$o" = "NOMATCH-SHORT" ]; then c="${c}1"; else c="${c}0"; fi
+  o="$(bash "$s" --dir "$ROOT/corpus-short" --cite "1. Yes. 2. Yes." 2>/dev/null)"; rc=$?
+  if [ "$rc" -eq 0 ] && [ "$o" = "MATCH 2026-10-05T13:25:14.171Z" ]; then c="${c}1"; else c="${c}0"; fi
+  # The NBSP pair. At the GATE either layer may refuse -- the caller naming its normalised length or
+  # the predicate's NOMATCH-SHORT line naming the same 3 / 0 -- so these two cells hold the VERDICT
+  # and the length and stay agnostic about which layer spoke. At --any-authorized the caller's own
+  # measure is the whole check, which is the cell an ASCII-only normaliser cannot pass.
+  fl_g pending-nbsp-padded.md
+  if [ "$rc" -eq 1 ] && grep -qE "\(3 chars once whitespace is collapsed\), too short|NOMATCH-SHORT: the cited quote is 3 character" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
+  fl_g pending-nbsp-blank.md
+  if [ "$rc" -eq 1 ] && grep -qE "\(0 chars once whitespace is collapsed\), too short|NOMATCH-SHORT: the cited quote is 0 character" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
+  o="$(bash "$v" --any-authorized "$ROOT/pending-nbsp-padded.md" 2>/dev/null)"; rc=$?
+  if [ "$rc" -eq 1 ] && grep -q '^NONE: 1 RESOLVED/OVERRIDDEN' <<<"$o"; then c="${c}1"; else c="${c}0"; fi
+  o="$(bash "$v" --any-authorized "$ROOT/pending-nbsp-blank.md" 2>/dev/null)"; rc=$?
+  if [ "$rc" -eq 1 ] && grep -q '^NONE: 1 RESOLVED/OVERRIDDEN' <<<"$o"; then c="${c}1"; else c="${c}0"; fi
+  # An EMPTY needle is still a citation. A build keying cite mode on the TEXT rather than on the
+  # flag having been passed falls through to the checks mode, whose clean rc 0 a caller reads as
+  # MATCH. With and without --authorized-at, because the bound is its own branch in the wrapper.
+  o="$(bash "$s" --dir "$ROOT/corpus-short" --cite "" 2>/dev/null)"; rc=$?
+  if [ "$rc" -eq 2 ] && [ "$o" = "NOMATCH-SHORT" ]; then c="${c}1"; else c="${c}0"; fi
+  o="$(bash "$s" --dir "$ROOT/corpus-short" --cite "" --authorized-at 2026-10-05T13:25:14Z 2>/dev/null)"; rc=$?
+  if [ "$rc" -eq 2 ] && [ "$o" = "NOMATCH-SHORT" ]; then c="${c}1"; else c="${c}0"; fi
+  # THE FLOOR'S VALUE. Eleven normalised characters a genuine turn carries -> refused; twelve
+  # from the same turn -> MATCH. A floor moved either way breaks exactly one of the pair.
+  o="$(bash "$s" --dir "$ROOT/corpus-short" --cite "  go ahead ok  " 2>/dev/null)"; rc=$?
+  if [ "$rc" -eq 2 ] && [ "$o" = "NOMATCH-SHORT" ]; then c="${c}1"; else c="${c}0"; fi
+  o="$(bash "$s" --dir "$ROOT/corpus-short" --cite "go ahead ok," 2>/dev/null)"; rc=$?
+  if [ "$rc" -eq 0 ] && [ "$o" = "MATCH 2026-10-05T12:05:00Z" ]; then c="${c}1"; else c="${c}0"; fi
+  FL_CELLS="$c"
+}
+fl_names="P:padded Q:blank R:incident-whole S:incident-short T:any-authorized-padded t:any-authorized-whole U:cite-blank-corpus V:cite-blank-empty-dir W:cite-short-raw X:cite-whole-match Np:nbsp-padded Nb:nbsp-blank Na:any-authorized-nbsp-padded Nab:any-authorized-nbsp-blank E:cite-empty Ea:cite-empty-authorized-at F11:cite-eleven-refused F12:cite-twelve-match"
+fl_cells "$FL_SRC_DIR"
+# A SUBJECT THAT PREDATES THE FLOOR. This fixture ships, and a consumer may run it one pull ahead
+# of its validators: the pre-fix build matched P, Q and both NBSP quotes, accepted T and both NBSP
+# --any-authorized entries, has no NOMATCH-SHORT and a too-short message that names no length,
+# while R, t, X and the twelve-character MATCH hold; an empty needle falls through to the checks
+# mode and eleven characters verify. SKIP on a consumer; FAIL in the distribution.
+if [ "$FL_CELLS" = "001001000100000001" ] && [ "$EN_IS_DIST" -ne 1 ]; then
+  printf '  SKIP %-30s the installed validators predate the normalised citation floor; this fixture ships one pull ahead of them\n' "pending-padded.md"
+else
+  i=0
+  for nm in $fl_names; do
+    i=$((i + 1)); N=$((N + 1))
+    if [ "$(printf '%s' "$FL_CELLS" | cut -c"$i")" = "1" ]; then printf '  ok   %-30s floor cell %s holds\n' "${nm#*:}" "${nm%%:*}"
+    else FAIL=$((FAIL + 1)); printf '  FAIL %-30s floor cell %s does not hold (cells=%s)\n' "${nm#*:}" "${nm%%:*}" "$FL_CELLS"; fi
+  done
+
+  # --- the mutants, each in a copy of the WHOLE scripts dir -----------------------------------
+  # The validator resolves the predicate beside itself, so every copy carries both; the unmutated
+  # copy must score all fourteen presence cells before any mutant verdict is read. Strings reach awk
+  # through ENVIRON, never `-v`, which strips a level of backslash escaping.
+  FL_MW="$(mktemp -d)"; trap 'chmod -R u+rwX "${ER:-/nonexistent}" 2>/dev/null; rm -rf "$ROOT" "$MWORK" "${EN_MW:-}" "${ER:-}" "$FL_MW"' EXIT
+  FL_WHY=""
+  fl_mk() {  # $1 name  $2 target basename  $3 anchor (one line, exactly once)  $4 replacement -> FL_DIR
+    local d="$FL_MW/$1" n
+    FL_DIR=""
+    cp -R "$FL_SRC_DIR" "$d" || { FL_WHY="could not copy $FL_SRC_DIR"; return 1; }
+    [ -f "$d/validate-steering-budget.sh" ] && [ -f "$d/$FL_BASE" ] || { FL_WHY="the copy lacks the validator or its predicate"; return 1; }
+    [ -n "$2" ] || { FL_DIR="$d"; return 0; }
+    n="$(grep -cF -- "$3" "$FL_SRC_DIR/$2")" || n=0
+    [ "$n" -eq 1 ] || { FL_WHY="anchor matches $n line(s) in $2, not 1 -- re-anchor it, never relax the arm"; return 1; }
+    A="$3" R="$4" awk '{ i = index($0, ENVIRON["A"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["R"] substr($0, i + length(ENVIRON["A"])); print }' \
+      "$FL_SRC_DIR/$2" > "$d/$2" || { FL_WHY="awk died"; return 1; }
+    cmp -s "$FL_SRC_DIR/$2" "$d/$2" && { FL_WHY="changed no bytes -- it would score as a kill"; return 1; }
+    bash -n "$d/$2" 2>/dev/null || { FL_WHY="does not parse"; return 1; }
+    FL_DIR="$d"
+  }
+  fl_score() {  # $1 label  $2 expected cells  $3 name  $4 target  $5 anchor  $6 replacement
+    N=$((N + 1))
+    if ! fl_mk "$3" "$4" "$5" "$6"; then
+      FAIL=$((FAIL + 1)); printf '  FAIL %-30s DID NOT APPLY: %s\n' "$1" "$FL_WHY"; return 1
+    fi
+    fl_cells "$FL_DIR"
+    if [ "$FL_CELLS" = "$2" ]; then printf '  ok   %-30s %s -> %s\n' "$1" "$2" "$FL_CELLS"; [ -n "$4" ] && KILLS=$((KILLS + 1)); return 0
+    else FAIL=$((FAIL + 1)); printf '  FAIL %-30s scored %s, wanted %s\n' "$1" "$FL_CELLS" "$2"; return 1; fi
+  }
+  FL_FLOOR='  if (needle.length < CITE_MIN_NORM_CHARS) {'
+  fl_score "F-control"            111111111111111111 ctl "" "" ""
+  # m1: the predicate's floor removed. ONLY the predicate-direct cells move: every caller refuses
+  # on the normalised length before asking, so P, Q, S and the NBSP pair still FAIL at the caller.
+  # The empty needle now scans and `includes("")` matches, and eleven characters verify.
+  fl_score "F-m1 floor removed"   111111000111110001 m1 validate-steering-budget.sh "$FL_FLOOR" '  if (false) {'
+  # m3: the floor measured on the RAW needle, i.e. normalisation applied after it. Twelve spaces
+  # is twelve raw characters and passes; `yes` is three raw and is still refused -- which is the
+  # cell (W) that separates this mutant from m1. The padded eleven is fifteen raw and verifies.
+  fl_score "F-m3 floor before norm" 111111001111111101 m3 validate-steering-budget.sh "$FL_FLOOR" '  if (CITE_TEXT.length < CITE_MIN_NORM_CHARS) {'
+  # m5: cite mode keyed on the needle's TEXT rather than on the flag. An empty needle skips the
+  # citation block and the checks mode answers rc 0. Only the two empty-needle cells move.
+  fl_score "F-m5 cite mode keyed on text" 111111111111110011 m5 validate-steering-budget.sh \
+    'const CITE = process.env.AI_DLC_CITE_SET === "1";' 'const CITE = !!process.env.AI_DLC_CITE;'
+  # m6: the floor's VALUE lowered to 4, callers untouched. Every short needle in the other cells is
+  # under 4 (or a caller refuses it first), so only the eleven-character cell moves.
+  fl_score "F-m6 floor is 4" 111111111111111101 m6 validate-steering-budget.sh \
+    'const CITE_MIN_NORM_CHARS = 12;' 'const CITE_MIN_NORM_CHARS = 4;'
+  # m2: --any-authorized measures the un-normalised quote again. It never calls the predicate, so
+  # this site's own check is the whole check: the padded entry and both NBSP entries count.
+  fl_score "F-m2 any-authorized raw" 111101111111001111 m2 "$FL_BASE" \
+    '    nquote="$(cite_norm "$(cite_quote "$authline")")"' '    nquote="$(cite_quote "$authline")"'
+  # m4: cite_norm collapses ASCII whitespace only -- the first fix's body. At the gate the
+  # predicate's own `\s` still refuses the NBSP quotes, so the ONLY cells that move are the two
+  # --any-authorized NBSP entries, where the caller's measure is the whole check.
+  fl_score "F-m4 cite_norm ASCII-only" 111111111111001111 m4 "$FL_BASE" \
+    '      gsub("\302\240|\341\232\200|\342\200[\200-\212]|\342\200\250|\342\200\251|\342\200\257|\342\201\237|\343\200\200|\357\273\277", " ", s)' \
+    '      s = s'
+  # m2b: the GATE site measures the un-normalised quote again. The predicate still refuses (rc
+  # stays 1), so the cells that move are the messages naming the normalised length -- the defence
+  # in depth the floor's single home is meant to provide, asserted separately below.
+  if fl_score "F-m2b gate-mode raw" 001111111111111111 m2b "$FL_BASE" \
+       '  nquote="$(cite_norm "$quote")"' '  nquote="$quote"'; then
+    N=$((N + 1))
+    FL_O="$(bash "$FL_DIR/$FL_BASE" --escalations "$ROOT/pending-padded.md" --sprint 50 --transcript-dir "$ROOT/corpus-short" 2>&1)"; FL_RC=$?
+    if [ "$FL_RC" -eq 1 ] && grep -qF "NOMATCH-SHORT" <<<"$FL_O"; then
+      printf '  ok   %-30s m2b: the padded quote still FAILs -- the predicate refused it (NOMATCH-SHORT)\n' "pending-padded.md"
+    else
+      FAIL=$((FAIL + 1)); printf '  FAIL %-30s m2b: with the caller measuring raw bytes the padded quote was not refused by the predicate (rc=%s)\n' "pending-padded.md" "$FL_RC"
+    fi
+  fi
+fi
+
 # KILL COUNT. A mutation that applied cleanly to a file the run never loaded reads exactly
 # like an arm that cannot fire, and `cmp -s` cannot tell them apart. Zero kills is that state.
 N=$((N + 1))
-if [ "$KILLS" -ge 18 ]; then printf '  ok   %-30s %s mutant kill(s) -- these arms can fire\n' "KILL-COUNT" "$KILLS"
+if [ "$KILLS" -ge 25 ]; then printf '  ok   %-30s %s mutant kill(s) -- these arms can fire\n' "KILL-COUNT" "$KILLS"
 else FAIL=$((FAIL + 1)); printf '  FAIL %-30s %s kill(s); the mutants changed bytes in a file these arms never loaded\n' "KILL-COUNT" "$KILLS"; fi
 
 echo

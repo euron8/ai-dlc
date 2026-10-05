@@ -134,6 +134,19 @@ EOF
   : > "$W/sessions-jsonl/current.jsonl"
 }
 
+# THE FLOOR WORLD'S CORPUS. A genuine operator turn carrying `yes` and nothing twelve characters
+# long: the consumer's own free-typed `1. Yes.\n2. Yes.` after an assistant text turn, with the keys
+# Claude Code writes on a typed turn. `monday.jsonl` is replaced, not appended to, so the only
+# operator words in the corpus are the incident's; the incident file sorts after `current.jsonl`,
+# so it is not the member the reader opens first.
+transcripts_yes() {
+  : > "$W/sessions-jsonl/monday.jsonl"
+  cat > "$W/sessions-jsonl/x-incident.jsonl" <<'EOF'
+{"parentUuid":"9b1f0c2e-0000-4000-8000-000000000001","isSidechain":false,"type":"assistant","timestamp":"2026-08-01T00:00:00.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Two decisions need you: 1. Suppress check 7 for three gates? 2. File the follow-up?"}]},"uuid":"9b1f0c2e-0000-4000-8000-000000000002","sessionId":"22e0f5c2-0000-4000-8000-000000000000"}
+{"parentUuid":"9b1f0c2e-0000-4000-8000-000000000002","isSidechain":false,"promptId":"9b1f0c2e-0000-4000-8000-000000000003","type":"user","message":{"role":"user","content":"1. Yes.\n2. Yes."},"uuid":"9b1f0c2e-0000-4000-8000-000000000004","timestamp":"2026-08-01T00:00:05.171Z","permissionMode":"bypassPermissions","origin":{"kind":"human"},"promptSource":"typed","turnOrigin":"human","userType":"external","entrypoint":"cli","sessionId":"22e0f5c2-0000-4000-8000-000000000000"}
+EOF
+}
+
 FAILING='[{"check_id":"7","verdict":"FAIL","evidence":"citation drift in test-strategy.md"},
           {"check_id":"3a","verdict":"FAIL","evidence":"story AC not traced"},
           {"check_id":"2","verdict":"PASS","evidence":"escalation census clean"}]'
@@ -272,6 +285,19 @@ LEDGER
     install_sibling; metrics "$METRICS" 2
     suppression "[core] 7" 3 "the operator never said this sentence"
     ;;
+  suppressed-yes-padded|suppressed-yes-blank|suppressed-yes-whole)
+    # THE CITATION FLOOR. `suppressed` with the corpus replaced by one genuine operator turn
+    # carrying `yes`, and only the quote moving across the three. The guard compared bash
+    # `${#q}` against 12 while the predicate collapses whitespace and trims, so a padded
+    # `"          yes"` and twelve spaces both verified against that turn. `-whole` is the ALLOW.
+    verdict "story-20260811T193044Z" "$FAILING1"
+    install_sibling; metrics "$METRICS" 2; transcripts_yes
+    case "$CASE" in
+      suppressed-yes-padded) suppression "[core] 7" 3 "          yes" ;;
+      suppressed-yes-blank)  suppression "[core] 7" 3 "            " ;;
+      *)                     suppression "[core] 7" 3 "1. Yes. 2. Yes." ;;
+    esac
+    ;;
   suppressed-superset)
     # THE ID GRAIN. The suppression names `3a`; the only live FAIL is `3`. A substring join
     # acquits it, and `3` is a different check from `3a` in every catalog that has both.
@@ -366,7 +392,7 @@ fi
 # reason: if the base seed ever starts shipping those files, those two arms would be
 # measuring `ok` and reporting the fail-closed path.
 case "$CASE" in
-  suppressed|suppressed-expired|suppressed-wrongcat|suppressed-bare|suppressed-nocat|suppressed-partial|suppressed-oldsibling|suppressed-forged|suppressed-superset|suppressed-subset)
+  suppressed|suppressed-expired|suppressed-wrongcat|suppressed-bare|suppressed-nocat|suppressed-partial|suppressed-oldsibling|suppressed-forged|suppressed-superset|suppressed-subset|suppressed-yes-padded|suppressed-yes-blank|suppressed-yes-whole)
     for _need in "$W/scripts/ai-dlc/validate-suppression-lifetime.sh" \
                  "$W/.claude/skills/ai-dlc/enforcement-map.yaml" \
                  "$W/docs/escalations/pending.md" \

@@ -19,6 +19,42 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.730.0] - 2026-10-05
+
+Batch 198's release. It discharges one consumer candidate and closes one entry it files (net closed
+minus filed: 0). No file in it is bootstrapping.
+
+### PC-S316-ESCALATION-CITATION-FLOOR-REJECTS-A-GENUINE-SHORT-OPERATOR-ANSWER (as BL-449)
+
+- **Security: a padded or blank operator-authorization quote verified at every citation gate.**
+  Every caller of `validate-steering-budget.sh --cite` measured the 12-character floor on the raw
+  quote, and `--cite` then collapsed whitespace before matching. So `"          yes"` verified against
+  any operator turn containing `yes`, and twelve spaces normalised to the empty string, which matches
+  every turn. Measured on the reference consumer's real gate and corpus: both returned OK.
+- `--cite` now owns the floor. A needle under 12 characters once whitespace is collapsed, an empty
+  `--cite ""` included, prints `NOMATCH-SHORT` and exits 2 before any transcript is read. The token
+  joins the I117 `--cite` verdict vocabulary.
+- The four callers (`validate-escalation-resolution.sh` with its `--any-authorized` shape count,
+  `validate-adversarial-convergence.sh`, `validate-gate-adjudication.sh`, and both citation arms of
+  `ai-dlc-gate-remediation-guard.sh`) measure through new `cite_norm()` and `cite_nlen()`, held
+  byte-identical by I103. `cite_norm()` collapses the same whitespace set as JavaScript `\s`, NBSP
+  and U+2000-U+200A included, and `cite_nlen()` counts UTF-16 units. New invariant I120 runs node over
+  every code point and fails the push when they disagree with the predicate.
+- Guidance: `escalations.md`, `steps/_gate-procedures.md`, `steps/gate-validation.md`,
+  `team-roles/adversary.md` and the FAIL texts now say the quote is at least 12 characters after
+  whitespace is collapsed, and that a short message is quoted whole, numbering included. The
+  incident's answer, `1. Yes.` then `2. Yes.`, cited as `"1. Yes. 2. Yes."`, verifies.
+- The candidate's suggested remedy, citing the AskUserQuestion prompt and option label, was not
+  built: option labels were already citable. A whole operator message under 12 characters stays
+  uncitable.
+- Fixture arms and mutants in `escalation-citation`, `adversarial-citation`, `gate-adjudication`,
+  `gate-remediation-deny` and `gate-adjudication-mutants`.
+
+### BL-375 (record only)
+
+- Three `scripts/readset-stage1-run.sh` runs scored NOT-MET: 2, 1 and 2 of the five subjects
+  mapped, at peak loads 9.23, 5.14 and 4.22. The third run also failed the 4.5 load floor.
+
 ## [0.729.0] - 2026-10-05
 
 Batch 197's release. It takes `BL-375` one step further and closes nothing (net closed minus filed:

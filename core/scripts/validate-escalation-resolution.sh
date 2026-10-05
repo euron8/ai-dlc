@@ -170,6 +170,39 @@ cite_segments() { # $1 authline -> one quoted segment per line
 
 # The first segment long enough to be verifiable, or empty. Callers fall back to the whole
 # post-`|` remainder, which is what a citation carrying no quote at all leaves them.
+# The quote as `validate-steering-budget.sh --cite` measures it: every run of ECMAScript `\s`
+# whitespace one space, the ends trimmed. The 12-character floor is measured on THIS, never on
+# the raw bytes -- a raw `${#quote}` scored `"          yes"` as 13 and twelve spaces as 12, and
+# the predicate then matched 3 characters and the empty string against any operator turn. The
+# predicate owns the floor and refuses a short needle itself (NOMATCH-SHORT); a caller's check
+# is the message, and for `--any-authorized`, which never calls the predicate, the whole check.
+#
+# THE SET IS NODE'S, RENDERED AS UTF-8 BYTE SEQUENCES, because bash cannot run the predicate's
+# regex without a node fork per segment and `[[:space:]]` under LC_ALL=C is ASCII only: an NBSP-
+# or U+2000-padded `yes` counted AUTHORIZED. The non-ASCII members are U+00A0, U+1680,
+# U+2000-U+200A, U+2028, U+2029, U+202F, U+205F, U+3000 and U+FEFF. Invariant I120 derives the
+# set from node and drives this body against every member and against the near-misses node
+# excludes (U+0085, U+180E, U+200B), so the rendering cannot drift from the definition silently.
+cite_norm() { # $1 text -> ECMAScript-\s runs collapsed to one space, ends trimmed
+  printf '%s' "$1" | LC_ALL=C awk '
+    { s = s (NR > 1 ? " " : "") $0 }
+    END {
+      gsub("\302\240|\341\232\200|\342\200[\200-\212]|\342\200\250|\342\200\251|\342\200\257|\342\201\237|\343\200\200|\357\273\277", " ", s)
+      gsub("[ \t\013\014\015]+", " ", s)
+      sub("^ ", "", s); sub(" $", "", s)
+      printf "%s", s }'
+}
+
+# The length the predicate's floor reads: UTF-16 code units, which is JavaScript's `.length`.
+# `${#}` is neither -- bytes under LC_ALL=C, characters under a UTF-8 locale -- so a six-letter
+# accented quote was 12 to one caller and 6 to the predicate. Every byte that is not a UTF-8
+# continuation byte starts one character, and a four-byte lead starts one that JS counts twice.
+cite_nlen() { # $1 text -> length in UTF-16 code units
+  _cn_c="$(printf '%s' "$1" | LC_ALL=C tr -d '\200-\277' | wc -c)"
+  _cn_a="$(printf '%s' "$1" | LC_ALL=C tr -cd '\360-\367' | wc -c)"
+  printf '%s' "$((_cn_c + _cn_a))"
+}
+
 cite_quote() { # $1 authline
   _cq_segs="$(cite_segments "$1")"
   [ -n "$_cq_segs" ] || _cq_segs="$(printf '%s' "${1#*|}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
@@ -177,7 +210,8 @@ cite_quote() { # $1 authline
   _cq_long=""
   while IFS= read -r _cq_seg; do
     [ "${#_cq_seg}" -gt "${#_cq_long}" ] && _cq_long="$_cq_seg"
-    [ "${#_cq_seg}" -ge 12 ] || continue
+    _cq_n="$(cite_nlen "$(cite_norm "$_cq_seg")")"
+    [ "$_cq_n" -ge 12 ] || continue
     [ -n "$_cq_pick" ] || _cq_pick="$_cq_seg"
   done <<CITEEOF
 $_cq_segs
@@ -347,8 +381,9 @@ if [ "$ANY_AUTHORIZED" -eq 1 ]; then
     TERMINAL=$((TERMINAL + 1))
     [ "$authline" = "__MISSING__" ] && continue
     [ -n "$authline" ] || continue
-    quote="$(cite_quote "$authline")"
-    [ "${#quote}" -lt 12 ] && continue
+    # NORMALISED, because this is the whole check here: --any-authorized never calls --cite.
+    nquote="$(cite_norm "$(cite_quote "$authline")")"
+    [ "$(cite_nlen "$nquote")" -lt 12 ] && continue
     AUTHORIZED=$((AUTHORIZED + 1))
     [ -n "$FIRST" ] || FIRST="$(printf '%s' "$header" | sed -E 's/^#+ //' | cut -c1-72)"
   done <<EOF
@@ -388,14 +423,18 @@ while IFS="$(printf '\t')" read -r header status authline; do
   if [ "$authline" = "__MISSING__" ] || [ -z "$authline" ]; then
     echo "FAIL: [$short] is $status but carries no 'Operator authorization:' citation." >&2
     echo "      A $status HARD_BLOCK asserts the operator adjudicated it. Cite the operator's own" >&2
-    echo "      words: Operator authorization: <ISO-8601 UTC ts> | \"<verbatim substring, >=12 chars>\"" >&2
+    echo "      words: Operator authorization: <ISO-8601 UTC ts> | \"<verbatim quote of the operator's message, >=12 chars after whitespace is collapsed; a short message is quoted whole, numbering included>\"" >&2
     echo "      If you decided this yourself, its status is DECIDED_AUTONOMOUSLY, not $status." >&2
     FAIL=1; FAILN=$((FAILN + 1)); continue
   fi
 
   quote="$(cite_quote "$authline")"
-  if [ "${#quote}" -lt 12 ]; then
-    echo "FAIL: [$short] operator authorization quotes '${quote}', too short (>=12 chars) to verify." >&2
+  # The floor is measured AFTER whitespace is collapsed and trimmed, as --cite matches it; the
+  # raw quote still goes to the predicate, which owns the floor and refuses it again itself.
+  nquote="$(cite_norm "$quote")"
+  nqlen="$(cite_nlen "$nquote")"
+  if [ "$nqlen" -lt 12 ]; then
+    echo "FAIL: [$short] operator authorization quotes '${nquote}' (${nqlen} chars once whitespace is collapsed), too short (>=12 chars) to verify." >&2
     FAIL=1; FAILN=$((FAILN + 1)); continue
   fi
 

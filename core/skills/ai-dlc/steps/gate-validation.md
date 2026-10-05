@@ -376,8 +376,8 @@ Two arms, either satisfies (dual-arm OR):
 A HARD_BLOCK exists because the decision is the operator's. Marking one
 `RESOLVED` (or a `DECIDED_AUTONOMOUSLY` entry `OVERRIDDEN`) asserts the
 operator adjudicated it — so the entry MUST carry
-`**Operator authorization:** <ISO ts> | "<verbatim operator quote, ≥12 chars>"`
-(see `escalations.md`).
+`**Operator authorization:** <ISO ts> | "<verbatim operator quote, ≥12 chars after whitespace is collapsed>"`
+(see `escalations.md`; a short message is quoted whole).
 
 **Check.** Invoke `scripts/ai-dlc/validate-escalation-resolution.sh --escalations
 docs/escalations/pending.md --sprint <N> --transcript <this session's
@@ -1854,7 +1854,7 @@ violation of any of the other four:
    silently disarm it) and exits 2 on missing required args, so a truncated
    command verifies nothing rather than appearing to pass. That validator
    requires the entry's
-   `**Operator authorization:** <ISO ts> | "<verbatim ≥12 chars>"` line and
+   `**Operator authorization:** <ISO ts> | "<verbatim, ≥12 chars after whitespace is collapsed>"` line and
    verifies the quoted substring against a GENUINE operator message in the
    session transcript. The verdict on this arm is the validator's exit code,
    not the adjudicator's reading — which is what makes the disposition

@@ -29,7 +29,7 @@ invariant because the set kept getting restated from memory somewhere else.
 | reasoning effort levels | `high` `low` `max` `medium` `xhigh` | `core/hooks/ai-dlc-dispatch-guard.sh` | I111 | — | `scripts/validate-enforcement-map.sh`, `core/scripts/render-agent-definitions.sh` |
 | code-review verdicts | `APPROVED` `BLOCKED` `NEEDS_REWORK` | `core/team-roles/code-reviewer.md` | I112 | — | `core/skills/ai-dlc/steps/gate-validation.md` |
 | QA verdicts | `NEEDS_REWORK` `PASS` | `core/team-roles/qa.md` | I112 | — | `core/skills/ai-dlc/steps/gate-validation.md` |
-| steering-budget --cite verdicts | `MATCH` `NOMATCH` `NOMATCH-NO-RECORDS` `NOMATCH-TRANSCRIPT-PRUNED` | `core/scripts/validate-steering-budget.sh` | I117 | — | `core/scripts/validate-adversarial-convergence.sh` |
+| steering-budget --cite verdicts | `MATCH` `NOMATCH` `NOMATCH-NO-RECORDS` `NOMATCH-SHORT` `NOMATCH-TRANSCRIPT-PRUNED` | `core/scripts/validate-steering-budget.sh` | I117 | — | `core/scripts/validate-adversarial-convergence.sh` |
 
 ## Schema enums
 
