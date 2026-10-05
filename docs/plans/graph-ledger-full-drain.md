@@ -97,8 +97,12 @@ rule false-accepted 2 of 3 on the consumer's corpus.
 notices and stays unmapped.
 
 **THE DELIVERY GAP IS ONE RELEASE.** The consumer is installed at 0.729.0 against `VERSION` 0.730.0; 0.730.0 is not
-bootstrapping. The banked ruling stands: report the gap and write no runbook. **OPERATOR DECISIONS STILL OPEN:** whether
-`refs/recovered/b197` is kept.
+bootstrapping. The banked ruling stands: report the gap and write no runbook. **OPERATOR DECISIONS STILL OPEN:** none.
+
+**OPERATOR RULING, BATCH 198: `refs/recovered/b197` IS DELETED.** Option B of three (keep, delete, keep until a date).
+All 12293 pins were removed from the main checkout with `git update-ref --stdin`; branches and `origin/main` were
+unchanged. The pins existed only locally. On the operator's instruction no sha list was kept, and `git gc --prune=now`
+removed all 12293 commits at once: 0 remain, `origin/main` resolves, `git fsck` exits 0, `.git` went from 42M to 28M.
 
 Batch 197's block below is history: batch 198's block replaces its delivery gap and its decisions list.
 
