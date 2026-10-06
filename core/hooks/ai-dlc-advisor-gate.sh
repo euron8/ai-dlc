@@ -89,7 +89,12 @@
 #     next write of the same verdict is a new gated action. Measured on graph's granted subagent
 #     transcripts: 14 same-path deliverable re-writes had such a line between them, every one a
 #     string (a fresh pass prompt, or a coordinator message); without this one advisor call
-#     covered a PASS-to-FAIL rewrite of one `verdict.json`. The line number is kept, so the last
+#     covered a PASS-to-FAIL rewrite of one `verdict.json`. A `user` line carrying
+#     `origin.kind: "task-notification"` is a background-task event, not a re-dispatch, and does
+#     not clear. Measured on graph: 2 same-path repair-record re-writes had only such lines between
+#     them and were wrongly denied; every one of graph's 2476 user lines opening with either
+#     background-task text form carries that field, and no line carries it with any other opening.
+#     The line number is kept, so the last
 #     gated action does not move. RESIDUAL COST: 2 of those 14 lines were the harness's
 #     "Your response above was cut off mid-stream" continuation, not a re-dispatch; such a
 #     resumed write now costs one more advisor call. It never wedges.
@@ -242,6 +247,10 @@ def matekind:
       then "verdict" else "" end
   else "" end;
 def kind($role): if $role == "lead" then leadkind else matekind end;
+# A background-task event the harness delivers as a user line is not a re-dispatch. Keyed on the
+# `origin.kind` field of the line, never on its text: the text openings are harness-origin prefixes,
+# which core/schemas/harness-origin.json declares once and invariant I91 forbids restating.
+def notif: ((.origin? | if type == "object" then .kind else null end) // "") == "task-notification";
 '
 
 # The incoming call: one jq pass decides its kind and hands the fields to the shell.
@@ -300,7 +309,7 @@ STATE="$(jq -n -R -r --arg home "${HOME:-}" --arg proj "$PROJ" --arg role "$ROLE
      | if ($l.type == "attachment" and ($l.attachment | type) == "object" and $l.attachment.type == "advisor_tool") then
        .grant = (($l.attachment.available != false) and ($l.attachment.toolChange != "remove"))
      else
-       (if ($l.type == "user" and (($l.message.content? | type) == "string"
+       (if ($l.type == "user" and ($l | notif | not) and (($l.message.content? | type) == "string"
              or ([($l.message.content? // []) | .[]? | select(type == "object") | .type] | index("text") != null)))
         then .g |= map_values(.[1] = "") else . end)
        | reduce ((($l.message.content? // []) | if type == "array" then .[] else empty end | select(type == "object"))) as $b (.;
