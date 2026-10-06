@@ -85,6 +85,13 @@ old side): the unsplit fixture 2537s / 2476s; the shipped fixture after the spli
 347s. The shipped fixture is traced and mapped. `review-shard-merge-mutants` is still OMITTED from
 `.ai-dlc-fixture-readsets.tsv` (0 rows, against 65 for `review-shard-merge`), so it runs on every push until a trace maps it.
 
+**Progress — `adversarial-shard-merge` (batch 201; not one of the six above, split because the BL-460/461 arms took it
+from 317 to 354 CPU-s solo and projected it past the suite pole).** Its 34 arms stay in the shipped fixture; the
+predicates and worlds moved to `core/fixtures/adversarial-shard-merge/lib.sh`; MX0, the 15 mutants and MX6b moved to
+the new `.dist-only` `adversarial-shard-merge-mutants`, the `review-shard-merge-mutants` shape, whose reap counts
+DECLARED scorings off its own `mutant "` lines so an emptied battery fails. The 16 killed-set rows are byte-identical
+to the unsplit serial battery's. The new directory is unmapped in `.ai-dlc-fixture-readsets.tsv` until traced.
+
 **Remedy.** Per fixture: measure solo, attribute the time, then cut it — move a mutation battery behind a shipped
 fixture into its own `.dist-only` fixture (`fixture-ship-decl.md`), score mutants in parallel within the fixture, and
 remove repeated setup. `review-shard-merge` is being split in batch 199 as the first instance.

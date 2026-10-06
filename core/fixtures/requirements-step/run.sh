@@ -34,6 +34,10 @@
 #   (i) requirements.md section 5 names partition-subject.sh and no longer says Rule 28
 #       has no axis for a multi-artifact subject; 4(c) carries the `###` subheading
 #       mandate. Two committed mutants (restore-sentence, drop-mandate) on a copy.
+#   (j) gate-validation.md names `s<N>/requirements-adversarial-p` at BOTH Check 24 sites
+#       (the invocation paragraph and the post-planning sweep), each read as its own
+#       region; requirements.md's series-naming bullet carries the B4 refusal sentence
+#       for a --document merge of a subject file.
 #
 # Usage: run.sh
 # Exit:  0 = every assertion holds (or subject not installed), 1 = a regression,
