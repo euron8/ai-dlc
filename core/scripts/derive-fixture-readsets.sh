@@ -793,7 +793,7 @@ if [ "$TRACER" = sandbox ] || [ "$TRACER" = both ]; then
   elif [ -n "$LOCAL_MAP" ]; then
     { printf '(version 3)\n(allow default)\n(allow file* process-exec* (subpath "%s") (subpath "%s") (with report) (with message (string-append "FXTAG=" (param "FXTAG") ";")))\n' "$TREE" "$MARKDIR"
       printf '(allow process-exec*'
-      readset_trip_set | LC_ALL=C sort -u | while IFS= read -r tp; do [ -n "$tp" ] && printf ' (literal "%s")' "$tp"; done
+      readset_trip_set | LC_ALL=C sort -u | awk 'NF { printf " (literal \"%s\")", $0 }'
       printf ' (with report) (with message (string-append "FXTAG=" (param "FXTAG") ";TRIP")))\n'
     } > "$PROFILE" || die "cannot write $PROFILE"
   else
