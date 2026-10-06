@@ -2272,7 +2272,7 @@ repair_field() { grep -qE '^[[:space:]-]*([*_`]{1,2})?'"$1"'([*_`]{1,2})?:' "$2"
 # H_RELEASE -- so every one reads PENDING and none fails. The stamp keyed on the series' FIRST
 # pass is the whole narrowing, as it is for K, K2 and J2. The cost is paid only on the FOREIGN
 # case: a compliant series reads one file and never globs, probes, walks or forks git.
-H_RELEASE="0.732.0"
+H_RELEASE="0.733.0"
 h_stem() {  # $1 pass file -> H_STEM (empty when the name carries no pass number)
   local b="${1##*/}"
   b="${b%.md}"
