@@ -359,12 +359,25 @@ fi
 # ai-dlc-recover.sh with source=compact, and assert the resume text names the nonce and
 # gate-slice.sh, under the 10000-char cliff. Control: no ledger dir -> "no gate in flight".
 # ============================================================================
+# The recover hook sources its two libraries from ITS OWN directory, so they are copied from
+# beside $HOOK, which seed.sh resolved in both layouts. A `${ROOT}/core/hooks/` source exists
+# only in the distribution: on a consumer the copy failed silently, the hook fell back to its
+# no-op provenance wrap, and arm G and the BL-457 arms measured an unwrapped hook. A missing
+# library is therefore FIXTURE BROKEN with the path named, never a quiet skip.
+_HOOKDIR="$(dirname "$HOOK")"
+_cp_hook_libs() { # _cp_hook_libs <consumer-dir>
+  for _lib in ai-dlc-handoff-pending.sh ai-dlc-context-provenance.sh; do
+    if [ ! -f "$_HOOKDIR/$_lib" ] || ! cp "$_HOOKDIR/$_lib" "$1/.claude/hooks/"; then
+      echo "FIXTURE BROKEN: cannot copy the recover hook's library $_HOOKDIR/$_lib into $1/.claude/hooks/" >&2
+      exit 2
+    fi
+  done
+}
 if [ -n "$CKPT" ]; then
   _mkconsumer() { # _mkconsumer <dir>
     mkdir -p "$1/_bmad-output" "$1/.claude/skills/ai-dlc/steps" "$1/.claude/hooks" "$1/scripts/ai-dlc"
     cp "$HOOK" "$1/.claude/hooks/ai-dlc-recover.sh"; chmod +x "$1/.claude/hooks/ai-dlc-recover.sh"
-    [ -f "${ROOT}/core/hooks/ai-dlc-handoff-pending.sh" ] && cp "${ROOT}/core/hooks/ai-dlc-handoff-pending.sh" "$1/.claude/hooks/"
-    [ -f "${ROOT}/core/hooks/ai-dlc-context-provenance.sh" ] && cp "${ROOT}/core/hooks/ai-dlc-context-provenance.sh" "$1/.claude/hooks/"
+    _cp_hook_libs "$1"
     cp "$CKPT" "$1/scripts/ai-dlc/gate-checkpoint.sh"; chmod +x "$1/scripts/ai-dlc/gate-checkpoint.sh"
     cat > "$1/_bmad-output/pipeline-snapshot.md" <<'MD'
 # Pipeline Snapshot
@@ -473,7 +486,7 @@ if [ -n "$CKPT" ]; then
   _mkc457() { # _mkc457 <dir> <hookfile> <step:res|unres> <sidecar:yes|no> <nonce|""> <posbytes>
     mkdir -p "$1/_bmad-output" "$1/.claude/skills/ai-dlc/steps" "$1/.claude/hooks" "$1/scripts/ai-dlc"
     cp "$2" "$1/.claude/hooks/ai-dlc-recover.sh"
-    cp "${ROOT}/core/hooks/ai-dlc-handoff-pending.sh" "${ROOT}/core/hooks/ai-dlc-context-provenance.sh" "$1/.claude/hooks/" 2>/dev/null
+    _cp_hook_libs "$1"
     cp "$CKPT" "$1/scripts/ai-dlc/gate-checkpoint.sh"; chmod +x "$1/scripts/ai-dlc/gate-checkpoint.sh"
     [ "$3" = res ] && printf '# Implementation\n\nstep body\n' > "$1/.claude/skills/ai-dlc/steps/implementation.md"
     {
