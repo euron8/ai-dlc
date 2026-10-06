@@ -8467,8 +8467,8 @@ fi
 #
 # WHY THE FILE IS WORTH THE CORPUS SLOT AT ALL: Rule 7 sits at byte 8,722, RESIDENT above the
 # 20,000-byte re-attach cut. Rule 28, which attributed it, sits at 79,510, and
-# `_gate-procedures.md` is a separate file the lead never loaded. 13 of 31 rules are resident,
-# 18 are below the cut. A compacted lead therefore holds "Just fix it" verbatim and holds
+# `_gate-procedures.md` is a separate file the lead never loaded. 13 of 32 rules are resident,
+# 19 are below the cut. A compacted lead therefore holds "Just fix it" verbatim and holds
 # nothing that says who fixes it. Proven: reverting Rule 7 to its pre-v0.357.0 text makes this
 # invariant fire at SKILL.md:185, against a same-tree control that reports nothing.
 #

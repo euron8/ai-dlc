@@ -164,6 +164,8 @@ rendered namespace.
 the `adjudication: llm` checks (read-and-compare judgment) are escalated, once per gate, to a
 fresh Opus `gate-adjudicator`.
 
+SKILL.md Rule 32 touchpoint G1 applies here, before the script arms run.
+
 **Script arms before the adjudicator.** At gate entry, BEFORE minting `gate_nonce` and before
 dispatching anything, the lead runs every `adjudication: script` check in the manifest AND the
 script arm of every `adjudication: llm` check whose enforcement-map entry carries an
@@ -186,7 +188,8 @@ check, or an adjudicator verdict adopted through Check 26 — run
 `scripts/ai-dlc/gate-checkpoint.sh --nonce <gate_nonce> record <check-id> <PASS|FAIL|SKIP|PENDING>`.
 A post-compaction resume reads this ledger to skip settled checks (Rule 21). Record a
 `FAIL` too. On a re-dispatch, mint the fresh nonce and `open` it; the old ledger needs no
-clearing. After Check 15, run `gate-checkpoint.sh --nonce <gate_nonce> close`.
+clearing. After Check 15, run `gate-checkpoint.sh --nonce <gate_nonce> close` (SKILL.md
+Rule 32 touchpoint G2 applies before it).
 Adopt the adjudicator's per-check verdicts through the terminal **Check 26** (fail-closed).
 A verdict is valid ONLY for the dispatch that produced it. If you re-dispatch — because
 state moved, or the prior verdict cited state that has since changed — generate a fresh

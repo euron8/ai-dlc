@@ -273,6 +273,24 @@ citation set that produced the number. A count authored without one is a fact
 the reader cannot check and the author did not run, and it is indistinguishable
 from a guess.
 
+### Rule 32 -- Consult the advisor tool at named touchpoints when it is available
+When the harness gives you an `advisor` tool, you MUST call it at each touchpoint below; it
+takes no parameters and forwards your whole transcript to a stronger reviewer. If the tool is
+absent, or a call returns an error, continue without it -- a missing or failed advisor never
+blocks, delays or fails a step. The touchpoints:
+- **R -- post-compact recovery.** After the `postcompact-digest.md` Read and before your first
+  dispatch or write.
+- **G1 -- every gate, at entry.** Before the script arms run (`steps/gate-validation.md`).
+- **G2 -- every gate, before it closes.** Before `gate-checkpoint.sh --nonce <gate_nonce> close`.
+- **V1 -- validation cycle, after a repair.** After a repair record is joined and before the
+  next pass is dispatched (`steps/_gate-procedures.md`, Validation cycle).
+- **V2 -- a verdict and a validator disagree.** When a pass verdict and a validator's result
+  disagree, before acting on either.
+- **P -- a validation-cycle teammate is slow.** On the beat whose `WAITING` line reports
+  `beat 2/` for a validation-cycle deliverable, re-arm the next beat (`run_in_background:
+  true`) FIRST, then call the advisor in the same turn. Once per pass, never once per beat.
+- **I -- before an irreversible step.** Before a push, a merge or a deploy.
+
 ## INITIALIZATION
 Clear the pipeline pause flag before any other action. The
 UserPromptSubmit hook creates `_bmad-output/pipeline-paused.flag` on

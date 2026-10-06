@@ -941,6 +941,46 @@ shipped. Declared a GAP.
 <!-- I79: every rule below the re-attach cut declares what mechanically carries it,
      or declares `none` and is counted as a gap. A compacted lead does not hold this
      rule; whatever is named here is what survives instead of its memory. -->
+### Rule 32 -- Consult the advisor tool at named touchpoints when it is available
+
+When the harness gives you an `advisor` tool, you MUST call it at each touchpoint below; it
+takes no parameters and forwards your whole transcript to a stronger reviewer. If the tool is
+absent, or a call returns an error, continue without it -- a missing or failed advisor never
+blocks, delays or fails a step. The touchpoints:
+
+- **R -- post-compact recovery.** After the `postcompact-digest.md` Read and before your first
+  dispatch or write.
+- **G1 -- every gate, at entry.** Before the script arms run (`steps/gate-validation.md`).
+- **G2 -- every gate, before it closes.** Before `gate-checkpoint.sh --nonce <gate_nonce> close`.
+- **V1 -- validation cycle, after a repair.** After a repair record is joined and before the
+  next pass is dispatched (`steps/_gate-procedures.md`, Validation cycle).
+- **V2 -- a verdict and a validator disagree.** When a pass verdict and a validator's result
+  disagree, before acting on either.
+- **P -- a validation-cycle teammate is slow.** On the beat whose `WAITING` line reports
+  `beat 2/` for a validation-cycle deliverable, re-arm the next beat (`run_in_background:
+  true`) FIRST, then call the advisor in the same turn. Once per pass, never once per beat.
+- **I -- before an irreversible step.** Before a push, a merge or a deploy.
+
+Weigh what it returns. Where it contradicts evidence you hold, record the disagreement in the
+artifact you are writing rather than switching silently. An advisor call is a bounded
+foreground call that Rule 29 names as an exception; every touchpoint above sits where nothing
+else is in flight, and P re-arms the join before it calls.
+
+Teammates are bound separately: every `team-roles/*.md` contract carries its own advisor
+paragraph, and that paragraph is the teammate's instruction.
+
+**Carrier:** `.claude/skills/ai-dlc/steps/gate-validation.md`
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: a lead that holds a stronger reviewer and
+never calls it -- through a post-compact recovery, a gate verdict, a repair loop or a push --
+where a second reading is cheapest and a wrong call costs most. False-positive cost: one
+advisor call per touchpoint reached, measured at a median near 100 seconds of foreground time
+during which the operator cannot steer, and nothing at all where the tool is absent. Removal
+condition: retire this rule when the harness consults the advisor on its own schedule, or when
+the advisor tool is withdrawn.
+<!-- I79: every rule below the re-attach cut declares what mechanically carries it,
+     or declares `none` and is counted as a gap. A compacted lead does not hold this
+     rule; whatever is named here is what survives instead of its memory. -->
 
 ## INITIALIZATION
 

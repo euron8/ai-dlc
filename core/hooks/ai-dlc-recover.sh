@@ -445,6 +445,7 @@ to APPLY one. Before acting on a rule you meet there, \`Read
 .claude/skills/ai-dlc/SKILL.md\` for its full text. Reading an entry and proceeding
 as though you had read the rule is the one way this costs more than it saves. Do
 not reconstruct a rule, and do not ask the operator to re-invoke \`/ai-dlc\`.
+Then Rule 32 touchpoint R: call \`advisor\` if available; absent or erroring, go on.
 
 Before acting, emit a verification turn naming: the current step file, the last
 gate passed with its timestamp, any in-flight sub-step, the In-Flight Teammates

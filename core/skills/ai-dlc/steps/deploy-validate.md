@@ -44,6 +44,8 @@ sprint-overall PRs, not gated on anchor count or story count.
 
 ### 2. Deploy
 
+SKILL.md Rule 32 touchpoint I applies before the deploy.
+
 <!-- {deploy_command}: Your project's deployment command.
      Examples:
      - docker compose build <service> && docker compose up -d <service>

@@ -1106,6 +1106,8 @@ enforced rather than written.
 
 ### 6. Commit, Push, and PR
 
+SKILL.md Rule 32 touchpoint I applies before the push.
+
 **6a. Commit all remaining artifacts.**
 
 Completeness is already gated: Step 5c's four checks fail the commit on a
@@ -1233,6 +1235,8 @@ Then announce:
 The pipeline's only terminal announcement is Step 7d's handoff block.
 
 ### 7. Merge and Next-Sprint Handoff
+
+SKILL.md Rule 32 touchpoint I applies before the merge.
 
 This step closes the loop on the sprint and produces a copy-pasteable
 `/ai-dlc` prompt for the next sprint. The prompt is authored here, not
