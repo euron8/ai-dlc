@@ -103,6 +103,39 @@
 #   Files mode also refuses a repair dir that carries `sections/.manifest`: its section writes are
 #   under shards/ and would all be dropped, so a files-mode join would record a repair whose
 #   document was never assembled.
+#
+# SUBJECT MODE -- THE REQUIREMENTS SUBJECT REPAIRED BY PART.
+#   join-remediator-shards.sh --subject <N> --pass <M>|party|elicitation [--artifact gate-<type>]
+#       [<repair-dir>] [--base <sha>] --since <ISO> --until <ISO>
+#
+#   The lead has run `partition-subject.sh --split <N> <repair-dir>`, which wrote
+#   `<repair-dir>/.subject` (every part: its stem, its file, its section copy or `-` for a
+#   WHOLE-FILE part) and `<repair-dir>/<stem>/sections/` for every stem mapped into sections.
+#     --pass <M>           <repair-dir> s<N>/shards/requirements-repair-p<M>/  -> s<N>/requirements-repair-p<M>.md
+#     --pass party         s<N>/shards/requirements-party-repair/       -> s<N>/requirements-party-repair.md
+#     --pass elicitation   s<N>/shards/requirements-elicitation-repair/ -> s<N>/requirements-elicitation-repair.md
+#     --artifact gate-<type> --pass <M>   (the requirements gate's FAILURE repair; <M> numeric)
+#                          s<N>/shards/gate-<type>-repair-p<M>/ -> s<N>/gate-<type>-repair-p<M>.md,
+#                          the non-subject path's own naming, so arm H never reads it as an
+#                          adversarial pass's repair.
+#   The party and elicitation records sit OUTSIDE `*-repair-p<M>.md`, so neither can stand in for
+#   an adversarial pass's repair record in arm H.
+#   What changes, and nothing else does:
+#   - THE FILE SET is the four subject files, the spec kernel's sibling `.memlog.md` (the SPEC's
+#     owner repairs through `bmad-spec`, which writes both), and the section copies `.subject`
+#     names. Ledger rows anywhere else are not this join's. Slot confinement is not applied: the
+#     subject spans `planning-artifacts/`, `planning-artifacts/s<N>/` and `specs/s<N>/`.
+#   - A SECTIONED file written in place is REFUSED by name: its parts edit section copies, and
+#     a write to the file itself is a write to out-of-scope text (the assembler would refuse it
+#     too, as a moved document; this says which file and who). A subject file with NO part in
+#     the split -- unchanged since the base -- written in the window is refused the same way.
+#   - The manifest the split recorded must be the sprint's subject manifest, and `--base`, when
+#     given, must equal its base: the base is read, never re-chosen.
+#   - ASSEMBLY (`partition-subject.sh --assemble`) runs after every refusal has cleared and
+#     before the record is written; WHOLE-FILE parts are never reassembled. The record opens with
+#     `- artifact:` (the manifest) and per-stem `- artifact_sha_before:` / `- artifact_sha_after:`
+#     lists, every stem on both sides.
+#   Distinct-writer, UNWRITTEN, AMBIG, UNCITED, DOUBLE and SPAN are the same code.
 
 set -u
 export LC_ALL=C
@@ -112,8 +145,11 @@ refuse() { echo "REFUSED: $*" >&2; refuse_n=$((refuse_n + 1)); }
 die() { echo "REFUSED: $*" >&2; exit 2; }
 
 SPRINT=""; ARTIFACT=""; PASS=""; APATH=""; SINCE=""; UNTIL=""; DOCUMENT=""; REPDIR=""; DOCMODE=0
+SUBJMODE=0; SUBJ_BASE=""
 while [ $# -gt 0 ]; do
   case "$1" in
+    --subject) SPRINT="${2:-}"; SUBJMODE=1; shift 2 ;;
+    --base) SUBJ_BASE="${2:-}"; shift 2 ;;
     --sprint) SPRINT="${2:-}"; shift 2 ;;
     --artifact) ARTIFACT="${2:-}"; shift 2 ;;
     --pass) PASS="${2:-}"; shift 2 ;;
@@ -121,12 +157,34 @@ while [ $# -gt 0 ]; do
     --since) SINCE="${2:-}"; shift 2 ;;
     --until) UNTIL="${2:-}"; shift 2 ;;
     --document) DOCUMENT="${2:-}"; DOCMODE=1; shift 2 ;;
-    -h|--help) sed -n '2,105p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,139p' "$0"; exit 0 ;;
     -*) die "unknown argument '$1' (see --help)" ;;
-    *) [ "$DOCMODE" = 1 ] && [ -z "$REPDIR" ] || die "unknown argument '$1' (see --help)"
+    *) { [ "$DOCMODE" = 1 ] || [ "$SUBJMODE" = 1 ]; } && [ -z "$REPDIR" ] || die "unknown argument '$1' (see --help)"
        REPDIR="$1"; shift ;;
   esac
 done
+if [ "$SUBJMODE" = 1 ]; then
+  [ "$DOCMODE" = 0 ] || die "--subject and --document are two modes; pass one"
+  GATE_ART=""
+  case "$ARTIFACT" in
+    "") ;;
+    gate-?*) case "${ARTIFACT#gate-}" in *[!a-z0-9-]*) die "--artifact ${ARTIFACT} is not gate-<type> (lowercase, digits, hyphens)" ;; esac
+             GATE_ART="$ARTIFACT" ;;
+    *) die "--artifact applies with --subject only as gate-<type>, the requirements gate's failure repair; the artifact is the requirements subject" ;;
+  esac
+  [ -z "$APATH" ] || die "--artifact-path does not apply with --subject; the file set is the subject's"
+  case "$PASS" in
+    party) SUBJ_DIRNAME="requirements-party-repair"; SUBJ_RECNAME="requirements-party-repair.md" ;;
+    elicitation) SUBJ_DIRNAME="requirements-elicitation-repair"; SUBJ_RECNAME="requirements-elicitation-repair.md" ;;
+    ''|*[!0-9]*) die "--pass must be a pass number, party or elicitation in subject mode (got '${PASS}')" ;;
+    *) SUBJ_DIRNAME="requirements-repair-p${PASS}"; SUBJ_RECNAME="requirements-repair-p${PASS}.md" ;;
+  esac
+  if [ -n "$GATE_ART" ]; then
+    case "$PASS" in ''|*[!0-9]*) die "--artifact ${GATE_ART} names a gate repair, which needs a numeric --pass (got '${PASS}')" ;; esac
+    SUBJ_DIRNAME="${GATE_ART}-repair-p${PASS}"; SUBJ_RECNAME="${GATE_ART}-repair-p${PASS}.md"
+  fi
+  ARTIFACT="requirements"
+fi
 
 # Document mode may name the repair dir instead of the three flags: `.../s<N>/shards/<artifact>-repair-p<M>`.
 if [ "$DOCMODE" = 1 ] && [ -n "$REPDIR" ]; then
@@ -138,9 +196,11 @@ if [ "$DOCMODE" = 1 ] && [ -n "$REPDIR" ]; then
 fi
 SPRINT="${SPRINT#s}"
 case "$SPRINT" in ''|*[!0-9]*) die "--sprint must be a sprint number (got '${SPRINT}')" ;; esac
-case "$PASS" in ''|*[!0-9]*) die "--pass must be a pass number (got '${PASS}')" ;; esac
+[ "$SUBJMODE" = 1 ] || case "$PASS" in ''|*[!0-9]*) die "--pass must be a pass number (got '${PASS}')" ;; esac
 case "$ARTIFACT" in ''|*/*) die "--artifact must be a bare artifact name (got '${ARTIFACT}')" ;; esac
-if [ "$DOCMODE" = 1 ]; then
+if [ "$SUBJMODE" = 1 ]; then
+  :
+elif [ "$DOCMODE" = 1 ]; then
   [ -n "$DOCUMENT" ] || die "--document needs a path"
   [ -z "$APATH" ] || die "--artifact-path does not apply with --document; the file set is the repair dir's sections/"
 else
@@ -195,6 +255,10 @@ PA="${STATE}/planning-artifacts"
 LEDGER="${PA}/.artifact-writes.jsonl"
 SHARD_DIR="${PA}/s${SPRINT}/shards/${ARTIFACT}-repair-p${PASS}"
 OUT="${PA}/s${SPRINT}/${ARTIFACT}-repair-p${PASS}.md"
+if [ "$SUBJMODE" = 1 ]; then
+  SHARD_DIR="${PA}/s${SPRINT}/shards/${SUBJ_DIRNAME}"
+  OUT="${PA}/s${SPRINT}/${SUBJ_RECNAME}"
+fi
 # The shards root in the LEDGER's spelling: the hook writes `<basename of the state dir>/...`
 # (its STATE_DIR_NAME), so this is derived the same way, whether AI_DLC_STATE_DIR is absolute or not.
 SHARD_REL="${_STATE_DIR##*/}/planning-artifacts/s${SPRINT}/shards"
@@ -205,7 +269,52 @@ phys() { # <path> -> physical absolute path of an existing file or dir, rc 1 if 
   d="$(cd "$(dirname "$1")" 2>/dev/null && pwd -P)" || return 1
   b="$(basename "$1")"; printf '%s/%s\n' "$d" "$b"
 }
-if [ "$DOCMODE" = 1 ]; then
+SUBJ_SET=""; SUBJ_SECTIONED=""; SUBJ_OUTSIDE=""
+if [ "$SUBJMODE" = 1 ]; then
+  SUBJ_REC="${SHARD_DIR}/.subject"
+  if [ -n "$REPDIR" ]; then
+    _rd="$(phys "$REPDIR")" || die "the repair dir ${REPDIR} does not exist"
+    _sd="$(phys "$SHARD_DIR")" || die "the repair dir ${SHARD_DIR} does not exist"
+    [ "$_rd" = "$_sd" ] || die "the repair dir ${REPDIR} is not ${SHARD_DIR}, the one --subject/--pass name"
+  fi
+  [ -f "$SUBJ_REC" ] || die "no subject split record at ${SUBJ_REC}; run partition-subject.sh --split ${SPRINT} ${SHARD_DIR} before dispatching the remediators"
+  PSUBJ="${JR_SCRIPT_DIR}/partition-subject.sh"
+  [ -f "$PSUBJ" ] || die "partition-subject.sh is not beside this script (${PSUBJ}); reinstall ai-dlc"
+  _srm="$(awk -F'\t' '$1 == "manifest" { print $2; exit }' "$SUBJ_REC")"
+  # partition-subject.sh records every path ROOT-relative (`<state dir relative to the root>/...`),
+  # computed exactly as below; the ledger spells the same paths from the state dir's BASENAME. The
+  # two differ for a nested state dir, so the recorded spelling is compared as recorded and every
+  # path that meets the ledger is converted once, by to_ledger.
+  _rootp="$(cd "$JR_ROOT" 2>/dev/null && pwd -P)" || die "the project root ${JR_ROOT} does not exist"
+  case "$_STATE_DIR" in
+    /*) _sdp="$(cd "$_STATE_DIR" 2>/dev/null && pwd -P)" || die "the state dir ${_STATE_DIR} does not exist"
+        case "$_sdp" in "$_rootp"/*) SREL="${_sdp#"$_rootp"/}" ;; *) die "the state dir ${_STATE_DIR} is not under the project root ${_rootp}" ;; esac ;;
+    *) SREL="${_STATE_DIR%/}" ;;
+  esac
+  STATE_NAME="${STATE##*/}"
+  to_ledger() { awk -v p="${SREL}/" -v n="${STATE_NAME}/" 'index($0, p) == 1 { print n substr($0, length(p) + 1); next } { print }'; }
+  _want_mf="${SREL}/planning-artifacts/s${SPRINT}/requirements-subject.md"
+  [ "$_srm" = "$_want_mf" ] || die "${SUBJ_REC} was split against ${_srm:-no manifest}, not sprint ${SPRINT}'s subject manifest ${_want_mf}"
+  [ -f "${JR_ROOT}/${_srm}" ] || die "the subject manifest ${JR_ROOT}/${_srm} is gone"
+  SUBJ_MF_BASE="$(awk '/REQUIREMENTS_SUBJECT v1/ { inb = 1; next } inb && /^base: / { print $2; exit }' "${JR_ROOT}/${_srm}")"
+  [ "$(awk -F'\t' '$1 == "base" { print $2; exit }' "$SUBJ_REC")" = "$SUBJ_MF_BASE" ] \
+    || die "${SUBJ_REC} was split under a base other than the manifest's (${SUBJ_MF_BASE:-none}); the base is read, never re-chosen"
+  if [ -n "$SUBJ_BASE" ]; then
+    _bf="$(git -C "$JR_ROOT" rev-parse --verify --quiet "${SUBJ_BASE}^{commit}" 2>/dev/null)" || _bf=""
+    [ -n "$_bf" ] && [ "$_bf" = "$SUBJ_MF_BASE" ] || die "--base ${SUBJ_BASE} is not the subject manifest's base ${SUBJ_MF_BASE}"
+  fi
+  # The file set, in the ledger's spelling: section copies, the subject files with a WHOLE-FILE
+  # part, and the spec's .memlog.md beside its SPEC.md when the SPEC has a part.
+  SUBJ_SET="$(awk -F'\t' '
+    $1 == "part" && $7 != "-" { print $7 }
+    $1 == "part" && $7 == "-" { print $4; if ($3 == "SPEC") { m = $4; sub(/SPEC\.md$/, ".memlog.md", m); print m } }' "$SUBJ_REC" | to_ledger | awk '!seen[$0]++')"
+  SUBJ_SECTIONED="$(awk -F'\t' '$1 == "part" && $7 != "-" { print $4 }' "$SUBJ_REC" | to_ledger | awk '!seen[$0]++')"
+  # A subject file with no part at all: unchanged since the base, so nobody owns a write to it.
+  SUBJ_OUTSIDE="$(awk '/REQUIREMENTS_SUBJECT v1/ { inb = 1; next } /REQUIREMENTS_SUBJECT_END/ { inb = 0 } inb && /^file: / { print $3 }' "${JR_ROOT}/${_srm}" \
+    | while IFS= read -r _f; do awk -F'\t' -v f="$_f" '$1 == "part" && $4 == f { h = 1 } END { if (!h) print f }' "$SUBJ_REC"; done | to_ledger)"
+  [ -n "$SUBJ_SET" ] || die "${SUBJ_REC} lists no part"
+  APATH="${STATE_NAME}"
+elif [ "$DOCMODE" = 1 ]; then
   # The section copies are the file set, in the ledger's spelling.
   APATH="${SHARD_REL}/${ARTIFACT}-repair-p${PASS}/sections"
   PARTITION="${JR_SCRIPT_DIR}/partition-document.sh"
@@ -245,7 +354,8 @@ PARTS="$(printf '%s' "$PARTS" | sort)"
 
 # --- the ledger: per-file distinct writers inside the window, under the artifact path.
 [ -f "$LEDGER" ] || die "no write ledger at ${LEDGER}; disjointness cannot be proven"
-ROWS="$(jq -rn --arg since "$SINCE" --arg until "$UNTIL" --arg ap "$APATH" --arg sh "$SHARD_REL" --arg doc "$DOCMODE" '
+_jdoc="$DOCMODE"; [ "$SUBJMODE" = 1 ] && _jdoc=1
+ROWS="$(jq -rn --arg since "$SINCE" --arg until "$UNTIL" --arg ap "$APATH" --arg sh "$SHARD_REL" --arg doc "$_jdoc" '
   [inputs | select(type == "object") | select(.kind == "artifact-write")
    | select((.agent_id // "") != "") | select((.ts | type) == "string")
    | select(.ts >= $since and .ts <= $until)
@@ -253,6 +363,32 @@ ROWS="$(jq -rn --arg since "$SINCE" --arg until "$UNTIL" --arg ap "$APATH" --arg
    | select($doc == "1" or ((.path | startswith($sh + "/")) | not))
    | [.path, .agent_id]] | unique | .[] | @tsv' "$LEDGER" 2>/dev/null)" \
   || die "the write ledger ${LEDGER} does not parse as JSON lines"
+if [ "$SUBJMODE" = 1 ]; then
+  # Keep the subject's file set; name every in-place write to a sectioned or part-less subject
+  # file; drop everything else (the parts themselves, other agents' unrelated writes).
+  _subjf="$(mktemp "${TMPDIR:-/tmp}/join-subject.XXXXXX")" || die "mktemp failed"
+  { printf '%s\n' "$SUBJ_SET" | sed 's/^/K\t/'
+    printf '%s\n' "$SUBJ_SECTIONED" | sed '/^$/d; s/^/S\t/'
+    printf '%s\n' "$SUBJ_OUTSIDE" | sed '/^$/d; s/^/O\t/'; } > "$_subjf"
+  _bad="$(printf '%s\n' "$ROWS" | awk -F'\t' -v sf="$_subjf" '
+    BEGIN { while ((getline l < sf) > 0) { split(l, a, "\t"); C[a[2]] = a[1] } }
+    NF >= 2 && C[$1] == "S" { print "S\t" $1 "\t" $2 }
+    NF >= 2 && C[$1] == "O" { print "O\t" $1 "\t" $2 }')"
+  ROWS="$(printf '%s\n' "$ROWS" | awk -F'\t' -v sf="$_subjf" '
+    BEGIN { while ((getline l < sf) > 0) { split(l, a, "\t"); C[a[2]] = a[1] } }
+    NF >= 2 && C[$1] == "K"')"
+  rm -f "$_subjf"
+  if [ -n "$_bad" ]; then
+    while IFS='	' read -r _k _p _a; do
+      case "$_k" in
+        S) refuse "${_p} was written IN PLACE by ${_a}, but the split sectioned it: its parts edit section copies, and an in-place write is a write to text outside every in-scope part (the serial remediator edits it AFTER the join)" ;;
+        O) refuse "${_p} has no part in this split (unchanged since the base) and was written in the window by ${_a}; no shard owns it" ;;
+      esac
+    done <<BADEOF
+$_bad
+BADEOF
+  fi
+fi
 [ -n "$ROWS" ] || die "the ledger records no dispatched write under ${APATH} in [${SINCE}, ${UNTIL}]; disjointness is unproven"
 
 OVERLAPS="$(printf '%s\n' "$ROWS" | awk -F'\t' '
@@ -294,6 +430,9 @@ while IFS= read -r p; do
   while IFS= read -r _t; do
     [ -n "$_t" ] || continue
     _t="${_t#"$STATE_PARENT"}"; _t="${_t#"$STATE_PARENT_P"}"
+    # Subject mode: a part may cite the root-relative spelling `.subject` records; the ledger spells
+    # the state dir by its basename.
+    [ "$SUBJMODE" = 1 ] && case "$_t" in "${SREL}"/*) _t="${STATE_NAME}/${_t#"${SREL}"/}" ;; esac
     CITES="${CITES}C	$(basename "$p")	${_t}
 "
   done <<TOKEOF
@@ -362,7 +501,20 @@ fi
 # --- document mode: assemble BEFORE the record. A refusal here writes nothing -- the assembler
 # refuses without touching the document, and no record is written after it.
 ASM_LINE=""
-if [ "$DOCMODE" = 1 ]; then
+SUBJ_BEFORE=""; SUBJ_AFTER=""
+if [ "$SUBJMODE" = 1 ]; then
+  SUBJ_BEFORE="$(awk -F'\t' '$1 == "sha" { printf " %s=%s", $2, $3 }' "$SUBJ_REC")"
+  ASM_LINE="$(bash "$PSUBJ" --assemble "$SHARD_DIR" 2>&1)" || {
+    printf '%s\n' "$ASM_LINE" >&2
+    die "the sections of the sprint ${SPRINT} subject did not assemble; no repair record was written"
+  }
+  for _st in product-brief SPEC prd architecture-impact; do
+    _rel="$(awk '/REQUIREMENTS_SUBJECT v1/ { inb = 1; next } /REQUIREMENTS_SUBJECT_END/ { inb = 0 } inb && $1 == "file:" && $2 == s { print $3 }' s="$_st" "${JR_ROOT}/${_srm}")"
+    if command -v shasum >/dev/null 2>&1; then _h="$(shasum -a 256 "${JR_ROOT}/${_rel}" | cut -d' ' -f1)"
+    else _h="$(sha256sum "${JR_ROOT}/${_rel}" | cut -d' ' -f1)"; fi
+    SUBJ_AFTER="${SUBJ_AFTER} ${_st}=${_h}"
+  done
+elif [ "$DOCMODE" = 1 ]; then
   ASM_LINE="$(bash "$PARTITION" --assemble "$SHARD_DIR" 2>&1)" || {
     printf '%s\n' "$ASM_LINE" >&2
     die "the sections of ${DOC_ABS} did not assemble; no repair record was written"
@@ -375,7 +527,14 @@ TMP="${OUT}.join.$$"
   echo "# ${ARTIFACT} repair — sprint ${SPRINT}, pass ${PASS} (joined from $(printf '%s\n' "$PARTS" | grep -c .) shard records)"
   echo ""
   echo "Joined by join-remediator-shards.sh from ${SHARD_DIR#"${JR_ROOT}"/}; window ${SINCE} .. ${UNTIL};"
-  if [ "$DOCMODE" = 1 ]; then
+  if [ "$SUBJMODE" = 1 ]; then
+    echo "every subject file and section copy was written by exactly one agent in that window;"
+    printf '%s\n' "$ASM_LINE" | sed 's/^/partition-subject.sh: /'
+    echo ""
+    echo "- artifact: ${_srm}"
+    echo "- artifact_sha_before:${SUBJ_BEFORE}"
+    echo "- artifact_sha_after:${SUBJ_AFTER}"
+  elif [ "$DOCMODE" = 1 ]; then
     echo "every section under ${APATH} was written by exactly one agent in that window;"
     echo "partition-document.sh: ${ASM_LINE}"
   else

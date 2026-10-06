@@ -418,10 +418,12 @@ record_artifact_write() { # $1 file_path -- silent no-op unless this is a planni
   # The LOG_DIR prefix first, so a directory under planning-artifacts that happens to share the
   # state directory's name cannot move the cut; the generic form is the fallback for a payload
   # spelled from somewhere else.
+  # `specs/s<N>/**` too: the requirements subject's SPEC kernel (and its `.memlog.md`) is one
+  # whole-file part of a subject repair, and the subject join proves its one owner from these rows.
   case "$1" in
-    "$LOG_DIR"/planning-artifacts/*) _raw_rel="${STATE_DIR_NAME}/${1#"$LOG_DIR"/}" ;;
-    */${STATE_DIR_NAME}/planning-artifacts/*) _raw_rel="${STATE_DIR_NAME}/${1#*/${STATE_DIR_NAME}/}" ;;
-    ${STATE_DIR_NAME}/planning-artifacts/*) _raw_rel="$1" ;;
+    "$LOG_DIR"/planning-artifacts/*|"$LOG_DIR"/specs/s[0-9]*/*) _raw_rel="${STATE_DIR_NAME}/${1#"$LOG_DIR"/}" ;;
+    */${STATE_DIR_NAME}/planning-artifacts/*|*/${STATE_DIR_NAME}/specs/s[0-9]*/*) _raw_rel="${STATE_DIR_NAME}/${1#*/${STATE_DIR_NAME}/}" ;;
+    ${STATE_DIR_NAME}/planning-artifacts/*|${STATE_DIR_NAME}/specs/s[0-9]*/*) _raw_rel="$1" ;;
     *) return 0 ;;
   esac
   mkdir -p "$ARTIFACT_LEDGER_DIR" 2>/dev/null || return 0

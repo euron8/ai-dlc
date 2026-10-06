@@ -23,6 +23,7 @@ the corpus is ever read:
 | (f) | `SKILL.md` | Rule 8's `lightweight` row names `requirements` |
 | (g) | `validate-draft-stamps.sh` | `DRAFTS=` contains `requirements-context` |
 | (h) | every step file carrying `one-line disposition per hit (` | the carrier set is DERIVED (at least two); the backtick members of that parenthetical, lines joined, are identical across carriers and are exactly `superseded` / `still binding` / `not relevant` / `deferred-unfiled`; each carrier states the `deferred-unfiled` filing mandate. Two mutants on a copy of the steps dir: drop the member from one carrier (disagreement) and from every carrier (agreement on the wrong set) |
+| (i) | `requirements.md` | section 5 (its `### 5.` heading to `### 6.`) names `partition-subject.sh` and no longer says Rule 28 has no axis for a multi-artifact subject; 4(c) (`**(c) Update the PRD.**` to `**PRD validation.**`) carries the `###` subheading mandate sentence, not merely `###` tokens. Two mutants on a copy: restore the old sentence into section 5, drop the mandate line; each is killed by its own predicate while the other still holds |
 
 ## Why the grammar is not a bare substring match
 

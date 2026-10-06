@@ -118,6 +118,18 @@ for your findings, and (d) a shared context block. You MUST:
    you are the cross shard — and never a `stories:` line. `artifact:` names the whole document and
    `artifact_sha` is the sha256 of the WHOLE document as it is on disk, not of your range: the
    merge checks every shard's sha against the document and refuses a mismatch.
+
+   **As a subject shard** — your brief carries `shard: <ordinal>/<K> <file-stem> <heading>` or
+   `shard: cross/<K> cross` over the requirements subject (Rule 28, "Split dispatch": subject
+   axis). Your read scope, your `sections:` citations, your `artifact:` and your per-stem
+   `artifact_sha` are exactly those `steps/_gate-procedures.md`, "Adversarial review dispatch",
+   prescribes in its paragraph **Shard the requirements subject**; follow that paragraph, not
+   the section-shard paragraph above. As an
+   elicitation shard there, you run `/bmad-advanced-elicitation`, edit nothing, and stamp no
+   `verdict:` ("Validation cycle" item 2); your `artifact:`, per-stem `artifact_sha:` and
+   `sections:` lines are those of that same paragraph, which the elicitation merge refuses
+   without. Briefed `shard: none (serial-document)` over a one-part subject, you write
+   `requirements-elicitation.md` yourself with the same fields and nothing is merged.
 6. **A finding whose repair ADDS mechanism must say why the simpler path fails**
    (Rule 26(d)). Removal and simplification findings are equal in standing to
    additions: propose them with the same directness, grade them on the same

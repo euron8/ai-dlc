@@ -19,6 +19,53 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.735.0] - 2026-10-06
+
+Batch 200's fourth release. It discharges the reference consumer's
+`PC-S317-REQUIREMENTS-STEP-CYCLE-IS-NEVER-SHARDED-BECAUSE-ITS-SUBJECT-IS-THREE-FILES-AND-THE-PRD-IS-CUMULATIVE`,
+filed here as `BL-458`, which closes in the batch close commit (net closed minus filed: 0). No file in it
+is bootstrapping.
+
+### The requirements step reviews its SUBJECT, sharded by a map (BL-458)
+
+- The requirements step's validation cycle reviews four files as one subject: the product brief, the
+  one spec kernel `SPEC.md`, `prd.md` and `s<N>/architecture-impact.md`. Rule 28 had no axis for a
+  multi-file subject, so every sub-pass ran one agent per seat, and the consumer's s317 series
+  sectioned the cumulative PRD whole while the other three files were reviewed by nobody.
+- New `core/scripts/partition-subject.sh` maps the subject over what changed since one base: `git
+  merge-base $AI_DLC_TRUNK HEAD` at the first map, recorded in `s<N>/requirements-subject.md` and read
+  thereafter. `--base` is an assertion checked against that manifest, never a choice. Sections are
+  delegated to `partition-document.sh --scope-ref`; the SPEC is always one whole-file part, repaired
+  through its `.memlog.md` and a `bmad-spec` re-render, never by a direct edit. `--split` takes
+  `--expect-sha "<stem>=<sha> ..."` (or `@<file>`) naming every stem once, writes section copies
+  under `<repair-dir>/<stem>/sections/`, and leaves no section behind when it refuses.
+- `merge-adversarial-shards.sh --subject <N> [--elicitation]` and `join-remediator-shards.sh
+  --subject <N> --pass <M>|party|elicitation` join every sub-pass: the party round (seats x subject
+  parts), elicitation, every adversarial pass and every repair. A gate-failure repair at the
+  requirements gate joins with `--artifact gate-<type> --pass <M>` and writes
+  `gate-<type>-repair-p<M>.md`, the name the non-subject path uses, so arm H never reads it as an
+  adversarial pass's repair. A nested `AI_DLC_STATE_DIR` resolves the same way on both sides.
+- Check 24 arm K3: the terminal pass of `s<N>/requirements-adversarial-p*` names the subject manifest
+  and carries a `shard_tool_use_ids` key SET equal to the map's ordinals plus `cross` (identity, not
+  count); a one-part subject carries none. It reads PENDING unless every stem's disk sha equals its
+  notarized sha, and is stamp-gated by `K3_RELEASE` (0.735.0) on the series' first pass, so a legacy
+  series reads PENDING, never FAIL.
+- The remediation guard ledgers writes under `specs/s<N>/**`.
+- Text: `steps/requirements.md`, `_gate-procedures.md`, Rule 20 and Rule 28 (subject and
+  seats x subject-parts axes; exception 4 covers a one-part subject, whose party round, elicitation
+  and passes are each written by one agent and never merged), and the adversary and remediator role
+  files by citation.
+- Fixtures: new shipping `subject-partition` (map, split, `--expect-sha` in every form, the undo,
+  a nested state dir, a receipt and six mutants); `adversarial-shard-merge` U0-U8 and MX9-MX13;
+  `remediator-shard-join` SJ0-SJ9 and JX11-JX14; `check-24-adversarial-convergence` K3 cells over
+  real-producer worlds and K3X0-K3X2; `requirements-step` arm (i).
+
+### Known, not closed here
+
+- Drift after a terminal MET pass is invisible for the requirements subject: arm J2 skips a per-stem
+  `artifact_sha` list and K3 reads moved bytes as PENDING. It predates this release, since `prd.md`
+  sat outside J2's scope before; filed at the batch close.
+
 ## [0.734.0] - 2026-10-06
 
 Batch 200's third release, shipped ALONE because it edits a bootstrapping file

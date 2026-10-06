@@ -39,6 +39,25 @@
 #   start and its file's modification time (UTC), so the wall clock a section fan-out actually
 #   bought is readable from the pass file rather than argued about.
 #
+# SUBJECT MODE (--subject <N> [--base <sha>] [--elicitation] <shard-dir>)
+#   The requirements step's SUBJECT -- brief, SPEC, PRD, architecture-impact, mapped over what
+#   changed since one base -- reviewed as one artifact. The ordinal set is the parts
+#   `partition-subject.sh --map <N> --manifest <s<N>/requirements-subject.md>` prints, and the base
+#   is the one that manifest RECORDS: this merge never derives a base and never writes the
+#   manifest (no manifest refuses). `--base` is an assertion against it. A subject the map calls
+#   SERIAL is refused, as a SERIAL document is: one adversary writes that pass itself.
+#     shard dir  `s<N>/shards/requirements-p<M>/` -> `s<N>/requirements-adversarial-p<M>.md`;
+#                with --elicitation `s<N>/shards/requirements-elicitation/` ->
+#                `s<N>/requirements-elicitation.md`. The sprint in the path must be <N>.
+#     citation   `sections: <ordinal>[, ...]`, the document-mode grammar over SUBJECT ordinals.
+#     sha        every shard notarizes `artifact_sha:` as `<stem>=<sha>` for ALL FOUR subject
+#                stems (any order), each equal to that file on disk; the merged block carries the
+#                list in subject order. `artifact:` must resolve to the subject manifest.
+#     elicitation  no shard may carry `verdict:` and the merge writes none -- elicitation is not
+#                a convergence pass -- and every shard declares `skill: bmad-advanced-elicitation`.
+#   `--document` and files mode REFUSE a shard dir named `requirements-p<M>`, so subject mode is
+#   the only writer of that series.
+#
 # WHY IT EXISTS
 #   A multi-file artifact is reviewed by one adversary per story ORDINAL plus one cross-story
 #   adversary. Each writes a shard; the convergence validator, the hooks and every other
@@ -98,11 +117,22 @@ export LC_ALL=C
 
 refuse() { printf 'REFUSED: %s\n' "$*"; exit 2; }
 
-USAGE="usage: merge-adversarial-shards.sh [--map | --document <path>] <planning>/s<N>/shards/<artifact>-p<M>"
-MAP_ONLY=0; DOCUMENT=""
+USAGE="usage: merge-adversarial-shards.sh [--map | --document <path> | --subject <N> [--base <sha>] [--elicitation]] <planning>/s<N>/shards/<artifact>-p<M>"
+MAP_ONLY=0; DOCUMENT=""; SUBJECT=""; SUBJ_BASE=""; ELICIT=0
 case "${1:-}" in
   -h|--help) awk 'NR > 1 && /^set -u/ { exit } NR > 1' "$0"; exit 0 ;;
   --map) MAP_ONLY=1; shift ;;
+  --subject)
+    [ $# -ge 2 ] || refuse "$USAGE"
+    SUBJECT="${2#s}"; shift 2
+    case "$SUBJECT" in ""|*[!0-9]*) refuse "--subject takes a sprint number (got '$SUBJECT')" ;; esac
+    while [ $# -gt 1 ]; do
+      case "$1" in
+        --base) [ -n "${2:-}" ] || refuse "--base needs a value"; SUBJ_BASE="$2"; shift 2 ;;
+        --elicitation) ELICIT=1; shift ;;
+        *) break ;;
+      esac
+    done ;;
   --document)
     [ $# -ge 2 ] || refuse "$USAGE"
     DOCUMENT="$2"; shift 2
@@ -114,7 +144,8 @@ esac
 # refused explicitly (below), never merely ignored -- ignored, a `stories:` line in a document
 # shard is invisible, and the finding is then judged on whatever `sections:` line sits beside it.
 # Files mode keeps no second axis, so its behaviour on every input is what it was before sections.
-if [ -n "$DOCUMENT" ]; then CITE=sections; OTHER=stories; NOUN=section; else CITE=stories; OTHER=""; NOUN=story; fi
+if [ -n "$DOCUMENT" ] || [ -n "$SUBJECT" ]; then CITE=sections; OTHER=stories; NOUN=section; else CITE=stories; OTHER=""; NOUN=story; fi
+if [ -n "$SUBJECT" ]; then NOUN=part; fi
 
 SHARD_DIR="${1%/}"
 [ -d "$SHARD_DIR" ] || refuse "shard directory $SHARD_DIR does not exist"
@@ -129,13 +160,29 @@ case "$(basename "$SPRINT_DIR")" in
   s[0-9]*) ;;
   *) refuse "$SPRINT_DIR is not a sprint directory s<N>" ;;
 esac
+if [ -n "$SUBJECT" ] && [ "$ELICIT" -eq 1 ]; then
+  [ "$SHARD_BASE" = "requirements-elicitation" ] \
+    || refuse "an elicitation merge reads s<N>/shards/requirements-elicitation/, not $SHARD_BASE"
+  ARTIFACT="requirements"; PASS=""
+  OUT="$SPRINT_DIR/requirements-elicitation.md"
+else
 ARTIFACT="$(printf '%s' "$SHARD_BASE" | sed -n 's/^\(.*[^-]\)-p\([0-9][0-9]*\)$/\1/p')"
 PASS="$(printf '%s' "$SHARD_BASE" | sed -n 's/^\(.*[^-]\)-p\([0-9][0-9]*\)$/\2/p')"
 [ -n "$ARTIFACT" ] && [ -n "$PASS" ] || refuse "shard directory name $SHARD_BASE is not <artifact>-p<M>"
 PASS=$((10#$PASS))
-STORIES_DIR="$SPRINT_DIR/$ARTIFACT"
 OUT="$SPRINT_DIR/$ARTIFACT-adversarial-p$PASS.md"
-if [ -z "$DOCUMENT" ]; then
+fi
+STORIES_DIR="$SPRINT_DIR/$ARTIFACT"
+# B4: the requirements series is the SUBJECT's. A whole-PRD `--document` merge (or a files merge)
+# into it would write a pass K3 then has to fail; refuse it here, before anything is read.
+if [ -z "$SUBJECT" ] && [ "$ARTIFACT" = "requirements" ]; then
+  refuse "$SHARD_BASE is the requirements subject's series; merge it with --subject <N>, never --document or files mode"
+fi
+if [ -n "$SUBJECT" ]; then
+  [ "$ARTIFACT" = "requirements" ] || refuse "--subject merges s<N>/shards/requirements-p<M>/ or requirements-elicitation/, not $SHARD_BASE"
+  [ "$(basename "$SPRINT_DIR")" = "s$SUBJECT" ] || refuse "$SHARD_DIR is not under s$SUBJECT/; --subject $SUBJECT names another sprint"
+fi
+if [ -z "$DOCUMENT" ] && [ -z "$SUBJECT" ]; then
   [ -d "$STORIES_DIR" ] || refuse "the artifact under review $STORIES_DIR is not a directory; a single-file artifact is sharded only by section, with --document"
 fi
 
@@ -147,7 +194,56 @@ sha_of() {
   else sha256sum "$1" | cut -d' ' -f1; fi
 }
 
-if [ -n "$DOCUMENT" ]; then
+if [ -n "$SUBJECT" ]; then
+# ---- the ordinal map, derived from the subject partition under the MANIFEST's base ----------
+# The manifest is found beside the series (s<N>/requirements-subject.md); partition-subject.sh
+# reads the base and the four paths from it alone (--manifest), so this merge derives no root,
+# no trunk and no base, and a missing manifest refuses rather than being written here.
+SUBJ_PS="$(cd "$(dirname "$0")" && pwd)/partition-subject.sh"
+[ -f "$SUBJ_PS" ] || refuse "cannot read the subject partition: $SUBJ_PS is absent"
+SUBJ_MF="$SPRINT_DIR/requirements-subject.md"
+[ -f "$SUBJ_MF" ] || refuse "no subject manifest at $SUBJ_MF; the subject's first partition-subject.sh --map writes it"
+SUBJ_MF="$(cd "$(dirname "$SUBJ_MF")" && pwd -P)/$(basename "$SUBJ_MF")"
+if [ -n "$SUBJ_BASE" ]; then
+  bash "$SUBJ_PS" --map "$SUBJECT" --manifest "$SUBJ_MF" --base "$SUBJ_BASE" > "$T/smap" 2> "$T/map.err"; prc=$?
+else
+  bash "$SUBJ_PS" --map "$SUBJECT" --manifest "$SUBJ_MF" > "$T/smap" 2> "$T/map.err"; prc=$?
+fi
+if [ "$prc" -eq 3 ]; then
+  refuse "the sprint $SUBJECT subject maps to one part ($(head -1 "$T/smap")); a one-part subject is reviewed by one adversary and never merged"
+fi
+[ "$prc" -eq 0 ] || refuse "partition-subject.sh --map $SUBJECT exited $prc: $(head -1 "$T/map.err")"
+cp "$T/smap" "$T/map" || refuse "cannot stage the ordinal map"
+K="$(grep -c . "$T/map")" || K=0
+[ "$K" -ge 2 ] || refuse "partition-subject.sh --map $SUBJECT printed $K part(s); a subject merge needs two or more"
+W=${#K}
+i=0
+while IFS="$(printf '\t')" read -r o f a z h; do
+  i=$((i + 1))
+  case "$o" in ""|*[!0-9]*) refuse "partition-subject.sh --map printed ordinal '$o' on row $i" ;; esac
+  [ "$((10#$o))" -eq "$i" ] || refuse "partition-subject.sh --map printed ordinal $o on row $i; ordinals run 1..K in order"
+done < "$T/map"
+# The four stems and their disk shas, in manifest order: `<stem>\t<sha>`.
+SUBJ_ROOT=""
+SUBJ_FIRST="$(awk '/^file: / { print $3; exit }' "$SUBJ_MF")"
+_d="$(dirname "$SUBJ_MF")"
+while [ -n "$_d" ] && [ "$_d" != "/" ]; do
+  if [ -f "$_d/$SUBJ_FIRST" ]; then SUBJ_ROOT="$_d"; break; fi
+  _d="$(dirname "$_d")"
+done
+[ -n "$SUBJ_ROOT" ] || refuse "no directory above $SUBJ_MF holds $SUBJ_FIRST"
+: > "$T/stems" || refuse "cannot stage the subject shas"
+awk '/REQUIREMENTS_SUBJECT v1/ { inb = 1; next } /REQUIREMENTS_SUBJECT_END/ { inb = 0 } inb && /^file: /' "$SUBJ_MF" > "$T/mfiles" \
+  || refuse "cannot read $SUBJ_MF"
+while read -r _k _st _rel; do
+  [ "$_k" = "file:" ] || continue
+  _s="$(sha_of "$SUBJ_ROOT/$_rel")" || refuse "cannot hash $_rel"
+  [[ $_s =~ ^[a-f0-9]{64}$ ]] || refuse "cannot hash $_rel"
+  printf '%s\t%s\n' "$_st" "$_s" >> "$T/stems" || refuse "cannot stage the subject shas"
+done < "$T/mfiles"
+[ "$(grep -c . "$T/stems")" = "4" ] || refuse "$SUBJ_MF does not list four subject files"
+SUBJ_SHA_LIST="$(awk -F'\t' '{ printf " %s=%s", $1, $2 }' "$T/stems")"
+elif [ -n "$DOCUMENT" ]; then
 # ---- the ordinal map, derived from the partition of the document -------------------------
 # partition-document.sh is the ONLY speller of the section grammar; its --map is read here and
 # never re-derived, and never replaced by a listing of the shard directory -- a listing is the
@@ -193,7 +289,8 @@ done < "$T/listing.sorted"
 [ "$i" -eq "$K" ] || refuse "read $i of $K story files"
 fi
 if [ "$MAP_ONLY" -eq 1 ]; then cat "$T/map"; exit 0; fi
-if [ -n "$DOCUMENT" ]; then UNIT_COUNT="part count of $DOCUMENT"; else UNIT_COUNT="story count of $STORIES_DIR"; fi
+if [ -n "$SUBJECT" ]; then UNIT_COUNT="part count of the sprint $SUBJECT subject"
+elif [ -n "$DOCUMENT" ]; then UNIT_COUNT="part count of $DOCUMENT"; else UNIT_COUNT="story count of $STORIES_DIR"; fi
 ORDINALS="$(cut -f1 "$T/map" | tr '\n' ' ')"
 ORDINALS="${ORDINALS% }"
 norm_ord() { # "003" -> 03 at width W; empty unless digits within 1..K
@@ -342,12 +439,17 @@ for key in $ORDINALS cross; do
   minor="$(digits "$(field "$P" findings_minor)")"
   [ -n "$minor" ] || minor=0
 
+  if [ "$ELICIT" -eq 1 ]; then
+    # Elicitation is not a convergence pass: a verdict here would be read as one by every gate.
+    [ -z "$(field "$P" verdict)" ] || refuse "$sf declares a verdict; an elicitation shard carries none"
+  else
   v="$(field "$P" verdict | tr '[:lower:]' '[:upper:]' | sed -e 's/[^A-Z]\{1,\}/_/g' -e 's/^_//' -e 's/_$//')"
   case "$v" in
     EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET) ;;
     DIVERGENT_HARD_BLOCK) ANY_DIVERGENT=1 ;;
     *) refuse "$sf declares verdict '${v:-<none>}', not one of EXIT_CONDITION_MET EXIT_CONDITION_NOT_MET DIVERGENT_HARD_BLOCK" ;;
   esac
+  fi
 
   at="$(field "$P" invoked_at)"
   [[ $at =~ $RE_ISO ]] || refuse "$sf invoked_at '${at:-<none>}' is not ISO 8601 UTC to the second (an optional .<fraction> before Z is accepted)"
@@ -362,6 +464,9 @@ for key in $ORDINALS cross; do
 
   # skill / mode / lead_role are batch-invariant: every shard ran the same evaluation.
   val="$(field "$P" skill)"; [ -n "$val" ] || refuse "$sf declares no skill"
+  if [ "$ELICIT" -eq 1 ] && [ "$val" != "bmad-advanced-elicitation" ]; then
+    refuse "$sf declares skill '$val'; an elicitation shard runs bmad-advanced-elicitation"
+  fi
   [ -z "$SKILL" ] || [ "$SKILL" = "$val" ] || refuse "$sf declares skill '$val' where another shard declares '$SKILL'"
   SKILL="$val"
   val="$(field "$P" mode)"; [ -n "$val" ] || refuse "$sf declares no mode"
@@ -382,7 +487,29 @@ for key in $ORDINALS cross; do
   wrong="$(awk '$1 == "Y" { print $2 }' "$P")"
   [ "${wrong:-0}" = "0" ] || refuse "$sf:$wrong carries a '$OTHER:' line; a document merge cites sections only, and a finding citing both axes is never keyed on one of them"
 
-  if [ -n "$DOCUMENT" ]; then
+  if [ -n "$SUBJECT" ]; then
+    # Every shard -- cross included -- notarizes ALL FOUR stems at their disk bytes, and names the
+    # subject manifest. Order-free: the list is compared stem by stem.
+    sha="$(field "$P" artifact_sha)"
+    [ -n "$sha" ] || refuse "$sf declares no artifact_sha; a subject shard notarizes <stem>=<sha> for every subject file"
+    nt=0
+    for tok in $sha; do
+      nt=$((nt + 1))
+      st="${tok%%=*}"; sv="$(printf '%s' "${tok#*=}" | tr 'A-F' 'a-f')"
+      case "$tok" in *=*) ;; *) refuse "$sf artifact_sha token '$tok' is not <stem>=<sha>" ;; esac
+      want="$(awk -F'\t' -v s="$st" '$1 == s { print $2 }' "$T/stems")"
+      [ -n "$want" ] || refuse "$sf artifact_sha names stem '$st', not a subject stem ($(cut -f1 "$T/stems" | tr '\n' ' '))"
+      [ "$sv" = "$want" ] || refuse "$sf notarizes $st=$sv but that file is $want on disk; the shard reviewed other bytes"
+    done
+    [ "$nt" -eq 4 ] && [ "$(printf '%s\n' $sha | sed 's/=.*//' | sort -u | grep -c .)" -eq 4 ] \
+      || refuse "$sf artifact_sha carries $nt token(s); a subject shard notarizes each of the four stems once"
+    art="$(field "$P" artifact)"
+    [ -n "$art" ] || refuse "$sf declares no artifact; a subject shard names the subject manifest"
+    resolve_artifact "$art"
+    [ "$ART_ABS" = "$SUBJ_MF" ] \
+      || refuse "$sf names artifact '$art', which resolves to ${ART_ABS:-nothing}, not the subject manifest $SUBJ_MF"
+    if [ "$key" = "cross" ]; then CROSS_ID="$tid"; CROSS_ARTIFACT="$art"; fi
+  elif [ -n "$DOCUMENT" ]; then
     # Every shard -- cross included -- reviewed the WHOLE document's bytes, so every shard
     # notarizes the one whole-document sha and names the one document.
     sha="$(field "$P" artifact_sha)"
@@ -437,7 +564,10 @@ for key in $ORDINALS cross; do
   S_UNDER=$((S_UNDER + under)); S_MINOR=$((S_MINOR + minor))
 
   # --- the body, provenance block stripped ---
-  if [ -n "$DOCUMENT" ]; then
+  if [ -n "$SUBJECT" ]; then
+    if [ "$key" = "cross" ]; then printf '\n## Shard: cross-part\n\n' >> "$T/body" || refuse "cannot stage the merged body"
+    else printf '\n## Shard: part %s\n\n' "$key" >> "$T/body" || refuse "cannot stage the merged body"; fi
+  elif [ -n "$DOCUMENT" ]; then
     if [ "$key" = "cross" ]; then printf '\n## Shard: cross-section\n\n' >> "$T/body" || refuse "cannot stage the merged body"
     else printf '\n## Shard: section %s\n\n' "$key" >> "$T/body" || refuse "cannot stage the merged body"; fi
   elif [ "$key" = "cross" ]; then printf '\n## Shard: cross-story\n\n' >> "$T/body" || refuse "cannot stage the merged body"
@@ -457,8 +587,13 @@ elif [ "$S_CRIT" -le "$CRIT_CEIL" ] && [ "$BLOCKING" -le "$MAJOR_CEIL" ]; then V
 else VERDICT="EXIT_CONDITION_NOT_MET"; fi
 
 {
+  if [ "$ELICIT" -eq 1 ]; then
+  printf '# %s -- advanced elicitation (merged from %s shards)\n' "$ARTIFACT" "$(wc -l < "$T/shards" | tr -d ' ')"
+  printf '\nMerged by merge-adversarial-shards.sh --elicitation; elicitation is not a convergence pass and carries no verdict.\n'
+  else
   printf '# %s -- adversarial pass %s (merged from %s shards)\n' "$ARTIFACT" "$PASS" "$(wc -l < "$T/shards" | tr -d ' ')"
   printf '\nVerdict RECOMPUTED by merge-adversarial-shards.sh from the summed residue; shard verdicts are advisory.\n'
+  fi
   printf '\n## Shard ordinal map\n\n```text\n'
   cat "$T/map"
   printf '```\n'
@@ -471,7 +606,9 @@ else VERDICT="EXIT_CONDITION_NOT_MET"; fi
   printf 'mode: %s\n' "$MODE"
   printf 'lead_role: %s\n' "$LEAD_ROLE"
   printf 'artifact: %s\n' "$CROSS_ARTIFACT"
-  if [ -n "$DOCUMENT" ]; then
+  if [ -n "$SUBJECT" ]; then
+    printf 'artifact_sha:%s\n' "$SUBJ_SHA_LIST"
+  elif [ -n "$DOCUMENT" ]; then
     printf 'artifact_sha: %s\n' "$DOC_SHA"
     printf 'shard_wall:%s\n' "$WALL_LIST"
   else
@@ -483,7 +620,7 @@ else VERDICT="EXIT_CONDITION_NOT_MET"; fi
   printf 'findings_major_underived: %s\n' "$S_UNDER"
   printf 'findings_minor: %s\n' "$S_MINOR"
   [ "$RESOLVES_SET" -eq 1 ] && printf 'resolves_divergence: %s\n' "$RESOLVES"
-  printf 'verdict: %s\n' "$VERDICT"
+  [ "$ELICIT" -eq 1 ] || printf 'verdict: %s\n' "$VERDICT"
   printf 'SKILL_INVOCATION_PROVENANCE_END -->\n'
 } > "$T/out" || refuse "cannot stage the merged pass file"
 
@@ -494,6 +631,11 @@ if [ -e "$OUT" ]; then
   refuse "$OUT already exists and differs from this merge; a pass file is never overwritten"
 fi
 cp "$T/out" "$OUT.merge-tmp.$$" && mv "$OUT.merge-tmp.$$" "$OUT" || refuse "writing $OUT failed"
+if [ "$ELICIT" -eq 1 ]; then
+  printf 'MERGED: %s elicitation shards=%s critical=%s major=%s minor=%s (no verdict)\n' \
+    "$OUT" "$(wc -l < "$T/shards" | tr -d ' ')" "$S_CRIT" "$S_MAJOR" "$S_MINOR"
+  exit 0
+fi
 printf 'MERGED: %s verdict=%s shards=%s critical=%s major=%s underived=%s blocking=%s ceiling=%s\n' \
   "$OUT" "$VERDICT" "$(wc -l < "$T/shards" | tr -d ' ')" "$S_CRIT" "$S_MAJOR" "$S_UNDER" "$BLOCKING" "$MAJOR_CEIL"
 exit 0

@@ -49,12 +49,16 @@ arguments did not arrive.
 **(ii) Single-voice (`/bmad-advanced-elicitation`,
 `/bmad-review-adversarial-general`, `/bmad-prd`).** These have no
 internal spawn, so the lead MUST dispatch the invocation to ONE spawned
-`adversary` teammate (Rule 19 binding to `.claude/team-roles/adversary.md` --
+`adversary` teammate per Rule 28 part -- one in all, unless the subject is
+sharded under Rule 28 "Split dispatch", where it is one per part plus the
+cross-part agent (Rule 19 binding to `.claude/team-roles/adversary.md` --
 the role purpose-built for independent validation of a planning artifact: no
 ownership stake, the sub-skill drives the method, the role supplies the
 independence + model). The `adversary` invokes the named sub-skill in its OWN
 context and writes the provenance block with `mode: subagent`; the lead applies
-the returned findings. One role serves all three single-voice sub-skills -- the
+the returned findings. For the requirements subject, the findings are applied by
+the elicitation repair a `remediator` runs (`_gate-procedures.md`, "Validation
+cycle" item 2), never by the lead inline. One role serves all three single-voice sub-skills -- the
 binding does not vary by sub-skill (the sub-skill selects the method; the role
 is constant). `code-reviewer` (diff-scoped) and `analyst` (read-only,
 non-adversarial) are the WRONG bind here -- neither is an independent critic of
@@ -68,7 +72,8 @@ operator back-and-forth, so subagent dispatch does not break an interactive loop
 invokes **no Skill at all**. The lead dispatches ONE `adversary` per pass (same
 Rule 19 binding as (ii)), sharded per file with one cross-file shard when the artifact is two or
 more files, and joined by `merge-adversarial-shards.sh` (Rule 28, "Split dispatch": files
-axis); the METHOD is `team-roles/adversary.md` itself.
+axis), or sharded by section or subject part under that clause's sections and subject axes;
+the METHOD is `team-roles/adversary.md` itself.
 Procedure: `_gate-procedures.md`, "Adversarial review dispatch".
 **Why it is not a sub-skill:** the bmad review skill demands *at least ten
 findings*, *HALTs on zero*, and emits *no severity or ranking* -- so a loop whose

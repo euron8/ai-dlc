@@ -2042,6 +2042,177 @@ h_mutate h-stem-unstripped "FOREIGN/1 FOREIGN/1 PENDING/0 PENDING/0 MISSING/1" \
   '  H_STEM="${b%-adversarial}"' '  H_STEM="$b"' \
   '  if [ "$hp1" != prd ] || [ "$hp2" != s289-rr ] || [ "$hp3" != x-p1 ] \' '  if false \'
 
+echo
+# --- ARM K3: the requirements series reviews the SUBJECT ------------------------------------
+# Every K3 world is its own git repository (trunk main, sprint 9 on a branch) carrying the
+# requirements subject, a `.claude/.ai-dlc-version` stamp commit, and passes written by the REAL
+# producers: partition-subject.sh's first map writes the manifest, merge-adversarial-shards.sh
+# --subject (or --document) writes the pass. Built OUTSIDE $ROOT so the derived pairing loop below
+# never walks them (K3 is gate-only; nothing here denies).
+#   k3-subject    a sharded subject merge, post-stamp                      exit 0, K3 silent
+#   k3-document   terminal pass = a `--document prd.md` merge, post-stamp exit 1, FAIL (K3
+#   k3-wrongset   same shard COUNT, other ordinal SET, post-stamp         exit 1, FAIL (K3
+#   k3-serial     a one-part subject, one adversary naming the manifest   exit 0, K3 and K2 silent
+#   k3-pre        k3-document's shape, series opened BEFORE the stamp     exit 0, PENDING Legacy
+#   k3-moved      k3-document's shape, prd.md moved after the pass        exit 0, PENDING bytes
+#   k3-pin        installed layout; the copy in force has no --scope-ref  exit 0, PENDING; its
+#                 control world, the real copy in force, FAILs (K3
+#   k3-armh       a party record beside a fallen pass 1 -> pass 1 still owes requirements-repair-p1
+K3W="$(mktemp -d "${TMPDIR:-/tmp}/check24-k3.XXXXXX")" || exit 2
+trap 'rm -rf "$ROOT" "$K3W"' EXIT
+K3S="$(cd "$(dirname "$VALIDATOR")" && pwd)"
+k3g() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$1" -c user.name=f -c user.email=f@example.invalid -c core.hooksPath=/dev/null -c commit.gpgsign=false "${@:2}"; }
+k3lorem() { local i; for i in $(seq 1 "$2"); do printf '%s line %d of the section, carrying enough prose to weigh something real.\n' "$1" "$i"; done; }
+k3sha() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1; else sha256sum "$1" | cut -d' ' -f1; fi; }
+K3PA=_bmad-output/planning-artifacts
+# k3_world <name> <stamp-date> [serial] [scripts-dir] -> the world path. serial: only the SPEC changes.
+k3_world() {
+  local w="$K3W/$1" pa; pa="$w/$K3PA"
+  mkdir -p "$pa/s9" "$w/_bmad-output/specs/s9/kernel" "$w/.claude" || return 1
+  { ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+      k3g "$w" init -q . && k3g "$w" checkout -q -b main
+      { printf '# Brief\n\n## Vision\n\n'; k3lorem vision 10; } > "$pa/product-brief.md"
+      { printf '# PRD\n\n## Current state\n\n'; k3lorem current 20; printf '\n## Sprint 8\n\n'; k3lorem s8 20; printf '\n'; } > "$pa/prd.md"
+      printf -- '- FR-S8-1: architecture_impact: none\n' > "$pa/s9/architecture-impact.md"
+      if [ -n "${4:-}" ]; then mkdir -p "$w/scripts/ai-dlc" && cp "$4"/*.sh "$w/scripts/ai-dlc/"; fi
+      printf 'version: 9.0.0\n' > "$w/.claude/.ai-dlc-version"
+      k3g "$w" add -A && GIT_COMMITTER_DATE="$2" GIT_AUTHOR_DATE="$2" k3g "$w" commit -q -m stamp && k3g "$w" checkout -q -b sprint-9 ); } >/dev/null 2>&1 || return 1
+  printf '# SPEC\n\ncap-1: THE system SHALL x.\n' > "$w/_bmad-output/specs/s9/kernel/SPEC.md"
+  if [ "${3:-}" != serial ]; then
+    printf 'A new brief line.\n' >> "$pa/product-brief.md"
+    { printf '## Sprint 9\n\n### Goals\n\n'; k3lorem s9g 30; printf '\n### Requirements\n\n'; k3lorem s9r 30; } >> "$pa/prd.md"
+    printf -- '- FR-S9-1: architecture_impact: none\n' >> "$pa/s9/architecture-impact.md"
+  fi
+  printf '%s' "$w"
+}
+k3_shard() { # <dir> <key> <cite> <minute> <artifact> <artifact_sha> [n-major]
+  local i=0
+  { printf '# shard %s\n\n## Findings\n\n' "$2"
+    while [ "$i" -lt "${7:-0}" ]; do i=$((i + 1)); printf '### M%s — MAJOR — finding\n\nsections: %s\n\n' "$i" "$3"; done
+    printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\ninvoked_at: 2026-10-01T10:%02d:00Z\n' "$4"
+    printf 'tool_use_id: toolu_k3%s%s\nmode: subagent\nlead_role: requirements\nartifact: %s\nartifact_sha: %s\n' "$2" "$4" "$5" "$6"
+    printf 'findings_critical: 0\nfindings_major: %s\nverdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' "${7:-0}"; } > "$1/$2.md"
+}
+k3_stems() { local w="$1"
+  printf 'product-brief=%s SPEC=%s prd=%s architecture-impact=%s' "$(k3sha "$w/$K3PA/product-brief.md")" \
+    "$(k3sha "$w/_bmad-output/specs/s9/kernel/SPEC.md")" "$(k3sha "$w/$K3PA/prd.md")" "$(k3sha "$w/$K3PA/s9/architecture-impact.md")"; }
+k3_subject_pass() { # <world> <scripts dir> -> s9/requirements-adversarial-p1.md by merge --subject
+  local w="$1" d="$1/$K3PA/s9/shards/requirements-p1" m=0 o sl
+  AI_DLC_PROJECT_ROOT="$w" bash "$2/partition-subject.sh" --map 9 > "$w/subject.map" 2>&1 || return 1
+  mkdir -p "$d"; sl="$(k3_stems "$w")"
+  for o in $(cut -f1 "$w/subject.map"); do m=$((m + 1)); k3_shard "$d" "$o" "$o" "$m" "$K3PA/s9/requirements-subject.md" "$sl"; done
+  k3_shard "$d" cross "1, 2" 59 "$K3PA/s9/requirements-subject.md" "$sl"
+  bash "$2/merge-adversarial-shards.sh" --subject 9 "$d" >/dev/null 2>&1
+}
+k3_document_pass() { # <world> <scripts dir> -> the consumer's shape: a --document prd.md merge in the series
+  local w="$1" d="$1/$K3PA/s9/shards/prd-p1" m=0 o sl
+  AI_DLC_PROJECT_ROOT="$w" bash "$2/partition-subject.sh" --map 9 >/dev/null 2>&1   # the manifest exists, as in a real sprint
+  mkdir -p "$d"; sl="$(k3sha "$w/$K3PA/prd.md")"
+  for o in $(bash "$2/partition-document.sh" --map "$w/$K3PA/prd.md" | cut -f1); do m=$((m + 1)); k3_shard "$d" "$o" "$o" "$m" "$K3PA/prd.md" "$sl"; done
+  k3_shard "$d" cross "1, 2" 59 "$K3PA/prd.md" "$sl"
+  bash "$2/merge-adversarial-shards.sh" --document "$w/$K3PA/prd.md" "$d" >/dev/null 2>&1 \
+    && mv "$w/$K3PA/s9/prd-adversarial-p1.md" "$w/$K3PA/s9/requirements-adversarial-p1.md"
+}
+K3_OUT="$K3W/out"
+k3_run() { # <validator> <world> -> K3_RC, $K3_OUT
+  bash "$1" --series "$2/$K3PA/s9/requirements-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" > "$K3_OUT" 2>&1; K3_RC=$?
+}
+k3_cell() { # <label> <validator> <world> <want rc> <must-say | -> <must-not-say | ->
+  ASSERTIONS=$((ASSERTIONS + 1))
+  k3_run "$2" "$3"
+  if [ "$K3_RC" -eq "$4" ] && { [ "$5" = - ] || grep -qF -- "$5" "$K3_OUT"; } && { [ "$6" = - ] || ! grep -qF -- "$6" "$K3_OUT"; }; then
+    printf '  ok    %-28s exit=%s %s\n' "$1" "$K3_RC" "${5#-}"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s exit=%s want=%s, must say [%s], must not say [%s]\n' "$1" "$K3_RC" "$4" "$5" "$6"
+    sed 's/^/          | /' "$K3_OUT"
+  fi
+}
+K3_POST=2026-01-01T00:00:00Z; K3_LATE=2026-12-01T00:00:00Z
+K3_BUILT=1
+w="$(k3_world k3-subject "$K3_POST")" && k3_subject_pass "$w" "$K3S" || K3_BUILT=0
+w="$(k3_world k3-document "$K3_POST")" && k3_document_pass "$w" "$K3S" || K3_BUILT=0
+w="$(k3_world k3-wrongset "$K3_POST")" && k3_subject_pass "$w" "$K3S" \
+  && awk '/^shard_tool_use_ids:/ { sub(/ 1=/, " 99=") } { print }' "$w/$K3PA/s9/requirements-adversarial-p1.md" > "$w/p1.n" \
+  && mv "$w/p1.n" "$w/$K3PA/s9/requirements-adversarial-p1.md" || K3_BUILT=0
+w="$(k3_world k3-serial "$K3_POST" serial)" && { AI_DLC_PROJECT_ROOT="$w" bash "$K3S/partition-subject.sh" --map 9 > "$w/serial.map" 2>&1; [ $? -eq 3 ]; } \
+  && k3_shard "$w/$K3PA/s9" requirements-adversarial-p1 x 0 "$K3PA/s9/requirements-subject.md" "$(k3_stems "$w")" \
+  && sed -i.b 's/^tool_use_id: .*/tool_use_id: toolu_k3serial/' "$w/$K3PA/s9/requirements-adversarial-p1.md" && rm -f "$w/$K3PA/s9/"*.b || K3_BUILT=0
+w="$(k3_world k3-pre "$K3_LATE")" && k3_document_pass "$w" "$K3S" || K3_BUILT=0
+w="$(k3_world k3-moved "$K3_POST")" && k3_document_pass "$w" "$K3S" && printf 'moved\n' >> "$w/$K3PA/prd.md" || K3_BUILT=0
+# k3-pin: an installed layout whose tracked partition-document.sh has no --scope-ref; the working
+# copy (what would run TODAY) is the real one. Control: the same world with the real copy tracked.
+K3_STUB="$K3W/stub-scripts"; K3_REAL="$K3W/real-scripts"; mkdir -p "$K3_STUB" "$K3_REAL"
+cp "$K3S"/validate-adversarial-convergence.sh "$K3S"/validate-steering-budget.sh "$K3S"/partition-document.sh \
+   "$K3S"/partition-subject.sh "$K3S"/merge-adversarial-shards.sh "$K3_REAL/" && cp "$K3_REAL"/*.sh "$K3_STUB/" \
+  && awk '{ gsub(/scope-ref/, "scope-XXX"); print }' "$K3_REAL/partition-document.sh" > "$K3_STUB/partition-document.sh" || K3_BUILT=0
+# The pin only matters where a MAP is asked -- a manifest pass -- so both worlds carry k3-wrongset's
+# pass: the real copy in force FAILs it (count right, set wrong), the stub in force is PENDING.
+for v in pin:"$K3_STUB" pinctl:"$K3_REAL"; do
+  w="$(k3_world "k3-${v%%:*}" "$K3_POST" "" "${v#*:}")" && cp "$K3_REAL"/*.sh "$w/scripts/ai-dlc/" \
+    && k3_subject_pass "$w" "$K3_REAL" \
+    && awk '/^shard_tool_use_ids:/ { sub(/ 1=/, " 99=") } { print }' "$w/$K3PA/s9/requirements-adversarial-p1.md" > "$w/p1.n" \
+    && mv "$w/p1.n" "$w/$K3PA/s9/requirements-adversarial-p1.md" || K3_BUILT=0
+done
+# k3-armh: pass 1 has 2 MAJOR, pass 2 has 0, and only a PARTY record sits beside them.
+w="$(k3_world k3-armh "$K3_POST")" && k3_subject_pass "$w" "$K3S" || K3_BUILT=0
+if [ "$K3_BUILT" -eq 1 ]; then
+  sed -i.b 's/^findings_major: 0$/findings_major: 2/; s/^verdict: .*/verdict: EXIT_CONDITION_NOT_MET/' "$w/$K3PA/s9/requirements-adversarial-p1.md"
+  awk '/^## Findings/ { print; print ""; print "### M1 — MAJOR — a"; print ""; print "### M2 — MAJOR — b"; next } { print }' \
+    "$w/$K3PA/s9/requirements-adversarial-p1.md" > "$w/p1.n" && mv "$w/p1.n" "$w/$K3PA/s9/requirements-adversarial-p1.md"
+  sed 's/invoked_at: 2026-10-01T10:00:00Z/invoked_at: 2026-10-02T10:00:00Z/; s/^findings_major: 2$/findings_major: 0/; s/^verdict: .*/verdict: EXIT_CONDITION_MET/; /^### M[12] — MAJOR/d' \
+    "$w/$K3PA/s9/requirements-adversarial-p1.md" > "$w/$K3PA/s9/requirements-adversarial-p2.md"
+  sed -i.b 's/^invoked_at: 2026-10-01T/invoked_at: 2026-10-02T/' "$w/$K3PA/s9/requirements-adversarial-p2.md"
+  rm -f "$w/$K3PA/s9/"*.b
+  printf -- '- disposition: repaired\n- edit: prd.md:3\n- derivation: the party round\n' > "$w/$K3PA/s9/requirements-party-repair.md"
+fi
+
+echo
+echo "--- arm K3 (SUBJECT)"
+if [ "$K3_BUILT" -ne 1 ]; then
+  FAILURES=$((FAILURES + 1)); ASSERTIONS=$((ASSERTIONS + 1))
+  printf '  FAIL  %-28s FIXTURE BROKEN -- a K3 world did not build (worlds under %s)\n' "k3-worlds" "$K3W"
+else
+  K3_DOC_FAIL="FAIL (K3 -- SUBJECT): requirements-adversarial-p1.md: it reviews"
+  k3_cell k3-subject  "$VALIDATOR" "$K3W/k3-subject"  0 - "K3 -- SUBJECT"
+  k3_cell k3-document "$VALIDATOR" "$K3W/k3-document" 1 "$K3_DOC_FAIL" -
+  k3_cell k3-wrongset "$VALIDATOR" "$K3W/k3-wrongset" 1 "is not the subject map's ordinals plus cross" -
+  k3_cell k3-serial   "$VALIDATOR" "$K3W/k3-serial"   0 - "K2 -- SECTIONS"
+  k3_cell k3-serial-k3 "$VALIDATOR" "$K3W/k3-serial"  0 - "K3 -- SUBJECT): requirements"
+  k3_cell k3-pre      "$VALIDATOR" "$K3W/k3-pre"      0 "Legacy series." "FAIL (K3"
+  k3_cell k3-moved    "$VALIDATOR" "$K3W/k3-moved"    0 "PENDING (K3 -- SUBJECT)" "FAIL (K3"
+  k3_cell k3-pin      "$K3W/k3-pin/scripts/ai-dlc/validate-adversarial-convergence.sh" "$K3W/k3-pin" 0 "has no --scope-ref" "FAIL (K3"
+  k3_cell k3-pin-ctl  "$K3W/k3-pinctl/scripts/ai-dlc/validate-adversarial-convergence.sh" "$K3W/k3-pinctl" 1 "asked of the copy in force at" "FALLBACK (K3"
+  k3_cell k3-armh     "$VALIDATOR" "$K3W/k3-armh"     1 "no repair" -
+  # MUTATION: count-not-identity, and the stamp gate deleted. A copy of the validator's directory
+  # with its siblings, and an unmutated control from the same directory scoring all four cells.
+  k3_mut_row() { # <validator> -> "<subject> <document> <wrongset> <pre>" rc's
+    local r="" c; for c in k3-subject k3-document k3-wrongset k3-pre; do k3_run "$1" "$K3W/$c"; r="$r $K3_RC"; done; printf '%s' "${r# }"; }
+  k3_mut() { # <label> <expected row> <old> <new>
+    local d; d="$(mktemp -d "$K3W/mut.XXXXXX")"; cp "$K3_REAL"/*.sh "$d/"
+    ASSERTIONS=$((ASSERTIONS + 1))
+    if [ -n "$3" ]; then
+      M_OLD="$3" M_NEW="$4" python3 - "$d/validate-adversarial-convergence.sh" <<'PY' || { FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s FIXTURE STALE -- anchor not unique\n' "$1"; return; }
+import os, sys
+p = sys.argv[1]; t = open(p, encoding="utf-8").read(); o = os.environ["M_OLD"]
+if t.count(o) != 1: sys.exit(3)
+open(p, "w", encoding="utf-8").write(t.replace(o, os.environ["M_NEW"]))
+PY
+      cmp -s "$VALIDATOR" "$d/validate-adversarial-convergence.sh" && { FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s FIXTURE STALE -- byte-identical copy\n' "$1"; return; }
+    fi
+    got="$(k3_mut_row "$d/validate-adversarial-convergence.sh")"
+    if [ "$got" = "$2" ]; then printf '  ok    %-28s row [%s]\n' "$1" "$got"
+    else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s row [%s], want [%s]\n' "$1" "$got" "$2"; fi
+  }
+  k3_mut "K3X0 control (unmutated)" "0 1 1 0" "" ""
+  k3_mut "K3X1 count, not identity" "0 1 0 0" \
+    '          [ "$k3_have" = "$k3_want_s" ] \' \
+    '          [ "$(printf "%s" "$k3_have" | wc -w)" = "$(printf "%s" "$k3_want_s" | wc -w)" ] \'
+  k3_mut "K3X2 stamp gate deleted" "0 1 1 1" \
+    '    elif [[ "$k3_at" < "$k3_stamp" ]]; then' \
+    '    elif false; then'
+fi
+
 # --- PAIRING: a case that DENIES must assert the state the hooks read -------------
 # THE MECHANISM FOR A DEFECT CLASS THIS FIXTURE HAS NOW HIT TWICE. Gate mode and
 # --cycle-state are different code paths with different branch ordering, and the second one

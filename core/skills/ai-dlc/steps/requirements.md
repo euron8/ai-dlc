@@ -155,6 +155,11 @@ narrative to `prd-history.md` (cut-and-paste, verbatim). Never drop a requiremen
 locked requirements stay in the live PRD. Reference existing components by name where the new
 work touches them. For requirements from carry-over items or user instructions: quote the
 source requirement verbatim; preserve specific details; do not generalize.
+**The sprint's PRD content MUST carry `###` subheadings** — every `##` section this sprint
+adds to `prd.md` is divided into `###` subsections.
+Section 5 shards the validation cycle by the subject partition, which splits a changed section
+at its `###` headings; a changed section with none maps as ONE serial part, and one agent then
+reviews and repairs the whole section alone.
 Every functional requirement MUST cite the capability it realizes, in its own entry, alongside
 the existing locked-requirement arrow:
 
@@ -204,11 +209,39 @@ Returns paths only. The lead reads paths, not content.
 
 Run the validation cycle (`_gate-procedures.md`, "Validation cycle") — its passes use the
 **Adversarial review dispatch** and **Adversarial repair dispatch** sub-routines — over the
-product brief, the spec kernel, and the PRD as ONE subject. Parameters:
-- **party-mode seats / subject:** Architect, Dev — walk all three artifacts. The Architect
-  seat challenges every `architecture_impact: none` line in `architecture-impact.md`.
-  Rule 28 "Split dispatch" has no axis for a multi-artifact subject, so the round keeps one
-  agent per seat.
+product brief, the spec kernel, the PRD and `architecture-impact.md` as ONE subject.
+**The subject is sharded (Rule 28, "Split dispatch": subject axis), and every sub-pass is
+sharded** — the party round, its repair, elicitation, its repair, every adversarial pass and
+every repair. `_gate-procedures.md` carries the subject case at each of those sites.
+- **The four subject files:** `_bmad-output/planning-artifacts/product-brief.md`, the spec
+  kernel `_bmad-output/specs/s<N>/*/SPEC.md` (exactly one match; `partition-subject.sh`
+  refuses zero or two), `_bmad-output/planning-artifacts/prd.md`, and
+  `_bmad-output/planning-artifacts/s<N>/architecture-impact.md`.
+- **The base:** `git merge-base <trunk> HEAD`, trunk from `AI_DLC_TRUNK` (default `main`).
+  The diff runs from that base tree to the working tree. The party round's first map resolves
+  it ONCE and records it in the subject manifest. Every later invocation reads the base from the
+  manifest, and the gate reads it there too; nothing re-derives it, because a trunk that moves
+  mid-cycle would change the part set under a running series. The lead may pass `--base`, and
+  it is checked against the manifest (at the first map, against the derived merge-base): a
+  different sha refuses, so `--base` asserts the base and never chooses it.
+- **The partition:** `scripts/ai-dlc/partition-subject.sh --map <N> --base <base sha>` prints
+  `<ordinal>\t<file>\t<first-line>\t<last-line>\t<heading>` per part. A file unchanged since the
+  base gets no part; a changed file is mapped over its changed sections; the SPEC is one
+  whole-file part. A subject with every file unchanged is refused, not mapped. A part key is
+  `<file-stem> <heading>`, as in `shard: 4/7 prd ### Functional requirements`. A subject that
+  maps to one part is `shard: none (serial-document)` (Rule 28 exception 4).
+- **The SPEC is repaired through its own render path, never by a direct edit.** A finding
+  whose fix lies in `SPEC.md` goes to that part's one remediator, which appends a `(decision)`
+  entry to the spec's `.memlog.md` and re-renders `SPEC.md` through `bmad-spec` — the amendment
+  procedure's item 2 path in `_gate-procedures.md`, "Divergence resolution dispatch".
+- **The adversarial series is named `s<N>/requirements-adversarial-p<M>`.** A sharded pass is
+  written by `merge-adversarial-shards.sh --subject`, never by `--document`; a one-part subject's
+  single adversary writes it directly, notarizing the subject manifest. Check 24 arm K3 holds
+  the series to the subject shape.
+- **party-mode seats / subject:** Architect, Dev — walk every part of the subject. The Architect
+  seat challenges every `architecture_impact: none` line in `architecture-impact.md`. The round
+  is seats x subject-parts (Rule 28, "Split dispatch"), and its seats record findings without
+  editing; the party repair applies them (`_gate-procedures.md`, "Validation cycle" item 1).
 - **source-fidelity check:** where features originate from carry-over items or user
   instructions with specific details, verify those details are preserved and flag any
   generalization (`discovery.md` §5's brief bullet); verify each requirement implements what
@@ -219,7 +252,7 @@ product brief, the spec kernel, and the PRD as ONE subject. Parameters:
   advanced-elicitation. That skip is the whole of `lightweight`; it is NOT a cap on passes —
   the cycle still converges (Check 24's scope includes `requirements`), so each pass stamps a
   `verdict:` and the series ends when one stamps `EXIT_CONDITION_MET`. One validation cycle
-  over the three artifacts as one subject satisfies the per-artifact minimum (Check 20).
+  over the four subject files as one subject satisfies the per-artifact minimum (Check 20).
 - **`Seam D` label:** `requirements adversarial pass <N>`.
 - **on convergence:** append a changelog to
   `_bmad-output/planning-artifacts/s<N>/changelog-requirements.md` (`_gate-procedures.md` —

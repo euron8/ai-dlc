@@ -252,7 +252,8 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
 1. `/bmad-party-mode --mode subagent --non-interactive` — the step's seats (bound
    via the Rule 20 role-manifest preamble to their `.claude/team-roles/<role>.md`)
    walk the step's subject and
-   apply every improvement; run the step's source-fidelity check if it names one.
+   apply every improvement — except in the requirements subject case below, where the seats
+   edit nothing; run the step's source-fidelity check if it names one.
    **When the subject is two or more files** (`stories/`), the round is sharded (Rule 28,
    "Split dispatch": seats x parts axis). The invocation brief asks for one persona agent per
    (seat, story ordinal) plus one cross-story round scoped to interactions between stories. The
@@ -265,7 +266,31 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    part ordinal) plus one cross-part round per seat scoped to interactions between sections. A `SERIAL:` answer keeps one agent per seat
    (Rule 28 serial exception 4). `PART_CAP` in `partition-document.sh` bounds the parts, so a round
    spawns at most seats x (`PART_CAP` + 1) agents.
-   A subject that meets neither case keeps one agent per seat.
+   **When the subject is the requirements subject** (`steps/requirements.md` section 5: the
+   brief, `SPEC.md`, `prd.md` and `architecture-impact.md` under one base), the round is
+   sharded (Rule 28, "Split dispatch": seats x subject-parts axis) over the parts
+   `scripts/ai-dlc/partition-subject.sh --map <N> --base <base sha>` prints: one persona agent
+   per (seat, part ordinal) plus one cross-part round per seat. This is the subject's first
+   map: the lead resolves `<base sha>` as `steps/requirements.md` section 5 states, the map
+   records it in the subject manifest, and every later sub-pass passes the manifest's sha. **The seats edit nothing in this case.** Several seats walking
+   the same file would each write it in place at once, and no join can attribute or order
+   those writes. Each seat writes its findings to its deliverable, each finding carrying one
+   `sections:` line citing the map ordinals it rests on, and the party repair below applies
+   them. Before wave 1 the lead writes the sha256 of every subject file, one `<stem>=<sha>`
+   line each, to `_bmad-output/planning-artifacts/s<N>/shards/requirements-party-repair/anchor`
+   — the bytes the seats review, and the split anchor of the party repair.
+   **Party repair (requirements subject case).** After the round's join, the lead dispatches
+   the seats' findings to remediators exactly as "Adversarial repair dispatch" below shards the
+   requirements subject, with `--pass party`, the shard dir
+   `_bmad-output/planning-artifacts/s<N>/shards/requirements-party-repair/`, and the anchor's
+   shas as the expected bytes. The joined record is
+   `_bmad-output/planning-artifacts/s<N>/requirements-party-repair.md`. A finding citing two or
+   more parts goes to the serial remediator after assembly.
+   A subject that maps to one part is not sharded: no seats x parts round and no party shard dir.
+   Each seat is one agent over the whole subject, the seats still edit nothing, and the party
+   repair is ONE remediator briefed `shard: none (serial-document)` (Rule 28 exception 4) that
+   writes `_bmad-output/planning-artifacts/s<N>/requirements-party-repair.md` itself; no join runs.
+   A subject that meets none of these cases keeps one agent per seat.
    The round goes out in waves (Rule 28, "Split dispatch"): seats x parts routinely exceeds
    the harness's concurrent-subagent cap, and a spawn past the cap is rejected, not queued.
    The lead's join, before it proceeds, derives the EXPECTED set — `<step>-<seat>-<ordinal>.md`
@@ -291,6 +316,35 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    proceed.
 2. `/bmad-advanced-elicitation` — probe until zero ambiguity and update the
    artifact. **Run sub-step snapshot update**, then proceed.
+   **When the subject is the requirements subject**, elicitation is sharded (Rule 28, "Split
+   dispatch": subject axis): one `adversary` per part of the subject map, each invoking
+   `/bmad-advanced-elicitation` in its own context scoped to its part, plus one cross-part
+   `adversary` scoped to interactions between parts, all in waves. They record findings and
+   edit nothing. Each writes to
+   `_bmad-output/planning-artifacts/s<N>/shards/requirements-elicitation/<ordinal>.md` (the
+   cross shard: `cross.md`) with `skill: bmad-advanced-elicitation` and no `verdict:` line,
+   since elicitation is not a convergence pass. Beat-join every shard path, then run
+   `scripts/ai-dlc/merge-adversarial-shards.sh --subject <N> --base <base sha from the manifest> --elicitation <that dir>`.
+   It refuses unless every ordinal and the cross shard delivered exactly once and every finding
+   cites ordinals within the partition, and then writes
+   `_bmad-output/planning-artifacts/s<N>/requirements-elicitation.md` with no verdict. The
+   elicitation repair is dispatched as the party repair is, with `--pass elicitation`, the shard
+   dir `s<N>/shards/requirements-elicitation-repair/`, and the merged record's per-stem
+   `artifact_sha` values as the expected bytes; its joined record is
+   `_bmad-output/planning-artifacts/s<N>/requirements-elicitation-repair.md`.
+   Every elicitation shard notarizes exactly what an adversarial subject shard does ("Shard the
+   requirements subject" below): `artifact:` = the subject manifest
+   `_bmad-output/planning-artifacts/s<N>/requirements-subject.md`, `artifact_sha:` as one
+   `<stem>=<sha>` token for each of the four subject stems, each equal to that file's sha256 on
+   disk, and one `sections:` line citing map ordinals on every finding (a part shard only its own,
+   the cross shard two or more). The merge refuses a shard missing any of them.
+   **A subject that maps to one part** (`partition-subject.sh --map` exits 3) is never merged:
+   `merge-adversarial-shards.sh --subject` refuses it, and `--elicitation` has no single-adversary
+   form. ONE adversary, briefed `shard: none (serial-document)` (Rule 28 exception 4), runs
+   `/bmad-advanced-elicitation` over the whole subject and writes
+   `_bmad-output/planning-artifacts/s<N>/requirements-elicitation.md` itself, with no `verdict:`
+   line, `skill: bmad-advanced-elicitation`, `artifact:` = the subject manifest and `artifact_sha:`
+   as above. No merge runs, and the elicitation repair is ONE remediator on the same footing.
 3. **Adversarial convergence** — passes through the
    **Adversarial review dispatch** and **Adversarial repair dispatch**
    sub-routines (below), carrying the step's declared focus. **Run sub-step
@@ -349,7 +403,9 @@ files that run one still invoke it.
 **Dispatch** ONE `adversary` per pass, or one shard per story plus a cross-story shard when the
 artifact is two or more files ("Shard a multi-file artifact" below), or one shard per section plus
 a cross-section shard when the artifact is one document that `partition-document.sh --map`
-partitions ("Shard a single document" below). Agent tool, bound to `.claude/team-roles/adversary.md` per
+partitions ("Shard a single document" below), or one shard per subject part plus a cross-part
+shard when the artifact is the requirements subject ("Shard the requirements subject" below).
+Agent tool, bound to `.claude/team-roles/adversary.md` per
 SKILL.md Rule 19 (both bindings: `model` and the standing role-contract Read line). Give it: the
 artifact path under review, the canonical output path, the pass number, and — on pass 2+ — the
 PRIOR pass's findings and the repair record, because pass 2+ reviews the REPAIR, not the document
@@ -399,6 +455,33 @@ the ordinal set from `--map`, refuses (exit 2, `REFUSED:`, nothing written) unle
 and the cross shard delivered exactly once, every finding cites `sections:` within the partition,
 and every shard notarized the document's current sha, then writes the one
 `<artifact>-adversarial-p<M>.md` above.
+
+**Shard the requirements subject (Rule 28, "Split dispatch": subject axis).** When the artifact
+under review is the requirements subject (`steps/requirements.md` section 5), the series is
+`s<N>/requirements-adversarial-p<M>` and every pass of it is sharded. Create
+`_bmad-output/planning-artifacts/s<N>/shards/requirements-p<M>/` and run
+`scripts/ai-dlc/partition-subject.sh --map <N> --base <base sha>`, with the base read from the
+subject manifest, never re-derived. The map prints
+`<ordinal>\t<file>\t<first-line>\t<last-line>\t<heading>` per part. A subject that maps to one
+part gets ONE adversary whose brief carries `shard: none (serial-document)` (Rule 28 exception
+4); it writes `requirements-adversarial-p<M>.md` itself, with `artifact:` = the subject manifest
+and `artifact_sha:` as one `<stem>=<sha>` entry per subject file. Otherwise dispatch, in waves (Rule 28, "Split dispatch"), one `adversary` per part plus one
+cross-part shard. Each part shard gets its ordinal, its file, its line range and heading, the
+line `shard: <ordinal>/<K> <file-stem> <heading>`, and the output path `<that dir>/<ordinal>.md`;
+it reads its line range of the REAL file, read-only. The cross-part shard gets
+`shard: cross/<K> cross`, the whole map, a scope limited to interactions between parts —
+across files as well as within one — and `<that dir>/cross.md`. Every finding carries one
+`sections:` line citing map ordinals (a part shard only its own, the cross shard two or more).
+Every shard notarizes `artifact:` = the subject manifest and `artifact_sha:` as one
+`<stem>=<sha>` entry per subject file, as the files are on disk. Beat-join every shard path,
+then run `scripts/ai-dlc/merge-adversarial-shards.sh --subject <N> --base <base sha> <that dir>`.
+It re-derives the ordinal set from `partition-subject.sh --map`, refuses (exit 2, `REFUSED:`,
+nothing written) unless every ordinal and the cross shard delivered exactly once, every
+finding cites ordinals within the partition, and every per-stem sha matches the disk, then
+sums the counts, recomputes the verdict and writes
+`_bmad-output/planning-artifacts/s<N>/requirements-adversarial-p<M>.md`. `--document` refuses a
+shard dir named `requirements-p<M>`, so no sharded pass of this series is written in document
+mode. Check 24 arm K3 (`gate-validation.md`) holds the series to the subject shape.
 
 **Zero findings on a later pass is the EXPECTED outcome, not a suspicious one.** The cycle exists
 to reach it. An adversary that manufactures a finding to justify its pass sends the remediator to
@@ -475,6 +558,12 @@ PreToolUse hook denies every `Agent` / `Skill` / `Task` dispatch until step 3 ha
    | `RESTART_CYCLE` | abandon the series and start over | as above, **plus** the passes MOVED to an existing `archive:` dir |
    | `REOPEN_AFTER_MET` | the series had already stamped `EXIT_CONDITION_MET` and the artifact moved after it | sha changed; `scope_delta` names what moved |
 
+   **For the requirements subject** the record's `artifact:` is the subject manifest, and
+   `artifact_sha_before` and `artifact_sha_after` each carry one `<stem>=<sha>` entry per subject
+   file, every stem on both sides. `artifact_bytes_before` / `artifact_bytes_after` are the sums
+   over the subject files, so `CUT_SCOPE` compares summed bytes. `REVERT_REPAIR` matches per
+   stem: every stem's after sha equals that stem's sha in one earlier pass's `artifact_sha`.
+
    **THE CYCLE GETS ONE SANCTIONED RESOLUTION; A SECOND MUST BE ANCHORED.** Arms C, D and E
    each STOP the cycle and all three take this same exit, so a cycle stopped and released
    repeatedly reads to every one of them as a cycle being legitimately resolved. Arm I counts
@@ -511,6 +600,8 @@ PreToolUse hook denies every `Agent` / `Skill` / `Task` dispatch until step 3 ha
    1. A residue or gate repair on unchanged scope: the remediator's structured repair record, in
       the pass directory, with `artifact:`, `artifact_sha_before:` and `artifact_sha_after:`.
       Each repair's before is the previous repair's after, from the notarized sha to the disk sha.
+      For the requirements subject the repair is sharded as "Adversarial repair dispatch" shards
+      that subject, and each side is the per-stem `<stem>=<sha>` list, chained per stem.
    2. A scope change — a later step rewording a capability: append a `(decision)` entry to the
       spec's `.memlog.md` and re-render `SPEC.md` through `bmad-spec`; update the `prd.md`
       sprint-block FR in the same dispatch.
@@ -552,7 +643,9 @@ PreToolUse hook denies every `Agent` / `Skill` / `Task` dispatch until step 3 ha
    `planning-artifacts/archive/<series>-cycle-<n>/`. Do not delete them; retro reads them.
 
 4. **VERIFY.** Dispatch **ONE** adversary pass (procedure above, sharded exactly as a review pass is
-   when the artifact is two or more files or a document `--map` partitions, and every shard carrying the declaration below) against the RESOLVED artifact, as the
+   when the artifact is two or more files, a document `--map` partitions, or the requirements
+   subject — whose verify pass is mapped by `partition-subject.sh` under the manifest's base and
+   merged with `--subject` — and every shard carrying the declaration below) against the RESOLVED artifact, as the
    **next pass number in the SAME series**, declaring `resolves_divergence: <the record>`. Do not
    open a new series: `--series` spans both, the pass numbers collide, and the gate then fails on
    a cycle that did nothing wrong. That pass is the terminal clean pass Check 24 requires.
@@ -566,8 +659,13 @@ compacted summary, not the document. (Rationale + the measurement: notes R35.)
 
 **Dispatch** ONE `remediator` per pass, or one shard per disjoint FILE set when the artifact is
 two or more files ("Shard by file" below), or one shard per SECTION when the artifact is one
-document that `partition-document.sh --map` partitions ("Shard by section" below), and never one
-per finding. Agent tool, bound to
+document that `partition-document.sh --map` partitions ("Shard by section" below), or one shard
+per subject part when the artifact is the requirements subject ("Shard the requirements
+subject's repair" below), and never one per finding. The gate-failure caller at the
+requirements gate repairs a FAILED check on a subject file the same way, as a subject repair,
+under the gate record name (`join-remediator-shards.sh --subject <N> --artifact gate-<type> --pass <M>`,
+"Shard the requirements subject's repair" below).
+Agent tool, bound to
 `.claude/team-roles/remediator.md` per SKILL.md Rule 19 (both bindings: `model` and the
 standing role-contract Read line). Together the remediators take that pass's WHOLE set: every
 finding of the adversarial pass, or every FAILED check of the gate pass.
@@ -630,6 +728,53 @@ document in place. Otherwise, in this order:
    the join writes the one repair record.
 4. **Cross-section.** The serial cross-section remediator then edits the ASSEMBLED document in
    place and APPENDS its entries to the joined record.
+
+**Shard the requirements subject's repair (Rule 28, "Split dispatch": subject axis).** When the
+artifact is the requirements subject (`steps/requirements.md` section 5), the repair is sharded
+by the subject map, with the base read from the subject manifest. A subject that maps to one
+part keeps ONE remediator with `shard: none (serial-document)` (Rule 28 exception 4). Otherwise,
+in this order:
+
+1. **Split.** `scripts/ai-dlc/partition-subject.sh --split <N>
+   _bmad-output/planning-artifacts/s<N>/shards/requirements-repair-p<M>/ --base <base sha>
+   --expect-sha "<stem>=<sha> ..."`, naming every subject stem once with the sha the pass being
+   repaired reviewed (or `--expect-sha @<file>` holding that list). It delegates per file and
+   writes one section file per part of a file mapped into sections, under
+   `<that dir>/<stem>/sections/`; it
+   refuses when any subject file is not the bytes that pass reviewed. A WHOLE-FILE part — the
+   SPEC always, and any file whose scoped map is SERIAL — is not split: it has no section copy,
+   its one shard edits the file itself, and its expected bytes are that stem's sha.
+2. **Parts.** Partition the findings by their `sections:` line. A finding citing one part goes
+   to that part's shard; a finding citing two or more goes to ONE serial remediator after
+   assembly. A section part's shard edits ONLY its section file, as "Shard by section" step 2
+   describes. A whole-file part's shard edits its file in place. The SPEC part's shard never
+   edits `SPEC.md` by hand: it appends a `(decision)` entry to the spec's `.memlog.md` and
+   re-renders `SPEC.md` through `bmad-spec` (the amendment procedure's item 2 path, "Divergence
+   resolution dispatch"), and its `edit:` lines cite both files by their project-relative
+   paths under `_bmad-output/specs/s<N>/<slug>/`.
+3. **Join and assemble.** Beat-join every part, then run
+   `scripts/ai-dlc/join-remediator-shards.sh --subject <N> --base <base sha> --pass <M> <that dir> --since <ISO> --until <ISO>`.
+   The file set is the four subject files, the spec's `.memlog.md`, and the section copies; a
+   file written by two agents, an uncited file or one cited by two parts refuses, and a write to
+   subject text outside the in-scope parts refuses. It then reassembles each file that was split
+   through `partition-subject.sh --assemble`, which refuses when such a file moved since the
+   split (a whole-file part is not reassembled), and
+   writes the one record `_bmad-output/planning-artifacts/s<N>/requirements-repair-p<M>.md`,
+   whose `artifact:` is the subject manifest and whose sha lines are per-stem `<stem>=<sha>`
+   lists.
+4. **Cross-part and out-of-scope.** The serial remediator then edits the ASSEMBLED files in
+   place and APPENDS its entries to the joined record. It owns every finding citing two or more
+   parts AND every finding whose fix lies in PRD text outside the in-scope parts — a part shard
+   never edits text outside its section file, so such a finding has no other owner.
+
+The party and elicitation repairs run this same procedure with `--pass party` and
+`--pass elicitation`, under the shard dirs and record names "Validation cycle" items 1 and 2
+give them. The requirements gate's FAILURE repair runs it with `--artifact gate-<type> --pass <M>`
+(`<type>` the gate type, `<M>` numeric), splitting into
+`s<N>/shards/gate-<type>-repair-p<M>/` and joining into `s<N>/gate-<type>-repair-p<M>.md`, the
+name the non-subject gate caller writes; `--pass party`, `--pass elicitation` and `--artifact`
+are never combined. Those record names sit outside `*-repair-p<M>.md`, so neither can stand in for an
+adversarial pass's repair record.
 
 It writes the repaired artifact in place plus a **repair record** (`<M>` = the pass repaired) at
 `_bmad-output/planning-artifacts/s<N>/<artifact>-repair-p<M>.md` when the caller is an

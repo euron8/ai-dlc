@@ -350,7 +350,121 @@ p_files_golden() { # files mode is byte-identical to the merge before section mo
   run_merge "$m" "$d"
   [ "$RC" -eq 0 ] && cmp -s "$o" "$HERE/seed.files-b3-merged.expected"
 }
-P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms doc_b3 doc_axis doc_sha doc_path doc_serial files_golden"
+# ------------------------------------------------------------------ subject mode (--subject)
+# A subject world is a git repository (trunk main, sprint on a branch) holding the requirements
+# subject, its manifest written by the REAL partition-subject.sh first map. Shards notarize the
+# four stems and name the manifest; findings cite subject ordinals by `sections:`.
+SG() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$1" -c user.name=f -c user.email=f@example.invalid -c core.hooksPath=/dev/null "${@:2}"; }
+slorem() { local i; for i in $(seq 1 "$2"); do printf '%s line %d of the section, carrying enough prose to weigh something real.\n' "$1" "$i"; done; }
+SUBJ_PA=_bmad-output/planning-artifacts
+new_subj_world() { # -> prints the shard dir s9/shards/requirements-p1 of a fresh subject world
+  local w pa; w="$(mktemp -d "$WORK/sw.XXXXXX")" || return 1; pa="$w/$SUBJ_PA"
+  mkdir -p "$pa/s9/shards/requirements-p1" "$w/_bmad-output/specs/s9/kernel" || return 1
+  { SG "$w" init -q . && SG "$w" checkout -q -b main
+    { printf '# Brief\n\n## Vision\n\n'; slorem vision 10; } > "$pa/product-brief.md"
+    { printf '# PRD\n\n## Current state\n\n'; slorem current 20; printf '\n## Sprint 8\n\n'; slorem s8 20; printf '\n'; } > "$pa/prd.md"
+    SG "$w" add -A && SG "$w" commit -q -m base && SG "$w" checkout -q -b sprint-9; } >/dev/null 2>&1 || return 1
+  printf 'A new brief line.\n' >> "$pa/product-brief.md"
+  { printf '## Sprint 9\n\n### Goals\n\n'; slorem s9g 30; printf '\n### Requirements\n\n'; slorem s9r 30; } >> "$pa/prd.md"
+  printf '# SPEC\n\ncap-1: THE system SHALL x.\n' > "$w/_bmad-output/specs/s9/kernel/SPEC.md"
+  printf -- '- FR-S9-1: architecture_impact: none\n' > "$pa/s9/architecture-impact.md"
+  AI_DLC_PROJECT_ROOT="$w" bash "$SRCDIR/partition-subject.sh" --map 9 > "$w/subject.map" 2>&1 || return 1
+  printf '%s' "$pa/s9/shards/requirements-p1"
+}
+subj_root() { printf '%s' "$(dirname "$(dirname "$(dirname "$(dirname "$(dirname "$1")")")")")"; }
+subj_out_of() { printf '%s' "$(dirname "$(dirname "$1")")/requirements-adversarial-p1.md"; }
+subj_shas() { # <shard dir> -> the four-stem list as on disk
+  local w; w="$(subj_root "$1")"
+  printf 'product-brief=%s SPEC=%s prd=%s architecture-impact=%s' "$(sha_of "$w/$SUBJ_PA/product-brief.md")" \
+    "$(sha_of "$w/_bmad-output/specs/s9/kernel/SPEC.md")" "$(sha_of "$w/$SUBJ_PA/prd.md")" "$(sha_of "$w/$SUBJ_PA/s9/architecture-impact.md")"
+}
+# sshard <dir> <key> <n-major> <cite> [sha-list] [skill] [verdict|-] [artifact]
+sshard() {
+  local d="$1" k="$2" n="$3" cite="$4" sl="${5:-}" sk="${6:-ai-dlc-adversary-review}" v="${7:-EXIT_CONDITION_MET}" i=0 mm
+  local art="${8:-$SUBJ_PA/s9/requirements-subject.md}"
+  [ -n "$sl" ] || sl="$(subj_shas "$d")"
+  case "$k" in cross) mm=59 ;; *) mm=$((10#$k)) ;; esac
+  { printf '# requirements -- subject shard %s\n\n## Findings\n\n' "$k"
+    while [ "$i" -lt "$n" ]; do i=$((i + 1)); printf '### M%s — MAJOR — %s\n\nsections: %s\n\nBody.\n\n' "$i" "$(real_title "$i")" "$cite"; done
+    printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: %s\ninvoked_at: 2026-10-01T10:%02d:00Z\n' "$sk" "$mm"
+    printf 'tool_use_id: toolu_01Subj%s\nmode: subagent\nlead_role: .claude/skills/ai-dlc/steps/requirements.md\n' "$k"
+    printf 'artifact: %s\nartifact_sha: %s\n' "$art" "$sl"
+    printf 'findings_critical: 0\nfindings_critical_prior_scope: 0\nfindings_major: %s\nfindings_major_underived: 0\nfindings_minor: 0\n' "$n"
+    [ "$v" = "-" ] || printf 'verdict: %s\n' "$v"
+    printf 'SKILL_INVOCATION_PROVENANCE_END -->\n'; } > "$d/$k.md"
+}
+subj_b3_world() { # every part shard 1 MAJOR stamped MET, summed over the ceiling; a clean cross
+  local d o; d="$(new_subj_world)" || return 1
+  for o in $(cut -f1 "$(subj_root "$d")/subject.map"); do sshard "$d" "$o" 1 "$o"; done
+  sshard "$d" cross 0 "1, 2"
+  printf '%s' "$d"
+}
+run_subj_merge() { bash "$1" --subject 9 "${@:3}" "$2" > "$MO" 2>&1; RC=$?; }
+subj_refused_clean() { # <token> <shard-dir>
+  local o; o="$(subj_out_of "$2")"
+  [ "$RC" -eq 2 ] && has "$MO" "REFUSED:" && has "$MO" "$1" && [ ! -e "$o" ]
+}
+p_subj_b3() { # sums, recomputes, artifact = manifest, four stems, ids = ordinals + cross; validator reads it
+  local m="$1" d o k want have
+  d="$(subj_b3_world)" || return 1; o="$(subj_out_of "$d")"
+  k="$(grep -c . "$(subj_root "$d")/subject.map")"
+  run_subj_merge "$m" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "verdict=EXIT_CONDITION_NOT_MET" && has "$MO" "major=$k" && [ -f "$o" ] || return 1
+  grep -qx "artifact: $SUBJ_PA/s9/requirements-subject.md" "$o" || return 1
+  [ "$(grep '^artifact_sha:' "$o")" = "artifact_sha: $(subj_shas "$d")" ] || return 1
+  want="$( { cut -f1 "$(subj_root "$d")/subject.map" | awk '{ print $1 + 0 }'; echo cross; } | sort | tr '\n' ' ')"
+  have="$(sed -n 's/^shard_tool_use_ids://p' "$o" | tr ' ' '\n' | awk -F= 'NF == 2 { k = $1; if (k ~ /^[0-9]+$/) k += 0; print k }' | sort | tr '\n' ' ')"
+  [ "$want" = "$have" ]
+}
+p_subj_miss_cross() { local d; d="$(subj_b3_world)" || return 1; rm -f "$d/cross.md"; run_subj_merge "$1" "$d"; subj_refused_clean "shard cross is missing" "$d"; }
+p_subj_xcite() { # a part shard citing ANOTHER file's ordinal (cross-file citation) -> refused
+  local d; d="$(subj_b3_world)" || return 1
+  sshard "$d" 1 1 "1, 3"
+  run_subj_merge "$1" "$d"
+  subj_refused_clean "a per-ordinal shard reports only findings citing its own ordinal alone" "$d"
+}
+p_subj_sha() { # one stem's sha is not the disk bytes (the prd moved), every other stem right
+  local d sl; d="$(subj_b3_world)" || return 1
+  sl="$(subj_shas "$d" | sed "s/prd=[0-9a-f]*/prd=$(sha_of "$HERE/seed.doc-serial-epics.md")/")"
+  sshard "$d" 2 1 2 "$sl"
+  run_subj_merge "$1" "$d"
+  subj_refused_clean "notarizes prd=" "$d"
+}
+p_subj_stems() { # a shard notarizing three of the four stems
+  local d sl; d="$(subj_b3_world)" || return 1
+  sl="$(subj_shas "$d" | sed 's/ architecture-impact=[0-9a-f]*//')"
+  sshard "$d" 2 1 2 "$sl"
+  run_subj_merge "$1" "$d"
+  subj_refused_clean "notarizes each of the four stems once" "$d"
+}
+p_subj_art() { # a shard naming prd.md, not the manifest
+  local d; d="$(subj_b3_world)" || return 1
+  sshard "$d" 2 1 2 "" "" "" "$SUBJ_PA/prd.md"
+  run_subj_merge "$1" "$d"
+  subj_refused_clean "not the subject manifest" "$d"
+}
+p_subj_elicit() { # elicitation: no verdict anywhere, skill required, own output; a verdict-bearing shard refused
+  local m="$1" w e o; w="$(subj_root "$(new_subj_world)")" || return 1
+  e="$w/$SUBJ_PA/s9/shards/requirements-elicitation"; mkdir -p "$e"; o="$w/$SUBJ_PA/s9/requirements-elicitation.md"
+  for k in $(cut -f1 "$w/subject.map"); do sshard "$e" "$k" 1 "$k" "" bmad-advanced-elicitation -; done
+  sshard "$e" cross 0 "1, 2" "" bmad-advanced-elicitation -
+  # Shards notarize via a path walk from the shard dir; subj_shas reads from the shard dir's world.
+  bash "$m" --subject 9 --elicitation "$e" > "$MO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && [ -f "$o" ] && ! grep -q '^verdict:' "$o" && ! grep -q 'verdict=' "$MO" && has "$o" "skill: bmad-advanced-elicitation" || return 1
+  [ ! -e "$w/$SUBJ_PA/s9/requirements-adversarial-p1.md" ] || return 1
+  rm -f "$o"; sshard "$e" 1 1 1 "" bmad-advanced-elicitation EXIT_CONDITION_MET
+  bash "$m" --subject 9 --elicitation "$e" > "$MO" 2>&1; RC=$?
+  [ "$RC" -eq 2 ] && has "$MO" "an elicitation shard carries none" && [ ! -e "$o" ] || return 1
+  sshard "$e" 1 1 1 "" ai-dlc-adversary-review -
+  bash "$m" --subject 9 --elicitation "$e" > "$MO" 2>&1; RC=$?
+  [ "$RC" -eq 2 ] && has "$MO" "an elicitation shard runs bmad-advanced-elicitation" && [ ! -e "$o" ]
+}
+p_subj_b4() { # --document into requirements-p<M> refused before any shard is read
+  local d w; d="$(subj_b3_world)" || return 1; w="$(subj_root "$d")"
+  bash "$1" --document "$w/$SUBJ_PA/prd.md" "$d" > "$MO" 2>&1; RC=$?
+  subj_refused_clean "merge it with --subject" "$d"
+}
+P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms doc_b3 doc_axis doc_sha doc_path doc_serial files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit subj_b4"
 
 # ---------------------------------------------------------------------------------- the arms
 echo "adversarial-shard-merge:"
@@ -411,6 +525,27 @@ p_doc_serial "$MERGE" && ok "D5: --document on a document partition-document.sh 
   || bad "D5: a SERIAL document was not refused cleanly (rc=$RC): $(cat "$MO")"
 p_files_golden "$MERGE" && ok "D6: files mode on B3 is byte-identical to seed.files-b3-merged.expected, the output of the merge before section mode existed" \
   || bad "D6: files-mode output moved from the pre-section-mode golden (rc=$RC): $(cat "$MO")"
+
+# ---- subject mode. U0: the seed must map to parts in at least two files, or a cross-file
+# citation cannot be expressed and U3 asserts about nothing.
+SW0="$(new_subj_world)"; SW0R="$(subj_root "$SW0")"
+n_sp="$(grep -c . "$SW0R/subject.map")" || n_sp=0
+n_sf="$(cut -f2 "$SW0R/subject.map" | sort -u | grep -c .)" || n_sf=0
+if [ "$n_sp" -ge 4 ] && [ "$n_sf" -eq 4 ] && [ -f "$SW0R/$SUBJ_PA/s9/requirements-subject.md" ]; then
+  ok "U0: the subject seed maps to $n_sp parts across all 4 files (read from partition-subject.sh --map), manifest written"
+else
+  bad "U0: FIXTURE BROKEN -- the subject seed maps to $n_sp part(s) over $n_sf file(s): $(head -3 "$SW0R/subject.map")"
+fi
+p_subj_b3 "$MERGE" && ok "U1: subject shards each stamped MET with 1 MAJOR merge NOT_MET; artifact: = the manifest; artifact_sha: the four stems at disk bytes; ids = map ordinals + cross" \
+  || bad "U1: the subject merge did not sum, recompute and notarize the manifest (rc=$RC): $(cat "$MO")"
+p_subj_miss_cross "$MERGE" && ok "U2: a subject shard set with no cross.md -> REFUSED, nothing written" || bad "U2: (rc=$RC) $(cat "$MO")"
+p_subj_xcite "$MERGE" && ok "U3: a part shard citing another file's ordinal -> REFUSED by the partition, nothing written" || bad "U3: (rc=$RC) $(cat "$MO")"
+p_subj_sha "$MERGE" && ok "U4: one stem notarized at other bytes (the rest right) -> REFUSED naming that stem, nothing written" || bad "U4: (rc=$RC) $(cat "$MO")"
+p_subj_stems "$MERGE" && ok "U5: a shard notarizing three of four stems -> REFUSED, nothing written" || bad "U5: (rc=$RC) $(cat "$MO")"
+p_subj_art "$MERGE" && ok "U6: a shard naming prd.md instead of the manifest -> REFUSED, nothing written" || bad "U6: (rc=$RC) $(cat "$MO")"
+p_subj_elicit "$MERGE" && ok "U7: --elicitation writes s9/requirements-elicitation.md with NO verdict (file or stdout); a verdict-bearing shard and a non-elicitation skill each REFUSED" \
+  || bad "U7: the elicitation merge (rc=$RC): $(cat "$MO")"
+p_subj_b4 "$MERGE" && ok "U8: --document into shards/requirements-p1 -> REFUSED 'merge it with --subject' (B4), nothing written" || bad "U8: (rc=$RC) $(cat "$MO")"
 
 # R6: a finding heading EXACTLY as the real pass wrote it carries no severity word, so the heads
 # counted (0 MAJOR) disagree with findings_major -- refused, never counted as zero.
@@ -494,7 +629,7 @@ fi
 mutdir() { # <name> -> a dir holding the merge and the siblings it and the predicates resolve
   local d s
   d="$(mktemp -d "$WORK/mut-$1.XXXXXX")" || return 1
-  for s in merge-adversarial-shards.sh validate-adversarial-convergence.sh validate-steering-budget.sh partition-document.sh; do
+  for s in merge-adversarial-shards.sh validate-adversarial-convergence.sh validate-steering-budget.sh partition-document.sh partition-subject.sh; do
     [ -f "$SRCDIR/$s" ] && cp "$SRCDIR/$s" "$d/"
   done
   printf '%s' "$d"
@@ -544,7 +679,7 @@ fi
 # shard NOT_MET, residue at the ceiling). A worst-shard merge is wrong in both directions. The
 # section-mode B3 (D1) and the files-mode golden (D6) are the same property in the other mode and
 # in bytes, so they die with it.
-mutant "MX1 verdict = worst shard verdict, not recomputed" "b3 clean doc_b3 files_golden" \
+mutant "MX1 verdict = worst shard verdict, not recomputed" "b3 clean doc_b3 files_golden subj_b3" \
   'elif [ "$S_CRIT" -le "$CRIT_CEIL" ] && [ "$BLOCKING" -le "$MAJOR_CEIL" ]; then VERDICT="EXIT_CONDITION_MET"' \
   'elif [ "${WORST_NOT_MET:-0}" -eq 0 ]; then VERDICT="EXIT_CONDITION_MET"' \
   '    EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET) ;;' \
@@ -553,7 +688,7 @@ mutant "MX1 verdict = worst shard verdict, not recomputed" "b3 clean doc_b3 file
 mutant "MX2 ceiling hard-coded, not read" "ceiling" \
   'MAJOR_CEIL="$(read_ceiling MAJOR_EXIT_CEILING)"' \
   'MAJOR_CEIL=3'
-mutant "MX3 missing-shard check removed" "miss_ord miss_cross" \
+mutant "MX3 missing-shard check removed" "miss_ord miss_cross subj_miss_cross" \
   'for idx in $ORDINALS cross; do' \
   'for idx in ; do'
 mutant "MX4 earliest shard by raw string, not by time" "ms" \
@@ -586,6 +721,22 @@ mutant "MX7 whole-document sha check removed" "doc_sha" \
 mutant "MX8 artifact-path check removed" "doc_path" \
   '[ "$ART_ABS" = "$DOCUMENT" ] \' \
   'true || [ "$ART_ABS" = "$DOCUMENT" ] \'
+# Subject mode.
+mutant "MX9 per-stem sha check removed" "subj_sha" \
+  '[ "$sv" = "$want" ] || refuse' \
+  '[ "$sv" = "$want" ] || true'
+mutant "MX10 four-stem count check removed" "subj_stems" \
+  '[ "$nt" -eq 4 ] && [' \
+  'true || ['
+mutant "MX11 subject artifact check removed" "subj_art" \
+  '[ "$ART_ABS" = "$SUBJ_MF" ] \' \
+  'true || [ "$ART_ABS" = "$SUBJ_MF" ] \'
+mutant "MX12 elicitation verdict line written" "subj_elicit" \
+  '  [ "$ELICIT" -eq 1 ] || printf '"'"'verdict: %s\n'"'"' "$VERDICT"' \
+  '  printf '"'"'verdict: %s\n'"'"' "$VERDICT"'
+mutant "MX13 B4 refusal removed" "subj_b4" \
+  'if [ -z "$SUBJECT" ] && [ "$ARTIFACT" = "requirements" ]; then' \
+  'if false; then'
 echo
 if [ "$fails" -eq 0 ]; then echo "adversarial-shard-merge: PASS"; exit 0; fi
 echo "adversarial-shard-merge: $fails assertion(s) FAILED" >&2

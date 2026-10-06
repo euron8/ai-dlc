@@ -31,6 +31,9 @@
 #   (h) every step file carrying the prior-decision disposition vocabulary (derived,
 #       at least two) agrees on the four members and states the deferred-unfiled
 #       filing mandate; two committed mutants on a copy of the steps dir.
+#   (i) requirements.md section 5 names partition-subject.sh and no longer says Rule 28
+#       has no axis for a multi-artifact subject; 4(c) carries the `###` subheading
+#       mandate. Two committed mutants (restore-sentence, drop-mandate) on a copy.
 #
 # Usage: run.sh
 # Exit:  0 = every assertion holds (or subject not installed), 1 = a regression,
@@ -364,6 +367,59 @@ dprobe "offender: deferred-unfiled in prose but not in the parenthetical" fire "
 dprobe "offender: a single carrier" fire "$PROBE/h-off-single"
 dprobe "offender: a carrier without the filing mandate" fire "$PROBE/h-off-mandate"
 
+# --- arm (i): the subject axis in section 5, and the `###` mandate in 4(c) ---
+# Each predicate reads ONE region of requirements.md, never the whole file: section 5 is
+# from its `### 5.` heading to the next `### `, 4(c) from its `**(c) Update the PRD.**`
+# opener to `**PRD validation.**`. The mandate key is its sentence, not the bare `###`
+# token, which every step file carries as headings.
+SUBJ_TOOL='partition-subject.sh'
+OLD_SENT='has no axis for a multi-artifact subject'
+MANDATE='The sprint'"'"'s PRD content MUST carry `###` subheadings'
+region() { # <file> <start-literal> <stop-literal> -> the joined text between them
+  awk -v a="$2" -v b="$3" '
+    !on && index($0, a) { on = 1; print; next }
+    on && index($0, b) { exit }
+    on { print }' "$1" | tr '\n' ' ' | tr -s ' '
+}
+sec5() { region "$1" '### 5. ' '### 6. '; }
+sec4c() { region "$1" '**(c) Update the PRD.**' '**PRD validation.**'; }
+I_WHY=""
+subject_axis_ok() { # <requirements.md> -> 0 when section 5 names the tool and lacks the old sentence
+  local s; s="$(sec5 "$1")"; I_WHY=""
+  [ -n "$s" ] || { I_WHY="section 5 not found"; return 1; }
+  case "$s" in *"$SUBJ_TOOL"*) ;; *) I_WHY="section 5 does not name $SUBJ_TOOL"; return 1 ;; esac
+  case "$s" in *"$OLD_SENT"*) I_WHY="section 5 still says it '$OLD_SENT'"; return 1 ;; esac
+  return 0
+}
+mandate_ok() { # <requirements.md> -> 0 when 4(c) carries the mandate sentence
+  local s; s="$(sec4c "$1")"; I_WHY=""
+  [ -n "$s" ] || { I_WHY="4(c) not found"; return 1; }
+  case "$s" in *"$MANDATE"*) return 0 ;; esac
+  I_WHY="4(c) does not carry the \`###\` subheading mandate"; return 1
+}
+iprobe() { # <label> <expect: ok|fire> <predicate> <file>
+  if "$3" "$4"; then got=ok; else got=fire; fi
+  if [ "$got" = "$2" ]; then probe_ok "(i) $1 -> $got${I_WHY:+ ($I_WHY)}"
+  else probe_bad "(i) $1" "expected $2, got $got${I_WHY:+ ($I_WHY)}"; fi
+}
+mk_req() { # <file> <section-5 body> <4(c) body>
+  printf '### 4. Authoring\n**(c) Update the PRD.** Integrate.\n%s\n**PRD validation.** Run it.\n### 5. Validation Cycle\n%s\n### 6. Gate\nThe tail names %s and says it %s, outside section 5.\n' \
+    "$3" "$2" "$SUBJ_TOOL" "$OLD_SENT" > "$1"
+}
+GOOD5="Map with \`scripts/ai-dlc/$SUBJ_TOOL --map <N>\`."
+mk_req "$PROBE/i-nm.md"      "$GOOD5" "$MANDATE — every section."
+mk_req "$PROBE/i-old.md"     "$GOOD5 Rule 28 $OLD_SENT, so one agent." "$MANDATE — every section."
+mk_req "$PROBE/i-notool.md"  "Run the cycle over one subject." "$MANDATE — every section."
+mk_req "$PROBE/i-nomand.md"  "$GOOD5" "Quote the source; headings like ### Scope appear here."
+# Mandate sentence present in the file but OUTSIDE 4(c): a whole-file grep would pass it.
+mk_req "$PROBE/i-mandout.md" "$GOOD5 $MANDATE." "Quote the source."
+iprobe "near-miss: tool in section 5, old sentence only outside it" ok subject_axis_ok "$PROBE/i-nm.md"
+iprobe "offender: old sentence restored inside section 5" fire subject_axis_ok "$PROBE/i-old.md"
+iprobe "offender: section 5 does not name the tool (named only outside it)" fire subject_axis_ok "$PROBE/i-notool.md"
+iprobe "near-miss: mandate in 4(c)" ok mandate_ok "$PROBE/i-nm.md"
+iprobe "offender: 4(c) carries bare ### tokens but no mandate" fire mandate_ok "$PROBE/i-nomand.md"
+iprobe "offender: mandate sentence present only outside 4(c)" fire mandate_ok "$PROBE/i-mandout.md"
+
 echo "requirements-step: $probes self-probe assertion(s), $fails failed"
 if [ "$fails" -gt 0 ]; then
   echo "FIXTURE ERROR: a self-probe could not discriminate offender from near-miss; corpus arms below would not be trustworthy." >&2
@@ -546,6 +602,39 @@ else
   done
   rm -rf "$MUT"
 fi
+
+# --- (i) subject axis in section 5; `###` mandate in 4(c) ---
+if subject_axis_ok "$REQMD"; then
+  ok "(i) requirements.md section 5 names $SUBJ_TOOL and no longer says it '$OLD_SENT'"
+else
+  bad "(i) requirements.md: $I_WHY"
+fi
+if mandate_ok "$REQMD"; then
+  ok "(i) requirements.md 4(c) carries the \`###\` subheading mandate"
+else
+  bad "(i) requirements.md: $I_WHY"
+fi
+# Mutants on a COPY, cmp -s guarded. Each must fail ONLY its own predicate: the other
+# predicate is asserted to still hold on the same mutant.
+IMUT="$(mktemp -d)"
+# restore-sentence: re-insert the old sentence directly after the `### 5. ` heading.
+awk -v s="  Rule 28 \"Split dispatch\" $OLD_SENT, so the round keeps one agent per seat." \
+  '{ print } index($0, "### 5. ") == 1 { print s }' "$REQMD" > "$IMUT/restore.md"
+# drop-mandate: delete every line carrying the mandate sentence.
+awk -v m="$MANDATE" '!index($0, m)' "$REQMD" > "$IMUT/drop.md"
+for m in restore drop; do
+  if cmp -s "$REQMD" "$IMUT/$m.md"; then bad "(i) MUTANT $m DID NOT APPLY"; continue; fi
+  if [ "$m" = restore ]; then own=subject_axis_ok; other=mandate_ok; else own=mandate_ok; other=subject_axis_ok; fi
+  if "$own" "$IMUT/$m.md"; then
+    bad "(i) MUTANT $m SURVIVED: $own passed on the mutated copy"
+  elif ! "$other" "$IMUT/$m.md"; then
+    bad "(i) MUTANT $m is entangled: $other also failed ($I_WHY)"
+  else
+    "$own" "$IMUT/$m.md"
+    ok "(i) MUTANT $m killed by $own alone: $I_WHY"
+  fi
+done
+rm -rf "$IMUT"
 
 echo
 if [ "$fails" -eq 0 ]; then

@@ -313,7 +313,140 @@ p_unwrittenmsg() { # the UNWRITTEN line names the Bash cause and the re-dispatch
     && grep -qF "re-dispatch that shard writing through Edit, Write or MultiEdit" <<<"$l" \
     && ! grep -qiE "hand.assembl" <<<"$l"
 }
-P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg"
+# ---- SUBJECT MODE. A git world holding the requirements subject (trunk main, sprint 9 on a
+# branch), split by the REAL partition-subject.sh; every write is a ledger row the REAL hook
+# recorded -- including the SPEC's, under specs/s9/, which the hook ledgers since B2.
+SJG() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$1" -c user.name=f -c user.email=f@example.invalid -c core.hooksPath=/dev/null "${@:2}"; }
+sjlorem() { local i; for i in $(seq 1 "$2"); do printf '%s line %d of the section, carrying enough prose to weigh something real.\n' "$1" "$i"; done; }
+SJPA=_bmad-output/planning-artifacts
+SJRD=$SJPA/s9/shards/requirements-repair-p1
+SPECREL=_bmad-output/specs/s9/kernel/SPEC.md
+SJSD=_bmad-output
+subj_world() { # -> a world whose subject is split into $SJRD; brief UNCHANGED (no part)
+  local w pa; w="$(mktemp -d "$WORK/sj.XXXXXX")" || return 1; pa="$w/$SJPA"
+  mkdir -p "$pa/s9" "$w/$SJSD/specs/s9/kernel" "$w/$SJSD/gate-adjudication" || return 1
+  printf '# Pipeline Snapshot\n' > "$w/$SJSD/pipeline-snapshot.md"
+  { SJG "$w" init -q . && SJG "$w" checkout -q -b main
+    { printf '# Brief\n\n## Vision\n\n'; sjlorem vision 10; } > "$pa/product-brief.md"
+    { printf '# PRD\n\n## Current state\n\n'; sjlorem current 20; printf '\n## Sprint 8\n\n'; sjlorem s8 20; printf '\n'; } > "$pa/prd.md"
+    SJG "$w" add -A && SJG "$w" commit -q -m base && SJG "$w" checkout -q -b sprint-9; } >/dev/null 2>&1 || return 1
+  { printf '## Sprint 9\n\n### Goals\n\n'; sjlorem s9g 30; printf '\n### Requirements\n\n'; sjlorem s9r 30; } >> "$pa/prd.md"
+  printf '# SPEC\n\ncap-1: THE system SHALL x.\n' > "$w/$SPECREL"
+  printf -- '- FR-S9-1: architecture_impact: none\n' > "$pa/s9/architecture-impact.md"
+  AI_DLC_PROJECT_ROOT="$w" bash "$SRCDIR/partition-subject.sh" --map 9 > "$w/subject.map" 2>&1 || return 1
+  AI_DLC_PROJECT_ROOT="$w" bash "$SRCDIR/partition-subject.sh" --split 9 "$w/$SJRD" >/dev/null 2>&1 || return 1
+  [ -f "$w/$SJRD/.subject" ] || return 1
+  printf '%s' "$w"
+}
+sj_part_rows() { awk -F'\t' '$1 == "part"' "$1/$SJRD/.subject"; }
+sj_edit() { # <world> <global ordinal> <agent> -- edits that part's section copy, or its whole file
+  local w="$1" o="$2" row f
+  row="$(sj_part_rows "$w" | awk -F'\t' -v o="$o" '$2 + 0 == o + 0')"
+  f="$(printf '%s' "$row" | cut -f7)"; [ "$f" = "-" ] && f="$(printf '%s' "$row" | cut -f4)"
+  printf 'Repaired by the part %s remediator.\n' "$o" >> "$w/$f"
+  drive "$w" Edit "$w/$f" "$3"
+  SJ_LAST="$f"
+}
+sj_part() { # <world> <global ordinal> <cited path>
+  printf -- '- **disposition:** repaired\n- **edit:** `%s:2`\n- **derivation:** the part %s finding\n' "$3" "$2" > "$1/$SJRD/$2.md"
+}
+sj_all() { # <world> -- one distinct agent per part, each part citing what it wrote
+  local w="$1" o n=0
+  for o in $(sj_part_rows "$w" | cut -f2); do
+    n=$((n + 1)); sj_edit "$w" "$o" "a$(printf '%016d' "$n")"; sj_part "$w" "$o" "$SJ_LAST"
+  done
+}
+sj_out() { printf '%s' "$1/$SJPA/s9/requirements-repair-p1.md"; }
+run_sjoin() { # <join> <world> [pass]
+  AI_DLC_PROJECT_ROOT="$2" bash "$1" --subject 9 --pass "${3:-1}" \
+    --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1
+  RC=$?
+}
+sj_refused() { [ "$RC" -eq 2 ] && has "$JO" "$2" && [ ! -e "$(sj_out "$1")" ]; }
+p_sjoin() { # every part by one writer -> JOINED, prd assembled, SPEC written in place, per-stem sha lists
+  local w k n; w="$(subj_world)" || return 1
+  k="$(sj_part_rows "$w" | grep -c .)"
+  sj_all "$w"; run_sjoin "$1" "$w"
+  n="$(grep -c 'Repaired by the part' "$w/$SJPA/prd.md")" || n=0
+  [ "$RC" -eq 0 ] && has "$JO" "($k parts, $k writers)" && [ -f "$(sj_out "$w")" ] && [ "$n" -ge 2 ] \
+    && has "$w/$SPECREL" "Repaired by the part" && has "$(sj_out "$w")" "- artifact: $SJPA/s9/requirements-subject.md" \
+    && grep -qE '^- artifact_sha_before: product-brief=[0-9a-f]{64} SPEC=[0-9a-f]{64} prd=[0-9a-f]{64} architecture-impact=[0-9a-f]{64}$' "$(sj_out "$w")" \
+    && grep -qE '^- artifact_sha_after: product-brief=[0-9a-f]{64} SPEC=[0-9a-f]{64} prd=[0-9a-f]{64} architecture-impact=[0-9a-f]{64}$' "$(sj_out "$w")" \
+    && ! grep -q "Repaired by" "$w/$SJPA/product-brief.md"
+}
+p_sjspec2() { # the WHOLE-FILE SPEC part written by two agents -> REFUSED; nothing assembled
+  local w o; w="$(subj_world)" || return 1
+  o="$(sj_part_rows "$w" | awk -F'\t' '$3 == "SPEC" { print $2 }')"
+  sj_all "$w"; drive "$w" Edit "$w/$SPECREL" a9999999999999999
+  run_sjoin "$1" "$w"
+  sj_refused "$w" "$SPECREL was written by more than one agent in the window"
+}
+p_sjoos() { # prd.md written IN PLACE (out-of-scope text) while its sections were out -> REFUSED by name
+  local w; w="$(subj_world)" || return 1
+  sj_all "$w"
+  printf 'An out-of-scope edit.\n' >> "$w/$SJPA/prd.md"; drive "$w" Edit "$w/$SJPA/prd.md" a8888888888888888
+  run_sjoin "$1" "$w"
+  sj_refused "$w" "$SJPA/prd.md was written IN PLACE"
+}
+p_sjnopart() { # the UNCHANGED brief (no part) written in the window -> REFUSED: no shard owns it
+  local w; w="$(subj_world)" || return 1
+  sj_all "$w"
+  printf 'stray\n' >> "$w/$SJPA/product-brief.md"; drive "$w" Edit "$w/$SJPA/product-brief.md" a7777777777777777
+  run_sjoin "$1" "$w"
+  sj_refused "$w" "$SJPA/product-brief.md has no part in this split"
+}
+p_sjnames() { # --pass party / elicitation read and write their own names; a party record is not *-repair-p<M>
+  local w rd; w="$(subj_world)" || return 1
+  rd="$w/$SJPA/s9/shards/requirements-party-repair"
+  AI_DLC_PROJECT_ROOT="$w" bash "$SRCDIR/partition-subject.sh" --split 9 "$rd" >/dev/null 2>&1 || return 1
+  sj_all_dir() { local o n=0 row f; for o in $(awk -F'\t' '$1 == "part" { print $2 }' "$rd/.subject"); do
+      n=$((n + 1)); row="$(awk -F'\t' -v o="$o" '$1 == "part" && $2 == o' "$rd/.subject")"
+      f="$(printf '%s' "$row" | cut -f7)"; [ "$f" = "-" ] && f="$(printf '%s' "$row" | cut -f4)"
+      printf 'party %s\n' "$o" >> "$w/$f"; drive "$w" Edit "$w/$f" "b$(printf '%016d' "$n")"
+      printf -- '- **disposition:** repaired\n- **edit:** `%s:2`\n- **derivation:** party %s\n' "$f" "$o" > "$rd/$o.md"; done; }
+  # The repair-p1 split from subj_world holds the prd sections; assemble it away first so the
+  # party split owns the file alone.
+  AI_DLC_PROJECT_ROOT="$w" bash "$SRCDIR/partition-subject.sh" --assemble "$w/$SJRD" >/dev/null 2>&1 || return 1
+  sj_all_dir
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --subject 9 --pass party --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && [ -f "$w/$SJPA/s9/requirements-party-repair.md" ] && [ ! -e "$(sj_out "$w")" ] \
+    && ! ls "$w/$SJPA/s9/"*-repair-p[0-9]*.md >/dev/null 2>&1
+}
+p_sjbase() { # --base other than the manifest's -> REFUSED before anything is read
+  local w; w="$(subj_world)" || return 1
+  sj_all "$w"
+  SJG "$w" commit -q --allow-empty -m other >/dev/null 2>&1 || return 1   # HEAD is now NOT the base
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --subject 9 --pass 1 --base HEAD --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1; RC=$?
+  sj_refused "$w" "is not the subject manifest's base"
+}
+p_sjgate() { # the requirements gate's FAILURE repair: --artifact gate-<type> -> gate-planning-repair-p1.md, never requirements-repair-p1.md
+  ( SJRD=$SJPA/s9/shards/gate-planning-repair-p1
+    w="$(subj_world)" || exit 1
+    sj_all "$w"
+    AI_DLC_PROJECT_ROOT="$w" bash "$1" --subject 9 --artifact gate-planning --pass 1 \
+      --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1 || exit 1
+    [ -f "$w/$SJPA/s9/gate-planning-repair-p1.md" ] && [ ! -e "$w/$SJPA/s9/requirements-repair-p1.md" ] \
+      && has "$JO" "gate-planning-repair-p1.md" && has "$w/$SJPA/s9/gate-planning-repair-p1.md" "- artifact: $SJPA/s9/requirements-subject.md" )
+}
+p_sjgatenear() { # near-misses of the gate form: a non-gate --artifact, and a gate form with a non-numeric pass, both REFUSED writing nothing
+  local w ra rb; w="$(subj_world)" || return 1
+  sj_all "$w"
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --subject 9 --artifact stories --pass 1 \
+    --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1; ra=$?
+  has "$JO" "applies with --subject only as gate-<type>" || return 1
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --subject 9 --artifact gate-planning --pass party \
+    --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1; rb=$?
+  has "$JO" "needs a numeric --pass" || return 1
+  [ "$ra" -eq 2 ] && [ "$rb" -eq 2 ] && ! ls "$w/$SJPA/s9/"*-repair*.md >/dev/null 2>&1
+}
+p_sjnest() { # a NESTED state dir (out/bmad): map, split, join and the record agree on the root-relative spelling
+  ( export AI_DLC_STATE_DIR=out/bmad
+    SJSD=out/bmad; SJPA=out/bmad/planning-artifacts; SJRD=out/bmad/planning-artifacts/s9/shards/requirements-repair-p1
+    SPECREL=out/bmad/specs/s9/kernel/SPEC.md
+    p_sjoin "$1" )
+}
+
+P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest"
 
 # ---- A PART'S DERIVATION SURVIVES THE JOIN. The part's ```derived fence is copied into the joined
 # record, and the gate re-runs `validate-artifact-derivations.sh` over the sprint dir AFTER the
@@ -443,6 +576,36 @@ p_basecite "$JOIN"   && ok "A5: control -- a bare basename citation still resolv
 p_unwrittenmsg "$JOIN" && ok "A6: the UNWRITTEN refusal names the Bash cause and the re-dispatch, and not hand-assembly" \
   || bad "A6: the UNWRITTEN refusal line does not name the Bash cause and the re-dispatch, or names hand-assembly: $(cat "$JO")"
 
+# ---- subject mode. B2 first: a dispatched Write of the SPEC under specs/s9/ is a ledger row, and a
+# Write under specs/ outside a sprint slot is not (the near-miss).
+SJW="$(subj_world)"
+if [ -n "$SJW" ]; then
+  drive "$SJW" Write "$SJW/$SPECREL" "$AG1"
+  drive "$SJW" Write "$SJW/_bmad-output/specs/README.md" "$AG2"
+  n_spec="$(grep -c "\"path\":\"$SPECREL\"" "$SJW/$SJPA/.artifact-writes.jsonl" 2>/dev/null)" || n_spec=0
+  n_near="$(grep -c '"path":"_bmad-output/specs/README.md"' "$SJW/$SJPA/.artifact-writes.jsonl" 2>/dev/null)" || n_near=0
+  [ "$n_spec" -eq 1 ] && [ "$n_near" -eq 0 ] \
+    && ok "B2: the real hook ledgers a dispatched Write of specs/s9/kernel/SPEC.md (1 row) and not one of specs/README.md (0)" \
+    || bad "B2: SPEC rows=$n_spec (want 1), specs/README.md rows=$n_near (want 0)"
+  n_sec="$(awk -F'\t' '$1 == "part" && $7 != "-"' "$SJW/$SJRD/.subject" | grep -c .)" || n_sec=0
+  n_whole="$(awk -F'\t' '$1 == "part" && $7 == "-"' "$SJW/$SJRD/.subject" | grep -c .)" || n_whole=0
+  [ "$n_sec" -ge 2 ] && [ "$n_whole" -ge 2 ] \
+    && ok "SJ0: the subject seed splits into $n_sec section part(s) and $n_whole whole-file part(s), so both join paths are reachable" \
+    || bad "SJ0: FIXTURE BROKEN -- $n_sec section / $n_whole whole-file part(s)"
+else
+  bad "SJ0: FIXTURE BROKEN -- the subject world did not build"
+fi
+p_sjoin "$JOIN" && ok "SJ1: --subject, one writer per part -> JOINED; prd assembled, SPEC edited in place, the unchanged brief untouched; per-stem before/after lists, artifact: the manifest" \
+  || bad "SJ1: the subject join (rc=$RC): $(cat "$JO")"
+p_sjspec2 "$JOIN" && ok "SJ2: the whole-file SPEC part written by two agents -> REFUSED 'more than one agent', no record" || bad "SJ2: (rc=$RC) $(cat "$JO")"
+p_sjoos "$JOIN" && ok "SJ3: prd.md written IN PLACE while its sections were out (out-of-scope text) -> REFUSED naming the file, no record" || bad "SJ3: (rc=$RC) $(cat "$JO")"
+p_sjnopart "$JOIN" && ok "SJ4: the unchanged brief (no part) written in the window -> REFUSED, no record" || bad "SJ4: (rc=$RC) $(cat "$JO")"
+p_sjnames "$JOIN" && ok "SJ5: --pass party reads shards/requirements-party-repair/ and writes requirements-party-repair.md, never a *-repair-p<M>.md" || bad "SJ5: (rc=$RC) $(cat "$JO")"
+p_sjbase "$JOIN" && ok "SJ6: --base other than the manifest's -> REFUSED, no record" || bad "SJ6: (rc=$RC) $(cat "$JO")"
+p_sjgate "$JOIN" && ok "SJ7: --subject --artifact gate-planning --pass 1 -> JOINED as gate-planning-repair-p1.md from shards/gate-planning-repair-p1/, and no requirements-repair-p1.md" || bad "SJ7: $(cat "$JO")"
+p_sjgatenear "$JOIN" && ok "SJ8: near-misses -- --artifact stories, and --artifact gate-planning with --pass party -> REFUSED, nothing written" || bad "SJ8: $(cat "$JO")"
+p_sjnest "$JOIN" && ok "SJ9: a nested AI_DLC_STATE_DIR (out/bmad) -> map, split and join agree and the record is the manifest's root-relative path (SJ1 is the default-layout control)" || bad "SJ9: $(cat "$JO")"
+
 # R1: the role file the remediator is bound to teaches the write tool and the citation form. Walked
 # up from this fixture in both layouts; install copies team-roles/ verbatim, so no render exists.
 ROLE=""
@@ -515,7 +678,7 @@ fi
 # ------------------------------------------------------------------------------ the mutants
 mutdir() { # <name> -> the join and the sibling it evals arm H's predicate out of
   local d; d="$(mktemp -d "$WORK/mut-$1.XXXXXX")" || return 1
-  cp "$JOIN" "$CONV" "$PARTITION" "$d/"
+  cp "$JOIN" "$CONV" "$PARTITION" "$SRCDIR/partition-subject.sh" "$d/"
   printf '%s' "$d"
 }
 apply() { # <file> <old> <new>
@@ -560,7 +723,7 @@ else
 fi
 # J2's world ALSO trips other refusals, so this mutant still exits 2 there; the kill is the
 # missing overlap SENTENCE, which is the only thing that names the defect to the lead.
-mutant "JX1 the >1-writer refusal removed" "overlap docoverlap" \
+mutant "JX1 the >1-writer refusal removed" "overlap docoverlap sjspec2" \
   'if [ -n "$OVERLAPS" ]; then' \
   'if false; then'
 mutant "JX2 the uncited-file refusal removed" "missing" \
@@ -571,7 +734,7 @@ mutant "JX3 the shards/ exclusion removed" "shardrow" \
   '   | select(true)'
 # JX4 is the defect this mode exists to close: the files-mode filter applied in document mode drops
 # every section row, so the join sees no write at all.
-mutant "JX4 section rows dropped in document mode (the pre-BL-372 file set)" "docjoin docoverlap asmrefuse" \
+mutant "JX4 section rows dropped in document mode (the pre-BL-372 file set)" "docjoin docoverlap asmrefuse sjoin sjnames sjgate sjnest" \
   '   | select($doc == "1" or ((.path | startswith($sh + "/")) | not))' \
   '   | select((.path | startswith($sh + "/")) | not)'
 mutant "JX5 the assembly skipped" "docjoin asmrefuse" \
@@ -596,6 +759,19 @@ mutant "JX9 any .../<state-dir-name>/... rewritten to <state-dir-name>/..." "abs
   "$STRIP" \
   "$STRIP"'
     case "$_t" in */"${STATE##*/}"/*) _t="${STATE##*/}/${_t#*/"${STATE##*/}"/}" ;; esac'
+
+mutant "JX11 subject in-place write to a sectioned file not refused" "sjoos" \
+  '        S) refuse "${_p} was written IN PLACE' \
+  '        S) : "${_p} was written IN PLACE'
+mutant "JX12 subject part-less file write not refused" "sjnopart" \
+  '        O) refuse "${_p} has no part' \
+  '        O) : "${_p} has no part'
+mutant "JX13 subject --base assertion removed" "sjbase" \
+  '    [ -n "$_bf" ] && [ "$_bf" = "$SUBJ_MF_BASE" ] || die' \
+  '    true || die'
+mutant "JX14 subject assembly skipped" "sjoin sjnest" \
+  '  ASM_LINE="$(bash "$PSUBJ" --assemble "$SHARD_DIR" 2>&1)" || {' \
+  '  ASM_LINE="skipped" || {'
 
 echo
 if [ "$fails" -eq 0 ]; then echo "remediator-shard-join: PASS"; exit 0; fi
