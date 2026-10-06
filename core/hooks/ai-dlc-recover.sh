@@ -41,10 +41,11 @@ SIDECAR="${STATE_DIR}/pipeline-snapshot.precompact.md"
 MARKER="${STATE_DIR}/.recover-fired"
 
 # Claude Code's hard limit. At or above this, additionalContext is persisted to
-# disk and stubbed. Stay under it with margin; the directive is worthless if the
+# disk and stubbed, and the limit applies to the string the hook EMITS -- the
+# provenance-wrapped block, not the directive inside it. Every budget below is
+# therefore reckoned on the wrapped length; the directive is worthless if the
 # harness replaces it with a file path.
 CONTEXT_LIMIT="${AI_DLC_HOOK_CONTEXT_LIMIT:-10000}"
-SAFETY_MARGIN="${AI_DLC_HOOK_CONTEXT_MARGIN:-1000}"
 POSITION_MAX_BYTES="${AI_DLC_RECOVER_POSITION_MAX_BYTES:-1200}"
 
 INPUT="$(cat 2>/dev/null || true)"
@@ -350,6 +351,9 @@ fi
 POSITION="$(awk '/^## Pipeline Position/{f=1;next} /^## /{f=0} f' "$SNAPSHOT" 2>/dev/null \
   | head -c "$POSITION_MAX_BYTES" | sed -E 's/[[:space:]]+$//')"
 
+# DROPPABLE, like the excerpt: the note says to read the sidecar only if the snapshot leaves a
+# gap, so it is a convenience and never the payload. The budget section below drops it first
+# when the wrapped block would otherwise reach the cliff.
 SIDECAR_NOTE=""
 [ -f "$SIDECAR" ] && SIDECAR_NOTE="Mechanical state captured immediately before this compaction (branch, last
 commit, working tree, sprint status, gate-log tail) is at
@@ -367,19 +371,28 @@ for _ckp in "${PROJECT_DIR}/scripts/ai-dlc/gate-checkpoint.sh" "${PROJECT_DIR}/c
     break
   fi
 done
+#
+# THE SECTION CARRIES THE NONCE AND THE ONE COMMAND THAT USES IT, AND NOTHING THE GATE FILE
+# ALREADY SAYS. Three sentences were cut to keep a gate-in-flight block under the cliff, each
+# because the recovering lead reads it anyway at the gate-validation.md Read this section sends
+# it to -- and inside the PREAMBLE interval, which gate-slice.sh plans as the first read for
+# every gate type (offset 1), so no slice can omit it:
+#   - "issue one native Read per emitted row"      -> gate-validation.md's Loader contract;
+#   - the `record <id> <verdict>` command form      -> its gate-entry "Record every verdict" paragraph;
+#   - "mint a fresh nonce only on a re-dispatch"    -> the same paragraph ("On a re-dispatch, mint
+#     the fresh nonce and `open` it").
+# The nonce is also named twice rather than four times: it is the one part of this section whose
+# length the hook does not choose, so every repetition multiplies the overrun a long one causes.
 if [ -n "$GATE_NONCE" ]; then
   GATE_RESUME="## The cut landed inside a gate -- RESUME it, do not restart it
 
-\`_bmad-output/.gate-checkpoint/OPEN\` names \`${GATE_NONCE}\`: that gate was in flight
-when this compaction cut and its \`gate_nonce\` is \`${GATE_NONCE}\`.
-When you reach that gate's \`gate-validation.md\` Read, take the SLICED plan and
-skip the checks already settled at this nonce:
+Its \`gate_nonce\` is \`${GATE_NONCE}\` (\`.gate-checkpoint/OPEN\`). At that gate's
+\`gate-validation.md\` Read, skip the checks already settled at it:
 
 \`scripts/ai-dlc/gate-slice.sh --type <gate type> --done \"\$(scripts/ai-dlc/gate-checkpoint.sh --nonce ${GATE_NONCE} done)\"\`
 
-Issue one native \`Read\` per emitted row. Every verdict you reach from here is
-recorded at the same nonce (\`gate-checkpoint.sh --nonce ${GATE_NONCE} record <id> <verdict>\`).
-Mint a fresh nonce ONLY if you re-dispatch the adjudicator."
+Keep recording at this nonce. Per-row Reads, recording and re-dispatch: that
+file's Loader contract and gate-entry paragraph."
 else
   # No ledger, no gate in flight: the section is omitted whole. Rule 21 already carries the
   # slicing instruction for the next gate the lead reaches, and the block is at its byte
@@ -540,12 +553,51 @@ $( [ "$1" = yes ] && [ -n "$POSITION" ] && printf '%s\n\n%s\n' "---
 EOF
 }
 
-CEILING=$(( CONTEXT_LIMIT - SAFETY_MARGIN ))
+# PROVENANCE MARKER -- PC-S306-UNSOLICITED-CONTEXT-HAS-NO-PROVENANCE-SIGNAL. The
+# library is a SIBLING in both layouts (core/hooks/, .claude/hooks/), so this is a
+# same-directory read and never a walk up from a resolved path. Fail-open: a hook
+# that cannot mark its output still emits it.
+#
+# SOURCED BEFORE THE BUDGET, because the wrap is part of what the harness measures.
+_AI_DLC_PROV="$(dirname "${BASH_SOURCE[0]}")/ai-dlc-context-provenance.sh"
+if [ -r "$_AI_DLC_PROV" ]; then . "$_AI_DLC_PROV"
+else ai_dlc_provenance_wrap() { printf %s "${3:-}"; }; fi
+
+# THE WRAP IS MEASURED BY WRAPPING, ONCE, AND THAT ONE WRAP IS THE ONE EMITTED. The budget
+# used to be reckoned on the unwrapped block, so a block the wrap pushed to 10000-10128
+# characters was stubbed by the harness while `.recover-fired` recorded `degraded=no` (BL-457).
+# A hand-typed overhead would drift with the marker's format; a second wrap call would mint a
+# second nonce on this SessionStart and rotate the store under the block being marked. So the
+# wrap runs once over a sentinel, the result is split around it, and the emitted string is
+# head + block + tail. The sentinel is non-empty because command substitution strips trailing
+# newlines, and an empty body would hide the newline the wrap puts before it. The fail-open
+# no-op above yields an empty head and tail, which is its true overhead.
+_PROV_SENTINEL='@@AI-DLC-RECOVER-PAYLOAD@@'
+_PROV_WRAPPED="$(ai_dlc_provenance_wrap ai-dlc-recover SessionStart "$_PROV_SENTINEL")"
+case "$_PROV_WRAPPED" in
+  *"$_PROV_SENTINEL"*)
+    _PROV_HEAD="${_PROV_WRAPPED%%"$_PROV_SENTINEL"*}"
+    _PROV_TAIL="${_PROV_WRAPPED#*"$_PROV_SENTINEL"}" ;;
+  # UNREACHABLE with the shipped library, which always places the body last. Reaching it would
+  # emit the block UNMARKED, the same fail-open as a missing library, with an overhead of 0.
+  *) _PROV_HEAD=""; _PROV_TAIL="" ;;
+esac
+WRAP_OVERHEAD=$(( ${#_PROV_HEAD} + ${#_PROV_TAIL} ))
 
 # Trim before emitting, never after. An over-limit block is not truncated by the
 # harness -- it is replaced wholesale by a file path, so a directive that does
-# not fit is a directive that never runs. The Pipeline Position excerpt is the
-# only droppable part; the directive itself is the payload.
+# not fit is a directive that never runs. Two parts are droppable: the Pipeline
+# Position excerpt, which is fitted to whatever room is left, and the sidecar note.
+# The directive is the payload.
+#
+# THE SIDECAR NOTE GOES ONLY WHEN THE WRAPPED BARE DIRECTIVE WOULD REACH THE CLIFF. It is kept
+# whenever it fits, ahead of the excerpt, because it is the one pointer to the pre-compaction
+# branch and gate-log tail, where the excerpt repeats a section the mandated Read returns whole.
+BARE="$(build no)"
+if [ -n "$SIDECAR_NOTE" ] && [ $(( ${#BARE} + WRAP_OVERHEAD )) -ge "$CONTEXT_LIMIT" ]; then
+  SIDECAR_NOTE=""
+  BARE="$(build no)"
+fi
 #
 # THE EXCERPT IS FITTED TO THE REMAINING BUDGET, NOT INCLUDED WHOLE OR DROPPED WHOLE.
 # All-or-nothing was the earlier shape and it made the `build yes` path very nearly dead:
@@ -553,43 +605,42 @@ CEILING=$(( CONTEXT_LIMIT - SAFETY_MARGIN ))
 # entirely, so the branch fired only for a Position under ~230 bytes. Sizing the excerpt to
 # what is actually left keeps it in the cases it was written for and, where nothing is left,
 # emits the bare directive by the same rule rather than by a branch nobody can reach.
-BARE="$(build no)"
+#
 # The excerpt carries its own separator and heading, which are part of what it costs.
 EXCERPT_OVERHEAD=120
-# THE MARGIN GUARDS THE DIRECTIVE; THE EXCERPT MAY SPEND PART OF IT, DOWN TO A RESERVE.
-# `SAFETY_MARGIN` exists so the DIRECTIVE -- the payload, which cannot be dropped -- never
-# approaches the cliff, and that use is unchanged: `CEILING` still decides `degraded`. The
-# excerpt is different in kind. It is droppable, and it is now bounded by this arithmetic
-# rather than added blind at up to 1,200 bytes, which is the risk the whole margin was
-# absorbing before. So it draws on the space between the ceiling and the cliff, leaving
-# `EXCERPT_RESERVE` unspent. Worst case with an excerpt is CONTEXT_LIMIT - EXCERPT_RESERVE,
-# asserted below rather than assumed.
+# THE EXCERPT STOPS SHORT OF THE CLIFF BY A RESERVE. It is droppable and bounded by this
+# arithmetic, so it may run up to CONTEXT_LIMIT - EXCERPT_RESERVE of EMITTED length and no
+# further -- the wrap's overhead is subtracted here and in the fallback below, so that bound
+# holds for the string the harness measures, not for the block inside it.
 EXCERPT_RESERVE="${AI_DLC_HOOK_EXCERPT_RESERVE:-500}"
-ROOM=$(( CONTEXT_LIMIT - EXCERPT_RESERVE - ${#BARE} - EXCERPT_OVERHEAD ))
+ROOM=$(( CONTEXT_LIMIT - EXCERPT_RESERVE - ${#BARE} - EXCERPT_OVERHEAD - WRAP_OVERHEAD ))
 if [ -n "$POSITION" ] && [ "$ROOM" -gt 200 ]; then
   [ "$ROOM" -lt "${#POSITION}" ] && POSITION="$(printf '%s' "$POSITION" | head -c "$ROOM")"
   CONTEXT="$(build yes)"
 else
   CONTEXT="$BARE"
 fi
-# Belt and braces. If the assembled block still reaches the excerpt's own ceiling -- a path
-# length or a sidecar note this arithmetic did not anticipate -- fall back to the directive
-# alone. The directive is the payload and the excerpt is the convenience; that order never
-# inverts, and this is the assertion rather than the assumption.
-if [ "${#CONTEXT}" -ge $(( CONTEXT_LIMIT - EXCERPT_RESERVE )) ]; then
+# Belt and braces. If the assembled, wrapped block still reaches the excerpt's own bound -- a
+# path length this arithmetic did not anticipate -- fall back to the directive alone. The
+# directive is the payload and the excerpt is the convenience; that order never inverts, and
+# this is the assertion rather than the assumption.
+if [ $(( ${#CONTEXT} + WRAP_OVERHEAD )) -ge $(( CONTEXT_LIMIT - EXCERPT_RESERVE )) ]; then
   CONTEXT="$BARE"
 fi
 
-# `degraded` reports what the HARNESS will do, so it tests against the real
-# cliff -- not against the ceiling, which only governs when we trim. A block
-# between the ceiling and the limit still lands in context intact.
+# `degraded` reports what the HARNESS will do, so it is decided on the string the hook
+# EMITS -- wrap included -- against the real cliff. The excerpt's reserve only governs when
+# we trim; a block between that bound and the cliff still lands in context intact.
+EMITTED="${_PROV_HEAD}${CONTEXT}${_PROV_TAIL}"
 DEGRADED=no
-[ "${#CONTEXT}" -ge "$CONTEXT_LIMIT" ] && DEGRADED=yes
+[ "${#EMITTED}" -ge "$CONTEXT_LIMIT" ] && DEGRADED=yes
 
 mkdir -p "$STATE_DIR" 2>/dev/null || true
 {
   printf 'fired_at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  printf 'injected_bytes=%s\n' "${#CONTEXT}"
+  # The EMITTED length, wrap included -- the figure `ai-dlc-postcompact.sh` reports and the one
+  # the harness compares against the cliff.
+  printf 'injected_bytes=%s\n' "${#EMITTED}"
   printf 'context_limit=%s\n' "$CONTEXT_LIMIT"
   printf 'degraded=%s\n' "$DEGRADED"
   # WHAT THE GATE ARMS ON. `ai-dlc-recover-gate.sh` refuses the first post-compact tool call
@@ -612,15 +663,9 @@ mkdir -p "$STATE_DIR" 2>/dev/null || true
 # which is the same guarantee `$MARKER` gets from being rewritten above.
 rm -f "${STATE_DIR}/.recover-satisfied" 2>/dev/null || true
 
-# PROVENANCE MARKER -- PC-S306-UNSOLICITED-CONTEXT-HAS-NO-PROVENANCE-SIGNAL. The
-# library is a SIBLING in both layouts (core/hooks/, .claude/hooks/), so this is a
-# same-directory read and never a walk up from a resolved path. Fail-open: a hook
-# that cannot mark its output still emits it.
-_AI_DLC_PROV="$(dirname "${BASH_SOURCE[0]}")/ai-dlc-context-provenance.sh"
-if [ -r "$_AI_DLC_PROV" ]; then . "$_AI_DLC_PROV"
-else ai_dlc_provenance_wrap() { printf %s "${3:-}"; }; fi
-
-jq -n --arg ctx "$(ai_dlc_provenance_wrap ai-dlc-recover SessionStart "$CONTEXT")" \
+# The string measured above is the string emitted: the provenance wrap ran once, before the
+# budget, and EMITTED is its head and tail around the trimmed block.
+jq -n --arg ctx "$EMITTED" \
   '{hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: $ctx}}'
 
 exit 0
