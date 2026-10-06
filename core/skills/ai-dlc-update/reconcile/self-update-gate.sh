@@ -448,22 +448,38 @@ gate_refline() {
 # gate_argv_scan <hook> <name> -- how the hook runs scripts/ai-dlc/<name>, one row per occurrence
 # on a non-comment line:
 #   R<TAB><line><TAB><argv>  run at command position and its exit status is READ: a plain
-#                            command, a pipeline stage, a function body, or a `$( )` capture
-#                            whose status the same line reads (`$?`, `&&`, `||`, `if`)
-#   D<TAB><line><TAB><argv>  run, but its status is DISCARDED: a capture nothing reads, or `&`.
-#                            NEVER RUN BY THIS GATE: the renderer's D line is its write mode.
+#                            command, a pipeline stage, a function body, a `step "…"` argument,
+#                            or a `$( )` capture whose status is read -- on the same line (`$?`,
+#                            `&&`, `||`, `if`), by the NEXT non-blank, non-comment line (`$?`
+#                            anywhere on it, or `&&`/`||` as its first token), or because the
+#                            capture is the last statement of a function body (`; }` on its
+#                            line, or `}` opening the next line), so the function returns it
+#   D<TAB><line><TAB><argv>  run, but its status is DISCARDED: a capture nothing reads, `&`, or
+#                            a trailing `|| true` / `; true` (`:` alike) with no other status
+#                            reader before it -- except after `step`, whose own `if` has already
+#                            read it. NEVER RUN BY THIS GATE: the renderer's D line is its write
+#                            mode, and the `[ -d … ] \` / `&& printf` after it reads the TEST's
+#                            status, not the capture's, because only a next line's FIRST token
+#                            counts and that line opens with `[`.
 #   M<TAB><line><TAB><kind>  MENTIONED, never run: a comment, an existence test, a `for … in`
-#                            list, printf text, an assignment's value, or a path that runs on into
-#                            another name (`x.sh=y.sh` executes a different file)
+#                            list, printf text, or a path that runs on into another name
+#                            (`x.sh=y.sh` executes a different file)
 #   X<TAB><line><TAB><argv>  run with its status read, but the argv span holds an expansion or
-#                            quoting this gate cannot resolve without executing the hook
+#                            quoting this gate cannot resolve without executing the hook. AN
+#                            ASSIGNMENT IS X, NEVER M: the script's path assigned to `V`, then
+#                            `bash "$V" --k`, is a run this scan cannot follow, and reading the
+#                            assignment as a mention made the script "not gating" and OK.
 #   U<TAB><line><TAB>        an occurrence of no shape above (`exec`, `env`, `timeout`, a command
 #                            word that is a variable). Unknown is never read as a mention.
 # EVERY occurrence the name list was derived from yields a row, comments included, so a name with
 # no row at all is a disagreement between this scan and that list, never an absence.
 # COMMAND POSITION is the start of a line or a `;`, `|`, `&`, `(`, `{` or `$(` boundary, then any
-# of `if elif while until then do else !`, then an optional `bash`/`sh`, then an optional quote
-# and `./`. A path quoted on both sides is unquoted before its span is read.
+# of `if elif while until then do else !`, then an optional `step "<label>"` (one quoted word),
+# then an optional `bash`/`sh`, then an optional quote and `./`. A path quoted on both sides is
+# unquoted before its span is read.
+# NOT MODELLED, and each reads D rather than R: a capture whose status is read only through
+# `set -e` (both real hooks run `set -uo pipefail`, no `-e`), and a capture closed by `fi`, `done`
+# or `esac` as the last statement of a function body.
 # THE ARGV SPAN runs from the end of the path to the first `)`, `;`, `|`, `&`, `<`, `>` or ` #`,
 # with a trailing fd digit dropped (`2>` ends a span the way `>` does). Only what is INSIDE that
 # span decides X: the hook's `printf '%s' "$PUSH_REFS" | bash …` carries a `$` before the path
@@ -472,16 +488,24 @@ gate_refline() {
 # No apostrophe may appear in this awk program, which sits inside a single-quoted shell literal.
 gate_argv_scan() {
   awk -v p="scripts/ai-dlc/$2" '
-    /^[[:space:]]*#/ { if (index($0, p) > 0) printf "M\t%d\tcomment\n", NR; next }
-    {
-      line = $0; off = 0
+    function nextline(r,  t) { # the first line after r that is neither blank nor a comment, or ""
+      for (t = r + 1; t <= NL; t++) if (L[t] !~ /^[[:space:]]*(#.*)?$/) return L[t]
+      return ""
+    }
+    { L[NR] = $0 }
+    END { NL = NR; for (r = 1; r <= NL; r++) scanline(r) }
+    function scanline(r,  line, off, i, s, e, nc, pre, after, q, span, k, j, c, tail, capture, bg, nx, stepped, readnext, ct, lastinfn, tt, truetail) {
+      line = L[r]
+      if (line ~ /^[[:space:]]*#/) { if (index(line, p) > 0) printf "M\t%d\tcomment\n", r; return }
+      off = 0
       while ((i = index(substr(line, off + 1), p)) > 0) {
         s = off + i; e = s + length(p); off = e - 1
         nc = substr(line, e, 1)
         pre = substr(line, 1, s - 1); after = substr(line, e)
-        if (nc != "" && nc !~ /[[:space:];|&)<>"\047]/) { printf "M\t%d\tjoined\n", NR; continue }
-        if (pre ~ /(^|[[:space:];])[A-Za-z_][A-Za-z0-9_]*=["\047]?(\.\/)?$/) { printf "M\t%d\tassign\n", NR; continue }
-        if (pre ~ /(^|[;|&({]|\$\()[[:space:]]*((if|elif|while|until|then|do|else|!)[[:space:]]+)*((bash|sh)[[:space:]]+)?["\047]?(\.\/)?$/) {
+        if (nc != "" && nc !~ /[[:space:];|&)<>"\047]/) { printf "M\t%d\tjoined\n", r; continue }
+        if (pre ~ /(^|[[:space:];])[A-Za-z_][A-Za-z0-9_]*=["\047]?(\.\/)?$/) { printf "X\t%d\tthe path is assigned to a variable, and what the hook later runs through it is not derived\n", r; continue }
+        stepped = (pre ~ /(^|[;|&({]|\$\()[[:space:]]*((if|elif|while|until|then|do|else|!)[[:space:]]+)*step[[:space:]]+("[^"]*"|\047[^\047]*\047)[[:space:]]+((bash|sh)[[:space:]]+)?["\047]?(\.\/)?$/)
+        if (stepped || pre ~ /(^|[;|&({]|\$\()[[:space:]]*((if|elif|while|until|then|do|else|!)[[:space:]]+)*((bash|sh)[[:space:]]+)?["\047]?(\.\/)?$/) {
           q = pre; sub(/(\.\/)?$/, "", q); q = substr(q, length(q), 1)
           if ((q == "\"" || q == "\047") && substr(after, 1, 1) == q) after = substr(after, 2)
           span = after; k = 0
@@ -494,22 +518,34 @@ gate_argv_scan() {
           gsub(/^[[:space:]]+|[[:space:]]+$/, "", span)
           capture = (pre ~ /\$\([[:space:]]*((bash|sh)[[:space:]]+)?["\047]?(\.\/)?$/)
           bg = (tail ~ /^&([^&]|$)/)
-          if (bg || (capture && index(tail, "$?") == 0 && index(tail, "&&") == 0 && index(tail, "||") == 0 \
+          # A capture whose status the NEXT non-blank line reads, or that closes a function body
+          # (so the function returns its status), is not discarded.
+          nx = nextline(r)
+          readnext = (index(nx, "$?") > 0 || nx ~ /^[[:space:]]*(&&|\|\|)/)
+          ct = tail; sub(/^[^)]*\)["\047]?[[:space:]]*;?[[:space:]]*/, "", ct)
+          lastinfn = (capture && (ct ~ /^}/ || (ct == "" && nx ~ /^[[:space:]]*}/)))
+          # A trailing `|| true` or `; true` discards the status, unless `step` already read it.
+          tt = tail; truetail = 0
+          if (!stepped && match(tt, /(\|\||;)[[:space:]]*(true|:)[[:space:]]*;?[[:space:]]*}?[[:space:]]*$/)) {
+            tt = substr(tt, 1, RSTART - 1)
+            truetail = (index(tt, "||") == 0 && index(tt, "&&") == 0 && index(tt, "$?") == 0)
+          }
+          if (bg || truetail || (capture && !readnext && !lastinfn && index(tail, "$?") == 0 && index(tail, "&&") == 0 && index(tail, "||") == 0 \
                      && pre !~ /(^|[;[:space:]])(if|elif|while|until)[[:space:]]/)) {
-            printf "D\t%d\t%s\n", NR, span
+            printf "D\t%d\t%s\n", r, span
           } else if (span ~ /[$`"\\*?~[]/ || span ~ /\047/) {
-            printf "X\t%d\t%s\n", NR, span
+            printf "X\t%d\t%s\n", r, span
           } else {
-            printf "R\t%d\t%s\n", NR, span
+            printf "R\t%d\t%s\n", r, span
           }
         } else if (pre ~ /(^|[^A-Za-z0-9_])(printf|echo)[[:space:]]/) {
-          printf "M\t%d\ttext\n", NR
+          printf "M\t%d\ttext\n", r
         } else if (pre ~ /(^|[[:space:]])-[A-Za-z][[:space:]]+(\.\/)?$/) {
-          printf "M\t%d\ttest\n", NR
+          printf "M\t%d\ttest\n", r
         } else if (pre ~ /(^|[;[:space:]])for[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+in[[:space:]]/) {
-          printf "M\t%d\tlist\n", NR
+          printf "M\t%d\tlist\n", r
         } else {
-          printf "U\t%d\t\n", NR
+          printf "U\t%d\t\n", r
         }
       }
     }
@@ -1506,7 +1542,7 @@ while IFS= read -r name; do
   sc_n_all="$(grep -c . "$TMP/scan")" || sc_n_all=0
   if [ "$sc_n_x" -gt 0 ]; then
     sc_x="$(awk -F'\t' '$1 == "X" {printf "%sline %s: %s", (n++ ? "; " : ""), $2, $3}' "$TMP/scan")"
-    emit SELF-UPDATE-UNDECIDED "$name" "the hook runs scripts/ai-dlc/$name and reads its exit status, but its argument span holds an expansion or quoting this gate cannot resolve without executing the hook (${sc_x}). The argv is unknown, so neither run can ask the hook's question; treat as defer."
+    emit SELF-UPDATE-UNDECIDED "$name" "the hook runs scripts/ai-dlc/$name and reads its exit status, but its argument span holds an expansion or quoting, or the path is reached through a variable, which this gate cannot resolve without executing the hook (${sc_x}). The argv is unknown, so neither run can ask the hook's question; treat as defer."
     deferred=1
     continue
   fi

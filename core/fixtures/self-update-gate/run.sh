@@ -3494,7 +3494,7 @@ av_kill "av-mut-firstline" "$(av_mut firstline \
   "awk -F'\\t' '\$1 == \"R\" || \$1 == \"D\" {print \$3; exit}' \"\$TMP/scan\" > \"\$TMP/argvs\"")" "$AV/a" \
   "render=SELF-UPDATE-OK audit=SELF-UPDATE-DEFER derive=SELF-UPDATE-OK anchors=SELF-UPDATE-DEFER paths=SELF-UPDATE-DEFER rooted=SELF-UPDATE-UNDECIDED quiet=SELF-UPDATE-OK agents=moved" \
   "the hook's FIRST renderer line (--root ., write mode): 0,0 reads OK and the consumer's .claude/agents is rewritten"
-av_kill "av-mut-listed" "$(av_mut listed 'printf "M\t%d\tlist\n", NR' 'printf "X\t%d\tlist\n", NR')" "$AV/a" \
+av_kill "av-mut-listed" "$(av_mut listed 'printf "M\t%d\tlist\n", r' 'printf "X\t%d\tlist\n", r')" "$AV/a" \
   "render=SELF-UPDATE-DEFER audit=SELF-UPDATE-DEFER derive=SELF-UPDATE-UNDECIDED anchors=SELF-UPDATE-DEFER paths=SELF-UPDATE-DEFER rooted=SELF-UPDATE-UNDECIDED quiet=SELF-UPDATE-OK agents=same" \
   "a list mention read as an underivable run: the non-gating deriver refuses the pull"
 av_kill "av-mut-sibling" "$(av_mut sibling \
@@ -3513,6 +3513,135 @@ e="$(av_mut eqund '    if [ "$rc_cur" -ne "$rc_new" ] && [ "$rc_new" -ne 0 ]; th
   && got="$(av_st "$(av_run "$e" "$AV/d")" render-agent-definitions.sh)" || got="DID-NOT-APPLY"
 mp_killed "av-mut-eqund" "$got" SELF-UPDATE-UNDECIDED \
   "equal non-zero under the hook's argv read as UNDECIDED: a comment-only pull is refused on a consumer whose definitions already drifted"
+
+# --- HOOK SHAPES THE SCAN MUST NOT READ AS "NOT GATING" (BL-456, tip round) ----------------------
+# Each shape below is one reformat away from the real hook, and before this round the first three
+# scanned as a mention or a discarded capture, so a script whose incoming copy fails read
+# SELF-UPDATE-OK "not gating" -- a false OK on the bootstrapping gate. World S is one pull in which
+# EVERY stub exits 0 at base and 1 at theirs under any argv, so a script the scan reads as run with
+# its status read DEFERs, and one it reads as not gating says so. Only the scan separates them.
+#
+#   sa-assign    V=scripts/ai-dlc/sa-assign.sh; bash "$V" --k             -> UNDECIDED (was OK)
+#   sa-next      capture, then `rc=$?` on the next line                   -> DEFER     (was OK)
+#   sa-fnlast    f() { out="$(bash …)"; } called through step             -> DEFER     (was OK)
+#   sa-fnlast2   the same with `}` opening the next line                  -> DEFER     (was OK)
+#   sa-w229      the real hook's write-mode lines 229-233, verbatim       -> OK, not gating (near-miss
+#                for both arms above: its next line opens with `[` and only a FIRST-token `&&` counts)
+#   sa-true      bash … || true                                           -> OK, not gating (was DEFER)
+#   sa-exit      bash … || exit 1   (near-miss: one word apart)           -> DEFER
+#   sa-step      step "x" bash scripts/ai-dlc/…   on one line             -> DEFER     (was UNDECIDED)
+#   sa-steptrue  step "x" bash … || true   (step's own `if` read it)      -> DEFER     (was UNDECIDED)
+SH_SCRIPTS="sa-assign sa-next sa-fnlast sa-fnlast2 sa-w229 sa-true sa-exit sa-step sa-steptrue"
+sh_world() {
+  local w="$1" n
+  mkdir -p "$w/dist/core/rules" "$w/dist/core/scripts" "$w/cons/.githooks" "$w/cons/scripts/ai-dlc" "$w/cons/.claude/agents"
+  git -C "$w/dist" init -q
+  printf '1.0.0\n' > "$w/dist/VERSION"
+  printf 'sh machinery\n' > "$w/dist/core/rules/sh.md"
+  for n in $SH_SCRIPTS; do
+    printf '#!/bin/sh\n# %s\nexit 0\n' "$n" > "$w/dist/core/scripts/$n.sh"
+    cp "$w/dist/core/scripts/$n.sh" "$w/cons/scripts/ai-dlc/$n.sh"
+  done
+  av_git "$w/dist" add -A >/dev/null 2>&1; av_git "$w/dist" commit -qm base >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/B"
+  printf '1.1.0\n' > "$w/dist/VERSION"
+  for n in $SH_SCRIPTS; do printf '#!/bin/sh\n# %s, incoming\nexit 1\n' "$n" > "$w/dist/core/scripts/$n.sh"; done
+  av_git "$w/dist" add -A >/dev/null 2>&1; av_git "$w/dist" commit -qm theirs >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/T"
+  printf 'definitions\n' > "$w/cons/.claude/agents/dev.md"
+  printf '%s\n' '#!/usr/bin/env bash' 'set -uo pipefail' \
+    'V=scripts/ai-dlc/sa-assign.sh; bash "$V" --k' \
+    'nxt() {' '  out="$(bash scripts/ai-dlc/sa-next.sh --check 2>&1)"' '  rc=$?' '  return $rc' '}' \
+    'step "next" nxt' \
+    'fnl() { out="$(bash scripts/ai-dlc/sa-fnlast.sh --q)"; }' 'step "fnlast" fnl' \
+    'fnl2() {' '  out="$(bash scripts/ai-dlc/sa-fnlast2.sh --q 2>&1)"' '}' 'step "fnlast2" fnl2' \
+    'w229() {' '  local out' '  if [ ! -d .claude/agents ]; then' \
+    '      out="$(bash scripts/ai-dlc/sa-w229.sh --root . 2>&1)"' \
+    '      [ -d .claude/agents ] \' \
+    "        && printf '   .claude/agents/ was absent (a gitignored, derived directory), so it was rendered:\\n'" \
+    "      printf '%s\\n' \"\$out\"" '  fi' '  return 0' '}' 'step "w229" w229' \
+    'bash scripts/ai-dlc/sa-true.sh --t || true' \
+    'bash scripts/ai-dlc/sa-exit.sh --t || exit 1' \
+    'step "step" bash scripts/ai-dlc/sa-step.sh --s' \
+    'step "steptrue" bash scripts/ai-dlc/sa-steptrue.sh --s || true' > "$w/cons/.githooks/pre-push"
+  chmod +x "$w/cons/.githooks/pre-push"
+  git -C "$w/cons" init -q
+  av_git "$w/cons" add -A >/dev/null 2>&1; av_git "$w/cons" commit -qm consumer >/dev/null 2>&1
+}
+sh_world "$AV/s"
+# sh_sig <rows> -> one token per script: its status, `+ng` when an OK row says "not gating"
+sh_sig() {
+  local n out=""
+  for n in $SH_SCRIPTS; do
+    out="$out${out:+ }${n#sa-}=$(av_st "$1" "$n.sh" | sed 's/^SELF-UPDATE-//')"
+    [ "$(av_has "$1" "$n.sh" '^not gating')" = yes ] && out="$out+ng"
+  done
+  printf '%s\n' "$out"
+}
+# PRECONDITIONS: the hook carries the real write-mode lines byte-for-byte, and every stub really
+# goes 0 to 1, so a scan reading a line as run-and-read would DEFER it.
+# THE REAL HOOK TOO, in whichever layout this runs: the distribution's core/git-hooks/pre-push, or
+# a consumer's installed .githooks/pre-push. Its write-mode renderer line must scan D and its
+# --check line R, so the real-hook shape the near-miss copies is the one the scan actually sees.
+SH_HOOK=""
+for cand in "$DIR/../../git-hooks/pre-push" "$DIR/../../../.githooks/pre-push"; do
+  [ -f "$cand" ] && { SH_HOOK="$cand"; break; }
+done
+SH_RH="$( (eval "$(awk '/^gate_argv_scan\(\) \{/,/^\}/' "$GATE")"; gate_argv_scan "$SH_HOOK" render-agent-definitions.sh) 2>/dev/null \
+  | awk -F'\t' '$1 == "D" || $1 == "R" {printf "%s%s[%s]", (n++ ? " " : ""), $1, $3}')"
+ss_assert "sh-real-229" "${SH_HOOK:+found} $SH_RH" "found D[--root .] R[--check --root .]" \
+  "the real hook's write-mode renderer capture stays D and its --check capture stays R"
+SH_229='      out="$(bash scripts/ai-dlc/render-agent-definitions.sh --root . 2>&1)"'
+SH_W="$(grep -n -A2 -F -- "$SH_229" "$SH_HOOK" 2>/dev/null | sed 's/^[0-9]*[:-]//' | sed 's/render-agent-definitions/sa-w229/')"
+SH_S3="$(grep -n -A2 -F -- 'sa-w229.sh --root' "$AV/s/cons/.githooks/pre-push" | sed 's/^[0-9]*[:-]//')"
+ss_assert "sh-pre-229" "$([ -n "$SH_W" ] && [ "$SH_W" = "$SH_S3" ] && echo same)" "same" \
+  "world S carries the real hook's write-mode capture and the two lines after it verbatim, only the script name differs"
+ss_assert "sh-pre-rc" \
+  "$(av_rc "$AV/s/cons" scripts/ai-dlc/sa-next.sh)$(git -C "$AV/s/dist" show "$(cat "$AV/s/T"):core/scripts/sa-next.sh" | sh; printf '%s' "$?")" \
+  "01" "every stub exits 0 at base and 1 at theirs"
+SH_SIG_FIX="assign=UNDECIDED next=DEFER fnlast=DEFER fnlast2=DEFER w229=OK+ng true=OK+ng exit=DEFER step=DEFER steptrue=DEFER"
+SH_S="$(av_run "$GATE" "$AV/s")"
+ss_assert "sh-signature" "$(sh_sig "$SH_S")" "$SH_SIG_FIX" "world S, every shape arm below in one row"
+ss_assert "sh-assign" "$(av_st "$SH_S" sa-assign.sh) $(av_has "$SH_S" sa-assign.sh 'through a variable')" "SELF-UPDATE-UNDECIDED yes" \
+  "a path assigned to a variable and run through it is UNDECIDED, never a mention read as not gating"
+ss_assert "sh-next-line" "$(av_st "$SH_S" sa-next.sh)" SELF-UPDATE-DEFER \
+  "a capture whose status the NEXT line reads (rc=\$?) is run, and its incoming failure defers"
+ss_assert "sh-fn-last" "$(av_st "$SH_S" sa-fnlast.sh) $(av_st "$SH_S" sa-fnlast2.sh)" "SELF-UPDATE-DEFER SELF-UPDATE-DEFER" \
+  "a capture that is a function body's last statement is returned by the function, in both brace layouts"
+ss_assert "sh-229-stays-D" "$(av_st "$SH_S" sa-w229.sh) $(av_has "$SH_S" sa-w229.sh 'line [0-9]* run with its status discarded')" "SELF-UPDATE-OK yes" \
+  "the real write-mode line stays discarded: the line after it opens with [ and reads the test's status, not the capture's"
+ss_assert "sh-true-tail" "$(av_st "$SH_S" sa-true.sh) $(av_has "$SH_S" sa-true.sh '^not gating') $(av_st "$SH_S" sa-exit.sh)" "SELF-UPDATE-OK yes SELF-UPDATE-DEFER" \
+  "a trailing || true discards the status; || exit 1, one word apart, reads it"
+ss_assert "sh-step" "$(av_st "$SH_S" sa-step.sh) $(av_st "$SH_S" sa-steptrue.sh)" "SELF-UPDATE-DEFER SELF-UPDATE-DEFER" \
+  "a single-line step \"x\" bash … is a run step reads, with or without a trailing || true"
+# THE CONTROL: an unmutated copy reproduces world S's whole signature.
+SH_CTL="$(av_mut sh-control)"
+ss_assert "sh-mut-control" "$(sh_sig "$(av_run "$SH_CTL" "$AV/s")")" "$SH_SIG_FIX" \
+  "an unmutated copy reproduces every world-S verdict, so a kill below is the mutation"
+# sh_kill <label> <gate|""> <want-signature> <why>
+sh_kill() {
+  local got
+  if [ -z "$2" ]; then got="DID-NOT-APPLY"; else got="$(sh_sig "$(av_run "$2" "$AV/s")")"; fi
+  mp_killed "$1" "$got" "$3" "$4"
+}
+sh_kill "sh-mut-assign" "$(av_mut sh-assign '{ printf "X\t%d\tthe path is assigned' '{ printf "M\t%d\tthe path is assigned')" \
+  "assign=OK+ng next=DEFER fnlast=DEFER fnlast2=DEFER w229=OK+ng true=OK+ng exit=DEFER step=DEFER steptrue=DEFER" \
+  "an assignment read as a mention: the script run through \$V is not gating and reads OK"
+sh_kill "sh-mut-nextline" "$(av_mut sh-nextline 'readnext = (index(nx, "$?") > 0 || nx ~ /^[[:space:]]*(&&|\|\|)/)' 'readnext = 0')" \
+  "assign=UNDECIDED next=OK+ng fnlast=DEFER fnlast2=DEFER w229=OK+ng true=OK+ng exit=DEFER step=DEFER steptrue=DEFER" \
+  "the next line is not read: a capture checked by rc=\$? reads as discarded and OK"
+sh_kill "sh-mut-fnlast" "$(av_mut sh-fnlast 'lastinfn = (capture && (ct ~ /^}/ || (ct == "" && nx ~ /^[[:space:]]*}/)))' 'lastinfn = 0')" \
+  "assign=UNDECIDED next=DEFER fnlast=OK+ng fnlast2=OK+ng w229=OK+ng true=OK+ng exit=DEFER step=DEFER steptrue=DEFER" \
+  "a function's last-statement capture read as discarded: both brace layouts read OK"
+sh_kill "sh-mut-true" "$(av_mut sh-true 'truetail = (index(tt, "||") == 0 && index(tt, "&&") == 0 && index(tt, "$?") == 0)' 'truetail = 0')" \
+  "assign=UNDECIDED next=DEFER fnlast=DEFER fnlast2=DEFER w229=OK+ng true=DEFER exit=DEFER step=DEFER steptrue=DEFER" \
+  "|| true read as a status reader: a script whose failure the hook ignores refuses the pull"
+sh_kill "sh-mut-step" "$(av_mut sh-step 'stepped = (pre ~' 'stepped = 0 && (pre ~')" \
+  "assign=UNDECIDED next=DEFER fnlast=DEFER fnlast2=DEFER w229=OK+ng true=OK+ng exit=DEFER step=UNDECIDED steptrue=UNDECIDED" \
+  "no step prefix: a single-line step run is an unknown shape and UNDECIDED"
+sh_kill "sh-mut-steptrue" "$(av_mut sh-steptrue 'if (!stepped && match(tt,' 'if (match(tt,')" \
+  "assign=UNDECIDED next=DEFER fnlast=DEFER fnlast2=DEFER w229=OK+ng true=OK+ng exit=DEFER step=DEFER steptrue=OK+ng" \
+  "|| true after step read as discarding: the status step already read is lost and the script reads OK"
 rm -rf "$AV"
 
 echo
