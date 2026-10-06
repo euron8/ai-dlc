@@ -19,6 +19,47 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.734.0] - 2026-10-06
+
+Batch 200's third release, shipped ALONE because it edits a bootstrapping file
+(`core/skills/ai-dlc-update/reconcile/self-update-gate.sh`): a consumer runs the gate it already has, so
+this change reaches the gate only after the pull that delivers it. It discharges no consumer candidate.
+It closes `BL-452` in the batch close commit and files `BL-456` (net closed minus filed: 0).
+
+### Pre-push traces the unmapped fixtures it just ran (BL-452)
+
+- After a green suite, both pre-push hooks start one detached, unprivileged
+  `derive-fixture-readsets.sh --list <unmapped> --tracer sandbox --local-map .git/ai-dlc-fixture-readsets.local`
+  run. Clean traces land in a local map under git-common-dir, keyed on the hash of every recorded path
+  and of the deriver, and every map-reading site in both hooks reads committed and local rows through one
+  merged-row helper. A fixture no longer stays unmapped, and runs on every push, until a session
+  hand-runs the deriver. `AI_DLC_READSET_LIVE_TRACE=0` turns it off.
+- Ghost rows cannot buy a skip. The orphan universe keeps only rows of fixtures in this run's dispatch
+  list, so a deleted or renamed fixture's local rows, or a committed row with no directory, no longer
+  make a path "known". The filter can only turn a skip into a full run. The deriver prunes local rows of
+  fixtures with no `run.sh`, and its liveness probe runs before the tree copy.
+- The suite-pole guard records a held, non-stale live-trace lock before the pool starts and SKIPs its
+  comparison in that case, because a concurrent trace loads the box it is timing.
+- Both hooks are now registered under `I87`. They carry no extension, so the knob glob never saw them,
+  and `AI_DLC_FIXTURE_JOBS`, `AI_DLC_FIXTURE_NO_SKIP` and `AI_DLC_READSET_LIVE_TRACE` were registered
+  nowhere.
+- Every fixture that drives a hook copy sets `AI_DLC_READSET_LIVE_TRACE=0`, and so does the
+  self-update gate's push probe, so a green probe starts no detached trace under an update cycle that is
+  about to write the tree it copies.
+- Fixtures: `readset-skip` gains local-map, launcher and ghost-row arms with mutants (ghostlocal,
+  ghostcom, noghost, copyfirst); `self-update-gate` gains `pp-trace-knob`, its control and
+  `pp-mut-knob`; `suite-pole-guard` drives the overlap probe against a stub validator (live, none and
+  dead lock) with mutants noskip, nodetect and nostale.
+- The receipt is behavioural: it extracts each hook's pool block into a fresh repository with a stub
+  deriver and requires the trace on green and none under the knob. Scored on this tree 0; with both
+  hooks at the previous release 1.
+
+### Filed
+
+- `BL-456`: the self-update gate probes hook-named gating scripts with no arguments, so a renderer
+  change that only alters rendered text exits 2 on both sides, reads `SELF-UPDATE-OK`, and the
+  consumer's hook then refuses step 2's push. Its receipt scores 1 on this tree.
+
 ## [0.733.0] - 2026-10-06
 
 Batch 200's second release: three separable machinery changes. It discharges no consumer candidate
