@@ -113,3 +113,25 @@ definition or `bash -c`), against the before figures above. Options (2)-(4) of t
 stays high. That census is recorded as owed residue in the CHANGELOG at release; the receipt below closes on the text.
 
 verify: sh set -- core/team-roles/*.md; [ -f "$1" ] || exit 9; awk -v n="$#" -v op='**Verify with one read-only command per Bash call.**' -v fp='`scripts/ai-dlc/validate-artifact-derivations.sh <that file>`' 'function chk() { if (w != 1 || s != 1 || !p) bad++ } FNR == 1 { if (nf++) chk(); w = 0; s = 0; p = 0; at = 0; pr = "" } { if (index($0, op)) s++; if (index($0, op) == 1 && pr == "") { w++; at = FNR } if (at && FNR - at <= 7 && index($0, fp)) p = 1; pr = $0 } END { if (nf) chk(); if (nf != n) bad++; exit (bad ? 1 : 0) }' "$@"
+
+## BL-454 — the lead and its teammates never consult the advisor tool, even when the harness supplies one
+
+**DEFECT.** Carries the reference consumer's PC-S317-CONSULT-THE-ADVISOR-TOOL-AT-NAMED-TOUCHPOINTS-IN-THE-LEAD-AND-IN-ROLE-CONTRACTS-WHEN-IT-IS-AVAILABLE.
+Core named `advisor` nowhere, while subagents on the reference consumer have carried the tool since it arrived (every
+remediator transcript in that era). Neither the lead nor any role contract told an agent to call it, so a stronger
+reviewer sat unused through post-compact recovery, gates, repair loops and pushes. Measured call cost: lead median 94s,
+max 176s, 4 of 14 over 150s; subagent median 116s, max 295s. Check A of `validate-steering-budget.sh` read no server-side
+tool at all, so those calls were never measured either.
+
+**Fix.** SKILL.md Rule 32 names the lead's touchpoints (R, G1, G2, V1, V2, P, I) with the degrade clause in its opening
+paragraph, and the postcompact digest carries it; one-line cites at each step-file site; the recover hook names
+touchpoint R. Every file matching `core/team-roles/*.md` carries one byte-identical paragraph opening
+``**Consult the `advisor` tool when it is available.**``, bound by `I122`; no renderer change, because a rendered line
+would read DRIFTED at a consumer's self-update gate. Check A reads `server_tool_use` / `*_tool_result` pairs and
+exempts `advisor` by name; every other server tool is still charged.
+
+**Done when, consumer side, owed as residue and not held open here.** After a pull carrying this, the consumer
+re-renders `.claude/agents/` only if its own render inputs moved (they do not here), and the first sprint's lead
+transcripts show advisor calls at the named touchpoints. The receipt below closes on the text.
+
+verify: sh set -- core/team-roles/*.md; [ -f "$1" ] || exit 9; awk -v n="$#" -v op='**Consult the `advisor` tool when it is available.**' 'function chk(  b) { b = tolower(j); if (k != 1 || !index(b, "call it") || !index(b, "`advisor`") || !index(b, "available") || index(b, "never") || index(b, "do not call")) bad++ } FNR == 1 { if (nf++) chk(); k = 0; on = 0; j = ""; pr = "" } { if (index($0, op) == 1 && pr == "") { k++; on = 1 } if (on) { if ($0 == "") on = 0; else j = j " " $0 } pr = $0 } END { if (nf) chk(); if (nf != n) bad++; exit (bad ? 1 : 0) }' "$@" && h="$(grep -E '^### Rule [0-9]+ -- .*advisor' core/skills/ai-dlc/SKILL.md | head -n 1)" && [ -n "$h" ] && awk -v h="$h" 'index($0, "<!-- BEGIN GENERATED: postcompact-digest") == 1 { g = 1 } index($0, "<!-- END GENERATED: postcompact-digest") == 1 { g = 0 } g && $0 == h { f = 1 } END { exit (f ? 0 : 1) }' core/skills/ai-dlc/postcompact-digest.md
