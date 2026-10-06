@@ -306,12 +306,26 @@ if [ "${1:-}" = "--score-one" ]; then
   # `tail -1 f | grep -qx X` and `grep -c a f | grep -qx 3` all held against every appended seed
   # and every one closes on a line placed where it reads. No finite seed set reaches every
   # position and count a reader can key on; a receipt that never runs its subject is a reader,
-  # whatever it reads. Data files (no recognised language and no shebang) get no line.
+  # whatever it reads.
+  #
+  # ROUND 4: EVERY NAMED FILE MUST BE A SCRIPT THAT RAN, NOT ANY ONE OF THEM. The round-3 form
+  # answered yes when ANY named file fired, which proved a file ran and not that the run decided
+  # the verdict. Measured by an adversary, each closed 1 -> 0 by a one-line text edit while
+  # granted: `bash t.sh && tail -1 doc.md | grep -qx "$P"`, `test "$(sed -n 1p doc.md)" = X ||
+  # { bash t.sh; exit 1; }` (t.sh runs only on the failing path), `bash t.sh; test "$(sed -n 1p
+  # doc2.md)" = X`, `. lib.sh; test "$(sed -n 1p doc.md)" = X`, and the same shape with a token
+  # receipt scored BOUND. So each named file gets its OWN sentinel, a data file (no recognised
+  # language and no shebang) gets none and fails the test outright, and the answer is yes only
+  # when every named file is a script whose sentinel fired. A receipt that names any text it does
+  # not execute is a reader of that text, whatever else it runs: EX_WHY then names the file.
+  # No per-file head/tail seeding is attempted -- this rule replaces it.
   executed() {
     _ex_d="$(mktree x)"
     [ -n "$_ex_d" ] || { wr BROKEN "no-execution-worktree"; exit 0; }
-    _ex_s="$W/t/$n.ran"; rm -f "$_ex_s"
+    _ex_i=0; _ex_list=""; EX_WHY=""
     for _p in $PATHS; do
+      _ex_i=$(( _ex_i + 1 ))
+      _ex_s="$W/t/$n.ran.$_ex_i"; rm -f "$_ex_s"
       _ex_first=""; [ -f "$_ex_d/$_p" ] && _ex_first="$(sed -n 1p "$_ex_d/$_p")"
       case "$_p" in
         *.js|*.cjs) _ex_l="try{require('fs').writeFileSync('$_ex_s','')}catch(e){}" ;;
@@ -322,15 +336,23 @@ if [ "${1:-}" = "--score-one" ]; then
             '#!'*node*)   _ex_l="try{require('fs').writeFileSync('$_ex_s','')}catch(e){}" ;;
             '#!'*python*) _ex_l="open('$_ex_s','w').close()" ;;
             '#!'*sh*)     _ex_l=": > '$_ex_s' 2>/dev/null" ;;
-            *) [ -f "$_ex_d/$_p" ] && continue; _ex_l=": > '$_ex_s' 2>/dev/null" ;;
+            *) if [ -f "$_ex_d/$_p" ]; then EX_WHY="${EX_WHY:-$_p}"; continue; fi
+               _ex_l=": > '$_ex_s' 2>/dev/null" ;;
           esac ;;
       esac
       [ -f "$_ex_d/$_p" ] && cp "$_ex_d/$_p" "$_ex_d/$_p.brsrc"
       insert_after_shebang "$_ex_d/$_p" "$_ex_l"
       rm -f "$_ex_d/$_p.brsrc"
+      _ex_list="$_ex_list $_ex_i:$_p"
     done
     run_in "$_ex_d"; EX_RC=$?
-    [ -f "$_ex_s" ]
+    # A data file already failed the test; with no script named at all there is nothing to run.
+    [ -z "$EX_WHY" ] || return 1
+    [ -n "$_ex_list" ] || { EX_WHY="none"; return 1; }
+    for _e in $_ex_list; do
+      [ -f "$W/t/$n.ran.${_e%%:*}" ] || { EX_WHY="${_e#*:}"; return 1; }
+    done
+    return 0
   }
 
   VERB="${RECEIPT%% *}"
@@ -457,8 +479,10 @@ if [ "${1:-}" = "--score-one" ]; then
   # WHAT THE EXECUTION TEST CANNOT SEE, recorded: a `.py` whose first statement must be a
   # `from __future__` import, and an ES module where `require` is undefined, both fail to run
   # the sentinel and are scored as readers -- the conservative direction, a blocked zero rather
-  # than an acquittal. A receipt that runs a named file and ALSO reads a second named file for
-  # its verdict is acquitted on the run; the seed still flips it if its literal is spellable.
+  # than an acquittal. ROUND 4 closed the case this sentence used to concede: a receipt that runs
+  # a named file and ALSO reads a second named file is now `reads-named-text=<that file>`.
+  # STILL OPEN, and filed as a NOTE rather than another round: a receipt that runs ONLY named
+  # scripts but decides on text those scripts print from a file the receipt does not name.
   # STILL UNMEASURED, and acquitted as behavioural when they occur: a pattern ASSEMBLED from
   # pieces (`grep -q MARK'CC' f`, `S=MA; grep -q "${S}RK" f`, and a bare escape `grep -q MA\RK f`,
   # which the shell unescapes to a literal the receipt never spells), because the assembled
@@ -551,7 +575,7 @@ EOF
       fi
       wr BOUND "seed-exit=$SEED_RC" "paths=${PL:-none}" "tokens=${TL:-none}"; exit 0
     fi
-    wr UNSCORABLE "held-seed-but-runs-no-named-file-seed=$SEED_KIND" "paths=${PL:-none}" "tokens=${TL:-none}"; exit 0
+    wr UNSCORABLE "reads-named-text=$EX_WHY-seed=$SEED_KIND" "paths=${PL:-none}" "tokens=${TL:-none}"; exit 0
   fi
 
   # --- the FORMAT control -------------------------------------------------------------
@@ -1153,8 +1177,8 @@ case "$(probe_status "$R1_OUT" BL-912)/$(probe_detail "$R1_OUT" BL-912)" in
 esac
 # AND ITS NEAR-MISS: a reader that HOLDS every appended seed and runs nothing.
 case "$(probe_status "$R1_OUT" BL-915)/$(probe_detail "$R1_OUT" BL-915)" in
-  UNSCORABLE/held-seed-but-runs-no-named-file-*) ;;
-  *) r1_fail "the first-line reader was reported $(probe_status "$R1_OUT" BL-915) '$(probe_detail "$R1_OUT" BL-915)', not UNSCORABLE held-seed-but-runs-no-named-file. It reads a line the seed never reaches and runs nothing; granted behavioural, a prose edit at the top of the file closes it while R2's zero passes." ;;
+  UNSCORABLE/reads-named-text=probe/first.txt-*) ;;
+  *) r1_fail "the first-line reader was reported $(probe_status "$R1_OUT" BL-915) '$(probe_detail "$R1_OUT" BL-915)', not UNSCORABLE reads-named-text=probe/first.txt. It reads a line the seed never reaches and runs nothing; granted behavioural, a prose edit at the top of the file closes it while R2's zero passes." ;;
 esac
 # THE LITERAL-FREE RECEIPT A COMMENT CAN CLOSE IS CLOSED BY THE RECEIPT-TEXT SEED.
 case "$(probe_status "$R1_OUT" BL-913)/$(probe_detail "$R1_OUT" BL-913)" in
@@ -1293,6 +1317,11 @@ fi
 #   behavioural -> held-seed-but-runs-no-named-file: BL-030, BL-081.
 #   behavioural -> literal-free-runs-no-named-file: BL-300, the round-2 "stable twice" signal.
 # 257 ALREADY-PASSING, 14 OUT-OF-POPULATION, 29 UNSCORABLE and 1 behavioural were unchanged.
+# ROUND 4 (every named existing file must be a script that ran): measured at the gate argv on
+# docs/backlog.md at origin/main 1794fa83 and at 389e0f3a, BL-456 filtered out (it drives
+# core/git-hooks/pre-push and was not run). BL-457 runs its one named script, and BL-459 names
+# only a script the tree lacks, so both stay behavioural and both ledgers pass all-behavioural at
+# --min-sh-receipts 1 and 0. The archive was not re-scored this round.
 # The round-2 table below is kept because its BL-147/BL-167/BL-070 rows still describe the grammar.
 # THE ROUND-2 NARROWING, MEASURED at origin/main 1794fa83 by running the round-1 file and this one over
 # docs/backlog.md (3 live sh receipts) and over docs/backlog.archive.md with every LANDED

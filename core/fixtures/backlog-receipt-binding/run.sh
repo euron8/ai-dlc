@@ -774,7 +774,8 @@ fi
 #   mW11  the sum also absorbs UNSEEDED   -> must die on m8g
 #   mW10  the sum also absorbs OUT-OF-POP -> must die on m8h
 #   mR2v  the verb census dropped         -> must die on m8i-dash
-#   mX1   the execution test always true  -> must die on m8l-sed1p
+#   mX1   the execution test always true  -> must die at R1 (BL-915)
+#   mX3   a named text file skipped, not failing (round 3's "any ran") -> must die on m8r-tailvar
 #   mX2   created stub: "ran" without "still fails" -> must die on m8l-stub
 #   mG1-3, mT1: the grammar and the receipt-text seed, each killed at the subject's own R1 probe
 r8_mut() { # r8_mut <name> <src-dir> <sed> <check: ok|fail|m8> <args for the check...>
@@ -869,7 +870,7 @@ m8l_shape stub     BL-861 'bash probe/new861.sh >/dev/null 2>&1 || exit 1'      
 mX1_check() {
   local out rc_v
   mkdir -p "$TMP/mX1"; cp -R "$TMP/m8l-sed1p/." "$TMP/mX1/"
-  mut "$TMP/mX1" 's|^    \[ -f "\$_ex_s" \]$|    true|' || return
+  mut "$TMP/mX1" 's/^    \[ -z "\$EX_WHY" \] || return 1$/    return 0/' || return
   ( cd "$TMP/mX1" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m mut >/dev/null 2>&1 )
   out="$(run_v "" "$TMP/mX1" --max-prose-closable 1 --max-unscorable 28 --max-out-of-population 1 \
     --max-unstable 0 --min-sh-receipts 1 --min-entries 1)"; rc_v=$?
@@ -882,6 +883,62 @@ mX1_check() {
   fi
 }
 mX1_check
+
+# ===== M8R. ROUND 4: A RECEIPT THAT RUNS A SCRIPT AND READS TEXT IS A READER OF THAT TEXT. ======
+# Round 3 granted the execution signal when ANY named file ran. Each receipt below runs a named
+# script and decides on a named text file, and an adversary closed every one 1 -> 0 with a
+# one-line edit to that text. The rule now needs EVERY named existing file to be a script whose
+# sentinel fired, so each is `UNSCORABLE reads-named-text=<file>` and blocks R2's zero. Every arm
+# here was measured to PASS -- the acquittal -- on ad86c0ae; m8r-bound read BOUND there.
+# m8r_shape <tag> <id> <receipt> -- the world holds a runnable t.sh, a sourceable lib.sh and two
+# text files, so only the receipt varies between arms.
+m8r_shape() {
+  local t="$1" id="$2" rcp="$3" out rc_v d="$TMP/m8r-$1"
+  r8_seed "$d" "## $id
+
+verify: sh $rcp
+"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$d/probe/t.sh"
+  printf 'LIBLOADED=1\n' > "$d/probe/lib.sh"
+  printf 'plain\n' > "$d/probe/doc.md"
+  printf 'plain\n' > "$d/probe/doc2.md"
+  ( cd "$d" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m shape >/dev/null 2>&1 )
+  out="$(run_v "" "$d" --max-prose-closable 1 --max-unscorable 28 --max-out-of-population 1 \
+    --max-unstable 0 --min-sh-receipts 1 --min-entries 1)"; rc_v=$?
+  if [ "$rc_v" -eq 1 ] && grep -qF "produced ZERO scored receipts" <<<"$out" \
+     && ! grep -qF "OK: validate-backlog-receipts" <<<"$out"; then
+    note "ok    m8r-$t -- '$rcp' runs a script but reads named text, so it blocks R2's zero"
+  else
+    note "FAIL  m8r-$t -- '$rcp' exited $rc_v without R2's zero FAIL: a run-and-read receipt a text edit closes was accounted for"
+    printf '%s\n' "$out" | grep -E '^(FAIL|OK)' | sed 's/^/      /' | head -2; rc=1
+  fi
+}
+m8r_shape tailvar  BL-871 'P=MARKA; bash probe/t.sh && tail -1 probe/doc.md | grep -qx "$P"'
+m8r_shape failpath BL-872 'test "$(sed -n 1p probe/doc.md)" = "$(printf MARKB)" || { bash probe/t.sh; exit 1; }'
+m8r_shape seqread  BL-873 'bash probe/t.sh; test "$(sed -n 1p probe/doc2.md)" = "$(printf MARKC)"'
+m8r_shape sourced  BL-874 '. probe/lib.sh; test "$(sed -n 1p probe/doc.md)" = "$(printf MARKD)"'
+m8r_shape bound    BL-875 '[ -f probe/doc.md ] && bash probe/t.sh && tail -1 probe/doc.md | grep -qx MARKF'
+
+# THE MUTANT: round 3's "any named file ran" -- a data file is skipped instead of failing the
+# test. The run-and-read receipt is then granted on t.sh alone; it must die on m8r-tailvar.
+mkdir -p "$TMP/mX3"; cp -R "$TMP/m8r-tailvar/." "$TMP/mX3/"
+if mut "$TMP/mX3" 's/^            \*) if \[ -f "\$_ex_d\/\$_p" \]; then EX_WHY="\${EX_WHY:-\$_p}"; continue; fi$/            *) if [ -f "$_ex_d\/$_p" ]; then continue; fi/'; then
+  ( cd "$TMP/mX3" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m mut >/dev/null 2>&1 )
+  mX3_out="$(run_v "" "$TMP/mX3" --max-prose-closable 1 --max-unscorable 28 --max-out-of-population 1 \
+    --max-unstable 0 --min-sh-receipts 1 --min-entries 1)"; mX3_rc=$?
+  # Either observable is a kill. The first reached is R1: with text skipped, BL-915 names no
+  # file that failed, its detail loses `probe/first.txt`, and the subject refuses before any
+  # corpus -- measured on this arm's first cut. The corpus acquittal is accepted too, so the arm
+  # does not depend on which site fires first.
+  if { [ "$mX3_rc" -eq 0 ] && grep -qF "R2 all-behavioural" <<<"$mX3_out"; } \
+     || { [ "$mX3_rc" -eq 2 ] && grep -qF "SELF-PROBE FAILED -- the first-line reader" <<<"$mX3_out"; }; then
+    note "ok    mX3 -- killed (exit $mX3_rc): a named text file skipped rather than failing the execution test"
+  else
+    note "FAIL  mX3 SURVIVED or died elsewhere -- exit $mX3_rc"
+    printf '%s\n' "$mX3_out" | grep -E 'SELF-PROBE|^FAIL|^OK' | sed 's/^/      /' | head -2; rc=1
+  fi
+fi
+
 # THE MUTANT on the created-stub branch: "ran" alone, without "still failed with only the stub".
 mkdir -p "$TMP/mX2"; cp -R "$TMP/m8l-stub/." "$TMP/mX2/"
 if mut "$TMP/mX2" 's|^      if executed \&\& \[ "\$EX_RC" != "0" \]; then|      if executed; then|'; then
