@@ -15,17 +15,32 @@
 #     (`available`, `toolChange`, `model`) when it grants the tool. No such line -> silent.
 #     The LATEST such line wins; `available: false` or `toolChange: "remove"` is a withdrawn
 #     grant -> silent. A lead on a local model and teammates on Anthropic models is normal.
+#     WITHDRAWAL, MEASURED (`claude -p` 2.1.291, PreToolUse logging hook): a session on
+#     claude-opus-5-5 wrote `{"type":"advisor_tool","available":true,"model":"claude-fable-5-1",
+#     "toolChange":"add"}`; `--resume` with `--model qwen38flash-mlx` (a fresh session on it carries
+#     no grant line) wrote `{"type":"advisor_tool","available":false,"model":"claude-fable-5-1",
+#     "toolChange":"remove","byBase":true}` at line 47, BEFORE its Bash call's PreToolUse fired at 47
+#     lines; resuming on claude-opus-5-5 again wrote a new grant with `"abbreviated":true` at line 68.
+#     A switch between Anthropic models that both carry the tool (opus-5, sonnet-5, haiku-4-5 each
+#     granted fresh) writes no line at all, which is correct: nothing was withdrawn.
 #   - The judged file is one the agent could write, so a write onto a transcript is denied
 #     (below) BEFORE and INDEPENDENT of the grant test -- deleting the grant line is the attack.
 #
 # GATED ACTIONS, DERIVED BY GREP over core/skills/ai-dlc/SKILL.md, steps/*.md and team-roles/*.md
 # (line numbers at this release; the touchpoint that precedes each is named after it):
 #   THE LEAD (hook input carries no `agent_id`):
-#   - any `git push` that is not a branch delete (`--delete`, `-d`, or a `:ref` refspec):
+#   - any `git push` that is not a branch delete (`--delete`, `-d`, or a `:ref` refspec), however
+#     it is wrapped. Measured spellings in the consumer's own commands, each held by the fixture:
+#     `nohup git push`, `nohup bash -c 'exec setsid git push ...'`, `exec git push`; and `command`,
+#     `time`, `sudo`, `caffeinate -i`, `timeout`/`gtimeout <n>`, `env [-u X]`, `/usr/bin/git`,
+#     `if`/`for`/`while`/`{ }` bodies, `git -c "a b" push`, `VAR="a b" git push`, and the string
+#     argument of `bash -c`/`sh -c` (one level, re-split). Wrapper words strip in a LOOP, so any
+#     stacking of them is one spelling.
 #       steps/_gate-procedures.md:990 auto-handoff push      -- touchpoint I, :992
 #       steps/handoff.md:56 handoff push                     -- touchpoint I, :58
 #       steps/retro.md:1177 6b push                          -- touchpoint I, :1109
-#   - `gh pr merge`, and `mcp__github__merge_pull_request`:
+#   - `gh [-R|--repo <r>] pr merge`, and any MCP tool named `mcp__<server>__merge_pull_request`
+#     (the settings template matches the same regex, `mcp__.*__merge_pull_request`):
 #       steps/retro.md:1250 7a merge                         -- touchpoint I, :1239
 #   - `gate-checkpoint.sh ... close` (NOT `record`: G1, N records, G2, close is the sequence):
 #       steps/gate-validation.md:191                         -- touchpoint G2, :192
@@ -41,6 +56,17 @@
 #     `ai-dlc-update/*` (`git -C <cwd> symbolic-ref --short -q HEAD`) -- the self-update branch
 #     cut at :502 and pushed and auto-merged at :520. A detached HEAD, a non-repository or any
 #     git failure is NOT excluded, so it stays gated.
+#   - EXCLUDED BY COMMAND TEXT, because PreToolUse sees the cwd branch BEFORE the command runs:
+#     a push whose every refspec destination is `ai-dlc-update/*` (`git push -u origin
+#     ai-dlc-update/x`, `HEAD:refs/heads/ai-dlc-update/x`), and a push of `HEAD` or of
+#     `ai-dlc-update/*` in a command that also cuts `ai-dlc-update/*` with `checkout -b`/`-B` or
+#     `switch -c`/`-C`. A `$B`/`${B}` refspec resolves through a `B=...` assignment in the same
+#     command. Measured on graph: 4 real pushes ran from another branch with the update branch as
+#     the refspec, and 1 cut it as `B=ai-dlc-update/...; git checkout -q -b $B && ... git push -u
+#     origin $B`. A push naming any other ref beside an update ref stays gated.
+#   - ALLOWED, AND KNOWN: a cwd already on `ai-dlc-update/*` plus `cd <elsewhere> && git push`.
+#     The exclusion reads the cwd, not where the command moves to; a session on an update branch
+#     that pushes a different checkout in the same command is not gated.
 #   - STILL GATED: step 1's AUTO-PUSH, :192 `git push -u origin <branch>` and :200 `git push`.
 #     Both run on the consumer's current branch before any `ai-dlc-update/*` branch exists, and
 #     no refspec or branch property separates them from a sprint push. RESIDUAL COST: that step
@@ -58,20 +84,48 @@
 #     verdict". So a re-write of a path this agent already wrote un-denied is NOT a new gated
 #     action: one call covers one deliverable, and a Write followed by fixing Edits costs one
 #     advisor call, not one per Edit. A teammate's `git push` is NOT gated (option A).
+#     That exemption ENDS at a re-dispatch: a `user` line carrying TEXT (a string, or a `text`
+#     block -- not a `tool_result`) after the earlier write clears every recorded path, so the
+#     next write of the same verdict is a new gated action. Measured on graph's granted subagent
+#     transcripts: 14 same-path deliverable re-writes had such a line between them, every one a
+#     string (a fresh pass prompt, or a coordinator message); without this one advisor call
+#     covered a PASS-to-FAIL rewrite of one `verdict.json`. The line number is kept, so the last
+#     gated action does not move. RESIDUAL COST: 2 of those 14 lines were the harness's
+#     "Your response above was cut off mid-stream" continuation, not a re-dispatch; such a
+#     resumed write now costs one more advisor call. It never wedges.
+#   UNMEASURED: agent teams. A top-level teammate (not a subagent) carries no `agent_id`, so it is
+#   judged as a LEAD on its own `transcript_path`: its pushes are gated and its verdict writes are
+#   not. No team transcript was available to measure which file that path names.
 #   NOT gated anywhere: the lead's `join-remediator-shards.sh` or any merge script, a branch
 #   delete, a Bash write by a teammate (the pipeline instructs Edit/Write for every record).
 #
-# THE TEST. In the judged transcript, the line of the most recent advisor attempt must come
-# AFTER the line of the most recent gated action. ONE classifier decides the incoming call and
+# THE TEST, PER KIND (operator ruling, batch 201). In the judged transcript, the line of the most
+# recent advisor attempt must come AFTER the line of the most recent gated action OF THE SAME
+# KIND as the incoming call. The kinds are push, PR merge (`gh pr merge` and the MCP merge), gate
+# `close`, Check 12 gate-log append, and a teammate's verdict/repair-record write. So one call
+# before a release's push also covers that release's merge, while the next push owes its own; a
+# re-push after a failed gate owes a new call. The kind rides on each recorded call in the same
+# single pass; there is no new file and no knob. ONE classifier decides the incoming call and
 # every `tool_use` already recorded, so a command that merely MENTIONS a push (a grep, an echo)
 # is not one in either place. Two recorded calls are not counted, both MEASURED:
 #   - a call this hook DENIED. A denied `tool_use` is persisted, followed by an error
-#     `tool_result` carrying this hook's reason (measured on a real transcript). It shipped
+#     `tool_result` whose content OPENS with the harness envelope
+#     `PreToolUse:<Tool> hook error: ai-dlc-advisor-gate: DENIED` (measured, `claude -p` 2.1.291,
+#     a string; a `text`-block array is read the same way). Only that anchored envelope removes a
+#     call: a push that RAN and printed this hook's reason somewhere in a failing output keeps
+#     its gated action. It shipped
 #     nothing, and counting it would wedge: an advisor call issued in the SAME assistant message
 #     as the gated call is not always on disk when PreToolUse fires (measured, `claude -p` 2.1.291:
 #     the lead's hook saw 31 lines while the advisor block landed at line 32), so the first try
 #     is denied and the retry must not then be held to an advisor older than the denied call.
-#   - the incoming call itself, by `tool_use_id` -- it can already be on disk when the hook runs.
+#   - the incoming call itself, by `tool_use_id` -- it IS already on disk when the hook runs
+#     (measured in a live session: the retry at line 1408 was the transcript's last tool_use),
+#     and counting it denies every retry forever. The input's `tool_use_id` IS the on-disk
+#     `tool_use.id` (measured, `claude -p` 2.1.291: `toolu_01Q3LcULKxuLsrnrvJKrg211` on both),
+#     so the id match is the defence. With no `tool_use_id` in the input, a gated call on the
+#     transcript's LAST line is taken to be the incoming one; an attachment landing after the
+#     call (measured: a `hook_additional_context` line right after a `tool_use`) defeats that
+#     fallback, which is why it is only the fallback.
 #
 # A TEAMMATE IS JUDGED ON ITS OWN TRANSCRIPT. Inside a subagent the input's `transcript_path`
 # names the PARENT session's file. The teammate's own is
@@ -111,9 +165,21 @@ CLASSIFY='
 def unq: sub("^[\"\\x27]"; "") | sub("[\"\\x27]$"; "");
 def expand($home): if startswith("~/") then $home + .[1:] else gsub("\\$\\{HOME\\}|\\$HOME"; $home) end;
 def under($proj): ($proj != "") and startswith($proj + "/") and endswith(".jsonl");
-def segs: [splits("&&|\\|\\||[;|\\n()]")]
-  | map(sub("^\\s+"; "") | sub("^(env\\s+)?([A-Za-z_][A-Za-z0-9_]*=\\S*\\s+)+"; ""));
+def wrapre: "^((nohup|exec|command|time|sudo|setsid|caffeinate|then|do|else|if|while|until|!|\\{)(\\s+-[A-Za-z]+)*|g?timeout(\\s+-\\S+)*\\s+[0-9.]+[smhd]?|env(\\s+(-u|--unset)\\s+\\S+|\\s+-\\S+)*)\\s+";
+def envre: "^[A-Za-z_][A-Za-z0-9_]*=(\"[^\"]*\"|\\x27[^\\x27]*\\x27|\\S*)\\s+";
+def bashc: "^(\\S*/)?(bash|sh|zsh)(\\s+-[A-Za-z]+)*\\s+-[A-Za-z]*c\\s+[\"\\x27]?";
+def strip: (sub(wrapre; "") | sub(envre; "")) as $n
+  | if $n != . then ($n | strip) elif test(bashc) then (sub(bashc; "") | strip) else . end;
+def segs: [splits("&&|\\|\\||[;|\\n()]")] | map(sub("^\\s+"; "") | strip);
+# The closing quote of a bash -c body is shed ONLY when the command holds such a body: a quoted
+# alternation handed to pgrep -fl must not become a push (measured, 4 graph rows).
+def csegs: segs as $s | if test("(^|[\\s;&|(])(\\S*/)?(bash|sh|zsh)(\\s+-[A-Za-z]+)*\\s+-[A-Za-z]*c\\s")
+  then $s | map(sub("[\"\\x27]\\s*&?\\s*$"; "")) else $s end;
 def words: [splits("\\s+")] | map(select(. != "") | unq);
+def vars: [scan("(?:^|[\\s;&|(])([A-Za-z_][A-Za-z0-9_]*)=(\"[^\"]*\"|\\x27[^\\x27]*\\x27|[^\\s;&|()]+)")]
+  | map({key: .[0], value: (.[1] | unq)}) | from_entries;
+def xv($v): if test("^\\$\\{?[A-Za-z_][A-Za-z0-9_]*\\}?$") then ($v[sub("^\\$\\{?"; "") | sub("\\}$"; "")] // .) else . end;
+def upd: split(":") | last | sub("^\\+"; "") | sub("^refs/heads/"; "") | startswith("ai-dlc-update/");
 def redirs: [scan("[0-9&]?>>?\\|?\\s*(\"[^\"]*\"|\\x27[^\\x27]*\\x27|[^\\s;&|<>()]+)") | .[0] | unq];
 def heads: [match("(^|\\n)## Gate Log:"; "g")] | length;
 def isedit: .name == "Edit" or .name == "Write" or .name == "MultiEdit";
@@ -132,14 +198,23 @@ def twrite($proj; $home):
                 then ($w[1:] | map(expand($home) | under($proj)) | any)
               else false end) | any))
   else false end;
-def gitpush: test("^(timeout\\s+\\S+\\s+)?git(\\s+(-C|-c|--git-dir|--work-tree)\\s+\\S+|\\s+-\\S+)*\\s+push(\\s|$)");
+def gitre: "^(\\S*/)?git(\\s+(-C|-c|--git-dir|--work-tree|--namespace)\\s+(\"[^\"]*\"|\\x27[^\\x27]*\\x27|\\S+)|\\s+-\\S+)*\\s+";
+def gitpush: test(gitre + "push(\\s|$)");
 def isdelete: test("\\s(--delete|-d)(\\s|$)") or test("\\s\\+?:\\S");
+def pushrefs($v): sub("^.*?\\spush(\\s+|$)"; "") | gsub("[0-9&]?>>?\\|?\\s*\\S+"; "")
+  | words | map(select((startswith("-") or test("^[&;|]*$")) | not)) | .[1:] | map(xv($v));
+def pushupd($v; $cut): pushrefs($v) as $r
+  | (($r | length) > 0 and ($r | all(upd))) or ($cut and ($r | all(. == "HEAD" or upd)));
+def cutupd($v): test(gitre + "(checkout|switch)\\s") and (words as $w
+  | [range(0; ($w | length) - 1) as $i | select($w[$i] | test("^-[A-Za-z]*[bBcC]$")) | $w[$i + 1] | xv($v) | upd] | any);
 def leadkind:
-  if .name == "mcp__github__merge_pull_request" then "merge"
+  if ((.name // "") | tostring | startswith("mcp__") and endswith("__merge_pull_request")) then "merge"
   elif .name == "Bash" then
-    ((.input.command // "") | tostring) as $c | ($c | segs) as $s
-    | if ($s | map(gitpush and (isdelete | not)) | any) then "push"
-      elif ($s | map(test("^gh\\s+pr\\s+merge(\\s|$)")) | any) then "merge"
+    ((.input.command // "") | tostring) as $c | ($c | csegs) as $s
+    | (if ($c | test("ai-dlc-update/")) then ($c | vars) else {} end) as $v
+    | ($s | map(cutupd($v)) | any) as $cut
+    | if ($s | map(gitpush and (isdelete | not) and (pushupd($v; $cut) | not)) | any) then "push"
+      elif ($s | map(test("^(\\S*/)?gh(\\s+(-R|--repo)(\\s+|=)\\S+)*\\s+pr\\s+merge(\\s|$)")) | any) then "merge"
       elif ($s | map(test("^((bash|sh)\\s+)?\\S*gate-checkpoint\\.sh(\\s.*)?\\sclose(\\s|$)")) | any) then "close"
       elif ($c | contains("## Gate Log:"))
            and ((($c | redirs) + [$s[] | words | select(length > 0 and .[0] == "tee") | .[1:][]])
@@ -216,26 +291,34 @@ JUDGED="$TP"
 # One pass over the judged transcript. Lines that are not JSON are skipped, never fatal.
 #   grant: the latest `advisor_tool` attachment (null = never granted)
 #   adv:   line of the last advisor attempt;  res: U (`unavailable`) or R, the last result
-#   g:     tool_use id -> [line, path] of every gated call; a call this hook denied is removed
-STATE="$(jq -n -R -r --arg home "${HOME:-}" --arg proj "$PROJ" --arg role "$ROLE" --arg tuid "$TUID" --arg fp "$FP" "$CLASSIFY"'
+#   g:     tool_use id -> [line, path, kind] of every gated call; a call this hook denied is removed.
+#          The last gated action is the last one OF THE INCOMING CALL'S KIND.
+STATE="$(jq -n -R -r --arg home "${HOME:-}" --arg proj "$PROJ" --arg role "$ROLE" --arg tuid "$TUID" --arg fp "$FP" --arg kind "$KIND" "$CLASSIFY"'
   reduce (inputs | (fromjson? // empty) as $l | select(($l | type) == "object") | [input_line_number, $l]) as [$n, $l]
-    ({grant: null, adv: 0, res: "-", g: {}};
-     if ($l.type == "attachment" and ($l.attachment | type) == "object" and $l.attachment.type == "advisor_tool") then
+    ({grant: null, adv: 0, res: "-", g: {}, last: 0};
+     .last = $n
+     | if ($l.type == "attachment" and ($l.attachment | type) == "object" and $l.attachment.type == "advisor_tool") then
        .grant = (($l.attachment.available != false) and ($l.attachment.toolChange != "remove"))
      else
-       reduce ((($l.message.content? // []) | if type == "array" then .[] else empty end | select(type == "object"))) as $b (.;
+       (if ($l.type == "user" and (($l.message.content? | type) == "string"
+             or ([($l.message.content? // []) | .[]? | select(type == "object") | .type] | index("text") != null)))
+        then .g |= map_values(.[1] = "") else . end)
+       | reduce ((($l.message.content? // []) | if type == "array" then .[] else empty end | select(type == "object"))) as $b (.;
          if ($b.type == "server_tool_use" and $b.name == "advisor") then .adv = $n
          elif $b.type == "advisor_tool_result" then
            .res = (if (($b.content | if type == "object" then .error_code else null end) // "") == "unavailable" then "U" else "R" end)
-         elif ($b.type == "tool_use" and (($b.id // "") | tostring) != "" and (($b.id | tostring) != $tuid)
-               and (({name: $b.name, input: ($b.input // {})} | kind($role)) != "")) then
-           .g[$b.id | tostring] = [$n, (($b.input.file_path // "") | tostring)]
+         elif ($b.type == "tool_use" and (($b.id // "") | tostring) != "" and (($b.id | tostring) != $tuid)) then
+           ({name: $b.name, input: ($b.input // {})} | kind($role) | sub("^gatelogw$"; "gatelog")) as $k
+           | if $k != "" then .g[$b.id | tostring] = [$n, (($b.input.file_path // "") | tostring), $k] else . end
          elif ($b.type == "tool_result" and $b.is_error == true
-               and (($b.content | tostring) | contains("ai-dlc-advisor-gate: DENIED"))) then
+               and (($b.content | if type == "array" then (map(select(type == "object") | .text // "") | join("\n")) else tostring end)
+                    | test("^PreToolUse:[A-Za-z_]+ hook error: ai-dlc-advisor-gate: DENIED"))) then
            .g |= del(.[($b.tool_use_id // "") | tostring])
          else . end)
      end)
-  | ([.g[] | .[0]] | max // 0) as $act
+  | .last as $last
+  | (if $tuid == "" then .g |= with_entries(select(.value[0] != $last)) else . end)
+  | ([.g[] | select(.[2] == $kind) | .[0]] | max // 0) as $act
   | ([.g[] | select(.[1] != "" and .[1] == $fp)] | length) as $same
   | "\(if .grant == null then "none" elif .grant then "on" else "off" end) \(.adv) \($act) \(.res) \($same)"' "$JUDGED" 2>/dev/null)" \
   || { say "the transcript could not be scanned ($JUDGED); gate skipped"; exit 0; }
@@ -258,4 +341,8 @@ if [ "${LAST_RES:--}" = U ]; then
   exit 0
 fi
 
-deny "ai-dlc-advisor-gate: DENIED -- call the advisor tool, then retry the same command. This ${KIND} is a SKILL.md Rule 32 touchpoint, and this agent holds the advisor tool with no advisor attempt since its last gated action. Any attempt clears this, including one that errors; if the advisor answers 'unavailable' the gate drops to a warning. This is not a push or merge failure: do not record it as one."
+case "$KIND" in
+  push) _what="git push" ;; merge) _what="PR merge" ;; close) _what="gate close" ;;
+  gatelog) _what="Check 12 gate-log append" ;; verdict) _what="verdict or repair-record write" ;; *) _what="$KIND" ;;
+esac
+deny "ai-dlc-advisor-gate: DENIED -- call the advisor tool, then retry the same command. This ${_what} is a SKILL.md Rule 32 touchpoint, and this agent holds the advisor tool with no advisor attempt since its last ${_what}. Each kind (push, PR merge, gate close, gate-log append, verdict write) owes its own call; one call covers the next action of every kind. Any attempt clears this, including one that errors; if the advisor answers 'unavailable' the gate drops to a warning. This is not a push or merge failure: do not record it as one."
