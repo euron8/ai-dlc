@@ -367,12 +367,14 @@ else
   red=0
   judge "$pd/p" "$pl" "$pw" > /dev/null || red=$((red + 100))
   judge "$pd/p" "$pl" "worst" > /dev/null || red=$((red + 1))
-  rm -f "$pd/p.v"
+  : > "$pd/p.timeout"
   judge "$pd/p" "$pl" "$pw" > /dev/null || red=$((red + 1))
-  if [ "$red" -eq 2 ]; then
-    ok "MJ: the judgment passes MX1's real verdict against its own set, and FAILS it against a wrong set and with the verdict file deleted"
+  rm -f "$pd/p.timeout" "$pd/p.v"
+  judge "$pd/p" "$pl" "$pw" > /dev/null || red=$((red + 1))
+  if [ "$red" -eq 3 ]; then
+    ok "MJ: the judgment passes MX1's real verdict against its own set, and FAILS it against a wrong set, beside a TIMEOUT marker, and with the verdict file deleted"
   else
-    bad "MJ: the judgment probe scored $red (want 2: real+right ok, real+wrong red, deleted red; +100 means the right set failed)"
+    bad "MJ: the judgment probe scored $red (want 3: real+right ok, real+wrong red, real+timeout red, deleted red; +100 means the right set failed)"
   fi
 fi
 
