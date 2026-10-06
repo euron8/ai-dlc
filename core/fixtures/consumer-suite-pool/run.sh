@@ -177,7 +177,7 @@ new_retained() {               # new_retained <tree>
 # `[ -t 0 ]` guard leaves PUSH_REFS empty and arm 0 says so, which is a different run
 # from the one a real push makes.
 drive() {                      # drive <tree> <outfile>  -> rc
-  ( cd "$1" && bash .githooks/pre-push </dev/null >"$2" 2>&1; echo $? )
+  ( cd "$1" && AI_DLC_READSET_LIVE_TRACE=0 bash .githooks/pre-push </dev/null >"$2" 2>&1; echo $? )
 }
 
 # ------------------------------------------------------------- 1. green baseline --
@@ -360,7 +360,7 @@ fi
 T="$WORK/serial"; seed "$T" "$HOOK" || broken "seed failed"
 export CSP_OBSERVE="$T/observe"; mkdir -p "$CSP_OBSERVE"
 for n in alpha bravo charlie delta; do mkfx_observe "$T" "$n"; done
-rc="$( cd "$T" && AI_DLC_FIXTURE_JOBS=1 bash .githooks/pre-push </dev/null >"$WORK/serial.out" 2>&1; echo $? )"
+rc="$( cd "$T" && AI_DLC_FIXTURE_JOBS=1 AI_DLC_READSET_LIVE_TRACE=0 bash .githooks/pre-push </dev/null >"$WORK/serial.out" 2>&1; echo $? )"
 max_ser="$(sort -n "$T/observe/../seen" 2>/dev/null | tail -1)"
 if [ "$rc" = 0 ] && [ "${max_ser:-0}" = 1 ]; then
   ok "AI_DLC_FIXTURE_JOBS=1 runs them one at a time (max observed in flight: 1) — the knob is live and the observation is real"

@@ -175,7 +175,7 @@ EOF
 
   # `</dev/null` because the consumer hook drains the ref protocol from stdin and
   # would otherwise inherit whatever the suite handed this fixture.
-  ( cd "$sb/wt" && env GIT_DIR="$gd" AI_DLC_FIXTURE_NO_SKIP=1 \
+  ( cd "$sb/wt" && env GIT_DIR="$gd" AI_DLC_FIXTURE_NO_SKIP=1 AI_DLC_READSET_LIVE_TRACE=0 \
       bash "$hookfile" ) </dev/null > "$sb/hook.log" 2>&1
 
   git --git-dir="$gd" rev-parse HEAD > "$sb/head.after" 2>/dev/null || : > "$sb/head.after"

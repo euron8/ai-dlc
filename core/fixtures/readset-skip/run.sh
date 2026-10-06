@@ -295,8 +295,9 @@ mutant() {
 # Drop the fail-closed loop that adds map-less fixtures: gamma must stop being selected.
 mutant unmapped 's|if ! grep -qxF "$b" "$out/.mapped"; then printf .*$|:|' \
   "alpha gamma" 'printf v2 > src/a.sh'
-# Match on `.changed` instead of `.match` -- the real development defect, restored.
-mutant parentdir 's|"$out/.match" "$READSET_MAP"|"$out/.changed" "$READSET_MAP"|' \
+# Match on `.changed` instead of `.match` -- the real development defect, restored. Anchored on
+# the selection's own input pair, which reads the merged rows (`$out/.rows`), not the map file.
+mutant parentdir 's|"$out/.match" "$out/.rows"|"$out/.changed" "$out/.rows"|' \
   "alpha beta gamma" 'rm -f src/a.sh'
 # Remove the orphan fallback: an unreadable change must stop forcing a full run.
 mutant orphan 's|if \[ -s "$out/.orphan" \]; then|if false; then|' \
@@ -959,6 +960,367 @@ if holds "$R" "beta delta" 0 "SKIPPING" && grep -q 'read-set map: derived at' <<
   ok "CONTROL: the unmutated block, driven the same way, selects 'beta delta' and announces the map — the manifest kills are attributable"
 else
   bad "CONTROL: the unmutated block did not reproduce 'beta delta' through drive() — every manifest mutant is unattributable"
+fi
+
+# ------------------------------------------- the local map and the post-green trace ----
+# An unmapped fixture ran on every push until someone hand-ran the deriver. Now a GREEN suite starts
+# one detached, unprivileged `--tracer sandbox --local-map` run for the fixtures with no committed
+# row and no valid local row, and the rows it records under the git dir are read at every site that
+# reads the committed map. These arms drive the extracted pool block with a STUB deriver (it records
+# its argv and appends a row), so they need no sandbox; the deriver's own `--local-map` mode is
+# driven further down, in the stub-stream world. Every arm below is presence-shaped or carries a
+# mutant, and every mutant is a count-checked literal edit of a copy of the block.
+#   (a) a green run starts the trace for the unmapped fixture, detached, and a row lands
+#   (b) a valid local row maps the fixture: skipped on an unrelated change, selected on its own input
+#   (c) a moved run.sh (or deriver) invalidates the set: unmapped, and taken by the next trace
+#   (d) committed rows win over local ones
+#   (e) a linked worktree starts no trace and says so in one line (the deriver-side discards are below)
+#   (f) the gate's exit is never the trace's: a failing deriver leaves the green run green
+#   (g) the orphan universe and the manifest read local rows, so a local-only path is not an orphan
+LT_ARMS=0
+lt_arm() { LT_ARMS=$((LT_ARMS+1)); }
+LT_CAN=1
+{ command -v sandbox-exec >/dev/null 2>&1 && [ -x /usr/bin/log ] && command -v python3 >/dev/null 2>&1; } || LT_CAN=0
+sha_of() { shasum -a 256 -- "$1" | cut -d' ' -f1; }
+lt_wait() { local i=0; while [ -d "$1" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done; }
+LT_STUB='#!/bin/bash
+printf "%s\n" "$*" > "$STUB_ARGS"
+if [ -n "${STUB_GO:-}" ]; then i=0; while [ ! -f "$STUB_GO" ] && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i+1)); done; fi
+lm=""; ls=""
+while [ $# -gt 0 ]; do case "$1" in --local-map) lm="$2"; shift ;; --list) ls="$2"; shift ;; esac; shift; done
+for f in $ls; do printf "%s\tcore/fixtures/%s/run.sh\t-\n" "$f" "$f" >> "$lm"; done
+exit "${STUB_RC:-0}"'
+seed_lt() { # <t>: seed() plus a TRACKED stub deriver, so readset_deriver_path resolves and hashes it
+  seed "$1" || return 1
+  mkdir -p "$1/core/scripts" && printf '%s\n' "$LT_STUB" > "$1/core/scripts/derive-fixture-readsets.sh" || return 1
+  ( cd "$1" && git add -A && git -c user.email=f@f -c user.name=f commit -qm stub ) >/dev/null 2>&1
+}
+# The local world: gamma's VALID rows (its run.sh, and src/orphan.sh, which no committed row names),
+# and an alpha row on src/lonly.sh, a file NO committed row names. Alpha has committed rows, so its
+# local rows must be ignored everywhere -- including the universe, where an ignored row would
+# otherwise turn src/lonly.sh from an orphan into a known path. `nomap` removes the committed map.
+seed_lw() { # <t> [sub|nomap]
+  local t="$1" ds
+  seed_lt "$t" || return 1
+  printf 'v1\n' > "$t/src/lonly.sh"
+  ( cd "$t" && git add -A && git -c user.email=f@f -c user.name=f commit -qm lonly ) >/dev/null 2>&1 || return 1
+  if [ "${2:-}" = nomap ]; then
+    ( cd "$t" && git rm -q .ai-dlc-fixture-readsets.tsv && git -c user.email=f@f -c user.name=f commit -qm nomap ) >/dev/null 2>&1 || return 1
+  fi
+  if [ "${2:-}" = sub ]; then
+    mkdir -p "$t/src/sub" && printf 'v1\n' > "$t/src/sub/f.txt" || return 1
+    ( cd "$t/src/sub" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm sub ) >/dev/null 2>&1 || return 1
+    ( cd "$t" && git add -A && git -c user.email=f@f -c user.name=f commit -qm gitlink ) >/dev/null 2>&1 || return 1
+    ( cd "$t" && git ls-files -s | grep -q '^160000 .*	src/sub$' ) || return 1
+  fi
+  ds="$(sha_of "$t/core/scripts/derive-fixture-readsets.sh")"
+  { printf 'gamma\tcore/fixtures/gamma/run.sh\t%s\n' "$(sha_of "$t/core/fixtures/gamma/run.sh")"
+    printf 'gamma\tsrc/orphan.sh\t%s\n' "$(sha_of "$t/src/orphan.sh")"
+    [ "${2:-}" = sub ] && printf 'gamma\tsrc/sub/f.txt\t%s\n' "$(sha_of "$t/src/sub/f.txt")"
+    printf 'gamma\t#deriver\t%s\n' "$ds"
+    printf 'alpha\tsrc/lonly.sh\t%s\n' "$(sha_of "$t/src/lonly.sh")"
+    printf 'alpha\t#deriver\t%s\n' "$ds"
+  } > "$t/.git/ai-dlc-fixture-readsets.local"
+  # GHOSTS: `ghost` has VALID local rows and `zombie` a committed row, and neither has a directory
+  # in `ghost` mode. Each names one file nobody else names. `ghostdir` is the near-miss: the same
+  # rows with both directories present, so each row's fixture is dispatched and selects normally.
+  case "${2:-}" in ghost|ghostdir)
+    printf 'v1\n' > "$t/src/gonly.sh"; printf 'v1\n' > "$t/src/zonly.sh"
+    printf 'zombie\tsrc/zonly.sh\n' >> "$t/.ai-dlc-fixture-readsets.tsv"
+    if [ "$2" = ghostdir ]; then
+      mkdir -p "$t/core/fixtures/ghost" "$t/core/fixtures/zombie" || return 1
+      printf 'exit 0\n' > "$t/core/fixtures/ghost/run.sh"; printf 'exit 0\n' > "$t/core/fixtures/zombie/run.sh"
+    fi
+    ( cd "$t" && git add -A && git -c user.email=f@f -c user.name=f commit -qm ghosts ) >/dev/null 2>&1 || return 1
+    { printf 'ghost\tsrc/gonly.sh\t%s\n' "$(sha_of "$t/src/gonly.sh")"
+      printf 'ghost\t#deriver\t%s\n' "$ds"
+    } >> "$t/.git/ai-dlc-fixture-readsets.local" ;;
+  esac
+}
+# select_in, plus the fixtures the post-green trace would take (`.trace`) and those it holds back.
+lsel_in() {
+  local t="$1" scratch; shift
+  scratch="$(mktemp -d "$WORK/ls.XXXXXX")" || return 1
+  ( cd "$t" || exit 1
+    . "$POOL" 2>/dev/null
+    for d in core/fixtures/*/; do printf '%s\n' "$d"; done > "$scratch/list"
+    readset_manifest "$scratch"
+    cp "$scratch/.now" .git/ai-dlc-fixture-verified 2>/dev/null && printf 'v2\n' > .git/ai-dlc-fixture-verified.format
+    eval "$*"
+    cp "$scratch/list" "$scratch/l"
+    apply_readset_skip "$scratch/l" "$scratch" > "$scratch/msg" 2>&1
+    sed 's|core/fixtures/||g; s|/$||' "$scratch/l" | tr '\n' ' '
+    printf '\n---MSG---\n'; cat "$scratch/msg"
+    printf '\n---FLAG---\n%s\n' "${READSET_NO_CHANGE:-0}"
+    printf -- '---TRACE---\n%s\n' "$(tr '\n' ' ' < "$scratch/.trace" 2>/dev/null | sed 's/ $//')"
+    printf -- '---HELD---\n%s\n' "$(tr '\n' ' ' < "$scratch/.trace.held" 2>/dev/null | sed 's/ $//')"
+  )
+}
+lflag_of() { printf '%s\n' "$1" | sed -n '/^---FLAG---$/{n;p;}'; }
+trace_of() { printf '%s\n' "$1" | sed -n '/^---TRACE---$/{n;p;}'; }
+held_of()  { printf '%s\n' "$1" | sed -n '/^---HELD---$/{n;p;}'; }
+lw_run() { # <pool> <name> <mutation> [sub]: a fresh local world, driven through <pool>
+  local t="$WORK/lw.$2" saved="$POOL"
+  seed_lw "$t" "${4:-}" || { printf 'SEED FAILED\n'; return 1; }
+  POOL="$1"; lsel_in "$t" "$3"; POOL="$saved"
+}
+# Each result is scored by a predicate over it, so a mutant is scored by the SAME predicate.
+lb1() { [ "$(sel_of "$1")" = "alpha" ] && [ "$(trace_of "$1")" = "" ] && msg_of "$1" | grep -qF '0 of 3 fixture dir(s) UNMAPPED'; }
+lb2() { [ "$(sel_of "$1")" = "gamma" ] && [ "$(lflag_of "$1")" = 0 ] && msg_of "$1" | grep -qF 'SKIPPING' && ! msg_of "$1" | grep -qF 'NO fixture read-set'; }
+lc1() { [ "$(trace_of "$1")" = "gamma" ] && msg_of "$1" | grep -qF 'UNMAPPED (always run): gamma'; }
+lc2() { [ "$(trace_of "$1")" = "gamma" ]; }
+ld()  { [ "$(sel_of "$1")" = "alpha beta gamma" ] && msg_of "$1" | grep -qF '1 changed path(s) are in NO fixture read-set (e.g. src/lonly.sh)'; }
+lgs() { [ "$(sel_of "$1")" = "gamma" ] && [ "$(lflag_of "$1")" = 0 ] && msg_of "$1" | grep -qF 'SKIPPING'; }
+le()  { [ "$(sel_of "$1")" = "beta gamma" ] && msg_of "$1" | grep -qF 'SKIPPING'; }
+lgl() { [ "$(sel_of "$1")" = "alpha beta gamma" ] && msg_of "$1" | grep -qF '1 changed path(s) are in NO fixture read-set (e.g. src/gonly.sh)'; }
+lgc() { [ "$(sel_of "$1")" = "alpha beta gamma" ] && msg_of "$1" | grep -qF '1 changed path(s) are in NO fixture read-set (e.g. src/zonly.sh)'; }
+lgln() { [ "$(sel_of "$1")" = "ghost" ] && msg_of "$1" | grep -qF 'SKIPPING'; }
+lgcn() { [ "$(sel_of "$1")" = "zombie" ] && msg_of "$1" | grep -qF 'SKIPPING'; }
+LM_B1='printf v2 > src/a.sh'
+LM_B2='printf v2 > src/orphan.sh'
+LM_C1='printf "exit 0 # moved\n" > core/fixtures/gamma/run.sh'
+LM_C2='printf "# moved\n" >> core/scripts/derive-fixture-readsets.sh'
+LM_D='printf v2 > src/lonly.sh'
+LM_GS='printf v2 > src/sub/f.txt'
+LM_E='printf v2 > src/orphan.sh'
+LM_GL='printf v2 > src/gonly.sh'
+LM_GC='printf v2 > src/zonly.sh'
+lt_case() { # <label> <predicate> <mutation> <ok text> [sub]
+  local r; r="$(lw_run "$POOL" "$1" "$3" "${5:-}")"; lt_arm
+  if "$2" "$r"; then ok "$4"
+  else bad "$1: got sel '$(sel_of "$r")' flag $(lflag_of "$r") trace '$(trace_of "$r")': $(msg_of "$r" | tr -d '\n')"; fi
+}
+lt_case lb1 lb1 "$LM_B1" "(b) a VALID local row maps gamma: an edit to src/a.sh selects alpha alone, and the coverage line reads 0 of 3 unmapped"
+lt_case lb2 lb2 "$LM_B2" "(b)(g) an edit to src/orphan.sh, named by gamma's LOCAL row alone, selects gamma and is not an orphan — the universe reads local rows"
+lt_case lc1 lc1 "$LM_C1" "(c) gamma's run.sh moved: its local set is ignored, it reads UNMAPPED, and the next trace takes it"
+lt_case lc2 lc2 "$LM_C2" "(c) the DERIVER moved: every local set it recorded is ignored, and gamma is taken by the next trace"
+lt_case ld ld "$LM_D" "(d) src/lonly.sh, named only by a local row of alpha — which HAS committed rows — is an orphan: committed rows win, its local rows are ignored"
+lt_case lgs lgs "$LM_GS" "(g) a path inside a SUBMODULE named only by a local row is hashed by the manifest: editing it selects gamma, never a whole-suite skip" sub
+lt_case le le "$LM_E" "(b) with NO committed map, valid local rows still select: an edit to gamma's input selects gamma and the unmapped beta, and alpha (locally mapped) is skipped" nomap
+# THE REMEDY TEXT. Both announce lines tell the reader the next green push traces what is unmapped,
+# and name the hand command beside it. Presence-shaped: each demands its own emitting line's text.
+lrm() { msg_of "$1" | grep -qF 'UNMAPPED (always run): gamma -- the next green push traces them automatically; by hand, with no sudo: bash core/scripts/derive-fixture-readsets.sh --list "gamma" --tracer sandbox'; }
+lt_case lrm lrm "$LM_C1" "(c) the unmapped line names gamma, says the next green push traces it automatically, and gives the hand command"
+LRN_T="$WORK/lrn"; seed_lt "$LRN_T" || broken "the no-map remedy seed failed"
+( cd "$LRN_T" && git rm -q .ai-dlc-fixture-readsets.tsv && git -c user.email=f@f -c user.name=f commit -qm nomap ) >/dev/null 2>&1 || broken "could not remove the map from the no-map remedy seed"
+LRN="$(lsel_in "$LRN_T" ':')"; lt_arm
+if msg_of "$LRN" | grep -qF 'no read-set map at' && msg_of "$LRN" | grep -qF 'the next green push traces its fixtures automatically; to build one whole, with no sudo: bash core/scripts/derive-fixture-readsets.sh --all --tracer sandbox'; then
+  ok "with NO map and no local rows the run says the next green push traces its fixtures automatically, and gives the whole-map command"
+else
+  bad "the no-map remedy line is missing or changed: $(msg_of "$LRN" | tr '\n' ' ')"
+fi
+# (h) GHOST ROWS. A fixture deleted or renamed after its trace keeps its local rows, and a committed
+# map keeps a deleted fixture's rows until re-derived. Neither may make a path KNOWN: an edit to a
+# path only a ghost names is an orphan, and the whole suite runs -- otherwise a present fixture that
+# started reading that path after its own trace is skipped. The near-misses put both directories
+# back, and the same edits then select the fixture whose row names the path.
+lt_case lgl lgl "$LM_GL" "(h) src/gonly.sh, named only by a VALID local row of a fixture with NO directory, is an orphan: the whole suite runs" ghost
+lt_case lgc lgc "$LM_GC" "(h) src/zonly.sh, named only by a COMMITTED row of a fixture with no directory, is an orphan too" ghost
+lt_case lgln lgln "$LM_GL" "  near-miss: with ghost's directory present, the same local row selects ghost alone" ghostdir
+lt_case lgcn lgcn "$LM_GC" "  near-miss: with zombie's directory present, the same committed row selects zombie alone" ghostdir
+# THE HELD SET (M5). Three consecutive discards on gamma's CURRENT key hold it back; two do not, and
+# three on a key that has since moved do not.
+lt_held() { # <label> <discards> <key: cur|old> <want trace> <want held>
+  local t="$WORK/lh.$1" r k
+  seed_lt "$t" || broken "the held-set seed failed"
+  k="$(sha_of "$t/core/fixtures/gamma/run.sh"):$(sha_of "$t/core/scripts/derive-fixture-readsets.sh")"
+  [ "$3" = cur ] || k="0000:$(sha_of "$t/core/scripts/derive-fixture-readsets.sh")"
+  printf 'gamma\t#discards\t%s\t%s\tLOSS CANARY\n' "$2" "$k" > "$t/.git/ai-dlc-fixture-readsets.local"
+  r="$(lsel_in "$t" ':')"
+  printf '%s|%s' "$(trace_of "$r")" "$(held_of "$r")"
+}
+LH3="$(lt_held h3 3 cur)"; lt_arm
+[ "$LH3" = "|gamma" ] && ok "(M5) three consecutive discards on gamma's current key HOLD it: no trace until the key changes" \
+  || bad "(M5) three discards on the current key did not hold gamma back: trace|held '$LH3'"
+LH2="$(lt_held h2 2 cur)"; lt_arm
+[ "$LH2" = "gamma|" ] && ok "  two discards do not hold it — it is traced again" || bad "  two discards held gamma back: '$LH2'"
+LHO="$(lt_held ho 3 old)"; lt_arm
+[ "$LHO" = "gamma|" ] && ok "  three discards on a key that has since MOVED do not hold it" || bad "  three discards on a stale key held gamma back: '$LHO'"
+
+# THE LAUNCHER, driven directly: a seeded `$out` naming gamma green with a captured log.
+lt_drive() { # <pool> <world> <setup>; prints "<message>|<invoked|not>"
+  local p="$1" t="$2" setup="$3" o
+  o="$(mktemp -d "$WORK/lo.XXXXXX")" || return 1
+  ( cd "$t" || exit 1
+    export STUB_ARGS="$o/args"
+    . "$p" 2>/dev/null
+    mkdir -p "$o/.log"; printf 'gamma\n' > "$o/.trace"; : > "$o/.trace.held"
+    printf ok > "$o/gamma"; printf '  ok    g\n' > "$o/.log/gamma"
+    eval "$setup"
+    readset_live_trace "$o" > "$o/msg" 2>&1
+    grep -q 'started detached' "$o/msg" && lt_wait "$GITDIR/ai-dlc-fixture-readsets.local.lock"
+    :
+  )
+  printf '%s|%s' "$(tr '\n' ' ' < "$o/msg")" "$([ -f "$o/args" ] && echo invoked || echo not)"
+}
+lt_fresh() { local t="$WORK/lf.$1"; seed_lt "$t" || broken "the launcher seed failed"; printf '%s' "$t"; }
+LKLOCK='"$GITDIR/ai-dlc-fixture-readsets.local.lock"'
+LK_LIVE="mkdir $LKLOCK && printf '%s %s\n' \$PPID \"\$(date +%s)\" > $LKLOCK/pid"
+LK_DEAD="sh -c 'exit 0' & dp=\$!; wait \$dp; mkdir $LKLOCK && printf '%s %s\n' \$dp \"\$(date +%s)\" > $LKLOCK/pid"
+LK_OLD="mkdir $LKLOCK && printf '%s %s\n' \$PPID 1000 > $LKLOCK/pid"
+LK_NOPID_OLD="mkdir $LKLOCK && touch -t 200001010000 $LKLOCK"
+LK_NOPID_NEW="mkdir $LKLOCK"
+if [ "$LT_CAN" = 0 ]; then
+  R="$(lt_drive "$POOL" "$(lt_fresh can0)" ':')"; lt_arm
+  case "$R" in
+    *"read-set live trace: skipped ("*"|not") ok "(L6) no sandbox-exec, /usr/bin/log or python3 here: the launcher says so in one line and starts nothing — today's behaviour" ;;
+    *) bad "(L6) without the trace tools the launcher did not skip in one line: '$R'" ;;
+  esac
+  printf '  SKIP  launcher, lock and gate arms: this tree has no sandbox-exec, /usr/bin/log or python3\n'
+else
+  lt_l() { # <label> <setup> <want: invoked|not> <needle> <ok text>
+    local r; r="$(lt_drive "$POOL" "$(lt_fresh "$1")" "$2")"; lt_arm
+    case "$r" in
+      *"$4"*"|$3") ok "$5" ;;
+      *) bad "$1: expected '$4' and $3, got '$r'" ;;
+    esac
+  }
+  lt_l k1 ':' invoked 'started detached for 1 unmapped fixture(s) (gamma)' "the launcher starts ONE detached trace for the green unmapped fixture and names it"
+  lt_l k0 'export AI_DLC_READSET_LIVE_TRACE=0' not '' "AI_DLC_READSET_LIVE_TRACE=0 starts nothing"
+  lt_l lk1 "$LK_LIVE" not 'another trace holds' "a LIVE lock is not stolen: no trace this push, and it says so"
+  lt_l lk2 "$LK_DEAD" invoked 'started detached' "  a lock whose pid is DEAD is stale and recovered"
+  lt_l lk3 "$LK_OLD" invoked 'started detached' "  a lock taken more than 6h ago is stale even with a live pid"
+  lt_l lk4 "$LK_NOPID_OLD" invoked 'started detached' "  a lock with no pid file older than 60s is stale"
+  lt_l lk5 "$LK_NOPID_NEW" not 'another trace holds' "  a lock with no pid file younger than 60s is held"
+  lt_l hd "printf 'gamma\n' > \"\$o/.trace.held\"; : > \"\$o/.trace\"" not 'NOT re-tracing gamma' "(M5) a held fixture is named in one line and not traced"
+  # (e) the hook half: a LINKED worktree starts nothing, in one line.
+  LW_T="$(lt_fresh lw)"; ( cd "$LW_T" && git worktree add -q "$LW_T.wt" -b lwt ) >/dev/null 2>&1 || broken "could not add a linked worktree to the launcher seed"
+  R="$(lt_drive "$POOL" "$LW_T.wt" ':')"; lt_arm
+  case "$R" in
+    *"skipped ("*"a linked worktree"*"|not") ok "(e) from a LINKED worktree the launcher starts nothing and says so in one line" ;;
+    *) bad "(e) a linked worktree started a trace or said nothing: '$R'" ;;
+  esac
+  # (a) and (f), through the real call site: run_fixtures in a seeded world.
+  # run_fixtures GLOBS ITS OWN FIXTURE ROOT -- `core/fixtures/` in the distribution's hook,
+  # `tests/fixtures/` in the consumer's, which is the one an installed tree resolves first. Read off
+  # the resolved block's own glob, the way the deriver reads it, and the world is seeded under it;
+  # seeded only under core/fixtures/ the consumer run found no fixtures and every arm here went red.
+  FXROOT="$(sed -n 's|^[[:space:]]*for d in \([A-Za-z0-9_./-]*\)/\*/;.*|\1|p' "$POOL" | sort -u)"
+  [ "$(printf '%s\n' "$FXROOT" | grep -c .)" -eq 1 ] || broken "read '$FXROOT' as the pool block's fixture root; need exactly one"
+  rf_drive() { # <pool> <name> <setup>; prints "<rc>|<lock held at return>|<invoked>|<verified>|<stashed>|<row>|<args>"
+    local p="$1" t o
+    t="$(lt_fresh "rf.$2")"; o="$WORK/rfo.$2"; mkdir -p "$o"
+    if [ "$FXROOT" != core/fixtures ]; then
+      mkdir -p "$t/$(dirname "$FXROOT")" && cp -R "$t/core/fixtures" "$t/$FXROOT" \
+        && ( cd "$t" && git add -A && git -c user.email=f@f -c user.name=f commit -qm fxroot ) >/dev/null 2>&1 \
+        || broken "could not seed the fixture root $FXROOT"
+    fi
+    ( cd "$t" || exit 1
+      export STUB_ARGS="$o/args"
+      eval "$3"
+      . "$p" 2>/dev/null
+      run_fixtures > "$o/out" 2>&1; echo "$?" > "$o/rc"
+      if [ -d "$GITDIR/ai-dlc-fixture-readsets.local.lock" ]; then echo yes > "$o/held"; else echo no > "$o/held"; fi
+      [ -n "${STUB_GO:-}" ] && : > "$STUB_GO"
+      lt_wait "$GITDIR/ai-dlc-fixture-readsets.local.lock"
+    )
+    printf '%s|%s|%s|%s|%s|%s|%s' "$(cat "$o/rc")" "$(cat "$o/held")" "$([ -f "$o/args" ] && echo invoked || echo not)" \
+      "$([ -s "$t/.git/ai-dlc-fixture-verified" ] && echo verified || echo none)" \
+      "$([ -f "$t/.git/ai-dlc-fixture-readsets.local.logs/gamma" ] && echo stashed || echo none)" \
+      "$(grep -c '^gamma	core/fixtures/gamma/run.sh' "$t/.git/ai-dlc-fixture-readsets.local" 2>/dev/null || :)" \
+      "$(cat "$o/args" 2>/dev/null)"
+  }
+  RA="$(rf_drive "$POOL" a "export STUB_GO=\"$WORK/rf.go.a\"")"; lt_arm
+  case "$RA" in
+    "0|yes|invoked|verified|stashed|1|--list gamma --tracer sandbox --local-map .git/ai-dlc-fixture-readsets.local")
+      ok "(a) a GREEN run_fixtures returns while the trace is still running, having started it for gamma with --tracer sandbox --local-map, stashed gamma's log, and the row lands" ;;
+    *) bad "(a) the green run did not start a detached trace that recorded a row: '$RA' — $(tail -3 "$WORK/rfo.a/out" | tr '\n' ' ')" ;;
+  esac
+  RF="$(rf_drive "$POOL" f 'export STUB_RC=1')"; lt_arm
+  case "$RF" in
+    "0|"*"|invoked|verified|"*) ok "(f) a deriver that FAILS leaves the gate green and the verified record written — the trace never decides the push" ;;
+    *) bad "(f) a failing trace changed the gate: '$RF'" ;;
+  esac
+  RR="$(rf_drive "$POOL" r "printf 'exit 1\n' > $FXROOT/alpha/run.sh")"; lt_arm
+  case "$RR" in
+    "1|no|not|none|"*) ok "(f) a RED run starts no trace, even for the unmapped fixture that passed in it" ;;
+    *) bad "(f) a red run started a trace or wrote a verified record: '$RR'" ;;
+  esac
+fi
+
+# MUTANTS of the block, each a count-checked literal edit of a copy, scored by the arm's own predicate.
+pm_copy() { # <name> then triples <count> <from> <to>; sets PM, or reports DID NOT APPLY
+  local name="$1" dst="$WORK/pool.pm.$1.sh" n; shift; PM=""
+  cp "$POOL" "$dst" || return 1
+  while [ $# -ge 3 ]; do
+    MF="$2" MT="$3" MC="$WORK/pm.$name.n" awk '
+      BEGIN { f = ENVIRON["MF"]; t = ENVIRON["MT"]; n = 0 }
+      { line = $0; o = ""
+        while ((p = index(line, f)) > 0) { o = o substr(line, 1, p - 1) t; line = substr(line, p + length(f)); n++ }
+        print o line }
+      END { print n > ENVIRON["MC"] }' "$dst" > "$dst.t" && mv "$dst.t" "$dst"
+    n="$(cat "$WORK/pm.$name.n" 2>/dev/null)"
+    if [ "$n" != "$1" ]; then lt_arm; bad "BL-452 MUTANT $name: anchor matched ${n:-nothing} time(s), not $1 — DID NOT APPLY"; return 1; fi
+    shift 3
+  done
+  if cmp -s "$POOL" "$dst"; then lt_arm; bad "BL-452 MUTANT $name: the copy is unchanged"; return 1; fi
+  PM="$dst"
+}
+pm_lw() { # <name> <predicate> <mutation> [sub] -- scored on a local world; the copy must reach the announce
+  local r; lt_arm
+  r="$(lw_run "$PM" "pm.$1" "$3" "${4:-}")"
+  if ! msg_of "$r" | grep -qE 'read-set map|no read-set map'; then bad "BL-452 MUTANT $1: the copy never reached apply_readset_skip — no verdict"
+  elif "$2" "$r"; then bad "BL-452 MUTANT $1 SURVIVED $2: sel '$(sel_of "$r")' trace '$(trace_of "$r")'"
+  else ok "BL-452 MUTANT $1 is KILLED by $2: sel '$(sel_of "$r")' flag $(lflag_of "$r") trace '$(trace_of "$r")'"; fi
+}
+pm_copy valid 1 '    $1 == "V" { print $2 "\t" $3; next }' '    $1 == "V" { next }' && pm_lw valid lb1 "$LM_B1"
+pm_copy hash 1 'else if (!(($2 in now) && now[$2] == $3)) bad[f] = 1' 'else if (0) bad[f] = 1' && pm_lw hash lc1 "$LM_C1"
+pm_copy dsha 1 '$2 == "#deriver" { dok[$1] = ($3 == dsha); next }' '$2 == "#deriver" { dok[$1] = 1; next }' && pm_lw dsha lc2 "$LM_C2"
+pm_copy comwins 1 '    ($2 in com) { next }' '    0 { next }' && pm_lw comwins ld "$LM_D"
+pm_copy ghostlocal 1 '{ if (mode != "known" || ($2 in here)) print $3 }' '{ print $3 }' && pm_lw ghostlocal lgl "$LM_GL" ghost
+pm_copy ghostcom 1 '      if (mode == "known" && !($2 in here)) next' '      if (0) next' && pm_lw ghostcom lgc "$LM_GC" ghost
+pm_copy universe 1 '  readset_rows "$out" known | grep -v' "  grep -v '^#' \"\$READSET_MAP\" | cut -f2 | grep -v" && pm_lw universe lb2 "$LM_B2"
+pm_copy manifest 1 '    readset_rows "$out" paths' "    [ -s \"\$READSET_MAP\" ] && grep -v '^#' \"\$READSET_MAP\" | cut -f2" && pm_lw manifest lgs "$LM_GS" sub
+pm_copy nomap 1 '  if [ ! -s "$READSET_MAP" ] && [ ! -s "$out/.local.valid" ]; then' '  if [ ! -s "$READSET_MAP" ]; then' && pm_lw nomap le "$LM_E"
+if pm_copy held 1 '$3 >= 3 && $4 == k' '$3 >= 99 && $4 == k'; then
+  lt_arm; _s="$POOL"; POOL="$PM"; _h="$(lt_held pm.h3 3 cur)"; POOL="$_s"
+  [ "$_h" = "|gamma" ] && bad "BL-452 MUTANT held SURVIVED: three discards still held gamma" || ok "BL-452 MUTANT held is KILLED by (M5): trace|held '$_h'"
+fi
+if [ "$LT_CAN" = 1 ]; then
+  pm_l() { # <name> <arm label> <setup> <correct result glob> [world]
+    local r; lt_arm
+    r="$(lt_drive "$PM" "${5:-$(lt_fresh "pm.$1")}" "$3")"
+    case "$r" in
+      $4) bad "BL-452 MUTANT $1 SURVIVED $2: '$r'" ;;
+      *) ok "BL-452 MUTANT $1 is KILLED by $2: '$r'" ;;
+    esac
+  }
+  pm_copy knob 1 '  [ "${AI_DLC_READSET_LIVE_TRACE:-1}" = 0 ] && return 0' '  :' && pm_l knob k0 'export AI_DLC_READSET_LIVE_TRACE=0' '*"|not"'
+  pm_copy lockall 1 '  local lk="$1" p="" e="" now' '  return 0' && pm_l lockall lk1 "$LK_LIVE" '*"another trace holds"*"|not"'
+  pm_copy locknone 1 '  local lk="$1" p="" e="" now' '  return 1' && pm_l locknone lk2 "$LK_DEAD" '*"started detached"*"|invoked"'
+  pm_copy linked 1 '  [ "$(git rev-parse --git-dir 2>/dev/null)" = "$(git rev-parse --git-common-dir 2>/dev/null)" ] \' '  true \' \
+    && pm_l linked e ':' '*"a linked worktree"*"|not"' "$LW_T.wt"
+  pm_rf() { # <name> <arm> <setup> <correct result glob>
+    local r; lt_arm
+    r="$(rf_drive "$PM" "pm.$1" "$3")"
+    case "$r" in
+      $4) bad "BL-452 MUTANT $1 SURVIVED $2: '$r'" ;;
+      *) ok "BL-452 MUTANT $1 is KILLED by $2: '$r'" ;;
+    esac
+  }
+  pm_copy nocall 1 '  if [ "$rc" -eq 0 ]; then readset_live_trace "$out"; fi' '  :' \
+    && pm_rf nocall a "export STUB_GO=\"$WORK/rf.go.nocall\"" '"0|yes|invoked|"*'
+  # sync and fold drop the `&`, so `$!` is replaced by a literal pid in the copy too: with no
+  # background job `$!` is unset, and bash 3.2 under `set -u` rejects even `${!:-0}`, so the drive
+  # aborts and the mutant dies for a reason that is not its own (an empty rc field, measured).
+  pm_copy sync 1 '  ) </dev/null >"$logf" 2>&1 &' '  ) </dev/null >"$logf" 2>&1' \
+                1 "printf '%s %s\\n' \"\$!\"" "printf '%s %s\\n' 0" \
+    && pm_rf sync a "export STUB_GO=\"$WORK/rf.go.sync\"" '"0|yes|invoked|"*'
+  pm_copy fold 1 'AI_DLC_READSET_TRACE_ROOT="$tr" bash "$dv" --list "$names" --tracer sandbox --local-map "$READSET_LOCAL"' \
+                   'AI_DLC_READSET_TRACE_ROOT="$tr" bash "$dv" --list "$names" --tracer sandbox --local-map "$READSET_LOCAL" || { rm -f "$lk/pid"; rmdir "$lk"; exit 1; }' \
+                1 '  ) </dev/null >"$logf" 2>&1 &' '  ) </dev/null >"$logf" 2>&1 || return 1' \
+                1 "printf '%s %s\\n' \"\$!\"" "printf '%s %s\\n' 0" \
+                1 '  if [ "$rc" -eq 0 ]; then readset_live_trace "$out"; fi' '  if [ "$rc" -eq 0 ]; then readset_live_trace "$out" || rc=1; fi' \
+    && pm_rf fold f 'export STUB_RC=1' '"0|"*"|invoked|verified|"*'
+  pm_copy redrun 1 '  if [ "$rc" -eq 0 ]; then readset_live_trace "$out"; fi' '  readset_live_trace "$out"' \
+    && pm_rf redrun f "printf 'exit 1\n' > $FXROOT/alpha/run.sh" '"1|no|not|"*'
+fi
+# UNMUTATED CONTROL, driven the same way as the local-world mutants: a baseline selection must APPEAR.
+R="$(lw_run "$POOL" ctl3 "$LM_B1")"; lt_arm
+if lb1 "$R" && msg_of "$R" | grep -q 'read-set map: derived at'; then
+  ok "CONTROL: the unmutated block, driven through lw_run, maps gamma locally and selects alpha alone — the kills above are attributable"
+else
+  bad "CONTROL: the unmutated block did not reproduce (b) through lw_run — every local-map mutant is unattributable"
 fi
 
 # ------------------------------------------------------- the deriver's map merge ----
@@ -2662,6 +3024,186 @@ d/-p'
         *) bad "UNREAD CONTROL MUTANT: expected fxu mapped, got '$UM'" ;;
       esac
     fi
+
+    # `--local-map`, THE DERIVER HALF, DRIVEN WHOLE IN THE STUB-STREAM WORLD. The hook starts this mode
+    # detached and nobody reads its output, so each condition below is scored on what it WRITES to the
+    # local map. fxl is a fixture the committed map does not name; it prints two verdict lines.
+    # Its own stub sandbox-exec strips `-D FXTAG=<fx>` and tags every report it writes, the way the
+    # profile's `(with message ...)` does; STUB_TRIP adds an exec of a refused binary, STUB_DROP a
+    # drop notice, and the stream stub delivers nothing for the liveness probe when STUB_DEADLIVE is set.
+    SL="$WORK/lmstub"; mkdir -p "$SL" || broken "mkdir failed"
+    cat > "$SL/sandbox-exec" <<'STUB'
+#!/bin/bash
+tag=""
+[ "$1" = -D ] && { tag="${2#FXTAG=}"; shift 2; }
+[ "$1" = -f ] && shift 2
+emit() { printf '%s\n' "$1" >> "$STUB_FEED"; [ -z "$tag" ] || printf 'FXTAG=%s;\n' "$tag" >> "$STUB_FEED"; }
+_c=1; [ "$1" = env ] && { _c=2; for _w in "${@:2}"; do case "$_w" in *=*) _c=$((_c+1)) ;; *) break ;; esac; done; }
+if [ "${!_c}" = bash ]; then
+  while IFS= read -r p; do [ -n "$p" ] && emit "x Sandbox: bash(1) allow file-read-data $PWD/$p"; done < "$STUB_SB"
+  [ -z "${STUB_TRIP:-}" ] || printf 'x Sandbox: bash(1) allow process-exec* /usr/bin/sudo\nFXTAG=%s;TRIP\n' "$tag" >> "$STUB_FEED"
+  [ -z "${STUB_DROP:-}" ] || printf '=== Messages dropped during live streaming\n' >> "$STUB_FEED"
+else
+  for a in "$@"; do case "$a" in /*) emit "x Sandbox: cat(1) allow file-read-data $a" ;; esac; done
+fi
+exec "$@"
+STUB
+    cat > "$SL/logstream" <<'STUB'
+#!/bin/bash
+case "$*" in *FXTAG=__liveness__\;*) [ -z "${STUB_DEADLIVE:-}" ] || exec sleep 30 ;; esac
+exec tail -n 0 -f "$STUB_FEED"
+STUB
+    chmod +x "$SL/sandbox-exec" "$SL/logstream"
+    : > "$SL/feed"
+    SL_TR="$(cd "$WORK" && pwd -P)/lm.tr"
+    LMF="$BR/.git/ai-dlc-fixture-readsets.local"
+    # `other` is the COMMITTED fixture whose local row the committed-wins prune drops. Its directory
+    # is present, so the present-set prune cannot also drop that row and cover the noprune mutant.
+    mkdir -p "$BR/core/fixtures/fxl" "$BR/core/fixtures/zz" "$BR/core/fixtures/other" || broken "mkdir failed"
+    printf '#!/bin/bash\nexit 0\n' > "$BR/core/fixtures/other/run.sh"
+    printf '#!/bin/bash\ncat src/a.sh >/dev/null\necho "  ok    one"\necho "  ok    two"\n' > "$BR/core/fixtures/fxl/run.sh"
+    # zz is a PRESENT fixture whose local rows the trace leaves alone; gh, seeded by lm_seed, has no
+    # directory, so its rows are pruned.
+    printf '#!/bin/bash\nexit 0\n' > "$BR/core/fixtures/zz/run.sh"
+    ( cd "$BR" && git add -A && git -c user.email=f@f -c user.name=f commit -qm fxl ) >/dev/null 2>&1 || broken "could not seed fxl"
+    grep -q '^fxl	' "$BR/.ai-dlc-fixture-readsets.tsv" && broken "fxl has committed rows, so its local rows would be pruned and every arm below would read an empty map"
+    printf '%s\n' core/fixtures/fxl/run.sh src/a.sh > "$SL/whole.list"
+    printf '%s\n' core/fixtures/fxl/run.sh > "$SL/lossy.list"
+    sed "s|^LOG_BIN=/usr/bin/log\$|LOG_BIN=\"$SL/logstream\"|" "$DERIVER" > "$SL/deriver.sh"
+    cmp -s "$DERIVER" "$SL/deriver.sh" && broken "the LOG_BIN line is gone, so the --local-map world cannot point the stream at a stub"
+    # lm_run <deriver copy> <stream list> <stash: same|diff|none> [env...]; prints
+    # "<rc>|<fxl path rows>|<deriver row ok>|<discards n>|<other kept>|<zz kept>|<trace root gone>|<why>"
+    lm_run() {
+      local dv="$1" sl="$2" st="$3" r rows dok dn ok2 zz gone
+      shift 3
+      cp "$dv" "$STUB_DERIVER"
+      mkdir -p "$LMF.logs"
+      case "$st" in
+        same) printf '  ok    one\n  ok    two\n' > "$LMF.logs/fxl" ;;
+        diff) printf '  ok    one\n  FAIL  two\n' > "$LMF.logs/fxl" ;;
+        none) rm -f "$LMF.logs/fxl" ;;
+      esac
+      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SL:$PATH" STUB_FEED="$SL/feed" STUB_SB="$sl" "$@" \
+          AI_DLC_READSET_TRACE_ROOT="$SL_TR" bash core/scripts/derive-fixture-readsets.sh --list fxl --tracer sandbox --local-map "$LMF" ) > "$WORK/lm.out" 2>&1 </dev/null
+      r=$?
+      ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
+      rows="$(grep -c '^fxl	[^#]' "$LMF" 2>/dev/null)" || rows=0
+      # Keyed on the copy that RAN ($dv): the checkout above has already restored $STUB_DERIVER.
+      dok=no; grep -qxF "fxl	#deriver	$(shasum -a 256 -- "$dv" | cut -d' ' -f1)" "$LMF" 2>/dev/null && dok=yes
+      dn="$(awk -F'\t' '$1 == "fxl" && $2 == "#discards" { print $3 }' "$LMF" 2>/dev/null)"
+      ok2=no; grep -q '^other	' "$LMF" 2>/dev/null && ok2=yes
+      zz=no; grep -q '^zz	src/zz.sh	' "$LMF" 2>/dev/null && zz=yes
+      gone=no; [ -e "$SL_TR" ] || gone=yes
+      printf '%s|%s|%s|%s|%s|%s|%s|%s' "$r" "$rows" "$dok" "${dn:--}" "$ok2" "$zz" "$gone" \
+        "$(grep -m1 -E '^  fxl +OMITTED|LIVENESS|LINKED' "$WORK/lm.out" | tr -s ' ' | sed 's/^ *//' | cut -c1-120)"
+    }
+    lm_seed() { printf 'gh\tsrc/gh.sh\tghi\ngh\t#deriver\tx\nother\tsrc/other.sh\tabc\nzz\tsrc/zz.sh\tdef\nzz\t#deriver\tx\n' > "$LMF"; }
+    lm_arm() { # <label> <result> <glob> <ok text>
+      TRACE_ARMS=$((TRACE_ARMS+1))
+      case "$2" in $3) ok "$4" ;; *) bad "$1: expected '$3', got '$2' — $(tail -2 "$WORK/lm.out" | tr '\n' ' ')" ;; esac
+    }
+    lm_seed; L1="$(lm_run "$SL/deriver.sh" "$SL/whole.list" same)"
+    L1_COPY="$(grep -c 'copying the tree to' "$WORK/lm.out")" || L1_COPY=0
+    lm_arm "LOCAL clean" "$L1" "0|2|yes|-|no|yes|yes|" \
+      "LOCAL: a clean --local-map trace records fxl's two rows and its #deriver key, prunes the COMMITTED fixture's local row, keeps an untraced one, and removes its trace root"
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    if [ "$(grep -c '^gh	' "$LMF" 2>/dev/null)" = 0 ] && [ "$(grep -c '^zz	' "$LMF" 2>/dev/null)" = 2 ]; then
+      ok "  and a fixture with NO directory loses every local row, while the untraced zz, whose directory is present, keeps both of its rows"
+    else
+      bad "  the ghost fixture gh kept local rows, or zz lost its own: $(cut -f1,2 "$LMF" | tr '\t\n' ': ')"
+    fi
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    if awk -F'\t' -v s="$(shasum -a 256 -- "$BR/src/a.sh" | cut -d' ' -f1)" '$1 == "fxl" && $2 == "src/a.sh" && $3 == s { f = 1 } END { exit !f }' "$LMF" \
+       && ! grep -q '^fxl	' "$BR/.ai-dlc-fixture-readsets.tsv"; then
+      ok "  and each row carries the sha256 of the file it names, while the committed map is untouched"
+    else
+      bad "  fxl's src/a.sh row does not carry its sha256, or the committed map gained an fxl row: $(grep '^fxl' "$LMF" | tr '\n' ' ')"
+    fi
+    lm_seed; L2="$(lm_run "$SL/deriver.sh" "$SL/whole.list" same STUB_TRIP=1)"
+    lm_arm "LOCAL TRIP" "$L2" "0|0|no|1|no|yes|yes|fxl OMITTED (TRIP: 1 exec(s)*" "LOCAL: an exec of a refused binary in fxl's window DISCARDS the trace — no rows, one #discards row naming TRIP"
+    L2B="$(lm_run "$SL/deriver.sh" "$SL/whole.list" same STUB_TRIP=1)"
+    lm_arm "LOCAL TRIP x2" "$L2B" "0|0|no|2|*" "  and a second discard on the same key counts 2 — the hook holds the fixture back at 3"
+    L2C="$(lm_run "$SL/deriver.sh" "$SL/whole.list" same)"
+    lm_arm "LOCAL recover" "$L2C" "0|2|yes|-|*" "  and a clean trace after it records the rows and clears the discard count"
+    lm_seed; L3="$(lm_run "$SL/deriver.sh" "$SL/whole.list" same STUB_DROP=1)"
+    lm_arm "LOCAL drop" "$L3" "0|0|no|1|*|*|yes|fxl OMITTED (the stream dropped reports*" "LOCAL: a DROP NOTICE in fxl's window discards the trace"
+    lm_seed; L4="$(lm_run "$SL/deriver.sh" "$SL/lossy.list" same)"
+    lm_arm "LOCAL canary" "$L4" "0|0|no|1|*|*|yes|fxl OMITTED (LOSS CANARY: 1 path(s)*" "LOCAL: the LOSS CANARY (a read the stream never reported) discards the trace"
+    lm_seed; L5="$(lm_run "$SL/deriver.sh" "$SL/whole.list" diff)"
+    lm_arm "LOCAL verdict" "$L5" "0|0|no|1|*|*|yes|fxl OMITTED (VERDICT: the sandboxed run's verdict lines differ*" "LOCAL: a sandboxed run whose verdict lines differ from the normal run's is discarded"
+    lm_seed; L6="$(lm_run "$SL/deriver.sh" "$SL/whole.list" none)"
+    lm_arm "LOCAL nolog" "$L6" "0|0|no|1|*|*|yes|fxl OMITTED (VERDICT: no normal-run log*" "  and so is one with no stashed normal-run log to compare against"
+    lm_seed; L7="$(lm_run "$SL/deriver.sh" "$SL/whole.list" same STUB_DEADLIVE=1)"
+    L7_COPY="$(grep -c 'copying the tree to' "$WORK/lm.out")" || L7_COPY=0
+    lm_arm "LOCAL liveness" "$L7" "1|0|no|-|yes|yes|yes|ERROR: LIVENESS*" "LOCAL: a stream that never sees the 1s liveness probe REFUSES before tracing — the local map is untouched and the trace root is removed"
+    # THE REFUSAL PAYS NO TREE COPY. A consumer whose stream never delivers refuses on every green
+    # push, so the copy must come after the probe. The clean run above is the control: it copies.
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    if [ "$L7_COPY" = 0 ] && [ "$L1_COPY" = 1 ]; then
+      ok "  and it refuses BEFORE copying the tree, while the clean trace above copies it once"
+    else
+      bad "  liveness refusal copied the tree (${L7_COPY}x), or the clean trace did not (${L1_COPY}x)"
+    fi
+    ( cd "$BR" && git worktree add -q "$WORK/lmwt" -b lmwt ) >/dev/null 2>&1 || broken "could not add a linked worktree for the --local-map arm"
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    LW_R="$( ( cd "$WORK/lmwt" && env PATH="$SL:$PATH" bash core/scripts/derive-fixture-readsets.sh --list fxl --tracer sandbox --local-map "$WORK/lmwt.local" ) 2>&1 )"; LW_RC=$?
+    if [ "$LW_RC" -eq 1 ] && grep -q 'LINKED worktree' <<< "$LW_R" && [ ! -e "$WORK/lmwt.local" ]; then
+      ok "LOCAL: from a LINKED worktree --local-map refuses before parsing and writes no local map"
+    else
+      bad "LOCAL: a linked worktree did not refuse --local-map at 1 with no file written (rc $LW_RC): $(printf '%s' "$LW_R" | head -2 | tr '\n' ' ')"
+    fi
+    # Six mutant derivers, each a cmp -s guarded copy, each scored on the arm it must break.
+    sed '/^    \[ "\$trip" -eq 0 \] || why=/d' "$SL/deriver.sh" > "$SL/d.notrip.sh"
+    sed 's/^    elif \[ "\$(readset_verdict_sig "\$WORK\/\$fx.log"/    elif false \&\& [ "$(readset_verdict_sig "$WORK\/$fx.log"/' "$SL/deriver.sh" > "$SL/d.noverdict.sh"
+    sed 's/^  \[ "\$lv_ok" -eq 1 \] || die /  : || die /' "$SL/deriver.sh" > "$SL/d.nolive.sh"
+    sed '/^\[ -z "\$LOCAL_MAP" \] || trap /d' "$SL/deriver.sh" > "$SL/d.notrap.sh"
+    sed 's/n = ((f in pk) \&\& pk\[f\] == dk\[f\]) ? pn\[f\] + 1 : 1/n = 1/' "$SL/deriver.sh" > "$SL/d.nocount.sh"
+    sed 's/^      if (\$2 in com) next$/      if (0) next/' "$SL/deriver.sh" > "$SL/d.noprune.sh"
+    lm_mut() { # <name> <copy> <stream list> <stash> <arm> <killing glob> [env...]
+      local n="$1" c="$2" sl="$3" st="$4" arm="$5" g="$6" r; shift 6
+      TRACE_ARMS=$((TRACE_ARMS+1))
+      if cmp -s "$SL/deriver.sh" "$c"; then bad "LOCAL MUTANT $n did not apply"; return; fi
+      [ "$n" = nocount ] || lm_seed
+      r="$(lm_run "$c" "$sl" "$st" "$@")"
+      case "$r" in $g) ok "LOCAL MUTANT $n is KILLED by $arm: '$r'" ;; *) bad "LOCAL MUTANT $n SURVIVED $arm: '$r'" ;; esac
+    }
+    lm_mut notrip "$SL/d.notrip.sh" "$SL/whole.list" same "LOCAL TRIP" "0|2|yes|*" STUB_TRIP=1
+    lm_mut noverdict "$SL/d.noverdict.sh" "$SL/whole.list" diff "LOCAL verdict" "0|2|yes|*"
+    lm_mut nolive "$SL/d.nolive.sh" "$SL/whole.list" same "LOCAL liveness" "0|2|yes|*" STUB_DEADLIVE=1
+    lm_mut notrap "$SL/d.notrap.sh" "$SL/whole.list" same "LOCAL clean" "0|2|yes|-|*|*|no|*"
+    lm_mut noprune "$SL/d.noprune.sh" "$SL/whole.list" same "LOCAL clean" "0|2|yes|-|yes|*"
+    # copyfirst: the WHOLE copy block -- from its announce through the sentinel exclude -- moved back
+    # ahead of the liveness probe's comment block, the order this replaced. The refusal then pays it.
+    awk '/^say "copying the tree to \$TREE"$/ { inb = 1 }
+         inb { blk = blk $0 "\n"; if ($0 ~ /^printf .\.readset-sentinel/) inb = 0; next }
+         /^# `--local-map` PRECONDITIONS THAT NEED THE PROFILE/ { held = 1 }
+         held { rest = rest $0 "\n"; next }
+         { print }
+         END { printf "%s%s", blk, rest }' "$SL/deriver.sh" > "$SL/d.copyfirst.sh"
+    bash -n "$SL/d.copyfirst.sh" 2>/dev/null || : > "$SL/d.copyfirst.sh"
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    if cmp -s "$SL/deriver.sh" "$SL/d.copyfirst.sh"; then bad "LOCAL MUTANT copyfirst did not apply"
+    else
+      lm_seed; CF="$(lm_run "$SL/d.copyfirst.sh" "$SL/whole.list" same STUB_DEADLIVE=1)"
+      CF_COPY="$(grep -c 'copying the tree to' "$WORK/lm.out")" || CF_COPY=0
+      case "$CF|$CF_COPY" in
+        "1|"*"ERROR: LIVENESS"*"|1") ok "LOCAL MUTANT copyfirst is KILLED: with the copy's announce moved ahead of the probe, the refusal prints it" ;;
+        *) bad "LOCAL MUTANT copyfirst SURVIVED or did not run: '$CF' copies $CF_COPY" ;;
+      esac
+    fi
+    # noghost: the present-set prune deleted. The trace still succeeds; gh's rows survive it.
+    sed '/^      if (!(\$2 in here)) next$/d' "$SL/deriver.sh" > "$SL/d.noghost.sh"
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    if cmp -s "$SL/deriver.sh" "$SL/d.noghost.sh"; then bad "LOCAL MUTANT noghost did not apply"
+    else
+      lm_seed; NG="$(lm_run "$SL/d.noghost.sh" "$SL/whole.list" same)"
+      case "$NG|$(grep -c '^gh	' "$LMF" 2>/dev/null)" in
+        "0|2|yes|"*"|2") ok "LOCAL MUTANT noghost is KILLED: with the prune gone a clean trace keeps the absent fixture gh's 2 local rows" ;;
+        *) bad "LOCAL MUTANT noghost SURVIVED or did not run: '$NG' gh rows $(grep -c '^gh	' "$LMF" 2>/dev/null)" ;;
+      esac
+    fi
+    lm_seed; lm_run "$SL/deriver.sh" "$SL/whole.list" same STUB_TRIP=1 >/dev/null
+    lm_mut nocount "$SL/d.nocount.sh" "$SL/whole.list" same "LOCAL TRIP x2" "0|0|no|1|*" STUB_TRIP=1
   fi
 fi
 
@@ -2669,7 +3211,7 @@ fi
 # mistake: it printed two thirds of its arms, never reached a verdict line, and exited 0 --
 # which the suite's worker records as `ok`. A fixture that dies silently reads exactly like one
 # that passed, so the arm count is asserted against the number this file actually carries.
-EXPECTED=$(( 18 + IGN_ARMS + NEW_ARMS + MERGE_ARMS + CONTROL_ARMS + TRACE_ARMS + BOTH_ARMS ))
+EXPECTED=$(( 18 + IGN_ARMS + NEW_ARMS + MERGE_ARMS + CONTROL_ARMS + TRACE_ARMS + BOTH_ARMS + LT_ARMS ))
 if [ "$asserts" -lt "$EXPECTED" ]; then
   printf '  FAIL  only %s assertions ran; this fixture carries %s — it exited early and a short green run reads exactly like a passing one\n' "$asserts" "$EXPECTED"
   fails=$((fails+1))

@@ -88,7 +88,7 @@ FX
 }
 
 drive() {                      # drive <tree> <outfile>  -> rc
-  ( cd "$1" && bash .githooks/pre-push </dev/null >"$2" 2>&1; echo $? )
+  ( cd "$1" && AI_DLC_READSET_LIVE_TRACE=0 bash .githooks/pre-push </dev/null >"$2" 2>&1; echo $? )
 }
 
 # ONE AT A TIME, which is what makes dispatch order observable at all. Above width 1 the
@@ -96,7 +96,7 @@ drive() {                      # drive <tree> <outfile>  -> rc
 # order, so the trace reads the schedule directly rather than inferring it from a wall
 # clock — the timing-sensitive assertion §7's gate warns about.
 drive1() {                     # drive1 <tree> <outfile>  -> rc
-  ( cd "$1" && AI_DLC_FIXTURE_JOBS=1 bash .githooks/pre-push </dev/null >"$2" 2>&1; echo $? )
+  ( cd "$1" && AI_DLC_FIXTURE_JOBS=1 AI_DLC_READSET_LIVE_TRACE=0 bash .githooks/pre-push </dev/null >"$2" 2>&1; echo $? )
 }
 
 # --------------------------- 1. dispatch is LONGEST-FIRST, off a SEEDED record ------
