@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 423..455. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 418..477. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,60 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 200 SHIPPED FOUR RELEASES, `v0.732.0` (`3f37d986`, #1032), `v0.733.0` (`d94b19f0`, #1033), `v0.734.0`
+(`199721b6`, #1034) AND `v0.735.0` (`fba242e4`, #1035), AND DISCHARGED THREE CONSUMER CANDIDATES.** It was handed the
+plan by peer session ai-dlc-bc at `origin/main` `d6e25229` (`VERSION` 0.731.0). The opening sweep read live 3 on 7
+qualifying refs, and graph's working tree held three uncommitted `PC-S317-*` filings. The closing sweep at `fba242e4`
+read live 3 on 8 qualifying refs (the consumer reconciled to 0.734.0 during the batch), archived 335, unfiled 1
+(`PC-S316-VACUOUS-VALIDATOR-FAILING-ON-EVERY-STORY-IS-A-FINDING`, the consumer's own by ruling below), TERMINAL 214, every
+control passing. The worklist join refuses as batch 199's did: no live backlog entry cites a candidate.
+- `v0.732.0`: `BL-453` and `BL-454`, carrying `PC-S317-TEAMMATE-VERIFICATION-COMMANDS-…` and
+  `PC-S317-CONSULT-THE-ADVISOR-TOOL-…`. Every role file carries a one-read-only-command-per-Bash-call paragraph (`I121`)
+  and an advisor paragraph (`I122`); SKILL.md Rule 32 names the lead's advisor touchpoints. Filed `BL-457`.
+- `v0.733.0`: `BL-455` (arm H matches repair records by name, stamp `H_RELEASE`), `partition-document.sh --scope-ref`,
+  and `BL-451`'s first instance: `review-shard-merge`'s mutant battery moved to the `.dist-only`
+  `review-shard-merge-mutants` (shipped fixture 2537s to 42s solo).
+- `v0.734.0`, shipped alone (it edits both pre-push hooks): `BL-452`. After a green suite the hook starts one detached
+  sandbox trace of the unmapped fixtures it ran, into a local map under git-common-dir. Filed `BL-456`.
+- `v0.735.0`: `BL-458`, carrying `PC-S317-REQUIREMENTS-STEP-CYCLE-IS-NEVER-SHARDED-…`. The requirements step reviews its
+  four-file subject sharded by `partition-subject.sh`, joined by `--subject` modes, held by Check 24 arm K3.
+
+Live backlog **3 -> 8** after the close (BL-451, BL-456, BL-457 open; BL-459 to BL-463 filed), archive **449 -> 454**.
+
+**OPERATOR RULINGS, BATCH 200:**
+- `PC-S316-REQUIRE-DONE-REFUSES-EXTENSION-DECLARED-STORY-STATUSES`: option A, the consumer's own; a brief item, and no
+  release names it.
+- `PC-S316-VACUOUS-VALIDATOR-FAILING-ON-EVERY-STORY-IS-A-FINDING`: option A, the consumer's own. Brief: its receipt keyed
+  on XVH can never close (re-anchor it or mark it `verify: manual`), and `[story]` scope never reaches gate 3.
+- The advisor gate hook (`~/.claude/hooks/ai-dlc-advisor-gate.sh`, this repo only) is a CONDITIONAL DENY. It denies a
+  release push or merge with no advisor attempt since the last one; any attempt clears it, even one that errors; once
+  the advisor answers `unavailable` it only warns. Branch deletes are not gated. Self-test 25/25.
+- The shipped version of that hook is option A: `BL-459`, built in a later batch. **No config knob and no default**:
+  whether it applies is decided per agent from that agent's own transcript's `advisor_tool` grant line, because a lead
+  and its teammates can run any mix of local and Anthropic models.
+- A remote branch delete runs `git push --no-verify origin --delete <exact names>`; it never runs the suite.
+
+**THE ADVISOR RETURNED `unavailable` TWICE THIS BATCH, BOTH DEEP INTO A LARGE CONTEXT**, at 10:26Z (about 745k) and
+13:13Z. Each time the first call after an operator compaction succeeded. Not a rate limit (that code is
+`too_many_requests`); per-session; cause unknown, two data points. A subagent can call its own advisor meanwhile.
+
+**THREE FIRST GATES BLOCKED ON THE RELEASE'S OWN CODE.** 0.733.0 committed `lib.sh` without its executable bit
+(I77); 0.734.0 and 0.735.0 each added a `| while` loop in
+a shipped script, which `procsub-staged-refusal` r2 refuses; 0.735.0 also took `FORK_BUDGET` 3231 -> 3245 for
+`partition-subject.sh` in three per-file arms.
+
+**READ-SET TRACES:** sandbox traces committed for 0.733.0-0.735.0's changed fixtures. `subject-partition`, `adversarial-shard-merge`,
+`remediator-shard-join`, `check-24-adversarial-convergence` and `review-shard-merge-mutants` are OMITTED on dropped
+reports and run on every push; `BL-452`'s post-green trace retries them.
+
+**THE DELIVERY GAP IS ONE RELEASE.** graph's `.claude/.ai-dlc-version` reads 0.734.0 (`c9ef6323`, its reconcile #1173)
+against `VERSION` 0.735.0; 0.735.0 is not bootstrapping. PENDING is 1 (`PC-S317-REQUIREMENTS-…`). The banked ruling
+stands: report the gap and write no runbook. **OPERATOR DECISIONS STILL OPEN:** whether the dev role gets a setup row in
+the read-set mapping (from batch 199).
+
+Batch 199's block below is history: batch 200's block replaces its delivery gap, its decisions list and its advisor-gate
+paragraph.
 
 **BATCH 199 SHIPPED ONE RELEASE, `v0.731.0` (`35abd1c9`, #1029), AND DISCHARGED THE GATE-2 HALF OF ONE CONSUMER
 CANDIDATE.** It was handed the plan by peer session ai-dlc-ed at `origin/main` `5a800ccc` (`VERSION` 0.730.0). The
@@ -360,66 +414,6 @@ bootstrapping and its range touches no setup-sited file. PENDING is 7. The banke
 no runbook. **OPERATOR DECISIONS STILL OPEN:** none.
 
 Batch 194's block below is history: batch 195's block replaces its delivery gap and its decisions list.
-
-**BATCH 194 SHIPPED TWO RELEASES, `v0.723.0` (`3868b252`, #1012) AND `v0.724.0` (`42e20a8f`, #1013), AND DISCHARGED NO
-CONSUMER CANDIDATE.** It was invoked by peer handoff (`ai-dlc-5f`) at `origin/main` `d0384052` (`VERSION` 0.722.0). The opening
-sweep found 1 live candidate on 36 qualifying refs, already shipped at 0.718.0, with unfiled 0, worklist 0 (a true empty),
-TERMINAL 203, and every control passing. The consumer's own 0.722.0 reconcile had archived four of batch 193's five.
-- `v0.723.0`: `BL-375` PARTIAL. `enforcement-map-sites` seeds once per shard and runs its A40 cwd battery from a decoy
-  root (template + `VERSION` + `.git`), not from the live tree. Its post-merge stage-1 trace was NOT MET, but the fixture
-  itself now maps in 3 of 3 runs; the figures are in the entry.
-- `v0.724.0`: `BL-440`, filed and landed. **OPERATOR RULING: gate-1 review sharding is the DEFAULT**, at a built-in
-  threshold of 8 reviewable files, measured on 26 consumer stories. `=0` turns it off. **OPERATOR RULING (option B,
-  after gate 3): one `code-reviewer` closing writer per story, serial or sharded, makes the `done` transition,
-  `deferred_acs`, the upstream close-out and the closing commit.** `sprint-status.sh check-stories --require-done`,
-  which deploy-validate runs, fails a story that is not `done`.
-
-Live backlog **2 -> 1**, archive **437 -> 438**. Net closed minus filed: **0** (`BL-440` filed and closed).
-
-**EVERY ADVERSARY FOUND SOMETHING ON A GATE-GREEN SHAPE, AGAIN.** Six passes across two releases, each one finding
-defects that the fixtures and receipts accepted. The worst: an empty-directory decoy kept every bit string; the decoy
-lost BL-436's `VERSION` walk-up class; and the first closing-writer design ran before QA, under a hook that denies the
-lead's story-file edits. All were fixed before merge.
-
-**SEVEN CONSUMER FILINGS LANDED DURING THE BATCH AND WERE NOT SCOPED** (consumer commits `0839003c` and `25521c67`, both
-2026-10-04, after the opening sweep). They are live on `ai-dlc/carry-over/phase-316-rebalancer-repoint`, and every one
-is `PC-S316-*`: `DERIVE-READSETS-ALL-REFUSES-…`, `LATER-EVENT-INVALIDATING-AN-AUTHORIZATION-PREMISE-…`,
-`NO-ADVERSARIAL-PASS-ON-THE-BUG-ANALYSIS-…`, `OPERATOR-ATTRIBUTION-AND-STATE-CLAIMS-…`,
-`PRE-PUSH-READSET-KEYS-ON-THE-WORKING-TREE-…`, `STORY-PROVENANCE-FIXTURE-FAILS-ITS-SCHEMA-MUTANT-…`, and
-`VACUOUS-VALIDATOR-FAILING-ON-EVERY-STORY-…`. The consumer's working-tree ledger equals its `HEAD` (`cmp` 0).
-
-**THE DELIVERY GAP IS TWO RELEASES.** The consumer is installed at 0.722.0 against `VERSION` 0.724.0. Neither release is
-bootstrapping, and 0.723.0 touches only a `.dist-only` fixture. PENDING is 0. On its next pull, 0.724.0 owes a closing
-writer for each of the 17 sprint-316 stories already past gate 3 (all still `review`), before the sprint can route
-onward. The consumer already sets `AI_DLC_REVIEW_SHARD_MIN_FILES=8` itself. The banked ruling stands: report the gap and
-write no runbook. **OPERATOR DECISIONS STILL OPEN:** none.
-
-Batch 193's block below is history: batch 194's block replaces its delivery gap and its decisions list.
-
-**BATCH 193 SHIPPED NO RELEASE AND DISCHARGED NO CONSUMER CANDIDATE; IT AMENDED `BL-375` ON AN OPERATOR RULING.** It was
-invoked by peer handoff (`ai-dlc-55`) at `origin/main` `d4354b7c` (`VERSION` 0.722.0). The opening sweep was identical
-to batch 192's: live 5 on 34 qualifying refs, all five shipped here, unfiled 0, worklist 0 (a true empty), TERMINAL 199,
-every control passing, the consumer's working-tree ledger equal to its `HEAD`. One `opus` hand adjudicated `BL-375`.
-
-**OPERATOR RULING (option A): `BL-375`'s stage-1 identical-sets arm compares only paths that exist in the traced tree
-at window close.** The unfiltered arm was unreachable by construction. Batch 192's deriver lever was refuted, not
-deferred: it contradicts the deriver's own contract that a negative lookup is a dependency, and the `existonly` mutant
-in `core/fixtures/readset-skip` kills it. The entry also records the `.git/**` runner question as answered and corrects
-its `cp -R` prose.
-
-**THE STAGE-1 TRACE WAS NOT MET.** Over three runs, at peak loads 32.0, 12.8 and 5.9, the runs mapped 0, 2 and 4 of 5
-fixtures. The filtered arm compared 0 differences on both twice-clean pairs, where the raw arm differed by 58 absent
-paths. `enforcement-map-sites` dropped reports in all three runs and is the lone stage-1 blocker.
-
-Live backlog **1**, archive **437**. Net closed minus filed: **0**.
-
-**THE DELIVERY GAP IS ZERO: THE CONSUMER PULLED TO 0.722.0 DURING THE BATCH** (stamp `commit: d4354b7c`, its branch
-`ai-dlc-update/0.722.0-reconcile-20261004T120743Z`). The close re-derive from a fresh `origin/main` read 36 qualifying
-refs where the opening read 34; every other figure was unchanged. The five live candidates are therefore all installed
-there, and PENDING is 0. They stay live until the consumer's own reconcile closes them. **OPERATOR DECISIONS STILL
-OPEN:** whether review sharding becomes the default.
-
-Batch 192's block below is history: batch 193's block replaces its delivery gap and its decisions list.
 
 ### Derive the state; do not trust the numbers below
 
