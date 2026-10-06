@@ -45,6 +45,19 @@ cites its capabilities, the architecture spine consumes it, stories carry its
 IDs, and Checks 29/30/31 join against them — so a defect authored here is
 ratified by everything downstream rather than caught.
 
+**Verify with one read-only command per Bash call.** A check that reads the tree to confirm a
+claim (a count, a citation, a listing) is either a `derived` fence in your deliverable, replayed
+by one call to `scripts/ai-dlc/validate-artifact-derivations.sh <that file>`, or one read-only
+command or pipeline in its own Bash call: no `set`, no chain of variable assignments, no
+function definition, no `bash -c`, and no `;`, `&&` or `||` joining two checks. Several
+command/output pairs share one fence, so N claims are one fence and one validator call, never N
+lines of shell; write each path literally, because a fence has no variables. A test, build or
+script run your contract requires is likewise one call of its own: at most one `VAR=value`
+prefix, absolute paths instead of a `cd`, and never wrapped in `set`, a function or `bash -c`.
+A recipe in an artifact that cannot be run in either form is reported as underived rather than
+run as compound shell. A call that sets variables, defines a function or runs `bash -c` matches
+no command-prefix allow rule and can stop an unattended sprint until a human approves it.
+
 ## Contract
 
 Read `.claude/team-roles/pm.md` and follow it IN FULL — identity, ownership,
