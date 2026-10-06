@@ -266,14 +266,14 @@ PP="$WORK/pptree"
 mkdir -p "$PP/.claude" "$PP/tests/fixtures/x" || exit 2
 printf '#!/usr/bin/env bash\nexit 0\n' > "$PP/tests/fixtures/x/run.sh"
 : > "$PP/.claude/.ai-dlc-applying"
-pp_out="$(cd "$PP" && bash "$PREPUSH" </dev/null 2>&1)"; pp_rc=$?
+pp_out="$(cd "$PP" && AI_DLC_READSET_LIVE_TRACE=0 bash "$PREPUSH" </dev/null 2>&1)"; pp_rc=$?
 if grep -q 'ai-dlc-applying' <<<"$pp_out" && [ "$pp_rc" -ne 0 ]; then
   ok "pre-push REFUSES the fixture suite while the marker exists, and names the file"
 else
   bad "pre-push ran the suite on a mid-pull tree (rc=$pp_rc) — the marker is written but nothing reads it"
 fi
 rm -f "$PP/.claude/.ai-dlc-applying"
-pp_out2="$(cd "$PP" && bash "$PREPUSH" </dev/null 2>&1)"
+pp_out2="$(cd "$PP" && AI_DLC_READSET_LIVE_TRACE=0 bash "$PREPUSH" </dev/null 2>&1)"
 if ! grep -q 'ai-dlc-applying' <<<"$pp_out2"; then
   ok "  control: with no marker the suite runs normally (the guard is not always-on)"
 else

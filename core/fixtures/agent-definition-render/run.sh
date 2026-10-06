@@ -674,7 +674,7 @@ hook_world() { # <hook> -> a scratch consumer project with the renderer and the 
   printf '%s\n' "$p"
 }
 drive_hook() { # <project> -> the hook's combined output; exit = the hook's
-  ( cd "$1" && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE bash .githooks/pre-push </dev/null 2>&1 )
+  ( cd "$1" && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE AI_DLC_READSET_LIVE_TRACE=0 bash .githooks/pre-push </dev/null 2>&1 )
 }
 agents_digest() { ( cd "$1/.claude/agents" 2>/dev/null && shasum -a 256 -- *.md 2>/dev/null ) }
 

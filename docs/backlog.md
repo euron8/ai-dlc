@@ -101,7 +101,7 @@ run for the unmapped fixtures and record clean traces in a local map under git-c
 recorded path and of the deriver. Measured: per-fixture `FXTAG` profile tags attribute concurrent reports with zero
 cross-attribution, drops are system-wide, and silent loss requires a private tree copy so the atime canary can run.
 
-verify: sh grep -qF -- '--local-map' .githooks/pre-push && grep -qF -- '--local-map' core/git-hooks/pre-push
+verify: sh [ "$(grep -v '^[[:space:]]*#' .githooks/pre-push | grep -cE '^[[:space:]]*AI_DLC_READSET_TRACE_ROOT="[$]tr" bash "[$]dv" --list "[$]names" --tracer sandbox --local-map "[$]READSET_LOCAL"$')" -eq 1 ] && [ "$(grep -v '^[[:space:]]*#' core/git-hooks/pre-push | grep -cE '^[[:space:]]*AI_DLC_READSET_TRACE_ROOT="[$]tr" bash "[$]dv" --list "[$]names" --tracer sandbox --local-map "[$]READSET_LOCAL"$')" -eq 1 ]
 
 ## BL-453 — teammate verification calls are ad-hoc compound shell that no allow rule matches, so an unattended sprint stops for approval
 

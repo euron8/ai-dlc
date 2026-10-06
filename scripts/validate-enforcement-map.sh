@@ -8290,6 +8290,10 @@ i87_readable() {   # <root> -> AI_DLC_* keys a shipped program dereferences, one
   _fl="$(mktemp)"
   find "$1/core" "$1/scripts" -type f \( -name '*.sh' -o -name '*.js' -o -name '*.py' \) \
        -not -path '*/core/fixtures/*' 2>/dev/null > "$_fl"
+  # THE TWO PRE-PUSH HOOKS CARRY NO EXTENSION, so the glob above never saw them and their knobs
+  # (AI_DLC_FIXTURE_JOBS, AI_DLC_FIXTURE_NO_SKIP, AI_DLC_READSET_LIVE_TRACE) were registered nowhere.
+  # Named, not globbed: they are the only extensionless shipped programs that read an AI_DLC_* key.
+  for _h in "$1/.githooks/pre-push" "$1/core/git-hooks/pre-push"; do [ -f "$_h" ] && printf '%s\n' "$_h"; done >> "$_fl"
   awk -v FLIST="$_fl" '
     BEGIN {
       while ((getline fn < FLIST) > 0) {
