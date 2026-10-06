@@ -652,18 +652,50 @@ readset_local_validate() { # <list> <out>
   done < "$list"
 }
 
-# THE LOCK IS STALE when its pid is dead, when it was taken more than 6h ago, or when it has no pid
-# file and is older than 60s (a launcher killed between `mkdir` and writing the pid). Never a
-# process-table grep: `kill -0` on the recorded pid is the liveness test.
+# THE START TIME OF A PID, ONE NORMALISED STRING, for the live-trace lock. The writer and the reader
+# both call this, so the two sides cannot disagree on locale, zone or column padding: `ps` runs
+# under LC_ALL=C TZ=UTC0 and its words are re-joined by single spaces. Prints nothing and returns 1
+# when `ps` fails or prints nothing (no such pid, or no usable `ps`).
+readset_pid_start() { # <pid>
+  local x
+  x="$(LC_ALL=C TZ=UTC0 ps -o lstart= -p "$1" 2>/dev/null)" || return 1
+  set -- $x
+  [ -n "$*" ] || return 1
+  printf '%s' "$*"
+}
+
+# IS THE LIVE-TRACE LOCK STALE? `$lk/pid` is line 1 `<pid> <epoch>` (the only line an older hook
+# writes or reads) and line 2 the start time of that pid as readset_pid_start printed it when the
+# lock was taken. The pid is the detached trace subshell's `$!`, never `$$`. Decided in this order:
+#   (1) a malformed pid or epoch                                   -> stale
+#   (2) `kill -0` on the pid fails                                 -> stale
+#   (3) the epoch is more than 6h old                              -> stale
+#   (4) no start line (a lock taken by an older hook)              -> held, judged as before
+#   (5) the pid's start time cannot be read now                    -> held, and it says so
+#   (6) the pid's start time differs from the recorded one         -> stale (the pid was reused)
+#   otherwise                                                      -> held
+# (5) is reached only after `kill -0` succeeded, so an empty `ps` there is a `ps` failure or a pid
+# that died in the gap. HELD with the announcement is right for both and the next push re-judges;
+# do not turn it into stale, because a false stale lets two traces run at once. A lock dir with no
+# pid file is stale once older than 60s (a launcher killed between `mkdir` and writing the pid).
+# Never a process-table grep: `kill -0` on the recorded pid is the liveness test.
 readset_lock_stale() { # <lock dir>
   local lk="$1" p="" e="" now
+  local s="" c=""
   if [ -f "$lk/pid" ]; then
-    read -r p e < "$lk/pid" 2>/dev/null
+    { read -r p e; read -r s; } < "$lk/pid" 2>/dev/null
     case "$p" in ''|*[!0-9]*) return 0 ;; esac
     case "$e" in ''|*[!0-9]*) return 0 ;; esac
     kill -0 "$p" 2>/dev/null || return 0
     now="$(date +%s)"
     [ $(( now - e )) -gt 21600 ] && return 0
+    set -- $s; s="$*"
+    [ -n "$s" ] || return 1
+    if ! c="$(readset_pid_start "$p")"; then
+      printf '   ..    read-set live trace: could not read the start time of lock pid %s (ps failed or printed nothing) -- the lock is judged HELD on pid and age alone\n' "$p"
+      return 1
+    fi
+    [ "$c" != "$s" ] && return 0
     return 1
   fi
   [ -n "$(find "$lk" -maxdepth 0 -mmin +1 2>/dev/null)" ] && return 0
@@ -678,7 +710,7 @@ readset_lock_stale() { # <lock dir>
 # lock: if another trace holds it this push starts none and says so. Every precondition that fails
 # is ONE line naming it, and the fixtures stay unmapped -- the behaviour before this existed.
 readset_live_trace() { # <out>
-  local out="$1" b names="" n=0 dv why="" lk tr logf
+  local out="$1" b names="" n=0 dv why="" lk tr logf tp
   [ "${AI_DLC_READSET_LIVE_TRACE:-1}" = 0 ] && return 0
   if [ -s "$out/.trace.held" ]; then
     printf '   ..    read-set live trace: NOT re-tracing %s -- discarded 3 times in a row on the same run.sh and deriver; unmapped until one of them changes (see %s.log)\n' \
@@ -717,7 +749,8 @@ readset_live_trace() { # <out>
     AI_DLC_READSET_TRACE_ROOT="$tr" bash "$dv" --list "$names" --tracer sandbox --local-map "$READSET_LOCAL"
     rm -f "$lk/pid"; rmdir "$lk" 2>/dev/null || { sleep 1; rm -f "$lk/pid"; rmdir "$lk" 2>/dev/null; }
   ) </dev/null >"$logf" 2>&1 &
-  printf '%s %s\n' "$!" "$(date +%s)" > "$lk/pid" 2>/dev/null
+  tp="$!"
+  printf '%s %s\n%s\n' "$tp" "$(date +%s)" "$(readset_pid_start "$tp")" > "$lk/pid" 2>/dev/null
   printf '   ..    read-set live trace: started detached for %s unmapped fixture(s) (%s) -> %s\n' "$n" "$names" "$logf"
   return 0
 }
