@@ -610,7 +610,6 @@ readset_local_validate() { # <list> <out>
       FILENAME == ENVIRON["RL_C"] { if ($0 !~ /^#/) com[$1] = 1; next }
       FILENAME == ENVIRON["RL_P"] { inu[$0] = 1; next }
       FILENAME == ENVIRON["RL_N"] { now[$1] = $2; next }
-      ($1 in com) { next }
       $2 == "#deriver" { dok[$1] = ($3 == dsha); next }
       substr($2, 1, 1) == "#" { next }
       { f = $1; seen[f] = 1; rows[f] = rows[f] $2 "\n"
@@ -698,7 +697,8 @@ readset_live_trace() { # <out>
   logf="$READSET_LOCAL.log"
   ( trap '' HUP
     AI_DLC_READSET_TRACE_ROOT="$tr" bash "$dv" --list "$names" --tracer sandbox --local-map "$READSET_LOCAL"
-    rm -f "$lk/pid"; rmdir "$lk" 2>/dev/null ) </dev/null >"$logf" 2>&1 &
+    rm -f "$lk/pid"; rmdir "$lk" 2>/dev/null || { sleep 1; rm -f "$lk/pid"; rmdir "$lk" 2>/dev/null; }
+  ) </dev/null >"$logf" 2>&1 &
   printf '%s %s\n' "$!" "$(date +%s)" > "$lk/pid" 2>/dev/null
   printf '   ..    read-set live trace: started detached for %s unmapped fixture(s) (%s) -> %s\n' "$n" "$names" "$logf"
   return 0
