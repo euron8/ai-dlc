@@ -1309,12 +1309,14 @@ else
   fi
 fi
 
-# --- S3 ON THE GATE-1 REVIEWERS, AND NOT ON qa ---------------------------------------------------
-# A code-reviewer dispatch is a part of `partition-review-diff.sh --map`, the cross shard, or
-# `shard: 1/1 <idx>`; never `shard: none (...)`. Gate 2 dispatches qa serially and has no shard
-# merge, so qa is outside the shardable set. Settings here PIN A MODEL for every role seeded,
-# qa included: the shardable set also takes every declared role with NO model (a party seat),
-# so an unpinned qa would be judged for that reason and the qa arm could not see SHARD_ROLES.
+# --- S3 ON THE GATE-1 REVIEWERS AND ON gate-2 qa, NOT ON dev -------------------------------------
+# A code-reviewer or qa dispatch is a part of `partition-review-diff.sh --map`, the cross shard, or
+# `shard: 1/1 <idx>`; never `shard: none (...)`. Gate 2 shards under the same files axis and joins
+# with `merge-review-shards.sh --gate qa`, so qa is IN the shardable set. The allow direction is
+# held by `dev`, a pinned role outside SHARD_ROLES carrying the same invented exception: without
+# it a validator that judged EVERY role would pass every FAIL cell here. Settings PIN A MODEL for
+# every role seeded: the shardable set also takes every declared role with NO model (a party seat),
+# so an unpinned qa or dev would be judged for that reason and neither arm could see SHARD_ROLES.
 # Every offender is Rule 19-clean (bound == pin, cited, readable) and sits after a dev epoch row,
 # so S3 is the only route to its exit 1.
 cat > "$WORK/settings-rev.json" <<'JSON'
@@ -1336,7 +1338,7 @@ rvrow() { # role name shard [shard_raw]
       role_contract_cited:true,role_file_readable:true,shard:$s,tool_use_id:("toolu_" + $n)}
      | if $raw == "" then . else . + {shard_raw:$raw} end'
 }
-for _r in code-reviewer code-reviewer-escalated qa remediator; do
+for _r in code-reviewer code-reviewer-escalated qa remediator dev; do
   { row dev sonnet sonnet true true rv-epoch; rvrow "$_r" "rv-$_r" invalid-exception 'none (made up)'; } > "$WORK/rv-$_r.jsonl"
 done
 { row dev sonnet sonnet true true rv-epoch; rvrow code-reviewer rv-ok '1/1 3'; } > "$WORK/rv-ok.jsonl"
@@ -1358,42 +1360,62 @@ rvok() {
   o="$(bash "$1" --ledger "$WORK/rv-ok.jsonl" --sprint 900 --settings "$WORK/settings-rev.json" 2>&1)"; rc=$?
   if [ "$rc" -eq 0 ] && grep -qF '1 shardable row(s) carry a shard line, 0 FAILED' <<<"$o"; then printf 'OK'; else printf 'rc=%s' "$rc"; fi
 }
-rvvec() { printf '%s %s %s %s %s' "$(rv "$1" code-reviewer)" "$(rv "$1" code-reviewer-escalated)" \
-  "$(rv "$1" qa)" "$(rv "$1" remediator)" "$(rvok "$1")"; }
-RV_EXPECTED="FAIL1 FAIL1 OK FAIL1 OK"
+rvvec() { printf '%s %s %s %s %s %s' "$(rv "$1" code-reviewer)" "$(rv "$1" code-reviewer-escalated)" \
+  "$(rv "$1" qa)" "$(rv "$1" remediator)" "$(rvok "$1")" "$(rv "$1" dev)"; }
+# The five membership cells, then the dev near-miss cell (R6) every mutant also scores.
+RV_EXPECTED="FAIL1 FAIL1 FAIL1 FAIL1 OK"
+RV_NEAR="OK"
 RVGOT="$(rvvec "$VSL")"
 set -- $RVGOT
 [ "$1" = FAIL1 ] && ok "S3-R1 a code-reviewer row (model pinned, Rule 19-clean) with the invented 'shard: none (made up)' FAILS S3: exit 1, the role named, its shard_raw printed" \
   || bad "S3-R1 a code-reviewer row with an invented exception scored [$1], expected FAIL1"
 [ "$2" = FAIL1 ] && ok "S3-R2 a code-reviewer-escalated row with the same invented exception FAILS S3 the same way" \
   || bad "S3-R2 a code-reviewer-escalated row with an invented exception scored [$2], expected FAIL1"
-[ "$3" = OK ] && ok "S3-R3 a qa row (model pinned, so NOT a party seat) with the same invented exception is NOT judged: exit 0, the OK row, 0 FAILED under S3 -- gate 2 is serial-only and qa is outside SHARD_ROLES" \
-  || bad "S3-R3 a qa row with an invented exception scored [$3], expected OK -- qa is being judged as shardable"
-[ "$4" = FAIL1 ] && ok "S3-R4 control: a remediator row with the same invented exception FAILS S3, so the qa OK above is about qa's membership and not about the seed" \
-  || bad "S3-R4 the remediator control scored [$4], expected FAIL1 -- the seed does not reach S3, so R3 proves nothing"
+[ "$3" = FAIL1 ] && ok "S3-R3 a qa row (model pinned, so NOT a party seat) with the same invented exception FAILS S3 -- gate 2 shards and qa is in SHARD_ROLES; its control is S3-R6, a pinned dev row with the same seed, which is NOT judged" \
+  || bad "S3-R3 a qa row with an invented exception scored [$3], expected FAIL1 -- qa is not being judged as shardable"
+[ "$4" = FAIL1 ] && ok "S3-R4 a remediator row with the same invented exception FAILS S3 the same way" \
+  || bad "S3-R4 the remediator row scored [$4], expected FAIL1"
 [ "$5" = OK ] && ok "S3-R5 ALLOW twin: a code-reviewer row carrying 'shard: 1/1 3' exits 0 and is counted as carrying a shard line" \
   || bad "S3-R5 a code-reviewer row with 'shard: 1/1 3' scored [$5], expected OK"
+[ "$6" = OK ] && ok "S3-R6 near-miss: a dev row (model pinned, outside SHARD_ROLES) with the same invented exception is NOT judged: exit 0, the OK row, 0 FAILED under S3 -- so the FAIL on qa above is about qa's membership, not about the seed" \
+  || bad "S3-R6 the dev near-miss scored [$6], expected OK -- S3 judges a role outside SHARD_ROLES, so R3 proves nothing about membership"
 
-# MUTANTS on the SHARD_ROLES line, each scored against all five cells.
-rvmoved() { local got="$1" i=1 e m out="" names="reviewer escalated qa remediator ok"
-  for e in $RV_EXPECTED; do m="$(printf '%s' "$got" | cut -d' ' -f$i)"
+# MUTANTS on the SHARD_ROLES line, each scored against all six cells. The line is DERIVED from the
+# validator and each mutant edits its WORD LIST, so a reordering of the roles does not lose them.
+rvmoved() { local got="$1" i=1 e m out="" names="reviewer escalated qa remediator ok dev"
+  for e in $RV_EXPECTED $RV_NEAR; do m="$(printf '%s' "$got" | cut -d' ' -f$i)"
     [ "$e" != "$m" ] && out="$out $(printf '%s' "$names" | cut -d' ' -f$i)"; i=$((i+1)); done
   printf '%s' "${out# }"; }
-RVSRC="$(grep -c '^SHARD_ROLES="adversary remediator gate-adjudicator analyst code-reviewer code-reviewer-escalated"$' "$WORK/mut/control.sh")" || RVSRC=0
+RVSRC="$(grep -c '^SHARD_ROLES="[a-z -]*"$' "$WORK/mut/control.sh")" || RVSRC=0
+RVLINE="$(grep '^SHARD_ROLES="[a-z -]*"$' "$WORK/mut/control.sh" | head -1)"
+RVLIST=" $(printf '%s' "$RVLINE" | sed -e 's/^SHARD_ROLES="//' -e 's/"$//') "
+rvwords_ok=1
+for _w in code-reviewer code-reviewer-escalated qa remediator; do
+  case "$RVLIST" in *" $_w "*) ;; *) rvwords_ok=0 ;; esac
+done
+case "$RVLIST" in *" dev "*) rvwords_ok=0 ;; esac
+# rvsed <word-to-drop|""> <word-to-add|""> -> a sed expr replacing the derived line
+rvsed() { local l="$RVLIST" n
+  [ -n "$1" ] && l="${l/ $1 / }"
+  n="$(printf '%s' "$l" | sed -e 's/^ *//' -e 's/ *$//')"
+  [ -n "$2" ] && n="$n $2"
+  printf 's/^%s$/SHARD_ROLES="%s"/' "$RVLINE" "$n"; }
 if [ "$RVSRC" -ne 1 ]; then
-  bad "FIXTURE BROKEN: the SHARD_ROLES line is not in the validator exactly once ($RVSRC); the reviewer mutants below have no subject"
+  bad "FIXTURE BROKEN: the SHARD_ROLES line is in the validator $RVSRC time(s) (want 1); the reviewer mutants below have no subject"
+elif [ "$rvwords_ok" -ne 1 ]; then
+  bad "S3 membership: SHARD_ROLES [$RVLIST] does not carry code-reviewer, code-reviewer-escalated, qa and remediator without dev -- a regression in the validator, not the harness; the membership mutants stand down until it does"
 else
   # (rva) drops code-reviewer: the R1 cell moves, and the ALLOW twin with it (stated overlap --
   # the twin's positive conjunct is that a code-reviewer 1/1 row is COUNTED, which is membership).
-  RVA="$(s3mut rva 's/^SHARD_ROLES="adversary remediator gate-adjudicator analyst code-reviewer code-reviewer-escalated"$/SHARD_ROLES="adversary remediator gate-adjudicator analyst code-reviewer-escalated"/')"
+  RVA="$(s3mut rva "$(rvsed code-reviewer '')")"
   if [ -z "$RVA" ]; then bad "FIXTURE BROKEN: reviewer mutant (rva) did not apply"
   else
     mv_="$(rvmoved "$(rvvec "$RVA")")"
     [ "$mv_" = "reviewer ok" ] \
-      && ok "S3 MUTANT (rva) killed: SHARD_ROLES without code-reviewer passes its invented exception and stops counting its 1/1 row -- escalated, qa and the remediator control unmoved" \
+      && ok "S3 MUTANT (rva) killed: SHARD_ROLES without code-reviewer passes its invented exception and stops counting its 1/1 row -- escalated, qa, remediator and the dev near-miss unmoved" \
       || bad "S3 MUTANT (rva): moved [$mv_], expected [reviewer ok]"
   fi
-  RVC="$(s3mut rvc 's/^SHARD_ROLES="adversary remediator gate-adjudicator analyst code-reviewer code-reviewer-escalated"$/SHARD_ROLES="adversary remediator gate-adjudicator analyst code-reviewer"/')"
+  RVC="$(s3mut rvc "$(rvsed code-reviewer-escalated '')")"
   if [ -z "$RVC" ]; then bad "FIXTURE BROKEN: escalated mutant (rvc) did not apply"
   else
     mv_="$(rvmoved "$(rvvec "$RVC")")"
@@ -1401,13 +1423,23 @@ else
       && ok "S3 MUTANT (rvc) killed: SHARD_ROLES without code-reviewer-escalated passes its invented exception -- S3-R2 alone moves" \
       || bad "S3 MUTANT (rvc): moved [$mv_], expected [escalated]"
   fi
-  RVB="$(s3mut rvb 's/^SHARD_ROLES="adversary remediator gate-adjudicator analyst code-reviewer code-reviewer-escalated"$/SHARD_ROLES="adversary remediator gate-adjudicator analyst code-reviewer code-reviewer-escalated qa"/')"
+  # (rvb) the pre-fix state: qa dropped from the set. S3-R3 alone moves, FAIL1 -> OK.
+  RVB="$(s3mut rvb "$(rvsed qa '')")"
   if [ -z "$RVB" ]; then bad "FIXTURE BROKEN: qa mutant (rvb) did not apply"
   else
     mv_="$(rvmoved "$(rvvec "$RVB")")"
     [ "$mv_" = "qa" ] \
-      && ok "S3 MUTANT (rvb) killed: SHARD_ROLES gaining qa FAILS the qa row -- S3-R3 alone moves" \
+      && ok "S3 MUTANT (rvb) killed: SHARD_ROLES without qa passes the qa row's invented exception -- S3-R3 alone moves" \
       || bad "S3 MUTANT (rvb): moved [$mv_], expected [qa]"
+  fi
+  # (rvd) the near-miss can fire: SHARD_ROLES gaining dev FAILS the dev row -- S3-R6 alone moves.
+  RVD="$(s3mut rvd "$(rvsed '' dev)")"
+  if [ -z "$RVD" ]; then bad "FIXTURE BROKEN: dev mutant (rvd) did not apply"
+  else
+    mv_="$(rvmoved "$(rvvec "$RVD")")"
+    [ "$mv_" = "dev" ] \
+      && ok "S3 MUTANT (rvd) killed: SHARD_ROLES gaining dev FAILS the dev near-miss -- S3-R6 alone moves, so R6's OK is about membership" \
+      || bad "S3 MUTANT (rvd): moved [$mv_], expected [dev]"
   fi
 fi
 

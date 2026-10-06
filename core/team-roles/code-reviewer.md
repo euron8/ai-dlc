@@ -177,10 +177,12 @@ commit, and you do NOT make any closing write either.
 every story, serial or sharded, briefed `shard: 1/1 <story-index>` and naming
 you the closing writer. You review nothing. Read the story's gate-1 review file
 (the merged file for a sharded review, the serial file otherwise) and QA's
-verdict. Then the closing writer makes exactly these writes and nothing else:
+verdict (the merged QA file for a sharded validation, the serial file
+otherwise). Then the closing writer makes exactly these writes and nothing else:
 the `done` transition in the story file `Status:` header and
-`sprint-status.yaml`, `deferred_acs` in both canonical views taken from QA's
-verdict, the upstream close-out `implementation.md` section 5 requires (the
+`sprint-status.yaml`, `deferred_acs` in both canonical views taken from the
+merged QA file's `## Deferred ACs`, or the deferred record in the serial file,
+the upstream close-out `implementation.md` section 5 requires (the
 story's carry-over-backlog item set to `CLOSED - delivered in sprint <N> via
 <story-id>`, and a `RESOLVED` line appended to its `docs/escalations/pending.md`
 entry, each only where the story traces to one), and the closing commit

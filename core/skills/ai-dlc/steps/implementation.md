@@ -124,8 +124,11 @@ axis, as `_dispatch-protocol.md` "Bounded-join ≠ serial execution" applies it.
   "Split dispatch": files axis, over the story's changed-file set:
   `partition-review-diff.sh --map` derives the parts and
   `merge-review-shards.sh` joins them (Section 6, gate-1 dispatch).
-- **qa** from `qa.md`. Validates acceptance criteria, runs tests. Gate 2
-  is dispatched serially, `shard: 1/1 <story-index>`.
+- **qa** from `qa.md`. Validates acceptance criteria, runs tests. A gate-2
+  validation is Rule 28, "Split dispatch": files axis, over the story's
+  changed-file set at the go-signal SHA: `partition-review-diff.sh --map`
+  derives the parts and `merge-review-shards.sh --gate qa` joins them
+  (Section 6, gate-2 dispatch).
 
 Spawn additional dev teammates if stories span multiple ownership
 boundaries (e.g., dev-frontend + dev-backend).
@@ -142,11 +145,13 @@ follow-up tasks with dependencies:
    dispatches one `code-reviewer` as the closing writer, `shard: 1/1
    <story-index>`, for every story, serial or sharded.** The closing writer
    reads the gate-1 review file (the merged file for a sharded review) and
-   QA's verdict, and the closing writer makes exactly these writes and nothing
-   else: the `done` transition (story file `Status:` header and
-   `sprint-status.yaml`), `deferred_acs` in both sprint-status views taken from
-   QA's verdict, the upstream close-out section 5 requires, and the closing
-   commit carrying them (`code-reviewer.md` "As the Closing Writer"). The lead
+   QA's verdict (the merged QA file for a sharded validation), and the
+   closing writer makes exactly these writes and nothing else: the `done`
+   transition (story file `Status:` header and `sprint-status.yaml`),
+   `deferred_acs` in both sprint-status views taken from the merged QA file's
+   `## Deferred ACs`, or the deferred record in the serial file, the
+   upstream close-out section 5 requires, and the closing commit carrying
+   them (`code-reviewer.md` "As the Closing Writer"). The lead
    does NOT make these writes. **The closing writer is also owed to a story
    already past gate 3 without its closing writes** — still `review`, or `done`
    with no `deferred_acs` field in both views, including every such story a
@@ -290,7 +295,11 @@ commit-presence check, with the frozen SHA recorded (the freeze below),
 run in the frozen dev worktree
 `partition-review-diff.sh --map <worktree> <base> <frozen-sha> --shard-dir docs/reviews/s<N>/shards/<story-index>-code-review-<sha12>`,
 where `<base>` is the base of the two-dot range the check above logs,
-`<frozen-sha>` is the full SHA and `<sha12>` its first twelve characters.
+`<frozen-sha>` is the full SHA and `<sha12>` its first twelve characters. A
+later pass appends its pass marker to the directory,
+`<story-index>-code-review-<sha12>-p<M>`, matching the `-p<M>` of the review
+file it merges into; the merge refuses a directory whose marker differs from
+its `--out`.
 Review sharding is on by default: the program answers `SERIAL:` (exit 3)
 when the story's reviewable files fall below the threshold, which is the
 built-in default in `partition-review-diff.sh`;
@@ -317,8 +326,7 @@ serial or shard, does NOT make the `done` transition, `deferred_acs` or the
 closing commit; the closing writer does, after gate 3. Persisting the gate-1
 review file is unchanged: a serial reviewer commits it to its Git-tracked path
 before the verdict is recorded, as Check 1 requires. The lead persists
-the shard directory together with the merged file. Gate 2 is
-dispatched `shard: 1/1 <story-index>`; it has no shard merge.
+the shard directory together with the merged file.
 
 **DAR-fold preflight before gate-2 dispatch.** After gate1 (code
 review) approves a story and BEFORE dispatching gate2 (QA), the lead
@@ -334,6 +342,57 @@ authored. Removal condition: retire this preflight once the dev's DAR
 is guaranteed present in the canonical story file by the merge step
 itself, making the fold redundant. Dispatching gate2 with an empty DAR
 section is a retro finding.
+
+**Gate-2 dispatch: the validation partitions by changed-file group too.**
+After the DAR-fold preflight, with the go-signal SHA recorded (it may differ
+from gate 1's frozen SHA after a rework pass), run in the frozen dev worktree
+`partition-review-diff.sh --map <worktree> <base> <go-signal-sha> --shard-dir <root>/docs/reviews/s<N>/shards/<story-index>-qa-validation-<sha12>`,
+fresh on that SHA, where `<root>` is the absolute path of the frozen worktree,
+`<base>` is the same two-dot base gate 1 used, `<go-signal-sha>` is the full
+SHA and `<sha12>` its first twelve characters. A later pass appends its pass
+marker, `<story-index>-qa-validation-<sha12>-p<M>`, matching the `-p<M>` of the
+validation file it merges into. The threshold is gate 1's: the built-in default
+in `partition-review-diff.sh`, overridden by `AI_DLC_REVIEW_SHARD_MIN_FILES`,
+and `0` turns sharding off for both gates. On `SERIAL` (exit 3), dispatch one QA
+with `shard: 1/1 <story-index>`, the whole validation. On exit 2, likewise
+dispatch one QA with `shard: 1/1 <story-index>` and record the refusal line
+verbatim in the story's gate log. Otherwise dispatch one QA per line the map
+prints, briefed `shard: <i>/<N> <group>` with the map and the absolute path of
+its shard file `<ordinal>.md` in the shard directory, in Rule 28 waves
+("Split dispatch": files axis). The part QAs are dispatched first; the one
+`shard: cross/<N> cross` QA writing `cross.md` there is dispatched only after
+every part shard file exists, and its brief names the absolute path of every
+part shard file. That ordering is Rule 28's serial exception 1 ("Split
+dispatch"), a true data dependency: the cross QA reads what the parts wrote.
+Each shard gets the go-signal
+`gate-2 go-signal: <story-id> @ <SHA>` with the full SHA the manifest records.
+Part QAs read their part, score the part-local checklist items and replay the
+mutation-REDs and null-impl REDs anchored in their part, each in its own
+detached worktree at that SHA; they run no suite. In that worktree a part QA
+first runs the project's canonical dependency setup (the setup the dev's QA
+Handoff Evidence records, or the story's documented setup) and confirms the
+canonical run of the anchor's test is GREEN there before any mutation. An AC
+whose replay cannot reach a GREEN baseline in the part's worktree is handed to
+the cross QA, listed under the part shard's findings with its reason, rather
+than scored. That finding carries a `handover: <AC-id>` line, and every part
+shard carries one header line `handovers: <n>` counting its hand-overs, `0` when
+it handed nothing over (the grammar is `merge-review-shards.sh`'s header). Before scoring,
+the cross QA reads every part shard file for `handover:` lines, runs each
+handed-over replay and records it as a `handover-run:` line; the merge refuses a hand-over with no
+matching run, and a replay that is not `RED` forces `NEEDS_REWORK`. The cross QA owns every other
+checklist item, the Handoff Evidence Precondition, the one honest-green
+canonical run in the frozen worktree and the RED replays a part QA handed
+over, and writes the per-AC table and the
+`## Deferred ACs` section (`qa.md` "As a Shard"). Join in the frozen worktree
+with
+`merge-review-shards.sh <shard-dir> --gate qa --out <root>/docs/reviews/s<N>/<story-index>-qa-validation.md`,
+passing the pass-specific name on a later pass (`-p2`, ...). The merge
+re-derives the parts, refuses (exit 2, nothing written) on a missing,
+duplicate or mis-cited shard, and writes the one validation file Check 1
+reads, verdict recomputed as the worst shard verdict. A QA shard does NOT make
+any closing write; the closing writer makes them, after gate 3, reading the
+merged file. The lead persists the shard directory together with the merged
+file.
 
 **Worktree gate-verification freeze.** Once the lead dispatches a gate
 reviewer (gate-1 code review or gate-2 QA) against a dev worktree, that

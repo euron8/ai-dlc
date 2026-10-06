@@ -451,6 +451,11 @@ READSET_MAP=".ai-dlc-fixture-readsets.tsv"
 # hashes the working tree, so a cross-run record inside it would change the key that decides
 # whether this suite runs at all.
 VERIFIED_RECORD="$GITDIR/ai-dlc-fixture-verified"
+# THE RECORD'S FORMAT STAMP IS A SIDECAR, NOT A HEADER LINE, so the record stays pure
+# `path<TAB>sha` rows and every reader of it -- `comm`, `cut`, and the fixtures that seed one
+# by copying a manifest -- is unchanged. Written only beside a record THIS hook wrote, which is
+# already filtered of ignored paths at the manifest; see the reader in apply_readset_skip.
+VERIFIED_FORMAT="$GITDIR/ai-dlc-fixture-verified.format"
 # A RED UNIT'S OUTPUT HAS TO OUTLIVE THE RUN THAT PRODUCED IT. Until this record existed the
 # worker below sent every fixture's stdout and stderr to /dev/null, so an intermittent red left
 # ONE line of evidence -- `FAIL <name>` in a terminal -- and the honest local remedy was "push
@@ -551,8 +556,34 @@ readset_drop_excluded() { # reads stdin, writes stdout
   if [ -n "$re" ]; then grep -vE "$re"; else cat; fi
 }
 
+# Copy <in> to <res> minus every row whose first tab field git reports IGNORED. ONE helper for
+# both sites that build a path set NOW -- the manifest and the orphan universe -- because they
+# must agree or a path dropped from one reads as changed in the other. `check-ignore` in its
+# default mode never reports a TRACKED file, so a force-added file that matches an ignore
+# pattern stays in; a `.gitignore` grep would drop it. That holds only while the file is STILL
+# tracked, which is why a verified RECORD is never passed here, stamped or not: once `git rm`'d
+# such a file is untracked and ignored, and filtering the record would erase its vanish.
+# Exit 1 means "nothing
+# ignored". Any other exit fails CLOSED: <res> is emptied and the caller runs everything.
+# A PATH INSIDE A SUBMODULE IS NEVER ASKED, because one such path makes `check-ignore` die with
+# 128 ("Pathspec ... is in submodule") and that would fail closed on EVERY push. Measured on the
+# reference consumer: 397 of its 21034 map paths sit under its one gitlink. They are kept --
+# the superproject's ignore rules do not reach inside a submodule.
+readset_drop_ignored() { # <in> <res>
+  local in="$1" res="$2" ci_rc
+  git -c core.quotePath=false ls-files -s 2>/dev/null \
+    | awk '$1 == "160000" { sub(/^[^\t]*\t/, ""); print }' > "$res.gl"
+  cut -f1 "$in" | awk -v gl="$res.gl" 'BEGIN { while ((getline l < gl) > 0) g[++n] = l "/" }
+    { for (i = 1; i <= n; i++) if (index($0, g[i]) == 1) next; print }' > "$res.q"
+  git -c core.quotePath=false check-ignore --stdin < "$res.q" > "$res.ign" 2>/dev/null
+  ci_rc=$?
+  if [ "$ci_rc" -ne 0 ] && [ "$ci_rc" -ne 1 ]; then : > "$res"; return 1; fi
+  awk -F'\t' -v ign="$res.ign" 'BEGIN { while ((getline l < ign) > 0) drop[l] = 1 }
+                                !($1 in drop)' "$in" > "$res"
+}
+
 readset_manifest() {
-  local out="$1" hash_rc
+  local out="$1" hash_rc ign_rc
   # UNTRACKED-BUT-UNIGNORED FILES ARE IN THE UNIVERSE, AND THE WHOLE-SUITE SKIP BELOW IS WHY.
   # `git ls-files` alone answers about the COMMITTED tree, which is the right population for
   # "what am I pushing" and the wrong one for "what will a fixture read": a fixture reads the
@@ -562,6 +593,12 @@ readset_manifest() {
   # Git-ignored paths stay out, for the reason the content key states about the same set:
   # hooks and fixtures WRITE INTO them while the suite runs, so a universe covering them would
   # differ from itself across the very run it is keyed on.
+  # THE MAP ARM USED TO BYPASS THAT, and it is dropped here from EVERY source. `--exclude-standard`
+  # filters only the untracked listing; a map row naming an ignored file was hashed whenever the
+  # file existed. Measured: a trace run in the main checkout recorded three ignored `.DS_Store`
+  # files, a green run there wrote them into the verified record in the SHARED git dir, and a
+  # push from a worktree without them saw them VANISH -- their parents, `core` among them, joined
+  # `.match`, and 11 changed paths selected 226 of 232 fixtures where their own rows select 55.
   #
   # A MANIFEST THAT HASHED LESS THAN IT LISTED IS EMPTIED, so the guard in apply_readset_skip
   # runs everything. `xargs` without `-0` stops at the first apostrophe in a filename and the
@@ -574,12 +611,13 @@ readset_manifest() {
   { git -c core.quotePath=false ls-files 2>/dev/null
     git -c core.quotePath=false ls-files --others --exclude-standard 2>/dev/null
     [ -s "$READSET_MAP" ] && grep -v '^#' "$READSET_MAP" | cut -f2
-  } | grep -v '^\.git/' | grep -v '^\.git$' | readset_drop_excluded | sort -u > "$out/.paths"
+  } | grep -v '^\.git/' | grep -v '^\.git$' | readset_drop_excluded | sort -u > "$out/.paths.all"
+  readset_drop_ignored "$out/.paths.all" "$out/.paths"; ign_rc=$?
   while IFS= read -r p; do [ -f "$p" ] && printf '%s\n' "$p"; done < "$out/.paths" > "$out/.files"
   tr '\n' '\000' < "$out/.files" | xargs -0 -n 200 shasum -a 256 -- > "$out/.sums" 2>/dev/null
   hash_rc=$?
   awk '{ path = $0; sub(/^[0-9a-f]+  /, "", path); print path "\t" $1 }' "$out/.sums" | sort > "$out/.now"
-  if [ "$hash_rc" -ne 0 ] || grep -q '^"' "$out/.paths" \
+  if [ "$hash_rc" -ne 0 ] || [ "$ign_rc" -ne 0 ] || grep -q '^"' "$out/.paths" \
      || [ "$(wc -l < "$out/.now")" -ne "$(wc -l < "$out/.files")" ]; then
     : > "$out/.now"
   fi
@@ -674,11 +712,34 @@ apply_readset_skip() {
 
   [ -s "$out/.now" ] || { printf '   ..    could not hash the working tree -- running all %s\n' "$n_all"; return 0; }
 
+  # THE RECORD IS NEVER FILTERED, AND ONLY A `v2` RECORD IS READ AT ALL. A record THIS hook wrote
+  # is stamped `v2` and is already filtered at the manifest, so it is used AS WRITTEN. Filtering
+  # a record is a wrong skip: a FORCE-ADDED tracked file matching an ignore pattern is in it, and
+  # once `git rm`'d it is untracked and ignored, so a filter drops its row, the vanish never
+  # reaches `.changed`, its parent never reaches `.match`, and an otherwise unchanged tree reads
+  # "NOTHING changed" and skips the WHOLE suite. Measured on the reference consumer: 88
+  # tracked-but-ignored files, 19 of whose parents its map names.
+  # AN UNSTAMPED RECORD RUNS EVERYTHING, exactly as a missing one does. It comes from an OLDER
+  # hook, or from a run of this one whose record copy landed and whose stamp did not (a failed
+  # write, an interrupt between the two). An older hook's map arm hashed untracked IGNORED files,
+  # which read unfiltered would all VANISH -- yet "untracked-ignored, hashed by an old map arm,
+  # since deleted" and "force-added, since `git rm`'d" are byte-identical at read time, so no
+  # filter can be right for both, and the wrong one skips the suite. A full run costs one push and
+  # writes a `v2` record. A stamp naming any other format is one this hook cannot read either.
+  if [ ! -e "$VERIFIED_FORMAT" ]; then
+    printf '   ..    verified-state record predates the format stamp -- running all %s (this run writes one)\n' "$n_all"; return 0
+  elif [ "$(cat "$VERIFIED_FORMAT" 2>/dev/null)" = v2 ]; then
+    cp "$VERIFIED_RECORD" "$out/.rec" \
+      || { printf '   ..    could not copy the verified-state record -- running all %s\n' "$n_all"; return 0; }
+  else
+    printf '   ..    verified-state record carries an unknown format stamp -- running all %s\n' "$n_all"; return 0
+  fi
+
   # A path is changed if its hash moved, if it appeared, or if it vanished. comm -3 reports
   # exactly those three, and the parent directory rides along because adding or removing an
   # entry changes what a listing of that directory returns -- which is how a fixture that
   # globs a directory depends on it.
-  comm -3 "$VERIFIED_RECORD" "$out/.now" 2>/dev/null | sed 's/^\t//' | cut -f1 | sort -u > "$out/.changed"
+  comm -3 "$out/.rec" "$out/.now" 2>/dev/null | sed 's/^\t//' | cut -f1 | sort -u > "$out/.changed"
 
   # TWO SETS, AND CONFLATING THEM MAKES THE SKIP INERT. `.changed` is what actually moved and
   # is the ONLY thing the orphan test below may consider. `.match` adds each changed path's
@@ -692,7 +753,7 @@ apply_readset_skip() {
   # a fixture that globs a directory depends on it; rewriting a file's contents does not. Doing
   # it for every changed path instead selects every fixture that ever stat'd the enclosing
   # directory, which quietly turns the skip back into a full run.
-  cut -f1 "$VERIFIED_RECORD" | sort > "$out/.was"
+  cut -f1 "$out/.rec"        | sort > "$out/.was"
   cut -f1 "$out/.now"        | sort > "$out/.is"
   { comm -23 "$out/.was" "$out/.is"; comm -13 "$out/.was" "$out/.is"; } | sort -u > "$out/.appeared"
   { cat "$out/.changed"; sed -n 's|/[^/]*$||p' "$out/.appeared" | grep -v '^$'; } \
@@ -718,8 +779,9 @@ apply_readset_skip() {
   # `run.sh` is a file that appeared, so `.changed` is non-empty by construction.
   #
   # AND IT FAILS CLOSED IN THE ONE DIRECTION THAT MATTERS: every guard ABOVE this point --
-  # NO_SKIP set, no map, no verified record, an unhashable tree -- returns "run everything"
-  # before reaching here, so a broken or uninstalled instrument can never produce this skip.
+  # NO_SKIP set, no map, no verified record, a record with no `v2` stamp, an unhashable tree
+  # -- returns "run everything" before reaching here, so a broken or uninstalled instrument can
+  # never produce this skip.
   if [ ! -s "$out/.changed" ]; then
     READSET_NO_CHANGE=1
     printf '   ..    read-set map: NOTHING in any fixture read-set changed since the last green run -- skipping all %s\n' "$n_all"
@@ -734,8 +796,15 @@ apply_readset_skip() {
   # the manifest but not the universe would read as "changed, and no fixture reads it" and
   # force a full run on every commit -- the failure this exclusion exists to prevent, arriving
   # through the other side of the same join.
+  # Ignored paths leave by the same helper as the manifest, for the same reason. NO MUTANT
+  # REMOVES THIS ONE ALONE: the manifest never lists an ignored path, so one reaches `.changed`
+  # only as a VANISH from a `v2` record -- a force-added file since `git rm`'d -- and dropping it
+  # here makes that vanish an orphan, which runs everything: coarser than its own readers, never
+  # a skip. It carries the other half of the join -- with the MANIFEST filter gone and this one
+  # kept, a changed ignored file is an orphan and runs everything.
   grep -v '^#' "$READSET_MAP" | cut -f2 | grep -v '^\.git/' | grep -v '^\.git$' \
-    | readset_drop_excluded | sort -u > "$out/.universe"
+    | readset_drop_excluded | sort -u > "$out/.universe.all"
+  readset_drop_ignored "$out/.universe.all" "$out/.universe"
   # EXCEPT THE UPDATE SKILL'S OWN BOOKKEEPING AND THE PIPELINE'S FLAT STATE FILES: the version
   # stamp, the flat files directly under `_bmad-output/ai-dlc-update/`, which every reconcile
   # commit writes, and the flat files directly under `_bmad-output/`, which a consumer's pipeline
@@ -990,7 +1059,12 @@ run_fixtures() {
   # contents". Writing it after a red run would mark the failing state as verified, and the
   # next push -- changing something else entirely -- would skip the fixture that is still
   # broken and report green.
-  if [ "$rc" -eq 0 ] && [ -s "$out/.now" ]; then cp "$out/.now" "$VERIFIED_RECORD" 2>/dev/null; fi
+  # The format stamp is written only AFTER the record copy succeeds, so a failed copy cannot
+  # leave a `v2` stamp vouching for a record this run did not write. A copy that lands with no
+  # stamp after it is an unstamped record, which the next run reads as "run everything".
+  if [ "$rc" -eq 0 ] && [ -s "$out/.now" ]; then
+    cp "$out/.now" "$VERIFIED_RECORD" 2>/dev/null && printf 'v2\n' > "$VERIFIED_FORMAT" 2>/dev/null
+  fi
 
   # PUBLISH THIS RUN'S UNMERGED COSTS UNDER THE SAME GREEN-ONLY GATE, and copy the PRE-MERGE
   # file: "$out/.durations" is exactly the units this pool timed, while "$out/.merged" one block
