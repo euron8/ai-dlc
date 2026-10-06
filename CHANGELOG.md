@@ -19,6 +19,56 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.736.0] - 2026-10-06
+
+Batch 201's first release. No consumer candidate is discharged: the sweep's three live ids are one
+already discharged by 0.735.0 and two the operator ruled the consumer's own. It carries `BL-457`, three
+of `BL-451`'s six fixtures and an operator-directed QA handoff field. `BL-457` closes in the batch close
+commit. No file in it is bootstrapping.
+
+### The recover hook decides `degraded` from the string it emits (BL-457)
+
+- `core/hooks/ai-dlc-recover.sh` decided `degraded` and recorded `injected_bytes` before
+  `ai_dlc_provenance_wrap` prepended its ~129-character tag. A gate-in-flight recovery emitted at
+  10000-10128 characters was replaced by the harness with a file stub while `.recover-fired` read
+  `degraded=no`. Measured before the fix: 10002, 10026 and 10066 emitted, each recorded as landed.
+- The wrap is now measured once from the hook's single nonce mint, split into a head and tail, and
+  subtracted from the trim budget and the fallback bound. `degraded` and `injected_bytes` are taken
+  from the emitted string. The sidecar note is dropped only when the wrapped directive would reach the
+  cliff. The worst real shape (31-character `implementation-<UTC>` nonce, a sidecar, an unresolvable
+  step file) went from 10255 emitted to 9980.
+- Three sentences of the gate-resume directive were cut; each is carried by `gate-validation.md`
+  (`:77-79`, `:186-191`), inside the first read `gate-slice.sh` plans for every gate type. Dead
+  `CEILING`, `SAFETY_MARGIN` and `AI_DLC_HOOK_CONTEXT_MARGIN` are removed.
+- `gate-resume`: a cliff sweep, the worst case, an excerpt-reserve arm proving the hook received its
+  override, a one-mint arm, and six mutants each killed by its own arm. The fixture now copies the
+  hook's libraries from beside the installed hook, so it runs on a consumer install; it previously
+  read them from a distribution-only path, hid the failed copy, and would have failed on every
+  consumer pull crossing this release.
+
+### Three slow shipped fixtures split from their mutation batteries (BL-451)
+
+- `apply-self-overwrite`, `apply-setup-sited-merge` and `self-update-fixture-log` each move their
+  battery to a new `.dist-only` `<name>-mutants` sibling that sources a shipped `lib.sh` and scores in
+  a pool of 8. Killed sets were compared byte-for-byte against the unsplit batteries.
+- Solo, in clean worktrees: the shipped fixtures went from 73s to 17s, 66s to 31s and 72s to 27s.
+  `apply-setup-sited-merge` also builds its 48 worlds in a pool, and its battery now fails when its
+  mutant list is empty, which the unsplit fixture printed PASS over.
+- Total CPU grew for two of the three (`apply-self-overwrite` 64 to 197 CPU-seconds,
+  `self-update-fixture-log` 60 to 80), because each pooled scorer builds its own worlds; that cost
+  falls on this repo's pushes, not a consumer's.
+- Solo re-measurement found none of the six filed fixtures near the filed 29-41 minutes; the
+  slowest shipped one ran 278s. `remediator-shard-join` is split in a later release.
+
+### The dev records the dependency setup its full-collection run needs (operator ruling)
+
+- `dev.md` `## QA Handoff Evidence` gains a bullet: the exact setup invocation and working directory
+  that make the full-collection run reproducible from a fresh detached worktree, or `none` with the
+  reason. `qa.md`'s Handoff Evidence Precondition rejects a story without it. A part QA's replay
+  (`qa.md`, `implementation.md`) already named "the setup the dev's QA Handoff Evidence records",
+  which had no field behind it. Both sections sit outside the reference consumer's overrides.
+  `story-evidence-scaffold` pins both, with four mutants.
+
 ## [0.735.0] - 2026-10-06
 
 Batch 200's fourth release. It discharges the reference consumer's

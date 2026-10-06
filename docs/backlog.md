@@ -85,6 +85,22 @@ old side): the unsplit fixture 2537s / 2476s; the shipped fixture after the spli
 347s. The shipped fixture is traced and mapped. `review-shard-merge-mutants` is still OMITTED from
 `.ai-dlc-fixture-readsets.tsv` (0 rows, against 65 for `review-shard-merge`), so it runs on every push until a trace maps it.
 
+**Progress — re-measurement and three more instances (batch 201, v0.736.0; entry stays open for `remediator-shard-join`).**
+Solo at `1794fa83`, one clean `git worktree` per fixture, one fixture at a time, 2 interleaved reps, box shared (low-load
+rep quoted): `apply-self-overwrite` 73s, `apply-setup-sited-merge` 68s, `self-update-fixture-log` 74s,
+`remediator-shard-join` 278s, `backlog-receipt-binding` 61s, `review-shard-merge-mutants` 381s. None is near the filed
+29-41 minutes; the filed figures were loaded, and the cause (sleep, or pool co-scheduling of fixtures that run their own
+pool of 8) was not tested. `backlog-receipt-binding` is already `.dist-only` with no hot spot and is not cut.
+Three split, each into a shipped fixture plus a `.dist-only` `<name>-mutants` battery sharing a shipped `lib.sh`, pooled at
+8, killed sets byte-compared against the unsplit battery. Solo, CPU-seconds (user+sys), clean worktrees, 2 interleaved reps:
+- `apply-self-overwrite`: unsplit 64 CPU-s / 74s; shipped 15 / 17s; battery 182 / 41s. Total CPU grew about 3x because
+  every scorer builds every world; each mutant is now scored against all ten predicates.
+- `apply-setup-sited-merge`: unsplit 185 / 66s; shipped 126 / 31s; battery 71 / 17s. The world-build loop is pooled, and
+  an emptied battery now FAILS (the unsplit fixture printed PASS over `MUTS=""`).
+- `self-update-fixture-log`: unsplit 60 / 72s; shipped 22.5 / 27s; battery 58 / 14s.
+The three batteries and three `lib.sh` files have no read-set rows yet and run on every push until traced.
+`remediator-shard-join` (battery 247-255s of 278s, the same serial `score()` shape) is split in a later release of batch 201.
+
 **Remedy.** Per fixture: measure solo, attribute the time, then cut it — move a mutation battery behind a shipped
 fixture into its own `.dist-only` fixture (`fixture-ship-decl.md`), score mutants in parallel within the fixture, and
 remove repeated setup. `review-shard-merge` is being split in batch 199 as the first instance.
@@ -112,7 +128,18 @@ fixture arm that seeds sidecar plus nonce and asserts both the length bound and 
 length across the cliff and passes only when every world over it reports `degraded=yes` and every world under it
 `degraded=no`, so reporting `yes` unconditionally, or lowering the threshold to the trim ceiling, does not close it.
 
-verify: sh S=core/hooks/ai-dlc-recover.sh; [ -f "$S" ] || exit 9; command -v jq >/dev/null 2>&1 || exit 9; W="$(mktemp -d)" || exit 9; lo=0; hi=0; bad=0; n=0; while [ "$n" -le 80 ]; do P="$W/w$n"; mkdir -p "$P/_bmad-output" "$P/scripts/ai-dlc" "$P/.claude/skills/ai-dlc/steps" || exit 9; echo x > "$P/.claude/skills/ai-dlc/steps/implementation.md"; printf '# Pipeline Snapshot\n\n## Pipeline Position\n- **Current step file:** `implementation.md`\n' > "$P/_bmad-output/pipeline-snapshot.md"; printf 'sidecar\n' > "$P/_bmad-output/pipeline-snapshot.precompact.md"; x="$(printf '%*s' "$n" '' | tr ' ' a)"; printf '#!/bin/sh\n[ "$1" = current ] && echo g%s\n' "$x" > "$P/scripts/ai-dlc/gate-checkpoint.sh"; chmod +x "$P/scripts/ai-dlc/gate-checkpoint.sh"; L="$(printf '{"source":"compact","session_id":"receipt"}' | CLAUDE_PROJECT_DIR="$P" bash "$S" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext | length' 2>/dev/null)"; D="$(sed -n 's/^degraded=//p' "$P/_bmad-output/.recover-fired" 2>/dev/null)"; [ -n "$L" ] && [ -n "$D" ] || exit 9; if [ "$L" -ge 10000 ]; then hi=$((hi + 1)); [ "$D" = yes ] || bad=$((bad + 1)); else lo=$((lo + 1)); [ "$D" = no ] || bad=$((bad + 1)); fi; n=$((n + 5)); done; [ "$lo" -gt 0 ] && [ "$hi" -gt 0 ] || exit 9; [ "$bad" -eq 0 ]
+**Receipt rewritten in batch 201.** The filed receipt swept the nonce to 81 characters and required a world over the
+cliff. The fix also trims the gate-in-flight block, measured on the receipt's own seed: the 81-character world now emits
+9851, `hi` is 0, and the filed receipt exits 9 on the fix. The sweep now runs to 401 characters in steps of 10. It also
+requires a world in [9500, 10000), where lowering the threshold to the trim bound is visible, and it requires
+`injected_bytes` to equal the emitted length in every world. Scored under `bash -c 'set -uo pipefail; ...'` (filed / rewritten):
+fix 9 / 0, the pre-fix tree 1 / 1, `degraded=yes` unconditionally 9 / 1, threshold at the trim bound 9 / 1.
+
+**What the receipt does not close.** The receipt scores `degraded` and `injected_bytes` against the emitted length only.
+Two other parts of the fix are closed by arms of `core/fixtures/gate-resume/run.sh`, not by this receipt: budgeting the
+excerpt by the WRAPPED length is arm RB, and dropping the precompact-sidecar note from an over-cliff world is arm S0.
+
+verify: sh S=core/hooks/ai-dlc-recover.sh; [ -f "$S" ] || exit 9; command -v jq >/dev/null 2>&1 || exit 9; W="$(mktemp -d)" || exit 9; lo=0; hi=0; mid=0; bad=0; n=0; while [ "$n" -le 400 ]; do P="$W/w$n"; mkdir -p "$P/_bmad-output" "$P/scripts/ai-dlc" "$P/.claude/skills/ai-dlc/steps" || exit 9; echo x > "$P/.claude/skills/ai-dlc/steps/implementation.md"; printf '# Pipeline Snapshot\n\n## Pipeline Position\n- **Current step file:** `implementation.md`\n' > "$P/_bmad-output/pipeline-snapshot.md"; printf 'sidecar\n' > "$P/_bmad-output/pipeline-snapshot.precompact.md"; x="$(printf '%*s' "$n" '' | tr ' ' a)"; printf '#!/bin/sh\n[ "$1" = current ] && echo g%s\n' "$x" > "$P/scripts/ai-dlc/gate-checkpoint.sh"; chmod +x "$P/scripts/ai-dlc/gate-checkpoint.sh"; L="$(printf '{"source":"compact","session_id":"receipt"}' | CLAUDE_PROJECT_DIR="$P" bash "$S" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext | length' 2>/dev/null)"; D="$(sed -n 's/^degraded=//p' "$P/_bmad-output/.recover-fired" 2>/dev/null)"; I="$(sed -n 's/^injected_bytes=//p' "$P/_bmad-output/.recover-fired" 2>/dev/null)"; [ -n "$L" ] && [ -n "$D" ] || exit 9; [ "$I" = "$L" ] || bad=$((bad + 1)); if [ "$L" -ge 10000 ]; then hi=$((hi + 1)); [ "$D" = yes ] || bad=$((bad + 1)); else lo=$((lo + 1)); [ "$L" -ge 9500 ] && mid=$((mid + 1)); [ "$D" = no ] || bad=$((bad + 1)); fi; n=$((n + 10)); done; [ "$lo" -gt 0 ] && [ "$hi" -gt 0 ] && [ "$mid" -gt 0 ] || exit 9; [ "$bad" -eq 0 ]
 
 ## BL-456 — the self-update gate probes gating scripts bare, so a renderer change the consumer's hook rejects reads SELF-UPDATE-OK
 

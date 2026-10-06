@@ -269,6 +269,12 @@ project that replaces that section does not replace this one.
   passing is not this run: a baseline test elsewhere in the suite that your
   change breaks is found here or by QA, and QA finding it costs a rework
   cycle. A nonzero deselected count needs a named justification.
+- **The dependency setup that run needs, recorded beside it.** A fresh
+  detached worktree carries none of the project's gitignored dependencies, so
+  record in the Dev Agent Record, beside the full-collection run, the canonical
+  dependency setup that makes that run reproducible from a fresh detached
+  worktree: the exact invocation and its working directory, or `none` with the
+  reason. A part QA runs this setup before replaying any mutation.
 - **The four evidence sections filled**: `## Production Integrity Tests`,
   `## Smoke Test Updates`, `## Rename Verification` (or `not a rename`), and
   `## Strategy Test IDs`. The lead writes the empty headings at authoring

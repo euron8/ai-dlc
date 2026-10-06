@@ -1,0 +1,7 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+It is a mutation battery behind a shipped fixture: the battery behind `apply-setup-sited-merge`.
+It edits copies of the distribution's own `reconcile/apply.sh` and `reconcile/setup-site-drift.sh`,
+which a consumer is denied editing, and its runtime is why the arms and the mutants are separate
+directories. It sources `apply-setup-sited-merge/lib.sh`, so it judges each mutant with the worlds,
+drives and predicates the shipped arms run.
