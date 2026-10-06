@@ -948,8 +948,9 @@ takes no parameters and forwards your whole transcript to a stronger reviewer. I
 absent, or a call returns an error, continue without it -- a missing or failed advisor never
 blocks, delays or fails a step. The touchpoints:
 
-- **R -- post-compact recovery.** After the `postcompact-digest.md` Read and before your first
-  dispatch or write.
+- **R -- post-compact recovery.** After the `postcompact-digest.md` Read, and after arming any
+  fresh beat the In-Flight Teammates rows require (`run_in_background: true`), then call the
+  advisor in the same turn, before your first dispatch or write.
 - **G1 -- every gate, at entry.** Before the script arms run (`steps/gate-validation.md`).
 - **G2 -- every gate, before it closes.** Before `gate-checkpoint.sh --nonce <gate_nonce> close`.
 - **V1 -- validation cycle, after a repair.** After a repair record is joined and before the
@@ -963,8 +964,8 @@ blocks, delays or fails a step. The touchpoints:
 
 Weigh what it returns. Where it contradicts evidence you hold, record the disagreement in the
 artifact you are writing rather than switching silently. An advisor call is a bounded
-foreground call that Rule 29 names as an exception; every touchpoint above sits where nothing
-else is in flight, and P re-arms the join before it calls.
+foreground call that Rule 29 names as an exception; R and P re-arm every outstanding join
+before they call, and the other touchpoints sit where nothing else is in flight.
 
 Teammates are bound separately: every `team-roles/*.md` contract carries its own advisor
 paragraph, and that paragraph is the teammate's instruction.

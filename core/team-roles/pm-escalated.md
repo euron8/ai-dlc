@@ -69,7 +69,9 @@ switching silently. If the tool is absent or returns an error, continue without 
 Read `.claude/team-roles/pm.md` and follow it IN FULL — identity, ownership,
 responsibilities, constraints, and escalation. This role adds nothing to and
 removes nothing from the PM contract except the session-setup declarations
-(model and effort) above. There is no second copy of the PM rules here on
+(model and effort) above. The verification and advisor paragraphs above are
+byte-identical copies of the ones in `pm.md`, carried in every role contract, so
+they add nothing either. There is no second copy of the PM rules here on
 purpose: `pm.md` is the single source of truth for how a PM teammate behaves,
 and this role is that same teammate on the key this file names.
 

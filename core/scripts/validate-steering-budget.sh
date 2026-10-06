@@ -65,6 +65,14 @@
 #   starvation. The lead is waiting ON the operator, not blocking them. Counting
 #   it would flag every checkpoint as a violation.
 #
+#   advisor -- a server-side tool that takes no parameters and cannot be
+#   backgrounded; Rule 29 names it as the one exception to the steering budget.
+#   This validator exempts EVERY advisor call by name, wherever it occurs.
+#   Confining the call to Rule 32's touchpoints is Rule 32's text, not this
+#   check. Reading server_tool_use records widens the reader for the LEAD only:
+#   subagent records (`isSidechain: true`) are dropped at the reader before any
+#   tool call is collected, so the widening cannot change a subagent count.
+#
 #   Its SIBLINGS are charged only for the time they block AFTER the answer. A tool
 #   call issued in the same assistant turn returns only once the human answers, so
 #   its raw duration is the same think-time. The join is `message.id`, which every
@@ -398,8 +406,9 @@ const one = process.env.AI_DLC_T, dir = process.env.AI_DLC_D;
 //
 // `advisor` IS EXEMPT BY DECISION, NOT BY OMISSION. It is a server-side tool: it takes no
 // parameters, it cannot be backgrounded, and while it runs the operator cannot steer. Rule 29
-// names it as the one bounded foreground exception and Rule 32 confines it to touchpoints
-// where no join is outstanding (touchpoint P re-arms the beat first). Measured over the
+// names it as the one bounded foreground exception and Rule 32's text names the touchpoints
+// (R and P re-arm every outstanding join first). This set exempts EVERY advisor call, at a
+// touchpoint or not; the confinement is prose and nothing here checks it. Measured over the
 // reference consumer's lead transcripts: 14 completed advisor calls, median 94s, max 176s,
 // 4 of 14 past the 150s threshold, 3 more with no result recorded. Charged, each of those
 // would be a STARVATION row against a call the rules require; the reader above sees it and
@@ -977,7 +986,7 @@ log(`transcripts scanned : ${files.length}${SINCE && !one ? ` (${skippedBySince}
 // (`steps/retro.md`), so this goes after it and changes none of its bytes.
 log(`corpus              : ${CORPUS_ID}`);
 log(`transcripts read    : ${files.length ? files.map(f => path.resolve(f)).join("\n                      ") : "(none)"}`);
-log(`exempt from check A : AskUserQuestion (human think-time, not starvation); a call sharing its message.id is charged only after the answer`);
+log(`exempt from check A : AskUserQuestion (human think-time, not starvation); a call sharing its message.id is charged only after the answer; advisor (Rule 29's named exception, every call)`);
 log("");
 
 let bad = false;

@@ -48,12 +48,19 @@ arrived as new filings this batch). No file in it is bootstrapping.
 ### PC-S317-CONSULT-THE-ADVISOR-TOOL-AT-NAMED-TOUCHPOINTS-IN-THE-LEAD-AND-IN-ROLE-CONTRACTS-WHEN-IT-IS-AVAILABLE
 
 - **Rule 32, "Consult the advisor tool at named touchpoints when it is available."** The lead calls
-  it after the post-compact digest read, at each gate's entry and before `gate-checkpoint.sh … close`,
+  it after the post-compact digest read (after arming any fresh beat the In-Flight Teammates rows
+  require), at each gate's entry and before `gate-checkpoint.sh … close`,
   after a repair record is joined, when a pass verdict and a validator disagree, on the join beat
   that reports b == 2 for a validation-cycle deliverable (after re-arming the next beat), and before
   a push, merge or deploy. An absent tool or an error result means continue without it; that clause
-  sits before the list, so the post-compact digest carries it. The recover hook names the recovery
-  touchpoint in one line, inside its 9500-character bound.
+  sits before the list, so the post-compact digest carries it. **`ai-dlc-recover.sh` is unchanged.**
+  Touchpoint R reaches a compacted lead through the digest, which the hook already mandates reading.
+  A hook line naming R was tried and removed: it pushed measured consumer recoveries (gate-resume
+  with a precompact sidecar) from 10002-10026 to 10085-10109 characters, past the harness's
+  10000-character stub cliff. The hook's own `degraded` flag did not report either, which `BL-457`
+  carries.
+- Rule 29 says what the validator does: it exempts EVERY advisor call; confining the call to Rule
+  32's touchpoints is Rule 32's text alone.
 - **Every role contract carries a second byte-identical paragraph**: call the `advisor` before the
   first edit or write and again before the deliverable or verdict, when the tool is available.
   **Invariant I122** binds it exactly as I121 binds the verification paragraph, and each arm is
@@ -66,7 +73,8 @@ arrived as new filings this batch). No file in it is bootstrapping.
   same `message.id`), and exempts `advisor` by name. Measured on the reference consumer's lead
   transcripts: median 94s, max 176s, 4 of 14 calls over 150s. `check-25-steering-conduct` kills a
   mutant that drops the exemption and one that reverts the reader, the second only on a non-advisor
-  server tool, which still counts.
+  server tool, which still counts. Subagent counts cannot move under the reader widening: the reader
+  drops every `isSidechain: true` record before collecting a tool call.
 - Carried by `BL-454`.
 
 ## [0.731.0] - 2026-10-05

@@ -37,7 +37,9 @@ switching silently. If the tool is absent or returns an error, continue without 
 Read `.claude/team-roles/code-reviewer.md` and follow it IN FULL — identity, ownership,
 responsibilities, constraints, context loading, workflow, and verdict format. This role
 adds nothing to and removes nothing from the Code Reviewer contract except the
-session-setup declarations (model and effort) above. There is no second copy of the Code
+session-setup declarations (model and effort) above. The verification and advisor paragraphs
+above are byte-identical copies of the ones in `code-reviewer.md`, carried in every role
+contract, so they add nothing either. There is no second copy of the Code
 Reviewer rules here on purpose: `code-reviewer.md` is the single source of truth for how a
 Code Reviewer behaves. This role is that same reviewer on the key this file names.
 

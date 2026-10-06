@@ -278,8 +278,9 @@ When the harness gives you an `advisor` tool, you MUST call it at each touchpoin
 takes no parameters and forwards your whole transcript to a stronger reviewer. If the tool is
 absent, or a call returns an error, continue without it -- a missing or failed advisor never
 blocks, delays or fails a step. The touchpoints:
-- **R -- post-compact recovery.** After the `postcompact-digest.md` Read and before your first
-  dispatch or write.
+- **R -- post-compact recovery.** After the `postcompact-digest.md` Read, and after arming any
+  fresh beat the In-Flight Teammates rows require (`run_in_background: true`), then call the
+  advisor in the same turn, before your first dispatch or write.
 - **G1 -- every gate, at entry.** Before the script arms run (`steps/gate-validation.md`).
 - **G2 -- every gate, before it closes.** Before `gate-checkpoint.sh --nonce <gate_nonce> close`.
 - **V1 -- validation cycle, after a repair.** After a repair record is joined and before the

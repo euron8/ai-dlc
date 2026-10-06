@@ -21,12 +21,12 @@ longer than 2 minutes, the worst for **36 minutes**.
 budget (`steering_budget`, default **120 seconds**).
 
 **The one named exception: an `advisor` call.** The advisor tool runs server-side, takes
-no parameters and cannot be backgrounded, and a call routinely runs past the budget. It is
-permitted only at the touchpoints Rule 32 names, each of which sits where no join is
-outstanding or, for touchpoint P, where the next beat is re-armed in the same turn before the
-call. An advisor call anywhere else is held to the invariant above.
-`validate-steering-budget.sh` reads the call and exempts it by name from Check A; every other
-server-side tool is still charged.
+no parameters and cannot be backgrounded, and a call routinely runs past the budget. Rule 32
+names the touchpoints where you make it; at R and P you arm every beat an outstanding join
+requires, in the same turn, before the call, and the other touchpoints sit where no join is
+outstanding. `validate-steering-budget.sh` reads the call and exempts EVERY advisor call by
+name from Check A, wherever it occurs; confining the call to Rule 32's touchpoints is Rule
+32's text alone, and no check enforces it. Every other server-side tool is still charged.
 
 **Bounded-join dispatch.** Spawn teammates with `run_in_background: true`, then
 JOIN them by arming a bounded, **backgrounded** wait-beat and ENDING YOUR TURN.
