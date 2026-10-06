@@ -76,6 +76,8 @@ arrived as new filings this batch). No file in it is bootstrapping.
   server tool, which still counts. Subagent counts cannot move under the reader widening: the reader
   drops every `isSidechain: true` record before collecting a tool call.
 - Carried by `BL-454`.
+- `FORK_BUDGET` rises from 3204 to 3231. Profiled base against tip in one worktree at one path: 3193
+  to 3225, of which I121 is 17, I122 is 11 and I79 counting Rule 32 is 5.
 
 ## [0.731.0] - 2026-10-05
 

@@ -715,7 +715,13 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   +6. Every arm that moved is a per-file walk over `scripts/*.sh` counting
 #   `readset-stage1-run.sh` and `readset-stage1-verdict.sh`: I84 291 -> 295, I83 144 -> 146. HIGH
 #   reading 3198 plus the usual 6.
-FORK_BUDGET=3204
+#
+#   RAISED TO 3231 FOR TWO NEW ARMS, I121 AND I122. `fork-profile.sh --stable` and `--section by-arm`,
+#   base `origin/main` d6e25229 then the 0.732.0 tip 8e84106a, in ONE worktree at the same path: base
+#   3193, tip 3225 (the gate's own validator-fork-budget run read 3225 twice), so +32. I121 0 -> 17 and
+#   I122 0 -> 11 are the two role-contract paragraph arms; I79 108 -> 113 counts Rule 32. HIGH reading
+#   3225 plus the usual 6.
+FORK_BUDGET=3231
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
