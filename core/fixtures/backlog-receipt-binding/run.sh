@@ -577,6 +577,151 @@ printf '# Probe backlog\n\nEntries were renamed to a shape the predicate does no
 kill_check "m8 a ledger that parses to ZERO receipts is a finding" "$TMP/m8" "" 1 \
   "produced ZERO scored receipts"
 
+# ===== M8B-M8F. AN ACCOUNTED-FOR ZERO IS NOT A ZERO THAT OBSERVED NOTHING. ==================
+# R2's unconditional zero wedged the ledger's PREFERRED state: receipts that DRIVE their
+# subject carry no grep literal, score UNSCORABLE `tokens=0`, and a ledger of nothing else --
+# plus a fixed receipt reading ALREADY-PASSING -- scored 0 and failed the push. The narrowed
+# predicate passes that state on a DISTINCT OK line and still fails every zero holding a receipt
+# that is not behavioural. Each ledger below is written whole and passes its own ceilings and
+# floor sized to it, so R3 and R5 are never what decides.
+#   m8b  all-behavioural: tokens=0 with a path, tokens=0 without, and one ALREADY-PASSING -> OK
+#   m8c  the only sh receipt does not parse                                               -> R2 FAIL
+#   m8d  the only sh receipt is an empty one-liner                                        -> R2 FAIL
+#   m8e  the only sh receipt greps a literal at a path the seed cannot name               -> R2 FAIL
+#   m8f  live entries and no sh receipt at all                                            -> OK
+# The behavioural seed carries BOTH tokens=0 shapes so a predicate keyed on paths cannot pass it.
+r8_seed() { # r8_seed <dir> <nsh> <nentries> <ledger-body...> -> seeds, writes the ledger, commits
+  local d="$1"; shift
+  seed "$d"
+  { printf '# Probe backlog\n\n'; printf '%s\n' "$@"; } > "$d/docs/backlog.md"
+  ( cd "$d" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m r8 >/dev/null 2>&1 )
+}
+r8_run() { # r8_run <dir> <nsh> <nentries>
+  run_v "" "$1" --max-prose-closable 9 --max-unscorable 9 --max-out-of-population 9 \
+    --max-unstable 0 --min-sh-receipts "$2" --min-entries "$3"
+}
+R8_BEHAV_PATH='## BL-821
+
+verify: sh o="$(bash probe/tool.sh)"; [ "$o" = READY821 ]
+'
+R8_BEHAV_NOPATH='## BL-822
+
+verify: sh [ "$(printf x)" = y822 ]
+'
+R8_PASSING="## BL-823
+
+verify: sh ! grep -q 'MARK823' probe/passing.txt
+"
+R8_MALFORMED='## BL-824
+
+verify: sh if true; then echo 824
+'
+R8_EMPTY='## BL-825
+
+verify: sh
+'
+R8_NOPATH_TOK="## BL-826
+
+verify: sh grep -q 'MARK826' probe/*.txt
+"
+R8_MANUAL='## BL-827
+
+verify: manual -- no mechanical predicate
+'
+# r8_ok <name> <dir> <nsh> <nent> <state> <want-substr>
+r8_ok() {
+  local n="$1" d="$2" ns="$3" ne="$4" st="$5" want="$6" out rc_v
+  out="$(r8_run "$d" "$ns" "$ne")"; rc_v=$?
+  if [ "$rc_v" -ne 0 ]; then
+    note "FAIL  $n -- exited $rc_v on an accounted-for zero that must pass"
+    printf '%s\n' "$out" | grep -E '^FAIL|SELF-PROBE' | sed 's/^/      /' | head -3; rc=1; return
+  fi
+  if ! grep -qF "OK: validate-backlog-receipts -- R2 $st: 0 scored receipts" <<<"$out"; then
+    note "FAIL  $n -- exit 0 but not on the distinct R2 $st line, so this pass is not this state's"
+    printf '%s\n' "$out" | tail -2 | sed 's/^/      /'; rc=1; return
+  fi
+  if ! grep -qF "$want" <<<"$out"; then
+    note "FAIL  $n -- the R2 $st line does not carry its counts (wanted: $want)"; rc=1; return
+  fi
+  note "ok    $n -- an accounted-for zero passes on its own R2 $st line, with its counts"
+}
+# r8_fail <name> <dir> <nsh> <nent> <class-id> <want-class>
+r8_fail() {
+  local n="$1" d="$2" ns="$3" ne="$4" id="$5" wc="$6" out rc_v nf
+  out="$(r8_run "$d" "$ns" "$ne")"; rc_v=$?
+  nf="$(printf '%s\n' "$out" | grep -c '^FAIL:')" || nf=0
+  if [ "$rc_v" -ne 1 ]; then
+    note "FAIL  $n -- exited $rc_v, not 1: a zero holding a non-behavioural receipt must stay R2's finding"
+    printf '%s\n' "$out" | tail -2 | sed 's/^/      /'; rc=1; return
+  fi
+  if ! grep -qF "produced ZERO scored receipts" <<<"$out" || [ "$nf" -ne 1 ]; then
+    note "FAIL  $n -- exit 1 but not on R2's zero alone ($nf FAIL lines)"
+    printf '%s\n' "$out" | grep '^FAIL:' | sed 's/^/      /' | head -3; rc=1; return
+  fi
+  # The receipt must have been classified as the seed wrote it, or this FAIL is about the parse
+  # and not about the predicate. The rows are dropped on the FAIL path, so the class is read
+  # from R2's own FAIL text.
+  if ! grep -qF "$wc" <<<"$out"; then
+    note "FAIL  $n -- R2 failed, but its counts do not show $id as $wc"; rc=1; return
+  fi
+  note "ok    $n -- a zero whose only sh receipt is $id ($wc) is still R2's finding"
+}
+
+r8_seed "$TMP/m8b" "$R8_BEHAV_PATH" "$R8_BEHAV_NOPATH" "$R8_PASSING"
+r8_ok "m8b an all-behavioural ledger is accounted for" "$TMP/m8b" 3 3 all-behavioural \
+  "(3 sh receipts over 3 live entries in docs/backlog.md: 2 behavioural with no grep literal to seed, 1 already passing)"
+r8_seed "$TMP/m8c" "$R8_MALFORMED"
+r8_fail "m8c a malformed receipt" "$TMP/m8c" 1 1 BL-824 "sh receipts 1, unscorable 1,"
+r8_seed "$TMP/m8d" "$R8_EMPTY"
+r8_fail "m8d an empty sh one-liner" "$TMP/m8d" 1 1 BL-825 "sh receipts 1, unscorable 1,"
+r8_seed "$TMP/m8e" "$R8_NOPATH_TOK"
+r8_fail "m8e a literal at an unseedable path" "$TMP/m8e" 1 1 BL-826 "sh receipts 1, unscorable 1,"
+r8_seed "$TMP/m8f" "$R8_MANUAL"
+r8_ok "m8f live entries with no sh receipt" "$TMP/m8f" 0 1 no-sh-receipts \
+  "(0 sh receipts over 1 live entries in docs/backlog.md"
+
+# THE MUTANTS. Each is ONE line of the subject, anchored on text that occurs once, and each must
+# die on exactly the arm that owns it.
+#   mR2a  R2 relaxed unconditionally      -> must die on m8c (malformed still FAILs)
+#   mR2b  the old unconditional predicate -> must die on m8b (all-behavioural passes)
+#   mR2c  behavioural keyed on STATUS     -> must die on m8c (malformed is not behavioural)
+#   mR2d  no-sh state drops ENTRIES > 0   -> must die on m8 (an empty parse is not a ledger)
+r8_mut() { # r8_mut <name> <src-dir> <sed> <check: ok|fail|m8> <args for the check...>
+  local n="$1" src="$2" ex="$3" kind="$4"; shift 4
+  local md="$TMP/$n"
+  mkdir -p "$md"; cp -R "$src/." "$md/"
+  if ! mut "$md" "$ex"; then return; fi
+  local f="$md/scripts/validate-backlog-receipts.sh" out rc_v
+  ( cd "$md" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m mut >/dev/null 2>&1 )
+  case "$kind" in
+    ok)
+      out="$(r8_run "$md" "$1" "$2")"; rc_v=$?
+      if [ "$rc_v" -eq 1 ] && grep -qF "produced ZERO scored receipts" <<<"$out"; then
+        note "ok    $n -- killed: the all-behavioural ledger fails R2 under the mutant"
+      else
+        note "FAIL  $n SURVIVED -- exit $rc_v, the accounted-for zero still passed"; rc=1
+      fi ;;
+    fail)
+      out="$(r8_run "$md" "$1" "$2")"; rc_v=$?
+      if [ "$rc_v" -eq 0 ] && grep -qF "OK: validate-backlog-receipts" <<<"$out"; then
+        note "ok    $n -- killed: the malformed-only ledger passes under the mutant"
+      else
+        note "FAIL  $n SURVIVED -- exit $rc_v, the malformed-only ledger still failed"; rc=1
+      fi ;;
+    m8)
+      out="$(run_v "" "$md" $DEF)"; rc_v=$?
+      if [ "$rc_v" -eq 0 ] && ! grep -qF "produced ZERO scored receipts" <<<"$out"; then
+        note "ok    $n -- killed: the empty parse passes under the mutant"
+      else
+        note "FAIL  $n SURVIVED -- exit $rc_v, the empty parse still failed"; rc=1
+      fi ;;
+  esac
+}
+r8_mut mR2a "$TMP/m8c" 's|^if \[ "$SCORED" -eq 0 \] && \[ -z "$R2_ZERO_STATE" \]; then|if false; then|' fail 1 1
+r8_mut mR2b "$TMP/m8b" 's|^if \[ "$SCORED" -eq 0 \] && \[ -z "$R2_ZERO_STATE" \]; then|if [ "$SCORED" -eq 0 ]; then|' ok 3 3
+r8_mut mR2c "$TMP/m8c" 's|$1 == "UNSCORABLE" \&\& $3 ~ /^base-exit=\[01\]-paths=\[0-9\]+-tokens=0$/|$1 == "UNSCORABLE"|' fail 1 1
+r8_mut mR2d "$TMP/m8" 's|^  elif \[ "$SH_RECEIPTS" -eq 0 \] && \[ "$ENTRIES" -gt 0 \]; then|  elif [ "$SH_RECEIPTS" -eq 0 ]; then|' m8
+
 # ===== THE RATCHETS THAT EXIST BECAUSE THE FIRST ONE IS ESCAPABLE. =========================
 # Each of these is an edit that LOWERS the prose-closable count and fixes nothing. Without
 # their own ceilings the headline number falls and the gate reports an improvement.

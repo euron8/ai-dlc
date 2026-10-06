@@ -997,7 +997,38 @@ fi
 
 # THE ZERO IS A FINDING. An empty parse, a ledger whose every receipt this grammar cannot
 # spell, and a corpus of perfectly bound receipts all print the same 0 prose-closable.
+#
+# A ZERO WHOSE EVERY RECEIPT IS ACCOUNTED FOR IS NOT A ZERO THAT OBSERVED NOTHING, and the
+# unconditional form wedged the ledger's PREFERRED state. Measured with the pre-push argv: a
+# ledger whose `sh` receipts DRIVE their subject (a behavioural receipt, which docs/backlog.md's
+# own header tells authors to prefer) carries no grep literal for the seed, so each one is
+# UNSCORABLE with `tokens=0`; with the one bound receipt fixed it reads ALREADY-PASSING, and
+# SCORED fell to 0 on the release tip, on that tip with the entry rotated, and on a ledger whose
+# only live entry is `verify: manual`. Every one of those failed here for doing what the ledger asks.
+#
+# THE NARROWING IS ON THE EMISSION SITE'S OWN DETAIL, NEVER ON THE STATUS. UNSCORABLE is written
+# by three sites -- `empty-sh-one-liner`, `malformed-receipt-does-not-parse`, and
+# `base-exit=N-paths=P-tokens=T` -- and only the third with `tokens=0` is "behavioural, nothing
+# to seed". The third with tokens and no seedable path is a grep the seed cannot reach, which is
+# an escape and not a behaviour. So the zero stays a FAIL when ANY `sh` receipt is anything other
+# than behavioural or ALREADY-PASSING: empty, malformed, tokens-without-a-path, UNSEEDED,
+# OUT-OF-POPULATION, UNSTABLE. A ledger with live entries and NO `sh` receipt is accounted for
+# too -- R1 has already proven above that the entry grammar reads `verify: sh` (its probe must
+# parse to exactly 10), and the population floor for that state is R5's, not this arm's. A
+# ledger that parses to no ENTRY at all is an empty parse and stays a FAIL.
+# WHAT THIS ACQUITS, recorded rather than fixed: `tokens=0` cannot tell a receipt with no grep
+# from one whose pattern was moved into a variable. R3's ceiling bounds that count; R2 no
+# longer does when every receipt is that shape.
+N_BEHAV="$(printf '%s\n' "$OUT" | awk -F'\t' '$1 == "UNSCORABLE" && $3 ~ /^base-exit=[01]-paths=[0-9]+-tokens=0$/' | grep -c .)" || N_BEHAV=0
+R2_ZERO_STATE=""
 if [ "$SCORED" -eq 0 ]; then
+  if [ "$SH_RECEIPTS" -gt 0 ] && [ $(( N_BEHAV + N_PASS )) -eq "$SH_RECEIPTS" ]; then
+    R2_ZERO_STATE="all-behavioural"
+  elif [ "$SH_RECEIPTS" -eq 0 ] && [ "$ENTRIES" -gt 0 ]; then
+    R2_ZERO_STATE="no-sh-receipts"
+  fi
+fi
+if [ "$SCORED" -eq 0 ] && [ -z "$R2_ZERO_STATE" ]; then
   echo "FAIL: R2: $LEDGER produced ZERO scored receipts (entries $ENTRIES, sh receipts ${SH_RECEIPTS:-0}, unscorable $N_UNSC, unseeded $N_UNSEED, out of population $N_OOP, already passing $N_PASS). Nothing was observed, and an arm that observed nothing is not a clean corpus." >&2
   exit 1
 fi
@@ -1060,6 +1091,14 @@ fi
 
 _where="$LEDGER"
 [ "$DEFAULTED" = "1" ] && _where="docs/backlog.md"
+# THE ACCOUNTED-FOR ZERO GETS ITS OWN LINE, in both modes, so a reader can never take it for a
+# run that scored something. It names the state and its counts, and carries R1's provenance --
+# in this state no receipt was seeded, so R1's ten seeded receipts are the only thing in the
+# line a stub could not print truthfully.
+if [ -n "$R2_ZERO_STATE" ]; then
+  echo "OK: validate-backlog-receipts -- R2 ${R2_ZERO_STATE}: 0 scored receipts, and every one is accounted for (${SH_RECEIPTS} sh receipts over ${ENTRIES} live entries in ${_where}: ${N_BEHAV} behavioural with no grep literal to seed, ${N_PASS} already passing); R3 ${UNSCORED}/${MAX_UNSC} unscored, R5 ${SH_RECEIPTS}/${MIN_SH} floor; R1 fired both directions over 10 seeded receipts, caller porcelain ${PORC_BEFORE} unchanged."
+  exit 0
+fi
 if [ "$QUIET" != "1" ]; then
   echo "OK: validate-backlog-receipts -- R2 ${N_PC}/${MAX_PC} prose-closable, R3 ${UNSCORED}/${MAX_UNSC} unscored, R4 ${N_OOP}/${MAX_OOP} out of population, R6 ${N_UNSTABLE}/${MAX_UNSTABLE} unstable, R5 ${SH_RECEIPTS} sh receipts over ${ENTRIES} live entries in ${_where} (${N_BOUND} bound, ${N_FS} format-sensitive, ${N_PASS} already passing; R0 bound the path-split class to ${CLASS_SOURCE}; R1 fired both directions over 10 seeded receipts; every receipt ran in its own ${PROVENANCE}, ${WT_OWN_AFTER} of this run's own checkouts still registered, caller porcelain ${PORC_BEFORE} unchanged)."
 else
