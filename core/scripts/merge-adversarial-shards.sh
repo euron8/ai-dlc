@@ -178,6 +178,26 @@ STORIES_DIR="$SPRINT_DIR/$ARTIFACT"
 if [ -z "$SUBJECT" ] && [ "$ARTIFACT" = "requirements" ]; then
   refuse "$SHARD_BASE is the requirements subject's series; merge it with --subject <N>, never --document or files mode"
 fi
+# B4, by DOCUMENT as well as by name: in a sprint with a subject manifest, a `--document` merge of
+# ANY file the manifest names (brief, SPEC, prd.md, architecture-impact.md) would write a
+# `<stem>-adversarial-p<M>` series over a quarter of the subject under another name. Refuse it;
+# the subject is merged with --subject. The manifest is rooted as arm K3 roots it: walk up from
+# the sprint dir for the first `file:` row, then compare physical paths row by row.
+if [ -n "$DOCUMENT" ] && [ -f "$SPRINT_DIR/requirements-subject.md" ]; then
+  B4_MF="$SPRINT_DIR/requirements-subject.md"
+  B4_FIRST="$(awk '/^file: / { print $3; exit }' "$B4_MF")"; B4_ROOT=""; B4_W="$(cd "$SPRINT_DIR" && pwd -P)"
+  while [ -n "$B4_W" ] && [ "$B4_W" != "/" ]; do
+    if [ -n "$B4_FIRST" ] && [ -f "$B4_W/$B4_FIRST" ]; then B4_ROOT="$B4_W"; break; fi
+    B4_W="${B4_W%/*}"
+  done
+  # A manifest whose rows resolve under no parent names no file, so it refuses nothing here; the
+  # subject merge itself refuses such a manifest when it is run.
+  [ -n "$B4_ROOT" ] && while read -r b4_k b4_st b4_rel; do
+    [ "$b4_k" = "file:" ] && [ -n "$b4_rel" ] && [ -f "$B4_ROOT/$b4_rel" ] || continue
+    [ "$(cd "$(dirname "$B4_ROOT/$b4_rel")" && pwd -P)/${b4_rel##*/}" = "$DOCUMENT" ] \
+      && refuse "--document $DOCUMENT is the '$b4_st' file of the requirements subject ($B4_MF); merge the subject with --subject $(basename "$SPRINT_DIR" | sed 's/^s//'), never one of its files by --document"
+  done < "$B4_MF"
+fi
 if [ -n "$SUBJECT" ]; then
   [ "$ARTIFACT" = "requirements" ] || refuse "--subject merges s<N>/shards/requirements-p<M>/ or requirements-elicitation/, not $SHARD_BASE"
   [ "$(basename "$SPRINT_DIR")" = "s$SUBJECT" ] || refuse "$SHARD_DIR is not under s$SUBJECT/; --subject $SUBJECT names another sprint"

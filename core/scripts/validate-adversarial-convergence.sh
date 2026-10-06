@@ -2196,6 +2196,23 @@ fi
 #   candidate  its basename is `requirements-adversarial-p<M>.md` in an `s<N>/` directory. That
 #              string test is the whole cost for every other series: the self-probe, the manifest
 #              read, the git reads and the map all sit BEHIND it (as J2's sit behind its drift).
+#              WIDENED at K3B_RELEASE: ANY `<stem>-adversarial-p<M>.md` in an `s<N>/` directory
+#              that holds `requirements-subject.md`, whose terminal `artifact:` resolves to that
+#              manifest or to a file it names, is judged as the requirements series. A lead that
+#              named its series `prd-*` (a `--document prd.md` merge), or a one-part subject's
+#              adversary that wrote its pass under another stem, no longer escapes the subject axis
+#              by its NAME. The cost for every other series stays one `[ -f ]` on the pass's own
+#              directory, fork-free; the artifact is resolved only behind it, and a series whose
+#              artifact is not a manifest file drops out there. A widened candidate is stamp-gated
+#              on K3B_RELEASE, not K3_RELEASE, so a series opened before the widening shipped reads
+#              PENDING rather than being convicted retroactively.
+#              WIDENED FALSE-POSITIVE SET, measured: the reference consumer as pulled holds no
+#              subject manifest, so no series reaches the widened branch (0 invocations). On a
+#              CONSTRUCTED population -- its latest sprint with a manifest seeded over its four
+#              subject files -- the only widened-eligible series are the `--document`-shaped ones
+#              this widening exists for; every other series names a file outside the manifest and
+#              drops out at the artifact test. The narrowing that reached zero is the manifest's
+#              own file set: the sprint's other series review their own artifacts, never a stem.
 #   offence    (a) `artifact:` does not resolve to `s<N>/requirements-subject.md` -- a whole-PRD,
 #                  a `--document prd.md` merge, any other file; or
 #              (b) it does, and the SET of `shard_tool_use_ids:` keys is not the map's ordinal set
@@ -2204,7 +2221,14 @@ fi
 #                  part) owes NO shard line, and a pass carrying one is the same offence.
 #   PENDING    printed, never counted, and judged on nothing:
 #              - the notarized bytes are not the disk bytes -- for the manifest, EVERY stem's disk
-#                sha must equal its `<stem>=<sha>` token; for any other file, its one sha256;
+#                sha must equal its `<stem>=<sha>` token; for any other file, its one sha256.
+#                This gate does NOT exclude the cumulative stems (`prd.md`, the brief) the way
+#                J2 does, on purpose: `partition-subject.sh --map` maps the WORKING TREE against
+#                the manifest's base, so after a legitimate mid-sprint `prd.md` rewrite (the
+#                architecture step's Rule 25(a) consolidation) the map is over bytes the dispatch
+#                never saw, and judging the shard key set against it would convict a dispatch that
+#                obeyed the map in force -- K2's measured case. Such a series reads PENDING here;
+#                a drift of a sprint-scoped stem after MET is J2's to judge, per stem;
 #              - the manifest is absent or names no base;
 #              - the partitioner in force at the terminal pass cannot be pinned the way K2 pins
 #                it (`k2_pd_in_force`, the same commit for both siblings), or the pinned
@@ -2223,18 +2247,68 @@ fi
 # (a subject repaired after its terminal pass is judged by nothing), and the pin (a map read off a
 # later partitioner convicts a dispatch that obeyed the one it ran under -- K2's measured case).
 K3_RELEASE="0.735.0"
+K3B_RELEASE="0.736.0"
 k3_keys() {  # $1 a shard_tool_use_ids value -> its key set, numeric keys de-padded, sorted, one per line
   printf '%s\n' $1 | awk -F= 'NF >= 2 && $2 ~ /^toolu_./ { k = $1; if (k ~ /^[0-9]+$/) k = k + 0; print k }' | LC_ALL=C sort -u
 }
 k3_want() {  # $1 a map file (rc 0) -> the ordinal set plus cross, de-padded, sorted
   { awk -F'\t' '$1 ~ /^[0-9]+$/ { print $1 + 0 }' "$1"; echo cross; } | LC_ALL=C sort -u
 }
+# $1 the sprint dir (physical), $2 a resolved physical file -> 0 when $2 is that sprint's subject
+# manifest or a file the manifest names (rooted as K3 roots it, at the first `file:` row's dir).
+k3_names() {
+  local mf="$1/requirements-subject.md" first w root="" k st rel
+  [ -n "$2" ] && [ -f "$mf" ] || return 1
+  [ "$2" = "$mf" ] && return 0
+  first="$(awk '/^file: / { print $3; exit }' "$mf")"; w="$1"
+  while [ -n "$w" ] && [ "$w" != "/" ]; do
+    if [ -n "$first" ] && [ -f "$w/$first" ]; then root="$w"; break; fi
+    w="${w%/*}"
+  done
+  [ -n "$root" ] || return 1
+  while read -r k st rel; do
+    [ "$k" = "file:" ] && [ -n "$rel" ] || continue
+    [ "$2" = "$root/$rel" ] && return 0
+  done < "$mf"
+  return 1
+}
+k3_rel="$K3_RELEASE"; k3_wide=0
+case "$LAST_FILE" in */*) k3_pd="${LAST_FILE%/*}" ;; *) k3_pd=. ;; esac
 case "${LAST_FILE##*/}" in
   requirements-adversarial-p[0-9]*.md)
     k3_dir="$(cd "$(dirname "$LAST_FILE")" 2>/dev/null && pwd -P)"
     case "${k3_dir##*/}" in s[0-9]*) k3_go=1 ;; *) k3_go=0 ;; esac ;;
+  *-adversarial-p[0-9]*.md)
+    # THE WIDENED CANDIDATE (K3B_RELEASE). One fork-free `[ -f ]` is the whole cost for a series
+    # whose directory holds no subject manifest; everything below it is paid only beside one.
+    k3_go=0
+    if [ -f "$k3_pd/requirements-subject.md" ]; then
+      k3_dir="$(cd "$k3_pd" 2>/dev/null && pwd -P)"
+      case "${k3_dir##*/}" in s[0-9]*) k3_go=1; k3_wide=1; k3_rel="$K3B_RELEASE" ;; esac
+    fi ;;
   *) k3_go=0 ;;
 esac
+if [ "$N" -gt 0 ] && [ "$k3_go" -eq 1 ] && [ "$k3_wide" -eq 1 ]; then
+  # A widened candidate is judged only when its terminal artifact is the manifest or a file the
+  # manifest names; any other series in the sprint reviews its own artifact and drops out here.
+  k3_wart="$(block_field "$LAST_FILE" 'artifact')"; k3_wart="${k3_wart%%[[:space:]]*}"
+  k2_resolve_file "$LAST_FILE" "$k3_wart"; k3_wf="$K2_FILE"
+  [ -z "$k3_wf" ] || k3_wf="$(cd "$(dirname "$k3_wf")" 2>/dev/null && pwd -P)/${k3_wf##*/}"
+  # THE SELF-PROBE, both directions, before the corpus: a file the manifest names is named, its
+  # sibling under the same root is not, and the manifest itself is.
+  mkdir -p "$AC_T/k3b/pa/s1" && : > "$AC_T/k3b/pa/a.md" && : > "$AC_T/k3b/pa/b.md" \
+    && printf 'file: a pa/a.md\n' > "$AC_T/k3b/pa/s1/requirements-subject.md" || {
+    echo "validate-adversarial-convergence.sh: arm K3 widened-candidate self-probe could not stage; no verdict" >&2; exit 2; }
+  k3b_pd="$(cd "$AC_T/k3b/pa/s1" && pwd -P)"
+  k3_names "$k3b_pd" "$(dirname "$k3b_pd")/a.md"; k3bp1=$?
+  k3_names "$k3b_pd" "$(dirname "$k3b_pd")/b.md"; k3bp2=$?
+  k3_names "$k3b_pd" "$k3b_pd/requirements-subject.md"; k3bp3=$?
+  if [ "$k3bp1" -ne 0 ] || [ "$k3bp2" -eq 0 ] || [ "$k3bp3" -ne 0 ]; then
+    echo "validate-adversarial-convergence.sh: arm K3 widened-candidate self-probe failed (named $k3bp1, sibling $k3bp2, manifest $k3bp3); no verdict" >&2
+    exit 2
+  fi
+  k3_names "$k3_dir" "$k3_wf" || k3_go=0
+fi
 if [ "$N" -gt 0 ] && [ "$k3_go" -eq 1 ]; then
   # THE SELF-PROBE, both directions, before the corpus: the key set is an IDENTITY (same count,
   # other set -> differs), padding-blind, and blind to a key with no toolu_ id.
@@ -2247,13 +2321,15 @@ if [ "$N" -gt 0 ] && [ "$k3_go" -eq 1 ]; then
     echo "validate-adversarial-convergence.sh: arm K3 self-probe failed (want '$k3p_w', same set '$k3p_1', other set '$k3p_2', empty id '$k3p_3'); no verdict" >&2
     exit 2
   fi
+  # The stamp this candidate is dated against: K3_RELEASE for a `requirements-` series, K3B_RELEASE
+  # for a widened one. The probe exercises the release actually bound, predecessor as near-miss.
   IFS=. read -r k3_maj k3_min k3_pat <<EOF
-$K3_RELEASE
+$k3_rel
 EOF
   k3_pred="${k3_maj}.$((k3_min - 1)).${k3_pat}"
-  k3_probe="$(printf '%s\n' 'C 2026-01-02T00:00:00Z' "+version: $K3_RELEASE" 'C 2026-01-01T00:00:00Z' "+version: $k3_pred" \
-              'C 2026-01-03T00:00:00Z' '+version: 9.0.0' | K_RELEASE="$K3_RELEASE" k_stamp_parse)"
-  k3_probe_none="$(printf '%s\n' 'C 2026-01-01T00:00:00Z' "+version: $k3_pred" | K_RELEASE="$K3_RELEASE" k_stamp_parse)"
+  k3_probe="$(printf '%s\n' 'C 2026-01-02T00:00:00Z' "+version: $k3_rel" 'C 2026-01-01T00:00:00Z' "+version: $k3_pred" \
+              'C 2026-01-03T00:00:00Z' '+version: 9.0.0' | K_RELEASE="$k3_rel" k_stamp_parse)"
+  k3_probe_none="$(printf '%s\n' 'C 2026-01-01T00:00:00Z' "+version: $k3_pred" | K_RELEASE="$k3_rel" k_stamp_parse)"
   if [ "$k3_probe" != "2026-01-02T00:00:00Z" ] || [ -n "$k3_probe_none" ]; then
     echo "validate-adversarial-convergence.sh: arm K3 stamp-parser self-probe failed (got '$k3_probe', near-miss '$k3_probe_none'); no verdict" >&2
     exit 2
@@ -2355,7 +2431,7 @@ EOF
     k3_stamp=""
     if [ -n "$k3_sroot" ]; then
       stamp_log "$k3_sroot"
-      k3_stamp="$(K_RELEASE="$K3_RELEASE" k_stamp_parse < "$STAMP_LOG")"
+      k3_stamp="$(K_RELEASE="$k3_rel" k_stamp_parse < "$STAMP_LOG")"
     fi
     case "$k3_at" in
       [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) k3_atok=1 ;;
@@ -2363,15 +2439,15 @@ EOF
     esac
     if [ -z "$k3_stamp" ]; then
       echo "PENDING (K3 -- SUBJECT): the terminal pass ${k3_term}: ${k3_why};"
-      echo "      no commit${k3_sroot:+ in $k3_sroot} stamps .claude/.ai-dlc-version at ${K3_RELEASE} or later -- not owed yet."
+      echo "      no commit${k3_sroot:+ in $k3_sroot} stamps .claude/.ai-dlc-version at ${k3_rel} or later -- not owed yet."
     elif [ "$k3_atok" -eq 0 ]; then
       echo "PENDING (K3 -- SUBJECT): the terminal pass ${k3_term}: ${k3_why};"
       echo "      the series' first pass ${k3_first} has no ISO 8601 UTC invoked_at ('${k3_at}') to date against ${k3_stamp}."
     elif [[ "$k3_at" < "$k3_stamp" ]]; then
       echo "PENDING (K3 -- SUBJECT): the terminal pass ${k3_term}: ${k3_why};"
-      echo "      the series opened (${k3_first}, ${k3_at}) before ${K3_RELEASE} was stamped (${k3_stamp}). Legacy series."
+      echo "      the series opened (${k3_first}, ${k3_at}) before ${k3_rel} was stamped (${k3_stamp}). Legacy series."
     else
-      err "K3 -- SUBJECT" "${k3_term}: ${k3_why}. The series opened (${k3_at}) after ${K3_RELEASE}
+      err "K3 -- SUBJECT" "${k3_term}: ${k3_why}. The series opened (${k3_at}) after ${k3_rel}
       was stamped (${k3_stamp}), so the requirements step's subject axis binds it (Rule 28, \"Split
       dispatch\": subject): one adversary per part scripts/ai-dlc/partition-subject.sh --map prints,
       plus one cross-part adversary, joined by scripts/ai-dlc/merge-adversarial-shards.sh --subject,
@@ -2690,10 +2766,37 @@ done
 # notarized sha to the disk sha plus ONE verify pass in this series makes the verify pass
 # terminal; its sha is the disk sha, this arm is quiet, and arm J owns the record.
 #
+# THE REQUIREMENTS SUBJECT, PER STEM (J2S_RELEASE). When the terminal MET pass's `artifact:`
+# resolves to its own sprint's `s<N>/requirements-subject.md` and `artifact_sha:` is a
+# `<stem>=<sha>` list, every manifest stem that j2_in_subject admits (the SPEC.md and
+# `s<N>/architecture-impact.md`), whose notarized token is one sha256 and whose disk bytes differ
+# from it, needs its own complete chain, walked by j2_walk. Unchanged stems are not judged. A
+# link is an ENTRY of any `*repair*.md` in the pass directory structured for arm H -- the glob is
+# widened here only, so the reference consumer's `requirements-repair-adv-p<M>.md` and
+# `requirements-repair-el.md` count; the single-file glob above is unchanged. An entry naming the
+# manifest contributes the stem's pair from its two lists (`join-remediator-shards.sh --subject`
+# writes them); an entry naming the stem's file contributes its one pair (a per-file triple, or
+# the serial remediator's appended triple). `repair_entries` reads EVERY entry of a record --
+# `repair_value` stops at the first, which on the consumer's three-triple records would hand
+# every stem the `prd.md` pair. Identity links (x -> x, the join's unchanged stems) and repeated
+# pairs are dropped before the walk, or an unchanged stem beside a real link reads as a fork.
+# Same PENDING ladder as above, keyed on J2S_RELEASE. FAIL names each stem.
+#   NARROWING, recorded as residue: `prd.md` and the product brief are NOT judged, as above,
+#   although the manifest names them. The architecture step's Rule 25(a) consolidation rewrites
+#   `prd.md` mid-sprint, legitimately and with no repair record -- measured on the reference
+#   consumer: sprint 317's prd moved after its requirements series met, in commit bdbfd63e. A
+#   later-sprint bound was considered and dropped: Check 24 sweeps only the current sprint, so a
+#   sprint whose successor exists is never re-judged and the bound could never decide anything.
+#   FALSE-POSITIVE SET: the reference consumer holds no subject manifest, so no series reaches
+#   this branch (0). On a CONSTRUCTED population -- sprint 317's requirements series with its
+#   terminal pass re-pointed at a seeded manifest over the four files as notarized -- the moved
+#   stems are SPEC.md and architecture-impact.md; the consumer's per-file triples chain both
+#   (or the series predates the stamp), and the prd, which moved with no record, is the narrowing.
+#
 # RESIDUE, stated so it is not read as coverage: cumulative documents -- `prd.md`,
 # `product-brief.md`, `docs/architecture.md` -- are edited by every sprint and are not in the
-# subject; a comma list in `artifact:` resolves to no file; a directory is arm K's; a
-# `<stem>=<sha>` list is not one sha256. None of those is judged. A repair link is existence +
+# subject; a comma list in `artifact:` resolves to no file; a directory is arm K's. None of
+# those is judged, the subject manifest's cumulative stems included. A repair link is existence +
 # structure: a repair record written for what was really a scope change is a false statement
 # this arm cannot see, and a pass file's `artifact_sha` can be rewritten by whoever writes it.
 #
@@ -2705,6 +2808,7 @@ done
 # STAMP keyed on the series' FIRST pass -- no commit there stamps J2_RELEASE, so every candidate
 # is PENDING and none fails.
 J2_RELEASE="0.669.0"
+J2S_RELEASE="0.736.0"
 
 j2_in_subject() {  # $1 resolved file -> 0 when it is a sprint-scoped single artifact
   case "$1" in
@@ -2747,6 +2851,45 @@ j2_walk() {
     cur="$next"
     steps=$((steps + 1))
   done
+}
+
+# THE SUBJECT'S LINKS (J2S_RELEASE). A requirements repair record carries SEVERAL entries: the
+# join's subject form (`artifact:` = the manifest, each sha line a `<stem>=<sha>` list), and per-file
+# triples (`artifact:` = one subject file, one sha each) -- the reference consumer's records carry
+# three per-file triples apiece, and the serial cross-part remediator appends its own triple after
+# the join's. `repair_value` reads the FIRST label and stops, so it would hand every stem the first
+# triple's shas. This reader emits EVERY entry, in order: `<artifact>\t<before>\t<after>`, an entry
+# opening at each `artifact:` label (same emphasis tolerance and line anchor as repair_value), the
+# sha values kept WHOLE so a list survives. No apostrophe may appear in the awk text below.
+repair_entries() {  # $1 file
+  awk '
+    function val(  v) { v = substr($0, RSTART + RLENGTH); sub(/^[*_`]+[[:space:]]+/, "", v)
+      gsub(/[`*]/, "", v); sub(/^[[:space:]]+/, "", v); sub(/[[:space:]]+$/, "", v); return v }
+    function low(v,  n, i, t, o) { n = split(v, t, /[[:space:]]+/); o = ""
+      for (i = 1; i <= n; i++) { if (t[i] == "") continue; e = index(t[i], "=")
+        t[i] = e ? substr(t[i], 1, e) tolower(substr(t[i], e + 1)) : tolower(t[i]); o = o (o == "" ? "" : " ") t[i] }
+      return o }
+    function flush() { if (a != "") printf "%s\t%s\t%s\n", a, b, f; a = ""; b = ""; f = "" }
+    match($0, /^[[:space:]-]*[*_`]?[*_`]?artifact[*_`]?[*_`]?:/) { flush(); a = val(); sub(/[[:space:]].*$/, "", a); next }
+    match($0, /^[[:space:]-]*[*_`]?[*_`]?artifact_sha_before[*_`]?[*_`]?:/) { if (a != "" && b == "") b = low(val()); next }
+    match($0, /^[[:space:]-]*[*_`]?[*_`]?artifact_sha_after[*_`]?[*_`]?:/) { if (a != "" && f == "") f = low(val()); next }
+    END { flush() }' "$1"
+}
+# One stem's sha out of a `<stem>=<sha>` list, fork-free. Prints nothing when the stem is absent;
+# `SPEC` never matches `SPE=`, because the token must open with the whole stem and its `=`.
+j2s_tok() {  # $1 stem  $2 list -> sha (lowercased by the caller)
+  local t
+  for t in $2; do
+    case "$t" in "$1="*) printf '%s' "${t#*=}"; return 0 ;; esac
+  done
+  return 0
+}
+# A stem's links out of the rows file (`<stem>\t<before>\t<after>\t<record>`): identity links
+# dropped (the join writes every stem on both sides, so an unchanged stem reads x -> x, and beside
+# a real x -> y that self-loop would be a second hit from x -- a FORK, a false FAIL) and repeated
+# (before, after) pairs kept once (the same link restated by a second record is one link).
+j2s_links() {  # $1 stem  $2 rows file
+  awk -F'\t' -v s="$1" '$1 == s && $2 != $3 && !seen[$2 FS $3]++ { print $2 "\t" $3 "\t" $4 }' "$2"
 }
 
 if [ "$N" -gt 0 ] && [ "$LAST_VERDICT" = "EXIT_CONDITION_MET" ]; then
@@ -2845,6 +2988,147 @@ EOF
         REOPEN   a scope change -- ONE 'resolution: REOPEN_AFTER_MET' record from ${j2_sha} to
                  ${j2_disk}, operator-authorized, and ONE verify pass in this series citing it.
                  The verify pass becomes terminal and notarizes the bytes on disk."
+        fi
+      fi
+    fi
+  elif [ -n "$j2_file" ] && [ "${j2_file##*/}" = "requirements-subject.md" ]; then
+    case "$j2_sha" in *=*) j2s_go=1 ;; *) j2s_go=0 ;; esac
+    j2s_dir="$(cd "$(dirname "$LAST_FILE")" 2>/dev/null && pwd -P)"
+    case "${j2s_dir##*/}" in s[0-9]*) ;; *) j2s_go=0 ;; esac
+    j2s_mf="$j2s_dir/requirements-subject.md"
+    [ "$(cd "$(dirname "$j2_file")" 2>/dev/null && pwd -P)/${j2_file##*/}" = "$j2s_mf" ] || j2s_go=0
+    if [ "$j2s_go" -eq 1 ]; then
+      # Values lowercased, stem names untouched (`SPEC` carries A-F letters), as K3 reads them.
+      j2s_sha="$(block_field "$LAST_FILE" 'artifact_sha' | awk '{ for (i = 1; i <= NF; i++) { n = index($i, "=")
+        if (n) $i = substr($i, 1, n) tolower(substr($i, n + 1)); else $i = tolower($i) } print }')"
+      j2s_first="$(awk '/^file: / { print $3; exit }' "$j2s_mf")"; j2s_root=""; j2s_w="$j2s_dir"
+      while [ -n "$j2s_w" ] && [ "$j2s_w" != "/" ]; do
+        if [ -n "$j2s_first" ] && [ -f "$j2s_w/$j2s_first" ]; then j2s_root="$j2s_w"; break; fi
+        j2s_w="${j2s_w%/*}"
+      done
+      # The judged stems that MOVED: sprint-scoped (j2_in_subject -- SPEC.md, s<N>/*), a notarized
+      # sha that is one sha256, and disk bytes that differ. Unchanged stems are not judged.
+      j2s_moved=""
+      if [ -n "$j2s_root" ]; then
+        while read -r j2s_k j2s_st j2s_rel; do
+          [ "$j2s_k" = "file:" ] && [ -n "$j2s_rel" ] || continue
+          j2_in_subject "$j2s_root/$j2s_rel" || continue
+          [ -f "$j2s_root/$j2s_rel" ] || continue
+          j2s_n="$(j2s_tok "$j2s_st" "$j2s_sha")"
+          j2_is_sha "$j2s_n" || continue
+          j2s_d="$(k2_sha "$j2s_root/$j2s_rel")"
+          [ -n "$j2s_d" ] && [ "$j2s_d" != "$j2s_n" ] && j2s_moved="${j2s_moved}${j2s_st} ${j2s_rel} ${j2s_n} ${j2s_d}
+"
+        done < "$j2s_mf"
+      fi
+      if [ -n "$j2s_moved" ]; then
+        # THE SELF-PROBE, both directions, before the corpus -- here, where a moved stem makes the
+        # entry reader, the token lookup and the link filter load-bearing.
+        printf -- '- artifact: p/prd.md\n- artifact_sha_before: AA\n- artifact_sha_after: BB\n- **artifact:** `s/SPEC.md`\n- artifact_sha_before: CC\n- artifact_sha_after: DD\nthe artifact: s/x.md moved\n- artifact: m.md\n- artifact_sha_before: SPEC=EE prd=FF\n' \
+          > "$AC_T/j2s-rec.md" && printf 'SPEC\tx\tx\tr0\nSPEC\tx\ty\tr1\nSPEC\tx\ty\tr2\nprd\tx\tz\tr3\n' > "$AC_T/j2s-rows" || {
+          echo "validate-adversarial-convergence.sh: arm J2 subject self-probe could not stage; no verdict" >&2; exit 2; }
+        j2sp1="$(repair_entries "$AC_T/j2s-rec.md" | awk -F'\t' 'NR == 2 || NR == 3 { print $1 "|" $2 "|" $3 } END { print NR }' | tr '\n' ' ')"
+        j2sp2="$(j2s_tok SPEC "SPE=aa SPEC=bb") $(j2s_tok SPE "SPEC=bb")"
+        j2sp3="$(j2s_links SPEC "$AC_T/j2s-rows" | tr '\t\n' ': ')"
+        if [ "$j2sp1" != "s/SPEC.md|cc|dd m.md|SPEC=ee prd=ff| 3 " ] || [ "$j2sp2" != "bb " ] || [ "$j2sp3" != "x:y:r1 " ]; then
+          echo "validate-adversarial-convergence.sh: arm J2 subject self-probe failed (entries '$j2sp1', token '$j2sp2', links '$j2sp3'); no verdict" >&2
+          exit 2
+        fi
+        # THE LINK ROWS: every repair record in the pass directory -- `*repair*.md`, so the
+        # reference consumer's `requirements-repair-adv-p<M>.md` and `requirements-repair-el.md`
+        # count beside `*-repair-p<M>.md` -- structured for arm H; each of its entries naming the
+        # manifest contributes every judged stem's pair from its lists, and each naming one judged
+        # stem's file contributes that stem's pair.
+        : > "$AC_T/j2s-all"
+        for j2s_rec in "$j2s_dir"/*repair*.md; do
+          [ -f "$j2s_rec" ] || continue
+          repair_field disposition "$j2s_rec" && repair_field edit "$j2s_rec" \
+            && repair_field derivation "$j2s_rec" || continue
+          repair_entries "$j2s_rec" > "$AC_T/j2s-ent"
+          while IFS="$(printf '\t')" read -r j2s_ea j2s_eb j2s_ef; do
+            k2_resolve_file "$j2s_rec" "$j2s_ea"; [ -n "$K2_FILE" ] || continue
+            j2s_ep="$(cd "$(dirname "$K2_FILE")" 2>/dev/null && pwd -P)/${K2_FILE##*/}"
+            while read -r j2s_st j2s_rel j2s_n j2s_d; do
+              [ -n "$j2s_st" ] || continue
+              if [ "$j2s_ep" = "$j2s_mf" ]; then
+                j2s_b="$(j2s_tok "$j2s_st" "$j2s_eb")"; j2s_a="$(j2s_tok "$j2s_st" "$j2s_ef")"
+              elif [ "$j2s_ep" = "$j2s_root/$j2s_rel" ]; then
+                j2s_b="$j2s_eb"; j2s_a="$j2s_ef"
+              else
+                continue
+              fi
+              j2_is_sha "$j2s_b" && j2_is_sha "$j2s_a" \
+                && printf '%s\t%s\t%s\t%s\n' "$j2s_st" "$j2s_b" "$j2s_a" "${j2s_rec##*/}" >> "$AC_T/j2s-all"
+            done <<J2SEOF
+$j2s_moved
+J2SEOF
+          done < "$AC_T/j2s-ent"
+        done
+        j2s_bad=""
+        while read -r j2s_st j2s_rel j2s_n j2s_d; do
+          [ -n "$j2s_st" ] || continue
+          j2s_links "$j2s_st" "$AC_T/j2s-all" > "$AC_T/j2s-links"
+          j2_walk "$j2s_n" "$j2s_d" "$AC_T/j2s-links"
+          [ "$J2_END" = complete ] && continue
+          if [ "$J2_END" = fork ]; then
+            j2s_what="two repair records both start from the same sha (${J2_FORK}), so its history forks"
+          else
+            j2s_what="no chain of repair records runs from the notarized sha to the disk sha"
+          fi
+          j2s_bad="${j2s_bad}        ${j2s_st} (${j2s_rel}): notarized ${j2s_n}, on disk ${j2s_d}; ${j2s_what}.
+"
+        done <<J2SEOF
+$j2s_moved
+J2SEOF
+        if [ -n "$j2s_bad" ]; then
+          j2_term="${LAST_FILE##*/}"; j2_first="$(basename "${P_FILE[0]}")"; j2_at="${P_AT[0]:-}"
+          j2_root=""; j2_walkup="$(cd "$(dirname "${P_FILE[0]}")" 2>/dev/null && pwd)"
+          while [ -n "$j2_walkup" ]; do
+            if [ -f "$j2_walkup/.claude/.ai-dlc-version" ]; then j2_root="$j2_walkup"; break; fi
+            j2_walkup="${j2_walkup%/*}"
+          done
+          IFS=. read -r j2_maj j2_min j2_pat <<EOF
+$J2S_RELEASE
+EOF
+          j2_pred="${j2_maj}.$((j2_min - 1)).${j2_pat}"
+          j2_probe="$(printf '%s\n' 'C 2026-01-02T00:00:00Z' "+version: $J2S_RELEASE" 'C 2026-01-01T00:00:00Z' "+version: $j2_pred" \
+                      'C 2026-01-03T00:00:00Z' '+version: 9.0.0' | K_RELEASE="$J2S_RELEASE" k_stamp_parse)"
+          j2_probe_none="$(printf '%s\n' 'C 2026-01-01T00:00:00Z' "+version: $j2_pred" | K_RELEASE="$J2S_RELEASE" k_stamp_parse)"
+          if [ "$j2_probe" != "2026-01-02T00:00:00Z" ] || [ -n "$j2_probe_none" ]; then
+            echo "validate-adversarial-convergence.sh: arm J2 subject stamp-parser self-probe failed (got '$j2_probe', near-miss '$j2_probe_none'); no verdict" >&2
+            exit 2
+          fi
+          j2_stamp=""
+          if [ -n "$j2_root" ]; then
+            stamp_log "$j2_root"
+            j2_stamp="$(K_RELEASE="$J2S_RELEASE" k_stamp_parse < "$STAMP_LOG")"
+          fi
+          case "$j2_at" in
+            [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) j2_atok=1 ;;
+            *) j2_atok=0 ;;
+          esac
+          if [ -z "$j2_stamp" ]; then
+            printf 'PENDING (J2 -- DRIFT): %s notarized the requirements subject %s, and a sprint-scoped stem moved after MET:\n%s' "$j2_term" "$j2s_mf" "$j2s_bad"
+            echo "      no commit${j2_root:+ in $j2_root} stamps .claude/.ai-dlc-version at ${J2S_RELEASE} or later -- not owed yet."
+          elif [ "$j2_atok" -eq 0 ]; then
+            printf 'PENDING (J2 -- DRIFT): %s notarized the requirements subject %s, and a sprint-scoped stem moved after MET:\n%s' "$j2_term" "$j2s_mf" "$j2s_bad"
+            echo "      the series' first pass ${j2_first} has no ISO 8601 UTC invoked_at ('${j2_at}') to date against ${j2_stamp}."
+          elif [[ "$j2_at" < "$j2_stamp" ]]; then
+            printf 'PENDING (J2 -- DRIFT): %s notarized the requirements subject %s, and a sprint-scoped stem moved after MET:\n%s' "$j2_term" "$j2s_mf" "$j2s_bad"
+            echo "      the series opened (${j2_first}, ${j2_at}) before ${J2S_RELEASE} was stamped (${j2_stamp}). Legacy series."
+          else
+            err "J2 -- DRIFT" "${j2_term} stamps EXIT_CONDITION_MET over the requirements subject ${j2s_mf},
+      and these stems MOVED after the series notarized them, each with nothing on the record:
+${j2s_bad}      A notarized stem is amended on the record, one of two ways (_gate-procedures.md, the
+      amendment procedure):
+        REPAIR   a residue or gate repair on unchanged scope -- a structured repair record in
+                 ${j2s_dir} whose entry names the manifest (per-stem '<stem>=<sha>' lists) or
+                 that stem's file (one sha256) in 'artifact:', with 'artifact_sha_before:' /
+                 'artifact_sha_after:', each before equal to the previous after, per stem.
+        REOPEN   a scope change -- ONE 'resolution: REOPEN_AFTER_MET' record over the manifest and
+                 ONE verify pass in this series citing it; the verify pass becomes terminal and
+                 notarizes the bytes on disk."
+          fi
         fi
       fi
     fi

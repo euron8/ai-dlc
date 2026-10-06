@@ -237,7 +237,9 @@ every repair. `_gate-procedures.md` carries the subject case at each of those si
 - **The adversarial series is named `s<N>/requirements-adversarial-p<M>`.** A sharded pass is
   written by `merge-adversarial-shards.sh --subject`, never by `--document`; a one-part subject's
   single adversary writes it directly, notarizing the subject manifest. Check 24 arm K3 holds
-  the series to the subject shape.
+  the series to the subject shape. No `--document` merge of a subject file (brief, SPEC, `prd.md`,
+  `architecture-impact.md`) runs while `s<N>/requirements-subject.md` exists — no
+  `prd-adversarial-p*` series — and `merge-adversarial-shards.sh` refuses one (its B4).
 - **party-mode seats / subject:** Architect, Dev — walk every part of the subject. The Architect
   seat challenges every `architecture_impact: none` line in `architecture-impact.md`. The round
   is seats x subject-parts (Rule 28, "Split dispatch"), and its seats record findings without
