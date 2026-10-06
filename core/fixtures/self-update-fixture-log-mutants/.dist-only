@@ -1,0 +1,7 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+It is a mutation battery behind a shipped fixture: the battery behind `self-update-fixture-log`.
+It edits copies of the distribution's own `core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh`,
+which a consumer is denied editing, and its runtime is why the arms and the mutants are separate
+directories. It sources `self-update-fixture-log/lib.sh`, so it drives every mutant through the
+worlds and log readers the shipped arms use.
