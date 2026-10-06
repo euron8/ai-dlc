@@ -715,7 +715,13 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   +6. Every arm that moved is a per-file walk over `scripts/*.sh` counting
 #   `readset-stage1-run.sh` and `readset-stage1-verdict.sh`: I84 291 -> 295, I83 144 -> 146. HIGH
 #   reading 3198 plus the usual 6.
-FORK_BUDGET=3204
+#
+#   RAISED TO 3231 FOR TWO NEW ARMS, I121 AND I122. `fork-profile.sh --stable` and `--section by-arm`,
+#   base `origin/main` d6e25229 then the 0.732.0 tip 8e84106a, in ONE worktree at the same path: base
+#   3193, tip 3225 (the gate's own validator-fork-budget run read 3225 twice), so +32. I121 0 -> 17 and
+#   I122 0 -> 11 are the two role-contract paragraph arms; I79 108 -> 113 counts Rule 32. HIGH reading
+#   3225 plus the usual 6.
+FORK_BUDGET=3231
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
@@ -8467,8 +8473,8 @@ fi
 #
 # WHY THE FILE IS WORTH THE CORPUS SLOT AT ALL: Rule 7 sits at byte 8,722, RESIDENT above the
 # 20,000-byte re-attach cut. Rule 28, which attributed it, sits at 79,510, and
-# `_gate-procedures.md` is a separate file the lead never loaded. 13 of 31 rules are resident,
-# 18 are below the cut. A compacted lead therefore holds "Just fix it" verbatim and holds
+# `_gate-procedures.md` is a separate file the lead never loaded. 13 of 32 rules are resident,
+# 19 are below the cut. A compacted lead therefore holds "Just fix it" verbatim and holds
 # nothing that says who fixes it. Proven: reverting Rule 7 to its pre-v0.357.0 text makes this
 # invariant fire at SKILL.md:185, against a same-tree control that reports nothing.
 #
@@ -12515,6 +12521,469 @@ else
   elif [ -n "$i119_hits" ]; then
     err "I119 a shipped prompt tells the lead to dispatch a whole set 'in one message':${i119_hits}
 The harness rejects every spawn past CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS rather than queueing it, so a fan-out sent whole launches only part of its round. Cite Rule 28 \"Split dispatch\" (its waves paragraph) at that site instead of restating it."
+  fi
+fi
+
+# --- I121: every role contract carries the verify-shape paragraph exactly once, byte-identical, and no other file carries it ---
+# WHAT IT BINDS. Every file matching core/team-roles/*.md -- the glob scripts/install.sh copies
+# whole into a consumer's .claude/team-roles/, and therefore every contract a teammate executes
+# -- carries one paragraph opening **Verify with one read-only command per Bash call.** and
+# closing at the line ending "until a human approves it.". It tells the teammate to confirm a
+# claim with a `derived` fence replayed by one validator call, or with ONE read-only command in
+# its own Bash call, and never with compound shell. A compound call matches no command-prefix
+# allow rule, so in an unattended sprint it stops on an approval prompt nobody is there to
+# answer. The paragraph is the whole fix on the prose side; this arm is what keeps it present.
+#
+# THE POPULATION IS THE GLOB, NEVER A LIST. A hand list of today's role files goes stale the
+# release a role is added, and the new role is exactly the one shipped without the paragraph.
+# install.sh copies by the same glob, so the arm and the delivery cannot disagree about which
+# files are role contracts. A glob that matches nothing is refused, not read as eighteen passes.
+#
+# THREE HALVES, EACH WITH A SUBJECT THE OTHER TWO CANNOT SEE.
+#   A  every population file carries the paragraph EXACTLY ONCE, as its own paragraph: the
+#      opener is a whole line with a blank line above it, the opener sentence appears on no
+#      other line, the closing line is reached, and the paragraph ends there. All copies are
+#      then compared byte-for-byte, opener to closer, against the MODAL copy, so one drifted
+#      file is named alone rather than seventeen good ones being named against it.
+#   B  no copy of the opener sentence exists outside the population, across the roots I108
+#      scans (core/, scripts/, templates/, patterns/, .claude/rules/, the root CLAUDE.md), with
+#      core/fixtures/ excluded and THIS FILE exempted -- see the false-positive set below.
+#   C  the validator path the paragraph names, scripts/ai-dlc/<x>, is one path, and <x> is
+#      core/scripts/validate-artifact-derivations.sh on disk -- the reader I108 binds. install.sh
+#      copies core/scripts/<x> to scripts/ai-dlc/<x>, so a path that does not resolve here
+#      resolves nowhere in a consumer, and the teammate is told to run a file that is not there.
+#
+# THE OPENER IS A WHOLE LINE, NOT A SUBSTRING, AND THAT IS THE KEY. A substring key accepts the
+# sentence glued onto the end of some other paragraph, where markdown renders it as the tail of
+# a sentence about something else and a reader skims straight past it. Half A therefore counts
+# opener-sentence lines and whole-opener lines separately and requires them EQUAL: a sentence
+# present only inside another line is reported, not acquitted. The battery builds the
+# substring-keyed arm and the probe kills it.
+#
+# THE COMPARISON IS THE WHOLE BLOCK, NOT THE OPENER. An arm comparing only the first line is
+# blind to every edit in the body -- the fence pointer deleted, one prohibition dropped -- and
+# those are the edits that change what a teammate does. The probe seeds a one-word body drift.
+#
+# EIGHTEEN BYTE-IDENTICAL COPIES OF WRONG TEXT PASS, BY DESIGN, as they do under I108. This arm
+# binds presence and agreement. It cannot judge whether the paragraph's advice is right, and
+# half C is the only half that checks a claim the text makes against the tree.
+#
+# WHY A BINDING AND NOT A RENDER, and COPIES RATHER THAN A SHARED SOURCE: I108's header states
+# both and they hold here unchanged -- markdown has no include, and install.sh copies the role
+# files whole into a consumer where nothing could resolve a shared source.
+#
+# NOT A VOCABULARY, so no vocabulary marker. The subject is one paragraph's BYTES and one path's
+# resolution, not an enumerated membership a second reader could restate.
+#
+# THE MEASURED FALSE-POSITIVE SET FOR HALF B, AND HOW IT REACHED THAT SIZE. Over the six roots
+# with nothing excluded, `grep -rlF` on the opener sentence returns the population, THIS file,
+# and core/fixtures/derived-fence-binding/run.sh. The fixture carries the sentence because its
+# sixth-copy and near-miss worlds are written from a literal copy held in its own run.sh, so
+# core/fixtures/ is excluded on I108's reason, and the battery asserts the exclusion is scoped:
+# a ninth copy under core/skills/ is REPORTED and a copy under core/fixtures/ is not, in the
+# same run. That leaves exactly one non-population hit -- this file, which spells the sentence
+# in i121_sn and in this header -- and it is exempted by exact path AFTER a control requires the
+# scan to have FOUND it. The exemption without the control would hide a scan that stopped
+# reading scripts/ behind the same silence as a clean tree. docs/ is not scanned, on I108's
+# reason: the backlog entry that commissioned this arm quotes the opener in its receipt.
+i121_sn='**Verify with one read-only command per Bash call.**'
+i121_op='**Verify with one read-only command per Bash call.** A check that reads the tree to confirm a'
+i121_cl='no command-prefix allow rule and can stop an unattended sprint until a human approves it.'
+
+# The population: every *.md directly under the directory given, by glob. Prints nothing when
+# the glob matches nothing; the caller refuses an empty population.
+i121_pop() { for i121_pf in "$1"/*.md; do [ -f "$i121_pf" ] && printf '%s\n' "$i121_pf"; done; }
+
+# ONE awk pass over every file given. Per file it prints "<STATUS> <path>", then "N <files
+# scanned>", then the modal block with each line prefixed "| ". STATUS is one of
+#   OK        one paragraph, matching the modal copy byte-for-byte
+#   DRIFT     one paragraph, differing from the modal copy
+#   MISSING   the opener sentence appears nowhere in the file
+#   INLINE    the opener sentence appears on a line that is not a whole opener line with a
+#             blank line above it -- glued into another paragraph or sentence
+#   MULTI     more than one whole opener line
+#   UNCLOSED  the opener is found and the closing line never is; reported as vacuous, never as
+#             drift, because an extractor that ran to end of file would otherwise compare a
+#             tail and send the reader to the wrong repair
+#   TRAILING  the closing line is followed by more text in the same paragraph
+# An EMPTY file produces no FNR == 1 and so no row at all; the caller compares the scanned
+# count against the list it passed, which is how an unopened or empty file is reported.
+i121_scan() {
+  awk -v sn="$i121_sn" -v op="$i121_op" -v cl="$i121_cl" '
+    function fin(  s) {
+      if (nsub == 0) s = "MISSING"
+      else if (nsub != nex) s = "INLINE"
+      else if (nex > 1) s = "MULTI"
+      else if (!closed) s = "UNCLOSED"
+      else if (trail) s = "TRAILING"
+      else { s = "OK"; cnt[buf]++ }
+      st[f] = s; blk[f] = buf
+    }
+    FNR == 1 { if (nf) fin(); f = FILENAME; order[++nf] = f
+               prev = ""; on = 0; nsub = 0; nex = 0; buf = ""; closed = 0; trail = 0; jc = 0 }
+    {
+      if (jc) { if ($0 != "") trail = 1; jc = 0 }
+      if (index($0, sn)) nsub++
+      if ($0 == op && prev == "") { nex++; if (nex == 1) on = 1 }
+      if (on) { buf = buf $0 "\n"; if ($0 == cl) { on = 0; closed = 1; jc = 1 } }
+      prev = $0
+    }
+    END {
+      if (nf) fin()
+      best = -1; modal = ""
+      for (b in cnt) if (cnt[b] > best) { best = cnt[b]; modal = b }
+      for (i = 1; i <= nf; i++) {
+        s = st[order[i]]
+        if (s == "OK" && blk[order[i]] != modal) s = "DRIFT"
+        printf "%s %s\n", s, order[i]
+      }
+      printf "N %d\n", nf
+      n = split(modal, ml, "\n")
+      for (i = 1; i < n; i++) printf "| %s\n", ml[i]
+    }' "$@" 2>/dev/null
+}
+
+# The sixth-site scan, as a function taking its roots so the probe drives the shipping path.
+i121_sites() { grep -rlF -- "$i121_sn" "$@" 2>/dev/null; }
+
+# Half C: every distinct scripts/ai-dlc/<x> token in the block given, one per line.
+i121_ptrs() {
+  grep -oE 'scripts/ai-dlc/[A-Za-z0-9_.-]+' <<<"$1" 2>/dev/null | sed 's/\.$//' | LC_ALL=C sort -u
+}
+
+# Reads i121_scan output into i121_st_<STATUS> lists, i121_nscan and i121_block.
+i121_parse() {
+  i121_st_OK=''; i121_st_DRIFT=''; i121_st_MISSING=''; i121_st_INLINE=''; i121_st_MULTI=''
+  i121_st_UNCLOSED=''; i121_st_TRAILING=''; i121_nscan=0; i121_block=''
+  while IFS= read -r i121_l; do
+    case "$i121_l" in
+      "OK "*)       i121_st_OK="$i121_st_OK ${i121_l#OK }" ;;
+      "DRIFT "*)    i121_st_DRIFT="$i121_st_DRIFT ${i121_l#DRIFT }" ;;
+      "MISSING "*)  i121_st_MISSING="$i121_st_MISSING ${i121_l#MISSING }" ;;
+      "INLINE "*)   i121_st_INLINE="$i121_st_INLINE ${i121_l#INLINE }" ;;
+      "MULTI "*)    i121_st_MULTI="$i121_st_MULTI ${i121_l#MULTI }" ;;
+      "UNCLOSED "*) i121_st_UNCLOSED="$i121_st_UNCLOSED ${i121_l#UNCLOSED }" ;;
+      "TRAILING "*) i121_st_TRAILING="$i121_st_TRAILING ${i121_l#TRAILING }" ;;
+      "N "*)        i121_nscan="${i121_l#N }" ;;
+      "| "*)        i121_block="$i121_block${i121_l#| }
+" ;;
+    esac
+  done <<EOF
+$1
+EOF
+}
+
+# THE PROBE, RUN BEFORE THE CORPUS, IN BOTH DIRECTIONS. Every half is absence-shaped: a scan
+# that stops matching reports no missing copy, no drift and no sixth site, and each of those
+# silences reads exactly like a conforming tree. So the functions above are driven over seeds
+# with one right answer first, and the corpus is not read unless they produce it.
+i121_pd="$(mktemp -d "${TMPDIR:-/tmp}/i121-XXXXXX")"
+mkdir -p "$i121_pd/t" "$i121_pd/p/sub" "$i121_pd/s"
+i121_body="$i121_op
+claim (a count, a citation, a listing) is either a \`derived\` fence in your deliverable, replayed
+by one call to \`scripts/ai-dlc/validate-artifact-derivations.sh <that file>\`, or one read-only
+command or pipeline in its own Bash call: no \`set\`, no chain of variable assignments, no
+$i121_cl"
+#  a  the reference paragraph.   b  NEAR-MISS: identical, different surroundings -- must be OK.
+printf 'lead\n\n%s\n\nafter\n' "$i121_body" > "$i121_pd/t/a.md"
+printf 'other lead\nmore lead\n\n%s\n\nother after\n' "$i121_body" > "$i121_pd/t/b.md"
+#  c  one word of the BODY changed -- DRIFT. An arm comparing only the opener calls this OK.
+printf 'lead\n\n%s\n\nafter\n' "$(printf '%s\n' "$i121_body" | sed 's/no chain of variable assignments/no chain of variable assignment/')" > "$i121_pd/t/c.md"
+#  d  no paragraph at all -- MISSING.
+printf 'a role file that says nothing about Bash calls\n' > "$i121_pd/t/d.md"
+#  e  the opener GLUED onto the end of another sentence on one line -- INLINE. A substring key
+#     finds the sentence here and accepts it.
+printf 'lead\n\nSome other sentence. %s\n\nafter\n' "$i121_body" > "$i121_pd/t/e.md"
+#  f  the opener on its own line with NO blank line above it, so markdown joins it to the
+#     paragraph before -- INLINE.
+printf 'lead\n%s\n\nafter\n' "$i121_body" > "$i121_pd/t/f.md"
+#  g  opened and never closed -- UNCLOSED, not DRIFT.
+printf 'lead\n\n%s\nand the file simply ends\n' "$i121_op" > "$i121_pd/t/g.md"
+#  h  two copies -- MULTI.
+printf 'lead\n\n%s\n\nmiddle\n\n%s\n' "$i121_body" "$i121_body" > "$i121_pd/t/h.md"
+#  i  a sentence appended to the closing line's paragraph -- TRAILING.
+printf 'lead\n\n%s\nAnd one more sentence.\n' "$i121_body" > "$i121_pd/t/i.md"
+#  population seeds: a .md, a .txt and a .md one directory down. Only the first is a member.
+printf 'x\n' > "$i121_pd/p/a.md"; printf 'x\n' > "$i121_pd/p/b.txt"; printf 'x\n' > "$i121_pd/p/sub/c.md"
+#  site seeds: a mention-only sixth site that MUST be seen, and the sentence without its bold
+#  markers, which must NOT be.
+printf 'see %s\n' "$i121_sn" > "$i121_pd/s/m.md"
+printf 'Verify with one read-only command per Bash call.\n' > "$i121_pd/s/n.md"
+
+i121_parse "$(i121_scan "$i121_pd"/t/a.md "$i121_pd"/t/b.md "$i121_pd"/t/c.md "$i121_pd"/t/d.md \
+  "$i121_pd"/t/e.md "$i121_pd"/t/f.md "$i121_pd"/t/g.md "$i121_pd"/t/h.md "$i121_pd"/t/i.md)"
+i121_score=0
+[ "$(i121_pop "$i121_pd/p")" = "$i121_pd/p/a.md" ]                   || i121_score=$((i121_score + 1))
+[ "$i121_st_OK" = " $i121_pd/t/a.md $i121_pd/t/b.md" ]               || i121_score=$((i121_score + 10))
+[ "$i121_st_DRIFT" = " $i121_pd/t/c.md" ]                            || i121_score=$((i121_score + 1000))
+[ "$i121_st_MISSING" = " $i121_pd/t/d.md" ]                          || i121_score=$((i121_score + 10000))
+in_lines "$i121_pd/t/e.md" "$(printf '%s\n' $i121_st_INLINE)"         || i121_score=$((i121_score + 100000))
+in_lines "$i121_pd/t/f.md" "$(printf '%s\n' $i121_st_INLINE)"         || i121_score=$((i121_score + 1000000))
+[ "$i121_st_UNCLOSED" = " $i121_pd/t/g.md" ]                         || i121_score=$((i121_score + 10000000))
+[ "$i121_st_MULTI" = " $i121_pd/t/h.md" ]                            || i121_score=$((i121_score + 100000000))
+[ "$i121_st_TRAILING" = " $i121_pd/t/i.md" ]                         || i121_score=$((i121_score + 1000000000))
+[ "$i121_nscan" = 9 ]                                                || i121_score=$((i121_score + 10000000000))
+[ "$(i121_sites "$i121_pd/s")" = "$i121_pd/s/m.md" ]                 || i121_score=$((i121_score + 100000000000))
+[ "$(i121_ptrs "$i121_block")" = "scripts/ai-dlc/validate-artifact-derivations.sh" ] \
+                                                                     || i121_score=$((i121_score + 1000000000000))
+rm -rf "$i121_pd"
+
+if [ "$i121_score" -ne 0 ]; then
+  err "I121's probe scored $i121_score where 0 is the only correct total, so the corpus below was not read. +1 the population function did not return exactly the one *.md directly under its directory, so the population is not the glob install.sh copies -- a hand list, or a recursive or extension-blind scan; +10 a reference paragraph, or the identical paragraph in different surroundings, was not scored OK; +1000 a paragraph differing by one word in its BODY was not scored DRIFT, so the comparison reads only the opener; +10000 a file with no paragraph was not scored MISSING; +100000 the opener glued onto the end of another sentence was not scored INLINE, so the key is a substring rather than a whole line; +1000000 the opener with no blank line above it was not scored INLINE; +10000000 an opener with no closing line was not scored UNCLOSED; +100000000 two copies were not scored MULTI; +1000000000 a sentence appended after the closing line was not scored TRAILING; +10000000000 the scan did not report every file it was given; +100000000000 the sixth-site scan did not name exactly the mention-only file, or it named the sentence without its bold markers; +1000000000000 the validator path was not extracted from the modal block as exactly scripts/ai-dlc/validate-artifact-derivations.sh. Any non-zero total means a half of I121 would report a clean tree for the reason a broken scan does."
+else
+  i121_roles="$REPO_ROOT/core/team-roles"
+  i121_set="$(i121_pop "$i121_roles")"
+  i121_n="$(printf '%s\n' "$i121_set" | grep -c .)" || i121_n=0
+  if [ "$i121_n" -eq 0 ]; then
+    err "I121 found no file matching core/team-roles/*.md. That glob is what install.sh copies into a consumer as the role contracts, so an empty population means the arm is looking in the wrong place, not that there are no roles. Nothing below was checked."
+  else
+    # HALF A.
+    # shellcheck disable=SC2086 # the population is newline-separated paths with no blanks
+    i121_parse "$(IFS='
+'; i121_scan $i121_set)"
+    if [ "$i121_nscan" != "$i121_n" ]; then
+      err "I121 scanned $i121_nscan of the $i121_n role files the glob listed. A file that was listed and never read -- empty, or unreadable -- produces no row at all and would read as conforming. Every role file must carry the verify-shape paragraph, so an empty one is a finding too."
+    fi
+    i121_rel() { i121_rl=''; for i121_x in $1; do i121_rl="$i121_rl ${i121_x#"$REPO_ROOT"/}"; done; printf '%s' "$i121_rl"; }
+    [ -z "$i121_st_MISSING" ] || err "I121: role file(s) do not carry the verify-shape paragraph:$(i121_rel "$i121_st_MISSING"). Every file in core/team-roles/ is a contract a teammate executes in an unattended sprint, and a teammate never told to keep each check to one read-only call writes compound shell that matches no allow rule and stops the sprint on an approval prompt. Copy the paragraph opening '$i121_sn' byte-for-byte from any other role file, as its own paragraph."
+    [ -z "$i121_st_INLINE" ] || err "I121: the verify-shape opener sentence appears inside another line or paragraph in:$(i121_rel "$i121_st_INLINE"). The opener must be a whole line with a blank line above it. Glued onto another sentence, or with no blank line above, markdown renders it as the tail of a paragraph about something else, and a reader skims past it. Put a blank line before it and start the line with the opener."
+    [ -z "$i121_st_MULTI" ] || err "I121: role file(s) carry the verify-shape paragraph more than once:$(i121_rel "$i121_st_MULTI"). Half A compares the first copy only, so a second one is unbound and free to drift. Keep one."
+    [ -z "$i121_st_UNCLOSED" ] || err "I121 cannot find the end of the verify-shape paragraph in:$(i121_rel "$i121_st_UNCLOSED"). It is delimited by its opener line and by the line ending 'until a human approves it.', and the second was not reached, so nothing was compared for this file. If the paragraph was reworded in every file, reword i121_op and i121_cl here in the same change."
+    [ -z "$i121_st_TRAILING" ] || err "I121: the verify-shape paragraph continues past its closing line in:$(i121_rel "$i121_st_TRAILING"). Text appended to the same paragraph is outside the compared block, so it would differ between copies unreported. Put a blank line after 'until a human approves it.'."
+    [ -z "$i121_st_DRIFT" ] || err "I121: the verify-shape paragraph has forked. It differs from the copy the other role files agree on, byte-for-byte from opener to closing line, in:$(i121_rel "$i121_st_DRIFT"). Every role file is handed whole to a teammate, and two wordings of the same rule are two rules. Make the paragraph byte-identical in every file under core/team-roles/."
+
+    # HALF C: the validator path the modal paragraph names resolves to the derivations reader.
+    if [ -n "$i121_block" ]; then
+      i121_p="$(i121_ptrs "$i121_block")"
+      i121_pn="$(printf '%s\n' "$i121_p" | grep -c .)" || i121_pn=0
+      if [ "$i121_pn" -ne 1 ]; then
+        err "I121: the verify-shape paragraph names $i121_pn distinct scripts/ai-dlc/ path(s) where exactly one is expected:$(printf ' %s' $i121_p). It tells the teammate which validator replays a derived fence, and it must name one."
+      elif [ "${i121_p#scripts/ai-dlc/}" != "validate-artifact-derivations.sh" ] || [ ! -f "$REPO_ROOT/core/scripts/${i121_p#scripts/ai-dlc/}" ]; then
+        err "I121: the verify-shape paragraph tells the teammate to run $i121_p, which must be core/scripts/validate-artifact-derivations.sh as install.sh copies it into a consumer. It names a different file, or that file is not on disk, so a teammate following the paragraph runs a validator that is not there and its claims go unchecked."
+      fi
+    fi
+
+    # HALF B: no copy outside the population. The control is THIS file: the scan must find it
+    # before it is exempted, or a scan that stopped reading scripts/ would read as clean.
+    i121_hits="$(i121_sites \
+        "$REPO_ROOT/core" "$REPO_ROOT/scripts" "$REPO_ROOT/templates" \
+        "$REPO_ROOT/patterns" "$REPO_ROOT/.claude/rules" "$REPO_ROOT/CLAUDE.md" | LC_ALL=C sort)"
+    i121_self="scripts/validate-enforcement-map.sh"
+    if ! in_lines "$REPO_ROOT/$i121_self" "$i121_hits"; then
+      err "I121's site scan did not find $i121_self, which carries the opener sentence in i121_sn and in this arm's header. That is the control failing, not a finding about the tree: the scan is not reading the roots it was handed, so its report of no extra copy would be a zero taken over a corpus it never opened."
+    else
+      i121_extra=''
+      while IFS= read -r i121_hit; do
+        [ -n "$i121_hit" ] || continue
+        i121_r="${i121_hit#"$REPO_ROOT"/}"
+        case "$i121_r" in
+          core/fixtures/*) continue ;;
+          scripts/validate-enforcement-map.sh) continue ;;
+        esac
+        in_lines "$i121_hit" "$i121_set" || i121_extra="$i121_extra $i121_r"
+      done <<EOF
+$i121_hits
+EOF
+      [ -z "$i121_extra" ] || err "I121: file(s) outside core/team-roles/*.md carry the verify-shape opener sentence:$i121_extra. Half A binds only the role files, so a copy anywhere else drifts unbound and teaches its own version of the rule to whichever agent reads it. Point that file at the role contract instead of copying the paragraph."
+    fi
+  fi
+fi
+
+# --- I122: every role contract carries the advisor paragraph exactly once, byte-identical, and no other file carries it ---
+# WHAT IT BINDS. Every file matching core/team-roles/*.md carries one paragraph opening
+# **Consult the `advisor` tool when it is available.** and closing at the line ending "If the
+# tool is absent or returns an error, continue without it.". It tells a teammate to call the
+# advisor tool, when the harness gives it one, before its first edit or write and again before
+# its deliverable or verdict, and to continue without it when the tool is absent or errors.
+# The role contract is the carrier because the rendered agent definition already tells every
+# teammate to read it FIRST; a line rendered into the definition instead would make every
+# consumer that keeps .claude/agents/ report DRIFTED on every role at its self-update gate,
+# whose bare probe cannot clear that state. So the prose lives here and this arm keeps it.
+#
+# BUILT AS I121 IS, AND FOR I121's REASONS, which its header states and which are not restated:
+# the population is the glob install.sh copies, never a list, and an empty glob is refused; the
+# opener is keyed as a WHOLE LINE with a blank line above it, never as a substring; the whole
+# block is compared byte-for-byte against the MODAL copy, never the opener alone; eighteen
+# identical copies of wrong text pass by design; a binding rather than a render, and copies
+# rather than a shared source, because markdown has no include.
+#
+# TWO HALVES, NOT THREE. I121's half C resolves the validator path its paragraph names. This
+# paragraph names no scripts/ai-dlc/ path, so there is no claim against the tree to resolve.
+#   A  every population file carries the paragraph EXACTLY ONCE, as its own paragraph, and
+#      every copy matches the modal copy byte-for-byte, opener to closer.
+#   B  no copy of the opener sentence exists outside the population, over I121's six roots,
+#      with core/fixtures/ excluded and THIS FILE exempted after a control finds it.
+#
+# I121 AND I122 MUST NOT SATISFY EACH OTHER. The two paragraphs sit side by side in every role
+# file, so a scan keyed on the wrong opener or closer would read the neighbour and report a
+# clean tree. derived-fence-binding drops each paragraph in turn and requires the OTHER arm to
+# stay green while this one names the file.
+#
+# NOT A VOCABULARY, so no vocabulary marker. The subject is one paragraph's BYTES.
+#
+# THE MEASURED FALSE-POSITIVE SET FOR HALF B, AND HOW IT REACHED THAT SIZE. Over the six roots
+# with nothing excluded, `grep -rlF` on the opener sentence returns the eighteen role files,
+# THIS file, and core/fixtures/derived-fence-binding/run.sh, which holds the sentence to plant
+# its sixth-copy worlds. core/fixtures/ is excluded on I108's reason and the battery asserts
+# the exclusion is scoped (a copy under core/skills/ REPORTED, one under core/fixtures/ not).
+# THIS file spells the sentence in i122_sn and in this header and is exempted by exact path
+# after a control requires the scan to have FOUND it. Rule 32 in SKILL.md, rule-29.md and the
+# recover hook name the advisor tool in plain prose and never in the bold opener, so they are
+# not hits; docs/ is not scanned, on I108's reason -- the backlog entry quotes the opener.
+i122_sn='**Consult the `advisor` tool when it is available.**'
+i122_op='**Consult the `advisor` tool when it is available.** If an `advisor` tool is available to you,'
+i122_cl='switching silently. If the tool is absent or returns an error, continue without it.'
+
+# The population: every *.md directly under the directory given, by glob.
+i122_pop() { for i122_pf in "$1"/*.md; do [ -f "$i122_pf" ] && printf '%s\n' "$i122_pf"; done; }
+
+# ONE awk pass over every file given; the same row grammar as i121_scan (OK, DRIFT, MISSING,
+# INLINE, MULTI, UNCLOSED, TRAILING; then "N <files scanned>"; then the modal block, "| "-led).
+i122_scan() {
+  awk -v sn="$i122_sn" -v op="$i122_op" -v cl="$i122_cl" '
+    function fin(  s) {
+      if (nsub == 0) s = "MISSING"
+      else if (nsub != nex) s = "INLINE"
+      else if (nex > 1) s = "MULTI"
+      else if (!closed) s = "UNCLOSED"
+      else if (trail) s = "TRAILING"
+      else { s = "OK"; cnt[buf]++ }
+      st[f] = s; blk[f] = buf
+    }
+    FNR == 1 { if (nf) fin(); f = FILENAME; order[++nf] = f
+               prev = ""; on = 0; nsub = 0; nex = 0; buf = ""; closed = 0; trail = 0; jc = 0 }
+    {
+      if (jc) { if ($0 != "") trail = 1; jc = 0 }
+      if (index($0, sn)) nsub++
+      if ($0 == op && prev == "") { nex++; if (nex == 1) on = 1 }   # i122 opener key
+      if (on) { buf = buf $0 "\n"; if ($0 == cl) { on = 0; closed = 1; jc = 1 } }   # i122 block
+      prev = $0
+    }
+    END {
+      if (nf) fin()
+      best = -1; modal = ""
+      for (b in cnt) if (cnt[b] > best) { best = cnt[b]; modal = b }
+      for (i = 1; i <= nf; i++) {
+        s = st[order[i]]
+        if (s == "OK" && blk[order[i]] != modal) s = "DRIFT"
+        printf "%s %s\n", s, order[i]
+      }
+      printf "N %d\n", nf
+      n = split(modal, ml, "\n")
+      for (i = 1; i < n; i++) printf "| %s\n", ml[i]
+    }' "$@" 2>/dev/null
+}
+
+i122_sites() { grep -rlF -- "$i122_sn" "$@" 2>/dev/null; }
+
+i122_parse() {
+  i122_st_OK=''; i122_st_DRIFT=''; i122_st_MISSING=''; i122_st_INLINE=''; i122_st_MULTI=''
+  i122_st_UNCLOSED=''; i122_st_TRAILING=''; i122_nscan=0
+  while IFS= read -r i122_l; do
+    case "$i122_l" in
+      "OK "*)       i122_st_OK="$i122_st_OK ${i122_l#OK }" ;;
+      "DRIFT "*)    i122_st_DRIFT="$i122_st_DRIFT ${i122_l#DRIFT }" ;;
+      "MISSING "*)  i122_st_MISSING="$i122_st_MISSING ${i122_l#MISSING }" ;;
+      "INLINE "*)   i122_st_INLINE="$i122_st_INLINE ${i122_l#INLINE }" ;;
+      "MULTI "*)    i122_st_MULTI="$i122_st_MULTI ${i122_l#MULTI }" ;;
+      "UNCLOSED "*) i122_st_UNCLOSED="$i122_st_UNCLOSED ${i122_l#UNCLOSED }" ;;
+      "TRAILING "*) i122_st_TRAILING="$i122_st_TRAILING ${i122_l#TRAILING }" ;;
+      "N "*)        i122_nscan="${i122_l#N }" ;;
+    esac
+  done <<EOF
+$1
+EOF
+}
+
+# THE PROBE, RUN BEFORE THE CORPUS, IN BOTH DIRECTIONS -- I121's seeds re-spelled for this
+# paragraph, plus one I121 does not need: a file carrying ONLY the verify-shape paragraph must
+# score MISSING here, so a scan keyed on the neighbour's text cannot read as conforming.
+i122_pd="$(mktemp -d "${TMPDIR:-/tmp}/i122-XXXXXX")"
+mkdir -p "$i122_pd/t" "$i122_pd/p/sub" "$i122_pd/s"
+i122_body="$i122_op
+call it before your first edit or write, and again before you write your deliverable or verdict.
+It takes no parameters and forwards your whole transcript to a stronger reviewer; weigh what it
+$i122_cl"
+printf 'lead\n\n%s\n\nafter\n' "$i122_body" > "$i122_pd/t/a.md"
+printf 'other lead\nmore lead\n\n%s\n\nother after\n' "$i122_body" > "$i122_pd/t/b.md"
+printf 'lead\n\n%s\n\nafter\n' "$(printf '%s\n' "$i122_body" | sed 's/forwards your whole transcript/forwards your transcript/')" > "$i122_pd/t/c.md"
+# The neighbour's opener and closer are spelled here, not read from i121_op/i121_cl: `--arms
+# I122` runs this unit alone, where I121's variables are unset.
+printf 'lead\n\n%s\n%s\n\nafter\n' \
+  '**Verify with one read-only command per Bash call.** A check that reads the tree to confirm a' \
+  'no command-prefix allow rule and can stop an unattended sprint until a human approves it.' > "$i122_pd/t/d.md"
+printf 'lead\n\nSome other sentence. %s\n\nafter\n' "$i122_body" > "$i122_pd/t/e.md"
+printf 'lead\n%s\n\nafter\n' "$i122_body" > "$i122_pd/t/f.md"
+printf 'lead\n\n%s\nand the file simply ends\n' "$i122_op" > "$i122_pd/t/g.md"
+printf 'lead\n\n%s\n\nmiddle\n\n%s\n' "$i122_body" "$i122_body" > "$i122_pd/t/h.md"
+printf 'lead\n\n%s\nAnd one more sentence.\n' "$i122_body" > "$i122_pd/t/i.md"
+printf 'x\n' > "$i122_pd/p/a.md"; printf 'x\n' > "$i122_pd/p/b.txt"; printf 'x\n' > "$i122_pd/p/sub/c.md"
+printf 'see %s\n' "$i122_sn" > "$i122_pd/s/m.md"
+printf 'Consult the `advisor` tool when it is available.\n' > "$i122_pd/s/n.md"
+
+i122_parse "$(i122_scan "$i122_pd"/t/a.md "$i122_pd"/t/b.md "$i122_pd"/t/c.md "$i122_pd"/t/d.md \
+  "$i122_pd"/t/e.md "$i122_pd"/t/f.md "$i122_pd"/t/g.md "$i122_pd"/t/h.md "$i122_pd"/t/i.md)"
+i122_score=0
+[ "$(i122_pop "$i122_pd/p")" = "$i122_pd/p/a.md" ]                   || i122_score=$((i122_score + 1))
+[ "$i122_st_OK" = " $i122_pd/t/a.md $i122_pd/t/b.md" ]               || i122_score=$((i122_score + 10))
+[ "$i122_st_DRIFT" = " $i122_pd/t/c.md" ]                            || i122_score=$((i122_score + 1000))
+[ "$i122_st_MISSING" = " $i122_pd/t/d.md" ]                          || i122_score=$((i122_score + 10000))
+in_lines "$i122_pd/t/e.md" "$(printf '%s\n' $i122_st_INLINE)"         || i122_score=$((i122_score + 100000))
+in_lines "$i122_pd/t/f.md" "$(printf '%s\n' $i122_st_INLINE)"         || i122_score=$((i122_score + 1000000))
+[ "$i122_st_UNCLOSED" = " $i122_pd/t/g.md" ]                         || i122_score=$((i122_score + 10000000))
+[ "$i122_st_MULTI" = " $i122_pd/t/h.md" ]                            || i122_score=$((i122_score + 100000000))
+[ "$i122_st_TRAILING" = " $i122_pd/t/i.md" ]                         || i122_score=$((i122_score + 1000000000))
+[ "$i122_nscan" = 9 ]                                                || i122_score=$((i122_score + 10000000000))
+[ "$(i122_sites "$i122_pd/s")" = "$i122_pd/s/m.md" ]                 || i122_score=$((i122_score + 100000000000))
+rm -rf "$i122_pd"
+
+if [ "$i122_score" -ne 0 ]; then
+  err "I122's probe scored $i122_score where 0 is the only correct total, so the corpus below was not read. +1 the population function did not return exactly the one *.md directly under its directory; +10 a reference paragraph, or the identical paragraph in different surroundings, was not scored OK; +1000 a paragraph differing by one word in its BODY was not scored DRIFT, so the comparison reads only the opener; +10000 a file carrying only the verify-shape paragraph was not scored MISSING, so the scan is keyed on the neighbouring I121 paragraph; +100000 the opener glued onto the end of another sentence was not scored INLINE, so the key is a substring rather than a whole line; +1000000 the opener with no blank line above it was not scored INLINE; +10000000 an opener with no closing line was not scored UNCLOSED; +100000000 two copies were not scored MULTI; +1000000000 a sentence appended after the closing line was not scored TRAILING; +10000000000 the scan did not report every file it was given; +100000000000 the sixth-site scan did not name exactly the mention-only file, or it named the sentence without its bold markers. Any non-zero total means a half of I122 would report a clean tree for the reason a broken scan does."
+else
+  i122_roles="$REPO_ROOT/core/team-roles"
+  i122_set="$(i122_pop "$i122_roles")"
+  i122_n="$(printf '%s\n' "$i122_set" | grep -c .)" || i122_n=0
+  if [ "$i122_n" -eq 0 ]; then
+    err "I122 found no file matching core/team-roles/*.md. That glob is what install.sh copies into a consumer as the role contracts, so an empty population means the arm is looking in the wrong place, not that there are no roles. Nothing below was checked."
+  else
+    # HALF A.
+    # shellcheck disable=SC2086 # the population is newline-separated paths with no blanks
+    i122_parse "$(IFS='
+'; i122_scan $i122_set)"
+    if [ "$i122_nscan" != "$i122_n" ]; then
+      err "I122 scanned $i122_nscan of the $i122_n role files the glob listed. A file that was listed and never read -- empty, or unreadable -- produces no row at all and would read as conforming. Every role file must carry the advisor paragraph, so an empty one is a finding too."
+    fi
+    i122_rel() { i122_rl=''; for i122_x in $1; do i122_rl="$i122_rl ${i122_x#"$REPO_ROOT"/}"; done; printf '%s' "$i122_rl"; }
+    [ -z "$i122_st_MISSING" ] || err "I122: role file(s) do not carry the advisor paragraph:$(i122_rel "$i122_st_MISSING"). Every file in core/team-roles/ is a contract a teammate executes, and a teammate never told to consult the advisor tool when it has one ships its first edit and its verdict unreviewed. Copy the paragraph opening '$i122_sn' byte-for-byte from any other role file, as its own paragraph."
+    [ -z "$i122_st_INLINE" ] || err "I122: the advisor opener sentence appears inside another line or paragraph in:$(i122_rel "$i122_st_INLINE"). The opener must be a whole line with a blank line above it. Glued onto another sentence, or with no blank line above, markdown renders it as the tail of a paragraph about something else, and a reader skims past it. Put a blank line before it and start the line with the opener."
+    [ -z "$i122_st_MULTI" ] || err "I122: role file(s) carry the advisor paragraph more than once:$(i122_rel "$i122_st_MULTI"). Half A compares the first copy only, so a second one is unbound and free to drift. Keep one."
+    [ -z "$i122_st_UNCLOSED" ] || err "I122 cannot find the end of the advisor paragraph in:$(i122_rel "$i122_st_UNCLOSED"). It is delimited by its opener line and by the line ending 'continue without it.', and the second was not reached, so nothing was compared for this file. If the paragraph was reworded in every file, reword i122_op and i122_cl here in the same change."
+    [ -z "$i122_st_TRAILING" ] || err "I122: the advisor paragraph continues past its closing line in:$(i122_rel "$i122_st_TRAILING"). Text appended to the same paragraph is outside the compared block, so it would differ between copies unreported. Put a blank line after 'continue without it.'."
+    [ -z "$i122_st_DRIFT" ] || err "I122: the advisor paragraph has forked. It differs from the copy the other role files agree on, byte-for-byte from opener to closing line, in:$(i122_rel "$i122_st_DRIFT"). Every role file is handed whole to a teammate, and two wordings of the same rule are two rules. Make the paragraph byte-identical in every file under core/team-roles/."
+
+    # HALF B: no copy outside the population. The control is THIS file.
+    # The same six roots as I121, laid out on different lines so a mutation anchored on either
+    # arm's root line edits that arm alone.
+    i122_hits="$(i122_sites "$REPO_ROOT/core" "$REPO_ROOT/scripts" \
+        "$REPO_ROOT/templates" "$REPO_ROOT/patterns" "$REPO_ROOT/.claude/rules" "$REPO_ROOT/CLAUDE.md" | LC_ALL=C sort)"
+    i122_self="scripts/validate-enforcement-map.sh"
+    if ! in_lines "$REPO_ROOT/$i122_self" "$i122_hits"; then
+      err "I122's site scan did not find $i122_self, which carries the opener sentence in i122_sn and in this arm's header. That is the control failing, not a finding about the tree: the scan is not reading the roots it was handed, so its report of no extra copy would be a zero taken over a corpus it never opened."
+    else
+      i122_extra=''
+      while IFS= read -r i122_hit; do
+        [ -n "$i122_hit" ] || continue
+        i122_r="${i122_hit#"$REPO_ROOT"/}"
+        case "$i122_r" in
+          core/fixtures/*) continue ;;
+          scripts/validate-enforcement-map.sh) continue ;;
+        esac
+        in_lines "$i122_hit" "$i122_set" || i122_extra="$i122_extra $i122_r"
+      done <<EOF
+$i122_hits
+EOF
+      [ -z "$i122_extra" ] || err "I122: file(s) outside core/team-roles/*.md carry the advisor opener sentence:$i122_extra. Half A binds only the role files, so a copy anywhere else drifts unbound and teaches its own version of the rule to whichever agent reads it. Point that file at the role contract instead of copying the paragraph."
+    fi
   fi
 fi
 

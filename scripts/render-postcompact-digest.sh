@@ -8,7 +8,7 @@
 # after a compaction. Measured over the reference consumer's 379 transcripts -- 69 carrying a
 # `compact_boundary`, 261 post-boundary records carrying a real re-attach -- the cut sits at
 # 20,121 bytes in every one of them, identical at p10, p25, p50, p75 and p90. SKILL.md is
-# ~102 KB, so the harness keeps under a fifth of it and marks nothing. 18 of the 31 numbered
+# ~102 KB, so the harness keeps under a fifth of it and marks nothing. 19 of the 32 numbered
 # rules, the handoff triggers and the snapshot schema are simply absent, INCLUDING the rules
 # that mandate re-reading.
 #

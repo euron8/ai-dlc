@@ -243,6 +243,25 @@ not discharge the review. A claim whose recipe you did not run this pass is **no
 this pass**, however many earlier passes accepted it, and you may not carry their acceptance
 forward as evidence.
 
+**Verify with one read-only command per Bash call.** A check that reads the tree to confirm a
+claim (a count, a citation, a listing) is either a `derived` fence in your deliverable, replayed
+by one call to `scripts/ai-dlc/validate-artifact-derivations.sh <that file>`, or one read-only
+command or pipeline in its own Bash call: no `set`, no chain of variable assignments, no
+function definition, no `bash -c`, and no `;`, `&&` or `||` joining two checks. Several
+command/output pairs share one fence, so N claims are one fence and one validator call, never N
+lines of shell; write each path literally, because a fence has no variables. A test, build or
+script run your contract requires is likewise one call of its own: at most one `VAR=value`
+prefix, absolute paths instead of a `cd`, and never wrapped in `set`, a function or `bash -c`.
+A recipe in an artifact that cannot be run in either form is reported as underived rather than
+run as compound shell. A call that sets variables, defines a function or runs `bash -c` matches
+no command-prefix allow rule and can stop an unattended sprint until a human approves it.
+
+**Consult the `advisor` tool when it is available.** If an `advisor` tool is available to you,
+call it before your first edit or write, and again before you write your deliverable or verdict.
+It takes no parameters and forwards your whole transcript to a stronger reviewer; weigh what it
+returns, and if it contradicts evidence you hold, say so in your deliverable rather than
+switching silently. If the tool is absent or returns an error, continue without it.
+
 **A control is a derivation too.** The line an AC carries to prove its own check is not
 vacuous — *"must be non-zero: 38"*, *"reads 2 against a scratch copy"* — is a claim about
 the tree with exactly the same unexecuted-recipe risk as the claim it guards, and it fails

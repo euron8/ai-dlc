@@ -92,3 +92,69 @@ recorded path and of the deriver. Measured: per-fixture `FXTAG` profile tags att
 cross-attribution, drops are system-wide, and silent loss requires a private tree copy so the atime canary can run.
 
 verify: sh grep -qF -- '--local-map' .githooks/pre-push && grep -qF -- '--local-map' core/git-hooks/pre-push
+
+## BL-453 — teammate verification calls are ad-hoc compound shell that no allow rule matches, so an unattended sprint stops for approval
+
+**DEFECT.** Carries the reference consumer's PC-S317-TEAMMATE-VERIFICATION-COMMANDS-ARE-AD-HOC-COMPOUND-SHELL-THAT-NO-ALLOW-RULE-MATCHES-SO-THEY-STOP-FOR-APPROVAL.
+A teammate confirming a claim writes a `bash -c` wrapper, a function definition, or a chain of variable assignments
+joined by `;`/`&&`. None of those matches a command-prefix allow rule, so each one raises an approval prompt, and in an
+unattended sprint nobody is there to answer it. The filing's census counted 38 wrapper-shape calls in 840 (a function
+definition or `bash -c`); remediator 30/290, adversary 3/525.
+
+**Fix (option 1 of the filing).** One byte-identical paragraph in every file matching `core/team-roles/*.md`, the glob
+`install.sh` copies, opening `**Verify with one read-only command per Bash call.**`: confirm a claim with a `derived`
+fence replayed by one `scripts/ai-dlc/validate-artifact-derivations.sh` call, or with one read-only command in its own
+Bash call. Invariant `I121` binds it: present exactly once in every role file as its own paragraph, byte-identical,
+no copy elsewhere, and the validator path resolving to `core/scripts/validate-artifact-derivations.sh`.
+
+**Done when, consumer side, owed as residue and not held open here.** On the first consumer sprint after a pull that
+carries this text, re-run the filing's census over that sprint's subagent transcripts (wrapper-shape calls: a function
+definition or `bash -c`), against the before figures above. Options (2)-(4) of the filing are weighed only if the rate
+stays high. That census is recorded as owed residue in the CHANGELOG at release; the receipt below closes on the text.
+
+verify: sh set -- core/team-roles/*.md; [ -f "$1" ] || exit 9; awk -v n="$#" -v op='**Verify with one read-only command per Bash call.**' -v fp='`scripts/ai-dlc/validate-artifact-derivations.sh <that file>`' 'function chk() { if (w != 1 || s != 1 || !p) bad++ } FNR == 1 { if (nf++) chk(); w = 0; s = 0; p = 0; at = 0; pr = "" } { if (index($0, op)) s++; if (index($0, op) == 1 && pr == "") { w++; at = FNR } if (at && FNR - at <= 7 && index($0, fp)) p = 1; pr = $0 } END { if (nf) chk(); if (nf != n) bad++; exit (bad ? 1 : 0) }' "$@"
+
+## BL-454 — the lead and its teammates never consult the advisor tool, even when the harness supplies one
+
+**DEFECT.** Carries the reference consumer's PC-S317-CONSULT-THE-ADVISOR-TOOL-AT-NAMED-TOUCHPOINTS-IN-THE-LEAD-AND-IN-ROLE-CONTRACTS-WHEN-IT-IS-AVAILABLE.
+Core named `advisor` nowhere, while subagents on the reference consumer have carried the tool since it arrived (every
+remediator transcript in that era). Neither the lead nor any role contract told an agent to call it, so a stronger
+reviewer sat unused through post-compact recovery, gates, repair loops and pushes. Measured call cost: lead median 94s,
+max 176s, 4 of 14 over 150s; subagent median 116s, max 295s. Check A of `validate-steering-budget.sh` read no server-side
+tool at all, so those calls were never measured either.
+
+**Fix.** SKILL.md Rule 32 names the lead's touchpoints (R, G1, G2, V1, V2, P, I) with the degrade clause in its opening
+paragraph, and the postcompact digest carries it; one-line cites at each step-file site. The recover hook is
+unchanged: touchpoint R reaches a compacted lead through the digest, because a hook line naming it pushed measured
+consumer recoveries past the 10000-character stub cliff (`BL-457`). Every file matching `core/team-roles/*.md` carries one byte-identical paragraph opening
+``**Consult the `advisor` tool when it is available.**``, bound by `I122`; no renderer change, because a rendered line
+would read DRIFTED at a consumer's self-update gate. Check A reads `server_tool_use` / `*_tool_result` pairs and
+exempts `advisor` by name; every other server tool is still charged.
+
+**Done when, consumer side, owed as residue and not held open here.** After a pull carrying this, the consumer
+re-renders `.claude/agents/` only if its own render inputs moved (they do not here), and the first sprint's lead
+transcripts show advisor calls at the named touchpoints. The receipt below closes on the text.
+
+verify: sh set -- core/team-roles/*.md; [ -f "$1" ] || exit 9; awk -v n="$#" -v op='**Consult the `advisor` tool when it is available.**' 'function chk(  b) { b = tolower(j); if (k != 1 || !index(b, "call it") || !index(b, "`advisor`") || !index(b, "available") || index(b, "never") || index(b, "do not call") || index(b, "must not") || index(b, "don\047t")) bad++ } FNR == 1 { if (nf++) chk(); k = 0; on = 0; j = ""; pr = "" } { if (index($0, op) == 1 && pr == "") { k++; on = 1 } if (on) { if ($0 == "") on = 0; else j = j " " $0 } pr = $0 } END { if (nf) chk(); if (nf != n) bad++; exit (bad ? 1 : 0) }' "$@" && h="$(grep -E '^### Rule [0-9]+ -- .*advisor' core/skills/ai-dlc/SKILL.md | head -n 1)" && [ -n "$h" ] && awk -v h="$h" 'index($0, "<!-- BEGIN GENERATED: postcompact-digest") == 1 { g = 1 } index($0, "<!-- END GENERATED: postcompact-digest") == 1 { g = 0 } g && $0 == h { f = 1 } END { exit (f ? 0 : 1) }' core/skills/ai-dlc/postcompact-digest.md
+
+## BL-457 — the recover hook measures `degraded` before the provenance wrap, so a stubbed block reports `degraded=no`
+
+**DEFECT.** Filed in batch 200 by the 0.732.0 tip adversary. `core/hooks/ai-dlc-recover.sh` sets `degraded` from
+`${#CONTEXT}` against the 10000-character cliff, then `ai_dlc_provenance_wrap` prepends the provenance tag (about 129
+characters) to the string it actually emits. A block emitted at 10000-10128 characters is replaced by the harness with a
+file stub, while `.recover-fired` records `degraded=no` and `injected_bytes` below the cliff, so `ai-dlc-postcompact.sh`
+reports the context as landed. The check cannot fire in exactly the band where it is needed. Measured on the
+resolvable-step-file branch with a precompact sidecar and a gate nonce: a 41-character nonce emits 10066 characters and
+records `injected_bytes=9937 degraded=no`; real consumer recoveries of that shape (gate-resume with a sidecar) measured
+10002-10026 emitted.
+
+**Coverage gap beside it.** No fixture seeds a precompact sidecar together with a gate nonce and bounds the emitted
+length: `core/fixtures/gate-resume/run.sh` bounds length with no sidecar, and `postcompact-rulebook-recovery` seeds no
+gate nonce.
+
+**Fix.** Decide `degraded` (and record `injected_bytes`) from the string actually emitted, after the wrap, and add a
+fixture arm that seeds sidecar plus nonce and asserts both the length bound and `degraded`. The receipt sweeps the nonce
+length across the cliff and passes only when every world over it reports `degraded=yes` and every world under it
+`degraded=no`, so reporting `yes` unconditionally, or lowering the threshold to the trim ceiling, does not close it.
+
+verify: sh S=core/hooks/ai-dlc-recover.sh; [ -f "$S" ] || exit 9; command -v jq >/dev/null 2>&1 || exit 9; W="$(mktemp -d)" || exit 9; lo=0; hi=0; bad=0; n=0; while [ "$n" -le 80 ]; do P="$W/w$n"; mkdir -p "$P/_bmad-output" "$P/scripts/ai-dlc" "$P/.claude/skills/ai-dlc/steps" || exit 9; echo x > "$P/.claude/skills/ai-dlc/steps/implementation.md"; printf '# Pipeline Snapshot\n\n## Pipeline Position\n- **Current step file:** `implementation.md`\n' > "$P/_bmad-output/pipeline-snapshot.md"; printf 'sidecar\n' > "$P/_bmad-output/pipeline-snapshot.precompact.md"; x="$(printf '%*s' "$n" '' | tr ' ' a)"; printf '#!/bin/sh\n[ "$1" = current ] && echo g%s\n' "$x" > "$P/scripts/ai-dlc/gate-checkpoint.sh"; chmod +x "$P/scripts/ai-dlc/gate-checkpoint.sh"; L="$(printf '{"source":"compact","session_id":"receipt"}' | CLAUDE_PROJECT_DIR="$P" bash "$S" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext | length' 2>/dev/null)"; D="$(sed -n 's/^degraded=//p' "$P/_bmad-output/.recover-fired" 2>/dev/null)"; [ -n "$L" ] && [ -n "$D" ] || exit 9; if [ "$L" -ge 10000 ]; then hi=$((hi + 1)); [ "$D" = yes ] || bad=$((bad + 1)); else lo=$((lo + 1)); [ "$D" = no ] || bad=$((bad + 1)); fi; n=$((n + 5)); done; [ "$lo" -gt 0 ] && [ "$hi" -gt 0 ] || exit 9; [ "$bad" -eq 0 ]

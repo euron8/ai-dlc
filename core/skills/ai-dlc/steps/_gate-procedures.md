@@ -239,7 +239,8 @@ step file is a copy that drifts.
 **Join every spawn on its DELIVERABLE** — one `scripts/ai-dlc/wait-for-deliverable.sh
 <path> [<path> ...]` call per wave, `run_in_background: true` ("Bounded-join beat"
 above). A hand-rolled `until`/`while`/`sleep` wait is a Rule 29 Check A violation that
-gate Check 25 counts.
+gate Check 25 counts. SKILL.md Rule 32 touchpoint P applies on a pass's `beat 2/` WAITING
+line, and touchpoint V2 wherever a pass verdict and a validator disagree.
 
 **Intensity.** Run the minimum cycle SKILL.md Rule 8's intensity table names for
 the declared `validation_intensity` — read that row; a copy here drifts. A
@@ -641,6 +642,7 @@ that derives every factual claim the repair asserts, with its output. The next a
 verifies against that record; so does the gate's re-run of the failed checks.
 
 **Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh <repair_record_path>`.
+SKILL.md Rule 32 touchpoint V1 applies once the repair record is joined, before the next pass.
 
 **Then re-run the derivations, BEFORE dispatching the next pass:**
 

@@ -13,12 +13,33 @@ operator config — do not evaluate it, and do not compare it to the standard ro
 `aiDlcRoles.code-reviewer-escalated` in `.claude/settings.json`.** That entry is the only
 source; do not infer either value from anywhere else.
 
+**Verify with one read-only command per Bash call.** A check that reads the tree to confirm a
+claim (a count, a citation, a listing) is either a `derived` fence in your deliverable, replayed
+by one call to `scripts/ai-dlc/validate-artifact-derivations.sh <that file>`, or one read-only
+command or pipeline in its own Bash call: no `set`, no chain of variable assignments, no
+function definition, no `bash -c`, and no `;`, `&&` or `||` joining two checks. Several
+command/output pairs share one fence, so N claims are one fence and one validator call, never N
+lines of shell; write each path literally, because a fence has no variables. A test, build or
+script run your contract requires is likewise one call of its own: at most one `VAR=value`
+prefix, absolute paths instead of a `cd`, and never wrapped in `set`, a function or `bash -c`.
+A recipe in an artifact that cannot be run in either form is reported as underived rather than
+run as compound shell. A call that sets variables, defines a function or runs `bash -c` matches
+no command-prefix allow rule and can stop an unattended sprint until a human approves it.
+
+**Consult the `advisor` tool when it is available.** If an `advisor` tool is available to you,
+call it before your first edit or write, and again before you write your deliverable or verdict.
+It takes no parameters and forwards your whole transcript to a stronger reviewer; weigh what it
+returns, and if it contradicts evidence you hold, say so in your deliverable rather than
+switching silently. If the tool is absent or returns an error, continue without it.
+
 ## Contract
 
 Read `.claude/team-roles/code-reviewer.md` and follow it IN FULL — identity, ownership,
 responsibilities, constraints, context loading, workflow, and verdict format. This role
 adds nothing to and removes nothing from the Code Reviewer contract except the
-session-setup declarations (model and effort) above. There is no second copy of the Code
+session-setup declarations (model and effort) above. The verification and advisor paragraphs
+above are byte-identical copies of the ones in `code-reviewer.md`, carried in every role
+contract, so they add nothing either. There is no second copy of the Code
 Reviewer rules here on purpose: `code-reviewer.md` is the single source of truth for how a
 Code Reviewer behaves. This role is that same reviewer on the key this file names.
 

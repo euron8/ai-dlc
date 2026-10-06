@@ -125,8 +125,28 @@ command measures as an operand: a command that reads stdin derives from nothing,
 checker refuses it as `READS-STDIN`.
 
 The command must be one read-only line (`grep`, `rg`, `awk`, `sed`, `wc`, `git grep`, and their
-kin; no `;`, `&&`, redirects or command substitution). A claim you cannot state that way is one
-the checker refuses rather than skips, and it stays the adversary's to run by hand.
+kin), shaped by the paragraph below, which is the one list of what may not join it; the checker
+also refuses a redirect or a command substitution inside a fence. A claim you cannot state that
+way is one the checker refuses rather than skips, and it stays the adversary's to run by hand.
+
+**Verify with one read-only command per Bash call.** A check that reads the tree to confirm a
+claim (a count, a citation, a listing) is either a `derived` fence in your deliverable, replayed
+by one call to `scripts/ai-dlc/validate-artifact-derivations.sh <that file>`, or one read-only
+command or pipeline in its own Bash call: no `set`, no chain of variable assignments, no
+function definition, no `bash -c`, and no `;`, `&&` or `||` joining two checks. Several
+command/output pairs share one fence, so N claims are one fence and one validator call, never N
+lines of shell; write each path literally, because a fence has no variables. A test, build or
+script run your contract requires is likewise one call of its own: at most one `VAR=value`
+prefix, absolute paths instead of a `cd`, and never wrapped in `set`, a function or `bash -c`.
+A recipe in an artifact that cannot be run in either form is reported as underived rather than
+run as compound shell. A call that sets variables, defines a function or runs `bash -c` matches
+no command-prefix allow rule and can stop an unattended sprint until a human approves it.
+
+**Consult the `advisor` tool when it is available.** If an `advisor` tool is available to you,
+call it before your first edit or write, and again before you write your deliverable or verdict.
+It takes no parameters and forwards your whole transcript to a stronger reviewer; weigh what it
+returns, and if it contradicts evidence you hold, say so in your deliverable rather than
+switching silently. If the tool is absent or returns an error, continue without it.
 
 A finding whose repair asserts nothing about the code (a wording fix, a deletion) needs no
 derivation — say `derivation: n/a (no factual claim)`.

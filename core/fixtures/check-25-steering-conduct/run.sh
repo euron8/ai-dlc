@@ -816,7 +816,7 @@ smut() {
   if [ "$got" = "$3" ]; then kill_ "S-$1" "$4 ($got)"; else bad_ "S-$1" "got '$got', want '$3' -- $4"; fi
 }
 # MUTANT K -- Bash added to EXEMPT. Every Bash is acquitted: B, C, D and H die.
-smut sib-bash-exempt 's#^const EXEMPT = new Set(\["AskUserQuestion"\]);$#const EXEMPT = new Set(["AskUserQuestion", "Bash"]);#' \
+smut sib-bash-exempt 's#^const EXEMPT = new Set(\["AskUserQuestion", "advisor"\]);$#const EXEMPT = new Set(["AskUserQuestion", "advisor", "Bash"]);#' \
   AbcdEFGh "with Bash exempt, a starving Bash in another message, past the answer or unjoined all pass"
 # MUTANT L -- keyed on the RECORD (its uuid) rather than message.id. The harness writes each
 # block as its own record, so nothing ever joins: A, E, F and G die, exactly as before the fix.
@@ -843,16 +843,50 @@ smut sib-one-pass 's#^    if (u.n !== "AskUserQuestion" || !u.mid || !res\[id\])
 smut sib-unanswered-acquits 's#^    if (u.n !== "AskUserQuestion" || !u.mid || !res\[id\]) continue;$#    if (u.n !== "AskUserQuestion" || !u.mid) continue; if (!res[id]) { answeredAt[u.mid] = Infinity; continue; }#' \
   ABCDEFGh "an unanswered question acquits a Bash sibling that blocked 600s"
 
+# ===========================================================================
+# SERVER-SIDE TOOLS. Two layers, and they cover each other on the advisor seed, which is why
+# a second seed exists. The READER must see a server_tool_use / *_tool_result pair at all; the
+# EXEMPT set then excuses `advisor` by name. Reverting the reader makes the advisor seed read 0
+# BYTE-IDENTICALLY to the shipping program (nothing is read, so nothing is charged), so only
+# the non-advisor server seed can kill that mutant. Removing the exemption is killed on the
+# advisor seed. Each mutant holds on the other seed.
+#   srv-advisor  advisor, 176s, producer shape       count 0 (exempt by decision)
+#   srv-search   tool_search_tool_regex, 176s, same  count 1 (a server tool is still charged)
+echo
+echo "  -- server-side tools --"
+srvc() { local c; c="$(bash "$1" --transcript "$ROOT/$2/session.jsonl" --count 2>/dev/null)"; printf '%s' "${c:-EMPTY}"; }
+w srv-advisor-exempt "$(srvc "$VALIDATOR" srv-advisor)" "0" \
+  "an advisor call over 150s, in the shape the harness writes it, is exempt by name"
+w srv-search-charged "$(srvc "$VALIDATOR" srv-search)" "1" \
+  "CONTROL: a non-advisor server tool over 150s is still charged -- the exemption is the name, not the shape"
+w srv-control "$(srvc "$MCTL" srv-advisor)/$(srvc "$MCTL" srv-search)" "0/1" \
+  "control: an unmutated copy beside the mutants reads both server seeds as shipped"
+# MUTANT S -- the advisor EXEMPTION removed; the reader still widened.
+mut srv-exempt-removed 's#^const EXEMPT = new Set(\["AskUserQuestion", "advisor"\]);$#const EXEMPT = new Set(["AskUserQuestion"]);#'
+if [ -n "$MUTP" ]; then
+  if [ "$(srvc "$MUTP" srv-advisor)" = "1" ]; then kill_ S-srv-exempt-removed "S: without the exemption the 176s advisor call is a STARVATION row"
+  else bad_ S-srv-exempt-removed "got '$(srvc "$MUTP" srv-advisor)', want '1' -- the exemption is not what acquits the advisor seed"; fi
+  w S-search-holds "$(srvc "$MUTP" srv-search)" "1" "S: the non-advisor server tool is charged either way"
+fi
+# MUTANT T -- the READER reverted to client tools only: both predicates back to the old literals.
+mut srv-reader-reverted 's#^  const isUse = (b) => /^(server_)?tool_use\$/.test(b.type || "");$#  const isUse = (b) => b.type === "tool_use";#;s#^  const isRes = (b) => /^(\[a-z_\]+_)?tool_result\$/.test(b.type || "");$#  const isRes = (b) => b.type === "tool_result";#'
+if [ -n "$MUTP" ]; then
+  if [ "$(srvc "$MUTP" srv-search)" = "0" ]; then kill_ T-srv-reader-reverted "T: with the reader reverted a 176s server tool charges nothing -- srv-search has teeth"
+  else bad_ T-srv-reader-reverted "got '$(srvc "$MUTP" srv-search)', want '0' -- the reader is not what charges the server seed"; fi
+  w T-advisor-holds "$(srvc "$MUTP" srv-advisor)" "0" \
+    "T: the advisor seed reads 0 BYTE-IDENTICALLY to the shipping program -- the two layers cover each other there, and only srv-search separates them"
+fi
+
 # KILL COUNT. A mutation that applied cleanly to a file this run never loaded reads exactly
 # like an arm that cannot fire, and `cmp -s` cannot tell them apart. Zero kills is that state.
-if [ "$KILLS" -ge 19 ]; then
+if [ "$KILLS" -ge 21 ]; then
   ok_ KILL-COUNT "$KILLS mutant kill(s) -- the arms above can fire"
 else
   bad_ KILL-COUNT "$KILLS kill(s); the mutants changed bytes in a file these arms never loaded"
 fi
 
 if [ "$FAILURES" -eq 0 ]; then
-  echo "PASS: check-25 steering-conduct fixture holds (3 cases + count contract + 9 identity arms + provenance window/isMeta arms + flagless-derivation arms + 8 AskUserQuestion-sibling arms + 18 mutants)."
+  echo "PASS: check-25 steering-conduct fixture holds (3 cases + count contract + 9 identity arms + provenance window/isMeta arms + flagless-derivation arms + 8 AskUserQuestion-sibling arms + 2 server-tool arms + 20 mutants)."
   exit 0
 fi
 echo "FAIL: $FAILURES check-25 assertion(s) failed."
