@@ -2489,6 +2489,59 @@ pp_world() {
   esac
   printf '%s\n' "$c"
 }
+# pp_mk <VAR> <pp_world args...> -- build a world and bind its path to VAR, or abort the fixture.
+# THE BARE `VAR="$(pp_world ...)"` THIS REPLACES WAS THE RECURSION'S ROOT. pp_world prints its path
+# only on success, so a failed build bound an EMPTY string, and `cd ""` in bash is a no-op that exits
+# 0 -- the drive below then ran `.githooks/pre-push` from the fixture's own cwd, the repo root, which is
+# the DISTRIBUTION hook over the real fixture tree, which runs this fixture again. A failed world is
+# therefore fatal here, and no drive trusts a path it has not checked (pp_enter).
+pp_mk() {
+  local _v="$1" _p; shift
+  _p="$(pp_world "$@")" && [ -n "$_p" ] && [ -d "$_p" ] \
+    || { printf 'FIXTURE ERROR: pp_world %s produced no world; refusing to drive a hook from %s\n' "$1" "$(pwd -P)" >&2; exit 1; }
+  printf -v "$_v" '%s' "$_p"
+}
+# pp_enter <world> -- cd into a world, REFUSING unless it is non-empty, a directory, and its own git
+# toplevel. A world that is a plain subdirectory of an enclosing repository resolves that repository's
+# toplevel instead, which is the same escape by a second route (the hook's own `cd "$(git rev-parse
+# --show-toplevel)"`). Returns non-zero with a FIXTURE ERROR line; callers join it with `&&`.
+pp_enter() {
+  local w="$1" top
+  [ -n "$w" ] && [ -d "$w" ] || { printf 'FIXTURE ERROR: pp_enter: world path [%s] is empty or not a directory\n' "$w" >&2; return 97; }
+  top="$(git -C "$w" rev-parse --show-toplevel 2>/dev/null)" || top=""
+  [ -n "$top" ] && [ "$(cd "$top" && pwd -P)" = "$(cd "$w" && pwd -P)" ] \
+    || { printf 'FIXTURE ERROR: pp_enter: world [%s] is not its own git toplevel (got [%s])\n' "$w" "$top" >&2; return 98; }
+  cd "$w"
+}
+# THE ESCAPE, CONSTRUCTED. A stub "distribution" repo whose hook only records that it ran, and a
+# drive standing in it -- the fixture's own cwd. Three worlds: an EMPTY path (what a failed pp_world
+# binds), a plain subdirectory of that repo (git resolves the ENCLOSING toplevel), and a real world.
+# The OLD drive shape `( cd "$w" && .githooks/pre-push )` is run as the control and MUST reach the
+# stub in the first two -- that is what proves the escape is constructible and the arm can fire; the
+# pp_enter shape must not reach it, and must still reach it in the real world (the ALLOW twin).
+PP_ESC="$PP/escape"; rm -rf "$PP_ESC"; mkdir -p "$PP_ESC/repo/.githooks" "$PP_ESC/repo/sub/.githooks" "$PP_ESC/real/.githooks"
+printf '#!/usr/bin/env bash\necho ran >> "%s/ran"\nexit 0\n' "$PP_ESC" > "$PP_ESC/repo/.githooks/pre-push"
+cp "$PP_ESC/repo/.githooks/pre-push" "$PP_ESC/real/.githooks/pre-push"
+# the subdirectory world carries a hook that resolves its toplevel the way the shipped hook does (line 31)
+printf '#!/usr/bin/env bash
+cd "$(git rev-parse --show-toplevel)" && exec .githooks/pre-push "$@"
+' > "$PP_ESC/repo/sub/.githooks/pre-push"
+chmod +x "$PP_ESC/repo/sub/.githooks/pre-push"
+chmod +x "$PP_ESC/repo/.githooks/pre-push" "$PP_ESC/real/.githooks/pre-push"
+( cd "$PP_ESC/repo" && git init -q . ) && ( cd "$PP_ESC/real" && git init -q . ) \
+  || { printf 'FIXTURE ERROR: escape worlds did not init\n' >&2; exit 1; }
+pp_esc_drive() { # pp_esc_drive <old|new> <world> -> number of times the stub hook ran
+  rm -f "$PP_ESC/ran"
+  if [ "$1" = old ]; then ( cd "$PP_ESC/repo" && cd "$2" && .githooks/pre-push origin x </dev/null >/dev/null 2>&1 )
+  else ( cd "$PP_ESC/repo" && pp_enter "$2" && .githooks/pre-push origin x </dev/null >/dev/null 2>&1 ) 2>/dev/null; fi
+  if [ -f "$PP_ESC/ran" ]; then grep -c ran "$PP_ESC/ran"; else echo 0; fi
+}
+ss_assert "pp-escape-old-empty"  "$(pp_esc_drive old "")"               "1" "control: the old drive shape with an EMPTY world path runs the hook standing in the cwd"
+ss_assert "pp-escape-old-subdir" "$(pp_esc_drive old "$PP_ESC/repo/sub")" "1" "control: a subdirectory world is entered, and its hook resolves the ENCLOSING toplevel and runs that repository hook"
+ss_assert "pp-escape-new-empty"  "$(pp_esc_drive new "")"               "0" "the guarded drive refuses an EMPTY world path and runs nothing"
+ss_assert "pp-escape-new-subdir" "$(pp_esc_drive new "$PP_ESC/repo/sub")" "0" "the guarded drive refuses a world that is a subdirectory of an enclosing repository"
+ss_assert "pp-escape-new-real"   "$(pp_esc_drive new "$PP_ESC/real")"    "1" "ALLOW twin: a real world that is its own repository is driven normally, once"
+
 # pp_scan <gate> <consumer> -> "pp=<status|none> sum=<n summary DEFER rows> ss=<n SAFE-STOP rows> und=<n>"
 pp_scan() {
   local o
@@ -2520,7 +2573,7 @@ PP_RED_LINES="$(printf '%s\n' "$PP_HOOK_RED" | bash 2>/dev/null | wc -l | tr -d 
 ss_assert "pp-nonrepo-silent" "$(pp_scan "$GATE" "$(vr_cons ppnonrepo)")" \
   "pp=none sum=1 ss=1 und=1" \
   "the seed's consumer is a bare directory: no push can happen, so no pre-push row -- the differential's own DEFER/SAFE-STOP pair is what remains"
-PP_GREEN="$(pp_world green "$PP_HOOK_GREEN" hooksPath yes)"
+pp_mk PP_GREEN green "$PP_HOOK_GREEN" hooksPath yes
 ss_assert "pp-green" "$(pp_scan "$GATE" "$PP_GREEN")" \
   "pp=SELF-UPDATE-OK sum=1 ss=1 und=1" \
   "a repository with a remote and an armed hook that exits 0: the probe ran, said OK, and the differential's verdicts are untouched beside it"
@@ -2528,7 +2581,7 @@ ss_assert "pp-green" "$(pp_scan "$GATE" "$PP_GREEN")" \
 # 2. A REFUSING HOOK DEFERS, names the phase it read out of the hook's own output, and the record
 #    carries the hook's output as `# probe:` lines. ONE summary DEFER and ONE SAFE-STOP row: the
 #    push arm exits after its own pair, so the differential cannot add a second.
-PP_RED="$(pp_world red "$PP_HOOK_RED" hooksPath yes)"
+pp_mk PP_RED red "$PP_HOOK_RED" hooksPath yes
 pp_red_out="$(bash "$GATE" "$DIST" "$BASE" "$THEIRS" "$PP_RED" 2>/dev/null)"
 ss_assert "pp-red-defers" "$(pp_scan "$GATE" "$PP_RED")" \
   "pp=SELF-UPDATE-DEFER sum=1 ss=1 und=0" \
@@ -2551,34 +2604,34 @@ ss_assert "pp-red-fed-line" \
 #    core.hooksPath (the reference consumer's shim spelling) still defers; the tracked hook
 #    unarmed -- present at .githooks/ but no core.hooksPath and no .git/hooks copy -- is OK,
 #    because git runs nothing, and the row says so.
-PP_DOTGIT="$(pp_world dotgit "$PP_HOOK_RED" dotgit yes)"
+pp_mk PP_DOTGIT dotgit "$PP_HOOK_RED" dotgit yes
 ss_assert "pp-dotgit-hook" "$(pp_scan "$GATE" "$PP_DOTGIT")" \
   "pp=SELF-UPDATE-DEFER sum=1 ss=1 und=0" \
   "a refusing hook at .git/hooks/pre-push with no core.hooksPath is the hook git runs, and the probe finds it there"
-PP_UNARMED="$(pp_world unarmed "" none yes)"
+pp_mk PP_UNARMED unarmed "" none yes
 ss_assert "pp-unarmed-ok" \
   "$(pp_scan "$GATE" "$PP_UNARMED")|$(bash "$GATE" "$DIST" "$BASE" "$THEIRS" "$PP_UNARMED" 2>/dev/null | awk -F'\t' '$2 == "pre-push" && $3 ~ /git runs no pre-push hook/ {print "says-so"; exit}')" \
   "pp=SELF-UPDATE-OK sum=1 ss=1 und=1|says-so" \
   "the tracked hook exists but nothing arms it: git runs no hook, so the push is not refused locally, and the row says that rather than claiming the hook passed"
 # NOT EXECUTABLE IS NOT ARMED. Git skips a hook without the exec bit, and so does the probe.
-PP_NOEXEC="$(pp_world noexec "$PP_HOOK_RED" hooksPath yes)"; chmod -x "$PP_NOEXEC/.githooks/pre-push"
+pp_mk PP_NOEXEC noexec "$PP_HOOK_RED" hooksPath yes; chmod -x "$PP_NOEXEC/.githooks/pre-push"
 ss_assert "pp-noexec-ok" "$(pp_scan "$GATE" "$PP_NOEXEC")" \
   "pp=SELF-UPDATE-OK sum=1 ss=1 und=1" \
   "a refusing hook without its exec bit is one git would skip, so the probe skips it too"
 
 # 4. NO REMOTE: silent, like the non-repo, because step 2 commits locally and pushes nothing.
-PP_NOREMOTE="$(pp_world noremote "$PP_HOOK_RED" hooksPath no)"
+pp_mk PP_NOREMOTE noremote "$PP_HOOK_RED" hooksPath no
 ss_assert "pp-noremote-silent" "$(pp_scan "$GATE" "$PP_NOREMOTE")" \
   "pp=none sum=1 ss=1 und=1" \
   "a repository with no remote makes no push, so a refusing hook is never run and no pre-push row is emitted"
 
 # 5. FED THE PROTOCOL LINE. A hook that refuses on EMPTY stdin passes under the probe, so the
 #    probe fed it something; the control is the same hook driven with empty stdin by hand.
-PP_STDIN="$(pp_world stdin "$PP_HOOK_STDIN" hooksPath yes)"
+pp_mk PP_STDIN stdin "$PP_HOOK_STDIN" hooksPath yes
 ss_assert "pp-stdin-fed" "$(pp_scan "$GATE" "$PP_STDIN")" \
   "pp=SELF-UPDATE-OK sum=1 ss=1 und=1" \
   "a hook that refuses empty stdin is OK under the probe, so the probe fed it the ref protocol"
-ss_assert "pp-stdin-control" "$( ( cd "$PP_STDIN" && .githooks/pre-push origin x </dev/null >/dev/null 2>&1 ); echo $? )" "3" \
+ss_assert "pp-stdin-control" "$( ( pp_enter "$PP_STDIN" && .githooks/pre-push origin x </dev/null >/dev/null 2>&1 ); echo $? )" "3" \
   "...and the same hook fed nothing exits 3, so the cell above is the fed line and not a hook that ignores stdin"
 
 # 6. THE SAFE-STOP ROW SAYS THE SPLIT BUYS NOTHING, AND THE WALK SKIPS THE PROBE. A push refused
@@ -2624,7 +2677,7 @@ PP_HOOK_LSREC='n=$(ls _bmad-output/ai-dlc-update/self-update-gate-*.md 2>/dev/nu
 echo "records-visible-during-hook=$n"
 [ "$n" -eq 0 ] || exit 4
 exit 0'
-PP_LSREC="$(pp_world lsrec "$PP_HOOK_LSREC" hooksPath yes)"
+pp_mk PP_LSREC lsrec "$PP_HOOK_LSREC" hooksPath yes
 ss_assert "pp-record-out-of-tree" \
   "$(pp_scan "$GATE" "$PP_LSREC")|n=$(vr_n "$PP_LSREC")|$(sed -n 's/^# verdict: *//p' "$(vr_newest "$PP_LSREC")" | head -1)" \
   "pp=SELF-UPDATE-OK sum=1 ss=1 und=1|n=1|DEFER" \
@@ -2633,7 +2686,7 @@ ss_assert "pp-record-out-of-tree" \
 # so the cell above is the record's absence and not a hook that cannot see the directory.
 ss_assert "pp-record-control" \
   "$( mkdir -p "$PP_LSREC/_bmad-output/ai-dlc-update" && : > "$PP_LSREC/_bmad-output/ai-dlc-update/self-update-gate-00000000T000000Z.md" \
-      && ( cd "$PP_LSREC" && .githooks/pre-push origin x </dev/null >/dev/null 2>&1 ); echo $? )" "4" \
+      && ( pp_enter "$PP_LSREC" && .githooks/pre-push origin x </dev/null >/dev/null 2>&1 ); echo $? )" "4" \
   "...and the same hook with a record-shaped file present exits 4, so the probe's hook really can see that directory"
 
 # 8. THE HOOK GETS WHAT GIT PASSES. `$1` is the remote NAME and `$2` its URL; the local ref on
@@ -2647,7 +2700,7 @@ git rev-parse --verify -q "$lref" >/dev/null || { echo "local ref $lref does not
 [ "$lref" = "$(git symbolic-ref HEAD)" ] || { echo "local ref $lref is not the current branch"; exit 8; }
 case "$rref" in refs/heads/ai-dlc-update/self-update-*) ;; *) echo "remote ref $rref"; exit 9 ;; esac
 exit 0'
-PP_UPSTREAM="$(pp_world upstream "$PP_HOOK_ARGS" hooksPath no)"
+pp_mk PP_UPSTREAM upstream "$PP_HOOK_ARGS" hooksPath no
 git -C "$PP_UPSTREAM" remote add upstream "$PP/nowhere-upstream.git"
 ss_assert "pp-args-as-git" "$(pp_scan "$GATE" "$PP_UPSTREAM")" \
   "pp=SELF-UPDATE-OK sum=1 ss=1 und=1" \
@@ -2656,7 +2709,7 @@ ss_assert "pp-args-as-git" "$(pp_scan "$GATE" "$PP_UPSTREAM")" \
 # non-existent local ref -- refuses, so the cell above is the arguments and not a hook that
 # accepts anything.
 ss_assert "pp-args-control" \
-  "$( ( cd "$PP_UPSTREAM" && printf 'refs/heads/ai-dlc-update/self-update-x-probe %s refs/heads/ai-dlc-update/self-update-x-probe 0000000000000000000000000000000000000000\n' "$(git rev-parse HEAD)" \
+  "$( ( pp_enter "$PP_UPSTREAM" && printf 'refs/heads/ai-dlc-update/self-update-x-probe %s refs/heads/ai-dlc-update/self-update-x-probe 0000000000000000000000000000000000000000\n' "$(git rev-parse HEAD)" \
         | .githooks/pre-push origin upstream >/dev/null 2>&1 ); echo $? )" "5" \
   "...and the same hook fed the first cut's arguments exits 5, so the probe's arguments are what satisfies it"
 
@@ -2666,11 +2719,11 @@ ss_assert "pp-args-control" \
 #    fixture unsets every AI_DLC_* at its top, so only the gate can have set it.
 PP_HOOK_KNOB='[ "${AI_DLC_READSET_LIVE_TRACE:-unset}" = 0 ] || { echo "live trace knob ${AI_DLC_READSET_LIVE_TRACE:-unset}"; exit 10; }
 exit 0'
-PP_KNOB="$(pp_world knob "$PP_HOOK_KNOB" hooksPath yes)"
+pp_mk PP_KNOB knob "$PP_HOOK_KNOB" hooksPath yes
 ss_assert "pp-trace-knob" "$(pp_scan "$GATE" "$PP_KNOB")" \
   "pp=SELF-UPDATE-OK sum=1 ss=1 und=1" \
   "a hook that refuses unless AI_DLC_READSET_LIVE_TRACE=0 is OK under the probe, so the probe starts no detached trace"
-ss_assert "pp-trace-knob-control" "$( ( cd "$PP_KNOB" && printf 'refs/heads/x %s refs/heads/x 0000000000000000000000000000000000000000\n' "$(git rev-parse HEAD)" | .githooks/pre-push origin x >/dev/null 2>&1 ); echo $? )" "10" \
+ss_assert "pp-trace-knob-control" "$( ( pp_enter "$PP_KNOB" && printf 'refs/heads/x %s refs/heads/x 0000000000000000000000000000000000000000\n' "$(git rev-parse HEAD)" | .githooks/pre-push origin x >/dev/null 2>&1 ); echo $? )" "10" \
   "...and the same hook run by hand without the knob exits 10, so the cell above is the knob and not a hook that accepts anything"
 
 # --- MUTANTS on arm P ---------------------------------------------------------------------
