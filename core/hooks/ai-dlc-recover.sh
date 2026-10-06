@@ -578,6 +578,8 @@ case "$_PROV_WRAPPED" in
   *"$_PROV_SENTINEL"*)
     _PROV_HEAD="${_PROV_WRAPPED%%"$_PROV_SENTINEL"*}"
     _PROV_TAIL="${_PROV_WRAPPED#*"$_PROV_SENTINEL"}" ;;
+  # UNREACHABLE with the shipped library, which always places the body last. Reaching it would
+  # emit the block UNMARKED, the same fail-open as a missing library, with an overhead of 0.
   *) _PROV_HEAD=""; _PROV_TAIL="" ;;
 esac
 WRAP_OVERHEAD=$(( ${#_PROV_HEAD} + ${#_PROV_TAIL} ))

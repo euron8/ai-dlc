@@ -114,7 +114,7 @@ length across the cliff and passes only when every world over it reports `degrad
 
 **Receipt rewritten in batch 201.** The filed receipt swept the nonce to 81 characters and required a world over the
 cliff. The fix also trims the gate-in-flight block, measured on the receipt's own seed: the 81-character world now emits
-9855, `hi` is 0, and the filed receipt exits 9 on the fix. The sweep now runs to 401 characters in steps of 10. It also
+9851, `hi` is 0, and the filed receipt exits 9 on the fix. The sweep now runs to 401 characters in steps of 10. It also
 requires a world in [9500, 10000), where lowering the threshold to the trim bound is visible, and it requires
 `injected_bytes` to equal the emitted length in every world. Scored under `bash -c 'set -uo pipefail; ...'` (filed / rewritten):
 fix 9 / 0, the pre-fix tree 1 / 1, `degraded=yes` unconditionally 9 / 1, threshold at the trim bound 9 / 1.

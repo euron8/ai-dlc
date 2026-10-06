@@ -887,7 +887,7 @@ else
 fi
 
 # ============================================================================
-EXPECTED_ASSERTIONS=49
+EXPECTED_ASSERTIONS=55
 echo
 if [ "$total" -lt "$EXPECTED_ASSERTIONS" ]; then
   bad "only ${total} assertion(s) ran, below the ${EXPECTED_ASSERTIONS}-assertion floor -- an arm silently failed to fire rather than to pass"
