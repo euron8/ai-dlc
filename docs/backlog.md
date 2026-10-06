@@ -146,18 +146,36 @@ runs the gate it already has, so (a) reaches a consumer only after one pull and 
 (b) Make the consumer hook re-render when the only difference is the rendered body, so a renderer body change cannot
 refuse the push.
 
-**Receipt.** It builds two mktemp worlds and drives the real gate in each. In the first, the incoming renderer changes
-only rendered body text, and the receipt asserts that the hook's `--check --root .` arm really goes 0 to 1 there. In the
-second, the incoming renderer changes only a comment, and the receipt asserts that the hook's arm stays at 0. The receipt
-exits 0 only when the gate refuses (DEFER or UNDECIDED) the first world on `render-agent-definitions.sh` AND answers OK,
-with no refusal, on the second. Scored under `bash -c 'set -uo pipefail; …'` on scratch copies of this tree: current
-tree 1; a gate that turns equal non-zero codes into UNDECIDED 1 (it refuses the benign control too); a gate that passes
-`--root "$CONSUMER"` with no `--check` 1 (write mode exits 0 on both sides, so it is still OK); a prototype of (a) that
-passes `--check --root .` when the hook names it 0. The receipt exits 9 if a precondition moves. That includes either of
-its two renderer anchors changing: the body text `FIRST action before any other work` and the comment
-`# --check NEVER WRITES, so it is safe`.
+**Receipt.** It builds four mktemp worlds from the real renderer, the real provenance validator, the shipped hook and
+the shipped schema, and drives the real gate in each, as step 2 drives it. Before reading the gate, it measures each
+world's own hook-argv exit pair, current then incoming, and exits 9 unless the pair is what the world claims:
+- `body`: the incoming renderer changes only rendered body text, and the hook's `--check --root .` goes 0 to 1.
+- `benign`: the incoming renderer changes only a comment, and the pair is 0 and 0.
+- `drift`: the same comment change on a consumer whose definitions were already hand-edited, and the pair is 1 and 1.
+- `strays`: a SECOND argv-dependent script. The incoming `validate-provenance-block.sh` fails `--strays` on any
+  envelope-carrying file, and the hook's `--strays` goes 0 to 1.
 
-verify: sh G=core/skills/ai-dlc-update/reconcile/self-update-gate.sh; R=core/scripts/render-agent-definitions.sh; H=core/git-hooks/pre-push; [ -f "$G" ] && [ -f "$R" ] && [ -f "$H" ] || exit 9; command -v jq >/dev/null 2>&1 || exit 9; grep -q 'FIRST action before any other work' "$R" || exit 9; W="$(mktemp -d)" || exit 9; sw() { D="$W/$1"; N="$D/d/core/scripts/render-agent-definitions.sh"; mkdir -p "$D/d/core/scripts" "$D/c/scripts/ai-dlc" "$D/c/.githooks" "$D/c/.claude" || exit 9; git -C "$D/d" init -q || exit 9; cp "$R" "$N" && cp "$R" "$D/c/scripts/ai-dlc/render-agent-definitions.sh" && cp "$H" "$D/c/.githooks/pre-push" || exit 9; printf '0.1.0\n' > "$D/d/VERSION"; printf '{"aiDlcRoles":{"dev":{"model":"m"}},"aiDlcModels":{"m":"claude-x"}}\n' > "$D/c/.claude/settings.json"; bash "$R" --root "$D/c" >/dev/null 2>&1 || exit 9; git -C "$D/d" add -A && git -C "$D/d" -c user.name=r -c user.email=r@r commit -qm base || exit 9; sed "$2" "$R" > "$N"; cmp -s "$R" "$N" && exit 9; printf '0.2.0\n' > "$D/d/VERSION"; git -C "$D/d" -c user.name=r -c user.email=r@r commit -qam theirs || exit 9; ( cd "$D/c" && bash "$N" --check --root . >/dev/null 2>&1 ); HRC=$?; bash "$G" "$D/d" "$(git -C "$D/d" rev-parse HEAD~1)" "$(git -C "$D/d" rev-parse HEAD)" "$D/c" > "$D/out" 2>/dev/null; [ -s "$D/out" ] || exit 9; }; sw body 's/FIRST action before any other work/FIRST action, before any other work/'; [ "$HRC" -eq 1 ] || exit 9; sw benign 's/^# --check NEVER WRITES, so it is safe/# --check NEVER WRITES; it is safe/'; [ "$HRC" -eq 0 ] || exit 9; b="$(grep -cE '^SELF-UPDATE-(DEFER|UNDECIDED).render-agent-definitions' "$W/body/out")" || b=0; k="$(grep -cE '^SELF-UPDATE-(DEFER|UNDECIDED)' "$W/benign/out")" || k=0; o="$(grep -cE '^SELF-UPDATE-OK.render-agent-definitions' "$W/benign/out")" || o=0; [ "$b" -ge 1 ] && [ "$k" -eq 0 ] && [ "$o" -eq 1 ]
+It exits 0 only when all of these hold:
+- the gate refuses `body` on the renderer, and the consumer's `.claude/agents` is byte-identical across that run;
+- it answers OK on the renderer with no refusal at all in `benign` and in `drift`;
+- it refuses `strays` on the provenance validator.
+
+Scored under `bash -c 'set -uo pipefail; …'`, each build in its own scratch copy of `core/`:
+
+| build | exit |
+|---|---|
+| the fix | 0 |
+| today's tree (bare probe) | 1 |
+| a gate that hand-lists the renderer's `--check --root .` | 1 (`strays` reads OK) |
+| a gate that passes `--root "$CONSUMER"` with no `--check` | 1 (`body` reads OK, and `.claude/agents` is rewritten) |
+| a gate that turns equal non-zero codes into UNDECIDED | 1 (it refuses `drift`) |
+| a second correct spelling (today's gate, argv by `sed` of the last hook line, siblings staged, root set) | 0 |
+
+The receipt exits 9 if a precondition moves. That includes any of its three anchors changing: the renderer's body text
+`FIRST action before any other work`, its comment `# --check NEVER WRITES, so it is safe`, and the provenance
+validator's single `if strays:` line.
+
+verify: sh G=core/skills/ai-dlc-update/reconcile/self-update-gate.sh; R=core/scripts/render-agent-definitions.sh; P=core/scripts/validate-provenance-block.sh; H=core/git-hooks/pre-push; K=core/schemas/provenance-block.json; [ -f "$G" ] && [ -f "$R" ] && [ -f "$P" ] && [ -f "$H" ] && [ -f "$K" ] || exit 9; command -v jq >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1 || exit 9; grep -q 'FIRST action before any other work' "$R" && grep -q '^# --check NEVER WRITES, so it is safe' "$R" && [ "$(grep -c '^if strays:$' "$P")" = 1 ] || exit 9; W="$(mktemp -d)" || exit 9; sw() { D="$W/$1"; S="$D/c/scripts/ai-dlc/$2"; N="$D/d/core/scripts/$2"; mkdir -p "$D/d/core/scripts" "$D/c/scripts/ai-dlc" "$D/c/.githooks" "$D/c/.claude/schemas" || exit 9; git -C "$D/d" init -q || exit 9; cp "$R" "$P" "$D/d/core/scripts/" && cp "$R" "$P" "$D/c/scripts/ai-dlc/" && cp "$H" "$D/c/.githooks/pre-push" && cp "$K" "$D/c/.claude/schemas/" || exit 9; printf '0.1.0\n' > "$D/d/VERSION"; printf '{"aiDlcRoles":{"dev":{"model":"m"}},"aiDlcModels":{"m":"claude-x"}}\n' > "$D/c/.claude/settings.json"; bash "$R" --root "$D/c" >/dev/null 2>&1 || exit 9; [ "$3" = drift ] && printf 'drift\n' >> "$D/c/.claude/agents/dev.md"; git -C "$D/d" add -A && git -C "$D/d" -c user.name=r -c user.email=r@r commit -qm base || exit 9; sed "$4" "$S" > "$N"; cmp -s "$S" "$N" && exit 9; printf '0.2.0\n' > "$D/d/VERSION"; git -C "$D/d" -c user.name=r -c user.email=r@r commit -qam theirs || exit 9; HC="$( cd "$D/c" && AI_DLC_PROJECT_ROOT="$D/c" bash "$S" $5 >/dev/null 2>&1; echo $? )"; HN="$( cd "$D/c" && AI_DLC_PROJECT_ROOT="$D/c" bash "$N" $5 >/dev/null 2>&1; echo $? )"; A0="$(cat "$D/c/.claude/agents/"* | cksum)"; bash "$G" "$D/d" "$(git -C "$D/d" rev-parse HEAD~1)" "$(git -C "$D/d" rev-parse HEAD)" "$D/c" > "$D/out" 2>/dev/null; [ -s "$D/out" ] || exit 9; [ "$A0" = "$(cat "$D/c/.claude/agents/"* | cksum)" ] && AG=same || AG=moved; }; rf() { n="$(grep -cE "^SELF-UPDATE-(DEFER|UNDECIDED).$2" "$W/$1/out")" || n=0; printf '%s' "$n"; }; ok() { n="$(grep -cE "^SELF-UPDATE-OK.$2" "$W/$1/out")" || n=0; printf '%s' "$n"; }; sw body render-agent-definitions.sh clean 's/FIRST action before any other work/FIRST action, before any other work/' '--check --root .'; [ "$HC$HN" = 01 ] || exit 9; AB="$AG"; sw benign render-agent-definitions.sh clean 's/^# --check NEVER WRITES, so it is safe/# --check NEVER WRITES; it is safe/' '--check --root .'; [ "$HC$HN" = 00 ] || exit 9; sw drift render-agent-definitions.sh drift 's/^# --check NEVER WRITES, so it is safe/# --check NEVER WRITES; it is safe/' '--check --root .'; [ "$HC$HN" = 11 ] || exit 9; sw strays validate-provenance-block.sh clean 's/^if strays:$/if strays or candidates:/' '--strays'; [ "$HC$HN" = 01 ] || exit 9; [ "$(rf body render-agent-definitions)" -ge 1 ] && [ "$AB" = same ] && [ "$(rf benign '')" -eq 0 ] && [ "$(ok benign render-agent-definitions)" -eq 1 ] && [ "$(rf drift '')" -eq 0 ] && [ "$(ok drift render-agent-definitions)" -eq 1 ] && [ "$(rf strays validate-provenance-block)" -ge 1 ]
 
 ## BL-459 — Rule 32's advisor touchpoints are prose only, so a lead or teammate can skip every one
 
