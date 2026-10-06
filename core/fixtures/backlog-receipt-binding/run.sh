@@ -127,7 +127,11 @@ note() { printf '%s\n' "$*"; }
 #   BL-801  greps a literal        -> PROSE-CLOSABLE   (the finding)
 #   BL-802  drives a script        -> BOUND            (the near-miss)
 #   BL-803  exits 9 at a guard     -> OUT-OF-POPULATION
-#   BL-804  pattern from a var     -> UNSCORABLE
+#   BL-804  pattern assembled from -> UNSCORABLE       (`MARK'804'`: the literal grep receives
+#           two quoted pieces                             is in no text the arm can seed. A pattern
+#                                                         in a VARIABLE is not this shape any more:
+#                                                         the receipt-text seed carries it, and m9b
+#                                                         asserts that it flips.)
 #   BL-805  base 0                 -> ALREADY-PASSING  (a 0 -> 1 flip is not a finding)
 #   BL-806  reads git              -> PROSE-CLOSABLE, and its base exit proves the checkout
 #                                     is a real repository rather than a bare extraction
@@ -185,7 +189,7 @@ bl_seed_ledger() { # bl_seed_ledger <file>
     printf '## BL-801\n\nBody.\n\nverify: sh grep -q %s probe/subject.txt\n\n' "'MARK801'"
     printf '## BL-802\n\nBody.\n\nverify: sh o="$(bash probe/tool.sh)"; grep -q %s <<<"$o"\n\n' "'READY802'"
     printf '## BL-803\n\nBody.\n\nverify: sh grep -q %s probe/guarded.txt || exit 9\n\n' "'MARK803'"
-    printf '## BL-804\n\nBody.\n\nverify: sh S=%s; grep -q "$S" probe/varpat.txt\n\n' "MARK804"
+    printf '## BL-804\n\nBody.\n\nverify: sh grep -q MARK%s probe/varpat.txt\n\n' "'804'"
     printf '## BL-805\n\nBody.\n\nverify: sh ! grep -q %s probe/passing.txt\n\n' "'MARK805'"
     printf '## BL-806\n\nBody.\n\nverify: sh git rev-parse HEAD >/dev/null 2>&1 || exit 9; grep -q %s probe/gitsub.txt\n\n' "'MARK806'"
     printf '## BL-807\n\nBody.\n\nverify: sh grep -q %s probe/one.txt && grep -q %s probe/two.txt\n\n' "'MARK807A'" "'MARK807B'"
@@ -589,7 +593,9 @@ kill_check "m8 a ledger that parses to ZERO receipts is a finding" "$TMP/m8" "" 
 #   m8d  the only sh receipt is an empty one-liner                                        -> R2 FAIL
 #   m8e  the only sh receipt greps a literal at a path the seed cannot name               -> R2 FAIL
 #   m8f  live entries and no sh receipt at all                                            -> OK
-# The behavioural seed carries BOTH tokens=0 shapes so a predicate keyed on paths cannot pass it.
+# The behavioural seed carries BOTH literal-free shapes -- one naming a path, whose own text
+# appended to that path must not flip it, and one naming none, whose exit must be stable across
+# two readings -- so a predicate that grants only one of the two signals cannot pass it.
 r8_seed() { # r8_seed <dir> <nsh> <nentries> <ledger-body...> -> seeds, writes the ledger, commits
   local d="$1"; shift
   seed "$d"
@@ -680,12 +686,92 @@ r8_seed "$TMP/m8f" "$R8_MANUAL"
 r8_ok "m8f live entries with no sh receipt" "$TMP/m8f" 0 1 no-sh-receipts \
   "(0 sh receipts over 1 live entries in docs/backlog.md"
 
+# ===== M8G-M8M. WHAT AN ACCOUNTED-FOR ZERO MAY NOT ABSORB. ===================================
+#   m8g  one behavioural receipt + one UNSEEDED receipt                       -> R2 FAIL
+#   m8h  one behavioural receipt + one `|| exit 9` OUT-OF-POPULATION receipt  -> R2 FAIL
+#   m8i  live entries whose verify line this parser cannot see, one per spelling -> R2 FAIL
+#   m8j  `has` and `lacks` beside `manual`: every verb the parser reads        -> OK
+#   m8k  `verify:<TAB>sh ...` -- the parser strips blanks after the colon, so it IS an sh receipt
+#        and is scored. It is asserted SCORED, because it cannot reach the no-sh state at all.
+# m8g's receipt is UNSEEDED for a real reason, the way R1's BL-906 is: a `post-checkout` hook in
+# the probe repository makes its subject unwritable in every checkout. Each receipt has its own
+# subject file, so no seed reaches another receipt's.
+R8_UNSEEDED="## BL-838
+
+verify: sh grep -q 'MARK838' probe/locked.txt
+"
+R8_OOP="## BL-839
+
+verify: sh grep -q 'MARK839' probe/guarded.txt || exit 9
+"
+r8_seed "$TMP/m8g" "$R8_BEHAV_PATH" "$R8_UNSEEDED"
+printf 'locked\n' > "$TMP/m8g/probe/locked.txt"
+( cd "$TMP/m8g" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m locked >/dev/null 2>&1 )
+mkdir -p "$TMP/m8g/.probehooks"
+{ echo '#!/usr/bin/env bash'
+  echo '[ -f probe/locked.txt ] && chmod 444 probe/locked.txt'
+  echo 'exit 0'
+} > "$TMP/m8g/.probehooks/post-checkout"
+chmod +x "$TMP/m8g/.probehooks/post-checkout"
+( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+  git -C "$TMP/m8g" config core.hooksPath "$TMP/m8g/.probehooks" )
+[ "$(git config --file "$TMP/m8g/.git/config" --get core.hooksPath 2>/dev/null)" = "$TMP/m8g/.probehooks" ] || {
+  note "FAIL  m8g -- the probe repository does not carry its hooks path, so its receipt cannot be UNSEEDED"; rc=1; }
+r8_fail "m8g a behavioural receipt beside an UNSEEDED one" "$TMP/m8g" 2 2 BL-838 "sh receipts 2, unscorable 1, unseeded 1,"
+r8_seed "$TMP/m8h" "$R8_BEHAV_PATH" "$R8_OOP"
+r8_fail "m8h a behavioural receipt beside an exit-9 one" "$TMP/m8h" 2 2 BL-839 "out of population 1,"
+
+# m8i -- one ledger per spelling, each the ledger's only entry. Every one parses to no `sh`
+# receipt (or, for `sh<TAB>`, to a verb of `sh<TAB>grep`), so without the verb census each read as
+# the no-sh-receipts state and passed. R2's FAIL text is unchanged; the entry is named on its own
+# line, which is what each arm keys on.
+r8_spell() { # r8_spell <tag> <id> <verify line>
+  r8_seed "$TMP/m8i-$1" "## $2
+
+$3
+"
+  r8_fail "m8i-$1 a verify line spelled '$3'" "$TMP/m8i-$1" 0 1 "$2" \
+    "live entry $2 carries a verify verb this parser does not read"
+}
+r8_spell dash    BL-841 "- verify: sh grep -q 'MARK841' probe/subject.txt"
+r8_spell capital BL-842 "Verify: sh grep -q 'MARK842' probe/subject.txt"
+r8_spell bold    BL-843 "**verify:** sh grep -q 'MARK843' probe/subject.txt"
+r8_spell upper   BL-844 "verify: SH grep -q 'MARK844' probe/subject.txt"
+r8_spell shtab   BL-845 "verify: sh	grep -q 'MARK845' probe/subject.txt"
+
+r8_seed "$TMP/m8j" "$R8_MANUAL" '## BL-846
+
+verify: has probe/subject.txt "alpha"
+' '## BL-847
+
+verify: lacks probe/subject.txt "MARK847"
+'
+r8_ok "m8j manual, has and lacks are all read" "$TMP/m8j" 0 3 no-sh-receipts \
+  "(0 sh receipts over 3 live entries in docs/backlog.md"
+
+r8_seed "$TMP/m8k" "## BL-848
+
+verify:	sh grep -q 'MARK848' probe/subject.txt
+"
+m8k_out="$(r8_run "$TMP/m8k" 1 1)"; m8k_rc=$?
+m8k_row="$(cls "$m8k_out" BL-848)"
+if [ "$m8k_rc" -eq 0 ] && [ "$m8k_row" = "PROSE-CLOSABLE" ] && grep -q '^SUMMARY .* sh-receipts=1 scored=1 ' <<<"$m8k_out"; then
+  note "ok    m8k -- 'verify:<TAB>sh' is read as an sh receipt and scored, so it can never reach the no-sh state"
+else
+  note "FAIL  m8k -- 'verify:<TAB>sh' read '${m8k_row:-NONE}' (exit $m8k_rc), not one scored PROSE-CLOSABLE sh receipt"; rc=1
+fi
+
 # THE MUTANTS. Each is ONE line of the subject, anchored on text that occurs once, and each must
 # die on exactly the arm that owns it.
 #   mR2a  R2 relaxed unconditionally      -> must die on m8c (malformed still FAILs)
 #   mR2b  the old unconditional predicate -> must die on m8b (all-behavioural passes)
 #   mR2c  behavioural keyed on STATUS     -> must die on m8c (malformed is not behavioural)
 #   mR2d  no-sh state drops ENTRIES > 0   -> must die on m8 (an empty parse is not a ledger)
+#   mW11  the sum also absorbs UNSEEDED   -> must die on m8g
+#   mW10  the sum also absorbs OUT-OF-POP -> must die on m8h
+#   mR2v  the verb census dropped         -> must die on m8i-dash
+#   mR2s  the no-path stability re-read   -> must die on m8l
+#   mG1-3, mT1: the grammar and the receipt-text seed, each killed at the subject's own R1 probe
 r8_mut() { # r8_mut <name> <src-dir> <sed> <check: ok|fail|m8> <args for the check...>
   local n="$1" src="$2" ex="$3" kind="$4"; shift 4
   local md="$TMP/$n"
@@ -704,9 +790,9 @@ r8_mut() { # r8_mut <name> <src-dir> <sed> <check: ok|fail|m8> <args for the che
     fail)
       out="$(r8_run "$md" "$1" "$2")"; rc_v=$?
       if [ "$rc_v" -eq 0 ] && grep -qF "OK: validate-backlog-receipts" <<<"$out"; then
-        note "ok    $n -- killed: the malformed-only ledger passes under the mutant"
+        note "ok    $n -- killed: a ledger that must fail R2 passes under the mutant"
       else
-        note "FAIL  $n SURVIVED -- exit $rc_v, the malformed-only ledger still failed"; rc=1
+        note "FAIL  $n SURVIVED -- exit $rc_v, the ledger that must fail R2 still failed"; rc=1
       fi ;;
     m8)
       out="$(run_v "" "$md" $DEF)"; rc_v=$?
@@ -719,24 +805,119 @@ r8_mut() { # r8_mut <name> <src-dir> <sed> <check: ok|fail|m8> <args for the che
 }
 r8_mut mR2a "$TMP/m8c" 's|^if \[ "$SCORED" -eq 0 \] && \[ -z "$R2_ZERO_STATE" \]; then|if false; then|' fail 1 1
 r8_mut mR2b "$TMP/m8b" 's|^if \[ "$SCORED" -eq 0 \] && \[ -z "$R2_ZERO_STATE" \]; then|if [ "$SCORED" -eq 0 ]; then|' ok 3 3
-r8_mut mR2c "$TMP/m8c" 's|$1 == "UNSCORABLE" \&\& $3 ~ /^base-exit=\[01\]-paths=\[0-9\]+-tokens=0$/|$1 == "UNSCORABLE"|' fail 1 1
+r8_mut mR2c "$TMP/m8c" 's@$1 == "UNSCORABLE" \&\& ($3 ~ /^behavioural-text-seed-held-seed-exit=/ || $3 ~ /^behavioural-no-path-exit-stable=/)@$1 == "UNSCORABLE"@' fail 1 1
 r8_mut mR2d "$TMP/m8" 's|^  elif \[ "$SH_RECEIPTS" -eq 0 \] && \[ "$ENTRIES" -gt 0 \]; then|  elif [ "$SH_RECEIPTS" -eq 0 ]; then|' m8
+# W11 and W10: the accounted-for sum widened to absorb an UNSEEDED receipt, and an exit-9 one.
+# Each was a wrong predicate the whole fixture let through; m8g and m8h are their subjects.
+r8_mut mW11 "$TMP/m8g" 's|\$(( N_BEHAV + N_PASS ))|$(( N_BEHAV + N_PASS + N_UNSEED ))|' fail 2 2
+r8_mut mW10 "$TMP/m8h" 's|\$(( N_BEHAV + N_PASS ))|$(( N_BEHAV + N_PASS + N_OOP ))|' fail 2 2
+# The verb census dropped from the zero-state predicate: a ledger whose only entry is spelled
+# `- verify: sh` reads as having no sh receipt and passes again.
+r8_mut mR2v "$TMP/m8i-dash" 's|^if \[ "$SCORED" -eq 0 \] && \[ "$UNREAD_VERBS" -eq 0 \]; then|if [ "$SCORED" -eq 0 ]; then|' fail 0 1
+
+# ===== M8L. A RECEIPT NAMING NO SEEDABLE PATH IS BEHAVIOURAL ONLY IF ITS EXIT IS STABLE. ======
+# It exits 1 on its first reading and 0 on its second, counting through a file outside every
+# checkout, and names no path the seed could reach -- so the stability re-read is its only
+# observation. It must be UNSTABLE with both exits. Its counter is a literal 0, never a
+# truncation: an empty file reads as `` and the first branch would never fire.
+R8_FLIP_COUNTER="$TMP/flip.counter"; export R8_FLIP_COUNTER
+# BL-850 is a scored ANCHOR: with the flapping receipt alone SCORED is 0, R2 refuses before the
+# rows are printed, and the arm reads no class at all -- measured on this arm's first cut.
+r8_seed "$TMP/m8l" '## BL-849
+
+verify: sh C="$R8_FLIP_COUNTER"; n=$(cat "$C"); printf %s $((n+1)) > "$C"; [ "$n" = 0 ] && exit 1; exit 0
+' "## BL-850
+
+verify: sh grep -q 'MARK850' probe/subject.txt
+"
+m8l_check() { # m8l_check <dir> -> "<class> <detail>"
+  printf 0 > "$R8_FLIP_COUNTER"
+  run_v "" "$1" --max-prose-closable 9 --max-unscorable 9 --max-out-of-population 9 \
+    --max-unstable 9 --min-sh-receipts 1 --min-entries 1 | awk -F'\t' '$2 == "BL-849" { print $1 " " ($1 == "UNSTABLE" ? $3 : $5) }' | sed -n '1p'
+}
+m8l_got="$(m8l_check "$TMP/m8l")"
+if [ "$m8l_got" = "UNSTABLE base-exit=1/0" ]; then
+  note "ok    m8l -- a literal-free receipt naming no path whose exit moves between readings is UNSTABLE, not behavioural"
+else
+  note "FAIL  m8l -- the no-path receipt that reads 1 then 0 was classified '${m8l_got:-NONE}', not 'UNSTABLE base-exit=1/0'"; rc=1
+fi
+mkdir -p "$TMP/mR2s"; cp -R "$TMP/m8l/." "$TMP/mR2s/"
+if mut "$TMP/mR2s" 's|^    if \[ "$STAB_RC" != "$BASE_RC" \]; then|    if false; then|'; then
+  ( cd "$TMP/mR2s" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m mut >/dev/null 2>&1 )
+  mR2s_got="$(m8l_check "$TMP/mR2s")"
+  case "$mR2s_got" in
+    "UNSCORABLE behavioural-no-path-exit-stable="*) note "ok    mR2s -- killed: without the stability comparison the flapping receipt is granted behavioural ($mR2s_got)" ;;
+    *) note "FAIL  mR2s SURVIVED -- with the stability comparison removed the receipt still read '${mR2s_got:-NONE}'"; rc=1 ;;
+  esac
+fi
+
+# ===== THE GRAMMAR AND THE RECEIPT-TEXT SEED, KILLED AT THE SUBJECT'S OWN SELF-PROBE. ==========
+# Each mutant removes one piece of how a literal-free receipt earns "behavioural", and the R1
+# probe that owns that piece must refuse, naming its receipt -- before any corpus is scored.
+# r1_mut <name> <sed> <the R1 message that must appear>
+r1_mut() {
+  local n="$1" ex="$2" want="$3" out rc_v
+  seed "$TMP/$n"
+  mut "$TMP/$n" "$ex" || return
+  out="$(run_v "" "$TMP/$n" $DEF)"; rc_v=$?
+  if [ "$rc_v" -eq 2 ] && grep -qF "SELF-PROBE FAILED" <<<"$out" && grep -qF "$want" <<<"$out" \
+     && ! grep -qF "OK: validate-backlog-receipts" <<<"$out"; then
+    note "ok    $n -- killed at R1, on its own probe ($want)"
+  else
+    note "FAIL  $n SURVIVED or died elsewhere -- exit $rc_v; wanted a SELF-PROBE refusal carrying '$want'"
+    printf '%s\n' "$out" | grep -E 'SELF-PROBE|^FAIL' | sed 's/^/      /' | head -3; rc=1
+  fi
+}
+# The grammar stops emitting BARE patterns: the bare grep is then closed only by its receipt text.
+r1_mut mG1 's|^  if (K\[idx\] == "b") {|  if (0) {|' "not on its TOKEN seed"
+# The command-substitution depth check removed: `printf` is read as the pattern and seeded.
+r1_mut mG2 's|^      if (D\[q\] != D\[p\]) break|      if (0) break|' 'the grep carrying `-m 1`'
+# The option-argument skip removed: `1` (the argument of `-m`) is read as the pattern.
+r1_mut mG3 's|^        if (b ~ /^-\[a-zA-Z\]\*\[mABCd\]$/) { q = q + 2; continue }|        if (0) { q = q + 2; continue }|' 'the grep carrying `-m 1`'
+# The receipt-text seed removed: a literal-free receipt is appended a bare `#`, flips nothing,
+# and is granted behavioural -- the acquittal this round exists to remove.
+r1_mut mT1 's|^  \[ "$SEED_KIND" = receipt-text \] && SEED_LINE="# $REST"|  :|' "the awk-body receipt"
 
 # ===== THE RATCHETS THAT EXIST BECAUSE THE FIRST ONE IS ESCAPABLE. =========================
 # Each of these is an edit that LOWERS the prose-closable count and fixes nothing. Without
 # their own ceilings the headline number falls and the gate reports an improvement.
 
-# m9 -- the pattern moves into a variable. BL-801 leaves the scored population entirely.
+# m9 -- the pattern is ASSEMBLED from quoted pieces, so the literal grep receives appears in no
+# text the arm can seed. BL-801 leaves the scored population, and only R3 sees it go.
 seed "$TMP/m9"
-sed "s|verify: sh grep -q 'MARK801' probe/subject.txt|verify: sh S=MARK801; grep -q \"\$S\" probe/subject.txt|" \
+sed "s|verify: sh grep -q 'MARK801' probe/subject.txt|verify: sh grep -q MARK'801' probe/subject.txt|" \
   "$TMP/m9/docs/backlog.md" > "$TMP/m9/docs/backlog.md.new"
 if cmp -s "$TMP/m9/docs/backlog.md" "$TMP/m9/docs/backlog.md.new"; then
   note "FAIL  m9 -- the evasion edit was a NO-OP, so its verdict means nothing"; rc=1
 else
   mv "$TMP/m9/docs/backlog.md.new" "$TMP/m9/docs/backlog.md"
   ( cd "$TMP/m9" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m evade >/dev/null 2>&1 )
-  kill_check "m9 moving the pattern into a variable is caught by the unscored ceiling" "$TMP/m9" "" 1 \
+  kill_check "m9 assembling the pattern from pieces is caught by the unscored ceiling" "$TMP/m9" "" 1 \
     "could not be scored at all" --max-unscorable 1
+fi
+
+# m9b -- the pattern moves into a VARIABLE. That was m9's evasion until the receipt-text seed:
+# the receipt's own text carries `MARK801`, so a comment carrying it closes the receipt and R2,
+# not R3, must see it -- PROSE-CLOSABLE with no token extracted, which is only reachable through
+# that seed.
+seed "$TMP/m9b"
+sed "s|verify: sh grep -q 'MARK801' probe/subject.txt|verify: sh S=MARK801; grep -q \"\$S\" probe/subject.txt|" \
+  "$TMP/m9b/docs/backlog.md" > "$TMP/m9b/docs/backlog.md.new"
+if cmp -s "$TMP/m9b/docs/backlog.md" "$TMP/m9b/docs/backlog.md.new"; then
+  note "FAIL  m9b -- the evasion edit was a NO-OP, so its verdict means nothing"; rc=1
+else
+  mv "$TMP/m9b/docs/backlog.md.new" "$TMP/m9b/docs/backlog.md"
+  ( cd "$TMP/m9b" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m evade >/dev/null 2>&1 )
+  # One more prose-closable receipt than the seed carries, so the ceiling is sized to it rather
+  # than taken from $DEF: R2 passing here is the count being right, not slack.
+  m9b_out="$(run_v "" "$TMP/m9b" --max-prose-closable "$(( BL_PC + 1 ))" --max-unscorable 9 \
+    --max-out-of-population 9 --max-unstable 1 --min-sh-receipts "$BL_N" --min-entries "$BL_N")"; m9b_rc=$?
+  m9b_row="$(printf '%s\n' "$m9b_out" | awk -F'\t' '$2 == "BL-801" { print $1 " " $4 }' | sed -n '1p')"
+  if [ "$m9b_rc" -eq 0 ] && [ "$m9b_row" = "PROSE-CLOSABLE tokens=none" ]; then
+    note "ok    m9b -- a pattern moved into a variable is still closed by a comment carrying the receipt's own text, and R2 counts it"
+  else
+    note "FAIL  m9b -- the variable-pattern receipt read '${m9b_row:-NONE}' (exit $m9b_rc), not 'PROSE-CLOSABLE tokens=none'. A comment carrying the receipt's text satisfies it; anything else acquits it."; rc=1
+  fi
 fi
 
 # m10 -- the receipt's verb becomes `manual`. It leaves the `sh` population, which no ceiling
