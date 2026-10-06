@@ -410,7 +410,100 @@ p_no_overwrite() { # a second split over a live sections/ is refused
   [ "$rc" -eq 2 ] && has "$w/e" "already exists"
 }
 
-P_ALL="fence longfence comment cfence serial_dominant wide_table fence_table sep_outside_fence two_row prose_run sep_at_k single_line fm_crlf_table serial_one roundtrip crlf_map cap manifest sha_moved missing newline refused_intact removed unchanged expect_sha relative no_overwrite"
+# ------------------------------------------------------------------- the scope (--scope-ref)
+# Every scoped world is a fresh git repository whose BASE commit holds doc_eight: eight `##`
+# sections of a heading and 20 body lines, no fence, comment or table, so no scoped world can
+# move a kill set of the grammar mutants above. The worktree is then edited and NOT committed:
+# the scope is the base TREE against the WORKTREE. Git config is isolated for the builder's own
+# commits; the subject's diff runs under whatever config the caller has, as it does in use.
+doc_eight() {
+  local s
+  printf '# Eight\n\n'
+  for s in 1 2 3 4 5 6 7 8; do printf '## Section %s\n' "$s"; body "s$s" 20; done
+}
+sprint9() { # a `##` section that carries three `###` subsections
+  local h
+  printf '## Sprint 9\n'; body intro 2
+  for h in a b c; do printf '### Part %s\n' "$h"; body "p$h" 10; done
+}
+g() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -c user.name=fixture -c user.email=fixture@example.invalid "$@"; }
+git_world() { # -> world path; doc_eight committed as d.md, the base sha in $w/.B
+  local w; w="$(world)" || return 1
+  g -C "$w" init -q && doc_eight > "$w/d.md" && g -C "$w" add d.md && g -C "$w" commit -qm base || return 1
+  g -C "$w" rev-parse HEAD > "$w/.B" || return 1
+  printf '%s' "$w"
+}
+edit_line() { # <file> <line> -- rewrite that line in place (same position, different bytes)
+  awk -v n="$2" 'NR == n { print "an edited line, written over the original in place." ; next } { print }' "$1" > "$1.t" && cat "$1.t" > "$1" && rm -f "$1.t"
+}
+drop_line() { # <file> <line> -- delete that line
+  awk -v n="$2" 'NR != n' "$1" > "$1.t" && cat "$1.t" > "$1" && rm -f "$1.t"
+}
+p_scope_changed() { # one line of Section 6 edited: the scoped map is that part alone; unchanged prints nothing
+  local w B u; w="$(git_world)" || return 1; B="$(cat "$w/.B")"
+  # Control: the unchanged worktree is in scope nowhere -- nothing printed, exit 0.
+  bash "$1" --map "$w/d.md" --scope-ref "$B" > "$w/m0" 2> "$w/e0" || return 1
+  [ ! -s "$w/m0" ] || return 1
+  bash "$1" --map "$w/d.md" > "$w/u" || return 1
+  u="$(grep -F '## Section 6' "$w/u")" || return 1
+  edit_line "$w/d.md" 118
+  bash "$1" --map "$w/d.md" --scope-ref "$B" > "$w/m" 2> "$w/e" || return 1
+  # Exactly one row: Section 6's own unscoped range, renumbered 1.
+  [ "$(grep -c . "$w/m")" -eq 1 ] && [ "$(cat "$w/m")" = "$(printf '1\t%s' "$(printf '%s' "$u" | cut -f2-)")" ]
+}
+p_scope_h3() { # an appended `## Sprint 9` with three `###`: the in-scope threshold splits it into >=3 parts
+  local w B wb sb; w="$(git_world)" || return 1; B="$(cat "$w/.B")"
+  sprint9 >> "$w/d.md"
+  # THE SEED SIZES THAT MAKE THIS PROVABLE, asserted rather than assumed: the Sprint 9 section is
+  # the ONLY in-scope text, so over in-scope bytes it is all of them (s*2 > tot, it splits at its
+  # `###`), while over the whole document it is under half (s*2 <= tot, a whole-document threshold
+  # leaves it one atom, which packs as ONE part). Measured on this seed: Sprint 9 is 1526 of 9087
+  # bytes (base 7561) -- re-derived below on every run, so a reseed cannot silently void it.
+  wb="$(wc -c < "$w/d.md" | tr -d ' ')"; sb="$(sprint9 | wc -c | tr -d ' ')"
+  [ "$((sb * 2))" -le "$wb" ] && [ "$sb" -gt 0 ] || return 1
+  bash "$1" --map "$w/d.md" --scope-ref "$B" > "$w/m" 2> "$w/e" || return 1
+  [ "$(grep -c . "$w/m")" -ge 3 ] && [ "$(cut -f4 "$w/m" | grep -c '^### Part ')" -ge 2 ] \
+    && ! grep -q '## Section' "$w/m"
+}
+p_scope_deletion() { # a deletion-only hunk in Section 3 brings Section 3 in scope beside an edit in Section 7
+  local w B; w="$(git_world)" || return 1; B="$(cat "$w/.B")"
+  # Section 3 runs 45-65 at base; deleting line 55 is hunk `-55 +54,0` -- deletion point 54.
+  # Section 7's body is 130-149; line 140 is edited first, so it sits at 139 after the deletion.
+  edit_line "$w/d.md" 140; drop_line "$w/d.md" 55
+  [ "$(g -C "$w" diff -U0 --diff-algorithm=myers -- d.md | grep -c '^@@ -55 +54,0 @@')" -eq 1 ] || return 1
+  bash "$1" --map "$w/d.md" --scope-ref "$B" > "$w/m" 2> "$w/e" || return 1
+  [ "$(cut -f4 "$w/m" | tr '\n' '|')" = "## Section 3|## Section 7|" ]
+}
+p_scope_absent() { # a file absent at base is wholly in scope; a ref that names no commit refuses
+  local w B rc; w="$(git_world)" || return 1; B="$(cat "$w/.B")"
+  doc_plain > "$w/n.md"
+  bash "$1" --map "$w/n.md" > "$w/u" || return 1
+  bash "$1" --map "$w/n.md" --scope-ref "$B" > "$w/m" 2> "$w/e" || return 1
+  [ "$(grep -c . "$w/m")" -ge 2 ] && cmp -s "$w/m" "$w/u" || return 1
+  bash "$1" --map "$w/n.md" --scope-ref 0000000000000000000000000000000000000000 > "$w/m2" 2> "$w/e2"; rc=$?
+  [ "$rc" -eq 2 ] && has "$w/e2" "does not name a commit" && [ ! -s "$w/m2" ]
+}
+p_scope_gap() { # scoped split writes gap rows; an untouched split assembles byte-exact; a moved gap refuses by range
+  local w B ng; w="$(git_world)" || return 1; B="$(cat "$w/.B")"
+  edit_line "$w/d.md" 118; cp -p "$w/d.md" "$w/orig"
+  bash "$1" --split "$w/d.md" "$w/x" --scope-ref "$B" > /dev/null 2> "$w/se" || return 1
+  # gap 1-107 and gap 129-170 around the one part, 108-128.
+  ng="$(grep -c "^gap$(printf '\t')" "$w/x/sections/.manifest")" || ng=0
+  [ "$ng" -eq 2 ] && has "$w/x/sections/.manifest" "$(printf 'gap\t1\t107\t')" || return 1
+  printf 'the reviewed part, edited\n' >> "$w/x/sections/1.md"
+  assemble "$1" "$w"
+  [ "$RC" -eq 0 ] && [ "$(grep -c 'the reviewed part, edited' "$w/d.md")" -eq 1 ] \
+    && [ "$(wc -l < "$w/d.md" | tr -d ' ')" -eq 171 ] || return 1
+  # The moved gap: a second split, then line 20 (Section 1, out of scope) written in place.
+  w="$(git_world)" || return 1; B="$(cat "$w/.B")"
+  edit_line "$w/d.md" 118
+  bash "$1" --split "$w/d.md" "$w/x" --scope-ref "$B" > /dev/null 2>&1 || return 1
+  edit_line "$w/d.md" 20; cp -p "$w/d.md" "$w/pre"
+  assemble "$1" "$w"
+  refused_intact "$w" "gap lines 1-107 of"
+}
+
+P_ALL="fence longfence comment cfence serial_dominant wide_table fence_table sep_outside_fence two_row prose_run sep_at_k single_line fm_crlf_table serial_one roundtrip crlf_map cap manifest sha_moved missing newline refused_intact removed unchanged expect_sha relative no_overwrite scope_changed scope_h3 scope_deletion scope_absent scope_gap"
 
 arm() { # <predicate> <label>
   if "p_$1" "$PD"; then ok "$2"; else bad "$2"; fi
@@ -442,6 +535,11 @@ arm unchanged        "A13: a re-run prints UNCHANGED; a re-run after an edit ref
 arm expect_sha       "A14: --expect-sha mismatch -> REFUSED 'is not the reviewed bytes', nothing created; the right sha splits"
 arm relative         "A15: a split given a RELATIVE path assembles the right file from another cwd"
 arm no_overwrite     "A16: a second split over a live sections/ -> REFUSED 'already exists'"
+arm scope_changed    "A28: --scope-ref, one line of Section 6 edited -> Section 6's own range alone, ordinal 1; an unchanged worktree prints nothing"
+arm scope_h3         "A29: --scope-ref, an appended ## with three ### (under half the document, all of the in-scope bytes) -> >=3 parts, no ## Section part"
+arm scope_deletion   "A30: --scope-ref, a deletion-only hunk in Section 3 beside an edit in Section 7 -> exactly Section 3 and Section 7"
+arm scope_absent     "A31: --scope-ref, a file absent at base -> wholly in scope (equal to its unscoped map); a ref naming no commit -> REFUSED"
+arm scope_gap        "A32: --scope-ref --split -> gap rows around the part, assembly byte-exact; an out-of-scope line moved -> REFUSED 'gap lines 1-107 of'"
 
 # ------------------------------------------------------------------------------ the mutants
 apply() { # <file> then (old, new) pairs through M_1_OLD.. env -- every anchor exactly once
@@ -539,9 +637,20 @@ mutant "MX13 the row split removed" "wide_table sep_at_k single_line fm_crlf_tab
           for' '        if (0)
           for'
 mutant "MX14 the blocking part dropped from the SERIAL line" "serial_dominant fence_table sep_outside_fence two_row prose_run single_line" \
-  ' (lines %d-%d, %d%%, %s)\n", int(big * 100 / tot), P1[bi], P2[bi], int(big * 100 / tot), why' '\n", int(big * 100 / tot)'
+  ' (lines %d-%d, %d%%, %s)\n", int(big * 100 / tot), (scoped ? "in-scope bytes" : "document"), P1[bi], P2[bi], int(big * 100 / tot), why' '\n", int(big * 100 / tot), (scoped ? "in-scope bytes" : "document")'
 mutant "MX15 the single-line reason never given" "single_line" \
   'why = "single-line"' 'why = "no-boundary"'
+mutant "MX20 the scope ignored (every line weighs its bytes)" "scope_changed scope_h3 scope_deletion scope_gap" \
+  'W[k] = (scoped ? (IN[k] ? B[k] : 0) : B[k])' 'W[k] = B[k]'
+mutant "MX21 the ## split threshold computed over the whole document" "scope_h3" \
+  '        s = 0; for (k = a; k <= z; k++) s += W[k]
+        if (s * 2 > tot) {' '        s = 0; for (k = a; k <= z; k++) s += B[k]
+        tb = 0; for (k = 1; k <= NR; k++) tb += B[k]
+        if (s * 2 > tb) {'
+mutant "MX22 deletion-only hunks dropped" "scope_deletion" \
+  'if (d == 0) print (c > 0 ? c : 1)' 'if (d == 0) next'
+mutant "MX23 the gap sha unchecked" "scope_gap" \
+  '[ "$(sha_of "$GT")" = "$gs" ] || {' 'true || {'
 
 echo
 if [ "$fails" -eq 0 ]; then echo "document-partition: PASS"; exit 0; fi

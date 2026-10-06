@@ -19,6 +19,54 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.733.0] - 2026-10-06
+
+Batch 200's second release: three separable machinery changes. It discharges no consumer candidate
+by itself; the requirements-subject release that follows cites the candidate these two
+partitioner and validator changes serve. It files `BL-455` and closes it in the batch close commit,
+and records first-instance progress on `BL-451`, which stays open (net closed minus filed: 0).
+No file in it is bootstrapping.
+
+### Arm H matches a repair record to its series by name (BL-455)
+
+- `validate-adversarial-convergence.sh` arm H looked for pass M's repair record with the glob
+  `*-repair-p<M>.md`, so any structured record for pass M in the sprint directory satisfied it,
+  including a party-round repair or another series' record. It now requires exactly
+  `<stem>-repair-p<M>.md`, the name `_gate-procedures.md` prescribes and `join-remediator-shards.sh`
+  writes, behind `H_RELEASE` (0.733.0), a stamp keyed on the series' first pass as K, K2 and J2 are.
+  A legacy series reads `PENDING (H -- REPAIR-RECORD)`, never FAIL.
+- Replayed on the reference consumer's 109 adversarial series, base and tip validators side by
+  side: no exit code changes on any series; 36 pass-pairs in 27 series gain a PENDING line.
+- `check-24-adversarial-convergence` carries six world cells and four mutants (stamp gate removed,
+  glob restored, stamp not rebound, stem keeping `-adversarial`), each killed.
+
+### `partition-document.sh --scope-ref <sha>`
+
+- `--map` and `--split` take a base ref and partition only what changed against the working tree.
+  A file absent at the base is wholly in scope; a deletion-only hunk counts at its deletion point;
+  the split threshold and pack target are measured over in-scope bytes. `--split` writes `gap` rows
+  for out-of-scope ranges and `--assemble` refuses a moved gap by range.
+- Unscoped output is byte-identical: 34 of 34 fixture-fed documents and 3293 of 3293 of the
+  reference consumer's planning artifacts, stdout, stderr and exit compared, with a control proving
+  the two scripts differ.
+- **Cost, grown under this change:** `document-partition` runs about 108s solo against about 60s at
+  base, because five new scoped predicates run under each of 29 mutant scorings. It is not the pole.
+
+### `review-shard-merge` splits its mutation battery into a parallel `.dist-only` fixture (BL-451, first instance)
+
+- The 51 mutants and MX0 move to `review-shard-merge-mutants`, scored in a fixed pool of 8 with a
+  per-scorer watchdog and per-mutant verdict files. The shipped fixture keeps all 71 arms and sources
+  the predicates and worlds from `review-shard-merge/lib.sh`, which ships beside it.
+- Solo, in clean worktrees: the shipped fixture fell from about 2500s to about 41s, and the battery
+  runs in about 352s, about a sixth of the original's wall clock overall. Consumers no longer pay
+  for the battery at all.
+- Proof the split changes no verdict: old and new scorers emit identical killed-set rows (52 rows,
+  same md5); with one output path left shared at pool 8 the rows differ in 20 places, so the
+  comparison can see shared state. The shipped fixture's label set is unchanged once the 53 battery
+  labels are excluded.
+- `BL-451` is corrected (six fixtures, five ship, floor 29 minutes; `apply-setup-sited-merge`
+  already scores its 24 mutants in a pool of 8) and stays open.
+
 ## [0.732.0] - 2026-10-06
 
 Batch 200's first release. It discharges two consumer candidates, files the two entries that carry

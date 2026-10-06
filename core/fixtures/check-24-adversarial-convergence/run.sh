@@ -1887,6 +1887,161 @@ jd_mutate j-citation "CONVERGED CONVERGED CONVERGED CONVERGED" \
 jd_mutate f5-reopen-spec "CONVERGED REOPENED CONVERGED CONVERGED" \
   '      if [ "${r_art##*/}" = "SPEC.md" ] && ! [[ "$delta" =~ $r_re ]]; then' '      if false; then'
 
+echo
+# --- ARM H: the record is named by its SERIES, behind a stamp -------------------------------
+# Every arm-H case above sits in no stamped repo and names its records `s1-brief-repair-p<M>`
+# against the stem `s1`, so each one is a FOREIGN record that reads PENDING (no stamp). These
+# worlds are stamped git repos, one property apart. The series is `prd-adversarial-p1/p2`, 3 MAJOR
+# falling to 0, so arm H owes `prd-repair-p1.md`. The release is READ from the validator, so a
+# renumbered H_RELEASE moves the worlds with it. Five worlds, one cell each (`<class>/<exit>`):
+#   stem-post     owed name present, series opened after the stamp     -> SILENT/0
+#   foreign-post  only `arch-repair-p1.md` (another series' record)     -> FOREIGN/1
+#   foreign-pre   the same record, series opened BEFORE the stamp       -> PENDING/0
+#   pred-stamp    the same record, repo stamped only at H_RELEASE's
+#                 predecessor (but above K_RELEASE)                      -> PENDING/0
+#   none-post     no record at all                                      -> MISSING/1 (unchanged)
+H_REL="$(sed -n 's/^H_RELEASE="\([0-9.]*\)"$/\1/p' "$VALIDATOR")"
+IFS=. read -r h_ma h_mi h_pa <<EOF
+$H_REL
+EOF
+H_PRED="${h_ma}.$((h_mi - 1)).${h_pa}"
+HW="$ROOT/.h-worlds"
+h_world() {  # $1 world  $2 stamp version  $3 first invoked_at  $4 record name ("" = none)
+  local w="$HW/$1" n
+  mkdir -p "$w/.claude" || return 1
+  printf 'version: %s\n' "$2" > "$w/.claude/.ai-dlc-version"
+  ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+    cd "$w" || exit 1
+    git init -q . >/dev/null || exit 1
+    git add .claude/.ai-dlc-version || exit 1
+    GIT_COMMITTER_DATE=2026-09-29T10:00:00Z GIT_AUTHOR_DATE=2026-09-29T10:00:00Z \
+      git -c user.email=fixture@example.invalid -c user.name=fixture -c commit.gpgsign=false \
+          -c core.hooksPath=/dev/null commit -q -m stamp >/dev/null ) || return 1
+  for n in 1 2; do
+    {
+      printf '# prd -- adversarial pass %s\n\n' "$n"
+      printf '<!-- SKILL_INVOCATION_PROVENANCE v1\n'
+      printf 'skill: ai-dlc-adversary-review\n'
+      if [ "$n" = 1 ]; then printf 'invoked_at: %s\n' "$3"; else printf 'invoked_at: 2026-09-29T12:00:00Z\n'; fi
+      printf 'tool_use_id: toolu_fixture_h%s\n' "$n"
+      printf 'mode: subagent\nlead_role: pm\nartifact: prd.md\n'
+      printf 'artifact_sha: %s\n' 0000000000000000000000000000000000000000000000000000000000000000
+      printf 'findings_critical: 0\nfindings_critical_prior_scope: 0\n'
+      if [ "$n" = 1 ]; then printf 'findings_major: 3\nverdict: EXIT_CONDITION_NOT_MET\n'
+      else printf 'findings_major: 0\nverdict: EXIT_CONDITION_MET\n'; fi
+      printf 'findings_major_underived: 0\nfindings_minor: 0\n'
+      printf 'SKILL_INVOCATION_PROVENANCE_END -->\n'
+    } > "$w/prd-adversarial-p$n.md"
+  done
+  [ -z "$4" ] || printf '# Repair record\n\n### F1 -- MAJOR\n- disposition: repaired\n- edit: prd.md:4\n- derivation:\n    $ grep -c x prd.md\n    1\n' > "$w/$4"
+}
+H_WORLDS="stem-post foreign-post foreign-pre pred-stamp none-post"
+H_REAL="SILENT/0 FOREIGN/1 PENDING/0 PENDING/0 MISSING/1"
+H_OK=1
+[ -n "$H_REL" ] && [ "$h_mi" -ge 1 ] 2>/dev/null || H_OK=0
+h_world stem-post    "$H_REL"  2026-09-29T11:00:00Z prd-repair-p1.md  || H_OK=0
+h_world foreign-post "$H_REL"  2026-09-29T11:00:00Z arch-repair-p1.md || H_OK=0
+h_world foreign-pre  "$H_REL"  2026-09-29T09:00:00Z arch-repair-p1.md || H_OK=0
+h_world pred-stamp   "$H_PRED" 2026-09-29T11:00:00Z arch-repair-p1.md || H_OK=0
+h_world none-post    "$H_REL"  2026-09-29T11:00:00Z ""                || H_OK=0
+# Not in the row: the consumer's commonest misname, this series' OWN record under its pass stem.
+# It fails like foreign-post and must hand the opposite remedy (rename it, not leave it).
+h_world misnamed-post "$H_REL" 2026-09-29T11:00:00Z prd-adversarial-repair-p1.md || H_OK=0
+# THE WORLDS ARE WHAT THEY CLAIM: the release was read, every world built, the predecessor
+# still satisfies K_RELEASE (so a stamp read that forgot to rebind WOULD date pred-stamp), and
+# the BASE glob would accept the foreign record -- or the FOREIGN cells test a name nobody uses.
+ASSERTIONS=$((ASSERTIONS + 1))
+h_krel="$(sed -n 's/^K_RELEASE="\([0-9.]*\)"$/\1/p' "$VALIDATOR")"
+h_glob=0; for h_c in "$HW/foreign-post"/*-repair-p1.md; do [ -f "$h_c" ] && h_glob=$((h_glob + 1)); done
+if [ "$H_OK" -ne 1 ] || [ -z "$h_krel" ] || [ "$(printf '%s\n%s\n' "$h_krel" "$H_PRED" | sort -t. -k1,1n -k2,2n -k3,3n | head -1)" != "$h_krel" ] || [ "$h_glob" -ne 1 ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-28s FIXTURE BROKEN: built=%s release=%s pred=%s K_RELEASE=%s old-glob hits=%s (want 1)\n' \
+    "h-worlds" "$H_OK" "$H_REL" "$H_PRED" "$h_krel" "$h_glob"
+else
+  printf '  ok    %-28s release %s, predecessor %s >= K_RELEASE %s; the old glob takes the foreign record\n' \
+    "h-worlds" "$H_REL" "$H_PRED" "$h_krel"
+fi
+h_cell() {  # $1 script  $2 world -> <class>/<exit>
+  local out rc v
+  out="$(bash "$1" --series "$HW/$2/prd-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"; rc=$?
+  case "$out" in
+    *"The only structured record for pass"*)  v=FOREIGN ;;
+    *"PENDING (H -- REPAIR-RECORD)"*)         v=PENDING ;;
+    *"the lead having repaired inline"*)      v=MISSING ;;
+    *"FAIL ("*)                               v=OTHER ;;
+    *"adversarial convergence -- 2 pass"*)    v=SILENT ;;
+    *)                                        v=NORUN ;;
+  esac
+  printf '%s/%s\n' "$v" "$rc"
+}
+h_score() {  # $1 label  $2 script  $3 expected row
+  local got="" w
+  ASSERTIONS=$((ASSERTIONS + 1))
+  for w in $H_WORLDS; do got="$got $(h_cell "$2" "$w")"; done
+  if [ "$(echo $got)" = "$(echo $3)" ]; then
+    printf '  ok    %-28s [%s]\n' "$1" "$(echo $got)"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s got [%s] want [%s]\n' "$1" "$(echo $got)" "$(echo $3)"
+  fi
+}
+h_score "H series-named record" "$VALIDATOR" "$H_REAL"
+# The unmutated copy in the mutant directory, siblings beside it. SILENT is a positive cell: it
+# requires the validator's own header line, so a copy that never ran reads NORUN, not SILENT.
+h_score "CONTROL h copy" "$J2_MUT/control.sh" "$H_REAL"
+expect_says_h() {  # $1 world  $2 label  $3... required substrings
+  local w="$1" label="$2" out missing="" want; shift 2
+  ASSERTIONS=$((ASSERTIONS + 1))
+  out="$(bash "$VALIDATOR" --series "$HW/$w/prd-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"
+  for want in "$@"; do grep -qF -- "$want" <<<"$out" || missing="$missing \"$want\""; done
+  if [ -z "$missing" ]; then printf '  ok    %-28s %s\n' "$label" "says what it must"
+  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s missing:%s\n' "$label" "$missing"; fi
+}
+expect_says_h foreign-post "H-foreign-names-both" "prd-repair-p1.md, is absent" "The only structured record for pass 1 is arch-repair-p1.md" \
+  "do not rename a record that belongs to a different repair"
+expect_says_h misnamed-post "H-misnamed-own-rename" "The only structured record for pass 1 is prd-adversarial-repair-p1.md" \
+  "If it records THIS series' repair, rename it to the owed path"
+expect_silent_h() {  # $1 world  $2 token that must be absent  $3 world where it is present (control)
+  local out ctl
+  ASSERTIONS=$((ASSERTIONS + 1))
+  out="$(bash "$VALIDATOR" --series "$HW/$1/prd-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"
+  ctl="$(bash "$VALIDATOR" --series "$HW/$3/prd-adversarial-p" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"
+  if grep -qF -- "$2" <<<"$out"; then FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s "%s" fired in %s\n' "H-remedy-$1" "$2" "$1"
+  elif ! grep -qF -- "$2" <<<"$ctl"; then FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s CONTROL: "%s" absent from %s too\n' "H-remedy-$1" "$2" "$3"
+  else printf '  ok    %-28s the other remedy is silent here, present in %s\n' "H-remedy-$1" "$3"; fi
+}
+expect_silent_h misnamed-post "do not rename a record" foreign-post
+expect_silent_h foreign-post "rename it to the owed path" misnamed-post
+expect_says_h foreign-pre  "H-foreign-legacy" "is satisfied only by arch-repair-p1.md, not by" "prd-repair-p1.md" "Legacy series."
+expect_says_h pred-stamp   "H-foreign-not-owed" "at ${H_REL} or later -- not owed yet."
+h_mutate() {  # $1 label  $2 expected row  $3.. old/new pairs
+  local label="$1" want="$2" mut="$J2_MUT/mutant-$1.sh"; shift 2
+  if ! j2_mut_build "$mut" "$@" || cmp -s "$VALIDATOR" "$mut" || ! bash -n "$mut" 2>/dev/null; then
+    ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s an anchor is not unique, the mutation DID NOT APPLY, or the mutant is not valid shell\n' "MUTATION $label"
+    return
+  fi
+  h_score "MUTATION $label" "$mut" "$want"
+}
+# The stamp gate removed: every foreign record is owed, legacy or not.
+h_mutate h-stamp-gate "SILENT/0 FOREIGN/1 FOREIGN/1 FOREIGN/1 MISSING/1" \
+  '  [ -n "$H_GATE" ] && return 0' '  H_GATE=owed; H_GATE_MSG=mutant; return 0'
+# The glob restored, every layer: the owed-name test and the foreign branch both gone, so any
+# `*-repair-p<M>.md` satisfies the pass again -- the pre-fix arm.
+h_mutate h-glob-restored "SILENT/0 SILENT/0 SILENT/0 SILENT/0 MISSING/1" \
+  '  if [ -n "$H_STEM" ] && [ -f "$h_own" ] && [ -s "$h_own" ] && repair_field disposition "$h_own" \' \
+  '  if false && [ -f "$h_own" ] && [ -s "$h_own" ] && repair_field disposition "$h_own" \' \
+  '    [ -n "$rec" ] && h_foreign="$rec"' '    :'
+# The stamp read without the rebinding: K_RELEASE's stamp dates pred-stamp, which then FAILS.
+h_mutate h-stamp-rebind "SILENT/0 FOREIGN/1 PENDING/0 FOREIGN/1 MISSING/1" \
+  '    h_stamp="$(K_RELEASE="$H_RELEASE" k_stamp_parse < "$STAMP_LOG")"' \
+  '    h_stamp="$(k_stamp_parse < "$STAMP_LOG")"'
+# The stem keeps `-adversarial`: the owed name becomes `prd-adversarial-repair-p1.md`, and the
+# series' own correctly-named record reads as foreign. The self-probe conjunct goes with it.
+h_mutate h-stem-unstripped "FOREIGN/1 FOREIGN/1 PENDING/0 PENDING/0 MISSING/1" \
+  '  H_STEM="${b%-adversarial}"' '  H_STEM="$b"' \
+  '  if [ "$hp1" != prd ] || [ "$hp2" != s289-rr ] || [ "$hp3" != x-p1 ] \' '  if false \'
+
 # --- PAIRING: a case that DENIES must assert the state the hooks read -------------
 # THE MECHANISM FOR A DEFECT CLASS THIS FIXTURE HAS NOW HIT TWICE. Gate mode and
 # --cycle-state are different code paths with different branch ordering, and the second one

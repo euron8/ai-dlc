@@ -58,21 +58,31 @@ have gone green, and would have reported "still open" forever.
 never the word anywhere in prose, because an entry that merely discusses landing something is
 not a closed entry.
 
-## BL-451 — the slowest fixtures take 23 to 41 minutes each, and four of the five ship to consumers
+## BL-451 — the six slowest fixtures take 29 to 41 minutes loaded each, and five of the six ship to consumers
 
 **DEFECT.** Filed in batch 199 on the operator's direction that these wall clocks are not acceptable. Loaded costs in
 `$(git rev-parse --git-common-dir)/ai-dlc-fixture-durations` at filing: `apply-self-overwrite` 2463s,
 `apply-setup-sited-merge` 2430s, `self-update-fixture-log` 2425s, `remediator-shard-join` 2420s,
-`backlog-receipt-binding` 2166s, `review-shard-merge` 1738s. These are LOADED figures and some may carry a laptop sleep
-(batch 198 recorded a 2608s gate run in transit); each must be re-measured solo in a clean worktree before it is cut.
-Only `backlog-receipt-binding` is `.dist-only`; the other four ship, so the reference consumer pays them on every push
-that selects them.
+`backlog-receipt-binding` 2166s, `review-shard-merge` 1738s — six fixtures, the minimum 1738s (29 min). These are
+LOADED figures and some may carry a laptop sleep (batch 198 recorded a 2608s gate run in transit); each must be
+re-measured solo in a clean worktree before it is cut. Only `backlog-receipt-binding` is `.dist-only`; the other FIVE
+ship, so the reference consumer pays them on every push that selects them.
 
 **Measured cause, on one of them.** `review-shard-merge` went from 731s to 1738s across batch 199. Its `score()` runs
 every predicate for every mutant (arms × mutants), and the batch added arms and mutants to both factors. The same shape
 is likely behind the mutation-battery fixtures above (`self-update-fixture-log` 35 mutation sites,
-`remediator-shard-join` 10, `apply-self-overwrite` 8) and is not established for `apply-setup-sited-merge`, which has
-none.
+`remediator-shard-join` 10, `apply-self-overwrite` 8). `apply-setup-sited-merge` is NOT mutation-free: it carries 24
+`kill_if` mutants, already launched through a pool of 8 (`POOL=8` at its `launch()`), so serial scoring is not its
+cause and its time is still unattributed.
+
+**Progress — first instance, `review-shard-merge` (batch 200; entry stays open for the other five).** Its 71 arms stay
+in the shipped fixture; the predicates and worlds moved to `core/fixtures/review-shard-merge/lib.sh` (ships beside it);
+MX0 and the 51 mutants moved to the new `.dist-only` `review-shard-merge-mutants`, which sources the same `lib.sh` and
+scores in a fixed pool of 8 with per-scorer scratch, a verdict-count reap, a 900s watchdog and an in-fixture probe of
+its own judgment. Per-mutant killed sets were compared byte-for-byte against the unsplit serial battery.
+Solo, clean worktrees, interleaved, 2 reps, box shared with other sessions (load 4-30 during the
+old side): the unsplit fixture 2537s / 2476s; the shipped fixture after the split 42s / 40s; the new battery 358s /
+347s. The sandbox read-set trace for both fixtures is owed by the lead, not yet committed.
 
 **Remedy.** Per fixture: measure solo, attribute the time, then cut it — move a mutation battery behind a shipped
 fixture into its own `.dist-only` fixture (`fixture-ship-decl.md`), score mutants in parallel within the fixture, and
@@ -158,3 +168,33 @@ length across the cliff and passes only when every world over it reports `degrad
 `degraded=no`, so reporting `yes` unconditionally, or lowering the threshold to the trim ceiling, does not close it.
 
 verify: sh S=core/hooks/ai-dlc-recover.sh; [ -f "$S" ] || exit 9; command -v jq >/dev/null 2>&1 || exit 9; W="$(mktemp -d)" || exit 9; lo=0; hi=0; bad=0; n=0; while [ "$n" -le 80 ]; do P="$W/w$n"; mkdir -p "$P/_bmad-output" "$P/scripts/ai-dlc" "$P/.claude/skills/ai-dlc/steps" || exit 9; echo x > "$P/.claude/skills/ai-dlc/steps/implementation.md"; printf '# Pipeline Snapshot\n\n## Pipeline Position\n- **Current step file:** `implementation.md`\n' > "$P/_bmad-output/pipeline-snapshot.md"; printf 'sidecar\n' > "$P/_bmad-output/pipeline-snapshot.precompact.md"; x="$(printf '%*s' "$n" '' | tr ' ' a)"; printf '#!/bin/sh\n[ "$1" = current ] && echo g%s\n' "$x" > "$P/scripts/ai-dlc/gate-checkpoint.sh"; chmod +x "$P/scripts/ai-dlc/gate-checkpoint.sh"; L="$(printf '{"source":"compact","session_id":"receipt"}' | CLAUDE_PROJECT_DIR="$P" bash "$S" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext | length' 2>/dev/null)"; D="$(sed -n 's/^degraded=//p' "$P/_bmad-output/.recover-fired" 2>/dev/null)"; [ -n "$L" ] && [ -n "$D" ] || exit 9; if [ "$L" -ge 10000 ]; then hi=$((hi + 1)); [ "$D" = yes ] || bad=$((bad + 1)); else lo=$((lo + 1)); [ "$D" = no ] || bad=$((bad + 1)); fi; n=$((n + 5)); done; [ "$lo" -gt 0 ] && [ "$hi" -gt 0 ] || exit 9; [ "$bad" -eq 0 ]
+
+## BL-455 — arm H accepts any `*-repair-p<M>.md`, so another repair's record satisfies a series' pass M
+
+**DEFECT.** Found in batch 200 while adjudicating
+PC-S317-REQUIREMENTS-STEP-CYCLE-IS-NEVER-SHARDED-BECAUSE-ITS-SUBJECT-IS-THREE-FILES-AND-THE-PRD-IS-CUMULATIVE.
+`core/scripts/validate-adversarial-convergence.sh` arm H looked for the repair record of pass M with the glob
+`<dir>/*-repair-p<M>.md`. Any structured record for pass number M in the sprint directory satisfied it, including a
+party-round repair, a gate repair, or a record belonging to another series. As a result, a series whose own repair
+was done inline passed on a neighbour's record. The name `_gate-procedures.md` prescribes, and
+`join-remediator-shards.sh` writes, is `<artifact>-repair-p<M>.md`.
+
+**Measured on the reference consumer** (a scratch clone at 0.730.0, the working-tree `_bmad-output/` copied over it,
+109 series, base and tip validators side by side). 36 pass-pairs in 27 series are satisfied only by a
+differently-named record. Examples are s309 `coe-adversarial-p1` by `architecture-adversarial-repair-p1.md`, s307
+`prd-adversarial-p1` by `carry-over-evaluation-advanced-elicitation-repair-p1.md`, and s302 `product-brief-adversarial-p1`
+by `architecture-repair-p1.md`. With the fix, every one of them reads `PENDING (H -- REPAIR-RECORD)`, because no
+commit there stamps the release. No exit code changes on any of the 109 series.
+
+**What the fix does not close.** The s317 instance that surfaced this is not reachable by the name rule.
+`s317/requirements-repair-p1.md` sits at the series' own stem name but records the requirements PARTY round, so
+the stem-named record satisfies requirements pass 1. That instance closes only when party and elicitation repair
+records are renamed outside `*-repair-p<M>.md` (`requirements-party-repair.md`, `requirements-elicitation-repair.md`),
+which belongs to the requirements-subject release.
+
+**Remedy (this release).** Arm H requires exactly `<stem>-repair-p<M>.md`, where the stem is the pass name before its
+last `p<N>`/`pass<N>` token with one trailing `-adversarial` removed. The requirement sits behind `H_RELEASE`, a stamp
+keyed on the series' first pass as for K, K2 and J2, so a legacy series reads PENDING rather than FAIL. Fixture:
+check-24's `h-worlds` cells and four mutants.
+
+verify: sh bash -c 'v=core/scripts/validate-adversarial-convergence.sh; [ -f "$v" ] || exit 9; d=$(mktemp -d) || exit 9; mkdir -p "$d/.claude" && echo "version: 9.0.0" > "$d/.claude/.ai-dlc-version" || exit 9; (unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; cd "$d" && git init -q . && git add .claude && GIT_COMMITTER_DATE=2026-01-01T00:00:00Z GIT_AUTHOR_DATE=2026-01-01T00:00:00Z git -c user.email=r@x.invalid -c user.name=r -c commit.gpgsign=false -c core.hooksPath=/dev/null commit -q -m s) || exit 9; for n in 1 2; do vd=EXIT_CONDITION_NOT_MET; m=3; [ "$n" = 2 ] && vd=EXIT_CONDITION_MET && m=0; printf -- "<!-- SKILL_INVOCATION_PROVENANCE v1\ninvoked_at: 2026-01-0%sT00:00:00Z\nfindings_critical: 0\nfindings_major: %s\nverdict: %s\nSKILL_INVOCATION_PROVENANCE_END -->\n" "$((n + 1))" "$m" "$vd" > "$d/prd-adversarial-p$n.md"; done; r="- disposition: repaired\n- edit: prd.md:1\n- derivation: n/a\n"; printf -- "$r" > "$d/arch-repair-p1.md"; o=$(bash "$v" --series "$d/prd-adversarial-p" 2>&1); rc=$?; [ "$rc" = 1 ] && grep -qF "The only structured record for pass 1 is arch-repair-p1.md" <<<"$o" || exit 1; printf -- "$r" > "$d/prd-repair-p1.md"; bash "$v" --series "$d/prd-adversarial-p" >/dev/null 2>&1'

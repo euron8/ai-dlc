@@ -2,11 +2,11 @@
 # partition-document.sh -- the ONE speller of the section partition of a single document.
 #
 # USAGE
-#   partition-document.sh --map <doc>
+#   partition-document.sh --map <doc> [--scope-ref <sha>]
 #       stdout: one line per part, `<ordinal>\t<first-line>\t<last-line>\t<heading>`, exit 0.
 #       A document that does not partition prints ONE line `SERIAL: <reason>` on STDOUT and
 #       exits 3. SERIAL is an answer, not an error: the caller dispatches one agent.
-#   partition-document.sh --split <doc> <dir> [--expect-sha <sha256>]
+#   partition-document.sh --split <doc> <dir> [--expect-sha <sha256>] [--scope-ref <sha>]
 #       writes `<dir>/sections/<ordinal>.md` (byte slices of <doc>) and, LAST,
 #       `<dir>/sections/.manifest`. Exit 0; exit 3 with the SERIAL line and nothing created
 #       when the document does not partition.
@@ -59,19 +59,50 @@
 #   the heading line that OPENED its first atom, never a line found by scanning the part, so a
 #   fenced `## ` can be neither a boundary nor a heading. Trailing CR is stripped from the heading
 #   and a TAB in it becomes a space -- a heading must not break the TSV every caller parses.
-#   Line numbers are 1-based and the parts tile the document: first=1, each first is the previous
-#   last+1, the final last is the line count (a final line without a newline counts).
+#   Line numbers are 1-based. UNSCOPED (no --scope-ref), the parts tile the document: first=1, each
+#   first is the previous last+1, the final last is the line count (a final line without a newline
+#   counts). A SCOPED map does not tile; see below.
+#
+# THE SCOPE (`--scope-ref <sha>` on --map and --split)
+#   The in-scope lines are the WORKTREE file's lines that differ from the file in the base TREE
+#   (`<sha>:<path>`), by `git diff --no-index --diff-algorithm=myers -U0` of that blob against the
+#   file on disk -- not commit..commit, not the index. A hunk `+c,d` puts lines c..c+d-1 in scope;
+#   a DELETION-ONLY hunk (d=0) puts line c in scope (line 1 when c=0), so the part holding the
+#   deletion point is reviewed. A file absent at `<sha>:<path>` is wholly in scope. The ref must
+#   resolve to a commit and the document must sit in a git work tree, or the run refuses -- an
+#   unresolvable ref never reads as "absent at base".
+#   Every byte quantity of the grammar above -- the `##` split threshold, the row-cut cap, the pack
+#   target and its search bound, the SERIAL share -- is computed over IN-SCOPE bytes: a line out
+#   of scope weighs 0. Atoms with no in-scope byte are dropped, and no part spans the run of
+#   dropped atoms between two kept ones -- unless that forces more than PART_CAP parts, in which
+#   case the gaps are bridged (a part may then carry out-of-scope lines inside it).
+#   Scoped --map prints the in-scope parts only, in the same 4-column TSV, ordinals 1..K. Nothing
+#   in scope prints nothing and exits 0; --split refuses it.
+#   SERIAL UNDER A SCOPE: when the scoped map is SERIAL, the UNSCOPED map is asked too. Both
+#   SERIAL: the answer is the unscoped SERIAL line, exit 3 -- the caller dispatches one agent over
+#   the whole file. Unscoped partitions: the scoped parts are printed anyway, the one-part and
+#   largest-share tests waived, so a small change in a partitionable file is one part, not the
+#   whole file.
+#
+#   With UNSCOPED input every line weighs its own bytes and nothing is dropped, so the program
+#   above IS the unscoped partitioner, byte for byte.
 #
 # THE MANIFEST (`<dir>/sections/.manifest` -- a dotfile, so no `*.md` glob over sections/ sees it)
 #   document\t<ABSOLUTE path, resolved with `pwd -P`: physical, so /tmp reads /private/tmp>
 #   sha256\t<hex of the document as split>
 #   part\t<ordinal>\t<first>\t<last>\t<heading>     one per part, exactly the `--map` lines
+#   gap\t<first>\t<last>\t<sha256 of those lines>   scoped only: one per out-of-scope range,
+#                                                   interleaved with the parts in line order, so
+#                                                   part and gap rows together tile the document
 #   assembled\t<hex of the document as assembled>   appended by a successful --assemble
 #
 # ASSEMBLY, IN THIS ORDER, AND EACH STEP IS WHY THE NEXT IS SAFE
 #   0. `assembled` present: disk sha equal to it prints UNCHANGED and exits 0 (a re-run is not
 #      an error); anything else refuses, because the sections are gone and the document has
 #      moved since.
+#   1a. Refuse on a `gap` row whose lines no longer hash to its sha, naming the range. Step 1
+#      would refuse the same write; this one runs first so the refusal says WHICH range moved.
+#      Each gap is re-read from the document at step 4, between the section files.
 #   1. Refuse when the document is no longer the bytes it was split from -- something wrote it
 #      in place while the sections were out, and assembling would silently erase that write.
 #   2. Refuse on a foreign entry in sections/ (a non-dot name that is not `<ordinal>.md` of this
@@ -110,18 +141,28 @@ abs_path() { # <existing file> -> physical absolute path
   printf '%s/%s' "$d" "$(basename "$1")"
 }
 
-map_of() { # <doc> -> map on stdout (rc 0) or one SERIAL line (rc 3)
-  awk -v cap="$PART_CAP" -v maxpct="$MAX_SHARE_PCT" '
+map_of() { # <doc> [<in-scope line list> [<relax>]] -> map on stdout (rc 0) or one SERIAL line (rc 3)
+  # With no line list every line weighs its bytes and the program is the unscoped partitioner.
+  # With one, a line not on the list weighs 0, and every byte quantity below is the in-scope sum.
+  awk -v cap="$PART_CAP" -v maxpct="$MAX_SHARE_PCT" -v sf="${2:-}" -v relax="${3:-0}" '
+    BEGIN {
+      scoped = (sf != ""); bad = 0; nin = 0
+      if (scoped) {
+        while ((rr = (getline l < sf)) > 0) { IN[l + 0] = 1; nin++ }
+        if (rr < 0) bad = 1
+        close(sf)
+      }
+    }
     function pack(t,   i, n, s) {
       n = 1; s = 0
       for (i = 1; i <= na; i++) {
-        if (s > 0 && s + AS[i] > t) { n++; s = 0 }
+        if ((s > 0 && s + AS[i] > t) || (i > 1 && RN[i] != RN[i - 1])) { n++; s = 0 }
         s += AS[i]
       }
       return n
     }
     function head_of(line) { sub(/\r$/, "", line); gsub(/\t/, " ", line); return line }
-    { B[NR] = length($0) + 1; tot += B[NR]
+    { B[NR] = length($0) + 1
       r = $0; sub(/\r$/, "", r); SEP[NR] = (r ~ /^\|[ \t]*:?-+:?[ \t]*(\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$/) }
     fence != "" {
       t = $0; sub(/^[ \t]*/, "", t); c = substr(fence, 1, 1); n = 0
@@ -136,11 +177,15 @@ map_of() { # <doc> -> map on stdout (rc 0) or one SERIAL line (rc 3)
     /^## /  { n2++; h2[n2] = NR; h2t[n2] = $0; next }
     /^### / { n3++; h3[n3] = NR; h3t[n3] = $0; next }
     END {
+      if (bad) { print "partition-document: cannot read the scope list " sf > "/dev/stderr"; exit 2 }
+      tot = 0
+      for (k = 1; k <= NR; k++) { W[k] = (scoped ? (IN[k] ? B[k] : 0) : B[k]); tot += W[k] }
+      if (scoped && tot == 0) exit 0
       if (n2 == 0) { print "SERIAL: no ## heading outside a fence"; exit 3 }
       na = 0
       for (i = 1; i <= n2; i++) {
         a = (i == 1 ? 1 : h2[i]); z = (i < n2 ? h2[i + 1] - 1 : NR)
-        s = 0; for (k = a; k <= z; k++) s += B[k]
+        s = 0; for (k = a; k <= z; k++) s += W[k]
         if (s * 2 > tot) {
           st = a; stt = h2t[i]
           for (j = 1; j <= n3; j++) if (h3[j] > h2[i] && h3[j] <= z) {
@@ -153,7 +198,7 @@ map_of() { # <doc> -> map on stdout (rc 0) or one SERIAL line (rc 3)
       for (k = 1; k <= NR; k++) RUNSEP[k] = (TR[k] ? (RUNSEP[k - 1] || SEP[k]) : 0)
       nb = 0
       for (i = 1; i <= na; i++) {
-        s = 0; for (k = A1[i]; k <= A2[i]; k++) s += B[k]
+        s = 0; for (k = A1[i]; k <= A2[i]; k++) s += W[k]
         st = A1[i]
         if (s * 100 > tot * maxpct)
           for (k = A1[i] + 2; k <= A2[i]; k++) if (TR[k] && TR[k - 1] && TR[k - 2] && RUNSEP[k - 1]) {
@@ -161,12 +206,16 @@ map_of() { # <doc> -> map on stdout (rc 0) or one SERIAL line (rc 3)
           }
         nb++; C1[nb] = st; C2[nb] = A2[i]; CH[nb] = AH[i]
       }
-      na = nb; for (i = 1; i <= na; i++) { A1[i] = C1[i]; A2[i] = C2[i]; AH[i] = CH[i] }
-      mx = 0
-      for (i = 1; i <= na; i++) {
-        s = 0; for (k = A1[i]; k <= A2[i]; k++) s += B[k]
-        AS[i] = s; if (s > mx) mx = s
+      # Keep the atoms carrying in-scope bytes (every atom, unscoped: a line weighs at least its
+      # newline). RN is a run id that changes across every dropped atom, so no part spans a gap.
+      na = 0; mx = 0; run = 1
+      for (i = 1; i <= nb; i++) {
+        s = 0; for (k = C1[i]; k <= C2[i]; k++) s += W[k]
+        if (scoped && s == 0) { if (na > 0 && RN[na] == run) run++; continue }
+        na++; A1[na] = C1[i]; A2[na] = C2[i]; AH[na] = CH[i]; AS[na] = s; RN[na] = run
+        if (s > mx) mx = s
       }
+      if (RN[na] > cap) for (i = 1; i <= na; i++) RN[i] = 1
       target = int((tot + cap - 1) / cap); if (mx > target) target = mx
       if (pack(target) > cap) {
         lo = target; hi = tot
@@ -175,15 +224,15 @@ map_of() { # <doc> -> map on stdout (rc 0) or one SERIAL line (rc 3)
       }
       np = 1; P1[1] = A1[1]; PH[1] = AH[1]; PS[1] = 0
       for (i = 1; i <= na; i++) {
-        if (PS[np] > 0 && PS[np] + AS[i] > target) { np++; P1[np] = A1[i]; PH[np] = AH[i]; PS[np] = 0 }
+        if ((PS[np] > 0 && PS[np] + AS[i] > target) || (i > 1 && RN[i] != RN[i - 1])) { np++; P1[np] = A1[i]; PH[np] = AH[i]; PS[np] = 0 }
         PS[np] += AS[i]; P2[np] = A2[i]
       }
       big = 0; for (i = 1; i <= np; i++) if (PS[i] > big) { big = PS[i]; bi = i }
-      if (np < 2) { print "SERIAL: one part"; exit 3 }
-      if (big * 100 > tot * maxpct) {
+      if (np < 2 && !relax) { print "SERIAL: one part"; exit 3 }
+      if (big * 100 > tot * maxpct && !relax) {
         why = "no-boundary"
-        for (k = P1[bi]; k <= P2[bi]; k++) if (B[k] * 100 > tot * maxpct) why = "single-line"
-        printf "SERIAL: largest part is %d%% of the document (lines %d-%d, %d%%, %s)\n", int(big * 100 / tot), P1[bi], P2[bi], int(big * 100 / tot), why
+        for (k = P1[bi]; k <= P2[bi]; k++) if (W[k] * 100 > tot * maxpct) why = "single-line"
+        printf "SERIAL: largest part is %d%% of the %s (lines %d-%d, %d%%, %s)\n", int(big * 100 / tot), (scoped ? "in-scope bytes" : "document"), P1[bi], P2[bi], int(big * 100 / tot), why
         exit 3
       }
       fmt = "%0" length(np "") "d\t%d\t%d\t%s\n"
@@ -195,24 +244,88 @@ manifest_field() { # <manifest> <key> -> the first value of that key
   awk -F'\t' -v k="$2" '$1 == k { print $2; exit }' "$1"
 }
 
+SCOPE_TMP=""
+scope_cleanup() { if [ -n "$SCOPE_TMP" ]; then rm -f "$SCOPE_TMP" "$SCOPE_TMP.base" "$SCOPE_TMP.diff"; fi; return 0; }
+trap scope_cleanup EXIT
+
+scope_lines() { # <doc> <ref> -> SCOPE_TMP holds the in-scope line numbers, SCOPE_SHA the resolved commit
+  local dir top pre rel drc
+  command -v git >/dev/null 2>&1 || refuse "--scope-ref needs git on PATH"
+  dir="$(cd "$(dirname "$1")" 2>/dev/null && pwd -P)" || refuse "cannot resolve the directory of $1"
+  top="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)" || refuse "$1 is not inside a git work tree; --scope-ref has nothing to diff against"
+  [ -n "$top" ] || refuse "$1 is not inside a git work tree; --scope-ref has nothing to diff against"
+  # The ref resolves FIRST: an unresolvable ref and a path absent at a good ref both fail
+  # `cat-file -e`, and the second means "wholly in scope" -- a typo must not read as that.
+  SCOPE_SHA="$(git -C "$dir" rev-parse --verify --quiet "${2}^{commit}" 2>/dev/null)" \
+    || refuse "--scope-ref $2 does not name a commit in $top"
+  pre="$(git -C "$dir" rev-parse --show-prefix 2>/dev/null)" || refuse "cannot locate $1 inside $top"
+  rel="${pre}$(basename "$1")"
+  SCOPE_TMP="$(mktemp "${TMPDIR:-/tmp}/partition-document-scope.XXXXXX")" || refuse "cannot stage the scope list"
+  if ! git -C "$dir" cat-file -e "${SCOPE_SHA}:./$(basename "$1")" 2>/dev/null; then
+    # Absent at the base: every line is in scope.
+    awk 'END { for (i = 1; i <= NR; i++) print i }' "$1" > "$SCOPE_TMP" || refuse "cannot write the scope list"
+    return 0
+  fi
+  git -C "$dir" cat-file blob "${SCOPE_SHA}:./$(basename "$1")" > "$SCOPE_TMP.base" 2>/dev/null \
+    || refuse "cannot read ${rel} at ${SCOPE_SHA}"
+  # The base TREE's blob against the WORKTREE file: not commit..commit, not the index. Myers is
+  # pinned so a configured diff.algorithm cannot move a hunk boundary.
+  git --no-pager diff --no-index --no-color --no-ext-diff --no-renames --diff-algorithm=myers -U0 \
+    -- "$SCOPE_TMP.base" "$1" > "$SCOPE_TMP.diff" 2>/dev/null; drc=$?
+  [ "$drc" -le 1 ] || refuse "git diff of ${rel} against ${SCOPE_SHA} failed (rc=$drc)"
+  # A hunk `@@ -a[,b] +c[,d] @@` puts new lines c..c+d-1 in scope; a deletion-only hunk (d = 0)
+  # counts at its deletion point, new line c (line 1 when c = 0).
+  awk '/^@@ / {
+         h = $3; sub(/^\+/, "", h); n = split(h, P, ","); c = P[1] + 0; d = (n > 1 ? P[2] + 0 : 1)
+         if (d == 0) print (c > 0 ? c : 1)
+         else for (i = c; i < c + d; i++) print i
+       }' "$SCOPE_TMP.diff" > "$SCOPE_TMP" || refuse "cannot write the scope list"
+  return 0
+}
+
+scoped_map() { # <doc> <ref> -> M and MRC, the scoped answer
+  local u urc
+  scope_lines "$1" "$2"
+  M="$(map_of "$1" "$SCOPE_TMP")"; MRC=$?
+  [ "$MRC" -eq 3 ] || return 0
+  # Scoped SERIAL: SERIAL stands only when the unscoped map is SERIAL too, and then the answer is
+  # the unscoped SERIAL line. Otherwise the in-scope parts are printed, one part allowed.
+  u="$(map_of "$1")"; urc=$?
+  if [ "$urc" -eq 3 ]; then M="$u"; MRC=3; return 0; fi
+  M="$(map_of "$1" "$SCOPE_TMP" 1)"; MRC=$?
+}
+
 case "${1:-}" in
   --map)
-    [ "$#" -eq 2 ] || refuse "usage: --map <doc>"
-    [ -f "$2" ] || refuse "no document at $2"
-    [ -r "$2" ] || refuse "cannot read $2"
-    map_of "$2"; exit $? ;;
+    shift
+    DOC=""; REF=""
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --scope-ref) [ "$#" -ge 2 ] && [ -n "$2" ] || refuse "--scope-ref needs a value"; REF="$2"; shift 2 ;;
+        --*) refuse "unknown flag $1" ;;
+        *) [ -z "$DOC" ] || refuse "usage: --map <doc> [--scope-ref <sha>]"; DOC="$1"; shift ;;
+      esac
+    done
+    [ -n "$DOC" ] || refuse "usage: --map <doc> [--scope-ref <sha>]"
+    [ -f "$DOC" ] || refuse "no document at $DOC"
+    [ -r "$DOC" ] || refuse "cannot read $DOC"
+    if [ -z "$REF" ]; then map_of "$DOC"; exit $?; fi
+    scoped_map "$DOC" "$REF"
+    [ -n "$M" ] && printf '%s\n' "$M"
+    exit "$MRC" ;;
 
   --split)
     shift
-    DOC=""; DIR=""; EXPECT=""
+    DOC=""; DIR=""; EXPECT=""; REF=""
     while [ "$#" -gt 0 ]; do
       case "$1" in
         --expect-sha) [ "$#" -ge 2 ] || refuse "--expect-sha needs a value"; EXPECT="$2"; shift 2 ;;
+        --scope-ref) [ "$#" -ge 2 ] && [ -n "$2" ] || refuse "--scope-ref needs a value"; REF="$2"; shift 2 ;;
         --*) refuse "unknown flag $1" ;;
         *) if [ -z "$DOC" ]; then DOC="$1"; elif [ -z "$DIR" ]; then DIR="$1"; else refuse "unexpected argument $1"; fi; shift ;;
       esac
     done
-    [ -n "$DOC" ] && [ -n "$DIR" ] || refuse "usage: --split <doc> <dir> [--expect-sha <sha256>]"
+    [ -n "$DOC" ] && [ -n "$DIR" ] || refuse "usage: --split <doc> <dir> [--expect-sha <sha256>] [--scope-ref <sha>]"
     [ -f "$DOC" ] || refuse "no document at $DOC"
     ABS="$(abs_path "$DOC")" || refuse "cannot resolve the directory of $DOC"
     SHA="$(sha_of "$DOC")"
@@ -221,23 +334,49 @@ case "${1:-}" in
       refuse "$ABS is not the reviewed bytes: sha256 $SHA, expected $EXPECT"
     fi
     [ -e "$DIR/sections" ] && refuse "$DIR/sections already exists; a split never overwrites"
-    M="$(map_of "$DOC")"; rc=$?
+    if [ -z "$REF" ]; then
+      M="$(map_of "$DOC")"; rc=$?
+    else
+      scoped_map "$DOC" "$REF"; rc=$MRC
+      [ "$rc" -ne 0 ] || [ -n "$M" ] || refuse "nothing in $ABS differs from $SCOPE_SHA; there is no part to split"
+    fi
     if [ "$rc" -eq 3 ]; then printf '%s\n' "$M"; exit 3; fi
     [ "$rc" -eq 0 ] && [ -n "$M" ] || refuse "the partition of $ABS failed (awk rc=$rc)"
+    # The rows in line order: every part, and (scoped) a `gap` row for each range between them.
+    # Unscoped the parts tile the document, so no gap row is written and ROWS is the map.
+    NL="$(awk 'END { print NR }' "$DOC")"
+    ROWS="$(printf '%s\n' "$M" | awk -F'\t' -v L="$NL" '
+      { if ($2 > nx) print "gap\t" nx "\t" ($2 - 1); print "part\t" $0; nx = $3 + 1 }
+      BEGIN { nx = 1 }
+      END { if (nx <= L) print "gap\t" nx "\t" L }')"
     mkdir -p "$DIR/sections" || refuse "cannot create $DIR/sections"
     SEC="$(cd "$DIR/sections" && pwd -P)" || refuse "cannot resolve $DIR/sections"
     V="$SEC/.verify.$$"
     : > "$V" || refuse "cannot stage the split check in $SEC"
+    G="$SEC/.gap.$$"
     TAB="$(printf '\t')"
-    while IFS="$TAB" read -r o a z h; do
-      tail -n "+$a" "$DOC" | head -n "$((z - a + 1))" > "$SEC/$o.md" \
-        || { rm -f "$V"; refuse "cannot write section $o into $SEC"; }
-      cat "$SEC/$o.md" >> "$V" || { rm -f "$V"; refuse "cannot stage the split check"; }
+    MROWS="$SEC/.rows.$$"
+    : > "$MROWS" || { rm -f "$V"; refuse "cannot stage the manifest rows in $SEC"; }
+    while IFS="$TAB" read -r kind f1 f2 f3 f4; do
+      if [ "$kind" = "gap" ]; then
+        tail -n "+$f1" "$DOC" | head -n "$((f2 - f1 + 1))" > "$G" \
+          || { rm -f "$V" "$G" "$MROWS"; refuse "cannot stage gap lines $f1-$f2"; }
+        cat "$G" >> "$V" || { rm -f "$V" "$G" "$MROWS"; refuse "cannot stage the split check"; }
+        printf 'gap\t%s\t%s\t%s\n' "$f1" "$f2" "$(sha_of "$G")" >> "$MROWS" \
+          || { rm -f "$V" "$G" "$MROWS"; refuse "cannot stage the manifest rows"; }
+        continue
+      fi
+      tail -n "+$f2" "$DOC" | head -n "$((f3 - f2 + 1))" > "$SEC/$f1.md" \
+        || { rm -f "$V" "$G" "$MROWS"; refuse "cannot write section $f1 into $SEC"; }
+      cat "$SEC/$f1.md" >> "$V" || { rm -f "$V" "$G" "$MROWS"; refuse "cannot stage the split check"; }
+      printf 'part\t%s\t%s\t%s\t%s\n' "$f1" "$f2" "$f3" "$f4" >> "$MROWS" \
+        || { rm -f "$V" "$G" "$MROWS"; refuse "cannot stage the manifest rows"; }
     done <<EOF
-$M
+$ROWS
 EOF
+    rm -f "$G"
     if [ "$(sha_of "$V")" != "$SHA" ]; then
-      rm -f "$V"
+      rm -f "$V" "$MROWS"
       while IFS="$TAB" read -r o a z h; do rm -f "$SEC/$o.md"; done <<EOF
 $M
 EOF
@@ -246,8 +385,9 @@ EOF
     fi
     rm -f "$V"
     { printf 'document\t%s\n' "$ABS"; printf 'sha256\t%s\n' "$SHA"
-      printf '%s\n' "$M" | awk '{ print "part\t" $0 }'; } > "$SEC/.manifest" \
-      || refuse "cannot write $SEC/.manifest"
+      cat "$MROWS"; } > "$SEC/.manifest" \
+      || { rm -f "$MROWS"; refuse "cannot write $SEC/.manifest"; }
+    rm -f "$MROWS"
     printf 'SPLIT: %s parts of %s into %s\n' "$(printf '%s\n' "$M" | grep -c .)" "$ABS" "$SEC"
     exit 0 ;;
 
@@ -266,6 +406,17 @@ EOF
       [ "$NOW" = "$DONE" ] && { printf 'UNCHANGED: %s sha256=%s\n' "$DOC" "$NOW"; exit 0; }
       refuse "$DOC was already assembled (sha256 $DONE) and has moved since (sha256 $NOW); its sections are gone"
     fi
+    # Gap rows (a --scope-ref split): each out-of-scope range must still be the bytes it was split
+    # from. This runs BEFORE the whole-document check and names the range; the whole-document check
+    # below would also refuse a moved gap, so this one buys the diagnosis, not a further refusal.
+    TAB="$(printf '\t')"
+    GT="$(dirname "$DOC")/.$(basename "$DOC").gap.$$"
+    while IFS="$TAB" read -r kind ga gz gs; do
+      [ "$kind" = "gap" ] || continue
+      tail -n "+$ga" "$DOC" | head -n "$((gz - ga + 1))" > "$GT" || { rm -f "$GT"; refuse "cannot stage gap lines $ga-$gz"; }
+      [ "$(sha_of "$GT")" = "$gs" ] || { rm -f "$GT"; refuse "gap lines $ga-$gz of $DOC moved since the split (sha256 $gs); an out-of-scope range was written while the sections were out"; }
+    done < "$MF"
+    rm -f "$GT"
     [ "$NOW" = "$SHA" ] || refuse "$DOC is no longer the bytes it was split from (sha256 $SHA, now $NOW); something wrote it in place while the sections were out"
     ORDS="$(awk -F'\t' '$1 == "part" { print $2 }' "$MF")"
     [ -n "$ORDS" ] || refuse "$MF lists no part"
@@ -291,9 +442,13 @@ EOF
     T="$(dirname "$DOC")/.$(basename "$DOC").assemble.$$"
     cp -p "$DOC" "$T" || refuse "cannot stage $T"
     : > "$T" || { rm -f "$T"; refuse "cannot stage $T"; }
-    for o in $ORDS; do
-      cat "$DIR/sections/$o.md" >> "$T" || { rm -f "$T"; refuse "cannot stage section $o"; }
-    done
+    # Manifest rows in line order: a part is its section file, a gap is its range of the document.
+    while IFS="$TAB" read -r kind f1 f2 f3; do
+      case "$kind" in
+        part) cat "$DIR/sections/$f1.md" >> "$T" || { rm -f "$T"; refuse "cannot stage section $f1"; } ;;
+        gap) tail -n "+$f1" "$DOC" | head -n "$((f2 - f1 + 1))" >> "$T" || { rm -f "$T"; refuse "cannot stage gap lines $f1-$f2"; } ;;
+      esac
+    done < "$MF"
     [ "$(sha_of "$DOC")" = "$SHA" ] || { rm -f "$T"; refuse "$DOC moved while it was being assembled; nothing written"; }
     mv "$T" "$DOC" || { rm -f "$T"; refuse "cannot write $DOC"; }
     NEW="$(sha_of "$DOC")"
@@ -302,5 +457,5 @@ EOF
     printf 'ASSEMBLED: %s sha256=%s\n' "$DOC" "$NEW"
     exit 0 ;;
 
-  *) refuse "usage: partition-document.sh --map <doc> | --split <doc> <dir> [--expect-sha <sha256>] | --assemble <dir>" ;;
+  *) refuse "usage: partition-document.sh --map <doc> [--scope-ref <sha>] | --split <doc> <dir> [--expect-sha <sha256>] [--scope-ref <sha>] | --assemble <dir>" ;;
 esac

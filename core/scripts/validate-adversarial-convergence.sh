@@ -2244,6 +2244,105 @@ fi
 # single-quoted so the source text is what grep receives.
 #   $1 field label   $2 candidate file
 repair_field() { grep -qE '^[[:space:]-]*([*_`]{1,2})?'"$1"'([*_`]{1,2})?:' "$2"; }
+
+# THE RECORD IS NAMED BY ITS SERIES, NOT BY ITS SUFFIX. The glob this arm read until H_RELEASE,
+# `<dir>/*-repair-p<M>.md`, is satisfied by ANY record for pass number M in the directory -- a
+# party-round repair, a gate repair, another series' repair -- so a series whose own repair was
+# done inline passed on a neighbour's record. The name `_gate-procedures.md` and
+# `join-remediator-shards.sh` write is `<artifact>-repair-p<M>.md` beside
+# `<artifact>-adversarial-p<M>.md`, and that exact name is what is owed now.
+#
+#   stem      the pass file's basename up to the LAST `pass<N>`/`p<N>` token -- the token
+#             `order_key` numbers the pass by -- with the trailing `-` and one trailing
+#             `-adversarial` dropped: `prd-adversarial-p3` -> `prd`,
+#             `s289-rr-adversarial-pass4-verification` -> `s289-rr`. Fork-free (`h_stem`).
+#   owed      `<dir>/<stem>-repair-p<M>.md`, read with the same three-field reader.
+#   FOREIGN   the owed record is absent or unstructured AND a structured record of another name
+#             satisfies the old glob -- the one case the old arm passed and this one does not.
+#             FAIL when the series' FIRST pass is at or after the first commit stamping
+#             `.claude/.ai-dlc-version` at H_RELEASE or later (`k_stamp_parse`, K_RELEASE
+#             rebound, the history read once per root by `stamp_log`); PENDING, printed and
+#             never counted, otherwise -- no root, no git, no such stamp, a first pass opened
+#             before it, or a first `invoked_at` that is not ISO 8601 UTC.
+#   unchanged every case the old glob FAILED still fails with its old message, and an owed
+#             record that is structured passes. Nothing the old arm refused is acquitted here.
+#
+# FALSE-POSITIVE SET, and how it reached zero: on the reference consumer as pulled, the series
+# satisfied only by a differently-named record are all legacy -- no commit there stamps
+# H_RELEASE -- so every one reads PENDING and none fails. The stamp keyed on the series' FIRST
+# pass is the whole narrowing, as it is for K, K2 and J2. The cost is paid only on the FOREIGN
+# case: a compliant series reads one file and never globs, probes, walks or forks git.
+H_RELEASE="0.733.0"
+h_stem() {  # $1 pass file -> H_STEM (empty when the name carries no pass number)
+  local b="${1##*/}"
+  b="${b%.md}"
+  H_STEM=""
+  [[ "$b" =~ $H_STEM_RE ]] || return 0
+  b="${BASH_REMATCH[1]}"
+  b="${b%-}"
+  H_STEM="${b%-adversarial}"
+}
+H_STEM_RE='^(.*)(pass|p)[0-9]+'
+# THE SELF-PROBE RUNS BEFORE THE CORPUS, both directions, fork-free: the last numbered token
+# wins over an earlier one, `pass<N>` is not read as `s<N>`, a suffix after the token is
+# dropped, `-adversarial` is dropped once and only at the end, and a name with no number has
+# no stem.
+if [ "$N" -gt 1 ]; then
+  h_stem "d/prd-adversarial-p13.md"; hp1="$H_STEM"
+  h_stem "s289-rr-adversarial-pass4-verification.md"; hp2="$H_STEM"
+  h_stem "x-p1-adversarial-pass2.md"; hp3="$H_STEM"
+  h_stem "adversarial-notes-p1.md"; hp4="$H_STEM"
+  h_stem "brief-adversarial.md"; hp5="$H_STEM"
+  if [ "$hp1" != prd ] || [ "$hp2" != s289-rr ] || [ "$hp3" != x-p1 ] \
+     || [ "$hp4" != adversarial-notes ] || [ -n "$hp5" ]; then
+    echo "validate-adversarial-convergence.sh: arm H stem self-probe failed (p13 '$hp1', pass4-suffix '$hp2', last-token '$hp3', inner-word '$hp4', no-number '$hp5'); no verdict" >&2
+    exit 2
+  fi
+fi
+H_GATE=""   # unset until the first FOREIGN case asks: owed | pending-<reason>
+h_gate() {  # -> H_GATE, H_GATE_MSG; the stamp is read once per run
+  [ -n "$H_GATE" ] && return 0
+  local h_root="" h_walk h_at="${P_AT[0]:-}" h_maj h_min h_pat h_pred h_probe h_probe_none h_stamp=""
+  h_walk="$(cd "$(dirname "${P_FILE[0]}")" 2>/dev/null && pwd)"
+  while [ -n "$h_walk" ]; do
+    if [ -f "$h_walk/.claude/.ai-dlc-version" ]; then h_root="$h_walk"; break; fi
+    h_walk="${h_walk%/*}"
+  done
+  # The rebinding is probed with H_RELEASE's predecessor as the near-miss, as J2's is.
+  IFS=. read -r h_maj h_min h_pat <<EOF
+$H_RELEASE
+EOF
+  h_pred="${h_maj}.$((h_min - 1)).${h_pat}"
+  h_probe="$(printf '%s\n' 'C 2026-01-02T00:00:00Z' "+version: $H_RELEASE" 'C 2026-01-01T00:00:00Z' "+version: $h_pred" \
+             'C 2026-01-03T00:00:00Z' '+version: 9.0.0' | K_RELEASE="$H_RELEASE" k_stamp_parse)"
+  h_probe_none="$(printf '%s\n' 'C 2026-01-01T00:00:00Z' "+version: $h_pred" | K_RELEASE="$H_RELEASE" k_stamp_parse)"
+  if [ "$h_probe" != "2026-01-02T00:00:00Z" ] || [ -n "$h_probe_none" ]; then
+    echo "validate-adversarial-convergence.sh: arm H stamp-parser self-probe failed (got '$h_probe', near-miss '$h_probe_none'); no verdict" >&2
+    exit 2
+  fi
+  if [ -n "$h_root" ]; then
+    stamp_log "$h_root"
+    h_stamp="$(K_RELEASE="$H_RELEASE" k_stamp_parse < "$STAMP_LOG")"
+  fi
+  case "$h_at" in
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) h_atok=1 ;;
+    *) h_atok=0 ;;
+  esac
+  if [ -z "$h_stamp" ]; then
+    H_GATE=pending
+    H_GATE_MSG="no commit${h_root:+ in $h_root} stamps .claude/.ai-dlc-version at ${H_RELEASE} or later -- not owed yet."
+  elif [ "$h_atok" -eq 0 ]; then
+    H_GATE=pending
+    H_GATE_MSG="the series' first pass $(basename "${P_FILE[0]}") has no ISO 8601 UTC invoked_at ('${h_at}') to date against ${h_stamp}."
+  elif [[ "$h_at" < "$h_stamp" ]]; then
+    H_GATE=pending
+    H_GATE_MSG="the series opened ($(basename "${P_FILE[0]}"), ${h_at}) before ${H_RELEASE} was stamped (${h_stamp}). Legacy series."
+  else
+    H_GATE=owed
+    H_GATE_MSG="the series opened (${h_at}) after ${H_RELEASE} was stamped (${h_stamp})"
+  fi
+}
+
 for ((h = 0; h + 1 < N; h++)); do
   # A verification pass after a RESOLUTION is arm F's business, not a repair pass.
   [ -n "${P_RESOLVES[$((h + 1))]:-}" ] && continue
@@ -2268,20 +2367,54 @@ for ((h = 0; h + 1 < N; h++)); do
   [ -n "$M" ] || continue   # an unorderable pass already failed the ORDER check
   dir="$(dirname "${P_FILE[$h]}")"
 
-  rec=""; rec_unstructured=""
-  for cand in "$dir"/*-repair-p"$M".md; do
-    [ -f "$cand" ] && [ -s "$cand" ] || continue
-    # Structured per remediator.md: at least one finding block carrying a disposition,
-    # an edit site, and a derivation line. An empty or narrative-only file fails.
-    if repair_field disposition "$cand" \
-       && repair_field edit "$cand" \
-       && repair_field derivation "$cand"; then
-      rec="$cand"; break
-    fi
-    rec_unstructured="$cand"
-  done
+  # The OWED record first: a structured `<stem>-repair-p<M>.md` settles the pass with no glob.
+  h_stem "${P_FILE[$h]}"
+  h_own="$dir/${H_STEM}-repair-p${M}.md"
+  rec=""; rec_unstructured=""; h_foreign=""
+  if [ -n "$H_STEM" ] && [ -f "$h_own" ] && [ -s "$h_own" ] && repair_field disposition "$h_own" \
+     && repair_field edit "$h_own" && repair_field derivation "$h_own"; then
+    rec="$h_own"
+  else
+    for cand in "$dir"/*-repair-p"$M".md; do
+      [ -f "$cand" ] && [ -s "$cand" ] || continue
+      # Structured per remediator.md: at least one finding block carrying a disposition,
+      # an edit site, and a derivation line. An empty or narrative-only file fails.
+      if repair_field disposition "$cand" \
+         && repair_field edit "$cand" \
+         && repair_field derivation "$cand"; then
+        rec="$cand"; break
+      fi
+      rec_unstructured="$cand"
+    done
+    # Only a structured record of ANOTHER name reaches here with rec set: the FOREIGN case.
+    [ -n "$rec" ] && h_foreign="$rec"
+  fi
 
-  if [ -n "$rec" ]; then
+  if [ -n "$h_foreign" ]; then
+    h_gate
+    h_want="${H_STEM:+${H_STEM}-repair-p${M}.md}"
+    if [ "$H_GATE" = owed ]; then
+      # A record under this series' stem but not the owed name (`<stem>-adversarial-repair-p<M>`)
+      # is most likely this series' own record misnamed; any other name is most likely another
+      # repair's. The remedy differs, so the message says which -- and never asserts ownership.
+      case "$(basename "$h_foreign")" in
+        "${H_STEM:-.}"-*) h_fix="If it records THIS series' repair, rename it to the owed path; otherwise write this series' own record there." ;;
+        *) h_fix="Its name does not carry this series' stem, so it is most likely another repair's -- another series, a party or elicitation round, or a gate repair. Write this series' own record at the owed path; do not rename a record that belongs to a different repair." ;;
+      esac
+      err "H -- REPAIR-RECORD" "$(basename "${P_FILE[$h]}")'s findings were repaired before
+      $(basename "${P_FILE[$((h + 1))]}") (fell ${c0}C/${m0}M -> ${c1}C/${m1}M), and the record
+      this series owes, $dir/${h_want:-<stem>-repair-p$M.md}, is $( [ -f "$h_own" ] && echo 'not a structured record' || echo 'absent').
+      The only structured record for pass $M is $(basename "$h_foreign"), which is not this
+      series' prescribed name. A record is matched to its series by NAME:
+      <artifact>-repair-p<M>.md beside <artifact>-adversarial-p<M>.md (_gate-procedures.md,
+      Adversarial repair dispatch; join-remediator-shards.sh writes that name).
+      ${H_GATE_MSG}, so the exact name is owed.
+      ${h_fix}"
+    else
+      echo "PENDING (H -- REPAIR-RECORD): $(basename "${P_FILE[$h]}") is satisfied only by $(basename "$h_foreign"), not by"
+      echo "      ${h_want:-<stem>-repair-p$M.md} -- ${H_GATE_MSG}"
+    fi
+  elif [ -n "$rec" ]; then
     :   # delegated and recorded -- nothing owed
   elif [ -n "$rec_unstructured" ]; then
     err "H -- REPAIR-RECORD" "$(basename "${P_FILE[$((h + 1))]}") verifies a repair of
