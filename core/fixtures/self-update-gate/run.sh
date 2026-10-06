@@ -108,7 +108,7 @@ fi
 # can no longer reach is how a kill becomes a coincidence.
 MUT="$(dirname "$DIST")/mut-nodiff"
 rm -rf "$MUT"; mkdir -p "$MUT"
-sed 's/^  elif \[ "$rc_cur" -eq 0 \]; then$/  elif true; then/' "$GATE" > "$MUT/gate.sh"
+sed 's/^      if \[ "$rc_cur" -eq 0 \]; then sc_v=DEFER$/      if true; then sc_v=DEFER/' "$GATE" > "$MUT/gate.sh"
 ASSERTIONS=$((ASSERTIONS + 1))
 if cmp -s "$GATE" "$MUT/gate.sh"; then
   FAILURES=$((FAILURES + 1))
@@ -3456,6 +3456,242 @@ mp_killed "mp-mut-perrow" "$got" "preclassify=3 derived=3 left=3 carried=3" \
   "the derivation back inside \$( ): preclassify re-runs per row and every ud-carry directory leaks"
 chmod -R u+rwX "$MP" 2>/dev/null
 rm -rf "$MP"
+
+# --- EACH GATING SCRIPT RUNS WITH THE HOOK'S OWN ARGV (BL-456) --------------------------------
+# The differential ran every hook-named script BARE. A script that needs arguments exits the same
+# usage code on both sides, so an incoming renderer whose rendered BODY changed -- `--check --root .`
+# going 0 to 1 on every consumer with pinned roles -- read SELF-UPDATE-OK, step 2 pushed into its own
+# refusal, and the printed remedy re-ran the OLD renderer. The gate now derives the argv from the
+# hook line whose exit status the hook reads, stages each side beside its own siblings, feeds both
+# the ref line the push sends, and refuses an argv span it cannot resolve.
+#
+# STUBS, NOT THE SHIPPED SCRIPTS, so this section reads nothing outside its own world and behaves
+# the same in both layouts. Each stub carries exactly the property its arm keys on; the real
+# renderer and the real provenance validator are driven by the BL-456 receipt. The hook is a copy
+# of the shipped hook's SHAPES (the agent-definitions function, the trunk-push pipe, the readset
+# `for` list), and it is only ever SCANNED here: the consumer has no remote, so arm P never runs it.
+#
+#   world A (one pull, seven changed gating scripts, a clean consumer)
+#     render-agent-definitions.sh  rendered body changes: bare 2,2; hook argv 0,1        -> DEFER
+#     audit-rule-files.sh          second argv-dependent script: bare 1,1; hook 0,1      -> DEFER
+#     derive-fixture-readsets.sh   incoming exits 1, but the hook only LISTS it          -> OK, not gating
+#     validate-audit-anchors.sh    incoming fails on the pushed ref read from STDIN      -> DEFER
+#     validate-artifact-paths.sh   its SIBLING artifact-path-config.sh fails at theirs   -> DEFER
+#     validate-rooted.sh           hook argv span holds `$ROOT`                          -> UNDECIDED
+#     validate-quiet.sh            near-miss: its `$` is after `2>`, outside the span    -> OK
+#   world B (one pull, the renderer's change is a COMMENT), consumer clean and consumer drifted
+#     render-agent-definitions.sh  hook argv 0,0 clean and 1,1 drifted                   -> OK both
+# The drifted consumer is the discriminating input for equal-non-zero: its renderer already fails
+# under the hook's argv on both sides, which is a pre-existing failure and not this pull's.
+AV="$(mktemp -d "${TMPDIR:-/tmp}/su-gate-av.XXXXXX")"
+av_git() { git -C "$1" -c user.email=f@x -c user.name=f -c commit.gpgsign=false "${@:2}"; }
+# av_render <file> <body> <comment> -- a renderer-shaped stub: bare exits 2, --root writes the body,
+# --check --root compares it.
+av_render() {
+  { printf '#!/usr/bin/env bash\n# %s\n' "$3"
+    printf 'm=w; r=""\nwhile [ $# -gt 0 ]; do\n  case "$1" in --check) m=c ;; --root) shift; r="${1:-}" ;; *) exit 2 ;; esac\n  shift\ndone\n'
+    printf '[ -n "$r" ] || exit 2\nb=%s\n' "'$2'"
+    printf 'if [ "$m" = w ]; then mkdir -p "$r/.claude/agents" && printf "%%s\\n" "$b" > "$r/.claude/agents/dev.md"; exit; fi\n'
+    printf '[ "$(cat "$r/.claude/agents/dev.md" 2>/dev/null)" = "$b" ] || exit 1\n'; } > "$1"
+}
+# av_scripts <dir> <side:base|theirs> <kind:A|B>
+av_scripts() {
+  local d="$1"
+  mkdir -p "$d"
+  if [ "$2" = theirs ] && [ "$3" = A ]; then
+    av_render "$d/render-agent-definitions.sh" 'FIRST action, before any other work.' 'renderer stub'
+  elif [ "$2" = theirs ]; then
+    av_render "$d/render-agent-definitions.sh" 'FIRST action before any other work.' 'renderer stub; reworded'
+  else
+    av_render "$d/render-agent-definitions.sh" 'FIRST action before any other work.' 'renderer stub'
+  fi
+  if [ "$2" = theirs ] && [ "$3" = A ]; then
+    printf '#!/bin/sh\ncase "${1:-}" in --fail-on=deterministic) exit 1 ;; *) exit 1 ;; esac\n' > "$d/audit-rule-files.sh"
+    printf '#!/bin/sh\nexit 1\n' > "$d/derive-fixture-readsets.sh"
+    printf '#!/bin/sh\n[ "${1:-}" = --trunk-push ] || exit 2\ngrep -q refs/heads/ && exit 1\nexit 0\n' > "$d/validate-audit-anchors.sh"
+    printf '#!/bin/sh\n# reworded\n. "$(dirname "$0")/artifact-path-config.sh" || exit 2\nexit "$APC_RC"\n' > "$d/validate-artifact-paths.sh"
+    printf 'APC_RC=1\n' > "$d/artifact-path-config.sh"
+    printf '#!/bin/sh\n# reworded\nexit 0\n' > "$d/validate-rooted.sh"
+    printf '#!/bin/sh\n# reworded\n[ "${1:-}" = --strays ] || exit 2\nexit 0\n' > "$d/validate-quiet.sh"
+  else
+    printf '#!/bin/sh\ncase "${1:-}" in --fail-on=deterministic) exit 0 ;; *) exit 1 ;; esac\n' > "$d/audit-rule-files.sh"
+    printf '#!/bin/sh\nexit 0\n' > "$d/derive-fixture-readsets.sh"
+    printf '#!/bin/sh\n[ "${1:-}" = --trunk-push ] || exit 2\ncat > /dev/null\nexit 0\n' > "$d/validate-audit-anchors.sh"
+    printf '#!/bin/sh\n. "$(dirname "$0")/artifact-path-config.sh" || exit 2\nexit "$APC_RC"\n' > "$d/validate-artifact-paths.sh"
+    printf 'APC_RC=0\n' > "$d/artifact-path-config.sh"
+    printf '#!/bin/sh\nexit 0\n' > "$d/validate-rooted.sh"
+    printf '#!/bin/sh\n[ "${1:-}" = --strays ] || exit 2\nexit 0\n' > "$d/validate-quiet.sh"
+  fi
+}
+# av_world <dir> <kind:A|B> <consumer:clean|drift> -> <dir>/{dist,cons,B,T}
+av_world() {
+  local w="$1"
+  mkdir -p "$w/dist/core/rules" "$w/cons/.githooks"
+  git -C "$w/dist" init -q
+  printf '1.0.0\n' > "$w/dist/VERSION"
+  printf 'av machinery\n' > "$w/dist/core/rules/av.md"
+  av_scripts "$w/dist/core/scripts" base "$2"
+  av_git "$w/dist" add -A >/dev/null 2>&1; av_git "$w/dist" commit -qm base >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/B"
+  printf '1.1.0\n' > "$w/dist/VERSION"
+  av_scripts "$w/dist/core/scripts" theirs "$2"
+  av_git "$w/dist" add -A >/dev/null 2>&1; av_git "$w/dist" commit -qm theirs >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/T"
+  av_scripts "$w/cons/scripts/ai-dlc" base "$2"
+  { printf '#!/usr/bin/env bash\nset -uo pipefail\nPUSH_REFS=""\n[ -t 0 ] || PUSH_REFS="$(cat)"\n'
+    printf 'trunk_push() { printf '"'%%s'"' "$PUSH_REFS" | bash scripts/ai-dlc/validate-audit-anchors.sh --trunk-push; }\n'
+    printf 'if [ -f scripts/ai-dlc/validate-audit-anchors.sh ]; then trunk_push; fi\n'
+    printf 'if [ -f scripts/ai-dlc/audit-rule-files.sh ]; then\n  bash scripts/ai-dlc/audit-rule-files.sh --fail-on=deterministic\nfi\n'
+    printf 'if [ -f scripts/ai-dlc/validate-artifact-paths.sh ]; then\n  bash scripts/ai-dlc/validate-artifact-paths.sh\nfi\n'
+    printf 'bash scripts/ai-dlc/validate-rooted.sh --root "$ROOT"\n'
+    printf 'bash scripts/ai-dlc/validate-quiet.sh --strays 2>"$LOG"\n'
+    printf 'if [ -f scripts/ai-dlc/render-agent-definitions.sh ]; then\n  agent_definitions() {\n    local out rc\n'
+    printf '    if [ ! -d .claude/agents ]; then\n      out="$(bash scripts/ai-dlc/render-agent-definitions.sh --root . 2>&1)"\n    fi\n'
+    printf '    out="$(bash scripts/ai-dlc/render-agent-definitions.sh --check --root . 2>&1)"; rc=$?\n'
+    printf '    case "$rc" in 0|3) return 0 ;; *) return 1 ;; esac\n  }\n  agent_definitions\nfi\n'
+    printf 'readset_deriver_path() {\n  local c\n'
+    printf '  for c in scripts/ai-dlc/derive-fixture-readsets.sh core/scripts/derive-fixture-readsets.sh; do\n'
+    printf '    [ -f "$c" ] && { printf '"'%%s'"' "$c"; return 0; }\n  done\n}\n'; } > "$w/cons/.githooks/pre-push"
+  chmod +x "$w/cons/.githooks/pre-push"
+  bash "$w/cons/scripts/ai-dlc/render-agent-definitions.sh" --root "$w/cons" >/dev/null 2>&1
+  [ "$3" = drift ] && printf 'a hand edit\n' > "$w/cons/.claude/agents/dev.md"
+  # A COMMITTED BRANCH, NO REMOTE: the ref line can be formed, and arm P is skipped -- the state in
+  # which the differential must still build its own stdin.
+  git -C "$w/cons" init -q
+  av_git "$w/cons" add -A >/dev/null 2>&1; av_git "$w/cons" commit -qm consumer >/dev/null 2>&1
+}
+av_world "$AV/a" A clean
+av_world "$AV/b" B clean
+av_world "$AV/d" B drift
+# av_run <gate> <world> -> the gate's rows, against a FRESH copy of the world's consumer, then an
+# `AGENTS same|moved` row for that copy's .claude/agents across the run. FRESH BY `mktemp -d`, never
+# by a counter: av_run is called inside `$( )`, where a counter's increment is lost, and a reused
+# copy hands one mutant's writes to the next run -- measured, a write-mode mutant's rendered
+# definitions turned four later kills into the same wrong row.
+av_run() {
+  local c a0
+  c="$(mktemp -d "$AV/run.XXXXXX")" || return 1
+  c="$c/cons"
+  cp -R "$2/cons" "$c" || return 1
+  a0="$(cat "$c/.claude/agents/"* | cksum)"
+  bash "$1" "$2/dist" "$(cat "$2/B")" "$(cat "$2/T")" "$c" 2>/dev/null
+  if [ "$a0" = "$(cat "$c/.claude/agents/"* | cksum)" ]; then printf 'AGENTS\tsame\n'; else printf 'AGENTS\tmoved\n'; fi
+}
+av_st() { printf '%s\n' "$1" | awk -F'\t' -v s="$2" '$2 == s {print $1; exit}'; }
+av_has() { printf '%s\n' "$1" | awk -F'\t' -v s="$2" -v re="$3" '$2 == s && $3 ~ re {f=1} END{print (f ? "yes" : "no")}'; }
+av_ag() { printf '%s\n' "$1" | awk -F'\t' '$1 == "AGENTS" {print $2}'; }
+av_ref() { printf '%s\n' "$1" | awk -F'\t' '$1 ~ /^SELF-UPDATE-(DEFER|UNDECIDED)$/' | grep -c .; }
+# av_sig <rows> -> the whole world-A signature, one token per script
+av_sig() {
+  printf 'render=%s audit=%s derive=%s anchors=%s paths=%s rooted=%s quiet=%s agents=%s\n' \
+    "$(av_st "$1" render-agent-definitions.sh)" "$(av_st "$1" audit-rule-files.sh)" \
+    "$(av_st "$1" derive-fixture-readsets.sh)" "$(av_st "$1" validate-audit-anchors.sh)" \
+    "$(av_st "$1" validate-artifact-paths.sh)" "$(av_st "$1" validate-rooted.sh)" \
+    "$(av_st "$1" validate-quiet.sh)" "$(av_ag "$1")"
+}
+
+# PRECONDITIONS, or every arm below asserts about a world that cannot express the defect: under
+# the hook's argv the renderer and the audit stub really go 0 to 1 in world A while their BARE
+# runs agree, and the drifted world's renderer really fails on both sides.
+av_rc() { ( cd "$1" && bash "$2" ${3:+$3} >/dev/null 2>&1 < /dev/null ); printf '%s' "$?"; }
+AVA="$AV/a"
+git -C "$AVA/dist" show "$(cat "$AVA/T"):core/scripts/render-agent-definitions.sh" > "$AV/new-render.sh"
+git -C "$AVA/dist" show "$(cat "$AVA/T"):core/scripts/audit-rule-files.sh" > "$AV/new-audit.sh"
+ss_assert "av-pre" \
+  "render hook $(av_rc "$AVA/cons" scripts/ai-dlc/render-agent-definitions.sh '--check --root .')$(av_rc "$AVA/cons" "$AV/new-render.sh" '--check --root .') bare $(av_rc "$AVA/cons" scripts/ai-dlc/render-agent-definitions.sh)$(av_rc "$AVA/cons" "$AV/new-render.sh"); audit hook $(av_rc "$AVA/cons" scripts/ai-dlc/audit-rule-files.sh --fail-on=deterministic)$(av_rc "$AVA/cons" "$AV/new-audit.sh" --fail-on=deterministic) bare $(av_rc "$AVA/cons" scripts/ai-dlc/audit-rule-files.sh)$(av_rc "$AVA/cons" "$AV/new-audit.sh"); drift hook $(av_rc "$AV/d/cons" scripts/ai-dlc/render-agent-definitions.sh '--check --root .')" \
+  "render hook 01 bare 22; audit hook 01 bare 11; drift hook 1" \
+  "the worlds express the defect: the hook's argv sees each change, a bare run cannot, and the drifted renderer already fails"
+
+AV_A="$(av_run "$GATE" "$AV/a")"
+AV_B="$(av_run "$GATE" "$AV/b")"
+AV_D="$(av_run "$GATE" "$AV/d")"
+AV_SIG_FIX="render=SELF-UPDATE-DEFER audit=SELF-UPDATE-DEFER derive=SELF-UPDATE-OK anchors=SELF-UPDATE-DEFER paths=SELF-UPDATE-DEFER rooted=SELF-UPDATE-UNDECIDED quiet=SELF-UPDATE-OK agents=same"
+ss_assert "av-signature" "$(av_sig "$AV_A")" "$AV_SIG_FIX" "world A, every arm below in one row"
+ss_assert "av-render-body" "$(av_st "$AV_A" render-agent-definitions.sh)" SELF-UPDATE-DEFER \
+  "a renderer whose rendered body changes is refused: under --check --root . it goes 0 to 1, though a bare run exits 2 on both sides"
+ss_assert "av-render-comment" "$(av_st "$AV_B" render-agent-definitions.sh) refusals=$(av_ref "$AV_B")" "SELF-UPDATE-OK refusals=0" \
+  "a renderer whose only change is a comment is OK and the pull carries no refusal at all"
+ss_assert "av-render-drift" "$(av_st "$AV_D" render-agent-definitions.sh) refusals=$(av_ref "$AV_D")" "SELF-UPDATE-OK refusals=0" \
+  "the same comment-only pull on a consumer whose definitions already drifted is OK: 1,1 under the hook's argv predates the pull"
+ss_assert "av-second-argv" "$(av_st "$AV_A" audit-rule-files.sh)" SELF-UPDATE-DEFER \
+  "a SECOND argv-dependent script: --fail-on=deterministic goes 0 to 1 where its bare default exits 1 on both sides"
+ss_assert "av-not-gating" "$(av_st "$AV_A" derive-fixture-readsets.sh) $(av_has "$AV_A" derive-fixture-readsets.sh '^not gating')" "SELF-UPDATE-OK yes" \
+  "a script the hook only lists in a \`for\` loop is not gating, and says so, though its incoming copy exits 1"
+ss_assert "av-agents-digest" "$(av_ag "$AV_A")" same \
+  "the consumer's .claude/agents is byte-identical across the gate run: the hook's write-mode line is never run"
+ss_assert "av-siblings" "$(av_st "$AV_A" validate-artifact-paths.sh)" SELF-UPDATE-DEFER \
+  "the incoming script runs beside its OWN siblings at theirs, where artifact-path-config.sh now fails"
+ss_assert "av-stdin" "$(av_st "$AV_A" validate-audit-anchors.sh)" SELF-UPDATE-DEFER \
+  "both runs are fed the ref line the push sends, built though arm P is skipped, and the incoming check fires on it"
+ss_assert "av-dollar" "$(av_st "$AV_A" validate-rooted.sh) $(av_has "$AV_A" validate-rooted.sh 'cannot resolve')" "SELF-UPDATE-UNDECIDED yes" \
+  "an argv span holding \$ROOT cannot be derived, so the script is UNDECIDED rather than run with a guessed argv"
+ss_assert "av-dollar-nearmiss" "$(av_st "$AV_A" validate-quiet.sh)" SELF-UPDATE-OK \
+  "a \$ after 2> is outside the span, so that line is derived and run, not refused"
+
+# --- MUTANTS, each a copy of the WHOLE reconcile directory so the gate finds its siblings --------
+# av_mut <name> <old> <new> [<old> <new>]... -> the mutated gate's path, or nothing when an anchor
+# is not unique, the copy is unchanged, or it is not a program.
+av_mut() {
+  local e="$AV/m-$1" mrc=0
+  shift
+  rm -rf "$e"; mkdir -p "$e"
+  cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$e"/ 2>/dev/null
+  [ "$#" -gt 0 ] || { printf '%s' "$e/self-update-gate.sh"; return 0; }
+  python3 -c 'import sys
+s = open(sys.argv[1]).read(); p = sys.argv[3:]
+for i in range(0, len(p), 2):
+    if s.count(p[i]) != 1: sys.exit(3)
+    s = s.replace(p[i], p[i + 1], 1)
+open(sys.argv[2], "w").write(s)' "$GATE" "$e/self-update-gate.sh" "$@" 2>/dev/null || mrc=$?
+  if [ "$mrc" -ne 0 ] || cmp -s "$GATE" "$e/self-update-gate.sh" || ! bash -n "$e/self-update-gate.sh" 2>/dev/null; then return 1; fi
+  printf '%s' "$e/self-update-gate.sh"
+}
+# THE CONTROL: an unmutated copy beside its siblings reproduces world A's whole signature and the
+# drifted world's OK, so every kill below is its mutation and not a copy that could not run.
+AV_CTL="$(av_mut control)"
+ss_assert "av-mut-control" "$(av_sig "$(av_run "$AV_CTL" "$AV/a")") drift=$(av_st "$(av_run "$AV_CTL" "$AV/d")" render-agent-definitions.sh)" \
+  "$AV_SIG_FIX drift=SELF-UPDATE-OK" "an unmutated copy reproduces every verdict, so a kill below is the mutation"
+# av_kill <label> <gate|""> <world> <want-signature> <why> -- the mutant's whole world signature
+av_kill() {
+  local got
+  if [ -z "$2" ]; then got="DID-NOT-APPLY"; else got="$(av_sig "$(av_run "$2" "$3")")"; fi
+  mp_killed "$1" "$got" "$4" "$5"
+}
+av_kill "av-mut-bare" "$(av_mut bare '  set -- $_a
+' '  set --
+')" "$AV/a" \
+  "render=SELF-UPDATE-OK audit=SELF-UPDATE-OK derive=SELF-UPDATE-OK anchors=SELF-UPDATE-OK paths=SELF-UPDATE-DEFER rooted=SELF-UPDATE-UNDECIDED quiet=SELF-UPDATE-OK agents=same" \
+  "the bare probe: every argv-dependent change reads OK again, the renderer's first among them"
+av_kill "av-mut-hand" "$(av_mut hand '  set -- $_a
+' '  if [ "${_s##*/}" = render-agent-definitions.sh ]; then set -- $_a; else set --; fi
+')" "$AV/a" \
+  "render=SELF-UPDATE-DEFER audit=SELF-UPDATE-OK derive=SELF-UPDATE-OK anchors=SELF-UPDATE-OK paths=SELF-UPDATE-DEFER rooted=SELF-UPDATE-UNDECIDED quiet=SELF-UPDATE-OK agents=same" \
+  "a hand-listed renderer argv: the renderer is refused and the second argv-dependent script reads OK"
+av_kill "av-mut-firstline" "$(av_mut firstline \
+  "awk -F'\\t' '\$1 == \"R\" && !seen[\$3]++ {print \$3}' \"\$TMP/scan\" > \"\$TMP/argvs\"" \
+  "awk -F'\\t' '\$1 == \"R\" || \$1 == \"D\" {print \$3; exit}' \"\$TMP/scan\" > \"\$TMP/argvs\"")" "$AV/a" \
+  "render=SELF-UPDATE-OK audit=SELF-UPDATE-DEFER derive=SELF-UPDATE-OK anchors=SELF-UPDATE-DEFER paths=SELF-UPDATE-DEFER rooted=SELF-UPDATE-UNDECIDED quiet=SELF-UPDATE-OK agents=moved" \
+  "the hook's FIRST renderer line (--root ., write mode): 0,0 reads OK and the consumer's .claude/agents is rewritten"
+av_kill "av-mut-listed" "$(av_mut listed 'printf "M\t%d\tlist\n", NR' 'printf "X\t%d\tlist\n", NR')" "$AV/a" \
+  "render=SELF-UPDATE-DEFER audit=SELF-UPDATE-DEFER derive=SELF-UPDATE-UNDECIDED anchors=SELF-UPDATE-DEFER paths=SELF-UPDATE-DEFER rooted=SELF-UPDATE-UNDECIDED quiet=SELF-UPDATE-OK agents=same" \
+  "a list mention read as an underivable run: the non-gating deriver refuses the pull"
+av_kill "av-mut-sibling" "$(av_mut sibling \
+  'gate_run_side "$TMP/new/scripts/ai-dlc/$name" "$sc_a"; rc_new=$?' \
+  'cp "$TMP/new/scripts/ai-dlc/$name" "$TMP/cur/scripts/ai-dlc/zz-$name"; gate_run_side "$TMP/cur/scripts/ai-dlc/zz-$name" "$sc_a"; rc_new=$?')" "$AV/a" \
+  "render=SELF-UPDATE-DEFER audit=SELF-UPDATE-DEFER derive=SELF-UPDATE-OK anchors=SELF-UPDATE-DEFER paths=SELF-UPDATE-OK rooted=SELF-UPDATE-UNDECIDED quiet=SELF-UPDATE-OK agents=same" \
+  "the incoming script staged beside the CONSUMER's siblings: theirs' failing config is never read"
+av_kill "av-mut-stdin" "$(av_mut stdin '< "$TMP/refline" > /dev/null 2>&1 )' '< /dev/null > /dev/null 2>&1 )')" "$AV/a" \
+  "render=SELF-UPDATE-DEFER audit=SELF-UPDATE-DEFER derive=SELF-UPDATE-OK anchors=SELF-UPDATE-OK paths=SELF-UPDATE-DEFER rooted=SELF-UPDATE-UNDECIDED quiet=SELF-UPDATE-OK agents=same" \
+  "no stdin: the incoming trunk-push check never sees the pushed ref and reads OK"
+av_kill "av-mut-dollar" "$(av_mut dollar '} else if (span ~ /[$`"\\*?~[]/ || span ~ /\047/) {' '} else if (span ~ /[`\\*?~[]/ || span ~ /\047/) {')" "$AV/a" \
+  "render=SELF-UPDATE-DEFER audit=SELF-UPDATE-DEFER derive=SELF-UPDATE-OK anchors=SELF-UPDATE-DEFER paths=SELF-UPDATE-DEFER rooted=SELF-UPDATE-OK quiet=SELF-UPDATE-OK agents=same" \
+  "an argv span holding \$ROOT run with the literal text: the underivable invocation reads OK"
+# EQUAL NON-ZERO READ AS UNDECIDED: scored on the drifted world, the only one where it differs.
+e="$(av_mut eqund '    if [ "$rc_cur" -ne "$rc_new" ] && [ "$rc_new" -ne 0 ]; then' '    if [ "$rc_new" -ne 0 ]; then')" \
+  && got="$(av_st "$(av_run "$e" "$AV/d")" render-agent-definitions.sh)" || got="DID-NOT-APPLY"
+mp_killed "av-mut-eqund" "$got" SELF-UPDATE-UNDECIDED \
+  "equal non-zero under the hook's argv read as UNDECIDED: a comment-only pull is refused on a consumer whose definitions already drifted"
+rm -rf "$AV"
 
 echo
 if [ "$FAILURES" -gt 0 ]; then

@@ -22,20 +22,33 @@
 # THE GATING SET IS DERIVED, NEVER LISTED. Which scripts can block a push is a property of the
 # consumer's pre-push hook, so it is read out of that hook: every `scripts/ai-dlc/<name>.sh` it
 # invokes. Hand-listing them here would rot the moment the hook gains a step — and the hook gaining
-# a step is exactly when this check matters most. Four are invoked as of v0.184.0; this file names
-# none of them.
+# a step is exactly when this check matters most. This file names none of them.
+#
+# GATING MEANS THE HOOK READS THE SCRIPT'S EXIT STATUS, and each run asks the hook's own question.
+# For every hook-named script the pull changes, the argv is DERIVED from the hook line that runs it
+# at command position and whose status the hook reads; both copies run with that argv, from the
+# consumer root, fed the ref line the push will send. A script the hook only MENTIONS (a list
+# entry, an existence test, printf text) or runs only where its status is discarded is not gating
+# and reads OK with that reason. A status-read line whose argv span holds a `$`, or two such lines
+# with different argv, reads UNDECIDED. A bare probe asks a question the hook never asks: the
+# renderer exits 2 bare on both sides while the hook's `--check --root .` goes 0 to 1 (BL-456).
+#
+# RESIDUE, NOT BUILT. Both runs see the consumer's CURRENT `.claude/schemas/` and every other
+# non-script input the scripts resolve from `AI_DLC_PROJECT_ROOT`. A pull whose incoming script is
+# fine but whose incoming SCHEMA makes it fail is outside this differential.
 #
 # THE VERDICT IS A DIFFERENTIAL, NOT AN EXIT CODE. Running the incoming copy from a temp path can
-# fail for reasons that have nothing to do with its findings — a script that resolves its own
-# location, a missing sibling, an unreadable dependency. A bare non-zero would turn any of those
-# into a confident "defer", which is a false positive that strands the machinery slice for no
-# reason. So each gating script is run TWICE under identical conditions, incoming and current:
+# fail for reasons that have nothing to do with its findings, so each gating script runs TWICE
+# under identical conditions, incoming and current, each staged beside its own siblings (the
+# incoming one beside `core/scripts/` at theirs, the current one beside the consumer's installed
+# `scripts/ai-dlc/`):
 #
-#   current 0, incoming non-zero  -> DEFER      the incoming version finds something new. Real.
-#   both non-zero                 -> UNDECIDED  pre-existing failure or a harness artifact; NOT
-#                                               attributable to the incoming version, so it must
-#                                               not silently become a defer verdict.
+#   equal codes                   -> OK         no differential signal. An equal NON-ZERO under the
+#                                               hook's argv is a pre-existing failure, and the push
+#                                               probe (arm P) is what catches it, not this table.
 #   incoming 0                    -> OK
+#   current 0, incoming non-zero  -> DEFER      the incoming version finds something new. Real.
+#   unequal non-zero              -> UNDECIDED  a real change nobody can attribute.
 #
 # MODES
 #   self-update-gate.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>
@@ -410,6 +423,97 @@ gate_stage() { # gate_stage <file-name> <value> <what> -- MAIN SHELL ONLY; UNDEC
   [ "$_rc" = 0 ] && return 0
   emit SELF-UPDATE-UNDECIDED "-" "$3 could not be staged (${_rc}), so the arm reading it would read an EMPTY input — and every arm here reads an empty input as the clean answer. A gate that could not read its own subject must not return OK; treat as DEFER and re-run."
   exit 0
+}
+
+# gate_refline <file> -- write the ref line step 2's push will send, which is what the consumer's
+# pre-push reads on stdin: the current branch at HEAD, pushed to a new branch the remote lacks.
+# ONE SPELLING, READ BY TWO ARMS: arm P feeds it to the hook, and the differential feeds it to
+# every gating script it runs, so a script reading the hook's stdin gets the line the hook would.
+# Where no line can be formed (no commit, a detached HEAD, not a work tree) the file is EMPTY,
+# which is what a script reading stdin sees from a hook that received nothing. Returns the
+# write's status.
+gate_refline() {
+  local _h _l _tv
+  _h="$(git -C "$CONSUMER" rev-parse -q --verify 'HEAD^{commit}' 2>/dev/null)" || _h=""
+  _l="$(git -C "$CONSUMER" symbolic-ref -q HEAD 2>/dev/null)" || _l=""
+  if [ -z "$_h" ] || [ -z "$_l" ]; then
+    : > "$1"
+    return
+  fi
+  _tv="$(git -C "$DIST" show "${THEIRS}:VERSION" 2>/dev/null | tr -d '[:space:]')"
+  printf '%s %s %s %s\n' "$_l" "$_h" "refs/heads/ai-dlc-update/self-update-${_tv:-theirs}-probe" \
+    "0000000000000000000000000000000000000000" > "$1"
+}
+
+# gate_argv_scan <hook> <name> -- how the hook runs scripts/ai-dlc/<name>, one row per occurrence
+# on a non-comment line:
+#   R<TAB><line><TAB><argv>  run at command position and its exit status is READ: a plain
+#                            command, a pipeline stage, a function body, or a `$( )` capture
+#                            whose status the same line reads (`$?`, `&&`, `||`, `if`)
+#   D<TAB><line><TAB><argv>  run, but its status is DISCARDED: a capture nothing reads, or `&`.
+#                            NEVER RUN BY THIS GATE: the renderer's D line is its write mode.
+#   M<TAB><line><TAB><kind>  MENTIONED, never run: a comment, an existence test, a `for … in`
+#                            list, printf text, an assignment's value, or a path that runs on into
+#                            another name (`x.sh=y.sh` executes a different file)
+#   X<TAB><line><TAB><argv>  run with its status read, but the argv span holds an expansion or
+#                            quoting this gate cannot resolve without executing the hook
+#   U<TAB><line><TAB>        an occurrence of no shape above (`exec`, `env`, `timeout`, a command
+#                            word that is a variable). Unknown is never read as a mention.
+# EVERY occurrence the name list was derived from yields a row, comments included, so a name with
+# no row at all is a disagreement between this scan and that list, never an absence.
+# COMMAND POSITION is the start of a line or a `;`, `|`, `&`, `(`, `{` or `$(` boundary, then any
+# of `if elif while until then do else !`, then an optional `bash`/`sh`, then an optional quote
+# and `./`. A path quoted on both sides is unquoted before its span is read.
+# THE ARGV SPAN runs from the end of the path to the first `)`, `;`, `|`, `&`, `<`, `>` or ` #`,
+# with a trailing fd digit dropped (`2>` ends a span the way `>` does). Only what is INSIDE that
+# span decides X: the hook's `printf '%s' "$PUSH_REFS" | bash …` carries a `$` before the path
+# and is an ordinary R. The unresolvable set is `$`, a backtick, quotes, a backslash (including a
+# continuation onto the next line), and the glob and tilde characters the hook's shell would expand.
+# No apostrophe may appear in this awk program, which sits inside a single-quoted shell literal.
+gate_argv_scan() {
+  awk -v p="scripts/ai-dlc/$2" '
+    /^[[:space:]]*#/ { if (index($0, p) > 0) printf "M\t%d\tcomment\n", NR; next }
+    {
+      line = $0; off = 0
+      while ((i = index(substr(line, off + 1), p)) > 0) {
+        s = off + i; e = s + length(p); off = e - 1
+        nc = substr(line, e, 1)
+        pre = substr(line, 1, s - 1); after = substr(line, e)
+        if (nc != "" && nc !~ /[[:space:];|&)<>"\047]/) { printf "M\t%d\tjoined\n", NR; continue }
+        if (pre ~ /(^|[[:space:];])[A-Za-z_][A-Za-z0-9_]*=["\047]?(\.\/)?$/) { printf "M\t%d\tassign\n", NR; continue }
+        if (pre ~ /(^|[;|&({]|\$\()[[:space:]]*((if|elif|while|until|then|do|else|!)[[:space:]]+)*((bash|sh)[[:space:]]+)?["\047]?(\.\/)?$/) {
+          q = pre; sub(/(\.\/)?$/, "", q); q = substr(q, length(q), 1)
+          if ((q == "\"" || q == "\047") && substr(after, 1, 1) == q) after = substr(after, 2)
+          span = after; k = 0
+          for (j = 1; j <= length(after); j++) {
+            c = substr(after, j, 1)
+            if (c ~ /[);|&<>]/ || (c == "#" && j > 1 && substr(after, j - 1, 1) ~ /[[:space:]]/)) { k = j; break }
+          }
+          if (k > 0) { span = substr(after, 1, k - 1); tail = substr(after, k) } else { tail = "" }
+          if (substr(tail, 1, 1) == ">" && span ~ /[[:space:]][0-9]$/) sub(/[0-9]$/, "", span)
+          gsub(/^[[:space:]]+|[[:space:]]+$/, "", span)
+          capture = (pre ~ /\$\([[:space:]]*((bash|sh)[[:space:]]+)?["\047]?(\.\/)?$/)
+          bg = (tail ~ /^&([^&]|$)/)
+          if (bg || (capture && index(tail, "$?") == 0 && index(tail, "&&") == 0 && index(tail, "||") == 0 \
+                     && pre !~ /(^|[;[:space:]])(if|elif|while|until)[[:space:]]/)) {
+            printf "D\t%d\t%s\n", NR, span
+          } else if (span ~ /[$`"\\*?~[]/ || span ~ /\047/) {
+            printf "X\t%d\t%s\n", NR, span
+          } else {
+            printf "R\t%d\t%s\n", NR, span
+          }
+        } else if (pre ~ /(^|[^A-Za-z0-9_])(printf|echo)[[:space:]]/) {
+          printf "M\t%d\ttext\n", NR
+        } else if (pre ~ /(^|[[:space:]])-[A-Za-z][[:space:]]+(\.\/)?$/) {
+          printf "M\t%d\ttest\n", NR
+        } else if (pre ~ /(^|[;[:space:]])for[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+in[[:space:]]/) {
+          printf "M\t%d\tlist\n", NR
+        } else {
+          printf "U\t%d\t\n", NR
+        }
+      }
+    }
+  ' "$1"
 }
 
 # NO RECORD INSIDE A --safe-stop WALK, and this is the guard's own spelling rather than a
@@ -1187,8 +1291,6 @@ if [ -z "${AI_DLC_GATE_IN_SAFE_STOP:-}" ] \
       emit SELF-UPDATE-UNDECIDED "pre-push" "HEAD is detached on this consumer, so there is no branch a push could carry. Step 1's preflight stops on this state; a gate asked anyway must not answer OK about a push that cannot be made."
       exit 0
     fi
-    pp_tv="$(git -C "$DIST" show "${THEIRS}:VERSION" 2>/dev/null | tr -d '[:space:]')"
-    pp_ref="refs/heads/ai-dlc-update/self-update-${pp_tv:-theirs}-probe"
     # THE REMOTE NAME AND URL ARE WHAT GIT PASSES: `$1` is the name, `$2` its URL. A first cut
     # passed the literal `origin` and, when no remote was so named, a NAME where the URL goes;
     # measured, a hook branching on `$2` being URL-shaped refused the probe on a consumer whose
@@ -1200,7 +1302,7 @@ if [ -z "${AI_DLC_GATE_IN_SAFE_STOP:-}" ] \
     [ -n "$pp_remote" ] || pp_remote="$(git -C "$CONSUMER" remote 2>/dev/null | head -1)"
     pp_url="$(git -C "$CONSUMER" remote get-url "$pp_remote" 2>/dev/null)" || pp_url="$pp_remote"
     pp_in="$TMP/push-probe.in"; pp_out="$TMP/push-probe.out"
-    printf '%s %s %s %s\n' "$pp_local" "$pp_head" "$pp_ref" "0000000000000000000000000000000000000000" > "$pp_in"
+    gate_refline "$pp_in"
     printf 'push probe: running the pre-push hook git would run (%s); this is the consumer'\''s own gate and can take minutes\n' "$pp_hook" >&2
     # THE HOOK WRITES INTO `.git/`, AND THAT IS STATED RATHER THAN HIDDEN. The shipped hook
     # records `.git/ai-dlc-fixture-verified` and `.git/ai-dlc-fixture-durations` on a run, as it
@@ -1306,19 +1408,64 @@ fi
 
 deferred=0
 gate_stage gating "$GATING" "the gating-script set"
+
+# ---- BOTH SIDES ARE STAGED BESIDE THEIR OWN SIBLINGS, AND BOTH ARE FED THE PUSH'S STDIN --------
+# A gating script resolves helpers BESIDE ITSELF (`validate-artifact-paths.sh` sources
+# `artifact-path-config.sh`, `audit-rule-files.sh` shells to `core-paths.sh`), so a lone copy in
+# a temp directory fails on a missing sibling, identically on both sides, and the equality arm
+# below reads that as agreement. The incoming script runs beside the whole of `core/scripts/` at
+# theirs, the current one beside the consumer's whole installed `scripts/ai-dlc/`; each side's
+# helpers are its own version's, which is what the consumer will hold after the write and before
+# it. BOTH ARE STAGED IN THE CONSUMER LAYOUT, `<side>/scripts/ai-dlc/`, because that is where the
+# incoming copy will run after the write, and a script resolving `$SELF_DIR/..` then sees the same
+# shape on both sides. Staged ONCE for the loop: both trees are a property of the range.
+#
+# THE REF LINE IS BUILT HERE AS WELL AS IN ARM P, because arm P is skipped on a consumer with no
+# remote and inside a --safe-stop walk, and a script the hook feeds stdin (`validate-audit-anchors.sh
+# --trunk-push`) still reads it here. An empty line where none can be formed is what the hook
+# itself would have passed.
+#
+# A STAGING FAILURE IS UNDECIDED FOR THE WHOLE LOOP, at the first one, like every other stage here.
+dl_why=""
+if ! mkdir -p "$TMP/new" "$TMP/cur/scripts" 2>/dev/null; then
+  dl_why="the staging directories could not be created"
+elif ! gate_refline "$TMP/refline" 2>/dev/null; then
+  dl_why="the ref line the push will send could not be written"
+elif ! git -C "$DIST" archive --format=tar --prefix=scripts/ai-dlc/ -o "$TMP/new.tar" "${THEIRS}:core/scripts" 2>/dev/null \
+     || ! tar -xf "$TMP/new.tar" -C "$TMP/new" 2>/dev/null; then
+  dl_why="core/scripts/ at $THEIRS could not be extracted"
+elif [ -d "$CONSUMER/scripts/ai-dlc" ] && ! cp -R "$CONSUMER/scripts/ai-dlc" "$TMP/cur/scripts/" 2>/dev/null; then
+  dl_why="the consumer's scripts/ai-dlc/ could not be copied"
+fi
+if [ -n "$dl_why" ]; then
+  emit SELF-UPDATE-UNDECIDED "-" "the differential could not stage its two sides (${dl_why}). A gating script run without its siblings or its stdin fails the same way on both sides, and the equality arm reads that as agreement; treat as DEFER and re-run."
+  exit 0
+fi
+
+# gate_run_side <script> <argv-span> -> the exit status of one run, asked the hook's question:
+# the hook's argv, from the consumer root, fed the ref line, with the root named explicitly so a
+# script that walks up from its own (staged) location does not resolve a different project.
+# Globbing is off for the split, so the span's words are passed as written.
+gate_run_side() {
+  local _s="$1" _a="$2"
+  set -f
+  # shellcheck disable=SC2086 -- the span is a list of words, split as the hook's shell splits it
+  set -- $_a
+  set +f
+  ( cd "$CONSUMER" && AI_DLC_PROJECT_ROOT="$CONSUMER" bash "$_s" "$@" < "$TMP/refline" > /dev/null 2>&1 )
+}
+
 while IFS= read -r name; do
   [ -n "$name" ] || continue
 
   # Incoming copy, out of the distribution at theirs.
-  if ! git -C "$DIST" show "${THEIRS}:core/scripts/$name" > "$TMP/new-$name" 2>/dev/null; then
+  if [ ! -f "$TMP/new/scripts/ai-dlc/$name" ]; then
     emit SELF-UPDATE-UNDECIDED "$name" "cannot read core/scripts/$name at $THEIRS, so the differential has no incoming side to compare."
     deferred=1
     continue
   fi
 
-  # The consumer's CURRENT copy is the control side. Same temp directory, so both runs meet the
-  # same resolution conditions and a location-dependent failure cancels out instead of being
-  # attributed to the incoming version.
+  # The consumer's CURRENT copy is the control side.
   cur="$CONSUMER/scripts/ai-dlc/$name"
   if [ ! -f "$cur" ]; then
     emit SELF-UPDATE-OK "$name" "the consumer has no current copy at scripts/ai-dlc/$name, so this pull ADDS it rather than replacing something the hook already runs against this tree."
@@ -1371,57 +1518,68 @@ while IFS= read -r name; do
     continue
   fi
 
-  cp "$cur" "$TMP/cur-$name"
-
-  ( cd "$CONSUMER" && bash "$TMP/cur-$name" >/dev/null 2>&1 ); rc_cur=$?
-  ( cd "$CONSUMER" && bash "$TMP/new-$name" >/dev/null 2>&1 ); rc_new=$?
-
-  # AGREEMENT IS NOT A DIFFERENTIAL SIGNAL, WHATEVER THE CODE. This gate asks exactly one
-  # question -- does the INCOMING version fail where the CURRENT one passes -- and two runs that
-  # return the same code answer it with "no". Reading anything more into an equal pair requires
-  # knowing WHY each side failed, which an exit code cannot supply.
-  #
-  # v0.288.0 scoped this exemption to 2 and 2 alone, on the ground that 2 is the declared token
-  # for a fumbled invocation and this bare probe IS the fumbled caller. That reasoning was right
-  # and the SCOPE was too narrow, because a probe can ask the wrong question without earning a
-  # usage error. Re-measured against a consumer built by running install.sh into an empty tree,
-  # over every script that consumer's pre-push actually invokes -- SEVEN, not the five v0.288.0
-  # had:
-  #
-  #   script                           bare rc   how the pre-push invokes it
-  #   validate-audit-anchors.sh              2   --trunk-push, with refs on stdin
-  #   validate-provenance-block.sh           2   --strays
-  #   audit-rule-files.sh                    1   --fail-on=deterministic
-  #   validate-layer-entries.sh              0   bare
-  #   validate-compact-window.sh             0
-  #   validate-fixture-drivability.sh        0
-  #   sync-taught-schema.sh                  0
-  #
-  # THREE OF SEVEN take arguments this probe cannot pass, and the third of them is the case the
-  # 2,2 scope could not reach. `audit-rule-files.sh` bare defaults to `--fail-on=any` while the
-  # hook passes `--fail-on=deterministic`, so the probe exits 1 while printing
-  # `tier-1 findings: 0` -- it fails a threshold the hook never applies, identically on both
-  # sides, and the old both-non-zero arm called that an unattributable failure and deferred.
-  # Any pull touching that script therefore folded the machinery slice into the operator-gated
-  # apply, for no rulebook reason: the exact cost `pull graph in TWO hops` exists to avoid,
-  # arriving through a DIFFERENT DEFAULT rather than through a usage error.
-  #
-  # THE SCOPING THAT KEEPS THIS FROM REMOVING THE GATE IS UNCHANGED, and it is the arm below:
-  # `rc_cur` 0 with a non-zero `rc_new` still DEFERS. A version that newly starts or stops
-  # refusing its own invocation still disagrees with its predecessor and still falls through --
-  # 0,2 and 2,1 alike. Equality is the whole exemption, and equality is what carries no
-  # information.
-  if [ "$rc_cur" -eq "$rc_new" ]; then
-    emit SELF-UPDATE-OK "$name" "both versions exit $rc_cur against this consumer's tree. Equal codes are not a differential signal: this probe is bare -- no arguments, no stdin -- and cannot pass what the pre-push passes, so a shared non-zero says the probe asked the wrong question, not that the incoming version is worse. Deferring on agreement stranded the machinery slice on every pull touching such a script."
-  elif [ "$rc_new" -eq 0 ]; then
-    emit SELF-UPDATE-OK "$name" "the incoming version passes against this consumer's existing tree (current version rc=$rc_cur), so installing it cannot block the push."
-  elif [ "$rc_cur" -eq 0 ]; then
+  # ---- HOW THE HOOK RUNS IT, derived from the hook line (`gate_argv_scan` states the grammar) ----
+  # Only an R row is RUN, and only with its own argv: a D row (the renderer's write-mode line,
+  # taken only when `.claude/agents/` is absent) never decides the step's verdict, and running it
+  # here would write into the consumer's tree. Every distinct R argv is run, and the worst verdict
+  # across them is the script's.
+  if ! gate_argv_scan "$HOOK" "$name" > "$TMP/scan" 2>/dev/null; then
+    emit SELF-UPDATE-UNDECIDED "$name" "the hook line that runs scripts/ai-dlc/$name could not be scanned (awk failed), so the argv the hook passes is unknown. A probe with the wrong argv asks a question the hook never asks; treat as defer."
     deferred=1
-    emit SELF-UPDATE-DEFER "$name" "the INCOMING version exits $rc_new against this consumer's existing tree while the current version exits 0 — the self-update would install a check that then fails its own push, on state that predates this pull. Do NOT cut the self-update branch: fold the machinery slice into the gated apply so the operator can fix the layer state and land machinery + rulebook on one branch."
-  else
-    deferred=1
-    emit SELF-UPDATE-UNDECIDED "$name" "both versions exit non-zero (current $rc_cur, incoming $rc_new), so the failure is pre-existing or a harness artifact and is NOT attributable to this pull. Treat as defer — acting autonomously on an unattributable failure is what this gate exists to prevent."
+    continue
   fi
+  sc_n_x="$(awk -F'\t' '$1 == "X"' "$TMP/scan" | grep -c .)" || sc_n_x=0
+  sc_n_u="$(awk -F'\t' '$1 == "U"' "$TMP/scan" | grep -c .)" || sc_n_u=0
+  sc_n_r="$(awk -F'\t' '$1 == "R"' "$TMP/scan" | grep -c .)" || sc_n_r=0
+  sc_n_all="$(grep -c . "$TMP/scan")" || sc_n_all=0
+  if [ "$sc_n_x" -gt 0 ]; then
+    sc_x="$(awk -F'\t' '$1 == "X" {printf "%sline %s: %s", (n++ ? "; " : ""), $2, $3}' "$TMP/scan")"
+    emit SELF-UPDATE-UNDECIDED "$name" "the hook runs scripts/ai-dlc/$name and reads its exit status, but its argument span holds an expansion or quoting this gate cannot resolve without executing the hook (${sc_x}). The argv is unknown, so neither run can ask the hook's question; treat as defer."
+    deferred=1
+    continue
+  fi
+  if [ "$sc_n_u" -gt 0 ] || [ "$sc_n_all" -eq 0 ]; then
+    emit SELF-UPDATE-UNDECIDED "$name" "the hook names scripts/ai-dlc/$name in a shape this gate cannot classify as a run or a mention ($(awk -F'\t' '$1 == "U" {printf "%sline %s", (n++ ? ", " : ""), $2} END {if (!NR) printf "no occurrence found by the line scan"}' "$TMP/scan")), so whether its exit status gates the push is unknown; treat as defer."
+    deferred=1
+    continue
+  fi
+  if [ "$sc_n_r" -eq 0 ]; then
+    emit SELF-UPDATE-OK "$name" "not gating: the hook names scripts/ai-dlc/$name but never reads its exit status (occurrences: $(awk -F'\t' '{printf "%sline %s %s", (n++ ? ", " : ""), $2, ($1 == "D" ? "run with its status discarded" : $3 " mention")}' "$TMP/scan")), so no version of it can refuse the push."
+    continue
+  fi
+  awk -F'\t' '$1 == "R" && !seen[$3]++ {print $3}' "$TMP/scan" > "$TMP/argvs" 2>/dev/null
+
+  # AGREEMENT IS NOT A DIFFERENTIAL SIGNAL. This gate asks one question -- does the INCOMING
+  # version fail where the CURRENT one passes, under the hook's own argv -- and two runs that return
+  # the same code answer it with "no". An equal NON-ZERO is a failure that predates the pull: the
+  # push probe (arm P) runs the hook itself on the tree as it stands and refuses on it, so this arm
+  # does not need to. Reading an equal pair as UNDECIDED instead refuses every pull touching a
+  # script whose current run already fails, including one whose incoming version changes only a
+  # comment.
+  #
+  # `rc_cur` 0 with a non-zero `rc_new` DEFERS: a version that newly starts failing under the
+  # hook's argv is the case the gate exists for. Unequal non-zero codes are a real change nobody
+  # can attribute, and are UNDECIDED.
+  sc_v=OK; sc_d=""
+  while IFS= read -r sc_a; do
+    gate_run_side "$TMP/cur/scripts/ai-dlc/$name" "$sc_a"; rc_cur=$?
+    gate_run_side "$TMP/new/scripts/ai-dlc/$name" "$sc_a"; rc_new=$?
+    sc_d="${sc_d:+$sc_d; }argv [${sc_a}] current ${rc_cur} incoming ${rc_new}"
+    if [ "$rc_cur" -ne "$rc_new" ] && [ "$rc_new" -ne 0 ]; then
+      if [ "$rc_cur" -eq 0 ]; then sc_v=DEFER
+      elif [ "$sc_v" != DEFER ]; then sc_v=UNDECIDED; fi
+    fi
+  done < "$TMP/argvs"
+  case "$sc_v" in
+    OK)
+      emit SELF-UPDATE-OK "$name" "run as the hook runs it (${sc_d}), the incoming version fails nowhere the current one passes. Equal codes are no differential signal: an equal NON-ZERO under the hook's own argv is a failure that predates this pull, caught by the push probe and not by this row." ;;
+    DEFER)
+      deferred=1
+      emit SELF-UPDATE-DEFER "$name" "run as the hook runs it (${sc_d}), the INCOMING version fails where the current version exits 0 — the self-update would install a check that then fails its own push, on state that predates this pull. Do NOT cut the self-update branch: fold the machinery slice into the gated apply so the operator can fix the layer state and land machinery + rulebook on one branch." ;;
+    *)
+      deferred=1
+      emit SELF-UPDATE-UNDECIDED "$name" "run as the hook runs it (${sc_d}), both versions exit non-zero with DIFFERENT codes, so the change is real and NOT attributable to this pull. Treat as defer — acting autonomously on an unattributable failure is what this gate exists to prevent." ;;
+  esac
 done < "$TMP/gating"
 
 if [ "$deferred" -ne 0 ]; then
