@@ -58,21 +58,31 @@ have gone green, and would have reported "still open" forever.
 never the word anywhere in prose, because an entry that merely discusses landing something is
 not a closed entry.
 
-## BL-451 — the slowest fixtures take 23 to 41 minutes each, and four of the five ship to consumers
+## BL-451 — the six slowest fixtures take 29 to 41 minutes loaded each, and five of the six ship to consumers
 
 **DEFECT.** Filed in batch 199 on the operator's direction that these wall clocks are not acceptable. Loaded costs in
 `$(git rev-parse --git-common-dir)/ai-dlc-fixture-durations` at filing: `apply-self-overwrite` 2463s,
 `apply-setup-sited-merge` 2430s, `self-update-fixture-log` 2425s, `remediator-shard-join` 2420s,
-`backlog-receipt-binding` 2166s, `review-shard-merge` 1738s. These are LOADED figures and some may carry a laptop sleep
-(batch 198 recorded a 2608s gate run in transit); each must be re-measured solo in a clean worktree before it is cut.
-Only `backlog-receipt-binding` is `.dist-only`; the other four ship, so the reference consumer pays them on every push
-that selects them.
+`backlog-receipt-binding` 2166s, `review-shard-merge` 1738s — six fixtures, the minimum 1738s (29 min). These are
+LOADED figures and some may carry a laptop sleep (batch 198 recorded a 2608s gate run in transit); each must be
+re-measured solo in a clean worktree before it is cut. Only `backlog-receipt-binding` is `.dist-only`; the other FIVE
+ship, so the reference consumer pays them on every push that selects them.
 
 **Measured cause, on one of them.** `review-shard-merge` went from 731s to 1738s across batch 199. Its `score()` runs
 every predicate for every mutant (arms × mutants), and the batch added arms and mutants to both factors. The same shape
 is likely behind the mutation-battery fixtures above (`self-update-fixture-log` 35 mutation sites,
-`remediator-shard-join` 10, `apply-self-overwrite` 8) and is not established for `apply-setup-sited-merge`, which has
-none.
+`remediator-shard-join` 10, `apply-self-overwrite` 8). `apply-setup-sited-merge` is NOT mutation-free: it carries 24
+`kill_if` mutants, already launched through a pool of 8 (`POOL=8` at its `launch()`), so serial scoring is not its
+cause and its time is still unattributed.
+
+**Progress — first instance, `review-shard-merge` (batch 200; entry stays open for the other five).** Its 71 arms stay
+in the shipped fixture; the predicates and worlds moved to `core/fixtures/review-shard-merge/lib.sh` (ships beside it);
+MX0 and the 51 mutants moved to the new `.dist-only` `review-shard-merge-mutants`, which sources the same `lib.sh` and
+scores in a fixed pool of 8 with per-scorer scratch, a verdict-count reap, a 900s watchdog and an in-fixture probe of
+its own judgment. Per-mutant killed sets were compared byte-for-byte against the unsplit serial battery.
+Solo, clean worktrees, interleaved, 2 reps, box shared with other sessions (load 4-30 during the
+old side): the unsplit fixture 2537s / 2476s; the shipped fixture after the split 42s / 40s; the new battery 358s /
+347s. The sandbox read-set trace for both fixtures is owed by the lead, not yet committed.
 
 **Remedy.** Per fixture: measure solo, attribute the time, then cut it — move a mutation battery behind a shipped
 fixture into its own `.dist-only` fixture (`fixture-ship-decl.md`), score mutants in parallel within the fixture, and
