@@ -244,8 +244,11 @@ A lost update between two seats is invisible, and a review of the round cannot a
 requirements subject case already avoids this (its seats edit nothing, and repairs join by part), which is the shape to
 generalise.
 
-verify: manual -- the subject is the party-round procedure's write model across the step files; close when every
-sharded party round writes per-seat records joined by a merge, as the requirements subject case does.
+Receipt scored under `bash -c 'set -uo pipefail; ...'` against five trees holding the two files it reads: the fix 0;
+today's tree (422552d2) 1; an id-only source key with its self-probe gone 1; the prose rewritten with the join untouched
+1; the join built with "apply every improvement" left in the procedure 1; neither file present 9.
+
+verify: sh J=core/scripts/join-remediator-shards.sh; G=core/skills/ai-dlc/steps/_gate-procedures.md; [ -f "$J" ] && [ -f "$G" ] || exit 9; command -v awk >/dev/null 2>&1 || exit 9; n="$(grep -c 'apply every improvement' "$G")" || n=0; [ "$n" -eq 0 ] || exit 1; grep -qF '**The seats edit nothing, in every case below.**' "$G" || exit 1; W="$(mktemp -d)" || exit 9; S="$W/_bmad-output/party-mode/s9"; mkdir -p "$S" "$W/.claude" || exit 9; printf '## F-1 (major) sections: 1\n' > "$S/a-dev-1.md" && printf '## F-1 MAJOR sections: 1\n## F-4 MINOR sections: 1\n' > "$S/a-tea-1.md" && printf '### x\n- disposition: repaired\n- source: a-dev-1.md#F-1 a-tea-1.md#F-1\n' > "$W/ok.md" && printf '### y\n- disposition: repaired\n- source: a-dev-1.md#F-4\n' > "$W/bad.md" || exit 9; o="$(AI_DLC_PROJECT_ROOT="$W" bash "$J" --sources "$W/ok.md" --sprint 9 2>&1)" || exit 1; case "$o" in *"2 sources, every one resolved"*) ;; *) exit 1 ;; esac; o="$(AI_DLC_PROJECT_ROOT="$W" bash "$J" --sources "$W/bad.md" --sprint 9 2>&1)"; rc=$?; [ "$rc" -eq 2 ] || exit 1; case "$o" in *"a-dev-1.md#F-4 is UNRESOLVED"*) exit 0 ;; *) exit 1 ;; esac
 
 ## BL-463 — a reused pid holds the live-trace lock for up to six hours
 

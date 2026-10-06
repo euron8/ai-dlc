@@ -96,6 +96,7 @@ Then, per finding:
 
 ```
 ### <finding id> — <CRITICAL|MAJOR|MINOR>
+- source: <seat-file>#<finding-id> [<seat-file>#<finding-id> ...]   (a party repair only)
 - disposition: repaired | escalated | skipped (nit)
 - edit: <artifact file:line(s)>
 - derivation:
@@ -107,6 +108,13 @@ $ <the exact command>
 
 - claim now asserted: <the sentence you wrote, which the derivation above supports>
 ```
+
+**A party repair names the seat finding behind every entry.** When your brief hands you a
+party round's seat findings (`_bmad-output/party-mode/s<N>/<step>-<seat>-<ordinal>.md`), every
+entry carries a `source:` line with one `<seat-file>#<finding-id>` token per seat finding the
+edit applies, the id being the first token of that finding's `##` heading. Finding ids collide
+across seats, so the file is never dropped. `join-remediator-shards.sh` refuses an entry with no
+`source:` and a token that resolves to no finding of that seat file.
 
 **The three labels are read LITERALLY by the gate.** `validate-adversarial-convergence.sh`
 arm H decides whether this record is structured by looking for each label at the start of a

@@ -140,6 +140,52 @@
 #     `- artifact:` (the manifest) and per-stem `- artifact_sha_before:` / `- artifact_sha_after:`
 #     lists, every stem on both sides.
 #   Distinct-writer, UNWRITTEN, AMBIG, UNCITED, DOUBLE and SPAN are the same code.
+#
+# PARTY REPAIRS -- EVERY ENTRY NAMES THE SEAT FINDING IT APPLIES (BL-462).
+#   A party round's seats write findings and edit nothing; one repair writer applies them. So a
+#   party repair is joined like any other repair, and in addition every entry carries
+#   `source: <seat-file>#<finding-id>` naming the seat finding it applied. A party repair is:
+#     --subject <N> --pass party                          (the requirements subject)
+#     --artifact <name>-party --pass 1 [files | --document]  (seats x parts, seats x sections)
+#   and its seat files are `<state>/party-mode/s<N>/*.md`, DERIVED, never passed in. The files and
+#   document forms keep the `<name>-party-repair-p1` dir and record name graph already writes, so
+#   the document-mode dir parse and the derivation-capture hook's `*/shards/*-repair-p*/` section
+#   exemption hold unchanged; arm H reads such a record for an adversarial series only as FOREIGN.
+#
+#   join-remediator-shards.sh --sources <record> --sprint <N>
+#   checks one record that no join wrote -- the unsharded round's single repair writer, the
+#   one-part subject, the serial remediator's appended entries -- and writes nothing.
+#
+#   FINDING IDS COLLIDE ACROSS SEATS (graph s317: 14 ids, `F-1` among them, appear in more than one
+#   seat file), so a source resolves on the PAIR (seat file, id), never the id alone. The refusals:
+#   an entry carrying `disposition:` and no `source:` line; a `source:` line with no
+#   `<file>.md#<id>` token; a token whose file is not a seat file of sprint <N> (a path that is not
+#   a suffix of `<state>/party-mode/s<N>/<file>` names another sprint's seat); a token whose seat
+#   file carries no finding of that id. A SELF-PROBE runs the resolver on a seeded pair before the
+#   corpus is read: a resolving source must pass and an id another seat carries must refuse.
+#
+#   THE ID GRAMMAR IS GRAPH'S, MEASURED. A finding id is the first token of a `##`..`######`
+#   heading, emphasis and a leading `Finding ` dropped, trailing `.`/`-` trimmed, holding a digit:
+#   `## A1-1 (major) sections: 1`, `## Finding D4-1 (MAJOR) ...`, `## F-5.1 MAJOR`,
+#   `## Finding 1 (minor), sections: 3`, `### F1 (MAJOR) ...`, `## X-1 — MINOR — ...`. Fenced
+#   lines are skipped. Over graph's 55 seat files carrying `sections:` in s315-s317, this grammar
+#   reads fewer ids than `sections:` lines on 2: one counts a `sections:` legend line, and
+#   `carry-over-evaluation-architect-2.md` writes its findings as bullets with no id at all -- an
+#   unattributable seat file, which is what the procedure now forbids.
+#   FALSE-POSITIVE SET: ZERO, and how it got there. No real record carries `source:` yet, so the
+#   set was measured on scratch copies of graph's twelve s317 party parts (architecture spine 1-8,
+#   carry-over evaluation 1-4), each entry's OWN attribution rewritten as a `source:` line --
+#   `### architect A1-1`, `### dev-5 F-1`, `### F-6.1 (dev)`, `### carry-over-evaluation-pm-1:F1`,
+#   `### Architect-1 / TEA F-T7-01 / PM-1` (one entry, three findings: one line, three tokens) --
+#   against a copy of graph's real `party-mode/s317/`. 279 entries carrying 287 sources; 279
+#   sources resolve, and 217 of the 287 carry an id that ANOTHER seat file also carries, which an
+#   id-only key cannot attribute. The narrowings, in order: a `Finding ` lead is dropped (`## Finding D4-1`); `.`
+#   is an id character (`F-5.1`); a seat file with headings but no id is told apart from a wrong
+#   id. What still refuses is graph's own attribution gap, not the grammar: 8 sources name
+#   `carry-over-evaluation-architect-2.md`, whose findings are `- **MAJOR. ...**` bullets carrying
+#   no id at all, and 1 entry (`### ADR-S317-9 alignment`) is an edit no seat finding asked for.
+#   A heading such as `### 3.1.1 ladder` reads as an id `3.1.1`: that widens the accept set and
+#   never refuses a correct source.
 
 set -u
 export LC_ALL=C
@@ -149,9 +195,10 @@ refuse() { echo "REFUSED: $*" >&2; refuse_n=$((refuse_n + 1)); }
 die() { echo "REFUSED: $*" >&2; exit 2; }
 
 SPRINT=""; ARTIFACT=""; PASS=""; APATH=""; SINCE=""; UNTIL=""; DOCUMENT=""; REPDIR=""; DOCMODE=0
-SUBJMODE=0; SUBJ_BASE=""
+SUBJMODE=0; SUBJ_BASE=""; SRCMODE=0; SRC_REC=""
 while [ $# -gt 0 ]; do
   case "$1" in
+    --sources) SRC_REC="${2:-}"; SRCMODE=1; shift 2 ;;
     --subject) SPRINT="${2:-}"; SUBJMODE=1; shift 2 ;;
     --base) SUBJ_BASE="${2:-}"; shift 2 ;;
     --sprint) SPRINT="${2:-}"; shift 2 ;;
@@ -161,12 +208,21 @@ while [ $# -gt 0 ]; do
     --since) SINCE="${2:-}"; shift 2 ;;
     --until) UNTIL="${2:-}"; shift 2 ;;
     --document) DOCUMENT="${2:-}"; DOCMODE=1; shift 2 ;;
-    -h|--help) sed -n '2,139p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,188p' "$0"; exit 0 ;;
     -*) die "unknown argument '$1' (see --help)" ;;
     *) { [ "$DOCMODE" = 1 ] || [ "$SUBJMODE" = 1 ]; } && [ -z "$REPDIR" ] || die "unknown argument '$1' (see --help)"
        REPDIR="$1"; shift ;;
   esac
 done
+# A party repair: its entries must each name the seat finding they apply.
+PARTY=0
+if [ "$SRCMODE" = 1 ]; then
+  [ "$DOCMODE$SUBJMODE" = 00 ] && [ -z "$ARTIFACT$PASS$APATH$SINCE$UNTIL$REPDIR" ] \
+    || die "--sources checks one record and takes only --sprint <N>"
+  [ -n "$SRC_REC" ] && [ -f "$SRC_REC" ] || die "--sources needs an existing record (got '${SRC_REC}')"
+  PARTY=1
+fi
+[ "$SUBJMODE" = 1 ] && [ "$PASS" = party ] && [ -z "$ARTIFACT" ] && PARTY=1
 if [ "$SUBJMODE" = 1 ]; then
   [ "$DOCMODE" = 0 ] || die "--subject and --document are two modes; pass one"
   GATE_ART=""
@@ -200,6 +256,10 @@ if [ "$DOCMODE" = 1 ] && [ -n "$REPDIR" ]; then
 fi
 SPRINT="${SPRINT#s}"
 case "$SPRINT" in ''|*[!0-9]*) die "--sprint must be a sprint number (got '${SPRINT}')" ;; esac
+case "$ARTIFACT" in *-party) PARTY=1 ;; esac
+if [ "$SRCMODE" = 1 ]; then
+  :
+else
 [ "$SUBJMODE" = 1 ] || case "$PASS" in ''|*[!0-9]*) die "--pass must be a pass number (got '${PASS}')" ;; esac
 case "$ARTIFACT" in ''|*/*) die "--artifact must be a bare artifact name (got '${ARTIFACT}')" ;; esac
 if [ "$SUBJMODE" = 1 ]; then
@@ -218,6 +278,7 @@ case "$SINCE" in $ISO) ;; *) die "--since must be YYYY-MM-DDTHH:MM:SSZ (got '${S
 case "$UNTIL" in $ISO) ;; *) die "--until must be YYYY-MM-DDTHH:MM:SSZ (got '${UNTIL}')" ;; esac
 [ "$SINCE" \> "$UNTIL" ] && die "--since ${SINCE} is after --until ${UNTIL}"
 command -v jq >/dev/null 2>&1 || die "jq is not on PATH; the ledger cannot be read"
+fi
 
 # --- AI_DLC_ROOT ------------------------------------------------------------
 # Walk UP for a marker, never count `..` hops. The canonical block, precedence bound by I75:
@@ -257,6 +318,116 @@ if _sl="$(cd "$STATE" 2>/dev/null && pwd)"; then STATE_PARENT="${_sl%/*}/"; fi
 if _sp="$(cd "$STATE" 2>/dev/null && pwd -P)"; then STATE_PARENT_P="${_sp%/*}/"; fi
 PA="${STATE}/planning-artifacts"
 LEDGER="${PA}/.artifact-writes.jsonl"
+
+# --- PARTY SOURCES (BL-462). Every applied entry names `source: <seat-file>#<finding-id>`, and the
+# pair resolves against the sprint's seat files -- never the id alone, which collides across seats.
+SEAT_DIR="${STATE}/party-mode/s${SPRINT}"
+# src_ids <seat file>... -> "<basename>\t<finding id>" per finding heading (grammar: the header).
+src_ids() {
+  awk '
+    FNR == 1 { fence = 0; b = FILENAME; sub(/.*\//, "", b); print b "\t" }
+    /^[ \t]*(```|~~~)/ { fence = !fence; next }
+    fence { next }
+    /^##+[ \t]/ {
+      s = $0; sub(/^#+[ \t]+/, "", s); gsub(/[*`_]/, "", s); gsub(/[][]/, "", s); sub(/^[ \t]+/, "", s)
+      sub(/^[Ff]inding[ \t]+/, "", s)
+      if (match(s, /^[A-Za-z0-9][A-Za-z0-9.-]*/)) {
+        t = substr(s, 1, RLENGTH); sub(/[.-]+$/, "", t)
+        if (t ~ /[0-9]/) print b "\t" t
+      }
+    }' "$@"
+}
+# src_check <seat dir> <record>... -> one "<KIND>\t<record>\t<detail>" line per defect, then
+# "N\t<entries>\t<sources>". An ENTRY is the text under one heading; it needs a source only if
+# it carries a `disposition:` line (the label arm H reads), so a preamble or a "for the lead"
+# section is not an entry. No `{n,m}` interval in these regexes: the macOS awk is not assumed to
+# carry them.
+src_check() {
+  local sd="$1" sdp ids toks; shift
+  sdp="$(cd "$sd" 2>/dev/null && pwd -P)" || sdp="$sd"
+  toks="$(awk '
+    function flush() { if (disp && !nsrc) print "NOSOURCE\t" cf "\t" cur; if (disp) ne++; disp = 0; nsrc = 0 }
+    FNR == 1 { flush(); cur = "(before any heading)"; cf = FILENAME; sub(/.*\//, "", cf); fence = 0 }
+    /^[ \t]*(```|~~~)/ { fence = !fence; next }
+    fence { next }
+    /^#+[ \t]/ { flush(); cur = $0; sub(/^#+[ \t]+/, "", cur); next }
+    /^[[:space:]-]*[*_`]*disposition[*_`]*:/ { disp = 1; next }
+    /^[[:space:]-]*[*_`]*source[*_`]*:/ {
+      nsrc++; v = $0; sub(/^[^:]*:/, "", v); n = 0
+      while (match(v, /[A-Za-z0-9_.\/-]+[.]md#[A-Za-z0-9][A-Za-z0-9.-]*/)) {
+        t = substr(v, RSTART, RLENGTH); v = substr(v, RSTART + RLENGTH); sub(/[.-]+$/, "", t); n++; ns++
+        gsub(/\/\/+/, "/", t); print "T\t" cf "\t" t
+      }
+      if (!n) { l = $0; sub(/^[ \t]+/, "", l); print "BADFORM\t" cf "\t" l }
+      next }
+    END { flush(); print "N\t" ne + 0 "\t" ns + 0 }' "$@")"
+  # One awk over every seat file of the sprint; a glob that matched nothing leaves no file, and
+  # every source then reads NOFILE -- a refusal, never a pass.
+  set -- "$sd"/*.md
+  ids=""
+  [ -f "$1" ] && ids="$(src_ids "$@")"
+  { printf '%s\n' "$ids" | sed '/^$/d; s/^/I\t/'; printf '%s\n' "$toks"; } | awk -F'\t' -v sd="$sd" -v sdp="$sdp" '
+    $1 == "I" && $3 == "" { f[$2] = 1; next }
+    $1 == "I" { has[$2 SUBSEP $3] = 1; nid[$2]++; who[$3] = (($3 in who) ? who[$3] " " : "") $2; next }
+    $1 == "T" {
+      t = $3; i = index(t, "#"); p = substr(t, 1, i - 1); id = substr(t, i + 1)
+      b = p; sub(/.*\//, "", b); full = sd "/" b; fullp = sdp "/" b
+      ok = (p == b || p == full || p == fullp \
+            || (length(full) > length(p) && substr(full, length(full) - length(p)) == "/" p) \
+            || (length(fullp) > length(p) && substr(fullp, length(fullp) - length(p)) == "/" p))
+      if (!ok) { print "FOREIGN\t" $2 "\t" t; next }
+      if (!(b in f)) { print "NOFILE\t" $2 "\t" t "\t" b; next }
+      if (!((b SUBSEP id) in has)) { print "UNRESOLVED\t" $2 "\t" t "\t" b "\t" id "\t" ((id in who) ? who[id] : "no seat file") "\t" (nid[b] + 0); next }
+      next }
+    { print }'
+}
+# src_refusals <src_check output> -> calls refuse per defect; SRC_E / SRC_S carry the counts.
+src_refusals() {
+  local k r d b i w c
+  SRC_E=0; SRC_S=0
+  while IFS='	' read -r k r d b i w c; do
+    case "$k" in
+      N) SRC_E="$r"; SRC_S="$d" ;;
+      NOSOURCE)   refuse "${r}: the entry '${d}' carries a disposition and no 'source:' line; a party repair names the seat finding it applies as 'source: <seat-file>#<finding-id>'" ;;
+      BADFORM)    refuse "${r}: '${d}' names no <seat-file>.md#<finding-id>" ;;
+      FOREIGN)    refuse "${r}: source ${d} names a file outside ${SEAT_DIR}; a party repair applies its own sprint's seat findings" ;;
+      NOFILE)     refuse "${r}: source ${d} names no seat file (${SEAT_DIR}/${b} does not exist)" ;;
+      UNRESOLVED) if [ "${c:-0}" = 0 ]; then
+                    refuse "${r}: source ${d} is UNRESOLVED -- ${b} carries no finding id at all (no '## <id> ...' heading); the seat wrote findings nothing can attribute"
+                  else
+                    refuse "${r}: source ${d} is UNRESOLVED -- ${b} carries no finding ${i}; a source is keyed on the seat file AND the id, because ids collide across seats (${i} is in: ${w})"
+                  fi ;;
+    esac
+  done <<SRCEOF
+$1
+SRCEOF
+}
+# The self-probe, before any corpus is read: a resolving source passes, and an id that only ANOTHER
+# seat carries refuses. Both directions, or a resolver keyed on the id alone reads as working.
+src_probe() {
+  local d o
+  d="$(mktemp -d "${TMPDIR:-/tmp}/join-srcprobe.XXXXXX")" || die "mktemp failed; the source resolver cannot be probed"
+  mkdir -p "$d/seats" || die "the source probe could not stage"
+  printf '# seat a\n\n## F-1 (major) sections: 1\n' > "$d/seats/a-1.md"
+  printf '# seat b\n\n## Finding A1-2 (MAJOR) sections: 1\n' > "$d/seats/b-1.md"
+  printf '### F-1\n- disposition: repaired\n- source: a-1.md#F-1\n' > "$d/good.md"
+  printf '### F-1\n- disposition: repaired\n- source: b-1.md#F-1\n' > "$d/bad.md"
+  o="$(src_check "$d/seats" "$d/good.md")"
+  [ "$o" = "N	1	1" ] || { rm -rf "$d"; die "the source resolver's self-probe failed: a resolving source read '${o}'; no verdict"; }
+  o="$(src_check "$d/seats" "$d/bad.md")"
+  case "$o" in UNRESOLVED*"b-1.md#F-1"*) ;; *) rm -rf "$d"; die "the source resolver's self-probe failed: an id only another seat carries read '${o}'; no verdict" ;; esac
+  rm -rf "$d"
+}
+if [ "$SRCMODE" = 1 ]; then
+  [ -d "$SEAT_DIR" ] || die "no seat files at ${SEAT_DIR}; a party repair's sources resolve there"
+  src_probe
+  src_refusals "$(src_check "$SEAT_DIR" "$SRC_REC")"
+  [ "$SRC_E" -gt 0 ] || refuse "${SRC_REC} carries no entry with a 'disposition:' line; nothing is attributed"
+  [ "$refuse_n" -eq 0 ] || exit 2
+  echo "SOURCES: ${SRC_REC} -- ${SRC_E} entries, ${SRC_S} sources, every one resolved in ${SEAT_DIR}"
+  exit 0
+fi
+
 SHARD_DIR="${PA}/s${SPRINT}/shards/${ARTIFACT}-repair-p${PASS}"
 OUT="${PA}/s${SPRINT}/${ARTIFACT}-repair-p${PASS}.md"
 if [ "$SUBJMODE" = 1 ]; then
@@ -497,6 +668,21 @@ if [ -n "$JOINRES" ]; then
   done <<JREOF
 $JOINRES
 JREOF
+fi
+
+# A party repair: every entry of every part names the seat finding it applied, resolved on the
+# pair (seat file, id). Reported beside every other reason, before anything is assembled.
+if [ "$PARTY" = 1 ]; then
+  if [ -d "$SEAT_DIR" ]; then
+    src_probe
+    set --
+    while IFS= read -r p; do [ -n "$p" ] && set -- "$@" "$p"; done <<SRCPEOF
+$PARTS
+SRCPEOF
+    src_refusals "$(src_check "$SEAT_DIR" "$@")"
+  else
+    refuse "no seat files at ${SEAT_DIR}; a party repair's sources resolve there"
+  fi
 fi
 
 [ -e "$OUT" ] && refuse "${OUT} already exists; a join never overwrites a repair record"

@@ -251,9 +251,43 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
 
 1. `/bmad-party-mode --mode subagent --non-interactive` — the step's seats (bound
    via the Rule 20 role-manifest preamble to their `.claude/team-roles/<role>.md`)
-   walk the step's subject and
-   apply every improvement — except in the requirements subject case below, where the seats
-   edit nothing; run the step's source-fidelity check if it names one.
+   walk the step's subject and record findings; run the step's source-fidelity check if it
+   names one.
+
+   **The seats edit nothing, in every case below.** Several seats walking one subject would
+   each write it in place at once, and nothing attributes or orders those writes, so a lost
+   update between two seats is invisible. Each seat writes one findings file per (seat, shard)
+   — its deliverable, named below — and every finding in it opens a `##` heading whose first
+   token is the finding's id (`## F-1 (major) sections: 2`), carrying one `sections:` line
+   citing the map ordinals it rests on. Ids collide across seats, so a finding is named by its
+   file and its id together.
+
+   **One repair writer applies them.** After the round's join the lead dispatches the seats'
+   findings to remediators, never back to a seat, and every entry of the party repair record
+   — a joined part, the serial remediator's appended entries, or a single writer's record —
+   carries `source: <seat-file>#<finding-id>`, one token per seat finding the edit applies
+   (`- source: architecture-dev-3.md#F-1 architecture-tea-3.md#F-1`). The join resolves each
+   token against `_bmad-output/party-mode/s<N>/` on the (file, id) pair and refuses an entry
+   with no `source:`, a token naming no seat file of the sprint, and a token whose file carries
+   no finding of that id. Seats x parts is repaired as "Adversarial repair dispatch" "Shard by
+   file" does, with `--artifact <artifact>-party --pass 1`, the shard dir
+   `_bmad-output/planning-artifacts/s<N>/shards/<artifact>-party-repair-p1/` and the joined
+   record `_bmad-output/planning-artifacts/s<N>/<artifact>-party-repair-p1.md`. Seats x
+   sections is repaired as "Shard by section" does, split into that same shard dir with
+   `--expect-sha` the sha256 the lead recorded for the document before wave 1, and joined with
+   `join-remediator-shards.sh --document <doc> <that dir>`. The requirements subject case is
+   below. A finding citing two or more parts goes to the serial remediator after the join, and
+   the lead then runs `scripts/ai-dlc/join-remediator-shards.sh --sources <the joined record> --sprint <N>`
+   over the record with its appended entries.
+
+   **An unsharded round has the same write model.** One agent per seat over the whole subject
+   (a `SERIAL:` map, a one-part subject, or a subject that meets none of the cases below), the
+   seats still edit nothing, and ONE remediator briefed `shard: none (serial-document)` (Rule 28
+   exception 4) applies their findings and writes the party repair record itself, every entry
+   carrying `source:`. No join runs, so the lead runs
+   `scripts/ai-dlc/join-remediator-shards.sh --sources <that record> --sprint <N>`; a refusal
+   re-dispatches that remediator.
+
    **When the subject is two or more files** (`stories/`), the round is sharded (Rule 28,
    "Split dispatch": seats x parts axis). The invocation brief asks for one persona agent per
    (seat, story ordinal) plus one cross-story round scoped to interactions between stories. The
@@ -272,11 +306,8 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    `scripts/ai-dlc/partition-subject.sh --map <N> --base <base sha>` prints: one persona agent
    per (seat, part ordinal) plus one cross-part round per seat. This is the subject's first
    map: the lead resolves `<base sha>` as `steps/requirements.md` section 5 states, the map
-   records it in the subject manifest, and every later sub-pass passes the manifest's sha. **The seats edit nothing in this case.** Several seats walking
-   the same file would each write it in place at once, and no join can attribute or order
-   those writes. Each seat writes its findings to its deliverable, each finding carrying one
-   `sections:` line citing the map ordinals it rests on, and the party repair below applies
-   them. Before wave 1 the lead writes the sha256 of every subject file, one `<stem>=<sha>`
+   records it in the subject manifest, and every later sub-pass passes the manifest's sha. The
+   seats edit nothing, as above, and the party repair below applies their findings. Before wave 1 the lead writes the sha256 of every subject file, one `<stem>=<sha>`
    line each, to `_bmad-output/planning-artifacts/s<N>/shards/requirements-party-repair/anchor`
    — the bytes the seats review, and the split anchor of the party repair.
    **Party repair (requirements subject case).** After the round's join, the lead dispatches
@@ -284,13 +315,14 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    requirements subject, with `--pass party`, the shard dir
    `_bmad-output/planning-artifacts/s<N>/shards/requirements-party-repair/`, and the anchor's
    shas as the expected bytes. The joined record is
-   `_bmad-output/planning-artifacts/s<N>/requirements-party-repair.md`. A finding citing two or
-   more parts goes to the serial remediator after assembly.
+   `_bmad-output/planning-artifacts/s<N>/requirements-party-repair.md`, and the join resolves
+   every entry's `source:` as above. A finding citing two or more parts goes to the serial
+   remediator after assembly, and `--sources` then checks the record with its appended entries.
    A subject that maps to one part is not sharded: no seats x parts round and no party shard dir.
-   Each seat is one agent over the whole subject, the seats still edit nothing, and the party
-   repair is ONE remediator briefed `shard: none (serial-document)` (Rule 28 exception 4) that
-   writes `_bmad-output/planning-artifacts/s<N>/requirements-party-repair.md` itself; no join runs.
-   A subject that meets none of these cases keeps one agent per seat.
+   It is the unsharded round above: the party repair is ONE remediator that writes
+   `_bmad-output/planning-artifacts/s<N>/requirements-party-repair.md` itself, and `--sources`
+   checks it.
+   A subject that meets none of these cases keeps one agent per seat, as an unsharded round.
    The round goes out in waves (Rule 28, "Split dispatch"): seats x parts routinely exceeds
    the harness's concurrent-subagent cap, and a spawn past the cap is rejected, not queued.
    The lead's join, before it proceeds, derives the EXPECTED set — `<step>-<seat>-<ordinal>.md`

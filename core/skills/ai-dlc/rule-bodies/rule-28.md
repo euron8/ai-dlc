@@ -80,9 +80,12 @@ joins each wave in one bounded-join beat (Rule 29). The axes:
 - **surfaces** -- the surfaces a Rule 24 Section 0 declares: one analyst
   per surface, no cross-part agent.
 - **seats x parts** -- a party-mode round over a files-axis subject: one
-  persona agent per (seat, part) plus one cross-part round.
+  persona agent per (seat, part) plus one cross-part round. The seats
+  record findings and edit nothing; a files-axis repair applies them.
 - **seats x sections** -- a party-mode round over a sections-axis subject:
   one persona agent per (seat, part) plus one cross-part round per seat.
+  The seats record findings and edit nothing; a sections-axis repair
+  applies them.
 - **subject** -- a subject of several files reviewed as one, under one
   base recorded in its manifest (the requirements step's brief, spec,
   PRD and architecture-impact record): one agent per part that

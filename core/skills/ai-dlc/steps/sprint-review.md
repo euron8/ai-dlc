@@ -105,8 +105,9 @@ is for a single-document subject, not this one.
 - Does the implementation match the requirements?
 - Are there cross-cutting concerns?
 - Is the test coverage adequate across the sprint as a whole?
-- Apply all improvements. **Code changes are applied by dev teammates, not
-  inline by the lead (Rule 28); the lead owns disposition, not the edit.**
+- Record every finding; the seats edit nothing (that item's write model). **Code changes are
+  applied in Step 3 by dev teammates, not by a seat and not inline by the lead (Rule 28); the
+  lead owns disposition, not the edit.**
 
 ### 3. Fix and Re-Validate
 

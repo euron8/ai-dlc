@@ -58,7 +58,9 @@ CONV="$SRCDIR/validate-adversarial-convergence.sh"
 PARTITION="$SRCDIR/partition-document.sh"
 [ -f "$PARTITION" ] || { echo "FIXTURE ERROR: $PARTITION is not beside the join; document mode assembles through it" >&2; exit 2; }
 S21=story-2.1-positions-on-demand.md; S22=story-2.2-lifetime-pnl-on-demand.md; S31=story-3.1-dark-theme.md
-for _s in "seed.$S21" "seed.$S22" "seed.$S31" seed.block-2.1.md seed.block-2.2.md seed.block-3.1.md seed.block-epics.md; do
+SEATS="architect-1 dev-1 tea-1 dev-4"
+for _s in "seed.$S21" "seed.$S22" "seed.$S31" seed.block-2.1.md seed.block-2.2.md seed.block-3.1.md seed.block-epics.md \
+          seed.seat-architecture-architect-1.md seed.seat-architecture-dev-1.md seed.seat-architecture-tea-1.md seed.seat-architecture-dev-4.md; do
   [ -s "$HERE/$_s" ] || { echo "FIXTURE ERROR: seed $HERE/$_s is missing or empty" >&2; exit 2; }
 done
 echo "remediator-shard-join: resolved subjects = $JOIN, $HOOK"
@@ -395,22 +397,123 @@ p_sjnopart() { # the UNCHANGED brief (no part) written in the window -> REFUSED:
   run_sjoin "$1" "$w"
   sj_refused "$w" "$SJPA/product-brief.md has no part in this split"
 }
-p_sjnames() { # --pass party / elicitation read and write their own names; a party record is not *-repair-p<M>
-  local w rd; w="$(subj_world)" || return 1
+sj_party() { # <join> <source token> -> RC, $JO, SJP_W: a --pass party join, every part citing the token
+  local w rd o n=0 row f; w="$(subj_world)" || return 1; SJP_W="$w"
   rd="$w/$SJPA/s9/shards/requirements-party-repair"
   AI_DLC_PROJECT_ROOT="$w" bash "$SRCDIR/partition-subject.sh" --split 9 "$rd" >/dev/null 2>&1 || return 1
-  sj_all_dir() { local o n=0 row f; for o in $(awk -F'\t' '$1 == "part" { print $2 }' "$rd/.subject"); do
-      n=$((n + 1)); row="$(awk -F'\t' -v o="$o" '$1 == "part" && $2 == o' "$rd/.subject")"
-      f="$(printf '%s' "$row" | cut -f7)"; [ "$f" = "-" ] && f="$(printf '%s' "$row" | cut -f4)"
-      printf 'party %s\n' "$o" >> "$w/$f"; drive "$w" Edit "$w/$f" "b$(printf '%016d' "$n")"
-      printf -- '- **disposition:** repaired\n- **edit:** `%s:2`\n- **derivation:** party %s\n' "$f" "$o" > "$rd/$o.md"; done; }
   # The repair-p1 split from subj_world holds the prd sections; assemble it away first so the
   # party split owns the file alone.
   AI_DLC_PROJECT_ROOT="$w" bash "$SRCDIR/partition-subject.sh" --assemble "$w/$SJRD" >/dev/null 2>&1 || return 1
-  sj_all_dir
+  seat_seed "$w" 9 || return 1
+  for o in $(awk -F'\t' '$1 == "part" { print $2 }' "$rd/.subject"); do
+    n=$((n + 1)); row="$(awk -F'\t' -v o="$o" '$1 == "part" && $2 == o' "$rd/.subject")"
+    f="$(printf '%s' "$row" | cut -f7)"; [ "$f" = "-" ] && f="$(printf '%s' "$row" | cut -f4)"
+    printf 'party %s\n' "$o" >> "$w/$f"; drive "$w" Edit "$w/$f" "b$(printf '%016d' "$n")"
+    printf -- '- **disposition:** repaired\n- **edit:** `%s:2`\n- **derivation:** party %s\n- **source:** %s\n' "$f" "$o" "$2" > "$rd/$o.md"
+  done
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --subject 9 --pass party --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1; RC=$?
-  [ "$RC" -eq 0 ] && [ -f "$w/$SJPA/s9/requirements-party-repair.md" ] && [ ! -e "$(sj_out "$w")" ] \
-    && ! ls "$w/$SJPA/s9/"*-repair-p[0-9]*.md >/dev/null 2>&1
+}
+p_sjnames() { # --pass party / elicitation read and write their own names; a party record is not *-repair-p<M>
+  sj_party "$1" "architecture-dev-1.md#F-1" || return 1
+  [ "$RC" -eq 0 ] && [ -f "$SJP_W/$SJPA/s9/requirements-party-repair.md" ] && [ ! -e "$(sj_out "$SJP_W")" ] \
+    && ! ls "$SJP_W/$SJPA/s9/"*-repair-p[0-9]*.md >/dev/null 2>&1
+}
+p_sjpartysrc() { # BL-462: the same subject party join, every part citing a seat file sprint 9 does not have -> REFUSED
+  sj_party "$1" "architecture-pm-1.md#F-1" || return 1
+  [ "$RC" -eq 2 ] && has "$JO" "source architecture-pm-1.md#F-1 names no seat file" \
+    && [ ! -e "$SJP_W/$SJPA/s9/requirements-party-repair.md" ]
+}
+
+# ---- PARTY REPAIRS (BL-462). Seat files are graph's own s317 heading lines (seed.seat-*), so the
+# ids are the shapes a real seat writes: `## A1-1 (major) sections: 1`, `## F-1 MAJOR sections: 1`,
+# `## Finding D4-1 (MAJOR) sections: 4 — ...`. dev-1 and tea-1 BOTH carry F-1..F-3, the collision.
+seat_seed() { # <world> <sprint> -- the sprint's seat files under party-mode/s<N>/
+  local d="$1/_bmad-output/party-mode/s$2" s
+  mkdir -p "$d" || return 1
+  for s in $SEATS; do cp "$HERE/seed.seat-architecture-$s.md" "$d/architecture-$s.md" || return 1; done
+}
+PRD=$SLOT/shards/stories-party-repair-p1
+ppart() { # <world> <name> <block> <source tokens> -- a real repair block, its source line after the heading
+  awk -v s="$4" 'NR == 1 { print; print "- **source:** " s; next } { print }' "$HERE/seed.block-$3.md" > "$1/$PRD/$2.md"
+}
+run_pjoin() { # <join> <world>
+  AI_DLC_PROJECT_ROOT="$2" bash "$1" --sprint 305 --artifact stories-party --pass 1 --artifact-path "$SLOT" \
+    --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1
+  RC=$?
+}
+pout() { printf '%s' "$1/$SLOT/stories-party-repair-p1.md"; }
+party_world() { # <world var output> -- three writers, the seats seeded for s305 AND s304
+  local w; w="$(new_world)" || return 1
+  mkdir -p "$w/$PRD" && seat_seed "$w" 305 && seat_seed "$w" 304 || return 1
+  three_writers "$w"
+  printf '%s' "$w"
+}
+p_party() { # three parts, the colliding pair on one entry, the `Finding D4-1` form on another -> JOINED, sources in the record
+  local w; w="$(party_world)" || return 1
+  ppart "$w" 01 2.1 "architecture-dev-1.md#F-1 architecture-tea-1.md#F-1"
+  ppart "$w" 02 2.2 "_bmad-output/party-mode/s305/architecture-dev-4.md#D4-1"
+  ppart "$w" 03 3.1 "architecture-tea-1.md#F-4"
+  run_pjoin "$1" "$w"
+  [ "$RC" -eq 0 ] && has "$JO" "(3 parts, 3 writers)" && [ -f "$(pout "$w")" ] \
+    && has "$(pout "$w")" "architecture-tea-1.md#F-4" && has "$(pout "$w")" "architecture-dev-1.md#F-1 architecture-tea-1.md#F-1"
+}
+p_partyunres() { # p_party's world, ONE property apart: F-4 cited under dev-1, which carries F-1..F-3 only (tea-1 has F-4)
+  local w; w="$(party_world)" || return 1
+  ppart "$w" 01 2.1 "architecture-dev-1.md#F-1 architecture-tea-1.md#F-1"
+  ppart "$w" 02 2.2 "_bmad-output/party-mode/s305/architecture-dev-4.md#D4-1"
+  ppart "$w" 03 3.1 "architecture-dev-1.md#F-4"
+  run_pjoin "$1" "$w"
+  refused "$w" "03.md: source architecture-dev-1.md#F-4 is UNRESOLVED -- architecture-dev-1.md carries no finding F-4" \
+    && has "$JO" "(F-4 is in: architecture-tea-1.md)" && [ ! -e "$(pout "$w")" ]
+}
+p_partynosrc() { # an entry with a disposition and no source line -> REFUSED by name, nothing written
+  local w; w="$(party_world)" || return 1
+  ppart "$w" 01 2.1 "architecture-dev-1.md#F-1"
+  ppart "$w" 02 2.2 "architecture-dev-1.md#F-2"
+  part "$w" 03 3.1; mv "$w/$SLOT/shards/stories-repair-p1/03.md" "$w/$PRD/03.md" || return 1
+  run_pjoin "$1" "$w"
+  refused "$w" "03.md: the entry 'M6 — MAJOR' carries a disposition and no 'source:' line" && [ ! -e "$(pout "$w")" ]
+}
+p_partyforeign() { # a token naming the SAME seat file under ANOTHER sprint's party-mode dir -> REFUSED
+  local w; w="$(party_world)" || return 1
+  ppart "$w" 01 2.1 "architecture-dev-1.md#F-1"
+  ppart "$w" 02 2.2 "_bmad-output/party-mode/s304/architecture-dev-4.md#D4-1"
+  ppart "$w" 03 3.1 "architecture-tea-1.md#F-4"
+  run_pjoin "$1" "$w"
+  refused "$w" "02.md: source _bmad-output/party-mode/s304/architecture-dev-4.md#D4-1 names a file outside" && [ ! -e "$(pout "$w")" ]
+}
+p_partydoc() { # seats x sections: a document split into <doc>-party-repair-p1, joined with --document -> JOINED, sources resolved
+  local w rd o; w="$(new_world)" || return 1
+  { printf '# PRD\n\n## Goals\nThe first goal, in one line of prose.\nThe second goal, in one line of prose.\n\n'
+    printf '## Scope\nThe first scope item, in one line of prose.\nThe second scope item, in one line of prose.\n\n'
+    printf '## Risks\nThe first risk, in one line of prose.\nThe second risk, in one line of prose.\n'; } > "$w/$DOCREL"
+  rd="$SLOT/shards/prd-party-repair-p1"
+  bash "$PARTITION" --split "$w/$DOCREL" "$w/$rd" >/dev/null 2>&1 && [ -f "$w/$rd/sections/3.md" ] && seat_seed "$w" 305 || return 1
+  for o in 1 2 3; do
+    printf 'Repaired by the section %s remediator.\n' "$o" >> "$w/$rd/sections/$o.md"
+    drive "$w" Edit "$w/$rd/sections/$o.md" "a00000000000000$o"
+    printf -- '### F-%s\n- **source:** architecture-tea-1.md#F-%s\n- **disposition:** repaired\n- **edit:** `%s/sections/%s.md:2`\n- **derivation:** the section %s finding\n' \
+      "$o" "$o" "$rd" "$o" "$o" > "$w/$rd/$o.md"
+  done
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --document "$DOCREL" "$w/$rd" \
+    --since 2000-01-01T00:00:00Z --until 2999-12-31T23:59:59Z > "$JO" 2>&1; RC=$?
+  o="$(grep -c 'Repaired by the section' "$w/$DOCREL")" || o=0
+  [ "$RC" -eq 0 ] && has "$JO" "(3 parts, 3 writers)" && [ -f "$w/$SLOT/prd-party-repair-p1.md" ] \
+    && has "$w/$SLOT/prd-party-repair-p1.md" "architecture-tea-1.md#F-3" && [ "$o" -eq 3 ]
+}
+src_rec() { # <world> <body> -- a record no join wrote, checked by --sources
+  printf '%b' "$2" > "$1/rec.md"
+  AI_DLC_PROJECT_ROOT="$1" bash "$3" --sources "$1/rec.md" --sprint 305 > "$JO" 2>&1; RC=$?
+}
+p_srcok() { # --sources: colliding ids keyed by file -> rc 0, the count line names 2 entries and 3 sources
+  local w; w="$(mktemp -d "$WORK/src.XXXXXX")" && mkdir -p "$w/.claude" && seat_seed "$w" 305 || return 1
+  src_rec "$w" '### F-1\n- disposition: repaired\n- source: architecture-dev-1.md#F-1 architecture-tea-1.md#F-1\n\n### F-4\n- disposition: repaired\n- source: architecture-tea-1.md#F-4\n' "$1"
+  [ "$RC" -eq 0 ] && has "$JO" "-- 2 entries, 3 sources, every one resolved in"
+}
+p_srcunres() { # --sources, one property apart: F-4 under dev-1 -> rc 2, UNRESOLVED named, the seat carrying it listed
+  local w; w="$(mktemp -d "$WORK/src.XXXXXX")" && mkdir -p "$w/.claude" && seat_seed "$w" 305 || return 1
+  src_rec "$w" '### F-1\n- disposition: repaired\n- source: architecture-dev-1.md#F-1 architecture-tea-1.md#F-1\n\n### F-4\n- disposition: repaired\n- source: architecture-dev-1.md#F-4\n' "$1"
+  [ "$RC" -eq 2 ] && has "$JO" "source architecture-dev-1.md#F-4 is UNRESOLVED" && has "$JO" "(F-4 is in: architecture-tea-1.md)"
 }
 p_sjbase() { # --base other than the manifest's -> REFUSED before anything is read
   local w; w="$(subj_world)" || return 1
@@ -446,7 +549,7 @@ p_sjnest() { # a NESTED state dir (out/bmad): map, split, join and the record ag
     p_sjoin "$1" )
 }
 
-P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest"
+P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres"
 
 # ---- A PART'S DERIVATION SURVIVES THE JOIN. The part's ```derived fence is copied into the joined
 # record, and the gate re-runs `validate-artifact-derivations.sh` over the sprint dir AFTER the
@@ -606,6 +709,24 @@ p_sjgate "$JOIN" && ok "SJ7: --subject --artifact gate-planning --pass 1 -> JOIN
 p_sjgatenear "$JOIN" && ok "SJ8: near-misses -- --artifact stories, and --artifact gate-planning with --pass party -> REFUSED, nothing written" || bad "SJ8: $(cat "$JO")"
 p_sjnest "$JOIN" && ok "SJ9: a nested AI_DLC_STATE_DIR (out/bmad) -> map, split and join agree and the record is the manifest's root-relative path (SJ1 is the default-layout control)" || bad "SJ9: $(cat "$JO")"
 
+# ---- party repairs (BL-462). Each refusal has its ALLOW twin one property apart in the same run.
+p_party "$JOIN" && ok "PS1: a party repair (--artifact stories-party), sources keyed on (seat file, id) -- F-1 in BOTH dev-1 and tea-1, and graph's \`## Finding D4-1\` form -> JOINED, the tokens carried into the record" \
+  || bad "PS1: a party repair with resolving sources did not join (rc=$RC): $(cat "$JO")"
+p_partyunres "$JOIN" && ok "PS2: the same world with F-4 cited under dev-1 (only tea-1 carries F-4) -> REFUSED 'is UNRESOLVED', naming the seat that does, nothing written" \
+  || bad "PS2: a source whose id only another seat carries was not refused as UNRESOLVED (rc=$RC): $(cat "$JO")"
+p_partynosrc "$JOIN" && ok "PS3: a party part entry with a disposition and no source line -> REFUSED naming the entry, nothing written" \
+  || bad "PS3: a sourceless party entry was not refused (rc=$RC): $(cat "$JO")"
+p_partyforeign "$JOIN" && ok "PS4: a source naming the same seat file under party-mode/s304 (another sprint) -> REFUSED 'names a file outside', nothing written" \
+  || bad "PS4: another sprint's seat file was accepted as a source (rc=$RC): $(cat "$JO")"
+p_partydoc "$JOIN" && ok "PS5: seats x sections -- a document split into prd-party-repair-p1, joined with --document -> JOINED, sources resolved" \
+  || bad "PS5: a section-sharded party repair did not join (rc=$RC): $(cat "$JO")"
+p_sjpartysrc "$JOIN" && ok "PS6: --subject --pass party, every part citing a seat file sprint 9 lacks -> REFUSED 'names no seat file' (SJ5 is its ALLOW twin)" \
+  || bad "PS6: a subject party repair accepted an unresolvable source (rc=$RC): $(cat "$JO")"
+p_srcok "$JOIN" && ok "PS7: --sources on a record no join wrote -- colliding F-1 keyed by file -> rc 0, '2 entries, 3 sources'" \
+  || bad "PS7: --sources refused a resolving record (rc=$RC): $(cat "$JO")"
+p_srcunres "$JOIN" && ok "PS8: --sources, one property apart (F-4 under dev-1) -> rc 2, UNRESOLVED, the carrying seat named" \
+  || bad "PS8: --sources accepted an id only another seat carries (rc=$RC): $(cat "$JO")"
+
 # R1: the role file the remediator is bound to teaches the write tool and the citation form. Walked
 # up from this fixture in both layouts; install copies team-roles/ verbatim, so no render exists.
 ROLE=""
@@ -734,10 +855,12 @@ mutant "JX3 the shards/ exclusion removed" "shardrow" \
   '   | select(true)'
 # JX4 is the defect this mode exists to close: the files-mode filter applied in document mode drops
 # every section row, so the join sees no write at all.
-mutant "JX4 section rows dropped in document mode (the pre-BL-372 file set)" "docjoin docoverlap asmrefuse sjoin sjnames sjgate sjnest" \
+# partydoc is a document join too, and dies with the others. sjpartysrc does NOT: its subject keeps
+# whole-file part rows outside shards/, so the join still reaches the source check and refuses by name.
+mutant "JX4 section rows dropped in document mode (the pre-BL-372 file set)" "docjoin docoverlap asmrefuse sjoin sjnames sjgate sjnest partydoc" \
   '   | select($doc == "1" or ((.path | startswith($sh + "/")) | not))' \
   '   | select((.path | startswith($sh + "/")) | not)'
-mutant "JX5 the assembly skipped" "docjoin asmrefuse" \
+mutant "JX5 the assembly skipped" "docjoin asmrefuse partydoc" \
   '  ASM_LINE="$(bash "$PARTITION" --assemble "$SHARD_DIR" 2>&1)" || {' \
   '  ASM_LINE="skipped" || {'
 mutant "JX6 the assembler's refusal ignored" "asmrefuse" \
@@ -772,6 +895,44 @@ mutant "JX13 subject --base assertion removed" "sjbase" \
 mutant "JX14 subject assembly skipped" "sjoin sjnest" \
   '  ASM_LINE="$(bash "$PSUBJ" --assemble "$SHARD_DIR" 2>&1)" || {' \
   '  ASM_LINE="skipped" || {'
+
+# ---- BL-462 party-source mutants. A finding id collides across seats, so the key is (file, id).
+IDONLY_OLD='      if (!((b SUBSEP id) in has)) {'
+IDONLY_NEW='      if (!(id in who)) {'
+PROBE_OLD='src_probe() {'
+PROBE_NEW='src_probe() { return 0; }
+src_probe_disabled() {'
+# JX15: the id-only key with the self-probe IN PLACE -- the probe refuses before any corpus is read,
+# so every party run stops at it: the arms that expect a party join or a NAMED refusal all die.
+mutant "JX15 source keyed on the id alone (self-probe in place)" "sjnames party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres" \
+  "$IDONLY_OLD" "$IDONLY_NEW"
+mutant2() { # <label> <expected> <old1> <new1> <old2> <new2> -- two layers reverted together
+  local d; d="$(mutdir "${1%% *}")"
+  if ! apply "$d/join-remediator-shards.sh" "$3" "$4" || ! apply "$d/join-remediator-shards.sh" "$5" "$6"; then
+    bad "$1: FIXTURE STALE -- a mutation anchor is not in the join exactly once; re-anchor it, never relax the assertion"; return
+  fi
+  score "$1" "$d/join-remediator-shards.sh" "$2"
+}
+# JX16: the same key AND the probe removed -- now only the arms that seed an id another seat carries see it.
+mutant2 "JX16 source keyed on the id alone, self-probe removed" "partyunres srcunres" \
+  "$IDONLY_OLD" "$IDONLY_NEW" "$PROBE_OLD" "$PROBE_NEW"
+mutant "JX17 an entry with no source line not refused" "partynosrc" \
+  '      NOSOURCE)   refuse' \
+  '      NOSOURCE)   :'
+mutant "JX18 a source outside party-mode/s<N> not refused" "partyforeign" \
+  '      if (!ok) { print "FOREIGN\t" $2 "\t" t; next }' \
+  '      if (0) { print "FOREIGN\t" $2 "\t" t; next }'
+mutant "JX19 files/document mode not a party repair for <name>-party" "partyunres partynosrc partyforeign" \
+  'case "$ARTIFACT" in *-party) PARTY=1 ;; esac' \
+  'case "$ARTIFACT" in *-never-a-name) PARTY=1 ;; esac'
+mutant "JX20 subject --pass party not a party repair" "sjpartysrc" \
+  '[ "$SUBJMODE" = 1 ] && [ "$PASS" = party ] && [ -z "$ARTIFACT" ] && PARTY=1' \
+  'false && PARTY=1'
+mutant "JX21 --sources reports refusals and exits 0" "srcunres" \
+  '  [ "$refuse_n" -eq 0 ] || exit 2
+  echo "SOURCES:' \
+  '  true || exit 2
+  echo "SOURCES:'
 
 echo
 if [ "$fails" -eq 0 ]; then echo "remediator-shard-join: PASS"; exit 0; fi
