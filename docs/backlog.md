@@ -92,3 +92,24 @@ recorded path and of the deriver. Measured: per-fixture `FXTAG` profile tags att
 cross-attribution, drops are system-wide, and silent loss requires a private tree copy so the atime canary can run.
 
 verify: sh grep -qF -- '--local-map' .githooks/pre-push && grep -qF -- '--local-map' core/git-hooks/pre-push
+
+## BL-453 — teammate verification calls are ad-hoc compound shell that no allow rule matches, so an unattended sprint stops for approval
+
+**DEFECT.** Carries the reference consumer's PC-S317-TEAMMATE-VERIFICATION-COMMANDS-ARE-AD-HOC-COMPOUND-SHELL-THAT-NO-ALLOW-RULE-MATCHES-SO-THEY-STOP-FOR-APPROVAL.
+A teammate confirming a claim writes a `bash -c` wrapper, a function definition, or a chain of variable assignments
+joined by `;`/`&&`. None of those matches a command-prefix allow rule, so each one raises an approval prompt, and in an
+unattended sprint nobody is there to answer it. The filing's census counted 38 wrapper-shape calls in 840 (a function
+definition or `bash -c`); remediator 30/290, adversary 3/525.
+
+**Fix (option 1 of the filing).** One byte-identical paragraph in every file matching `core/team-roles/*.md`, the glob
+`install.sh` copies, opening `**Verify with one read-only command per Bash call.**`: confirm a claim with a `derived`
+fence replayed by one `scripts/ai-dlc/validate-artifact-derivations.sh` call, or with one read-only command in its own
+Bash call. Invariant `I121` binds it: present exactly once in every role file as its own paragraph, byte-identical,
+no copy elsewhere, and the validator path resolving to `core/scripts/validate-artifact-derivations.sh`.
+
+**Done when, consumer side, owed as residue and not held open here.** On the first consumer sprint after a pull that
+carries this text, re-run the filing's census over that sprint's subagent transcripts (wrapper-shape calls: a function
+definition or `bash -c`), against the before figures above. Options (2)-(4) of the filing are weighed only if the rate
+stays high. That census is recorded as owed residue in the CHANGELOG at release; the receipt below closes on the text.
+
+verify: sh set -- core/team-roles/*.md; [ -f "$1" ] || exit 9; awk -v n="$#" -v op='**Verify with one read-only command per Bash call.**' -v fp='`scripts/ai-dlc/validate-artifact-derivations.sh <that file>`' 'function chk() { if (w != 1 || s != 1 || !p) bad++ } FNR == 1 { if (nf++) chk(); w = 0; s = 0; p = 0; at = 0; pr = "" } { if (index($0, op)) s++; if (index($0, op) == 1 && pr == "") { w++; at = FNR } if (at && FNR - at <= 7 && index($0, fp)) p = 1; pr = $0 } END { if (nf) chk(); if (nf != n) bad++; exit (bad ? 1 : 0) }' "$@"
