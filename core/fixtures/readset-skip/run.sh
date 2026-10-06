@@ -2453,7 +2453,7 @@ MUT
     mkdir -p "$PRM" || broken "mkdir failed"
     cp -R "$PR/." "$PRM/" || broken "could not copy the probe repo for the width mutant"
     cp "$DERIVER" "$PR/core/scripts/derive-fixture-readsets.sh"
-    sed 's| env VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash | bash |' "$DERIVER" > "$PRM/core/scripts/derive-fixture-readsets.sh"
+    sed 's| env PREPUSH_POOL_DEPTH=1 VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash | bash |' "$DERIVER" > "$PRM/core/scripts/derive-fixture-readsets.sh"
     ( cd "$PR" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm probe ) >/dev/null 2>&1 \
       || broken "could not seed the loss probe repo"
     ( cd "$PRM" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm probe ) >/dev/null 2>&1 \
@@ -2975,13 +2975,13 @@ d/-p'
     #   m4      the `sandboxed` launch dropping the knob under `--tracer both` only;
     #   prefix  `VAS_INNER_POOL_WIDTH=1 sandboxed ...`, a prefix in front of the function.
     # Each must log width=unset and ems=unset with `fxa ok` present: both knobs move together.
-    sed -e 's|sudo -n -u "$RUN_AS" sandbox-exec -f "$PROFILE" "$@"|env VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 sudo -n -u "$RUN_AS" sandbox-exec -f "$PROFILE" "$@"|' \
-        -e 's|^    sandbox-exec -f "$PROFILE" "$@"$|    env VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 sandbox-exec -f "$PROFILE" "$@"|' \
-        -e 's|sudo -n -u "$RUN_AS" env VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash |env VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 sudo -n -u "$RUN_AS" bash |' \
-        -e 's|sandboxed env VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash |sandboxed bash |' "$SB/deriver.sh" > "$SB/deriver.m2.sh"
-    sed 's|( cd "$TREE" \&\& sandboxed env VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" )|( cd "$TREE" \&\& if [ "$TRACER" = both ]; then sandboxed bash "$FIXTURE_ROOT/$fx/run.sh"; else sandboxed env VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh"; fi )|' \
+    sed -e 's|sudo -n -u "$RUN_AS" sandbox-exec -f "$PROFILE" "$@"|env PREPUSH_POOL_DEPTH=1 VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 sudo -n -u "$RUN_AS" sandbox-exec -f "$PROFILE" "$@"|' \
+        -e 's|^    sandbox-exec -f "$PROFILE" "$@"$|    env PREPUSH_POOL_DEPTH=1 VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 sandbox-exec -f "$PROFILE" "$@"|' \
+        -e 's|sudo -n -u "$RUN_AS" env PREPUSH_POOL_DEPTH=1 VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash |env PREPUSH_POOL_DEPTH=1 VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 sudo -n -u "$RUN_AS" bash |' \
+        -e 's|sandboxed env PREPUSH_POOL_DEPTH=1 VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash |sandboxed bash |' "$SB/deriver.sh" > "$SB/deriver.m2.sh"
+    sed 's|( cd "$TREE" \&\& sandboxed env PREPUSH_POOL_DEPTH=1 VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" )|( cd "$TREE" \&\& if [ "$TRACER" = both ]; then sandboxed bash "$FIXTURE_ROOT/$fx/run.sh"; else sandboxed env PREPUSH_POOL_DEPTH=1 VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh"; fi )|' \
       "$SB/deriver.sh" > "$SB/deriver.m4.sh"
-    sed 's|sandboxed env VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash |VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 sandboxed bash |' "$SB/deriver.sh" > "$SB/deriver.prefix.sh"
+    sed 's|sandboxed env PREPUSH_POOL_DEPTH=1 VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash |PREPUSH_POOL_DEPTH=1 VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 sandboxed bash |' "$SB/deriver.sh" > "$SB/deriver.prefix.sh"
     for _wm in m2 m4 prefix; do
       BOTH_ARMS=$((BOTH_ARMS+1))
       if cmp -s "$SB/deriver.sh" "$SB/deriver.$_wm.sh"; then

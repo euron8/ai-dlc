@@ -421,6 +421,15 @@ step "agent definitions (the shipped renderer runs, and says which of its three 
 # is present and the mechanism is absent.
 # FIXTURE_POOL_BEGIN
 FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-12}"
+# RECURSION BOUND. A fixture that drives a hook runs this pool again, and nothing else limits the
+# nesting. The depth marker is deliberately NOT named AI_DLC_*: fixtures scrub that whole prefix from
+# their environment before driving a hook, so a marker carrying it would be removed exactly where it
+# has to survive. Depth 1 is a hook started under a pool's fixture, and its pool is narrowed to two
+# workers, not one, because a fixture that asserts parallelism needs two in flight. Depth 2 or more
+# refuses to open a pool (run_fixtures). An explicit AI_DLC_FIXTURE_JOBS does not lift the cap.
+POOL_DEPTH_IN="${PREPUSH_POOL_DEPTH:-0}"
+case "$POOL_DEPTH_IN" in ''|*[!0-9]*) POOL_DEPTH_IN=0 ;; esac
+if [ "$POOL_DEPTH_IN" -ge 1 ] && [ "$FIXTURE_JOBS" -gt 2 ]; then FIXTURE_JOBS=2; fi
 # RESOLVE THE GIT DIRECTORY; NEVER SPELL IT `.git/`. In a LINKED WORKTREE `.git` is a
 # FILE, not a directory, so every record below fails to open -- and each write is
 # error-suppressed, so the suite proceeds and the banner is unaffected while the
@@ -1072,6 +1081,11 @@ apply_readset_skip() {
 
 run_fixtures() {
   local rc=0 d b out n_expected n_actual n_ordered verdict
+  if [ "$POOL_DEPTH_IN" -ge 2 ]; then
+    printf '   FAIL  fixture pool refused: nested at depth %s (PREPUSH_POOL_DEPTH=%s), a hook started by a hook started by a pool opens no pool\n' "$POOL_DEPTH_IN" "$POOL_DEPTH_IN"
+    return 1
+  fi
+  if [ "$POOL_DEPTH_IN" -ge 1 ]; then printf '   nested: depth %s, width %s\n' "$POOL_DEPTH_IN" "$FIXTURE_JOBS"; fi
   out="$(mktemp -d)" || return 1
   # DOT-PREFIXED, and that is what makes the name collision-proof rather than
   # unlikely. Every verdict file in "$out" is named for a fixture, and the glob
@@ -1175,7 +1189,7 @@ run_fixtures() {
   # is the reading the ordering above wants anyway. A fixture the record has never seen
   # sorts FIRST: an unknown cost is treated as the largest, because the failure mode
   # worth avoiding is a new heavy unit dispatched last.
-  AI_DLC_FX_OUT="$out" xargs -P "$FIXTURE_JOBS" -I{} bash -c '
+  PREPUSH_POOL_DEPTH="$((POOL_DEPTH_IN + 1))" AI_DLC_FX_OUT="$out" xargs -P "$FIXTURE_JOBS" -I{} bash -c '
     d="$1"; b="$(basename "$d")"
     if bash "$d/run.sh" > "$AI_DLC_FX_OUT/.log/$b" 2>&1; then printf ok   > "$AI_DLC_FX_OUT/$b"
     else                                      printf FAIL > "$AI_DLC_FX_OUT/$b"; fi

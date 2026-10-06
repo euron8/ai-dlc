@@ -1041,10 +1041,10 @@ for fx in $LIST; do
   # enforcement-map-sites reads it as its own pool width, so a traced run of it is narrowed too.
   # core/fixtures/readset-skip binds this line by running a copy of this deriver, for both knobs.
   if [ "$TRACER" = fs_usage ]; then
-    ( cd "$TREE" && sudo -n -u "$RUN_AS" env VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
+    ( cd "$TREE" && sudo -n -u "$RUN_AS" env PREPUSH_POOL_DEPTH=1 VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
     rc=$?
   else
-    ( cd "$TREE" && sandboxed env VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
+    ( cd "$TREE" && sandboxed env PREPUSH_POOL_DEPTH=1 VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
     rc=$?
   fi
 
