@@ -158,3 +158,33 @@ length across the cliff and passes only when every world over it reports `degrad
 `degraded=no`, so reporting `yes` unconditionally, or lowering the threshold to the trim ceiling, does not close it.
 
 verify: sh S=core/hooks/ai-dlc-recover.sh; [ -f "$S" ] || exit 9; command -v jq >/dev/null 2>&1 || exit 9; W="$(mktemp -d)" || exit 9; lo=0; hi=0; bad=0; n=0; while [ "$n" -le 80 ]; do P="$W/w$n"; mkdir -p "$P/_bmad-output" "$P/scripts/ai-dlc" "$P/.claude/skills/ai-dlc/steps" || exit 9; echo x > "$P/.claude/skills/ai-dlc/steps/implementation.md"; printf '# Pipeline Snapshot\n\n## Pipeline Position\n- **Current step file:** `implementation.md`\n' > "$P/_bmad-output/pipeline-snapshot.md"; printf 'sidecar\n' > "$P/_bmad-output/pipeline-snapshot.precompact.md"; x="$(printf '%*s' "$n" '' | tr ' ' a)"; printf '#!/bin/sh\n[ "$1" = current ] && echo g%s\n' "$x" > "$P/scripts/ai-dlc/gate-checkpoint.sh"; chmod +x "$P/scripts/ai-dlc/gate-checkpoint.sh"; L="$(printf '{"source":"compact","session_id":"receipt"}' | CLAUDE_PROJECT_DIR="$P" bash "$S" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext | length' 2>/dev/null)"; D="$(sed -n 's/^degraded=//p' "$P/_bmad-output/.recover-fired" 2>/dev/null)"; [ -n "$L" ] && [ -n "$D" ] || exit 9; if [ "$L" -ge 10000 ]; then hi=$((hi + 1)); [ "$D" = yes ] || bad=$((bad + 1)); else lo=$((lo + 1)); [ "$D" = no ] || bad=$((bad + 1)); fi; n=$((n + 5)); done; [ "$lo" -gt 0 ] && [ "$hi" -gt 0 ] || exit 9; [ "$bad" -eq 0 ]
+
+## BL-455 — arm H accepts any `*-repair-p<M>.md`, so another repair's record satisfies a series' pass M
+
+**DEFECT.** Found in batch 200 while adjudicating
+PC-S317-REQUIREMENTS-STEP-CYCLE-IS-NEVER-SHARDED-BECAUSE-ITS-SUBJECT-IS-THREE-FILES-AND-THE-PRD-IS-CUMULATIVE.
+`core/scripts/validate-adversarial-convergence.sh` arm H looked for the repair record of pass M with the glob
+`<dir>/*-repair-p<M>.md`. Any structured record for pass number M in the sprint directory satisfied it, including a
+party-round repair, a gate repair, or a record belonging to another series. As a result, a series whose own repair
+was done inline passed on a neighbour's record. The name `_gate-procedures.md` prescribes, and
+`join-remediator-shards.sh` writes, is `<artifact>-repair-p<M>.md`.
+
+**Measured on the reference consumer** (a scratch clone at 0.730.0, the working-tree `_bmad-output/` copied over it,
+109 series, base and tip validators side by side). 36 pass-pairs in 27 series are satisfied only by a
+differently-named record. Examples are s309 `coe-adversarial-p1` by `architecture-adversarial-repair-p1.md`, s307
+`prd-adversarial-p1` by `carry-over-evaluation-advanced-elicitation-repair-p1.md`, and s302 `product-brief-adversarial-p1`
+by `architecture-repair-p1.md`. With the fix, every one of them reads `PENDING (H -- REPAIR-RECORD)`, because no
+commit there stamps the release. No exit code changes on any of the 109 series.
+
+**What the fix does not close.** The s317 instance that surfaced this is not reachable by the name rule.
+`s317/requirements-repair-p1.md` sits at the series' own stem name but records the requirements PARTY round, so
+the stem-named record satisfies requirements pass 1. That instance closes only when party and elicitation repair
+records are renamed outside `*-repair-p<M>.md` (`requirements-party-repair.md`, `requirements-elicitation-repair.md`),
+which belongs to the requirements-subject release.
+
+**Remedy (this release).** Arm H requires exactly `<stem>-repair-p<M>.md`, where the stem is the pass name before its
+last `p<N>`/`pass<N>` token with one trailing `-adversarial` removed. The requirement sits behind `H_RELEASE`, a stamp
+keyed on the series' first pass as for K, K2 and J2, so a legacy series reads PENDING rather than FAIL. Fixture:
+check-24's `h-worlds` cells and four mutants.
+
+verify: sh bash -c 'v=core/scripts/validate-adversarial-convergence.sh; [ -f "$v" ] || exit 9; d=$(mktemp -d) || exit 9; mkdir -p "$d/.claude" && echo "version: 9.0.0" > "$d/.claude/.ai-dlc-version" || exit 9; (unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; cd "$d" && git init -q . && git add .claude && GIT_COMMITTER_DATE=2026-01-01T00:00:00Z GIT_AUTHOR_DATE=2026-01-01T00:00:00Z git -c user.email=r@x.invalid -c user.name=r -c commit.gpgsign=false -c core.hooksPath=/dev/null commit -q -m s) || exit 9; for n in 1 2; do vd=EXIT_CONDITION_NOT_MET; m=3; [ "$n" = 2 ] && vd=EXIT_CONDITION_MET && m=0; printf -- "<!-- SKILL_INVOCATION_PROVENANCE v1\ninvoked_at: 2026-01-0%sT00:00:00Z\nfindings_critical: 0\nfindings_major: %s\nverdict: %s\nSKILL_INVOCATION_PROVENANCE_END -->\n" "$((n + 1))" "$m" "$vd" > "$d/prd-adversarial-p$n.md"; done; r="- disposition: repaired\n- edit: prd.md:1\n- derivation: n/a\n"; printf -- "$r" > "$d/arch-repair-p1.md"; o=$(bash "$v" --series "$d/prd-adversarial-p" 2>&1); rc=$?; [ "$rc" = 1 ] && grep -qF "The only structured record for pass 1 is arch-repair-p1.md" <<<"$o" || exit 1; printf -- "$r" > "$d/prd-repair-p1.md"; bash "$v" --series "$d/prd-adversarial-p" >/dev/null 2>&1'

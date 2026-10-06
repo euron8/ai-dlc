@@ -2126,7 +2126,11 @@ that the next pass verifies against. A file- or section-sharded repair reaches a
 record `join-remediator-shards.sh` writes (`_gate-procedures.md`, "Adversarial repair dispatch").
 Arm H asserts that record exists and is structured
 (a `disposition:`, an `edit:` site, a `derivation:` per finding) for every pass whose
-findings a later pass measured as repaired. It proves the record EXISTS, not who authored
+findings a later pass measured as repaired. The record is matched to its series by NAME:
+`<artifact>-repair-p<M>.md` beside `<artifact>-adversarial-p<M>.md`. A record of any other
+name (another series', a party or elicitation round's, a gate repair's) does not satisfy the
+pass. That is owed for a series whose first pass postdates the stamp of `H_RELEASE`, and it
+prints `PENDING (H -- REPAIR-RECORD)` for an older series. It proves the record EXISTS, not who authored
 it — a subagent leaves no transcript and the provenance id is shape-only, so existence +
 structure is the honest floor. Without it, a lead that repairs inline writes a pass series
 byte-identical to a delegated one, and arms A–G pass over it.
