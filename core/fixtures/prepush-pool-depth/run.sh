@@ -80,6 +80,53 @@ drive() {
 }
 maxflight() { sort -n "$WORK/log.flight" 2>/dev/null | tail -1; }
 
+# The nest block is the FIRST resolved hook's, and the chain is rebuilt per scored block because
+# the stubs source the file they were built with.
+HOOK1="${HOOKS# }"; HOOK1="${HOOK1%% *}"
+# ------------------------------------------------------------------ the constructed nest ------
+# THREE LEVELS OF STUB: the outer pool dispatches stub A; A drives a copy of the block over its own
+# tree holding stub B; B drives it again over a tree holding stub C. Count which stubs STARTED.
+# Guarded: A runs, B runs (depth 1), C never starts (B's pool refuses at depth 2). The control is the
+# same chain with the refusal removed, where C starts -- so the nest is constructible and the count
+# can move.
+NB="$WORK/nest.block.sh"; sed -n '/^# FIXTURE_POOL_BEGIN$/,/^# FIXTURE_POOL_END$/p' "$HOOK1" > "$NB"
+NFXR="$(sed -n 's|^[[:space:]]*for d in \([A-Za-z0-9_./-]*\)/\*/;.*|\1|p' "$NB" | sort -u)"
+nest_build() { # nest_build <root> <blockfile>
+  local r="$1" blk="$2" lvl next
+  # the fixture root is the SCORED block's own: core/fixtures in one hook, tests/fixtures in the other
+  NFXR="$(sed -n 's|^[[:space:]]*for d in \([A-Za-z0-9_./-]*\)/\*/;.*|\1|p' "$blk" | sort -u)"
+  for lvl in a b c; do
+    mkdir -p "$r/$lvl/$NFXR/stub-$lvl"
+    case "$lvl" in a) next=b ;; b) next=c ;; c) next="" ;; esac
+    {
+      printf '#!/usr/bin/env bash\n'
+      printf 'for _v in $(env | sed -n "s/^\\(AI_DLC_[A-Za-z0-9_]*\\)=.*/\\1/p"); do unset "$_v"; done\n'
+      printf 'printf "%%s depth=%%s\\n" "stub-%s" "${PREPUSH_POOL_DEPTH-unset}" >> "$NEST_LOG"\n' "$lvl"
+      if [ -n "$next" ]; then
+        printf '( cd "%s/%s" && export AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 && . "%s" >/dev/null 2>&1 && run_fixtures >> "$NEST_LOG.out" 2>&1 )\n' "$r" "$next" "$blk"
+      fi
+      printf 'exit 0\n'
+    } > "$r/$lvl/$NFXR/stub-$lvl/run.sh"
+    ( cd "$r/$lvl" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm seed ) >/dev/null 2>&1
+  done
+}
+nest_run() { # nest_run <root> <blockfile> -> started stubs, space separated
+  local r="$1" blk="$2"
+  NFXR="$(sed -n 's|^[[:space:]]*for d in \([A-Za-z0-9_./-]*\)/\*/;.*|\1|p' "$blk" | sort -u)"
+  : > "$WORK/nest.log"; : > "$WORK/nest.log.out"
+  ( cd "$r/a" && export NEST_LOG="$WORK/nest.log" AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1; unset PREPUSH_POOL_DEPTH
+    . "$blk" >/dev/null 2>&1; run_fixtures >> "$WORK/nest.log.out" 2>&1 )
+  sed 's/ depth=.*//' "$WORK/nest.log" | tr '\n' ' '
+}
+NESTN=0
+nest_cells() { # nest_cells <blockfile> -> nest_started / nest_depths / nest_b_present cells
+  local blk="$1" r st
+  NESTN=$((NESTN+1)); r="$WORK/nestc$NESTN"; nest_build "$r" "$blk"
+  st="$(nest_run "$r" "$blk" | sed 's/ *$//')"
+  printf 'nest_started=%s\n' "$st"
+  printf 'nest_depths=%s\n' "$(sed 's/stub-//; s/ depth=/=/' "$WORK/nest.log" | tr '\n' ' ' | sed 's/ *$//')"
+  printf 'nest_b_present=%s\n' "$(grep -c '^stub-b depth=[0-9]' "$WORK/nest.log")"
+}
 HN=0
 for HOOK in $HOOKS; do
   HN=$((HN+1)); TAG="$(basename "$(dirname "$HOOK")")"
@@ -126,6 +173,8 @@ for HOOK in $HOOKS; do
     r="$( cd "$W" && unset PREPUSH_POOL_DEPTH; export AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 PD_LOG="$WORK/log" PD_FLIGHT="$WORK/flight"
           mkdir -p "$PD_FLIGHT"; . "$b" >/dev/null 2>&1; run_fixtures >/dev/null 2>&1; printf '%s' "${PREPUSH_POOL_DEPTH-unset}" )"
     printf 'leak=%s\n' "$r"
+    # THE CHAIN: outer pool -> a -> pool -> b -> pool -> c, the marker as each stub sees it AFTER the scrub
+    nest_cells "$b"
   }
 
   # Expected value per arm. One owner per arm: the mutant table below says which mutant moves which.
@@ -149,7 +198,10 @@ refuse_d5_rc=1
 notice_dispatch=1
 notice_load=0
 notice_d0=0
-leak=unset"
+leak=unset
+nest_started=stub-a stub-b
+nest_depths=a=1 b=2
+nest_b_present=1"
   GOT="$(score "$BLK")"
   # BASELINE ASSERTED BEFORE ANY MUTANT: a harness that died prints nothing and would score every
   # mutant as a kill.
@@ -174,6 +226,7 @@ leak=unset"
   armcheck "depth 2 refuses: non-zero exit, one line naming depth and marker, no fixture ran; depth 5 too" refuse_rc refuse_line refuse_ran refuse_d5_rc
   armcheck "the notice prints at dispatch inside run_fixtures, never at block load, never at depth 0" notice_dispatch notice_load notice_d0
   armcheck "the marker does not leak into the caller's own environment" leak
+  armcheck "the constructed chain: a and b start, c never does, and a/b see depths 1 and 2 after the scrub" nest_started nest_depths nest_b_present
   armcheck "a depth-2 hook caps the width it would have opened too" width_d2_j12
 
   # ---------------------------------------------------------------- mutants ------------------
@@ -197,48 +250,15 @@ leak=unset"
     if [ "$diffk" = "$want" ]; then ok "[$TAG] MUTANT $name killed by exactly: $diffk"
     else bad "[$TAG] MUTANT $name moved [$diffk], want [$want]"; fi
   }
-  mutant not-exported   "raw_d0 raw_d1" 's/PREPUSH_POOL_DEPTH="\$((POOL_DEPTH_IN + 1))" //'
-  mutant not-incremented "raw_d0 raw_d1" 's/PREPUSH_POOL_DEPTH="\$((POOL_DEPTH_IN + 1))"/PREPUSH_POOL_DEPTH="$POOL_DEPTH_IN"/'
+  mutant not-exported   "raw_d0 raw_d1 nest_started nest_depths nest_b_present" 's/PREPUSH_POOL_DEPTH="\$((POOL_DEPTH_IN + 1))" //'
+  mutant not-incremented "raw_d0 raw_d1 nest_started nest_depths" 's/PREPUSH_POOL_DEPTH="\$((POOL_DEPTH_IN + 1))"/PREPUSH_POOL_DEPTH="$POOL_DEPTH_IN"/'
   mutant cap-ignored    "width_d1_j12 width_d1_j12x width_d2_j12 obs_d1_max" 's/if \[ "\$POOL_DEPTH_IN" -ge 1 \] && \[ "\$FIXTURE_JOBS" -gt 2 \]; then FIXTURE_JOBS=2; fi/:/'
-  mutant ai-dlc-named   "scrub_same" 's/PREPUSH_POOL_DEPTH="\$((POOL_DEPTH_IN + 1))"/AI_DLC_POOL_DEPTH="$((POOL_DEPTH_IN + 1))"/'
+  mutant ai-dlc-named   "scrub_same nest_started nest_depths nest_b_present" 's/PREPUSH_POOL_DEPTH="\$((POOL_DEPTH_IN + 1))"/AI_DLC_POOL_DEPTH="$((POOL_DEPTH_IN + 1))"/'
   mutant notice-at-load "notice_load" 's/^POOL_DEPTH_IN="\${PREPUSH_POOL_DEPTH:-0}"$/&; [ "$POOL_DEPTH_IN" -ge 1 ] \&\& printf "   nested: depth %s\\n" "$POOL_DEPTH_IN"/'
-  mutant no-refusal     "refuse_rc refuse_line refuse_ran refuse_d5_rc" 's/if \[ "\$POOL_DEPTH_IN" -ge 2 \]; then/if false; then/'
+  mutant no-refusal     "refuse_rc refuse_line refuse_ran refuse_d5_rc nest_started nest_depths" 's/if \[ "\$POOL_DEPTH_IN" -ge 2 \]; then/if false; then/'
   mutant leaks          "leak" 's/^POOL_DEPTH_IN="\${PREPUSH_POOL_DEPTH:-0}"$/&; export PREPUSH_POOL_DEPTH="$((POOL_DEPTH_IN + 1))"/'
 done
 
-# ------------------------------------------------------------------ the constructed nest ------
-# THREE LEVELS OF STUB: the outer pool dispatches stub A; A drives a copy of the block over its own
-# tree holding stub B; B drives it again over a tree holding stub C. Count which stubs STARTED.
-# Guarded: A runs, B runs (depth 1), C never starts (B's pool refuses at depth 2). The control is the
-# same chain with the refusal removed, where C starts -- so the nest is constructible and the count
-# can move.
-HOOK1="${HOOKS# }"; HOOK1="${HOOK1%% *}"
-NB="$WORK/nest.block.sh"; sed -n '/^# FIXTURE_POOL_BEGIN$/,/^# FIXTURE_POOL_END$/p' "$HOOK1" > "$NB"
-NFXR="$(sed -n 's|^[[:space:]]*for d in \([A-Za-z0-9_./-]*\)/\*/;.*|\1|p' "$NB" | sort -u)"
-nest_build() { # nest_build <root> <blockfile>
-  local r="$1" blk="$2" lvl next
-  for lvl in a b c; do
-    mkdir -p "$r/$lvl/$NFXR/stub-$lvl"
-    case "$lvl" in a) next=b ;; b) next=c ;; c) next="" ;; esac
-    {
-      printf '#!/usr/bin/env bash\n'
-      printf 'for _v in $(env | sed -n "s/^\\(AI_DLC_[A-Za-z0-9_]*\\)=.*/\\1/p"); do unset "$_v"; done\n'
-      printf 'printf "%%s depth=%%s\\n" "stub-%s" "${PREPUSH_POOL_DEPTH:-0}" >> "$NEST_LOG"\n' "$lvl"
-      if [ -n "$next" ]; then
-        printf '( cd "%s/%s" && export AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1 && . "%s" >/dev/null 2>&1 && run_fixtures >> "$NEST_LOG.out" 2>&1 )\n' "$r" "$next" "$blk"
-      fi
-      printf 'exit 0\n'
-    } > "$r/$lvl/$NFXR/stub-$lvl/run.sh"
-    ( cd "$r/$lvl" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm seed ) >/dev/null 2>&1
-  done
-}
-nest_run() { # nest_run <root> <blockfile> -> started stubs, space separated
-  local r="$1" blk="$2"
-  : > "$WORK/nest.log"; : > "$WORK/nest.log.out"
-  ( cd "$r/a" && export NEST_LOG="$WORK/nest.log" AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1; unset PREPUSH_POOL_DEPTH
-    . "$blk" >/dev/null 2>&1; run_fixtures >> "$WORK/nest.log.out" 2>&1 )
-  sed 's/ depth=.*//' "$WORK/nest.log" | tr '\n' ' '
-}
 NR="$WORK/nest"; nest_build "$NR" "$NB"
 N_GUARDED="$(nest_run "$NR" "$NB")"
 if [ "$N_GUARDED" = "stub-a stub-b " ]; then

@@ -1130,7 +1130,12 @@ done < "$TMP/invoked"
 # would have stranded a branch.
 if [ -z "${AI_DLC_GATE_IN_SAFE_STOP:-}" ] \
    && git -C "$CONSUMER" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+   && [ "$(cd "$(git -C "$CONSUMER" rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null && pwd -P)" = "$(cd "$CONSUMER" 2>/dev/null && pwd -P)" ] \
    && [ -n "$(git -C "$CONSUMER" remote 2>/dev/null)" ]; then
+  # THE CONSUMER MUST BE ITS OWN WORK TREE'S TOP, compared physically (macOS /var is /private/var).
+  # A consumer that is a plain subdirectory of an enclosing repository passes --is-inside-work-tree,
+  # and the hook git-path then resolves the ENCLOSING repository's hook, which would run from here.
+  # Such a consumer is answered exactly as a non-repository is: silent, no pre-push row.
   pp_hook="$(cd "$CONSUMER" && git rev-parse --git-path hooks/pre-push 2>/dev/null)"
   case "$pp_hook" in
     ""|/*) ;;
