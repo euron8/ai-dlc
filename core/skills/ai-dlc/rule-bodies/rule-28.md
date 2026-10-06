@@ -83,6 +83,20 @@ joins each wave in one bounded-join beat (Rule 29). The axes:
   persona agent per (seat, part) plus one cross-part round.
 - **seats x sections** -- a party-mode round over a sections-axis subject:
   one persona agent per (seat, part) plus one cross-part round per seat.
+- **subject** -- a subject of several files reviewed as one, under one
+  base recorded in its manifest (the requirements step's brief, spec,
+  PRD and architecture-impact record): one agent per part that
+  `partition-subject.sh --map` prints plus one cross-part agent scoped
+  to interactions between parts, citing parts by the same rule as the
+  files axis. A file unchanged since the base has no part. A review
+  joins with `merge-adversarial-shards.sh --subject`; a repair shard
+  edits only its section file and `join-remediator-shards.sh --subject`
+  joins the parts and reassembles every file. A subject that maps to one
+  part is exception 4.
+- **seats x subject-parts** -- a party-mode round over a subject-axis
+  subject: one persona agent per (seat, part) plus one cross-part round
+  per seat. The seats record findings and edit nothing; a subject-axis
+  repair applies them.
 
 **The partition is derived, never listed.** The part set comes from a
 program or from the tree -- the artifact directory's listing, the
@@ -166,7 +180,8 @@ one-at-a-time rule in `stories-test-strategy.md`; (2) a convergence
 sequence -- review pass, repair, next pass; sharding shortens a pass and
 never overlaps two; (3) an ordered authoring chain whose next step
 reads the previous one's output; (4) a single document that
-`partition-document.sh --map` reports SERIAL. A per-role site cites
+`partition-document.sh --map` reports SERIAL, or a subject that
+`partition-subject.sh --map` maps to one part. A per-role site cites
 this clause and names its axis and its join; it does not restate them.
 
 The lead's written dispatch plan names, for every dispatch, its axis

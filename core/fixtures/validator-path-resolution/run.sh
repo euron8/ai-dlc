@@ -283,6 +283,10 @@ argv_for() {
     # reaches the gate-file lookup and its refusal names the root it resolved. Same floor as the
     # entries above: the root is CONSULTED, not that a merge is correct.
     merge-review-shards.sh)         printf '%s' "$WORK/_bmad-output --gate code-review --out $WORK/docs/vpr-steer/vpr-merged-review.md" ;;
+    # A bare run stops at its usage refusal, before the root block. `--map 9 --read-only` reaches
+    # the subject lookup under the resolved root, finds no spec kernel, and refuses naming that
+    # root -- without writing a manifest. Same floor as the entries above: the root is CONSULTED.
+    partition-subject.sh)           printf '%s' "--map 9 --read-only" ;;
     *)                              printf '%s' "" ;;
   esac
 }

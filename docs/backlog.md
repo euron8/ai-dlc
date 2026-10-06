@@ -91,6 +91,25 @@ remove repeated setup. `review-shard-merge` is being split in batch 199 as the f
 verify: manual -- the subject is wall clock on a loaded box, which no in-tree receipt can measure; close on a solo
 re-measurement of each named fixture recorded in the closing entry.
 
+## BL-458 — the requirements step's validation cycle is never sharded over its subject, so the PRD is reviewed alone and the brief, SPEC and architecture-impact never are
+
+**DEFECT.** Carries the reference consumer's PC-S317-REQUIREMENTS-STEP-CYCLE-IS-NEVER-SHARDED-BECAUSE-ITS-SUBJECT-IS-THREE-FILES-AND-THE-PRD-IS-CUMULATIVE.
+The requirements step reviews the product brief, the spec kernel, `prd.md` and `s<N>/architecture-impact.md` as one
+subject, and Rule 28 had no axis for a multi-file subject, so every sub-pass ran one agent per seat. The consumer's s317
+series shows the workaround: its pass 2 is a `--document prd.md` section merge filed as `requirements-adversarial-p2`,
+so the cumulative PRD was sectioned whole and the other three files were reviewed by nobody. The remedy is the subject
+axis: `partition-subject.sh` maps the four files over what changed since one base recorded in
+`s<N>/requirements-subject.md`, `merge-adversarial-shards.sh --subject` and `join-remediator-shards.sh --subject`
+join every sub-pass, and Check 24 arm K3 holds the requirements series to that shape.
+
+**Residual, not closed by this entry.** B4 makes `--document` refuse a shard dir named `requirements-p<M>`, so subject
+mode is the only writer of `requirements-adversarial-p<M>`. A series under any other stem — `prd-adversarial-p<M>`,
+written by a `--document prd.md` merge — is not a requirements series to K3 and is judged by K2 alone, so a lead that
+names its series `prd-*` escapes the subject axis. Closing that needs the step to own the series name in a way a
+validator can read, which no gate does today.
+
+verify: sh [ -f core/fixtures/subject-partition/receipt.sh ] || exit 9; bash core/fixtures/subject-partition/receipt.sh "$PWD"
+
 ## BL-452 — pre-push never traces the unmapped fixtures it runs, so they stay unmapped and run on every push
 
 **DEFECT.** Filed in batch 199 on the operator's direction ("close the cycle"). A fixture with no row in

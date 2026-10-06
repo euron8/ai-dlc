@@ -1951,6 +1951,7 @@ K2_PD_AMBIG=""
 k2_pd_in_force() {  # $1 root ("" = none)  $2 terminal invoked_at  $3 terminal pass file
                     # -> K2_RUN, K2_PD_FROM, K2_PD_FALLBACK, K2_PD_AMBIG
   K2_RUN="$K2_PD"; K2_PD_FROM="the CURRENT ${K2_PD}"; K2_PD_FALLBACK=""; K2_PD_AMBIG=""
+  K2_PD_COMMIT=""; K2_PD_RELDIR=""   # read by arm K3, which pins its sibling at the same commit
   local pdp rootp rel c
   if [ -z "$1" ]; then
     K2_PD_FALLBACK="no directory above the series carries .claude/.ai-dlc-version, so no install history can be read"; return 0
@@ -1981,6 +1982,7 @@ k2_pd_in_force() {  # $1 root ("" = none)  $2 terminal invoked_at  $3 terminal p
   fi
   K2_RUN="$AC_T/k2-pd-in-force.sh"
   K2_PD_FROM="the copy of ${rel} in force at ${c:0:12}"
+  K2_PD_COMMIT="$c"; K2_PD_RELDIR="${rel%partition-document.sh}"
   # THE ADDED-COMMIT CROSS-CHECK. The commit that first ADDED the terminal pass file on HEAD's
   # history carries the branch the pass was written on: the sprint commit through a true merge,
   # the squash commit through a squash. Its partitioner differing from the time-resolved one
@@ -2068,6 +2070,9 @@ $k2_row
 EOF
   k2_term="${LAST_FILE##*/}"
   k2_resolve_file "$LAST_FILE" "$k2a"
+  # A pass naming the requirements SUBJECT MANIFEST reviews four files, not one document: it is
+  # arm K3's subject, and a one-part subject's single adversary is K3's exception 4, not K2's.
+  [ "${K2_FILE##*/}" = "requirements-subject.md" ] && K2_FILE=""
   if [ -n "$K2_FILE" ] && ! k_has_ids "$k2s"; then
     if [ ! -f "$K2_PD" ]; then
       echo "PENDING (K2 -- SECTIONS): the terminal pass ${k2_term} reviews one document and carries no shard_tool_use_ids:,"
@@ -2171,6 +2176,210 @@ if [ -n "$K2_CAND" ]; then
       scripts/ai-dlc/merge-adversarial-shards.sh --document, which writes this pass file and that
       line. Re-run the pass sectioned and write it as the NEXT pass number. This arm reads only
       the series' terminal pass, so a sectioned merged pass after this one clears it."
+  fi
+fi
+
+# =============================================================================
+# K3. SUBJECT -- the requirements series reviews the SUBJECT, sharded by its map.
+# =============================================================================
+# GATE ONLY, like K and K2: --cycle-state has exited above, and this arm reads git.
+#
+# The requirements step reviews four files as ONE subject (brief, the one SPEC, prd.md,
+# s<N>/architecture-impact.md), mapped by `partition-subject.sh --map` over what changed since the
+# base its manifest `s<N>/requirements-subject.md` records, and joined by
+# `merge-adversarial-shards.sh --subject`. Measured on the reference consumer before this arm: its
+# requirements series reviewed `prd.md` alone, sectioned by `--document`, so brief, SPEC and
+# architecture-impact were never in a sharded pass and K2 passed it -- the series was "sharded"
+# over a quarter of its subject.
+#
+#   subject    the TERMINAL pass, `$LAST_FILE`, for arm K's reason (the remedy is a NEXT pass).
+#   candidate  its basename is `requirements-adversarial-p<M>.md` in an `s<N>/` directory. That
+#              string test is the whole cost for every other series: the self-probe, the manifest
+#              read, the git reads and the map all sit BEHIND it (as J2's sit behind its drift).
+#   offence    (a) `artifact:` does not resolve to `s<N>/requirements-subject.md` -- a whole-PRD,
+#                  a `--document prd.md` merge, any other file; or
+#              (b) it does, and the SET of `shard_tool_use_ids:` keys is not the map's ordinal set
+#                  plus `cross` -- IDENTITY, never a count: a merge under another base can carry
+#                  the right number of shards over the wrong parts. A map that answers SERIAL (one
+#                  part) owes NO shard line, and a pass carrying one is the same offence.
+#   PENDING    printed, never counted, and judged on nothing:
+#              - the notarized bytes are not the disk bytes -- for the manifest, EVERY stem's disk
+#                sha must equal its `<stem>=<sha>` token; for any other file, its one sha256;
+#              - the manifest is absent or names no base;
+#              - the partitioner in force at the terminal pass cannot be pinned the way K2 pins
+#                it (`k2_pd_in_force`, the same commit for both siblings), or the pinned
+#                `partition-document.sh` has no `--scope-ref` (a copy that predates the scope
+#                cannot map a subject), or `partition-subject.sh` is not tracked at that commit;
+#                or the map answers neither 0 nor 3;
+#              - the stamp gate: the series' FIRST pass precedes the first commit stamping
+#                `.claude/.ai-dlc-version` at K3_RELEASE or later, or no such commit exists, or
+#                the first `invoked_at` is not ISO 8601 UTC. `stamp_log` is read once per root.
+#   FALLBACK   no root, no git, or this validator outside the root (the distribution layout):
+#              today's two siblings are asked and a `FALLBACK (K3 partitioner)` line says so.
+#
+# FALSE-POSITIVE SET, and how it reached zero: on the reference consumer as pulled every
+# requirements series predates the stamp, so every candidate is PENDING. The narrowings are the
+# stamp keyed on the FIRST pass (a series finishes under the rules it opened under), the bytes gate
+# (a subject repaired after its terminal pass is judged by nothing), and the pin (a map read off a
+# later partitioner convicts a dispatch that obeyed the one it ran under -- K2's measured case).
+K3_RELEASE="0.735.0"
+k3_keys() {  # $1 a shard_tool_use_ids value -> its key set, numeric keys de-padded, sorted, one per line
+  printf '%s\n' $1 | awk -F= 'NF >= 2 && $2 ~ /^toolu_./ { k = $1; if (k ~ /^[0-9]+$/) k = k + 0; print k }' | LC_ALL=C sort -u
+}
+k3_want() {  # $1 a map file (rc 0) -> the ordinal set plus cross, de-padded, sorted
+  { awk -F'\t' '$1 ~ /^[0-9]+$/ { print $1 + 0 }' "$1"; echo cross; } | LC_ALL=C sort -u
+}
+case "${LAST_FILE##*/}" in
+  requirements-adversarial-p[0-9]*.md)
+    k3_dir="$(cd "$(dirname "$LAST_FILE")" 2>/dev/null && pwd -P)"
+    case "${k3_dir##*/}" in s[0-9]*) k3_go=1 ;; *) k3_go=0 ;; esac ;;
+  *) k3_go=0 ;;
+esac
+if [ "$N" -gt 0 ] && [ "$k3_go" -eq 1 ]; then
+  # THE SELF-PROBE, both directions, before the corpus: the key set is an IDENTITY (same count,
+  # other set -> differs), padding-blind, and blind to a key with no toolu_ id.
+  printf '01\ta\n02\tb\n03\tc\n' > "$AC_T/k3-map" || { echo "validate-adversarial-convergence.sh: arm K3 self-probe could not stage; no verdict" >&2; exit 2; }
+  k3p_w="$(k3_want "$AC_T/k3-map" | tr '\n' ' ')"
+  k3p_1="$(k3_keys " 1=toolu_a 02=toolu_b 3=toolu_c cross=toolu_d" | tr '\n' ' ')"
+  k3p_2="$(k3_keys " 1=toolu_a 2=toolu_b 4=toolu_c cross=toolu_d" | tr '\n' ' ')"
+  k3p_3="$(k3_keys " 1=toolu_a 2=toolu_b 3= cross=toolu_d" | tr '\n' ' ')"
+  if [ "$k3p_w" != "$k3p_1" ] || [ "$k3p_w" = "$k3p_2" ] || [ "$k3p_w" = "$k3p_3" ]; then
+    echo "validate-adversarial-convergence.sh: arm K3 self-probe failed (want '$k3p_w', same set '$k3p_1', other set '$k3p_2', empty id '$k3p_3'); no verdict" >&2
+    exit 2
+  fi
+  IFS=. read -r k3_maj k3_min k3_pat <<EOF
+$K3_RELEASE
+EOF
+  k3_pred="${k3_maj}.$((k3_min - 1)).${k3_pat}"
+  k3_probe="$(printf '%s\n' 'C 2026-01-02T00:00:00Z' "+version: $K3_RELEASE" 'C 2026-01-01T00:00:00Z' "+version: $k3_pred" \
+              'C 2026-01-03T00:00:00Z' '+version: 9.0.0' | K_RELEASE="$K3_RELEASE" k_stamp_parse)"
+  k3_probe_none="$(printf '%s\n' 'C 2026-01-01T00:00:00Z' "+version: $k3_pred" | K_RELEASE="$K3_RELEASE" k_stamp_parse)"
+  if [ "$k3_probe" != "2026-01-02T00:00:00Z" ] || [ -n "$k3_probe_none" ]; then
+    echo "validate-adversarial-convergence.sh: arm K3 stamp-parser self-probe failed (got '$k3_probe', near-miss '$k3_probe_none'); no verdict" >&2
+    exit 2
+  fi
+
+  k3_term="${LAST_FILE##*/}"
+  k3_mf="$k3_dir/requirements-subject.md"
+  k3_art="$(block_field "$LAST_FILE" 'artifact')"; k3_art="${k3_art%%[[:space:]]*}"
+  # Lowercase the VALUES only: a stem name (`SPEC`) carries letters in A-F too.
+  k3_sha="$(block_field "$LAST_FILE" 'artifact_sha' | awk '{ for (i = 1; i <= NF; i++) { n = index($i, "=")
+    if (n) $i = substr($i, 1, n) tolower(substr($i, n + 1)); else $i = tolower($i) } print }')"
+  k3_ids="$(block_field "$LAST_FILE" 'shard_tool_use_ids')"
+  k2_resolve_file "$LAST_FILE" "$k3_art"; k3_file="$K2_FILE"
+  [ -z "$k3_file" ] || k3_file="$(cd "$(dirname "$k3_file")" 2>/dev/null && pwd -P)/${k3_file##*/}"
+  k3_why=""; k3_pending=""
+  if [ "$k3_file" != "$k3_mf" ]; then
+    # (a) not the subject. Judged only on the bytes it reviewed.
+    if [ -z "$k3_file" ]; then
+      k3_pending="its artifact '${k3_art}' resolves to no file, so the bytes it reviewed cannot be named"
+    elif [ "${#k3_sha}" -ne 64 ] || [ "$(k2_sha "$k3_file")" != "$k3_sha" ]; then
+      k3_pending="it reviews ${k3_file}, whose disk bytes are not the one sha256 it notarized ('${k3_sha}')"
+    else
+      k3_why="it reviews ${k3_file}, not the requirements subject (its 'artifact:' must be ${k3_mf})"
+    fi
+  elif [ ! -f "$k3_mf" ]; then
+    k3_pending="the subject manifest ${k3_mf} is gone"
+  else
+    # (b) the subject: every stem's disk bytes, then the map in force.
+    k3_root=""; k3_first_rel="$(awk '/^file: / { print $3; exit }' "$k3_mf")"
+    k3_w="$k3_dir"
+    while [ -n "$k3_w" ] && [ "$k3_w" != "/" ]; do
+      if [ -n "$k3_first_rel" ] && [ -f "$k3_w/$k3_first_rel" ]; then k3_root="$k3_w"; break; fi
+      k3_w="${k3_w%/*}"
+    done
+    k3_nstem=0; k3_moved=""
+    if [ -n "$k3_root" ]; then
+      while read -r k3_k k3_st k3_rel; do
+        [ "$k3_k" = "file:" ] || continue
+        k3_nstem=$((k3_nstem + 1))
+        k3_n="$(printf '%s\n' $k3_sha | awk -F= -v s="$k3_st" '$1 == s { print $2; exit }')"
+        [ -f "$k3_root/$k3_rel" ] && [ -n "$k3_n" ] && [ "$(k2_sha "$k3_root/$k3_rel")" = "$k3_n" ] || k3_moved="$k3_moved $k3_st"
+      done < "$k3_mf"
+    fi
+    if [ -z "$k3_root" ] || [ "$k3_nstem" -ne 4 ]; then
+      k3_pending="the subject manifest ${k3_mf} does not name four files under one root"
+    elif [ -n "$k3_moved" ]; then
+      k3_pending="the disk bytes of${k3_moved} are not the bytes it notarized -- judged only on reviewed bytes"
+    else
+      # The partitioner in force at the terminal pass: K2's pin, both siblings at one commit.
+      k3_vroot=""; k3_vw="$k3_dir"
+      while [ -n "$k3_vw" ]; do
+        if [ -f "$k3_vw/.claude/.ai-dlc-version" ]; then k3_vroot="$k3_vw"; break; fi
+        k3_vw="${k3_vw%/*}"
+      done
+      k2_pd_in_force "$k3_vroot" "${P_AT[$((N - 1))]:-}" "$LAST_FILE"
+      mkdir -p "$AC_T/k3" || { echo "validate-adversarial-convergence.sh: arm K3 could not stage; no verdict" >&2; exit 2; }
+      k3_ps_from=""
+      if [ -n "$K2_PD_FALLBACK" ]; then
+        cp "$(dirname "$K2_PD")/partition-subject.sh" "$AC_T/k3/partition-subject.sh" 2>/dev/null \
+          && cp "$K2_PD" "$AC_T/k3/partition-document.sh" 2>/dev/null && k3_ps_from="the CURRENT partition-subject.sh"
+        [ -n "$k3_ps_from" ] || k3_pending="partition-subject.sh or partition-document.sh is not installed beside this validator"
+        [ -n "$k3_ps_from" ] && echo "FALLBACK (K3 partitioner): ${k3_term} is judged by ${k3_ps_from} -- ${K2_PD_FALLBACK}."
+      elif [ -n "$K2_PD_AMBIG" ]; then
+        k3_pending="the in-force partitioner is ambiguous (${K2_PD_AMBIG}); a merge re-dated the install"
+      elif ! ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+               git -C "$k3_vroot" cat-file blob "${K2_PD_COMMIT}:./${K2_PD_RELDIR}partition-subject.sh" 2>/dev/null ) > "$AC_T/k3/partition-subject.sh"; then
+        k3_pending="partition-subject.sh is not tracked at ${K2_PD_COMMIT:0:12}, the commit in force at the terminal pass"
+      else
+        cp "$K2_RUN" "$AC_T/k3/partition-document.sh" && k3_ps_from="the copy in force at ${K2_PD_COMMIT:0:12}"
+      fi
+      if [ -z "$k3_pending" ] && ! grep -q -- '--scope-ref' "$AC_T/k3/partition-document.sh"; then
+        k3_pending="the partition-document.sh ${k3_ps_from} has no --scope-ref, so it cannot map a subject"
+      fi
+      if [ -z "$k3_pending" ]; then
+        k3_sprint="${k3_dir##*/}"; k3_sprint="${k3_sprint#s}"
+        bash "$AC_T/k3/partition-subject.sh" --map "$k3_sprint" --manifest "$k3_mf" > "$AC_T/k3-real" 2> "$AC_T/k3-err"; k3rc=$?
+        k3_have="$(k3_keys "$k3_ids" | tr '\n' ' ')"
+        if [ "$k3rc" -eq 3 ]; then
+          [ -z "$k3_have" ] || k3_why="the subject maps to ONE part ($(head -1 "$AC_T/k3-real")), which one adversary reviews, yet the pass carries shard_tool_use_ids '${k3_ids# }'"
+        elif [ "$k3rc" -eq 0 ]; then
+          k3_want_s="$(k3_want "$AC_T/k3-real" | tr '\n' ' ')"
+          [ "$k3_have" = "$k3_want_s" ] \
+            || k3_why="its shard_tool_use_ids key set {${k3_have% }} is not the subject map's ordinals plus cross {${k3_want_s% }} (asked of ${k3_ps_from}, base read from ${k3_mf})"
+        else
+          k3_pending="partition-subject.sh --map ${k3_sprint} exited ${k3rc}, neither a map (0) nor SERIAL (3): $(head -1 "$AC_T/k3-err")"
+        fi
+      fi
+    fi
+  fi
+  if [ -n "$k3_pending" ]; then
+    echo "PENDING (K3 -- SUBJECT): the terminal pass ${k3_term}: ${k3_pending}."
+  elif [ -n "$k3_why" ]; then
+    k3_first="$(basename "${P_FILE[0]}")"; k3_at="${P_AT[0]:-}"
+    k3_sroot=""; k3_sw="$(cd "$(dirname "${P_FILE[0]}")" 2>/dev/null && pwd)"
+    while [ -n "$k3_sw" ]; do
+      if [ -f "$k3_sw/.claude/.ai-dlc-version" ]; then k3_sroot="$k3_sw"; break; fi
+      k3_sw="${k3_sw%/*}"
+    done
+    k3_stamp=""
+    if [ -n "$k3_sroot" ]; then
+      stamp_log "$k3_sroot"
+      k3_stamp="$(K_RELEASE="$K3_RELEASE" k_stamp_parse < "$STAMP_LOG")"
+    fi
+    case "$k3_at" in
+      [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) k3_atok=1 ;;
+      *) k3_atok=0 ;;
+    esac
+    if [ -z "$k3_stamp" ]; then
+      echo "PENDING (K3 -- SUBJECT): the terminal pass ${k3_term}: ${k3_why};"
+      echo "      no commit${k3_sroot:+ in $k3_sroot} stamps .claude/.ai-dlc-version at ${K3_RELEASE} or later -- not owed yet."
+    elif [ "$k3_atok" -eq 0 ]; then
+      echo "PENDING (K3 -- SUBJECT): the terminal pass ${k3_term}: ${k3_why};"
+      echo "      the series' first pass ${k3_first} has no ISO 8601 UTC invoked_at ('${k3_at}') to date against ${k3_stamp}."
+    elif [[ "$k3_at" < "$k3_stamp" ]]; then
+      echo "PENDING (K3 -- SUBJECT): the terminal pass ${k3_term}: ${k3_why};"
+      echo "      the series opened (${k3_first}, ${k3_at}) before ${K3_RELEASE} was stamped (${k3_stamp}). Legacy series."
+    else
+      err "K3 -- SUBJECT" "${k3_term}: ${k3_why}. The series opened (${k3_at}) after ${K3_RELEASE}
+      was stamped (${k3_stamp}), so the requirements step's subject axis binds it (Rule 28, \"Split
+      dispatch\": subject): one adversary per part scripts/ai-dlc/partition-subject.sh --map prints,
+      plus one cross-part adversary, joined by scripts/ai-dlc/merge-adversarial-shards.sh --subject,
+      which writes this pass file with 'artifact:' = the subject manifest. A subject that maps to one
+      part is reviewed by one adversary that writes the pass itself, naming the manifest, with no
+      shard line. Re-run the pass that way and write it as the NEXT pass number; this arm reads only
+      the series' terminal pass."
+    fi
   fi
 fi
 

@@ -721,7 +721,14 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   3193, tip 3225 (the gate's own validator-fork-budget run read 3225 twice), so +32. I121 0 -> 17 and
 #   I122 0 -> 11 are the two role-contract paragraph arms; I79 108 -> 113 counts Rule 32. HIGH reading
 #   3225 plus the usual 6.
-FORK_BUDGET=3231
+#
+#   RAISED TO 3245 FOR ONE NEW DISTRIBUTION SCRIPT, NOT FOR A NEW ARM. `fork-profile.sh --section
+#   by-arm --stable`, base `origin/main` 199721b6 then the 0.735.0 tip f12ed160, in ONE worktree at
+#   the same path: base 3226, tip 3239 (spread 3238-3239; the gate's own validator-fork-budget run
+#   read 3239 twice), so +13. Every arm that moved is a per-file walk counting
+#   `partition-subject.sh`: I75 351 -> 361, I84 295 -> 297, I83 146 -> 147. HIGH reading 3239 plus
+#   the usual 6.
+FORK_BUDGET=3245
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

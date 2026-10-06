@@ -2060,10 +2060,10 @@ resolution record's `operator_authorization` against ground truth; the gate **fa
 if a resolution cites an operator message the corpus does not contain — and fails closed
 too if `--transcript` is omitted, so a forgotten flag cannot silently disarm the check. It
 reads the `findings_critical` / `findings_major` / `artifact_sha` / `verdict` fields of every
-pass in the series (mapping in `team-roles/adversary.md`) and enforces thirteen arms:
+pass in the series (mapping in `team-roles/adversary.md`) and enforces fourteen arms:
 **A** VOCABULARY, **B** CONSISTENCY, **C** DIVERGENCE (scope-relative), **D** TERMINAL,
 **E** STALL, **F** RESOLUTION, **G** CHRONOLOGY, **H** REPAIR-RECORD, **I** RESOLUTION
-CEILING, **J** RE-OPEN, **J2** TERMINAL DRIFT, **K** SHARD, **K2** SECTIONS. (This list is
+CEILING, **J** RE-OPEN, **J2** TERMINAL DRIFT, **K** SHARD, **K2** SECTIONS, **K3** SUBJECT. (This list is
 hand-maintained and nothing joins it to the script's own `err` labels, so it can drift — and
 had: it read "eight arms: A–H" for several releases while the script also carried arm J, and
 "ten arms" after K and K2 shipped.)

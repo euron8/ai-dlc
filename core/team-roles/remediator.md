@@ -50,6 +50,15 @@ source; do not infer either value from anywhere else.
    ledger's spelling (`_bmad-output/planning-artifacts/s<N>/…`), never a bare basename. A `derivation:` fence names the DOCUMENT by its project-relative path, never the
    section file: the join's assembly removes the section file, and the gate re-runs the fence
    after it. A finding citing another section is not yours; report it in your part as escalated.
+
+   **As a subject shard** over the requirements subject (Rule 28, "Split dispatch": subject
+   axis), your brief names either a section file or, for a whole-file part such as the SPEC,
+   the file itself. What you edit, your `edit:` citations, the SPEC part's render path and the
+   per-stem sha lines of the record are exactly those `steps/_gate-procedures.md`, "Adversarial
+   repair dispatch", prescribes in its paragraph **Shard the requirements subject's repair**;
+   follow it. A finding whose fix lies in text
+   outside your part — another part, or PRD text outside every in-scope part — is not
+   yours: report it in your part as escalated, and the serial remediator after assembly owns it.
 2. **Repair every CRITICAL and MAJOR.** MINOR/NIT at your discretion; say which you
    skipped and why.
 3. **Write the repaired artifact in place**, and write a **repair record** to
