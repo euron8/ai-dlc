@@ -2969,6 +2969,134 @@ d/-p'
         *) bad "UNREAD CONTROL MUTANT: expected fxu mapped, got '$UM'" ;;
       esac
     fi
+
+    # `--local-map`, THE DERIVER HALF, DRIVEN WHOLE IN THE STUB-STREAM WORLD. The hook starts this mode
+    # detached and nobody reads its output, so each condition below is scored on what it WRITES to the
+    # local map. fxl is a fixture the committed map does not name; it prints two verdict lines.
+    # Its own stub sandbox-exec strips `-D FXTAG=<fx>` and tags every report it writes, the way the
+    # profile's `(with message ...)` does; STUB_TRIP adds an exec of a refused binary, STUB_DROP a
+    # drop notice, and the stream stub delivers nothing for the liveness probe when STUB_DEADLIVE is set.
+    SL="$WORK/lmstub"; mkdir -p "$SL" || broken "mkdir failed"
+    cat > "$SL/sandbox-exec" <<'STUB'
+#!/bin/bash
+tag=""
+[ "$1" = -D ] && { tag="${2#FXTAG=}"; shift 2; }
+[ "$1" = -f ] && shift 2
+emit() { printf '%s\n' "$1" >> "$STUB_FEED"; [ -z "$tag" ] || printf 'FXTAG=%s;\n' "$tag" >> "$STUB_FEED"; }
+_c=1; [ "$1" = env ] && { _c=2; for _w in "${@:2}"; do case "$_w" in *=*) _c=$((_c+1)) ;; *) break ;; esac; done; }
+if [ "${!_c}" = bash ]; then
+  while IFS= read -r p; do [ -n "$p" ] && emit "x Sandbox: bash(1) allow file-read-data $PWD/$p"; done < "$STUB_SB"
+  [ -z "${STUB_TRIP:-}" ] || printf 'x Sandbox: bash(1) allow process-exec* /usr/bin/sudo\nFXTAG=%s;TRIP\n' "$tag" >> "$STUB_FEED"
+  [ -z "${STUB_DROP:-}" ] || printf '=== Messages dropped during live streaming\n' >> "$STUB_FEED"
+else
+  for a in "$@"; do case "$a" in /*) emit "x Sandbox: cat(1) allow file-read-data $a" ;; esac; done
+fi
+exec "$@"
+STUB
+    cat > "$SL/logstream" <<'STUB'
+#!/bin/bash
+case "$*" in *FXTAG=__liveness__\;*) [ -z "${STUB_DEADLIVE:-}" ] || exec sleep 30 ;; esac
+exec tail -n 0 -f "$STUB_FEED"
+STUB
+    chmod +x "$SL/sandbox-exec" "$SL/logstream"
+    : > "$SL/feed"
+    SL_TR="$(cd "$WORK" && pwd -P)/lm.tr"
+    LMF="$BR/.git/ai-dlc-fixture-readsets.local"
+    mkdir -p "$BR/core/fixtures/fxl" || broken "mkdir failed"
+    printf '#!/bin/bash\ncat src/a.sh >/dev/null\necho "  ok    one"\necho "  ok    two"\n' > "$BR/core/fixtures/fxl/run.sh"
+    ( cd "$BR" && git add -A && git -c user.email=f@f -c user.name=f commit -qm fxl ) >/dev/null 2>&1 || broken "could not seed fxl"
+    grep -q '^fxl	' "$BR/.ai-dlc-fixture-readsets.tsv" && broken "fxl has committed rows, so its local rows would be pruned and every arm below would read an empty map"
+    printf '%s\n' core/fixtures/fxl/run.sh src/a.sh > "$SL/whole.list"
+    printf '%s\n' core/fixtures/fxl/run.sh > "$SL/lossy.list"
+    sed "s|^LOG_BIN=/usr/bin/log\$|LOG_BIN=\"$SL/logstream\"|" "$DERIVER" > "$SL/deriver.sh"
+    cmp -s "$DERIVER" "$SL/deriver.sh" && broken "the LOG_BIN line is gone, so the --local-map world cannot point the stream at a stub"
+    # lm_run <deriver copy> <stream list> <stash: same|diff|none> [env...]; prints
+    # "<rc>|<fxl path rows>|<deriver row ok>|<discards n>|<other kept>|<zz kept>|<trace root gone>|<why>"
+    lm_run() {
+      local dv="$1" sl="$2" st="$3" r rows dok dn ok2 zz gone
+      shift 3
+      cp "$dv" "$STUB_DERIVER"
+      mkdir -p "$LMF.logs"
+      case "$st" in
+        same) printf '  ok    one\n  ok    two\n' > "$LMF.logs/fxl" ;;
+        diff) printf '  ok    one\n  FAIL  two\n' > "$LMF.logs/fxl" ;;
+        none) rm -f "$LMF.logs/fxl" ;;
+      esac
+      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SL:$PATH" STUB_FEED="$SL/feed" STUB_SB="$sl" "$@" \
+          AI_DLC_READSET_TRACE_ROOT="$SL_TR" bash core/scripts/derive-fixture-readsets.sh --list fxl --tracer sandbox --local-map "$LMF" ) > "$WORK/lm.out" 2>&1 </dev/null
+      r=$?
+      ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
+      rows="$(grep -c '^fxl	[^#]' "$LMF" 2>/dev/null)" || rows=0
+      # Keyed on the copy that RAN ($dv): the checkout above has already restored $STUB_DERIVER.
+      dok=no; grep -qxF "fxl	#deriver	$(shasum -a 256 -- "$dv" | cut -d' ' -f1)" "$LMF" 2>/dev/null && dok=yes
+      dn="$(awk -F'\t' '$1 == "fxl" && $2 == "#discards" { print $3 }' "$LMF" 2>/dev/null)"
+      ok2=no; grep -q '^other	' "$LMF" 2>/dev/null && ok2=yes
+      zz=no; grep -q '^zz	src/zz.sh	' "$LMF" 2>/dev/null && zz=yes
+      gone=no; [ -e "$SL_TR" ] || gone=yes
+      printf '%s|%s|%s|%s|%s|%s|%s|%s' "$r" "$rows" "$dok" "${dn:--}" "$ok2" "$zz" "$gone" \
+        "$(grep -m1 -E '^  fxl +OMITTED|LIVENESS|LINKED' "$WORK/lm.out" | tr -s ' ' | sed 's/^ *//' | cut -c1-120)"
+    }
+    lm_seed() { printf 'other\tsrc/other.sh\tabc\nzz\tsrc/zz.sh\tdef\nzz\t#deriver\tx\n' > "$LMF"; }
+    lm_arm() { # <label> <result> <glob> <ok text>
+      TRACE_ARMS=$((TRACE_ARMS+1))
+      case "$2" in $3) ok "$4" ;; *) bad "$1: expected '$3', got '$2' — $(tail -2 "$WORK/lm.out" | tr '\n' ' ')" ;; esac
+    }
+    lm_seed; L1="$(lm_run "$SL/deriver.sh" "$SL/whole.list" same)"
+    lm_arm "LOCAL clean" "$L1" "0|2|yes|-|no|yes|yes|" \
+      "LOCAL: a clean --local-map trace records fxl's two rows and its #deriver key, prunes the COMMITTED fixture's local row, keeps an untraced one, and removes its trace root"
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    if awk -F'\t' -v s="$(shasum -a 256 -- "$BR/src/a.sh" | cut -d' ' -f1)" '$1 == "fxl" && $2 == "src/a.sh" && $3 == s { f = 1 } END { exit !f }' "$LMF" \
+       && ! grep -q '^fxl	' "$BR/.ai-dlc-fixture-readsets.tsv"; then
+      ok "  and each row carries the sha256 of the file it names, while the committed map is untouched"
+    else
+      bad "  fxl's src/a.sh row does not carry its sha256, or the committed map gained an fxl row: $(grep '^fxl' "$LMF" | tr '\n' ' ')"
+    fi
+    lm_seed; L2="$(lm_run "$SL/deriver.sh" "$SL/whole.list" same STUB_TRIP=1)"
+    lm_arm "LOCAL TRIP" "$L2" "0|0|no|1|no|yes|yes|fxl OMITTED (TRIP: 1 exec(s)*" "LOCAL: an exec of a refused binary in fxl's window DISCARDS the trace — no rows, one #discards row naming TRIP"
+    L2B="$(lm_run "$SL/deriver.sh" "$SL/whole.list" same STUB_TRIP=1)"
+    lm_arm "LOCAL TRIP x2" "$L2B" "0|0|no|2|*" "  and a second discard on the same key counts 2 — the hook holds the fixture back at 3"
+    L2C="$(lm_run "$SL/deriver.sh" "$SL/whole.list" same)"
+    lm_arm "LOCAL recover" "$L2C" "0|2|yes|-|*" "  and a clean trace after it records the rows and clears the discard count"
+    lm_seed; L3="$(lm_run "$SL/deriver.sh" "$SL/whole.list" same STUB_DROP=1)"
+    lm_arm "LOCAL drop" "$L3" "0|0|no|1|*|*|yes|fxl OMITTED (the stream dropped reports*" "LOCAL: a DROP NOTICE in fxl's window discards the trace"
+    lm_seed; L4="$(lm_run "$SL/deriver.sh" "$SL/lossy.list" same)"
+    lm_arm "LOCAL canary" "$L4" "0|0|no|1|*|*|yes|fxl OMITTED (LOSS CANARY: 1 path(s)*" "LOCAL: the LOSS CANARY (a read the stream never reported) discards the trace"
+    lm_seed; L5="$(lm_run "$SL/deriver.sh" "$SL/whole.list" diff)"
+    lm_arm "LOCAL verdict" "$L5" "0|0|no|1|*|*|yes|fxl OMITTED (VERDICT: the sandboxed run's verdict lines differ*" "LOCAL: a sandboxed run whose verdict lines differ from the normal run's is discarded"
+    lm_seed; L6="$(lm_run "$SL/deriver.sh" "$SL/whole.list" none)"
+    lm_arm "LOCAL nolog" "$L6" "0|0|no|1|*|*|yes|fxl OMITTED (VERDICT: no normal-run log*" "  and so is one with no stashed normal-run log to compare against"
+    lm_seed; L7="$(lm_run "$SL/deriver.sh" "$SL/whole.list" same STUB_DEADLIVE=1)"
+    lm_arm "LOCAL liveness" "$L7" "1|0|no|-|yes|yes|yes|ERROR: LIVENESS*" "LOCAL: a stream that never sees the 1s liveness probe REFUSES before tracing — the local map is untouched and the trace root is removed"
+    ( cd "$BR" && git worktree add -q "$WORK/lmwt" -b lmwt ) >/dev/null 2>&1 || broken "could not add a linked worktree for the --local-map arm"
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    LW_R="$( ( cd "$WORK/lmwt" && env PATH="$SL:$PATH" bash core/scripts/derive-fixture-readsets.sh --list fxl --tracer sandbox --local-map "$WORK/lmwt.local" ) 2>&1 )"; LW_RC=$?
+    if [ "$LW_RC" -eq 1 ] && grep -q 'LINKED worktree' <<< "$LW_R" && [ ! -e "$WORK/lmwt.local" ]; then
+      ok "LOCAL: from a LINKED worktree --local-map refuses before parsing and writes no local map"
+    else
+      bad "LOCAL: a linked worktree did not refuse --local-map at 1 with no file written (rc $LW_RC): $(printf '%s' "$LW_R" | head -2 | tr '\n' ' ')"
+    fi
+    # Six mutant derivers, each a cmp -s guarded copy, each scored on the arm it must break.
+    sed '/^    \[ "\$trip" -eq 0 \] || why=/d' "$SL/deriver.sh" > "$SL/d.notrip.sh"
+    sed 's/^    elif \[ "\$(readset_verdict_sig "\$WORK\/\$fx.log"/    elif false \&\& [ "$(readset_verdict_sig "$WORK\/$fx.log"/' "$SL/deriver.sh" > "$SL/d.noverdict.sh"
+    sed 's/^  \[ "\$lv_ok" -eq 1 \] || die /  : || die /' "$SL/deriver.sh" > "$SL/d.nolive.sh"
+    sed '/^\[ -z "\$LOCAL_MAP" \] || trap /d' "$SL/deriver.sh" > "$SL/d.notrap.sh"
+    sed 's/n = ((f in pk) \&\& pk\[f\] == dk\[f\]) ? pn\[f\] + 1 : 1/n = 1/' "$SL/deriver.sh" > "$SL/d.nocount.sh"
+    sed 's/^      if (\$2 in com) next$/      if (0) next/' "$SL/deriver.sh" > "$SL/d.noprune.sh"
+    lm_mut() { # <name> <copy> <stream list> <stash> <arm> <killing glob> [env...]
+      local n="$1" c="$2" sl="$3" st="$4" arm="$5" g="$6" r; shift 6
+      TRACE_ARMS=$((TRACE_ARMS+1))
+      if cmp -s "$SL/deriver.sh" "$c"; then bad "LOCAL MUTANT $n did not apply"; return; fi
+      [ "$n" = nocount ] || lm_seed
+      r="$(lm_run "$c" "$sl" "$st" "$@")"
+      case "$r" in $g) ok "LOCAL MUTANT $n is KILLED by $arm: '$r'" ;; *) bad "LOCAL MUTANT $n SURVIVED $arm: '$r'" ;; esac
+    }
+    lm_mut notrip "$SL/d.notrip.sh" "$SL/whole.list" same "LOCAL TRIP" "0|2|yes|*" STUB_TRIP=1
+    lm_mut noverdict "$SL/d.noverdict.sh" "$SL/whole.list" diff "LOCAL verdict" "0|2|yes|*"
+    lm_mut nolive "$SL/d.nolive.sh" "$SL/whole.list" same "LOCAL liveness" "0|2|yes|*" STUB_DEADLIVE=1
+    lm_mut notrap "$SL/d.notrap.sh" "$SL/whole.list" same "LOCAL clean" "0|2|yes|-|*|*|no|*"
+    lm_mut noprune "$SL/d.noprune.sh" "$SL/whole.list" same "LOCAL clean" "0|2|yes|-|yes|*"
+    lm_seed; lm_run "$SL/deriver.sh" "$SL/whole.list" same STUB_TRIP=1 >/dev/null
+    lm_mut nocount "$SL/d.nocount.sh" "$SL/whole.list" same "LOCAL TRIP x2" "0|0|no|1|*" STUB_TRIP=1
   fi
 fi
 

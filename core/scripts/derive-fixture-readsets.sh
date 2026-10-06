@@ -690,7 +690,7 @@ readset_local_write() {
       if ($3 == "#discards") { pn[$2] = $4; pk[$2] = $5 }
       if (index(traced, " " $2 " ") == 0) { sub(/^L\t/, ""); print; next }
       next }
-    $1 == "O" { if ($2 in com) next; sub(/^O\t/, ""); print; ok[$2] = 1; next }
+    $1 == "O" { if ($2 in com) next; ok[$2] = 1; sub(/^O\t/, ""); print; next }
     END {
       for (f in ok) print f "\t#deriver\t" dsha
       for (f in dk) { if (f in com) continue; n = ((f in pk) && pk[f] == dk[f]) ? pn[f] + 1 : 1; print f "\t#discards\t" n "\t" dk[f] "\t" dw[f] }
