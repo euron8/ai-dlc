@@ -43,6 +43,9 @@ set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# lib.sh rebinds HERE to ITS directory (it reads the seeds from there), so this file's own path is
+# captured now: the reap reads the DECLARED mutant set from it.
+SELF="$HERE/run.sh"
 NAME="remediator-shard-join-mutants"
 ROWS=""
 while [ "$#" -gt 0 ]; do
@@ -289,7 +292,7 @@ nd="$(ndone)"
 # DECLARED is read off this file's own source, between the markers; JUDGED is counted below as the
 # reap walks the index. A control alone is NOT a battery: with every mutant call deleted the
 # control still dispatches, still holds, and the run would otherwise read PASS.
-ndecl="$(awk '/^# ---- BEGIN JX MUTANTS/ { on = 1; next } /^# ---- END JX MUTANTS/ { on = 0 } on && /^mutant2? "/' "$HERE/run.sh" | grep -c .)" || ndecl=0
+ndecl="$(awk '/^# ---- BEGIN JX MUTANTS/ { on = 1; next } /^# ---- END JX MUTANTS/ { on = 0 } on && /^mutant2? "/' "$SELF" | grep -c .)" || ndecl=0
 if [ "$NDISP" -ge 2 ] && [ "$nidx" -eq "$NDISP" ] && [ "$nd" -eq "$NDISP" ]; then
   ok "MR: $NDISP scorers dispatched, $nidx recorded, $nd completed"
 else
