@@ -64,6 +64,24 @@ printf -- '- FR-S9-1: architecture_impact: none\n' > "$PA/s9/architecture-impact
 EDITED="$(grep -n '^current line 7 EDITED' "$PA/prd.md" | cut -d: -f1)"
 [ -n "$EDITED" ] || exit 9
 export AI_DLC_PROJECT_ROOT="$P"
+sha() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1; else sha256sum "$1" | cut -d' ' -f1; fi; }
+
+# ---- the consumer's shape, written FIRST: a --document merge of prd.md alone ------------------
+# The reference consumer's sprint holds this pass from before it had a subject manifest, and
+# merge-adversarial-shards.sh B4 now refuses that merge once the manifest exists (BL-461). So it
+# is written here, before (a) writes the manifest, and parked OUTSIDE the sprint dir until (c), so
+# (b) and (c)'s first validator call read a sprint dir holding only what they seed.
+DD="$PA/s9/shards/prd-p3"; mkdir -p "$DD" || exit 9
+DMAP="$(bash "$S/partition-document.sh" --map "$PA/prd.md")" || miss "(c) the PRD does not partition unscoped"
+PSHA="$(sha "$PA/prd.md")"
+for o in $(printf '%s\n' "$DMAP" | cut -f1) cross; do
+  { printf '# d %s\n\n## Findings\n\n<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\n' "$o"
+    printf 'invoked_at: 2026-10-03T10:00:00Z\ntool_use_id: toolu_d%s\nmode: subagent\nlead_role: requirements\n' "$o"
+    printf 'artifact: _bmad-output/planning-artifacts/prd.md\nartifact_sha: %s\nfindings_critical: 0\nfindings_major: 0\n' "$PSHA"
+    printf 'verdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n'; } > "$DD/$o.md"
+done
+MO="$(bash "$S/merge-adversarial-shards.sh" --document "$PA/prd.md" "$DD" 2>&1)" || miss "(c) the --document merge refused with no manifest present: $(printf '%s' "$MO" | head -1)"
+mv "$PA/s9/prd-adversarial-p3.md" "$W/parked-p3.md" && mv "$DD" "$W/parked-prd-p3" || exit 9
 
 # ---- (a) the map ------------------------------------------------------------------------
 MAP="$(bash "$S/partition-subject.sh" --map 9 2>&1)"; rc=$?
@@ -83,7 +101,6 @@ for s in 6 7 8; do
 done
 
 # ---- (b) the subject merge ----------------------------------------------------------------
-sha() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1; else sha256sum "$1" | cut -d' ' -f1; fi; }
 SL="product-brief=$(sha "$PA/product-brief.md") SPEC=$(sha "$P/_bmad-output/specs/s9/kernel/SPEC.md") prd=$(sha "$PA/prd.md") architecture-impact=$(sha "$PA/s9/architecture-impact.md")"
 ORDS="$(printf '%s\n' "$MAP" | cut -f1)"
 shard() { # <dir> <key> <n-major> <cite> <minute>
@@ -116,18 +133,9 @@ printf -- '- disposition: repaired\n- edit: prd.md:%s\n- derivation: the seeded 
 MO="$(bash "$S/merge-adversarial-shards.sh" --subject 9 "$D2" 2>&1)" || miss "(c) merge of pass 2: $(printf '%s' "$MO" | head -1)"
 VO="$(bash "$S/validate-adversarial-convergence.sh" --series "$PA/s9/requirements-adversarial-p" 2>&1)"; rc=$?
 [ "$rc" -eq 0 ] || miss "(c) the validator exited $rc on a converged sharded subject series: $(printf '%s\n' "$VO" | grep -m1 'FAIL')"
-# The consumer's shape: the terminal pass is a --document merge of prd.md alone.
-DD="$PA/s9/shards/prd-p3"; mkdir -p "$DD" || exit 9
-DMAP="$(bash "$S/partition-document.sh" --map "$PA/prd.md")" || miss "(c) the PRD does not partition unscoped"
-PSHA="$(sha "$PA/prd.md")"
-for o in $(printf '%s\n' "$DMAP" | cut -f1) cross; do
-  { printf '# d %s\n\n## Findings\n\n<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\n' "$o"
-    printf 'invoked_at: 2026-10-03T10:00:00Z\ntool_use_id: toolu_d%s\nmode: subagent\nlead_role: requirements\n' "$o"
-    printf 'artifact: _bmad-output/planning-artifacts/prd.md\nartifact_sha: %s\nfindings_critical: 0\nfindings_major: 0\n' "$PSHA"
-    printf 'verdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n'; } > "$DD/$o.md"
-done
-MO="$(bash "$S/merge-adversarial-shards.sh" --document "$PA/prd.md" "$DD" 2>&1)" || miss "(c) the --document merge refused: $(printf '%s' "$MO" | head -1)"
-mv "$PA/s9/prd-adversarial-p3.md" "$PA/s9/requirements-adversarial-p3.md" || exit 9
+# The consumer's shape: the terminal pass is the --document merge of prd.md alone, written before
+# the manifest existed and parked; it enters the series now.
+mv "$W/parked-p3.md" "$PA/s9/requirements-adversarial-p3.md" || exit 9
 VO="$(bash "$S/validate-adversarial-convergence.sh" --series "$PA/s9/requirements-adversarial-p" 2>&1)"; rc=$?
 [ "$rc" -eq 1 ] && grep -qF 'FAIL (K3' <<<"$VO" \
   || miss "(c) a --document prd.md terminal pass in the requirements series exited $rc without FAIL (K3"
