@@ -444,6 +444,195 @@ else
 fi
 
 # ============================================================================
+# I. BL-457: THE CLIFF IS MEASURED ON THE STRING THE HOOK EMITS.
+#
+# The harness stubs an additionalContext of >= 10000 characters, and what it measures is the
+# provenance-WRAPPED block. The hook used to budget, trim and decide `degraded` on the block
+# before the wrap, so a block the wrap carried to 10000-10128 was stubbed while `.recover-fired`
+# said `degraded=no`. Seven arms, one vector per hook, so every mutant below is scored on ALL of
+# them and must break exactly its own:
+#   S0  an over-cliff world carries no droppable part (the sidecar note), and the drop fires;
+#   S1  every world at/over the cliff records degraded=yes, and injected_bytes IS the emitted
+#       length -- with worlds required IN the wrap band [10000, 10000+wrap), the only band
+#       where a pre-wrap decision and a post-wrap one disagree;
+#   S2  a world far under every bound records degraded=no (owns "yes unconditionally");
+#   S3  worlds between the excerpt bound and the cliff record degraded=no -- stands down when
+#       S2's world says yes, because then S2 owns the case;
+#   WC  the worst real gate-in-flight case -- a 31-char `implementation-<UTC>` nonce, a
+#       sidecar, an unresolvable step file -- emits under 10000 (10255 before this fix);
+#   RB  with AI_DLC_HOOK_EXCERPT_RESERVE=50 the fitted excerpt stays under LIMIT-50 EMITTED,
+#       and the emitted length is over LIMIT-500, which the default reserve cannot produce --
+#       the tell that the hook received the setting rather than a scrubbed default;
+#   NC  one fire mints ONE provenance nonce, and the marker carries that nonce: the wrap is
+#       measured without a second mint.
+# Nonces are seeded through the REAL gate-checkpoint.sh `open`, never a stub, so a nonce the
+# script refuses leaves no gate section and the stale-guards below say so.
+# ============================================================================
+B457_V_ALL="S0=1 S1=1 S2=1 S3=1 WC=1 RB=1 NC=1"
+if [ -n "$CKPT" ]; then
+  _mkc457() { # _mkc457 <dir> <hookfile> <step:res|unres> <sidecar:yes|no> <nonce|""> <posbytes>
+    mkdir -p "$1/_bmad-output" "$1/.claude/skills/ai-dlc/steps" "$1/.claude/hooks" "$1/scripts/ai-dlc"
+    cp "$2" "$1/.claude/hooks/ai-dlc-recover.sh"
+    cp "${ROOT}/core/hooks/ai-dlc-handoff-pending.sh" "${ROOT}/core/hooks/ai-dlc-context-provenance.sh" "$1/.claude/hooks/" 2>/dev/null
+    cp "$CKPT" "$1/scripts/ai-dlc/gate-checkpoint.sh"; chmod +x "$1/scripts/ai-dlc/gate-checkpoint.sh"
+    [ "$3" = res ] && printf '# Implementation\n\nstep body\n' > "$1/.claude/skills/ai-dlc/steps/implementation.md"
+    {
+      printf '# Pipeline Snapshot\n\n## Pipeline Position\n- **Current step file:** `implementation.md`\n'
+      [ "$6" -gt 0 ] && awk -v n="$6" 'BEGIN { s = ""; while (length(s) < n) s = s "- position detail line, recorded at the last gate\n"; printf "%s", substr(s, 1, n) }'
+      printf '\n## Sprint Context\nsprint_id: 300\n'
+    } > "$1/_bmad-output/pipeline-snapshot.md"
+    [ "$4" = yes ] && printf '# precompact sidecar\nbranch: main\n' > "$1/_bmad-output/pipeline-snapshot.precompact.md"
+    [ -n "$5" ] && bash "$CKPT" --root "$1" --nonce "$5" open >/dev/null 2>&1
+    return 0
+  }
+  # _fire457 <dir> [reserve] -> "<emitted-len> <injected_bytes> <degraded> <sidecar-note:0|1> <excerpt:0|1> <gate-section:0|1>"
+  _fire457() {
+    if [ -n "${2:-}" ]; then
+      printf '{"source":"compact","session_id":"fixture"}' \
+        | AI_DLC_HOOK_EXCERPT_RESERVE="$2" CLAUDE_PROJECT_DIR="$1" bash "$1/.claude/hooks/ai-dlc-recover.sh" > "$1/out.json" 2>/dev/null
+    else
+      printf '{"source":"compact","session_id":"fixture"}' \
+        | CLAUDE_PROJECT_DIR="$1" bash "$1/.claude/hooks/ai-dlc-recover.sh" > "$1/out.json" 2>/dev/null
+    fi
+    python3 -c 'import sys,json
+try: c = json.load(open(sys.argv[1]))["hookSpecificOutput"]["additionalContext"]
+except Exception: c = None
+if c is None: print("none"); sys.exit(0)
+open(sys.argv[2], "w").write(c)
+print(len(c), int("Mechanical state captured immediately before this compaction" in c),
+      int("## Pipeline Position (excerpt" in c), int("RESUME it, do not restart it" in c))' \
+      "$1/out.json" "$1/out.ctx" > "$1/out.py"
+    _p="$(cat "$1/out.py")"
+    _i="$(sed -n 's/^injected_bytes=//p' "$1/_bmad-output/.recover-fired" 2>/dev/null)"
+    _d="$(sed -n 's/^degraded=//p' "$1/_bmad-output/.recover-fired" 2>/dev/null)"
+    set -- $_p
+    printf '%s %s %s %s %s %s\n' "${1:-none}" "${_i:-none}" "${_d:-none}" "${2:-x}" "${3:-x}" "${4:-x}"
+  }
+  # b457_eval <hookfile> <tag> -> prints the arm vector; diagnostics to $WORK/b457-<tag>.log
+  b457_eval() {
+    local H="$1" T="$2" D="$WORK/b457-$2" log="$WORK/b457-$2.log" n nonce r
+    local s0=1 s1=1 s2=1 s3=1 wc=1 rb=1 nc=1 hi=0 band=0 dropped=0 under=0 below_no=0
+    : > "$log"
+    # The wrap's own overhead, read off the library the hook sources: marker line + newline.
+    local W=$(( ${#B457_WRAP_PROBE} ))
+    # --- the sweep: unresolvable step file, sidecar, real nonce growing across the cliff ---
+    n=0
+    while [ "$n" -le 192 ]; do
+      nonce="implementation-20261006T120000Z$(printf '%*s' "$n" '' | tr ' ' x)"
+      _mkc457 "$D/sw$n" "$H" unres yes "$nonce" 0
+      r="$(_fire457 "$D/sw$n")"; printf 'sweep n=%s len=%s\n' "$n" "$r" >> "$log"
+      set -- $r
+      if [ "$1" = none ] || [ "$6" != 1 ]; then s0=0; s1=0; s3=0; printf '  STALE: no emission or no gate section at n=%s\n' "$n" >> "$log"
+      else
+        [ "$2" = "$1" ] || s1=0
+        if [ "$1" -ge 10000 ]; then
+          hi=$((hi + 1)); [ "$3" = yes ] || s1=0
+          [ "$1" -lt $((10000 + W)) ] && band=$((band + 1))
+          [ "$4" = 1 ] && s0=0
+        else
+          [ "$4" = 0 ] && dropped=$((dropped + 1))
+          if [ "$1" -ge 9500 ]; then under=$((under + 1)); [ "$3" = no ] || s3=0; fi
+        fi
+      fi
+      n=$((n + 12))
+    done
+    [ "$hi" -gt 0 ] && [ "$band" -gt 0 ] || { s1=0; printf '  STALE: hi=%s band=%s\n' "$hi" "$band" >> "$log"; }
+    [ "$dropped" -gt 0 ] || { s0=0; printf '  STALE: no world dropped the sidecar note under the cliff\n' >> "$log"; }
+    [ "$under" -gt 0 ] || { s3=0; printf '  STALE: no world in [9500,10000)\n' >> "$log"; }
+    # --- S2 + NC: far under every bound; one mint per fire ---
+    _mkc457 "$D/low" "$H" res no "" 0
+    r="$(_fire457 "$D/low")"; printf 'low %s\n' "$r" >> "$log"; set -- $r
+    if [ "$1" != none ] && [ "$1" -lt 9500 ] && [ "$3" = no ]; then below_no=1; else s2=0; fi
+    [ "$below_no" = 1 ] || s3=1   # S2 owns the unconditional case; S3 stands down
+    local st="$D/low/_bmad-output/.ai-dlc-context-nonce" lines mark
+    lines="$(grep -c . "$st" 2>/dev/null)" || lines=0
+    mark="$(sed -n '1s/.* nonce=\([0-9a-f]*\) .*/\1/p' "$D/low/out.ctx" 2>/dev/null)"
+    printf 'nc lines=%s mark=%s store=%s\n' "$lines" "$mark" "$(awk '{print $NF}' "$st" 2>/dev/null)" >> "$log"
+    [ "$lines" = 1 ] && [ -n "$mark" ] && [ "$mark" = "$(awk '{print $NF}' "$st")" ] || nc=0
+    # --- WC ---
+    _mkc457 "$D/wc" "$H" unres yes "implementation-20261006T120000Z" 0
+    r="$(_fire457 "$D/wc")"; printf 'wc %s\n' "$r" >> "$log"; set -- $r
+    [ "$1" != none ] && [ "$6" = 1 ] && [ "$1" -lt 10000 ] || wc=0
+    # --- RB ---
+    _mkc457 "$D/rb" "$H" res no "" 1200
+    r="$(_fire457 "$D/rb" 50)"; printf 'rb %s\n' "$r" >> "$log"; set -- $r
+    [ "$1" != none ] && [ "$5" = 1 ] && [ "$1" -gt 9500 ] && [ "$1" -lt 9950 ] || rb=0
+    printf 'S0=%s S1=%s S2=%s S3=%s WC=%s RB=%s NC=%s\n' "$s0" "$s1" "$s2" "$s3" "$wc" "$rb" "$nc"
+  }
+  # The wrap's overhead as the fixture sees it: one marker line, read from a real fire below.
+  B457_WRAP_PROBE=""
+  _mkc457 "$WORK/b457-probe" "$HOOK" res no "" 0
+  _fire457 "$WORK/b457-probe" >/dev/null
+  B457_WRAP_PROBE="$(sed -n '1p' "$WORK/b457-probe/out.ctx" 2>/dev/null)x"
+  case "$B457_WRAP_PROBE" in
+    '[AI-DLC-HOOK-PROVENANCE'*) ok "BL-457 probe: the recover hook's emission opens with the provenance marker (${#B457_WRAP_PROBE} chars with its newline)" ;;
+    *) bad "FIXTURE BROKEN: BL-457 probe -- the recover hook's emission carries no provenance marker line, so the wrap band below is unmeasurable" ;;
+  esac
+
+  B457_V="$(b457_eval "$HOOK" fix)"
+  for _arm in $B457_V; do
+    case "$_arm" in
+      S0=1) ok "BL-457 S0: no world at/over the cliff still carries the droppable sidecar note, and the note IS dropped in a world it would have pushed over" ;;
+      S1=1) ok "BL-457 S1: every swept world at/over 10000 EMITTED records degraded=yes, worlds land inside the wrap band, and injected_bytes equals the emitted length in every world" ;;
+      S2=1) ok "BL-457 S2: a world under every bound records degraded=no" ;;
+      S3=1) ok "BL-457 S3: worlds between the excerpt bound (9500) and the cliff record degraded=no -- the threshold is the cliff, not the trim bound" ;;
+      WC=1) ok "BL-457 WC: the worst real gate-in-flight case (31-char implementation-<UTC> nonce, sidecar, unresolvable step file) emits under 10000" ;;
+      RB=1) ok "BL-457 RB: with AI_DLC_HOOK_EXCERPT_RESERVE=50 the hook received it (emitted > 9500) and the fitted excerpt stays under 9950 EMITTED" ;;
+      NC=1) ok "BL-457 NC: one fire mints ONE provenance nonce and the emitted marker carries it -- the wrap is measured without a second mint" ;;
+      *) bad "BL-457 arm ${_arm%=*} FAILED on the shipped hook (see the diagnostic below)" ;;
+    esac
+  done
+  [ "$B457_V" = "$B457_V_ALL" ] || sed 's/^/      /' "$WORK/b457-fix.log" | grep -E 'STALE|wc |rb |low |nc ' >&2
+
+  # --- MUTANTS (a)-(f). Built by literal replacement, each anchor required to occur EXACTLY
+  # ONCE in the hook (a lost or duplicated anchor is FIXTURE STALE, never a pass), every layer
+  # of a layered fix reverted together, `bash -n` on the result. Each must break its OWN arm
+  # and no other: the expected vector is the full one with that single arm at 0.
+  b457_mut() { # b457_mut <tag> <out> <old1> <new1> [<old2> <new2> ...]
+    python3 - "$HOOK" "$2" "${@:3}" <<'PY'
+import sys
+src = open(sys.argv[1]).read(); out = sys.argv[2]; pairs = sys.argv[3:]
+for i in range(0, len(pairs), 2):
+    if src.count(pairs[i]) != 1:
+        sys.exit(3)
+    src = src.replace(pairs[i], pairs[i + 1])
+open(out, "w").write(src)
+PY
+  }
+  b457_score() { # b457_score <tag> <owned-arm> <what> <old1> <new1> ...
+    local tag="$1" arm="$2" what="$3" m="$WORK/recover-$1.sh" v want
+    shift 3
+    if ! b457_mut "$tag" "$m" "$@"; then bad "FIXTURE STALE: BL-457 mutant ($tag) -- an anchor is absent or not unique in the hook"; return; fi
+    if cmp -s "$HOOK" "$m"; then bad "FIXTURE STALE: BL-457 mutant ($tag) is byte-identical to the hook"; return; fi
+    if ! bash -n "$m" 2>/dev/null; then bad "FIXTURE STALE: BL-457 mutant ($tag) is not valid shell"; return; fi
+    want="$(printf '%s' "$B457_V_ALL" | sed "s/${arm}=1/${arm}=0/")"
+    v="$(b457_eval "$m" "$tag")"
+    if [ "$v" = "$want" ]; then ok "BL-457 mutant ($tag) $what -- killed by ${arm} and by no other arm"
+    else bad "BL-457 mutant ($tag) $what -- expected [$want], got [$v]"; fi
+  }
+  if [ "$B457_V" = "$B457_V_ALL" ]; then
+    b457_score a S1 "decides degraded and injected_bytes on the pre-wrap block" \
+      '[ "${#EMITTED}" -ge "$CONTEXT_LIMIT" ] && DEGRADED=yes' '[ "${#CONTEXT}" -ge "$CONTEXT_LIMIT" ] && DEGRADED=yes' \
+      'printf '"'"'injected_bytes=%s\n'"'"' "${#EMITTED}"' 'printf '"'"'injected_bytes=%s\n'"'"' "${#CONTEXT}"'
+    b457_score b RB "does not reduce the excerpt budget or its fallback by the wrap" \
+      '${#BARE} - EXCERPT_OVERHEAD - WRAP_OVERHEAD ))' '${#BARE} - EXCERPT_OVERHEAD ))' \
+      'if [ $(( ${#CONTEXT} + WRAP_OVERHEAD )) -ge $(( CONTEXT_LIMIT - EXCERPT_RESERVE )) ]; then' 'if [ "${#CONTEXT}" -ge $(( CONTEXT_LIMIT - EXCERPT_RESERVE )) ]; then'
+    b457_score c S2 "records degraded=yes unconditionally" \
+      '[ "${#EMITTED}" -ge "$CONTEXT_LIMIT" ] && DEGRADED=yes' 'DEGRADED=yes'
+    b457_score d S3 "lowers the degraded threshold to the excerpt's trim bound" \
+      '[ "${#EMITTED}" -ge "$CONTEXT_LIMIT" ] && DEGRADED=yes' '[ "${#EMITTED}" -ge $(( CONTEXT_LIMIT - EXCERPT_RESERVE )) ] && DEGRADED=yes'
+    b457_score e S0 "keys the sidecar-note drop on the pre-wrap length" \
+      'if [ -n "$SIDECAR_NOTE" ] && [ $(( ${#BARE} + WRAP_OVERHEAD )) -ge "$CONTEXT_LIMIT" ]; then' 'if [ -n "$SIDECAR_NOTE" ] && [ "${#BARE}" -ge "$CONTEXT_LIMIT" ]; then'
+    b457_score f NC "emits through a second wrap call, minting a second nonce" \
+      'jq -n --arg ctx "$EMITTED"' 'jq -n --arg ctx "$(ai_dlc_provenance_wrap ai-dlc-recover SessionStart "$CONTEXT")"'
+  else
+    bad "BL-457 mutants not scored: the shipped hook's own vector [$B457_V] is not [$B457_V_ALL], so a mutant's vector would be read against a broken baseline"
+  fi
+else
+  skip "BL-457 cliff arms and mutants" "gate-checkpoint.sh is not present in this tree"
+fi
+
+# ============================================================================
 # MUTANTS. Each built as a COPY, guarded by cmp -s (a sed/awk/python edit that matched
 # nothing is DID NOT APPLY, not a pass) and bash -n (a mutant that is not a program is a
 # silent kill, not a real one). Section A's self-probes are the unmutated control that the
@@ -698,7 +887,7 @@ else
 fi
 
 # ============================================================================
-EXPECTED_ASSERTIONS=35
+EXPECTED_ASSERTIONS=49
 echo
 if [ "$total" -lt "$EXPECTED_ASSERTIONS" ]; then
   bad "only ${total} assertion(s) ran, below the ${EXPECTED_ASSERTIONS}-assertion floor -- an arm silently failed to fire rather than to pass"
