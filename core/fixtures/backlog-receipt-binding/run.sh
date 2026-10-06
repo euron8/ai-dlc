@@ -588,7 +588,8 @@ kill_check "m8 a ledger that parses to ZERO receipts is a finding" "$TMP/m8" "" 
 # predicate passes that state on a DISTINCT OK line and still fails every zero holding a receipt
 # that is not behavioural. Each ledger below is written whole and passes its own ceilings and
 # floor sized to it, so R3 and R5 are never what decides.
-#   m8b  all-behavioural: tokens=0 with a path, tokens=0 without, and one ALREADY-PASSING -> OK
+#   m8b  all-behavioural: one runs a script it names, one runs a script the tree lacks,
+#        and one ALREADY-PASSING                                                          -> OK
 #   m8c  the only sh receipt does not parse                                               -> R2 FAIL
 #   m8d  the only sh receipt is an empty one-liner                                        -> R2 FAIL
 #   m8e  the only sh receipt greps a literal at a path the seed cannot name               -> R2 FAIL
