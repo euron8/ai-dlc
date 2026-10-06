@@ -653,17 +653,35 @@ READSET_LOCAL="$GITDIR/ai-dlc-fixture-readsets.local"
 #          reads as a change no fixture reads and runs everything. Its reader is unmapped and runs.
 #   rows   committed rows plus the VALID local rows (`$out/.local.valid`) -- mapped-ness and
 #          selection. A fixture with ANY committed row uses only those; its local rows are ignored.
-readset_rows() { # <out> <paths|rows>
+#   known  `paths`, keeping only the rows of fixtures in THIS run's dispatch list (`$out/.present`,
+#          one basename per line) -- the orphan universe, and nothing else.
+#
+# A ROW WHOSE FIXTURE IS GONE MUST NOT MAKE A PATH KNOWN. The local map is written by a detached
+# trace and a fixture deleted or renamed after it keeps its rows there; a committed map keeps a
+# deleted fixture's rows until someone re-derives (`--all` does not drop them). Read into the
+# universe, such a row turns an edit to a path only it names into "a path some fixture reads", the
+# orphan test passes, and the stale committed reader that should have been re-traced is SKIPPED.
+# Measured on a seeded consumer: a ghost local row naming p.txt, the only present reader of p.txt
+# mapped from before it read it, and an edit to p.txt skipped that reader. Under `known` the ghost
+# row is dropped, the path is an orphan, and everything runs. The filter can only turn a skip into a
+# full run, never the reverse: a path whose only mapped reader has no directory has no reader this
+# run can dispatch. An absent `.present` drops every row, so every changed path is an orphan.
+# The MANIFEST stays on `paths`: a superset there only hashes more, and four callers build one
+# with no dispatch list.
+readset_rows() { # <out> <paths|known|rows>
   local out="$1" mode="$2"
   { [ -s "$READSET_MAP" ] && grep -v '^#' "$READSET_MAP" | sed 's/^/C	/'
     if [ "$mode" = rows ]; then [ -s "$out/.local.valid" ] && sed 's/^/V	/' "$out/.local.valid"
     else [ -s "$READSET_LOCAL" ] && sed 's/^/L	/' "$READSET_LOCAL"; fi
     :
-  } | awk -F'\t' -v mode="$mode" '
-    $1 == "C" { com[$2] = 1; if (mode == "rows") print $2 "\t" $3; else print $3; next }
+  } | RS_PRESENT="$out/.present" awk -F'\t' -v mode="$mode" '
+    BEGIN { if (mode == "known") while ((getline l < ENVIRON["RS_PRESENT"]) > 0) here[l] = 1 }
+    $1 == "C" { com[$2] = 1
+      if (mode == "known" && !($2 in here)) next
+      if (mode == "rows") print $2 "\t" $3; else print $3; next }
     ($2 in com) { next }
     $1 == "V" { print $2 "\t" $3; next }
-    $1 == "L" && substr($3, 1, 1) != "#" { print $3 }'
+    $1 == "L" && substr($3, 1, 1) != "#" { if (mode != "known" || ($2 in here)) print $3 }'
 }
 
 # A LOCAL ROW SET IS VALID ONLY WHILE EVERY PATH IT RECORDED HASHES AS IT DID IN THE TRACE COPY, AND
@@ -793,6 +811,7 @@ apply_readset_skip() {
   # bootstrap -- a mechanism that is always inert and never says so.
   readset_manifest "$out"
   readset_local_validate "$list" "$out"
+  while IFS= read -r d; do b="${d%/}"; printf '%s\n' "${b##*/}"; done < "$list" > "$out/.present"
 
   # THE MAP DECAYS SILENTLY, AND THIS LINE IS THE ONLY THING THAT SAYS SO. A fixture directory
   # added after the last derivation has no entry and runs on every push -- correct, and the
@@ -952,7 +971,7 @@ apply_readset_skip() {
   # here makes that vanish an orphan, which runs everything: coarser than its own readers, never
   # a skip. It carries the other half of the join -- with the MANIFEST filter gone and this one
   # kept, a changed ignored file is an orphan and runs everything.
-  readset_rows "$out" paths | grep -v '^\.git/' | grep -v '^\.git$' \
+  readset_rows "$out" known | grep -v '^\.git/' | grep -v '^\.git$' \
     | readset_drop_excluded | sort -u > "$out/.universe.all"
   readset_drop_ignored "$out/.universe.all" "$out/.universe"
   # EXCEPT THE UPDATE SKILL'S OWN BOOKKEEPING AND THE PIPELINE'S FLAT STATE FILES: the version
@@ -1372,6 +1391,16 @@ fixture_suite_step() {
     key_log MISS "$key"
   fi
 
+  # A DETACHED READ-SET TRACE STILL RUNNING FROM AN EARLIER PUSH SHARES THE MACHINE WITH THIS SUITE,
+  # and every unit's loaded cost then reads high for a reason no fixture owns. Recorded HERE, before
+  # the pool starts, because this run's own trace takes the same lock at the end of run_fixtures and
+  # a check sited after it would report an overlap on every green push. Read by pole_guard_step.
+  READSET_TRACE_OVERLAP=0
+  if [ -d "$READSET_LOCAL.lock" ] && ! readset_lock_stale "$READSET_LOCAL.lock"; then
+    READSET_TRACE_OVERLAP=1
+    printf '   (a read-set live trace from an earlier push is still running -- the suite pole will not be compared this run)\n'
+  fi
+
   run_fixtures || return 1
 
   # Recorded only after a full green run. A partial or red suite leaves the prior
@@ -1456,6 +1485,15 @@ step "fixture suite (${FIXTURE_JOBS}-way)" fixture_suite_step
 pole_guard_step() {
   if [ "${SUITE_SKIPPED:-0}" = 1 ]; then
     printf '   (suite skipped on the content key -- parsing the baseline only; nothing was measured)\n'
+    bash scripts/validate-suite-pole.sh --durations /dev/null --jobs "$FIXTURE_JOBS"
+    return
+  fi
+  # A LIVE TRACE OVERLAPPED THE SUITE (recorded by fixture_suite_step before the pool started), so
+  # this run's costs were taken on a machine the trace was also loading. Comparing them could FAIL
+  # a push for the trace's load, and passing them would read as a clean measurement; neither is
+  # true. The baseline is still parsed, for the reason the skip branch above gives.
+  if [ "${READSET_TRACE_OVERLAP:-0}" = 1 ]; then
+    printf '   SKIP: a read-set live trace overlapped this run -- its loaded costs are not compared; parsing the baseline only\n'
     bash scripts/validate-suite-pole.sh --durations /dev/null --jobs "$FIXTURE_JOBS"
     return
   fi

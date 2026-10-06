@@ -672,21 +672,29 @@ readset_hash_rows() {
 # replaced, a clean one gains its `#deriver` key row, and a discarded one carries
 # `<fx>\t#discards\t<n>\t<key>\t<why>` -- n counts consecutive discards on one key, so a changed
 # key starts again at 1.
+#   <present>   one fixture basename per line: the fixtures with a run.sh in the checkout this trace
+#               was started from. Every row of a fixture NOT in it is pruned -- a deleted or renamed
+#               fixture's rows otherwise stay in the local map for good, and the hook would read
+#               them. An absent or empty file prunes every untraced row, which leaves those fixtures
+#               unmapped: they run and are re-traced, never skipped.
 readset_local_write() {
-  local lm="$1" cm="$2" okr="$3" disc="$4" traced="$5" dsha="$6" tmp
+  local lm="$1" cm="$2" okr="$3" disc="$4" traced="$5" dsha="$6" present="${7:-/dev/null}" tmp
   tmp="$lm.tmp.$$"
   traced="$(printf '%s' "$traced" | tr '\n\t' '  ')"
   {
     [ -s "$cm" ] && grep -v '^#' "$cm" | cut -f1 | LC_ALL=C sort -u | sed 's/^/C\t/'
+    [ -s "$present" ] && sed 's/^/P\t/' "$present"
     [ -s "$disc" ] && sed 's/^/D\t/' "$disc"
     [ -s "$lm" ] && sed 's/^/L\t/' "$lm"
     [ -s "$okr" ] && sed 's/^/O\t/' "$okr"
     :
   } | awk -F'\t' -v traced=" $traced " -v dsha="$dsha" '
     $1 == "C" { com[$2] = 1; next }
+    $1 == "P" { here[$2] = 1; next }
     $1 == "D" { dk[$2] = $3; dw[$2] = $4; next }
     $1 == "L" {
       if ($2 in com) next
+      if (!($2 in here)) next
       if ($3 == "#discards") { pn[$2] = $4; pk[$2] = $5 }
       if (index(traced, " " $2 " ") == 0) { sub(/^L\t/, ""); print; next }
       next }
@@ -739,25 +747,6 @@ if [ "$TRACER" = sandbox ] || [ "$TRACER" = both ]; then
   SENTINEL="$MARKDIR/.readset-sentinel"
   ENDMARK="$MARKDIR/.readset-end"
 fi
-say "copying the tree to $TREE"
-readset_copy_tree "$REPO_ROOT" "$TREE" "$WORK" || die "copy failed"
-[ -d "$TREE/.git" ] || die "copy carries no .git; git-backed fixtures would fail for the wrong reason"
-# THE UNREAD CONTROL. A file nothing reads, reset with every other file before each fixture and
-# required to be STILL at the 2001 epoch after it. If its atime moved, either the reset did not
-# take (so every "read" in that window is really the copy's own timestamp) or something walked the
-# tree, and either way the atime set is not a set of the fixture's reads: the fixture is omitted.
-# It sits in `.git/` because git never reads an unknown file there and `git status` never lists
-# one. Measured before placing it: 0 of 33 census fixtures read `.git/description`, the nearest
-# file git also ignores, against 2 reading `.git/HEAD`, so no fixture in that set walks `.git/`.
-UNREAD_CTL=".git/readset-unread-control"
-printf 'never read\n' > "$TREE/$UNREAD_CTL" || die "cannot plant the unread control $TREE/$UNREAD_CTL"
-if [ "$TRACER" = fs_usage ] || [ "$TRACER" = both ]; then
-  chown -R "$RUN_AS" "$TREE" || die "chown failed"
-fi
-# The sentinels live inside the tree because the tracer filters on the tree prefix, which
-# makes them untracked files. Left visible they peg `git status --porcelain` and the
-# contamination guard below can never report anything.
-printf '.readset-sentinel\n.readset-end\n' >> "$TREE/.git/info/exclude"
 
 # THE SANDBOX PROFILE IS SCOPED TO THE TREE, AND THE SCOPE IS LOAD-BEARING. `(with report)` on
 # `(allow default)` reports every operation the fixture makes anywhere on the machine; measured,
@@ -836,6 +825,30 @@ if [ -n "$LOCAL_MAP" ]; then
   kill "$lv_pid" 2>/dev/null; wait "$lv_pid" 2>/dev/null
   [ "$lv_ok" -eq 1 ] || die "LIVENESS: a 1s log stream never saw this run's own tagged sentinel read -- a push from inside a sandbox, or a stream that delivers nothing. Nothing traced, nothing written; the fixtures stay unmapped."
 fi
+
+# THE COPY COMES AFTER THE LIVENESS PROBE. A `--local-map` run whose stream delivers nothing refuses
+# above, and a consumer pushing from inside a sandbox refuses on every green push -- so the tree copy,
+# the one step here that scales with the repository, is paid only by a run that can use it. Nothing
+# above reads the copy: the profile names $TREE as a string, and the probe reads a marker beside it.
+say "copying the tree to $TREE"
+readset_copy_tree "$REPO_ROOT" "$TREE" "$WORK" || die "copy failed"
+[ -d "$TREE/.git" ] || die "copy carries no .git; git-backed fixtures would fail for the wrong reason"
+# THE UNREAD CONTROL. A file nothing reads, reset with every other file before each fixture and
+# required to be STILL at the 2001 epoch after it. If its atime moved, either the reset did not
+# take (so every "read" in that window is really the copy's own timestamp) or something walked the
+# tree, and either way the atime set is not a set of the fixture's reads: the fixture is omitted.
+# It sits in `.git/` because git never reads an unknown file there and `git status` never lists
+# one. Measured before placing it: 0 of 33 census fixtures read `.git/description`, the nearest
+# file git also ignores, against 2 reading `.git/HEAD`, so no fixture in that set walks `.git/`.
+UNREAD_CTL=".git/readset-unread-control"
+printf 'never read\n' > "$TREE/$UNREAD_CTL" || die "cannot plant the unread control $TREE/$UNREAD_CTL"
+if [ "$TRACER" = fs_usage ] || [ "$TRACER" = both ]; then
+  chown -R "$RUN_AS" "$TREE" || die "chown failed"
+fi
+# The sentinels live inside the tree because the tracer filters on the tree prefix, which
+# makes them untracked files. Left visible they peg `git status --porcelain` and the
+# contamination guard below can never report anything.
+printf '.readset-sentinel\n.readset-end\n' >> "$TREE/.git/info/exclude"
 
 # THE CONTAMINATION GUARD MEASURES A DELTA, NOT AN ABSOLUTE. The copy carries whatever the
 # working tree carries, so deriving from a tree with uncommitted work starts non-zero -- and
@@ -1219,7 +1232,13 @@ done
 # a full map, and a one-fixture local trace would fail the plan-shape pair and the discrimination
 # control by construction. Its own conditions were applied per fixture above.
 if [ -n "$LOCAL_MAP" ]; then
-  readset_local_write "$LOCAL_MAP" "$MAP" "$WORK/local.ok" "$WORK/local.discards" "$LIST" "$DERIVER_SHA" \
+  # The PRESENT set is read off the checkout the hook pushed from, not the trace copy: a fixture
+  # deleted there since the copy was taken is gone for the next push too.
+  for _pd in "$REPO_ROOT/$FIXTURE_ROOT"/*/; do
+    [ -f "${_pd}run.sh" ] || continue
+    _pd="${_pd%/}"; printf '%s\n' "${_pd##*/}"
+  done > "$WORK/local.present"
+  readset_local_write "$LOCAL_MAP" "$MAP" "$WORK/local.ok" "$WORK/local.discards" "$LIST" "$DERIVER_SHA" "$WORK/local.present" \
     || die "could not write $LOCAL_MAP -- it is unchanged"
   say "wrote $LOCAL_MAP -- $MAPPED of $N_SUBJECT traced fixture(s) recorded${OMITTED:+; discarded: $OMITTED}"
   exit 0

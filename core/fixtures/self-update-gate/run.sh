@@ -2660,6 +2660,19 @@ ss_assert "pp-args-control" \
         | .githooks/pre-push origin upstream >/dev/null 2>&1 ); echo $? )" "5" \
   "...and the same hook fed the first cut's arguments exits 5, so the probe's arguments are what satisfies it"
 
+# 9. THE PROBE RUNS THE HOOK WITH THE LIVE TRACE OFF. A green shipped hook starts a DETACHED
+#    read-set trace of its unmapped fixtures, which would run under the update cycle about to write
+#    the tree it copies. The tail refuses unless AI_DLC_READSET_LIVE_TRACE=0 reached it; this
+#    fixture unsets every AI_DLC_* at its top, so only the gate can have set it.
+PP_HOOK_KNOB='[ "${AI_DLC_READSET_LIVE_TRACE:-unset}" = 0 ] || { echo "live trace knob ${AI_DLC_READSET_LIVE_TRACE:-unset}"; exit 10; }
+exit 0'
+PP_KNOB="$(pp_world knob "$PP_HOOK_KNOB" hooksPath yes)"
+ss_assert "pp-trace-knob" "$(pp_scan "$GATE" "$PP_KNOB")" \
+  "pp=SELF-UPDATE-OK sum=1 ss=1 und=1" \
+  "a hook that refuses unless AI_DLC_READSET_LIVE_TRACE=0 is OK under the probe, so the probe starts no detached trace"
+ss_assert "pp-trace-knob-control" "$( ( cd "$PP_KNOB" && printf 'refs/heads/x %s refs/heads/x 0000000000000000000000000000000000000000\n' "$(git rev-parse HEAD)" | .githooks/pre-push origin x >/dev/null 2>&1 ); echo $? )" "10" \
+  "...and the same hook run by hand without the knob exits 10, so the cell above is the knob and not a hook that accepts anything"
+
 # --- MUTANTS on arm P ---------------------------------------------------------------------
 # Each is scored on the RED world, where the shipped gate defers; a mutant that keeps deferring
 # there is not a mutant of this arm. The unmutated control is `pp-red-defers` above.
@@ -2728,6 +2741,19 @@ else
     printf '  ok    %-16s KILLED (running a hook git would skip refuses a push git would allow: got [%s])\n' "pp-mut-exec" "$pp_m5_got"
   else
     FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED: the non-executable hook was skipped anyway, so the exec-bit test is not what skips it\n' "pp-mut-exec"
+  fi
+fi
+# M6: the knob dropped from the probe's invocation. The knob world's hook then refuses.
+PP_M6="$(vr_mut pp6 'index($0,"AI_DLC_READSET_LIVE_TRACE=0 \"$pp_hook\" \"$pp_remote\" \"$pp_url\" < \"$pp_in\"") { sub(/AI_DLC_READSET_LIVE_TRACE=0 /, ""); print; next } { print }')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$GATE" "$PP_M6"; then
+  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s mutation matched nothing\n' "pp-mut-knob"
+else
+  pp_m6_got="$(pp_scan "$PP_M6" "$PP_KNOB")"
+  if [ "$pp_m6_got" = "pp=SELF-UPDATE-DEFER sum=1 ss=1 und=0" ]; then
+    printf '  ok    %-16s KILLED (without the knob the probe runs the hook with its live trace armed)\n' "pp-mut-knob"
+  else
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED: got=[%s]\n' "pp-mut-knob" "$pp_m6_got"
   fi
 fi
 # CONTROL: an unmutated copy beside its siblings defers on the red world, so a kill above is the

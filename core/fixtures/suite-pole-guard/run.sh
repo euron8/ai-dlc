@@ -1130,13 +1130,80 @@ fi
 printf '  mutant table (label -> arm that must kill it, anchor match count):\n'
 printf '%s' "$MUT_TABLE" | sed 's/^/    /'
 
+# ---------------------------------------------------------------------------------------
+# THE HOOK STEP, WHEN A LIVE READ-SET TRACE OVERLAPPED THE SUITE. A green push starts a detached
+# trace of its unmapped fixtures; one still running when the NEXT push's suite starts loads the
+# machine under every unit, and the pole read off that run is the trace's cost as much as the
+# fixture's. fixture_suite_step records the overlap BEFORE the pool starts (its own trace takes
+# the same lock after), and pole_guard_step then SKIPs the comparison in one line while still
+# parsing the baseline. Both halves are extracted from the hook and driven in a mktemp world
+# with a stub validator that records its argv.
+# ---------------------------------------------------------------------------------------
+HOOK_ARMS=0
+PG_HOOK="$ROOT/.githooks/pre-push"
+[ -f "$PG_HOOK" ] || broken "cannot locate .githooks/pre-push at $PG_HOOK"
+PGW="$WORK/pgstep"; mkdir -p "$PGW/scripts" || broken "could not create the hook-step world"
+PG_LIB="$PGW/lib.sh"
+{ awk '/^readset_lock_stale\(\) \{/,/^}/' "$PG_HOOK"
+  awk '/^pole_guard_step\(\) \{/,/^}/' "$PG_HOOK"
+  printf 'overlap_probe() {\n'
+  awk '/^  READSET_TRACE_OVERLAP=0$/ { p = 1 } p { print } p && /^  fi$/ { exit }' "$PG_HOOK"
+  printf '}\n'
+} > "$PG_LIB"
+[ "$(grep -c '^[a-z_]*() {' "$PG_LIB")" -eq 3 ] && grep -q 'readset_lock_stale' "$PG_LIB" && grep -q 'READSET_TRACE_OVERLAP=1' "$PG_LIB" \
+  || broken "could not extract readset_lock_stale, pole_guard_step and the overlap probe from $PG_HOOK"
+printf '#!/bin/bash\nprintf "%%s\\n" "$*" > "$PG_ARGS"\nexit 0\n' > "$PGW/scripts/validate-suite-pole.sh"
+# pg_drive <lib> <lock: live|dead|none> -> "<overlap>|<argv>|<skip line: yes|no>"
+pg_drive() {
+  local lib="$1" lk="$2" o="$PGW/o.$RANDOM"
+  mkdir -p "$o"; rm -rf "$PGW/rl.lock"
+  case "$lk" in
+    live) mkdir "$PGW/rl.lock"; printf '%s %s\n' "$$" "$(date +%s)" > "$PGW/rl.lock/pid" ;;
+    dead) sh -c 'exit 0' & dp=$!; wait "$dp"; mkdir "$PGW/rl.lock"; printf '%s %s\n' "$dp" "$(date +%s)" > "$PGW/rl.lock/pid" ;;
+  esac
+  ( cd "$PGW" || exit 1
+    . "$lib"
+    READSET_LOCAL="$PGW/rl"; FIXTURE_JOBS=12; LASTRUN_RECORD=last.tsv; DURATIONS_RECORD=dur.tsv; SUITE_SKIPPED=0
+    export PG_ARGS="$o/args"
+    overlap_probe > "$o/probe" 2>&1
+    pole_guard_step > "$o/step" 2>&1
+    printf '%s' "$READSET_TRACE_OVERLAP" > "$o/ov"
+  )
+  printf '%s|%s|%s' "$(cat "$o/ov" 2>/dev/null)" "$(cat "$o/args" 2>/dev/null)" \
+    "$(grep -q 'SKIP: a read-set live trace overlapped this run' "$o/step" && echo yes || echo no)"
+}
+PG_COMPARE="0|--durations last.tsv --record dur.tsv --jobs 12|no"
+PG_SKIP="1|--durations /dev/null --jobs 12|yes"
+pg_arm() { HOOK_ARMS=$((HOOK_ARMS + 1)); if [ "$2" = "$3" ]; then ok "$4"; else bad "$4 -- got '$2', want '$3'"; fi; }
+pg_arm live "$(pg_drive "$PG_LIB" live)" "$PG_SKIP" \
+  "hook step: a LIVE trace lock at suite start records the overlap, and the pole step SKIPs in one line and parses the baseline only"
+pg_arm none "$(pg_drive "$PG_LIB" none)" "$PG_COMPARE" \
+  "hook step: with no trace lock the pole step compares this run's record, and prints no overlap line"
+pg_arm dead "$(pg_drive "$PG_LIB" dead)" "$PG_COMPARE" \
+  "hook step: a lock whose pid is DEAD is stale, not an overlap -- the pole is compared"
+# Mutants of the extracted lib, each count-checked, each scored on the arm it must break.
+pg_mut() { # <name> <from> <to> <lock> <arm's correct result>
+  local m="$PGW/m.$1.sh" n r
+  n="$(grep -cF -- "$2" "$PG_LIB")" || n=0
+  HOOK_ARMS=$((HOOK_ARMS + 1))
+  if [ "$n" != 1 ]; then bad "hook-step MUTANT $1: anchor matched $n time(s), not 1 -- DID NOT APPLY"; return; fi
+  MF="$2" MT="$3" awk '{ i = index($0, ENVIRON["MF"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["MT"] substr($0, i + length(ENVIRON["MF"])); print }' "$PG_LIB" > "$m"
+  if cmp -s "$PG_LIB" "$m"; then bad "hook-step MUTANT $1: the copy is unchanged"; return; fi
+  r="$(pg_drive "$m" "$4")"
+  if [ "$r" = "$5" ]; then bad "hook-step MUTANT $1 SURVIVED: '$r'"; else ok "hook-step MUTANT $1 is KILLED: '$r'"; fi
+}
+pg_mut noskip 'if [ "${READSET_TRACE_OVERLAP:-0}" = 1 ]; then' 'if false; then' live "$PG_SKIP"
+pg_mut nodetect '    READSET_TRACE_OVERLAP=1' '    :' live "$PG_SKIP"
+pg_mut nostale '[ -d "$READSET_LOCAL.lock" ] && ! readset_lock_stale "$READSET_LOCAL.lock"' '[ -d "$READSET_LOCAL.lock" ]' dead "$PG_COMPARE"
+
 # EXPECTED_ASSERTIONS, DERIVED FROM THE ARM LIST rather than typed. A hardcoded total goes
 # stale the release somebody adds an arm, and it goes stale SILENTLY in the direction that
 # matters — a fixture reporting fewer assertions than it has arms reads as a complete run.
 # The three addends are counted where they are produced: ARM_COUNT from $ARMS, MUT_COUNT
 # incremented by every `mut` call, and the unmutated control, which is straight-line and
 # cannot vary.
-EXPECTED_ASSERTIONS=$((ARM_COUNT + MUT_COUNT + 1))
+EXPECTED_ASSERTIONS=$((ARM_COUNT + MUT_COUNT + 1 + HOOK_ARMS))
+[ "$HOOK_ARMS" -eq 6 ] || { printf '  FAIL  %s hook-step assertions ran, 6 expected\n' "$HOOK_ARMS"; fails=$((fails + 1)); }
 if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf '  FAIL  %s assertions ran, %s expected — an arm did not execute\n' "$asserts" "$EXPECTED_ASSERTIONS"
   fails=$((fails + 1))

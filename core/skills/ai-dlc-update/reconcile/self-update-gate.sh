@@ -1179,7 +1179,10 @@ if [ -z "${AI_DLC_GATE_IN_SAFE_STOP:-}" ] \
     # would on the real push; both are untracked, under `.git/`, and are the hook's own state.
     # The consumer's TREE is not written. The probe is exactly one run of the hook the push
     # would run, so its side effects are the push's side effects, arriving one step earlier.
-    ( cd "$CONSUMER" && "$pp_hook" "$pp_remote" "$pp_url" < "$pp_in" ) > "$pp_out" 2>&1
+    # EXCEPT ONE: a green shipped hook starts a DETACHED read-set trace of its unmapped fixtures,
+    # which would then run under the update cycle that is about to write the tree it copies.
+    # `AI_DLC_READSET_LIVE_TRACE=0` stops it for the probe; the real push still traces.
+    ( cd "$CONSUMER" && AI_DLC_READSET_LIVE_TRACE=0 "$pp_hook" "$pp_remote" "$pp_url" < "$pp_in" ) > "$pp_out" 2>&1
     pp_rc=$?
     if [ "$pp_rc" -eq 0 ]; then
       emit SELF-UPDATE-OK "pre-push" "the pre-push hook git runs on this consumer ($pp_hook) exits 0 on the tree as it stands, fed the ref line this cycle's push will send, so the push is not refused locally. A remote-side rejection is outside this gate."
