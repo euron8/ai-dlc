@@ -775,7 +775,7 @@ fi
 #   mW10  the sum also absorbs OUT-OF-POP -> must die on m8h
 #   mR2v  the verb census dropped         -> must die on m8i-dash
 #   mX1   the execution test always true  -> must die at R1 (BL-915)
-#   mX3   a named text file skipped, not failing (round 3's "any ran") -> must die on m8r-tailvar
+#   mX3   a named text file skipped, not failing (round 3 "any ran") -> dies at R1 (BL-915) or on m8r-tailvar
 #   mX2   created stub: "ran" without "still fails" -> must die on m8l-stub
 #   mG1-3, mT1: the grammar and the receipt-text seed, each killed at the subject's own R1 probe
 r8_mut() { # r8_mut <name> <src-dir> <sed> <check: ok|fail|m8> <args for the check...>
