@@ -19,6 +19,75 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.738.0] - 2026-10-06
+
+Batch 201's third release. It carries `BL-459`, `BL-460`, `BL-461`, `BL-462` and the last of
+`BL-451`'s splits; each closes in the batch close commit. No consumer candidate is discharged.
+`core/hooks/ai-dlc-advisor-gate.sh` is new and registered in the settings template, so a consumer
+gets it on its next pull.
+
+### The advisor gate ships as a conditional PreToolUse deny (BL-459)
+
+- `core/hooks/ai-dlc-advisor-gate.sh` denies a gated action when the acting agent holds the
+  advisor tool and its own transcript records no advisor attempt since its last gated action OF
+  THE SAME KIND (operator ruling, batch 201). The kinds are push, PR merge, gate close, the Check
+  12 gate-log append, and a teammate's verdict or repair-record write. Any attempt clears the
+  deny, including one that errors. An `unavailable` result drops it to a warning, and a later
+  result re-arms it. The grant is read per agent from that agent's own `advisor_tool` attachment.
+- The call being decided is already on the transcript when PreToolUse fires, so it is excluded by
+  `tool_use_id`. Without that, every gated action after an advisor call was still denied.
+- A push or merge from an `ai-dlc-update/*` branch is excluded, and so is a delete. Wrapper words
+  (`nohup`, `time`, `sudo`, `timeout`, `env`, `bash -c` bodies and more) are stripped in a loop,
+  and leading `VAR=x` assignments are read through.
+- A user line clears a teammate's re-write exemption, so a re-dispatched verdict re-write is a
+  new gated action. A background-task notification is not a re-dispatch: it is recognised by
+  `origin.kind == "task-notification"` and never by its text, because I91 allows that text only
+  in `core/schemas/harness-origin.json`. Measured: every notification-shaped user line carries the
+  field, 2050 of 2050 in this repo's transcripts and 2477 of 2477 in the reference consumer's.
+  A human, peer or coordinator line is a re-dispatch.
+- `advisor-gate-deny` ships the shipped-hook pass and the unmutated control, about 9s solo. The
+  60-mutant battery is in five `.dist-only` shards, `advisor-gate-deny-mutants` and `-b` to `-e`,
+  dealt round-robin from the battery's own declarations. Each shard asserts the deal is disjoint
+  and covers the declared set, and refuses fewer than 60 mutants. Every mutant asserts its exact
+  arm set, and 17 also assert their exact cell set. One shard ran in 49s solo.
+- `FORK_BUDGET` is 3254, nine more for the new shipped hook.
+
+### Check 24 judges the requirements subject per stem and names the series it missed (BL-460, BL-461)
+
+- Arm J2 judges a terminal MET pass over the subject manifest per stem, from `J2S_RELEASE`. Each
+  sprint-scoped stem (`SPEC.md`, `s<N>/architecture-impact.md`) whose sha moved from its notarized
+  token needs a complete repair chain. A new reader, `repair_entries`, reads every entry of a
+  repair record; the old one stopped at the first. `prd.md` and the brief stay unjudged, because
+  Rule 25(a) consolidation rewrites `prd.md` mid-sprint.
+- Arm K3 is widened from `K3B_RELEASE`: any `s<N>/*-adversarial-p*` series beside
+  `requirements-subject.md` whose terminal artifact is the manifest or a file it names is judged
+  as the requirements series. `merge-adversarial-shards.sh` B4 refuses a `--document` merge of a
+  manifest-named file.
+- Both stamps are `0.738.0`, the release that ships them. The branch had them at `0.736.0`, which
+  would have dated a series against a release that did not carry the arm.
+
+### A party round's seats edit nothing, and every repair entry names its seat (BL-462)
+
+- Seats write findings records, one file per seat per shard, and one repair writer applies them.
+  Every applied entry carries `source: <seat-file>#<finding-id>`.
+- `join-remediator-shards.sh` resolves each source on the (seat file, id) pair, because finding
+  ids collide across seats. It refuses a missing source, a token naming no seat file of the
+  sprint, and an id the named file does not carry. Measured on scratch copies of the reference
+  consumer's twelve s317 party parts: 287 sources, all 279 its own attribution allows resolve,
+  and 217 carry an id another seat also carries.
+- `_gate-procedures.md`, `sprint-review.md`, `rule-28.md` and `remediator.md` say so.
+
+### Two more slow fixtures split (BL-451)
+
+- `remediator-shard-join`: its JX battery moves to the `.dist-only` `remediator-shard-join-mutants`,
+  sharing a shipped `lib.sh`, pooled at 8. Every killed set is byte-identical to the unsplit serial
+  battery. The BL-462 mutants are JX18 to JX24.
+- `adversarial-shard-merge`: MX0, the 15 mutants and MX6b move to the `.dist-only`
+  `adversarial-shard-merge-mutants`. The 16 killed-set rows are byte-identical to the unsplit
+  battery's. The BL-460/461 arms had taken it from 317 to 354 CPU-s solo.
+- With these, all six fixtures `BL-451` named are cut or measured: `backlog-receipt-binding` was
+  already `.dist-only` and ran 61s solo.
+
 ## [0.737.0] - 2026-10-06
 
 Batch 201's second release, shipped alone because it edits both pre-push hooks. It carries

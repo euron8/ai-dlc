@@ -2363,7 +2363,7 @@ else
   k3w_cell k3w-brief "$VALIDATOR" "$K3W/k3w-brief" product-brief 1 "FAIL (K3 -- SUBJECT): product-brief-adversarial-p1.md: it reviews" -
   k3w_cell k3w-arch  "$VALIDATOR" "$K3W/k3w-arch"  architecture-impact 1 "FAIL (K3 -- SUBJECT): architecture-impact-adversarial-p1.md: it reviews" -
   k3w_cell k3w-pre   "$VALIDATOR" "$K3W/k3w-pre"   prd 0 "Legacy series." "FAIL (K3"
-  k3w_cell k3w-pred  "$VALIDATOR" "$K3W/k3w-pred"  prd 0 "at 0.736.0 or later -- not owed yet." "FAIL (K3"
+  k3w_cell k3w-pred  "$VALIDATOR" "$K3W/k3w-pred"  prd 0 "at 0.738.0 or later -- not owed yet." "FAIL (K3"
   k3w_cell k3w-nomf  "$VALIDATOR" "$K3W/k3w-nomf"  prd 0 - "K3 -- SUBJECT"
   k3w_cell k3w-other "$VALIDATOR" "$K3W/k3w-other" test-strategy 0 - "K3 -- SUBJECT"
   # The FAIL is J2's own, not K3's: K3 reads only PENDING (its byte gate) in every J2S world.
@@ -2374,7 +2374,7 @@ else
   k3w_cell j2s-prd      "$VALIDATOR" "$K3W/j2s-prd"      requirements 0 "PENDING (K3 -- SUBJECT)" "J2 -- DRIFT"
   k3w_cell j2s-pre      "$VALIDATOR" "$K3W/j2s-pre"      requirements 0 "architecture-impact (_bmad-output/planning-artifacts/s9/architecture-impact.md): notarized" "FAIL (J2"
   k3w_cell j2s-pre-legacy "$VALIDATOR" "$K3W/j2s-pre"    requirements 0 "Legacy series." "FAIL ("
-  k3w_cell j2s-pred     "$VALIDATOR" "$K3W/j2s-pred"     requirements 0 "stamps .claude/.ai-dlc-version at 0.736.0 or later -- not owed yet." "FAIL (J2"
+  k3w_cell j2s-pred     "$VALIDATOR" "$K3W/j2s-pred"     requirements 0 "stamps .claude/.ai-dlc-version at 0.738.0 or later -- not owed yet." "FAIL (J2"
 
   # --- the mutants: one row per battery, each cell FAIL | PENDING | SILENT, a copy of the validator's
   # directory (partition-subject.sh beside it, or K3 itself reads no map), an unmutated control first.
@@ -2434,7 +2434,7 @@ PY
   rowmut "K3WX3 widened stamp not rebound" k3w_row "FAIL PENDING FAIL SILENT SILENT FAIL FAIL" \
     'k3_rel="$K3B_RELEASE"' 'k3_rel="$K3_RELEASE"'
   rowmut "K3WX4 K3B_RELEASE lowered" k3w_row "FAIL PENDING FAIL SILENT SILENT FAIL FAIL" \
-    'K3B_RELEASE="0.736.0"' 'K3B_RELEASE="0.735.0"'
+    'K3B_RELEASE="0.738.0"' 'K3B_RELEASE="0.735.0"'
   # k3_names rooted at the sprint dir, no walk up (self-probe conjunct with it): only a stem the
   # manifest names relative to a root it can no longer find drops out -- every stem, in- or out-of-s<N>.
   rowmut "K3WX5 manifest root not walked" k3w_row "SILENT SILENT SILENT SILENT SILENT SILENT SILENT" \
@@ -2466,7 +2466,7 @@ PY
   rowmut "J2SX6 stamp gate deleted" j2s_row "FAIL SILENT SILENT SILENT FAIL PENDING" \
     '          elif [[ "$j2_at" < "$j2_stamp" ]]; then' '          elif false; then'
   rowmut "J2SX7 J2S_RELEASE lowered" j2s_row "FAIL SILENT SILENT SILENT PENDING FAIL" \
-    'J2S_RELEASE="0.736.0"' 'J2S_RELEASE="0.735.0"'
+    'J2S_RELEASE="0.738.0"' 'J2S_RELEASE="0.735.0"'
 fi
 
 # --- PAIRING: a case that DENIES must assert the state the hooks read -------------

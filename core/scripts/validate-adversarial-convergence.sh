@@ -2247,7 +2247,7 @@ fi
 # (a subject repaired after its terminal pass is judged by nothing), and the pin (a map read off a
 # later partitioner convicts a dispatch that obeyed the one it ran under -- K2's measured case).
 K3_RELEASE="0.735.0"
-K3B_RELEASE="0.736.0"
+K3B_RELEASE="0.738.0"
 k3_keys() {  # $1 a shard_tool_use_ids value -> its key set, numeric keys de-padded, sorted, one per line
   printf '%s\n' $1 | awk -F= 'NF >= 2 && $2 ~ /^toolu_./ { k = $1; if (k ~ /^[0-9]+$/) k = k + 0; print k }' | LC_ALL=C sort -u
 }
@@ -2808,7 +2808,7 @@ done
 # STAMP keyed on the series' FIRST pass -- no commit there stamps J2_RELEASE, so every candidate
 # is PENDING and none fails.
 J2_RELEASE="0.669.0"
-J2S_RELEASE="0.736.0"
+J2S_RELEASE="0.738.0"
 
 j2_in_subject() {  # $1 resolved file -> 0 when it is a sprint-scoped single artifact
   case "$1" in

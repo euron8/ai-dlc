@@ -240,7 +240,7 @@ mut mcp-exact-name "MCPNAME" -e 's/startswith("mcp__") and endswith("__merge_pul
 mutc notif-not-excluded "REDISPATCH" "REDISPATCH:rd-sys REDISPATCH:rd-task" -e 's/^def notif: .*$/def notif: false;/'
 # 45. keyed on `isMeta`: the system form carries it, so does a real coordinator re-dispatch, and
 #     the task form does not.
-mutc notif-by-ismeta "REDISPATCH" "REDISPATCH:rd-meta REDISPATCH:rd-meta-adv REDISPATCH:rd-task" -e 's/^def notif: .*$/def notif: (.isMeta? == true);/'
+mutc notif-by-ismeta "REDISPATCH" "REDISPATCH:rd-meta REDISPATCH:rd-meta-adv REDISPATCH:rd-peer REDISPATCH:rd-task" -e 's/^def notif: .*$/def notif: (.isMeta? == true);/'
 # 46. keyed on the text anywhere in the line: a re-dispatch that mentions a notification is lost,
 #     and the task form, whose text says it in lower case, is not excluded.
 mutc notif-by-text "REDISPATCH" "REDISPATCH:rd-mid REDISPATCH:rd-task" -e 's/^def notif: .*$/def notif: ((.message.content? \/\/ "") | tostring | contains("NOTIFICATION"));/'

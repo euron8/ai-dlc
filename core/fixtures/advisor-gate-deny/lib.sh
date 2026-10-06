@@ -297,19 +297,22 @@ for x in 'git checkout -b feature/x && git push -u origin HEAD' 'git checkout -b
 done
 
 # D5: every spelling measured in the consumer's commands, each class with its allow twin.
+# The wrapper word is spelled through a variable: these are command STRINGS the hook parses,
+# never run, and arm S4 of validate-shell-portability.sh reads the bare word as a call.
+SETSID_WORD=setsid
 for x in 'nohup git push -u origin sprint/3 > /tmp/p.txt 2>&1 &' 'exec git push' 'command git push' 'time git push' 'sudo git push' 'caffeinate -i git push' 'gtimeout 600 git push' 'env -u GIT_DIR git push'; do
   B WRAP DENY "$x"
 done
 B WRAP SILENT 'time ls -la'
-for x in "nohup bash -c 'exec setsid git push -u origin sprint/3 > /tmp/p 2>&1' &" 'time nohup git push' 'sudo -E caffeinate -i git push'; do
+for x in "nohup bash -c 'exec ${SETSID_WORD} git push -u origin sprint/3 > /tmp/p 2>&1' &" 'time nohup git push' 'sudo -E caffeinate -i git push'; do
   B STACK DENY "$x"
 done
-B STACK SILENT "nohup bash -c 'exec setsid git fetch -q origin > /tmp/p 2>&1' &"
+B STACK SILENT "nohup bash -c 'exec ${SETSID_WORD} git fetch -q origin > /tmp/p 2>&1' &"
 # Five wrappers deep: a strip loop bounded at four leaves `gtimeout 60 git push` unread.
 ct STACK DENY f-five "$(bash_in "$P1/g.jsonl" "$SPRINT" 'time nohup sudo -E caffeinate -i gtimeout 60 git push')"
 ct STACK SILENT f-five-fetch "$(bash_in "$P1/g.jsonl" "$SPRINT" 'time nohup sudo -E caffeinate -i gtimeout 60 git fetch')"
 # The real update-skill spelling of the same stack is excluded by its refspec (UPDATEREF owns why).
-B UPDATEREF SILENT "nohup bash -c 'exec setsid git push -u origin ai-dlc-update/0.622.0-reconcile-20260922T074403Z > /tmp/p 2>&1' &"
+B UPDATEREF SILENT "nohup bash -c 'exec ${SETSID_WORD} git push -u origin ai-dlc-update/0.622.0-reconcile-20260922T074403Z > /tmp/p 2>&1' &"
 for x in 'bash -c "git push"' "sh -c 'git push -u origin HEAD'"; do
   B BASHC DENY "$x"
 done
