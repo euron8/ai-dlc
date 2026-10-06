@@ -1307,7 +1307,10 @@ pj_mut nostart '    [ "$c" != "$s" ] && return 0' '    :' wrong
 pj_mut nopin 'LC_ALL=C TZ=UTC0 ps -o lstart=' 'ps -o lstart=' split
 pj_mut psstale "alone\\n' \"\$p\"" "alone\\n' \"\$p\"; return 0" psfail
 pj_mut nonorm '  set -- $x' '  set -- "$x"' right
-pj_mut nolegacy '    [ -n "$s" ] || return 1' '    :' legacylive
+# No mutant here deletes the legacy branch (`[ -n "$s" ] || return 1`): one was built and moved
+# `legacylive` AND the `live` hook-step arm above, whose seed is also a two-field lock. That arm
+# owns the regression (an upgrade turning every older lock stale) and kills it; `legacylive` adds
+# only the no-announcement conjunct.
 
 # EXPECTED_ASSERTIONS, DERIVED FROM THE ARM LIST rather than typed. A hardcoded total goes
 # stale the release somebody adds an arm, and it goes stale SILENTLY in the direction that
@@ -1318,7 +1321,7 @@ pj_mut nolegacy '    [ -n "$s" ] || return 1' '    :' legacylive
 EXPECTED_ASSERTIONS=$((ARM_COUNT + MUT_COUNT + 1 + HOOK_ARMS))
 # HOOK_WANT is derived from this file's own call lines: one assertion per pg_arm/pg_mut/pj_arm/pj_mut.
 HOOK_WANT="$(grep -cE '^(pg_arm|pg_mut|pj_arm|pj_mut) ' "$HERE/run.sh")" || HOOK_WANT=0
-[ "$HOOK_WANT" -ge 17 ] || broken "counted $HOOK_WANT hook-step call lines in $HERE/run.sh, expected at least 17"
+[ "$HOOK_WANT" -ge 16 ] || broken "counted $HOOK_WANT hook-step call lines in $HERE/run.sh, expected at least 16"
 [ "$HOOK_ARMS" -eq "$HOOK_WANT" ] || { printf '  FAIL  %s hook-step assertions ran, %s expected\n' "$HOOK_ARMS" "$HOOK_WANT"; fails=$((fails + 1)); }
 if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf '  FAIL  %s assertions ran, %s expected — an arm did not execute\n' "$asserts" "$EXPECTED_ASSERTIONS"
