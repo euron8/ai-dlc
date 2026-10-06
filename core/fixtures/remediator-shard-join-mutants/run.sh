@@ -254,6 +254,10 @@ mutant "JX17 document-mode artifact not root-relative" "docjoin" \
   '  :'
 
 # ---- BL-462 party-source mutants. A finding id collides across seats, so the key is (file, id).
+# RENUMBERED AT THE MERGE: BL-462 shipped these as JX15..JX21, and BL-460's document-mode sha
+# mutants above took JX15..JX17 on the other branch. The BL-460 ids stand; these moved, each
+# killed set unchanged: JX15->JX18, JX16->JX19, JX17->JX20, JX18->JX21, JX19->JX22, JX20->JX23,
+# JX21->JX24.
 IDONLY_OLD='      if (!((b SUBSEP id) in has)) {'
 IDONLY_NEW='      if (!(id in who)) {'
 PROBE_OLD='src_probe() {'
