@@ -2578,6 +2578,36 @@ ss_assert "pp-green" "$(pp_scan "$GATE" "$PP_GREEN")" \
   "pp=SELF-UPDATE-OK sum=1 ss=1 und=1" \
   "a repository with a remote and an armed hook that exits 0: the probe ran, said OK, and the differential's verdicts are untouched beside it"
 
+# ENCLOSED CONSUMER (PP-ENC BEGIN). A consumer that is a plain SUBDIRECTORY of an enclosing repository
+# passes `--is-inside-work-tree`, and git's hook path then resolves the ENCLOSING repository's hook.
+# The enclosing world has an executable hook that writes a sentinel, a hooksPath and a remote; the
+# consumer is a copy of the seed's inside it. The gate must answer as for a non-repository (no
+# pre-push row) and the sentinel must be ABSENT. The control, one property apart, is a real repository
+# with the same hook: the sentinel IS written, so an absent sentinel is the guard and not a hook that
+# cannot write.
+PP_SENT_HOOK="$(printf 'touch "%s/sentinel"' "$PP/sent")"
+rm -rf "$PP/sent"; mkdir -p "$PP/sent"
+pp_mk PP_ENC enc "$PP_SENT_HOOK" hooksPath yes
+rm -rf "$PP_ENC/sub"; cp -R "$CONS" "$PP_ENC/sub"; rm -rf "$PP_ENC/sub/.git" "$PP_ENC/sub/_bmad-output"
+pp_enc_row="$(pp_scan "$GATE" "$PP_ENC/sub")"; pp_enc_hit="$([ -e "$PP/sent/sentinel" ] && echo written || echo absent)"
+ss_assert "pp-enclosed-no-hook" "$pp_enc_row|$pp_enc_hit" "pp=none sum=1 ss=1 und=1|absent" \
+  "a consumer that is a subdirectory of an enclosing repository is answered as a non-repository and the enclosing repository's hook is never run"
+rm -f "$PP/sent/sentinel"
+pp_mk PP_ENC_REAL encreal "$PP_SENT_HOOK" hooksPath yes
+pp_scan "$GATE" "$PP_ENC_REAL" >/dev/null
+ss_assert "pp-enclosed-control" "$([ -e "$PP/sent/sentinel" ] && echo written || echo absent)" "written" \
+  "...and the same hook in a consumer that IS its own repository runs, so the absent sentinel above is the guard"
+# PP-ENC END
+# pp_mk ITSELF REFUSES. Driven in a subshell with pp_world replaced: a failing one, and one that
+# succeeds while printing nothing -- the two ways a bind goes empty. Each must exit 1 with the
+# variable unbound, and a working one must bind it (ALLOW twin).
+ss_assert "pp-mk-refuses-failed" "$( ( pp_world() { return 1; }; pp_mk PP_T x ) 2>/dev/null; echo "rc=$?")" "rc=1" \
+  "pp_mk aborts the fixture when the world build fails, instead of binding an empty path"
+ss_assert "pp-mk-refuses-empty" "$( ( pp_world() { :; }; pp_mk PP_T x ) 2>/dev/null; echo "rc=$?")" "rc=1" \
+  "pp_mk aborts when the world build succeeds but prints no path"
+ss_assert "pp-mk-binds" "$( ( pp_world() { printf '%s\n' "$PP"; }; pp_mk PP_T x; [ "$PP_T" = "$PP" ] && echo bound ) 2>/dev/null )" "bound" \
+  "...and pp_mk binds the path a working build prints"
+
 # 2. A REFUSING HOOK DEFERS, names the phase it read out of the hook's own output, and the record
 #    carries the hook's output as `# probe:` lines. ONE summary DEFER and ONE SAFE-STOP row: the
 #    push arm exits after its own pair, so the differential cannot add a second.
