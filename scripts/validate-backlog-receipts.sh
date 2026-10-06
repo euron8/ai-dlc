@@ -1175,14 +1175,14 @@ fi
 #        from files the receipt builds in a temp dir. They were acquitted; they now block the zero.
 # No archive receipt moved INTO prose-closable, and the live ledger moved nothing: BL-457 holds
 # against its own text, BL-459 names no seedable path and reads 1 twice, and the one bound receipt
-# stays bound. 31 archive receipts changed token set; outside the 147 above, none changed class.
-# One of the 31 was a GRAMMAR false positive -- BL-058's `G=/usr/bin/grep` read as a grep command, which
+# stays bound. 30 archive receipts changed token set; outside the 147 above, none changed class.
+# A 31st was a GRAMMAR false positive the census measured and this file no longer has -- BL-058's `G=/usr/bin/grep` read as a grep command, which
 # emitted `V=docs/vocabulary-index.md` as its pattern -- and assignment words are now refused as
 # command words. That receipt is base 0, so its class is unaffected.
 #
 # AN ACCOUNTED-FOR ZERO ALSO REQUIRES EVERY NON-`sh` LIVE ENTRY TO CARRY A VERB THIS PARSER
 # READS -- `manual`, `has` or `lacks`, exactly. `- verify: sh`, `Verify:`, `**verify:**` and
-# `verify: SH` parse to no `sh` receipt, and `verify: sh<TAB>cmd` to a verb of `sh<TAB>cmd`, so a
+# `verify: SH` parse to no `sh` receipt, and `verify: sh<TAB>cmd` to a receipt the `"sh "` match refuses (its verb, cut at the TAB, reads `sh`), so a
 # ledger spelled that way read as "no sh receipts" and passed. Such entries are named on stderr
 # and the zero is a FAIL.
 # The two details are matched by PREFIX and their exit values are not constrained: the worker
