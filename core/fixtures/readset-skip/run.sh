@@ -49,6 +49,8 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/readset-skip.XXXXXX")" || broken "mktemp fail
 # It is killed by its literal recorded pid on exit, never found through the process table.
 sleep 600 </dev/null >/dev/null 2>&1 &
 LOCKPID=$!
+# disowned so the exit trap's kill does not print a job-termination line over the verdict line.
+disown "$LOCKPID" 2>/dev/null || :
 LOCK_T0="$(date +%s)"
 trap 'kill '"$LOCKPID"' 2>/dev/null; rm -rf "$WORK"' EXIT
 
@@ -1265,7 +1267,8 @@ else
   # correctly. So the stub deriver writes its own `$PPID` -- the trace subshell, seen from inside it
   # -- to STUB_PPID, and (k) demands line 1 equal it. The driver sleeps 1.1s before taking the lock,
   # so the trace subshell starts in a later second than the driver, and the control (sdiff) asserts
-  # start($$) != start(the stub's recorded pid) in the same invocation. The control is keyed on the
+  # start($$) != start(the stub's recorded pid) in the same invocation, read by the fixture's own `ps`,
+  # not the block's helper, which is a subject. The control is keyed on the
   # STUB's pid, not on line 1: under `parentpid` line 1 IS `$$`, and a control on it would read
   # "equal" for a mutant that must read as killed, not as a broken harness.
   RT_DRIVER="$WORK/rt-driver.sh"
@@ -1284,8 +1287,8 @@ i=0; while [ ! -s "$o/ppid" ] && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i+1)); done
 cp "$lk/pid" "$o/pidfile" 2>/dev/null
 p="$(sed -n 1p "$o/pidfile" 2>/dev/null | cut -d' ' -f1)"
 sp="$(cat "$o/ppid" 2>/dev/null)"
-( . "$ref" 2>/dev/null; a="$(readset_pid_start "$$")"; b="$(readset_pid_start "$sp")"
-  if [ -n "$a" ] && [ -n "$b" ] && [ "$a" != "$b" ]; then echo sdiff; else echo "nosdiff($a/$b)"; fi ) > "$o/sdiff" 2>/dev/null
+a="$(LC_ALL=C TZ=UTC0 ps -o lstart= -p "$$" 2>/dev/null)"; b="$(LC_ALL=C TZ=UTC0 ps -o lstart= -p "${sp:-0}" 2>/dev/null)"
+if [ -n "$a" ] && [ -n "$b" ] && [ "$a" != "$b" ]; then echo sdiff; else echo "nosdiff($a/$b)"; fi > "$o/sdiff"
 ( . "$ref" 2>/dev/null; readset_pid_start "$p" ) > "$o/want" 2>/dev/null
 ( . "$ref" 2>/dev/null; readset_lock_stale "$lk" > "$o/judge" 2>&1; echo "$?" > "$o/rc" )
 : > "$STUB_GO"
@@ -1421,12 +1424,14 @@ _a="$(LC_ALL=de_DE.UTF-8 TZ=Asia/Tokyo ps -o lstart= -p "$LOCKPID")"; _b="$(LC_A
 ( export LANG=de_DE.UTF-8 LC_ALL=de_DE.UTF-8 TZ=Asia/Tokyo; . "$PJ_SEEDLIB"; pj_write_lock "$LOCKPID" "$PJW/j.split.lock" )
 [ "$(sed -n 2p "$PJW/j.split.lock/pid")" = "$PJ_LIVE" ] || broken "the writer under de_DE/Tokyo did not record the pinned start '$PJ_LIVE'"
 mkdir -p "$PJW/psbin" && printf '#!/bin/sh\nexit 1\n' > "$PJW/psbin/ps" && chmod +x "$PJW/psbin/ps" || broken "could not build the failing ps stub"
-# The judge: a fresh process. ctl is computed with the UNMUTATED helper before any world's env.
+# The judge: a fresh process. ctl is computed before any world's env by the fixture's OWN `ps` call,
+# never the block's helper: the control is a fact about the harness, and a helper mutant reading `$$`
+# would otherwise blind the control that exists to separate it from a right helper.
 PJ_JUDGE="$PJW/judge.sh"
 cat > "$PJ_JUDGE" <<'PJ'
 lib="$1"; seed="$2"; lk="$3"; w="$4"; o="$5"; lp="$6"; psbin="$7"
-( . "$seed"; a="$(readset_pid_start "$$")"; b="$(readset_pid_start "$lp")"
-  if [ -n "$a" ] && [ -n "$b" ] && [ "$a" != "$b" ]; then echo sdiff; else echo "nosdiff($a/$b)"; fi ) > "$o/ctl" 2>&1
+a="$(LC_ALL=C TZ=UTC0 ps -o lstart= -p "$$" 2>/dev/null)"; b="$(LC_ALL=C TZ=UTC0 ps -o lstart= -p "$lp" 2>/dev/null)"
+if [ -n "$a" ] && [ -n "$b" ] && [ "$a" != "$b" ]; then echo sdiff; else echo "nosdiff($a/$b)"; fi > "$o/ctl"
 . "$lib"
 case "$w" in
   right) export LC_ALL=C TZ=UTC0 ;;
