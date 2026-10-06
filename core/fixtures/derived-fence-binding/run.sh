@@ -3,6 +3,8 @@
 # Also hosts I75's seeded-drift oracle (A16-A19), which had no fixture anywhere, and I121's
 # battery (A20-A33): the verify-shape paragraph every role contract carries, with its three
 # wrong arms (opener-only compare, hand-listed population, substring key) each scored killed.
+# And I122's battery (A34-A47): the advisor paragraph directly below it in every role contract,
+# the same three wrong arms, and a cross-probe that neither arm is satisfied by the other's text.
 #
 # Usage: run.sh
 # Exit:  0 = every assertion holds, 1 = one regressed, 2 = fixture broken.
@@ -763,6 +765,222 @@ if edit "$t" "core/team-roles/qa.md" "$MUT_I121_INLINE"; then
   fi
 fi
 
+# --- I122: the advisor paragraph in every role contract ------------------------
+# I122 is built as I121 is, over the same population, for a second paragraph that sits directly
+# below I121's in every role file. The battery mirrors A20-A33, and adds what only a SECOND
+# paragraph in the same files needs: A46/A47 drop each paragraph in turn and require the OTHER
+# arm to stay green while this one names the files, so neither arm can be satisfied by the
+# neighbour's text.
+#
+# The opener sentence is held in a SINGLE-QUOTED variable: it carries backticks, and inside
+# double quotes they would run `advisor` as a command and plant the text either side of a hole.
+OPENER3='**Consult the `advisor` tool when it is available.**'
+run_i122_out() { run_arm "$1" I122; }
+
+MUT_I122_DROP='
+index($0, "**Consult the `advisor` tool when it is available.**") == 1 { skip = 1 }
+skip { if ($0 == "switching silently. If the tool is absent or returns an error, continue without it.") skip = 0; next }
+{ print }'
+MUT_I122_INLINE='
+index($0, "**Consult the `advisor` tool when it is available.**") == 1 { print "Some other sentence. " $0; next }
+{ print }'
+# The FIRST of the two touchpoints dropped from one copy: the teammate is told to consult only
+# before its verdict.
+MUT_I122_WORD='
+$0 == "call it before your first edit or write, and again before you write your deliverable or verdict." { print "call it before you write your deliverable or verdict."; next }
+{ print }'
+# CONTROL MUTANT for I122's self-exemption: half B stops reading scripts/.
+MUT_I122_ROOTS='
+$0 == "    i122_hits=\"$(i122_sites \"$REPO_ROOT/core\" \"$REPO_ROOT/scripts\" \\" { print "    i122_hits=\"$(i122_sites \"$REPO_ROOT/core\" \\"; next }
+{ print }'
+# WRONG ARM W9: the block keeps only its OPENER line.
+MUT_W9='
+$0 == "      if (on) { buf = buf $0 \"\\n\"; if ($0 == cl) { on = 0; closed = 1; jc = 1 } }   # i122 block" { print "      if (on) { if (buf == \"\") buf = $0 \"\\n\"; if ($0 == cl) { on = 0; closed = 1; jc = 1 } }   # i122 block"; next }
+{ print }'
+# WRONG ARM W10: the population HAND-LISTED.
+MUT_W10='
+index($0, "i122_pop() { for i122_pf in \"$1\"/*.md;") == 1 { sub(/"\$1"\/\*\.md/, "\"$1\"/analyst.md \"$1\"/architect.md \"$1\"/pm.md \"$1\"/sm.md \"$1\"/tea.md \"$1\"/remediator.md \"$1\"/ops.md \"$1\"/adversary.md"); print; next }
+{ print }'
+# WRONG ARM W11: the opener keyed as a SUBSTRING.
+MUT_W11='
+$0 == "      if ($0 == op && prev == \"\") { nex++; if (nex == 1) on = 1 }   # i122 opener key" { print "      if (index($0, sn)) { nex++; if (nex == 1) on = 1 }   # i122 opener key"; next }
+{ print }'
+
+I122_MISSING="do not carry the advisor paragraph"
+I122_INLINE="advisor opener sentence appears inside another line or paragraph in"
+I122_FORK="the advisor paragraph has forked"
+I122_EXTRA="outside core/team-roles/*.md carry the advisor opener sentence"
+I122_CTL="I122's site scan did not find scripts/validate-enforcement-map.sh"
+
+# --- A34: I122 CONTROL ---------------------------------------------------------
+t="$(fresh)"
+out="$(run_i122_out "$t")"; rc=$?
+if guard_sel "$rc" "$out"; then
+  case "$rc:$out" in
+    *"FAIL: I122"*) bad "A34 I122 CONTROL — the unmutated seed fails I122 (rc=$rc), so every assertion below would be a false pass. It said: $out" ;;
+    0:*"$OKLINE"*)  ok "A34 I122 CONTROL: the unmutated seed passes --arms I122 and reaches its verdict" ;;
+    *)              bad "A34 I122 CONTROL — no I122 finding, but no verdict line either (rc=$rc), so the silence is a run that died" ;;
+  esac
+fi
+
+# --- A35: the paragraph dropped from ONE role file -----------------------------
+t="$(fresh)"
+if edit "$t" "core/team-roles/adversary.md" "$MUT_I122_DROP"; then
+  says I122 "A35 half A  the advisor paragraph dropped from adversary.md is REPORTED as missing, by name" \
+       "$t" "$I122_MISSING: core/team-roles/adversary.md"
+fi
+
+# --- A36: the paragraph present ONLY in remediator.md --------------------------
+t="$(fresh)"
+brk=0
+for f in "$t"/core/team-roles/*.md; do
+  r="${f##*/}"
+  [ "$r" = remediator.md ] && continue
+  edit "$t" "core/team-roles/$r" "$MUT_I122_DROP" || { brk=1; break; }
+done
+if [ "$brk" -eq 0 ]; then
+  out="$(run_i122_out "$t")"; rc=$?
+  if guard_sel "$rc" "$out"; then
+    miss="$(printf '%s\n' "$out" | grep -F "$I122_MISSING")"
+    case "$miss" in
+      *"core/team-roles/remediator.md"*) bad "A36 half A  remediator.md, the one file carrying the paragraph, was named as missing it (rc=$rc)" ;;
+      *"core/team-roles/adversary.md"*"core/team-roles/ux.md"*) ok "A36 half A  the advisor paragraph present ONLY in remediator.md reports every other role file, first to last, and not remediator" ;;
+      *) bad "A36 half A  the paragraph present only in remediator.md was not reported against the other role files (rc=$rc): $miss" ;;
+    esac
+  fi
+fi
+
+# --- A37: the opener inside another sentence -----------------------------------
+t="$(fresh)"
+if edit "$t" "core/team-roles/qa.md" "$MUT_I122_INLINE"; then
+  says I122 "A37 half A  the advisor opener glued onto the end of another sentence is REPORTED as inline, by name" \
+       "$t" "$I122_INLINE: core/team-roles/qa.md"
+fi
+
+# --- A38: one touchpoint dropped from one body ---------------------------------
+t="$(fresh)"
+if edit "$t" "core/team-roles/sm.md" "$MUT_I122_WORD"; then
+  says I122 "A38 half A  the first-edit touchpoint dropped from ONE body is REPORTED as a fork naming that copy" \
+       "$t" "$I122_FORK. It differs from the copy the other role files agree on, byte-for-byte from opener to closing line, in: core/team-roles/sm.md."
+fi
+
+# --- A39/A40: half B, a copy outside the population and the scoped exclusion ---
+t="$(fresh)"
+mkdir -p "$t/core/skills"
+printf 'See the role contract.\n\n%s Do it.\n' "$OPENER3" > "$t/core/skills/zz-planted.md"
+if grep -qF -- "$OPENER3" "$t/core/skills/zz-planted.md"; then
+  says I122 "A39 half B  a copy of the advisor opener under core/skills/ is REPORTED" \
+       "$t" "$I122_EXTRA: core/skills/zz-planted.md"
+else
+  bad "FIXTURE BROKEN — the core/skills/ copy was not written, so A39 tested a clean tree"
+fi
+t="$(fresh)"
+mkdir -p "$t/core/fixtures/zz-planted"
+printf '%s\n' "$OPENER3" > "$t/core/fixtures/zz-planted/x.md"
+if grep -qF -- "$OPENER3" "$t/core/fixtures/zz-planted/x.md"; then
+  out="$(run_i122_out "$t")"; rc=$?
+  if guard_sel "$rc" "$out"; then
+    case "$out" in
+      *"FAIL: I122"*) bad "A40 half B  a copy under core/fixtures/ was REPORTED (rc=$rc); the battery that proves this arm has to be able to seed the sentence" ;;
+      *"$OKLINE"*)    ok "A40 half B  a copy of the advisor opener under core/fixtures/ is ACQUITTED and the run reaches its verdict (the exclusion, scoped)" ;;
+      *)              bad "A40 half B  no finding but no verdict either (rc=$rc), so the acquittal is a run that died" ;;
+    esac
+  fi
+else
+  bad "FIXTURE BROKEN — the core/fixtures/ copy was not written, so A40 tested a clean tree"
+fi
+
+# --- A41: a NEW role file with no paragraph ------------------------------------
+t="$(fresh)"
+printf '# Role: Planted\n\n## Identity\n\nA role added after this arm was written.\n' > "$t/core/team-roles/zz-newrole.md"
+says I122 "A41 half A  a NEW role file without the advisor paragraph is REPORTED (the population is the glob, not a list)" \
+     "$t" "$I122_MISSING: core/team-roles/zz-newrole.md"
+
+# --- A42: the self-exemption's control fires -----------------------------------
+t="$(fresh)"
+if edit "$t" "$ARM" "$MUT_I122_ROOTS"; then
+  says I122 "A42 half B  with scripts/ dropped from I122's roots the CONTROL fires, rather than the self-exemption hiding a scan that no longer reaches this file" \
+       "$t" "$I122_CTL"
+fi
+
+# --- A43: WRONG ARM W9 — compare only the opener line --------------------------
+t="$(fresh)"
+if edit "$t" "core/team-roles/dev.md" "$MUT_I122_WORD"; then
+  says I122 "A43a W9's tree is an offender: the shipped arm reports the dropped touchpoint" "$t" "$I122_FORK"
+  if edit "$t" "$ARM" "$MUT_W9"; then
+    out="$(run_i122_out "$t")"; rc=$?
+    if guard_sel "$rc" "$out"; then
+      case "$out" in
+        *"$I122_FORK"*) bad "A43b W9 (opener-only compare) still reported the fork, so this tree does not separate the two implementations" ;;
+        *"I122's probe scored 1010 "*) ok "A43b W9 (an arm comparing only the OPENER line) is KILLED by the probe: 10 and 1000, a one-word body drift scored OK" ;;
+        *) bad "A43b W9 reported neither the fork nor the expected probe refusal (rc=$rc): $(printf '%s\n' "$out" | grep I122 | cut -c1-200)" ;;
+      esac
+    fi
+  fi
+fi
+
+# --- A44: WRONG ARM W10 — a hand-listed population -----------------------------
+t="$(fresh)"
+if edit "$t" "core/team-roles/qa.md" "$MUT_I122_DROP"; then
+  says I122 "A44a W10's tree is an offender: the shipped arm names qa.md" "$t" "$I122_MISSING: core/team-roles/qa.md"
+  if edit "$t" "$ARM" "$MUT_W10"; then
+    out="$(run_i122_out "$t")"; rc=$?
+    if guard_sel "$rc" "$out"; then
+      case "$out" in
+        *"core/team-roles/qa.md"*) bad "A44b W10 (hand-listed population) still named qa.md, so this tree does not separate the two implementations" ;;
+        *"I122's probe scored 1 "*) ok "A44b W10 (a HAND-LISTED population) is KILLED by the probe, which requires the population to be every *.md in the directory" ;;
+        *) bad "A44b W10 reported neither qa.md nor the expected probe refusal (rc=$rc): $(printf '%s\n' "$out" | grep I122 | cut -c1-200)" ;;
+      esac
+    fi
+  fi
+fi
+
+# --- A45: WRONG ARM W11 — the opener keyed as a substring ----------------------
+t="$(fresh)"
+if edit "$t" "core/team-roles/qa.md" "$MUT_I122_INLINE"; then
+  says I122 "A45a W11's tree is an offender: the shipped arm reports the inline opener" "$t" "$I122_INLINE: core/team-roles/qa.md"
+  if edit "$t" "$ARM" "$MUT_W11"; then
+    out="$(run_i122_out "$t")"; rc=$?
+    if guard_sel "$rc" "$out"; then
+      case "$out" in
+        *"$I122_INLINE"*) bad "A45b W11 (substring key) still reported the inline opener, so this tree does not separate the two implementations" ;;
+        *"I122's probe scored 1101010 "*) ok "A45b W11 (the opener keyed as a SUBSTRING) is KILLED by the probe: 100000 and 1000000, the glued opener and the opener with no blank line above it both accepted, and in consequence 10 and 1000" ;;
+        *) bad "A45b W11 reported neither the inline opener nor the expected probe refusal (rc=$rc): $(printf '%s\n' "$out" | grep I122 | cut -c1-200)" ;;
+      esac
+    fi
+  fi
+fi
+
+# --- A46/A47: I121 AND I122 DO NOT SATISFY EACH OTHER ---------------------------
+# Each paragraph dropped from EVERY role file in turn. The arm that owns it must name a file
+# (adversary.md, first in the glob) and the arm that owns the OTHER paragraph must reach a clean
+# verdict on the same tree. An arm keyed on its neighbour's opener or closer fails one half.
+xprobe() { # xprobe <label> <drop-mutation> <owner-arm> <owner-missing-msg> <other-arm>
+  local label="$1" mut="$2" own="$3" msg="$4" oth="$5" f brk=0 o1 o2 r1 r2
+  t="$(fresh)"
+  for f in "$t"/core/team-roles/*.md; do
+    edit "$t" "core/team-roles/${f##*/}" "$mut" || { brk=1; break; }
+  done
+  [ "$brk" -eq 0 ] || return 0
+  o1="$(run_arm "$t" "$own")"; r1=$?
+  o2="$(run_arm "$t" "$oth")"; r2=$?
+  guard_sel "$r1" "$o1" || return 0
+  guard_sel "$r2" "$o2" || return 0
+  case "$o1" in
+    *"$msg: core/team-roles/adversary.md"*) ;;
+    *) bad "$label — $own did not name the files its paragraph was dropped from (rc=$r1)"; return 0 ;;
+  esac
+  case "$r2:$o2" in
+    *"FAIL: $oth"*) bad "$label — $oth reported on a tree where only $own's paragraph was dropped, so the two arms are entangled (rc=$r2)" ;;
+    0:*"$OKLINE"*)  ok "$label" ;;
+    *)              bad "$label — $oth reached no verdict (rc=$r2), so its silence is a run that died" ;;
+  esac
+}
+xprobe "A46 the verify-shape paragraph dropped everywhere: I121 names the files and I122 stays green" \
+       "$MUT_I121_DROP" I121 "$I121_MISSING" I122
+xprobe "A47 the advisor paragraph dropped everywhere: I122 names the files and I121 stays green" \
+       "$MUT_I122_DROP" I122 "$I122_MISSING" I121
+
 # --- I75: the seeded-drift oracle (BL-269) ------------------------------------
 # I75 had no fixture anywhere, and its finding sets are EMPTY on a clean tree -- every subject
 # hashes to the one modal chain -- so a before/after comparison around any rewrite of it compares
@@ -837,7 +1055,7 @@ fi
 # THE COUNT IS ASSERTED. A driver whose `for` loop or `if` guard stopped reaching an assertion
 # prints fewer lines and no failure, and an unrun assertion is indistinguishable from one that
 # passed.
-EXPECTED=46
+EXPECTED=63
 if [ "$asserted" -ne "$EXPECTED" ]; then
   printf '\nderived-fence-binding: FIXTURE BROKEN — %d assertions ran, %d were declared. An assertion that never ran reads exactly like one that passed.\n' "$asserted" "$EXPECTED"
   exit 2

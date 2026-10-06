@@ -139,3 +139,4 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I119 | no shipped prompt prescribes a whole fan-out "in ONE message" |
 | I120 | the citation floor's bash measure is node's, member for member |
 | I121 | every role contract carries the verify-shape paragraph exactly once, byte-identical, and no other file carries it |
+| I122 | every role contract carries the advisor paragraph exactly once, byte-identical, and no other file carries it |

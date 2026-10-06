@@ -107,6 +107,12 @@ A recipe in an artifact that cannot be run in either form is reported as underiv
 run as compound shell. A call that sets variables, defines a function or runs `bash -c` matches
 no command-prefix allow rule and can stop an unattended sprint until a human approves it.
 
+**Consult the `advisor` tool when it is available.** If an `advisor` tool is available to you,
+call it before your first edit or write, and again before you write your deliverable or verdict.
+It takes no parameters and forwards your whole transcript to a stronger reviewer; weigh what it
+returns, and if it contradicts evidence you hold, say so in your deliverable rather than
+switching silently. If the tool is absent or returns an error, continue without it.
+
 ## NEVER MASK A CODE DEFECT WITH AN OPERATIONAL WORKAROUND
 
 **Raising a timeout, adding a retry, pinning to an older build, widening a permission,
