@@ -1144,6 +1144,11 @@ PG_HOOK="$ROOT/.githooks/pre-push"
 [ -f "$PG_HOOK" ] || broken "cannot locate .githooks/pre-push at $PG_HOOK"
 PGW="$WORK/pgstep"; mkdir -p "$PGW/scripts" || broken "could not create the hook-step world"
 PG_LIB="$PGW/lib.sh"
+echo "  hook: ${PG_HOOK#"$ROOT"/}"
+# readset_pid_start is NOT extracted: every lock seeded here is a two-field lock, which the reader
+# judges at its legacy branch before it reads a start time, so nothing here runs `ps`. That is
+# deliberate -- /bin/ps is setuid, the read-set deriver's sandbox refuses it, and a fixture that runs
+# it can never be traced. The start-time worlds (BL-463) live in readset-skip, which is unmapped.
 { awk '/^readset_lock_stale\(\) \{/,/^}/' "$PG_HOOK"
   awk '/^pole_guard_step\(\) \{/,/^}/' "$PG_HOOK"
   printf 'overlap_probe() {\n'
@@ -1195,6 +1200,10 @@ pg_mut() { # <name> <from> <to> <lock> <arm's correct result>
 pg_mut noskip 'if [ "${READSET_TRACE_OVERLAP:-0}" = 1 ]; then' 'if false; then' live "$PG_SKIP"
 pg_mut nodetect '    READSET_TRACE_OVERLAP=1' '    :' live "$PG_SKIP"
 pg_mut nostale '[ -d "$READSET_LOCAL.lock" ] && ! readset_lock_stale "$READSET_LOCAL.lock"' '[ -d "$READSET_LOCAL.lock" ]' dead "$PG_COMPARE"
+# No mutant anywhere deletes the legacy branch (`[ -n "$s" ] || return 1`): one was built and moved
+# readset-skip's `legacylive` world AND the `live` hook-step arm above, whose seed is also a
+# two-field lock. That arm owns the regression (an upgrade turning every older lock stale) and kills
+# it; `legacylive` adds only the no-announcement conjunct.
 
 # EXPECTED_ASSERTIONS, DERIVED FROM THE ARM LIST rather than typed. A hardcoded total goes
 # stale the release somebody adds an arm, and it goes stale SILENTLY in the direction that
@@ -1203,7 +1212,10 @@ pg_mut nostale '[ -d "$READSET_LOCAL.lock" ] && ! readset_lock_stale "$READSET_L
 # incremented by every `mut` call, and the unmutated control, which is straight-line and
 # cannot vary.
 EXPECTED_ASSERTIONS=$((ARM_COUNT + MUT_COUNT + 1 + HOOK_ARMS))
-[ "$HOOK_ARMS" -eq 6 ] || { printf '  FAIL  %s hook-step assertions ran, 6 expected\n' "$HOOK_ARMS"; fails=$((fails + 1)); }
+# HOOK_WANT is derived from this file's own call lines: one assertion per pg_arm/pg_mut.
+HOOK_WANT="$(grep -cE '^(pg_arm|pg_mut) ' "$HERE/run.sh")" || HOOK_WANT=0
+[ "$HOOK_WANT" -ge 6 ] || broken "counted $HOOK_WANT hook-step call lines in $HERE/run.sh, expected at least 6"
+[ "$HOOK_ARMS" -eq "$HOOK_WANT" ] || { printf '  FAIL  %s hook-step assertions ran, %s expected\n' "$HOOK_ARMS" "$HOOK_WANT"; fails=$((fails + 1)); }
 if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf '  FAIL  %s assertions ran, %s expected — an arm did not execute\n' "$asserts" "$EXPECTED_ASSERTIONS"
   fails=$((fails + 1))
