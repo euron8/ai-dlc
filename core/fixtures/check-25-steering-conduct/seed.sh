@@ -141,4 +141,26 @@ use_rec "$F" msg_01SibAlpha u-h1 "$T0"  q1 AskUserQuestion "$AUQ"
 use_rec "$F" msg_01SibAlpha u-h2 "$T0B" b1 Bash "$BASH_IN"
 res_rec "$F" u-h3 "$TSIB" b1 "ok"
 
+# --- srv-*: SERVER-SIDE tools, in the shape the harness writes them -------------
+# A server tool is a `server_tool_use` block and a `<kind>_tool_result` block, BOTH in
+# ASSISTANT records sharing one message.id, never a user-record tool_result. Lifted from the
+# reference consumer's transcripts (`advisor` / `advisor_tool_result` with redacted object
+# content; `tool_search_tool_regex` / `tool_search_tool_result`). turn() above writes the
+# client-tool shape and must not be used here.
+srv_rec() { # srv_rec <file> <mid> <uuid> <ts> <block-json>
+  printf '%s\n' "{\"type\":\"assistant\",\"uuid\":\"$3\",\"timestamp\":\"$4\",\"message\":{\"id\":\"$2\",\"role\":\"assistant\",\"content\":[$5]}}" >> "$1"
+}
+# srv-advisor: an advisor call blocking 176s, the measured lead maximum. EXEMPT: count 0.
+mkdir -p "$ROOT/srv-advisor"; F="$ROOT/srv-advisor/session.jsonl"; : > "$F"
+srv_rec "$F" msg_01SrvAdv u-s1 "2026-07-13T14:00:00.000Z" \
+  '{"type":"server_tool_use","id":"srvtoolu_01Adv","name":"advisor","input":{}}'
+srv_rec "$F" msg_01SrvAdv u-s2 "2026-07-13T14:02:56.000Z" \
+  '{"type":"advisor_tool_result","tool_use_id":"srvtoolu_01Adv","content":{"type":"advisor_redacted_result","encrypted_content":"Eo"}}'
+# srv-search: a NON-advisor server tool blocking the same 176s. Still charged: count 1.
+mkdir -p "$ROOT/srv-search"; F="$ROOT/srv-search/session.jsonl"; : > "$F"
+srv_rec "$F" msg_01SrvSearch u-t1 "2026-07-13T14:00:00.000Z" \
+  '{"type":"server_tool_use","id":"srvtoolu_01Search","name":"tool_search_tool_regex","input":{"pattern":"^Agent","limit":5}}'
+srv_rec "$F" msg_01SrvSearch u-t2 "2026-07-13T14:02:56.000Z" \
+  '{"type":"tool_search_tool_result","tool_use_id":"srvtoolu_01Search","content":{"type":"tool_search_tool_search_result","tool_references":[]}}'
+
 echo "$ROOT"

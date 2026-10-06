@@ -395,7 +395,16 @@ const CITE_MIN_NORM_CHARS = 12;
 const one = process.env.AI_DLC_T, dir = process.env.AI_DLC_D;
 
 // AskUserQuestion measures the human's think-time, not machine starvation.
-const EXEMPT = new Set(["AskUserQuestion"]);
+//
+// `advisor` IS EXEMPT BY DECISION, NOT BY OMISSION. It is a server-side tool: it takes no
+// parameters, it cannot be backgrounded, and while it runs the operator cannot steer. Rule 29
+// names it as the one bounded foreground exception and Rule 32 confines it to touchpoints
+// where no join is outstanding (touchpoint P re-arms the beat first). Measured over the
+// reference consumer's lead transcripts: 14 completed advisor calls, median 94s, max 176s,
+// 4 of 14 past the 150s threshold, 3 more with no result recorded. Charged, each of those
+// would be a STARVATION row against a call the rules require; the reader above sees it and
+// this line excuses it by name. Every other server tool is still charged.
+const EXEMPT = new Set(["AskUserQuestion", "advisor"]);
 const ADVANCING = new Set(["Agent", "Task", "Skill", "TaskCreate"]);
 
 // THE genuine-operator-message predicate: "a real human FREELY TYPED this". Returns the
@@ -823,15 +832,25 @@ for (const f of files) {
   } catch { continue; }
 
   // ---- Check A: foreground calls that exceed the budget -------------------
+  // A SERVER-SIDE TOOL IS A FOREGROUND CALL TOO, AND IT IS WRITTEN IN A DIFFERENT SHAPE. The
+  // harness records a server tool (`advisor`, `tool_search_tool_regex`) as a `server_tool_use`
+  // block and its answer as a `<kind>_tool_result` block, BOTH inside ASSISTANT records sharing
+  // one message.id -- never as a tool_use / user-record tool_result pair. A reader keyed on
+  // `tool_use` alone never saw one, so a server call of any length charged nothing. Measured on
+  // the reference consumer: 272 `advisor_tool_result` and 180 `tool_search_tool_result` blocks,
+  // each in the same message.id as its use. isUse/isRes are the one place the shape is named.
+  // A server tool cannot be backgrounded, so it carries no run_in_background input.
+  const isUse = (b) => /^(server_)?tool_use$/.test(b.type || "");
+  const isRes = (b) => /^([a-z_]+_)?tool_result$/.test(b.type || "");
   const use = {}, res = {}, denied = new Set();
   for (const r of recs) {
     const c = r.message?.content;
     if (!Array.isArray(c)) continue;
     for (const b of c) {
-      if (b.type === "tool_use")
+      if (isUse(b))
         use[b.id] = { n: b.name, t: Date.parse(r.timestamp), bg: b.input?.run_in_background === true,
                       mid: r.message?.id || "" };
-      if (b.type === "tool_result") {
+      if (isRes(b)) {
         res[b.tool_use_id] = Date.parse(r.timestamp);
         if (isDenied(b)) denied.add(b.tool_use_id);   // the hook stopped this one
         // ---- Check D: TaskOutput handed an agent_id ------------------------
