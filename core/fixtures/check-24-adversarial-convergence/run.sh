@@ -2203,13 +2203,30 @@ fi
 #   k3w-nomf   the same pass, NO manifest in the sprint                                SILENT
 #   k3w-other  `test-strategy-adversarial-p1` over a file the manifest does not name   SILENT (drops at
 #              the artifact test, K3's `k3_names`)
+#   k3w-brief  `product-brief-adversarial-p1`, one adversary over the brief (a stem
+#              OUTSIDE s<N>, root walk up two levels), + manifest, post-stamp          FAIL (K3
+#   k3w-arch   `architecture-impact-adversarial-p1` over a stem INSIDE s<N>, + manifest FAIL (K3
+# The new worlds carry their OWN build flag: a world here that fails to build is FIXTURE BROKEN by
+# name, and never takes the original K3 cells above down with it.
+K3W_BUILT=1; K3W_BAD=""
+k3w_bad() { K3W_BUILT=0; K3W_BAD="$K3W_BAD $1"; }
+# k3w_single <world> <stem> <file rel> -- one adversary's pass written directly, as a one-part
+# reviewer writes it (no merge: these files read SERIAL), the manifest written by the real first map.
+k3w_single() {
+  AI_DLC_PROJECT_ROOT="$1" bash "$K3S/partition-subject.sh" --map 9 >/dev/null 2>&1
+  [ -f "$1/$K3PA/s9/requirements-subject.md" ] || return 1
+  k3_shard "$1/$K3PA/s9" "$2-adversarial-p1" x 0 "$3" "$(k3sha "$1/$3")" \
+    && sed -i.b "s/^tool_use_id: .*/tool_use_id: toolu_k3$2/" "$1/$K3PA/s9/$2-adversarial-p1.md" && rm -f "$1/$K3PA/s9/"*.b
+}
 K3_PRED="$(sed -n 's/^K3_RELEASE="\([0-9.]*\)"$/\1/p' "$VALIDATOR")"
-w="$(k3_world k3w-post "$K3_POST")" && k3_document_pass "$w" "$K3S" keep || K3_BUILT=0
-w="$(k3_world k3w-pre "$K3_LATE")" && k3_document_pass "$w" "$K3S" keep || K3_BUILT=0
-w="$(k3_world k3w-pred "$K3_POST" "" "" "$K3_PRED")" && k3_document_pass "$w" "$K3S" keep || K3_BUILT=0
+w="$(k3_world k3w-post "$K3_POST")" && k3_document_pass "$w" "$K3S" keep || k3w_bad k3w-post
+w="$(k3_world k3w-pre "$K3_LATE")" && k3_document_pass "$w" "$K3S" keep || k3w_bad k3w-pre
+w="$(k3_world k3w-pred "$K3_POST" "" "" "$K3_PRED")" && k3_document_pass "$w" "$K3S" keep || k3w_bad k3w-pred
 w="$(k3_world k3w-nomf "$K3_POST")" && k3_document_pass "$w" "$K3S" nomanifest \
-  && [ ! -e "$w/$K3PA/s9/requirements-subject.md" ] || K3_BUILT=0
-w="$(k3_world k3w-other "$K3_POST")" && k3_other_pass "$w" "$K3S" || K3_BUILT=0
+  && [ ! -e "$w/$K3PA/s9/requirements-subject.md" ] || k3w_bad k3w-nomf
+w="$(k3_world k3w-other "$K3_POST")" && k3_other_pass "$w" "$K3S" || k3w_bad k3w-other
+w="$(k3_world k3w-brief "$K3_POST")" && k3w_single "$w" product-brief "$K3PA/product-brief.md" || k3w_bad k3w-brief
+w="$(k3_world k3w-arch "$K3_POST")" && k3w_single "$w" architecture-impact "$K3PA/s9/architecture-impact.md" || k3w_bad k3w-arch
 
 # --- J2 PER STEM (J2S_RELEASE): a subject stem moved after the requirements series met ---------
 # Each world is k3-subject's (a MET `merge --subject` pass notarizing the four stems, so K3 itself is
@@ -2254,9 +2271,9 @@ j2s_sub() { # <list> <stem> <sha> -> the list with that stem's sha replaced
   local t o=""; for t in $1; do case "$t" in "$2="*) t="$2=$3" ;; esac; o="$o${o:+ }$t"; done; printf '%s' "$o"
 }
 J2S_FAKE="$(printf '%064d' 7)"
-w="$(j2s_world j2s-nochain "$K3_POST")" && printf 'cap-2: THE system SHALL y.\n' >> "$w/$J2S_SPEC" || K3_BUILT=0
-w="$(j2s_world j2s-chain "$K3_POST")" || K3_BUILT=0
-if [ "$K3_BUILT" -eq 1 ]; then
+w="$(j2s_world j2s-nochain "$K3_POST")" && printf 'cap-2: THE system SHALL y.\n' >> "$w/$J2S_SPEC" || k3w_bad j2s-nochain
+w="$(j2s_world j2s-chain "$K3_POST")" || k3w_bad j2s-chain
+if [ "$K3W_BUILT" -eq 1 ]; then
   j2s_n="$(k3sha "$w/$J2S_SPEC")"; printf 'cap-2: THE system SHALL y.\n' >> "$w/$J2S_SPEC"
   j2s_m="$(k3sha "$w/$J2S_SPEC")"; printf 'cap-3: THE system SHALL z.\n' >> "$w/$J2S_SPEC"
   j2s_d="$(k3sha "$w/$J2S_SPEC")"; j2s_b="$(k3sha "$w/$K3PA/product-brief.md")"
@@ -2264,17 +2281,17 @@ if [ "$K3_BUILT" -eq 1 ]; then
     "$K3PA/product-brief.md|$j2s_b|$j2s_b" "$J2S_SPEC|$j2s_n|$j2s_m"
   j2s_rec "$w/$K3PA/s9/requirements-repair-el.md" "$J2S_SPEC|$j2s_m|$j2s_d"
 fi
-w="$(j2s_world j2s-subjlink "$K3_POST")" || K3_BUILT=0
-if [ "$K3_BUILT" -eq 1 ]; then
+w="$(j2s_world j2s-subjlink "$K3_POST")" || k3w_bad j2s-subjlink
+if [ "$K3W_BUILT" -eq 1 ]; then
   j2s_l0="$(sed -n 's/^artifact_sha: //p' "$w/$K3PA/s9/requirements-adversarial-p1.md")"
   j2s_l1="$(j2s_sub "$j2s_l0" prd "$J2S_FAKE")"
   printf -- '- FR-S9-2: architecture_impact: none\n' >> "$w/$J2S_ARCH"
   j2s_l2="$(j2s_sub "$j2s_l1" architecture-impact "$(k3sha "$w/$J2S_ARCH")")"
   j2s_rec "$w/$K3PA/s9/requirements-repair-p1.md" "$J2S_MF|$j2s_l0|$j2s_l1" "$J2S_MF|$j2s_l1|$j2s_l2"
 fi
-w="$(j2s_world j2s-prd "$K3_POST")" && printf 'moved after MET\n' >> "$w/$K3PA/prd.md" || K3_BUILT=0
-w="$(j2s_world j2s-pre "$K3_LATE")" && printf -- '- FR-S9-2: architecture_impact: none\n' >> "$w/$J2S_ARCH" || K3_BUILT=0
-w="$(j2s_world j2s-pred "$K3_POST" "$J2S_PRED")" && printf 'cap-2: THE system SHALL y.\n' >> "$w/$J2S_SPEC" || K3_BUILT=0
+w="$(j2s_world j2s-prd "$K3_POST")" && printf 'moved after MET\n' >> "$w/$K3PA/prd.md" || k3w_bad j2s-prd
+w="$(j2s_world j2s-pre "$K3_LATE")" && printf -- '- FR-S9-2: architecture_impact: none\n' >> "$w/$J2S_ARCH" || k3w_bad j2s-pre
+w="$(j2s_world j2s-pred "$K3_POST" "$J2S_PRED")" && printf 'cap-2: THE system SHALL y.\n' >> "$w/$J2S_SPEC" || k3w_bad j2s-pred
 
 echo
 echo "--- arm K3 (SUBJECT)"
@@ -2320,7 +2337,14 @@ PY
   k3_mut "K3X2 stamp gate deleted" "0 1 1 1" \
     '    elif [[ "$k3_at" < "$k3_stamp" ]]; then' \
     '    elif false; then'
+fi
 
+echo
+echo "--- arm K3 widened (K3B_RELEASE) and arm J2 per stem (J2S_RELEASE)"
+if [ "$K3W_BUILT" -ne 1 ]; then
+  FAILURES=$((FAILURES + 1)); ASSERTIONS=$((ASSERTIONS + 1))
+  printf '  FAIL  %-28s FIXTURE BROKEN -- world(s)%s did not build (under %s)\n' "k3w-worlds" "$K3W_BAD" "$K3W"
+else
   # --- K3 widened, J2 per stem: the cells ---------------------------------------------------
   # k3w_run <validator> <world> <series stem> -- the series is named by its own stem, as the
   # post-planning sweep names every `*-adversarial-p*` series in the sprint.
@@ -2335,8 +2359,9 @@ PY
       sed 's/^/          | /' "$K3_OUT"
     fi
   }
-  echo "--- arm K3 widened (K3B_RELEASE) and arm J2 per stem (J2S_RELEASE)"
   k3w_cell k3w-post  "$VALIDATOR" "$K3W/k3w-post"  prd 1 "FAIL (K3 -- SUBJECT): prd-adversarial-p1.md: it reviews" -
+  k3w_cell k3w-brief "$VALIDATOR" "$K3W/k3w-brief" product-brief 1 "FAIL (K3 -- SUBJECT): product-brief-adversarial-p1.md: it reviews" -
+  k3w_cell k3w-arch  "$VALIDATOR" "$K3W/k3w-arch"  architecture-impact 1 "FAIL (K3 -- SUBJECT): architecture-impact-adversarial-p1.md: it reviews" -
   k3w_cell k3w-pre   "$VALIDATOR" "$K3W/k3w-pre"   prd 0 "Legacy series." "FAIL (K3"
   k3w_cell k3w-pred  "$VALIDATOR" "$K3W/k3w-pred"  prd 0 "at 0.736.0 or later -- not owed yet." "FAIL (K3"
   k3w_cell k3w-nomf  "$VALIDATOR" "$K3W/k3w-nomf"  prd 0 - "K3 -- SUBJECT"
@@ -2359,11 +2384,12 @@ PY
     elif grep -qF "PENDING ($4" "$K3_OUT"; then printf 'PENDING'
     else printf 'SILENT'; fi
   }
-  k3w_row() { # <validator> -> the five K3-widened cells
+  k3w_row() { # <validator> -> the seven K3-widened cells
     # Each world's series is the only one run, so any K3 line in its output is about that series.
-    printf '%s %s %s %s %s' "$(k3w_class "$1" k3w-post prd 'K3 -- SUBJECT')" \
+    printf '%s %s %s %s %s %s %s' "$(k3w_class "$1" k3w-post prd 'K3 -- SUBJECT')" \
       "$(k3w_class "$1" k3w-pre prd 'K3 -- SUBJECT')" "$(k3w_class "$1" k3w-pred prd 'K3 -- SUBJECT')" \
-      "$(k3w_class "$1" k3w-nomf prd 'K3 -- SUBJECT')" "$(k3w_class "$1" k3w-other test-strategy 'K3 -- SUBJECT')"
+      "$(k3w_class "$1" k3w-nomf prd 'K3 -- SUBJECT')" "$(k3w_class "$1" k3w-other test-strategy 'K3 -- SUBJECT')" \
+      "$(k3w_class "$1" k3w-brief product-brief 'K3 -- SUBJECT')" "$(k3w_class "$1" k3w-arch architecture-impact 'K3 -- SUBJECT')"
   }
   j2s_row() { # <validator> -> the six J2-per-stem cells
     local c r=""
@@ -2395,20 +2421,25 @@ PY
     if [ "$got" = "$want" ]; then printf '  ok    %-28s row [%s]\n' "$label" "$got"
     else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s row [%s], want [%s]\n' "$label" "$got" "$want"; fi
   }
-  #                       post    pre     pred    nomf   other
-  K3W_REAL="FAIL PENDING PENDING SILENT SILENT"
+  #                       post    pre     pred    nomf   other  brief  arch
+  K3W_REAL="FAIL PENDING PENDING SILENT SILENT FAIL FAIL"
   rowmut "K3WX0 control (unmutated)" k3w_row "$K3W_REAL"
   # The widened case arm matching nothing: every widened series escapes K3 by its name again.
-  rowmut "K3WX1 widened case arm gone" k3w_row "SILENT SILENT SILENT SILENT SILENT" \
+  rowmut "K3WX1 widened case arm gone" k3w_row "SILENT SILENT SILENT SILENT SILENT SILENT SILENT" \
     '  *-adversarial-p[0-9]*.md)' '  *-adversarial-pNEVER.md)'
   # The artifact test skipped: a sprint's OTHER series beside the manifest is convicted as the subject's.
-  rowmut "K3WX2 artifact test skipped" k3w_row "FAIL PENDING PENDING SILENT FAIL" \
+  rowmut "K3WX2 artifact test skipped" k3w_row "FAIL PENDING PENDING SILENT FAIL FAIL FAIL" \
     'k3_names "$k3_dir" "$k3_wf" || k3_go=0' 'true || k3_go=0'
   # The widened candidate dated against K3_RELEASE: a repo stamped at 0.735.0 convicts retroactively.
-  rowmut "K3WX3 widened stamp not rebound" k3w_row "FAIL PENDING FAIL SILENT SILENT" \
+  rowmut "K3WX3 widened stamp not rebound" k3w_row "FAIL PENDING FAIL SILENT SILENT FAIL FAIL" \
     'k3_rel="$K3B_RELEASE"' 'k3_rel="$K3_RELEASE"'
-  rowmut "K3WX4 K3B_RELEASE lowered" k3w_row "FAIL PENDING FAIL SILENT SILENT" \
+  rowmut "K3WX4 K3B_RELEASE lowered" k3w_row "FAIL PENDING FAIL SILENT SILENT FAIL FAIL" \
     'K3B_RELEASE="0.736.0"' 'K3B_RELEASE="0.735.0"'
+  # k3_names rooted at the sprint dir, no walk up (self-probe conjunct with it): only a stem the
+  # manifest names relative to a root it can no longer find drops out -- every stem, in- or out-of-s<N>.
+  rowmut "K3WX5 manifest root not walked" k3w_row "SILENT SILENT SILENT SILENT SILENT SILENT SILENT" \
+    '    if [ -n "$first" ] && [ -f "$w/$first" ]; then root="$w"; break; fi' '    root=""; break' \
+    'if [ "$k3bp1" -ne 0 ] || [ "$k3bp2" -eq 0 ] || [ "$k3bp3" -ne 0 ]; then' 'if false; then'
   #                       nochain chain   subjlink prd    pre     pred
   J2S_REAL="FAIL SILENT SILENT SILENT PENDING PENDING"
   rowmut "J2SX0 control (unmutated)" j2s_row "$J2S_REAL"

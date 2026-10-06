@@ -796,7 +796,10 @@ mutant "MX14 B4-by-document guard removed" "b4doc" \
   'if false; then'
 # MX15 dies on TWO arms, both genuinely: U11 sees a refusal where none is owed, and U9 sees the
 # refusal name the wrong stem -- an always-true compare refuses at the manifest's FIRST row, so it
-# tells the lead `--document prd.md` is the 'product-brief' file. U9's stem-name conjunct owns that.
+# tells the lead `--document prd.md` is the 'product-brief' file. The stand-down the mutant rule
+# prescribes is NOT taken: the only arm that could stand down is U9's stem-name conjunct, which is
+# there because prd is seeded NOT first in the manifest, and a refusal naming the wrong file is the
+# costlier failure -- it is the remedy text the lead acts on.
 mutant "MX15 B4-by-document refuses every document" "b4doc b4doc_other" \
   '    [ "$(cd "$(dirname "$B4_ROOT/$b4_rel")" && pwd -P)/${b4_rel##*/}" = "$DOCUMENT" ] \' \
   '    true \'
