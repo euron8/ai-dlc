@@ -108,14 +108,6 @@ transcript's last advisor call is after its last such action. A subagent is judg
 `~/.claude/hooks/ai-dlc-advisor-gate.test.sh`, 17/17. **Not yet observed firing in a live session.** It covers 2 of the
 plan's 5 advisor triggers; scoping, each contract and a result that does not fit stay the lead's.
 
-**FINDING (NOTE), NOT FILED: A `docs/` CHANGE SELECTS NO FIXTURE, BY DESIGN, AND TWO FIXTURES READ THE LIVE BACKLOG.**
-`readset_drop_excluded` (both hooks, since `v0.347.0`) drops the content key's `EXCLUDE` tops (`docs`, `CHANGELOG.md`,
-`VERSION`, `CLAUDE.md`) from the skip's universe, deliberately: a plan edit had forced the whole suite. 23 fixtures'
-committed read sets name paths under those tops. Most reads are incidental, but two copy the live `docs/backlog.md` into
-a scratch tree as a subject: `backlog-size-ceiling` arm b16 and `backlog-receipt-binding` arm j1. A backlog edit can
-move those arms and selects neither. Measured at this close: `backlog-size-ceiling` run directly on the edited backlog
-passed 16/16. The live backlog is also gated outside the suite on every push (receipts and backlog depth).
-
 **OPEN, NOT BUILT:** whether the dev role gets a setup row in the read-set mapping; recommended yes, not decided.
 
 **THE DELIVERY GAP IS ONE RELEASE.** graph's `.claude/.ai-dlc-version` reads 0.730.0 against `VERSION` 0.731.0. Its
