@@ -900,13 +900,18 @@ matches_pin() {
 # `model` -- the definition ai-dlc-dispatch-guard.sh already uses (PARTY PERSONAS in its
 # header). A consumer adding a seat gets it here with no edit.
 #
-# THE GATE-1 REVIEWERS ARE IN IT, `qa` IS NOT. A code-reviewer (or code-reviewer-escalated)
-# dispatch is one part of `partition-review-diff.sh --map`, the cross shard, or `shard: 1/1
-# <story-index>` when the map is SERIAL -- never `shard: none (...)`, so S3 judges an invented
-# exception on them. Gate 2 dispatches qa serially as `shard: 1/1 <story-index>` and has no
-# shard merge, so qa is outside the set and S1/S3 do not judge it. Consequence on a ledger
-# whose reviewer rows predate this: a keyless row stays PENDING; a row carrying `shard: null`
-# now WARNs under S1 (never fails).
+# THE GATE-1 REVIEWERS AND GATE-2 `qa` ARE IN IT. A code-reviewer (or code-reviewer-escalated)
+# dispatch, and a qa dispatch, is one part of `partition-review-diff.sh --map`, the cross
+# shard, or `shard: 1/1 <story-index>` when the map is SERIAL -- never `shard: none (...)`, so
+# S3 judges an invented exception on them. Gate 2 partitions afresh on its go-signal sha and
+# joins its shards with `merge-review-shards.sh --gate qa`. A qa row that validates no story
+# diff (a party, retro or deploy re-validation seat whose role is `qa`) is a single-voice
+# dispatch, `shard: 1/1 <key>`, which the grammar accepts. Consequence on a ledger whose
+# reviewer or qa rows predate this: a keyless row stays PENDING; a row carrying `shard: null`
+# WARNs under S1 (never fails). Measured when qa joined, on the reference consumer ledger,
+# this script before and after: S3 unchanged (sprint 316: 1 and 1; sprint 315: 0 and 0); every
+# added S1 WARN is a qa row written with `shard: null` (316: 112 -> 147, +35; 315: 21 -> 59,
+# +38), and the 38 qa rows on 316 already carrying `1/N` lines move to the OK count.
 #
 # WHY S1 WARNS AND S3 FAILS. Whether a scope is one part or several is a judgment about
 # intent; `shard: none (<exception>)` is the lead declaring it, and nothing at dispatch can
@@ -939,7 +944,7 @@ matches_pin() {
 # warns on none; S2 finds no `shard_tool_use_ids:` line and joins nothing. The narrowing is
 # the key-presence test above -- keyed on `shard == null` alone, every shardable row ever
 # written would warn.
-SHARD_ROLES="adversary remediator gate-adjudicator analyst code-reviewer code-reviewer-escalated"
+SHARD_ROLES="adversary remediator gate-adjudicator analyst code-reviewer code-reviewer-escalated qa"
 NL='
 '
 
@@ -1517,6 +1522,11 @@ else
              echo "      Rule 28: one reviewer per part 'partition-review-diff.sh --map' prints for the story diff"
              echo "      plus 'shard: cross/<N> cross', or 'shard: 1/1 <story-index>' when the map is SERIAL"
              echo "      (grammar: ai-dlc-dispatch-guard.sh, THE SHARD LINE). Not a failure." ;;
+           qa)
+             echo "      Rule 28: for a gate-2 validation, one QA per part 'partition-review-diff.sh --map' prints on the"
+             echo "      go-signal sha plus 'shard: cross/<N> cross', or 'shard: 1/1 <story-index>' when the map is SERIAL;"
+             echo "      a qa seat with no story diff is 'shard: 1/1 <key>' (grammar: ai-dlc-dispatch-guard.sh, THE SHARD"
+             echo "      LINE). Not a failure." ;;
            *)
              echo "      Rule 28: one agent per independent part (files, or the sections partition-document.sh --map"
              echo "      prints), or 'shard: none (<1-4>)' naming the serial exception -- 4 is a document the map"

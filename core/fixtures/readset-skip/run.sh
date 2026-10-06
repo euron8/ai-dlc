@@ -79,7 +79,9 @@ select_in() {
     . "$POOL" 2>/dev/null
     for d in core/fixtures/*/; do printf '%s\n' "$d"; done > "$scratch/list"
     readset_manifest "$scratch"
-    cp "$scratch/.now" .git/ai-dlc-fixture-verified 2>/dev/null
+    # SEEDED AS THE HOOK WRITES IT: the record AND its `v2` format stamp. An arm modelling a
+    # record an OLDER hook wrote removes the stamp in its own mutation.
+    cp "$scratch/.now" .git/ai-dlc-fixture-verified 2>/dev/null && printf 'v2\n' > .git/ai-dlc-fixture-verified.format
     eval "$*"                                   # the caller's mutation of the tree
     cp "$scratch/list" "$scratch/l"
     apply_readset_skip "$scratch/l" "$scratch" > "$scratch/msg" 2>&1
@@ -374,6 +376,162 @@ else
   bad "CONTROL: the unmutated copy did not reproduce the baseline ('$(sel_of "$R")') — every mutant above is unattributable"
 fi
 
+# ------------------------------------------------------- git-ignored paths, from every source ----
+# THE DEFECT: the map arm of the manifest bypassed `--exclude-standard`, so a map row naming an
+# IGNORED file was hashed whenever the file existed. A trace in the main checkout recorded three
+# ignored `.DS_Store` files, a green run there wrote them into the verified record in the SHARED
+# git dir, and a push from a worktree without them saw them VANISH: their parents joined `.match`
+# and 11 changed paths selected 226 of 232 fixtures where their own rows select 55.
+#
+# The world: `src/x.bin` is ignored and named by alpha's map row, and beta names `src` -- so a
+# vanished x.bin reaching `.match` selects beta, which is the motivating over-selection.
+# `ign` creates x.bin untracked; `forced` force-adds it, so it is TRACKED and still matches
+# the ignore pattern. Every arm edits src/a.sh too, so a correct run selects 'alpha gamma' and
+# an over-selection and an orphan fallback both read as 'alpha beta gamma'.
+IGN_ARMS=0
+REAL_GIT="$(command -v git)" || broken "no git on PATH"
+SHIM="$WORK/shim"; mkdir -p "$SHIM" || broken "could not make the check-ignore shim dir"
+# The shim lives under $WORK, outside every seeded tree: inside one it would be an untracked
+# file and an orphan. It scans argv because `-c core.quotePath=false` precedes the subcommand.
+{ printf '#!/bin/sh\nfor a in "$@"; do [ "$a" = check-ignore ] && exit 128; done\n'
+  printf 'exec "%s" "$@"\n' "$REAL_GIT"; } > "$SHIM/git" && chmod +x "$SHIM/git" \
+  || broken "could not write the check-ignore shim"
+seed_ign() { # <t> <none|ign|forced>
+  local t="$1" mode="$2"
+  seed "$t" || return 1
+  printf 'src/x.bin\n' > "$t/.gitignore"
+  printf 'alpha\tsrc/x.bin\n' >> "$t/.ai-dlc-fixture-readsets.tsv"
+  [ "$mode" = none ] || printf 'v1\n' > "$t/src/x.bin"
+  ( cd "$t" && git add -A && { [ "$mode" != forced ] || git add -f src/x.bin; } && \
+    git -c user.email=f@f -c user.name=f commit -qm ignored ) >/dev/null 2>&1 || return 1
+  ( cd "$t" && [ "$mode" != forced ] || git ls-files --error-unmatch src/x.bin ) >/dev/null 2>&1 || return 1
+  ( cd "$t" && [ "$mode" = forced ] || ! git ls-files --error-unmatch src/x.bin ) >/dev/null 2>&1 || return 1
+  [ "$mode" = sub ] || return 0
+  # A GITLINK the outer repo records at src/sub, and a map row naming a file inside it. One such
+  # path makes `check-ignore` exit 128, so this world is the subject of the submodule guard.
+  mkdir -p "$t/src/sub" && printf 'v1\n' > "$t/src/sub/f.txt" || return 1
+  ( cd "$t/src/sub" && git init -q . && git add -A && \
+    git -c user.email=f@f -c user.name=f commit -qm sub ) >/dev/null 2>&1 || return 1
+  printf 'alpha\tsrc/sub/f.txt\n' >> "$t/.ai-dlc-fixture-readsets.tsv"
+  ( cd "$t" && git add -A && git -c user.email=f@f -c user.name=f commit -qm gitlink ) >/dev/null 2>&1 || return 1
+  ( cd "$t" && git ls-files -s | grep -q '^160000 .*	src/sub$' ) || return 1
+  ( cd "$t" && printf 'src/sub/f.txt\n' | git check-ignore --stdin ) >/dev/null 2>&1
+  [ $? -eq 128 ]
+}
+# (a) the motivating case: a record from before the fix lists the ignored file, which is absent.
+# A record from before the fix carries NO format stamp, so the stamp is removed first, and an
+# unstamped record runs everything -- no over-selection is possible because nothing is selected.
+IGN_A='rm -f .git/ai-dlc-fixture-verified.format && printf "src/x.bin\tdeadbeef\n" >> .git/ai-dlc-fixture-verified && sort -o .git/ai-dlc-fixture-verified .git/ai-dlc-fixture-verified && printf v2 > src/a.sh'
+# (g) THE RECORD FILTER WAS A STANDING FILTER AND THAT WAS A WRONG SKIP. x.bin is FORCE-ADDED, so
+# it is tracked, in the manifest and in the `v2` record. `git rm` makes it untracked AND ignored;
+# filtering the record dropped its row, the vanish never reached `.changed`, and the whole suite
+# was skipped over a deleted file beta's `src` row lists. The seed itself asserts the post-state.
+IGN_G='git rm -q src/x.bin && git -c user.email=f@f -c user.name=f commit -qm rmforced >/dev/null && git check-ignore -q src/x.bin && [ -s .git/ai-dlc-fixture-verified.format ] && grep -q "^src/x.bin	" .git/ai-dlc-fixture-verified'
+# (h) the upgrade path in the world it exists for: an OLDER hook (no stamp) hashed an untracked
+# ignored file through the map arm, and the file has since been deleted. It runs everything: this
+# world and (j)'s are byte-identical at read time, and filtering for this one skips (j)'s suite.
+IGN_H='rm -f .git/ai-dlc-fixture-verified.format && printf "src/x.bin\t%s\n" "$(shasum -a 256 src/x.bin | cut -d" " -f1)" >> .git/ai-dlc-fixture-verified && sort -o .git/ai-dlc-fixture-verified .git/ai-dlc-fixture-verified && rm -f src/x.bin && printf v2 > src/a.sh'
+# (i) a stamp this hook cannot read: the record format is unknown, so everything runs.
+IGN_I='printf "v3\n" > .git/ai-dlc-fixture-verified.format && printf v2 > src/a.sh'
+# (j) (g)'s world with NO stamp -- an older hook's record, or this hook's record copy landing and
+# its stamp write failing. x.bin is force-added, recorded, then `git rm`'d, and NOTHING else
+# changes, so a filter over the unstamped record drops the only change and skips the whole suite.
+# The mutation asserts its own post-state: x.bin ignored now, in the record, and no stamp.
+IGN_J='rm -f .git/ai-dlc-fixture-verified.format && git rm -q src/x.bin && git -c user.email=f@f -c user.name=f commit -qm rmforced >/dev/null && git check-ignore -q src/x.bin && [ ! -e .git/ai-dlc-fixture-verified.format ] && grep -q "^src/x.bin	" .git/ai-dlc-fixture-verified'
+IGN_B='printf v2 > src/x.bin && printf v2 > src/a.sh'
+IGN_C='rm -f src/a.sh'
+IGN_D='printf v2 > src/x.bin'
+IGN_E='PATH="$SHIM:$PATH"; printf v2 > src/a.sh'
+ign_arm() { # <label> <seed mode> <mutation> <want sel> <want flag> <message needle> <ok text>
+  local t; t="$(mktemp -d "$WORK/ig.XXXXXX")" || broken "mktemp failed"
+  seed_ign "$t/w" "$2" || broken "ignored-path seed ($2) failed"
+  R="$(select_in "$t/w" "$3")"
+  if [ "$(sel_of "$R")" = "$4" ] && [ "$(flag_of "$R")" = "$5" ] && msg_of "$R" | grep -qF "$6"; then
+    ok "$7"
+  else
+    bad "$1: expected '$4' flag $5 with '$6', got '$(sel_of "$R")' flag $(flag_of "$R"): $(msg_of "$R" | tr -d '\n')"
+  fi
+  IGN_ARMS=$((IGN_ARMS+1))
+}
+ign_arm "(a)" none "$IGN_A" "alpha beta gamma" 0 "predates the format stamp" \
+  "(a) an UNSTAMPED record listing an ignored file now absent runs everything — it is never filtered"
+ign_arm "(b)" ign "$IGN_B" "alpha gamma" 0 "SKIPPING" \
+  "(b) an ignored file PRESENT and EDITED is no change and no orphan — only a.sh's reader runs"
+ign_arm "(c)" ign "$IGN_C" "alpha beta gamma" 0 "SKIPPING" \
+  "(c) in the same world a TRACKED file vanishing still adds its parent and selects beta"
+ign_arm "(d)" forced "$IGN_D" "alpha gamma" 0 "SKIPPING" \
+  "(d) a TRACKED file matching an ignore pattern still counts — editing it selects its reader"
+ign_arm "(e)" none "$IGN_E" "alpha beta gamma" 0 "could not hash" \
+  "(e) check-ignore failing (exit 128) fails CLOSED — the manifest is emptied and everything runs"
+# The seed itself asserts the gitlink is recorded and that check-ignore exits 128 on the path
+# inside it, so this arm cannot pass over a world that never expressed the case.
+ign_arm "(f)" sub 'printf v2 > src/a.sh' "alpha gamma" 0 "SKIPPING" \
+  "(f) a map path inside a SUBMODULE is never asked — check-ignore would exit 128 on it and run everything on every push"
+# (g) runs everything through the orphan branch, not through beta's `src` row: the vanished path is
+# ignored now, so the universe filter drops it. Coarser than its readers, and never a skip.
+ign_arm "(g)" forced "$IGN_G" "alpha beta gamma" 0 "NO fixture read-set (e.g. src/x.bin)" \
+  "(g) a FORCE-ADDED ignored file in a v2 record, then git rm'd, is a VANISH — the suite runs rather than skipping whole"
+ign_arm "(h)" ign "$IGN_H" "alpha beta gamma" 0 "predates the format stamp" \
+  "(h) an UNSTAMPED record from an older hook's map arm, its ignored file since deleted, runs everything"
+ign_arm "(i)" none "$IGN_I" "alpha beta gamma" 0 "unknown format stamp" \
+  "(i) an UNKNOWN format stamp fails CLOSED — everything runs"
+ign_arm "(j)" forced "$IGN_J" "alpha beta gamma" 0 "predates the format stamp" \
+  "(j) a FORCE-ADDED file git rm'd under an UNSTAMPED record runs everything — never 'NOTHING changed, skipping all'"
+
+# Each mutant is scored on the ONE world whose arm it must break, against the same worlds the
+# arms above just passed on unmutated -- those passes are this battery's control.
+# An optional sixth argument is the arm's correct FLAG, and then the mutant survives only if
+# both the set and the flag still match: a whole-suite skip leaves the set untouched, so a
+# mutant that turns "ran everything" into "skipped everything" moves the flag and nothing else.
+ign_mutant() { # <name> <sed expr> <seed mode> <mutation> <arm's correct sel> [arm's correct flag]
+  local name="$1" m t out wantflag="${6:-}"
+  m="$WORK/pool.ign.$name.sh"
+  if ! sed "$2" "$POOL" > "$m"; then bad "IGN MUTANT $name: DID NOT APPLY (sed failed)"; IGN_ARMS=$((IGN_ARMS+1)); return; fi
+  if cmp -s "$POOL" "$m"; then
+    bad "IGN MUTANT $name: the edit matched nothing, so this mutant tests the unmutated program"
+    IGN_ARMS=$((IGN_ARMS+1)); return
+  fi
+  t="$(mktemp -d "$WORK/igm.XXXXXX")" || broken "mktemp failed"
+  seed_ign "$t/w" "$3" || broken "ignored-path seed ($3) failed"
+  local saved="$POOL"; POOL="$m"
+  out="$(select_in "$t/w" "$4")"
+  POOL="$saved"
+  if [ -z "$(sel_of "$out")" ]; then
+    bad "IGN MUTANT $name: selected NOTHING — the mutated copy did not run"
+  elif [ "$(sel_of "$out")" = "$5" ] && { [ -z "$wantflag" ] || [ "$(flag_of "$out")" = "$wantflag" ]; }; then
+    bad "IGN MUTANT $name: still produced '$5'${wantflag:+ flag $wantflag} — the arm it should break does not depend on the mutated line"
+  else
+    ok "IGN MUTANT $name moves its arm: '$5'${wantflag:+ flag $wantflag} became '$(sel_of "$out")' flag $(flag_of "$out")"
+  fi
+  IGN_ARMS=$((IGN_ARMS+1))
+}
+ign_mutant no_manifest_filter \
+  's|readset_drop_ignored "$out/.paths.all" "$out/.paths"; ign_rc=$?|cp "$out/.paths.all" "$out/.paths"; ign_rc=0|' \
+  ign "$IGN_B" "alpha gamma"
+# UNSTAMPED FILTER RESTORED: the round-1 upgrade filter, which skipped (j)'s whole suite. Scored
+# on the FLAG -- (j)'s correct set and the defect's whole-suite skip are the same list.
+ign_mutant unstamped_filter \
+  's#^    printf .*predates the format stamp.*$#    readset_drop_ignored "$VERIFIED_RECORD" "$out/.rec" || return 0#' \
+  forced "$IGN_J" "alpha beta gamma" 0
+# ALWAYS FILTER: the `v2` branch filters too, which is the shipped defect restored. Scored on the
+# FLAG -- (g)'s correct set and the defect's whole-suite skip are the same list.
+ign_mutant always_filter \
+  's|    cp "$VERIFIED_RECORD" "$out/.rec" \\|    readset_drop_ignored "$VERIFIED_RECORD" "$out/.rec" \\|' \
+  forced "$IGN_G" "alpha beta gamma" 0
+# AN UNKNOWN STAMP READ AS `v2`: (i) stops running everything and selects a.sh's reader alone.
+ign_mutant unknown_as_v2 \
+  's|elif \[ "$(cat "$VERIFIED_FORMAT" 2>/dev/null)" = v2 \]; then|elif true; then|' \
+  none "$IGN_I" "alpha beta gamma" 0
+ign_mutant gitignore_grep \
+  's|git -c core.quotePath=false check-ignore --stdin < "$res.q"|grep -xF -f .gitignore < "$res.q"|' \
+  forced "$IGN_D" "alpha gamma"
+ign_mutant fail_open \
+  's|if \[ "$ci_rc" -ne 0 \] && \[ "$ci_rc" -ne 1 \]; then : > "$res"; return 1; fi|:|' \
+  none "$IGN_E" "alpha beta gamma"
+ign_mutant no_gitlink_guard \
+  's|^  cut -f1 "$in" \| awk -v gl="$res.gl" |  cut -f1 "$in" \| awk -v gl=/dev/null |' \
+  sub 'printf v2 > src/a.sh' "alpha gamma"
+
 # ------------------------------------- the manifest's population and the bookkeeping exemption ----
 # TWO DEFECTS, ONE SEED. The manifest fed its path list to `xargs` without `-0`, and `xargs`
 # aborts at the first apostrophe in a name: every file sorted after it went unhashed, so an
@@ -447,6 +605,7 @@ drive() {
     cp "$sc/.now" "$sc/seed.now"; cp "$sc/.files" "$sc/seed.files"
     if [ "$mode" = stale ]; then printf 'seed\tstale\n' > "$GITDIR/ai-dlc-fixture-verified"
     else cp "$sc/.now" "$GITDIR/ai-dlc-fixture-verified"; fi
+    printf 'v2\n' > "$GITDIR/ai-dlc-fixture-verified.format"
     eval "$mut"
     READSET_NO_CHANGE=0
     apply_readset_skip "$sc/list" "$sc" > "$sc/msg" 2>&1
@@ -658,7 +817,9 @@ if lit_mut noz 1 "tr '\\n' '\\000' < \"\$out/.files\" | xargs -0 -n 200 shasum -
   killed noz "the after-apostrophe arm" "$(drive "$M" m.noz 'printf "v2\n" > zzz/b.sh')" "beta delta" 0 "SKIPPING"
 fi
 NEW_ARMS=$((NEW_ARMS+1))
-if lit_mut quotepath 2 "git -c core.quotePath=false ls-files" "git ls-files"; then M="$LM"
+# Three sites: the two manifest listings and the gitlink listing in `readset_drop_ignored`. The
+# kill comes from the manifest; the seed has no submodule, so the third edit changes nothing.
+if lit_mut quotepath 3 "git -c core.quotePath=false ls-files" "git ls-files"; then M="$LM"
   killed quotepath "the non-ASCII arm" "$(drive "$M" m.quotepath 'printf "c2\n" > "$CAFE"')" "$ALL5" 0 "$(NM1 "$CAFE")"
 fi
 if lit_mut nofailclosed 1 ': > "$out/.now"' ':'; then M="$LM"
@@ -672,8 +833,8 @@ else
   NEW_ARMS=$((NEW_ARMS+1))
 fi
 NEW_ARMS=$((NEW_ARMS+1))
-if lit_mut aposdrop 1 '| readset_drop_excluded | sort -u > "$out/.paths"' \
-                         "| grep -v \"'\" | readset_drop_excluded | sort -u > \"\$out/.paths\""; then M="$LM"
+if lit_mut aposdrop 1 '| readset_drop_excluded | sort -u > "$out/.paths.all"' \
+                         "| grep -v \"'\" | readset_drop_excluded | sort -u > \"\$out/.paths.all\""; then M="$LM"
   if [ -n "$(drive "$M" m.aposdrop ':')" ] && ! hashed "$WORK/x.m.aposdrop"; then
     ok "MANIFEST MUTANT aposdrop is KILLED by the apostrophe-hashed arm: $(grep -cF "$APOS	" "$WORK/x.m.aposdrop/seed.now") apostrophe row(s) in the manifest"
   else
@@ -2508,7 +2669,7 @@ fi
 # mistake: it printed two thirds of its arms, never reached a verdict line, and exited 0 --
 # which the suite's worker records as `ok`. A fixture that dies silently reads exactly like one
 # that passed, so the arm count is asserted against the number this file actually carries.
-EXPECTED=$(( 18 + NEW_ARMS + MERGE_ARMS + CONTROL_ARMS + TRACE_ARMS + BOTH_ARMS ))
+EXPECTED=$(( 18 + IGN_ARMS + NEW_ARMS + MERGE_ARMS + CONTROL_ARMS + TRACE_ARMS + BOTH_ARMS ))
 if [ "$asserts" -lt "$EXPECTED" ]; then
   printf '  FAIL  only %s assertions ran; this fixture carries %s — it exited early and a short green run reads exactly like a passing one\n' "$asserts" "$EXPECTED"
   fails=$((fails+1))

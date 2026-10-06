@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# partition-review-diff.sh -- the ONE speller of the part set of a gate-1 code review.
+# partition-review-diff.sh -- the ONE speller of the part set of a gate-1 code review and of a
+# gate-2 QA validation.
 #
 # USAGE
 #   partition-review-diff.sh --map <worktree> <base> <frozen-sha>
@@ -7,8 +8,10 @@
 #       stdout: one line per part, `<ordinal>\t<groups>\t<file>\t<file>...`, exit 0.
 #       <groups> is the part's group keys joined by `,`; every file after it is one TAB-separated
 #       column. A diff that does not partition prints ONE line `SERIAL: <reason>` on STDOUT and
-#       exits 3. SERIAL is an answer, not an error: the lead dispatches one reviewer,
-#       `shard: 1/1 <story-index>`.
+#       exits 3. SERIAL is an answer, not an error: the lead dispatches one reviewer at gate 1,
+#       or one QA at gate 2, `shard: 1/1 <story-index>`. Gate 2 runs its own partition on the
+#       go-signal sha into its own shard directory (`<idx>-qa-validation-<sha12>[-p<M>]`); it
+#       never reuses gate 1's manifest.
 #       With --shard-dir, a partitioned run ALSO writes `<dir>/.manifest` (creating <dir>), the
 #       record merge-review-shards.sh re-derives the map from. SERIAL writes nothing.
 #

@@ -19,6 +19,99 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.731.0] - 2026-10-05
+
+Batch 199's release. It discharges the remaining half of one consumer candidate and closes the entry
+filed for it (net closed minus filed: 1). No file in it is bootstrapping.
+
+### PC-S316-GATE-1-AND-2-REVIEWS-ARE-NEVER-SHARDED-SO-A-LARGE-CAPITAL-PATH-DIFF-IS-ONE-SERIAL-READ
+
+- **Gate 2 is sharded under Rule 28's files axis, at the same threshold as gate 1.** At gate-2
+  dispatch the lead runs `partition-review-diff.sh --map` fresh on the go-signal SHA into
+  `docs/reviews/s<N>/shards/<idx>-qa-validation-<sha12>[-p<M>]`. `SERIAL` or a refusal dispatches one
+  QA, `shard: 1/1 <idx>`, which is the whole validation. Otherwise the lead dispatches one QA per part
+  plus one cross QA, in Rule 28 waves, and joins with
+  `merge-review-shards.sh <shard-dir> --gate qa --out <abs>/docs/reviews/s<N>/<idx>-qa-validation.md`.
+  The `AI_DLC_REVIEW_SHARD_MIN_FILES` knob governs both gates, and no QA-specific knob exists.
+- **`merge-review-shards.sh --gate qa` merges instead of refusing.** The QA verdict set is lifted
+  from `qa.md`'s `## Verdict` line (exactly `PASS | NEEDS_REWORK`), and the merged verdict is the worst
+  shard verdict. Additional qa-only refusals apply: `cross.md` must carry exactly one
+  `## Acceptance Criteria` and at most one `## Deferred ACs`, and no part shard may carry either.
+- **The pass marker lives in the shard directory name for both gates.** `<idx>-<gate>-<sha12>` pairs
+  with the pass-1 file and `<idx>-<gate>-<sha12>-p<M>` with `-p<M>.md`. The merge refuses a mismatch,
+  so a stale pass-1 directory cannot be merged into a later pass's file. Gate-1 output on every
+  pass-1 world is byte-identical to before. **This refuses a gate-1 merge 0.730.0 accepted:** an
+  unmarked shard directory merged into `<idx>-code-review-p<M>.md` now exits 2 with nothing written.
+  A lead mid-sprint re-partitions a later pass into its `-p<M>` directory.
+- **The execution split.** Part QAs score only the part-local checklist items. They replay the
+  mutation-REDs and null-impl REDs anchored in their part, each in its own detached worktree at the
+  frozen SHA. The cross QA owns every other item, including items an override or extension adds. It
+  also owns the Handoff Evidence Precondition, the one honest-green canonical run in the frozen
+  worktree, the per-AC table under `## Acceptance Criteria` and `## Deferred ACs`. `qa.md` gains an
+  `## As a Shard` section, and its "Gate 2 is dispatched serially" sentence is gone.
+- **A part shard first runs the project's dependency setup in its worktree** and confirms the anchor's
+  test is GREEN before mutating. An AC whose replay cannot reach a GREEN baseline there is HANDED to
+  the cross shard as a `handover: <AC-id>` line. Measured on the reference consumer: a fresh detached
+  worktree exits 127 with no setup and passes 9 after it, and a bare host `pytest` gave a false green.
+- **A hand-over is joined at the merge, so its HARD GATE replay cannot go unrun.** The cross QA is
+  dispatched only after every part shard file exists, reads them all before scoring, and records each
+  replay as `handover-run: <ordinal> <AC-id> <RED|GREEN-SURVIVED|NO-BASELINE>`. The merge refuses an
+  unmatched hand-over or an orphan replay, and a result other than RED forces NEEDS_REWORK whatever
+  the shard verdicts say. It also refuses a hand-over line naming two ACs (which merged PASS with one
+  replay unrun), two hand-overs in one finding, the same hand-over twice, an AC id not starting with a
+  letter or digit, and a decorated or misspelled label (`**handover:**`, `hand-over:`, a quoted,
+  dash-separated, numbered or colon-less form). Measured false positives: 0 lines over the reference
+  consumer's 8511 tracked markdown files.
+- **Each part shard declares `handovers: <n>`, and the merge refuses the shard unless n equals the
+  hand-overs it parsed.** Three adversary rounds each found a spelling the malformed-label check
+  missed, which merged PASS with the replay unrun; a blocklist of spellings does not converge. A
+  hand-over in any unparseable form now leaves the parsed count short of the declared one, so the
+  merge refuses. A missing, doubled or non-integer `handovers:` line is refused, and so is one in
+  `cross.md`. The count is read without word-splitting: a globbed read turned `handovers: ?` into a
+  valid `0` in a working directory holding a file named `0`, and merged PASS over a hidden hand-over.
+  A value wider than nine digits is refused, because bash 3.2 wraps 2^64 to 0.
+- The qa section counts are case-insensitive at heading levels 2 and 3 (level 4 stays free for
+  findings), and the serial-sentence checks normalise whitespace and case: base wrapped "Gate 2" /
+  "is dispatched serially" across two lines, so a one-line grep was true before the fix.
+- `qa` joins `SHARD_ROLES` in `validate-spawn-ledger.sh`, so an invented serial exception on a qa row
+  fails S3. The S1 remedy gains a qa arm.
+- The closing writer reads `deferred_acs` from the merged QA file's `## Deferred ACs`, or from the
+  deferred record in the serial file.
+- Fixture arms and mutants in `review-shard-merge` and `check-22-spawn-ledger`.
+
+### BL-450
+
+- Closed by the change above. Its receipt is behavioural: it builds a seeded repository, manifest and
+  PASS/NEEDS_REWORK QA shards, requires `--gate qa` to merge with the worst-of verdict, and reads the
+  role, step and ledger carriers.
+
+### The read-set skip no longer selects fixtures over git-ignored files
+
+- **A git-ignored path is never in the skip's universe, from any source.** The manifest already left
+  ignored files out of its `ls-files` arms, but the MAP arm added every path any read-set names, and
+  the map carried 23 rows for three gitignored `core/**/.DS_Store` files. A green run in the main
+  checkout recorded them in the shared verified record; a push from a linked worktree, which has no
+  such files, saw them vanish and added `core` to the match set, which 225 fixtures name. Measured on
+  this release's own push: 226 of 232 fixtures selected, where the 8 hashed changed paths select 44
+  plus the one unmapped fixture, 45.
+- `readset_drop_ignored` filters the manifest, the verified record before both comparisons, and the
+  orphan universe, through one helper in both hooks. A `git check-ignore` failure runs everything.
+  Paths under a gitlink are not passed to it (one such path makes it exit 128).
+- `readset-skip` arms (a)-(f), the motivating case failing on the previous hook, and five mutants.
+- **The verified record carries a format stamp** (`ai-dlc-fixture-verified.format`, `v2`, written only
+  after the record copy succeeds). A `v2` record is read unfiltered. **A record with no stamp runs
+  everything**, once, and the green run writes a stamped one: a pre-0.731.0 record, a copy that landed
+  without its stamp and an interrupted write all read the same, and none of them can be filtered
+  safely. Filtering it would drop a force-added ignored file the moment it was `git rm`'d, so its
+  deletion never reaches `.changed` and the whole suite is skipped -- measured, where 0.730.0's hook
+  selects correctly on the same input. Any other stamp runs everything. Every consumer pays one full
+  run per clone on the first push after pulling 0.731.0.
+- **An edit to an ignored file no longer selects its readers.** That is the content key's existing
+  rule, now applied to the map arm too. A consumer whose fixtures read ignored inputs (`.env`, a
+  lockfile, a nonce under `_bmad-output/`) gets no selection from editing them; the reference
+  consumer's map names 3452 such files that exist, and **all 177 of its mapped fixtures read at least
+  one of them**, so a push whose only change is an ignored file selects nothing there.
+
 ## [0.730.0] - 2026-10-05
 
 Batch 198's release. It discharges one consumer candidate and closes one entry it files (net closed

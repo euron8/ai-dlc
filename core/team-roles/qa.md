@@ -62,9 +62,6 @@ Before reviewing a task, read these files:
    sections. Whole-reading the architecture doc is a Rule 25 violation.
 3. The diff or files changed by the dev teammate
 
-Gate 2 is dispatched serially: your brief carries `shard: 1/1 <story-index>` and
-you validate the whole story.
-
 ## Gate-2 Start Condition (HARD)
 
 Gate-2 validation MUST NOT begin until the lead sends an explicit go-signal of
@@ -293,7 +290,11 @@ For each completed task, verify:
 
 - **Deliver before idle (MANDATORY).** Before going idle/available you MUST
   `SendMessage` your full validation verdict (per-AC PASS/FAIL with
-  Expected/Got) to the lead. A silent idle is NOT a delivery — the lead treats
+  Expected/Got) to the lead. A part shard delivers its shard file's absolute
+  path and its `shard-verdict:` value instead, never per-AC rows, which only
+  the cross shard writes. The cross shard delivers its shard file's absolute
+  path, its `shard-verdict:` value and the count of hand-overs it ran; its
+  per-AC rows stay in the file. A silent idle is NOT a delivery — the lead treats
   it as no-response and re-requests, wasting an orchestration round. Your final
   thinking is not your final message; the message MUST be sent.
 - Message **dev teammate** when rejecting a task (include specific failure
@@ -327,6 +328,82 @@ PASS | NEEDS_REWORK
 Write the file's verdict as ONE line, `Verdict: PASS`, or as a bare `## Verdict` heading with
 the member alone on the next non-blank line. Per-AC PASS/FAIL rows belong in a table under
 their own heading; a second verdict line carrying a different member fails Check 1.
+
+## As a Shard
+
+**As a shard**, your brief carries `shard: <ordinal>/<K> <group>` or
+`shard: cross/<K> cross` (Rule 28, "Split dispatch": files axis), the part map,
+and the ABSOLUTE path of the one shard file you write: `<ordinal>.md` or
+`cross.md` in the shard directory. Write there and nowhere else, never to the
+validation file above. The go-signal SHA is the frozen sha. Your
+`reviewed-sha:` line carries it in FULL (40 or 64 hex characters) even when the
+go-signal abbreviates it, so resolve it with `git rev-parse` in the frozen
+worktree.
+
+**As a part shard** you read only your part's files and score only the
+part-local checklist items, which are the items whose REJECT can be decided from
+those files alone: the caller grep of the orphaned-function item, the
+fixture-shape check, producer-driven context testing, conventions, the ownership
+boundary, hardcoded secrets, the environment-variable template, and the
+commit-message format of commits touching your files. You also replay the
+discriminator mutation-REDs and the per-locked-requirement null-impl REDs for
+every AC whose mutation anchor file lies in your part. Run them in your OWN
+detached worktree at the frozen sha (`git worktree add --detach <tmp> <sha>`),
+never in the shared frozen worktree. A fresh worktree carries none of the
+project's gitignored dependencies (a virtualenv, `node_modules`, `.env`), so in
+it you first run the project's canonical dependency setup, the setup the dev's
+QA Handoff Evidence records or else the story's documented setup, and confirm
+the canonical run of the anchor's test is GREEN there before any mutation. An
+AC whose replay cannot reach a GREEN baseline in your worktree is handed to the
+cross shard rather than scored: list it under `## Findings` as a `#### `
+finding citing `parts: <your ordinal>` that names the AC and the reason. A
+hand-over is not a REJECT of its own. The hand-over finding goes under
+`### Important`, never under a `### Deferred` container, and carries exactly
+one column-0 `handover: <AC-id>` line beside its `parts:` line. Beyond that
+setup and those replays, a part shard runs no suite, no build and no live run.
+
+**As the cross shard** you own every Validation Checklist item that is not on
+the part-local list above, including every item an override or extension of
+this file adds. You also own the Handoff Evidence Precondition, the one
+honest-green canonical full-collection run (in the frozen worktree, which nothing
+else mutates), the permitted-pre-existing-failures check, live-run evidence,
+smoke-test updates, provenance, the `Status:` match with sprint-status, Dev
+Agent Record completeness, the RED replays for any AC whose anchor lies in no
+part's files or that a part shard handed over, and the interactions between
+parts. Before scoring anything, the cross shard reads every part shard
+`<ordinal>.md` its brief names for `handover:` lines, runs each handed-over
+replay in the frozen worktree after the project's canonical dependency setup,
+and records each one as a column-0
+`handover-run: <ordinal> <AC-id> <RED|GREEN-SURVIVED|NO-BASELINE>` line inside
+a `#### ` finding that cites exactly the parts it ran replays for. A result
+other than `RED` is an unmet HARD GATE, and the merge forces `NEEDS_REWORK`
+for it. Only the cross shard writes
+the per-AC results, as a pipe-led table (`| AC | Result | Expected | Got |`)
+under `## Acceptance Criteria`, and every deferred AC's discharge predicate
+under `## Deferred ACs`. A part shard carries neither section.
+
+**The shard grammar.** Each shard carries one column-0
+`shard-verdict: <VALUE>` (`PASS` or `NEEDS_REWORK`) and one column-0
+`reviewed-sha: <full frozen sha>`. It also carries a `## Findings` section,
+even an empty one, and every finding in it is a `#### ` heading with exactly one
+`parts: <ordinal>[, <ordinal>...]` line: your own ordinal alone, or two or more
+if you are the cross shard. A part shard also carries, beside those two lines,
+exactly one column-0 `handovers: <n>` line counting its hand-overs however written, `0`
+when it handed nothing over; the cross shard carries none. The merge refuses a
+part shard whose count disagrees with the hand-overs it parsed, so a hand-over
+spelled any other way than the bare line is refused rather than dropped.
+A shard writes NO line that Check 1's grep matches.
+That rules out a `## Verdict` or `## Decision` heading, a `Verdict:` label or a
+`<word> verdict:` label such as `QA verdict: PASS`, and a bold label such as
+`**Verdict:** PASS`. Per-AC results go in the table, never on verdict lines. The
+SHARD GRAMMAR section of `merge-review-shards.sh`'s header defines all of this.
+
+**Your verdict is advisory.** `merge-review-shards.sh --gate qa` recomputes the
+QA verdict as the worst shard verdict and writes the validation file. A part
+shard and the cross shard make no closing write; the closing writer makes those,
+after gate 3. Dispatched `shard: 1/1 <story-index>`, you are the whole
+validation: run every item above yourself, and write the validation file at the
+path above in the normal way.
 
 ## Escalation Protocol
 
