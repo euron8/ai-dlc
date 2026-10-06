@@ -100,6 +100,10 @@
 #     document moved in place, a section is missing or foreign, a section lost its trailing
 #     newline) the join exits 2 with its line and writes NOTHING. A re-run after a record-write
 #     failure is safe: the assembler answers UNCHANGED for a document it already assembled.
+#   - THE RECORD opens with `- artifact:` (the document, root-relative), `- artifact_sha_before:`
+#     (the sha the split recorded in the manifest) and `- artifact_sha_after:` (the assembled
+#     document, re-hashed), so arm J2 reads the join as one repair link. The serial cross-section
+#     remediator appends its own triple after it, its before equal to this after.
 #   Files mode also refuses a repair dir that carries `sections/.manifest`: its section writes are
 #   under shards/ and would all be dropped, so a files-mode join would record a repair whose
 #   document was never assembled.
@@ -516,10 +520,18 @@ if [ "$SUBJMODE" = 1 ]; then
     SUBJ_AFTER="${SUBJ_AFTER} ${_st}=${_h}"
   done
 elif [ "$DOCMODE" = 1 ]; then
+  # The document's sha before is the one the split recorded (the bytes the shards were cut from);
+  # after is re-hashed off the assembled document, so the record is a J2 repair link.
+  DOC_BEFORE="$(awk -F'\t' '$1 == "sha256" { print $2; exit }' "$MANIFEST")"
   ASM_LINE="$(bash "$PARTITION" --assemble "$SHARD_DIR" 2>&1)" || {
     printf '%s\n' "$ASM_LINE" >&2
     die "the sections of ${DOC_ABS} did not assemble; no repair record was written"
   }
+  if command -v shasum >/dev/null 2>&1; then DOC_AFTER="$(shasum -a 256 "$DOC_ABS" | cut -d' ' -f1)"
+  else DOC_AFTER="$(sha256sum "$DOC_ABS" | cut -d' ' -f1)"; fi
+  _rootp="$(cd "$JR_ROOT" 2>/dev/null && pwd -P)" || _rootp=""
+  DOC_REL="$DOC_ABS"
+  [ -n "$_rootp" ] && case "$DOC_ABS" in "$_rootp"/*) DOC_REL="${DOC_ABS#"$_rootp"/}" ;; esac
 fi
 
 # --- write the single record every reader globs for.
@@ -538,6 +550,10 @@ TMP="${OUT}.join.$$"
   elif [ "$DOCMODE" = 1 ]; then
     echo "every section under ${APATH} was written by exactly one agent in that window;"
     echo "partition-document.sh: ${ASM_LINE}"
+    echo ""
+    echo "- artifact: ${DOC_REL}"
+    echo "- artifact_sha_before: ${DOC_BEFORE}"
+    echo "- artifact_sha_after: ${DOC_AFTER}"
   else
     echo "every file under ${APATH} outside ${SHARD_REL}/ was written by exactly one agent in that window."
   fi

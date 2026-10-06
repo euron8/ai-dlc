@@ -687,7 +687,8 @@ themselves and are not counted. It reads the harness write ledger and refuses (e
 nothing written) if any file was written by two agents, if a written file is cited by no part,
 if a file is cited by two parts, or if any part is unstructured. Otherwise it writes the one
 repair record below. The serial cross-file remediator runs after that and APPENDS its entries
-to the joined record. The join never overwrites a record, so it is run before the serial
+to the joined record, opening them with its own `- artifact:` / `- artifact_sha_before:` /
+`- artifact_sha_after:` triple per file it edits, each before equal to the bytes the join left. The join never overwrites a record, so it is run before the serial
 remediator and never after it.
 
 After a join refusal naming a file `which no dispatched agent wrote`:
@@ -727,7 +728,8 @@ document in place. Otherwise, in this order:
    from the sections, the manifest records the assembled sha, the section copies are removed, and
    the join writes the one repair record.
 4. **Cross-section.** The serial cross-section remediator then edits the ASSEMBLED document in
-   place and APPENDS its entries to the joined record.
+   place and APPENDS its entries to the joined record, opening them with its own `- artifact:` /
+   `- artifact_sha_before:` / `- artifact_sha_after:` triple, its before equal to the join's after.
 
 **Shard the requirements subject's repair (Rule 28, "Split dispatch": subject axis).** When the
 artifact is the requirements subject (`steps/requirements.md` section 5), the repair is sharded
@@ -763,7 +765,9 @@ in this order:
    whose `artifact:` is the subject manifest and whose sha lines are per-stem `<stem>=<sha>`
    lists.
 4. **Cross-part and out-of-scope.** The serial remediator then edits the ASSEMBLED files in
-   place and APPENDS its entries to the joined record. It owns every finding citing two or more
+   place and APPENDS its entries to the joined record, opening them with its own `- artifact:`
+   (the subject manifest) and per-stem `- artifact_sha_before:` / `- artifact_sha_after:` lists,
+   every stem on both sides, each before equal to the join's after. It owns every finding citing two or more
    parts AND every finding whose fix lies in PRD text outside the in-scope parts — a part shard
    never edits text outside its section file, so such a finding has no other owner.
 
@@ -782,6 +786,8 @@ adversarial pass, or at
 `_bmad-output/planning-artifacts/s<N>/gate-<type>-repair-p<M>.md` when the caller is a gate
 failure. Both open with `- artifact:`, `- artifact_sha_before:` and `- artifact_sha_after:` —
 the repaired file and its whole-file sha256 on each side, as `team-roles/remediator.md` teaches.
+A serial remediator appending to a joined record opens its entries with its own such triple,
+its before equal to the join's after, so Check 24 arm J2 chains the join and the serial edit.
 Per finding — or per failed check — the disposition, the edit site, and the command
 that derives every factual claim the repair asserts, with its output. The next adversarial pass
 verifies against that record; so does the gate's re-run of the failed checks.

@@ -101,6 +101,13 @@ Three split, each into a shipped fixture plus a `.dist-only` `<name>-mutants` ba
 The three batteries and three `lib.sh` files have no read-set rows yet and run on every push until traced.
 `remediator-shard-join` (battery 247-255s of 278s, the same serial `score()` shape) is split in a later release of batch 201.
 
+**Progress — `adversarial-shard-merge` (batch 201; not one of the six above, split because the BL-460/461 arms took it
+from 317 to 354 CPU-s solo and projected it past the suite pole).** Its 34 arms stay in the shipped fixture; the
+predicates and worlds moved to `core/fixtures/adversarial-shard-merge/lib.sh`; MX0, the 15 mutants and MX6b moved to
+the new `.dist-only` `adversarial-shard-merge-mutants`, the `review-shard-merge-mutants` shape, whose reap counts
+DECLARED scorings off its own `mutant "` lines so an emptied battery fails. The 16 killed-set rows are byte-identical
+to the unsplit serial battery's. The new directory is unmapped in `.ai-dlc-fixture-readsets.tsv` until traced.
+
 **Remedy.** Per fixture: measure solo, attribute the time, then cut it — move a mutation battery behind a shipped
 fixture into its own `.dist-only` fixture (`fixture-ship-decl.md`), score mutants in parallel within the fixture, and
 remove repeated setup. `review-shard-merge` is being split in batch 199 as the first instance.
@@ -238,8 +245,13 @@ documents (`prd.md`, the product brief) as outside its subject, so this gap pred
 **Remedy.** Teach J2 the per-stem list: every stem whose disk sha differs from its notarized sha after a MET pass needs
 the same repair chain or re-open a single-file series needs, stamp-gated like K3.
 
-verify: manual -- the subject is a judgement over a constructed requirements series; close on a check-24 cell where a
-stem edited after the terminal MET pass reads FAIL (J2), with a second stem left unchanged as the control.
+**Narrowing (contract M3d).** `prd.md` and the product brief stay unjudged, as J2 already excludes cumulative
+documents: the architecture step's Rule 25(a) consolidation rewrites `prd.md` mid-sprint with no repair record
+(measured on the reference consumer: sprint 317's prd moved after its requirements series met, `bdbfd63e`). The
+later-sprint bound was dropped because Check 24 sweeps only the current sprint, so it could never decide anything.
+Judged stems: the SPEC and `s<N>/architecture-impact.md`.
+
+verify: sh V=core/scripts/validate-adversarial-convergence.sh; [ -f "$V" ] || exit 9; W="$(mktemp -d)" || exit 9; h() { shasum -a 256 "$1" | cut -d' ' -f1; }; mk() { w="$W/$1"; p="$w/_bmad-output/planning-artifacts"; mkdir -p "$p/s9" "$w/_bmad-output/specs/s9/k" "$w/.claude" || exit 9; printf 'b\n' > "$p/product-brief.md"; printf 'p\n' > "$p/prd.md"; printf 'a\n' > "$p/s9/architecture-impact.md"; printf 's\n' > "$w/_bmad-output/specs/s9/k/SPEC.md"; printf 'version: 0.736.0\n' > "$w/.claude/.ai-dlc-version"; ( cd "$w" && git init -q . && git add -A && GIT_COMMITTER_DATE=2026-01-01T00:00:00Z git -c user.name=r -c user.email=r@x.invalid -c commit.gpgsign=false commit -q -m s ) || exit 9; printf 'file: product-brief _bmad-output/planning-artifacts/product-brief.md\nfile: SPEC _bmad-output/specs/s9/k/SPEC.md\nfile: prd _bmad-output/planning-artifacts/prd.md\nfile: architecture-impact _bmad-output/planning-artifacts/s9/architecture-impact.md\n' > "$p/s9/requirements-subject.md"; L0="product-brief=$(h "$p/product-brief.md") SPEC=$(h "$w/_bmad-output/specs/s9/k/SPEC.md") prd=$(h "$p/prd.md") architecture-impact=$(h "$p/s9/architecture-impact.md")"; S0="$(h "$w/_bmad-output/specs/s9/k/SPEC.md")"; A0="$(h "$p/s9/architecture-impact.md")"; printf '<!-- SKILL_INVOCATION_PROVENANCE v1\ninvoked_at: 2026-02-01T00:00:00Z\nartifact: _bmad-output/planning-artifacts/s9/requirements-subject.md\nartifact_sha: %s\nfindings_critical: 0\nfindings_major: 0\nverdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$L0" > "$p/s9/requirements-adversarial-p1.md"; printf 's2\n' >> "$w/_bmad-output/specs/s9/k/SPEC.md"; S1="$(h "$w/_bmad-output/specs/s9/k/SPEC.md")"; L1="product-brief=$(h "$p/product-brief.md") SPEC=$S1 prd=$(h "$p/prd.md") architecture-impact=$A0"; }; j() { bash "$V" --series "$w/_bmad-output/planning-artifacts/s9/requirements-adversarial-p" --transcript-dir "$W" 2>&1; }; f='### M1\n- disposition: repaired\n- edit: x:1\n- derivation: y\n'; mk bare; o1="$(j)"; mk chained; printf 'a2\n' >> "$p/s9/architecture-impact.md"; A1="$(h "$p/s9/architecture-impact.md")"; printf -- "- artifact: _bmad-output/planning-artifacts/prd.md\n- artifact_sha_before: $(h "$p/prd.md")\n- artifact_sha_after: $(h "$p/prd.md")\n\n- artifact: _bmad-output/planning-artifacts/s9/requirements-subject.md\n- artifact_sha_before: $L0\n- artifact_sha_after: $L1\n\n- artifact: _bmad-output/planning-artifacts/s9/architecture-impact.md\n- artifact_sha_before: $A0\n- artifact_sha_after: $A1\n$f" > "$p/s9/requirements-repair-adv-p1.md"; o2="$(j)"; case "$o1" in *"FAIL (J2 -- DRIFT)"*"SPEC (_bmad-output/specs/s9/k/SPEC.md)"*) ;; *) exit 1 ;; esac; case "$o1" in *"architecture-impact (_bmad"*) exit 1 ;; esac; case "$o2" in *"J2 -- DRIFT"*) exit 1 ;; esac
 
 ## BL-461 — the requirements series is named at no Check 24 call site, and a `prd-*` series escapes the subject axis
 
@@ -255,8 +267,7 @@ text must own the requirements series' NAME.
 **Remedy.** Name `<planning>/s<N>/requirements-adversarial-p` explicitly at the requirements gate's Check 24 call, and
 have the requirements step refuse a `prd-adversarial-p*` series in a sprint that has a subject manifest.
 
-verify: manual -- two subjects, and a text receipt could close on the first alone; close when the requirements gate's
-Check 24 call names the requirements series AND a `prd-adversarial-p*` series in a sprint with a subject manifest is refused.
+verify: sh G=core/skills/ai-dlc/steps/gate-validation.md; M=core/scripts/merge-adversarial-shards.sh; [ -f "$G" ] && [ -f "$M" ] || exit 9; n="$(grep -c 'planning-artifacts/s<N>/requirements-adversarial-p`' "$G")" || n=0; [ "$n" -ge 2 ] || exit 1; W="$(mktemp -d)" || exit 9; p="$W/_bmad-output/planning-artifacts"; mkdir -p "$p/s9/shards/product-brief-p1" "$W/.git" || exit 9; printf '# B\n\n## One\n\nx\n\n## Two\n\ny\n' > "$p/product-brief.md"; printf 'p\n' > "$p/prd.md"; c="$(bash "$M" --document "$p/product-brief.md" "$p/s9/shards/product-brief-p1" 2>&1)"; printf 'file: product-brief _bmad-output/planning-artifacts/product-brief.md\nfile: prd _bmad-output/planning-artifacts/prd.md\n' > "$p/s9/requirements-subject.md"; r="$(bash "$M" --document "$p/product-brief.md" "$p/s9/shards/product-brief-p1" 2>&1)"; case "$r" in "REFUSED: --document "*"requirements subject"*) ;; *) exit 1 ;; esac; case "$c" in *"requirements subject"*) exit 1 ;; esac
 
 ## BL-462 — a party round edits one document in place from several seats and nothing attributes the writes
 

@@ -82,7 +82,9 @@ The repair record opens with the file it repaired and that file's whole-file sha
 and after your edits — the adversary's `artifact_sha` spelling. A repair landing after the
 series stamped `EXIT_CONDITION_MET` is on the record only through these two shas; Check 24
 arm J2 chains them from the notarized sha to the bytes on disk. Take both with
-`shasum -a 256 <file>`.
+`shasum -a 256 <file>`. As the SERIAL remediator after a join, append your entries to the
+joined record opening with your own triple (for the requirements subject, the manifest and
+per-stem lists), its before equal to the join's after.
 
 ```
 - artifact: <the repaired file, project-relative>

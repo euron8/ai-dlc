@@ -2055,7 +2055,9 @@ artifact into the series.
 **Check.** Invoke `scripts/ai-dlc/validate-adversarial-convergence.sh --series
 <path-prefix-of-this-step's-pass-series> --transcript <this session's transcript_path>
 --transcript-dir <the directory that transcript sits in>`;
-exit 0 required. Pass `--transcript` (the current session's JSONL) so arm F6 can verify a
+exit 0 required. At the requirements gate the series prefix is
+`_bmad-output/planning-artifacts/s<N>/requirements-adversarial-p`, named literally, whatever its
+terminal pass's `artifact:` holds. Pass `--transcript` (the current session's JSONL) so arm F6 can verify a
 resolution record's `operator_authorization` against ground truth; the gate **fails closed**
 if a resolution cites an operator message the corpus does not contain — and fails closed
 too if `--transcript` is omitted, so a forgotten flag cannot silently disarm the check. It
@@ -2071,8 +2073,10 @@ had: it read "eight arms: A–H" for several releases while the script also carr
 **At every gate after the first planning gate, also run it over every earlier series in the
 sprint.** For each `_bmad-output/planning-artifacts/s<N>/*-adversarial-p*` series whose terminal
 pass stamps `EXIT_CONDITION_MET` and names one file in `artifact:`, invoke the same command with
-that series' prefix; exit 0 required. Skip this when the sprint directory holds no such series —
-a `--series` matching nothing exits 1. Arm J2 fails a series whose notarized file moved after MET
+that series' prefix; exit 0 required. The requirements series
+`_bmad-output/planning-artifacts/s<N>/requirements-adversarial-p` is always one of them when it
+exists, although its terminal pass names the subject manifest. Skip this when the sprint directory
+holds no such series — a `--series` matching nothing exits 1. Arm J2 fails a series whose notarized file moved after MET
 with no repair chain and no re-open on the record; the amendment procedure is in
 `_gate-procedures.md`, *Divergence resolution dispatch*.
 Each arm emits its own named failure

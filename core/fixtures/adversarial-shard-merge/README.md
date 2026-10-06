@@ -4,7 +4,10 @@ Whether it ships is decided by the absence of a `.dist-only` marker
 (`.claude/rules/fixture-ship-decl.md`). The fixture resolves its subject by walking up in
 either layout.
 
-- `run.sh` — the arms and the mutant battery; the header states what each proves.
+- `run.sh` — the behavioural arms; the header states what each proves. The mutation battery
+  that proves each arm can fail is the distribution-only `adversarial-shard-merge-mutants`.
+- `lib.sh` — the resolution, seeds, worlds and predicates, sourced by `run.sh` and by the
+  battery, so a mutant is scored by the predicate bodies the shipped arms run.
 - `seed.<story>.md` — the first 12 lines of three real story files from one reference-consumer
   sprint, chosen so two NON-`story-` names sort to ordinals 1 and 2.
 - `seed.finding-headings.txt` — the finding headings of a real multi-story adversarial pass.

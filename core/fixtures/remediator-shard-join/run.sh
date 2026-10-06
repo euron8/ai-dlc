@@ -207,15 +207,23 @@ doc_refused() { # <world> <token> -- exit 2, the token, no record, no staging fi
   [ "$RC" -eq 2 ] && has "$JO" "$2" && [ ! -e "$(doc_out "$1")" ] \
     && [ -z "$(find "$1/$SLOT" -maxdepth 1 -name '*.join.*')" ]
 }
-p_docjoin() { # three section writers, three parts -> JOINED, the document ASSEMBLED with every edit
-  local w n; w="$(doc_world)" || return 1
+dsha() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1; else sha256sum "$1" | cut -d' ' -f1; fi; }
+p_docjoin() { # three section writers, three parts -> JOINED, the document ASSEMBLED with every edit,
+  # and the record opens with the J2 link triple: the document root-relative, the split's sha before,
+  # the assembled document's sha after (BL-460) -- each compared to a sha this predicate took itself.
+  local w n b a o; w="$(doc_world)" || return 1
+  b="$(dsha "$w/$DOCREL")"
   sec_edit "$w" 1 "$AG1"; sec_edit "$w" 2 "$AG2"; sec_edit "$w" 3 "$AG3"
   docpart "$w" 1; docpart "$w" 2; docpart "$w" 3
   run_docjoin "$1" "$w"
   n="$(grep -c 'Repaired by the section' "$w/$DOCREL")" || n=0
-  [ "$RC" -eq 0 ] && has "$JO" "(3 parts, 3 writers)" && [ -f "$(doc_out "$w")" ] && [ "$n" -eq 3 ] \
-    && has "$(doc_out "$w")" "ASSEMBLED: " && has "$w/$RDREL/sections/.manifest" "assembled	" \
-    && [ ! -e "$w/$RDREL/sections/2.md" ]
+  a="$(dsha "$w/$DOCREL")"; o="$(doc_out "$w")"
+  [ "$RC" -eq 0 ] && has "$JO" "(3 parts, 3 writers)" && [ -f "$o" ] && [ "$n" -eq 3 ] \
+    && has "$o" "ASSEMBLED: " && has "$w/$RDREL/sections/.manifest" "assembled	" \
+    && [ ! -e "$w/$RDREL/sections/2.md" ] && [ "$b" != "$a" ] \
+    && grep -qx -- "- artifact: $DOCREL" "$o" \
+    && grep -qx -- "- artifact_sha_before: $b" "$o" \
+    && grep -qx -- "- artifact_sha_after: $a" "$o"
 }
 p_docoverlap() { # one section copy written by two agents -> REFUSED, the document not assembled
   local w; w="$(doc_world)" || return 1
@@ -553,7 +561,7 @@ p_shardrow "$JOIN"  && ok "J7: remediators' own part-file writes under s305/shar
   || bad "J7: a part-file write under shards/ was read as an artifact write (rc=$RC): $(cat "$JO")"
 p_bothdirs "$JOIN"  && ok "J5: shards/stories-p1/ (adversary) beside shards/stories-repair-p1/ for the same pass -> the join reads only its own dir, 3 parts" \
   || bad "J5: the join read the adversary shard dir of the same pass (rc=$RC): $(cat "$JO")"
-p_docjoin "$JOIN"    && ok "D1: --document, three section writers and three parts -> JOINED, 3 parts / 3 writers, the document ASSEMBLED with all three edits, sections/ cleared" \
+p_docjoin "$JOIN"    && ok "D1: --document, three section writers and three parts -> JOINED, 3 parts / 3 writers, the document ASSEMBLED with all three edits, sections/ cleared, the record opening with the J2 link triple (root-relative artifact, split sha before, assembled sha after)" \
   || bad "D1: a disjoint section repair did not join and assemble (rc=$RC): $(cat "$JO")"
 p_docoverlap "$JOIN" && ok "D2: --document, one section copy written by two agents -> REFUSED 'more than one agent', no record, the document untouched" \
   || bad "D2: two writers on one section were not refused, or the document moved (rc=$RC): $(cat "$JO")"
@@ -772,6 +780,17 @@ mutant "JX13 subject --base assertion removed" "sjbase" \
 mutant "JX14 subject assembly skipped" "sjoin sjnest" \
   '  ASM_LINE="$(bash "$PSUBJ" --assemble "$SHARD_DIR" 2>&1)" || {' \
   '  ASM_LINE="skipped" || {'
+# The document-mode link triple (BL-460): the after line dropped, the after taken off the split's
+# sha (an identity link J2 discards), and the root strip removed (an absolute artifact: path).
+mutant "JX15 document-mode after sha not written" "docjoin" \
+  '    echo "- artifact_sha_after: ${DOC_AFTER}"' \
+  '    :'
+mutant "JX16 document-mode after sha = the split's sha" "docjoin" \
+  '    echo "- artifact_sha_after: ${DOC_AFTER}"' \
+  '    echo "- artifact_sha_after: ${DOC_BEFORE}"'
+mutant "JX17 document-mode artifact not root-relative" "docjoin" \
+  '  [ -n "$_rootp" ] && case "$DOC_ABS" in "$_rootp"/*) DOC_REL="${DOC_ABS#"$_rootp"/}" ;; esac' \
+  '  :'
 
 echo
 if [ "$fails" -eq 0 ]; then echo "remediator-shard-join: PASS"; exit 0; fi
