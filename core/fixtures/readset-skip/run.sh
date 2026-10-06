@@ -1149,9 +1149,20 @@ else
     *) bad "(e) a linked worktree started a trace or said nothing: '$R'" ;;
   esac
   # (a) and (f), through the real call site: run_fixtures in a seeded world.
+  # run_fixtures GLOBS ITS OWN FIXTURE ROOT -- `core/fixtures/` in the distribution's hook,
+  # `tests/fixtures/` in the consumer's, which is the one an installed tree resolves first. Read off
+  # the resolved block's own glob, the way the deriver reads it, and the world is seeded under it;
+  # seeded only under core/fixtures/ the consumer run found no fixtures and every arm here went red.
+  FXROOT="$(sed -n 's|^[[:space:]]*for d in \([A-Za-z0-9_./-]*\)/\*/;.*|\1|p' "$POOL" | sort -u)"
+  [ "$(printf '%s\n' "$FXROOT" | grep -c .)" -eq 1 ] || broken "read '$FXROOT' as the pool block's fixture root; need exactly one"
   rf_drive() { # <pool> <name> <setup>; prints "<rc>|<lock held at return>|<invoked>|<verified>|<stashed>|<row>|<args>"
     local p="$1" t o
     t="$(lt_fresh "rf.$2")"; o="$WORK/rfo.$2"; mkdir -p "$o"
+    if [ "$FXROOT" != core/fixtures ]; then
+      mkdir -p "$t/$(dirname "$FXROOT")" && cp -R "$t/core/fixtures" "$t/$FXROOT" \
+        && ( cd "$t" && git add -A && git -c user.email=f@f -c user.name=f commit -qm fxroot ) >/dev/null 2>&1 \
+        || broken "could not seed the fixture root $FXROOT"
+    fi
     ( cd "$t" || exit 1
       export STUB_ARGS="$o/args"
       eval "$3"
@@ -1178,7 +1189,7 @@ else
     "0|"*"|invoked|verified|"*) ok "(f) a deriver that FAILS leaves the gate green and the verified record written — the trace never decides the push" ;;
     *) bad "(f) a failing trace changed the gate: '$RF'" ;;
   esac
-  RR="$(rf_drive "$POOL" r 'printf "exit 1\n" > core/fixtures/alpha/run.sh')"; lt_arm
+  RR="$(rf_drive "$POOL" r "printf 'exit 1\n' > $FXROOT/alpha/run.sh")"; lt_arm
   case "$RR" in
     "1|no|not|none|"*) ok "(f) a RED run starts no trace, even for the unmapped fixture that passed in it" ;;
     *) bad "(f) a red run started a trace or wrote a verified record: '$RR'" ;;
@@ -1258,7 +1269,7 @@ if [ "$LT_CAN" = 1 ]; then
                 1 '  if [ "$rc" -eq 0 ]; then readset_live_trace "$out"; fi' '  if [ "$rc" -eq 0 ]; then readset_live_trace "$out" || rc=1; fi' \
     && pm_rf fold f 'export STUB_RC=1' '"0|"*"|invoked|verified|"*'
   pm_copy redrun 1 '  if [ "$rc" -eq 0 ]; then readset_live_trace "$out"; fi' '  readset_live_trace "$out"' \
-    && pm_rf redrun f 'printf "exit 1\n" > core/fixtures/alpha/run.sh' '"1|no|not|"*'
+    && pm_rf redrun f "printf 'exit 1\n' > $FXROOT/alpha/run.sh" '"1|no|not|"*'
 fi
 # UNMUTATED CONTROL, driven the same way as the local-world mutants: a baseline selection must APPEAR.
 R="$(lw_run "$POOL" ctl3 "$LM_B1")"; lt_arm
