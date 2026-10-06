@@ -30560,3 +30560,120 @@ Drops occurred this batch at 1-minute loads of 1.8 to 3.6, below the criterion's
 - A single-fixture trace of `readset-stage1-verdict` at load about 5 was OMITTED with 272 drop notices, so that fixture is still unmapped and runs on every push.
 
 
+## BL-458 — the requirements step's validation cycle is never sharded over its subject, so the PRD is reviewed alone and the brief, SPEC and architecture-impact never are
+
+**LANDED (v0.735.0, verified fba242e4).**
+
+**DEFECT.** Carries the reference consumer's PC-S317-REQUIREMENTS-STEP-CYCLE-IS-NEVER-SHARDED-BECAUSE-ITS-SUBJECT-IS-THREE-FILES-AND-THE-PRD-IS-CUMULATIVE.
+The requirements step reviews the product brief, the spec kernel, `prd.md` and `s<N>/architecture-impact.md` as one
+subject, and Rule 28 had no axis for a multi-file subject, so every sub-pass ran one agent per seat. The consumer's s317
+series shows the workaround: its pass 2 is a `--document prd.md` section merge filed as `requirements-adversarial-p2`,
+so the cumulative PRD was sectioned whole and the other three files were reviewed by nobody. The remedy is the subject
+axis: `partition-subject.sh` maps the four files over what changed since one base recorded in
+`s<N>/requirements-subject.md`, `merge-adversarial-shards.sh --subject` and `join-remediator-shards.sh --subject`
+join every sub-pass, and Check 24 arm K3 holds the requirements series to that shape.
+
+**Residual, not closed by this entry.** B4 makes `--document` refuse a shard dir named `requirements-p<M>`, so subject
+mode is the only writer of `requirements-adversarial-p<M>`. A series under any other stem — `prd-adversarial-p<M>`,
+written by a `--document prd.md` merge — is not a requirements series to K3 and is judged by K2 alone, so a lead that
+names its series `prd-*` escapes the subject axis. Closing that needs the step to own the series name in a way a
+validator can read, which no gate does today.
+
+verify: sh [ -f core/fixtures/subject-partition/receipt.sh ] || exit 9; bash core/fixtures/subject-partition/receipt.sh "$PWD"
+
+## BL-452 — pre-push never traces the unmapped fixtures it runs, so they stay unmapped and run on every push
+
+**LANDED (v0.734.0, verified 199721b6).**
+
+**DEFECT.** Filed in batch 199 on the operator's direction ("close the cycle"). A fixture with no row in
+`.ai-dlc-fixture-readsets.tsv` runs on every push, and nothing maps it unless a session hand-runs the deriver. Supersedes
+`BL-375`'s stage 1, closed by ruling in the same batch. Design and two adversary rounds: the contract is quoted
+verbatim in the batch-199 record of `docs/plans/graph-ledger-full-drain.md` (or its archive once rotated). In short: after a green suite, both hooks start one detached, unprivileged `derive-fixture-readsets.sh --tracer sandbox`
+run for the unmapped fixtures and record clean traces in a local map under git-common-dir, keyed on the hash of every
+recorded path and of the deriver. Measured: per-fixture `FXTAG` profile tags attribute concurrent reports with zero
+cross-attribution, drops are system-wide, and silent loss requires a private tree copy so the atime canary can run.
+
+**Receipt.** Behavioural, in both hooks. It extracts each hook's FIXTURE_POOL block into a fresh repository whose one fixture passes and whose deriver is a stub that records its argv, runs `run_fixtures`, and requires the stub to have run with `--list u --tracer sandbox --local-map .git/ai-dlc-fixture-readsets.local`, and NOT to have run under `AI_DLC_READSET_LIVE_TRACE=0`. Exits 9 when the suite in that world is not green or the trace tools are absent. Scored under `bash -c 'set -uo pipefail; ...'`: the fixed tree 0; base `d6e25229` 1; the call site deleted from both hooks 1; the knob defaulting off 1; either hook alone carrying the change 1; an empty tree 9.
+
+verify: sh unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; for v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$v"; done; command -v sandbox-exec >/dev/null 2>&1 && [ -x /usr/bin/log ] && command -v python3 >/dev/null 2>&1 || exit 9; W="$(mktemp -d)" || exit 9; W="$(cd "$W" && pwd -P)" || exit 9; lt() { H="$1"; K="$2"; D="$W/$3"; [ -f "$H" ] || exit 9; mkdir -p "$D/w" && sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$H" > "$D/pool.sh" || exit 9; [ -s "$D/pool.sh" ] || exit 9; F="$(sed -n 's|^[[:space:]]*for d in \([A-Za-z0-9_./-]*\)/\*/;.*|\1|p' "$D/pool.sh" | sort -u)"; [ "$(printf '%s\n' "$F" | grep -c .)" -eq 1 ] || exit 9; mkdir -p "$D/w/$F/u" "$D/w/core/scripts" || exit 9; printf '#!/bin/bash\necho "  ok    u"\n' > "$D/w/$F/u/run.sh"; printf '#!/bin/bash\nprintf "%%s\\n" "$*" > "%s/ran"\n' "$D" > "$D/w/core/scripts/derive-fixture-readsets.sh"; ( cd "$D/w" && git init -q . && git add -A && git -c user.email=r@r -c user.name=r commit -qm seed ) >/dev/null 2>&1 || exit 9; ( cd "$D/w" || exit 1; [ "$K" = off ] && export AI_DLC_READSET_LIVE_TRACE=0; . "$D/pool.sh" >/dev/null 2>&1; run_fixtures > "$D/out" 2>&1; echo "$?" > "$D/rc" ); [ "$(cat "$D/rc" 2>/dev/null)" = 0 ] || exit 9; grep -q 'ok    u' "$D/out" || exit 9; i=0; while [ "$i" -lt 100 ] && { [ -d "$D/w/.git/ai-dlc-fixture-readsets.local.lock" ] || { [ "$K" = on ] && [ ! -f "$D/ran" ]; }; }; do sleep 0.1; i=$((i+1)); done; if [ ! -f "$D/ran" ]; then V=no; elif grep -qx -- '--list u --tracer sandbox --local-map .git/ai-dlc-fixture-readsets.local' "$D/ran"; then V=yes; else V=bad; fi; }; for h in .githooks/pre-push core/git-hooks/pre-push; do n="${h%%/*}"; n="${n#.}"; lt "$h" on "$n.on"; [ "$V" = yes ] || exit 1; lt "$h" off "$n.off"; [ "$V" = no ] || exit 1; done
+
+## BL-453 — teammate verification calls are ad-hoc compound shell that no allow rule matches, so an unattended sprint stops for approval
+
+**LANDED (v0.732.0, verified 3f37d986).**
+
+**DEFECT.** Carries the reference consumer's PC-S317-TEAMMATE-VERIFICATION-COMMANDS-ARE-AD-HOC-COMPOUND-SHELL-THAT-NO-ALLOW-RULE-MATCHES-SO-THEY-STOP-FOR-APPROVAL.
+A teammate confirming a claim writes a `bash -c` wrapper, a function definition, or a chain of variable assignments
+joined by `;`/`&&`. None of those matches a command-prefix allow rule, so each one raises an approval prompt, and in an
+unattended sprint nobody is there to answer it. The filing's census counted 38 wrapper-shape calls in 840 (a function
+definition or `bash -c`); remediator 30/290, adversary 3/525.
+
+**Fix (option 1 of the filing).** One byte-identical paragraph in every file matching `core/team-roles/*.md`, the glob
+`install.sh` copies, opening `**Verify with one read-only command per Bash call.**`: confirm a claim with a `derived`
+fence replayed by one `scripts/ai-dlc/validate-artifact-derivations.sh` call, or with one read-only command in its own
+Bash call. Invariant `I121` binds it: present exactly once in every role file as its own paragraph, byte-identical,
+no copy elsewhere, and the validator path resolving to `core/scripts/validate-artifact-derivations.sh`.
+
+**Done when, consumer side, owed as residue and not held open here.** On the first consumer sprint after a pull that
+carries this text, re-run the filing's census over that sprint's subagent transcripts (wrapper-shape calls: a function
+definition or `bash -c`), against the before figures above. Options (2)-(4) of the filing are weighed only if the rate
+stays high. That census is recorded as owed residue in the CHANGELOG at release; the receipt below closes on the text.
+
+verify: sh set -- core/team-roles/*.md; [ -f "$1" ] || exit 9; awk -v n="$#" -v op='**Verify with one read-only command per Bash call.**' -v fp='`scripts/ai-dlc/validate-artifact-derivations.sh <that file>`' 'function chk() { if (w != 1 || s != 1 || !p) bad++ } FNR == 1 { if (nf++) chk(); w = 0; s = 0; p = 0; at = 0; pr = "" } { if (index($0, op)) s++; if (index($0, op) == 1 && pr == "") { w++; at = FNR } if (at && FNR - at <= 7 && index($0, fp)) p = 1; pr = $0 } END { if (nf) chk(); if (nf != n) bad++; exit (bad ? 1 : 0) }' "$@"
+
+## BL-454 — the lead and its teammates never consult the advisor tool, even when the harness supplies one
+
+**LANDED (v0.732.0, verified 3f37d986).**
+
+**DEFECT.** Carries the reference consumer's PC-S317-CONSULT-THE-ADVISOR-TOOL-AT-NAMED-TOUCHPOINTS-IN-THE-LEAD-AND-IN-ROLE-CONTRACTS-WHEN-IT-IS-AVAILABLE.
+Core named `advisor` nowhere, while subagents on the reference consumer have carried the tool since it arrived (every
+remediator transcript in that era). Neither the lead nor any role contract told an agent to call it, so a stronger
+reviewer sat unused through post-compact recovery, gates, repair loops and pushes. Measured call cost: lead median 94s,
+max 176s, 4 of 14 over 150s; subagent median 116s, max 295s. Check A of `validate-steering-budget.sh` read no server-side
+tool at all, so those calls were never measured either.
+
+**Fix.** SKILL.md Rule 32 names the lead's touchpoints (R, G1, G2, V1, V2, P, I) with the degrade clause in its opening
+paragraph, and the postcompact digest carries it; one-line cites at each step-file site. The recover hook is
+unchanged: touchpoint R reaches a compacted lead through the digest, because a hook line naming it pushed measured
+consumer recoveries past the 10000-character stub cliff (`BL-457`). Every file matching `core/team-roles/*.md` carries one byte-identical paragraph opening
+``**Consult the `advisor` tool when it is available.**``, bound by `I122`; no renderer change, because a rendered line
+would read DRIFTED at a consumer's self-update gate. Check A reads `server_tool_use` / `*_tool_result` pairs and
+exempts `advisor` by name; every other server tool is still charged.
+
+**Done when, consumer side, owed as residue and not held open here.** After a pull carrying this, the consumer
+re-renders `.claude/agents/` only if its own render inputs moved (they do not here), and the first sprint's lead
+transcripts show advisor calls at the named touchpoints. The receipt below closes on the text.
+
+verify: sh set -- core/team-roles/*.md; [ -f "$1" ] || exit 9; awk -v n="$#" -v op='**Consult the `advisor` tool when it is available.**' 'function chk(  b) { b = tolower(j); if (k != 1 || !index(b, "call it") || !index(b, "`advisor`") || !index(b, "available") || index(b, "never") || index(b, "do not call") || index(b, "must not") || index(b, "don\047t")) bad++ } FNR == 1 { if (nf++) chk(); k = 0; on = 0; j = ""; pr = "" } { if (index($0, op) == 1 && pr == "") { k++; on = 1 } if (on) { if ($0 == "") on = 0; else j = j " " $0 } pr = $0 } END { if (nf) chk(); if (nf != n) bad++; exit (bad ? 1 : 0) }' "$@" && h="$(grep -E '^### Rule [0-9]+ -- .*advisor' core/skills/ai-dlc/SKILL.md | head -n 1)" && [ -n "$h" ] && awk -v h="$h" 'index($0, "<!-- BEGIN GENERATED: postcompact-digest") == 1 { g = 1 } index($0, "<!-- END GENERATED: postcompact-digest") == 1 { g = 0 } g && $0 == h { f = 1 } END { exit (f ? 0 : 1) }' core/skills/ai-dlc/postcompact-digest.md
+
+## BL-455 — arm H accepts any `*-repair-p<M>.md`, so another repair's record satisfies a series' pass M
+
+**LANDED (v0.733.0, verified d94b19f0).**
+
+**DEFECT.** Found in batch 200 while adjudicating
+PC-S317-REQUIREMENTS-STEP-CYCLE-IS-NEVER-SHARDED-BECAUSE-ITS-SUBJECT-IS-THREE-FILES-AND-THE-PRD-IS-CUMULATIVE.
+`core/scripts/validate-adversarial-convergence.sh` arm H looked for the repair record of pass M with the glob
+`<dir>/*-repair-p<M>.md`. Any structured record for pass number M in the sprint directory satisfied it, including a
+party-round repair, a gate repair, or a record belonging to another series. As a result, a series whose own repair
+was done inline passed on a neighbour's record. The name `_gate-procedures.md` prescribes, and
+`join-remediator-shards.sh` writes, is `<artifact>-repair-p<M>.md`.
+
+**Measured on the reference consumer** (a scratch clone at 0.730.0, the working-tree `_bmad-output/` copied over it,
+109 series, base and tip validators side by side). 36 pass-pairs in 27 series are satisfied only by a
+differently-named record. Examples are s309 `coe-adversarial-p1` by `architecture-adversarial-repair-p1.md`, s307
+`prd-adversarial-p1` by `carry-over-evaluation-advanced-elicitation-repair-p1.md`, and s302 `product-brief-adversarial-p1`
+by `architecture-repair-p1.md`. With the fix, every one of them reads `PENDING (H -- REPAIR-RECORD)`, because no
+commit there stamps the release. No exit code changes on any of the 109 series.
+
+**What the fix does not close.** The s317 instance that surfaced this is not reachable by the name rule.
+`s317/requirements-repair-p1.md` sits at the series' own stem name but records the requirements PARTY round, so
+the stem-named record satisfies requirements pass 1. That instance closes only when party and elicitation repair
+records are renamed outside `*-repair-p<M>.md` (`requirements-party-repair.md`, `requirements-elicitation-repair.md`),
+which belongs to the requirements-subject release.
+
+**Remedy (this release).** Arm H requires exactly `<stem>-repair-p<M>.md`, where the stem is the pass name before its
+last `p<N>`/`pass<N>` token with one trailing `-adversarial` removed. The requirement sits behind `H_RELEASE`, a stamp
+keyed on the series' first pass as for K, K2 and J2, so a legacy series reads PENDING rather than FAIL. Fixture:
+check-24's `h-worlds` cells and four mutants.
+
+verify: sh bash -c 'v=core/scripts/validate-adversarial-convergence.sh; [ -f "$v" ] || exit 9; d=$(mktemp -d) || exit 9; mkdir -p "$d/.claude" && echo "version: 9.0.0" > "$d/.claude/.ai-dlc-version" || exit 9; (unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; cd "$d" && git init -q . && git add .claude && GIT_COMMITTER_DATE=2026-01-01T00:00:00Z GIT_AUTHOR_DATE=2026-01-01T00:00:00Z git -c user.email=r@x.invalid -c user.name=r -c commit.gpgsign=false -c core.hooksPath=/dev/null commit -q -m s) || exit 9; for n in 1 2; do vd=EXIT_CONDITION_NOT_MET; m=3; [ "$n" = 2 ] && vd=EXIT_CONDITION_MET && m=0; printf -- "<!-- SKILL_INVOCATION_PROVENANCE v1\ninvoked_at: 2026-01-0%sT00:00:00Z\nfindings_critical: 0\nfindings_major: %s\nverdict: %s\nSKILL_INVOCATION_PROVENANCE_END -->\n" "$((n + 1))" "$m" "$vd" > "$d/prd-adversarial-p$n.md"; done; r="- disposition: repaired\n- edit: prd.md:1\n- derivation: n/a\n"; printf -- "$r" > "$d/arch-repair-p1.md"; o=$(bash "$v" --series "$d/prd-adversarial-p" 2>&1); rc=$?; [ "$rc" = 1 ] && grep -qF "The only structured record for pass 1 is arch-repair-p1.md" <<<"$o" || exit 1; printf -- "$r" > "$d/prd-repair-p1.md"; bash "$v" --series "$d/prd-adversarial-p" >/dev/null 2>&1'
+
