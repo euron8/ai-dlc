@@ -85,6 +85,22 @@ old side): the unsplit fixture 2537s / 2476s; the shipped fixture after the spli
 347s. The shipped fixture is traced and mapped. `review-shard-merge-mutants` is still OMITTED from
 `.ai-dlc-fixture-readsets.tsv` (0 rows, against 65 for `review-shard-merge`), so it runs on every push until a trace maps it.
 
+**Progress — re-measurement and three more instances (batch 201, v0.736.0; entry stays open for `remediator-shard-join`).**
+Solo at `1794fa83`, one clean `git worktree` per fixture, one fixture at a time, 2 interleaved reps, box shared (low-load
+rep quoted): `apply-self-overwrite` 73s, `apply-setup-sited-merge` 68s, `self-update-fixture-log` 74s,
+`remediator-shard-join` 278s, `backlog-receipt-binding` 61s, `review-shard-merge-mutants` 381s. None is near the filed
+29-41 minutes; the filed figures were loaded, and the cause (sleep, or pool co-scheduling of fixtures that run their own
+pool of 8) was not tested. `backlog-receipt-binding` is already `.dist-only` with no hot spot and is not cut.
+Three split, each into a shipped fixture plus a `.dist-only` `<name>-mutants` battery sharing a shipped `lib.sh`, pooled at
+8, killed sets byte-compared against the unsplit battery. Solo, CPU-seconds (user+sys), clean worktrees, 2 interleaved reps:
+- `apply-self-overwrite`: unsplit 64 CPU-s / 74s; shipped 15 / 17s; battery 182 / 41s. Total CPU grew about 3x because
+  every scorer builds every world; each mutant is now scored against all ten predicates.
+- `apply-setup-sited-merge`: unsplit 185 / 66s; shipped 126 / 31s; battery 71 / 17s. The world-build loop is pooled, and
+  an emptied battery now FAILS (the unsplit fixture printed PASS over `MUTS=""`).
+- `self-update-fixture-log`: unsplit 60 / 72s; shipped 22.5 / 27s; battery 58 / 14s.
+The three batteries and three `lib.sh` files have no read-set rows yet and run on every push until traced.
+`remediator-shard-join` (battery 247-255s of 278s, the same serial `score()` shape) is split in a later release of batch 201.
+
 **Remedy.** Per fixture: measure solo, attribute the time, then cut it — move a mutation battery behind a shipped
 fixture into its own `.dist-only` fixture (`fixture-ship-decl.md`), score mutants in parallel within the fixture, and
 remove repeated setup. `review-shard-merge` is being split in batch 199 as the first instance.
