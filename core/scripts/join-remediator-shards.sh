@@ -310,8 +310,9 @@ if [ "$SUBJMODE" = 1 ]; then
     $1 == "part" && $7 == "-" { print $4; if ($3 == "SPEC") { m = $4; sub(/SPEC\.md$/, ".memlog.md", m); print m } }' "$SUBJ_REC" | to_ledger | awk '!seen[$0]++')"
   SUBJ_SECTIONED="$(awk -F'\t' '$1 == "part" && $7 != "-" { print $4 }' "$SUBJ_REC" | to_ledger | awk '!seen[$0]++')"
   # A subject file with no part at all: unchanged since the base, so nobody owns a write to it.
-  SUBJ_OUTSIDE="$(awk '/REQUIREMENTS_SUBJECT v1/ { inb = 1; next } /REQUIREMENTS_SUBJECT_END/ { inb = 0 } inb && /^file: / { print $3 }' "${JR_ROOT}/${_srm}" \
-    | while IFS= read -r _f; do awk -F'\t' -v f="$_f" '$1 == "part" && $4 == f { h = 1 } END { if (!h) print f }' "$SUBJ_REC"; done | to_ledger)"
+  SUBJ_OUTSIDE="$(awk 'FILENAME == ARGV[1] { split($0, c, "\t"); if (c[1] == "part") h[c[4]] = 1; next }
+    /REQUIREMENTS_SUBJECT v1/ { inb = 1; next } /REQUIREMENTS_SUBJECT_END/ { inb = 0 }
+    inb && /^file: / && !($3 in h) { print $3 }' "$SUBJ_REC" "${JR_ROOT}/${_srm}" | to_ledger)"
   [ -n "$SUBJ_SET" ] || die "${SUBJ_REC} lists no part"
   APATH="${STATE_NAME}"
 elif [ "$DOCMODE" = 1 ]; then
