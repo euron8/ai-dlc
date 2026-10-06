@@ -85,7 +85,7 @@ control passing. The worklist join refuses as batch 199's did: no live backlog e
 - `v0.735.0`: `BL-458`, carrying `PC-S317-REQUIREMENTS-STEP-CYCLE-IS-NEVER-SHARDED-…`. The requirements step reviews its
   four-file subject sharded by `partition-subject.sh`, joined by `--subject` modes, held by Check 24 arm K3.
 
-Live backlog **3 -> 8** after the close (BL-451, BL-456, BL-457 open; BL-459 to BL-463 filed), archive **449 -> 454**.
+Live backlog **2 -> 8 -> 3 -> 8** (the releases filed six; the close rotated five and filed five) (BL-451, BL-456, BL-457 open; BL-459 to BL-463 filed), archive **449 -> 454**.
 
 **OPERATOR RULINGS, BATCH 200:**
 - `PC-S316-REQUIRE-DONE-REFUSES-EXTENSION-DECLARED-STORY-STATUSES`: option A, the consumer's own; a brief item, and no
@@ -110,8 +110,8 @@ a shipped script, which `procsub-staged-refusal` r2 refuses; 0.735.0 also took `
 `partition-subject.sh` in three per-file arms.
 
 **READ-SET TRACES:** sandbox traces committed for 0.733.0-0.735.0's changed fixtures. `subject-partition`, `adversarial-shard-merge`,
-`remediator-shard-join`, `check-24-adversarial-convergence` and `review-shard-merge-mutants` are OMITTED on dropped
-reports and run on every push; `BL-452`'s post-green trace retries them.
+`remediator-shard-join` and `check-24-adversarial-convergence` are OMITTED on dropped reports, and
+`review-shard-merge-mutants` is unmapped; all five run on every push; `BL-452`'s post-green trace retries them.
 
 **THE DELIVERY GAP IS ONE RELEASE.** graph's `.claude/.ai-dlc-version` reads 0.734.0 (`c9ef6323`, its reconcile #1173)
 against `VERSION` 0.735.0; 0.735.0 is not bootstrapping. PENDING is 1 (`PC-S317-REQUIREMENTS-…`). The banked ruling
@@ -1565,6 +1565,11 @@ given at batch 90.
    `scripts/backlog-rotate.sh --check`, then `--apply`. **Confirm the archive count MOVED.** A
    release has shipped with this step silently skipped and was reported complete; it was caught
    only because the operator asked.
+
+   **Delete merged branches by EXACT NAME, and a remote delete as `git push --no-verify origin
+   --delete <names>`.** Operator ruling, batch 200: a bare delete push ran the whole pre-push suite
+   to remove six refs. A delete carries no content for the gate to verify. Never feed a glob to
+   `git branch -D`; batch 197's glob deleted 227 older batches' branches.
 
    **THEN LOOK FOR THE ENTRIES YOU CLOSED WITHOUT MEANING TO.** Operator ruling: a PC-backed fix
    will sometimes discharge pre-existing entries that carry no classification, and those closes
