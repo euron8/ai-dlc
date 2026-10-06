@@ -42,7 +42,15 @@ done
 echo "  hook: ${HOOK#"$ROOT"/}"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/readset-skip.XXXXXX")" || broken "mktemp failed"
-trap 'rm -rf "$WORK"' EXIT
+# THE LOCK PID FOR THE START-TIME WORLDS (BL-463) is a process of its own, started here, never `$$`.
+# A lock naming `$$` shares its pid AND its start time with every judge the fixture forks, so a
+# reader or helper that reads the start of `$$` instead of the lock's pid reads the right answer for
+# the wrong reason and survives. Its fds are closed so it cannot hold the runner's output pipe open.
+# It is killed by its literal recorded pid on exit, never found through the process table.
+sleep 600 </dev/null >/dev/null 2>&1 &
+LOCKPID=$!
+LOCK_T0="$(date +%s)"
+trap 'kill '"$LOCKPID"' 2>/dev/null; rm -rf "$WORK"' EXIT
 
 # The block is extracted rather than the whole hook sourced: the hook runs a full gate on
 # source. I66 holds the two copies of this block to one program, so proving it here proves it
@@ -991,6 +999,7 @@ sha_of() { shasum -a 256 -- "$1" | cut -d' ' -f1; }
 lt_wait() { local i=0; while [ -d "$1" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done; }
 LT_STUB='#!/bin/bash
 printf "%s\n" "$*" > "$STUB_ARGS"
+if [ -n "${STUB_PPID:-}" ]; then printf "%s\n" "$PPID" > "$STUB_PPID"; fi
 if [ -n "${STUB_GO:-}" ]; then i=0; while [ ! -f "$STUB_GO" ] && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i+1)); done; fi
 lm=""; ls=""
 while [ $# -gt 0 ]; do case "$1" in --local-map) lm="$2"; shift ;; --list) ls="$2"; shift ;; esac; shift; done
@@ -1251,19 +1260,32 @@ else
   # readset_pid_start), and line 1 is not the pid of the process that ran the hook copy. HELD is a
   # conjunct. The driver is a separate `bash` launched with `&`, so `$!` here IS its `$$` (asserted).
   # After release the lock is gone, or stale.
+  # LINE 1 IS JOINED TO A PID THE OTHER SIDE RECORDED. A pid file agreeing with itself proves only
+  # that the writer read one pid twice: `tp="$PPID"` names a live process whose start it then records
+  # correctly. So the stub deriver writes its own `$PPID` -- the trace subshell, seen from inside it
+  # -- to STUB_PPID, and (k) demands line 1 equal it. The driver sleeps 1.1s before taking the lock,
+  # so the trace subshell starts in a later second than the driver, and the control (sdiff) asserts
+  # start($$) != start(the stub's recorded pid) in the same invocation. The control is keyed on the
+  # STUB's pid, not on line 1: under `parentpid` line 1 IS `$$`, and a control on it would read
+  # "equal" for a mutant that must read as killed, not as a broken harness.
   RT_DRIVER="$WORK/rt-driver.sh"
   cat > "$RT_DRIVER" <<'RT'
 pool="$1"; t="$2"; o="$3"; ref="$4"
 cd "$t" || exit 1
 printf '%s\n' "$$" > "$o/self"
-export STUB_ARGS="$o/args" STUB_GO="$o/go" AI_DLC_READSET_LIVE_TRACE=1
+export STUB_ARGS="$o/args" STUB_GO="$o/go" STUB_PPID="$o/ppid" AI_DLC_READSET_LIVE_TRACE=1
 . "$pool" 2>/dev/null
 mkdir -p "$o/.log"; printf 'gamma\n' > "$o/.trace"; : > "$o/.trace.held"
 printf ok > "$o/gamma"; printf '  ok    g\n' > "$o/.log/gamma"
 lk="$GITDIR/ai-dlc-fixture-readsets.local.lock"
+sleep 1.1
 readset_live_trace "$o" > "$o/msg" 2>&1
+i=0; while [ ! -s "$o/ppid" ] && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i+1)); done
 cp "$lk/pid" "$o/pidfile" 2>/dev/null
 p="$(sed -n 1p "$o/pidfile" 2>/dev/null | cut -d' ' -f1)"
+sp="$(cat "$o/ppid" 2>/dev/null)"
+( . "$ref" 2>/dev/null; a="$(readset_pid_start "$$")"; b="$(readset_pid_start "$sp")"
+  if [ -n "$a" ] && [ -n "$b" ] && [ "$a" != "$b" ]; then echo sdiff; else echo "nosdiff($a/$b)"; fi ) > "$o/sdiff" 2>/dev/null
 ( . "$ref" 2>/dev/null; readset_pid_start "$p" ) > "$o/want" 2>/dev/null
 ( . "$ref" 2>/dev/null; readset_lock_stale "$lk" > "$o/judge" 2>&1; echo "$?" > "$o/rc" )
 : > "$STUB_GO"
@@ -1272,21 +1294,24 @@ if [ ! -d "$lk" ]; then echo gone > "$o/after"
 elif ( . "$ref" 2>/dev/null; readset_lock_stale "$lk" ) >/dev/null 2>&1; then echo stale > "$o/after"
 else echo held > "$o/after"; fi
 RT
-  rt_drive() { # <pool> <name>; prints "<self=launched>|<l1!=launched>|<l2 set>|<l2=start(l1)>|<rc>|<after>|<started>"
-    local t o lp l1 l2
+  rt_drive() { # <pool> <name>; prints "<self=launched>|<l1!=launched>|<l2 set>|<l2=start(l1)>|<rc>|<after>|<started>|<l1=stub's ppid>|<control>"
+    local t o lp l1 l2 sp
     t="$(lt_fresh "rt.$1.$2")"; o="$WORK/rto.$2"; mkdir -p "$o"
     bash "$RT_DRIVER" "$1" "$t" "$o" "$POOL" > "$o/driver.out" 2>&1 &
     lp=$!; wait "$lp"
     l1="$(sed -n 1p "$o/pidfile" 2>/dev/null | cut -d' ' -f1)"; l2="$(sed -n 2p "$o/pidfile" 2>/dev/null)"
-    printf '%s|%s|%s|%s|%s|%s|%s' \
+    sp="$(cat "$o/ppid" 2>/dev/null)"
+    printf '%s|%s|%s|%s|%s|%s|%s|%s|%s' \
       "$([ "$(cat "$o/self" 2>/dev/null)" = "$lp" ] && echo self || echo noself)" \
       "$([ -n "$l1" ] && [ "$l1" != "$lp" ] && echo child || echo "pid=${l1:-none}")" \
       "$([ -n "$l2" ] && echo start || echo nostart)" \
       "$([ -n "$l2" ] && [ "$l2" = "$(cat "$o/want" 2>/dev/null)" ] && echo match || echo nomatch)" \
       "$(cat "$o/rc" 2>/dev/null)" "$(cat "$o/after" 2>/dev/null)" \
-      "$(grep -q 'started detached' "$o/msg" 2>/dev/null && echo started || echo notstarted)"
+      "$(grep -q 'started detached' "$o/msg" 2>/dev/null && echo started || echo notstarted)" \
+      "$([ -n "$sp" ] && [ "$l1" = "$sp" ] && echo ppid || echo "noppid(${sp:-none})")" \
+      "$(cat "$o/sdiff" 2>/dev/null || echo nosdiff)"
   }
-  RT_OK='self|child|start|match|1|'*'|started'
+  RT_OK='self|child|start|match|1|'*'|started|ppid|sdiff'
   RK="$(rt_drive "$POOL" k)"; lt_arm
   case "$RK" in
     $RT_OK) case "$RK" in *"|gone|"*|*"|stale|"*)
@@ -1334,6 +1359,145 @@ if pm_copy held 1 '$3 >= 3 && $4 == k' '$3 >= 99 && $4 == k'; then
   lt_arm; _s="$POOL"; POOL="$PM"; _h="$(lt_held pm.h3 3 cur)"; POOL="$_s"
   [ "$_h" = "|gamma" ] && bad "BL-452 MUTANT held SURVIVED: three discards still held gamma" || ok "BL-452 MUTANT held is KILLED by (M5): trace|held '$_h'"
 fi
+
+# THE LOCK'S START TIME (BL-463). `kill -0` alone reads a REUSED pid as a live trace, so the lock
+# records the start time of its pid on line 2 and the reader compares it. Six worlds, judged by
+# calling readset_lock_stale directly and reading its exact return code (0 stale, 1 held, anything
+# else is an error and never scores as either) and whether it printed the ps-fallback announcement.
+# These run `ps`, which is setuid and refused by the read-set deriver's sandbox; this fixture TRIPs
+# that sandbox already and is unmapped, which is why the worlds live here and not in suite-pole-guard.
+#
+# THE LOCK PID IS $LOCKPID, the `sleep` started at the top, NEVER `$$`. Each world is judged by a
+# fresh `bash` (PJ_JUDGE) launched at least 2s after that sleep, and the judge asserts in the same
+# invocation that its own start differs from the lock pid's (ctl). A judge sharing the lock pid's
+# start second cannot tell a reader or helper that reads `$$` from a right one: the fixture refuses.
+#
+# EVERY SEED COMES FROM THE UNMUTATED BLOCK. The seed lib is readset_pid_start plus the block's own
+# writer line, extracted, so the right-start lock is what the real writer emits, never a string typed
+# here; and a mutant of the judge cannot also move its seed, which would let a normalisation mutant
+# survive by symmetry.
+#   wrong       a LIVE pid with a start time it never had (a reused pid)              -> stale
+#   right       the real writer's lock for that pid, judged under LC_ALL=C TZ=UTC0     -> held, silent
+#   legacylive  `pid epoch` only, as an older hook wrote it, live pid                  -> held, silent
+#   legacydead  the same with a dead pid                                               -> stale, silent
+#   psfail      the real writer's lock, judged with a PATH `ps` that exits 1           -> held, announced
+#   split       written under de_DE/Asia/Tokyo, judged under fr_FR/America/Los_Angeles -> whatever `right` reads
+# `split` is scored RELATIVE to `right` under the same lib, so a mutant that breaks every held-with-
+# start world is owned by `right` alone, and one that breaks only the cross-env case (no pin) is owned
+# by `split` alone. On the unmutated block `right` is asserted held and silent, so `split` is too.
+PJW="$WORK/pj"; mkdir -p "$PJW" || broken "could not create the lock-start world"
+pj_lib() { # <pool copy> <out>: the reader and its helper, as the hook defines them
+  { awk '/^readset_pid_start\(\) \{/,/^}/' "$1"; awk '/^readset_lock_stale\(\) \{/,/^}/' "$1"; } > "$2"
+}
+PJ_LIB="$PJW/lib.sh"; pj_lib "$POOL" "$PJ_LIB"
+[ "$(grep -c '^[a-z_]*() {' "$PJ_LIB")" -eq 2 ] && grep -q '^readset_pid_start() {' "$PJ_LIB" && grep -q '^readset_lock_stale() {' "$PJ_LIB" \
+  || broken "could not extract readset_pid_start and readset_lock_stale from the pool block"
+PJ_WLINE="printf '%s %s\\n%s\\n' \"\$tp\""
+PJ_N="$(grep -cF -- "$PJ_WLINE" "$POOL")" || PJ_N=0
+[ "$PJ_N" -eq 1 ] || broken "the lock writer line ($PJ_WLINE) occurs $PJ_N time(s) in the pool block, not 1"
+PJ_SEEDLIB="$PJW/seed.sh"
+{ awk '/^readset_pid_start\(\) \{/,/^}/' "$POOL"
+  printf 'pj_write_lock() { local tp="$1" lk="$2"\n'
+  grep -F -- "$PJ_WLINE" "$POOL"
+  printf '}\n'
+} > "$PJ_SEEDLIB"
+kill -0 "$LOCKPID" 2>/dev/null || broken "the lock-pid sleep $LOCKPID is not alive"
+PJ_LIVE="$( . "$PJ_SEEDLIB"; readset_pid_start "$LOCKPID" )" || PJ_LIVE=""
+[ -n "$PJ_LIVE" ] || broken "readset_pid_start printed nothing for the live lock pid $LOCKPID -- no world below can reach the start comparison"
+for _w in wrong right legacylive legacydead psfail split; do mkdir -p "$PJW/j.$_w.lock" || broken "could not create the $_w lock world"; done
+printf '%s %s\n%s\n' "$LOCKPID" "$(date +%s)" 'Thu Jan  1 00:00:00 1970' > "$PJW/j.wrong.lock/pid"
+_s="$(sed -n 2p "$PJW/j.wrong.lock/pid")"; _s="$(set -f; set -- $_s; printf '%s' "$*")"
+[ "$_s" != "$PJ_LIVE" ] || broken "the wrong-start seed '$_s' equals the live start '$PJ_LIVE' -- the world cannot discriminate"
+( . "$PJ_SEEDLIB"; pj_write_lock "$LOCKPID" "$PJW/j.right.lock" )
+[ "$(sed -n 1p "$PJW/j.right.lock/pid" | cut -d' ' -f1)" = "$LOCKPID" ] && [ "$(sed -n 2p "$PJW/j.right.lock/pid")" = "$PJ_LIVE" ] \
+  || broken "the real writer did not record pid $LOCKPID and its start '$PJ_LIVE': $(tr '\n' '/' < "$PJW/j.right.lock/pid")"
+cp "$PJW/j.right.lock/pid" "$PJW/j.psfail.lock/pid"
+printf '%s %s\n' "$LOCKPID" "$(date +%s)" > "$PJW/j.legacylive.lock/pid"
+sh -c 'exit 0' & _dp=$!; wait "$_dp"
+printf '%s %s\n' "$_dp" "$(date +%s)" > "$PJW/j.legacydead.lock/pid"
+_a="$(LC_ALL=de_DE.UTF-8 TZ=Asia/Tokyo ps -o lstart= -p "$LOCKPID")"; _b="$(LC_ALL=fr_FR.UTF-8 TZ=America/Los_Angeles ps -o lstart= -p "$LOCKPID")"
+[ -n "$_a" ] && [ -n "$_b" ] && [ "$_a" != "$_b" ] \
+  || broken "unpinned ps reads the same start under the two split environments ('$_a' / '$_b') -- the split world cannot discriminate"
+( export LANG=de_DE.UTF-8 LC_ALL=de_DE.UTF-8 TZ=Asia/Tokyo; . "$PJ_SEEDLIB"; pj_write_lock "$LOCKPID" "$PJW/j.split.lock" )
+[ "$(sed -n 2p "$PJW/j.split.lock/pid")" = "$PJ_LIVE" ] || broken "the writer under de_DE/Tokyo did not record the pinned start '$PJ_LIVE'"
+mkdir -p "$PJW/psbin" && printf '#!/bin/sh\nexit 1\n' > "$PJW/psbin/ps" && chmod +x "$PJW/psbin/ps" || broken "could not build the failing ps stub"
+# The judge: a fresh process. ctl is computed with the UNMUTATED helper before any world's env.
+PJ_JUDGE="$PJW/judge.sh"
+cat > "$PJ_JUDGE" <<'PJ'
+lib="$1"; seed="$2"; lk="$3"; w="$4"; o="$5"; lp="$6"; psbin="$7"
+( . "$seed"; a="$(readset_pid_start "$$")"; b="$(readset_pid_start "$lp")"
+  if [ -n "$a" ] && [ -n "$b" ] && [ "$a" != "$b" ]; then echo sdiff; else echo "nosdiff($a/$b)"; fi ) > "$o/ctl" 2>&1
+. "$lib"
+case "$w" in
+  right) export LC_ALL=C TZ=UTC0 ;;
+  split) export LANG=fr_FR.UTF-8 LC_ALL=fr_FR.UTF-8 TZ=America/Los_Angeles ;;
+  psfail) PATH="$psbin:$PATH"; [ "$(command -v ps)" = "$psbin/ps" ] || exit 7 ;;
+esac
+readset_lock_stale "$lk" > "$o/out" 2>&1; echo "$?" > "$o/rc"
+PJ
+while [ $(( $(date +%s) - LOCK_T0 )) -lt 2 ]; do sleep 0.2; done
+pj_judge() { # <lib> <world> -> "<stale|held|err<rc>>|<ann|noann>"; refuses on a failed control
+  local o rc c
+  o="$(mktemp -d "$PJW/jo.$2.XXXXXX")" || broken "mktemp for the $2 judge failed"
+  bash "$PJ_JUDGE" "$1" "$PJ_SEEDLIB" "$PJW/j.$2.lock" "$2" "$o" "$LOCKPID" "$PJW/psbin" > "$o/judge.out" 2>&1
+  # pj_judge runs inside `$( )`, where `broken` would end only the substitution: the failed control
+  # is recorded, and pj_eval refuses on it in the fixture's own shell.
+  c="$(cat "$o/ctl" 2>/dev/null)"
+  [ "$c" = sdiff ] || printf '%s %s\n' "$2" "${c:-none}" >> "$PJW/ctlfail"
+  rc="$(cat "$o/rc" 2>/dev/null)"
+  case "$rc" in 0) rc=stale ;; 1) rc=held ;; *) rc="err${rc:-none}" ;; esac
+  printf '%s|%s' "$rc" "$(grep -q 'could not read the start time of lock pid' "$o/out" && echo ann || echo noann)"
+}
+PJ_WORLDS="wrong right legacylive legacydead psfail split"
+pj_want() { # <world> <right's result under the same lib>
+  case "$1" in
+    wrong|legacydead) printf 'stale|noann' ;;
+    right|legacylive) printf 'held|noann' ;;
+    psfail) printf 'held|ann' ;;
+    split) printf '%s' "$2" ;;
+  esac
+}
+pj_eval() { # <lib>: sets PJ_R_<world> and PJ_FLIP, the worlds whose result is not the wanted one
+  local w r rr
+  rr="$(pj_judge "$1" right)"; PJ_FLIP=""
+  for w in $PJ_WORLDS; do
+    if [ "$w" = right ]; then r="$rr"; else r="$(pj_judge "$1" "$w")"; fi
+    eval "PJ_R_$w=\$r"
+    [ "$r" = "$(pj_want "$w" "$rr")" ] || PJ_FLIP="$PJ_FLIP${PJ_FLIP:+ }$w"
+  done
+  [ ! -s "$PJW/ctlfail" ] || broken "a judge's start equals the lock pid's, or could not be read -- a reader or helper reading \$\$ would pass: $(tr '\n' ';' < "$PJW/ctlfail")"
+}
+pj_eval "$PJ_LIB"
+pj_arm() { # <world> <text>
+  local r; lt_arm; eval "r=\$PJ_R_$1"
+  if [ "$r" = "$(pj_want "$1" "$PJ_R_right")" ]; then ok "$2"; else bad "$2 -- got '$r', want '$(pj_want "$1" "$PJ_R_right")'"; fi
+}
+pj_arm wrong "lock start: a LIVE pid whose recorded start time is not its own (a reused pid) is STALE"
+pj_arm right "  the real writer's lock for a live pid is HELD, with no ps-fallback announcement"
+pj_arm legacylive "  a two-field lock from an older hook with a live pid is HELD, judged as before, with no announcement"
+pj_arm legacydead "  a two-field lock from an older hook with a dead pid is STALE"
+pj_arm psfail "  a ps that fails (PATH stub exiting 1) leaves a live lock HELD and says so in one line"
+pj_arm split "  written under de_DE/Asia/Tokyo and judged under fr_FR/America/Los_Angeles, the lock reads as it does under C/UTC0"
+# Each mutant is a pm_copy of the pool block -- the one mutation path every mutant here uses -- with
+# the two functions re-extracted from it, scored against ALL six worlds, and must move exactly its own.
+pj_mut() { # <name> <from> <to> <the one world it must move>
+  local m="$PJW/m.$1.sh"
+  pm_copy "pj.$1" 1 "$2" "$3" || return 0
+  lt_arm
+  pj_lib "$PM" "$m"
+  if cmp -s "$PJ_LIB" "$m"; then bad "BL-463 MUTANT $1: applied to the block but not inside the two extracted functions"; return 0; fi
+  pj_eval "$m"
+  if [ "$PJ_FLIP" = "$4" ]; then ok "BL-463 MUTANT $1 is KILLED by '$4' alone: '$(eval "printf '%s' \"\$PJ_R_$4\"")'"
+  else bad "BL-463 MUTANT $1 moved '${PJ_FLIP:-nothing}', want exactly '$4'"; fi
+}
+pj_mut nostart '    [ "$c" != "$s" ] && return 0' '    :' wrong
+pj_mut nopin 'LC_ALL=C TZ=UTC0 ps -o lstart=' 'ps -o lstart=' split
+pj_mut psstale "alone\\n' \"\$p\"" "alone\\n' \"\$p\"; return 0" psfail
+pj_mut nonorm '  set -- $x' '  set -- "$x"' right
+# readerself and helperself read the start of `$$` -- the judge -- in place of the lock pid. They
+# die on `right` only because the lock pid is the sleep and the judge's start is asserted different.
+pj_mut readerself 'if ! c="$(readset_pid_start "$p")"; then' 'if ! c="$(readset_pid_start "$$")"; then' right
+pj_mut helperself 'ps -o lstart= -p "$1"' 'ps -o lstart= -p "$$"' right
 if [ "$LT_CAN" = 1 ]; then
   pm_l() { # <name> <arm label> <setup> <correct result glob> [world]
     local r; lt_arm
@@ -1381,16 +1545,22 @@ if [ "$LT_CAN" = 1 ]; then
     && pm_rf fold f 'export STUB_RC=1' '"0|"*"|invoked|verified|"*'
   # The lock WRITER's mutants (BL-463), each scored on the round trip (k), the one arm that reads
   # the pid file's content: the parent's pid in place of the trace subshell's, and no start line.
+  # A mutant whose drive lost its control (no stub pid recorded, or the driver and the trace subshell
+  # sharing a start) is NO VERDICT, never a kill.
   pm_rt() { # <name>
     local r; lt_arm
     r="$(rt_drive "$PM" "pm.$1")"
     case "$r" in
       $RT_OK) bad "BL-463 MUTANT $1 SURVIVED k: '$r'" ;;
+      *"|noppid(none)|"*|*"|nosdiff"*) bad "BL-463 MUTANT $1: the drive's control failed, NO VERDICT: '$r'" ;;
       *) ok "BL-463 MUTANT $1 is KILLED by k: '$r'" ;;
     esac
   }
   pm_copy parentpid 1 '  tp="$!"' '  tp="$$"' && pm_rt parentpid
   pm_copy nostartline 1 '"$(readset_pid_start "$tp")" > "$lk/pid"' '"" > "$lk/pid"' && pm_rt nostartline
+  # ppidwriter names a LIVE process that is not the trace subshell and records that process's start
+  # correctly, so the file agrees with itself; only the join to the stub's recorded pid (ppid) sees it.
+  pm_copy ppidwriter 1 '  tp="$!"' '  tp="$PPID"' && pm_rt ppidwriter
   pm_copy redrun 1 '  if [ "$rc" -eq 0 ]; then readset_live_trace "$out"; fi' '  readset_live_trace "$out"' \
     && pm_rf redrun f "printf 'exit 1\n' > $FXROOT/alpha/run.sh" '"1|no|not|"*'
 fi
