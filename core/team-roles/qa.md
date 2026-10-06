@@ -83,6 +83,9 @@ further when any of these is absent:
 
 - the dev's full-collection run: exact invocation, working directory, and
   collected / passed / failed / deselected / skipped / xfailed counts;
+- the dev's dependency setup for that run, recorded beside it: the canonical
+  dependency setup that makes it reproducible from a fresh detached worktree,
+  as the exact invocation and its working directory, or `none` with the reason;
 - the four evidence sections, each filled: `## Production Integrity Tests`,
   `## Smoke Test Updates`, `## Rename Verification` (or `not a rename`), and
   `## Strategy Test IDs`;
