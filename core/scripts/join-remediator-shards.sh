@@ -156,8 +156,8 @@
 #   checks one record that no join wrote -- the unsharded round's single repair writer, the
 #   one-part subject, the serial remediator's appended entries -- and writes nothing.
 #
-#   FINDING IDS COLLIDE ACROSS SEATS (graph s317: 14 ids, `F-1` among them, appear in more than one
-#   seat file), so a source resolves on the PAIR (seat file, id), never the id alone. The refusals:
+#   FINDING IDS COLLIDE ACROSS SEATS (graph s317, read by src_ids below: 19 ids, `F-1` among them,
+#   appear in more than one `architecture-*` seat file), so a source resolves on the PAIR (seat file, id), never the id alone. The refusals:
 #   an entry carrying `disposition:` and no `source:` line; a `source:` line with no
 #   `<file>.md#<id>` token; a token whose file is not a seat file of sprint <N> (a path that is not
 #   a suffix of `<state>/party-mode/s<N>/<file>` names another sprint's seat); a token whose seat
@@ -177,8 +177,8 @@
 #   carry-over evaluation 1-4), each entry's OWN attribution rewritten as a `source:` line --
 #   `### architect A1-1`, `### dev-5 F-1`, `### F-6.1 (dev)`, `### carry-over-evaluation-pm-1:F1`,
 #   `### Architect-1 / TEA F-T7-01 / PM-1` (one entry, three findings: one line, three tokens) --
-#   against a copy of graph's real `party-mode/s317/`. 279 entries carrying 287 sources; 279
-#   sources resolve, and 217 of the 287 carry an id that ANOTHER seat file also carries, which an
+#   against a copy of graph's real `party-mode/s317/`. 279 entries; 278 carry 287 sources, 279 of
+#   which resolve, and 217 of the 287 carry an id that ANOTHER seat file also carries, which an
 #   id-only key cannot attribute. The narrowings, in order: a `Finding ` lead is dropped (`## Finding D4-1`); `.`
 #   is an id character (`F-5.1`); a seat file with headings but no id is told apart from a wrong
 #   id. What still refuses is graph's own attribution gap, not the grammar: 8 sources name
