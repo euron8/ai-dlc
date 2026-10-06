@@ -593,9 +593,10 @@ kill_check "m8 a ledger that parses to ZERO receipts is a finding" "$TMP/m8" "" 
 #   m8d  the only sh receipt is an empty one-liner                                        -> R2 FAIL
 #   m8e  the only sh receipt greps a literal at a path the seed cannot name               -> R2 FAIL
 #   m8f  live entries and no sh receipt at all                                            -> OK
-# The behavioural seed carries BOTH literal-free shapes -- one naming a path, whose own text
-# appended to that path must not flip it, and one naming none, whose exit must be stable across
-# two readings -- so a predicate that grants only one of the two signals cannot pass it.
+# The behavioural seed carries BOTH literal-free shapes -- one naming a script the tree holds,
+# which must hold its own text appended AND be seen to run, and one naming a script the tree does
+# not hold, which must run as a created stub and still fail -- so a predicate granting only one
+# of the two signals cannot pass it.
 r8_seed() { # r8_seed <dir> <nsh> <nentries> <ledger-body...> -> seeds, writes the ledger, commits
   local d="$1"; shift
   seed "$d"
@@ -610,9 +611,11 @@ R8_BEHAV_PATH='## BL-831
 
 verify: sh o="$(bash probe/tool.sh)"; [ "$o" = READY831 ]
 '
+# Names a script the tree does not hold: the only no-seedable-path shape that can be
+# behavioural, because the execution test creates it as a stub and sees it run and still fail.
 R8_BEHAV_NOPATH='## BL-832
 
-verify: sh [ "$(printf x)" = y832 ]
+verify: sh o="$(bash probe/new832.sh 2>/dev/null)"; [ "$o" = READY832 ]
 '
 R8_PASSING="## BL-833
 
@@ -770,7 +773,8 @@ fi
 #   mW11  the sum also absorbs UNSEEDED   -> must die on m8g
 #   mW10  the sum also absorbs OUT-OF-POP -> must die on m8h
 #   mR2v  the verb census dropped         -> must die on m8i-dash
-#   mR2s  the no-path stability re-read   -> must die on m8l
+#   mX1   the execution test always true  -> must die on m8l-sed1p
+#   mX2   created stub: "ran" without "still fails" -> must die on m8l-stub
 #   mG1-3, mT1: the grammar and the receipt-text seed, each killed at the subject's own R1 probe
 r8_mut() { # r8_mut <name> <src-dir> <sed> <check: ok|fail|m8> <args for the check...>
   local n="$1" src="$2" ex="$3" kind="$4"; shift 4
@@ -805,7 +809,7 @@ r8_mut() { # r8_mut <name> <src-dir> <sed> <check: ok|fail|m8> <args for the che
 }
 r8_mut mR2a "$TMP/m8c" 's|^if \[ "$SCORED" -eq 0 \] && \[ -z "$R2_ZERO_STATE" \]; then|if false; then|' fail 1 1
 r8_mut mR2b "$TMP/m8b" 's|^if \[ "$SCORED" -eq 0 \] && \[ -z "$R2_ZERO_STATE" \]; then|if [ "$SCORED" -eq 0 ]; then|' ok 3 3
-r8_mut mR2c "$TMP/m8c" 's@$1 == "UNSCORABLE" \&\& ($3 ~ /^behavioural-text-seed-held-seed-exit=/ || $3 ~ /^behavioural-no-path-exit-stable=/)@$1 == "UNSCORABLE"@' fail 1 1
+r8_mut mR2c "$TMP/m8c" 's@$1 == "UNSCORABLE" \&\& $3 ~ /^behavioural-executes-named-file/@$1 == "UNSCORABLE"@' fail 1 1
 r8_mut mR2d "$TMP/m8" 's|^  elif \[ "$SH_RECEIPTS" -eq 0 \] && \[ "$ENTRIES" -gt 0 \]; then|  elif [ "$SH_RECEIPTS" -eq 0 ]; then|' m8
 # W11 and W10: the accounted-for sum widened to absorb an UNSEEDED receipt, and an exit-9 one.
 # Each was a wrong predicate the whole fixture let through; m8g and m8h are their subjects.
@@ -815,40 +819,128 @@ r8_mut mW10 "$TMP/m8h" 's|\$(( N_BEHAV + N_PASS ))|$(( N_BEHAV + N_PASS + N_OOP 
 # `- verify: sh` reads as having no sh receipt and passes again.
 r8_mut mR2v "$TMP/m8i-dash" 's|^if \[ "$SCORED" -eq 0 \] && \[ "$UNREAD_VERBS" -eq 0 \]; then|if [ "$SCORED" -eq 0 ]; then|' fail 0 1
 
-# ===== M8L. A RECEIPT NAMING NO SEEDABLE PATH IS BEHAVIOURAL ONLY IF ITS EXIT IS STABLE. ======
-# It exits 1 on its first reading and 0 on its second, counting through a file outside every
-# checkout, and names no path the seed could reach -- so the stability re-read is its only
-# observation. It must be UNSTABLE with both exits. Its counter is a literal 0, never a
-# truncation: an empty file reads as `` and the first branch would never fire.
-R8_FLIP_COUNTER="$TMP/flip.counter"; export R8_FLIP_COUNTER
-# BL-850 is a scored ANCHOR: with the flapping receipt alone SCORED is 0, R2 refuses before the
-# rows are printed, and the arm reads no class at all -- measured on this arm's first cut.
-r8_seed "$TMP/m8l" '## BL-849
+# ===== M8L-M8Z. ROUND 3: A READER THAT HOLDS EVERY SEED IS STILL A READER. =====================
+# Round 2 granted "behavioural" to a literal-free receipt that held its own text appended, or
+# that named no path and read the same exit twice. An adversary closed every one of the shapes
+# below with a prose edit placed where the receipt reads -- a leading line, a trailing exact line,
+# a padding of lines, a file the receipt reaches through a variable, a glob or `find`. Each is now
+# a reader that RUNS nothing it names, and must block R2's zero. Every arm is its own one-receipt
+# ledger at the gate's ceilings with the floor sized to it, so R2's zero is the only thing that
+# can decide, and each was measured to PASS (the acquittal) on the round-2 tip 303f030f.
+# m8l_shape <tag> <id> <receipt> <file> <file-content> -- seeds the file, asserts R2's zero FAIL.
+m8l_shape() {
+  local t="$1" id="$2" rcp="$3" f="$4" body="$5" out rc_v
+  r8_seed "$TMP/m8l-$t" "## $id
 
-verify: sh C="$R8_FLIP_COUNTER"; n=$(cat "$C"); printf %s $((n+1)) > "$C"; [ "$n" = 0 ] && exit 1; exit 0
-' "## BL-850
-
-verify: sh grep -q 'MARK850' probe/subject.txt
+verify: sh $rcp
 "
-m8l_check() { # m8l_check <dir> -> "<class> <detail>"
-  printf 0 > "$R8_FLIP_COUNTER"
-  run_v "" "$1" --max-prose-closable 9 --max-unscorable 9 --max-out-of-population 9 \
-    --max-unstable 9 --min-sh-receipts 1 --min-entries 1 | awk -F'\t' '$2 == "BL-849" { print $1 " " ($1 == "UNSTABLE" ? $3 : $5) }' | sed -n '1p'
+  mkdir -p "$(dirname "$TMP/m8l-$t/$f")"
+  printf '%s' "$body" > "$TMP/m8l-$t/$f"
+  ( cd "$TMP/m8l-$t" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m shape >/dev/null 2>&1 )
+  out="$(run_v "" "$TMP/m8l-$t" --max-prose-closable 1 --max-unscorable 28 --max-out-of-population 1 \
+    --max-unstable 0 --min-sh-receipts 1 --min-entries 1)"; rc_v=$?
+  if [ "$rc_v" -eq 1 ] && grep -qF "produced ZERO scored receipts" <<<"$out" \
+     && ! grep -qF "OK: validate-backlog-receipts" <<<"$out"; then
+    note "ok    m8l-$t -- the reader '$rcp' runs nothing it names, so it blocks R2's zero"
+  else
+    note "FAIL  m8l-$t -- '$rcp' exited $rc_v without R2's zero FAIL: a reader a prose edit closes was accounted for"
+    printf '%s\n' "$out" | grep -E '^(FAIL|OK)' | sed 's/^/      /' | head -2; rc=1
+  fi
 }
-m8l_got="$(m8l_check "$TMP/m8l")"
-if [ "$m8l_got" = "UNSTABLE base-exit=1/0" ]; then
-  note "ok    m8l -- a literal-free receipt naming no path whose exit moves between readings is UNSTABLE, not behavioural"
-else
-  note "FAIL  m8l -- the no-path receipt that reads 1 then 0 was classified '${m8l_got:-NONE}', not 'UNSTABLE base-exit=1/0'"; rc=1
+m8l_shape sed1p    BL-851 'test "$(sed -n 1p probe/g.txt)" = ZZFIRST'                    probe/g.txt     $'plain\n'
+m8l_shape head1    BL-852 'head -1 probe/f.txt | grep -q ZZONE'                          probe/f.txt     $'plain\n'
+m8l_shape headn1   BL-853 'head -n 1 probe/f.txt | grep -q ZZLEAD'                       probe/f.txt     $'plain\n'
+m8l_shape tail1    BL-854 'tail -1 probe/f.txt | grep -qx ZZLAST'                        probe/f.txt     $'plain\n'
+m8l_shape grepcx   BL-855 'grep -c alpha probe/a.txt | grep -qx 3'                       probe/a.txt     $'alpha\n'
+m8l_shape wcl      BL-856 '[ "$(wc -l < probe/lines.txt)" -gt 5 ]'                       probe/lines.txt $'a\nb\nc\n'
+m8l_shape grepcdot BL-857 '[ "$(grep -c . probe/lines.txt)" = 5 ]'                       probe/lines.txt $'a\nb\nc\n'
+m8l_shape varpath  BL-858 'D=probe/sub; test "$(cat "$D/x.txt")" = ZZVAR'                probe/sub/x.txt $'plain\n'
+m8l_shape glob     BL-859 'test "$(cat probe/sub/*.txt)" = ZZGLOB'                       probe/sub/x.txt $'plain\n'
+m8l_shape find     BL-860 'test "$(find probe/sub -name "*.txt" | xargs cat)" = ZZFIND'  probe/sub/x.txt $'plain\n'
+# ...and a receipt that runs a script the tree does not hold, which a comment-only stub SATISFIES.
+m8l_shape stub     BL-861 'bash probe/new861.sh >/dev/null 2>&1 || exit 1'               probe/other.txt $'x\n'
+
+# THE MUTANT: the execution test answers yes unconditionally, so every reader is granted
+# behavioural. It is killed at the subject's own R1 probe, before any corpus -- BL-915, the
+# first-line reader -- which is the stronger kill: the run refuses instead of publishing a zero
+# that accounts for a reader. Measured on this arm's first cut, which expected the corpus arm to
+# fire and read the refusal as a survival.
+mX1_check() {
+  local out rc_v
+  mkdir -p "$TMP/mX1"; cp -R "$TMP/m8l-sed1p/." "$TMP/mX1/"
+  mut "$TMP/mX1" 's|^    \[ -f "\$_ex_s" \]$|    true|' || return
+  ( cd "$TMP/mX1" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m mut >/dev/null 2>&1 )
+  out="$(run_v "" "$TMP/mX1" --max-prose-closable 1 --max-unscorable 28 --max-out-of-population 1 \
+    --max-unstable 0 --min-sh-receipts 1 --min-entries 1)"; rc_v=$?
+  if [ "$rc_v" -eq 2 ] && grep -qF "SELF-PROBE FAILED" <<<"$out" && grep -qF "the first-line reader" <<<"$out" \
+     && ! grep -qF "OK: validate-backlog-receipts" <<<"$out"; then
+    note "ok    mX1 -- killed at R1 on the first-line reader: with the execution test always true it is granted behavioural"
+  else
+    note "FAIL  mX1 SURVIVED or died elsewhere -- exit $rc_v"
+    printf '%s\n' "$out" | grep -E 'SELF-PROBE|^FAIL|^OK' | sed 's/^/      /' | head -2; rc=1
+  fi
+}
+mX1_check
+# THE MUTANT on the created-stub branch: "ran" alone, without "still failed with only the stub".
+mkdir -p "$TMP/mX2"; cp -R "$TMP/m8l-stub/." "$TMP/mX2/"
+if mut "$TMP/mX2" 's|^      if executed \&\& \[ "\$EX_RC" != "0" \]; then|      if executed; then|'; then
+  ( cd "$TMP/mX2" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m mut >/dev/null 2>&1 )
+  mX2_out="$(run_v "" "$TMP/mX2" --max-prose-closable 1 --max-unscorable 28 --max-out-of-population 1 \
+    --max-unstable 0 --min-sh-receipts 1 --min-entries 1)"; mX2_rc=$?
+  if [ "$mX2_rc" -eq 0 ] && grep -qF "R2 all-behavioural" <<<"$mX2_out"; then
+    note "ok    mX2 -- killed: without the stub-still-fails check a receipt a comment-only file satisfies is accounted for"
+  else
+    note "FAIL  mX2 SURVIVED -- exit $mX2_rc"; rc=1
+  fi
 fi
-mkdir -p "$TMP/mR2s"; cp -R "$TMP/m8l/." "$TMP/mR2s/"
-if mut "$TMP/mR2s" 's|^    if \[ "$STAB_RC" != "$BASE_RC" \]; then|    if false; then|'; then
-  ( cd "$TMP/mR2s" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m mut >/dev/null 2>&1 )
-  mR2s_got="$(m8l_check "$TMP/mR2s")"
-  case "$mR2s_got" in
-    "UNSCORABLE behavioural-no-path-exit-stable="*) note "ok    mR2s -- killed: without the stability comparison the flapping receipt is granted behavioural ($mR2s_got)" ;;
-    *) note "FAIL  mR2s SURVIVED -- with the stability comparison removed the receipt still read '${mR2s_got:-NONE}'"; rc=1 ;;
-  esac
+
+# ===== D5. A LIVE ENTRY WITH NO VERIFY LINE AT ALL BLOCKS THE NO-SH ZERO. =====================
+r8_seed "$TMP/m8n" "$R8_MANUAL" '## BL-862
+
+Body with no verify line.
+'
+r8_fail "m8n a live entry with no verify line" "$TMP/m8n" 0 2 BL-862 \
+  "live entry BL-862 carries a verify verb this parser does not read (no verify line"
+
+# ===== D4. THE VERB CENSUS AT THE GATE'S ARGV, BESIDE ONE REAL SH RECEIPT. =====================
+# One behavioural receipt keeps sh-receipts at 1, so R5's floor of 1 holds and cannot be what
+# decides; the dash-spelled entry is the only thing standing between this ledger and the
+# all-behavioural pass. At the gate argv, so the arm is what the push actually runs.
+r8_seed "$TMP/m8o" "$R8_BEHAV_PATH" "## BL-863
+
+- verify: sh grep -q 'MARK863' probe/subject.txt
+"
+m8o_out="$(run_v "" "$TMP/m8o" --max-prose-closable 1 --max-unscorable 28 --max-out-of-population 1 \
+  --max-unstable 0 --min-sh-receipts 1 --min-entries 1)"; m8o_rc=$?
+m8o_nf="$(printf '%s\n' "$m8o_out" | grep -c '^FAIL:')" || m8o_nf=0
+if [ "$m8o_rc" -eq 1 ] && [ "$m8o_nf" -eq 1 ] && grep -qF "produced ZERO scored receipts" <<<"$m8o_out" \
+   && grep -qF "live entry BL-863 carries a verify verb this parser does not read" <<<"$m8o_out"; then
+  note "ok    m8o -- at the gate argv, one behavioural receipt beside a '- verify: sh' entry fails R2 alone and names the entry"
+else
+  note "FAIL  m8o -- exit $m8o_rc, $m8o_nf FAIL lines: the unread verb beside a real sh receipt was not R2's sole finding"
+  printf '%s\n' "$m8o_out" | grep -E '^(FAIL|OK)' | sed 's/^/      /' | head -3; rc=1
+fi
+
+# ===== N2. A RECEIPT THAT HANGS IS A REFUSAL, AND ITS WHOLE PROCESS TREE IS KILLED. ===========
+# The receipt starts a grandchild that would outlive a leader-only kill; the timeout is 2s. The
+# subject must refuse (exit 2, BROKEN naming the limit), and no process carrying the marker may
+# survive it -- asserted through the receipt's own pid file, never a process-table grep.
+r8_seed "$TMP/m8p" "## BL-864
+
+verify: sh ( sleep 300 & echo \$! > \"\$R8_HANG_PIDS\"; wait ) ; exit 1
+"
+R8_HANG_PIDS="$TMP/hang.pids"; export R8_HANG_PIDS; : > "$R8_HANG_PIDS"
+m8p_out="$(run_v "AI_DLC_BACKLOG_RECEIPT_TIMEOUT=2" "$TMP/m8p" --max-prose-closable 1 --max-unscorable 28 \
+  --max-out-of-population 1 --max-unstable 0 --min-sh-receipts 1 --min-entries 1)"; m8p_rc=$?
+m8p_live=0
+for m8p_pid in $(cat "$R8_HANG_PIDS" 2>/dev/null); do kill -0 "$m8p_pid" 2>/dev/null && m8p_live=$((m8p_live + 1)); done
+m8p_seen="$(grep -c . "$R8_HANG_PIDS")" || m8p_seen=0
+if [ "$m8p_rc" -eq 2 ] && grep -qF "receipt-timed-out-after-2s" <<<"$m8p_out" && [ "$m8p_seen" -ge 1 ] && [ "$m8p_live" -eq 0 ]; then
+  note "ok    m8p -- a hanging receipt is refused at its timeout, and the $m8p_seen grandchild(ren) it started are dead"
+else
+  note "FAIL  m8p -- exit $m8p_rc, grandchildren recorded $m8p_seen, still alive $m8p_live: a hanging receipt was not refused, or its tree outlived it"
+  for m8p_pid in $(cat "$R8_HANG_PIDS" 2>/dev/null); do kill -9 "$m8p_pid" 2>/dev/null; done
+  rc=1
 fi
 
 # ===== THE GRAMMAR AND THE RECEIPT-TEXT SEED, KILLED AT THE SUBJECT'S OWN SELF-PROBE. ==========

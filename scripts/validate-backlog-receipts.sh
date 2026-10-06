@@ -262,6 +262,77 @@ if [ "${1:-}" = "--score-one" ]; then
 
   wr() { printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$LABEL" "$2" "${3:-paths=}" "${4:-tokens=}" > "$W/out/$n"; }
 
+  # EVERY READING OF THE RECEIPT GOES THROUGH HERE, AND IT CARRIES A HARD TIMEOUT. A receipt
+  # that hangs held its worker -- and the pool slot, and the push -- forever. The receipt runs
+  # as the leader of its OWN process group (perl's setpgrp, because bash 3.2 has no setsid and
+  # no job control in a script), so the watchdog kills the whole tree it spawned: killing only
+  # the leader orphans its children, which is the runaway this exists to stop. A timeout is
+  # BROKEN -- a refusal, never a verdict -- and names the limit, AI_DLC_BACKLOG_RECEIPT_TIMEOUT
+  # (default 900s). The receipt runs under `-u -o pipefail`, the options its `eval` inherited
+  # from this worker before, so no receipt's exit moved with the change.
+  run_in() { # run_in <dir> -> the receipt's exit, or a BROKEN row and exit on a timeout
+    rm -f "$W/t/$n.timedout"
+    ( cd "$1" && exec perl -e 'setpgrp(0, 0); exec @ARGV or exit 127' bash -u -o pipefail -c "$REST" ) >/dev/null 2>&1 </dev/null &
+    _ri_p=$!
+    perl -e '($t, $p, $m) = @ARGV; sleep $t; if (kill 0, $p) { open(F, ">", $m); close F; kill 9, -$p; }' \
+      "$BR_TIMEOUT" "$_ri_p" "$W/t/$n.timedout" >/dev/null 2>&1 &
+    _ri_w=$!
+    wait "$_ri_p"; _ri_rc=$?
+    kill "$_ri_w" 2>/dev/null; wait "$_ri_w" 2>/dev/null
+    if [ -f "$W/t/$n.timedout" ]; then wr BROKEN "receipt-timed-out-after-${BR_TIMEOUT}s"; exit 0; fi
+    return "$_ri_rc"
+  }
+
+  # insert_after_shebang <file> <line> -- <line> becomes the first line, or the second when the
+  # first is a `#!`, so an executable file stays executable.
+  insert_after_shebang() {
+    _ia_f="$1"; _ia_l="$2"
+    if [ -f "$_ia_f" ]; then
+      _ia_first="$(sed -n 1p "$_ia_f")"
+      case "$_ia_first" in
+        '#!'*) ( { printf '%s\n%s\n' "$_ia_first" "$_ia_l"; sed 1d "$_ia_f.brsrc"; } > "$_ia_f" ) 2>/dev/null ;;
+        *)     ( { printf '%s\n' "$_ia_l"; cat "$_ia_f.brsrc"; } > "$_ia_f" ) 2>/dev/null ;;
+      esac
+    else
+      ( mkdir -p "$(dirname "$_ia_f")" && printf '%s\n' "$_ia_l" > "$_ia_f" ) 2>/dev/null
+    fi
+  }
+
+  # executed -- did the receipt RUN any file it names (or that the seed created for it)? Each
+  # such file gets a line that touches a sentinel when executed, in its own language, inserted
+  # after any shebang in a fresh checkout; the receipt is run once and the sentinel read.
+  # THIS IS THE BEHAVIOURAL SIGNAL, and a seed that held is not. Measured by an adversary on
+  # the round that keyed on a held seed: `test "$(sed -n 1p f)" = X`, `[ "$(wc -l < f)" -gt 5 ]`,
+  # `tail -1 f | grep -qx X` and `grep -c a f | grep -qx 3` all held against every appended seed
+  # and every one closes on a line placed where it reads. No finite seed set reaches every
+  # position and count a reader can key on; a receipt that never runs its subject is a reader,
+  # whatever it reads. Data files (no recognised language and no shebang) get no line.
+  executed() {
+    _ex_d="$(mktree x)"
+    [ -n "$_ex_d" ] || { wr BROKEN "no-execution-worktree"; exit 0; }
+    _ex_s="$W/t/$n.ran"; rm -f "$_ex_s"
+    for _p in $PATHS; do
+      _ex_first=""; [ -f "$_ex_d/$_p" ] && _ex_first="$(sed -n 1p "$_ex_d/$_p")"
+      case "$_p" in
+        *.js|*.cjs) _ex_l="try{require('fs').writeFileSync('$_ex_s','')}catch(e){}" ;;
+        *.py)       _ex_l="open('$_ex_s','w').close()" ;;
+        *.sh|*.bash) _ex_l=": > '$_ex_s' 2>/dev/null" ;;
+        *)
+          case "$_ex_first" in
+            '#!'*node*)   _ex_l="try{require('fs').writeFileSync('$_ex_s','')}catch(e){}" ;;
+            '#!'*python*) _ex_l="open('$_ex_s','w').close()" ;;
+            '#!'*sh*)     _ex_l=": > '$_ex_s' 2>/dev/null" ;;
+            *) [ -f "$_ex_d/$_p" ] && continue; _ex_l=": > '$_ex_s' 2>/dev/null" ;;
+          esac ;;
+      esac
+      [ -f "$_ex_d/$_p" ] && cp "$_ex_d/$_p" "$_ex_d/$_p.brsrc"
+      insert_after_shebang "$_ex_d/$_p" "$_ex_l"
+      rm -f "$_ex_d/$_p.brsrc"
+    done
+    run_in "$_ex_d"; EX_RC=$?
+    [ -f "$_ex_s" ]
+  }
+
   VERB="${RECEIPT%% *}"
   REST="${RECEIPT#* }"
   [ "$VERB" = "$RECEIPT" ] && REST=""
@@ -283,7 +354,7 @@ if [ "${1:-}" = "--score-one" ]; then
   TA="$(mktree a)"
   [ -n "$TA" ] || { wr BROKEN "no-base-worktree"; exit 0; }
 
-  ( cd "$TA" && eval "$REST" ) >/dev/null 2>&1
+  run_in "$TA"
   BASE_RC=$?
 
   # --- what the receipt NAMES ---------------------------------------------------------
@@ -293,13 +364,21 @@ if [ "${1:-}" = "--score-one" ]; then
   # directory half of every glob standing as its own token -- `scripts/*.sh` yields
   # `scripts/` -- so treating a non-file as unseedable refuses most of the ledger for a
   # property of the SPLIT rather than of the receipt. The filter is `-f`.
-  PATHS=""; NSEEDABLE=0; HAS_STRUCTURED=0
+  # A named SCRIPT the tree does not hold is kept apart as MISSING: the seed cannot reach it, but
+  # the execution test below can create it and see whether the receipt runs it -- the shape of
+  # a receipt written before its fix adds the file. Only script extensions qualify, because only
+  # a script can report having been run, and a created data file changes what the receipt reads.
+  PATHS=""; NSEEDABLE=0; HAS_STRUCTURED=0; MISSING=""
   for p in $(printf '%s\n' "$REST" | tr -c "$BR_PATH_CLASS" '\n' | sort -u); do
     case "$p" in */*) ;; *) continue ;; esac
     case "$p" in
       /*) continue ;;                       # absolute: not this tree's to seed
       *'*'*|*'?'*|*'$'*) continue ;;        # a glob or a variable names no one file
     esac
+    if [ ! -e "$TA/$p" ]; then
+      case "$p" in *.sh|*.bash|*.js|*.cjs|*.py) MISSING="$MISSING $p" ;; esac
+      continue
+    fi
     [ -f "$TA/$p" ] || continue
     PATHS="$PATHS $p"; NSEEDABLE=$(( NSEEDABLE + 1 ))
     case "$p" in *.json|*.yaml|*.yml) HAS_STRUCTURED=1 ;; esac
@@ -343,7 +422,7 @@ if [ "${1:-}" = "--score-one" ]; then
     if [ -z "$TR" ]; then
       wr BROKEN "no-reread-worktree"; exit 0
     fi
-    ( cd "$TR" && eval "$REST" ) >/dev/null 2>&1
+    run_in "$TR"
     REREAD_RC=$?
     if [ "$REREAD_RC" != "$BASE_RC" ]; then
       wr UNSTABLE "base-exit=$BASE_RC/$REREAD_RC" "paths=${PL:-none}" "tokens=${TL:-none}"; exit 0
@@ -362,10 +441,24 @@ if [ "${1:-}" = "--score-one" ]; then
   #     go 1 -> 0. A flip is PROSE-CLOSABLE (detail `seed=receipt-text`), reported and counted
   #     under the same ceiling as a token flip, because it IS the same finding: a comment
   #     satisfied the receipt. A separate status would need its own ceiling or be an escape.
-  #   - it names no seedable path: there is nothing to seed, so it is read a second time in a
-  #     fresh checkout and is behavioural only if both readings agree. A disagreement is UNSTABLE.
-  # A base of 0 can show neither -- no 1 -> 0 flip exists to be refused -- so it is
+  #   - ROUND 3: holding the seed is NECESSARY AND NOT SUFFICIENT. A receipt that held must also
+  #     EXECUTE a file it names (see `executed` above), or it is a reader whose closing line the
+  #     seed did not happen to reach -- UNSCORABLE, which blocks the zero and counts under R3.
+  #     The same rule makes a token receipt BOUND: `tail -1 f | grep -qx X` holds `# X` appended
+  #     and closes on a bare `X` line, so a held token receipt that runs nothing is not bound.
+  #   - it names no seedable path: there is nothing to seed. "Stable on two readings" was the
+  #     round-2 signal and it is not one -- a static file is stable too, and a variable path, a
+  #     glob or `find | xargs cat` each closed on a prose edit to a file the receipt never names.
+  #     It is behavioural only if it EXECUTES a script it names that the tree does not hold yet
+  #     (MISSING above: the execution test creates it as a sentinel-only stub) AND still fails
+  #     with only that stub in place; otherwise UNSCORABLE.
+  # A base of 0 can show none of this -- no 1 -> 0 flip exists to be refused -- so it is
   # ALREADY-PASSING, the status every other base-0 receipt already carries.
+  # WHAT THE EXECUTION TEST CANNOT SEE, recorded: a `.py` whose first statement must be a
+  # `from __future__` import, and an ES module where `require` is undefined, both fail to run
+  # the sentinel and are scored as readers -- the conservative direction, a blocked zero rather
+  # than an acquittal. A receipt that runs a named file and ALSO reads a second named file for
+  # its verdict is acquitted on the run; the seed still flips it if its literal is spellable.
   # STILL UNMEASURED, and acquitted as behavioural when they occur: a pattern ASSEMBLED from
   # pieces (`grep -q MARK'CC' f`, `S=MA; grep -q "${S}RK" f`, and a bare escape `grep -q MA\RK f`,
   # which the shell unescapes to a literal the receipt never spells), because the assembled
@@ -381,14 +474,17 @@ if [ "${1:-}" = "--score-one" ]; then
     if [ "$BASE_RC" = "0" ]; then
       wr ALREADY-PASSING "base-exit=0-no-seedable-path" "paths=none" "tokens=none"; exit 0
     fi
-    TS="$(mktree s)"
-    [ -n "$TS" ] || { wr BROKEN "no-stability-worktree"; exit 0; }
-    ( cd "$TS" && eval "$REST" ) >/dev/null 2>&1
-    STAB_RC=$?
-    if [ "$STAB_RC" != "$BASE_RC" ]; then
-      wr UNSTABLE "base-exit=$BASE_RC/$STAB_RC" "paths=none" "tokens=none"; exit 0
+    # A CREATED FILE HOLDS NOTHING BUT THE SENTINEL, so it is a stub -- and a stub is exactly
+    # what a prose-only "fix" would add. Behavioural therefore needs BOTH: the receipt ran the
+    # file, and with only a stub there it still did not pass. `bash new.sh || exit 1` runs the
+    # stub and passes, so it is closable by a comment-only file and is not behavioural.
+    if [ -n "$MISSING" ]; then
+      PATHS="$MISSING"
+      if executed && [ "$EX_RC" != "0" ]; then
+        wr UNSCORABLE "behavioural-executes-named-file-created-stub-exit=$EX_RC" "paths=none" "tokens=none"; exit 0
+      fi
     fi
-    wr UNSCORABLE "behavioural-no-path-exit-stable=$BASE_RC" "paths=none" "tokens=none"; exit 0
+    wr UNSCORABLE "literal-free-runs-no-named-file" "paths=none" "tokens=none"; exit 0
   fi
   [ "$NTOK" -eq 0 ] && SEED_KIND=receipt-text
 
@@ -430,7 +526,7 @@ EOF
   }
 
   TB="$(seed_tree b "$SEED_LINE")" || exit 0
-  ( cd "$TB" && eval "$REST" ) >/dev/null 2>&1
+  run_in "$TB"
   SEED_RC=$?
 
   # THE DIRECTION IS PART OF THE FINDING. Only 1 -> 0 is a receipt a comment SATISFIES. A
@@ -445,13 +541,17 @@ EOF
     wr ALREADY-PASSING "base-exit=$BASE_RC-seed-exit=$SEED_RC" "paths=${PL:-none}" "tokens=${TL:-none}"; exit 0
   fi
   if [ "$SEED_RC" != "0" ]; then
-    # Held against its own whole text: the positive signal a literal-free receipt needs. It
-    # stays in UNSCORABLE's count -- nothing was SCORED against a literal -- under a detail
-    # the R2 zero predicate keys on by name.
-    if [ "$SEED_KIND" = receipt-text ]; then
-      wr UNSCORABLE "behavioural-text-seed-held-seed-exit=$SEED_RC" "paths=${PL:-none}" "tokens=none"; exit 0
+    # HELD. Now it must RUN something it names, or it is a reader the seed missed. A
+    # literal-free receipt that runs stays in UNSCORABLE's count -- nothing was scored against a
+    # literal -- under the one detail the R2 zero predicate keys on by name.
+    PATHS="$PATHS $MISSING"
+    if executed; then
+      if [ "$SEED_KIND" = receipt-text ]; then
+        wr UNSCORABLE "behavioural-executes-named-file-seed-exit=$SEED_RC" "paths=${PL:-none}" "tokens=none"; exit 0
+      fi
+      wr BOUND "seed-exit=$SEED_RC" "paths=${PL:-none}" "tokens=${TL:-none}"; exit 0
     fi
-    wr BOUND "seed-exit=$SEED_RC" "paths=${PL:-none}" "tokens=${TL:-none}"; exit 0
+    wr UNSCORABLE "held-seed-but-runs-no-named-file-seed=$SEED_KIND" "paths=${PL:-none}" "tokens=${TL:-none}"; exit 0
   fi
 
   # --- the FORMAT control -------------------------------------------------------------
@@ -460,7 +560,7 @@ EOF
   # the arm's cost to establish something already known about a plain-text file.
   if [ "$HAS_STRUCTURED" = "1" ] && [ "${BR_GENERIC_SEED:-0}" != "1" ]; then
     TC="$(seed_tree c "$GENERIC_LINE")" || exit 0
-    ( cd "$TC" && eval "$REST" ) >/dev/null 2>&1
+    run_in "$TC"
     CTRL_RC=$?
     if [ "$CTRL_RC" = "0" ]; then
       wr FORMAT-SENSITIVE "flips-on-a-line-carrying-NO-token-so-the-format-broke-not-the-binding" "paths=${PL:-none}" "tokens=${TL:-none}"
@@ -557,6 +657,9 @@ num_or_die "$MIN_ENTRIES" --min-entries
 
 JOBS="${AI_DLC_BACKLOG_RECEIPT_JOBS:-8}"
 case "$JOBS" in ''|*[!0-9]*|0) JOBS=8 ;; esac
+RECEIPT_TIMEOUT="${AI_DLC_BACKLOG_RECEIPT_TIMEOUT:-900}"
+case "$RECEIPT_TIMEOUT" in ''|*[!0-9]*|0) RECEIPT_TIMEOUT=900 ;; esac
+command -v perl >/dev/null 2>&1 || { echo "$(me): FAIL -- perl is required to run each receipt in its own process group under a timeout." >&2; exit 2; }
 
 WORK="$(mktemp -d)" || { echo "$(me): FAIL -- mktemp -d" >&2; exit 2; }
 
@@ -840,7 +943,8 @@ EOF
 
   BR_WORK="$WORK"; BR_SUBJECT_ROOT="$_sl_root"; BR_PATH_CLASS="$PATH_CLASS"
   BR_TOKAWK="$TOKAWK"; BR_GENERIC_SEED="${BR_GENERIC_SEED:-0}"
-  export BR_WORK BR_SUBJECT_ROOT BR_PATH_CLASS BR_TOKAWK BR_GENERIC_SEED BR_SENTINEL BR_LIB_VARS
+  BR_TIMEOUT="$RECEIPT_TIMEOUT"
+  export BR_WORK BR_SUBJECT_ROOT BR_PATH_CLASS BR_TOKAWK BR_GENERIC_SEED BR_SENTINEL BR_LIB_VARS BR_TIMEOUT
   find "$WORK/rec" -type f | sort | xargs -P "$JOBS" -n 1 bash "$SELF" --score-one
 
   # EVERY DISPATCHED RECEIPT MUST HAVE PRODUCED A VERDICT. A worker that died leaves no file,
@@ -891,8 +995,12 @@ read_counts() {
 #          pattern, and the receipt must flip on its TOKEN seed. Counted behavioural, it is the
 #          commonest receipt shape in the ledger acquitted.
 #   BL-912 behavioural      drives a script and compares its output to a value no file holds;
-#          its own text appended to the script it names must NOT flip it. It is the only probe
-#          that reaches `behavioural-text-seed-held`, so an arm that never grants that is caught.
+#          its own text appended to the script must NOT flip it, AND the script must be seen to
+#          RUN. It is the only probe reaching `behavioural-executes-named-file`, so an arm that
+#          never grants behavioural is caught.
+#   BL-915 a READER that holds  `test "$(sed -n 1p f)" = X` reads the FIRST line, so every
+#          appended seed holds -- and it runs nothing. It must NOT be behavioural. Without it an
+#          execution test that answers yes to everything passes every probe beside it.
 #   BL-913 no grep literal  an `awk` match body the grammar cannot spell, so the only seed that
 #          can reach it is the receipt's own text -- and it must flip under that. Without it the
 #          receipt-text seed has no subject: every other literal-free probe here is behavioural.
@@ -917,6 +1025,7 @@ printf 'second\n' > "$P/probe/two.txt"
 printf 'bare\n' > "$P/probe/bare.txt"
 printf 'awk\n' > "$P/probe/awk.txt"
 printf 'depth\n' > "$P/probe/depth.txt"
+printf 'first\n' > "$P/probe/first.txt"
 # BL-910's counter lives OUTSIDE the checkout on purpose: each reading gets a fresh tree, so
 # state kept inside one cannot survive into the next and the receipt could not differ.
 BR_PROBE_COUNTER="$WORK/probe.counter"
@@ -940,6 +1049,7 @@ printf '#!/usr/bin/env bash\nprintf %%s\\\\n WAIT\n' > "$P/probe/tool.sh"
   printf '## BL-912\n\nverify: sh o="$(bash probe/tool.sh)"; [ "$o" = READY912 ]\n\n'
   printf '## BL-913\n\nverify: sh awk %s probe/awk.txt\n\n' "'/AWKMARK/ { f = 1 } END { exit !f }'"
   printf '## BL-914\n\nverify: sh grep -m 1 -q "$(printf DEPTHMARK)" probe/depth.txt\n\n'
+  printf '## BL-915\n\nverify: sh test "$(sed -n 1p probe/first.txt)" = FIRSTMARK\n\n'
 } > "$P/docs/backlog.md"
 
 # A THROWAWAY REPOSITORY, and the git environment is scrubbed first: git exports GIT_DIR
@@ -1007,7 +1117,7 @@ R1_SH="$SH_RECEIPTS"
 
 r1_fail() { echo "$(me): SELF-PROBE FAILED -- $1" >&2; printf '%s\n' "$R1_OUT" | sed 's/^/    /' >&2; exit 2; }
 
-[ "$R1_SH" -eq 14 ] || r1_fail "the probe ledger parsed to $R1_SH sh receipts, not 14, so the entry grammar did not read the probe and nothing below is about the scorer."
+[ "$R1_SH" -eq 15 ] || r1_fail "the probe ledger parsed to $R1_SH sh receipts, not 15, so the entry grammar did not read the probe and nothing below is about the scorer."
 [ "$(probe_status "$R1_OUT" BL-901)" = "PROSE-CLOSABLE" ] || r1_fail "the seeded prose-closable receipt did NOT flip under a seed carrying its own grep literal (got: $(probe_status "$R1_OUT" BL-901)). The scorer cannot produce a finding, so a clean corpus below would mean only that it ran."
 [ "$(probe_status "$R1_OUT" BL-902)" = "BOUND" ] || r1_fail "the receipt that DRIVES its subject was reported $(probe_status "$R1_OUT" BL-902), not BOUND. An arm that flags a bound receipt puts every honest receipt in the finding set."
 [ "$(probe_status "$R1_OUT" BL-903)" = "OUT-OF-POPULATION" ] || r1_fail "the base-exit-9 receipt was reported $(probe_status "$R1_OUT" BL-903), not OUT-OF-POPULATION. A receipt answering a question about its own preconditions is not reproducing, and seeding it scores a flip that is not about prose."
@@ -1038,8 +1148,13 @@ case "$(probe_detail "$R1_OUT" BL-911)" in
 esac
 # THE GENUINELY BEHAVIOURAL RECEIPT IS COUNTED BEHAVIOURAL, on the detail R2 keys on.
 case "$(probe_status "$R1_OUT" BL-912)/$(probe_detail "$R1_OUT" BL-912)" in
-  UNSCORABLE/behavioural-text-seed-held-seed-exit=1) ;;
-  *) r1_fail "the receipt that DRIVES its subject and carries no literal was reported $(probe_status "$R1_OUT" BL-912) '$(probe_detail "$R1_OUT" BL-912)', not UNSCORABLE behavioural-text-seed-held-seed-exit=1. A behavioural receipt that is never granted behavioural wedges the ledger's preferred state at R2's zero." ;;
+  UNSCORABLE/behavioural-executes-named-file-seed-exit=1) ;;
+  *) r1_fail "the receipt that DRIVES its subject and carries no literal was reported $(probe_status "$R1_OUT" BL-912) '$(probe_detail "$R1_OUT" BL-912)', not UNSCORABLE behavioural-executes-named-file-seed-exit=1. A behavioural receipt that is never granted behavioural wedges the ledger's preferred state at R2's zero." ;;
+esac
+# AND ITS NEAR-MISS: a reader that HOLDS every appended seed and runs nothing.
+case "$(probe_status "$R1_OUT" BL-915)/$(probe_detail "$R1_OUT" BL-915)" in
+  UNSCORABLE/held-seed-but-runs-no-named-file-*) ;;
+  *) r1_fail "the first-line reader was reported $(probe_status "$R1_OUT" BL-915) '$(probe_detail "$R1_OUT" BL-915)', not UNSCORABLE held-seed-but-runs-no-named-file. It reads a line the seed never reaches and runs nothing; granted behavioural, a prose edit at the top of the file closes it while R2's zero passes." ;;
 esac
 # THE LITERAL-FREE RECEIPT A COMMENT CAN CLOSE IS CLOSED BY THE RECEIPT-TEXT SEED.
 case "$(probe_status "$R1_OUT" BL-913)/$(probe_detail "$R1_OUT" BL-913)" in
@@ -1142,7 +1257,7 @@ fi
 # than behavioural or ALREADY-PASSING: empty, malformed, tokens-without-a-path, UNSEEDED,
 # OUT-OF-POPULATION, UNSTABLE. A ledger with live entries and NO `sh` receipt is accounted for
 # too -- R1 has already proven above that the entry grammar reads `verify: sh` (its probe must
-# parse to exactly 14), and the population floor for that state is R5's, not this arm's. A
+# parse to exactly 15), and the population floor for that state is R5's, not this arm's. A
 # ledger that parses to no ENTRY at all is an empty parse and stays a FAIL.
 #
 # R2 ROUND 2 -- "behavioural" IS A POSITIVE SIGNAL, NEVER THE ABSENCE OF A TOKEN. The first cut
@@ -1153,14 +1268,33 @@ fi
 # and `test -s f` each counted behavioural and each went 1 -> 0 when a comment carrying its
 # pattern was appended. Two changes, and both are needed: the grammar now emits BARE grep
 # patterns (no `$`, backtick, glob or backslash, and at least one letter or digit), and a
-# literal-free receipt is behavioural only on a signal the worker OBSERVED -- held 1 against its
-# own whole text appended to every file it names (`behavioural-text-seed-held-*`), or, naming no
-# seedable file, the same exit on two readings in fresh checkouts
-# (`behavioural-no-path-exit-stable=*`). Those two details are the only rows counted here, by
-# name; no other UNSCORABLE row, and no base exit, can reach N_BEHAV. The worker's header for
-# that branch lists the shapes still acquitted.
+# literal-free receipt is behavioural only on a signal the worker OBSERVED.
 #
-# THE NARROWING, MEASURED at origin/main 1794fa83 by running the round-1 file and this one over
+# R2 ROUND 3 -- THE SIGNAL IS THAT THE RECEIPT RAN A FILE IT NAMES. Round 2 counted "held against
+# its own text appended" and "stable on two readings with no path", and an adversary closed both
+# with a prose edit: a first-line reader (`sed -n 1p`, `head -1`), a last-line exact match, a
+# line count (`wc -l`, `grep -c .`) and a count piped to `grep -qx`, all holding every appended
+# seed; and a variable path, a glob and `find | xargs cat`, all stable because a static file is.
+# Now the only detail counted is `behavioural-executes-named-file*`: the receipt held the seed (or
+# names only a script the tree does not yet hold) AND a sentinel line inserted into a file it
+# names fired when the receipt ran. Every other literal-free row is UNSCORABLE under a detail that
+# blocks the zero, and a held TOKEN receipt that runs nothing is no longer BOUND either. The
+# worker's header for that branch lists what the execution test cannot see.
+#
+# THE ROUND-3 NARROWING, MEASURED against 303f030f on docs/backlog.md at origin/main 1794fa83 and
+# at 389e0f3a, and on the 310 of 420 defused-archive receipts that name no `core/fixtures`,
+# `run.sh`, `pre-push` or `.githooks` (the rest drive fixtures or hooks and were NOT re-run; their
+# round-2 classes stand unmeasured under this round's rule). Live: nothing moved -- BL-457 and
+# BL-459 stay behavioural, now because each EXECUTES a file it names. Archive, 7 moved, all toward
+# blocking the zero and none toward an acquittal:
+#   BOUND -> held-seed-but-runs-no-named-file: BL-019, BL-229, BL-365, BL-366 -- token receipts
+#     that held their appended literal and run nothing they name, so a line placed where they read
+#     can still close them.
+#   behavioural -> held-seed-but-runs-no-named-file: BL-030, BL-081.
+#   behavioural -> literal-free-runs-no-named-file: BL-300, the round-2 "stable twice" signal.
+# 257 ALREADY-PASSING, 14 OUT-OF-POPULATION, 29 UNSCORABLE and 1 behavioural were unchanged.
+# The round-2 table below is kept because its BL-147/BL-167/BL-070 rows still describe the grammar.
+# THE ROUND-2 NARROWING, MEASURED at origin/main 1794fa83 by running the round-1 file and this one over
 # docs/backlog.md (3 live sh receipts) and over docs/backlog.archive.md with every LANDED
 # annotation defused (420 sh receipts; 418 joined -- BL-191 produced no verdict on either side
 # and BL-285 none on this side, so those two are UNMEASURED). The round-1 N_BEHAV held 147
@@ -1188,7 +1322,7 @@ fi
 # The two details are matched by PREFIX and their exit values are not constrained: the worker
 # writes each from one branch whose base exit is already 1, so a value class here would be a
 # condition no row can fail -- the shape of the `base-exit=[01]` this replaces.
-N_BEHAV="$(printf '%s\n' "$OUT" | awk -F'\t' '$1 == "UNSCORABLE" && ($3 ~ /^behavioural-text-seed-held-seed-exit=/ || $3 ~ /^behavioural-no-path-exit-stable=/)' | grep -c .)" || N_BEHAV=0
+N_BEHAV="$(printf '%s\n' "$OUT" | awk -F'\t' '$1 == "UNSCORABLE" && $3 ~ /^behavioural-executes-named-file/' | grep -c .)" || N_BEHAV=0
 R2_ZERO_STATE=""
 if [ "$SCORED" -eq 0 ] && [ "$UNREAD_VERBS" -eq 0 ]; then
   if [ "$SH_RECEIPTS" -gt 0 ] && [ $(( N_BEHAV + N_PASS )) -eq "$SH_RECEIPTS" ]; then
@@ -1269,14 +1403,14 @@ _where="$LEDGER"
 [ "$DEFAULTED" = "1" ] && _where="docs/backlog.md"
 # THE ACCOUNTED-FOR ZERO GETS ITS OWN LINE, in both modes, so a reader can never take it for a
 # run that scored something. It names the state and its counts, and carries R1's provenance --
-# in this state no receipt was SCORED, so R1's fourteen seeded receipts are the only thing in the
+# in this state no receipt was SCORED, so R1's fifteen seeded receipts are the only thing in the
 # line a stub could not print truthfully.
 if [ -n "$R2_ZERO_STATE" ]; then
-  echo "OK: validate-backlog-receipts -- R2 ${R2_ZERO_STATE}: 0 scored receipts, and every one is accounted for (${SH_RECEIPTS} sh receipts over ${ENTRIES} live entries in ${_where}: ${N_BEHAV} behavioural with no grep literal to seed, ${N_PASS} already passing); R3 ${UNSCORED}/${MAX_UNSC} unscored, R5 ${SH_RECEIPTS}/${MIN_SH} floor; R1 fired both directions over 14 seeded receipts, caller porcelain ${PORC_BEFORE} unchanged."
+  echo "OK: validate-backlog-receipts -- R2 ${R2_ZERO_STATE}: 0 scored receipts, and every one is accounted for (${SH_RECEIPTS} sh receipts over ${ENTRIES} live entries in ${_where}: ${N_BEHAV} behavioural with no grep literal to seed, ${N_PASS} already passing); R3 ${UNSCORED}/${MAX_UNSC} unscored, R5 ${SH_RECEIPTS}/${MIN_SH} floor; R1 fired both directions over 15 seeded receipts, caller porcelain ${PORC_BEFORE} unchanged."
   exit 0
 fi
 if [ "$QUIET" != "1" ]; then
-  echo "OK: validate-backlog-receipts -- R2 ${N_PC}/${MAX_PC} prose-closable, R3 ${UNSCORED}/${MAX_UNSC} unscored, R4 ${N_OOP}/${MAX_OOP} out of population, R6 ${N_UNSTABLE}/${MAX_UNSTABLE} unstable, R5 ${SH_RECEIPTS} sh receipts over ${ENTRIES} live entries in ${_where} (${N_BOUND} bound, ${N_FS} format-sensitive, ${N_PASS} already passing; R0 bound the path-split class to ${CLASS_SOURCE}; R1 fired both directions over 14 seeded receipts; every receipt ran in its own ${PROVENANCE}, ${WT_OWN_AFTER} of this run's own checkouts still registered, caller porcelain ${PORC_BEFORE} unchanged)."
+  echo "OK: validate-backlog-receipts -- R2 ${N_PC}/${MAX_PC} prose-closable, R3 ${UNSCORED}/${MAX_UNSC} unscored, R4 ${N_OOP}/${MAX_OOP} out of population, R6 ${N_UNSTABLE}/${MAX_UNSTABLE} unstable, R5 ${SH_RECEIPTS} sh receipts over ${ENTRIES} live entries in ${_where} (${N_BOUND} bound, ${N_FS} format-sensitive, ${N_PASS} already passing; R0 bound the path-split class to ${CLASS_SOURCE}; R1 fired both directions over 15 seeded receipts; every receipt ran in its own ${PROVENANCE}, ${WT_OWN_AFTER} of this run's own checkouts still registered, caller porcelain ${PORC_BEFORE} unchanged)."
 else
   # `--quiet` SUPPRESSES THE FINDING ROWS, NEVER THE PROVENANCE. A caller that asks for quiet
   # still has to be able to tell this arm's silence from a stub's: a fifteen-line heuristic
