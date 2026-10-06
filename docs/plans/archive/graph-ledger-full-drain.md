@@ -16827,3 +16827,162 @@ two. The consumer's two filings are still uncommitted. The banked ruling stands:
 
 Batch 187's block below is history: batch 188's block replaces its delivery gap and its decisions list.
 
+**BATCH 191 SHIPPED FOUR RELEASES, `v0.719.0` (`665cfb3d`, #1003), `v0.720.0` (`c81bb603`, #1004), `v0.721.0`
+(`3efb87d8`, #1005) AND `v0.722.0` (`1f4ad903`, #1006), AND TOOK THE LIVE BACKLOG FROM 8 TO 1.** It continued batch
+190's session on the operator's direct questions. The operator ruled that an entry with no buildable remedy closes
+rather than stays open, and decided `BL-071` (option A: re-rule `fp-quotes` as an intended refusal) and `BL-145`
+(option A: re-scope to sibling attribution). No consumer candidate was live, so none was discharged.
+
+- Closed by adjudication (#1002): `BL-128`, `BL-404`, `BL-412`. `BL-230` closed on its forced reproduction: all four
+  arms reproduce their recorded shapes when the `is_unregistered()` process-substitution diff fails on the 0.624.0
+  tree, and 0.625.0 and 0.647.0 had already fixed and removed that site.
+- `v0.719.0`: `BL-071`. A backticked quotation of the close form no longer silences the split refusal.
+- `v0.720.0`: `BL-438`. QA declares `PASS | NEEDS_REWORK`; Check 1 reads each gate against its owner; I112 binds both.
+- `v0.721.0`: `BL-439` (filed and fixed: pseudo-path rows) and `BL-375`'s stage-1 levers (loss canary, unread
+  control, `cp -RX` seed, traced pool width 1).
+- `v0.722.0`: `BL-145`. New `NAMED-UPSTREAM-SIBLING-ATTRIBUTED` row; sibling receipts staged from the archive.
+
+Live backlog **8 -> 1**, archive **429 -> 437**. Net closed minus filed: **7** (eight closed, `BL-439` filed). R5
+`--min-sh-receipts 1 --min-entries 1`. `FORK_BUDGET` 3196.
+
+**EVERY ADVERSARY FOUND SOMETHING ON A GATE-GREEN SHAPE, AGAIN.** Each of the four releases had a contract or tip
+pass, or both, that showed a wrong build the fixtures accepted, and each was fixed before merge.
+
+**`BL-375` IS THE ONE LIVE ENTRY, AND STAGE 1 WAS TRACED AND NOT MET.** At `3efb87d8`, three five-fixture runs
+started at load 3-11 and peaked at 21-43, because the traced fixtures make their own load. They mapped 4, 1 and 3 of
+5, every omission a drop notice. Two clean traces of `validator-arm-selection` disagreed by 19 `seed.sh` paths with
+no guard firing. The entry records both.
+
+**0.719.0'S GATE EXITED 1 ON THE SUITE-POLE PHASE ALONE:** `gate-adjudication-mutants` 749s against a 736s ceiling,
+at load 35-44 with a second suite on the box; that fixture reads neither changed file. The re-push skipped on the
+content key. The three release gates after it skipped the pole by coverage (30.69%, 24.83%, 65.82%). The close commit's gate
+measured it at 99.88% coverage on a tree carrying all four releases: `gate-adjudication-mutants` 475s against the
+736s ceiling. So 0.719.0's 749s was load. NOTE, not filed: the guard's remedy says "re-run the gate", which an
+unchanged commit cannot do.
+
+**THE DELIVERY GAP IS NINE RELEASES.** The consumer pulled to 0.713.0 during the batch (#1162, stamp
+`commit: 65bf593b`) against `VERSION` 0.722.0; 0.719.0 and 0.722.0 are bootstrapping. It also committed its three
+filings, so its working-tree ledger equals its `HEAD`. The derive block at `de1376c7` reads live 5, unfiled 0,
+TERMINAL 199, and PENDING 5: every live candidate is discharged here (0.711.0, 0.712.0, 0.714.0 twice, 0.718.0). The
+banked ruling stands: report the gap and write no runbook. **OPERATOR DECISIONS STILL OPEN:** whether review sharding
+becomes the default.
+
+**THE WORKLIST BLOCK PRINTS `REFUSE: awk half matched nothing`, AND HERE IT IS A TRUE EMPTY, NOT A GRAMMAR FAILURE.**
+The one live entry, `BL-375`, cites no `PC-` id. The file's only `PC-` token is in the preamble legend
+(`docs/backlog.md:12`), which the awk skips because it starts at the first `## BL-` heading. The worklist is 0.
+
+Batch 190's block below is history: batch 191's block replaces its delivery gap and its decisions list.
+
+**BATCH 190 SHIPPED NO RELEASE AND DISCHARGED NO CONSUMER CANDIDATE, BECAUSE NOTHING BUILDABLE WAS FOUND.** It
+was invoked by peer handoff (`ai-dlc-40`) and ran autonomously, at `origin/main` `b53f93fd` (`VERSION` 0.718.0). The
+opening sweep: live 2 on 28 qualifying refs, both shipped (0.711.0 and 0.712.0), unfiled 0, worklist 0, TERMINAL 188,
+every control passing. The consumer's working-tree ledger differs from its `HEAD` by three `## PC-` headings, all
+already filed and shipped here (`BL-434`, `BL-435`, `BL-437`).
+
+**THE SESSION HAD NO `Agent` OR `ListAgents` TOOL.** Neither was offered by the harness or by `ToolSearch`, so action 0
+could not spawn hands and the lead ran the derive block, the adjudication and the traces itself. For the same reason
+action 9's handoff could not run.
+
+The whole-backlog adjudication covered 8 entries: 0 CLOSE, 3 PARTIAL (`BL-230`, `BL-375`, `BL-412`) and 5 LIVE. None
+has a buildable remedy:
+- An operator decision blocks `BL-128` and `BL-438`.
+- `BL-071` and `BL-145` need a signal the parse does not compute; both `sh` receipts exit 1.
+- `BL-404`'s open claim is the harness transcript format, which no file in this tree holds.
+- `BL-412` has no recurrence. Both stamped red-run records name only `validator-fork-budget`.
+- `BL-230`'s claim (d) has no named cause.
+- `BL-375`'s `enforcement-map-sites` dropped again (below).
+
+Live backlog **8**, archive **429**. Net closed minus filed: **0**.
+
+**READ-SET TRACE, COMMITTED AS `ff6b5c9c`.** Four fixtures, one per deriver run at load 3-16, each with 0 OMITTED
+lines and 0 drop notices. `suite-pole-guard` and `readset-skip` came back byte-identical. `mutation-red-replay` (21 to
+9 rows) and `check-25-steering-conduct` (21 to 14) lost only the 2026-09-15 trace's `.git/**` and `.gitignore` rows,
+and every script each `run.sh` names is still in its set. That is the completeness control. Three python `compile()`
+pseudo-paths (`<input>`, `<string>`, `<unknown>`) entered `mutation-red-replay`'s rows; they match no file. The deriver
+should filter them, but it was not filed. `enforcement-map-sites` was OMITTED with a drop notice again, so its rows are
+unchanged and its trace is still owed.
+
+**THE DELIVERY GAP IS NINE RELEASES.** The consumer is installed at 0.709.0 against `VERSION` 0.718.0. The derive
+block reads PENDING 2. Counting the three discharged ids that are still uncommitted in the consumer's working tree,
+PENDING is 5. The banked ruling stands: report the gap and write no runbook. **OPERATOR DECISIONS STILL OPEN:** batch
+189's two, unchanged.
+
+Batch 189's block below is history: batch 190's block replaces its delivery gap and its decisions list.
+
+**BATCH 189 SHIPPED THREE RELEASES, `v0.716.0` (`2483dbb8`, #997), `v0.717.0` (`946fb8ce`, #998) AND `v0.718.0`
+(`a366d8ce`, #999), AND DISCHARGED THE ONE CONSUMER CANDIDATE FILED DURING IT.** It was invoked by peer handoff and
+ran autonomously, at `origin/main` `9bbc5a50`. The opening sweep: live 2 on 26 qualifying refs, unfiled 0, worklist
+0, TERMINAL 188, every control passing. The consumer's working-tree ledger differed from `HEAD` by two headings, both
+batch 188's already-shipped ids. Scope came from the whole-backlog adjudication: 9 entries, 0 CLOSE, 2 PARTIAL, 7 LIVE.
+
+- `v0.716.0`: `BL-436` filed and fixed. `scripts/validate-enforcement-map.sh` arms I81, I91, I94 and I95 read the
+  process cwd, so a seeded tree's validator run from the repo root read the LIVE tree and returned a false clean.
+  It now `cd`s to its own root; an inherited `VEM_SELF` is discarded. Found by the BL-375 contract adversary.
+- `v0.717.0`: `BL-004` and `BL-430`, from one nine-run forced sweep on an unpushed branch of a file:// clone
+  (the batch-188 ruling). The width-1 control separated; doubling did not. Pool-12 pole row is now
+  `reconcile-emit-report 553`, band 33 over all nine runs (the three-run band would fail two of them).
+- `v0.718.0`: `PC-S316-GATE-1-AND-2-REVIEWS-ARE-NEVER-SHARDED-SO-A-LARGE-CAPITAL-PATH-DIFF-IS-ONE-SERIAL-READ`
+  as `BL-437`, filed by the consumer mid-batch (uncommitted). Gate-1 review shards by changed-file group, opt-in via
+  `AI_DLC_REVIEW_SHARD_MIN_FILES`; gate 2 stays serial. `BL-438` (NOTE) files the QA verdict-vocabulary mismatch.
+
+Live backlog **9 -> 12 -> 8**, archive **425 -> 429**. Net closed minus filed: **1** (four closed; `BL-436`,
+`BL-437`, `BL-438` filed). R5 `--min-entries 8`; `--min-sh-receipts` stays 3. `FORK_BUDGET` 3188 (+16, the two new
+core scripts counted by the per-file walks I75, I84, I83).
+
+**`BL-375`'S NAMED ARM-6 LEVER WAS REFUTED BEFORE IT WAS BUILT.** The one on-disk trace put 0 of 19 drop notices in
+its window and 17 in the `enforcement-map-sites` seed `cp -R` burst. No copy form was shown to help: `cp -R` traced
+alone dropped 0 of 3. A before/after trace, one sample per side, read `validator-arm-selection-b` OMITTED (108 drops)
+at base and CLEAN at `946fb8ce`, which carries `BL-436`; `enforcement-map-sites` dropped on both. A `cp -R` trace lost
+10 of 956 paths with ZERO drop notices, so the entry's close criterion now needs a completeness control.
+
+**EVERY ADVERSARY FOUND SOMETHING ON A GATE-GREEN SHAPE, AGAIN.** 0.716.0's tip accepted a fix that `cd`s only inside
+`--arms`, while full mode (how the hook runs it) still read the live tree; 0.718.0's tip accepted eight wrong builds
+and a partition that never checked its base was an ancestor (11 of 13 graph s316 story merges have a non-ancestor
+sprint parent). All fixed before merge. 0.718.0's first gate failed `validator-fork-budget` by 9.
+
+**THE DELIVERY GAP IS NINE RELEASES, PAST ACTION 7'S WIDE THRESHOLD.** The consumer is installed at 0.709.0 (stamp
+`commit: 0414a98e`) against `VERSION` 0.718.0; 0.710.0, 0.711.0 and 0.713.0 are bootstrapping. PENDING is 5: the four
+ids batches 186 and 188 shipped, plus `BL-437`'s. Three consumer filings are still uncommitted in its working tree. The
+banked ruling stands: report the gap and write no runbook.
+
+**READ-SET TRACE OWED:** `enforcement-map-sites` (its new cells were never traced; it drops on every pass, `BL-375`),
+`suite-pole-guard`, `mutation-red-replay`, `check-25-steering-conduct`, `readset-skip`. `review-shard-merge`,
+`validator-path-resolution` and `check-22-spawn-ledger` were traced clean at load 2 and the map ships in 0.718.0.
+**OPERATOR DECISIONS STILL OPEN:** whether review sharding becomes default after two or three sprints of measurement,
+and `BL-438`'s QA verdict vocabulary.
+
+Batch 188's block below is history: batch 189's block replaces its delivery gap and its decisions list.
+
+**BATCH 192 SHIPPED NO RELEASE AND DISCHARGED NO CONSUMER CANDIDATE, BECAUSE NOTHING BUILDABLE WAS FOUND.** It was
+invoked by peer handoff (`ai-dlc-86`) and ran autonomously at `origin/main` `1047e971` (`VERSION` 0.722.0). The `Agent`
+tool was available; one `opus` hand ran the `BL-375` determinism probe. The opening sweep read live 5 on 33 qualifying
+refs, all five already shipped here, with unfiled 0, worklist 0 (a true empty, as batch 191 recorded) and TERMINAL 199.
+Every control passed. The consumer's working-tree ledger equals its `HEAD` (`cmp` 0).
+
+**WHY THE FIVE STAY LIVE, READ FROM THE CONSUMER'S OWN 0.713.0 RECONCILE REPORT** (on
+`origin/ai-dlc-update/0.713.0-reconcile-20261003T221934Z`). None of the five is an engine defect here:
+- `…EMIT-REPORT-STAMP-BASE-MISMATCH…` reads `CLOSE-CANDIDATE` plus `NAMED-UPSTREAM` and awaits the consumer's own annotation.
+- `…MUTATION-RED…` and `…STEERING-BUDGET…` read `CLOSE-CANDIDATE` at 0.713.0, before their 0.714.0 fixes. Batch 188 recorded this.
+- `…UPDATE-DELIVERY-PUSH…` reads `NAMED-UPSTREAM-OFF-SUBJECT`, correctly. The fix is in the pre-push hook, and the
+  consumer's installed hook is byte-identical to `core/git-hooks/pre-push`. The consumer's receipt
+  `theirs_lacks core/skills/ai-dlc-update/SKILL.md "--no-verify"` anchors on its own suggested remedy, so it can never
+  close. That receipt is the consumer's to re-anchor.
+- `…GATE-1-AND-2-REVIEWS…` reads `NEEDS-REVIEW`, an unfalsifiable receipt that reads only the installed copy. It is also
+  the consumer's.
+
+**`BL-375`: the open "non-deterministic or silent loss" question is answered, and the entry is amended.** The reads are
+deterministic: three untraced reps give one md5 outside `.git/**`. The stream silently lost negative-lookup reports for
+`core/fixtures/*/seed.sh` paths that do not exist, and the atime canary cannot see that class by construction. The
+committed map carries 2390 absent-path rows across 129 of 230 fixtures. Tier NOTE: the runner's parent-directory
+ride-along covers an appearing file while the directory row survives. Stage 1's close criterion gains an
+identical-sets-across-traces arm. The op-filter lever (drop xattr reports) was refuted from the entry's own K-series and
+not built.
+
+Live backlog **1**, archive **437**. Net closed minus filed: **0**.
+
+**THE DELIVERY GAP IS NINE RELEASES.** The consumer is installed at 0.713.0 against `VERSION` 0.722.0, and PENDING is 5.
+The banked ruling stands: report the gap and write no runbook. **OPERATOR DECISIONS STILL OPEN:** whether review sharding
+becomes the default.
+
+Batch 191's block below is history: batch 192's block replaces its delivery gap and its decisions list.
+

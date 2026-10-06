@@ -56,6 +56,19 @@ Every read-set trace runs as `bash core/scripts/derive-fixture-readsets.sh --lis
 commit to trace. It needs no root, so a session owing a trace runs it and commits the map rather
 than handing the operator a command. `fs_usage` and `--tracer both` are for the operator alone.
 
+## A command handed to the operator states its runtime and its odds
+
+Before giving the operator any command to run, state in the same answer how long it takes and
+whether it is expected to succeed, from evidence. If the plan's precondition for it is unmet,
+say that instead of giving the command. The operator does not run a multi-hour command whose
+success is unknown.
+
+## A wall clock is a defect until it is justified
+
+A fixture or gate that takes tens of minutes is a test doing more work than its checks need,
+not a scheduling detail. Report a cost that grew under your own change when you see it, with the
+before and after, and never quote a long wall clock as normal.
+
 ## Reaching the operator
 
 `AskUserQuestion` when a decision is genuinely theirs and the answer changes what happens
