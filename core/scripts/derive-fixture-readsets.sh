@@ -159,7 +159,9 @@ MAP="$REPO_ROOT/.ai-dlc-fixture-readsets.tsv"
 # fixture's work. Deliberately NOT a general noise list: a fixture's own helpers (bash, git,
 # awk, sed, python3, cp) are absent from it, because a `cp` reading a source file IS a real
 # dependency and fixtures copy trees constantly.
+# READSET_DAEMONS_BEGIN
 DAEMONS='fseventsd|mds|mds_stores|mdworker|mdworker_shared|mdsync|Spotlight|distnoted|cfprefsd|syspolicyd|opendirectoryd|securityd|notifyd|logd|UserEventAgent|revisiond|backupd|diskarbitrationd|coreauthd|trustd|nsurlsessiond|Finder|fmfd|photoanalysisd|cloudd|bird|CrashReporter'
+# READSET_DAEMONS_END
 
 # ONE ASSIGNMENT, ON ITS OWN LINE, so core/fixtures/readset-skip can point a COPY of this script at
 # a stub stream: `/usr/bin/log` is called by absolute path (zsh shadows `log` with a builtin), so a
@@ -169,19 +171,40 @@ LOG_BIN=/usr/bin/log
 die() { echo "ERROR: $*" >&2; exit "$DIE_RC"; }
 say() { echo "[$(date +%H:%M:%S)] $*"; }
 
-USAGE="usage: bash $0 [--all | --list \"<fixtures>\"] [--tracer fs_usage|sandbox|both]   (fs_usage and both need sudo)"
-MODE=""; LIST_ARG=""; TRACER="fs_usage"
+USAGE="usage: bash $0 [--all | --list \"<fixtures>\"] [--tracer fs_usage|sandbox|both] [--local-map <file>]   (fs_usage and both need sudo)"
+MODE=""; LIST_ARG=""; TRACER="fs_usage"; LOCAL_MAP=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --all)       MODE="--all"; shift ;;
     --list)      MODE="--list"; LIST_ARG="${2:-}"; shift; [ $# -gt 0 ] && shift ;;
     --tracer)    TRACER="${2:-}"; shift; [ $# -gt 0 ] && shift ;;
     --tracer=*)  TRACER="${1#--tracer=}"; shift ;;
+    --local-map) LOCAL_MAP="${2:-}"; shift; [ $# -gt 0 ] && shift; [ -n "$LOCAL_MAP" ] || die "--local-map needs a file. $USAGE" ;;
     *)           die "$USAGE" ;;
   esac
 done
 : "${MODE:=--all}"
 case "$TRACER" in fs_usage|sandbox|both) ;; *) die "unknown --tracer '$TRACER'. $USAGE" ;; esac
+
+# `--local-map <file>` IS THE PRE-PUSH HOOK'S MODE, and it never writes the committed map. Both hooks
+# start it DETACHED after a green suite, for the fixtures that have no committed row and no valid
+# local row, so an unmapped fixture stops running on every push without anyone hand-running this.
+# Each fixture whose trace is clean has its rows in <file> replaced, atomically (temp + mv), as
+# `<fx>\t<path>\t<sha256 or ->` plus `<fx>\t#deriver\t<sha256 of this script>`; the hook honours a
+# row set only while every recorded path still hashes the same and this script is unchanged. A
+# discarded trace writes `<fx>\t#discards\t<n>\t<run.sh sha>:<deriver sha>` instead, and the hook
+# stops re-tracing a fixture after three in a row on one key. Rows of a fixture the COMMITTED map
+# names are pruned on every write: committed rows always win. Unprivileged by construction -- the
+# sandbox tracer only -- and the fixture's normal-run log is read from `<file>.logs/<fx>`, where the
+# hook stashed it, because a trace whose verdict lines differ from the normal run's is not a trace
+# of the run that passed.
+if [ -n "$LOCAL_MAP" ]; then
+  [ "$TRACER" = sandbox ] || die "--local-map runs only under --tracer sandbox: it is started by the pre-push hook, which has no root"
+  [ "$MODE" = --list ] || die "--local-map needs --list \"<fixtures>\": it traces the fixtures the hook names, never the whole suite"
+  case "$LOCAL_MAP" in /*) ;; *) LOCAL_MAP="$PWD/$LOCAL_MAP" ;; esac
+  command -v shasum >/dev/null || die "shasum not found; --local-map keys every row on a sha256"
+fi
+DERIVER_SHA="$(shasum -a 256 -- "$0" 2>/dev/null | cut -d' ' -f1)"
 
 # EACH TRACER HAS ITS OWN TRACE ROOT. The fs_usage run creates its tree as root and then chowns
 # only the tree, so a root-owned TRACE_ROOT is left behind; a later sandbox run -- unprivileged by
@@ -447,6 +470,7 @@ else
   RUN_AS="$(id -un)"
 fi
 
+# READSET_NORM_BEGIN
 norm() {
   python3 -c '
 import sys, os
@@ -457,6 +481,7 @@ for line in sys.stdin:
         seen.add(p); print(p)
 ' | LC_ALL=C sort -u
 }
+# READSET_NORM_END
 
 # READSET_DROP_BEGIN
 # Driven by core/fixtures/readset-skip on a seeded repo carrying a real submodule; it reads only
@@ -603,6 +628,77 @@ readset_loss_canary() {
 }
 # READSET_CANARY_END
 
+# READSET_LOCALMAP_BEGIN
+# `--local-map` mode's three helpers. Kept between sentinels so core/fixtures/readset-skip drives
+# the shipped logic on seeded files; none of them reads a global.
+#
+# readset_verdict_sig <log> <root>... -- the MULTISET of a fixture's verdict lines, normalised.
+# A verdict line is one whose first word is `ok`, `FAIL` or `PASS`, or which carries `: PASS` or
+# `: FAIL` (a fixture's own summary line). Every root given is replaced by `<ROOT>`, every path
+# under a temp directory by `<TMP>`, every run of digits by `N`, and the lines are sorted. Two runs
+# of one fixture on one tree give one signature; a trace whose sandbox changed an outcome does not.
+readset_verdict_sig() {
+  local log="$1"; shift
+  [ -r "$log" ] || return 2
+  RS_ROOTS="$(printf '%s\n' "$@")" awk '
+    BEGIN { n = split(ENVIRON["RS_ROOTS"], r, "\n") }
+    /^[ \t]*(ok|FAIL|PASS)([ \t]|$)/ || /: (PASS|FAIL)([ \t(]|$)/ {
+      l = $0
+      for (i = 1; i <= n; i++) if (r[i] != "") while ((p = index(l, r[i])) > 0) l = substr(l, 1, p - 1) "<ROOT>" substr(l, p + length(r[i]))
+      gsub(/(\/private)?\/(var\/folders|tmp)\/[^ \t:'"'"'")]*/, "<TMP>", l)
+      gsub(/[0-9]+/, "N", l)
+      print l
+    }' "$log" | LC_ALL=C sort
+}
+#
+# readset_hash_rows <tree> <fx> <set file> -- prints `<fx>\t<path>\t<sha256>` for every path of the
+# set, `-` for one that is not a regular file in <tree> (a directory, a negative lookup). The hash is
+# the trace COPY's: the hook honours the row set only while every one of these still matches.
+readset_hash_rows() {
+  local tree="$1" fx="$2" set="$3" p
+  ( cd "$tree" || exit 1
+    while IFS= read -r p; do [ -f "$p" ] && printf '%s\0' "$p"; done < "$set" | xargs -0 -n 200 shasum -a 256 -- 2>/dev/null
+  ) | awk '{ s = $1; p = $0; sub(/^[0-9a-f]+  /, "", p); print p "\t" s }' > "$set.sha" || return 1
+  awk -F'\t' -v fx="$fx" -v sha="$set.sha" '
+    BEGIN { while ((getline l < sha) > 0) { i = index(l, "\t"); h[substr(l, 1, i - 1)] = substr(l, i + 1) } }
+    $0 != "" { print fx "\t" $0 "\t" (($0 in h) ? h[$0] : "-") }' "$set"
+}
+#
+# readset_local_write <local map> <committed map> <ok rows> <discards> <traced fixtures> <deriver sha>
+#   <ok rows>   `<fx>\t<path>\t<sha>` for every fixture whose trace was clean
+#   <discards>  `<fx>\t<key>\t<why>` for every fixture whose trace was discarded
+# Rewrites <local map> ATOMICALLY (a temp file beside it, then mv): every row of a fixture the
+# committed map names is pruned (committed rows always win), every traced fixture's rows are
+# replaced, a clean one gains its `#deriver` key row, and a discarded one carries
+# `<fx>\t#discards\t<n>\t<key>\t<why>` -- n counts consecutive discards on one key, so a changed
+# key starts again at 1.
+readset_local_write() {
+  local lm="$1" cm="$2" okr="$3" disc="$4" traced="$5" dsha="$6" tmp
+  tmp="$lm.tmp.$$"
+  traced="$(printf '%s' "$traced" | tr '\n\t' '  ')"
+  {
+    [ -s "$cm" ] && grep -v '^#' "$cm" | cut -f1 | LC_ALL=C sort -u | sed 's/^/C\t/'
+    [ -s "$disc" ] && sed 's/^/D\t/' "$disc"
+    [ -s "$lm" ] && sed 's/^/L\t/' "$lm"
+    [ -s "$okr" ] && sed 's/^/O\t/' "$okr"
+    :
+  } | awk -F'\t' -v traced=" $traced " -v dsha="$dsha" '
+    $1 == "C" { com[$2] = 1; next }
+    $1 == "D" { dk[$2] = $3; dw[$2] = $4; next }
+    $1 == "L" {
+      if ($2 in com) next
+      if ($3 == "#discards") { pn[$2] = $4; pk[$2] = $5 }
+      if (index(traced, " " $2 " ") == 0) { sub(/^L\t/, ""); print; next }
+      next }
+    $1 == "O" { if ($2 in com) next; sub(/^O\t/, ""); print; ok[$2] = 1; next }
+    END {
+      for (f in ok) print f "\t#deriver\t" dsha
+      for (f in dk) { if (f in com) continue; n = ((f in pk) && pk[f] == dk[f]) ? pn[f] + 1 : 1; print f "\t#discards\t" n "\t" dk[f] "\t" dw[f] }
+    }' | LC_ALL=C sort > "$tmp" || { rm -f "$tmp"; return 1; }
+  mv "$tmp" "$lm" || { rm -f "$tmp"; return 1; }
+}
+# READSET_LOCALMAP_END
+
 if [ "$TRACER" = fs_usage ]; then
   say "fs_usage runs as root; fixtures run as '$RUN_AS'"
 elif [ "$TRACER" = both ]; then
@@ -618,6 +714,8 @@ mkdir -p "$TRACE_ROOT/t" "$TRACE_ROOT/w" || die "cannot create $TRACE_ROOT"
 # `/private/tmp/...`; a `/tmp/...` root would make the sandbox's `subpath` and the stream
 # predicate match nothing, and every fixture would come back with an atime-only read-set.
 TRACE_ROOT="$(cd "$TRACE_ROOT" && pwd -P)" || die "cannot resolve $TRACE_ROOT"
+# `--local-map` removes the trace root it created on EVERY exit, a refusal included.
+[ -z "$LOCAL_MAP" ] || trap 'rm -rf "$TRACE_ROOT"' EXIT
 TREE="$TRACE_ROOT/t"
 WORK="$TRACE_ROOT/w"
 SENTINEL="$TREE/.readset-sentinel"
@@ -672,12 +770,27 @@ printf '.readset-sentinel\n.readset-end\n' >> "$TREE/.git/info/exclude"
 # sandboxed() RUNS ONE COMMAND THE WAY THIS TRACER RUNS A FIXTURE. Under `both` the caller is root,
 # and a fixture must never be: it drops to the invoking user BEFORE entering the profile, so the
 # probe, both marker reads and the fixture itself all execute as the user the map is derived for.
+#
+# UNDER `--local-map` EVERY LAUNCH CARRIES `-D FXTAG=<fixture>`, and the profile appends
+# `FXTAG=<fixture>;` to each report it makes, so the stream for one fixture is selected by its own
+# tag. A TRIP clause after the tree's reports the exec of anything in the REFUSED set -- the
+# setuid/setgid binaries on this machine, `/usr/bin/log` and `sandbox-exec` -- tagged `;TRIP`, and a
+# window carrying one is discarded: a fixture that escalates or re-enters the tracer is not a
+# fixture whose reads one unprivileged sandbox saw. The set is DERIVED at trace time by
+# readset_trip_set, never hand-listed.
+CUR_FX="__probe__"
 sandboxed() {
   if [ "$TRACER" = both ]; then
     sudo -n -u "$RUN_AS" sandbox-exec -f "$PROFILE" "$@"
+  elif [ -n "$LOCAL_MAP" ]; then
+    sandbox-exec -D FXTAG="$CUR_FX" -f "$PROFILE" "$@"
   else
     sandbox-exec -f "$PROFILE" "$@"
   fi
+}
+readset_trip_set() {
+  find /usr/bin /bin /usr/sbin /sbin /usr/libexec -maxdepth 1 -type f \( -perm -4000 -o -perm -2000 \) 2>/dev/null
+  printf '%s\n' /usr/bin/log "$(command -v sandbox-exec)"
 }
 if [ "$TRACER" = sandbox ] || [ "$TRACER" = both ]; then
   PROFILE="$WORK/sandbox.sb"
@@ -688,12 +801,40 @@ if [ "$TRACER" = sandbox ] || [ "$TRACER" = both ]; then
         while ((i = index($0, "@MARK@")) > 0) $0 = substr($0, 1, i - 1) m substr($0, i + 6)
         print }' \
       "$AI_DLC_READSET_SANDBOX_PROFILE" > "$PROFILE" || die "cannot write $PROFILE"
+  elif [ -n "$LOCAL_MAP" ]; then
+    { printf '(version 3)\n(allow default)\n(allow file* process-exec* (subpath "%s") (subpath "%s") (with report) (with message (string-append "FXTAG=" (param "FXTAG") ";")))\n' "$TREE" "$MARKDIR"
+      printf '(allow process-exec*'
+      readset_trip_set | LC_ALL=C sort -u | while IFS= read -r tp; do [ -n "$tp" ] && printf ' (literal "%s")' "$tp"; done
+      printf ' (with report) (with message (string-append "FXTAG=" (param "FXTAG") ";TRIP")))\n'
+    } > "$PROFILE" || die "cannot write $PROFILE"
   else
     printf '(version 3)\n(allow default)\n(allow file* process-exec* (subpath "%s") (subpath "%s") (with report))\n' "$TREE" "$MARKDIR" > "$PROFILE" \
       || die "cannot write $PROFILE"
   fi
   sandboxed true 2>"$WORK/sandbox-probe.err" </dev/null \
     || die "sandbox-exec refused the profile: $(head -1 "$WORK/sandbox-probe.err")"
+fi
+
+# `--local-map` PRECONDITIONS THAT NEED THE PROFILE, and the cleanup it owes. A one-second `log
+# stream` probe must see its own tagged sentinel read: a push made from INSIDE a sandbox (an agent
+# harness, a nested sandbox-exec) gets a stream that delivers nothing, and every fixture would then
+# be discarded one at a time for a reason that is not the fixture's. Refused here instead, once,
+# with nothing written. The trace root is removed on every exit -- this mode runs unattended after
+# every green push, and a tree copy left per run is a disk leak nobody is watching.
+if [ -n "$LOCAL_MAP" ]; then
+  CUR_FX="__liveness__"
+  echo "liveness" > "$SENTINEL"
+  "$LOG_BIN" stream --level debug --style compact \
+    --predicate "eventMessage CONTAINS \"FXTAG=$CUR_FX;\"" > "$WORK/liveness.raw" 2>&1 &
+  lv_pid=$!
+  lv_ok=0; i=0
+  while [ "$i" -lt 5 ]; do
+    sandboxed cat "$SENTINEL" >/dev/null 2>&1 </dev/null
+    if grep -q 'readset-sentinel' "$WORK/liveness.raw" 2>/dev/null; then lv_ok=1; break; fi
+    sleep 0.2; i=$(( i + 1 ))
+  done
+  kill "$lv_pid" 2>/dev/null; wait "$lv_pid" 2>/dev/null
+  [ "$lv_ok" -eq 1 ] || die "LIVENESS: a 1s log stream never saw this run's own tagged sentinel read -- a push from inside a sandbox, or a stream that delivers nothing. Nothing traced, nothing written; the fixtures stay unmapped."
 fi
 
 # THE CONTAMINATION GUARD MEASURES A DELTA, NOT AN ABSOLUTE. The copy carries whatever the
@@ -791,6 +932,8 @@ OMITTED=""; MAPPED=0; TOTAL_PATHS=0
 # The PATH RUNS TO END OF LINE and may carry spaces, so it is everything after the op token, never
 # a `\S*` match. Only file* and process-exec* ops are kept, then the same DAEMONS filter the
 # fs_usage extraction applies. Reads the window on stdin, writes tree-relative paths.
+# Between sentinels, with DAEMONS and norm, so a fixture can source the three and drive them.
+# READSET_SBPATHS_BEGIN
 sandbox_paths() {
   awk -v tree="$TREE/" -v d="^($DAEMONS)$" '
     {
@@ -809,9 +952,15 @@ sandbox_paths() {
       print substr(path, length(tree) + 1)
     }'
 }
+# READSET_SBPATHS_END
 
 for fx in $LIST; do
   raw="$WORK/$fx.raw"
+  CUR_FX="$fx"
+  # Under `--local-map` the stream selects this fixture's own tag, never the trace root: one
+  # predicate per fixture window, as the other modes run one stream per window.
+  STREAM_PRED="sender == \"Sandbox\" AND eventMessage CONTAINS \"$TRACE_ROOT/\""
+  [ -z "$LOCAL_MAP" ] || STREAM_PRED="eventMessage CONTAINS \"FXTAG=$fx;\""
   echo "sentinel-$fx" > "$SENTINEL"
   echo "end-$fx" > "$ENDMARK"
   reset_atimes
@@ -833,7 +982,7 @@ for fx in $LIST; do
     # reports, so a stream that was not live when an event fired has lost it for good -- which is
     # why the settle loop below and the end sentinel after the fixture are both required.
     "$LOG_BIN" stream --level debug --style compact \
-      --predicate "sender == \"Sandbox\" AND eventMessage CONTAINS \"$TRACE_ROOT/\"" > "$raw" 2>&1 &
+      --predicate "$STREAM_PRED" > "$raw" 2>&1 &
     fs_pid=$!
   fi
 
@@ -1010,6 +1159,22 @@ for fx in $LIST; do
   [ "$unread_moved" -eq 0 ] || why="${why:+$why; }UNREAD CONTROL: $UNREAD_CTL left the 2001 atime epoch -- the reset did not hold or something walked the tree"
   [ "$n" -gt 0 ]      || why="${why:+$why; }empty read-set"
   [ "$dirty" -le "$DIRTY_BASE" ] || why="${why:+$why; }fixture wrote $(( dirty - DIRTY_BASE )) path(s) into the tree"
+  # `--local-map` ADDS THREE CONDITIONS, because nobody reads this run's output: the hook starts it
+  # detached and only the rows it writes are ever consumed.
+  #   TRIP     the window reports an exec from the refused set (the profile's `;TRIP` tag);
+  #   DRIVER   the set does not name the fixture's own run.sh, so the window lost its first open;
+  #   VERDICT  the multiset of the trace's verdict lines differs from the normal run's, read from
+  #            `<local map>.logs/<fx>` where the hook stashed it -- a missing log is a discard too.
+  if [ -n "$LOCAL_MAP" ]; then
+    trip="$(grep -c "FXTAG=$fx;TRIP" "$WORK/$fx.win" 2>/dev/null)" || trip=0
+    [ "$trip" -eq 0 ] || why="${why:+$why; }TRIP: $trip exec(s) of a refused binary (setuid/setgid, log, sandbox-exec)"
+    grep -qxF "$FIXTURE_ROOT/$fx/run.sh" "$WORK/$fx.set" || why="${why:+$why; }the set does not name its own $FIXTURE_ROOT/$fx/run.sh"
+    if [ ! -r "$LOCAL_MAP.logs/$fx" ]; then
+      why="${why:+$why; }VERDICT: no normal-run log at $LOCAL_MAP.logs/$fx to compare against"
+    elif [ "$(readset_verdict_sig "$WORK/$fx.log" "$TREE" "$REPO_ROOT")" != "$(readset_verdict_sig "$LOCAL_MAP.logs/$fx" "$TREE" "$REPO_ROOT")" ]; then
+      why="${why:+$why; }VERDICT: the sandboxed run's verdict lines differ from the normal run's"
+    fi
+  fi
 
   if [ "$TRACER" = both ]; then
     # EITHER SET EMPTY IS ITS OWN REASON. An empty sandbox set is what a root `log stream` that
@@ -1035,12 +1200,30 @@ for fx in $LIST; do
   if [ -n "$why" ]; then
     OMITTED="${OMITTED}${OMITTED:+ }$fx"
     [ "$TRACER" = both ] || printf '  %-32s OMITTED (%s) -- will always run\n' "$fx" "$why"
+    if [ -n "$LOCAL_MAP" ]; then
+      dk="$( (shasum -a 256 -- "$TREE/$FIXTURE_ROOT/$fx/run.sh" 2>/dev/null || echo -) | cut -d' ' -f1):$DERIVER_SHA"
+      printf '%s\t%s\t%s\n' "$fx" "$dk" "$(printf '%s' "$why" | tr '\t\n' '  ')" >> "$WORK/local.discards"
+    fi
   else
     awk -v f="$fx" '{ print f "\t" $0 }' "$WORK/$fx.set" >> "$WORK/map"
     MAPPED=$(( MAPPED + 1 )); TOTAL_PATHS=$(( TOTAL_PATHS + n ))
     [ "$TRACER" = both ] || printf '  %-32s %5s paths\n' "$fx" "$n"
+    if [ -n "$LOCAL_MAP" ]; then
+      readset_hash_rows "$TREE" "$fx" "$WORK/$fx.set" >> "$WORK/local.ok" \
+        || { echo "  could not hash $fx's set in the trace copy -- not recorded" >&2; }
+    fi
   fi
 done
+
+# `--local-map` ENDS HERE. It never reaches the controls or the committed map's write: those judge
+# a full map, and a one-fixture local trace would fail the plan-shape pair and the discrimination
+# control by construction. Its own conditions were applied per fixture above.
+if [ -n "$LOCAL_MAP" ]; then
+  readset_local_write "$LOCAL_MAP" "$MAP" "$WORK/local.ok" "$WORK/local.discards" "$LIST" "$DERIVER_SHA" \
+    || die "could not write $LOCAL_MAP -- it is unchanged"
+  say "wrote $LOCAL_MAP -- $MAPPED of $N_SUBJECT traced fixture(s) recorded${OMITTED:+; discarded: $OMITTED}"
+  exit 0
+fi
 
 # `--tracer both` ENDS HERE, AT ITS VERDICT, AND NEVER REACHES THE WRITE BELOW. The loop above still
 # built $WORK/map exactly as the other modes do, so this exit is the ONLY thing between a

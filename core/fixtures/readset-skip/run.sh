@@ -295,8 +295,9 @@ mutant() {
 # Drop the fail-closed loop that adds map-less fixtures: gamma must stop being selected.
 mutant unmapped 's|if ! grep -qxF "$b" "$out/.mapped"; then printf .*$|:|' \
   "alpha gamma" 'printf v2 > src/a.sh'
-# Match on `.changed` instead of `.match` -- the real development defect, restored.
-mutant parentdir 's|"$out/.match" "$READSET_MAP"|"$out/.changed" "$READSET_MAP"|' \
+# Match on `.changed` instead of `.match` -- the real development defect, restored. Anchored on
+# the selection's own input pair, which reads the merged rows (`$out/.rows`), not the map file.
+mutant parentdir 's|"$out/.match" "$out/.rows"|"$out/.changed" "$out/.rows"|' \
   "alpha beta gamma" 'rm -f src/a.sh'
 # Remove the orphan fallback: an unreadable change must stop forcing a full run.
 mutant orphan 's|if \[ -s "$out/.orphan" \]; then|if false; then|' \

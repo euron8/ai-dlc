@@ -22,6 +22,10 @@
 #
 # Bypass for a genuine emergency is `git push --no-verify`, and it is a decision you
 # are making on the record, not a default you fall into.
+#
+# AI_DLC_READSET_LIVE_TRACE=0 stops the detached read-set trace a green suite starts for its
+# unmapped fixtures (readset_live_trace); default on. A fixture that drives a copy of this hook
+# sets it to 0 on that drive.
 
 set -uo pipefail
 cd "$(git rev-parse --show-toplevel)" || exit 1
@@ -610,7 +614,7 @@ readset_manifest() {
   # name beginning with `-` is hashed as a file rather than refused as an option.
   { git -c core.quotePath=false ls-files 2>/dev/null
     git -c core.quotePath=false ls-files --others --exclude-standard 2>/dev/null
-    [ -s "$READSET_MAP" ] && grep -v '^#' "$READSET_MAP" | cut -f2
+    readset_rows "$out" paths
   } | grep -v '^\.git/' | grep -v '^\.git$' | readset_drop_excluded | sort -u > "$out/.paths.all"
   readset_drop_ignored "$out/.paths.all" "$out/.paths"; ign_rc=$?
   while IFS= read -r p; do [ -f "$p" ] && printf '%s\n' "$p"; done < "$out/.paths" > "$out/.files"
@@ -634,6 +638,149 @@ readset_deriver_path() {
   return 0
 }
 
+# THE LOCAL MAP. After a GREEN suite this hook starts one detached, unprivileged trace of the
+# fixtures that have no committed row and no valid local row (readset_live_trace, below), and the
+# deriver records each clean trace here, under the git dir, never in the tree. `AI_DLC_READSET_LIVE_TRACE=0`
+# turns the trace off; the rows already recorded are still read.
+READSET_LOCAL="$GITDIR/ai-dlc-fixture-readsets.local"
+
+# ONE HELPER EMITS THE MERGED ROW SET, AND EVERY SITE THAT READ THE COMMITTED MAP CALLS IT. A missed
+# site turns a local-only path into an orphan and forces the full suite, or leaves a locally-mapped
+# fixture "unmapped" on one side of a join and mapped on the other.
+#   paths  committed paths plus EVERY local candidate path -- the manifest and the orphan universe.
+#          Validity is NOT applied here: the manifest is what validity is computed FROM, and a path
+#          whose only reader's local set just went invalid must still be a KNOWN path, or editing it
+#          reads as a change no fixture reads and runs everything. Its reader is unmapped and runs.
+#   rows   committed rows plus the VALID local rows (`$out/.local.valid`) -- mapped-ness and
+#          selection. A fixture with ANY committed row uses only those; its local rows are ignored.
+readset_rows() { # <out> <paths|rows>
+  local out="$1" mode="$2"
+  { [ -s "$READSET_MAP" ] && grep -v '^#' "$READSET_MAP" | sed 's/^/C	/'
+    if [ "$mode" = rows ]; then [ -s "$out/.local.valid" ] && sed 's/^/V	/' "$out/.local.valid"
+    else [ -s "$READSET_LOCAL" ] && sed 's/^/L	/' "$READSET_LOCAL"; fi
+    :
+  } | awk -F'\t' -v mode="$mode" '
+    $1 == "C" { com[$2] = 1; if (mode == "rows") print $2 "\t" $3; else print $3; next }
+    ($2 in com) { next }
+    $1 == "V" { print $2 "\t" $3; next }
+    $1 == "L" && substr($3, 1, 1) != "#" { print $3 }'
+}
+
+# A LOCAL ROW SET IS VALID ONLY WHILE EVERY PATH IT RECORDED HASHES AS IT DID IN THE TRACE COPY, AND
+# THE DERIVER IS THE ONE THAT TRACED IT. Read off THIS run's `$out/.now`, so a set whose input moved
+# is ignored on the very push that moved it: the fixture is unmapped, runs, and is re-traced. A path
+# outside the manifest's universe (`.git/**`, the content key's excluded tops, an ignored path) is
+# not compared -- no change there can reach `.changed` either, for committed rows or local ones. A
+# `-` hash (a directory or an absent name) stays valid while no FILE of that name exists.
+# Writes `$out/.local.valid` (`<fx>\t<path>`), `$out/.trace` (the dispatch-list fixtures with no
+# committed row and no valid local row) and `$out/.trace.held` (those of them discarded three times
+# in a row on their current key, which are not re-traced until the key changes).
+readset_local_validate() { # <list> <out>
+  local list="$1" out="$2" dv dsha="" rc_map="$READSET_MAP" rl_loc="$READSET_LOCAL" d b k
+  : > "$out/.local.valid"; : > "$out/.trace"; : > "$out/.trace.held"
+  dv="$(readset_deriver_path)"
+  [ -n "$dv" ] && dsha="$(shasum -a 256 -- "$dv" 2>/dev/null | cut -d' ' -f1)"
+  [ -s "$rc_map" ] || rc_map=/dev/null
+  [ -s "$rl_loc" ] || rl_loc=/dev/null
+  if [ -n "$dsha" ] && [ -s "$out/.now" ] && [ "$rl_loc" != /dev/null ]; then
+    RL_C="$rc_map" RL_P="$out/.paths" RL_N="$out/.now" awk -F'\t' -v dsha="$dsha" '
+      FILENAME == ENVIRON["RL_C"] { if ($0 !~ /^#/) com[$1] = 1; next }
+      FILENAME == ENVIRON["RL_P"] { inu[$0] = 1; next }
+      FILENAME == ENVIRON["RL_N"] { now[$1] = $2; next }
+      ($1 in com) { next }
+      $2 == "#deriver" { dok[$1] = ($3 == dsha); next }
+      substr($2, 1, 1) == "#" { next }
+      { f = $1; seen[f] = 1; rows[f] = rows[f] $2 "\n"
+        if ($2 in inu) {
+          if ($3 == "-") { if ($2 in now) bad[f] = 1 }
+          else if (!(($2 in now) && now[$2] == $3)) bad[f] = 1
+        } }
+      END { for (f in seen) if ((f in dok) && dok[f] && !(f in bad)) {
+              n = split(rows[f], r, "\n"); for (i = 1; i < n; i++) print f "\t" r[i] } }' \
+      "$rc_map" "$out/.paths" "$out/.now" "$rl_loc" | sort -u > "$out/.local.valid"
+  fi
+  readset_rows "$out" rows | cut -f1 | sort -u > "$out/.mapped.all"
+  while IFS= read -r d; do
+    b="${d%/}"; b="${b##*/}"
+    grep -qxF "$b" "$out/.mapped.all" && continue
+    k="$(awk -F'\t' -v p="${d%/}/run.sh" '$1 == p { print $2 }' "$out/.now")"
+    if awk -F'\t' -v f="$b" -v k="${k:--}:$dsha" '$1 == f && $2 == "#discards" && $3 >= 3 && $4 == k { h = 1 } END { exit !h }' "$rl_loc"; then
+      printf '%s\n' "$b" >> "$out/.trace.held"
+    else
+      printf '%s\n' "$b" >> "$out/.trace"
+    fi
+  done < "$list"
+}
+
+# THE LOCK IS STALE when its pid is dead, when it was taken more than 6h ago, or when it has no pid
+# file and is older than 60s (a launcher killed between `mkdir` and writing the pid). Never a
+# process-table grep: `kill -0` on the recorded pid is the liveness test.
+readset_lock_stale() { # <lock dir>
+  local lk="$1" p="" e="" now
+  if [ -f "$lk/pid" ]; then
+    read -r p e < "$lk/pid" 2>/dev/null
+    case "$p" in ''|*[!0-9]*) return 0 ;; esac
+    case "$e" in ''|*[!0-9]*) return 0 ;; esac
+    kill -0 "$p" 2>/dev/null || return 0
+    now="$(date +%s)"
+    [ $(( now - e )) -gt 21600 ] && return 0
+    return 1
+  fi
+  [ -n "$(find "$lk" -maxdepth 0 -mmin +1 2>/dev/null)" ] && return 0
+  return 1
+}
+
+# AFTER A GREEN SUITE, START ONE DETACHED TRACE OF THE UNMAPPED FIXTURES THAT RAN. The push is never
+# delayed: every descriptor goes to a log under the git dir, so git has nothing to wait on, and the
+# durations, the pole and the verified record were all written before this runs and are never
+# touched by it. A fixture's normal-run output is stashed beside the local map first, because the
+# deriver discards a trace whose verdict lines differ from the run that passed. Under a NON-blocking
+# lock: if another trace holds it this push starts none and says so. Every precondition that fails
+# is ONE line naming it, and the fixtures stay unmapped -- the behaviour before this existed.
+readset_live_trace() { # <out>
+  local out="$1" b names="" n=0 dv why="" lk tr logf
+  [ "${AI_DLC_READSET_LIVE_TRACE:-1}" = 0 ] && return 0
+  if [ -s "$out/.trace.held" ]; then
+    printf '   ..    read-set live trace: NOT re-tracing %s -- discarded 3 times in a row on the same run.sh and deriver; unmapped until one of them changes (see %s.log)\n' \
+      "$(tr '\n' ' ' < "$out/.trace.held" | sed 's/ $//')" "$READSET_LOCAL"
+  fi
+  [ -s "$out/.trace" ] || return 0
+  while IFS= read -r b; do
+    [ -n "$b" ] && [ "$(cat "$out/$b" 2>/dev/null)" = ok ] || continue
+    names="${names}${names:+ }$b"; n=$((n + 1))
+  done < "$out/.trace"
+  [ "$n" -gt 0 ] || return 0
+  dv="$(readset_deriver_path)"
+  [ -n "$dv" ] || why="no derive-fixture-readsets.sh in either layout"
+  command -v sandbox-exec >/dev/null 2>&1 || why="${why:+$why; }no sandbox-exec"
+  [ -x /usr/bin/log ] || why="${why:+$why; }no /usr/bin/log"
+  command -v python3 >/dev/null 2>&1 || why="${why:+$why; }no python3"
+  [ "$(git rev-parse --git-dir 2>/dev/null)" = "$(git rev-parse --git-common-dir 2>/dev/null)" ] \
+    || why="${why:+$why; }a linked worktree (the deriver traces only the main checkout)"
+  if [ -n "$why" ]; then
+    printf '   ..    read-set live trace: skipped (%s); %s fixture(s) stay unmapped: %s\n' "$why" "$n" "$names"
+    return 0
+  fi
+  lk="$READSET_LOCAL.lock"
+  if ! mkdir "$lk" 2>/dev/null; then
+    if readset_lock_stale "$lk"; then rm -f "$lk/pid"; rmdir "$lk" 2>/dev/null; fi
+    if ! mkdir "$lk" 2>/dev/null; then
+      printf '   ..    read-set live trace: another trace holds %s -- none started; %s fixture(s) stay unmapped this push\n' "$lk" "$n"
+      return 0
+    fi
+  fi
+  mkdir -p "$READSET_LOCAL.logs" 2>/dev/null
+  for b in $names; do cp "$out/.log/$b" "$READSET_LOCAL.logs/$b" 2>/dev/null; done
+  tr="${TMPDIR:-/tmp}"; tr="${tr%/}/ai-dlc-readset-live.$$"
+  logf="$READSET_LOCAL.log"
+  ( trap '' HUP
+    AI_DLC_READSET_TRACE_ROOT="$tr" bash "$dv" --list "$names" --tracer sandbox --local-map "$READSET_LOCAL"
+    rm -f "$lk/pid"; rmdir "$lk" 2>/dev/null ) </dev/null >"$logf" 2>&1 &
+  printf '%s %s\n' "$!" "$(date +%s)" > "$lk/pid" 2>/dev/null
+  printf '   ..    read-set live trace: started detached for %s unmapped fixture(s) (%s) -> %s\n' "$n" "$names" "$logf"
+  return 0
+}
+
 apply_readset_skip() {
   local list="$1" out="$2" n_all n_sel n_skip readset_at readset_age n_unmapped unmapped_names readset_deriver
 
@@ -645,6 +792,7 @@ apply_readset_skip() {
   # run would write nothing, the second would find no state, and the skip could never
   # bootstrap -- a mechanism that is always inert and never says so.
   readset_manifest "$out"
+  readset_local_validate "$list" "$out"
 
   # THE MAP DECAYS SILENTLY, AND THIS LINE IS THE ONLY THING THAT SAYS SO. A fixture directory
   # added after the last derivation has no entry and runs on every push -- correct, and the
@@ -655,7 +803,9 @@ apply_readset_skip() {
   # derivations left 41 of 194 fixture directories unmapped -- 744 loaded seconds run on every
   # push -- and 74 already-mapped paths had gained readers nothing had traced. The deriver
   # needs root, so the remedy is printed rather than run.
-  if [ -s "$READSET_MAP" ]; then
+  # A tree with no committed map but valid LOCAL rows is a mapped tree: its rows select like any
+  # other, so it announces and skips like one.
+  if [ -s "$READSET_MAP" ] || [ -s "$out/.local.valid" ]; then
     readset_at="$(git log -1 --format=%h -- "$READSET_MAP" 2>/dev/null)"
     if [ -n "$readset_at" ]; then
       readset_age="$(git rev-list --count "${readset_at}..HEAD" 2>/dev/null)"
@@ -664,7 +814,7 @@ apply_readset_skip() {
     else
       readset_age="UNTRACKED, age unknown"
     fi
-    grep -v '^#' "$READSET_MAP" | cut -f1 | sort -u > "$out/.mapped"
+    cp "$out/.mapped.all" "$out/.mapped"
     : > "$out/.unmapped"
     while IFS= read -r d; do
       b="${d%/}"; b="${b##*/}"
@@ -676,7 +826,7 @@ apply_readset_skip() {
       unmapped_names="$(tr '\n' ' ' < "$out/.unmapped" | sed 's/ $//')"
       printf ': %s' "$unmapped_names"
       readset_deriver="$(readset_deriver_path)"
-      [ -n "$readset_deriver" ] && printf ' -- trace them: sudo bash %s --list "%s"' "$readset_deriver" "$unmapped_names"
+      [ -n "$readset_deriver" ] && printf ' -- the next green push traces them automatically; by hand, with no sudo: bash %s --list "%s" --tracer sandbox' "$readset_deriver" "$unmapped_names"
     fi
     printf '\n'
   fi
@@ -685,7 +835,7 @@ apply_readset_skip() {
     printf '   ..    read-set skip OFF (AI_DLC_FIXTURE_NO_SKIP=1) -- running all %s\n' "$n_all"
     return 0
   fi
-  if [ ! -s "$READSET_MAP" ]; then
+  if [ ! -s "$READSET_MAP" ] && [ ! -s "$out/.local.valid" ]; then
     printf '   ..    no read-set map at %s -- running all %s\n' "$READSET_MAP" "$n_all"
     # THE FALLBACK IS CORRECT AND IT IS ALSO PERMANENT UNTIL SOMEONE ACTS, which is why this
     # branch now prints a command. The reader shipped without its producer from v0.294.0 to
@@ -700,7 +850,7 @@ apply_readset_skip() {
     # silently forever. A pre-push that prompted for a password would be worse than the wait.
     readset_deriver="$(readset_deriver_path)"
     if [ -n "$readset_deriver" ]; then
-      printf '   ..    build one once, from a normal account: sudo bash %s --all\n' "$readset_deriver"
+      printf '   ..    the next green push traces its fixtures automatically; to build one whole, with no sudo: bash %s --all --tracer sandbox\n' "$readset_deriver"
     else
       printf '   ..    and no derive-fixture-readsets.sh in either layout -- until ai-dlc ships one here, every push runs all %s\n' "$n_all"
     fi
@@ -802,7 +952,7 @@ apply_readset_skip() {
   # here makes that vanish an orphan, which runs everything: coarser than its own readers, never
   # a skip. It carries the other half of the join -- with the MANIFEST filter gone and this one
   # kept, a changed ignored file is an orphan and runs everything.
-  grep -v '^#' "$READSET_MAP" | cut -f2 | grep -v '^\.git/' | grep -v '^\.git$' \
+  readset_rows "$out" paths | grep -v '^\.git/' | grep -v '^\.git$' \
     | readset_drop_excluded | sort -u > "$out/.universe.all"
   readset_drop_ignored "$out/.universe.all" "$out/.universe"
   # EXCEPT THE UPDATE SKILL'S OWN BOOKKEEPING AND THE PIPELINE'S FLAT STATE FILES: the version
@@ -839,9 +989,10 @@ apply_readset_skip() {
   # Selected = every fixture naming a changed path, PLUS every fixture with no map entry.
   # The second half is the fail-closed one: absence from the map means "unknown", never
   # "depends on nothing".
+  readset_rows "$out" rows > "$out/.rows"
   awk -F'\t' 'NR==FNR { ch[$0]=1; next } /^#/ { next } ch[$2] { sel[$1]=1 }
-              END { for (f in sel) print f }' "$out/.match" "$READSET_MAP" | sort -u > "$out/.sel"
-  grep -v '^#' "$READSET_MAP" | cut -f1 | sort -u > "$out/.mapped"
+              END { for (f in sel) print f }' "$out/.match" "$out/.rows" | sort -u > "$out/.sel"
+  cut -f1 "$out/.rows" | sort -u > "$out/.mapped"
   while IFS= read -r d; do
     b="${d%/}"; b="${b##*/}"
     if ! grep -qxF "$b" "$out/.mapped"; then printf '%s\n' "$b" >> "$out/.sel"; fi
@@ -1072,6 +1223,10 @@ run_fixtures() {
   # Gated on `rc` for the reason the line above is -- a red run's timings belong to a suite that
   # stopped early, and a reader comparing them to a full-suite figure reads "short" as "fast".
   if [ "$rc" -eq 0 ] && [ -s "$out/.durations" ]; then cp "$out/.durations" "$LASTRUN_RECORD" 2>/dev/null; fi
+
+  # THE DETACHED TRACE STARTS ONLY HERE, after every record above is written and only on a GREEN
+  # run: a trace measures reads, but a fixture whose normal run failed has no run to compare it to.
+  if [ "$rc" -eq 0 ]; then readset_live_trace "$out"; fi
 
   # PUBLISH THE RED UNITS' CAPTURED OUTPUT BEFORE THE TEMP DIR GOES. Placed here, beside the
   # durations publish, for the same reason that one is here: it is the last point at which
