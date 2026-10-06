@@ -19,6 +19,39 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.737.0] - 2026-10-06
+
+Batch 201's second release, shipped alone because it edits both pre-push hooks. It carries
+`BL-463`, which closes in the batch close commit. No consumer candidate is discharged.
+
+### The live-trace lock records its pid's start time, so a reused pid reads stale (BL-463)
+
+- `readset_lock_stale` treated the read-set trace lock as held while `kill -0` on its recorded pid
+  succeeded and the lock was under six hours old. A trace killed uncleanly whose pid was then reused
+  by an unrelated process kept the lock, so unmapped fixtures stayed unmapped for up to six hours.
+- The writer now records, on line 2 of the same `pid` file, the start time of the traced subshell
+  (`$!`), read through one helper, `readset_pid_start`, which runs `LC_ALL=C TZ=UTC0 ps -o lstart=`
+  and normalises whitespace. Line 1 stays `pid epoch`, so a hook installed before this release
+  still reads a new lock correctly. Decision order: a malformed pid or epoch, a dead pid, or an
+  epoch over six hours is stale; a lock with no start line is held; a `ps` that fails or prints
+  nothing on a live pid is held and announced; a start time that differs from the recorded one is
+  stale. Both hooks carry byte-identical code (I66).
+- `readset-skip` round-trips the real writer, asserts the pid file names the traced subshell
+  (checked against the stub deriver's own `$PPID`), and judges six lock worlds: wrong start, right
+  start, legacy two-field live and dead, a failing `ps`, and a writer and judge under different
+  locale and timezone. The lock pid is a separate `sleep`, judged from a fresh shell at least two
+  seconds later. Nine mutants, including a reader or helper that reads its own pid, each die on
+  their own world.
+- `suite-pole-guard` keeps its original three arms. The start-time worlds were moved out of it
+  because `/bin/ps` is setuid and the sandbox tracer refuses it, which would have left
+  `suite-pole-guard` permanently unmappable.
+
+### Known, not closed here
+
+- The contract asked that `readset-skip`'s trace confirm `ps` runs under the sandbox tracer. It
+  cannot: no sandbox profile lets a process exec a setuid binary. `readset-skip` was already
+  omitted from the read-set map, and stays omitted.
+
 ## [0.736.0] - 2026-10-06
 
 Batch 201's first release. No consumer candidate is discharged: the sweep's three live ids are one
