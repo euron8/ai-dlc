@@ -1144,14 +1144,19 @@ PG_HOOK="$ROOT/.githooks/pre-push"
 [ -f "$PG_HOOK" ] || broken "cannot locate .githooks/pre-push at $PG_HOOK"
 PGW="$WORK/pgstep"; mkdir -p "$PGW/scripts" || broken "could not create the hook-step world"
 PG_LIB="$PGW/lib.sh"
-{ awk '/^readset_lock_stale\(\) \{/,/^}/' "$PG_HOOK"
+echo "  hook: ${PG_HOOK#"$ROOT"/}"
+# readset_pid_start is extracted beside readset_lock_stale because the reader calls it: left out,
+# the call is "command not found" inside `$( )`, the reader announces a ps failure and says HELD,
+# and a right-start world passes for that reason. The right-start arm below demands NO announcement.
+{ awk '/^readset_pid_start\(\) \{/,/^}/' "$PG_HOOK"
+  awk '/^readset_lock_stale\(\) \{/,/^}/' "$PG_HOOK"
   awk '/^pole_guard_step\(\) \{/,/^}/' "$PG_HOOK"
   printf 'overlap_probe() {\n'
   awk '/^  READSET_TRACE_OVERLAP=0$/ { p = 1 } p { print } p && /^  fi$/ { exit }' "$PG_HOOK"
   printf '}\n'
 } > "$PG_LIB"
-[ "$(grep -c '^[a-z_]*() {' "$PG_LIB")" -eq 3 ] && grep -q 'readset_lock_stale' "$PG_LIB" && grep -q 'READSET_TRACE_OVERLAP=1' "$PG_LIB" \
-  || broken "could not extract readset_lock_stale, pole_guard_step and the overlap probe from $PG_HOOK"
+[ "$(grep -c '^[a-z_]*() {' "$PG_LIB")" -eq 4 ] && grep -q '^readset_pid_start() {' "$PG_LIB" && grep -q 'readset_lock_stale' "$PG_LIB" && grep -q 'READSET_TRACE_OVERLAP=1' "$PG_LIB" \
+  || broken "could not extract readset_pid_start, readset_lock_stale, pole_guard_step and the overlap probe from $PG_HOOK"
 printf '#!/bin/bash\nprintf "%%s\\n" "$*" > "$PG_ARGS"\nexit 0\n' > "$PGW/scripts/validate-suite-pole.sh"
 # pg_drive <lib> <lock: live|dead|none> -> "<overlap>|<argv>|<skip line: yes|no>"
 pg_drive() {
@@ -1196,6 +1201,114 @@ pg_mut noskip 'if [ "${READSET_TRACE_OVERLAP:-0}" = 1 ]; then' 'if false; then' 
 pg_mut nodetect '    READSET_TRACE_OVERLAP=1' '    :' live "$PG_SKIP"
 pg_mut nostale '[ -d "$READSET_LOCAL.lock" ] && ! readset_lock_stale "$READSET_LOCAL.lock"' '[ -d "$READSET_LOCAL.lock" ]' dead "$PG_COMPARE"
 
+# THE LOCK'S START TIME (BL-463). `kill -0` alone reads a REUSED pid as a live trace, so the lock
+# records the start time of its pid on line 2 and the reader compares it. Six worlds, judged by
+# calling readset_lock_stale directly and reading its exact return code (0 stale, 1 held, anything
+# else is an error and never scores as either) and whether it printed the ps-fallback announcement.
+#
+# EVERY SEED COMES FROM THE UNMUTATED HOOK. The seed lib below is readset_pid_start plus the hook's
+# own writer line, extracted, so the right-start lock is what the real writer emits, never a string
+# typed here; and a mutant of the judge cannot also move its seed, which would let a normalisation
+# mutant survive by symmetry.
+#   wrong       the A7 seed: a LIVE pid (this fixture) with a start time it never had   -> stale
+#   right       the real writer's lock for that pid, judged under LC_ALL=C TZ=UTC0       -> held, silent
+#   legacylive  `pid epoch` only, as an older hook wrote it, live pid                    -> held, silent
+#   legacydead  the same with a dead pid                                                 -> stale, silent
+#   psfail      the real writer's lock, judged with a PATH `ps` that exits 1             -> held, announced
+#   split       written under de_DE/Asia/Tokyo, judged under fr_FR/America/Los_Angeles  -> whatever `right` reads
+# `split` is scored RELATIVE to `right` under the same lib, so a mutant that breaks every held-with-
+# start world (no normalisation) is owned by `right` alone, and one that breaks only the cross-env
+# case (no pin) is owned by `split` alone. On the unmutated hook `right` is asserted held and silent,
+# so `split` is held and silent by that conjunct.
+PJ_WLINE="printf '%s %s\\n%s\\n' \"\$tp\""
+PJ_N="$(grep -cF -- "$PJ_WLINE" "$PG_HOOK")" || PJ_N=0
+[ "$PJ_N" -eq 1 ] || broken "the lock writer line ($PJ_WLINE) occurs $PJ_N time(s) in $PG_HOOK, not 1"
+PJ_SEEDLIB="$PGW/seed.sh"
+{ awk '/^readset_pid_start\(\) \{/,/^}/' "$PG_HOOK"
+  printf 'pj_write_lock() { local tp="$1" lk="$2"\n'
+  grep -F -- "$PJ_WLINE" "$PG_HOOK"
+  printf '}\n'
+} > "$PJ_SEEDLIB"
+PJ_LIVE="$( . "$PJ_SEEDLIB"; readset_pid_start "$$" )" || PJ_LIVE=""
+[ -n "$PJ_LIVE" ] || broken "readset_pid_start printed nothing for this fixture's own live pid $$ -- no world below can reach the start comparison"
+for _w in wrong right legacylive legacydead psfail split; do mkdir -p "$PGW/j.$_w.lock" || broken "could not create the $_w lock world"; done
+printf '%s %s\n%s\n' "$$" "$(date +%s)" 'Thu Jan  1 00:00:00 1970' > "$PGW/j.wrong.lock/pid"
+_s="$(sed -n 2p "$PGW/j.wrong.lock/pid")"; _s="$(set -f; set -- $_s; printf '%s' "$*")"
+[ "$_s" != "$PJ_LIVE" ] || broken "the wrong-start seed '$_s' equals the live start '$PJ_LIVE' -- the world cannot discriminate"
+( . "$PJ_SEEDLIB"; pj_write_lock "$$" "$PGW/j.right.lock" )
+[ "$(sed -n 1p "$PGW/j.right.lock/pid" | cut -d' ' -f1)" = "$$" ] && [ "$(sed -n 2p "$PGW/j.right.lock/pid")" = "$PJ_LIVE" ] \
+  || broken "the real writer did not record pid $$ and its start '$PJ_LIVE': $(tr '\n' '/' < "$PGW/j.right.lock/pid")"
+cp "$PGW/j.right.lock/pid" "$PGW/j.psfail.lock/pid"
+printf '%s %s\n' "$$" "$(date +%s)" > "$PGW/j.legacylive.lock/pid"
+sh -c 'exit 0' & _dp=$!; wait "$_dp"
+printf '%s %s\n' "$_dp" "$(date +%s)" > "$PGW/j.legacydead.lock/pid"
+_a="$(LC_ALL=de_DE.UTF-8 TZ=Asia/Tokyo ps -o lstart= -p "$$")"; _b="$(LC_ALL=fr_FR.UTF-8 TZ=America/Los_Angeles ps -o lstart= -p "$$")"
+[ -n "$_a" ] && [ -n "$_b" ] && [ "$_a" != "$_b" ] \
+  || broken "unpinned ps reads the same start under the two split environments ('$_a' / '$_b') -- the split world cannot discriminate"
+( export LANG=de_DE.UTF-8 LC_ALL=de_DE.UTF-8 TZ=Asia/Tokyo; . "$PJ_SEEDLIB"; pj_write_lock "$$" "$PGW/j.split.lock" )
+[ "$(sed -n 2p "$PGW/j.split.lock/pid")" = "$PJ_LIVE" ] || broken "the writer under de_DE/Tokyo did not record the pinned start '$PJ_LIVE'"
+mkdir -p "$PGW/psbin" && printf '#!/bin/sh\nexit 1\n' > "$PGW/psbin/ps" && chmod +x "$PGW/psbin/ps" || broken "could not build the failing ps stub"
+pj_judge() { # <lib> <world> -> "<stale|held|err<rc>>|<ann|noann>"
+  local o="$PGW/jo.$2.$RANDOM" rc
+  mkdir -p "$o"
+  ( . "$1"
+    case "$2" in
+      right) export LC_ALL=C TZ=UTC0 ;;
+      split) export LANG=fr_FR.UTF-8 LC_ALL=fr_FR.UTF-8 TZ=America/Los_Angeles ;;
+      psfail) PATH="$PGW/psbin:$PATH"; [ "$(command -v ps)" = "$PGW/psbin/ps" ] || exit 7 ;;
+    esac
+    readset_lock_stale "$PGW/j.$2.lock" > "$o/out" 2>&1; echo "$?" > "$o/rc" )
+  rc="$(cat "$o/rc" 2>/dev/null)"
+  case "$rc" in 0) rc=stale ;; 1) rc=held ;; *) rc="err${rc:-none}" ;; esac
+  printf '%s|%s' "$rc" "$(grep -q 'could not read the start time of lock pid' "$o/out" && echo ann || echo noann)"
+}
+PJ_WORLDS="wrong right legacylive legacydead psfail split"
+pj_want() { # <world> <right's result under the same lib>
+  case "$1" in
+    wrong|legacydead) printf 'stale|noann' ;;
+    right|legacylive) printf 'held|noann' ;;
+    psfail) printf 'held|ann' ;;
+    split) printf '%s' "$2" ;;
+  esac
+}
+pj_eval() { # <lib>: sets PJ_R_<world> and PJ_FLIP, the worlds whose result is not the wanted one
+  local w r rr
+  rr="$(pj_judge "$1" right)"; PJ_FLIP=""
+  for w in $PJ_WORLDS; do
+    if [ "$w" = right ]; then r="$rr"; else r="$(pj_judge "$1" "$w")"; fi
+    eval "PJ_R_$w=\$r"
+    [ "$r" = "$(pj_want "$w" "$rr")" ] || PJ_FLIP="$PJ_FLIP${PJ_FLIP:+ }$w"
+  done
+}
+pj_eval "$PG_LIB"
+pj_arm() { # <world> <text>
+  local r; HOOK_ARMS=$((HOOK_ARMS + 1)); eval "r=\$PJ_R_$1"
+  if [ "$r" = "$(pj_want "$1" "$PJ_R_right")" ]; then ok "$2"; else bad "$2 -- got '$r', want '$(pj_want "$1" "$PJ_R_right")'"; fi
+}
+pj_arm wrong "lock start: a LIVE pid whose recorded start time is not its own (a reused pid) is STALE"
+pj_arm right "  the real writer's lock for a live pid is HELD, with no ps-fallback announcement"
+pj_arm legacylive "  a two-field lock from an older hook with a live pid is HELD, judged as before, with no announcement"
+pj_arm legacydead "  a two-field lock from an older hook with a dead pid is STALE"
+pj_arm psfail "  a ps that fails (PATH stub exiting 1) leaves a live lock HELD and says so in one line"
+pj_arm split "  written under de_DE/Asia/Tokyo and judged under fr_FR/America/Los_Angeles, the lock reads as it does under C/UTC0"
+# Each mutant is scored against ALL six worlds, and must move exactly its own.
+pj_mut() { # <name> <from> <to> <the one world it must move>
+  local m="$PGW/m.pj.$1.sh" n
+  HOOK_ARMS=$((HOOK_ARMS + 1))
+  n="$(grep -cF -- "$2" "$PG_LIB")" || n=0
+  if [ "$n" != 1 ]; then bad "lock-start MUTANT $1: anchor matched $n time(s), not 1 -- DID NOT APPLY"; return; fi
+  MF="$2" MT="$3" awk '{ i = index($0, ENVIRON["MF"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["MT"] substr($0, i + length(ENVIRON["MF"])); print }' "$PG_LIB" > "$m"
+  if cmp -s "$PG_LIB" "$m"; then bad "lock-start MUTANT $1: the copy is unchanged"; return; fi
+  pj_eval "$m"
+  if [ "$PJ_FLIP" = "$4" ]; then ok "lock-start MUTANT $1 is KILLED by '$4' alone: '$(eval "printf '%s' \"\$PJ_R_$4\"")'"
+  else bad "lock-start MUTANT $1 moved '${PJ_FLIP:-nothing}', want exactly '$4'"; fi
+}
+pj_mut nostart '    [ "$c" != "$s" ] && return 0' '    :' wrong
+pj_mut nopin 'LC_ALL=C TZ=UTC0 ps -o lstart=' 'ps -o lstart=' split
+pj_mut psstale "alone\\n' \"\$p\"" "alone\\n' \"\$p\"; return 0" psfail
+pj_mut nonorm '  set -- $x' '  set -- "$x"' right
+pj_mut nolegacy '    [ -n "$s" ] || return 1' '    :' legacylive
+
 # EXPECTED_ASSERTIONS, DERIVED FROM THE ARM LIST rather than typed. A hardcoded total goes
 # stale the release somebody adds an arm, and it goes stale SILENTLY in the direction that
 # matters — a fixture reporting fewer assertions than it has arms reads as a complete run.
@@ -1203,7 +1316,10 @@ pg_mut nostale '[ -d "$READSET_LOCAL.lock" ] && ! readset_lock_stale "$READSET_L
 # incremented by every `mut` call, and the unmutated control, which is straight-line and
 # cannot vary.
 EXPECTED_ASSERTIONS=$((ARM_COUNT + MUT_COUNT + 1 + HOOK_ARMS))
-[ "$HOOK_ARMS" -eq 6 ] || { printf '  FAIL  %s hook-step assertions ran, 6 expected\n' "$HOOK_ARMS"; fails=$((fails + 1)); }
+# HOOK_WANT is derived from this file's own call lines: one assertion per pg_arm/pg_mut/pj_arm/pj_mut.
+HOOK_WANT="$(grep -cE '^(pg_arm|pg_mut|pj_arm|pj_mut) ' "$HERE/run.sh")" || HOOK_WANT=0
+[ "$HOOK_WANT" -ge 17 ] || broken "counted $HOOK_WANT hook-step call lines in $HERE/run.sh, expected at least 17"
+[ "$HOOK_ARMS" -eq "$HOOK_WANT" ] || { printf '  FAIL  %s hook-step assertions ran, %s expected\n' "$HOOK_ARMS" "$HOOK_WANT"; fails=$((fails + 1)); }
 if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf '  FAIL  %s assertions ran, %s expected — an arm did not execute\n' "$asserts" "$EXPECTED_ASSERTIONS"
   fails=$((fails + 1))

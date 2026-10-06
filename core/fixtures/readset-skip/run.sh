@@ -37,6 +37,9 @@ for c in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
   [ -f "$c" ] && { HOOK="$c"; break; }
 done
 [ -n "$HOOK" ] || broken "no pre-push hook found in either layout"
+# PRINT THE RESOLVED HOOK. Every mutant below edits a copy of THIS file's pool block; a mutation
+# made to the other layout's copy would leave every arm green.
+echo "  hook: ${HOOK#"$ROOT"/}"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/readset-skip.XXXXXX")" || broken "mktemp failed"
 trap 'rm -rf "$WORK"' EXIT
@@ -75,6 +78,8 @@ select_in() {
   local t="$1" scratch; shift
   scratch="$(mktemp -d "$WORK/s.XXXXXX")" || return 1
   ( cd "$t" || exit 1
+    # Only the launcher arms turn the live trace on, and they say so on their own drive.
+    export AI_DLC_READSET_LIVE_TRACE=0
     # shellcheck disable=SC1090
     . "$POOL" 2>/dev/null
     for d in core/fixtures/*/; do printf '%s\n' "$d"; done > "$scratch/list"
@@ -599,6 +604,7 @@ drive() {
       git -c user.email=f@f -c user.name=f commit -qm extra ) >/dev/null 2>&1 || return 1
   fi
   ( cd "$t" || exit 1
+    export AI_DLC_READSET_LIVE_TRACE=0
     # shellcheck disable=SC1090
     . "$pool" 2>/dev/null
     for d in core/fixtures/*/; do printf '%s\n' "$d"; done > "$sc/list"
@@ -1042,6 +1048,7 @@ lsel_in() {
   local t="$1" scratch; shift
   scratch="$(mktemp -d "$WORK/ls.XXXXXX")" || return 1
   ( cd "$t" || exit 1
+    export AI_DLC_READSET_LIVE_TRACE=0
     . "$POOL" 2>/dev/null
     for d in core/fixtures/*/; do printf '%s\n' "$d"; done > "$scratch/list"
     readset_manifest "$scratch"
@@ -1142,7 +1149,7 @@ lt_drive() { # <pool> <world> <setup>; prints "<message>|<invoked|not>"
   local p="$1" t="$2" setup="$3" o
   o="$(mktemp -d "$WORK/lo.XXXXXX")" || return 1
   ( cd "$t" || exit 1
-    export STUB_ARGS="$o/args"
+    export STUB_ARGS="$o/args" AI_DLC_READSET_LIVE_TRACE=1
     . "$p" 2>/dev/null
     mkdir -p "$o/.log"; printf 'gamma\n' > "$o/.trace"; : > "$o/.trace.held"
     printf ok > "$o/gamma"; printf '  ok    g\n' > "$o/.log/gamma"
@@ -1206,7 +1213,7 @@ else
         || broken "could not seed the fixture root $FXROOT"
     fi
     ( cd "$t" || exit 1
-      export STUB_ARGS="$o/args"
+      export STUB_ARGS="$o/args" AI_DLC_READSET_LIVE_TRACE=1
       eval "$3"
       . "$p" 2>/dev/null
       run_fixtures > "$o/out" 2>&1; echo "$?" > "$o/rc"
@@ -1235,6 +1242,57 @@ else
   case "$RR" in
     "1|no|not|none|"*) ok "(f) a RED run starts no trace, even for the unmapped fixture that passed in it" ;;
     *) bad "(f) a red run started a trace or wrote a verified record: '$RR'" ;;
+  esac
+  # (k) THE LOCK ROUND TRIP (BL-463). The real readset_live_trace takes the lock while STUB_GO holds
+  # the stub deriver, so the trace subshell is alive when the pid file is read. A verdict alone cannot
+  # tell a right writer from a wrong one -- a lock with no start line reads HELD by design, and a
+  # parent and its child share a start second -- so the arm is on the pid file's CONTENT: line 2 is
+  # non-empty, line 2 is the normalised start of line 1's pid (computed by the UNMUTATED hook's
+  # readset_pid_start), and line 1 is not the pid of the process that ran the hook copy. HELD is a
+  # conjunct. The driver is a separate `bash` launched with `&`, so `$!` here IS its `$$` (asserted).
+  # After release the lock is gone, or stale.
+  RT_DRIVER="$WORK/rt-driver.sh"
+  cat > "$RT_DRIVER" <<'RT'
+pool="$1"; t="$2"; o="$3"; ref="$4"
+cd "$t" || exit 1
+printf '%s\n' "$$" > "$o/self"
+export STUB_ARGS="$o/args" STUB_GO="$o/go" AI_DLC_READSET_LIVE_TRACE=1
+. "$pool" 2>/dev/null
+mkdir -p "$o/.log"; printf 'gamma\n' > "$o/.trace"; : > "$o/.trace.held"
+printf ok > "$o/gamma"; printf '  ok    g\n' > "$o/.log/gamma"
+lk="$GITDIR/ai-dlc-fixture-readsets.local.lock"
+readset_live_trace "$o" > "$o/msg" 2>&1
+cp "$lk/pid" "$o/pidfile" 2>/dev/null
+p="$(sed -n 1p "$o/pidfile" 2>/dev/null | cut -d' ' -f1)"
+( . "$ref" 2>/dev/null; readset_pid_start "$p" ) > "$o/want" 2>/dev/null
+( . "$ref" 2>/dev/null; readset_lock_stale "$lk" > "$o/judge" 2>&1; echo "$?" > "$o/rc" )
+: > "$STUB_GO"
+i=0; while [ -d "$lk" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+if [ ! -d "$lk" ]; then echo gone > "$o/after"
+elif ( . "$ref" 2>/dev/null; readset_lock_stale "$lk" ) >/dev/null 2>&1; then echo stale > "$o/after"
+else echo held > "$o/after"; fi
+RT
+  rt_drive() { # <pool> <name>; prints "<self=launched>|<l1!=launched>|<l2 set>|<l2=start(l1)>|<rc>|<after>|<started>"
+    local t o lp l1 l2
+    t="$(lt_fresh "rt.$1.$2")"; o="$WORK/rto.$2"; mkdir -p "$o"
+    bash "$RT_DRIVER" "$1" "$t" "$o" "$POOL" > "$o/driver.out" 2>&1 &
+    lp=$!; wait "$lp"
+    l1="$(sed -n 1p "$o/pidfile" 2>/dev/null | cut -d' ' -f1)"; l2="$(sed -n 2p "$o/pidfile" 2>/dev/null)"
+    printf '%s|%s|%s|%s|%s|%s|%s' \
+      "$([ "$(cat "$o/self" 2>/dev/null)" = "$lp" ] && echo self || echo noself)" \
+      "$([ -n "$l1" ] && [ "$l1" != "$lp" ] && echo child || echo "pid=${l1:-none}")" \
+      "$([ -n "$l2" ] && echo start || echo nostart)" \
+      "$([ -n "$l2" ] && [ "$l2" = "$(cat "$o/want" 2>/dev/null)" ] && echo match || echo nomatch)" \
+      "$(cat "$o/rc" 2>/dev/null)" "$(cat "$o/after" 2>/dev/null)" \
+      "$(grep -q 'started detached' "$o/msg" 2>/dev/null && echo started || echo notstarted)"
+  }
+  RT_OK='self|child|start|match|1|'*'|started'
+  RK="$(rt_drive "$POOL" k)"; lt_arm
+  case "$RK" in
+    $RT_OK) case "$RK" in *"|gone|"*|*"|stale|"*)
+         ok "(k) the real launcher's lock names the trace subshell's pid with its own start time, reads HELD while it runs, and is gone or stale after: '$RK'" ;;
+       *) bad "(k) the lock outlived its trace as HELD: '$RK'" ;; esac ;;
+    *) bad "(k) the launcher's lock is not the trace subshell's pid with its start time, HELD: '$RK' -- $(tr '\n' '/' < "$WORK/rto.k/pidfile" 2>/dev/null)" ;;
   esac
 fi
 
@@ -1303,15 +1361,36 @@ if [ "$LT_CAN" = 1 ]; then
   # sync and fold drop the `&`, so `$!` is replaced by a literal pid in the copy too: with no
   # background job `$!` is unset, and bash 3.2 under `set -u` rejects even `${!:-0}`, so the drive
   # aborts and the mutant dies for a reason that is not its own (an empty rc field, measured).
+  # The writer reads `$!` once, into `tp` (BL-463), and that line is the anchor; RT_ANCHOR_N asserts
+  # it is the block's ONLY `$!`, so no second reader is left unset.
+  RT_ANCHOR_N="$(grep -cF '"$!"' "$POOL")" || RT_ANCHOR_N=0; lt_arm
+  [ "$RT_ANCHOR_N" = 1 ] && ok "the pool block reads \"\$!\" exactly once (the writer's tp=), so sync and fold replace every reader" \
+    || bad "the pool block reads \"\$!\" $RT_ANCHOR_N time(s), not 1 -- sync and fold no longer replace every reader"
+  RT_TP_N="$(grep -cF '  tp="$!"' "$POOL")" || RT_TP_N=0
+  RT_NEVER_N="$(grep -cF 'B463-NEVER-ANCHOR' "$POOL")" || RT_NEVER_N=0; lt_arm
+  [ "$RT_TP_N" = 1 ] && [ "$RT_NEVER_N" = 0 ] && ok "  the anchor '  tp=\"\$!\"' occurs once, and the impossible-anchor control 0 times" \
+    || bad "  the anchor '  tp=\"\$!\"' occurs $RT_TP_N time(s) and the impossible-anchor control $RT_NEVER_N -- want 1 and 0"
   pm_copy sync 1 '  ) </dev/null >"$logf" 2>&1 &' '  ) </dev/null >"$logf" 2>&1' \
-                1 "printf '%s %s\\n' \"\$!\"" "printf '%s %s\\n' 0" \
+                1 '  tp="$!"' '  tp=0' \
     && pm_rf sync a "export STUB_GO=\"$WORK/rf.go.sync\"" '"0|yes|invoked|"*'
   pm_copy fold 1 'AI_DLC_READSET_TRACE_ROOT="$tr" bash "$dv" --list "$names" --tracer sandbox --local-map "$READSET_LOCAL"' \
                    'AI_DLC_READSET_TRACE_ROOT="$tr" bash "$dv" --list "$names" --tracer sandbox --local-map "$READSET_LOCAL" || { rm -f "$lk/pid"; rmdir "$lk"; exit 1; }' \
                 1 '  ) </dev/null >"$logf" 2>&1 &' '  ) </dev/null >"$logf" 2>&1 || return 1' \
-                1 "printf '%s %s\\n' \"\$!\"" "printf '%s %s\\n' 0" \
+                1 '  tp="$!"' '  tp=0' \
                 1 '  if [ "$rc" -eq 0 ]; then readset_live_trace "$out"; fi' '  if [ "$rc" -eq 0 ]; then readset_live_trace "$out" || rc=1; fi' \
     && pm_rf fold f 'export STUB_RC=1' '"0|"*"|invoked|verified|"*'
+  # The lock WRITER's mutants (BL-463), each scored on the round trip (k), the one arm that reads
+  # the pid file's content: the parent's pid in place of the trace subshell's, and no start line.
+  pm_rt() { # <name>
+    local r; lt_arm
+    r="$(rt_drive "$PM" "pm.$1")"
+    case "$r" in
+      $RT_OK) bad "BL-463 MUTANT $1 SURVIVED k: '$r'" ;;
+      *) ok "BL-463 MUTANT $1 is KILLED by k: '$r'" ;;
+    esac
+  }
+  pm_copy parentpid 1 '  tp="$!"' '  tp="$$"' && pm_rt parentpid
+  pm_copy nostartline 1 '"$(readset_pid_start "$tp")" > "$lk/pid"' '"" > "$lk/pid"' && pm_rt nostartline
   pm_copy redrun 1 '  if [ "$rc" -eq 0 ]; then readset_live_trace "$out"; fi' '  readset_live_trace "$out"' \
     && pm_rf redrun f "printf 'exit 1\n' > $FXROOT/alpha/run.sh" '"1|no|not|"*'
 fi
