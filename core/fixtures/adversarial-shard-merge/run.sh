@@ -464,7 +464,50 @@ p_subj_b4() { # --document into requirements-p<M> refused before any shard is re
   bash "$1" --document "$w/$SUBJ_PA/prd.md" "$d" > "$MO" 2>&1; RC=$?
   subj_refused_clean "merge it with --subject" "$d"
 }
-P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms doc_b3 doc_axis doc_sha doc_path doc_serial files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit subj_b4"
+# B4 BY DOCUMENT (BL-461): a --document merge of a file the sprint's subject manifest NAMES is
+# refused, whatever its shard dir is called. Three worlds, one property apart:
+#   b4doc        manifest present, --document prd.md from shards/prd-p1          REFUSED naming the stem
+#   b4doc_nomf   the same merge, no manifest in the sprint (the ALLOW twin)       MERGED prd-adversarial-p1
+#   b4doc_other  manifest present, --document of an s9 file it does NOT name      MERGED (a guard refusing
+#                every --document in a manifest sprint dies here, not on b4doc_nomf)
+# The prd world's prd.md partitions unscoped (two `##` sections plus a third), so the merge would
+# otherwise succeed; b4doc_nomf proves that.
+b4_doc_shards() { # <world> <document rel> <shard dir> -> unscoped section shards over the document
+  local w="$1" doc="$1/$2" d="$3" o sl
+  mkdir -p "$d" || return 1; sl="$(sha_of "$doc")"
+  for o in $(bash "$SRCDIR/partition-document.sh" --map "$doc" | cut -f1) cross; do
+    sshard "$d" "$o" 0 "$o" "$sl" "" "" "$2"
+  done
+  [ -f "$d/1.md" ] && [ -f "$d/2.md" ]
+}
+b4_world() { # <with manifest: 1|0> -> the world root
+  local d w; d="$(new_subj_world)" || return 1; w="$(subj_root "$d")"
+  [ "$1" = 1 ] || rm -f "$w/$SUBJ_PA/s9/requirements-subject.md"
+  printf '%s' "$w"
+}
+p_b4doc() {
+  local w o; w="$(b4_world 1)" || return 1; o="$w/$SUBJ_PA/s9/prd-adversarial-p1.md"
+  b4_doc_shards "$w" "$SUBJ_PA/prd.md" "$w/$SUBJ_PA/s9/shards/prd-p1" || return 1
+  bash "$1" --document "$w/$SUBJ_PA/prd.md" "$w/$SUBJ_PA/s9/shards/prd-p1" > "$MO" 2>&1; RC=$?
+  [ "$RC" -eq 2 ] && has "$MO" "REFUSED:" && has "$MO" "is the 'prd' file of the requirements subject" \
+    && has "$MO" "merge the subject with --subject 9" && [ ! -e "$o" ]
+}
+p_b4doc_nomf() {
+  local w o; w="$(b4_world 0)" || return 1; o="$w/$SUBJ_PA/s9/prd-adversarial-p1.md"
+  [ ! -e "$w/$SUBJ_PA/s9/requirements-subject.md" ] || return 1
+  b4_doc_shards "$w" "$SUBJ_PA/prd.md" "$w/$SUBJ_PA/s9/shards/prd-p1" || return 1
+  bash "$1" --document "$w/$SUBJ_PA/prd.md" "$w/$SUBJ_PA/s9/shards/prd-p1" > "$MO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ -f "$o" ] && grep -qx "artifact: $SUBJ_PA/prd.md" "$o"
+}
+p_b4doc_other() {
+  local w o doc; w="$(b4_world 1)" || return 1; o="$w/$SUBJ_PA/s9/test-strategy-adversarial-p1.md"
+  [ -f "$w/$SUBJ_PA/s9/requirements-subject.md" ] || return 1
+  doc="$SUBJ_PA/s9/test-strategy.md"; cp "$HERE/seed.doc-test-strategy.md" "$w/$doc" || return 1
+  b4_doc_shards "$w" "$doc" "$w/$SUBJ_PA/s9/shards/test-strategy-p1" || return 1
+  bash "$1" --document "$w/$doc" "$w/$SUBJ_PA/s9/shards/test-strategy-p1" > "$MO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ -f "$o" ]
+}
+P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms doc_b3 doc_axis doc_sha doc_path doc_serial files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit subj_b4 b4doc b4doc_nomf b4doc_other"
 
 # ---------------------------------------------------------------------------------- the arms
 echo "adversarial-shard-merge:"
@@ -546,6 +589,12 @@ p_subj_art "$MERGE" && ok "U6: a shard naming prd.md instead of the manifest -> 
 p_subj_elicit "$MERGE" && ok "U7: --elicitation writes s9/requirements-elicitation.md with NO verdict (file or stdout); a verdict-bearing shard and a non-elicitation skill each REFUSED" \
   || bad "U7: the elicitation merge (rc=$RC): $(cat "$MO")"
 p_subj_b4 "$MERGE" && ok "U8: --document into shards/requirements-p1 -> REFUSED 'merge it with --subject' (B4), nothing written" || bad "U8: (rc=$RC) $(cat "$MO")"
+p_b4doc "$MERGE" && ok "U9: --document prd.md from shards/prd-p1 while s9/requirements-subject.md names it -> REFUSED naming the 'prd' stem and --subject 9 (B4 by document), nothing written" \
+  || bad "U9: a --document merge of a manifest-named file was not refused (rc=$RC): $(cat "$MO")"
+p_b4doc_nomf "$MERGE" && ok "U10: the same --document prd.md merge with NO manifest in the sprint -> MERGED prd-adversarial-p1 (U9's ALLOW twin)" \
+  || bad "U10: the no-manifest twin did not merge (rc=$RC): $(cat "$MO")"
+p_b4doc_other "$MERGE" && ok "U11: --document of an s9 file the manifest does NOT name, manifest present -> MERGED (B4 keys on the manifest's files, not on the manifest's presence)" \
+  || bad "U11: a --document merge of a file outside the subject was refused beside a manifest (rc=$RC): $(cat "$MO")"
 
 # R6: a finding heading EXACTLY as the real pass wrote it carries no severity word, so the heads
 # counted (0 MAJOR) disagree with findings_major -- refused, never counted as zero.
@@ -737,6 +786,20 @@ mutant "MX12 elicitation verdict line written" "subj_elicit" \
 mutant "MX13 B4 refusal removed" "subj_b4" \
   'if [ -z "$SUBJECT" ] && [ "$ARTIFACT" = "requirements" ]; then' \
   'if false; then'
+# B4 by document. MX14: the widened guard never entered. MX15: it refuses every --document in a
+# manifest sprint (the row compare dropped) -- only the not-named twin U11 can see that. The guard's
+# own `[ -f manifest ]` conjunct has no killing world: with it removed, a sprint with no manifest
+# finds no first row, resolves no root and refuses nothing, so U10 holds either way (covered by the
+# `[ -n "$B4_ROOT" ]` below it, recorded rather than mutated).
+mutant "MX14 B4-by-document guard removed" "b4doc" \
+  'if [ -n "$DOCUMENT" ] && [ -f "$SPRINT_DIR/requirements-subject.md" ]; then' \
+  'if false; then'
+# MX15 dies on TWO arms, both genuinely: U11 sees a refusal where none is owed, and U9 sees the
+# refusal name the wrong stem -- an always-true compare refuses at the manifest's FIRST row, so it
+# tells the lead `--document prd.md` is the 'product-brief' file. U9's stem-name conjunct owns that.
+mutant "MX15 B4-by-document refuses every document" "b4doc b4doc_other" \
+  '    [ "$(cd "$(dirname "$B4_ROOT/$b4_rel")" && pwd -P)/${b4_rel##*/}" = "$DOCUMENT" ] \' \
+  '    true \'
 echo
 if [ "$fails" -eq 0 ]; then echo "adversarial-shard-merge: PASS"; exit 0; fi
 echo "adversarial-shard-merge: $fails assertion(s) FAILED" >&2

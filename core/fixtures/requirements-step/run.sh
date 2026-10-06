@@ -420,6 +420,53 @@ iprobe "near-miss: mandate in 4(c)" ok mandate_ok "$PROBE/i-nm.md"
 iprobe "offender: 4(c) carries bare ### tokens but no mandate" fire mandate_ok "$PROBE/i-nomand.md"
 iprobe "offender: mandate sentence present only outside 4(c)" fire mandate_ok "$PROBE/i-mandout.md"
 
+# --- arm (j) probe: the requirements series is NAMED at both Check 24 sites, and requirements.md
+# says B4 refuses a --document merge of a subject file (BL-461). Each predicate reads ONE region, so a
+# whole-file count cannot be satisfied by two mentions in one paragraph.
+J_TOK='s<N>/requirements-adversarial-p'
+J_CHECK_A='**Check.** Invoke `scripts/ai-dlc/validate-adversarial-convergence.sh'
+J_SWEEP_A='**At every gate after the first planning gate'
+J_SWEEP_Z='Each arm emits its own named failure'
+J_REQ_A='**The adversarial series is named'
+J_REQ_Z='**party-mode seats'
+J_REFUSE_1='No `--document` merge of a subject file'
+J_REFUSE_2='refuses one (its B4)'
+J_WHY=""
+j_check_ok() { local s; s="$(region "$1" "$J_CHECK_A" "$J_SWEEP_A")"; J_WHY=""
+  [ -n "$s" ] || { J_WHY="the Check 24 invocation paragraph not found"; return 1; }
+  case "$s" in *"$J_TOK"*) return 0 ;; esac; J_WHY="the Check 24 invocation paragraph does not name $J_TOK"; return 1; }
+j_sweep_ok() { local s; s="$(region "$1" "$J_SWEEP_A" "$J_SWEEP_Z")"; J_WHY=""
+  [ -n "$s" ] || { J_WHY="the post-planning sweep paragraph not found"; return 1; }
+  case "$s" in *"$J_TOK"*) return 0 ;; esac; J_WHY="the post-planning sweep paragraph does not name $J_TOK"; return 1; }
+j_refuse_ok() { local s; s="$(region "$1" "$J_REQ_A" "$J_REQ_Z")"; J_WHY=""
+  [ -n "$s" ] || { J_WHY="the series-naming bullet not found"; return 1; }
+  case "$s" in *"$J_REFUSE_1"*"$J_REFUSE_2"*) return 0 ;; esac
+  J_WHY="the series-naming bullet does not say a --document merge of a subject file is refused by B4"; return 1; }
+jprobe() { # <label> <expect: ok|fire> <predicate> <file>
+  if "$3" "$4"; then got=ok; else got=fire; fi
+  if [ "$got" = "$2" ]; then probe_ok "(j) $1 -> $got${J_WHY:+ ($J_WHY)}"
+  else probe_bad "(j) $1" "expected $2, got $got${J_WHY:+ ($J_WHY)}"; fi
+}
+mk_gv() { # <file> <check-paragraph extra> <sweep-paragraph extra>
+  printf '%s --series\n<prefix>`; exit 0 required. %s\n\n%s sprint.** Run it. %s\n%s here.\n' \
+    "$J_CHECK_A" "$2" "$J_SWEEP_A" "$3" "$J_SWEEP_Z" > "$1"
+}
+mk_gv "$PROBE/j-gv-nm.md" "Prefix \`_bmad-output/planning-artifacts/$J_TOK\`." "The series \`_bmad-output/planning-artifacts/$J_TOK\` is one."
+# Both offenders carry the token TWICE in the file, in the other paragraph: a whole-file count of 2 passes them.
+mk_gv "$PROBE/j-gv-nocheck.md" "Prefix of the step." "The series \`$J_TOK\` is one, and so is \`$J_TOK\`."
+mk_gv "$PROBE/j-gv-nosweep.md" "Prefix \`$J_TOK\`, or \`$J_TOK\`." "Each series."
+printf '%s `s<N>/requirements-adversarial-p<M>`.** %s\n  while the manifest exists, and `merge-adversarial-shards.sh` %s.\n%s / subject:** x\n' \
+  "$J_REQ_A" "$J_REFUSE_1" "$J_REFUSE_2" "$J_REQ_Z" > "$PROBE/j-req-nm.md"
+# Offender: the sentence sits in the file, but OUTSIDE the series-naming bullet.
+printf '%s `s<N>/requirements-adversarial-p<M>`.** Merged by --subject.\n%s / subject:** x\n%s, and it %s.\n' \
+  "$J_REQ_A" "$J_REQ_Z" "$J_REFUSE_1" "$J_REFUSE_2" > "$PROBE/j-req-out.md"
+jprobe "near-miss: both paragraphs name the series" ok j_check_ok "$PROBE/j-gv-nm.md"
+jprobe "near-miss: both paragraphs name the series (sweep)" ok j_sweep_ok "$PROBE/j-gv-nm.md"
+jprobe "offender: invocation paragraph silent, token twice in the sweep" fire j_check_ok "$PROBE/j-gv-nocheck.md"
+jprobe "offender: sweep paragraph silent, token twice in the invocation" fire j_sweep_ok "$PROBE/j-gv-nosweep.md"
+jprobe "near-miss: the refusal sentence in the bullet" ok j_refuse_ok "$PROBE/j-req-nm.md"
+jprobe "offender: the refusal sentence only outside the bullet" fire j_refuse_ok "$PROBE/j-req-out.md"
+
 echo "requirements-step: $probes self-probe assertion(s), $fails failed"
 if [ "$fails" -gt 0 ]; then
   echo "FIXTURE ERROR: a self-probe could not discriminate offender from near-miss; corpus arms below would not be trustworthy." >&2
@@ -635,6 +682,42 @@ for m in restore drop; do
   fi
 done
 rm -rf "$IMUT"
+
+# --- (j) the requirements series named at both Check 24 sites; B4's refusal in requirements.md ---
+if [ -f "$GVMD" ]; then
+  j_check_ok "$GVMD" && ok "(j) gate-validation.md's Check 24 invocation paragraph names $J_TOK" || bad "(j) gate-validation.md: $J_WHY"
+  j_sweep_ok "$GVMD" && ok "(j) gate-validation.md's post-planning sweep paragraph names $J_TOK" || bad "(j) gate-validation.md: $J_WHY"
+else
+  bad "(j) gate-validation.md not found at $GVMD"
+fi
+j_refuse_ok "$REQMD" && ok "(j) requirements.md's series bullet says B4 refuses a --document merge of a subject file" || bad "(j) requirements.md: $J_WHY"
+# Mutants on COPIES, cmp -s guarded, each keyed on its own predicate's REGION (every occurrence of
+# the token inside it removed, so a third mention a later release adds cannot leave it vacuous),
+# and each must fail ONLY its own predicate.
+JMUT="$(mktemp -d)"
+j_strip() { # <file> <start> <stop> <literal> -> the file with <literal> removed inside the region
+  awk -v a="$2" -v b="$3" -v t="$4" '
+    function strip(s,  i, o) { o = ""; while ((i = index(s, t)) > 0) { o = o substr(s, 1, i - 1); s = substr(s, i + length(t)) } return o s }
+    !on && !done && index($0, a) { on = 1 }
+    on && index($0, b) && !index($0, a) { on = 0; done = 1 }
+    { print (on ? strip($0) : $0) }' "$1"
+}
+j_strip "$GVMD" "$J_CHECK_A" "$J_SWEEP_A" "$J_TOK" > "$JMUT/check.md"
+j_strip "$GVMD" "$J_SWEEP_A" "$J_SWEEP_Z" "$J_TOK" > "$JMUT/sweep.md"
+j_strip "$REQMD" "$J_REQ_A" "$J_REQ_Z" "$J_REFUSE_2" > "$JMUT/refuse.md"
+for m in check sweep refuse; do
+  case "$m" in
+    check)  src="$GVMD";  own=j_check_ok;  others="j_sweep_ok" ;;
+    sweep)  src="$GVMD";  own=j_sweep_ok;  others="j_check_ok" ;;
+    refuse) src="$REQMD"; own=j_refuse_ok; others="" ;;
+  esac
+  if cmp -s "$src" "$JMUT/$m.md"; then bad "(j) MUTANT $m DID NOT APPLY"; continue; fi
+  if "$own" "$JMUT/$m.md"; then bad "(j) MUTANT $m SURVIVED: $own passed on the mutated copy"; continue; fi
+  ent=""; for o in $others; do "$o" "$JMUT/$m.md" || ent="$ent $o"; done
+  if [ -n "$ent" ]; then bad "(j) MUTANT $m is entangled:$ent also failed"
+  else "$own" "$JMUT/$m.md"; ok "(j) MUTANT $m killed by $own alone: $J_WHY"; fi
+done
+rm -rf "$JMUT"
 
 echo
 if [ "$fails" -eq 0 ]; then
