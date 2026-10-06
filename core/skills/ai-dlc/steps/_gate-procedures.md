@@ -1027,6 +1027,7 @@ carry the no-human-present additions:
    tracks `_bmad-output/`, then push the current branch to origin
    (`git push -u origin HEAD`) so the Step 2 commit and the finalized
    state reach the remote and are not stranded on this machine.
+   SKILL.md Rule 32 touchpoint I applies before the push.
    **`-u origin HEAD`, never a bare `git push`** — a bare push cannot
    succeed on a branch that has never been pushed, which is every
    sprint's FIRST auto-handoff wherever a branch is cut per sprint.

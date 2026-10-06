@@ -225,12 +225,15 @@ redesigned the same batch into the conditional deny this entry ships.
 **Done when, consumer side, owed as residue.** `BL-454`'s first-sprint census of advisor calls is the before-figure;
 the first sprint after this ships is the after-figure.
 
-**Receipt.** It drives the shipped hook on seeded transcripts. A transcript carrying a grant attachment and a release
-push with no advisor attempt must be denied, and the same transcript with the grant line removed must be left silent.
-The build adds the remaining cases to its fixture: an errored attempt clears, `unavailable` warns, a later success
-re-arms, a withdrawn grant is silent, a delete is not gated, and a transcript write is denied.
+**Receipt.** It drives the shipped hook on seeded transcripts, reseeded on the consumer's real push and merge forms. A
+lead transcript carrying a grant attachment and no advisor attempt must be denied `git push -u origin HEAD` and
+`gh pr merge 7 --squash --delete-branch`, and the same calls with the grant line absent must be left silent. A teammate,
+named by `agent_id`, is judged on its own `<session>/subagents/agent-<id>.jsonl`: granted with no advisor call, it is
+denied a verdict write even though its parent's transcript holds an advisor call, and its `git push` is left silent.
+The remaining cases are arms of `core/fixtures/advisor-gate-deny`: an errored attempt clears, `unavailable` warns, a later
+success re-arms, a withdrawn grant is silent, a delete is not gated, and a transcript write is denied.
 
-verify: sh H=core/hooks/ai-dlc-advisor-gate.sh; [ -f "$H" ] || exit 1; command -v jq >/dev/null 2>&1 || exit 9; W="$(mktemp -d)" || exit 9; g='{"type":"attachment","attachment":{"type":"advisor_tool","available":true,"toolChange":"add","model":"m"}}'; u='{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"git push origin release/9.9.9"}}]}}'; printf '%s\n%s\n' "$g" "$u" > "$W/on.jsonl"; printf '%s\n' "$u" > "$W/off.jsonl"; run() { jq -cn --arg t "$W/$1.jsonl" '{hook_event_name:"PreToolUse",tool_name:"Bash",tool_input:{command:"git push origin release/9.9.9"},transcript_path:$t}' | bash "$H" 2>/dev/null | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null; }; [ "$(run on)" = deny ] && [ -z "$(run off)" ]
+verify: sh H=core/hooks/ai-dlc-advisor-gate.sh; [ -f "$H" ] || exit 1; command -v jq >/dev/null 2>&1 || exit 9; W="$(mktemp -d)" || exit 9; mkdir -p "$W/p/s/subagents" || exit 9; g='{"type":"attachment","attachment":{"type":"advisor_tool","available":true,"toolChange":"add","model":"m"}}'; a='{"type":"assistant","message":{"content":[{"type":"server_tool_use","id":"s1","name":"advisor","input":{}}]}}'; printf '%s\n%s\n' "$g" "$a" > "$W/p/s.jsonl"; printf '%s\n' "$g" > "$W/p/s/subagents/agent-a1.jsonl"; printf '%s\n' "$g" > "$W/p/on.jsonl"; printf '{"type":"user"}\n' > "$W/p/off.jsonl"; run() { jq -cn --arg t "$W/p/$1.jsonl" --arg c "$2" --arg a "${3:-}" --arg n "${4:-Bash}" '{hook_event_name:"PreToolUse",tool_name:$n,tool_input:{command:$c,file_path:"/r/_bmad-output/gate-adjudication/implementation-20261006T120000Z.verdict.json",content:"{}"},transcript_path:$t,cwd:"/"} + (if $a == "" then {} else {agent_id:$a} end)' | bash "$H" 2>/dev/null | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null; }; [ "$(run on 'git push -u origin HEAD')" = deny ] && [ "$(run on 'gh pr merge 7 --squash --delete-branch')" = deny ] && [ -z "$(run off 'git push -u origin HEAD')" ] && [ -z "$(run off 'gh pr merge 7 --squash --delete-branch')" ] && [ "$(run s x a1 Write)" = deny ] && [ -z "$(run s 'git push -u origin HEAD' a1)" ]
 
 ## BL-460 — the requirements subject drifts after a terminal MET pass with nothing to see it
 

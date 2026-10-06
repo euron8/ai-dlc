@@ -243,6 +243,7 @@ core_manifest:
   - fixtures/extract-push-flag-decision/**
   - fixtures/fold-architect-ledger-join/**
   - fixtures/foreground-budget-deny/**
+  - fixtures/advisor-gate-deny/**
   - fixtures/update-preflight-push/**
   - fixtures/push-drain-refusals/**
   - fixtures/inflight-row-shape/**

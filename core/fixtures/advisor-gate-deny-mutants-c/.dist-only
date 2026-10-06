@@ -1,0 +1,10 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+It is shard 'c' of advisor-gate-deny-mutants, and it inherits that fixture's reason without
+restating it: it is the MUTATION BATTERY behind the shipped advisor-gate-deny fixture, editing
+copies of core's own hook in temp trees, so every verdict is a question about whether THIS
+repository's hook still discriminates.
+
+A shard is a scheduling boundary, never a subject boundary, so it can carry no ship decision
+its sibling does not. On a consumer it would be a unit the consumer cannot act on, sitting in
+that consumer's suite schedule.

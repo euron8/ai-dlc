@@ -1,0 +1,10 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+It is the MUTATION BATTERY behind the shipped `advisor-gate-deny` fixture. It copies core's own
+`core/hooks/ai-dlc-advisor-gate.sh` into a temp directory, removes or bends one clause at a time,
+and requires the shipped fixture's cells to go red on exactly the arms and cells that clause owns.
+That hook is the distribution's; a consumer is denied the in-place edit of it, so every verdict
+here is a question about whether THIS repository's hook still discriminates. It sources
+`advisor-gate-deny/lib.sh`, so it scores the cells the shipped fixture runs. It is also roughly
+97% of that subject's wall clock, and shipping it would put a unit the consumer cannot act on
+into the consumer's suite schedule.
