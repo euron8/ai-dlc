@@ -600,31 +600,31 @@ r8_run() { # r8_run <dir> <nsh> <nentries>
   run_v "" "$1" --max-prose-closable 9 --max-unscorable 9 --max-out-of-population 9 \
     --max-unstable 0 --min-sh-receipts "$2" --min-entries "$3"
 }
-R8_BEHAV_PATH='## BL-821
+R8_BEHAV_PATH='## BL-831
 
-verify: sh o="$(bash probe/tool.sh)"; [ "$o" = READY821 ]
+verify: sh o="$(bash probe/tool.sh)"; [ "$o" = READY831 ]
 '
-R8_BEHAV_NOPATH='## BL-822
+R8_BEHAV_NOPATH='## BL-832
 
-verify: sh [ "$(printf x)" = y822 ]
+verify: sh [ "$(printf x)" = y832 ]
 '
-R8_PASSING="## BL-823
+R8_PASSING="## BL-833
 
-verify: sh ! grep -q 'MARK823' probe/passing.txt
+verify: sh ! grep -q 'MARK833' probe/passing.txt
 "
-R8_MALFORMED='## BL-824
+R8_MALFORMED='## BL-834
 
-verify: sh if true; then echo 824
+verify: sh if true; then echo 834
 '
-R8_EMPTY='## BL-825
+R8_EMPTY='## BL-835
 
 verify: sh
 '
-R8_NOPATH_TOK="## BL-826
+R8_NOPATH_TOK="## BL-836
 
-verify: sh grep -q 'MARK826' probe/*.txt
+verify: sh grep -q 'MARK836' probe/*.txt
 "
-R8_MANUAL='## BL-827
+R8_MANUAL='## BL-837
 
 verify: manual -- no mechanical predicate
 '
@@ -671,11 +671,11 @@ r8_seed "$TMP/m8b" "$R8_BEHAV_PATH" "$R8_BEHAV_NOPATH" "$R8_PASSING"
 r8_ok "m8b an all-behavioural ledger is accounted for" "$TMP/m8b" 3 3 all-behavioural \
   "(3 sh receipts over 3 live entries in docs/backlog.md: 2 behavioural with no grep literal to seed, 1 already passing)"
 r8_seed "$TMP/m8c" "$R8_MALFORMED"
-r8_fail "m8c a malformed receipt" "$TMP/m8c" 1 1 BL-824 "sh receipts 1, unscorable 1,"
+r8_fail "m8c a malformed receipt" "$TMP/m8c" 1 1 BL-834 "sh receipts 1, unscorable 1,"
 r8_seed "$TMP/m8d" "$R8_EMPTY"
-r8_fail "m8d an empty sh one-liner" "$TMP/m8d" 1 1 BL-825 "sh receipts 1, unscorable 1,"
+r8_fail "m8d an empty sh one-liner" "$TMP/m8d" 1 1 BL-835 "sh receipts 1, unscorable 1,"
 r8_seed "$TMP/m8e" "$R8_NOPATH_TOK"
-r8_fail "m8e a literal at an unseedable path" "$TMP/m8e" 1 1 BL-826 "sh receipts 1, unscorable 1,"
+r8_fail "m8e a literal at an unseedable path" "$TMP/m8e" 1 1 BL-836 "sh receipts 1, unscorable 1,"
 r8_seed "$TMP/m8f" "$R8_MANUAL"
 r8_ok "m8f live entries with no sh receipt" "$TMP/m8f" 0 1 no-sh-receipts \
   "(0 sh receipts over 1 live entries in docs/backlog.md"

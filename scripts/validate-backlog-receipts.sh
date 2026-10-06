@@ -1093,7 +1093,7 @@ _where="$LEDGER"
 [ "$DEFAULTED" = "1" ] && _where="docs/backlog.md"
 # THE ACCOUNTED-FOR ZERO GETS ITS OWN LINE, in both modes, so a reader can never take it for a
 # run that scored something. It names the state and its counts, and carries R1's provenance --
-# in this state no receipt was seeded, so R1's ten seeded receipts are the only thing in the
+# in this state no receipt was SCORED, so R1's ten seeded receipts are the only thing in the
 # line a stub could not print truthfully.
 if [ -n "$R2_ZERO_STATE" ]; then
   echo "OK: validate-backlog-receipts -- R2 ${R2_ZERO_STATE}: 0 scored receipts, and every one is accounted for (${SH_RECEIPTS} sh receipts over ${ENTRIES} live entries in ${_where}: ${N_BEHAV} behavioural with no grep literal to seed, ${N_PASS} already passing); R3 ${UNSCORED}/${MAX_UNSC} unscored, R5 ${SH_RECEIPTS}/${MIN_SH} floor; R1 fired both directions over 10 seeded receipts, caller porcelain ${PORC_BEFORE} unchanged."
