@@ -8,9 +8,10 @@
 #   - gate-validation.md Check 21: the citation set IS that table; a case letter with no row
 #     fails; a strategy with no id table is a SKIP that says so, never a PASS.
 #   - dev.md `## QA Handoff Evidence`: the full-collection run WITH its counts before the
-#     handoff message, the four sections filled, every table row resolved.
+#     handoff message, the dependency setup that makes that run reproducible from a fresh
+#     detached worktree recorded beside it, the four sections filled, every table row resolved.
 #   - qa.md `## Handoff Evidence Precondition`: QA rejects before validating when that
-#     evidence is absent.
+#     evidence, the dependency setup included, is absent.
 #   - code-reviewer.md Field Verification: the baseline-fixture sweep when a diff changes a
 #     handler's result shape.
 # No script reads any of this; the executing agents read the prose, so the prose is the
@@ -70,6 +71,12 @@ flat() { tr '\n' ' ' | sed -e 's/\*\*//g' -e 's/[[:space:]][[:space:]]*/ /g'; }
 has() { case "$1" in *"$2"*) return 0 ;; esac; return 1; }
 
 COUNTS='collected / passed / failed / deselected / skipped / xfailed counts'
+# The dependency-setup row: the dev records it, the QA precondition REJECTs without it. A part
+# QA's own worktree runs "the setup the dev's QA Handoff Evidence records" (qa.md `## As a
+# Shard`, implementation.md Gate-2 dispatch), so a dev list without this row leaves that reader
+# with nothing to run. Each phrase is the row's own wording in its own section.
+SETUP_DEV='the canonical dependency setup that makes that run reproducible from a fresh detached worktree: the exact invocation and its working directory, or `none` with the reason'
+SETUP_QA='the canonical dependency setup that makes it reproducible from a fresh detached worktree, as the exact invocation and its working directory, or `none` with the reason'
 
 # check <sts> <gv> <dev> <qa> <cr> -> one line per failing arm; nothing when every arm holds.
 # Presence-shaped throughout: every arm demands a string APPEAR in its own section.
@@ -104,11 +111,15 @@ check() {
   fl="$(flat <<<"$b")"
   { has "$fl" "$COUNTS" && has "$fl" 'before the handoff message' && has "$fl" '`## Strategy Test IDs`'; } \
     || echo "DEV: after the consumer's Workflow Per Task shadow, dev.md carries no full-collection-with-counts handoff requirement"
+  has "$fl" "$SETUP_DEV" \
+    || echo "DEV: setup -- after the consumer's Workflow Per Task shadow, dev.md's handoff evidence records no dependency setup beside the full-collection run"
   shadow "$qa" '## Validation Checklist' > "$WORK/.qa.shadowed"
   b="$(h2 "$WORK/.qa.shadowed" '## Handoff Evidence Precondition')"
   fl="$(flat <<<"$b")"
   { has "$fl" "$COUNTS" && has "$fl" 'REJECT without validating further'; } \
     || echo "QA: after the consumer's Validation Checklist shadow, qa.md carries no handoff-evidence precondition"
+  has "$fl" "$SETUP_QA" \
+    || echo "QA: setup -- after the consumer's Validation Checklist shadow, qa.md does not REJECT a handoff missing the dev's dependency setup"
   b="$(h2 "$cr" '## Field Verification (API-Consuming Stories)')"
   fl="$(flat <<<"$b")"
   has "$fl" "Baseline-fixture sweep when a diff changes a handler's result shape" \
@@ -188,6 +199,25 @@ mutant qa-into-checklist QA \
   '/^## Handoff Evidence Precondition$/{h=1; next} h && /^## Validation Checklist$/{h=0; print; printf "%s", buf; next} h{buf=buf $0 "\n"; next} {print}' \
   "QA:" "qa precondition moved into the shadowed Validation Checklist section is caught" \
   'REJECT without validating further'
+# The dependency-setup row. Its section precedes neither shadowed section in the same way:
+# dev.md's Workflow Per Task sits ABOVE QA Handoff Evidence, so that move buffers the file and
+# re-emits the bullet before the heading; qa.md's Validation Checklist sits BELOW the
+# precondition, so that move streams. Each MOVE leaves the row in the file (asserted), which a
+# whole-file grep would accept. The drops remove one side only, so the dev list and the QA
+# list each hold the row on their own.
+mutant dev-setup-into-workflow DEV \
+  '{a[NR]=$0} END{for(i=1;i<=NR;i++) if(a[i] ~ /^- \*\*The dependency setup that run needs/){s=i; for(e=i+1; e<=NR && a[e] !~ /^- /; e++); break}
+    for(i=1;i<=NR;i++){ if(s && i>=s && i<e) continue; if(s && a[i]=="## QA Handoff Evidence"){for(j=s;j<e;j++) print a[j]; print ""} print a[i] }}' \
+  "DEV: setup --" "the dev setup row moved into the shadowed Workflow Per Task section is caught" \
+  "$SETUP_DEV"
+mutant qa-setup-into-checklist QA \
+  '/^- the dev.s dependency setup for that run/{h=1; buf=$0 "\n"; next} h && /^- /{h=0} h{buf=buf $0 "\n"; next} /^## Validation Checklist$/{print; printf "%s", buf; next} {print}' \
+  "QA: setup --" "the qa setup row moved into the shadowed Validation Checklist section is caught" \
+  "$SETUP_QA"
+mutant dev-no-setup DEV '/^- \*\*The dependency setup that run needs/{s=1; next} s && /^- /{s=0} !s{print}' \
+  "DEV: setup --" "dropping the setup row from dev.md alone is caught"
+mutant qa-no-setup QA '/^- the dev.s dependency setup for that run/{s=1; next} s && /^- /{s=0} !s{print}' \
+  "QA: setup --" "dropping the setup row from qa.md alone is caught"
 mutant cr-no-sweep CR '/Baseline-fixture sweep when a diff changes a handler/{next} {print}' \
   "CR:" "dropping the code-reviewer baseline-fixture sweep is caught"
 mutant no-check-21 GV '/^### 21\. /{print "### Test-strategy deliverable presence"; next} {print}' \
