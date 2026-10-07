@@ -25,9 +25,11 @@ sprint stamp: `<N>` is `sprint_id` from the pipeline snapshot's Sprint
 Context, resolved at `route.md` Step 6 — never the unstamped path, which
 would destroy the prior sprint's evaluation), returning
 only `{artifact_path, summary, gaps}`. Then resume at section 3.
-**Join it, and section 3's party seats, on their DELIVERABLES** — one
-`scripts/ai-dlc/wait-for-deliverable.sh <path> [<path> ...]` call per wave,
-`run_in_background: true` (`_gate-procedures.md`, "Bounded-join beat"). A hand-rolled
+**Join it, and section 3's party seats, on their DELIVERABLES** — the analyst's artifact
+with one `scripts/ai-dlc/wait-for-deliverable.sh <path>` call, and each wave of seat files
+with one `scripts/ai-dlc/wait-for-deliverable.sh --complete <path> [<path> ...]` call, because a
+seat writes early and is finished only at its `seat-complete:` line while the analyst's artifact
+carries none, all `run_in_background: true` (`_gate-procedures.md`, "Bounded-join beat"). A hand-rolled
 `until`/`sleep` wait is a Rule 29 Check A violation; gate Check 25 counts it.
 **Sections 3 onward stay inline in the lead** — section 3 is party mode
 (Rule 20, never offloaded) and sections 4–6 mutate escalations and the

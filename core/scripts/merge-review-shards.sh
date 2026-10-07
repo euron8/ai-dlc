@@ -23,17 +23,20 @@
 #   exactly one row (G=1, i.e. K=2). The table is read from that one speller, never restated
 #   here. Every `cross-<g>` it prints is required; a `cross-<g>` it does not print, `cross.md`
 #   beside any `cross-<g>.md`, `cross.md` when G>1 and `cross-<g>.md` when G=1 are each REFUSED.
-#   THE OWNER RULE. The groups overlap, so each cross finding citing two or more parts is
-#   accepted ONLY from the shard `partition-document.sh --cross-owner <K> <cited ordinals>`
-#   names (`cross` when G=1) and REFUSED from any other, so the worst-of verdict and the
-#   conserved finding count never depend on how the cover overlaps.
+#   THE OWNER RULE. The groups overlap, so each cross finding citing two or more parts has one
+#   owner, the shard `partition-document.sh --cross-owner <K> <cited ordinals>` names (`cross`
+#   when G=1). A cross reviewer reads the WHOLE diff and may cite any part, so a finding outside
+#   its owner's shard is accepted, and REFUSED only when the owner's shard carries a finding
+#   citing the IDENTICAL set -- the one case the two are the same finding.
 #   THE FIRST CROSS SHARD (`cross` when G=1, else `cross-1`) is the EXECUTION owner: it alone
 #   runs in the frozen worktree, which nothing else may mutate -- the suite, mutation-red, every
 #   handed-over replay -- and under --gate qa it alone carries the per-AC table and the deferred
-#   record. Every other cross shard executes nothing and reports only the pair findings it owns.
+#   record. Every other cross shard executes nothing and reports interaction findings only.
 #   SEAT-COMPLETE. A shard dispatched under the early-write brief ends, as its LAST NON-BLANK
-#   line, in `seat-complete: <step> <seat> <shard>`. If ANY shard in the directory carries that
-#   line, every shard must, and one that does not is REFUSED as unfinished. Keyed on the
+#   line, in `seat-complete: <step> <seat> <shard> findings=<n>`, written once as its final
+#   write. If ANY shard in the directory ends in that line, every shard must,
+#   and one that does not is REFUSED as unfinished; a marker whose `findings=<n>` differs from
+#   the findings parsed in its shard is REFUSED as truncated. Keyed on the
 #   marker's presence in the directory, as merge-adversarial-shards.sh keys it: a directory whose
 #   shards predate the brief carries no marker anywhere and merges as before. Its limit: a set in
 #   which NO shard has finished carries no marker either, so this is the belt and
@@ -84,7 +87,7 @@
 #   carries EXACTLY ONE line
 #       parts: <ordinal>[, <ordinal>...]
 #   before the next heading. A part shard cites ONLY its own ordinal; a cross shard cites two
-#   or more DISTINCT ordinals that it OWNS (the owner rule above). Ordinals compare numerically
+#   or more DISTINCT ordinals (the owner rule above). Ordinals compare numerically
 #   (`1` and `01` are one ordinal).
 #   Every shard carries a `## Findings` section, even an empty one; a shard without one is
 #   REFUSED. A `parts:` line anywhere else -- under another `## ` section, before the first
@@ -372,7 +375,9 @@ done
 # If ANY shard's last non-blank line is the marker, every shard's must be. See the header.
 : > "$T/sc" || refuse "cannot stage the completion check"
 while IFS="$TAB" read -r sk sf_; do
-  if awk 'NF { l = $0 } END { exit !(l ~ /^seat-complete: /) }' "$sf_"; then printf 'Y\t%s\n' "$sk" >> "$T/sc"
+  # Y carries the marker's declared count (`findings=<n>`, `-` when absent), checked per shard below.
+  if awk 'NF { l = $0 } END { exit !(l ~ /^seat-complete: /) }' "$sf_"; then
+    printf 'Y\t%s\t%s\n' "$sk" "$(awk 'NF { l = $0 } END { if (match(l, /findings=[0-9]+[ \t]*$/)) { v = substr(l, RSTART + 9); sub(/[ \t]+$/, "", v); print v } else print "-" }' "$sf_")" >> "$T/sc"
   else printf 'N\t%s\t%s\n' "$sk" "$sf_" >> "$T/sc"; fi || refuse "cannot stage the completion check"
 done < "$T/shards"
 if grep -q '^Y' "$T/sc" && grep -q '^N' "$T/sc"; then
@@ -420,6 +425,18 @@ parse_shard() {
 }
 RE_CITED='^[0-9]+(,[0-9]+)*$'
 RE_AC='^[A-Za-z0-9][A-Za-z0-9._-]*$'
+# same_set <file> <label> <ordinals, blank-separated> -> 0 when a column-0 `<label>:` line outside
+# a fence in <file> cites exactly that set of ordinals (order, padding and repeats free).
+same_set() {
+  awk -v lab="$2:" -v want="$3" '
+    BEGIN { n = split(want, w, /[ \t]+/); for (i = 1; i <= n; i++) if (w[i] != "") { W[w[i] + 0] = 1; nw++ } }
+    /^[ \t]*(```|~~~)/ { f = !f; next }
+    f || index($0, lab) != 1 { next }
+    { v = substr($0, length(lab) + 1); m = split(v, a, /[ ,\t]+/); delete G; ng = 0; ok = 1
+      for (i = 1; i <= m; i++) if (a[i] ~ /^[0-9]+$/ && !((a[i] + 0) in G)) { G[a[i] + 0] = 1; ng++; if (!((a[i] + 0) in W)) ok = 0 }
+      if (ok && ng == nw) { hit = 1; exit } }
+    END { exit !hit }' "$1"
+}
 WORST=""; WORST_R=0; NFIND=0; FORCE=""
 : > "$T/hand" && : > "$T/runs" && : > "$T/runords" && : > "$T/htable" || refuse "cannot stage the hand-over set"
 : > "$T/body" || refuse "cannot stage the merged body"
@@ -438,6 +455,11 @@ for key in $ORDINALS $CROSS_KEYS; do
   if [ "$r" -gt "$WORST_R" ]; then WORST_R="$r"; WORST="$v"; fi
   printf '| %s | %s |\n' "$key" "$v" >> "$T/vtable" || refuse "cannot stage the verdict table"
   nf="$(awk '$1 == "C" { print $2 }' "$P")"; NFIND=$((NFIND + ${nf:-0}))
+  # The marker's count against the findings parsed here: a shard truncated after its marker, or
+  # marked before its findings, disagrees.
+  scn="$(awk -F'\t' -v k="$key" '$1 == "Y" && $2 == k { print $3; exit }' "$T/sc")"
+  [ -z "$scn" ] || [ "$scn" = "${nf:-0}" ] \
+    || refuse "$sf ends in 'seat-complete: ... findings=$scn' but its ## Findings section heads ${nf:-0} finding(s); the marker is written once, last, counting the shard's findings"
   [ "$(awk '$1 == "F" { print $2 }' "$P")" = "1" ] \
     || refuse "$sf carries no '## Findings' section; a shard reports its findings there, even when it has none"
   sl="$(awk '$1 == "S" { print $2 }' "$P")"
@@ -543,8 +565,13 @@ for key in $ORDINALS $CROSS_KEYS; do
       own="$(bash "$XPART" --cross-owner "$K" "$(printf '%s' "${distinct# }" | tr ' ' ',')" 2> "$T/own.err" < /dev/null)" \
         || refuse "partition-document.sh --cross-owner $K on$distinct failed: $(head -1 "$T/own.err")"
       if [ "$G" -eq 1 ]; then ownk="cross"; else ownk="cross-$own"; fi
-      [ "$ownk" = "$key" ] \
-        || refuse "$sf:$line ($key) cites$distinct, a finding owned by $ownk (partition-document.sh --cross-owner); a cross shard reports only the findings it owns, or the merged verdict and finding count depend on the cover"
+      # A cross reviewer reads the whole diff and may cite any part, so a finding outside its
+      # owner's shard is accepted -- unless the owner's shard carries the IDENTICAL cited set.
+      if [ "$ownk" != "$key" ]; then
+        osf="$(awk -F'\t' -v k="$ownk" '$1 == k { print $2; exit }' "$T/shards")"
+        ! same_set "$osf" parts "$distinct" \
+          || refuse "$sf:$line ($key) cites$distinct, a finding owned by $ownk (partition-document.sh --cross-owner), whose shard carries the identical set; one finding is reported once, or the merged verdict and finding count depend on the cover"
+      fi
     else
       [ $# -eq 1 ] && [ "$1" = "$key" ] \
         || refuse "$sf:$line (shard $key) cites$distinct; a part shard reports only findings citing its own part alone"

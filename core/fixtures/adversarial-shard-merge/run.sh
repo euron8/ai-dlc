@@ -139,7 +139,7 @@ p_b4doc_other "$MERGE" && ok "U11: --document of an s9 file the manifest does NO
 # ---- the cross groups (BL-464). Every K>=3 shard set owes one cross shard per row of
 # partition-document.sh --cross-groups <K>, in EVERY mode; X1-X3 drive K=8 through each mode (and
 # K=2 through files and --document), each predicate presence-shaped in every cell.
-p_xfiles "$MERGE" && ok "X1: files mode, K=8: cross-1..6 merges (tool_use_id = cross-1's); cross.md alone REFUSED; a finding in its owner AND another covering group REFUSED naming the owner, its owner alone merges major=1; K=2 cross.md merges, K=2 cross-1.md REFUSED" \
+p_xfiles "$MERGE" && ok "X1: files mode, K=8: cross-1..6 merges (tool_use_id = cross-1's); cross.md alone REFUSED; a finding in its owner AND another covering group REFUSED naming the owner, its owner alone merges major=1, a (1, 2, K-1) finding held only by a non-owner merges major=1; K=2 cross.md merges, K=2 cross-1.md REFUSED" \
   || bad "X1: files-mode cross groups (rc=$RC): $(cat "$MO")"
 p_xdoc "$MERGE" && ok "X2: --document, K=8: the same four cells, and K=2 cross.md merges" \
   || bad "X2: --document cross groups (rc=$RC): $(cat "$MO")"
@@ -147,7 +147,7 @@ p_xelicit "$MERGE" && ok "X3: --subject --elicitation over the 6-part subject: c
   || bad "X3: elicitation cross groups (rc=$RC): $(cat "$MO")"
 p_xmix "$MERGE" && ok "X4: cross.md beside cross-1..3.md -> REFUSED as a mix, nothing written" || bad "X4: (rc=$RC) $(cat "$MO")"
 p_xunknown "$MERGE" && ok "X5: cross-7.md at K=3 -> REFUSED, the table does not print group 7, nothing written" || bad "X5: (rc=$RC) $(cat "$MO")"
-p_xcomplete "$MERGE" && ok "X6: one shard ending in seat-complete: makes an unmarked shard an unfinished REFUSAL; every shard marked merges with the markers dropped" \
+p_xcomplete "$MERGE" && ok "X6: one shard ending in seat-complete: makes an unmarked shard an unfinished REFUSAL; every shard marked with its findings=<n> merges with the markers dropped; findings=3 over 2 findings REFUSED as truncated" \
   || bad "X6: seat-complete (rc=$RC): $(cat "$MO")"
 
 # R6: a finding heading EXACTLY as the real pass wrote it carries no severity word, so the heads

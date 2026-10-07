@@ -348,7 +348,14 @@ mutant "MC2 cross.md beside cross-<g>.md not refused as a mix" merge-review-shar
 mutant "MC3 a cross group the table does not print accepted" merge-review-shards.sh "x_unknown" \
   'case " $CROSS_KEYS " in *" $xk "*) ;; *) refuse' 'case " $CROSS_KEYS " in *) ;; NEVER) refuse'
 mutant "MC4 the owner rule dropped" merge-review-shards.sh "x_owner" \
-  '      [ "$ownk" = "$key" ] \' '      true \'
+  '      if [ "$ownk" != "$key" ]; then' '      if false; then'
+# MC11: the pre-v4 rule -- every finding outside its owner's shard refused, identical or not; X5's
+# 1, 2, 7 finding held only by cross-3 is then refused.
+mutant "MC11 non-owner refused whatever its owner carries" merge-review-shards.sh "x_owner" \
+  '        ! same_set "$osf" parts "$distinct" \' '        false \'
+# MC12: the marker's findings=<n> not compared -- X9's truncated shard merges.
+mutant "MC12 the seat-complete count unchecked" merge-review-shards.sh "x_seat" \
+  '  [ -z "$scn" ] || [ "$scn" = "${nf:-0}" ] \' '  true \'
 mutant "MC5 the per-AC table and deferred record accepted outside the first cross shard" merge-review-shards.sh "x_actable" \
   '    elif is_cross "$key"; then' '    elif is_cross "$key"; then :; elif false; then'
 mutant "MC6 a hand-over replay accepted from any cross shard" merge-review-shards.sh "x_horun" \

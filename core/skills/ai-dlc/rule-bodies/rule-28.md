@@ -54,21 +54,20 @@ subagent context and the lead in orchestration (Rule 23).
 WHETHER work is delegated; this clause decides the SHAPE of a
 delegation. When a dispatch's scope partitions along an independent
 axis, the lead dispatches one agent per part, plus one cross-part agent
-where the axis says parts interact, in the waves described below, and
+per cross group where the axis says parts interact, in the waves described below, and
 joins each wave in one bounded-join beat (Rule 29). The axes:
 
 - **files** -- an artifact that is two or more files (`stories/`), or a
   story's changed-file set as `partition-review-diff.sh --map` prints it:
-  one agent per file or part plus one cross-part agent scoped to
-  interactions between them only. Every finding or edit names the parts
+  one agent per file or part plus one cross-part agent per cross group
+  (below), reporting interactions only. Every finding or edit names the parts
   it cites; a per-part agent reports only findings citing its own part
-  alone, the cross-part agent only findings citing two or more. A review
+  alone, a cross-part agent only findings citing two or more. A review
   the program answers `SERIAL` is `shard: 1/1 <story-index>`, never
   `shard: none (…)`.
 - **sections** -- a single document that `partition-document.sh --map`
   partitions: one agent per part the map prints plus one cross-part
-  agent per cross group (below) scoped to interactions between the
-  sections of its group only, citing parts by
+  agent per cross group (below), reporting interactions only, citing parts by
   the same rule as the files axis. A review joins with
   `merge-adversarial-shards.sh --document`; a repair shard edits only
   its section file from `partition-document.sh --split`, and
@@ -92,8 +91,7 @@ joins each wave in one bounded-join beat (Rule 29). The axes:
   base recorded in its manifest (the requirements step's brief, spec,
   PRD and architecture-impact record): one agent per part that
   `partition-subject.sh --map` prints plus one cross-part agent per
-  cross group (below) scoped to interactions between the parts of its
-  group, citing parts by the same rule as the
+  cross group (below), reporting interactions only, citing parts by the same rule as the
   files axis. A file unchanged since the base has no part. A review
   joins with `merge-adversarial-shards.sh --subject`; a repair shard
   edits only its section file and `join-remediator-shards.sh --subject`
@@ -110,14 +108,20 @@ axes, there is one cross-part agent per cross group, not one per round:
 the groups are the rows `partition-document.sh --cross-groups <K>`
 prints for the map's part count K, at most six, and every unordered
 pair of parts lies inside at least one. Each goes out in the same waves
-as the parts. A cross finding is OWNED by the lowest group whose row
-holds its two smallest cited ordinals, as `partition-document.sh
---cross-owner <K> <ordinals>` prints; a cross agent reports only the
-findings it owns, so a pair two groups share is reported once, and the
-join refuses a cross finding outside its owner's shard. Every part and
-cross agent writes its file early and ends it with a `seat-complete:`
-line, and its join beat passes `--complete` (`_gate-procedures.md`,
-"Validation cycle" item 1). A SERIAL map has no cross agent.
+as the parts. A cross agent reads the WHOLE subject: its group's pairs
+are its focus, not its boundary, and it may cite any part. The groups
+cover every pair but not every triple, so a group-bounded read loses
+a finding resting on three or more parts that no group holds, and a
+cross agent's wall clock tracks the tokens it writes, not the bytes it
+reads. A cross finding is OWNED by the lowest group whose row holds its
+two smallest cited ordinals, as `partition-document.sh --cross-owner
+<K> <ordinals>` prints. The join accepts a finding reported outside its
+owner, and refuses it only when the owner's shard carries the identical
+cited set. Every part and cross agent writes its file early
+and ends it with one `seat-complete: ... findings=<n>` line, written
+once as its final write, and its join beat passes `--complete`
+(`_gate-procedures.md`, "Validation cycle" item 1). A SERIAL map has no
+cross agent.
 
 **The partition is derived, never listed.** The part set comes from a
 program or from the tree -- the artifact directory's listing, the

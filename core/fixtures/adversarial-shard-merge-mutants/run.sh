@@ -264,8 +264,17 @@ mutant "XM1 one mode left single-cross" "b3 clean ceiling miss_ord miss_cross pa
 # XM2: the owner rule off -- a finding two covering groups both report is summed twice. Only the
 # duplicate cell of X1-X3 seeds one.
 mutant "XM2 owner rule off (duplicate summed)" "xfiles xdoc xelicit" \
-  '      [ "$ownk" = "$key" ] \' \
-  '      true || [ "$ownk" = "$key" ] \'
+  '      if [ "$ownk" != "$key" ]; then' \
+  '      if false; then'
+# XM7: the pre-v4 rule -- every finding outside its owner's shard refused, identical or not. The
+# (1, 2, K-1) finding only a non-owner holds is then lost, which is the defect; only that cell dies.
+mutant "XM7 non-owner refused whatever its owner carries" "xfiles xdoc xelicit" \
+  '        ! same_set "$osf" "$CITE" "$distinct" \' \
+  '        false \'
+# XM8: the marker's findings=<n> not compared -- a truncated shard merges. Only X6's partial cell.
+mutant "XM8 seat-complete count unchecked" "xcomplete" \
+  '    [ "$scn" = "$nfx" ] \' \
+  '    true \'
 # XM3: the merged tool_use_id taken from the LAST cross group read, not cross-1. Anchored on the
 # EMISSION line, so only the emitted value moves: CROSS_FIRST also keys the files-mode cross
 # artifact agreement, and a mutation there refused every files world for that other reason.

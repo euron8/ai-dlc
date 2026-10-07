@@ -248,6 +248,14 @@ p_xgroups() {
   d="$(xworld "$mode" 8)"; xset "$mode" "$d" "$K" groups; xfind "$mode" "$d" "cross-$own" "1, 2"
   xmerge "$m" "$mode" "$d"
   [ "$RC" -eq 0 ] && has "$MO" "major=1" || return 1
+  # A finding citing (1, 2, K-1) reported ONLY by a non-owner holding 1 and K-1: a cross shard reads
+  # the whole document, and its owner carries nothing identical, so it merges, counted once.
+  local non3
+  non3="$(bash "$PARTITION" --cross-groups "$K" | awk -F'\t' -v o="$own" -v z="$((K - 1))" '$1 != o && ("," $2 ",") ~ /,1,/ && ("," $2 ",") ~ ("," z ",") { print $1; exit }')"
+  [ -n "$non3" ] || return 1
+  d="$(xworld "$mode" 8)"; xset "$mode" "$d" "$K" groups; xfind "$mode" "$d" "cross-$non3" "1, 2, $((K - 1))"
+  xmerge "$m" "$mode" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "major=1" || return 1
   # The merged tool_use_id is cross-1's and the id keys are cross-1..cross-6.
   local o; case "$mode" in files) o="$(out_of "$d")" ;; document) o="$(doc_out_of "$d")" ;; elicit) o="$(dirname "$(dirname "$d")")/requirements-elicitation.md" ;; esac
   grep -q '^tool_use_id: .*cross-1$' "$o" && grep -q ' cross-6=' "$o" && ! grep -q ' cross=' "$o" || return 1
@@ -274,13 +282,21 @@ p_xunknown() { # cross-7.md at K=3 (three groups) -> refused by name
 }
 p_xcomplete() { # seat-complete: one marked shard makes every unmarked one an unfinished refusal;
                 # every shard marked merges and the markers are dropped; none marked merges (pre-release)
-  local m="$1" d f o
-  d="$(b3_world)"; printf '\nseat-complete: stories adversary 1\n' >> "$d/1.md"; run_merge "$m" "$d"
+  local m="$1" d f o n
+  d="$(b3_world)"; printf '\nseat-complete: stories adversary 1 findings=2\n' >> "$d/1.md"; run_merge "$m" "$d"
   refused_clean "does not end in 'seat-complete: '" "$d" || return 1
+  # Every shard marked with its own finding count (B3: 2 per ordinal shard, 0 per cross shard).
   d="$(b3_world)"; o="$(out_of "$d")"
-  for f in "$d"/*.md; do printf '\nseat-complete: stories adversary %s\n\n' "$(basename "$f" .md)" >> "$f"; done
+  for f in "$d"/*.md; do case "$(basename "$f")" in cross*) n=0 ;; *) n=2 ;; esac
+    printf '\nseat-complete: stories adversary %s findings=%s\n\n' "$(basename "$f" .md)" "$n" >> "$f"; done
   run_merge "$m" "$d"
-  [ "$RC" -eq 0 ] && [ -f "$o" ] && ! grep -q '^seat-complete: ' "$o"
+  [ "$RC" -eq 0 ] && [ -f "$o" ] && ! grep -q '^seat-complete: ' "$o" || return 1
+  # All marked, one partial: 1.md declares findings=3 over the 2 it holds -> REFUSED as truncated.
+  d="$(b3_world)"
+  for f in "$d"/*.md; do case "$(basename "$f")" in cross*) n=0 ;; 1.md) n=3 ;; *) n=2 ;; esac
+    printf '\nseat-complete: stories adversary %s findings=%s\n' "$(basename "$f" .md)" "$n" >> "$f"; done
+  run_merge "$m" "$d"
+  refused_clean "findings=3' but its ## Findings section heads 2 finding(s)" "$d"
 }
 
 # THE FIXED SCRATCH PATHS, all of them, bound in ONE place. Every predicate writes either under a

@@ -263,15 +263,20 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    file and its id together.
 
    **Every seat writes its file early and closes it with a completion line.** Its brief tells
-   it to Write the file's header first, append each finding as soon as it is verified, and
-   make the LAST NON-BLANK line `seat-complete: <step> <seat> <shard>` after every edit, where
-   `<shard>` is the brief's `shard:` value. Every adversary shard brief — part or cross, in
-   item 2 and in "Adversarial review dispatch" — carries the same instruction with the
-   adversary in place of the seat. Every beat that joins such a file passes `--complete`
-   (`wait-for-deliverable.sh`, its header): the file counts as DELIVERED only when that line is
-   last, so a file written early is never taken as finished, and a seat still appending shows
-   as progress on its own file rather than as silence. `--complete` and `--progress-path`
-   never go on the same beat.
+   it to Write the file's header first, append each finding as soon as it is verified, and,
+   when it has finished and only then, make ONE final write: the line
+   `seat-complete: <step> <seat> <shard> findings=<n>`, where `<shard>` is the brief's
+   `shard:` value and `<n>` the number of findings in the file. The marker is never written
+   with the header. Every adversary shard brief — part or cross, in item 2 and in "Adversarial
+   review dispatch" — carries the same instruction with the adversary in place of the seat.
+   Every beat that joins such a file passes `--complete` (`wait-for-deliverable.sh`, its
+   header): the file counts as DELIVERED only when that line is last, so a file written early
+   is never taken as finished, and a seat still appending shows as progress on its own file
+   rather than as silence. The beat reads the marker only; `merge-adversarial-shards.sh` and
+   `merge-review-shards.sh` check `findings=<n>` against the findings they parse and refuse a
+   shard that disagrees. A party round's seat files are read by the lead and by
+   `join-remediator-shards.sh`, neither of which checks the count, so on that axis the marker's
+   count has no mechanical reader. `--complete` and `--progress-path` never go on the same beat.
 
    **One repair writer applies them.** After the round's join the lead dispatches the seats'
    findings to remediators, never back to a seat, and every entry of the party repair record
@@ -308,8 +313,8 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
 
    **When the subject is two or more files** (`stories/`), the round is sharded (Rule 28,
    "Split dispatch": seats x parts axis). The invocation brief asks for one persona agent per
-   (seat, story ordinal) plus one cross-story agent per (seat, cross group) scoped to
-   interactions between the stories of its group. The
+   (seat, story ordinal) plus one cross-story agent per (seat, cross group) that reads every
+   story and focuses on its group's pairs ("The cross groups" below). The
    ordinals are the ones `scripts/ai-dlc/merge-adversarial-shards.sh --map <shards-dir>` prints
    (`<shards-dir>` is the next review pass's `s<N>/shards/<artifact>-p<M>/`, which must exist),
    and each agent's brief carries its `shard:` line. A round spawns at most seats x (K + 6)
@@ -317,16 +322,21 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    **When the subject is a single document** (one path), the round is sharded (Rule 28,
    "Split dispatch": seats x sections axis) over the parts
    `scripts/ai-dlc/partition-document.sh --map <doc>` prints: one persona agent per (seat,
-   part ordinal) plus one cross-part agent per (seat, cross group) scoped to interactions between the sections of its group. A `SERIAL:` answer keeps one agent per seat
+   part ordinal) plus one cross-part agent per (seat, cross group) that reads the whole document and focuses on its group's pairs. A `SERIAL:` answer keeps one agent per seat
    (Rule 28 serial exception 4) and has no cross agent. `PART_CAP` in `partition-document.sh` bounds the parts and there are at most six cross groups, so a round
    spawns at most seats x (`PART_CAP` + 6) agents.
    **The cross groups, on every axis**, are the rows
    `scripts/ai-dlc/partition-document.sh --cross-groups <K>` prints, `<g>\t<ordinals>`, K being
    the ordinal count the axis's own `--map` printed. That program is their one speller; every
    unordered pair of parts lies inside at least one group, and G, the row count, is never above
-   six. A cross agent's brief carries the line `shard: cross/<K> g<g>/<G> <ordinals>`, the
-   whole group table, and the owner rule (Rule 28, "Split dispatch"): it reports only the
-   cross findings it owns, so a pair two groups share is reported once.
+   six. A cross agent's brief carries the line `shard: cross/<K> g<g>/<G> <ordinals>` and the
+   whole group table (Rule 28, "Split dispatch"). It reads the WHOLE subject: its group's pairs
+   are its FOCUS, and it may cite any ordinal. The groups cover every pair but not every triple,
+   so a group-bounded read loses a finding resting on three or more parts that no group holds;
+   wall clock tracks the tokens a cross agent writes, not the bytes it reads, so the whole read
+   costs little and the focus is what shortens it. Each cross finding has one owner,
+   `partition-document.sh --cross-owner`; the merge refuses a finding reported outside its owner
+   only when the owner's shard carries the identical cited set, and accepts any other.
    **When the subject is the requirements subject** (`steps/requirements.md` section 5: the
    brief, `SPEC.md`, `prd.md` and `architecture-impact.md` under one base), the round is
    sharded (Rule 28, "Split dispatch": seats x subject-parts axis) over the parts
@@ -381,16 +391,16 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    **When the subject is the requirements subject**, elicitation is sharded (Rule 28, "Split
    dispatch": subject axis): one `adversary` per part of the subject map, each invoking
    `/bmad-advanced-elicitation` in its own context scoped to its part, plus one cross-part
-   `adversary` per cross group (item 1, "The cross groups") scoped to interactions between the
-   parts of its group, all in the same waves. They record findings and edit nothing, and each
+   `adversary` per cross group (item 1, "The cross groups") that reads the whole subject and
+   focuses on its group's pairs, all in the same waves. They record findings and edit nothing, and each
    writes early and closes with its `seat-complete:` line as item 1 states. Each writes to
    `_bmad-output/planning-artifacts/s<N>/shards/requirements-elicitation/<ordinal>.md` (a
    cross shard: `cross-<g>.md`, or `cross.md` when there is one group) with `skill: bmad-advanced-elicitation` and no `verdict:` line,
    since elicitation is not a convergence pass. Beat-join every shard path with `--complete`, then run
    `scripts/ai-dlc/merge-adversarial-shards.sh --subject <N> --base <base sha from the manifest> --elicitation <that dir>`.
    It refuses unless every ordinal and every cross group delivered exactly once, every finding
-   cites ordinals within the partition, and every cross finding is in the shard of the group
-   that owns it, and then writes
+   cites ordinals within the partition, and no cross finding outside its owner's shard repeats
+   one the owner carries, and then writes
    `_bmad-output/planning-artifacts/s<N>/requirements-elicitation.md` with no verdict. The
    elicitation repair is dispatched as the party repair is, with `--pass elicitation`, the shard
    dir `s<N>/shards/requirements-elicitation-repair/`, and the merged record's per-stem
@@ -401,7 +411,7 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    `_bmad-output/planning-artifacts/s<N>/requirements-subject.md`, `artifact_sha:` as one
    `<stem>=<sha>` token for each of the four subject stems, each equal to that file's sha256 on
    disk, and one `sections:` line citing map ordinals on every finding (a part shard only its own,
-   a cross shard two or more, only for findings its group owns). The merge refuses a shard missing any of them.
+   a cross shard two or more, any of them). The merge refuses a shard missing any of them.
    **A subject that maps to one part** (`partition-subject.sh --map` exits 3) is never merged:
    `merge-adversarial-shards.sh --subject` refuses it, and `--elicitation` has no single-adversary
    form. ONE adversary, briefed `shard: none (serial-document)` (Rule 28 exception 4), runs
@@ -477,11 +487,12 @@ SKILL.md Rule 19 (both bindings: `model` and the standing role-contract Read lin
 artifact path under review, the canonical output path, the pass number, and — on pass 2+ — the
 PRIOR pass's findings and the repair record, because pass 2+ reviews the REPAIR, not the document
 again. Every adversary brief, sharded or not, also carries the early-write instruction of
-"Validation cycle" item 1: header first, each finding appended as verified, and the last
-non-blank line `seat-complete: <step> adversary <shard>` after every edit, `<shard>` being the
-brief's `shard:` value (`none` when it carries none). On every axis, once ANY shard in the
-directory ends on a `seat-complete:` line, the merge refuses every shard in it whose last
-non-blank line is not one. Its limit: a directory where no shard carries the marker merges
+"Validation cycle" item 1: header first, each finding appended as verified, and ONE final
+write once it has finished, never with the header: `seat-complete: <step> adversary <shard>
+findings=<n>`, `<shard>` being the brief's `shard:` value (`none` when it carries none) and
+`<n>` its `### ` findings. On every axis, once ANY shard in the directory carries a
+`seat-complete:` line anywhere, the merge refuses every shard in it that does not end in
+exactly one, or whose `findings=<n>` differs from the findings it parses there. Its limit: a directory where no shard carries the marker merges
 unchecked, exactly as before. That is a directory written before this instruction, and also a
 round where no shard has finished — which the join's `--complete` beat, not the merge, keeps
 from reaching the merge. The merged record's `tool_use_id` is the first cross group's shard's.
@@ -501,14 +512,14 @@ cross-story shard per cross group, in waves (Rule 28, "Split dispatch"). The par
 `scripts/ai-dlc/merge-adversarial-shards.sh --map <that dir>`, which prints
 `<ordinal>\t<basename>` per story. Each per-story shard gets its ordinal and basename, the line
 `shard: <ordinal>/<K> <basename>`, and the output path `<that dir>/<ordinal>.md`. Each cross-story
-shard gets `shard: cross/<K> g<g>/<G> <ordinals>`, the whole map, the whole group table, the
-owner rule, a scope limited to interactions between the stories of its group, and
-`<that dir>/cross-<g>.md` (`<that dir>/cross.md` when G is 1). Every finding carries one `stories:` line in the grammar
+shard gets `shard: cross/<K> g<g>/<G> <ordinals>`, the whole map, the whole group table, every
+story to read, its group's pairs as its focus ("Validation cycle" item 1, "The cross groups"),
+and `<that dir>/cross-<g>.md` (`<that dir>/cross.md` when G is 1). Every finding carries one `stories:` line in the grammar
 `merge-adversarial-shards.sh` defines. Beat-join every shard path with `--complete`, then run the join
 `scripts/ai-dlc/merge-adversarial-shards.sh <that dir>`. It refuses (exit 2, `REFUSED:`, nothing
 written) unless every ordinal and every cross group delivered exactly once, every finding
-respects the partition, every cross finding sits in the shard of the group that owns it, and
-every cross shard's `artifact:` equals `cross-1`'s. It then sums the counts, recomputes the verdict (a shard's own verdict is
+respects the partition, no cross finding outside its owner's shard repeats the owner's identical
+cited set, and every cross shard's `artifact:` equals `cross-1`'s. It then sums the counts, recomputes the verdict (a shard's own verdict is
 advisory) and writes the one `<artifact>-adversarial-p<M>.md` above. Check 24 reads that file as
 it reads an unsharded pass. A single-file artifact is sharded by section (below), and passes stay
 serial (exception 2).
@@ -523,15 +534,15 @@ review is one file, run `scripts/ai-dlc/partition-document.sh --map <artifact pa
 range and heading, the line `shard: <ordinal>/<K> <heading>`, and the output path
 `<that dir>/<ordinal>.md`; it reads its line range of the REAL document, read-only, never a copy.
 Each cross-section shard gets `shard: cross/<K> g<g>/<G> <ordinals>`, the whole map, the whole
-group table, the owner rule, a scope limited to interactions between the sections of its group,
+group table, the whole document to read and its group's pairs as its focus,
 and `<that dir>/cross-<g>.md` (`<that dir>/cross.md` when G is 1). Every finding carries one `sections:`
-line citing map ordinals (a part shard only its own, a cross shard two or more, only for findings its group owns), and every
+line citing map ordinals (a part shard only its own, a cross shard two or more, any of them), and every
 shard notarizes the WHOLE document's `artifact_sha` with `artifact:` naming the document. Beat-join
 every shard path with `--complete`, then run the join
 `scripts/ai-dlc/merge-adversarial-shards.sh --document <artifact path> <that dir>`. It re-derives
 the ordinal set from `--map` and the groups from `--cross-groups`, refuses (exit 2, `REFUSED:`, nothing written) unless every ordinal
 and every cross group delivered exactly once, every finding cites `sections:` within the partition,
-every cross finding sits in its owner's shard, and every shard notarized the document's current sha, then writes the one
+no cross finding outside its owner's shard repeats the owner's identical cited set, and every shard notarized the document's current sha, then writes the one
 `<artifact>-adversarial-p<M>.md` above.
 
 **Shard the requirements subject (Rule 28, "Split dispatch": subject axis).** When the artifact
@@ -547,16 +558,16 @@ and `artifact_sha:` as one `<stem>=<sha>` entry per subject file. Otherwise disp
 cross-part shard per cross group. Each part shard gets its ordinal, its file, its line range and heading, the
 line `shard: <ordinal>/<K> <file-stem> <heading>`, and the output path `<that dir>/<ordinal>.md`;
 it reads its line range of the REAL file, read-only. Each cross-part shard gets
-`shard: cross/<K> g<g>/<G> <ordinals>`, the whole map, the whole group table, the owner rule, a
-scope limited to interactions between the parts of its group — across files as well as within
-one — and `<that dir>/cross-<g>.md` (`<that dir>/cross.md` when G is 1). Every finding carries one
-`sections:` line citing map ordinals (a part shard only its own, a cross shard two or more, only for findings its group owns).
+`shard: cross/<K> g<g>/<G> <ordinals>`, the whole map, the whole group table, the whole subject
+to read — across files as well as within one — with its group's pairs as its focus,
+and `<that dir>/cross-<g>.md` (`<that dir>/cross.md` when G is 1). Every finding carries one
+`sections:` line citing map ordinals (a part shard only its own, a cross shard two or more, any of them).
 Every shard notarizes `artifact:` = the subject manifest and `artifact_sha:` as one
 `<stem>=<sha>` entry per subject file, as the files are on disk. Beat-join every shard path with `--complete`,
 then run `scripts/ai-dlc/merge-adversarial-shards.sh --subject <N> --base <base sha> <that dir>`.
 It re-derives the ordinal set from `partition-subject.sh --map` and the groups from `--cross-groups`, refuses (exit 2, `REFUSED:`,
 nothing written) unless every ordinal and every cross group delivered exactly once, every
-finding cites ordinals within the partition, every cross finding sits in its owner's shard, and every per-stem sha matches the disk, then
+finding cites ordinals within the partition, no cross finding outside its owner's shard repeats the owner's identical cited set, and every per-stem sha matches the disk, then
 sums the counts, recomputes the verdict and writes
 `_bmad-output/planning-artifacts/s<N>/requirements-adversarial-p<M>.md`. `--document` refuses a
 shard dir named `requirements-p<M>`, so no sharded pass of this series is written in document

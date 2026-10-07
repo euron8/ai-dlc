@@ -312,18 +312,19 @@ refusal line verbatim in the story's gate log. Otherwise dispatch one reviewer
 per line the map prints, briefed `shard: <i>/<N> <group>` with the map
 and its shard path `<ordinal>.md` in the shard directory, plus one cross
 reviewer per row `partition-document.sh --cross-groups <K>` prints (K = N), briefed
-`shard: cross/<K> g<g>/<G> <ordinals>` with the whole group table, the owner
-rule (report only the findings `partition-document.sh --cross-owner` assigns
-to your group) and its shard path `cross-<g>.md`, or `cross.md` when the table
+`shard: cross/<K> g<g>/<G> <ordinals>` with the whole group table, the whole
+diff to read with its group's pairs as its focus (it may cite any part; Rule 28,
+"The cross-part agent is sharded too") and its shard path `cross-<g>.md`, or `cross.md` when the table
 has one row (Rule 28, "Split dispatch": files axis). Part reviewers EXECUTE
 NOTHING -- no tests, no `validate-mutation-red.sh`, no build; they read their
 part and report. The first cross reviewer (`cross-1`, or `cross` when there is
 one) owns every execution step the role requires, the suite and mutation-red,
 run once in the frozen worktree; every other cross reviewer executes nothing.
 Every shard writes its header first, appends each finding as it is verified,
-and ends with the last non-blank line `seat-complete: implementation
-code-reviewer <shard>` after every edit; the join beat passes
-`wait-for-deliverable.sh --complete`. Join in the frozen worktree with
+and, once finished, makes ONE final write, never with its header: the line
+`seat-complete: implementation code-reviewer <shard> findings=<n>`, <n> its
+`#### ` findings; the join beat passes `wait-for-deliverable.sh --complete`,
+and the merge refuses a count that disagrees. Join in the frozen worktree with
 `merge-review-shards.sh <shard-dir> --gate code-review --out docs/reviews/s<N>/<story-index>-code-review.md`,
 passing the pass-specific name on a later pass (`-p2`, ...). The merge
 re-derives the parts, refuses (exit 2, nothing written) on a missing,
@@ -368,8 +369,8 @@ prints, briefed `shard: <i>/<N> <group>` with the map and the absolute path of
 its shard file `<ordinal>.md` in the shard directory, in Rule 28 waves
 ("Split dispatch": files axis). The part QAs are dispatched first; the cross
 QAs, one per row `partition-document.sh --cross-groups <K>` prints (K = N), briefed
-`shard: cross/<K> g<g>/<G> <ordinals>` with the whole group table and the owner
-rule, each writing `cross-<g>.md` there (`cross.md` when the table has one
+`shard: cross/<K> g<g>/<G> <ordinals>` with the whole group table and the whole
+diff to read, each writing `cross-<g>.md` there (`cross.md` when the table has one
 row), are dispatched only after every part shard file exists, and the first
 cross QA's brief names the absolute path of every part shard file. That
 ordering is Rule 28's serial exception 1 ("Split dispatch"), a true data
@@ -377,10 +378,11 @@ dependency: the first cross QA reads what the parts wrote. The first cross QA
 (`cross-1`, or `cross`) is the execution owner: it alone runs in the frozen
 worktree, runs every handed-over replay and writes the per-AC table and the
 `## Deferred ACs` section; every other cross QA executes nothing and reports
-only the pair findings it owns. Every shard writes its header first, appends
-each finding as it is verified, and ends with the last non-blank line
-`seat-complete: implementation qa <shard>` after every edit; the join beat
-passes `wait-for-deliverable.sh --complete`.
+interaction findings only, focused on its group's pairs. Every shard writes its
+header first, appends each finding as it is verified, and, once finished, makes
+ONE final write, never with its header: `seat-complete: implementation qa
+<shard> findings=<n>`, <n> its `#### ` findings; the join beat passes
+`wait-for-deliverable.sh --complete`, and the merge refuses a count that disagrees.
 Each shard gets the go-signal
 `gate-2 go-signal: <story-id> @ <SHA>` with the full SHA the manifest records.
 Part QAs read their part, score the part-local checklist items and replay the

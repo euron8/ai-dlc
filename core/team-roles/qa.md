@@ -360,13 +360,15 @@ their own heading; a second verdict line carrying a different member fails Check
 the part map, and the ABSOLUTE path of the one shard file you write:
 `<ordinal>.md`, or `cross-<g>.md` (`cross.md` when there is one cross group)
 in the shard directory. A cross brief also carries the whole group table from
-`partition-document.sh --cross-groups <K>` and the owner rule: report only
-the findings `partition-document.sh --cross-owner` assigns to your group,
-because the merge refuses one reported by any other. Write there and nowhere
-else, never to the validation file above. Write your header first, append each
-finding as you verify it, and make your LAST non-blank line
-`seat-complete: implementation qa <shard>` after every edit; the lead's join
-waits for that line. The go-signal SHA is the frozen sha. Your
+`partition-document.sh --cross-groups <K>`. As a cross shard, read the WHOLE
+diff: your group's pairs are your FOCUS, and you may cite any part. The merge
+refuses your finding only when the group `partition-document.sh --cross-owner`
+names already carries the identical `parts:` set. Write there and nowhere
+else, never to the validation file above. Write your header first and append
+each finding as you verify it. When you have finished, and only then, make ONE
+final write: `seat-complete: implementation qa <shard> findings=<n>`, <n> being
+the number of `#### ` findings in your file, never with your header; the lead's
+join waits for that line and the merge refuses a count that disagrees. The go-signal SHA is the frozen sha. Your
 `reviewed-sha:` line carries it in FULL (40 or 64 hex characters) even when the
 go-signal abbreviates it, so resolve it with `git rev-parse` in the frozen
 worktree.

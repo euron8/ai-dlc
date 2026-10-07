@@ -77,13 +77,16 @@
 #
 # THE OWNER RULE. The cross groups overlap (every unordered pair of units is in at least one
 #   group, some pairs in several), so a finding two groups both see would be summed twice. Each
-#   cross-shard finding is therefore accepted ONLY from the group that owns it -- the one
-#   `partition-document.sh --cross-owner <K> <cited ordinals>` names -- and refused from any
-#   other, so the summed counts do not depend on how the cover overlaps.
+#   cross finding has one owner, the group `partition-document.sh --cross-owner <K> <cited
+#   ordinals>` names. A cross shard reads the WHOLE document and may cite any ordinal, so a
+#   finding outside its owner's shard is accepted, and REFUSED only when the owner's shard
+#   carries a finding citing the IDENTICAL set -- the one case the two are the same finding.
 #
 # SEAT-COMPLETE. A shard dispatched under the early-write brief ends, as its LAST NON-BLANK line,
-#   in `seat-complete: <step> <adversary> <shard>`. If ANY shard in the directory carries that
-#   line, every shard must, and one that does not is REFUSED as unfinished. Keyed on the marker's
+#   in `seat-complete: <step> adversary <shard> findings=<n>`, written once as its final write.
+#   If ANY shard in the directory ends in that line, every shard must, and one
+#   that does not is REFUSED as unfinished; a marker whose `findings=<n>` differs from the
+#   findings parsed in its shard is REFUSED as truncated. Keyed on the marker's
 #   presence in the directory, not on an install stamp: this merge resolves no root and reads no
 #   git, and a directory whose shards predate the brief carries no marker anywhere and merges as
 #   before. Its limit: a set in which NO shard has finished yet carries no marker either, so this
@@ -107,8 +110,8 @@
 #   of CRITICAL / MAJOR / MINOR / NIT in the heading. Each finding carries EXACTLY ONE line
 #       stories: <ordinal>[, <ordinal>...]          e.g. `stories: 03` or `stories: 01, 04`
 #   outside a fence, citing ordinals from `--map`. A per-ordinal shard may cite ONLY its own
-#   ordinal; a cross shard only findings citing two or more DISTINCT ordinals that it OWNS (the
-#   owner rule above). Every cited ordinal must be within 1..K.
+#   ordinal; a cross shard only findings citing two or more DISTINCT ordinals (the owner rule
+#   above). Every cited ordinal must be within 1..K.
 #   Per shard, the CRITICAL-heading count must equal `findings_critical` and the MAJOR-heading
 #   count `findings_major` -- otherwise the partition is checked over findings that are not
 #   the ones the counts describe.
@@ -423,7 +426,9 @@ done
 # If ANY shard's last non-blank line is the marker, every shard's must be. See the header.
 : > "$T/sc" || refuse "cannot stage the completion check"
 while IFS="$(printf '\t')" read -r sk sf_; do
-  if awk 'NF { l = $0 } END { exit !(l ~ /^seat-complete: /) }' "$sf_"; then printf 'Y\t%s\n' "$sk" >> "$T/sc"
+  # Y carries the marker's declared count (`findings=<n>`, `-` when absent), checked per shard below.
+  if awk 'NF { l = $0 } END { exit !(l ~ /^seat-complete: /) }' "$sf_"; then
+    printf 'Y\t%s\t%s\n' "$sk" "$(awk 'NF { l = $0 } END { if (match(l, /findings=[0-9]+[ \t]*$/)) { v = substr(l, RSTART + 9); sub(/[ \t]+$/, "", v); print v } else print "-" }' "$sf_")" >> "$T/sc"
   else printf 'N\t%s\t%s\n' "$sk" "$sf_" >> "$T/sc"; fi
 done < "$T/shards"
 if grep -q '^Y' "$T/sc" && grep -q '^N' "$T/sc"; then
@@ -504,6 +509,19 @@ resolve_artifact() {
     d="$(dirname "$d")"
   done
   return 0
+}
+
+# same_set <file> <label> <ordinals, blank-separated> -> 0 when a column-0 `<label>:` line outside
+# a fence in <file> cites exactly that set of ordinals (order, padding and repeats free).
+same_set() {
+  awk -v lab="$2:" -v want="$3" '
+    BEGIN { n = split(want, w, /[ \t]+/); for (i = 1; i <= n; i++) if (w[i] != "") { W[w[i] + 0] = 1; nw++ } }
+    /^[ \t]*(```|~~~)/ { f = !f; next }
+    f || index($0, lab) != 1 { next }
+    { v = substr($0, length(lab) + 1); m = split(v, a, /[ ,\t]+/); delete G; ng = 0; ok = 1
+      for (i = 1; i <= m; i++) if (a[i] ~ /^[0-9]+$/ && !((a[i] + 0) in G)) { G[a[i] + 0] = 1; ng++; if (!((a[i] + 0) in W)) ok = 0 }
+      if (ok && ng == nw) { hit = 1; exit } }
+    END { exit !hit }' "$1"
 }
 
 S_CRIT=0; S_PRIOR=0; S_MAJOR=0; S_UNDER=0; S_MINOR=0; WALL_LIST=""
@@ -652,8 +670,14 @@ for key in $ORDINALS $CROSS_KEYS; do
       own="$(bash "$XPART" --cross-owner "$K" "$(printf '%s' "${distinct# }" | tr ' ' ',')" 2> "$T/own.err")" \
         || refuse "partition-document.sh --cross-owner $K on$distinct failed: $(head -1 "$T/own.err")"
       [ "$G" -eq 1 ] && ownk="cross" || ownk="cross-$own"
-      [ "$ownk" = "$key" ] \
-        || refuse "$sf:$line ($key) cites$distinct, a finding owned by $ownk (partition-document.sh --cross-owner); a cross shard reports only the findings it owns, or the summed counts depend on the cover"
+      # A cross shard reads the whole document and may cite any ordinal, so a finding outside its
+      # owner's shard is accepted -- unless the owner's shard carries the IDENTICAL cited set, the
+      # one case the two are the same finding and would be summed twice.
+      if [ "$ownk" != "$key" ]; then
+        osf="$(awk -F'\t' -v k="$ownk" '$1 == k { print $2; exit }' "$T/shards")"
+        ! same_set "$osf" "$CITE" "$distinct" \
+          || refuse "$sf:$line ($key) cites$distinct, a finding owned by $ownk (partition-document.sh --cross-owner), whose shard carries the identical set; one finding is reported once, or the summed counts depend on the cover"
+      fi
     else
       [ $# -eq 1 ] && [ "$1" = "$key" ] \
         || refuse "$sf:$line (shard $key) cites$distinct; a per-ordinal shard reports only findings citing its own ordinal alone"
@@ -661,6 +685,14 @@ for key in $ORDINALS $CROSS_KEYS; do
   done < "$P"
   [ "$n_crit_h" -eq "$crit" ] && [ "$n_major_h" -eq "$major" ] \
     || refuse "$sf declares $crit CRITICAL / $major MAJOR but its ## Findings section heads $n_crit_h CRITICAL / $n_major_h MAJOR findings"
+  # The marker's count against the findings parsed here: a shard truncated after its marker, or
+  # marked before its findings, disagrees.
+  scn="$(awk -F'\t' -v k="$key" '$1 == "Y" && $2 == k { print $3; exit }' "$T/sc")"
+  if [ -n "$scn" ]; then
+    nfx="$(grep -c '^X ' "$P")" || nfx=0
+    [ "$scn" = "$nfx" ] \
+      || refuse "$sf ends in 'seat-complete: ... findings=$scn' but its ## Findings section heads $nfx finding(s); the marker is written once, last, counting the shard's findings"
+  fi
 
   S_CRIT=$((S_CRIT + crit)); S_PRIOR=$((S_PRIOR + prior)); S_MAJOR=$((S_MAJOR + major))
   S_UNDER=$((S_UNDER + under)); S_MINOR=$((S_MINOR + minor))

@@ -178,7 +178,7 @@ arm x_only "X2: K=8, and K=3, with one cross.md in place of the cross groups -> 
 arm x_mix "X3: cross.md beside cross-1..3 -> REFUSED as a mix, nothing at --out" "X3: cross.md and cross-<g>.md merged together"
 arm x_unknown "X4: cross-4 at K=3, and cross-1.md in place of cross.md at K=2 -> each REFUSED as a group --cross-groups does not print" \
               "X4: a cross shard naming a group the table does not print was merged"
-arm x_owner "X5: K=8, a finding citing 1, 2 in cross-3 (inside its group, owned by cross-1) -> REFUSED naming the owner; the same finding in cross-1 merges and the finding count rises by one" \
+arm x_owner "X5: K=8, a finding citing 1, 2 in cross-3 AND in its owner cross-1 -> REFUSED naming the owner; 1, 2, 7 in cross-3 alone merges, count +1; the same finding in cross-1 merges and the finding count rises by one" \
             "X5: a cross finding reported by a group that does not own it was merged, or its owner's copy was refused"
 arm x_actable "X6: --gate qa, the per-AC table in cross-2 and the deferred record in cross-3 -> each REFUSED, only cross-1 writes them" \
               "X6: a per-AC table or deferred record outside cross-1 was merged"
@@ -186,7 +186,7 @@ arm x_horun "X7: --gate qa, part 2's hand-over replayed by cross-2 rather than c
             "X7: a hand-over replayed by a cross group other than the execution owner was merged"
 arm x_k2 "X8: K=2 -- cross.md merges under both gates, titled 'merged from 3 shards', its body header '## Shard: cross'" \
          "X8: a K=2 shard dir with its one cross.md did not merge as before"
-arm x_seat "X9: one shard without 'seat-complete:' beside shards with it, and a marker that is not the last non-blank line -> each REFUSED; every shard ending in it (blank lines after) merges, the marker dropped" \
+arm x_seat "X9: one shard without 'seat-complete:' beside shards with it, a marker that is not the last non-blank line, and findings=3 over 1 finding -> each REFUSED; every shard ending in it (blank lines after) merges, the marker dropped" \
            "X9: an unfinished shard was merged beside finished ones, or finished shards were refused"
 
 # THE PROGRAMS ARE NOTHING IF THE LEAD IS NEVER TOLD TO RUN THEM. Every arm above drives the two
@@ -602,7 +602,7 @@ fi
 # every part shard and writing `handover-run:`); the Deliver-before-idle bullet (the first cross
 # shard, cross-1, delivers the count of hand-overs it ran).
 p_ho_step() { local t; t="$(step2_para "$1" | joined)"
-  grep -qF 'The part QAs are dispatched first; the cross QAs, one per row `partition-document.sh --cross-groups <K>` prints (K = N), briefed `shard: cross/<K> g<g>/<G> <ordinals>` with the whole group table and the owner rule, each writing `cross-<g>.md` there (`cross.md` when the table has one row), are dispatched only after every part shard file exists, and the first cross QA'"'"'s brief names the absolute path of every part shard file.' <<<"$t" \
+  grep -qF 'The part QAs are dispatched first; the cross QAs, one per row `partition-document.sh --cross-groups <K>` prints (K = N), briefed `shard: cross/<K> g<g>/<G> <ordinals>` with the whole group table and the whole diff to read, each writing `cross-<g>.md` there (`cross.md` when the table has one row), are dispatched only after every part shard file exists, and the first cross QA'"'"'s brief names the absolute path of every part shard file.' <<<"$t" \
     && grep -qF 'Before scoring, the first cross QA reads every part shard file for `handover:` lines, runs each handed-over replay and records it as a `handover-run:` line' <<<"$t"; }
 p_ho_role() { local t; t="$(role_sect "$1" | joined)"
   grep -qF 'The hand-over finding goes under `### Important`, never under a `### Deferred` container, and carries exactly one column-0 `handover: <AC-id>` line beside its `parts:` line.' <<<"$t" \
@@ -613,7 +613,7 @@ p_ho_deliver() { local t; t="$(role_bullet "$1" Communication '- **Deliver befor
 # placed under Deferred; the ordering sentence moved out of its paragraph; the cross delivery dropped.
 sed -e 's/^("Split dispatch": files axis)\. The part QAs are dispatched first; the cross$/("Split dispatch": files axis), together with the cross/' "$STEP_MD" > "$WORK/ho-step-onewave.md"
 sed -e 's/^the first cross QA reads every part shard file for `handover:` lines, runs each$/the first cross QA may read a part shard file for `handover:` lines, runs each/' "$STEP_MD" > "$WORK/ho-step-noread.md"
-awk '/^\*\*Gate-2 dispatch:/ { p = 1 } p && /^[[:space:]]*$/ && !d { print; print "The part QAs are dispatched first; the cross QAs, one per row `partition-document.sh --cross-groups <K>` prints (K = N), briefed `shard: cross/<K> g<g>/<G> <ordinals>` with the whole group table and the owner rule, each writing `cross-<g>.md` there (`cross.md` when the table has one row), are dispatched only after every part shard file exists, and the first cross QA'"'"'s brief names the absolute path of every part shard file."; d = 1; p = 0 }
+awk '/^\*\*Gate-2 dispatch:/ { p = 1 } p && /^[[:space:]]*$/ && !d { print; print "The part QAs are dispatched first; the cross QAs, one per row `partition-document.sh --cross-groups <K>` prints (K = N), briefed `shard: cross/<K> g<g>/<G> <ordinals>` with the whole group table and the whole diff to read, each writing `cross-<g>.md` there (`cross.md` when the table has one row), are dispatched only after every part shard file exists, and the first cross QA'"'"'s brief names the absolute path of every part shard file."; d = 1; p = 0 }
      /^\("Split dispatch": files axis\)\. The part QAs are dispatched first; the cross$/ { print "(\"Split dispatch\": files axis), together with the cross"; next } { print }' "$STEP_MD" > "$WORK/ho-step-moved.md"
 grep -q '^("Split dispatch": files axis), together with the cross$' "$WORK/ho-step-moved.md" || cp "$STEP_MD" "$WORK/ho-step-moved.md"
 sed -e 's/^`### Important`, never under a `### Deferred` container, and carries exactly$/`### Deferred ACs`, and carries exactly/' "$QA_MD" > "$WORK/ho-role-deferred.md"

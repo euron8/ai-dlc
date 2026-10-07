@@ -262,7 +262,8 @@ set -u
 #
 #   DELIVERED additionally requires the file's LAST NON-BLANK line to begin
 #   `seat-complete: `. A marker anywhere else is not completion -- the brief makes it
-#   the last line after every edit, so a finding appended after it reopens the file.
+#   one final write, so a finding appended after it reopens the file. The beat reads the
+#   marker only; the merges check its `findings=<n>` count.
 #   Trailing blank lines are skipped, not read as the last line.
 #
 #   PROGRESS is per target and needs no --progress-path: each target carries its OWN

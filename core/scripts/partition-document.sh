@@ -44,8 +44,10 @@
 #   one group holding every ordinal, and every K >= 3 run differs from it.
 #   THE OWNER RULE. A cross finding is OWNED by the LOWEST g whose group contains its two
 #   SMALLEST cited ordinals (distinct, numerically). Every pair lies in some group, so every
-#   finding citing two or more ordinals has exactly one owner; a shard reports only the
-#   findings it owns, so summed counts never depend on the cover's overlaps.
+#   finding citing two or more ordinals has exactly one owner. A group is a cross agent's FOCUS,
+#   not its read scope: the groups cover every pair, not every triple, so a cross agent reads the
+#   whole document and may cite any ordinal. The merges accept an out-of-owner finding unless
+#   its owner's shard carries the IDENTICAL cited set, which they refuse as the same finding.
 #
 # THE GRAMMAR (nothing else in core may restate it; callers read `--map`)
 #   Atoms are `## ` headings OUTSIDE fences and OUTSIDE HTML comments.

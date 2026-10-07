@@ -928,6 +928,7 @@ QT_X_AC="(cross-2) carries a '## Acceptance Criteria' section; only cross-1, the
 QT_X_DEF="(cross-3) carries a '## Deferred ACs' section; only cross-1, the execution owner"
 QT_X_HORUN="(cross-2) carries a 'handover-run:' line; only cross-1, the execution owner"
 QT_X_SEAT="does not end in 'seat-complete: ' while another shard"
+QT_X_COUNT="findings=3' but its ## Findings section heads 1 finding(s)"
 xfinding() { # <shard-file> <heading-id> <cite>: a second finding, inside ## Findings, before ### Important
   awk -v h="$2" -v c="$3" '/^### Important/ && !d { printf "#### %s an interaction\nparts: %s\n\nBody.\n\n", h, c; d = 1 } { print }' \
     "$1" > "$1.x" && mv "$1.x" "$1" && grep -q "^#### $2 " "$1"
@@ -966,13 +967,21 @@ p_x_unknown() { # X4: cross-4 at K=3 (G=3), and cross-1.md in place of cross.md 
   refused_clean "is cross-1, which partition-document.sh --cross-groups 2 does not print" "$d"
 }
 p_x_owner() { # X5: K=8; a finding citing 1, 2 (inside groups 1, 2 and 3; owned by 1) reported by
-  # cross-3 -> REFUSED. The ALLOW twin, same run: the same finding reported by cross-1 merges and
-  # the conserved finding count rises by exactly one.
+  # cross-3 AND by its owner cross-1 -> REFUSED, the identical set. A finding citing 1, 2, 7 reported
+  # by cross-3 alone (owned by 1, which holds no 7) merges: a cross reviewer reads the whole diff.
+  # The ALLOW twin, same run: the 1, 2 finding reported by cross-1 alone merges and the conserved
+  # finding count rises by exactly one.
   local sd="$1" d o n0 SHARD_SHA="$E_SHA"
   d="$(kworld "$sd" "$REPO_E" "$E_BASE" "$E_SHA" 8 code-review APPROVED)" || return 1
   grep -q '^parts: 1, 2$' "$d/cross-3.md" && return 1   # the seed must not already carry it
-  xfinding "$d/cross-3.md" F-dup "1, 2" || return 1
+  xfinding "$d/cross-3.md" F-dup "1, 2" || return 1; xfinding "$d/cross-1.md" F-own "1, 2" || return 1
   o="$(out_of "$d")"; run_merge "$sd" "$d"; refused_clean "$QT_X_OWNER" "$d" || return 1
+  d="$(kworld "$sd" "$REPO_E" "$E_BASE" "$E_SHA" 8 code-review APPROVED)" || return 1
+  o="$(out_of "$d")"; run_merge "$sd" "$d"; [ "$RC" -eq 0 ] || return 1
+  n0="$(sed -n 's/.* findings=\([0-9]*\) .*/\1/p' "$MO")"; rm -f "$o"
+  xfinding "$d/cross-3.md" F-tri "1, 2, 7" || return 1
+  run_merge "$sd" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "findings=$((n0 + 1)) " && has "$o" "#### F-tri " || return 1
   d="$(kworld "$sd" "$REPO_E" "$E_BASE" "$E_SHA" 8 code-review APPROVED)" || return 1
   o="$(out_of "$d")"; run_merge "$sd" "$d"; [ "$RC" -eq 0 ] || return 1
   n0="$(sed -n 's/.* findings=\([0-9]*\) .*/\1/p' "$MO")"; rm -f "$o"
@@ -1014,12 +1023,15 @@ p_x_seat() { # X9: seat-complete -- one shard without the marker beside shards w
   # trailing blank lines skipped, and the marker is not in the merged file.
   local sd="$1" d o k
   d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || return 1
-  for k in 1 2 3 cross-1 cross-2 cross-3; do printf 'seat-complete: implementation code-reviewer %s\n\n' "$k" >> "$d/$k.md"; done
+  for k in 1 2 3 cross-1 cross-2 cross-3; do printf 'seat-complete: implementation code-reviewer %s findings=1\n\n' "$k" >> "$d/$k.md"; done
   shard "$d" 2 APPROVED 2
   o="$(out_of "$d")"; run_merge "$sd" "$d"; refused_clean "$QT_X_SEAT" "$d" || return 1
-  printf 'seat-complete: implementation code-reviewer 2\n#### F-2-late a finding after the marker\n' >> "$d/2.md"
+  printf 'seat-complete: implementation code-reviewer 2 findings=1\n#### F-2-late a finding after the marker\n' >> "$d/2.md"
   run_merge "$sd" "$d"; refused_clean "$QT_X_SEAT" "$d" || return 1
-  shard "$d" 2 APPROVED 2; printf 'seat-complete: implementation code-reviewer 2\n' >> "$d/2.md"
+  # All marked, one partial: shard 2 declares findings=3 over the 1 it holds -> REFUSED as truncated.
+  shard "$d" 2 APPROVED 2; printf 'seat-complete: implementation code-reviewer 2 findings=3\n' >> "$d/2.md"
+  run_merge "$sd" "$d"; refused_clean "$QT_X_COUNT" "$d" || return 1
+  shard "$d" 2 APPROVED 2; printf 'seat-complete: implementation code-reviewer 2 findings=1\n' >> "$d/2.md"
   run_merge "$sd" "$d"
   [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ -f "$o" ] && ! has "$o" "seat-complete:"
 }
