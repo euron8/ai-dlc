@@ -110,7 +110,7 @@ for your findings, and (d) a shared context block. You MUST:
    (`steps/_gate-procedures.md`, "Validation cycle" item 1). Write to the shard path your brief
    names. Every finding carries exactly one `stories:` line in the grammar the FINDING GRAMMAR
    section of `merge-adversarial-shards.sh`'s header defines, citing ordinals from the map in your
-   brief. Report a finding that cites another story only if you are the cross shard. Stamp your
+   brief. Report a finding that cites another story only if you are a cross shard and your group owns it. Stamp your
    counts and verdict as usual. **Your verdict is advisory:** the merge sums every shard's counts
    and recomputes the pass verdict, so a MET you stamp does not make the pass MET.
 
