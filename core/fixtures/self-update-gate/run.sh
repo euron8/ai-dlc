@@ -3856,7 +3856,7 @@ hk_kill "hk-mut-adds" "$(av_mut hk-adds '  [ -f "$cur" ] || cur_absent=1
 ' '  [ -f "$cur" ] || { emit SELF-UPDATE-OK "$name" "the consumer has no current copy, so this pull ADDS it."; continue; }
 ')" "adds=DEFER reads=DEFER absent=OK same=OK deleted=OK+carried" \
   "an absent current copy read as \"this pull ADDS it\": a consumer with pinned roles and no renderer pushes into the renderer it was just given"
-hk_kill "hk-mut-carried" "$(av_mut hk-carried '  if gate_has_line "${GATE_CARRIED:-}" "core/scripts/$name"; then' '  if false; then')" \
+hk_kill "hk-mut-carried" "$(av_mut hk-carried '  if [ ! -f "$cur" ] && gate_has_line "${GATE_CARRIED:-}" "core/scripts/$name"; then' '  if false; then')" \
   "adds=DEFER reads=DEFER absent=DEFER same=OK deleted=DEFER" \
   "a carried script judged as though written: a consumer that deleted the renderer is refused over a copy step 2 never installs"
 

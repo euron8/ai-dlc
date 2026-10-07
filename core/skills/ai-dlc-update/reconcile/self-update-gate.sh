@@ -1558,14 +1558,15 @@ while IFS= read -r name; do
   # every run below reads 0 and the incoming side is asked the hook's question. Reading "this pull
   # ADDS it" as OK sent a consumer with pinned roles and no renderer into a push refused by the
   # renderer it had just been given, on every cycle (BL-456).
-  # A CARRIED SCRIPT IS NOT WRITTEN, so the push runs the consumer's own copy (or none) exactly as
-  # today's push does, and no incoming version of it can refuse this cycle. A consumer that DELETED
-  # a script present at base is carried by arm C, never given the incoming copy here.
-  if gate_has_line "${GATE_CARRIED:-}" "core/scripts/$name"; then
-    emit SELF-UPDATE-OK "$name" "carried: arm C removed core/scripts/$name from the slice, so this cycle does not write it and the push runs the consumer's current copy, as today's push does."
+  # A SCRIPT THE CONSUMER DELETED AND ARM C CARRIED IS NOT WRITTEN, so the push runs none, as
+  # today's does. Scoped to the ABSENT copy on purpose: a carried script the consumer still holds
+  # keeps the differential it always had (self-update-join-gate's rc-pair table is exactly that
+  # world, and an acquittal for every carried path would make its OK arms true by construction).
+  cur="$CONSUMER/scripts/ai-dlc/$name"
+  if [ ! -f "$cur" ] && gate_has_line "${GATE_CARRIED:-}" "core/scripts/$name"; then
+    emit SELF-UPDATE-OK "$name" "carried: the consumer has no copy of scripts/ai-dlc/$name and arm C removed it from the slice, so this cycle does not write it and the push runs none, as today's push does."
     continue
   fi
-  cur="$CONSUMER/scripts/ai-dlc/$name"
   cur_absent=0
   [ -f "$cur" ] || cur_absent=1
   # ---- A VERDICT TAKEN ON AN ALREADY-WRITTEN TREE ANSWERS A DIFFERENT QUESTION ----------
