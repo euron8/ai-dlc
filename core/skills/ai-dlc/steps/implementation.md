@@ -310,13 +310,20 @@ stderr, e.g. a base that is not an ancestor of the frozen SHA), likewise
 dispatch one reviewer with `shard: 1/1 <story-index>` and record the
 refusal line verbatim in the story's gate log. Otherwise dispatch one reviewer
 per line the map prints, briefed `shard: <i>/<N> <group>` with the map
-and its shard path `<ordinal>.md` in the shard directory, plus one
-`shard: cross/<N> cross` reviewer writing `cross.md` there (Rule 28,
-"Split dispatch": files axis). Part reviewers EXECUTE NOTHING -- no
-tests, no `validate-mutation-red.sh`, no build; they read their part and
-report. The cross reviewer owns every execution step the role requires,
-the suite and mutation-red, run once in the frozen worktree. Join in the
-frozen worktree with
+and its shard path `<ordinal>.md` in the shard directory, plus one cross
+reviewer per row `partition-document.sh --cross-groups <N>` prints, briefed
+`shard: cross/<N> g<g>/<G> <ordinals>` with the whole group table, the owner
+rule (report only the findings `partition-document.sh --cross-owner` assigns
+to your group) and its shard path `cross-<g>.md`, or `cross.md` when the table
+has one row (Rule 28, "Split dispatch": files axis). Part reviewers EXECUTE
+NOTHING -- no tests, no `validate-mutation-red.sh`, no build; they read their
+part and report. The first cross reviewer (`cross-1`, or `cross` when there is
+one) owns every execution step the role requires, the suite and mutation-red,
+run once in the frozen worktree; every other cross reviewer executes nothing.
+Every shard writes its header first, appends each finding as it is verified,
+and ends with the last non-blank line `seat-complete: implementation
+code-reviewer <shard>` after every edit; the join beat passes
+`wait-for-deliverable.sh --complete`. Join in the frozen worktree with
 `merge-review-shards.sh <shard-dir> --gate code-review --out docs/reviews/s<N>/<story-index>-code-review.md`,
 passing the pass-specific name on a later pass (`-p2`, ...). The merge
 re-derives the parts, refuses (exit 2, nothing written) on a missing,
@@ -359,11 +366,21 @@ dispatch one QA with `shard: 1/1 <story-index>` and record the refusal line
 verbatim in the story's gate log. Otherwise dispatch one QA per line the map
 prints, briefed `shard: <i>/<N> <group>` with the map and the absolute path of
 its shard file `<ordinal>.md` in the shard directory, in Rule 28 waves
-("Split dispatch": files axis). The part QAs are dispatched first; the one
-`shard: cross/<N> cross` QA writing `cross.md` there is dispatched only after
-every part shard file exists, and its brief names the absolute path of every
-part shard file. That ordering is Rule 28's serial exception 1 ("Split
-dispatch"), a true data dependency: the cross QA reads what the parts wrote.
+("Split dispatch": files axis). The part QAs are dispatched first; the cross
+QAs, one per row `partition-document.sh --cross-groups <N>` prints, briefed
+`shard: cross/<N> g<g>/<G> <ordinals>` with the whole group table and the owner
+rule, each writing `cross-<g>.md` there (`cross.md` when the table has one
+row), are dispatched only after every part shard file exists, and the first
+cross QA's brief names the absolute path of every part shard file. That
+ordering is Rule 28's serial exception 1 ("Split dispatch"), a true data
+dependency: the first cross QA reads what the parts wrote. The first cross QA
+(`cross-1`, or `cross`) is the execution owner: it alone runs in the frozen
+worktree, runs every handed-over replay and writes the per-AC table and the
+`## Deferred ACs` section; every other cross QA executes nothing and reports
+only the pair findings it owns. Every shard writes its header first, appends
+each finding as it is verified, and ends with the last non-blank line
+`seat-complete: implementation qa <shard>` after every edit; the join beat
+passes `wait-for-deliverable.sh --complete`.
 Each shard gets the go-signal
 `gate-2 go-signal: <story-id> @ <SHA>` with the full SHA the manifest records.
 Part QAs read their part, score the part-local checklist items and replay the
@@ -373,13 +390,14 @@ first runs the project's canonical dependency setup (the setup the dev's QA
 Handoff Evidence records, or the story's documented setup) and confirms the
 canonical run of the anchor's test is GREEN there before any mutation. An AC
 whose replay cannot reach a GREEN baseline in the part's worktree is handed to
-the cross QA, listed under the part shard's findings with its reason, rather
+the first cross QA, listed under the part shard's findings with its reason, rather
 than scored. That finding carries a `handover: <AC-id>` line, and every part
 shard carries one header line `handovers: <n>` counting its hand-overs, `0` when
 it handed nothing over (the grammar is `merge-review-shards.sh`'s header). Before scoring,
-the cross QA reads every part shard file for `handover:` lines, runs each
+the first cross QA reads every part shard file for `handover:` lines, runs each
 handed-over replay and records it as a `handover-run:` line; the merge refuses a hand-over with no
-matching run, and a replay that is not `RED` forces `NEEDS_REWORK`. The cross QA owns every other
+matching run, a replay in any other cross shard, and a replay that is not `RED` forces
+`NEEDS_REWORK`. The first cross QA owns every other
 checklist item, the Handoff Evidence Precondition, the one honest-green
 canonical run in the frozen worktree and the RED replays a part QA handed
 over, and writes the per-AC table and the

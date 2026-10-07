@@ -15,7 +15,30 @@
 #
 #   <shard-dir> lives under `docs/reviews/s<N>/shards/`, written in the frozen dev worktree:
 #   `.manifest` (by `partition-review-diff.sh --map ... --shard-dir`), one `<ordinal>.md` per
-#   part, and `cross.md` once. <sha12> is the first 12 characters of the manifest's frozen sha.
+#   part, and the CROSS SHARDS (below). <sha12> is the first 12 characters of the manifest's
+#   frozen sha.
+#
+# THE CROSS SHARDS. One per row of `partition-document.sh --cross-groups <K>` (K = the part
+#   count of the re-derived map), named `cross-<g>.md`, and `cross.md` iff that table has
+#   exactly one row (G=1, i.e. K=2). The table is read from that one speller, never restated
+#   here. Every `cross-<g>` it prints is required; a `cross-<g>` it does not print, `cross.md`
+#   beside any `cross-<g>.md`, `cross.md` when G>1 and `cross-<g>.md` when G=1 are each REFUSED.
+#   THE OWNER RULE. The groups overlap, so each cross finding citing two or more parts is
+#   accepted ONLY from the shard `partition-document.sh --cross-owner <K> <cited ordinals>`
+#   names (`cross` when G=1) and REFUSED from any other, so the worst-of verdict and the
+#   conserved finding count never depend on how the cover overlaps.
+#   THE FIRST CROSS SHARD (`cross` when G=1, else `cross-1`) is the EXECUTION owner: it alone
+#   runs in the frozen worktree, which nothing else may mutate -- the suite, mutation-red, every
+#   handed-over replay -- and under --gate qa it alone carries the per-AC table and the deferred
+#   record. Every other cross shard executes nothing and reports only the pair findings it owns.
+#   SEAT-COMPLETE. A shard dispatched under the early-write brief ends, as its LAST NON-BLANK
+#   line, in `seat-complete: <step> <seat> <shard>`. If ANY shard in the directory carries that
+#   line, every shard must, and one that does not is REFUSED as unfinished. Keyed on the
+#   marker's presence in the directory, as merge-adversarial-shards.sh keys it: a directory whose
+#   shards predate the brief carries no marker anywhere and merges as before. Its limit: a set in
+#   which NO shard has finished carries no marker either, so this is the belt and
+#   `wait-for-deliverable.sh --complete` at the join is the braces. The marker line is dropped
+#   from the merged body.
 #   THE PASS MARKER. Pass 1 carries none; pass M (M a decimal integer >= 2, no leading zero)
 #   appends `-p<M>` to BOTH the shard directory and the review file. The merge REFUSES unless
 #   the two markers are equal and --out's basename is the gate's review-file shape for the
@@ -52,33 +75,37 @@
 #   `##  acceptance criteria`, `### Deferred ACs` and `## Deferred / operator-owned` all count.
 #   A `#### ` heading never counts: that level is a FINDING, and a finding titled
 #   `#### Acceptance criteria ...` is a finding, not a second per-AC section:
-#       cross.md carries EXACTLY ONE `## Acceptance Criteria` (the story's per-AC table) and AT
-#       MOST ONE `## Deferred ACs` (every deferred-AC discharge predicate); a part shard carries
-#       NEITHER. The closing writer reads both from the merged file, so a second copy, or one in
-#       a part shard, is a second answer to one question.
+#       the FIRST cross shard carries EXACTLY ONE `## Acceptance Criteria` (the story's per-AC
+#       table) and AT MOST ONE `## Deferred ACs` (every deferred-AC discharge predicate); a part
+#       shard and every other cross shard carry NEITHER. The closing writer reads both from the
+#       merged file, so a second copy, or one in another shard, is a second answer to one question.
 #   A FINDING is a `#### ` heading inside the shard's `## Findings` section (to the next `## `),
 #   under the template's `### Critical / Important / Suggestions` containers. Each finding
 #   carries EXACTLY ONE line
 #       parts: <ordinal>[, <ordinal>...]
-#   before the next heading. A part shard cites ONLY its own ordinal; the cross shard cites two
-#   or more DISTINCT ordinals. Ordinals compare numerically (`1` and `01` are one ordinal).
+#   before the next heading. A part shard cites ONLY its own ordinal; a cross shard cites two
+#   or more DISTINCT ordinals that it OWNS (the owner rule above). Ordinals compare numerically
+#   (`1` and `01` are one ordinal).
 #   Every shard carries a `## Findings` section, even an empty one; a shard without one is
 #   REFUSED. A `parts:` line anywhere else -- under another `## ` section, before the first
 #   `#### `, indented, or behind a list bullet (`- parts: 3`) -- is REFUSED, never skipped: a
 #   finding written as a bullet or under `## Critical Issues` would otherwise merge uncited.
 #   HAND-OVERS, --gate qa ONLY (under --gate code-review these lines are not read). A part shard
-#   whose mutation-RED replay for an AC cannot reach a GREEN baseline hands that AC to the cross
-#   shard with a finding (under `### Important`, never `### Deferred...`) carrying its one
-#   `parts: <own ordinal>` line and EXACTLY ONE column-0 line
+#   whose mutation-RED replay for an AC cannot reach a GREEN baseline hands that AC to the FIRST
+#   cross shard (the execution owner: the replay runs in the frozen worktree) with a finding
+#   (under `### Important`, never `### Deferred...`) carrying its one `parts: <own ordinal>` line
+#   and EXACTLY ONE column-0 line
 #       handover: <AC-id>
-#   The cross shard runs each handed-over replay and records it inside a `#### ` finding as one
-#   column-0 line per replay
+#   The first cross shard runs each handed-over replay and records it inside a `#### ` finding as
+#   one column-0 line per replay
 #       handover-run: <ordinal> <AC-id> RED | GREEN-SURVIVED | NO-BASELINE
 #   A cross finding carrying `handover-run:` lines cites exactly the ordinals those lines name,
-#   one or more; every other cross finding still cites two or more. <AC-id> is one token of
+#   one or more, and is exempt from the owner rule; every other cross finding still cites two or
+#   more. <AC-id> is one token of
 #   letters, digits, `.`, `_`, `-` that BEGINS with a letter or digit. Both lines count only
-#   outside fences. REFUSED: a `handover:` line in cross.md; a `handover-run:` line in a part
-#   shard; either line outside a `#### ` finding, indented, bulleted or in another case; a
+#   outside fences. REFUSED: a `handover:` line in any cross shard; a `handover-run:` line in a
+#   part shard or in any cross shard but the first; either line outside a `#### ` finding,
+#   indented, bulleted or in another case; a
 #   MALFORMED hand-over line anywhere -- the label decorated (`**handover:**`, `*handover*:`),
 #   quoted (`` `handover: AC7` ``, `> handover: AC7`), hyphenated (`hand-over:`) or, at column 0,
 #   missing its colon (`handover AC7`, `handover - AC7`); a `handover:` line naming more than one
@@ -91,8 +118,8 @@
 #   with <n> a non-negative decimal integer (`0` when it handed nothing over) equal to the number
 #   of `handover:` lines the merge PARSED in that shard. REFUSED: a part shard with no such line or
 #   two, a non-integer <n>, an <n> that differs from the parsed count, and any `handovers:` line in
-#   cross.md. This is the fail-closed half: a hand-over spelled any way the parser does not read is
-#   not counted, so it disagrees with its writer's declaration whatever the spelling. The
+#   any cross shard. This is the fail-closed half: a hand-over spelled any way the parser does not
+#   read is not counted, so it disagrees with its writer's declaration whatever the spelling. The
 #   malformed-line refusals above stay, for the precise message on the common forms; the no-colon
 #   form there takes any run of non-alphanumerics as its separator (` - `, an em or en dash, `=`,
 #   `->`), ends at the AC-id's token boundary rather than the end of the line, and both it and the
@@ -112,7 +139,9 @@
 #
 # THE OUTPUT. The gate's merged title, a summary naming the range and shard count, the
 #   `## Verdict` heading with the worst-of value on the next line (the template's own shape), a
-#   table of shard verdicts, the part map, then every shard body in ordinal order, cross last.
+#   table of shard verdicts, the part map, then every shard body in ordinal order, the cross
+#   shards last in group order (`## Shard: cross` when G=1, `## Shard: cross-<g> (<ordinals>)`
+#   otherwise).
 #   CONSERVATION: every finding heading of every shard appears in the output, counted.
 #   The assembled file must match Check 1's pattern exactly once, and the value read back Check
 #   1's way (the value rule gate-validation.md Check 1 states) must equal the recomputed verdict.
@@ -278,28 +307,78 @@ norm_ord() { # "003" -> 03 at width W; empty unless digits within 1..K
   printf '%0*d' "$W" "$n"
 }
 
+# ---- the cross groups, read from their one speller ----------------------------------------
+# CROSS_KEYS is `cross` when the table has one row (K=2) and `cross-1 .. cross-<G>` otherwise;
+# nothing here restates the construction. CROSS_FIRST is the execution owner (header).
+XPART="$SELF_DIR/partition-document.sh"
+[ -f "$XPART" ] || refuse "cannot read the cross groups: $XPART is absent"
+bash "$XPART" --cross-groups "$K" > "$T/groups" 2> "$T/groups.err" < /dev/null; grc=$?
+[ "$grc" -eq 0 ] || refuse "partition-document.sh --cross-groups $K exited $grc: $(head -1 "$T/groups.err")"
+G="$(grep -c . "$T/groups")" || G=0
+[ "$G" -ge 1 ] || refuse "partition-document.sh --cross-groups $K printed no group"
+i=0
+while IFS="$TAB" read -r gg gl; do
+  i=$((i + 1))
+  [ "$gg" = "$i" ] && [[ $gl =~ ^[0-9]+(,[0-9]+)+$ ]] \
+    || refuse "partition-document.sh --cross-groups $K printed row $i as '$gg	$gl'; want <g>\\t<ordinal,ordinal,...> with g = 1..G in order"
+done < "$T/groups"
+if [ "$G" -eq 1 ]; then CROSS_KEYS="cross"
+else CROSS_KEYS="$(awk '{ printf "%scross-%d", (NR > 1 ? " " : ""), NR }' "$T/groups")"; fi
+CROSS_FIRST="${CROSS_KEYS%% *}"
+is_cross() { case "$1" in cross|cross-*) return 0 ;; esac; return 1; }
+
 # ---- the shard set ----------------------------------------------------------------------
 : > "$T/shards" || refuse "cannot stage the shard set"
 for f in "$SDIR"/*; do
   [ -e "$f" ] || continue
   b="$(basename "$f")"
-  [ -f "$f" ] || refuse "$f is not a regular file; the shard directory holds only <ordinal>.md and cross.md"
+  [ -f "$f" ] || refuse "$f is not a regular file; the shard directory holds only <ordinal>.md and the cross shards ($CROSS_KEYS)"
   case "$b" in
     cross.md) key="cross" ;;
+    cross-*.md)
+      gn="${b#cross-}"; gn="${gn%.md}"
+      case "$gn" in ""|*[!0-9]*|??????????*) refuse "$f is not a shard name (<ordinal>.md, cross.md or cross-<g>.md)" ;; esac
+      key="cross-$((10#$gn))" ;;
     *.md)
-      case "${b%.md}" in ""|*[!0-9]*) refuse "$f is not a shard name (<ordinal>.md or cross.md)" ;; esac
+      case "${b%.md}" in ""|*[!0-9]*) refuse "$f is not a shard name (<ordinal>.md, cross.md or cross-<g>.md)" ;; esac
       key="$(norm_ord "${b%.md}")"
       [ -n "$key" ] || refuse "$f names ordinal ${b%.md}, outside 1..$K" ;;
-    *) refuse "$f is not a shard name (<ordinal>.md or cross.md)" ;;
+    *) refuse "$f is not a shard name (<ordinal>.md, cross.md or cross-<g>.md)" ;;
   esac
   printf '%s\t%s\n' "$key" "$f" >> "$T/shards" || refuse "cannot stage the shard set"
 done
 dup="$(cut -f1 "$T/shards" | sort | uniq -d | head -1)"
 [ -z "$dup" ] || refuse "shard $dup was delivered more than once in $SDIR"
-for idx in $ORDINALS cross; do
+# The cross shards delivered must be EXACTLY the table's: a mix of `cross.md` and `cross-<g>.md`,
+# a `cross-<g>` the table does not print, or the wrong spelling for G are each refused by name.
+x_plain=0; x_num=0
+while IFS="$TAB" read -r xk xf; do
+  case "$xk" in
+    cross) x_plain=1 ;;
+    cross-*) x_num=1
+      case " $CROSS_KEYS " in *" $xk "*) ;; *) refuse "$xf is $xk, which partition-document.sh --cross-groups $K does not print (the cross shards for K=$K are: $CROSS_KEYS)" ;; esac ;;
+  esac
+done < "$T/shards"
+[ "$x_plain" -eq 1 ] && [ "$x_num" -eq 1 ] \
+  && refuse "$SDIR mixes cross.md with cross-<g>.md; a shard set is one cross shape or the other (for K=$K: $CROSS_KEYS)"
+[ "$x_plain" -eq 1 ] && [ "$G" -gt 1 ] \
+  && refuse "$SDIR holds cross.md, but the part map has $K parts, whose cross groups are $CROSS_KEYS; a single cross shard is owed only at K=2"
+for idx in $ORDINALS $CROSS_KEYS; do
   [ -n "$(awk -F'\t' -v k="$idx" '$1 == k { print; exit }' "$T/shards")" ] \
-    || refuse "shard $idx is missing from $SDIR (expected: $ORDINALS and cross)"
+    || refuse "shard $idx is missing from $SDIR (expected: $ORDINALS and $CROSS_KEYS)"
 done
+
+# ---- seat-complete (the belt; the join beat's --complete is the braces) --------------------
+# If ANY shard's last non-blank line is the marker, every shard's must be. See the header.
+: > "$T/sc" || refuse "cannot stage the completion check"
+while IFS="$TAB" read -r sk sf_; do
+  if awk 'NF { l = $0 } END { exit !(l ~ /^seat-complete: /) }' "$sf_"; then printf 'Y\t%s\n' "$sk" >> "$T/sc"
+  else printf 'N\t%s\t%s\n' "$sk" "$sf_" >> "$T/sc"; fi || refuse "cannot stage the completion check"
+done < "$T/shards"
+if grep -q '^Y' "$T/sc" && grep -q '^N' "$T/sc"; then
+  sc_bad="$(awk -F'\t' '$1 == "N" { print $3; exit }' "$T/sc")"
+  refuse "$sc_bad does not end in 'seat-complete: ' while another shard in $SDIR does; that shard is unfinished (its last non-blank line must be 'seat-complete: <step> <seat> <shard>')"
+fi
 
 # ---- per-shard parse --------------------------------------------------------------------
 # Emits: R <n> <first value>   V <n> <first value>   X <line> <n-parts-lines> <parts>   C <findings>
@@ -345,7 +424,7 @@ WORST=""; WORST_R=0; NFIND=0; FORCE=""
 : > "$T/hand" && : > "$T/runs" && : > "$T/runords" && : > "$T/htable" || refuse "cannot stage the hand-over set"
 : > "$T/body" || refuse "cannot stage the merged body"
 : > "$T/vtable" || refuse "cannot stage the verdict table"
-for key in $ORDINALS cross; do
+for key in $ORDINALS $CROSS_KEYS; do
   sf="$(awk -F'\t' -v k="$key" '$1 == k { print $2; exit }' "$T/shards")"
   P="$T/parse.$key"
   parse_shard "$sf" > "$P" || refuse "parsing $sf did not run"
@@ -366,11 +445,16 @@ for key in $ORDINALS cross; do
     || refuse "$sf:$sl carries a 'parts:' line outside a '#### ' finding under '## Findings' (indented, bulleted, or under another section); every finding is a '#### ' heading there"
   if [ "$GATE" = "qa" ]; then
     nac="$(awk '$1 == "A" { print $2 }' "$P")"; nda="$(awk '$1 == "D" { print $2 }' "$P")"
-    if [ "$key" = "cross" ]; then
+    if [ "$key" = "$CROSS_FIRST" ]; then
       [ "${nac:-0}" = "1" ] \
         || refuse "$sf carries ${nac:-0} '## Acceptance Criteria' section(s) outside a fence; the cross shard carries exactly one, the story's per-AC table"
       [ "${nda:-0}" -le 1 ] \
         || refuse "$sf carries ${nda:-0} '## Deferred ACs' sections outside a fence; the cross shard carries at most one"
+    elif is_cross "$key"; then
+      [ "${nac:-0}" = "0" ] \
+        || refuse "$sf ($key) carries a '## Acceptance Criteria' section; only $CROSS_FIRST, the execution owner, writes the per-AC table"
+      [ "${nda:-0}" = "0" ] \
+        || refuse "$sf ($key) carries a '## Deferred ACs' section; only $CROSS_FIRST, the execution owner, writes the deferred-AC discharge predicates"
     else
       [ "${nac:-0}" = "0" ] \
         || refuse "$sf (part shard $key) carries a '## Acceptance Criteria' section; only the cross shard writes the per-AC table"
@@ -394,7 +478,7 @@ for key in $ORDINALS cross; do
     nhd="${nhd:-0}"; hdv="${hdv:--}"
     nho_s="$(grep -c '^HO ' "$P")" || nho_s=0
     hmnote=""; [ "${hm:-0}" = "0" ] || hmnote=" ($sf:$hm is a malformed hand-over line)"
-    if [ "$key" = "cross" ]; then
+    if is_cross "$key"; then
       [ "$nhd" = "0" ] \
         || refuse "$sf carries a 'handovers:' line; only a part shard declares a hand-over count, the cross shard records its replays as 'handover-run:'"
     else
@@ -409,12 +493,14 @@ for key in $ORDINALS cross; do
     while read -r tag hline hfl a1 a2 a3 a4; do
       case "$tag" in
         HO)
-          [ "$key" != "cross" ] || refuse "$sf:$hline carries a 'handover:' line; only a part shard hands an AC over, the cross shard records the replay as 'handover-run:'"
+          ! is_cross "$key" || refuse "$sf:$hline carries a 'handover:' line; only a part shard hands an AC over, the cross shard records the replay as 'handover-run:'"
           [ -z "${a2:-}" ] || refuse "$sf:$hline handover: '${a1:-} ${a2:-}' names more than one AC; a hand-over line names exactly one <AC-id>"
           [[ ${a1:-} =~ $RE_AC ]] || refuse "$sf:$hline handover: '${a1:-}' is not an <AC-id> (one token beginning with a letter or digit)"
           printf '%s %s\n' "$key" "$a1" >> "$T/hand" || refuse "cannot stage the hand-over set" ;;
         HR)
-          [ "$key" = "cross" ] || refuse "$sf:$hline (part shard $key) carries a 'handover-run:' line; only the cross shard runs a handed-over replay"
+          is_cross "$key" || refuse "$sf:$hline (part shard $key) carries a 'handover-run:' line; only the cross shard runs a handed-over replay"
+          [ "$key" = "$CROSS_FIRST" ] \
+            || refuse "$sf:$hline ($key) carries a 'handover-run:' line; only $CROSS_FIRST, the execution owner, runs a handed-over replay in the frozen worktree"
           o="$(norm_ord "${a1:-}")"
           [ -n "$o" ] && [[ ${a2:-} =~ $RE_AC ]] && [ -z "${a4:-}" ] \
             || refuse "$sf:$hline handover-run: '${a1:-} ${a2:-} ${a3:-} ${a4:-}' is not <ordinal 1..$K> <AC-id> <result>"
@@ -442,7 +528,7 @@ for key in $ORDINALS cross; do
     done
     if [ "$GATE" = qa ]; then
       [ "${nho:-0}" -le 1 ] || refuse "$sf:$line finding carries $nho 'handover:' lines; a hand-over finding names exactly one AC"
-      if [ "$key" = "cross" ] && [ "${nhr:-0}" -gt 0 ]; then
+      if is_cross "$key" && [ "${nhr:-0}" -gt 0 ]; then
         want="$(awk -v f="$line" '$1 == f { print $2 }' "$T/runords" | sort -u | tr '\n' ' ')"
         got="$(printf '%s\n' $distinct | sort -u | tr '\n' ' ')"
         [ "$want" = "$got" ] \
@@ -451,8 +537,14 @@ for key in $ORDINALS cross; do
       fi
     fi
     set -- $distinct
-    if [ "$key" = "cross" ]; then
+    if is_cross "$key"; then
       [ $# -ge 2 ] || refuse "$sf:$line (cross shard) cites only$distinct; a cross finding cites two or more parts, a one-part finding belongs to that part's shard"
+      # THE OWNER RULE: the one group --cross-owner names, never any other that also covers it.
+      own="$(bash "$XPART" --cross-owner "$K" "$(printf '%s' "${distinct# }" | tr ' ' ',')" 2> "$T/own.err" < /dev/null)" \
+        || refuse "partition-document.sh --cross-owner $K on$distinct failed: $(head -1 "$T/own.err")"
+      if [ "$G" -eq 1 ]; then ownk="cross"; else ownk="cross-$own"; fi
+      [ "$ownk" = "$key" ] \
+        || refuse "$sf:$line ($key) cites$distinct, a finding owned by $ownk (partition-document.sh --cross-owner); a cross shard reports only the findings it owns, or the merged verdict and finding count depend on the cover"
     else
       [ $# -eq 1 ] && [ "$1" = "$key" ] \
         || refuse "$sf:$line (shard $key) cites$distinct; a part shard reports only findings citing its own part alone"
@@ -460,8 +552,12 @@ for key in $ORDINALS cross; do
   done < "$P"
 
   if [ "$key" = "cross" ]; then printf '\n## Shard: cross\n\n' >> "$T/body" || refuse "cannot stage the merged body"
+  elif is_cross "$key"; then
+    printf '\n## Shard: %s (%s)\n\n' "$key" "$(awk -F'\t' -v g="${key#cross-}" '$1 == g { print $2; exit }' "$T/groups")" >> "$T/body" \
+      || refuse "cannot stage the merged body"
   else printf '\n## Shard: part %s\n\n' "$key" >> "$T/body" || refuse "cannot stage the merged body"; fi
-  cat "$sf" >> "$T/body" || refuse "cannot stage the body of $sf"
+  # The seat-complete marker is dropped: inside the merged file it would read as the merge's own.
+  awk '!/^seat-complete: /' "$sf" >> "$T/body" || refuse "cannot stage the body of $sf"
 done
 
 # ---- the hand-over join (--gate qa) ------------------------------------------------------
@@ -471,21 +567,22 @@ if [ "$GATE" = qa ]; then
   d1="$(sort "$T/hand" | uniq -d | head -1)"
   [ -z "$d1" ] || refuse "hand-over '$d1' (<ordinal> <AC-id>) is handed over more than once"
   d1="$(sort "$T/runs" | uniq -d | head -1)"
-  [ -z "$d1" ] || refuse "hand-over '$d1' has more than one 'handover-run:' line in cross.md; each hand-over is run exactly once"
+  [ -z "$d1" ] || refuse "hand-over '$d1' has more than one 'handover-run:' line in $CROSS_FIRST.md; each hand-over is run exactly once"
   sort -u "$T/hand" > "$T/hand.s" && sort -u "$T/runs" > "$T/runs.s" || refuse "cannot sort the hand-over sets"
   d1="$(comm -23 "$T/hand.s" "$T/runs.s" | head -1)"
-  [ -z "$d1" ] || refuse "hand-over '$d1' (part shard $(printf '%s' "$d1" | cut -d' ' -f1)) has no 'handover-run:' line in cross.md; the cross shard runs every handed-over replay before the merge"
+  [ -z "$d1" ] || refuse "hand-over '$d1' (part shard $(printf '%s' "$d1" | cut -d' ' -f1)) has no 'handover-run:' line in $CROSS_FIRST.md; the cross shard runs every handed-over replay before the merge"
   d1="$(comm -13 "$T/hand.s" "$T/runs.s" | head -1)"
-  [ -z "$d1" ] || refuse "cross.md carries 'handover-run: $d1' but part shard $(printf '%s' "$d1" | cut -d' ' -f1) handed over no such AC"
+  [ -z "$d1" ] || refuse "$CROSS_FIRST.md carries 'handover-run: $d1' but part shard $(printf '%s' "$d1" | cut -d' ' -f1) handed over no such AC"
   NHAND="$(grep -c . "$T/hand.s")" || NHAND=0
   # An unmet HARD GATE: the replay did not go RED, or never reached a GREEN baseline.
   if [ -n "$FORCE" ]; then WORST="NEEDS_REWORK"; WORST_R="$(rank NEEDS_REWORK)"; fi
 fi
 
 {
-  printf '# %s: %s (merged from %s shards)\n\n' "$TITLE" "$IDX" "$((K + 1))"
+  printf '# %s: %s (merged from %s shards)\n\n' "$TITLE" "$IDX" "$((K + G))"
   printf '## Summary\n\n'
-  printf 'Merged by merge-review-shards.sh from %s part shards and one cross shard, all reviewing\n' "$K"
+  if [ "$G" -eq 1 ]; then XWORD="one cross shard"; else XWORD="$G cross shards"; fi
+  printf 'Merged by merge-review-shards.sh from %s part shards and %s, all reviewing\n' "$K" "$XWORD"
   printf '`%s..%s`. The verdict below is RECOMPUTED as the worst shard verdict; the\n' "$M_BASE" "$M_SHA"
   printf 'shard verdicts in the table are advisory inputs to it.\n\n'
   if [ -n "$FORCE" ]; then

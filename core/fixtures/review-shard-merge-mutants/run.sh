@@ -82,7 +82,7 @@ set -- $P_ALL; N_ALL=$#
 mutdir() { # <name> -> a dir holding both subjects and the scan-root sibling
   local d s
   d="$(mktemp -d "$WORK/mut-$1.XXXXXX")" || return 1
-  for s in partition-review-diff.sh merge-review-shards.sh artifact-path-config.sh; do cp "$SRCDIR/$s" "$d/"; done
+  for s in partition-review-diff.sh merge-review-shards.sh artifact-path-config.sh partition-document.sh; do cp "$SRCDIR/$s" "$d/"; done
   printf '%s' "$d"
 }
 apply() { # <file> <old> <new>: exactly one occurrence, else exit 3
@@ -167,15 +167,16 @@ mutant() { # <label> <file> <expected> <old> <new> [<old2> <new2>]
 }
 
 C0="$(mutdir m0)"
-if [ -f "$C0/partition-review-diff.sh" ] && [ -f "$C0/merge-review-shards.sh" ] && [ -f "$C0/artifact-path-config.sh" ]; then
-  ok "MX-pre: the sandbox carries the merge, the partition it re-runs, and the scan-root resolver the partition calls"
+if [ -f "$C0/partition-review-diff.sh" ] && [ -f "$C0/merge-review-shards.sh" ] && [ -f "$C0/artifact-path-config.sh" ] \
+   && [ -f "$C0/partition-document.sh" ]; then
+  ok "MX-pre: the sandbox carries the merge, the partition it re-runs, the scan-root resolver the partition calls, and the cross-group speller the merge calls"
   dispatch "MX0 control (unmutated copy)" "$C0" NONE
 else
   bad "MX-pre: FIXTURE BROKEN -- the sandbox lacks a subject or its sibling"
 fi
 
 WORST_LINE='if [ "$r" -gt "$WORST_R" ]; then WORST_R="$r"; WORST="$v"; fi'
-HDR_LINE="  printf '# %s: %s (merged from %s shards)\\n\\n' \"\$TITLE\" \"\$IDX\" \"\$((K + 1))\""
+HDR_LINE="  printf '# %s: %s (merged from %s shards)\\n\\n' \"\$TITLE\" \"\$IDX\" \"\$((K + G))\""
 # The worst-of line is SHARED by both gates, so each wrong rule dies in gate 1 (V1) and gate 2 (Q1).
 # MX1 kills H4 too, and both findings are true: its majority recompute sits after the hand-over
 # join, so it discards the forced NEEDS_REWORK as well as the worst-of.
@@ -183,13 +184,13 @@ mutant "MX1 verdict by majority count" merge-review-shards.sh "worst q_worst q_h
   "$WORST_LINE" 'TALLY="${TALLY:-} $v"' \
   "$HDR_LINE" "  WORST=\"\$(printf '%s\\n' \$TALLY | sort | uniq -c | sort -k1,1nr -k2,2 | awk 'NR == 1 { print \$2 }')\"
 $HDR_LINE"
-mutant "MX2 verdict = the cross shard's" merge-review-shards.sh "worst q_worst" \
-  "$WORST_LINE" 'if [ "$key" = cross ]; then WORST_R="$r"; WORST="$v"; fi'
+mutant "MX2 verdict = the cross shards'" merge-review-shards.sh "worst q_worst" \
+  "$WORST_LINE" 'if is_cross "$key"; then WORST_R="$r"; WORST="$v"; fi'
 mutant "MX3 verdict = the last part read" merge-review-shards.sh "worst q_worst" \
-  "$WORST_LINE" 'if [ "$key" != cross ]; then WORST_R="$r"; WORST="$v"; fi'
+  "$WORST_LINE" 'if ! is_cross "$key"; then WORST_R="$r"; WORST="$v"; fi'
 # Short union: the owed-set check removed AND a missing shard skipped, so the mutant MERGES.
 mutant "MX4 accepts a short union" merge-review-shards.sh "miss_ord miss_cross" \
-  'for idx in $ORDINALS cross; do' 'for idx in ; do' \
+  'for idx in $ORDINALS $CROSS_KEYS; do' 'for idx in ; do' \
   "  sf=\"\$(awk -F'\\t' -v k=\"\$key\" '\$1 == k { print \$2; exit }' \"\$T/shards\")\"" \
   "  sf=\"\$(awk -F'\\t' -v k=\"\$key\" '\$1 == k { print \$2; exit }' \"\$T/shards\")\"
   [ -n \"\$sf\" ] || continue"
@@ -212,7 +213,7 @@ mutant "MX9 an existing differing review is overwritten" merge-review-shards.sh 
 mutant "MX10 the ancestor check removed" partition-review-diff.sh "anc" \
   'git -C "$WT_ABS" merge-base --is-ancestor "$BASE_FULL" "$SHA_FULL" \' 'true \'
 mutant "MX11 the cross shard's reviewed-sha is not checked" merge-review-shards.sh "cross_sha" \
-  '  [ "${2:-}" = "$M_SHA" ] || refuse' '  [ "$key" = cross ] || [ "${2:-}" = "$M_SHA" ] || refuse'
+  '  [ "${2:-}" = "$M_SHA" ] || refuse' '  is_cross "$key" || [ "${2:-}" = "$M_SHA" ] || refuse'
 mutant "MX12 an unranked verdict is accepted" merge-review-shards.sh "bad_verdict q_rank" \
   '[ "$r" -gt 0 ] || refuse' '[ "$r" -ge 0 ] || refuse'
 mutant "MX13 a finding with no parts: is skipped" merge-review-shards.sh "noparts" \
@@ -259,7 +260,9 @@ mutant "MX28 the manifest records the default's SOURCE, not its number" partitio
 mutant "MQ1 the qa rank inverted (PASS worst)" merge-review-shards.sh "q_worst" \
   '    qa:PASS) echo 1 ;;' '    qa:PASS) echo 2 ;;' \
   '    qa:NEEDS_REWORK) echo 2 ;;' '    qa:NEEDS_REWORK) echo 1 ;;'
-mutant "MQ2 the qa section refusals removed" merge-review-shards.sh "q_part_ac q_part_def q_cross_noac q_cross_twoac q_cross_twodef q_secvar" \
+# x_actable dies too, and both findings are true: the per-AC refusal for a non-first cross shard
+# sits inside the same qa-only block.
+mutant "MQ2 the qa section refusals removed" merge-review-shards.sh "q_part_ac q_part_def q_cross_noac q_cross_twoac q_cross_twodef q_secvar x_actable" \
   '  if [ "$GATE" = "qa" ]; then' '  if false; then'
 mutant "MQ3 QA's verdict set lifted from code-reviewer.md" merge-review-shards.sh "q_vset" \
   'ROLE_NAME="qa.md"; DSUF="qa-validation"' 'ROLE_NAME="code-reviewer.md"; DSUF="qa-validation"' \
@@ -336,6 +339,30 @@ mutant "MH14 the hand-over count read by word-splitting" merge-review-shards.sh 
   '    read -r nhd hdv <<<"$(awk '"'"'$1 == "N" { print $2, $3 }'"'"' "$P")"' '    set -- $(awk '"'"'$1 == "N" { print $2, $3 }'"'"' "$P"); nhd="$1"; hdv="${2:-}"'
 mutant "MH9 an <AC-id> may begin with any of its characters" merge-review-shards.sh "q_ho_acid" \
   "RE_AC='^[A-Za-z0-9][A-Za-z0-9._-]*\$'" "RE_AC='^[A-Za-z0-9._-]+\$'"
+# THE SHARDED CROSS REVIEWER. Each is a wrong build the contract names, each refusal disabled
+# alone so the world it guards MERGES (or reaches a refusal with another message) without it.
+mutant "MC1 one cross.md accepted where the cross groups are owed" merge-review-shards.sh "x_only" \
+  '[ "$x_plain" -eq 1 ] && [ "$G" -gt 1 ] \' '[ "$x_plain" -eq 1 ] && false \'
+mutant "MC2 cross.md beside cross-<g>.md not refused as a mix" merge-review-shards.sh "x_mix" \
+  '[ "$x_plain" -eq 1 ] && [ "$x_num" -eq 1 ] \' '[ "$x_plain" -eq 1 ] && false \'
+mutant "MC3 a cross group the table does not print accepted" merge-review-shards.sh "x_unknown" \
+  'case " $CROSS_KEYS " in *" $xk "*) ;; *) refuse' 'case " $CROSS_KEYS " in *) ;; NEVER) refuse'
+mutant "MC4 the owner rule dropped" merge-review-shards.sh "x_owner" \
+  '      [ "$ownk" = "$key" ] \' '      true \'
+mutant "MC5 the per-AC table and deferred record accepted outside the first cross shard" merge-review-shards.sh "x_actable" \
+  '    elif is_cross "$key"; then' '    elif is_cross "$key"; then :; elif false; then'
+mutant "MC6 a hand-over replay accepted from any cross shard" merge-review-shards.sh "x_horun" \
+  '          [ "$key" = "$CROSS_FIRST" ] \' '          true \'
+mutant "MC7 the seat-complete refusal dropped" merge-review-shards.sh "x_seat" \
+  'if grep -q '"'"'^Y'"'"' "$T/sc" && grep -q '"'"'^N'"'"' "$T/sc"; then' 'if false; then'
+mutant "MC8 the seat-complete marker kept in the merged body" merge-review-shards.sh "x_seat" \
+  "  awk '!/^seat-complete: /' \"\$sf\" >> \"\$T/body\"" "  cat \"\$sf\" >> \"\$T/body\""
+mutant "MC9 the title counts one cross shard" merge-review-shards.sh "q_title x_k8" \
+  "$HDR_LINE" "  printf '# %s: %s (merged from %s shards)\\n\\n' \"\$TITLE\" \"\$IDX\" \"\$((K + 1))\""
+# At G=1 the shard is named cross-1: X8's cross.md is refused as missing cross-1, and X4's
+# cross-1.md at K=2 reaches the owner refusal instead of the table refusal.
+mutant "MC10 the single cross shard is named cross-1" merge-review-shards.sh "x_unknown x_k2" \
+  'if [ "$G" -eq 1 ]; then CROSS_KEYS="cross"' 'if false; then CROSS_KEYS="cross"'
 
 # ------------------------------------------------------------------------------ the reap
 wait
