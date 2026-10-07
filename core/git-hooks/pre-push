@@ -766,24 +766,26 @@ readset_live_trace() { # <out>
   return 0
 }
 
-# THE TOOL FINGERPRINT: sha256 over `<name>\t<sha256 of the binary>` for every command on $PATH whose
-# name appears as a word in the manifest's `.sh` files, the first hit on $PATH winning. Derived by that
-# grep, never hand-listed. Keyed on the binary's CONTENT, never its path, so two PATHs reaching the same
-# builds agree. Nothing is EXECUTED to read a version: the derived name set includes commands such as
-# `halt`, `yes` and `passwd`, and running each with `--version` is not safe.
-readset_tools_sha() { # <out>; prints the sha
-  local out="$1" p
-  local IFS=:
-  for p in $PATH; do
-    [ -d "$p" ] && ls -1 "$p" 2>/dev/null | awk -v d="$p" '{ print d "\t" $0 }'
-  done > "$out/.pathcmds"
-  grep '\.sh$' "$out/.files" | tr '\n' '\000' | xargs -0 cat 2>/dev/null | grep -v '^[[:space:]]*#' \
-    | tr -cs 'A-Za-z0-9_.+-' '\n' | LC_ALL=C sort -u > "$out/.tok"
-  awk -F'\t' -v tok="$out/.tok" 'BEGIN { while ((getline l < tok) > 0) t[l] = 1 }
-    ($2 in t) && !($2 in seen) { seen[$2] = 1; print $1 "/" $2 }' "$out/.pathcmds" > "$out/.toolpaths"
-  tr '\n' '\000' < "$out/.toolpaths" | xargs -0 shasum -a 256 -- 2>/dev/null \
-    | awk '{ n = $0; sub(/^[0-9a-f]+  /, "", n); sub(/.*\//, "", n); print n "\t" $1 }' \
-    | LC_ALL=C sort | shasum -a 256 | cut -d' ' -f1
+# THE TOOLS, KEYED PER FIXTURE. One pass over the manifest's `.sh` files writes `<out>/.ftools`
+# (`<file>\t<tool path>`): every word of a non-comment line that names a command on $PATH, the first hit
+# on $PATH winning. Derived that way, never hand-listed. `<out>/.tools` is `<tool path>\t<sha256>` for
+# every tool named anywhere. F's tool keys are the tools its keyed files name, so a changed binary reruns
+# only the fixtures whose files name it. Keyed on the binary's CONTENT: nothing is EXECUTED to read a
+# version, because the derived name set includes commands such as `halt`, `yes` and `passwd`.
+readset_tools() { # <out>
+  local out="$1"
+  ( IFS=:; for p in $PATH; do
+      [ -d "$p" ] && ls -1 "$p" 2>/dev/null | awk -v d="$p" '{ print d "\t" $0 }'
+    done ) > "$out/.pathcmds"
+  grep '\.sh$' "$out/.files" | tr '\n' '\000' | RT_CMDS="$out/.pathcmds" xargs -0 awk '
+    BEGIN { while ((getline l < ENVIRON["RT_CMDS"]) > 0) { t = index(l, "\t"); n = substr(l, t + 1); if (!(n in cmd)) cmd[n] = substr(l, 1, t - 1) "/" n } }
+    FNR == 1 { delete seen }
+    /^[[:space:]]*#/ { next }
+    { n = split($0, w, /[^A-Za-z0-9_.+-]+/)
+      for (i = 1; i <= n; i++) if ((w[i] in cmd) && !(w[i] in seen)) { seen[w[i]] = 1; print FILENAME "\t" cmd[w[i]] } }' \
+    > "$out/.ftools" 2>/dev/null
+  cut -f2 "$out/.ftools" | LC_ALL=C sort -u | tr '\n' '\000' | xargs -0 shasum -a 256 -- 2>/dev/null \
+    | awk '{ p = $0; sub(/^[0-9a-f]+  /, "", p); print p "\t" $1 }' > "$out/.tools"
 }
 
 # `<dir>/\t#listing:<sha256>` for every directory a path list implies, derived from the list alone and
@@ -800,6 +802,12 @@ readset_listings() { # <path list> <out file>
       { n = $0; sub(/^[0-9a-f]+  /, "", n); sub(/.*\//, "", n); if (n in d) print d[n] "\t#listing:" $1 }' > "$2"
 }
 
+# THE RECORD, `$KEYS_DIR/<fx>.key`: `#format k1`, `#state ok|stale|seeded`, `#tools per-fixture`
+# (a constant; the tools are rows), then one row per key, C-sorted: `<path>\t<sha256>` for a file,
+# `<path>\t-` for an absent name, `<dir>/\t#listing:<sha256>` for a directory listing, and
+# `<tool path>\t<sha256>` for a tool (an absolute path). A changed tool row reruns F as `tools
+# changed` and never stales it.
+#
 # DECIDE EVERY FIXTURE IN <list> FROM ITS KEY RECORD. Writes `<out>/.kdec`, one line per fixture:
 # `<fx>\trun\t<reason>\t<k|u|s>\t<new state>` or `<fx>\tskip\t\t\t<state>`, and the prospective record
 # of every fixture that runs (or that a seed skips) to `<out>/.k/<fx>`. The record holds the PRE-RUN
@@ -807,7 +815,7 @@ readset_listings() { # <path list> <out file>
 #
 # THE SEED: no `$KEYS_DIR` yet and a `v2` verified record present. That record is a copy of the
 # pre-run `.now` of a suite every fixture passed on, so each fixture's record is the projection of it
-# onto K(F) -- listings from its path set, a path it lacks as `-`, the current tool fingerprint, state
+# onto K(F) -- listings from its path set, a path it lacks as `-`, its tools as they are now, state
 # `seeded`. Once the directory exists the seed never runs again, and a missing record is `unrecorded`.
 #
 # A LISTING MOVED, AND WHICH ENTRIES ARE NEW. The record holds only a listing's hash, so the old entry
@@ -820,10 +828,10 @@ readset_listings() { # <path list> <out file>
 # when the fixture next runs for another reason; a whole-tree record has no listing key, so an
 # unmapped fixture that gains a trace sheds it.
 readset_keys() { # <list> <out>
-  local list="$1" out="$2" tsha seed=0 v2=/dev/null lp=/dev/null lv=/dev/null pp=/dev/null pv=/dev/null tab
+  local list="$1" out="$2" seed=0 v2=/dev/null lp=/dev/null lv=/dev/null pp=/dev/null pv=/dev/null tab
   tab="$(printf '\t')"
   mkdir -p "$out/.k" || return 1
-  tsha="$(readset_tools_sha "$out")"
+  readset_tools "$out"
   cut -f1 "$out/.now" > "$out/.is"
   readset_listings "$out/.is" "$out/.ls.now"
   if [ -s "$VERIFIED_RECORD" ] && [ "$(cat "$VERIFIED_FORMAT" 2>/dev/null)" = v2 ]; then
@@ -841,7 +849,6 @@ readset_keys() { # <list> <out>
     awk 'FNR == 1 { ok = ($0 == "#format k1"); f = FILENAME; sub(/.*\//, "", f); sub(/\.key$/, "", f); next }
          !ok { next }
          /^#state / { print f "\t#state\t" substr($0, 8); next }
-         /^#tools / { print f "\t#tools\t" substr($0, 8); next }
          /^#/ { next }
          { print f "\t" $0 }' "$KEYS_DIR"/*.key > "$out/.krecs" 2>/dev/null
   fi
@@ -849,12 +856,14 @@ readset_keys() { # <list> <out>
   : > "$out/.khdr"; : > "$out/.kout"
   KN="$out/.now" KLN="$out/.ls.now" KLP="$lp" KLV="$lv" KPP="$pp" KPV="$pv" KV2="$v2" KR="$out/.krows" \
   KM="$out/.mapped.all" KLOC="$out/.local.valid" KC="$out/.krecs" KF="$out/.kl" KH="$out/.khdr" KO="$out/.kout" \
-  awk -v tsha="$tsha" -v seed="$seed" -v root="$FXROOT" '
+  KT="$out/.tools" KFT="$out/.ftools" awk -v seed="$seed" -v root="$FXROOT" '
     function rd(file, arr,   l, t) { while ((getline l < file) > 0) { t = index(l, "\t"); arr[substr(l, 1, t - 1)] = substr(l, t + 1) } }
     function kids(file, set,   l, t, p, i) { while ((getline l < file) > 0) { t = index(l, "\t"); p = (t ? substr(l, 1, t - 1) : l)
         while ((i = match(p, /\/[^\/]*$/)) > 0) { set[substr(p, 1, i - 1) SUBSEP substr(p, i + 1)] = 1; p = substr(p, 1, i - 1) } } }
-    function cur(k) { return (k ~ /\/$/) ? ((k in LN) ? LN[k] : "-") : ((k in NV) ? NV[k] : "-") }
-    function sv(k) { return (k ~ /\/$/) ? ((k in LV) ? LV[k] : "-") : ((k in VV) ? VV[k] : "-") }
+    function cur(k) { if (substr(k, 1, 1) == "/") return (k in TV) ? TV[k] : "-"
+      return (k ~ /\/$/) ? ((k in LN) ? LN[k] : "-") : ((k in NV) ? NV[k] : "-") }
+    function sv(k) { if (substr(k, 1, 1) == "/") return cur(k)
+      return (k ~ /\/$/) ? ((k in LV) ? LV[k] : "-") : ((k in VV) ? VV[k] : "-") }
     function addk(p) { if (p in NV) K[p] = 1; else if (p in DN) K[p "/"] = 1; else K[p] = 1 }
     function subtree(q,   p, r, i) {
       if (q in NV) X[q] = 1
@@ -879,6 +888,8 @@ readset_keys() { # <list> <out>
       rd(ENVIRON["KN"], NV); rd(ENVIRON["KLN"], LN); rd(ENVIRON["KLP"], LP); rd(ENVIRON["KLV"], LV)
       kids(ENVIRON["KPP"], CP); kids(ENVIRON["KPV"], CV)
       if (seed) rd(ENVIRON["KV2"], VV)
+      rd(ENVIRON["KT"], TV)
+      while ((getline l < ENVIRON["KFT"]) > 0) { t = index(l, "\t"); f = substr(l, 1, t - 1); FT[f] = FT[f] "\n" substr(l, t + 1) }
       for (p in NV) { q = p
         while ((i = match(q, /\/[^\/]*$/)) > 0) { d = substr(q, 1, i - 1); e = substr(q, i + 1)
           DN[d] = 1; if (!((d SUBSEP e) in CN)) { CN[d SUBSEP e] = 1; KIDS[d] = KIDS[d] "\n" e }; q = d }
@@ -896,19 +907,25 @@ readset_keys() { # <list> <out>
         if (um) { for (p in NV) K[p] = 1 }
         else { n = split(ROWS[f], a, "\n"); for (j = 2; j <= n; j++) addk(a[j])
                n = split(OWN[f], a, "\n"); for (j = 2; j <= n; j++) K[a[j]] = 1 }
-        has = 0; st = ""; tl = ""; rl = 0
-        if (seed) { has = 1; st = "seeded"; tl = tsha; for (k in K) R[k] = sv(k) }
-        else if (f in RST) { has = 1; st = RST[f]; tl = RTL[f]
+        delete TK
+        for (k in K) if (k in FT) { n = split(FT[k], a, "\n"); for (j = 2; j <= n; j++) TK[a[j]] = 1 }
+        for (k in TK) K[k] = 1
+        has = 0; st = ""; rl = 0
+        # A SEEDED WHOLE-TREE KEY ALSO COMPARES EVERY v2 PATH: one deleted since v2 is not in K.
+        if (seed) { has = 1; st = "seeded"; for (k in K) R[k] = sv(k); if (um) for (p in VV) if (!(p in R)) R[p] = VV[p] }
+        else if (f in RST) { has = 1; st = RST[f]
           n = split(RK[f], a, "\n"); for (j = 2; j <= n; j++) R[a[j]] = RV[f SUBSEP a[j]] }
-        first = ""; fch = 0
+        first = ""; fch = 0; tch = 0
         if (has) {
           for (k in R) { if (k ~ /\/$/) rl = 1
-            if (cur(k) != R[k]) { if (first == "" || k < first) first = k; if (k ~ /\/$/) LM[k] = 1; else if (k in K) fch = 1 } }
-          for (k in K) if (!(k in R)) { if (first == "" || k < first) first = k } }
+            if (cur(k) == R[k]) continue
+            if (substr(k, 1, 1) == "/") { tch = 1; continue }
+            if (first == "" || k < first) first = k; if (k ~ /\/$/) LM[k] = 1; else if (k in K) fch = 1 }
+          for (k in K) if (!(k in R)) { if (substr(k, 1, 1) == "/") tch = 1; else if (first == "" || k < first) first = k } }
         run = 1; why = ""; c = ""
         if (!has) { why = "unrecorded"; c = "u" }
         else if (st == "stale") { why = "stale"; c = "s" }
-        else if (tl != tsha) { why = "tools changed"; c = "k" }
+        else if (tch) { why = "tools changed"; c = "k" }
         else if (first != "") { why = um ? "unmapped: closure changed" : "changed " first; c = "k" }
         else run = 0
         if (!run) { if (!seed) { print f "\tskip\t\t\t" st; continue }; ns = "seeded" }
@@ -922,9 +939,9 @@ readset_keys() { # <list> <out>
         for (k in X) print f "\t" k "\t" cur(k) > ENVIRON["KO"]
         print f "\t" (run ? "run" : "skip") "\t" why "\t" c "\t" ns }
     }' > "$out/.kdec"
-  LC_ALL=C sort -t "$tab" -k1,1 -k2 "$out/.kout" | awk -F'\t' -v kd="$out/.k" -v hdr="$out/.khdr" -v tsha="$tsha" '
+  LC_ALL=C sort -t "$tab" -k1,1 -k2 "$out/.kout" | awk -F'\t' -v kd="$out/.k" -v hdr="$out/.khdr" '
     BEGIN { while ((getline l < hdr) > 0) { t = index(l, "\t"); st[substr(l, 1, t - 1)] = substr(l, t + 1) } }
-    $1 != f { if (f != "") close(o); f = $1; o = kd "/" f; print "#format k1" > o; print "#state " st[f] > o; print "#tools " tsha > o }
+    $1 != f { if (f != "") close(o); f = $1; o = kd "/" f; print "#format k1" > o; print "#state " st[f] > o; print "#tools per-fixture" > o }
     { print substr($0, length(f) + 2) > o }'
 }
 
@@ -1070,6 +1087,8 @@ run_fixtures() {
   # nothing ran, so nothing new is blessed.
   if [ "${READSET_NO_CHANGE:-0}" = "1" ]; then
     SUITE_SKIPPED=1
+    # A seed that skips every fixture still publishes its records, so it lands once.
+    readset_keys_write "$out"
     rm -rf "$out"
     return 0
   fi
