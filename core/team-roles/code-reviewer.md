@@ -171,8 +171,8 @@ suite once in the frozen worktree and the RED replays for any anchor in no
 part's files, both before it reads any part file. It is dispatched in the same
 wave as the parts, so it then joins the part shard files its brief names with
 `AI_DLC_STATE_DIR=<the beat state directory your brief names>
-scripts/ai-dlc/wait-for-deliverable.sh --complete <part paths>`, backgrounded
-and re-armed until each is DELIVERED. It then runs every handed-over replay in
+scripts/ai-dlc/wait-for-deliverable.sh --complete --since <the round epoch your brief names> <part paths>`,
+backgrounded and re-armed until each is DELIVERED. It then runs every handed-over replay in
 the frozen worktree and records each as a column-0
 `handover-run: <ordinal> <AC-id> <RED|GREEN-SURVIVED|NO-BASELINE>` line inside
 a `#### ` finding citing exactly the parts it ran replays for. A result other
@@ -700,7 +700,10 @@ without verbatim REPL trace.**
 
 - **Deliver before idle (MANDATORY).** Before going idle/available you MUST
   `SendMessage` your full verdict (APPROVED | NEEDS_REWORK | BLOCKED, with
-  per-finding severity + file:line) to the lead. A
+  per-finding severity + file:line) to the lead. A part shard delivers its
+  shard file's absolute path, its `shard-verdict:` value and its `handovers:`
+  count; the first cross shard delivers its path, its `shard-verdict:` value
+  and the count of hand-overs it ran. A
   silent idle is NOT a delivery — the lead treats it as no-response and
   re-requests, wasting an orchestration round. Your final thinking is not your
   final message.

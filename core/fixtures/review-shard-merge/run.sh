@@ -612,36 +612,38 @@ fi
 # every part shard and writing `handover-run:`); the Deliver-before-idle bullet (the first cross
 # shard, cross-1, delivers the count of hand-overs it ran).
 p_ho_step() { local t; t="$(step2_para "$1" | joined)"
-  grep -qF 'The cross QAs, one per row `partition-document.sh --cross-groups <K>` prints (K = N), briefed `shard: cross/<K> g<g>/<G> <ordinals>` with the whole group table and the whole diff to read, each writing `cross-<g>.md` there (`cross.md` when the table has one row), are dispatched in the same wave as the part QAs, and the first cross QA'"'"'s brief names the absolute path of every part shard file and a beat state directory of its own' <<<"$t" \
-    && grep -qF 'and only then joins the part shard files itself with `AI_DLC_STATE_DIR=<that directory> wait-for-deliverable.sh --complete <part paths>`' <<<"$t" \
+  grep -qF 'The cross QAs, one per row `partition-document.sh --cross-groups <K>` prints (K = N), briefed `shard: cross/<K> g<g>/<G> <ordinals>` with the whole group table and the whole diff to read, each writing `cross-<g>.md` there (`cross.md` when the table has one row), are dispatched in the same wave as the part QAs, the first cross QA in the first wave whatever the cap leaves for the rest, and the first cross QA'"'"'s brief names the absolute path of every part shard file, the round'"'"'s epoch and a beat state directory of its own' <<<"$t" \
+    && grep -qF 'the first cross QA in the first wave whatever the cap leaves for the rest' <<<"$t" \
+    && grep -qF 'and only then joins the part shard files itself with `AI_DLC_STATE_DIR=<that directory> wait-for-deliverable.sh --complete --since <epoch> <part paths>`' <<<"$t" \
     && grep -qF 'Once that join completes, the first cross QA reads every part shard file for `handover:` lines, runs each handed-over replay and records it as a `handover-run:` line' <<<"$t"; }
 p_ho_role() { local t; t="$(role_sect "$1" | joined)"
   grep -qF 'The hand-over finding goes under `### Important`, never under a `### Deferred` container, and carries exactly one column-0 `handover: <AC-id>` line beside its `parts:` line.' <<<"$t" \
     && grep -qF 'You are dispatched in the same wave as the part shards, so the part files may not exist yet.' <<<"$t" \
-    && grep -qF 'scripts/ai-dlc/wait-for-deliverable.sh --complete <part paths>`, run in the background and re-armed until every path is DELIVERED.' <<<"$t" \
+    && grep -qF 'scripts/ai-dlc/wait-for-deliverable.sh --complete --since <the round epoch your brief names> <part paths>`, run in the background and re-armed until every path is DELIVERED.' <<<"$t" \
     && grep -qF 'Once the join completes, the cross shard reads every part shard `<ordinal>.md` its brief names for `handover:` lines, runs each handed-over replay in the frozen worktree after the project'"'"'s canonical dependency setup, and records each one as a column-0 `handover-run: <ordinal> <AC-id> <RED|GREEN-SURVIVED|NO-BASELINE>` line' <<<"$t"; }
 p_ho_deliver() { local t; t="$(role_bullet "$1" Communication '- **Deliver before idle' | joined)"
   grep -qF 'The first cross shard (`cross-1`, or `cross` when there is one cross group) delivers its shard file'"'"'s absolute path, its `shard-verdict:` value and the count of hand-overs it ran; its per-AC rows stay in the file.' <<<"$t"; }
 # OFFENDERS: the parts-first (two-wave) dispatch restored; the cross QA's own --complete join
 # dropped; the cross-read dropped from each site; the hand-over placed under Deferred; the
 # same-wave sentence moved out of its paragraph; the cross delivery dropped.
-sed -e 's/^row), are dispatched in the same wave as the part QAs, and the first cross QA.s$/row), are dispatched only after every part shard file exists, and the first cross QA'"'"'s/' "$STEP_MD" > "$WORK/ho-step-onewave.md"
-sed -e 's/^`AI_DLC_STATE_DIR=<that directory> wait-for-deliverable.sh --complete <part paths>`,$/`wait-for-deliverable.sh <part paths>`,/' "$STEP_MD" > "$WORK/ho-step-nojoin.md"
+sed -e 's/^row), are dispatched in the same wave as the part QAs, the first cross QA in$/row), are dispatched only after every part shard file exists, the first cross QA in/' "$STEP_MD" > "$WORK/ho-step-onewave.md"
+sed -e 's/^`AI_DLC_STATE_DIR=<that directory> wait-for-deliverable.sh --complete --since <epoch> <part paths>`,$/`AI_DLC_STATE_DIR=<that directory> wait-for-deliverable.sh --complete <part paths>`,/' "$STEP_MD" > "$WORK/ho-step-nojoin.md"
+sed -e 's/^the first wave whatever the cap leaves for the rest, and the first cross QA.s$/the wave after the parts, and the first cross QA'"'"'s/' "$STEP_MD" > "$WORK/ho-step-latewave.md"
 sed -e 's/^completes, the first cross QA reads every part shard file for `handover:` lines, runs each$/completes, the first cross QA may read a part shard file for `handover:` lines, runs each/' "$STEP_MD" > "$WORK/ho-step-noread.md"
-awk '/^\*\*Gate-2 dispatch:/ { p = 1 } p && /^[[:space:]]*$/ && !d { print; print "The cross QAs, one per row `partition-document.sh --cross-groups <K>` prints (K = N), briefed `shard: cross/<K> g<g>/<G> <ordinals>` with the whole group table and the whole diff to read, each writing `cross-<g>.md` there (`cross.md` when the table has one row), are dispatched in the same wave as the part QAs, and the first cross QA'"'"'s brief names the absolute path of every part shard file and a beat state directory of its own"; d = 1; p = 0 }
-     /^row\), are dispatched in the same wave as the part QAs, and the first cross QA.s$/ { print "row), are dispatched only after every part shard file exists, and the first cross QA'"'"'s"; next } { print }' "$STEP_MD" > "$WORK/ho-step-moved.md"
+awk '/^\*\*Gate-2 dispatch:/ { p = 1 } p && /^[[:space:]]*$/ && !d { print; print "The cross QAs, one per row `partition-document.sh --cross-groups <K>` prints (K = N), briefed `shard: cross/<K> g<g>/<G> <ordinals>` with the whole group table and the whole diff to read, each writing `cross-<g>.md` there (`cross.md` when the table has one row), are dispatched in the same wave as the part QAs, the first cross QA in the first wave whatever the cap leaves for the rest, and the first cross QA'"'"'s brief names the absolute path of every part shard file, the round'"'"'s epoch and a beat state directory of its own"; d = 1; p = 0 }
+     /^row\), are dispatched in the same wave as the part QAs, the first cross QA in$/ { print "row), are dispatched only after every part shard file exists, the first cross QA in"; next } { print }' "$STEP_MD" > "$WORK/ho-step-moved.md"
 grep -q '^row), are dispatched only after every part shard file exists' "$WORK/ho-step-moved.md" || cp "$STEP_MD" "$WORK/ho-step-moved.md"
 sed -e 's/^`### Important`, never under a `### Deferred` container, and carries exactly$/`### Deferred ACs`, and carries exactly/' "$QA_MD" > "$WORK/ho-role-deferred.md"
 sed -e 's/^the join completes, the cross shard reads every part shard$/the join completes, the cross shard may read a part shard/' "$QA_MD" > "$WORK/ho-role-noread.md"
-sed -e 's/^scripts\/ai-dlc\/wait-for-deliverable.sh --complete <part paths>`, run in the$/scripts\/ai-dlc\/wait-for-deliverable.sh <part paths>`, run in the/' "$QA_MD" > "$WORK/ho-role-nojoin.md"
+sed -e 's/^scripts\/ai-dlc\/wait-for-deliverable.sh --complete --since <the round epoch your brief names> <part paths>`,$/scripts\/ai-dlc\/wait-for-deliverable.sh --complete <part paths>`,/' "$QA_MD" > "$WORK/ho-role-nojoin.md"
 sed -e 's/^  `shard-verdict:` value and the count of hand-overs it ran; its per-AC rows$/  `shard-verdict:` value; its per-AC rows/' "$QA_MD" > "$WORK/ho-deliver-nocount.md"
 _s11s=0
-for _p in "$STEP_MD:ho-step-onewave.md" "$STEP_MD:ho-step-nojoin.md" "$STEP_MD:ho-step-noread.md" "$STEP_MD:ho-step-moved.md" \
+for _p in "$STEP_MD:ho-step-onewave.md" "$STEP_MD:ho-step-nojoin.md" "$STEP_MD:ho-step-latewave.md" "$STEP_MD:ho-step-noread.md" "$STEP_MD:ho-step-moved.md" \
           "$QA_MD:ho-role-deferred.md" "$QA_MD:ho-role-noread.md" "$QA_MD:ho-role-nojoin.md" "$QA_MD:ho-deliver-nocount.md"; do
   cmp -s "${_p%%:*}" "$WORK/${_p#*:}" && { _s11s=1; echo "  (unchanged probe: ${_p#*:})"; }
 done
 _s11f=""
-for _o in ho-step-onewave ho-step-nojoin ho-step-noread ho-step-moved; do p_ho_step "$WORK/$_o.md" && _s11f="$_s11f $_o"; done
+for _o in ho-step-onewave ho-step-nojoin ho-step-latewave ho-step-noread ho-step-moved; do p_ho_step "$WORK/$_o.md" && _s11f="$_s11f $_o"; done
 for _o in ho-role-deferred ho-role-noread ho-role-nojoin; do p_ho_role "$WORK/$_o.md" && _s11f="$_s11f $_o"; done
 p_ho_deliver "$WORK/ho-deliver-nocount.md" && _s11f="$_s11f ho-deliver-nocount"
 if [ "$_s11s" -ne 0 ]; then
@@ -649,7 +651,7 @@ if [ "$_s11s" -ne 0 ]; then
 elif [ -n "$_s11f" ]; then
   bad "S11-pre: FIXTURE BROKEN -- a hand-over ordering or cross-read predicate passed offender(s) [${_s11f# }]"
 else
-  ok "S11-pre: 8 offenders refused (the cross QAs dispatched after the parts; the cross QA's own --complete join dropped from the Gate-2 paragraph and from qa.md; the cross read dropped from each; the same-wave sentence moved out of the paragraph; the hand-over under '### Deferred ACs'; the cross delivery without its hand-over count)"
+  ok "S11-pre: 9 offenders refused (the cross QAs dispatched after the parts; the first cross QA out of the first wave; the cross QA's join without --since at the Gate-2 paragraph and at qa.md; the cross read dropped from each; the same-wave sentence moved out of the paragraph; the hand-over under '### Deferred ACs'; the cross delivery without its hand-over count)"
 fi
 _s11=""
 p_ho_step "$STEP_MD" || _s11="$_s11 implementation.md-Gate-2-dispatch"
@@ -668,7 +670,7 @@ fi
 # is refused at both sites.
 p_cr_step() { local t; t="$(step_para "$1" | joined)"
   ! grep -qi 'Part reviewers EXECUTE NOTHING' <<<"$t" \
-    && grep -qF '(Rule 28, "Split dispatch": files axis), all in the same wave.' <<<"$t" \
+    && grep -qF '(Rule 28, "Split dispatch": files axis), all in the same wave and the first cross reviewer in the first wave.' <<<"$t" \
     && grep -qF 'Each part reviewer replays, with `validate-mutation-red.sh`, the mutation-REDs whose anchor file lies in its part, in its own detached worktree at the frozen sha after the project'"'"'s canonical dependency setup' <<<"$t" \
     && grep -qF 'every part shard carries one header line `handovers: <n>`, `0` when it handed nothing over.' <<<"$t" \
     && grep -qF 'joins the part shard files as the first cross QA does below and runs every handed-over replay there, recorded as `handover-run:` lines' <<<"$t"; }
@@ -676,14 +678,14 @@ p_cr_role() { local t; t="$(role_sect "$1" | joined)"
   ! grep -qi 'As a part shard you EXECUTE NOTHING' <<<"$t" \
     && grep -qF 'in your OWN detached worktree at the frozen sha (`git worktree add --detach <tmp> <sha>`), never in the shared frozen worktree' <<<"$t" \
     && grep -qF 'As a part shard you also carry one column-0 `handovers: <n>` line beside `reviewed-sha:`, `0` when you handed nothing over.' <<<"$t" \
-    && grep -qF 'scripts/ai-dlc/wait-for-deliverable.sh --complete <part paths>`, backgrounded and re-armed until each is DELIVERED.' <<<"$t" \
+    && grep -qF 'scripts/ai-dlc/wait-for-deliverable.sh --complete --since <the round epoch your brief names> <part paths>`, backgrounded and re-armed until each is DELIVERED.' <<<"$t" \
     && grep -qF '`handover-run: <ordinal> <AC-id> <RED|GREEN-SURVIVED|NO-BASELINE>`' <<<"$t"; }
 sed -e 's/^Part reviewers run no suite and no build\. Each part reviewer replays, with$/Part reviewers EXECUTE NOTHING. Each part reviewer replays, with/' "$STEP_MD" > "$WORK/cr-step-exec.md"
-sed -e 's/^has one row (Rule 28, "Split dispatch": files axis), all in the same wave\.$/has one row (Rule 28, "Split dispatch": files axis)./' "$STEP_MD" > "$WORK/cr-step-wave.md"
+sed -e 's/^has one row (Rule 28, "Split dispatch": files axis), all in the same wave and$/has one row (Rule 28, "Split dispatch": files axis), and/' "$STEP_MD" > "$WORK/cr-step-wave.md"
 sed -e 's/^one header line `handovers: <n>`, `0` when it handed nothing over\. The first$/one header line, `0` when it handed nothing over. The first/' "$STEP_MD" > "$WORK/cr-step-nocount.md"
 sed -e 's/^`parts:` set\. As a part shard you run no suite and no build\. You replay,$/`parts:` set. As a part shard you EXECUTE NOTHING. You replay,/' "$ROLE_MD" > "$WORK/cr-role-exec.md"
 sed -e 's/^(`git worktree add --detach <tmp> <sha>`), never in the shared frozen$/in the shared frozen/' "$ROLE_MD" > "$WORK/cr-role-shared.md"
-sed -e 's/^and re-armed until each is DELIVERED\. It then runs every handed-over replay in$/and checked once. It then runs every handed-over replay in/' "$ROLE_MD" > "$WORK/cr-role-nojoin.md"
+sed -e 's/^scripts\/ai-dlc\/wait-for-deliverable.sh --complete --since <the round epoch your brief names> <part paths>`,$/scripts\/ai-dlc\/wait-for-deliverable.sh --complete <part paths>`,/' "$ROLE_MD" > "$WORK/cr-role-nojoin.md"
 _s13s=0
 for _p in "$STEP_MD:cr-step-exec.md" "$STEP_MD:cr-step-wave.md" "$STEP_MD:cr-step-nocount.md" \
           "$ROLE_MD:cr-role-exec.md" "$ROLE_MD:cr-role-shared.md" "$ROLE_MD:cr-role-nojoin.md"; do

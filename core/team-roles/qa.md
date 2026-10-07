@@ -416,8 +416,8 @@ files may not exist yet. Do every duty that reads no part file first: the
 precondition, the canonical run and every item above except the handed-over
 replays and the per-AC table. Then join the part shard files your brief names
 with `AI_DLC_STATE_DIR=<the beat state directory your brief names>
-scripts/ai-dlc/wait-for-deliverable.sh --complete <part paths>`, run in the
-background and re-armed until every path is DELIVERED. A path it reports
+scripts/ai-dlc/wait-for-deliverable.sh --complete --since <the round epoch your brief names> <part paths>`,
+run in the background and re-armed until every path is DELIVERED. A path it reports
 NON-DELIVERY goes to the lead in your shard as a finding, never a guess. Once
 the join completes, the cross shard reads every part shard
 `<ordinal>.md` its brief names for `handover:` lines, runs each handed-over

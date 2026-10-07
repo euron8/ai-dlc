@@ -315,7 +315,8 @@ reviewer per row `partition-document.sh --cross-groups <K>` prints (K = N), brie
 `shard: cross/<K> g<g>/<G> <ordinals>` with the whole group table, the whole
 diff to read with its group's pairs as its focus (it may cite any part; Rule 28,
 "The cross-part agent is sharded too") and its shard path `cross-<g>.md`, or `cross.md` when the table
-has one row (Rule 28, "Split dispatch": files axis), all in the same wave.
+has one row (Rule 28, "Split dispatch": files axis), all in the same wave and
+the first cross reviewer in the first wave.
 Part reviewers run no suite and no build. Each part reviewer replays, with
 `validate-mutation-red.sh`, the mutation-REDs whose anchor file lies in its
 part, in its own detached worktree at the frozen sha after the project's
@@ -381,16 +382,20 @@ its shard file `<ordinal>.md` in the shard directory, in Rule 28 waves
 `partition-document.sh --cross-groups <K>` prints (K = N), briefed
 `shard: cross/<K> g<g>/<G> <ordinals>` with the whole group table and the whole
 diff to read, each writing `cross-<g>.md` there (`cross.md` when the table has one
-row), are dispatched in the same wave as the part QAs, and the first cross QA's
-brief names the absolute path of every part shard file and a beat state
-directory of its own, outside the shard directory and never the lead's. Only
+row), are dispatched in the same wave as the part QAs, the first cross QA in
+the first wave whatever the cap leaves for the rest, and the first cross QA's
+brief names the absolute path of every part shard file, the round's epoch and
+a beat state directory of its own, outside the shard directory and never the
+lead's. Only
 the first cross QA's hand-over replays and per-AC table read what the parts
 wrote, so it first does every duty that reads no part file -- the Handoff
 Evidence Precondition, the one honest-green canonical run, every checklist item
 off the part-local list and its interaction findings -- and only then joins the
 part shard files itself with
-`AI_DLC_STATE_DIR=<that directory> wait-for-deliverable.sh --complete <part paths>`,
-backgrounded and re-armed as a Rule 29 beat is. The first cross QA
+`AI_DLC_STATE_DIR=<that directory> wait-for-deliverable.sh --complete --since <epoch> <part paths>`,
+backgrounded and re-armed as a Rule 29 beat is; without `--since` a part that
+finished during the canonical run reads as written before the join and never
+delivers. The first cross QA
 (`cross-1`, or `cross`) is the execution owner: it alone runs in the frozen
 worktree, runs every handed-over replay and writes the per-AC table and the
 `## Deferred ACs` section; every other cross QA executes nothing and reports
