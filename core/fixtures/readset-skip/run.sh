@@ -3458,6 +3458,90 @@ STUB
     fi
     lm_seed; lm_run "$SL/deriver.sh" "$SL/whole.list" same STUB_TRIP=1 >/dev/null
     lm_mut nocount "$SL/d.nocount.sh" "$SL/whole.list" same "LOCAL TRIP x2" "0|0|no|1|*" STUB_TRIP=1
+
+    # THE MAP IS WRITTEN AFTER EACH ACCEPTED FIXTURE, SO AN INTERRUPTED RUN KEEPS WHAT IT TRACED.
+    # Three fixtures with OLD committed rows; a `--list "fxw1 fxw2 fxw3"` run is SIGKILLed while
+    # fxw3 runs (fxw3 touches <flag>.at and waits; the fixture then kills the deriver and its direct
+    # children, and removes the flag so fxw3 exits instead of leaking). The map must hold fxw1's and
+    # fxw2's NEW rows, none of their OLD ones, fxw3's OLD row and no fxw3 NEW row. The mutant
+    # deletes the per-fixture call, restoring end-only writing: the kill then leaves the map as seeded.
+    # The identity arm runs the same three UNINTERRUPTED, with fxw2 omitted by the canary (its read
+    # of src/w2.sh is unreported), so the final map carries an OMITTED line and drops a mid-list
+    # fixture's rows -- and the per-fixture map must be byte-identical to the end-only mutant's.
+    mkdir -p "$BR/core/fixtures/fxw1" "$BR/core/fixtures/fxw2" "$BR/core/fixtures/fxw3" || broken "mkdir failed"
+    printf '#!/bin/bash\ncat src/w1.sh >/dev/null\n' > "$BR/core/fixtures/fxw1/run.sh"
+    printf '#!/bin/bash\ncat src/w2.sh >/dev/null\n' > "$BR/core/fixtures/fxw2/run.sh"
+    printf '#!/bin/bash\ncat src/w3.sh >/dev/null\nif [ -n "${STUB_KILLFLAG:-}" ]; then : > "$STUB_KILLFLAG.at"; i=0; while [ -e "$STUB_KILLFLAG" ] && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i+1)); done; fi\n' > "$BR/core/fixtures/fxw3/run.sh"
+    printf 'w1\n' > "$BR/src/w1.sh"; printf 'w2\n' > "$BR/src/w2.sh"; printf 'w3\n' > "$BR/src/w3.sh"
+    printf 'fxw1\tsrc/OLD-1\nfxw2\tsrc/OLD-2\nfxw3\tsrc/OLD-3\n' >> "$BR/.ai-dlc-fixture-readsets.tsv"
+    ( cd "$BR" && git add -A && git -c user.email=f@f -c user.name=f commit -qm fxw ) >/dev/null 2>&1 || broken "could not seed fxw1-3"
+    printf '%s\n' core/fixtures/fxw1/run.sh core/fixtures/fxw2/run.sh core/fixtures/fxw3/run.sh src/w1.sh src/w2.sh src/w3.sh > "$SX/fxw.list"
+    printf '%s\n' core/fixtures/fxw1/run.sh core/fixtures/fxw2/run.sh core/fixtures/fxw3/run.sh src/w1.sh src/w3.sh > "$SX/fxw.omit.list"
+    sed '/^    \[ -n "\$LOCAL_MAP" \] || \[ "\$TRACER" = both \] || ( LIST="\$DONE"; readset_write_map )/d' "$SB/deriver.sh" > "$SX/deriver.endonly.sh"
+    iw_run() { # <deriver copy> <stream list> <kill: yes|no> <map copy out>; prints "<rc>|<killed at fxw3>"
+      local dv="$1" sl="$2" k="$3" out="$4" pid r at=no i=0 kf=""
+      cp "$dv" "$STUB_DERIVER"
+      rm -f "$SX/kill" "$SX/kill.at"
+      [ "$k" = yes ] && { kf="$SX/kill"; : > "$kf"; }
+      ( cd "$BR" && exec env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$sl" STUB_KILLFLAG="$kf" \
+          AI_DLC_READSET_TRACE_ROOT="$SX_TR" bash core/scripts/derive-fixture-readsets.sh --list "fxw1 fxw2 fxw3" --tracer sandbox ) > "$WORK/iw.out" 2>&1 </dev/null &
+      pid=$!
+      if [ "$k" = yes ]; then
+        while [ ! -e "$SX/kill.at" ] && [ "$i" -lt 600 ]; do sleep 0.1; i=$((i+1)); done
+        [ -e "$SX/kill.at" ] && at=yes
+        pkill -9 -P "$pid" 2>/dev/null; kill -9 "$pid" 2>/dev/null
+        wait "$pid" 2>/dev/null; r=killed
+        rm -f "$SX/kill"
+      else
+        wait "$pid"; r=$?
+      fi
+      cp "$BR/.ai-dlc-fixture-readsets.tsv" "$out"
+      ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
+      printf '%s|%s' "$r" "$at"
+    }
+    iw_sig() { # <map>; prints one 0/1 per row: fxw1 new, fxw1 old, fxw2 new, fxw2 old, fxw3 new, fxw3 old, then |<other rows>|<tmp files left>
+      local m="$1" s="" row c t
+      for row in 'fxw1	src/w1.sh' 'fxw1	src/OLD-1' 'fxw2	src/w2.sh' 'fxw2	src/OLD-2' 'fxw3	src/w3.sh' 'fxw3	src/OLD-3'; do
+        c="$(grep -cxF "$row" "$m")" || c=0; s="$s$c"
+      done
+      c="$(grep -c '^other	' "$m")" || c=0
+      t="$(find "$BR" -maxdepth 1 -name '.ai-dlc-fixture-readsets.tsv.tmp.*' | grep -c .)" || t=0
+      printf '%s|%s|%s' "$s" "$c" "$t"
+    }
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    IW="$(iw_run "$SB/deriver.sh" "$SX/fxw.list" yes "$WORK/iw.killed.tsv")"
+    IWS="$(iw_sig "$WORK/iw.killed.tsv")"
+    if [ "$IW|$IWS" = "killed|yes|101001|2|0" ]; then
+      ok "INTERRUPTED: a 3-fixture --list run SIGKILLed during fxw3 leaves a map holding fxw1's and fxw2's new rows, fxw3's old row, the untraced fixture's rows, and no temp file"
+    else
+      bad "INTERRUPTED: expected 'killed|yes|101001|2|0' (rc|reached fxw3|new/old rows fxw1..3|other rows|tmp files), got '$IW|$IWS' — $(tail -3 "$WORK/iw.out" | tr '\n' ' ')"
+    fi
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    if cmp -s "$SB/deriver.sh" "$SX/deriver.endonly.sh"; then
+      bad "INTERRUPTED MUTANT endonly did not apply: deleting the per-fixture write changed nothing in the deriver copy"
+    else
+      IWM="$(iw_run "$SX/deriver.endonly.sh" "$SX/fxw.list" yes "$WORK/iw.killed.endonly.tsv")"
+      IWMS="$(iw_sig "$WORK/iw.killed.endonly.tsv")"
+      case "$IWM|$IWMS" in
+        "killed|yes|010101|2|0") ok "INTERRUPTED MUTANT endonly is KILLED: with end-only writing the same SIGKILL leaves every fixture's OLD row and none of the new ones" ;;
+        *) bad "INTERRUPTED MUTANT endonly: expected 'killed|yes|010101|2|0', got '$IWM|$IWMS' — $(tail -3 "$WORK/iw.out" | tr '\n' ' ')" ;;
+      esac
+    fi
+    # The identity arm. The fix's run must have written per fixture (fxw1's write log names the map)
+    # and reached a map that MOVED (new rows, fxw2's OLD row dropped, the OMITTED line), so the cmp is
+    # not two untouched seeds agreeing; the mutant must have written none.
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    IU="$(iw_run "$SB/deriver.sh" "$SX/fxw.omit.list" no "$WORK/iw.full.tsv")"
+    IU_W="$(grep -c '^\[[0-9:]*\] wrote ' "$SX_TR/w/fxw1.write" 2>/dev/null)" || IU_W=0
+    IUE="$(iw_run "$SX/deriver.endonly.sh" "$SX/fxw.omit.list" no "$WORK/iw.full.endonly.tsv")"
+    IUE_W=0; [ -e "$SX_TR/w/fxw1.write" ] && IUE_W=1
+    IUS="$(iw_sig "$WORK/iw.full.tsv")"
+    IUH="$(grep -cx '# OMITTED by the last run (always run): fxw2' "$WORK/iw.full.tsv")" || IUH=0
+    if [ "$IU|$IUE|$IU_W|$IUE_W|$IUS|$IUH" = "0|0|1|0|100010|2|0|1" ] && cmp -s "$WORK/iw.full.tsv" "$WORK/iw.full.endonly.tsv"; then
+      ok "IDENTITY: an uninterrupted run that wrote after each fixture ends on a map byte-identical (cmp -s) to the end-only write's, including the OMITTED line for the mid-list fxw2"
+    else
+      bad "IDENTITY: expected '0|0|1|0|100010|2|0|1' and identical maps, got '$IU|$IUE|$IU_W|$IUE_W|$IUS|$IUH' cmp=$(cmp -s "$WORK/iw.full.tsv" "$WORK/iw.full.endonly.tsv" && echo same || echo DIFFER) — $(diff "$WORK/iw.full.tsv" "$WORK/iw.full.endonly.tsv" | head -4 | tr '\n' ' ')"
+    fi
   fi
 fi
 
