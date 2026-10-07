@@ -946,7 +946,7 @@ readset_both_verdict() {
 }
 # READSET_BOTH_END
 
-OMITTED=""; MAPPED=0; TOTAL_PATHS=0
+OMITTED=""; MAPPED=0; TOTAL_PATHS=0; DONE=""
 : > "$WORK/map"
 : > "$WORK/both.results"
 : > "$WORK/both.missed"
@@ -978,7 +978,175 @@ sandbox_paths() {
 }
 # READSET_SBPATHS_END
 
+# THE MAP IS WRITTEN AFTER EVERY ACCEPTED FIXTURE, NOT ONLY AT THE END. Each trace is independent,
+# and a run interrupted after N clean fixtures used to lose all N: measured, a 5-fixture run killed
+# after 2 clean traces wrote neither. readset_write_map is the whole merge-guard-control-write
+# sequence, called in a SUBSHELL with LIST set to the fixtures traced so far after each accepted
+# fixture (so a `die` there skips that write and leaves the previous map in place), and once more
+# at the end over the whole LIST, which writes the OMITTED line and is the map an uninterrupted run
+# always wrote. Its merge reads the map the previous call wrote; that map differs from the original
+# only in fixtures this run already traced, and the final merge replaces all of those, so the final
+# map is byte-identical to the end-only one. core/fixtures/readset-skip kills a 3-fixture run in its
+# third fixture and asserts the first two landed, and cmp-s an uninterrupted map against end-only.
+# THE WRITE IS A TEMP FILE BESIDE THE MAP, then mv, so an interrupt mid-write never leaves a
+# truncated map. `cp -p` first carries the existing map's mode and, under sudo, its owner.
+readset_write_map() {
+# ---------------------------------------------------------------------- controls ----
+# A map is only worth shipping if it still selects the fixture that caught a real regression,
+# and only meaningful if it does NOT select everything. Both are asserted here, on the same
+# read, before anything is written to the tree.
+FAIL=0
+# Membership by `case` glob rather than `echo | tr | grep -qx`: that idiom is a pipeline
+# feeding a reader which leaves at its first match, and under `pipefail` the pipeline answers
+# with the WRITER's EPIPE once the upstream's post-match output passes the pipe buffer -- a
+# SIZE threshold, so it is correct until it is permanently wrong with no symptom. I54b caught
+# exactly this line in this file. The glob also forks nothing.
+#
+# THE PAIR READS THIS RUN'S TRACED ROWS, SO IT RUNS ONLY WHEN plan-shape HAS ROWS IN THEM. A listed
+# plan-shape that was OMITTED has none by construction; judged anyway, the positive control fails
+# and the run dies "controls failed" -- one omitted fixture discarding every good trace, which is
+# the defect the merge guard below was fixed for. The omission is printed instead, and the fixture
+# runs on every push because it is unmapped. Same shape as the `--list` carve-out after this block.
+case " $LIST " in *" plan-shape "*) ;; *) FIXTURE_HAS_PLAN_SHAPE=no ;; esac
+if [ "${FIXTURE_HAS_PLAN_SHAPE:-yes}" = yes ] && ! grep -q '^plan-shape	' "$WORK/map"; then
+  echo "  SKIP  plan-shape controls: plan-shape OMITTED this run"
+  FIXTURE_HAS_PLAN_SHAPE=no
+fi
+if [ "${FIXTURE_HAS_PLAN_SHAPE:-yes}" = yes ]; then
+  if grep -qxF "plan-shape	scripts/validate-plan-shape.sh" "$WORK/map"; then
+    echo "  PASS  plan-shape's read-set names its own subject (the v0.293.0 regression case)"
+  else
+    echo "  FAIL  plan-shape's read-set does NOT name scripts/validate-plan-shape.sh"; FAIL=1
+  fi
+  if grep -qxF "plan-shape	scripts/validate-release-version.sh" "$WORK/map"; then
+    echo "  FAIL  CONTROL: plan-shape also 'reads' an unrelated validator -- the set is not selective"; FAIL=1
+  else
+    echo "  PASS  CONTROL: an unrelated validator is absent from plan-shape's read-set"
+  fi
+fi
+# UNDER `--list` THIS CONTROL READS THE MERGED MAP, BELOW, NOT THIS RUN'S TRACED COUNT. A one-fixture
+# refresh whose fixture is OMITTED maps zero fixtures in this run by construction, and dying here
+# left that fixture's STALE rows in the map -- the map went on asserting a read-set the run had
+# just refused. Written instead, the omission drops those rows and the fixture runs every push.
+# Under `--all` the traced count IS the whole map, so it is read here.
+if [ "$MODE" != --list ]; then
+  [ "$MAPPED" -gt 0 ] || { echo "  FAIL  zero fixtures mapped -- an empty map would skip the whole suite"; FAIL=1; }
+fi
+
+# THE TWO CONTROLS ABOVE NAME A FIXTURE AND A VALIDATOR THAT EXIST ONLY IN THIS DISTRIBUTION,
+# so in an installed tree the whole `if` is skipped and only "mapped > 0" is left -- which is
+# satisfied by a map that records one path for one fixture. A shipped program whose controls
+# cannot fire on the tree it ships to is this repo's named defect class, so the pair below is
+# DERIVED and holds in any tree.
+#
+# POSITIVE: a fixture reads its own driver. `bash <root>/<fx>/run.sh` is how the runner starts
+# it, so that path is in every honest read-set. A trace that lost it lost the fixture's first
+# open, which means the capture boundary moved and every other path in that set is suspect.
+#
+# NEGATIVE: the map DISCRIMINATES. A read-set equal to the whole universe selects its fixture
+# on every change and is a full run wearing a map's clothes -- and it is the shape an
+# over-broad filter produces, so a map built entirely of them would report success while
+# skipping nothing. One fixture whose set is a proper subset of the union is enough to
+# establish that the instrument separates; zero of them is not.
+# STAGED, WITH ITS STATUS READ: a `< <(cut … | sort -u)` feed discarded it, so a failed read of
+# the map checked no fixture and this POSITIVE control passed having looked at nothing.
+if cut -f1 "$WORK/map" | sort -u > "$WORK/map-fixtures"; then
+  while IFS= read -r cfx; do
+    [ -n "$cfx" ] || continue
+    if ! grep -qxF "$cfx	$FIXTURE_ROOT/$cfx/run.sh" "$WORK/map"; then
+      echo "  FAIL  $cfx's read-set does not name its own driver $FIXTURE_ROOT/$cfx/run.sh"; FAIL=1
+    fi
+  done < "$WORK/map-fixtures"
+else
+  echo "  FAIL  the fixture list could not be read out of $WORK/map, so this positive control did not run"; FAIL=1
+fi
+
+# THE MERGE HAPPENS HERE, ABOVE THE NEGATIVE CONTROL, BECAUSE THAT CONTROL JUDGES THE MAP THIS
+# RUN WILL WRITE -- which is the merged one, never the handful of fixtures this run traced.
+# Judged on the traced map alone, a `--list "<one fixture>"` run compares that fixture's set
+# against a universe built from that same set: the two are equal by construction, N_PROPER is 0
+# for every possible input, and the control fails every single-fixture refresh while looking
+# exactly like a map that discriminates nothing. Measured: three owed `--list` refreshes failed
+# identically, and the only workaround was to list more fixtures.
+#
+# THE ORDERING HAS A CONSEQUENCE AND IT IS DELIBERATE. The merge's "dropped '$f'" die now runs
+# BEFORE the control verdicts are read, so a run whose merge lost an untraced fixture reports
+# that die rather than a control line -- the earlier failure names the earlier fault, and the
+# map is unwritten either way.
+#
+# THE `--all` READING CHANGES ONLY WHERE THE COMMITTED MAP NAMES A FIXTURE THAT IS NO LONGER ON
+# DISK. Under `--all` every fixture on disk is traced, so the merged map adds nothing except
+# such a stale fixture's paths, which would widen the universe. That case is live, not
+# hypothetical: the committed map has carried rows for a fixture with no directory under the
+# fixture root (notify-hook-channel). Such a fixture is untraced and kept by the merge, so the
+# guard below does not die on it -- its rows survive every `--all` run until removed by hand.
+MERGED="$WORK/merged"
+readset_merge_map "$MAP" "$WORK/map" "$LIST" | LC_ALL=C sort -u > "$MERGED"
+if [ "$MODE" = --list ]; then
+  N_MERGED_FIX="$(cut -f1 "$MERGED" | LC_ALL=C sort -u | grep -c .)" || N_MERGED_FIX=0
+  [ "$N_MERGED_FIX" -gt 0 ] || { echo "  FAIL  zero fixtures in the merged map -- an empty map would skip the whole suite"; FAIL=1; }
+fi
+
+# THE MERGE MUST NOT LOSE A FIXTURE IT WAS NOT ASKED ABOUT. Dropping one is SAFE (an unmapped
+# fixture always runs) but it silently costs the skip, which is the entire point of the file --
+# and the first version of `--list` did exactly that, rewriting the whole map from the handful
+# of fixtures it had just traced. Asserted rather than trusted.
+# The comparison is readset_untraced_lost, between sentinels above, so readset-skip drives it. Its
+# output is staged to a file and its status read: a failed read must refuse, never pass as "lost
+# nothing".
+if [ -s "$MAP" ]; then
+  readset_untraced_lost "$MAP" "$MERGED" "$LIST" > "$WORK/untraced.lost" \
+    || die "could not compare $MAP against the merged map $MERGED -- refusing to write a map whose losses were never checked"
+  if [ -s "$WORK/untraced.lost" ]; then
+    f="$(head -1 "$WORK/untraced.lost")"
+    die "merge dropped '$f', which this run never traced -- refusing to write a map that silently stops skipping"
+  fi
+fi
+
+readset_discrimination_control "$MERGED" || FAIL=1
+
+[ "$FAIL" -eq 0 ] || die "controls failed; the map was NOT written"
+
+M_FIX="$(cut -f1 "$MERGED" | sort -u | wc -l | tr -d ' ')"
+M_ENT="$(wc -l < "$MERGED" | tr -d ' ')"
+M_PATH="$(cut -f2 "$MERGED" | sort -u | wc -l | tr -d ' ')"
+[ "$M_ENT" -gt 0 ] || die "the merged map is empty -- refusing to write it"
+
+MAP_TMP="$MAP.tmp.$$"
+if [ -e "$MAP" ]; then cp -p "$MAP" "$MAP_TMP" || die "could not stage $MAP_TMP -- $MAP is unchanged"; fi
+{
+  echo "# GENERATED by derive-fixture-readsets.sh -- DO NOT EDIT BY HAND."
+  echo "# LOG -- unbounded by design; rotation does not apply. It grows with the fixture suite and is regenerated whole, never trimmed."
+  echo "#"
+  echo "# <fixture>\t<path it reads>. The pre-push suite runs a fixture when any changed path"
+  echo "# is in its set, and ALWAYS runs a fixture that has no entry here -- absence means"
+  echo "# 'run it', never 'depends on nothing'. Re-derive after changing a fixture or anything"
+  echo "# it reads: a stale entry is safe only in the direction of running too much."
+  echo "#"
+  echo "# A --list run MERGES: it replaces the entries of the fixtures it traced and leaves"
+  echo "# every other fixture's entries alone, so refreshing one fixture costs its own runtime"
+  echo "# rather than a full re-derivation."
+  echo "#"
+  echo "# fixtures mapped: $M_FIX    entries: $M_ENT"
+  [ -n "$OMITTED" ] && echo "# OMITTED by the last run (always run): $OMITTED"
+  cat "$MERGED"
+} > "$MAP_TMP" || { rm -f "$MAP_TMP"; die "could not write $MAP_TMP -- $MAP is unchanged"; }
+mv -f "$MAP_TMP" "$MAP" || { rm -f "$MAP_TMP"; die "could not move $MAP_TMP over $MAP -- $MAP is unchanged"; }
+}
+
+# The PRESENT set for `--local-map`, read off the checkout the hook pushed from, not the trace copy:
+# a fixture deleted there since the copy was taken is gone for the next push too.
+readset_local_present() {
+  local _pd
+  for _pd in "$REPO_ROOT/$FIXTURE_ROOT"/*/; do
+    [ -f "${_pd}run.sh" ] || continue
+    _pd="${_pd%/}"; printf '%s\n' "${_pd##*/}"
+  done
+}
+
 for fx in $LIST; do
+  DONE="${DONE}${DONE:+ }$fx"
+  [ -z "$LOCAL_MAP" ] || { : > "$WORK/local.ok"; : > "$WORK/local.discards"; }
   raw="$WORK/$fx.raw"
   CUR_FX="$fx"
   # Under `--local-map` the stream selects this fixture's own tag, never the trace root: one
@@ -1237,21 +1405,20 @@ for fx in $LIST; do
       readset_hash_rows "$TREE" "$fx" "$WORK/$fx.set" >> "$WORK/local.ok" \
         || { echo "  could not hash $fx's set in the trace copy -- not recorded" >&2; }
     fi
+    [ -n "$LOCAL_MAP" ] || [ "$TRACER" = both ] || ( LIST="$DONE"; readset_write_map ) > "$WORK/$fx.write" 2>&1 || :
+  fi
+  # `--local-map` writes its file after EVERY fixture, kept or discarded, for the same reason.
+  if [ -n "$LOCAL_MAP" ]; then
+    readset_local_present > "$WORK/local.present"
+    readset_local_write "$LOCAL_MAP" "$MAP" "$WORK/local.ok" "$WORK/local.discards" "$fx" "$DERIVER_SHA" "$WORK/local.present" \
+      || die "could not write $LOCAL_MAP after tracing $fx -- that fixture's rows are unchanged"
   fi
 done
 
 # `--local-map` ENDS HERE. It never reaches the controls or the committed map's write: those judge
 # a full map, and a one-fixture local trace would fail the plan-shape pair and the discrimination
-# control by construction. Its own conditions were applied per fixture above.
+# control by construction. Its own conditions were applied, and its file written, per fixture above.
 if [ -n "$LOCAL_MAP" ]; then
-  # The PRESENT set is read off the checkout the hook pushed from, not the trace copy: a fixture
-  # deleted there since the copy was taken is gone for the next push too.
-  for _pd in "$REPO_ROOT/$FIXTURE_ROOT"/*/; do
-    [ -f "${_pd}run.sh" ] || continue
-    _pd="${_pd%/}"; printf '%s\n' "${_pd##*/}"
-  done > "$WORK/local.present"
-  readset_local_write "$LOCAL_MAP" "$MAP" "$WORK/local.ok" "$WORK/local.discards" "$LIST" "$DERIVER_SHA" "$WORK/local.present" \
-    || die "could not write $LOCAL_MAP -- it is unchanged"
   say "wrote $LOCAL_MAP -- $MAPPED of $N_SUBJECT traced fixture(s) recorded${OMITTED:+; discarded: $OMITTED}"
   exit 0
 fi
@@ -1268,144 +1435,9 @@ if [ "$TRACER" = both ]; then
   exit "$BOTH_RC"
 fi
 
-# ---------------------------------------------------------------------- controls ----
-# A map is only worth shipping if it still selects the fixture that caught a real regression,
-# and only meaningful if it does NOT select everything. Both are asserted here, on the same
-# read, before anything is written to the tree.
-FAIL=0
-# Membership by `case` glob rather than `echo | tr | grep -qx`: that idiom is a pipeline
-# feeding a reader which leaves at its first match, and under `pipefail` the pipeline answers
-# with the WRITER's EPIPE once the upstream's post-match output passes the pipe buffer -- a
-# SIZE threshold, so it is correct until it is permanently wrong with no symptom. I54b caught
-# exactly this line in this file. The glob also forks nothing.
-#
-# THE PAIR READS THIS RUN'S TRACED ROWS, SO IT RUNS ONLY WHEN plan-shape HAS ROWS IN THEM. A listed
-# plan-shape that was OMITTED has none by construction; judged anyway, the positive control fails
-# and the run dies "controls failed" -- one omitted fixture discarding every good trace, which is
-# the defect the merge guard below was fixed for. The omission is printed instead, and the fixture
-# runs on every push because it is unmapped. Same shape as the `--list` carve-out after this block.
-case " $LIST " in *" plan-shape "*) ;; *) FIXTURE_HAS_PLAN_SHAPE=no ;; esac
-if [ "${FIXTURE_HAS_PLAN_SHAPE:-yes}" = yes ] && ! grep -q '^plan-shape	' "$WORK/map"; then
-  echo "  SKIP  plan-shape controls: plan-shape OMITTED this run"
-  FIXTURE_HAS_PLAN_SHAPE=no
-fi
-if [ "${FIXTURE_HAS_PLAN_SHAPE:-yes}" = yes ]; then
-  if grep -qxF "plan-shape	scripts/validate-plan-shape.sh" "$WORK/map"; then
-    echo "  PASS  plan-shape's read-set names its own subject (the v0.293.0 regression case)"
-  else
-    echo "  FAIL  plan-shape's read-set does NOT name scripts/validate-plan-shape.sh"; FAIL=1
-  fi
-  if grep -qxF "plan-shape	scripts/validate-release-version.sh" "$WORK/map"; then
-    echo "  FAIL  CONTROL: plan-shape also 'reads' an unrelated validator -- the set is not selective"; FAIL=1
-  else
-    echo "  PASS  CONTROL: an unrelated validator is absent from plan-shape's read-set"
-  fi
-fi
-# UNDER `--list` THIS CONTROL READS THE MERGED MAP, BELOW, NOT THIS RUN'S TRACED COUNT. A one-fixture
-# refresh whose fixture is OMITTED maps zero fixtures in this run by construction, and dying here
-# left that fixture's STALE rows in the map -- the map went on asserting a read-set the run had
-# just refused. Written instead, the omission drops those rows and the fixture runs every push.
-# Under `--all` the traced count IS the whole map, so it is read here.
-if [ "$MODE" != --list ]; then
-  [ "$MAPPED" -gt 0 ] || { echo "  FAIL  zero fixtures mapped -- an empty map would skip the whole suite"; FAIL=1; }
-fi
-
-# THE TWO CONTROLS ABOVE NAME A FIXTURE AND A VALIDATOR THAT EXIST ONLY IN THIS DISTRIBUTION,
-# so in an installed tree the whole `if` is skipped and only "mapped > 0" is left -- which is
-# satisfied by a map that records one path for one fixture. A shipped program whose controls
-# cannot fire on the tree it ships to is this repo's named defect class, so the pair below is
-# DERIVED and holds in any tree.
-#
-# POSITIVE: a fixture reads its own driver. `bash <root>/<fx>/run.sh` is how the runner starts
-# it, so that path is in every honest read-set. A trace that lost it lost the fixture's first
-# open, which means the capture boundary moved and every other path in that set is suspect.
-#
-# NEGATIVE: the map DISCRIMINATES. A read-set equal to the whole universe selects its fixture
-# on every change and is a full run wearing a map's clothes -- and it is the shape an
-# over-broad filter produces, so a map built entirely of them would report success while
-# skipping nothing. One fixture whose set is a proper subset of the union is enough to
-# establish that the instrument separates; zero of them is not.
-# STAGED, WITH ITS STATUS READ: a `< <(cut … | sort -u)` feed discarded it, so a failed read of
-# the map checked no fixture and this POSITIVE control passed having looked at nothing.
-if cut -f1 "$WORK/map" | sort -u > "$WORK/map-fixtures"; then
-  while IFS= read -r cfx; do
-    [ -n "$cfx" ] || continue
-    if ! grep -qxF "$cfx	$FIXTURE_ROOT/$cfx/run.sh" "$WORK/map"; then
-      echo "  FAIL  $cfx's read-set does not name its own driver $FIXTURE_ROOT/$cfx/run.sh"; FAIL=1
-    fi
-  done < "$WORK/map-fixtures"
-else
-  echo "  FAIL  the fixture list could not be read out of $WORK/map, so this positive control did not run"; FAIL=1
-fi
-
-# THE MERGE HAPPENS HERE, ABOVE THE NEGATIVE CONTROL, BECAUSE THAT CONTROL JUDGES THE MAP THIS
-# RUN WILL WRITE -- which is the merged one, never the handful of fixtures this run traced.
-# Judged on the traced map alone, a `--list "<one fixture>"` run compares that fixture's set
-# against a universe built from that same set: the two are equal by construction, N_PROPER is 0
-# for every possible input, and the control fails every single-fixture refresh while looking
-# exactly like a map that discriminates nothing. Measured: three owed `--list` refreshes failed
-# identically, and the only workaround was to list more fixtures.
-#
-# THE ORDERING HAS A CONSEQUENCE AND IT IS DELIBERATE. The merge's "dropped '$f'" die now runs
-# BEFORE the control verdicts are read, so a run whose merge lost an untraced fixture reports
-# that die rather than a control line -- the earlier failure names the earlier fault, and the
-# map is unwritten either way.
-#
-# THE `--all` READING CHANGES ONLY WHERE THE COMMITTED MAP NAMES A FIXTURE THAT IS NO LONGER ON
-# DISK. Under `--all` every fixture on disk is traced, so the merged map adds nothing except
-# such a stale fixture's paths, which would widen the universe. That case is live, not
-# hypothetical: the committed map has carried rows for a fixture with no directory under the
-# fixture root (notify-hook-channel). Such a fixture is untraced and kept by the merge, so the
-# guard below does not die on it -- its rows survive every `--all` run until removed by hand.
-MERGED="$WORK/merged"
-readset_merge_map "$MAP" "$WORK/map" "$LIST" | LC_ALL=C sort -u > "$MERGED"
-if [ "$MODE" = --list ]; then
-  N_MERGED_FIX="$(cut -f1 "$MERGED" | LC_ALL=C sort -u | grep -c .)" || N_MERGED_FIX=0
-  [ "$N_MERGED_FIX" -gt 0 ] || { echo "  FAIL  zero fixtures in the merged map -- an empty map would skip the whole suite"; FAIL=1; }
-fi
-
-# THE MERGE MUST NOT LOSE A FIXTURE IT WAS NOT ASKED ABOUT. Dropping one is SAFE (an unmapped
-# fixture always runs) but it silently costs the skip, which is the entire point of the file --
-# and the first version of `--list` did exactly that, rewriting the whole map from the handful
-# of fixtures it had just traced. Asserted rather than trusted.
-# The comparison is readset_untraced_lost, between sentinels above, so readset-skip drives it. Its
-# output is staged to a file and its status read: a failed read must refuse, never pass as "lost
-# nothing".
-if [ -s "$MAP" ]; then
-  readset_untraced_lost "$MAP" "$MERGED" "$LIST" > "$WORK/untraced.lost" \
-    || die "could not compare $MAP against the merged map $MERGED -- refusing to write a map whose losses were never checked"
-  if [ -s "$WORK/untraced.lost" ]; then
-    f="$(head -1 "$WORK/untraced.lost")"
-    die "merge dropped '$f', which this run never traced -- refusing to write a map that silently stops skipping"
-  fi
-fi
-
-readset_discrimination_control "$MERGED" || FAIL=1
-
-[ "$FAIL" -eq 0 ] || die "controls failed; the map was NOT written"
-
-M_FIX="$(cut -f1 "$MERGED" | sort -u | wc -l | tr -d ' ')"
-M_ENT="$(wc -l < "$MERGED" | tr -d ' ')"
-M_PATH="$(cut -f2 "$MERGED" | sort -u | wc -l | tr -d ' ')"
-[ "$M_ENT" -gt 0 ] || die "the merged map is empty -- refusing to write it"
-
-{
-  echo "# GENERATED by derive-fixture-readsets.sh -- DO NOT EDIT BY HAND."
-  echo "# LOG -- unbounded by design; rotation does not apply. It grows with the fixture suite and is regenerated whole, never trimmed."
-  echo "#"
-  echo "# <fixture>\t<path it reads>. The pre-push suite runs a fixture when any changed path"
-  echo "# is in its set, and ALWAYS runs a fixture that has no entry here -- absence means"
-  echo "# 'run it', never 'depends on nothing'. Re-derive after changing a fixture or anything"
-  echo "# it reads: a stale entry is safe only in the direction of running too much."
-  echo "#"
-  echo "# A --list run MERGES: it replaces the entries of the fixtures it traced and leaves"
-  echo "# every other fixture's entries alone, so refreshing one fixture costs its own runtime"
-  echo "# rather than a full re-derivation."
-  echo "#"
-  echo "# fixtures mapped: $M_FIX    entries: $M_ENT"
-  [ -n "$OMITTED" ] && echo "# OMITTED by the last run (always run): $OMITTED"
-  cat "$MERGED"
-} > "$MAP"
+# THE FINAL WRITE: the same function every accepted fixture called above, over the whole LIST and
+# NOT in a subshell, so its `die` ends the run exactly as the end-only write did.
+readset_write_map
 
 say "wrote $MAP -- $M_FIX fixtures, $M_ENT entries, $M_PATH distinct paths (this run traced $MAPPED)"
 [ -n "$OMITTED" ] && say "OMITTED and therefore always run: $OMITTED"
