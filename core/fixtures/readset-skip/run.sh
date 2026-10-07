@@ -1213,7 +1213,7 @@ else
   # `tests/fixtures/` in the consumer's, which is the one an installed tree resolves first. Read off
   # the resolved block's own glob, the way the deriver reads it, and the world is seeded under it;
   # seeded only under core/fixtures/ the consumer run found no fixtures and every arm here went red.
-  FXROOT="$(sed -n 's|^[[:space:]]*for d in \([A-Za-z0-9_./-]*\)/\*/;.*|\1|p' "$POOL" | sort -u)"
+  FXROOT="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$POOL" | sort -u)"
   [ "$(printf '%s\n' "$FXROOT" | grep -c .)" -eq 1 ] || broken "read '$FXROOT' as the pool block's fixture root; need exactly one"
   rf_drive() { # <pool> <name> <setup>; prints "<rc>|<lock held at return>|<invoked>|<verified>|<stashed>|<row>|<args>"
     local p="$1" t o
@@ -2444,7 +2444,7 @@ MUT
     PR="$WORK/lossprobe"
     mkdir -p "$PR/core/fixtures/burst" "$PR/core/scripts" "$PR/.githooks" "$PR/d" || broken "mkdir failed"
     _i=0; while [ "$_i" -lt 400 ]; do _i=$((_i+1)); echo "$_i" > "$PR/d/f$_i"; done
-    printf '#!/bin/bash\nfor d in core/fixtures/*/; do :; done\n' > "$PR/.githooks/pre-push"
+    printf '#!/bin/bash\nFXROOT="core/fixtures/"\nfor d in "$FXROOT"*/; do :; done\n' > "$PR/.githooks/pre-push"
     # The probe fixture also ECHOES the width knob, which the width arm below reads from its log.
     printf '#!/bin/bash\necho "width=${VAS_INNER_POOL_WIDTH:-unset}"\necho "ems=${EMS_POOL_WIDTH:-unset}"\ncat d/f* >/dev/null\nls -lR /usr/share >/dev/null 2>&1\ncat d/f* >/dev/null\necho burst ok\n' > "$PR/core/fixtures/burst/run.sh"
     # The width mutant's repo is the same seed with the deriver's env injection removed from both
@@ -2549,7 +2549,7 @@ MUT
     mkdir -p "$CP/core/fixtures/burst8" "$CP/core/fixtures/small1" "$CP/core/scripts" "$CP/.githooks" "$CP/d" "$CP/s" || broken "mkdir failed"
     _i=0; while [ "$_i" -lt 1500 ]; do _i=$((_i+1)); echo "$_i" > "$CP/d/f$_i"; done
     _i=0; while [ "$_i" -lt 100 ]; do _i=$((_i+1)); echo "$_i" > "$CP/s/f$_i"; done
-    printf '#!/bin/bash\nfor d in core/fixtures/*/; do :; done\n' > "$CP/.githooks/pre-push"
+    printf '#!/bin/bash\nFXROOT="core/fixtures/"\nfor d in "$FXROOT"*/; do :; done\n' > "$CP/.githooks/pre-push"
     printf '#!/bin/bash\nfor _r in 1 2 3 4 5 6 7 8; do cat d/f* >/dev/null & done\nwait\necho burst8 ok\n' > "$CP/core/fixtures/burst8/run.sh"
     printf '#!/bin/bash\ncat s/f* >/dev/null\necho small1 ok\n' > "$CP/core/fixtures/small1/run.sh"
     cp "$DERIVER" "$CP/core/scripts/derive-fixture-readsets.sh"
@@ -2727,7 +2727,7 @@ MUT
   else
     BR="$WORK/bothrepo"
     mkdir -p "$BR/core/fixtures/fxa" "$BR/core/scripts" "$BR/.githooks" "$BR/src" || broken "mkdir failed"
-    printf '#!/bin/bash\nfor d in core/fixtures/*/; do :; done\n' > "$BR/.githooks/pre-push"
+    printf '#!/bin/bash\nFXROOT="core/fixtures/"\nfor d in "$FXROOT"*/; do :; done\n' > "$BR/.githooks/pre-push"
     # fxa echoes the width knob, which the stub-world width arm below reads from its log.
     printf '#!/bin/bash\necho "width=${VAS_INNER_POOL_WIDTH:-unset}"\necho "ems=${EMS_POOL_WIDTH:-unset}"\ncat src/a.sh >/dev/null\necho fxa ok\n' > "$BR/core/fixtures/fxa/run.sh"
     printf 'a\n' > "$BR/src/a.sh"; printf 'o\n' > "$BR/src/other.sh"
