@@ -90,6 +90,21 @@ block's `FXROOT` once and seeds and keys gamma under it.
 
 verify: sh ! grep -qF '"$t/core/fixtures/gamma/run.sh"):$(sha_of' core/fixtures/readset-skip/run.sh && grep -qF '"$t/$FXROOT/gamma/run.sh"' core/fixtures/readset-skip/run.sh
 
+**LANDED (v0.741.1, verified 6f73066d).**
+
+## BL-468 — the self-update gate runs the consumer's whole pre-push hook, and step 2's push runs it again
+
+**DEFECT.** Filed by the reference consumer as `PC-S317-SELF-UPDATE-GATE-PUSH-PROBE-DUPLICATES-THE-PUSH-HOOK`. The gate's
+push probe ran the consumer's whole pre-push hook on the UNWRITTEN tree, and step 2's push then ran the hook git resolves on
+the WRITTEN tree, so every self-update paid the suite twice and the first run judged the wrong hook on the wrong tree —
+about 22 minutes on the consumer for the probe alone. The gate no longer runs a hook. Step 2 pushes through
+`reconcile/self-update-push.sh`, which runs the hook once, fed the exact ref line it then pushes, and pushes that one sha to
+that one ref with `--no-verify --no-follow-tags`; a refusal is `SELF-UPDATE-DEFER` with the branch discarded and the gate
+record, fixture log and push record carried uncommitted to the gated apply. Closed by `core/fixtures/self-update-gate`'s
+wrapper arms and mutants; the receipt is the textual floor.
+
+verify: sh ! grep -q 'push probe: running the pre-push hook' core/skills/ai-dlc-update/reconcile/self-update-gate.sh && ! grep -q 'caught by the push probe' core/skills/ai-dlc-update/reconcile/self-update-gate.sh && grep -q 'self-update-push.sh' core/skills/ai-dlc-update/SKILL.md && bash -n core/skills/ai-dlc-update/reconcile/self-update-push.sh && grep -qF -- '--no-verify --no-follow-tags "$REMOTE" "$LOCAL_SHA:refs/heads/$BRANCH"' core/skills/ai-dlc-update/reconcile/self-update-push.sh
+
 ## BL-469 — readset-skip ends FIXTURE BROKEN under the read-set deriver's sandbox, so it is never mapped
 
 **DEFECT.** Measured batch 203 by the operator's read-set trace. `/bin/ps` is setuid, and `sandbox-exec` refuses to exec
@@ -102,3 +117,19 @@ where `ps` still works is `broken`, and outside a sandbox a failing `ps` stays `
 own detector block under a real `sandbox-exec` and requires the SKIP, and requires the unskipped `broken` to remain.
 
 verify: sh f=core/fixtures/readset-skip/run.sh; b="$(awk '/^IN_SANDBOX=0; LS_PROBE_RC=127$/,/^}$/' "$f")"; [ -n "$b" ] || exit 1; o="$(B="$b" sandbox-exec -p '(version 1)(allow default)' /bin/bash -c 'WORK="$(mktemp -d)"; broken() { echo BROKEN; exit 2; }; eval "$B"; ps_sandbox_skip probe; r=$?; rm -f "$WORK/ls.err"; rmdir "$WORK"; exit "$r"' 2>&1)"; case "$o" in *"SKIP  probe: inside a sandbox"*) ;; *) exit 1 ;; esac; [ "$(grep -F '[ -n "$PJ_LIVE" ] || broken' "$f" | grep -cv '^[[:space:]]*#')" = 1 ]
+
+## BL-470 — the sandbox tracer logs every `bash` check on the tree root, and the stream drops a large fixture's trace
+
+**DEFECT.** Measured batch 203 on `readset-skip`'s sandboxed trace, after `BL-469` let it finish (`PASS (238 assertions)`).
+The deriver still OMITTED it: `the stream dropped reports 1384 time(s) in this window`. Of the 4399 Sandbox report lines in
+that window's raw capture, **4155 name the trace tree's root directory and nothing below it**, all
+`file-test-existence` and `file-read-metadata`; the next most-reported path has 71. The profile reports everything under
+`(subpath TREE)`, which includes the root itself, so every `bash` path-existence and `cd` check a fixture makes on the tree
+root costs a report line and carries no read-set information. The operator's own trace of the same fixture showed about
+500 drop notices before it aborted. **It is not one fixture.** `self-update-fixture-log-mutants`, traced alone in a clean
+clone of `6f73066d`, was OMITTED on 115 drops; 34685 of its 58568 report lines name the tree root alone, against 2600 for
+the next path (`.git`). Both fixtures stay unmapped, so both run on every push, until this lands. Remedy: stop reporting operations whose path is the tree root alone (exclude
+`(literal TREE)` from the reporting clause, or drop those lines before the drop count is judged), keeping any
+`file-read-data` on the root, which is a directory listing and IS a read. Re-trace both fixtures after; both must read MAPPED.
+
+verify: manual -- close when `bash core/scripts/derive-fixture-readsets.sh --list "readset-skip self-update-fixture-log-mutants" --tracer sandbox` in a scratch clone reports both MAPPED with zero drop notices.
