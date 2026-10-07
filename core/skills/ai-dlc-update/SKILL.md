@@ -445,20 +445,19 @@ prose is itself generated rather than composed.
    under identical conditions — so a script that merely fails to resolve from a temp path cannot
    masquerade as a new finding and strand the slice for no reason.
 
-   **One arm is NOT a differential, and it is the one that asks whether this consumer can push at
-   all.** A push failure that predates the pull sits outside every incoming-versus-current
-   comparison by construction, so the gate used to say OK on a tree whose `git push` was already
-   refused by its own hook, and this cycle would have pushed into that refusal — the orphaned branch
-   `PC-S308` describes, reached by a route the pull did not cause. The gate now runs the pre-push
-   hook GIT WOULD RUN — resolved by `git rev-parse --git-path hooks/pre-push`, so `core.hooksPath`
-   and a `.git/hooks/` shim both count, and a hook git would skip is skipped — on the tree as the
-   operator left it, fed the ref line this cycle's push sends, and emits a `SELF-UPDATE-DEFER` row
-   on script `pre-push` when it exits non-zero. The record carries the hook's output as `# probe:`
-   lines. It is a DEFER like any other: fold the slice into the gated apply, where the operator
-   fixes what the hook refuses. No `pre-push` row at all means no push can happen here (not a work
-   tree, or no remote), so nothing was probed. **The probe runs the consumer's whole pre-push once,
-   which can take minutes; the push this cycle makes pays the same hook, and this run is the one
-   that would otherwise have stranded a branch.**
+   **A push failure that predates the pull is NOT a differential, and the gate does not judge it.**
+   It sits outside every incoming-versus-current comparison by construction, so it is answered at
+   the push, by `reconcile/self-update-push.sh`, which runs the consumer's pre-push hook EXACTLY
+   ONCE per self-update: the hook git would run (resolved by `git rev-parse --git-path
+   hooks/pre-push`, so `core.hooksPath` and a `.git/hooks/` shim both count, and a hook git would
+   skip is skipped), on the WRITTEN tree, with the hook the slice may just have replaced, fed the
+   ref line the push sends. That is the push's own run of the hook, not a rehearsal of it: the
+   wrapper pushes with `--no-verify` only after that run exited 0. A non-zero run is
+   `HOOK-REFUSED` (exit 3) with nothing pushed, and the push paragraph below discards the branch
+   and DEFERs. The gate never runs the hook; its only `pre-push` rows are UNDECIDED — a consumer
+   that is a subdirectory of an enclosing repository (the push would run that repository's hook),
+   or a range whose hook change could not be read. **The one hook run is the consumer's whole
+   pre-push and can take minutes; it is the run the push would have made anyway.**
 
    **THE APPROVAL ARTIFACT FOR THIS AUTONOMOUS CYCLE IS THE PAIR OF RECORDS, AND IT IS THE ONLY
    ONE.** This cycle cuts a branch, writes the machinery slice, pushes and auto-merges with no
@@ -516,8 +515,13 @@ prose is itself generated rather than composed.
      other slash form, and any single argument holding more than one name, is refused —
      **word-split the derived list explicitly**, because an unquoted variable holding a
      newline-joined list arrives as ONE argument under zsh —
-     **and require green BEFORE the push**, push,
-     open a PR, and **auto-merge (squash, delete branch)** — no operator gate.
+     **and require green BEFORE the push**, push **through the wrapper, never a bare `git push`**:
+     `bash reconcile/self-update-push.sh <consumer> origin <self-update-branch> _bmad-output/ai-dlc-update/self-update-push-<ts>.md`
+     (`origin` is the remote step 1 synced against; the last argument is a NEW untracked path
+     the wrapper writes only on a hook refusal). Exit 0 means pushed: open a PR, and
+     **auto-merge (squash, delete branch)** — no operator gate. Exit 4 (`TRANSPORT`) and exit 3
+     (`HOOK-REFUSED`) are the next paragraph's two cases; exit 2 is a refusal before anything
+     ran — report its stderr line and treat it as exit 4.
      **That holds only when step 1 reached sync**: the preflight then confirmed the
      branch is in sync with `origin`, so this merge cannot strand local commits.
      This bullet is never reached on an UN-SYNCED branch: step 2 deferred above,
@@ -529,15 +533,20 @@ prose is itself generated rather than composed.
      base stays put until a gated apply).
 
      **A PUSH THAT FAILS HERE DISCARDS THE CYCLE; it never keeps a local commit.**
-     This is a transport failure — auth, network, a remote rejection — after the
-     gate's pre-push probe passed, and a kept commit is the orphan `PC-S308` describes:
+     The wrapper separates the two ways it fails, because a hook refusal and a remote rejection
+     both exit 1 from a bare `git push` with the same stderr shape and need different
+     dispositions. Exit 4 (`TRANSPORT`) is a transport failure — auth, network, a remote
+     rejection — after the consumer's own pre-push hook passed in the wrapper's single run.
+     Exit 3 (`HOOK-REFUSED`) is that hook refusing the written tree, with nothing pushed; its
+     disposition is the HOOK-REFUSED paragraph below, not UN-SYNCED. Either way a kept commit is
+     the orphan `PC-S308` describes:
      `skill_version` advanced on a branch that never merges. The commit above stages ONLY the
      paths this cycle wrote,
      each named by explicit pathspec:
      the slice at its `map_consumer()` destinations, the covering `tests/fixtures/<dir>/`, the
      stamp, and the two records. Never `git add -A` or `git add .`, which sweep an uncommitted
-     consumer edit into the commit. On the failed push, in this order: report the `git push`
-     error in one line;
+     consumer edit into the commit. On a `TRANSPORT` exit, in this order: report the `TRANSPORT`
+     line and the push error above it in one line;
      run `git checkout <original-branch>`, the branch step 1 confirmed in sync;
      list every file the self-update branch's commits touch with `git diff --name-only <original-branch> <self-update-branch>`;
      only when every listed path is in the written set above, delete it with `git branch -D <self-update-branch>`.
@@ -550,6 +559,27 @@ prose is itself generated rather than composed.
      `skill_version`/`skill_commit` stay where they were, because the stamp rewrite lived only on the discarded commit.
      The two records left with that commit, so the one-line report carries the push error. The
      next invocation, after the operator fixes the push, derives the slice again.
+
+     **On a `HOOK-REFUSED` exit the branch is discarded the same way, but the disposition is
+     `SELF-UPDATE-DEFER`, not UN-SYNCED.** The consumer's own gate refused the tree this cycle
+     wrote — a refusal that may predate the pull, which no differential arm of the gate can see —
+     so the remedy is the operator's, at the gated apply, exactly as for a gate DEFER. In this
+     order: report the `HOOK-REFUSED <rc> <phases>` line;
+     run `git checkout <original-branch>`;
+     restore the gate record, which lived only on the self-update commit, with
+     `git show "${self_update_branch}:<gate-record-path>" > <gate-record-path>`;
+     run the same `git diff --name-only <original-branch> <self-update-branch>` check and, only
+     when every listed path is in the written set above, `git branch -D <self-update-branch>`
+     (any path outside it: STOP and name the branch, as above).
+     Both records now sit in the working tree UNCOMMITTED — the gate record just restored, and
+     the wrapper's `_bmad-output/ai-dlc-update/self-update-push-<ts>.md`, whose `# probe:` lines
+     are the hook's exit, the ref line it was fed and the tail of its output. Carry both to the
+     step-7 gated apply and commit them there with the machinery slice, exactly as the gate's
+     DEFER verdict leaves its record above; run that apply as
+     `reconcile/apply.sh --carried-machinery-slice <dist> <base> <consumer> <theirs>`.
+     `skill_version`/`skill_commit` stay where they were and advance with that apply. The branch
+     is NOT UN-SYNCED: step 1 reached sync and nothing was pushed, so steps 3–5 run and step 6
+     does not refuse `apply` on this account.
 
      **The pair advances even on a cycle that CARRIED a path, and that is what the gate's
      `GATE_CARRY_STATE` refusal compensates for.** A carried path is the one thing this cycle

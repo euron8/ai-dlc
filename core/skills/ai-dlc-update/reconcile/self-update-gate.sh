@@ -44,8 +44,9 @@
 # `scripts/ai-dlc/`):
 #
 #   equal codes                   -> OK         no differential signal. An equal NON-ZERO under the
-#                                               hook's argv is a pre-existing failure, and the push
-#                                               probe (arm P) is what catches it, not this table.
+#                                               hook's argv is a pre-existing failure; the push
+#                                               wrapper `self-update-push.sh` meets it as
+#                                               HOOK-REFUSED (exit 3), not this table.
 #   incoming 0                    -> OK
 #   current 0, incoming non-zero  -> DEFER      the incoming version finds something new. Real.
 #   unequal non-zero              -> UNDECIDED  a real change nobody can attribute.
@@ -91,14 +92,20 @@
 #                         a WORKLIST semantic-merge row. A CARRY row beside an OK verdict means
 #                         "self-update the rest, hand this path to the operator" -- the case
 #                         step 2 previously had no disposition for at all.
-#   SELF-UPDATE-DEFER, script `pre-push`
-#                         the consumer's OWN push is refused by the pre-push hook git would run,
-#                         on the tree as it stands and before anything is written. Not a
-#                         differential: a refusal that predates the pull, which every other arm
-#                         here is blind to by construction (BL-086). Same disposition as any
-#                         DEFER. An OK on the same script means the hook ran and exited 0, or
-#                         git runs no hook on this consumer; NO `pre-push` row means no push can
-#                         happen here (not a work tree, or no remote), so nothing was probed.
+#   SELF-UPDATE-UNDECIDED, script `pre-push`
+#                         either the consumer is a SUBDIRECTORY of an enclosing repository, so
+#                         the push would run that repository's hook (an unsupported layout), or
+#                         the hook the push will run could not be determined from the range.
+#                         This gate NEVER runs the consumer's hook and emits no `pre-push` OK
+#                         row: whether the consumer's own push is refused on the tree as it
+#                         stands is answered by `self-update-push.sh`, which runs the hook git
+#                         would run exactly once, on the tree and hook actually pushed, and
+#                         reports HOOK-REFUSED (exit 3) without pushing.
+#
+# WHY THE PUSH IS WRAPPED RATHER THAN A PLAIN `git push` CLASSIFIED BY ITS OUTPUT: a pre-push hook
+# refusal and a remote-side rejection both exit 1 with the same stderr shape, so nothing after the
+# fact separates "the consumer's own gate refused this tree" (DEFER) from "the transport failed"
+# (UN-SYNCED); the wrapper runs the hook itself and pushes with `--no-verify` only after it passed.
 #   SELF-UPDATE-SAFE-STOP accompanies every DEFER: the furthest release in the range that DOES
 #                         self-update cleanly, so the operator can split the pull and land the
 #                         engine before it is used — or the explicit statement that no such
@@ -228,7 +235,7 @@ CONSUMER="${4:?}"
 # the runner by design, so its digest can never survive and it has no core origin to be accepted
 # by the theirs rule either. The reasoning is beside the recording site.
 # ONE TEMP DIRECTORY FOR THE WHOLE RUN, created before the record opens because the record is
-# ASSEMBLED here (see `gate_record_open`) and the differential and the push probe reuse it.
+# ASSEMBLED here (see `gate_record_open`) and the differential reuses it.
 # `gate_exit_cleanup` removes it — no second `trap … EXIT` anywhere in this file.
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/self-update-gate-XXXXXX")"
 GATE_REC=""
@@ -331,19 +338,14 @@ gate_exit_cleanup() {
       _rec_v=UNDECIDED
     fi
     printf '# verdict: %s\n# rows: %s\n' "$_rec_v" "${_rec_n:-0}" >> "$GATE_REC" 2>/dev/null
-    # THE RECORD REACHES THE CONSUMER ONLY HERE, and the reason is arm P. The record is
-    # assembled under `$TMP` for the whole run; a file under `_bmad-output/ai-dlc-update/` is
-    # untracked and unignored on the reference consumer, and its hook builds the read-set
-    # universe from `git ls-files --others --exclude-standard` — so a record written IN PLACE
-    # before the probe is a changed path in no fixture's read-set. A hook predating the
-    # bookkeeping exemption (the orphan test in `core/git-hooks/pre-push`) takes its
-    # run-everything branch on every probe; a hook carrying that exemption drops such a flat
-    # file from the orphan set. The move out of the tree stays either way, because the probe
-    # runs the consumer's INSTALLED hook, which on the pull delivering the exemption is still
-    # the old one. Measured under a hook without the exemption, on a shared clone, one settled
-    # tree: 30s with no record on disk, 257s with one record-shaped file added, 30s again with
-    # it removed. Under such a hook every claimed warm-cost figure was unreachable by
-    # construction until this move.
+    # THE RECORD REACHES THE CONSUMER ONLY HERE. It is assembled under `$TMP` for the whole run
+    # and moved in at exit. The reason it was built that way is gone: this gate used to run the
+    # consumer's pre-push hook mid-run, and a record sitting untracked under `_bmad-output/`
+    # while that hook ran was a changed path in no fixture's read-set, which defeats a hook's
+    # read-set skip (measured: 30s settled, 257s with one record-shaped file added). This gate
+    # no longer runs any hook, and the one run happens in `self-update-push.sh` after step 2
+    # has committed this record. The assembly stays because the never-over-an-existing-record
+    # move below is built on it and scored by the fixture's nested-write mutant.
     #
     # NEVER OVER AN EXISTING RECORD. The name carries a whole-second timestamp, so a second
     # invocation landing inside the same second — a nested classify with its guard removed, or
@@ -427,8 +429,9 @@ gate_stage() { # gate_stage <file-name> <value> <what> -- MAIN SHELL ONLY; UNDEC
 
 # gate_refline <file> -- write the ref line step 2's push will send, which is what the consumer's
 # pre-push reads on stdin: the current branch at HEAD, pushed to a new branch the remote lacks.
-# ONE SPELLING, READ BY TWO ARMS: arm P feeds it to the hook, and the differential feeds it to
-# every gating script it runs, so a script reading the hook's stdin gets the line the hook would.
+# The differential feeds it to every gating script it runs, so a script reading the hook's stdin
+# gets the line the hook would. (`self-update-push.sh` builds its own line from the branch it
+# actually pushes; it does not read this one.)
 # Where no line can be formed (no commit, a detached HEAD, not a work tree) the file is EMPTY,
 # which is what a script reading stdin sees from a hook that received nothing. Returns the
 # write's status.
@@ -599,9 +602,8 @@ gate_record_open() {
   _rec_p="$GATE_REC_DIR/self-update-gate-$(date -u +%Y%m%dT%H%M%SZ).md"
   # OPENED IN PLACE TO PROVE IT CAN BE WRITTEN, THEN ASSEMBLED UNDER `$TMP` AND MOVED BACK AT
   # EXIT. The in-place open is the writability test — the refusal below has to fire NOW, not
-  # at exit when the verdict is already printed. The assembly happens elsewhere for arm P's
-  # reason, stated at the move in `gate_exit_cleanup`: a record sitting under `_bmad-output/`
-  # while the probe runs the consumer's hook is what defeats that hook's read-set skip.
+  # at exit when the verdict is already printed. Why the assembly happens elsewhere, and why it
+  # stays now that this gate runs no hook, is stated at the move in `gate_exit_cleanup`.
   if mkdir -p "$GATE_REC_DIR" 2>/dev/null && : > "$_rec_p" 2>/dev/null; then
     rm -f "$_rec_p"
     GATE_REC_FINAL="$_rec_p"
@@ -1255,94 +1257,20 @@ while IFS= read -r gi_name; do
   gate_input "scripts/ai-dlc/$gi_name" "core/scripts/$gi_name"
 done < "$TMP/invoked"
 
-# ---- ARM P: CAN THIS CONSUMER PUSH AT ALL? ----------------------------------------------
-# Every other arm in this file is DIFFERENTIAL: it asks whether the INCOMING slice fails where
-# the consumer's CURRENT copy passes. A push failure that predates the pull is outside that
-# difference by construction, so the gate returned OK on a tree whose push was already blocked
-# — and step 2 then cut a branch, wrote the slice, advanced `skill_version` and pushed into a
-# refusal the pull did not cause. Measured on the reference consumer during a real pull, filed
-# as BL-086: `SELF-UPDATE-OK` with a non-empty slice, and `git push` on the same tree rc=1
-# with an artifact-path conformance failure predating the pull. The operator skipped step 2 by
-# hand; the step as written would have produced the orphaned branch `PC-S308` describes.
+# ---- THE LAYOUT ARM: A CONSUMER INSIDE AN ENCLOSING REPOSITORY IS UNDECIDED ---------------
+# THIS GATE DOES NOT RUN THE CONSUMER'S PRE-PUSH HOOK, AND THAT IS DELIBERATE. It used to run the
+# hook git would run, once, on the tree as the operator left it, to catch a push refusal that
+# predates the pull (BL-086), which every differential arm here is blind to by construction. Step
+# 2's push then ran the hook again, on the WRITTEN tree, with the hook the slice may have just
+# replaced: two whole-suite runs per self-update, and the first measured the wrong hook on the
+# wrong tree. The one run now happens in `self-update-push.sh`, which step 2 calls in place of a
+# bare `git push`: it runs the hook git resolves, on the tree and hook actually pushed, and a
+# refusal there is HOOK-REFUSED (exit 3) with nothing pushed, which step 2 discards and DEFERs.
 #
-# THE PROBE RUNS THE HOOK GIT WOULD RUN, NOT THE FILE THE DIFFERENTIAL READS. `$HOOK` above is
-# the consumer's `.githooks/pre-push`, the authority on what WOULD block once the hook is armed
-# — the right subject for a differential. What git runs at push time is a different question:
-# `core.hooksPath`, or `.git/hooks/pre-push`, which on the reference consumer is a shim that
-# `exec`s the tracked hook, and on a consumer that never armed it is nothing at all. Git skips
-# an absent or non-executable hook (measured: `chmod -x` and the push proceeds), so the probe
-# does the same rather than running a file git would not. `git rev-parse --git-path
-# hooks/pre-push` is git's own answer and honours `core.hooksPath` in both spellings.
-#
-# FED THE LINE STEP 2'S PUSH WILL SEND. A pre-push hook reads git's ref protocol on stdin and
-# the shipped hook's arm 0 judges it; a probe with empty stdin leaves that arm judging nothing
-# — the shipped hook says so in its own words — and an arm judging nothing reads like an arm
-# finding nothing wrong. The line's local side is the CURRENT BRANCH at HEAD, which any hook
-# can resolve; its remote side is the NEW branch under `ai-dlc-update/self-update-` with a zero
-# sha, which is what git sends for a branch the remote lacks. The hook gets the remote's NAME
-# and URL as `$1` and `$2`, as git passes them. Stdin is a FILE, not a pipe: a hook that never
-# reads stdin would hand the writer an EPIPE and `pipefail` would report the writer's 141 as
-# the hook's verdict. Measured against a real push to a local bare remote with a hook that
-# dumps its arguments, environment, cwd and stdin: identical on `$1`, `$2`, argc and cwd;
-# differs in stdin being a file, the ref line, and git's `GIT_PREFIX`/`GIT_EXEC_PATH`, none of
-# which the shipped hook reads.
-#
-# ON THE TREE AS IT STANDS, BEFORE ANYTHING IS WRITTEN. That is the only tree this gate is
-# allowed to read, and it is the right one: a refusal here is PRE-EXISTING and the pull did
-# not cause it, which is exactly the case the differential cannot see. Where the RANGE itself
-# carries the remedy for what the hook refuses, this probe still defers — it never simulates
-# the write — and the cost is one autonomous cycle becoming the operator-gated apply, where the
-# slice lands beside the fix on one branch. That is a refusal rather than a wrong OK, the
-# direction this file chooses everywhere else.
-#
-# SILENT, NOT OK, WHERE NO PUSH CAN HAPPEN. A consumer root that is not a git work tree, or one
-# with no remote, makes no push at all: step 1's preflight stops on the first and step 2
-# commits locally on the second. There is no hook a push would run, so there is nothing to
-# probe, and a row here would be a claim about a push that does not exist. The arm emits
-# nothing and the record carries no `pre-push` row, which is how a reader tells "not probed
-# because no push" from "probed and clear".
-#
-# NOT THE REMOTE. The probe does not contact origin: a rejection on the remote side — auth,
-# a protected branch, the network — is environmental, transient, and already has a disposition
-# in step 2: the failed push discards the cycle and marks the branch UN-SYNCED, so `apply` is
-# refused this invocation and the next one derives the slice again. The hook is the deterministic
-# local half and the one both filings hit.
-#
-# ITS INPUTS ARE NOT ENUMERATED IN THE RECORD, deliberately. The hook reads the whole tree, so
-# one `# input:` row naming its entry point would claim a completeness the row does not have.
-# The verdict is a measurement of the tree at gate time; the push re-runs the same hook, so a
-# tree that moved between the two is refused by the push, not acquitted by this record. What
-# the record DOES carry on a refusal is the hook's own output, tail-first, as `# probe:` lines,
-# so the operator reads what was refused without re-running a gate that can take minutes.
-#
-# AFTER THE COUPLING ARMS AND NOT BEFORE THEM, because a range those arms defer never reaches
-# the push, and the hook can take minutes. ONCE PER RUN, NEVER INSIDE A `--safe-stop` WALK:
-# push viability is a property of the consumer's tree, not of the range, so it is the same
-# answer at every candidate ref, and the walk runs one classify per release.
-#
-# COST, MEASURED ON THE REFERENCE CONSUMER'S OWN HOOK, fed this line, from a shared clone:
-# 303s with no verified-state record, 244s on the next run (its read-set map could not
-# attribute the changed paths), 30s once the skip engaged. THE THIRD FIGURE WAS UNREACHABLE
-# UNTIL THE RECORD MOVED OUT OF THE TREE, under a hook without the bookkeeping exemption: an
-# earlier cut wrote the verdict record in place under `_bmad-output/` BEFORE this probe, the
-# hook's read-set skip saw an untracked path no fixture reads, and every probe ran all 179
-# fixtures — 287s, 257s, 247s across three runs on a settled tree where the bare hook took 30s.
-# The record is now assembled under `$TMP` and moved into the consumer at exit; the reasoning,
-# and what a hook carrying the exemption changes, is at that move. Re-measured after the move,
-# still under a hook without the exemption: 37s on a settled clone. AND THE NEXT RUN READ 257s,
-# because the record the first run moved in at exit was still UNTRACKED when the second probe
-# fired — the same skip defeat, one gate later. This probe writes nothing before the hook runs;
-# it cannot make the tree settled.
-# Step 2 commits the record in the self-update commit, and a DEFER leaves it for the consumer's
-# next commit, so on a real consumer the warm figure holds for a probe on a committed tree and
-# the cold one for any tree carrying an untracked path no fixture reads and the installed hook
-# does not exempt. The push this cycle
-# makes pays the same hook, so the probe adds one hook run per pull and removes the one that
-# would have stranded a branch.
 # A CONSUMER THAT IS A SUBDIRECTORY OF A LARGER REPOSITORY IS UNDECIDED, NEVER SILENT. It passes
 # --is-inside-work-tree, but its toplevel is the ENCLOSING repository's, so the hook git would run
-# on the push is that repository's -- the probe below refuses to run it, and silence here would
-# read exactly like the non-repository answer, which acquits a push this gate never probed. The
+# on the push is that repository's, which neither this gate nor the push wrapper can reason about,
+# and silence here would read exactly like an acquittal of a push nothing judged. The
 # layout is unsupported: install.sh installs at a repository's top. The remote is NOT consulted:
 # from inside the subdirectory `git remote` answers for the enclosing repository, which is the
 # confusion itself. A true non-repository fails --is-inside-work-tree and keeps its silent answer.
@@ -1360,93 +1288,6 @@ if [ -n "$pp_enclosed" ]; then
   pp_top="$(git -C "$CONSUMER" rev-parse --show-toplevel 2>/dev/null)"
   emit SELF-UPDATE-UNDECIDED "pre-push" "UNSUPPORTED LAYOUT: this consumer ($CONSUMER) is a subdirectory of the enclosing repository at ${pp_top:-<unresolved>} (as ${pp_prefix}), not the top of its own repository. A push from here runs the ENCLOSING repository's pre-push hook, which this gate does not probe, so it cannot say whether the push this cycle makes is refused. Do NOT cut the branch and do NOT push. AI/DLC installs at a repository's top; make the consumer its own repository (or install at the enclosing top), then re-run this gate."
   exit 0
-fi
-if [ -z "${AI_DLC_GATE_IN_SAFE_STOP:-}" ] \
-   && git -C "$CONSUMER" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
-   && [ -z "$(git -C "$CONSUMER" rev-parse --show-prefix 2>/dev/null)" ] \
-   && [ -n "$(git -C "$CONSUMER" remote 2>/dev/null)" ]; then
-  # THE CONSUMER MUST BE ITS OWN WORK TREE'S TOP, decided by an empty `--show-prefix` (see above).
-  # A consumer that is a plain subdirectory of an enclosing repository passes --is-inside-work-tree,
-  # and the hook git-path then resolves the ENCLOSING repository's hook, which would run from here.
-  # Such a consumer was answered UNDECIDED and exited above; this conjunct stays as the second wall,
-  # so a regression in that block still never runs the enclosing repository's hook.
-  pp_hook="$(cd "$CONSUMER" && git rev-parse --git-path hooks/pre-push 2>/dev/null)"
-  case "$pp_hook" in
-    ""|/*) ;;
-    *) pp_hook="$CONSUMER/$pp_hook" ;;
-  esac
-  if [ -z "$pp_hook" ] || [ ! -x "$pp_hook" ]; then
-    emit SELF-UPDATE-OK "pre-push" "git runs no pre-push hook on this consumer: ${pp_hook:-the hook path is unresolvable} is absent or not executable, and git skips such a hook. Nothing local refuses the push this cycle makes; whether the consumer's tracked hook WOULD refuse it once armed is what the differential rows below answer."
-  else
-    pp_head="$(git -C "$CONSUMER" rev-parse -q --verify 'HEAD^{commit}' 2>/dev/null)" || pp_head=""
-    if [ -z "$pp_head" ]; then
-      emit SELF-UPDATE-UNDECIDED "pre-push" "HEAD does not resolve to a commit on this consumer, so there is no ref line a push could carry and the hook cannot be asked the question the push would ask."
-      exit 0
-    fi
-    # THE LOCAL REF IS THE CURRENT BRANCH, WHICH RESOLVES; THE REMOTE REF IS THE NEW BRANCH
-    # STEP 2 WILL PUSH TO. A first cut named a branch that did not exist on both sides, and a
-    # hook that resolves each pushed local ref (`git rev-parse --verify "$lr"`), or that
-    # requires it to be the checked-out branch, refused the probe while the real push
-    # succeeded. Step 2's push is `git push -u <remote> <branch>` with that branch checked out;
-    # at probe time it does not exist yet, so the current branch stands in for it on the local
-    # side — every property such a hook can check of a local ref holds for it — and the remote
-    # side carries the new name with a zero sha, which is what git sends for a branch the
-    # remote lacks. A detached HEAD is refused above by the `symbolic-ref` test, since step 1
-    # stops on it too.
-    pp_local="$(git -C "$CONSUMER" symbolic-ref -q HEAD 2>/dev/null)" || pp_local=""
-    if [ -z "$pp_local" ]; then
-      emit SELF-UPDATE-UNDECIDED "pre-push" "HEAD is detached on this consumer, so there is no branch a push could carry. Step 1's preflight stops on this state; a gate asked anyway must not answer OK about a push that cannot be made."
-      exit 0
-    fi
-    # THE REMOTE NAME AND URL ARE WHAT GIT PASSES: `$1` is the name, `$2` its URL. A first cut
-    # passed the literal `origin` and, when no remote was so named, a NAME where the URL goes;
-    # measured, a hook branching on `$2` being URL-shaped refused the probe on a consumer whose
-    # remote was `upstream` while its real push succeeded. Step 1 pushes to the current branch's
-    # upstream remote; that remote is taken first, then `origin`, then the first configured.
-    pp_remote="$(git -C "$CONSUMER" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null | sed 's|/.*||')" || pp_remote=""
-    [ -n "$pp_remote" ] && git -C "$CONSUMER" remote get-url "$pp_remote" >/dev/null 2>&1 || pp_remote=""
-    [ -n "$pp_remote" ] || { git -C "$CONSUMER" remote get-url origin >/dev/null 2>&1 && pp_remote=origin; }
-    [ -n "$pp_remote" ] || pp_remote="$(git -C "$CONSUMER" remote 2>/dev/null | head -1)"
-    pp_url="$(git -C "$CONSUMER" remote get-url "$pp_remote" 2>/dev/null)" || pp_url="$pp_remote"
-    pp_in="$TMP/push-probe.in"; pp_out="$TMP/push-probe.out"
-    gate_refline "$pp_in"
-    printf 'push probe: running the pre-push hook git would run (%s); this is the consumer'\''s own gate and can take minutes\n' "$pp_hook" >&2
-    # THE HOOK WRITES INTO `.git/`, AND THAT IS STATED RATHER THAN HIDDEN. The shipped hook
-    # records `.git/ai-dlc-fixture-verified` and `.git/ai-dlc-fixture-durations` on a run, as it
-    # would on the real push; both are untracked, under `.git/`, and are the hook's own state.
-    # The consumer's TREE is not written. The probe is exactly one run of the hook the push
-    # would run, so its side effects are the push's side effects, arriving one step earlier.
-    # EXCEPT ONE: a green shipped hook starts a DETACHED read-set trace of its unmapped fixtures,
-    # which would then run under the update cycle that is about to write the tree it copies.
-    # `AI_DLC_READSET_LIVE_TRACE=0` stops it for the probe; the real push still traces.
-    ( cd "$CONSUMER" && AI_DLC_READSET_LIVE_TRACE=0 "$pp_hook" "$pp_remote" "$pp_url" < "$pp_in" ) > "$pp_out" 2>&1
-    pp_rc=$?
-    if [ "$pp_rc" -eq 0 ]; then
-      emit SELF-UPDATE-OK "pre-push" "the pre-push hook git runs on this consumer ($pp_hook) exits 0 on the tree as it stands, fed the ref line this cycle's push will send, so the push is not refused locally. A remote-side rejection is outside this gate."
-    else
-      # WHICH PHASES REFUSED, derived from the shipped hook's own output grammar — a `── <phase>`
-      # header followed by `   FAIL` — falling back to the last non-blank line for a hook that
-      # speaks differently. `sub()` rather than a byte offset, because the header's dash is
-      # multibyte and a byte offset is a different number under the C locale.
-      pp_why="$(awk '/^── /{h=$0; sub(/^── /, "", h)} /^   FAIL/{printf "%s; ", h}' "$pp_out" 2>/dev/null | sed 's/; $//')"
-      [ -n "$pp_why" ] || pp_why="$(grep -v '^[[:space:]]*$' "$pp_out" 2>/dev/null | tail -1 | tr '\t' ' ')"
-      emit SELF-UPDATE-DEFER "pre-push" "the pre-push hook git runs on this consumer ($pp_hook) exits $pp_rc on the tree as it stands, BEFORE anything is written, fed the ref line this cycle's push would send — so the refusal predates this pull and no differential can see it. Step 2 would cut a branch, write the slice, advance skill_version and push into that refusal: an orphaned branch whose push is permanently blocked. Do NOT cut the self-update branch: fold the machinery slice into the gated apply, where the operator fixes what the hook refuses and machinery + rulebook land on one branch. Refused by: ${pp_why:-<no output>}. The hook's output is in this run's record as '# probe:' lines."
-      if [ -n "$GATE_REC" ]; then
-        {
-          printf '# probe: %s exit %s, fed: %s\n' "$pp_hook" "$pp_rc" "$(cat "$pp_in")"
-          tail -n 60 "$pp_out" 2>/dev/null | tr '\t' ' ' | sed 's/^/# probe: /'
-        } >> "$GATE_REC" 2>/dev/null
-      fi
-      emit SELF-UPDATE-DEFER "-" "this consumer's push is refused by its own pre-push hook on the tree as it stands, before this pull writes anything; step 2 must not push. Fold the machinery slice into the gated apply."
-      # NOT `advise_safe_stop`. That walk answers "which release in the RANGE self-updates
-      # cleanly", and a push refused on the tree as it stands is refused at every ref alike — a
-      # split would land nothing and the walk would cost one full classify per release to say
-      # so. The row is still emitted, because every DEFER carries one and silence is the dead
-      # end the advisory exists to remove; it just says the split buys nothing and why.
-      emit SELF-UPDATE-SAFE-STOP "-" "SPLIT BUYS NOTHING HERE — the push is refused by this consumer's own hook on the tree as it stands, so it is refused at every ref in ${BASE}..${THEIRS} alike and no intermediate release lands. Fix what the hook refuses (the '# probe:' lines in this run's record are its output), then re-run this gate and take the answer it gives then."
-      exit 0
-    fi
-  fi
 fi
 
 # Core scripts this pull changes, by basename.
@@ -1528,7 +1369,7 @@ if [ -z "$GATING" ]; then
   exit 0
 fi
 
-# `$TMP` was created above arm P. NO `trap … EXIT` HERE. A second EXIT trap REPLACES the first
+# `$TMP` was created near the top, before the record opens. NO `trap … EXIT` HERE. A second EXIT trap REPLACES the first
 # silently, and the first one is what flushes the verdict record's trailer — so installing one
 # here would leave every record reached through this arm with no `# verdict:` line, which the
 # runner reads as a refusal. `gate_exit_cleanup` removes `$TMP` for that reason.
@@ -1547,10 +1388,9 @@ gate_stage gating "$GATING" "the gating-script set"
 # incoming copy will run after the write, and a script resolving `$SELF_DIR/..` then sees the same
 # shape on both sides. Staged ONCE for the loop: both trees are a property of the range.
 #
-# THE REF LINE IS BUILT HERE AS WELL AS IN ARM P, because arm P is skipped on a consumer with no
-# remote and inside a --safe-stop walk, and a script the hook feeds stdin (`validate-audit-anchors.sh
-# --trunk-push`) still reads it here. An empty line where none can be formed is what the hook
-# itself would have passed.
+# THE REF LINE IS BUILT HERE because a script the hook feeds stdin (`validate-audit-anchors.sh
+# --trunk-push`) reads it, on a consumer with no remote and inside a --safe-stop walk as well. An
+# empty line where none can be formed is what the hook itself would have passed.
 #
 # A STAGING FAILURE IS UNDECIDED FOR THE WHOLE LOOP, at the first one, like every other stage here.
 dl_why=""
@@ -1698,8 +1538,8 @@ while IFS= read -r name; do
   # AGREEMENT IS NOT A DIFFERENTIAL SIGNAL. This gate asks one question -- does the INCOMING
   # version fail where the CURRENT one passes, under the hook's own argv -- and two runs that return
   # the same code answer it with "no". An equal NON-ZERO is a failure that predates the pull: the
-  # push probe (arm P) runs the hook itself on the tree as it stands and refuses on it, so this arm
-  # does not need to. Reading an equal pair as UNDECIDED instead refuses every pull touching a
+  # push wrapper `self-update-push.sh` runs the hook itself on the tree actually pushed and
+  # reports it as HOOK-REFUSED (exit 3) without pushing, so this arm does not need to. Reading an equal pair as UNDECIDED instead refuses every pull touching a
   # script whose current run already fails, including one whose incoming version changes only a
   # comment.
   #
@@ -1751,7 +1591,7 @@ while IFS= read -r name; do
   done < "$TMP/argvs"
   case "$sc_v" in
     OK)
-      emit SELF-UPDATE-OK "$name" "run as the hook runs it (${sc_d}), the incoming version fails nowhere the current one passes. Equal codes are no differential signal: an equal NON-ZERO under the hook's own argv is a failure that predates this pull, caught by the push probe and not by this row." ;;
+      emit SELF-UPDATE-OK "$name" "run as the hook runs it (${sc_d}), the incoming version fails nowhere the current one passes. Equal codes are no differential signal: an equal NON-ZERO under the hook's own argv is a failure that predates this pull, refused by the push wrapper (self-update-push.sh, HOOK-REFUSED, exit 3) and not by this row." ;;
     DEFER)
       deferred=1
       if [ "$sc_absent" -eq 1 ]; then

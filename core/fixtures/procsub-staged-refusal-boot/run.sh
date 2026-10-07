@@ -478,7 +478,8 @@ er_shape() { # <recon> <stub-dir or ->
 #   gt  no gate-validation.md at all (R1 has no subject); the pull changes gate-defer.sh, which the
 #       consumer's hook invokes, and the incoming copy exits 1 where the current exits 0. Healthy:
 #       DEFER. Silenced: an empty intersection -- OK.
-# Neither consumer is a git work tree, so arm P (the push probe) has nothing to probe.
+# Neither consumer is a git work tree, so the gate's enclosed-layout arm stays silent; the gate
+# runs no pre-push hook in any world (the push wrapper owns that one run).
 mk_gate_world() { # <dir> <r1|gt>
   local W="$1" D="$1/dist" C="$1/consumer"
   mkdir -p "$D/core/scripts" "$C/scripts/ai-dlc" "$C/.githooks"
