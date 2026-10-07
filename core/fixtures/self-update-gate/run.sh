@@ -2438,31 +2438,25 @@ else
   fi
 fi
 
-# --- ARM P: CAN THIS CONSUMER PUSH AT ALL? (BL-086) ----------------------------------------
+# --- THE GATE NEVER RUNS THE PUSH HOOK; THE ENCLOSED LAYOUT IS STILL UNDECIDED -------------
 #
-# Every other arm in the gate is a DIFFERENTIAL, and a push failure that PREDATES the pull is
-# outside the difference by construction: the gate said OK on a consumer whose `git push` was
-# already refused by its own hook, and step 2 would have pushed into that refusal. Measured on the
-# reference consumer during a real pull. The arm runs the hook GIT WOULD RUN -- resolved by
-# `git rev-parse --git-path hooks/pre-push`, which honours `core.hooksPath` -- on the tree as it
-# stands, fed the ref line step 2's push sends, and defers when it exits non-zero.
+# A push refusal that PREDATES the pull is outside every differential by construction. The gate
+# used to answer it by running the consumer's whole pre-push hook on the UNWRITTEN tree, and step
+# 2's bare `git push` then ran it again on the WRITTEN tree with the incoming hook: two whole-suite
+# runs per self-update, the first measuring the wrong hook on the wrong tree. That question now
+# belongs to `self-update-push.sh` (its battery is the next section), which runs the hook once, as
+# the push. What stays here is (a) the gate runs NO hook -- an executable hook that writes a
+# sentinel leaves none behind, with a control proving the hook can write it and a mutant that
+# restores a hook call -- and (b) a consumer that is a SUBDIRECTORY of an enclosing repository is
+# UNDECIDED on pre-push, because its push would run that repository's hook.
 #
-# ITS OWN MINIATURE WORLD, BECAUSE THE SEED'S CONSUMER IS NOT A REPOSITORY. Every world above
-# hands the gate a bare directory, and the arm is SILENT there by design (no push can happen from
-# a non-repo, so there is nothing to probe). That silence is asserted below as its own cell, with
-# a repo world beside it so "silent because no push" and "silent because dead" are two different
-# readings. Each consumer here is `git init`ed, given a remote, and armed through
-# `core.hooksPath` -- the spelling install.sh documents -- so the probe reaches a hook the way a
-# real push would.
+# THE WORLDS ARE REPOSITORIES, BECAUSE THE SEED'S CONSUMER IS NOT ONE. Every world above hands the
+# gate a bare directory; the enclosed-layout arm keys on git's own answer, so it needs a real work
+# tree, given a remote and armed through `core.hooksPath` -- the spelling install.sh documents.
 #
-# THE HOOK IS THE SUBJECT, AND IT IS THE SEED'S HOOK PLUS A TAIL. The seed's `.githooks/pre-push`
-# names the gating scripts the DIFFERENTIAL reads its set from, and it exits 0 (no `set -e`; its
-# last script passes), so replacing it would empty the differential's subject and every row above
-# would vanish from these worlds -- measured on the first cut of this section, where every world
-# read `none of which the consumer's pre-push invokes`. Each world's hook is therefore the seed's
-# hook VERBATIM followed by a tail that decides the probe's answer: exit 0, refuse with the shipped
-# hook's own phase grammar, or read stdin and refuse when it is EMPTY -- the tail that separates
-# "fed the protocol line" from "fed nothing".
+# EACH WORLD'S HOOK IS THE SEED'S HOOK PLUS A TAIL. The seed's `.githooks/pre-push` names the
+# gating scripts the DIFFERENTIAL reads its set from, so replacing it would empty the
+# differential's subject and every summary row would vanish; the tail is appended instead.
 PP="$(dirname "$DIST")/pp"
 rm -rf "$PP"; mkdir -p "$PP"
 PP_SEED_HOOK="$(cat "$CONS/.githooks/pre-push")"
@@ -2552,31 +2546,18 @@ pp_scan() {
     "$(printf '%s\n' "$o" | awk -F'\t' '$1 == "SELF-UPDATE-SAFE-STOP" {n++} END{print n+0}')" \
     "$(printf '%s\n' "$o" | awk -F'\t' '$1 == "SELF-UPDATE-UNDECIDED" {n++} END{print n+0}')"
 }
-# The tails. Each is appended to the seed's hook, whose own last line exits 0.
+# The tail appended to the seed's hook, whose own last line exits 0.
 PP_HOOK_GREEN='exit 0'
-PP_HOOK_RED='printf "\n── artifact paths (the directory is the only sprint slot)\n   FAIL\n"
-printf "\n── layer entries\n   PASS\n"
-printf "\npre-push: BLOCKED.\n"
-exit 1'
-# READS STDIN, AND REFUSES WHEN IT IS EMPTY. The shipped hook'"'"'s arm 0 judges the ref protocol; a
-# probe that fed nothing would leave that arm judging nothing, which this tail turns into a
-# refusal so the fed line is a cell and not an assumption.
-PP_HOOK_STDIN='n=$(grep -c . /dev/stdin)
-[ "$n" -gt 0 ] || { echo "no ref lines on stdin"; exit 3; }
-exit 0'
-# The record carries the hook'"'"'s whole output, BLANK LINES INCLUDED -- the shipped hook prints a
-# blank before every phase header and a faithful transcript keeps them. The seed'"'"'s scripts print
-# nothing, so the tail'"'"'s lines are the whole of it. Derived by running the tail, never spelled.
-PP_RED_LINES="$(printf '%s\n' "$PP_HOOK_RED" | bash 2>/dev/null | wc -l | tr -d ' ')"
 
-# 1. SILENT ON A NON-REPOSITORY, and the control beside it is a repository where the arm speaks.
+# 1. NO pre-push ROW ON A NON-REPOSITORY OR A HEALTHY REPOSITORY. The gate judges no push on either;
+#    the differential's own DEFER/SAFE-STOP pair is what remains, so the scan is not reading a dead gate.
 ss_assert "pp-nonrepo-silent" "$(pp_scan "$GATE" "$(vr_cons ppnonrepo)")" \
   "pp=none sum=1 ss=1 und=1" \
-  "the seed's consumer is a bare directory: no push can happen, so no pre-push row -- the differential's own DEFER/SAFE-STOP pair is what remains"
+  "the seed's consumer is a bare directory: no pre-push row, and the differential's DEFER/SAFE-STOP pair is what remains"
 pp_mk PP_GREEN green "$PP_HOOK_GREEN" hooksPath yes
 ss_assert "pp-green" "$(pp_scan "$GATE" "$PP_GREEN")" \
-  "pp=SELF-UPDATE-OK sum=1 ss=1 und=1" \
-  "a repository with a remote and an armed hook that exits 0: the probe ran, said OK, and the differential's verdicts are untouched beside it"
+  "pp=none sum=1 ss=1 und=1" \
+  "a repository that is its own toplevel, with a remote and an armed hook: the gate emits no pre-push row (the push wrapper owns that question) and the differential's verdicts are untouched"
 
 # ENCLOSED CONSUMER (PP-ENC BEGIN). A consumer that is a plain SUBDIRECTORY of an enclosing repository
 # passes `--is-inside-work-tree`, and git's hook path then resolves the ENCLOSING repository's hook.
@@ -2607,7 +2588,7 @@ rm -f "$PP/sent/sentinel"
 # MUTANT: the UNDECIDED block's guard made false restores round 2's silence. Built beside the gate's
 # siblings (machinery_paths reads setup-sites.md beside $0) with an unmutated control that must
 # reproduce the layout row first, so a copy that cannot run does not score as a kill. Under the mutant
-# the probe block's own toplevel conjunct still holds, so the enclosing hook must STILL not run.
+# the gate falls through to the differential, which runs no hook, so the enclosing hook must STILL not run.
 PPE_ANCHOR='^if \[ -n "\$pp_enclosed" \]; then$'
 ss_assert "pp-enclosed-anchor" "$(grep -c "$PPE_ANCHOR" "$GATE")" "1" \
   "the enclosed-layout mutation's anchor matches exactly one line"
@@ -2639,7 +2620,7 @@ fi
 rm -f "$PP/sent/sentinel"
 # ...and the mutant leaves a real repository's answer where it was: the block never fires there.
 ss_assert "pp-enclosed-mut-green" "$(pp_scan "$PPE_MUT/mut/self-update-gate.sh" "$PP_GREEN")" \
-  "pp=SELF-UPDATE-OK sum=1 ss=1 und=1" "the mutant does not move the green world, so it owns only the enclosed case"
+  "pp=none sum=1 ss=1 und=1" "the mutant does not move the green world, so it owns only the enclosed case"
 rm -f "$PP/sent/sentinel"
 # A HEALTHY CONSUMER REACHED BY A MISCASED PATH IS NOT ENCLOSED. On case-insensitive APFS bash's
 # `pwd -P` keeps the case the caller typed while git answers the on-disk case, so a layout decided by
@@ -2657,8 +2638,8 @@ else
   pp_case_typed="$(cd "$PP_GREEN_MIS" && pwd -P)"; pp_case_git="$(git -C "$PP_GREEN_MIS" rev-parse --show-toplevel 2>/dev/null)"
   ss_assert "pp-case-discriminates" "$([ "$pp_case_typed" != "$pp_case_git" ] && echo differ || echo same)" "differ" \
     "the miscased path's pwd -P [$pp_case_typed] differs from git's toplevel [$pp_case_git], so a string comparison WOULD misread it -- the input separates the two rules"
-  ss_assert "pp-case-ok" "$(pp_scan "$GATE" "$PP_GREEN_MIS")" "pp=SELF-UPDATE-OK sum=1 ss=1 und=1" \
-    "the green consumer reached by a miscased path is its own toplevel and reads OK, not UNSUPPORTED LAYOUT"
+  ss_assert "pp-case-ok" "$(pp_scan "$GATE" "$PP_GREEN_MIS")" "pp=none sum=1 ss=1 und=1" \
+    "the green consumer reached by a miscased path is its own toplevel: no pre-push row, not UNSUPPORTED LAYOUT"
   # MUTANT: the decision restored to the string comparison of two `pwd -P` results. The `&`s are
   # escaped because sed reads a bare `&` in a replacement as the whole match.
   PPC_MUT="$(dirname "$DIST")/ppcmut"
@@ -2683,15 +2664,47 @@ else
       printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]\n' "pp-case-mut" "$ppc_got" "pp=SELF-UPDATE-UNDECIDED sum=0 ss=0 und=1"
     fi
     # the mutant still answers the canonical spelling OK, so it owns only the miscased case
-    ss_assert "pp-case-mut-canonical" "$(pp_scan "$PPC_MUT/self-update-gate.sh" "$PP_GREEN")" "pp=SELF-UPDATE-OK sum=1 ss=1 und=1" \
-      "the string-comparison mutant still reads the canonically spelled green world OK, so its kill above is the case and not a broken copy"
+    ss_assert "pp-case-mut-canonical" "$(pp_scan "$PPC_MUT/self-update-gate.sh" "$PP_GREEN")" "pp=none sum=1 ss=1 und=1" \
+      "the string-comparison mutant still reads the canonically spelled green world as its own toplevel, so its kill above is the case and not a broken copy"
   fi
 fi
 rm -f "$PP/sent/sentinel"
+# THE GATE RUNS NO HOOK. The same sentinel hook in a consumer that IS its own repository, with a
+# remote and an armed core.hooksPath -- every precondition the removed push arm needed to run it.
+# The scan must still carry the differential's rows (so the gate ran to its end) and the sentinel
+# must be absent. The control is that hook run by hand: it writes the sentinel, so its absence is
+# the gate, not a hook that cannot write.
 pp_mk PP_ENC_REAL encreal "$PP_SENT_HOOK" hooksPath yes
-pp_scan "$GATE" "$PP_ENC_REAL" >/dev/null
-ss_assert "pp-enclosed-control" "$([ -e "$PP/sent/sentinel" ] && echo written || echo absent)" "written" \
-  "...and the same hook in a consumer that IS its own repository runs, so the absent sentinel above is the guard"
+ss_assert "pp-gate-runs-no-hook" \
+  "$(pp_scan "$GATE" "$PP_ENC_REAL")|$([ -e "$PP/sent/sentinel" ] && echo written || echo absent)" \
+  "pp=none sum=1 ss=1 und=1|absent" \
+  "a consumer that is its own repository, with a remote and an executable armed hook: the gate runs to its verdict and the hook never runs"
+rm -f "$PP/sent/sentinel"
+ss_assert "pp-enclosed-control" \
+  "$( ( pp_enter "$PP_ENC_REAL" && .githooks/pre-push origin x </dev/null >/dev/null 2>&1 ); [ -e "$PP/sent/sentinel" ] && echo written || echo absent )" \
+  "written" "...and the same hook run by hand writes the sentinel, so every absent sentinel in this section is the gate and not the hook"
+rm -f "$PP/sent/sentinel"
+# MUTANT: a hook call restored to the gate, after the enclosed-layout block, as the removed arm sat.
+# The rows must survive (the copy ran to its verdict) AND the sentinel must appear.
+PP_MH="$(vr_mut pphook 'index($0, "# Core scripts this pull changes, by basename.") == 1 && !d { print "( cd \"$CONSUMER\" && h=\"$(git rev-parse --git-path hooks/pre-push)\" && [ -x \"$h\" ] && \"$h\" origin x </dev/null >/dev/null 2>&1 ) || :"; d = 1 } { print }')"
+PP_MC="$(vr_mut pphookctl '{ print }')"
+ss_assert "pp-hook-mut-control" \
+  "$(cmp -s "$GATE" "$PP_MC" && echo identical || echo differ)|$(pp_scan "$PP_MC" "$PP_ENC_REAL")|$([ -e "$PP/sent/sentinel" ] && echo written || echo absent)" \
+  "identical|pp=none sum=1 ss=1 und=1|absent" \
+  "an unmutated copy beside its siblings reaches the verdict and runs no hook, so the kill below is the inserted call"
+rm -f "$PP/sent/sentinel"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$GATE" "$PP_MH"; then
+  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s mutation matched nothing\n' "pp-mut-gatehook"
+else
+  pp_mh_got="$(pp_scan "$PP_MH" "$PP_ENC_REAL")|$([ -e "$PP/sent/sentinel" ] && echo written || echo absent)"
+  if [ "$pp_mh_got" = "pp=none sum=1 ss=1 und=1|written" ]; then
+    printf '  ok    %-16s KILLED (a gate that calls the hook again writes the sentinel, and pp-gate-runs-no-hook reads it)\n' "pp-mut-gatehook"
+  else
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED: got=[%s]\n' "pp-mut-gatehook" "$pp_mh_got"
+  fi
+fi
+rm -f "$PP/sent/sentinel"
 # PP-ENC END
 # pp_mk ITSELF REFUSES. Driven in a subshell with pp_world replaced: a failing one, and one that
 # succeeds while printing nothing -- the two ways a bind goes empty. Each must exit 1 with the
@@ -2703,244 +2716,392 @@ ss_assert "pp-mk-refuses-empty" "$( ( pp_world() { :; }; pp_mk PP_T x ) 2>/dev/n
 ss_assert "pp-mk-binds" "$( ( pp_world() { printf '%s\n' "$PP"; }; pp_mk PP_T x; [ "$PP_T" = "$PP" ] && echo bound ) 2>/dev/null )" "bound" \
   "...and pp_mk binds the path a working build prints"
 
-# 2. A REFUSING HOOK DEFERS, names the phase it read out of the hook's own output, and the record
-#    carries the hook's output as `# probe:` lines. ONE summary DEFER and ONE SAFE-STOP row: the
-#    push arm exits after its own pair, so the differential cannot add a second.
-pp_mk PP_RED red "$PP_HOOK_RED" hooksPath yes
-pp_red_out="$(bash "$GATE" "$DIST" "$BASE" "$THEIRS" "$PP_RED" 2>/dev/null)"
-ss_assert "pp-red-defers" "$(pp_scan "$GATE" "$PP_RED")" \
-  "pp=SELF-UPDATE-DEFER sum=1 ss=1 und=0" \
-  "a hook that refuses the tree as it stands defers BEFORE the differential runs: one summary DEFER, one SAFE-STOP, and no per-script rows at all"
-ss_assert "pp-red-names-phase" \
-  "$(printf '%s\n' "$pp_red_out" | awk -F'\t' '$2 == "pre-push" && $3 ~ /Refused by: artifact paths/ {print "named"; exit}')" \
-  "named" "the DEFER row names the phase the hook reported FAIL, read out of the hook's own output grammar"
-pp_red_rec="$(vr_newest "$PP_RED")"
-ss_assert "pp-red-record-probe" \
-  "$(grep -c '^# probe: ' "${pp_red_rec:-/dev/null}")|$(grep -c '^# probe: .*pre-push: BLOCKED' "${pp_red_rec:-/dev/null}")|$(sed -n 's/^# verdict: *//p' "${pp_red_rec:-/dev/null}" | head -1)" \
-  "$(( PP_RED_LINES + 1 ))|1|DEFER" \
-  "the record carries every line the hook printed plus the header line naming the hook, its exit and the fed ref line, and its verdict trailer reads DEFER"
-# THE FED LINE IS THE STEP-2 SHAPE: a new branch under ai-dlc-update/self-update-, at the
-# consumer's HEAD, remote side all zeros. Read off the record's header line.
-ss_assert "pp-red-fed-line" \
-  "$(sed -n 's/^# probe: .* fed: //p' "${pp_red_rec:-/dev/null}" | head -1 | awk -v h="$(git -C "$PP_RED" rev-parse HEAD)" -v b="$(git -C "$PP_RED" symbolic-ref HEAD)" '{ok = ($1 == b && $2 == h && $3 ~ /^refs\/heads\/ai-dlc-update\/self-update-/ && $3 != $1 && $4 ~ /^0+$/); print ok ? "step2-shape" : "wrong:" $0}')" \
-  "step2-shape" "the probe feeds the hook the ref line step 2's push sends -- the current branch at HEAD on the local side, a new self-update branch with a zero sha on the remote side"
-
-# 3. THE HOOK GIT WOULD RUN, NOT THE TRACKED FILE. Same red body at `.git/hooks/pre-push` with no
-#    core.hooksPath (the reference consumer's shim spelling) still defers; the tracked hook
-#    unarmed -- present at .githooks/ but no core.hooksPath and no .git/hooks copy -- is OK,
-#    because git runs nothing, and the row says so.
-pp_mk PP_DOTGIT dotgit "$PP_HOOK_RED" dotgit yes
-ss_assert "pp-dotgit-hook" "$(pp_scan "$GATE" "$PP_DOTGIT")" \
-  "pp=SELF-UPDATE-DEFER sum=1 ss=1 und=0" \
-  "a refusing hook at .git/hooks/pre-push with no core.hooksPath is the hook git runs, and the probe finds it there"
-pp_mk PP_UNARMED unarmed "" none yes
-ss_assert "pp-unarmed-ok" \
-  "$(pp_scan "$GATE" "$PP_UNARMED")|$(bash "$GATE" "$DIST" "$BASE" "$THEIRS" "$PP_UNARMED" 2>/dev/null | awk -F'\t' '$2 == "pre-push" && $3 ~ /git runs no pre-push hook/ {print "says-so"; exit}')" \
-  "pp=SELF-UPDATE-OK sum=1 ss=1 und=1|says-so" \
-  "the tracked hook exists but nothing arms it: git runs no hook, so the push is not refused locally, and the row says that rather than claiming the hook passed"
-# NOT EXECUTABLE IS NOT ARMED. Git skips a hook without the exec bit, and so does the probe.
-pp_mk PP_NOEXEC noexec "$PP_HOOK_RED" hooksPath yes; chmod -x "$PP_NOEXEC/.githooks/pre-push"
-ss_assert "pp-noexec-ok" "$(pp_scan "$GATE" "$PP_NOEXEC")" \
-  "pp=SELF-UPDATE-OK sum=1 ss=1 und=1" \
-  "a refusing hook without its exec bit is one git would skip, so the probe skips it too"
-
-# 4. NO REMOTE: silent, like the non-repo, because step 2 commits locally and pushes nothing.
-pp_mk PP_NOREMOTE noremote "$PP_HOOK_RED" hooksPath no
-ss_assert "pp-noremote-silent" "$(pp_scan "$GATE" "$PP_NOREMOTE")" \
-  "pp=none sum=1 ss=1 und=1" \
-  "a repository with no remote makes no push, so a refusing hook is never run and no pre-push row is emitted"
-
-# 5. FED THE PROTOCOL LINE. A hook that refuses on EMPTY stdin passes under the probe, so the
-#    probe fed it something; the control is the same hook driven with empty stdin by hand.
-pp_mk PP_STDIN stdin "$PP_HOOK_STDIN" hooksPath yes
-ss_assert "pp-stdin-fed" "$(pp_scan "$GATE" "$PP_STDIN")" \
-  "pp=SELF-UPDATE-OK sum=1 ss=1 und=1" \
-  "a hook that refuses empty stdin is OK under the probe, so the probe fed it the ref protocol"
-ss_assert "pp-stdin-control" "$( ( pp_enter "$PP_STDIN" && .githooks/pre-push origin x </dev/null >/dev/null 2>&1 ); echo $? )" "3" \
-  "...and the same hook fed nothing exits 3, so the cell above is the fed line and not a hook that ignores stdin"
-
-# 6. THE SAFE-STOP ROW SAYS THE SPLIT BUYS NOTHING, AND THE WALK SKIPS THE PROBE. A push refused
-#    on the tree as it stands is refused at every ref in the range alike, so the DEFER's advisory
-#    is "fix what the hook refuses" rather than a ref -- and a `--safe-stop` walk over the same
-#    consumer must still find the range's clean release, because its nested classifies never run
-#    the probe. Driven on the SS world, whose range has a clean release and a deferring one; its
-#    consumer becomes a repository with a refusing hook armed. The SS hook names no gating script
-#    and ends in `exit 0`, so it is REPLACED rather than appended to.
-PP_SS="$PP/sscons"; rm -rf "$PP_SS"; cp -R "$SS/cons" "$PP_SS"; rm -rf "$PP_SS/_bmad-output"
-printf '#!/usr/bin/env bash\n%s\n' "$PP_HOOK_RED" > "$PP_SS/.githooks/pre-push"; chmod +x "$PP_SS/.githooks/pre-push"
-( cd "$PP_SS" && git init -q . && git config user.email f@x && git config user.name f \
-    && git config commit.gpgsign false && git config core.hooksPath .githooks \
-    && git add -A >/dev/null 2>&1 && git commit -qm seed >/dev/null 2>&1 \
-    && git remote add origin "$PP/nowhere-ss.git" ) || printf 'FIXTURE ERROR: pp sscons init failed\n' >&2
-# The CLEAN range: the coupling arms are silent, so the probe is the only thing that can defer.
-pp_ss_out="$(bash "$GATE" "$SS/dist" "$SS_BASE" "$SS_R1" "$PP_SS" 2>/dev/null)"
-ss_assert "pp-safe-stop-nothing" \
-  "$(printf '%s\n' "$pp_ss_out" | awk -F'\t' '$2 == "pre-push" {print $1; exit}')|$(printf '%s\n' "$pp_ss_out" | awk -F'\t' '$1 == "SELF-UPDATE-SAFE-STOP" {print $2; exit}')|$(printf '%s\n' "$pp_ss_out" | awk -F'\t' '$1 == "SELF-UPDATE-SAFE-STOP" && $3 ~ /SPLIT BUYS NOTHING/ {print "nothing"; exit}')" \
-  "SELF-UPDATE-DEFER|-|nothing" \
-  "on a range the coupling arms clear, a refusing hook defers and the SAFE-STOP row names no ref: the push is refused at every ref alike"
-# CONTROL, ONE PROPERTY APART: the same consumer, same range, hook exiting 0, is clean OK.
-printf '#!/usr/bin/env bash\nexit 0\n' > "$PP_SS/.githooks/pre-push"
-ss_assert "pp-safe-stop-control" \
-  "$(bash "$GATE" "$SS/dist" "$SS_BASE" "$SS_R1" "$PP_SS" 2>/dev/null | awk -F'\t' '$1 ~ /^SELF-UPDATE-(OK|DEFER|UNDECIDED)$/ {print $1}' | sort -u | tr '\n' ',')" \
-  "SELF-UPDATE-OK," "...and with the hook exiting 0 the same range is OK, so the DEFER above is the hook's refusal"
-# THE WALK SKIPS THE PROBE. `--safe-stop` over the range whose LAST release couples answers with
-# the clean release even though this consumer's hook refuses: if the nested classifies ran the
-# probe every candidate would defer and the walk would print nothing (rc 1).
-printf '#!/usr/bin/env bash\n%s\n' "$PP_HOOK_RED" > "$PP_SS/.githooks/pre-push"
-ss_assert "pp-safe-stop-walk" \
-  "$(bash "$GATE" --safe-stop "$SS/dist" "$SS_BASE" "$SS_R2" "$PP_SS" 2>/dev/null; echo "|rc=$?")" \
-  "$SS_R1
-|rc=0" \
-  "the walk's nested classifies skip the probe, so a refusing hook does not empty the candidate set"
-
-# 7. THE RECORD IS NOT IN THE TREE WHILE THE HOOK RUNS. An earlier cut opened the verdict record
-#    under `_bmad-output/` before the probe, and the consumer's hook then saw an untracked path no
-#    fixture reads and ran its whole suite on every probe -- 257s where the settled tree took 30s.
-#    A hook that lists the record directory at run time is the cell: it must see NOTHING there,
-#    and the record must still be on disk, complete, once the gate exits.
-PP_HOOK_LSREC='n=$(ls _bmad-output/ai-dlc-update/self-update-gate-*.md 2>/dev/null | wc -l | tr -d " ")
-echo "records-visible-during-hook=$n"
-[ "$n" -eq 0 ] || exit 4
-exit 0'
-pp_mk PP_LSREC lsrec "$PP_HOOK_LSREC" hooksPath yes
+# 2. THE RECORD IS NOT IN THE TREE WHILE THE GATE RUNS. An earlier cut opened the verdict record
+#    under `_bmad-output/` at the start of the run, and a consumer process running mid-gate then saw
+#    an untracked path no fixture reads -- for a pre-push hook that defeats its read-set skip
+#    (measured: 257s where the settled tree took 30s). The gate no longer runs a hook, but it still
+#    runs the consumer's GATING SCRIPTS from the consumer root, and the record is still assembled
+#    under `$TMP` and moved in at exit. The observer is the consumer's current copy of a gating
+#    script the differential runs: it logs how many record files it can see, from the consumer root.
+#    It must see none, have run at least once, and exactly one complete record must be in the tree
+#    afterwards.
+PP_LSREC="$(vr_cons pplsrec)"
+PP_LSREC_LOG="$VR/pplsrec.log"
+pp_lsrec_obs() { # pp_lsrec_obs <consumer> <log> -- install the observing gating script
+  printf '#!/bin/sh\nn=$(ls _bmad-output/ai-dlc-update/self-update-gate-*.md 2>/dev/null | wc -l | tr -d " ")\necho "$n" >> "%s"\nexit 0\n' "$2" \
+    > "$1/scripts/ai-dlc/gate-pass.sh"
+  chmod +x "$1/scripts/ai-dlc/gate-pass.sh"
+}
+pp_lsrec_obs "$PP_LSREC" "$PP_LSREC_LOG"; : > "$PP_LSREC_LOG"
+bash "$GATE" "$DIST" "$BASE" "$THEIRS" "$PP_LSREC" >/dev/null 2>&1
 ss_assert "pp-record-out-of-tree" \
-  "$(pp_scan "$GATE" "$PP_LSREC")|n=$(vr_n "$PP_LSREC")|$(sed -n 's/^# verdict: *//p' "$(vr_newest "$PP_LSREC")" | head -1)" \
-  "pp=SELF-UPDATE-OK sum=1 ss=1 und=1|n=1|DEFER" \
-  "the hook sees no record file while it runs (it exits 4 otherwise), and exactly one complete record is in the tree afterwards"
-# CONTROL: the same hook, fed the directory with a record-shaped file already in it, exits 4 --
-# so the cell above is the record's absence and not a hook that cannot see the directory.
-ss_assert "pp-record-control" \
-  "$( mkdir -p "$PP_LSREC/_bmad-output/ai-dlc-update" && : > "$PP_LSREC/_bmad-output/ai-dlc-update/self-update-gate-00000000T000000Z.md" \
-      && ( pp_enter "$PP_LSREC" && .githooks/pre-push origin x </dev/null >/dev/null 2>&1 ); echo $? )" "4" \
-  "...and the same hook with a record-shaped file present exits 4, so the probe's hook really can see that directory"
+  "seen=$(sort -u "$PP_LSREC_LOG" | tr '\n' ',')|n=$(vr_n "$PP_LSREC")|$(sed -n 's/^# verdict: *//p' "$(vr_newest "$PP_LSREC")" | head -1)" \
+  "seen=0,|n=1|DEFER" \
+  "a gating script the gate runs from the consumer root sees no record file while it runs, and exactly one complete record is in the tree afterwards"
+# CONTROL: the same script, run by hand from the consumer root with a record-shaped file present,
+# logs 1 -- so the 0 above is the record's absence and not a script that cannot see the directory.
+: > "$PP_LSREC_LOG.ctl"
+pp_lsrec_obs "$PP_LSREC" "$PP_LSREC_LOG.ctl"
+( cd "$PP_LSREC" && sh scripts/ai-dlc/gate-pass.sh )
+ss_assert "pp-record-control" "$(cat "$PP_LSREC_LOG.ctl")" "1" \
+  "...and the same script with a record-shaped file present logs 1, so it really can see that directory"
+# MUTANT: the record assembled IN PLACE from the start of the run, as the earlier cut did.
+PP_MR="$(vr_mut pprecinplace 'index($0, "    GATE_REC=\"$TMP/record.md\"") == 1 { print "    GATE_REC=\"$_rec_p\""; next } { print }')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$GATE" "$PP_MR"; then
+  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s mutation matched nothing\n' "pp-mut-recinplace"
+else
+  PP_LSREC_M="$(vr_cons pplsrecm)"; pp_lsrec_obs "$PP_LSREC_M" "$PP_LSREC_LOG.m"; : > "$PP_LSREC_LOG.m"
+  bash "$PP_MR" "$DIST" "$BASE" "$THEIRS" "$PP_LSREC_M" >/dev/null 2>&1
+  pp_mr_got="seen=$(sort -u "$PP_LSREC_LOG.m" | tr '\n' ',')"
+  if [ "$pp_mr_got" = "seen=1," ]; then
+    printf '  ok    %-16s KILLED (a record assembled in place is visible to every consumer process the gate runs)\n' "pp-mut-recinplace"
+  else
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED: got=[%s] want=[seen=1,]\n' "pp-mut-recinplace" "$pp_mr_got"
+  fi
+fi
 
-# 8. THE HOOK GETS WHAT GIT PASSES. `$1` is the remote NAME and `$2` its URL; the local ref on
-#    stdin is the CURRENT BRANCH, which resolves. A first cut passed the literal `origin`, a
-#    NAME where the URL goes when no remote was so named, and a local ref that existed nowhere;
-#    a hook branching on any of those refused the probe while the real push succeeded.
-PP_HOOK_ARGS='[ "$1" = "upstream" ] || { echo "arg1=$1"; exit 5; }
-case "$2" in *nowhere-upstream.git) ;; *) echo "arg2=$2"; exit 6 ;; esac
-read -r lref lsha rref rsha
-git rev-parse --verify -q "$lref" >/dev/null || { echo "local ref $lref does not resolve"; exit 7; }
-[ "$lref" = "$(git symbolic-ref HEAD)" ] || { echo "local ref $lref is not the current branch"; exit 8; }
-case "$rref" in refs/heads/ai-dlc-update/self-update-*) ;; *) echo "remote ref $rref"; exit 9 ;; esac
-exit 0'
-pp_mk PP_UPSTREAM upstream "$PP_HOOK_ARGS" hooksPath no
-git -C "$PP_UPSTREAM" remote add upstream "$PP/nowhere-upstream.git"
-ss_assert "pp-args-as-git" "$(pp_scan "$GATE" "$PP_UPSTREAM")" \
-  "pp=SELF-UPDATE-OK sum=1 ss=1 und=1" \
-  "a hook demanding the remote's name in \$1, its URL in \$2, a resolvable current-branch local ref and a self-update remote ref is satisfied, on a consumer whose only remote is 'upstream'"
-# CONTROL: the same hook fed the first cut's line by hand -- literal origin, a name as the URL, a
-# non-existent local ref -- refuses, so the cell above is the arguments and not a hook that
-# accepts anything.
-ss_assert "pp-args-control" \
-  "$( ( pp_enter "$PP_UPSTREAM" && printf 'refs/heads/ai-dlc-update/self-update-x-probe %s refs/heads/ai-dlc-update/self-update-x-probe 0000000000000000000000000000000000000000\n' "$(git rev-parse HEAD)" \
-        | .githooks/pre-push origin upstream >/dev/null 2>&1 ); echo $? )" "5" \
-  "...and the same hook fed the first cut's arguments exits 5, so the probe's arguments are what satisfies it"
-
-# 9. THE PROBE RUNS THE HOOK WITH THE LIVE TRACE OFF. A green shipped hook starts a DETACHED
-#    read-set trace of its unmapped fixtures, which would run under the update cycle about to write
-#    the tree it copies. The tail refuses unless AI_DLC_READSET_LIVE_TRACE=0 reached it; this
-#    fixture unsets every AI_DLC_* at its top, so only the gate can have set it.
-PP_HOOK_KNOB='[ "${AI_DLC_READSET_LIVE_TRACE:-unset}" = 0 ] || { echo "live trace knob ${AI_DLC_READSET_LIVE_TRACE:-unset}"; exit 10; }
-exit 0'
-pp_mk PP_KNOB knob "$PP_HOOK_KNOB" hooksPath yes
-ss_assert "pp-trace-knob" "$(pp_scan "$GATE" "$PP_KNOB")" \
-  "pp=SELF-UPDATE-OK sum=1 ss=1 und=1" \
-  "a hook that refuses unless AI_DLC_READSET_LIVE_TRACE=0 is OK under the probe, so the probe starts no detached trace"
-ss_assert "pp-trace-knob-control" "$( ( pp_enter "$PP_KNOB" && printf 'refs/heads/x %s refs/heads/x 0000000000000000000000000000000000000000\n' "$(git rev-parse HEAD)" | .githooks/pre-push origin x >/dev/null 2>&1 ); echo $? )" "10" \
-  "...and the same hook run by hand without the knob exits 10, so the cell above is the knob and not a hook that accepts anything"
-
-# --- MUTANTS on arm P ---------------------------------------------------------------------
-# Each is scored on the RED world, where the shipped gate defers; a mutant that keeps deferring
-# there is not a mutant of this arm. The unmutated control is `pp-red-defers` above.
+# --- reconcile/self-update-push.sh: THE ONE HOOK RUN, AS THE PUSH ---------------------------
 #
-# M1: the probe never runs (the whole arm removed). The red world reads exactly like the green.
-PP_M1="$(vr_mut pp1 'index($0,"if [ -z \"${AI_DLC_GATE_IN_SAFE_STOP:-}\" ] \\") && !done { print "if false \\"; done=1; next } { print }')"
-ASSERTIONS=$((ASSERTIONS + 1))
-if cmp -s "$GATE" "$PP_M1"; then
-  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s mutation matched nothing\n' "pp-mut-noprobe"
-else
-  pp_m1_got="$(pp_scan "$PP_M1" "$PP_RED")"
-  if [ "$pp_m1_got" = "pp=none sum=1 ss=1 und=1" ]; then
-    printf '  ok    %-16s KILLED (without the probe a consumer whose push is already refused reads exactly like one whose push is clear)\n' "pp-mut-noprobe"
-  else
-    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED: got=[%s]\n' "pp-mut-noprobe" "$pp_m1_got"
-  fi
+# Step 2 pushes through this wrapper. It runs the consumer's pre-push hook EXACTLY ONCE, as git
+# would run it, and pushes with `--no-verify` only after that run exited 0. Every world is a work
+# tree `W` with `main` pushed to a bare `R1` (a second bare `R2` beside it), on a branch `su` one
+# commit ahead. The hook is installed at `.git/hooks/pre-push` -- the hook git resolves -- and
+# appends a line to a COUNTER file on every run, then writes its argv and stdin to `run-<n>`. Its
+# answer is chosen by marker files: refuse always, refuse when stdin carries a token, fail iff
+# `yes | head -1` died of SIGPIPE, or commit before passing.
+#
+# REAL `git push` IS THE ORACLE wherever the wrapper claims to do what git does: the same world
+# is pushed for real with a hook that refuses (so nothing moves), and the two `run-<n>` files are
+# byte-compared. Every comparison carries a control that must DIFFER, so a comparison of two
+# identical nothings cannot pass.
+#
+# HERMETIC GIT: the operator's global and system config are kept out, so a `push.followTags`, a
+# `core.hooksPath` or a signing key there cannot decide a cell. Unset again at the section's end.
+export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
+export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+PU_SRC="$(dirname "$GATE")/self-update-push.sh"
+PU_D="$(dirname "$DIST")/pu"; mkdir -p "$PU_D"
+ss_assert "pu-located" "$([ -f "$PU_SRC" ] && echo present || echo absent)" "present" \
+  "self-update-push.sh sits beside the gate, in the layout this fixture resolved the gate from"
+PU_HOOK_BODY='echo run >> "$D/count"
+n=$(grep -c . "$D/count")
+f="$D/run-$n"
+{ printf "ARGV:%s|%s\n" "$1" "$2"; cat; } > "$f"
+if [ -f "$D/sigpipe" ]; then
+  yes | head -1 >/dev/null
+  [ "${PIPESTATUS[0]}" -eq 141 ] && { echo "hook: SIGPIPE killed yes"; exit 1; }
 fi
-# M2: the probe reads the TRACKED hook instead of the one git runs. The dotgit world -- red hook
-#     at .git/hooks, tracked hook the seed's -- then answers about the wrong file.
-PP_M2="$(vr_mut pp2 'index($0,"pp_hook=\"$(cd \"$CONSUMER\" && git rev-parse --git-path hooks/pre-push") { print "  pp_hook=\".githooks/pre-push\""; next } { print }')"
-ASSERTIONS=$((ASSERTIONS + 1))
-if cmp -s "$GATE" "$PP_M2"; then
-  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s mutation matched nothing\n' "pp-mut-tracked"
-else
-  pp_m2_got="$(pp_scan "$PP_M2" "$PP_DOTGIT")"
-  if [ "$pp_m2_got" != "pp=SELF-UPDATE-DEFER sum=1 ss=1 und=0" ]; then
-    printf '  ok    %-16s KILLED (reading the tracked file misses the hook git actually runs: got [%s])\n' "pp-mut-tracked" "$pp_m2_got"
-  else
-    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED: the dotgit world still deferred, so the probe is not keyed on what git resolves\n' "pp-mut-tracked"
+[ -f "$D/refuse-all" ] && { printf "\n── artifact paths\n   FAIL\n\npre-push: BLOCKED.\n"; exit 1; }
+if [ -f "$D/refuse-stdin" ] && grep -qF "$(cat "$D/refuse-stdin")" "$f"; then echo "hook: refuse stdin"; exit 1; fi
+[ -f "$D/mutate" ] && git commit -q --allow-empty -m hook-made
+exit 0'
+# pu_world <name> [nohook] -> world dir. Aborts the fixture on a failed build: an empty path here
+# would push from the caller's cwd.
+pu_world() {
+  local d="$PU_D/$1"
+  mkdir "$d" 2>/dev/null \
+    && git init -q --bare "$d/R1" && git init -q --bare "$d/R2" && git -c init.defaultBranch=main init -q "$d/W" \
+    && ( cd "$d/W" && echo a > a && git add a && git commit -q -m base \
+         && git remote add origin "$d/R1" && git push -q --no-verify origin main >/dev/null 2>&1 \
+         && git checkout -q -b su && echo b > b && git add b && git commit -q -m su ) \
+    && : > "$d/count" \
+    || { printf 'FIXTURE ERROR: pu_world %s did not build\n' "$1" >&2; exit 1; }
+  if [ "${2:-}" != nohook ]; then
+    printf '#!/usr/bin/env bash\nD="%s"\n%s\n' "$d" "$PU_HOOK_BODY" > "$d/W/.git/hooks/pre-push"
+    chmod +x "$d/W/.git/hooks/pre-push"
   fi
-fi
-# M3: the probe feeds EMPTY stdin. The stdin world's hook then refuses.
-PP_M3="$(vr_mut pp3 'index($0,"\"$pp_hook\" \"$pp_remote\" \"$pp_url\" < \"$pp_in\"") { sub(/< "\$pp_in"/, "< /dev/null"); print; next } { print }')"
-ASSERTIONS=$((ASSERTIONS + 1))
-if cmp -s "$GATE" "$PP_M3"; then
-  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s mutation matched nothing\n' "pp-mut-nostdin"
-else
-  pp_m3_got="$(pp_scan "$PP_M3" "$PP_STDIN")"
-  if [ "$pp_m3_got" = "pp=SELF-UPDATE-DEFER sum=1 ss=1 und=0" ]; then
-    printf '  ok    %-16s KILLED (fed nothing, a hook that judges the ref protocol refuses -- the fed line is load-bearing)\n' "pp-mut-nostdin"
+  printf '%s\n' "$d"
+}
+# pu_run <wrapper> <world> [prefix-cmd...] -> exit status; stdout/stderr kept in the world. Driven
+# from `/`, so the wrapper cannot lean on its caller's cwd. A fresh <out> path each call.
+# pu_run is called inside `$( )`, so a counter it bumps is lost; the <out> name it chose is written
+# into the world instead, and pu_out reads it back.
+pu_run() {
+  local w="$1" d="$2" o; shift 2
+  o="_bmad-output/ai-dlc-update/self-update-push-$(grep -c . "$d/count" 2>/dev/null)-$$-$RANDOM.md"
+  printf '%s\n' "$o" > "$d/outname"
+  ( cd / && "$@" bash "$w" "$d/W" origin su "$o" ) > "$d/stdout" 2> "$d/stderr"
+  printf '%s' "$?"
+}
+pu_out() { printf '%s\n' "$1/W/$(cat "$1/outname" 2>/dev/null)"; }
+pu_n() { local n; n="$(grep -c . "$1/count" 2>/dev/null)" || n=0; printf '%s' "$n"; }
+pu_at() { git --git-dir="$1/$2" rev-parse -q --verify "$3" 2>/dev/null || printf 'absent'; }
+pu_landed() { # pu_landed <world> <R> -> landed | absent | other
+  local r; r="$(pu_at "$1" "$2" refs/heads/su)"
+  if [ "$r" = absent ]; then printf absent
+  elif [ "$r" = "$(git -C "$1/W" rev-parse refs/heads/su)" ]; then printf landed
+  else printf other; fi
+}
+pu_real() { ( cd "$1/W" && git push -u origin su ) >/dev/null 2>&1; printf '%s' "$?"; }
+pu_kill() { # pu_kill <label> <mutant> <got> <want> <why>
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if cmp -s "$PU_SRC" "$2"; then
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s mutation matched nothing\n' "$1"
+  elif [ "$3" = "$4" ]; then
+    printf '  ok    %-16s KILLED (%s)\n' "$1" "$5"
   else
-    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED: got=[%s]\n' "pp-mut-nostdin" "$pp_m3_got"
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]\n' "$1" "$3" "$4"
   fi
-fi
-# M4: a non-zero hook exit is reported OK. The red world reads OK on the pre-push row.
-PP_M4="$(vr_mut pp4 'index($0,"    if [ \"$pp_rc\" -eq 0 ]; then") { print "    if true; then"; next } { print }')"
-ASSERTIONS=$((ASSERTIONS + 1))
-if cmp -s "$GATE" "$PP_M4"; then
-  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s mutation matched nothing\n' "pp-mut-rc"
-else
-  pp_m4_got="$(pp_scan "$PP_M4" "$PP_RED")"
-  if [ "$pp_m4_got" = "pp=SELF-UPDATE-OK sum=1 ss=1 und=1" ]; then
-    printf '  ok    %-16s KILLED (a probe that ignores the hook exit code says OK on a refused push)\n' "pp-mut-rc"
+}
+pu_mut() { # pu_mut <name> <awk-program> -> a mutated copy of the wrapper
+  mkdir -p "$PU_D/m-$1"
+  awk "$2" "$PU_SRC" > "$PU_D/m-$1/self-update-push.sh" 2>/dev/null
+  printf '%s\n' "$PU_D/m-$1/self-update-push.sh"
+}
+
+# pu-absent: no hook at all. git runs none, and neither does the wrapper; the push lands.
+PU_W="$(pu_world absent nohook)"
+ss_assert "pu-hook-absent" "rc=$(pu_run "$PU_SRC" "$PU_W")|$(pu_landed "$PU_W" R1)|stdout=$(wc -c < "$PU_W/stdout" | tr -d ' ')" \
+  "rc=0|landed|stdout=0" "no pre-push hook: exit 0, the branch lands at the local sha, and stdout carries nothing"
+
+# THE SCENARIOS EVERY MUTANT IS SCORED ON. Each builds a fresh world and prints one summary line.
+pu_sc_pass() { local d; d="$(pu_world "pass-$2")"
+  printf 'rc=%s ref=%s n=%s' "$(pu_run "$1" "$d")" "$(pu_landed "$d" R1)" "$(pu_n "$d")"; }
+pu_sc_refuse() { local d; d="$(pu_world "refuse-$2")"; : > "$d/refuse-all"
+  printf 'rc=%s ref=%s n=%s' "$(pu_run "$1" "$d")" "$(pu_landed "$d" R1)" "$(pu_n "$d")"; }
+
+PU_PASS="$(pu_sc_pass "$PU_SRC" shipped)"
+ss_assert "pu-hook-passes" "$PU_PASS|stdout=$(wc -c < "$PU_D/pass-shipped/stdout" | tr -d ' ')|up=$(git -C "$PU_D/pass-shipped/W" rev-parse --abbrev-ref 'su@{upstream}' 2>/dev/null)" \
+  "rc=0 ref=landed n=1|stdout=0|up=origin/su" \
+  "a passing hook: the remote ref is created at the local sha, the hook ran EXACTLY once, stdout is empty, and the upstream is origin/su"
+PU_REF="$(pu_sc_refuse "$PU_SRC" shipped)"
+PU_REF_OUT="$(pu_out "$PU_D/refuse-shipped")"
+ss_assert "pu-hook-refuses" \
+  "$PU_REF|probe=$(grep -c '^# probe: ' "$PU_REF_OUT" 2>/dev/null)|blocked=$(grep -c '^# probe: pre-push: BLOCKED' "$PU_REF_OUT" 2>/dev/null)|stdout=$(grep -c . "$PU_D/refuse-shipped/stdout")/$(grep -c '^HOOK-REFUSED 1 artifact paths$' "$PU_D/refuse-shipped/stdout")|tracked=$(git -C "$PU_D/refuse-shipped/W" ls-files -- _bmad-output | grep -c .)" \
+  "rc=3 ref=absent n=1|probe=6|blocked=1|stdout=1/1|tracked=0" \
+  "a refusing hook: exit 3, nothing pushed, the hook ran once, the record holds the header plus the hook's 5 output lines as '# probe:', stdout is the one HOOK-REFUSED line naming the FAIL phase, and the record is untracked"
+
+PU_W="$(pu_world prerecv)"
+printf '#!/bin/sh\necho "remote: refused by pre-receive" >&2\nexit 1\n' > "$PU_W/R1/hooks/pre-receive"; chmod +x "$PU_W/R1/hooks/pre-receive"
+ss_assert "pu-remote-refuses" "rc=$(pu_run "$PU_SRC" "$PU_W")|$(pu_landed "$PU_W" R1)|n=$(pu_n "$PU_W")|$(cat "$PU_W/stdout")" \
+  "rc=4|absent|n=1|TRANSPORT 1" \
+  "the hook passes and the remote's pre-receive refuses: exit 4, TRANSPORT on stdout, the hook ran once, nothing landed"
+
+PU_W="$(pu_world notout)"; git -C "$PU_W/W" checkout -q main
+ss_assert "pu-not-checked-out" "rc=$(pu_run "$PU_SRC" "$PU_W")|n=$(pu_n "$PU_W")|$(pu_landed "$PU_W" R1)" \
+  "rc=2|n=0|absent" "the self-update branch is not checked out: exit 2 before the hook runs, nothing pushed"
+
+# A DIVERGED REMOTE. R1 holds su at a commit that is not an ancestor of the local one.
+pu_diverge() { local c
+  c="$(git -C "$1/W" commit-tree -p main -m other "$(git -C "$1/W" rev-parse 'main^{tree}')")" \
+    && git -C "$1/W" push -q --no-verify origin "$c:refs/heads/su" >/dev/null 2>&1; }
+PU_W="$(pu_world divpass)"; pu_diverge "$PU_W"
+ss_assert "pu-diverged-pass" "rc=$(pu_run "$PU_SRC" "$PU_W")|n=$(pu_n "$PU_W")|$(pu_landed "$PU_W" R1)" \
+  "rc=4|n=1|other" "a remote that diverged, hook passing: the non-fast-forward push fails as TRANSPORT (exit 4) and the remote keeps its commit"
+PU_W="$(pu_world divref)"; pu_diverge "$PU_W"; : > "$PU_W/refuse-all"
+ss_assert "pu-diverged-refuse" "rc=$(pu_run "$PU_SRC" "$PU_W")|n=$(pu_n "$PU_W")|$(pu_landed "$PU_W" R1)" \
+  "rc=3|n=1|other" "a remote that diverged, hook refusing: HOOK-REFUSED (exit 3) and nothing pushed"
+
+# THE HOOK'S ARGV AND STDIN ARE THE REAL PUSH'S, with `remote.origin.pushurl` set to R2 while the
+# fetch url stays R1. The hook refuses, so the real push moves nothing and the wrapper then sees the
+# same world. CONTROL: the real push with the pushurl removed feeds a DIFFERENT argv, so the
+# comparison can tell two pushes apart.
+PU_BE="$(pu_world byteeq)"; : > "$PU_BE/refuse-all"
+git -C "$PU_BE/W" config remote.origin.pushurl "$PU_BE/R2"
+pu_real "$PU_BE" >/dev/null
+PU_BE_REAL="$PU_BE/run-$(pu_n "$PU_BE")"
+pu_be_rc="$(pu_run "$PU_SRC" "$PU_BE")"
+PU_BE_WRAP="$PU_BE/run-$(pu_n "$PU_BE")"
+ss_assert "pu-argv-stdin-as-git" \
+  "rc=$pu_be_rc|n=$(pu_n "$PU_BE")|$(cmp -s "$PU_BE_REAL" "$PU_BE_WRAP" && echo byte-equal || echo differ)|$(grep -c "^ARGV:origin|$PU_BE/R2\$" "$PU_BE_WRAP")|$(grep -vc '^ARGV:' "$PU_BE_WRAP")" \
+  "rc=3|n=2|byte-equal|1|1" \
+  "the wrapper's hook argv (remote name, PUSH url) and its one stdin ref line are byte-equal to a real git push's to the same bare remote"
+# MUTANTS scored on this world (the refusing hook keeps it unchanged between runs).
+pu_be_mut() { # pu_be_mut <mutant> -> byte-equal | differ
+  local f; pu_run "$1" "$PU_BE" >/dev/null; f="$PU_BE/run-$(pu_n "$PU_BE")"
+  cmp -s "$PU_BE_REAL" "$f" && printf byte-equal || printf differ
+}
+PU_M="$(pu_mut probe 'BEGIN { a = "refs/heads/%s %s refs/heads/%s %s" } index($0, a) { i = index($0, a); $0 = substr($0, 1, i - 1) "refs/heads/%s %s refs/heads/ai-dlc-update/self-update-%s-probe %s" substr($0, i + length(a)) } { print }')"
+pu_kill "pu-mut-probename" "$PU_M" "$(pu_be_mut "$PU_M")" "differ" \
+  "a ref line built from the gate's old -probe stand-in name is not the line git sends"
+PU_M="$(pu_mut fetchargv 'index($0, "remote get-url --push --all") { sub(/remote get-url --push --all/, "remote get-url --all") } { print }')"
+pu_kill "pu-mut-fetchargv" "$PU_M" "$(pu_be_mut "$PU_M")" "differ" \
+  "the fetch url in \$2 is not the url git passes when remote.origin.pushurl is set"
+git -C "$PU_BE/W" config --unset remote.origin.pushurl
+pu_real "$PU_BE" >/dev/null
+ss_assert "pu-argv-control" "$(cmp -s "$PU_BE_REAL" "$PU_BE/run-$(pu_n "$PU_BE")" && echo byte-equal || echo differ)" "differ" \
+  "control: a real push with the pushurl removed feeds a different argv, so byte-equality above is a comparison that can fail"
+
+# PUSH URL, NOT FETCH URL, FOR THE REMOTE SIDE OF THE REF LINE. (1) The fetch remote R1 already
+# holds the local sha while the push url R2 lacks it: git feeds the hook a ref line with a zero
+# remote sha. Real push first, refusing, then the wrapper.
+pu_sc_pushurl() { local d; d="$(pu_world "pushurl-$2")"
+  git -C "$d/W" push -q --no-verify origin su >/dev/null 2>&1
+  git -C "$d/W" config remote.origin.pushurl "$d/R2"; : > "$d/refuse-all"
+  pu_real "$d" >/dev/null; local real="$d/run-$(pu_n "$d")" rc
+  rc="$(pu_run "$1" "$d")"
+  printf 'rc=%s R2=%s n=%s %s' "$rc" "$(pu_landed "$d" R2)" "$(( $(pu_n "$d") - 1 ))" \
+    "$(cmp -s "$real" "$d/run-$(pu_n "$d")" && echo byte-equal || echo differ)"
+}
+ss_assert "pu-pushurl-side" "$(pu_sc_pushurl "$PU_SRC" shipped)|$(grep -c ' 0000000000000000000000000000000000000000$' "$PU_D/pushurl-shipped/run-2")" \
+  "rc=3 R2=absent n=1 byte-equal|1" \
+  "fetch url already at the local sha, push url lacking it, hook refusing: exit 3, nothing on the push url, the hook ran once, fed the zero-sha line a real push feeds"
+# (2) The remote is already at the local sha: git still runs the hook, on EMPTY stdin.
+pu_sc_current() { local d; d="$(pu_world "current-$2")"
+  git -C "$d/W" push -q --no-verify origin su >/dev/null 2>&1; : > "$d/refuse-all"
+  pu_real "$d" >/dev/null; local before; before="$(pu_n "$d")"; local real="$d/run-$before" rc
+  rc="$(pu_run "$1" "$d")"
+  if [ "$(pu_n "$d")" -gt "$before" ]; then
+    printf 'rc=%s real=%s n=%s stdin=%s %s' "$rc" "$before" "$(( $(pu_n "$d") - before ))" \
+      "$(grep -vc '^ARGV:' "$d/run-$(pu_n "$d")")" \
+      "$(cmp -s "$real" "$d/run-$(pu_n "$d")" && echo byte-equal || echo differ)"
   else
-    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED: got=[%s]\n' "pp-mut-rc" "$pp_m4_got"
+    printf 'rc=%s real=%s n=0 stdin=none norun' "$rc" "$before"
   fi
-fi
-# M5: the exec-bit test is dropped, so a hook git would skip is run. The noexec world defers.
-PP_M5="$(vr_mut pp5 'index($0,"if [ -z \"$pp_hook\" ] || [ ! -x \"$pp_hook\" ]; then") { print "  if [ -z \"$pp_hook\" ] || [ ! -e \"$pp_hook\" ]; then"; next } { print }')"
-ASSERTIONS=$((ASSERTIONS + 1))
-if cmp -s "$GATE" "$PP_M5"; then
-  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s mutation matched nothing\n' "pp-mut-exec"
+}
+ss_assert "pu-remote-current" "$(pu_sc_current "$PU_SRC" shipped)" \
+  "rc=3 real=1 n=1 stdin=0 byte-equal" \
+  "the remote already at the local sha: a real push runs the hook on empty stdin (real=1), and so does the wrapper -- exit 3 on a refusing hook, once, byte-equal"
+# (3) The fetch url does not exist, the push url does: the push is decided on the push url alone.
+pu_sc_nofetch() { local d; d="$(pu_world "nofetch-$2")"
+  git -C "$d/W" config remote.origin.pushurl "$d/R2"
+  git -C "$d/W" config remote.origin.url "$d/nonexistent.git"
+  printf 'rc=%s R2=%s n=%s' "$(pu_run "$1" "$d")" "$(pu_landed "$d" R2)" "$(pu_n "$d")"
+}
+ss_assert "pu-fetch-url-missing" "$(pu_sc_nofetch "$PU_SRC" shipped)" "rc=0 R2=landed n=1" \
+  "a fetch url that does not exist and a valid push url: exit 0, the branch lands on the push url, the hook ran once"
+PU_M="$(pu_mut lsfetch 'index($0, "ls-remote \"$URL\"") { sub(/ls-remote "\$URL"/, "ls-remote \"$REMOTE\"") } { print }')"
+pu_kill "pu-mut-lsfetch" "$PU_M" "$(pu_sc_pushurl "$PU_M" lsfetch)" "rc=3 R2=absent n=1 differ" \
+  "ls-remote against the fetch url reads R1's sha, feeds the hook an empty stdin, and differs from the real push"
+ss_assert "pu-mut-lsfetch-b" "$(pu_sc_nofetch "$PU_M" lsfetch)" "rc=4 R2=absent n=0" \
+  "...and the same mutant cannot read a missing fetch url, so it reports TRANSPORT where the real push lands"
+PU_M="$(pu_mut shortcut 'index($0, "if [ \"$REMOTE_SHA\" = \"$LOCAL_SHA\" ]; then") == 1 { print; print "  pinned_push"; next } { print }')"
+pu_kill "pu-mut-shortcut" "$PU_M" "$(pu_sc_current "$PU_M" shortcut)" "rc=0 real=1 n=0 stdin=none norun" \
+  "the up-to-date shortcut skips the hook git would run, and pushes past a refusal"
+
+# SIGPIPE. `git push` runs hooks with SIGPIPE ignored, so a hook's `yes | head -1` sees EPIPE and
+# not a 141. The wrapper ignores it the same way. Each drive RESETS the disposition to default
+# first with perl, because this fixture may itself run under a `git push` hook with SIGPIPE
+# already ignored, which would hide a wrapper that forgot to ignore it.
+if ! command -v perl >/dev/null 2>&1; then
+  printf '  SKIP  %-16s perl is not on PATH, so SIGPIPE cannot be reset to default and the arm cannot discriminate\n' "pu-sigpipe"
 else
-  pp_m5_got="$(pp_scan "$PP_M5" "$PP_NOEXEC")"
-  if [ "$pp_m5_got" != "pp=SELF-UPDATE-OK sum=1 ss=1 und=1" ]; then
-    printf '  ok    %-16s KILLED (running a hook git would skip refuses a push git would allow: got [%s])\n' "pp-mut-exec" "$pp_m5_got"
-  else
-    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED: the non-executable hook was skipped anyway, so the exec-bit test is not what skips it\n' "pp-mut-exec"
-  fi
+  pu_dfl() { perl -e '$SIG{PIPE} = "DEFAULT"; exec @ARGV or exit 127' "$@"; }
+  pu_sc_sigpipe() { local d; d="$(pu_world "sigpipe-$2")"; : > "$d/sigpipe"
+    printf 'rc=%s ref=%s n=%s' "$(pu_run "$1" "$d" pu_dfl)" "$(pu_landed "$d" R1)" "$(pu_n "$d")"; }
+  ss_assert "pu-sigpipe" "$(pu_sc_sigpipe "$PU_SRC" shipped)" "rc=0 ref=landed n=1" \
+    "a hook that fails iff yes|head -1 died of SIGPIPE passes under the wrapper, driven with SIGPIPE at its default"
+  PU_SP="$PU_D/sigpipe-shipped"
+  ss_assert "pu-sigpipe-control" \
+    "$( ( cd "$PU_SP/W" && pu_dfl .git/hooks/pre-push origin x </dev/null >/dev/null 2>&1 ); echo $? )|$( ( cd "$PU_SP/W" && perl -e '$SIG{PIPE} = "IGNORE"; exec @ARGV or exit 127' .git/hooks/pre-push origin x </dev/null >/dev/null 2>&1 ); echo $? )" \
+    "1|0" "control: the same hook run by hand fails with SIGPIPE at default and passes with it ignored, so the cell above is the wrapper's trap"
+  PU_M="$(pu_mut notrap 'BEGIN { a = "trap \047\047 PIPE; " } index($0, a) { i = index($0, a); $0 = substr($0, 1, i - 1) substr($0, i + length(a)) } { print }')"
+  pu_kill "pu-mut-notrap" "$PU_M" "$(pu_sc_sigpipe "$PU_M" notrap)" "rc=3 ref=absent n=1" \
+    "without the trap the hook sees a 141 and refuses a push git would make"
 fi
-# M6: the knob dropped from the probe's invocation. The knob world's hook then refuses.
-PP_M6="$(vr_mut pp6 'index($0,"AI_DLC_READSET_LIVE_TRACE=0 \"$pp_hook\" \"$pp_remote\" \"$pp_url\" < \"$pp_in\"") { sub(/AI_DLC_READSET_LIVE_TRACE=0 /, ""); print; next } { print }')"
-ASSERTIONS=$((ASSERTIONS + 1))
-if cmp -s "$GATE" "$PP_M6"; then
-  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s mutation matched nothing\n' "pp-mut-knob"
-else
-  pp_m6_got="$(pp_scan "$PP_M6" "$PP_KNOB")"
-  if [ "$pp_m6_got" = "pp=SELF-UPDATE-DEFER sum=1 ss=1 und=0" ]; then
-    printf '  ok    %-16s KILLED (without the knob the probe runs the hook with its live trace armed)\n' "pp-mut-knob"
-  else
-    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED: got=[%s]\n' "pp-mut-knob" "$pp_m6_got"
-  fi
-fi
-# CONTROL: an unmutated copy beside its siblings defers on the red world, so a kill above is the
-# mutation and not a copy that died resolving preclassify.sh.
-rm -rf "$PP/m-control"; mkdir -p "$PP/m-control"
-cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$PP/m-control"/ 2>/dev/null
-ss_assert "pp-mut-control" "$(pp_scan "$PP/m-control/self-update-gate.sh" "$PP_RED")" \
-  "pp=SELF-UPDATE-DEFER sum=1 ss=1 und=0" \
-  "an unmutated copy beside its siblings defers on the red world, so each kill above is its mutation"
+
+# MUTANTS ON THE ONE-RUN CONTRACT. An unmutated copy in a directory of its own passes first, so a
+# copy that cannot run does not score as a kill.
+PU_M="$(pu_mut control '{ print }')"
+ss_assert "pu-mut-control" "$(cmp -s "$PU_SRC" "$PU_M" && echo identical || echo differ)|$(pu_sc_pass "$PU_M" control)" \
+  "identical|rc=0 ref=landed n=1" "an unmutated copy of the wrapper, alone in its own directory, pushes and runs the hook once"
+PU_M="$(pu_mut noverify 'index($0, "push --no-verify --no-follow-tags") { sub(/push --no-verify --no-follow-tags/, "push --no-follow-tags") } { print }')"
+pu_kill "pu-mut-noverify" "$PU_M" "$(pu_sc_pass "$PU_M" noverify)" "rc=0 ref=landed n=2" \
+  "a push without --no-verify after the hook ran runs the hook a second time"
+PU_M="$(pu_mut pushonrefuse '$0 == "  exit 3" { print "  pinned_push"; next } { print }')"
+pu_kill "pu-mut-pushonrefuse" "$PU_M" "$(pu_sc_refuse "$PU_M" pushonrefuse)" "rc=0 ref=landed n=1" \
+  "a wrapper that pushes on a refusal lands a branch the consumer's own gate refused"
+PU_M="$(pu_mut refuse4 '$0 == "  exit 3" { print "  exit 4"; next } { print }')"
+pu_kill "pu-mut-refuse4" "$PU_M" "$(pu_sc_refuse "$PU_M" refuse4)" "rc=4 ref=absent n=1" \
+  "a refusal mapped to exit 4 reads as TRANSPORT and gets the UN-SYNCED disposition"
+
+# X1. A CONFIGURED REFSPEC MAPS su ONTO main. A real push feeds the hook refs/heads/main (control)
+#     and the hook refuses it; the wrapper pushes only the one ref its hook judged, so main does
+#     not move.
+pu_sc_x1() { local d m; d="$(pu_world "x1-$2")"
+  git -C "$d/W" config remote.origin.push 'refs/heads/su:refs/heads/main'; printf 'refs/heads/main' > "$d/refuse-stdin"
+  m="$(pu_at "$d" R1 refs/heads/main)"
+  printf 'rc=%s main=%s su=%s n=%s up=%s' "$(pu_run "$1" "$d")" \
+    "$([ "$(pu_at "$d" R1 refs/heads/main)" = "$m" ] && echo kept || echo moved)" "$(pu_landed "$d" R1)" "$(pu_n "$d")" \
+    "$(git -C "$d/W" rev-parse --abbrev-ref 'su@{upstream}' 2>/dev/null || echo none)"
+}
+ss_assert "pu-x1-refspec" "$(pu_sc_x1 "$PU_SRC" shipped)" "rc=0 main=kept su=landed n=1 up=origin/su" \
+  "remote.origin.push maps su onto main: the wrapper pushes refs/heads/su only, main is not moved, the upstream is origin/su"
+PU_X="$(pu_world x1real)"; git -C "$PU_X/W" config remote.origin.push 'refs/heads/su:refs/heads/main'; printf 'refs/heads/main' > "$PU_X/refuse-stdin"
+pu_x1_m="$(pu_at "$PU_X" R1 refs/heads/main)"; pu_x1_rc="$(pu_real "$PU_X")"
+ss_assert "pu-x1-control" "rc=$pu_x1_rc|$(grep -c ' refs/heads/main ' "$PU_X/run-1")|$([ "$(pu_at "$PU_X" R1 refs/heads/main)" = "$pu_x1_m" ] && echo kept || echo moved)" \
+  "rc=1|1|kept" "control: a real git push in the same world feeds the hook refs/heads/main, so the mapping is live and the hook can refuse it"
+PU_M="$(pu_mut unpinned 'index($0, "\"$LOCAL_SHA:refs/heads/$BRANCH\"") { sub(/"\$LOCAL_SHA:refs\/heads\/\$BRANCH"/, "\"$BRANCH\"") } { print }')"
+pu_kill "pu-mut-unpinned" "$PU_M" "$(pu_sc_x1 "$PU_M" unpinned | awk '{print $1, $2}')" "rc=0 main=moved" \
+  "a push of the bare branch name follows the configured refspec and moves main, which the hook never judged"
+
+# X2. push.followTags WITH AN ANNOTATED TAG. A real push feeds the hook the tag (control); the
+#     wrapper pushes no tag.
+pu_sc_x2() { local d; d="$(pu_world "x2-$2")"
+  git -C "$d/W" tag -a -m t v1 && git -C "$d/W" config push.followTags true; printf 'refs/tags/' > "$d/refuse-stdin"
+  printf 'rc=%s tag=%s su=%s n=%s' "$(pu_run "$1" "$d")" "$([ "$(pu_at "$d" R1 refs/tags/v1)" = absent ] && echo absent || echo present)" \
+    "$(pu_landed "$d" R1)" "$(pu_n "$d")"
+}
+ss_assert "pu-x2-followtags" "$(pu_sc_x2 "$PU_SRC" shipped)" "rc=0 tag=absent su=landed n=1" \
+  "push.followTags and an annotated tag on the pushed commit: the branch lands and the tag does not"
+PU_X="$(pu_world x2real)"; git -C "$PU_X/W" tag -a -m t v1; git -C "$PU_X/W" config push.followTags true; printf 'refs/tags/' > "$PU_X/refuse-stdin"
+pu_x2_rc="$(pu_real "$PU_X")"
+ss_assert "pu-x2-control" "rc=$pu_x2_rc|$(grep -c '^refs/tags/v1 ' "$PU_X/run-1")" "rc=1|1" \
+  "control: a real git push in the same world feeds the hook refs/tags/v1, so the tag would have been pushed"
+PU_M="$(pu_mut followtags 'index($0, "push --no-verify --no-follow-tags") { sub(/ --no-follow-tags/, "") } { print }')"
+pu_kill "pu-mut-followtags" "$PU_M" "$(pu_sc_x2 "$PU_M" followtags)" "rc=0 tag=present su=landed n=1" \
+  "without --no-follow-tags the configured followTags pushes a tag the hook never judged"
+
+# X3. TWO PUSH URLS. git runs the hook once per url; the wrapper refuses before running it.
+pu_sc_x3() { local d; d="$(pu_world "x3-$2")"
+  git -C "$d/W" remote set-url --add --push origin "$d/R1"; git -C "$d/W" remote set-url --add --push origin "$d/R2"
+  printf 'rc=%s n=%s R1=%s R2=%s' "$(pu_run "$1" "$d")" "$(pu_n "$d")" "$(pu_landed "$d" R1)" "$(pu_landed "$d" R2)"
+}
+ss_assert "pu-x3-multiurl" "$(pu_sc_x3 "$PU_SRC" shipped)" "rc=2 n=0 R1=absent R2=absent" \
+  "a remote with two push urls: exit 2, the hook never ran, nothing pushed to either url"
+pu_real "$PU_D/x3-shipped" >/dev/null
+ss_assert "pu-x3-control" "$(pu_n "$PU_D/x3-shipped")" "2" \
+  "control: a real git push in the same world runs the hook twice, once per push url"
+PU_M="$(pu_mut multiurl 'index($0, "[ \"$su_n\" -eq 1 ] \\") == 1 { print "true || " $0; next } { print }')"
+pu_kill "pu-mut-multiurl" "$PU_M" "$(pu_sc_x3 "$PU_M" multiurl)|$(cat "$PU_D/x3-multiurl/stdout")" "rc=4 n=0 R1=absent R2=absent|TRANSPORT 128" \
+  "without the refusal the two urls reach ls-remote as one newline-joined url, which is misreported as TRANSPORT instead of refused as a usage error"
+
+# X4. A HOOK THAT MOVES THE BRANCH. It judged one sha and committed another; nothing is pushed.
+pu_sc_x4() { local d; d="$(pu_world "x4-$2")"; : > "$d/mutate"
+  printf 'rc=%s n=%s su=%s' "$(pu_run "$1" "$d")" "$(pu_n "$d")" "$(pu_at "$d" R1 refs/heads/su | sed 's/^[0-9a-f]\{40\}$/present/')"
+}
+ss_assert "pu-x4-moved" "$(pu_sc_x4 "$PU_SRC" shipped)" "rc=2 n=1 su=absent" \
+  "a hook that commits on the branch and passes: exit 2, the hook ran once, nothing pushed"
+PU_M="$(pu_mut moved 'index($0, "[ \"$su_after\" = \"$LOCAL_SHA\" ] \\") == 1 { print "true || " $0; next } { print }')"
+pu_kill "pu-mut-moved" "$PU_M" "$(pu_sc_x4 "$PU_M" moved)" "rc=0 n=1 su=present" \
+  "without the check the wrapper pushes after a hook that moved the branch"
+
+# A1. THE HOOK-REFUSED DISCARD SEQUENCE, END TO END, as SKILL.md step 2 spells it. The
+#     self-update branch commits the slice, the gate record and the fixture log; the wrapper
+#     refuses; then: checkout the original branch, `git show` both records back, the name-only
+#     check against the written set, `branch -D`. Afterwards HEAD is the original branch, the
+#     self-update branch is gone, and all three records are on disk and uncommitted.
+PU_A="$(pu_world a1)"; : > "$PU_A/refuse-all"
+PU_A_GATE=_bmad-output/ai-dlc-update/self-update-gate-20990101T000000Z.md
+PU_A_LOG=_bmad-output/ai-dlc-update/self-update-fixtures-20990101T000000Z.md
+PU_A_SLICE=scripts/ai-dlc/slice.sh
+mkdir -p "$PU_A/W/_bmad-output/ai-dlc-update" "$PU_A/W/scripts/ai-dlc"
+printf '# gate record\n# verdict: OK\n' > "$PU_A/W/$PU_A_GATE"
+printf '# fixture log\n' > "$PU_A/W/$PU_A_LOG"
+printf '#!/bin/sh\nexit 0\n' > "$PU_A/W/$PU_A_SLICE"
+# The ORIGINAL branch is the commit the self-update branch was cut from, as in step 2.
+git -C "$PU_A/W" branch -q orig
+git -C "$PU_A/W" add -- "$PU_A_GATE" "$PU_A_LOG" "$PU_A_SLICE" && git -C "$PU_A/W" commit -q -m self-update
+pu_a_gate_blob="$(git -C "$PU_A/W" rev-parse "su:$PU_A_GATE")"; pu_a_log_blob="$(git -C "$PU_A/W" rev-parse "su:$PU_A_LOG")"
+pu_a_rc="$(pu_run "$PU_SRC" "$PU_A")"
+PU_A_PUSHREC="$(cat "$PU_A/outname")"
+git -C "$PU_A/W" checkout -q orig \
+  && git -C "$PU_A/W" show "su:$PU_A_GATE" > "$PU_A/W/$PU_A_GATE" \
+  && git -C "$PU_A/W" show "su:$PU_A_LOG" > "$PU_A/W/$PU_A_LOG"
+pu_a_names="$(git -C "$PU_A/W" diff --name-only orig su | grep -c .)" || pu_a_names=0
+pu_a_extra="$(git -C "$PU_A/W" diff --name-only orig su | grep -vxF -e "$PU_A_GATE" -e "$PU_A_LOG" -e "$PU_A_SLICE" | grep -c .)" || pu_a_extra=0
+[ "$pu_a_extra" -eq 0 ] && git -C "$PU_A/W" branch -q -D su
+pu_a_file() { # pu_a_file <path> -> untracked | tracked | missing
+  if [ ! -f "$PU_A/W/$1" ]; then printf missing
+  elif git -C "$PU_A/W" ls-files --error-unmatch -- "$1" >/dev/null 2>&1; then printf tracked
+  else printf untracked; fi
+}
+ss_assert "pu-a1-discard" \
+  "rc=$pu_a_rc|names=$pu_a_names|extra=$pu_a_extra|head=$(git -C "$PU_A/W" symbolic-ref -q HEAD)|su=$(git -C "$PU_A/W" rev-parse -q --verify refs/heads/su >/dev/null && echo present || echo gone)|R1=$(pu_landed "$PU_A" R1)|gate=$(pu_a_file "$PU_A_GATE"),$([ "$(git -C "$PU_A/W" hash-object "$PU_A_GATE")" = "$pu_a_gate_blob" ] && echo same || echo changed)|log=$(pu_a_file "$PU_A_LOG"),$([ "$(git -C "$PU_A/W" hash-object "$PU_A_LOG")" = "$pu_a_log_blob" ] && echo same || echo changed)|push=$(pu_a_file "$PU_A_PUSHREC"),$(grep -c '^# probe: ' "$PU_A/W/$PU_A_PUSHREC" 2>/dev/null)|slice=$(pu_a_file "$PU_A_SLICE")" \
+  "rc=3|names=3|extra=0|head=refs/heads/orig|su=gone|R1=absent|gate=untracked,same|log=untracked,same|push=untracked,6|slice=missing" \
+  "after HOOK-REFUSED and the step-2 discard: HEAD is the original branch, the self-update branch is gone, nothing was pushed, the gate record and fixture log are restored byte-for-byte and the push record carries its '# probe:' lines -- all three uncommitted -- and the slice left with the branch"
+unset GIT_CONFIG_NOSYSTEM GIT_CONFIG_GLOBAL GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
 
 # --- A STAGING WRITE THAT FAILS IS UNDECIDED (BL-360) -------------------------------------
 # Every loop in the gate reads a file `gate_stage` wrote into `$TMP`. The heredocs these replaced
