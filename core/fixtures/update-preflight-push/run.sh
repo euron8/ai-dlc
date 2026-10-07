@@ -24,7 +24,8 @@
 #
 # BL-391, THREE MORE UNITS. Step 2's cycle bullet said "If there is no remote / push fails,
 # commit locally and note it", which keeps a commit advancing `skill_version` on a branch that
-# never merges. A push that fails after the gate's probe passed now discards the cycle: stage by
+# never merges. A push that fails (since the push wrapper, a TRANSPORT exit after the consumer's
+# pre-push hook passed in the wrapper's single run) now discards the cycle: stage by
 # pathspec only, check out the original branch, list the self-update branch's files, delete it
 # only when every file is one this cycle wrote (else STOP naming it), DEFER step 2, mark the
 # branch UN-SYNCED, leave the stamp. Arm 8 forbids the failed-push/commit-locally pairing in the

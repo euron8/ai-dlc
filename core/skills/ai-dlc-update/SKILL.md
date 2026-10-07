@@ -566,14 +566,17 @@ prose is itself generated rather than composed.
      so the remedy is the operator's, at the gated apply, exactly as for a gate DEFER. In this
      order: report the `HOOK-REFUSED <rc> <phases>` line;
      run `git checkout <original-branch>`;
-     restore the gate record, which lived only on the self-update commit, with
-     `git show "${self_update_branch}:<gate-record-path>" > <gate-record-path>`;
+     restore BOTH approval records, which lived only on the self-update commit, with
+     `git show "${self_update_branch}:<gate-record-path>" > <gate-record-path>` for the gate record
+     and `git show "${self_update_branch}:<fixture-log-path>" > <fixture-log-path>` for the fixture
+     runner's log;
      run the same `git diff --name-only <original-branch> <self-update-branch>` check and, only
      when every listed path is in the written set above, `git branch -D <self-update-branch>`
      (any path outside it: STOP and name the branch, as above).
-     Both records now sit in the working tree UNCOMMITTED — the gate record just restored, and
-     the wrapper's `_bmad-output/ai-dlc-update/self-update-push-<ts>.md`, whose `# probe:` lines
-     are the hook's exit, the ref line it was fed and the tail of its output. Carry both to the
+     Three files now sit in the working tree UNCOMMITTED — the gate record and the fixture log
+     just restored, and the wrapper's `_bmad-output/ai-dlc-update/self-update-push-<ts>.md`, whose
+     `# probe:` lines are the hook's exit, the ref line it was fed and the tail of its output.
+     Carry all three to the
      step-7 gated apply and commit them there with the machinery slice, exactly as the gate's
      DEFER verdict leaves its record above; run that apply as
      `reconcile/apply.sh --carried-machinery-slice <dist> <base> <consumer> <theirs>`.

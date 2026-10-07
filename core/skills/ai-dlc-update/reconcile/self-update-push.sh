@@ -27,7 +27,8 @@
 #             script never writes a tracked path.
 #
 # Exit:   0  pushed. The hook ran once and exited 0 (or git runs no hook here), then the push
-#            succeeded.
+#            succeeded. That holds when the push url already holds the local sha too: the hook
+#            still ran once, on an empty stdin, as git runs it.
 #         2  usage or REFUSAL before anything ran: wrong argc, a consumer that is not the top of
 #            its own work tree (a subdirectory of an enclosing repository would run THAT
 #            repository's hook), an unknown remote, <branch> not checked out or not a commit,
@@ -36,10 +37,11 @@
 #         3  HOOK-REFUSED. The hook ran once and exited non-zero; NOTHING was pushed. One stdout
 #            line `HOOK-REFUSED <rc> <phases>`, and <out> carries `# probe:` lines: the hook,
 #            its exit and the ref line it was fed, then the last 60 lines of its output.
-#         4  TRANSPORT. The push failed after the hook passed, or the remote could not be read
-#            for the ref line. One stdout line `TRANSPORT <rc>`. A remote that cannot be reached
+#         4  TRANSPORT. The push failed after the hook passed, or the PUSH url could not be read
+#            for the ref line. One stdout line `TRANSPORT <rc>`. A push url that cannot be reached
 #            is TRANSPORT WITHOUT running the hook, which is what `git push` itself does: it
-#            connects before it runs the hook, so an unreachable remote never reaches it either.
+#            connects before it runs the hook. The FETCH url is never contacted, so an
+#            unreachable fetch url beside a valid pushurl pushes, as git does.
 #
 # THE HOOK IS RUN AS GIT RUNS IT.
 #   * Which hook: `git rev-parse --git-path hooks/pre-push`, git's own answer, honouring
@@ -49,14 +51,17 @@
 #     `remote.<r>.pushurl` is what the hook sees, as on a real push).
 #   * stdin: the ref line git sends, built here from the branch actually pushed —
 #     `refs/heads/<b> <local sha> refs/heads/<b> <remote sha>` — the remote sha read with
-#     `git ls-remote`, matched on the full ref name (its pattern tail-matches), zeros when the
-#     remote lacks the branch. Stdin is a FILE.
+#     `git ls-remote` against the PUSH url — never the remote name, which resolves to the FETCH
+#     url and answers about a different repository when `remote.<r>.pushurl` is set — matched on
+#     the full ref name (its pattern tail-matches), zeros when the remote lacks the branch. Stdin
+#     is a FILE.
 #   * cwd: the work tree's top. SIGPIPE ignored, because `git push` runs hooks with SIGPIPE
 #     ignored; a hook whose pipeline is cut short (`yes | head -1`) sees EPIPE, not a 141.
 #   * The environment is left as the caller's, including the hook's detached read-set trace
 #     knob AI_DLC_READSET_LIVE_TRACE: this IS the push's own run of the hook.
-# If the remote already holds the local sha, git sends no ref and runs no hook; this script then
-# runs no hook either and lets `git push --no-verify -u` set the upstream.
+# If the push url already holds the local sha, git STILL runs the pre-push hook, with an EMPTY
+# stdin, and a refusal there still blocks the push. This script does the same: the hook runs once
+# on an empty stdin file, and the HOOK-REFUSED / `--no-verify` paths below are unchanged.
 #
 # bash 3.2 and `set -u` safe: no arrays, no here-strings, no heredocs, no pipeline feeding `while`.
 
@@ -111,7 +116,7 @@ esac
 
 if [ -z "$HOOK" ] || [ ! -x "$HOOK" ]; then
   printf 'self-update-push: git runs no pre-push hook here (%s is absent or not executable); pushing.\n' "${HOOK:-unresolvable}" >&2
-  git -C "$ROOT" push -u "$REMOTE" "$BRANCH"
+  git -C "$ROOT" push -u "$REMOTE" "$BRANCH" >&2
   su_rc=$?
   if [ "$su_rc" -ne 0 ]; then
     printf 'TRANSPORT %s\n' "$su_rc"
@@ -124,13 +129,15 @@ TMP="$(mktemp -d "${TMPDIR:-/tmp}/self-update-push-XXXXXX" 2>/dev/null)" && [ -n
   || refuse "a scratch directory could not be created"
 trap '[ -n "${TMP:-}" ] && [ -d "$TMP" ] && rm -rf "$TMP"' EXIT
 
-# THE REMOTE SIDE OF THE REF LINE. `ls-remote` exits 0 with no output when the branch is absent,
-# and non-zero when the remote cannot be read; only the second is TRANSPORT.
-git -C "$ROOT" ls-remote "$REMOTE" "refs/heads/$BRANCH" > "$TMP/ls-remote" 2> "$TMP/ls-remote.err"
+# THE REMOTE SIDE OF THE REF LINE, read from the PUSH url: that is the repository the push writes,
+# and with `remote.<r>.pushurl` set the remote NAME would answer for the fetch url instead.
+# `ls-remote` exits 0 with no output when the branch is absent, and non-zero when the push url
+# cannot be read; only the second is TRANSPORT.
+git -C "$ROOT" ls-remote "$URL" "refs/heads/$BRANCH" > "$TMP/ls-remote" 2> "$TMP/ls-remote.err"
 su_rc=$?
 if [ "$su_rc" -ne 0 ]; then
   cat "$TMP/ls-remote.err" >&2
-  printf 'self-update-push: the remote could not be read (git ls-remote exited %s); git push would fail before its hook ran.\n' "$su_rc" >&2
+  printf 'self-update-push: the push url could not be read (git ls-remote exited %s); git push would fail before its hook ran.\n' "$su_rc" >&2
   printf 'TRANSPORT %s\n' "$su_rc"
   exit 4
 fi
@@ -138,19 +145,13 @@ REMOTE_SHA="$(awk -F'\t' -v r="refs/heads/$BRANCH" '$2 == r {print $1; exit}' "$
   || refuse "the ls-remote answer could not be read"
 [ -n "$REMOTE_SHA" ] || REMOTE_SHA="$ZERO"
 
+# UP TO DATE IS NOT EXEMPT: git sends no ref line but still runs the hook, on an empty stdin.
 if [ "$REMOTE_SHA" = "$LOCAL_SHA" ]; then
-  printf 'self-update-push: %s already holds %s; git sends no ref and runs no hook.\n' "$REMOTE" "$LOCAL_SHA" >&2
-  git -C "$ROOT" push --no-verify -u "$REMOTE" "$BRANCH"
-  su_rc=$?
-  if [ "$su_rc" -ne 0 ]; then
-    printf 'TRANSPORT %s\n' "$su_rc"
-    exit 4
-  fi
-  exit 0
+  : > "$TMP/refline" || refuse "the empty ref line could not be staged"
+else
+  printf 'refs/heads/%s %s refs/heads/%s %s\n' "$BRANCH" "$LOCAL_SHA" "$BRANCH" "$REMOTE_SHA" > "$TMP/refline" \
+    || refuse "the ref line could not be staged"
 fi
-
-printf 'refs/heads/%s %s refs/heads/%s %s\n' "$BRANCH" "$LOCAL_SHA" "$BRANCH" "$REMOTE_SHA" > "$TMP/refline" \
-  || refuse "the ref line could not be staged"
 
 printf 'self-update-push: running the pre-push hook git would run (%s), once; this is the consumer'\''s own gate and can take minutes\n' "$HOOK" >&2
 ( trap '' PIPE; cd "$ROOT" && exec "$HOOK" "$REMOTE" "$URL" < "$TMP/refline" ) > "$TMP/hook.out" 2>&1
@@ -177,7 +178,8 @@ if [ "$HOOK_RC" -ne 0 ]; then
   exit 3
 fi
 
-git -C "$ROOT" push --no-verify -u "$REMOTE" "$BRANCH"
+# git's own output goes to stderr: stdout carries only this script's status lines.
+git -C "$ROOT" push --no-verify -u "$REMOTE" "$BRANCH" >&2
 su_rc=$?
 if [ "$su_rc" -ne 0 ]; then
   printf 'TRANSPORT %s\n' "$su_rc"
