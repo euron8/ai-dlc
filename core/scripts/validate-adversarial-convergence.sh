@@ -2346,6 +2346,13 @@ if [ "$N" -gt 0 ] && [ "$k3_go" -eq 1 ]; then
   # for a widened one, K3C_RELEASE for a pass in the pre-groups cross shape (rebound below, and
   # probed again there). The probe exercises the release actually bound, predecessor as near-miss.
   k3_stamp_probe() {
+    # The bound release must be a release: a placeholder such as `0.0.0-CUT` reads as 0.0.0 to the
+    # stamp parser, so every stamped series would be dated against it and convicted. Refused here,
+    # where the value is bound, so only a pass that actually reaches it loses its verdict.
+    if ! [[ "$k3_rel" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      echo "validate-adversarial-convergence.sh: arm K3 is bound to release '${k3_rel}', which is not <major>.<minor>.<patch>; this validator shipped unstamped. No verdict." >&2
+      exit 2
+    fi
     IFS=. read -r k3_maj k3_min k3_pat <<EOF
 $k3_rel
 EOF

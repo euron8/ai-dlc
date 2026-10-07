@@ -2515,6 +2515,17 @@ w="$(k3_world k3c-pinold "$K3_POST" "" "$K3C_STUB")" && cp "$K3_REAL"/*.sh "$w/s
 
 echo
 echo "--- arm K3 cross groups (K3C_RELEASE ${K3C_REL})"
+# THE SHAPE CELL. K3C_RELEASE is written as a placeholder on the branch and stamped with the
+# release version by the release commit. An unstamped validator must not ship: this cell FAILS
+# until the value is <major>.<minor>.<patch>, so a branch that was never stamped cannot pass the
+# gate. There is deliberately no skip for the placeholder -- a skip is how one would ship.
+ASSERTIONS=$((ASSERTIONS + 1))
+if printf '%s\n' "$K3C_REL" | grep -Eqx '[0-9]+\.[0-9]+\.[0-9]+'; then
+  printf '  ok    %-28s K3C_RELEASE is %s\n' k3c-release-shape "$K3C_REL"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-28s K3C_RELEASE is [%s], not <major>.<minor>.<patch> -- stamp it with the release version at cut\n' k3c-release-shape "$K3C_REL"
+fi
 if [ "$K3_BUILT" -ne 1 ] || [ "$K3C_BUILT" -ne 1 ]; then
   FAILURES=$((FAILURES + 1)); ASSERTIONS=$((ASSERTIONS + 1))
   printf '  FAIL  %-28s FIXTURE BROKEN -- world(s)%s did not build (under %s)\n' "k3c-worlds" "$K3C_BAD" "$K3W"
