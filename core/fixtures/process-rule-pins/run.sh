@@ -571,15 +571,27 @@ elif [ -n "$jf" ]; then
 else
   ok "join: every seat or cross join paragraph carries --complete ($n_seat seat or cross join call(s) scanned)"
 fi
-# MUTANT: --complete stripped from one real seat join -- sprint-review.md, which has no other.
+# MUTANTS: --complete stripped from each real site, ONE LINE AT A TIME; every strip must be flagged.
+# The site list is derived from the corpus, and its count is asserted, so a site the scan cannot see
+# reads as a survivor rather than as a smaller battery.
 jm="$WORK/join-mut"; mkdir -p "$jm" || exit 2
-sed 's/wait-for-deliverable\.sh --complete </wait-for-deliverable.sh </' "$SKILL_DIR/steps/sprint-review.md" > "$jm/sprint-review.md"
-if cmp -s "$SKILL_DIR/steps/sprint-review.md" "$jm/sprint-review.md"; then
-  bad "join/mutant: the --complete strip matched nothing in sprint-review.md -- re-anchor it"
+n_sites=0; n_killed=0; j_surv=""
+# shellcheck disable=SC2086
+for jf_f in $JSCOPE; do
+  for jf_l in $(grep -n 'wait-for-deliverable\.sh --complete' "$jf_f" | cut -d: -f1); do
+    n_sites=$((n_sites + 1))
+    awk -v L="$jf_l" 'NR == L { gsub(/wait-for-deliverable\.sh --complete/, "wait-for-deliverable.sh") } { print }' "$jf_f" > "$jm/m.md"
+    if cmp -s "$jf_f" "$jm/m.md"; then j_surv="$j_surv ${jf_f#"$ROOT/"}:$jf_l(no-apply)"; continue; fi
+    n_m="$(join_findings "$jm/m.md" | grep -c .)" || n_m=0
+    if [ "$n_m" -ge 1 ]; then n_killed=$((n_killed + 1)); else j_surv="$j_surv ${jf_f#"$ROOT/"}:$jf_l"; fi
+  done
+done
+if [ "$n_sites" -lt 3 ]; then
+  bad "join/mutant: only $n_sites --complete site(s) found -- the battery has nothing to strip"
+elif [ -n "$j_surv" ]; then
+  bad "join/mutant: SURVIVED -- --complete stripped at [${j_surv# }] was not flagged ($n_killed/$n_sites killed)"
 else
-  n_m="$(join_findings "$jm/sprint-review.md" | grep -c .)" || n_m=0
-  [ "$n_m" -ge 1 ] && ok "join/mutant: --complete stripped from sprint-review.md's seat join is flagged ($n_m)" \
-                   || bad "join/mutant: SURVIVED -- sprint-review.md without --complete was not flagged"
+  ok "join/mutant: --complete stripped from each of $n_sites real sites, one at a time, is flagged ($n_killed/$n_sites)"
 fi
 
 # --- 5. the real corpus ---------------------------------------------------------

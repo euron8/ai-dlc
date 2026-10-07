@@ -517,7 +517,9 @@ same_set() {
   awk -v lab="$2:" -v want="$3" '
     BEGIN { n = split(want, w, /[ \t]+/); for (i = 1; i <= n; i++) if (w[i] != "") { W[w[i] + 0] = 1; nw++ } }
     /^[ \t]*(```|~~~)/ { f = !f; next }
-    f || index($0, lab) != 1 { next }
+    f { next }
+    /^## / { inf = ($0 ~ /^## Findings[ \t]*$/); next }
+    !inf || index($0, lab) != 1 { next }
     { v = substr($0, length(lab) + 1); m = split(v, a, /[ ,\t]+/); delete G; ng = 0; ok = 1
       for (i = 1; i <= m; i++) if (a[i] ~ /^[0-9]+$/ && !((a[i] + 0) in G)) { G[a[i] + 0] = 1; ng++; if (!((a[i] + 0) in W)) ok = 0 }
       if (ok && ng == nw) { hit = 1; exit } }

@@ -503,7 +503,7 @@ carrying a `SKILL_INVOCATION_PROVENANCE v1` block with `skill: ai-dlc-adversary-
 `findings_*` counts, and the `verdict:`. Filename numbering is load-bearing: Check 24 orders the
 series by the `p<M>` token.
 
-**Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh --complete <findings_path>`.
+**Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh --complete <findings_path>`, which takes a file as delivered only once it ends in its `seat-complete:` line.
 
 **Shard a multi-file artifact (Rule 28, "Split dispatch": files axis).** When the artifact under
 review is two or more files (`stories/`), dispatch one `adversary` shard per story plus one

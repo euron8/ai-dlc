@@ -323,7 +323,7 @@ run once in the frozen worktree; every other cross reviewer executes nothing.
 Every shard writes its header first, appends each finding as it is verified,
 and, once finished, makes ONE final write, never with its header: the line
 `seat-complete: implementation code-reviewer <shard> findings=<n>`, <n> its
-`#### ` findings; the join beat passes `wait-for-deliverable.sh --complete`,
+`#### ` findings; the join beat is `wait-for-deliverable.sh --complete <path> [<path> ...]`,
 and the merge refuses a count that disagrees. Join in the frozen worktree with
 `merge-review-shards.sh <shard-dir> --gate code-review --out docs/reviews/s<N>/<story-index>-code-review.md`,
 passing the pass-specific name on a later pass (`-p2`, ...). The merge
@@ -381,8 +381,8 @@ worktree, runs every handed-over replay and writes the per-AC table and the
 interaction findings only, focused on its group's pairs. Every shard writes its
 header first, appends each finding as it is verified, and, once finished, makes
 ONE final write, never with its header: `seat-complete: implementation qa
-<shard> findings=<n>`, <n> its `#### ` findings; the join beat passes
-`wait-for-deliverable.sh --complete`, and the merge refuses a count that disagrees.
+<shard> findings=<n>`, <n> its `#### ` findings; the join beat is
+`wait-for-deliverable.sh --complete <path> [<path> ...]`, and the merge refuses a count that disagrees.
 Each shard gets the go-signal
 `gate-2 go-signal: <story-id> @ <SHA>` with the full SHA the manifest records.
 Part QAs read their part, score the part-local checklist items and replay the
