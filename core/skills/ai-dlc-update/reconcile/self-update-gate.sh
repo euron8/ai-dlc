@@ -492,8 +492,41 @@ gate_argv_scan() {
       for (t = r + 1; t <= NL; t++) if (L[t] !~ /^[[:space:]]*(#.*)?$/) return L[t]
       return ""
     }
+    # THE GUARD IS TIED TO THE RUN, column 4 of an R row: `guarded` only when the run sits inside an
+    # `if [ -f|-x|-e <this path> ]` block (a frame on IF[], pushed by the opener line, turned
+    # non-guarding by `else`/`elif`, popped by `fi`) or follows `[ -f <path> ] &&` / `if [ -f <path> ];
+    # then` on its own line. Anything this cannot tie -- an existence test elsewhere in the hook, a
+    # guard spelled another way -- is `unguarded`, the fail-closed direction: an absent script then
+    # reads as a step that fails, and the gate DEFERs.
+    BEGIN { pe = p; gsub(/[.]/, "[.]", pe)
+            GT = "\\[[[:space:]]+-[fxe][[:space:]]+[\"]?(\\./)?" pe "[\"]?[[:space:]]+\\]"
+            NIF = 0 }
     { L[NR] = $0 }
-    END { NL = NR; for (r = 1; r <= NL; r++) scanline(r) }
+    END { NL = NR; for (r = 1; r <= NL; r++) { ifpre(r); scanline(r); ifpost(r) } }
+    function ifpre(r,  t) { # an else/elif line opens a branch the test does not guard
+      t = L[r]; if (t ~ /^[[:space:]]*#/) return
+      if (NIF > 0 && t ~ /^[[:space:]]*(else|elif)([;[:space:]]|$)/) IF[NIF] = 0
+    }
+    function ifpost(r,  t, o, f) {
+      t = L[r]; if (t ~ /^[[:space:]]*#/) return
+      o = (t ~ /^[[:space:]]*if[[:space:]]/)
+      f = (t ~ /(^|[;[:space:]])fi([;[:space:]]|$)/)
+      if (o && !f) { NIF++; IF[NIF] = (t ~ ("^[[:space:]]*if[[:space:]]+" GT "[[:space:]]*;[[:space:]]*then([[:space:]]|$)")) }
+      else if (!o && f && NIF > 0) NIF--
+    }
+    # `[ -f p ] && bash p` guards only when nothing after the run catches the TEST failing too:
+    # `[ -f p ] && bash p || fail=1` runs `fail=1` when p is absent, so it is unguarded; the brace
+    # form `[ -f p ] && { bash p || fail=1; }` keeps the `||` inside the guarded group.
+    function guarded(pre, tail,  g, rest) {
+      for (g = 1; g <= NIF; g++) if (IF[g]) return 1
+      if (pre ~ (GT "[[:space:]]*&&[[:space:]]*\\{[[:space:]]*((bash|sh)[[:space:]]+)?[\"]?(\\./)?$")) return 1
+      if (pre ~ (GT "[[:space:]]*&&[[:space:]]*((bash|sh)[[:space:]]+)?[\"]?(\\./)?$") && index(tail, "||") == 0) return 1
+      if (match(pre, ("(^|[;[:space:]])if[[:space:]]+" GT "[[:space:]]*;[[:space:]]*then[[:space:]]"))) {
+        rest = substr(pre, RSTART + RLENGTH)
+        if (rest !~ /(^|[;[:space:]])(fi|else|elif)([;[:space:]]|$)/) return 1
+      }
+      return 0
+    }
     function scanline(r,  line, off, i, s, e, nc, pre, after, q, span, k, j, c, tail, capture, bg, nx, stepped, readnext, ct, lastinfn, tt, truetail) {
       line = L[r]
       if (line ~ /^[[:space:]]*#/) { if (index(line, p) > 0) printf "M\t%d\tcomment\n", r; return }
@@ -536,7 +569,7 @@ gate_argv_scan() {
           } else if (span ~ /[$`"\\*?~[]/ || span ~ /\047/) {
             printf "X\t%d\t%s\n", r, span
           } else {
-            printf "R\t%d\t%s\n", r, span
+            printf "R\t%d\t%s\t%s\n", r, span, (guarded(pre, tail) ? "guarded" : "unguarded")
           }
         } else if (pre ~ /(^|[^A-Za-z0-9_])(printf|echo)[[:space:]]/) {
           printf "M\t%d\ttext\n", r
@@ -1676,11 +1709,13 @@ while IFS= read -r name; do
   if [ "$HOOK" != "$HOOK_CUR" ] && [ -f "$HOOK_CUR" ]; then
     sc_cur_argvs="$(gate_argv_scan "$HOOK_CUR" "$name" | awk -F'\t' '$1 == "R" {print $3}')"
   fi
-  # An UNWRITTEN script the consumer lacks: the hook's own existence test decides. Any `-f`/`-x`-style
-  # test of this path in the hook (an M `test` row) is read as the guard of its run, which skips the
-  # step at rc 0; with no such test the hook runs a missing file and fails, and the row says ABSENT.
+  # An UNWRITTEN script the consumer lacks: the hook's own existence test decides, and only a test
+  # TIED TO THE RUN counts -- column 4 of each R row, which `gate_argv_scan` sets from the enclosing
+  # `if [ -f <path> ]` block or a `[ -f <path> ] &&` on the run's own line. A test elsewhere in the
+  # hook (`[ -f p ] || echo missing`) guards nothing. Guarded only when EVERY status-read run of the
+  # script is; one unguarded run of a missing file fails the push, and the row says ABSENT.
   sc_guarded=0
-  [ "$(awk -F'\t' '$1 == "M" && $3 == "test"' "$TMP/scan" | grep -c .)" -gt 0 ] && sc_guarded=1
+  [ "$(awk -F'\t' '$1 == "R" && $4 != "guarded"' "$TMP/scan" | grep -c .)" -eq 0 ] && sc_guarded=1
   sc_v=OK; sc_d=""; sc_absent=0
   while IFS= read -r sc_a; do
     if [ "$cur_absent" -eq 1 ] || { [ "$HOOK" != "$HOOK_CUR" ] && ! gate_has_line "$sc_cur_argvs" "$sc_a"; }; then
