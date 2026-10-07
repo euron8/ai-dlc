@@ -1148,7 +1148,8 @@ echo "  hook: ${PG_HOOK#"$ROOT"/}"
 # readset_pid_start is NOT extracted: every lock seeded here is a two-field lock, which the reader
 # judges at its legacy branch before it reads a start time, so nothing here runs `ps`. That is
 # deliberate -- /bin/ps is setuid, the read-set deriver's sandbox refuses it, and a fixture that runs
-# it can never be traced. The start-time worlds (BL-463) live in readset-skip, which is unmapped.
+# it can never be traced. The start-time worlds (BL-463) live in readset-skip, which runs them on
+# every ordinary run and SKIPs them, by name, only when it detects it is inside that sandbox.
 { awk '/^readset_lock_stale\(\) \{/,/^}/' "$PG_HOOK"
   awk '/^pole_guard_step\(\) \{/,/^}/' "$PG_HOOK"
   printf 'overlap_probe() {\n'
