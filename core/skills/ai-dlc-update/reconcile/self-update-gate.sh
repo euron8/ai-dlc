@@ -509,7 +509,10 @@ gate_argv_scan() {
     }
     function ifpost(r,  t, o, f) {
       t = L[r]; if (t ~ /^[[:space:]]*#/) return
-      o = (t ~ /^[[:space:]]*if[[:space:]]/)
+      # A SHELL `if` only: `if` then `[`, `[[`, `!`, `test` or a command word. An awk `if (` inside a
+      # single-quoted awk program opens no shell block, and counting it left the shipped hooks
+      # unbalanced at depth 4.
+      o = (t ~ /^[[:space:]]*if[[:space:]]+(\[|!|[A-Za-z_.\/])/)
       f = (t ~ /(^|[;[:space:]])fi([;[:space:]]|$)/)
       if (o && !f) { NIF++; IF[NIF] = (t ~ ("^[[:space:]]*if[[:space:]]+" GT "[[:space:]]*;[[:space:]]*then([[:space:]]|$)")) }
       else if (!o && f && NIF > 0) NIF--
@@ -1492,9 +1495,11 @@ if [ "$HOOK" != "$HOOK_CUR" ]; then
   gate_stage hook-names "$INVOKED" "the new hook's invoked-script list"
   while IFS= read -r ha_n; do
     [ -n "$ha_n" ] || continue
-    ha_new="$(gate_argv_scan "$HOOK" "$ha_n" | awk -F'\t' '{print $1 "\t" $3}' | sort -u)"
+    # THE GUARD COLUMN IS PART OF THE KEY: a hook that keeps the test but unties it from the run
+    # asks the script a new question (run it even when absent), with kind and argv unchanged.
+    ha_new="$(gate_argv_scan "$HOOK" "$ha_n" | awk -F'\t' '{print $1 "\t" $3 "\t" $4}' | sort -u)"
     ha_cur=""
-    [ -f "$HOOK_CUR" ] && ha_cur="$(gate_argv_scan "$HOOK_CUR" "$ha_n" | awk -F'\t' '{print $1 "\t" $3}' | sort -u)"
+    [ -f "$HOOK_CUR" ] && ha_cur="$(gate_argv_scan "$HOOK_CUR" "$ha_n" | awk -F'\t' '{print $1 "\t" $3 "\t" $4}' | sort -u)"
     [ "$ha_new" = "$ha_cur" ] || HOOK_ASKS_NEW="${HOOK_ASKS_NEW}${ha_n}
 "
   done < "$TMP/hook-names"

@@ -162,7 +162,14 @@ decided as not guarded, which reads DEFER only when the consumer lacks the scrip
 Worlds `hu-orecho`, `hu-andand`, `hu-andor`, `hu-block` and `hu-else` take their expected verdicts from theirs' hook run
 on the post-write tree. One mutant per guard leg is keyed on its own line, and `hu-mut-anytest` restores the round-3
 rule. The receipt's `orguard` world appends the two lines to a base hook over a consumer that lacks the provenance
-validator, and must be refused. The current side reads 0 where today's hook does not ask the question or the consumer has no copy,
+validator, and must be refused.
+
+Round 5 made two more fixes. First, the hook-change key now carries the guard column, so a hook that keeps the test but
+unties it from the run is a new question (`hu-keeptest`, mutant `hu-mut-dropguard`). Second, the if-frame stack opens
+only on a SHELL `if`, never on an awk `if (` inside a quoted program; that opener had left both shipped hooks at depth
+4, and they now end at 0 (`hu-awkif`, `hu-mut-awkopen`, `hu-stack-depth`). Known shapes the scan does not model, each
+failing closed or found in no real hook, and exercised by no world: a one-line `then … else` on the run's line, a
+closing `fi;`, an `if` opened inside a heredoc body, and the status of a run inside a longer `&&` list. The current side reads 0 where today's hook does not ask the question or the consumer has no copy,
 because today's push cannot be refused there. A script arm C carried is not written, so it reads OK "carried". The
 `hk-` arms pin the four worlds, plus a deleted-by-consumer near-miss, and the mutants `hk-mut-curhook`, `hk-mut-adds`
 and `hk-mut-carried` each revert one leg. The receipt adds `hookadd` (the current hook has no renderer step, theirs'

@@ -3878,7 +3878,12 @@ hu_world() { # hu_world <dir> <consumer-y:fail|pass|none> <theirs-y-rc> <guarded
   printf '1.0.0\n' > "$w/dist/VERSION"; printf 'hu machinery\n' > "$w/dist/core/rules/hu.md"
   printf '#!/bin/sh\nexit 0\n' > "$w/dist/core/scripts/validate-x.sh"
   printf '#!/bin/sh\n[ "${1:-}" = --strict ] || exit 2\nexit %s\n' "$3" > "$w/dist/core/scripts/validate-y.sh"
-  printf '#!/usr/bin/env bash\nfail=0\nbash scripts/ai-dlc/validate-x.sh || fail=1\nexit "$fail"\n' > "$w/dist/core/git-hooks/pre-push"
+  # keeptest: today's hook already guards the run with a block, so only the GUARD moves in theirs'
+  local basestep=""
+  [ "$4" = keeptest ] && basestep='if [ -f scripts/ai-dlc/validate-y.sh ]; then
+  bash scripts/ai-dlc/validate-y.sh --strict || fail=1
+fi'
+  printf '#!/usr/bin/env bash\nfail=0\nbash scripts/ai-dlc/validate-x.sh || fail=1\n%s\nexit "$fail"\n' "$basestep" > "$w/dist/core/git-hooks/pre-push"
   av_git "$w/dist" add -A >/dev/null 2>&1; av_git "$w/dist" commit -qm base >/dev/null 2>&1
   git -C "$w/dist" rev-parse HEAD > "$w/B"
   cp "$w/dist/core/git-hooks/pre-push" "$w/cons/.githooks/pre-push"; chmod +x "$w/cons/.githooks/pre-push"
@@ -3904,6 +3909,14 @@ fi" ;;
 else
   $step
 fi" ;;
+    keeptest) step="[ -f scripts/ai-dlc/validate-y.sh ] || echo missing
+$step" ;;
+    awkif)   step="if [ -f scripts/ai-dlc/validate-y.sh ]; then
+  awk '
+    if (NR > 0) print
+  ' /dev/null
+fi
+$step" ;;
   esac
   printf '#!/usr/bin/env bash\nfail=0\nbash scripts/ai-dlc/validate-x.sh || fail=1\n%s\nexit "$fail"\n' "$step" > "$w/dist/core/git-hooks/pre-push"
   av_git "$w/dist" add -A >/dev/null 2>&1; av_git "$w/dist" commit -qm theirs >/dev/null 2>&1
@@ -3928,7 +3941,13 @@ hu_world "$AV/hu-andand" none 1 andand
 hu_world "$AV/hu-andor" none 1 andor
 hu_world "$AV/hu-block" none 1 block
 hu_world "$AV/hu-else" none 1 else
-HU_WORLDS="lfail lpass gdel udel orecho andand andor block else"
+# ROUND 5. hu-keeptest: today's hook runs y inside `if [ -f y ]`, theirs' keeps a test of y but runs
+# it bare -- kind and argv unchanged, only the guard column moves, so the hook-change key must carry
+# it. hu-awkif: an awk `if (` inside a guard block must not open a shell frame, or the bare run after
+# the block's `fi` reads as still guarded.                              post-write rc 1 -> DEFER+absent
+hu_world "$AV/hu-keeptest" none 1 keeptest
+hu_world "$AV/hu-awkif" none 1 awkif
+HU_WORLDS="lfail lpass gdel udel orecho andand andor block else keeptest awkif"
 # PRECONDITION: the truth each world asserts. A copy of the consumer gets step 2's write -- the range
 # diff and nothing else -- and theirs' hook is run on it, as git runs it on the push.
 hu_post() { # hu_post <world> -> the post-write hook's exit
@@ -3944,7 +3963,7 @@ hu_post() { # hu_post <world> -> the post-write hook's exit
   ( cd "$c" && bash .githooks/pre-push origin x < /dev/null > /dev/null 2>&1 ); printf '%s' "$?"
 }
 ss_assert "hu-pre" "$(for n in $HU_WORLDS; do printf '%s=%s ' "$n" "$(hu_post "$AV/hu-$n")"; done)y-in-range=$(git -C "$AV/hu-lfail/dist" diff --name-only "$(cat "$AV/hu-lfail/B")" "$(cat "$AV/hu-lfail/T")" -- core/scripts/validate-y.sh | grep -c .)" \
-  "lfail=1 lpass=0 gdel=0 udel=1 orecho=1 andand=0 andor=1 block=0 else=1 y-in-range=0" \
+  "lfail=1 lpass=0 gdel=0 udel=1 orecho=1 andand=0 andor=1 block=0 else=1 keeptest=1 awkif=1 y-in-range=0" \
   "the push theirs' hook gates fails exactly where the consumer's own copy fails or is missing unguarded, and the range never touches validate-y.sh"
 hu_sig() { # hu_sig <gate> -> one token per world, `+absent` when the row names the absence
   local n r out=""
@@ -3955,7 +3974,7 @@ hu_sig() { # hu_sig <gate> -> one token per world, `+absent` when the row names 
   done
   printf '%s\n' "$out"
 }
-HU_SIG_FIX="lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=OK andor=DEFER+absent block=OK else=DEFER+absent"
+HU_SIG_FIX="lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=OK andor=DEFER+absent block=OK else=DEFER+absent keeptest=DEFER+absent awkif=DEFER+absent"
 ss_assert "hu-signature" "$(hu_sig "$GATE")" "$HU_SIG_FIX" \
   "an unchanged script the new hook asks is judged by the copy the push runs: the consumer's, or the hook's own guard over its absence"
 mp_killed "hu-mut-control" "$(hu_sig "$(av_mut hu-control)")" "$HU_SIG_FIX" \
@@ -3964,32 +3983,62 @@ hu_kill() { local got; if [ -z "$2" ]; then got="DID-NOT-APPLY"; else got="$(hu_
 # KEYED ON THE LINE THAT DECIDES WHICH COPY RUNS: without it every script is judged by theirs' copy.
 hu_kill "hu-mut-theirs" "$(av_mut hu-theirs '  gate_has_line "$CHANGED" "$name" || sc_written=0
 ' '  :
-')" "lfail=OK lpass=DEFER gdel=DEFER udel=DEFER orecho=DEFER andand=DEFER andor=DEFER block=DEFER else=DEFER" \
+')" "lfail=OK lpass=DEFER gdel=DEFER udel=DEFER orecho=DEFER andand=DEFER andor=DEFER block=DEFER else=DEFER keeptest=DEFER awkif=DEFER" \
   "an unchanged script judged by theirs' copy: every world takes the verdict of a copy step 2 never writes"
 # Each guard mutant is keyed on the one line that owns its leg, and moves only its own worlds.
 HU_GUARD_LINE='  [ "$(awk -F'"'"'\t'"'"' '"'"'$1 == "R" && $4 != "guarded"'"'"' "$TMP/scan" | grep -c .)" -eq 0 ] && sc_guarded=1
 '
 hu_kill "hu-mut-anytest" "$(av_mut hu-anytest "$HU_GUARD_LINE" '  [ "$(awk -F'"'"'\t'"'"' '"'"'$1 == "M" && $3 == "test"'"'"' "$TMP/scan" | grep -c .)" -gt 0 ] && sc_guarded=1
-')" "lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=OK andand=OK andor=OK block=OK else=OK" \
+')" "lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=OK andand=OK andor=OK block=OK else=OK keeptest=OK awkif=OK" \
   "any existence test anywhere in the hook read as the run's guard: three pushes that fail on a missing script read OK"
 hu_kill "hu-mut-noguard" "$(av_mut hu-noguard "$HU_GUARD_LINE" '  :
-')" "lfail=DEFER lpass=OK gdel=DEFER+absent udel=DEFER+absent orecho=DEFER+absent andand=DEFER+absent andor=DEFER+absent block=DEFER+absent else=DEFER+absent" \
+')" "lfail=DEFER lpass=OK gdel=DEFER+absent udel=DEFER+absent orecho=DEFER+absent andand=DEFER+absent andor=DEFER+absent block=DEFER+absent else=DEFER+absent keeptest=DEFER+absent awkif=DEFER+absent" \
   "no guard read at all: every step the post-write hook skips is refused as a missing script"
 hu_kill "hu-mut-brace" "$(av_mut hu-brace '      if (pre ~ (GT "[[:space:]]*&&[[:space:]]*\\{' '      if (0 && pre ~ (GT "[[:space:]]*&&[[:space:]]*\\{')" \
-  "lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=DEFER+absent andor=DEFER+absent block=OK else=DEFER+absent" \
+  "lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=DEFER+absent andor=DEFER+absent block=OK else=DEFER+absent keeptest=DEFER+absent awkif=DEFER+absent" \
   "the && { … } arm dropped: a step the hook skips on a missing script is refused"
 hu_kill "hu-mut-andor" "$(av_mut hu-andor ' && index(tail, "||") == 0) return 1' ') return 1')" \
-  "lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=OK andor=OK block=OK else=DEFER+absent" \
+  "lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=OK andor=OK block=OK else=DEFER+absent keeptest=DEFER+absent awkif=DEFER+absent" \
   "the trailing || not read: [ -f y ] && bash y || fail=1 reads guarded while the push fails on the missing script"
 hu_kill "hu-mut-oneline" "$(av_mut hu-oneline '      if (match(pre, ("(^|[;[:space:]])if' '      if (0 && match(pre, ("(^|[;[:space:]])if')" \
-  "lfail=DEFER lpass=OK gdel=DEFER+absent udel=DEFER+absent orecho=DEFER+absent andand=OK andor=DEFER+absent block=OK else=DEFER+absent" \
+  "lfail=DEFER lpass=OK gdel=DEFER+absent udel=DEFER+absent orecho=DEFER+absent andand=OK andor=DEFER+absent block=OK else=DEFER+absent keeptest=DEFER+absent awkif=DEFER+absent" \
   "the one-line if [ -f y ]; then …; fi arm dropped: round 3's guarded world is refused again"
 hu_kill "hu-mut-block" "$(av_mut hu-block '      if (o && !f) { NIF++; IF[NIF] = (t ~' '      if (o && !f) { NIF++; IF[NIF] = 0 && (t ~')" \
-  "lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=OK andor=DEFER+absent block=DEFER+absent else=DEFER+absent" \
+  "lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=OK andor=DEFER+absent block=DEFER+absent else=DEFER+absent keeptest= awkif=DEFER+absent" \
   "the enclosing if-block frame never guards: a multi-line guarded step is refused"
 hu_kill "hu-mut-else" "$(av_mut hu-else '      if (NIF > 0 && t ~ /^[[:space:]]*(else|elif)([;[:space:]]|$)/) IF[NIF] = 0' '      if (0) IF[NIF] = 0')" \
-  "lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=OK andor=DEFER+absent block=OK else=OK" \
+  "lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=OK andor=DEFER+absent block=OK else=OK keeptest=DEFER+absent awkif=DEFER+absent" \
   "else not read: a run in the branch taken when the script is MISSING reads guarded, a false OK"
+# ROUND 5 MUTANTS. Each keyed on the line it reverts.
+HU_KEY_NEW="    ha_new=\"\$(gate_argv_scan \"\$HOOK\" \"\$ha_n\" | awk -F'\\t' '{print \$1 \"\\t\" \$3 \"\\t\" \$4}' | sort -u)\""
+HU_KEY_CUR="    [ -f \"\$HOOK_CUR\" ] && ha_cur=\"\$(gate_argv_scan \"\$HOOK_CUR\" \"\$ha_n\" | awk -F'\\t' '{print \$1 \"\\t\" \$3 \"\\t\" \$4}' | sort -u)\""
+HU_KEY_NEW_OLD="    ha_new=\"\$(gate_argv_scan \"\$HOOK\" \"\$ha_n\" | awk -F'\\t' '{print \$1 \"\\t\" \$3}' | sort -u)\""
+HU_KEY_CUR_OLD="    [ -f \"\$HOOK_CUR\" ] && ha_cur=\"\$(gate_argv_scan \"\$HOOK_CUR\" \"\$ha_n\" | awk -F'\\t' '{print \$1 \"\\t\" \$3}' | sort -u)\""
+hu_kill "hu-mut-dropguard" "$(av_mut hu-dropguard "$HU_KEY_NEW" "$HU_KEY_NEW_OLD" "$HU_KEY_CUR" "$HU_KEY_CUR_OLD")" \
+  "lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=OK andor=DEFER+absent block=OK else=DEFER+absent keeptest= awkif=DEFER+absent" \
+  "the guard column dropped from the hook-change key: a hook that keeps the test but unties it from the run asks nothing new, and y gets no row"
+HU_OPEN_NEW='      o = (t ~ /^[[:space:]]*if[[:space:]]+(\[|!|[A-Za-z_.\/])/)'
+hu_kill "hu-mut-awkopen" "$(av_mut hu-awkopen "$HU_OPEN_NEW" '      o = (t ~ /^[[:space:]]*if[[:space:]]/)')" \
+  "lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=OK andor=DEFER+absent block=OK else=DEFER+absent keeptest=DEFER+absent awkif=OK" \
+  "an awk if ( read as a shell opener: the guard frame outlives its fi and the bare run after it reads guarded, a false OK"
+# THE STACK BALANCES ON THE SHIPPED HOOK. The scan's END is re-emitted with the frame depth appended,
+# once with the shipped opener and once with the old one, so the assertion proves it can see the
+# imbalance it rules out.
+HU_REAL=""
+for cand in "$DIR/../../git-hooks/pre-push" "$DIR/../../../.githooks/pre-push"; do
+  [ -f "$cand" ] && { HU_REAL="$cand"; break; }
+done
+hu_depth() { # hu_depth <gate-file> -> the if-frame depth after scanning the shipped hook
+  ( eval "$(awk '/^gate_argv_scan\(\) \{/,/^\}/' "$1" | sed 's/ifpost(r) } }$/ifpost(r) }; printf "DEPTH\\t%d\\n", NIF }/')"
+    gate_argv_scan "$HU_REAL" render-agent-definitions.sh ) 2>/dev/null | awk -F'\t' '$1 == "DEPTH" {print $2}'
+}
+HU_OLD="$AV/hu-depth-old.sh"
+python3 -c 'import sys
+s = open(sys.argv[1]).read(); o, n = sys.argv[3], sys.argv[4]
+if s.count(o) != 1: sys.exit(3)
+open(sys.argv[2], "w").write(s.replace(o, n, 1))' "$GATE" "$HU_OLD" "$HU_OPEN_NEW" '      o = (t ~ /^[[:space:]]*if[[:space:]]/)' 2>/dev/null || : > "$HU_OLD"
+ss_assert "hu-stack-depth" "${HU_REAL:+found} shipped=$(hu_depth "$GATE") old-opener=$(hu_depth "$HU_OLD")" "found shipped=0 old-opener=4" \
+  "scanning the shipped pre-push ends at if-frame depth 0; the old opener test leaves it at 4, so this assertion can see the imbalance"
 
 # --- HOOK SHAPES THE SCAN MUST NOT READ AS "NOT GATING" (BL-456, tip round) ----------------------
 # Each shape below is one reformat away from the real hook, and before this round the first three
