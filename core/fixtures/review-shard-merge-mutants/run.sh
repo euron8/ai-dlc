@@ -299,7 +299,7 @@ mutant "MH3 fenced hand-over lines counted" merge-review-shards.sh "q_ho_fenced"
 mutant "MH4 a two-AC hand-over line accepted" merge-review-shards.sh "q_ho_multi" \
   '          [ -z "${a2:-}" ] || refuse' '          true || refuse'
 mutant "MH5 two hand-over lines in one finding accepted" merge-review-shards.sh "q_ho_twoline" \
-  '      [ "${nho:-0}" -le 1 ] || refuse' '      true || refuse'
+  '    [ "${nho:-0}" -le 1 ] || refuse' '    true || refuse'
 mutant "MH6 a duplicate hand-over accepted" merge-review-shards.sh "q_ho_dup" \
   '  d1="$(sort "$T/hand" | uniq -d | head -1)"' '  d1=""'
 # The widened malformed-line pattern reverted, one alternation family at a time: the decorated
