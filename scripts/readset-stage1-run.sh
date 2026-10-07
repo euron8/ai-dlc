@@ -28,10 +28,11 @@
 # next three good runs read as consecutive when they were not. A refusal BEFORE the deriver starts
 # (worktree, dirty tree, live orphan, RUN_DIR exists) records nothing, because nothing ran.
 #
-# A SIGKILL DOES NOT LEAVE THE MAP DIRTY AT ONCE. The deriver writes the map LAST
-# (derive-fixture-readsets.sh, the `} > "$MAP"` before its final `say`), and nothing kills its
-# process group when the wrapper dies without a trap, so straight after a `kill -9` the map is clean
-# and the deriver is an ORPHAN, still tracing. The dirty-tree check cannot see that. So a run
+# A SIGKILL DOES NOT LEAVE THE MAP DIRTY AT ONCE. The deriver writes the map after EACH accepted
+# fixture and once more at the end (derive-fixture-readsets.sh, readset_write_map, temp + mv), so
+# the map changes MID-RUN, and nothing kills its process group when the wrapper dies without a
+# trap: straight after a `kill -9` the map may still be clean while the deriver is an ORPHAN, still
+# tracing and about to write. The dirty-tree check cannot see that. So a run
 # refuses while any process in the group recorded in `$RUN_DIR/pgid` of the most recent `started`
 # line with no terminal line is still alive (`kill -0 -- -<pgid>`; no process-table grep). Once the
 # orphan has written the map and exited, the dirty-tree check refuses instead. The pgid is written a
@@ -123,8 +124,8 @@ stop_sampler() {
 }
 
 # THE RESTORE RUNS FROM THE TRAP, so a killed wrapper restores the map too. The deriver writes the
-# map LAST, so it is killed and reaped BEFORE the copy-back: restoring while it still runs would be
-# undone by its own write.
+# map after every accepted fixture as well as at the end, so it is killed and reaped BEFORE the
+# copy-back: restoring while it still runs would be undone by its next write.
 #
 # THE DERIVER IS KILLED AS A PROCESS GROUP, NEVER BY ITS PID ALONE. It carries no `trap`, and its
 # `log stream` children and the sandboxed fixture are killed only on its normal path, after a
