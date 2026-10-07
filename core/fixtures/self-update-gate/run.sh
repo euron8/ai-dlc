@@ -3112,7 +3112,7 @@ ss_assert "pu-a1-discard" \
 printf '# fixture log, written after the commit\n' > "$PU_A/W/$PU_A_UNC.ctl"
 git -C "$PU_A/W" show "orig:$PU_A_UNC.ctl" > "$PU_A/W/$PU_A_UNC.ctl" 2>/dev/null
 ss_assert "pu-a1-restore-control" "bytes=$(wc -c < "$PU_A/W/$PU_A_UNC.ctl" | tr -d ' ')" "bytes=0" \
-  "control: a bare 'git show <branch>:<path> > <path>' on a record the branch does not hold truncates it -- the hazard the temporary-file restore exists for is live here"
+  "control: a bare redirect of git show straight onto a record the branch does not hold truncates it -- the hazard the temporary-file restore exists for is live here"
 unset GIT_CONFIG_NOSYSTEM GIT_CONFIG_GLOBAL GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
 
 # --- A STAGING WRITE THAT FAILS IS UNDECIDED (BL-360) -------------------------------------
