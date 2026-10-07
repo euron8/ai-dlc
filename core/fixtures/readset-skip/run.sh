@@ -2202,7 +2202,7 @@ EOF
         if (rline == 0 && index(code, "readset_merge_map") && code ~ />[[:blank:]]*"\$MERGED"/) rline = FNR
         if (cline == 0 && index(code, "die \"could not compare")) cline = FNR
         if (dline == 0 && index(code, "die \"merge dropped " SQ)) dline = FNR
-        if (wline == 0 && code ~ /^}[[:blank:]]*>[[:blank:]]*"\$MAP"/) wline = FNR
+        if (wline == 0 && code ~ /^}[[:blank:]]*>[[:blank:]]*"\$MAP_TMP"/) wline = FNR
       }
       END {
         printf "BAL\t%s\n", (q == "" && k == 0) ? "ok" : "UNBALANCED"
