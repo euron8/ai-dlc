@@ -45,8 +45,10 @@ Execute this 5-step procedure in order:
    **Rewrite the row; do not delete it** — at a handoff the successor
    needs to know what was running, and a deleted row is
    indistinguishable from a teammate that never existed.
-   `ai-dlc-continue.sh` Check 0 blocks the stop while any row still
-   reads `in-flight`.
+   `ai-dlc-continue.sh` Check 0 defers while this step's beat holds a
+   live `.beat-inflight` lease, so the turn ends on the beat; once the
+   lease has expired it blocks the stop while any row still reads
+   `in-flight`.
 2. Commit any in-flight work (`git add` + `git commit`), including
    work teammates left in the working tree.
 3. Finalize the pipeline snapshot — one last update capturing

@@ -1017,8 +1017,9 @@ carry the no-human-present additions:
    in-flight artifacts in the snapshot's Open Items in Step 3, and set each
    stopped teammate's **In-Flight Teammates** row `status` to `stopped` —
    rewrite the row, never delete it. `steps/handoff.md` step 1 owns
-   why, and `ai-dlc-continue.sh` Check 0 blocks the stop while any
-   row still reads `in-flight`.
+   why. Where `ai-dlc-continue.sh` Check 0 is armed it blocks the stop
+   while any row still reads `in-flight`, deferring only while a beat's
+   `.beat-inflight` lease is live.
 2. `git add` and `git commit` any in-flight work, including work
    teammates left in the working tree.
 3. Finalize the pipeline snapshot — one last update capturing
