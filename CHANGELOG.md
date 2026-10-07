@@ -19,6 +19,24 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.741.1] - 2026-10-07
+
+Batch 203's first release. It discharges one consumer candidate and closes `BL-467`. Under 0.741.0 every consumer's
+pre-push refused, including the self-update push that installs 0.741.0, so this patch is what lets
+a consumer land the checksum release.
+
+### readset-skip's held-set arm keys gamma under the hook's own fixture root (PC-S317-READSET-SKIP-M5-SEEDS-CORE-FIXTURES-UNDER-A-TESTS-FIXTURES-HOOK)
+
+- The M5 arm seeded gamma under `core/fixtures/` and built its recorded discard key from that path.
+  A consumer's hook sets `FXROOT="tests/fixtures/"`, so the hook looked the key up under
+  `tests/fixtures/`, found nothing, and traced gamma instead of holding it. The arm failed on every
+  consumer push.
+- The fixture now reads the resolved hook's `FXROOT` once, and M5 seeds and keys gamma under it, as
+  the run_fixtures arms already did. Measured on a consumer tree built by `scripts/install.sh`:
+  `PASS (245 assertions)`, M5 holds gamma, and its mutant is still killed; the pre-fix `lt_held`
+  fails M5 there. A distribution worktree passes all 258. The consumer count is lower because the
+  second-hook and I66 arms skip on a consumer tree.
+
 ## [0.741.0] - 2026-10-07
 
 Batch 202's third release. No consumer candidate is discharged. Both pre-push hooks change, so a
