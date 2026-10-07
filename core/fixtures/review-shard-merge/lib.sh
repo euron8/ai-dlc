@@ -188,8 +188,10 @@ out_of() { printf '%s/1-code-review.md' "$(dirname "$1")"; }
 shard() {
   local d="$1" k="$2" v="$3" cite="$4" sha="${5:-${SHARD_SHA:-$B_SHA}}" extra="${6:-}"
   {
-    printf '# Code Review shard %s\n\nreviewed-sha: %s\nshard-verdict: %s\n\n' "$k" "$sha" "$v"
-    printf '## Summary\nShard %s read its part. CONSERVE-%s-7f3a\n\n' "$k" "$k"
+    printf '# Code Review shard %s\n\nreviewed-sha: %s\nshard-verdict: %s\n' "$k" "$sha" "$v"
+    # A part shard declares its hand-over count under both gates (code-reviewer.md "As a Shard").
+    case "$k" in cross*) ;; *) printf 'handovers: 0\n' ;; esac
+    printf '\n## Summary\nShard %s read its part. CONSERVE-%s-7f3a\n\n' "$k" "$k"
     printf '## Findings\n\n### Critical (must fix before merge)\n\n'
     printf '#### F-%s-1 an unchecked return in shard %s\nparts: %s\n\nBody of the finding.\n\n' "$k" "$k" "$cite"
     printf '### Important (should fix, can be follow-up)\n\n### Suggestions (optional improvements)\n\n'
@@ -434,8 +436,9 @@ part_refused() { # <token> <shard-dir>
 # A shard written by hand, for the bodies shard() cannot express.
 raw_shard() { # <dir> <key> <body...>: the two shard lines, then the body lines verbatim
   local d="$1" k="$2"; shift 2
-  { printf '# Code Review shard %s\n\nreviewed-sha: %s\nshard-verdict: APPROVED\n\n' "$k" "$B_SHA"
-    printf '%s\n' "$@"; } > "$d/$k.md"
+  { printf '# Code Review shard %s\n\nreviewed-sha: %s\nshard-verdict: APPROVED\n' "$k" "$B_SHA"
+    case "$k" in cross*) ;; *) printf 'handovers: 0\n' ;; esac
+    printf '\n'; printf '%s\n' "$@"; } > "$d/$k.md"
 }
 p_rerun() { # MC: an identical re-merge is UNCHANGED; after a shard changed, refused, file untouched
   local sd="$1" d o
@@ -1036,8 +1039,66 @@ p_x_seat() { # X9: seat-complete -- one shard without the marker beside shards w
   [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ -f "$o" ] && ! has "$o" "seat-complete:"
 }
 X_ALL="x_k8 x_only x_mix x_unknown x_owner x_actable x_horun x_k2 x_seat"
+# ------------------------------------------------------- gate-1 hand-overs (--gate code-review)
+# A code-review part shard replays its own part's mutation-REDs and hands over only what its own
+# worktree cannot bring to GREEN; the execution owner (cross-1) runs the hand-overs. The grammar
+# and the join are the QA ones, read under both gates. Seeded as code-reviewer.md tells each
+# writer to emit them: the hand-over under `### Important` in a part shard, the replays inside
+# cross-1's `## Findings`, the part's `handovers: <n>` beside `reviewed-sha:`.
+# crs <dir> <key> <verdict> <cite> <handovers count | OMIT | -> [text inside ### Important]
+crs() {
+  local d="$1" k="$2" v="$3" cite="$4" hc="$5" body="${6:-}"
+  {
+    printf '# Code Review shard %s\n\nreviewed-sha: %s\nshard-verdict: %s\n' "$k" "${SHARD_SHA:-$B_SHA}" "$v"
+    case "$hc" in OMIT|-) ;; *) printf 'handovers: %s\n' "$hc" ;; esac
+    printf '\n## Summary\nShard %s read its part. CONSERVE-%s-7f3a\n\n' "$k" "$k"
+    printf '## Findings\n\n### Critical (must fix before merge)\n\n#### F-%s-1 an unchecked return in shard %s\nparts: %s\n\nBody of the finding.\n\n' "$k" "$k" "$cite"
+    printf '### Important (should fix, can be follow-up)\n\n%s\n\n### Suggestions (optional improvements)\n' "$body"
+  } > "$d/$k.md"
+}
+crho() { printf '#### F-%s-H %s replay cannot reach a GREEN baseline in the part worktree\nparts: %s\nhandover: %s\n\nThe documented setup fails in a fresh worktree.' "$1" "$2" "$1" "$2"; }
+crrun() { printf '#### F-cross-H hand-over replays\nparts: %s\n' "$1"; shift; for _r in "$@"; do printf 'handover-run: %s\n' "$_r"; done; printf '\nRan in the frozen worktree after setup.'; }
+QT_HO_RUN2="hand-over '2 AC7' has more than one 'handover-run:' line in cross-1.md"
+p_cr_ho_ok() { # G1: parts 1 and 2 each hand over a DISJOINT replay; cross-1 runs both exactly once
+  # -> merges APPROVED with both tabled; the same world with AC7 GREEN-SURVIVED merges NEEDS_REWORK.
+  local sd="$1" d o r
+  for r in RED GREEN-SURVIVED; do
+    d="$(world4 "$sd" APPROVED APPROVED APPROVED APPROVED)" || return 1
+    crs "$d" 1 APPROVED 1 1 "$(crho 1 AC3)"; crs "$d" 2 APPROVED 2 1 "$(crho 2 AC7)"
+    crs "$d" cross-1 APPROVED "1, 2" - "$(crrun '1, 2' '1 AC3 RED' "2 AC7 $r")"
+    o="$(out_of "$d")"; run_merge "$sd" "$d"
+    if [ "$r" = RED ]; then
+      [ "$RC" -eq 0 ] && has "$MO" "verdict=APPROVED " && [ "$(check1_value "$o")" = APPROVED ] \
+        && has "$o" "| 1 | AC3 | RED |" && has "$o" "| 2 | AC7 | RED |" || return 1
+    else
+      [ "$RC" -eq 0 ] && has "$MO" "verdict=NEEDS_REWORK " && [ "$(check1_value "$o")" = NEEDS_REWORK ] || return 1
+    fi
+  done
+}
+p_cr_ho_block() { # G2: every shard BLOCKED (every wrong rule agrees), an unmet replay -> stays BLOCKED
+  local sd="$1" d o
+  d="$(world4 "$sd" BLOCKED BLOCKED BLOCKED BLOCKED)" || return 1
+  crs "$d" 2 BLOCKED 2 1 "$(crho 2 AC7)"
+  crs "$d" cross-1 BLOCKED "1, 2" - "$(crrun 2 '2 AC7 NO-BASELINE')"
+  o="$(out_of "$d")"; run_merge "$sd" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "verdict=BLOCKED " && [ "$(check1_value "$o")" = BLOCKED ]
+}
+p_cr_ho_unm() { # G3: part 2's hand-over run by no shard -> REFUSED, nothing written
+  local d; d="$(world4 "$1" APPROVED APPROVED APPROVED APPROVED)" || return 1
+  crs "$d" 2 APPROVED 2 1 "$(crho 2 AC7)"; run_merge "$1" "$d"; refused_clean "$QT_HO_UNM" "$d"; }
+p_cr_ho_runtwice() { # G4: one hand-over replayed twice by cross-1, in two findings -> REFUSED
+  local d; d="$(world4 "$1" APPROVED APPROVED APPROVED APPROVED)" || return 1
+  crs "$d" 2 APPROVED 2 1 "$(crho 2 AC7)"
+  crs "$d" cross-1 APPROVED "1, 2" - "$(printf '%s\n\n%s' "$(crrun 2 '2 AC7 RED')" "$(crrun 2 '2 AC7 RED' | sed 's/F-cross-H/F-cross-H2/')")"
+  [ "$(grep -c '^handover-run: 2 AC7 RED$' "$d/cross-1.md")" = 2 ] || return 1
+  run_merge "$1" "$d"; refused_clean "$QT_HO_RUN2" "$d"; }
+p_cr_hc_missing() { # G5: a code-review part shard without its declared count -> REFUSED
+  local d; d="$(world4 "$1" APPROVED APPROVED APPROVED APPROVED)" || return 1
+  crs "$d" 2 APPROVED 2 OMIT; ! grep -q '^handovers:' "$d/2.md" || return 1
+  run_merge "$1" "$d"; refused_clean "$QT_HC_MISSING" "$d"; }
+C_ALL="cr_ho_ok cr_ho_block cr_ho_unm cr_ho_runtwice cr_hc_missing"
 Q_ALL="q_worst q_table q_title q_fenced q_part_ac q_part_def q_cross_noac q_cross_twoac q_cross_twodef q_nodef q_rank q_pm q_suffix q_gate q_vset q_secvar q_ho_ok q_ho_unm q_ho_orph q_ho_force q_ho_cross q_ho_prun q_ho_fenced q_ho_shape q_ho_multi q_ho_twoline q_ho_dup q_ho_deco q_ho_nocolon q_ho_prose q_ho_acid q_hc_dash q_hc_hidden q_hc_zero q_hc_missing q_hc_two q_hc_nonint q_hc_cross q_hc_none q_ho_widen"
-P_ALL="part dflt_lo dflt_hi off refuse_val prec dmerge env worst c1 conserve miss_ord miss_cross dup part_cite cross_one sha_dir sha_rev moved a3 rerun anc cross_sha bad_verdict noparts manifest two_sha default_k stray nofind knob $Q_ALL $X_ALL"
+P_ALL="part dflt_lo dflt_hi off refuse_val prec dmerge env worst c1 conserve miss_ord miss_cross dup part_cite cross_one sha_dir sha_rev moved a3 rerun anc cross_sha bad_verdict noparts manifest two_sha default_k stray nofind knob $Q_ALL $X_ALL $C_ALL"
 
 # Seed controls: the worlds must be able to express what the arms are named for. Both callers run
 # them before any arm or mutant verdict is read.
