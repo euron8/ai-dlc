@@ -281,15 +281,22 @@ set -u
 #   ABOVE it -- measured on the reference consumer: one cross seat wrote its file once,
 #   marker last, then made seven in-place Edits over three minutes -- ends in the marker
 #   the whole time, so "marker last" alone consumed it mid-edit. DELIVERED therefore also
-#   requires the file's content hash to be unchanged across one poll interval: a
-#   `.settle` sidecar beside the counter holds `<hash> <epoch first seen>`, any change of
-#   hash restarts it, and the file delivers only once `now - epoch > POLL` in whole
-#   seconds (so at least POLL real seconds). A file that loses its marker drops its sidecar.
+#   requires the file's content hash to be unchanged for the SETTLE WINDOW: a `.settle`
+#   sidecar beside the counter holds `<hash> <epoch first seen>`, any change of hash
+#   restarts it, and the file delivers only once `now - epoch > SETTLE` in whole seconds
+#   (so at least SETTLE real seconds). A file that loses its marker drops its sidecar.
+#
+#   THE WINDOW IS MEASURED, NOT THE POLL INTERVAL. That seat's harness transcript records
+#   one Write and seven Edits of its file, 18:10:59Z to 18:14:08Z, with gaps of 29.7, 1.7,
+#   1.6, 5.1, 146.6, 2.4 and 1.4 seconds. A window of one poll (10s) delivered it between
+#   the first two writes. The default, AI_DLC_WAIT_SETTLE_SECS=180, is the largest gap plus
+#   margin; it is never set below 60.
 #
 #   WHAT IS NOT A MARKER. The last non-blank line must open with `seat-complete: `,
 #   carry no carriage return (a CRLF line is not the line the brief asked for), and lie
 #   OUTSIDE a fenced block: a marker inside an unclosed ``` or ~~~ fence is quoted text,
-#   not the seat's final write.
+#   not the seat's final write. A fence closes only on a run of the opener's character at
+#   least as long as the opener, with nothing after it -- a ```` fence is not closed by ```.
 #
 #   UNFINISHED IS NOT ABSENT. A target that is present, non-empty, written since the
 #   join armed, and whose last non-blank line is not a marker is reported as
@@ -308,6 +315,8 @@ POLL="${AI_DLC_WAIT_POLL_SECS:-10}"
 MAX_BEATS="${AI_DLC_MAX_WAIT_BEATS:-6}"
 STATE_DIR="${AI_DLC_STATE_DIR:-_bmad-output}"
 MARGIN="${AI_DLC_WAIT_MARGIN_SECS:-10}"
+SETTLE="${AI_DLC_WAIT_SETTLE_SECS:-180}"
+case "$SETTLE" in ''|*[!0-9]*) SETTLE=180 ;; esac
 
 QUIET=0
 RESET=0
@@ -503,7 +512,16 @@ is_delivered() {  # $1 = path, $2 = join epoch
 # return, and is not inside an unclosed fence. A whitespace-only line is blank
 # (NF == 0), so trailing blank lines cannot hide the marker.
 has_marker() {  # $1 = path
-  awk '/^[ \t]*(```|~~~)/ { f = !f } NF { l = $0 } END { exit ((!f && l !~ /\r/ && index(l, "seat-complete: ") == 1) ? 0 : 1) }' "$1" 2>/dev/null
+  awk '
+    # A fence opens on a run of 3+ backticks or tildes; it closes only on a run of the SAME
+    # character at least as long, with nothing but blanks after it.
+    match($0, /^[ \t]*(```+|~~~+)/) {
+      r = substr($0, RSTART, RLENGTH); sub(/^[ \t]*/, "", r)
+      if (fc == "") { fc = substr(r, 1, 1); fl = length(r) }
+      else if (substr(r, 1, 1) == fc && length(r) >= fl && substr($0, RSTART + RLENGTH) ~ /^[ \t\r]*$/) { fc = ""; fl = 0 }
+    }
+    NF { l = $0 }
+    END { exit ((fc == "" && l !~ /\r/ && index(l, "seat-complete: ") == 1) ? 0 : 1) }' "$1" 2>/dev/null
 }
 
 content_hash() {  # $1 = path -> a content hash, empty when unreadable
@@ -512,8 +530,8 @@ content_hash() {  # $1 = path -> a content hash, empty when unreadable
   else cksum < "$1" 2>/dev/null | tr -d ' \t'; fi
 }
 
-# The marked file has SETTLED: its hash equals the one its sidecar recorded at least one
-# poll interval ago. Any other hash (or no sidecar) re-records `<hash> <now>` and waits.
+# The marked file has SETTLED: its hash equals the one its sidecar recorded more than SETTLE
+# seconds ago (the measured window in the --complete header). Any other hash (or no sidecar) re-records `<hash> <now>` and waits.
 settled() {  # $1 = path, $2 = its .settle sidecar
   st_h_="$(content_hash "$1")"; [ -n "$st_h_" ] || return 1
   st_now_="$(date +%s)"; st_rec_=""
@@ -524,7 +542,7 @@ settled() {  # $1 = path, $2 = its .settle sidecar
     # STRICTLY greater: both stamps are whole seconds, so a difference of exactly POLL can be
     # a few milliseconds of real time across a second boundary. POLL + 1 whole seconds is at
     # least POLL real ones.
-    [ $(( st_now_ - st_t_ )) -gt "$POLL" ] && return 0
+    [ $(( st_now_ - st_t_ )) -gt "$SETTLE" ] && return 0
     return 1
   fi
   printf '%s %s' "$st_h_" "$st_now_" > "$2" 2>/dev/null || true
@@ -722,7 +740,10 @@ for t in $TARGETS; do
   # Non-empty, but not newer than the arming instant: the ambiguous case. Name it
   # on the one beat that decides it, so the lead learns the flag while it is still
   # actionable -- not at minute twenty via a non-delivery it cannot explain.
-  [ "$FIRST" -eq 1 ] && [ -s "$t" ] && PREEXISTING="${PREEXISTING}${PREEXISTING:+|}$t"
+  # Only a file OLDER than the arming instant: under --complete a post-arm file can be
+  # undelivered (unmarked or unsettled), and it did not "already have content". Without the
+  # flag an undelivered non-empty file is always older, so this clause changes nothing there.
+  [ "$FIRST" -eq 1 ] && [ -s "$t" ] && [ "$(mtime_of "$t")" -lt "$j" ] && PREEXISTING="${PREEXISTING}${PREEXISTING:+|}$t"
 
   b=0; [ -f "$c" ] && b="$(cat "$c" 2>/dev/null || echo 0)"
   case "$b" in ''|*[!0-9]*) b=0 ;; esac

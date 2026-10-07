@@ -275,7 +275,8 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    review dispatch" — carries the same instruction with the adversary in place of the seat.
    Every beat that joins such a file passes `--complete` (`wait-for-deliverable.sh`, its
    header): the file counts as DELIVERED only when that line is last — outside any fence, with
-   no carriage return — and the file has not changed for one poll interval, so a file written
+   no carriage return — and the file has not changed for the settle window
+   (`AI_DLC_WAIT_SETTLE_SECS`, default 180s, measured from a cross seat's real edit gaps), so a file written
    early is never taken as finished, a seat editing above its marker is not either, and a seat
    still appending shows as progress on its own file rather than as silence. The beat reads the marker only; `merge-adversarial-shards.sh` and
    `merge-review-shards.sh` check `findings=<n>` against the findings they parse and refuse a
