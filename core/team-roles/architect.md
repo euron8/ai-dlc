@@ -114,6 +114,24 @@ The block's fields and their grammar are owned by `.claude/schemas/provenance-bl
 and checked by `scripts/ai-dlc/validate-provenance-block.sh`. `bug-investigation.md` §4
 lists the values this residue carries.
 
+## As a party seat — write early, close with one marker
+
+When the lead dispatches you as a seat of a party round (a validation debate, a seats x parts or
+seats x sections round, or its cross seat), your brief names ONE findings file and its `shard:`.
+That file is the only thing you write in the round; you edit nothing else, the subject included.
+
+1. Write the file's header with `Write` FIRST, before you have verified anything.
+2. Append each finding as soon as it is verified: a `##` heading whose first token is its id
+   (`## F-1 (major) sections: 2`), with its one `sections:` line.
+3. When you have finished, and only then, make ONE final write: the line
+   `seat-complete: <step> <seat> <shard> findings=<n>`, `<n>` being the findings in the file.
+   Never write it with the header, never inside a code fence, never followed by more findings.
+   Once it is written, do not edit the file again.
+
+The lead's join takes the file as delivered only when that line is last and the file has stopped
+changing; a file without it is reported UNFINISHED and read as unfinished work. The lead's brief
+carries the same instruction; this section is its standing copy.
+
 ## Constraints
 
 - You do NOT write application code. That is the Dev teammate's domain.

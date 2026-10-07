@@ -149,6 +149,10 @@ p_srcok "$JOIN" && ok "PS7: --sources on a record no join wrote -- colliding F-1
   || bad "PS7: --sources refused a resolving record (rc=$RC): $(cat "$JO")"
 p_srcunres "$JOIN" && ok "PS8: --sources, one property apart (F-4 under dev-1) -> rc 2, UNRESOLVED, the carrying seat named" \
   || bad "PS8: --sources accepted an id only another seat carries (rc=$RC): $(cat "$JO")"
+p_partymarked "$JOIN" && ok "PS9: every CITED seat file ends in seat-complete:, the uncited architect-1 does not -> JOINED (the belt is scoped to cited seats)" \
+  || bad "PS9: a party repair over finished cited seats did not join (rc=$RC): $(cat "$JO")"
+p_partyunmarked "$JOIN" && ok "PS10: PS9 one property apart, the cited dev-4 unmarked -> REFUSED naming dev-4, nothing written" \
+  || bad "PS10: a cited unfinished seat file beside finished ones was not refused (rc=$RC): $(cat "$JO")"
 
 # R1: the role file the remediator is bound to teaches the write tool and the citation form. Walked
 # up from this fixture in both layouts; install copies team-roles/ verbatim, so no render exists.

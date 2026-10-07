@@ -456,6 +456,34 @@ p_party() { # three parts, the colliding pair on one entry, the `Finding D4-1` f
   [ "$RC" -eq 0 ] && has "$JO" "(3 parts, 3 writers)" && [ -f "$(pout "$w")" ] \
     && has "$(pout "$w")" "architecture-tea-1.md#F-4" && has "$(pout "$w")" "architecture-dev-1.md#F-1 architecture-tea-1.md#F-1"
 }
+# THE SEAT-COMPLETE BELT (BL-464). Seat files end in one `seat-complete:` line once finished. The
+# belt is scoped to the seat files the parts CITE: architect-1 is never cited, and is left unmarked
+# in BOTH worlds below, so a belt widened to the whole party-mode dir refuses the ALLOW twin.
+seat_mark() { # <world> <seat>... -- close each s305 seat file with its marker
+  local w="$1" s; shift
+  for s in "$@"; do
+    printf '\nseat-complete: architecture %s none findings=1\n' "$s" >> "$w/_bmad-output/party-mode/s305/architecture-$s.md" || return 1
+  done
+}
+p_partymarked() { # every CITED seat file marked, the uncited architect-1 not -> JOINED
+  local w; w="$(party_world)" || return 1
+  seat_mark "$w" dev-1 tea-1 dev-4 || return 1
+  ppart "$w" 01 2.1 "architecture-dev-1.md#F-1 architecture-tea-1.md#F-1"
+  ppart "$w" 02 2.2 "_bmad-output/party-mode/s305/architecture-dev-4.md#D4-1"
+  ppart "$w" 03 3.1 "architecture-tea-1.md#F-4"
+  run_pjoin "$1" "$w"
+  [ "$RC" -eq 0 ] && has "$JO" "(3 parts, 3 writers)" && [ -f "$(pout "$w")" ]
+}
+p_partyunmarked() { # p_partymarked ONE property apart: the cited dev-4 unmarked -> REFUSED by name, nothing written
+  local w; w="$(party_world)" || return 1
+  seat_mark "$w" dev-1 tea-1 || return 1
+  ppart "$w" 01 2.1 "architecture-dev-1.md#F-1 architecture-tea-1.md#F-1"
+  ppart "$w" 02 2.2 "_bmad-output/party-mode/s305/architecture-dev-4.md#D4-1"
+  ppart "$w" 03 3.1 "architecture-tea-1.md#F-4"
+  run_pjoin "$1" "$w"
+  refused "$w" "seat file architecture-dev-4.md does not end in its 'seat-complete:' line" \
+    && [ ! -e "$(pout "$w")" ]
+}
 p_partyunres() { # p_party's world, ONE property apart: F-4 cited under dev-1, which carries F-1..F-3 only (tea-1 has F-4)
   local w; w="$(party_world)" || return 1
   ppart "$w" 01 2.1 "architecture-dev-1.md#F-1 architecture-tea-1.md#F-1"
@@ -548,7 +576,7 @@ p_sjnest() { # a NESTED state dir (out/bmad): map, split, join and the record ag
     p_sjoin "$1" )
 }
 
-P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres"
+P_ALL="disjoint overlap missing unwritten bothdirs epics shardrow docjoin docoverlap asmrefuse filesguard absroot absforeign absnested absslash absdouble basecite unwrittenmsg sjoin sjspec2 sjoos sjnopart sjnames sjbase sjgate sjgatenear sjnest party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked"
 
 # ---- A PART'S DERIVATION SURVIVES THE JOIN. The part's ```derived fence is copied into the joined
 # record, and the gate re-runs `validate-artifact-derivations.sh` over the sprint dir AFTER the

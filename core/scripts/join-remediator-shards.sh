@@ -402,6 +402,41 @@ src_refusals() {
 $1
 SRCEOF
 }
+# THE SEAT-COMPLETE BELT. Every seat writes its findings file early and closes it with ONE final
+# `seat-complete: <step> <seat> <shard> findings=<n>` line (`_gate-procedures.md` "Validation cycle"
+# item 1); the join beat's `--complete` is the braces. Scoped to the seat files the records' `source:`
+# tokens CITE, never the whole `party-mode/s<N>/` dir, which spans every step of the sprint: if ANY
+# cited seat file ends in the marker, every cited one must, or a repair is applying a seat that had
+# not finished. A cited set with no marker at all is accepted unchecked -- seat files written before
+# the instruction, exactly as the merges treat an unmarked directory. The marker predicate is the
+# beat's: last non-blank line, no carriage return, outside an unclosed fence.
+# seat_marked <file> -> 0 iff it ends in the marker.
+seat_marked() {
+  awk '/^[ \t]*(```|~~~)/ { f = !f } NF { l = $0 } END { exit ((!f && l !~ /\r/ && index(l, "seat-complete: ") == 1) ? 0 : 1) }' "$1" 2>/dev/null
+}
+# seat_complete_check <seat dir> <record>... -> refuse once per cited seat file that is unfinished.
+seat_complete_check() {
+  local sd="$1" cited b y="" n=""; shift
+  cited="$(awk '
+    /^[ \t]*(```|~~~)/ { fence = !fence; next }
+    fence { next }
+    /^[[:space:]-]*[*_`]*source[*_`]*:/ {
+      v = $0; sub(/^[^:]*:/, "", v)
+      while (match(v, /[A-Za-z0-9_.\/-]+[.]md#/)) {
+        t = substr(v, RSTART, RLENGTH - 1); v = substr(v, RSTART + RLENGTH); sub(/.*\//, "", t); print t
+      }
+    }' "$@" | LC_ALL=C sort -u)"
+  while IFS= read -r b; do
+    [ -n "$b" ] && [ -f "$sd/$b" ] || continue
+    if seat_marked "$sd/$b"; then y="$y $b"; else n="$n $b"; fi
+  done <<SCEOF
+$cited
+SCEOF
+  [ -n "$y" ] && [ -n "$n" ] || return 0
+  for b in $n; do
+    refuse "seat file ${b} does not end in its 'seat-complete:' line while another cited seat file (${y# }) does; that seat had not finished, and a repair applying it applies unfinished findings"
+  done
+}
 # The self-probe, before any corpus is read: a resolving source passes, and an id that only ANOTHER
 # seat carries refuses. Both directions, or a resolver keyed on the id alone reads as working.
 src_probe() {
@@ -422,6 +457,7 @@ if [ "$SRCMODE" = 1 ]; then
   [ -d "$SEAT_DIR" ] || die "no seat files at ${SEAT_DIR}; a party repair's sources resolve there"
   src_probe
   src_refusals "$(src_check "$SEAT_DIR" "$SRC_REC")"
+  seat_complete_check "$SEAT_DIR" "$SRC_REC"
   [ "$SRC_E" -gt 0 ] || refuse "${SRC_REC} carries no entry with a 'disposition:' line; nothing is attributed"
   [ "$refuse_n" -eq 0 ] || exit 2
   echo "SOURCES: ${SRC_REC} -- ${SRC_E} entries, ${SRC_S} sources, every one resolved in ${SEAT_DIR}"
@@ -680,6 +716,7 @@ if [ "$PARTY" = 1 ]; then
 $PARTS
 SRCPEOF
     src_refusals "$(src_check "$SEAT_DIR" "$@")"
+    seat_complete_check "$SEAT_DIR" "$@"
   else
     refuse "no seat files at ${SEAT_DIR}; a party repair's sources resolve there"
   fi
