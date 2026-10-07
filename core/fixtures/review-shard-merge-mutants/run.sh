@@ -257,7 +257,9 @@ mutant "MX28 the manifest records the default's SOURCE, not its number" partitio
   '  MINF="$REVIEW_SHARD_DEFAULT_MIN_FILES"' '  MINF="$REVIEW_SHARD_DEFAULT_MIN_FILES"; MREC=default' \
   "printf 'min-files\\t%s\\n' \"\$MINF\"" "printf 'min-files\\t%s\\n' \"\${MREC:-\$MINF}\""
 # GATE 2 (--gate qa). Each is a wrong build the contract names.
-mutant "MQ1 the qa rank inverted (PASS worst)" merge-review-shards.sh "q_worst" \
+# H4 dies too, and both findings are true: the forced floor only RAISES a verdict ranked below
+# NEEDS_REWORK, and with the rank inverted every PASS shard already sits above it.
+mutant "MQ1 the qa rank inverted (PASS worst)" merge-review-shards.sh "q_worst q_ho_force" \
   '    qa:PASS) echo 1 ;;' '    qa:PASS) echo 2 ;;' \
   '    qa:NEEDS_REWORK) echo 2 ;;' '    qa:NEEDS_REWORK) echo 1 ;;'
 # x_actable dies too, and both findings are true: the per-AC refusal for a non-first cross shard
