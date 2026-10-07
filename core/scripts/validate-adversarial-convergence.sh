@@ -2256,7 +2256,7 @@ fi
 # series opened before the cross groups shipped reads PENDING rather than being convicted.
 K3_RELEASE="0.735.0"
 K3B_RELEASE="0.738.0"
-K3C_RELEASE="0.740.0"
+K3C_RELEASE="0.0.0-CUT"
 k3_keys() {  # $1 a shard_tool_use_ids value -> its key set, numeric keys de-padded, sorted, one per line
   printf '%s\n' $1 | awk -F= 'NF >= 2 && $2 ~ /^toolu_./ { k = $1; if (k ~ /^[0-9]+$/) k = k + 0; print k }' | LC_ALL=C sort -u
 }
