@@ -45,7 +45,7 @@
 #   directory's <idx>: a shard directory partitioned for one pass is never merged into
 #   another pass's review file. `-p1` is refused -- pass 1 has no marker.
 #
-# WHY IT EXISTS. A sharded review is N part reviewers plus one cross reviewer; Check 1 in
+# WHY IT EXISTS. A sharded review is N part reviewers plus one cross reviewer per cross group; Check 1 in
 #   gate-validation.md keeps reading exactly one review file. This is the deterministic JOIN
 #   that writes it. Shard verdicts are ADVISORY inputs; the merged verdict is RECOMPUTED as the
 #   worst of them in the gate's order above. Never a count, never the cross shard alone,

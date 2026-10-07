@@ -311,8 +311,8 @@ dispatch one reviewer with `shard: 1/1 <story-index>` and record the
 refusal line verbatim in the story's gate log. Otherwise dispatch one reviewer
 per line the map prints, briefed `shard: <i>/<N> <group>` with the map
 and its shard path `<ordinal>.md` in the shard directory, plus one cross
-reviewer per row `partition-document.sh --cross-groups <N>` prints, briefed
-`shard: cross/<N> g<g>/<G> <ordinals>` with the whole group table, the owner
+reviewer per row `partition-document.sh --cross-groups <K>` prints (K = N), briefed
+`shard: cross/<K> g<g>/<G> <ordinals>` with the whole group table, the owner
 rule (report only the findings `partition-document.sh --cross-owner` assigns
 to your group) and its shard path `cross-<g>.md`, or `cross.md` when the table
 has one row (Rule 28, "Split dispatch": files axis). Part reviewers EXECUTE
@@ -367,8 +367,8 @@ verbatim in the story's gate log. Otherwise dispatch one QA per line the map
 prints, briefed `shard: <i>/<N> <group>` with the map and the absolute path of
 its shard file `<ordinal>.md` in the shard directory, in Rule 28 waves
 ("Split dispatch": files axis). The part QAs are dispatched first; the cross
-QAs, one per row `partition-document.sh --cross-groups <N>` prints, briefed
-`shard: cross/<N> g<g>/<G> <ordinals>` with the whole group table and the owner
+QAs, one per row `partition-document.sh --cross-groups <K>` prints (K = N), briefed
+`shard: cross/<K> g<g>/<G> <ordinals>` with the whole group table and the owner
 rule, each writing `cross-<g>.md` there (`cross.md` when the table has one
 row), are dispatched only after every part shard file exists, and the first
 cross QA's brief names the absolute path of every part shard file. That

@@ -208,9 +208,10 @@ this clause and names its axis and its join; it does not restate them.
 The lead's written dispatch plan names, for every dispatch, its axis
 and part count or which of (1)-(4) keeps it whole. Every shard brief
 carries one line `shard: <i>/<N> <part-key>` (a cross-part agent:
-`shard: cross/<N> g<g>/<G> <ordinals>`, its group of G and that group's
-ordinals; the one cross agent of a code or QA review over
-`partition-review-diff.sh --map`: `shard: cross/<N> cross`)
+`shard: cross/<K> g<g>/<G> <ordinals>`, its group of G and that group's
+ordinals, K being the map's part count; no axis keeps a single cross
+agent, a code or QA review over `partition-review-diff.sh --map`
+included, except where `--cross-groups` prints one group, which is K=2)
 or `shard: none (<exception 1-4>)`. A
 sections-axis part key is the part's heading from the map, as in
 `shard: 2/5 ## Functional Requirements`; a document the map reports

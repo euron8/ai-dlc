@@ -314,9 +314,11 @@ For each completed task, verify:
   `SendMessage` your full validation verdict (per-AC PASS/FAIL with
   Expected/Got) to the lead. A part shard delivers its shard file's absolute
   path and its `shard-verdict:` value instead, never per-AC rows, which only
-  the cross shard writes. The cross shard delivers its shard file's absolute
-  path, its `shard-verdict:` value and the count of hand-overs it ran; its
-  per-AC rows stay in the file. A silent idle is NOT a delivery — the lead treats
+  the first cross shard writes. The first cross shard (`cross-1`, or `cross`
+  when there is one cross group) delivers its shard file's absolute path, its
+  `shard-verdict:` value and the count of hand-overs it ran; its per-AC rows
+  stay in the file. Every other cross shard delivers its shard file's absolute
+  path and its `shard-verdict:` value. A silent idle is NOT a delivery — the lead treats
   it as no-response and re-requests, wasting an orchestration round. Your final
   thinking is not your final message; the message MUST be sent.
 - Message **dev teammate** when rejecting a task (include specific failure
