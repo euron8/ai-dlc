@@ -61,6 +61,11 @@ POOL="$WORK/pool.sh"
 sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$HOOK" > "$POOL"
 [ -s "$POOL" ] || broken "extracted an empty FIXTURE_POOL block from $HOOK"
 grep -q 'apply_readset_skip' "$POOL" || broken "the extracted block carries no apply_readset_skip"
+# THE RESOLVED BLOCK'S FIXTURE ROOT -- `core/fixtures` in the distribution's hook, `tests/fixtures` in
+# the consumer's, which an installed tree resolves first. Read once here, so every world keyed on a
+# fixture's own run.sh keys it where this hook will look it up.
+FXROOT="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$POOL" | sort -u)"
+[ "$(printf '%s\n' "$FXROOT" | grep -c .)" -eq 1 ] || broken "read '$FXROOT' as the pool block's fixture root; need exactly one"
 
 # ---------------------------------------------------------------------------- seed ----
 # alpha reads a.sh and shared.sh; beta reads b.sh and shared.sh; gamma is DELIBERATELY absent
@@ -985,7 +990,12 @@ lt_case lrm lrm "$LM_C1" "(c) the unmapped line names gamma, says the next green
 lt_held() { # <label> <discards> <key: cur|old> <want trace> <want held>
   local t="$WORK/lh.$1" r k
   seed_lt "$t" || broken "the held-set seed failed"
-  k="$(sha_of "$t/core/fixtures/gamma/run.sh"):$(sha_of "$t/core/scripts/derive-fixture-readsets.sh")"
+  if [ "$FXROOT" != core/fixtures ]; then
+    mkdir -p "$t/$(dirname "$FXROOT")" && cp -R "$t/core/fixtures" "$t/$FXROOT" \
+      && ( cd "$t" && git add -A && git -c user.email=f@f -c user.name=f commit -qm fxroot ) >/dev/null 2>&1 \
+      || broken "could not seed the fixture root $FXROOT"
+  fi
+  k="$(sha_of "$t/$FXROOT/gamma/run.sh"):$(sha_of "$t/core/scripts/derive-fixture-readsets.sh")"
   [ "$3" = cur ] || k="0000:$(sha_of "$t/core/scripts/derive-fixture-readsets.sh")"
   printf 'gamma\t#discards\t%s\t%s\tLOSS CANARY\n' "$2" "$k" > "$t/.git/ai-dlc-fixture-readsets.local"
   r="$(lsel_in "$t" ':')"
@@ -1057,8 +1067,6 @@ else
   # `tests/fixtures/` in the consumer's, which is the one an installed tree resolves first. Read off
   # the resolved block's own glob, the way the deriver reads it, and the world is seeded under it;
   # seeded only under core/fixtures/ the consumer run found no fixtures and every arm here went red.
-  FXROOT="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$POOL" | sort -u)"
-  [ "$(printf '%s\n' "$FXROOT" | grep -c .)" -eq 1 ] || broken "read '$FXROOT' as the pool block's fixture root; need exactly one"
   rf_drive() { # <pool> <name> <setup>; prints "<rc>|<lock held at return>|<invoked>|<verified>|<stashed>|<row>|<args>"
     local p="$1" t o
     t="$(lt_fresh "rf.$2")"; o="$WORK/rfo.$2"; mkdir -p "$o"

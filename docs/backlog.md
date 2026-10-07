@@ -79,3 +79,13 @@ a small read-set, not like a fault", so the rows those runs write are untrustwor
 own tracer by pid, or refuse to start while another `fs_usage` is live.
 
 verify: sh ! grep -n 'pkill -x fs_usage' core/scripts/derive-fixture-readsets.sh
+
+## BL-467 — readset-skip's M5 arm keys gamma under `core/fixtures/` while a consumer hook looks under `tests/fixtures/`
+
+**BLOCKER.** Filed by the reference consumer as `PC-S317-READSET-SKIP-M5-SEEDS-CORE-FIXTURES-UNDER-A-TESTS-FIXTURES-HOOK`.
+`lt_held()` in `core/fixtures/readset-skip/run.sh` seeded gamma and built its recorded discard key from
+`$t/core/fixtures/gamma/run.sh`. The consumer's hook sets `FXROOT="tests/fixtures/"`, so the key never matched and M5
+failed on every consumer push, including the self-update push that installs 0.741.0. The fix reads the resolved pool
+block's `FXROOT` once and seeds and keys gamma under it.
+
+verify: sh ! grep -qF '"$t/core/fixtures/gamma/run.sh"):$(sha_of' core/fixtures/readset-skip/run.sh && grep -qF '"$t/$FXROOT/gamma/run.sh"' core/fixtures/readset-skip/run.sh
