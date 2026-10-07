@@ -577,6 +577,34 @@ printf '# Probe backlog\n\nEntries were renamed to a shape the predicate does no
 kill_check "m8 a ledger that parses to ZERO receipts is a finding" "$TMP/m8" "" 1 \
   "produced ZERO scored receipts"
 
+# ===== M8b. EVERY LIVE RECEIPT ALREADY PASSING IS AN OBSERVATION, NOT A ZERO. ===============
+# A release that fixes the last live receipt leaves a ledger whose only `sh` receipt exits 0 at
+# HEAD: scored is 0 because nothing is open, and every receipt WAS run and read. It must pass and
+# say so; m8 above is the near-miss, where nothing was run at all.
+seed "$TMP/m8b"
+printf '# Probe backlog\n\n## BL-805\n\nBody.\n\nverify: sh ! grep -q %s probe/passing.txt\n\n' "'MARK805'" > "$TMP/m8b/docs/backlog.md"
+( cd "$TMP/m8b" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m allpass >/dev/null 2>&1 )
+M8B_ARGS="--max-prose-closable 0 --max-unscorable 0 --max-out-of-population 0 --max-unstable 0 --min-sh-receipts 1 --min-entries 1"
+# shellcheck disable=SC2086
+m8b_out="$(run_v "" "$TMP/m8b" $M8B_ARGS)"; m8b_rc=$?
+if [ "$m8b_rc" -eq 0 ] && grep -q '^OK: validate-backlog-receipts.* R2 all-already-passing$' <<<"$m8b_out" \
+   && [ "$(cls "$m8b_out" BL-805)" = ALREADY-PASSING ]; then
+  note "ok    m8b -- a ledger whose only receipt already passes is OK and says R2 all-already-passing"
+else
+  note "FAIL  m8b -- a ledger whose only receipt already passes must pass and say so (rc=$m8b_rc)"
+  printf '%s\n' "$m8b_out" | grep -E '^(FAIL|OK):' | sed 's/^/      /' | head -3; rc=1
+fi
+# ...and its mutant: the old condition restored, the same ledger must refuse as a zero.
+if mut "$TMP/m8b" 's|^if \[ "$SCORED" -eq 0 \] \&\& \[ "$N_PASS" -eq 0 \]; then|if [ "$SCORED" -eq 0 ]; then|'; then
+  # shellcheck disable=SC2086
+  m8bm_out="$(run_v "" "$TMP/m8b" $M8B_ARGS)"; m8bm_rc=$?
+  if [ "$m8bm_rc" -eq 1 ] && grep -qF "produced ZERO scored receipts" <<<"$m8bm_out"; then
+    note "ok    m8b-mut -- KILLED: the old R2 condition refuses an all-already-passing ledger as a zero"
+  else
+    note "FAIL  m8b-mut SURVIVED: the old condition exited $m8bm_rc on the all-already-passing ledger"; rc=1
+  fi
+fi
+
 # ===== THE RATCHETS THAT EXIST BECAUSE THE FIRST ONE IS ESCAPABLE. =========================
 # Each of these is an edit that LOWERS the prose-closable count and fixes nothing. Without
 # their own ceilings the headline number falls and the gate reports an improvement.

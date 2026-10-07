@@ -997,7 +997,11 @@ fi
 
 # THE ZERO IS A FINDING. An empty parse, a ledger whose every receipt this grammar cannot
 # spell, and a corpus of perfectly bound receipts all print the same 0 prose-closable.
-if [ "$SCORED" -eq 0 ]; then
+# EXCEPT WHEN EVERY LIVE RECEIPT ALREADY PASSES: each one was run and read 0 at HEAD, which is an
+# observation, not an absence -- it is the state a release fixing the last live receipt leaves.
+R2_ALLPASS=""
+[ "$SCORED" -eq 0 ] && [ "$N_PASS" -gt 0 ] && R2_ALLPASS=" R2 all-already-passing"
+if [ "$SCORED" -eq 0 ] && [ "$N_PASS" -eq 0 ]; then
   echo "FAIL: R2: $LEDGER produced ZERO scored receipts (entries $ENTRIES, sh receipts ${SH_RECEIPTS:-0}, unscorable $N_UNSC, unseeded $N_UNSEED, out of population $N_OOP, already passing $N_PASS). Nothing was observed, and an arm that observed nothing is not a clean corpus." >&2
   exit 1
 fi
@@ -1061,7 +1065,7 @@ fi
 _where="$LEDGER"
 [ "$DEFAULTED" = "1" ] && _where="docs/backlog.md"
 if [ "$QUIET" != "1" ]; then
-  echo "OK: validate-backlog-receipts -- R2 ${N_PC}/${MAX_PC} prose-closable, R3 ${UNSCORED}/${MAX_UNSC} unscored, R4 ${N_OOP}/${MAX_OOP} out of population, R6 ${N_UNSTABLE}/${MAX_UNSTABLE} unstable, R5 ${SH_RECEIPTS} sh receipts over ${ENTRIES} live entries in ${_where} (${N_BOUND} bound, ${N_FS} format-sensitive, ${N_PASS} already passing; R0 bound the path-split class to ${CLASS_SOURCE}; R1 fired both directions over 10 seeded receipts; every receipt ran in its own ${PROVENANCE}, ${WT_OWN_AFTER} of this run's own checkouts still registered, caller porcelain ${PORC_BEFORE} unchanged)."
+  echo "OK: validate-backlog-receipts -- R2 ${N_PC}/${MAX_PC} prose-closable, R3 ${UNSCORED}/${MAX_UNSC} unscored, R4 ${N_OOP}/${MAX_OOP} out of population, R6 ${N_UNSTABLE}/${MAX_UNSTABLE} unstable, R5 ${SH_RECEIPTS} sh receipts over ${ENTRIES} live entries in ${_where} (${N_BOUND} bound, ${N_FS} format-sensitive, ${N_PASS} already passing; R0 bound the path-split class to ${CLASS_SOURCE}; R1 fired both directions over 10 seeded receipts; every receipt ran in its own ${PROVENANCE}, ${WT_OWN_AFTER} of this run's own checkouts still registered, caller porcelain ${PORC_BEFORE} unchanged).${R2_ALLPASS}"
 else
   # `--quiet` SUPPRESSES THE FINDING ROWS, NEVER THE PROVENANCE. A caller that asks for quiet
   # still has to be able to tell this arm's silence from a stub's: a fifteen-line heuristic
@@ -1069,6 +1073,6 @@ else
   # output, and there would be nothing to distinguish them. This line reports what the run
   # actually DID -- how many receipts were checked out and scored -- which no implementation
   # that seeds nothing can emit truthfully.
-  echo "OK: validate-backlog-receipts -- ${SCORED} receipt(s) scored in ${_where}, each in its own ${PROVENANCE}; ${N_PC}/${MAX_PC} prose-closable."
+  echo "OK: validate-backlog-receipts -- ${SCORED} receipt(s) scored in ${_where}, each in its own ${PROVENANCE}; ${N_PC}/${MAX_PC} prose-closable.${R2_ALLPASS}"
 fi
 exit 0

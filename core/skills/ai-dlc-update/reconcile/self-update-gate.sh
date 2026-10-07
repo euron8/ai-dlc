@@ -1484,8 +1484,6 @@ fi
 # match (a real empty set); anything else is UNDECIDED. Both inputs are staged FILES: not a pipe,
 # so no writer can take an EPIPE if grep stops reading early, and not a here-string, which bash
 # 3.2 writes to a temp file of its own whose failed write is silent.
-gating_why=""
-GATING=""
 # A SCRIPT THE PULL DOES NOT CHANGE IS STILL GATING WHEN THE NEW HOOK ASKS IT A NEW QUESTION.
 # Where theirs' hook replaces the current one, every name it invokes whose run shape (kind and
 # argv, line numbers aside) differs between the two hooks joins the changed set: the push asks it
@@ -1504,6 +1502,10 @@ if [ "$HOOK" != "$HOOK_CUR" ]; then
 "
   done < "$TMP/hook-names"
 fi
+# SITED ABOVE `gating_why=""` ON PURPOSE: procsub-staged-refusal-boot's M-S2 cuts the span from
+# that line through the second column-0 `fi`, and a block between them would shift its cut.
+gating_why=""
+GATING=""
 if [ -z "${TMP:-}" ] || [ ! -d "$TMP" ]; then
   gating_why="no staging directory exists for this run"
 elif ! printf '%s\n%s' "$CHANGED" "$HOOK_ASKS_NEW" > "$TMP/gating-changed" || ! printf '%s\n' "$INVOKED" > "$TMP/gating-invoked"; then
