@@ -128,8 +128,11 @@ that window's raw capture, **4155 name the trace tree's root directory and nothi
 root costs a report line and carries no read-set information. The operator's own trace of the same fixture showed about
 500 drop notices before it aborted. **It is not one fixture.** `self-update-fixture-log-mutants`, traced alone in a clean
 clone of `6f73066d`, was OMITTED on 115 drops; 34685 of its 58568 report lines name the tree root alone, against 2600 for
-the next path (`.git`). Both fixtures stay unmapped, so both run on every push, until this lands. Remedy: stop reporting operations whose path is the tree root alone (exclude
+the next path (`.git`). The 0.742.0 re-trace on the release tree added two more, OMITTED on drops: `self-update-gate`
+(1007) and `procsub-staged-refusal-boot` (1657). All four stay unmapped, so all four run on every push, until this
+lands. Remedy: stop reporting operations whose path is the tree root alone (exclude
 `(literal TREE)` from the reporting clause, or drop those lines before the drop count is judged), keeping any
-`file-read-data` on the root, which is a directory listing and IS a read. Re-trace both fixtures after; both must read MAPPED.
+`file-read-data` on the root, which is a directory listing and IS a read. Re-trace all four after; all four must read
+MAPPED.
 
-verify: manual -- close when `bash core/scripts/derive-fixture-readsets.sh --list "readset-skip self-update-fixture-log-mutants" --tracer sandbox` in a scratch clone reports both MAPPED with zero drop notices.
+verify: manual -- close when `bash core/scripts/derive-fixture-readsets.sh --list "readset-skip self-update-fixture-log-mutants self-update-gate procsub-staged-refusal-boot" --tracer sandbox` in a scratch clone reports all four MAPPED with zero drop notices.

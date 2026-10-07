@@ -22,7 +22,8 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 ## [0.742.0] - 2026-10-07
 
 Batch 203's second release, shipped alone because it changes the update skill. It discharges one consumer candidate,
-closes `BL-468` and `BL-469`, and files `BL-470`. It also carries the operator's completed sandbox read-set trace.
+closes `BL-468` and `BL-469`, and files `BL-470`. It also carries the operator's completed sandbox read-set trace, with
+the fixtures this release changes re-traced on top.
 
 ### One pre-push run per self-update, on the hook and tree actually pushed (PC-S317-SELF-UPDATE-GATE-PUSH-PROBE-DUPLICATES-THE-PUSH-HOOK)
 
@@ -52,8 +53,13 @@ closes `BL-468` and `BL-469`, and files `BL-470`. It also carries the operator's
 
 ### Read-set map
 
-- The operator's sandbox trace, at `9d7dee9b`: 245 fixtures mapped. `readset-skip` and `self-update-fixture-log-mutants`
-  stay unmapped (`BL-470`).
+- The operator's sandbox trace, at `9d7dee9b`, then the four fixtures this release changes re-traced on the release tree:
+  243 fixtures mapped. `update-preflight-push` re-traced clean and reads `SKILL.md`. `self-update-gate` and
+  `procsub-staged-refusal-boot` traced OMITTED on dropped reports, so their old rows, which predate
+  `self-update-push.sh`, are removed and both run on every push. With `readset-skip` and
+  `self-update-fixture-log-mutants` they wait on `BL-470`.
+- `update-preflight-push` re-anchors its `wX` mutant on the rewritten push-failure line, and its discard arm requires an
+  UN-SYNCED that is not negated, since the paragraph now also says a hook refusal is "not UN-SYNCED".
 
 ## [0.741.1] - 2026-10-07
 
