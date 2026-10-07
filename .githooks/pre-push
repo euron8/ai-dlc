@@ -1074,7 +1074,10 @@ apply_readset_skip() {
   # THE ONLY RUN-ALL: the hashing instrument is broken, so no key can be read.
   [ -s "$out/.now" ] || { printf '   ..    could not hash the working tree -- running all %s\n' "$n_all"; return 0; }
 
-  readset_keys "$list" "$out" || { printf '   ..    could not build the fixture keys -- running all %s\n' "$n_all"; return 0; }
+  # A DECISION FILE SHORT OF THE LIST IS A BROKEN INSTRUMENT: an undecided fixture would read as skipped.
+  if ! readset_keys "$list" "$out" || [ "$(grep -c . "$out/.kdec" 2>/dev/null)" != "$n_all" ]; then
+    printf '   ..    could not build the fixture keys -- running all %s\n' "$n_all"; return 0
+  fi
   awk -F'\t' '$2 == "skip" && $5 == "seeded" { print $1 }' "$out/.kdec" > "$out/.k.always"
 
   if [ "${AI_DLC_FIXTURE_NO_SKIP:-}" = "1" ]; then
