@@ -728,7 +728,24 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   read 3239 twice), so +13. Every arm that moved is a per-file walk counting
 #   `partition-subject.sh`: I75 351 -> 361, I84 295 -> 297, I83 146 -> 147. HIGH reading 3239 plus
 #   the usual 6.
-FORK_BUDGET=3245
+#
+#   RAISED TO 3254 FOR ONE NEW SHIPPED HOOK, NOT FOR A NEW ARM. `fork-profile.sh --section by-arm
+#   --stable`, base `origin/main` 1794fa83 in a clean detached worktree, then the BL-459 tip with the
+#   hook COMMITTED (I14 skips an untracked hook, so an uncommitted reading is 1 low): base 3239
+#   (STABLE 2), tip 3248 (STABLE 3), so +9. Every arm that moved is a per-hook or per-file walk
+#   counting `ai-dlc-advisor-gate.sh`: I14 94 -> 98, I13 51 -> 53, I84 297 -> 299, I83 147 -> 148.
+#   HIGH reading 3248 plus the usual 6.
+#
+#   RAISED TO 3263 FOR SEVEN NEW FIXTURE DIRECTORIES, NOT FOR A NEW ARM. `fork-profile.sh --section
+#   by-arm --stable`, base `origin/main` 65e4d8fe in a clean detached worktree, then the 0.738.0
+#   release tree with every file committed: base 3242 (STABLE 2), tip 3257 (STABLE 2; the gate's own
+#   validator-fork-budget run read 3257), so +15. I8 73 -> 80 is the per-directory fixture-packaging
+#   walk over seven new `.dist-only` directories (59 -> 66: the five advisor-gate-deny shards and the
+#   remediator-shard-join and adversarial-shard-merge batteries); I14 94 -> 98, I13 51 -> 53,
+#   I84 297 -> 299, I83 147 -> 148 count the new hook and scripts; I93 32 -> 31. The 3254 above was
+#   measured on the BL-459 branch alone, before the other branches' directories were merged in.
+#   HIGH reading 3257 plus the usual 6.
+FORK_BUDGET=3263
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

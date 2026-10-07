@@ -135,6 +135,15 @@
         ]
       },
       {
+        "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit|mcp__.*__merge_pull_request",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ai-dlc-advisor-gate.sh"
+          }
+        ]
+      },
+      {
         "matcher": "Agent|Task|Skill|TaskCreate|Write|Edit|MultiEdit|NotebookEdit",
         "hooks": [
           {

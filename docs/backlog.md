@@ -101,6 +101,13 @@ Three split, each into a shipped fixture plus a `.dist-only` `<name>-mutants` ba
 The three batteries and three `lib.sh` files have no read-set rows yet and run on every push until traced.
 `remediator-shard-join` (battery 247-255s of 278s, the same serial `score()` shape) is split in a later release of batch 201.
 
+**Progress — `adversarial-shard-merge` (batch 201; not one of the six above, split because the BL-460/461 arms took it
+from 317 to 354 CPU-s solo and projected it past the suite pole).** Its 34 arms stay in the shipped fixture; the
+predicates and worlds moved to `core/fixtures/adversarial-shard-merge/lib.sh`; MX0, the 15 mutants and MX6b moved to
+the new `.dist-only` `adversarial-shard-merge-mutants`, the `review-shard-merge-mutants` shape, whose reap counts
+DECLARED scorings off its own `mutant "` lines so an emptied battery fails. The 16 killed-set rows are byte-identical
+to the unsplit serial battery's. The new directory is unmapped in `.ai-dlc-fixture-readsets.tsv` until traced.
+
 **Remedy.** Per fixture: measure solo, attribute the time, then cut it — move a mutation battery behind a shipped
 fixture into its own `.dist-only` fixture (`fixture-ship-decl.md`), score mutants in parallel within the fixture, and
 remove repeated setup. `review-shard-merge` is being split in batch 199 as the first instance.
@@ -218,12 +225,15 @@ redesigned the same batch into the conditional deny this entry ships.
 **Done when, consumer side, owed as residue.** `BL-454`'s first-sprint census of advisor calls is the before-figure;
 the first sprint after this ships is the after-figure.
 
-**Receipt.** It drives the shipped hook on seeded transcripts. A transcript carrying a grant attachment and a release
-push with no advisor attempt must be denied, and the same transcript with the grant line removed must be left silent.
-The build adds the remaining cases to its fixture: an errored attempt clears, `unavailable` warns, a later success
-re-arms, a withdrawn grant is silent, a delete is not gated, and a transcript write is denied.
+**Receipt.** It drives the shipped hook on seeded transcripts, reseeded on the consumer's real push and merge forms. A
+lead transcript carrying a grant attachment and no advisor attempt must be denied `git push -u origin HEAD` and
+`gh pr merge 7 --squash --delete-branch`, and the same calls with the grant line absent must be left silent. A teammate,
+named by `agent_id`, is judged on its own `<session>/subagents/agent-<id>.jsonl`: granted with no advisor call, it is
+denied a verdict write even though its parent's transcript holds an advisor call, and its `git push` is left silent.
+The remaining cases are arms of `core/fixtures/advisor-gate-deny`: an errored attempt clears, `unavailable` warns, a later
+success re-arms, a withdrawn grant is silent, a delete is not gated, and a transcript write is denied.
 
-verify: sh H=core/hooks/ai-dlc-advisor-gate.sh; [ -f "$H" ] || exit 1; command -v jq >/dev/null 2>&1 || exit 9; W="$(mktemp -d)" || exit 9; g='{"type":"attachment","attachment":{"type":"advisor_tool","available":true,"toolChange":"add","model":"m"}}'; u='{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"git push origin release/9.9.9"}}]}}'; printf '%s\n%s\n' "$g" "$u" > "$W/on.jsonl"; printf '%s\n' "$u" > "$W/off.jsonl"; run() { jq -cn --arg t "$W/$1.jsonl" '{hook_event_name:"PreToolUse",tool_name:"Bash",tool_input:{command:"git push origin release/9.9.9"},transcript_path:$t}' | bash "$H" 2>/dev/null | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null; }; [ "$(run on)" = deny ] && [ -z "$(run off)" ]
+verify: sh H=core/hooks/ai-dlc-advisor-gate.sh; [ -f "$H" ] || exit 1; command -v jq >/dev/null 2>&1 || exit 9; W="$(mktemp -d)" || exit 9; mkdir -p "$W/p/s/subagents" || exit 9; g='{"type":"attachment","attachment":{"type":"advisor_tool","available":true,"toolChange":"add","model":"m"}}'; a='{"type":"assistant","message":{"content":[{"type":"server_tool_use","id":"s1","name":"advisor","input":{}}]}}'; printf '%s\n%s\n' "$g" "$a" > "$W/p/s.jsonl"; printf '%s\n' "$g" > "$W/p/s/subagents/agent-a1.jsonl"; printf '%s\n' "$g" > "$W/p/on.jsonl"; printf '{"type":"user"}\n' > "$W/p/off.jsonl"; run() { jq -cn --arg t "$W/p/$1.jsonl" --arg c "$2" --arg a "${3:-}" --arg n "${4:-Bash}" '{hook_event_name:"PreToolUse",tool_name:$n,tool_input:{command:$c,file_path:"/r/_bmad-output/gate-adjudication/implementation-20261006T120000Z.verdict.json",content:"{}"},transcript_path:$t,cwd:"/"} + (if $a == "" then {} else {agent_id:$a} end)' | bash "$H" 2>/dev/null | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null; }; [ "$(run on 'git push -u origin HEAD')" = deny ] && [ "$(run on 'gh pr merge 7 --squash --delete-branch')" = deny ] && [ -z "$(run off 'git push -u origin HEAD')" ] && [ -z "$(run off 'gh pr merge 7 --squash --delete-branch')" ] && [ "$(run s x a1 Write)" = deny ] && [ -z "$(run s 'git push -u origin HEAD' a1)" ]
 
 ## BL-460 — the requirements subject drifts after a terminal MET pass with nothing to see it
 
@@ -238,8 +248,13 @@ documents (`prd.md`, the product brief) as outside its subject, so this gap pred
 **Remedy.** Teach J2 the per-stem list: every stem whose disk sha differs from its notarized sha after a MET pass needs
 the same repair chain or re-open a single-file series needs, stamp-gated like K3.
 
-verify: manual -- the subject is a judgement over a constructed requirements series; close on a check-24 cell where a
-stem edited after the terminal MET pass reads FAIL (J2), with a second stem left unchanged as the control.
+**Narrowing (contract M3d).** `prd.md` and the product brief stay unjudged, as J2 already excludes cumulative
+documents: the architecture step's Rule 25(a) consolidation rewrites `prd.md` mid-sprint with no repair record
+(measured on the reference consumer: sprint 317's prd moved after its requirements series met, `bdbfd63e`). The
+later-sprint bound was dropped because Check 24 sweeps only the current sprint, so it could never decide anything.
+Judged stems: the SPEC and `s<N>/architecture-impact.md`.
+
+verify: sh V=core/scripts/validate-adversarial-convergence.sh; [ -f "$V" ] || exit 9; W="$(mktemp -d)" || exit 9; h() { shasum -a 256 "$1" | cut -d' ' -f1; }; mk() { w="$W/$1"; p="$w/_bmad-output/planning-artifacts"; mkdir -p "$p/s9" "$w/_bmad-output/specs/s9/k" "$w/.claude" || exit 9; printf 'b\n' > "$p/product-brief.md"; printf 'p\n' > "$p/prd.md"; printf 'a\n' > "$p/s9/architecture-impact.md"; printf 's\n' > "$w/_bmad-output/specs/s9/k/SPEC.md"; printf 'version: 0.736.0\n' > "$w/.claude/.ai-dlc-version"; ( cd "$w" && git init -q . && git add -A && GIT_COMMITTER_DATE=2026-01-01T00:00:00Z git -c user.name=r -c user.email=r@x.invalid -c commit.gpgsign=false commit -q -m s ) || exit 9; printf 'file: product-brief _bmad-output/planning-artifacts/product-brief.md\nfile: SPEC _bmad-output/specs/s9/k/SPEC.md\nfile: prd _bmad-output/planning-artifacts/prd.md\nfile: architecture-impact _bmad-output/planning-artifacts/s9/architecture-impact.md\n' > "$p/s9/requirements-subject.md"; L0="product-brief=$(h "$p/product-brief.md") SPEC=$(h "$w/_bmad-output/specs/s9/k/SPEC.md") prd=$(h "$p/prd.md") architecture-impact=$(h "$p/s9/architecture-impact.md")"; S0="$(h "$w/_bmad-output/specs/s9/k/SPEC.md")"; A0="$(h "$p/s9/architecture-impact.md")"; printf '<!-- SKILL_INVOCATION_PROVENANCE v1\ninvoked_at: 2026-02-01T00:00:00Z\nartifact: _bmad-output/planning-artifacts/s9/requirements-subject.md\nartifact_sha: %s\nfindings_critical: 0\nfindings_major: 0\nverdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$L0" > "$p/s9/requirements-adversarial-p1.md"; printf 's2\n' >> "$w/_bmad-output/specs/s9/k/SPEC.md"; S1="$(h "$w/_bmad-output/specs/s9/k/SPEC.md")"; L1="product-brief=$(h "$p/product-brief.md") SPEC=$S1 prd=$(h "$p/prd.md") architecture-impact=$A0"; }; j() { bash "$V" --series "$w/_bmad-output/planning-artifacts/s9/requirements-adversarial-p" --transcript-dir "$W" 2>&1; }; f='### M1\n- disposition: repaired\n- edit: x:1\n- derivation: y\n'; mk bare; o1="$(j)"; mk chained; printf 'a2\n' >> "$p/s9/architecture-impact.md"; A1="$(h "$p/s9/architecture-impact.md")"; printf -- "- artifact: _bmad-output/planning-artifacts/prd.md\n- artifact_sha_before: $(h "$p/prd.md")\n- artifact_sha_after: $(h "$p/prd.md")\n\n- artifact: _bmad-output/planning-artifacts/s9/requirements-subject.md\n- artifact_sha_before: $L0\n- artifact_sha_after: $L1\n\n- artifact: _bmad-output/planning-artifacts/s9/architecture-impact.md\n- artifact_sha_before: $A0\n- artifact_sha_after: $A1\n$f" > "$p/s9/requirements-repair-adv-p1.md"; o2="$(j)"; case "$o1" in *"FAIL (J2 -- DRIFT)"*"SPEC (_bmad-output/specs/s9/k/SPEC.md)"*) ;; *) exit 1 ;; esac; case "$o1" in *"architecture-impact (_bmad"*) exit 1 ;; esac; case "$o2" in *"J2 -- DRIFT"*) exit 1 ;; esac
 
 ## BL-461 — the requirements series is named at no Check 24 call site, and a `prd-*` series escapes the subject axis
 
@@ -255,8 +270,7 @@ text must own the requirements series' NAME.
 **Remedy.** Name `<planning>/s<N>/requirements-adversarial-p` explicitly at the requirements gate's Check 24 call, and
 have the requirements step refuse a `prd-adversarial-p*` series in a sprint that has a subject manifest.
 
-verify: manual -- two subjects, and a text receipt could close on the first alone; close when the requirements gate's
-Check 24 call names the requirements series AND a `prd-adversarial-p*` series in a sprint with a subject manifest is refused.
+verify: sh G=core/skills/ai-dlc/steps/gate-validation.md; M=core/scripts/merge-adversarial-shards.sh; [ -f "$G" ] && [ -f "$M" ] || exit 9; n="$(grep -c 'planning-artifacts/s<N>/requirements-adversarial-p`' "$G")" || n=0; [ "$n" -ge 2 ] || exit 1; W="$(mktemp -d)" || exit 9; p="$W/_bmad-output/planning-artifacts"; mkdir -p "$p/s9/shards/product-brief-p1" "$W/.git" || exit 9; printf '# B\n\n## One\n\nx\n\n## Two\n\ny\n' > "$p/product-brief.md"; printf 'p\n' > "$p/prd.md"; c="$(bash "$M" --document "$p/product-brief.md" "$p/s9/shards/product-brief-p1" 2>&1)"; printf 'file: product-brief _bmad-output/planning-artifacts/product-brief.md\nfile: prd _bmad-output/planning-artifacts/prd.md\n' > "$p/s9/requirements-subject.md"; r="$(bash "$M" --document "$p/product-brief.md" "$p/s9/shards/product-brief-p1" 2>&1)"; case "$r" in "REFUSED: --document "*"requirements subject"*) ;; *) exit 1 ;; esac; case "$c" in *"requirements subject"*) exit 1 ;; esac
 
 ## BL-462 — a party round edits one document in place from several seats and nothing attributes the writes
 
@@ -267,8 +281,11 @@ A lost update between two seats is invisible, and a review of the round cannot a
 requirements subject case already avoids this (its seats edit nothing, and repairs join by part), which is the shape to
 generalise.
 
-verify: manual -- the subject is the party-round procedure's write model across the step files; close when every
-sharded party round writes per-seat records joined by a merge, as the requirements subject case does.
+Receipt scored under `bash -c 'set -uo pipefail; ...'` against five trees holding the two files it reads: the fix 0;
+today's tree (422552d2) 1; an id-only source key with its self-probe gone 1; the prose rewritten with the join untouched
+1; the join built with "apply every improvement" left in the procedure 1; neither file present 9.
+
+verify: sh J=core/scripts/join-remediator-shards.sh; G=core/skills/ai-dlc/steps/_gate-procedures.md; [ -f "$J" ] && [ -f "$G" ] || exit 9; command -v awk >/dev/null 2>&1 || exit 9; n="$(grep -c 'apply every improvement' "$G")" || n=0; [ "$n" -eq 0 ] || exit 1; grep -qF '**The seats edit nothing, in every case below.**' "$G" || exit 1; W="$(mktemp -d)" || exit 9; S="$W/_bmad-output/party-mode/s9"; mkdir -p "$S" "$W/.claude" || exit 9; printf '## F-1 (major) sections: 1\n' > "$S/a-dev-1.md" && printf '## F-1 MAJOR sections: 1\n## F-4 MINOR sections: 1\n' > "$S/a-tea-1.md" && printf '### x\n- disposition: repaired\n- source: a-dev-1.md#F-1 a-tea-1.md#F-1\n' > "$W/ok.md" && printf '### y\n- disposition: repaired\n- source: a-dev-1.md#F-4\n' > "$W/bad.md" || exit 9; o="$(AI_DLC_PROJECT_ROOT="$W" bash "$J" --sources "$W/ok.md" --sprint 9 2>&1)" || exit 1; case "$o" in *"2 sources, every one resolved"*) ;; *) exit 1 ;; esac; o="$(AI_DLC_PROJECT_ROOT="$W" bash "$J" --sources "$W/bad.md" --sprint 9 2>&1)"; rc=$?; [ "$rc" -eq 2 ] || exit 1; case "$o" in *"a-dev-1.md#F-4 is UNRESOLVED"*) exit 0 ;; *) exit 1 ;; esac
 
 ## BL-463 — a reused pid holds the live-trace lock for up to six hours
 

@@ -1,0 +1,494 @@
+#!/usr/bin/env bash
+# advisor-gate-deny/lib.sh — the worlds, the cells and the scorer, sourced by the shipped
+# fixture beside it and by its distribution-only mutation battery (advisor-gate-deny-mutants*).
+# One copy, so a mutant is scored over the very cells the shipped arms run.
+#
+# THE DEFECT (BL-459). SKILL.md Rule 32 and every role file name advisor touchpoints, and nothing
+# enforced one. The hook denies a gated action while the acting agent holds the advisor tool and
+# its own transcript records no advisor attempt since its last gated action.
+#
+# A wrong deny costs a consumer's push, merge or gate close, so the allow side is pinned as hard
+# as the deny side: every deny cell has an allow twin one property apart, named beside it.
+#
+# ARMS. Each verdict is read from the hook's stdout: DENY (permissionDecision deny), WARN
+# (additionalContext saying NOT blocked, no decision) or SILENT (no stdout at all).
+#   PUSH         grant, no advisor: `git push -u origin HEAD`, `git -C <d> push ...`,
+#                `cd <d> && git push`, `timeout 600 git push` -> DENY
+#   REASON       that deny names its remedy: "call the advisor tool, then retry the same command"
+#   NOGRANT      the same push with the grant line absent -> SILENT; a teammate whose own file has
+#                no grant while its parent's does -> SILENT
+#   WITHDRAWN    grant then `available:false` -> SILENT; twin: withdrawn then re-granted -> DENY
+#   ORDER        push then advisor -> SILENT; twin: advisor then push -> DENY
+#   ERRCLEAR     push, advisor, an errored (non-unavailable) result -> SILENT
+#   UNAV         advisor, `unavailable`, push -> WARN; twin REARM: then advisor + success -> DENY
+#   MERGE        `gh pr merge 7 --squash --delete-branch` and mcp__github__merge_pull_request -> DENY;
+#                twin `gh pr list` -> SILENT
+#   CLOSE        `gate-checkpoint.sh ... close` -> DENY; twin `... record 12 PASS` -> SILENT
+#   DELETE       `git push origin --delete x`, `-d`, `:x` -> SILENT (twin: PUSH)
+#   MENTION      `echo git push origin x`, `grep -c "gh pr merge" log` -> SILENT
+#   UPDATE       cwd on `ai-dlc-update/x`: push and merge -> SILENT; twin: same on `sprint/3` -> DENY
+#   UPDATEREF    from `sprint/3`, every refspec destination `ai-dlc-update/*` (bare, `HEAD:refs/heads/`,
+#                redirected, inside `nohup bash -c 'exec setsid ...'`) -> SILENT; twins `ai-dlc-updated/x`,
+#                `HEAD:ai-dlc-update-x`, `sprint/3 ai-dlc-update/x` -> DENY
+#   UPDATECUT    `checkout -b`/`switch -c ai-dlc-update/x` then push HEAD, and `B=ai-dlc-update/..;
+#                checkout -q -b $B ... push $B` -> SILENT; twins: cut `feature/x`, cut the update
+#                branch but push `sprint/3`, `B=sprint/9` -> DENY
+#   WRAP STACK BASHC PATHGIT BODY QUOTEDC QUOTEDENV GHREPO MCPNAME
+#                the D5 spellings measured in the consumer's commands -> DENY, each with an allow
+#                twin carrying the same wrapper around a non-push (`time ls`, `bash -c "echo git
+#                push"`, `/usr/bin/git push-status`, `gh -R r pr list`, `mcp__..__merge_pull_request_status`).
+#                STACK holds a stack FIVE wrappers deep, so a strip loop bounded at four dies.
+#   QUOTEDPAT    `pgrep -fl 'x|git push'` -> SILENT (the bash -c quote shedding must not reach it)
+#   PERKIND      advisor, push, then merge -> SILENT; advisor, merge, then push -> SILENT; advisor,
+#                push, merge, then the next push -> DENY and the next merge -> DENY; advisor, close,
+#                then a Check 12 append -> SILENT; twin: the next close -> DENY. Every lead-kind pair
+#                has a SILENT cell: after a push, a close and a Check 12 append; after a merge, the
+#                same two. A build that collapses any one pair dies on that pair's cell alone.
+#   REDISPATCH   a teammate's verdict re-write after a user TEXT line (string, text block, an
+#                `isMeta` coordinator message, a string that merely MENTIONS a notification, a
+#                human turn and a peer session's message -- both carrying an `origin` of their own
+#                kind) -> DENY, also when an advisor call preceded the FIRST write; twins: after
+#                only a background-task line (`origin.kind` "task-notification", both measured text
+#                forms) -> SILENT, and MATEREWRITE -> SILENT
+#   ENVELOPE     a push that ran and printed this hook's token in failing output -> still DENY,
+#                including the FULL `PreToolUse:... hook error:` envelope on an output's second line
+#   SELFLAST     no tool_use_id, the incoming push is the last line after an advisor -> SILENT;
+#                twin: the same push already answered by a tool_result -> DENY
+#   DETACHED     cwd detached HEAD, cwd not a repository: push -> DENY
+#   MATE         teammate, own file grant only, parent HAS an advisor call: verdict write -> DENY;
+#                twin: own file with its own advisor call -> SILENT
+#   MATEABSENT   teammate whose own file is absent, parent granted, no advisor -> SILENT
+#   MATEPUSH     teammate push, own file granted, no advisor -> SILENT (option A)
+#   MATEPATH     teammate adversarial pass, repair record, `.part-<i>of<N>.jsonl`, `SR1-code-review.md`,
+#                `SR2-qa-validation.md` and a file in each review's shard directory -> DENY; twins:
+#                the artifact, `SR1-summary.md`, a non-review shard directory, `.part-1of3.json` -> SILENT
+#   MATEREWRITE  teammate Edit of a verdict it already wrote un-denied -> SILENT; twin: it wrote a
+#                DIFFERENT verdict -> DENY
+#   DENIED       advisor, push, that push DENIED by this hook -> the retry is SILENT;
+#                twins: the same push succeeded -> DENY; a NON-error result carrying the envelope -> DENY
+#   SELF         advisor, push id tX on disk, incoming tool_use_id tX -> SILENT; twin tY -> DENY
+#   TWRITE       NO grant anywhere: Write onto a transcript, `>>`, `tee -a`, `sed -i`, `mv` onto one,
+#                via `~` too -> DENY
+#   TWRITEREAD   `cat <t> > out`, `cp <t> out`, a Write of a memory `.md` beside it -> SILENT
+#   GATELOG      Edit adding a `## Gate Log:` heading, a Write adding one, a Bash `>>` and a `tee -a`
+#                carrying one, a MultiEdit adding one -> DENY; twins: header-only Write (the rotation),
+#                a Write keeping one heading, `tail` of the log, a `tee -a` and a MultiEdit adding no
+#                heading -> SILENT
+#   FAILOPEN     unparseable input, a missing transcript -> SILENT, and stderr says why
+#   EXIT         every call exits 0
+#
+# COST. Every cell's hook input is built ONCE per run into `$W/cells/<n>.json`, listed in one
+# manifest, and every score drives the same files; each decision is parsed with ONE jq. A cell
+# rebuilt per score is a jq fork per cell per mutant, and parsing with several is more.
+#
+# Sourced, never run: it resolves seed.sh beside ITSELF, so a battery in a sibling directory
+# builds the same worlds. It exits 2 on any broken world, cell or seeded branch.
+set -uo pipefail
+
+# The pre-push gate exports AI_DLC_* tunables; none is read here, but scrub them all the same.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+
+LIBDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORK="$(bash "$LIBDIR/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
+[ -n "$WORK" ] && [ -f "$WORK/env.sh" ] || { echo "FIXTURE ERROR: seed printed no work dir" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$WORK/env.sh"
+
+command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq not found; the hook is silent without it, so no arm here could fire" >&2; exit 2; }
+
+fails=0
+ok()  { printf '  ok    %s\n' "$1"; }
+bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+
+OUTF="$W/out"; ERRF="$W/err"; VF="$W/verdict"
+
+# --- transcript lines, in the shapes the harness writes (measured on this repo's transcripts) ---
+GRANT='{"type":"attachment","attachment":{"type":"advisor_tool","available":true,"toolChange":"add","model":"m"}}'
+# GOFF and GREGRANT are the shapes measured on a `--resume --model` switch away from and back to a
+# model carrying the tool (`claude -p` 2.1.291; the hook header records the run).
+GOFF='{"type":"attachment","attachment":{"type":"advisor_tool","available":false,"model":"m","toolChange":"remove","byBase":true}}'
+GREGRANT='{"type":"attachment","attachment":{"type":"advisor_tool","available":true,"model":"m","abbreviated":true,"toolChange":"add"}}'
+USER='{"type":"user","message":{"role":"user","content":"go"}}'
+ADV='{"type":"assistant","message":{"content":[{"type":"server_tool_use","id":"s1","name":"advisor","input":{}}]}}'
+OKRES='{"type":"assistant","message":{"content":[{"type":"advisor_tool_result","tool_use_id":"s1","content":{"type":"advisor_redacted_result"}}]}}'
+UNAV='{"type":"assistant","message":{"content":[{"type":"advisor_tool_result","tool_use_id":"s1","content":{"type":"advisor_tool_result_error","error_code":"unavailable"}}]}}'
+ERRRES='{"type":"assistant","message":{"content":[{"type":"advisor_tool_result","tool_use_id":"s1","content":{"type":"advisor_tool_result_error","error_code":"too_many_requests"}}]}}'
+# tu <id> <tool> <input-json>
+tu() { jq -cn --arg id "$1" --arg n "$2" --argjson i "$3" '{type:"assistant",message:{content:[{type:"tool_use",id:$id,name:$n,input:$i}]}}'; }
+# tr <id> <is_error> <text>
+tr_() { jq -cn --arg id "$1" --argjson e "$2" --arg t "$3" '{type:"user",message:{content:[{type:"tool_result",tool_use_id:$id,is_error:$e,content:$t}]}}'; }
+ENV9='PreToolUse:Bash hook error: ai-dlc-advisor-gate: DENIED -- call the advisor tool, then retry the same command.'
+PUSHL="$(tu t1 Bash '{"command":"git push -u origin HEAD"}')"
+PUSH9="$(tu t9 Bash '{"command":"git push -u origin HEAD"}')"
+DENY9="$(tr_ t9 true "$ENV9")"
+OK9="$(tr_ t9 false 'Everything up-to-date')"
+OK1="$(tr_ t1 false 'Everything up-to-date')"
+# The real denial envelope as a text-block array, and a push that RAN, failed, and printed the token.
+DENY9A="$(jq -cn --arg t "$ENV9" '{type:"user",message:{content:[{type:"tool_result",tool_use_id:"t9",is_error:true,content:[{type:"text",text:$t}]}]}}')"
+RAN9="$(tr_ t9 true 'Exit code 1
+remote: pre-receive said: ai-dlc-advisor-gate: DENIED -- call the advisor tool
+error: failed to push some refs')"
+# The FULL envelope, but on the second line of a push that ran: only a match anchored at the
+# start of the content can tell it from a real denial.
+RAN9F="$(tr_ t9 true "Exit code 1
+$ENV9
+error: failed to push some refs")"
+# The envelope as the content of a NON-error result: the call ran, so it stays a gated action.
+OKENV9="$(tr_ t9 false "$ENV9")"
+# A re-dispatch: a user line carrying TEXT (measured: a string, isMeta on coordinator messages).
+UTXT='{"type":"user","message":{"role":"user","content":"The coordinator sent a message while you were working: re-run pass 2"},"isMeta":true}'
+UTXTA='{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Adversarial pass 3 of the series."}]}}'
+# A background-task event is NOT a re-dispatch. Both shapes as measured in graph's transcripts:
+# `user` string lines carrying `origin.kind` "task-notification".
+SYSNOTIF='{"type":"user","message":{"role":"user","content":"[SYSTEM NOTIFICATION - NOT USER INPUT]\nThis is an automated background-task event, NOT a message from the user."},"isMeta":true,"origin":{"kind":"task-notification"}}'
+TASKNOTIF='{"type":"user","message":{"role":"user","content":"<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n</task-notification>"},"origin":{"kind":"task-notification"}}'
+# Near-miss: a real re-dispatch that merely MENTIONS the notification prefix.
+UTXTMID='{"type":"user","message":{"role":"user","content":"Re-run pass 2; ignore any [SYSTEM NOTIFICATION - NOT USER INPUT] line above."}}'
+# A real instruction that DOES carry an origin, of a kind other than task-notification. Shapes as
+# measured in graph's transcripts: a human turn (786 lines) and a peer session's message (45 user
+# lines, isMeta true). A notif test keyed on "has an origin" reads both as background noise.
+UHUMAN='{"type":"user","message":{"role":"user","content":"Flip it to FAIL, the AC7 evidence is stale."},"origin":{"kind":"human"}}'
+UPEER='{"type":"user","message":{"role":"user","content":"Another Claude session sent a message:\n<agent-message from=\"a1\">\nRe-adjudicate: the AC7 probe is stale.\n</agent-message>"},"isMeta":true,"origin":{"kind":"peer","fromMode":null}}'
+
+VERDICT="$SPRINT/_bmad-output/gate-adjudication/implementation-20261006T120000Z.verdict.json"
+VERDICT2="$SPRINT/_bmad-output/gate-adjudication/story-20261006T110000Z.verdict.json"
+PART="$SPRINT/_bmad-output/gate-adjudication/implementation-20261006T120000Z.part-1of3.jsonl"
+PARTX="$SPRINT/_bmad-output/gate-adjudication/implementation-20261006T120000Z.part-1of3.json"
+ADVP="$SPRINT/_bmad-output/planning-artifacts/s3/prd-adversarial-p2.md"
+REPR="$SPRINT/_bmad-output/planning-artifacts/s3/prd-repair-p2.md"
+ARTF="$SPRINT/_bmad-output/planning-artifacts/s3/prd.md"
+# The review deliverables under their real names (code-reviewer.md:92, qa.md:325), and a file in
+# each review's shard directory (implementation.md:296, :349).
+REVCR="$SPRINT/docs/reviews/s3/SR1-code-review.md"
+REVQA="$SPRINT/docs/reviews/s3/SR2-qa-validation.md"
+REVSHQ="$SPRINT/docs/reviews/s3/shards/SR2-qa-validation-0123456789ab/1.md"
+REVSHC="$SPRINT/docs/reviews/s3/shards/SR1-code-review-0123456789ab/cross.md"
+REVX="$SPRINT/docs/reviews/s3/SR1-summary.md"
+REVSHX="$SPRINT/docs/reviews/s3/shards/SR1-notes/1.md"
+WV="$(tu w1 Write "$(jq -cn --arg f "$VERDICT" '{file_path:$f,content:"{}"}')")"
+WV2="$(tu w1 Write "$(jq -cn --arg f "$VERDICT2" '{file_path:$f,content:"{}"}')")"
+
+# mk <file> <line>... -- one world's transcript
+mk() { local f="$1"; shift; mkdir -p "$(dirname "$f")"; : > "$f"; local l; for l in "$@"; do printf '%s\n' "$l" >> "$f"; done; }
+mk "$P1/g.jsonl"        "$USER" "$GRANT"
+mk "$P1/none.jsonl"     "$USER"
+mk "$P1/off.jsonl"      "$GRANT" "$GOFF"
+mk "$P1/regrant.jsonl"  "$GRANT" "$GOFF" "$GREGRANT"
+mk "$P1/pa.jsonl"       "$GRANT" "$PUSHL" "$ADV"
+mk "$P1/ap.jsonl"       "$GRANT" "$ADV" "$PUSHL"
+mk "$P1/err.jsonl"      "$GRANT" "$PUSHL" "$ADV" "$ERRRES"
+mk "$P1/unav.jsonl"     "$GRANT" "$ADV" "$UNAV" "$PUSHL"
+mk "$P1/rearm.jsonl"    "$GRANT" "$ADV" "$UNAV" "$ADV" "$OKRES" "$PUSHL"
+mk "$P1/denied.jsonl"   "$GRANT" "$ADV" "$PUSH9" "$DENY9"
+mk "$P1/pushed.jsonl"   "$GRANT" "$ADV" "$PUSH9" "$OK9"
+mk "$P1/deniedarr.jsonl" "$GRANT" "$ADV" "$PUSH9" "$DENY9A"
+mk "$P1/ran.jsonl"      "$GRANT" "$ADV" "$PUSH9" "$RAN9"
+mk "$P1/ranfull.jsonl"  "$GRANT" "$ADV" "$PUSH9" "$RAN9F"
+mk "$P1/okenv.jsonl"    "$GRANT" "$ADV" "$PUSH9" "$OKENV9"
+mk "$P1/apok.jsonl"     "$GRANT" "$ADV" "$PUSHL" "$OK1"
+# PER-KIND worlds: one advisor call, then gated actions of different kinds, each answered.
+MERGEL="$(tu t2 Bash '{"command":"gh pr merge 7 --squash --delete-branch"}')"
+CLOSEL="$(tu t3 Bash '{"command":"bash scripts/ai-dlc/gate-checkpoint.sh --nonce n close"}')"
+mk "$P1/apm.jsonl"      "$GRANT" "$ADV" "$PUSHL" "$OK1" "$MERGEL" "$(tr_ t2 false merged)"
+mk "$P1/amp.jsonl"      "$GRANT" "$ADV" "$MERGEL" "$(tr_ t2 false merged)"
+mk "$P1/ap1.jsonl"      "$GRANT" "$ADV" "$PUSHL" "$OK1"
+mk "$P1/ac.jsonl"       "$GRANT" "$ADV" "$CLOSEL" "$(tr_ t3 false closed)"
+mk "$P1/par.jsonl"      "$GRANT" "$ADV"
+mk "$P1/par/subagents/agent-a1.jsonl" "$USER" "$GRANT"
+mk "$P1/par/subagents/agent-a2.jsonl" "$USER" "$GRANT" "$ADV" "$OKRES"
+mk "$P1/par/subagents/agent-a4.jsonl" "$USER"
+mk "$P1/par/subagents/agent-a5.jsonl" "$GRANT" "$WV" "$(tr_ w1 false ok)"
+mk "$P1/par/subagents/agent-a6.jsonl" "$GRANT" "$WV2" "$(tr_ w1 false ok)"
+mk "$P1/par/subagents/agent-a7.jsonl" "$GRANT" "$WV" "$(tr_ w1 false ok)" "$UTXT"
+mk "$P1/par/subagents/agent-a8.jsonl" "$GRANT" "$WV" "$(tr_ w1 false ok)" "$UTXTA"
+mk "$P1/par/subagents/agent-a9.jsonl" "$GRANT" "$ADV" "$WV" "$(tr_ w1 false ok)" "$UTXT"
+mk "$P1/par/subagents/agent-a10.jsonl" "$GRANT" "$WV" "$(tr_ w1 false ok)" "$SYSNOTIF"
+mk "$P1/par/subagents/agent-a11.jsonl" "$GRANT" "$WV" "$(tr_ w1 false ok)" "$TASKNOTIF"
+mk "$P1/par/subagents/agent-a12.jsonl" "$GRANT" "$WV" "$(tr_ w1 false ok)" "$UTXTMID"
+mk "$P1/par/subagents/agent-a13.jsonl" "$GRANT" "$WV" "$(tr_ w1 false ok)" "$UHUMAN"
+mk "$P1/par/subagents/agent-a14.jsonl" "$GRANT" "$WV" "$(tr_ w1 false ok)" "$UPEER"
+mk "$P1/q.jsonl"        "$GRANT"
+mkdir -p "$P1/q/subagents"
+for _f in g none off regrant pa ap err unav rearm denied pushed deniedarr ran ranfull okenv apok apm amp ap1 ac par q \
+          par/subagents/agent-a7 par/subagents/agent-a9 par/subagents/agent-a10 par/subagents/agent-a11 par/subagents/agent-a12 \
+          par/subagents/agent-a13 par/subagents/agent-a14; do
+  [ -s "$P1/$_f.jsonl" ] || { echo "FIXTURE BROKEN: world $_f was not written" >&2; exit 2; }
+done
+
+# bash_in <transcript> <cwd> <command> [agent_id] [tool_use_id]
+#   tool_use_id `-` omits the key, the shape of a harness that does not send one
+bash_in() { jq -cn --arg t "$1" --arg d "$2" --arg c "$3" --arg a "${4:-}" --arg u "${5:-tNEW}" \
+  '{hook_event_name:"PreToolUse",tool_name:"Bash",tool_input:{command:$c},transcript_path:$t,cwd:$d} + (if $u == "-" then {} else {tool_use_id:$u} end) + (if $a == "" then {} else {agent_id:$a} end)'; }
+# tool_in <transcript> <tool> <input-json> [agent_id]
+tool_in() { jq -cn --arg t "$1" --arg n "$2" --argjson i "$3" --arg a "${4:-}" --arg d "$SPRINT" \
+  '{hook_event_name:"PreToolUse",tool_name:$n,tool_input:$i,transcript_path:$t,cwd:$d,tool_use_id:"tNEW"} + (if $a == "" then {} else {agent_id:$a} end)'; }
+write_in() { tool_in "$1" Write "$(jq -cn --arg f "$2" --arg c "${4:-x}" '{file_path:$f,content:$c}')" "${3:-}"; }
+edit_in() { tool_in "$1" Edit "$(jq -cn --arg f "$2" --arg o "$3" --arg n "$4" '{file_path:$f,old_string:$o,new_string:$n}')" "${5:-}"; }
+
+# --- the cells, built ONCE ---------------------------------------------------------------------
+# cell <arm> <want> <check> <tag> <json>
+#   check: `-`, `R:<text>` (the deny reason must contain it) or `E:<text>` (stderr must contain it)
+#   tag:   `-` numbers the cell; a name makes it addressable from a mutant's expected cell set
+CELLS="$W/cells"; MAN="$W/manifest"
+mkdir -p "$CELLS" || { echo "FIXTURE ERROR: cannot create $CELLS" >&2; exit 2; }
+: > "$MAN"; nc=0
+cell() {
+  nc=$((nc+1))
+  local tag="$4"; [ "$tag" = - ] && tag="$nc"
+  printf '%s' "$5" > "$CELLS/$nc.json"
+  printf '%s\t%s:%s\t%s\t%s\t%s\n' "$nc" "$1" "$tag" "$3" "$1" "$2" >> "$MAN"
+}
+# c <arm> <want> <json>  /  ct <arm> <want> <tag> <json>
+c()  { cell "$1" "$2" - - "$3"; }
+ct() { cell "$1" "$2" - "$3" "$4"; }
+B()  { c "$1" "$2" "$(bash_in "$P1/g.jsonl" "$SPRINT" "$3")"; }
+
+for x in 'git push -u origin HEAD' "git -C $SPRINT push origin HEAD:refs/heads/release/1" "cd $SPRINT && git push" 'timeout 600 git push origin sprint/3'; do
+  B PUSH DENY "$x"
+done
+cell REASON DENY 'R:call the advisor tool, then retry the same command' - "$(bash_in "$P1/g.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+
+c NOGRANT SILENT "$(bash_in "$P1/none.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+c NOGRANT SILENT "$(write_in "$P1/par.jsonl" "$VERDICT" a4)"
+
+c WITHDRAWN SILENT "$(bash_in "$P1/off.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+c WITHDRAWN DENY "$(bash_in "$P1/regrant.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+
+c ORDER SILENT "$(bash_in "$P1/pa.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+c ORDER DENY "$(bash_in "$P1/ap.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+
+c ERRCLEAR SILENT "$(bash_in "$P1/err.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+
+c UNAV WARN "$(bash_in "$P1/unav.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+c REARM DENY "$(bash_in "$P1/rearm.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+
+B MERGE DENY 'gh pr merge 7 --squash --delete-branch'
+c MERGE DENY "$(tool_in "$P1/g.jsonl" mcp__github__merge_pull_request '{"owner":"o","repo":"r","pullNumber":7}')"
+B MERGE SILENT 'gh pr list --state merged --limit 3'
+
+B CLOSE DENY 'bash scripts/ai-dlc/gate-checkpoint.sh --nonce implementation-20261006T120000Z close'
+B CLOSE SILENT 'scripts/ai-dlc/gate-checkpoint.sh --nonce implementation-20261006T120000Z record 12 PASS'
+
+for x in 'git push origin --delete release/0.1.0' 'git push -d origin release/0.1.0' 'git push origin :release/0.1.0'; do
+  B DELETE SILENT "$x"
+done
+
+B MENTION SILENT 'echo git push origin x'
+B MENTION SILENT 'grep -c "gh pr merge" log'
+
+c UPDATE SILENT "$(bash_in "$P1/g.jsonl" "$UPDATE" 'git push -u origin HEAD')"
+c UPDATE SILENT "$(bash_in "$P1/g.jsonl" "$UPDATE" 'gh pr merge 9 --squash --delete-branch')"
+B UPDATE DENY 'git push -u origin HEAD'
+B UPDATE DENY 'gh pr merge 9 --squash --delete-branch'
+
+# D3, from the SPRINT cwd: the update branch named as every refspec destination.
+for x in 'git push -u origin ai-dlc-update/x' 'git push -u origin HEAD:refs/heads/ai-dlc-update/x' 'git push -u origin ai-dlc-update/x > /tmp/push.txt 2>&1; echo rc=$?'; do
+  B UPDATEREF SILENT "$x"
+done
+for x in 'git push -u origin ai-dlc-updated/x' 'git push -u origin HEAD:ai-dlc-update-x' 'git push origin sprint/3 ai-dlc-update/x'; do
+  B UPDATEREF DENY "$x"
+done
+# D3: the update branch cut in the same command (the real `B=...; checkout -q -b $B` shape too).
+for x in 'git checkout -b ai-dlc-update/x && git commit -qm x && git push -u origin HEAD' 'git switch -c ai-dlc-update/x && git push' 'B=ai-dlc-update/ledger-20260929; git checkout -q -b $B && git add f && git commit -q -m x; git push -u origin $B > /tmp/p 2>&1'; do
+  B UPDATECUT SILENT "$x"
+done
+for x in 'git checkout -b feature/x && git push -u origin HEAD' 'git checkout -b ai-dlc-update/x && git push origin sprint/3' 'B=sprint/9; git checkout -b $B && git push -u origin $B'; do
+  B UPDATECUT DENY "$x"
+done
+
+# D5: every spelling measured in the consumer's commands, each class with its allow twin.
+# The wrapper word is spelled through a variable: these are command STRINGS the hook parses,
+# never run, and arm S4 of validate-shell-portability.sh reads the bare word as a call.
+SETSID_WORD=setsid
+for x in 'nohup git push -u origin sprint/3 > /tmp/p.txt 2>&1 &' 'exec git push' 'command git push' 'time git push' 'sudo git push' 'caffeinate -i git push' 'gtimeout 600 git push' 'env -u GIT_DIR git push'; do
+  B WRAP DENY "$x"
+done
+B WRAP SILENT 'time ls -la'
+for x in "nohup bash -c 'exec ${SETSID_WORD} git push -u origin sprint/3 > /tmp/p 2>&1' &" 'time nohup git push' 'sudo -E caffeinate -i git push'; do
+  B STACK DENY "$x"
+done
+B STACK SILENT "nohup bash -c 'exec ${SETSID_WORD} git fetch -q origin > /tmp/p 2>&1' &"
+# Five wrappers deep: a strip loop bounded at four leaves `gtimeout 60 git push` unread.
+ct STACK DENY f-five "$(bash_in "$P1/g.jsonl" "$SPRINT" 'time nohup sudo -E caffeinate -i gtimeout 60 git push')"
+ct STACK SILENT f-five-fetch "$(bash_in "$P1/g.jsonl" "$SPRINT" 'time nohup sudo -E caffeinate -i gtimeout 60 git fetch')"
+# The real update-skill spelling of the same stack is excluded by its refspec (UPDATEREF owns why).
+B UPDATEREF SILENT "nohup bash -c 'exec ${SETSID_WORD} git push -u origin ai-dlc-update/0.622.0-reconcile-20260922T074403Z > /tmp/p 2>&1' &"
+for x in 'bash -c "git push"' "sh -c 'git push -u origin HEAD'"; do
+  B BASHC DENY "$x"
+done
+B BASHC SILENT 'bash -c "echo git push"'
+# A quoted alternation carrying `git push` is a pattern, not a push (4 real graph rows).
+B QUOTEDPAT SILENT "pgrep -fl 'wait-for-deliverable|git push' | grep -v pgrep"
+B PATHGIT DENY '/usr/bin/git push'
+B PATHGIT SILENT '/usr/bin/git push-status'
+for x in 'if true; then git push; fi' 'for i in 1; do git push; done' '{ git push; }'; do
+  B BODY DENY "$x"
+done
+B BODY SILENT 'if true; then echo git push; fi'
+B QUOTEDC DENY 'git -c "user.name=a b" push origin HEAD'
+B QUOTEDC SILENT 'git -c "user.name=a b" log --grep push'
+B QUOTEDENV DENY 'GIT_SSH_COMMAND="ssh -o X=1" git push'
+B QUOTEDENV SILENT 'MSG="git push" echo hi'
+for x in 'gh -R euron8/graph pr merge 7 --squash' 'gh --repo euron8/graph pr merge 7' 'gh --repo=euron8/graph pr merge 7'; do
+  B GHREPO DENY "$x"
+done
+B GHREPO SILENT 'gh -R euron8/graph pr list'
+c MCPNAME DENY "$(tool_in "$P1/g.jsonl" mcp__gh2__merge_pull_request '{"owner":"o","repo":"r","pullNumber":7}')"
+c MCPNAME SILENT "$(tool_in "$P1/g.jsonl" mcp__github__merge_pull_request_status '{"owner":"o","repo":"r","pullNumber":7}')"
+
+c DETACHED DENY "$(bash_in "$P1/g.jsonl" "$DETACHED" 'git push -u origin HEAD')"
+c DETACHED DENY "$(bash_in "$P1/g.jsonl" "$NOREPO" 'git push -u origin HEAD')"
+
+c MATE DENY "$(write_in "$P1/par.jsonl" "$VERDICT" a1)"
+c MATE SILENT "$(write_in "$P1/par.jsonl" "$VERDICT" a2)"
+
+cell MATEABSENT SILENT 'E:agent-a3.jsonl' - "$(write_in "$P1/q.jsonl" "$VERDICT" a3)"
+
+c MATEPUSH SILENT "$(bash_in "$P1/par.jsonl" "$SPRINT" 'git push -u origin HEAD' a1)"
+
+c MATEPATH DENY "$(write_in "$P1/par.jsonl" "$ADVP" a1)"
+c MATEPATH DENY "$(write_in "$P1/par.jsonl" "$REPR" a1)"
+c MATEPATH SILENT "$(write_in "$P1/par.jsonl" "$ARTF" a1)"
+ct MATEPATH DENY l-part "$(write_in "$P1/par.jsonl" "$PART" a1)"
+ct MATEPATH SILENT l-part-json "$(write_in "$P1/par.jsonl" "$PARTX" a1)"
+ct MATEPATH DENY k-cr "$(write_in "$P1/par.jsonl" "$REVCR" a1)"
+ct MATEPATH DENY k-qa "$(write_in "$P1/par.jsonl" "$REVQA" a1)"
+ct MATEPATH DENY k-sh-qa "$(write_in "$P1/par.jsonl" "$REVSHQ" a1)"
+ct MATEPATH DENY k-sh-cr "$(write_in "$P1/par.jsonl" "$REVSHC" a1)"
+ct MATEPATH SILENT k-summary "$(write_in "$P1/par.jsonl" "$REVX" a1)"
+ct MATEPATH SILENT k-sh-notes "$(write_in "$P1/par.jsonl" "$REVSHX" a1)"
+
+c MATEREWRITE SILENT "$(edit_in "$P1/par.jsonl" "$VERDICT" a b a5)"
+c MATEREWRITE DENY "$(edit_in "$P1/par.jsonl" "$VERDICT" a b a6)"
+
+# D4: a re-dispatch (a user TEXT line, string or text block) ends the re-write exemption;
+# twin: a5 has only a tool_result after its write and stays exempt (MATEREWRITE above);
+# a9 called the advisor BEFORE its first write, so the cleared path must not hide that the
+# write is still its last gated action -- an advisor older than it does not clear.
+ct REDISPATCH DENY rd-meta "$(edit_in "$P1/par.jsonl" "$VERDICT" PASS FAIL a7)"
+c REDISPATCH DENY "$(edit_in "$P1/par.jsonl" "$VERDICT" PASS FAIL a8)"
+ct REDISPATCH DENY rd-meta-adv "$(edit_in "$P1/par.jsonl" "$VERDICT" PASS FAIL a9)"
+# A background-task event between the writes is not a re-dispatch (measured: 2 real repair-record
+# re-writes); a re-dispatch that merely MENTIONS the prefix still is.
+ct REDISPATCH SILENT rd-sys "$(edit_in "$P1/par.jsonl" "$VERDICT" PASS FAIL a10)"
+ct REDISPATCH SILENT rd-task "$(edit_in "$P1/par.jsonl" "$VERDICT" PASS FAIL a11)"
+ct REDISPATCH DENY rd-mid "$(edit_in "$P1/par.jsonl" "$VERDICT" PASS FAIL a12)"
+# A human's and a peer's instruction carry an origin too, of another kind: both are re-dispatches.
+ct REDISPATCH DENY rd-human "$(edit_in "$P1/par.jsonl" "$VERDICT" PASS FAIL a13)"
+ct REDISPATCH DENY rd-peer "$(edit_in "$P1/par.jsonl" "$VERDICT" PASS FAIL a14)"
+
+c DENIED SILENT "$(bash_in "$P1/denied.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+c DENIED SILENT "$(bash_in "$P1/deniedarr.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+c DENIED DENY "$(bash_in "$P1/pushed.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+ct DENIED DENY h-noerr "$(bash_in "$P1/okenv.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+# D1: a push that RAN, failed, and printed the token mid-output is still a gated action.
+c ENVELOPE DENY "$(bash_in "$P1/ran.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+ct ENVELOPE DENY a-midline "$(bash_in "$P1/ranfull.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+
+c SELF SILENT "$(bash_in "$P1/ap.jsonl" "$SPRINT" 'git push -u origin HEAD' '' t1)"
+c SELF DENY "$(bash_in "$P1/ap.jsonl" "$SPRINT" 'git push -u origin HEAD' '' tY)"
+# The live wedge: the incoming call is the transcript's LAST line, advisor before it, and the
+# input carries no tool_use_id -> ALLOW. Twin: the same push already ANSWERED (a tool_result
+# after it), so it is a recorded action, not the incoming one -> DENY.
+c SELFLAST SILENT "$(bash_in "$P1/ap.jsonl" "$SPRINT" 'git push -u origin HEAD' '' -)"
+c SELFLAST DENY "$(bash_in "$P1/apok.jsonl" "$SPRINT" 'git push -u origin HEAD' '' -)"
+
+# PER-KIND (operator ruling): one advisor call covers the next action of each kind.
+GLADD="$(edit_in "$P1/ac.jsonl" "$GL" '| check | verdict |
+' '| check | verdict |
+
+## Gate Log: Sprint 3
+')"
+c PERKIND SILENT "$(bash_in "$P1/ap1.jsonl" "$SPRINT" 'gh pr merge 7 --squash --delete-branch')"
+c PERKIND SILENT "$(bash_in "$P1/amp.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+c PERKIND DENY "$(bash_in "$P1/apm.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+c PERKIND DENY "$(bash_in "$P1/apm.jsonl" "$SPRINT" 'gh pr merge 8 --squash')"
+c PERKIND SILENT "$GLADD"
+c PERKIND DENY "$(bash_in "$P1/ac.jsonl" "$SPRINT" 'bash scripts/ai-dlc/gate-checkpoint.sh --nonce m close')"
+# The four lead-kind pairs no cell above separates: after a push, and after a merge, the next
+# close and the next Check 12 append each owe nothing.
+ct PERKIND SILENT pk-push-close "$(bash_in "$P1/ap1.jsonl" "$SPRINT" 'bash scripts/ai-dlc/gate-checkpoint.sh --nonce m close')"
+ct PERKIND SILENT pk-push-gatelog "$(printf '%s' "$GLADD" | jq -c --arg t "$P1/ap1.jsonl" '.transcript_path = $t')"
+ct PERKIND SILENT pk-merge-close "$(bash_in "$P1/amp.jsonl" "$SPRINT" 'bash scripts/ai-dlc/gate-checkpoint.sh --nonce m close')"
+ct PERKIND SILENT pk-merge-gatelog "$(printf '%s' "$GLADD" | jq -c --arg t "$P1/amp.jsonl" '.transcript_path = $t')"
+
+c TWRITE DENY "$(write_in "$P1/none.jsonl" "$P1/none.jsonl")"
+for x in "echo x >> $P1/none.jsonl" "printf x | tee -a ~/projects/p1/none.jsonl" "sed -i '' s/a/b/ $P1/par/subagents/agent-a1.jsonl" "mv $W/out ~/projects/p1/none.jsonl"; do
+  c TWRITE DENY "$(bash_in "$P1/none.jsonl" "$SPRINT" "$x")"
+done
+c TWRITEREAD SILENT "$(bash_in "$P1/none.jsonl" "$SPRINT" "cat $P1/none.jsonl > $W/copy.txt")"
+c TWRITEREAD SILENT "$(bash_in "$P1/none.jsonl" "$SPRINT" "cp ~/projects/p1/none.jsonl $W/copy.jsonl")"
+c TWRITEREAD SILENT "$(write_in "$P1/none.jsonl" "$P1/memory/MEMORY.md")"
+
+c GATELOG DENY "$(edit_in "$P1/g.jsonl" "$GL" '| check | verdict |
+' '| check | verdict |
+
+## Gate Log: Sprint 3
+Timestamp: 2026-10-06T12:00Z
+')"
+c GATELOG DENY "$(write_in "$P1/g.jsonl" "$GL" '' "$(printf '# Gate Log\n\n## Gate Log: Sprint 2\n\n## Gate Log: Sprint 3\n')")"
+B GATELOG DENY "printf '\n## Gate Log: Sprint 3\n' >> _bmad-output/implementation-artifacts/gate-log.md"
+ct GATELOG DENY i-tee "$(bash_in "$P1/g.jsonl" "$SPRINT" "printf '\n## Gate Log: Sprint 3\n' | tee -a _bmad-output/implementation-artifacts/gate-log.md")"
+ct GATELOG SILENT i-tee-noentry "$(bash_in "$P1/g.jsonl" "$SPRINT" "printf 'Timestamp: x\n' | tee -a _bmad-output/implementation-artifacts/gate-log.md")"
+ct GATELOG DENY j-multi "$(tool_in "$P1/g.jsonl" MultiEdit "$(jq -cn --arg f "$GL" '{file_path:$f,edits:[{old_string:"Timestamp: 2026-10-01T00:00Z\n",new_string:"Timestamp: 2026-10-01T00:00Z\n"},{old_string:"| check | verdict |\n",new_string:"| check | verdict |\n\n## Gate Log: Sprint 3\n"}]}')")"
+ct GATELOG SILENT j-multi-noentry "$(tool_in "$P1/g.jsonl" MultiEdit "$(jq -cn --arg f "$GL" '{file_path:$f,edits:[{old_string:"| check | verdict |\n",new_string:"| check | verdict |\n| 12 | PASS |\n"}]}')")"
+c GATELOG SILENT "$(write_in "$P1/g.jsonl" "$GL" '' "$(printf '# Gate Log\n')")"
+c GATELOG SILENT "$(write_in "$P1/g.jsonl" "$GL" '' "$(printf '# Gate Log\n\n## Gate Log: Sprint 2\nedited\n')")"
+B GATELOG SILENT 'tail -20 _bmad-output/implementation-artifacts/gate-log.md'
+
+cell FAILOPEN SILENT 'E:not readable JSON' - '{"tool_name":"Bash","tool_input":{"command":"git push"'
+cell FAILOPEN SILENT 'E:gate skipped' - "$(bash_in "$P1/absent.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+
+# Every cell file must hold its input: a builder that failed writes an empty file, and an empty
+# input is SILENT, which is what half the cells want.
+_i=1
+while [ "$_i" -le "$nc" ]; do
+  [ -s "$CELLS/$_i.json" ] || { echo "FIXTURE BROKEN: cell $_i has no input" >&2; exit 2; }
+  _i=$((_i+1))
+done
+_mn="$(grep -c . "$MAN")" || _mn=0
+[ "$nc" -gt 0 ] && [ "$_mn" -eq "$nc" ] || { echo "FIXTURE BROKEN: manifest lists $_mn of $nc cells" >&2; exit 2; }
+
+# The decision, parsed with ONE jq: DENY<TAB>reason, WARN, or OTHER.
+DECIDE='.hookSpecificOutput as $h
+  | if (($h.permissionDecision? // "") == "deny") then "DENY\t\($h.permissionDecisionReason // "")"
+    elif (($h.permissionDecision? == null) and (($h.additionalContext? // "") | tostring | contains("NOT blocked"))) then "WARN\t-"
+    else "OTHER\t-" end'
+
+# score <hook> <cell-log> -> prints the space-separated, C-sorted set of arms that FAILED, or
+# nothing; writes the id of every failing cell to <cell-log>.
+score() {
+  local h="$1" log="$2" failed="" exitbad=0 n id check arm want V REASON_TXT ERR_TXT
+  : > "$log"
+  while IFS=$'\t' read -r n id check arm want <&3; do
+    HOME="$W" CLAUDE_PROJECT_DIR="$CPD" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
+    if [ ! -s "$OUTF" ]; then V=SILENT; REASON_TXT=""
+    else
+      jq -r "$DECIDE" "$OUTF" > "$VF" 2>/dev/null || printf 'OTHER\t-\n' > "$VF"
+      IFS=$'\t' read -r V REASON_TXT < "$VF" || V=OTHER
+    fi
+    local miss=0
+    [ "$V" = "$want" ] || miss=1
+    case "$check" in
+      R:*) case "$REASON_TXT" in *"${check#R:}"*) ;; *) miss=1 ;; esac ;;
+      E:*) ERR_TXT=""; IFS= read -r -d '' ERR_TXT < "$ERRF" || true
+           case "$ERR_TXT" in *"${check#E:}"*) ;; *) miss=1 ;; esac ;;
+    esac
+    if [ "$miss" -eq 1 ]; then
+      printf '%s\n' "$id" >> "$log"
+      case " $failed " in *" $arm "*) ;; *) failed="$failed $arm" ;; esac
+    fi
+  done 3< "$MAN"
+  [ "$exitbad" -eq 0 ] || failed="$failed EXIT"
+  printf '%s\n' "$failed" | tr ' ' '\n' | sed '/^$/d' | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//'
+}
+# sorted, space-joined content of a cell log
+cells_of() { LC_ALL=C sort "$1" | tr '\n' ' ' | sed 's/ $//'; }
+
+# The world the UPDATE arm's twin rests on: the two repositories must really be on different branches.
+_bs="$(env -u GIT_DIR -u GIT_WORK_TREE git -C "$SPRINT" symbolic-ref --short -q HEAD)"
+_bu="$(env -u GIT_DIR -u GIT_WORK_TREE git -C "$UPDATE" symbolic-ref --short -q HEAD)"
+_bd="$(env -u GIT_DIR -u GIT_WORK_TREE git -C "$DETACHED" symbolic-ref --short -q HEAD)"
+[ "$_bs" = sprint/3 ] && [ "$_bu" = ai-dlc-update/x ] && [ -z "$_bd" ] \
+  || { echo "FIXTURE BROKEN: seeded branches read sprint='$_bs' update='$_bu' detached='$_bd'" >&2; exit 2; }
+

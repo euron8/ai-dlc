@@ -82,7 +82,9 @@ The repair record opens with the file it repaired and that file's whole-file sha
 and after your edits — the adversary's `artifact_sha` spelling. A repair landing after the
 series stamped `EXIT_CONDITION_MET` is on the record only through these two shas; Check 24
 arm J2 chains them from the notarized sha to the bytes on disk. Take both with
-`shasum -a 256 <file>`.
+`shasum -a 256 <file>`. As the SERIAL remediator after a join, append your entries to the
+joined record opening with your own triple (for the requirements subject, the manifest and
+per-stem lists), its before equal to the join's after.
 
 ```
 - artifact: <the repaired file, project-relative>
@@ -94,6 +96,7 @@ Then, per finding:
 
 ```
 ### <finding id> — <CRITICAL|MAJOR|MINOR>
+- source: <seat-file>#<finding-id> [<seat-file>#<finding-id> ...]   (a party repair only)
 - disposition: repaired | escalated | skipped (nit)
 - edit: <artifact file:line(s)>
 - derivation:
@@ -105,6 +108,13 @@ $ <the exact command>
 
 - claim now asserted: <the sentence you wrote, which the derivation above supports>
 ```
+
+**A party repair names the seat finding behind every entry.** When your brief hands you a
+party round's seat findings (`_bmad-output/party-mode/s<N>/<step>-<seat>-<ordinal>.md`), every
+entry carries a `source:` line with one `<seat-file>#<finding-id>` token per seat finding the
+edit applies, the id being the first token of that finding's `##` heading. Finding ids collide
+across seats, so the file is never dropped. `join-remediator-shards.sh` refuses an entry with no
+`source:` and a token that resolves to no finding of that seat file.
 
 **The three labels are read LITERALLY by the gate.** `validate-adversarial-convergence.sh`
 arm H decides whether this record is structured by looking for each label at the start of a

@@ -12,7 +12,12 @@
 #   - a later event invalidating an authorization premise returns to the operator
 #     (escalations.md, and a second adversary Severity rung);
 #   - the bug root-cause claim gets an adversarial pass in bug-investigation.md §2c, and the
-#     folded-defect routes (route.md, stories-test-strategy.md) reach §2c.
+#     folded-defect routes (route.md, stories-test-strategy.md) reach §2c;
+#   - a party round's seats edit nothing and one repair writer applies their findings, every
+#     entry carrying `source: <seat-file>#<finding-id>` (_gate-procedures.md "Validation cycle",
+#     sprint-review.md §2, remediator.md). The `source:` resolution itself is mechanised in
+#     join-remediator-shards.sh and owned by remediator-shard-join; these rows pin the PROSE that
+#     tells the seats not to write, which no program can read off a seat's behaviour.
 #
 # LEADS ARE NOT ENOUGH. A bold lead left intact over a body rewritten to say the opposite
 # ("need NOT carry", "dropped only through a HARD_BLOCK", "an assertion is a sufficient
@@ -157,6 +162,14 @@ adv-prem-lead|R|adversary.md|## Severity|## |**An authorization whose named outc
 route-range|S|steps/route.md|### Step 4:|### Step 5:|sections 0–2c|contains
 sts-range|S|steps/stories-test-strategy.md|### 3a.|### 4.|sections 0–2c|contains
 sts-names-2c|S|steps/stories-test-strategy.md|### 3a.|### 4.|§2c's adversarial verification of the root-cause|contains
+party-seats-record|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**The seats edit nothing, in every case below.**|para|Each seat writes one findings file per (seat, shard)
+party-seats-sections|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**The seats edit nothing, in every case below.**|para|carrying one `sections:` line
+party-one-writer|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**One repair writer applies them.**|para|never back to a seat
+party-source|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**One repair writer applies them.**|para|carries `source: <seat-file>#<finding-id>`
+party-unsharded|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**An unsharded round has the same write model.**|para|the seats still edit nothing, and ONE remediator
+party-unsharded-check|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**An unsharded round has the same write model.**|para|join-remediator-shards.sh --sources <that record> --sprint <N>
+srev-seats-record|S|steps/sprint-review.md|### 2. Sprint-Level Party Mode|### 3.|- Record every finding; the seats edit nothing|prefix
+rem-party-source|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**A party repair names the seat finding behind every entry.**|para|every entry carries a `source:` line
 PINS
 }
 
@@ -414,7 +427,9 @@ pmutate() {
   MU_MODE="$1" MU_LEAD="$4" MU_TOK="$5" awk '
   BEGIN { m = ENVIRON["MU_MODE"]; l = ENVIRON["MU_LEAD"]; k = ENVIRON["MU_TOK"]; n = 0 }
   {
-    q = $0; gsub(/[ \t]+/, " ", q)
+    # Collapsed and left-trimmed exactly as pin_scan flush() does, so a paragraph indented under
+    # a numbered list item is the same string to the mutator as to the scanner.
+    q = $0; gsub(/[ \t]+/, " ", q); sub(/^ /, "", q)
     if (!(index(q, l) == 1 && index(q, k) > 0)) { print; next }
     if (m == "negate")   { i = index(q, k); print substr(q, 1, i - 1) "NEGATED-CLAUSE" substr(q, i + length(k)); next }
     if (m == "relocate") { held[++n] = q; next }

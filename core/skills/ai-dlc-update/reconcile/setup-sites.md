@@ -171,6 +171,7 @@ core_manifest:
   - core/fixtures/extract-push-flag-decision/**
   - core/fixtures/fold-architect-ledger-join/**
   - core/fixtures/foreground-budget-deny/**
+  - core/fixtures/advisor-gate-deny/**
   - core/fixtures/update-preflight-push/**
   - core/fixtures/push-drain-refusals/**
   - core/fixtures/inflight-row-shape/**
