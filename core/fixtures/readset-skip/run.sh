@@ -3527,20 +3527,22 @@ STUB
         *) bad "INTERRUPTED MUTANT endonly: expected 'killed|yes|010101|2|0', got '$IWM|$IWMS' — $(tail -3 "$WORK/iw.out" | tr '\n' ' ')" ;;
       esac
     fi
-    # The identity arm. The fix's run must have written per fixture (fxw1's write log names the map)
-    # and reached a map that MOVED (new rows, fxw2's OLD row dropped, the OMITTED line), so the cmp is
-    # not two untouched seeds agreeing; the mutant must have written none.
+    # The identity arm. The fix's run must have written per fixture and reached a map that MOVED (new
+    # rows, fxw2's OLD row dropped, the OMITTED line), so the cmp is not two untouched seeds agreeing;
+    # the mutant must have written none. The per-fixture call's output lands in $WORK/fxw1.write; it
+    # prints the controls but no `wrote` line (that `say` follows only the final call), so the
+    # evidence it ran is the discrimination control's PASS line, which precedes the write.
     TRACE_ARMS=$((TRACE_ARMS+1))
     IU="$(iw_run "$SB/deriver.sh" "$SX/fxw.omit.list" no "$WORK/iw.full.tsv")"
-    IU_W="$(grep -c '^\[[0-9:]*\] wrote ' "$SX_TR/w/fxw1.write" 2>/dev/null)" || IU_W=0
+    IU_W="$(grep -c '^  PASS  CONTROL: ' "$SX_TR/w/fxw1.write" 2>/dev/null)" || IU_W=0
     IUE="$(iw_run "$SX/deriver.endonly.sh" "$SX/fxw.omit.list" no "$WORK/iw.full.endonly.tsv")"
     IUE_W=0; [ -e "$SX_TR/w/fxw1.write" ] && IUE_W=1
     IUS="$(iw_sig "$WORK/iw.full.tsv")"
     IUH="$(grep -cx '# OMITTED by the last run (always run): fxw2' "$WORK/iw.full.tsv")" || IUH=0
-    if [ "$IU|$IUE|$IU_W|$IUE_W|$IUS|$IUH" = "0|0|1|0|100010|2|0|1" ] && cmp -s "$WORK/iw.full.tsv" "$WORK/iw.full.endonly.tsv"; then
+    if [ "$IU|$IUE|$IU_W|$IUE_W|$IUS|$IUH" = "0|no|0|no|1|0|100010|2|0|1" ] && cmp -s "$WORK/iw.full.tsv" "$WORK/iw.full.endonly.tsv"; then
       ok "IDENTITY: an uninterrupted run that wrote after each fixture ends on a map byte-identical (cmp -s) to the end-only write's, including the OMITTED line for the mid-list fxw2"
     else
-      bad "IDENTITY: expected '0|0|1|0|100010|2|0|1' and identical maps, got '$IU|$IUE|$IU_W|$IUE_W|$IUS|$IUH' cmp=$(cmp -s "$WORK/iw.full.tsv" "$WORK/iw.full.endonly.tsv" && echo same || echo DIFFER) — $(diff "$WORK/iw.full.tsv" "$WORK/iw.full.endonly.tsv" | head -4 | tr '\n' ' ')"
+      bad "IDENTITY: expected '0|no|0|no|1|0|100010|2|0|1' and identical maps, got '$IU|$IUE|$IU_W|$IUE_W|$IUS|$IUH' cmp=$(cmp -s "$WORK/iw.full.tsv" "$WORK/iw.full.endonly.tsv" && echo same || echo DIFFER) — $(diff "$WORK/iw.full.tsv" "$WORK/iw.full.endonly.tsv" | head -4 | tr '\n' ' ')"
     fi
   fi
 fi
