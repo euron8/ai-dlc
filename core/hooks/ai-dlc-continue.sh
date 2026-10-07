@@ -141,6 +141,17 @@ SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 NOW=$(date +%s)
 
+# THE ONE READER OF THE WAIT-BEAT LEASE, shared by Check 0's deferral and Check 2b's allow. A
+# second copy of this test beside Check 0 is two readers of one file that drift, the cost the
+# stall-run helper below already records. Sets BEAT_DEADLINE for the caller's log row. Every
+# non-live state -- missing, a directory, empty, non-numeric, expired -- returns 1.
+beat_lease_live() {
+  BEAT_DEADLINE=""
+  [ -f "$BEAT_MARKER" ] || return 1
+  BEAT_DEADLINE=$(cat "$BEAT_MARKER" 2>/dev/null || echo "")
+  [[ "$BEAT_DEADLINE" =~ ^[0-9]+$ ]] && [ "$BEAT_DEADLINE" -gt "$NOW" ]
+}
+
 # -----------------------------------------------------------------------------
 # Seed log header if needed
 # -----------------------------------------------------------------------------
@@ -271,6 +282,14 @@ fi
 # (no pipeline), no In-Flight section (it AUTO-HEALS per route.md, so snapshots predating
 # it are legal), and no rows (nothing was dispatched). The arm fires only on a row that
 # positively says a teammate is still running.
+#
+# A LIVE WAIT-BEAT LEASE DEFERS THE BLOCK, AND NOTHING ELSE DOES. `steps/handoff.md` step 1 ends
+# the turn on one backgrounded `wait-for-deliverable.sh` beat before any TaskStop, so the Stop at
+# that moment fails every arm by construction, and blocking it tells the lead to stop the very
+# teammates the beat is waiting on. While `.beat-inflight` holds a future epoch (the same lease
+# Check 2b reads, through the same `beat_lease_live`), an UNSATISFIED guard logs
+# HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT and falls through without touching the stall counter or the
+# arming record; the beat's return re-invokes the lead and the next Stop is guarded as before.
 #
 # Fail-open: any transcript parse failure skips this check entirely.
 TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // empty')
@@ -879,6 +898,32 @@ EOF
       # not told to redo it.
       H_FIX_RESUME="Per steps/handoff.md step 4, emit exactly this, and nothing else -- no narrated body:"
       H_FIX_TEAM="Per steps/handoff.md step 1, stop every in-flight teammate, wait for each to return, and rewrite its In-Flight Teammates row's status to \`stopped\` -- do NOT delete the row. A deleted row is a lost record: the successor session cannot tell it from a teammate that never existed."
+      # A LIVE WAIT-BEAT LEASE DEFERS THIS GUARD, AND IT IS STEP 1's OWN BEAT. handoff.md step 1
+      # runs one backgrounded wait-for-deliverable.sh beat over the in-flight rows and ENDS THE
+      # TURN on it. That Stop reaches here with every arm unsatisfied by construction -- no resume
+      # block, commit, push or driver signal yet, the entry marker still present -- and a block
+      # tells the lead to stop every teammate, which is the TaskStop the beat exists to avoid.
+      # So while the lease reads live, the block is skipped and the Stop FALLS THROUGH to the
+      # checks below, where Check 1 (the pause flag) or Check 2b (the same lease) allows it.
+      #
+      # THE DEFERRAL IS INSIDE THE UNSATISFIED BRANCH, after H_WHY. A satisfied handoff with a
+      # lease still live takes the branch below and is stamped complete; deferring before the arm
+      # test would skip that stamp. The stall counter is not written and the arming record is not
+      # cleared: the beat's return re-invokes the lead, its next Stop is armed by the record, and
+      # the guard fires then. stall_run above only READS the state file.
+      #
+      # THE LIMIT, STATED: a SIGKILLed beat's last lease, or one written by an unrelated beat,
+      # defers a Stop with nothing left to re-invoke the lead -- the same hazard Check 2b carries,
+      # bounded by the lease length (3*POLL, about 30s), after which the guard fires again.
+      if beat_lease_live; then
+        {
+          echo "## ${TIMESTAMP} -- HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT"
+          echo "- Session: ${SESSION_ID}"
+          echo "- Wait-beat lease live until epoch ${BEAT_DEADLINE} (now ${NOW}); guard deferred, not cleared"
+          echo "- Unsatisfied: ${H_WHY}"
+          echo ""
+        } >> "$LOG_FILE"
+      else
       if [ "$H_CNT" -le "$EFF_MAX" ]; then
         stall_run_write "$HANDOFF_STATE"
         {
@@ -965,6 +1010,7 @@ The \`/ai-dlc resume\` line MUST sit BETWEEN two delimiter lines (four or more h
       } >> "$LOG_FILE"
       rm -f "$HANDOFF_STATE" "$HANDOFF_ARMED_FILE"   # possible false positive, as before
       exit 0
+      fi
     else
       rm -f "$HANDOFF_STATE"   # every arm satisfied: the handoff is complete
       # THE ARMING RECORD IS CLEARED ONLY WHEN THE RESUME ARM WAS ACTUALLY READ. With no transcript
@@ -1416,9 +1462,11 @@ fi
 # ~30s regardless of how long the quantum is -- which is what made raising the
 # quantum from 120s to 600s safe. Nothing here changed: `epoch > now` reads a
 # lease exactly as it read a promise.
-if [ -f "$BEAT_MARKER" ]; then
-  BEAT_DEADLINE=$(cat "$BEAT_MARKER" 2>/dev/null || echo "")
-  if [[ "$BEAT_DEADLINE" =~ ^[0-9]+$ ]] && [ "$BEAT_DEADLINE" -gt "$NOW" ]; then
+#
+# THE LEASE TEST IS beat_lease_live, DEFINED BESIDE `NOW` AND SHARED WITH CHECK 0. Check 0 defers
+# its handoff guard on the same lease, because handoff.md step 1 ends the turn on exactly this
+# beat; one reader keeps the two decisions from drifting apart.
+if beat_lease_live; then
     {
       echo "## ${TIMESTAMP} -- ALLOWED_BY_LIVE_BEAT"
       echo "- Session: ${SESSION_ID}"
@@ -1458,7 +1506,6 @@ if [ -f "$BEAT_MARKER" ]; then
     # the counter; only a BLOCK does, twenty lines below. The v0.81.0 comment's
     # stated fear was of a state this code cannot reach.
     exit 0
-  fi
 fi
 
 # -----------------------------------------------------------------------------

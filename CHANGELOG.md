@@ -19,6 +19,28 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.743.0] - 2026-10-07
+
+Batch 204's first release. It discharges one consumer candidate and files and carries `BL-473`.
+
+### Handoff step 1's wait-beat is no longer blocked by Check 0 (PC-S317-HANDOFF-STEP-1-ENDS-THE-TURN-ON-A-BEAT-WHILE-CHECK-0-BLOCKS-THE-STOP-ON-IN-FLIGHT-ROWS)
+
+- `steps/handoff.md` step 1 ends the turn on a backgrounded `wait-for-deliverable.sh` beat over the in-flight rows. Check 0
+  of `core/hooks/ai-dlc-continue.sh` ran before Check 2b's live-beat allow and blocked that Stop, because at step 1 every
+  handoff arm is unsatisfied by construction. Its block text told the lead to stop every teammate, the TaskStop the beat
+  exists to avoid. The reference consumer's sprint 317 stopped nine seats with no file and re-dispatched all nine.
+- Inside Check 0's unsatisfied branch, a live `.beat-inflight` lease now logs `HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT` and
+  falls through to Check 1 and Check 2b. It writes no stall counter and keeps `.handoff-guard-armed`, so the guard fires
+  again on the first Stop after the beat returns. A satisfied handoff under a live lease is still stamped complete.
+- One helper, `beat_lease_live`, reads the lease for Check 0 and Check 2b.
+- Limit: a SIGKILLed or unrelated beat's lease defers a Stop with nothing left to re-invoke the lead, for at most the lease
+  length (about 30s), the same exposure Check 2b already carries.
+- `steps/handoff.md` step 1 and the auto-handoff copy in `_gate-procedures.md` say Check 0 defers while the beat's lease is
+  live and blocks afterwards.
+- Fixtures: `handoff-resume-guard` arms A1-A6 with mutants m1, m2, m4, m5 and a placement mutant, on whole hooks-directory
+  copies; `implementation-join-yield` arm 8i with mutant m3 (a deferral that writes the stall counter). Every mutant is
+  killed. Across 16 worlds with no live lease, base and tip decide byte-identically.
+
 ## [0.742.0] - 2026-10-07
 
 Batch 203's second release, shipped alone because it changes the update skill. It discharges one consumer candidate,

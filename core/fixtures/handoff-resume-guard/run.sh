@@ -600,6 +600,170 @@ if hook_mut "$M_TAIL" 's|            . .id. "$TRANSCRIPT" 2>/dev/null . sort -u)
                    || bad "MUTANT m4 HARNESS BROKEN — the copy blocks case B ($r); it is not running the arm at all"
 fi
 
+# --- THE LIVE-BEAT DEFERRAL ---------------------------------------------------------
+#
+# THE DEFECT. `steps/handoff.md` step 1 ends the turn on ONE backgrounded
+# `wait-for-deliverable.sh` beat before any TaskStop. That Stop reaches Check 0 with every arm
+# unsatisfied by construction -- here, a row still reading `in-flight` -- and the block text
+# tells the lead to stop every teammate, which is the TaskStop the beat exists to avoid. Check 0
+# now DEFERS while `.beat-inflight` holds a future epoch, the same lease Check 2b reads.
+#
+# EACH WORLD IS ONE PROJECT DIR THE ARM KEEPS, because the arms read what the hook left on disk
+# -- the log, the stall-state file, the arming record, the completion stamp -- and `drive`
+# removes its project. The stall-state file is SEEDED as three lines so a deferral that writes
+# the counter is caught by `cmp`, not inferred from a later count.
+LEASE_STATE_SEED="$ROOT/lease-state-seed.txt"
+printf '%s\n%s\n%s\n' 1000 1 "fx:none" > "$LEASE_STATE_SEED"
+lease_world() { # lease_world <lease|NONE> <snapshot-file> <flag:up|down> -> project dir
+  local p; p="$(mktemp -d "$ROOT/lease-XXXXXX")"; mkdir -p "$p/_bmad-output/.driver"
+  cp "$2" "$p/_bmad-output/pipeline-snapshot.md"
+  [ "$3" = up ] && touch "$p/_bmad-output/pipeline-paused.flag"
+  : > "$p/_bmad-output/.driver/handoff"
+  cp "$LEASE_STATE_SEED" "$p/_bmad-output/handoff-guard-state.txt"
+  [ "$1" = NONE ] || printf '%s' "$1" > "$p/_bmad-output/.beat-inflight"
+  printf '%s' "$p"
+}
+lease_drive() { # lease_drive <proj> <transcript> [hook] -> raw hook stdout
+  jq -nc --arg t "$2" --arg s "fx" '{transcript_path:$t,session_id:$s}' \
+    | CLAUDE_PROJECT_DIR="$1" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" bash "${3:-$HOOK}" 2>/dev/null
+}
+LEASE_LOG='_bmad-output/pipeline-continuation-log.md'
+lease_ev()  { grep -c -- "^## .* -- $2\$" "$1/$LEASE_LOG" 2>/dev/null || true; }
+is_guard()  { case "$1" in *'HANDOFF GUARD'*) return 0 ;; esac; return 1; }
+is_block()  { printf '%s' "$1" | jq -e '.decision=="block"' >/dev/null 2>&1; }
+live_lease()    { printf '%s' "$(( $(date +%s) + 60 ))"; }
+expired_lease() { printf '%s' "$(( $(date +%s) - 1 ))"; }
+
+# Each scorer drives one world through the given hook and returns 0 when the arm's property
+# holds, so the mutant battery below scores the SAME predicate the arm does. LA_MSG is evidence.
+la_a1() { # live lease + in-flight row -> ALLOW, token, counter byte-identical, record kept
+  local p o; p="$(lease_world "$(live_lease)" "$(cat "$ROOT/.s_running")" up)"
+  o="$(lease_drive "$p" "$SWEEP" "${1:-}")"
+  LA_MSG="[block=$(is_block "$o" && echo y || echo n) deferred=$(lease_ev "$p" HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT) state=$(cmp -s "$LEASE_STATE_SEED" "$p/_bmad-output/handoff-guard-state.txt" && echo same || echo changed) armed=$([ -f "$p/_bmad-output/.handoff-guard-armed" ] && echo y || echo n)]"
+  ! is_block "$o" && [ "$(lease_ev "$p" HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT)" = 1 ] \
+    && cmp -s "$LEASE_STATE_SEED" "$p/_bmad-output/handoff-guard-state.txt" \
+    && [ -f "$p/_bmad-output/.handoff-guard-armed" ]
+}
+la_block_on() { # la_block_on <lease> [hook] -> 0 when the guard BLOCKS with its own reason, undeferred
+  local p o; p="$(lease_world "$1" "$(cat "$ROOT/.s_running")" up)"
+  o="$(lease_drive "$p" "$SWEEP" "${2:-}")"
+  LA_MSG="[block=$(is_block "$o" && echo y || echo n) guard=$(is_guard "$o" && echo y || echo n) deferred=$(lease_ev "$p" HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT) logged=$(lease_ev "$p" 'HANDOFF_GUARD_BLOCK ([0-9]*/[0-9]*)')]"
+  is_block "$o" && is_guard "$o" && [ "$(lease_ev "$p" HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT)" = 0 ] \
+    && [ "$(lease_ev "$p" 'HANDOFF_GUARD_BLOCK ([0-9]*/[0-9]*)')" = 1 ]
+}
+la_a2() { la_block_on "$(expired_lease)" "${1:-}"; }
+la_a3() { la_block_on "not-an-epoch" "${1:-}"; }
+la_a4() { # NO handoff requested, flag DOWN, live lease -> Check 2b's allow, no guard row at all
+  local p o; p="$(lease_world "$(live_lease)" "$(cat "$ROOT/.s_running")" down)"
+  o="$(lease_drive "$p" "$(cat "$ROOT/.p_noun")" "${1:-}")"
+  LA_MSG="[block=$(is_block "$o" && echo y || echo n) live=$(lease_ev "$p" ALLOWED_BY_LIVE_BEAT) deferred=$(lease_ev "$p" HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT)]"
+  ! is_block "$o" && [ "$(lease_ev "$p" ALLOWED_BY_LIVE_BEAT)" = 1 ] \
+    && [ "$(lease_ev "$p" HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT)" = 0 ]
+}
+la_a4_ctl() { # the same world with NO lease -> Rule 3's ordinary block, so A4's allow is the lease's
+  local p o; p="$(lease_world NONE "$(cat "$ROOT/.s_running")" down)"
+  o="$(lease_drive "$p" "$(cat "$ROOT/.p_noun")" "${1:-}")"
+  is_block "$o" && ! is_guard "$o"
+}
+# A5 -- STICKY ARMING SURVIVES THE DEFERRAL. No `.handoff-in-progress`, no `HANDOFF POINT` line and
+# no session log row, so the SECOND Stop has no key at all: the transcript's last user record is
+# the background task's completion notice, which is not a request. Only the arming record the
+# first Stop wrote can arm it. The transcript is the request turn plus that notice, appended.
+la_a5() {
+  local p t o1 o2
+  p="$(lease_world "$(live_lease)" "$(cat "$ROOT/.s_running")" up)"
+  t="$p/lead.jsonl"; cp "$SWEEP" "$t"
+  o1="$(lease_drive "$p" "$t" "${1:-}")"
+  jq -nc '{message:{role:"user",content:"<task-notification><task-id>bwfd01</task-id><status>completed</status><summary>Background command \"scripts/ai-dlc/wait-for-deliverable.sh docs/reviews/s305-qa.md\" completed (exit code 0)</summary></task-notification>"}}' >> "$t"
+  expired_lease > "$p/_bmad-output/.beat-inflight"
+  o2="$(lease_drive "$p" "$t" "${1:-}")"
+  LA_MSG="[stop1 block=$(is_block "$o1" && echo y || echo n) deferred=$(lease_ev "$p" HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT) | stop2 block=$(is_block "$o2" && echo y || echo n) guard=$(is_guard "$o2" && echo y || echo n)]"
+  ! is_block "$o1" && [ "$(lease_ev "$p" HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT)" = 1 ] \
+    && is_block "$o2" && is_guard "$o2"
+}
+la_a5_premise() { # the notice alone, no arming record, is NOT a request: the same Stop must ALLOW
+  local p t o
+  p="$(lease_world "$(expired_lease)" "$(cat "$ROOT/.s_running")" up)"
+  t="$p/lead.jsonl"; cp "$SWEEP" "$t"
+  jq -nc '{message:{role:"user",content:"<task-notification><task-id>bwfd01</task-id><status>completed</status><summary>Background command \"scripts/ai-dlc/wait-for-deliverable.sh docs/reviews/s305-qa.md\" completed (exit code 0)</summary></task-notification>"}}' >> "$t"
+  o="$(lease_drive "$p" "$t")"
+  ! is_block "$o"
+}
+# A6 -- EVERY ARM SATISFIED with a live lease: the completion branch, never the deferral.
+la_a6() {
+  local p o; p="$(lease_world "$(live_lease)" "$(cat "$ROOT/.s_stopped")" up)"
+  : > "$p/_bmad-output/.driver/handoff"
+  printf 'fx\n' > "$p/_bmad-output/.handoff-guard-armed"
+  o="$(lease_drive "$p" "$SWEEP" "${1:-}")"
+  LA_MSG="[block=$(is_block "$o" && echo y || echo n) stamp=$([ -f "$p/_bmad-output/.handoff-complete" ] && echo y || echo n) armed=$([ -f "$p/_bmad-output/.handoff-guard-armed" ] && echo y || echo n) deferred=$(lease_ev "$p" HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT)]"
+  ! is_block "$o" && [ -f "$p/_bmad-output/.handoff-complete" ] \
+    && [ ! -f "$p/_bmad-output/.handoff-guard-armed" ] \
+    && [ "$(lease_ev "$p" HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT)" = 0 ]
+}
+
+la_a1 && ok "A1: handoff with an 'in-flight' row and a LIVE beat lease -> ALLOW, HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT logged, stall state byte-identical, arming record kept" \
+      || bad "A1: the step-1 beat's Stop was not deferred cleanly $LA_MSG — the lead is told to TaskStop the teammates the beat is waiting on"
+la_a2 && ok "A2: the same world with an EXPIRED lease -> BLOCK with the HANDOFF GUARD reason and a HANDOFF_GUARD_BLOCK row (keyed on the lease, not the file)" \
+      || bad "A2: an expired lease did not block $LA_MSG — a dead beat's marker defers the guard forever"
+la_a3 && ok "A3: the same world with a NON-INTEGER lease -> BLOCK with the HANDOFF GUARD reason" \
+      || bad "A3: a garbage lease did not block $LA_MSG — the deferral reads the file's existence, not its epoch"
+la_a4 && ok "A4: NO handoff requested, flag down, live lease -> ALLOWED_BY_LIVE_BEAT and no deferral row (the change is confined to the handoff path)" \
+      || bad "A4: a non-handoff Stop with a live lease is not Check 2b's allow $LA_MSG"
+la_a4_ctl && ok "A4 control: the same world with NO lease -> Rule 3's ordinary block, so A4's allow is the lease" \
+          || bad "A4 CONTROL BROKEN: the no-lease world did not take Rule 3's block — A4's allow proves nothing about the lease"
+la_a5_premise && ok "A5 premise: the task-notification turn alone, no arming record, ALLOWS — it is not a request, so A5's second block can only be the sticky record" \
+              || bad "A5 PREMISE BROKEN: the task-notification turn is read as a handoff request on its own, so A5 cannot see the arming record"
+la_a5 && ok "A5: deferred Stop, then the beat's notice and an expired lease -> the next Stop BLOCKS with the guard (sticky arming survived the deferral)" \
+      || bad "A5: the guard did not re-fire after the deferral $LA_MSG — the deferral disarmed it and the handoff escapes"
+la_a6 && ok "A6: every arm satisfied with a live lease -> stamped complete, arming record cleared, no deferral row (the deferral sits inside the unsatisfied branch)" \
+      || bad "A6: a satisfied handoff with a live lease was not stamped complete $LA_MSG — the deferral sits before the arm test"
+
+# --- MUTANTS FOR THE DEFERRAL. Each is a copy of the WHOLE hooks directory, because the hook
+# sources ai-dlc-handoff-pending.sh from beside itself and a lone copy silently skips it. Guarded
+# by `cmp -s` and `bash -n`, each scored on the ONE arm that owns it, with a presence-shaped
+# control from the same copy. m3 (the deferral writes the stall counter) is owned by
+# implementation-join-yield's sequence arm.
+HOOK_DIR_L="$(cd "$(dirname "$HOOK")" && pwd)"
+LMUT_CTL="$ROOT/lmut-control"; mkdir -p "$LMUT_CTL"; cp -R "$HOOK_DIR_L/." "$LMUT_CTL/"
+if [ ! -f "$LMUT_CTL/ai-dlc-handoff-pending.sh" ]; then
+  bad "FIXTURE BROKEN: the hooks-directory copy has no ai-dlc-handoff-pending.sh — no deferral mutant below would be about a hook that ran"
+elif la_a1 "$LMUT_CTL/ai-dlc-continue.sh" && la_a2 "$LMUT_CTL/ai-dlc-continue.sh"; then
+  ok "deferral mutant control: an UNEDITED hooks-dir copy passes A1 and A2"
+else
+  bad "deferral mutant control: an UNEDITED hooks-dir copy fails A1 or A2 $LA_MSG — every kill below is unreadable"
+fi
+# NOT CALLED INSIDE `$( )`: a `bad` there would print into the captured path and never reach
+# `fails`, so a stale mutation would read as a silent skip. It sets M instead.
+lmut() { # lmut <name> <sed-expr> -> 0 and M=<mutated continue hook>, or 1 after a `bad`
+  M=""
+  local d="$ROOT/lmut-$1"; mkdir -p "$d"; cp -R "$HOOK_DIR_L/." "$d/"
+  sed "$2" "$HOOK_DIR_L/ai-dlc-continue.sh" > "$d/ai-dlc-continue.sh" || { bad "MUTANT $1: sed DIED — the mutation never existed"; return 1; }
+  if cmp -s "$HOOK_DIR_L/ai-dlc-continue.sh" "$d/ai-dlc-continue.sh"; then bad "FIXTURE STALE: deferral mutation $1 matched nothing — re-anchor it on the real line"; return 1; fi
+  bash -n "$d/ai-dlc-continue.sh" 2>/dev/null || { bad "FIXTURE STALE: deferral mutant $1 does not parse"; return 1; }
+  M="$d/ai-dlc-continue.sh"
+}
+lscore() { # lscore <name> <mutant> <owning-arm> <control-arm> <what>
+  if "la_$3" "$2"; then bad "MUTANT SURVIVED ($1: $5) — arm $3 still passes $LA_MSG"
+  else ok "mutant ($1: $5) fails arm $3"; fi
+  if "la_$4" "$2"; then ok "...and the same copy still passes arm $4 (it runs; the kill is the mutation's)"
+  else bad "MUTANT HARNESS BROKEN ($1): the copy also fails arm $4 $LA_MSG"; fi
+}
+if lmut m1-no-deferral 's/^      if beat_lease_live; then$/      if false; then/'; then
+  lscore m1 "$M" a1 a2 "the deferral removed"
+fi
+if lmut m2-ge-zero 's/^  \[\[ "\$BEAT_DEADLINE" =~ \^\[0-9\]+\$ \]\] && \[ "\$BEAT_DEADLINE" -gt "\$NOW" \]$/  [[ "$BEAT_DEADLINE" =~ ^[0-9]+$ ]] \&\& [ "$BEAT_DEADLINE" -ge 0 ]/'; then
+  lscore m2 "$M" a2 a3 "the lease test is -ge 0, not -gt NOW"
+fi
+if lmut m5-file-only 's/^  \[\[ "\$BEAT_DEADLINE" =~ \^\[0-9\]+\$ \]\] && \[ "\$BEAT_DEADLINE" -gt "\$NOW" \]$/  :/'; then
+  lscore m5 "$M" a3 a1 "the deferral keyed on the marker file alone"
+fi
+if lmut m4-disarms 's/^          echo "## \${TIMESTAMP} -- HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT"$/          rm -f "$HANDOFF_ARMED_FILE"; echo "## ${TIMESTAMP} -- HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT"/'; then
+  lscore m4 "$M" a5 a2 "the deferral clears the arming record"
+fi
+if lmut placement-before-arm-test 's/^    if \[ "\$RESUME_OK" != "1" \] || \[ "\$TEAMMATES_OK" != "1" \] || \[ "\$INFLIGHT_OK" != "1" \] \\$/    if beat_lease_live || [ "$RESUME_OK" != "1" ] || [ "$TEAMMATES_OK" != "1" ] || [ "$INFLIGHT_OK" != "1" ] \\/'; then
+  lscore placement "$M" a6 a1 "the deferral taken before the arm test"
+fi
+
 # --- Beat-before-stop arm -----------------------------------------------------------
 #
 # THE DEFECT THIS ARM EXISTS FOR. Measured on the reference consumer: an adversary pass

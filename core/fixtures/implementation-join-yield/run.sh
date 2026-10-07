@@ -298,6 +298,7 @@ tx_world() { # tx_world <seed-case> -> world dir with a date shim at $T0
 #                  Q  an assistant text record alone, with no user record before it (arm 8h)
 #                  L  arm a wait-beat (a typed tool_use record) and Stop while it is live
 #                  S  Stop with no beat live
+#                  X  Stop with the lease left as it is, so the shimmed clock decides (arm 8i)
 #                  +N advance the shimmed clock N seconds
 #                  @X the next Stops carry session_id X
 tx_seq() {
@@ -324,6 +325,7 @@ tx_seq() {
             >> "$_w/transcript.jsonl"
           echo $(( $(cat "$_w/.now") + 100 )) > "$_w/_bmad-output/.beat-inflight" ;;
       S)  rm -f "$_w/_bmad-output/.beat-inflight" ;;
+      X)  : ;;
     esac
     _in="$(printf '{"session_id":"%s","transcript_path":"%s"}' "$(cat "$_w/.sid")" "$_w/transcript.jsonl")"
     if [ "$_cap" = - ]; then
@@ -452,7 +454,21 @@ arm_8h() { # the 8g world with the pause flag DOWN: Check 0's backoff must relea
   [ "$_bo" -ge 1 ] || return 1
   case "$_why" in 'no tool call across '*) return 0 ;; esac; return 1
 }
-ARMS_8="8a 8b 8c 8d 8e 8f 8g 8h"
+arm_8i() { # handoff.md step 1's beat: three deferred Stops within 30s, then the lease expires -> H
+  _w="$(tx_world handoff)"
+  # L re-stamps the lease to now+100 each time, as wait-for-deliverable.sh re-stamps every poll;
+  # +200 carries the clock past the last stamp, and X stops on the expired lease untouched.
+  _d="$(tx_seq "$_w" "$1" - L +5 L +5 L +200 X)"
+  _df="$(grep -c -- '-- HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT$' "$_w/$LOG" 2>/dev/null)" || _df=0
+  _ev="$(tx_events "$_w")"
+  ARM_MSG="[$_d | deferred $_df | $_ev]"; rm -rf "$_w"
+  # The guard fires on the FIRST Stop after the lease, at a fresh run of 1: three deferrals moved
+  # no counter. A deferral that wrote the counter reaches the 4th block and releases instead.
+  [ "$_d" = aaaH ] || return 1
+  [ "$_df" = 3 ] || return 1
+  [ "$_ev" = 'HANDOFF_GUARD_BLOCK (1/3) ' ]
+}
+ARMS_8="8a 8b 8c 8d 8e 8f 8g 8h 8i"
 arm_desc() {
   case "$1" in
     8a) echo "text-only stall at 45s and 300s: blocks then BACKOFF on the 4th Stop, detail names the no-tool-call signal" ;;
@@ -463,6 +479,7 @@ arm_desc() {
     8f) echo "CLAUDE_CODE_STOP_HOOK_BLOCK_CAP clamps EFF_MAX: 1 -> ba, 0 -> bbba, 2 -> bba" ;;
     8g) echo "a slow text-only handoff-guard run releases after EFF_MAX, each row carrying the tool-call line" ;;
     8h) echo "the same run with the pause flag DOWN releases by the 4th Stop via a 'Handoff guard:' BACKOFF, never more than 3 blocks in a row over 9 Stops" ;;
+    8i) echo "three Stops on handoff.md step 1's live beat are deferred (aaa) and the first Stop past the lease is the guard's block at 1/3 (H)" ;;
   esac
 }
 # EVERY ARM OF SECTIONS 8 AND 9 IS A CONCURRENT JOB. Each builds its own worlds and each mutant
@@ -557,13 +574,17 @@ mut_bg() { job mut "$@"; }
   mut_bg check0-fallthrough 8h '/^      # BACKOFF EXHAUSTED: ALLOW THE STOP HERE/,/^      exit 0$/{
 /# possible false positive, as before$/!d
 }' "Check 0's exhausted backoff falls through to Check 3"
+  # (x) Check 0's live-beat deferral writes the stall counter, so three deferrals and one guard
+  # block read as a four-block stall and the guard releases on the Stop it exists to catch.
+  mut_bg deferral-writes-counter 8i 's/^          echo "## \${TIMESTAMP} -- HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT"$/          stall_run_write "$HANDOFF_STATE"; echo "## ${TIMESTAMP} -- HANDOFF_GUARD_DEFERRED_BY_LIVE_BEAT"/' \
+      "Check 0's live-beat deferral writes the stall counter"
 }
 wait
 # Every section-8 arm on the shipping hook, every one again on the unmutated copy, and the
-# nine mutant lines above. With no control copy the FIXTURE BROKEN line above has already
+# ten mutant lines above. With no control copy the FIXTURE BROKEN line above has already
 # failed the run and only the section-8 jobs exist.
 set -- $ARMS_8; N_ARMS=$#
-JOBS_WANT=$((2 * N_ARMS + 9)); [ -n "$CTRL" ] || JOBS_WANT=$N_ARMS
+JOBS_WANT=$((2 * N_ARMS + 10)); [ -n "$CTRL" ] || JOBS_WANT=$N_ARMS
 _i=0
 while [ "$_i" -lt "$JOB_N" ]; do
   _i=$((_i + 1)); _vf="$JOBS/verdict.$_i"
