@@ -816,7 +816,20 @@ S13c_complete_marker_must_settle() {
   cbeat "$SUBJ" "$W" --complete --reset churn.md
   if has "DELIVERED churn.md"; then ok "complete: once the edits stop, the same file settles and DELIVERS"
   else bad "complete: the churned file did not deliver after its edits stopped: $OUT"; fi
-  rm -rf "$W"
+
+  # A marked file that PREDATES the join (a previous sprint's file at a reused path) is not
+  # UNSETTLED: nothing changed. On exhaustion it is 'absent', the reading the arming NOTE gave.
+  W3="$(mk_work)"; CBEAT_SINCE=""
+  printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W3/old.md"
+  fx_backdate "$W3/old.md" 3600 || broken "cannot backdate old.md"
+  cb2() { ( cd "$W3" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=3 AI_DLC_WAIT_POLL_SECS=1 \
+      AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      bash "$SUBJ" --complete old.md ) > "$BEATOUT" 2>&1; RC=$?; OUT="$(cat "$BEATOUT")"; }
+  cb2; cb2
+  if has "NON-DELIVERY old.md -- absent after" && ! has "UNSETTLED old.md" && [ "$RC" -eq 1 ]; then
+    ok "complete: a marked file older than the join is 'absent' on exhaustion, never UNSETTLED"
+  else bad "complete: a pre-join marked file was reported UNSETTLED or not absent (rc=$RC): $OUT"; fi
+  rm -rf "$W" "$W3"
 }
 
 S13d_complete_unfinished_is_not_absent() {

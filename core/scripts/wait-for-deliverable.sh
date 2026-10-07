@@ -817,7 +817,7 @@ if [ -n "$EXHAUSTED" ]; then
     if is_unfinished "$t" "$(join_of "$t")"; then
       echo "NON-DELIVERY $t -- after $MAX_BEATS beats."
       echo "UNFINISHED $t -- present, last non-blank line is not seat-complete:"
-    elif [ "$COMPLETE" -eq 1 ] && [ -s "$t" ] && has_marker "$t"; then
+    elif [ "$COMPLETE" -eq 1 ] && [ -s "$t" ] && [ "$(mtime_of "$t")" -ge "$(join_of "$t")" ] && has_marker "$t"; then
       echo "NON-DELIVERY $t -- after $MAX_BEATS beats."
       echo "UNSETTLED $t -- present and ends in seat-complete:, but its content was still changing"
     else
