@@ -31,9 +31,11 @@
 #            still ran once, on an empty stdin, as git runs it.
 #         2  usage or REFUSAL before anything ran: wrong argc, a consumer that is not the top of
 #            its own work tree (a subdirectory of an enclosing repository would run THAT
-#            repository's hook), an unknown remote, <branch> not checked out or not a commit,
-#            <out> already present or tracked, or the scratch area could not be staged. Nothing
-#            was run and nothing was pushed. A `self-update-push: REFUSED —` line on stderr.
+#            repository's hook), an unknown remote, a remote with more than one push url,
+#            <branch> not checked out or not a commit, <out> already present or tracked, or the
+#            scratch area could not be staged — in all of these nothing ran. Also exit 2 AFTER
+#            the hook when the hook moved <branch>. Nothing was pushed in any exit-2 case. A
+#            `self-update-push: REFUSED —` line on stderr.
 #         3  HOOK-REFUSED. The hook ran once and exited non-zero; NOTHING was pushed. One stdout
 #            line `HOOK-REFUSED <rc> <phases>`, and <out> carries `# probe:` lines: the hook,
 #            its exit and the ref line it was fed, then the last 60 lines of its output.
@@ -46,7 +48,7 @@
 # THE HOOK IS RUN AS GIT RUNS IT.
 #   * Which hook: `git rev-parse --git-path hooks/pre-push`, git's own answer, honouring
 #     `core.hooksPath` and a `.git/hooks/` shim. Absent or not executable: git skips it, so this
-#     script runs plain `git push -u` and runs no hook.
+#     script runs no hook and makes the same pinned push described below.
 #   * argv: `$1` the remote NAME, `$2` its PUSH url (`git remote get-url --push`, so a
 #     `remote.<r>.pushurl` is what the hook sees, as on a real push).
 #   * stdin: the ref line git sends, built here from the branch actually pushed —
@@ -62,6 +64,20 @@
 # If the push url already holds the local sha, git STILL runs the pre-push hook, with an EMPTY
 # stdin, and a refusal there still blocks the push. This script does the same: the hook runs once
 # on an empty stdin file, and the HOOK-REFUSED / `--no-verify` paths below are unchanged.
+#
+# THE PUSH IS PINNED: the ref line the hook judges and the push that goes out must be the SAME
+# object, so the push is defined here exactly — one ref, one url, no tags, a fixed sha — and git's
+# configuration gets no say in what is sent. Three rules follow.
+#   * `git push --no-verify --no-follow-tags <remote> <sha>:refs/heads/<b>`, the sha read BEFORE
+#     the hook. An explicit refspec overrides `remote.<r>.push` and `push.default`, and
+#     `--no-follow-tags` overrides `push.followTags`, so neither can push a ref the hook was never
+#     shown. The upstream is then set with `git branch --set-upstream-to`; if that alone fails the
+#     push still landed, so it is reported on stderr and the exit stays 0.
+#   * A hook that MOVES <branch> (commits, resets) is refused, exit 2, nothing pushed: the hook
+#     judged the sha it was fed, and pushing either that sha or the new one would publish a branch
+#     that disagrees with the tree the operator now holds.
+#   * A remote with MORE THAN ONE push url is refused, exit 2, BEFORE the hook runs: git runs the
+#     hook once per url, and one pinned push to one url cannot reproduce that.
 #
 # bash 3.2 and `set -u` safe: no arrays, no here-strings, no heredocs, no pipeline feeding `while`.
 
@@ -87,8 +103,12 @@ ROOT="$(git -C "$CONSUMER" rev-parse --show-toplevel 2>/dev/null)" && [ -n "$ROO
   || refuse "git could not resolve the consumer's work-tree top"
 
 git -C "$ROOT" remote get-url "$REMOTE" >/dev/null 2>&1 || refuse "no remote named '$REMOTE' on this consumer"
-URL="$(git -C "$ROOT" remote get-url --push "$REMOTE" 2>/dev/null)" && [ -n "$URL" ] \
+URLS="$(git -C "$ROOT" remote get-url --push --all "$REMOTE" 2>/dev/null)" && [ -n "$URLS" ] \
   || refuse "the push url of remote '$REMOTE' could not be read"
+su_n="$(printf '%s\n' "$URLS" | grep -c .)" || su_n=0
+[ "$su_n" -eq 1 ] \
+  || refuse "remote '$REMOTE' has $su_n push urls ($(printf '%s\n' "$URLS" | tr '\n' ' ' | sed 's/ $//')); git would run the hook once per url and this wrapper pushes to exactly one. Give the remote a single push url, then re-run."
+URL="$URLS"
 
 SU_HEAD="$(git -C "$ROOT" symbolic-ref -q HEAD 2>/dev/null)" || SU_HEAD=""
 [ "$SU_HEAD" = "refs/heads/$BRANCH" ] \
@@ -107,6 +127,22 @@ fi
 
 ZERO=0000000000000000000000000000000000000000
 
+# pinned_push — the ONE push this script makes: LOCAL_SHA to refs/heads/<b> on <remote>, no tags,
+# no configured refspec, no hook (it already ran, or git would run none). git's own output goes to
+# stderr; stdout carries only this script's status lines. Exits the script.
+pinned_push() {
+  git -C "$ROOT" push --no-verify --no-follow-tags "$REMOTE" "$LOCAL_SHA:refs/heads/$BRANCH" >&2
+  su_rc=$?
+  if [ "$su_rc" -ne 0 ]; then
+    printf 'TRANSPORT %s\n' "$su_rc"
+    exit 4
+  fi
+  if ! git -C "$ROOT" branch --set-upstream-to="$REMOTE/$BRANCH" "$BRANCH" >&2; then
+    printf 'self-update-push: pushed %s to %s, but its upstream could not be set to %s/%s; the push landed.\n' "$LOCAL_SHA" "refs/heads/$BRANCH" "$REMOTE" "$BRANCH" >&2
+  fi
+  exit 0
+}
+
 # THE HOOK GIT WOULD RUN. Resolved from the work-tree top, so a relative answer is relative to it.
 HOOK="$(cd "$ROOT" && git rev-parse --git-path hooks/pre-push 2>/dev/null)" || HOOK=""
 case "$HOOK" in
@@ -116,13 +152,7 @@ esac
 
 if [ -z "$HOOK" ] || [ ! -x "$HOOK" ]; then
   printf 'self-update-push: git runs no pre-push hook here (%s is absent or not executable); pushing.\n' "${HOOK:-unresolvable}" >&2
-  git -C "$ROOT" push -u "$REMOTE" "$BRANCH" >&2
-  su_rc=$?
-  if [ "$su_rc" -ne 0 ]; then
-    printf 'TRANSPORT %s\n' "$su_rc"
-    exit 4
-  fi
-  exit 0
+  pinned_push
 fi
 
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/self-update-push-XXXXXX" 2>/dev/null)" && [ -n "$TMP" ] && [ -d "$TMP" ] \
@@ -178,11 +208,9 @@ if [ "$HOOK_RC" -ne 0 ]; then
   exit 3
 fi
 
-# git's own output goes to stderr: stdout carries only this script's status lines.
-git -C "$ROOT" push --no-verify -u "$REMOTE" "$BRANCH" >&2
-su_rc=$?
-if [ "$su_rc" -ne 0 ]; then
-  printf 'TRANSPORT %s\n' "$su_rc"
-  exit 4
-fi
-exit 0
+# THE HOOK MUST NOT HAVE MOVED THE BRANCH: it judged LOCAL_SHA, and that is all this may push.
+su_after="$(git -C "$ROOT" rev-parse -q --verify "refs/heads/${BRANCH}^{commit}" 2>/dev/null)" || su_after=""
+[ "$su_after" = "$LOCAL_SHA" ] \
+  || refuse "the pre-push hook moved $BRANCH (from $LOCAL_SHA to ${su_after:-<unresolvable>}); it judged the first and this wrapper pushes nothing it did not judge. Nothing was pushed."
+
+pinned_push
