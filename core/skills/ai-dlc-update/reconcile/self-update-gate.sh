@@ -834,6 +834,11 @@ machinery_at_or_past() {
 # NEVER LOOKED leaves behind must not be the one that acquits. "Arm C carried nothing" and "arm C
 # did not run" are different facts and the initializer is the only place they can be told apart.
 GATE_CARRY_STATE=cold
+# Whether arm C carried the HOOK itself out of the slice. A carried hook is not written, so the
+# push runs the consumer's current one; an uncarried hook the range changes is written, and the
+# push runs theirs' (see "THE HOOK THE PUSH WILL RUN" below).
+GATE_HOOK_CARRIED=0
+GATE_CARRIED=""
 
 # ---- ARM C: A MACHINERY PATH THE CONSUMER HAS DIVERGED ON ------------------------------
 # Step 2 justifies autonomy -- no operator gate, auto-merged PR -- on the declaration that the
@@ -988,6 +993,9 @@ if [ -z "${AI_DLC_GATE_IN_SAFE_STOP:-}" ]; then
         # pipe, so this assignment survives into the caller; a `|` here would lose it to a
         # subshell and the acquittal would return with nothing saying so.
         GATE_CARRY_STATE=carried
+        [ "$c_path" = core/git-hooks/pre-push ] && GATE_HOOK_CARRIED=1
+        GATE_CARRIED="${GATE_CARRIED:-}${c_path}
+"
         emit SELF-UPDATE-CARRY "$c_path" "the consumer's copy at ${c_cons:-?} has DIVERGED (status ${c_st:-?}, bucket $c_bucket). This is a machinery path, so the self-update would write \`theirs\` over it autonomously and auto-merge the result. Do NOT write it: drop it from the slice, report it, and carry it to the step-7 gated apply, which emits a WORKLIST semantic-merge row for it. The rest of the slice is unaffected by this row."
       done < "$TMP/c-out"
     fi
@@ -1154,6 +1162,33 @@ fi
 # `$HOOK` IS ALREADY RESOLVED, at the input-recording block near the top, and is deliberately NOT
 # re-resolved here. Two resolutions of "which hook is the authority" is two chances to record one
 # file and read another, which is the exact divergence the input list exists to make impossible.
+# ---- THE HOOK THE PUSH WILL RUN IS THEIRS' WHENEVER THE SLICE WRITES IT (BL-456) ----------
+# The hook is MACHINERY: step 2 writes `core/git-hooks/pre-push` to `.githooks/pre-push` whenever
+# the range changes it and arm C did not carry it. git then runs THAT hook on the push, so judging
+# the slice against the consumer's CURRENT hook asks a question the push never asks. Measured at
+# the tip that scanned only the current hook, two cycles each, a renderer whose rendered body
+# changes: theirs' hook ADDS the --check step, or turns a discarded `--check || true` into a read
+# one -- the gate read OK, the push was refused by theirs' hook, the cycle was discarded, and the
+# next run read OK again. From here on `$HOOK` is the hook the push runs and `$HOOK_CUR` the one the
+# consumer runs today; the differential's CURRENT side asks the current hook's question or, where
+# that hook does not ask it, reads as not run. Theirs' hook is a blob of the recorded `theirs-sha`,
+# so the record still identifies every byte this verdict read.
+HOOK_CUR="$HOOK"
+hp_rc=0
+git -C "$DIST" diff --quiet "${BASE}..${THEIRS}" -- core/git-hooks/pre-push >/dev/null 2>&1 || hp_rc=$?
+if [ "$hp_rc" -gt 1 ]; then
+  emit SELF-UPDATE-UNDECIDED "pre-push" "whether ${BASE}..${THEIRS} changes core/git-hooks/pre-push could not be computed (git diff exited ${hp_rc}), so which hook the push will run is unknown; treat as defer."
+  exit 0
+fi
+if [ "$hp_rc" -eq 1 ] && [ "$GATE_HOOK_CARRIED" -eq 0 ]; then
+  if git -C "$DIST" show "${THEIRS}:core/git-hooks/pre-push" > "$TMP/hook-theirs" 2>/dev/null && [ -s "$TMP/hook-theirs" ]; then
+    HOOK="$TMP/hook-theirs"
+  else
+    emit SELF-UPDATE-UNDECIDED "pre-push" "the range changes core/git-hooks/pre-push and the slice writes it, but theirs' copy could not be read, so the hook the push will run is unknown; treat as defer."
+    exit 0
+  fi
+fi
+
 if [ ! -f "$HOOK" ]; then
   emit SELF-UPDATE-UNDECIDED "-" "no pre-push hook found at $CONSUMER/.githooks/pre-push or in the distribution, so the set of scripts that can block a push is unknown. A gate that cannot read its own subject must not return OK."
   exit 0
@@ -1399,7 +1434,7 @@ if [ -n "$changed_why" ]; then
 fi
 CHANGED="$(sed 's|.*/||' "$TMP/changed-raw" | sort -u)"
 
-if [ -z "$CHANGED" ]; then
+if [ -z "$CHANGED" ] && [ "$HOOK" = "$HOOK_CUR" ]; then
   emit SELF-UPDATE-OK "-" "this pull changes no core/scripts/ path, so nothing the pre-push invokes can be replaced by the self-update."
   exit 0
 fi
@@ -1415,9 +1450,25 @@ fi
 # 3.2 writes to a temp file of its own whose failed write is silent.
 gating_why=""
 GATING=""
+# A SCRIPT THE PULL DOES NOT CHANGE IS STILL GATING WHEN THE NEW HOOK ASKS IT A NEW QUESTION.
+# Where theirs' hook replaces the current one, every name it invokes whose run shape (kind and
+# argv, line numbers aside) differs between the two hooks joins the changed set: the push asks it
+# something today's push does not.
+HOOK_ASKS_NEW=""
+if [ "$HOOK" != "$HOOK_CUR" ]; then
+  gate_stage hook-names "$INVOKED" "the new hook's invoked-script list"
+  while IFS= read -r ha_n; do
+    [ -n "$ha_n" ] || continue
+    ha_new="$(gate_argv_scan "$HOOK" "$ha_n" | awk -F'\t' '{print $1 "\t" $3}' | sort -u)"
+    ha_cur=""
+    [ -f "$HOOK_CUR" ] && ha_cur="$(gate_argv_scan "$HOOK_CUR" "$ha_n" | awk -F'\t' '{print $1 "\t" $3}' | sort -u)"
+    [ "$ha_new" = "$ha_cur" ] || HOOK_ASKS_NEW="${HOOK_ASKS_NEW}${ha_n}
+"
+  done < "$TMP/hook-names"
+fi
 if [ -z "${TMP:-}" ] || [ ! -d "$TMP" ]; then
   gating_why="no staging directory exists for this run"
-elif ! printf '%s\n' "$CHANGED" > "$TMP/gating-changed" || ! printf '%s\n' "$INVOKED" > "$TMP/gating-invoked"; then
+elif ! printf '%s\n%s' "$CHANGED" "$HOOK_ASKS_NEW" > "$TMP/gating-changed" || ! printf '%s\n' "$INVOKED" > "$TMP/gating-invoked"; then
   gating_why="the changed-script and invoked-script sets could not be staged"
 else
   GATING="$(grep -Fxf "$TMP/gating-changed" "$TMP/gating-invoked" 2>/dev/null)"
@@ -1502,11 +1553,21 @@ while IFS= read -r name; do
   fi
 
   # The consumer's CURRENT copy is the control side.
-  cur="$CONSUMER/scripts/ai-dlc/$name"
-  if [ ! -f "$cur" ]; then
-    emit SELF-UPDATE-OK "$name" "the consumer has no current copy at scripts/ai-dlc/$name, so this pull ADDS it rather than replacing something the hook already runs against this tree."
+  # AN ABSENT CURRENT COPY IS NOT AN ACQUITTAL. Today's push cannot be refused by a script the
+  # consumer lacks, and after the write the push runs the incoming one -- so the current side of
+  # every run below reads 0 and the incoming side is asked the hook's question. Reading "this pull
+  # ADDS it" as OK sent a consumer with pinned roles and no renderer into a push refused by the
+  # renderer it had just been given, on every cycle (BL-456).
+  # A CARRIED SCRIPT IS NOT WRITTEN, so the push runs the consumer's own copy (or none) exactly as
+  # today's push does, and no incoming version of it can refuse this cycle. A consumer that DELETED
+  # a script present at base is carried by arm C, never given the incoming copy here.
+  if gate_has_line "${GATE_CARRIED:-}" "core/scripts/$name"; then
+    emit SELF-UPDATE-OK "$name" "carried: arm C removed core/scripts/$name from the slice, so this cycle does not write it and the push runs the consumer's current copy, as today's push does."
     continue
   fi
+  cur="$CONSUMER/scripts/ai-dlc/$name"
+  cur_absent=0
+  [ -f "$cur" ] || cur_absent=1
   # ---- A VERDICT TAKEN ON AN ALREADY-WRITTEN TREE ANSWERS A DIFFERENT QUESTION ----------
   # The differential asks whether the INCOMING version fails where the CURRENT one passes. When
   # the consumer's current copy is already byte-identical to `theirs` AND the range changes that
@@ -1596,9 +1657,23 @@ while IFS= read -r name; do
   # `rc_cur` 0 with a non-zero `rc_new` DEFERS: a version that newly starts failing under the
   # hook's argv is the case the gate exists for. Unequal non-zero codes are a real change nobody
   # can attribute, and are UNDECIDED.
+  #
+  # THE CURRENT SIDE IS TODAY'S PUSH. Where today's hook does not run this script with this argv
+  # and read it (theirs' hook added or reshaped the step), or the consumer has no copy, today's
+  # push is not refused by it: `rc_cur` is 0, and the incoming run alone answers. Running the
+  # current copy under a question today's hook never asks read an equal non-zero as "predates the
+  # pull" on a push that only theirs' hook refuses.
+  sc_cur_argvs=""
+  if [ "$HOOK" != "$HOOK_CUR" ] && [ -f "$HOOK_CUR" ]; then
+    sc_cur_argvs="$(gate_argv_scan "$HOOK_CUR" "$name" | awk -F'\t' '$1 == "R" {print $3}')"
+  fi
   sc_v=OK; sc_d=""
   while IFS= read -r sc_a; do
-    gate_run_side "$TMP/cur/scripts/ai-dlc/$name" "$sc_a"; rc_cur=$?
+    if [ "$cur_absent" -eq 1 ] || { [ "$HOOK" != "$HOOK_CUR" ] && ! gate_has_line "$sc_cur_argvs" "$sc_a"; }; then
+      rc_cur=0
+    else
+      gate_run_side "$TMP/cur/scripts/ai-dlc/$name" "$sc_a"; rc_cur=$?
+    fi
     gate_run_side "$TMP/new/scripts/ai-dlc/$name" "$sc_a"; rc_new=$?
     sc_d="${sc_d:+$sc_d; }argv [${sc_a}] current ${rc_cur} incoming ${rc_new}"
     if [ "$rc_cur" -ne "$rc_new" ] && [ "$rc_new" -ne 0 ]; then

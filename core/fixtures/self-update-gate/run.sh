@@ -3699,27 +3699,37 @@ mp_killed "av-mut-eqund" "$got" SELF-UPDATE-UNDECIDED \
 # and the incoming --check fails exactly as before. On a DEFER the slice folds into the gated apply,
 # which WRITES the incoming renderer before its push, so the same remedy re-renders with the incoming
 # one and its --check clears. Claim 3 is therefore a consequence of claim 1's OK, not a defect of its
-# own, and this arm pins that: the cycle the gate's verdict selects is followed, then the remedy, then
-# the incoming renderer's --check. The stub spells the remedy `--root .` where the real renderer walks
-# up to the same root bare.
-# c3_cycle <gate> <world> -> <render verdict> gate-wrote=<yes|no> next-check=<rc>
+# own, and this arm pins that by DRIVING THE REAL APPLY: on a refusal it runs the shipped
+# `apply.sh --carried-machinery-slice`, which is what step 7 runs for a deferred slice, and reads
+# what apply itself reports and writes -- the renderer's RESOLVED pure-apply row, its WORKLIST
+# agent-definitions row, the renderer it left installed -- then the remedy and the hook's --check
+# before and after it. Nothing here writes the renderer; only apply does. The stub spells the
+# remedy `--root .` where the real renderer walks up to the same root bare.
+# c3_cycle <gate> <apply> <world> -> verdict, apply's rows, installed renderer, remedy, check before->after
 c3_cycle() {
-  local c rows v w rc
+  local c rows v b t rc0 rc1 rr inst pa wl
   c="$(mktemp -d "$AV/c3.XXXXXX")" || return 1
-  c="$c/cons"; cp -R "$2/cons" "$c" || return 1
-  rows="$(bash "$1" "$2/dist" "$(cat "$2/B")" "$(cat "$2/T")" "$c" 2>/dev/null)"
+  c="$c/cons"; cp -R "$3/cons" "$c" || return 1
+  b="$(cat "$3/B")"; t="$(cat "$3/T")"
+  rows="$(bash "$1" "$3/dist" "$b" "$t" "$c" 2>/dev/null)"
   v="$(av_st "$rows" render-agent-definitions.sh)"
-  if cmp -s "$2/cons/scripts/ai-dlc/render-agent-definitions.sh" "$c/scripts/ai-dlc/render-agent-definitions.sh"; then w=no; else w=yes; fi
   case "$v" in
     SELF-UPDATE-DEFER|SELF-UPDATE-UNDECIDED)
-      git -C "$2/dist" show "$(cat "$2/T"):core/scripts/render-agent-definitions.sh" > "$c/scripts/ai-dlc/render-agent-definitions.sh" ;;
-    SELF-UPDATE-OK) : ;;
+      printf 'version: 1.0.0\ncommit: %s\nskill_version: 1.0.0\nskill_commit: %s\ninstalled_at: 2026-01-01T00:00:00Z\nupstream: https://example.invalid/x\n' "$b" "$b" > "$c/.claude/.ai-dlc-version"
+      av_git "$c" add -A >/dev/null 2>&1; av_git "$c" commit -qm stamp >/dev/null 2>&1
+      rows="$(bash "$2" --carried-machinery-slice "$3/dist" "$b" "$c" "$t" 2>/dev/null)" ;;
+    SELF-UPDATE-OK) rows="" ;;
     *) printf 'no-render-row'; return 0 ;;
   esac
-  ( cd "$c" && bash scripts/ai-dlc/render-agent-definitions.sh --root . >/dev/null 2>&1 < /dev/null )
-  ( cd "$c" && bash "$AV/new-render.sh" --check --root . >/dev/null 2>&1 < /dev/null ); rc=$?
-  printf '%s gate-wrote=%s next-check=%s' "${v#SELF-UPDATE-}" "$w" "$rc"
+  pa="$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "RESOLVED" && $2 == "pure-apply" && $3 == "scripts/render-agent-definitions.sh" {f=1} END {print (f ? "yes" : "no")}')"
+  wl="$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "WORKLIST" && $2 == "agent-definitions" {f=1} END {print (f ? "yes" : "no")}')"
+  if cmp -s "$AV/new-render.sh" "$c/scripts/ai-dlc/render-agent-definitions.sh"; then inst=theirs; else inst=current; fi
+  ( cd "$c" && bash scripts/ai-dlc/render-agent-definitions.sh --check --root . >/dev/null 2>&1 < /dev/null ); rc0=$?
+  ( cd "$c" && bash scripts/ai-dlc/render-agent-definitions.sh --root . >/dev/null 2>&1 < /dev/null ); rr=$?
+  ( cd "$c" && bash scripts/ai-dlc/render-agent-definitions.sh --check --root . >/dev/null 2>&1 < /dev/null ); rc1=$?
+  printf '%s pure-apply=%s worklist=%s installed=%s remedy=%s check=%s->%s' "${v#SELF-UPDATE-}" "$pa" "$wl" "$inst" "$rr" "$rc0" "$rc1"
 }
+C3_APPLY="$(dirname "$GATE")/apply.sh"
 # PRECONDITION: world A expresses the loop. The remedy run with the OLD renderer leaves the incoming
 # --check at 1; run with the incoming renderer it clears to 0. Without both, the arm below cannot
 # separate a gate that leads to the loop from one that does not.
@@ -3728,15 +3738,127 @@ cp "$AV/new-render.sh" "$C3P/new/scripts/ai-dlc/render-agent-definitions.sh"
 for c3s in old new; do ( cd "$C3P/$c3s" && bash scripts/ai-dlc/render-agent-definitions.sh --root . >/dev/null 2>&1 < /dev/null ); done
 ss_assert "c3-pre" "old $(av_rc "$C3P/old" "$AV/new-render.sh" '--check --root .') new $(av_rc "$C3P/new" "$AV/new-render.sh" '--check --root .')" "old 1 new 0" \
   "the remedy clears the incoming check only when the incoming renderer is the one installed"
-ss_assert "c3-remedy-after-defer" "$(c3_cycle "$GATE" "$AV/a")" "DEFER gate-wrote=no next-check=0" \
-  "the gate defers before any push and writes nothing, so the gated apply installs the incoming renderer and the remedy clears the next check"
-c3_kill() { local got; if [ -z "$2" ]; then got="DID-NOT-APPLY"; else got="$(c3_cycle "$2" "$AV/a")"; fi; mp_killed "$1" "$got" "$3" "$4"; }
-c3_kill "c3-mut-control" "$(av_mut c3-control)" "DEFER gate-wrote=no next-check=0" \
-  "an unmutated copy beside its siblings reaches the same cycle, so the kill below is its mutation"
-c3_kill "c3-mut-bare" "$(av_mut c3-bare '  set -- $_a
-' '  set --
-')" "OK gate-wrote=no next-check=1" \
-  "the bare probe reads OK, step 2's push is refused and discarded, and the remedy re-renders with the OLD renderer: the next check fails again"
+C3_WANT="DEFER pure-apply=yes worklist=yes installed=theirs remedy=0 check=1->0"
+ss_assert "c3-remedy-after-defer" "$(c3_cycle "$GATE" "$C3_APPLY" "$AV/a")" "$C3_WANT" \
+  "the gate defers; the real carried-slice apply installs theirs' renderer and reports it, names the re-render, and the remedy takes the hook's check from 1 to 0"
+# THE MUTANT BREAKS THE APPLY-INSTALLS-THEIRS LEG, in a copy of the whole reconcile directory: the
+# pure-apply row is still printed but the write is skipped, which is exactly a cycle whose remedy
+# runs the renderer the consumer already had. The control is the same copy unmutated.
+c3_apply_mut() {
+  local e="$AV/c3a-$1"
+  mkdir -p "$e"; cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$(dirname "$GATE")"/*.tsv "$e"/ 2>/dev/null
+  [ -n "$2" ] || { printf '%s' "$e/apply.sh"; return 0; }
+  python3 -c 'import sys
+s = open(sys.argv[1]).read(); o, n = sys.argv[3], sys.argv[4]
+if s.count(o) != 1: sys.exit(3)
+open(sys.argv[2], "w").write(s.replace(o, n, 1))' "$C3_APPLY" "$e/apply.sh" "$2" "$3" 2>/dev/null || return 1
+  cmp -s "$C3_APPLY" "$e/apply.sh" && return 1
+  bash -n "$e/apply.sh" 2>/dev/null || return 1
+  printf '%s' "$e/apply.sh"
+}
+c3_kill() { local got; if [ -z "$2" ]; then got="DID-NOT-APPLY"; else got="$(c3_cycle "$GATE" "$2" "$AV/a")"; fi; mp_killed "$1" "$got" "$3" "$4"; }
+c3_kill "c3-mut-control" "$(c3_apply_mut control '')" "$C3_WANT" \
+  "an unmutated apply.sh copy beside its siblings reaches the same cycle, so the kill below is its mutation"
+c3_kill "c3-mut-nowrite" "$(c3_apply_mut nowrite 'overwrite_from_theirs "$rel" && say RESOLVED pure-apply "$rel"' 'say RESOLVED pure-apply "$rel"')" \
+  "DEFER pure-apply=yes worklist=no installed=current remedy=0 check=0->0" \
+  "the apply reports pure-apply but never writes theirs' renderer: the current one stays installed, no re-render is owed, and the push carries the old text"
+
+# --- THE HOOK THE PUSH RUNS IS THEIRS' WHEN THE SLICE WRITES IT (BL-456, round 2) ----------------
+# The gate scanned only the consumer's CURRENT hook, and its gating set was changed scripts that hook
+# invokes. When theirs' hook adds the renderer's --check step, turns a discarded `--check || true`
+# into a read one, or the consumer has no renderer at all ("ADDS it"), the render row read OK; step 2
+# wrote theirs' hook, git ran it on the push, the push was refused and discarded, and the next run
+# read OK again. Each world is one pull whose renderer's rendered body changes; only the hook pair and
+# the consumer's renderer differ.
+#   hk-adds    current hook has no renderer step, theirs' runs --check            -> DEFER (was OK)
+#   hk-reads   current `--check --root . || true`, theirs' reads it                -> DEFER (was OK)
+#   hk-absent  both hooks run --check, the pull ADDS the renderer (absent at base
+#              and on the consumer)                                                 -> DEFER (was OK)
+#   hk-same    both hooks run --check identically; the change is a renderer COMMENT -> OK (near-miss:
+#              the hook moved elsewhere, so theirs' hook is in force and must not refuse on its own)
+hk_hook() { # hk_hook <file> <none|discard|read> <extra comment>
+  { printf '#!/usr/bin/env bash\nset -uo pipefail\n# %s\n' "$3"
+    case "$2" in
+      discard) printf 'bash scripts/ai-dlc/render-agent-definitions.sh --check --root . || true\n' ;;
+      read) printf 'agent_definitions() {\n  local out rc\n  out="$(bash scripts/ai-dlc/render-agent-definitions.sh --check --root . 2>&1)"; rc=$?\n  return "$rc"\n}\nstep "agent definitions" agent_definitions\n' ;;
+    esac; } > "$1"
+  chmod +x "$1"
+}
+hk_world() { # hk_world <dir> <base-hook> <theirs-hook> <consumer-renderer:yes|no> <theirs-renderer:body|comment>
+  local w="$1"
+  mkdir -p "$w/dist/core/rules" "$w/dist/core/scripts" "$w/dist/core/git-hooks" "$w/cons/.githooks" "$w/cons/scripts/ai-dlc"
+  git -C "$w/dist" init -q
+  printf '1.0.0\n' > "$w/dist/VERSION"; printf 'hk machinery\n' > "$w/dist/core/rules/hk.md"
+  # A consumer WITHOUT a renderer is seeded against a base that has none either: the pull ADDS it.
+  # Absent at base and present at the consumer's base would be a consumer DELETION, which arm C
+  # carries and step 2 never writes -- a different world, with no loop in it.
+  [ "$4" = yes ] && av_render "$w/dist/core/scripts/render-agent-definitions.sh" 'FIRST action before any other work.' 'renderer stub'
+  hk_hook "$w/dist/core/git-hooks/pre-push" "$2" base
+  av_git "$w/dist" add -A >/dev/null 2>&1; av_git "$w/dist" commit -qm base >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/B"
+  printf '1.1.0\n' > "$w/dist/VERSION"
+  if [ "$5" = body ]; then av_render "$w/dist/core/scripts/render-agent-definitions.sh" 'FIRST action, before any other work.' 'renderer stub'
+  else av_render "$w/dist/core/scripts/render-agent-definitions.sh" 'FIRST action before any other work.' 'renderer stub; reworded'; fi
+  hk_hook "$w/dist/core/git-hooks/pre-push" "$3" theirs
+  av_git "$w/dist" add -A >/dev/null 2>&1; av_git "$w/dist" commit -qm theirs >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/T"
+  git -C "$w/dist" show "$(cat "$w/B"):core/git-hooks/pre-push" > "$w/cons/.githooks/pre-push"; chmod +x "$w/cons/.githooks/pre-push"
+  if [ "$4" = yes ]; then
+    git -C "$w/dist" show "$(cat "$w/B"):core/scripts/render-agent-definitions.sh" > "$w/cons/scripts/ai-dlc/render-agent-definitions.sh"
+    bash "$w/cons/scripts/ai-dlc/render-agent-definitions.sh" --root "$w/cons" >/dev/null 2>&1
+  else
+    printf 'keep\n' > "$w/cons/scripts/ai-dlc/.keep"
+  fi
+  git -C "$w/cons" init -q
+  av_git "$w/cons" add -A >/dev/null 2>&1; av_git "$w/cons" commit -qm consumer >/dev/null 2>&1
+}
+hk_world "$AV/hk-adds" none read yes body
+hk_world "$AV/hk-reads" discard read yes body
+hk_world "$AV/hk-absent" read read no body
+hk_world "$AV/hk-same" read read yes comment
+# hk-deleted: the renderer is present at base and the consumer DELETED it. Arm C carries it, step 2
+# never writes it, and the push runs no renderer -- OK, "carried". The near-miss for hk-absent: one
+# property apart (present at base), and the reason the absent-copy rule is scoped to an ADDED path.
+hk_world "$AV/hk-deleted" read read yes body
+git -C "$AV/hk-deleted/cons" rm -q scripts/ai-dlc/render-agent-definitions.sh
+av_git "$AV/hk-deleted/cons" commit -qm "consumer deleted the renderer" >/dev/null 2>&1
+# PRECONDITION: in every refusing world the push that theirs' hook gates would be refused -- theirs'
+# renderer installed over the consumer's tree fails its own --check -- while the hook the consumer
+# runs today does not run a status-read --check that fails.
+hk_pre() { # hk_pre <world> -> <theirs-renderer --check rc on the consumer tree>
+  git -C "$1/dist" show "$(cat "$1/T"):core/scripts/render-agent-definitions.sh" > "$1/new-render.sh"
+  av_rc "$1/cons" "$1/new-render.sh" '--check --root .'
+}
+ss_assert "hk-pre" "adds $(hk_pre "$AV/hk-adds") reads $(hk_pre "$AV/hk-reads") absent $(hk_pre "$AV/hk-absent") same $(hk_pre "$AV/hk-same") cur-adds $(grep -c 'render-agent-definitions' "$AV/hk-adds/cons/.githooks/pre-push")" \
+  "adds 1 reads 1 absent 1 same 0 cur-adds 0" \
+  "theirs' renderer fails its own --check in the three refusing worlds and passes in the near-miss; today's hook in hk-adds runs no renderer at all"
+hk_sig() { # hk_sig <gate> -> one token per world
+  local n out=""
+  local r
+  for n in adds reads absent same deleted; do
+    r="$(av_run "$1" "$AV/hk-$n")"
+    out="$out${out:+ }$n=$(av_st "$r" render-agent-definitions.sh | sed 's/^SELF-UPDATE-//')"
+    [ "$(av_has "$r" render-agent-definitions.sh '^carried')" = yes ] && out="$out+carried"
+  done
+  printf '%s\n' "$out"
+}
+HK_SIG_FIX="adds=DEFER reads=DEFER absent=DEFER same=OK deleted=OK+carried"
+ss_assert "hk-signature" "$(hk_sig "$GATE")" "$HK_SIG_FIX" \
+  "the render row is judged against the hook the push will run, and an absent current copy is today's push passing"
+HK_CTL="$(av_mut hk-control)"
+mp_killed "hk-mut-control" "$(hk_sig "$HK_CTL")" "$HK_SIG_FIX" "an unmutated copy reproduces every hook-world verdict, so a kill below is the mutation"
+hk_kill() { local got; if [ -z "$2" ]; then got="DID-NOT-APPLY"; else got="$(hk_sig "$2")"; fi; mp_killed "$1" "$got" "$3" "$4"; }
+hk_kill "hk-mut-curhook" "$(av_mut hk-curhook '    HOOK="$TMP/hook-theirs"
+' '    :
+')" "adds= reads=OK absent=DEFER same=OK deleted=OK+carried" \
+  "the gate scans only the consumer's current hook: a --check step theirs' hook adds is not gating, and one it starts reading reads as discarded"
+hk_kill "hk-mut-adds" "$(av_mut hk-adds '  [ -f "$cur" ] || cur_absent=1
+' '  [ -f "$cur" ] || { emit SELF-UPDATE-OK "$name" "the consumer has no current copy, so this pull ADDS it."; continue; }
+')" "adds=DEFER reads=DEFER absent=OK same=OK deleted=OK+carried" \
+  "an absent current copy read as \"this pull ADDS it\": a consumer with pinned roles and no renderer pushes into the renderer it was just given"
+hk_kill "hk-mut-carried" "$(av_mut hk-carried '  if gate_has_line "${GATE_CARRIED:-}" "core/scripts/$name"; then' '  if false; then')" \
+  "adds=DEFER reads=DEFER absent=DEFER same=OK deleted=DEFER" \
+  "a carried script judged as though written: a consumer that deleted the renderer is refused over a copy step 2 never installs"
 
 # --- HOOK SHAPES THE SCAN MUST NOT READ AS "NOT GATING" (BL-456, tip round) ----------------------
 # Each shape below is one reformat away from the real hook, and before this round the first three
