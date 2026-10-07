@@ -1128,9 +1128,37 @@ done < "$TMP/invoked"
 # does not exempt. The push this cycle
 # makes pays the same hook, so the probe adds one hook run per pull and removes the one that
 # would have stranded a branch.
+# A CONSUMER THAT IS A SUBDIRECTORY OF A LARGER REPOSITORY IS UNDECIDED, NEVER SILENT. It passes
+# --is-inside-work-tree, but its toplevel is the ENCLOSING repository's, so the hook git would run
+# on the push is that repository's -- the probe below refuses to run it, and silence here would
+# read exactly like the non-repository answer, which acquits a push this gate never probed. The
+# layout is unsupported: install.sh installs at a repository's top. The remote is NOT consulted:
+# from inside the subdirectory `git remote` answers for the enclosing repository, which is the
+# confusion itself. A true non-repository fails --is-inside-work-tree and keeps its silent answer.
+# THE LAYOUT IS DECIDED BY GIT'S OWN PREFIX, NEVER BY COMPARING TWO PATH STRINGS. `--show-prefix` is
+# empty exactly when the consumer is its work tree's top -- through a symlink, in a linked worktree, in
+# a submodule, and under ANY spelling of the path. A string comparison of two `pwd -P` results is not:
+# on case-insensitive APFS bash's `pwd -P` keeps the case the caller TYPED while git answers the case
+# on disk, so a healthy consumer reached as /users/n8/GIT/x read as enclosed and stopped its pull.
+pp_prefix=""; pp_enclosed=""
+if [ -z "${AI_DLC_GATE_IN_SAFE_STOP:-}" ] && git -C "$CONSUMER" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  pp_prefix="$(git -C "$CONSUMER" rev-parse --show-prefix 2>/dev/null)"
+  [ -n "$pp_prefix" ] && pp_enclosed=1
+fi
+if [ -n "$pp_enclosed" ]; then
+  pp_top="$(git -C "$CONSUMER" rev-parse --show-toplevel 2>/dev/null)"
+  emit SELF-UPDATE-UNDECIDED "pre-push" "UNSUPPORTED LAYOUT: this consumer ($CONSUMER) is a subdirectory of the enclosing repository at ${pp_top:-<unresolved>} (as ${pp_prefix}), not the top of its own repository. A push from here runs the ENCLOSING repository's pre-push hook, which this gate does not probe, so it cannot say whether the push this cycle makes is refused. Do NOT cut the branch and do NOT push. AI/DLC installs at a repository's top; make the consumer its own repository (or install at the enclosing top), then re-run this gate."
+  exit 0
+fi
 if [ -z "${AI_DLC_GATE_IN_SAFE_STOP:-}" ] \
    && git -C "$CONSUMER" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+   && [ -z "$(git -C "$CONSUMER" rev-parse --show-prefix 2>/dev/null)" ] \
    && [ -n "$(git -C "$CONSUMER" remote 2>/dev/null)" ]; then
+  # THE CONSUMER MUST BE ITS OWN WORK TREE'S TOP, decided by an empty `--show-prefix` (see above).
+  # A consumer that is a plain subdirectory of an enclosing repository passes --is-inside-work-tree,
+  # and the hook git-path then resolves the ENCLOSING repository's hook, which would run from here.
+  # Such a consumer was answered UNDECIDED and exited above; this conjunct stays as the second wall,
+  # so a regression in that block still never runs the enclosing repository's hook.
   pp_hook="$(cd "$CONSUMER" && git rev-parse --git-path hooks/pre-push 2>/dev/null)"
   case "$pp_hook" in
     ""|/*) ;;

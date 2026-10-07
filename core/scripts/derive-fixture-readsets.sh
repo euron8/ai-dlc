@@ -768,6 +768,17 @@ fi
 # fixture whose reads one unprivileged sandbox saw. The set is DERIVED at trace time by
 # readset_trip_set, never hand-listed.
 CUR_FX="__probe__"
+# PREPUSH_POOL_DEPTH HANDED TO A TRACED FIXTURE IS THE CALLER'S DEPTH + 1, never a pinned 1. A deriver
+# started by a fixture that a pool dispatched already carries a depth, and pinning 1 under it would hand
+# the traced fixture a SHALLOWER depth than its real nesting -- the recursion bound counts levels, so a
+# reset re-opens a level. The marker is read the way the hooks read it: absent is depth 0, and SET but
+# not a number or longer than five digits is depth 2 (fail closed), so this deriver can never hand a
+# traced fixture a shallower depth than the hook would have refused at. `10#` reads 08 and 09 as base
+# ten, so `value too great for base` cannot occur. Computed HERE, at top level before any sandboxed()
+# call, so the value is bound wherever a launch reads it (`set -u` makes an unbound read fatal).
+RS_POOL_DEPTH="${PREPUSH_POOL_DEPTH:-0}"
+case "$RS_POOL_DEPTH" in *[!0-9]*|??????*) RS_POOL_DEPTH=2 ;; esac
+RS_POOL_DEPTH=$((10#$RS_POOL_DEPTH + 1))
 sandboxed() {
   if [ "$TRACER" = both ]; then
     sudo -n -u "$RUN_AS" sandbox-exec -f "$PROFILE" "$@"
@@ -1040,11 +1051,12 @@ for fx in $LIST; do
   # EMS_POOL_WIDTH=1 rides the same `env`, for the same reason and with the same guarantee:
   # enforcement-map-sites reads it as its own pool width, so a traced run of it is narrowed too.
   # core/fixtures/readset-skip binds this line by running a copy of this deriver, for both knobs.
+  # PREPUSH_POOL_DEPTH is RS_POOL_DEPTH, the caller's depth + 1; it is set at top level above sandboxed().
   if [ "$TRACER" = fs_usage ]; then
-    ( cd "$TREE" && sudo -n -u "$RUN_AS" env VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
+    ( cd "$TREE" && sudo -n -u "$RUN_AS" env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
     rc=$?
   else
-    ( cd "$TREE" && sandboxed env VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
+    ( cd "$TREE" && sandboxed env PREPUSH_POOL_DEPTH="$RS_POOL_DEPTH" VAS_INNER_POOL_WIDTH=1 EMS_POOL_WIDTH=1 bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
     rc=$?
   fi
 

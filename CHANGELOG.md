@@ -19,6 +19,41 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.739.0] - 2026-10-06
+
+Batch 202's first release, shipped alone because it edits both pre-push hooks. It is the
+operator-directed pre-push pool recursion guard from batch 201; no backlog entry and no consumer
+candidate is discharged. `self-update-gate.sh` runs from the consumer's INSTALLED copy on the pull
+that delivers it, so its layout row first takes effect on the pull after this one.
+
+### A pre-push pool cannot nest past one level (operator directive)
+
+- Root cause of batch 201's load-60-90 runaway: `self-update-gate`'s push-probe worlds bound an
+  EMPTY path when a world builder failed, `cd ""` is a no-op, and the drive ran the distribution
+  hook over the real fixture tree, recursing to depth 7.
+- Both hooks carry a depth marker, `PREPUSH_POOL_DEPTH`, set on the pool's `xargs` line. It is not
+  `AI_DLC_*`-named because fixtures scrub that prefix. A hook one level deep runs at most two
+  workers; one two or more deep refuses to open a pool and fails the push. No
+  `AI_DLC_FIXTURE_JOBS` value lifts the depth-1 cap (BSD `xargs -P 0` is unlimited). A marker that
+  is set but not a number, or longer than five digits, fails closed as depth 2; `10#` reads `08` as
+  eight. The pool blocks are byte-identical across both hooks (I66).
+- `derive-fixture-readsets.sh` hands down the caller's depth plus one under the same guard.
+- `self-update-gate`'s fixture fails loudly when a world builder fails, and `pp_enter` refuses a
+  path that is not its own toplevel. New `.dist-only` fixture `prepush-pool-depth` drives the nest
+  chain per mutant.
+
+### The self-update gate refuses to acquit a consumer nested inside a larger repository
+
+- A consumer that is a subdirectory of an enclosing repository used to read as a non-repository:
+  silence, while its push ran the enclosing repository's hook, which the gate never probed. It now
+  gets a `SELF-UPDATE-UNDECIDED` pre-push row naming the layout, which stops the pull
+  (`ai-dlc-update` step 2). The layout is decided by `git rev-parse --show-prefix`, never by path
+  strings: on a case-insensitive filesystem a path typed in a different case would otherwise
+  false-UNDECIDE a healthy consumer. A `core.worktree` consumer is judged by the hook its real push
+  runs. A true non-repository stays silent.
+- `self-update-gate` reaches a healthy consumer by a miscased path and expects OK, and reaches an
+  enclosed one and expects the layout row; each has a mutant.
+
 ## [0.738.0] - 2026-10-06
 
 Batch 201's third release. It carries `BL-459`, `BL-460`, `BL-461`, `BL-462` and the last of
