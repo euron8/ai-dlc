@@ -124,7 +124,7 @@ else
   bad "expected 'alpha gamma', got '$(sel_of "$R")' — the skip selected the wrong set: $(msg_of "$R" | tr -d '\n')"
 fi
 case "$(msg_of "$R")" in
-  *SKIPPING*) ok "  and the run ANNOUNCES the skip rather than performing it silently" ;;
+  *"read-set keys: 2 of 3 fixture(s) run"*"; skipping 1"*) ok "  and the run ANNOUNCES the skip rather than performing it silently" ;;
   *)          bad "  the skip was applied with no announcement naming what it skipped" ;;
 esac
 
@@ -137,11 +137,13 @@ else
 fi
 
 T="$WORK/t3"; seed "$T" || broken "seed failed"
+# CONVERTED (contract k1): a changed path no read set names no longer runs the whole suite. It
+# reruns exactly the fixtures keyed on the whole tree -- the unmapped gamma -- and nothing else.
 R="$(select_in "$T" 'printf v2 > src/orphan.sh')"
-if [ "$(sel_of "$R")" = "alpha beta gamma" ] && printf '%s' "$(msg_of "$R")" | grep -q 'NO fixture read-set'; then
-  ok "a changed path NO fixture reads runs the whole suite — a stale map and a harmless file are indistinguishable from here"
+if [ "$(sel_of "$R")" = "gamma" ] && printf '%s' "$(msg_of "$R")" | grep -qF 'gamma: unmapped: closure changed'; then
+  ok "a changed path NO fixture reads reruns only the unmapped fixture, which is keyed on the whole tree"
 else
-  bad "an unmapped changed path did not force a full run: '$(sel_of "$R")' / $(msg_of "$R" | tr -d '\n')"
+  bad "an unmapped changed path did not select the unmapped fixture alone: '$(sel_of "$R")' / $(msg_of "$R" | tr -d '\n')"
 fi
 
 T="$WORK/t4"; seed "$T" || broken "seed failed"
@@ -264,7 +266,7 @@ fi
 T="$WORK/t13"; seed "$T" || broken "seed failed"
 R="$(select_in "$T" 'printf v2 > src/a.sh')"
 case "$(msg_of "$R")" in
-  *"1 of 3 fixture dir(s) UNMAPPED (always run): gamma"*)
+  *"1 of 3 fixture dir(s) UNMAPPED (keyed on the whole tree): gamma"*)
     ok "the run ANNOUNCES the map's coverage gap by count and by name — an unmapped fixture is not a silent always-run" ;;
   *)
     bad "the coverage gap was not announced (expected '1 of 3 ... UNMAPPED ... gamma'): $(msg_of "$R" | tr -d '\n')" ;;
@@ -370,7 +372,7 @@ msg_mutant() {
     *)           ok "MSG MUTANT $name moves arm 13: '$needle' is gone from the announce" ;;
   esac
 }
-msg_mutant unnamed "s|printf ': %s' \"\$unmapped_names\"|:|" "UNMAPPED (always run): gamma" 'printf v2 > src/a.sh'
+msg_mutant unnamed "s|printf ': %s' \"\$unmapped_names\"|:|" "UNMAPPED (keyed on the whole tree): gamma" 'printf v2 > src/a.sh'
 
 # Keyed on the EMITTING line, not on a spelling of the announce: the flag is the decision.
 flag_mutant nochange_off 's|READSET_NO_CHANGE=1|READSET_NO_CHANGE=0|' "1" ':'
@@ -1085,7 +1087,7 @@ lw_run() { # <pool> <name> <mutation> [sub]: a fresh local world, driven through
 # Each result is scored by a predicate over it, so a mutant is scored by the SAME predicate.
 lb1() { [ "$(sel_of "$1")" = "alpha" ] && [ "$(trace_of "$1")" = "" ] && msg_of "$1" | grep -qF '0 of 3 fixture dir(s) UNMAPPED'; }
 lb2() { [ "$(sel_of "$1")" = "gamma" ] && [ "$(lflag_of "$1")" = 0 ] && msg_of "$1" | grep -qF 'SKIPPING' && ! msg_of "$1" | grep -qF 'NO fixture read-set'; }
-lc1() { [ "$(trace_of "$1")" = "gamma" ] && msg_of "$1" | grep -qF 'UNMAPPED (always run): gamma'; }
+lc1() { [ "$(trace_of "$1")" = "gamma" ] && msg_of "$1" | grep -qF 'UNMAPPED (keyed on the whole tree): gamma'; }
 lc2() { [ "$(trace_of "$1")" = "gamma" ]; }
 ld()  { [ "$(sel_of "$1")" = "alpha beta gamma" ] && msg_of "$1" | grep -qF '1 changed path(s) are in NO fixture read-set (e.g. src/lonly.sh)'; }
 lgs() { [ "$(sel_of "$1")" = "gamma" ] && [ "$(lflag_of "$1")" = 0 ] && msg_of "$1" | grep -qF 'SKIPPING'; }
@@ -1117,7 +1119,7 @@ lt_case lgs lgs "$LM_GS" "(g) a path inside a SUBMODULE named only by a local ro
 lt_case le le "$LM_E" "(b) with NO committed map, valid local rows still select: an edit to gamma's input selects gamma and the unmapped beta, and alpha (locally mapped) is skipped" nomap
 # THE REMEDY TEXT. Both announce lines tell the reader the next green push traces what is unmapped,
 # and name the hand command beside it. Presence-shaped: each demands its own emitting line's text.
-lrm() { msg_of "$1" | grep -qF 'UNMAPPED (always run): gamma -- the next green push traces them automatically; by hand, with no sudo: bash core/scripts/derive-fixture-readsets.sh --list "gamma" --tracer sandbox'; }
+lrm() { msg_of "$1" | grep -qF 'UNMAPPED (keyed on the whole tree): gamma -- the next green push traces them automatically; by hand, with no sudo: bash core/scripts/derive-fixture-readsets.sh --list "gamma" --tracer sandbox'; }
 lt_case lrm lrm "$LM_C1" "(c) the unmapped line names gamma, says the next green push traces it automatically, and gives the hand command"
 LRN_T="$WORK/lrn"; seed_lt "$LRN_T" || broken "the no-map remedy seed failed"
 ( cd "$LRN_T" && git rm -q .ai-dlc-fixture-readsets.tsv && git -c user.email=f@f -c user.name=f commit -qm nomap ) >/dev/null 2>&1 || broken "could not remove the map from the no-map remedy seed"
@@ -3547,11 +3549,307 @@ STUB
   fi
 fi
 
+# ------------------------------------------- per-fixture checksum keys (contract k1) ----
+# THE SKIP IS PER FIXTURE: F is skipped iff its record `<gitdir>/ai-dlc-fixture-keys/F.key` exists,
+# carries `#format k1`, is not `#state stale`, and every key in it still matches. Each world below
+# drives the REAL call site, run_fixtures, in a fresh seeded repo, and reads which fixtures actually
+# RAN off a log each seeded run.sh appends to -- presence-shaped, so a pool that ran nothing and a
+# pool that skipped everything are told apart by the record files and the announce line.
+#
+# THE LOG AND THE CONTROL FILES LIVE OUTSIDE THE TREE. K(F) holds every file under F's own
+# directory, so a marker written inside it would move the key under test. The env names carry no
+# AI_DLC_ prefix because this fixture scrubs that prefix at its top.
+#
+# BOTH HOOKS. Every world runs against each candidate at the top of this file that exists, each
+# with its own extracted block and its own fixture root, read off that block's glob. On a consumer
+# only one exists and the loop runs once. Every world is scored as ONE vector of cells against a
+# want string, so a mutant is scored by the same vector, and "fails only its own cells" is checked
+# by running every mutant over every world and requiring the other worlds' vectors unchanged.
+#
+# Dispatch is pinned to one worker (AI_DLC_FIXTURE_JOBS=1 on the drive) because world (l) kills a
+# worker: BSD xargs stops dispatching when an invocation dies by signal, so the fixture after the
+# killed one has no verdict -- which is the no-verdict half of (l), deterministic only serially.
+CK_ARMS=0
+CK_W="$WORK/ck"; mkdir -p "$CK_W" || broken "could not create the checksum-key worlds"
+ck_sha() { shasum -a 256 -- "$1" | cut -d' ' -f1; }
+ck_seed() { # <t> <fixture root> [extra fixture]: alpha, beta, delta mapped; the extra one unmapped
+  local t="$1" x="$2" f
+  mkdir -p "$t/src/d" "$t/src/e" "$t.ctl" || return 1
+  for f in alpha beta delta ${3:-}; do
+    mkdir -p "$t/$x/$f" || return 1
+    printf '%s\n' "printf '%s\\n' $f >> \"\$CK_LOG\"" \
+      "[ -f \"\$CK_CTL/kill.$f\" ] && kill -9 \$PPID" \
+      "[ -f \"\$CK_CTL/fail.$f\" ] && exit 1" 'exit 0' > "$t/$x/$f/run.sh" || return 1
+  done
+  for f in a b c; do printf 'v1\n' > "$t/src/$f.sh"; done
+  # TOOLS ARE KEYED PER FIXTURE: each word of a keyed `.sh` file that resolves on PATH is a key row
+  # `<abs path>\t<sha of its content>`. Two shims outside the tree, first on PATH for every push:
+  # `cktool` is named only by src/shared.sh, which alpha alone reads; `ckall` by src/all.sh, which
+  # every mapped fixture reads. Growing a shim moves exactly the fixtures whose files name it.
+  printf 'cktool v1\n' > "$t/src/shared.sh"; printf 'ckall v1\n' > "$t/src/all.sh"
+  mkdir -p "$t.bin" || return 1
+  for f in cktool ckall; do printf '#!/bin/sh\nexit 0\n' > "$t.bin/$f" && chmod +x "$t.bin/$f" || return 1; done
+  printf '1\n' > "$t/src/d/one.txt"; printf '1\n' > "$t/src/e/one.txt"
+  # beta names the DIRECTORY src/d, so its key carries a listing; nobody names src/e.
+  printf 'alpha\tsrc/a.sh\nalpha\tsrc/shared.sh\nalpha\tsrc/all.sh\nbeta\tsrc/b.sh\nbeta\tsrc/d\nbeta\tsrc/all.sh\ndelta\tsrc/c.sh\ndelta\tsrc/all.sh\n' \
+    > "$t/.ai-dlc-fixture-readsets.tsv"
+  ( cd "$t" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm seed ) >/dev/null 2>&1
+}
+ck_push() { # <pool> <t> <tag>: one push's suite. Leaves <t>.o.<tag>/{out,rc,ran}
+  local o="$2.o.$3"
+  mkdir -p "$o" && : > "$o/log" || return 1
+  ( cd "$2" || exit 1
+    export CK_LOG="$o/log" CK_CTL="$2.ctl" AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_JOBS=1 PATH="$2.bin:$PATH"
+    # shellcheck disable=SC1090
+    . "$1" 2>/dev/null
+    run_fixtures > "$o/out" 2>&1; echo "$?" > "$o/rc" )
+  LC_ALL=C sort "$o/log" | tr '\n' ' ' | sed 's/ $//' > "$o/ran"
+}
+ck_r()   { printf '%s|%s' "$(cat "$1.o.$2/ran" 2>/dev/null)" "$(cat "$1.o.$2/rc" 2>/dev/null)"; }
+ck_k()   { printf '%s/.git/ai-dlc-fixture-keys/%s.key' "$1" "$2"; }
+ck_st()  { sed -n 2p "$(ck_k "$1" "$2")" 2>/dev/null; }
+ck_has() { local f s=""; for f in alpha beta delta; do [ -f "$(ck_k "$1" "$f")" ] && s="$s $f"; done; printf '%s' "${s# }"; }
+ck_ln()  { grep -cxF -- "$3" "$1.o.$2/out" 2>/dev/null; }
+CK_A0='   ..    read-set keys: 0 of 3 fixture(s) run (0 changed, 0 unrecorded, 0 stale); skipping 3'
+
+# (a) record on pass, then skip on an unchanged rerun. Pins the record format and the announce.
+ck_w_a() { local p="$1" x="$2" t="$3" k
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  ck_push "$p" "$t" 1; ck_push "$p" "$t" 2; k="$(ck_k "$t" alpha)"
+  # The own-directory row belongs to (d) and the listing row to (c); asserting them here as well
+  # would make those worlds' mutants move this one too.
+  printf 'p1=%s p2=%s hdr=%s tools=%s trow=%s row=%s sorted=%s ann=%s' "$(ck_r "$t" 1)" "$(ck_r "$t" 2)" \
+    "$(sed -n '1,3p' "$k" 2>/dev/null | tr '\n' ',')" \
+    "$(grep -cxF "$t.bin/cktool	$(ck_sha "$t.bin/cktool")" "$k" 2>/dev/null)" \
+    "$( { grep -cE '^/[^	]*	[0-9a-f]{64}$' "$k" 2>/dev/null | grep -qvx 0; } && echo y || echo n)" \
+    "$(grep -cxF "src/a.sh	$(ck_sha "$t/src/a.sh")" "$k" 2>/dev/null)" \
+    "$( { [ -f "$k" ] && tail -n +4 "$k" | LC_ALL=C sort -c; } >/dev/null 2>&1 && echo y || echo n)" \
+    "$(ck_ln "$t" 2 "$CK_A0")"
+}
+CK_WANT_a='p1=alpha beta delta|0 p2=|0 hdr=#format k1,#state ok,#tools per-fixture, tools=1 trow=y row=1 sorted=y ann=1'
+
+# (b) a read-set file change reruns F and skips the unrelated ones.
+ck_w_b() { local p="$1" x="$2" t="$3"
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  ck_push "$p" "$t" 1; printf 'v2\n' > "$t/src/b.sh"; ck_push "$p" "$t" 2
+  printf 'p2=%s ann=%s why=%s' "$(ck_r "$t" 2)" \
+    "$(ck_ln "$t" 2 '   ..    read-set keys: 1 of 3 fixture(s) run (1 changed, 0 unrecorded, 0 stale); skipping 2')" \
+    "$(ck_ln "$t" 2 '   ..      beta: changed src/b.sh')"
+}
+CK_WANT_b='p2=beta|0 ann=1 why=1'
+
+# (c) a new file in a directory F lists reruns F; a new file in a directory nobody lists does not.
+# Elsewhere first, so the listed push is not confounded by a stale record.
+ck_w_c() { local p="$1" x="$2" t="$3"
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  ck_push "$p" "$t" 1; printf '2\n' > "$t/src/e/two.txt"; ck_push "$p" "$t" 2
+  printf '2\n' > "$t/src/d/two.txt"; ck_push "$p" "$t" 3
+  printf 'p2=%s p3=%s' "$(ck_r "$t" 2)" "$(ck_r "$t" 3)"
+}
+CK_WANT_c='p2=|0 p3=beta|0'
+
+# (d) a file under F's own directory that no read set names reruns F only.
+ck_w_d() { local p="$1" x="$2" t="$3"
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  ck_push "$p" "$t" 1; printf 'x\n' > "$t/$x/alpha/extra.txt"; ck_push "$p" "$t" 2
+  printf 'p2=%s' "$(ck_r "$t" 2)"
+}
+CK_WANT_d='p2=alpha|0'
+
+# (e) an unmapped G keys on the whole universe: it skips only while nothing changed.
+ck_w_e() { local p="$1" x="$2" t="$3"
+  ck_seed "$t" "$x" gamma || { printf SEED; return; }
+  ck_push "$p" "$t" 1; ck_push "$p" "$t" 2; printf 'v2\n' > "$t/src/c.sh"; ck_push "$p" "$t" 3
+  printf 'p1=%s p2=%s p3=%s why=%s' "$(ck_r "$t" 1)" "$(ck_r "$t" 2)" "$(ck_r "$t" 3)" \
+    "$(ck_ln "$t" 3 '   ..      gamma: unmapped: closure changed')"
+}
+CK_WANT_e='p1=alpha beta delta gamma|0 p2=|0 p3=delta gamma|0 why=1'
+
+# (f) one fixture fails: the passes are still recorded, and the next push reruns only the failed
+# fixture plus the changed one.
+ck_w_f() { local p="$1" x="$2" t="$3"
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  : > "$t.ctl/fail.beta"; ck_push "$p" "$t" 1; local h1; h1="$(ck_has "$t")"
+  rm -f "$t.ctl/fail.beta"; printf 'v2\n' > "$t/src/c.sh"; ck_push "$p" "$t" 2
+  printf 'p1=%s keys=%s p2=%s' "$(ck_r "$t" 1)" "$h1" "$(ck_r "$t" 2)"
+}
+CK_WANT_f='p1=alpha beta delta|1 keys=alpha delta p2=beta delta|0'
+
+# (g) a change to a tool every fixture's files name reruns every recorded fixture as `tools changed`,
+# and does NOT stale them (lead ruling 1): `ckall` gains a line, so its content sha moves while no
+# tree file does.
+ck_w_g() { local p="$1" x="$2" t="$3"
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  ck_push "$p" "$t" 1; printf '# grown\n' >> "$t.bin/ckall"; ck_push "$p" "$t" 2
+  printf 'p2=%s why=%s st=%s' "$(ck_r "$t" 2)" "$(ck_ln "$t" 2 '   ..      beta: tools changed')" "$(ck_st "$t" beta)"
+}
+CK_WANT_g='p2=alpha beta delta|0 why=1 st=#state ok'
+
+# (n) tools are keyed PER FIXTURE: a change to `cktool`, which only alpha's files name, leaves beta
+# and delta skipped. Scored on the two that must NOT run, so a hook that reruns nothing on a tool
+# change is (g)'s failure, not this one's.
+ck_w_n() { local p="$1" x="$2" t="$3"
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  ck_push "$p" "$t" 1; printf '# grown\n' >> "$t.bin/cktool"; ck_push "$p" "$t" 2
+  printf 'others=%s rc=%s' "$(tr ' ' '\n' < "$t.o.2/ran" | grep -cxE 'beta|delta')" "$(cat "$t.o.2/rc" 2>/dev/null)"
+}
+CK_WANT_n='others=0 rc=0'
+
+# (h) stale: alpha reran on a moved FILE key and is recorded stale; it runs again on the next push
+# with nothing changed; once a trace replaces its rows with valid local rows, it skips. The trace is
+# what the deriver records: `<F>\t<path>\t<sha>` rows plus `<F>\t#deriver\t<sha of the deriver>`,
+# so the seed carries a tracked deriver for readset_deriver_path to resolve and hash.
+ck_w_h() { local p="$1" x="$2" t="$3" ds
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  mkdir -p "$t/core/scripts" && printf '#!/bin/bash\nexit 0\n' > "$t/core/scripts/derive-fixture-readsets.sh" \
+    && ( cd "$t" && git add -A && git -c user.email=f@f -c user.name=f commit -qm deriver ) >/dev/null 2>&1 || { printf SEED; return; }
+  ck_push "$p" "$t" 1; printf 'v2\n' > "$t/src/a.sh"; ck_push "$p" "$t" 2; local s2; s2="$(ck_st "$t" alpha)"
+  ck_push "$p" "$t" 3; local s3; s3="$(ck_st "$t" alpha)"
+  ds="$(ck_sha "$t/core/scripts/derive-fixture-readsets.sh")"
+  { printf 'alpha\tsrc/a.sh\t%s\n' "$(ck_sha "$t/src/a.sh")"
+    printf 'alpha\tsrc/shared.sh\t%s\n' "$(ck_sha "$t/src/shared.sh")"
+    printf 'alpha\t#deriver\t%s\n' "$ds"; } > "$t/.git/ai-dlc-fixture-readsets.local"
+  # The traced push still runs alpha once, rekeying its record on the local rows (lead ruling B), and
+  # writes it `#state ok`; the push after that skips it.
+  ck_push "$p" "$t" 4; local s4; s4="$(ck_st "$t" alpha)"; ck_push "$p" "$t" 5
+  printf 'p2=%s s2=%s p3=%s why=%s s3=%s p4=%s s4=%s p5=%s' "$(ck_r "$t" 2)" "$s2" "$(ck_r "$t" 3)" \
+    "$(ck_ln "$t" 3 '   ..      alpha: stale')" "$s3" "$(ck_r "$t" 4)" "$s4" "$(ck_r "$t" 5)"
+}
+CK_WANT_h='p2=alpha|0 s2=#state stale p3=alpha|0 why=1 s3=#state stale p4=alpha|0 s4=#state ok p5=|0'
+
+# (m) a walker that keys the fixture root reruns when a fixture X appears, is recorded `#state ok`
+# (a listing change never stales, lead ruling 2) with X's files added to its keys, and a later edit
+# to X/run.sh alone reruns it again. X is unmapped, so it runs on both pushes too.
+ck_w_m() { local p="$1" x="$2" t="$3" k
+  ck_seed "$t" "$x" walker || { printf SEED; return; }
+  printf 'walker\t%s\n' "$x" >> "$t/.ai-dlc-fixture-readsets.tsv"
+  ( cd "$t" && git add -A && git -c user.email=f@f -c user.name=f commit -qm walker ) >/dev/null 2>&1 || { printf SEED; return; }
+  ck_push "$p" "$t" 1
+  mkdir -p "$t/$x/newfx" && sed 's/walker/newfx/g' "$t/$x/walker/run.sh" > "$t/$x/newfx/run.sh"
+  ck_push "$p" "$t" 2; k="$(ck_k "$t" walker)"
+  local st row; st="$(ck_st "$t" walker)"; row="$(grep -cxF "$x/newfx/run.sh	$(ck_sha "$t/$x/newfx/run.sh")" "$k" 2>/dev/null)"
+  printf '# edited\n' >> "$t/$x/newfx/run.sh"; ck_push "$p" "$t" 3
+  # Scored on walker alone: newfx is unmapped, so whether IT runs is (e)'s subject.
+  printf 'p2=%s st=%s row=%s p3=%s' "$(grep -cx walker "$t.o.2/log")" "$st" "$row" "$(grep -cx walker "$t.o.3/log")"
+}
+CK_WANT_m='p2=1 st=#state ok row=1 p3=1'
+
+# (i) seed: a v2 whole-tree record and no key files. The v2 record is what the hook's own manifest
+# writes on a green run -- `.now` copied, `v2` stamped. AFTER it is taken, alpha's input changes and
+# a file appears in src/d, the directory beta lists: only a listing derived from the v2 PATH SET sees
+# that entry as new, so beta running is the cell that separates it from a listing taken from now.
+ck_w_i() { local p="$1" x="$2" t="$3"
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  ( cd "$t" && mkdir -p "$t.v2" && . "$p" 2>/dev/null && readset_manifest "$t.v2" \
+    && [ -s "$t.v2/.now" ] && cp "$t.v2/.now" .git/ai-dlc-fixture-verified && printf 'v2\n' > .git/ai-dlc-fixture-verified.format ) \
+    || { printf V2SEED; return; }
+  # A new DIRECTORY entry, not a file: (c)'s mutant drops file entries from listings, and this world
+  # must not move with it.
+  printf 'v2\n' > "$t/src/a.sh"; mkdir -p "$t/src/d/sub" && printf '2\n' > "$t/src/d/sub/two.txt"; ck_push "$p" "$t" 1
+  printf 'p1=%s delta=%s' "$(ck_r "$t" 1)" "$(ck_st "$t" delta)"
+}
+CK_WANT_i='p1=alpha beta|0 delta=#state seeded'
+
+# (j) an empty `.now` runs everything: a name git must quote empties the manifest by design.
+ck_w_j() { local p="$1" x="$2" t="$3"
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  ck_push "$p" "$t" 1; printf 'q\n' > "$t/src/q\"x.txt"; ck_push "$p" "$t" 2
+  printf 'p2=%s why=%s' "$(ck_r "$t" 2)" "$(ck_ln "$t" 2 '   ..    could not hash the working tree -- running all 3')"
+}
+CK_WANT_j='p2=alpha beta delta|0 why=1'
+
+# (k) a record with no `#format k1` line is no record: that ONE fixture runs, not everything.
+ck_w_k() { local p="$1" x="$2" t="$3" k
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  ck_push "$p" "$t" 1; k="$(ck_k "$t" alpha)"
+  # A WRONG format line, not a deleted one: with line 1 gone the reader's FNR==1 consumes `#state`,
+  # and the record reads as unrecorded whether or not the format is checked.
+  sed '1s/.*/#format k0/' "$k" > "$k.ed" && mv "$k.ed" "$k"; ck_push "$p" "$t" 2
+  printf 'p2=%s why=%s' "$(ck_r "$t" 2)" "$(ck_ln "$t" 2 '   ..      alpha: unrecorded')"
+}
+CK_WANT_k='p2=alpha|0 why=1'
+
+# (l) a killed fixture (beta) and one left with no verdict (delta, never dispatched once xargs saw a
+# signal) are not recorded. That the pass before them IS recorded belongs to (f).
+ck_w_l() { local p="$1" x="$2" t="$3"
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  : > "$t.ctl/kill.beta"; ck_push "$p" "$t" 1
+  printf 'p1=%s bad=%s' "$(ck_r "$t" 1)" "$(ck_has "$t" | tr ' ' '\n' | grep -cxE 'beta|delta')"
+}
+CK_WANT_l='p1=alpha beta|1 bad=0'
+
+CK_WORLDS="a b c d e f g h i j k l m n"
+ck_all() { # <pool> <fixture root> <tag>: every world, vectors at $CK_W/<tag>.<w>.got
+  local w
+  for w in $CK_WORLDS; do "ck_w_$w" "$1" "$2" "$CK_W/$3.$w" > "$CK_W/$3.$w.got" 2>/dev/null; done
+}
+ck_want() { eval "printf '%s' \"\$CK_WANT_$1\""; }
+
+CK_N=0
+for _h in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
+  [ -f "$_h" ] || continue
+  CK_N=$((CK_N+1)); CK_P="$CK_W/pool.$CK_N.sh"
+  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$_h" > "$CK_P"
+  CK_X="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$CK_P" | sort -u)"
+  [ "$(printf '%s\n' "$CK_X" | grep -c .)" -eq 1 ] || broken "read '$CK_X' as ${_h#"$ROOT"/}'s fixture root; need exactly one"
+  ck_all "$CK_P" "$CK_X" "h$CK_N"
+  for _w in $CK_WORLDS; do
+    CK_ARMS=$((CK_ARMS+1)); _g="$(cat "$CK_W/h$CK_N.$_w.got")"
+    if [ "$_g" = "$(ck_want "$_w")" ]; then ok "($_w) ${_h#"$ROOT"/}: $_g"
+    else bad "($_w) ${_h#"$ROOT"/}: want '$(ck_want "$_w")' got '$_g'"; fi
+  done
+  [ "$CK_N" -eq 1 ] && { CK_P1="$CK_P"; CK_X1="$CK_X"; }
+done
+CK_ARMS=$((CK_ARMS+1))
+[ "$CK_N" -ge 1 ] && ok "the checksum-key worlds ran against $CK_N hook(s)" || bad "no pre-push hook was found for the checksum-key worlds"
+
+# MUTANTS on the FIRST resolved hook's block, one per world, each a count-checked literal edit
+# (pm_copy's grammar). Each must move its own world's vector and leave all eleven others at want.
+ck_mut() { # <world> <name> then triples <count> <from> <to>
+  local w="$1" name="$2" dst="$CK_W/mut.$2.sh" n o moved=""; shift 2
+  CK_ARMS=$((CK_ARMS+1)); cp "$CK_P1" "$dst" || { bad "CK MUTANT $name: copy failed"; return; }
+  while [ $# -ge 3 ]; do
+    MF="$2" MT="$3" MC="$CK_W/mut.$name.n" awk '
+      BEGIN { f = ENVIRON["MF"]; t = ENVIRON["MT"]; n = 0 }
+      { line = $0; o = ""
+        while ((p = index(line, f)) > 0) { o = o substr(line, 1, p - 1) t; line = substr(line, p + length(f)); n++ }
+        print o line }
+      END { print n > ENVIRON["MC"] }' "$dst" > "$dst.t" && mv "$dst.t" "$dst"
+    n="$(cat "$CK_W/mut.$name.n" 2>/dev/null)"
+    [ "$n" = "$1" ] || { bad "CK MUTANT $name: anchor matched ${n:-nothing} time(s), not $1 — DID NOT APPLY"; return; }
+    shift 3
+  done
+  cmp -s "$CK_P1" "$dst" && { bad "CK MUTANT $name: the copy is unchanged"; return; }
+  ck_all "$dst" "$CK_X1" "m.$name"
+  for o in $CK_WORLDS; do
+    [ "$(cat "$CK_W/m.$name.$o.got")" = "$(ck_want "$o")" ] || moved="$moved $o"
+  done
+  if [ "$moved" = " $w" ]; then ok "CK MUTANT $name is KILLED by ($w) alone: $(cat "$CK_W/m.$name.$w.got")"
+  else bad "CK MUTANT $name moved worlds '${moved# }', not ($w) alone"; fi
+}
+# One mutant per world. Each anchor must be unique in the block; ck_mut refuses any other count.
+if [ "$CK_N" -ge 1 ]; then
+  ck_mut a rowsort 1 '-k1,1 -k2 "$out/.kout"' '-k1,1 -k2r "$out/.kout"'
+  ck_mut b reason 1 'why = um ? "unmapped: closure changed" : "changed " first;' 'why = um ? "unmapped: closure changed" : "changed";'
+  ck_mut c fileentries 1 "  awk '{ p = \$0; while ((i = match(p," "  awk '{ p = \$0; sub(/\\/[^\\/]*\$/, \"\", p); while ((i = match(p,"
+  ck_mut d owndir 1 '               n = split(OWN[f], a, "\n"); for (j = 2; j <= n; j++) K[a[j]] = 1 }' '               }'
+  ck_mut e closure 1 '        if (um) { for (p in NV) K[p] = 1 }' '        if (um) { }'
+  ck_mut f redblocks 1 '    if [ "$(cat "$out/$b" 2>/dev/null)" = ok ] ||' '    if [ "${rc:-1}" = 0 ] && [ "$(cat "$out/$b" 2>/dev/null)" = ok ] ||'
+  ck_mut g notools 1 'else if (tch) { why = "tools changed"; c = "k" }' 'else if (0) { why = "tools changed"; c = "k" }'
+  ck_mut h staleclears 1 '        else if (st == "stale") ns = ((f in LOC) ? "ok" : "stale")' '        else if (st == "stale") ns = "ok"'
+  ck_mut i nov2 1 '      if (seed) rd(ENVIRON["KV2"], VV)' '      if (0) rd(ENVIRON["KV2"], VV)'
+  ck_mut j hashrunall 1 "  [ -s \"\$out/.now\" ] || { printf '   ..    could not hash" "  : || { printf '   ..    could not hash"
+  ck_mut k anyformat 1 'FNR == 1 { ok = ($0 == "#format k1");' 'FNR == 1 { ok = 1;'
+  ck_mut l notfail 1 '    if [ "$(cat "$out/$b" 2>/dev/null)" = ok ] ||' '    if [ "$(cat "$out/$b" 2>/dev/null)" != FAIL ] ||'
+  ck_mut m nosubtree 1 '        subtree(d "/" a[j]) }' '        }'
+  ck_mut n globaltools 1 '        for (k in K) if (k in FT) {' '        for (k in FT) {'
+fi
+
 # THE SUMMARY IS ALSO A COMPLETENESS CHECK. This fixture once ended mid-file after an editing
 # mistake: it printed two thirds of its arms, never reached a verdict line, and exited 0 --
 # which the suite's worker records as `ok`. A fixture that dies silently reads exactly like one
 # that passed, so the arm count is asserted against the number this file actually carries.
-EXPECTED=$(( 18 + IGN_ARMS + NEW_ARMS + MERGE_ARMS + CONTROL_ARMS + TRACE_ARMS + BOTH_ARMS + LT_ARMS ))
+EXPECTED=$(( 18 + IGN_ARMS + NEW_ARMS + MERGE_ARMS + CONTROL_ARMS + TRACE_ARMS + BOTH_ARMS + LT_ARMS + CK_ARMS ))
 if [ "$asserts" -lt "$EXPECTED" ]; then
   printf '  FAIL  only %s assertions ran; this fixture carries %s — it exited early and a short green run reads exactly like a passing one\n' "$asserts" "$EXPECTED"
   fails=$((fails+1))
