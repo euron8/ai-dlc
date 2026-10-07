@@ -1403,7 +1403,10 @@ for fx in $LIST; do
       readset_hash_rows "$TREE" "$fx" "$WORK/$fx.set" >> "$WORK/local.ok" \
         || { echo "  could not hash $fx's set in the trace copy -- not recorded" >&2; }
     fi
-    [ -n "$LOCAL_MAP" ] || [ "$TRACER" = both ] || ( LIST="$DONE"; readset_write_map ) > "$WORK/$fx.write" 2>&1 || :
+    if [ -z "$LOCAL_MAP" ] && [ "$TRACER" != both ]; then
+      ( LIST="$DONE"; readset_write_map ) > "$WORK/$fx.write" 2>&1 \
+        || say "  per-fixture map write refused after $fx (the previous map stands): $(tail -1 "$WORK/$fx.write")"
+    fi
   fi
   # `--local-map` writes its file after EVERY fixture, kept or discarded, for the same reason.
   if [ -n "$LOCAL_MAP" ]; then
