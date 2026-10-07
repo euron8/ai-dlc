@@ -421,6 +421,8 @@ step "agent definitions (the shipped renderer runs, and says which of its three 
 # is present and the mechanism is absent.
 # FIXTURE_POOL_BEGIN
 FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-12}"
+# THE FIXTURE ROOT, SPELLED ONCE AND SLASH-TERMINATED. It is the one line I66 maps between the hooks.
+FXROOT="core/fixtures/"
 # RECURSION BOUND. A fixture that drives a hook runs this pool again, and nothing else limits the
 # nesting. The depth marker is deliberately NOT named AI_DLC_*: fixtures scrub that whole prefix from
 # their environment before driving a hook, so a marker carrying it would be removed exactly where it
@@ -478,6 +480,8 @@ VERIFIED_RECORD="$GITDIR/ai-dlc-fixture-verified"
 # by copying a manifest -- is unchanged. Written only beside a record THIS hook wrote, which is
 # already filtered of ignored paths at the manifest; see the reader in apply_readset_skip.
 VERIFIED_FORMAT="$GITDIR/ai-dlc-fixture-verified.format"
+# ONE KEY RECORD PER FIXTURE, `<fixture>.key`; see the header of apply_readset_skip.
+KEYS_DIR="$GITDIR/ai-dlc-fixture-keys"
 # A RED UNIT'S OUTPUT HAS TO OUTLIVE THE RUN THAT PRODUCED IT. Until this record existed the
 # worker below sent every fixture's stdout and stderr to /dev/null, so an intermittent red left
 # ONE line of evidence -- `FAIL <name>` in a terminal -- and the honest local remedy was "push
@@ -724,13 +728,22 @@ readset_local_validate() { # <list> <out>
   while IFS= read -r d; do
     b="${d%/}"; b="${b##*/}"
     grep -qxF "$b" "$out/.mapped.all" && continue
-    k="$(awk -F'\t' -v p="${d%/}/run.sh" '$1 == p { print $2 }' "$out/.now")"
-    if awk -F'\t' -v f="$b" -v k="${k:--}:$dsha" '$1 == f && $2 == "#discards" && $3 >= 3 && $4 == k { h = 1 } END { exit !h }' "$rl_loc"; then
-      printf '%s\n' "$b" >> "$out/.trace.held"
-    else
-      printf '%s\n' "$b" >> "$out/.trace"
-    fi
+    readset_trace_add "$out" "$b" "$dsha"
   done < "$list"
+}
+
+# Queue <fixture> for the post-green trace, or hold it when its last three traces were discarded on
+# the current run.sh and deriver. Unmapped fixtures come here from readset_local_validate, stale
+# ones from apply_readset_skip.
+readset_trace_add() { # <out> <fixture> <deriver sha>
+  local k rl="$READSET_LOCAL"
+  [ -s "$rl" ] || rl=/dev/null
+  k="$(awk -F'\t' -v p="${FXROOT}$2/run.sh" '$1 == p { print $2 }' "$1/.now")"
+  if awk -F'\t' -v f="$2" -v k="${k:--}:$3" '$1 == f && $2 == "#discards" && $3 >= 3 && $4 == k { h = 1 } END { exit !h }' "$rl"; then
+    printf '%s\n' "$2" >> "$1/.trace.held"
+  else
+    printf '%s\n' "$2" >> "$1/.trace"
+  fi
 }
 
 # THE START TIME OF A PID, ONE NORMALISED STRING, for the live-trace lock. The writer and the reader
@@ -836,31 +849,203 @@ readset_live_trace() { # <out>
   return 0
 }
 
+# THE TOOL FINGERPRINT: sha256 over `<name>\t<sha256 of the binary>` for every command on $PATH whose
+# name appears as a word in the manifest's `.sh` files, the first hit on $PATH winning. Derived by that
+# grep, never hand-listed. Keyed on the binary's CONTENT, never its path, so two PATHs reaching the same
+# builds agree. Nothing is EXECUTED to read a version: the derived name set includes commands such as
+# `halt`, `yes` and `passwd`, and running each with `--version` is not safe.
+readset_tools_sha() { # <out>; prints the sha
+  local out="$1" p
+  local IFS=:
+  for p in $PATH; do
+    [ -d "$p" ] && ls -1 "$p" 2>/dev/null | awk -v d="$p" '{ print d "\t" $0 }'
+  done > "$out/.pathcmds"
+  grep '\.sh$' "$out/.files" | tr '\n' '\000' | xargs -0 cat 2>/dev/null | grep -v '^[[:space:]]*#' \
+    | tr -cs 'A-Za-z0-9_.+-' '\n' | LC_ALL=C sort -u > "$out/.tok"
+  awk -F'\t' -v tok="$out/.tok" 'BEGIN { while ((getline l < tok) > 0) t[l] = 1 }
+    ($2 in t) && !($2 in seen) { seen[$2] = 1; print $1 "/" $2 }' "$out/.pathcmds" > "$out/.toolpaths"
+  tr '\n' '\000' < "$out/.toolpaths" | xargs -0 shasum -a 256 -- 2>/dev/null \
+    | awk '{ n = $0; sub(/^[0-9a-f]+  /, "", n); sub(/.*\//, "", n); print n "\t" $1 }' \
+    | LC_ALL=C sort | shasum -a 256 | cut -d' ' -f1
+}
+
+# `<dir>/\t#listing:<sha256>` for every directory a path list implies, derived from the list alone and
+# never from readdir. A listing is the directory's immediate entry names, C-sorted, one per line.
+readset_listings() { # <path list> <out file>
+  local w="$2.d"
+  mkdir -p "$w" || { : > "$2"; return 1; }
+  awk '{ p = $0; while ((i = match(p, /\/[^\/]*$/)) > 0) { d = substr(p, 1, i - 1); print d "\t" substr(p, i + 1); p = d } }' "$1" \
+    | LC_ALL=C sort -u | awk -F'\t' -v w="$w" '
+      $1 != d { if (f != "") close(f); d = $1; n++; f = w "/" n; print n "\t" d "/" > (w "/.idx") }
+      { print $2 > f }'
+  find "$w" -type f ! -name .idx -print0 | xargs -0 shasum -a 256 -- 2>/dev/null \
+    | awk -v idx="$w/.idx" 'BEGIN { while ((getline l < idx) > 0) { t = index(l, "\t"); d[substr(l, 1, t - 1)] = substr(l, t + 1) } }
+      { n = $0; sub(/^[0-9a-f]+  /, "", n); sub(/.*\//, "", n); if (n in d) print d[n] "\t#listing:" $1 }' > "$2"
+}
+
+# DECIDE EVERY FIXTURE IN <list> FROM ITS KEY RECORD. Writes `<out>/.kdec`, one line per fixture:
+# `<fx>\trun\t<reason>\t<k|u|s>\t<new state>` or `<fx>\tskip\t\t\t<state>`, and the prospective record
+# of every fixture that runs (or that a seed skips) to `<out>/.k/<fx>`. The record holds the PRE-RUN
+# hashes; run_fixtures publishes it only for a fixture that passed.
+#
+# THE SEED: no `$KEYS_DIR` yet and a `v2` verified record present. That record is a copy of the
+# pre-run `.now` of a suite every fixture passed on, so each fixture's record is the projection of it
+# onto K(F) -- listings from its path set, a path it lacks as `-`, the current tool fingerprint, state
+# `seeded`. Once the directory exists the seed never runs again, and a missing record is `unrecorded`.
+#
+# A LISTING MOVED, AND WHICH ENTRIES ARE NEW. The record holds only a listing's hash, so the old entry
+# set is taken from a path list whose listing hash EQUALS the recorded one -- the previous run's `.now`
+# (`$KEYS_DIR/.prev`) or the verified record. Every file and directory under a new entry is added to
+# the record, which stays `ok`; with no matching list the record goes `stale`. A change to a key added
+# that way reruns the fixture and refreshes the key, and does not stale it; nor does a key K(F) gained
+# (a trace landed or the map moved), which reruns it once to record the key. An `ok` record's keys
+# are carried into the next one while it has any listing key, so a key added that way is not dropped
+# when the fixture next runs for another reason; a whole-tree record has no listing key, so an
+# unmapped fixture that gains a trace sheds it.
+readset_keys() { # <list> <out>
+  local list="$1" out="$2" tsha seed=0 v2=/dev/null lp=/dev/null lv=/dev/null pp=/dev/null pv=/dev/null tab
+  tab="$(printf '\t')"
+  mkdir -p "$out/.k" || return 1
+  tsha="$(readset_tools_sha "$out")"
+  cut -f1 "$out/.now" > "$out/.is"
+  readset_listings "$out/.is" "$out/.ls.now"
+  if [ -s "$VERIFIED_RECORD" ] && [ "$(cat "$VERIFIED_FORMAT" 2>/dev/null)" = v2 ]; then
+    v2="$VERIFIED_RECORD"; cut -f1 "$v2" > "$out/.pv"; pv="$out/.pv"
+    readset_listings "$pv" "$out/.ls.v2"; lv="$out/.ls.v2"
+    [ -d "$KEYS_DIR" ] || seed=1
+  fi
+  if [ -s "$KEYS_DIR/.prev" ]; then
+    cut -f1 "$KEYS_DIR/.prev" > "$out/.pp"; pp="$out/.pp"
+    readset_listings "$pp" "$out/.ls.prev"; lp="$out/.ls.prev"
+  fi
+  readset_rows "$out" rows | awk -F'\t' -v u="$out/.paths" 'BEGIN { while ((getline l < u) > 0) in_u[l] = 1 } ($2 in in_u)' > "$out/.krows"
+  : > "$out/.krecs"
+  if [ "$seed" = 0 ]; then
+    awk 'FNR == 1 { ok = ($0 == "#format k1"); f = FILENAME; sub(/.*\//, "", f); sub(/\.key$/, "", f); next }
+         !ok { next }
+         /^#state / { print f "\t#state\t" substr($0, 8); next }
+         /^#tools / { print f "\t#tools\t" substr($0, 8); next }
+         /^#/ { next }
+         { print f "\t" $0 }' "$KEYS_DIR"/*.key > "$out/.krecs" 2>/dev/null
+  fi
+  while IFS= read -r d; do b="${d%/}"; printf '%s\n' "${b##*/}"; done < "$list" > "$out/.kl"
+  : > "$out/.khdr"; : > "$out/.kout"
+  KN="$out/.now" KLN="$out/.ls.now" KLP="$lp" KLV="$lv" KPP="$pp" KPV="$pv" KV2="$v2" KR="$out/.krows" \
+  KM="$out/.mapped.all" KLOC="$out/.local.valid" KC="$out/.krecs" KF="$out/.kl" KH="$out/.khdr" KO="$out/.kout" \
+  awk -v tsha="$tsha" -v seed="$seed" -v root="$FXROOT" '
+    function rd(file, arr,   l, t) { while ((getline l < file) > 0) { t = index(l, "\t"); arr[substr(l, 1, t - 1)] = substr(l, t + 1) } }
+    function kids(file, set,   l, t, p, i) { while ((getline l < file) > 0) { t = index(l, "\t"); p = (t ? substr(l, 1, t - 1) : l)
+        while ((i = match(p, /\/[^\/]*$/)) > 0) { set[substr(p, 1, i - 1) SUBSEP substr(p, i + 1)] = 1; p = substr(p, 1, i - 1) } } }
+    function cur(k) { return (k ~ /\/$/) ? ((k in LN) ? LN[k] : "-") : ((k in NV) ? NV[k] : "-") }
+    function sv(k) { return (k ~ /\/$/) ? ((k in LV) ? LV[k] : "-") : ((k in VV) ? VV[k] : "-") }
+    function addk(p) { if (p in NV) K[p] = 1; else if (p in DN) K[p "/"] = 1; else K[p] = 1 }
+    function subtree(q,   p, r, i) {
+      if (q in NV) X[q] = 1
+      if (!(q in DN)) return
+      X[q "/"] = 1
+      for (p in NV) if (index(p, q "/") == 1) { X[p] = 1; r = substr(p, length(q) + 2)
+        while ((i = match(r, /\/[^\/]*$/)) > 0) { r = substr(r, 1, i - 1); X[q "/" r "/"] = 1 } } }
+    function grow(k,   d, rv, src, n, a, j) {
+      d = substr(k, 1, length(k) - 1); rv = R[k]
+      if (!(d in DN)) return 1
+      if (rv == "-") src = ""
+      else if ((k in LP) && LP[k] == rv) src = "P"
+      else if ((k in LV) && LV[k] == rv) src = "V"
+      else return 0
+      n = split(KIDS[d], a, "\n")
+      for (j = 2; j <= n; j++) {
+        if (src == "P" && ((d SUBSEP a[j]) in CP)) continue
+        if (src == "V" && ((d SUBSEP a[j]) in CV)) continue
+        subtree(d "/" a[j]) }
+      return 1 }
+    BEGIN {
+      rd(ENVIRON["KN"], NV); rd(ENVIRON["KLN"], LN); rd(ENVIRON["KLP"], LP); rd(ENVIRON["KLV"], LV)
+      kids(ENVIRON["KPP"], CP); kids(ENVIRON["KPV"], CV)
+      if (seed) rd(ENVIRON["KV2"], VV)
+      for (p in NV) { q = p
+        while ((i = match(q, /\/[^\/]*$/)) > 0) { d = substr(q, 1, i - 1); e = substr(q, i + 1)
+          DN[d] = 1; if (!((d SUBSEP e) in CN)) { CN[d SUBSEP e] = 1; KIDS[d] = KIDS[d] "\n" e }; q = d }
+        if (index(p, root) == 1) { r = substr(p, length(root) + 1); i = index(r, "/"); if (i > 1) OWN[substr(r, 1, i - 1)] = OWN[substr(r, 1, i - 1)] "\n" p } }
+      while ((getline l < ENVIRON["KM"]) > 0) MAPPED[l] = 1
+      while ((getline l < ENVIRON["KLOC"]) > 0) { t = index(l, "\t"); LOC[substr(l, 1, t - 1)] = 1 }
+      while ((getline l < ENVIRON["KR"]) > 0) { t = index(l, "\t"); f = substr(l, 1, t - 1); ROWS[f] = ROWS[f] "\n" substr(l, t + 1) }
+      while ((getline l < ENVIRON["KC"]) > 0) { n = split(l, a, "\t")
+        if (a[2] == "#state") RST[a[1]] = a[3]
+        else if (a[2] == "#tools") RTL[a[1]] = a[3]
+        else { RK[a[1]] = RK[a[1]] "\n" a[2]; RV[a[1] SUBSEP a[2]] = a[3] } }
+      while ((getline f < ENVIRON["KF"]) > 0) {
+        delete K; delete R; delete X; delete LM
+        um = !(f in MAPPED)
+        if (um) { for (p in NV) K[p] = 1 }
+        else { n = split(ROWS[f], a, "\n"); for (j = 2; j <= n; j++) addk(a[j])
+               n = split(OWN[f], a, "\n"); for (j = 2; j <= n; j++) K[a[j]] = 1 }
+        has = 0; st = ""; tl = ""; rl = 0
+        if (seed) { has = 1; st = "seeded"; tl = tsha; for (k in K) R[k] = sv(k) }
+        else if (f in RST) { has = 1; st = RST[f]; tl = RTL[f]
+          n = split(RK[f], a, "\n"); for (j = 2; j <= n; j++) R[a[j]] = RV[f SUBSEP a[j]] }
+        first = ""; fch = 0
+        if (has) {
+          for (k in R) { if (k ~ /\/$/) rl = 1
+            if (cur(k) != R[k]) { if (first == "" || k < first) first = k; if (k ~ /\/$/) LM[k] = 1; else if (k in K) fch = 1 } }
+          for (k in K) if (!(k in R)) { if (first == "" || k < first) first = k } }
+        run = 1; why = ""; c = ""
+        if (!has) { why = "unrecorded"; c = "u" }
+        else if (st == "stale") { why = "stale"; c = "s" }
+        else if (tl != tsha) { why = "tools changed"; c = "k" }
+        else if (first != "") { why = um ? "unmapped: closure changed" : "changed " first; c = "k" }
+        else run = 0
+        if (!run) { if (!seed) { print f "\tskip\t\t\t" st; continue }; ns = "seeded" }
+        else if (!has || um) ns = "ok"
+        else if (st == "stale") ns = ((f in LOC) ? "ok" : "stale")
+        else if (fch) ns = "stale"
+        else { ns = "ok"; if (rl) for (k in R) X[k] = 1
+               for (k in LM) if (!grow(k)) ns = "stale" }
+        for (k in K) X[k] = 1
+        print f "\t" ns > ENVIRON["KH"]
+        for (k in X) print f "\t" k "\t" cur(k) > ENVIRON["KO"]
+        print f "\t" (run ? "run" : "skip") "\t" why "\t" c "\t" ns }
+    }' > "$out/.kdec"
+  LC_ALL=C sort -t "$tab" -k1,1 -k2 "$out/.kout" | awk -F'\t' -v kd="$out/.k" -v hdr="$out/.khdr" -v tsha="$tsha" '
+    BEGIN { while ((getline l < hdr) > 0) { t = index(l, "\t"); st[substr(l, 1, t - 1)] = substr(l, t + 1) } }
+    $1 != f { if (f != "") close(o); f = $1; o = kd "/" f; print "#format k1" > o; print "#state " st[f] > o; print "#tools " tsha > o }
+    { print substr($0, length(f) + 2) > o }'
+}
+
+# PUBLISH EACH PROSPECTIVE RECORD WHOSE FIXTURE PASSED, whatever its neighbours did, and every record a
+# seed skipped. A FAIL, a kill or a missing verdict publishes nothing. temp + mv per record. The pre-run
+# `.now` is kept as `$KEYS_DIR/.prev`, the path list the next run derives a moved listing's old entries
+# from; it is only ever read after its listing hash matches the record's, so a red run may write it.
+readset_keys_write() { # <out>
+  local out="$1" f b
+  [ -d "$out/.k" ] || return 0
+  mkdir -p "$KEYS_DIR" 2>/dev/null || return 0
+  for f in "$out/.k"/*; do
+    [ -f "$f" ] || continue
+    b="${f##*/}"
+    if [ "$(cat "$out/$b" 2>/dev/null)" = ok ] || grep -qxF "$b" "$out/.k.always" 2>/dev/null; then
+      cp "$f" "$KEYS_DIR/$b.key.tmp.$$" 2>/dev/null && mv "$KEYS_DIR/$b.key.tmp.$$" "$KEYS_DIR/$b.key" 2>/dev/null
+    fi
+  done
+  if [ -s "$out/.now" ]; then
+    cp "$out/.now" "$KEYS_DIR/.prev.tmp.$$" 2>/dev/null && mv "$KEYS_DIR/.prev.tmp.$$" "$KEYS_DIR/.prev" 2>/dev/null
+  fi
+  return 0
+}
+
 apply_readset_skip() {
-  local list="$1" out="$2" n_all n_sel n_skip readset_at readset_age n_unmapped unmapped_names readset_deriver
+  local list="$1" out="$2" n_all n_sel readset_at readset_age n_unmapped unmapped_names readset_deriver dv dsha="" b
 
   n_all="$(grep -c . "$list" 2>/dev/null)"; case "$n_all" in ''|*[!0-9]*) n_all=0 ;; esac
 
-  # THE MANIFEST IS BUILT FIRST, BEFORE ANY EARLY RETURN, because the run that cannot skip is
-  # exactly the run that must leave a state behind for the next one. Computed only here and
-  # copied by the caller on a green run: if it were built after the early returns, the first
-  # run would write nothing, the second would find no state, and the skip could never
-  # bootstrap -- a mechanism that is always inert and never says so.
+  # THE MANIFEST IS BUILT FIRST, BEFORE ANY EARLY RETURN: it is the pre-run state every record
+  # this run publishes is keyed on.
   readset_manifest "$out"
   readset_local_validate "$list" "$out"
-  while IFS= read -r d; do b="${d%/}"; printf '%s\n' "${b##*/}"; done < "$list" > "$out/.present"
 
   # THE MAP DECAYS SILENTLY, AND THIS LINE IS THE ONLY THING THAT SAYS SO. A fixture directory
-  # added after the last derivation has no entry and runs on every push -- correct, and the
-  # cost is invisible. A path that gained a NEW reader after the derivation is skipped for that
-  # reader with nothing reporting it, because the orphan test below sees only paths in NO
-  # read-set. Neither state is detectable from here, so the map's age and the set it does not
-  # cover are printed on every run. Measured on the distribution: 510 commits between two
-  # derivations left 41 of 194 fixture directories unmapped -- 744 loaded seconds run on every
-  # push -- and 74 already-mapped paths had gained readers nothing had traced. The deriver
-  # needs root, so the remedy is printed rather than run.
-  # A tree with no committed map but valid LOCAL rows is a mapped tree: its rows select like any
-  # other, so it announces and skips like one.
+  # added after the last derivation has no entry and is keyed on the whole tree, so it runs on
+  # almost every push -- correct, and the cost is invisible unless printed. The map's age and the
+  # set it does not cover are printed on every run.
   if [ -s "$READSET_MAP" ] || [ -s "$out/.local.valid" ]; then
     readset_at="$(git log -1 --format=%h -- "$READSET_MAP" 2>/dev/null)"
     if [ -n "$readset_at" ]; then
@@ -870,14 +1055,13 @@ apply_readset_skip() {
     else
       readset_age="UNTRACKED, age unknown"
     fi
-    cp "$out/.mapped.all" "$out/.mapped"
     : > "$out/.unmapped"
     while IFS= read -r d; do
       b="${d%/}"; b="${b##*/}"
-      grep -qxF "$b" "$out/.mapped" || printf '%s\n' "$b" >> "$out/.unmapped"
+      grep -qxF "$b" "$out/.mapped.all" || printf '%s\n' "$b" >> "$out/.unmapped"
     done < "$list"
     n_unmapped="$(grep -c . "$out/.unmapped" 2>/dev/null)"; case "$n_unmapped" in ''|*[!0-9]*) n_unmapped=0 ;; esac
-    printf '   ..    read-set map: %s; %s of %s fixture dir(s) UNMAPPED (always run)' "$readset_age" "$n_unmapped" "$n_all"
+    printf '   ..    read-set map: %s; %s of %s fixture dir(s) UNMAPPED (keyed on the whole tree)' "$readset_age" "$n_unmapped" "$n_all"
     if [ "$n_unmapped" -gt 0 ]; then
       unmapped_names="$(tr '\n' ' ' < "$out/.unmapped" | sed 's/ $//')"
       printf ': %s' "$unmapped_names"
@@ -887,190 +1071,39 @@ apply_readset_skip() {
     printf '\n'
   fi
 
+  # THE ONLY RUN-ALL: the hashing instrument is broken, so no key can be read.
+  [ -s "$out/.now" ] || { printf '   ..    could not hash the working tree -- running all %s\n' "$n_all"; return 0; }
+
+  readset_keys "$list" "$out" || { printf '   ..    could not build the fixture keys -- running all %s\n' "$n_all"; return 0; }
+  awk -F'\t' '$2 == "skip" && $5 == "seeded" { print $1 }' "$out/.kdec" > "$out/.k.always"
+
   if [ "${AI_DLC_FIXTURE_NO_SKIP:-}" = "1" ]; then
+    : > "$out/.k.always"
     printf '   ..    read-set skip OFF (AI_DLC_FIXTURE_NO_SKIP=1) -- running all %s\n' "$n_all"
     return 0
   fi
-  if [ ! -s "$READSET_MAP" ] && [ ! -s "$out/.local.valid" ]; then
-    printf '   ..    no read-set map at %s -- running all %s\n' "$READSET_MAP" "$n_all"
-    # THE FALLBACK IS CORRECT AND IT IS ALSO PERMANENT UNTIL SOMEONE ACTS, which is why this
-    # branch now prints a command. The reader shipped without its producer from v0.294.0 to
-    # 0.403.0: every consumer push ran the whole suite, this line was the only symptom, and it
-    # reads as a considered fallback rather than as an instrument nobody ever built. Measured on
-    # the reference consumer at 0.403.0 -- 18s for every other phase combined, 145s for the
-    # suite, 2m43s total against a 2m00s caller timeout that SIGKILLed two pushes in one sprint.
-    #
-    # THIS HOOK CANNOT BUILD THE MAP ITSELF, and the reason is not effort. The deriver needs
-    # ROOT: fs_usage is the only tracer that sees a stat()-only dependency, an atime-only map
-    # under-records exactly those, and under-recording is the direction that skips a fixture
-    # silently forever. A pre-push that prompted for a password would be worse than the wait.
-    readset_deriver="$(readset_deriver_path)"
-    if [ -n "$readset_deriver" ]; then
-      printf '   ..    the next green push traces its fixtures automatically; to build one whole, with no sudo: bash %s --all --tracer sandbox\n' "$readset_deriver"
-    else
-      printf '   ..    and no derive-fixture-readsets.sh in either layout -- until ai-dlc ships one here, every push runs all %s\n' "$n_all"
-    fi
-    return 0
-  fi
-  if [ ! -s "$VERIFIED_RECORD" ]; then
-    printf '   ..    no verified-state record yet -- running all %s (this run writes one)\n' "$n_all"; return 0
-  fi
 
-  [ -s "$out/.now" ] || { printf '   ..    could not hash the working tree -- running all %s\n' "$n_all"; return 0; }
-
-  # THE RECORD IS NEVER FILTERED, AND ONLY A `v2` RECORD IS READ AT ALL. A record THIS hook wrote
-  # is stamped `v2` and is already filtered at the manifest, so it is used AS WRITTEN. Filtering
-  # a record is a wrong skip: a FORCE-ADDED tracked file matching an ignore pattern is in it, and
-  # once `git rm`'d it is untracked and ignored, so a filter drops its row, the vanish never
-  # reaches `.changed`, its parent never reaches `.match`, and an otherwise unchanged tree reads
-  # "NOTHING changed" and skips the WHOLE suite. Measured on the reference consumer: 88
-  # tracked-but-ignored files, 19 of whose parents its map names.
-  # AN UNSTAMPED RECORD RUNS EVERYTHING, exactly as a missing one does. It comes from an OLDER
-  # hook, or from a run of this one whose record copy landed and whose stamp did not (a failed
-  # write, an interrupt between the two). An older hook's map arm hashed untracked IGNORED files,
-  # which read unfiltered would all VANISH -- yet "untracked-ignored, hashed by an old map arm,
-  # since deleted" and "force-added, since `git rm`'d" are byte-identical at read time, so no
-  # filter can be right for both, and the wrong one skips the suite. A full run costs one push and
-  # writes a `v2` record. A stamp naming any other format is one this hook cannot read either.
-  if [ ! -e "$VERIFIED_FORMAT" ]; then
-    printf '   ..    verified-state record predates the format stamp -- running all %s (this run writes one)\n' "$n_all"; return 0
-  elif [ "$(cat "$VERIFIED_FORMAT" 2>/dev/null)" = v2 ]; then
-    cp "$VERIFIED_RECORD" "$out/.rec" \
-      || { printf '   ..    could not copy the verified-state record -- running all %s\n' "$n_all"; return 0; }
-  else
-    printf '   ..    verified-state record carries an unknown format stamp -- running all %s\n' "$n_all"; return 0
-  fi
-
-  # A path is changed if its hash moved, if it appeared, or if it vanished. comm -3 reports
-  # exactly those three, and the parent directory rides along because adding or removing an
-  # entry changes what a listing of that directory returns -- which is how a fixture that
-  # globs a directory depends on it.
-  comm -3 "$out/.rec" "$out/.now" 2>/dev/null | sed 's/^\t//' | cut -f1 | sort -u > "$out/.changed"
-
-  # TWO SETS, AND CONFLATING THEM MAKES THE SKIP INERT. `.changed` is what actually moved and
-  # is the ONLY thing the orphan test below may consider. `.match` adds each changed path's
-  # parent directory, because adding or removing an entry changes what a listing of that
-  # directory returns -- which is how a fixture that globs a directory depends on it.
-  # A synthesised parent is not itself a change, so putting it in `.changed` made every run
-  # report "a changed path no fixture reads" and fall back to the full suite: measured, the
-  # skip could never fire once, in any scenario, and said so in wording that read like caution.
-  # A PARENT RIDES ALONG ONLY FOR AN APPEARANCE OR A DISAPPEARANCE, never for a plain edit.
-  # Adding or removing an entry changes what a listing of that directory returns, which is how
-  # a fixture that globs a directory depends on it; rewriting a file's contents does not. Doing
-  # it for every changed path instead selects every fixture that ever stat'd the enclosing
-  # directory, which quietly turns the skip back into a full run.
-  cut -f1 "$out/.rec"        | sort > "$out/.was"
-  cut -f1 "$out/.now"        | sort > "$out/.is"
-  { comm -23 "$out/.was" "$out/.is"; comm -13 "$out/.was" "$out/.is"; } | sort -u > "$out/.appeared"
-  { cat "$out/.changed"; sed -n 's|/[^/]*$||p' "$out/.appeared" | grep -v '^$'; } \
-    | sort -u > "$out/.match"
-
-  # NOTHING CHANGED -> SKIP THE WHOLE SUITE. THIS BRANCH USED TO DEFER TO THE CONTENT KEY AND
-  # THE TWO INSTRUMENTS THEN DEADLOCKED: the key said "changed, run everything", this said "the
-  # key owns that case", and neither ever skipped. Measured on this repo, on a commit touching
-  # only two files under `docs/` -- a top the key itself EXCLUDES -- the suite ran all 161
-  # fixtures while this line printed that nothing had changed.
-  #
-  # THE READ-SET MANIFEST IS THE FINER INSTRUMENT AND IT IS THE ONE TO BELIEVE. It hashes file
-  # CONTENT over every tracked file, every untracked-but-unignored file and every path any
-  # read-set names, minus the exclusion set both instruments derive from ONE declaration
-  # (`readset_excluded_re`, lifted from the content key's own EXCLUDE block). The content key
-  # additionally hashes directory entries and is a declared SUPERSET, so it moves for reasons
-  # that cannot reach a fixture verdict -- which is precisely the announce above.
-  #
-  # WHAT MAKES SKIPPING EVERYTHING SOUND HERE, stated so the next reader can attack it: an
-  # empty `.changed` means no path in that universe changed content, appeared or vanished
-  # since the last GREEN run recorded the state. Every fixture would therefore read bytes
-  # identical to the ones it already passed on. A new fixture cannot hide in it either -- a new
-  # `run.sh` is a file that appeared, so `.changed` is non-empty by construction.
-  #
-  # AND IT FAILS CLOSED IN THE ONE DIRECTION THAT MATTERS: every guard ABOVE this point --
-  # NO_SKIP set, no map, no verified record, a record with no `v2` stamp, an unhashable tree
-  # -- returns "run everything" before reaching here, so a broken or uninstalled instrument can
-  # never produce this skip.
-  if [ ! -s "$out/.changed" ]; then
-    READSET_NO_CHANGE=1
-    printf '   ..    read-set map: NOTHING in any fixture read-set changed since the last green run -- skipping all %s\n' "$n_all"
-    return 0
-  fi
-
-  # A changed path no fixture is known to read cannot be reasoned about: either it genuinely
-  # affects nothing, or the map is stale and a fixture reads it without our knowing. The two
-  # are indistinguishable from here, so this runs everything.
-  # Same exclusion as the manifest, and it has to be the same or the two disagree: a `.git`
-  # path left in the universe but absent from the manifest can never be compared, while one in
-  # the manifest but not the universe would read as "changed, and no fixture reads it" and
-  # force a full run on every commit -- the failure this exclusion exists to prevent, arriving
-  # through the other side of the same join.
-  # Ignored paths leave by the same helper as the manifest, for the same reason. NO MUTANT
-  # REMOVES THIS ONE ALONE: the manifest never lists an ignored path, so one reaches `.changed`
-  # only as a VANISH from a `v2` record -- a force-added file since `git rm`'d -- and dropping it
-  # here makes that vanish an orphan, which runs everything: coarser than its own readers, never
-  # a skip. It carries the other half of the join -- with the MANIFEST filter gone and this one
-  # kept, a changed ignored file is an orphan and runs everything.
-  readset_rows "$out" known | grep -v '^\.git/' | grep -v '^\.git$' \
-    | readset_drop_excluded | sort -u > "$out/.universe.all"
-  readset_drop_ignored "$out/.universe.all" "$out/.universe"
-  # EXCEPT THE UPDATE SKILL'S OWN BOOKKEEPING AND THE PIPELINE'S FLAT STATE FILES: the version
-  # stamp, the flat files directly under `_bmad-output/ai-dlc-update/`, which every reconcile
-  # commit writes, and the flat files directly under `_bmad-output/`, which a consumer's pipeline
-  # commits as story state and which the map names no reader for. Each one landing in this set
-  # used to force the whole suite on a path the map names no reader for.
-  #
-  # THE COST, AND IT IS THE ONE THE `ai-dlc-update/` WAIVER ALREADY CARRIES. A fixture that starts
-  # reading an unmapped flat file after the map was derived is SKIPPED for a change to that path,
-  # because the waiver reads "the map names no reader" as "no reader". The exposure lasts until the
-  # map is re-derived; a consumer's map can and does name readers of some flat files, and those
-  # are in `.universe` and select normally.
-  #
-  # ONLY THE "UNKNOWN READER" VERDICT IS WAIVED, NOTHING ELSE. A flat `_bmad-output/` file the map
-  # DOES name is in `.universe`, never reaches this filter, and still selects its reader below; an
-  # unmapped fixture still runs. The pattern is anchored at both ends and `[^/]+` cannot cross a
-  # `/`, so a deeper path (`_bmad-output/<dir>/...`) and a nested `_bmad-output/` under another
-  # top both remain orphans and still run all. I66 holds this line identical to the consumer's.
-  #
-  # THE CONSUMER'S OWN REMEDY DOES NOT COVER THIS. The EXCLUDE-top remedy stated above
-  # `readset_excluded_re` in core/git-hooks/pre-push, applied to `_bmad-output`, drops the whole
-  # top from the manifest, so a change under it never reaches `.changed` and a fixture that reads
-  # a mapped `_bmad-output/` path is no longer selected when that path changes -- it is fail-open
-  # for this top. Hence a waiver here, not an exclusion.
-  comm -23 "$out/.changed" "$out/.universe" \
-    | grep -vE '^(\.claude/\.ai-dlc-version|_bmad-output/ai-dlc-update/[^/]+|_bmad-output/[^/]+)$' > "$out/.orphan"
-  if [ -s "$out/.orphan" ]; then
-    printf '   ..    read-set map: %s changed path(s) are in NO fixture read-set (e.g. %s) -- running all %s\n' \
-      "$(grep -c . "$out/.orphan")" "$(head -1 "$out/.orphan")" "$n_all"
-    return 0
-  fi
-
-  # Selected = every fixture naming a changed path, PLUS every fixture with no map entry.
-  # The second half is the fail-closed one: absence from the map means "unknown", never
-  # "depends on nothing".
-  readset_rows "$out" rows > "$out/.rows"
-  awk -F'\t' 'NR==FNR { ch[$0]=1; next } /^#/ { next } ch[$2] { sel[$1]=1 }
-              END { for (f in sel) print f }' "$out/.match" "$out/.rows" | sort -u > "$out/.sel"
-  cut -f1 "$out/.rows" | sort -u > "$out/.mapped"
-  while IFS= read -r d; do
-    b="${d%/}"; b="${b##*/}"
-    if ! grep -qxF "$b" "$out/.mapped"; then printf '%s\n' "$b" >> "$out/.sel"; fi
-  done < "$list"
-  sort -u -o "$out/.sel" "$out/.sel"
-
-  : > "$out/.list.sel"
-  while IFS= read -r d; do
-    b="${d%/}"; b="${b##*/}"
-    if grep -qxF "$b" "$out/.sel"; then printf '%s\n' "$d" >> "$out/.list.sel"; fi
-  done < "$list"
-
+  awk -F'\t' 'NR == FNR { if ($2 == "run") r[$1] = 1; next }
+              { b = $0; sub(/\/$/, "", b); sub(/.*\//, "", b) } (b in r)' "$out/.kdec" "$list" > "$out/.list.sel"
   n_sel="$(grep -c . "$out/.list.sel" 2>/dev/null)"; case "$n_sel" in ''|*[!0-9]*) n_sel=0 ;; esac
-  n_skip=$(( n_all - n_sel ))
+  printf '   ..    read-set keys: %s of %s fixture(s) run (%s changed, %s unrecorded, %s stale); skipping %s\n' \
+    "$n_sel" "$n_all" "$(awk -F'\t' '$4 == "k"' "$out/.kdec" | grep -c .)" \
+    "$(awk -F'\t' '$4 == "u"' "$out/.kdec" | grep -c .)" "$(awk -F'\t' '$4 == "s"' "$out/.kdec" | grep -c .)" \
+    "$(( n_all - n_sel ))"
+  awk -F'\t' '$2 == "run" && n < 10 { n++; print "   ..      " $1 ": " $3 }' "$out/.kdec"
+
+  # A FIXTURE RECORDED STALE IS TRACED after a green run, beside the unmapped ones.
+  dv="$(readset_deriver_path)"
+  [ -n "$dv" ] && dsha="$(shasum -a 256 -- "$dv" 2>/dev/null | cut -d' ' -f1)"
+  awk -F'\t' '$2 == "run" && $5 == "stale" { print $1 }' "$out/.kdec" | while IFS= read -r b; do
+    grep -qxF "$b" "$out/.trace" "$out/.trace.held" 2>/dev/null || readset_trace_add "$out" "$b" "$dsha"
+  done
+
   if [ "$n_sel" -eq 0 ]; then
-    printf '   ..    read-set map selected NOTHING from %s changed path(s) -- running all %s rather than trusting an empty selection\n' \
-      "$(grep -c . "$out/.changed")" "$n_all"
+    READSET_NO_CHANGE=1
     return 0
   fi
   mv "$out/.list.sel" "$list"
-  printf '   ..    read-set map: %s changed path(s) select %s of %s fixtures; SKIPPING %s\n' \
-    "$(grep -c . "$out/.changed")" "$n_sel" "$n_all" "$n_skip"
   return 0
 }
 
@@ -1096,7 +1129,7 @@ run_fixtures() {
   # output, and the publish below is what decides whether anything is there to read.
   : > "$LASTRUN_RECORD" 2>/dev/null
 
-  for d in core/fixtures/*/; do
+  for d in "$FXROOT"*/; do
     [ -f "$d/run.sh" ] || continue
     printf '%s\n' "$d"
   done > "$out/list"
@@ -1277,6 +1310,8 @@ run_fixtures() {
   if [ "$rc" -eq 0 ] && [ -s "$out/.now" ]; then
     cp "$out/.now" "$VERIFIED_RECORD" 2>/dev/null && printf 'v2\n' > "$VERIFIED_FORMAT" 2>/dev/null
   fi
+  # PER-FIXTURE KEY RECORDS ARE PUBLISHED ON A RED RUN TOO: each one is gated on its own verdict.
+  readset_keys_write "$out"
 
   # PUBLISH THIS RUN'S UNMERGED COSTS UNDER THE SAME GREEN-ONLY GATE, and copy the PRE-MERGE
   # file: "$out/.durations" is exactly the units this pool timed, while "$out/.merged" one block
