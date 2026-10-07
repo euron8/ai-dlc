@@ -233,7 +233,8 @@ and could not tell a working seat from a dead one. The consumer's own grep found
 
 1. *Prune the cross work list to pairs whose parts cite a shared identifier* (direction 1). **Refuted** on the S317 spine:
    the shipped MAJOR `dev` finding F-X5 rests on the pair (4,7), whose two parts share zero identifier tokens, so the
-   pruning would have dropped a real MAJOR. Not built.
+   pruning would have dropped a real MAJOR. Measured by the batch lead on the consumer's S317 spine; it cannot be
+   re-derived in this tree. Not built.
 2. *Fan the cross seat out per pair-group, in the same waves as the parts* (direction 2). **Built**:
    `partition-document.sh --cross-groups <K>` prints at most six groups covering every unordered pair, and every cross
    agent on every axis is one per group (`_gate-procedures.md` "Validation cycle" item 1, Rule 28 "The cross-part agent is
