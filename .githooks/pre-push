@@ -514,7 +514,7 @@ FAILLOG_KEEP=20
 # skipped iff its record exists and every key in K(F) still matches; otherwise F runs.
 #
 # K(F): every path in F's read set (its committed rows, or its valid local rows once a trace of
-# it lands -- those REPLACE the committed rows), plus every file under F's own directory, each
+# it lands -- those are ADDED to the committed rows, never shadow them), plus every file under F's own directory, each
 # keyed by its `.now` sha or `-` when absent; the entry list of every DIRECTORY in that set,
 # derived from the hashed path list and never from readdir; and the tool fingerprint. A fixture
 # with no rows at all is keyed on the whole `.now` universe.
@@ -689,7 +689,7 @@ readset_rows() { # <out> <paths|rows>
   } | awk -F'\t' -v mode="$mode" '
     $1 == "V" { loc[$2] = 1; print $2 "\t" $3; next }
     $1 == "L" { if (substr($3, 1, 1) != "#") print $3; next }
-    $1 == "C" { if (mode != "rows") print $3; else if (!($2 in loc)) print $2 "\t" $3 }'
+    $1 == "C" { if (mode != "rows") print $3; else print $2 "\t" $3 }'
 }
 
 # A LOCAL ROW SET IS VALID ONLY WHILE EVERY PATH IT RECORDED HASHES AS IT DID IN THE TRACE COPY, AND
@@ -905,7 +905,7 @@ readset_listings() { # <path list> <out file>
 # set is taken from a path list whose listing hash EQUALS the recorded one -- the previous run's `.now`
 # (`$KEYS_DIR/.prev`) or the verified record. Every file and directory under a new entry is added to
 # the record, which stays `ok`; with no matching list the record goes `stale`. A change to a key added
-# that way reruns the fixture and refreshes the key, and does not stale it; nor does a key K(F) gained
+# that way reruns the fixture and stales it, so a new script's own reads are traced; a key K(F) gained
 # (a trace landed or the map moved), which reruns it once to record the key. An `ok` record's keys
 # are carried into the next one while it has any listing key, so a key added that way is not dropped
 # when the fixture next runs for another reason; a whole-tree record has no listing key, so an
@@ -1003,7 +1003,7 @@ readset_keys() { # <list> <out>
           for (k in R) { if (k ~ /\/$/) rl = 1
             if (cur(k) == R[k]) continue
             if (substr(k, 1, 1) == "/") { tch = 1; continue }
-            if (first == "" || k < first) first = k; if (k ~ /\/$/) LM[k] = 1; else if (k in K) fch = 1 }
+            if (first == "" || k < first) first = k; if (k ~ /\/$/) LM[k] = 1; else fch = 1 }
           for (k in K) if (!(k in R)) { if (substr(k, 1, 1) == "/") tch = 1; else if (first == "" || k < first) first = k } }
         run = 1; why = ""; c = ""
         if (!has) { why = "unrecorded"; c = "u" }
