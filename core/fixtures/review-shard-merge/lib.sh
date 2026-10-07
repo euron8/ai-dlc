@@ -157,7 +157,8 @@ D_SHA12="$(printf '%s' "$D_SHA" | cut -c1-12)"
 REPO_E="$WORK/repo-e"; REPO_F="$WORK/repo-f"
 new_repo "$REPO_E" && new_repo "$REPO_F" || { echo "FIXTURE ERROR: git init/commit failed" >&2; exit 2; }
 for _i in 1 2 3 4 5 6 7 8; do lines "$REPO_E/e$_i/a.txt" 5 "e$_i-a"; lines "$REPO_E/e$_i/b.txt" 5 "e$_i-b"; done
-for _i in 1 2; do lines "$REPO_F/f$_i/a.txt" 5 "f$_i-a"; lines "$REPO_F/f$_i/b.txt" 5 "f$_i-b"; done
+# Six files, off the --min-files 4 boundary, so the `<`/`<=` mutant is owned by P2b alone.
+for _i in 1 2; do for _f in a b c; do lines "$REPO_F/f$_i/$_f.txt" 5 "f$_i-$_f"; done; done
 G -C "$REPO_E" add -A && G -C "$REPO_E" commit -q -m frozen
 G -C "$REPO_F" add -A && G -C "$REPO_F" commit -q -m frozen
 for r in "$REPO_E" "$REPO_F"; do
@@ -939,7 +940,8 @@ p_x_k8() { # X1: K=8 -> eight parts and cross-1..6 merge; the title counts 14 sh
   for g in 1 2 3 4 5 6; do [ -f "$d/cross-$g.md" ] || return 1; done
   [ ! -e "$d/cross-7.md" ] && [ ! -e "$d/cross.md" ] || return 1
   o="$(out_of "$d")"; run_merge "$sd" "$d"
-  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ "$(sed -n 1p "$o")" = "# Code Review: 1 (merged from 14 shards)" ] \
+  # The shard COUNT only: the title's gate wording is Q3's.
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && grep -qF '(merged from 14 shards)' <<<"$(sed -n 1p "$o")" \
     && has "$o" "## Shard: cross-1 (1,2,3,4)" && has "$o" "## Shard: cross-6 (5,6,7,8)" && has "$o" "#### F-cross-6-1 "
 }
 p_x_only() { # X2: K=8 (and K=3) with ONE cross.md in place of the groups -> REFUSED, nothing written
@@ -1001,7 +1003,7 @@ p_x_k2() { # X8: K=2 -> cross.md, both gates merge; the title counts 3 shards, t
   d="$(kworld "$sd" "$REPO_F" "$F_BASE" "$F_SHA" 2 code-review APPROVED)" || return 1
   [ "$(nparts "$d")" = 2 ] && [ -f "$d/cross.md" ] && [ ! -e "$d/cross-1.md" ] || return 1
   o="$(out_of "$d")"; run_merge "$sd" "$d"
-  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ "$(sed -n 1p "$o")" = "# Code Review: 1 (merged from 3 shards)" ] \
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && grep -qF '(merged from 3 shards)' <<<"$(sed -n 1p "$o")" \
     && has "$o" "## Shard: cross" && ! has "$o" "## Shard: cross-" || return 1
   d="$(kworld "$sd" "$REPO_F" "$F_BASE" "$F_SHA" 2 "$QA_SFX" PASS qa)" || return 1
   o="$(qout "$d")"; q_merge "$sd" "$d"
