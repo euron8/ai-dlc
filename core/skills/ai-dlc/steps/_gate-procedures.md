@@ -479,9 +479,12 @@ PRIOR pass's findings and the repair record, because pass 2+ reviews the REPAIR,
 again. Every adversary brief, sharded or not, also carries the early-write instruction of
 "Validation cycle" item 1: header first, each finding appended as verified, and the last
 non-blank line `seat-complete: <step> adversary <shard>` after every edit, `<shard>` being the
-brief's `shard:` value (`none` when it carries none). On every axis the merge refuses a shard
-of a round written under this instruction whose last non-blank line is not its `seat-complete:`
-line, and the merged record's `tool_use_id` is the first cross group's shard's.
+brief's `shard:` value (`none` when it carries none). On every axis, once ANY shard in the
+directory ends on a `seat-complete:` line, the merge refuses every shard in it whose last
+non-blank line is not one. Its limit: a directory where no shard carries the marker merges
+unchecked, exactly as before. That is a directory written before this instruction, and also a
+round where no shard has finished — which the join's `--complete` beat, not the merge, keeps
+from reaching the merge. The merged record's `tool_use_id` is the first cross group's shard's.
 
 It writes findings to `_bmad-output/planning-artifacts/s<N>/<artifact>-adversarial-p<M>.md`
 carrying a `SKILL_INVOCATION_PROVENANCE v1` block with `skill: ai-dlc-adversary-review`,
@@ -504,7 +507,8 @@ owner rule, a scope limited to interactions between the stories of its group, an
 `merge-adversarial-shards.sh` defines. Beat-join every shard path with `--complete`, then run the join
 `scripts/ai-dlc/merge-adversarial-shards.sh <that dir>`. It refuses (exit 2, `REFUSED:`, nothing
 written) unless every ordinal and every cross group delivered exactly once, every finding
-respects the partition, and every cross finding sits in the shard of the group that owns it. It then sums the counts, recomputes the verdict (a shard's own verdict is
+respects the partition, every cross finding sits in the shard of the group that owns it, and
+every cross shard's `artifact:` equals `cross-1`'s. It then sums the counts, recomputes the verdict (a shard's own verdict is
 advisory) and writes the one `<artifact>-adversarial-p<M>.md` above. Check 24 reads that file as
 it reads an unsharded pass. A single-file artifact is sharded by section (below), and passes stay
 serial (exception 2).
