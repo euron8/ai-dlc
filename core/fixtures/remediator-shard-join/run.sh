@@ -153,6 +153,10 @@ p_partymarked "$JOIN" && ok "PS9: every CITED seat file ends in seat-complete:, 
   || bad "PS9: a party repair over finished cited seats did not join (rc=$RC): $(cat "$JO")"
 p_partyunmarked "$JOIN" && ok "PS10: PS9 one property apart, the cited dev-4 unmarked -> REFUSED naming dev-4, nothing written" \
   || bad "PS10: a cited unfinished seat file beside finished ones was not refused (rc=$RC): $(cat "$JO")"
+p_partyx1 "$JOIN" && ok "PS11: the only cited seat (architect-1) unmarked, its step's uncited siblings marked -> REFUSED (the era is per step over the dir)" \
+  || bad "PS11: a lone cited unmarked seat whose step is in the marker era was joined (rc=$RC): $(cat "$JO")"
+p_partyx4 "$JOIN" && ok "PS12: an earlier step's pre-marker seat cited beside marked architecture seats -> JOINED (its step has no marker)" \
+  || bad "PS12: a pre-marker seat of another step was refused (rc=$RC): $(cat "$JO")"
 
 # R1: the role file the remediator is bound to teaches the write tool and the citation form. Walked
 # up from this fixture in both layouts; install copies team-roles/ verbatim, so no render exists.

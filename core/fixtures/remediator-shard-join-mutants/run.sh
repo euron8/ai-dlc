@@ -265,7 +265,7 @@ PROBE_NEW='src_probe() { return 0; }
 src_probe_disabled() {'
 # JX18: the id-only key with the self-probe IN PLACE -- the probe refuses before any corpus is read,
 # so every party run stops at it: the arms that expect a party join or a NAMED refusal all die.
-mutant "JX18 source keyed on the id alone (self-probe in place)" "sjnames party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked" \
+mutant "JX18 source keyed on the id alone (self-probe in place)" "sjnames party partyunres partynosrc partyforeign partydoc sjpartysrc srcok srcunres partymarked partyunmarked partyx1 partyx4" \
   "$IDONLY_OLD" "$IDONLY_NEW"
 # JX19: the same key AND the probe removed -- now only the arms that seed an id another seat carries see it.
 mutant2 "JX19 source keyed on the id alone, self-probe removed" "partyunres srcunres" \
@@ -276,8 +276,8 @@ mutant "JX20 an entry with no source line not refused" "partynosrc" \
 mutant "JX21 a source outside party-mode/s<N> not refused" "partyforeign" \
   '      if (!ok) { print "FOREIGN\t" $2 "\t" t; next }' \
   '      if (0) { print "FOREIGN\t" $2 "\t" t; next }'
-# partyunmarked dies too: with no party gate the seat-complete belt (BL-464) never runs.
-mutant "JX22 files/document mode not a party repair for <name>-party" "partyunres partynosrc partyforeign partyunmarked" \
+# partyunmarked and partyx1 die too: with no party gate the seat-complete belt (BL-464) never runs.
+mutant "JX22 files/document mode not a party repair for <name>-party" "partyunres partynosrc partyforeign partyunmarked partyx1" \
   'case "$ARTIFACT" in *-party) PARTY=1 ;; esac' \
   'case "$ARTIFACT" in *-never-a-name) PARTY=1 ;; esac'
 mutant "JX23 subject --pass party not a party repair" "sjpartysrc" \
@@ -289,13 +289,17 @@ mutant "JX24 --sources reports refusals and exits 0" "srcunres" \
   '  true || exit 2
   echo "SOURCES:'
 # ---- BL-464 seat-complete belt: removed, and widened from the CITED seat files to the whole dir.
-mutant "JX25 the seat-complete belt removed" "partyunmarked" \
-  '  [ -n "$y" ] && [ -n "$n" ] || return 0' \
+mutant "JX25 the seat-complete belt removed" "partyunmarked partyx1" \
+  '  [ -n "$steps" ] || return 0' \
   '  return 0'
-mutant "JX26 the seat-complete belt widened to every seat file of the sprint" "partymarked" \
-  '  while IFS= read -r b; do' \
-  '  cited="$(cd "$sd" && ls)"
-  while IFS= read -r b; do'
+# JX26: the era decided over the CITED set only (the pre-batch-204 shape) -- X1 joins.
+mutant "JX26 the marker era decided over the cited seat files only" "partyx1" \
+  '  for f in "$sd"/*.md; do' \
+  '  for f in $(printf '"'"'%s\n'"'"' "$cited" | sed "s@^@$sd/@"); do'
+# JX27: the era not per step -- any marker anywhere holds every cited seat, so X4 refuses.
+mutant "JX27 the marker era not decided per step" "partyx4" \
+  '      case "$b" in "$st"-*)' \
+  '      case "$b" in *)'
 # ---- END JX MUTANTS.
 
 # ------------------------------------------------------------------------------ the reap
