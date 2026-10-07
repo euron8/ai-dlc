@@ -1238,10 +1238,11 @@ fi
 # calling readset_lock_stale directly and reading its exact return code (0 stale, 1 held, anything
 # else is an error and never scores as either) and whether it printed the ps-fallback announcement.
 # These run `ps`, which is setuid and refused by the read-set deriver's sandbox. Under that sandbox
-# ps_sandbox_skip SKIPs them, and the rest of the fixture runs and a hand `--tracer sandbox` trace
-# maps it; on every ordinary run they run. The post-green `--local-map` trace still discards its
-# window as TRIP, because the detector's own probe execs /usr/bin/log, which that profile tags; a
-# committed row wins over a local one, so that trace never runs for this fixture once it is mapped.
+# ps_sandbox_skip SKIPs them and the rest of the fixture runs to a verdict; on every ordinary run
+# they run. Reaching a verdict is not being mapped: a hand `--tracer sandbox` trace can still OMIT
+# this fixture when the stream drops reports in its window. The post-green `--local-map` trace
+# discards its window as TRIP regardless, because the detector's own probe execs /usr/bin/log,
+# which that profile tags.
 # suite-pole-guard stays ps-free instead, so it carries none of these worlds.
 #
 # THE BLOCK BELOW IS NOT RE-INDENTED under its `if`: it carries a heredoc whose terminator must sit
