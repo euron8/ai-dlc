@@ -353,9 +353,10 @@ bash "$XPART" --cross-groups "$K" > "$T/groups" 2> "$T/groups.err"; grc=$?
 G="$(grep -c . "$T/groups")" || G=0
 [ "$G" -ge 1 ] || refuse "partition-document.sh --cross-groups $K printed no group"
 i=0
+RE_GROUP='^[0-9]+(,[0-9]+)+$'   # held in a variable for bash 3.2, as RE_ISO and RE_CITED are
 while IFS="$(printf '\t')" read -r gg gl; do
   i=$((i + 1))
-  [ "$gg" = "$i" ] && [[ $gl =~ ^[0-9]+(,[0-9]+)+$ ]] \
+  [ "$gg" = "$i" ] && [[ $gl =~ $RE_GROUP ]] \
     || refuse "partition-document.sh --cross-groups $K printed row $i as '$gg	$gl'; want <g>\\t<ordinal,ordinal,...> with g = 1..G in order"
 done < "$T/groups"
 if [ "$G" -eq 1 ]; then CROSS_KEYS="cross"
