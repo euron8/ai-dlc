@@ -85,26 +85,36 @@ real_title() { # <n> -> the title text after "### X# — "
   sed -n "${1}p" "$SEED_DIR/seed.finding-headings.txt" | sed 's/^### [A-Z][0-9]* — //'
 }
 
-# shard <shard-dir> <key: ordinal|cross> <n-major> <verdict> <stories-cite> [sha-override] [invoked_at]
+# xkeys <K> -> the cross shard keys a lead dispatches for K units, one per line: `cross` when
+# partition-document.sh --cross-groups prints one group (K=2), `cross-1 .. cross-<G>` otherwise.
+# Read from the partitioner the lead reads, never restated here.
+xkeys() {
+  local g; g="$(bash "$PARTITION" --cross-groups "$1" | grep -c .)" || g=0
+  [ "$g" -ge 1 ] || return 1
+  if [ "$g" -eq 1 ]; then echo cross; else seq 1 "$g" | sed 's/^/cross-/'; fi
+}
+is_cross() { case "$1" in cross|cross-*) return 0 ;; esac; return 1; }
+
+# shard <shard-dir> <key: ordinal|cross|cross-<g>> <n-major> <verdict> <stories-cite> [sha-override] [invoked_at]
 shard() {
   local d="$1" k="$2" n="$3" v="$4" cite="$5" sha="${6:-}" at_o="${7:-}" i=0 b at hn
-  if [ "$k" != "cross" ] && [ -z "$sha" ]; then
+  if ! is_cross "$k" && [ -z "$sha" ]; then
     b="$(bash "$MERGE" --map "$d" | awk -F'\t' -v k="$k" '$1 + 0 == k + 0 { print $2 }')"
     sha="$(sha_of "$(stories_of "$d")/$b")"
   fi
-  case "$k" in cross) at="2026-08-24T15:09:19Z" ;; *) at="2026-08-24T15:0${k}:19Z" ;; esac
+  case "$k" in cross) at="2026-08-24T15:09:19Z" ;; cross-*) at="2026-08-24T15:09:1${k#cross-}Z" ;; *) at="2026-08-24T15:0${k}:19Z" ;; esac
   [ -n "$at_o" ] && at="$at_o"
   {
     printf '# stories -- adversarial shard %s\n\n## Findings\n\n' "$k"
     while [ "$i" -lt "$n" ]; do
-      i=$((i + 1)); hn=$(( (i + ${k#cross}0) % 10 + 1 ))
+      i=$((i + 1)); hn=$(( i % 10 + 1 ))
       printf '### M%s — MAJOR — %s\n\nstories: %s\n\nBody quoted from the real pass.\n\n' "$i" "$(real_title "$hn")" "$cite"
     done
     printf '## Probed and found sound\n\nNothing further.\n\n'
     printf '<!-- SKILL_INVOCATION_PROVENANCE v1\n'
     printf 'skill: ai-dlc-adversary-review\ninvoked_at: %s\ntool_use_id: toolu_014KW7m9L81QQd5tmf3J%s\n' "$at" "$k"
     printf 'mode: subagent\nlead_role: .claude/skills/ai-dlc/steps/stories-test-strategy.md\n'
-    [ "$k" = "cross" ] && printf 'artifact: _bmad-output/planning-artifacts/s1/stories\n'
+    is_cross "$k" && printf 'artifact: _bmad-output/planning-artifacts/s1/stories\n'
     [ -n "$sha" ] && printf 'artifact_sha: %s\n' "$sha"
     printf 'findings_critical: 0\nfindings_critical_prior_scope: 0\nfindings_major: %s\n' "$n"
     printf 'findings_major_underived: 0\nfindings_minor: 0\nverdict: %s\n' "$v"
@@ -112,24 +122,165 @@ shard() {
   } > "$d/$k.md"
 }
 
-# The B3 input: three ordinal shards, 2 MAJOR each, each stamped MET; a clean cross shard.
+# The B3 input: three ordinal shards, 2 MAJOR each, each stamped MET; clean cross shards, one per
+# group of `--cross-groups 3` (cross-1..3).
 b3_world() {
-  local d; d="$(new_world)"
+  local d x; d="$(new_world)"
   shard "$d" 1 2 EXIT_CONDITION_MET 1
   shard "$d" 2 2 EXIT_CONDITION_MET 2
   shard "$d" 3 2 EXIT_CONDITION_MET 3
-  shard "$d" cross 0 EXIT_CONDITION_MET "1, 3"
+  for x in $(xkeys 3); do shard "$d" "$x" 0 EXIT_CONDITION_MET "1, 3"; done
   printf '%s' "$d"
 }
-# The clean set: 1 MAJOR per ordinal shard (sum 3, AT the ceiling), a cross finding citing two
-# ordinals with 0 MAJOR counted elsewhere -- and every shard stamped NOT_MET, the mirror of B3.
+# The clean set: 1 MAJOR per ordinal shard (sum 3, AT the ceiling), clean cross shards -- and
+# every shard stamped NOT_MET, the mirror of B3.
 clean_world() {
-  local d; d="$(new_world)"
+  local d x; d="$(new_world)"
   shard "$d" 1 1 EXIT_CONDITION_NOT_MET 1
   shard "$d" 2 1 EXIT_CONDITION_NOT_MET 2
   shard "$d" 3 1 EXIT_CONDITION_NOT_MET 3
-  shard "$d" cross 0 EXIT_CONDITION_NOT_MET "1, 2"
+  for x in $(xkeys 3); do shard "$d" "$x" 0 EXIT_CONDITION_NOT_MET "1, 2"; done
   printf '%s' "$d"
+}
+# A files world of K story files (K >= 2), each distinct bytes, every ordinal shard clean and the
+# cross shards the table names for K; no finding anywhere. -> the shard dir.
+k_world() {
+  local K="$1" w pa i o x
+  w="$(mktemp -d "$WORK/kw.XXXXXX")" || return 1
+  pa="$w/_bmad-output/planning-artifacts"
+  mkdir -p "$pa/s1/stories" "$pa/s1/shards/stories-p1" || return 1
+  i=0; while [ "$i" -lt "$K" ]; do i=$((i + 1)); printf '# Story %s\n\nBody of story %s.\n' "$i" "$i" > "$pa/s1/stories/story-$(printf '%02d' "$i")-k.md"; done
+  if [ "${2:-}" != noshards ]; then
+    for o in $(seq 1 "$K"); do shard "$pa/s1/shards/stories-p1" "$o" 0 EXIT_CONDITION_MET "$o"; done
+    for x in $(xkeys "$K"); do shard "$pa/s1/shards/stories-p1" "$x" 0 EXIT_CONDITION_MET "1, 2"; done
+  fi
+  printf '%s' "$pa/s1/shards/stories-p1"
+}
+
+# ---------------------------------------------------------------- the cross groups (BL-464)
+# Every mode at K=8 (files, --document, --subject --elicitation): cross-1..6 merges; cross.md alone
+# refuses; a finding duplicated into a non-owner group refuses; and K=2 with cross.md merges.
+# 8-section document, and an 8-unit subject built from the --document world's own partitioner.
+doc8_world() { # -> the shard dir of a --document world over an 8-part document
+  local w pa i
+  w="$(mktemp -d "$WORK/d8.XXXXXX")" || return 1
+  pa="$w/_bmad-output/planning-artifacts"
+  mkdir -p "$pa/s1/shards/test-strategy-p1" || return 1
+  { printf '# Test strategy\n\n'
+    for i in 1 2 3 4 5 6 7 8; do printf '## Section %s\n\n' "$i"; slorem "sec$i" 15; printf '\n'; done; } > "$pa/s1/test-strategy.md"
+  printf '%s' "$pa/s1/shards/test-strategy-p1"
+}
+# xset <mode> <shard dir> <K> <cross shape: groups|single> -- write every shard for that mode
+xset() {
+  local mode="$1" d="$2" K="$3" shape="$4" o x
+  for o in $(seq 1 "$K"); do
+    case "$mode" in
+      files) shard "$d" "$o" 0 EXIT_CONDITION_MET "$o" ;;
+      document) dshard "$d" "$o" 0 EXIT_CONDITION_MET "$o" ;;
+      elicit) sshard "$d" "$o" 0 "$o" "" bmad-advanced-elicitation - ;;
+    esac
+  done
+  if [ "$shape" = single ]; then x=cross; else x="$(xkeys "$K")"; fi
+  for o in $x; do
+    case "$mode" in
+      files) shard "$d" "$o" 0 EXIT_CONDITION_MET "1, 2" ;;
+      document) dshard "$d" "$o" 0 EXIT_CONDITION_MET "1, 2" ;;
+      elicit) sshard "$d" "$o" 0 "1, 2" "" bmad-advanced-elicitation - ;;
+    esac
+  done
+}
+# xfind <mode> <shard dir> <key> <cite> -- rewrite one cross shard to hold one MAJOR citing <cite>
+xfind() {
+  case "$1" in
+    files) shard "$2" "$3" 1 EXIT_CONDITION_MET "$4" ;;
+    document) dshard "$2" "$3" 1 EXIT_CONDITION_MET "$4" ;;
+    elicit) sshard "$2" "$3" 1 "$4" "" bmad-advanced-elicitation - ;;
+  esac
+}
+xmerge() { # <merge> <mode> <shard dir> -> RC, $MO
+  case "$2" in
+    files) bash "$1" "$3" > "$MO" 2>&1; RC=$? ;;
+    document) bash "$1" --document "$(doc_of "$3")" "$3" > "$MO" 2>&1; RC=$? ;;
+    elicit) bash "$1" --subject 9 --elicitation "$3" > "$MO" 2>&1; RC=$? ;;
+  esac
+}
+xworld() { # <mode> <K: 8|2> -> a fresh shard dir with no shards; K=2 only for files/document
+  local w
+  case "$1:$2" in
+    files:8) k_world 8 noshards ;;
+    files:2) w="$(new_world)"; rm -f "$(stories_of "$w")/story-1-rebalancer-il-accuracy.md"; printf '%s' "$w" ;;
+    document:8) doc8_world ;;
+    document:2) w="$(new_doc_world)"
+      # Two byte-identical-length halves and no preamble: the largest part is exactly 50%, the
+      # partitioner's MAX_SHARE_PCT, which is not OVER it -- the only K=2 shape a document can take.
+      { printf '## A\n\n'; slorem a 15; printf '## B\n\n'; slorem b 15; } > "$(doc_of "$w")"; printf '%s' "$w" ;;
+    elicit:8) w="$(subj_root "$(new_subj_world)")" || return 1
+      mkdir -p "$w/$SUBJ_PA/s9/shards/requirements-elicitation"; printf '%s' "$w/$SUBJ_PA/s9/shards/requirements-elicitation" ;;
+  esac
+}
+xk_of() { # <mode> <shard dir> -> the unit count the merge will read
+  case "$1" in
+    files) bash "$MERGE" --map "$2" | grep -c . ;;
+    document) bash "$PARTITION" --map "$(doc_of "$2")" | grep -c . ;;
+    elicit) grep -c . "$(subj_root "$(dirname "$2")/requirements-p1")/subject.map" ;;
+  esac
+}
+# p_xgroups <merge> <mode>: the four cells for one mode, every one PRESENCE-shaped.
+p_xgroups() {
+  local m="$1" mode="$2" d K own non
+  d="$(xworld "$mode" 8)" || return 1; K="$(xk_of "$mode" "$d")"
+  [ "$K" -ge 5 ] || return 1                       # G = 6 needs K >= 5; the seed must express it
+  xset "$mode" "$d" "$K" groups; xmerge "$m" "$mode" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" || return 1
+  d="$(xworld "$mode" 8)"; xset "$mode" "$d" "$K" single; xmerge "$m" "$mode" "$d"
+  [ "$RC" -eq 2 ] && has "$MO" "holds cross.md, but" || return 1
+  # The duplicate: the pair (1, 2) sits in the first quarter, so SEVERAL groups cover it and exactly
+  # one owns it. Seed the finding in its owner AND in another group that also covers it (the overlap
+  # the owner rule exists for), and the merge must refuse naming the owner.
+  own="$(bash "$PARTITION" --cross-owner "$K" "1,2")" || return 1
+  non="$(bash "$PARTITION" --cross-groups "$K" | awk -F'\t' -v o="$own" '$1 != o && ("," $2 ",") ~ /,1,/ && ("," $2 ",") ~ /,2,/ { print $1; exit }')"
+  [ -n "$non" ] || return 1
+  d="$(xworld "$mode" 8)"; xset "$mode" "$d" "$K" groups
+  xfind "$mode" "$d" "cross-$own" "1, 2"; xfind "$mode" "$d" "cross-$non" "1, 2"
+  xmerge "$m" "$mode" "$d"
+  [ "$RC" -eq 2 ] && has "$MO" "a finding owned by cross-$own" || return 1
+  # Its ALLOW twin: the same finding in its owner alone merges, with major=1 (counted once).
+  d="$(xworld "$mode" 8)"; xset "$mode" "$d" "$K" groups; xfind "$mode" "$d" "cross-$own" "1, 2"
+  xmerge "$m" "$mode" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "major=1" || return 1
+  # The merged tool_use_id is cross-1's and the id keys are cross-1..cross-6.
+  local o; case "$mode" in files) o="$(out_of "$d")" ;; document) o="$(doc_out_of "$d")" ;; elicit) o="$(dirname "$(dirname "$d")")/requirements-elicitation.md" ;; esac
+  grep -q '^tool_use_id: .*cross-1$' "$o" && grep -q ' cross-6=' "$o" && ! grep -q ' cross=' "$o" || return 1
+  [ "$mode" = elicit ] && return 0
+  d="$(xworld "$mode" 2)"; [ "$(xk_of "$mode" "$d")" -eq 2 ] || return 1
+  xset "$mode" "$d" 2 single; xmerge "$m" "$mode" "$d"
+  [ "$RC" -eq 0 ] && has "$MO" "MERGED:" || return 1
+  d="$(xworld "$mode" 2)"; xset "$mode" "$d" 2 groups
+  bash "$PARTITION" --cross-groups 2 >/dev/null || return 1
+  # At K=2 the table has one row, so `cross-1.md` is the wrong spelling and refused.
+  mv "$d/cross.md" "$d/cross-1.md" 2>/dev/null; xmerge "$m" "$mode" "$d"
+  [ "$RC" -eq 2 ] && has "$MO" "which partition-document.sh --cross-groups 2 does not print"
+}
+p_xfiles() { p_xgroups "$1" files; }
+p_xdoc() { p_xgroups "$1" document; }
+p_xelicit() { p_xgroups "$1" elicit; }
+p_xmix() { # cross.md beside cross-<g>.md -> refused as a mix
+  local d; d="$(b3_world)"; shard "$d" cross 0 EXIT_CONDITION_MET "1, 3"; run_merge "$1" "$d"
+  refused_clean "mixes cross.md with cross-<g>.md" "$d"
+}
+p_xunknown() { # cross-7.md at K=3 (three groups) -> refused by name
+  local d; d="$(b3_world)"; shard "$d" cross-7 0 EXIT_CONDITION_MET "1, 3"; run_merge "$1" "$d"
+  refused_clean "cross-7, which partition-document.sh --cross-groups 3 does not print" "$d"
+}
+p_xcomplete() { # seat-complete: one marked shard makes every unmarked one an unfinished refusal;
+                # every shard marked merges and the markers are dropped; none marked merges (pre-release)
+  local m="$1" d f o
+  d="$(b3_world)"; printf '\nseat-complete: stories adversary 1\n' >> "$d/1.md"; run_merge "$m" "$d"
+  refused_clean "does not end in 'seat-complete: '" "$d" || return 1
+  d="$(b3_world)"; o="$(out_of "$d")"
+  for f in "$d"/*.md; do printf '\nseat-complete: stories adversary %s\n\n' "$(basename "$f" .md)" >> "$f"; done
+  run_merge "$m" "$d"
+  [ "$RC" -eq 0 ] && [ -f "$o" ] && ! grep -q '^seat-complete: ' "$o"
 }
 
 # THE FIXED SCRATCH PATHS, all of them, bound in ONE place. Every predicate writes either under a
@@ -156,7 +307,7 @@ p_b3() { # the recomputed verdict, and the convergence validator accepts the mer
   local m="$1" d o c
   d="$(b3_world)"; o="$(out_of "$d")"; c="$(dirname "$m")/validate-adversarial-convergence.sh"
   run_merge "$m" "$d"
-  [ "$RC" -eq 0 ] && has "$MO" "verdict=EXIT_CONDITION_NOT_MET shards=4" && has "$MO" "blocking=6" \
+  [ "$RC" -eq 0 ] && has "$MO" "verdict=EXIT_CONDITION_NOT_MET shards=6" && has "$MO" "blocking=6" \
     && [ -f "$o" ] && has "$o" "verdict: EXIT_CONDITION_NOT_MET" || return 1
   bash "$c" --series "$(dirname "$o")/stories-adversarial-p" --cycle-state > "$CO" 2>&1 || return 1
   has "$CO" "CONTINUE"
@@ -165,7 +316,7 @@ p_clean() { # every shard stamped NOT_MET, summed blocking == the ceiling -> MET
   local m="$1" d o c
   d="$(clean_world)"; o="$(out_of "$d")"; c="$(dirname "$m")/validate-adversarial-convergence.sh"
   run_merge "$m" "$d"
-  [ "$RC" -eq 0 ] && has "$MO" "verdict=EXIT_CONDITION_MET shards=4" && has "$o" "verdict: EXIT_CONDITION_MET" || return 1
+  [ "$RC" -eq 0 ] && has "$MO" "verdict=EXIT_CONDITION_MET shards=6" && has "$o" "verdict: EXIT_CONDITION_MET" || return 1
   bash "$c" --series "$(dirname "$o")/stories-adversarial-p" --cycle-state > "$CO" 2>&1 || return 1
   has "$CO" "CONVERGED"
 }
@@ -176,6 +327,8 @@ p_ceiling() { # the ceiling is READ from the sibling: a copy whose sibling says 
   sed 's/^MAJOR_EXIT_CEILING=3$/MAJOR_EXIT_CEILING=6/' "$(dirname "$m")/validate-adversarial-convergence.sh" \
     > "$sd/validate-adversarial-convergence.sh"
   cp "$(dirname "$m")/validate-steering-budget.sh" "$sd/" 2>/dev/null
+  # Every mode reads its cross groups from this sibling, files mode included.
+  cp "$(dirname "$m")/partition-document.sh" "$sd/" || return 1
   cmp -s "$(dirname "$m")/validate-adversarial-convergence.sh" "$sd/validate-adversarial-convergence.sh" && return 2
   d="$(b3_world)"; o="$(out_of "$d")"
   run_merge "$sd/merge-adversarial-shards.sh" "$d"
@@ -187,9 +340,9 @@ p_miss_ord() { # ordinal 1 -- the NON-story file -- has no shard
   local d; d="$(b3_world)"; rm -f "$d/1.md"; run_merge "$1" "$d"
   refused_clean "shard 1 is missing from" "$d"
 }
-p_miss_cross() {
-  local d; d="$(b3_world)"; rm -f "$d/cross.md"; run_merge "$1" "$d"
-  refused_clean "shard cross is missing from" "$d"
+p_miss_cross() { # ONE of the three cross groups absent: every group is owed, not "some cross shard"
+  local d; d="$(b3_world)"; rm -f "$d/cross-2.md"; run_merge "$1" "$d"
+  refused_clean "shard cross-2 is missing from" "$d"
 }
 p_dup() { # 1.md and 01.md are one ordinal
   local d; d="$(b3_world)"; cp "$d/1.md" "$d/01.md"; run_merge "$1" "$d"
@@ -199,7 +352,7 @@ p_partition() { # a per-ordinal shard citing another story, and a cross shard ci
   local d r1 r2; d="$(b3_world)"
   shard "$d" 2 2 EXIT_CONDITION_MET "1, 2"; run_merge "$1" "$d"
   refused_clean "a per-ordinal shard reports only findings citing its own ordinal alone" "$d"; r1=$?
-  d="$(b3_world)"; shard "$d" cross 1 EXIT_CONDITION_MET 3; run_merge "$1" "$d"
+  d="$(b3_world)"; shard "$d" cross-2 1 EXIT_CONDITION_MET 3; run_merge "$1" "$d"
   refused_clean "a cross-story finding cites two or more ordinals" "$d"; r2=$?
   [ "$r1" -eq 0 ] && [ "$r2" -eq 0 ]
 }
@@ -255,11 +408,11 @@ doc_refused_clean() { # <token> <shard-dir>
 dshard() {
   local d="$1" k="$2" n="$3" v="$4" cite="$5" sha="${6:-}" art="${7:-$DOC_TOKEN}" extra="${8:-}" i=0 at hn
   [ -n "$sha" ] || sha="$(sha_of "$(doc_of "$d")")"
-  case "$k" in cross) at="2026-08-24T16:09:19Z" ;; *) at="2026-08-24T16:0${k}:19Z" ;; esac
+  case "$k" in cross) at="2026-08-24T16:09:19Z" ;; cross-*) at="2026-08-24T16:09:1${k#cross-}Z" ;; *) at="2026-08-24T16:0${k}:19Z" ;; esac
   {
     printf '# test-strategy -- adversarial section shard %s\n\n## Findings\n\n' "$k"
     while [ "$i" -lt "$n" ]; do
-      i=$((i + 1)); hn=$(( (i + ${k#cross}0) % 10 + 1 ))
+      i=$((i + 1)); hn=$(( i % 10 + 1 ))
       printf '### M%s — MAJOR — %s\n\nsections: %s\n' "$i" "$(real_title "$hn")" "$cite"
       [ -n "$extra" ] && printf '%s\n' "$extra"
       printf '\nBody quoted from the real pass.\n\n'
@@ -274,13 +427,14 @@ dshard() {
     printf 'SKILL_INVOCATION_PROVENANCE_END -->\n'
   } > "$d/$k.md"
 }
-# The section-mode B3: three part shards of 2 MAJOR each, each stamped MET, and a clean cross.
+# The section-mode B3: three part shards of 2 MAJOR each, each stamped MET, and clean cross
+# shards cross-1..3.
 doc_b3_world() {
-  local d; d="$(new_doc_world)"
+  local d x; d="$(new_doc_world)"
   dshard "$d" 1 2 EXIT_CONDITION_MET 1
   dshard "$d" 2 2 EXIT_CONDITION_MET 2
   dshard "$d" 3 2 EXIT_CONDITION_MET 3
-  dshard "$d" cross 0 EXIT_CONDITION_MET "1, 3"
+  for x in $(xkeys 3); do dshard "$d" "$x" 0 EXIT_CONDITION_MET "1, 3"; done
   printf '%s' "$d"
 }
 
@@ -289,12 +443,14 @@ p_doc_b3() { # sums, recomputes, ONE artifact_sha, a shard_wall entry per shard,
   d="$(doc_b3_world)"; o="$(doc_out_of "$d")"; c="$(dirname "$m")/validate-adversarial-convergence.sh"
   sha="$(sha_of "$(doc_of "$d")")"
   run_doc_merge "$m" "$d"
-  [ "$RC" -eq 0 ] && has "$MO" "verdict=EXIT_CONDITION_NOT_MET shards=4" && has "$MO" "major=6" \
+  [ "$RC" -eq 0 ] && has "$MO" "verdict=EXIT_CONDITION_NOT_MET shards=6" && has "$MO" "major=6" \
     && [ -f "$o" ] && has "$o" "verdict: EXIT_CONDITION_NOT_MET" || return 1
   n_sha="$(grep -c '^artifact_sha:' "$o")" || n_sha=0
   [ "$n_sha" -eq 1 ] && [ "$(grep '^artifact_sha:' "$o")" = "artifact_sha: $sha" ] || return 1
-  n_wall="$(grep '^shard_wall:' "$o" | tr ' ' '\n' | grep -cE '^(1|2|3|cross)=[0-9T:.Z-]+/[0-9T:Z-]+$')" || n_wall=0
-  [ "$n_wall" -eq 4 ] || return 1
+  # The merged tool_use_id is cross-1's -- the first group's dispatch, never the last one read.
+  grep -qx 'tool_use_id: toolu_01DocShard9xQcross-1' "$o" || return 1
+  n_wall="$(grep '^shard_wall:' "$o" | tr ' ' '\n' | grep -cE '^(1|2|3|cross-1|cross-2|cross-3)=[0-9T:.Z-]+/[0-9T:Z-]+$')" || n_wall=0
+  [ "$n_wall" -eq 6 ] || return 1
   # The per-file line of the validator's report (not --cycle-state, whose exit is the cycle's).
   bash "$c" --series "$(dirname "$o")/test-strategy-adversarial-p" > "$CO" 2>&1
   has "$CO" "verdict=EXIT_CONDITION_NOT_MET critical=0 major=6"
@@ -365,7 +521,7 @@ sshard() {
   local d="$1" k="$2" n="$3" cite="$4" sl="${5:-}" sk="${6:-ai-dlc-adversary-review}" v="${7:-EXIT_CONDITION_MET}" i=0 mm
   local art="${8:-$SUBJ_PA/s9/requirements-subject.md}"
   [ -n "$sl" ] || sl="$(subj_shas "$d")"
-  case "$k" in cross) mm=59 ;; *) mm=$((10#$k)) ;; esac
+  case "$k" in cross) mm=59 ;; cross-*) mm=$((50 + ${k#cross-})) ;; *) mm=$((10#$k)) ;; esac
   { printf '# requirements -- subject shard %s\n\n## Findings\n\n' "$k"
     while [ "$i" -lt "$n" ]; do i=$((i + 1)); printf '### M%s — MAJOR — %s\n\nsections: %s\n\nBody.\n\n' "$i" "$(real_title "$i")" "$cite"; done
     printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: %s\ninvoked_at: 2026-10-01T10:%02d:00Z\n' "$sk" "$mm"
@@ -375,10 +531,11 @@ sshard() {
     [ "$v" = "-" ] || printf 'verdict: %s\n' "$v"
     printf 'SKILL_INVOCATION_PROVENANCE_END -->\n'; } > "$d/$k.md"
 }
-subj_b3_world() { # every part shard 1 MAJOR stamped MET, summed over the ceiling; a clean cross
+subj_xkeys() { xkeys "$(grep -c . "$(subj_root "$1")/subject.map")"; } # <shard dir> -> its cross keys
+subj_b3_world() { # every part shard 1 MAJOR stamped MET, summed over the ceiling; clean cross shards
   local d o; d="$(new_subj_world)" || return 1
   for o in $(cut -f1 "$(subj_root "$d")/subject.map"); do sshard "$d" "$o" 1 "$o"; done
-  sshard "$d" cross 0 "1, 2"
+  for o in $(subj_xkeys "$d"); do sshard "$d" "$o" 0 "1, 2"; done
   printf '%s' "$d"
 }
 run_subj_merge() { bash "$1" --subject 9 "${@:3}" "$2" > "$MO" 2>&1; RC=$?; }
@@ -394,11 +551,14 @@ p_subj_b3() { # sums, recomputes, artifact = manifest, four stems, ids = ordinal
   [ "$RC" -eq 0 ] && has "$MO" "verdict=EXIT_CONDITION_NOT_MET" && has "$MO" "major=$k" && [ -f "$o" ] || return 1
   grep -qx "artifact: $SUBJ_PA/s9/requirements-subject.md" "$o" || return 1
   [ "$(grep '^artifact_sha:' "$o")" = "artifact_sha: $(subj_shas "$d")" ] || return 1
-  want="$( { cut -f1 "$(subj_root "$d")/subject.map" | awk '{ print $1 + 0 }'; echo cross; } | sort | tr '\n' ' ')"
+  want="$( { cut -f1 "$(subj_root "$d")/subject.map" | awk '{ print $1 + 0 }'; subj_xkeys "$d"; } | sort | tr '\n' ' ')"
   have="$(sed -n 's/^shard_tool_use_ids://p' "$o" | tr ' ' '\n' | awk -F= 'NF == 2 { k = $1; if (k ~ /^[0-9]+$/) k += 0; print k }' | sort | tr '\n' ' ')"
   [ "$want" = "$have" ]
 }
-p_subj_miss_cross() { local d; d="$(subj_b3_world)" || return 1; rm -f "$d/cross.md"; run_subj_merge "$1" "$d"; subj_refused_clean "shard cross is missing" "$d"; }
+p_subj_miss_cross() { # the LAST cross group absent (a merge requiring only cross-1 would accept it)
+  local d x; d="$(subj_b3_world)" || return 1; x="$(subj_xkeys "$d" | tail -1)"
+  [ "$x" != cross ] || return 1
+  rm -f "$d/$x.md"; run_subj_merge "$1" "$d"; subj_refused_clean "shard $x is missing" "$d"; }
 p_subj_xcite() { # a part shard citing ANOTHER file's ordinal (cross-file citation) -> refused
   local d; d="$(subj_b3_world)" || return 1
   sshard "$d" 1 1 "1, 3"
@@ -429,7 +589,7 @@ p_subj_elicit() { # elicitation: no verdict anywhere, skill required, own output
   local m="$1" w e o; w="$(subj_root "$(new_subj_world)")" || return 1
   e="$w/$SUBJ_PA/s9/shards/requirements-elicitation"; mkdir -p "$e"; o="$w/$SUBJ_PA/s9/requirements-elicitation.md"
   for k in $(cut -f1 "$w/subject.map"); do sshard "$e" "$k" 1 "$k" "" bmad-advanced-elicitation -; done
-  sshard "$e" cross 0 "1, 2" "" bmad-advanced-elicitation -
+  for k in $(xkeys "$(grep -c . "$w/subject.map")"); do sshard "$e" "$k" 0 "1, 2" "" bmad-advanced-elicitation -; done
   # Shards notarize via a path walk from the shard dir; subj_shas reads from the shard dir's world.
   bash "$m" --subject 9 --elicitation "$e" > "$MO" 2>&1; RC=$?
   [ "$RC" -eq 0 ] && [ -f "$o" ] && ! grep -q '^verdict:' "$o" && ! grep -q 'verdict=' "$MO" && has "$o" "skill: bmad-advanced-elicitation" || return 1
@@ -457,7 +617,8 @@ p_subj_b4() { # --document into requirements-p<M> refused before any shard is re
 b4_doc_shards() { # <world> <document rel> <shard dir> -> unscoped section shards over the document
   local w="$1" doc="$1/$2" d="$3" o sl
   mkdir -p "$d" || return 1; sl="$(sha_of "$doc")"
-  for o in $(bash "$SRCDIR/partition-document.sh" --map "$doc" | cut -f1) cross; do
+  for o in $(bash "$SRCDIR/partition-document.sh" --map "$doc" | cut -f1) \
+           $(xkeys "$(bash "$SRCDIR/partition-document.sh" --map "$doc" | grep -c .)"); do
     sshard "$d" "$o" 0 "$o" "$sl" "" "" "$2"
   done
   [ -f "$d/1.md" ] && [ -f "$d/2.md" ]
@@ -489,5 +650,5 @@ p_b4doc_other() {
   bash "$1" --document "$w/$doc" "$w/$SUBJ_PA/s9/shards/test-strategy-p1" > "$MO" 2>&1; RC=$?
   [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ -f "$o" ]
 }
-P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms doc_b3 doc_axis doc_sha doc_path doc_serial files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit subj_b4 b4doc b4doc_nomf b4doc_other"
+P_ALL="b3 clean ceiling miss_ord miss_cross dup partition sha ms doc_b3 doc_axis doc_sha doc_path doc_serial files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit subj_b4 b4doc b4doc_nomf b4doc_other xfiles xdoc xelicit xmix xunknown xcomplete"
 

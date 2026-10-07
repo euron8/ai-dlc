@@ -37,8 +37,8 @@
 # THE WATCHDOG. bash 3.2 has no `wait -n`, so each scorer runs under a slot that polls it and,
 # past SCORER_BOUND seconds, writes a TIMEOUT marker and kills the scorer's whole process tree
 # (stopped first, then children before parents, so nothing reparents to init and keeps spinning).
-# One scoring is 26 predicates, about 22 CPU-seconds solo; a unit under the gate's pool has
-# measured 4x its solo time, and 900s is roughly 10x that loaded figure.
+# One scoring is |P_ALL| predicates (32 since the cross groups), about 22 CPU-seconds solo at 26;
+# a unit under the gate's pool has measured 4x its solo time, and 900s is roughly 10x that figure.
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -190,7 +190,7 @@ mutant "MX2 ceiling hard-coded, not read" "ceiling" \
   'MAJOR_CEIL="$(read_ceiling MAJOR_EXIT_CEILING)"' \
   'MAJOR_CEIL=3'
 mutant "MX3 missing-shard check removed" "miss_ord miss_cross subj_miss_cross" \
-  'for idx in $ORDINALS cross; do' \
+  'for idx in $ORDINALS $CROSS_KEYS; do' \
   'for idx in ; do'
 mutant "MX4 earliest shard by raw string, not by time" "ms" \
   'if [ -z "$EARLIEST" ] || [[ "$AT_KEY" < "$EARLIEST_KEY" ]]; then' \
@@ -255,6 +255,37 @@ mutant "MX14 B4-by-document guard removed" "b4doc" \
 mutant "MX15 B4-by-document refuses every document" "b4doc b4doc_other" \
   '    [ "$(cd "$(dirname "$B4_ROOT/$b4_rel")" && pwd -P)/${b4_rel##*/}" = "$DOCUMENT" ] \' \
   '    true \'
+# The cross groups (BL-464). XM1: files and --subject left single-cross -- the groups are read only
+# in --document mode, the wrong build "merge sharded in one mode only". Every files and subject arm
+# that seeds cross-<g> dies; the --document arms hold.
+mutant "XM1 one mode left single-cross" "b3 clean ceiling miss_ord miss_cross partition sha ms files_golden subj_b3 subj_miss_cross subj_xcite subj_sha subj_stems subj_art subj_elicit xfiles xelicit xmix xunknown xcomplete" \
+  'bash "$XPART" --cross-groups "$K" > "$T/groups" 2> "$T/groups.err"; grc=$?' \
+  'bash "$XPART" --cross-groups "$( [ -n "$DOCUMENT" ] && echo "$K" || echo 2)" > "$T/groups" 2> "$T/groups.err"; grc=$?'
+# XM2: the owner rule off -- a finding two covering groups both report is summed twice. Only the
+# duplicate cell of X1-X3 seeds one.
+mutant "XM2 owner rule off (duplicate summed)" "xfiles xdoc xelicit" \
+  '      [ "$ownk" = "$key" ] \' \
+  '      true || [ "$ownk" = "$key" ] \'
+# XM3: the merged tool_use_id taken from the LAST cross group read, not cross-1. Anchored on the
+# EMISSION line, so only the emitted value moves: CROSS_FIRST also keys the files-mode cross
+# artifact agreement, and a mutation there refused every files world for that other reason.
+mutant "XM3 tool_use_id not cross-1" "doc_b3 files_golden xfiles xdoc xelicit" \
+  "  printf 'tool_use_id: %s\\n' \"\$CROSS_ID\"" \
+  "  printf 'tool_use_id: %s\\n' \"\${ID_LIST##*=}\""
+# XM4: the mix guard gone. cross.md beside cross-<g>.md at G>1 is then refused by the wrong-shape
+# guard instead, so the kill is X4's message alone.
+mutant "XM4 cross.md/cross-<g>.md mix accepted" "xmix" \
+  '[ "$x_plain" -eq 1 ] && [ "$x_num" -eq 1 ] \' \
+  'false && [ "$x_num" -eq 1 ] \'
+# XM5: a cross-<g> the table does not print accepted. X5 sees cross-7 merge silently; X1 and X2's
+# K=2 cell sees `cross-1.md` refused as missing `cross` rather than named as unprinted -- both true.
+mutant "XM5 unknown cross group accepted" "xfiles xdoc xunknown" \
+  '      case " $CROSS_KEYS " in *" $xk "*) ;; *) refuse' \
+  '      case " $CROSS_KEYS " in *) ;; *" $xk "*) refuse'
+# XM6: the seat-complete belt gone -- an unfinished shard beside a finished one merges.
+mutant "XM6 seat-complete refusal removed" "xcomplete" \
+  "if grep -q '^Y' \"\$T/sc\" && grep -q '^N' \"\$T/sc\"; then" \
+  'if false; then'
 
 # ------------------------------------------------------------------------------ the reap
 wait
