@@ -4037,8 +4037,10 @@ python3 -c 'import sys
 s = open(sys.argv[1]).read(); o, n = sys.argv[3], sys.argv[4]
 if s.count(o) != 1: sys.exit(3)
 open(sys.argv[2], "w").write(s.replace(o, n, 1))' "$GATE" "$HU_OLD" "$HU_OPEN_NEW" '      o = (t ~ /^[[:space:]]*if[[:space:]]/)' 2>/dev/null || : > "$HU_OLD"
-ss_assert "hu-stack-depth" "${HU_REAL:+found} shipped=$(hu_depth "$GATE") old-opener=$(hu_depth "$HU_OLD")" "found shipped=0 old-opener=4" \
-  "scanning the shipped pre-push ends at if-frame depth 0; the old opener test leaves it at 4, so this assertion can see the imbalance"
+HU_OLD_D="$(hu_depth "$HU_OLD")"
+case "$HU_OLD_D" in ''|0|*[!0-9]*) HU_OLD_UNBAL=no ;; *) HU_OLD_UNBAL=yes ;; esac
+ss_assert "hu-stack-depth" "${HU_REAL:+found} shipped=$(hu_depth "$GATE") old-opener-unbalanced=$HU_OLD_UNBAL" "found shipped=0 old-opener-unbalanced=yes" \
+  "scanning the shipped pre-push ends at if-frame depth 0; the old opener test leaves it above 0 (read $HU_OLD_D), so this assertion can see the imbalance"
 
 # --- HOOK SHAPES THE SCAN MUST NOT READ AS "NOT GATING" (BL-456, tip round) ----------------------
 # Each shape below is one reformat away from the real hook, and before this round the first three

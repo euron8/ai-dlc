@@ -92,11 +92,11 @@ HOOK1="${HOOKS# }"; HOOK1="${HOOK1%% *}"
 # same chain with the refusal removed, where C starts -- so the nest is constructible and the count
 # can move.
 NB="$WORK/nest.block.sh"; sed -n '/^# FIXTURE_POOL_BEGIN$/,/^# FIXTURE_POOL_END$/p' "$HOOK1" > "$NB"
-NFXR="$(sed -n 's|^[[:space:]]*for d in \([A-Za-z0-9_./-]*\)/\*/;.*|\1|p' "$NB" | sort -u)"
+NFXR="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$NB" | sort -u)"
 nest_build() { # nest_build <root> <blockfile>
   local r="$1" blk="$2" lvl next
   # the fixture root is the SCORED block's own: core/fixtures in one hook, tests/fixtures in the other
-  NFXR="$(sed -n 's|^[[:space:]]*for d in \([A-Za-z0-9_./-]*\)/\*/;.*|\1|p' "$blk" | sort -u)"
+  NFXR="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$blk" | sort -u)"
   for lvl in a b c; do
     mkdir -p "$r/$lvl/$NFXR/stub-$lvl"
     case "$lvl" in a) next=b ;; b) next=c ;; c) next="" ;; esac
@@ -114,7 +114,7 @@ nest_build() { # nest_build <root> <blockfile>
 }
 nest_run() { # nest_run <root> <blockfile> -> started stubs, space separated
   local r="$1" blk="$2"
-  NFXR="$(sed -n 's|^[[:space:]]*for d in \([A-Za-z0-9_./-]*\)/\*/;.*|\1|p' "$blk" | sort -u)"
+  NFXR="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$blk" | sort -u)"
   : > "$WORK/nest.log"; : > "$WORK/nest.log.out"
   ( cd "$r/a" && export NEST_LOG="$WORK/nest.log" AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_NO_SKIP=1; unset PREPUSH_POOL_DEPTH
     . "$blk" >/dev/null 2>&1; run_fixtures >> "$WORK/nest.log.out" 2>&1 )
@@ -136,7 +136,7 @@ for HOOK in $HOOKS; do
   BLK="$WORK/block$HN.sh"
   sed -n '/^# FIXTURE_POOL_BEGIN$/,/^# FIXTURE_POOL_END$/p' "$HOOK" > "$BLK"
   [ -s "$BLK" ] || broken "extracted an empty FIXTURE_POOL block from $HOOK"
-  FXR="$(sed -n 's|^[[:space:]]*for d in \([A-Za-z0-9_./-]*\)/\*/;.*|\1|p' "$BLK" | sort -u)"
+  FXR="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$BLK" | sort -u)"
   [ "$(printf '%s\n' "$FXR" | grep -c .)" -eq 1 ] || broken "read '$FXR' as the block's fixture root; need exactly one"
   W="$WORK/w$HN"; mkworld "$W" "$FXR" 6 || broken "could not seed the probe world"
 

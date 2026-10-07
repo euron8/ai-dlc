@@ -19,6 +19,36 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.741.0] - 2026-10-07
+
+Batch 202's third release. No consumer candidate is discharged. Both pre-push hooks change, so a
+consumer's suite selection moves on the pull that delivers it.
+
+### The suite runs only the fixtures whose own inputs changed
+
+- A push used to run EVERY fixture whenever a changed path sat in no fixture's read set. Each
+  fixture now carries its own key record, `$GITDIR/ai-dlc-fixture-keys/<fixture>.key`, holding the
+  pre-run hash of every path it reads, every file under its own directory, the entry list of every
+  directory it reads, and the content hash of every tool its files name. A fixture is skipped
+  only while every key matches. A record is written only for a fixture that passed, via temp and
+  `mv`, so a red or killed run records nothing for it.
+- A fixture with no read set keys the whole tree, so it reruns on any change but no longer drags
+  the rest of the suite with it. Only an empty or failed hash manifest still runs everything.
+- A changed file key marks the record `stale`, and a stale fixture reruns until a clean trace of
+  it lands. A tool update reruns only the fixtures that name that tool, and never stales them.
+- The first push seeds each record once from the existing whole-tree verified record, comparing
+  every path in it, so a file deleted since that record still reruns its readers.
+- The push prints one line with `<n> of <m> fixture(s) run` and up to ten reasons.
+- A fixture's traced local rows are added to its committed rows instead of replacing them.
+- `readset-skip` holds the selection in fourteen worlds across both hooks, one mutant each.
+
+### The read-set deriver writes the map after every fixture
+
+- `derive-fixture-readsets.sh` used to write the map only at the end of a run, so a killed run
+  lost every fixture it had traced. It now writes after each accepted fixture, through a temp file
+  and `mv`. `readset-skip` kills a three-fixture run during the third fixture and asserts the first
+  two fixtures' rows survive. An end-only mutant loses them.
+
 ## [0.740.0] - 2026-10-07
 
 Batch 202's second release. It carries `BL-456`, which closes in the batch close commit. No

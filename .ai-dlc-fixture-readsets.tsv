@@ -10,8 +10,7 @@
 # every other fixture's entries alone, so refreshing one fixture costs its own runtime
 # rather than a full re-derivation.
 #
-# fixtures mapped: 232    entries: 27511
-# OMITTED by the last run (always run): adversarial-shard-merge adversarial-shard-merge-mutants advisor-gate-deny-mutants-c advisor-gate-deny-mutants-e check-24-adversarial-convergence remediator-shard-join-mutants
+# fixtures mapped: 233    entries: 27579
 absorbed-specifics-survive	.git/HEAD
 absorbed-specifics-survive	.git/config
 absorbed-specifics-survive	.git/index
@@ -106,6 +105,74 @@ adversarial-citation	core/scripts/validate-write-format-steering.sh
 adversarial-citation	core/scripts/verdict.sh
 adversarial-citation	core/scripts/wait-for-deliverable.sh
 adversarial-citation	s-resolution-p2.md
+adversarial-shard-merge	.git
+adversarial-shard-merge	.git/HEAD
+adversarial-shard-merge	.git/commondir
+adversarial-shard-merge	.git/config
+adversarial-shard-merge	.git/info/attributes
+adversarial-shard-merge	.git/objects
+adversarial-shard-merge	.git/objects/4e
+adversarial-shard-merge	.git/objects/5f
+adversarial-shard-merge	.git/objects/c6
+adversarial-shard-merge	.git/objects/d9
+adversarial-shard-merge	.git/objects/info/alternates
+adversarial-shard-merge	.git/objects/pack
+adversarial-shard-merge	.git/objects/pack/multi-pack-index
+adversarial-shard-merge	.git/objects/pack/pack-2b84686f1c22ab5ba792c7fa71963f87b4771ffd.keep
+adversarial-shard-merge	.git/objects/pack/pack-2b84686f1c22ab5ba792c7fa71963f87b4771ffd.mtimes
+adversarial-shard-merge	.git/objects/pack/pack-2b84686f1c22ab5ba792c7fa71963f87b4771ffd.pack
+adversarial-shard-merge	.git/objects/pack/pack-2b84686f1c22ab5ba792c7fa71963f87b4771ffd.promisor
+adversarial-shard-merge	.git/objects/pack/pack-3af86136785cab26fb3cce940480121d41e2e3ba.keep
+adversarial-shard-merge	.git/objects/pack/pack-3af86136785cab26fb3cce940480121d41e2e3ba.mtimes
+adversarial-shard-merge	.git/objects/pack/pack-3af86136785cab26fb3cce940480121d41e2e3ba.pack
+adversarial-shard-merge	.git/objects/pack/pack-3af86136785cab26fb3cce940480121d41e2e3ba.promisor
+adversarial-shard-merge	.git/objects/pack/pack-67cfe6b651fa0144300f4d9b2ffebfb04acbb935.keep
+adversarial-shard-merge	.git/objects/pack/pack-67cfe6b651fa0144300f4d9b2ffebfb04acbb935.mtimes
+adversarial-shard-merge	.git/objects/pack/pack-67cfe6b651fa0144300f4d9b2ffebfb04acbb935.pack
+adversarial-shard-merge	.git/objects/pack/pack-67cfe6b651fa0144300f4d9b2ffebfb04acbb935.promisor
+adversarial-shard-merge	.git/refs
+adversarial-shard-merge	.gitattributes
+adversarial-shard-merge	core
+adversarial-shard-merge	core/.claude
+adversarial-shard-merge	core/.claude/schemas/provenance-block.json
+adversarial-shard-merge	core/.git
+adversarial-shard-merge	core/core/schemas/provenance-block.json
+adversarial-shard-merge	core/core/scripts/merge-adversarial-shards.sh
+adversarial-shard-merge	core/core/skills/ai-dlc
+adversarial-shard-merge	core/fixtures
+adversarial-shard-merge	core/fixtures/adversarial-shard-merge
+adversarial-shard-merge	core/fixtures/adversarial-shard-merge/core/scripts/merge-adversarial-shards.sh
+adversarial-shard-merge	core/fixtures/adversarial-shard-merge/lib.sh
+adversarial-shard-merge	core/fixtures/adversarial-shard-merge/run.sh
+adversarial-shard-merge	core/fixtures/adversarial-shard-merge/scripts/ai-dlc/merge-adversarial-shards.sh
+adversarial-shard-merge	core/fixtures/adversarial-shard-merge/seed.192-ff-A-token-decimal-resolution.md
+adversarial-shard-merge	core/fixtures/adversarial-shard-merge/seed.bug-192-il-accuracy.md
+adversarial-shard-merge	core/fixtures/adversarial-shard-merge/seed.doc-serial-epics.md
+adversarial-shard-merge	core/fixtures/adversarial-shard-merge/seed.doc-test-strategy.md
+adversarial-shard-merge	core/fixtures/adversarial-shard-merge/seed.files-b3-merged.expected
+adversarial-shard-merge	core/fixtures/adversarial-shard-merge/seed.finding-headings.txt
+adversarial-shard-merge	core/fixtures/adversarial-shard-merge/seed.story-1-rebalancer-il-accuracy.md
+adversarial-shard-merge	core/fixtures/core/scripts/merge-adversarial-shards.sh
+adversarial-shard-merge	core/fixtures/lib
+adversarial-shard-merge	core/fixtures/lib/preamble.sh
+adversarial-shard-merge	core/fixtures/scripts/ai-dlc/merge-adversarial-shards.sh
+adversarial-shard-merge	core/schemas/provenance-block.json
+adversarial-shard-merge	core/scripts
+adversarial-shard-merge	core/scripts/.claude
+adversarial-shard-merge	core/scripts/.claude/schemas/provenance-block.json
+adversarial-shard-merge	core/scripts/.git
+adversarial-shard-merge	core/scripts/ai-dlc/merge-adversarial-shards.sh
+adversarial-shard-merge	core/scripts/core/schemas/provenance-block.json
+adversarial-shard-merge	core/scripts/core/skills/ai-dlc
+adversarial-shard-merge	core/scripts/lib/meta-gate.sh
+adversarial-shard-merge	core/scripts/merge-adversarial-shards.sh
+adversarial-shard-merge	core/scripts/partition-document.sh
+adversarial-shard-merge	core/scripts/partition-subject.sh
+adversarial-shard-merge	core/scripts/validate-adversarial-convergence.sh
+adversarial-shard-merge	core/scripts/validate-provenance-block.sh
+adversarial-shard-merge	core/scripts/validate-steering-budget.sh
+adversarial-shard-merge	core/skills/ai-dlc/extensions/known-skills.json
+adversarial-shard-merge	skills/ai-dlc/extensions/known-skills.json
 advisor-gate-deny	@rpath/DVTSystemPrerequisites.framework/Versions/A
 advisor-gate-deny	@rpath/DVTSystemPrerequisites.framework/Versions/A/DVTSystemPrerequisites
 advisor-gate-deny	@rpath/ManagedBackgroundAssetsXPC.framework/Versions/A/ManagedBackgroundAssetsXPC
