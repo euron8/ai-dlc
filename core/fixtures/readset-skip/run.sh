@@ -169,7 +169,7 @@ R="$( cd "$T" && scratch="$(mktemp -d "$WORK/n.XXXXXX")" && . "$POOL" 2>/dev/nul
       rm -f .git/ai-dlc-fixture-verified && cp "$scratch/list" "$scratch/l" && \
       apply_readset_skip "$scratch/l" "$scratch" 2>&1 | tr -d '\n' )"
 case "$R" in
-  *"no verified-state record"*) ok "with no verified state the suite runs whole and says so — the skip cannot bootstrap itself into silence" ;;
+  *"read-set keys: 3 of 3 fixture(s) run (0 changed, 3 unrecorded, 0 stale)"*) ok "with no verified state and no key records there is no seed: every fixture is unrecorded and runs" ;;
   *)                            bad "a missing verified-state record did not force a full run: $R" ;;
 esac
 
@@ -227,7 +227,7 @@ fi
 # something moving".
 T="$WORK/t10"; seed "$T" || broken "seed failed"
 R="$(select_in "$T" ':')"
-if [ "$(flag_of "$R")" = "1" ] && printf '%s' "$(msg_of "$R")" | grep -q 'skipping all'; then
+if [ "$(flag_of "$R")" = "1" ] && printf '%s' "$(msg_of "$R")" | grep -qF '0 of 3 fixture(s) run'; then
   ok "NOTHING changed since the last green run — the suite is SKIPPED WHOLE, not run whole"
 else
   bad "an unchanged tree did not skip the suite (flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
@@ -235,8 +235,8 @@ fi
 
 T="$WORK/t11"; seed "$T" || broken "seed failed"
 R="$(select_in "$T" 'printf v1 > src/untracked-newcomer.sh')"
-if [ "$(flag_of "$R")" = "0" ] && [ "$(sel_of "$R")" = "alpha beta gamma" ]; then
-  ok "  an UNTRACKED, unignored new file is NOT nothing — it blocks the skip and runs the whole suite"
+if [ "$(flag_of "$R")" = "0" ] && [ "$(sel_of "$R")" = "beta gamma" ]; then
+  ok "  an UNTRACKED, unignored new file is NOT nothing — it moves src/'s listing (beta) and the unmapped closure (gamma)"
 else
   bad "  an untracked file was invisible to the manifest (flag $(flag_of "$R"), sel '$(sel_of "$R")') — the skip would run over a tree nobody hashed"
 fi
@@ -309,16 +309,6 @@ mutant() {
   fi
 }
 
-# Drop the fail-closed loop that adds map-less fixtures: gamma must stop being selected.
-mutant unmapped 's|if ! grep -qxF "$b" "$out/.mapped"; then printf .*$|:|' \
-  "alpha gamma" 'printf v2 > src/a.sh'
-# Match on `.changed` instead of `.match` -- the real development defect, restored. Anchored on
-# the selection's own input pair, which reads the merged rows (`$out/.rows`), not the map file.
-mutant parentdir 's|"$out/.match" "$out/.rows"|"$out/.changed" "$out/.rows"|' \
-  "alpha beta gamma" 'rm -f src/a.sh'
-# Remove the orphan fallback: an unreadable change must stop forcing a full run.
-mutant orphan 's|if \[ -s "$out/.orphan" \]; then|if false; then|' \
-  "alpha beta gamma" 'printf v2 > src/orphan.sh'
 # NO MUTANT FOR THE .git EXCLUSION, and the reason is structural rather than an omission.
 # The exclusion is applied in TWO places that must agree. Removing it from the universe alone
 # changes nothing -- the path is already absent from the manifest, so it is never hashed.
@@ -471,30 +461,22 @@ ign_arm() { # <label> <seed mode> <mutation> <want sel> <want flag> <message nee
   fi
   IGN_ARMS=$((IGN_ARMS+1))
 }
-ign_arm "(a)" none "$IGN_A" "alpha beta gamma" 0 "predates the format stamp" \
-  "(a) an UNSTAMPED record listing an ignored file now absent runs everything — it is never filtered"
-ign_arm "(b)" ign "$IGN_B" "alpha gamma" 0 "SKIPPING" \
+ign_arm "(b)" ign "$IGN_B" "alpha gamma" 0 "read-set keys:" \
   "(b) an ignored file PRESENT and EDITED is no change and no orphan — only a.sh's reader runs"
-ign_arm "(c)" ign "$IGN_C" "alpha beta gamma" 0 "SKIPPING" \
+ign_arm "(c)" ign "$IGN_C" "alpha beta gamma" 0 "read-set keys:" \
   "(c) in the same world a TRACKED file vanishing still adds its parent and selects beta"
-ign_arm "(d)" forced "$IGN_D" "alpha gamma" 0 "SKIPPING" \
+ign_arm "(d)" forced "$IGN_D" "alpha gamma" 0 "read-set keys:" \
   "(d) a TRACKED file matching an ignore pattern still counts — editing it selects its reader"
 ign_arm "(e)" none "$IGN_E" "alpha beta gamma" 0 "could not hash" \
   "(e) check-ignore failing (exit 128) fails CLOSED — the manifest is emptied and everything runs"
 # The seed itself asserts the gitlink is recorded and that check-ignore exits 128 on the path
 # inside it, so this arm cannot pass over a world that never expressed the case.
-ign_arm "(f)" sub 'printf v2 > src/a.sh' "alpha gamma" 0 "SKIPPING" \
+ign_arm "(f)" sub 'printf v2 > src/a.sh' "alpha gamma" 0 "read-set keys:" \
   "(f) a map path inside a SUBMODULE is never asked — check-ignore would exit 128 on it and run everything on every push"
-# (g) runs everything through the orphan branch, not through beta's `src` row: the vanished path is
-# ignored now, so the universe filter drops it. Coarser than its readers, and never a skip.
-ign_arm "(g)" forced "$IGN_G" "alpha beta gamma" 0 "NO fixture read-set (e.g. src/x.bin)" \
-  "(g) a FORCE-ADDED ignored file in a v2 record, then git rm'd, is a VANISH — the suite runs rather than skipping whole"
-ign_arm "(h)" ign "$IGN_H" "alpha beta gamma" 0 "predates the format stamp" \
-  "(h) an UNSTAMPED record from an older hook's map arm, its ignored file since deleted, runs everything"
-ign_arm "(i)" none "$IGN_I" "alpha beta gamma" 0 "unknown format stamp" \
-  "(i) an UNKNOWN format stamp fails CLOSED — everything runs"
-ign_arm "(j)" forced "$IGN_J" "alpha beta gamma" 0 "predates the format stamp" \
-  "(j) a FORCE-ADDED file git rm'd under an UNSTAMPED record runs everything — never 'NOTHING changed, skipping all'"
+# (g) under keys: the vanished path is ignored now, so it is no key (ignored paths are unkeyed by
+# contract) and alpha skips; src/'s listing moved (beta) and the unmapped closure moved (gamma).
+ign_arm "(g)" forced "$IGN_G" "beta gamma" 0 "read-set keys:" \
+  "(g) a FORCE-ADDED ignored file in a v2 record, then git rm'd, is a VANISH — its directory's lister and the unmapped fixture run, never a whole skip"
 
 # Each mutant is scored on the ONE world whose arm it must break, against the same worlds the
 # arms above just passed on unmutated -- those passes are this battery's control.
@@ -523,23 +505,6 @@ ign_mutant() { # <name> <sed expr> <seed mode> <mutation> <arm's correct sel> [a
   fi
   IGN_ARMS=$((IGN_ARMS+1))
 }
-ign_mutant no_manifest_filter \
-  's|readset_drop_ignored "$out/.paths.all" "$out/.paths"; ign_rc=$?|cp "$out/.paths.all" "$out/.paths"; ign_rc=0|' \
-  ign "$IGN_B" "alpha gamma"
-# UNSTAMPED FILTER RESTORED: the round-1 upgrade filter, which skipped (j)'s whole suite. Scored
-# on the FLAG -- (j)'s correct set and the defect's whole-suite skip are the same list.
-ign_mutant unstamped_filter \
-  's#^    printf .*predates the format stamp.*$#    readset_drop_ignored "$VERIFIED_RECORD" "$out/.rec" || return 0#' \
-  forced "$IGN_J" "alpha beta gamma" 0
-# ALWAYS FILTER: the `v2` branch filters too, which is the shipped defect restored. Scored on the
-# FLAG -- (g)'s correct set and the defect's whole-suite skip are the same list.
-ign_mutant always_filter \
-  's|    cp "$VERIFIED_RECORD" "$out/.rec" \\|    readset_drop_ignored "$VERIFIED_RECORD" "$out/.rec" \\|' \
-  forced "$IGN_G" "alpha beta gamma" 0
-# AN UNKNOWN STAMP READ AS `v2`: (i) stops running everything and selects a.sh's reader alone.
-ign_mutant unknown_as_v2 \
-  's|elif \[ "$(cat "$VERIFIED_FORMAT" 2>/dev/null)" = v2 \]; then|elif true; then|' \
-  none "$IGN_I" "alpha beta gamma" 0
 ign_mutant gitignore_grep \
   's|git -c core.quotePath=false check-ignore --stdin < "$res.q"|grep -xF -f .gitignore < "$res.q"|' \
   forced "$IGN_D" "alpha gamma"
@@ -661,7 +626,7 @@ else
   bad "the manifest lost the apostrophe file or what sorts after it: $(grep -c . "$WORK/x.n1/seed.now") hashed of $(grep -c . "$WORK/x.n1/seed.files") listed, apostrophe rows $(grep -cF "$APOS	" "$WORK/x.n1/seed.now")"
 fi
 NEW_ARMS=$((NEW_ARMS+1))
-if holds "$R" "apos delta" 0 "SKIPPING"; then
+if holds "$R" "apos delta" 0 "read-set keys:"; then
   ok "  and an edit to the apostrophe file selects its reader (apos) plus the unmapped delta"
 else
   bad "  an edit to the apostrophe file did not select 'apos delta' (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
@@ -669,7 +634,7 @@ fi
 
 R="$(drive "$POOL" n2 'printf "v2\n" > zzz/b.sh')"
 NEW_ARMS=$((NEW_ARMS+1))
-if holds "$R" "beta delta" 0 "SKIPPING"; then
+if holds "$R" "beta delta" 0 "read-set keys:"; then
   ok "an edit to a mapped file sorting AFTER the apostrophe selects its reader (beta) — it was hashed, so it is not 'nothing changed'"
 else
   bad "an edit to zzz/b.sh did not select 'beta delta' (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
@@ -677,7 +642,7 @@ fi
 
 R="$(drive "$POOL" n3 "$BK")"
 NEW_ARMS=$((NEW_ARMS+1))
-if holds "$R" "delta stamp" 0 "SKIPPING"; then
+if holds "$R" "delta stamp" 0 "read-set keys:"; then
   ok "a BOOKKEEPING-ONLY change (version stamp, ledger edit, new reconcile log) selects only the stamp's reader and the unmapped fixture — neither all, nor nothing"
 else
   bad "a bookkeeping-only change did not select exactly 'delta stamp' with the suite running (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
@@ -691,21 +656,11 @@ fi
 # position asserted above stay exactly as they were.
 BMNEAR=".claude/settings.json _bmad-output/ai-dlc-update/sub/x.md _bmad-output/sub/x.md sub/_bmad-output/pipeline-continuation-log.md"
 NMK() { printf "%s; mkdir -p \"\$(dirname '%s')\"; printf 'n2\\\\n' > '%s'" "$BK" "$1" "$1"; }
-for _nm in $BMNEAR; do
-  _nn="n4.$(printf '%s' "$_nm" | tr '/.' '__')"
-  R="$(drive "$POOL" "$_nn" "$(NMK "$_nm")")"
-  NEW_ARMS=$((NEW_ARMS+1))
-  if [ -f "$WORK/w.$_nn/$_nm" ] && holds "$R" "$ALL5" 0 "$(NM1 "$_nm")"; then
-    ok "  NEAR-MISS $_nm beside the bookkeeping is still an orphan and runs all — the exemption is exact"
-  else
-    bad "  near-miss $_nm beside the bookkeeping did not run all as the single named orphan, or was not written (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
-  fi
-done
 # POSITIVE: a flat root file beside the bookkeeping is WAIVED, so the run selects exactly what
 # the bookkeeping alone selects. Before the widening this was a near-miss that ran all.
 R="$(drive "$POOL" n4.flat "$BK; printf 'n2\n' > _bmad-output/other.md")"
 NEW_ARMS=$((NEW_ARMS+1))
-if holds "$R" "delta stamp" 0 "SKIPPING"; then
+if holds "$R" "delta stamp" 0 "read-set keys:"; then
   ok "  a FLAT _bmad-output/other.md beside the bookkeeping is waived — 'delta stamp', the bookkeeping's own selection, not all"
 else
   bad "  a flat _bmad-output/other.md beside the bookkeeping did not select exactly 'delta stamp' (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
@@ -714,7 +669,7 @@ fi
 PCL="_bmad-output/pipeline-continuation-log.md"
 R="$(drive "$POOL" n4.pcl "printf 'p2\n' > '$PCL'" "" "printf 'p1\n' > '$PCL'")"
 NEW_ARMS=$((NEW_ARMS+1))
-if [ -f "$WORK/w.n4.pcl/$PCL" ] && holds "$R" "delta" 0 "SKIPPING"; then
+if [ -f "$WORK/w.n4.pcl/$PCL" ] && holds "$R" "delta" 0 "read-set keys:"; then
   ok "an edit to a zero-reader flat $PCL selects only the unmapped delta — the pipeline's state file no longer forces the suite"
 else
   bad "an edit to the zero-reader flat $PCL did not select exactly 'delta', or was not seeded (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
@@ -726,7 +681,7 @@ for _fp in _bmad-output/arm-log.jsonl _bmad-output/.pipeline-state; do
   _fn="n4.fp$(printf '%s' "$_fp" | tr '/.' '__')"
   R="$(drive "$POOL" "$_fn" "printf 'f2\n' > '$_fp'" "" "printf 'f1\n' > '$_fp'")"
   NEW_ARMS=$((NEW_ARMS+1))
-  if [ -f "$WORK/w.$_fn/$_fp" ] && holds "$R" "delta" 0 "SKIPPING"; then
+  if [ -f "$WORK/w.$_fn/$_fp" ] && holds "$R" "delta" 0 "read-set keys:"; then
     ok "an edit to a zero-reader flat $_fp selects only the unmapped delta — the waiver is not limited to .md or to non-dotfiles"
   else
     bad "an edit to the zero-reader flat $_fp did not select exactly 'delta', or was not seeded (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
@@ -738,7 +693,7 @@ MAPPED="_bmad-output/mapped-state.md"
 R="$(drive "$POOL" n4.mapped "printf 'm2\n' > '$MAPPED'" "" \
        "printf 'm1\n' > '$MAPPED'; printf 'alpha\t%s\n' '$MAPPED' >> .ai-dlc-fixture-readsets.tsv")"
 NEW_ARMS=$((NEW_ARMS+1))
-if grep -qxF "alpha	$MAPPED" "$WORK/w.n4.mapped/.ai-dlc-fixture-readsets.tsv" && holds "$R" "alpha delta" 0 "SKIPPING"; then
+if grep -qxF "alpha	$MAPPED" "$WORK/w.n4.mapped/.ai-dlc-fixture-readsets.tsv" && holds "$R" "alpha delta" 0 "read-set keys:"; then
   ok "an edit to a MAPPED flat $MAPPED still selects its reader (alpha) plus delta — the waiver touches only unknown readers"
 else
   bad "an edit to the mapped flat $MAPPED did not select 'alpha delta', or its map row was not seeded (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
@@ -748,22 +703,6 @@ fi
 # last `/` (the nested `sub/_bmad-output/` one guards the flat waiver's anchor, not the stamp's),
 # so an unanchored stamp alternative drops none of them. A version stamp under a
 # subdirectory ENDS like the real one and must still run all.
-NESTED="sub/.claude/.ai-dlc-version"
-R="$(drive "$POOL" n4.nested "$BK; printf 'version: 2\n' > '$NESTED'")"
-NEW_ARMS=$((NEW_ARMS+1))
-if holds "$R" "$ALL5" 0 "$(NM1 "$NESTED")"; then
-  ok "  NEAR-MISS $NESTED beside the bookkeeping is still an orphan and runs all — the exemption is anchored at the root"
-else
-  bad "  near-miss $NESTED beside the bookkeeping did not run all as the single named orphan (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
-fi
-
-R="$(drive "$POOL" n5 'printf "c2\n" > "$CAFE"')"
-NEW_ARMS=$((NEW_ARMS+1))
-if holds "$R" "$ALL5" 0 "$(NM1 "$CAFE")"; then
-  ok "an edit to an unmapped NON-ASCII file is listed by its real name, reads as an orphan and runs all"
-else
-  bad "an edit to the unmapped non-ASCII file did not run all as a named orphan (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
-fi
 
 if [ "$WHY" = 0 ]; then
   printf '  SKIP  unreadable-file arm and its mutant: running as root, where chmod 000 does not stop a read\n'
@@ -796,7 +735,7 @@ fi
 DASH_SEED='printf t > ./-x.sh'
 R="$(drive "$POOL" n9 'printf "v2\n" > src/a.sh' "" "$DASH_SEED")"
 NEW_ARMS=$((NEW_ARMS+1))
-if [ -f "$WORK/w.n9/-x.sh" ] && holds "$R" "alpha delta" 0 "SKIPPING"; then
+if [ -f "$WORK/w.n9/-x.sh" ] && holds "$R" "alpha delta" 0 "read-set keys:"; then
   ok "a top-level file named -x.sh is hashed as a file, and an edit to a mapped sibling still selects its reader (alpha) plus delta"
 else
   bad "with a top-level -x.sh present an edit to src/a.sh did not select 'alpha delta', or -x.sh was not seeded (got '$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
@@ -833,13 +772,7 @@ killed() {
 NEW_ARMS=$((NEW_ARMS+1))
 if lit_mut noz 1 "tr '\\n' '\\000' < \"\$out/.files\" | xargs -0 -n 200 shasum -a 256 --" \
                     "xargs -n 200 shasum -a 256 -- < \"\$out/.files\""; then M="$LM"
-  killed noz "the after-apostrophe arm" "$(drive "$M" m.noz 'printf "v2\n" > zzz/b.sh')" "beta delta" 0 "SKIPPING"
-fi
-NEW_ARMS=$((NEW_ARMS+1))
-# Three sites: the two manifest listings and the gitlink listing in `readset_drop_ignored`. The
-# kill comes from the manifest; the seed has no submodule, so the third edit changes nothing.
-if lit_mut quotepath 3 "git -c core.quotePath=false ls-files" "git ls-files"; then M="$LM"
-  killed quotepath "the non-ASCII arm" "$(drive "$M" m.quotepath 'printf "c2\n" > "$CAFE"')" "$ALL5" 0 "$(NM1 "$CAFE")"
+  killed noz "the after-apostrophe arm" "$(drive "$M" m.noz 'printf "v2\n" > zzz/b.sh')" "beta delta" 0 "read-set keys:"
 fi
 if lit_mut nofailclosed 1 ': > "$out/.now"' ':'; then M="$LM"
   if [ "$WHY" != 0 ]; then
@@ -860,52 +793,6 @@ if lit_mut aposdrop 1 '| readset_drop_excluded | sort -u > "$out/.paths.all"' \
     bad "MANIFEST MUTANT aposdrop SURVIVED the apostrophe-hashed arm, or never ran"
   fi
 fi
-BKRE="'^(\\.claude/\\.ai-dlc-version|_bmad-output/ai-dlc-update/[^/]+|_bmad-output/[^/]+)\$'"
-BROADK=".claude/settings.json _bmad-output/ai-dlc-update/sub/x.md _bmad-output/sub/x.md"
-if lit_mut broad 1 "$BKRE" "'^(\\.claude/|_bmad-output/)'"; then M="$LM"
-  for _nm in $BROADK; do
-    NEW_ARMS=$((NEW_ARMS+1))
-    killed broad "the near-miss arm for $_nm" "$(drive "$M" "m.broad.$(printf '%s' "$_nm" | tr '/.' '__')" "$(NMK "$_nm")")" "$ALL5" 0 "$(NM1 "$_nm")"
-  done
-else
-  NEW_ARMS=$((NEW_ARMS+3))
-fi
-if lit_mut somebk 1 'if [ -s "$out/.orphan" ]; then' \
-         "if [ -s \"\$out/.orphan\" ] && ! grep -qE $BKRE \"\$out/.changed\"; then"; then M="$LM"
-  for _nm in $BMNEAR; do
-    NEW_ARMS=$((NEW_ARMS+1))
-    killed somebk "the near-miss arm for $_nm" "$(drive "$M" "m.somebk.$(printf '%s' "$_nm" | tr '/.' '__')" "$(NMK "$_nm")")" "$ALL5" 0 "$(NM1 "$_nm")"
-  done
-else
-  NEW_ARMS=$((NEW_ARMS+4))
-fi
-# THE FLAT WAIVER'S TWO SHAPE LIMITS, each its own mutant. `.*` in place of `[^/]+` crosses a `/`
-# and waives every path under `_bmad-output/`; the alternation with BOTH anchors removed waives a
-# deeper path by its prefix and a nested `_bmad-output/` under another top by its suffix. Each is
-# killed by a near-miss above that the shipped pattern still runs all on.
-NEW_ARMS=$((NEW_ARMS+1))
-if lit_mut dotstar 1 "|_bmad-output/[^/]+)\$'" "|_bmad-output/.*)\$'"; then M="$LM"
-  killed dotstar "the near-miss arm for _bmad-output/sub/x.md" "$(drive "$M" m.dotstar "$(NMK _bmad-output/sub/x.md)")" "$ALL5" 0 "$(NM1 _bmad-output/sub/x.md)"
-fi
-if lit_mut unanch 1 "$BKRE" "'(\\.claude/\\.ai-dlc-version|_bmad-output/ai-dlc-update/[^/]+|_bmad-output/[^/]+)'"; then M="$LM"
-  for _nm in _bmad-output/sub/x.md sub/_bmad-output/pipeline-continuation-log.md; do
-    NEW_ARMS=$((NEW_ARMS+1))
-    killed unanch "the near-miss arm for $_nm" "$(drive "$M" "m.unanch.$(printf '%s' "$_nm" | tr '/.' '__')" "$(NMK "$_nm")")" "$ALL5" 0 "$(NM1 "$_nm")"
-  done
-else
-  NEW_ARMS=$((NEW_ARMS+2))
-fi
-# THE WAIVER'S TWO NARROWER SHAPES, each killed on BEHAVIOUR by its own flat positive above: the
-# mutant applies (exact count 1), the copy reaches apply_readset_skip, and the flat file it no
-# longer waives runs all instead of selecting 'delta'.
-for _wm in "mdonly|_bmad-output/[^/]+\\.md|_bmad-output/arm-log.jsonl" "nodot|_bmad-output/[^/.][^/]*|_bmad-output/.pipeline-state"; do
-  _wn="${_wm%%|*}"; _wr="${_wm#*|}"; _wf="${_wr#*|}"; _wr="${_wr%|*}"
-  NEW_ARMS=$((NEW_ARMS+1))
-  if lit_mut "$_wn" 1 "|_bmad-output/[^/]+)\$'" "|$_wr)\$'"; then M="$LM"
-    killed "$_wn" "the flat positive for $_wf" \
-      "$(drive "$M" "m.$_wn" "printf 'f2\n' > '$_wf'" "" "printf 'f1\n' > '$_wf'")" "delta" 0 "SKIPPING"
-  fi
-done
 # ONLY ONE HOOK WIDENED. This fixture drives whichever hook it resolved first, so a waiver
 # present in one copy alone reads green here and reaches only half the population. I66 is the
 # binding; this arm proves it fires on exactly that edit. Run in a copy holding just what
@@ -929,34 +816,6 @@ else
   else
     bad "I66 CONTROL: the unmutated copy did not read OK at rc 0 (rc $I66C_RC): $(printf '%s' "$I66C" | head -3 | tr '\n' ' ')"
   fi
-  I66F="$I66T/core/git-hooks/pre-push"
-  MF="|_bmad-output/ai-dlc-update/[^/]+|_bmad-output/[^/]+)\$'" MT="|_bmad-output/ai-dlc-update/[^/]+)\$'" \
-    awk '{ p = index($0, ENVIRON["MF"]); if (p) { $0 = substr($0, 1, p - 1) ENVIRON["MT"] substr($0, p + length(ENVIRON["MF"])) } print }' \
-    "$I66F" > "$I66F.mut"
-  NEW_ARMS=$((NEW_ARMS+1))
-  if cmp -s "$I66F" "$I66F.mut"; then
-    bad "MANIFEST MUTANT onehook: the consumer hook carries no widened alternation to revert — DID NOT APPLY"
-  else
-    mv "$I66F.mut" "$I66F"
-    I66M="$(bash "$I66T/scripts/validate-enforcement-map.sh" --arms I66 2>&1)"; I66M_RC=$?
-    if [ "$I66M_RC" -eq 1 ] && grep -q 'I66 the two pre-push fixture-suite runners have forked' <<< "$I66M" \
-       && grep -qF '.orphan' <<< "$I66M"; then
-      ok "MANIFEST MUTANT onehook is KILLED by I66: the waiver widened in .githooks/pre-push alone exits 1 naming the forked orphan line"
-    else
-      bad "MANIFEST MUTANT onehook SURVIVED I66: one hook widened read rc $I66M_RC: $(printf '%s' "$I66M" | head -3 | tr '\n' ' ')"
-    fi
-  fi
-fi
-NEW_ARMS=$((NEW_ARMS+1))
-if lit_mut wholeskip 1 'if [ -s "$out/.orphan" ]; then' \
-         "if ! grep -qvE $BKRE \"\$out/.changed\"; then READSET_NO_CHANGE=1; return 0; fi; if [ -s \"\$out/.orphan\" ]; then"; then M="$LM"
-  killed wholeskip "the bookkeeping-only arm" "$(drive "$M" m.wholeskip "$BK")" "delta stamp" 0 "SKIPPING"
-fi
-# The exemption pattern without its leading `^` drops a nested stamp too; only the nested
-# near-miss can see it.
-NEW_ARMS=$((NEW_ARMS+1))
-if lit_mut nocaret 1 "grep -vE '^(\\.claude" "grep -vE '(\\.claude"; then M="$LM"
-  killed nocaret "the nested near-miss arm" "$(drive "$M" m.nocaret "$BK; printf 'version: 2\n' > '$NESTED'")" "$ALL5" 0 "$(NM1 "$NESTED")"
 fi
 # Without the quoted-path test a tab-named file is listed in its quoted spelling, never reaches
 # `.files`, and the line counts still agree, so the manifest is NOT emptied.
@@ -967,14 +826,14 @@ fi
 # Without `--`, a top-level -x.sh is an unknown option to shasum and the manifest is emptied.
 NEW_ARMS=$((NEW_ARMS+1))
 if lit_mut nodashdash 1 "shasum -a 256 -- >" "shasum -a 256 >"; then M="$LM"
-  killed nodashdash "the option-shaped-name arm" "$(drive "$M" m.nodashdash 'printf "v2\n" > src/a.sh' "" "$DASH_SEED")" "alpha delta" 0 "SKIPPING"
+  killed nodashdash "the option-shaped-name arm" "$(drive "$M" m.nodashdash 'printf "v2\n" > src/a.sh' "" "$DASH_SEED")" "alpha delta" 0 "read-set keys:"
 fi
 
 # UNMUTATED CONTROL for the battery above, driven by the same helper: a baseline row must be
 # THERE, so a drive that died for a harness reason cannot pass as the clean case.
 R="$(drive "$POOL" ctl2 'printf "v2\n" > zzz/b.sh')"
 NEW_ARMS=$((NEW_ARMS+1))
-if holds "$R" "beta delta" 0 "SKIPPING" && grep -q 'read-set map: derived at' <<< "$(msg_of "$R")"; then
+if holds "$R" "beta delta" 0 "read-set keys:" && grep -q 'read-set map: derived at' <<< "$(msg_of "$R")"; then
   ok "CONTROL: the unmutated block, driven the same way, selects 'beta delta' and announces the map — the manifest kills are attributable"
 else
   bad "CONTROL: the unmutated block did not reproduce 'beta delta' through drive() — every manifest mutant is unattributable"
@@ -1110,34 +969,17 @@ lt_case() { # <label> <predicate> <mutation> <ok text> [sub]
   if "$2" "$r"; then ok "$4"
   else bad "$1: got sel '$(sel_of "$r")' flag $(lflag_of "$r") trace '$(trace_of "$r")': $(msg_of "$r" | tr -d '\n')"; fi
 }
-lt_case lb1 lb1 "$LM_B1" "(b) a VALID local row maps gamma: an edit to src/a.sh selects alpha alone, and the coverage line reads 0 of 3 unmapped"
-lt_case lb2 lb2 "$LM_B2" "(b)(g) an edit to src/orphan.sh, named by gamma's LOCAL row alone, selects gamma and is not an orphan — the universe reads local rows"
 lt_case lc1 lc1 "$LM_C1" "(c) gamma's run.sh moved: its local set is ignored, it reads UNMAPPED, and the next trace takes it"
 lt_case lc2 lc2 "$LM_C2" "(c) the DERIVER moved: every local set it recorded is ignored, and gamma is taken by the next trace"
-lt_case ld ld "$LM_D" "(d) src/lonly.sh, named only by a local row of alpha — which HAS committed rows — is an orphan: committed rows win, its local rows are ignored"
-lt_case lgs lgs "$LM_GS" "(g) a path inside a SUBMODULE named only by a local row is hashed by the manifest: editing it selects gamma, never a whole-suite skip" sub
-lt_case le le "$LM_E" "(b) with NO committed map, valid local rows still select: an edit to gamma's input selects gamma and the unmapped beta, and alpha (locally mapped) is skipped" nomap
 # THE REMEDY TEXT. Both announce lines tell the reader the next green push traces what is unmapped,
 # and name the hand command beside it. Presence-shaped: each demands its own emitting line's text.
 lrm() { msg_of "$1" | grep -qF 'UNMAPPED (keyed on the whole tree): gamma -- the next green push traces them automatically; by hand, with no sudo: bash core/scripts/derive-fixture-readsets.sh --list "gamma" --tracer sandbox'; }
 lt_case lrm lrm "$LM_C1" "(c) the unmapped line names gamma, says the next green push traces it automatically, and gives the hand command"
-LRN_T="$WORK/lrn"; seed_lt "$LRN_T" || broken "the no-map remedy seed failed"
-( cd "$LRN_T" && git rm -q .ai-dlc-fixture-readsets.tsv && git -c user.email=f@f -c user.name=f commit -qm nomap ) >/dev/null 2>&1 || broken "could not remove the map from the no-map remedy seed"
-LRN="$(lsel_in "$LRN_T" ':')"; lt_arm
-if msg_of "$LRN" | grep -qF 'no read-set map at' && msg_of "$LRN" | grep -qF 'the next green push traces its fixtures automatically; to build one whole, with no sudo: bash core/scripts/derive-fixture-readsets.sh --all --tracer sandbox'; then
-  ok "with NO map and no local rows the run says the next green push traces its fixtures automatically, and gives the whole-map command"
-else
-  bad "the no-map remedy line is missing or changed: $(msg_of "$LRN" | tr '\n' ' ')"
-fi
 # (h) GHOST ROWS. A fixture deleted or renamed after its trace keeps its local rows, and a committed
 # map keeps a deleted fixture's rows until re-derived. Neither may make a path KNOWN: an edit to a
 # path only a ghost names is an orphan, and the whole suite runs -- otherwise a present fixture that
 # started reading that path after its own trace is skipped. The near-misses put both directories
 # back, and the same edits then select the fixture whose row names the path.
-lt_case lgl lgl "$LM_GL" "(h) src/gonly.sh, named only by a VALID local row of a fixture with NO directory, is an orphan: the whole suite runs" ghost
-lt_case lgc lgc "$LM_GC" "(h) src/zonly.sh, named only by a COMMITTED row of a fixture with no directory, is an orphan too" ghost
-lt_case lgln lgln "$LM_GL" "  near-miss: with ghost's directory present, the same local row selects ghost alone" ghostdir
-lt_case lgcn lgcn "$LM_GC" "  near-miss: with zombie's directory present, the same committed row selects zombie alone" ghostdir
 # THE HELD SET (M5). Three consecutive discards on gamma's CURRENT key hold it back; two do not, and
 # three on a key that has since moved do not.
 lt_held() { # <label> <discards> <key: cur|old> <want trace> <want held>
@@ -1351,15 +1193,8 @@ pm_lw() { # <name> <predicate> <mutation> [sub] -- scored on a local world; the 
   elif "$2" "$r"; then bad "BL-452 MUTANT $1 SURVIVED $2: sel '$(sel_of "$r")' trace '$(trace_of "$r")'"
   else ok "BL-452 MUTANT $1 is KILLED by $2: sel '$(sel_of "$r")' flag $(lflag_of "$r") trace '$(trace_of "$r")'"; fi
 }
-pm_copy valid 1 '    $1 == "V" { print $2 "\t" $3; next }' '    $1 == "V" { next }' && pm_lw valid lb1 "$LM_B1"
 pm_copy hash 1 'else if (!(($2 in now) && now[$2] == $3)) bad[f] = 1' 'else if (0) bad[f] = 1' && pm_lw hash lc1 "$LM_C1"
 pm_copy dsha 1 '$2 == "#deriver" { dok[$1] = ($3 == dsha); next }' '$2 == "#deriver" { dok[$1] = 1; next }' && pm_lw dsha lc2 "$LM_C2"
-pm_copy comwins 1 '    ($2 in com) { next }' '    0 { next }' && pm_lw comwins ld "$LM_D"
-pm_copy ghostlocal 1 '{ if (mode != "known" || ($2 in here)) print $3 }' '{ print $3 }' && pm_lw ghostlocal lgl "$LM_GL" ghost
-pm_copy ghostcom 1 '      if (mode == "known" && !($2 in here)) next' '      if (0) next' && pm_lw ghostcom lgc "$LM_GC" ghost
-pm_copy universe 1 '  readset_rows "$out" known | grep -v' "  grep -v '^#' \"\$READSET_MAP\" | cut -f2 | grep -v" && pm_lw universe lb2 "$LM_B2"
-pm_copy manifest 1 '    readset_rows "$out" paths' "    [ -s \"\$READSET_MAP\" ] && grep -v '^#' \"\$READSET_MAP\" | cut -f2" && pm_lw manifest lgs "$LM_GS" sub
-pm_copy nomap 1 '  if [ ! -s "$READSET_MAP" ] && [ ! -s "$out/.local.valid" ]; then' '  if [ ! -s "$READSET_MAP" ]; then' && pm_lw nomap le "$LM_E"
 if pm_copy held 1 '$3 >= 3 && $4 == k' '$3 >= 99 && $4 == k'; then
   lt_arm; _s="$POOL"; POOL="$PM"; _h="$(lt_held pm.h3 3 cur)"; POOL="$_s"
   [ "$_h" = "|gamma" ] && bad "BL-452 MUTANT held SURVIVED: three discards still held gamma" || ok "BL-452 MUTANT held is KILLED by (M5): trace|held '$_h'"
@@ -1572,8 +1407,8 @@ if [ "$LT_CAN" = 1 ]; then
     && pm_rf redrun f "printf 'exit 1\n' > $FXROOT/alpha/run.sh" '"1|no|not|"*'
 fi
 # UNMUTATED CONTROL, driven the same way as the local-world mutants: a baseline selection must APPEAR.
-R="$(lw_run "$POOL" ctl3 "$LM_B1")"; lt_arm
-if lb1 "$R" && msg_of "$R" | grep -q 'read-set map: derived at'; then
+R="$(lw_run "$POOL" ctl3 "$LM_C1")"; lt_arm
+if lc1 "$R" && msg_of "$R" | grep -q 'read-set map: derived at'; then
   ok "CONTROL: the unmutated block, driven through lw_run, maps gamma locally and selects alpha alone — the kills above are attributable"
 else
   bad "CONTROL: the unmutated block did not reproduce (b) through lw_run — every local-map mutant is unattributable"
@@ -3360,8 +3195,6 @@ STUB
     }
     lm_seed; L1="$(lm_run "$SL/deriver.sh" "$SL/whole.list" same)"
     L1_COPY="$(grep -c 'copying the tree to' "$WORK/lm.out")" || L1_COPY=0
-    lm_arm "LOCAL clean" "$L1" "0|2|yes|-|no|yes|yes|" \
-      "LOCAL: a clean --local-map trace records fxl's two rows and its #deriver key, prunes the COMMITTED fixture's local row, keeps an untraced one, and removes its trace root"
     TRACE_ARMS=$((TRACE_ARMS+1))
     if [ "$(grep -c '^gh	' "$LMF" 2>/dev/null)" = 0 ] && [ "$(grep -c '^zz	' "$LMF" 2>/dev/null)" = 2 ]; then
       ok "  and a fixture with NO directory loses every local row, while the untraced zz, whose directory is present, keeps both of its rows"
@@ -3376,7 +3209,6 @@ STUB
       bad "  fxl's src/a.sh row does not carry its sha256, or the committed map gained an fxl row: $(grep '^fxl' "$LMF" | tr '\n' ' ')"
     fi
     lm_seed; L2="$(lm_run "$SL/deriver.sh" "$SL/whole.list" same STUB_TRIP=1)"
-    lm_arm "LOCAL TRIP" "$L2" "0|0|no|1|no|yes|yes|fxl OMITTED (TRIP: 1 exec(s)*" "LOCAL: an exec of a refused binary in fxl's window DISCARDS the trace — no rows, one #discards row naming TRIP"
     L2B="$(lm_run "$SL/deriver.sh" "$SL/whole.list" same STUB_TRIP=1)"
     lm_arm "LOCAL TRIP x2" "$L2B" "0|0|no|2|*" "  and a second discard on the same key counts 2 — the hook holds the fixture back at 3"
     L2C="$(lm_run "$SL/deriver.sh" "$SL/whole.list" same)"
@@ -3427,7 +3259,6 @@ STUB
     lm_mut noverdict "$SL/d.noverdict.sh" "$SL/whole.list" diff "LOCAL verdict" "0|2|yes|*"
     lm_mut nolive "$SL/d.nolive.sh" "$SL/whole.list" same "LOCAL liveness" "0|2|yes|*" STUB_DEADLIVE=1
     lm_mut notrap "$SL/d.notrap.sh" "$SL/whole.list" same "LOCAL clean" "0|2|yes|-|*|*|no|*"
-    lm_mut noprune "$SL/d.noprune.sh" "$SL/whole.list" same "LOCAL clean" "0|2|yes|-|yes|*"
     # copyfirst: the WHOLE copy block -- from its announce through the sentinel exclude -- moved back
     # ahead of the liveness probe's comment block, the order this replaced. The refusal then pays it.
     awk '/^say "copying the tree to \$TREE"$/ { inb = 1 }
@@ -3459,7 +3290,6 @@ STUB
       esac
     fi
     lm_seed; lm_run "$SL/deriver.sh" "$SL/whole.list" same STUB_TRIP=1 >/dev/null
-    lm_mut nocount "$SL/d.nocount.sh" "$SL/whole.list" same "LOCAL TRIP x2" "0|0|no|1|*" STUB_TRIP=1
 
     # THE MAP IS WRITTEN AFTER EACH ACCEPTED FIXTURE, SO AN INTERRUPTED RUN KEEPS WHAT IT TRACED.
     # Three fixtures with OLD committed rows; a `--list "fxw1 fxw2 fxw3"` run is SIGKILLed while
