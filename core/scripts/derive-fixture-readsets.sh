@@ -229,12 +229,13 @@ fi
 # installed tree, the copy install.sh puts there from core/git-hooks/pre-push (a consumer's
 # .git/hooks/pre-push is a shim that execs it). Invariant I66 binds those to be one program.
 #
-# EXACTLY ONE MATCH IS REQUIRED. Zero means the runner no longer iterates a fixture glob and
+# The root is read off the runner's one `FXROOT="<root>/"` line, the variable its glob iterates.
+# EXACTLY ONE MATCH IS REQUIRED. Zero means the runner no longer declares a fixture root and
 # this script's whole premise has moved; more than one means the suite has two roots and a map
 # keyed on basenames alone cannot say which directory an entry belongs to.
 RUNNER="$REPO_ROOT/.githooks/pre-push"
 [ -r "$RUNNER" ] || die "cannot read $RUNNER. It is the program that consumes this map, and the fixture root is read off its own glob rather than assumed."
-FIXTURE_ROOT="$(sed -n 's|^[[:space:]]*for d in \([A-Za-z0-9_./-]*\)/\*/;.*|\1|p' "$RUNNER" | sort -u)"
+FIXTURE_ROOT="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$RUNNER" | sort -u)"
 N_ROOT="$(printf '%s\n' "$FIXTURE_ROOT" | grep -c .)"
 [ "$N_ROOT" -eq 1 ] || die "read $N_ROOT fixture root(s) from $RUNNER, need exactly 1 (got: $(printf '%s' "$FIXTURE_ROOT" | tr '\n' ' ')). Zero means its fixture glob has changed shape and this producer is now guessing; more than one means a basename key cannot name a directory."
 [ -d "$REPO_ROOT/$FIXTURE_ROOT" ] || die "$RUNNER drives '$FIXTURE_ROOT/' and no such directory exists under $REPO_ROOT."
