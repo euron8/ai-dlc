@@ -17170,3 +17170,42 @@ no runbook. **OPERATOR DECISIONS STILL OPEN:** none.
 
 Batch 195's block below is history: batch 196's block replaces its delivery gap and its decisions list.
 
+**BATCH 198 SHIPPED ONE RELEASE, `v0.730.0` (`6692342c`, #1024), AND DISCHARGED ONE CONSUMER CANDIDATE.** It was
+invoked by the operator's one-liner at `origin/main` `efdda1f3` (`VERSION` 0.729.0). The opening sweep read live 4 on 4
+qualifying refs, unfiled 2 (both dated 2026-10-05), worklist 0, TERMINAL 210, every control passing. The consumer had
+pulled to 0.729.0 that morning, so the delivery gap opened at zero. Its working-tree ledger equals its `HEAD`.
+- `v0.730.0`: `PC-S316-ESCALATION-CITATION-FLOOR-REJECTS-A-GENUINE-SHORT-OPERATOR-ANSWER` as `BL-449`, filed and closed.
+  The contract adversary found that a padded quote (`"          yes"`) or twelve spaces verified at every citation gate
+  on the consumer's real corpus, because callers measured the floor on the raw quote. `--cite` now refuses a needle
+  under 12 characters after whitespace is collapsed (`NOMATCH-SHORT`). Callers measure through `cite_norm()` and
+  `cite_nlen()` (I103), bound to node's `\s` by new invariant I120. The incident's answer, quoted whole as
+  `"1. Yes. 2. Yes."`, verifies. The candidate's AskUserQuestion-label remedy was not built: labels were already citable.
+- `v0.730.0`: `BL-375` record only. Three stage-1 wrapper runs scored NOT-MET (2, 1 and 2 of 5 mapped, peak loads 9.23,
+  5.14 and 4.22). `validator-arm-selection` was omitted in all three. No code lever is named.
+
+Live backlog **1**, archive **447**. Net closed minus filed: **0**.
+
+**THE RELEASE TOOK FOUR PUSHES.** The first gate failed three fixtures the release itself broke (a mutant anchored on a
+rewritten line, an assertion the new floor pre-empted, and the fork budget 17 over). The second failed both
+`validator-arm-selection` fixtures, because the fork reshape made I120 call a helper only I103's unit defined. The third
+failed only the suite-pole check, at 2608s, while the operator's laptop slept in transit. The fourth skipped the suite on
+the unchanged content key. `FORK_BUDGET` stays 3204.
+
+**OPERATOR RULING, BATCH 198: AN OPERATOR CITATION STAYS AT 12 CHARACTERS OR MORE.** In the operator's words: "we
+should continue requiring the longer form (12 character or greater) operator message." A whole operator message under
+12 characters (`approved`, `yes`) stays uncitable, and no short-message citation path is to be built. The best measured
+rule false-accepted 2 of 3 on the consumer's corpus.
+
+**READ-SET TRACES:** `adversarial-citation` traced clean and committed. `readset-stage1-verdict` OMITTED with 272 drop
+notices and stays unmapped.
+
+**THE DELIVERY GAP IS ONE RELEASE.** The consumer is installed at 0.729.0 against `VERSION` 0.730.0; 0.730.0 is not
+bootstrapping. The banked ruling stands: report the gap and write no runbook. **OPERATOR DECISIONS STILL OPEN:** none.
+
+**OPERATOR RULING, BATCH 198: `refs/recovered/b197` IS DELETED.** Option B of three (keep, delete, keep until a date).
+All 12293 pins were removed from the main checkout with `git update-ref --stdin`; branches and `origin/main` were
+unchanged. The pins existed only locally. On the operator's instruction no sha list was kept, and `git gc --prune=now`
+removed all 12293 commits at once: 0 remain, `origin/main` resolves, `git fsck` exits 0, `.git` went from 42M to 28M.
+
+Batch 197's block below is history: batch 198's block replaces its delivery gap and its decisions list.
+

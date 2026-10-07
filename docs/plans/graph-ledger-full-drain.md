@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 431..499. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 435..473. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,48 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 203 SHIPPED TWO RELEASES, `v0.741.1` (`6f73066d`, #1046) AND `v0.742.0` (`6e9897bd`, #1047), AND DISCHARGED
+BOTH CONSUMER CANDIDATES BATCH 202 LEFT UNSHIPPED.** It was handed the plan by peer session ai-dlc-63 at `origin/main`
+`9d7dee9b` (`VERSION` 0.741.0). The opening sweep read live 3, unfiled 3, worklist 0, every control passing.
+- `v0.741.1`, shipped alone: `PC-S317-READSET-SKIP-M5-SEEDS-CORE-FIXTURES-UNDER-A-TESTS-FIXTURES-HOOK` as `BL-467`.
+  readset-skip's M5 arm seeds and keys gamma under the resolved hook's `FXROOT`.
+- `v0.742.0`, shipped alone (it changes the update skill): `PC-S317-SELF-UPDATE-GATE-PUSH-PROBE-DUPLICATES-THE-PUSH-HOOK`
+  as `BL-468`. The gate runs no pre-push hook; step 2 pushes through `reconcile/self-update-push.sh`, which runs the hook
+  once and pins the push to the one sha and ref the hook judged. Also `BL-469` (readset-skip finishes under the sandbox),
+  `FORK_BUDGET` 3263 -> 3272, and the operator's sandbox read-set trace with the changed fixtures re-traced on top.
+
+Live backlog **2 -> 5** (BL-467 to BL-469 rotated; BL-470 to BL-472 filed), archive **462 -> 465**.
+
+**OPEN, BY OPERATOR DIRECTION AT THE CLOSE: "let's consider this batch complete once 0.742.0 ships".** The next session's
+sweep and adjudication scope these, with no order implied here:
+- `PC-S317-CROSS-SEAT-IS-THE-SERIAL-TAIL-OF-A-SECTIONS-PARTY-ROUND-AND-WRITES-NOTHING-UNTIL-DONE`, the third live unfiled
+  candidate. **It is NOT on `main`**: neither `--cross-groups` nor `seat-complete:` is in `origin/main`'s `core/`, and no
+  release message names the id. The operator believed it shipped. Its build is held on `b202-cs` at `67d9ff10` (with
+  `b202-cs-docs`, `-f1`, `-f2`, `-f3`), never adversaried; `b202-r2` at `da88c226` depends on its receipt.
+- `BL-465` (suite-pole baseline per pool width), `BL-466` (`pkill -x fs_usage` kills other tracers).
+- `BL-470`: the sandbox tracer reports every `bash` check on the trace tree's root, the log stream drops, and four
+  fixtures trace OMITTED and run on every push: `readset-skip`, `self-update-fixture-log-mutants`, `self-update-gate`,
+  `procsub-staged-refusal-boot`.
+- `BL-471` (operator ruling: a defect): a committed trace cannot clear a stale key record; only a valid LOCAL-map row
+  can, and the hook's post-green trace that writes one is skipped on a push from a linked worktree. 45 records went stale
+  at the 0.741.1 push and stayed stale through 0.742.0.
+- `BL-472` (operator request): `derive-fixture-readsets.sh --reconcile` derives the unmapped, stale and changed-input set
+  itself and traces only that. Build it with `BL-471`.
+
+**OPERATOR RULINGS, BATCH 203:**
+- The two newest consumer candidates ship before anything else builds.
+- The read-set map in the main checkout belongs to the operator's trace while it runs; a release snapshots it at push
+  time, never earlier.
+- A fixture fix found mid-batch (`BL-469`) folds into the release in flight when the operator says so.
+- `BL-470`: ship the release, file the drops; do not hold a consumer fix for a tracer fix.
+
+**THE DELIVERY GAP IS ONE RELEASE.** graph's `.claude/.ai-dlc-version` reads 0.741.1 against `VERSION` 0.742.0.
+0.742.0 changes the update skill, so the pull that delivers it still runs graph's old gate and SKILL.md and pays two
+hook runs; the saving starts on the pull after. The banked ruling stands: report the gap and write no runbook.
+
+Batch 202's block below is history: batch 203's block replaces its branches, its two unshipped candidates, its open
+items and its delivery gap.
 
 **BATCH 202 SHIPPED THREE RELEASES, `v0.739.0` (`4d8a6f64`, #1041), `v0.740.0` (`bc8bfed5`, #1042) AND `v0.741.0`
 (`65b4334c`, #1043), AND DISCHARGED NO CONSUMER CANDIDATE.** It was handed the plan by peer session ai-dlc-5b at
@@ -389,45 +431,6 @@ report the gap and write no runbook. **OPERATOR DECISIONS STILL OPEN:** the dev 
 > run is skipped with one line saying so.
 
 Batch 198's block below is history: batch 199's block replaces its delivery gap and its decisions list.
-
-**BATCH 198 SHIPPED ONE RELEASE, `v0.730.0` (`6692342c`, #1024), AND DISCHARGED ONE CONSUMER CANDIDATE.** It was
-invoked by the operator's one-liner at `origin/main` `efdda1f3` (`VERSION` 0.729.0). The opening sweep read live 4 on 4
-qualifying refs, unfiled 2 (both dated 2026-10-05), worklist 0, TERMINAL 210, every control passing. The consumer had
-pulled to 0.729.0 that morning, so the delivery gap opened at zero. Its working-tree ledger equals its `HEAD`.
-- `v0.730.0`: `PC-S316-ESCALATION-CITATION-FLOOR-REJECTS-A-GENUINE-SHORT-OPERATOR-ANSWER` as `BL-449`, filed and closed.
-  The contract adversary found that a padded quote (`"          yes"`) or twelve spaces verified at every citation gate
-  on the consumer's real corpus, because callers measured the floor on the raw quote. `--cite` now refuses a needle
-  under 12 characters after whitespace is collapsed (`NOMATCH-SHORT`). Callers measure through `cite_norm()` and
-  `cite_nlen()` (I103), bound to node's `\s` by new invariant I120. The incident's answer, quoted whole as
-  `"1. Yes. 2. Yes."`, verifies. The candidate's AskUserQuestion-label remedy was not built: labels were already citable.
-- `v0.730.0`: `BL-375` record only. Three stage-1 wrapper runs scored NOT-MET (2, 1 and 2 of 5 mapped, peak loads 9.23,
-  5.14 and 4.22). `validator-arm-selection` was omitted in all three. No code lever is named.
-
-Live backlog **1**, archive **447**. Net closed minus filed: **0**.
-
-**THE RELEASE TOOK FOUR PUSHES.** The first gate failed three fixtures the release itself broke (a mutant anchored on a
-rewritten line, an assertion the new floor pre-empted, and the fork budget 17 over). The second failed both
-`validator-arm-selection` fixtures, because the fork reshape made I120 call a helper only I103's unit defined. The third
-failed only the suite-pole check, at 2608s, while the operator's laptop slept in transit. The fourth skipped the suite on
-the unchanged content key. `FORK_BUDGET` stays 3204.
-
-**OPERATOR RULING, BATCH 198: AN OPERATOR CITATION STAYS AT 12 CHARACTERS OR MORE.** In the operator's words: "we
-should continue requiring the longer form (12 character or greater) operator message." A whole operator message under
-12 characters (`approved`, `yes`) stays uncitable, and no short-message citation path is to be built. The best measured
-rule false-accepted 2 of 3 on the consumer's corpus.
-
-**READ-SET TRACES:** `adversarial-citation` traced clean and committed. `readset-stage1-verdict` OMITTED with 272 drop
-notices and stays unmapped.
-
-**THE DELIVERY GAP IS ONE RELEASE.** The consumer is installed at 0.729.0 against `VERSION` 0.730.0; 0.730.0 is not
-bootstrapping. The banked ruling stands: report the gap and write no runbook. **OPERATOR DECISIONS STILL OPEN:** none.
-
-**OPERATOR RULING, BATCH 198: `refs/recovered/b197` IS DELETED.** Option B of three (keep, delete, keep until a date).
-All 12293 pins were removed from the main checkout with `git update-ref --stdin`; branches and `origin/main` were
-unchanged. The pins existed only locally. On the operator's instruction no sha list was kept, and `git gc --prune=now`
-removed all 12293 commits at once: 0 remain, `origin/main` resolves, `git fsck` exits 0, `.git` went from 42M to 28M.
-
-Batch 197's block below is history: batch 198's block replaces its delivery gap and its decisions list.
 
 ### Derive the state; do not trust the numbers below
 
