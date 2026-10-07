@@ -122,7 +122,11 @@ live wait over a teammate that has not delivered.
 
 - `exit 0` — beat complete. Read the output: consume the `DELIVERED <path>` lines,
   beat again over the `WAITING <path>` ones. Exit 0 alone does not mean all landed.
-- `exit 1` — Rule 20 non-delivery. Re-dispatch, then HARD_BLOCK.
+- `exit 1` — Rule 20 non-delivery. Re-dispatch, then HARD_BLOCK — for a path the beat
+  reports `absent`. Under `--complete`, `UNFINISHED <path>` (present, last non-blank line is
+  not `seat-complete:`) and `UNSETTLED <path>` (marked, still changing) are NOT absent, on a
+  waiting beat or an exhausted one: read the file before deciding, never re-dispatch over it
+  unread — that discards the seat's findings.
 
 **A waiting beat exits 0 on purpose.** Waiting is what most beats report, and a
 nonzero exit from a backgrounded command is reported to you as `status: failed` —
@@ -270,13 +274,15 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    with the header. Every adversary shard brief — part or cross, in item 2 and in "Adversarial
    review dispatch" — carries the same instruction with the adversary in place of the seat.
    Every beat that joins such a file passes `--complete` (`wait-for-deliverable.sh`, its
-   header): the file counts as DELIVERED only when that line is last, so a file written early
-   is never taken as finished, and a seat still appending shows as progress on its own file
-   rather than as silence. The beat reads the marker only; `merge-adversarial-shards.sh` and
+   header): the file counts as DELIVERED only when that line is last — outside any fence, with
+   no carriage return — and the file has not changed for one poll interval, so a file written
+   early is never taken as finished, a seat editing above its marker is not either, and a seat
+   still appending shows as progress on its own file rather than as silence. The beat reads the marker only; `merge-adversarial-shards.sh` and
    `merge-review-shards.sh` check `findings=<n>` against the findings they parse and refuse a
    shard that disagrees. A party round's seat files are read by the lead and by
-   `join-remediator-shards.sh`, neither of which checks the count, so on that axis the marker's
-   count has no mechanical reader. `--complete` and `--progress-path` never go on the same beat.
+   `join-remediator-shards.sh`, which refuses a repair citing an unmarked seat file beside a
+   marked one but does not check the count, so on that axis the marker's count has no
+   mechanical reader. `--complete` and `--progress-path` never go on the same beat.
 
    **One repair writer applies them.** After the round's join the lead dispatches the seats'
    findings to remediators, never back to a seat, and every entry of the party repair record

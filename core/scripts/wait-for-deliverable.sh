@@ -277,6 +277,29 @@ set -u
 #   The exhaustion advice to re-arm with --progress-path is not printed: under this
 #   flag the progress signal is already on.
 #
+#   THE MARKER MUST ALSO HAVE SETTLED. A seat that writes its marker and then edits
+#   ABOVE it -- measured on the reference consumer: one cross seat wrote its file once,
+#   marker last, then made seven in-place Edits over three minutes -- ends in the marker
+#   the whole time, so "marker last" alone consumed it mid-edit. DELIVERED therefore also
+#   requires the file's content hash to be unchanged across one poll interval: a
+#   `.settle` sidecar beside the counter holds `<hash> <epoch first seen>`, any change of
+#   hash restarts it, and the file delivers only once `now - epoch > POLL` in whole
+#   seconds (so at least POLL real seconds). A file that loses its marker drops its sidecar.
+#
+#   WHAT IS NOT A MARKER. The last non-blank line must open with `seat-complete: `,
+#   carry no carriage return (a CRLF line is not the line the brief asked for), and lie
+#   OUTSIDE a fenced block: a marker inside an unclosed ``` or ~~~ fence is quoted text,
+#   not the seat's final write.
+#
+#   UNFINISHED IS NOT ABSENT. A target that is present, non-empty, written since the
+#   join armed, and whose last non-blank line is not a marker is reported as
+#     UNFINISHED <path> -- present, last non-blank line is not seat-complete:
+#   beneath its WAITING line on every beat, and IN PLACE OF the `absent after N beats`
+#   line when the sequence is spent (still exit 1: a decision is owed). The lead reads
+#   that file before deciding; re-dispatching over it discards the seat's findings. A
+#   present file that does carry its marker but never settled is reported UNSETTLED on
+#   exhaustion, for the same reason: it is not absent either.
+#
 # Without --complete every line this script prints is byte-identical to before.
 # ---------------------------------------------------------------------------
 
@@ -471,9 +494,50 @@ is_delivered() {  # $1 = path, $2 = join epoch
   [ -s "$1" ] || return 1
   [ "$(mtime_of "$1")" -ge "$2" ] || return 1
   [ "$COMPLETE" -eq 1 ] || return 0
-  # --complete: the LAST NON-BLANK line begins `seat-complete: `. A whitespace-only
-  # line is blank (NF == 0), so trailing blank lines cannot hide the marker.
-  awk 'NF { l = $0 } END { exit (index(l, "seat-complete: ") == 1 ? 0 : 1) }' "$1" 2>/dev/null
+  id_st_="${COUNTER_DIR}/$(key_of "$1").settle"
+  if ! has_marker "$1"; then rm -f "$id_st_" 2>/dev/null; return 1; fi
+  settled "$1" "$id_st_"
+}
+
+# --complete: the LAST NON-BLANK line begins `seat-complete: `, carries no carriage
+# return, and is not inside an unclosed fence. A whitespace-only line is blank
+# (NF == 0), so trailing blank lines cannot hide the marker.
+has_marker() {  # $1 = path
+  awk '/^[ \t]*(```|~~~)/ { f = !f } NF { l = $0 } END { exit ((!f && l !~ /\r/ && index(l, "seat-complete: ") == 1) ? 0 : 1) }' "$1" 2>/dev/null
+}
+
+content_hash() {  # $1 = path -> a content hash, empty when unreadable
+  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1
+  elif command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" 2>/dev/null | cut -d' ' -f1
+  else cksum < "$1" 2>/dev/null | tr -d ' \t'; fi
+}
+
+# The marked file has SETTLED: its hash equals the one its sidecar recorded at least one
+# poll interval ago. Any other hash (or no sidecar) re-records `<hash> <now>` and waits.
+settled() {  # $1 = path, $2 = its .settle sidecar
+  st_h_="$(content_hash "$1")"; [ -n "$st_h_" ] || return 1
+  st_now_="$(date +%s)"; st_rec_=""
+  [ -f "$2" ] && st_rec_="$(cat "$2" 2>/dev/null || echo '')"
+  st_t_="${st_rec_#* }"
+  case "$st_t_" in ''|*[!0-9]*) st_t_="" ;; esac
+  if [ "${st_rec_%% *}" = "$st_h_" ] && [ -n "$st_t_" ]; then
+    # STRICTLY greater: both stamps are whole seconds, so a difference of exactly POLL can be
+    # a few milliseconds of real time across a second boundary. POLL + 1 whole seconds is at
+    # least POLL real ones.
+    [ $(( st_now_ - st_t_ )) -gt "$POLL" ] && return 0
+    return 1
+  fi
+  printf '%s %s' "$st_h_" "$st_now_" > "$2" 2>/dev/null || true
+  return 1
+}
+
+# UNFINISHED: present, non-empty, written since the join armed, and NOT closed by a marker.
+is_unfinished() {  # $1 = path, $2 = join epoch
+  [ "$COMPLETE" -eq 1 ] && [ -s "$1" ] && [ "$(mtime_of "$1")" -ge "$2" ] && ! has_marker "$1"
+}
+say_unfinished() {  # $1 = path, $2 = join epoch -- the line beneath a WAITING line
+  is_unfinished "$1" "$2" && echo "UNFINISHED $1 -- present, last non-blank line is not seat-complete:"
+  return 0
 }
 
 # --complete's evidence of work: the target ITSELF newer than its OWN mark. `find
@@ -642,7 +706,7 @@ for t in $TARGETS; do
   s="${c}.since"
   pg="${c}.progress"
   gr="${c}.grants"
-  [ "$RESET" -eq 1 ] && rm -f "$c" "$s" "$pg" "$gr" 2>/dev/null
+  [ "$RESET" -eq 1 ] && rm -f "$c" "$s" "$pg" "$gr" "${c}.settle" 2>/dev/null
 
   # Whether THIS beat armed the join must be read before join_of, which creates
   # the sidecar as a side effect.
@@ -650,7 +714,7 @@ for t in $TARGETS; do
   j="$(join_of "$t")"
 
   if is_delivered "$t" "$j"; then
-    rm -f "$c" "$s" "$pg" "$gr" 2>/dev/null || true
+    rm -f "$c" "$s" "$pg" "$gr" "${c}.settle" 2>/dev/null || true
     say "DELIVERED $t"
     continue
   fi
@@ -747,8 +811,25 @@ fi
 
 if [ -n "$EXHAUSTED" ]; then
   IFS='|'; for t in $EXHAUSTED; do
-    echo "NON-DELIVERY $t -- absent after $MAX_BEATS beats."
+    IFS="$OLDIFS"
+    # Under --complete a PRESENT file is never called absent: re-dispatching over a seat's
+    # findings discards them. UNFINISHED and UNSETTLED say read the file, then decide.
+    if is_unfinished "$t" "$(join_of "$t")"; then
+      echo "NON-DELIVERY $t -- after $MAX_BEATS beats."
+      echo "UNFINISHED $t -- present, last non-blank line is not seat-complete:"
+    elif [ "$COMPLETE" -eq 1 ] && [ -s "$t" ] && has_marker "$t"; then
+      echo "NON-DELIVERY $t -- after $MAX_BEATS beats."
+      echo "UNSETTLED $t -- present and ends in seat-complete:, but its content was still changing"
+    else
+      echo "NON-DELIVERY $t -- absent after $MAX_BEATS beats."
+    fi
+    IFS='|'
   done; IFS="$OLDIFS"
+  if [ "$COMPLETE" -eq 1 ]; then
+    echo "  UNFINISHED or UNSETTLED is NOT absence: the seat wrote a file. Read it before you"
+    echo "  decide -- its findings are real whether or not it closed them, and a re-dispatch"
+    echo "  over it discards them. Only a path reported 'absent' is Rule 20 non-delivery."
+  fi
   if [ -n "$GRANTSPENT" ]; then
     IFS='|'; for t in $GRANTSPENT; do
       echo "  NOTE: $t still shows work under the progress path, but all $MAX_BEATS"
@@ -805,6 +886,7 @@ if [ "$MAY_SLEEP" -eq 0 ]; then
     b="$(cat "$c" 2>/dev/null || echo 0)"; case "$b" in ''|*[!0-9]*) b=0 ;; esac
     echo "WAITING   $t -- beat ${b}/${MAX_BEATS} (no beat charged), $(human_age "$(( NOW_ - $(join_of "$t") ))") since"
     echo "  this join armed, not yet delivered."
+    say_unfinished "$t" "$(join_of "$t")"
     IFS='|'
   done
   IFS="$OLDIFS"
@@ -890,7 +972,7 @@ for t in $PENDING; do
   c="${COUNTER_DIR}/$(key_of "$t")"
   s="${c}.since"
   if is_delivered "$t" "$(join_of "$t")"; then
-    rm -f "$c" "$s" "${c}.progress" "${c}.grants" 2>/dev/null || true
+    rm -f "$c" "$s" "${c}.progress" "${c}.grants" "${c}.settle" 2>/dev/null || true
     say "DELIVERED $t"
     N_DELIVERED=$(( N_DELIVERED + 1 ))
   else
@@ -899,6 +981,7 @@ for t in $PENDING; do
     # sameness: the beat number restarts at 1 on every re-arm, the clock restarts
     # too, and a lead that sees both restart can SEE that it re-armed.
     say "WAITING   $t -- beat $b/$MAX_BEATS, $(human_age "$(( NOW_ - $(join_of "$t") ))") since this join armed, not yet delivered. Beat again."
+    say_unfinished "$t" "$(join_of "$t")"
     N_WAITING=$(( N_WAITING + 1 ))
   fi
 done
