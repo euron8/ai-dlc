@@ -180,7 +180,7 @@ HDR_LINE="  printf '# %s: %s (merged from %s shards)\\n\\n' \"\$TITLE\" \"\$IDX\
 # The worst-of line is SHARED by both gates, so each wrong rule dies in gate 1 (V1) and gate 2 (Q1).
 # MX1 kills H4 too, and both findings are true: its majority recompute sits after the hand-over
 # join, so it discards the forced NEEDS_REWORK as well as the worst-of.
-mutant "MX1 verdict by majority count" merge-review-shards.sh "worst q_worst q_ho_force" \
+mutant "MX1 verdict by majority count" merge-review-shards.sh "worst q_worst q_ho_force cr_ho_ok" \
   "$WORST_LINE" 'TALLY="${TALLY:-} $v"' \
   "$HDR_LINE" "  WORST=\"\$(printf '%s\\n' \$TALLY | sort | uniq -c | sort -k1,1nr -k2,2 | awk 'NR == 1 { print \$2 }')\"
 $HDR_LINE"
@@ -286,11 +286,11 @@ mutant "MQ9 the section counts widened to every heading level" merge-review-shar
   "$SEC_AC" '    lc ~ /^##+[ \t]+acceptance criteria/ { nac++ }' \
   "$SEC_DEF" '    lc ~ /^##+[ \t]+deferred/ { nda++ }'
 # HAND-OVERS. Each is a wrong build the contract names.
-mutant "MH1 the hand-over match check dropped" merge-review-shards.sh "q_ho_unm q_ho_orph" \
+mutant "MH1 the hand-over match check dropped" merge-review-shards.sh "q_ho_unm q_ho_orph cr_ho_unm" \
   '  d1="$(comm -23 "$T/hand.s" "$T/runs.s" | head -1)"' '  d1=""' \
   '  d1="$(comm -13 "$T/hand.s" "$T/runs.s" | head -1)"' '  d1=""'
-mutant "MH2 an unmet replay does not force NEEDS_REWORK" merge-review-shards.sh "q_ho_force" \
-  '  if [ -n "$FORCE" ]; then WORST="NEEDS_REWORK"' '  if false; then WORST="NEEDS_REWORK"'
+mutant "MH2 an unmet replay does not force NEEDS_REWORK" merge-review-shards.sh "q_ho_force cr_ho_ok" \
+  '  if [ -n "$FORCE" ] && [ "$WORST_R"' '  if false && [ "$WORST_R"'
 # Fenced lines leak ONLY for the hand-over grammar, so every other fence arm stays green.
 mutant "MH3 fenced hand-over lines counted" merge-review-shards.sh "q_ho_fenced" \
   '    fence { next }' '    fence && !/^handover/ { next }'
@@ -328,7 +328,7 @@ mutant "MH11 the declared-count equality dropped" merge-review-shards.sh "q_hc_d
   '      [ "$((10#$hdv))" -eq "$nho_s" ] \' '      true \'
 # A missing line read as a valid 0: both the line count relaxed and the absent value defaulted,
 # or the non-integer refusal would still catch the `-` an absent value parses to.
-mutant "MH12 a missing handovers: line accepted as 0" merge-review-shards.sh "q_hc_missing" \
+mutant "MH12 a missing handovers: line accepted as 0" merge-review-shards.sh "q_hc_missing cr_hc_missing" \
   '      [ "$nhd" = "1" ] \' '      [ "$nhd" -le 1 ] \' \
   '    nhd="${nhd:-0}"; hdv="${hdv:--}"' '    nhd="${nhd:-0}"; hdv="${hdv:-0}"'
 # The width guard alone: 2^64 wraps to 0 in bash 3.2's arithmetic, so only the guard refuses it.
@@ -339,6 +339,16 @@ mutant "MH14 the hand-over count read by word-splitting" merge-review-shards.sh 
   '    read -r nhd hdv <<<"$(awk '"'"'$1 == "N" { print $2, $3 }'"'"' "$P")"' '    set -- $(awk '"'"'$1 == "N" { print $2, $3 }'"'"' "$P"); nhd="$1"; hdv="${2:-}"'
 mutant "MH9 an <AC-id> may begin with any of its characters" merge-review-shards.sh "q_ho_acid" \
   "RE_AC='^[A-Za-z0-9][A-Za-z0-9._-]*\$'" "RE_AC='^[A-Za-z0-9._-]+\$'"
+# GATE-1 HAND-OVERS. MG1 reverts the read to --gate qa only (the pre-sharding build, where a
+# code-review part shard executed nothing): every gate-1 arm dies, each for its own reason --
+# G1/G2 on the replay finding that then names no run, G3 and G5 by merging, G4 by the same.
+mutant "MG1 hand-over lines read under --gate qa only" merge-review-shards.sh "cr_ho_ok cr_ho_block cr_ho_unm cr_ho_runtwice cr_hc_missing" \
+  '  { # HAND-OVERS, read under both gates (header)' '  if [ "$GATE" = qa ]; then' \
+  '  } # end HAND-OVERS' '  fi'
+mutant "MG2 a hand-over replayed twice accepted" merge-review-shards.sh "cr_ho_runtwice" \
+  '  d1="$(sort "$T/runs" | uniq -d | head -1)"' '  d1=""'
+mutant "MG3 an unmet replay lowers a BLOCKED review" merge-review-shards.sh "cr_ho_block" \
+  '  if [ -n "$FORCE" ] && [ "$WORST_R" -lt "$(rank NEEDS_REWORK)" ]; then' '  if [ -n "$FORCE" ]; then'
 # THE SHARDED CROSS REVIEWER. Each is a wrong build the contract names, each refusal disabled
 # alone so the world it guards MERGES (or reaches a refusal with another message) without it.
 mutant "MC1 one cross.md accepted where the cross groups are owed" merge-review-shards.sh "x_only" \

@@ -29,9 +29,14 @@
 #   its owner's shard is accepted, and REFUSED only when the owner's shard carries a finding
 #   citing the IDENTICAL set -- the one case the two are the same finding.
 #   THE FIRST CROSS SHARD (`cross` when G=1, else `cross-1`) is the EXECUTION owner: it alone
-#   runs in the frozen worktree, which nothing else may mutate -- the suite, mutation-red, every
-#   handed-over replay -- and under --gate qa it alone carries the per-AC table and the deferred
-#   record. Every other cross shard executes nothing and reports interaction findings only.
+#   runs in the frozen worktree, which nothing else may mutate -- the one canonical suite run and
+#   every handed-over replay -- and under --gate qa it alone carries the per-AC table and the
+#   deferred record. Every other cross shard executes nothing and reports interaction findings
+#   only. The mutation-RED replays are NOT the execution owner's: under BOTH gates each part
+#   shard replays the ones anchored in its part, in its own detached worktree at the frozen sha,
+#   and hands over (HAND-OVERS below) only an AC that worktree cannot bring to a GREEN baseline.
+#   A hand-over is defined by that failure, so a per-group copy of the worktree would only repeat
+#   it; the execution owner runs it in the frozen worktree, and that residue stays on one agent.
 #   SEAT-COMPLETE. A shard dispatched under the early-write brief ends, as its LAST NON-BLANK
 #   line, in `seat-complete: <step> <seat> <shard> findings=<n>`, written once as its final
 #   write. If ANY shard in the directory ends in that line, every shard must,
@@ -52,8 +57,8 @@
 #   gate-validation.md keeps reading exactly one review file. This is the deterministic JOIN
 #   that writes it. Shard verdicts are ADVISORY inputs; the merged verdict is RECOMPUTED as the
 #   worst of them in the gate's order above. Never a count, never the cross shard alone,
-#   never the last one read. Under --gate qa an unmet hand-over replay (HAND-OVERS below) also
-#   forces NEEDS_REWORK.
+#   never the last one read. Under either gate an unmet hand-over replay (HAND-OVERS below)
+#   also raises it to at least NEEDS_REWORK.
 #
 # THE PART SET IS RE-DERIVED, NEVER READ OFF THE DIRECTORY. The manifest's worktree, base, sha,
 #   min-files and max-parts are handed back to partition-review-diff.sh --map (sibling of this
@@ -93,7 +98,8 @@
 #   REFUSED. A `parts:` line anywhere else -- under another `## ` section, before the first
 #   `#### `, indented, or behind a list bullet (`- parts: 3`) -- is REFUSED, never skipped: a
 #   finding written as a bullet or under `## Critical Issues` would otherwise merge uncited.
-#   HAND-OVERS, --gate qa ONLY (under --gate code-review these lines are not read). A part shard
+#   HAND-OVERS, BOTH GATES (a code-review part shard replays its part's mutation-REDs exactly as
+#   a QA part shard does, so the grammar, the declared count and the join are one). A part shard
 #   whose mutation-RED replay for an AC cannot reach a GREEN baseline hands that AC to the FIRST
 #   cross shard (the execution owner: the replay runs in the frozen worktree) with a finding
 #   (under `### Important`, never `### Deferred...`) carrying its one `parts: <own ordinal>` line
@@ -129,7 +135,12 @@
 #   decorated form allow a numbered-list prefix (`1. `). A hand-over is not a verdict
 #   of its own, but its replay is a HARD GATE: a `handover-run:` result of GREEN-SURVIVED (the
 #   mutation did not turn the test RED) or NO-BASELINE (the cross shard could not reach GREEN
-#   either) forces the merged verdict to NEEDS_REWORK whatever the shard verdicts say.
+#   either) raises the merged verdict to NEEDS_REWORK whatever the shard verdicts say, and never
+#   lowers one: under --gate code-review a BLOCKED shard keeps the merge BLOCKED.
+#   EXACTLY ONCE. Each hand-over is keyed `<ordinal> <AC-id>` and joined in both directions: a
+#   hand-over no replay names, a replay no hand-over names, the same hand-over handed over twice and
+#   the same replay recorded twice are each REFUSED, so every handed-over replay is accounted for
+#   exactly once, counted, across the part shards and the execution owner.
 #
 # CHECK 1'S PATTERN IS DERIVED, NEVER RETYPED. It is lifted from gate-validation.md's own
 #   `grep -inE '<pattern>' <review-file>` directive the way core/fixtures/gate-verdict-grep-shape
@@ -392,7 +403,7 @@ fi
 #        HO <line> <finding line> <AC>   HR <line> <finding line> <ordinal> <AC> <result> [extra]
 #        H <first stray handover:/handover-run: line>   HM <first malformed hand-over line>
 #        N <handovers: count> <first value>   (HO, HR, H, HM, N and X's last two fields --
-#        handover: and handover-run: lines in that finding -- are read under --gate qa only)
+#        handover: and handover-run: lines in that finding -- are read under both gates)
 parse_shard() {
   awk '
     function flush() { if (fl > 0) printf "X %d %d %s %d %d\n", fl, fn, (fst == "" ? "-" : fst), fh + 0, fr + 0; fl = 0 }
@@ -485,7 +496,7 @@ for key in $ORDINALS $CROSS_KEYS; do
     fi
   fi
 
-  if [ "$GATE" = qa ]; then
+  { # HAND-OVERS, read under both gates (header)
     hl="$(awk '$1 == "H" { print $2 }' "$P")"
     [ "${hl:-0}" = "0" ] \
       || refuse "$sf:$hl carries a 'handover:' or 'handover-run:' line outside a '#### ' finding under '## Findings' (indented, bulleted, another case, or under another section); each sits at column 0 inside its finding"
@@ -536,7 +547,7 @@ for key in $ORDINALS $CROSS_KEYS; do
           printf '| %s | %s | %s |\n' "$o" "$a2" "$a3" >> "$T/htable" || refuse "cannot stage the hand-over replay table" ;;
       esac
     done < "$P"
-  fi
+  } # end HAND-OVERS
 
   while read -r tag line nlines cited nho nhr; do
     [ "$tag" = "X" ] || continue
@@ -548,15 +559,13 @@ for key in $ORDINALS $CROSS_KEYS; do
       [ -n "$o" ] || refuse "$sf:$line cites part $c, outside 1..$K"
       case " $distinct " in *" $o "*) ;; *) distinct="$distinct $o" ;; esac
     done
-    if [ "$GATE" = qa ]; then
-      [ "${nho:-0}" -le 1 ] || refuse "$sf:$line finding carries $nho 'handover:' lines; a hand-over finding names exactly one AC"
-      if is_cross "$key" && [ "${nhr:-0}" -gt 0 ]; then
-        want="$(awk -v f="$line" '$1 == f { print $2 }' "$T/runords" | sort -u | tr '\n' ' ')"
-        got="$(printf '%s\n' $distinct | sort -u | tr '\n' ' ')"
-        [ "$want" = "$got" ] \
-          || refuse "$sf:$line (cross shard) cites$distinct but its 'handover-run:' lines name ${want% }; a hand-over replay finding cites exactly the parts it ran replays for"
-        continue
-      fi
+    [ "${nho:-0}" -le 1 ] || refuse "$sf:$line finding carries $nho 'handover:' lines; a hand-over finding names exactly one AC"
+    if is_cross "$key" && [ "${nhr:-0}" -gt 0 ]; then
+      want="$(awk -v f="$line" '$1 == f { print $2 }' "$T/runords" | sort -u | tr '\n' ' ')"
+      got="$(printf '%s\n' $distinct | sort -u | tr '\n' ' ')"
+      [ "$want" = "$got" ] \
+        || refuse "$sf:$line (cross shard) cites$distinct but its 'handover-run:' lines name ${want% }; a hand-over replay finding cites exactly the parts it ran replays for"
+      continue
     fi
     set -- $distinct
     if is_cross "$key"; then
@@ -587,10 +596,10 @@ for key in $ORDINALS $CROSS_KEYS; do
   awk '!/^seat-complete: /' "$sf" >> "$T/body" || refuse "cannot stage the body of $sf"
 done
 
-# ---- the hand-over join (--gate qa) ------------------------------------------------------
+# ---- the hand-over join (both gates) -----------------------------------------------------
 # Every part hand-over is matched by EXACTLY ONE cross replay, and every replay by a hand-over.
 # Keys are `<ordinal> <AC-id>`, the ordinal normalised, compared under LC_ALL=C.
-if [ "$GATE" = qa ]; then
+{
   d1="$(sort "$T/hand" | uniq -d | head -1)"
   [ -z "$d1" ] || refuse "hand-over '$d1' (<ordinal> <AC-id>) is handed over more than once"
   d1="$(sort "$T/runs" | uniq -d | head -1)"
@@ -601,9 +610,10 @@ if [ "$GATE" = qa ]; then
   d1="$(comm -13 "$T/hand.s" "$T/runs.s" | head -1)"
   [ -z "$d1" ] || refuse "$CROSS_FIRST.md carries 'handover-run: $d1' but part shard $(printf '%s' "$d1" | cut -d' ' -f1) handed over no such AC"
   NHAND="$(grep -c . "$T/hand.s")" || NHAND=0
-  # An unmet HARD GATE: the replay did not go RED, or never reached a GREEN baseline.
-  if [ -n "$FORCE" ]; then WORST="NEEDS_REWORK"; WORST_R="$(rank NEEDS_REWORK)"; fi
-fi
+  # An unmet HARD GATE: the replay did not go RED, or never reached a GREEN baseline. It raises
+  # the verdict to NEEDS_REWORK and never lowers one (a code-review BLOCKED stays BLOCKED).
+  if [ -n "$FORCE" ] && [ "$WORST_R" -lt "$(rank NEEDS_REWORK)" ]; then WORST="NEEDS_REWORK"; WORST_R="$(rank NEEDS_REWORK)"; fi
+}
 
 {
   printf '# %s: %s (merged from %s shards)\n\n' "$TITLE" "$IDX" "$((K + G))"
@@ -613,7 +623,7 @@ fi
   printf '`%s..%s`. The verdict below is RECOMPUTED as the worst shard verdict; the\n' "$M_BASE" "$M_SHA"
   printf 'shard verdicts in the table are advisory inputs to it.\n\n'
   if [ -n "$FORCE" ]; then
-    printf 'A handed-over replay is an unmet HARD GATE (%s), so the verdict is NEEDS_REWORK\n' "$FORCE"
+    printf 'A handed-over replay is an unmet HARD GATE (%s), so the verdict is at least NEEDS_REWORK\n' "$FORCE"
     printf 'whatever the shard verdicts say.\n\n'
   fi
   printf '## Verdict\n%s\n\n' "$WORST"

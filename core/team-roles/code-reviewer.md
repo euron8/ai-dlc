@@ -155,10 +155,28 @@ when you are a cross shard. Review only the files your part of the map lists.
 As a cross shard, read the WHOLE diff: the pairs of your group are your FOCUS,
 and you may cite any part. The merge refuses your finding only when the group
 `partition-document.sh --cross-owner` names already carries the identical
-`parts:` set. As a part shard you
-EXECUTE NOTHING: no tests, no `validate-mutation-red.sh`, no build. The first
-cross shard (`cross-1`, or `cross` when there is one group) runs every
-execution step this role requires, once, in the frozen worktree; every other
+`parts:` set. As a part shard you run no suite and no build. You replay,
+with `validate-mutation-red.sh`, every mutation-RED this role requires whose
+anchor file lies in your part, in your OWN detached worktree at the frozen sha
+(`git worktree add --detach <tmp> <sha>`), never in the shared frozen
+worktree, after the project's canonical dependency setup, and confirm the
+anchor's test is GREEN there before any mutation. An AC whose replay cannot
+reach a GREEN baseline there is handed to the first cross shard rather than
+graded: a `#### ` finding under `### Important` citing `parts: <your ordinal>`
+that names the AC and the reason, with exactly one column-0
+`handover: <AC-id>` line. As a part shard you also carry one column-0
+`handovers: <n>` line beside `reviewed-sha:`, `0` when you handed nothing over.
+The first cross shard (`cross-1`, or `cross` when there is one group) runs the
+suite once in the frozen worktree and the RED replays for any anchor in no
+part's files, both before it reads any part file. It is dispatched in the same
+wave as the parts, so it then joins the part shard files its brief names with
+`AI_DLC_STATE_DIR=<the beat state directory your brief names>
+scripts/ai-dlc/wait-for-deliverable.sh --complete <part paths>`, backgrounded
+and re-armed until each is DELIVERED. It then runs every handed-over replay in
+the frozen worktree and records each as a column-0
+`handover-run: <ordinal> <AC-id> <RED|GREEN-SURVIVED|NO-BASELINE>` line inside
+a `#### ` finding citing exactly the parts it ran replays for. A result other
+than `RED` raises the merged verdict to at least `NEEDS_REWORK`. Every other
 cross shard executes nothing. Write to the shard path your brief names
 (`<ordinal>.md`, `cross-<g>.md`, or `cross.md` for one group), never to the
 review file above. Write your header first and append each finding as you

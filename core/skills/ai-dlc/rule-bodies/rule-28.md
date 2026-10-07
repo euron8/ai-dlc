@@ -123,6 +123,22 @@ once as its final write, and its join beat passes `--complete`
 (`_gate-procedures.md`, "Validation cycle" item 1). A SERIAL map has no
 cross agent.
 
+**Code review and QA shard their execution too.** On a review over
+`partition-review-diff.sh --map`, at gate 1 and gate 2 alike, each part
+agent replays the mutation-REDs anchored in its part in its own detached
+worktree at the frozen sha, and every cross agent goes out in the same
+wave as the parts. The first cross agent does its part-independent work
+first and joins the part files itself only before the hand-over replays
+and the per-AC table (`implementation.md`, the Gate-1 and Gate-2
+dispatch paragraphs). What remains on that one agent is the canonical
+suite run and the replays a part HANDED OVER, run in the frozen worktree.
+**That residue is an open item for the operator, not serial by design.**
+A hand-over is defined as an AC whose replay cannot reach a GREEN
+baseline in a fresh detached worktree at the frozen sha, so a per-group
+copy made that same way repeats the failure. The frozen worktree's
+environment is shared and mutable, and no other copy of it exists.
+`merge-review-shards.sh` accounts for every hand-over exactly once.
+
 **The partition is derived, never listed.** The part set comes from a
 program or from the tree -- the artifact directory's listing, the
 `--map` of a document, the `--expected` worklist, the Section 0 surface

@@ -274,7 +274,10 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    is never taken as finished, and a seat still appending shows as progress on its own file
    rather than as silence. The beat reads the marker only; `merge-adversarial-shards.sh` and
    `merge-review-shards.sh` check `findings=<n>` against the findings they parse and refuse a
-   shard that disagrees. A party round's seat files are read by the lead and by
+   shard that disagrees. A code review or QA over `partition-review-diff.sh --map` dispatches
+   its cross shards in the same wave as its parts, and its first cross shard arms its own
+   `--complete` beat on the part files, under a state directory its brief names, before the
+   hand-over replays (`implementation.md`, Gate-1 and Gate-2 dispatch). A party round's seat files are read by the lead and by
    `join-remediator-shards.sh`, neither of which checks the count, so on that axis the marker's
    count has no mechanical reader. `--complete` and `--progress-path` never go on the same beat.
 
