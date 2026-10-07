@@ -79,7 +79,7 @@ previous session.
      newer than
      its `dispatched-at` is DELIVERED — consume it, never re-dispatch.
      Older or absent means the beat resumes, not that the teammate died.
-     Arm that beat by running `scripts/ai-dlc/wait-for-deliverable.sh`, `run_in_background: true`, with `--since` set to that row's `dispatched-at` cell, because the teammate may have delivered before this session's join armed.
+     Arm that beat by running `scripts/ai-dlc/wait-for-deliverable.sh --complete --since <dispatched-at> <path>` when the deliverable is a seat, shard or cross file, and the same call without `--complete` for any other deliverable, `run_in_background: true`, with `--since` set to that row's `dispatched-at` cell, because the teammate may have delivered before this session's join armed.
      Join the deliverable per `_gate-procedures.md`, "Bounded-join beat".
      Liveness for a teammate dispatched by a PRIOR session is unavailable
      to that program (`CLAUDE_CODE_SESSION_ID` differs), so its absence is

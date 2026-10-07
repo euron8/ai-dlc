@@ -37,7 +37,9 @@
 # check refuses; D3 is the mirror, the right path with other bytes' sha.
 # `seed.files-b3-merged.expected` is the B3 output of the merge BEFORE section mode existed
 # (origin/main at dd7e40ad), so D6 holds files mode to its old bytes rather than to whatever the
-# current merge prints.
+# current merge prints. Regenerated once for the cross groups (BL-464): K=3 now owes cross-1..3,
+# and the diff against the earlier golden is confined to the cross headers, the shard count and
+# the two id lines -- every ordinal shard's body is byte-identical.
 #
 # Every arm that scores a merge calls its predicate as `p_<name> "$MERGE"` at the start of a
 # line; the battery's join J1 reads exactly that shape to prove the shipped arm set and P_ALL
@@ -77,7 +79,7 @@ if [ "$r" -eq 2 ]; then bad "A3: FIXTURE STALE -- MAJOR_EXIT_CEILING=3 is not a 
 elif [ "$r" -eq 0 ]; then ok "A3: with the sibling's MAJOR_EXIT_CEILING at 6 the SAME B3 input merges MET (ceiling=6) -- the ceiling is read, not restated"
 else bad "A3: a sibling ceiling of 6 did not move the B3 merge to MET: $(cat "$MO")"; fi
 p_miss_ord "$MERGE"   && ok "R1: ordinal 1 (a non-story- file) with no shard -> REFUSED 'is missing', exit 2, nothing written" || bad "R1: a missing ordinal shard was not refused cleanly (rc=$RC): $(cat "$MO")"
-p_miss_cross "$MERGE" && ok "R2: no cross.md -> REFUSED 'shard cross is missing', exit 2, nothing written" || bad "R2: a missing cross shard was not refused cleanly (rc=$RC): $(cat "$MO")"
+p_miss_cross "$MERGE" && ok "R2: cross-2.md of the three cross groups absent -> REFUSED 'shard cross-2 is missing', exit 2, nothing written" || bad "R2: a missing cross shard was not refused cleanly (rc=$RC): $(cat "$MO")"
 p_dup "$MERGE"        && ok "R3: 1.md beside 01.md -> REFUSED 'delivered more than once', exit 2, nothing written" || bad "R3: a duplicate shard was not refused cleanly (rc=$RC): $(cat "$MO")"
 p_partition "$MERGE"  && ok "R4: a per-ordinal finding citing two stories, and a cross finding citing one, each REFUSED, nothing written" || bad "R4: a partition violation was not refused cleanly (rc=$RC): $(cat "$MO")"
 p_ms "$MERGE"         && ok "A4: shards stamped 15:00:19.497Z and 15:00:19Z merge, the merged invoked_at is 15:00:19Z (the true earliest, not the raw-string least), and --cycle-state accepts it (exit 0)" \
@@ -94,7 +96,7 @@ if [ "$n_parts" -eq 3 ] && [ "$r_serial" -eq 3 ] && has "$WORK/serial.map" "SERI
 else
   bad "D0: FIXTURE BROKEN -- the document seed maps to $n_parts part(s) (want 3) and the SERIAL seed exited $r_serial (want 3); the D arms cannot discriminate"
 fi
-p_doc_b3 "$MERGE" && ok "D1: three section shards x 2 MAJOR, each stamped MET, merge NOT_MET major=6; ONE artifact_sha equal to the document's; a shard_wall entry per shard; the convergence validator reads critical=0 major=6" \
+p_doc_b3 "$MERGE" && ok "D1: three section shards x 2 MAJOR, each stamped MET, merge NOT_MET major=6; ONE artifact_sha equal to the document's; tool_use_id = cross-1's; a shard_wall entry per shard (cross-1..3 included); the convergence validator reads critical=0 major=6" \
   || bad "D1: the section B3 did not merge to a recomputed NOT_MET with one artifact_sha read 0/6 by the validator (rc=$RC): $(cat "$MO") $(grep -m1 'major=' "$CO" 2>/dev/null)"
 p_doc_axis "$MERGE" && ok "D2: a finding carrying ONE sections: line AND a stories: line -> REFUSED by the axis guard (the one-citation count passes it), nothing written" \
   || bad "D2: a finding citing both axes was not refused by the axis guard (rc=$RC): $(cat "$MO")"
@@ -119,7 +121,7 @@ else
 fi
 p_subj_b3 "$MERGE" && ok "U1: subject shards each stamped MET with 1 MAJOR merge NOT_MET; artifact: = the manifest; artifact_sha: the four stems at disk bytes; ids = map ordinals + cross" \
   || bad "U1: the subject merge did not sum, recompute and notarize the manifest (rc=$RC): $(cat "$MO")"
-p_subj_miss_cross "$MERGE" && ok "U2: a subject shard set with no cross.md -> REFUSED, nothing written" || bad "U2: (rc=$RC) $(cat "$MO")"
+p_subj_miss_cross "$MERGE" && ok "U2: a subject shard set missing its LAST cross group -> REFUSED, nothing written" || bad "U2: (rc=$RC) $(cat "$MO")"
 p_subj_xcite "$MERGE" && ok "U3: a part shard citing another file's ordinal -> REFUSED by the partition, nothing written" || bad "U3: (rc=$RC) $(cat "$MO")"
 p_subj_sha "$MERGE" && ok "U4: one stem notarized at other bytes (the rest right) -> REFUSED naming that stem, nothing written" || bad "U4: (rc=$RC) $(cat "$MO")"
 p_subj_stems "$MERGE" && ok "U5: a shard notarizing three of four stems -> REFUSED, nothing written" || bad "U5: (rc=$RC) $(cat "$MO")"
@@ -133,6 +135,20 @@ p_b4doc_nomf "$MERGE" && ok "U10: the same --document prd.md merge with NO manif
   || bad "U10: the no-manifest twin did not merge (rc=$RC): $(cat "$MO")"
 p_b4doc_other "$MERGE" && ok "U11: --document of an s9 file the manifest does NOT name, manifest present -> MERGED (B4 keys on the manifest's files, not on the manifest's presence)" \
   || bad "U11: a --document merge of a file outside the subject was refused beside a manifest (rc=$RC): $(cat "$MO")"
+
+# ---- the cross groups (BL-464). Every K>=3 shard set owes one cross shard per row of
+# partition-document.sh --cross-groups <K>, in EVERY mode; X1-X3 drive K=8 through each mode (and
+# K=2 through files and --document), each predicate presence-shaped in every cell.
+p_xfiles "$MERGE" && ok "X1: files mode, K=8: cross-1..6 merges (tool_use_id = cross-1's); cross.md alone REFUSED; a finding in its owner AND another covering group REFUSED naming the owner, its owner alone merges major=1, a (1, 2, K-1) finding held only by a non-owner merges major=1; K=2 cross.md merges, K=2 cross-1.md REFUSED" \
+  || bad "X1: files-mode cross groups (rc=$RC): $(cat "$MO")"
+p_xdoc "$MERGE" && ok "X2: --document, K=8: the same four cells, and K=2 cross.md merges" \
+  || bad "X2: --document cross groups (rc=$RC): $(cat "$MO")"
+p_xelicit "$MERGE" && ok "X3: --subject --elicitation over the 6-part subject: cross-1..6 merges, cross.md REFUSED, the non-owner duplicate REFUSED, the owner alone counted once" \
+  || bad "X3: elicitation cross groups (rc=$RC): $(cat "$MO")"
+p_xmix "$MERGE" && ok "X4: cross.md beside cross-1..3.md -> REFUSED as a mix, nothing written" || bad "X4: (rc=$RC) $(cat "$MO")"
+p_xunknown "$MERGE" && ok "X5: cross-7.md at K=3 -> REFUSED, the table does not print group 7, nothing written" || bad "X5: (rc=$RC) $(cat "$MO")"
+p_xcomplete "$MERGE" && ok "X6: one shard ending in seat-complete: makes an unmarked shard an unfinished REFUSAL; every shard marked with its findings=<n> merges with the markers dropped; findings=3 over 2 findings REFUSED as truncated" \
+  || bad "X6: seat-complete (rc=$RC): $(cat "$MO")"
 
 # R6: a finding heading EXACTLY as the real pass wrote it carries no severity word, so the heads
 # counted (0 MAJOR) disagree with findings_major -- refused, never counted as zero.
