@@ -2520,7 +2520,7 @@ echo "--- arm K3 cross groups (K3C_RELEASE ${K3C_REL})"
 # until the value is <major>.<minor>.<patch>, so a branch that was never stamped cannot pass the
 # gate. There is deliberately no skip for the placeholder -- a skip is how one would ship.
 ASSERTIONS=$((ASSERTIONS + 1))
-if printf '%s\n' "$K3C_REL" | grep -Eqx '[0-9]+\.[0-9]+\.[0-9]+'; then
+if [[ "$K3C_REL" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   printf '  ok    %-28s K3C_RELEASE is %s\n' k3c-release-shape "$K3C_REL"
 else
   FAILURES=$((FAILURES + 1))
