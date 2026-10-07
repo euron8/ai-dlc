@@ -9,7 +9,8 @@
 # THE GUARD, in the FIXTURE_POOL block both hooks carry (I66 holds them to one program):
 #   * the pool exports PREPUSH_POOL_DEPTH = its own depth + 1 to every fixture it dispatches;
 #   * a hook that STARTS at depth 1 keeps a pool of one or two and makes ANY other AI_DLC_FIXTURE_JOBS two:
-#     larger, zero (BSD `xargs -P 0` is unlimited), or not a number;
+#     larger, zero (BSD `xargs -P 0` is unlimited), not a number, or longer than five digits;
+#   * a marker SET to a non-number or to more than five digits is depth 2 and refuses (fail closed);
 #   * a hook that starts at depth 2 or more opens no pool and says so;
 #   * the marker carries no AI_DLC_ prefix, because fixtures scrub that whole prefix before driving a hook.
 #
@@ -148,9 +149,22 @@ for HOOK in $HOOKS; do
       r="$( cd "$W" && export PREPUSH_POOL_DEPTH="$1" AI_DLC_FIXTURE_JOBS="${2%x}"; . "$b" >/dev/null 2>&1; printf '%s' "$FIXTURE_JOBS" )"
       printf 'width_d%s_j%s=%s\n' "$1" "$2" "$r"
     done
-    # an unset marker is depth 0, and a non-numeric one is read as depth 0 rather than as a refusal
+    # an unset marker is depth 0
     r="$( cd "$W" && unset PREPUSH_POOL_DEPTH; export AI_DLC_FIXTURE_JOBS=12; . "$b" >/dev/null 2>&1; printf '%s' "$FIXTURE_JOBS" )"
     printf 'width_unset=%s\n' "$r"
+    # a marker SET to a non-number, or to 20 digits, FAILS CLOSED to depth 2. 18446744073709551616 is
+    # 2^64: bash arithmetic wraps it to 0, so without the length guard it reads as depth 0 and opens a
+    # full pool -- the value that discriminates (99999999999999999999 wraps to a large positive depth
+    # and refuses either way, so it could not kill the mutant). 08 is eight, not an octal error.
+    r="$( cd "$W" && export PREPUSH_POOL_DEPTH=18446744073709551616 AI_DLC_FIXTURE_JOBS=12; . "$b" >/dev/null 2>&1; printf '%s' "${POOL_DEPTH_IN:-}" )"
+    printf 'depth_long=%s\n' "$r"
+    r="$( cd "$W" && export PREPUSH_POOL_DEPTH=abc AI_DLC_FIXTURE_JOBS=12; . "$b" >/dev/null 2>&1; printf '%s' "${POOL_DEPTH_IN:-}" )"
+    printf 'depth_nonnum=%s\n' "$r"
+    r="$( cd "$W" && export PREPUSH_POOL_DEPTH=08 AI_DLC_FIXTURE_JOBS=12; . "$b" >/dev/null 2>&1; printf '%s' "${POOL_DEPTH_IN:-}" )"
+    printf 'depth_08=%s\n' "$r"
+    # a 20-digit jobs value at depth 1: `[` errors on it, so without the length guard it kept its width
+    r="$( cd "$W" && export PREPUSH_POOL_DEPTH=1 AI_DLC_FIXTURE_JOBS=99999999999999999999; . "$b" >/dev/null 2>&1; printf '%s' "$FIXTURE_JOBS" )"
+    printf 'width_d1_jlong=%s\n' "$r"
     # observed in flight at depth 1, jobs 12: the cap is real parallelism of two, not a number
     r="$(PD_SLEEP=0.3 drive "$b" "$W" 1 12)"; printf 'obs_d1_rc=%s\nobs_d1_max=%s\n' "$r" "$(maxflight)"
     r="$(PD_SLEEP=0.3 drive "$b" "$W" 1 1)"; printf 'obs_d1_j1_max=%s\n' "$(maxflight)"
@@ -187,6 +201,10 @@ width_d1_j0=2
 width_d1_jabc=2
 width_d2_j12=2
 width_unset=12
+depth_long=2
+depth_nonnum=2
+depth_08=8
+width_d1_jlong=2
 obs_d1_rc=0
 obs_d1_max=2
 obs_d1_j1_max=1
@@ -233,6 +251,10 @@ nest_b_present=1"
   armcheck "a depth-2 hook caps the width it would have opened too" width_d2_j12
   armcheck "depth 1 makes jobs=0 two, not BSD xargs -P 0 (unlimited)" width_d1_j0
   armcheck "depth 1 makes a non-numeric jobs value two, not whatever xargs does with it" width_d1_jabc
+  armcheck "depth 1 makes a 20-digit jobs value two, not the width [ cannot compare" width_d1_jlong
+  armcheck "a 20-digit depth (2^64, which arithmetic wraps to 0) fails closed to depth 2" depth_long
+  armcheck "a non-numeric depth fails closed to depth 2" depth_nonnum
+  armcheck "a depth of 08 is eight, not an octal error" depth_08
 
   # ---------------------------------------------------------------- mutants ------------------
   # mutate <name> <sed-expr>: copy the block, apply one edit, refuse a no-op.
@@ -257,14 +279,18 @@ nest_b_present=1"
   }
   mutant not-exported   "raw_d0 raw_d1 nest_started nest_depths nest_b_present" 's/PREPUSH_POOL_DEPTH="\$((POOL_DEPTH_IN + 1))" //'
   mutant not-incremented "raw_d0 raw_d1 nest_started nest_depths" 's/PREPUSH_POOL_DEPTH="\$((POOL_DEPTH_IN + 1))"/PREPUSH_POOL_DEPTH="$POOL_DEPTH_IN"/'
-  mutant cap-ignored    "width_d1_j12 width_d1_j12x width_d1_j0 width_d1_jabc width_d2_j12 obs_d1_max" 's/^if \[ "\$POOL_DEPTH_IN" -ge 1 \]; then$/if false; then/'
+  mutant cap-ignored    "width_d1_j12 width_d1_j12x width_d1_j0 width_d1_jabc width_d2_j12 width_d1_jlong obs_d1_max" 's/^if \[ "\$POOL_DEPTH_IN" -ge 1 \]; then$/if false; then/'
   # each half of the depth-1 cap admitted alone: zero passes the range test, a non-number skips the case
   mutant zero-admitted  "width_d1_j0" 's/^  if \[ "\$FIXTURE_JOBS" -lt 1 \] || /  if [ "$FIXTURE_JOBS" -lt 0 ] || /'
-  mutant nonnum-admitted "width_d1_jabc" 's/^  case "\$FIXTURE_JOBS" in '"''"'|\*\[!0-9\]\*) FIXTURE_JOBS=2 ;; esac$/  :/'
+  mutant nonnum-admitted "width_d1_jabc" 's/^  case "\$FIXTURE_JOBS" in '"''"'|\*\[!0-9\]\*|/  case "$FIXTURE_JOBS" in '"''"'|/'
+  mutant jlong-admitted "width_d1_jlong" 's/|??????\*) FIXTURE_JOBS=2 ;; esac$/) FIXTURE_JOBS=2 ;; esac/'
+  mutant depth-long-admitted "depth_long" 's/^case "\$POOL_DEPTH_IN" in \*\[!0-9\]\*|??????\*) POOL_DEPTH_IN=2 ;; esac$/case "$POOL_DEPTH_IN" in *[!0-9]*) POOL_DEPTH_IN=2 ;; esac/'
+  mutant depth-nonnum-zero "depth_nonnum" 's/^case "\$POOL_DEPTH_IN" in \*\[!0-9\]\*|??????\*) POOL_DEPTH_IN=2 ;; esac$/case "$POOL_DEPTH_IN" in *[!0-9]*) POOL_DEPTH_IN=0 ;; ??????*) POOL_DEPTH_IN=2 ;; esac/'
+  mutant octal-08      "depth_08" 's/^POOL_DEPTH_IN=\$((10#\$POOL_DEPTH_IN))$/POOL_DEPTH_IN=$((POOL_DEPTH_IN))/'
   mutant ai-dlc-named   "scrub_same nest_started nest_depths nest_b_present" 's/PREPUSH_POOL_DEPTH="\$((POOL_DEPTH_IN + 1))"/AI_DLC_POOL_DEPTH="$((POOL_DEPTH_IN + 1))"/'
   mutant notice-at-load "notice_load" 's/^POOL_DEPTH_IN="\${PREPUSH_POOL_DEPTH:-0}"$/&; [ "$POOL_DEPTH_IN" -ge 1 ] \&\& printf "   nested: depth %s\\n" "$POOL_DEPTH_IN"/'
   mutant no-refusal     "refuse_rc refuse_line refuse_ran refuse_d5_rc nest_started nest_depths" 's/if \[ "\$POOL_DEPTH_IN" -ge 2 \]; then/if false; then/'
-  mutant leaks          "leak" 's/^POOL_DEPTH_IN="\${PREPUSH_POOL_DEPTH:-0}"$/&; export PREPUSH_POOL_DEPTH="$((POOL_DEPTH_IN + 1))"/'
+  mutant leaks          "leak" 's/^POOL_DEPTH_IN=\$((10#\$POOL_DEPTH_IN))$/&; export PREPUSH_POOL_DEPTH="$((POOL_DEPTH_IN + 1))"/'
 done
 
 NR="$WORK/nest"; nest_build "$NR" "$NB"

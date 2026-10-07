@@ -338,12 +338,16 @@ FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-12}"
 # has to survive. Depth 1 is a hook started under a pool's fixture, and its pool is narrowed to two
 # workers, not one, because a fixture that asserts parallelism needs two in flight. Depth 2 or more
 # refuses to open a pool (run_fixtures). No AI_DLC_FIXTURE_JOBS value lifts the depth-1 cap: one or two
-# is kept, and anything else -- larger, zero (BSD `xargs -P 0` is UNLIMITED), or not a number -- becomes
-# two. A drive under `env -i` clears the marker with everything else and must pass the depth explicitly.
+# is kept, and anything else -- larger, zero (BSD `xargs -P 0` is UNLIMITED), not a number, or longer
+# than five digits -- becomes two. A drive under `env -i` clears the marker with everything else and must
+# pass the depth explicitly. A marker that is SET but not a number, or longer than five digits, is depth
+# 2 and refuses: it FAILS CLOSED, because bash arithmetic wraps a 20-digit value (2^64 reads as 0) and
+# `[` errors on one, either of which would otherwise open a full pool. The `10#` reads 08 as eight.
 POOL_DEPTH_IN="${PREPUSH_POOL_DEPTH:-0}"
-case "$POOL_DEPTH_IN" in ''|*[!0-9]*) POOL_DEPTH_IN=0 ;; esac
+case "$POOL_DEPTH_IN" in *[!0-9]*|??????*) POOL_DEPTH_IN=2 ;; esac
+POOL_DEPTH_IN=$((10#$POOL_DEPTH_IN))
 if [ "$POOL_DEPTH_IN" -ge 1 ]; then
-  case "$FIXTURE_JOBS" in ''|*[!0-9]*) FIXTURE_JOBS=2 ;; esac
+  case "$FIXTURE_JOBS" in ''|*[!0-9]*|??????*) FIXTURE_JOBS=2 ;; esac
   if [ "$FIXTURE_JOBS" -lt 1 ] || [ "$FIXTURE_JOBS" -gt 2 ]; then FIXTURE_JOBS=2; fi
 fi
 # RESOLVE THE GIT DIRECTORY; NEVER SPELL IT `.git/`. In a LINKED WORKTREE `.git` is a

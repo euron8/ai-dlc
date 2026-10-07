@@ -2506,11 +2506,11 @@ pp_mk() {
 # toplevel instead, which is the same escape by a second route (the hook's own `cd "$(git rev-parse
 # --show-toplevel)"`). Returns non-zero with a FIXTURE ERROR line; callers join it with `&&`.
 pp_enter() {
-  local w="$1" top
+  local w="$1" pfx
   [ -n "$w" ] && [ -d "$w" ] || { printf 'FIXTURE ERROR: pp_enter: world path [%s] is empty or not a directory\n' "$w" >&2; return 97; }
-  top="$(git -C "$w" rev-parse --show-toplevel 2>/dev/null)" || top=""
-  [ -n "$top" ] && [ "$(cd "$top" && pwd -P)" = "$(cd "$w" && pwd -P)" ] \
-    || { printf 'FIXTURE ERROR: pp_enter: world [%s] is not its own git toplevel (got [%s])\n' "$w" "$top" >&2; return 98; }
+  # git's own prefix, not two `pwd -P` strings: those disagree in case on case-insensitive APFS.
+  pfx="$(git -C "$w" rev-parse --show-prefix 2>/dev/null)" && [ -z "$pfx" ] \
+    || { printf 'FIXTURE ERROR: pp_enter: world [%s] is not its own git toplevel (prefix [%s])\n' "$w" "$pfx" >&2; return 98; }
   cd "$w" || return 99
 }
 # THE ESCAPE, CONSTRUCTED. A stub "distribution" repo whose hook only records that it ran, and a
@@ -2608,11 +2608,11 @@ rm -f "$PP/sent/sentinel"
 # siblings (machinery_paths reads setup-sites.md beside $0) with an unmutated control that must
 # reproduce the layout row first, so a copy that cannot run does not score as a kill. Under the mutant
 # the probe block's own toplevel conjunct still holds, so the enclosing hook must STILL not run.
-PPE_ANCHOR='^if \[ -n "\$pp_top_phys" \] && \[ "\$pp_top_phys" != "\$pp_cons_phys" \]; then$'
+PPE_ANCHOR='^if \[ -n "\$pp_enclosed" \]; then$'
 ss_assert "pp-enclosed-anchor" "$(grep -c "$PPE_ANCHOR" "$GATE")" "1" \
   "the enclosed-layout mutation's anchor matches exactly one line"
 ss_assert "pp-enclosed-anchor-ctl" \
-  "$(grep -c '^if \[ -n "\$pp_top_phys_NOT_A_VAR" \] && \[ "\$pp_top_phys" != "\$pp_cons_phys" \]; then$' "$GATE")" "0" \
+  "$(grep -c '^if \[ -n "\$pp_enclosed_NOT_A_VAR" \]; then$' "$GATE")" "0" \
   "an impossible anchor of the same shape returns 0, so the 1 above is a match and not a grammar artefact"
 PPE_MUT="$(dirname "$DIST")/ppemut"
 rm -rf "$PPE_MUT"; mkdir -p "$PPE_MUT/mut" "$PPE_MUT/ctl"
@@ -2640,6 +2640,53 @@ rm -f "$PP/sent/sentinel"
 # ...and the mutant leaves a real repository's answer where it was: the block never fires there.
 ss_assert "pp-enclosed-mut-green" "$(pp_scan "$PPE_MUT/mut/self-update-gate.sh" "$PP_GREEN")" \
   "pp=SELF-UPDATE-OK sum=1 ss=1 und=1" "the mutant does not move the green world, so it owns only the enclosed case"
+rm -f "$PP/sent/sentinel"
+# A HEALTHY CONSUMER REACHED BY A MISCASED PATH IS NOT ENCLOSED. On case-insensitive APFS bash's
+# `pwd -P` keeps the case the caller typed while git answers the on-disk case, so a layout decided by
+# comparing those two strings called this consumer enclosed and stopped its pull. The green world is
+# re-spelled with its LAST path component -- the world directory itself -- uppercased. NOT the first:
+# measured, the first component of a macOS TMPDIR is `/var`, a SYMLINK, and `pwd -P` resolves it to
+# `/private/var` in the on-disk case, so the miscased input never reached the comparison and the mutant
+# survived. The arm is DISCRIMINATING only where the miscased path resolves AND its `pwd -P` differs
+# from git's toplevel; both are asserted before any verdict is read, and a case-sensitive filesystem
+# SKIPs the arm with its reason rather than passing.
+PP_GREEN_MIS="$(dirname "$PP_GREEN")/$(basename "$PP_GREEN" | tr '[:lower:]' '[:upper:]')"
+if [ "$PP_GREEN_MIS" = "$PP_GREEN" ] || [ ! -d "$PP_GREEN_MIS" ]; then
+  printf '  SKIP  %-16s the miscased spelling [%s] does not resolve here (case-sensitive filesystem, or no letter to re-case), so the case arm cannot be built\n' "pp-case" "$PP_GREEN_MIS"
+else
+  pp_case_typed="$(cd "$PP_GREEN_MIS" && pwd -P)"; pp_case_git="$(git -C "$PP_GREEN_MIS" rev-parse --show-toplevel 2>/dev/null)"
+  ss_assert "pp-case-discriminates" "$([ "$pp_case_typed" != "$pp_case_git" ] && echo differ || echo same)" "differ" \
+    "the miscased path's pwd -P [$pp_case_typed] differs from git's toplevel [$pp_case_git], so a string comparison WOULD misread it -- the input separates the two rules"
+  ss_assert "pp-case-ok" "$(pp_scan "$GATE" "$PP_GREEN_MIS")" "pp=SELF-UPDATE-OK sum=1 ss=1 und=1" \
+    "the green consumer reached by a miscased path is its own toplevel and reads OK, not UNSUPPORTED LAYOUT"
+  # MUTANT: the decision restored to the string comparison of two `pwd -P` results. The `&`s are
+  # escaped because sed reads a bare `&` in a replacement as the whole match.
+  PPC_MUT="$(dirname "$DIST")/ppcmut"
+  rm -rf "$PPC_MUT"; mkdir -p "$PPC_MUT"
+  cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$PPC_MUT"/ 2>/dev/null
+  PPC_ANCHOR='^  \[ -n "\$pp_prefix" \] && pp_enclosed=1$'
+  ss_assert "pp-case-anchor" "$(grep -c "$PPC_ANCHOR" "$GATE")|$(grep -c '^  \[ -n "\$pp_prefix_NOT_A_VAR" \] && pp_enclosed=1$' "$GATE")" "1|0" \
+    "the string-comparison mutation's anchor matches one line, and an impossible anchor of the same shape matches none"
+  sed "s@${PPC_ANCHOR}@  [ \"\$(cd \"\$(git -C \"\$CONSUMER\" rev-parse --show-toplevel)\" \&\& pwd -P)\" != \"\$(cd \"\$CONSUMER\" \&\& pwd -P)\" ] \&\& pp_enclosed=1@" \
+    "$GATE" > "$PPC_MUT/self-update-gate.sh"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if cmp -s "$GATE" "$PPC_MUT/self-update-gate.sh"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s mutation matched nothing, so the case arm is unproven\n' "pp-case-mut"
+  else
+    ppc_got="$(pp_scan "$PPC_MUT/self-update-gate.sh" "$PP_GREEN_MIS")"
+    if [ "$ppc_got" = "pp=SELF-UPDATE-UNDECIDED sum=0 ss=0 und=1" ] && [ "$(pp_layout "$PPC_MUT/self-update-gate.sh" "$PP_GREEN_MIS")" = 1 ]; then
+      printf '  ok    %-16s KILLED (%s)\n' "pp-case-mut" \
+        "with the pwd -P string comparison restored the miscased healthy consumer reads UNSUPPORTED LAYOUT"
+    else
+      FAILURES=$((FAILURES + 1))
+      printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]\n' "pp-case-mut" "$ppc_got" "pp=SELF-UPDATE-UNDECIDED sum=0 ss=0 und=1"
+    fi
+    # the mutant still answers the canonical spelling OK, so it owns only the miscased case
+    ss_assert "pp-case-mut-canonical" "$(pp_scan "$PPC_MUT/self-update-gate.sh" "$PP_GREEN")" "pp=SELF-UPDATE-OK sum=1 ss=1 und=1" \
+      "the string-comparison mutant still reads the canonically spelled green world OK, so its kill above is the case and not a broken copy"
+  fi
+fi
 rm -f "$PP/sent/sentinel"
 pp_mk PP_ENC_REAL encreal "$PP_SENT_HOOK" hooksPath yes
 pp_scan "$GATE" "$PP_ENC_REAL" >/dev/null
