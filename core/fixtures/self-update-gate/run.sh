@@ -3692,6 +3692,52 @@ e="$(av_mut eqund '    if [ "$rc_cur" -ne "$rc_new" ] && [ "$rc_new" -ne 0 ]; th
 mp_killed "av-mut-eqund" "$got" SELF-UPDATE-UNDECIDED \
   "equal non-zero under the hook's argv read as UNDECIDED: a comment-only pull is refused on a consumer whose definitions already drifted"
 
+# --- THE REMEDY RUNS THE RENDERER THE CYCLE LEAVES INSTALLED (BL-456 claim 3) -------------------
+# The filing's third claim: the hook's printed remedy re-renders with the consumer's OLD renderer, so
+# the next cycle is refused again. That holds only on the OK path -- step 2 pushes, the hook refuses,
+# the cycle is DISCARDED and the old renderer stays installed, so re-rendering writes the old text
+# and the incoming --check fails exactly as before. On a DEFER the slice folds into the gated apply,
+# which WRITES the incoming renderer before its push, so the same remedy re-renders with the incoming
+# one and its --check clears. Claim 3 is therefore a consequence of claim 1's OK, not a defect of its
+# own, and this arm pins that: the cycle the gate's verdict selects is followed, then the remedy, then
+# the incoming renderer's --check. The stub spells the remedy `--root .` where the real renderer walks
+# up to the same root bare.
+# c3_cycle <gate> <world> -> <render verdict> gate-wrote=<yes|no> next-check=<rc>
+c3_cycle() {
+  local c rows v w rc
+  c="$(mktemp -d "$AV/c3.XXXXXX")" || return 1
+  c="$c/cons"; cp -R "$2/cons" "$c" || return 1
+  rows="$(bash "$1" "$2/dist" "$(cat "$2/B")" "$(cat "$2/T")" "$c" 2>/dev/null)"
+  v="$(av_st "$rows" render-agent-definitions.sh)"
+  if cmp -s "$2/cons/scripts/ai-dlc/render-agent-definitions.sh" "$c/scripts/ai-dlc/render-agent-definitions.sh"; then w=no; else w=yes; fi
+  case "$v" in
+    SELF-UPDATE-DEFER|SELF-UPDATE-UNDECIDED)
+      git -C "$2/dist" show "$(cat "$2/T"):core/scripts/render-agent-definitions.sh" > "$c/scripts/ai-dlc/render-agent-definitions.sh" ;;
+    SELF-UPDATE-OK) : ;;
+    *) printf 'no-render-row'; return 0 ;;
+  esac
+  ( cd "$c" && bash scripts/ai-dlc/render-agent-definitions.sh --root . >/dev/null 2>&1 < /dev/null )
+  ( cd "$c" && bash "$AV/new-render.sh" --check --root . >/dev/null 2>&1 < /dev/null ); rc=$?
+  printf '%s gate-wrote=%s next-check=%s' "${v#SELF-UPDATE-}" "$w" "$rc"
+}
+# PRECONDITION: world A expresses the loop. The remedy run with the OLD renderer leaves the incoming
+# --check at 1; run with the incoming renderer it clears to 0. Without both, the arm below cannot
+# separate a gate that leads to the loop from one that does not.
+C3P="$(mktemp -d "$AV/c3p.XXXXXX")"; cp -R "$AV/a/cons" "$C3P/old"; cp -R "$AV/a/cons" "$C3P/new"
+cp "$AV/new-render.sh" "$C3P/new/scripts/ai-dlc/render-agent-definitions.sh"
+for c3s in old new; do ( cd "$C3P/$c3s" && bash scripts/ai-dlc/render-agent-definitions.sh --root . >/dev/null 2>&1 < /dev/null ); done
+ss_assert "c3-pre" "old $(av_rc "$C3P/old" "$AV/new-render.sh" '--check --root .') new $(av_rc "$C3P/new" "$AV/new-render.sh" '--check --root .')" "old 1 new 0" \
+  "the remedy clears the incoming check only when the incoming renderer is the one installed"
+ss_assert "c3-remedy-after-defer" "$(c3_cycle "$GATE" "$AV/a")" "DEFER gate-wrote=no next-check=0" \
+  "the gate defers before any push and writes nothing, so the gated apply installs the incoming renderer and the remedy clears the next check"
+c3_kill() { local got; if [ -z "$2" ]; then got="DID-NOT-APPLY"; else got="$(c3_cycle "$2" "$AV/a")"; fi; mp_killed "$1" "$got" "$3" "$4"; }
+c3_kill "c3-mut-control" "$(av_mut c3-control)" "DEFER gate-wrote=no next-check=0" \
+  "an unmutated copy beside its siblings reaches the same cycle, so the kill below is its mutation"
+c3_kill "c3-mut-bare" "$(av_mut c3-bare '  set -- $_a
+' '  set --
+')" "OK gate-wrote=no next-check=1" \
+  "the bare probe reads OK, step 2's push is refused and discarded, and the remedy re-renders with the OLD renderer: the next check fails again"
+
 # --- HOOK SHAPES THE SCAN MUST NOT READ AS "NOT GATING" (BL-456, tip round) ----------------------
 # Each shape below is one reformat away from the real hook, and before this round the first three
 # scanned as a mention or a discarded capture, so a script whose incoming copy fails read
