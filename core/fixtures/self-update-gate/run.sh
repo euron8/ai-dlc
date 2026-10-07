@@ -3860,6 +3860,90 @@ hk_kill "hk-mut-carried" "$(av_mut hk-carried '  if [ ! -f "$cur" ] && gate_has_
   "adds=DEFER reads=DEFER absent=DEFER same=OK deleted=DEFER" \
   "a carried script judged as though written: a consumer that deleted the renderer is refused over a copy step 2 never installs"
 
+# --- AN UNCHANGED SCRIPT THE NEW HOOK ASKS IS JUDGED BY THE COPY THE PUSH RUNS (BL-456, round 3) ---
+# Theirs' hook adds a step for validate-y.sh, which the RANGE DOES NOT CHANGE. Step 2 writes only
+# the range diff, so after the write the push runs the CONSUMER'S copy of it, or nothing. Judging
+# it by theirs' copy read a false OK where the consumer's copy fails the new step, and a false DEFER
+# where the consumer's passes or the step is guarded away. Each world's expected verdict is the
+# post-write hook's own exit, asserted first as a precondition.
+#   hu-lfail     consumer's y exits 1, theirs' 0, unguarded step   post-write rc 1 -> DEFER (was OK)
+#   hu-lpass     consumer's y exits 0, theirs' 1                   post-write rc 0 -> OK    (was DEFER)
+#   hu-gdel      consumer deleted y, step under `if [ -f … ]`      post-write rc 0 -> OK    (was DEFER)
+#   hu-udel      consumer deleted y, unguarded step                post-write rc 1 -> DEFER, the row
+#                says ABSENT rather than blaming theirs' copy
+hu_world() { # hu_world <dir> <consumer-y:fail|pass|none> <theirs-y-rc> <guarded|bare>
+  local w="$1" step
+  mkdir -p "$w/dist/core/rules" "$w/dist/core/scripts" "$w/dist/core/git-hooks" "$w/cons/.githooks" "$w/cons/scripts/ai-dlc"
+  git -C "$w/dist" init -q
+  printf '1.0.0\n' > "$w/dist/VERSION"; printf 'hu machinery\n' > "$w/dist/core/rules/hu.md"
+  printf '#!/bin/sh\nexit 0\n' > "$w/dist/core/scripts/validate-x.sh"
+  printf '#!/bin/sh\n[ "${1:-}" = --strict ] || exit 2\nexit %s\n' "$3" > "$w/dist/core/scripts/validate-y.sh"
+  printf '#!/usr/bin/env bash\nfail=0\nbash scripts/ai-dlc/validate-x.sh || fail=1\nexit "$fail"\n' > "$w/dist/core/git-hooks/pre-push"
+  av_git "$w/dist" add -A >/dev/null 2>&1; av_git "$w/dist" commit -qm base >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/B"
+  cp "$w/dist/core/git-hooks/pre-push" "$w/cons/.githooks/pre-push"; chmod +x "$w/cons/.githooks/pre-push"
+  cp "$w/dist/core/scripts/validate-x.sh" "$w/cons/scripts/ai-dlc/"
+  case "$2" in
+    fail) printf '#!/bin/sh\n# consumer edit\nexit 1\n' > "$w/cons/scripts/ai-dlc/validate-y.sh" ;;
+    pass) printf '#!/bin/sh\n# consumer edit\nexit 0\n' > "$w/cons/scripts/ai-dlc/validate-y.sh" ;;
+  esac
+  printf '1.1.0\n' > "$w/dist/VERSION"
+  printf '#!/bin/sh\n# reworded\nexit 0\n' > "$w/dist/core/scripts/validate-x.sh"
+  step='bash scripts/ai-dlc/validate-y.sh --strict || fail=1'
+  [ "$4" = guarded ] && step="if [ -f scripts/ai-dlc/validate-y.sh ]; then $step; fi"
+  printf '#!/usr/bin/env bash\nfail=0\nbash scripts/ai-dlc/validate-x.sh || fail=1\n%s\nexit "$fail"\n' "$step" > "$w/dist/core/git-hooks/pre-push"
+  av_git "$w/dist" add -A >/dev/null 2>&1; av_git "$w/dist" commit -qm theirs >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/T"
+  git -C "$w/cons" init -q
+  av_git "$w/cons" add -A >/dev/null 2>&1; av_git "$w/cons" commit -qm consumer >/dev/null 2>&1
+}
+hu_world "$AV/hu-lfail" fail 0 bare
+hu_world "$AV/hu-lpass" pass 1 bare
+hu_world "$AV/hu-gdel" none 1 guarded
+hu_world "$AV/hu-udel" none 1 bare
+HU_WORLDS="lfail lpass gdel udel"
+# PRECONDITION: the truth each world asserts. A copy of the consumer gets step 2's write -- the range
+# diff and nothing else -- and theirs' hook is run on it, as git runs it on the push.
+hu_post() { # hu_post <world> -> the post-write hook's exit
+  local c p
+  c="$(mktemp -d "$AV/hup.XXXXXX")/cons"; cp -R "$1/cons" "$c"
+  git -C "$1/dist" diff --name-only "$(cat "$1/B")" "$(cat "$1/T")" > "$c.slice"
+  while IFS= read -r p; do
+    case "$p" in
+      core/git-hooks/*) git -C "$1/dist" show "$(cat "$1/T"):$p" > "$c/.githooks/${p#core/git-hooks/}" ;;
+      core/scripts/*) git -C "$1/dist" show "$(cat "$1/T"):$p" > "$c/scripts/ai-dlc/${p#core/scripts/}" ;;
+    esac
+  done < "$c.slice"
+  ( cd "$c" && bash .githooks/pre-push origin x < /dev/null > /dev/null 2>&1 ); printf '%s' "$?"
+}
+ss_assert "hu-pre" "$(for n in $HU_WORLDS; do printf '%s=%s ' "$n" "$(hu_post "$AV/hu-$n")"; done)y-in-range=$(git -C "$AV/hu-lfail/dist" diff --name-only "$(cat "$AV/hu-lfail/B")" "$(cat "$AV/hu-lfail/T")" -- core/scripts/validate-y.sh | grep -c .)" \
+  "lfail=1 lpass=0 gdel=0 udel=1 y-in-range=0" \
+  "the push theirs' hook gates fails exactly where the consumer's own copy fails or is missing unguarded, and the range never touches validate-y.sh"
+hu_sig() { # hu_sig <gate> -> one token per world, `+absent` when the row names the absence
+  local n r out=""
+  for n in $HU_WORLDS; do
+    r="$(av_run "$1" "$AV/hu-$n")"
+    out="$out${out:+ }$n=$(av_st "$r" validate-y.sh | sed 's/^SELF-UPDATE-//')"
+    [ "$(av_has "$r" validate-y.sh '^ABSENT')" = yes ] && out="$out+absent"
+  done
+  printf '%s\n' "$out"
+}
+HU_SIG_FIX="lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent"
+ss_assert "hu-signature" "$(hu_sig "$GATE")" "$HU_SIG_FIX" \
+  "an unchanged script the new hook asks is judged by the copy the push runs: the consumer's, or the hook's own guard over its absence"
+mp_killed "hu-mut-control" "$(hu_sig "$(av_mut hu-control)")" "$HU_SIG_FIX" \
+  "an unmutated copy reproduces all four verdicts, so a kill below is the mutation"
+hu_kill() { local got; if [ -z "$2" ]; then got="DID-NOT-APPLY"; else got="$(hu_sig "$2")"; fi; mp_killed "$1" "$got" "$3" "$4"; }
+# KEYED ON THE LINE THAT DECIDES WHICH COPY RUNS: without it every script is judged by theirs' copy.
+hu_kill "hu-mut-theirs" "$(av_mut hu-theirs '  gate_has_line "$CHANGED" "$name" || sc_written=0
+' '  :
+')" "lfail=OK lpass=DEFER gdel=DEFER udel=DEFER" \
+  "an unchanged script judged by theirs' copy: all four worlds take the verdict of a copy step 2 never writes"
+hu_kill "hu-mut-guard" "$(av_mut hu-guard '  [ "$(awk -F'"'"'\t'"'"' '"'"'$1 == "M" && $3 == "test"'"'"' "$TMP/scan" | grep -c .)" -gt 0 ] && sc_guarded=1
+' '  :
+')" "lfail=DEFER lpass=OK gdel=DEFER+absent udel=DEFER+absent" \
+  "the hook's existence guard ignored: a step the post-write hook skips is refused as a missing script"
+
 # --- HOOK SHAPES THE SCAN MUST NOT READ AS "NOT GATING" (BL-456, tip round) ----------------------
 # Each shape below is one reformat away from the real hook, and before this round the first three
 # scanned as a mention or a discarded capture, so a script whose incoming copy fails read

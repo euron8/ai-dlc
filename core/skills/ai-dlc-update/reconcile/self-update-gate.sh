@@ -1545,8 +1545,16 @@ gate_run_side() {
 while IFS= read -r name; do
   [ -n "$name" ] || continue
 
+  # WHICH COPY THE PUSH RUNS. Step 2 writes the RANGE DIFF and nothing else, so a script the range
+  # does not change -- one in the gating set only because theirs' hook asks it something new
+  # (`HOOK_ASKS_NEW`) -- is still the consumer's own copy after the write, or nothing. Its incoming
+  # side is therefore that copy, never theirs'. Judging it by theirs' read OK where the consumer's
+  # copy fails the new step, and DEFER where the consumer's passes or the step is guarded away.
+  sc_written=1
+  gate_has_line "$CHANGED" "$name" || sc_written=0
+
   # Incoming copy, out of the distribution at theirs.
-  if [ ! -f "$TMP/new/scripts/ai-dlc/$name" ]; then
+  if [ "$sc_written" -eq 1 ] && [ ! -f "$TMP/new/scripts/ai-dlc/$name" ]; then
     emit SELF-UPDATE-UNDECIDED "$name" "cannot read core/scripts/$name at $THEIRS, so the differential has no incoming side to compare."
     deferred=1
     continue
@@ -1668,15 +1676,32 @@ while IFS= read -r name; do
   if [ "$HOOK" != "$HOOK_CUR" ] && [ -f "$HOOK_CUR" ]; then
     sc_cur_argvs="$(gate_argv_scan "$HOOK_CUR" "$name" | awk -F'\t' '$1 == "R" {print $3}')"
   fi
-  sc_v=OK; sc_d=""
+  # An UNWRITTEN script the consumer lacks: the hook's own existence test decides. Any `-f`/`-x`-style
+  # test of this path in the hook (an M `test` row) is read as the guard of its run, which skips the
+  # step at rc 0; with no such test the hook runs a missing file and fails, and the row says ABSENT.
+  sc_guarded=0
+  [ "$(awk -F'\t' '$1 == "M" && $3 == "test"' "$TMP/scan" | grep -c .)" -gt 0 ] && sc_guarded=1
+  sc_v=OK; sc_d=""; sc_absent=0
   while IFS= read -r sc_a; do
     if [ "$cur_absent" -eq 1 ] || { [ "$HOOK" != "$HOOK_CUR" ] && ! gate_has_line "$sc_cur_argvs" "$sc_a"; }; then
       rc_cur=0
     else
       gate_run_side "$TMP/cur/scripts/ai-dlc/$name" "$sc_a"; rc_cur=$?
     fi
-    gate_run_side "$TMP/new/scripts/ai-dlc/$name" "$sc_a"; rc_new=$?
-    sc_d="${sc_d:+$sc_d; }argv [${sc_a}] current ${rc_cur} incoming ${rc_new}"
+    if [ "$sc_written" -eq 1 ]; then
+      gate_run_side "$TMP/new/scripts/ai-dlc/$name" "$sc_a"; rc_new=$?
+      sc_src=incoming
+    elif [ "$cur_absent" -eq 0 ]; then
+      gate_run_side "$TMP/cur/scripts/ai-dlc/$name" "$sc_a"; rc_new=$?
+      sc_src="after-write (the consumer's own copy; this pull does not change it)"
+    elif [ "$sc_guarded" -eq 1 ]; then
+      rc_new=0
+      sc_src="after-write (ABSENT on the consumer and unchanged by this pull; the hook's existence test skips the step)"
+    else
+      rc_new=127; sc_absent=1
+      sc_src="after-write (ABSENT on the consumer and unchanged by this pull; the hook runs it unguarded, so the step fails)"
+    fi
+    sc_d="${sc_d:+$sc_d; }argv [${sc_a}] current ${rc_cur} ${sc_src} ${rc_new}"
     if [ "$rc_cur" -ne "$rc_new" ] && [ "$rc_new" -ne 0 ]; then
       if [ "$rc_cur" -eq 0 ]; then sc_v=DEFER
       elif [ "$sc_v" != DEFER ]; then sc_v=UNDECIDED; fi
@@ -1687,7 +1712,13 @@ while IFS= read -r name; do
       emit SELF-UPDATE-OK "$name" "run as the hook runs it (${sc_d}), the incoming version fails nowhere the current one passes. Equal codes are no differential signal: an equal NON-ZERO under the hook's own argv is a failure that predates this pull, caught by the push probe and not by this row." ;;
     DEFER)
       deferred=1
-      emit SELF-UPDATE-DEFER "$name" "run as the hook runs it (${sc_d}), the INCOMING version fails where the current version exits 0 — the self-update would install a check that then fails its own push, on state that predates this pull. Do NOT cut the self-update branch: fold the machinery slice into the gated apply so the operator can fix the layer state and land machinery + rulebook on one branch." ;;
+      if [ "$sc_absent" -eq 1 ]; then
+        emit SELF-UPDATE-DEFER "$name" "ABSENT: the hook the push will run invokes scripts/ai-dlc/$name with its status read and no existence guard, the consumer has no copy, and this pull does not write one (${sc_d}). The push would fail on a missing script, not on theirs' copy of it. Fold the machinery slice into the gated apply, where the script can be restored or the step guarded."
+      elif [ "$sc_written" -eq 0 ]; then
+        emit SELF-UPDATE-DEFER "$name" "run as the hook the push will run asks it (${sc_d}), the consumer's OWN copy -- which this pull does not change, so it is what the push runs -- fails a step today's hook does not ask. Do NOT cut the self-update branch: fold the machinery slice into the gated apply."
+      else
+      emit SELF-UPDATE-DEFER "$name" "run as the hook runs it (${sc_d}), the INCOMING version fails where the current version exits 0 — the self-update would install a check that then fails its own push, on state that predates this pull. Do NOT cut the self-update branch: fold the machinery slice into the gated apply so the operator can fix the layer state and land machinery + rulebook on one branch."
+      fi ;;
     *)
       deferred=1
       emit SELF-UPDATE-UNDECIDED "$name" "run as the hook runs it (${sc_d}), both versions exit non-zero with DIFFERENT codes, so the change is real and NOT attributable to this pull. Treat as defer — acting autonomously on an unattributable failure is what this gate exists to prevent." ;;
