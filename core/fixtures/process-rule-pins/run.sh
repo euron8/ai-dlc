@@ -164,6 +164,8 @@ sts-range|S|steps/stories-test-strategy.md|### 3a.|### 4.|sections 0–2c|contai
 sts-names-2c|S|steps/stories-test-strategy.md|### 3a.|### 4.|§2c's adversarial verification of the root-cause|contains
 party-seats-record|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**The seats edit nothing, in every case below.**|para|Each seat writes one findings file per (seat, shard)
 party-seats-sections|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**The seats edit nothing, in every case below.**|para|carrying one `sections:` line
+party-early-write|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Every seat writes its file early and closes it with a completion line.**|para|Write the file's header first
+party-complete-line|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Every seat writes its file early and closes it with a completion line.**|para|Every beat that joins such a file passes `--complete`
 party-one-writer|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**One repair writer applies them.**|para|never back to a seat
 party-source|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**One repair writer applies them.**|para|carries `source: <seat-file>#<finding-id>`
 party-unsharded|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**An unsharded round has the same write model.**|para|the seats still edit nothing, and ONE remediator
@@ -494,6 +496,150 @@ while IFS='|' read -r id base rel s e lead mode tok; do
     esac
   done
 done <<<"$(pins)"
+
+# --- 4b. a join over seat or cross files passes --complete -----------------------
+# A seat or cross shard writes its file early and is finished only at its final `seat-complete:`
+# line, so a beat without --complete takes a half-written file as delivered. join_scan prints one
+# row per wait-for-deliverable.sh CALL (the name, a blank, then <, [ or -) outside fences and
+# comments: <file>:<line> TAB P=<1 when the paragraph names seat or cross> TAB COMPLETE|BARE.
+# The FINDING is a P=1 paragraph with no COMPLETE call. A paragraph may also join a non-shard
+# deliverable with a bare call beside its --complete one (carry-over-evaluation.md joins the
+# analyst artifact that way), so the unit is the paragraph, never the single call. A join that
+# names no seat or cross path is exempt.
+# How the false-positive set reached zero: a per-call clause rule flagged the analyst call in
+# that mixed paragraph; a section-wide rule pulled the generic "Join every spawn" paragraph of
+# the Validation cycle in under item 1. Paragraph scope with "any COMPLETE" is the narrowing.
+join_scan() {
+  awk '
+  function flush(   s, i, c, rest, k, args, q, ln, base) {
+    if (p == "") return
+    s = p; base = 0
+    while ((i = index(s, "wait-for-deliverable.sh ")) > 0) {
+      c = substr(s, i + 24, 1); rest = substr(s, i + 24)
+      if (c == "<" || c == "[" || c == "-") {
+        k = index(rest, "`"); args = (k ? substr(rest, 1, k - 1) : rest)
+        ln = 0; for (q = 1; q <= nl; q++) if (st[q] <= base + i) ln = lno[q]
+        printf "%s:%d:%d\tP=%d\t%s\n", pf, pl, ln, (tolower(p) ~ /seat|cross/), (args ~ /--complete/ ? "COMPLETE" : "BARE")
+      }
+      base += i + 23; s = rest
+    }
+    p = ""; nl = 0
+  }
+  FNR == 1 { flush(); fence = ""; com = 0 }
+  {
+    t = $0; sub(/^[ \t]+/, "", t)
+    if (com) { if (index($0, "-->")) com = 0; flush(); next }
+    if (fence != "") { if (substr(t, 1, 3) == fence) fence = ""; next }
+    if (substr(t, 1, 3) == "```" || substr(t, 1, 3) == "~~~") { flush(); fence = substr(t, 1, 3); next }
+    if (substr(t, 1, 4) == "<!--") { if (!index(substr(t, 5), "-->")) com = 1; flush(); next }
+    if (t == "" || t ~ /^#+ /) { flush(); next }
+    if (p == "") { pf = FILENAME; pl = FNR; p = t; nl = 1; st[1] = 1; lno[1] = FNR }
+    else { nl++; st[nl] = length(p) + 2; lno[nl] = FNR; p = p " " t }
+  }
+  END { flush() }' "$@"
+}
+# join_findings <files...> -> one line per seat/cross paragraph with no --complete call
+join_findings() {
+  join_scan "$@" | awk -F'\t' '{ split($1, a, ":"); key = a[1] ":" a[2] }
+    $2 == "P=1" { seen[key] = $1; if ($3 == "COMPLETE") ok[key] = 1 }
+    END { for (k in seen) if (!(k in ok)) print seen[k] }'
+}
+JS="$WORK/join"; mkdir -p "$JS" || exit 2
+printf 'Join the seats with one `scripts/ai-dlc/wait-for-deliverable.sh <path> [<path> ...]` call per wave.\n' > "$JS/off.md"
+printf 'Join the artifact with one `scripts/ai-dlc/wait-for-deliverable.sh <artifact_path>` call.\n' > "$JS/exempt.md"
+printf 'The analyst with `scripts/ai-dlc/wait-for-deliverable.sh <path>`, and each wave of seat files\nwith `scripts/ai-dlc/wait-for-deliverable.sh --complete <path>`.\n' > "$JS/mixed.md"
+printf '```\nJoin the seats with `scripts/ai-dlc/wait-for-deliverable.sh <path>`.\n```\n' > "$JS/fenced.md"
+n_off="$(join_findings "$JS/off.md" | grep -c .)" || n_off=0
+n_ex="$(join_findings "$JS/exempt.md" | grep -c .)" || n_ex=0
+n_mx="$(join_findings "$JS/mixed.md" | grep -c .)" || n_mx=0
+n_fc="$(join_findings "$JS/fenced.md" | grep -c .)" || n_fc=0
+n_exc="$(join_scan "$JS/exempt.md" | grep -c .)" || n_exc=0
+if [ "$n_off" = 1 ] && [ "$n_ex" = 0 ] && [ "$n_exc" = 1 ] && [ "$n_mx" = 0 ] && [ "$n_fc" = 0 ]; then
+  ok "join-pre: a bare seat join is flagged (1); a non-shard join is scanned (1 call) and exempt (0); a seat paragraph with one --complete call beside a bare one passes (0); a fenced seat join is not read (0)"
+else
+  bad "join-pre: FIXTURE BROKEN -- off=$n_off exempt=$n_ex (calls $n_exc) mixed=$n_mx fenced=$n_fc; want 1 0 (1) 0 0"
+fi
+JSCOPE="$SKILL_DIR/steps/*.md $SKILL_DIR/rule-bodies/*.md $ROLES_DIR/*.md"
+# shellcheck disable=SC2086 # the scope globs are expanded on purpose; no path carries a blank
+n_seat="$(join_scan $JSCOPE | awk -F'\t' '$2 == "P=1"' | grep -c .)" || n_seat=0
+# shellcheck disable=SC2086
+jf="$(join_findings $JSCOPE)"
+if [ "$n_seat" -lt 3 ]; then
+  bad "join: only $n_seat seat or cross join call(s) found in the steps, rule bodies and roles -- the scan cannot see the joins it guards, so its zero is no finding"
+elif [ -n "$jf" ]; then
+  bad "join: a seat or cross join paragraph carries no --complete call: $(printf '%s' "$jf" | sed "s|$ROOT/||g" | tr '\n' ' ')"
+else
+  ok "join: every seat or cross join paragraph carries --complete ($n_seat seat or cross join call(s) scanned)"
+fi
+# MUTANTS: --complete stripped from EVERY seat or cross join in the PARAGRAPH holding each real
+# site, one mutant per paragraph; every such mutant must flag THAT paragraph.
+# Why the unit is the paragraph and not the line: the mutant's unit must be the scanner's unit.
+# join_findings passes a P=1 paragraph when ANY of its calls carries --complete, so a one-line
+# strip in a paragraph holding two such calls leaves the other and survives against a correct
+# scanner. implementation.md's Gate-2 dispatch paragraph legitimately holds two -- the first cross
+# QA's own part join and every shard's join beat -- and must stay one paragraph, because
+# review-shard-merge reads it whole. The site list is derived from the corpus and the paragraph
+# count is asserted, so a site the scan cannot place in a paragraph reads as a survivor rather
+# than as a smaller battery.
+jm="$WORK/join-mut"; mkdir -p "$jm" || exit 2
+# join_battery <files...> -> sets jb_sites, jb_paras, jb_killed, jb_surv
+join_battery() {
+  jb_sites=0; jb_paras=0; jb_killed=0; jb_surv=""
+  local f rows l para done_p clines
+  for f in "$@"; do
+    rows="$(join_scan "$f")"
+    done_p=" "
+    for l in $(grep -n 'wait-for-deliverable\.sh --complete' "$f" | cut -d: -f1); do
+      jb_sites=$((jb_sites + 1))
+      para="$(awk -F'\t' -v L="$l" '{ n = split($1, a, ":"); if (a[n] == L && $3 == "COMPLETE") { print a[n - 1]; exit } }' <<<"$rows")"
+      if [ -z "$para" ]; then jb_surv="$jb_surv ${f#"$ROOT/"}:$l(no-paragraph)"; continue; fi
+      case "$done_p" in *" $para "*) continue ;; esac
+      done_p="$done_p$para "
+      jb_paras=$((jb_paras + 1))
+      clines=" $(awk -F'\t' -v P="$para" '{ n = split($1, a, ":"); if (a[n - 1] == P && $3 == "COMPLETE") printf "%s ", a[n] }' <<<"$rows")"
+      awk -v C="$clines" 'index(C, " " NR " ") { gsub(/wait-for-deliverable\.sh --complete/, "wait-for-deliverable.sh") } { print }' "$f" > "$jm/m.md"
+      if cmp -s "$f" "$jm/m.md"; then jb_surv="$jb_surv ${f#"$ROOT/"}:$para(no-apply)"; continue; fi
+      jb_found="$(join_findings "$jm/m.md")"
+      if grep -qF -- "$jm/m.md:$para:" <<<"$jb_found"; then jb_killed=$((jb_killed + 1))
+      else jb_surv="$jb_surv ${f#"$ROOT/"}:$para"; fi
+    done
+  done
+}
+# CONTROL: the battery must be able to fail and must keep the mixed-paragraph exemption.
+#   two.md  -- one seat paragraph with two --complete joins on separate lines. A one-line strip
+#              leaves the other (0 findings, the shape that motivated the paragraph unit); the
+#              paragraph mutant strips both and is flagged.
+#   mixed2.md -- a bare non-seat call beside one seat --complete call: exempt unmutated (0), and the
+#              paragraph mutant, stripping the seat call, is flagged though the bare call remains.
+printf 'Each seat joins its parts with\n`scripts/ai-dlc/wait-for-deliverable.sh --complete <part paths>`, and the lead joins\nthe seat files with `scripts/ai-dlc/wait-for-deliverable.sh --complete <path> [<path> ...]`.\n' > "$JS/two.md"
+printf 'The analyst artifact joins with `scripts/ai-dlc/wait-for-deliverable.sh <artifact_path>`, and\neach seat file with `scripts/ai-dlc/wait-for-deliverable.sh --complete <path>`.\n' > "$JS/mixed2.md"
+awk 'NR == 2 { gsub(/wait-for-deliverable\.sh --complete/, "wait-for-deliverable.sh") } { print }' "$JS/two.md" > "$JS/two.line.md"
+c_two0="$(join_findings "$JS/two.md" | grep -c .)" || c_two0=0
+c_line="$(join_findings "$JS/two.line.md" | grep -c .)" || c_line=0
+c_mx0="$(join_findings "$JS/mixed2.md" | grep -c .)" || c_mx0=0
+c_mxc="$(join_scan "$JS/mixed2.md" | awk -F'\t' '$2 == "P=1"' | grep -c .)" || c_mxc=0
+join_battery "$JS/two.md"; c_two="$jb_sites $jb_paras $jb_killed"
+join_battery "$JS/mixed2.md"; c_mx="$jb_sites $jb_paras $jb_killed"
+#   nonseat.md -- a --complete join naming no seat or cross path: its paragraph mutant is exempt,
+#              so the battery must report it as a SURVIVOR naming line 1 -- the survivor branch fires.
+printf 'Join the analyst artifact with `scripts/ai-dlc/wait-for-deliverable.sh --complete <artifact_path>`.\n' > "$JS/nonseat.md"
+join_battery "$JS/nonseat.md"; c_ns="$jb_sites $jb_paras $jb_killed"; c_nss="${jb_surv# }"
+case "$c_nss" in *nonseat.md:1) c_nsok=1 ;; *) c_nsok=0 ;; esac
+if [ "$c_two0" = 0 ] && [ "$c_line" = 0 ] && [ "$c_two" = "2 1 1" ] && [ "$c_mx0" = 0 ] && [ "$c_mxc" = 2 ] && [ "$c_mx" = "1 1 1" ] \
+   && [ "$c_ns" = "1 1 0" ] && [ "$c_nsok" = 1 ] && ! cmp -s "$JS/two.md" "$JS/two.line.md"; then
+  ok "join/mutant-control: two seat joins in one paragraph -- a one-line strip is not flagged (0), the paragraph mutant is (sites/paras/kills $c_two); a bare non-seat call beside a seat --complete call is exempt (0 of $c_mxc calls) and its paragraph mutant is flagged ($c_mx); a non-seat --complete paragraph survives and is named ($c_ns, ${c_nss##*/})"
+else
+  bad "join/mutant-control: FIXTURE BROKEN -- two: unmutated=$c_two0 one-line=$c_line battery=[$c_two] want 0 0 [2 1 1]; mixed: unmutated=$c_mx0 calls=$c_mxc battery=[$c_mx] want 0 2 [1 1 1]; nonseat: battery=[$c_ns] survivor='$c_nss' want [1 1 0] '...nonseat.md:1'"
+fi
+# shellcheck disable=SC2086 # the scope globs are expanded on purpose; no path carries a blank
+join_battery $JSCOPE
+if [ "$jb_paras" -lt 3 ]; then
+  bad "join/mutant: only $jb_paras paragraph(s) holding a --complete site found ($jb_sites site(s)) -- the battery has nothing to strip"
+elif [ -n "$jb_surv" ]; then
+  bad "join/mutant: SURVIVED -- every --complete stripped from the paragraph at [${jb_surv# }] was not flagged ($jb_killed/$jb_paras paragraphs killed, $jb_sites sites)"
+else
+  ok "join/mutant: every --complete stripped from each of $jb_paras real paragraphs ($jb_sites sites), one paragraph at a time, is flagged ($jb_killed/$jb_paras)"
+fi
 
 # --- 5. the real corpus ---------------------------------------------------------
 echo ""

@@ -2246,13 +2246,25 @@ fi
 # stamp keyed on the FIRST pass (a series finishes under the rules it opened under), the bytes gate
 # (a subject repaired after its terminal pass is judged by nothing), and the pin (a map read off a
 # later partitioner convicts a dispatch that obeyed the one it ran under -- K2's measured case).
+#
+# THE CROSS KEYS (K3C_RELEASE). The cross half of the want-set is the PINNED partitioner's
+# `partition-document.sh --cross-groups <K>` (K = the map's part count): `cross` when it prints one
+# group, `cross-1 .. cross-<G>` otherwise -- the shard set `merge-adversarial-shards.sh` requires.
+# A pinned copy with no `--cross-groups` predates the cross groups, so its want-set is {cross}: a
+# dispatch obeyed the program in force. A pass carrying the OLD shape (ordinals plus one `cross`)
+# where the pinned copy prints several groups is dated against K3C_RELEASE, not K3_RELEASE, so a
+# series opened before the cross groups shipped reads PENDING rather than being convicted.
 K3_RELEASE="0.735.0"
 K3B_RELEASE="0.738.0"
+K3C_RELEASE="0.744.0"
 k3_keys() {  # $1 a shard_tool_use_ids value -> its key set, numeric keys de-padded, sorted, one per line
   printf '%s\n' $1 | awk -F= 'NF >= 2 && $2 ~ /^toolu_./ { k = $1; if (k ~ /^[0-9]+$/) k = k + 0; print k }' | LC_ALL=C sort -u
 }
-k3_want() {  # $1 a map file (rc 0) -> the ordinal set plus cross, de-padded, sorted
-  { awk -F'\t' '$1 ~ /^[0-9]+$/ { print $1 + 0 }' "$1"; echo cross; } | LC_ALL=C sort -u
+k3_want() {  # $1 a map file (rc 0), $2 the cross keys (space-separated) -> the ordinal set plus them, de-padded, sorted
+  { awk -F'\t' '$1 ~ /^[0-9]+$/ { print $1 + 0 }' "$1"; printf '%s\n' $2; } | LC_ALL=C sort -u
+}
+k3_xkeys() {  # $1 a --cross-groups output -> `cross` for one row, `cross-1 .. cross-<G>` otherwise
+  awk -F'\t' '$1 ~ /^[0-9]+$/ { n++ } END { if (n == 1) print "cross"; else for (i = 1; i <= n; i++) printf "%scross-%d", (i > 1 ? " " : ""), i; print "" }' "$1"
 }
 # $1 the sprint dir (physical), $2 a resolved physical file -> 0 when $2 is that sprint's subject
 # manifest or a file the manifest names (rooted as K3 roots it, at the first `file:` row's dir).
@@ -2312,28 +2324,48 @@ fi
 if [ "$N" -gt 0 ] && [ "$k3_go" -eq 1 ]; then
   # THE SELF-PROBE, both directions, before the corpus: the key set is an IDENTITY (same count,
   # other set -> differs), padding-blind, and blind to a key with no toolu_ id.
-  printf '01\ta\n02\tb\n03\tc\n' > "$AC_T/k3-map" || { echo "validate-adversarial-convergence.sh: arm K3 self-probe could not stage; no verdict" >&2; exit 2; }
-  k3p_w="$(k3_want "$AC_T/k3-map" | tr '\n' ' ')"
+  printf '01\ta\n02\tb\n03\tc\n' > "$AC_T/k3-map" \
+    && printf '1\t1,2\n2\t1,3\n3\t2,3\n' > "$AC_T/k3-g3" && printf '1\t1,2\n' > "$AC_T/k3-g1" \
+    || { echo "validate-adversarial-convergence.sh: arm K3 self-probe could not stage; no verdict" >&2; exit 2; }
+  k3p_w="$(k3_want "$AC_T/k3-map" cross | tr '\n' ' ')"
   k3p_1="$(k3_keys " 1=toolu_a 02=toolu_b 3=toolu_c cross=toolu_d" | tr '\n' ' ')"
   k3p_2="$(k3_keys " 1=toolu_a 2=toolu_b 4=toolu_c cross=toolu_d" | tr '\n' ' ')"
   k3p_3="$(k3_keys " 1=toolu_a 2=toolu_b 3= cross=toolu_d" | tr '\n' ' ')"
-  if [ "$k3p_w" != "$k3p_1" ] || [ "$k3p_w" = "$k3p_2" ] || [ "$k3p_w" = "$k3p_3" ]; then
-    echo "validate-adversarial-convergence.sh: arm K3 self-probe failed (want '$k3p_w', same set '$k3p_1', other set '$k3p_2', empty id '$k3p_3'); no verdict" >&2
+  # The cross keys: three groups name cross-1..3, one group names `cross`; a group set read as
+  # {cross} would make the three-group want-set equal the one-cross key set.
+  k3p_x3="$(k3_xkeys "$AC_T/k3-g3")"; k3p_x1="$(k3_xkeys "$AC_T/k3-g1")"
+  k3p_wg="$(k3_want "$AC_T/k3-map" "$k3p_x3" | tr '\n' ' ')"
+  k3p_4="$(k3_keys " 1=toolu_a 2=toolu_b 3=toolu_c cross-1=toolu_d cross-2=toolu_e cross-3=toolu_f" | tr '\n' ' ')"
+  if [ "$k3p_w" != "$k3p_1" ] || [ "$k3p_w" = "$k3p_2" ] || [ "$k3p_w" = "$k3p_3" ] \
+     || [ "$k3p_x3" != "cross-1 cross-2 cross-3" ] || [ "$k3p_x1" != "cross" ] \
+     || [ "$k3p_wg" != "$k3p_4" ] || [ "$k3p_wg" = "$k3p_1" ]; then
+    echo "validate-adversarial-convergence.sh: arm K3 self-probe failed (want '$k3p_w', same set '$k3p_1', other set '$k3p_2', empty id '$k3p_3', groups '$k3p_x3'/'$k3p_x1', grouped want '$k3p_wg' vs '$k3p_4'); no verdict" >&2
     exit 2
   fi
   # The stamp this candidate is dated against: K3_RELEASE for a `requirements-` series, K3B_RELEASE
-  # for a widened one. The probe exercises the release actually bound, predecessor as near-miss.
-  IFS=. read -r k3_maj k3_min k3_pat <<EOF
+  # for a widened one, K3C_RELEASE for a pass in the pre-groups cross shape (rebound below, and
+  # probed again there). The probe exercises the release actually bound, predecessor as near-miss.
+  k3_stamp_probe() {
+    # The bound release must be a release: a placeholder such as `0.0.0-CUT` reads as 0.0.0 to the
+    # stamp parser, so every stamped series would be dated against it and convicted. Refused here,
+    # where the value is bound, so only a pass that actually reaches it loses its verdict.
+    if ! [[ "$k3_rel" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      echo "validate-adversarial-convergence.sh: arm K3 is bound to release '${k3_rel}', which is not <major>.<minor>.<patch>; this validator shipped unstamped. No verdict." >&2
+      exit 2
+    fi
+    IFS=. read -r k3_maj k3_min k3_pat <<EOF
 $k3_rel
 EOF
-  k3_pred="${k3_maj}.$((k3_min - 1)).${k3_pat}"
-  k3_probe="$(printf '%s\n' 'C 2026-01-02T00:00:00Z' "+version: $k3_rel" 'C 2026-01-01T00:00:00Z' "+version: $k3_pred" \
-              'C 2026-01-03T00:00:00Z' '+version: 9.0.0' | K_RELEASE="$k3_rel" k_stamp_parse)"
-  k3_probe_none="$(printf '%s\n' 'C 2026-01-01T00:00:00Z' "+version: $k3_pred" | K_RELEASE="$k3_rel" k_stamp_parse)"
-  if [ "$k3_probe" != "2026-01-02T00:00:00Z" ] || [ -n "$k3_probe_none" ]; then
-    echo "validate-adversarial-convergence.sh: arm K3 stamp-parser self-probe failed (got '$k3_probe', near-miss '$k3_probe_none'); no verdict" >&2
-    exit 2
-  fi
+    k3_pred="${k3_maj}.$((k3_min - 1)).${k3_pat}"
+    k3_probe="$(printf '%s\n' 'C 2026-01-02T00:00:00Z' "+version: $k3_rel" 'C 2026-01-01T00:00:00Z' "+version: $k3_pred" \
+                'C 2026-01-03T00:00:00Z' '+version: 9.0.0' | K_RELEASE="$k3_rel" k_stamp_parse)"
+    k3_probe_none="$(printf '%s\n' 'C 2026-01-01T00:00:00Z' "+version: $k3_pred" | K_RELEASE="$k3_rel" k_stamp_parse)"
+    if [ "$k3_probe" != "2026-01-02T00:00:00Z" ] || [ -n "$k3_probe_none" ]; then
+      echo "validate-adversarial-convergence.sh: arm K3 stamp-parser self-probe failed for ${k3_rel} (got '$k3_probe', near-miss '$k3_probe_none'); no verdict" >&2
+      exit 2
+    fi
+  }
+  k3_stamp_probe
 
   k3_term="${LAST_FILE##*/}"
   k3_mf="$k3_dir/requirements-subject.md"
@@ -2410,9 +2442,24 @@ EOF
         if [ "$k3rc" -eq 3 ]; then
           [ -z "$k3_have" ] || k3_why="the subject maps to ONE part ($(head -1 "$AC_T/k3-real")), which one adversary reviews, yet the pass carries shard_tool_use_ids '${k3_ids# }'"
         elif [ "$k3rc" -eq 0 ]; then
-          k3_want_s="$(k3_want "$AC_T/k3-real" | tr '\n' ' ')"
-          [ "$k3_have" = "$k3_want_s" ] \
-            || k3_why="its shard_tool_use_ids key set {${k3_have% }} is not the subject map's ordinals plus cross {${k3_want_s% }} (asked of ${k3_ps_from}, base read from ${k3_mf})"
+          # The cross keys, from the SAME pinned partitioner (see THE CROSS KEYS above).
+          k3_k="$(grep -c . "$AC_T/k3-real")" || k3_k=0
+          k3_xk="cross"
+          if grep -q -- '--cross-groups' "$AC_T/k3/partition-document.sh"; then
+            if bash "$AC_T/k3/partition-document.sh" --cross-groups "$k3_k" > "$AC_T/k3-groups" 2>/dev/null; then
+              k3_xk="$(k3_xkeys "$AC_T/k3-groups")"
+            else
+              k3_pending="the partition-document.sh ${k3_ps_from} carries --cross-groups but did not answer it for ${k3_k} parts"
+            fi
+          fi
+          if [ -z "$k3_pending" ]; then
+            k3_want_s="$(k3_want "$AC_T/k3-real" "$k3_xk" | tr '\n' ' ')"
+            if [ "$k3_have" != "$k3_want_s" ]; then
+              k3_why="its shard_tool_use_ids key set {${k3_have% }} is not the subject map's ordinals plus cross groups {${k3_want_s% }} (asked of ${k3_ps_from}, base read from ${k3_mf})"
+              # The pre-groups shape (ordinals plus one `cross`) is dated against K3C_RELEASE.
+              if [ "$k3_have" = "$(k3_want "$AC_T/k3-real" cross | tr '\n' ' ')" ]; then k3_rel="$K3C_RELEASE"; k3_stamp_probe; fi
+            fi
+          fi
         else
           k3_pending="partition-subject.sh --map ${k3_sprint} exited ${k3rc}, neither a map (0) nor SERIAL (3): $(head -1 "$AC_T/k3-err")"
         fi
@@ -2450,7 +2497,8 @@ EOF
       err "K3 -- SUBJECT" "${k3_term}: ${k3_why}. The series opened (${k3_at}) after ${k3_rel}
       was stamped (${k3_stamp}), so the requirements step's subject axis binds it (Rule 28, \"Split
       dispatch\": subject): one adversary per part scripts/ai-dlc/partition-subject.sh --map prints,
-      plus one cross-part adversary, joined by scripts/ai-dlc/merge-adversarial-shards.sh --subject,
+      plus one cross-part adversary per group scripts/ai-dlc/partition-document.sh --cross-groups <K>
+      prints (cross-1..cross-<G>; a single cross at K=2), joined by scripts/ai-dlc/merge-adversarial-shards.sh --subject,
       which writes this pass file with 'artifact:' = the subject manifest. A subject that maps to one
       part is reviewed by one adversary that writes the pass itself, naming the manifest, with no
       shard line. Re-run the pass that way and write it as the NEXT pass number; this arm reads only

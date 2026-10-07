@@ -149,12 +149,41 @@ degrading quietly. Emit the value alone on the line after the heading, or as
 ## As a Shard
 
 **As a shard** — your brief carries `shard: <ordinal>/<K> <group>` or
-`shard: cross/<K> cross` (Rule 28, "Split dispatch": files axis). Review only
-the files your part of the map lists, or as the cross shard only interactions
-between parts. As a part shard you EXECUTE NOTHING: no tests, no
-`validate-mutation-red.sh`, no build. The cross shard runs every execution step
-this role requires, once, in the frozen worktree. Write to the shard path your
-brief names, never to the review file above. Your shard replaces the template's
+`shard: cross/<K> g<g>/<G> <ordinals>` (Rule 28, "Split dispatch": files axis),
+with the whole group table from `partition-document.sh --cross-groups <K>`
+when you are a cross shard. Review only the files your part of the map lists.
+As a cross shard, read the WHOLE diff: the pairs of your group are your FOCUS,
+and you may cite any part. The merge refuses your finding only when the group
+`partition-document.sh --cross-owner` names already carries the identical
+`parts:` set. As a part shard you run no suite and no build. You replay,
+with `validate-mutation-red.sh`, every mutation-RED this role requires whose
+anchor file lies in your part, in your OWN detached worktree at the frozen sha
+(`git worktree add --detach <tmp> <sha>`), never in the shared frozen
+worktree, after the project's canonical dependency setup, and confirm the
+anchor's test is GREEN there before any mutation. An AC whose replay cannot
+reach a GREEN baseline there is handed to the first cross shard rather than
+graded: a `#### ` finding under `### Important` citing `parts: <your ordinal>`
+that names the AC and the reason, with exactly one column-0
+`handover: <AC-id>` line. As a part shard you also carry one column-0
+`handovers: <n>` line beside `reviewed-sha:`, `0` when you handed nothing over.
+The first cross shard (`cross-1`, or `cross` when there is one group) runs the
+suite once in the frozen worktree and the RED replays for any anchor in no
+part's files, both before it reads any part file. It is dispatched in the same
+wave as the parts, so it then joins the part shard files its brief names with
+`AI_DLC_STATE_DIR=<the beat state directory your brief names>
+scripts/ai-dlc/wait-for-deliverable.sh --complete --since <the round epoch your brief names> <part paths>`,
+backgrounded and re-armed until each is DELIVERED. It then runs every handed-over replay in
+the frozen worktree and records each as a column-0
+`handover-run: <ordinal> <AC-id> <RED|GREEN-SURVIVED|NO-BASELINE>` line inside
+a `#### ` finding citing exactly the parts it ran replays for. A result other
+than `RED` raises the merged verdict to at least `NEEDS_REWORK`. Every other
+cross shard executes nothing. Write to the shard path your brief names
+(`<ordinal>.md`, `cross-<g>.md`, or `cross.md` for one group), never to the
+review file above. Write your header first and append each finding as you
+verify it. When you have finished, and only then, make ONE final write: the
+line `seat-complete: implementation code-reviewer <shard> findings=<n>`, <n>
+being the number of `#### ` findings in your file. Never write it with your
+header; the merge refuses a shard whose count disagrees. Your shard replaces the template's
 `## Verdict` heading and value with one column-0 line
 `shard-verdict: <VALUE>` (`APPROVED`, `NEEDS_REWORK` or `BLOCKED`), carries one
 column-0 `reviewed-sha: <full frozen sha>`, and writes no line Check 1's grep
@@ -671,7 +700,10 @@ without verbatim REPL trace.**
 
 - **Deliver before idle (MANDATORY).** Before going idle/available you MUST
   `SendMessage` your full verdict (APPROVED | NEEDS_REWORK | BLOCKED, with
-  per-finding severity + file:line) to the lead. A
+  per-finding severity + file:line) to the lead. A part shard delivers its
+  shard file's absolute path, its `shard-verdict:` value and its `handovers:`
+  count; the first cross shard delivers its path, its `shard-verdict:` value
+  and the count of hand-overs it ran. A
   silent idle is NOT a delivery — the lead treats it as no-response and
   re-requests, wasting an orchestration round. Your final thinking is not your
   final message.

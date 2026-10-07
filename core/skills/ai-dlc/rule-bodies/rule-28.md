@@ -54,20 +54,20 @@ subagent context and the lead in orchestration (Rule 23).
 WHETHER work is delegated; this clause decides the SHAPE of a
 delegation. When a dispatch's scope partitions along an independent
 axis, the lead dispatches one agent per part, plus one cross-part agent
-where the axis says parts interact, in the waves described below, and
+per cross group where the axis says parts interact, in the waves described below, and
 joins each wave in one bounded-join beat (Rule 29). The axes:
 
 - **files** -- an artifact that is two or more files (`stories/`), or a
   story's changed-file set as `partition-review-diff.sh --map` prints it:
-  one agent per file or part plus one cross-part agent scoped to
-  interactions between them only. Every finding or edit names the parts
+  one agent per file or part plus one cross-part agent per cross group
+  (below), reporting interactions only. Every finding or edit names the parts
   it cites; a per-part agent reports only findings citing its own part
-  alone, the cross-part agent only findings citing two or more. A review
+  alone, a cross-part agent only findings citing two or more. A review
   the program answers `SERIAL` is `shard: 1/1 <story-index>`, never
   `shard: none (…)`.
 - **sections** -- a single document that `partition-document.sh --map`
   partitions: one agent per part the map prints plus one cross-part
-  agent scoped to interactions between sections only, citing parts by
+  agent per cross group (below), reporting interactions only, citing parts by
   the same rule as the files axis. A review joins with
   `merge-adversarial-shards.sh --document`; a repair shard edits only
   its section file from `partition-document.sh --split`, and
@@ -80,26 +80,65 @@ joins each wave in one bounded-join beat (Rule 29). The axes:
 - **surfaces** -- the surfaces a Rule 24 Section 0 declares: one analyst
   per surface, no cross-part agent.
 - **seats x parts** -- a party-mode round over a files-axis subject: one
-  persona agent per (seat, part) plus one cross-part round. The seats
-  record findings and edit nothing; a files-axis repair applies them.
+  persona agent per (seat, part) plus one cross-part agent per (seat,
+  cross group). The seats record findings and edit nothing; a files-axis
+  repair applies them.
 - **seats x sections** -- a party-mode round over a sections-axis subject:
-  one persona agent per (seat, part) plus one cross-part round per seat.
-  The seats record findings and edit nothing; a sections-axis repair
-  applies them.
+  one persona agent per (seat, part) plus one cross-part agent per (seat,
+  cross group). The seats record findings and edit nothing; a
+  sections-axis repair applies them.
 - **subject** -- a subject of several files reviewed as one, under one
   base recorded in its manifest (the requirements step's brief, spec,
   PRD and architecture-impact record): one agent per part that
-  `partition-subject.sh --map` prints plus one cross-part agent scoped
-  to interactions between parts, citing parts by the same rule as the
+  `partition-subject.sh --map` prints plus one cross-part agent per
+  cross group (below), reporting interactions only, citing parts by the same rule as the
   files axis. A file unchanged since the base has no part. A review
   joins with `merge-adversarial-shards.sh --subject`; a repair shard
   edits only its section file and `join-remediator-shards.sh --subject`
   joins the parts and reassembles every file. A subject that maps to one
   part is exception 4.
 - **seats x subject-parts** -- a party-mode round over a subject-axis
-  subject: one persona agent per (seat, part) plus one cross-part round
-  per seat. The seats record findings and edit nothing; a subject-axis
-  repair applies them.
+  subject: one persona agent per (seat, part) plus one cross-part agent
+  per (seat, cross group). The seats record findings and edit nothing; a
+  subject-axis repair applies them.
+
+**The cross-part agent is sharded too.** On the sections and subject
+axes, on an adversarial review over stories, and on the three seats
+axes, there is one cross-part agent per cross group, not one per round:
+the groups are the rows `partition-document.sh --cross-groups <K>`
+prints for the map's part count K, at most six, and every unordered
+pair of parts lies inside at least one. Each goes out in the same waves
+as the parts. A cross agent reads the WHOLE subject: its group's pairs
+are its focus, not its boundary, and it may cite any part. The groups
+cover every pair but not every triple, so a group-bounded read loses
+a finding resting on three or more parts that no group holds, and a
+cross agent's wall clock tracks the tokens it writes, not the bytes it
+reads. A cross finding is OWNED by the lowest group whose row holds its
+two smallest cited ordinals, as `partition-document.sh --cross-owner
+<K> <ordinals>` prints. The join accepts a finding reported outside its
+owner, and refuses it only when the owner's shard carries the identical
+cited set. Every part and cross agent writes its file early
+and ends it with one `seat-complete: ... findings=<n>` line, written
+once as its final write, and its join beat passes `--complete`
+(`_gate-procedures.md`, "Validation cycle" item 1). A SERIAL map has no
+cross agent.
+
+**Code review and QA shard their execution too.** On a review over
+`partition-review-diff.sh --map`, at gate 1 and gate 2 alike, each part
+agent replays the mutation-REDs anchored in its part in its own detached
+worktree at the frozen sha, and every cross agent goes out in the same
+wave as the parts. The first cross agent does its part-independent work
+first and joins the part files itself only before the hand-over replays
+and the per-AC table (`implementation.md`, the Gate-1 and Gate-2
+dispatch paragraphs). What remains on that one agent is the canonical
+suite run and the replays a part HANDED OVER, run in the frozen worktree.
+**That residue is not serial by design: the operator has ruled it be measured
+first (`BL-474`), and only that measurement decides it.**
+A hand-over is defined as an AC whose replay cannot reach a GREEN
+baseline in a fresh detached worktree at the frozen sha, so a per-group
+copy made that same way repeats the failure. The frozen worktree's
+environment is shared and mutable, and no other copy of it exists.
+`merge-review-shards.sh` accounts for every hand-over exactly once.
 
 **The partition is derived, never listed.** The part set comes from a
 program or from the tree -- the artifact directory's listing, the
@@ -189,8 +228,12 @@ this clause and names its axis and its join; it does not restate them.
 
 The lead's written dispatch plan names, for every dispatch, its axis
 and part count or which of (1)-(4) keeps it whole. Every shard brief
-carries one line `shard: <i>/<N> <part-key>` (the cross-part agent:
-`shard: cross/<N> cross`) or `shard: none (<exception 1-4>)`. A
+carries one line `shard: <i>/<N> <part-key>` (a cross-part agent:
+`shard: cross/<K> g<g>/<G> <ordinals>`, its group of G and that group's
+ordinals, K being the map's part count; no axis keeps a single cross
+agent, a code or QA review over `partition-review-diff.sh --map`
+included, except where `--cross-groups` prints one group, which is K=2)
+or `shard: none (<exception 1-4>)`. A
 sections-axis part key is the part's heading from the map, as in
 `shard: 2/5 ## Functional Requirements`; a document the map reports
 SERIAL is `shard: none (serial-document)`. Only the first parenthesised
@@ -205,7 +248,7 @@ agent's wall clock growing with the parts named in its brief; and a
 fan-out wider than the harness's concurrent-subagent cap launching only
 its first cap's worth while the lead joins the rest as if they had run,
 which proceeds on a partial round. False-positive cost: one fixed
-per-agent load cost per extra part, one cross-part agent, one join
+per-agent load cost per extra part, up to six cross-part agents, one join
 program run, and one extra beat per wave past the first -- paid in spawn
 overhead, recovered in wall clock. Removal condition: retire the split
 once the harness parallelises a single agent's independent sub-scopes

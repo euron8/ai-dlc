@@ -67,8 +67,31 @@
 #   may each honestly stamp EXIT_CONDITION_MET while the artifact holds 6.
 #
 # SHARD FILES (non-recursive, `<shard-dir>/*`)
-#   `<ordinal>.md` one per story, `cross.md` once. Any other non-dot entry is REFUSED -- a
+#   `<ordinal>.md` one per story, plus the CROSS SHARDS: one per row of
+#   `partition-document.sh --cross-groups <K>` (K = the unit count, in EVERY mode), named
+#   `cross-<g>.md` -- and `cross.md` iff that table has exactly one row (G=1, i.e. K=2). The
+#   table is read from that one speller, never restated here. Every `cross-<g>` the table prints
+#   is required; a `cross-<g>` it does not print, `cross.md` beside any `cross-<g>.md`, `cross.md`
+#   when G>1 and `cross-<g>.md` when G=1 are each REFUSED. Any other non-dot entry is REFUSED -- a
 #   re-dispatch written beside the original must not be silently ignored.
+#
+# THE OWNER RULE. The cross groups overlap (every unordered pair of units is in at least one
+#   group, some pairs in several), so a finding two groups both see would be summed twice. Each
+#   cross finding has one owner, the group `partition-document.sh --cross-owner <K> <cited
+#   ordinals>` names. A cross shard reads the WHOLE document and may cite any ordinal, so a
+#   finding outside its owner's shard is accepted, and REFUSED only when the owner's shard
+#   carries a finding citing the IDENTICAL set -- the one case the two are the same finding.
+#
+# SEAT-COMPLETE. A shard dispatched under the early-write brief ends, as its LAST NON-BLANK line,
+#   in `seat-complete: <step> adversary <shard> findings=<n>`, written once as its final write.
+#   If ANY shard in the directory ends in that line, every shard must, and one
+#   that does not is REFUSED as unfinished; a marker whose `findings=<n>` differs from the
+#   findings parsed in its shard is REFUSED as truncated. Keyed on the marker's
+#   presence in the directory, not on an install stamp: this merge resolves no root and reads no
+#   git, and a directory whose shards predate the brief carries no marker anywhere and merges as
+#   before. Its limit: a set in which NO shard has finished yet carries no marker either, so this
+#   is the belt; `wait-for-deliverable.sh --complete` at the join is the braces. The marker line is
+#   dropped from the merged body.
 #   THE KEY IS THE ORDINAL, NEVER THE FILENAME. Every `*.md` directly in
 #   `<planning>/s<N>/<artifact>/` is a story whatever it is called (`story-<n>-`, `story-<e>-<n>-`,
 #   `bug-`, `hotfix-`, ...); its ordinal is its 1-based position in the `LC_ALL=C` sorted listing,
@@ -78,7 +101,8 @@
 #
 # REFUSED KEYS: a shard ordinal outside 1..K, a duplicate shard, a missing ordinal or cross
 #   shard, an unreadable story file, fewer than two story files (a one-file artifact is never
-#   sharded), and a shard-directory entry that is neither `<digits>.md` nor `cross.md`.
+#   sharded), a cross shard the group table does not name, and a shard-directory entry that is
+#   none of `<digits>.md`, `cross.md`, `cross-<digits>.md`.
 #
 # FINDING GRAMMAR (the partition this script checks; `adversary.md` cites it, not restates it)
 #   A finding is a `### ` heading inside the shard `## Findings` section (up to the next
@@ -86,8 +110,8 @@
 #   of CRITICAL / MAJOR / MINOR / NIT in the heading. Each finding carries EXACTLY ONE line
 #       stories: <ordinal>[, <ordinal>...]          e.g. `stories: 03` or `stories: 01, 04`
 #   outside a fence, citing ordinals from `--map`. A per-ordinal shard may cite ONLY its own
-#   ordinal; the cross-story shard only findings citing two or more DISTINCT ordinals. Every
-#   cited ordinal must be within 1..K.
+#   ordinal; a cross shard only findings citing two or more DISTINCT ordinals (the owner rule
+#   above). Every cited ordinal must be within 1..K.
 #   Per shard, the CRITICAL-heading count must equal `findings_critical` and the MAJOR-heading
 #   count `findings_major` -- otherwise the partition is checked over findings that are not
 #   the ones the counts describe.
@@ -102,11 +126,12 @@
 #     EXIT_CONDITION_NOT_MET otherwise.
 #   Both ceilings are READ from validate-adversarial-convergence.sh, never restated here.
 #   artifact_sha is `<basename-stem>=<sha> ...` in ordinal order (each per-ordinal shard claim,
-#   each checked against the story bytes on disk); tool_use_id is the cross shard;
-#   shard_tool_use_ids is `<ordinal>=<id> ... cross=<id>`; invoked_at is the EARLIEST shard. The
-#   merged body opens with the ordinal map (the `--map` output, fenced), then every shard body in
-#   ordinal order, cross last, each with its own provenance block stripped, so the output
-#   carries exactly ONE provenance block.
+#   each checked against the story bytes on disk); tool_use_id is the FIRST cross shard's
+#   (`cross` or `cross-1`); shard_tool_use_ids is `<ordinal>=<id> ... cross-1=<id> ... cross-<G>=<id>`
+#   (`cross=<id>` when G=1); invoked_at is the EARLIEST shard. The merged body opens with the
+#   ordinal map (the `--map` output, fenced), then every shard body in ordinal order, the cross
+#   shards last in group order under one header per group, each with its own provenance block
+#   stripped, so the output carries exactly ONE provenance block.
 #
 # EXIT
 #   0  merged (stdout `MERGED: ...`), or the output already exists byte-identical (`UNCHANGED:`)
@@ -320,6 +345,27 @@ norm_ord() { # "003" -> 03 at width W; empty unless digits within 1..K
   printf '%0*d' "$W" "$n"
 }
 
+# ---- the cross groups, read from their one speller ----------------------------------------
+# In EVERY mode the cross shards are the rows of `partition-document.sh --cross-groups <K>`, the
+# sibling this merge already resolves for section mode. CROSS_KEYS is `cross` when the table has
+# one row (K=2) and `cross-1 .. cross-<G>` otherwise; nothing here restates the construction.
+XPART="$(cd "$(dirname "$0")" && pwd)/partition-document.sh"
+[ -f "$XPART" ] || refuse "cannot read the cross groups: $XPART is absent"
+bash "$XPART" --cross-groups "$K" > "$T/groups" 2> "$T/groups.err"; grc=$?
+[ "$grc" -eq 0 ] || refuse "partition-document.sh --cross-groups $K exited $grc: $(head -1 "$T/groups.err")"
+G="$(grep -c . "$T/groups")" || G=0
+[ "$G" -ge 1 ] || refuse "partition-document.sh --cross-groups $K printed no group"
+i=0
+RE_GROUP='^[0-9]+(,[0-9]+)+$'   # held in a variable for bash 3.2, as RE_ISO and RE_CITED are
+while IFS="$(printf '\t')" read -r gg gl; do
+  i=$((i + 1))
+  [ "$gg" = "$i" ] && [[ $gl =~ $RE_GROUP ]] \
+    || refuse "partition-document.sh --cross-groups $K printed row $i as '$gg	$gl'; want <g>\\t<ordinal,ordinal,...> with g = 1..G in order"
+done < "$T/groups"
+if [ "$G" -eq 1 ]; then CROSS_KEYS="cross"
+else CROSS_KEYS="$(awk '{ printf "%scross-%d", (NR > 1 ? " " : ""), NR }' "$T/groups")"; fi
+CROSS_FIRST="${CROSS_KEYS%% *}"
+
 # ---- the exit ceilings, read from their one declaration ----------------------------------
 VALIDATOR="$(cd "$(dirname "$0")" && pwd)/validate-adversarial-convergence.sh"
 [ -f "$VALIDATOR" ] || refuse "cannot read the exit ceilings: $VALIDATOR is absent"
@@ -341,22 +387,54 @@ CRIT_CEIL="$(read_ceiling CRITICAL_EXIT_CEILING)"
 for f in "$SHARD_DIR"/*; do
   [ -e "$f" ] || continue
   b="$(basename "$f")"
-  [ -f "$f" ] || refuse "$f is not a regular file; the shard directory holds only <ordinal>.md and cross.md"
+  [ -f "$f" ] || refuse "$f is not a regular file; the shard directory holds only <ordinal>.md and the cross shards ($CROSS_KEYS)"
   case "$b" in
     cross.md) key="cross" ;;
+    cross-*.md)
+      gn="${b#cross-}"; gn="${gn%.md}"
+      case "$gn" in ""|*[!0-9]*) refuse "$f is not a shard name (<ordinal>.md, cross.md or cross-<g>.md)" ;; esac
+      key="cross-$((10#$gn))" ;;
     *.md)
-      case "${b%.md}" in ""|*[!0-9]*) refuse "$f is not a shard name (<ordinal>.md or cross.md)" ;; esac
+      case "${b%.md}" in ""|*[!0-9]*) refuse "$f is not a shard name (<ordinal>.md, cross.md or cross-<g>.md)" ;; esac
       key="$(norm_ord "${b%.md}")"
       [ -n "$key" ] || refuse "$f names ordinal ${b%.md}, outside 1..$K (the $UNIT_COUNT)" ;;
-    *) refuse "$f is not a shard name (<ordinal>.md or cross.md)" ;;
+    *) refuse "$f is not a shard name (<ordinal>.md, cross.md or cross-<g>.md)" ;;
   esac
   printf '%s\t%s\n' "$key" "$f" >> "$T/shards" || refuse "cannot stage the shard set"
 done
 dup="$(cut -f1 "$T/shards" | sort | uniq -d | head -1)"
 [ -z "$dup" ] || refuse "shard $dup was delivered more than once in $SHARD_DIR"
-for idx in $ORDINALS cross; do
-  [ -n "$(awk -F'\t' -v k="$idx" '$1 == k { print; exit }' "$T/shards")" ] || refuse "shard $idx is missing from $SHARD_DIR (expected: $ORDINALS and cross)"
+# The cross shards delivered must be EXACTLY the table's: a mix of `cross.md` and `cross-<g>.md`,
+# a `cross-<g>` the table does not print, or the wrong spelling for G are each refused by name.
+x_plain=0; x_num=0
+while IFS="$(printf '\t')" read -r xk xf; do
+  case "$xk" in
+    cross) x_plain=1 ;;
+    cross-*) x_num=1
+      case " $CROSS_KEYS " in *" $xk "*) ;; *) refuse "$xf is $xk, which partition-document.sh --cross-groups $K does not print (the cross shards for K=$K are: $CROSS_KEYS)" ;; esac ;;
+  esac
+done < "$T/shards"
+[ "$x_plain" -eq 1 ] && [ "$x_num" -eq 1 ] \
+  && refuse "$SHARD_DIR mixes cross.md with cross-<g>.md; a shard set is one cross shape or the other (for K=$K: $CROSS_KEYS)"
+[ "$x_plain" -eq 1 ] && [ "$G" -gt 1 ] \
+  && refuse "$SHARD_DIR holds cross.md, but the $UNIT_COUNT is $K, whose cross groups are $CROSS_KEYS; a single cross shard is owed only at K=2"
+for idx in $ORDINALS $CROSS_KEYS; do
+  [ -n "$(awk -F'\t' -v k="$idx" '$1 == k { print; exit }' "$T/shards")" ] || refuse "shard $idx is missing from $SHARD_DIR (expected: $ORDINALS and $CROSS_KEYS)"
 done
+
+# ---- seat-complete (the belt; the join beat's --complete is the braces) --------------------
+# If ANY shard's last non-blank line is the marker, every shard's must be. See the header.
+: > "$T/sc" || refuse "cannot stage the completion check"
+while IFS="$(printf '\t')" read -r sk sf_; do
+  # Y carries the marker's declared count (`findings=<n>`, `-` when absent), checked per shard below.
+  if awk 'NF { l = $0 } END { exit !(l ~ /^seat-complete: /) }' "$sf_"; then
+    printf 'Y\t%s\t%s\n' "$sk" "$(awk 'NF { l = $0 } END { if (match(l, /findings=[0-9]+[ \t]*$/)) { v = substr(l, RSTART + 9); sub(/[ \t]+$/, "", v); print v } else print "-" }' "$sf_")" >> "$T/sc"
+  else printf 'N\t%s\t%s\n' "$sk" "$sf_" >> "$T/sc"; fi
+done < "$T/shards"
+if grep -q '^Y' "$T/sc" && grep -q '^N' "$T/sc"; then
+  sc_bad="$(awk -F'\t' '$1 == "N" { print $3; exit }' "$T/sc")"
+  refuse "$sc_bad does not end in 'seat-complete: ' while another shard in $SHARD_DIR does; that shard is unfinished (its last non-blank line must be 'seat-complete: <step> <adversary> <shard>')"
+fi
 
 # ---- per-shard parse ----------------------------------------------------------------------
 # One awk pass per shard. Emits:  B <starts> <ends>  /  F <key> <value>  /  X <line> <sev> <n-stories-lines> <stories>
@@ -433,12 +511,28 @@ resolve_artifact() {
   return 0
 }
 
+# same_set <file> <label> <ordinals, blank-separated> -> 0 when a column-0 `<label>:` line outside
+# a fence in <file> cites exactly that set of ordinals (order, padding and repeats free).
+same_set() {
+  awk -v lab="$2:" -v want="$3" '
+    BEGIN { n = split(want, w, /[ \t]+/); for (i = 1; i <= n; i++) if (w[i] != "") { W[w[i] + 0] = 1; nw++ } }
+    /^[ \t]*(```|~~~)/ { f = !f; next }
+    f { next }
+    /^## / { inf = ($0 ~ /^## Findings[ \t]*$/); next }
+    !inf || index($0, lab) != 1 { next }
+    { v = substr($0, length(lab) + 1); m = split(v, a, /[ ,\t]+/); delete G; ng = 0; ok = 1
+      for (i = 1; i <= m; i++) if (a[i] ~ /^[0-9]+$/ && !((a[i] + 0) in G)) { G[a[i] + 0] = 1; ng++; if (!((a[i] + 0) in W)) ok = 0 }
+      if (ok && ng == nw) { hit = 1; exit } }
+    END { exit !hit }' "$1"
+}
+
 S_CRIT=0; S_PRIOR=0; S_MAJOR=0; S_UNDER=0; S_MINOR=0; WALL_LIST=""
 ANY_DIVERGENT=0; EARLIEST=""; EARLIEST_KEY=""; SHA_LIST=""; ID_LIST=""; ALL_IDS=""; CROSS_ID=""; CROSS_ARTIFACT=""
 SKILL=""; MODE=""; LEAD_ROLE=""; RESOLVES=""; RESOLVES_SET=0
 : > "$T/body" || refuse "cannot stage the merged body"
 
-for key in $ORDINALS cross; do
+for key in $ORDINALS $CROSS_KEYS; do
+  case "$key" in cross|cross-*) is_x=1 ;; *) is_x=0 ;; esac
   sf="$(awk -F'\t' -v k="$key" '$1 == k { print $2; exit }' "$T/shards")"
   P="$T/parse.$key"
   parse_shard "$sf" > "$P" || refuse "parsing $sf did not run"
@@ -528,7 +622,7 @@ for key in $ORDINALS cross; do
     resolve_artifact "$art"
     [ "$ART_ABS" = "$SUBJ_MF" ] \
       || refuse "$sf names artifact '$art', which resolves to ${ART_ABS:-nothing}, not the subject manifest $SUBJ_MF"
-    if [ "$key" = "cross" ]; then CROSS_ID="$tid"; CROSS_ARTIFACT="$art"; fi
+    if [ "$key" = "$CROSS_FIRST" ]; then CROSS_ID="$tid"; CROSS_ARTIFACT="$art"; fi
   elif [ -n "$DOCUMENT" ]; then
     # Every shard -- cross included -- reviewed the WHOLE document's bytes, so every shard
     # notarizes the one whole-document sha and names the one document.
@@ -539,13 +633,15 @@ for key in $ORDINALS cross; do
     resolve_artifact "$art"
     [ "$ART_ABS" = "$DOCUMENT" ] \
       || refuse "$sf names artifact '$art', which resolves to ${ART_ABS:-nothing}, not --document $DOCUMENT; the shard reviewed another file"
-    if [ "$key" = "cross" ]; then CROSS_ID="$tid"; CROSS_ARTIFACT="$art"; fi
+    if [ "$key" = "$CROSS_FIRST" ]; then CROSS_ID="$tid"; CROSS_ARTIFACT="$art"; fi
     mt="$(date -u -r "$sf" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"
     [[ $mt =~ $RE_ISO ]] || refuse "cannot read the modification time of $sf"
     WALL_LIST="$WALL_LIST $key=$at/$mt"
-  elif [ "$key" = "cross" ]; then
-    CROSS_ID="$tid"; CROSS_ARTIFACT="$(field "$P" artifact)"
-    [ -n "$CROSS_ARTIFACT" ] || refuse "$sf (cross-story) declares no artifact"
+  elif [ "$is_x" -eq 1 ]; then
+    xa="$(field "$P" artifact)"
+    [ -n "$xa" ] || refuse "$sf (cross-story) declares no artifact"
+    if [ "$key" = "$CROSS_FIRST" ]; then CROSS_ID="$tid"; CROSS_ARTIFACT="$xa"
+    else [ "$xa" = "$CROSS_ARTIFACT" ] || refuse "$sf (cross-story) names artifact '$xa' where $CROSS_FIRST names '$CROSS_ARTIFACT'"; fi
   else
     sha="$(field "$P" artifact_sha)"
     [[ $sha =~ $RE_SHA ]] || refuse "$sf artifact_sha '${sha:-<none>}' is not one sha256"
@@ -570,8 +666,20 @@ for key in $ORDINALS cross; do
       case " $distinct " in *" $o "*) ;; *) distinct="$distinct $o" ;; esac
     done
     set -- $distinct
-    if [ "$key" = "cross" ]; then
+    if [ "$is_x" -eq 1 ]; then
       [ $# -ge 2 ] || refuse "$sf:$line (cross-$NOUN shard) cites only$distinct; a cross-$NOUN finding cites two or more ordinals, a single-$NOUN one belongs to that $NOUN shard"
+      # THE OWNER RULE: the one group --cross-owner names, never any other that also covers it.
+      own="$(bash "$XPART" --cross-owner "$K" "$(printf '%s' "${distinct# }" | tr ' ' ',')" 2> "$T/own.err")" \
+        || refuse "partition-document.sh --cross-owner $K on$distinct failed: $(head -1 "$T/own.err")"
+      [ "$G" -eq 1 ] && ownk="cross" || ownk="cross-$own"
+      # A cross shard reads the whole document and may cite any ordinal, so a finding outside its
+      # owner's shard is accepted -- unless the owner's shard carries the IDENTICAL cited set, the
+      # one case the two are the same finding and would be summed twice.
+      if [ "$ownk" != "$key" ]; then
+        osf="$(awk -F'\t' -v k="$ownk" '$1 == k { print $2; exit }' "$T/shards")"
+        ! same_set "$osf" "$CITE" "$distinct" \
+          || refuse "$sf:$line ($key) cites$distinct, a finding owned by $ownk (partition-document.sh --cross-owner), whose shard carries the identical set; one finding is reported once, or the summed counts depend on the cover"
+      fi
     else
       [ $# -eq 1 ] && [ "$1" = "$key" ] \
         || refuse "$sf:$line (shard $key) cites$distinct; a per-ordinal shard reports only findings citing its own ordinal alone"
@@ -579,22 +687,38 @@ for key in $ORDINALS cross; do
   done < "$P"
   [ "$n_crit_h" -eq "$crit" ] && [ "$n_major_h" -eq "$major" ] \
     || refuse "$sf declares $crit CRITICAL / $major MAJOR but its ## Findings section heads $n_crit_h CRITICAL / $n_major_h MAJOR findings"
+  # The marker's count against the findings parsed here: a shard truncated after its marker, or
+  # marked before its findings, disagrees.
+  scn="$(awk -F'\t' -v k="$key" '$1 == "Y" && $2 == k { print $3; exit }' "$T/sc")"
+  if [ -n "$scn" ]; then
+    nfx="$(grep -c '^X ' "$P")" || nfx=0
+    [ "$scn" = "$nfx" ] \
+      || refuse "$sf ends in 'seat-complete: ... findings=$scn' but its ## Findings section heads $nfx finding(s); the marker is written once, last, counting the shard's findings"
+  fi
 
   S_CRIT=$((S_CRIT + crit)); S_PRIOR=$((S_PRIOR + prior)); S_MAJOR=$((S_MAJOR + major))
   S_UNDER=$((S_UNDER + under)); S_MINOR=$((S_MINOR + minor))
 
   # --- the body, provenance block stripped ---
+  # One header per cross GROUP: `cross-story` at G=1 (the bytes before cross groups existed),
+  # `cross-story group <g> (<ordinals>)` otherwise, so a reader sees which pairs each group saw.
+  xh=""
+  if [ "$is_x" -eq 1 ] && [ "$key" != "cross" ]; then
+    xh=" group ${key#cross-} ($(awk -F'\t' -v g="${key#cross-}" '$1 == g { print $2; exit }' "$T/groups"))"
+  fi
   if [ -n "$SUBJECT" ]; then
-    if [ "$key" = "cross" ]; then printf '\n## Shard: cross-part\n\n' >> "$T/body" || refuse "cannot stage the merged body"
+    if [ "$is_x" -eq 1 ]; then printf '\n## Shard: cross-part%s\n\n' "$xh" >> "$T/body" || refuse "cannot stage the merged body"
     else printf '\n## Shard: part %s\n\n' "$key" >> "$T/body" || refuse "cannot stage the merged body"; fi
   elif [ -n "$DOCUMENT" ]; then
-    if [ "$key" = "cross" ]; then printf '\n## Shard: cross-section\n\n' >> "$T/body" || refuse "cannot stage the merged body"
+    if [ "$is_x" -eq 1 ]; then printf '\n## Shard: cross-section%s\n\n' "$xh" >> "$T/body" || refuse "cannot stage the merged body"
     else printf '\n## Shard: section %s\n\n' "$key" >> "$T/body" || refuse "cannot stage the merged body"; fi
-  elif [ "$key" = "cross" ]; then printf '\n## Shard: cross-story\n\n' >> "$T/body" || refuse "cannot stage the merged body"
+  elif [ "$is_x" -eq 1 ]; then printf '\n## Shard: cross-story%s\n\n' "$xh" >> "$T/body" || refuse "cannot stage the merged body"
   else printf '\n## Shard: story %s\n\n' "$key" >> "$T/body" || refuse "cannot stage the merged body"; fi
+  # The provenance block and the seat-complete marker are both stripped: the merged file carries
+  # one block of its own, and a marker inside it would read as the merge's own completion line.
   awk '/SKILL_INVOCATION_PROVENANCE v1/ { skip = 1; next }
        /SKILL_INVOCATION_PROVENANCE_END/ { skip = 0; next }
-       !skip' "$sf" >> "$T/body" || refuse "cannot stage the body of $sf"
+       !skip && !/^seat-complete: /' "$sf" >> "$T/body" || refuse "cannot stage the body of $sf"
 done
 
 if grep -q 'SKILL_INVOCATION_PROVENANCE' "$T/body"; then

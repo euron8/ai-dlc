@@ -19,6 +19,35 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.744.0] - 2026-10-07
+
+Batch 204's second release. It discharges one consumer candidate and files and carries `BL-464`.
+
+### The cross seat fans out, writes early, and is joined on its own completion marker (PC-S317-CROSS-SEAT-IS-THE-SERIAL-TAIL-OF-A-SECTIONS-PARTY-ROUND-AND-WRITES-NOTHING-UNTIL-DONE)
+
+- `partition-document.sh --cross-groups <K>` derives at most six cross groups covering every pair of parts, and
+  `--cross-owner` names the one group that owns a pair. A sharded round's cross work goes out as `cross-1..G` in the same
+  waves as its parts, so the round's tail is one group's reasoning rather than the whole cross round's. Both shard merges
+  and Check 24 arm K3 call the same derivation; `K3C_RELEASE` is stamped `0.744.0`.
+- A seat writes its skeleton early and ends with a `seat-complete:` line. `wait-for-deliverable.sh --complete` counts a
+  file as DELIVERED only when that line is last, outside any fence (a fence closes only on a run of the opener's character
+  at least as long), with no carriage return, and when the content has not changed for `AI_DLC_WAIT_SETTLE_SECS`
+  (default 180s, from the largest gap in the reference consumer's slowest cross seat's real edits). A present file with no
+  marker reports `UNFINISHED`, a marked file still changing at exhaustion `UNSETTLED`, and neither reads as `absent`, so
+  the lead reads the file instead of re-dispatching a finished teammate.
+- `join-remediator-shards.sh` refuses a repair citing an unmarked seat file when any seat of the same step carries the
+  marker, decided per step across the whole seat directory. The four party persona files carry the early-write and marker
+  instruction.
+- Code review and QA: part reviewers replay their own part's mutation-REDs in their own detached worktree, as QA parts
+  already did, and every cross shard dispatches in the same wave as the parts. `merge-review-shards.sh` reads the
+  hand-over grammar under `--gate code-review` as well as `--gate qa`, accounts for every hand-over exactly once, refuses a
+  missing group or an unpaired, duplicate or twice-run hand-over, and only raises the verdict on an unmet replay.
+- **Measured before it is ruled (`BL-474`, operator ruling):** one canonical suite run plus the handed-over replays stay
+  on the first cross shard, in the frozen worktree whose failure defines a hand-over. The consumer's first sharded
+  review after this pull is measured, and the operator rules on the number; it is not serial by design.
+- Not built: a computed cross work list from per-pair identifier intersections, refuted by a counterexample recorded in
+  `BL-464`.
+
 ## [0.743.0] - 2026-10-07
 
 Batch 204's first release. It discharges one consumer candidate and files and carries `BL-473`.

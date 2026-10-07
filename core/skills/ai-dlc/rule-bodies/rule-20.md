@@ -70,7 +70,7 @@ operator back-and-forth, so subagent dispatch does not break an interactive loop
 
 **(iii) Native convergence review (`ai-dlc-adversary-review`).** The Rule 8 cycle
 invokes **no Skill at all**. The lead dispatches ONE `adversary` per pass (same
-Rule 19 binding as (ii)), sharded per file with one cross-file shard when the artifact is two or
+Rule 19 binding as (ii)), sharded per file with one cross-file shard per cross group when the artifact is two or
 more files, and joined by `merge-adversarial-shards.sh` (Rule 28, "Split dispatch": files
 axis), or sharded by section or subject part under that clause's sections and subject axes;
 the METHOD is `team-roles/adversary.md` itself.
@@ -148,7 +148,11 @@ join over, which is exactly the observed failure.
 writing it to the canonical output/transcript path the invocation
 defines and returning ONLY that path. A text-only final message from a
 subagent is an unreliable transport; the lead MUST treat an absent file
-as non-delivery and re-dispatch. Build no detector for this — the lead's
+as non-delivery and re-dispatch. A PRESENT file is never absent: when a
+`--complete` beat reports `UNFINISHED <path>` (no closing `seat-complete:`
+line) or `UNSETTLED <path>` (closed, still changing), read the file and
+decide from what it holds — a re-dispatch over it discards the seat's
+findings. Build no detector for this — the lead's
 own read of the expected path is the check (Rule 26: audit before adding
 mechanism).
 

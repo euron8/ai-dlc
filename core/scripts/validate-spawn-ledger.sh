@@ -1520,11 +1520,13 @@ else
          case "$sh_b" in
            code-reviewer|code-reviewer-escalated)
              echo "      Rule 28: one reviewer per part 'partition-review-diff.sh --map' prints for the story diff"
-             echo "      plus 'shard: cross/<N> cross', or 'shard: 1/1 <story-index>' when the map is SERIAL"
+             echo "      plus its cross agent(s) -- 'shard: cross/<K> g<g>/<G> <ordinals>', one per row of"
+             echo "      'partition-document.sh --cross-groups <K>' -- or 'shard: 1/1 <story-index>' when the map is SERIAL"
              echo "      (grammar: ai-dlc-dispatch-guard.sh, THE SHARD LINE). Not a failure." ;;
            qa)
              echo "      Rule 28: for a gate-2 validation, one QA per part 'partition-review-diff.sh --map' prints on the"
-             echo "      go-signal sha plus 'shard: cross/<N> cross', or 'shard: 1/1 <story-index>' when the map is SERIAL;"
+             echo "      go-signal sha plus its cross agent(s), 'shard: cross/<K> g<g>/<G> <ordinals>' one per row of"
+             echo "      'partition-document.sh --cross-groups <K>', or 'shard: 1/1 <story-index>' when the map is SERIAL;"
              echo "      a qa seat with no story diff is 'shard: 1/1 <key>' (grammar: ai-dlc-dispatch-guard.sh, THE SHARD"
              echo "      LINE). Not a failure." ;;
            *)

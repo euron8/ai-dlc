@@ -74,7 +74,14 @@ sha() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' 
 DD="$PA/s9/shards/prd-p3"; mkdir -p "$DD" || exit 9
 DMAP="$(bash "$S/partition-document.sh" --map "$PA/prd.md")" || miss "(c) the PRD does not partition unscoped"
 PSHA="$(sha "$PA/prd.md")"
-for o in $(printf '%s\n' "$DMAP" | cut -f1) cross; do
+# The cross keys for the document's own part count, from the tree's partitioner (see (b)).
+DK="$(printf '%s\n' "$DMAP" | grep -c .)" || DK=0
+DXK=cross
+if grep -q -- '--cross-groups' "$S/partition-document.sh"; then
+  DXG="$(bash "$S/partition-document.sh" --cross-groups "$DK" | grep -c .)" || DXG=0
+  [ "$DXG" -le 1 ] || DXK="$(seq 1 "$DXG" | sed 's/^/cross-/' | tr '\n' ' ')"
+fi
+for o in $(printf '%s\n' "$DMAP" | cut -f1) $DXK; do
   { printf '# d %s\n\n## Findings\n\n<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\n' "$o"
     printf 'invoked_at: 2026-10-03T10:00:00Z\ntool_use_id: toolu_d%s\nmode: subagent\nlead_role: requirements\n' "$o"
     printf 'artifact: _bmad-output/planning-artifacts/prd.md\nartifact_sha: %s\nfindings_critical: 0\nfindings_major: 0\n' "$PSHA"
@@ -112,23 +119,34 @@ shard() { # <dir> <key> <n-major> <cite> <minute>
     printf 'artifact: _bmad-output/planning-artifacts/s9/requirements-subject.md\nartifact_sha: %s\n' "$SL"
     printf 'findings_critical: 0\nfindings_major: %s\nverdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$3"; } > "$1/$2.md"
 }
+# The cross keys, derived from the LIVE map's part count through the tree's own partitioner: one
+# shard per `--cross-groups <K>` row (`cross` when it prints one), or `cross` from a tree whose
+# partitioner predates the groups -- so this receipt scores a build on either side of them.
+K="$(printf '%s\n' "$MAP" | grep -c .)" || K=0
+XK=cross
+if grep -q -- '--cross-groups' "$S/partition-document.sh"; then
+  XG="$(bash "$S/partition-document.sh" --cross-groups "$K" | grep -c .)" || XG=0
+  [ "$XG" -ge 1 ] || miss "(b) partition-document.sh --cross-groups $K printed no group"
+  [ "$XG" -eq 1 ] || XK="$(seq 1 "$XG" | sed 's/^/cross-/' | tr '\n' ' ')"
+fi
 D1="$PA/s9/shards/requirements-p1"; mkdir -p "$D1" || exit 9
 m=0; for o in $ORDS; do m=$((m + 1)); shard "$D1" "$o" 1 "$o" "$m" a; done
-shard "$D1" cross 0 "1, 2" 59 a
+for o in $XK; do m=$((m + 1)); shard "$D1" "$o" 0 "1, 2" "$((40 + m))" a; done
 MO="$(bash "$S/merge-adversarial-shards.sh" --subject 9 "$D1" 2>&1)"; rc=$?
 P1="$PA/s9/requirements-adversarial-p1.md"
 [ "$rc" -eq 0 ] && [ -f "$P1" ] || miss "(b) merge --subject 9 exited $rc: $(printf '%s' "$MO" | head -1)"
 grep -qx 'artifact: _bmad-output/planning-artifacts/s9/requirements-subject.md' "$P1" || miss "(b) the pass does not name the subject manifest"
-want="$( { printf '%s\n' "$ORDS" | awk '{ print $1 + 0 }'; echo cross; } | sort | tr '\n' ' ')"
+want="$( { printf '%s\n' "$ORDS" | awk '{ print $1 + 0 }'; printf '%s\n' $XK; } | sort | tr '\n' ' ')"
 have="$(sed -n 's/^shard_tool_use_ids://p' "$P1" | tr ' ' '\n' | awk -F= 'NF == 2 { k = $1; if (k ~ /^[0-9]+$/) k += 0; print k }' | sort | tr '\n' ' ')"
-[ "$want" = "$have" ] || miss "(b) shard ids {$have} are not the map's ordinals plus cross {$want}"
+[ "$want" = "$have" ] || miss "(b) shard ids {$have} are not the map's ordinals plus its cross groups {$want}"
 grep -qx 'verdict: EXIT_CONDITION_NOT_MET' "$P1" || miss "(b) the verdict was not recomputed from the summed residue (every shard said MET)"
 
 # ---- (c) Check 24 arm K3, post-stamp --------------------------------------------------------
 D2="$PA/s9/shards/requirements-p2"; mkdir -p "$D2" || exit 9
 m=0; for o in $ORDS; do m=$((m + 1)); shard "$D2" "$o" 0 "$o" "$m" b; done
 sed -i.bak 's/invoked_at: 2026-10-01T/invoked_at: 2026-10-02T/' "$D2"/*.md && rm -f "$D2"/*.bak
-shard "$D2" cross 0 "1, 2" 59 b; sed -i.bak 's/invoked_at: 2026-10-01T/invoked_at: 2026-10-02T/' "$D2/cross.md" && rm -f "$D2"/*.bak
+for o in $XK; do m=$((m + 1)); shard "$D2" "$o" 0 "1, 2" "$((40 + m))" b
+  sed -i.bak 's/invoked_at: 2026-10-01T/invoked_at: 2026-10-02T/' "$D2/$o.md" && rm -f "$D2"/*.bak; done
 printf -- '- disposition: repaired\n- edit: prd.md:%s\n- derivation: the seeded repair\n' "$EDITED" > "$PA/s9/requirements-repair-p1.md"
 MO="$(bash "$S/merge-adversarial-shards.sh" --subject 9 "$D2" 2>&1)" || miss "(c) merge of pass 2: $(printf '%s' "$MO" | head -1)"
 VO="$(bash "$S/validate-adversarial-convergence.sh" --series "$PA/s9/requirements-adversarial-p" 2>&1)"; rc=$?

@@ -683,6 +683,393 @@ EOF
   else bad "cwd-invariance: $n assertions from cwd=/ , expected 3 — the case exited without running, which scores as clean"; fi
 }
 
+# ===========================================================================
+# 13. --complete: AN EARLY-WRITING SHARD IS DELIVERED ONLY BY ITS MARKER, AND ITS
+#     OWN WRITES ARE ITS EVIDENCE OF WORK.
+#     A seat that writes its header first and appends findings as it verifies them is
+#     non-empty for its whole run, so the plain predicate would consume it half-written.
+#     Every arm here drives TWO shapes one property apart: the same skeleton with and
+#     without the flag, the marker last and the marker followed by a finding, and two
+#     targets in one beat of which only one grows. The no-flag pins in sections 1-12 are
+#     untouched and still pass, which is the byte-identical claim for callers without it.
+# ===========================================================================
+CBEAT_SINCE=""
+# THE SETTLE WINDOW IS PINNED TO 1s here (its default is 180s, measured -- see the subject's
+# --complete header). CB_BEAT is the quantum, 2s by default: enough wherever a beat only has
+# to SEE a state. A call that must DELIVER a marked file passes CB_BEAT=3, the floor where it
+# can settle (the strict `> 1` needs two whole seconds; a 2s beat polls one second past
+# arming). Measured: at 2s everywhere, those six calls fail and nothing else does.
+CB_BEAT=2
+cbeat() {  # $1=subject $2=workdir ; rest = argv (targets relative to the workdir)
+  cb_subj="$1" cb_w="$2"; shift 2
+  ( cd "$cb_w" && env -u CLAUDE_CODE_SESSION_ID \
+        AI_DLC_WAIT_BEAT_SECS="$CB_BEAT" \
+        AI_DLC_WAIT_SETTLE_SECS=1 \
+        AI_DLC_WAIT_POLL_SECS=1 \
+        AI_DLC_WAIT_MARGIN_SECS=0 \
+        AI_DLC_MAX_WAIT_BEATS=1 \
+        AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+        bash "$cb_subj" --since "$CBEAT_SINCE" "$@" ) > "$BEATOUT" 2>&1
+  RC=$?
+  OUT="$(cat "$BEATOUT")"
+}
+SKELETON='# requirements pm cross-1
+
+- a finding verified so far'
+MARKER='seat-complete: requirements pm cross-1'
+
+S13a_complete_requires_marker() {
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\n' "$SKELETON" > "$W/a.md"; printf '%s\n' "$SKELETON" > "$W/b.md"
+  cbeat "$SUBJ" "$W" a.md
+  if has "DELIVERED a.md"; then ok "complete: CONTROL — without the flag a non-empty skeleton is DELIVERED"
+  else bad "complete: CONTROL FAILED — the no-flag skeleton was not delivered, so the WAITING below means nothing: $OUT"; fi
+  cbeat "$SUBJ" "$W" --complete b.md
+  if has "WAITING   b.md" && ! has "DELIVERED b.md" && [ "$RC" -eq 0 ]; then
+    ok "complete: the same skeleton under --complete is WAITING, not DELIVERED"
+  else bad "complete: a skeleton with no seat-complete line was accepted under --complete (rc=$RC): $OUT"; fi
+
+  printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W/c.md"
+  CB_BEAT=3 cbeat "$SUBJ" "$W" --complete c.md
+  if has "DELIVERED c.md"; then ok "complete: the marker as the last line DELIVERS"
+  else bad "complete: a file ending in its seat-complete line was not delivered: $OUT"; fi
+
+  printf '%s\n%s\n- a finding appended after the marker\n' "$SKELETON" "$MARKER" > "$W/d.md"
+  cbeat "$SUBJ" "$W" --complete d.md
+  if has "WAITING   d.md" && ! has "DELIVERED d.md"; then ok "complete: a marker that is NOT the last non-blank line does not deliver"
+  else bad "complete: a marker followed by a finding was taken as completion: $OUT"; fi
+
+  printf '%s\n%s\n\n   \n\n' "$SKELETON" "$MARKER" > "$W/e.md"
+  CB_BEAT=3 cbeat "$SUBJ" "$W" --complete e.md
+  if has "DELIVERED e.md"; then ok "complete: trailing blank and whitespace-only lines do not hide the marker"
+  else bad "complete: blank lines after the marker hid it: $OUT"; fi
+
+  cbeat "$SUBJ" "$W" --complete --progress-path "$W" b.md
+  if [ "$RC" -eq 64 ]; then ok "complete: --complete with --progress-path is refused (exit 64)"
+  else bad "complete: --complete with --progress-path was accepted (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+}
+
+S13b_complete_progress_per_target() {
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\n' "$SKELETON" > "$W/grow.md"; printf '%s\n' "$SKELETON" > "$W/static.md"
+  cbeat "$SUBJ" "$W" --complete grow.md static.md     # charges the only beat, stamps each mark
+  sleep 1
+  printf -- '- a second finding, verified\n' >> "$W/grow.md"
+  cbeat "$SUBJ" "$W" --complete grow.md static.md     # sequence spent
+  if has "PROGRESS  grow.md" && ! has "NON-DELIVERY grow.md"; then
+    ok "complete: the target that grew since its own mark is granted PROGRESS"
+  else bad "complete: a growing early-writing shard got no progress grant: $OUT"; fi
+  if has "NON-DELIVERY static.md" && ! has "PROGRESS  static.md" && [ "$RC" -eq 1 ]; then
+    ok "complete: the static target beside it reaches NON-DELIVERY (rc 1) — no cross-grant"
+  else bad "complete: the static target was not declared non-delivered (rc=$RC): $OUT"; fi
+  if has "re-arm with --reset --progress-path"; then bad "complete: the --progress-path advice printed under --complete: $OUT"
+  else ok "complete: the --progress-path advice is suppressed under --complete"; fi
+
+  # THE CONTROL for the suppression: the same exhaustion WITHOUT the flag prints it.
+  # An ABSENT target: a file written in the same whole second as the arming instant
+  # would be DELIVERED, which is the mtime race section 5 records.
+  W2="$(mk_work)"
+  cbeat "$SUBJ" "$W2" x.md
+  cbeat "$SUBJ" "$W2" x.md
+  if has "NON-DELIVERY x.md" && has "re-arm with --reset --progress-path"; then
+    ok "complete: CONTROL — a no-flag exhaustion still prints the --progress-path advice"
+  else bad "complete: CONTROL FAILED — the no-flag advice is gone, so its absence above proves nothing: $OUT"; fi
+  rm -rf "$W" "$W2"
+}
+
+# A writer that rewrites a marked file ABOVE its marker every 0.3s until its SENTINEL exists:
+# the consumer's cross seat that wrote once and then made seven in-place Edits. A counter makes
+# every rewrite distinct bytes. Stopped by `churn_stop`, which touches the sentinel and waits --
+# never killed. A hard cap of 60s keeps a lost sentinel from spinning forever.
+churn() {  # $1 = file
+  CHURN_STOP="$1.stop"; rm -f "$CHURN_STOP"
+  ( i=0; end=$(( $(date +%s) + 60 ))
+    while [ ! -e "$CHURN_STOP" ] && [ "$(date +%s)" -lt "$end" ]; do
+      i=$((i + 1)); printf '%s\n- an in-place edit, revision %d\n%s\n' "$SKELETON" "$i" "$MARKER" > "$1"
+      sleep 0.3
+    done ) &
+  CHURN_PID=$!
+}
+churn_stop() { : > "$CHURN_STOP"; wait "$CHURN_PID" 2>/dev/null; }
+
+S13c_complete_marker_must_settle() {
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  # CONTROL: the identical marked file, static, delivers inside one beat -- so the WAITING
+  # below is the churn and not a settle window the beat can never close.
+  printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W/still.md"
+  CB_BEAT=3 cbeat "$SUBJ" "$W" --complete still.md
+  if has "DELIVERED still.md"; then ok "complete: CONTROL — a static marked file settles and DELIVERS inside one beat"
+  else bad "complete: CONTROL FAILED — a static marked file did not deliver, so the churn arm means nothing: $OUT"; fi
+
+  printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W/churn.md"
+  churn "$W/churn.md"
+  cbeat "$SUBJ" "$W" --complete churn.md       # charges the only beat
+  o1="$OUT"
+  cbeat "$SUBJ" "$W" --complete churn.md       # sequence spent: its own edits buy the one grant
+  o3="$OUT"
+  cbeat "$SUBJ" "$W" --complete churn.md       # grant spent, still churning
+  o2="$OUT"; r2=$RC
+  churn_stop
+  OUT="$o1"
+  if has "WAITING   churn.md" && ! has "DELIVERED churn.md"; then
+    ok "complete: a marked file still being edited above its marker is WAITING, not DELIVERED"
+  else bad "complete: a marked file edited in place mid-beat was delivered: $OUT"; fi
+  OUT="$o3"
+  if has "PROGRESS  churn.md" && ! has "DELIVERED churn.md"; then
+    ok "complete: its in-place edits are its evidence of work (PROGRESS), still not DELIVERED"
+  else bad "complete: a churning marked file got no PROGRESS grant, or delivered: $OUT"; fi
+  OUT="$o2"
+  if has "UNSETTLED churn.md" && ! has "absent after" && [ "$r2" -eq 1 ]; then
+    ok "complete: on exhaustion a still-changing marked file is UNSETTLED, never 'absent' (rc 1)"
+  else bad "complete: an exhausted still-changing marked file was not reported UNSETTLED (rc=$r2): $OUT"; fi
+  CB_BEAT=3 cbeat "$SUBJ" "$W" --complete --reset churn.md
+  if has "DELIVERED churn.md"; then ok "complete: once the edits stop, the same file settles and DELIVERS"
+  else bad "complete: the churned file did not deliver after its edits stopped: $OUT"; fi
+
+  # A marked file that PREDATES the join (a previous sprint's file at a reused path) is not
+  # UNSETTLED: nothing changed. On exhaustion it is 'absent', the reading the arming NOTE gave.
+  W3="$(mk_work)"; CBEAT_SINCE=""
+  printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W3/old.md"
+  fx_backdate "$W3/old.md" 3600 || broken "cannot backdate old.md"
+  cb2() { ( cd "$W3" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_SETTLE_SECS=1 AI_DLC_WAIT_POLL_SECS=1 \
+      AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+      bash "$SUBJ" --complete old.md ) > "$BEATOUT" 2>&1; RC=$?; OUT="$(cat "$BEATOUT")"; }
+  cb2; cb2
+  if has "NON-DELIVERY old.md -- absent after" && ! has "UNSETTLED old.md" && [ "$RC" -eq 1 ]; then
+    ok "complete: a marked file older than the join is 'absent' on exhaustion, never UNSETTLED"
+  else bad "complete: a pre-join marked file was reported UNSETTLED or not absent (rc=$RC): $OUT"; fi
+  rm -rf "$W" "$W3"
+}
+
+S13d_complete_unfinished_is_not_absent() {
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\n' "$SKELETON" > "$W/u.md"
+  cbeat "$SUBJ" "$W" --complete u.md gone.md   # charges the only beat
+  if has "WAITING   u.md" && has "UNFINISHED u.md -- present, last non-blank line is not seat-complete:" \
+     && ! has "UNFINISHED gone.md"; then
+    ok "complete: a present unmarked file is WAITING and UNFINISHED; an absent one is not UNFINISHED"
+  else bad "complete: the WAITING beat did not name the present unmarked file UNFINISHED: $OUT"; fi
+  cbeat "$SUBJ" "$W" --complete u.md gone.md   # sequence spent
+  if has "UNFINISHED u.md -- present, last non-blank line is not seat-complete:" \
+     && ! has "NON-DELIVERY u.md -- absent" && [ "$RC" -eq 1 ]; then
+    ok "complete: on exhaustion a present unmarked file is UNFINISHED, never 'absent' (rc 1)"
+  else bad "complete: an exhausted present unmarked file was reported absent or not UNFINISHED (rc=$RC): $OUT"; fi
+  # The near-miss in the SAME beat: a target that really is absent still says so.
+  if has "NON-DELIVERY gone.md -- absent after"; then
+    ok "complete: NEAR-MISS — an absent target beside it is still 'absent'"
+  else bad "complete: NEAR-MISS FAILED — the absent target lost its 'absent' line: $OUT"; fi
+  # Without the flag nothing is ever UNFINISHED.
+  W2="$(mk_work)"; printf '%s\n' "$SKELETON" > "$W2/n.md"
+  cbeat "$SUBJ" "$W2" n.md
+  if has "DELIVERED n.md" && ! has "UNFINISHED"; then ok "complete: CONTROL — no UNFINISHED line without --complete"
+  else bad "complete: CONTROL FAILED — a no-flag beat printed UNFINISHED or did not deliver: $OUT"; fi
+  rm -rf "$W" "$W2"
+}
+
+S13e_complete_marker_not_fenced_not_crlf() {
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\n```text\n%s\n' "$SKELETON" "$MARKER" > "$W/fenced.md"
+  printf '%s\n```text\nquoted\n```\n%s\n' "$SKELETON" "$MARKER" > "$W/closed.md"
+  printf '%s\r\n%s\r\n' "$SKELETON" "$MARKER" > "$W/crlf.md"
+  # A four-backtick fence is not closed by three, nor a backtick fence by tildes.
+  printf '%s\n````text\nquoted\n```\n%s\n' "$SKELETON" "$MARKER" > "$W/short.md"
+  printf '%s\n```text\nquoted\n~~~\n%s\n' "$SKELETON" "$MARKER" > "$W/mixed.md"
+  printf '%s\n````text\nquoted\n`````\n%s\n' "$SKELETON" "$MARKER" > "$W/long.md"
+  CB_BEAT=3 cbeat "$SUBJ" "$W" --complete fenced.md closed.md crlf.md short.md mixed.md long.md
+  if has "WAITING   fenced.md" && ! has "DELIVERED fenced.md"; then
+    ok "complete: a marker inside an unclosed fence does not deliver"
+  else bad "complete: a marker inside an unclosed fence was taken as completion: $OUT"; fi
+  if has "DELIVERED closed.md"; then ok "complete: NEAR-MISS — a marker after a CLOSED fence delivers"
+  else bad "complete: NEAR-MISS FAILED — a marker after a closed fence did not deliver: $OUT"; fi
+  if has "WAITING   short.md" && ! has "DELIVERED short.md" && has "WAITING   mixed.md" && ! has "DELIVERED mixed.md"; then
+    ok "complete: a fence is not closed by a shorter run or by the other fence character"
+  else bad "complete: a \`\`\`\` fence closed by \`\`\`, or a \`\`\` fence closed by ~~~, delivered: $OUT"; fi
+  if has "DELIVERED long.md"; then ok "complete: NEAR-MISS — a fence closed by a LONGER run of its character delivers"
+  else bad "complete: NEAR-MISS FAILED — a fence closed by a longer run did not deliver: $OUT"; fi
+  if has "WAITING   crlf.md" && ! has "DELIVERED crlf.md"; then
+    ok "complete: a marker on a CRLF line does not deliver"
+  else bad "complete: a CRLF marker line was taken as completion: $OUT"; fi
+  rm -rf "$W"
+}
+
+M13_settle_dropped() {
+  mutant settle-dropped -e 's@^  settled "\$1" "\$id_st_"$@  return 0@' || return
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W/churn.md"
+  churn "$W/churn.md"
+  cbeat "$MUT" "$W" --complete churn.md
+  churn_stop
+  if has "DELIVERED churn.md"; then ok "MUTANT settle-dropped: a file still being edited delivers — section 13c catches it"
+  else bad "MUTANT settle-dropped: section 13c survives the settle check being dropped: $OUT"; fi
+  rm -rf "$W"
+}
+
+M14_unfinished_reads_absent() {
+  mutant unfinished-reads-absent \
+    -e 's@^  \[ "\$COMPLETE" -eq 1 \] && \[ -s "\$1" \] && \[ "\$(mtime_of "\$1")" -ge "\$2" \] && ! has_marker "\$1"$@  false@' || return
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\n' "$SKELETON" > "$W/u.md"
+  cbeat "$MUT" "$W" --complete u.md
+  cbeat "$MUT" "$W" --complete u.md
+  if has "NON-DELIVERY u.md -- absent after" && ! has "UNFINISHED u.md"; then
+    ok "MUTANT unfinished-reads-absent: a present seat file is called absent — section 13d catches it"
+  else bad "MUTANT unfinished-reads-absent: section 13d survives UNFINISHED being folded into absent: $OUT"; fi
+  rm -rf "$W"
+}
+
+M15_fence_ignored() {
+  mutant fence-ignored -e 's@(fc == "" && l !~@(l !~@' || return
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\n```text\n%s\n' "$SKELETON" "$MARKER" > "$W/fenced.md"
+  CB_BEAT=3 cbeat "$MUT" "$W" --complete fenced.md
+  if has "DELIVERED fenced.md"; then ok "MUTANT fence-ignored: a fenced marker delivers — section 13e catches it"
+  else bad "MUTANT fence-ignored: section 13e survives the fence test being dropped: $OUT"; fi
+  rm -rf "$W"
+}
+
+M16_crlf_ignored() {
+  mutant crlf-ignored -e 's@ && l !~ /\\r/ && @ \&\& @' || return
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\r\n%s\r\n' "$SKELETON" "$MARKER" > "$W/crlf.md"
+  CB_BEAT=3 cbeat "$MUT" "$W" --complete crlf.md
+  if has "DELIVERED crlf.md"; then ok "MUTANT crlf-ignored: a CRLF marker delivers — section 13e catches it"
+  else bad "MUTANT crlf-ignored: section 13e survives the CRLF test being dropped: $OUT"; fi
+  rm -rf "$W"
+}
+
+M17_fence_closes_on_any_run() {
+  mutant fence-closes-on-any-run \
+    -e 's@else if (substr(r, 1, 1) == fc && length(r) >= fl && substr($0, RSTART + RLENGTH) ~ /^\[ \\t\\r\]\*\$/) { fc = ""; fl = 0 }@else { fc = ""; fl = 0 }@' || return
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\n````text\nquoted\n```\n%s\n' "$SKELETON" "$MARKER" > "$W/short.md"
+  CB_BEAT=3 cbeat "$MUT" "$W" --complete short.md
+  if has "DELIVERED short.md"; then ok "MUTANT fence-closes-on-any-run: a \`\`\`\` fence closed by \`\`\` delivers — section 13e catches it"
+  else bad "MUTANT fence-closes-on-any-run: section 13e survives any fence run closing a fence: $OUT"; fi
+  rm -rf "$W"
+}
+
+M18_settle_is_poll() {
+  # D1's defect restored: the window read from POLL, not SETTLE. With POLL=1 and SETTLE=4 a file
+  # changing every 2.5s settles under POLL and never under SETTLE.
+  mutant settle-is-poll -e 's@-gt "\$SETTLE" \] && return 0@-gt "$POLL" ] \&\& return 0@' || return
+  W="$(mk_work)"
+  printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W/slow.md"
+  ( for i in 1 2 3; do sleep 2.5; printf '%s\n- slow edit %d\n%s\n' "$SKELETON" "$i" "$MARKER" > "$W/slow.md"; done ) &
+  sp_=$!
+  for s in "$SUBJ" "$MUT"; do
+    ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=6 AI_DLC_WAIT_SETTLE_SECS=4 \
+        AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS=3 \
+        AI_DLC_STATE_DIR="_bmad-output/$(basename "$s")" AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+        bash "$s" --since "$(( $(date +%s) - 30 ))" --complete slow.md ) > "$BEATOUT.$(basename "$s")" 2>&1 &
+  done
+  wait
+  OUT="$(cat "$BEATOUT.$(basename "$SUBJ")")"; o_s="$OUT"
+  OUT="$(cat "$BEATOUT.$(basename "$MUT")")"
+  if has "DELIVERED slow.md" && case "$o_s" in *"DELIVERED slow.md"*) false ;; *) true ;; esac; then
+    ok "MUTANT settle-is-poll: edits 2.5s apart deliver under a POLL window and not under SETTLE=4 — the window is SETTLE's"
+  else bad "MUTANT settle-is-poll: the settle window does not separate SETTLE from POLL (subject: $o_s) (mutant: $OUT)"; fi
+  wait "$sp_" 2>/dev/null
+  rm -rf "$W"
+}
+
+S13f_arming_note_only_for_pre_arm_files() {
+  # D2: under --complete a POST-arm undelivered file did not "already have content".
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\n' "$SKELETON" > "$W/post.md"
+  CB_BEAT=2 cbeat "$SUBJ" "$W" --complete post.md
+  if has "UNFINISHED post.md" && ! has "already had content when this join armed"; then
+    ok "complete: a post-arm unmarked file gets no 'already had content' NOTE"
+  else bad "complete: a post-arm file under --complete got the arming NOTE: $OUT"; fi
+  # A PRE-arm file under --complete still gets it.
+  W2="$(mk_work)"; printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W2/old.md"
+  fx_backdate "$W2/old.md" 3600 || broken "cannot backdate old.md"
+  CBEAT_SINCE=$(date +%s); CB_BEAT=2 cbeat "$SUBJ" "$W2" --complete old.md
+  if has "NOTE      old.md already had content when this join armed"; then
+    ok "complete: NEAR-MISS — a pre-arm file under --complete still gets the NOTE"
+  else bad "complete: NEAR-MISS FAILED — a pre-arm file lost the arming NOTE: $OUT"; fi
+  rm -rf "$W" "$W2"
+}
+
+S13g_no_flag_output_byte_identical() {
+  # D2's clause must not move a byte of no-flag output: the same pre-arm world beaten by HEAD's
+  # subject and by a copy with the clause removed, timing words masked, compared whole.
+  W="$(mktemp -d)" || broken "mktemp failed"
+  OLD="$W/old-subject.sh"
+  sed 's@ && \[ "\$(mtime_of "\$t")" -lt "\$j" \] && PREEXISTING=@ \&\& PREEXISTING=@' "$SUBJ" > "$OLD"
+  if cmp -s "$OLD" "$SUBJ"; then bad "no-flag byte identity: FIXTURE STALE — the D2 clause was not found to remove"; rm -rf "$W"; return; fi
+  for s in "$SUBJ" "$OLD"; do
+    d="$W/$(basename "$s" .sh)"; mkdir -p "$d/_bmad-output"
+    printf 'stale\n' > "$d/x.md"; fx_backdate "$d/x.md" 3600 || broken "cannot backdate"
+    # BOTH beats carry the short quantum: an env prefix binds one command, and a bare second
+    # `bash` would sleep the 600s default.
+    ( cd "$d" && export AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 \
+        AI_DLC_MAX_WAIT_BEATS=1 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" && unset CLAUDE_CODE_SESSION_ID \
+        && { bash "$s" x.md y.md; bash "$s" x.md y.md; } ) > "$d.raw" 2>&1
+    sed -E 's/[0-9]+[smhd] (old|since|ago)/N \1/g' "$d.raw" > "$d.out"
+  done
+  a="$(cat "$W/$(basename "$SUBJ" .sh).out")"; b="$(cat "$W/old-subject.out")"
+  case "$a" in *"already had content"*) : ;; *) bad "no-flag byte identity: CONTROL FAILED — the world never printed the arming NOTE: $a"; rm -rf "$W"; return ;; esac
+  if [ "$a" = "$b" ]; then ok "no-flag byte identity: a pre-arm and an absent target print byte-identical output with and without the D2 clause"
+  else bad "no-flag byte identity: the D2 clause changed no-flag output: [$a] vs [$b]"; fi
+  rm -rf "$W"
+}
+
+M19_arming_note_ungated() {
+  mutant arming-note-ungated -e 's@ && \[ "\$(mtime_of "\$t")" -lt "\$j" \] && PREEXISTING=@ \&\& PREEXISTING=@' || return
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\n' "$SKELETON" > "$W/post.md"
+  CB_BEAT=2 cbeat "$MUT" "$W" --complete post.md
+  if has "already had content when this join armed"; then ok "MUTANT arming-note-ungated: a post-arm file gets the false NOTE — section 13f catches it"
+  else bad "MUTANT arming-note-ungated: section 13f survives the D2 clause being removed: $OUT"; fi
+  rm -rf "$W"
+}
+
+M9_marker_not_required() {
+  mutant marker-not-required -e 's@^  \[ "\$COMPLETE" -eq 1 \] || return 0$@  return 0@' || return
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\n' "$SKELETON" > "$W/b.md"
+  cbeat "$MUT" "$W" --complete b.md
+  if has "DELIVERED b.md"; then ok "MUTANT marker-not-required: a skeleton is delivered under --complete — section 13a catches it"
+  else bad "MUTANT marker-not-required: section 13a survives the marker test being dropped: $OUT"; fi
+  rm -rf "$W"
+}
+
+M10_global_progress_grant() {
+  mutant global-progress-grant \
+    -e 's@^    target_progressed "\$t" "\$pg" && PROGRESSED=1$@    for t2_ in $TARGETS; do target_progressed "$t2_" "$pg" \&\& PROGRESSED=1; done@' || return
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\n' "$SKELETON" > "$W/grow.md"; printf '%s\n' "$SKELETON" > "$W/static.md"
+  cbeat "$MUT" "$W" --complete grow.md static.md
+  sleep 1; printf -- '- a second finding\n' >> "$W/grow.md"
+  cbeat "$MUT" "$W" --complete grow.md static.md
+  if has "PROGRESS  static.md" && ! has "NON-DELIVERY static.md"; then
+    ok "MUTANT global-progress-grant: one target's writes extend the other's wait — section 13b catches it"
+  else bad "MUTANT global-progress-grant: section 13b survives a cross-grant: $OUT"; fi
+  rm -rf "$W"
+}
+
+M11_marker_anywhere() {
+  mutant marker-anywhere -e 's@NF { l = \$0 }@/^seat-complete: / { l = $0 }@' || return
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\n%s\n- a finding appended after the marker\n' "$SKELETON" "$MARKER" > "$W/d.md"
+  CB_BEAT=3 cbeat "$MUT" "$W" --complete d.md
+  if has "DELIVERED d.md"; then ok "MUTANT marker-anywhere: a marker followed by a finding delivers — section 13a catches it"
+  else bad "MUTANT marker-anywhere: section 13a survives the marker being matched anywhere: $OUT"; fi
+  rm -rf "$W"
+}
+
+M12_trailing_blank_hides_marker() {
+  mutant trailing-blank-hides -e 's@NF { l = \$0 }@{ l = $0 }@' || return
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\n%s\n\n   \n\n' "$SKELETON" "$MARKER" > "$W/e.md"
+  cbeat "$MUT" "$W" --complete e.md
+  if has "WAITING   e.md" && ! has "DELIVERED e.md"; then
+    ok "MUTANT trailing-blank-hides: blank lines after the marker block delivery — section 13a catches it"
+  else bad "MUTANT trailing-blank-hides: section 13a survives blank lines being read as the last line: $OUT"; fi
+  rm -rf "$W"
+}
+
 # ---------------------------------------------------------------------------
 # THE DRIVER
 # ---------------------------------------------------------------------------

@@ -503,7 +503,54 @@ p_scope_gap() { # scoped split writes gap rows; an untouched split assembles byt
   refused_intact "$w" "gap lines 1-107 of"
 }
 
-P_ALL="fence longfence comment cfence serial_dominant wide_table fence_table sep_outside_fence two_row prose_run sep_at_k single_line fm_crlf_table serial_one roundtrip crlf_map cap manifest sha_moved missing newline refused_intact removed unchanged expect_sha relative no_overwrite scope_changed scope_h3 scope_deletion scope_absent scope_gap"
+# ----------------------------------------------------------- the cross groups (--cross-groups)
+# The pair check below is the FIXTURE'S OWN, not the subject's: every unordered pair of 1..K
+# must sit inside some printed row. It reads only the printed table.
+uncovered() { # <K> on stdin the table -> "<uncovered pairs> <rows> <largest row>"
+  awk -F'\t' -v K="$1" '{ G++; n = split($2, a, ","); if (n > mx) mx = n
+      for (i = 1; i <= n; i++) for (j = i + 1; j <= n; j++) c[a[i] "," a[j]] = 1 }
+    END { m = 0; for (i = 1; i <= K; i++) for (j = i + 1; j <= K; j++) if (!((i "," j) in c)) m++
+          print m, G + 0, mx + 0 }'
+}
+p_cross_cover() { # K=2..24: every pair covered, 1 <= G <= 6, rows <= 2*ceil(K/4), deterministic; K=2 one row; K=8 six
+  local K a b r
+  # CONTROL FIRST: the checker reports a hole when one exists (K=8 with its last row dropped).
+  r="$(bash "$1" --cross-groups 8 2>/dev/null | sed '$d' | uncovered 8)"
+  [ "${r%% *}" -gt 0 ] || return 1
+  for K in 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24; do
+    a="$(bash "$1" --cross-groups "$K" 2>/dev/null)" || return 1
+    b="$(bash "$1" --cross-groups "$K" 2>/dev/null)" || return 1
+    [ -n "$a" ] && [ "$a" = "$b" ] || return 1
+    set -- "$1" $(printf '%s\n' "$a" | uncovered "$K")
+    [ "$2" -eq 0 ] && [ "$3" -ge 1 ] && [ "$3" -le 6 ] && [ "$4" -le $(( 2 * ((K + 3) / 4) )) ] || return 1
+  done
+  [ "$(bash "$1" --cross-groups 2)" = "$(printf '1\t1,2')" ] || return 1
+  [ "$(bash "$1" --cross-groups 8 | grep -c .)" -eq 6 ] || return 1
+  [ "$(bash "$1" --cross-groups 8 | sed -n 6p)" = "$(printf '6\t5,6,7,8')" ]
+}
+p_cross_refuse() { # K<2, non-numeric, empty: exit 64 and nothing on stdout; the K=8 twin answers 0
+  # The twin asserts only rc 0 and a non-empty answer: its SHAPE is cross_cover's to own.
+  local k o rc
+  for k in 1 0 x 2.5 -3 ""; do
+    o="$(bash "$1" --cross-groups "$k" 2>/dev/null)"; rc=$?
+    [ "$rc" -eq 64 ] && [ -z "$o" ] || return 1
+  done
+  o="$(bash "$1" --cross-groups 8 2>/dev/null)"; rc=$?
+  [ "$rc" -eq 0 ] && [ -n "$o" ]
+}
+p_cross_owner() { # the lowest g holding the two smallest cited ordinals; under two distinct -> 64
+  local c o rc
+  for c in 8:1,2:1 8:2,1:1 8:5,6:2 8:3,5:4 8:8,2,7:3 8:03,05:4 8:7,8:3 2:1,2:1 3:2,3:3 12:12,10,1:3; do
+    o="$(bash "$1" --cross-owner "${c%%:*}" "$(printf '%s' "$c" | cut -d: -f2)" 2>/dev/null)" || return 1
+    [ "$o" = "${c##*:}" ] || return 1
+  done
+  for c in 1,1 1 1,9 a,b; do
+    o="$(bash "$1" --cross-owner 8 "$c" 2>/dev/null)"; rc=$?
+    [ "$rc" -eq 64 ] && [ -z "$o" ] || return 1
+  done
+}
+
+P_ALL="fence longfence comment cfence serial_dominant wide_table fence_table sep_outside_fence two_row prose_run sep_at_k single_line fm_crlf_table serial_one roundtrip crlf_map cap manifest sha_moved missing newline refused_intact removed unchanged expect_sha relative no_overwrite scope_changed scope_h3 scope_deletion scope_absent scope_gap cross_cover cross_refuse cross_owner"
 
 arm() { # <predicate> <label>
   if "p_$1" "$PD"; then ok "$2"; else bad "$2"; fi
@@ -540,6 +587,9 @@ arm scope_h3         "A29: --scope-ref, an appended ## with three ### (under hal
 arm scope_deletion   "A30: --scope-ref, a deletion-only hunk in Section 3 beside an edit in Section 7 -> exactly Section 3 and Section 7"
 arm scope_absent     "A31: --scope-ref, a file absent at base -> wholly in scope (equal to its unscoped map); a ref naming no commit -> REFUSED"
 arm scope_gap        "A32: --scope-ref --split -> gap rows around the part, assembly byte-exact; an out-of-scope line moved -> REFUSED 'gap lines 1-107 of'"
+arm cross_cover      "A33: --cross-groups K=2..24 -> every pair covered (the fixture's own check, control: K=8 minus its last row has a hole), 1<=G<=6, rows <= 2*ceil(K/4), identical on two runs; K=2 one row '1<TAB>1,2'; K=8 six rows"
+arm cross_refuse     "A34: --cross-groups K in {1,0,x,2.5,-3,''} -> exit 64, nothing on stdout; the K=8 twin exits 0 with rows"
+arm cross_owner      "A35: --cross-owner -> the lowest g holding the two smallest cited ordinals (order and padding free); under two distinct or out of range -> exit 64"
 
 # ------------------------------------------------------------------------------ the mutants
 apply() { # <file> then (old, new) pairs through M_1_OLD.. env -- every anchor exactly once
@@ -651,6 +701,18 @@ mutant "MX22 deletion-only hunks dropped" "scope_deletion" \
   'if (d == 0) print (c > 0 ? c : 1)' 'if (d == 0) next'
 mutant "MX23 the gap sha unchecked" "scope_gap" \
   '[ "$(sha_of "$GT")" = "$gs" ] || {' 'true || {'
+mutant "MX24 the last cross group dropped" "cross_cover" \
+  '      for (g = 1; g <= G; g++) {
+        row = ""' '      for (g = 1; g < G; g++) {
+        row = ""'
+# Two arms die and both findings are true: the owner rule reads the same quarter bounds the
+# table prints, so a short block both opens a pair hole and leaves a cited ordinal in no quarter.
+mutant "MX25 a cross quarter's block one ordinal short" "cross_cover cross_owner" \
+  'lo[n] = s; hi[n] = s + sz - 1; s += sz' 'lo[n] = s; hi[n] = s + sz - 2; s += sz'
+mutant "MX26 the cross owner taken as the HIGHEST g" "cross_owner" \
+  '    for (g = 1; g <= G; g++)
+      if ((QA[g] == q1' '    for (g = G; g >= 1; g--)
+      if ((QA[g] == q1'
 
 echo
 if [ "$fails" -eq 0 ]; then echo "document-partition: PASS"; exit 0; fi

@@ -102,6 +102,10 @@ on in beats:
               Exit 0 does NOT mean everything landed.
     exit 1 -- NON-DELIVERY. Sequence exhausted: re-dispatch ONCE (then
               re-run with --reset), and if it fails again, HARD_BLOCK.
+              Under --complete, a path reported `UNFINISHED` or `UNSETTLED`
+              is NOT absent: the seat wrote a file. Read it before you decide;
+              a re-dispatch over it discards its findings. Only `absent` is
+              non-delivery.
 
 **One Bash call, one beat -- however many deliverables.** All paths poll inside
 the same beat. Never chain beats (`wait a.md; wait b.md`) into one `Bash` call:
@@ -123,9 +127,11 @@ It enforces both bounds so you do not have to hold them:
   seconds**) bounds a FOREGROUND call, because the operator cannot be heard while
   one is in flight. A backgrounded beat gags nobody, so it is not bound by it.
 - Bound the **sequence**, not just the call: `max_wait_beats` (default **6**,
-  giving a 60-minute ceiling at the default quantum). Exhaustion means the file
-  is absent, which Rule 20 already defines as non-delivery -- **re-dispatch**
-  once, then HARD_BLOCK. The wait never runs forever. The script counts the
+  giving a 60-minute ceiling at the default quantum). Exhaustion over a path the
+  beat reports `absent` is what Rule 20 defines as non-delivery -- **re-dispatch**
+  once, then HARD_BLOCK. A `--complete` path reported `UNFINISHED` (present, not
+  closed by its `seat-complete:` line) or `UNSETTLED` (closed, still changing) is
+  not absent: read it first. The wait never runs forever. The script counts the
   beats in a sidecar keyed by the deliverable, so the sequence terminates
   whether or not you remember it.
 - **An exhausted clock is not evidence of death.** Pass `--progress-path <the
