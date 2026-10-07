@@ -234,6 +234,9 @@ cycle_ok() { # cycle_ok <file>
 # pathspec-only staging, checkout of the original branch BEFORE a delete, the file-list check,
 # a delete that is conditional on it, a STOP naming the branch otherwise, step 2's DEFER, the
 # UN-SYNCED marking, and the stamp left where it was. Nothing in it may commit locally.
+# THE MARKING NEEDS AN UN-SYNCED THAT IS NOT NEGATED. The paragraph also says a hook refusal is
+# "not UN-SYNCED", so a bare `un-synced` match let wU delete the marking and survive; keying on
+# one spelling ("mark the branch") instead broke probe 2, whose correct text says "branch as".
 discard_ok() { # discard_ok <file>
   _b="$(unit "$1" "$A_DISCARD")"; _r=$?
   [ "$_r" -eq 4 ] && return 1
@@ -245,7 +248,8 @@ discard_ok() { # discard_ok <file>
   grep -qE 'only (when|if)[^.;]*branch -d' <<<"$_b" || return 1
   grep -qE '(stop|refuse)[^.;]*name the branch|name the branch[^.;]*(stop|refuse)' <<<"$_b" || return 1
   grep -qE 'step 2 defer' <<<"$_b" || return 1
-  grep -qF 'un-synced' <<<"$_b" || return 1
+  _u="$(grep -oE '(not )?un-synced' <<<"$_b")" || return 1
+  grep -qvx 'not un-synced' <<<"$_u" || return 1
   grep -qE 'stay where (they|it) w(ere|as)|stamp unchanged' <<<"$_b" || return 1
   return 0
 }
@@ -457,7 +461,7 @@ post|wM-nocheckline|   proceeds to step 2's push or to \`apply\`. **Step 1 does 
 post|wN-failcommit|     note it. A push that fails is the next paragraph's case and never ends in a kept commit.|     note it. If the push fails, commit locally and note it.|000000010
 post|wO-nofailcase|     note it. A push that fails is the next paragraph's case and never ends in a kept commit.|     note it.|000000010
 post|wW-nopathspec|     each named by explicit pathspec:|     each named:|000000001
-post|wX-keepcommit|     error in one line;|     error in one line, and commit locally;|000000001
+post|wX-keepcommit|     line and the push error above it in one line;|     line and the push error above it in one line, and commit locally;|000000001
 post|wP-nocheckout|     run \`git checkout <original-branch>\`, the branch step 1 confirmed in sync;|     run \`git status\`, the branch step 1 confirmed in sync;|000000001
 post|wQ-nofilelist|     list every file the self-update branch's commits touch with \`git diff --name-only <original-branch> <self-update-branch>\`;|     list every file the self-update branch's commits touch;|000000001
 post|wR-uncondelete|     only when every listed path is in the written set above, delete it with \`git branch -D <self-update-branch>\`.|     delete it with \`git branch -D <self-update-branch>\`.|000000001
