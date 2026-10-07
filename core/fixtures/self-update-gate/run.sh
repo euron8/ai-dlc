@@ -2511,7 +2511,7 @@ pp_enter() {
   top="$(git -C "$w" rev-parse --show-toplevel 2>/dev/null)" || top=""
   [ -n "$top" ] && [ "$(cd "$top" && pwd -P)" = "$(cd "$w" && pwd -P)" ] \
     || { printf 'FIXTURE ERROR: pp_enter: world [%s] is not its own git toplevel (got [%s])\n' "$w" "$top" >&2; return 98; }
-  cd "$w"
+  cd "$w" || return 99
 }
 # THE ESCAPE, CONSTRUCTED. A stub "distribution" repo whose hook only records that it ran, and a
 # drive standing in it -- the fixture's own cwd. Three worlds: an EMPTY path (what a failed pp_world
@@ -2581,17 +2581,65 @@ ss_assert "pp-green" "$(pp_scan "$GATE" "$PP_GREEN")" \
 # ENCLOSED CONSUMER (PP-ENC BEGIN). A consumer that is a plain SUBDIRECTORY of an enclosing repository
 # passes `--is-inside-work-tree`, and git's hook path then resolves the ENCLOSING repository's hook.
 # The enclosing world has an executable hook that writes a sentinel, a hooksPath and a remote; the
-# consumer is a copy of the seed's inside it. The gate must answer as for a non-repository (no
-# pre-push row) and the sentinel must be ABSENT. The control, one property apart, is a real repository
+# consumer is a copy of the seed's inside it. The gate must answer UNDECIDED on pre-push, naming
+# the unsupported layout -- never the non-repository's silence, which would acquit a push that runs
+# the enclosing hook unprobed -- and the sentinel must be ABSENT. The control, one property apart, is a real repository
 # with the same hook: the sentinel IS written, so an absent sentinel is the guard and not a hook that
 # cannot write.
 PP_SENT_HOOK="$(printf 'touch "%s/sentinel"' "$PP/sent")"
 rm -rf "$PP/sent"; mkdir -p "$PP/sent"
 pp_mk PP_ENC enc "$PP_SENT_HOOK" hooksPath yes
 rm -rf "$PP_ENC/sub"; cp -R "$CONS" "$PP_ENC/sub"; rm -rf "$PP_ENC/sub/.git" "$PP_ENC/sub/_bmad-output"
+# pp_layout <gate> <consumer> -> count of pre-push UNDECIDED rows whose text NAMES the layout. Presence-
+# shaped on the message, because a status count alone passes against any other UNDECIDED (an unborn
+# HEAD, a detached one).
+pp_layout() {
+  bash "$1" "$DIST" "$BASE" "$THEIRS" "$2" 2>/dev/null \
+    | awk -F'\t' '$1 == "SELF-UPDATE-UNDECIDED" && $2 == "pre-push" && $3 ~ /UNSUPPORTED LAYOUT/ && $3 ~ /subdirectory of the enclosing repository/ {n++} END{print n+0}'
+}
 pp_enc_row="$(pp_scan "$GATE" "$PP_ENC/sub")"; pp_enc_hit="$([ -e "$PP/sent/sentinel" ] && echo written || echo absent)"
-ss_assert "pp-enclosed-no-hook" "$pp_enc_row|$pp_enc_hit" "pp=none sum=1 ss=1 und=1|absent" \
-  "a consumer that is a subdirectory of an enclosing repository is answered as a non-repository and the enclosing repository's hook is never run"
+ss_assert "pp-enclosed-undecided" "$pp_enc_row|$pp_enc_hit" "pp=SELF-UPDATE-UNDECIDED sum=0 ss=0 und=1|absent" \
+  "a consumer that is a subdirectory of an enclosing repository is UNDECIDED on pre-push, which SKILL.md step 2 stops on, and the enclosing repository's hook is never run"
+rm -f "$PP/sent/sentinel"
+ss_assert "pp-enclosed-names-layout" "$(pp_layout "$GATE" "$PP_ENC/sub")" "1" \
+  "...and the row names the unsupported layout, so the operator reads the remedy and not just a status"
+rm -f "$PP/sent/sentinel"
+# MUTANT: the UNDECIDED block's guard made false restores round 2's silence. Built beside the gate's
+# siblings (machinery_paths reads setup-sites.md beside $0) with an unmutated control that must
+# reproduce the layout row first, so a copy that cannot run does not score as a kill. Under the mutant
+# the probe block's own toplevel conjunct still holds, so the enclosing hook must STILL not run.
+PPE_ANCHOR='^if \[ -n "\$pp_top_phys" \] && \[ "\$pp_top_phys" != "\$pp_cons_phys" \]; then$'
+ss_assert "pp-enclosed-anchor" "$(grep -c "$PPE_ANCHOR" "$GATE")" "1" \
+  "the enclosed-layout mutation's anchor matches exactly one line"
+ss_assert "pp-enclosed-anchor-ctl" \
+  "$(grep -c '^if \[ -n "\$pp_top_phys_NOT_A_VAR" \] && \[ "\$pp_top_phys" != "\$pp_cons_phys" \]; then$' "$GATE")" "0" \
+  "an impossible anchor of the same shape returns 0, so the 1 above is a match and not a grammar artefact"
+PPE_MUT="$(dirname "$DIST")/ppemut"
+rm -rf "$PPE_MUT"; mkdir -p "$PPE_MUT/mut" "$PPE_MUT/ctl"
+cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$PPE_MUT/mut"/ 2>/dev/null
+cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$PPE_MUT/ctl"/ 2>/dev/null
+ss_assert "pp-enclosed-mut-control" "$(pp_layout "$PPE_MUT/ctl/self-update-gate.sh" "$PP_ENC/sub")" "1" \
+  "an UNMUTATED copy beside its siblings reproduces the layout row, so a mutant's silence is the mutation"
+rm -f "$PP/sent/sentinel"
+sed "s@${PPE_ANCHOR}@if false; then@" "$GATE" > "$PPE_MUT/mut/self-update-gate.sh"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$GATE" "$PPE_MUT/mut/self-update-gate.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-16s mutation matched nothing, so the enclosed-layout arm is unproven\n' "pp-enclosed-mut"
+else
+  ppe_got="$(pp_scan "$PPE_MUT/mut/self-update-gate.sh" "$PP_ENC/sub")|$([ -e "$PP/sent/sentinel" ] && echo written || echo absent)"
+  if [ "$ppe_got" = "pp=none sum=1 ss=1 und=1|absent" ]; then
+    printf '  ok    %-16s KILLED (%s)\n' "pp-enclosed-mut" \
+      "with the layout block disabled the enclosed consumer reads round 2's silence again, and the enclosing hook still does not run"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s SURVIVED or moved elsewhere: got=[%s] want=[%s]\n' "pp-enclosed-mut" "$ppe_got" "pp=none sum=1 ss=1 und=1|absent"
+  fi
+fi
+rm -f "$PP/sent/sentinel"
+# ...and the mutant leaves a real repository's answer where it was: the block never fires there.
+ss_assert "pp-enclosed-mut-green" "$(pp_scan "$PPE_MUT/mut/self-update-gate.sh" "$PP_GREEN")" \
+  "pp=SELF-UPDATE-OK sum=1 ss=1 und=1" "the mutant does not move the green world, so it owns only the enclosed case"
 rm -f "$PP/sent/sentinel"
 pp_mk PP_ENC_REAL encreal "$PP_SENT_HOOK" hooksPath yes
 pp_scan "$GATE" "$PP_ENC_REAL" >/dev/null

@@ -1128,6 +1128,23 @@ done < "$TMP/invoked"
 # does not exempt. The push this cycle
 # makes pays the same hook, so the probe adds one hook run per pull and removes the one that
 # would have stranded a branch.
+# A CONSUMER THAT IS A SUBDIRECTORY OF A LARGER REPOSITORY IS UNDECIDED, NEVER SILENT. It passes
+# --is-inside-work-tree, but its toplevel is the ENCLOSING repository's, so the hook git would run
+# on the push is that repository's -- the probe below refuses to run it, and silence here would
+# read exactly like the non-repository answer, which acquits a push this gate never probed. The
+# layout is unsupported: install.sh installs at a repository's top. The remote is NOT consulted:
+# from inside the subdirectory `git remote` answers for the enclosing repository, which is the
+# confusion itself. A true non-repository fails --is-inside-work-tree and keeps its silent answer.
+# Physical paths on both sides, because macOS /var is /private/var.
+pp_top_phys=""; pp_cons_phys=""
+if [ -z "${AI_DLC_GATE_IN_SAFE_STOP:-}" ] && git -C "$CONSUMER" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  pp_top_phys="$(cd "$(git -C "$CONSUMER" rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null && pwd -P)"
+  pp_cons_phys="$(cd "$CONSUMER" 2>/dev/null && pwd -P)"
+fi
+if [ -n "$pp_top_phys" ] && [ "$pp_top_phys" != "$pp_cons_phys" ]; then
+  emit SELF-UPDATE-UNDECIDED "pre-push" "UNSUPPORTED LAYOUT: this consumer ($pp_cons_phys) is a subdirectory of the enclosing repository at $pp_top_phys, not the top of its own repository. A push from here runs the ENCLOSING repository's pre-push hook, which this gate does not probe, so it cannot say whether the push this cycle makes is refused. Do NOT cut the branch and do NOT push. AI/DLC installs at a repository's top; make the consumer its own repository (or install at the enclosing top), then re-run this gate."
+  exit 0
+fi
 if [ -z "${AI_DLC_GATE_IN_SAFE_STOP:-}" ] \
    && git -C "$CONSUMER" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
    && [ "$(cd "$(git -C "$CONSUMER" rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null && pwd -P)" = "$(cd "$CONSUMER" 2>/dev/null && pwd -P)" ] \
@@ -1135,7 +1152,8 @@ if [ -z "${AI_DLC_GATE_IN_SAFE_STOP:-}" ] \
   # THE CONSUMER MUST BE ITS OWN WORK TREE'S TOP, compared physically (macOS /var is /private/var).
   # A consumer that is a plain subdirectory of an enclosing repository passes --is-inside-work-tree,
   # and the hook git-path then resolves the ENCLOSING repository's hook, which would run from here.
-  # Such a consumer is answered exactly as a non-repository is: silent, no pre-push row.
+  # Such a consumer was answered UNDECIDED and exited above; this conjunct stays as the second wall,
+  # so a regression in that block still never runs the enclosing repository's hook.
   pp_hook="$(cd "$CONSUMER" && git rev-parse --git-path hooks/pre-push 2>/dev/null)"
   case "$pp_hook" in
     ""|/*) ;;
