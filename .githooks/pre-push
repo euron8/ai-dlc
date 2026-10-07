@@ -505,22 +505,28 @@ VERIFIED_FORMAT="$GITDIR/ai-dlc-fixture-verified.format"
 FAILLOG_RECORD="$GITDIR/ai-dlc-fixture-failures"
 FAILLOG_KEEP=20
 
-# Reduce "$1" (the dispatch list) to the fixtures a change can actually affect, using the
-# trace-derived read-sets in $READSET_MAP. Announces what it skipped and why; leaves the list
-# untouched whenever it cannot justify a reduction.
+# Reduce "$1" (the dispatch list) to the fixtures whose KEY moved. Each fixture F has a key
+# record, `$KEYS_DIR/<F>.key`, holding the PRE-RUN hashes of the last run F passed on. F is
+# skipped iff its record exists and every key in K(F) still matches; otherwise F runs.
 #
-# WHY THIS EXISTS BESIDE THE CONTENT KEY. `scripts/suite-content-key.sh` already skips the
-# WHOLE suite when nothing moved, and it is NOT touched here -- it stays the safe outer gate.
-# What it cannot do is skip PART of the suite, so one changed file costs the full makespan.
-# This is the finer skip inside that outer one, and when it is in any doubt the fallback is
-# the full run.
+# K(F): every path in F's read set (its committed rows, or its valid local rows once a trace of
+# it lands -- those REPLACE the committed rows), plus every file under F's own directory, each
+# keyed by its `.now` sha or `-` when absent; the entry list of every DIRECTORY in that set,
+# derived from the hashed path list and never from readdir; and the tool fingerprint. A fixture
+# with no rows at all is keyed on the whole `.now` universe.
 #
-# EVERY BRANCH THAT CANNOT JUSTIFY A SKIP RUNS EVERYTHING. Under-recording one path does not
-# make the suite slow, it makes it SILENTLY SHORT: a fixture that never ran reports nothing
-# and the summary still says green. So absence of evidence is spelled "run it" at every step
-# -- no map, no state, an unreadable either, a manifest that hashed fewer files than it listed,
-# a changed path no fixture is known to read (the update skill's own bookkeeping excepted, see
-# the orphan test), or a fixture with no entry of its own.
+# NOT KEYED, the same exposure as before this record existed: `.git/**`, the content key's
+# EXCLUDE tops (readset_excluded_re), git-ignored paths, anything read under `$HOME`, and
+# environment knobs.
+#
+# A record is written per fixture on PASS, whatever its neighbours did; never on a fail, a kill
+# or a missing verdict. A fixture that ran because a FILE in its read set or own directory moved
+# is recorded `stale`: a stale fixture always runs, and the post-green live trace takes it. Once
+# that trace lands its local rows are its key and the next pass records it `ok`. A LISTING
+# change never stales: the record is written `ok` with every file and directory under each
+# newly appeared entry added to its keys, so whatever F might now read there is keyed.
+#
+# The ONLY run-all is an empty `.now`: the hashing instrument is broken. NO_SKIP stays.
 # Hash every path whose change could matter, into "$1/.now" as `path<TAB>sha`.
 #
 # THE SUBJECT IS TRACKED FILES *PLUS* EVERY PATH THE MAP NAMES. Tracked files are in it so a
@@ -665,41 +671,21 @@ READSET_LOCAL="$GITDIR/ai-dlc-fixture-readsets.local"
 # ONE HELPER EMITS THE MERGED ROW SET, AND EVERY SITE THAT READ THE COMMITTED MAP CALLS IT. A missed
 # site turns a local-only path into an orphan and forces the full suite, or leaves a locally-mapped
 # fixture "unmapped" on one side of a join and mapped on the other.
-#   paths  committed paths plus EVERY local candidate path -- the manifest and the orphan universe.
-#          Validity is NOT applied here: the manifest is what validity is computed FROM, and a path
-#          whose only reader's local set just went invalid must still be a KNOWN path, or editing it
-#          reads as a change no fixture reads and runs everything. Its reader is unmapped and runs.
-#   rows   committed rows plus the VALID local rows (`$out/.local.valid`) -- mapped-ness and
-#          selection. A fixture with ANY committed row uses only those; its local rows are ignored.
-#   known  `paths`, keeping only the rows of fixtures in THIS run's dispatch list (`$out/.present`,
-#          one basename per line) -- the orphan universe, and nothing else.
-#
-# A ROW WHOSE FIXTURE IS GONE MUST NOT MAKE A PATH KNOWN. The local map is written by a detached
-# trace and a fixture deleted or renamed after it keeps its rows there; a committed map keeps a
-# deleted fixture's rows until someone re-derives (`--all` does not drop them). Read into the
-# universe, such a row turns an edit to a path only it names into "a path some fixture reads", the
-# orphan test passes, and the stale committed reader that should have been re-traced is SKIPPED.
-# Measured on a seeded consumer: a ghost local row naming p.txt, the only present reader of p.txt
-# mapped from before it read it, and an edit to p.txt skipped that reader. Under `known` the ghost
-# row is dropped, the path is an orphan, and everything runs. The filter can only turn a skip into a
-# full run, never the reverse: a path whose only mapped reader has no directory has no reader this
-# run can dispatch. An absent `.present` drops every row, so every changed path is an orphan.
-# The MANIFEST stays on `paths`: a superset there only hashes more, and four callers build one
-# with no dispatch list.
-readset_rows() { # <out> <paths|known|rows>
+#   paths  committed paths plus EVERY local candidate path -- the manifest's universe. Validity is
+#          NOT applied here: the manifest is what validity is computed FROM.
+#   rows   `<fx>\t<path>` for selection. A fixture with VALID local rows (`$out/.local.valid`)
+#          uses only those; every other fixture uses its committed rows.
+# The local rows are read FIRST, so the committed rows of a locally-traced fixture are dropped.
+readset_rows() { # <out> <paths|rows>
   local out="$1" mode="$2"
-  { [ -s "$READSET_MAP" ] && grep -v '^#' "$READSET_MAP" | sed 's/^/C	/'
-    if [ "$mode" = rows ]; then [ -s "$out/.local.valid" ] && sed 's/^/V	/' "$out/.local.valid"
+  { if [ "$mode" = rows ]; then [ -s "$out/.local.valid" ] && sed 's/^/V	/' "$out/.local.valid"
     else [ -s "$READSET_LOCAL" ] && sed 's/^/L	/' "$READSET_LOCAL"; fi
+    [ -s "$READSET_MAP" ] && grep -v '^#' "$READSET_MAP" | sed 's/^/C	/'
     :
-  } | RS_PRESENT="$out/.present" awk -F'\t' -v mode="$mode" '
-    BEGIN { if (mode == "known") while ((getline l < ENVIRON["RS_PRESENT"]) > 0) here[l] = 1 }
-    $1 == "C" { com[$2] = 1
-      if (mode == "known" && !($2 in here)) next
-      if (mode == "rows") print $2 "\t" $3; else print $3; next }
-    ($2 in com) { next }
-    $1 == "V" { print $2 "\t" $3; next }
-    $1 == "L" && substr($3, 1, 1) != "#" { if (mode != "known" || ($2 in here)) print $3 }'
+  } | awk -F'\t' -v mode="$mode" '
+    $1 == "V" { loc[$2] = 1; print $2 "\t" $3; next }
+    $1 == "L" { if (substr($3, 1, 1) != "#") print $3; next }
+    $1 == "C" { if (mode != "rows") print $3; else if (!($2 in loc)) print $2 "\t" $3 }'
 }
 
 # A LOCAL ROW SET IS VALID ONLY WHILE EVERY PATH IT RECORDED HASHES AS IT DID IN THE TRACE COPY, AND
