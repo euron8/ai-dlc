@@ -123,8 +123,9 @@ fixtures' rows. A serial sandbox trace of the rest was running in `/private/tmp/
 - **A filing that lands after a batch's releases are built closes the batch** (action 0's batch-183 correction); this batch
   kept building after 0.741.0 merged and the operator stopped it.
 
-**THE DELIVERY GAP IS THREE RELEASES.** graph's `.claude/.ai-dlc-version` reads 0.738.0 against `VERSION` 0.741.0, and the
-gap cannot close until the M5 candidate ships. The banked ruling stands: report the gap and write no runbook.
+**THE DELIVERY GAP IS TWO RELEASES.** graph's `.claude/.ai-dlc-version` reads 0.739.0 on its checked-out sprint branch
+(reconcile #1182; graph `main` still reads 0.729.0) against `VERSION` 0.741.0, and the gap cannot close until the M5
+candidate ships. The banked ruling stands: report the gap and write no runbook.
 
 Batch 201's block below is history: batch 202's block replaces its branches, its unfiled candidate and its delivery gap.
 
