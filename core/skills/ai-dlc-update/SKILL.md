@@ -520,8 +520,9 @@ prose is itself generated rather than composed.
      (`origin` is the remote step 1 synced against; the last argument is a NEW untracked path
      the wrapper writes only on a hook refusal). Exit 0 means pushed: open a PR, and
      **auto-merge (squash, delete branch)** — no operator gate. Exit 4 (`TRANSPORT`) and exit 3
-     (`HOOK-REFUSED`) are the next paragraph's two cases; exit 2 is a refusal before anything
-     ran — report its stderr line and treat it as exit 4.
+     (`HOOK-REFUSED`) are the next paragraph's two cases; exit 2 is a refusal with nothing
+     pushed — a bad argument, a remote with more than one push URL, or a hook that moved the
+     branch — so report its stderr line and treat it as exit 4.
      **That holds only when step 1 reached sync**: the preflight then confirmed the
      branch is in sync with `origin`, so this merge cannot strand local commits.
      This bullet is never reached on an UN-SYNCED branch: step 2 deferred above,
@@ -566,10 +567,12 @@ prose is itself generated rather than composed.
      so the remedy is the operator's, at the gated apply, exactly as for a gate DEFER. In this
      order: report the `HOOK-REFUSED <rc> <phases>` line;
      run `git checkout <original-branch>`;
-     restore BOTH approval records, which lived only on the self-update commit, with
-     `git show "${self_update_branch}:<gate-record-path>" > <gate-record-path>` for the gate record
-     and `git show "${self_update_branch}:<fixture-log-path>" > <fixture-log-path>` for the fixture
-     runner's log;
+     restore BOTH approval records — the gate record and the fixture runner's log — from the
+     self-update commit, each through a temporary file so a record the branch does not hold is
+     never truncated:
+     `git show "${self_update_branch}:<path>" > <path>.restore && mv <path>.restore <path>`.
+     A record the branch does not hold is already in the working tree, uncommitted, and stays
+     as it is; delete the empty `<path>.restore` that the failed `git show` left;
      run the same `git diff --name-only <original-branch> <self-update-branch>` check and, only
      when every listed path is in the written set above, `git branch -D <self-update-branch>`
      (any path outside it: STOP and name the branch, as above).

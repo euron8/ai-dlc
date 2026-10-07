@@ -3084,11 +3084,18 @@ printf '#!/bin/sh\nexit 0\n' > "$PU_A/W/$PU_A_SLICE"
 git -C "$PU_A/W" branch -q orig
 git -C "$PU_A/W" add -- "$PU_A_GATE" "$PU_A_LOG" "$PU_A_SLICE" && git -C "$PU_A/W" commit -q -m self-update
 pu_a_gate_blob="$(git -C "$PU_A/W" rev-parse "su:$PU_A_GATE")"; pu_a_log_blob="$(git -C "$PU_A/W" rev-parse "su:$PU_A_LOG")"
+# A record the branch does NOT hold: a fixture log written after the commit, as step 2's sentence
+# order allows. The restore must leave it byte-identical; a bare `git show ... > <path>` truncates it
+# before git fails, which is the defect this world exists for.
+PU_A_UNC=_bmad-output/ai-dlc-update/self-update-fixtures-20990101T000001Z.md
+printf '# fixture log, written after the commit\n' > "$PU_A/W/$PU_A_UNC"
+pu_a_unc_blob="$(git -C "$PU_A/W" hash-object "$PU_A_UNC")"
 pu_a_rc="$(pu_run "$PU_SRC" "$PU_A")"
 PU_A_PUSHREC="$(cat "$PU_A/outname")"
+# THE RESTORE, AS SKILL.md SPELLS IT: through a temporary file, moved into place only on success.
+pu_a_restore() { git -C "$PU_A/W" show "su:$1" > "$PU_A/W/$1.restore" 2>/dev/null && mv "$PU_A/W/$1.restore" "$PU_A/W/$1"; rm -f "$PU_A/W/$1.restore"; return 0; }
 git -C "$PU_A/W" checkout -q orig \
-  && git -C "$PU_A/W" show "su:$PU_A_GATE" > "$PU_A/W/$PU_A_GATE" \
-  && git -C "$PU_A/W" show "su:$PU_A_LOG" > "$PU_A/W/$PU_A_LOG"
+  && pu_a_restore "$PU_A_GATE" && pu_a_restore "$PU_A_LOG" && pu_a_restore "$PU_A_UNC"
 pu_a_names="$(git -C "$PU_A/W" diff --name-only orig su | grep -c .)" || pu_a_names=0
 pu_a_extra="$(git -C "$PU_A/W" diff --name-only orig su | grep -vxF -e "$PU_A_GATE" -e "$PU_A_LOG" -e "$PU_A_SLICE" | grep -c .)" || pu_a_extra=0
 [ "$pu_a_extra" -eq 0 ] && git -C "$PU_A/W" branch -q -D su
@@ -3098,9 +3105,14 @@ pu_a_file() { # pu_a_file <path> -> untracked | tracked | missing
   else printf untracked; fi
 }
 ss_assert "pu-a1-discard" \
-  "rc=$pu_a_rc|names=$pu_a_names|extra=$pu_a_extra|head=$(git -C "$PU_A/W" symbolic-ref -q HEAD)|su=$(git -C "$PU_A/W" rev-parse -q --verify refs/heads/su >/dev/null && echo present || echo gone)|R1=$(pu_landed "$PU_A" R1)|gate=$(pu_a_file "$PU_A_GATE"),$([ "$(git -C "$PU_A/W" hash-object "$PU_A_GATE")" = "$pu_a_gate_blob" ] && echo same || echo changed)|log=$(pu_a_file "$PU_A_LOG"),$([ "$(git -C "$PU_A/W" hash-object "$PU_A_LOG")" = "$pu_a_log_blob" ] && echo same || echo changed)|push=$(pu_a_file "$PU_A_PUSHREC"),$(grep -c '^# probe: ' "$PU_A/W/$PU_A_PUSHREC" 2>/dev/null)|slice=$(pu_a_file "$PU_A_SLICE")" \
-  "rc=3|names=3|extra=0|head=refs/heads/orig|su=gone|R1=absent|gate=untracked,same|log=untracked,same|push=untracked,6|slice=missing" \
-  "after HOOK-REFUSED and the step-2 discard: HEAD is the original branch, the self-update branch is gone, nothing was pushed, the gate record and fixture log are restored byte-for-byte and the push record carries its '# probe:' lines -- all three uncommitted -- and the slice left with the branch"
+  "rc=$pu_a_rc|names=$pu_a_names|extra=$pu_a_extra|head=$(git -C "$PU_A/W" symbolic-ref -q HEAD)|su=$(git -C "$PU_A/W" rev-parse -q --verify refs/heads/su >/dev/null && echo present || echo gone)|R1=$(pu_landed "$PU_A" R1)|gate=$(pu_a_file "$PU_A_GATE"),$([ "$(git -C "$PU_A/W" hash-object "$PU_A_GATE")" = "$pu_a_gate_blob" ] && echo same || echo changed)|log=$(pu_a_file "$PU_A_LOG"),$([ "$(git -C "$PU_A/W" hash-object "$PU_A_LOG")" = "$pu_a_log_blob" ] && echo same || echo changed)|push=$(pu_a_file "$PU_A_PUSHREC"),$(grep -c '^# probe: ' "$PU_A/W/$PU_A_PUSHREC" 2>/dev/null)|slice=$(pu_a_file "$PU_A_SLICE")|unc=$(pu_a_file "$PU_A_UNC"),$([ "$(git -C "$PU_A/W" hash-object "$PU_A_UNC")" = "$pu_a_unc_blob" ] && echo same || echo changed)|tmp=$(find "$PU_A/W/_bmad-output" -name '*.restore' | grep -c .)" \
+  "rc=3|names=3|extra=0|head=refs/heads/orig|su=gone|R1=absent|gate=untracked,same|log=untracked,same|push=untracked,6|slice=missing|unc=untracked,same|tmp=0" \
+  "after HOOK-REFUSED and the step-2 discard: HEAD is the original branch, the self-update branch is gone, nothing was pushed, the gate record and fixture log are restored byte-for-byte and the push record carries its '# probe:' lines -- all three uncommitted -- the slice left with the branch, and a record the branch never held is left byte-for-byte with no temporary file behind"
+# CONTROL, ONE PROPERTY APART: the bare redirect the restore replaced empties that same record.
+printf '# fixture log, written after the commit\n' > "$PU_A/W/$PU_A_UNC.ctl"
+git -C "$PU_A/W" show "orig:$PU_A_UNC.ctl" > "$PU_A/W/$PU_A_UNC.ctl" 2>/dev/null
+ss_assert "pu-a1-restore-control" "bytes=$(wc -c < "$PU_A/W/$PU_A_UNC.ctl" | tr -d ' ')" "bytes=0" \
+  "control: a bare 'git show <branch>:<path> > <path>' on a record the branch does not hold truncates it -- the hazard the temporary-file restore exists for is live here"
 unset GIT_CONFIG_NOSYSTEM GIT_CONFIG_GLOBAL GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
 
 # --- A STAGING WRITE THAT FAILS IS UNDECIDED (BL-360) -------------------------------------

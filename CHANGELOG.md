@@ -41,7 +41,10 @@ the fixtures this release changes re-traced on top.
 - **Delivery.** The consumer's installed gate and SKILL.md run the delivering pull, so that pull still pays two hook runs.
   The saving starts on the pull after it.
 - `self-update-gate`'s fixture drops the probe's cells and proves the gate runs no hook. It covers the wrapper against a
-  real `git push` in every case above, with a hook-run counter and 16 killed mutants.
+  real `git push` in every case above, with a hook-run counter. The release adds 14 mutants, all killed: 12 against
+  the wrapper and 2 against the gate.
+- On a hook refusal, step 2 restores the gate record and fixture log through a temporary file, so a record the
+  discarded branch never held is left as it is instead of truncated by a bare `git show … > <path>`.
 
 ### readset-skip finishes under the read-set deriver's sandbox (BL-469)
 
