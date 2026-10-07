@@ -44,6 +44,13 @@ the pull that delivers it, so this gate first judges the pull after this one.
 - Known shapes the scan does not model (a one-line `then … else`, `fi;`, an `if` inside a heredoc,
   a run inside a longer `&&` list) occur in neither the shipped hook nor the reference consumer's.
 
+### A ledger whose every live receipt already passes is no longer "nothing observed"
+
+- `validate-backlog-receipts.sh` R2 failed with "ZERO scored receipts" whenever the only live
+  `sh` receipt exited 0 at HEAD, which is every release that fixes the last live receipt. With
+  every receipt already passing, R2 now passes and says `R2 all-already-passing`. A ledger with no
+  scored and no already-passing receipt still fails.
+
 ## [0.739.0] - 2026-10-06
 
 Batch 202's first release, shipped alone because it edits both pre-push hooks. It is the
