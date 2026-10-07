@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 439..493. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 431..499. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,67 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 202 SHIPPED THREE RELEASES, `v0.739.0` (`4d8a6f64`, #1041), `v0.740.0` (`bc8bfed5`, #1042) AND `v0.741.0`
+(`65b4334c`, #1043), AND DISCHARGED NO CONSUMER CANDIDATE.** It was handed the plan by peer session ai-dlc-5b at
+`origin/main` `8854b5eb` (`VERSION` 0.738.0).
+- `v0.739.0`, shipped alone (it edits both pre-push hooks): batch 201's `b201-nest`. A pre-push pool cannot nest past one
+  level (`PREPUSH_POOL_DEPTH`), and the self-update gate answers a consumer that is a subdirectory of a larger repository
+  `UNDECIDED`, decided by `git rev-parse --show-prefix`.
+- `v0.740.0`: `BL-456` (the gate runs each gating script with the hook's own argv, against the hook the push will run) and
+  arm R2's all-already-passing fix.
+- `v0.741.0`, shipped alone (it edits both pre-push hooks): PER-FIXTURE CHECKSUM KEYS. Each fixture's record under
+  `$GITDIR/ai-dlc-fixture-keys/` holds the pre-run hash of every path it reads, every file under its own directory, every
+  directory listing it reads, and every tool its files name. A fixture is skipped only while every key matches. The
+  "changed path in no read set, run all" fallback is gone. Also: the read-set deriver writes the map after every fixture.
+  **It was pushed with `--no-verify` on the operator's instruction**; the gate's last full run was on its parent
+  `4364cfa0`, 53 of 54 units green, and the one commit on top re-anchors a `readset-skip` mutant.
+
+Live backlog **1 -> 2** (BL-456 rotated; BL-465 and BL-466 filed), archive **461 -> 462**.
+
+**TWO CONSUMER CANDIDATES WERE FILED AFTER THIS BATCH'S RELEASES WERE BUILT, AND THEY ARE NOT IN ANY RELEASE.** The M5 one sits on
+graph's pushed branch `ai-dlc-update/file-pc-s317-readset-skip-m5-fxroot`; the probe one on its sprint branch `ai-dlc/carry-over/telv3-base-completion-ff1-root-cause` (neither is on graph `main`):
+- `PC-S317-READSET-SKIP-M5-SEEDS-CORE-FIXTURES-UNDER-A-TESTS-FIXTURES-HOOK`. **GRAPH CANNOT PUSH UNTIL THIS SHIPS**:
+  0.741.0's `readset-skip` M5 arm keys gamma under `core/fixtures/`, a consumer hook looks it up under `tests/fixtures/`,
+  and the arm fails every consumer push, including the self-update push that installs 0.741.0.
+- `PC-S317-SELF-UPDATE-GATE-PUSH-PROBE-DUPLICATES-THE-PUSH-HOOK`. The gate's arm P runs the consumer's whole pre-push
+  hook to predict step 2's push, which then runs the same hook again.
+
+**ONE BRANCH IS BUILT AND NOT SHIPPED, AND IT WAS BUILT OUTSIDE ACTION 0.** `b202-m5-fxroot` at `012e4f31`, on
+`65b4334c`: `057745dc` reads `FXROOT` off the resolved pool block once and seeds and keys M5's gamma under it, cut as
+`0.741.1` naming the M5 id; `012e4f31` re-traces 40 fixtures' read sets into the map. Measured: `readset-skip` 260 of 260
+under the consumer hook (M5 reads `|gamma`, its mutant killed) and 258 of 258 under the distribution hook. **It had no
+contract adversary and no tip adversary**; treat it as a candidate fix for action 0, not as reviewed work. A draft
+contract for the probe candidate is NOT carried: it was never adversaried, and action 0 writes its own.
+
+**HELD BRANCHES, BUILT IN THIS BATCH, NOT SHIPPED:**
+- `b202-cs` at `67d9ff10`: `BL-464`, carrying
+  `PC-S317-CROSS-SEAT-IS-THE-SERIAL-TAIL-OF-A-SECTIONS-PARTY-ROUND-AND-WRITES-NOTHING-UNTIL-DONE`. Cross-group sharding
+  (`partition-document.sh --cross-groups`), `wait-for-deliverable.sh --complete` and the `seat-complete:` marker. At cut:
+  stamp `K3C_RELEASE` in `core/scripts/validate-adversarial-convergence.sh` from `0.0.0-CUT`, and cite the PC id verbatim
+  in the release commit only. BL-464 has no live backlog entry; the branch carries its receipt.
+- `b202-r2` at `da88c226`: arm R2 rounds 5-7. Its harness's BL-464 live control must point at `67d9ff10`'s receipt.
+
+**READ-SET STATE, AND IT DECIDES THE NEXT PUSH'S COST.** After 0.741.0, 39 fixture records are `stale` and 13 fixtures have
+no read set, so a push runs about 53 fixtures until each is traced. A stale record clears only through the post-green live
+trace into `.git/ai-dlc-fixture-readsets.local`; committed map rows do not clear it. `012e4f31` above carries 40 fresh
+fixtures' rows. A serial sandbox trace of the rest was running in `/private/tmp/claude-501/b202-sbclone-0` at the close.
+
+**OPERATOR RULINGS, BATCH 202:**
+- Build the mechanism the operator proposes and solve its hard part inside it; never substitute a coarser design that
+  sidesteps it. The checksum design was proposed 2026-07-29 and swapped for a suite-level key, which took 19 releases of
+  patches.
+- KISS on findings: a finding with a small fix is fixed in-branch and ships; only a structural BLOCKER earns another round.
+  One tip adversary per release.
+- A push that runs every fixture is a defect to fix in the batch that sees it, never a choice to offer.
+- The suite-pole guard records a row for whatever width ran (`BL-465`).
+- **A filing that lands after a batch's releases are built closes the batch** (action 0's batch-183 correction); this batch
+  kept building after 0.741.0 merged and the operator stopped it.
+
+**THE DELIVERY GAP IS THREE RELEASES.** graph's `.claude/.ai-dlc-version` reads 0.738.0 against `VERSION` 0.741.0, and the
+gap cannot close until the M5 candidate ships. The banked ruling stands: report the gap and write no runbook.
+
+Batch 201's block below is history: batch 202's block replaces its branches, its unfiled candidate and its delivery gap.
 
 **BATCH 201 SHIPPED THREE RELEASES, `v0.736.0` (`6b936214`, #1037), `v0.737.0` (`65e4d8fe`, #1038) AND `v0.738.0`
 (`9bdbc311`, #1039), AND DISCHARGED NO CONSUMER CANDIDATE.** It was handed the plan by peer session ai-dlc-82 at
@@ -366,75 +427,6 @@ unchanged. The pins existed only locally. On the operator's instruction no sha l
 removed all 12293 commits at once: 0 remain, `origin/main` resolves, `git fsck` exits 0, `.git` went from 42M to 28M.
 
 Batch 197's block below is history: batch 198's block replaces its delivery gap and its decisions list.
-
-**BATCH 197 SHIPPED ONE RELEASE, `v0.729.0` (`d3d2e481`, #1022), AND DISCHARGED NO CONSUMER CANDIDATE.** It was
-invoked by peer handoff (`ai-dlc-16`) at `origin/main` `ff325996` (`VERSION` 0.728.0). The opening sweep read live 10 on
-44 qualifying refs, unfiled 1 (`PC-S316-VACUOUS-VALIDATOR-FAILING-ON-EVERY-STORY-IS-A-FINDING`, dated 2026-10-04), worklist 0,
-TERMINAL 203, every control passing. The consumer's working-tree ledger equals its `HEAD`, and it filed nothing during the
-batch. The whole-backlog adjudication covered the one live entry, `BL-375`: LIVE, with one non-trace remedy buildable.
-- `v0.729.0`: `BL-375` PARTIAL. `scripts/readset-stage1-run.sh` runs one stage-1 sandbox trace and records it in an
-  append-only ledger; `scripts/readset-stage1-verdict.sh` scores the last three runs against the stage-1 close criterion.
-  New `.dist-only` fixture `readset-stage1-verdict`. `FORK_BUDGET` 3196 -> 3204.
-
-Live backlog **1**, archive **446**. Net closed minus filed: **0**.
-
-**EVERY ADVERSARY FOUND SOMETHING ON A GATE-GREEN SHAPE, AGAIN, AND THE TIP TOOK TWO ROUNDS.** The contract pass found a
-BLOCKER (an `fs_usage` or `both` run scored MET vacuously) and nine DEFECTs. Tip round 1 found six DEFECTs, among them a
-SIGKILLed run vanishing from the ledger and a sandbox-profile override passed through. Round 2 found an unguarded pair check
-admitting a wrong MET, and a false SIGKILL claim that a stub writing the map early had hidden. All fixed before merge.
-
-**READ-SET TRACES, ONE FIXTURE PER `--list` RUN AT LOAD 1.8-3.6.** Committed in the release: `readset-skip` (clean on the
-second try, after 19 drop notices), `check-3b-locked-anchor` (its stale `-` row dropped), `apply-setup-sited-merge` (clean
-on the second try, after 13; first mapping, 46 rows) and `apply-drift-refile`. **Owed:** `enforcement-map-sites`, which
-OMITTED twice (30 drops plus a 39-path canary, then 11), and the new `readset-stage1-verdict`, unmapped and run on every
-push. Stage 1 itself is not traced; the wrapper is how it is run now.
-
-**THE BATCH CLEANUP DELETED 227 LOCAL `worktree-agent-*` BRANCHES, MOST OF THEM OLDER BATCHES'.** No worktree held them.
-Every commit left dangling, 12293, is pinned under `refs/recovered/b197/<sha>`; `git fsck --dangling` reads 0 commits.
-The branch names and their reflogs are not recoverable.
-
-**THE DELIVERY GAP IS FIVE RELEASES.** The consumer is installed at 0.724.0 against `VERSION` 0.729.0; 0.727.0 is
-bootstrapping. PENDING is **7** (0.725.0 three, 0.726.0 three, 0.727.0 one). Batch 196's 8 counted the 0.718.0 id, which
-the installed 0.724.0 already carries. The banked ruling stands: report the gap and write no runbook. **OPERATOR DECISIONS
-STILL OPEN:** whether `refs/recovered/b197` is kept.
-
-Batch 196's block below is history: batch 197's block replaces its delivery gap and its decisions list.
-
-**BATCH 196 SHIPPED ONE RELEASE, `v0.728.0` (`a972fddb`, #1020), AND DISCHARGED NO CONSUMER CANDIDATE.** It was
-invoked by peer handoff (`ai-dlc-79`) at `origin/main` `5f54aea5` (`VERSION` 0.727.0). The opening sweep read live 10 on
-44 qualifying refs: 8 discharged and awaiting the consumer's close, 1 in flight, 1 unfiled. Worklist 1 (`BL-448`),
-TERMINAL 203, every control passing except the live floor, which read 0 and so could not fail. The consumer's
-working-tree ledger equals its `HEAD`, and it filed nothing during the batch.
-- `v0.728.0`: `BL-448`. `--require-done` prints the closing-writer remedy only for a `review` story; every other
-  non-`done` status is still refused, with a remedy naming no closing writer. `deploy-validate.md` and
-  `implementation.md` §7 are scoped the same way. A24 pins it; the receipt is behavioural.
-- `v0.728.0`: `BL-375` PARTIAL. The deriver drops an absent `-`-leading row. `enforcement-map-sites:1843` put
-  `--exclude-dir` after `--`, so BSD `grep` read it as a file and never excluded; fixed at the source.
-
-Live backlog **2 -> 1**, archive **445 -> 446**. Net closed minus filed: **-1**.
-
-**`BL-448` DISCHARGES NOTHING UPSTREAM, AND THE NEXT SWEEP WILL SHOW THAT BY DESIGN.**
-`PC-S316-REQUIRE-DONE-REFUSES-EXTENSION-DECLARED-STORY-STATUSES` is cited only by the archived `BL-448`, so it moves
-from IN-FLIGHT to DISCHARGED and to discharged-but-invisible: no release commit names it. Do not "repair" that by
-naming it. The refusal it complains about is unchanged.
-
-**EVERY ADVERSARY FOUND SOMETHING ON A GATE-GREEN SHAPE, AGAIN.** The contract pass found three BLOCKERs (A24 would
-entangle A23's mutant, a false else-branch wording, a receipt accepting a relaxed refusal). The tip pass found two
-rewordings of the remedy that passed both A24 and the receipt. All fixed before merge.
-
-**OPERATOR DECISION PRESENTED, NO REPLY RECEIVED:** the REQUIRE-DONE and
-`PC-S316-VACUOUS-VALIDATOR-FAILING-ON-EVERY-STORY-IS-A-FINDING` candidates stay the consumer's own (recommended
-option A, taken). Option B, a declared-extension-status allowlist for `--require-done`, was not built.
-
-**READ-SET TRACE OWED:** `apply-setup-sited-merge`, `readset-skip`, `enforcement-map-sites`, `apply-drift-refile`,
-each one per `--list` run; 0.728.0 changed the last-but-one's grep and the deriver's filter, and
-`check-3b-locked-anchor`'s row `core/fixtures/check-3b-locked-anchor/-` drops on its next trace. Not run this batch.
-
-**THE DELIVERY GAP IS FOUR RELEASES.** The consumer is installed at 0.724.0 against `VERSION` 0.728.0; 0.727.0 is
-bootstrapping. PENDING is 8, every one shipped before this batch. The banked ruling stands: report the gap and write
-no runbook. **OPERATOR DECISIONS STILL OPEN:** none.
-
-Batch 195's block below is history: batch 196's block replaces its delivery gap and its decisions list.
 
 ### Derive the state; do not trust the numbers below
 
