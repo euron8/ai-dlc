@@ -187,14 +187,14 @@ done
 case "$TRACER" in fs_usage|sandbox|both) ;; *) die "unknown --tracer '$TRACER'. $USAGE" ;; esac
 
 # `--local-map <file>` IS THE PRE-PUSH HOOK'S MODE, and it never writes the committed map. Both hooks
-# start it DETACHED after a green suite, for the fixtures that have no committed row and no valid
-# local row, so an unmapped fixture stops running on every push without anyone hand-running this.
+# start it DETACHED after a green suite, for the fixtures that have no valid read set and the ones
+# whose key record went stale, so neither keeps running on every push without anyone hand-running this.
 # Each fixture whose trace is clean has its rows in <file> replaced, atomically (temp + mv), as
 # `<fx>\t<path>\t<sha256 or ->` plus `<fx>\t#deriver\t<sha256 of this script>`; the hook honours a
 # row set only while every recorded path still hashes the same and this script is unchanged. A
 # discarded trace writes `<fx>\t#discards\t<n>\t<run.sh sha>:<deriver sha>` instead, and the hook
-# stops re-tracing a fixture after three in a row on one key. Rows of a fixture the COMMITTED map
-# names are pruned on every write: committed rows always win. Unprivileged by construction -- the
+# stops re-tracing a fixture after three in a row on one key. A valid local row set REPLACES the
+# committed rows of its fixture in the hook. Unprivileged by construction -- the
 # sandbox tracer only -- and the fixture's normal-run log is read from `<file>.logs/<fx>`, where the
 # hook stashed it, because a trace whose verdict lines differ from the normal run's is not a trace
 # of the run that passed.
@@ -667,9 +667,9 @@ readset_hash_rows() {
 # readset_local_write <local map> <committed map> <ok rows> <discards> <traced fixtures> <deriver sha>
 #   <ok rows>   `<fx>\t<path>\t<sha>` for every fixture whose trace was clean
 #   <discards>  `<fx>\t<key>\t<why>` for every fixture whose trace was discarded
-# Rewrites <local map> ATOMICALLY (a temp file beside it, then mv): every row of a fixture the
-# committed map names is pruned (committed rows always win), every traced fixture's rows are
-# replaced, a clean one gains its `#deriver` key row, and a discarded one carries
+# Rewrites <local map> ATOMICALLY (a temp file beside it, then mv): every traced fixture's rows are
+# replaced -- a fixture the committed map names included, because the hook's valid local rows
+# REPLACE that fixture's committed ones (that is how a stale record clears) -- a clean one gains its `#deriver` key row, and a discarded one carries
 # `<fx>\t#discards\t<n>\t<key>\t<why>` -- n counts consecutive discards on one key, so a changed
 # key starts again at 1.
 #   <present>   one fixture basename per line: the fixtures with a run.sh in the checkout this trace
@@ -682,26 +682,23 @@ readset_local_write() {
   tmp="$lm.tmp.$$"
   traced="$(printf '%s' "$traced" | tr '\n\t' '  ')"
   {
-    [ -s "$cm" ] && grep -v '^#' "$cm" | cut -f1 | LC_ALL=C sort -u | sed 's/^/C\t/'
     [ -s "$present" ] && sed 's/^/P\t/' "$present"
     [ -s "$disc" ] && sed 's/^/D\t/' "$disc"
     [ -s "$lm" ] && sed 's/^/L\t/' "$lm"
     [ -s "$okr" ] && sed 's/^/O\t/' "$okr"
     :
   } | awk -F'\t' -v traced=" $traced " -v dsha="$dsha" '
-    $1 == "C" { com[$2] = 1; next }
     $1 == "P" { here[$2] = 1; next }
     $1 == "D" { dk[$2] = $3; dw[$2] = $4; next }
     $1 == "L" {
-      if ($2 in com) next
       if (!($2 in here)) next
       if ($3 == "#discards") { pn[$2] = $4; pk[$2] = $5 }
       if (index(traced, " " $2 " ") == 0) { sub(/^L\t/, ""); print; next }
       next }
-    $1 == "O" { if ($2 in com) next; ok[$2] = 1; sub(/^O\t/, ""); print; next }
+    $1 == "O" { ok[$2] = 1; sub(/^O\t/, ""); print; next }
     END {
       for (f in ok) print f "\t#deriver\t" dsha
-      for (f in dk) { if (f in com) continue; n = ((f in pk) && pk[f] == dk[f]) ? pn[f] + 1 : 1; print f "\t#discards\t" n "\t" dk[f] "\t" dw[f] }
+      for (f in dk) { n =((f in pk) && pk[f] == dk[f]) ? pn[f] + 1 : 1; print f "\t#discards\t" n "\t" dk[f] "\t" dw[f] }
     }' | LC_ALL=C sort > "$tmp" || { rm -f "$tmp"; return 1; }
   mv "$tmp" "$lm" || { rm -f "$tmp"; return 1; }
 }
