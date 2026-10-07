@@ -17046,3 +17046,58 @@ OPEN:** whether review sharding becomes the default.
 
 Batch 192's block below is history: batch 193's block replaces its delivery gap and its decisions list.
 
+**BATCH 195 SHIPPED THREE RELEASES, `v0.725.0` (`95655e50`, #1015), `v0.726.0` (`ab1586db`, #1016) AND `v0.727.0`
+(`64f60705`, #1017), AND DISCHARGED SEVEN CONSUMER CANDIDATES.** It was invoked by peer handoff (`ai-dlc-06`) at
+`origin/main` `f8384eea` (`VERSION` 0.724.0). The opening sweep read live 8 on 38 qualifying refs, unfiled 7 (every
+batch-194 `PC-S316-*` filing), worklist 0 (a true empty), TERMINAL 203, every control passing. The consumer pulled to
+0.724.0 mid-batch and filed two more; both were scoped.
+- `v0.725.0`: `BL-441` (`--all` newline list discarded every trace on one OMITTED fixture), `BL-442` (story-provenance
+  mutant writer unpinned), `BL-443` NOTE (flat `_bmad-output/` files the map names no reader for no longer force the
+  suite; range keying refused as fail-open).
+- `v0.726.0`: `BL-444` (state claims carry their command; operator attributions cite a quote and locator), `BL-445`
+  (bug-investigation §2c adversarial pass on the root cause), `BL-446` (authorization-premise invalidation). New shipping
+  fixture `process-rule-pins`.
+- `v0.727.0`, bootstrapping (`apply.sh`), shipped alone: `BL-447`. A setup-sited `BOTH-CHANGED->CLASSIFY` file whose only
+  consumer delta is its sites resolves as `RESOLVED setup-site-merge`. Measured on the consumer's 0.724.0 pull: both
+  hand-merged files resolve byte-equal to its hand merge, 18 of 20 rows unchanged; 0.722.0 and 0.691.0 resolve three
+  more, each equal to what it committed. New shipping fixture `apply-setup-sited-merge`.
+
+Live backlog **1 -> 8 -> 1 -> 2**, archive **438 -> 445**. Net closed minus filed: **-1** (seven closed, eight filed).
+`BL-448` is a NOTE carrying a core finding from a declined consumer candidate; it was filed at close because the
+release that could have carried it, `v0.727.0`, ships alone.
+
+**EVERY ADVERSARY FOUND SOMETHING ON A GATE-GREEN SHAPE, AGAIN, AND `v0.727.0` TOOK FOUR TIP ROUNDS.** Its rounds found an
+already-merged shortcut that dropped a theirs span edit (BLOCKER), a self-merged fence handed back (DEFECT), and a
+`setup-site-drift.sh` `c`-hunk arm reading left lines only, so a theirs deletion beside a single-line site was lost
+permanently (BLOCKER), then its `a|d` twin. All fixed before merge.
+
+**OPERATOR DECISIONS TAKEN ON RECOMMENDATION, NO REPLY RECEIVED:** `PC-S316-VACUOUS-VALIDATOR-FAILING-ON-EVERY-STORY-IS-A-FINDING`
+and `PC-S316-REQUIRE-DONE-REFUSES-EXTENSION-DECLARED-STORY-STATUSES` dispositioned as the consumer's own and NOT
+discharged; neither id is named in any release commit. `BL-375` stage-1 criterion kept as written. `BL-448` files the
+`sprint-status.sh` remedy text the REQUIRE-DONE scope found.
+
+**CONSUMER-SIDE FINDINGS FOR THE OPERATOR TO CARRY:** XVH is registered `[story]` but gate 3 runs `[implementation]`, so it
+never loads where it targets. The consumer's receipts for `BL-443` and for XAP (`BL-444`) can never close against core
+and need a hand annotation. Its 933 extension gets drift rows, not a retire signal, because core's clause is a bold lead.
+
+**TWO OF THREE FIRST GATE RUNS FAILED ONLY ON THE SUITE-POLE CHECK, AT LOAD 22-63** (`gate-adjudication-mutants` 783s
+and 1062s against a 736s ceiling). Each re-push skipped the suite on the content key; `v0.727.0`'s whole-suite run read the pole
+at 475s. `procsub-staged-refusal-boot` fails four arms under a scratch `TMPDIR` at base and tip alike, which is
+`BL-442`'s class; not filed.
+
+**READ-SET TRACE, PARTIAL.** One sandbox `--list` run over ten owed fixtures traced five clean (`process-rule-pins`,
+`enforcement-map-sites-c`, `apply-self-overwrite`, `apply-restamp-worklist`, `apply-restamp-theirs`) and OMITTED five on
+dropped reports (`BL-375`). That map was discarded, because writing it dropped the omitted fixtures' existing rows; the five
+clean ones were re-traced alone and committed in the close. The five omitted ones were then tried one per `--list` run:
+`enforcement-map-sites-b` traced clean (858 to 965 rows, the same 965 its two siblings map) and is committed.
+`apply-setup-sited-merge` traced clean alone (46 paths) but OMITTED when re-traced, so it is not committed. **Owed:**
+`apply-setup-sited-merge`, `readset-skip`, `enforcement-map-sites` and `apply-drift-refile`, each one per `--list` run.
+Until then they run unmapped on every push. **OPERATOR RULING, BATCH 195:** every spawn prompt carries the script-only
+sentence under `### NEXT ACTIONS` action 0.
+
+**THE DELIVERY GAP IS THREE RELEASES.** The consumer is installed at 0.724.0 against `VERSION` 0.727.0; 0.727.0 is
+bootstrapping and its range touches no setup-sited file. PENDING is 7. The banked ruling stands: report the gap and write
+no runbook. **OPERATOR DECISIONS STILL OPEN:** none.
+
+Batch 194's block below is history: batch 195's block replaces its delivery gap and its decisions list.
+

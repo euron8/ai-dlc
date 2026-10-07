@@ -30677,3 +30677,210 @@ check-24's `h-worlds` cells and four mutants.
 
 verify: sh bash -c 'v=core/scripts/validate-adversarial-convergence.sh; [ -f "$v" ] || exit 9; d=$(mktemp -d) || exit 9; mkdir -p "$d/.claude" && echo "version: 9.0.0" > "$d/.claude/.ai-dlc-version" || exit 9; (unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; cd "$d" && git init -q . && git add .claude && GIT_COMMITTER_DATE=2026-01-01T00:00:00Z GIT_AUTHOR_DATE=2026-01-01T00:00:00Z git -c user.email=r@x.invalid -c user.name=r -c commit.gpgsign=false -c core.hooksPath=/dev/null commit -q -m s) || exit 9; for n in 1 2; do vd=EXIT_CONDITION_NOT_MET; m=3; [ "$n" = 2 ] && vd=EXIT_CONDITION_MET && m=0; printf -- "<!-- SKILL_INVOCATION_PROVENANCE v1\ninvoked_at: 2026-01-0%sT00:00:00Z\nfindings_critical: 0\nfindings_major: %s\nverdict: %s\nSKILL_INVOCATION_PROVENANCE_END -->\n" "$((n + 1))" "$m" "$vd" > "$d/prd-adversarial-p$n.md"; done; r="- disposition: repaired\n- edit: prd.md:1\n- derivation: n/a\n"; printf -- "$r" > "$d/arch-repair-p1.md"; o=$(bash "$v" --series "$d/prd-adversarial-p" 2>&1); rc=$?; [ "$rc" = 1 ] && grep -qF "The only structured record for pass 1 is arch-repair-p1.md" <<<"$o" || exit 1; printf -- "$r" > "$d/prd-repair-p1.md"; bash "$v" --series "$d/prd-adversarial-p" >/dev/null 2>&1'
 
+## BL-451 — the six slowest fixtures take 29 to 41 minutes loaded each, and five of the six ship to consumers
+
+**LANDED (v0.738.0, verified 9bdbc311).**
+
+**DEFECT.** Filed in batch 199 on the operator's direction that these wall clocks are not acceptable. Loaded costs in
+`$(git rev-parse --git-common-dir)/ai-dlc-fixture-durations` at filing: `apply-self-overwrite` 2463s,
+`apply-setup-sited-merge` 2430s, `self-update-fixture-log` 2425s, `remediator-shard-join` 2420s,
+`backlog-receipt-binding` 2166s, `review-shard-merge` 1738s — six fixtures, the minimum 1738s (29 min). These are
+LOADED figures and some may carry a laptop sleep (batch 198 recorded a 2608s gate run in transit); each must be
+re-measured solo in a clean worktree before it is cut. Only `backlog-receipt-binding` is `.dist-only`; the other FIVE
+ship, so the reference consumer pays them on every push that selects them.
+
+**Measured cause, on one of them.** `review-shard-merge` went from 731s to 1738s across batch 199. Its `score()` runs
+every predicate for every mutant (arms × mutants), and the batch added arms and mutants to both factors. The same shape
+is likely behind the mutation-battery fixtures above (`self-update-fixture-log` 35 mutation sites,
+`remediator-shard-join` 10, `apply-self-overwrite` 8). `apply-setup-sited-merge` is NOT mutation-free: it carries 24
+`kill_if` mutants, already launched through a pool of 8 (`POOL=8` at its `launch()`), so serial scoring is not its
+cause and its time is still unattributed.
+
+**Progress — first instance, `review-shard-merge` (batch 200; entry stays open for the other five).** Its 71 arms stay
+in the shipped fixture; the predicates and worlds moved to `core/fixtures/review-shard-merge/lib.sh` (ships beside it);
+MX0 and the 51 mutants moved to the new `.dist-only` `review-shard-merge-mutants`, which sources the same `lib.sh` and
+scores in a fixed pool of 8 with per-scorer scratch, a verdict-count reap, a 900s watchdog and an in-fixture probe of
+its own judgment. Per-mutant killed sets were compared byte-for-byte against the unsplit serial battery.
+Solo, clean worktrees, interleaved, 2 reps, box shared with other sessions (load 4-30 during the
+old side): the unsplit fixture 2537s / 2476s; the shipped fixture after the split 42s / 40s; the new battery 358s /
+347s. The shipped fixture is traced and mapped. `review-shard-merge-mutants` is still OMITTED from
+`.ai-dlc-fixture-readsets.tsv` (0 rows, against 65 for `review-shard-merge`), so it runs on every push until a trace maps it.
+
+**Progress — re-measurement and three more instances (batch 201, v0.736.0; entry stays open for `remediator-shard-join`).**
+Solo at `1794fa83`, one clean `git worktree` per fixture, one fixture at a time, 2 interleaved reps, box shared (low-load
+rep quoted): `apply-self-overwrite` 73s, `apply-setup-sited-merge` 68s, `self-update-fixture-log` 74s,
+`remediator-shard-join` 278s, `backlog-receipt-binding` 61s, `review-shard-merge-mutants` 381s. None is near the filed
+29-41 minutes; the filed figures were loaded, and the cause (sleep, or pool co-scheduling of fixtures that run their own
+pool of 8) was not tested. `backlog-receipt-binding` is already `.dist-only` with no hot spot and is not cut.
+Three split, each into a shipped fixture plus a `.dist-only` `<name>-mutants` battery sharing a shipped `lib.sh`, pooled at
+8, killed sets byte-compared against the unsplit battery. Solo, CPU-seconds (user+sys), clean worktrees, 2 interleaved reps:
+- `apply-self-overwrite`: unsplit 64 CPU-s / 74s; shipped 15 / 17s; battery 182 / 41s. Total CPU grew about 3x because
+  every scorer builds every world; each mutant is now scored against all ten predicates.
+- `apply-setup-sited-merge`: unsplit 185 / 66s; shipped 126 / 31s; battery 71 / 17s. The world-build loop is pooled, and
+  an emptied battery now FAILS (the unsplit fixture printed PASS over `MUTS=""`).
+- `self-update-fixture-log`: unsplit 60 / 72s; shipped 22.5 / 27s; battery 58 / 14s.
+The three batteries and three `lib.sh` files have no read-set rows yet and run on every push until traced.
+`remediator-shard-join` (battery 247-255s of 278s, the same serial `score()` shape) is split in a later release of batch 201.
+
+**Progress — `adversarial-shard-merge` (batch 201; not one of the six above, split because the BL-460/461 arms took it
+from 317 to 354 CPU-s solo and projected it past the suite pole).** Its 34 arms stay in the shipped fixture; the
+predicates and worlds moved to `core/fixtures/adversarial-shard-merge/lib.sh`; MX0, the 15 mutants and MX6b moved to
+the new `.dist-only` `adversarial-shard-merge-mutants`, the `review-shard-merge-mutants` shape, whose reap counts
+DECLARED scorings off its own `mutant "` lines so an emptied battery fails. The 16 killed-set rows are byte-identical
+to the unsplit serial battery's. The new directory is unmapped in `.ai-dlc-fixture-readsets.tsv` until traced.
+
+**Remedy.** Per fixture: measure solo, attribute the time, then cut it — move a mutation battery behind a shipped
+fixture into its own `.dist-only` fixture (`fixture-ship-decl.md`), score mutants in parallel within the fixture, and
+remove repeated setup. `review-shard-merge` is being split in batch 199 as the first instance.
+
+verify: manual -- the subject is wall clock on a loaded box, which no in-tree receipt can measure; close on a solo
+re-measurement of each named fixture recorded in the closing entry.
+
+## BL-457 — the recover hook measures `degraded` before the provenance wrap, so a stubbed block reports `degraded=no`
+
+**LANDED (v0.736.0, verified 6b936214).**
+
+**DEFECT.** Filed in batch 200 by the 0.732.0 tip adversary. `core/hooks/ai-dlc-recover.sh` sets `degraded` from
+`${#CONTEXT}` against the 10000-character cliff, then `ai_dlc_provenance_wrap` prepends the provenance tag (about 129
+characters) to the string it actually emits. A block emitted at 10000-10128 characters is replaced by the harness with a
+file stub, while `.recover-fired` records `degraded=no` and `injected_bytes` below the cliff, so `ai-dlc-postcompact.sh`
+reports the context as landed. The check cannot fire in exactly the band where it is needed. Measured on the
+resolvable-step-file branch with a precompact sidecar and a gate nonce: a 41-character nonce emits 10066 characters and
+records `injected_bytes=9937 degraded=no`; real consumer recoveries of that shape (gate-resume with a sidecar) measured
+10002-10026 emitted.
+
+**Coverage gap beside it.** No fixture seeds a precompact sidecar together with a gate nonce and bounds the emitted
+length: `core/fixtures/gate-resume/run.sh` bounds length with no sidecar, and `postcompact-rulebook-recovery` seeds no
+gate nonce.
+
+**Fix.** Decide `degraded` (and record `injected_bytes`) from the string actually emitted, after the wrap, and add a
+fixture arm that seeds sidecar plus nonce and asserts both the length bound and `degraded`. The receipt sweeps the nonce
+length across the cliff and passes only when every world over it reports `degraded=yes` and every world under it
+`degraded=no`, so reporting `yes` unconditionally, or lowering the threshold to the trim ceiling, does not close it.
+
+**Receipt rewritten in batch 201.** The filed receipt swept the nonce to 81 characters and required a world over the
+cliff. The fix also trims the gate-in-flight block, measured on the receipt's own seed: the 81-character world now emits
+9851, `hi` is 0, and the filed receipt exits 9 on the fix. The sweep now runs to 401 characters in steps of 10. It also
+requires a world in [9500, 10000), where lowering the threshold to the trim bound is visible, and it requires
+`injected_bytes` to equal the emitted length in every world. Scored under `bash -c 'set -uo pipefail; ...'` (filed / rewritten):
+fix 9 / 0, the pre-fix tree 1 / 1, `degraded=yes` unconditionally 9 / 1, threshold at the trim bound 9 / 1.
+
+**What the receipt does not close.** The receipt scores `degraded` and `injected_bytes` against the emitted length only.
+Two other parts of the fix are closed by arms of `core/fixtures/gate-resume/run.sh`, not by this receipt: budgeting the
+excerpt by the WRAPPED length is arm RB, and dropping the precompact-sidecar note from an over-cliff world is arm S0.
+
+verify: sh S=core/hooks/ai-dlc-recover.sh; [ -f "$S" ] || exit 9; command -v jq >/dev/null 2>&1 || exit 9; W="$(mktemp -d)" || exit 9; lo=0; hi=0; mid=0; bad=0; n=0; while [ "$n" -le 400 ]; do P="$W/w$n"; mkdir -p "$P/_bmad-output" "$P/scripts/ai-dlc" "$P/.claude/skills/ai-dlc/steps" || exit 9; echo x > "$P/.claude/skills/ai-dlc/steps/implementation.md"; printf '# Pipeline Snapshot\n\n## Pipeline Position\n- **Current step file:** `implementation.md`\n' > "$P/_bmad-output/pipeline-snapshot.md"; printf 'sidecar\n' > "$P/_bmad-output/pipeline-snapshot.precompact.md"; x="$(printf '%*s' "$n" '' | tr ' ' a)"; printf '#!/bin/sh\n[ "$1" = current ] && echo g%s\n' "$x" > "$P/scripts/ai-dlc/gate-checkpoint.sh"; chmod +x "$P/scripts/ai-dlc/gate-checkpoint.sh"; L="$(printf '{"source":"compact","session_id":"receipt"}' | CLAUDE_PROJECT_DIR="$P" bash "$S" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext | length' 2>/dev/null)"; D="$(sed -n 's/^degraded=//p' "$P/_bmad-output/.recover-fired" 2>/dev/null)"; I="$(sed -n 's/^injected_bytes=//p' "$P/_bmad-output/.recover-fired" 2>/dev/null)"; [ -n "$L" ] && [ -n "$D" ] || exit 9; [ "$I" = "$L" ] || bad=$((bad + 1)); if [ "$L" -ge 10000 ]; then hi=$((hi + 1)); [ "$D" = yes ] || bad=$((bad + 1)); else lo=$((lo + 1)); [ "$L" -ge 9500 ] && mid=$((mid + 1)); [ "$D" = no ] || bad=$((bad + 1)); fi; n=$((n + 10)); done; [ "$lo" -gt 0 ] && [ "$hi" -gt 0 ] && [ "$mid" -gt 0 ] || exit 9; [ "$bad" -eq 0 ]
+
+## BL-459 — Rule 32's advisor touchpoints are prose only, so a lead or teammate can skip every one
+
+**LANDED (v0.738.0, verified 9bdbc311).**
+
+**DEFECT.** Filed in batch 200 on the operator's ruling (option A: build it in a later batch). `BL-454` put the
+advisor touchpoints in SKILL.md Rule 32 and in every role file, and nothing enforces them. Measured in this repo's own
+sessions: the plan's bold instruction got 2 advisor calls against about 15 owed (batch 199), and a warn-only PreToolUse
+hook was pushed past four times in one release (batch 200). The operator's own hook, outside the distribution, was
+redesigned the same batch into the conditional deny this entry ships.
+
+**Design.**
+- Gate only actions a hook can see: first, the lead's release push and PR merge, its gate-verdict writes and its
+  repair-record writes. Second, a teammate's verdict write, judged on that teammate's own
+  `<session>/subagents/agent-<id>.jsonl` and never on the parent transcript.
+- Any advisor ATTEMPT (`server_tool_use` named `advisor`) after the last gated action clears the deny, including an
+  attempt that errors. The deny is therefore always clearable by calling the tool.
+- Drop to a warning when the agent's most recent `advisor_tool_result` carries `error_code: "unavailable"`; the
+  harness withdraws the tool after that. A later successful result re-arms the deny.
+- **No config knob and no default** (operator ruling: a lead on a local model and teammates on Anthropic models, or any
+  other mix, is normal). Whether the gate applies is decided PER AGENT from that agent's own transcript. The harness
+  writes an `attachment` line of type `advisor_tool` (`available`, `toolChange`, `model`) into each session's and each
+  subagent's transcript when it grants the tool. Measured over this repo's 206 session transcripts: 36 carry it and 170
+  do not; 0 of the 170 contain an advisor call, and 33 of the 36 do. Every sampled value read `available: true` with
+  `toolChange` `"add"` or null. The build must also handle a withdrawn grant (`available: false` or
+  `toolChange: "remove"`, not yet observed), and the latest grant state wins.
+- The hook decides from a file the agent can write. Deny Edit, Write and Bash redirection onto
+  `~/.claude/projects/**/*.jsonl`, or an agent can delete its own grant line or append a forged `unavailable` result
+  and switch the gate off.
+- A branch DELETE (`git push --delete`/`-d`) is not gated.
+- Cost: measured median per call is 94s for the lead and 116s for a subagent. Gate the lead's points first.
+
+**Done when, consumer side, owed as residue.** `BL-454`'s first-sprint census of advisor calls is the before-figure;
+the first sprint after this ships is the after-figure.
+
+**Receipt.** It drives the shipped hook on seeded transcripts, reseeded on the consumer's real push and merge forms. A
+lead transcript carrying a grant attachment and no advisor attempt must be denied `git push -u origin HEAD` and
+`gh pr merge 7 --squash --delete-branch`, and the same calls with the grant line absent must be left silent. A teammate,
+named by `agent_id`, is judged on its own `<session>/subagents/agent-<id>.jsonl`: granted with no advisor call, it is
+denied a verdict write even though its parent's transcript holds an advisor call, and its `git push` is left silent.
+The remaining cases are arms of `core/fixtures/advisor-gate-deny`: an errored attempt clears, `unavailable` warns, a later
+success re-arms, a withdrawn grant is silent, a delete is not gated, and a transcript write is denied.
+
+verify: sh H=core/hooks/ai-dlc-advisor-gate.sh; [ -f "$H" ] || exit 1; command -v jq >/dev/null 2>&1 || exit 9; W="$(mktemp -d)" || exit 9; mkdir -p "$W/p/s/subagents" || exit 9; g='{"type":"attachment","attachment":{"type":"advisor_tool","available":true,"toolChange":"add","model":"m"}}'; a='{"type":"assistant","message":{"content":[{"type":"server_tool_use","id":"s1","name":"advisor","input":{}}]}}'; printf '%s\n%s\n' "$g" "$a" > "$W/p/s.jsonl"; printf '%s\n' "$g" > "$W/p/s/subagents/agent-a1.jsonl"; printf '%s\n' "$g" > "$W/p/on.jsonl"; printf '{"type":"user"}\n' > "$W/p/off.jsonl"; run() { jq -cn --arg t "$W/p/$1.jsonl" --arg c "$2" --arg a "${3:-}" --arg n "${4:-Bash}" '{hook_event_name:"PreToolUse",tool_name:$n,tool_input:{command:$c,file_path:"/r/_bmad-output/gate-adjudication/implementation-20261006T120000Z.verdict.json",content:"{}"},transcript_path:$t,cwd:"/"} + (if $a == "" then {} else {agent_id:$a} end)' | bash "$H" 2>/dev/null | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null; }; [ "$(run on 'git push -u origin HEAD')" = deny ] && [ "$(run on 'gh pr merge 7 --squash --delete-branch')" = deny ] && [ -z "$(run off 'git push -u origin HEAD')" ] && [ -z "$(run off 'gh pr merge 7 --squash --delete-branch')" ] && [ "$(run s x a1 Write)" = deny ] && [ -z "$(run s 'git push -u origin HEAD' a1)" ]
+
+## BL-460 — the requirements subject drifts after a terminal MET pass with nothing to see it
+
+**LANDED (v0.738.0, verified 9bdbc311).**
+
+**DEFECT.** Found by batch 200's contract adversary on the requirements-subject build; it predates 0.735.0. A terminal
+`requirements-adversarial-p<M>` pass names the subject manifest and carries a per-stem `artifact_sha` list. Arm J2
+judges only an `artifact:` that resolves to ONE regular file with one sha256, and its header lists a `<stem>=<sha>` list
+as "not judged" (`core/scripts/validate-adversarial-convergence.sh`, the J2 header). Arm K3 reads a subject whose disk
+sha differs from the notarized one as PENDING. So a brief, SPEC, `prd.md` or `architecture-impact.md` edited after the
+series met reads PENDING forever and never FAIL, where a single-file series would fail J2. J2's header also names cumulative
+documents (`prd.md`, the product brief) as outside its subject, so this gap predates 0.735.0.
+
+**Remedy.** Teach J2 the per-stem list: every stem whose disk sha differs from its notarized sha after a MET pass needs
+the same repair chain or re-open a single-file series needs, stamp-gated like K3.
+
+**Narrowing (contract M3d).** `prd.md` and the product brief stay unjudged, as J2 already excludes cumulative
+documents: the architecture step's Rule 25(a) consolidation rewrites `prd.md` mid-sprint with no repair record
+(measured on the reference consumer: sprint 317's prd moved after its requirements series met, `bdbfd63e`). The
+later-sprint bound was dropped because Check 24 sweeps only the current sprint, so it could never decide anything.
+Judged stems: the SPEC and `s<N>/architecture-impact.md`.
+
+verify: sh V=core/scripts/validate-adversarial-convergence.sh; [ -f "$V" ] || exit 9; W="$(mktemp -d)" || exit 9; h() { shasum -a 256 "$1" | cut -d' ' -f1; }; mk() { w="$W/$1"; p="$w/_bmad-output/planning-artifacts"; mkdir -p "$p/s9" "$w/_bmad-output/specs/s9/k" "$w/.claude" || exit 9; printf 'b\n' > "$p/product-brief.md"; printf 'p\n' > "$p/prd.md"; printf 'a\n' > "$p/s9/architecture-impact.md"; printf 's\n' > "$w/_bmad-output/specs/s9/k/SPEC.md"; printf 'version: 9.0.0\n' > "$w/.claude/.ai-dlc-version"; ( cd "$w" && git init -q . && git add -A && GIT_COMMITTER_DATE=2026-01-01T00:00:00Z git -c user.name=r -c user.email=r@x.invalid -c commit.gpgsign=false commit -q -m s ) || exit 9; printf 'file: product-brief _bmad-output/planning-artifacts/product-brief.md\nfile: SPEC _bmad-output/specs/s9/k/SPEC.md\nfile: prd _bmad-output/planning-artifacts/prd.md\nfile: architecture-impact _bmad-output/planning-artifacts/s9/architecture-impact.md\n' > "$p/s9/requirements-subject.md"; L0="product-brief=$(h "$p/product-brief.md") SPEC=$(h "$w/_bmad-output/specs/s9/k/SPEC.md") prd=$(h "$p/prd.md") architecture-impact=$(h "$p/s9/architecture-impact.md")"; S0="$(h "$w/_bmad-output/specs/s9/k/SPEC.md")"; A0="$(h "$p/s9/architecture-impact.md")"; printf '<!-- SKILL_INVOCATION_PROVENANCE v1\ninvoked_at: 2026-02-01T00:00:00Z\nartifact: _bmad-output/planning-artifacts/s9/requirements-subject.md\nartifact_sha: %s\nfindings_critical: 0\nfindings_major: 0\nverdict: EXIT_CONDITION_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$L0" > "$p/s9/requirements-adversarial-p1.md"; printf 's2\n' >> "$w/_bmad-output/specs/s9/k/SPEC.md"; S1="$(h "$w/_bmad-output/specs/s9/k/SPEC.md")"; L1="product-brief=$(h "$p/product-brief.md") SPEC=$S1 prd=$(h "$p/prd.md") architecture-impact=$A0"; }; j() { bash "$V" --series "$w/_bmad-output/planning-artifacts/s9/requirements-adversarial-p" --transcript-dir "$W" 2>&1; }; f='### M1\n- disposition: repaired\n- edit: x:1\n- derivation: y\n'; mk bare; o1="$(j)"; mk chained; printf 'a2\n' >> "$p/s9/architecture-impact.md"; A1="$(h "$p/s9/architecture-impact.md")"; printf -- "- artifact: _bmad-output/planning-artifacts/prd.md\n- artifact_sha_before: $(h "$p/prd.md")\n- artifact_sha_after: $(h "$p/prd.md")\n\n- artifact: _bmad-output/planning-artifacts/s9/requirements-subject.md\n- artifact_sha_before: $L0\n- artifact_sha_after: $L1\n\n- artifact: _bmad-output/planning-artifacts/s9/architecture-impact.md\n- artifact_sha_before: $A0\n- artifact_sha_after: $A1\n$f" > "$p/s9/requirements-repair-adv-p1.md"; o2="$(j)"; case "$o1" in *"FAIL (J2 -- DRIFT)"*"SPEC (_bmad-output/specs/s9/k/SPEC.md)"*) ;; *) exit 1 ;; esac; case "$o1" in *"architecture-impact (_bmad"*) exit 1 ;; esac; case "$o2" in *"J2 -- DRIFT"*) exit 1 ;; esac
+
+## BL-461 — the requirements series is named at no Check 24 call site, and a `prd-*` series escapes the subject axis
+
+**LANDED (v0.738.0, verified 9bdbc311).**
+
+**DEFECT.** Two of batch 200's 0.735.0 tip-adversary findings and one residual from `BL-458`, one subject: the gate
+text must own the requirements series' NAME.
+- `gate-validation.md`'s per-sprint Check 24 sweep runs `--series` over each `s<N>/*-adversarial-p*` series "whose
+  terminal pass ... names one file in `artifact:`". A subject pass names the manifest, so whether the sweep includes it
+  depends on how the lead reads "one file". No step or gate text names `s<N>/requirements-adversarial-p` as a
+  `--series` argument (0 hits in `gate-validation.md`, control `adversarial-p*` 1).
+- A series under any other stem, such as `prd-adversarial-p<M>` written by a `--document prd.md` merge, is not a
+  requirements series to K3 and is judged by K2 alone. A lead that names its series `prd-*` escapes the subject axis.
+
+**Remedy.** Name `<planning>/s<N>/requirements-adversarial-p` explicitly at the requirements gate's Check 24 call, and
+have the requirements step refuse a `prd-adversarial-p*` series in a sprint that has a subject manifest.
+
+verify: sh G=core/skills/ai-dlc/steps/gate-validation.md; M=core/scripts/merge-adversarial-shards.sh; [ -f "$G" ] && [ -f "$M" ] || exit 9; n="$(grep -c 'planning-artifacts/s<N>/requirements-adversarial-p`' "$G")" || n=0; [ "$n" -ge 2 ] || exit 1; W="$(mktemp -d)" || exit 9; p="$W/_bmad-output/planning-artifacts"; mkdir -p "$p/s9/shards/product-brief-p1" "$W/.git" || exit 9; printf '# B\n\n## One\n\nx\n\n## Two\n\ny\n' > "$p/product-brief.md"; printf 'p\n' > "$p/prd.md"; c="$(bash "$M" --document "$p/product-brief.md" "$p/s9/shards/product-brief-p1" 2>&1)"; printf 'file: product-brief _bmad-output/planning-artifacts/product-brief.md\nfile: prd _bmad-output/planning-artifacts/prd.md\n' > "$p/s9/requirements-subject.md"; r="$(bash "$M" --document "$p/product-brief.md" "$p/s9/shards/product-brief-p1" 2>&1)"; case "$r" in "REFUSED: --document "*"requirements subject"*) ;; *) exit 1 ;; esac; case "$c" in *"requirements subject"*) exit 1 ;; esac
+
+## BL-462 — a party round edits one document in place from several seats and nothing attributes the writes
+
+**LANDED (v0.738.0, verified 9bdbc311).**
+
+**DEFECT.** Found independently by two of batch 200's hands. `core/skills/ai-dlc/steps/_gate-procedures.md`'s
+party-mode procedure tells the seats to "apply every improvement". Under a seats x parts or seats x sections split,
+several persona agents edit the same document in place concurrently, and no join records which seat wrote which change.
+A lost update between two seats is invisible, and a review of the round cannot attribute a regression to a seat. The
+requirements subject case already avoids this (its seats edit nothing, and repairs join by part), which is the shape to
+generalise.
+
+Receipt scored under `bash -c 'set -uo pipefail; ...'` against five trees holding the two files it reads: the fix 0;
+today's tree (422552d2) 1; an id-only source key with its self-probe gone 1; the prose rewritten with the join untouched
+1; the join built with "apply every improvement" left in the procedure 1; neither file present 9.
+
+verify: sh J=core/scripts/join-remediator-shards.sh; G=core/skills/ai-dlc/steps/_gate-procedures.md; [ -f "$J" ] && [ -f "$G" ] || exit 9; command -v awk >/dev/null 2>&1 || exit 9; n="$(grep -c 'apply every improvement' "$G")" || n=0; [ "$n" -eq 0 ] || exit 1; grep -qF '**The seats edit nothing, in every case below.**' "$G" || exit 1; W="$(mktemp -d)" || exit 9; S="$W/_bmad-output/party-mode/s9"; mkdir -p "$S" "$W/.claude" || exit 9; printf '## F-1 (major) sections: 1\n' > "$S/a-dev-1.md" && printf '## F-1 MAJOR sections: 1\n## F-4 MINOR sections: 1\n' > "$S/a-tea-1.md" && printf '### x\n- disposition: repaired\n- source: a-dev-1.md#F-1 a-tea-1.md#F-1\n' > "$W/ok.md" && printf '### y\n- disposition: repaired\n- source: a-dev-1.md#F-4\n' > "$W/bad.md" || exit 9; o="$(AI_DLC_PROJECT_ROOT="$W" bash "$J" --sources "$W/ok.md" --sprint 9 2>&1)" || exit 1; case "$o" in *"2 sources, every one resolved"*) ;; *) exit 1 ;; esac; o="$(AI_DLC_PROJECT_ROOT="$W" bash "$J" --sources "$W/bad.md" --sprint 9 2>&1)"; rc=$?; [ "$rc" -eq 2 ] || exit 1; case "$o" in *"a-dev-1.md#F-4 is UNRESOLVED"*) exit 0 ;; *) exit 1 ;; esac
+
+## BL-463 — a reused pid holds the live-trace lock for up to six hours
+
+**LANDED (v0.737.0, verified 65e4d8fe).**
+
+**NOTE.** Found by batch 200's 0.734.0 tip adversary. `readset_lock_stale` in both pre-push hooks treats the
+live-trace lock as held while `kill -0` on its recorded pid succeeds and the lock is under 21600s old. A trace killed
+uncleanly whose pid is then reused by an unrelated process keeps the lock, so unmapped fixtures stay unmapped, and run,
+for up to six hours. The cost is wall clock, never a wrong verdict.
+
+verify: manual -- close when the lock records something a reused pid cannot match (the process start time) and the
+hook compares it.
