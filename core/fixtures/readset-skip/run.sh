@@ -3309,7 +3309,7 @@ STUB
     ( cd "$BR" && git add -A && git -c user.email=f@f -c user.name=f commit -qm fxw ) >/dev/null 2>&1 || broken "could not seed fxw1-3"
     printf '%s\n' core/fixtures/fxw1/run.sh core/fixtures/fxw2/run.sh core/fixtures/fxw3/run.sh src/w1.sh src/w2.sh src/w3.sh > "$SX/fxw.list"
     printf '%s\n' core/fixtures/fxw1/run.sh core/fixtures/fxw2/run.sh core/fixtures/fxw3/run.sh src/w1.sh src/w3.sh > "$SX/fxw.omit.list"
-    sed '/^    \[ -n "\$LOCAL_MAP" \] || \[ "\$TRACER" = both \] || ( LIST="\$DONE"; readset_write_map )/d' "$SB/deriver.sh" > "$SX/deriver.endonly.sh"
+    sed '/^    if \[ -z "\$LOCAL_MAP" \] && \[ "\$TRACER" != both \]; then$/,/^    fi$/d' "$SB/deriver.sh" > "$SX/deriver.endonly.sh"
     iw_run() { # <deriver copy> <stream list> <kill: yes|no> <map copy out>; prints "<rc>|<killed at fxw3>"
       local dv="$1" sl="$2" k="$3" out="$4" pid r at=no i=0 kf=""
       cp "$dv" "$STUB_DERIVER"
