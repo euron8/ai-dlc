@@ -545,7 +545,7 @@ settled() {  # $1 = path, $2 = its .settle sidecar
     [ $(( st_now_ - st_t_ )) -gt "$SETTLE" ] && return 0
     return 1
   fi
-  printf '%s %s' "$st_h_" "$st_now_" > "$2" 2>/dev/null || true
+  printf '%s %s' "$st_h_" "$st_now_" > "$2" 2>/dev/null || return 1
   return 1
 }
 
@@ -773,7 +773,7 @@ for t in $TARGETS; do
   if [ "$COMPLETE" -eq 1 ]; then
     target_progressed "$t" "$pg" && PROGRESSED=1
     if [ "$MAY_SLEEP" -eq 1 ]; then
-      : > "$pg" 2>/dev/null || true
+      : > "$pg" 2>/dev/null || echo "NOTE: could not re-stamp $pg -- $t's next beat reads its growth against the previous mark" >&2
     fi
   fi
   if [ -n "$PROGRESS_PATHS" ]; then

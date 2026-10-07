@@ -571,27 +571,74 @@ elif [ -n "$jf" ]; then
 else
   ok "join: every seat or cross join paragraph carries --complete ($n_seat seat or cross join call(s) scanned)"
 fi
-# MUTANTS: --complete stripped from each real site, ONE LINE AT A TIME; every strip must be flagged.
-# The site list is derived from the corpus, and its count is asserted, so a site the scan cannot see
-# reads as a survivor rather than as a smaller battery.
+# MUTANTS: --complete stripped from EVERY seat or cross join in the PARAGRAPH holding each real
+# site, one mutant per paragraph; every such mutant must flag THAT paragraph.
+# Why the unit is the paragraph and not the line: the mutant's unit must be the scanner's unit.
+# join_findings passes a P=1 paragraph when ANY of its calls carries --complete, so a one-line
+# strip in a paragraph holding two such calls leaves the other and survives against a correct
+# scanner. implementation.md's Gate-2 dispatch paragraph legitimately holds two -- the first cross
+# QA's own part join and every shard's join beat -- and must stay one paragraph, because
+# review-shard-merge reads it whole. The site list is derived from the corpus and the paragraph
+# count is asserted, so a site the scan cannot place in a paragraph reads as a survivor rather
+# than as a smaller battery.
 jm="$WORK/join-mut"; mkdir -p "$jm" || exit 2
-n_sites=0; n_killed=0; j_surv=""
-# shellcheck disable=SC2086
-for jf_f in $JSCOPE; do
-  for jf_l in $(grep -n 'wait-for-deliverable\.sh --complete' "$jf_f" | cut -d: -f1); do
-    n_sites=$((n_sites + 1))
-    awk -v L="$jf_l" 'NR == L { gsub(/wait-for-deliverable\.sh --complete/, "wait-for-deliverable.sh") } { print }' "$jf_f" > "$jm/m.md"
-    if cmp -s "$jf_f" "$jm/m.md"; then j_surv="$j_surv ${jf_f#"$ROOT/"}:$jf_l(no-apply)"; continue; fi
-    n_m="$(join_findings "$jm/m.md" | grep -c .)" || n_m=0
-    if [ "$n_m" -ge 1 ]; then n_killed=$((n_killed + 1)); else j_surv="$j_surv ${jf_f#"$ROOT/"}:$jf_l"; fi
+# join_battery <files...> -> sets jb_sites, jb_paras, jb_killed, jb_surv
+join_battery() {
+  jb_sites=0; jb_paras=0; jb_killed=0; jb_surv=""
+  local f rows l para done_p clines
+  for f in "$@"; do
+    rows="$(join_scan "$f")"
+    done_p=" "
+    for l in $(grep -n 'wait-for-deliverable\.sh --complete' "$f" | cut -d: -f1); do
+      jb_sites=$((jb_sites + 1))
+      para="$(awk -F'\t' -v L="$l" '{ n = split($1, a, ":"); if (a[n] == L && $3 == "COMPLETE") { print a[n - 1]; exit } }' <<<"$rows")"
+      if [ -z "$para" ]; then jb_surv="$jb_surv ${f#"$ROOT/"}:$l(no-paragraph)"; continue; fi
+      case "$done_p" in *" $para "*) continue ;; esac
+      done_p="$done_p$para "
+      jb_paras=$((jb_paras + 1))
+      clines=" $(awk -F'\t' -v P="$para" '{ n = split($1, a, ":"); if (a[n - 1] == P && $3 == "COMPLETE") printf "%s ", a[n] }' <<<"$rows")"
+      awk -v C="$clines" 'index(C, " " NR " ") { gsub(/wait-for-deliverable\.sh --complete/, "wait-for-deliverable.sh") } { print }' "$f" > "$jm/m.md"
+      if cmp -s "$f" "$jm/m.md"; then jb_surv="$jb_surv ${f#"$ROOT/"}:$para(no-apply)"; continue; fi
+      jb_found="$(join_findings "$jm/m.md")"
+      if grep -qF -- "$jm/m.md:$para:" <<<"$jb_found"; then jb_killed=$((jb_killed + 1))
+      else jb_surv="$jb_surv ${f#"$ROOT/"}:$para"; fi
+    done
   done
-done
-if [ "$n_sites" -lt 3 ]; then
-  bad "join/mutant: only $n_sites --complete site(s) found -- the battery has nothing to strip"
-elif [ -n "$j_surv" ]; then
-  bad "join/mutant: SURVIVED -- --complete stripped at [${j_surv# }] was not flagged ($n_killed/$n_sites killed)"
+}
+# CONTROL: the battery must be able to fail and must keep the mixed-paragraph exemption.
+#   two.md  -- one seat paragraph with two --complete joins on separate lines. A one-line strip
+#              leaves the other (0 findings, the shape that motivated the paragraph unit); the
+#              paragraph mutant strips both and is flagged.
+#   mixed2.md -- a bare non-seat call beside one seat --complete call: exempt unmutated (0), and the
+#              paragraph mutant, stripping the seat call, is flagged though the bare call remains.
+printf 'Each seat joins its parts with\n`scripts/ai-dlc/wait-for-deliverable.sh --complete <part paths>`, and the lead joins\nthe seat files with `scripts/ai-dlc/wait-for-deliverable.sh --complete <path> [<path> ...]`.\n' > "$JS/two.md"
+printf 'The analyst artifact joins with `scripts/ai-dlc/wait-for-deliverable.sh <artifact_path>`, and\neach seat file with `scripts/ai-dlc/wait-for-deliverable.sh --complete <path>`.\n' > "$JS/mixed2.md"
+awk 'NR == 2 { gsub(/wait-for-deliverable\.sh --complete/, "wait-for-deliverable.sh") } { print }' "$JS/two.md" > "$JS/two.line.md"
+c_two0="$(join_findings "$JS/two.md" | grep -c .)" || c_two0=0
+c_line="$(join_findings "$JS/two.line.md" | grep -c .)" || c_line=0
+c_mx0="$(join_findings "$JS/mixed2.md" | grep -c .)" || c_mx0=0
+c_mxc="$(join_scan "$JS/mixed2.md" | awk -F'\t' '$2 == "P=1"' | grep -c .)" || c_mxc=0
+join_battery "$JS/two.md"; c_two="$jb_sites $jb_paras $jb_killed"
+join_battery "$JS/mixed2.md"; c_mx="$jb_sites $jb_paras $jb_killed"
+#   nonseat.md -- a --complete join naming no seat or cross path: its paragraph mutant is exempt,
+#              so the battery must report it as a SURVIVOR naming line 1 -- the survivor branch fires.
+printf 'Join the analyst artifact with `scripts/ai-dlc/wait-for-deliverable.sh --complete <artifact_path>`.\n' > "$JS/nonseat.md"
+join_battery "$JS/nonseat.md"; c_ns="$jb_sites $jb_paras $jb_killed"; c_nss="${jb_surv# }"
+case "$c_nss" in *nonseat.md:1) c_nsok=1 ;; *) c_nsok=0 ;; esac
+if [ "$c_two0" = 0 ] && [ "$c_line" = 0 ] && [ "$c_two" = "2 1 1" ] && [ "$c_mx0" = 0 ] && [ "$c_mxc" = 2 ] && [ "$c_mx" = "1 1 1" ] \
+   && [ "$c_ns" = "1 1 0" ] && [ "$c_nsok" = 1 ] && ! cmp -s "$JS/two.md" "$JS/two.line.md"; then
+  ok "join/mutant-control: two seat joins in one paragraph -- a one-line strip is not flagged (0), the paragraph mutant is (sites/paras/kills $c_two); a bare non-seat call beside a seat --complete call is exempt (0 of $c_mxc calls) and its paragraph mutant is flagged ($c_mx); a non-seat --complete paragraph survives and is named ($c_ns, ${c_nss##*/})"
 else
-  ok "join/mutant: --complete stripped from each of $n_sites real sites, one at a time, is flagged ($n_killed/$n_sites)"
+  bad "join/mutant-control: FIXTURE BROKEN -- two: unmutated=$c_two0 one-line=$c_line battery=[$c_two] want 0 0 [2 1 1]; mixed: unmutated=$c_mx0 calls=$c_mxc battery=[$c_mx] want 0 2 [1 1 1]; nonseat: battery=[$c_ns] survivor='$c_nss' want [1 1 0] '...nonseat.md:1'"
+fi
+# shellcheck disable=SC2086 # the scope globs are expanded on purpose; no path carries a blank
+join_battery $JSCOPE
+if [ "$jb_paras" -lt 3 ]; then
+  bad "join/mutant: only $jb_paras paragraph(s) holding a --complete site found ($jb_sites site(s)) -- the battery has nothing to strip"
+elif [ -n "$jb_surv" ]; then
+  bad "join/mutant: SURVIVED -- every --complete stripped from the paragraph at [${jb_surv# }] was not flagged ($jb_killed/$jb_paras paragraphs killed, $jb_sites sites)"
+else
+  ok "join/mutant: every --complete stripped from each of $jb_paras real paragraphs ($jb_sites sites), one paragraph at a time, is flagged ($jb_killed/$jb_paras)"
 fi
 
 # --- 5. the real corpus ---------------------------------------------------------

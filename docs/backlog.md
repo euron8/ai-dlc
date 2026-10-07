@@ -127,6 +127,31 @@ key record; build them together.
 
 verify: manual -- close when `--reconcile` on a tree with one unmapped, one stale and one changed-input fixture names exactly those three with their reasons and traces only them, and on a fully-mapped clean tree prints "nothing to reconcile" and traces nothing.
 
+## BL-474 — measure the first cross shard's serial tail before ruling on it
+
+**DEFECT, open by operator ruling, batch 204.** `0.744.0` shards code review and QA execution across their part agents,
+but the first cross shard still runs the one canonical suite run and every replay a part HANDED OVER, all in the frozen
+worktree (Rule 28, "Code review and QA shard their execution too"; `BL-464`'s Track B paragraph). A hand-over is an AC
+whose replay cannot reach GREEN in a fresh detached worktree at the frozen sha, so a per-group fresh copy repeats the
+failure. The operator ruled, choosing among build-it-now, accept-it-serial and measure-first: **measure first, then
+decide.** Until then the residue is recorded as not serial by design, never as a ruling that it may stay serial.
+
+Measure on the reference consumer's first sharded code review or QA after it pulls `0.744.0`, from the shard directory
+`merge-review-shards.sh` joins, read-only:
+- the part count K and the cross group count G;
+- the hand-over count N, from the part shards' `handovers: <n>` lines, and the `handover-run:` lines in the first cross
+  shard, which must equal N;
+- the first cross shard's wall clock from its dispatch to its file's final write, split into the canonical suite run and
+  the hand-over replays, against the slowest part shard's.
+
+Then put the measured tail to the operator with three choices, each with a marked recommendation drawn from the numbers.
+**Shard it:** each cross group replays its share in an APFS clone (`cp -c`) of the frozen worktree with its setup state,
+never a fresh checkout. It is unproven against absolute paths, local services, ports and databases inside the
+environment, and is built as its own release with its own adversary. **Rule it serial by design:** Rule 28 and `BL-464`
+record the operator's ruling. **Keep it open:** take a second sprint's measurement.
+
+verify: manual -- close when the measurement above is recorded in this entry from a real consumer review and the operator has ruled on it.
+
 ## BL-473 — handoff step 1 ends the turn on a wait-beat while Check 0 blocks that Stop
 
 **DEFECT.** Carries the reference consumer's `PC-S317-HANDOFF-STEP-1-ENDS-THE-TURN-ON-A-BEAT-WHILE-CHECK-0-BLOCKS-THE-STOP-ON-IN-FLIGHT-ROWS`.
@@ -275,7 +300,7 @@ accounted for exactly once, by count. An unmet replay now only RAISES the verdic
 mutants are MG1 (the read gated to qa again), MG2 (a duplicate replay accepted) and MG3 (BLOCKED lowered). MX1, MH1, MH2
 and MH12 gain their gate-1 arms. (B5) The carriers are the Gate-1 and Gate-2 paragraphs of `implementation.md`,
 `code-reviewer.md` and `qa.md` "As a Shard", `_gate-procedures.md` "Validation cycle" item 1, and Rule 28 "Code review
-and QA shard their execution too". **OPEN FOR THE OPERATOR, not serial by design:** the residue on one agent is the one
+and QA shard their execution too". **MEASURE FIRST, operator ruling, not serial by design (`BL-474`):** the residue on one agent is the one
 canonical suite run plus the N handed-over replays, all in the frozen worktree. Its size on the consumer is unmeasured,
 because the consumer tree carries no sharded review directory yet. BL-464's receipt arm 8 needs `handovers: 0` on its
 part shards once both tracks merge; Track A owns that change.
