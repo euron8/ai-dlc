@@ -1016,7 +1016,8 @@ apply_readset_skip() {
     grep -qxF "$b" "$out/.trace" "$out/.trace.held" 2>/dev/null || readset_trace_add "$out" "$b" "$dsha"
   done
 
-  if [ "$n_sel" -eq 0 ]; then
+  # An EMPTY dispatch list is not a skip: it falls through to the empty-suite FAIL in run_fixtures.
+  if [ "$n_sel" -eq 0 ] && [ "$n_all" -gt 0 ]; then
     READSET_NO_CHANGE=1
     return 0
   fi
