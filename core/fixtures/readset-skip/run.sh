@@ -54,6 +54,29 @@ disown "$LOCKPID" 2>/dev/null || :
 LOCK_T0="$(date +%s)"
 trap 'kill '"$LOCKPID"' 2>/dev/null; rm -rf "$WORK"' EXIT
 
+# INSIDE A SANDBOX: ONE DETECTOR, READ IN TWO PLACES. The read-set deriver's `--tracer sandbox` runs
+# this fixture under `sandbox-exec`, and two things are refused there: `log stream` answers "Cannot
+# run while sandboxed", and the setuid `/bin/ps` is not exec'd at all. The first is the POSITIVE
+# detection; it is probed once, here, and read by the start-time worlds (ps_sandbox_skip) and by the
+# sandbox-tracer loss arm further down, which reuses this probe's exit and stderr.
+# A `ps` that merely FAILS is never a reason to skip: outside a sandbox it is still `broken`, and
+# inside one ps_sandbox_skip refuses unless `ps` really fails there, so a detector that claims a
+# sandbox where `ps` works cannot hide the worlds it gates.
+IN_SANDBOX=0; LS_PROBE_RC=127
+if [ -x /usr/bin/log ]; then
+  /usr/bin/log stream --style compact --timeout 1s --predicate 'sender == "readset-skip-probe"' >/dev/null 2>"$WORK/ls.err"
+  LS_PROBE_RC=$?
+  grep -q 'Cannot run while sandboxed' "$WORK/ls.err" && IN_SANDBOX=1
+fi
+ps_sandbox_skip() { # <group>: 0 (skip it, SKIP printed) inside a sandbox where ps is refused; 1 otherwise
+  [ "$IN_SANDBOX" = 1 ] || return 1
+  if ps -o lstart= -p "$$" >/dev/null 2>&1; then
+    broken "the sandbox detector says this run is sandboxed, yet ps -o lstart= -p \$\$ works -- refusing to skip $1"
+  fi
+  printf '  SKIP  %s: inside a sandbox (log stream answers "Cannot run while sandboxed"), where the setuid /bin/ps is refused\n' "$1"
+  return 0
+}
+
 # The block is extracted rather than the whole hook sourced: the hook runs a full gate on
 # source. I66 holds the two copies of this block to one program, so proving it here proves it
 # for the consumer's hook as well.
@@ -1167,13 +1190,15 @@ RT
       "$(cat "$o/sdiff" 2>/dev/null || echo nosdiff)"
   }
   RT_OK='self|child|start|match|1|'*'|started|ppid|sdiff'
-  RK="$(rt_drive "$POOL" k)"; lt_arm
-  case "$RK" in
-    $RT_OK) case "$RK" in *"|gone|"*|*"|stale|"*)
-         ok "(k) the real launcher's lock names the trace subshell's pid with its own start time, reads HELD while it runs, and is gone or stale after: '$RK'" ;;
-       *) bad "(k) the lock outlived its trace as HELD: '$RK'" ;; esac ;;
-    *) bad "(k) the launcher's lock is not the trace subshell's pid with its start time, HELD: '$RK' -- $(tr '\n' '/' < "$WORK/rto.k/pidfile" 2>/dev/null)" ;;
-  esac
+  if ! ps_sandbox_skip "(k) the launcher's lock round trip"; then
+    RK="$(rt_drive "$POOL" k)"; lt_arm
+    case "$RK" in
+      $RT_OK) case "$RK" in *"|gone|"*|*"|stale|"*)
+           ok "(k) the real launcher's lock names the trace subshell's pid with its own start time, reads HELD while it runs, and is gone or stale after: '$RK'" ;;
+         *) bad "(k) the lock outlived its trace as HELD: '$RK'" ;; esac ;;
+      *) bad "(k) the launcher's lock is not the trace subshell's pid with its start time, HELD: '$RK' -- $(tr '\n' '/' < "$WORK/rto.k/pidfile" 2>/dev/null)" ;;
+    esac
+  fi
 fi
 
 # MUTANTS of the block, each a count-checked literal edit of a copy, scored by the arm's own predicate.
@@ -1212,8 +1237,16 @@ fi
 # records the start time of its pid on line 2 and the reader compares it. Six worlds, judged by
 # calling readset_lock_stale directly and reading its exact return code (0 stale, 1 held, anything
 # else is an error and never scores as either) and whether it printed the ps-fallback announcement.
-# These run `ps`, which is setuid and refused by the read-set deriver's sandbox; this fixture TRIPs
-# that sandbox already and is unmapped, which is why the worlds live here and not in suite-pole-guard.
+# These run `ps`, which is setuid and refused by the read-set deriver's sandbox. Under that sandbox
+# ps_sandbox_skip SKIPs them and the rest of the fixture runs to a verdict; on every ordinary run
+# they run. Reaching a verdict is not being mapped: a hand `--tracer sandbox` trace can still OMIT
+# this fixture when the stream drops reports in its window. The post-green `--local-map` trace
+# discards its window as TRIP regardless, because the detector's own probe execs /usr/bin/log,
+# which that profile tags.
+# suite-pole-guard stays ps-free instead, so it carries none of these worlds.
+#
+# THE BLOCK BELOW IS NOT RE-INDENTED under its `if`: it carries a heredoc whose terminator must sit
+# at column 0. It ends at the line `fi # end of the ps-dependent start-time worlds`.
 #
 # THE LOCK PID IS $LOCKPID, the `sleep` started at the top, NEVER `$$`. Each world is judged by a
 # fresh `bash` (PJ_JUDGE) launched at least 2s after that sleep, and the judge asserts in the same
@@ -1233,6 +1266,20 @@ fi
 # `split` is scored RELATIVE to `right` under the same lib, so a mutant that breaks every held-with-
 # start world is owned by `right` alone, and one that breaks only the cross-env case (no pin) is owned
 # by `split` alone. On the unmutated block `right` is asserted held and silent, so `split` is too.
+# SANDBOX MUTANT: the detector forced to "inside a sandbox" on a run where `ps` works must refuse
+# (`broken`, exit 2), never SKIP. Run on every ordinary run; inside a real sandbox `ps` fails, so the
+# refusal it proves cannot be reached there and the arm is not counted.
+if [ "$IN_SANDBOX" = 0 ]; then
+  lt_arm
+  _sm="$( ( IN_SANDBOX=1; ps_sandbox_skip "mutant probe" ) 2>&1 >/dev/null; echo "rc=$?" )"
+  [ -d "$WORK" ] && kill -0 "$LOCKPID" 2>/dev/null || broken "the SANDBOX MUTANT subshell's exit ran the EXIT trap: WORK or the lock-pid sleep is gone"
+  case "$_sm" in
+    *"yet ps -o lstart= -p \$\$ works"*"FIXTURE BROKEN"*"rc=2")
+      ok "SANDBOX MUTANT: the detector forced to 'sandboxed' where ps works refuses (FIXTURE BROKEN, exit 2) instead of skipping the start-time worlds" ;;
+    *) bad "SANDBOX MUTANT: the detector forced to 'sandboxed' where ps works did not refuse: '$(printf '%s' "$_sm" | tr '\n' ' ')'" ;;
+  esac
+fi
+if ! ps_sandbox_skip "lock start-time worlds and their six reader mutants (BL-463)"; then
 PJW="$WORK/pj"; mkdir -p "$PJW" || broken "could not create the lock-start world"
 pj_lib() { # <pool copy> <out>: the reader and its helper, as the hook defines them
   { awk '/^readset_pid_start\(\) \{/,/^}/' "$1"; awk '/^readset_lock_stale\(\) \{/,/^}/' "$1"; } > "$2"
@@ -1348,6 +1395,7 @@ pj_mut nonorm '  set -- $x' '  set -- "$x"' right
 # die on `right` only because the lock pid is the sleep and the judge's start is asserted different.
 pj_mut readerself 'if ! c="$(readset_pid_start "$p")"; then' 'if ! c="$(readset_pid_start "$$")"; then' right
 pj_mut helperself 'ps -o lstart= -p "$1"' 'ps -o lstart= -p "$$"' right
+fi # end of the ps-dependent start-time worlds
 if [ "$LT_CAN" = 1 ]; then
   pm_l() { # <name> <arm label> <setup> <correct result glob> [world]
     local r; lt_arm
@@ -1406,11 +1454,13 @@ if [ "$LT_CAN" = 1 ]; then
       *) ok "BL-463 MUTANT $1 is KILLED by k: '$r'" ;;
     esac
   }
-  pm_copy parentpid 1 '  tp="$!"' '  tp="$$"' && pm_rt parentpid
-  pm_copy nostartline 1 '"$(readset_pid_start "$tp")" > "$lk/pid"' '"" > "$lk/pid"' && pm_rt nostartline
-  # ppidwriter names a LIVE process that is not the trace subshell and records that process's start
-  # correctly, so the file agrees with itself; only the join to the stub's recorded pid (ppid) sees it.
-  pm_copy ppidwriter 1 '  tp="$!"' '  tp="$PPID"' && pm_rt ppidwriter
+  if ! ps_sandbox_skip "the lock writer's three mutants scored on (k) (BL-463)"; then
+    pm_copy parentpid 1 '  tp="$!"' '  tp="$$"' && pm_rt parentpid
+    pm_copy nostartline 1 '"$(readset_pid_start "$tp")" > "$lk/pid"' '"" > "$lk/pid"' && pm_rt nostartline
+    # ppidwriter names a LIVE process that is not the trace subshell and records that process's start
+    # correctly, so the file agrees with itself; only the join to the stub's recorded pid (ppid) sees it.
+    pm_copy ppidwriter 1 '  tp="$!"' '  tp="$PPID"' && pm_rt ppidwriter
+  fi
   pm_copy redrun 1 '  if [ "$rc" -eq 0 ]; then readset_live_trace "$out"; fi' '  readset_live_trace "$out"' \
     && pm_rf redrun f "printf 'exit 1\n' > $FXROOT/alpha/run.sh" '"1|no|not|"*'
 fi
@@ -2274,14 +2324,14 @@ MUT
   #
   # IT SKIPS where the stream cannot run: no sandbox-exec, no /usr/bin/log, running as root (the
   # sandbox tracer refuses root), or INSIDE a sandbox -- `log stream` answers "Cannot run while
-  # sandboxed", which is exactly this fixture's state while `--tracer sandbox` traces it.
+  # sandboxed", which is exactly this fixture's state while `--tracer sandbox` traces it. That
+  # probe is the one taken at the top (IN_SANDBOX, LS_PROBE_RC), not a second one.
   LS_WHY=""
   if ! command -v sandbox-exec >/dev/null 2>&1; then LS_WHY="no sandbox-exec (not macOS)"
   elif [ ! -x /usr/bin/log ]; then LS_WHY="no /usr/bin/log"
   elif [ "$(id -u)" = 0 ]; then LS_WHY="running as root, which --tracer sandbox refuses"
-  else
-    /usr/bin/log stream --style compact --timeout 1s --predicate 'sender == "readset-skip-probe"' >/dev/null 2>"$WORK/ls.err" \
-      || LS_WHY="log stream unavailable here: $(head -1 "$WORK/ls.err")"
+  elif [ "$IN_SANDBOX" = 1 ]; then LS_WHY="inside a sandbox: $(head -1 "$WORK/ls.err")"
+  elif [ "$LS_PROBE_RC" != 0 ]; then LS_WHY="log stream unavailable here: $(head -1 "$WORK/ls.err")"
   fi
   if [ -n "$LS_WHY" ]; then
     printf '  SKIP  sandbox-tracer loss arm and deriver width arm: %s\n' "$LS_WHY"

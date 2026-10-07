@@ -745,7 +745,13 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   I84 297 -> 299, I83 147 -> 148 count the new hook and scripts; I93 32 -> 31. The 3254 above was
 #   measured on the BL-459 branch alone, before the other branches' directories were merged in.
 #   HIGH reading 3257 plus the usual 6.
-FORK_BUDGET=3263
+#
+#   RAISED TO 3272 FOR ONE NEW SHIPPED RECONCILE SCRIPT, NOT FOR A NEW ARM. `fork-profile.sh --section
+#   by-arm --stable`, base `origin/main` 6f73066d and the 0.742.0 release tree 1b425b13, each in a clean
+#   detached worktree with every file committed: base 3259 (STABLE 2), tip 3266 (STABLE 3, spread
+#   3265-3266), so +7. Every arm that moved walks `reconcile/self-update-push.sh`: I84 299 -> 301,
+#   I105 87 -> 90, I83 148 -> 149, I21 27 -> 28. HIGH reading 3266 plus the usual 6.
+FORK_BUDGET=3272
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

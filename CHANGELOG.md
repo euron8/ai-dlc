@@ -19,6 +19,51 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.742.0] - 2026-10-07
+
+Batch 203's second release, shipped alone because it changes the update skill. It discharges one consumer candidate,
+closes `BL-468` and `BL-469`, and files `BL-470`. It also carries the operator's completed sandbox read-set trace, with
+the fixtures this release changes re-traced on top.
+
+### One pre-push run per self-update, on the hook and tree actually pushed (PC-S317-SELF-UPDATE-GATE-PUSH-PROBE-DUPLICATES-THE-PUSH-HOOK)
+
+- The self-update gate no longer runs the consumer's pre-push hook. Its push probe ran the whole hook on the unwritten tree,
+  and step 2's push ran it again on the written tree with the incoming hook, so each self-update paid the suite twice and
+  the first run judged neither the hook nor the tree being pushed. The enclosed-layout `UNDECIDED` row stays.
+- New `reconcile/self-update-push.sh`. Step 2 pushes through it. It runs the hook git would run once, from the consumer
+  root, with SIGPIPE ignored as git does, fed the exact ref line for the one sha it then pushes, and passes the push URL as
+  `$2`. It then pushes that sha to `refs/heads/<branch>` with `--no-verify --no-follow-tags`, so a `remote.<r>.push`
+  mapping, `push.followTags` or a hook that moves the branch cannot send anything the hook did not judge. It refuses
+  (exit 2) on a remote with more than one push URL and on a hook that moves the branch. Exit 3 is a hook refusal, exit 4 a
+  transport failure.
+- A hook refusal is `SELF-UPDATE-DEFER`, as the probe's refusal was. Step 2 discards the branch and carries the gate record,
+  the fixture log and the new push record, uncommitted, to the gated apply.
+- **Delivery.** The consumer's installed gate and SKILL.md run the delivering pull, so that pull still pays two hook runs.
+  The saving starts on the pull after it.
+- `self-update-gate`'s fixture drops the probe's cells and proves the gate runs no hook. It covers the wrapper against a
+  real `git push` in every case above, with a hook-run counter. The release adds 14 mutants, all killed: 12 against
+  the wrapper and 2 against the gate.
+- On a hook refusal, step 2 restores the gate record and fixture log through a temporary file, so a record the
+  discarded branch never held is left as it is instead of truncated by a bare `git show … > <path>`.
+
+### readset-skip finishes under the read-set deriver's sandbox (BL-469)
+
+- `/bin/ps` is setuid and `sandbox-exec` refuses it, so the BL-463 start-time worlds ended `readset-skip` as
+  `FIXTURE BROKEN` on every trace. The fixture now detects the sandbox from its `log stream` probe and SKIPs only the three
+  `ps` groups there. Outside a sandbox a failing `ps` is still `broken`.
+- It still traces OMITTED, on dropped reports rather than a failure: filed as `BL-470` with
+  `self-update-fixture-log-mutants`, which drops for the same reason.
+
+### Read-set map
+
+- The operator's sandbox trace, at `9d7dee9b`, then the four fixtures this release changes re-traced on the release tree:
+  243 fixtures mapped. `update-preflight-push` re-traced clean and reads `SKILL.md`. `self-update-gate` and
+  `procsub-staged-refusal-boot` traced OMITTED on dropped reports, so their old rows, which predate
+  `self-update-push.sh`, are removed and both run on every push. With `readset-skip` and
+  `self-update-fixture-log-mutants` they wait on `BL-470`.
+- `update-preflight-push` re-anchors its `wX` mutant on the rewritten push-failure line, and its discard arm requires an
+  UN-SYNCED that is not negated, since the paragraph now also says a hook refusal is "not UN-SYNCED".
+
 ## [0.741.1] - 2026-10-07
 
 Batch 203's first release. It discharges one consumer candidate and closes `BL-467`. Under 0.741.0 every consumer's
