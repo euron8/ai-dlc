@@ -124,8 +124,9 @@ same three worlds, this gate           cycle 1 render row SELF-UPDATE-DEFER, not
 ```
 
 The gate now judges against the hook the push will run: theirs' whenever the range changes `core/git-hooks/pre-push` and
-arm C did not carry it. A script whose run shape differs between the two hooks joins the gating set even if the pull
-does not change it. The current side reads 0 where today's hook does not ask the question or the consumer has no copy,
+arm C did not carry it. A script whose scan rows differ between the two hooks, kind and argv (a new mention included, which can only
+add a refusal-direction row), joins the gating set even if the pull does not change it. A pull that changes ONLY the
+hook, with no core/scripts/ path, is not exercised by any world. The current side reads 0 where today's hook does not ask the question or the consumer has no copy,
 because today's push cannot be refused there. A script arm C carried is not written, so it reads OK "carried". The
 `hk-` arms pin the four worlds, plus a deleted-by-consumer near-miss, and the mutants `hk-mut-curhook`, `hk-mut-adds`
 and `hk-mut-carried` each revert one leg. The receipt adds `hookadd` (the current hook has no renderer step, theirs'
