@@ -314,9 +314,11 @@ For each completed task, verify:
   `SendMessage` your full validation verdict (per-AC PASS/FAIL with
   Expected/Got) to the lead. A part shard delivers its shard file's absolute
   path and its `shard-verdict:` value instead, never per-AC rows, which only
-  the cross shard writes. The cross shard delivers its shard file's absolute
-  path, its `shard-verdict:` value and the count of hand-overs it ran; its
-  per-AC rows stay in the file. A silent idle is NOT a delivery — the lead treats
+  the first cross shard writes. The first cross shard (`cross-1`, or `cross`
+  when there is one cross group) delivers its shard file's absolute path, its
+  `shard-verdict:` value and the count of hand-overs it ran; its per-AC rows
+  stay in the file. Every other cross shard delivers its shard file's absolute
+  path and its `shard-verdict:` value. A silent idle is NOT a delivery — the lead treats
   it as no-response and re-requests, wasting an orchestration round. Your final
   thinking is not your final message; the message MUST be sent.
 - Message **dev teammate** when rejecting a task (include specific failure
@@ -354,10 +356,19 @@ their own heading; a second verdict line carrying a different member fails Check
 ## As a Shard
 
 **As a shard**, your brief carries `shard: <ordinal>/<K> <group>` or
-`shard: cross/<K> cross` (Rule 28, "Split dispatch": files axis), the part map,
-and the ABSOLUTE path of the one shard file you write: `<ordinal>.md` or
-`cross.md` in the shard directory. Write there and nowhere else, never to the
-validation file above. The go-signal SHA is the frozen sha. Your
+`shard: cross/<K> g<g>/<G> <ordinals>` (Rule 28, "Split dispatch": files axis),
+the part map, and the ABSOLUTE path of the one shard file you write:
+`<ordinal>.md`, or `cross-<g>.md` (`cross.md` when there is one cross group)
+in the shard directory. A cross brief also carries the whole group table from
+`partition-document.sh --cross-groups <K>`. As a cross shard, read the WHOLE
+diff: your group's pairs are your FOCUS, and you may cite any part. The merge
+refuses your finding only when the group `partition-document.sh --cross-owner`
+names already carries the identical `parts:` set. Write there and nowhere
+else, never to the validation file above. Write your header first and append
+each finding as you verify it. When you have finished, and only then, make ONE
+final write: `seat-complete: implementation qa <shard> findings=<n>`, <n> being
+the number of `#### ` findings in your file, never with your header; the lead's
+join waits for that line and the merge refuses a count that disagrees. The go-signal SHA is the frozen sha. Your
 `reviewed-sha:` line carries it in FULL (40 or 64 hex characters) even when the
 go-signal abbreviates it, so resolve it with `git rev-parse` in the frozen
 worktree.
@@ -383,6 +394,14 @@ hand-over is not a REJECT of its own. The hand-over finding goes under
 `### Important`, never under a `### Deferred` container, and carries exactly
 one column-0 `handover: <AC-id>` line beside its `parts:` line. Beyond that
 setup and those replays, a part shard runs no suite, no build and no live run.
+
+**With more than one cross group, the FIRST cross shard (`cross-1`) is "the
+cross shard" of the next paragraph**: it alone executes in the frozen
+worktree, runs every handed-over replay, and writes the per-AC table and the
+deferred-AC record. Every other cross shard (`cross-2` onward) executes
+nothing, writes no `handover-run:` line and neither section, and reports only
+the interaction findings between parts that it owns; the merge refuses any of
+those from it.
 
 **As the cross shard** you own every Validation Checklist item that is not on
 the part-local list above, including every item an override or extension of

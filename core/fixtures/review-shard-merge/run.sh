@@ -8,7 +8,7 @@
 # consumer cannot edit, so the consumer keeps every correctness arm and loses only that proof.
 #
 # WHAT IS AT STAKE. Check 1 in gate-validation.md reads ONE verdict line from ONE review file. A
-# sharded review is N part reviewers plus one cross reviewer, and the merge writes that file. Its
+# sharded review is N part reviewers plus one cross reviewer per cross group, and the merge writes that file. Its
 # load-bearing claims are invisible to anything that only reads a finished review:
 #   - the part set is RE-DERIVED from the manifest's inputs, never read off the shard directory;
 #   - the merged verdict is the WORST shard verdict, never a count, the cross shard, or the last;
@@ -171,6 +171,23 @@ arm q_hc_none "H23: every part shard 'handovers: 0', cross.md with none, no hand
               "H23: a world with no hand-overs and correct zero counts was refused"
 arm q_ho_widen "H24: under 'handovers: 0', 'handover' followed by an em dash, en dash, '=', '->', a trailing reason, a parenthesised reason, a '1. ' list prefix (bare and bold), and 'handover-run —' -> each REFUSED as a malformed hand-over" \
                "H24: a hand-over spelling the widened malformed-line pattern names was merged"
+arm x_k8 "X1: K=8 -- eight parts and cross-1..6 (one per --cross-groups row) merge, titled 'merged from 14 shards', one body header per group" \
+         "X1: a K=8 shard dir with every cross group was not merged as fourteen shards"
+arm x_only "X2: K=8, and K=3, with one cross.md in place of the cross groups -> REFUSED 'a single cross shard is owed only at K=2', nothing at --out" \
+           "X2: a single unsharded cross reviewer was merged where the cross groups were owed"
+arm x_mix "X3: cross.md beside cross-1..3 -> REFUSED as a mix, nothing at --out" "X3: cross.md and cross-<g>.md merged together"
+arm x_unknown "X4: cross-4 at K=3, and cross-1.md in place of cross.md at K=2 -> each REFUSED as a group --cross-groups does not print" \
+              "X4: a cross shard naming a group the table does not print was merged"
+arm x_owner "X5: K=8, a finding citing 1, 2 in cross-3 AND in its owner cross-1 -> REFUSED naming the owner; 1, 2, 7 in cross-3 alone merges, count +1; the same finding in cross-1 merges and the finding count rises by one" \
+            "X5: a cross finding reported by a group that does not own it was merged, or its owner's copy was refused"
+arm x_actable "X6: --gate qa, the per-AC table in cross-2 and the deferred record in cross-3 -> each REFUSED, only cross-1 writes them" \
+              "X6: a per-AC table or deferred record outside cross-1 was merged"
+arm x_horun "X7: --gate qa, part 2's hand-over replayed by cross-2 rather than cross-1 -> REFUSED, only cross-1 runs a replay" \
+            "X7: a hand-over replayed by a cross group other than the execution owner was merged"
+arm x_k2 "X8: K=2 -- cross.md merges under both gates, titled 'merged from 3 shards', its body header '## Shard: cross'" \
+         "X8: a K=2 shard dir with its one cross.md did not merge as before"
+arm x_seat "X9: one shard without 'seat-complete:' beside shards with it, a marker that is not the last non-blank line, and findings=3 over 1 finding -> each REFUSED; every shard ending in it (blank lines after) merges, the marker dropped" \
+           "X9: an unfinished shard was merged beside finished ones, or finished shards were refused"
 
 # THE PROGRAMS ARE NOTHING IF THE LEAD IS NEVER TOLD TO RUN THEM. Every arm above drives the two
 # programs directly, so a release that built them and never rewired the step file passes all of
@@ -533,10 +550,10 @@ p_qsetup_role() { local t; t="$(role_sect "$1" | joined)"
     && grep -qF 'the RED replays for any AC whose anchor lies in no part'"'"'s files or that a part shard handed over' <<<"$t"; }
 p_qsetup_step() { local t; t="$(step2_para "$1" | joined)"
   grep -qF 'a part QA first runs the project'"'"'s canonical dependency setup (the setup the dev'"'"'s QA Handoff Evidence records, or the story'"'"'s documented setup) and confirms the canonical run of the anchor'"'"'s test is GREEN there before any mutation.' <<<"$t" \
-    && grep -qF 'An AC whose replay cannot reach a GREEN baseline in the part'"'"'s worktree is handed to the cross QA, listed under the part shard'"'"'s findings with its reason, rather than scored.' <<<"$t" \
+    && grep -qF 'An AC whose replay cannot reach a GREEN baseline in the part'"'"'s worktree is handed to the first cross QA, listed under the part shard'"'"'s findings with its reason, rather than scored.' <<<"$t" \
     && grep -qF 'the RED replays a part QA handed over' <<<"$t"; }
 p_qdeliver() { local t; t="$(role_bullet "$1" Communication '- **Deliver before idle' | joined)"
-  grep -qF 'A part shard delivers its shard file'"'"'s absolute path and its `shard-verdict:` value instead, never per-AC rows, which only the cross shard writes.' <<<"$t"; }
+  grep -qF 'A part shard delivers its shard file'"'"'s absolute path and its `shard-verdict:` value instead, never per-AC rows, which only the first cross shard writes.' <<<"$t"; }
 # OFFENDERS: each obligation dropped at its site; and each moved OUT of its section (into the
 # paragraph after it), which a whole-file grep would still accept.
 sed -e 's/^it you first run the project.s canonical dependency setup, the setup the dev.s$/it you run the replays directly, the setup the dev'"'"'s/' "$QA_MD" > "$WORK/qs-role-nosetup.md"
@@ -582,26 +599,26 @@ fi
 # first, cross only after every part shard file exists, its brief naming them, and the cross QA
 # reading them for `handover:` lines before scoring); qa.md's As a Shard (the hand-over's
 # `handover:` line under `### Important`, never a Deferred container, and the cross shard reading
-# every part shard and writing `handover-run:`); the Deliver-before-idle bullet (the cross shard
-# delivers the count of hand-overs it ran).
+# every part shard and writing `handover-run:`); the Deliver-before-idle bullet (the first cross
+# shard, cross-1, delivers the count of hand-overs it ran).
 p_ho_step() { local t; t="$(step2_para "$1" | joined)"
-  grep -qF 'The part QAs are dispatched first; the one `shard: cross/<N> cross` QA writing `cross.md` there is dispatched only after every part shard file exists, and its brief names the absolute path of every part shard file.' <<<"$t" \
-    && grep -qF 'Before scoring, the cross QA reads every part shard file for `handover:` lines, runs each handed-over replay and records it as a `handover-run:` line' <<<"$t"; }
+  grep -qF 'The part QAs are dispatched first; the cross QAs, one per row `partition-document.sh --cross-groups <K>` prints (K = N), briefed `shard: cross/<K> g<g>/<G> <ordinals>` with the whole group table and the whole diff to read, each writing `cross-<g>.md` there (`cross.md` when the table has one row), are dispatched only after every part shard file exists, and the first cross QA'"'"'s brief names the absolute path of every part shard file.' <<<"$t" \
+    && grep -qF 'Before scoring, the first cross QA reads every part shard file for `handover:` lines, runs each handed-over replay and records it as a `handover-run:` line' <<<"$t"; }
 p_ho_role() { local t; t="$(role_sect "$1" | joined)"
   grep -qF 'The hand-over finding goes under `### Important`, never under a `### Deferred` container, and carries exactly one column-0 `handover: <AC-id>` line beside its `parts:` line.' <<<"$t" \
     && grep -qF 'Before scoring anything, the cross shard reads every part shard `<ordinal>.md` its brief names for `handover:` lines, runs each handed-over replay in the frozen worktree after the project'"'"'s canonical dependency setup, and records each one as a column-0 `handover-run: <ordinal> <AC-id> <RED|GREEN-SURVIVED|NO-BASELINE>` line' <<<"$t"; }
 p_ho_deliver() { local t; t="$(role_bullet "$1" Communication '- **Deliver before idle' | joined)"
-  grep -qF 'The cross shard delivers its shard file'"'"'s absolute path, its `shard-verdict:` value and the count of hand-overs it ran; its per-AC rows stay in the file.' <<<"$t"; }
+  grep -qF 'The first cross shard (`cross-1`, or `cross` when there is one cross group) delivers its shard file'"'"'s absolute path, its `shard-verdict:` value and the count of hand-overs it ran; its per-AC rows stay in the file.' <<<"$t"; }
 # OFFENDERS: the one-wave dispatch restored; the cross-read dropped from each site; the hand-over
 # placed under Deferred; the ordering sentence moved out of its paragraph; the cross delivery dropped.
-sed -e 's/^("Split dispatch": files axis)\. The part QAs are dispatched first; the one$/("Split dispatch": files axis), together with the one/' "$STEP_MD" > "$WORK/ho-step-onewave.md"
-sed -e 's/^the cross QA reads every part shard file for `handover:` lines, runs each$/the cross QA may read a part shard file for `handover:` lines, runs each/' "$STEP_MD" > "$WORK/ho-step-noread.md"
-awk '/^\*\*Gate-2 dispatch:/ { p = 1 } p && /^[[:space:]]*$/ && !d { print; print "The part QAs are dispatched first; the one `shard: cross/<N> cross` QA writing `cross.md` there is dispatched only after every part shard file exists, and its brief names the absolute path of every part shard file."; d = 1; p = 0 }
-     /^\("Split dispatch": files axis\)\. The part QAs are dispatched first; the one$/ { print "(\"Split dispatch\": files axis), together with the one"; next } { print }' "$STEP_MD" > "$WORK/ho-step-moved.md"
-grep -q '^("Split dispatch": files axis), together with the one$' "$WORK/ho-step-moved.md" || cp "$STEP_MD" "$WORK/ho-step-moved.md"
+sed -e 's/^("Split dispatch": files axis)\. The part QAs are dispatched first; the cross$/("Split dispatch": files axis), together with the cross/' "$STEP_MD" > "$WORK/ho-step-onewave.md"
+sed -e 's/^the first cross QA reads every part shard file for `handover:` lines, runs each$/the first cross QA may read a part shard file for `handover:` lines, runs each/' "$STEP_MD" > "$WORK/ho-step-noread.md"
+awk '/^\*\*Gate-2 dispatch:/ { p = 1 } p && /^[[:space:]]*$/ && !d { print; print "The part QAs are dispatched first; the cross QAs, one per row `partition-document.sh --cross-groups <K>` prints (K = N), briefed `shard: cross/<K> g<g>/<G> <ordinals>` with the whole group table and the whole diff to read, each writing `cross-<g>.md` there (`cross.md` when the table has one row), are dispatched only after every part shard file exists, and the first cross QA'"'"'s brief names the absolute path of every part shard file."; d = 1; p = 0 }
+     /^\("Split dispatch": files axis\)\. The part QAs are dispatched first; the cross$/ { print "(\"Split dispatch\": files axis), together with the cross"; next } { print }' "$STEP_MD" > "$WORK/ho-step-moved.md"
+grep -q '^("Split dispatch": files axis), together with the cross$' "$WORK/ho-step-moved.md" || cp "$STEP_MD" "$WORK/ho-step-moved.md"
 sed -e 's/^`### Important`, never under a `### Deferred` container, and carries exactly$/`### Deferred ACs`, and carries exactly/' "$QA_MD" > "$WORK/ho-role-deferred.md"
 sed -e 's/^parts\. Before scoring anything, the cross shard reads every part shard$/parts. After scoring, the cross shard may read a part shard/' "$QA_MD" > "$WORK/ho-role-noread.md"
-sed -e 's/^  path, its `shard-verdict:` value and the count of hand-overs it ran; its$/  path and its `shard-verdict:` value; its/' "$QA_MD" > "$WORK/ho-deliver-nocount.md"
+sed -e 's/^  `shard-verdict:` value and the count of hand-overs it ran; its per-AC rows$/  `shard-verdict:` value; its per-AC rows/' "$QA_MD" > "$WORK/ho-deliver-nocount.md"
 _s11s=0
 for _p in "$STEP_MD:ho-step-onewave.md" "$STEP_MD:ho-step-noread.md" "$STEP_MD:ho-step-moved.md" \
           "$QA_MD:ho-role-deferred.md" "$QA_MD:ho-role-noread.md" "$QA_MD:ho-deliver-nocount.md"; do

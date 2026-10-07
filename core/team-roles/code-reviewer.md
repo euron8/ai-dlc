@@ -149,12 +149,23 @@ degrading quietly. Emit the value alone on the line after the heading, or as
 ## As a Shard
 
 **As a shard** — your brief carries `shard: <ordinal>/<K> <group>` or
-`shard: cross/<K> cross` (Rule 28, "Split dispatch": files axis). Review only
-the files your part of the map lists, or as the cross shard only interactions
-between parts. As a part shard you EXECUTE NOTHING: no tests, no
-`validate-mutation-red.sh`, no build. The cross shard runs every execution step
-this role requires, once, in the frozen worktree. Write to the shard path your
-brief names, never to the review file above. Your shard replaces the template's
+`shard: cross/<K> g<g>/<G> <ordinals>` (Rule 28, "Split dispatch": files axis),
+with the whole group table from `partition-document.sh --cross-groups <K>`
+when you are a cross shard. Review only the files your part of the map lists.
+As a cross shard, read the WHOLE diff: the pairs of your group are your FOCUS,
+and you may cite any part. The merge refuses your finding only when the group
+`partition-document.sh --cross-owner` names already carries the identical
+`parts:` set. As a part shard you
+EXECUTE NOTHING: no tests, no `validate-mutation-red.sh`, no build. The first
+cross shard (`cross-1`, or `cross` when there is one group) runs every
+execution step this role requires, once, in the frozen worktree; every other
+cross shard executes nothing. Write to the shard path your brief names
+(`<ordinal>.md`, `cross-<g>.md`, or `cross.md` for one group), never to the
+review file above. Write your header first and append each finding as you
+verify it. When you have finished, and only then, make ONE final write: the
+line `seat-complete: implementation code-reviewer <shard> findings=<n>`, <n>
+being the number of `#### ` findings in your file. Never write it with your
+header; the merge refuses a shard whose count disagrees. Your shard replaces the template's
 `## Verdict` heading and value with one column-0 line
 `shard-verdict: <VALUE>` (`APPROVED`, `NEEDS_REWORK` or `BLOCKED`), carries one
 column-0 `reviewed-sha: <full frozen sha>`, and writes no line Check 1's grep

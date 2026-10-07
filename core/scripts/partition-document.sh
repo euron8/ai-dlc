@@ -14,8 +14,40 @@
 #       writes the sections back over the document the manifest names. Exit 0 on
 #       `ASSEMBLED:` or `UNCHANGED:` (stdout).
 #
+#   partition-document.sh --cross-groups <K>
+#       stdout: the CROSS GROUPS over parts 1..K, one line per group, `<g>\t<ordinal,ordinal,...>`.
+#   partition-document.sh --cross-owner <K> <ordinal,ordinal,...>
+#       stdout: the one `<g>` that OWNS a cross finding citing those ordinals.
+#       Both read no document. K must be an integer >= 2, and --cross-owner needs at least two
+#       DISTINCT cited ordinals, each in 1..K; anything else is exit 64 with one stderr line
+#       `partition-document: USAGE — <reason>` and nothing on stdout.
+#
 #   Every refusal is exit 2 with ONE stderr line `partition-document: REFUSED — <reason>`, and a
 #   refusal writes nothing: not the document, not the manifest, not a section.
+#
+# THE CROSS GROUPS (this file is their one speller; every reader calls --cross-groups or
+#   --cross-owner, and nothing restates the construction)
+#   THE QUARTER CONSTRUCTION. Split 1..K into four contiguous quarters; quarter i (1..4) holds
+#   int(K/4) + (i <= K%4 ? 1 : 0) ordinals, in order. Drop the empty quarters (K < 4 leaves some).
+#   Emit ONE group per unordered pair of nonempty quarters, in lexicographic quarter order
+#   ((1,2) (1,3) (1,4) (2,3) (2,4) (3,4)), numbered g = 1..G; a group is the union of its two
+#   quarters' ordinals, ascending, comma-joined, unpadded. K=2 is the single row `1\t1,2`.
+#   INVARIANTS, each asserted by core/fixtures/document-partition:
+#     - every unordered pair of distinct ordinals in 1..K lies inside at least one group (two
+#       ordinals in different quarters share exactly the group of that quarter pair; two in the
+#       same quarter share every group holding that quarter);
+#     - G is 1, 3, 6 for K = 2, 3, 4 and 6 for every K >= 5, so G <= 6 <= PART_CAP;
+#     - no group holds more than 2*ceil(K/4) ordinals;
+#     - the output is a pure function of K: byte-identical across runs;
+#     - G = 1 iff K = 2.
+#   There is no byte-compatibility with any earlier one-cross shape for K >= 3: that shape was
+#   one group holding every ordinal, and every K >= 3 run differs from it.
+#   THE OWNER RULE. A cross finding is OWNED by the LOWEST g whose group contains its two
+#   SMALLEST cited ordinals (distinct, numerically). Every pair lies in some group, so every
+#   finding citing two or more ordinals has exactly one owner. A group is a cross agent's FOCUS,
+#   not its read scope: the groups cover every pair, not every triple, so a cross agent reads the
+#   whole document and may cite any ordinal. The merges accept an out-of-owner finding unless
+#   its owner's shard carries the IDENTICAL cited set, which they refuse as the same finding.
 #
 # THE GRAMMAR (nothing else in core may restate it; callers read `--map`)
 #   Atoms are `## ` headings OUTSIDE fences and OUTSIDE HTML comments.
@@ -295,7 +327,58 @@ scoped_map() { # <doc> <ref> -> M and MRC, the scoped answer
   M="$(map_of "$1" "$SCOPE_TMP" 1)"; MRC=$?
 }
 
+usage64() { printf 'partition-document: USAGE — %s\n' "$*" >&2; exit 64; }
+cross_of() { # <K> [<ordinal list>] -> the group table (no list) or the owning g (list); awk rc
+  awk -v K="$1" -v O="${2:-}" 'BEGIN {
+    n = 0; s = 1
+    for (i = 1; i <= 4; i++) {
+      sz = int(K / 4) + (i <= K % 4 ? 1 : 0)
+      if (sz > 0) { n++; lo[n] = s; hi[n] = s + sz - 1; s += sz }
+    }
+    G = 0
+    for (a = 1; a <= n; a++) for (b = a + 1; b <= n; b++) { G++; QA[G] = a; QB[G] = b }
+    if (O == "") {
+      for (g = 1; g <= G; g++) {
+        row = ""
+        for (x = lo[QA[g]]; x <= hi[QA[g]]; x++) row = row (row == "" ? "" : ",") x
+        for (x = lo[QB[g]]; x <= hi[QB[g]]; x++) row = row "," x
+        printf "%d\t%s\n", g, row
+      }
+      exit 0
+    }
+    m = split(O, C, ","); s1 = 0; s2 = 0
+    for (i = 1; i <= m; i++) {
+      if (C[i] !~ /^[0-9]+$/ || C[i] + 0 < 1 || C[i] + 0 > K) {
+        print "partition-document: USAGE — cited ordinal \"" C[i] "\" is not an integer in 1.." K > "/dev/stderr"; exit 64
+      }
+      v = C[i] + 0
+      if (s1 == 0 || v < s1) { if (v != s1) s2 = s1; s1 = v }
+      else if (v != s1 && (s2 == 0 || v < s2)) s2 = v
+    }
+    if (s2 == 0) { print "partition-document: USAGE — a cross finding cites at least two distinct ordinals" > "/dev/stderr"; exit 64 }
+    for (q = 1; q <= n; q++) { if (s1 >= lo[q] && s1 <= hi[q]) q1 = q; if (s2 >= lo[q] && s2 <= hi[q]) q2 = q }
+    for (g = 1; g <= G; g++)
+      if ((QA[g] == q1 || QB[g] == q1) && (QA[g] == q2 || QB[g] == q2)) { print g; exit 0 }
+    print "partition-document: USAGE — no group holds ordinals " s1 " and " s2 > "/dev/stderr"; exit 64
+  }'
+}
+cross_k() { # <K> -> refuses (64) unless an integer >= 2
+  case "$1" in ''|*[!0-9]*) usage64 "K must be an integer >= 2 (got '$1')" ;; esac
+  [ "${#1}" -le 6 ] && [ "$1" -ge 2 ] || usage64 "K must be an integer >= 2 and at most 6 digits (got '$1')"
+}
+
 case "${1:-}" in
+  --cross-groups)
+    [ "$#" -eq 2 ] || usage64 "--cross-groups <K>"
+    cross_k "$2"
+    cross_of "$((10#$2))"; exit $? ;;
+
+  --cross-owner)
+    [ "$#" -eq 3 ] || usage64 "--cross-owner <K> <ordinal,ordinal,...>"
+    cross_k "$2"
+    [ -n "$3" ] || usage64 "--cross-owner needs the cited ordinals"
+    cross_of "$((10#$2))" "$3"; exit $? ;;
+
   --map)
     shift
     DOC=""; REF=""

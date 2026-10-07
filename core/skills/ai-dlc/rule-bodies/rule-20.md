@@ -70,7 +70,7 @@ operator back-and-forth, so subagent dispatch does not break an interactive loop
 
 **(iii) Native convergence review (`ai-dlc-adversary-review`).** The Rule 8 cycle
 invokes **no Skill at all**. The lead dispatches ONE `adversary` per pass (same
-Rule 19 binding as (ii)), sharded per file with one cross-file shard when the artifact is two or
+Rule 19 binding as (ii)), sharded per file with one cross-file shard per cross group when the artifact is two or
 more files, and joined by `merge-adversarial-shards.sh` (Rule 28, "Split dispatch": files
 axis), or sharded by section or subject part under that clause's sections and subject axes;
 the METHOD is `team-roles/adversary.md` itself.

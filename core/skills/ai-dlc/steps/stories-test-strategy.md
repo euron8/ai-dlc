@@ -527,7 +527,7 @@ sprint's stories — its passes use the **Adversarial review dispatch** and
 - **party-mode seats / subject:** SM, Dev, Architect, TEA — every story: every
   acceptance criterion, every edge case, every dependency. `stories/` is a files-axis
   subject (Rule 28, "Split dispatch"), so the round, each review pass and each repair are
-  sharded per story ordinal plus one cross-story part, as the "Validation cycle", "Adversarial
+  sharded per story ordinal plus one cross-story part per cross group, as the "Validation cycle", "Adversarial
   review dispatch" and "Adversarial repair dispatch" sub-routines say. Their joins are
   `merge-adversarial-shards.sh` and `join-remediator-shards.sh`.
 - **source-fidelity check:** for each story derived from a carry-over item or user

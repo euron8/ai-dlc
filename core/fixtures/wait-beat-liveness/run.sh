@@ -683,6 +683,139 @@ EOF
   else bad "cwd-invariance: $n assertions from cwd=/ , expected 3 — the case exited without running, which scores as clean"; fi
 }
 
+# ===========================================================================
+# 13. --complete: AN EARLY-WRITING SHARD IS DELIVERED ONLY BY ITS MARKER, AND ITS
+#     OWN WRITES ARE ITS EVIDENCE OF WORK.
+#     A seat that writes its header first and appends findings as it verifies them is
+#     non-empty for its whole run, so the plain predicate would consume it half-written.
+#     Every arm here drives TWO shapes one property apart: the same skeleton with and
+#     without the flag, the marker last and the marker followed by a finding, and two
+#     targets in one beat of which only one grows. The no-flag pins in sections 1-12 are
+#     untouched and still pass, which is the byte-identical claim for callers without it.
+# ===========================================================================
+CBEAT_SINCE=""
+cbeat() {  # $1=subject $2=workdir ; rest = argv (targets relative to the workdir)
+  cb_subj="$1" cb_w="$2"; shift 2
+  ( cd "$cb_w" && env -u CLAUDE_CODE_SESSION_ID \
+        AI_DLC_WAIT_BEAT_SECS=3 \
+        AI_DLC_WAIT_POLL_SECS=1 \
+        AI_DLC_WAIT_MARGIN_SECS=0 \
+        AI_DLC_MAX_WAIT_BEATS=1 \
+        AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+        bash "$cb_subj" --since "$CBEAT_SINCE" "$@" ) > "$BEATOUT" 2>&1
+  RC=$?
+  OUT="$(cat "$BEATOUT")"
+}
+SKELETON='# requirements pm cross-1
+
+- a finding verified so far'
+MARKER='seat-complete: requirements pm cross-1'
+
+S13a_complete_requires_marker() {
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\n' "$SKELETON" > "$W/a.md"; printf '%s\n' "$SKELETON" > "$W/b.md"
+  cbeat "$SUBJ" "$W" a.md
+  if has "DELIVERED a.md"; then ok "complete: CONTROL — without the flag a non-empty skeleton is DELIVERED"
+  else bad "complete: CONTROL FAILED — the no-flag skeleton was not delivered, so the WAITING below means nothing: $OUT"; fi
+  cbeat "$SUBJ" "$W" --complete b.md
+  if has "WAITING   b.md" && ! has "DELIVERED b.md" && [ "$RC" -eq 0 ]; then
+    ok "complete: the same skeleton under --complete is WAITING, not DELIVERED"
+  else bad "complete: a skeleton with no seat-complete line was accepted under --complete (rc=$RC): $OUT"; fi
+
+  printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W/c.md"
+  cbeat "$SUBJ" "$W" --complete c.md
+  if has "DELIVERED c.md"; then ok "complete: the marker as the last line DELIVERS"
+  else bad "complete: a file ending in its seat-complete line was not delivered: $OUT"; fi
+
+  printf '%s\n%s\n- a finding appended after the marker\n' "$SKELETON" "$MARKER" > "$W/d.md"
+  cbeat "$SUBJ" "$W" --complete d.md
+  if has "WAITING   d.md" && ! has "DELIVERED d.md"; then ok "complete: a marker that is NOT the last non-blank line does not deliver"
+  else bad "complete: a marker followed by a finding was taken as completion: $OUT"; fi
+
+  printf '%s\n%s\n\n   \n\n' "$SKELETON" "$MARKER" > "$W/e.md"
+  cbeat "$SUBJ" "$W" --complete e.md
+  if has "DELIVERED e.md"; then ok "complete: trailing blank and whitespace-only lines do not hide the marker"
+  else bad "complete: blank lines after the marker hid it: $OUT"; fi
+
+  cbeat "$SUBJ" "$W" --complete --progress-path "$W" b.md
+  if [ "$RC" -eq 64 ]; then ok "complete: --complete with --progress-path is refused (exit 64)"
+  else bad "complete: --complete with --progress-path was accepted (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+}
+
+S13b_complete_progress_per_target() {
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\n' "$SKELETON" > "$W/grow.md"; printf '%s\n' "$SKELETON" > "$W/static.md"
+  cbeat "$SUBJ" "$W" --complete grow.md static.md     # charges the only beat, stamps each mark
+  sleep 1
+  printf -- '- a second finding, verified\n' >> "$W/grow.md"
+  cbeat "$SUBJ" "$W" --complete grow.md static.md     # sequence spent
+  if has "PROGRESS  grow.md" && ! has "NON-DELIVERY grow.md"; then
+    ok "complete: the target that grew since its own mark is granted PROGRESS"
+  else bad "complete: a growing early-writing shard got no progress grant: $OUT"; fi
+  if has "NON-DELIVERY static.md" && ! has "PROGRESS  static.md" && [ "$RC" -eq 1 ]; then
+    ok "complete: the static target beside it reaches NON-DELIVERY (rc 1) — no cross-grant"
+  else bad "complete: the static target was not declared non-delivered (rc=$RC): $OUT"; fi
+  if has "re-arm with --reset --progress-path"; then bad "complete: the --progress-path advice printed under --complete: $OUT"
+  else ok "complete: the --progress-path advice is suppressed under --complete"; fi
+
+  # THE CONTROL for the suppression: the same exhaustion WITHOUT the flag prints it.
+  # An ABSENT target: a file written in the same whole second as the arming instant
+  # would be DELIVERED, which is the mtime race section 5 records.
+  W2="$(mk_work)"
+  cbeat "$SUBJ" "$W2" x.md
+  cbeat "$SUBJ" "$W2" x.md
+  if has "NON-DELIVERY x.md" && has "re-arm with --reset --progress-path"; then
+    ok "complete: CONTROL — a no-flag exhaustion still prints the --progress-path advice"
+  else bad "complete: CONTROL FAILED — the no-flag advice is gone, so its absence above proves nothing: $OUT"; fi
+  rm -rf "$W" "$W2"
+}
+
+M9_marker_not_required() {
+  mutant marker-not-required -e 's@^  \[ "\$COMPLETE" -eq 1 \] || return 0$@  return 0@' || return
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\n' "$SKELETON" > "$W/b.md"
+  cbeat "$MUT" "$W" --complete b.md
+  if has "DELIVERED b.md"; then ok "MUTANT marker-not-required: a skeleton is delivered under --complete — section 13a catches it"
+  else bad "MUTANT marker-not-required: section 13a survives the marker test being dropped: $OUT"; fi
+  rm -rf "$W"
+}
+
+M10_global_progress_grant() {
+  mutant global-progress-grant \
+    -e 's@^    target_progressed "\$t" "\$pg" && PROGRESSED=1$@    for t2_ in $TARGETS; do target_progressed "$t2_" "$pg" \&\& PROGRESSED=1; done@' || return
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\n' "$SKELETON" > "$W/grow.md"; printf '%s\n' "$SKELETON" > "$W/static.md"
+  cbeat "$MUT" "$W" --complete grow.md static.md
+  sleep 1; printf -- '- a second finding\n' >> "$W/grow.md"
+  cbeat "$MUT" "$W" --complete grow.md static.md
+  if has "PROGRESS  static.md" && ! has "NON-DELIVERY static.md"; then
+    ok "MUTANT global-progress-grant: one target's writes extend the other's wait — section 13b catches it"
+  else bad "MUTANT global-progress-grant: section 13b survives a cross-grant: $OUT"; fi
+  rm -rf "$W"
+}
+
+M11_marker_anywhere() {
+  mutant marker-anywhere -e 's@NF { l = \$0 }@/^seat-complete: / { l = $0 }@' || return
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\n%s\n- a finding appended after the marker\n' "$SKELETON" "$MARKER" > "$W/d.md"
+  cbeat "$MUT" "$W" --complete d.md
+  if has "DELIVERED d.md"; then ok "MUTANT marker-anywhere: a marker followed by a finding delivers — section 13a catches it"
+  else bad "MUTANT marker-anywhere: section 13a survives the marker being matched anywhere: $OUT"; fi
+  rm -rf "$W"
+}
+
+M12_trailing_blank_hides_marker() {
+  mutant trailing-blank-hides -e 's@NF { l = \$0 }@{ l = $0 }@' || return
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  printf '%s\n%s\n\n   \n\n' "$SKELETON" "$MARKER" > "$W/e.md"
+  cbeat "$MUT" "$W" --complete e.md
+  if has "WAITING   e.md" && ! has "DELIVERED e.md"; then
+    ok "MUTANT trailing-blank-hides: blank lines after the marker block delivery — section 13a catches it"
+  else bad "MUTANT trailing-blank-hides: section 13a survives blank lines being read as the last line: $OUT"; fi
+  rm -rf "$W"
+}
+
 # ---------------------------------------------------------------------------
 # THE DRIVER
 # ---------------------------------------------------------------------------

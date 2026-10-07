@@ -250,6 +250,36 @@
 
 set -u
 
+# ---------------------------------------------------------------------------
+# --complete: THE EARLY-WRITING SHARD. (Documented here, below line 250, so that
+# `--help`, which prints lines 2-250, stays byte-identical for every caller that
+# does not pass the flag.)
+#
+# A seat or shard brief that writes its header FIRST and appends each finding as it
+# is verified makes the deliverable non-empty minutes before it is finished, so the
+# plain predicate -- non-empty and written since the join armed -- would consume a
+# half-written file. Under --complete (no argument):
+#
+#   DELIVERED additionally requires the file's LAST NON-BLANK line to begin
+#   `seat-complete: `. A marker anywhere else is not completion -- the brief makes it
+#   one final write, so a finding appended after it reopens the file. The beat reads the
+#   marker only; the merges check its `findings=<n>` count.
+#   Trailing blank lines are skipped, not read as the last line.
+#
+#   PROGRESS is per target and needs no --progress-path: each target carries its OWN
+#   `.progress` mark beside its counter, created and re-stamped by every sleeping beat,
+#   and the target PROGRESSED iff the target itself is newer than its own mark. An
+#   early-writing shard's file IS its evidence of work. One growing target never
+#   grants another: a static target beside a growing one still reaches NON-DELIVERY.
+#   --progress-path is refused in combination, because two sources of progress for
+#   one target is exactly a cross-grant.
+#
+#   The exhaustion advice to re-arm with --progress-path is not printed: under this
+#   flag the progress signal is already on.
+#
+# Without --complete every line this script prints is byte-identical to before.
+# ---------------------------------------------------------------------------
+
 BUDGET="${AI_DLC_WAIT_BEAT_SECS:-600}"
 POLL="${AI_DLC_WAIT_POLL_SECS:-10}"
 MAX_BEATS="${AI_DLC_MAX_WAIT_BEATS:-6}"
@@ -261,6 +291,7 @@ RESET=0
 TARGETS=""
 SINCE=""
 PROGRESS_PATHS=""
+COMPLETE=0
 
 # ---------------------------------------------------------------------------
 # Platform probes, done ONCE. `stat` and `date` split BSD/GNU on exactly the two
@@ -301,6 +332,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --reset) RESET=1; shift ;;
     --quiet) QUIET=1; shift ;;
+    --complete) COMPLETE=1; shift ;;
     --since)
       shift
       [ $# -gt 0 ] || { echo "FAIL: --since needs a value (epoch or ISO8601)." >&2; exit 64; }
@@ -329,6 +361,13 @@ done
 if [ -z "$TARGETS" ]; then
   echo "FAIL: pass at least one deliverable path." >&2
   echo "usage: $0 <path> [<path>...] [--reset]" >&2
+  exit 64
+fi
+
+if [ "$COMPLETE" -eq 1 ] && [ -n "$PROGRESS_PATHS" ]; then
+  echo "FAIL: --complete and --progress-path cannot be combined. Under --complete each" >&2
+  echo "  target's own writes are its evidence of work; a shared progress path would" >&2
+  echo "  let one target's work extend another's wait." >&2
   exit 64
 fi
 
@@ -430,7 +469,20 @@ join_of() {
 # ten instant beats straight to a false non-delivery.
 is_delivered() {  # $1 = path, $2 = join epoch
   [ -s "$1" ] || return 1
-  [ "$(mtime_of "$1")" -ge "$2" ]
+  [ "$(mtime_of "$1")" -ge "$2" ] || return 1
+  [ "$COMPLETE" -eq 1 ] || return 0
+  # --complete: the LAST NON-BLANK line begins `seat-complete: `. A whitespace-only
+  # line is blank (NF == 0), so trailing blank lines cannot hide the marker.
+  awk 'NF { l = $0 } END { exit (index(l, "seat-complete: ") == 1 ? 0 : 1) }' "$1" 2>/dev/null
+}
+
+# --complete's evidence of work: the target ITSELF newer than its OWN mark. `find
+# -newer` rather than whole-second mtimes, for the same reason progressed_since uses
+# it. A missing target or mark is no evidence.
+target_progressed() {  # $1 = target, $2 = its own mark; 0 iff the target is newer
+  [ -f "$1" ] && [ -f "$2" ] || return 1
+  tp_hit_="$(find "$1" -newer "$2" -print 2>/dev/null)"
+  [ -n "$tp_hit_" ]
 }
 
 # ---------------------------------------------------------------------------
@@ -630,6 +682,15 @@ for t in $TARGETS; do
   # sibling now reads the window its sleeping predecessor opened and leaves it open for
   # the next one, which is the behaviour the window was for.
   PROGRESSED=0
+  # --complete: the same gates as the block below -- sample always, re-stamp only when
+  # this beat may sleep -- but the evidence is this target's own file against this
+  # target's own mark. The two blocks are exclusive: the flags are refused together.
+  if [ "$COMPLETE" -eq 1 ]; then
+    target_progressed "$t" "$pg" && PROGRESSED=1
+    if [ "$MAY_SLEEP" -eq 1 ]; then
+      : > "$pg" 2>/dev/null || true
+    fi
+  fi
   if [ -n "$PROGRESS_PATHS" ]; then
     progressed_since "$pg" && PROGRESSED=1
     if [ "$MAY_SLEEP" -eq 1 ]; then
@@ -700,7 +761,7 @@ if [ -n "$EXHAUSTED" ]; then
   echo "  Rule 20 defines an absent deliverable as non-delivery. Re-dispatch the"
   echo "  teammate ONCE (then re-run with --reset), and if it fails again, HARD_BLOCK."
   echo "  Do NOT keep beating: the wait never runs forever (Rule 29, Check C)."
-  if [ -z "$PROGRESS_PATHS" ]; then
+  if [ -z "$PROGRESS_PATHS" ] && [ "$COMPLETE" -eq 0 ]; then
     echo "  Before you re-dispatch: an exhausted clock is not evidence of death. If the"
     echo "  teammate may still be working, re-arm with --reset --progress-path <its"
     echo "  worktree> and this beat will extend the sequence while it keeps writing."
