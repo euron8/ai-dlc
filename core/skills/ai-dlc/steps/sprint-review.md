@@ -99,7 +99,8 @@ reading this gate.
 entire sprint implementation. The round is sharded per `_gate-procedures.md`, "Validation
 cycle" item 1 (Rule 28, "Split dispatch": seats x parts axis). That means one persona agent per
 (seat, story ordinal) from `merge-adversarial-shards.sh --map` over the sprint's stories, plus
-one cross-story round. The lead's join counts the per-seat files against that map before
+one cross-story agent per (seat, cross group) from `partition-document.sh --cross-groups <K>`,
+every seat writing early and its join beat passing `--complete`. The lead's join counts the per-seat files against that map before
 dispositioning, and it counts only the files that item names. That item's seats x sections axis
 is for a single-document subject, not this one.
 - Does the implementation match the requirements?

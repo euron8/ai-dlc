@@ -102,8 +102,12 @@ for your findings, and (d) a shared context block. You MUST:
    where new defects come from. An unprobed "looks good" is a failed review. A
    probed "this holds" is a completed one.
 5. **As a shard** — your brief carries `shard: <ordinal>/<K> <basename>` or
-   `shard: cross/<K> cross` (Rule 28, "Split dispatch": files axis). Review only your story, or
-   as the cross shard only interactions between stories. Write to the shard path your brief
+   `shard: cross/<K> g<g>/<G> <ordinals>` (Rule 28, "Split dispatch": files axis). Review only
+   your story, or as a cross shard only interactions between the stories of your group, and
+   report only the cross findings your group owns (Rule 28, "The cross-part agent is sharded
+   too"). Write the file's header first, append each finding as you verify it, and keep the
+   last non-blank line `seat-complete: <step> adversary <shard>` after every edit
+   (`steps/_gate-procedures.md`, "Validation cycle" item 1). Write to the shard path your brief
    names. Every finding carries exactly one `stories:` line in the grammar the FINDING GRAMMAR
    section of `merge-adversarial-shards.sh`'s header defines, citing ordinals from the map in your
    brief. Report a finding that cites another story only if you are the cross shard. Stamp your
@@ -111,17 +115,18 @@ for your findings, and (d) a shared context block. You MUST:
    and recomputes the pass verdict, so a MET you stamp does not make the pass MET.
 
    **As a section shard** — your brief carries `shard: <ordinal>/<K> <heading>` or
-   `shard: cross/<K> cross` over ONE document (Rule 28, "Split dispatch": sections axis). Read
-   only your line range of the real document, read-only; as the cross shard, review only
-   interactions between sections. Every finding carries exactly one `sections: <ordinal>[, ...]`
+   `shard: cross/<K> g<g>/<G> <ordinals>` over ONE document (Rule 28, "Split dispatch": sections
+   axis). Read only your line range of the real document, read-only; as a cross shard, review
+   only interactions between the sections of your group and report only the findings your group
+   owns. Every finding carries exactly one `sections: <ordinal>[, ...]`
    line citing ordinals from the map in your brief — your own ordinal alone, or two or more if
-   you are the cross shard — and never a `stories:` line. `artifact:` names the whole document and
+   you are a cross shard — and never a `stories:` line. `artifact:` names the whole document and
    `artifact_sha` is the sha256 of the WHOLE document as it is on disk, not of your range: the
    merge checks every shard's sha against the document and refuses a mismatch.
 
    **As a subject shard** — your brief carries `shard: <ordinal>/<K> <file-stem> <heading>` or
-   `shard: cross/<K> cross` over the requirements subject (Rule 28, "Split dispatch": subject
-   axis). Your read scope, your `sections:` citations, your `artifact:` and your per-stem
+   `shard: cross/<K> g<g>/<G> <ordinals>` over the requirements subject (Rule 28, "Split
+   dispatch": subject axis). Your read scope, your `sections:` citations, your `artifact:` and your per-stem
    `artifact_sha` are exactly those `steps/_gate-procedures.md`, "Adversarial review dispatch",
    prescribes in its paragraph **Shard the requirements subject**; follow that paragraph, not
    the section-shard paragraph above. As an
