@@ -350,7 +350,7 @@ else
   # covered by the narrow form, so a mutant that moved both would mean the two arms are one
   # assertion wearing two labels.
   GATE_C="$WORK/gate-narrow.sh"
-  sed 's|^  if \[ "\$rc_cur" -eq "\$rc_new" \]; then|  if [ "$rc_cur" -eq 2 ] \&\& [ "$rc_new" -eq 2 ]; then|' "$GATE" > "$GATE_C"
+  sed 's|^    if \[ "\$rc_cur" -ne "\$rc_new" \] && \[ "\$rc_new" -ne 0 \]; then$|    if ! { [ "$rc_cur" -eq 2 ] \&\& [ "$rc_new" -eq 2 ]; } \&\& [ "$rc_new" -ne 0 ]; then|' "$GATE" > "$GATE_C"
   if cmp -s "$GATE" "$GATE_C"; then
     bad "FIXTURE STALE: could not build MUTANT C — the equality arm's condition was reworded, so the widening is asserted by nothing"
   elif ! bash -n "$GATE_C" 2>/dev/null; then

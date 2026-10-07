@@ -108,7 +108,7 @@ fi
 # can no longer reach is how a kill becomes a coincidence.
 MUT="$(dirname "$DIST")/mut-nodiff"
 rm -rf "$MUT"; mkdir -p "$MUT"
-sed 's/^  elif \[ "$rc_cur" -eq 0 \]; then$/  elif true; then/' "$GATE" > "$MUT/gate.sh"
+sed 's/^      if \[ "$rc_cur" -eq 0 \]; then sc_v=DEFER$/      if true; then sc_v=DEFER/' "$GATE" > "$MUT/gate.sh"
 ASSERTIONS=$((ASSERTIONS + 1))
 if cmp -s "$GATE" "$MUT/gate.sh"; then
   FAILURES=$((FAILURES + 1))
@@ -3456,6 +3456,719 @@ mp_killed "mp-mut-perrow" "$got" "preclassify=3 derived=3 left=3 carried=3" \
   "the derivation back inside \$( ): preclassify re-runs per row and every ud-carry directory leaks"
 chmod -R u+rwX "$MP" 2>/dev/null
 rm -rf "$MP"
+
+# --- EACH GATING SCRIPT RUNS WITH THE HOOK'S OWN ARGV (BL-456) --------------------------------
+# The differential ran every hook-named script BARE. A script that needs arguments exits the same
+# usage code on both sides, so an incoming renderer whose rendered BODY changed -- `--check --root .`
+# going 0 to 1 on every consumer with pinned roles -- read SELF-UPDATE-OK, step 2 pushed into its own
+# refusal, and the printed remedy re-ran the OLD renderer. The gate now derives the argv from the
+# hook line whose exit status the hook reads, stages each side beside its own siblings, feeds both
+# the ref line the push sends, and refuses an argv span it cannot resolve.
+#
+# STUBS, NOT THE SHIPPED SCRIPTS, so this section reads nothing outside its own world and behaves
+# the same in both layouts. Each stub carries exactly the property its arm keys on; the real
+# renderer and the real provenance validator are driven by the BL-456 receipt. The hook is a copy
+# of the shipped hook's SHAPES (the agent-definitions function, the trunk-push pipe, the readset
+# `for` list), and it is only ever SCANNED here: the consumer has no remote, so arm P never runs it.
+#
+#   world A (one pull, seven changed gating scripts, a clean consumer)
+#     render-agent-definitions.sh  rendered body changes: bare 2,2; hook argv 0,1        -> DEFER
+#     audit-rule-files.sh          second argv-dependent script: bare 1,1; hook 0,1      -> DEFER
+#     derive-fixture-readsets.sh   incoming exits 1, but the hook only LISTS it          -> OK, not gating
+#     validate-audit-anchors.sh    incoming fails on the pushed ref read from STDIN      -> DEFER
+#     validate-artifact-paths.sh   its SIBLING artifact-path-config.sh fails at theirs   -> DEFER
+#     validate-rooted.sh           hook argv span holds `$ROOT`                          -> UNDECIDED
+#     validate-quiet.sh            near-miss: its `$` is after `2>`, outside the span    -> OK
+#   world B (one pull, the renderer's change is a COMMENT), consumer clean and consumer drifted
+#     render-agent-definitions.sh  hook argv 0,0 clean and 1,1 drifted                   -> OK both
+# The drifted consumer is the discriminating input for equal-non-zero: its renderer already fails
+# under the hook's argv on both sides, which is a pre-existing failure and not this pull's.
+AV="$(mktemp -d "${TMPDIR:-/tmp}/su-gate-av.XXXXXX")"
+av_git() { git -C "$1" -c user.email=f@x -c user.name=f -c commit.gpgsign=false "${@:2}"; }
+# av_render <file> <body> <comment> -- a renderer-shaped stub: bare exits 2, --root writes the body,
+# --check --root compares it.
+av_render() {
+  { printf '#!/usr/bin/env bash\n# %s\n' "$3"
+    printf 'm=w; r=""\nwhile [ $# -gt 0 ]; do\n  case "$1" in --check) m=c ;; --root) shift; r="${1:-}" ;; *) exit 2 ;; esac\n  shift\ndone\n'
+    printf '[ -n "$r" ] || exit 2\nb=%s\n' "'$2'"
+    printf 'if [ "$m" = w ]; then mkdir -p "$r/.claude/agents" && printf "%%s\\n" "$b" > "$r/.claude/agents/dev.md"; exit; fi\n'
+    printf '[ "$(cat "$r/.claude/agents/dev.md" 2>/dev/null)" = "$b" ] || exit 1\n'; } > "$1"
+}
+# av_scripts <dir> <side:base|theirs> <kind:A|B>
+av_scripts() {
+  local d="$1"
+  mkdir -p "$d"
+  if [ "$2" = theirs ] && [ "$3" = A ]; then
+    av_render "$d/render-agent-definitions.sh" 'FIRST action, before any other work.' 'renderer stub'
+  elif [ "$2" = theirs ]; then
+    av_render "$d/render-agent-definitions.sh" 'FIRST action before any other work.' 'renderer stub; reworded'
+  else
+    av_render "$d/render-agent-definitions.sh" 'FIRST action before any other work.' 'renderer stub'
+  fi
+  if [ "$2" = theirs ] && [ "$3" = A ]; then
+    printf '#!/bin/sh\ncase "${1:-}" in --fail-on=deterministic) exit 1 ;; *) exit 1 ;; esac\n' > "$d/audit-rule-files.sh"
+    printf '#!/bin/sh\nexit 1\n' > "$d/derive-fixture-readsets.sh"
+    printf '#!/bin/sh\n[ "${1:-}" = --trunk-push ] || exit 2\ngrep -q refs/heads/ && exit 1\nexit 0\n' > "$d/validate-audit-anchors.sh"
+    printf '#!/bin/sh\n# reworded\n. "$(dirname "$0")/artifact-path-config.sh" || exit 2\nexit "$APC_RC"\n' > "$d/validate-artifact-paths.sh"
+    printf 'APC_RC=1\n' > "$d/artifact-path-config.sh"
+    printf '#!/bin/sh\n# reworded\nexit 0\n' > "$d/validate-rooted.sh"
+    printf '#!/bin/sh\n# reworded\n[ "${1:-}" = --strays ] || exit 2\nexit 0\n' > "$d/validate-quiet.sh"
+  else
+    printf '#!/bin/sh\ncase "${1:-}" in --fail-on=deterministic) exit 0 ;; *) exit 1 ;; esac\n' > "$d/audit-rule-files.sh"
+    printf '#!/bin/sh\nexit 0\n' > "$d/derive-fixture-readsets.sh"
+    printf '#!/bin/sh\n[ "${1:-}" = --trunk-push ] || exit 2\ncat > /dev/null\nexit 0\n' > "$d/validate-audit-anchors.sh"
+    printf '#!/bin/sh\n. "$(dirname "$0")/artifact-path-config.sh" || exit 2\nexit "$APC_RC"\n' > "$d/validate-artifact-paths.sh"
+    printf 'APC_RC=0\n' > "$d/artifact-path-config.sh"
+    printf '#!/bin/sh\nexit 0\n' > "$d/validate-rooted.sh"
+    printf '#!/bin/sh\n[ "${1:-}" = --strays ] || exit 2\nexit 0\n' > "$d/validate-quiet.sh"
+  fi
+}
+# av_world <dir> <kind:A|B> <consumer:clean|drift> -> <dir>/{dist,cons,B,T}
+av_world() {
+  local w="$1"
+  mkdir -p "$w/dist/core/rules" "$w/cons/.githooks"
+  git -C "$w/dist" init -q
+  printf '1.0.0\n' > "$w/dist/VERSION"
+  printf 'av machinery\n' > "$w/dist/core/rules/av.md"
+  av_scripts "$w/dist/core/scripts" base "$2"
+  av_git "$w/dist" add -A >/dev/null 2>&1; av_git "$w/dist" commit -qm base >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/B"
+  printf '1.1.0\n' > "$w/dist/VERSION"
+  av_scripts "$w/dist/core/scripts" theirs "$2"
+  av_git "$w/dist" add -A >/dev/null 2>&1; av_git "$w/dist" commit -qm theirs >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/T"
+  av_scripts "$w/cons/scripts/ai-dlc" base "$2"
+  { printf '#!/usr/bin/env bash\nset -uo pipefail\nPUSH_REFS=""\n[ -t 0 ] || PUSH_REFS="$(cat)"\n'
+    printf 'trunk_push() { printf '"'%%s'"' "$PUSH_REFS" | bash scripts/ai-dlc/validate-audit-anchors.sh --trunk-push; }\n'
+    printf 'if [ -f scripts/ai-dlc/validate-audit-anchors.sh ]; then trunk_push; fi\n'
+    printf 'if [ -f scripts/ai-dlc/audit-rule-files.sh ]; then\n  bash scripts/ai-dlc/audit-rule-files.sh --fail-on=deterministic\nfi\n'
+    printf 'if [ -f scripts/ai-dlc/validate-artifact-paths.sh ]; then\n  bash scripts/ai-dlc/validate-artifact-paths.sh\nfi\n'
+    printf 'bash scripts/ai-dlc/validate-rooted.sh --root "$ROOT"\n'
+    printf 'bash scripts/ai-dlc/validate-quiet.sh --strays 2>"$LOG"\n'
+    printf 'if [ -f scripts/ai-dlc/render-agent-definitions.sh ]; then\n  agent_definitions() {\n    local out rc\n'
+    printf '    if [ ! -d .claude/agents ]; then\n      out="$(bash scripts/ai-dlc/render-agent-definitions.sh --root . 2>&1)"\n    fi\n'
+    printf '    out="$(bash scripts/ai-dlc/render-agent-definitions.sh --check --root . 2>&1)"; rc=$?\n'
+    printf '    case "$rc" in 0|3) return 0 ;; *) return 1 ;; esac\n  }\n  agent_definitions\nfi\n'
+    printf 'readset_deriver_path() {\n  local c\n'
+    printf '  for c in scripts/ai-dlc/derive-fixture-readsets.sh core/scripts/derive-fixture-readsets.sh; do\n'
+    printf '    [ -f "$c" ] && { printf '"'%%s'"' "$c"; return 0; }\n  done\n}\n'; } > "$w/cons/.githooks/pre-push"
+  chmod +x "$w/cons/.githooks/pre-push"
+  bash "$w/cons/scripts/ai-dlc/render-agent-definitions.sh" --root "$w/cons" >/dev/null 2>&1
+  [ "$3" = drift ] && printf 'a hand edit\n' > "$w/cons/.claude/agents/dev.md"
+  # A COMMITTED BRANCH, NO REMOTE: the ref line can be formed, and arm P is skipped -- the state in
+  # which the differential must still build its own stdin.
+  git -C "$w/cons" init -q
+  av_git "$w/cons" add -A >/dev/null 2>&1; av_git "$w/cons" commit -qm consumer >/dev/null 2>&1
+}
+av_world "$AV/a" A clean
+av_world "$AV/b" B clean
+av_world "$AV/d" B drift
+# av_run <gate> <world> -> the gate's rows, against a FRESH copy of the world's consumer, then an
+# `AGENTS same|moved` row for that copy's .claude/agents across the run. FRESH BY `mktemp -d`, never
+# by a counter: av_run is called inside `$( )`, where a counter's increment is lost, and a reused
+# copy hands one mutant's writes to the next run -- measured, a write-mode mutant's rendered
+# definitions turned four later kills into the same wrong row.
+av_run() {
+  local c a0
+  c="$(mktemp -d "$AV/run.XXXXXX")" || return 1
+  c="$c/cons"
+  cp -R "$2/cons" "$c" || return 1
+  a0="$(cat "$c/.claude/agents/"* | cksum)"
+  bash "$1" "$2/dist" "$(cat "$2/B")" "$(cat "$2/T")" "$c" 2>/dev/null
+  if [ "$a0" = "$(cat "$c/.claude/agents/"* | cksum)" ]; then printf 'AGENTS\tsame\n'; else printf 'AGENTS\tmoved\n'; fi
+}
+av_st() { printf '%s\n' "$1" | awk -F'\t' -v s="$2" '$2 == s {print $1; exit}'; }
+av_has() { printf '%s\n' "$1" | awk -F'\t' -v s="$2" -v re="$3" '$2 == s && $3 ~ re {f=1} END{print (f ? "yes" : "no")}'; }
+av_ag() { printf '%s\n' "$1" | awk -F'\t' '$1 == "AGENTS" {print $2}'; }
+av_ref() { printf '%s\n' "$1" | awk -F'\t' '$1 ~ /^SELF-UPDATE-(DEFER|UNDECIDED)$/' | grep -c .; }
+# av_sig <rows> -> the whole world-A signature, one token per script
+av_sig() {
+  printf 'render=%s audit=%s derive=%s anchors=%s paths=%s rooted=%s quiet=%s agents=%s\n' \
+    "$(av_st "$1" render-agent-definitions.sh)" "$(av_st "$1" audit-rule-files.sh)" \
+    "$(av_st "$1" derive-fixture-readsets.sh)" "$(av_st "$1" validate-audit-anchors.sh)" \
+    "$(av_st "$1" validate-artifact-paths.sh)" "$(av_st "$1" validate-rooted.sh)" \
+    "$(av_st "$1" validate-quiet.sh)" "$(av_ag "$1")"
+}
+
+# PRECONDITIONS, or every arm below asserts about a world that cannot express the defect: under
+# the hook's argv the renderer and the audit stub really go 0 to 1 in world A while their BARE
+# runs agree, and the drifted world's renderer really fails on both sides.
+av_rc() { ( cd "$1" && bash "$2" ${3:+$3} >/dev/null 2>&1 < /dev/null ); printf '%s' "$?"; }
+AVA="$AV/a"
+git -C "$AVA/dist" show "$(cat "$AVA/T"):core/scripts/render-agent-definitions.sh" > "$AV/new-render.sh"
+git -C "$AVA/dist" show "$(cat "$AVA/T"):core/scripts/audit-rule-files.sh" > "$AV/new-audit.sh"
+ss_assert "av-pre" \
+  "render hook $(av_rc "$AVA/cons" scripts/ai-dlc/render-agent-definitions.sh '--check --root .')$(av_rc "$AVA/cons" "$AV/new-render.sh" '--check --root .') bare $(av_rc "$AVA/cons" scripts/ai-dlc/render-agent-definitions.sh)$(av_rc "$AVA/cons" "$AV/new-render.sh"); audit hook $(av_rc "$AVA/cons" scripts/ai-dlc/audit-rule-files.sh --fail-on=deterministic)$(av_rc "$AVA/cons" "$AV/new-audit.sh" --fail-on=deterministic) bare $(av_rc "$AVA/cons" scripts/ai-dlc/audit-rule-files.sh)$(av_rc "$AVA/cons" "$AV/new-audit.sh"); drift hook $(av_rc "$AV/d/cons" scripts/ai-dlc/render-agent-definitions.sh '--check --root .')" \
+  "render hook 01 bare 22; audit hook 01 bare 11; drift hook 1" \
+  "the worlds express the defect: the hook's argv sees each change, a bare run cannot, and the drifted renderer already fails"
+
+AV_A="$(av_run "$GATE" "$AV/a")"
+AV_B="$(av_run "$GATE" "$AV/b")"
+AV_D="$(av_run "$GATE" "$AV/d")"
+AV_SIG_FIX="render=SELF-UPDATE-DEFER audit=SELF-UPDATE-DEFER derive=SELF-UPDATE-OK anchors=SELF-UPDATE-DEFER paths=SELF-UPDATE-DEFER rooted=SELF-UPDATE-UNDECIDED quiet=SELF-UPDATE-OK agents=same"
+ss_assert "av-signature" "$(av_sig "$AV_A")" "$AV_SIG_FIX" "world A, every arm below in one row"
+ss_assert "av-render-body" "$(av_st "$AV_A" render-agent-definitions.sh)" SELF-UPDATE-DEFER \
+  "a renderer whose rendered body changes is refused: under --check --root . it goes 0 to 1, though a bare run exits 2 on both sides"
+ss_assert "av-render-comment" "$(av_st "$AV_B" render-agent-definitions.sh) refusals=$(av_ref "$AV_B")" "SELF-UPDATE-OK refusals=0" \
+  "a renderer whose only change is a comment is OK and the pull carries no refusal at all"
+ss_assert "av-render-drift" "$(av_st "$AV_D" render-agent-definitions.sh) refusals=$(av_ref "$AV_D")" "SELF-UPDATE-OK refusals=0" \
+  "the same comment-only pull on a consumer whose definitions already drifted is OK: 1,1 under the hook's argv predates the pull"
+ss_assert "av-second-argv" "$(av_st "$AV_A" audit-rule-files.sh)" SELF-UPDATE-DEFER \
+  "a SECOND argv-dependent script: --fail-on=deterministic goes 0 to 1 where its bare default exits 1 on both sides"
+ss_assert "av-not-gating" "$(av_st "$AV_A" derive-fixture-readsets.sh) $(av_has "$AV_A" derive-fixture-readsets.sh '^not gating')" "SELF-UPDATE-OK yes" \
+  "a script the hook only lists in a \`for\` loop is not gating, and says so, though its incoming copy exits 1"
+ss_assert "av-agents-digest" "$(av_ag "$AV_A")" same \
+  "the consumer's .claude/agents is byte-identical across the gate run: the hook's write-mode line is never run"
+ss_assert "av-siblings" "$(av_st "$AV_A" validate-artifact-paths.sh)" SELF-UPDATE-DEFER \
+  "the incoming script runs beside its OWN siblings at theirs, where artifact-path-config.sh now fails"
+ss_assert "av-stdin" "$(av_st "$AV_A" validate-audit-anchors.sh)" SELF-UPDATE-DEFER \
+  "both runs are fed the ref line the push sends, built though arm P is skipped, and the incoming check fires on it"
+ss_assert "av-dollar" "$(av_st "$AV_A" validate-rooted.sh) $(av_has "$AV_A" validate-rooted.sh 'cannot resolve')" "SELF-UPDATE-UNDECIDED yes" \
+  "an argv span holding \$ROOT cannot be derived, so the script is UNDECIDED rather than run with a guessed argv"
+ss_assert "av-dollar-nearmiss" "$(av_st "$AV_A" validate-quiet.sh)" SELF-UPDATE-OK \
+  "a \$ after 2> is outside the span, so that line is derived and run, not refused"
+
+# --- MUTANTS, each a copy of the WHOLE reconcile directory so the gate finds its siblings --------
+# av_mut <name> <old> <new> [<old> <new>]... -> the mutated gate's path, or nothing when an anchor
+# is not unique, the copy is unchanged, or it is not a program.
+av_mut() {
+  local e="$AV/m-$1" mrc=0
+  shift
+  rm -rf "$e"; mkdir -p "$e"
+  cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$e"/ 2>/dev/null
+  [ "$#" -gt 0 ] || { printf '%s' "$e/self-update-gate.sh"; return 0; }
+  python3 -c 'import sys
+s = open(sys.argv[1]).read(); p = sys.argv[3:]
+for i in range(0, len(p), 2):
+    if s.count(p[i]) != 1: sys.exit(3)
+    s = s.replace(p[i], p[i + 1], 1)
+open(sys.argv[2], "w").write(s)' "$GATE" "$e/self-update-gate.sh" "$@" 2>/dev/null || mrc=$?
+  if [ "$mrc" -ne 0 ] || cmp -s "$GATE" "$e/self-update-gate.sh" || ! bash -n "$e/self-update-gate.sh" 2>/dev/null; then return 1; fi
+  printf '%s' "$e/self-update-gate.sh"
+}
+# THE CONTROL: an unmutated copy beside its siblings reproduces world A's whole signature and the
+# drifted world's OK, so every kill below is its mutation and not a copy that could not run.
+AV_CTL="$(av_mut control)"
+ss_assert "av-mut-control" "$(av_sig "$(av_run "$AV_CTL" "$AV/a")") drift=$(av_st "$(av_run "$AV_CTL" "$AV/d")" render-agent-definitions.sh)" \
+  "$AV_SIG_FIX drift=SELF-UPDATE-OK" "an unmutated copy reproduces every verdict, so a kill below is the mutation"
+# av_kill <label> <gate|""> <world> <want-signature> <why> -- the mutant's whole world signature
+av_kill() {
+  local got
+  if [ -z "$2" ]; then got="DID-NOT-APPLY"; else got="$(av_sig "$(av_run "$2" "$3")")"; fi
+  mp_killed "$1" "$got" "$4" "$5"
+}
+av_kill "av-mut-bare" "$(av_mut bare '  set -- $_a
+' '  set --
+')" "$AV/a" \
+  "render=SELF-UPDATE-OK audit=SELF-UPDATE-OK derive=SELF-UPDATE-OK anchors=SELF-UPDATE-OK paths=SELF-UPDATE-DEFER rooted=SELF-UPDATE-UNDECIDED quiet=SELF-UPDATE-OK agents=same" \
+  "the bare probe: every argv-dependent change reads OK again, the renderer's first among them"
+av_kill "av-mut-hand" "$(av_mut hand '  set -- $_a
+' '  if [ "${_s##*/}" = render-agent-definitions.sh ]; then set -- $_a; else set --; fi
+')" "$AV/a" \
+  "render=SELF-UPDATE-DEFER audit=SELF-UPDATE-OK derive=SELF-UPDATE-OK anchors=SELF-UPDATE-OK paths=SELF-UPDATE-DEFER rooted=SELF-UPDATE-UNDECIDED quiet=SELF-UPDATE-OK agents=same" \
+  "a hand-listed renderer argv: the renderer is refused and the second argv-dependent script reads OK"
+av_kill "av-mut-firstline" "$(av_mut firstline \
+  "awk -F'\\t' '\$1 == \"R\" && !seen[\$3]++ {print \$3}' \"\$TMP/scan\" > \"\$TMP/argvs\"" \
+  "awk -F'\\t' '\$1 == \"R\" || \$1 == \"D\" {print \$3; exit}' \"\$TMP/scan\" > \"\$TMP/argvs\"")" "$AV/a" \
+  "render=SELF-UPDATE-OK audit=SELF-UPDATE-DEFER derive=SELF-UPDATE-OK anchors=SELF-UPDATE-DEFER paths=SELF-UPDATE-DEFER rooted=SELF-UPDATE-UNDECIDED quiet=SELF-UPDATE-OK agents=moved" \
+  "the hook's FIRST renderer line (--root ., write mode): 0,0 reads OK and the consumer's .claude/agents is rewritten"
+av_kill "av-mut-listed" "$(av_mut listed 'printf "M\t%d\tlist\n", r' 'printf "X\t%d\tlist\n", r')" "$AV/a" \
+  "render=SELF-UPDATE-DEFER audit=SELF-UPDATE-DEFER derive=SELF-UPDATE-UNDECIDED anchors=SELF-UPDATE-DEFER paths=SELF-UPDATE-DEFER rooted=SELF-UPDATE-UNDECIDED quiet=SELF-UPDATE-OK agents=same" \
+  "a list mention read as an underivable run: the non-gating deriver refuses the pull"
+av_kill "av-mut-sibling" "$(av_mut sibling \
+  'gate_run_side "$TMP/new/scripts/ai-dlc/$name" "$sc_a"; rc_new=$?' \
+  'cp "$TMP/new/scripts/ai-dlc/$name" "$TMP/cur/scripts/ai-dlc/zz-$name"; gate_run_side "$TMP/cur/scripts/ai-dlc/zz-$name" "$sc_a"; rc_new=$?')" "$AV/a" \
+  "render=SELF-UPDATE-DEFER audit=SELF-UPDATE-DEFER derive=SELF-UPDATE-OK anchors=SELF-UPDATE-DEFER paths=SELF-UPDATE-OK rooted=SELF-UPDATE-UNDECIDED quiet=SELF-UPDATE-OK agents=same" \
+  "the incoming script staged beside the CONSUMER's siblings: theirs' failing config is never read"
+av_kill "av-mut-stdin" "$(av_mut stdin '< "$TMP/refline" > /dev/null 2>&1 )' '< /dev/null > /dev/null 2>&1 )')" "$AV/a" \
+  "render=SELF-UPDATE-DEFER audit=SELF-UPDATE-DEFER derive=SELF-UPDATE-OK anchors=SELF-UPDATE-OK paths=SELF-UPDATE-DEFER rooted=SELF-UPDATE-UNDECIDED quiet=SELF-UPDATE-OK agents=same" \
+  "no stdin: the incoming trunk-push check never sees the pushed ref and reads OK"
+av_kill "av-mut-dollar" "$(av_mut dollar '} else if (span ~ /[$`"\\*?~[]/ || span ~ /\047/) {' '} else if (span ~ /[`\\*?~[]/ || span ~ /\047/) {')" "$AV/a" \
+  "render=SELF-UPDATE-DEFER audit=SELF-UPDATE-DEFER derive=SELF-UPDATE-OK anchors=SELF-UPDATE-DEFER paths=SELF-UPDATE-DEFER rooted=SELF-UPDATE-OK quiet=SELF-UPDATE-OK agents=same" \
+  "an argv span holding \$ROOT run with the literal text: the underivable invocation reads OK"
+# EQUAL NON-ZERO READ AS UNDECIDED: scored on the drifted world, the only one where it differs.
+e="$(av_mut eqund '    if [ "$rc_cur" -ne "$rc_new" ] && [ "$rc_new" -ne 0 ]; then' '    if [ "$rc_new" -ne 0 ]; then')" \
+  && got="$(av_st "$(av_run "$e" "$AV/d")" render-agent-definitions.sh)" || got="DID-NOT-APPLY"
+mp_killed "av-mut-eqund" "$got" SELF-UPDATE-UNDECIDED \
+  "equal non-zero under the hook's argv read as UNDECIDED: a comment-only pull is refused on a consumer whose definitions already drifted"
+
+# --- THE REMEDY RUNS THE RENDERER THE CYCLE LEAVES INSTALLED (BL-456 claim 3) -------------------
+# The filing's third claim: the hook's printed remedy re-renders with the consumer's OLD renderer, so
+# the next cycle is refused again. That holds only on the OK path -- step 2 pushes, the hook refuses,
+# the cycle is DISCARDED and the old renderer stays installed, so re-rendering writes the old text
+# and the incoming --check fails exactly as before. On a DEFER the slice folds into the gated apply,
+# which WRITES the incoming renderer before its push, so the same remedy re-renders with the incoming
+# one and its --check clears. Claim 3 is therefore a consequence of claim 1's OK, not a defect of its
+# own, and this arm pins that by DRIVING THE REAL APPLY: on a refusal it runs the shipped
+# `apply.sh --carried-machinery-slice`, which is what step 7 runs for a deferred slice, and reads
+# what apply itself reports and writes -- the renderer's RESOLVED pure-apply row, its WORKLIST
+# agent-definitions row, the renderer it left installed -- then the remedy and the hook's --check
+# before and after it. Nothing here writes the renderer; only apply does. The stub spells the
+# remedy `--root .` where the real renderer walks up to the same root bare.
+# c3_cycle <gate> <apply> <world> -> verdict, apply's rows, installed renderer, remedy, check before->after
+c3_cycle() {
+  local c rows v b t rc0 rc1 rr inst pa wl
+  c="$(mktemp -d "$AV/c3.XXXXXX")" || return 1
+  c="$c/cons"; cp -R "$3/cons" "$c" || return 1
+  b="$(cat "$3/B")"; t="$(cat "$3/T")"
+  rows="$(bash "$1" "$3/dist" "$b" "$t" "$c" 2>/dev/null)"
+  v="$(av_st "$rows" render-agent-definitions.sh)"
+  case "$v" in
+    SELF-UPDATE-DEFER|SELF-UPDATE-UNDECIDED)
+      printf 'version: 1.0.0\ncommit: %s\nskill_version: 1.0.0\nskill_commit: %s\ninstalled_at: 2026-01-01T00:00:00Z\nupstream: https://example.invalid/x\n' "$b" "$b" > "$c/.claude/.ai-dlc-version"
+      av_git "$c" add -A >/dev/null 2>&1; av_git "$c" commit -qm stamp >/dev/null 2>&1
+      rows="$(bash "$2" --carried-machinery-slice "$3/dist" "$b" "$c" "$t" 2>/dev/null)" ;;
+    SELF-UPDATE-OK) rows="" ;;
+    *) printf 'no-render-row'; return 0 ;;
+  esac
+  pa="$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "RESOLVED" && $2 == "pure-apply" && $3 == "scripts/render-agent-definitions.sh" {f=1} END {print (f ? "yes" : "no")}')"
+  wl="$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "WORKLIST" && $2 == "agent-definitions" {f=1} END {print (f ? "yes" : "no")}')"
+  if cmp -s "$AV/new-render.sh" "$c/scripts/ai-dlc/render-agent-definitions.sh"; then inst=theirs; else inst=current; fi
+  ( cd "$c" && bash scripts/ai-dlc/render-agent-definitions.sh --check --root . >/dev/null 2>&1 < /dev/null ); rc0=$?
+  ( cd "$c" && bash scripts/ai-dlc/render-agent-definitions.sh --root . >/dev/null 2>&1 < /dev/null ); rr=$?
+  ( cd "$c" && bash scripts/ai-dlc/render-agent-definitions.sh --check --root . >/dev/null 2>&1 < /dev/null ); rc1=$?
+  printf '%s pure-apply=%s worklist=%s installed=%s remedy=%s check=%s->%s' "${v#SELF-UPDATE-}" "$pa" "$wl" "$inst" "$rr" "$rc0" "$rc1"
+}
+C3_APPLY="$(dirname "$GATE")/apply.sh"
+# PRECONDITION: world A expresses the loop. The remedy run with the OLD renderer leaves the incoming
+# --check at 1; run with the incoming renderer it clears to 0. Without both, the arm below cannot
+# separate a gate that leads to the loop from one that does not.
+C3P="$(mktemp -d "$AV/c3p.XXXXXX")"; cp -R "$AV/a/cons" "$C3P/old"; cp -R "$AV/a/cons" "$C3P/new"
+cp "$AV/new-render.sh" "$C3P/new/scripts/ai-dlc/render-agent-definitions.sh"
+for c3s in old new; do ( cd "$C3P/$c3s" && bash scripts/ai-dlc/render-agent-definitions.sh --root . >/dev/null 2>&1 < /dev/null ); done
+ss_assert "c3-pre" "old $(av_rc "$C3P/old" "$AV/new-render.sh" '--check --root .') new $(av_rc "$C3P/new" "$AV/new-render.sh" '--check --root .')" "old 1 new 0" \
+  "the remedy clears the incoming check only when the incoming renderer is the one installed"
+C3_WANT="DEFER pure-apply=yes worklist=yes installed=theirs remedy=0 check=1->0"
+ss_assert "c3-remedy-after-defer" "$(c3_cycle "$GATE" "$C3_APPLY" "$AV/a")" "$C3_WANT" \
+  "the gate defers; the real carried-slice apply installs theirs' renderer and reports it, names the re-render, and the remedy takes the hook's check from 1 to 0"
+# THE MUTANT BREAKS THE APPLY-INSTALLS-THEIRS LEG, in a copy of the whole reconcile directory: the
+# pure-apply row is still printed but the write is skipped, which is exactly a cycle whose remedy
+# runs the renderer the consumer already had. The control is the same copy unmutated.
+c3_apply_mut() {
+  local e="$AV/c3a-$1"
+  mkdir -p "$e"; cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$(dirname "$GATE")"/*.tsv "$e"/ 2>/dev/null
+  [ -n "$2" ] || { printf '%s' "$e/apply.sh"; return 0; }
+  python3 -c 'import sys
+s = open(sys.argv[1]).read(); o, n = sys.argv[3], sys.argv[4]
+if s.count(o) != 1: sys.exit(3)
+open(sys.argv[2], "w").write(s.replace(o, n, 1))' "$C3_APPLY" "$e/apply.sh" "$2" "$3" 2>/dev/null || return 1
+  cmp -s "$C3_APPLY" "$e/apply.sh" && return 1
+  bash -n "$e/apply.sh" 2>/dev/null || return 1
+  printf '%s' "$e/apply.sh"
+}
+c3_kill() { local got; if [ -z "$2" ]; then got="DID-NOT-APPLY"; else got="$(c3_cycle "$GATE" "$2" "$AV/a")"; fi; mp_killed "$1" "$got" "$3" "$4"; }
+c3_kill "c3-mut-control" "$(c3_apply_mut control '')" "$C3_WANT" \
+  "an unmutated apply.sh copy beside its siblings reaches the same cycle, so the kill below is its mutation"
+c3_kill "c3-mut-nowrite" "$(c3_apply_mut nowrite 'overwrite_from_theirs "$rel" && say RESOLVED pure-apply "$rel"' 'say RESOLVED pure-apply "$rel"')" \
+  "DEFER pure-apply=yes worklist=no installed=current remedy=0 check=0->0" \
+  "the apply reports pure-apply but never writes theirs' renderer: the current one stays installed, no re-render is owed, and the push carries the old text"
+
+# --- THE HOOK THE PUSH RUNS IS THEIRS' WHEN THE SLICE WRITES IT (BL-456, round 2) ----------------
+# The gate scanned only the consumer's CURRENT hook, and its gating set was changed scripts that hook
+# invokes. When theirs' hook adds the renderer's --check step, turns a discarded `--check || true`
+# into a read one, or the consumer has no renderer at all ("ADDS it"), the render row read OK; step 2
+# wrote theirs' hook, git ran it on the push, the push was refused and discarded, and the next run
+# read OK again. Each world is one pull whose renderer's rendered body changes; only the hook pair and
+# the consumer's renderer differ.
+#   hk-adds    current hook has no renderer step, theirs' runs --check            -> DEFER (was OK)
+#   hk-reads   current `--check --root . || true`, theirs' reads it                -> DEFER (was OK)
+#   hk-absent  both hooks run --check, the pull ADDS the renderer (absent at base
+#              and on the consumer)                                                 -> DEFER (was OK)
+#   hk-same    both hooks run --check identically; the change is a renderer COMMENT -> OK (near-miss:
+#              the hook moved elsewhere, so theirs' hook is in force and must not refuse on its own)
+hk_hook() { # hk_hook <file> <none|discard|read> <extra comment>
+  { printf '#!/usr/bin/env bash\nset -uo pipefail\n# %s\n' "$3"
+    case "$2" in
+      discard) printf 'bash scripts/ai-dlc/render-agent-definitions.sh --check --root . || true\n' ;;
+      read) printf 'agent_definitions() {\n  local out rc\n  out="$(bash scripts/ai-dlc/render-agent-definitions.sh --check --root . 2>&1)"; rc=$?\n  return "$rc"\n}\nstep "agent definitions" agent_definitions\n' ;;
+    esac; } > "$1"
+  chmod +x "$1"
+}
+hk_world() { # hk_world <dir> <base-hook> <theirs-hook> <consumer-renderer:yes|no> <theirs-renderer:body|comment>
+  local w="$1"
+  mkdir -p "$w/dist/core/rules" "$w/dist/core/scripts" "$w/dist/core/git-hooks" "$w/cons/.githooks" "$w/cons/scripts/ai-dlc"
+  git -C "$w/dist" init -q
+  printf '1.0.0\n' > "$w/dist/VERSION"; printf 'hk machinery\n' > "$w/dist/core/rules/hk.md"
+  # A consumer WITHOUT a renderer is seeded against a base that has none either: the pull ADDS it.
+  # Absent at base and present at the consumer's base would be a consumer DELETION, which arm C
+  # carries and step 2 never writes -- a different world, with no loop in it.
+  [ "$4" = yes ] && av_render "$w/dist/core/scripts/render-agent-definitions.sh" 'FIRST action before any other work.' 'renderer stub'
+  hk_hook "$w/dist/core/git-hooks/pre-push" "$2" base
+  av_git "$w/dist" add -A >/dev/null 2>&1; av_git "$w/dist" commit -qm base >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/B"
+  printf '1.1.0\n' > "$w/dist/VERSION"
+  if [ "$5" = body ]; then av_render "$w/dist/core/scripts/render-agent-definitions.sh" 'FIRST action, before any other work.' 'renderer stub'
+  else av_render "$w/dist/core/scripts/render-agent-definitions.sh" 'FIRST action before any other work.' 'renderer stub; reworded'; fi
+  hk_hook "$w/dist/core/git-hooks/pre-push" "$3" theirs
+  av_git "$w/dist" add -A >/dev/null 2>&1; av_git "$w/dist" commit -qm theirs >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/T"
+  git -C "$w/dist" show "$(cat "$w/B"):core/git-hooks/pre-push" > "$w/cons/.githooks/pre-push"; chmod +x "$w/cons/.githooks/pre-push"
+  if [ "$4" = yes ]; then
+    git -C "$w/dist" show "$(cat "$w/B"):core/scripts/render-agent-definitions.sh" > "$w/cons/scripts/ai-dlc/render-agent-definitions.sh"
+    bash "$w/cons/scripts/ai-dlc/render-agent-definitions.sh" --root "$w/cons" >/dev/null 2>&1
+  else
+    printf 'keep\n' > "$w/cons/scripts/ai-dlc/.keep"
+  fi
+  git -C "$w/cons" init -q
+  av_git "$w/cons" add -A >/dev/null 2>&1; av_git "$w/cons" commit -qm consumer >/dev/null 2>&1
+}
+hk_world "$AV/hk-adds" none read yes body
+hk_world "$AV/hk-reads" discard read yes body
+hk_world "$AV/hk-absent" read read no body
+hk_world "$AV/hk-same" read read yes comment
+# hk-deleted: the renderer is present at base and the consumer DELETED it. Arm C carries it, step 2
+# never writes it, and the push runs no renderer -- OK, "carried". The near-miss for hk-absent: one
+# property apart (present at base), and the reason the absent-copy rule is scoped to an ADDED path.
+hk_world "$AV/hk-deleted" read read yes body
+git -C "$AV/hk-deleted/cons" rm -q scripts/ai-dlc/render-agent-definitions.sh
+av_git "$AV/hk-deleted/cons" commit -qm "consumer deleted the renderer" >/dev/null 2>&1
+# PRECONDITION: in every refusing world the push that theirs' hook gates would be refused -- theirs'
+# renderer installed over the consumer's tree fails its own --check -- while the hook the consumer
+# runs today does not run a status-read --check that fails.
+hk_pre() { # hk_pre <world> -> <theirs-renderer --check rc on the consumer tree>
+  git -C "$1/dist" show "$(cat "$1/T"):core/scripts/render-agent-definitions.sh" > "$1/new-render.sh"
+  av_rc "$1/cons" "$1/new-render.sh" '--check --root .'
+}
+ss_assert "hk-pre" "adds $(hk_pre "$AV/hk-adds") reads $(hk_pre "$AV/hk-reads") absent $(hk_pre "$AV/hk-absent") same $(hk_pre "$AV/hk-same") cur-adds $(grep -c 'render-agent-definitions' "$AV/hk-adds/cons/.githooks/pre-push")" \
+  "adds 1 reads 1 absent 1 same 0 cur-adds 0" \
+  "theirs' renderer fails its own --check in the three refusing worlds and passes in the near-miss; today's hook in hk-adds runs no renderer at all"
+hk_sig() { # hk_sig <gate> -> one token per world
+  local n out=""
+  local r
+  for n in adds reads absent same deleted; do
+    r="$(av_run "$1" "$AV/hk-$n")"
+    out="$out${out:+ }$n=$(av_st "$r" render-agent-definitions.sh | sed 's/^SELF-UPDATE-//')"
+    [ "$(av_has "$r" render-agent-definitions.sh '^carried')" = yes ] && out="$out+carried"
+  done
+  printf '%s\n' "$out"
+}
+HK_SIG_FIX="adds=DEFER reads=DEFER absent=DEFER same=OK deleted=OK+carried"
+ss_assert "hk-signature" "$(hk_sig "$GATE")" "$HK_SIG_FIX" \
+  "the render row is judged against the hook the push will run, and an absent current copy is today's push passing"
+HK_CTL="$(av_mut hk-control)"
+mp_killed "hk-mut-control" "$(hk_sig "$HK_CTL")" "$HK_SIG_FIX" "an unmutated copy reproduces every hook-world verdict, so a kill below is the mutation"
+hk_kill() { local got; if [ -z "$2" ]; then got="DID-NOT-APPLY"; else got="$(hk_sig "$2")"; fi; mp_killed "$1" "$got" "$3" "$4"; }
+hk_kill "hk-mut-curhook" "$(av_mut hk-curhook '    HOOK="$TMP/hook-theirs"
+' '    :
+')" "adds= reads=OK absent=DEFER same=OK deleted=OK+carried" \
+  "the gate scans only the consumer's current hook: a --check step theirs' hook adds is not gating, and one it starts reading reads as discarded"
+hk_kill "hk-mut-adds" "$(av_mut hk-adds '  [ -f "$cur" ] || cur_absent=1
+' '  [ -f "$cur" ] || { emit SELF-UPDATE-OK "$name" "the consumer has no current copy, so this pull ADDS it."; continue; }
+')" "adds=DEFER reads=DEFER absent=OK same=OK deleted=OK+carried" \
+  "an absent current copy read as \"this pull ADDS it\": a consumer with pinned roles and no renderer pushes into the renderer it was just given"
+hk_kill "hk-mut-carried" "$(av_mut hk-carried '  if [ ! -f "$cur" ] && gate_has_line "${GATE_CARRIED:-}" "core/scripts/$name"; then' '  if false; then')" \
+  "adds=DEFER reads=DEFER absent=DEFER same=OK deleted=DEFER" \
+  "a carried script judged as though written: a consumer that deleted the renderer is refused over a copy step 2 never installs"
+
+# --- AN UNCHANGED SCRIPT THE NEW HOOK ASKS IS JUDGED BY THE COPY THE PUSH RUNS (BL-456, round 3) ---
+# Theirs' hook adds a step for validate-y.sh, which the RANGE DOES NOT CHANGE. Step 2 writes only
+# the range diff, so after the write the push runs the CONSUMER'S copy of it, or nothing. Judging
+# it by theirs' copy read a false OK where the consumer's copy fails the new step, and a false DEFER
+# where the consumer's passes or the step is guarded away. Each world's expected verdict is the
+# post-write hook's own exit, asserted first as a precondition.
+#   hu-lfail     consumer's y exits 1, theirs' 0, unguarded step   post-write rc 1 -> DEFER (was OK)
+#   hu-lpass     consumer's y exits 0, theirs' 1                   post-write rc 0 -> OK    (was DEFER)
+#   hu-gdel      consumer deleted y, step under `if [ -f … ]`      post-write rc 0 -> OK    (was DEFER)
+#   hu-udel      consumer deleted y, unguarded step                post-write rc 1 -> DEFER, the row
+#                says ABSENT rather than blaming theirs' copy
+hu_world() { # hu_world <dir> <consumer-y:fail|pass|none> <theirs-y-rc> <guarded|bare>
+  local w="$1" step
+  mkdir -p "$w/dist/core/rules" "$w/dist/core/scripts" "$w/dist/core/git-hooks" "$w/cons/.githooks" "$w/cons/scripts/ai-dlc"
+  git -C "$w/dist" init -q
+  printf '1.0.0\n' > "$w/dist/VERSION"; printf 'hu machinery\n' > "$w/dist/core/rules/hu.md"
+  printf '#!/bin/sh\nexit 0\n' > "$w/dist/core/scripts/validate-x.sh"
+  printf '#!/bin/sh\n[ "${1:-}" = --strict ] || exit 2\nexit %s\n' "$3" > "$w/dist/core/scripts/validate-y.sh"
+  # keeptest: today's hook already guards the run with a block, so only the GUARD moves in theirs'
+  local basestep=""
+  [ "$4" = keeptest ] && basestep='if [ -f scripts/ai-dlc/validate-y.sh ]; then
+  bash scripts/ai-dlc/validate-y.sh --strict || fail=1
+fi'
+  printf '#!/usr/bin/env bash\nfail=0\nbash scripts/ai-dlc/validate-x.sh || fail=1\n%s\nexit "$fail"\n' "$basestep" > "$w/dist/core/git-hooks/pre-push"
+  av_git "$w/dist" add -A >/dev/null 2>&1; av_git "$w/dist" commit -qm base >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/B"
+  cp "$w/dist/core/git-hooks/pre-push" "$w/cons/.githooks/pre-push"; chmod +x "$w/cons/.githooks/pre-push"
+  cp "$w/dist/core/scripts/validate-x.sh" "$w/cons/scripts/ai-dlc/"
+  case "$2" in
+    fail) printf '#!/bin/sh\n# consumer edit\nexit 1\n' > "$w/cons/scripts/ai-dlc/validate-y.sh" ;;
+    pass) printf '#!/bin/sh\n# consumer edit\nexit 0\n' > "$w/cons/scripts/ai-dlc/validate-y.sh" ;;
+  esac
+  printf '1.1.0\n' > "$w/dist/VERSION"
+  printf '#!/bin/sh\n# reworded\nexit 0\n' > "$w/dist/core/scripts/validate-x.sh"
+  step='bash scripts/ai-dlc/validate-y.sh --strict || fail=1'
+  case "$4" in
+    guarded) step="if [ -f scripts/ai-dlc/validate-y.sh ]; then $step; fi" ;;
+    andand)  step="[ -f scripts/ai-dlc/validate-y.sh ] && { $step; }" ;;
+    andor)   step="[ -f scripts/ai-dlc/validate-y.sh ] && $step" ;;
+    orecho)  step="[ -f scripts/ai-dlc/validate-y.sh ] || echo missing
+$step" ;;
+    block)   step="if [ -f scripts/ai-dlc/validate-y.sh ]; then
+  $step
+fi" ;;
+    else)    step="if [ -f scripts/ai-dlc/validate-y.sh ]; then
+  :
+else
+  $step
+fi" ;;
+    keeptest) step="[ -f scripts/ai-dlc/validate-y.sh ] || echo missing
+$step" ;;
+    awkif)   step="if [ -f scripts/ai-dlc/validate-y.sh ]; then
+  awk '
+    if (NR > 0) print
+  ' /dev/null
+fi
+$step" ;;
+  esac
+  printf '#!/usr/bin/env bash\nfail=0\nbash scripts/ai-dlc/validate-x.sh || fail=1\n%s\nexit "$fail"\n' "$step" > "$w/dist/core/git-hooks/pre-push"
+  av_git "$w/dist" add -A >/dev/null 2>&1; av_git "$w/dist" commit -qm theirs >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/T"
+  git -C "$w/cons" init -q
+  av_git "$w/cons" add -A >/dev/null 2>&1; av_git "$w/cons" commit -qm consumer >/dev/null 2>&1
+}
+hu_world "$AV/hu-lfail" fail 0 bare
+hu_world "$AV/hu-lpass" pass 1 bare
+hu_world "$AV/hu-gdel" none 1 guarded
+hu_world "$AV/hu-udel" none 1 bare
+# THE GUARD IS TIED TO THE RUN (round 4). A test of the path elsewhere in the hook guards nothing:
+#   hu-orecho  `[ -f y ] || echo missing`, then an unguarded run       post-write rc 1 -> DEFER+absent
+#   hu-andand  `[ -f y ] && { bash y … || fail=1; }` on one line       post-write rc 0 -> OK
+#   hu-andor   `[ -f y ] && bash y … || fail=1` -- the `||` also catches
+#              the TEST failing, so an absent y fails the push          post-write rc 1 -> DEFER+absent
+#   hu-block   a multi-line `if [ -f y ]; then` … `fi` block            post-write rc 0 -> OK
+#   hu-else    the run sits in the ELSE branch of that test             post-write rc 1 -> DEFER+absent
+# hu-gdel above is the one-line `if [ -f y ]; then …; fi`, still OK.
+hu_world "$AV/hu-orecho" none 1 orecho
+hu_world "$AV/hu-andand" none 1 andand
+hu_world "$AV/hu-andor" none 1 andor
+hu_world "$AV/hu-block" none 1 block
+hu_world "$AV/hu-else" none 1 else
+# ROUND 5. hu-keeptest: today's hook runs y inside `if [ -f y ]`, theirs' keeps a test of y but runs
+# it bare -- kind and argv unchanged, only the guard column moves, so the hook-change key must carry
+# it. hu-awkif: an awk `if (` inside a guard block must not open a shell frame, or the bare run after
+# the block's `fi` reads as still guarded.                              post-write rc 1 -> DEFER+absent
+hu_world "$AV/hu-keeptest" none 1 keeptest
+hu_world "$AV/hu-awkif" none 1 awkif
+HU_WORLDS="lfail lpass gdel udel orecho andand andor block else keeptest awkif"
+# PRECONDITION: the truth each world asserts. A copy of the consumer gets step 2's write -- the range
+# diff and nothing else -- and theirs' hook is run on it, as git runs it on the push.
+hu_post() { # hu_post <world> -> the post-write hook's exit
+  local c p
+  c="$(mktemp -d "$AV/hup.XXXXXX")/cons"; cp -R "$1/cons" "$c"
+  git -C "$1/dist" diff --name-only "$(cat "$1/B")" "$(cat "$1/T")" > "$c.slice"
+  while IFS= read -r p; do
+    case "$p" in
+      core/git-hooks/*) git -C "$1/dist" show "$(cat "$1/T"):$p" > "$c/.githooks/${p#core/git-hooks/}" ;;
+      core/scripts/*) git -C "$1/dist" show "$(cat "$1/T"):$p" > "$c/scripts/ai-dlc/${p#core/scripts/}" ;;
+    esac
+  done < "$c.slice"
+  ( cd "$c" && bash .githooks/pre-push origin x < /dev/null > /dev/null 2>&1 ); printf '%s' "$?"
+}
+ss_assert "hu-pre" "$(for n in $HU_WORLDS; do printf '%s=%s ' "$n" "$(hu_post "$AV/hu-$n")"; done)y-in-range=$(git -C "$AV/hu-lfail/dist" diff --name-only "$(cat "$AV/hu-lfail/B")" "$(cat "$AV/hu-lfail/T")" -- core/scripts/validate-y.sh | grep -c .)" \
+  "lfail=1 lpass=0 gdel=0 udel=1 orecho=1 andand=0 andor=1 block=0 else=1 keeptest=1 awkif=1 y-in-range=0" \
+  "the push theirs' hook gates fails exactly where the consumer's own copy fails or is missing unguarded, and the range never touches validate-y.sh"
+hu_sig() { # hu_sig <gate> -> one token per world, `+absent` when the row names the absence
+  local n r out=""
+  for n in $HU_WORLDS; do
+    r="$(av_run "$1" "$AV/hu-$n")"
+    out="$out${out:+ }$n=$(av_st "$r" validate-y.sh | sed 's/^SELF-UPDATE-//')"
+    [ "$(av_has "$r" validate-y.sh '^ABSENT')" = yes ] && out="$out+absent"
+  done
+  printf '%s\n' "$out"
+}
+HU_SIG_FIX="lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=OK andor=DEFER+absent block=OK else=DEFER+absent keeptest=DEFER+absent awkif=DEFER+absent"
+ss_assert "hu-signature" "$(hu_sig "$GATE")" "$HU_SIG_FIX" \
+  "an unchanged script the new hook asks is judged by the copy the push runs: the consumer's, or the hook's own guard over its absence"
+mp_killed "hu-mut-control" "$(hu_sig "$(av_mut hu-control)")" "$HU_SIG_FIX" \
+  "an unmutated copy reproduces all four verdicts, so a kill below is the mutation"
+hu_kill() { local got; if [ -z "$2" ]; then got="DID-NOT-APPLY"; else got="$(hu_sig "$2")"; fi; mp_killed "$1" "$got" "$3" "$4"; }
+# KEYED ON THE LINE THAT DECIDES WHICH COPY RUNS: without it every script is judged by theirs' copy.
+hu_kill "hu-mut-theirs" "$(av_mut hu-theirs '  gate_has_line "$CHANGED" "$name" || sc_written=0
+' '  :
+')" "lfail=OK lpass=DEFER gdel=DEFER udel=DEFER orecho=DEFER andand=DEFER andor=DEFER block=DEFER else=DEFER keeptest=DEFER awkif=DEFER" \
+  "an unchanged script judged by theirs' copy: every world takes the verdict of a copy step 2 never writes"
+# Each guard mutant is keyed on the one line that owns its leg, and moves only its own worlds.
+HU_GUARD_LINE='  [ "$(awk -F'"'"'\t'"'"' '"'"'$1 == "R" && $4 != "guarded"'"'"' "$TMP/scan" | grep -c .)" -eq 0 ] && sc_guarded=1
+'
+hu_kill "hu-mut-anytest" "$(av_mut hu-anytest "$HU_GUARD_LINE" '  [ "$(awk -F'"'"'\t'"'"' '"'"'$1 == "M" && $3 == "test"'"'"' "$TMP/scan" | grep -c .)" -gt 0 ] && sc_guarded=1
+')" "lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=OK andand=OK andor=OK block=OK else=OK keeptest=OK awkif=OK" \
+  "any existence test anywhere in the hook read as the run's guard: three pushes that fail on a missing script read OK"
+hu_kill "hu-mut-noguard" "$(av_mut hu-noguard "$HU_GUARD_LINE" '  :
+')" "lfail=DEFER lpass=OK gdel=DEFER+absent udel=DEFER+absent orecho=DEFER+absent andand=DEFER+absent andor=DEFER+absent block=DEFER+absent else=DEFER+absent keeptest=DEFER+absent awkif=DEFER+absent" \
+  "no guard read at all: every step the post-write hook skips is refused as a missing script"
+hu_kill "hu-mut-brace" "$(av_mut hu-brace '      if (pre ~ (GT "[[:space:]]*&&[[:space:]]*\\{' '      if (0 && pre ~ (GT "[[:space:]]*&&[[:space:]]*\\{')" \
+  "lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=DEFER+absent andor=DEFER+absent block=OK else=DEFER+absent keeptest=DEFER+absent awkif=DEFER+absent" \
+  "the && { … } arm dropped: a step the hook skips on a missing script is refused"
+hu_kill "hu-mut-andor" "$(av_mut hu-andor ' && index(tail, "||") == 0) return 1' ') return 1')" \
+  "lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=OK andor=OK block=OK else=DEFER+absent keeptest=DEFER+absent awkif=DEFER+absent" \
+  "the trailing || not read: [ -f y ] && bash y || fail=1 reads guarded while the push fails on the missing script"
+hu_kill "hu-mut-oneline" "$(av_mut hu-oneline '      if (match(pre, ("(^|[;[:space:]])if' '      if (0 && match(pre, ("(^|[;[:space:]])if')" \
+  "lfail=DEFER lpass=OK gdel=DEFER+absent udel=DEFER+absent orecho=DEFER+absent andand=OK andor=DEFER+absent block=OK else=DEFER+absent keeptest=DEFER+absent awkif=DEFER+absent" \
+  "the one-line if [ -f y ]; then …; fi arm dropped: round 3's guarded world is refused again"
+hu_kill "hu-mut-block" "$(av_mut hu-block '      if (o && !f) { NIF++; IF[NIF] = (t ~' '      if (o && !f) { NIF++; IF[NIF] = 0 && (t ~')" \
+  "lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=OK andor=DEFER+absent block=DEFER+absent else=DEFER+absent keeptest= awkif=DEFER+absent" \
+  "the enclosing if-block frame never guards: a multi-line guarded step is refused"
+hu_kill "hu-mut-else" "$(av_mut hu-else '      if (NIF > 0 && t ~ /^[[:space:]]*(else|elif)([;[:space:]]|$)/) IF[NIF] = 0' '      if (0) IF[NIF] = 0')" \
+  "lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=OK andor=DEFER+absent block=OK else=OK keeptest=DEFER+absent awkif=DEFER+absent" \
+  "else not read: a run in the branch taken when the script is MISSING reads guarded, a false OK"
+# ROUND 5 MUTANTS. Each keyed on the line it reverts.
+HU_KEY_NEW="    ha_new=\"\$(gate_argv_scan \"\$HOOK\" \"\$ha_n\" | awk -F'\\t' '{print \$1 \"\\t\" \$3 \"\\t\" \$4}' | sort -u)\""
+HU_KEY_CUR="    [ -f \"\$HOOK_CUR\" ] && ha_cur=\"\$(gate_argv_scan \"\$HOOK_CUR\" \"\$ha_n\" | awk -F'\\t' '{print \$1 \"\\t\" \$3 \"\\t\" \$4}' | sort -u)\""
+HU_KEY_NEW_OLD="    ha_new=\"\$(gate_argv_scan \"\$HOOK\" \"\$ha_n\" | awk -F'\\t' '{print \$1 \"\\t\" \$3}' | sort -u)\""
+HU_KEY_CUR_OLD="    [ -f \"\$HOOK_CUR\" ] && ha_cur=\"\$(gate_argv_scan \"\$HOOK_CUR\" \"\$ha_n\" | awk -F'\\t' '{print \$1 \"\\t\" \$3}' | sort -u)\""
+hu_kill "hu-mut-dropguard" "$(av_mut hu-dropguard "$HU_KEY_NEW" "$HU_KEY_NEW_OLD" "$HU_KEY_CUR" "$HU_KEY_CUR_OLD")" \
+  "lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=OK andor=DEFER+absent block=OK else=DEFER+absent keeptest= awkif=DEFER+absent" \
+  "the guard column dropped from the hook-change key: a hook that keeps the test but unties it from the run asks nothing new, and y gets no row"
+HU_OPEN_NEW='      o = (t ~ /^[[:space:]]*if[[:space:]]+(\[|!|[A-Za-z_.\/])/)'
+hu_kill "hu-mut-awkopen" "$(av_mut hu-awkopen "$HU_OPEN_NEW" '      o = (t ~ /^[[:space:]]*if[[:space:]]/)')" \
+  "lfail=DEFER lpass=OK gdel=OK udel=DEFER+absent orecho=DEFER+absent andand=OK andor=DEFER+absent block=OK else=DEFER+absent keeptest=DEFER+absent awkif=OK" \
+  "an awk if ( read as a shell opener: the guard frame outlives its fi and the bare run after it reads guarded, a false OK"
+# THE STACK BALANCES ON THE SHIPPED HOOK. The scan's END is re-emitted with the frame depth appended,
+# once with the shipped opener and once with the old one, so the assertion proves it can see the
+# imbalance it rules out.
+HU_REAL=""
+for cand in "$DIR/../../git-hooks/pre-push" "$DIR/../../../.githooks/pre-push"; do
+  [ -f "$cand" ] && { HU_REAL="$cand"; break; }
+done
+hu_depth() { # hu_depth <gate-file> -> the if-frame depth after scanning the shipped hook
+  ( eval "$(awk '/^gate_argv_scan\(\) \{/,/^\}/' "$1" | sed 's/ifpost(r) } }$/ifpost(r) }; printf "DEPTH\\t%d\\n", NIF }/')"
+    gate_argv_scan "$HU_REAL" render-agent-definitions.sh ) 2>/dev/null | awk -F'\t' '$1 == "DEPTH" {print $2}'
+}
+HU_OLD="$AV/hu-depth-old.sh"
+python3 -c 'import sys
+s = open(sys.argv[1]).read(); o, n = sys.argv[3], sys.argv[4]
+if s.count(o) != 1: sys.exit(3)
+open(sys.argv[2], "w").write(s.replace(o, n, 1))' "$GATE" "$HU_OLD" "$HU_OPEN_NEW" '      o = (t ~ /^[[:space:]]*if[[:space:]]/)' 2>/dev/null || : > "$HU_OLD"
+ss_assert "hu-stack-depth" "${HU_REAL:+found} shipped=$(hu_depth "$GATE") old-opener=$(hu_depth "$HU_OLD")" "found shipped=0 old-opener=4" \
+  "scanning the shipped pre-push ends at if-frame depth 0; the old opener test leaves it at 4, so this assertion can see the imbalance"
+
+# --- HOOK SHAPES THE SCAN MUST NOT READ AS "NOT GATING" (BL-456, tip round) ----------------------
+# Each shape below is one reformat away from the real hook, and before this round the first three
+# scanned as a mention or a discarded capture, so a script whose incoming copy fails read
+# SELF-UPDATE-OK "not gating" -- a false OK on the bootstrapping gate. World S is one pull in which
+# EVERY stub exits 0 at base and 1 at theirs under any argv, so a script the scan reads as run with
+# its status read DEFERs, and one it reads as not gating says so. Only the scan separates them.
+#
+#   sa-assign    V=scripts/ai-dlc/sa-assign.sh; bash "$V" --k             -> UNDECIDED (was OK)
+#   sa-next      capture, then `rc=$?` on the next line                   -> DEFER     (was OK)
+#   sa-fnlast    f() { out="$(bash …)"; } called through step             -> DEFER     (was OK)
+#   sa-fnlast2   the same with `}` opening the next line                  -> DEFER     (was OK)
+#   sa-w229      the real hook's write-mode lines 229-233, verbatim       -> OK, not gating (near-miss
+#                for both arms above: its next line opens with `[` and only a FIRST-token `&&` counts)
+#   sa-true      bash … || true                                           -> OK, not gating (was DEFER)
+#   sa-exit      bash … || exit 1   (near-miss: one word apart)           -> DEFER
+#   sa-step      step "x" bash scripts/ai-dlc/…   on one line             -> DEFER     (was UNDECIDED)
+#   sa-steptrue  step "x" bash … || true   (step's own `if` read it)      -> DEFER     (was UNDECIDED)
+SH_SCRIPTS="sa-assign sa-next sa-fnlast sa-fnlast2 sa-w229 sa-true sa-exit sa-step sa-steptrue"
+sh_world() {
+  local w="$1" n
+  mkdir -p "$w/dist/core/rules" "$w/dist/core/scripts" "$w/cons/.githooks" "$w/cons/scripts/ai-dlc" "$w/cons/.claude/agents"
+  git -C "$w/dist" init -q
+  printf '1.0.0\n' > "$w/dist/VERSION"
+  printf 'sh machinery\n' > "$w/dist/core/rules/sh.md"
+  for n in $SH_SCRIPTS; do
+    printf '#!/bin/sh\n# %s\nexit 0\n' "$n" > "$w/dist/core/scripts/$n.sh"
+    cp "$w/dist/core/scripts/$n.sh" "$w/cons/scripts/ai-dlc/$n.sh"
+  done
+  av_git "$w/dist" add -A >/dev/null 2>&1; av_git "$w/dist" commit -qm base >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/B"
+  printf '1.1.0\n' > "$w/dist/VERSION"
+  for n in $SH_SCRIPTS; do printf '#!/bin/sh\n# %s, incoming\nexit 1\n' "$n" > "$w/dist/core/scripts/$n.sh"; done
+  av_git "$w/dist" add -A >/dev/null 2>&1; av_git "$w/dist" commit -qm theirs >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/T"
+  printf 'definitions\n' > "$w/cons/.claude/agents/dev.md"
+  printf '%s\n' '#!/usr/bin/env bash' 'set -uo pipefail' \
+    'V=scripts/ai-dlc/sa-assign.sh; bash "$V" --k' \
+    'nxt() {' '  out="$(bash scripts/ai-dlc/sa-next.sh --check 2>&1)"' '  rc=$?' '  return $rc' '}' \
+    'step "next" nxt' \
+    'fnl() { out="$(bash scripts/ai-dlc/sa-fnlast.sh --q)"; }' 'step "fnlast" fnl' \
+    'fnl2() {' '  out="$(bash scripts/ai-dlc/sa-fnlast2.sh --q 2>&1)"' '}' 'step "fnlast2" fnl2' \
+    'w229() {' '  local out' '  if [ ! -d .claude/agents ]; then' \
+    '      out="$(bash scripts/ai-dlc/sa-w229.sh --root . 2>&1)"' \
+    '      [ -d .claude/agents ] \' \
+    "        && printf '   .claude/agents/ was absent (a gitignored, derived directory), so it was rendered:\\n'" \
+    "      printf '%s\\n' \"\$out\"" '  fi' '  return 0' '}' 'step "w229" w229' \
+    'bash scripts/ai-dlc/sa-true.sh --t || true' \
+    'bash scripts/ai-dlc/sa-exit.sh --t || exit 1' \
+    'step "step" bash scripts/ai-dlc/sa-step.sh --s' \
+    'step "steptrue" bash scripts/ai-dlc/sa-steptrue.sh --s || true' > "$w/cons/.githooks/pre-push"
+  chmod +x "$w/cons/.githooks/pre-push"
+  git -C "$w/cons" init -q
+  av_git "$w/cons" add -A >/dev/null 2>&1; av_git "$w/cons" commit -qm consumer >/dev/null 2>&1
+}
+sh_world "$AV/s"
+# sh_sig <rows> -> one token per script: its status, `+ng` when an OK row says "not gating"
+sh_sig() {
+  local n out=""
+  for n in $SH_SCRIPTS; do
+    out="$out${out:+ }${n#sa-}=$(av_st "$1" "$n.sh" | sed 's/^SELF-UPDATE-//')"
+    [ "$(av_has "$1" "$n.sh" '^not gating')" = yes ] && out="$out+ng"
+  done
+  printf '%s\n' "$out"
+}
+# PRECONDITIONS: the hook carries the real write-mode lines byte-for-byte, and every stub really
+# goes 0 to 1, so a scan reading a line as run-and-read would DEFER it.
+# THE REAL HOOK TOO, in whichever layout this runs: the distribution's core/git-hooks/pre-push, or
+# a consumer's installed .githooks/pre-push. Its write-mode renderer line must scan D and its
+# --check line R, so the real-hook shape the near-miss copies is the one the scan actually sees.
+SH_HOOK=""
+for cand in "$DIR/../../git-hooks/pre-push" "$DIR/../../../.githooks/pre-push"; do
+  [ -f "$cand" ] && { SH_HOOK="$cand"; break; }
+done
+SH_RH="$( (eval "$(awk '/^gate_argv_scan\(\) \{/,/^\}/' "$GATE")"; gate_argv_scan "$SH_HOOK" render-agent-definitions.sh) 2>/dev/null \
+  | awk -F'\t' '$1 == "D" || $1 == "R" {printf "%s%s[%s]", (n++ ? " " : ""), $1, $3}')"
+ss_assert "sh-real-229" "${SH_HOOK:+found} $SH_RH" "found D[--root .] R[--check --root .]" \
+  "the real hook's write-mode renderer capture stays D and its --check capture stays R"
+SH_229='      out="$(bash scripts/ai-dlc/render-agent-definitions.sh --root . 2>&1)"'
+SH_W="$(grep -n -A2 -F -- "$SH_229" "$SH_HOOK" 2>/dev/null | sed 's/^[0-9]*[:-]//' | sed 's/render-agent-definitions/sa-w229/')"
+SH_S3="$(grep -n -A2 -F -- 'sa-w229.sh --root' "$AV/s/cons/.githooks/pre-push" | sed 's/^[0-9]*[:-]//')"
+ss_assert "sh-pre-229" "$([ -n "$SH_W" ] && [ "$SH_W" = "$SH_S3" ] && echo same)" "same" \
+  "world S carries the real hook's write-mode capture and the two lines after it verbatim, only the script name differs"
+ss_assert "sh-pre-rc" \
+  "$(av_rc "$AV/s/cons" scripts/ai-dlc/sa-next.sh)$(git -C "$AV/s/dist" show "$(cat "$AV/s/T"):core/scripts/sa-next.sh" | sh; printf '%s' "$?")" \
+  "01" "every stub exits 0 at base and 1 at theirs"
+SH_SIG_FIX="assign=UNDECIDED next=DEFER fnlast=DEFER fnlast2=DEFER w229=OK+ng true=OK+ng exit=DEFER step=DEFER steptrue=DEFER"
+SH_S="$(av_run "$GATE" "$AV/s")"
+ss_assert "sh-signature" "$(sh_sig "$SH_S")" "$SH_SIG_FIX" "world S, every shape arm below in one row"
+ss_assert "sh-assign" "$(av_st "$SH_S" sa-assign.sh) $(av_has "$SH_S" sa-assign.sh 'through a variable')" "SELF-UPDATE-UNDECIDED yes" \
+  "a path assigned to a variable and run through it is UNDECIDED, never a mention read as not gating"
+ss_assert "sh-next-line" "$(av_st "$SH_S" sa-next.sh)" SELF-UPDATE-DEFER \
+  "a capture whose status the NEXT line reads (rc=\$?) is run, and its incoming failure defers"
+ss_assert "sh-fn-last" "$(av_st "$SH_S" sa-fnlast.sh) $(av_st "$SH_S" sa-fnlast2.sh)" "SELF-UPDATE-DEFER SELF-UPDATE-DEFER" \
+  "a capture that is a function body's last statement is returned by the function, in both brace layouts"
+ss_assert "sh-229-stays-D" "$(av_st "$SH_S" sa-w229.sh) $(av_has "$SH_S" sa-w229.sh 'line [0-9]* run with its status discarded')" "SELF-UPDATE-OK yes" \
+  "the real write-mode line stays discarded: the line after it opens with [ and reads the test's status, not the capture's"
+ss_assert "sh-true-tail" "$(av_st "$SH_S" sa-true.sh) $(av_has "$SH_S" sa-true.sh '^not gating') $(av_st "$SH_S" sa-exit.sh)" "SELF-UPDATE-OK yes SELF-UPDATE-DEFER" \
+  "a trailing || true discards the status; || exit 1, one word apart, reads it"
+ss_assert "sh-step" "$(av_st "$SH_S" sa-step.sh) $(av_st "$SH_S" sa-steptrue.sh)" "SELF-UPDATE-DEFER SELF-UPDATE-DEFER" \
+  "a single-line step \"x\" bash … is a run step reads, with or without a trailing || true"
+# THE CONTROL: an unmutated copy reproduces world S's whole signature.
+SH_CTL="$(av_mut sh-control)"
+ss_assert "sh-mut-control" "$(sh_sig "$(av_run "$SH_CTL" "$AV/s")")" "$SH_SIG_FIX" \
+  "an unmutated copy reproduces every world-S verdict, so a kill below is the mutation"
+# sh_kill <label> <gate|""> <want-signature> <why>
+sh_kill() {
+  local got
+  if [ -z "$2" ]; then got="DID-NOT-APPLY"; else got="$(sh_sig "$(av_run "$2" "$AV/s")")"; fi
+  mp_killed "$1" "$got" "$3" "$4"
+}
+sh_kill "sh-mut-assign" "$(av_mut sh-assign '{ printf "X\t%d\tthe path is assigned' '{ printf "M\t%d\tthe path is assigned')" \
+  "assign=OK+ng next=DEFER fnlast=DEFER fnlast2=DEFER w229=OK+ng true=OK+ng exit=DEFER step=DEFER steptrue=DEFER" \
+  "an assignment read as a mention: the script run through \$V is not gating and reads OK"
+sh_kill "sh-mut-nextline" "$(av_mut sh-nextline 'readnext = (index(nx, "$?") > 0 || nx ~ /^[[:space:]]*(&&|\|\|)/)' 'readnext = 0')" \
+  "assign=UNDECIDED next=OK+ng fnlast=DEFER fnlast2=DEFER w229=OK+ng true=OK+ng exit=DEFER step=DEFER steptrue=DEFER" \
+  "the next line is not read: a capture checked by rc=\$? reads as discarded and OK"
+sh_kill "sh-mut-fnlast" "$(av_mut sh-fnlast 'lastinfn = (capture && (ct ~ /^}/ || (ct == "" && nx ~ /^[[:space:]]*}/)))' 'lastinfn = 0')" \
+  "assign=UNDECIDED next=DEFER fnlast=OK+ng fnlast2=OK+ng w229=OK+ng true=OK+ng exit=DEFER step=DEFER steptrue=DEFER" \
+  "a function's last-statement capture read as discarded: both brace layouts read OK"
+sh_kill "sh-mut-true" "$(av_mut sh-true 'truetail = (index(tt, "||") == 0 && index(tt, "&&") == 0 && index(tt, "$?") == 0)' 'truetail = 0')" \
+  "assign=UNDECIDED next=DEFER fnlast=DEFER fnlast2=DEFER w229=OK+ng true=DEFER exit=DEFER step=DEFER steptrue=DEFER" \
+  "|| true read as a status reader: a script whose failure the hook ignores refuses the pull"
+sh_kill "sh-mut-step" "$(av_mut sh-step 'stepped = (pre ~' 'stepped = 0 && (pre ~')" \
+  "assign=UNDECIDED next=DEFER fnlast=DEFER fnlast2=DEFER w229=OK+ng true=OK+ng exit=DEFER step=UNDECIDED steptrue=UNDECIDED" \
+  "no step prefix: a single-line step run is an unknown shape and UNDECIDED"
+sh_kill "sh-mut-steptrue" "$(av_mut sh-steptrue 'if (!stepped && match(tt,' 'if (match(tt,')" \
+  "assign=UNDECIDED next=DEFER fnlast=DEFER fnlast2=DEFER w229=OK+ng true=OK+ng exit=DEFER step=DEFER steptrue=OK+ng" \
+  "|| true after step read as discarding: the status step already read is lost and the script reads OK"
+rm -rf "$AV"
 
 echo
 if [ "$FAILURES" -gt 0 ]; then

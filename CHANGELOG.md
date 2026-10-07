@@ -19,6 +19,38 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.740.0] - 2026-10-07
+
+Batch 202's second release. It carries `BL-456`, which closes in the batch close commit. No
+consumer candidate is discharged. `self-update-gate.sh` runs from the consumer's INSTALLED copy on
+the pull that delivers it, so this gate first judges the pull after this one.
+
+### The self-update gate judges each gating script the way the push will run it (BL-456)
+
+- The gate used to run each hook-named gating script BARE and read equal exit codes as OK. A
+  script that needs arguments then exits the same usage code on both sides, so a renderer change
+  that the consumer's hook rejects read `SELF-UPDATE-OK`, step 2's push was refused, and the next
+  cycle refused again. Each script now runs with the argv the hook gives it, read by
+  `gate_argv_scan`, with its sibling inputs staged.
+- The gate judges against the hook the push will run: theirs' `core/git-hooks/pre-push` when the
+  range changes it. A script that hook newly asks something joins the gating set. A script the
+  range does not change runs from the consumer's own copy, because step 2 writes only the range.
+  An absent copy is skipped when its step sits inside an `if [ -f … ]` guard tied to the run, and
+  otherwise reads `ABSENT`.
+- The scan tracks shell `if` frames, so a guard counts only when it encloses the run. A shape it
+  cannot tie reads unguarded, which DEFERs. The guard column is part of the hook-change key.
+- The printed remedy's loop is gone: a DEFER installs the incoming renderer through the gated
+  apply before the remedy runs. `self-update-gate`'s claim-3 arm drives the real `apply.sh`.
+- Known shapes the scan does not model (a one-line `then … else`, `fi;`, an `if` inside a heredoc,
+  a run inside a longer `&&` list) occur in neither the shipped hook nor the reference consumer's.
+
+### A ledger whose every live receipt already passes is no longer "nothing observed"
+
+- `validate-backlog-receipts.sh` R2 failed with "ZERO scored receipts" whenever the only live
+  `sh` receipt exited 0 at HEAD, which is every release that fixes the last live receipt. With
+  every receipt already passing, R2 now passes and says `R2 all-already-passing`. A ledger with no
+  scored and no already-passing receipt still fails.
+
 ## [0.739.0] - 2026-10-06
 
 Batch 202's first release, shipped alone because it edits both pre-push hooks. It is the
