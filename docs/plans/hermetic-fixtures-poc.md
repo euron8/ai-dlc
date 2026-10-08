@@ -51,10 +51,10 @@ the hooks. Mutants for the fail-closed test
 are made on COPIES under `mktemp -d`, never on the tracked file.
 
 **Pushing:** `git push` is forbidden for this session except ONCE, at action 10, to publish this
-plan's updated block and the decision report on the docs branch this file lives on, and only after
-the gate in action 10 says no batch-204 push is in flight. `ps` is not a liveness probe
-(`.claude/rules/tool-hazards.md`, Environment floor); the gate is `git ls-remote` against origin
-plus asking the operator.
+plan's updated block and the decision report on the docs branch this file lives on, to GitHub
+through the clone's `github` remote (action 1). The clone carries no `core.hooksPath`, so that
+push runs no hook and touches nothing under the main checkout's `.git`; it is therefore
+independent of batch 204, which the operator has HELD so this PoC has the machine to itself.
 
 **Spawned hands:** every `Agent` spawn passes `isolation: "remote"`. A hand that needs this
 session's unpushed clone state (the census TSV, the runner prototype) cannot get it remotely; for
@@ -109,11 +109,18 @@ mid-batch, so it is a floor on staleness, not a typical push.
 ### NEXT ACTIONS — numbered, in order
 
 1. **MAKE THE CLONE AND PIN IT.** `S="$(mktemp -d "${TMPDIR:-/tmp}/ai-dlc-poc.XXXXXX")"`,
-   `git clone -q /Users/n8/git/ai-dlc "$S/ai-dlc-poc"`, `cd "$S/ai-dlc-poc"`,
-   `git fetch -q origin`, then `git checkout -q -b poc/hermetic-fixtures origin/main`. A clone of
-   the main checkout gives you its LOCAL `main`, which is batch 204's moving tip — the branch you
-   just cut from `origin/main` is the pin. Record `git rev-parse HEAD` as `PIN` and take every
-   figure in this plan at `PIN`. Confirm `git rev-parse --git-dir` prints `.git` (a directory in
+   `git clone -q /Users/n8/git/ai-dlc "$S/ai-dlc-poc"`, `cd "$S/ai-dlc-poc"`, then
+   `git remote add github "$(git -C /Users/n8/git/ai-dlc remote get-url origin)"` and
+   `git fetch -q github`. The clone's `origin` is the LOCAL checkout, not GitHub; every
+   `ls-remote`, fetch and push in this plan that means GitHub names `github`. This plan was handed
+   off before it reached GitHub, on the main checkout's local branch `docs/hermetic-fixtures-poc`,
+   which the clone sees as `origin/docs/hermetic-fixtures-poc`: run
+   `git checkout -q -b docs/hermetic-fixtures-poc origin/docs/hermetic-fixtures-poc` (if
+   `github/docs/hermetic-fixtures-poc` exists, prefer it). Its parent must equal
+   `github/main` — assert `git rev-parse HEAD~1` equals `git rev-parse github/main`, and if it does
+   not, rebase the one plan commit onto `github/main` before going on. Record `git rev-parse HEAD~1`
+   as `PIN` and take every figure in this plan at `PIN` (the plan commit touches only
+   `docs/plans/`, so the tree under test is `PIN`'s). Confirm `git rev-parse --git-dir` prints `.git` (a directory in
    your clone, not a file pointing at the main checkout), and confirm
    `git worktree list | wc -l` prints 1. Record `git config --get core.hooksPath` (expected:
    empty — a fresh clone carries no hooks path, so the push in action 10 runs NEITHER pre-push
@@ -285,17 +292,17 @@ mid-batch, so it is a floor on staleness, not a typical push.
    branch. Do not commit `scripts/poc/` unless the operator asks for it; describe it in the
    report and leave it in the clone.
 
-10. **PUBLISH, ONCE, AFTER THE GATE.** The gate: `git ls-remote --heads origin main` must return
-    a sha that CARRIES 0.745.0 — `git log -1 --format=%s <sha>` starts with `0.745.0`, or
-    `git merge-base --is-ancestor 67eae401 <sha>` succeeds — against the control that 0.744.0
-    (`60b467dc`) is an ancestor of it. If `origin/main` does not yet carry 0.745.0, a batch-204
-    push may be in flight: ask the operator, and do not push until they answer. Then
-    `git push -u origin docs/hermetic-fixtures-poc` from the clone, once, and confirm
-    `git ls-remote --heads origin docs/hermetic-fixtures-poc` is non-empty against the control
-    that a made-up branch name returns empty. A green hook is not a landed push.
+10. **PUBLISH, ONCE.** Assert `git config --get core.hooksPath` is still empty in the clone (a
+    set hooks path would run the full suite on push). `git fetch -q github`; if `github/main` has
+    moved past `PIN`, rebase the docs branch onto it — the branch touches only `docs/`, so a
+    conflict means someone else edited this plan, and you stop and ask the operator. Then
+    `git push -u github docs/hermetic-fixtures-poc` from the clone, once, and confirm
+    `git ls-remote --heads github docs/hermetic-fixtures-poc` is non-empty against the control
+    that a made-up branch name returns empty. A push exit of 0 is not a landed push.
 
 11. **FRESH-RESUME CHECK.** Merge the docs commit (merges are preapproved by standing ruling).
-    Then make a fresh clone of `origin/main` and read this plan there as a stranger would, re-run
+    Then make a fresh clone of origin/main and read this plan there as a stranger would (clone
+    GitHub's `main` through the `github` remote's URL, never the local checkout), re-run
     the derive block there, assert the numbered action list names nothing already shipped on
     `origin/main`, and run `bash scripts/validate-plan-shape.sh` there as the floor. If it fails,
     fix and repeat from action 9.
@@ -311,9 +318,9 @@ mid-batch, so it is a floor on staleness, not a typical push.
 
 Report to the operator on every question, every decision, and on completion including an early
 stop. Specifically: when the three fixtures are chosen (action 3), when action 5a returns anything
-but FAIL (that is the NO-GO finding and the operator decides whether the PoC continues), before
-the push in action 10 if `origin/main` does not carry 0.745.0, and when the decision report is
-written. Present a stall as choices with a marked recommendation. Never narrow the scope on your
+but FAIL (that is the NO-GO finding and the operator decides whether the PoC continues), and when
+the decision report is written. The operator holds batch 204's 0.745.0 release while this PoC
+runs, so report completion promptly: that hold is released on your report. Present a stall as choices with a marked recommendation. Never narrow the scope on your
 own authority: if an action cannot be completed, say what blocked it and deliver the rest.
 
 ### Done when
@@ -335,7 +342,7 @@ own authority: if an action cannot be completed, say what blocked it and deliver
    `fixtures × effort class` with the class counts from criterion 1, answers the coexistence
    question, and engages the deriver's header argument.
 6. This file's RESUME block has been re-derived after the report (action 9), the plan validator
-   is green on it, and the docs branch is on origin (action 10) after the 0.745.0 gate.
+   is green on it, and the docs branch is on GitHub (action 10), confirmed by `ls-remote`.
 
 The observation point for criteria 1-5 is the clone at `PIN`; nothing in this plan consumes its
 own subject, so no criterion moves between being satisfied and being read.
