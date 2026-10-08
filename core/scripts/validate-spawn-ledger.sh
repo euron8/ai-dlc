@@ -431,10 +431,16 @@ fa_judge() {  # <residue> <one-shot> <ledger> -> 0 PASS, 1 finding, 2 refusal, 3
     echo "FAIL: $led is not parseable as JSONL, so no dispatch can be joined against it." >&2
     return 2
   }
-  nid="$(printf '%s\n' "$q" | awk -F'\t' '$1 == "NID" { print $2; exit }')"
-  nidless="$(printf '%s\n' "$q" | awk -F'\t' '$1 == "NIDLESS" { print $2; exit }')"
-  one_e="$(printf '%s\n' "$q" | awk -F'\t' '$1 == "ONE" { print $2; exit }')"
-  one_ts="$(printf '%s\n' "$q" | awk -F'\t' '$1 == "ONE" { print $3; exit }')"
+  # HERE-STRINGS, NEVER `printf | awk '... exit'`. Each awk leaves at its first match while
+  # printf is still writing; once the rest of $q exceeds the pipe buffer printf takes EPIPE,
+  # `printf: write error: Broken pipe` lands on stderr, and the caller's first stderr line is
+  # that instead of its verdict. Measured under the pre-push pool at load ~60: the self-probe's
+  # no-tool_use_id world read rc=99 and fold-architect-ledger-join went red on D1-1 and D4-arch
+  # while the same tree passed solo. A here-string has no writer to interrupt.
+  nid="$(awk -F'\t' '$1 == "NID" { print $2; exit }' <<<"$q")"
+  nidless="$(awk -F'\t' '$1 == "NIDLESS" { print $2; exit }' <<<"$q")"
+  one_e="$(awk -F'\t' '$1 == "ONE" { print $2; exit }' <<<"$q")"
+  one_ts="$(awk -F'\t' '$1 == "ONE" { print $3; exit }' <<<"$q")"
 
   if [ "${nid:-0}" -eq 0 ]; then
     echo "SKIP-PRE-ADOPTION: the ledger carries no tool_use_id on any S${sprint} row, so no"
@@ -468,7 +474,7 @@ fa_judge() {  # <residue> <one-shot> <ledger> -> 0 PASS, 1 finding, 2 refusal, 3
   # sprint may hide -- it was recorded, and it is some other teammate. Pointing the one-shot at the
   # sprint's architecture-step architect would otherwise read as "id not in the ledger" in a fully
   # adopted sprint and as SKIP in a partial one, and neither message says what happened.
-  onerole="$(printf '%s\n' "$q" | awk -F'\t' '$1 == "ONEROLE" { printf "%s%s (S%s)", sep, $2, $3; sep = ", " }')"
+  onerole="$(awk -F'\t' '$1 == "ONEROLE" { printf "%s%s (S%s)", sep, $2, $3; sep = ", " }' <<<"$q")"
   if [ "${one_e:-__NONE__}" = "__NONE__" ] && [ -n "$onerole" ]; then
     echo "FAIL: one-shot id not in the ledger as an adversary dispatch -- $onebase cites tool_use_id" >&2
     echo "      '${sid}', which the ledger records as role ${onerole}, not adversary. The one-shot is" >&2
@@ -508,7 +514,7 @@ fa_judge() {  # <residue> <one-shot> <ledger> -> 0 PASS, 1 finding, 2 refusal, 3
       echo "      is the whole of what proves an architect ran; recover it from the transcript." >&2
       return 1 ;;
   esac
-  hits="$(printf '%s\n' "$q" | awk -F'\t' '$1 == "HIT"')"
+  hits="$(awk -F'\t' '$1 == "HIT"' <<<"$q")"
   if [ -z "$hits" ]; then
     echo "FAIL: residue tool_use_id ${rtui} resolves to NO spawn-ledger row. Nothing the dispatch" >&2
     echo "      guard recorded says an architect was dispatched for this fold." >&2

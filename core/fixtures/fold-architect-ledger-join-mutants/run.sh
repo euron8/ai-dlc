@@ -263,8 +263,8 @@ run_mutant M8-writer-path-drift "B2" "$BI_REL" 0 \
 # The SKIP/FAIL path for an unresolved id and the printed ledger ts are left as shipped, so the
 # only thing this reverts is which instant the architect row is compared against.
 run_mutant M9-ordering-reads-invoked-at "D1-1" "$VSL_REL" 1 \
-  '  one_ts="$(printf '"'"'%s\n'"'"' "$q" | awk -F'"'"'\t'"'"' '"'"'$1 == "ONE" { print $3; exit }'"'"')"' \
-  '  one_ts="$(printf '"'"'%s\n'"'"' "$q" | awk -F'"'"'\t'"'"' '"'"'$1 == "ONE" { print $3; exit }'"'"')"
+  '  one_ts="$(awk -F'"'"'\t'"'"' '"'"'$1 == "ONE" { print $3; exit }'"'"' <<<"$q")"' \
+  '  one_ts="$(awk -F'"'"'\t'"'"' '"'"'$1 == "ONE" { print $3; exit }'"'"' <<<"$q")"
   [ "${one_e:-__NONE__}" = "__NONE__" ] || one_e="$(jq -rn --arg t "$(fa_field "$one" invoked_at)" '"'"'$t | fromdateiso8601'"'"')"'
 # D4: the legacy name is NOT-OWED in every variant.
 run_mutant M10-legacy-not-owed-everywhere "A-legacy D4-arch Dd-carry" "$VSL_REL" 1 \
