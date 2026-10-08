@@ -160,20 +160,29 @@ every push.
 
 verify: manual -- close when a push's read-set line reports none of these fixtures UNMAPPED, by a trace or by a declaration.
 
-## BL-482 — a new fixture directory reruns nearly every fixture
+## BL-485 — `review-shard-merge-mutants` is the suite pole at 66 serial mutants in one unit
 
-**DEFECT, filed at batch 204's close.** 229 of 236 mapped fixtures carry the `core/fixtures` DIRECTORY row at
-`60b467dc`, and the hook keys a directory row as its LISTING, so adding or removing any fixture directory reruns all of
-them. Measured by the hermetic decision report (`docs/poc/hermetic-decision.md`, section 4): on the five release pairs
-in fifteen that added or removed a fixture directory, the traced key selected 219-226 fixtures against 53-111 for a
-declared key; on the other ten the two agreed within 5. `0.745.0`'s own gate was near-full for this reason.
+**DEFECT, filed at batch 205 by operator instruction.** The pre-push suite is pole-bound: wall clock
+tracks the single longest DIRECTORY, and `core/fixtures/review-shard-merge-mutants/run.sh` is that
+directory at every width. The durations record in the main checkout reads 1481s loaded against 1094s
+for the next unit (`sort -k2 -nr .git/ai-dlc-fixture-durations | head -2`), so every push that selects
+it pays 22 minutes whatever else it selects, and a selective push that touches
+`merge-review-shards.sh` pays the same as a full one. The battery drives 66 `mutant` call sites
+serially through one `run.sh` (`/usr/bin/grep -c '^ *mutant ' core/fixtures/review-shard-merge-mutants/run.sh`
+= 66; the impossible-token control reads 0). Its own header records the shape: arms x mutants,
+serially, and a loaded cost that went 731s to 1738s in one change.
 
-Same report, section 2: `readset_tools` does not fingerprint a tool a fixture reaches only through a non-`.sh` call or
-a non-standard PATH entry, so `node` is unkeyed for every fixture that needs it. `0.745.0`'s CHANGELOG states the
-same fact from the other side (tools outside the fixed directory list are no longer keyed). Both close under the
-hermetic program's declared keys (`tools.decl`; see `BL-477`), not by widening the traced key.
+The remedy is the one `fold-architect-ledger-join-mutants-{,b,c}` already carries: partition the
+mutant set across sibling directories, each a `run.sh` the pool dispatches as its own unit, with the
+partition declared once and joined against the `mutant` lines so a mutant added to the battery and
+dealt to no shard fails the join (that battery's `[J0] coverage join` arm). Three shards of 22
+bring the pole to roughly a third of 1481s loaded; the next pole is then
+`gate-adjudication-mutants` at 1094s, which is the same shape and the same remedy. Each shard
+carries its own unmutated control and the probe-bypass arm, exactly as the model does, and each is
+a new fixture directory (read `.claude/rules/fixture-ship-decl.md` before creating one; the model
+shards are `.dist-only`, so these will be too).
 
-verify: manual -- close when adding one fixture directory to a tree reruns only the fixtures whose keys declare `core/fixtures/` itself.
+verify: sh d=core/fixtures; [ -f "$d/review-shard-merge-mutants/run.sh" ] || exit 9; n="$(ls -d "$d"/review-shard-merge-mutants*/ 2>/dev/null | wc -l | tr -d ' ')"; [ "$n" -ge 3 ] || exit 1; for s in "$d"/review-shard-merge-mutants*/; do grep -qE 'coverage join|J0' "$s/run.sh" || exit 1; done; exit 0
 
 ## BL-477 — `tools.decl` cannot name `node`, which blocks plan action 3
 

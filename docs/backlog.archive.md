@@ -3,6 +3,23 @@
 Entries closed and rotated out of `docs/backlog.md` by `scripts/backlog-rotate.sh`.
 Nothing here is deleted; this file is the destination, not a wastebasket.
 
+## BL-482 — a new fixture directory reruns nearly every fixture
+
+**DEFECT, filed at batch 204's close.** 229 of 236 mapped fixtures carry the `core/fixtures` DIRECTORY row at
+`60b467dc`, and the hook keys a directory row as its LISTING, so adding or removing any fixture directory reruns all of
+them. Measured by the hermetic decision report (`docs/poc/hermetic-decision.md`, section 4): on the five release pairs
+in fifteen that added or removed a fixture directory, the traced key selected 219-226 fixtures against 53-111 for a
+declared key; on the other ten the two agreed within 5. `0.745.0`'s own gate was near-full for this reason.
+
+Same report, section 2: `readset_tools` does not fingerprint a tool a fixture reaches only through a non-`.sh` call or
+a non-standard PATH entry, so `node` is unkeyed for every fixture that needs it. `0.745.0`'s CHANGELOG states the
+same fact from the other side (tools outside the fixed directory list are no longer keyed). Both close under the
+hermetic program's declared keys (`tools.decl`; see `BL-477`), not by widening the traced key.
+
+verify: manual -- close when adding one fixture directory to a tree reruns only the fixtures whose keys declare `core/fixtures/` itself.
+
+**CLOSED 0.747.0.** Both hooks treat a fixture-root listing moved only by new sibling DIRECTORIES as unmoved for every other fixture; probed in a two-fixture repo with three controls (CHANGELOG 0.747.0).
+
 ## BL-009
 
 **LANDED (v0.373.0, verified 953e39e).** Both halves the receipt requires are present:
