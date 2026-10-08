@@ -150,6 +150,29 @@ esac
 EOF
 }
 
+stub_k()         { cat <<'EOF'
+cat data/a.txt >/dev/null || exit 1
+b207tool
+EOF
+}
+stub_knode()     { cat <<'EOF'
+cat data/a.txt >/dev/null || exit 1
+node -e 'console.log("node-ran-b207")'
+EOF
+}
+stub_lcons()     { cat <<'EOF'
+cat scripts/ai-dlc/x.sh >/dev/null || exit 1
+echo "HERMETIC-CONSUMED scripts/ai-dlc/x.sh"
+find . -type f | LC_ALL=C sort
+EOF
+}
+stub_ldist()     { cat <<'EOF'
+cat core/scripts/x.sh >/dev/null || exit 1
+echo "HERMETIC-CONSUMED core/scripts/x.sh"
+find . -type f | LC_ALL=C sort
+EOF
+}
+
 FXR="core/fixtures"
 # The hook the runner's --key-only sources its universe from, and the content-key declaration whose
 # EXCLUDE span names the excluded tops. Taken from the repo under test, whichever layout it is.
@@ -185,6 +208,24 @@ OUT=""; RC=0
 # run_hr <probe> [runner options...]: sets OUT and RC.
 run_hr() { local p="$1"; shift; OUT="$(bash "$RUN" --root "$p" "$@" probe 2>&1)"; RC=$?; }
 nfiles() { find "$1" -type f | wc -l | tr -d ' '; }
+# edit_hook <probe> <sed script>: rewrite the probe's COPIED hook (never the real one), no `sed -i`.
+edit_hook() { sed "$2" "$1/.githooks/pre-push" > "$1/.githooks/pre-push.new" && mv "$1/.githooks/pre-push.new" "$1/.githooks/pre-push"; }
+# hook_dump <probe> <hook file> <out dir>: run the hook's own readset_keys for fixture `probe` and leave
+# its work files (.k/probe, .dunres, .dtools) in <out dir>. $FXR must be the hook's own fixture root.
+hook_dump() {
+  local blk="$3.blk"
+  sed -n '/^# FIXTURE_POOL_BEGIN$/,/^# FIXTURE_POOL_END$/p' "$2" > "$blk"
+  ( cd "$1" && export AI_DLC_READSET_LIVE_TRACE=0 && . "$blk" && o="$3" && mkdir -p "$o" \
+    && printf '%s\n' "$FXR/probe/" > "$o/list" && readset_manifest "$o" && readset_local_validate "$o/list" "$o" \
+    && readset_keys "$o/list" "$o" ) >/dev/null 2>&1
+}
+hook_fxroot() { sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$HOOK_SRC" | head -1; }
+# mutate_file <in> <out> <old> <new>: replace exactly one occurrence, require a real change.
+mutate_file() {
+  OLD="$3" NEW="$4" awk '{ i = index($0, ENVIRON["OLD"]); if (i > 0) { $0 = substr($0, 1, i - 1) ENVIRON["NEW"] substr($0, i + length(ENVIRON["OLD"])); n++ } print } END { if (n != 1) exit 3 }' "$1" > "$2" || return 1
+  cmp -s "$1" "$2" && return 1
+  return 0
+}
 
 # --- the arms ---------------------------------------------------------------------------------
 arm_A() {
@@ -452,14 +493,271 @@ arm_J() {
   no "tool row gone on the hook side" "$hk3" "awk" "data/a.txt"
   no "tool row gone on the runner side" "$hr3" "awk" "data/a.txt"
   echo "  J rows: with-tools=$(grep -c . <<<"$hk2") without-tools=$(grep -c . <<<"$hk3") fxroot=$FXR"
+  # --- J, new grammars. Each probe is judged by the hook and by the runner on the SAME tree.
+  local mapper PJ PQ PM PA hm hq rq hj hn
+  mapper="$(dirname "$RUN_ORIG")/core-paths.sh"
+  # (1) `?b207tool`: both sides carry the same rows as the probe without the line (control: a bare awk
+  # line adds a row on BOTH sides), and the hook's decision is not `tool unresolved`. A hook copy that
+  # treats `?` as a keyed name disagrees: it leaves the fixture unresolved.
+  mkdir -p "$WK/J.sb" && printf '#!/bin/sh\necho b207tool-ran\n' > "$WK/J.sb/b207tool" && chmod +x "$WK/J.sb/b207tool"
+  PQ="$WK/J2"; mk_probe "$PQ" stub_named 'data/a.txt' '?b207tool'
+  edit_hook "$PQ" 's/^READSET_UNKEYED_TOOLS="/&b207tool /'
+  hook_dump "$PQ" "$PQ/.githooks/pre-push" "$WK/J2.o"
+  rq="$(PATH="$WK/J.sb:$PATH" bash "$RUN" --root "$PQ" --key-only probe 2>/dev/null)"
+  hj="$(grep -v '^#' "$WK/J2.o/.k/probe" 2>/dev/null)"
+  if [ "$hj" = "$rq" ] && [ -n "$hj" ]; then ok "$CUR: ?b207tool: hook and runner rows agree"; else bad "$CUR: ?b207tool: hook and runner rows differ"; fi
+  no "?b207tool: the hook's decision is not 'tool unresolved'" "$(cat "$WK/J2.o/.kdec" 2>/dev/null)" "tool unresolved" "probe"
+  # hook copy with `?` ignored (treated as a keyed name): it must DISAGREE with the runner.
+  mutate_file "$PQ/.githooks/pre-push" "$PQ/.githooks/pre-push.mut" "'?'*)" "'NEVER?'*)" && \
+    hook_dump "$PQ" "$PQ/.githooks/pre-push.mut" "$WK/J2m.o"
+  hn="$(cat "$WK/J2m.o/.dunres" 2>/dev/null)"
+  yes "mutant hook (? ignored) is caught: it puts ?b207tool in .dunres" "$hn" "?b207tool"
+  no "control: the unmutated hook has no .dunres row for it" "$(cat "$WK/J2.o/.dunres" 2>/dev/null)x" "?b207tool" "x"
+  # (2) a consumer-layout probe: declaration in distribution coordinates, mapped on both sides.
+  PM="$WK/J3"; mk_probe "$PM" stub_named $'core/scripts/x.sh\ndata/a.txt'
+  mkdir -p "$PM/scripts/ai-dlc" && printf 'x\n' > "$PM/scripts/ai-dlc/x.sh" && cp "$mapper" "$PM/scripts/ai-dlc/core-paths.sh"
+  ( cd "$PM" && git add -A && git -c user.name=t -c user.email=t@t commit -qm cons ) >/dev/null 2>&1
+  hook_dump "$PM" "$PM/.githooks/pre-push" "$WK/J3.o"
+  hm="$(grep -v '^#' "$WK/J3.o/.k/probe" 2>/dev/null)"
+  rq="$(bash "$RUN" --root "$PM" --key-only probe 2>/dev/null)"
+  yes "consumer layout: the runner keys the mapped path" "$rq" "scripts/ai-dlc/x.sh${T}"
+  if [ "$hm" = "$rq" ] && [ -n "$hm" ]; then ok "$CUR: consumer layout: hook and runner rows agree on the mapped path"; else bad "$CUR: consumer layout: hook and runner rows differ"; diff <(printf '%s\n' "$hm") <(printf '%s\n' "$rq") | head -10; fi
+  # hook copy with the IDENTITY map: it keys core/scripts/x.sh (absent) and so DISAGREES with the runner.
+  mutate_file "$PM/.githooks/pre-push" "$PM/.githooks/pre-push.mut" '| bash "$mp" --map >' '| cat >' && \
+    hook_dump "$PM" "$PM/.githooks/pre-push.mut" "$WK/J3m.o"
+  hn="$(grep -v '^#' "$WK/J3m.o/.k/probe" 2>/dev/null)"
+  if [ -n "$hn" ] && [ "$hn" != "$rq" ]; then ok "$CUR: mutant hook (identity map) disagrees with the runner"; else bad "$CUR: mutant hook (identity map) was not caught"; fi
+  # (3) a declared mapped file ABSENT in both: runner exit 2 (declared file absent), hook no row and no error.
+  PA="$WK/J4"; mk_probe "$PA" stub_named $'core/scripts/gone.sh\ndata/a.txt'
+  mkdir -p "$PA/scripts/ai-dlc" && cp "$mapper" "$PA/scripts/ai-dlc/core-paths.sh"
+  ( cd "$PA" && git add -A && git -c user.name=t -c user.email=t@t commit -qm cons ) >/dev/null 2>&1
+  hook_dump "$PA" "$PA/.githooks/pre-push" "$WK/J4.o"
+  hn="$(grep -v '^#' "$WK/J4.o/.k/probe" 2>/dev/null)"
+  run_hr "$PA"
+  eq "mapped file absent: runner exit 2" "$RC" 2
+  no "mapped file absent: the hook writes no row for it" "$hn" "gone.sh" "data/a.txt${T}"
+  yes "mapped file absent: the hook's .dunres says why" "$(cat "$WK/J4.o/.dunres" 2>/dev/null)" "declared file absent scripts/ai-dlc/gone.sh"
+  no "control: the present sibling is not reported absent" "$(cat "$WK/J4.o/.dunres" 2>/dev/null)" "absent data/a.txt" "gone.sh"
+  yes "mapped file absent: the hook decision is run (a fresh probe's reason is 'unrecorded'; the .dunres row above carries the cause)" "$(cat "$WK/J4.o/.kdec" 2>/dev/null)" "probe${T}run${T}"
+  no "control: the present sibling gets no .dunres row" "$(cat "$WK/J4.o/.dunres" 2>/dev/null)" "data/a.txt" "gone.sh"
+  # (3b) near-miss: a declared file that is ON DISK but outside the universe (docs/ is an excluded top
+  # where the content-key declaration exists). No .dunres row, runner exit 0. The offender above is the
+  # same probe shape with the file missing on disk.
+  local PE="$WK/J6"
+  mk_probe "$PE" stub_named $'data/a.txt\ndocs/n.md'
+  hook_dump "$PE" "$PE/.githooks/pre-push" "$WK/J6.o"
+  run_hr "$PE"
+  eq "near-miss, declared docs/n.md present on disk: runner exit 0" "$RC" 0
+  eq "near-miss: the hook writes no .dunres row" "$(grep -c . "$WK/J6.o/.dunres")" 0
+  if [ -n "$SCK_SRC" ]; then
+    no "near-miss: docs/n.md is outside the universe, so it has no key row" "$(grep -v '^#' "$WK/J6.o/.k/probe" 2>/dev/null)" "docs/n.md" "data/a.txt${T}"
+  fi
+  # (4) `..` shapes: refused by the runner before it maps, and by the hook before its mapper pre-pass.
+  local dd dn
+  for dd in '../x' 'core/scripts/../x' '/abs/x'; do
+    dn="J5$(printf '%s' "$dd" | cksum | cut -d' ' -f1)"
+    mk_probe "$WK/$dn" stub_named $'data/a.txt\n'"$dd"
+    mkdir -p "$WK/$dn/scripts/ai-dlc" && cp "$mapper" "$WK/$dn/scripts/ai-dlc/core-paths.sh"
+    ( cd "$WK/$dn" && git add -A && git -c user.name=t -c user.email=t@t commit -qm cons ) >/dev/null 2>&1
+    hook_dump "$WK/$dn" "$WK/$dn/.githooks/pre-push" "$WK/$dn.o"
+    yes "'$dd': the hook writes a .dunres row" "$(cat "$WK/$dn.o/.dunres" 2>/dev/null)" "absolute or contains .."
+    run_hr "$WK/$dn"
+    eq "'$dd': runner exit 2" "$RC" 2
+  done
+  no "control: a clean declaration writes no such row" "$(cat "$WK/J4.o/.dunres" 2>/dev/null)x" "absolute or contains .." "x"
   FXR="$FXR_SAVE"
 }
-run_arms() { arm_A; arm_B; arm_C; arm_D; arm_E; arm_F; arm_H; arm_I; }
+# --- K: an UNKEYED-REACHABLE tool (`?name`) ------------------------------------------------------
+# A synthetic tool `b207tool`, an executable stub in a mktemp dir that the arm prepends to PATH when it
+# invokes the runner, and which the PROBE's copied hook lists in READSET_UNKEYED_TOOLS (never the real hook).
+arm_K() {
+  CUR=K
+  local FXR_SAVE="$FXR" sb="$WK/K.bin" P0="$WK/K0" P1="$WK/K1" PB="$WK/K2" r0 r1 rb f hk n
+  FXR="$(hook_fxroot)"
+  [ -n "$FXR" ] || { bad "$CUR: cannot read FXROOT from $HOOK_SRC"; FXR="$FXR_SAVE"; return; }
+  mkdir -p "$sb" && printf '#!/bin/sh\necho b207tool-ran\n' > "$sb/b207tool" && chmod +x "$sb/b207tool" || exit 2
+  mk_probe "$P0" stub_k 'data/a.txt'
+  mk_probe "$P1" stub_k 'data/a.txt' '?b207tool'
+  edit_hook "$P1" 's/^READSET_UNKEYED_TOOLS="/&b207tool /'
+  mk_probe "$PB" stub_k 'data/a.txt' 'awk'
+  OUT="$(PATH="$sb:$PATH" bash "$RUN" --root "$P1" probe 2>&1)"; RC=$?
+  eq "?b207tool with the tool on PATH: exit 0" "$RC" 0
+  yes "?b207tool: the stub ran from the sandbox" "$OUT" "b207tool-ran"
+  r0="$(bash "$RUN" --root "$P0" --key-only probe 2>/dev/null)"
+  r1="$(PATH="$sb:$PATH" bash "$RUN" --root "$P1" --key-only probe 2>/dev/null)"
+  rb="$(bash "$RUN" --root "$PB" --key-only probe 2>/dev/null)"
+  [ -n "$r0" ] && ok "$CUR: baseline key rows are non-empty" || bad "$CUR: baseline key rows empty"
+  # The key rows carry no b207tool row and match the probe WITHOUT the line byte for byte. The hook copy
+  # and the fixture's own files differ between P0 and P1 only by the tools.decl file, so compare row
+  # sets after dropping the tools.decl row, and assert the control: a bare tool line adds a row.
+  eq "?b207tool: --key-only equals the same probe without the line" "$(grep -v '/tools\.decl' <<<"$r1" | grep -v '\.githooks/' )" "$(grep -v '/tools\.decl' <<<"$r0" | grep -v '\.githooks/')"
+  no "?b207tool: no key row names the tool" "$r1" "b207tool" "data/a.txt${T}"
+  yes "control: a bare awk line adds a /awk row" "$rb" "/awk${T}"
+  no "control: the baseline has no /awk row" "$r0" "/awk${T}" "data/a.txt${T}"
+  OUT="$(bash "$RUN" --root "$P1" probe 2>&1)"; RC=$?
+  if grep -qxF b207tool-ran <<<"$OUT"; then bad "$CUR: the stub ran with no PATH prepend (control broken)"; fi
+  eq "?b207tool without the PATH prepend: exit 2" "$RC" 2
+  yes "?b207tool without the PATH prepend: the unkeyed message" "$OUT" "declared tool name (unkeyed) is not on PATH"
+  # Refused forms. The runner exits 2; the probe hook writes a .dunres row for each.
+  for f in '?awk' '?' '?/x' '?a/b' '?a b'; do
+    n="K$(printf '%s' "$f" | cksum | cut -d' ' -f1)"
+    mk_probe "$WK/$n" stub_k 'data/a.txt' "$f"
+    run_hr "$WK/$n"
+    eq "refused '$f': runner exit 2" "$RC" 2
+    hook_dump "$WK/$n" "$WK/$n/.githooks/pre-push" "$WK/$n.o"
+    hk="$(cat "$WK/$n.o/.dunres" 2>/dev/null)"
+    [ -n "$hk" ] && ok "$CUR: refused '$f': the hook wrote a .dunres row" || bad "$CUR: refused '$f': hook .dunres empty"
+  done
+  # Hook side: `?b207tool` in the vocabulary writes no .dtools, .tools or .dunres row (control: bare awk does).
+  hook_dump "$P1" "$P1/.githooks/pre-push" "$WK/K1.o"
+  hook_dump "$PB" "$PB/.githooks/pre-push" "$WK/K2.o"
+  eq "hook: ?b207tool writes no .dunres row" "$(grep -c . "$WK/K1.o/.dunres")" 0
+  eq "hook: ?b207tool writes no .dtools row" "$(grep -c . "$WK/K1.o/.dtools")" 0
+  no "hook: ?b207tool adds no .tools row" "$(cat "$WK/K1.o/.tools" 2>/dev/null)" "b207tool" "/"
+  yes "control, hook: a bare awk line writes a .dtools row" "$(cat "$WK/K2.o/.dtools" 2>/dev/null)" "/awk"
+  # Duplicate lines: the same resolved path twice is ONE tool (exit 0, rows unchanged; control: one line).
+  # Two DIFFERENT paths sharing a basename (bare b207tool from a probe exec-path dir, plus ?b207tool from
+  # PATH) are refused by the runner and recorded in the hook's .dunres.
+  local PD1="$WK/K4" PD2="$WK/K5" PD3="$WK/K6" PD4="$WK/K7" xd="$WK/K.xp"
+  mk_probe "$PD1" stub_named 'data/a.txt' $'awk\nawk'
+  r0="$(bash "$RUN" --root "$PD1" --key-only probe 2>/dev/null)"
+  run_hr "$PD1"; eq "duplicated 'awk' line: exit 0" "$RC" 0
+  eq "duplicated 'awk' line: the awk row equals the single-line probe's row" "$(grep '/awk' <<<"$r0")" "$(grep '/awk' <<<"$rb")"
+  eq "duplicated 'awk' line: exactly one awk row" "$(grep -c '/awk' <<<"$r0")" 1
+  hook_dump "$PD1" "$PD1/.githooks/pre-push" "$WK/K4.o"
+  eq "duplicated 'awk' line: the hook writes no .dunres row" "$(grep -c . "$WK/K4.o/.dunres")" 0
+  eq "duplicated 'awk' line: the hook writes one .dtools row" "$(grep -c . "$WK/K4.o/.dtools")" 1
+  mk_probe "$PD2" stub_k 'data/a.txt' $'?b207tool\n?b207tool'
+  edit_hook "$PD2" 's/^READSET_UNKEYED_TOOLS="/&b207tool /'
+  OUT="$(PATH="$sb:$PATH" bash "$RUN" --root "$PD2" probe 2>&1)"; RC=$?
+  eq "duplicated ?b207tool line: exit 0" "$RC" 0
+  yes "duplicated ?b207tool line: the stub ran" "$OUT" "b207tool-ran"
+  hook_dump "$PD2" "$PD2/.githooks/pre-push" "$WK/K5.o"
+  eq "duplicated ?b207tool line: the hook writes no .dunres row" "$(grep -c . "$WK/K5.o/.dunres")" 0
+  mkdir -p "$xd" && printf '#!/bin/sh\necho other-b207tool\n' > "$xd/b207tool" && chmod +x "$xd/b207tool"
+  mk_probe "$PD3" stub_k 'data/a.txt' $'b207tool\n?b207tool'
+  edit_hook "$PD3" 's/^READSET_UNKEYED_TOOLS="/&b207tool /'
+  edit_hook "$PD3" "s|^READSET_TOOL_XP=\"\"|READSET_TOOL_XP=\"$xd\"|"
+  OUT="$(PATH="$sb:$PATH" bash "$RUN" --root "$PD3" probe 2>&1)"; RC=$?
+  eq "two different b207tool paths: runner exit 2" "$RC" 2
+  yes "two different b207tool paths: the basename message" "$OUT" "share the basename b207tool"
+  hook_dump "$PD3" "$PD3/.githooks/pre-push" "$WK/K6.o"
+  yes "two different b207tool paths: the hook writes a .dunres row" "$(cat "$WK/K6.o/.dunres" 2>/dev/null)" "duplicate basename b207tool"
+  mk_probe "$PD4" stub_k 'data/a.txt' $'?b207tool\nb207tool'
+  edit_hook "$PD4" 's/^READSET_UNKEYED_TOOLS="/&b207tool /'
+  edit_hook "$PD4" "s|^READSET_TOOL_XP=\"\"|READSET_TOOL_XP=\"$xd\"|"
+  hook_dump "$PD4" "$PD4/.githooks/pre-push" "$WK/K7.o"
+  yes "two different paths, unkeyed line first: the hook writes a .dunres row" "$(cat "$WK/K7.o/.dunres" 2>/dev/null)" "duplicate basename b207tool"
+  # ?node with a node -e stub: runs if node is on PATH, else SKIP.
+  if command -v node >/dev/null 2>&1; then
+    mk_probe "$WK/K3" stub_knode 'data/a.txt' '?node'
+    run_hr "$WK/K3"
+    eq "?node with node on PATH: exit 0" "$RC" 0
+    yes "?node: node ran in the sandbox" "$OUT" "node-ran-b207"
+  else
+    echo "  SKIP  $CUR: ?node -- node is not on this PATH, so the ?node run has no subject"
+    ok "$CUR: ?node skipped visibly"
+  fi
+  # The runner holds no copy of the tool dirs: it takes them from the hook's READSET_TOOLS span.
+  n="$(/usr/bin/grep -c '/opt/homebrew/bin' "$RUN_ORIG")" || n=0
+  eq "the runner carries no literal /opt/homebrew/bin line" "$n" 0
+  n="$(/usr/bin/grep -c '/opt/homebrew/bin' "$HOOK_SRC")" || n=0
+  [ "$n" -gt 0 ] && ok "$CUR: control: the hook does carry it" || bad "$CUR: control: the hook carries no /opt/homebrew/bin"
+  FXR="$FXR_SAVE"
+}
+# --- L: DISTRIBUTION coordinates mapped on a CONSUMER ---------------------------------------------
+arm_L() {
+  CUR=L
+  local FXR_SAVE="$FXR" P="$WK/L1" PD="$WK/L2" PM="$WK/L3" PX="$WK/L4" PA="$WK/L5" mapper rows nm
+  mapper="$(dirname "$RUN_ORIG")/core-paths.sh"
+  [ -f "$mapper" ] || { bad "$CUR: no core-paths.sh beside the runner under test"; return; }
+  FXR="tests/fixtures"
+  mk_probe "$P" stub_lcons '!core/scripts/x.sh'
+  printf 'x\n' > "$P/scripts/ai-dlc/x.sh" 2>/dev/null || { mkdir -p "$P/scripts/ai-dlc" && printf 'x\n' > "$P/scripts/ai-dlc/x.sh"; }
+  ( cd "$P" && git add -A && git -c user.name=t -c user.email=t@t commit -qm x ) >/dev/null 2>&1
+  run_hr "$P"
+  eq "consumer layout, core/ declaration: exit 0" "$RC" 0
+  yes "consumer layout: the mapped spelling is listed in the sandbox" "$OUT" "./scripts/ai-dlc/x.sh"
+  no "consumer layout: the declared spelling is NOT in the sandbox" "$OUT" "./core/scripts/x.sh" "./scripts/ai-dlc/x.sh"
+  rows="$(bash "$RUN" --root "$P" --key-only probe 2>/dev/null)"
+  yes "consumer layout: --key-only carries the mapped path" "$rows" "scripts/ai-dlc/x.sh${T}"
+  no "consumer layout: --key-only carries no declared-spelling row" "$rows" "core/scripts/x.sh" "scripts/ai-dlc/x.sh${T}"
+  # Distribution layout, same declaration: NOT mapped (control).
+  FXR="core/fixtures"
+  mk_probe "$PD" stub_ldist '!core/scripts/x.sh'
+  mkdir -p "$PD/core/scripts" "$PD/scripts/ai-dlc" && printf 'x\n' > "$PD/core/scripts/x.sh" && printf 'm\n' > "$PD/scripts/ai-dlc/x.sh"
+  ( cd "$PD" && git add -A && git -c user.name=t -c user.email=t@t commit -qm x ) >/dev/null 2>&1
+  run_hr "$PD"
+  eq "distribution layout, same declaration: exit 0" "$RC" 0
+  yes "distribution layout: the declared spelling is listed" "$OUT" "./core/scripts/x.sh"
+  no "distribution layout: the mapped spelling is NOT listed (not mapped)" "$OUT" "./scripts/ai-dlc/x.sh" "./core/scripts/x.sh"
+  # The mapper's own controls.
+  nm="$(printf 'core/skills/ai-dlc/steps/x.md\ncore/hooks/y.sh\ncore/schemas/z.json\ndocs/n.md\ncore/scripts/\n' | bash "$mapper" --map 2>&1)"
+  rowhas "map: skills -> .claude/skills/" "$nm" ".claude/skills/ai-dlc/steps/x.md"
+  rowhas "map: hooks -> .claude/hooks/" "$nm" ".claude/hooks/y.sh"
+  rowhas "map: schemas -> .claude/schemas/" "$nm" ".claude/schemas/z.json"
+  rowhas "map: a non-core path is unchanged" "$nm" "docs/n.md"
+  rowhas "map: a directory keeps its trailing slash" "$nm" "scripts/ai-dlc/"
+  printf 'core/ci-templates/x\n' | bash "$mapper" --map >/dev/null 2>&1; eq "map: an unrecognised top is exit 2" "$?" 2
+  printf 'core\n' | bash "$mapper" --map >/dev/null 2>&1; eq "map: bare core is exit 2" "$?" 2
+  # A mapped path absent on the consumer is `declared file absent`, naming both spellings.
+  FXR="tests/fixtures"
+  mk_probe "$PA" stub_lcons $'core/scripts/x.sh\ncore/scripts/missing.sh'
+  mkdir -p "$PA/scripts/ai-dlc" && printf 'x\n' > "$PA/scripts/ai-dlc/x.sh"
+  ( cd "$PA" && git add -A && git -c user.name=t -c user.email=t@t commit -qm x ) >/dev/null 2>&1
+  run_hr "$PA"
+  eq "mapped path absent: exit 2" "$RC" 2
+  yes "mapped path absent: names both spellings" "$OUT" "declared file absent: scripts/ai-dlc/missing.sh (declared as core/scripts/missing.sh)"
+  mk_probe "$PX" stub_lcons 'core/ci-templates/x.md'
+  run_hr "$PX"
+  eq "unrecognised core/ top in a declaration: exit 2" "$RC" 2
+  # The runner copied beside NO mapper: exit 2 `mapper absent`.
+  mkdir -p "$WK/L.nomap" && cp "$RUN" "$WK/L.nomap/hermetic-run.sh"
+  OUT="$(bash "$WK/L.nomap/hermetic-run.sh" --root "$P" probe 2>&1)"; RC=$?
+  eq "no mapper beside the runner: exit 2" "$RC" 2
+  yes "no mapper beside the runner: mapper absent" "$OUT" "mapper absent"
+  # control for the line above: the same probe through a copy that HAS the mapper beside it is exit 0.
+  mkdir -p "$WK/L.map" && cp "$RUN" "$WK/L.map/hermetic-run.sh" && cp "$mapper" "$WK/L.map/core-paths.sh"
+  OUT="$(bash "$WK/L.map/hermetic-run.sh" --root "$P" probe 2>&1)"; RC=$?
+  eq "control: the same copy with the mapper beside it: exit 0" "$RC" 0
+  FXR="$FXR_SAVE"
+}
+# --- N: a bare `git` is keyed on the binary that runs --------------------------------------------
+arm_N() {
+  CUR=N
+  local FXR_SAVE="$FXR" P="$WK/N1" xp rows
+  xp="$(/usr/bin/env -u DEVELOPER_DIR -u GIT_EXEC_PATH /usr/bin/git --exec-path 2>/dev/null)"
+  if [ -z "$xp" ] || [ ! -x "$xp/git" ] || [ "$xp/git" = /usr/bin/git ]; then
+    echo "  SKIP  $CUR: no exec-path git distinct from /usr/bin/git on this box ($xp), so the keyed binary and the shim cannot be told apart"
+    ok "$CUR: skipped visibly"; return
+  fi
+  FXR="$(hook_fxroot)"
+  mk_probe "$P" stub_named 'data/a.txt' $'awk\ngit\ngit-upload-pack'
+  rows="$(bash "$RUN" --root "$P" --key-only probe 2>/dev/null)"
+  yes "control: the awk row is present" "$rows" "/awk${T}"
+  yes "bare git keys the exec-path binary" "$rows" "$xp/git${T}"
+  no "bare git does not key /usr/bin/git" "$rows" "/usr/bin/git${T}" "/awk${T}"
+  if [ -x "$xp/git-upload-pack" ]; then yes "git-upload-pack keys in the exec-path dir" "$rows" "$xp/git-upload-pack${T}"
+  else echo "  SKIP  $CUR: $xp has no git-upload-pack"; ok "$CUR: git-upload-pack skipped visibly"; fi
+  FXR="$FXR_SAVE"
+}
+run_arms() { arm_A; arm_B; arm_C; arm_D; arm_E; arm_F; arm_H; arm_I; arm_K; arm_L; arm_N; }
 
 # --- main run -----------------------------------------------------------------------------------
 WK="$WORK/main"; mkdir -p "$WK"
 if [ -z "$HOOK_SRC" ]; then echo "FIXTURE ERROR: no pre-push hook with a READSET_UNIVERSE span in this tree" >&2; exit 2; fi
-run_arms; arm_G; arm_J
+# The main pass runs its arms in parallel subshells, each with its own output and FAILED file, then
+# replays the output in arm order so the transcript reads as before.
+mkdir -p "$WORK/par"
+for _a in A B C D E F H I K L N G J; do
+  ( "arm_$_a" > "$WORK/par/$_a.out" 2>&1; printf '%s' "$FAILED" > "$WORK/par/$_a.failed" ) &
+done
+wait
+for _a in A B C D E F H I K L N G J; do
+  cat "$WORK/par/$_a.out"
+  [ -f "$WORK/par/$_a.failed" ] || { echo "FIXTURE ERROR: arm $_a produced no verdict" >&2; exit 2; }
+  FAILED="$FAILED$(cat "$WORK/par/$_a.failed")"
+done
 MAIN_FAILED="$FAILED"
 
 # --- mutants of the runner ----------------------------------------------------------------------
@@ -469,22 +767,31 @@ mutate() { # mutate <out> <old> <new>: replace exactly one line occurrence, requ
   return 0
 }
 failed_set() { tr ' ' '\n' <<<"$1" | grep -v '^$' | LC_ALL=C sort -u | tr '\n' ' '; }
-run_mutant() { # run_mutant <name> <old> <new>
-  local m="$WORK/mut-$1.sh"
-  mutate "$m" "$2" "$3" || { echo "BROKEN" > "$WORK/mut-$1.res"; return; }
-  ( RUN="$m"; WK="$WORK/m-$1"; mkdir -p "$WK"; VERBOSE=0; FAILED=""; run_arms; failed_set "$FAILED" > "$WORK/mut-$1.res" )
+# run_mutant <name> <arms> <old> <new>: only the mutant's expected arms plus ONE control arm run, so the
+# verdict is "the expected arms fail and the control arm passes".
+run_mutant() {
+  # The mutant lives in its own directory WITH the mapper beside it: the runner resolves core-paths.sh
+  # from its own directory, so a lone copy would fail arm L as `mapper absent` and score every mutant
+  # as an L failure it did not earn. The sibling is asserted present (a mutant verdict is evidence only
+  # about a subject that ran).
+  local m="$WORK/mutdir-$1/hermetic-run.sh"
+  mkdir -p "$WORK/mutdir-$1" && cp "$(dirname "$RUN_ORIG")/core-paths.sh" "$WORK/mutdir-$1/core-paths.sh" || { echo "BROKEN" > "$WORK/mut-$1.res"; return; }
+  mutate "$m" "$3" "$4" || { echo "BROKEN" > "$WORK/mut-$1.res"; return; }
+  ( RUN="$m"; WK="$WORK/m-$1"; mkdir -p "$WK"; VERBOSE=0; FAILED=""; for _a in $2; do "arm_$_a"; done; failed_set "$FAILED" > "$WORK/mut-$1.res" )
 }
 
 if [ "$NESTED" != 1 ]; then
-  run_mutant M1 'if ! grep -qxF -e "HERMETIC-CONSUMED $rr"' 'if false && grep -qxF -e "HERMETIC-CONSUMED $rr"' &
-  run_mutant M2 'mkdir -p "$HR_SB/$HR_FXROOT" && cp -Rp "$HR_FXDIR" "$HR_SB/$HR_FXROOT/$HR_FX" || exit 2' 'cp -Rp "$HR_ROOT/." "$HR_SB/" ; mkdir -p "$HR_SB/$HR_FXROOT/$HR_FX" && cp -Rp "$HR_FXDIR/." "$HR_SB/$HR_FXROOT/$HR_FX/" || exit 2' &
-  run_mutant M3 'env -i PATH=' 'env PATH=' &
+  run_mutant M1 "B D" 'if ! grep -qxF -e "HERMETIC-CONSUMED $rr"' 'if false && grep -qxF -e "HERMETIC-CONSUMED $rr"' &
+  run_mutant M2 "A C D L B" 'mkdir -p "$HR_SB/$HR_FXROOT" && cp -Rp "$HR_FXDIR" "$HR_SB/$HR_FXROOT/$HR_FX" || exit 2' 'cp -Rp "$HR_ROOT/." "$HR_SB/" ; mkdir -p "$HR_SB/$HR_FXROOT/$HR_FX" && cp -Rp "$HR_FXDIR/." "$HR_SB/$HR_FXROOT/$HR_FX/" || exit 2' &
+  run_mutant M3 "F B" 'env -i PATH=' 'env PATH=' &
+  run_mutant M4 "L A" '| bash "$HR_SCRIPT_DIR/core-paths.sh" --map >' '| cat >' &
+  run_mutant M5 "K A" "'?'*)" "'NEVER?'*)" &
   # cwd-invariance: two nested runs of this fixture from different working directories.
   ( cd "$ROOT" && HERMETIC_FX_NESTED=1 bash "$HERE/run.sh" > "$WORK/cwd1.out" 2>&1; echo $? > "$WORK/cwd1.rc" ) &
   ( cd "$(dirname "$RUN")" && HERMETIC_FX_NESTED=1 bash "$HERE/run.sh" > "$WORK/cwd2.out" 2>&1; echo $? > "$WORK/cwd2.rc" ) &
   wait
   CUR=M
-  for pair in "M1:B" "M2:A C D" "M3:F"; do
+  for pair in "M1:B" "M2:A C D L" "M3:F" "M4:L" "M5:K"; do
     mname="${pair%%:*}"; want="$(failed_set "${pair#*:}")"
     got="$(cat "$WORK/mut-$mname.res" 2>/dev/null)"
     if [ "$got" = "BROKEN" ] || [ -z "$got" ] && [ "$want" != "" ] && [ "$got" = "BROKEN" ]; then

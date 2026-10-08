@@ -86,6 +86,7 @@ usage() {
   echo "usage: core-paths.sh --is-core <path> [<manifest>]" >&2
   echo "       core-paths.sh --list [<manifest>]" >&2
   echo "       core-paths.sh --audit-diff <base-ref> [<head-ref>]" >&2
+  echo "       core-paths.sh --map   (distribution-relative paths on stdin, consumer-relative paths on stdout)" >&2
 }
 
 # --- BEGIN SHARED WITH hooks/ai-dlc-core-guard.sh (byte-identical; I20) -------
@@ -125,10 +126,41 @@ to_consumer_glob() {  # <manifest entry> -> consumer-relative glob
 # MODE_DISPATCH_BEGIN
 MODE="${1:-}"
 case "$MODE" in
-  --is-core|--list|--audit-diff) ;;
+  --is-core|--list|--audit-diff|--map) ;;
   *) usage; exit 2 ;;
 esac
 # MODE_DISPATCH_END
+
+# --map: THE DISTRIBUTION-TO-CONSUMER PATH MAP, for declarations. Reads distribution-relative paths on
+# stdin (one per line), prints one consumer-relative path per line, in order. A path not under `core/`
+# is printed unchanged; a trailing `/` is kept. It answers from the tops below and consults no
+# manifest, so it runs on a tree that has none. An unrecognised top (`ci-templates`, which install.sh
+# does not place), a bare `core` and `core/` are exit 2 with nothing mapped after them, so no path is
+# ever sent through to_consumer_glob's catch-all arm. scripts/, fixtures/ and git-hooks/ are spelled
+# here because to_consumer_glob answers a manifest GLOB (scripts/* stays scripts/*), not the place
+# install.sh puts a file; every other recognised top is exactly to_consumer_glob's answer.
+if [ "$MODE" = "--map" ]; then
+  map_one() { # <path> -> prints the consumer path, or returns 2
+    local p="$1" e
+    case "$p" in
+      core|core/) return 2 ;;
+      core/*) ;;
+      *) printf '%s\n' "$p"; return 0 ;;
+    esac
+    e="${p#core/}"
+    case "$e" in
+      scripts/*)   printf 'scripts/ai-dlc/%s\n' "${e#scripts/}" ;;
+      fixtures/*)  printf 'tests/fixtures/%s\n' "${e#fixtures/}" ;;
+      git-hooks/*) printf '.githooks/%s\n' "${e#git-hooks/}" ;;
+      team-roles/*|hooks/*|session-driver/*|schemas/*|rules/*|skills/*) to_consumer_glob "$e" ;;
+      *) return 2 ;;
+    esac
+  }
+  while IFS= read -r line || [ -n "$line" ]; do
+    map_one "$line" || { echo "core-paths: --map: no consumer location for '${line}' (an unrecognised top under core/, or a bare core)" >&2; exit 2; }
+  done
+  exit 0
+fi
 
 TARGET=""
 BASE_REF=""

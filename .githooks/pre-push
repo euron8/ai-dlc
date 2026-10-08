@@ -1160,7 +1160,15 @@ readset_trace_report() { # <out, or empty where this push built no keys>
 # LONGER KEYED, and that is deliberate: any key that depends on PATH reintroduces the defect. Both
 # values are ASSIGNED here, so nothing inherited from the environment can set them; a fixture overrides
 # them after sourcing this block.
+# THE ESCAPE, AND WHAT IT COSTS. A fixture that must run node, npm, npx or claude declares it in
+# tools.decl as `?name`. That tool is NOT keyed: no row is written for it, so which copy runs depends on
+# the INVOKER's PATH while the key does not. The cost is that a changed node does not rerun the fixture;
+# that is the price of not reintroducing a per-invoker key. `?name` is accepted only for a name in
+# READSET_UNKEYED_TOOLS below, the single owner of that vocabulary: the hermetic runner sources this
+# span and reads the same list. Any other `?name` is unresolved.
+# READSET_TOOLS_BEGIN
 READSET_TOOL_DIRS="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+READSET_UNKEYED_TOOLS="node npm npx claude"
 READSET_TOOL_XP=""
 readset_git_exec_path() {
   local g
@@ -1171,6 +1179,7 @@ readset_git_exec_path() {
   done
   return 0
 }
+# READSET_TOOLS_END
 readset_tools() { # <out>
   local out="$1" xp="$READSET_TOOL_XP"
   [ -n "$xp" ] || xp="$(readset_git_exec_path)"
@@ -1203,13 +1212,31 @@ readset_tools() { # <out>
 # fixture is `run`, reason `tool unresolved <name>`, so the runner reports it (exit 2). The record format is
 # unchanged (`#format k1`, `#tools canonical`); `hermetic-run.sh --key-only` prints the same rows.
 readset_declared() { # <list> <out>
-  local list="$1" out="$2" d b t p found h tab
+  local list="$1" out="$2" d b t p found h tab decl lay mp name xp xpd="" seen dk dp
   : > "$out/.drows"; : > "$out/.dtools"; : > "$out/.dunres"; : > "$out/.dfx"
+  lay=cons; [ -d core/scripts ] && lay=dist
   while IFS= read -r d; do
     b="${d%/}"; b="${b##*/}"
     [ -f "${FXROOT}${b}/inputs.decl" ] || continue
     printf '%s\n' "$b" >> "$out/.dfx"
-    RD_DECL="${FXROOT}${b}/inputs.decl" awk -v fx="$b" '
+    decl="${FXROOT}${b}/inputs.decl"
+    tab="$(printf '\t')"
+    # The runner refuses an absolute path or a `..` component BEFORE it maps; refuse the same shapes here,
+    # before the mapper pre-pass, or `core/scripts/../x` maps to a path the runner never sees.
+    if awk '{ sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next; if (substr($0, 1, 1) == "!") $0 = substr($0, 2)
+           if ($0 ~ /^\// || $0 ~ /(^|\/)\.\.(\/|$)/) bad = 1 } END { exit bad ? 0 : 1 }' "$decl"; then
+      printf '%s\tdeclaration path is absolute or contains ..\n' "$b" >> "$out/.dunres"; continue
+    fi
+    if [ "$lay" = cons ] && /usr/bin/grep -q '^!*core/' "$decl" 2>/dev/null; then
+      mp=""
+      for p in scripts/ai-dlc/core-paths.sh core/scripts/core-paths.sh; do [ -f "$p" ] && { mp="$p"; break; }; done
+      if [ -z "$mp" ]; then printf '%s\tmapper absent\n' "$b" >> "$out/.dunres"; continue; fi
+      awk '{ sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next; if (substr($0, 1, 1) == "!") $0 = substr($0, 2); print }' "$decl" \
+        | bash "$mp" --map > "$out/.dmap.$b" 2>/dev/null \
+        || { printf '%s\tmapper refused a declared path\n' "$b" >> "$out/.dunres"; continue; }
+      decl="$out/.dmap.$b"
+    fi
+    RD_DECL="$decl" awk -v fx="$b" '
       BEGIN { while ((getline l < ENVIRON["RD_DECL"]) > 0) {
           sub(/\r$/, "", l); if (l == "" || l ~ /^#/) continue
           if (substr(l, 1, 1) == "!") l = substr(l, 2)
@@ -1219,13 +1246,40 @@ readset_declared() { # <list> <out>
       FNR == 1 { for (p in F) if (p in IN) print fx "\t" p }
       { for (p in D) if (index($0, p "/") == 1) { print fx "\t" $0; r = $0
           while ((i = match(r, /\/[^\/]*$/)) > 0) { r = substr(r, 1, i - 1); if (length(r) <= length(p)) break; print fx "\t" r } } }' "$out/.is" "$out/.is" >> "$out/.drows"
+    # A declared FILE or DIRECTORY (after mapping) that does not exist ON DISK under the repo root is
+    # unresolvable: the runner exits 2 on it (-f / -d, the runner's own test), so the decision must be
+    # `run`. A path that is on disk but outside the universe (an excluded top, a git-ignored file) is NOT
+    # flagged; it keeps its no-row behaviour, and the runner passes it.
+    while IFS="$tab" read -r dk dp; do
+      [ -n "$dp" ] || continue
+      if [ "$dk" = D ]; then [ -d "$dp" ] || printf '%s\tdeclared directory absent %s\n' "$b" "$dp" >> "$out/.dunres"
+      else [ -f "$dp" ] || printf '%s\tdeclared file absent %s\n' "$b" "$dp" >> "$out/.dunres"; fi
+    done <<RD_EOF
+$(awk '{ sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next; if (substr($0, 1, 1) == "!") $0 = substr($0, 2)
+         if ($0 ~ /\/$/) { sub(/\/+$/, ""); print "D\t" $0 } else print "F\t" $0 }' "$decl")
+RD_EOF
     if [ -f "${FXROOT}${b}/tools.decl" ]; then
-      tab="$(printf '\t')"
+      seen=""
+      if [ -z "$xpd" ]; then
+        xp="$READSET_TOOL_XP"
+        [ -n "$xp" ] || xp="$(readset_git_exec_path)"
+        xpd="$xp:$READSET_TOOL_DIRS"
+      fi
       while IFS= read -r t || [ -n "$t" ]; do
         case "$t" in ''|'#'*) continue ;; esac
+        case "$t" in
+          '?'*)
+            name="${t#?}"
+            case "$name" in ''|*[!A-Za-z0-9_.+-]*) printf '%s\t%s\n' "$b" "$t" >> "$out/.dunres"; continue ;; esac
+            case " $READSET_UNKEYED_TOOLS " in *" $name "*) ;; *) printf '%s\t%s\n' "$b" "$t" >> "$out/.dunres" ;; esac
+            case "$seen" in *"|$name=?|"*) ;; *"|$name="*) printf '%s\tduplicate basename %s\n' "$b" "$name" >> "$out/.dunres" ;; *) seen="$seen|$name=?|" ;; esac
+            continue ;;
+        esac
         found=""
-        case "$t" in */*) ;; *) found="$( IFS=:; for p in $READSET_TOOL_DIRS; do [ -x "$p/$t" ] && { printf '%s' "$p/$t"; break; }; done )" ;; esac
+        case "$t" in */*) ;; *) found="$( IFS=:; for p in $xpd; do [ -x "$p/$t" ] && { printf '%s' "$p/$t"; break; }; done )" ;; esac
         if [ -z "$found" ]; then printf '%s\t%s\n' "$b" "$t" >> "$out/.dunres"; continue; fi
+        case "$seen" in *"|${found##*/}=$found|"*) continue ;; *"|${found##*/}="*) printf '%s\tduplicate basename %s\n' "$b" "${found##*/}" >> "$out/.dunres"; continue ;; esac
+        seen="$seen|${found##*/}=$found|"
         printf '%s\t%s\n' "$b" "$found" >> "$out/.dtools"
         grep -qF "$found$tab" "$out/.tools" || { h="$(shasum -a 256 -- "$found" 2>/dev/null | cut -d' ' -f1)"; [ -n "$h" ] && printf '%s\t%s\n' "$found" "$h" >> "$out/.tools"; }
       done < "${FXROOT}${b}/tools.decl"
@@ -1385,7 +1439,7 @@ readset_keys() { # <list> <out>
         else if (tch) { why = "tools changed"; c = "k" }
         else if (first != "") { why = um ? "unmapped: closure changed" : "changed " first; c = "k" }
         else run = 0
-        if (!run && (f in UN)) { run = 1; why = "tool unresolved " UN[f]; c = "k" }
+        if (!run && (f in UN)) { run = 1; why = (substr(UN[f], 1, 7) == "mapper ") ? UN[f] : "tool unresolved " UN[f]; c = "k" }
         # A STALE RECORD WITH A VALID ROW SET AND NO MOVED KEY SKIPS, and its `ok` record is published
         # on this push through `.k.always`, as a seeded one is: c `v` marks it.
         if (!run) { if (!seed && st != "stale" && !mig && !SB) { print f "\tskip\t\t\t" st; continue }

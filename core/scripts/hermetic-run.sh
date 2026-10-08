@@ -12,8 +12,17 @@
 # declared, or prefixed by the sandbox root), or the run FAILS even though the fixture reported PASS.
 # `#` lines and blank lines are ignored; a declaration with NO path is exit 2, because a fixture
 # that declares nothing and passes has passed against an empty tree. `<fixture dir>/tools.decl`
-# lists tool NAMES, one per line, resolved against the fixed tool dirs the pre-push hook keys tools
-# in; a name that resolves nowhere is exit 2, never a silent omission.
+# lists tool NAMES, one per line, resolved against git's exec-path and then the fixed tool dirs the
+# pre-push hook keys tools in (`readset_tools` order); a name that resolves nowhere is exit 2, never a
+# silent omission. A line `?name` names a tool that must be REACHABLE and is NOT keyed: `name` must be
+# in the hook's READSET_UNKEYED_TOOLS (any other `?` line is exit 2), it is resolved with `command -v`
+# on the INVOKER's PATH, and so which copy runs depends on the invoker while the key does not.
+#
+# DISTRIBUTION COORDINATES. `inputs.decl` paths are spelled as in the distribution (`core/scripts/x.sh`).
+# Layout: DISTRIBUTION iff `<root>/core/scripts` is a directory, else CONSUMER. In a consumer every
+# declared path under `core/` is mapped by `core-paths.sh --map` (beside this script) BEFORE anything
+# else reads it; the hook runs the same rule. Errors name both spellings. A mapped path absent on a
+# consumer is `declared file absent`, exit 2, which is intended.
 #
 # WHY REQUIRED EXISTS, AND WHY IT IS A SENTINEL. A fixture that tolerates either of two layouts
 # PASSES with one of them dropped: measured, 48 assertions down to 32, verdict PASS, when one hook
@@ -35,10 +44,12 @@
 # the content key's excluded tops, git-ignored paths and deleted-but-tracked names are treated
 # exactly as the hook treats them. The hook derives the identical rows from the declaration in
 # `readset_keys`; the self-probe fixture asserts the two agree byte-for-byte, because two
-# implementations of one key drift. Without a hook to source, `--key-only` is exit 2.
+# implementations of one key drift. A run with no hook to source is exit 2, key-only or not: the tool
+# dirs and the unkeyed-tool vocabulary come from the hook's READSET_TOOLS span, so there is no copy of
+# them here to drift.
 #
 # THE SANDBOX. A fresh `mktemp -d`, `env -i`, PATH pinned to the fixed tool dirs plus a symlink farm
-# of the declared tools, `AI_DLC_PROJECT_ROOT` set to the sandbox root, and the fixture invoked as
+# of the declared tools (keyed and unkeyed), `AI_DLC_PROJECT_ROOT` set to the sandbox root, and the fixture invoked as
 # `bash core/fixtures/<f>/run.sh` from the sandbox ROOT -- the pre-push pool's own invocation, never
 # a `cd` into the fixture directory (CLAUDE.md measures that as five fabricated failures).
 # The sandbox is removed on exit unless `AI_DLC_HERMETIC_KEEP=1`.
@@ -109,39 +120,83 @@ done
 [ -f "$HR_FXDIR/run.sh" ] || { printf 'hermetic-run: no run.sh in %s\n' "$HR_FXDIR" >&2; exit 2; }
 [ -f "$HR_FXDIR/inputs.decl" ] || { printf 'hermetic-run: %s carries no inputs.decl -- this runner is for declared fixtures only\n' "$HR_FX" >&2; exit 2; }
 
-# THE FIXED TOOL DIRS -- the same list the pre-push hook's readset_tools keys against. A tool outside
-# them has no stable key, so it is refused here rather than resolved from whatever PATH we inherited.
-HR_TOOL_DIRS="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-
-# Parse the declaration. Lines: `[!]path[/]`. Output three lists: files, dirs, required.
+# THE HOOK, AND ITS TOOLS SPAN. The fixed tool dirs, git's exec-path derivation and the unkeyed-tool
+# vocabulary are owned by the pre-push hook's READSET_TOOLS span and sourced from it here, the way the
+# universe span is, so there is one list. A run with no hook is exit 2: a tool outside the span has no
+# stable key, and without it this runner would be guessing which directories count.
 HR_WORK="$(mktemp -d "${TMPDIR:-/tmp}/hermetic-run.XXXXXX")" || exit 2
 trap '[ "${AI_DLC_HERMETIC_KEEP:-0}" = 1 ] || rm -rf "$HR_WORK"' EXIT
-: > "$HR_WORK/files"; : > "$HR_WORK/dirs"; : > "$HR_WORK/required"; : > "$HR_WORK/tools"
-hr_bad=0
+HR_HOOK=""
+for c in .githooks/pre-push core/git-hooks/pre-push; do [ -f "$HR_ROOT/$c" ] && { HR_HOOK="$HR_ROOT/$c"; break; }; done
+[ -n "$HR_HOOK" ] || { printf 'hermetic-run: needs a pre-push hook under %s to take the tool dirs and the universe from\n' "$HR_ROOT" >&2; exit 2; }
+sed -n '/^# READSET_TOOLS_BEGIN$/,/^# READSET_TOOLS_END$/p' "$HR_HOOK" > "$HR_WORK/tools.sh"
+grep -q '^READSET_TOOL_DIRS=' "$HR_WORK/tools.sh" && grep -q '^READSET_UNKEYED_TOOLS=' "$HR_WORK/tools.sh" && grep -q '^readset_git_exec_path() ' "$HR_WORK/tools.sh" \
+  || { printf 'hermetic-run: %s carries no READSET_TOOLS span with READSET_TOOL_DIRS, READSET_UNKEYED_TOOLS and readset_git_exec_path\n' "$HR_HOOK" >&2; exit 2; }
+. "$HR_WORK/tools.sh" || exit 2
+HR_TOOL_DIRS="$READSET_TOOL_DIRS"
+# A bare name resolves against git's REAL exec-path first and then the fixed dirs, exactly as
+# readset_tools does. The sandbox's own `git` is still the first one on its PATH (the system shim),
+# which forwards to the binary keyed here; the key names the binary that runs behind it.
+HR_XP="$READSET_TOOL_XP"
+[ -n "$HR_XP" ] || HR_XP="$(readset_git_exec_path)"
+HR_XPD="$HR_XP:$HR_TOOL_DIRS"
+
+# LAYOUT: one rule, shared with the hook. DISTRIBUTION iff <root>/core/scripts is a directory.
+HR_LAYOUT=consumer
+[ -d "$HR_ROOT/core/scripts" ] && HR_LAYOUT=distribution
+
+# Parse the declaration. Pass 1 reads `[!]path[/]` lines into <req><TAB><path as declared>; pass 2 maps
+# them (consumer layout, any path under core/) and fills the files, dirs and required lists.
+: > "$HR_WORK/files"; : > "$HR_WORK/dirs"; : > "$HR_WORK/required"; : > "$HR_WORK/tools"; : > "$HR_WORK/unkeyed"; : > "$HR_WORK/dl"
+hr_bad=0; hr_needmap=0
 while IFS= read -r line || [ -n "$line" ]; do
   case "$line" in ''|'#'*) continue ;; esac
   req=0; p="$line"
   case "$p" in '!'*) req=1; p="${p#!}" ;; esac
   case "$p" in /*|*/../*|../*|*/..|..) printf 'hermetic-run: %s: declaration path must be root-relative with no .. : %s\n' "$HR_FX" "$line" >&2; hr_bad=1; continue ;; esac
+  printf '%s\t%s\n' "$req" "$p" >> "$HR_WORK/dl"
+  case "$p" in core|core/|core/*) hr_needmap=1 ;; esac
+done < "$HR_FXDIR/inputs.decl"
+if [ "$HR_LAYOUT" = consumer ] && [ "$hr_needmap" = 1 ]; then
+  [ -f "$HR_SCRIPT_DIR/core-paths.sh" ] || { printf 'hermetic-run: %s: mapper absent -- %s/core-paths.sh is needed to map a core/ declaration onto a consumer layout\n' "$HR_FX" "$HR_SCRIPT_DIR" >&2; exit 2; }
+  cut -f2 "$HR_WORK/dl" | bash "$HR_SCRIPT_DIR/core-paths.sh" --map > "$HR_WORK/mp" 2> "$HR_WORK/mp.err" \
+    || { printf 'hermetic-run: %s: a declared core/ path has no consumer location: %s\n' "$HR_FX" "$(cat "$HR_WORK/mp.err")" >&2; exit 2; }
+  [ "$(grep -c . "$HR_WORK/mp")" = "$(grep -c . "$HR_WORK/dl")" ] || { printf 'hermetic-run: %s: the mapper returned a different number of paths than were declared\n' "$HR_FX" >&2; exit 2; }
+  paste "$HR_WORK/dl" "$HR_WORK/mp" > "$HR_WORK/dm"
+else
+  awk -F'\t' '{ print $0 "\t" $2 }' "$HR_WORK/dl" > "$HR_WORK/dm"
+fi
+while IFS="$(printf '\t')" read -r req dp p; do
+  [ -n "$dp" ] || continue
+  # lbl is the path as the error names it: the mapped spelling, and the declared one when they differ.
+  lbl="$p"; [ "$p" = "$dp" ] || lbl="$p (declared as $dp)"
   if [ "${p%/}" != "$p" ]; then
     p="${p%/}"
-    [ -d "$HR_ROOT/$p" ] || { printf 'hermetic-run: %s: declared directory absent: %s/\n' "$HR_FX" "$p" >&2; hr_bad=1; continue; }
+    [ -d "$HR_ROOT/$p" ] || { printf 'hermetic-run: %s: declared directory absent: %s\n' "$HR_FX" "$lbl" >&2; hr_bad=1; continue; }
     printf '%s\n' "$p" >> "$HR_WORK/dirs"
-    [ "$req" = 1 ] && printf '%s/\n' "$p" >> "$HR_WORK/required"
+    [ "$req" = 1 ] && printf '%s/\t%s\n' "$p" "$dp" >> "$HR_WORK/required"
   else
-    [ -f "$HR_ROOT/$p" ] || { printf 'hermetic-run: %s: declared file absent: %s\n' "$HR_FX" "$p" >&2; hr_bad=1; continue; }
+    [ -f "$HR_ROOT/$p" ] || { printf 'hermetic-run: %s: declared file absent: %s\n' "$HR_FX" "$lbl" >&2; hr_bad=1; continue; }
     printf '%s\n' "$p" >> "$HR_WORK/files"
-    [ "$req" = 1 ] && printf '%s\n' "$p" >> "$HR_WORK/required"
+    [ "$req" = 1 ] && printf '%s\t%s\n' "$p" "$dp" >> "$HR_WORK/required"
   fi
-done < "$HR_FXDIR/inputs.decl"
+done < "$HR_WORK/dm"
 if [ -f "$HR_FXDIR/tools.decl" ]; then
   while IFS= read -r t || [ -n "$t" ]; do
     case "$t" in ''|'#'*) continue ;; esac
+    case "$t" in
+      '?'*)
+        un="${t#?}"
+        case "$un" in ''|*[!A-Za-z0-9_.+-]*) printf 'hermetic-run: %s: tools.decl line is not an unkeyed tool name: %s\n' "$HR_FX" "$t" >&2; hr_bad=1; continue ;; esac
+        case " $READSET_UNKEYED_TOOLS " in *" $un "*) ;; *) printf 'hermetic-run: %s: tools.decl line %s names a tool outside READSET_UNKEYED_TOOLS (%s)\n' "$HR_FX" "$t" "$READSET_UNKEYED_TOOLS" >&2; hr_bad=1; continue ;; esac
+        printf '%s\n' "$un" >> "$HR_WORK/unkeyed"
+        continue ;;
+    esac
     case "$t" in */*) printf 'hermetic-run: %s: tools.decl names a path, wants a bare name: %s\n' "$HR_FX" "$t" >&2; hr_bad=1; continue ;; esac
     found=""
-    ( IFS=:; for d in $HR_TOOL_DIRS; do [ -x "$d/$t" ] && { printf '%s\n' "$d/$t"; break; }; done ) > "$HR_WORK/t1"
+    ( IFS=:; for d in $HR_XPD; do [ -x "$d/$t" ] && { printf '%s\n' "$d/$t"; break; }; done ) > "$HR_WORK/t1"
     found="$(cat "$HR_WORK/t1")"
-    [ -n "$found" ] || { printf 'hermetic-run: %s: declared tool %s resolves in none of %s\n' "$HR_FX" "$t" "$HR_TOOL_DIRS" >&2; hr_bad=1; continue; }
+    [ -n "$found" ] || { printf 'hermetic-run: %s: declared tool %s resolves in none of %s\n' "$HR_FX" "$t" "$HR_XPD" >&2; hr_bad=1; continue; }
     printf '%s\n' "$found" >> "$HR_WORK/tools"
   done < "$HR_FXDIR/tools.decl"
 fi
@@ -161,9 +216,7 @@ fi
 # readset_listings grammar, never readdir); every file under the fixture's own directory; and each
 # declared tool by absolute path.
 hr_key_rows() {
-  local hook="" c span
-  for c in .githooks/pre-push core/git-hooks/pre-push; do [ -f "$HR_ROOT/$c" ] && { hook="$HR_ROOT/$c"; break; }; done
-  [ -n "$hook" ] || { printf 'hermetic-run: --key-only needs a pre-push hook under %s to take the universe from\n' "$HR_ROOT" >&2; return 2; }
+  local hook="$HR_HOOK" span
   span="$HR_WORK/universe.sh"
   sed -n '/^# READSET_UNIVERSE_BEGIN$/,/^# READSET_UNIVERSE_END$/p' "$hook" > "$span"
   grep -q '^readset_manifest() ' "$span" || { printf 'hermetic-run: %s carries no READSET_UNIVERSE span with readset_manifest\n' "$hook" >&2; return 2; }
@@ -234,8 +287,29 @@ while IFS= read -r p; do
 done < "$HR_WORK/files"
 hr_no_symlinks "$HR_FXROOT/$HR_FX"
 mkdir -p "$HR_SB/$HR_FXROOT" && cp -Rp "$HR_FXDIR" "$HR_SB/$HR_FXROOT/$HR_FX" || exit 2
+# UNKEYED TOOLS (`?name`) are resolved HERE, after the --key-only exit above, so the key is byte-identical
+# with and without the line. `command -v` on the invoker's PATH must answer an absolute executable path:
+# a function, an alias or a bare word is not one.
+: > "$HR_WORK/tools.unk"
+while IFS= read -r un; do
+  [ -n "$un" ] || continue
+  ur="$(command -v "$un" 2>/dev/null)" || ur=""
+  case "$ur" in /*) [ -x "$ur" ] || ur="" ;; *) ur="" ;; esac
+  [ -n "$ur" ] || { printf 'hermetic-run: %s: declared tool name (unkeyed) is not on PATH: %s\n' "$HR_FX" "$un" >&2; exit 2; }
+  printf '%s\n' "$ur" >> "$HR_WORK/tools.unk"
+done < "$HR_WORK/unkeyed"
 HR_BIN="$HR_WORK/bin"; mkdir -p "$HR_BIN"
-while IFS= read -r t; do [ -n "$t" ] && ln -s "$t" "$HR_BIN/${t##*/}"; done < "$HR_WORK/tools"
+for hr_tl in tools tools.unk; do
+  while IFS= read -r t; do
+    [ -n "$t" ] || continue
+    if [ -e "$HR_BIN/${t##*/}" ] || [ -L "$HR_BIN/${t##*/}" ]; then
+      # The same resolved path declared twice is one tool; two DIFFERENT paths sharing a basename are refused.
+      [ "$(readlink "$HR_BIN/${t##*/}")" = "$t" ] && continue
+      printf 'hermetic-run: %s: two declared tools share the basename %s -- the sandbox farm holds one\n' "$HR_FX" "${t##*/}" >&2; exit 2
+    fi
+    ln -s "$t" "$HR_BIN/${t##*/}"
+  done < "$HR_WORK/$hr_tl"
+done
 
 HR_LOG="$HR_WORK/log"
 ( cd "$HR_SB" && env -i PATH="$HR_TOOL_DIRS:$HR_BIN" HOME="$HR_WORK/home" TMPDIR="$HR_WORK/tmp" \
@@ -248,11 +322,12 @@ cat "$HR_LOG"
 # path spelled as declared or prefixed by the sandbox root, whole-line, so neither a longer path
 # nor a not-found message can satisfy it.
 hr_missing=0
-while IFS= read -r r; do
+while IFS="$(printf '\t')" read -r r rdecl; do
   [ -n "$r" ] || continue
-  rr="${r%/}"
-  if ! grep -qxF -e "HERMETIC-CONSUMED $rr" -e "HERMETIC-CONSUMED $rr/" -e "HERMETIC-CONSUMED $HR_SB/$rr" -e "HERMETIC-CONSUMED $HR_SB/$rr/" "$HR_LOG"; then
-    printf 'hermetic-run: %s: REQUIRED input %s was never consumed -- no HERMETIC-CONSUMED line names it, so the verdict did not depend on it\n' "$HR_FX" "$r"
+  rr="${r%/}"; rd="${rdecl%/}"
+  rlbl="$r"; [ "$r" = "$rdecl" ] || rlbl="$r (declared as $rdecl)"
+  if ! grep -qxF -e "HERMETIC-CONSUMED $rr" -e "HERMETIC-CONSUMED $rr/" -e "HERMETIC-CONSUMED $HR_SB/$rr" -e "HERMETIC-CONSUMED $HR_SB/$rr/" -e "HERMETIC-CONSUMED $rd" -e "HERMETIC-CONSUMED $rd/" "$HR_LOG"; then
+    printf 'hermetic-run: %s: REQUIRED input %s was never consumed -- no HERMETIC-CONSUMED line names it, so the verdict did not depend on it\n' "$HR_FX" "$rlbl"
     hr_missing=1
   fi
 done < "$HR_WORK/required"

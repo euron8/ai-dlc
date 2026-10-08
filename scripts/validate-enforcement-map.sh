@@ -5265,6 +5265,68 @@ else
   fi
 fi
 
+# I66, THE READSET_TOOLS SPAN SENTINELS. The comparison above strips comments, and the sentinels of the
+# tools span are comments, so renaming one in a single hook is invisible to it while the hermetic runner
+# (which extracts the span by those exact strings) exits 2 on every declared fixture of the consumer.
+# Each hook must carry exactly one BEGIN and one END line, END after BEGIN, with at least one code line
+# between them. ONE awk pass reads every file named (the five self-probe files first, then the two hooks)
+# and prints `<file><TAB><reason>` per file, empty reason when the span is sound: a per-file grep/sed/cut
+# chain here cost about fifty forks against the fork budget.
+rt_scan() { # <file>... -> one `<file>\t<reason>` line per file
+  awk '
+    function fin() {
+      if (f == "") return
+      if (b != 1 || e != 1) r = "BEGIN x" b ", END x" e " (want exactly one of each)"
+      else if (el < bl) r = "END (line " el ") is not after BEGIN (line " bl ")"
+      else if (code == 0) r = "no code between the sentinels"
+      else r = ""
+      print f "\t" r
+    }
+    FNR == 1 { fin(); f = FILENAME; b = 0; e = 0; bl = 0; el = 0; code = 0; r = "" }
+    $0 == "# READSET_TOOLS_BEGIN" { b++; bl = FNR; inb = 1; next }
+    $0 == "# READSET_TOOLS_END" { e++; el = FNR; inb = 0; next }
+    inb && $0 !~ /^[ \t]*#/ && $0 !~ /^[ \t]*$/ { code = 1 }
+    END { fin() }' "$@"
+}
+RT_RUNNER="$REPO_ROOT/core/scripts/hermetic-run.sh"
+if [ ! -f "$PP_DIST" ] || [ ! -f "$PP_CONS" ]; then
+  err "I66 (tools span) could not read both pre-push hooks, so the span sentinels were not checked."
+else
+  rt_pd="$(mktemp -d)" || rt_pd=""
+  if [ -z "$rt_pd" ]; then
+    err "I66 (tools span) could not create a scratch directory for its self-probe."
+  else
+    printf 'x\n# READSET_TOOLS_BEGIN\nA=1\n# READSET_TOOLS_END\n' > "$rt_pd/1ok"
+    printf '# READSET_TOOLS_BEGIN\nA=1\n# READSET_TOOLS_END\nz\n' > "$rt_pd/2moved"
+    printf 'x\n# READSET_TOOLS_BEGINS\nA=1\n# READSET_TOOLS_END\n' > "$rt_pd/3renamed"
+    printf '# READSET_TOOLS_BEGIN\n# c\n# READSET_TOOLS_END\n' > "$rt_pd/4empty"
+    printf '# READSET_TOOLS_END\nA=1\n# READSET_TOOLS_BEGIN\n' > "$rt_pd/5swapped"
+    rt_out="$(rt_scan "$rt_pd/1ok" "$rt_pd/2moved" "$rt_pd/3renamed" "$rt_pd/4empty" "$rt_pd/5swapped" "$PP_DIST" "$PP_CONS")"
+    rm -rf "$rt_pd"
+    rt_tab="$(printf '\t')"; rt_bad=0; rt_n=0
+    while IFS="$rt_tab" read -r rt_f rt_r; do
+      rt_n=$((rt_n + 1))
+      case "$rt_n:${rt_r:+bad}" in
+        1:|2:) ;;                   # sound probes must be quiet (a moved span is still sound)
+        3:bad|4:bad|5:bad) ;;       # offenders must be flagged
+        [1-5]:*) rt_bad=1 ;;        # a quiet offender or a flagged near-miss: the check cannot discriminate
+        *) [ -z "$rt_r" ] || err "I66 the READSET_TOOLS span of ${rt_f#$REPO_ROOT/} is unsound: ${rt_r}. The hermetic runner extracts it by those exact sentinel lines and exits 2 on every declared fixture without it." ;;
+      esac
+    done <<RT_EOF
+$rt_out
+RT_EOF
+    { [ "$rt_n" = 7 ] && [ "$rt_bad" = 0 ]; } || err "I66 (tools span) self-probe failed: the sentinel check did not flag a renamed, empty or swapped span, or flagged a moved one (read ${rt_n} of 7 files)."
+  fi
+  # The runner-extraction claim is SEPARATE: it is owed only when the hooks carry a tools span at all,
+  # and a hooks-only scratch copy must therefore copy the runner too (readset-skip's I66 arm does).
+  if [ ! -f "$RT_RUNNER" ]; then
+    err "I66 core/scripts/hermetic-run.sh is absent although the hooks carry the READSET_TOOLS span it extracts, so the runner's sentinel strings were not checked."
+  else
+    grep -qF "/^# READSET_TOOLS_BEGIN\$/,/^# READSET_TOOLS_END\$/p" "$RT_RUNNER" \
+      || err "I66 core/scripts/hermetic-run.sh no longer extracts the span with the literal sentinels '# READSET_TOOLS_BEGIN' / '# READSET_TOOLS_END', so it and the hooks disagree about where the tools span is."
+  fi
+fi
+
 # --- I67: the crosswalk file is ONE string, and no reader restates it ----------
 # THE DEFECT IT REPLACES, measured. LC-N6 is an ERROR whose only compliant output was a row
 # in `extensions/README.md` — a file the distribution ships, `install.sh` scaffolds and
