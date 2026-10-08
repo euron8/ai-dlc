@@ -3637,12 +3637,39 @@ STUB
     # listing -- `fxl<TAB>src<TAB>#listing:<sha256>` -- which only a caller that hands readset_local_rows a
     # manifest of the trace copy can write. The mutant hands it empty manifests, and the same run must then
     # record `fxl<TAB>src<TAB>-`, so the arm is shown to read the caller and not the span.
+    #
+    # THE SHAPE ALONE CANNOT SEE A WRONG CALLER, so the arm also recomputes the value. A call site that
+    # swaps `.now` and `.paths`, manifests another tree, or manifests after the loop still yields SOME
+    # 64-hex listing. The oracle takes a manifest of $BR the way the deriver takes one of its trace copy
+    # (the copy is gone by then -- --local-map traps its removal -- and $BR is the tree it was copied
+    # from), lists `cut -f1 .now` through the same span, and the row must equal its `src/` value byte for
+    # byte. THE GHOST ROW is the discriminating input for the swap: a committed map row naming a file
+    # that is absent on disk enters `.paths` and never `.now`, so a listing taken off `.paths` gains
+    # `ghost.sh`. Without it every BR path is a regular file, the two lists are identical, and the
+    # lmtswap mutant below survives for the corpus's sake rather than the arm's.
+    printf 'other\tsrc/ghost.sh\n' >> "$BR/.ai-dlc-fixture-readsets.tsv"
+    ( cd "$BR" && git add -A && git -c user.email=f@f -c user.name=f commit -qm ghost ) >/dev/null 2>&1 || broken "could not commit the ghost map row"
+    [ ! -e "$BR/src/ghost.sh" ] || broken "src/ghost.sh exists on disk, so the ghost row cannot separate .paths from .now"
     printf '%s\n' core/fixtures/fxl/run.sh src/a.sh src > "$SL/dir.list"
-    lmd_row() { awk -F'\t' '$1 == "fxl" && $2 == "src" { print $3 }' "$LMF" 2>/dev/null | sed 's/^\(#listing:\)[0-9a-f]\{64\}$/\1SHA/'; }
+    lmd_raw() { awk -F'\t' '$1 == "fxl" && $2 == "src" { print $3 }' "$LMF" 2>/dev/null; }
+    lmd_row() { lmd_raw | sed 's/^\(#listing:\)[0-9a-f]\{64\}$/\1SHA/'; }
     TRACE_ARMS=$((TRACE_ARMS+1))
-    lm_seed; LD="$(lm_run "$SL/deriver.sh" "$SL/dir.list" same)"; LD_ROW="$(lmd_row)"
+    lm_seed; LD="$(lm_run "$SL/deriver.sh" "$SL/dir.list" same)"; LD_ROW="$(lmd_row)"; LD_RAW="$(lmd_raw)"
+    LD_WANT="$( cd "$BR" && s="$(mktemp -d "$WORK/ldm.XXXXXX")" \
+      && READSET_MAP=.ai-dlc-fixture-readsets.tsv && READSET_LOCAL=/dev/null && . "$WORK/br.span" \
+      && readset_manifest "$s" && cut -f1 "$s/.now" > "$s/.p" && readset_listings "$s/.p" "$s/ls" \
+      && awk -F'\t' '$1 == "src/" { print $2 }' "$s/ls" )"
+    case "$LD_WANT" in
+      '#listing:'[0-9a-f][0-9a-f][0-9a-f][0-9a-f]*) [ "${#LD_WANT}" -eq 73 ] || broken "the LOCAL oracle's src/ listing is not '#listing:' plus 64 hex: '$LD_WANT'" ;;
+      *) broken "the LOCAL oracle produced no src/ listing: '$LD_WANT'" ;;
+    esac
     case "$LD|$LD_ROW" in
-      "0|3|yes|"*"|#listing:SHA") ok "LOCAL: with the runner's UNIVERSE span a --local-map trace records the directory src as 'fxl	src	#listing:<sha256>'" ;;
+      "0|3|yes|"*"|#listing:SHA")
+        if [ "$LD_RAW" = "$LD_WANT" ]; then
+          ok "LOCAL: with the runner's UNIVERSE span a --local-map trace records the directory src as 'fxl	src	#listing:<sha256>', byte-identical to the listing of the tree's own manifest"
+        else
+          bad "LOCAL: the src row has the listing SHAPE but not the tree's listing: row '$LD_RAW', oracle '$LD_WANT'"
+        fi ;;
       *) bad "LOCAL: expected a '#listing:<sha256>' row for src from a 3-row clean trace, got '$LD' row '$LD_ROW' — $(tail -2 "$WORK/lm.out" | tr '\n' ' ')" ;;
     esac
     LD_ANCH='readset_local_rows "$TREE" "$fx" "$WORK/$fx.set" "$WORK/lmt/.now" "$WORK/lmt/.paths"'
@@ -3658,6 +3685,25 @@ STUB
       case "$LDM|$LDM_ROW" in
         "0|3|yes|"*"|-") ok "LOCAL MUTANT nolmt is KILLED: with the trace copy's manifest withheld from the call site, the same trace records src as '-'" ;;
         *) bad "LOCAL MUTANT nolmt SURVIVED or did not run: '$LDM' row '$LDM_ROW'" ;;
+      esac
+    fi
+    # Mutant lmtswap hands the call site `.paths` where it wants `.now` and the reverse. Both are
+    # non-empty, so the row keeps its listing SHAPE; only the byte conjunct above can kill it.
+    MF="$LD_ANCH" MT='readset_local_rows "$TREE" "$fx" "$WORK/$fx.set" "$WORK/lmt/.paths" "$WORK/lmt/.now"' awk 'BEGIN { f = ENVIRON["MF"]; t = ENVIRON["MT"] }
+      { l = $0; o = ""; while ((p = index(l, f)) > 0) { o = o substr(l, 1, p - 1) t; l = substr(l, p + length(f)) } print o l }' "$SL/deriver.sh" > "$SL/d.lmtswap.sh"
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    if [ "$LD_N" != 1 ] || [ "$LD_Z" != 0 ] || cmp -s "$SL/deriver.sh" "$SL/d.lmtswap.sh"; then
+      bad "LOCAL MUTANT lmtswap: anchor matched $LD_N time(s) (impossible-anchor control $LD_Z), not 1 and 0 -- DID NOT APPLY"
+    else
+      lm_seed; LDS="$(lm_run "$SL/d.lmtswap.sh" "$SL/dir.list" same)"; LDS_ROW="$(lmd_row)"; LDS_RAW="$(lmd_raw)"
+      case "$LDS|$LDS_ROW" in
+        "0|3|yes|"*"|#listing:SHA")
+          if [ "$LDS_RAW" != "$LD_WANT" ]; then
+            ok "LOCAL MUTANT lmtswap is KILLED: with .now and .paths swapped the row keeps its listing shape but reads '$LDS_RAW', not the tree's '$LD_WANT'"
+          else
+            bad "LOCAL MUTANT lmtswap SURVIVED: the swapped call wrote the tree's own listing '$LDS_RAW'"
+          fi ;;
+        *) bad "LOCAL MUTANT lmtswap did not keep the listing shape (row '$LDS_ROW', run '$LDS'), so it tests the shape and not the byte conjunct" ;;
       esac
     fi
   fi
