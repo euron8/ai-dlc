@@ -3933,7 +3933,7 @@ if [ "$CK_N" -ge 1 ]; then
   ck_mut k anyformat 1 'FNR == 1 { ok = ($0 == "#format k1");' 'FNR == 1 { ok = 1;'
   ck_mut l notfail 1 '    if [ "$(cat "$out/$b" 2>/dev/null)" = ok ] ||' '    if [ "$(cat "$out/$b" 2>/dev/null)" != FAIL ] ||'
   ck_mut m nosubtree 1 '        subtree(d "/" a[j]) }' '        }'
-  ck_mut n globaltools 1 '        for (k in K) if (k in FT) {' '        for (k in FT) {'
+  ck_mut n globaltools 1 '(!(f in DECL)) for (k in K) if (k in FT) {' '(!(f in DECL)) for (k in FT) {'
 fi
 
 # ------------------------------------ tool keys do not depend on the invoker ----

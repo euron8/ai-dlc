@@ -247,6 +247,7 @@ core_manifest:
   - core/fixtures/verdict-pass-content/**
   - core/fixtures/wait-beat-liveness/**
   - core/fixtures/wait-stale-deliverable/**
+  - core/fixtures/hermetic-runner/**
   - core/fixtures/whole-read-pool/**
   - core/fixtures/write-format-steering-multiformat/**
   - core/fixtures/updater-session-signals/**

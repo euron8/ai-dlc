@@ -751,7 +751,13 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   detached worktree with every file committed: base 3259 (STABLE 2), tip 3266 (STABLE 3, spread
 #   3265-3266), so +7. Every arm that moved walks `reconcile/self-update-push.sh`: I84 299 -> 301,
 #   I105 87 -> 90, I83 148 -> 149, I21 27 -> 28. HIGH reading 3266 plus the usual 6.
-FORK_BUDGET=3272
+#
+#   RAISED TO 3287 FOR ONE NEW SHIPPED ROOT-CONSULTING SCRIPT, NOT FOR A NEW ARM. `fork-profile.sh
+#   --section by-arm --stable`, base `github/main` 1dc97eeb and the 0.746.0 release tree, each in a
+#   clean detached worktree with every file committed: base 3268 (STABLE 2), tip 3281 (STABLE 3), so
+#   +13. Every arm that moved walks the new `core/scripts/hermetic-run.sh`: I75 361 -> 371 (it hashes
+#   one more AI_DLC_ROOT chain), I84 301 -> 303, I83 149 -> 150. HIGH reading 3281 plus the usual 6.
+FORK_BUDGET=3287
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

@@ -175,3 +175,42 @@ hermetic program's declared keys (`tools.decl`; see `BL-477`), not by widening t
 
 verify: manual -- close when adding one fixture directory to a tree reruns only the fixtures whose keys declare `core/fixtures/` itself.
 
+## BL-477 — `tools.decl` cannot name `node`, which blocks plan action 3
+
+**BLOCKER.** Carried from the 0.746.0 adversary passes. `readset_declared` in `.githooks/pre-push` resolves each `tools.decl` name against
+`READSET_TOOL_DIRS` (`/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`), and `core/scripts/hermetic-run.sh` refuses a
+name that resolves in none of them (exit 2). On this box `node` is `~/.nvm/versions/node/v24.14.0/bin/node`, outside every one of
+those directories, so a declaration naming `node` is unresolvable and the nine node fixtures of plan action 3 cannot be declared.
+**Waiting on an operator ruling.** Options: an absolute path in `tools.decl` keyed by content hash (recommended; the runner's
+bare-name rule and the hook's resolver both change), add the nvm directory to the fixed dirs (reintroduces a per-user key), or
+reorder action 3 so the node fixtures go last.
+
+The receipt seeds a one-fixture repo with `inputs.decl` = `x.txt` and `tools.decl` = `node`, runs the shipped runner with
+`--key-only`, and requires a key row whose path ends in `/node`. Scored at 951678b5: exit 1 (the runner exits 2, `declared tool node
+resolves in none of`). It exits 9 when `node` is not on the receipt's own PATH or the hook or runner cannot be read.
+
+verify: sh H=.githooks/pre-push; S=core/scripts/hermetic-run.sh; [ -f "$H" ] && [ -f "$S" ] || exit 9; W="$(mktemp -d)" && W="$(cd "$W" && pwd -P)" || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; git init -q "$W" || exit 9; mkdir -p "$W/.githooks" "$W/core/fixtures/fx" "$W/scripts/ai-dlc" || exit 9; cp "$H" "$W/.githooks/pre-push" && printf 'exit 0\n' > "$W/core/fixtures/fx/run.sh" || exit 9; command -v node >/dev/null 2>&1 || exit 9; echo x > "$W/x.txt"; printf 'x.txt\n' > "$W/core/fixtures/fx/inputs.decl"; printf 'node\n' > "$W/core/fixtures/fx/tools.decl"; git -C "$W" add -A >/dev/null 2>&1; O="$(bash "$S" --root "$W" --key-only fx 2>/dev/null)" || exit 1; printf '%s\n' "$O" | cut -f1 | grep -q '/node$'
+
+## BL-478 — a declaration in distribution coordinates does not resolve on a consumer
+
+**DEFECT.** Carried from the 0.746.0 adversary passes. `inputs.decl` paths are project-root-relative and are copied from that root.
+The distribution holds `core/scripts/x.sh`; an installed consumer holds `scripts/ai-dlc/x.sh` (`install.sh` splits `core/scripts/` to
+`scripts/ai-dlc/`). A declaration written for this tree names a file absent on a consumer and the runner exits 2 `declared file
+absent`. Inert while zero declarations ship. A path-mapping rule, one table shared by the runner and the hook, must land before any
+real declaration ships.
+
+The receipt builds a consumer-layout tree holding only `scripts/ai-dlc/x.sh`, declares `core/scripts/x.sh`, and requires the
+runner's `--key-only` rows to carry `scripts/ai-dlc/x.sh`. Scored at 951678b5: exit 1.
+
+verify: sh H=.githooks/pre-push; S=core/scripts/hermetic-run.sh; [ -f "$H" ] && [ -f "$S" ] || exit 9; W="$(mktemp -d)" && W="$(cd "$W" && pwd -P)" || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; git init -q "$W" || exit 9; mkdir -p "$W/.githooks" "$W/core/fixtures/fx" "$W/scripts/ai-dlc" || exit 9; cp "$H" "$W/.githooks/pre-push" && printf 'exit 0\n' > "$W/core/fixtures/fx/run.sh" || exit 9; echo ok > "$W/scripts/ai-dlc/x.sh"; printf 'core/scripts/x.sh\n' > "$W/core/fixtures/fx/inputs.decl"; git -C "$W" add -A >/dev/null 2>&1; O="$(bash "$S" --root "$W" --key-only fx 2>/dev/null)" || exit 1; printf '%s\n' "$O" | cut -f1 | grep -qx 'scripts/ai-dlc/x.sh'
+
+## BL-479 — `tools.decl` naming `git` is keyed on the xcrun shim while the hook keys git's real exec-path
+
+**NOTE.** Carried from the 0.746.0 adversary passes. `readset_tools` keys git from `git --exec-path`, the binary that runs. The
+declared-tool resolver walks `READSET_TOOL_DIRS` in order and finds the `/usr/bin/git` xcrun shim first, so a fixture declaring `git`
+is keyed on the shim. Inert while zero declarations ship.
+
+The receipt runs the shipped runner with `--key-only` on a fixture declaring `git` and requires a row for the exec-path binary
+(`env -u DEVELOPER_DIR -u GIT_EXEC_PATH /usr/bin/git --exec-path`). Scored at 951678b5: exit 1, the row is `/usr/bin/git`.
+
+verify: sh H=.githooks/pre-push; S=core/scripts/hermetic-run.sh; [ -f "$H" ] && [ -f "$S" ] || exit 9; W="$(mktemp -d)" && W="$(cd "$W" && pwd -P)" || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; git init -q "$W" || exit 9; mkdir -p "$W/.githooks" "$W/core/fixtures/fx" "$W/scripts/ai-dlc" || exit 9; cp "$H" "$W/.githooks/pre-push" && printf 'exit 0\n' > "$W/core/fixtures/fx/run.sh" || exit 9; XP="$(/usr/bin/env -u DEVELOPER_DIR -u GIT_EXEC_PATH /usr/bin/git --exec-path)" && [ -x "$XP/git" ] || exit 9; echo x > "$W/x.txt"; printf 'x.txt\n' > "$W/core/fixtures/fx/inputs.decl"; printf 'git\n' > "$W/core/fixtures/fx/tools.decl"; git -C "$W" add -A >/dev/null 2>&1; O="$(bash "$S" --root "$W" --key-only fx 2>/dev/null)" || exit 1; printf '%s\n' "$O" | cut -f1 | grep -qxF "$XP/git"

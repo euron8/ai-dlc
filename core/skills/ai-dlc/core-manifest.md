@@ -319,6 +319,7 @@ core_manifest:
   - fixtures/verdict-pass-content/**
   - fixtures/wait-beat-liveness/**
   - fixtures/wait-stale-deliverable/**
+  - fixtures/hermetic-runner/**
   - fixtures/whole-read-pool/**
   - fixtures/write-format-steering-multiformat/**
   - fixtures/artifact-path-migration/**
