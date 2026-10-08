@@ -257,10 +257,16 @@ step "backlog depth (docs/backlog.md stays a queue, not a log)" \
 #     push failure named against a receipt that was fine: the flapping exit landed in the
 #     out-of-population count and took it over its ceiling. The arm now re-reads any non-0/1
 #     base exit once in a fresh checkout and reports the disagreement by name.
+#
+#     `--min-sh-receipts 0` is the floor the work reached: the last `sh`-receipted live entry
+#     was closed and rotated, every live entry declares `verify: manual`, and the arm reports
+#     that state as `R2 all-manual` (entries == manual receipts) rather than as a zero. It
+#     rises again the moment an `sh` receipt is filed, by lowering nothing: the floor binds
+#     the DROP from the registered count, so a ledger that grows past it is not bound by it.
 step "backlog receipts (a receipt a COMMENT can satisfy is not a receipt)" \
   bash scripts/validate-backlog-receipts.sh \
     --max-prose-closable 1 --max-unscorable 28 --max-out-of-population 1 \
-    --max-unstable 0 --min-sh-receipts 1 --min-entries 1
+    --max-unstable 0 --min-sh-receipts 0 --min-entries 1
 
 # 1g. The bash-3.2 / BSD-userland floor for every shipped shell file. GNU-only idioms do not
 #     error here, they return the WRONG ANSWER quietly -- `sed -i` takes the script as a

@@ -46,6 +46,14 @@ carries `BL-483`. It discharges no consumer candidate.
   and the `-r` precheck is not what refuses it) and `Dc-reader-lives`, 72 arms. Mutant `M28` reverts the status check
   and is killed by exactly `Dc-reader-dies`, dealt to shard c; `M23` now also owns `Dc-reader-lives`.
 
+### A backlog whose every live entry declares `verify: manual` is accounted for, not a zero
+
+- Rotating `BL-483` left five live entries, all `verify: manual`, and `validate-backlog-receipts.sh` R2 read that as
+  "ZERO scored receipts" on a correct tree. The scorer now counts manual receipts; when scored and already-passing are
+  both 0 and manual equals the live entry count the arm passes and says `R2 all-manual`. An entry with no receipt line
+  keeps the refusal. The hook's `--min-sh-receipts` floor moves 1 to 0, the count the arm read; `backlog-receipt-binding`
+  gains m8c, its near-miss and its mutant.
+
 ### `pre-push-wall-clock.md` declares its live sections and rotates under the ceiling (BL-483)
 
 - The plan's first section now declares its live sections in the shape `scripts/plan-rotate.sh` requires, and the
