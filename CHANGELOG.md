@@ -19,6 +19,55 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.747.0] - 2026-10-08
+
+Batch 205's release, shipped alone because it edits both pre-push hooks. It executes action 2 of
+`docs/plans/hermetic-fixtures-poc.md`: the hermetic runner, its self-probe fixture, and declared-input dispatch in both hooks.
+**ZERO fixtures carry a declaration, so this release changes no push's behaviour.** It files `BL-477`, `BL-478` and `BL-479`.
+The `hermetic-runner` fixture is UNMAPPED until the hook traces it after the first green push, so it runs on every push until then.
+
+### A hermetic fixture runner, ruled GO with one condition (`docs/poc/hermetic-decision.md`)
+
+- `core/scripts/hermetic-run.sh` runs one fixture in a fresh `mktemp -d` under `env -i` with a pinned PATH, holding ONLY the
+  inputs its `inputs.decl` names, invoked as `bash core/fixtures/<f>/run.sh` from the sandbox root as the pool does. A
+  declaration can be keyed and a missing input fails closed. `tools.decl` names bare tool names, resolved in the hook's fixed dirs.
+- **The condition: a REQUIRED input.** A leading `!` marks an input the verdict must have consumed, and the fixture must print a
+  whole line `HERMETIC-CONSUMED <path>` at the point it uses it. Measured reason: `prepush-pool-depth` tolerates either of two
+  hooks and PASSED with one dropped from its declaration, 48 assertions down to 32, so the sandbox cannot see the loss.
+- `core/fixtures/hermetic-runner` (ships) is the runner's self-probe, both directions, and asserts the runner's `--key-only`
+  rows equal the hook's rows byte for byte.
+
+### Both pre-push hooks dispatch a declared fixture to the runner and key it on its declaration
+
+- A fixture directory carrying `inputs.decl` goes to the runner, and its key record is `readset_declared`'s rows (the declared
+  files, the listing of each declared directory, the fixture's own files, and each declared tool), replacing its traced rows.
+  Declared fixtures are mapped, never stale, excluded from the trace queue, and excluded from `--reconcile`.
+- **No behaviour change with zero declarations**, verified by the hook hand's probe: `.k/<fx>` byte-identical to the base hook's
+  for every fixture, and the decision lines `unrecorded -> skip -> changed -> listing moved` identical under both. I66 holds.
+
+### Three adversary passes, each blocker fixed in the release
+
+- The sandbox exported the operator's `HOME` and `TMPDIR`; both are now sandbox-local, and the root is `pwd -P`.
+- REQUIRED was first a substring grep of the log, vacuous: a one-letter directory is in every log, `a.sh` is inside `a.sh.bak`,
+  and a fixture printing `skipping X: not found` names the path it did not consume. The sentinel line replaced it.
+- `--key-only` took its population from its own walk. It now sources the hook's `READSET_UNIVERSE` span, so excluded tops,
+  ignored paths and deleted-but-tracked names are treated as the hook treats them.
+- The runner path resolves in both layouts under I66; declared fixtures no longer enter the trace queue or `--reconcile`.
+
+### Carried forward (not fixed here)
+
+- `BL-477` (BLOCKER, awaits an operator ruling): `tools.decl` cannot name `node`, because nvm's node is outside the hook's fixed
+  dirs. Plan action 3 (nine node fixtures) is blocked on it.
+- `BL-478`: declarations in distribution coordinates (`core/scripts/x.sh`) do not resolve on a consumer (`scripts/ai-dlc/x.sh`).
+  A path-mapping rule is needed before any real declaration ships.
+- `BL-479`: `tools.decl` naming `git` resolves to the `/usr/bin` xcrun shim while the hook keys git's real exec-path first.
+
+- Gate-found fixes to the runner before this landed: the fixture sources `core/fixtures/lib/preamble.sh`
+  (`validate-fixture-git-env`); the key-rows listing loop no longer feeds a `while` from a pipeline
+  (`procsub-staged-refusal` r2); the no-argument usage refusal names the resolved root, so the
+  script is root-sensitive under `validator-path-resolution`.
+- `FORK_BUDGET` 3272 -> 3287: the new root-consulting script adds 13 forks to the I75, I84 and I83
+  per-file walks (base 3268 against tip 3281, each in a clean detached worktree, `--stable`).
 ## [0.746.0] - 2026-10-08
 
 Batch 206's first release, cut ahead of the batch's own subject at the operator's direction so the hermetic-runner

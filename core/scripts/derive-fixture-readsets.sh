@@ -299,6 +299,8 @@ readset_reconcile_list() {
   awk -F'\t' '$2 == "differs" { print $1 }' "$s/.cdig" > "$s/changed"
   for d in "$fxr"/*/; do
     [ -f "${d}run.sh" ] || continue
+    # A fixture with an inputs.decl is keyed on its declaration and has no trace to make: not unmapped.
+    [ -f "${d}inputs.decl" ] && continue
     d="${d%/}"; b="${d##*/}"
     if ! grep -qxF "$b" "$s/mapped"; then printf '%s\tunmapped\n' "$b"
     elif grep -qxF "$b" "$s/stale"; then printf '%s\tstale\n' "$b"

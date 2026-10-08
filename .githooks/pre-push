@@ -848,6 +848,13 @@ readset_local_validate() { # <list> <out>
     sort -u "$out/.local.valid" "$out/.cdig.valid" > "$out/.local.valid.t" && mv "$out/.local.valid.t" "$out/.local.valid"
   fi
   readset_rows "$out" rows | cut -f1 | sort -u > "$out/.mapped.all"
+  # A fixture carrying `inputs.decl` has no committed rows and needs none: its declaration is its read set
+  # (readset_declared), so it is MAPPED here, before the trace queue below and the unmapped report in
+  # apply_readset_skip read this file. Builtin tests only: an undeclared suite pays no fork for this.
+  while IFS= read -r d; do
+    b="${d%/}"; b="${b##*/}"
+    [ -f "${FXROOT}${b}/inputs.decl" ] && printf '%s\n' "$b" >> "$out/.mapped.all"
+  done < "$list"
   while IFS= read -r d; do
     b="${d%/}"; b="${b##*/}"
     grep -qxF "$b" "$out/.mapped.all" && continue
@@ -1181,6 +1188,55 @@ readset_tools() { # <out>
     | awk '{ p = $0; sub(/^[0-9a-f]+  /, "", p); print p "\t" $1 }' > "$out/.tools"
 }
 
+
+# DECLARED FIXTURES. A fixture directory carrying `inputs.decl` replaces its traced read set with the
+# declaration: one `<fx>\t<path>` row per declared file, per file under a declared directory (trailing `/`),
+# per directory between such a file and the declared one, and the declared directory path itself -- because
+# addk() in readset_keys turns a path that is a directory into the listing key `<dir>/`, which is what makes a
+# NEW file under a declared directory rerun the fixture. A leading `!` (REQUIRED) is runner-only semantics and
+# is stripped. The fixture's own files need no row: OWN[] adds them for every mapped fixture. These rows
+# REPLACE the fixture's committed-map rows in `.krows`, and the fixture joins `.mapped.all` so it is not keyed
+# on the whole tree and is never queued for a trace. It also never goes `stale` (stale means "re-trace", and
+# there is no trace). It takes no scanned tool keys (FT[] is skipped): its tool keys are exactly `tools.decl`,
+# each bare name resolved against READSET_TOOL_DIRS in order and keyed `<abs path>\t<sha>` (hashed here when
+# readset_tools did not already). A name that resolves nowhere lands in `.dunres` and the decision for that
+# fixture is `run`, reason `tool unresolved <name>`, so the runner reports it (exit 2). The record format is
+# unchanged (`#format k1`, `#tools canonical`); `hermetic-run.sh --key-only` prints the same rows.
+readset_declared() { # <list> <out>
+  local list="$1" out="$2" d b t p found h tab
+  : > "$out/.drows"; : > "$out/.dtools"; : > "$out/.dunres"; : > "$out/.dfx"
+  while IFS= read -r d; do
+    b="${d%/}"; b="${b##*/}"
+    [ -f "${FXROOT}${b}/inputs.decl" ] || continue
+    printf '%s\n' "$b" >> "$out/.dfx"
+    RD_DECL="${FXROOT}${b}/inputs.decl" awk -v fx="$b" '
+      BEGIN { while ((getline l < ENVIRON["RD_DECL"]) > 0) {
+          sub(/\r$/, "", l); if (l == "" || l ~ /^#/) continue
+          if (substr(l, 1, 1) == "!") l = substr(l, 2)
+          if (l ~ /\/$/) { sub(/\/+$/, "", l); D[l] = 1 } else F[l] = 1 }
+        for (p in D) print fx "\t" p }
+      FNR == NR { IN[$0] = 1; next }
+      FNR == 1 { for (p in F) if (p in IN) print fx "\t" p }
+      { for (p in D) if (index($0, p "/") == 1) { print fx "\t" $0; r = $0
+          while ((i = match(r, /\/[^\/]*$/)) > 0) { r = substr(r, 1, i - 1); if (length(r) <= length(p)) break; print fx "\t" r } } }' "$out/.is" "$out/.is" >> "$out/.drows"
+    if [ -f "${FXROOT}${b}/tools.decl" ]; then
+      tab="$(printf '\t')"
+      while IFS= read -r t || [ -n "$t" ]; do
+        case "$t" in ''|'#'*) continue ;; esac
+        found=""
+        case "$t" in */*) ;; *) found="$( IFS=:; for p in $READSET_TOOL_DIRS; do [ -x "$p/$t" ] && { printf '%s' "$p/$t"; break; }; done )" ;; esac
+        if [ -z "$found" ]; then printf '%s\t%s\n' "$b" "$t" >> "$out/.dunres"; continue; fi
+        printf '%s\t%s\n' "$b" "$found" >> "$out/.dtools"
+        grep -qF "$found$tab" "$out/.tools" || { h="$(shasum -a 256 -- "$found" 2>/dev/null | cut -d' ' -f1)"; [ -n "$h" ] && printf '%s\t%s\n' "$found" "$h" >> "$out/.tools"; }
+      done < "${FXROOT}${b}/tools.decl"
+    fi
+  done < "$list"
+  [ -s "$out/.dfx" ] || return 0
+  awk -F'\t' 'NR == FNR { d[$1] = 1; next } !($1 in d)' "$out/.dfx" "$out/.krows" > "$out/.krows.t"
+  LC_ALL=C sort -u "$out/.drows" >> "$out/.krows.t"
+  mv "$out/.krows.t" "$out/.krows"
+}
+
 # THE RECORD, `$KEYS_DIR/<fx>.key`: `#format k1`, `#state ok|stale|seeded`, `#tools canonical`
 # (the tool rows were resolved against the fixed tool dirs of readset_tools), then one row per key,
 # C-sorted: `<path>\t<sha256>` for a file, `<path>\t-` for an absent name, `<dir>/\t#listing:<sha256>`
@@ -1231,6 +1287,7 @@ readset_keys() { # <list> <out>
     readset_listings "$pp" "$out/.ls.prev"; lp="$out/.ls.prev"
   fi
   readset_rows "$out" rows | awk -F'\t' -v u="$out/.paths" 'BEGIN { while ((getline l < u) > 0) in_u[l] = 1 } ($2 in in_u)' > "$out/.krows"
+  readset_declared "$list" "$out"
   : > "$out/.krecs"
   if [ "$seed" = 0 ]; then
     readset_key_records "$KEYS_DIR" > "$out/.krecs"
@@ -1239,7 +1296,7 @@ readset_keys() { # <list> <out>
   : > "$out/.khdr"; : > "$out/.kout"
   KN="$out/.now" KLN="$out/.ls.now" KLP="$lp" KLV="$lv" KPP="$pp" KPV="$pv" KV2="$v2" KR="$out/.krows" \
   KM="$out/.mapped.all" KLOC="$out/.local.valid" KC="$out/.krecs" KF="$out/.kl" KH="$out/.khdr" KO="$out/.kout" \
-  KT="$out/.tools" KFT="$out/.ftools" awk -v seed="$seed" -v root="$FXROOT" '
+  KT="$out/.tools" KFT="$out/.ftools" KDF="$out/.dfx" KDT="$out/.dtools" KDU="$out/.dunres" awk -v seed="$seed" -v root="$FXROOT" '
     function rd(file, arr,   l, t) { while ((getline l < file) > 0) { t = index(l, "\t"); arr[substr(l, 1, t - 1)] = substr(l, t + 1) } }
     function kids(file, set,   l, t, p, i) { while ((getline l < file) > 0) { t = index(l, "\t"); p = (t ? substr(l, 1, t - 1) : l)
         while ((i = match(p, /\/[^\/]*$/)) > 0) { set[substr(p, 1, i - 1) SUBSEP substr(p, i + 1)] = 1; p = substr(p, 1, i - 1) } } }
@@ -1278,6 +1335,9 @@ readset_keys() { # <list> <out>
           DN[d] = 1; if (!((d SUBSEP e) in CN)) { CN[d SUBSEP e] = 1; KIDS[d] = KIDS[d] "\n" e }; q = d }
         if (index(p, root) == 1) { r = substr(p, length(root) + 1); i = index(r, "/"); if (i > 1) OWN[substr(r, 1, i - 1)] = OWN[substr(r, 1, i - 1)] "\n" p } }
       while ((getline l < ENVIRON["KM"]) > 0) MAPPED[l] = 1
+      while ((getline l < ENVIRON["KDF"]) > 0) DECL[l] = 1
+      while ((getline l < ENVIRON["KDT"]) > 0) { t = index(l, "\t"); f = substr(l, 1, t - 1); DT[f] = DT[f] "\n" substr(l, t + 1) }
+      while ((getline l < ENVIRON["KDU"]) > 0) { t = index(l, "\t"); f = substr(l, 1, t - 1); if (!(f in UN)) UN[f] = substr(l, t + 1) }
       while ((getline l < ENVIRON["KLOC"]) > 0) { t = index(l, "\t"); LOC[substr(l, 1, t - 1)] = 1 }
       while ((getline l < ENVIRON["KR"]) > 0) { t = index(l, "\t"); f = substr(l, 1, t - 1); ROWS[f] = ROWS[f] "\n" substr(l, t + 1) }
       while ((getline l < ENVIRON["KC"]) > 0) { n = split(l, a, "\t")
@@ -1291,7 +1351,8 @@ readset_keys() { # <list> <out>
         else { n = split(ROWS[f], a, "\n"); for (j = 2; j <= n; j++) addk(a[j])
                n = split(OWN[f], a, "\n"); for (j = 2; j <= n; j++) K[a[j]] = 1 }
         delete TK
-        for (k in K) if (k in FT) { n = split(FT[k], a, "\n"); for (j = 2; j <= n; j++) TK[a[j]] = 1 }
+        if (!(f in DECL)) for (k in K) if (k in FT) { n = split(FT[k], a, "\n"); for (j = 2; j <= n; j++) TK[a[j]] = 1 }
+        n = split(DT[f], a, "\n"); for (j = 2; j <= n; j++) TK[a[j]] = 1
         for (k in TK) K[k] = 1
         has = 0; st = ""; rl = 0
         # A SEEDED WHOLE-TREE KEY ALSO COMPARES EVERY v2 PATH: one deleted since v2 is not in K.
@@ -1312,6 +1373,7 @@ readset_keys() { # <list> <out>
         else if (tch) { why = "tools changed"; c = "k" }
         else if (first != "") { why = um ? "unmapped: closure changed" : "changed " first; c = "k" }
         else run = 0
+        if (!run && (f in UN)) { run = 1; why = "tool unresolved " UN[f]; c = "k" }
         # A STALE RECORD WITH A VALID ROW SET AND NO MOVED KEY SKIPS, and its `ok` record is published
         # on this push through `.k.always`, as a seeded one is: c `v` marks it.
         if (!run) { if (!seed && st != "stale" && !mig) { print f "\tskip\t\t\t" st; continue }
@@ -1319,9 +1381,9 @@ readset_keys() { # <list> <out>
                     if (c == "m" && rl) for (k in R) if (substr(k, 1, 1) != "/") X[k] = 1 }
         else if (!has || um) ns = "ok"
         else if (st == "stale") ns = ((f in LOC) ? "ok" : "stale")
-        else if (fch) ns = "stale"
+        else if (fch && !(f in DECL)) ns = "stale"
         else { ns = "ok"; if (rl) for (k in R) if (!mig || substr(k, 1, 1) != "/") X[k] = 1
-               for (k in LM) if (!grow(k)) ns = "stale" }
+               for (k in LM) if (!grow(k) && !(f in DECL)) ns = "stale" }
         for (k in K) X[k] = 1
         print f "\t" ns > ENVIRON["KH"]
         for (k in X) print f "\t" k "\t" cur(k) > ENVIRON["KO"]
@@ -1559,9 +1621,23 @@ run_fixtures() {
   # is the reading the ordering above wants anyway. A fixture the record has never seen
   # sorts FIRST: an unknown cost is treated as the largest, because the failure mode
   # worth avoiding is a new heavy unit dispatched last.
+  # A FIXTURE THAT CARRIES `inputs.decl` IS RUN BY core/scripts/hermetic-run.sh, in a sandbox holding only
+  # what it declares, and never by its own run.sh directly. The runner is resolved the way
+  # readset_deriver_path resolves the deriver (consumer layout first); a declared fixture whose runner is
+  # absent FAILS with a log line, because falling through to run.sh would run it un-sandboxed and read green.
   PREPUSH_POOL_DEPTH="$((POOL_DEPTH_IN + 1))" AI_DLC_FX_OUT="$out" xargs -P "$FIXTURE_JOBS" -I{} bash -c '
     d="$1"; b="$(basename "$d")"
-    if bash "$d/run.sh" > "$AI_DLC_FX_OUT/.log/$b" 2>&1; then printf ok   > "$AI_DLC_FX_OUT/$b"
+    if [ -f "$d/inputs.decl" ]; then
+      hr=""
+      for c in scripts/ai-dlc/hermetic-run.sh core/scripts/hermetic-run.sh; do
+        [ -f "$c" ] && { hr="$c"; break; }
+      done
+      if [ -z "$hr" ]; then
+        printf "hermetic-run.sh not found at scripts/ai-dlc/ or core/scripts/; %s declares inputs.decl and cannot run without it\n" "$b" > "$AI_DLC_FX_OUT/.log/$b"
+        printf FAIL > "$AI_DLC_FX_OUT/$b"
+      elif bash "$hr" --root "$PWD" "$b" > "$AI_DLC_FX_OUT/.log/$b" 2>&1; then printf ok   > "$AI_DLC_FX_OUT/$b"
+      else                                                                       printf FAIL > "$AI_DLC_FX_OUT/$b"; fi
+    elif bash "$d/run.sh" > "$AI_DLC_FX_OUT/.log/$b" 2>&1; then printf ok   > "$AI_DLC_FX_OUT/$b"
     else                                      printf FAIL > "$AI_DLC_FX_OUT/$b"; fi
     printf "%s %s\n" "$b" "$SECONDS" > "$AI_DLC_FX_OUT/.dur/$b"
   ' _ {} < "$out/.order"

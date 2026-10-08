@@ -6,21 +6,24 @@
 This section is the ONLY CURRENT STATUS RECORD in this file.** Every later status record this
 file acquires is replaced by this block, which a batch rewrites at its close.
 
-**State after the PoC batch:** the proof of concept is BUILT and the decision report is written at
-`docs/poc/hermetic-decision.md`, verdict **GO-WITH-CONDITIONS**, with its evidence under
-`docs/poc/hermetic-census/` (`00-derive.txt`, `01-key-baseline.txt`, `01b-hook-contract.txt`,
-`02-census.tsv`, `03-failclosed.txt`, `05c-escape.txt`, `06a-cost.tsv`, `06a-cost-summary.txt`,
-`06b-replay.tsv`). Everything was measured in a full clone at `PIN` `60b467dc` (`VERSION` 0.744.0,
-`github/main` at the time). The runner prototype `scripts/poc/hermetic-run.sh`, its self-probe
-`scripts/poc/selftest.sh`, the three `inputs.decl`/`tools.decl` sets and the re-rooted copy of
-`prepush-pool-depth/run.sh` were left in that clone and are NOT committed; the report describes them
-and the re-root diff is quoted in it.
+**The operator ruled GO on `docs/poc/hermetic-decision.md`.** Batch 205 executed action 2 of the
+GO list as release **0.746.0**: `core/scripts/hermetic-run.sh` is the runner (declared inputs in
+`inputs.decl`, `!path` marks a REQUIRED input that the fixture must consume by printing a whole
+line `HERMETIC-CONSUMED <path>`, `tools.decl` names tools resolved against the hook's fixed tool
+dirs); `core/fixtures/hermetic-runner` is its self-probe and ships; both pre-push hooks dispatch a
+fixture carrying `inputs.decl` to the runner and key it on its declaration through
+`readset_declared`, declared fixtures are excluded from the trace queue and from `--reconcile`,
+and **I66** holds. **Zero declarations shipped**, so that push changed no behaviour; the
+differential against 0.745.0 over four tree states was byte-identical and a one-declaration control
+differed. Three adversary passes found and the release fixed: a vacuous substring REQUIRED check, a
+key population that ignored the content key's excluded tops, a sandbox with no HOME/TMPDIR, a
+nested directory copy, and a symlink reaching outside the declaration.
 
-**The question this plan answered:** should the fixture suite move from TRACED read-set maps to
-HERMETIC, DECLARED fixture inputs? The report says yes, on the condition that a declaration can mark
-an input REQUIRED and the runner asserts it was consumed, because a fixture that tolerates either of
-two layouts passed with one of them dropped (`prepush-pool-depth`, 48 assertions down to 32, verdict
-PASS). The operator has not yet ruled on the report.
+**What the next batch owes, in the order below.** Action 3 as written is BLOCKED: `tools.decl`
+cannot name `node`, because the hook keys tools only from the fixed dirs and the operator's node is
+under nvm (`BL-477`). Action 4 needs a path-mapping rule first: a declaration spelled
+`core/scripts/x.sh` does not resolve on a consumer, where the file is `scripts/ai-dlc/x.sh`
+(`BL-478`). Resolve both before declaring any real fixture.
 
 Your instructions are four sections. Read all four before acting: `## Start here` (the trees and
 the read/write boundary), `### NEXT ACTIONS — numbered, in order`, `### Ping the operator`, and
@@ -30,47 +33,40 @@ the read/write boundary), `### NEXT ACTIONS — numbered, in order`, `### Ping t
 
 **Three trees, and only one of them is yours to write.**
 
-- **`<scratch>/ai-dlc-poc`** — WRITE. A FULL CLONE you make yourself (action 1). Every command in
-  this plan runs here. Nothing else is written, anywhere, by this session.
-- **`/Users/n8/git/ai-dlc`** — READ ONLY, including every linked worktree under
-  `/Users/n8/git/ai-dlc/.claude/worktrees/`. Batch 204 is running in this checkout concurrently
-  and pushing gated releases from it. **Never work in it, never work in a linked worktree of it,
-  never write it.** A linked worktree is not isolation here: every worktree shares the one
-  `$GITDIR`, and that `$GITDIR` holds the state the batch's gated pushes read and write — the
-  per-fixture key records under `.git/ai-dlc-fixture-keys/` (`.githooks/pre-push:484`), the
-  durations file, the local read-set map (`:673`) and the live-trace lock. A fixture run from a
-  worktree can stale a record the batch is about to read, and a key record the batch writes can
-  acquit a run you are measuring. You may `cat` files under that `.git` to take a baseline
-  (action 2b does); you do not run a fixture, a hook, or a deriver anywhere under that path.
-- **`/Users/n8/git/graph`** — the consumer. READ ONLY. `.claude/rules/consumer-boundary.md` is
-  unconditional; do not edit it, commit to it, or run anything in it. This plan needs nothing
-  from it.
+- **`<scratch>/ai-dlc-poc`** — WRITE. A FULL CLONE you make yourself (action 1), with a `github`
+  remote pointing at GitHub. Every edit and every commit of this plan happens here. Pin it at
+  `github/main`; if a release is unlanded on another session's branch, ask that session for its
+  landed sha before basing on anything else.
+- **`/Users/n8/git/ai-dlc`** — the operator's main checkout. Edit nothing there and run no fixture,
+  hook or deriver there while another batch is pushing from it; check `ListAgents` and ask. The ONE
+  thing it is for is the gated release push (below). Every linked worktree under
+  `/Users/n8/git/ai-dlc/.claude/worktrees/` shares its `$GITDIR` and is bound by the same rule.
+- **`/Users/n8/git/graph`** — the consumer. Read it, never write it. `.claude/rules/consumer-boundary.md` is
+  unconditional. Consumer-layout checks run on a tree built by `bash scripts/install.sh` into an
+  empty directory under the scratchpad, never on the consumer.
 
-**What this session must not edit, even in its own clone, if the edit would ever be pushed:**
-either pre-push hook (`.githooks/pre-push`, `core/git-hooks/pre-push`), the read-set map
-`.ai-dlc-fixture-readsets.tsv`, and any file under `core/` that ships. The runner prototype is a
-STANDALONE wrapper under `scripts/poc/` (a path `scripts/install.sh` does not copy — verify with
-`grep -c 'scripts/poc' scripts/install.sh` returning 0 against a control of
-`grep -c 'core/scripts' scripts/install.sh` returning non-zero) and it invokes fixtures without
-the hooks. Mutants for the fail-closed test
-are made on COPIES under `mktemp -d`, never on the tracked file.
+**The release push is GATED and runs from the main checkout detached at the release commit**, per
+the standing memory ruling for any commit that edits `.githooks/`: the clone carries no
+`core.hooksPath`, so a push from it runs no gate, and a hook release cannot ship ungated. Squash
+the branch to ONE commit whose subject opens with the version; `VERSION`, the `CHANGELOG` heading
+and that subject are one claim. A hook change plus a new fixture directory reruns nearly the whole
+suite; expect the pole-bound wall clock, not a selective run. Confirm the ref moved on origin with
+`git ls-remote --heads` before reporting the release.
 
-**Pushing:** `git push` is forbidden for this session except ONCE, at action 10, to publish this
-plan's updated block and the decision report on the docs branch this file lives on, to GitHub
-through the clone's `github` remote (action 1). The clone carries no `core.hooksPath`, so that
-push runs no hook and touches nothing under the main checkout's `.git`; it is therefore
-independent of batch 204, which the operator has HELD so this PoC has the machine to itself.
+**Never edit, even in the clone, a line a shipped fixture anchors a mutant on without first
+grepping `core/fixtures/*/run.sh` for it** — five fixtures `sed` the hooks' FIXTURE_POOL block, and
+a moved anchor reads as a regression on the gated push.
 
-**Spawned hands:** every `Agent` spawn passes `isolation: "remote"`. A hand that needs this
-session's unpushed clone state (the census TSV, the runner prototype) cannot get it remotely; for
-such a hand, say in its brief why it is local, give it a `mktemp -d` under the scratchpad, and
-forbid `rm -rf` on any variable path in the brief. No hand is given a load generator. Remove every
-worktree a hand leaves before reporting the batch closed.
+**Spawned hands:** every `Agent` spawn passes `isolation: "remote"` where the base commit is on
+GitHub; while the base exists only in the local clone a hand is local, and its brief says why. A
+hand works in a `mktemp -d` under the scratchpad and never deletes it; no `rm -rf` on a variable
+path; no load generator. Builders never run the suite or a heavy fixture while another session
+holds a gate; the lead asks that session for its window first. Remove every worktree a hand leaves
+before reporting the batch closed, checking the lock pid is not a live hand.
 
 **Every timing in this plan is taken on a machine where another gate may be running.** Record
 `uptime`'s 1-minute load beside every number, interleave reps across the two sides being compared,
-and never compare a loaded figure with a solo one. Measured while this file was authored: the load
-average moved from 33 to 11 inside ten minutes.
+and never compare a loaded figure with a solo one.
 
 ### Derive the state; do not trust the numbers below
 
@@ -83,6 +79,8 @@ MAP=.ai-dlc-fixture-readsets.tsv
 find core/fixtures -mindepth 1 -maxdepth 1 -type d | wc -l          # fixture dirs      (249 at 60b467dc)
 ls core/fixtures/*/run.sh | wc -l                                   # drivable fixtures (246)
 ls core/fixtures/*/.dist-only | wc -l                               # dist-only         (67)
+# declared fixtures. CONTROL: core/fixtures/hermetic-runner/run.sh exists (the runner's self-probe, undeclared by design).
+n=0; for d in core/fixtures/*/; do [ -f "$d/inputs.decl" ] && n=$((n+1)); done; echo "DECLARED $n"; ls core/fixtures/hermetic-runner/run.sh   # 0 at 0.746.0
 grep -v '^#' "$MAP" | cut -f1 | sort -u | wc -l                     # mapped fixtures   (236)
 grep -v '^#' "$MAP" | wc -l                                         # map rows          (29955)
 # drivable fixtures with NO map rows. CONTROL: absorbed-specifics-survive has 9 rows.
@@ -150,11 +148,12 @@ rotator.
 ### Ping the operator
 
 Report to the operator on every question, every decision, and on completion including an early
-stop. Specifically: when the three fixtures are chosen (action 3), when action 5a returns anything
-but FAIL (that is the NO-GO finding and the operator decides whether the PoC continues), and when
-the decision report is written. The operator holds batch 204's 0.745.0 release while this PoC
-runs, so report completion promptly: that hold is released on your report. Present a stall as choices with a marked recommendation. Never narrow the scope on your
-own authority: if an action cannot be completed, say what blocked it and deliver the rest.
+stop. Specifically: when BL-477's option is needed (action 3) unless already ruled; when a 5a probe
+returns anything but FAIL on a declared fixture (action 4 or 5), which is the finding the REQUIRED
+marker exists for and the operator decides whether the fixture gets a `!` or the batch stops; and
+when the release has landed on `origin/main`, confirmed by `ls-remote`. Present a stall as choices
+with a marked recommendation. Never narrow the scope on your own authority: if an action cannot be
+completed, say what blocked it and deliver the rest.
 ### Done when
 
 For the PoC batch (satisfied; the observation point is the clone at `PIN`):
@@ -174,7 +173,13 @@ For the PoC batch (satisfied; the observation point is the clone at `PIN`):
 6. This block was re-derived after the report, the plan validator is green, and the docs branch is
    on GitHub, confirmed by `ls-remote`.
 
-For a GO batch: actions 2-7 above, each with the 5a probe named in the batch's release message.
+For batch 205 (action 2, satisfied at 0.746.0): the runner, the self-probe fixture and the dispatch
+branch shipped with zero declarations; `bash core/fixtures/hermetic-runner/run.sh` PASSes from the
+distribution root and from an `install.sh`-built consumer root; the zero-declaration differential
+against 0.745.0 was byte-identical with a one-declaration control that differed.
+
+For the next GO batch: actions 2-7 above, each with the 5a probe named in the batch's release
+message, and BL-477 and BL-478 closed before the first real declaration lands.
 
 ## Hazards
 
