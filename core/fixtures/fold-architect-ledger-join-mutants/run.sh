@@ -25,7 +25,7 @@
 #
 # THE CONTROL HAS A POSITIVE CONJUNCT. The unmutated copy — with the probe bypass applied, so it
 # differs from each subject mutant by the mutation alone — must print the fixture's full
-# `70 ok, 0 FAIL` line. A copy that never ran prints nothing and cannot satisfy it.
+# `72 ok, 0 FAIL` line. A copy that never ran prints nothing and cannot satisfy it.
 #
 # --- THE SHARD SPLIT, AND IT IS A MEASUREMENT RATHER THAN A PREFERENCE --------------------
 # The pre-push suite is POLE-BOUND: its makespan tracks its single longest DIRECTORY, because
@@ -59,7 +59,7 @@
 SHARDS="a b c"
 MUTANTS_a="M1 M2 M3 M4 M5 M6 M19 M20 M25"
 MUTANTS_b="M7 M8 M9 M10 M11 M14 M21 M22 M26 M27"
-MUTANTS_c="M12 M13 M15 M16 M17 M18 M23 M24"
+MUTANTS_c="M12 M13 M15 M16 M17 M18 M23 M24 M28"
 set -uo pipefail
 
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
@@ -189,8 +189,8 @@ probe_verdict() {  # <tree> -> refuses | holds
 # --- CONTROLS -------------------------------------------------------------------------------
 T0="$WORK/t-pristine"; mktree "$T0" || { echo "FIXTURE ERROR: could not build the pristine tree" >&2; exit 2; }
 drive_fx "$T0" "$WORK/c0.out"; c0=$?
-if [ "$c0" -eq 0 ] && grep -q '^fold-architect-ledger-join: 70 ok, 0 FAIL, 0 stood down$' "$WORK/c0.out"; then
-  ok "[C0] pristine copy: 70 ok, 0 FAIL"
+if [ "$c0" -eq 0 ] && grep -q '^fold-architect-ledger-join: 72 ok, 0 FAIL, 0 stood down$' "$WORK/c0.out"; then
+  ok "[C0] pristine copy: 72 ok, 0 FAIL"
 else
   echo "FIXTURE BROKEN: the pristine copy did not pass (rc=$c0) — no mutant verdict is readable" >&2
   sed -n '1,40p' "$WORK/c0.out" >&2; exit 2
@@ -199,8 +199,8 @@ fi
 T1="$WORK/t-bypass"; mktree "$T1" || { echo "FIXTURE ERROR: tree build failed" >&2; exit 2; }
 mut "$T1/$VSL_REL" "$BYPASS_OLD" "$BYPASS_NEW" || { echo "FIXTURE BROKEN: the self-probe bypass DID NOT APPLY" >&2; exit 2; }
 drive_fx "$T1" "$WORK/c1.out"; c1=$?
-if [ "$c1" -eq 0 ] && grep -q '^fold-architect-ledger-join: 70 ok, 0 FAIL, 0 stood down$' "$WORK/c1.out"; then
-  ok "[C1] probe-bypassed, otherwise unmutated copy: 70 ok, 0 FAIL"
+if [ "$c1" -eq 0 ] && grep -q '^fold-architect-ledger-join: 72 ok, 0 FAIL, 0 stood down$' "$WORK/c1.out"; then
+  ok "[C1] probe-bypassed, otherwise unmutated copy: 72 ok, 0 FAIL"
 else
   echo "FIXTURE BROKEN: the probe-bypass control did not pass (rc=$c1)" >&2; sed -n '1,40p' "$WORK/c1.out" >&2; exit 2
 fi
@@ -344,7 +344,7 @@ run_mutant M22-oneshot-row-any-role "Db-full Db-part" "$VSL_REL" 1 \
   '      | [ $sp[] | select((.tool_use_id // "") == $o)'
 # D-c: the sprint-status cross-check dropped. A snapshot saying `bug` is then NOT-OWED on its own.
 # Re-anchored in round v3.4: the call moved into fa_resolve_variant, the one place the order lives.
-run_mutant M23-sprint-status-xcheck-dropped "Dc-disagree" "$VSL_REL" 1 \
+run_mutant M23-sprint-status-xcheck-dropped "Dc-disagree Dc-reader-lives" "$VSL_REL" 1 \
   '    fa_xcheck "$v" "$src" "$3" || return 2' '    true'
 # D-c: the snapshot reader stops skipping fenced blocks; the fenced decoy above the real line wins.
 run_mutant M24-snapshot-reads-fences "Dc-fence" "$VSL_REL" 1 \
@@ -365,6 +365,12 @@ run_mutant M26-unparseable-snapshot-exits-2 "V-legacy-bug V-legacy-none" "$VSL_R
 run_mutant M27-direct-fold-readds-residue-cmd "DF" "$BI_REL" 0 \
   'spells its commands. Type none of them here and run nothing else on the' \
   'spells its commands: first `scripts/ai-dlc/validate-provenance-block.sh <residue> --require-skill bmad-review-adversarial-general`, then the fold command. Run nothing else on the'
+# --- round v3.5: the reader's exit status is read -------------------------------------------
+# A failed snapshot read is refused. Reverting that to the discarded status turns a killed
+# reader back into "no variant", and the fold takes bug from sprint-status: Dc-reader-dies alone.
+run_mutant M28-failed-snapshot-read-is-no-variant "Dc-reader-dies" "$VSL_REL" 1 \
+  '      v="$(fa_snapshot_variant "$2")" || { rc_=$?; echo "FAIL: could not read the pipeline snapshot $2 (reader rc=$rc_); a failed read is not a sprint with no variant." >&2; return 2; }' \
+  '      v="$(fa_snapshot_variant "$2")" || :'
 
 # --- M6's PREMISE: folded into the bullet above it, I32 loses that bullet's own pin -----------
 # I32 reads each Check 17 arm's pin with a greedy `.*--require-skill`, so an arm carrying two pins

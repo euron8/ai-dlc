@@ -276,7 +276,7 @@ fa_sstatus_variant() {  # <sprint-status.yaml> -> the TOP-LEVEL variant value, o
       q = sprintf("%c", 39); f = substr(v, 1, 1)
       if ((f == "\"" || f == q) && length(v) >= 2 && substr(v, length(v), 1) == f) v = substr(v, 2, length(v) - 2)
       print v; exit
-    }' "$1" 2>/dev/null
+    }' "$1"
 }
 
 fa_field() {  # <file> <key> -> the key value in the FIRST provenance block, or empty
@@ -336,7 +336,7 @@ fa_snapshot_variant() {  # <pipeline-snapshot.md> -> the pipeline_variant value,
     index(l, "pipeline_variant:") == 1 {
       v = substr(l, length("pipeline_variant:") + 1); sub(/^[ \t]+/, "", v)
       split(v, w, /[ \t]+/); print w[1]; exit
-    }' "$1" 2>/dev/null
+    }' "$1"
 }
 
 # THE RESIDUE'S READER IS A SIBLING, RESOLVED BESIDE THIS FILE. Both land in one directory in
@@ -351,7 +351,7 @@ fa_xcheck() {  # <resolved variant> <source label> <sprint-status.yaml or empty>
   # it does not remove it. An absent file or an absent top-level `variant:` is no cross-check.
   local ssv
   [ -n "$3" ] && [ -f "$3" ] || return 0
-  ssv="$(fa_sstatus_variant "$3")"
+  ssv="$(fa_sstatus_variant "$3")" || { rc_=$?; echo "FAIL: could not read the sprint-status $3 (reader rc=$rc_); a failed read is not a sprint with no variant." >&2; return 2; }
   [ -n "$ssv" ] || return 0
   [ "$ssv" = "$1" ] && return 0
   echo "FAIL: variant disagreement: snapshot says $1, sprint-status says ${ssv} (variant from $2; sprint-status from $3)." >&2
@@ -372,14 +372,23 @@ fa_resolve_variant() {  # <--variant value or ""> <snapshot path> <sprint-status
   FA_RV=""; FA_RVSRC=""
   if [ -z "$v" ]; then
     src=""
-    [ -f "$2" ] && v="$(fa_snapshot_variant "$2")"
+    # A READ THAT FAILS IS NOT A SNAPSHOT NAMING NO VARIANT. The reader prints nothing on both,
+    # and a discarded exit status turned a killed or unforkable awk into "no line": the fold then
+    # took sprint-status alone, skipped the disagreement check, and could answer NOT-OWED on a
+    # snapshot that says carry-over. Measured under the pre-push pool, visible only through a
+    # mutant whose verdict an empty read changes. Fail closed and name the reader's status.
+    if [ -f "$2" ]; then
+      v="$(fa_snapshot_variant "$2")" || { rc_=$?; echo "FAIL: could not read the pipeline snapshot $2 (reader rc=$rc_); a failed read is not a sprint with no variant." >&2; return 2; }
+    fi
     # A snapshot with no parseable line is not a refusal; it falls through to sprint-status.
     [ -n "$v" ] && src="$2"
   fi
   if [ -n "$v" ]; then
     fa_xcheck "$v" "$src" "$3" || return 2
   else
-    [ -n "$3" ] && [ -f "$3" ] && ssv="$(fa_sstatus_variant "$3")"
+    if [ -n "$3" ] && [ -f "$3" ]; then
+      ssv="$(fa_sstatus_variant "$3")" || { rc_=$?; echo "FAIL: could not read the sprint-status $3 (reader rc=$rc_); a failed read is not a sprint with no variant." >&2; return 2; }
+    fi
     [ -n "$ssv" ] && { v="$ssv"; src="$3"; }
   fi
   FA_RV="$v"; FA_RVSRC="$src"
@@ -761,6 +770,19 @@ JSONL
   fa_resolve_variant "" "$pd/snap-legacy.md" "$pd/ss-none.yaml" 2>/dev/null; rc=$?
   [ "$rc" -eq 0 ] && [ -z "$FA_RV" ] \
     || { echo "FAIL: fold-architect self-probe: no variant in any record resolved to '$FA_RV' (rc=$rc); it must resolve to none, the fold OWED." >&2; bad=1; }
+  # A reader that FAILS is refused, never read as "no variant". Offender: an unreadable snapshot
+  # (mode 000) beside a sprint-status saying bug, which a discarded status resolved to bug from
+  # sprint-status alone. Near-miss: the same snapshot readable resolves to carry-over. Skipped
+  # under root, where mode 000 is readable.
+  if [ "$(id -u)" -ne 0 ]; then
+    cp "$pd/snap-plain.md" "$pd/snap-unreadable.md" && chmod 000 "$pd/snap-unreadable.md"
+    fa_resolve_variant "" "$pd/snap-unreadable.md" "$pd/ss-quoted.yaml" 2>/dev/null; rc=$?
+    [ "$rc" -eq 2 ] || { echo "FAIL: fold-architect self-probe: a snapshot the reader could not open resolved to '$FA_RV' (rc=$rc) instead of being refused." >&2; bad=1; }
+    chmod 644 "$pd/snap-unreadable.md"
+    fa_resolve_variant "" "$pd/snap-unreadable.md" "$pd/ss-quoted.yaml" 2>/dev/null; rc=$?
+    [ "$rc" -eq 2 ] && [ -z "$FA_RV" ] \
+      || { echo "FAIL: fold-architect self-probe: the readable twin of the unreadable snapshot did not reach the disagreement check (rc=$rc, variant='$FA_RV')." >&2; bad=1; }
+  fi
   fa_resolve_variant "" "$pd/snap-plain.md" "$pd/ss-plain.yaml" 2>/dev/null; rc=$?
   [ "$rc" -eq 0 ] && [ "$FA_RV" = carry-over ] && [ "$FA_RVSRC" = "$pd/snap-plain.md" ] \
     || { echo "FAIL: fold-architect self-probe: an agreeing snapshot did not win over sprint-status (rc=$rc, source='$FA_RVSRC')." >&2; bad=1; }
