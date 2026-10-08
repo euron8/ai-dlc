@@ -31,14 +31,28 @@ It takes no parameters and forwards your whole transcript to a stronger reviewer
 returns, and if it contradicts evidence you hold, say so in your deliverable rather than
 switching silently. If the tool is absent or returns an error, continue without it.
 
+**Write your deliverable in chunks and iteratively, never in one write at the end.** The
+deliverable is the result file your brief names, never a subject file you were asked to read or
+edit; if your brief names no result file, you have nothing to chunk. Create it with `Write`
+FIRST, before you have verified anything, carrying its header; append to it or rewrite it after
+each finding, and finish with one rewrite whose header matches its body, before any completion
+line your deliverable section names. If your deliverable section names a completion signal,
+chunk at the result path and write that signal last. If it names none, chunk to the sibling
+draft path `<result>.draft` and land the result path only with your final whole-file `Write`,
+so no join ever reads a partial result; delete nothing. Where your deliverable section says the
+file is written once, write it once and complete, and chunk nothing. Where it says you append
+to an existing record, append, and never `Write` over it. If an `advisor` tool is available to
+you, also call it before the first chunk and before the final rewrite, in addition to the calls
+the paragraph above names.
+
 ## Contract
 
 Read `.claude/team-roles/dev.md` and follow it IN FULL — identity, ownership,
 responsibilities, constraints, context loading, workflow, and escalation. This
 role adds nothing to and removes nothing from the Dev contract except the
-session-setup declarations (model and effort) above. The verification and advisor paragraphs
-above are byte-identical copies of the ones in `dev.md`, carried in every role contract, so
-they add nothing either. There is no second copy of the Dev rules here on purpose:
+session-setup declarations (model and effort) above. The verification, advisor and
+chunked-write paragraphs above are byte-identical copies of the ones in `dev.md`, carried in
+every role contract, so they add nothing either. There is no second copy of the Dev rules here on purpose:
 `dev.md` is the single source of truth for how a Dev teammate behaves. This role is
 that same teammate on the key this file names.
 

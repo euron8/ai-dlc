@@ -31481,3 +31481,72 @@ rotator cannot tell what is spent. The next edit to that plan of any size blocks
 declaration, then rotate.
 
 verify: sh f=docs/plans/pre-push-wall-clock.md; [ -f "$f" ] || exit 0; o="$(bash scripts/plan-rotate.sh "$f" 2>&1)"; grep -qF 'REFUSING' <<<"$o" && exit 1; [ "$(wc -c < "$f")" -lt 140000 ]
+## BL-484 — role contracts carry no chunked-write instruction, and the advisor paragraph fires only at the first write
+
+**LANDED (v0.749.0, verified 9c7c9e86).** The paragraph is in all 18 role contracts (one md5, 18 of 18, directly after
+the advisor paragraph), `I123` and `I124` bind it and the party-seat section with both-direction probes and the
+`derived-fence-binding` three-way drop matrix (66 assertions PASS), the receipt exits 0 on tip against 1 at base and on
+four wrong builds, and the consumer's own receipt (`grep -q -i -F 'in chunks'` over the installed roles) is satisfied on
+an `install.sh` scratch tree, 18 of 18, against 0 of 18 at `dd7ee999`.
+
+**DEFECT.** Filed by the consumer as `PC-S317-ROLE-CONTRACTS-CARRY-NO-CHUNKED-WRITE-INSTRUCTION-AND-THE-ADVISOR-PARAGRAPH-FIRES-ONLY-AT-FIRST-WRITE`,
+at the operator's direction: every role contract tells its agent to write the deliverable in chunks and iteratively, and
+to consult the advisor at that cadence. The consumer measured on its installed `0.743.0`; re-derived on `758c461d`, the
+filing makes five claims.
+
+- **Party seats never write early: DEAD on tip.** `architect.md`, `dev.md`, `pm.md` and `tea.md` have carried a
+  byte-identical `## As a party seat — write early, close with one marker` section since `0.744.0`: header first with
+  `Write`, one append per finding, one final `seat-complete:` line. No arm bound those four copies.
+- **No other role has a write-early rule: SURVIVES.** Eleven of the 18 role files carry no write-early language at all
+  (analyst, cis, code-reviewer-escalated, dev-escalated, gate-adjudicator, ops, pm-escalated, protected-path-editor,
+  remediator, sm, ux). Adversary, code-reviewer and qa say "header first and append" inside one deliverable section only.
+- **Zero of 18 carry `in chunks`: SURVIVES.** `grep -il 'in chunks'` over `core/team-roles/*.md` at `758c461d` returns 0.
+  The consumer's receipt keys on that literal.
+- **The advisor paragraph fires only at the first edit or write: SURVIVES.** The `I122` paragraph says "before your
+  first edit or write, and again before you write your deliverable or verdict", which a read-heavy seat reaches late.
+- **A plain join consumes a chunked file as finished: SURVIVES, and chunked writes make it common.** Without
+  `--complete`, `wait-for-deliverable.sh` reports DELIVERED on the first non-empty write since the join armed. The
+  consumer saw a cross seat's file DELIVERED at 1,678 bytes with the agent still running, before a 4,008-byte final
+  write.
+
+**The plain joins.** Twelve lead-side join sites under `core/skills/ai-dlc/steps/` pass no `--complete`:
+`_dispatch-protocol.md:108`, `_gate-procedures.md:116`, `:219`, `:243`, `:895` and `:1074`, `handoff.md:30`,
+`carry-over-evaluation.md:29`, `discovery.md:27`, `requirements.md:32`, `gate-validation.md:2203` and
+`implementation.md:107`. Two more plain joins exist. `route.md:82` makes "the same call without `--complete`" for
+any deliverable that is not a seat, shard or cross file. `rule-bodies/rule-24.md:52` joins the analyst part files
+plainly and then `cat`s them into the canonical artifact. For all fourteen sites, no result path carries a partial,
+so the plain join is safe and needs no edit. The completion rule below is what makes that true.
+
+**FIX.** One paragraph, byte-identical in all 18 role files, one blank line after the `I122` advisor paragraph's closing
+line:
+
+> **Write your deliverable in chunks and iteratively, never in one write at the end.** The deliverable is the result
+> file your brief names, never a subject file you were asked to read or edit; if your brief names no result file, you
+> have nothing to chunk. Create it with `Write` FIRST, before you have verified anything, carrying its header; append
+> to it or rewrite it after each finding, and finish with one rewrite whose header matches its body, before any
+> completion line your deliverable section names. If your deliverable section names a completion signal, chunk at the
+> result path and write that signal last. If it names none, chunk to the sibling draft path `<result>.draft` and land
+> the result path only with your final whole-file `Write`, so no join ever reads a partial result; delete nothing.
+> Where your deliverable section says the file is written once, write it once and complete, and chunk nothing. Where
+> it says you append to an existing record, append, and never `Write` over it. If an `advisor` tool is available to
+> you, also call it before the first chunk and before the final rewrite, in addition to the calls the paragraph above
+> names.
+
+The anchor rule: the paragraph replaces its own opener only where that opener occurs exactly once in the file. The four
+party-seat sections' step 1 now cites the paragraph instead of restating it. The completion rule is what keeps the
+plain joins safe. A role with a completion signal writes it last. A role without one never exposes a partial at the
+result path. The write-once clause reconciles `gate-adjudicator.md`, whose constraint now reads "One write: the verdict
+JSON or, as a shard, your part file, each complete, never a draft." Arm `I123` binds the paragraph. It must appear exactly once per role file,
+byte-identical to the modal copy, directly after the `I122` closer, and nowhere else under `core/` outside
+`core/fixtures/`. Arm `I124` binds the party-seat section across exactly those four files.
+
+The receipt copies the tracked tree to a `mktemp` directory and runs the COPY's own validator with `--arms I123`. The
+unmodified copy must exit 0 (else 1). It then strips the paragraph from `ux.md` in the copy and renames the file to
+`ux-bl484-probe.md`, a path the live tree must not hold (exit 9 otherwise, and exit 9 if the strip left the opener). The
+run must exit non-zero (else 2) and name that path (else 3). Scored under `set -uo pipefail` on copies of the named
+tree, with `tea.md` mutated on the arm's tree `793fb026`. Base `758c461d` read 1, because `--arms` selects nothing and
+the clean copy fails. Tip read 0. Four mutants each read 1: 17 of 18, the advisor sentence removed, the whole block
+re-wrapped, and the opener respelled "never in a single write". In every mutant, the copy's own `I123` named
+`core/team-roles/tea.md`.
+
+verify: sh v=scripts/validate-enforcement-map.sh; r=core/team-roles; p=ux-bl484-probe.md; [ -f "$v" ] && [ -f "$r/ux.md" ] || exit 9; [ ! -e "$r/$p" ] || exit 9; W="$(mktemp -d)" || exit 9; git ls-files -z | tar -c --null -T - -f - | tar -x -C "$W" -f - || exit 9; o="$(cd "$W" && bash "$v" --arms I123 2>&1)"; rc=$?; [ "$rc" -eq 0 ] || exit 1; awk '/^\*\*Write your deliverable in chunks and iteratively/{s=1} s&&/^$/{s=0; next} !s' "$W/$r/ux.md" > "$W/$r/$p" && mv "$W/$r/ux.md" "$W/ux.md.moved" || exit 9; grep -qF 'in chunks and iteratively' "$W/$r/$p" && exit 9; o="$(cd "$W" && bash "$v" --arms I123 2>&1)"; rc=$?; [ "$rc" -ne 0 ] || exit 2; grep -qF "$r/$p" <<<"$o" || exit 3; exit 0

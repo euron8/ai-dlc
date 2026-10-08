@@ -757,7 +757,19 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   clean detached worktree with every file committed: base 3268 (STABLE 2), tip 3281 (STABLE 3), so
 #   +13. Every arm that moved walks the new `core/scripts/hermetic-run.sh`: I75 361 -> 371 (it hashes
 #   one more AI_DLC_ROOT chain), I84 301 -> 303, I83 149 -> 150. HIGH reading 3281 plus the usual 6.
-FORK_BUDGET=3287
+#
+#   RAISED TO 3310 FOR TWO NEW ARMS, I123 AND I124. `fork-profile.sh --stable --section by-arm`,
+#   base `origin/main` dd7ee999 then the b206-rc-arm tip, interleaved base/tip/base/tip in ONE
+#   worktree at the same path, taken BOTH ways. Under `env -i`: base 3276 (STABLE 2) and 3275
+#   (STABLE 3), tip 3298 (STABLE 2) and 3298 (STABLE 3). With the caller's environment inherited,
+#   which is how `validator-fork-budget` invokes the profiler: base 3281 (STABLE 2) and 3280
+#   (STABLE 3), tip 3304 (STABLE 2) and 3303 (STABLE 2). So +23 either way. I123 0 -> 8 is the
+#   chunked-write paragraph arm; I124 0 -> 15 (16 with the environment inherited) is the party-seat
+#   section arm, its half-B control included. THE TWO METHODS DIFFER BY 5 ON ONE TREE -- I120 0 -> 4
+#   and I124 15 -> 16 with the environment inherited -- so a budget set from an `env -i` reading
+#   (3298 + 6 = 3304) sits at ZERO headroom under the gate, which read exactly 3304 on its first solo
+#   run. The budget is set from the gate's own method. HIGH reading 3304 plus the usual 6.
+FORK_BUDGET=3310
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
@@ -13024,6 +13036,406 @@ $i122_hits
 EOF
       [ -z "$i122_extra" ] || err "I122: file(s) outside core/team-roles/*.md carry the advisor opener sentence:$i122_extra. Half A binds only the role files, so a copy anywhere else drifts unbound and teaches its own version of the rule to whichever agent reads it. Point that file at the role contract instead of copying the paragraph."
     fi
+  fi
+fi
+
+# --- I123: every role contract carries the chunked-write paragraph once, byte-identical, directly after the advisor paragraph, and no other file carries it ---
+# WHAT IT BINDS. Every file matching core/team-roles/*.md carries one paragraph whose first line
+# opens **Write your deliverable in chunks and iteratively, never in one write at the end.** It
+# tells a teammate to create its result file first and grow it after each finding, that the file
+# is a draft until its own deliverable section's completion signal, and to consult the advisor
+# tool before the first chunk and the final rewrite. The paragraph CITES the advisor paragraph
+# ("the paragraph above"), so its position is part of its meaning: it must sit directly after
+# I122's closing line with exactly one blank line between.
+#
+# BUILT AS I121 AND I122 ARE, AND FOR THEIR REASONS, which I121's header states and which are not
+# restated: the population is the glob install.sh copies, the opener is a WHOLE LINE with a blank
+# line above it, the whole block is compared against the MODAL copy, and eighteen identical copies
+# of wrong text pass by design.
+#
+# FOUR DIFFERENCES FROM I122, EACH FOR A MEASURED REASON.
+#   1  THE BLOCK ENDS AT THE FIRST BLANK LINE, not at a closing sentence. Its last line is one
+#      short word, which is a weak key, and removing the advisor sentence would take a closing
+#      key with it and score UNCLOSED rather than DRIFT. A blank-line end makes every body edit,
+#      including an appended sentence, a DRIFT, so there is no TRAILING or UNCLOSED state.
+#   2  POSITION. The line two above the opener must be I122's closing line, spelled here rather
+#      than read from i122_cl because `--arms I123` runs this unit alone. A copy anywhere else
+#      in the file is MISPLACED, a state distinct from MISSING.
+#   3  FENCED. An opener inside a ``` or ~~~ fence is a quotation, not an instruction, and is
+#      reported as such. Measured before this was keyed: every role file has an even count of
+#      fence-marker lines, and the opener sits outside a fence in all eighteen, so the fence
+#      tracker cannot mis-score a real copy on the shipped tree.
+#   4  THE EMPTY POPULATION IS REFUSED BY A FUNCTION THE PROBE ALSO CALLS, so the refusal is
+#      proven able to fire rather than asserted in prose.
+#   5  THE OPENER KEY IS A LINE THAT BEGINS WITH THE BOLD SENTENCE, not a whole fixed first line.
+#      The words after the sentence on that line belong to the body, which half A already
+#      compares; keying on them too would score a rewrapped body MISSING instead of DRIFT.
+#
+# TWO HALVES, NOT THREE. I121's half C resolves the validator path its paragraph names. This
+# paragraph names no script path, so there is no claim against the tree to resolve.
+#   A  every population file carries the paragraph EXACTLY ONCE, unfenced, as its own paragraph,
+#      directly after the advisor paragraph, and every copy matches the modal copy byte-for-byte.
+#   B  no copy of the opener sentence exists outside the population, over I121's six roots, with
+#      core/fixtures/ excluded and THIS FILE exempted after a control finds it.
+#
+# I121, I122 AND I123 MUST NOT SATISFY EACH OTHER. derived-fence-binding drops each paragraph
+# from every role file in turn. Dropping I121's or I123's leaves the other two arms green.
+# Dropping I122's CANNOT leave this arm green, by construction: the position this arm requires
+# is defined by I122's closing line, which that drop deletes. That cell instead requires this arm
+# to report MISPLACED and NOT MISSING -- which proves the arm found its paragraph by its own
+# opener rather than by reading the advisor paragraph's text.
+#
+# NOT A VOCABULARY, so no vocabulary marker. The subject is one paragraph's BYTES.
+#
+# THE MEASURED FALSE-POSITIVE SET FOR HALF B, AND HOW IT REACHED THAT SIZE. Over the six roots
+# with nothing excluded, `grep -rlF` on the opener sentence returned the eighteen role files and
+# nothing else before this arm was written; this file and core/fixtures/derived-fence-binding/
+# run.sh now spell it too. core/fixtures/ is excluded on I108's reason and the probe asserts the
+# exclusion is scoped (a copy under core/skills/ REPORTED, one under core/fixtures/ not); this
+# file is exempted by exact path after a control requires the scan to have FOUND it. docs/ is
+# not scanned, on I108's reason -- the backlog entry quotes the opener.
+i123_sn='**Write your deliverable in chunks and iteratively, never in one write at the end.**'
+i123_op='**Write your deliverable in chunks and iteratively, never in one write at the end.** The'
+i123_pc='switching silently. If the tool is absent or returns an error, continue without it.'
+
+i123_pop() { for i123_pf in "$1"/*.md; do [ -f "$i123_pf" ] && printf '%s\n' "$i123_pf"; done; }
+# The population, refusing an empty one. The corpus and the probe both call this.
+i123_population() { i123_ps="$(i123_pop "$1")"; [ -n "$i123_ps" ] || return 1; printf '%s\n' "$i123_ps"; }
+i123_count() { i123_c=0; while IFS= read -r i123_cl; do [ -n "$i123_cl" ] && i123_c=$((i123_c + 1)); done <<EOF
+$1
+EOF
+  printf '%s' "$i123_c"; }
+
+# ONE awk pass over every file given. Rows: OK, DRIFT, MISSING, FENCED, INLINE, MULTI, MISPLACED;
+# then "N <files scanned>"; then the modal block, "| "-led.
+i123_scan() {
+  awk -v sn="$i123_sn" -v pc="$i123_pc" '
+    function fin(  s) {
+      if (nsub == 0) s = "MISSING"
+      else if (nfen) s = "FENCED"
+      else if (nsub != nex) s = "INLINE"
+      else if (nex > 1) s = "MULTI"
+      else if (!placed) s = "MISPLACED"
+      else { s = "OK"; cnt[buf]++ }
+      st[f] = s; blk[f] = buf
+    }
+    FNR == 1 { if (nf) fin(); f = FILENAME; order[++nf] = f
+               p1 = ""; p2 = ""; on = 0; fen = 0; nsub = 0; nex = 0; nfen = 0; buf = ""; placed = 0 }
+    {
+      if ($0 ~ /^ ? ? ?(```|~~~)/) fen = !fen
+      if (on && $0 == "") on = 0
+      if (index($0, sn)) { nsub++; if (fen) nfen++ }
+      if (!fen && index($0, sn) == 1 && p1 == "") { nex++; if (nex == 1) { on = 1; placed = (p2 == pc) } }   # i123 opener key
+      if (on) buf = buf $0 "\n"   # i123 block
+      p2 = p1; p1 = $0
+    }
+    END {
+      if (nf) fin()
+      best = -1; modal = ""
+      for (b in cnt) if (cnt[b] > best) { best = cnt[b]; modal = b }
+      for (i = 1; i <= nf; i++) {
+        s = st[order[i]]
+        if (s == "OK" && blk[order[i]] != modal) s = "DRIFT"
+        printf "%s %s\n", s, order[i]
+      }
+      printf "N %d\n", nf
+      n = split(modal, ml, "\n")
+      for (i = 1; i < n; i++) printf "| %s\n", ml[i]
+    }' "$@" 2>/dev/null
+}
+
+i123_sites() { grep -rlF -- "$i123_sn" "$@" 2>/dev/null; }
+
+# i123_outside <root> <hits> <population> -- the hits outside the population, root-relative,
+# with core/fixtures/ and this file excluded.
+i123_outside() {
+  i123_ox=''
+  while IFS= read -r i123_h; do
+    [ -n "$i123_h" ] || continue
+    i123_r="${i123_h#"$1"/}"
+    case "$i123_r" in
+      core/fixtures/*) continue ;;
+      scripts/validate-enforcement-map.sh) continue ;;
+    esac
+    in_lines "$i123_h" "$3" || i123_ox="$i123_ox $i123_r"
+  done <<EOF
+$2
+EOF
+  printf '%s' "$i123_ox"
+}
+
+i123_parse() {
+  i123_st_OK=''; i123_st_DRIFT=''; i123_st_MISSING=''; i123_st_FENCED=''; i123_st_INLINE=''
+  i123_st_MULTI=''; i123_st_MISPLACED=''; i123_nscan=0
+  while IFS= read -r i123_l; do
+    case "$i123_l" in
+      "OK "*)        i123_st_OK="$i123_st_OK ${i123_l#OK }" ;;
+      "DRIFT "*)     i123_st_DRIFT="$i123_st_DRIFT ${i123_l#DRIFT }" ;;
+      "MISSING "*)   i123_st_MISSING="$i123_st_MISSING ${i123_l#MISSING }" ;;
+      "FENCED "*)    i123_st_FENCED="$i123_st_FENCED ${i123_l#FENCED }" ;;
+      "INLINE "*)    i123_st_INLINE="$i123_st_INLINE ${i123_l#INLINE }" ;;
+      "MULTI "*)     i123_st_MULTI="$i123_st_MULTI ${i123_l#MULTI }" ;;
+      "MISPLACED "*) i123_st_MISPLACED="$i123_st_MISPLACED ${i123_l#MISPLACED }" ;;
+      "N "*)         i123_nscan="${i123_l#N }" ;;
+    esac
+  done <<EOF
+$1
+EOF
+}
+
+# THE PROBE, RUN BEFORE THE CORPUS, IN BOTH DIRECTIONS. Every seed file is written by the
+# builtin printf, so the probe costs one mktemp, one mkdir, one awk, one grep and one rm.
+i123_pd="$(mktemp -d "${TMPDIR:-/tmp}/i123-XXXXXX")"
+mkdir -p "$i123_pd/t" "$i123_pd/p18" "$i123_pd/e0" "$i123_pd/r/core/skills" "$i123_pd/r/core/fixtures/zz"
+i123_l1='draft body line one of the planted paragraph.'
+i123_l2='If an advisor tool is available to you, also call it before the first chunk.'
+i123_l3='final line of the planted paragraph.'
+i123_body="$i123_op
+$i123_l1
+$i123_l2
+$i123_l3"
+i123_adv="$(printf '%s\n%s' '**Consult the `advisor` tool when it is available.** If an `advisor` tool is available to you,' "$i123_pc")"
+printf 'lead\n\n%s\n\n%s\n\nafter\n' "$i123_adv" "$i123_body" > "$i123_pd/t/a.md"
+printf 'other lead\n%s\n\n%s\n\n## Next\n' "$i123_pc" "$i123_body" > "$i123_pd/t/b.md"
+printf 'lead\n%s\n\n%s\n%s \n%s\n%s\n\nafter\n' "$i123_pc" "$i123_op" "$i123_l1" "$i123_l2" "$i123_l3" > "$i123_pd/t/c.md"
+printf 'lead\n%s\n\n%s\n%s\n%s\n\nafter\n' "$i123_pc" "$i123_op" "$i123_l1" "$i123_l3" > "$i123_pd/t/d.md"
+printf 'lead\n\n%s\n\nafter\n' "$i123_adv" > "$i123_pd/t/e.md"
+printf 'lead\n%s\n\nSome other sentence. %s\n\nafter\n' "$i123_pc" "$i123_body" > "$i123_pd/t/f.md"
+printf 'lead\n%s\n%s\n\nafter\n' "$i123_pc" "$i123_body" > "$i123_pd/t/g.md"
+printf 'lead\n%s\n\n```\n\n%s\n```\n\nafter\n' "$i123_pc" "$i123_body" > "$i123_pd/t/h.md"
+printf 'lead\n%s\n\nanother paragraph between them.\n\n%s\n\nafter\n' "$i123_pc" "$i123_body" > "$i123_pd/t/i.md"
+printf 'lead\n%s\n\n%s\n\nmiddle\n\n%s\n' "$i123_pc" "$i123_body" "$i123_body" > "$i123_pd/t/j.md"
+printf 'lead\n%s\n\n\n%s\n\nafter\n' "$i123_pc" "$i123_body" > "$i123_pd/t/k.md"
+printf 'lead\n%s\n\n%s\n\nafter\n' "$i123_pc" "$i123_body" > "$i123_pd/p18/r01.md"
+for i123_i in 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18; do
+  printf 'lead\n\n%s\n\nafter\n' "$i123_adv" > "$i123_pd/p18/r$i123_i.md"
+done
+printf 'x\n' > "$i123_pd/e0/not-md.txt"
+printf 'See the role contract.\n\n%s Do it.\n' "$i123_sn" > "$i123_pd/r/core/skills/zz.md"
+printf 'Write your deliverable in chunks and iteratively, never in one write at the end.\n' > "$i123_pd/r/core/skills/plain.md"
+printf '%s\n' "$i123_sn" > "$i123_pd/r/core/fixtures/zz/x.md"
+
+i123_p18="$(i123_population "$i123_pd/p18")"
+# shellcheck disable=SC2086 # the probe paths are mktemp paths with no blanks
+i123_parse "$(IFS='
+'; i123_scan "$i123_pd"/t/a.md "$i123_pd"/t/b.md "$i123_pd"/t/c.md "$i123_pd"/t/d.md "$i123_pd"/t/e.md \
+  "$i123_pd"/t/f.md "$i123_pd"/t/g.md "$i123_pd"/t/h.md "$i123_pd"/t/i.md "$i123_pd"/t/j.md "$i123_pd"/t/k.md $i123_p18)"
+i123_bad=''
+i123_has() { in_lines "$1" "$(printf '%s\n' $2)"; }
+[ "$(i123_count "$i123_p18")" = 18 ]                    || i123_bad="$i123_bad population-of-18"
+if i123_population "$i123_pd/e0" >/dev/null; then i123_bad="$i123_bad empty-glob-not-refused"; fi
+[ "$i123_nscan" = 29 ]                                  || i123_bad="$i123_bad scanned-count"
+i123_has "$i123_pd/t/a.md" "$i123_st_OK"                || i123_bad="$i123_bad a-reference-not-OK"
+i123_has "$i123_pd/t/b.md" "$i123_st_OK"                || i123_bad="$i123_bad b-other-surroundings-not-OK"
+i123_has "$i123_pd/p18/r01.md" "$i123_st_OK"            || i123_bad="$i123_bad 18th-carrier-not-OK"
+i123_has "$i123_pd/t/c.md" "$i123_st_DRIFT"             || i123_bad="$i123_bad c-whitespace-drift"
+i123_has "$i123_pd/t/d.md" "$i123_st_DRIFT"             || i123_bad="$i123_bad d-advisor-sentence-removed"
+i123_has "$i123_pd/t/e.md" "$i123_st_MISSING"           || i123_bad="$i123_bad e-advisor-only-not-MISSING"
+[ "$(i123_count "$(printf '%s\n' $i123_st_MISSING | grep -F /p18/)")" = 17 ] || i123_bad="$i123_bad 17-of-18-missing"
+i123_has "$i123_pd/t/f.md" "$i123_st_INLINE"            || i123_bad="$i123_bad f-glued-sentence"
+i123_has "$i123_pd/t/g.md" "$i123_st_INLINE"            || i123_bad="$i123_bad g-no-blank-line-above"
+i123_has "$i123_pd/t/h.md" "$i123_st_FENCED"            || i123_bad="$i123_bad h-fenced-copy"
+i123_has "$i123_pd/t/i.md" "$i123_st_MISPLACED"         || i123_bad="$i123_bad i-not-after-advisor-closer"
+i123_has "$i123_pd/t/j.md" "$i123_st_MULTI"             || i123_bad="$i123_bad j-two-copies"
+i123_has "$i123_pd/t/k.md" "$i123_st_MISPLACED"         || i123_bad="$i123_bad k-two-blank-lines"
+[ "$(i123_outside "$i123_pd/r" "$(i123_sites "$i123_pd/r/core")" '')" = " core/skills/zz.md" ] \
+                                                        || i123_bad="$i123_bad half-B-skills-reported-fixtures-quiet"
+rm -rf "$i123_pd"
+
+if [ -n "$i123_bad" ]; then
+  err "I123's probe failed on seed(s):$i123_bad, so the corpus below was not read. Each name is a planted case the scan scored wrongly: population-of-18 and empty-glob-not-refused are the population function; a-, b- and 18th- are reference copies that must score OK; c- and d- are body drifts (one trailing space, the advisor sentence removed) that must score DRIFT; e- is a file holding only the advisor paragraph, which must score MISSING; 17-of-18-missing is that file shape seventeen times; f- and g- are the opener glued onto a sentence and onto the previous paragraph, INLINE; h- is a fenced copy, FENCED; i- and k- are copies not directly after the advisor closing line with one blank, MISPLACED; j- is two copies, MULTI; half-B- requires a core/skills/ copy reported and a core/fixtures/ copy and an unbolded sentence quiet. Any of them failing means a half of I123 would report a clean tree for the reason a broken scan does."
+else
+  if ! i123_set="$(i123_population "$REPO_ROOT/core/team-roles")"; then
+    err "I123 found no file matching core/team-roles/*.md. That glob is what install.sh copies into a consumer as the role contracts, so an empty population means the arm is looking in the wrong place, not that there are no roles. Nothing below was checked."
+  else
+    i123_n="$(i123_count "$i123_set")"
+    # HALF A.
+    # shellcheck disable=SC2086 # the population is newline-separated paths with no blanks
+    i123_parse "$(IFS='
+'; i123_scan $i123_set)"
+    [ "$i123_nscan" = "$i123_n" ] || err "I123 scanned $i123_nscan of the $i123_n role files the glob listed. A file that was listed and never read produces no row at all and would read as conforming."
+    i123_rel() { i123_rl=''; for i123_x in $1; do i123_rl="$i123_rl ${i123_x#"$REPO_ROOT"/}"; done; printf '%s' "$i123_rl"; }
+    [ -z "$i123_st_MISSING" ] || err "I123: role file(s) do not carry the chunked-write paragraph:$(i123_rel "$i123_st_MISSING"). A teammate never told to write its deliverable in chunks writes it once at the end, and a join that polls the file reads nothing until then. Copy the paragraph opening '$i123_sn' byte-for-byte from any other role file, directly after the advisor paragraph."
+    [ -z "$i123_st_FENCED" ] || err "I123: the chunked-write opener sits inside a code fence in:$(i123_rel "$i123_st_FENCED"). A fenced copy renders as a quotation, not an instruction. Put the paragraph outside every fence."
+    [ -z "$i123_st_INLINE" ] || err "I123: the chunked-write opener sentence appears inside another line or paragraph in:$(i123_rel "$i123_st_INLINE"). The opener must be a whole line with a blank line above it, or markdown renders it as the tail of a paragraph about something else."
+    [ -z "$i123_st_MULTI" ] || err "I123: role file(s) carry the chunked-write paragraph more than once:$(i123_rel "$i123_st_MULTI"). Half A compares the first copy only, so a second one is unbound and free to drift. Keep one."
+    [ -z "$i123_st_MISPLACED" ] || err "I123: the chunked-write paragraph is not directly after the advisor paragraph's closing line, with exactly one blank line between, in:$(i123_rel "$i123_st_MISPLACED"). The paragraph refers to 'the paragraph above' for the advisor calls, so anywhere else it points at the wrong text. Move it to follow the line ending 'continue without it.'."
+    [ -z "$i123_st_DRIFT" ] || err "I123: the chunked-write paragraph has forked. It differs from the copy the other role files agree on, byte-for-byte from opener to the next blank line, in:$(i123_rel "$i123_st_DRIFT"). Two wordings of the same rule are two rules. Make the paragraph byte-identical in every file under core/team-roles/."
+
+    # HALF B: no copy outside the population. The control is THIS file.
+    i123_hits="$(i123_sites "$REPO_ROOT/core" "$REPO_ROOT/scripts" "$REPO_ROOT/templates" \
+        "$REPO_ROOT/patterns" "$REPO_ROOT/.claude/rules" "$REPO_ROOT/CLAUDE.md")"
+    if ! in_lines "$REPO_ROOT/scripts/validate-enforcement-map.sh" "$i123_hits"; then
+      err "I123's site scan did not find scripts/validate-enforcement-map.sh, which carries the opener sentence in i123_sn. That is the control failing, not a finding about the tree: the scan is not reading the roots it was handed."
+    else
+      i123_extra="$(i123_outside "$REPO_ROOT" "$i123_hits" "$i123_set")"
+      [ -z "$i123_extra" ] || err "I123: file(s) outside core/team-roles/*.md carry the chunked-write opener sentence:$i123_extra. Half A binds only the role files, so a copy anywhere else drifts unbound. Point that file at the role contract instead of copying the paragraph."
+    fi
+  fi
+fi
+
+# --- I124: the party-seat section is byte-identical across exactly architect, dev, pm and tea, and no other file carries it ---
+# WHAT IT BINDS. Four role contracts carry a section headed
+# "## As a party seat — write early, close with one marker", from that heading line through the
+# line before the next level-two heading: the seat writes its findings header first, appends per
+# finding, and closes with one seat-complete line the lead's join keys on. The four copies are
+# the standing copy of an instruction the lead's brief also carries, so a fork among them is two
+# protocols for one join.
+#
+# THE CARRIER SET IS A LIST HERE, AND THAT IS CORRECT, unlike I121's W7 where a hand-listed
+# population is a killed wrong arm. I121's population is EVERY role, so a list goes stale the
+# release a role is added. This section's population is the four roles the lead seats in a party
+# round, a design choice and not a property of the directory, so no glob can derive it. The list
+# is bound in BOTH directions instead: every listed file carries the section exactly once, and
+# every file carrying the heading at any level is listed.
+#
+# TWO HALVES.
+#   A  each listed file exists, carries the exact heading line exactly once, and its section
+#      matches the modal section byte-for-byte, trailing blank lines included. With four copies a
+#      two-against-two split has no majority; the arm then names two of them as forked, which
+#      still fires.
+#   B  no file under the six roots outside the list carries a heading, at any level, opening
+#      "As a party seat"; core/fixtures/ excluded on I108's reason.
+#
+# HALF B CARRIES ITS OWN CONTROL ON THE REAL CORPUS. An absence scan that reads nothing reports
+# no EXTRA, which is the same output as a clean tree. So every listed file that half A read
+# carrying the exact heading must also be among half B's hits; one that is not is reported as
+# CONTROL. On a conforming tree that is all four, so a half-B scan that lost its core/ root, its
+# regex or its grep names every carrier. NARROWING: the control set is the files half A scored
+# OK, DRIFT or MULTI, never MISSING -- a listed file without the heading is half A's finding and
+# is not a hit half B could have produced, so including it would double-report every MISSING as
+# CONTROL. The probe seeds the mutant that drops "$1/core" from the roots (i124_mut=nocore) on
+# the conforming four and requires exactly four CONTROL rows; the three other seeds and the real
+# corpus stay free of CONTROL rows, which is the near-miss direction.
+#
+# NOT A VOCABULARY, so no vocabulary marker. The subject is one section's BYTES.
+#
+# THE MEASURED FALSE-POSITIVE SET FOR HALF B. The heading regex over the six roots with nothing
+# excluded returns exactly the four listed files, against a control (the same regex with an
+# impossible tail) returning 0. No other file mentions the phrase even in prose. This file needs
+# no exemption: the regex is anchored at line start on a markdown heading, and no line here opens
+# that way, which the corpus run proves by naming no extra.
+i124_hd='## As a party seat — write early, close with one marker'
+i124_names='architect dev pm tea'
+i124_pop() { for i124_nm in $i124_names; do printf '%s\n' "$1/$i124_nm.md"; done; }
+i124_sites() { grep -rlE -- '^#+[[:blank:]]+As a party seat' "$@" 2>/dev/null; }
+
+# ONE awk pass. Rows: OK, DRIFT, MISSING, MULTI; then "N <files scanned>".
+i124_scan() {
+  awk -v hd="$i124_hd" '
+    function fin(  s) {
+      if (nh == 0) s = "MISSING"
+      else if (nh > 1) s = "MULTI"
+      else { s = "OK"; cnt[buf]++ }
+      st[f] = s; blk[f] = buf
+    }
+    FNR == 1 { if (nf) fin(); f = FILENAME; order[++nf] = f; nh = 0; on = 0; buf = "" }
+    {
+      if (on && $0 ~ /^## /) on = 0
+      if ($0 == hd) { nh++; if (nh == 1) on = 1 }
+      if (on) buf = buf $0 "\n"
+    }
+    END {
+      if (nf) fin()
+      best = -1; modal = ""
+      for (b in cnt) if (cnt[b] > best) { best = cnt[b]; modal = b }
+      for (i = 1; i <= nf; i++) {
+        s = st[order[i]]
+        if (s == "OK" && blk[order[i]] != modal) s = "DRIFT"
+        printf "%s %s\n", s, order[i]
+      }
+      printf "N %d\n", nf
+    }' "$@" 2>/dev/null
+}
+
+# i124_check <root> -- run both halves against <root>, printing one finding per line and nothing
+# when the tree conforms. The probe and the corpus both call this.
+i124_check() {
+  i124_set="$(i124_pop "$1/core/team-roles")"
+  i124_exist=''; i124_want=0; i124_carry=''
+  while IFS= read -r i124_f; do
+    if [ -f "$i124_f" ]; then i124_exist="$i124_exist
+$i124_f"; i124_want=$((i124_want + 1))
+    else printf 'MISSING %s\n' "${i124_f#"$1"/}"; fi
+  done <<EOF
+$i124_set
+EOF
+  if [ "$i124_want" -gt 0 ]; then
+    # shellcheck disable=SC2086 # newline-separated paths with no blanks
+    i124_rows="$(IFS='
+'; i124_scan $i124_exist)"
+    while IFS= read -r i124_l; do
+      case "$i124_l" in
+        "N "*) [ "${i124_l#N }" = "$i124_want" ] || printf 'UNREAD %s\n' "${i124_l#N }" ;;
+        "OK "*) i124_carry="$i124_carry
+${i124_l#OK }" ;;
+        "MISSING "*) printf '%s %s\n' "${i124_l%% *}" "${i124_l#* "$1"/}" ;;
+        *) i124_carry="$i124_carry
+${i124_l#* }"; printf '%s %s\n' "${i124_l%% *}" "${i124_l#* "$1"/}" ;;
+      esac
+    done <<EOF
+$i124_rows
+EOF
+  fi
+  if [ "${i124_mut:-}" = nocore ]; then
+    i124_hits="$(i124_sites "$1/scripts" "$1/templates" "$1/patterns" "$1/.claude/rules" "$1/CLAUDE.md")"
+  else
+    i124_hits="$(i124_sites "$1/core" "$1/scripts" "$1/templates" "$1/patterns" "$1/.claude/rules" "$1/CLAUDE.md")"
+  fi
+  while IFS= read -r i124_h; do
+    [ -n "$i124_h" ] || continue
+    case "${i124_h#"$1"/}" in core/fixtures/*) continue ;; esac
+    in_lines "$i124_h" "$i124_set" || printf 'EXTRA %s\n' "${i124_h#"$1"/}"
+  done <<EOF
+$i124_hits
+EOF
+  # HALF B's CONTROL: every listed file half A read carrying the heading must be a half-B hit.
+  while IFS= read -r i124_c; do
+    [ -n "$i124_c" ] || continue
+    in_lines "$i124_c" "$i124_hits" || printf 'CONTROL %s\n' "${i124_c#"$1"/}"
+  done <<EOF
+$i124_carry
+EOF
+}
+
+# THE PROBE, BEFORE THE CORPUS, BOTH DIRECTIONS. Seeds: a conforming four (quiet), three of four
+# (tea MISSING), one body drift (DRIFT dev), a fifth carrier under core/skills/ at a demoted
+# level (EXTRA), and near-misses that must stay quiet: a copy under core/fixtures/ and a prose
+# mention that is not a heading.
+i124_pd="$(mktemp -d "${TMPDIR:-/tmp}/i124-XXXXXX")"
+mkdir -p "$i124_pd/ok/core/team-roles" "$i124_pd/w3/core/team-roles" "$i124_pd/wd/core/team-roles" \
+  "$i124_pd/w5/core/team-roles" "$i124_pd/w5/core/skills" "$i124_pd/w5/core/fixtures/zz" "$i124_pd/ok/core/skills"
+i124_sec="$(printf '%s\n\nWrite the header first.\nClose with one marker.' "$i124_hd")"
+for i124_nm in architect dev pm tea; do
+  for i124_w in ok w3 wd w5; do
+    printf '# Role\n\n%s\n\n## Constraints\n\nnone\n' "$i124_sec" > "$i124_pd/$i124_w/core/team-roles/$i124_nm.md"
+  done
+done
+printf '# Role\n\n## Constraints\n\nnone\n' > "$i124_pd/w3/core/team-roles/tea.md"
+printf '# Role\n\n%s\nOne extra sentence.\n\n## Constraints\n' "$i124_sec" > "$i124_pd/wd/core/team-roles/dev.md"
+printf '# Copy\n\n### As a party seat — paraphrased\n\nbody\n' > "$i124_pd/w5/core/skills/zz.md"
+printf '%s\n' "$i124_hd" > "$i124_pd/w5/core/fixtures/zz/x.md"
+printf 'Prose that says As a party seat in passing.\n' > "$i124_pd/ok/core/skills/prose.md"
+i124_bad=''
+[ -z "$(i124_check "$i124_pd/ok")" ]                                  || i124_bad="$i124_bad conforming-four-not-quiet"
+[ "$(i124_check "$i124_pd/w3")" = "MISSING core/team-roles/tea.md" ]  || i124_bad="$i124_bad 3-of-4"
+[ "$(i124_check "$i124_pd/wd")" = "DRIFT core/team-roles/dev.md" ]    || i124_bad="$i124_bad body-drift"
+[ "$(i124_check "$i124_pd/w5")" = "EXTRA core/skills/zz.md" ]         || i124_bad="$i124_bad 5th-carrier"
+i124_mo="$(i124_mut=nocore i124_check "$i124_pd/ok")"
+[ "$i124_mo" = "CONTROL core/team-roles/architect.md
+CONTROL core/team-roles/dev.md
+CONTROL core/team-roles/pm.md
+CONTROL core/team-roles/tea.md" ]                                       || i124_bad="$i124_bad no-core-root-mutant"
+rm -rf "$i124_pd"
+
+if [ -n "$i124_bad" ]; then
+  err "I124's probe failed on seed(s):$i124_bad, so the corpus below was not read. conforming-four-not-quiet: four identical sections and a prose mention were reported; 3-of-4: tea.md without the section was not the only finding; body-drift: one appended sentence in dev.md was not the only finding; 5th-carrier: a demoted copy under core/skills/ was not the only finding, or the core/fixtures/ copy was reported; no-core-root-mutant: half B run with core/ dropped from its roots did not name all four carriers as CONTROL, so a half-B scan that read nothing would pass. Any of them failing means I124 would report a clean tree for the reason a broken scan does."
+else
+  i124_out="$(i124_check "$REPO_ROOT")"
+  if [ -n "$i124_out" ]; then
+    err "I124: the party-seat section is not bound across architect, dev, pm and tea. Findings, one per line (MISSING: a listed file lacks the exact heading line; MULTI: it carries the heading twice; DRIFT: its section differs from the copy the others agree on, heading through the line before the next '## '; EXTRA: a file outside the four carries a heading opening 'As a party seat'; UNREAD: a listed file was not read; CONTROL: a listed file carrying the heading was not among half B's hits, so half B did not read the tree it reports on):
+$i124_out
+The four copies are the standing copy of one join protocol, so a fork among them is two protocols. Make the section byte-identical in the four files, and keep it out of every other file -- if a fifth role becomes a party seat, add it to i124_names in the same change."
   fi
 fi
 

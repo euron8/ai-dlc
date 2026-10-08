@@ -5,6 +5,8 @@
 # wrong arms (opener-only compare, hand-listed population, substring key) each scored killed.
 # And I122's battery (A34-A47): the advisor paragraph directly below it in every role contract,
 # the same three wrong arms, and a cross-probe that neither arm is satisfied by the other's text.
+# And A48-A50: the three-way drop matrix over I121, I122 and I123's chunked-write paragraph below
+# them, where the advisor drop must leave I123 reporting MISPLACED rather than green.
 #
 # Usage: run.sh
 # Exit:  0 = every assertion holds, 1 = one regressed, 2 = fixture broken.
@@ -981,6 +983,64 @@ xprobe "A46 the verify-shape paragraph dropped everywhere: I121 names the files 
 xprobe "A47 the advisor paragraph dropped everywhere: I122 names the files and I121 stays green" \
        "$MUT_I122_DROP" I122 "$I122_MISSING" I121
 
+# --- A48-A50: THE THREE-WAY DROP MATRIX OVER I121, I122 AND I123 -------------------
+# I123 binds the chunked-write paragraph directly below I122's in every role file. Each of the
+# three paragraphs is dropped from EVERY role file in turn, and all three arms are run on that
+# one tree: the owner must name adversary.md as MISSING and the other two must reach a clean
+# verdict. ONE CELL IS DIFFERENT BY CONSTRUCTION. I123 requires its paragraph to sit directly
+# after I122's closing line, so dropping I122's paragraph moves I123's out of place: in that
+# cell I123 must report MISPLACED, naming adversary.md, and must NOT report MISSING. That is a
+# stronger cell than green -- it proves I123 found its paragraph by its OWN opener rather than
+# by reading the advisor paragraph's text, which a green verdict cannot tell apart.
+# The block ends at its first blank line, the same delimiter I123 uses, so the drop and the arm
+# agree on what the paragraph is.
+MUT_I123_DROP='
+index($0, "**Write your deliverable in chunks and iteratively, never in one write at the end.**") == 1 { skip = 1 }
+skip { if ($0 == "") skip = 0; next }
+{ print }'
+I123_MISSING="do not carry the chunked-write paragraph"
+I123_MISPLACED="is not directly after the advisor paragraph's closing line, with exactly one blank line between, in"
+# matrix_cell <label> <drop-mutation> <owner-arm> <owner-msg> <arm>:<want> ...
+#   <want> is OK (clean verdict, no finding from that arm), a message that must name
+#   adversary.md, or !<message> -- a message that must NOT appear in that arm's output.
+matrix_cell() {
+  local label="$1" mut="$2" own="$3" msg="$4" f brk=0 spec a want o r why=''
+  shift 4
+  t="$(fresh)"
+  for f in "$t"/core/team-roles/*.md; do
+    edit "$t" "core/team-roles/${f##*/}" "$mut" || { brk=1; break; }
+  done
+  [ "$brk" -eq 0 ] || return 0
+  for spec in "$own:$msg" "$@"; do
+    a="${spec%%:*}"; want="${spec#*:}"
+    o="$(run_arm "$t" "$a")"; r=$?
+    guard_sel "$r" "$o" || return 0
+    if [ "${want#!}" != "$want" ]; then
+      case "$o" in
+        *"${want#!}"*) why="$why; $a reported '${want#!}', which this cell forbids (rc=$r)" ;;
+      esac
+    elif [ "$want" = OK ]; then
+      case "$r:$o" in
+        *"FAIL: $a"*) why="$why; $a reported on a tree where only $own's paragraph was dropped (rc=$r), so the arms are entangled" ;;
+        0:*"$OKLINE"*) : ;;
+        *) why="$why; $a reached no verdict (rc=$r), so its silence is a run that died" ;;
+      esac
+    else
+      case "$o" in
+        *"$want: core/team-roles/adversary.md"*) : ;;
+        *) why="$why; $a did not report '$want' naming core/team-roles/adversary.md (rc=$r)" ;;
+      esac
+    fi
+  done
+  if [ -n "$why" ]; then bad "$label —${why#;}"; else ok "$label"; fi
+}
+matrix_cell "A48 matrix: verify-shape dropped everywhere — I121 names the files, I122 and I123 stay green" \
+  "$MUT_I121_DROP" I121 "$I121_MISSING" I122:OK I123:OK
+matrix_cell "A49 matrix: advisor dropped everywhere — I122 names the files, I121 green, I123 reports MISPLACED and not MISSING" \
+  "$MUT_I122_DROP" I122 "$I122_MISSING" I121:OK "I123:$I123_MISPLACED" "I123:!$I123_MISSING"
+matrix_cell "A50 matrix: chunked-write dropped everywhere — I123 names the files, I121 and I122 stay green" \
+  "$MUT_I123_DROP" I123 "$I123_MISSING" I121:OK I122:OK
+
 # --- I75: the seeded-drift oracle (BL-269) ------------------------------------
 # I75 had no fixture anywhere, and its finding sets are EMPTY on a clean tree -- every subject
 # hashes to the one modal chain -- so a before/after comparison around any rewrite of it compares
@@ -1055,7 +1115,7 @@ fi
 # THE COUNT IS ASSERTED. A driver whose `for` loop or `if` guard stopped reaching an assertion
 # prints fewer lines and no failure, and an unrun assertion is indistinguishable from one that
 # passed.
-EXPECTED=63
+EXPECTED=66
 if [ "$asserted" -ne "$EXPECTED" ]; then
   printf '\nderived-fence-binding: FIXTURE BROKEN — %d assertions ran, %d were declared. An assertion that never ran reads exactly like one that passed.\n' "$asserted" "$EXPECTED"
   exit 2
