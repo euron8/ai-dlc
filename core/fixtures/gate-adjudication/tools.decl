@@ -1,0 +1,26 @@
+# node and python3 build the mutants and the transcript inputs; node is unkeyed because it lives
+# outside the fixed tool dirs on the operator box (nvm). The rest are the tools run.sh, seed.sh
+# and the validator shell section invoke, keyed on their binaries.
+?node
+python3
+bash
+awk
+cat
+cmp
+cp
+cut
+date
+dirname
+env
+find
+grep
+head
+mkdir
+mktemp
+mv
+rm
+sed
+sort
+tail
+tr
+wc

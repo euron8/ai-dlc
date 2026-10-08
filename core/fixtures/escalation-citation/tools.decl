@@ -1,0 +1,26 @@
+# node reads the corpus listing at the short-corpus arm; it is unkeyed because it lives outside
+# the fixed tool dirs on the operator box (nvm). The rest are the external tools run.sh, seed.sh
+# and the validator invoke, keyed on their binaries.
+?node
+awk
+basename
+bash
+cat
+chmod
+cmp
+cp
+cut
+dirname
+env
+expr
+grep
+id
+ls
+mkdir
+mktemp
+mv
+rm
+sed
+tail
+tr
+wc

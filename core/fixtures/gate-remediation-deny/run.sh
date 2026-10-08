@@ -48,6 +48,7 @@ command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq absent; every arm wou
 # applied to the other copy leaves every arm green and reads exactly like an arm that cannot
 # fire, and `cmp -s` cannot tell those apart.
 echo "gate-remediation-deny: resolved subject = $(cd "$(dirname "$HOOK")" && pwd)/$(basename "$HOOK")"
+echo "HERMETIC-CONSUMED core/hooks/ai-dlc-gate-remediation-guard.sh"
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }

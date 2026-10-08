@@ -1,0 +1,4 @@
+# architecture-index-cell-escaping reads ONE file outside its own directory: the script under test.
+# run.sh resolves it by walking from its own directory, copies it into a battery directory for the
+# mutant and the control, and runs all three by node. Its own directory is copied by the runner.
+!core/scripts/gen-architecture-index.js

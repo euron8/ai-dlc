@@ -1,0 +1,4 @@
+# askuserquestion-citation reads ONE file outside its own directory: the validator under test.
+# seed.sh copies it into the seeded consumer tree (P6, the cwd-root mutant); every mutant is a
+# string rewrite of it by node. Its own directory is copied by the runner without being named.
+!core/scripts/validate-steering-budget.sh

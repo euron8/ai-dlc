@@ -22,6 +22,9 @@ WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 
 trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
+# The REQUIRED input of inputs.decl: every assertion below drives this validator, and seed.sh
+# has already run it (--expected) to derive the escalated set, so this is the point of first use.
+echo "HERMETIC-CONSUMED $VALIDATOR"
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }

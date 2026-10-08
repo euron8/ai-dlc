@@ -67,6 +67,8 @@ for cand in "$HERE/../../scripts/gen-architecture-index.js" \
 done
 [ -n "$GEN" ] || broken "cannot locate gen-architecture-index.js in either layout (core/scripts/ or scripts/ai-dlc/) from $HERE"
 printf '  subject: %s\n' "$GEN"
+# The REQUIRED input of inputs.decl, consumed from here on (arm 3 runs it, arm 6 copies it).
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$GEN")" && pwd)/$(basename "$GEN")"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/architecture-index-cell-escaping.XXXXXX")" || broken "mktemp failed"
 trap 'rm -rf "$WORK"' EXIT

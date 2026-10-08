@@ -1,0 +1,4 @@
+# check-25-steering-conduct reads ONE file outside its own directory: the validator under test.
+# run.sh resolves it from DIR and every assertion, mutant and derive-world drives it; the mutants
+# are sed rewrites of it. Its own directory is copied by the runner without being named.
+!core/scripts/validate-steering-budget.sh

@@ -146,6 +146,10 @@ echo "adversarial-citation proof (arm F6)"
 # mutant applied to the other copy leaves every arm green and reads exactly like an arm
 # that cannot fire.
 echo "adversarial-citation: resolved subject = $(cd "$(dirname "$VALIDATOR")" && pwd)/$(basename "$VALIDATOR")"
+# The REQUIRED input of inputs.decl: the validator under test, resolved above and driven by every
+# assertion below. Unconditional: a sentinel guarded by a file test would print the declared name
+# whether or not the verdict depended on it.
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$VALIDATOR")" && pwd -P)/$(basename "$VALIDATOR")"
 echo
 
 # (a) VACUOUS -----------------------------------------------------------------------------

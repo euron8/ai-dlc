@@ -120,6 +120,7 @@ cat data/a.txt >/dev/null || exit 1
 t="$(mktemp)" || exit 1
 td="$(mktemp -d)" || exit 1
 [ -f "$t" ] && [ -d "$td" ] && [ -d "$HOME" ] && echo "mktemp-ok home-ok"
+case "$TMPDIR$HOME$td" in *//*) echo "DOUBLE-SLASH $TMPDIR $HOME $td" ;; *) echo "slashes-ok" ;; esac
 EOF
 }
 stub_unnamed()   { cat <<'EOF'
@@ -368,6 +369,14 @@ arm_F() {
   run_hr "$WK/F2"
   eq "stub calling mktemp and using HOME: exit 0" "$RC" 0
   yes "mktemp and HOME worked in the sandbox" "$OUT" "mktemp-ok home-ok"
+  # THE INVOKER'S TMPDIR CARRIES A TRAILING SLASH ON macOS, and the runner builds HOME and TMPDIR for
+  # the sandbox under a mktemp taken in it: without a squeeze the sandboxed fixture mints every scratch
+  # path with an EMBEDDED `//` that a plain run never sees. Forced here, so the arm fires on every box.
+  ( export TMPDIR="${TMPDIR:-/tmp}/"; bash "$RUN" --root "$WK/F2" probe > "$WK/F3.out" 2>&1 ); RC=$?
+  OUT="$(cat "$WK/F3.out")"
+  eq "trailing-slash TMPDIR at the invoker: exit 0" "$RC" 0
+  yes "sandbox TMPDIR, HOME and a minted path carry no //" "$OUT" "slashes-ok"
+  no "no DOUBLE-SLASH report" "$OUT" "DOUBLE-SLASH" "slashes-ok"
 }
 arm_G() {
   CUR=G
@@ -786,12 +795,13 @@ if [ "$NESTED" != 1 ]; then
   run_mutant M3 "F B" 'env -i PATH=' 'env PATH=' &
   run_mutant M4 "L A" '| bash "$HR_SCRIPT_DIR/core-paths.sh" --map >' '| cat >' &
   run_mutant M5 "K A" "'?'*)" "'NEVER?'*)" &
+  run_mutant M6 "F B" 'HR_WORK="$(cd "$HR_WORK" && pwd -P)" || exit 2' 'HR_WORK="$HR_WORK"' &
   # cwd-invariance: two nested runs of this fixture from different working directories.
   ( cd "$ROOT" && HERMETIC_FX_NESTED=1 bash "$HERE/run.sh" > "$WORK/cwd1.out" 2>&1; echo $? > "$WORK/cwd1.rc" ) &
   ( cd "$(dirname "$RUN")" && HERMETIC_FX_NESTED=1 bash "$HERE/run.sh" > "$WORK/cwd2.out" 2>&1; echo $? > "$WORK/cwd2.rc" ) &
   wait
   CUR=M
-  for pair in "M1:B" "M2:A C D L" "M3:F" "M4:L" "M5:K"; do
+  for pair in "M1:B" "M2:A C D L" "M3:F" "M4:L" "M5:K" "M6:F"; do
     mname="${pair%%:*}"; want="$(failed_set "${pair#*:}")"
     got="$(cat "$WORK/mut-$mname.res" 2>/dev/null)"
     if [ "$got" = "BROKEN" ] || [ -z "$got" ] && [ "$want" != "" ] && [ "$got" = "BROKEN" ]; then

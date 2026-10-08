@@ -1,0 +1,15 @@
+# node runs the validator body and builds every mutant; it is unkeyed because it lives outside
+# the fixed tool dirs on the operator box (nvm). The rest are the tools run.sh, seed.sh and the
+# validator shell section invoke, keyed on their binaries.
+?node
+bash
+cat
+cp
+dirname
+env
+grep
+mkdir
+mktemp
+rm
+sed
+touch

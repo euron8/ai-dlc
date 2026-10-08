@@ -125,6 +125,13 @@ done
 # universe span is, so there is one list. A run with no hook is exit 2: a tool outside the span has no
 # stable key, and without it this runner would be guessing which directories count.
 HR_WORK="$(mktemp -d "${TMPDIR:-/tmp}/hermetic-run.XXXXXX")" || exit 2
+# PHYSICAL, SQUEEZED. macOS hands out TMPDIR with a TRAILING SLASH, so the mktemp above spells
+# `.../T//hermetic-run.X`, and lines below export HOME and TMPDIR under it INTO the sandbox: the
+# sandboxed fixture then sees an EMBEDDED `//` in every scratch path it mints, where a plain run sees
+# none. Measured: a fixture comparing an absolute scratch citation against a pwd-derived path killed
+# four predicates in the sandbox and one in the plain run. `pwd -P` collapses the `//` and the /var
+# symlink in one step, the way HR_SB is already taken.
+HR_WORK="$(cd "$HR_WORK" && pwd -P)" || exit 2
 trap '[ "${AI_DLC_HERMETIC_KEEP:-0}" = 1 ] || rm -rf "$HR_WORK"' EXIT
 HR_HOOK=""
 for c in .githooks/pre-push core/git-hooks/pre-push; do [ -f "$HR_ROOT/$c" ] && { HR_HOOK="$HR_ROOT/$c"; break; }; done

@@ -1,0 +1,23 @@
+# node runs the citation floor probe in run.sh and the validator body; unkeyed (nvm).
+?node
+bash
+awk
+basename
+cat
+cmp
+cp
+cut
+dirname
+git
+grep
+head
+ls
+mkdir
+mktemp
+rm
+sed
+sort
+tail
+tr
+uniq
+wc
