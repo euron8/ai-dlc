@@ -1,0 +1,30 @@
+tree-sha a135a76a pin-sha 60b467dc dirty 1
+fixture-dirs 249   (/usr/bin/find)
+drivable-run.sh 246
+dist-only 67
+mapped-fixtures 236
+map-rows 29955
+control absorbed-specifics-survive rows 9 (expect non-zero)
+NOROWS adversarial-shard-merge-mutants
+NOROWS check-24-adversarial-convergence
+NOROWS implementation-join-yield
+NOROWS procsub-staged-refusal-boot
+NOROWS readset-skip
+NOROWS remediator-shard-join-mutants
+NOROWS review-shard-merge-mutants
+NOROWS self-update-fixture-log-mutants
+NOROWS self-update-gate
+NOROWS subject-partition
+NOROWS wait-beat-liveness
+NOROWS-total 11
+fixtures-with-core/fixtures-dir-row 229
+rows-per-mapped-fixture min 5 median 31 max 1463
+map-unique-paths 3269 dir-paths 295
+run.sh-with-mktemp 190
+run.sh-without-mktemp 56
+run.sh-with-env-i 5
+run.sh-naming-whole-tree-validator 34
+ROOT-walkup-shape 5
+install.sh scripts/poc refs 0  control core/scripts refs 3
+2026-10-07T20:12:27-0400
+20:12  up 2 days,  3:20, 5 users, load averages: 4.69 5.04 13.44

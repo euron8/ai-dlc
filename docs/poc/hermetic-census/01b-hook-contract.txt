@@ -1,0 +1,14 @@
+# hook contract at PIN 60b467dc, by function name (git show PIN:.githooks/pre-push | grep -n)
+## readset_tools()
+858:readset_tools() { # <out>
+## run_fixtures()
+1131:run_fixtures() {
+## KEYS_DIR=
+484:KEYS_DIR="$GITDIR/ai-dlc-fixture-keys"
+## READSET_LOCAL=
+673:READSET_LOCAL="$GITDIR/ai-dlc-fixture-readsets.local"
+## READSET_MAP=
+473:READSET_MAP=".ai-dlc-fixture-readsets.tsv"
+## FIXTURE_JOBS:-
+423:FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-12}"
+## bash "core/fixtures/

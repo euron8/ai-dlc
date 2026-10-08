@@ -4,22 +4,27 @@
 
 **You were started with one sentence: `READ and FOLLOW docs/plans/hermetic-fixtures-poc.md`.
 This section is the ONLY CURRENT STATUS RECORD in this file.** Every later status record this
-file acquires is replaced by this block, which a batch rewrites at its close (action 9).
+file acquires is replaced by this block, which a batch rewrites at its close.
 
-**State at authoring:** nothing has been built. The census below was taken ONCE, by the authoring
-session, at `origin/main` `60b467dc` (`VERSION` 0.744.0), read-only, to size the PoC and to pick
-its three fixtures. Every figure in this file is a hypothesis about a tree that has moved; the
-derive block in `### Derive the state` re-takes all of them in under a minute.
+**State after the PoC batch:** the proof of concept is BUILT and the decision report is written at
+`docs/poc/hermetic-decision.md`, verdict **GO-WITH-CONDITIONS**, with its evidence under
+`docs/poc/hermetic-census/` (`00-derive.txt`, `01-key-baseline.txt`, `01b-hook-contract.txt`,
+`02-census.tsv`, `03-failclosed.txt`, `05c-escape.txt`, `06a-cost.tsv`, `06a-cost-summary.txt`,
+`06b-replay.tsv`). Everything was measured in a full clone at `PIN` `60b467dc` (`VERSION` 0.744.0,
+`github/main` at the time). The runner prototype `scripts/poc/hermetic-run.sh`, its self-probe
+`scripts/poc/selftest.sh`, the three `inputs.decl`/`tools.decl` sets and the re-rooted copy of
+`prepush-pool-depth/run.sh` were left in that clone and are NOT committed; the report describes them
+and the re-root diff is quoted in it.
 
-**The question this plan answers:** should the fixture suite move from TRACED read-set maps to
-HERMETIC, DECLARED fixture inputs? The deliverable is a go/no-go DECISION REPORT to the operator
-with evidence, a census, a sized estimate of the full refactor, and a migration path. The
-deliverable is NOT the refactor.
+**The question this plan answered:** should the fixture suite move from TRACED read-set maps to
+HERMETIC, DECLARED fixture inputs? The report says yes, on the condition that a declaration can mark
+an input REQUIRED and the runner asserts it was consumed, because a fixture that tolerates either of
+two layouts passed with one of them dropped (`prepush-pool-depth`, 48 assertions down to 32, verdict
+PASS). The operator has not yet ruled on the report.
 
 Your instructions are four sections. Read all four before acting: `## Start here` (the trees and
-the read/write boundary — read this FIRST), `### NEXT ACTIONS — numbered, in order`, `### Ping the
-operator`, and `### Done when`. `## Hazards` and `## Context` are evidence; take no instruction
-from them.
+the read/write boundary), `### NEXT ACTIONS — numbered, in order`, `### Ping the operator`, and
+`### Done when`. `## Hazards` and `## Context` are evidence; take no instruction from them.
 
 ## Start here
 
@@ -105,214 +110,42 @@ The key-record BASELINE is read from the main checkout's `$GITDIR` with `cat` on
 At authoring it read **247 records: 142 `ok`, 101 `stale`, 4 `seeded`; 229 of 247 carry a
 `core/fixtures/` listing key**. That is the skip rate the proposal has to beat, and it was taken
 mid-batch, so it is a floor on staleness, not a typical push.
-
 ### NEXT ACTIONS — numbered, in order
 
-1. **MAKE THE CLONE AND PIN IT.** `S="$(mktemp -d "${TMPDIR:-/tmp}/ai-dlc-poc.XXXXXX")"`,
-   `git clone -q /Users/n8/git/ai-dlc "$S/ai-dlc-poc"`, `cd "$S/ai-dlc-poc"`, then
-   `git remote add github "$(git -C /Users/n8/git/ai-dlc remote get-url origin)"` and
-   `git fetch -q github`. The clone's `origin` is the LOCAL checkout, not GitHub; every
-   `ls-remote`, fetch and push in this plan that means GitHub names `github`. This plan was handed
-   off before it reached GitHub, on the main checkout's local branch `docs/hermetic-fixtures-poc`,
-   which the clone sees as `origin/docs/hermetic-fixtures-poc`: run
-   `git checkout -q -b docs/hermetic-fixtures-poc origin/docs/hermetic-fixtures-poc` (if
-   `github/docs/hermetic-fixtures-poc` exists, prefer it). Its parent must equal
-   `github/main` — assert `git rev-parse HEAD~1` equals `git rev-parse github/main`, and if it does
-   not, rebase the one plan commit onto `github/main` before going on. Record `git rev-parse HEAD~1`
-   as `PIN` and take every figure in this plan at `PIN` (the plan commit touches only
-   `docs/plans/`, so the tree under test is `PIN`'s). Confirm `git rev-parse --git-dir` prints `.git` (a directory in
-   your clone, not a file pointing at the main checkout), and confirm
-   `git worktree list | wc -l` prints 1. Record `git config --get core.hooksPath` (expected:
-   empty — a fresh clone carries no hooks path, so the push in action 10 runs NEITHER pre-push
-   hook and action 9's validator run is the only floor; do not set it, or the push will run the
-   full suite in the clone on a loaded box). Set `AI_DLC_PROJECT_ROOT="$S/ai-dlc-poc"` in every shell
-   that drives a validator, because several resolve their own root from the script's directory
-   and would otherwise answer about whichever tree they were copied from.
+Nothing is owed until the operator rules on `docs/poc/hermetic-decision.md`. The actions below are
+what a GO ruling owes; a NO-GO ruling owes nothing, and this file is then archived by the plan
+rotator.
 
-2. **TAKE THE BASELINES, READ-ONLY.**
-   - 2a. Run the derive block above in the clone. Write its output to `docs/poc/hermetic-census/00-derive.txt`
-     with `uptime` on the last line.
-   - 2b. Read the main checkout's key records with `cat` and `grep` only:
-     `grep -h '^#state' /Users/n8/git/ai-dlc/.git/ai-dlc-fixture-keys/*.key | sort | uniq -c`,
-     the count of records carrying `^core/fixtures/<TAB>#listing`, and the top four lines of
-     `/Users/n8/git/ai-dlc/.git/ai-dlc-fixture-durations` sorted by cost. Write them to
-     `docs/poc/hermetic-census/01-key-baseline.txt` with the time and the batch-204 `origin/main`
-     sha beside them. These are loaded, mid-batch numbers and the file says so.
-   - 2c. Record the hook's current contract by FUNCTION NAME, not line: `readset_tools`,
-     `run_fixtures`, `KEYS_DIR`, `READSET_LOCAL`, `READSET_MAP` (`grep -n` each in
-     `.githooks/pre-push` at `PIN`). 0.745.0 rewrites both hooks and is not on `origin/main` at
-     authoring; every hook line number in this file was taken at `60b467dc` and will move.
-
-3. **THE CENSUS (read-only; one hand per class, `isolation: "remote"`, each writes a TSV and
-   returns its counts AS TEXT).** Classify every drivable fixture (every `core/fixtures/*/run.sh`)
-   into exactly one of:
-   - **(a) already self-sandboxed** — builds its subject under `mktemp -d`, sources
-     `core/fixtures/lib/preamble.sh:31` or unsets `GIT_DIR` itself, and reads the live tree only
-     to COPY named inputs into the sandbox.
-   - **(b) reads the live repo root** — resolves `ROOT` by walking up from `$0` (the
-     `ROOT="$(cd "$HERE/../../.." && pwd)"` shape appears in 49 `run.sh` files at `PIN`) and then
-     reads or invokes files under it in place, or reads `.git/` of the live repo.
-   - **(c) whole-tree validator** — its verdict is a property of the whole tree: it invokes
-     `scripts/validate-enforcement-map.sh`, `validate-shell-portability.sh`,
-     `validate-claude-rules.sh`, `validate-fork-budget.sh`, or walks `core/**` or `scripts/**`
-     with `find` or `git ls-files`. 34 fixtures name one of those validators at `PIN`; that is the
-     grep floor, not the class.
-   The method: read each `run.sh` (the mktemp grep is a proxy that mis-classifies — a mutant
-   battery with no `mktemp` can still be (a) through a helper), record the `.git` dependence as
-   its own column (`none` / `own scratch repo` / `live .git`), and record the row count from the
-   committed map as the declaration-size proxy (file rows only; drop the 274 directory paths).
-   Control: the three classes plus an `unclassifiable` column must sum to the `run.sh` count, and
-   `absorbed-specifics-survive` (mktemp at `core/fixtures/absorbed-specifics-survive/run.sh:42`)
-   must land in (a) while `validator-arm-selection` (drives the enforcement-map validator from
-   `core/fixtures/validator-arm-selection/run.sh:155`) lands in (c). Output:
-   `docs/poc/hermetic-census/02-census.tsv` with columns
-   `fixture  class  git_dep  map_file_rows  skip_arm  notes`, where `skip_arm` is `yes` when the
-   fixture emits a `SKIP` verdict on a missing subject (`validator-arm-selection/run.sh:151` is
-   the reference shape). Pick the three PoC fixtures from it: one (a) with a non-trivial copy set,
-   one (b) whose git dependence is `live .git` (so the `.git` question is answered by the PoC and
-   not deferred), and one with the deepest sourcing chain (most `core/scripts/*.sh` invoked
-   transitively; the top map-row fixtures — `validator-arm-selection` 1463, `validator-fork-budget`
-   1455, `layer-contract-conformance` 1418 at `PIN` — are candidates, but prefer one that is NOT
-   class (c) so the depth and the whole-tree question stay separable). At least one of the three
-   must carry a `SKIP` arm. State the three and the reason for each in the report.
-
-4. **THE RUNNER PROTOTYPE, standalone, no hook edits.** `scripts/poc/hermetic-run.sh <fixture>`:
-   - reads `core/fixtures/<fixture>/inputs.decl` (one project-relative path per line; a trailing
-     `/` means the directory's files recursively; `.git` is NOT declarable in the first cut — a
-     fixture needing a repository builds one in its sandbox, which the preamble already
-     supports), and `tools.decl` (absolute tool paths);
-   - builds `mktemp -d`, copies ONLY the declared inputs plus the fixture's own directory plus
-     `core/fixtures/lib/`, preserving modes with `tar` the way `readset_copy_tree` does at
-     `core/scripts/derive-fixture-readsets.sh:419` (not `cp -R`, for the symlink reason in its
-     header);
-   - runs `env -i PATH=<fixed list from readset_tools at PIN> HOME=<sandbox>/home
-     GIT_CONFIG_NOSYSTEM=1 AI_DLC_PROJECT_ROOT=<sandbox> bash core/fixtures/<fixture>/run.sh`
-     inside the sandbox, with `GIT_DIR` and friends unset;
-   - prints the cache key: `sha256` over the sorted `(path, content-sha)` list of the copied set
-     plus the `(tool, content-sha)` list plus the pinned env string;
-   - **treats ANY verdict that is not the fixture's own PASS line as FAIL — including `SKIP`, an
-     empty log, and a missing verdict.** A fixture that cannot find its subject SKIPs
-     (`validator-arm-selection/run.sh:151`), and SKIP is the "pass or skip" outcome the
-     fail-closed test exists to forbid.
-   Write the three `inputs.decl` files by hand from the census row and the fixture's source,
-   not from the map (the map is what is being replaced; a declaration derived from it inherits
-   its gaps). Run each of the three under the runner with `uptime` beside each wall clock. The
-   (a) fixture and the deep-sourcing fixture PASS. **The (b) fixture is expected to FAIL on its
-   first run** — it reads a live `.git` the sandbox does not hold — and that FAIL is recorded as
-   the baseline for action 5c. Then re-root a COPY of its `run.sh` (under `mktemp -d`, the
-   tracked file untouched) so it builds its repository inside the sandbox through
-   `core/fixtures/lib/preamble.sh:31` and resolves `ROOT` from `AI_DLC_PROJECT_ROOT`, run it
-   again to PASS, and keep the `diff` of that re-root: it is the per-fixture effort figure
-   action 7 prices for class (b).
-
-5. **THE FAIL-CLOSED TEST — the decisive one.** For each of the three fixtures, on a COPY of its
-   declaration under `mktemp -d`:
-   - 5a. Remove ONE input the verdict positively depends on (not a negative-control file — a
-     dropped negative control passes by construction). The runner must report FAIL, naming the
-     fixture, with the fixture's log showing the missing path. PASS or SKIP here is a NO-GO
-     finding for the runner, and the report says so in those words.
-   - 5b. The decoy mutant: plant a file in the LIVE clone at a path the fixture would read if it
-     could (choose one its source names and the declaration omits; for a (b) fixture, a path
-     under the live `ROOT`), run under the runner, and assert the sandbox does not contain it
-     (`[ ! -e "$SANDBOX/<decoy>" ]`) AND that the fixture's log never names it. Control in the
-     same invocation: the same decoy ADDED to the declaration IS present in the sandbox.
-   - 5c. The sandbox-escape probe: with the decoy present and undeclared, trace the run with the
-     deriver's sandbox profile machinery if it can be driven standalone, or with
-     `fs_usage` if the operator grants root — and state which. A read of the decoy's live path
-     from inside the sandbox is an escape: the fixture resolved `ROOT` through `$0` to the
-     CLONE, not the sandbox. Report the count of live-tree reads for each of the three; a
-     non-zero count for the (b) fixture is the expected finding, and the report sizes what it
-     would take to make that fixture resolve inside the sandbox.
-   Each arm reports both directions; a probe that only fires is not a probe.
-
-6. **COST.**
-   - 6a. Copy overhead: time the runner's copy phase alone for each of the three (five reps,
-     interleaved a-b-c-a-b-c, load beside each), and the fixture's own run time under the runner
-     against its run time invoked directly from the clone root (the way `.githooks/pre-push:1245`
-     invokes it), same interleaving. Report `median copy / median run` per fixture.
-   - 6b. Skip-rate replay, offline. Take the last 15 first-parent release commits on
-     `origin/main` (`git log --first-parent --format=%h origin/main | ...` filtered to subjects
-     starting with a version). For each consecutive pair, `git diff --name-only`. Score two keys
-     per fixture per pair: TRACED = "would the committed map at the newer sha select this
-     fixture" (any changed path in its rows, or the fixture has no rows, or the `core/fixtures`
-     directory row is present and a fixture directory was added or removed in the diff);
-     DECLARED = "any changed path intersects its declaration". DECLARED is EXACT for the three
-     prototyped fixtures and APPROXIMATE for the mapped rest — approximate it as the fixture's
-     committed map FILE rows (no directory rows, no tools). The 11 unmapped fixtures have no rows
-     to approximate from and go in a THIRD column, scored under TRACED only. Report the three
-     populations in separate columns, never summed. Controls: a pair whose diff is docs-only must
-     select 0 under DECLARED for a fixture declaring no docs path; and a pair that added a fixture
-     directory must select ≥229 under TRACED — if no pair in the 15 carries one, extend the window
-     backward until a pair does, and say how far.
-   - 6c. Beside the replay, the key-record baseline from 2b: the live hook staled 101 of 247
-     records mid-batch. State what the declared key would have done on the same pushes if it can
-     be derived; if it cannot, say that rather than estimating.
-
-7. **THE DECISION REPORT**, `docs/poc/hermetic-decision.md`, in this order: the verdict (GO /
-   NO-GO / GO-WITH-CONDITIONS, one line, first); the census counts with their derivation; the
-   three fixtures and what each showed in actions 4-6; the fail-closed results per arm; the cost
-   table; the sized estimate; the migration path; the optional second leg (action 8); every claim
-   that could not be verified, named. The sized estimate is `fixtures × effort class`:
-   - class (a): write `inputs.decl` from existing copy lines — price at the median map file-row
-     count for the class;
-   - class (b): re-root the fixture into its sandbox (the `ROOT=` walk at the top of 49 files is
-     the pattern to replace) and declare — price per fixture by `.git` dependence;
-   - class (c): legitimately whole-tree; declare `core/`, `scripts/`, `.githooks/` as directory
-     inputs and accept that they rerun on most pushes — count them and say what fraction of the
-     pole they are (`enforcement-map-sites` 740s, `validator-arm-selection` and
-     `validator-fork-budget` are all in this class at `PIN`);
-   - plus the runner itself, the hook integration (both hooks, bound by **I66** at
-     `scripts/validate-enforcement-map.sh:5190`), and the consumer layout (a consumer's fixture
-     root is `tests/fixtures/`, and `install.sh` copies by list).
-   The migration question is answered explicitly: can traced and declared coexist per fixture?
-   The proposed answer to test is YES — a fixture with an `inputs.decl` is keyed by the runner
-   and one without is keyed by the map as today, decided per fixture at dispatch — and the report
-   states what in `run_fixtures` would have to branch on the file's presence. The counter-argument
-   the report must engage is the deriver's own header at
-   `core/scripts/derive-fixture-readsets.sh:74`: when declarations were last measured, 78 of 118
-   fixtures were declared nowhere and the 40 that were declared 1-3 paths while reading 5-31. The
-   hermetic proposal differs because an undeclared read FAILS instead of skipping blind; that
-   defence holds only if action 5 held, and the report says whether it did.
-
-8. **OPTIONAL SECOND LEG, only if actions 3-7 are complete and the operator has not stopped
-   you:** measure whether shipped scripts reach files only through a small helper set. Count the
-   raw `find`, `source`, `.`, and `ls` sites in `core/scripts/*.sh` (38 `find` and 74 `source`/`.`
-   sites by a loose grep at `PIN` — a floor, since `grep` cannot see a path built by
-   concatenation), list the helper functions they could route through
-   (`ai_dlc_resolve_root` at `core/scripts/validate-provenance-block.sh:138` is one), and estimate
-   the validator that would refuse a raw site. This leg produces a paragraph in the report, not
-   code.
-
-9. **AFTER THE REPORT IS WRITTEN, BEFORE YOU STOP: re-derive this file's own RESUME block.**
-   Re-run the derive block, replace the figures above with the ones the clone returns now, replace
-   the "State at authoring" paragraph with what was built and where, and turn `### NEXT ACTIONS`
-   into what a NEXT session owes (nothing, if the operator has ruled; the refactor plan, if the
-   ruling is GO). Run `bash scripts/validate-plan-shape.sh docs/plans/hermetic-fixtures-poc.md`
-   and fix every ERROR. Commit the plan, the report and `docs/poc/hermetic-census/` on the docs
-   branch. Do not commit `scripts/poc/` unless the operator asks for it; describe it in the
-   report and leave it in the clone.
-
-10. **PUBLISH, ONCE.** Assert `git config --get core.hooksPath` is still empty in the clone (a
-    set hooks path would run the full suite on push). `git fetch -q github`; if `github/main` has
-    moved past `PIN`, rebase the docs branch onto it — the branch touches only `docs/`, so a
-    conflict means someone else edited this plan, and you stop and ask the operator. Then
-    `git push -u github docs/hermetic-fixtures-poc` from the clone, once, and confirm
-    `git ls-remote --heads github docs/hermetic-fixtures-poc` is non-empty against the control
-    that a made-up branch name returns empty. A push exit of 0 is not a landed push.
-
-11. **FRESH-RESUME CHECK.** Merge the docs commit (merges are preapproved by standing ruling).
-    Then make a fresh clone of origin/main and read this plan there as a stranger would (clone
-    GitHub's `main` through the `github` remote's URL, never the local checkout), re-run
-    the derive block there, assert the numbered action list names nothing already shipped on
-    `origin/main`, and run `bash scripts/validate-plan-shape.sh` there as the floor. If it fails,
-    fix and repeat from action 9.
-
-12. **HAND THE PLAN TO A LOCAL AI-DLC SESSION, THEN STOP.** `ListAgents`; if a local `ai-dlc-*`
-    session is found (never a `graph-*` one), `SendMessage` it exactly
-    `READ and FOLLOW docs/plans/hermetic-fixtures-poc.md` and nothing else. A `REFUSED:` reply
-    advances to the next untried session, idle ones first; silence does not. Once a session
-    accepts, this session has no further work and communicates no further with it. If none is
-    found, there is nothing further to do.
+1. **MAKE THE CLONE AND PIN IT**, exactly as the retired action 1 did: a full clone under
+   `mktemp -d`, a `github` remote pointing at GitHub, this branch checked out, `PIN` recorded as
+   `github/main`. Never work in `/Users/n8/git/ai-dlc` or a linked worktree of it.
+2. **PROMOTE THE RUNNER.** Rebuild `scripts/poc/hermetic-run.sh` from the report's section 2 contract
+   (the clone that held it is gone) as `core/scripts/hermetic-run.sh` with its self-probe as a
+   fixture, add the REQUIRED-input marker (`!path` in `inputs.decl`; the runner FAILs unless the
+   fixture's log names it), and bind both pre-push hooks' dispatch branch under **I66**: a fixture
+   with `inputs.decl` is keyed by the runner, one without by the map, decided per fixture in
+   `run_fixtures`. Ship with ZERO declarations so the push changes no behaviour.
+3. **DECLARE THE NINE `node` FIXTURES FIRST** (`grep -lE '\bnode\b' core/fixtures/*/run.sh`), each
+   with a `tools.decl` naming node, and run 5a (drop one positive input; expect FAIL) on each.
+4. **DECLARE THE DECLARATION-ONLY SET** in batches by map-row count, smallest first: every class-a
+   row of `02-census.tsv` plus every class-b row whose `roots` column is a `$0` walk and whose
+   `git_dep` is not `live`. One 5a probe per batch.
+5. **RE-ROOT THE REST OF CLASS B**: the rows with `show-toplevel`, a `VERSION`/`install.sh` walk, or
+   `git_dep=live`. Read the root BEFORE the fixture's `AI_DLC_*` scrub (113 fixtures carry one); the
+   six history-readers need a seeded repository, which this plan has not priced.
+6. **LEAVE CLASS C ON THE MAP** unless the operator asks otherwise.
+7. **RE-DERIVE THIS BLOCK** at the batch close, run `bash scripts/validate-plan-shape.sh` on this
+   file, commit, and push once from the clone.
+8. **FRESH-RESUME CHECK.** Merge the docs commit (merges are preapproved by standing ruling). Then
+   make a fresh clone of `origin/main` through the `github` remote's URL, never the local checkout, and resume from it as a stranger would: read this plan there, re-run the derive block there, assert the numbered
+   action list names nothing already shipped on `origin/main`, and run
+   `bash scripts/validate-plan-shape.sh` there as the floor. If it fails, fix and repeat from action 7.
+9. **HAND THE PLAN TO A LOCAL AI-DLC SESSION, THEN STOP.** `ListAgents`; if a local `ai-dlc-*`
+   session is found (never a `graph-*` one), `SendMessage` it exactly
+   `READ and FOLLOW docs/plans/hermetic-fixtures-poc.md` and nothing else. A `REFUSED:` reply
+   advances to the next untried session, idle ones first; silence does not. Once a session
+   accepts, this session has no further work and communicates no further with it. If none is
+   found, there is nothing further to do.
 
 ### Ping the operator
 
@@ -322,30 +155,26 @@ but FAIL (that is the NO-GO finding and the operator decides whether the PoC con
 the decision report is written. The operator holds batch 204's 0.745.0 release while this PoC
 runs, so report completion promptly: that hold is released on your report. Present a stall as choices with a marked recommendation. Never narrow the scope on your
 own authority: if an action cannot be completed, say what blocked it and deliver the rest.
-
 ### Done when
 
-1. `docs/poc/hermetic-census/02-census.tsv` has one row per `core/fixtures/*/run.sh` at `PIN`,
-   the class column sums to that count, and the two named controls land in their classes.
-2. The runner ran all three fixtures to PASS in a sandbox under `env -i` — for the (b)
-   fixture, PASS after a recorded re-root whose diff is in the report — and the sandbox
-   contained no path outside the declaration plus the fixture's own directory plus
-   `core/fixtures/lib/` — asserted by listing the sandbox, not by reading the runner.
-3. Action 5a reported FAIL on all three (or the report names which did not and calls the verdict
-   NO-GO for that reason); 5b's decoy was absent from the sandbox with its add-to-declaration
-   control present; 5c reported a live-tree read count for each of the three with the tracer
-   named.
-4. The cost table carries copy and run medians with load beside each, and the replay reports
-   TRACED against DECLARED per release pair with the exact-3 and approximate-243 populations in
-   separate columns, with the docs-only control pair scoring as stated.
-5. `docs/poc/hermetic-decision.md` opens with the one-line verdict, carries the sized estimate as
-   `fixtures × effort class` with the class counts from criterion 1, answers the coexistence
-   question, and engages the deriver's header argument.
-6. This file's RESUME block has been re-derived after the report (action 9), the plan validator
-   is green on it, and the docs branch is on GitHub (action 10), confirmed by `ls-remote`.
+For the PoC batch (satisfied; the observation point is the clone at `PIN`):
 
-The observation point for criteria 1-5 is the clone at `PIN`; nothing in this plan consumes its
-own subject, so no criterion moves between being satisfied and being read.
+1. `02-census.tsv` has one row per `core/fixtures/*/run.sh` (246 = 246), the class column sums to
+   that count, and `absorbed-specifics-survive` = a, `validator-arm-selection` = c.
+2. The runner ran all three fixtures to PASS under `env -i`, `prepush-pool-depth` after the recorded
+   re-root, and each sandbox listed 0 files outside declaration + own dir + lib (65, 5 and 6 files).
+3. 5a reported FAIL on two of three and the report names the third and the condition it imposes;
+   5b's decoy was absent with its declared control present on all three; 5c reported 0 live-tree
+   reads for each against a positive control of 16, tracer named.
+4. The cost table carries copy and run medians with load beside each; the replay reports TRACED
+   against DECLARED per release pair in three separate populations; the docs-only control is
+   constructed and says so.
+5. The report opens with the verdict, carries the sized estimate, answers coexistence (yes), and
+   engages the deriver's header.
+6. This block was re-derived after the report, the plan validator is green, and the docs branch is
+   on GitHub, confirmed by `ls-remote`.
+
+For a GO batch: actions 2-7 above, each with the 5a probe named in the batch's release message.
 
 ## Hazards
 
