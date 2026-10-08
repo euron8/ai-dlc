@@ -757,7 +757,19 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   clean detached worktree with every file committed: base 3268 (STABLE 2), tip 3281 (STABLE 3), so
 #   +13. Every arm that moved walks the new `core/scripts/hermetic-run.sh`: I75 361 -> 371 (it hashes
 #   one more AI_DLC_ROOT chain), I84 301 -> 303, I83 149 -> 150. HIGH reading 3281 plus the usual 6.
-FORK_BUDGET=3287
+#
+#   RAISED TO 3310 FOR TWO NEW ARMS, I123 AND I124. `fork-profile.sh --stable --section by-arm`,
+#   base `origin/main` dd7ee999 then the b206-rc-arm tip, interleaved base/tip/base/tip in ONE
+#   worktree at the same path, taken BOTH ways. Under `env -i`: base 3276 (STABLE 2) and 3275
+#   (STABLE 3), tip 3298 (STABLE 2) and 3298 (STABLE 3). With the caller's environment inherited,
+#   which is how `validator-fork-budget` invokes the profiler: base 3281 (STABLE 2) and 3280
+#   (STABLE 3), tip 3304 (STABLE 2) and 3303 (STABLE 2). So +23 either way. I123 0 -> 8 is the
+#   chunked-write paragraph arm; I124 0 -> 15 (16 with the environment inherited) is the party-seat
+#   section arm, its half-B control included. THE TWO METHODS DIFFER BY 5 ON ONE TREE -- I120 0 -> 4
+#   and I124 15 -> 16 with the environment inherited -- so a budget set from an `env -i` reading
+#   (3298 + 6 = 3304) sits at ZERO headroom under the gate, which read exactly 3304 on its first solo
+#   run. The budget is set from the gate's own method. HIGH reading 3304 plus the usual 6.
+FORK_BUDGET=3310
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
@@ -13285,6 +13297,17 @@ fi
 #   B  no file under the six roots outside the list carries a heading, at any level, opening
 #      "As a party seat"; core/fixtures/ excluded on I108's reason.
 #
+# HALF B CARRIES ITS OWN CONTROL ON THE REAL CORPUS. An absence scan that reads nothing reports
+# no EXTRA, which is the same output as a clean tree. So every listed file that half A read
+# carrying the exact heading must also be among half B's hits; one that is not is reported as
+# CONTROL. On a conforming tree that is all four, so a half-B scan that lost its core/ root, its
+# regex or its grep names every carrier. NARROWING: the control set is the files half A scored
+# OK, DRIFT or MULTI, never MISSING -- a listed file without the heading is half A's finding and
+# is not a hit half B could have produced, so including it would double-report every MISSING as
+# CONTROL. The probe seeds the mutant that drops "$1/core" from the roots (i124_mut=nocore) on
+# the conforming four and requires exactly four CONTROL rows; the three other seeds and the real
+# corpus stay free of CONTROL rows, which is the near-miss direction.
+#
 # NOT A VOCABULARY, so no vocabulary marker. The subject is one section's BYTES.
 #
 # THE MEASURED FALSE-POSITIVE SET FOR HALF B. The heading regex over the six roots with nothing
@@ -13329,7 +13352,7 @@ i124_scan() {
 # when the tree conforms. The probe and the corpus both call this.
 i124_check() {
   i124_set="$(i124_pop "$1/core/team-roles")"
-  i124_exist=''; i124_want=0
+  i124_exist=''; i124_want=0; i124_carry=''
   while IFS= read -r i124_f; do
     if [ -f "$i124_f" ]; then i124_exist="$i124_exist
 $i124_f"; i124_want=$((i124_want + 1))
@@ -13344,20 +13367,34 @@ EOF
     while IFS= read -r i124_l; do
       case "$i124_l" in
         "N "*) [ "${i124_l#N }" = "$i124_want" ] || printf 'UNREAD %s\n' "${i124_l#N }" ;;
-        "OK "*) : ;;
-        *) printf '%s %s\n' "${i124_l%% *}" "${i124_l#* "$1"/}" ;;
+        "OK "*) i124_carry="$i124_carry
+${i124_l#OK }" ;;
+        "MISSING "*) printf '%s %s\n' "${i124_l%% *}" "${i124_l#* "$1"/}" ;;
+        *) i124_carry="$i124_carry
+${i124_l#* }"; printf '%s %s\n' "${i124_l%% *}" "${i124_l#* "$1"/}" ;;
       esac
     done <<EOF
 $i124_rows
 EOF
   fi
-  i124_hits="$(i124_sites "$1/core" "$1/scripts" "$1/templates" "$1/patterns" "$1/.claude/rules" "$1/CLAUDE.md")"
+  if [ "${i124_mut:-}" = nocore ]; then
+    i124_hits="$(i124_sites "$1/scripts" "$1/templates" "$1/patterns" "$1/.claude/rules" "$1/CLAUDE.md")"
+  else
+    i124_hits="$(i124_sites "$1/core" "$1/scripts" "$1/templates" "$1/patterns" "$1/.claude/rules" "$1/CLAUDE.md")"
+  fi
   while IFS= read -r i124_h; do
     [ -n "$i124_h" ] || continue
     case "${i124_h#"$1"/}" in core/fixtures/*) continue ;; esac
     in_lines "$i124_h" "$i124_set" || printf 'EXTRA %s\n' "${i124_h#"$1"/}"
   done <<EOF
 $i124_hits
+EOF
+  # HALF B's CONTROL: every listed file half A read carrying the heading must be a half-B hit.
+  while IFS= read -r i124_c; do
+    [ -n "$i124_c" ] || continue
+    in_lines "$i124_c" "$i124_hits" || printf 'CONTROL %s\n' "${i124_c#"$1"/}"
+  done <<EOF
+$i124_carry
 EOF
 }
 
@@ -13384,14 +13421,19 @@ i124_bad=''
 [ "$(i124_check "$i124_pd/w3")" = "MISSING core/team-roles/tea.md" ]  || i124_bad="$i124_bad 3-of-4"
 [ "$(i124_check "$i124_pd/wd")" = "DRIFT core/team-roles/dev.md" ]    || i124_bad="$i124_bad body-drift"
 [ "$(i124_check "$i124_pd/w5")" = "EXTRA core/skills/zz.md" ]         || i124_bad="$i124_bad 5th-carrier"
+i124_mo="$(i124_mut=nocore i124_check "$i124_pd/ok")"
+[ "$i124_mo" = "CONTROL core/team-roles/architect.md
+CONTROL core/team-roles/dev.md
+CONTROL core/team-roles/pm.md
+CONTROL core/team-roles/tea.md" ]                                       || i124_bad="$i124_bad no-core-root-mutant"
 rm -rf "$i124_pd"
 
 if [ -n "$i124_bad" ]; then
-  err "I124's probe failed on seed(s):$i124_bad, so the corpus below was not read. conforming-four-not-quiet: four identical sections and a prose mention were reported; 3-of-4: tea.md without the section was not the only finding; body-drift: one appended sentence in dev.md was not the only finding; 5th-carrier: a demoted copy under core/skills/ was not the only finding, or the core/fixtures/ copy was reported. Any of them failing means I124 would report a clean tree for the reason a broken scan does."
+  err "I124's probe failed on seed(s):$i124_bad, so the corpus below was not read. conforming-four-not-quiet: four identical sections and a prose mention were reported; 3-of-4: tea.md without the section was not the only finding; body-drift: one appended sentence in dev.md was not the only finding; 5th-carrier: a demoted copy under core/skills/ was not the only finding, or the core/fixtures/ copy was reported; no-core-root-mutant: half B run with core/ dropped from its roots did not name all four carriers as CONTROL, so a half-B scan that read nothing would pass. Any of them failing means I124 would report a clean tree for the reason a broken scan does."
 else
   i124_out="$(i124_check "$REPO_ROOT")"
   if [ -n "$i124_out" ]; then
-    err "I124: the party-seat section is not bound across architect, dev, pm and tea. Findings, one per line (MISSING: a listed file lacks the exact heading line; MULTI: it carries the heading twice; DRIFT: its section differs from the copy the others agree on, heading through the line before the next '## '; EXTRA: a file outside the four carries a heading opening 'As a party seat'; UNREAD: a listed file was not read):
+    err "I124: the party-seat section is not bound across architect, dev, pm and tea. Findings, one per line (MISSING: a listed file lacks the exact heading line; MULTI: it carries the heading twice; DRIFT: its section differs from the copy the others agree on, heading through the line before the next '## '; EXTRA: a file outside the four carries a heading opening 'As a party seat'; UNREAD: a listed file was not read; CONTROL: a listed file carrying the heading was not among half B's hits, so half B did not read the tree it reports on):
 $i124_out
 The four copies are the standing copy of one join protocol, so a fork among them is two protocols. Make the section byte-identical in the four files, and keep it out of every other file -- if a fifth role becomes a party seat, add it to i124_names in the same change."
   fi
