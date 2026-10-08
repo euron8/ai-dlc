@@ -1110,10 +1110,15 @@ carry the no-human-present additions:
    which 130.9s is the suite. A push that exceeds the default is SIGKILLed
    at `Exit code 143`, which looks like a failed push and is not one — the
    gate was still running, so nothing is known about whether it would have
-   passed. **Do not background the push to dodge this.** The exit code is
-   what says whether the gate passed, and a backgrounded push invites
-   moving on before it arrives; a push is a mutation, so the next step
-   would be acting on a remote state that does not exist yet.
+   passed. **Do not background the push to dodge this.** A backgrounded
+   push invites moving on before its result arrives; a push is a
+   mutation, so the next step would be acting on a remote state that
+   does not exist yet. **The push is the whole command — `git push -u
+   origin HEAD` and nothing chained, piped or redirected after it.** Its
+   exit code is in the tool result; a `; echo $?`, a `| tail` or a
+   redirect-then-read is not needed, a pipe replaces the push's exit
+   code with the last command's, and a chained push is denied by the
+   steering-budget hook.
 
    If the push fails (no
    remote configured, offline, or a protected branch), note the reason

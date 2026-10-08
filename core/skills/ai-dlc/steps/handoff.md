@@ -65,8 +65,10 @@ Execute this 5-step procedure in order:
    `ai-dlc-update`'s step 1 has resolved this exact state with the `-u`
    form all along; two step files disagreeing about one command is what
    made this survivable. **Push in the foreground
-   with `timeout: 600000`** — `_gate-procedures.md` ("Auto-handoff
-   evaluation", step 3) owns why, and the reason is not restated here.
+   with `timeout: 600000`, and the push is the whole command — nothing
+   chained, piped or redirected after it; its exit code is in the tool
+   result** — `_gate-procedures.md` ("Auto-handoff evaluation", step 3)
+   owns why, and the reason is not restated here.
    If the push fails (no
    remote configured, offline, or a protected branch), report it to the
    operator in one line and continue; the local commits still stand and

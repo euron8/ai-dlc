@@ -19,6 +19,84 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.751.0] - 2026-10-08
+
+Batch 208, release 1. It discharges one consumer candidate and closes `BL-486` and `BL-485`. Two shipped hooks
+change (`ai-dlc-advisor-gate.sh`, `ai-dlc-foreground-budget.sh`), along with the push sentence in three step files,
+the continue hook's handoff guard, and Rule 32's touchpoint I in `SKILL.md` and its post-compact digest.
+
+### The advisor gate re-reads before it denies, and a gated call that did not ship does not consume a consult (PC-S317-ADVISOR-GATE-DENIES-A-PUSH-AFTER-A-RECORDED-ADVISOR-CALL-AND-HANDOFF-STEP-3-TIMEOUT-CONFLICTS-WITH-THE-STEERING-BUDGET)
+
+- **Defect 1 had two causes.**
+  - **The race.** The current assistant message is usually not on disk when PreToolUse fires. In 12 of 13 `claude -p`
+    runs (2.1.294) the gated call's own `tool_use` line was absent at PreToolUse, and so was every earlier line of
+    its message, including an advisor call issued in the same response. After one 1s re-read every line was present
+    in 13 of 13. On the consumer, 6 of 7 pushes issued in the same message as their advisor call were denied.
+  - **A denied push stayed counted.** Only this hook's own `DENIED` envelope removed a call from the gated set. A push
+    that another hook denied (the steering-budget hook) stayed as the last gated action, so the consult made for the
+    retry no longer cleared it.
+- **The fix.**
+  - On the deny path only, the gate sleeps 1s and scans the transcript again, then once more after another 1s, and
+    judges the last scan. A WARN verdict is re-read the same way. An ALLOW is final at once and costs nothing.
+  - The re-read is skipped when the incoming call's own line is already on disk, because the rest of its message is
+    then on disk too.
+  - A re-read that cannot be scanned keeps the verdict of the read that could.
+  - `ADVISOR_GATE_REREADS` is a stricter-only knob. Only `0` and `1` lower the number of re-reads; every other value,
+    garbage included, falls through to the default 2. It exists so a fixture's deny cells do not each pay 2s, and it
+    cannot acquit.
+  - A gated call that failed is removed from the gated set. For a merge, that means its result is `is_error: true`
+    with no `Squashed and merged`, `Merged pull request` or `successfully merged` in the result text, so a
+    `gh pr merge --delete-branch` that merged and then failed to delete the local branch still counts. For a push,
+    it means `is_error: true` with no ref-update line in the result text (`<old>..<new> `, `* [new branch]`,
+    `+ … (forced update)`). A push whose transport dropped after the remote moved therefore still counts. A
+    PreToolUse deny from any hook is one shape of a failed call.
+  - The deny reason now says "call the advisor in a message of its own, read its answer, then retry the same
+    command", and Rule 32's touchpoint I in `SKILL.md` and `postcompact-digest.md` says the same. The gate still
+    does not require a result between the attempt and the action, because the batch-200 ruling that any attempt
+    clears still stands.
+- **This reverses batch 201's clause that "a re-push after a failed gate owes a new call".** `BL-486`'s operator
+  ruling is later and governs, and the hook header says so. The cost: a re-push after a red suite and a fix now
+  rides the consult made before the red push.
+- **Defect 2.** The literal step-3 command `git push -u origin HEAD` at `timeout: 600000` was always exempt from the
+  steering budget, but the lead's `git push … > f 2>&1; echo "push_rc=$?"; …` chain was denied. The step sentence
+  "the exit code is what says whether the gate passed" invited that chain. The fix has two parts:
+  - The step text now says the push is the whole command, with nothing chained, piped or redirected after it, and
+    its exit code is in the tool result. That text is in `handoff.md`, `_gate-procedures.md`, `retro.md` and the
+    continue hook's handoff guard.
+  - `ai-dlc-foreground-budget.sh` gives a chained push its own deny reason, whose one remedy is to drop what follows
+    the push. That reason carries no background or short-timeout remedy, because either one would break the push.
+    A single `|` now counts as a chain, so `git push … | tail -5` is denied too, since the pipe replaces the push's
+    exit code with `tail`'s.
+    A single `&` counts as a chain too, so `git push … & sleep 900` takes the push reason; `2>&1` and `&>` do not.
+- The gate reads a push's `is_error` as its exit status. The rule is sound when the recorded push is the bare whole
+  command, which is what the step text now instructs. A chained push that shipped and then errored is scored as
+  failed, which is the stated cost.
+
+### The operator-home advisor gate gains an escape hatch and stops scoring failed actions (BL-486)
+
+- `~/.claude/hooks/ai-dlc-advisor-gate.sh` is operator-home and not shipped. It applies the same rule that a failed
+  action does not consume a consult, and it gains the same deny-path re-read.
+- It counts `mcp__advisor__consult` as an attempt only in a transcript with no built-in `advisor_tool` grant.
+- It gains an operator `!` bypass, keyed on a user line opening `<bash-input>ai-dlc-advisor-gate --bypass`, which
+  allows one action and says so.
+- The shipped hook's transcript-write deny is ported to it, so the bypass line cannot be forged.
+- Its self-test reads `pass=61 fail=0`.
+- The entry's second claim, that the `unavailable` WARN path did not fire, is corrected. The parser returned
+  `3110 3088 U` and would have allowed; the deny was the same-message race.
+- The shipped hook gains one knob, `ADVISOR_GATE_REREADS`, and it is stricter-only: only `0` and `1` lower the
+  re-read count, every other value including garbage falls through to 2, it exists so fixture deny cells do not
+  each pay 2s, and it cannot acquit.
+
+### The `review-shard-merge-mutants` battery is sharded, and its receipt keys on the emitting lines (BL-485)
+
+- The battery is partitioned across `review-shard-merge-mutants`, `-b` and `-c`. The two new siblings are
+  `.dist-only` and each is an `exec bash "$IMPL" --group <shard>` wrapper. The base takes `--group` and carries a
+  `[J0]` coverage join, so a mutant dealt to no shard fails the run.
+- The receipt filed at batch 205 grepped every shard for `coverage join|J0`. It exited 1 on the model battery
+  `fold-architect-ledger-join-mutants` too, so the fix it prescribed could never turn it green. It is rewritten to
+  key on the base's `JOIN_LINE=` and `ok "$JOIN_LINE"` lines and on each sibling's `IMPL=` and `exec … --group`
+  lines.
+
 ## [0.750.0] - 2026-10-08
 
 Batch 207's release. It closes `BL-477`, `BL-478` and `BL-479`, the three defects the 0.746.0 adversary passes left blocking

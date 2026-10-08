@@ -6,11 +6,15 @@
 # DESIGN (BL-459, operator ruling, option A):
 #   - Any advisor ATTEMPT (`server_tool_use` named `advisor`) after the last gated action clears
 #     the deny, including one that errors. So the deny is always clearable by calling the tool,
-#     and its reason says exactly that: call the advisor tool, then retry the same command.
+#     and its reason says exactly that: call the advisor in a message of its own, read its
+#     answer, then retry the same command. The gate does not require a RESULT between the
+#     attempt and the action (batch-200 ruling: any attempt clears); the wording names the shape
+#     that never races (THE RACE, below).
 #   - When the agent's most recent `advisor_tool_result` carries `error_code: "unavailable"` the
 #     harness withdraws the tool, no call can clear a deny, and the gate only WARNS. A later
 #     result that is not `unavailable` re-arms the deny.
-#   - NO CONFIG KNOB AND NO DEFAULT. Whether the gate applies is decided PER AGENT from that
+#   - NO CONFIG KNOB AND NO DEFAULT on whether the gate applies (the one knob, THE RE-READ's
+#     `ADVISOR_GATE_REREADS`, can only make it stricter). That is decided PER AGENT from that
 #     agent's own transcript: the harness writes an `attachment` line of type `advisor_tool`
 #     (`available`, `toolChange`, `model`) when it grants the tool. No such line -> silent.
 #     The LATEST such line wins; `available: false` or `toolChange: "remove"` is a withdrawn
@@ -108,29 +112,54 @@
 # recent advisor attempt must come AFTER the line of the most recent gated action OF THE SAME
 # KIND as the incoming call. The kinds are push, PR merge (`gh pr merge` and the MCP merge), gate
 # `close`, Check 12 gate-log append, and a teammate's verdict/repair-record write. So one call
-# before a release's push also covers that release's merge, while the next push owes its own; a
-# re-push after a failed gate owes a new call. The kind rides on each recorded call in the same
-# single pass; there is no new file and no knob. ONE classifier decides the incoming call and
-# every `tool_use` already recorded, so a command that merely MENTIONS a push (a grep, an echo)
-# is not one in either place. Two recorded calls are not counted, both MEASURED:
-#   - a call this hook DENIED. A denied `tool_use` is persisted, followed by an error
-#     `tool_result` whose content OPENS with the harness envelope
-#     `PreToolUse:<Tool> hook error: ai-dlc-advisor-gate: DENIED` (measured, `claude -p` 2.1.291,
-#     a string; a `text`-block array is read the same way). Only that anchored envelope removes a
-#     call: a push that RAN and printed this hook's reason somewhere in a failing output keeps
-#     its gated action. It shipped
-#     nothing, and counting it would wedge: an advisor call issued in the SAME assistant message
-#     as the gated call is not always on disk when PreToolUse fires (measured, `claude -p` 2.1.291:
-#     the lead's hook saw 31 lines while the advisor block landed at line 32), so the first try
-#     is denied and the retry must not then be held to an advisor older than the denied call.
-#   - the incoming call itself, by `tool_use_id` -- it IS already on disk when the hook runs
-#     (measured in a live session: the retry at line 1408 was the transcript's last tool_use),
-#     and counting it denies every retry forever. The input's `tool_use_id` IS the on-disk
-#     `tool_use.id` (measured, `claude -p` 2.1.291: `toolu_01Q3LcULKxuLsrnrvJKrg211` on both),
-#     so the id match is the defence. With no `tool_use_id` in the input, a gated call on the
-#     transcript's LAST line is taken to be the incoming one; an attachment landing after the
-#     call (measured: a `hook_additional_context` line right after a `tool_use`) defeats that
-#     fallback, which is why it is only the fallback.
+# before a release's push also covers that release's merge, while the next push owes its own.
+# The kind rides on each recorded call in the same single pass; there is no new file, and no knob
+# bears on the kinds (the only knob, `ADVISOR_GATE_REREADS` under THE RE-READ, is stricter-only
+# and cannot acquit). ONE classifier decides the incoming call and every `tool_use` already recorded, so a
+# command that merely MENTIONS a push (a grep, an echo) is not one in either place. Two recorded
+# calls are not counted:
+#   - a gated call that DID NOT SHIP. Operator ruling BL-486 (batch 208), which is later than
+#     batch 201's "a re-push after a failed gate owes a new call" and REVERSES it: a gated
+#     action that ran and failed does not consume a consult. A gated call whose `tool_result` is
+#     `is_error: true` is removed unless its result text shows it shipped (`shipped`, below): for
+#     a PUSH, a ref-update line (`<old>..<new> `, `* [new branch]`, `+ ... (forced update)`); for
+#     a MERGE, `Squashed and merged`, `Merged pull request` or `successfully merged`. A 404 merge
+#     result is `is_error: true` with none of them (measured on this repo's own transcript), so it
+#     is removed. A push whose transport dropped after the remote moved (exit 141 with
+#     `* [new branch]` in its output) SHIPPED, and stays a gated action; so does a `gh pr merge
+#     --delete-branch` (retro.md:1252) that merged and then failed to delete the local branch.
+#     Every other kind is removed on `is_error` alone. The text is read from a string or from a
+#     `text`-block array. Every PreToolUse deny is one shape of this: the
+#     harness persists the denied `tool_use` and an `is_error` result opening
+#     `PreToolUse:<Tool> hook error: <hook>: ...` (measured, `claude -p` 2.1.291), whichever hook
+#     denied it -- measured on graph, a push the steering-budget hook denied stayed counted under
+#     the narrower envelope and spent the consult made for the retry. COST, stated: a re-push
+#     after a red suite and a fix rides the consult made before the red push. This reads the
+#     push's `is_error` as its exit status. The rule is sound when the recorded push is the bare
+#     whole command, which is what the step text now instructs (a `| tail` or a chained `echo`
+#     replaces the push's status with its own). A chained push that shipped and then errored,
+#     with no ref-update line in its text, is scored as failed: that is the stated cost.
+#   - the incoming call itself, by `tool_use_id`, whenever its line IS on disk; counting it
+#     would deny every retry forever. The input's `tool_use_id` IS the on-disk `tool_use.id`
+#     (measured, `claude -p` 2.1.291: `toolu_01Q3LcULKxuLsrnrvJKrg211` on both). With no
+#     `tool_use_id` in the input, a gated call on the transcript's LAST line is taken to be the
+#     incoming one; an attachment landing after the call (measured: a `hook_additional_context`
+#     line right after a `tool_use`) defeats that fallback, which is why it is only the fallback.
+#
+# THE RACE, AND THE RE-READ. The current assistant message is usually NOT on disk when
+# PreToolUse fires. Measured (`claude -p` 2.1.294, 13 runs): the incoming call's own `tool_use`
+# line was absent in 12 of 13, both for a Bash call alone and for an advisor call followed by
+# the Bash call in one response; after a 1s re-read every line of the message was present in 13
+# of 13, the advisor's `server_tool_use` included. Measured on graph: 6 of 7 pushes issued in
+# the same message as their advisor call were denied. So a verdict of DENY or WARN is not final
+# on the first read: the hook sleeps 1s and scans again, and once more after another 1s, and
+# judges the LAST scan. An ALLOW is final at once and pays nothing. When the incoming call's own
+# line is already on disk, every line of its message before it is too, so nothing that could
+# acquit is still in flight and the re-read is skipped. A re-read that cannot be scanned keeps
+# the verdict of the read that could. `ADVISOR_GATE_REREADS` (0, 1 or 2; default 2) can only
+# LOWER the number of re-reads, so it can make the gate stricter and never acquit; it exists so
+# a fixture's deny cells do not each pay 2s. The deny reason says to call the advisor in a
+# message of its own, which is the shape that never races.
 #
 # A TEAMMATE IS JUDGED ON ITS OWN TRANSCRIPT. Inside a subagent the input's `transcript_path`
 # names the PARENT session's file. The teammate's own is
@@ -251,6 +280,19 @@ def kind($role): if $role == "lead" then leadkind else matekind end;
 # `origin.kind` field of the line, never on its text: the text openings are harness-origin prefixes,
 # which core/schemas/harness-origin.json declares once and invariant I91 forbids restating.
 def notif: ((.origin? | if type == "object" then .kind else null end) // "") == "task-notification";
+# A push result that moved a remote ref. `(^|\n)` because jq `^` does not anchor at an embedded newline.
+# NOT SEEN, found by the batch-208 tip adversary: `* [new tag]`, `* [new reference]`, `--porcelain`
+# output, a `-q` push (no ref lines at all), and an unindented `a..b` line. An errored push carrying
+# only those scores as failed. None is a pipeline push form: the step text pushes a branch with
+# `git push -u origin HEAD`, which prints `* [new branch]` or an indented `a..b` line.
+def refupdate: test("(^|\\n) +[0-9a-f]+\\.\\.\\.?[0-9a-f]+ ") or test("\\* \\[new branch\\]") or test("\\+ .*\\(forced update\\)");
+# A merge result that merged (from gh `✓ Squashed and merged pull request` or `✓ Merged pull request`,
+# from the MCP tool `successfully merged`), read on an errored result: gh merged, then the local branch
+# delete failed. No apostrophe anywhere in this literal: one would close it.
+def mergedtext: test("Squashed and merged|Merged pull request|successfully merged");
+# shipped(kind): an errored result whose text shows the gated call took effect anyway.
+def shipped($k): if $k == "push" then refupdate elif $k == "merge" then mergedtext else false end;
+def rtext: if type == "array" then (map(select(type == "object") | .text // "") | join("\n")) else tostring end;
 '
 
 # The incoming call: one jq pass decides its kind and hands the fields to the shell.
@@ -300,11 +342,13 @@ JUDGED="$TP"
 # One pass over the judged transcript. Lines that are not JSON are skipped, never fatal.
 #   grant: the latest `advisor_tool` attachment (null = never granted)
 #   adv:   line of the last advisor attempt;  res: U (`unavailable`) or R, the last result
-#   g:     tool_use id -> [line, path, kind] of every gated call; a call this hook denied is removed.
+#   g:     tool_use id -> [line, path, kind] of every gated call; a call that did not ship is removed.
 #          The last gated action is the last one OF THE INCOMING CALL'S KIND.
-STATE="$(jq -n -R -r --arg home "${HOME:-}" --arg proj "$PROJ" --arg role "$ROLE" --arg tuid "$TUID" --arg fp "$FP" --arg kind "$KIND" "$CLASSIFY"'
+#   seen:  1 when the incoming call's own `tool_use` line is on disk, else 0.
+scan() {
+jq -n -R -r --arg home "${HOME:-}" --arg proj "$PROJ" --arg role "$ROLE" --arg tuid "$TUID" --arg fp "$FP" --arg kind "$KIND" "$CLASSIFY"'
   reduce (inputs | (fromjson? // empty) as $l | select(($l | type) == "object") | [input_line_number, $l]) as [$n, $l]
-    ({grant: null, adv: 0, res: "-", g: {}, last: 0};
+    ({grant: null, adv: 0, res: "-", g: {}, last: 0, seen: 0};
      .last = $n
      | if ($l.type == "attachment" and ($l.attachment | type) == "object" and $l.attachment.type == "advisor_tool") then
        .grant = (($l.attachment.available != false) and ($l.attachment.toolChange != "remove"))
@@ -319,9 +363,10 @@ STATE="$(jq -n -R -r --arg home "${HOME:-}" --arg proj "$PROJ" --arg role "$ROLE
          elif ($b.type == "tool_use" and (($b.id // "") | tostring) != "" and (($b.id | tostring) != $tuid)) then
            ({name: $b.name, input: ($b.input // {})} | kind($role) | sub("^gatelogw$"; "gatelog")) as $k
            | if $k != "" then .g[$b.id | tostring] = [$n, (($b.input.file_path // "") | tostring), $k] else . end
+         elif ($b.type == "tool_use" and $tuid != "" and (($b.id // "") | tostring) == $tuid) then .seen = 1
          elif ($b.type == "tool_result" and $b.is_error == true
-               and (($b.content | if type == "array" then (map(select(type == "object") | .text // "") | join("\n")) else tostring end)
-                    | test("^PreToolUse:[A-Za-z_]+ hook error: ai-dlc-advisor-gate: DENIED"))) then
+               and (((($b.tool_use_id // "") | tostring) as $r | .g[$r][2] // "") as $gk
+                    | ($b.content | rtext) | shipped($gk) | not)) then
            .g |= del(.[($b.tool_use_id // "") | tostring])
          else . end)
      end)
@@ -329,14 +374,32 @@ STATE="$(jq -n -R -r --arg home "${HOME:-}" --arg proj "$PROJ" --arg role "$ROLE
   | (if $tuid == "" then .g |= with_entries(select(.value[0] != $last)) else . end)
   | ([.g[] | select(.[2] == $kind) | .[0]] | max // 0) as $act
   | ([.g[] | select(.[1] != "" and .[1] == $fp)] | length) as $same
-  | "\(if .grant == null then "none" elif .grant then "on" else "off" end) \(.adv) \($act) \(.res) \($same)"' "$JUDGED" 2>/dev/null)" \
-  || { say "the transcript could not be scanned ($JUDGED); gate skipped"; exit 0; }
-read -r GRANT LAST_ADV LAST_ACT LAST_RES SAME <<<"$STATE"
-
+  | "\(if .grant == null then "none" elif .grant then "on" else "off" end) \(.adv) \($act) \(.res) \($same) \(.seen)"' "$JUDGED" 2>/dev/null
+}
+# judge: sets GRANT LAST_ADV LAST_ACT LAST_RES SAME SEEN from STATE, and V to allow | owed.
+judge() {
+  read -r GRANT LAST_ADV LAST_ACT LAST_RES SAME SEEN <<<"$STATE"
+  V=owed
+  # A teammate re-writing a deliverable it already wrote un-denied is not a new gated action.
+  if [ "$ROLE" = mate ] && [ "${SAME:-0}" -gt 0 ] 2>/dev/null; then V=allow; fi
+  if [ "${LAST_ADV:-0}" -gt "${LAST_ACT:-0}" ] 2>/dev/null; then V=allow; fi
+  return 0
+}
+STATE="$(scan)" || { say "the transcript could not be scanned ($JUDGED); gate skipped"; exit 0; }
+judge
+# The grant line is written at session start, long before any gated call, so the first read decides it.
 [ "${GRANT:-none}" = on ] || exit 0
-# A teammate re-writing a deliverable it already wrote un-denied is not a new gated action.
-if [ "$ROLE" = mate ] && [ "${SAME:-0}" -gt 0 ] 2>/dev/null; then exit 0; fi
-[ "${LAST_ADV:-0}" -gt "${LAST_ACT:-0}" ] 2>/dev/null && exit 0
+# The re-read: an owed verdict (DENY or WARN) on a read that did not yet hold the incoming call's
+# own line is re-judged on a later read. A re-read that fails keeps the last good STATE.
+case "${ADVISOR_GATE_REREADS:-2}" in 0) _rr=0 ;; 1) _rr=1 ;; *) _rr=2 ;; esac
+while [ "$V" != allow ] && [ "${SEEN:-0}" != 1 ] && [ "$_rr" -gt 0 ]; do
+  _rr=$((_rr - 1))
+  sleep 1
+  STATE2="$(scan)" || STATE2="$STATE"
+  STATE="$STATE2"
+  judge
+done
+[ "$V" = allow ] && exit 0
 
 if [ "${LAST_RES:--}" = U ]; then
   ctx="ai-dlc-advisor-gate: this ${KIND} is owed an advisor call (SKILL.md Rule 32), and this agent's most recent advisor result is an 'unavailable' error, so the harness has withdrawn the tool and the call is NOT blocked. A later successful advisor result re-arms the gate."
@@ -354,4 +417,4 @@ case "$KIND" in
   push) _what="git push" ;; merge) _what="PR merge" ;; close) _what="gate close" ;;
   gatelog) _what="Check 12 gate-log append" ;; verdict) _what="verdict or repair-record write" ;; *) _what="$KIND" ;;
 esac
-deny "ai-dlc-advisor-gate: DENIED -- call the advisor tool, then retry the same command. This ${_what} is a SKILL.md Rule 32 touchpoint, and this agent holds the advisor tool with no advisor attempt since its last ${_what}. Each kind (push, PR merge, gate close, gate-log append, verdict write) owes its own call; one call covers the next action of every kind. Any attempt clears this, including one that errors; if the advisor answers 'unavailable' the gate drops to a warning. This is not a push or merge failure: do not record it as one."
+deny "ai-dlc-advisor-gate: DENIED -- call the advisor in a message of its own, read its answer, then retry the same command. This ${_what} is a SKILL.md Rule 32 touchpoint, and this agent holds the advisor tool with no advisor attempt since its last ${_what}. Each kind (push, PR merge, gate close, gate-log append, verdict write) owes its own call; one call covers the next action of every kind. Any attempt clears this, including one that errors; if the advisor answers 'unavailable' the gate drops to a warning. This is not a push or merge failure: do not record it as one."

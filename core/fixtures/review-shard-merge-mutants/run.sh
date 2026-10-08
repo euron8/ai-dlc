@@ -3,7 +3,8 @@
 # review-shard-merge-mutants/run.sh -- the mutation battery behind `review-shard-merge`.
 # DISTRIBUTION-ONLY (see .dist-only).
 #
-# Usage: run.sh [--rows <file>]
+# Usage: run.sh [--group <shard>] [--rows <file>]
+#        --group run only the mutants dealt to <shard> (default a); see THE SHARDS below.
 #        --rows  append one `<label>TAB<killed set>` row per scored mutant, in dispatch order, the
 #                killed set in P_ALL order and space-joined (empty for a mutant that killed nothing).
 # Exit:  0 = every mutant killed exactly its expected set and the control killed nothing,
@@ -37,19 +38,92 @@
 # The bound is sized against the LOADED cost, not the solo one: the unsplit fixture's loaded cost
 # was 1738s for 52 scorings plus the arms, about 33s a scoring, and a unit under the gate's pool
 # has measured 4x its solo time. 900s is roughly 27x that per-scoring figure.
+#
+# THE SHARDS (BL-485). The pre-push suite is POLE-BOUND: its makespan tracks its single longest
+# DIRECTORY, and this battery, 66 mutants in one unit, was that directory at 1481s loaded. So the
+# mutant set is dealt across three units, this directory (shard a) and the one-line drivers
+# `review-shard-merge-mutants-b` and `-c`, each `exec bash "$IMPL" --group <x>`, the shape
+# `fold-architect-ledger-join-mutants` carries. Every scorer runs every predicate, so the cost per
+# mutant is roughly uniform and an equal count balances: 22 each, in declaration order by family.
+# Every shard pays the unmutated control MX0, the J1 join and the MJ probe itself, because a shard
+# that skipped them could report a kill against a harness that never ran.
+#
+# THE SHARD ARRIVES AS AN ARGUMENT, never from the environment: the scrub below unsets AI_DLC_*,
+# and a fallback-to-'a' design would run shard a three times and report three green fixtures.
+#
+# THE COVERAGE JOIN [J0] runs in every shard before any mutant is dispatched: the declared set is
+# DERIVED from this file's own `mutant "<id> ` lines, the dealt lists must be disjoint and their
+# union must equal it exactly, and every declared shard must have a driver directory naming it.
+# The join proves it can fire, on a seeded duplicate and a seeded omission, before it is trusted.
+# After the reap, [J2] asserts this shard dispatched exactly the mutants dealt to it.
+SHARDS="a b c"
+MUTANTS_a="MX1 MX2 MX3 MX4 MX5 MX6 MX7 MX8 MX9 MX10 MX11 MX12 MX13 MX14 MX15 MX16 MX17 MX18 MX19 MX20 MX21 MX22"
+MUTANTS_b="MX23 MX24 MX25 MX26 MX27 MX28 MQ1 MQ2 MQ3 MQ4 MQ5 MQ6 MQ7 MQ8 MQ9 MH1 MH2 MH3 MH4 MH5 MH6 MH7"
+MUTANTS_c="MH8 MH10 MH11 MH12 MH13 MH14 MH9 MG1 MG2 MG3 MC1 MC2 MC3 MC4 MC11 MC12 MC5 MC6 MC7 MC8 MC9 MC10"
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 unset AI_DLC_REVIEW_SHARD_MIN_FILES
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-NAME="review-shard-merge-mutants"
-ROWS=""
+SELF="$HERE/run.sh"
+ROWS=""; GROUP=a
+USAGE="usage: run.sh [--group <shard>] [--rows <file>]"
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --rows) ROWS="${2:-}"; [ -n "$ROWS" ] || { echo "usage: run.sh [--rows <file>]" >&2; exit 2; }; shift 2 ;;
-    *) echo "usage: run.sh [--rows <file>]" >&2; exit 2 ;;
+    --group) GROUP="${2:-}"; [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }; shift 2 ;;
+    --rows) ROWS="${2:-}"; [ -n "$ROWS" ] || { echo "$USAGE" >&2; exit 2; }; shift 2 ;;
+    *) echo "$USAGE" >&2; exit 2 ;;
   esac
 done
+case " $SHARDS " in
+  *" $GROUP "*) ;;
+  *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;;
+esac
+eval "MINE=\"\${MUTANTS_$GROUP:-}\""
+[ -n "$MINE" ] || { echo "FIXTURE ERROR: shard '$GROUP' has no MUTANTS_$GROUP list; a shard dealt nothing passes everything it never checked" >&2; exit 2; }
+NAME="review-shard-merge-mutants"
+[ "$GROUP" = a ] || NAME="$NAME-$GROUP"
+[ -f "$SELF" ] || { echo "FIXTURE ERROR: cannot read $SELF for the coverage join" >&2; exit 2; }
+
+# partition_ok <declared ids file> <dealt ids file> -> 0 when dealt is disjoint and covers declared
+# exactly; prints the offending ids otherwise.
+partition_ok() {
+  local dup miss extra
+  dup="$(sort "$2" | uniq -d | tr '\n' ' ')"
+  miss="$(sort -u "$2" | comm -23 <(sort -u "$1") - | tr '\n' ' ')"
+  extra="$(sort -u "$2" | comm -13 <(sort -u "$1") - | tr '\n' ' ')"
+  [ -z "$dup$miss$extra" ] && return 0
+  echo "dealt twice: {${dup% }} dealt to no shard: {${miss% }} dealt but not declared: {${extra% }}"
+  return 1
+}
+JW="$(mktemp -d "${TMPDIR:-/tmp}/rsm-join.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
+printf '%s\n' MX1 MX2 MX3 > "$JW/pd"; printf '%s\n' MX1 MX2 MX2 MX3 > "$JW/pdup"
+printf '%s\n' MX1 MX3 > "$JW/pmiss"; printf '%s\n' MX3 MX1 MX2 > "$JW/pok"
+if partition_ok "$JW/pd" "$JW/pdup" >/dev/null || partition_ok "$JW/pd" "$JW/pmiss" >/dev/null \
+   || ! partition_ok "$JW/pd" "$JW/pok" >/dev/null; then
+  echo "FIXTURE BROKEN: the coverage join's self-probe did not discriminate (duplicate, omission, exact)" >&2; exit 2
+fi
+sed -n 's/^mutant "\([A-Z][A-Z0-9]*\) .*/\1/p' "$SELF" > "$JW/declared"
+for s in $SHARDS; do eval "printf '%s\n' \${MUTANTS_$s}"; done | grep . > "$JW/dealt"
+ndecl="$(grep -c . "$JW/declared")" || ndecl=0
+ndupdecl="$(sort "$JW/declared" | uniq -d | grep -c .)" || ndupdecl=0
+if [ "$ndecl" -eq 0 ] || [ "$ndupdecl" -ne 0 ]; then
+  echo "FIXTURE BROKEN: $ndecl mutant ids derived from $SELF ($ndupdecl declared twice)" >&2; exit 2
+fi
+if ! why="$(partition_ok "$JW/declared" "$JW/dealt")"; then
+  echo "FIXTURE BROKEN: the shard partition does not cover the declared mutants exactly -- $why" >&2; exit 2
+fi
+for s in $SHARDS; do
+  [ "$s" = a ] && continue
+  drv="$HERE/../review-shard-merge-mutants-$s/run.sh"
+  # Anchored on the whole exec line, `^exec bash "$IMPL" --group <s>$`: a comment or any other
+  # line merely mentioning `--group <s>` does not drive the shard.
+  if [ ! -f "$drv" ] || ! grep -qxF -- "exec bash \"\$IMPL\" --group $s" "$drv"; then
+    echo "FIXTURE BROKEN: shard '$s' is declared but $drv does not drive it" >&2; exit 2
+  fi
+done
+nmine=0; for _m in $MINE; do nmine=$((nmine+1)); done
+JOIN_LINE="[J0] coverage join: $ndecl mutants derived from mutant lines, dealt disjointly across {$SHARDS}, union exact; this shard runs $nmine: {$MINE}"
 command -v python3 >/dev/null 2>&1 || { echo "FIXTURE ERROR: python3 not on PATH (the mutation helper)" >&2; exit 2; }
 SIB="$HERE/../review-shard-merge"
 [ -f "$SIB/lib.sh" ] || { echo "FIXTURE BROKEN: $SIB/lib.sh is absent; no predicate exists to score a mutant against" >&2; exit 2; }
@@ -59,6 +133,7 @@ SIB="$HERE/../review-shard-merge"
 if [ -n "$ROWS" ]; then : >> "$ROWS" || { echo "FIXTURE ERROR: cannot write --rows $ROWS" >&2; exit 2; }; fi
 
 echo "$NAME:"
+ok "$JOIN_LINE"
 seed_controls
 
 # THE JOIN: every predicate the shipped fixture names in an `arm` call is scored here, and every
@@ -156,8 +231,12 @@ judge() { # <verdict-stem> <label> <expected dead set | NONE>
   if [ "$dead" = "$want" ]; then printf '%s: KILLED by [%s] and nothing else\n' "$label" "$want"; return 0; fi
   printf '%s killed [%s], expected exactly [%s] -- an arm is entangled or does not own this property\n' "$label" "$dead" "$want"; return 1
 }
+NSEEN=0
 mutant() { # <label> <file> <expected> <old> <new> [<old2> <new2>]
-  local label="$1" f="$2" want="$3" d; d="$(mutdir "${label%% *}")"
+  local label="$1" f="$2" want="$3" d
+  case " $MINE " in *" ${label%% *} "*) ;; *) return 0 ;; esac
+  NSEEN=$((NSEEN + 1))
+  d="$(mutdir "${label%% *}")"
   if ! apply "$d/$f" "$4" "$5" || { [ $# -ge 7 ] && ! apply "$d/$f" "$6" "$7"; }; then
     bad "$label: FIXTURE STALE -- the mutation anchor is not in $f exactly once; re-anchor it, never relax the assertion"; return
   fi
@@ -392,6 +471,12 @@ if [ "$NDISP" -ge 2 ] && [ "$nidx" -eq "$NDISP" ] && [ "$nd" -eq "$NDISP" ]; the
 else
   bad "MR: $NDISP scorers dispatched, $nidx recorded, $nd completed -- a scorer was lost or never started"
 fi
+# The control is one dispatch; every other dispatch is a mutant dealt to this shard.
+if [ "$NSEEN" -eq "$nmine" ] && [ "$((NDISP - 1))" -eq "$nmine" ]; then
+  ok "[J2] shard '$GROUP' reached $NSEEN mutants and dispatched $((NDISP - 1)), of $nmine dealt"
+else
+  bad "[J2] shard '$GROUP' reached $NSEEN mutants and dispatched $((NDISP - 1)), of $nmine dealt -- a dealt mutant never ran"
+fi
 while IFS='	' read -r id label want; do
   if line="$(judge "$VD/$id" "$label" "$want")"; then ok "$line"; else bad "$line"; fi
   if [ -n "$ROWS" ] && [ -f "$VD/$id.v" ]; then
@@ -399,26 +484,27 @@ while IFS='	' read -r id label want; do
   fi
 done < "$IDX"
 
-# THE JUDGMENT, PROBED ON A REAL VERDICT. MX1's verdict file is copied aside and judged three
-# ways against a scratch counter: its own expected set must PASS (else the probe proves nothing
-# about a judge that always fails), a deliberately wrong set must FAIL, and the same stem with the
-# verdict file deleted must FAIL.
-pv="$(awk -F'\t' 'index($2, "MX1 ") == 1 { print $1; exit }' "$IDX")"
-pw="$(awk -F'\t' 'index($2, "MX1 ") == 1 { print $3; exit }' "$IDX")"
-pl="$(awk -F'\t' 'index($2, "MX1 ") == 1 { print $2; exit }' "$IDX")"
+# THE JUDGMENT, PROBED ON A REAL VERDICT. The first MUTANT verdict this shard dispatched (the first
+# row whose expected set is not the control's NONE) is copied aside and judged three ways against a
+# scratch counter: its own expected set must PASS (else the probe proves nothing about a judge that
+# always fails), a deliberately wrong set must FAIL, and the same stem with the verdict file deleted
+# must FAIL. The wrong set is a predicate name no P_ALL member carries, so it can equal no mutant's.
+pv="$(awk -F'\t' '$3 != "NONE" { print $1; exit }' "$IDX")"
+pw="$(awk -F'\t' '$3 != "NONE" { print $3; exit }' "$IDX")"
+pl="$(awk -F'\t' '$3 != "NONE" { print $2; exit }' "$IDX")"
 if [ -z "$pv" ] || [ ! -f "$VD/$pv.v" ]; then
-  bad "MJ: FIXTURE BROKEN -- no MX1 verdict file to probe the judgment with"
+  bad "MJ: FIXTURE BROKEN -- no mutant verdict file to probe the judgment with"
 else
   pd="$(mktemp -d "$WORK/judge-probe.XXXXXX")" && cp "$VD/$pv.v" "$pd/p.v"
   red=0
   judge "$pd/p" "$pl" "$pw" > /dev/null || red=$((red + 100))
-  judge "$pd/p" "$pl" "worst" > /dev/null || red=$((red + 1))
+  judge "$pd/p" "$pl" "no_such_predicate" > /dev/null || red=$((red + 1))
   : > "$pd/p.timeout"
   judge "$pd/p" "$pl" "$pw" > /dev/null || red=$((red + 1))
   rm -f "$pd/p.timeout" "$pd/p.v"
   judge "$pd/p" "$pl" "$pw" > /dev/null || red=$((red + 1))
   if [ "$red" -eq 3 ]; then
-    ok "MJ: the judgment passes MX1's real verdict against its own set, and FAILS it against a wrong set, beside a TIMEOUT marker, and with the verdict file deleted"
+    ok "MJ: the judgment passes ${pl%% *}'s real verdict against its own set, and FAILS it against a wrong set, beside a TIMEOUT marker, and with the verdict file deleted"
   else
     bad "MJ: the judgment probe scored $red (want 3: real+right ok, real+wrong red, real+timeout red, deleted red; +100 means the right set failed)"
   fi
