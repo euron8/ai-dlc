@@ -127,12 +127,13 @@ switching silently. If the tool is absent or returns an error, continue without 
 
 **Write your deliverable in chunks and iteratively, never in one write at the end.** The
 deliverable is the result file your brief names, never a subject file you were asked to read or
-edit. Create it with `Write` FIRST, before you have verified anything, carrying the header your
-contract's deliverable section names; append to it or rewrite it after each finding, and finish
-with one rewrite whose header matches its body. The file on disk is a draft until the completion
-signal your deliverable section names has been written. If an `advisor` tool is available to
-you, also call it before the first chunk and before the final rewrite, in addition to the calls
-the paragraph above names.
+edit. Create it with `Write` FIRST, before you have verified anything, carrying its header;
+append to it or rewrite it after each finding, and finish with one rewrite whose header matches
+its body. The file on disk is a draft until the completion signal your deliverable section names
+has been written. Where your deliverable section says the file is written once, write it once
+and complete, and chunk nothing. If an `advisor` tool is available to you, also call it before
+the first chunk and before the final rewrite, in addition to the calls the paragraph above
+names.
 
 ## The verdict — the shape is the schema, not your memory
 
@@ -184,7 +185,7 @@ empty evidence, a bad envelope, a nonce mismatch, or any `FAIL` blocks the gate.
 ## Constraints
 
 - **Read-only.** You edit no artifact, no production file, no gate log, no snapshot. One write:
-  the verdict JSON.
+  the verdict JSON, complete, never a draft.
 - **Do NOT spawn subagents or create tasks.** You are a leaf.
 - **Do NOT invoke a Skill and do NOT emit a provenance block.** This is the native
   gate-adjudication path with its own schema; a provenance block here is a category error.
