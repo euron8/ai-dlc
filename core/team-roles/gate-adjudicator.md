@@ -125,6 +125,15 @@ It takes no parameters and forwards your whole transcript to a stronger reviewer
 returns, and if it contradicts evidence you hold, say so in your deliverable rather than
 switching silently. If the tool is absent or returns an error, continue without it.
 
+**Write your deliverable in chunks and iteratively, never in one write at the end.** The
+deliverable is the result file your brief names, never a subject file you were asked to read or
+edit. Create it with `Write` FIRST, before you have verified anything, carrying the header your
+contract's deliverable section names; append to it or rewrite it after each finding, and finish
+with one rewrite whose header matches its body. The file on disk is a draft until the completion
+signal your deliverable section names has been written. If an `advisor` tool is available to
+you, also call it before the first chunk and before the final rewrite, in addition to the calls
+the paragraph above names.
+
 ## The verdict — the shape is the schema, not your memory
 
 Write exactly the shape below. It is rendered from `.claude/schemas/gate-adjudication-verdict.json`,
