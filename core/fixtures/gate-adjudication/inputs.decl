@@ -1,0 +1,12 @@
+# gate-adjudication reads the validator under test, the verdict schema, the enforcement map and
+# the three sibling validators it shells to, plus the two step files the script-arms-first arm
+# audits. seed.sh copies the validator and map into the seeded tree. Its own directory is
+# copied by the runner without being named.
+!core/scripts/validate-gate-adjudication.sh
+core/scripts/validate-adversarial-convergence.sh
+core/scripts/validate-steering-budget.sh
+core/scripts/validate-suppression-lifetime.sh
+core/schemas/gate-adjudication-verdict.json
+core/skills/ai-dlc/enforcement-map.yaml
+core/skills/ai-dlc/steps/_gate-procedures.md
+core/skills/ai-dlc/steps/gate-validation.md

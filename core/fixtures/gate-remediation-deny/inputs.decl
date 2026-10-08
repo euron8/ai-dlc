@@ -1,0 +1,5 @@
+# gate-remediation-deny drives the hook under test (!) and seeds copies of the sibling validators and the catalog into each workspace.
+!core/hooks/ai-dlc-gate-remediation-guard.sh
+core/scripts/validate-steering-budget.sh
+core/scripts/validate-suppression-lifetime.sh
+core/skills/ai-dlc/enforcement-map.yaml

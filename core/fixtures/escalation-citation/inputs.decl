@@ -1,0 +1,6 @@
+# escalation-citation reads the validator under test and, through cp -R of its directory (the
+# mutant batteries copy the whole scripts dir so siblings resolve), every file beside it, so
+# core/scripts/ is declared whole. The validator is the REQUIRED input; the other scripts are
+# only copied. Its own directory is copied by the runner without being named.
+core/scripts/
+!core/scripts/validate-escalation-resolution.sh

@@ -19,6 +19,94 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.752.0] - 2026-10-08
+
+Batch 209's release, plan action 3 of `docs/plans/hermetic-fixtures-poc.md` in full: **all eight shipping
+`node` fixtures are declared hermetic.** Each carries `inputs.decl` and `tools.decl`, is run by
+`core/scripts/hermetic-run.sh` in both pre-push hooks, and is keyed on its declaration rather than on a
+trace. No hook, validator or script changes. Zero fixtures were declared before this release; eight are
+after. The operator folded the plan's one-release-per-fixture cadence into one release: the eight
+declarations touch disjoint directories, each carries the plan's six measurements, and a gated push costs
+the suite pole whether it carries one declaration or eight.
+
+The first, `askuserquestion-citation`, was built by the lead and is recorded in full below; the other seven
+were built by one hand each from one brief, verified by the lead from branch content, and are summarised
+after it.
+
+- `core/fixtures/askuserquestion-citation/inputs.decl` names ONE file outside the fixture directory:
+  `!core/scripts/validate-steering-budget.sh`, REQUIRED. The traced map had 14 rows for this fixture,
+  of which 11 were directories or walk-up probes and `.git`; the only file read outside its own
+  directory was the validator. `tools.decl` carries `?node` (unkeyed; the validator body and every
+  mutant run under it) and eleven bare lines for the tools `run.sh`, `seed.sh` and the validator's
+  shell section invoke. `run.sh` prints `HERMETIC-CONSUMED $VALIDATOR` once `env.sh` is sourced, the
+  point after which every assertion drives that file.
+- Sandbox run, distribution layout, from the clone root: PASS, 19 assertions, `sandbox_files=5`
+  (the fixture's four files plus the validator), `required_missing=0`.
+- Consumer layout, on a tree built by `scripts/install.sh` into an empty directory: PASS by both
+  `scripts/ai-dlc/hermetic-run.sh askuserquestion-citation` (the declaration mapped to
+  `scripts/ai-dlc/validate-steering-budget.sh`, named by the sentinel line) and the plain
+  `bash tests/fixtures/askuserquestion-citation/run.sh`. `install.sh` ships `inputs.decl` and
+  `tools.decl` with the fixture directory's glob copy; nothing was added to a list.
+- **5a probe, as the plan requires, in four shapes, all against scratch copies of the fixture directory:**
+  (1) the REQUIRED input dropped from the declaration: the runner refuses the empty declaration,
+  exit 2; (2) the same path declared WITHOUT `!` and the sentinel removed: PASS, exit 0 — the control
+  showing the `!` is what does the work; (3) `!` kept and the sentinel line removed from `run.sh`: the
+  fixture reports PASS and the runner reports `REQUIRED input core/scripts/validate-steering-budget.sh
+  was never consumed`, exit 1 — the shape the marker exists for; (4) the REQUIRED input replaced by a
+  different real file: `seed.sh` cannot find the validator, exit 2, and the runner names the unconsumed
+  input. The plan's "expect exit 1 naming it" is shape (3); dropping the line outright is exit 2 because
+  the declaration is then empty, which the runner refuses before running anything.
+- The hook's own `readset_declared`, driven over the real fixture through the FIXTURE_POOL block, and
+  `hermetic-run.sh --key-only` agree byte-for-byte: 16 rows, five file rows and eleven tool rows, no
+  `node` row (control: a `sed` row is present).
+- The fixture's 14 traced rows stay in `.ai-dlc-fixture-readsets.tsv` and are inert, measured by driving
+  the hook's FIXTURE_POOL block on a throwaway clone of this branch with the fixture's key record
+  published: a byte appended to a map-row-only path (`core/scripts/core-paths.sh`, under the map's
+  `core/scripts` directory row) and a new file under `core/scripts/` both left the decision `skip`;
+  the control, a byte appended to the declared validator, read `run changed`. `--reconcile` skips a
+  declared directory, and the deriver regenerates the map whole on its next full run.
+- Not changed: `tools.decl` does not name `gh` or `timeout`, which the traced key carried because the
+  key-row tool scanner keys prose words it finds in the closure (recorded at 0.750.0); the declaration
+  keys what runs.
+
+**The other seven**, each measured by its hand with the runner PASS from the clone root, the 5a
+isolation probe (a declared input dropped or swapped: the fixture FAILs or refuses naming it, exit 1 or
+2), the 5a teeth probe (sentinel removed: exit 1, `REQUIRED input ... was never consumed`), `--key-only`
+with no `node` row, PASS on an `install.sh`-built consumer tree, and the plain `run.sh` control:
+
+- `check-25-steering-conduct`: `!core/scripts/validate-steering-budget.sh`; 85 assertions, 6 sandbox files.
+- `architecture-index-cell-escaping`: `!core/scripts/gen-architecture-index.js`; the traced `package.json`
+  and `.gitignore` rows are not reads and were not declared; 8 assertions, 4 sandbox files.
+- `command-args-citation`: `!core/scripts/validate-steering-budget.sh`; 13 assertions, 5 sandbox files.
+- `gate-remediation-deny`: `!core/hooks/ai-dlc-gate-remediation-guard.sh` plus the two validators and the
+  enforcement map its seed copies; isolation probe dropped `validate-suppression-lifetime.sh`, seed
+  refused; 143 assertions, 8 sandbox files.
+- `gate-adjudication`: `!core/scripts/validate-gate-adjudication.sh` plus seven inputs including the
+  verdict schema and two step files; isolation probe dropped `validate-suppression-lifetime.sh`, 29
+  assertions failed; 101 assertions, 14 sandbox files. `python3` is a keyed bare tool.
+- `adversarial-citation`: `core/scripts/` whole (the fixture copies the directory) and
+  `!core/scripts/validate-adversarial-convergence.sh`. **The hand shipped the `!` on
+  `validate-steering-budget.sh`, which the brief had named, with a sentinel guarded by a file-exists
+  test; the lead corrected both** — a guarded sentinel prints the declared name whether or not the
+  verdict depended on it, which is the vacuous shape the REQUIRED marker refuses. Re-measured after the
+  fix: PASS, 43 assertions, 66 sandbox files; teeth probe exit 1 naming the convergence validator.
+- `escalation-citation`: `core/scripts/` whole and `!core/scripts/validate-escalation-resolution.sh`
+  (the hand corrected the brief, which had named the steering-budget validator); 128 assertions, 66
+  sandbox files, 89 key rows.
+
+**Two findings from the seven, both NOTE.** A sentinel that prints `$VALIDATOR` where that variable
+still carries `..` segments is not matched by the runner, which compares against the declared path
+or the sandbox-prefixed resolved path; two hands hit it and both printed a `pwd -P`-resolved path
+instead. And a hand reading the brief's example `!` path literally put the marker on a file that was
+not the subject; a brief names the RULE (the validator under test), never an example path.
+
+**All eight through the hook's own decision, on a throwaway clone of the branch** with every record
+published: an unchanged tree skips all eight; a new file under `core/scripts/` and a byte appended to
+`core/scripts/core-paths.sh` each rerun exactly the two whole-directory declarers; a byte appended to
+`core/skills/ai-dlc/enforcement-map.yaml` reruns exactly `gate-remediation-deny` and
+`gate-adjudication`; a byte appended to `docs/backlog.md` reruns none. Every traced map row for the
+eight stays in the map and is inert by the same measurement.
+
 ## [0.751.0] - 2026-10-08
 
 Batch 208, release 1. It discharges one consumer candidate and closes `BL-486` and `BL-485`. Two shipped hooks

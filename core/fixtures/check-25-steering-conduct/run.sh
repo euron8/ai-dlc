@@ -36,6 +36,9 @@ command -v node >/dev/null 2>&1 || { echo "SKIP: node is required for check-25";
 
 ROOT="$(bash "$DIR/seed.sh" | tail -1)"
 trap 'rm -rf "$ROOT"' EXIT
+# The REQUIRED input of inputs.decl: seed.sh has built the corpus and every assertion below
+# drives this file, so this is the point the declaration is consumed.
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$VALIDATOR")" && pwd -P)/$(basename "$VALIDATOR")"
 
 FAILURES=0
 

@@ -1,0 +1,20 @@
+# node runs the validator body and is unkeyed because it lives outside the fixed tool dirs on
+# the operator box (nvm). The rest are the tools run.sh, seed.sh and the validator shell section
+# invoke, keyed on their binaries.
+?node
+bash
+basename
+cat
+cmp
+cp
+cut
+dirname
+env
+grep
+mkdir
+mktemp
+rm
+sed
+tail
+touch
+tr

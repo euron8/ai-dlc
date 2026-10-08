@@ -1,0 +1,15 @@
+# node runs the subject, the counter and the mutant; it is unkeyed because it lives outside the
+# fixed tool dirs on the operator box. The rest are the tools run.sh invokes, keyed on their binaries.
+?node
+awk
+basename
+bash
+cat
+cmp
+cp
+dirname
+head
+mkdir
+mktemp
+rm
+tail

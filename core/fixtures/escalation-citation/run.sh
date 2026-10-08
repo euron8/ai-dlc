@@ -31,6 +31,9 @@ for cand in \
 done
 [ -n "$VALIDATOR" ] || { echo "FAIL: cannot locate validate-escalation-resolution.sh from $DIR"; exit 1; }
 
+# The REQUIRED input of inputs.decl: every assertion below drives this file.
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$VALIDATOR")" && pwd)/$(basename "$VALIDATOR")"
+
 ROOT="$(bash "$DIR/seed.sh" | tail -1)"
 trap 'rm -rf "$ROOT"' EXIT
 FAIL=0; N=0

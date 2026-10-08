@@ -33,11 +33,44 @@ whose machine-local trace this branch invalidated. Two facts for action 3: `VERS
 hook's path universe, so a declaration naming it yields no key row; and the key-row tool scanner keys
 prose words it finds in a fixture's closure files, so a declaration does not change that.
 
-**What the next batch owes.** Action 3 as rewritten below: declare the eight SHIPPING node fixtures
-(`gate-adjudication-mutants` is `.dist-only`) one release at a time, smallest map-row count first,
-each with `?node` in `tools.decl`, every validator and hook the fixture reads declared in distribution
-coordinates, and the 5a probe run and named in the release message. Batch 208 (`ai-dlc-cd`) rewrites
-`BL-485`'s receipt when it builds the shards; do not touch that entry.
+**Batch 209 shipped release 0.752.0: action 3 complete, all eight shipping node fixtures declared.**
+The operator folded the one-release-per-fixture cadence into one release. The first,
+`askuserquestion-citation` (14 map rows, tied with `check-25-steering-conduct`), was built by the lead and
+is the worked example; the other seven were built by one hand each from one brief and verified from
+branch content. Every one PASSes the runner from the clone root and on an `install.sh`-built consumer
+tree, and every one's 5a isolation and teeth probes failed as required. Two are whole-directory
+declarations (`core/scripts/` for `adversarial-citation` and `escalation-citation`), and driving the
+hook's decision over all eight on a throwaway clone showed each declaration selecting exactly its own
+reruns: a new file under `core/scripts/` reruns the two directory declarers and no other; the
+enforcement map reruns its two readers; an unrelated doc reruns none. One hand's work needed
+correction by the lead: a `!` on the brief's example path rather than on the subject, with a sentinel
+guarded by a file test, which is the vacuous shape the marker refuses. A brief names the rule, not an
+example path. Two hands found that a sentinel printing a path with `..` segments does not match; print
+a `pwd -P`-resolved path. The worked example: `askuserquestion-citation` carries
+`inputs.decl` with one REQUIRED path, `!core/scripts/validate-steering-budget.sh`, and `tools.decl`
+with `?node` plus eleven bare tools; `run.sh` prints the sentinel after sourcing `env.sh`. PASS in the
+sandbox from the clone root (19 assertions, 5 sandbox files) and on an `install.sh`-built consumer
+tree in both the runner and the plain invocation; the hook's `readset_declared` and `--key-only` agreed
+byte-for-byte on 16 rows. The 5a probe in four shapes: REQUIRED input dropped is exit 2 (empty
+declaration refused), `!` kept and sentinel removed is exit 1 naming the input, the path declared
+without `!` PASSes (the control), and a different REQUIRED file is exit 2 with the fixture's own seed
+failure. **The plan's "expect exit 1" is the sentinel-removed shape; dropping the only line makes the
+declaration empty and the runner refuses it at exit 2 before running anything** — a one-path
+declaration cannot drop its input and stay non-empty, so action 3's probe wording below now says so.
+The fixture's 14 traced rows stay in the map and are inert, measured by driving the FIXTURE_POOL
+block on a throwaway clone: with the key record published, a byte appended to a map-row-only path
+(`core/scripts/core-paths.sh`) and a new file under `core/scripts/` both left the decision `skip`,
+and the control, a byte appended to the declared validator, read `run changed`.
+
+**What the next batch owes.** Action 4, which batch 209 started in parallel with this release: two
+peer sessions (`ai-dlc-99`, `ai-dlc-d9`) each hold 79 class-a non-node fixtures from
+`docs/poc/hermetic-census/02-census.tsv`, split by alternating map-row rank, building in batches of
+about ten on branches `b209-a4-99-<n>` and `b209-a4-d9-<n>` stacked on c2bb2b6b, feature pushes only.
+Collect their branches by content, stack them onto one release, and land it gated. One ruling already
+made for that set: `core/fixtures/lib/` (the preamble that unsets `GIT_*`) is declared without `!` on
+every fixture that sources it and is recorded once as non-discriminating, because under `env -i` the
+variables it unsets are already absent and dropping it cannot change a verdict. Batch 208
+(`ai-dlc-cd`) rewrites `BL-485`'s receipt when it builds the shards; do not touch that entry.
 
 Your instructions are four sections. Read all four before acting: `## Start here` (the trees and
 the read/write boundary), `### NEXT ACTIONS — numbered, in order`, `### Ping the operator`, and
@@ -94,7 +127,7 @@ find core/fixtures -mindepth 1 -maxdepth 1 -type d | wc -l          # fixture di
 ls core/fixtures/*/run.sh | wc -l                                   # drivable fixtures (246)
 ls core/fixtures/*/.dist-only | wc -l                               # dist-only         (67)
 # declared fixtures. CONTROL: core/fixtures/hermetic-runner/run.sh exists (the runner's self-probe, undeclared by design).
-n=0; for d in core/fixtures/*/; do [ -f "$d/inputs.decl" ] && n=$((n+1)); done; echo "DECLARED $n"; ls core/fixtures/hermetic-runner/run.sh   # 0 at 0.750.0
+n=0; for d in core/fixtures/*/; do [ -f "$d/inputs.decl" ] && n=$((n+1)); done; echo "DECLARED $n"; ls core/fixtures/hermetic-runner/run.sh   # 8 at 0.752.0
 grep -v '^#' "$MAP" | cut -f1 | sort -u | wc -l                     # mapped fixtures   (236)
 grep -v '^#' "$MAP" | wc -l                                         # map rows          (29955)
 # drivable fixtures with NO map rows. CONTROL: absorbed-specifics-survive has 9 rows.
@@ -133,16 +166,23 @@ actions 3 and 4 are COMPLETED (0.750.0); they are kept numbered so citations res
 2. **PROMOTE THE RUNNER** — COMPLETED at 0.747.0 (`core/scripts/hermetic-run.sh`,
    `core/fixtures/hermetic-runner`, dispatch under **I66**); 0.750.0 added `?name`, `--map` and
    exec-path keying. Nothing to do.
-3. **DECLARE THE EIGHT SHIPPING `node` FIXTURES, ONE RELEASE EACH, SMALLEST FIRST.** The set is
+3. **DECLARE THE EIGHT SHIPPING `node` FIXTURES** — COMPLETED at 0.752.0, all eight in one release.
+   The method below is the one action 4 reuses per fixture. The set was
    `/usr/bin/grep -lE '\bnode\b' core/fixtures/*/run.sh` minus any carrying `.dist-only`
-   (`gate-adjudication-mutants`; control: `ls core/fixtures/plan-shape/.dist-only` exists). Order by
+   (`gate-adjudication-mutants`; control: `ls core/fixtures/plan-shape/.dist-only` exists) minus any
+   already carrying `inputs.decl`. Order by
    `grep -c "^<f>"$'\t' .ai-dlc-fixture-readsets.tsv`, smallest first. For each: `tools.decl` carries
    `?node` plus a bare line per other tool the fixture runs that lives in the fixed dirs; `inputs.decl`
    lists every path under `core/` the fixture or its `seed.sh` reads, in distribution coordinates,
    with `!` on the validator under test and on any hook it copies; the fixture's own `$0` walk must
    resolve inside the sandbox (candidate lists naming both `core/scripts/` and `scripts/ai-dlc/`
    already do). Run `bash core/scripts/hermetic-run.sh <f>` from the clone root to PASS, then the 5a
-   probe (drop the `!` input; expect exit 1 naming it) and name both in the release message. Push
+   probe in two shapes, each on a scratch copy of the fixture directory driven by `--fixture-dir`:
+   (i) ISOLATION — drop one declared input, a non-`!` one where the declaration has several, and
+   where it has only one replace it with a different real file; expect the fixture to FAIL or
+   refuse, exit 1 or 2, naming what is absent; (ii) TEETH — keep every input and delete the
+   fixture's `HERMETIC-CONSUMED` line; expect exit 1 naming the `!` input while the fixture itself
+   reports PASS. Name both in the release message. Push
    through the gate; the declared fixture is excluded from the trace queue, so no trace is owed.
    A 5a probe that does not FAIL stops the batch and goes to the operator.
 4. **DECLARE THE DECLARATION-ONLY SET** in batches by map-row count, smallest first: every class-a
@@ -204,9 +244,13 @@ four-state differential against 41ac5d25 identical in every decision line except
 whose local trace the branch invalidated; the fixture PASSes from the distribution root and from an
 `install.sh`-built consumer root.
 
-For the next batch: action 3 above for at least the smallest node fixture, its `hermetic-run.sh`
-PASS and 5a FAIL named in the release message, and `DECLARED` in the derive block reading one more
-than before with the control present.
+For batch 209 (satisfied at 0.752.0): all eight node fixtures declared, each with `hermetic-run.sh`
+PASS in both layouts and both 5a probes named in the release message, `DECLARED` reading 8 with the
+control present.
+
+For the next batch: action 4's peer branches collected and landed, each fixture with its
+`hermetic-run.sh` PASS and 5a probes named in the release message, and `DECLARED` in the derive block
+reading more than 8 with the control present.
 
 ## Hazards
 

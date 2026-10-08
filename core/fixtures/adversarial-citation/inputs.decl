@@ -1,0 +1,5 @@
+# adversarial-citation reads core/scripts/ whole: seed.sh and run.sh copy/resolve the validator beside its
+# steering sibling, and the floor mutants copy the WHOLE scripts directory (cp -R) so the predicate resolves
+# beside the mutated validator. The validator under test is the REQUIRED input.
+core/scripts/
+!core/scripts/validate-adversarial-convergence.sh
