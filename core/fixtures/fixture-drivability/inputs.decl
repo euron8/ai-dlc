@@ -1,0 +1,2 @@
+# Reads one file outside its own directory: the validator under test. Every other tree is seeded by seed.sh under mktemp.
+!core/scripts/validate-fixture-drivability.sh

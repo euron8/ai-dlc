@@ -52,6 +52,7 @@ for cand in "$HERE/../../git-hooks/pre-push" "$HERE/../../../.githooks/pre-push"
 done
 [ -n "$HOOK" ] || broken "cannot locate the pre-push hook in either layout (core/git-hooks/pre-push or .githooks/pre-push) from $HERE"
 
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$HOOK")" && pwd)/pre-push"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/suite-dispatch-order.XXXXXX")" || broken "mktemp failed"
 trap 'rm -rf "$WORK"' EXIT
 

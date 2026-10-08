@@ -1,0 +1,3 @@
+# wait-beat-liveness reads ONE file outside its own directory: the join script under test.
+# run.sh finds it by walking from $0, drives it for every arm, and copies it to build each mutant.
+!core/scripts/wait-for-deliverable.sh

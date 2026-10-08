@@ -1,0 +1,21 @@
+# The external tools run.sh, seed.sh and the validator's shell section invoke. No node.
+bash
+awk
+cat
+cmp
+comm
+cp
+cut
+dirname
+find
+git
+grep
+head
+mkdir
+mktemp
+mv
+paste
+rm
+sed
+sort
+tr

@@ -32,6 +32,9 @@ for cand in \
 done
 [ -n "$VLE" ] || { printf 'FAIL: cannot locate validate-layer-entries.sh from %s. Looked in:\n%s' "$DIR" "$LOOKED"; exit 1; }
 
+VLE_DIR="$(cd "$(dirname "$VLE")" && pwd)"
+printf 'HERMETIC-CONSUMED %s/validate-layer-entries.sh\n' "$VLE_DIR"
+[ -f "$VLE_DIR/artifact-path-config.sh" ] && printf 'HERMETIC-CONSUMED %s/artifact-path-config.sh\n' "$VLE_DIR"
 CONS="$(bash "$DIR/seed.sh")"
 trap 'rm -rf "$(dirname "$CONS")"' EXIT
 

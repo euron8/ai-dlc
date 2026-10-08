@@ -63,6 +63,9 @@ if [ -z "$HOOK" ] || [ -z "$PAUSE_HOOK" ] || [ -z "$SCHEMA" ]; then
   echo; echo "answer-handoff-routing: FIXTURE BROKEN" >&2; exit 2
 fi
 ok "subject and declaration resolve ($HOOK)"
+echo "HERMETIC-CONSUMED core/hooks/ai-dlc-answer-capture.sh"
+echo "HERMETIC-CONSUMED core/hooks/ai-dlc-pause.sh"
+if [ -f "$(dirname "$HOOK")/ai-dlc-context-provenance.sh" ]; then echo "HERMETIC-CONSUMED core/hooks/ai-dlc-context-provenance.sh"; fi
 
 # ---------------------------------------------------------------------------------------
 # Drive the hook exactly as the harness does: the PostToolUse payload on stdin.

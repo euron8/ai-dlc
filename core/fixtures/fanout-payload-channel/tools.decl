@@ -1,0 +1,22 @@
+# The tools run.sh, its python3 shims and report-propagation-fanout.sh invoke, keyed on their binaries.
+bash
+cat
+chmod
+cmp
+dirname
+env
+find
+git
+grep
+head
+ls
+mkdir
+mktemp
+mv
+python3
+rm
+sed
+sort
+tail
+tr
+wc

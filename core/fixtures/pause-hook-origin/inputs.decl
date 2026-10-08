@@ -1,0 +1,11 @@
+# pause-hook-origin reads the five log-seeding hooks (all five are copied and legend-compared,
+# pause is also driven), plus what the driven pause hook loads fail-open beside itself: the
+# provenance library and the pause-routing schema. A fail-open input is REQUIRED too, because
+# dropping it leaves the verdict unchanged; its sentinel in run.sh is presence-guarded.
+!core/hooks/ai-dlc-pause.sh
+!core/hooks/ai-dlc-continue.sh
+!core/hooks/ai-dlc-acknowledge.sh
+!core/hooks/ai-dlc-escalation-delivery.sh
+!core/hooks/ai-dlc-answer-capture.sh
+!core/hooks/ai-dlc-context-provenance.sh
+!core/schemas/pause-routing.json

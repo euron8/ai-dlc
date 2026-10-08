@@ -1,0 +1,9 @@
+# Declared in distribution coordinates. VERSION is a plain input so the run.sh walk-up resolves inside the sandbox.
+# The battery copies the sibling validator, schema and map plus the gate-repair-record fixture into its own mktemp sandboxes,
+# and mutates a copy of the validator under test (the only required input).
+VERSION
+!core/scripts/validate-gate-adjudication.sh
+core/scripts/validate-adversarial-convergence.sh
+core/schemas/gate-adjudication-verdict.json
+core/skills/ai-dlc/enforcement-map.yaml
+core/fixtures/gate-repair-record/

@@ -160,3 +160,34 @@ every push.
 
 verify: manual -- close when a push's read-set line reports none of these fixtures UNMAPPED, by a trace or by a declaration.
 
+## BL-487 — a fixture whose installed subject honours `AI_DLC_PROJECT_ROOT` reads the sandbox, not its seeded tree
+
+**DEFECT, filed at batch 209.** The hermetic runner exports `AI_DLC_PROJECT_ROOT=<sandbox root>` so a
+fixture's own root walk lands inside the sandbox. Three fixtures install a subject INTO a seeded
+consumer tree under `mktemp` and then drive it there; the subject takes the exported override ahead of
+its own walk and reads the sandbox's pristine copy instead of the seeded tree's, so an arm that mutates
+the seeded copy fails under the runner and passes in the plain pool. Measured: `story-corpus-sprint-slot`
+(`core/scripts/sprint-status.sh:128` takes the override; arm A10 fails on all 7 mutants and the control),
+`artifact-path-migration` (`migrate-artifact-paths.sh:128` calls `artifact-path-config.sh --consumer-file`
+without `--root`, and that helper's line 92 takes the override; 2 of 69 fail), and `push-drain-refusals`
+(`pdr_root` at `run.sh:40-50` ignores the override and walks up from its own location, which inside the
+sandbox ESCAPES to the `mktemp` parent, a directory that carries `.claude/logs` on this box, and reads
+PENDING exit 0). 113 fixtures already scrub `AI_DLC_*` before driving a subject; these three do not.
+The remedy is in each fixture: unset the override in the tool invocation, or pass `--root`, or (for the
+walker) honour the override. Not a runner change: the other 93 declared fixtures depend on the export.
+
+verify: sh for f in story-corpus-sprint-slot artifact-path-migration push-drain-refusals; do [ -f core/fixtures/$f/inputs.decl ] || exit 1; done
+
+## BL-488 — two pre-existing fixture defects the hermetic census read past
+
+**DEFECT, filed at batch 209, found by hands reading `run.sh` to write a declaration.**
+`core/fixtures/spec-join-integrity/run.sh:99` calls `says` before its definition at line 174, so every
+run prints `says: command not found`, exit stays 0, and the "low-severity findings are RECORDED" arm
+never executes; confirmed on the base tree. `core/fixtures/claude-rules-joins/run.sh` guards a
+nonexistent `core/.gitignore` with `[ -f ]` and silently skips it, a latent no-op arm. Both fixtures
+are declared and PASS; neither declaration touched the defect. Fix each arm so it can fire, with the
+probe-both-ways discipline the repo requires of a new check.
+
+verify: sh n="$(bash core/fixtures/spec-join-integrity/run.sh 2>&1 </dev/null | grep -c 'says: command not found')" || n=0; [ "$n" -eq 0 ]
+
+

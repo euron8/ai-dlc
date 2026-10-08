@@ -1,0 +1,11 @@
+# backlog-receipt-binding reads these paths outside its own directory. The validator under test is
+# copied into every probe repository (seed) and then run; the other files are copied beside it,
+# read for the population join (j1), or read to derive the receipt-join arm (rj).
+!scripts/validate-backlog-receipts.sh
+core/skills/ai-dlc-update/reconcile/lib.sh
+core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
+scripts/backlog-reverify.sh
+docs/backlog.md
+docs/backlog.archive.md
+core/skills/ai-dlc/steps/gate-validation.md
+core/fixtures/gate-verdict-grep-shape/

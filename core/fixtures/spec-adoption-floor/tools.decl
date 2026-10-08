@@ -1,0 +1,13 @@
+bash
+mktemp
+dirname
+basename
+rm
+mkdir
+mv
+touch
+grep
+sed
+head
+cat
+git

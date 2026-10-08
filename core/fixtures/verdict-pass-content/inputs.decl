@@ -1,0 +1,3 @@
+# verdict-pass-content runs verdict.sh over validate-artifact-budget.sh, both in place, against a mktemp WORK tree.
+!core/scripts/verdict.sh
+!core/scripts/validate-artifact-budget.sh

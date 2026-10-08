@@ -1,0 +1,3 @@
+# Reads one script outside its own directory: the budget validator under test, which run.sh drives
+# with --root against seeded trees and copies for its mutants. It resolves nothing beside itself.
+!core/scripts/validate-artifact-budget.sh

@@ -97,6 +97,8 @@ printf '%s:\n' "$NAME"
 printf '  ..    subject resolved: %s\n' "${SUBJECT#$ROOT/}"
 printf '  ..    producer template: %s\n' "${TMPL#$ROOT/}"
 
+echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/settings-merge.sh"
+
 WORK="$(mktemp -d 2>/dev/null)" || { printf 'FIXTURE BROKEN: mktemp failed\n' >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 

@@ -1,0 +1,16 @@
+# Tools run.sh, mkrepo and the validator's --audit-trunk section invoke. No node: this fixture runs none.
+awk
+basename
+bash
+cat
+chmod
+dirname
+git
+grep
+head
+mkdir
+mktemp
+rm
+sed
+sort
+tr

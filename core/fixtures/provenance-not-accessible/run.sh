@@ -21,6 +21,7 @@ else
   echo "FIXTURE ERROR: validate-provenance-block.sh not found in either layout" >&2
   exit 2
 fi
+echo "HERMETIC-CONSUMED $VALIDATOR"
 
 command -v python3 >/dev/null 2>&1 || { echo "FIXTURE ERROR: python3 not on PATH" >&2; exit 2; }
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done

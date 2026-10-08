@@ -45,6 +45,8 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # copy leaves every arm green and reads exactly like an arm that cannot fire.
 echo "gate-adjudication-rotate: resolved rotator = ${ROT}"
 echo "gate-adjudication-rotate: resolved guard   = ${GUARD}"
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$ROT")" && pwd)/$(basename "$ROT")"
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$GUARD")" && pwd)/$(basename "$GUARD")"
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }

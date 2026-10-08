@@ -1,0 +1,21 @@
+# The tools run.sh, the sibling fixture it drives and the hook under mutation invoke.
+bash
+basename
+cat
+chmod
+cmp
+cp
+cut
+date
+dirname
+env
+grep
+head
+jq
+ls
+mkdir
+mktemp
+rm
+sed
+tail
+tr

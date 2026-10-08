@@ -1,0 +1,15 @@
+# Tools run.sh, seed.sh and the script under test invoke.
+bash
+dirname
+mktemp
+mkdir
+cat
+git
+rm
+grep
+sed
+sort
+head
+find
+awk
+mv

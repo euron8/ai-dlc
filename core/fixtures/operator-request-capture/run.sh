@@ -26,6 +26,14 @@ trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
 
+# The REQUIRED input: every assertion below drives this hook, and seed.sh has resolved it.
+echo "HERMETIC-CONSUMED core/hooks/ai-dlc-pause.sh"
+# The hook loads these two beside itself and fails open when they are absent, so the verdict alone
+# cannot show they were reached; the sentinel is presence-guarded for that reason.
+[ -f "$(dirname "$HOOK")/ai-dlc-context-provenance.sh" ] && echo "HERMETIC-CONSUMED core/hooks/ai-dlc-context-provenance.sh"
+_PRS=""; for _c in "$HERE/../../schemas/pause-routing.json" "$HERE/../../../.claude/schemas/pause-routing.json"; do [ -f "$_c" ] && { _PRS="$(cd "$(dirname "$_c")" && pwd -P)/pause-routing.json"; break; }; done
+[ -n "$_PRS" ] && echo "HERMETIC-CONSUMED core/schemas/pause-routing.json"
+
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }

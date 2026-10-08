@@ -1,0 +1,5 @@
+# pause-question-in-prose reads the Stop hook under test and the two optional inputs it fails open without.
+# seed.sh and run.sh read nothing else outside the fixture directory.
+!core/hooks/ai-dlc-continue.sh
+!core/hooks/ai-dlc-handoff-pending.sh
+!core/schemas/pause-routing.json

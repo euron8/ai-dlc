@@ -1,0 +1,13 @@
+# The tools run.sh, seed.sh and the validator's shell section invoke. python3 runs the validator body.
+bash
+cat
+cmp
+cp
+dirname
+git
+grep
+mkdir
+mktemp
+python3
+rm
+sed

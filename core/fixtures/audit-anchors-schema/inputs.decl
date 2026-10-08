@@ -1,0 +1,6 @@
+# audit-anchors-schema reads the validator under test, the schema it loads, and the shared preamble.
+# seed.sh resolves the validator and schema from its own location (HERE/../../..); the fixture builds
+# its own repository and copies both the validator and the schema into a scratch dir.
+!core/scripts/validate-audit-anchors.sh
+core/schemas/audit-anchors.json
+core/fixtures/lib/

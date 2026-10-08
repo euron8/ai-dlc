@@ -1,0 +1,7 @@
+# The hook under test; seed.sh and run.sh drive it, and copy it into mutants.
+!core/hooks/ai-dlc-pause.sh
+# Sourced by the hook from its own directory, fail-open when absent: REQUIRED so a drop is caught.
+!core/hooks/ai-dlc-context-provenance.sh
+# seed.sh copies harness-origin.json into both fake projects; the hook reads pause-routing.json via ../schemas.
+core/schemas/harness-origin.json
+!core/schemas/pause-routing.json

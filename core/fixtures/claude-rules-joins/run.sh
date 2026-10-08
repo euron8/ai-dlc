@@ -61,6 +61,7 @@ if [ -z "$VALIDATOR" ]; then
   echo "run.sh: could not locate validate-claude-rules.sh" >&2
   exit 2
 fi
+printf 'HERMETIC-CONSUMED %s\n' "$(cd "$(dirname "$VALIDATOR")" && pwd)/$(basename "$VALIDATOR")"
 GITIGNORE="$(dirname "$(dirname "$DIR")")/.gitignore"
 
 TMP="$(mktemp -d)"

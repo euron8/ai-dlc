@@ -1,0 +1,15 @@
+# The tools run.sh and the audit script invoke (python3 runs the audit body and builds every mutant).
+awk
+basename
+bash
+cat
+cmp
+cp
+diff
+dirname
+env
+grep
+mktemp
+python3
+rm
+sed

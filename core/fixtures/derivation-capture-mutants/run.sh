@@ -64,7 +64,9 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 TREE="$WORK/dist"
 mkdir -p "$TREE/core/hooks" "$TREE/core/scripts" "$TREE/core/fixtures/derivation-capture"
 cp "$ROOT/core/hooks/ai-dlc-derivation-capture.sh" "$TREE/core/hooks/"
+echo "HERMETIC-CONSUMED core/hooks/ai-dlc-derivation-capture.sh"
 cp "$ROOT/core/scripts/validate-artifact-derivations.sh" "$TREE/core/scripts/"
+echo "HERMETIC-CONSUMED core/scripts/validate-artifact-derivations.sh"
 # The sibling's seed splits its section artifact with the real splitter when one is present.
 [ -f "$ROOT/core/scripts/partition-document.sh" ] && cp "$ROOT/core/scripts/partition-document.sh" "$TREE/core/scripts/"
 cp "$SIB/run.sh" "$SIB/seed.sh" "$TREE/core/fixtures/derivation-capture/"

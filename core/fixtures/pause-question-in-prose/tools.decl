@@ -1,0 +1,25 @@
+# The tools run.sh, seed.sh and the hook (with its sourced handoff library) invoke.
+bash
+jq
+sed
+grep
+awk
+cat
+head
+tail
+tr
+wc
+sort
+mkdir
+touch
+cp
+rm
+env
+dirname
+basename
+mktemp
+cut
+find
+ls
+date
+git

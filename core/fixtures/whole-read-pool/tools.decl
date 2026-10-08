@@ -1,0 +1,24 @@
+# Tools run.sh and the validator's shell section invoke. python3 runs sprint-status.sh.
+awk
+basename
+bash
+cat
+cmp
+cp
+cut
+dirname
+find
+grep
+head
+jq
+mkdir
+mktemp
+mv
+python3
+rm
+sed
+sort
+tail
+tee
+tr
+wc

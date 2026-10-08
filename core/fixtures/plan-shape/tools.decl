@@ -1,0 +1,20 @@
+# The tools run.sh and the validator invoke, keyed on their binaries. No node: this fixture is pure shell.
+awk
+basename
+bash
+cat
+cmp
+comm
+cp
+cut
+dirname
+find
+grep
+head
+mktemp
+rm
+sed
+sort
+tail
+tr
+wc

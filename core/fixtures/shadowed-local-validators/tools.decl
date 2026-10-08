@@ -1,0 +1,16 @@
+# Tools run.sh, the subject and lib.sh invoke.
+awk
+bash
+cat
+cmp
+cp
+dirname
+find
+grep
+mkdir
+mktemp
+python3
+rm
+sed
+sort
+tr

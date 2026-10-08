@@ -1,0 +1,4 @@
+# gate-adjudication-rotate drives the rotator and the gate-remediation guard hook, and sources the shared preamble.
+!core/scripts/rotate-gate-adjudication.sh
+!core/hooks/ai-dlc-gate-remediation-guard.sh
+core/fixtures/lib/

@@ -1,0 +1,15 @@
+# External tools run.sh and settings-merge.sh invoke. No node.
+bash
+cat
+chmod
+cmp
+cp
+dirname
+grep
+head
+jq
+mkdir
+mktemp
+mv
+rm
+sed

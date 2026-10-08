@@ -28,6 +28,7 @@ HOOK="$(pick "$HERE/../../hooks/ai-dlc-escalation-delivery.sh" \
              "$HERE/../../../.claude/hooks/ai-dlc-escalation-delivery.sh" \
              "$HERE/../../../core/hooks/ai-dlc-escalation-delivery.sh")"
 [ -n "$HOOK" ] || { echo "FIXTURE ERROR: cannot locate ai-dlc-escalation-delivery.sh" >&2; exit 2; }
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$HOOK")" && pwd)/${HOOK##*/}"
 
 command -v jq >/dev/null 2>&1 || { echo "escalation-delivery: SKIP (no jq)"; exit 0; }
 

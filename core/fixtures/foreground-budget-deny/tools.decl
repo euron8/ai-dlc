@@ -1,0 +1,14 @@
+bash
+jq
+mktemp
+cp
+sed
+cmp
+cat
+tr
+sort
+rm
+rmdir
+mkdir
+dirname
+env

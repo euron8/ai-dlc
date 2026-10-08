@@ -36,6 +36,7 @@ if [ ! -f "$VALIDATOR" ]; then
   echo "release-version-triple: PASS (skipped -- distribution-only validator)"
   exit 0
 fi
+echo "HERMETIC-CONSUMED scripts/validate-release-version.sh"
 
 command -v git >/dev/null 2>&1 || { echo "FIXTURE ERROR: git not on PATH" >&2; exit 2; }
 
@@ -418,6 +419,7 @@ pair_ok() { # <engine> <validator> -> 0 when each has exactly one literal and th
   a="$(canon_of "$1")"; b="$(canon_of "$2")"
   [ "$(printf '%s\n' "$a" | grep -c .)" = 1 ] && [ "$(printf '%s\n' "$b" | grep -c .)" = 1 ] && [ "$a" = "$b" ]
 }
+echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/ledger-reverify.sh"
 if [ ! -f "$ENGINE" ]; then
   bad "the engine is absent at $ENGINE, so the grammar pair cannot be compared"
 elif pair_ok "$ENGINE" "$VALIDATOR"; then

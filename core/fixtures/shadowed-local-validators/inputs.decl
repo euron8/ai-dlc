@@ -1,0 +1,6 @@
+# The subject and the two siblings it loads. run.sh resolves the subject from core/skills and
+# copies lib.sh and ledger-reverify.sh beside every mutant sandbox. The traced map rows under
+# the dot-directory, core and core/fixtures are walk-up probes.
+!core/skills/ai-dlc-update/reconcile/warn-shadowed-local-validators.sh
+core/skills/ai-dlc-update/reconcile/lib.sh
+core/skills/ai-dlc-update/reconcile/ledger-reverify.sh

@@ -72,6 +72,7 @@ if [ -z "$AUDIT" ]; then
   echo "      it lands with this same pull. Nothing was asserted."
   exit 0
 fi
+echo "HERMETIC-CONSUMED $AUDIT"
 
 # audit <path>... -> sets OUT to the validator's combined output and RC to its exit code.
 # NOT a printing function called through `$( )`: a command substitution runs in a

@@ -1,0 +1,9 @@
+# Shard c delegates to the sibling battery, which sources the shared advisor-gate-deny lib and seed.
+# The hook is the mutated subject; its provenance sibling is copied beside every mutant.
+!core/hooks/ai-dlc-advisor-gate.sh
+!core/hooks/ai-dlc-context-provenance.sh
+core/fixtures/advisor-gate-deny/
+core/fixtures/advisor-gate-deny-mutants/
+core/fixtures/advisor-gate-deny-mutants-b/run.sh
+core/fixtures/advisor-gate-deny-mutants-d/run.sh
+core/fixtures/advisor-gate-deny-mutants-e/run.sh

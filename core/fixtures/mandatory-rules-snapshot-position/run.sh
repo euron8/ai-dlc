@@ -286,6 +286,7 @@ battery() {
 EXPECTED="a:PASS/-/all8/0 b:FAIL/d/nosumm/1 c:SKIP/-/skip8/0 d:SKIP/-/skip8/0 e:PASS/-/all8/0 f:FAIL/d/nosumm/1 g:SKIP/d/skip8/0 h:SKIP/d/skip8/0 i:PASS/-/all8/0 j:FAIL/d/nosumm/1"
 
 # --- 1. the shipping validator answers every arm ------------------------------
+echo "HERMETIC-CONSUMED $VMR"
 toolchain "$WORK/bin" "$VMR"
 GOT="$(battery "$WORK/bin")"
 if [ "$GOT" = "$EXPECTED" ]; then

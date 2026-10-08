@@ -113,6 +113,7 @@ scanned_count() { sed -n 's/^--strays: PASS (.*; \([0-9][0-9]*\) file(s) carried
 findings()     { grep -cF "STRAY PARTY-MODE PROVENANCE: " "$ERR" 2>/dev/null || true; }
 
 echo "stray-party-mode-provenance:"
+echo "HERMETIC-CONSUMED core/scripts/validate-provenance-block.sh"
 
 # --- Assertion 0: the UNMUTATED CONTROL COPY behaves like the in-tree script ---
 # A lone copy that dies sourcing its own preamble emits nothing, and "no output" scores as a kill

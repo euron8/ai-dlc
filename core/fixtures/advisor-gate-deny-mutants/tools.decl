@@ -1,0 +1,24 @@
+# Tools run.sh, advisor-gate-deny/{lib,seed}.sh, the hook and its provenance sibling invoke.
+awk
+bash
+cat
+cmp
+comm
+cp
+cut
+date
+dirname
+env
+git
+grep
+head
+jq
+mkdir
+mktemp
+mv
+rm
+sed
+sort
+tail
+tr
+uniq

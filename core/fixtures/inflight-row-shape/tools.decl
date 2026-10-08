@@ -1,0 +1,15 @@
+# Tools run.sh and validate-artifact-budget.sh --only invoke.
+awk
+bash
+cat
+cmp
+cp
+cut
+dirname
+env
+grep
+mktemp
+rm
+sed
+tr
+wc

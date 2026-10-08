@@ -1,0 +1,8 @@
+# transient-ignore-block reads the renderer under test and the declaration it renders from.
+# run.sh walks up from its own directory for both, drives the renderer against a seeded scratch
+# project, and copies it into a mutant dir and a consumer-shaped tree. Its own directory is
+# copied by the runner without being named.
+!core/scripts/sync-transient-ignore.sh
+!core/schemas/pipeline-state-paths.json
+# Sourced first by run.sh; it unsets GIT_* variables, which are already absent under env -i.
+core/fixtures/lib/

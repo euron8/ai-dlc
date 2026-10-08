@@ -48,6 +48,13 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 # sanity arm states the resolved path so a mutation applied to a copy the run never loads
 # cannot pass for an arm that could not fire.
 printf '        driving: %s\n' "$HOOK"
+# The REQUIRED input of inputs.decl: every arm below drives this hook.
+echo "HERMETIC-CONSUMED core/hooks/ai-dlc-continue.sh"
+# The hook sources its handoff library and loads the schema only if present, and fails open
+# without either, so each is REQUIRED and proven present here rather than by a verdict.
+HP="$(dirname "$HOOK")/ai-dlc-handoff-pending.sh"
+if [ -f "$HP" ]; then echo "HERMETIC-CONSUMED core/hooks/ai-dlc-handoff-pending.sh"; fi
+if [ -n "$SCHEMA" ] && [ -f "$SCHEMA" ]; then echo "HERMETIC-CONSUMED core/schemas/pause-routing.json"; fi
 
 # drive <case> <transcript> <flag 0|1> <snapshot 0|1> [hook]
 # A fresh project dir per case, so the rapid-fire counter cannot leak between them and turn a

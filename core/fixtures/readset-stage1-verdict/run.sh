@@ -51,6 +51,8 @@ while [ "$ROOT" != "/" ] && [ ! -f "$ROOT/scripts/readset-stage1-verdict.sh" ]; 
 SCORER="$ROOT/scripts/readset-stage1-verdict.sh"
 WRAPPER="$ROOT/scripts/readset-stage1-run.sh"
 [ -f "$SCORER" ] && [ -f "$WRAPPER" ] || { echo "FIXTURE BROKEN: no scripts/readset-stage1-{verdict,run}.sh above $HERE" >&2; exit 2; }
+echo "HERMETIC-CONSUMED $SCORER"
+echo "HERMETIC-CONSUMED $WRAPPER"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/readset-stage1-fx.XXXXXX")" || { echo "FIXTURE BROKEN: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd -P)"

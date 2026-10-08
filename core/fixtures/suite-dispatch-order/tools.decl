@@ -1,0 +1,27 @@
+# Tools run.sh invokes, plus those the copied pre-push hook runs in the seeded trees.
+bash
+dirname
+mktemp
+cp
+chmod
+mkdir
+git
+rm
+mv
+tr
+sort
+awk
+sed
+grep
+cmp
+tail
+env
+sleep
+cat
+cut
+xargs
+date
+shasum
+find
+basename
+wc

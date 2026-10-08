@@ -1,0 +1,27 @@
+# Tools run.sh, the sibling's run.sh and seed.sh, the hook, the validator and the splitter invoke.
+# No node: nothing here runs it.
+awk
+basename
+bash
+cat
+chmod
+cmp
+cp
+cut
+diff
+dirname
+env
+find
+grep
+head
+jq
+ln
+mkdir
+mktemp
+mv
+rm
+sed
+sort
+tail
+tr
+wc

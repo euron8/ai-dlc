@@ -1,0 +1,16 @@
+# External tools run.sh, seed.sh and the two scans invoke (python3 hosts the scan bodies).
+awk
+bash
+cat
+cmp
+cp
+dirname
+find
+grep
+mkdir
+mktemp
+perl
+python3
+rm
+sed
+sort

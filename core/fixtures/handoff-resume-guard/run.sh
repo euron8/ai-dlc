@@ -43,6 +43,7 @@ HOOK="$(pick "${1:-}" "$HERE/../../hooks/ai-dlc-continue.sh" \
                       "$HERE/../../../.claude/hooks/ai-dlc-continue.sh")"
 [ -n "$HOOK" ] || { echo "FIXTURE ERROR: cannot locate ai-dlc-continue.sh" >&2; exit 2; }
 command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq required" >&2; exit 2; }
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$HOOK")" && pwd)/$(basename "$HOOK")"
 
 ROOT="$(bash "$HERE/seed.sh")"
 fails=0
@@ -725,6 +726,7 @@ la_a6 && ok "A6: every arm satisfied with a live lease -> stamped complete, armi
 # implementation-join-yield's sequence arm.
 HOOK_DIR_L="$(cd "$(dirname "$HOOK")" && pwd)"
 LMUT_CTL="$ROOT/lmut-control"; mkdir -p "$LMUT_CTL"; cp -R "$HOOK_DIR_L/." "$LMUT_CTL/"
+[ -f "$HOOK_DIR_L/ai-dlc-handoff-pending.sh" ] && echo "HERMETIC-CONSUMED $HOOK_DIR_L/ai-dlc-handoff-pending.sh"
 if [ ! -f "$LMUT_CTL/ai-dlc-handoff-pending.sh" ]; then
   bad "FIXTURE BROKEN: the hooks-directory copy has no ai-dlc-handoff-pending.sh — no deferral mutant below would be about a hook that ran"
 elif la_a1 "$LMUT_CTL/ai-dlc-continue.sh" && la_a2 "$LMUT_CTL/ai-dlc-continue.sh"; then

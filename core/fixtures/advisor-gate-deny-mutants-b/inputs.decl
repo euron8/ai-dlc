@@ -1,0 +1,12 @@
+# Shard 'b' is a one-line driver: it execs the sibling battery, which sources the sibling
+# advisor-gate-deny/lib.sh (and its seed.sh). Both sibling directories are read whole.
+core/fixtures/advisor-gate-deny-mutants/
+core/fixtures/advisor-gate-deny/
+# The hook under test and its provenance sibling: seed.sh locates the hook at <root>/core/hooks/
+# and every mutant is a sed rewrite of a copy of it beside a copy of the provenance library.
+!core/hooks/ai-dlc-advisor-gate.sh
+!core/hooks/ai-dlc-context-provenance.sh
+# The sibling battery verifies that every other shard driver exists and drives its shard.
+core/fixtures/advisor-gate-deny-mutants-c/
+core/fixtures/advisor-gate-deny-mutants-d/
+core/fixtures/advisor-gate-deny-mutants-e/

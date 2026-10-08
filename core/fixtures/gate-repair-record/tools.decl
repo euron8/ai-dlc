@@ -1,0 +1,17 @@
+bash
+cat
+sed
+grep
+awk
+mktemp
+dirname
+basename
+rm
+mkdir
+cp
+find
+wc
+tr
+cmp
+env
+python3

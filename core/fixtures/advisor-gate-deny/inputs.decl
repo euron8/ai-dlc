@@ -1,0 +1,5 @@
+# Reads two hooks outside its own directory: the advisor gate under test and its provenance sibling,
+# which the gate sources and run.sh copies beside the mutant control. Map rows under core/ and
+# core/fixtures are walk-up probes.
+!core/hooks/ai-dlc-advisor-gate.sh
+!core/hooks/ai-dlc-context-provenance.sh

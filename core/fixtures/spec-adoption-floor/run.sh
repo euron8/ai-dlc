@@ -29,6 +29,8 @@ for cand in \
 done
 [ -n "$V" ] || { echo "run.sh: could not locate validate-spec-adoption.sh" >&2; exit 2; }
 
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$V")" && pwd)/$(basename "$V")"
+
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/spec-adoption-floor.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/docs/retro"

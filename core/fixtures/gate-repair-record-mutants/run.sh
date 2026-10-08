@@ -40,6 +40,7 @@ done
 # Print the resolved subject. A mutant applied to a file the run never loads leaves every
 # arm green, and `cmp -s` does not catch it — the mutation applied cleanly, to the wrong
 # copy. The path is the only thing that says which file was actually scored.
+echo "HERMETIC-CONSUMED core/scripts/validate-gate-adjudication.sh"
 echo "subject:  $SUBJECT"
 echo "fixture:  $FIXTURE/run.sh"
 

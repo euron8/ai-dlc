@@ -1,0 +1,14 @@
+bash
+sed
+awk
+grep
+mktemp
+dirname
+basename
+rm
+sort
+tr
+python3
+env
+cmp
+cp

@@ -180,6 +180,8 @@ kill_check() { # kill_check <name> <dir> <env> <nfail> <substr>
   note "ok    $n -- killed by its own assertion, and by exactly that many"
 }
 
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$VALIDATOR")" && pwd)/${VALIDATOR##*/}"
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$REVERIFY")" && pwd)/${REVERIFY##*/}"
 # --- unmutated control ------------------------------------------------------
 seed "$TMP/control"
 if out="$(run_v "" "$TMP/control")" && [ -n "$out" ]; then

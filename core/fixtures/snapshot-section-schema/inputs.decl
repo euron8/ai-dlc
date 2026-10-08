@@ -1,0 +1,3 @@
+# Read outside this directory: the validator under test (run directly and copied to mutants) and verdict.sh (driven by arm E9).
+!core/scripts/validate-artifact-budget.sh
+core/scripts/verdict.sh

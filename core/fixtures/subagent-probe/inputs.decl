@@ -1,0 +1,3 @@
+# subagent-probe reads ONE file outside its own directory: the SubagentStop hook under test.
+# seed.sh locates it and writes it into env.sh as HOOK; every fire() in run.sh pipes a payload into it.
+!core/hooks/ai-dlc-subagent-probe.sh

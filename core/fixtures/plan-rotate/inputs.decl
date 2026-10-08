@@ -1,0 +1,5 @@
+# Reads the subject and the shape validator at the repo root (not core/scripts), and walks up from
+# its own directory for a VERSION marker (run.sh:47-53). VERSION is outside the hook's key universe.
+VERSION
+!scripts/plan-rotate.sh
+!scripts/validate-plan-shape.sh

@@ -22,6 +22,7 @@ V="$(pick "${1:-}" "$HERE/../../../scripts/validate-plan-shape.sh" "$HERE/../../
 # A MISSING SUBJECT IS NOT A PASS: every assertion below reads the validator's output, so
 # a run that cannot invoke it produces nothing and scores green on the negative arms.
 [ -n "$V" ] || { echo "FIXTURE ERROR: cannot locate validate-plan-shape.sh" >&2; exit 2; }
+echo "HERMETIC-CONSUMED scripts/validate-plan-shape.sh"
 
 T="$(mktemp -d "${TMPDIR:-/tmp}/plan-shape.XXXXXX")"
 trap 'rm -rf "$T"' EXIT

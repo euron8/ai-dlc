@@ -103,12 +103,16 @@ nmine=0; for _m in $MINE; do nmine=$((nmine+1)); done
 . "$LIB"
 
 echo "$NAME:"
+# The REQUIRED input of inputs.decl: every mutant below is a sed-edited copy of this hook.
+echo "HERMETIC-CONSUMED $HOOK"
 printf '  hook  %s\n' "$HOOK"
 printf '  cells %s\n' "$nc"
 ok "[J0] coverage join: $ndecl mutants (floor $MIN_MUTANTS) derived from mut/mutc lines, dealt disjointly across {$SHARDS}, union exact; this shard runs $nmine: {$MINE}"
 
 n_mut=0; n_kill=0; n_seen=0
 [ -f "$PROV" ] && cp "$PROV" "$MUT/ai-dlc-context-provenance.sh"
+# The second REQUIRED input: every mutant below is scored with the provenance sibling present beside it.
+[ -f "$MUT/ai-dlc-context-provenance.sh" ] && echo "HERMETIC-CONSUMED $PROV"
 # mutc <name> <expected-failing-arms> <expected-failing-cells or -> <sed-expr>...
 mutc() {
   local name="$1" want="$2" wantc="$3"; shift 3

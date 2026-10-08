@@ -1,0 +1,3 @@
+# Reads ONE file outside its own directory: the validator under test, run directly and copied for
+# the two mutants and the unmutated control.
+!core/scripts/validate-artifact-budget.sh

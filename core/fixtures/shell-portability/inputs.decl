@@ -1,0 +1,6 @@
+# shell-portability copies the validator under test into every seeded sandbox corpus (seed(), run.sh:117).
+# VERSION is the marker both run.sh (lines 102-104) and the validator walk up for; plain, so the walk
+# resolves inside the sandbox. lib/ holds the sourced preamble.
+!scripts/validate-shell-portability.sh
+VERSION
+core/fixtures/lib/

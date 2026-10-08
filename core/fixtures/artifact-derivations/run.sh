@@ -21,6 +21,8 @@ VALIDATOR="$(pick "$HERE/../../scripts/validate-artifact-derivations.sh" \
                   "$HERE/../../../scripts/ai-dlc/validate-artifact-derivations.sh" \
                   "$HERE/../../../core/scripts/validate-artifact-derivations.sh")"
 [ -n "$VALIDATOR" ] || { echo "FIXTURE ERROR: cannot locate validate-artifact-derivations.sh" >&2; exit 2; }
+# The REQUIRED input of inputs.decl: every assertion below drives this file.
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$VALIDATOR")" && pwd)/$(basename "$VALIDATOR")"
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }

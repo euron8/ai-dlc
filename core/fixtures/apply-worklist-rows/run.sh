@@ -186,6 +186,7 @@ notes_for() { # notes_for <rec-dir> <entry>
     | awk -F'\t' -v o="$2" '$1=="NOTE" && $2=="override-adjudicated" && $3==o' | grep -c . || true
 }
 
+echo "HERMETIC-CONSUMED $REC/apply.sh"
 build_rec "$W/rec" || { bad "FIXTURE BROKEN — could not stage reconcile/"; echo; echo "apply-worklist-rows: FIXTURE BROKEN" >&2; exit 2; }
 
 ROWS="$(retire_rows "$W/rec")"

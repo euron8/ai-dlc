@@ -33,6 +33,7 @@ WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 
 trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
+printf 'HERMETIC-CONSUMED %s\n' "$VALIDATOR"
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }

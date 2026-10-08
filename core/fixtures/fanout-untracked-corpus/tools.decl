@@ -1,0 +1,21 @@
+# The tools run.sh and the subject's shell section invoke, keyed on their binaries.
+# python3 runs the subject's scanner heredoc.
+bash
+cat
+chmod
+dirname
+env
+git
+grep
+head
+ls
+mkdir
+mktemp
+mv
+python3
+rm
+rmdir
+sed
+sort
+tail
+tr

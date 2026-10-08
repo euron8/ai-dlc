@@ -1,0 +1,4 @@
+# spec-join-integrity drives validate-spec-join.sh, which runs its sibling validate-locked-anchor.sh
+# (--locked-requirements leg). run.sh resolves the subject from $DIR/../../scripts.
+!core/scripts/validate-spec-join.sh
+core/scripts/validate-locked-anchor.sh

@@ -1,0 +1,5 @@
+# story-provenance drives the writer and the reader (both copied into the fixture's mutant and
+# consumer-layout worlds) and loads the schema through the writer's --print-schema.
+!core/scripts/stamp-story-provenance.sh
+!core/scripts/validate-provenance-block.sh
+core/schemas/provenance-block.json

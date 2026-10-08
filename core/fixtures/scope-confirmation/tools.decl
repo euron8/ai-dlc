@@ -1,0 +1,26 @@
+# Tools run.sh, seed.sh, the validator and the capture hook invoke, keyed on their binaries.
+awk
+bash
+cat
+chmod
+cmp
+cp
+cut
+date
+dirname
+env
+git
+grep
+head
+jq
+mkdir
+mktemp
+python3
+rm
+sed
+seq
+shasum
+tail
+touch
+tr
+wc

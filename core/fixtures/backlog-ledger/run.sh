@@ -38,6 +38,8 @@ RT="$(pick "$HERE/../../../scripts/backlog-rotate.sh"   "$HERE/../../scripts/bac
 # invoke one produces empty output and would score green on anything phrased as an absence.
 [ -n "$RV" ] || { echo "FIXTURE ERROR: cannot locate scripts/backlog-reverify.sh" >&2; exit 2; }
 [ -n "$RT" ] || { echo "FIXTURE ERROR: cannot locate scripts/backlog-rotate.sh" >&2; exit 2; }
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$RV")" && pwd)/${RV##*/}"
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$RT")" && pwd)/${RT##*/}"
 
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT

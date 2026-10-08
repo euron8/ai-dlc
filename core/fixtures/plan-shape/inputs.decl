@@ -1,0 +1,3 @@
+# plan-shape reads ONE file outside its own directory: the validator under test.
+# run.sh locates it at HERE/../../../scripts/validate-plan-shape.sh and runs it against seeded plans.
+!scripts/validate-plan-shape.sh

@@ -1,0 +1,18 @@
+# The tools run.sh, seed.sh and the hook invoke, keyed on their binaries. No node: nothing here runs it.
+bash
+cat
+cp
+date
+dirname
+env
+grep
+head
+jq
+mkdir
+mktemp
+rm
+sed
+sort
+tail
+tr
+wc

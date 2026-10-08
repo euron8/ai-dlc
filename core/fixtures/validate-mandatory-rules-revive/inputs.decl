@@ -1,0 +1,9 @@
+# Reads the validator under test, the sprint-status producer that writes the envelope it checks,
+# and that producer's schema. The two delegates are read only if present (Check 1 runs the first;
+# Check 5 tests the second with -f and SKIPs without it), so each is REQUIRED with a sentinel
+# guarded by [ -f ]. validate-retro-prereq.sh is consumer-provided and not in core.
+!core/scripts/validate-mandatory-rules.sh
+core/scripts/sprint-status.sh
+core/schemas/sprint-status.json
+!core/scripts/validate-retro-evidence.sh
+!core/scripts/validate-audit-anchors.sh

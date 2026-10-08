@@ -1,0 +1,10 @@
+# Reads the continue hook under test, the handoff-pending library that hook sources from beside
+# itself (run.sh copies the whole hooks directory for the deferral mutants and guards on that
+# file), the pause-routing schema the hook loads, and the two rulebook step files run.sh
+# extracts step 1 and step 5 from. Map rows for the other hooks come from that directory copy
+# and are not read; core and core/fixtures rows are walk-up probes.
+!core/hooks/ai-dlc-continue.sh
+!core/hooks/ai-dlc-handoff-pending.sh
+core/schemas/pause-routing.json
+core/skills/ai-dlc/steps/handoff.md
+core/skills/ai-dlc/steps/_gate-procedures.md

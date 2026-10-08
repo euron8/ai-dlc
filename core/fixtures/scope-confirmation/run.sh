@@ -47,6 +47,11 @@ rc_of() {
 }
 
 echo "scope-confirmation:"
+printf 'HERMETIC-CONSUMED %s\n' "$VALIDATOR"
+printf 'HERMETIC-CONSUMED %s\n' "$HOOK"
+[ -f "$(dirname "$HOOK")/ai-dlc-context-provenance.sh" ] && printf 'HERMETIC-CONSUMED %s\n' "$(dirname "$HOOK")/ai-dlc-context-provenance.sh"
+_PRS=""; for _c in "$HERE/../../schemas/pause-routing.json" "$HERE/../../../.claude/schemas/pause-routing.json"; do [ -f "$_c" ] && { _PRS="$(cd "$(dirname "$_c")" && pwd -P)/pause-routing.json"; break; }; done
+[ -n "$_PRS" ] && printf 'HERMETIC-CONSUMED %s\n' "$_PRS"
 
 if [ -z "${SHA:-}" ]; then
   bad "SEED BROKEN: the capture hook recorded no SHA256, so every assertion below would be comparing against an empty string"

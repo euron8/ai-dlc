@@ -1,0 +1,10 @@
+# The merge under test: the mutation battery copies it and its four siblings into per-mutant
+# directories and rewrites one line of the copy. The sibling fixture's lib.sh holds the predicates
+# and the seeds (sourced at run.sh line 59); lib/preamble.sh is sourced at run.sh line 2.
+!core/scripts/merge-adversarial-shards.sh
+core/scripts/validate-adversarial-convergence.sh
+core/scripts/partition-document.sh
+core/scripts/partition-subject.sh
+core/scripts/validate-steering-budget.sh
+core/fixtures/adversarial-shard-merge/
+core/fixtures/lib/

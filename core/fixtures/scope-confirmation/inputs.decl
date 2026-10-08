@@ -1,0 +1,8 @@
+# Reads three files outside its own directory: the validator under test, the answer-capture hook seed.sh
+# drives, and the provenance sibling that hook sources from its own directory when present. The pause-routing
+# schema is read by the hook through ../schemas/. Map rows under core, core/scripts and core/fixtures are
+# walk-up probes.
+!core/scripts/validate-scope-confirmation.sh
+!core/hooks/ai-dlc-answer-capture.sh
+!core/hooks/ai-dlc-context-provenance.sh
+!core/schemas/pause-routing.json

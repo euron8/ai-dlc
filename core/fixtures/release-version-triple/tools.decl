@@ -1,0 +1,20 @@
+# Tools run.sh and the validator invoke. git builds every scratch repo. No node here.
+awk
+bash
+cat
+cmp
+comm
+cp
+cut
+dirname
+git
+grep
+head
+mkdir
+mktemp
+mv
+rm
+sed
+sort
+tail
+tr

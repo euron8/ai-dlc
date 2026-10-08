@@ -1,0 +1,2 @@
+# Reads one file outside its own directory: the acknowledge hook under test. The map rows under .git, core and core/fixtures are walk-up probes.
+!core/hooks/ai-dlc-acknowledge.sh

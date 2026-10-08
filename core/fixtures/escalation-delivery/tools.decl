@@ -1,0 +1,16 @@
+# Tools run.sh and the hook invoke, keyed on their binaries.
+bash
+cat
+cmp
+cp
+date
+dirname
+env
+grep
+jq
+mkdir
+mktemp
+rm
+sed
+touch
+tr

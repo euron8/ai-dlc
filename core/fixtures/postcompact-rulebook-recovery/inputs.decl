@@ -1,0 +1,12 @@
+# The recovery hook, gate, postcompact hook and budget validator under test; the provenance wrap and
+# handoff-pending library the recovery hook sources only if present; and verdict.sh, which run.sh
+# drives beside the validator only if present. Each prints a sentinel from run.sh after env.sh loads.
+!core/hooks/ai-dlc-recover.sh
+!core/hooks/ai-dlc-recover-gate.sh
+!core/hooks/ai-dlc-postcompact.sh
+!core/hooks/ai-dlc-context-provenance.sh
+!core/hooks/ai-dlc-handoff-pending.sh
+!core/scripts/validate-reattach-budget.sh
+!core/scripts/verdict.sh
+core/skills/ai-dlc/SKILL.md
+!core/schemas/pause-routing.json

@@ -1,0 +1,3 @@
+# sprint-status-lifecycle reads the subject and the schema it loads (seed.sh L12-19).
+!core/scripts/sprint-status.sh
+core/schemas/sprint-status.json

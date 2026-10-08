@@ -43,6 +43,19 @@ trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
 
+# Sentinels for the declared REQUIRED inputs, printed where env.sh first hands them to the run.
+# The gate, postcompact hook, sourced siblings and verdict.sh are tolerated absent below, so
+# each of those is guarded by [ -f ].
+echo "HERMETIC-CONSUMED $HOOK"
+echo "HERMETIC-CONSUMED $VAL"
+[ -n "${GATE:-}" ] && [ -f "$GATE" ] && echo "HERMETIC-CONSUMED $GATE"
+[ -n "${POSTCOMPACT:-}" ] && [ -f "$POSTCOMPACT" ] && echo "HERMETIC-CONSUMED $POSTCOMPACT"
+[ -f "$(dirname "$HOOK")/ai-dlc-context-provenance.sh" ] && echo "HERMETIC-CONSUMED $(dirname "$HOOK")/ai-dlc-context-provenance.sh"
+[ -f "$(dirname "$HOOK")/ai-dlc-handoff-pending.sh" ] && echo "HERMETIC-CONSUMED $(dirname "$HOOK")/ai-dlc-handoff-pending.sh"
+[ -f "$(dirname "$VAL")/verdict.sh" ] && echo "HERMETIC-CONSUMED $(dirname "$VAL")/verdict.sh"
+_PRS=""; for _c in "$HERE/../../schemas/pause-routing.json" "$HERE/../../../.claude/schemas/pause-routing.json"; do [ -f "$_c" ] && { _PRS="$(cd "$(dirname "$_c")" && pwd -P)/pause-routing.json"; break; }; done
+[ -n "$_PRS" ] && echo "HERMETIC-CONSUMED $_PRS"
+
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }

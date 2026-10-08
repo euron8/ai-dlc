@@ -51,6 +51,8 @@ if [ -z "$VALIDATOR" ]; then
   exit 1
 fi
 
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$VALIDATOR")" && pwd)/$(basename "$VALIDATOR")"
+
 ROOT="$(bash "$DIR/seed.sh" | tail -1)"
 if [ -z "$ROOT" ] || [ ! -d "$ROOT" ]; then
   echo "FIXTURE BROKEN: seed.sh produced no root"

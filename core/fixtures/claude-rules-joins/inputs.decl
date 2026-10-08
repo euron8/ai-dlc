@@ -1,0 +1,3 @@
+# claude-rules-joins sources the shared preamble and copies the validator under test into every seeded tree.
+!scripts/validate-claude-rules.sh
+core/fixtures/lib/

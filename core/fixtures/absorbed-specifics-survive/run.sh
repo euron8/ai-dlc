@@ -38,6 +38,7 @@ SKILL="${1:-}"
                                 "$HERE/../../../core/skills/ai-dlc/SKILL.md")"
 [ -n "$SKILL" ] && [ -f "$SKILL" ] \
   || { echo "FIXTURE ERROR: cannot locate SKILL.md in either layout" >&2; exit 2; }
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$SKILL")" && pwd)/${SKILL##*/}"
 
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT

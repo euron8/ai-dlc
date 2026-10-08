@@ -1,0 +1,10 @@
+# advisor-gate-deny-mutants reads: the hook it mutates (copied and sed-edited), the provenance sibling the hook
+# sources on its WARN path, the shipped fixture advisor-gate-deny (lib.sh + seed.sh, sourced and run), and the
+# four shard drivers whose run.sh the coverage join greps. Its own directory is copied by the runner.
+!core/hooks/ai-dlc-advisor-gate.sh
+!core/hooks/ai-dlc-context-provenance.sh
+core/fixtures/advisor-gate-deny/
+core/fixtures/advisor-gate-deny-mutants-b/run.sh
+core/fixtures/advisor-gate-deny-mutants-c/run.sh
+core/fixtures/advisor-gate-deny-mutants-d/run.sh
+core/fixtures/advisor-gate-deny-mutants-e/run.sh

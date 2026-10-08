@@ -67,6 +67,9 @@ fi
 # PRINT THE RESOLVED PATH. A mutant applied to the copy the run never loads leaves every arm
 # green, which reads exactly like an arm that cannot fire.
 echo "  subject: ${SUBJECT#"$ROOT"/}"
+# The REQUIRED inputs of inputs.decl: the renderer and its declaration are resolved and about to be driven.
+echo "HERMETIC-CONSUMED core/scripts/sync-transient-ignore.sh"
+echo "HERMETIC-CONSUMED core/schemas/pipeline-state-paths.json"
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }

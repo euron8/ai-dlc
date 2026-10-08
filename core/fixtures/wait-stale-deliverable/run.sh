@@ -999,6 +999,7 @@ if [ "$N_LISTED" -lt 10 ]; then
 fi
 
 echo "wait-stale-deliverable:"
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$SUBJ")" && pwd)/$(basename "$SUBJ")"
 
 OUT="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$OUT"' EXIT

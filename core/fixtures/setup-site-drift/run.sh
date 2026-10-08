@@ -27,6 +27,7 @@ SSD="$(pick "$HERE/../../skills/ai-dlc-update/reconcile/setup-site-drift.sh" \
             "$HERE/../../core/skills/ai-dlc-update/reconcile/setup-site-drift.sh")"
 [ -n "$SSD" ] || { echo "FIXTURE ERROR: cannot locate setup-site-drift.sh" >&2; exit 2; }
 RECONCILE="$(cd "$(dirname "$SSD")" && pwd)"
+echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/setup-site-drift.sh"
 
 fails=0; asserts=0
 ok()  { asserts=$((asserts+1)); printf '  ok    %s\n' "$1"; }

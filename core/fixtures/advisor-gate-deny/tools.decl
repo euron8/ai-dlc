@@ -1,0 +1,14 @@
+# Tools run.sh, seed.sh, lib.sh and the advisor gate invoke, keyed on their binaries.
+bash
+cat
+cp
+dirname
+env
+git
+grep
+jq
+mkdir
+mktemp
+sed
+tee
+tr

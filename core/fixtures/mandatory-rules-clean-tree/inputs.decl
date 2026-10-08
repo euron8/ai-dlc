@@ -1,0 +1,3 @@
+# mandatory-rules-clean-tree reads ONE file outside its own directory: the validator under test,
+# copied into a mktemp bin beside two sibling stubs. The map rows under .git/ are walk-up probes.
+!core/scripts/validate-mandatory-rules.sh

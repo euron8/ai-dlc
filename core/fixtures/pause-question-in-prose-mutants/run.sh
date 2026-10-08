@@ -26,6 +26,13 @@ FX="$(pick "$HERE/../pause-question-in-prose/run.sh")"
 [ -n "$HOOK" ] || { echo "FIXTURE ERROR: cannot locate ai-dlc-continue.sh" >&2; exit 2; }
 [ -n "$FX" ]   || { echo "FIXTURE ERROR: cannot locate the shipped fixture's run.sh" >&2; exit 2; }
 command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq required" >&2; exit 2; }
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$HOOK")" && pwd)/$(basename "$HOOK")"
+# The hook sources its handoff helper and reads the routing schema only when they are present,
+# so each is announced only when it is really there to be driven with.
+_HP="$(cd "$(dirname "$HOOK")" && pwd)/ai-dlc-handoff-pending.sh"
+[ -f "$_HP" ] && echo "HERMETIC-CONSUMED $_HP"
+_PS="$(cd "$(dirname "$HOOK")/../schemas" 2>/dev/null && pwd)/pause-routing.json"
+[ -f "$_PS" ] && echo "HERMETIC-CONSUMED $_PS"
 
 ROOT="$(mktemp -d)"
 fails=0

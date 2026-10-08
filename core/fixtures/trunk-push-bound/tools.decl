@@ -1,0 +1,13 @@
+bash
+basename
+dirname
+mktemp
+rm
+mkdir
+cat
+cmp
+grep
+sed
+git
+python3
+cp

@@ -121,6 +121,7 @@ if [ "$probe_rc" -ne 0 ] || ! grep -q 'LAYER DEBT' <<<"$probe_out" || ! grep -q 
   show "$probe_out" >&2
   exit 2
 fi
+echo "HERMETIC-CONSUMED core/scripts/audit-layer-debt.sh"
 
 # =============================================================================================
 # THE CORPUS — one register, one run, every shape side by side. `dis` and `nom` carry the SAME

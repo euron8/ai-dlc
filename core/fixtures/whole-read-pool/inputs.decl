@@ -1,0 +1,5 @@
+# whole-read-pool reads the validator under test and, for the sprint-slot arm (10b-10d), the
+# sprint-status resolver the validator calls plus the schema that resolver loads.
+!core/scripts/validate-artifact-budget.sh
+core/scripts/sprint-status.sh
+core/schemas/sprint-status.json

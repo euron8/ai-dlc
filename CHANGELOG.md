@@ -19,6 +19,90 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.753.0] - 2026-10-08
+
+Batch 209's second release, plan action 4 of `docs/plans/hermetic-fixtures-poc.md`: **95 more fixtures
+declared hermetic**, taking `DECLARED` from 8 to 103. Two peer sessions each held half of the class-a
+non-node set from `docs/poc/hermetic-census/02-census.tsv`, split by alternating map-row rank, and
+built in batches of about ten with one builder hand per fixture; the lead verified every batch from
+branch content (base, commit count, paths touched, sentinel present) and stacked it. No hook, validator
+or runner change; one fixture defect fixed, two filed. Every declared fixture was re-run by its peer
+serially through `core/scripts/hermetic-run.sh` on its batch branch, and the lead re-ran all 103 through
+the runner 4-wide on a throwaway clone of this branch (figures below).
+
+**The measurements every fixture carries**, in its builder's report and re-taken by its peer: runner PASS
+from the clone root with the fixture's own assertion count equal to its plain run; 5a ISOLATION (a
+declared input dropped or swapped: the fixture FAILs or refuses naming it, exit 1 or 2); 5a TEETH (the
+sentinel removed from a byte-identical copy: exit 1, `REQUIRED input ... was never consumed`, the fixture
+itself still PASS); `--key-only` with no `node` row; PASS on an `install.sh`-built consumer tree, or the
+`no run.sh in` refusal for a `.dist-only` fixture; the plain `run.sh` control.
+
+**Rulings made during the batch**, each applied set-wide once made:
+
+- `core/fixtures/lib/` (the preamble that unsets `GIT_*`) is declared plain, never `!`, on every fixture
+  that sources it, and recorded once as non-discriminating: under `env -i` the variables it unsets are
+  already absent, so dropping it cannot change a verdict. The isolation probe uses a different input.
+- **A fail-open optional input gets `!`.** Where a hook or validator loads a sibling only `if readable`
+  and otherwise passes through (the advisor gate's provenance wrapper, `ai-dlc-continue.sh`'s
+  handoff-pending helper and routing schema, `validate-layer-entries.sh`'s `artifact-path-config.sh`,
+  the recover and pause hooks' siblings), the fixture tolerates the input being absent, which is the
+  shape the REQUIRED marker was built for. The sentinel prints at the point the subject is driven with
+  the input present. Applied to fourteen fixtures; each carries a coverage NOTE that its assertions do
+  not depend on the optional file.
+- A fixture reading NOTHING under the repo root (`early-exit-reader`, `route-defect-classification`,
+  census `copies=none`) or only `lib/` (`check-1c-bypass`) stays on the map: a declaration attests reads,
+  and with none the runner's refusal of an empty declaration is correct.
+- A fixture whose root walk keys on `VERSION` declares `VERSION` plain (it yields no key row, being
+  outside the hook's universe); a drop-VERSION probe separates an in-sandbox walk (refuses, exit 2)
+  from an escape to the `mktemp` parent. Six built this way; none escaped.
+- A fixture that installs its subject into a seeded tree and whose subject honours
+  `AI_DLC_PROJECT_ROOT` ahead of its own walk is class b: `story-corpus-sprint-slot`,
+  `artifact-path-migration`, and `push-drain-refusals` (whose walk escapes the sandbox) are SKIPPED and
+  filed as `BL-487`.
+
+**Fixed, in a shipping fixture, found by construction.** `trunk-audit-mutants` FAILED under the runner
+and PASSED in the pool: its M13 mutant widened a bracket class with the reversed range `_-Z`, which the
+operator's UTF-8 locale collates as a wide range and `env -i`'s C locale reads differently, so the
+mutant was killed under one and survived under the other. Reproduced on the pristine tree with
+`LC_ALL=C` (rc=1, M13 survived). The mutant now appends a literal instead; 22 assertions green under
+both locales.
+
+**Filed.** `BL-487` (above) and `BL-488`: `spec-join-integrity/run.sh:99` calls `says` before its
+definition, so one arm never executes and every run prints `command not found` at exit 0;
+`claude-rules-joins` guards a nonexistent `core/.gitignore` and silently skips. Both found by hands
+reading the fixtures to declare them; neither declaration touched the defect.
+
+**Map noise recorded by the hands, none changing a verdict**: `.git/*`, `@rpath/*.framework`,
+`<input>`, `<string>` rows; walk-up directory probes; two rows naming files that do not exist in the
+distribution (`core/skills/ai-dlc/extensions/known-skills.json`, `core/scripts/lib/meta-gate.sh`,
+probed optionally by validators); and rows the map LACKS that the fixtures do read
+(`docs/backlog.archive.md`, `VERSION`, `reconcile/lib.sh`, `relabel-extension-checks.sh`). Tools keyed
+from `/opt/homebrew/bin` where a fixture runs them: `python3`, `jq`, `timeout`; `git` keys on the
+Xcode-beta exec-path.
+
+**The first gate of this release was BLOCKED by the declarations themselves, and the fix is in this
+commit.** Six fixtures that run `validate-enforcement-map.sh` against the pristine tree reported FIXTURE
+BROKEN because two of its arms fired on the new sentinel lines: I33 on four fixtures whose sentinel
+spelled `$(dirname "$HOOK")/../schemas/pause-routing.json` (a walk-up from a path another resolver
+produced, which the install mapping breaks on a consumer), and the hook-scrub arm on three advisor-gate
+shard drivers whose sentinel loop named `core/hooks/` without an `AI_DLC_*` scrub above it. Fixed: the
+four pick the schema from the fixture's own location across both layouts, the three carry the battery's
+own scrub line. All seven re-run PASS in the sandbox and plain, the validator is green, and the six
+reporting fixtures PASS from the repo root. The rule for every further sentinel: no `..` from a resolved
+path, and a fixture that names `core/hooks/` anywhere scrubs `AI_DLC_*` first.
+
+**Two sentinel traps, recorded for action 5's briefs.** A sentinel printing a `$VALIDATOR` that still
+carries `..` segments is not matched by the runner, which compares the declared path or the
+sandbox-prefixed resolved path; six hands hit it and printed a `pwd -P`-resolved path instead. And a
+teeth probe that strips the sentinel by deleting a line can leave an empty `for` body behind; the
+probe's copy must `cmp` identical to the base plus the one removed line.
+
+**All 103 declared fixtures through the runner and the hook's decision**, on a throwaway clone of this
+branch at load 6, 4-wide: 103 of 103 exit 0, 1033 sandbox files in total. With every key record
+published: an unchanged tree skips all 103; a byte appended to `docs/backlog.md` skips all 103; a byte
+appended to `core/scripts/validate-steering-budget.sh` reruns exactly the nine fixtures that declare it
+and skips the other 94.
+
 ## [0.752.0] - 2026-10-08
 
 Batch 209's release, plan action 3 of `docs/plans/hermetic-fixtures-poc.md` in full: **all eight shipping

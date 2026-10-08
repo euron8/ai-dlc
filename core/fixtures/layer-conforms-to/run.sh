@@ -27,6 +27,8 @@ LINTER="$(pick "${1:-}" "$HERE/../../../scripts/ai-dlc/validate-layer-entries.sh
                         "$HERE/../../scripts/validate-layer-entries.sh" \
                         "$HERE/../../../core/scripts/validate-layer-entries.sh")"
 [ -n "$LINTER" ] || { echo "FIXTURE ERROR: cannot locate validate-layer-entries.sh" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/scripts/validate-layer-entries.sh"
+[ -f "$(dirname "$LINTER")/artifact-path-config.sh" ] && echo "HERMETIC-CONSUMED core/scripts/artifact-path-config.sh"
 
 ROOT="$(bash "$HERE/seed.sh")"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/layer-conforms-to-m.XXXXXX")"

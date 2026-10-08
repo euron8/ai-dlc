@@ -1,0 +1,16 @@
+# Tools run.sh, seed.sh and the validator invoke. hdiutil is declared so the case-sensitive and HFS+ arms run rather than SKIP.
+bash
+cat
+cmp
+cp
+dirname
+grep
+hdiutil
+ln
+ls
+mkdir
+mktemp
+python3
+rm
+sed
+tail

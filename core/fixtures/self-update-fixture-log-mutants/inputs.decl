@@ -1,0 +1,8 @@
+# self-update-fixture-log-mutants drives copies of ONE file, the reconcile runner under test, through
+# the worlds of its sibling fixture. The runner sources its siblings in the reconcile directory, so
+# that directory is declared whole. The sibling fixture (lib.sh, seed.sh, run.sh) and the preamble
+# are read directly; the runner's gate and scripts read core/scripts and the hook directory.
+core/skills/ai-dlc-update/reconcile/
+!core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh
+core/fixtures/self-update-fixture-log/
+core/fixtures/lib/

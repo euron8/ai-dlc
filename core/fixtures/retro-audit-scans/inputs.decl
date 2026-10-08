@@ -1,0 +1,5 @@
+# retro-audit-scans drives the two retro Step 4 scans against a synthetic corpus. seed.sh locates
+# both by HERE/../../.. and resolves core-paths.sh beside the audit (the ownership resolver).
+!core/scripts/audit-rule-files.sh
+!core/scripts/validate-gate-manifest.sh
+core/scripts/core-paths.sh

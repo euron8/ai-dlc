@@ -1,0 +1,7 @@
+# readset-stage1-verdict walks up for scripts/readset-stage1-verdict.sh, drives the scorer and the
+# wrapper, and reads the deriver as text (mutants and a profile-format extraction); it never
+# executes the deriver. lib/ holds the sourced preamble.
+!scripts/readset-stage1-verdict.sh
+!scripts/readset-stage1-run.sh
+core/scripts/derive-fixture-readsets.sh
+core/fixtures/lib/

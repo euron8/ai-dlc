@@ -32,6 +32,8 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 # Isolated SCRIPT_DIR: the real validator + sibling stubs (--check-clean-tree tests
 # existence only, never executes them). retro-prereq is deliberately absent.
 mkdir -p "$WORK/bin"
+# The REQUIRED input of inputs.decl: both arms drive the copy made here.
+echo "HERMETIC-CONSUMED $VMR"
 cp "$VMR" "$WORK/bin/validate-mandatory-rules.sh"
 : > "$WORK/bin/validate-retro-evidence.sh"
 : > "$WORK/bin/validate-cycle-commits.sh"

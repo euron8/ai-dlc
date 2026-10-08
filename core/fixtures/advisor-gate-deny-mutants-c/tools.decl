@@ -1,0 +1,18 @@
+# Tools the battery, the shared lib and seed, and the hook under test invoke.
+awk
+bash
+cat
+cmp
+comm
+cp
+dirname
+env
+git
+grep
+jq
+mkdir
+mktemp
+sed
+sort
+tr
+uniq

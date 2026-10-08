@@ -28,6 +28,7 @@ if [ -n "$ROOT" ] && [ -f "$ROOT/core/scripts/sprint-status.sh" ]; then
 else
   echo "FIXTURE ERROR: sprint-status.sh not found — this fixture is distribution-only" >&2; exit 2
 fi
+echo "HERMETIC-CONSUMED $VAL"
 
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT

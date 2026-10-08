@@ -31,6 +31,7 @@ if [ -n "$ROOT" ] && [ -f "$ROOT/core/scripts/validate-cycle-commits.sh" ]; then
 else
   echo "FIXTURE ERROR: validate-cycle-commits.sh not found — this fixture is distribution-only" >&2; exit 2
 fi
+echo "HERMETIC-CONSUMED $VAL"
 
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
@@ -159,9 +160,12 @@ expect_set capture-ambiguity-guessed 2 'ambiguous capture did not report|ambigui
 
 # M13 — the safe-charset guard goes. The value is substituted into a command that is then
 # `eval`ed, so this is the arm between a consumer's `(.*)` and arbitrary execution driven by
-# a path in their own repository.
+# a path in their own repository. The mutant makes the guard's pattern unmatchable by appending a
+# literal that no capture value carries; its first spelling widened the class with a reversed range
+# `_-Z`, which the UTF-8 locale's collation read as a wide range and the C locale as an error, so the
+# mutant was killed under one and survived under the other.
 expect_set capture-unsafe-value-allowed 1 'unsafe capture value was substituted' \
-  's@^          \*\[!A-Za-z0-9._-\]\*)@          *[!A-Za-z0-9._-Z]*)@'
+  's@^          \*\[!A-Za-z0-9._-\]\*)@          *[!A-Za-z0-9._-]NEVER*)@'
 
 # M14 — the {name}-to-capture join goes. This is the arm that makes the runtime "unsubstituted
 # brace" check unnecessary; without it a typo'd {nosuch} ships and is discovered by whichever

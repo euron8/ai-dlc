@@ -168,6 +168,8 @@ score() {
 echo "foreground-budget-deny:"
 printf '  hook      %s\n' "$HOOK"
 printf '  detector  %s\n' "$DETECTOR"
+printf 'HERMETIC-CONSUMED %s\n' "$HOOK"
+printf 'HERMETIC-CONSUMED %s\n' "$DETECTOR"
 
 # --- the shipped hook ----------------------------------------------------------------------
 [ -x "$HOOK" ] || bad "hook is not executable: $HOOK -- settings.json invokes it as a bare path"
