@@ -25,6 +25,7 @@ AUDIT="$(pick "${1:-}" \
   "$HERE/../../../core/scripts/audit-layer-debt.sh" \
   "$HERE/../../../scripts/ai-dlc/audit-layer-debt.sh")"
 [ -n "$AUDIT" ] || { echo "FIXTURE ERROR: cannot locate audit-layer-debt.sh" >&2; exit 2; }
+printf 'HERMETIC-CONSUMED %s\n' "$(cd "$(dirname "$AUDIT")" && pwd)/$(basename "$AUDIT")"
 
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT

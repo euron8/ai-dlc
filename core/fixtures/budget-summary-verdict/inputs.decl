@@ -1,0 +1,4 @@
+# budget-summary-verdict reads ONE file outside its own directory: the validator under test.
+# run.sh locates it by candidate list, drives it directly, copies it into $WORK/bin for the control,
+# and builds every mutant as a sed rewrite of it. Its own directory is copied by the runner.
+!core/scripts/validate-artifact-budget.sh

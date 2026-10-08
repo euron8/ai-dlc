@@ -1,0 +1,9 @@
+# mandatory-rules-skip-accounting drives ONE validator under test and copies it, beside its siblings
+# and the two schemas they resolve at ../schemas, into per-arm toolchain dirs. Its own directory is
+# copied by the runner without being named.
+!core/scripts/validate-mandatory-rules.sh
+core/scripts/validate-audit-anchors.sh
+core/scripts/sprint-status.sh
+core/schemas/audit-anchors.json
+core/schemas/sprint-status.json
+core/fixtures/lib/

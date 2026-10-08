@@ -36,6 +36,8 @@ if [ -z "$SCRIPT" ]; then
   exit 2
 fi
 
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$SCRIPT")" && pwd)/$(basename "$SCRIPT")"
+
 ROOT="$(bash "$HERE/seed.sh" "$SCRIPT")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
 WORK="$(mktemp -d)"
 trap 'rm -rf "$ROOT" "$WORK"' EXIT

@@ -1,0 +1,6 @@
+# The validator under test, the arm-H sibling it runs for the repair-record field reader, and the
+# schema and enforcement map it fails closed without. Map rows under core/ are walk-up probes.
+!core/scripts/validate-gate-adjudication.sh
+core/scripts/validate-adversarial-convergence.sh
+core/schemas/gate-adjudication-verdict.json
+core/skills/ai-dlc/enforcement-map.yaml

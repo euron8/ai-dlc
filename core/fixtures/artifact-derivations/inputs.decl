@@ -1,0 +1,5 @@
+# artifact-derivations drives ONE shipped validator against mktemp worlds it builds itself
+# (AI_DLC_PROJECT_ROOT=$WORK). run.sh copies it into mutants and greps its line anchors, so it is REQUIRED.
+!core/scripts/validate-artifact-derivations.sh
+# run.sh sources the preamble (unsets inherited GIT_* variables) before any git call.
+core/fixtures/lib/

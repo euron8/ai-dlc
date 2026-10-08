@@ -1,0 +1,3 @@
+# Reads one hook outside its own directory: the escalation-delivery hook under test, which run.sh drives
+# and also copies as the base of its mutants. Map rows under core/ and core/fixtures are walk-up probes.
+!core/hooks/ai-dlc-escalation-delivery.sh

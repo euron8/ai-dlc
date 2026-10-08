@@ -39,6 +39,7 @@ else
   echo "FIXTURE ERROR: cannot locate validate-audit-anchors.sh in either layout" >&2; exit 2
 fi
 [ -f "$S" ] || { echo "FIXTURE ERROR: cannot locate audit-anchors.json ($S)" >&2; exit 2; }
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$V")" && pwd)/$(basename "$V")"
 
 WORK="$(mktemp -d)" || exit 2
 trap 'rm -rf "$WORK"' EXIT

@@ -74,6 +74,7 @@ FAIL=0
 KILLS=0
 echo "plan-rotate fixture"
 echo "  subject: $SUBJ"
+echo "HERMETIC-CONSUMED $SUBJ"
 echo
 
 ok()  { printf '  ok    %-26s %s\n' "$1" "$2"; }
@@ -770,6 +771,7 @@ fi
 LV="$(mkroot liveness)" || broken "could not build the liveness sandbox root"
 mkdir -p "$LV/scripts" || broken "could not create $LV/scripts"
 cp "$VPS" "$LV/scripts/validate-plan-shape.sh" || broken "could not copy the validator into the sandbox"
+echo "HERMETIC-CONSUMED $VPS"
 drive "$LV" "$WORK/seeds/base.md" probe --ceiling "$CEIL" --apply
 [ "$LAST_RC" -eq 0 ] || broken "the liveness root's rotation was refused (exit $LAST_RC); there is no rotated output to check: $LAST_OUT"
 [ -f "$LAST_ARCH" ] || broken "the liveness root's rotation wrote no archive, so the pointer this arm is about was never written"

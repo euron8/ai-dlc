@@ -1,0 +1,9 @@
+# layer-catalog-collision drives three scripts outside its own directory against a seeded consumer tree:
+# the layer linter, the pull-time drift classifier and the relabeller. The linter runs
+# artifact-path-config.sh from beside itself and TOLERATES its absence (warning W11), hence the `!`
+# and a sentinel guarded by -f. layer-drift.sh is only function-extracted, so its lib.sh is never read.
+# Map rows under core, core/scripts and .git are walk-up probes.
+!core/scripts/validate-layer-entries.sh
+!core/scripts/artifact-path-config.sh
+!core/skills/ai-dlc-update/reconcile/layer-drift.sh
+!core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh

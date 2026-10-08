@@ -1,0 +1,3 @@
+# Reads the SKILL.md under test plus every rule body beside it; rule-bodies/ is globbed, so it is declared whole.
+!core/skills/ai-dlc/SKILL.md
+core/skills/ai-dlc/rule-bodies/

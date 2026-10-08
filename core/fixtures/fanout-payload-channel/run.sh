@@ -79,6 +79,7 @@ done
 # Printed because a mutant applied to a copy the run never loads leaves every arm green,
 # and that reads exactly like an arm that cannot fire.
 echo "  subject resolved: $SUBJ"
+echo "HERMETIC-CONSUMED $SUBJ"
 
 command -v python3 >/dev/null 2>&1 || {
   echo "FIXTURE ERROR: python3 not on PATH; the subject's scanner is a python3 heredoc" >&2

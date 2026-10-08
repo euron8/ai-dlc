@@ -1,0 +1,8 @@
+# derivation-capture-mutants copies the hook and the validator into a throwaway distribution and
+# mutates the hook there; the validator is the sibling's engine, and the hook is its subject.
+!core/hooks/ai-dlc-derivation-capture.sh
+!core/scripts/validate-artifact-derivations.sh
+# seed.sh splits its section artifact with the real splitter when one is present.
+core/scripts/partition-document.sh
+# run.sh drives the sibling fixture's run.sh and seed.sh, copied into the throwaway tree.
+core/fixtures/derivation-capture/

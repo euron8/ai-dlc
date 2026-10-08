@@ -1,0 +1,3 @@
+# suite-dispatch-order sources the shared preamble and copies the pre-push hook (distribution layout) into every seeded tree.
+!core/git-hooks/pre-push
+core/fixtures/lib/

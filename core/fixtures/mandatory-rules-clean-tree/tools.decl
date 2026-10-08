@@ -1,0 +1,8 @@
+# Tools run.sh and the validator --check-clean-tree arm invoke, keyed on their binaries.
+bash
+cp
+dirname
+grep
+mktemp
+rm
+sed

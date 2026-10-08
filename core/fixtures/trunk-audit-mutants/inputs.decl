@@ -1,0 +1,5 @@
+# trunk-audit-mutants mutates validate-cycle-commits.sh and drives the sibling trunk-audit-classes against each copy; the sibling sources the shared preamble and reads the shipped layer-contract.yaml.
+!core/scripts/validate-cycle-commits.sh
+core/fixtures/trunk-audit-classes/run.sh
+core/fixtures/lib/
+core/skills/ai-dlc/layer-contract.yaml

@@ -34,6 +34,14 @@ trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
 
+# Sentinels for the hermetic runner: printed where each declared input is first USED. The
+# provenance library and the schema are loaded fail-open by the driven hook, so each is
+# guarded on the presence the hook itself would find, beside the RESOLVED hook.
+[ -f "$HOOK" ] && echo "HERMETIC-CONSUMED core/hooks/ai-dlc-pause.sh"
+[ -f "$(dirname "$HOOK")/ai-dlc-context-provenance.sh" ] && echo "HERMETIC-CONSUMED core/hooks/ai-dlc-context-provenance.sh"
+_PRS=""; for _c in "$HERE/../../schemas/pause-routing.json" "$HERE/../../../.claude/schemas/pause-routing.json"; do [ -f "$_c" ] && { _PRS="$(cd "$(dirname "$_c")" && pwd -P)/pause-routing.json"; break; }; done
+[ -n "$_PRS" ] && echo "HERMETIC-CONSUMED core/schemas/pause-routing.json"
+
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
@@ -171,6 +179,10 @@ ESC_HOOK="$(pick "$HERE/../../hooks/ai-dlc-escalation-delivery.sh" \
 ANS_HOOK="$(pick "$HERE/../../hooks/ai-dlc-answer-capture.sh" \
                  "$HERE/../../../.claude/hooks/ai-dlc-answer-capture.sh" \
                  "$HERE/../../../core/hooks/ai-dlc-answer-capture.sh")"
+[ -f "$CONT_HOOK" ] && echo "HERMETIC-CONSUMED core/hooks/ai-dlc-continue.sh"
+[ -f "$ACK_HOOK" ] && echo "HERMETIC-CONSUMED core/hooks/ai-dlc-acknowledge.sh"
+[ -f "$ESC_HOOK" ] && echo "HERMETIC-CONSUMED core/hooks/ai-dlc-escalation-delivery.sh"
+[ -f "$ANS_HOOK" ] && echo "HERMETIC-CONSUMED core/hooks/ai-dlc-answer-capture.sh"
 
 # The heredoc body between `cat > "$LOG_FILE" <<'EOF'` and its terminator. Keyed on the
 # EMITTING line, not on a mention of the log elsewhere in the file. LC_ALL=C because the

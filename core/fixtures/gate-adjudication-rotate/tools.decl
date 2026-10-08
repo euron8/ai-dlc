@@ -1,0 +1,26 @@
+# Tools run.sh, seed.sh, the rotator and the guard hook invoke, keyed on their binaries.
+awk
+basename
+bash
+cat
+chmod
+cmp
+cut
+date
+dirname
+env
+find
+git
+grep
+head
+jq
+mkdir
+mktemp
+mv
+rm
+sed
+shasum
+sort
+stat
+tr
+wc

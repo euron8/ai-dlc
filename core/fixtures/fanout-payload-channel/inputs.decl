@@ -1,0 +1,4 @@
+# fanout-payload-channel reads ONE file outside its own directory: the subject under test.
+# Every arm and mutant runs report-propagation-fanout.sh (or a sed copy of it) against trees the
+# fixture builds under mktemp. Its own directory is copied by the runner without being named.
+!core/scripts/report-propagation-fanout.sh

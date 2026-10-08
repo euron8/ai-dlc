@@ -37,6 +37,9 @@ run() { OUT="$(bash "$1" --requests "$2" --brief "$3" --sprint "${4:-42}" 2>&1)"
 
 echo "request-coverage:"
 
+# The REQUIRED input of inputs.decl: every assertion below drives this validator.
+echo "HERMETIC-CONSUMED $VALIDATOR"
+
 # --- Assertion 1: THE FIX — a dropped epic FAILS ------------------------------
 run "$VALIDATOR" "$REQ" "$DROPPED"
 if [ "$RC" = "1" ]; then

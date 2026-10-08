@@ -18,4 +18,7 @@ IMPL="$HERE/../advisor-gate-deny-mutants/run.sh"
   exit 2
 }
 
+for _h in ai-dlc-advisor-gate.sh ai-dlc-context-provenance.sh; do
+  echo "HERMETIC-CONSUMED $(cd "$HERE/../../hooks" && pwd)/$_h"
+done
 exec bash "$IMPL" --group d

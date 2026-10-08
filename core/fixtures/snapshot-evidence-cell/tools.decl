@@ -1,0 +1,17 @@
+awk
+basename
+bash
+cat
+cmp
+cut
+dirname
+find
+grep
+head
+mktemp
+mv
+rm
+sed
+sort
+tail
+tr

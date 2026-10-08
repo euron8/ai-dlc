@@ -1,0 +1,4 @@
+# updater-session-signals-mutants reads two things outside its own directory: the hook it mutates
+# (copied and sed-rewritten per mutant) and the sibling fixture it re-runs against each copy.
+!core/hooks/ai-dlc-acknowledge.sh
+core/fixtures/updater-session-signals/

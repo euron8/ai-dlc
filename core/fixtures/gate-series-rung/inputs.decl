@@ -1,0 +1,8 @@
+# The validator under test: every case runs `validate-gate-adjudication.sh --series` on it.
+!core/scripts/validate-gate-adjudication.sh
+# The verdict schema the validator LOADS and fails without (no built-in copy).
+core/schemas/gate-adjudication-verdict.json
+# The escalated set is DERIVED from the enforcement map; the validator fails closed without it.
+core/skills/ai-dlc/enforcement-map.yaml
+# The sibling the validator resolves for its repair-record arm.
+core/scripts/validate-adversarial-convergence.sh

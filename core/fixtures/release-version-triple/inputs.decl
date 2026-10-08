@@ -1,0 +1,8 @@
+# release-version-triple reads three things outside its own directory.
+# The preamble is sourced on line 2; the runner copies only the fixture's own directory.
+core/fixtures/lib/
+# The validator under test. Distribution tooling in scripts/, not core/scripts/. The fixture
+# SKIP-and-PASSes when it is absent, so it is REQUIRED: absent, the verdict would still read PASS.
+!scripts/validate-release-version.sh
+# The consumer engine whose citation regex arm F is bound to, byte for byte (assertions 20 and 21).
+!core/skills/ai-dlc-update/reconcile/ledger-reverify.sh

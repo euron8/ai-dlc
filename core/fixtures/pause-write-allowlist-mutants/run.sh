@@ -103,6 +103,7 @@ echo "pause-write-allowlist-mutants:"
 # emits nothing, and nothing reads as ALLOW. Every "and the other arms still allow" clause
 # below would then pass over a hook that never ran. Establish that an untouched copy answers
 # the baseline before reading any mutant's answer as evidence.
+echo "HERMETIC-CONSUMED $HOOK"
 cp "$HOOK" "$WORK/control.sh"
 CTRL="$(row "$WORK/control.sh")"
 if [ "$CTRL" = "$BASELINE" ]; then

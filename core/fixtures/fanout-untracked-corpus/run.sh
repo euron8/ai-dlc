@@ -201,6 +201,9 @@ SHIM
 }
 fired() { [ -f "$1/.fired" ]; }
 
+# The REQUIRED input of inputs.decl: every assertion drives this file, and this is the first
+# point it is run. SUBJ is built from a pwd-resolved ROOT, so it carries no `..` segment.
+echo "HERMETIC-CONSUMED $SUBJ"
 OUT="$(run "$SUBJ" "$TREE" "$BASE")"
 
 # ============================================================================

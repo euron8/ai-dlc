@@ -1,0 +1,3 @@
+# snapshot-conservation drives the validator under test and sources the shared preamble (known non-discriminating).
+!core/scripts/validate-snapshot-conservation.sh
+core/fixtures/lib/

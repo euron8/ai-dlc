@@ -50,6 +50,7 @@ for cand in \
   [ -f "$cand" ] && V="$cand" && break
 done
 [ -n "$V" ] || { echo "run.sh: could not locate validate-artifact-budget.sh in either layout" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/scripts/validate-artifact-budget.sh"
 
 rc=0
 ok()  { echo "ok: $1"; }

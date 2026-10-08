@@ -1,0 +1,26 @@
+# External tools run.sh, the sandboxed gate-repair-record run.sh/seed.sh and the validators invoke. python3 applies each mutation.
+awk
+basename
+bash
+cat
+cmp
+cp
+cut
+date
+dirname
+env
+find
+grep
+head
+id
+ls
+mkdir
+mktemp
+python3
+rm
+sed
+sort
+tail
+tr
+uniq
+wc

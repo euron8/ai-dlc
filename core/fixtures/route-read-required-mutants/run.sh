@@ -258,6 +258,7 @@ echo "route-read-required-mutants:"
 # cell is DENY, so this control demands the hook produce something before any survival below
 # is readable as evidence. The log cells are the same demand on the second observable.
 cp "$HOOK" "$WORK/control.sh"
+printf 'HERMETIC-CONSUMED %s\n' "$HOOK"
 CTRL="$(row "$WORK/control.sh")"
 if [ "$CTRL" = "$BASELINE" ]; then
   ok "CONTROL: an unmutated copy DENIES both lead write cells and allows every other cell including \`teammate\` (positive conjunct: \`bypass\` and \`notebook\` are DENY, so a subject that emitted nothing would fail this)"

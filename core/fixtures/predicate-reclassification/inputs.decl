@@ -1,0 +1,3 @@
+# The validator under test (predicate-differential.sh) is the REQUIRED input; the fixture copies it per case. lib/ holds the git-env preamble, declared whole and non-discriminating.
+!core/skills/ai-dlc-update/reconcile/predicate-differential.sh
+core/fixtures/lib/

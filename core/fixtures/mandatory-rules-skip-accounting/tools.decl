@@ -1,0 +1,23 @@
+# The tools run.sh, the three scripts it drives and the copied validator invoke.
+awk
+basename
+bash
+cat
+chmod
+cmp
+cp
+cut
+dirname
+env
+find
+git
+grep
+head
+mkdir
+mktemp
+python3
+rm
+sed
+sort
+tail
+tr

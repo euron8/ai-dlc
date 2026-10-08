@@ -105,6 +105,7 @@ for cand in "$DIR/../../.." "$DIR/../.."; do
   fi
 done
 [ -n "$VALIDATOR" ] || { echo "run.sh: could not locate validate-shell-portability.sh from $DIR" >&2; exit 2; }
+echo "HERMETIC-CONSUMED scripts/validate-shell-portability.sh"
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 rc=0

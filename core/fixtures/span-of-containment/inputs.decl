@@ -1,0 +1,3 @@
+# span-of-containment reads ONE file outside its own directory: reconcile/lib.sh, sourced for
+# span_of, which the fixture runs on seeded documents and mutates by sed into a copy.
+!core/skills/ai-dlc-update/reconcile/lib.sh

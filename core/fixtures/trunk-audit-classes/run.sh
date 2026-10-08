@@ -50,6 +50,7 @@ fi
 # BOTH LAYOUTS, because install.sh splits what shares a parent in core/ and a fixture that
 # knows only the distribution path exits 2 in a consumer — which the suite reports as a FAIL,
 # not as a skip. That is v0.234.1, produced by the sibling fixture one release earlier.
+echo "HERMETIC-CONSUMED $VAL"
 if [ -n "$ROOT" ] && [ -f "$ROOT/core/skills/ai-dlc/layer-contract.yaml" ]; then
   REAL_LC="$ROOT/core/skills/ai-dlc/layer-contract.yaml"
 elif [ -n "$ROOT" ] && [ -f "$ROOT/.claude/skills/ai-dlc/layer-contract.yaml" ]; then

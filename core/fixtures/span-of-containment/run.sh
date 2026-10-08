@@ -34,6 +34,7 @@ done
 
 # shellcheck source=/dev/null
 . "$LIB" || { echo "FAIL: could not source $LIB"; exit 1; }
+echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/lib.sh"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT

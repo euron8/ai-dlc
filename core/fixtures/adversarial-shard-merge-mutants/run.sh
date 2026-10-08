@@ -60,6 +60,7 @@ SIB="$HERE/../adversarial-shard-merge"
 if [ -n "$ROWS" ]; then : >> "$ROWS" || { echo "FIXTURE ERROR: cannot write --rows $ROWS" >&2; exit 2; }; fi
 
 echo "$NAME:"
+echo "HERMETIC-CONSUMED core/scripts/merge-adversarial-shards.sh"
 
 # THE JOIN: every predicate the shipped fixture calls as an arm is scored here, and every predicate
 # scored here is one the shipped fixture runs. Read from the shipped run.sh's own arm calls.

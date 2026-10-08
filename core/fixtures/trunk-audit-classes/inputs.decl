@@ -1,0 +1,6 @@
+# The validator under test: every assertion drives `validate-cycle-commits.sh --audit-trunk` against scratch repos.
+!core/scripts/validate-cycle-commits.sh
+# Joined at arm 10: core's shipped contract must declare consumer_pr_class_file:.
+core/skills/ai-dlc/layer-contract.yaml
+# Sourced first by run.sh; non-discriminating (the sandbox env is already scrubbed), declared because it is read.
+core/fixtures/lib/

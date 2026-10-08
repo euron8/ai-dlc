@@ -107,6 +107,8 @@ STATUS_SCHEMA="$SCHEMAS/sprint-status.json"
 for f in "$VMR" "$VAA" "$SS" "$ANCHOR_SCHEMA" "$STATUS_SCHEMA"; do
   [ -f "$f" ] || { echo "FIXTURE ERROR: required file not found: $f" >&2; exit 2; }
 done
+echo "HERMETIC-CONSUMED core/scripts/validate-mandatory-rules.sh"
+echo "HERMETIC-CONSUMED core/skills/ai-dlc/steps/retro.md"
 command -v git >/dev/null 2>&1 || { echo "FIXTURE ERROR: git not on PATH" >&2; exit 2; }
 # Hermeticity (I10/I87): a fixture that inherits the operator's AI_DLC_* tunables tests the
 # CONFIG, not the code.

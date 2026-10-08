@@ -1,0 +1,8 @@
+# layer-retired-id-crosswalk reads the validator under test (run.sh passes it to every vector and
+# mutates copies of it), artifact-path-config.sh (the validator calls it as a sibling), and the
+# shipping layer-contract.yaml (seed.sh copies it into the seeded consumer). Its own directory is
+# copied by the runner without being named.
+!core/scripts/validate-layer-entries.sh
+!core/scripts/artifact-path-config.sh
+core/skills/ai-dlc/layer-contract.yaml
+core/fixtures/lib/

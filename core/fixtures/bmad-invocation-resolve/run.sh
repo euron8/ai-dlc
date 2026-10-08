@@ -34,6 +34,8 @@ for cand in \
 done
 [ -n "$V" ] || { echo "run.sh: could not locate validate-bmad-invocations.sh" >&2; exit 2; }
 
+printf 'HERMETIC-CONSUMED %s/%s\n' "$(cd "$(dirname "$V")" && pwd)" "$(basename "$V")"
+
 ROOT="$(bash "$DIR/seed.sh")"
 trap 'rm -rf "$ROOT"' EXIT
 S="$ROOT/.claude/skills"

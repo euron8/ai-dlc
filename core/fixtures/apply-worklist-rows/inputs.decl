@@ -1,0 +1,4 @@
+# apply-worklist-rows sources the shared preamble and drives apply.sh from a copy of the reconcile directory, which apply.sh reads many siblings of.
+core/fixtures/lib/
+core/skills/ai-dlc-update/reconcile/
+!core/skills/ai-dlc-update/reconcile/apply.sh

@@ -1,0 +1,8 @@
+# layer-conforms-to reads the validator under test, the helper the validator loads beside itself
+# (fail-open: absent draws only a W11 warning, so it is REQUIRED and consumed by a presence-guarded
+# sentinel), the shipping layer contract that seed.sh copies into every seeded consumer, and the
+# shared fixture preamble. Its own directory is copied by the runner without being named.
+!core/scripts/validate-layer-entries.sh
+!core/scripts/artifact-path-config.sh
+core/skills/ai-dlc/layer-contract.yaml
+core/fixtures/lib/

@@ -12,6 +12,9 @@ WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 
 trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
+# The REQUIRED input of inputs.decl: every fire() below pipes into this hook, and seed.sh has
+# already resolved it into $HOOK, so this is the point the declaration is consumed.
+echo "HERMETIC-CONSUMED core/hooks/ai-dlc-subagent-probe.sh"
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }

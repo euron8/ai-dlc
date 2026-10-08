@@ -1,0 +1,22 @@
+# The tools the driver, the sibling battery, lib.sh, seed.sh and the hook invoke.
+awk
+bash
+cat
+cmp
+comm
+cp
+date
+dirname
+env
+git
+grep
+head
+jq
+mkdir
+mktemp
+mv
+sed
+sort
+tail
+tr
+uniq

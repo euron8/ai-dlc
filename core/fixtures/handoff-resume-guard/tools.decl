@@ -1,0 +1,19 @@
+# Tools run.sh, seed.sh and the continue hook invoke, keyed on their binaries.
+awk
+basename
+cat
+cmp
+cp
+date
+dirname
+env
+grep
+head
+jq
+ls
+mkdir
+mktemp
+rm
+sed
+tail
+touch

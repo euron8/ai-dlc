@@ -1,0 +1,6 @@
+# setup-site-drift reads the validator under test, the declaration beside it (setup-sites.md) and
+# preclassify.sh (map_consumer() is scraped out of it). Dist and consumer trees are built under mktemp.
+!core/skills/ai-dlc-update/reconcile/setup-site-drift.sh
+core/skills/ai-dlc-update/reconcile/setup-sites.md
+core/skills/ai-dlc-update/reconcile/preclassify.sh
+core/fixtures/lib/

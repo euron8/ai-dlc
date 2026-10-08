@@ -19,6 +19,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 pick() { for c in "$@"; do [ -n "$c" ] && [ -f "$c" ] && { printf '%s' "$c"; return; }; done; }
+rp() { printf "%s/%s" "$(cd "$(dirname "$1")" && pwd)" "$(basename "$1")"; }  # resolved path, no ../ segments
 LINTER="$(pick "${1:-}" "$HERE/../../../scripts/ai-dlc/validate-layer-entries.sh" \
                         "$HERE/../../scripts/validate-layer-entries.sh" \
                         "$HERE/../../../core/scripts/validate-layer-entries.sh")"
@@ -37,6 +38,8 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 echo "layer-catalog-collision:"
 
 # --- Part 1: the linter classifies the same-number states ---------------------
+echo "HERMETIC-CONSUMED $(rp "$LINTER")"
+[ -f "$(dirname "$LINTER")/artifact-path-config.sh" ] && echo "HERMETIC-CONSUMED $(rp "$(dirname "$LINTER")/artifact-path-config.sh")"
 out="$(bash "$LINTER" "$ROOT" 2>&1)"
 
 grep -q "NUMBER COLLISION on '24\.'" <<<"$out" \
@@ -134,6 +137,7 @@ probe() { # probe <file> <fn-name> <a> <b> ; exit 0 = matched
 # defects (readopt-override vs layer-drift; register-drift vs layer-drift; the
 # heading-label rule) — so bind it here rather than trusting a comment.
 BOLD_IN="$ROOT/.claude/skills/ai-dlc/extensions/steps-domain/prose.md"
+echo "HERMETIC-CONSUMED $(rp "$DRIFT")"
 for spec in "$LINTER|validate-layer-entries.sh" "$DRIFT|layer-drift.sh"; do
   f="${spec%%|*}"; name="${spec##*|}"
   [ -n "$f" ] && [ -f "$f" ] || { bad "$name not found — cannot test its bold-anchor rule"; continue; }
@@ -248,6 +252,7 @@ grep -q "RULE NUMBER COLLISION on 'Rule 24'" <<<"$out" \
 if [ -z "$RELABEL" ]; then
   bad "FIXTURE BROKEN — cannot locate relabel-extension-checks.sh; Part 4b would pass by not running"
 else
+  echo "HERMETIC-CONSUMED $(rp "$RELABEL")"
   rel_out="$(bash "$RELABEL" "$ROOT" 2>&1)"
   grep -q '^  +  ## Rule 29 \[ext:rules\] -- ' <<<"$rel_out" \
     && ok "the relabeller writes '## Rule 29 [ext:rules] -- …' (label before the separator, integer unmoved)" \

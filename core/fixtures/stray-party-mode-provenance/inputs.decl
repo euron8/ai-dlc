@@ -1,0 +1,4 @@
+# stray-party-mode-provenance reads the validator under test and the schema it ships beside.
+# seed.sh copies both into the seeded project and builds every mutant from those copies.
+!core/scripts/validate-provenance-block.sh
+core/schemas/provenance-block.json

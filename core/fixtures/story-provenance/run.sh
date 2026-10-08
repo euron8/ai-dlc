@@ -25,6 +25,7 @@ if [ -z "$WRITER" ]; then
   echo "FAIL: cannot locate stamp-story-provenance.sh from $DIR"
   exit 1
 fi
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$WRITER")" && pwd)/$(basename "$WRITER")"
 
 ROOT="$(bash "$DIR/seed.sh" | tail -1)"
 NM_EXTRA=""
@@ -527,6 +528,7 @@ esac
 # sandbox; the foreign root carries .claude/ too. The two schemas and the source differ in BYTES,
 # so identity cannot be satisfied by a coincidence of content.
 READER="$(dirname "$WRITER")/validate-provenance-block.sh"
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$READER")" && pwd)/$(basename "$READER")"
 CONS="$(mktemp -d "$ROOT/cons.XXXXXX")"
 NEAR_SKILL="fixture-nearmiss-foreign-skill"
 SCH="provenance-block.json"

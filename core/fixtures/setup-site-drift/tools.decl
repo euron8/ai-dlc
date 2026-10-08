@@ -1,0 +1,20 @@
+# Tools run.sh and setup-site-drift.sh invoke. No node.
+awk
+bash
+cat
+cmp
+cp
+cut
+diff
+dirname
+git
+grep
+mkdir
+mktemp
+mv
+rm
+sed
+seq
+sort
+tr
+wc

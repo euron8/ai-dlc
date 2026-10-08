@@ -1,0 +1,16 @@
+bash
+cat
+cksum
+cmp
+cp
+sed
+grep
+awk
+mktemp
+dirname
+rm
+mkdir
+chmod
+find
+tail
+python3

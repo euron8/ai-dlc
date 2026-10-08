@@ -1,0 +1,18 @@
+# Tools run.sh invokes directly or through the pre-push hook copies it drives (git sandbox
+# seeding, the awk mutations, the hook's own dispatch). No node: the fixture never runs it.
+awk
+basename
+bash
+cat
+chmod
+cmp
+cp
+cut
+dirname
+env
+git
+grep
+mkdir
+mktemp
+rm
+sed

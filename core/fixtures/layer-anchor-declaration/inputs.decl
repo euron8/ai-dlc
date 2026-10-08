@@ -1,0 +1,4 @@
+# Sources the shared preamble; runs the validator under test and the artifact-path resolver it calls beside itself.
+!core/scripts/validate-layer-entries.sh
+!core/scripts/artifact-path-config.sh
+core/fixtures/lib/

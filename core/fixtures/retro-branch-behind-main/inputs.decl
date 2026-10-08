@@ -1,0 +1,12 @@
+# The two subjects: Check 7 of the validator (worlds A-H, every mutant is a sed rewrite of it)
+# and retro.md Step 1 (part 2, extracted and driven, mutated by sed).
+!core/scripts/validate-mandatory-rules.sh
+!core/skills/ai-dlc/steps/retro.md
+# Sibling validators copied into each synthetic toolchain dir, and the sprint-status roller.
+core/scripts/validate-audit-anchors.sh
+core/scripts/sprint-status.sh
+# Schemas the toolchain resolves beside itself (../schemas) and via AI_DLC_SPRINT_STATUS_SCHEMA.
+core/schemas/audit-anchors.json
+core/schemas/sprint-status.json
+# The preamble sourced first by run.sh.
+core/fixtures/lib/

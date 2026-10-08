@@ -1,0 +1,9 @@
+# Tools run.sh invokes directly, plus awk, which span_of runs.
+awk
+cat
+cmp
+cp
+dirname
+mktemp
+rm
+sed

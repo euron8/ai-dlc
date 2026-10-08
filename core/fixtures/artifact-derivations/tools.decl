@@ -1,0 +1,27 @@
+# Tools run.sh and the validator's shell section invoke from the fixed tool dirs. No node: the
+# fixture never runs it. python3 and xargs appear only inside strings fed to the validator as
+# derivations it must refuse.
+awk
+basename
+bash
+cat
+chmod
+cmp
+cp
+cut
+diff
+dirname
+env
+find
+git
+grep
+head
+ls
+mkdir
+mktemp
+mv
+rm
+sed
+sort
+tr
+wc

@@ -1,0 +1,22 @@
+# Tools run.sh, the subject and the validator invoke, keyed on their binaries.
+awk
+basename
+bash
+cat
+cmp
+comm
+cp
+cut
+diff
+dirname
+find
+grep
+head
+mkdir
+mktemp
+rm
+sed
+sort
+tail
+tr
+wc

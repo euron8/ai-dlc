@@ -1,0 +1,21 @@
+# Tools run.sh, seed.sh and the validator shell section invoke.
+bash
+dirname
+basename
+rm
+mkdir
+mktemp
+cp
+cat
+git
+awk
+sed
+grep
+cut
+tr
+sort
+head
+find
+comm
+paste
+cmp

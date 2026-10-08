@@ -1,0 +1,5 @@
+# The validator under test (seed.sh resolves it as VALIDATOR, run.sh executes it) and the schema it
+# loads from $AI_DLC_PROJECT_ROOT/core/schemas. Map rows core, core/scripts, .git, .claude and
+# core/core/skills/ai-dlc are the validator's walk-up probes, not reads.
+!core/scripts/validate-provenance-block.sh
+core/schemas/provenance-block.json

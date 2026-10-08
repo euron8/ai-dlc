@@ -1,0 +1,8 @@
+# answer-handoff-routing drives two hooks and the routing schema they share. run.sh resolves each
+# from its own directory (../../hooks, ../../schemas); seed.sh reads nothing outside it.
+!core/hooks/ai-dlc-answer-capture.sh
+!core/hooks/ai-dlc-pause.sh
+core/schemas/pause-routing.json
+# Both hooks source this wrapper only `if [ -r ... ]` and otherwise define a pass-through, so
+# the verdict survives its absence; it is REQUIRED so the declaration cannot drop it unseen.
+!core/hooks/ai-dlc-context-provenance.sh

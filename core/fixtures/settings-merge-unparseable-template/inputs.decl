@@ -1,0 +1,5 @@
+# Reads: the subject (settings-merge.sh, run on the producer template and mutated copies) and the
+# producer template it merges. VERSION is the marker run.sh walks up for; it is plain, not required.
+VERSION
+!core/skills/ai-dlc-update/reconcile/settings-merge.sh
+templates/settings.json.template

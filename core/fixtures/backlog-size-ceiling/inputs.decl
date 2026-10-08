@@ -1,0 +1,6 @@
+# Reads the live ledger (b16) and the entry-boundary library, and copies the ceiling validator and
+# the classifier into each seeded tree. VERSION is not declared: every seed writes its own.
+!scripts/validate-backlog-size.sh
+!scripts/backlog-reverify.sh
+core/skills/ai-dlc-update/reconcile/lib.sh
+docs/backlog.md

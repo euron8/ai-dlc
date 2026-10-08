@@ -1,0 +1,6 @@
+# Reads the validator under test and the schema it loads. Map rows under .git/, core, core/scripts
+# and core/fixtures are walk-up probes; the known-skills.json rows are optional-extension candidates
+# the validator tolerates absent (no such file exists in the distribution), and the map row for
+# core/scripts/lib/meta-gate.sh names a file the validator sources only when readable (absent here).
+!core/scripts/validate-provenance-block.sh
+core/schemas/provenance-block.json

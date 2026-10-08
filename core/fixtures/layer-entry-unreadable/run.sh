@@ -74,6 +74,9 @@ LINTER="$(pick "${1:-}" "$HERE/../../../scripts/ai-dlc/validate-layer-entries.sh
 # PRINTED, because a mutant applied to a file the run never loads leaves every arm green and
 # `cmp -s` cannot see it -- the mutation applied cleanly, to the wrong copy.
 echo "layer-entry-unreadable: subject = $LINTER"
+_LDIR="$(cd "$(dirname "$LINTER")" && pwd)"
+echo "HERMETIC-CONSUMED ${_LDIR}/$(basename "$LINTER")"
+[ -f "${_LDIR}/artifact-path-config.sh" ] && echo "HERMETIC-CONSUMED ${_LDIR}/artifact-path-config.sh"
 
 ROOT="$(bash "$HERE/seed.sh")"
 [ -n "$ROOT" ] && [ -d "$ROOT" ] || { echo "FIXTURE BROKEN: seed produced no sandbox" >&2; exit 2; }

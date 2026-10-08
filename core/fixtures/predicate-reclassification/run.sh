@@ -47,6 +47,7 @@ if [ -z "$SUBJ" ]; then
   echo "SKIP: predicate-differential.sh is not present in this tree yet (a core fixture ships ahead of its subject). Nothing was asserted."
   exit 0
 fi
+echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/predicate-differential.sh"
 
 ROOT="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
 trap 'rm -rf "$ROOT"' EXIT

@@ -69,6 +69,7 @@ SUFL_RUNNER_ARG=""
 # shellcheck source=../self-update-fixture-log/lib.sh
 . "$SIB/lib.sh"
 echo "$NAME:"
+echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh"
 
 # ------------------------------------------------------------------------ the mutation helpers
 # --- MUTATION: prove the arms above can fail -----------------------------------------------

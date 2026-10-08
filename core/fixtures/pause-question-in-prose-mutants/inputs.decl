@@ -1,0 +1,9 @@
+# The hook under test (mutated as copies, then executed) and what it reads beside itself.
+# The handoff helper and routing schema are optional to the hook, so run.sh announces each
+# only when present and the runner fails the run if either is missing.
+!core/hooks/ai-dlc-continue.sh
+!core/hooks/ai-dlc-handoff-pending.sh
+!core/schemas/pause-routing.json
+# The shipped sibling fixture this battery drives (run.sh) and seeds from (seed.sh).
+core/fixtures/pause-question-in-prose/run.sh
+core/fixtures/pause-question-in-prose/seed.sh

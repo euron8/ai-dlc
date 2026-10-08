@@ -118,6 +118,7 @@ new_sandbox() { # new_sandbox <name>  -> path on stdout
   printf '%s\n' "$d"
 }
 
+echo "HERMETIC-CONSUMED $SRC_DIR/$(basename "$SCRIPT")"
 OUT="$(run_warn "$SCRIPT")"
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }

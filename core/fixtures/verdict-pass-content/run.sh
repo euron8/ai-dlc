@@ -49,6 +49,8 @@ fi
 VERDICT="$SCRIPTS/verdict.sh"
 VALIDATOR="$SCRIPTS/validate-artifact-budget.sh"
 [ -f "$VALIDATOR" ] || { echo "FIXTURE ERROR: validate-artifact-budget.sh missing" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/scripts/verdict.sh"
+echo "HERMETIC-CONSUMED core/scripts/validate-artifact-budget.sh"
 
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"

@@ -26,6 +26,7 @@ echo "advisor-gate-deny:"
 printf '  hook  %s\n' "$HOOK"
 printf '  cells %s\n' "$nc"
 
+printf 'HERMETIC-CONSUMED %s\n' "$HOOK"
 [ -x "$HOOK" ] || bad "hook is not executable: $HOOK -- settings.json invokes it as a bare path"
 GOT="$(score "$HOOK" "$W/failed.shipped")"
 if [ -z "$GOT" ]; then
@@ -34,6 +35,7 @@ else
   bad "shipped hook fails arm(s): $GOT [cells: $(cells_of "$W/failed.shipped")]"
 fi
 
+[ -f "$PROV" ] && printf 'HERMETIC-CONSUMED %s\n' "$PROV"
 [ -f "$PROV" ] && cp "$PROV" "$MUT/ai-dlc-context-provenance.sh"
 cp "$HOOK" "$MUT/hook-control.sh"
 CTL="$(score "$MUT/hook-control.sh" "$W/failed.control")"

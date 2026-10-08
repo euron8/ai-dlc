@@ -73,6 +73,7 @@ done
 if [ -z "$VALIDATOR" ]; then
   echo "FIXTURE BROKEN: could not locate validate-backlog-receipts.sh" >&2; exit 2
 fi
+echo "HERMETIC-CONSUMED scripts/validate-backlog-receipts.sh"
 
 LIBSRC=""
 for cand in \

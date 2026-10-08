@@ -327,6 +327,7 @@ run_subject() { # run_subject <slug> <hook-source> <fixture-dir> <label>
 }
 
 if [ -f "$SUBJ_PATH_1" ]; then
+  echo "HERMETIC-CONSUMED .githooks/pre-push"
   run_subject s1 "$(cd "$(dirname "$SUBJ_PATH_1")" && pwd -P)/$(basename "$SUBJ_PATH_1")" \
     "$SUBJ_FXDIR_1" "$SUBJ_LABEL_1"
 else
@@ -334,6 +335,7 @@ else
 fi
 
 if [ -f "$SUBJ_PATH_2" ]; then
+  echo "HERMETIC-CONSUMED core/git-hooks/pre-push"
   run_subject s2 "$(cd "$(dirname "$SUBJ_PATH_2")" && pwd -P)/$(basename "$SUBJ_PATH_2")" \
     "$SUBJ_FXDIR_2" "$SUBJ_LABEL_2"
 else

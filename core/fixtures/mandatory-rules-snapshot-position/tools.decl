@@ -1,0 +1,22 @@
+# Tools run.sh and the three scripts it drives invoke.
+awk
+basename
+bash
+cat
+chmod
+cmp
+cp
+cut
+dirname
+find
+git
+grep
+head
+mktemp
+python3
+rm
+sed
+sort
+tail
+touch
+tr

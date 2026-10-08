@@ -1,0 +1,6 @@
+# request-coverage reads three files outside its own directory: the validator under test, the sibling
+# grammar it shells to (validate-locked-anchor.sh), and harness-origin.json, which the validator and
+# the BL-327 arm read. The map rows under .git/.claude/core/skills are walk-up probes, not reads.
+!core/scripts/validate-request-coverage.sh
+core/scripts/validate-locked-anchor.sh
+core/schemas/harness-origin.json

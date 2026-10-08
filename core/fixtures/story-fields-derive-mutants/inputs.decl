@@ -1,0 +1,8 @@
+# Reads, outside its own directory: the sibling subject fixture it re-executes, the script under
+# test (mutated copies of it are made with sed), the schema and layer contract the subject
+# reads, and the steps/ directory the subject greps for the wiring assertions.
+!core/scripts/sprint-status.sh
+core/fixtures/story-fields-derive/run.sh
+core/schemas/sprint-status.json
+core/skills/ai-dlc/layer-contract.yaml
+core/skills/ai-dlc/steps/

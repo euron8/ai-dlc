@@ -42,6 +42,7 @@ SUBJ="$(pick "$HERE/../../scripts/wait-for-deliverable.sh" \
              "$HERE/../../../scripts/ai-dlc/wait-for-deliverable.sh" \
              "$HERE/../../../core/scripts/wait-for-deliverable.sh")"
 [ -n "$SUBJ" ] || { echo "FIXTURE ERROR: cannot locate wait-for-deliverable.sh" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/scripts/wait-for-deliverable.sh"
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }

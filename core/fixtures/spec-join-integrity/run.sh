@@ -32,6 +32,7 @@ for cand in \
 done
 [ -n "$V" ] || { echo "run.sh: could not locate validate-spec-join.sh" >&2; exit 2; }
 
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$V")" && pwd)/$(basename "$V")"
 R="$(bash "$DIR/seed.sh")"
 trap 'rm -rf "$R"' EXIT
 

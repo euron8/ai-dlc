@@ -1,0 +1,4 @@
+# Reads the pause hook under test (copied and mutated) and the sibling divergence-hard-block/run.sh,
+# which section 3 greps by name. Map rows under core/ and core/fixtures are walk-up probes.
+!core/hooks/ai-dlc-acknowledge.sh
+core/fixtures/divergence-hard-block/run.sh

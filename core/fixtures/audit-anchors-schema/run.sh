@@ -15,6 +15,7 @@ WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 
 trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
+echo "HERMETIC-CONSUMED core/scripts/validate-audit-anchors.sh"
 
 fails=0
 asserted=0

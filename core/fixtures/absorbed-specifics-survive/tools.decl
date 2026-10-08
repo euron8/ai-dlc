@@ -1,0 +1,12 @@
+# Tools run.sh invokes: env+sed (option scrub), dirname, mktemp, cat, grep, wc, awk, cmp, rm.
+awk
+bash
+cat
+cmp
+dirname
+env
+grep
+mktemp
+rm
+sed
+wc

@@ -52,6 +52,7 @@ LIB="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
 for f in "$RT" "$RV" "$LIB"; do
   [ -f "$f" ] || { echo "FIXTURE ERROR: cannot locate $f" >&2; exit 2; }
 done
+echo "HERMETIC-CONSUMED scripts/backlog-rotate.sh"
 
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT

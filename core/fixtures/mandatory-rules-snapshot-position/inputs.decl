@@ -1,0 +1,7 @@
+# mandatory-rules-snapshot-position sources the shared preamble and copies the validator under test (!) beside its siblings and the two schemas.
+!core/scripts/validate-mandatory-rules.sh
+core/scripts/validate-audit-anchors.sh
+core/scripts/sprint-status.sh
+core/schemas/audit-anchors.json
+core/schemas/sprint-status.json
+core/fixtures/lib/

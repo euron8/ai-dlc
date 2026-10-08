@@ -20,6 +20,11 @@ WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 
 trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
+# HERMETIC-CONSUMED sentinels: the validator under test, then the two delegates it reads only if present.
+VMR_DIR="$(dirname "$VMR")"
+echo "HERMETIC-CONSUMED $VMR"
+[ -f "$VMR_DIR/validate-retro-evidence.sh" ] && echo "HERMETIC-CONSUMED $VMR_DIR/validate-retro-evidence.sh"
+[ -f "$VMR_DIR/validate-audit-anchors.sh" ] && echo "HERMETIC-CONSUMED $VMR_DIR/validate-audit-anchors.sh"
 
 P="$WORK/proj"
 export AI_DLC_SPRINT_STATUS_SCHEMA="$SCHEMA"

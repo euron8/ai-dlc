@@ -1,0 +1,11 @@
+# Hooks the mutation battery copies and mutates (the subject under test).
+!core/hooks/ai-dlc-advisor-gate.sh
+!core/hooks/ai-dlc-context-provenance.sh
+# Sibling fixtures: the battery implementation, its shared cells library and seed, and the shard
+# drivers the coverage join greps for `--group <x>`.
+core/fixtures/advisor-gate-deny/lib.sh
+core/fixtures/advisor-gate-deny/seed.sh
+core/fixtures/advisor-gate-deny-mutants/run.sh
+core/fixtures/advisor-gate-deny-mutants-b/run.sh
+core/fixtures/advisor-gate-deny-mutants-c/run.sh
+core/fixtures/advisor-gate-deny-mutants-e/run.sh

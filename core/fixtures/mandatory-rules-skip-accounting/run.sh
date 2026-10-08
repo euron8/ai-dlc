@@ -64,6 +64,7 @@ fi
 for f in "$VAA" "$SS" "$ANCHOR_SCHEMA" "$STATUS_SCHEMA"; do
   [ -f "$f" ] || { echo "FIXTURE ERROR: required file not found: $f" >&2; exit 2; }
 done
+echo "HERMETIC-CONSUMED core/scripts/validate-mandatory-rules.sh"
 command -v git >/dev/null 2>&1 || { echo "FIXTURE ERROR: git not on PATH" >&2; exit 2; }
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 

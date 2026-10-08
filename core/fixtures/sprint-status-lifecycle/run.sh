@@ -21,6 +21,7 @@ WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 
 trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
+echo "HERMETIC-CONSUMED core/scripts/sprint-status.sh"
 
 P="$WORK/proj"
 IMPL="$P/_bmad-output/implementation-artifacts"

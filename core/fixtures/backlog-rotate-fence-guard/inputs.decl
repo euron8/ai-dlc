@@ -1,0 +1,8 @@
+# backlog-rotate-fence-guard reads the rotator under test, its sibling reverifier, and the shared
+# reconcile library the rotator sources; run.sh copies all three into mktemp roots to build mutants.
+# VERSION is the marker run.sh, the rotator and the reverifier each walk up for, declared plain so
+# the walk resolves inside the sandbox.
+VERSION
+!scripts/backlog-rotate.sh
+scripts/backlog-reverify.sh
+core/skills/ai-dlc-update/reconcile/lib.sh

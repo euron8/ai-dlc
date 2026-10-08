@@ -1,0 +1,2 @@
+# Subject under test; run.sh and every --run-one worker execute it, and it reads no other repo path.
+!core/scripts/wait-for-deliverable.sh
