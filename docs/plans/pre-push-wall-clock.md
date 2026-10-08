@@ -508,13 +508,19 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    **563s** (wall 629s, load 9.06, gate red on one unrelated flake with the durations file
    complete at 201 rows), **562s** (wall 627s, load 5.30, gate green 21/21).
 
-   `scripts/validate-suite-pole.sh` compares the last full green run's pole against
-   `docs/suite-pole-baseline.tsv` — row 628, band 20, ceiling 754 — and fails the push above the
-   ceiling. It SKIPs rather than fails on a partial dispatch or a different pool width, and has no
-   downward fail. Read the current row, and confirm the guard answers on it:
+   That 628s row is superseded (`ledger-reverify` was sharded, the pool-12 row re-calibrated).
+   Read the tracked file; quote no figure from here.
+
+   `scripts/validate-suite-pole.sh` compares the last full green run's pole against that pool
+   width's own recorded pole history (BL-465): the max of every usable row at the width, under the
+   file-level `# history-band:` in `docs/suite-pole-baseline.tsv`, fails the push above its ceiling.
+   A width with fewer than three history rows CALIBRATES — against the tracked seed row where one
+   exists, reported and never enforced. It SKIPs rather than fails on a partial dispatch, and has no
+   downward fail. Read the current seed rows and history, and confirm the guard answers on them:
 
    ```
-   grep -v '^#' docs/suite-pole-baseline.tsv        # ledger-reverify 628
+   grep -v '^#' docs/suite-pole-baseline.tsv        # the tracked seed rows, one per width
+   cat "$(git rev-parse --path-format=absolute --git-common-dir)/ai-dlc-suite-pole.history"
    bash scripts/validate-suite-pole.sh --root . \
         --durations .git/ai-dlc-fixture-durations.last --jobs 12
    ```

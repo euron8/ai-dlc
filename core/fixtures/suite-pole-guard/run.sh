@@ -122,9 +122,47 @@ big_rows() { # <pole-secs> [<fx2-secs>] -> all 227 rows, as the hook's merged re
 }
 TPL=""
 
+# AN ENFORCED BASELINE. Since BL-465 a tracked row is only a calibrating SEED and never FAILs, so
+# every comparator arm reads its baseline from HISTORY: mkbase writes the tracked row AND, beside
+# it as `<file>.hist`, three history rows at the row's width, pole, figure and fixture count, under
+# a `# history-band:` equal to the row's band. `drive` passes that file as --history whenever the
+# baseline it resolves has one. The comparison and GROWN lines then read exactly as they did
+# against the tracked row -- same pole, figure, band and ceiling; only the source differs.
+#
+# THE TRACKED BLOCK SITS AT WIDTH 16, WHICH NO mkbase ARM DRIVES. Those arms then read history ALONE
+# at the width they drive, so a subject that prefers a seed over history cannot move them -- that
+# mutant is history_precedence's to own, and only an arm with a seed AT the driven width can see it.
+# The block still names the same pole, so the stale-pole scan over every block reads it as before.
 mkbase() { # <file> <pole-name> <secs> <band> <jobs> <fixtures>
-  printf '# a prose comment the parser ignores\n# band: %s\n# jobs: %s\n# fixtures: %s\n%s %s\n' \
+  local i
+  printf '# a prose comment the parser ignores\n# history-band: %s\n# band: %s\n# jobs: 16\n# fixtures: %s\n%s %s\n' \
+    "$4" "$4" "$6" "$2" "$3" > "$1" || return 1
+  : > "$1.hist" || return 1
+  for i in 1 2 3; do printf '%s\t%s\t%s\t%s\t1790000000\n' "$5" "$2" "$3" "$6" >> "$1.hist" || return 1; done
+}
+# A SEED-ONLY BASELINE: the tracked row and `# history-band: 33`, no history. What the history arms
+# and the seed arms start from.
+mkseed() { # <file> <pole-name> <secs> <band> <jobs> <fixtures>
+  printf '# a prose comment the parser ignores\n# history-band: 33\n# band: %s\n# jobs: %s\n# fixtures: %s\n%s %s\n' \
     "$4" "$5" "$6" "$2" "$3" > "$1"
+}
+
+# A durations file PLUS the width sidecar the hook writes beside it after a green pool. Without
+# the sidecar the subject never records, which is what every pre-BL-465 arm above relies on: they
+# use plain `mkdur` and so cannot write a history row whatever the subject does.
+mkdurj() { # <file> <n-fixtures> <pole-name> <pole-seconds> <jobs>
+  mkdur "$1" "$2" "$3" "$4" || return 1
+  printf '%s\n' "$5" > "$1.jobs" || return 1
+}
+
+# HISTORY ROWS IN THE PRODUCER'S FORMAT: `<jobs>\t<pole>\t<secs>\t<fixtures>\t<epoch>`, which
+# arm history_first_record asserts the subject itself writes. Seeded directly where an arm needs
+# rows the subject would never have admitted in that order (another width's rows, an older outlier).
+hrow() { # <file> <jobs> <pole> <secs>
+  printf '%s\t%s\t%s\t3\t%s\n' "$2" "$3" "$4" "1790000000" >> "$1"
+}
+hlines() { # <file> -> line count, 0 when absent
+  if [ -f "$1" ]; then awk 'END { print NR }' "$1"; else echo 0; fi
 }
 
 # DRIVE. Captures stdout and stderr together, because the subject writes its PASS/SKIP lines
@@ -142,15 +180,29 @@ mkbase() { # <file> <pole-name> <secs> <band> <jobs> <fixtures>
 # same rows, which is what the hook's merge produces after a run that dispatched every unit, and
 # `drive` passes it as `--record` unless the arm named one itself. Arms about coverage write their
 # own record and pass it explicitly; every other arm is a full dispatch and reads 100%.
+#
+# EVERY DRIVE NAMES A HISTORY FILE (BL-465). run_arms sets DRIVE_HIST to `<arm dir>/hist` before
+# each arm, and drive appends `--history "$DRIVE_HIST"` unless the arm passed its own. Without it
+# the subject's default would resolve the git common dir of whatever repository the fixture's
+# TMPDIR sits in -- or, from a probe root that is not a repository, record nothing at all.
 RC=0
 OUT=""
+DRIVE_HIST=""
 drive() { # <args...> -> output in $OUT, exit code in $RC
-  local a prev="" dur="" has_rec=0
+  local a prev="" dur="" has_rec=0 has_hist=0 base="" root="" h
   for a in "$@"; do
     [ "$prev" = "--durations" ] && dur="$a"
+    [ "$prev" = "--baseline" ] && base="$a"
+    [ "$prev" = "--root" ] && root="$a"
     [ "$a" = "--record" ] && has_rec=1
+    [ "$a" = "--history" ] && has_hist=1
     prev="$a"
   done
+  # The baseline the SUBJECT will read, resolved the way it resolves it, so an mkbase world gets the
+  # history written beside that baseline: --baseline, else the env override, else the root default.
+  [ -n "$base" ] || base="${AI_DLC_POLE_BASELINE:-$root/docs/suite-pole-baseline.tsv}"
+  h="$DRIVE_HIST"; [ -f "$base.hist" ] && h="$base.hist"
+  [ "$has_hist" -eq 0 ] && [ -n "$h" ] && set -- "$@" --history "$h"
   if [ "$has_rec" -eq 0 ] && [ -n "$dur" ] && [ -f "$dur.rec" ]; then
     OUT="$(bash "$SUBJ" "$@" --record "$dur.rec" 2>&1)"; RC=$?
   else
@@ -278,9 +330,9 @@ arm_probe_catches_broken_comparator() {
   cmp -s "$SUBJ" "$ge" && return 1          # the anchor is lost: this arm would assert nothing
   sed -e 's/+ 99) \/ 100/) \/ 100/' "$SUBJ" > "$floor" || return 1
   cmp -s "$SUBJ" "$floor" && return 1
-  out="$(bash "$ge" --root "$w" --baseline "$w/base.tsv" --durations "$w/at.tsv" --jobs 12 2>&1)"; rc_ge=$?
+  out="$(bash "$ge" --root "$w" --baseline "$w/base.tsv" --durations "$w/at.tsv" --jobs 12 --history "$w/hist" 2>&1)"; rc_ge=$?
   grep -qF 'SELF-PROBE MISS' <<<"$out" || return 1
-  out="$(bash "$floor" --root "$w" --baseline "$w/base.tsv" --durations "$w/at.tsv" --jobs 12 2>&1)"; rc_floor=$?
+  out="$(bash "$floor" --root "$w" --baseline "$w/base.tsv" --durations "$w/at.tsv" --jobs 12 --history "$w/hist" 2>&1)"; rc_floor=$?
   grep -qF 'SELF-PROBE MISS' <<<"$out" || return 1
   [ "$rc_ge" -eq 2 ] && [ "$rc_floor" -eq 2 ]
 }
@@ -293,20 +345,24 @@ arm_probe_catches_broken_comparator() {
 arm_env_override() {
   local w="$1" out
   mktree "$w" 3 || return 1
-  # The DECOY at the default location: band 15 over a baseline of 1000, which 1000 passes.
-  mkbase "$w/docs/suite-pole-baseline.tsv" fx1 1000 15 12 3 || return 1
-  # The env baseline: 100, which the same 1000 fails.
-  mkbase "$w/env.tsv" fx1 100 15 12 3 || return 1
+  # SEED BASELINES, NO HISTORY: the file read is then the only thing that decides the figure
+  # compared, and the figure is printed. (Given history, a mutant reading the decoy would still
+  # be handed the right history and the arm could not see it.) Both seeds keep 1000 inside the
+  # band, so neither run reaches the seed-above-ceiling path, which tracked_seed owns.
+  # The DECOY at the default location: 1000, compared as `baseline fx1 1000s`.
+  mkseed "$w/docs/suite-pole-baseline.tsv" fx1 1000 15 12 3 || return 1
+  # The env baseline: 900, compared as `baseline fx1 900s` (ceiling 1035).
+  mkseed "$w/env.tsv" fx1 900 15 12 3 || return 1
   mkdur "$w/dur.tsv" 3 fx1 1000 || return 1
-  # CONTROL, IN THE SAME ARM: with no env set the decoy is read and the verdict is PASS. That
-  # is what proves the decoy really would have given the opposite answer, rather than the arm
-  # asserting a failure the tree produces for some other reason.
+  # CONTROL, IN THE SAME ARM: with no env set the decoy is read. That is what proves the decoy
+  # really would have given a different answer, rather than the arm asserting a figure the tree
+  # produces for some other reason.
   drive --root "$w" --durations "$w/dur.tsv" --jobs 12; out="$OUT"
   [ "$RC" -eq 0 ] || return 1
-  grep -qF 'baseline fx1 1000s' <<<"$out" || return 1
+  grep -qF 'against baseline fx1 1000s' <<<"$out" || return 1
   AI_DLC_POLE_BASELINE="$w/env.tsv" drive --root "$w" --durations "$w/dur.tsv" --jobs 12; out="$OUT"
-  [ "$RC" -eq 1 ] || return 1
-  grep -qF 'GROWN' <<<"$out" || return 1
+  [ "$RC" -eq 0 ] || return 1
+  grep -qF 'against baseline fx1 900s' <<<"$out" || return 1
 }
 
 # `--baseline` likewise, against the same decoy. The flag and the env are two delivery paths
@@ -314,14 +370,15 @@ arm_env_override() {
 arm_baseline_flag() {
   local w="$1" out
   mktree "$w" 3 || return 1
-  mkbase "$w/docs/suite-pole-baseline.tsv" fx1 1000 15 12 3 || return 1
-  mkbase "$w/flag.tsv" fx1 100 15 12 3 || return 1
+  mkseed "$w/docs/suite-pole-baseline.tsv" fx1 1000 15 12 3 || return 1
+  mkseed "$w/flag.tsv" fx1 900 15 12 3 || return 1
   mkdur "$w/dur.tsv" 3 fx1 1000 || return 1
   drive --root "$w" --durations "$w/dur.tsv" --jobs 12; out="$OUT"
   [ "$RC" -eq 0 ] || return 1
+  grep -qF 'against baseline fx1 1000s' <<<"$out" || return 1
   drive --root "$w" --baseline "$w/flag.tsv" --durations "$w/dur.tsv" --jobs 12; out="$OUT"
-  [ "$RC" -eq 1 ] || return 1
-  grep -qF 'GROWN' <<<"$out" || return 1
+  [ "$RC" -eq 0 ] || return 1
+  grep -qF 'against baseline fx1 900s' <<<"$out" || return 1
 }
 
 # DURATIONS ABSENT and DURATIONS EMPTY -> 0 with SKIP. Two distinct inputs reaching the same
@@ -454,24 +511,30 @@ arm_no_record() {
   [ "$rc_absent" -eq 0 ] && [ "$rc_empty" -eq 0 ] && [ "$rc_present" -eq 1 ]
 }
 
-# ONE ROW PER POOL WIDTH. A baseline with a block at width 12 (fx1 100) and one at width 16
-# (fx1 2000), driven with the same 1000s pole at three widths:
-#   --jobs 16 compares against the SECOND block and passes -- the case a first-row reader fails;
-#   --jobs 12 compares against the FIRST and fails -- the case a last-row reader fails;
-#   --jobs 4  has no row and SKIPs naming the widths that do, at exit 0 and never a FAIL.
+# ONE ROW PER POOL WIDTH. A seed baseline with a block at width 12 (fx1 950) and one at width 16
+# (fx1 2000), no history, driven with the same 1000s pole at three widths:
+#   --jobs 16 compares against the SECOND block (`baseline fx1 2000s`) -- a first-row reader fails;
+#   --jobs 12 compares against the FIRST (`baseline fx1 950s`) -- a last-row reader fails;
+#   --jobs 4  has no row and no history and CALIBRATES at exit 0 -- never a FAIL, and never the
+#             SKIP it printed before BL-465, which read exactly like a pass.
+# Both compared figures keep 1000 inside the band, so this arm never reaches the seed-above-ceiling
+# path, which tracked_seed owns.
 arm_jobs_mismatch() {
   local w="$1" out rc16 rc12 rc4
   mktree "$w" 3 || return 1
-  printf '# band: 15\n# jobs: 12\n# fixtures: 3\nfx1 100\n# band: 15\n# jobs: 16\n# fixtures: 3\nfx1 2000\n' > "$w/base.tsv" || return 1
+  printf '# band: 15\n# jobs: 12\n# fixtures: 3\nfx1 950\n# band: 15\n# jobs: 16\n# fixtures: 3\nfx1 2000\n' > "$w/base.tsv" || return 1
   mkdur "$w/dur.tsv" 3 fx1 1000 || return 1
   drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 16; out="$OUT"; rc16=$RC
-  grep -qF 'baseline fx1 2000s' <<<"$out" || return 1
+  grep -qF 'against baseline fx1 2000s' <<<"$out" || return 1
   grep -qF 'pool 16' <<<"$out" || return 1
   drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 12; out="$OUT"; rc12=$RC
-  grep -qF 'GROWN' <<<"$out" || return 1
+  grep -qF 'against baseline fx1 950s' <<<"$out" || return 1
   drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 4; out="$OUT"; rc4=$RC
-  grep -qF 'pool width 4 has no baseline row (widths with a row: 12 16)' <<<"$out" || return 1
-  [ "$rc16" -eq 0 ] && [ "$rc12" -eq 1 ] && [ "$rc4" -eq 0 ]
+  # Exit 0 with no growth reported: a width with no row is never a FAIL. WHAT it prints instead
+  # (CALIBRATING) is history_first_record's to own; asserting it here too would make this arm die
+  # beside that one on every no-row mutant and leave neither owning the case.
+  grep -qF 'GROWN' <<<"$out" && return 1
+  [ "$rc16" -eq 0 ] && [ "$rc12" -eq 0 ] && [ "$rc4" -eq 0 ]
 }
 
 # THE REFUSALS, all exit 2. A malformed baseline is a broken instrument, and a growth figure
@@ -613,14 +676,18 @@ arm_jobs_canonical() {
 
 # WIDTH SELECTION IS EXACT INTEGER EQUALITY. `--jobs 1` against rows at 12 and 16 has no row:
 # a substring or regex match would select 12, and a pool of one compared against a twelve-way
-# loaded figure reads as a dramatic improvement. The near-miss is `--jobs 12` selecting row 12.
+# loaded figure reads as a dramatic improvement. With no row it CALIBRATES; selected wrongly it would
+# print a comparison against row 12 instead. The near-miss is `--jobs 12` selecting row 12.
 arm_width_exact() {
   local w="$1" out rc1 rc12
   mktree "$w" 3 || return 1
   printf '# band: 15\n# jobs: 12\n# fixtures: 3\nfx1 100\n# band: 15\n# jobs: 16\n# fixtures: 3\nfx1 200\n' > "$w/base.tsv" || return 1
   mkdur "$w/dur.tsv" 3 fx1 100 || return 1
   drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 1; out="$OUT"; rc1=$RC
-  grep -qF 'pool width 1 has no baseline row (widths with a row: 12 16)' <<<"$out" || return 1
+  # --jobs 1 selects NO tracked row, so it calibrates -- asserted by its words, because a regex
+  # selector picks BOTH rows and dies in the arithmetic without ever printing a comparison.
+  grep -qF 'CALIBRATING (1/3) -- pool width 1 has 0 usable history row(s) and no tracked row' <<<"$out" || return 1
+  grep -qF 'against baseline' <<<"$out" && return 1
   drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 12; out="$OUT"; rc12=$RC
   grep -qF 'pole fx1 100s against baseline fx1 100s' <<<"$out" || return 1
   [ "$rc1" -eq 0 ] && [ "$rc12" -eq 0 ]
@@ -637,13 +704,13 @@ arm_lower_the_row_note() {
   mkdur "$w/dur.tsv" 3 fx1 100 || return 1
   drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 12; out="$OUT"
   [ "$RC" -eq 0 ] || return 1
-  grep -qF 'lower the row' <<<"$out" || return 1
+  grep -qF 'lower the baseline' <<<"$out" || return 1
   # THE NEAR-MISS, one property apart: a figure just OVER half the baseline gets no note and
   # still exits 0. Without it, an implementation printing the note unconditionally passes.
   mkdur "$w/near.tsv" 3 fx1 501 || return 1
   drive --root "$w" --baseline "$w/base.tsv" --durations "$w/near.tsv" --jobs 12; out="$OUT"
   [ "$RC" -eq 0 ] || return 1
-  grep -qF 'lower the row' <<<"$out" && return 1
+  grep -qF 'lower the baseline' <<<"$out" && return 1
   return 0
 }
 
@@ -691,11 +758,18 @@ arm_probe_before_corpus() {
 arm_cwd_invariance() {
   local w="$1" o_root o_sub o_slash r_root r_sub r_slash
   mktree "$w" 3 || return 1
-  mkbase "$w/base.tsv" fx1 100 15 12 3 || return 1
+  # A SEED AT THE DRIVEN WIDTH: this arm's history is an unreadable directory, so the seed is the
+  # only comparison it can print, and it is the one it has always printed.
+  mkseed "$w/base.tsv" fx1 100 15 12 3 || return 1
   mkdur "$w/dur.tsv" 3 fx1 105 || return 1
-  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 12; o_root="$OUT"; r_root=$RC
-  o_sub="$( cd "$w/core/fixtures/fx1" && bash "$SUBJ" --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 12 --record "$w/dur.tsv.rec" 2>&1 )"; r_sub=$?
-  o_slash="$( cd / && bash "$SUBJ" --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 12 --record "$w/dur.tsv.rec" 2>&1 )"; r_slash=$?
+  # THE HISTORY IS A DIRECTORY, deliberately, and the same one all three times. This arm owns
+  # invariance across cwd, not recording: an appendable history would gain a row per run under any
+  # mutant that records here, and the next run's output would then differ for a reason another arm
+  # owns. A directory cannot be appended to, so every run says the same thing whatever it decides.
+  mkdir -p "$w/histdir" || return 1
+  o_root="$( bash "$SUBJ" --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 12 --record "$w/dur.tsv.rec" --history "$w/histdir" 2>&1 )"; r_root=$?
+  o_sub="$( cd "$w/core/fixtures/fx1" && bash "$SUBJ" --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 12 --record "$w/dur.tsv.rec" --history "$w/histdir" 2>&1 )"; r_sub=$?
+  o_slash="$( cd / && bash "$SUBJ" --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 12 --record "$w/dur.tsv.rec" --history "$w/histdir" 2>&1 )"; r_slash=$?
   [ "$r_root" -eq 0 ] && [ "$r_sub" -eq 0 ] && [ "$r_slash" -eq 0 ] || return 1
   # IDENTICAL VERDICT, not merely three zeros: three runs that all printed nothing would be
   # three equal exits. The verdict line itself has to match, and it has to be the real one.
@@ -704,12 +778,375 @@ arm_cwd_invariance() {
   [ "$o_root" = "$o_slash" ] || return 1
 }
 
+# =======================================================================================
+# THE HISTORY ARMS (BL-465). Every pool width records its own pole and is compared against its
+# own history; a tracked row only seeds a width that has none. Each arm below drives the subject
+# with `--history "$DRIVE_HIST"` (a file in the arm's own directory) and a width sidecar written by
+# `mkdurj`, which is what the hook leaves beside a green pool's durations file. All on 3-fixture
+# trees, pole fx1, `# history-band: 33` (from mkbase), tracked row only at width 12 unless stated.
+# =======================================================================================
+
+# A1. THE FIRST RUN AT AN UNCALIBRATED WIDTH RECORDS, AND THE ROW IS THE PRODUCER'S FORMAT. Width 4,
+# no history: exit 0, `RECORDED -- first pole at pool width 4: 100s (fx1)`, and the history holds
+# EXACTLY one row reading `4 TAB fx1 TAB 100 TAB 3 TAB <epoch>`.
+arm_history_first_record() {
+  local w="$1" out
+  mktree "$w" 3 || return 1
+  mkseed "$w/base.tsv" fx1 100 15 12 3 || return 1
+  mkdurj "$w/dur.tsv" 3 fx1 100 4 || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 4; out="$OUT"
+  [ "$RC" -eq 0 ] || return 1
+  grep -qF 'RECORDED -- first pole at pool width 4: 100s (fx1)' <<<"$out" || return 1
+  # And it is CALIBRATING for want of a row at THIS width -- not a seed borrowed from another width.
+  grep -qF 'CALIBRATING (1/3) -- pool width 4 has 0 usable history row(s) and no tracked row' <<<"$out" || return 1
+  [ "$(hlines "$DRIVE_HIST")" -eq 1 ] || return 1
+  awk -F'\t' 'NF == 5 && $1 == "4" && $2 == "fx1" && $3 == "100" && $4 == "3" && $5 ~ /^[0-9]+$/ { ok = 1 } END { exit !ok }' "$DRIVE_HIST"
+}
+
+# A2+A3. A RECORDED ROW IS READ, IN BOTH DIRECTIONS. Width 4 history 100/100/100: B = 100, band 33,
+# ceiling 133. 1000 FAILS naming GROWN, the history file and the exact drop command; 120 PASSES
+# against `baseline fx1 100s (band 33%, ceiling 133s, pool 4)`. The tracked row is at width 12, so a
+# subject that never reads history calibrates both runs and passes the grown one.
+arm_history_compare() {
+  local w="$1" out rc_grown rc_within
+  mktree "$w" 3 || return 1
+  mkseed "$w/base.tsv" fx1 100 15 12 3 || return 1
+  hrow "$DRIVE_HIST" 4 fx1 100; hrow "$DRIVE_HIST" 4 fx1 100; hrow "$DRIVE_HIST" 4 fx1 100
+  # EACH RUN READS ITS OWN COPY OF THE SEEDED HISTORY. This arm owns the READ; what one run writes
+  # is owned by the admission, fail and write-shape arms, and a shared file would let a mutant of
+  # any of those (record-on-fail, admit-above-B, a truncating write) move this arm too.
+  cp "$DRIVE_HIST" "$w/hist.ok" && cp "$DRIVE_HIST" "$w/hist.big" || return 1
+  mkdurj "$w/ok.tsv" 3 fx1 120 4 || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/ok.tsv" --jobs 4 --history "$w/hist.ok"; out="$OUT"; rc_within=$RC
+  grep -qF 'source: history' <<<"$out" || return 1
+  grep -qF 'pole fx1 120s against baseline fx1 100s (band 33%, ceiling 133s, pool 4)' <<<"$out" || return 1
+  mkdurj "$w/big.tsv" 3 fx1 1000 4 || return 1
+  DRIVE_HIST="$w/hist.big"
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/big.tsv" --jobs 4; out="$OUT"; rc_grown=$RC
+  grep -qF 'GROWN: fx1 at 1000s against baseline fx1 at 100s (band 33%, ceiling 133s, pool 4' <<<"$out" || return 1
+  grep -qF "the recorded history at pool 4 in $DRIVE_HIST" <<<"$out" || return 1
+  # The command names this width and this file; HOW the path is quoted is drop_command_quoted's.
+  grep -qF "awk -F'\\t' -v w=4 '\$1 != w'" <<<"$out" || return 1
+  grep -qF "$DRIVE_HIST.new" <<<"$out" || return 1
+  [ "$rc_grown" -eq 1 ] && [ "$rc_within" -eq 0 ]
+}
+
+# A4 / B1. WIDTH 12 WITH A TRACKED ROW AND NO HISTORY IS A CALIBRATING SEED. Within its band the
+# comparison line is byte-identical to the pre-BL-465 one; the source is named as the SEED; and the
+# run RECORDS. ABOVE its ceiling it is reported (ABOVE SEED), recorded and passed -- exit 0, never
+# GROWN -- because the operator ruled the hand-calibrated rows the defect and a seed that could FAIL
+# would stop the history that replaces it from forming. Two figures, one property apart.
+arm_tracked_seed() {
+  local w="$1" out
+  mktree "$w" 3 || return 1
+  mkseed "$w/base.tsv" fx1 100 15 12 3 || return 1
+  mkdurj "$w/dur.tsv" 3 fx1 105 12 || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 12; out="$OUT"
+  [ "$RC" -eq 0 ] || return 1
+  grep -qxF '   pole fx1 105s against baseline fx1 100s (band 15%, ceiling 115s, pool 12)' <<<"$out" || return 1
+  grep -qF 'CALIBRATING (1/3) -- source: the tracked SEED row for pool 12' <<<"$out" || return 1
+  grep -qF 'recorded: pool 12 pole fx1 105s' <<<"$out" || return 1
+  [ "$(hlines "$DRIVE_HIST")" -eq 1 ] || return 1
+  mkdurj "$w/big.tsv" 3 fx1 1000 12 || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/big.tsv" --jobs 12; out="$OUT"
+  [ "$RC" -eq 0 ] || return 1
+  grep -qF 'ABOVE SEED  fx1 at 1000s is above the tracked seed fx1 at 100s (band 15%, ceiling 115s, pool 12)' <<<"$out" || return 1
+  grep -qF 'GROWN' <<<"$out" && return 1
+  # Asserted on the subject's own words, not a second row count: whether an append ADDS a line is
+  # history_admission's to own, and a count here would move under the truncating-write mutant too.
+  grep -qF 'recorded: pool 12 pole fx1 1000s' <<<"$out"
+}
+
+# A5. NO MEASUREMENT RECORDS NOTHING, even with a matching sidecar beside the empty file -- the
+# state a red pool leaves. The near-miss in the same arm: a measurement records. Both at width 12,
+# where the tracked row is the source, so the near-miss does not depend on how a width with no row
+# is handled -- history_first_record owns that.
+arm_no_measurement_writes_nothing() {
+  local w="$1" out
+  mktree "$w" 3 || return 1
+  mkseed "$w/base.tsv" fx1 100 15 12 3 || return 1
+  : > "$w/empty.tsv" || return 1
+  printf '12\n' > "$w/empty.tsv.jobs" || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/empty.tsv" --jobs 12; out="$OUT"
+  [ "$RC" -eq 0 ] || return 1
+  grep -qF 'SKIP -- no fresh full-suite measurement' <<<"$out" || return 1
+  [ "$(hlines "$DRIVE_HIST")" -eq 0 ] || return 1
+  mkdurj "$w/dur.tsv" 3 fx1 100 12 || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 12; out="$OUT"
+  [ "$(hlines "$DRIVE_HIST")" -eq 1 ]
+}
+
+# A6. A COVERAGE SKIP AT A NEW WIDTH RECORDS NOTHING. 1 of 3 units timed (fx1 60 of a 140s record):
+# coverage 42.85%, a near-solo figure that must never become a width's first history row. The
+# near-miss: the full dispatch over the same record records, at width 12 against the tracked row
+# (pole fx1 60 against 100, a pass), so it holds however a width with no row is handled.
+#
+# THE SEED IS SHAPED SO OTHER MUTANTS CANNOT REACH IT. 60 is over half of 100, so the lower-the-row
+# NOTE (and the mutant turning it into a FAIL) stays silent on the near-miss; and the solo run stays
+# below 90% even with the observed pole subtracted from the divisor (60 / 80 = 75%). The solo run's
+# presence conjunct is any SKIP, not the coverage wording: a width with no row that skipped earlier
+# also writes nothing, and that case is history_first_record's.
+arm_coverage_skip_writes_nothing() {
+  local w="$1" out
+  mktree "$w" 3 || return 1
+  mkseed "$w/base.tsv" fx1 100 15 12 3 || return 1
+  printf 'fx1 60\nfx2 40\nfx3 40\n' > "$w/rec.tsv" || return 1
+  printf 'fx1 60\n' > "$w/solo.tsv" || return 1
+  printf '4\n' > "$w/solo.tsv.jobs" || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/solo.tsv" --record "$w/rec.tsv" --jobs 4; out="$OUT"
+  [ "$RC" -eq 0 ] || return 1
+  grep -qF 'SKIP' <<<"$out" || return 1
+  [ "$(hlines "$DRIVE_HIST")" -eq 0 ] || return 1
+  cp "$w/rec.tsv" "$w/full.tsv" || return 1
+  printf '12\n' > "$w/full.tsv.jobs" || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/full.tsv" --record "$w/rec.tsv" --jobs 12; out="$OUT"
+  [ "$(hlines "$DRIVE_HIST")" -eq 1 ]
+}
+
+# A7. A FAIL APPENDS NOTHING. History 100/100/100 at width 4, a 1000s pole: exit 1 and still three
+# rows. The near-miss, asserted on the subject's own words rather than a count (a count here would
+# also move under the truncating-write mutant, which admission owns): a 100s pole says `recorded:`.
+arm_fail_appends_nothing() {
+  local w="$1" out
+  mktree "$w" 3 || return 1
+  mkseed "$w/base.tsv" fx1 100 15 12 3 || return 1
+  hrow "$DRIVE_HIST" 4 fx1 100; hrow "$DRIVE_HIST" 4 fx1 100; hrow "$DRIVE_HIST" 4 fx1 100
+  mkdurj "$w/big.tsv" 3 fx1 1000 4 || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/big.tsv" --jobs 4; out="$OUT"
+  [ "$RC" -eq 1 ] || return 1
+  [ "$(hlines "$DRIVE_HIST")" -eq 3 ] || return 1
+  mkdurj "$w/ok.tsv" 3 fx1 100 4 || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/ok.tsv" --jobs 4; out="$OUT"
+  grep -qF 'recorded: pool 4 pole fx1 100s' <<<"$out"
+}
+
+# A8. A WIDTH READS ONLY ITS OWN ROWS. Width 4 rows 100/100/100, then width 8 rows 1000/1000/1000
+# written AFTER them. At width 4, B = 100 and ceiling 133, so a 300s pole FAILS. Read without the
+# width filter the three most recent rows are width 8's, B = 1000, and 300 passes.
+arm_history_width_isolation() {
+  local w="$1" out
+  mktree "$w" 3 || return 1
+  mkseed "$w/base.tsv" fx1 100 15 12 3 || return 1
+  hrow "$DRIVE_HIST" 4 fx1 100; hrow "$DRIVE_HIST" 4 fx1 100; hrow "$DRIVE_HIST" 4 fx1 100
+  hrow "$DRIVE_HIST" 8 fx1 1000; hrow "$DRIVE_HIST" 8 fx1 1000; hrow "$DRIVE_HIST" 8 fx1 1000
+  mkdurj "$w/dur.tsv" 3 fx1 300 4 || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 4; out="$OUT"
+  [ "$RC" -eq 1 ] || return 1
+  grep -qF 'against baseline fx1 at 100s (band 33%, ceiling 133s, pool 4' <<<"$out"
+}
+
+# A9. THE STATISTIC IS THE MAX OF EVERY USABLE ROW. Width 4 rows, oldest first: 100, 300, 200, 150.
+# B = 300, ceiling 300 + ceil(99) = 399, so 290 PASSES against 300.
+#   last row (150): ceiling 200, FAILS;   first row (100): ceiling 133, FAILS.
+# The max sits inside the 3 most recent on purpose, so a 3-row window reads 300 too and this arm
+# does not move under it: the window is history_no_collapse's to own.
+arm_history_statistic() {
+  local w="$1" out
+  mktree "$w" 3 || return 1
+  mkseed "$w/base.tsv" fx1 100 15 12 3 || return 1
+  hrow "$DRIVE_HIST" 4 fx1 100; hrow "$DRIVE_HIST" 4 fx1 300; hrow "$DRIVE_HIST" 4 fx1 200; hrow "$DRIVE_HIST" 4 fx1 150
+  mkdurj "$w/dur.tsv" 3 fx1 290 4 || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 4; out="$OUT"
+  [ "$RC" -eq 0 ] || return 1
+  grep -qF 'pole fx1 290s against baseline fx1 300s (band 33%, ceiling 399s, pool 4)' <<<"$out" || return 1
+  grep -qF 'max of 4 usable row(s) at pool 4' <<<"$out"
+}
+
+# THE RATCHET MUST NOT COLLAPSE (the K-window defect, measured by the tip adversary). Driven through
+# the subject's own writer, in order: calibrate width 4 at 500, 520, 510; then three quiet runs at
+# 300, each at or below B and so ADMITTED; then an ordinary loaded 450. Over every row B is 520,
+# ceiling 692, and 450 PASSES. Over the 3 most recent rows B fell to 300, ceiling 399, and 450 FAILS
+# -- which is what every figure from 410 to 500 did on the defective tip.
+arm_history_no_collapse() {
+  local w="$1" out s
+  mktree "$w" 3 || return 1
+  mkseed "$w/base.tsv" fx1 100 15 12 3 || return 1
+  for s in 500 520 510 300 300 300; do
+    mkdurj "$w/d$s.tsv" 3 fx1 "$s" 4 || return 1
+    drive --root "$w" --baseline "$w/base.tsv" --durations "$w/d$s.tsv" --jobs 4
+    [ "$RC" -eq 0 ] || return 1
+  done
+  [ "$(hlines "$DRIVE_HIST")" -eq 6 ] || return 1
+  mkdurj "$w/d450.tsv" 3 fx1 450 4 || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/d450.tsv" --jobs 4; out="$OUT"
+  [ "$RC" -eq 0 ] || return 1
+  grep -qF 'pole fx1 450s against baseline fx1 520s (band 33%, ceiling 692s, pool 4)' <<<"$out"
+}
+
+# ONE PUBLISHED MEASUREMENT IS ONE ROW. Four invocations over the SAME durations file and sidecar --
+# what a re-run gate, or a hand-run validator, does -- give exactly one history row: the first
+# recording consumes the sidecar, and the next three each say why they did not record.
+arm_sidecar_consumed() {
+  local w="$1" out i
+  mktree "$w" 3 || return 1
+  mkseed "$w/base.tsv" fx1 100 15 12 3 || return 1
+  mkdurj "$w/dur.tsv" 3 fx1 100 4 || return 1
+  for i in 1 2 3 4; do
+    drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 4; out="$OUT"
+    [ "$RC" -eq 0 ] || return 1
+  done
+  grep -qF 'not recorded: the width sidecar' <<<"$out" || return 1
+  [ "$(hlines "$DRIVE_HIST")" -eq 1 ]
+}
+
+# THE DROP COMMAND IS PASTEABLE FOR A HISTORY PATH CARRYING A QUOTE. The FAIL text prints the exact
+# command the operator is told to run; a hand-quoted `'%s'` splits at a `'` in the path. Here the
+# history lives under a directory named `it's`: the printed command is EXECUTED, and it must remove
+# width 4's rows and keep width 8's.
+arm_drop_command_quoted() {
+  local w="$1" out cmd d h
+  mktree "$w" 3 || return 1
+  mkseed "$w/base.tsv" fx1 100 15 12 3 || return 1
+  d="$w/it's"; mkdir -p "$d" || return 1; h="$d/hist"
+  hrow "$h" 4 fx1 100; hrow "$h" 4 fx1 100; hrow "$h" 4 fx1 100; hrow "$h" 8 fx1 100
+  mkdurj "$w/big.tsv" 3 fx1 1000 4 || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/big.tsv" --jobs 4 --history "$h"; out="$OUT"
+  [ "$RC" -eq 1 ] || return 1
+  cmd="$(printf '%s\n' "$out" | sed -n 's/^           awk /awk /p')"
+  [ -n "$cmd" ] || return 1
+  bash -c "$cmd" >/dev/null 2>&1 || return 1
+  [ "$(hlines "$h")" -eq 1 ] && awk -F'\t' '$1 == "8" { ok = 1 } END { exit !ok }' "$h"
+}
+
+# A10. THE WIDTH SIDECAR MUST EQUAL --jobs. A durations file whose sidecar reads 4, driven at width
+# 12, is a measurement some other pool published: the run is compared and passes, but nothing is
+# recorded and the line names the sidecar. A missing sidecar is the same. The near-miss: a sidecar
+# reading 12 records. Width 12 against its tracked row throughout, so the arm owns the sidecar and
+# nothing about how a width with no row is handled.
+arm_sidecar_mismatch() {
+  local w="$1" out
+  mktree "$w" 3 || return 1
+  mkseed "$w/base.tsv" fx1 100 15 12 3 || return 1
+  mkdurj "$w/dur.tsv" 3 fx1 100 4 || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 12; out="$OUT"
+  [ "$RC" -eq 0 ] || return 1
+  grep -qF "not recorded: the width sidecar $w/dur.tsv.jobs reads \"4\", not --jobs 12" <<<"$out" || return 1
+  [ "$(hlines "$DRIVE_HIST")" -eq 0 ] || return 1
+  rm -f "$w/dur.tsv.jobs"
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 12; out="$OUT"
+  grep -qF 'reads "", not --jobs 12' <<<"$out" || return 1
+  [ "$(hlines "$DRIVE_HIST")" -eq 0 ] || return 1
+  printf '12\n' > "$w/dur.tsv.jobs" || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 12; out="$OUT"
+  grep -qF 'recorded: pool 12 pole fx1 100s' <<<"$out" || return 1
+  [ "$(hlines "$DRIVE_HIST")" -eq 1 ]
+}
+
+# A11. A HISTORY ROW WHOSE POLE DIRECTORY IS GONE IS IGNORED, NOT REFUSED. Width 4: fx1 100 x3, then
+# the three MOST RECENT rows name `fx-sharded-away` at 10s. Ignored, B = 100 and 120 passes with a
+# NOTE counting three; counted, B = 10, ceiling 14, and 120 fails. Refused, it would exit 2.
+arm_stale_history_ignored() {
+  local w="$1" out
+  mktree "$w" 3 || return 1
+  [ -d "$w/core/fixtures/fx-sharded-away" ] && return 1
+  mkseed "$w/base.tsv" fx1 100 15 12 3 || return 1
+  hrow "$DRIVE_HIST" 4 fx1 100; hrow "$DRIVE_HIST" 4 fx1 100; hrow "$DRIVE_HIST" 4 fx1 100
+  hrow "$DRIVE_HIST" 4 fx-sharded-away 10; hrow "$DRIVE_HIST" 4 fx-sharded-away 10; hrow "$DRIVE_HIST" 4 fx-sharded-away 10
+  mkdurj "$w/dur.tsv" 3 fx1 120 4 || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --jobs 4; out="$OUT"
+  [ "$RC" -eq 0 ] || return 1
+  grep -qF 'pole fx1 120s against baseline fx1 100s (band 33%, ceiling 133s, pool 4)' <<<"$out" || return 1
+  grep -qF '3 history row(s) at pool 4 name a pole directory that no longer exists and were ignored' <<<"$out"
+}
+
+# A12. AT 12 AND 16, HISTORY OUTRANKS THE TRACKED ROW ONCE IT HOLDS K ROWS -- in both directions.
+#   width 12: tracked fx1 100 band 15 (ceiling 115); history 300 x3 (ceiling 399). 200 PASSES and
+#             prints the history comparison, not the seed's.
+#   width 16: tracked fx1 2000 band 15 (ceiling 2300); history 300 x3 (ceiling 399). 1000 FAILS.
+# A subject preferring the seed passes width 16 (a seed never fails) and prints the seed line at 12.
+arm_history_precedence() {
+  local w="$1" out rc12 rc16
+  mktree "$w" 3 || return 1
+  printf '# history-band: 33\n# band: 15\n# jobs: 12\n# fixtures: 3\nfx1 100\n# band: 15\n# jobs: 16\n# fixtures: 3\nfx1 2000\n' > "$w/base.tsv" || return 1
+  hrow "$DRIVE_HIST" 12 fx1 300; hrow "$DRIVE_HIST" 12 fx1 300; hrow "$DRIVE_HIST" 12 fx1 300
+  hrow "$DRIVE_HIST" 16 fx1 300; hrow "$DRIVE_HIST" 16 fx1 300; hrow "$DRIVE_HIST" 16 fx1 300
+  # Width 16 FIRST: it fails and records nothing, so the width-12 run reads the seeded file intact.
+  mkdurj "$w/d16.tsv" 3 fx1 1000 16 || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/d16.tsv" --jobs 16; out="$OUT"; rc16=$RC
+  grep -qF 'GROWN: fx1 at 1000s against baseline fx1 at 300s' <<<"$out" || return 1
+  mkdurj "$w/d12.tsv" 3 fx1 200 12 || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/d12.tsv" --jobs 12; out="$OUT"; rc12=$RC
+  grep -qF 'pole fx1 200s against baseline fx1 300s (band 33%, ceiling 399s, pool 12)' <<<"$out" || return 1
+  [ "$rc12" -eq 0 ] && [ "$rc16" -eq 1 ]
+}
+
+# ADMISSION: ONCE HISTORY IS THE SOURCE, ONLY A POLE AT OR BELOW B IS APPENDED. History 100 x3 at
+# width 4: 120 is inside the band (ceiling 133) and above B, so it passes and is NOT recorded --
+# three rows stay three. The near-miss: 90 is at or below B and is appended, giving four, which
+# also proves each append ADDS a line rather than replacing the file.
+arm_history_admission() {
+  local w="$1" out rc_above
+  mktree "$w" 3 || return 1
+  mkseed "$w/base.tsv" fx1 100 15 12 3 || return 1
+  hrow "$DRIVE_HIST" 4 fx1 100; hrow "$DRIVE_HIST" 4 fx1 100; hrow "$DRIVE_HIST" 4 fx1 100
+  mkdurj "$w/above.tsv" 3 fx1 120 4 || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/above.tsv" --jobs 4; out="$OUT"; rc_above=$RC
+  grep -qF 'not recorded: 120s is inside the band but above B=100s' <<<"$out" || return 1
+  [ "$(hlines "$DRIVE_HIST")" -eq 3 ] || return 1
+  mkdurj "$w/below.tsv" 3 fx1 90 4 || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/below.tsv" --jobs 4; out="$OUT"
+  grep -qF 'recorded: pool 4 pole fx1 90s' <<<"$out" || return 1
+  [ "$(hlines "$DRIVE_HIST")" -eq 4 ] && [ "$rc_above" -eq 0 ]
+}
+
+# NO `--history` ON A ROOT THAT IS NOT A REPOSITORY CREATES NOTHING. The default history lives in
+# the git common dir; with none there is no default, no `.git` is made under the probe root, and the
+# run says it did not record. The near-miss: the same world after `git init` records into
+# `.git/ai-dlc-suite-pole.history` by default.
+arm_nonrepo_creates_nothing() {
+  local w="$1" out r
+  r="$w/r"; mkdir -p "$r" || return 1
+  mktree "$r" 3 || return 1
+  git -C "$r" rev-parse --git-dir >/dev/null 2>&1 && return 1   # the world must not be inside a repo
+  mkseed "$w/base.tsv" fx1 100 15 12 3 || return 1
+  mkdurj "$w/dur.tsv" 3 fx1 100 12 || return 1
+  out="$(bash "$SUBJ" --root "$r" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --record "$w/dur.tsv.rec" --jobs 12 2>&1)" || return 1
+  grep -qF "not recorded: $r is not a git repository and no --history was given" <<<"$out" || return 1
+  [ ! -e "$r/.git" ] || return 1
+  [ -z "$(find "$w" -name 'ai-dlc-suite-pole.history' 2>/dev/null)" ] || return 1
+  ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; git init -q "$r" ) >/dev/null 2>&1 || return 1
+  out="$(bash "$SUBJ" --root "$r" --baseline "$w/base.tsv" --durations "$w/dur.tsv" --record "$w/dur.tsv.rec" --jobs 12 2>&1)" || return 1
+  [ "$(hlines "$r/.git/ai-dlc-suite-pole.history")" -eq 1 ]
+}
+
+# D1. UNDER HISTORY THE NOTES NAME THE DROP COMMAND, NOT THE ROW. Width 4, history fx1 1000 x3 and a
+# 100s run: below half of B, so the lower-the-baseline NOTE fires, and fx2 is the longest so the
+# pole-moved NOTE fires too -- each followed by the drop command for pool 4. The near-miss, the SAME
+# two NOTEs from a SEED (width 12, tracked fx1 1000, no history): neither carries the drop command,
+# because there is no history to drop and the tracked row is what the operator edits.
+arm_notes_name_drop_command() {
+  local w="$1" out n
+  mktree "$w" 3 || return 1
+  mkseed "$w/base.tsv" fx1 1000 15 12 3 || return 1
+  hrow "$DRIVE_HIST" 4 fx1 1000; hrow "$DRIVE_HIST" 4 fx1 1000; hrow "$DRIVE_HIST" 4 fx1 1000
+  printf 'fx1 90\nfx2 100\nfx3 1\n' > "$w/d4.tsv" || return 1
+  cp "$w/d4.tsv" "$w/d4.tsv.rec" || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/d4.tsv" --jobs 4; out="$OUT"
+  [ "$RC" -eq 0 ] || return 1
+  grep -qF 'NOTE  the pole has moved to fx2' <<<"$out" || return 1
+  grep -qF 'lower the baseline' <<<"$out" || return 1
+  n="$(grep -cF "Re-baseline pool 4 by dropping its rows: awk -F'\\t' -v w=4 '\$1 != w'" <<<"$out")" || n=0
+  [ "$n" -eq 2 ] || return 1
+  printf 'fx1 90\nfx2 100\nfx3 1\n' > "$w/d12.tsv" || return 1
+  cp "$w/d12.tsv" "$w/d12.tsv.rec" || return 1
+  drive --root "$w" --baseline "$w/base.tsv" --durations "$w/d12.tsv" --jobs 12 --history "$w/seedhist"; out="$OUT"
+  [ "$RC" -eq 0 ] || return 1
+  grep -qF 'NOTE  the pole has moved to fx2' <<<"$out" || return 1
+  grep -qF 'lower the baseline' <<<"$out" || return 1
+  grep -qF 'Re-baseline pool' <<<"$out" && return 1
+  return 0
+}
+
 ARMS="grown equal within_band ceiling_boundary ceil_arithmetic
 probe_catches_broken_comparator
 env_override baseline_flag no_measurement partial_dispatch jobs_mismatch refusals
 lower_the_row_note pole_moved probe_before_corpus cwd_invariance
 coverage_partial ghost_record pole_absent no_record
-orphan_block stale_second_block record_pole_skipped jobs_canonical width_exact"
+orphan_block stale_second_block record_pole_skipped jobs_canonical width_exact
+history_first_record history_compare tracked_seed no_measurement_writes_nothing
+coverage_skip_writes_nothing fail_appends_nothing history_width_isolation history_statistic
+sidecar_mismatch stale_history_ignored history_precedence history_admission nonrepo_creates_nothing
+history_no_collapse sidecar_consumed drop_command_quoted notes_name_drop_command"
 
 ARM_COUNT=0
 for _a in $ARMS; do ARM_COUNT=$((ARM_COUNT + 1)); done
@@ -727,6 +1164,7 @@ run_arms() { # <subject> -> "<name>:<0|1>" per arm, each in its own fresh probe 
   SUBJ="$subj"
   for name in $ARMS; do
     w="$(mktemp -d "$WORK/t.XXXXXX")" || { printf '%s:1\n' "$name"; continue; }
+    DRIVE_HIST="$w/hist"
     "arm_$name" "$w" >/dev/null 2>&1 && rc=0 || rc=1
     printf '%s:%s\n' "$name" "$rc"
   done
@@ -746,17 +1184,34 @@ while IFS=: read -r name rc; do
     ceiling_boundary)    msg="AT the ceiling (115) passes and ceiling+1 (116) fails, one property apart" ;;
     ceil_arithmetic)     msg="the ceiling is CEIL and neither floor nor round: B=4 band=15 gives 5 (floor would give 4) and B=7 gives 9 (round would give 8)" ;;
     probe_catches_broken_comparator) msg="a comparator broken either way (-ge, or the +99 dropped) is caught by the subject's OWN self-probe and refuses at exit 2 rather than returning a wrong verdict" ;;
-    env_override)        msg="AI_DLC_POLE_BASELINE is read, against a DECOY at the default path that gives the opposite verdict" ;;
+    env_override)        msg="AI_DLC_POLE_BASELINE is read, against a DECOY at the default path that names a different figure" ;;
     baseline_flag)       msg="--baseline is read, against the same decoy" ;;
     no_measurement)      msg="a durations file that is absent, and one that is EMPTY, each SKIP at exit 0" ;;
     partial_dispatch)    msg="a near-solo dispatch (30 of 227) with a grown pole SKIPs naming coverage below 90%, while the same pole in a full dispatch FAILS" ;;
-    jobs_mismatch)       msg="one baseline row per pool width: --jobs 16 compares against the SECOND block, --jobs 12 against the first, and a width with no row SKIPs naming the widths that have one" ;;
+    jobs_mismatch)       msg="one seed row per pool width: --jobs 16 compares against the SECOND block, --jobs 12 against the first, and a width with no row and no history CALIBRATES at exit 0 (no SKIP)" ;;
+    history_first_record) msg="A1: the first run at an uncalibrated width prints RECORDED and appends exactly one row in the producer's 5-field format" ;;
+    history_compare)     msg="A2/A3: width-4 history 100x3 is READ: 1000 fails naming GROWN, the history file and the drop command; 120 passes against B=100, ceiling 133" ;;
+    tracked_seed)        msg="A4/B1: width 12 with a tracked row and no history CALIBRATES against the seed: within band the pre-BL-465 line byte-for-byte, above its ceiling ABOVE SEED at exit 0, and both record" ;;
+    no_measurement_writes_nothing) msg="A5: an empty durations file with a matching sidecar SKIPs and writes no history row, while a real measurement at that width does" ;;
+    coverage_skip_writes_nothing) msg="A6: a coverage SKIP at a new width writes no history row, while the full dispatch over the same record does" ;;
+    fail_appends_nothing) msg="A7: a FAIL against width-4 history leaves the history at three rows, while a passing run says recorded" ;;
+    history_width_isolation) msg="A8: width 4 reads only width-4 rows: newer width-8 rows at 1000 do not acquit a 300s pole against B=100" ;;
+    history_statistic)   msg="A9: B is the max of every usable row (300,100,200,150 -> 300): 290 passes at ceiling 399, which last-row and a 3-row window each get wrong" ;;
+    history_no_collapse) msg="the ratchet does not collapse: calibrated 500/520/510 then admitted 300x3, an ordinary 450 passes against B=520 (a 3-row window would fail it at 399)" ;;
+    sidecar_consumed)    msg="one published measurement is one row: four invocations over one durations file and sidecar append exactly one history row" ;;
+    notes_name_drop_command) msg="D1: under history both the pole-moved and lower-the-baseline NOTEs print the drop command for the width; from a seed neither does" ;;
+    drop_command_quoted) msg="the FAIL text's drop command, printed for a history path containing a quote, runs as printed and drops only that width's rows" ;;
+    sidecar_mismatch)    msg="A10: a width sidecar reading 12 (or absent) at --jobs 4 records nothing and names the sidecar, while a sidecar reading 4 records" ;;
+    stale_history_ignored) msg="A11: history rows naming a pole directory that no longer exists are ignored with a NOTE, not refused, and do not enter B" ;;
+    history_precedence)  msg="A12: at widths 12 and 16, three history rows outrank the tracked row in both directions (200 passes at 12, 1000 fails at 16)" ;;
+    history_admission)   msg="admission: a pole inside the band but above B passes and is NOT recorded; one at or below B is appended as a fourth row" ;;
+    nonrepo_creates_nothing) msg="no --history on a root that is not a repository creates nothing and says so, while the same root after git init records by default" ;;
     refusals)            msg="a row with no block of its own, two rows for one width, a missing band, a missing jobs, a pole naming no fixture directory, a zero-second row, a band over 1000%, and an empty --jobs each exit 2 and name the cause" ;;
     orphan_block)        msg="a block left without its row MID-FILE (two whole blocks, an orphan between rows, a repeated jobs line) exits 2 naming the repeat" ;;
     stale_second_block)  msg="a stale pole in the SECOND, unselected block exits 2 naming it, while the same file with a real directory there is compared" ;;
     record_pole_skipped) msg="a skipped unit costing more than the ceiling in the RECORD does not become the observed pole: this run's max (fx100 830s) is compared and passes" ;;
     jobs_canonical)      msg="'# jobs: 012' is width 12: beside a '# jobs: 12' block it is a duplicate (exit 2), alone it is selected by --jobs 12, and a CRLF baseline parses as its LF twin" ;;
-    width_exact)         msg="width selection is exact: --jobs 1 against rows at 12 and 16 SKIPs naming both, while --jobs 12 selects row 12" ;;
+    width_exact)         msg="width selection is exact: --jobs 1 against rows at 12 and 16 CALIBRATES rather than comparing against either, while --jobs 12 selects row 12" ;;
     coverage_partial)    msg="a realistic 220-of-227 dispatch is COMPARED at coverage 99.87%: a grown pole FAILS and the within-band near-miss passes" ;;
     ghost_record)        msg="a 100000s ghost row for a deleted fixture leaves a full dispatch compared (FAIL), while the same cost on an undispatched fixture on disk is counted in the 113224s denominator" ;;
     pole_absent)         msg="the baseline pole absent: within band SKIPs 'not dispatched', above the ceiling still FAILS" ;;
@@ -818,9 +1273,34 @@ MUT_TABLE=""
 # rule cannot silently widen as arms are added.
 co_kills_ok() { # <label> -> the arms allowed to die beside the owner
   case "$1" in
-    probe-then-exit-0)          printf '%s' "equal within_band ceiling_boundary ceil_arithmetic env_override baseline_flag no_measurement partial_dispatch jobs_mismatch refusals lower_the_row_note pole_moved probe_before_corpus cwd_invariance coverage_partial ghost_record pole_absent no_record orphan_block stale_second_block record_pole_skipped jobs_canonical width_exact" ;;
-    downward-note-becomes-fail) printf '%s' "cwd_invariance" ;;
-    partial-dispatch-compared)  printf '%s' "cwd_invariance" ;;
+    probe-then-exit-0)          printf '%s' "equal within_band ceiling_boundary ceil_arithmetic env_override baseline_flag no_measurement partial_dispatch jobs_mismatch refusals lower_the_row_note pole_moved probe_before_corpus cwd_invariance coverage_partial ghost_record pole_absent no_record orphan_block stale_second_block record_pole_skipped jobs_canonical width_exact history_first_record history_compare tracked_seed no_measurement_writes_nothing coverage_skip_writes_nothing fail_appends_nothing history_width_isolation history_statistic sidecar_mismatch stale_history_ignored history_precedence history_admission nonrepo_creates_nothing history_no_collapse sidecar_consumed drop_command_quoted notes_name_drop_command" ;;
+    # notes_name_drop_command drives the lower-the-baseline NOTE (under history and from a seed) and
+    # asserts exit 0 on both, so a downward FAIL moves it too. lower_the_row_note owns the direction;
+    # the D1 arm owns what the NOTE says, and stands down for it.
+    downward-note-becomes-fail) printf '%s' "cwd_invariance notes_name_drop_command" ;;
+    # WITH THE COVERAGE SKIP GONE, the near-solo run is compared and RECORDED -- the very row
+    # coverage_skip_writes_nothing forbids. True of the same defect; partial_dispatch owns it
+    # because its verdict moves, where the history arm sees only the consequence.
+    partial-dispatch-compared)  printf '%s' "cwd_invariance coverage_skip_writes_nothing" ;;
+    coverage-threshold-zero)    printf '%s' "coverage_skip_writes_nothing" ;;
+    # HISTORY NOT READ removes the ONLY source that can FAIL a push: since the seed ruling a tracked
+    # row never blocks, so every arm that asserts an exit 1 reads its enforced baseline from history
+    # (mkbase writes it beside the row) and each then calibrates where it asserted GROWN. That is the
+    # probe-then-exit-0 shape -- the enforcement deleted, every enforcing arm moving -- and true for
+    # each. history_compare owns the read; the rest own what is done with it, and each has its own
+    # mutant that leaves the read in place.
+    history-never-read)         printf '%s' "grown equal within_band ceiling_boundary ceil_arithmetic partial_dispatch coverage_partial ghost_record pole_absent no_record lower_the_row_note pole_moved record_pole_skipped no_measurement fail_appends_nothing history_width_isolation history_statistic stale_history_ignored history_precedence history_admission history_no_collapse drop_command_quoted notes_name_drop_command" ;;
+    # COMPARING A WIDTH WITH NO ROW AGAINST THE WIDTH-12 ROW and the first-row selector are the
+    # same wrong answer at width 4 against a width-12-only baseline: no CALIBRATING, a comparison.
+    # history_first_record owns the width-with-no-row case; jobs_mismatch owns selection among rows.
+    compares-against-width-12)  printf '%s' "jobs_mismatch width_exact" ;;
+    # THE OLD SKIP KEPT is also what width_exact's --jobs 1 world sees: a width with no row. Both
+    # findings are true; history_first_record owns "a new width calibrates and records", and
+    # width_exact keeps its calibration conjunct because the regex selector is otherwise invisible.
+    # history_no_collapse and sidecar_consumed both begin by calibrating a width with no row, so a
+    # SKIP there records nothing and both read the absence. True of the same defect; they own the
+    # window and the consume, and stand down for it.
+    no-row-still-skips)         printf '%s' "width_exact history_no_collapse sidecar_consumed" ;;
     # DIVIDING WITHOUT THE OBSERVED POLE puts the pole on one side of the ratio only, so the
     # ghost arm's printed denominator loses the pole's 1000s and no longer reads 113224. That is
     # a TRUE finding about the same defect; coverage_partial owns it because it is the arm whose
@@ -830,14 +1310,26 @@ co_kills_ok() { # <label> -> the arms allowed to die beside the owner
     # row 12 under it, exactly as a regex selector does. Both findings are true; jobs_mismatch
     # owns the first-row reader (it is the only arm whose SECOND block must be the one compared)
     # and width_exact stands down for it, owning the regex mutant alone.
-    width-selects-first-row)    printf '%s' "width_exact" ;;
+    width-selects-first-row)    printf '%s' "width_exact history_first_record" ;;
+    # THE LAST ROW is also a window of one: the collapse sequence ends on three admitted 300s, so
+    # it reads B=300 there exactly as the K-window does. history_statistic owns the last-row reader;
+    # history_no_collapse owns the window, and stands down here.
+    history-last-row)           printf '%s' "history_no_collapse" ;;
+    # A TRUNCATING WRITE leaves one row however many runs record, so the collapse sequence never
+    # reaches K rows and calibrates where it asserted a comparison. The collapse is only expressible
+    # over an ACCUMULATED history; history_admission owns accumulation, and the window arm stands down.
+    history-truncating-write)   printf '%s' "history_no_collapse" ;;
+    # WITH NO SIDECAR CHECK, a consumed (emptied) sidecar no longer stops a second record: consuming
+    # only has an effect THROUGH the check. sidecar_mismatch owns the check; sidecar_consumed owns the
+    # consume line, and stands down here.
+    sidecar-not-checked)        printf '%s' "sidecar_consumed" ;;
     *) printf '' ;;
   esac
 }
 
 mut() { # <label> <anchor-fixed-string> <sed-expr> <arm-that-must-fail> [count] [injected-marker]
   local label="$1" anchor="$2" expr="$3" want="$4" n_want="${5:-1}" marker="${6:-}"
-  local dir="$MUTROOT/$label" copy out rc others n_anchor n_after allowed unexpected o n_mark
+  local dir="$MUTROOT/$label" copy n_anchor n_after n_mark
   # THE ANCHOR IS COUNTED BEFORE THE MUTATION, AND AGAIN AFTER. A `sed` keyed on a line that
   # no longer exists produces an unmutated copy, and `cmp -s` catches that — but a mutation
   # can also APPLY and be INSUFFICIENT, removing some of the property and leaving the rest,
@@ -905,7 +1397,51 @@ mut() { # <label> <anchor-fixed-string> <sed-expr> <arm-that-must-fail> [count] 
     fi
   fi
   chmod +x "$copy"
-  out="$(run_arms "$copy")"
+  # QUEUED, NOT RUN HERE. Every guard above is synchronous and reports in place; the arms-against-
+  # a-mutant run is the expensive part, and it goes to the bounded pool below (mut_pool), which
+  # writes each mutant's verdict list to its own file. mut_score then reads them in queue order.
+  printf '%s\t%s\n' "$label" "$want" >> "$MUTROOT/.queue"
+}
+
+# THE MUTANT POOL, AT MOST MUT_JOBS WIDE. Each queued mutant runs the FULL arm list against its copy
+# in a background subshell, writing `<name>:<0|1>` lines to `$MUTROOT/<label>.res`. Bash 3.2 has no
+# `wait -n`, so the pool runs in WAVES of MUT_JOBS and waits on each wave's pids by number -- never
+# on a process-table grep. Every arm still runs against every mutant; only the scheduling changed.
+# The width is capped at 4 because this fixture itself runs inside the pre-push pool.
+MUT_JOBS=4
+mut_pool() {
+  local label want pids="" n=0 p
+  while IFS="$(printf '\t')" read -r label want; do
+    [ -n "$label" ] || continue
+    ( run_arms "$MUTROOT/$label/$SUBJ_BASE" > "$MUTROOT/$label.res" 2>/dev/null ) &
+    pids="$pids $!"; n=$((n + 1))
+    if [ "$n" -ge "$MUT_JOBS" ]; then
+      for p in $pids; do wait "$p"; done
+      pids=""; n=0
+    fi
+  done < "$MUTROOT/.queue"
+  for p in $pids; do wait "$p"; done
+}
+
+# SCORING, in queue order, from the per-mutant files. A missing or short file is a mutant whose
+# arms did not all report, which is FIXTURE BROKEN territory and scored as a failure by name rather
+# than read as a survival or a kill.
+mut_score() {
+  local label want out rc others allowed unexpected o n_got
+  while IFS="$(printf '\t')" read -r label want; do
+    [ -n "$label" ] || continue
+    out="$(cat "$MUTROOT/$label.res" 2>/dev/null)"
+    n_got="$(printf '%s\n' "$out" | grep -c ':')" || n_got=0
+    if [ "$n_got" -ne "$ARM_COUNT" ]; then
+      bad "MUTANT $label: $n_got of $ARM_COUNT arms reported a verdict in the pool -- a mutant scored on a partial arm list is neither a kill nor a survival"
+      continue
+    fi
+    mut_judge "$label" "$want" "$out"
+  done < "$MUTROOT/.queue"
+}
+
+mut_judge() { # <label> <want> <run_arms output>
+  local label="$1" want="$2" out="$3" rc others allowed unexpected o
   rc="$(printf '%s\n' "$out" | sed -n "s/^${want}://p")"
   if [ "$rc" = "1" ]; then
     kills=$((kills + 1))
@@ -999,8 +1535,8 @@ mut self-probe-short-circuited \
 # fires on a quiet box and blocks the push that IMPROVES the suite. It reads as a tightening
 # and it is the one change the header forbids by name.
 mut downward-note-becomes-fail \
-  'lower the row' \
-  '/lower the row/a\
+  'lower the baseline' \
+  '/lower the baseline/a\
   exit 1 # MUTANT-DOWNWARD-FAIL' \
   lower_the_row_note \
   1 \
@@ -1106,6 +1642,141 @@ mut width-selects-first-row \
   "s/awk -v j=\"\\\$2\" '\\\$4 == j'/awk -v j=\"\$2\" 'NR == 1'/" \
   jobs_mismatch
 
+# ---------------------------------------------------------------------------------------
+# THE HISTORY MUTANTS (BL-465), each named for the wrong implementation it stands for.
+# ---------------------------------------------------------------------------------------
+
+# H1: HISTORY NEVER READ -- the rows are written and nothing consults them, so every width without a
+# tracked row calibrates forever. The read itself is emptied; the writer is untouched.
+mut history-never-read \
+  'H_RAW="$(awk -F' \
+  's/^  H_RAW="\$(awk -F.*$/  H_RAW="" # MUTANT-NO-READ/' \
+  history_compare \
+  1 \
+  'MUTANT-NO-READ'
+
+# H2: WRITES, BUT COMPARES AGAINST THE WIDTH-12 ROW -- the tracked row selected for every width.
+mut compares-against-width-12 \
+  'BL="$(select_width "$BL_ALL" "$JOBS")"' \
+  's/^BL="\$(select_width "\$BL_ALL" "\$JOBS")"$/BL="$(select_width "$BL_ALL" 12)"/' \
+  history_first_record
+
+# H3a: RECORDS AT A COVERAGE SKIP -- a near-solo figure becomes a width's history row.
+mut records-at-coverage-skip \
+  '"$COV_TXT" "$COV_MIN" "$NUM" "$DEN" "$fx_count"' \
+  '/"\$COV_TXT" "\$COV_MIN" "\$NUM" "\$DEN" "\$fx_count"$/a\
+  record_pole yes "" # MUTANT-REC-COVSKIP' \
+  coverage_skip_writes_nothing \
+  1 \
+  'MUTANT-REC-COVSKIP'
+
+# H3b: RECORDS ON A FAIL -- a grown pole enters the history it was just judged against.
+mut records-on-fail \
+  'covers the run-to-run spread this figure was calibrated against' \
+  '/covers the run-to-run spread this figure was calibrated against/a\
+  record_pole yes "" # MUTANT-REC-FAIL' \
+  fail_appends_nothing \
+  1 \
+  'MUTANT-REC-FAIL'
+
+# H4: THE SKIP KEPT -- a width with no tracked row and too little history SKIPs as before BL-465.
+mut no-row-still-skips \
+  '  SRC=calibrating' \
+  's/^  SRC=calibrating$/  printf "   SKIP -- pool width %s has no baseline row\\n" "$JOBS"; exit 0/' \
+  history_first_record
+
+# H5: NO WIDTH FILTER on the history read -- every width's rows pooled into one statistic.
+mut history-no-width-filter \
+  "'NF >= 5 && \$1 == j && \$3" \
+  "s/'NF >= 5 \&\& \$1 == j \&\& \$3/'NF >= 5 \&\& \$3/" \
+  history_width_isolation
+
+# H6: THE LAST ROW AND NOT THE MAX of every usable row.
+mut history-last-row \
+  'if [ "$_hs" -gt "$H_B" ]; then H_B="$_hs"; H_BPOLE="$_hp"; H_BFIXT="$_hf"; fi' \
+  's/if \[ "\$_hs" -gt "\$H_B" \]; then H_B="\$_hs"; H_BPOLE="\$_hp"; H_BFIXT="\$_hf"; fi/H_B="$_hs"; H_BPOLE="$_hp"; H_BFIXT="$_hf"/' \
+  history_statistic
+
+# H11: THE K-WINDOW RESTORED -- B over the 3 most recent rows, the ratchet that collapses. Injected
+# as the line the tip had before the fix, at the head of the max loop; the counter it needs rides on
+# the same line so the mutation is one site.
+mut k-window-restored \
+  'if [ "$_hs" -gt "$H_B" ]; then H_B="$_hs"; H_BPOLE="$_hp"; H_BFIXT="$_hf"; fi' \
+  's/^  if \[ "\$_hs" -gt "\$H_B" \]; then H_B=/  _hi=$((${_hi:-0} + 1)); [ "$_hi" -gt "$((H_N - HIST_K))" ] || continue # MUTANT-K-WINDOW\
+  if [ "$_hs" -gt "$H_B" ]; then H_B=/' \
+  history_no_collapse \
+  1 \
+  'MUTANT-K-WINDOW'
+
+# H12: THE SIDECAR NOT CONSUMED -- one published measurement recorded once per invocation.
+mut sidecar-not-consumed \
+  ': > "$side" 2>/dev/null' \
+  's/^    : > "\$side" 2>\/dev\/null$/    : # MUTANT-NO-CONSUME/' \
+  sidecar_consumed \
+  1 \
+  'MUTANT-NO-CONSUME'
+
+# H13: THE SEED ENFORCED -- a tracked row FAILs at a width still calibrating, as it did before.
+mut seed-enforced \
+  '  if [ "$SRC" = seed ]; then' \
+  's/^  if \[ "\$SRC" = seed \]; then$/  if false; then/' \
+  tracked_seed
+
+# H14: THE DROP COMMAND HAND-QUOTED -- `'%s'` around the path, which a quote in the path splits.
+# Two sites -- the FAIL text and the NOTEs' drop_hint -- because a hand-quoted path is wrong in both,
+# and a mutation of one leaves the other quoting correctly. drop_command_quoted runs the FAIL's copy.
+mut drop-command-hand-quoted \
+  '%q > %q && mv %q %q' \
+  "s/%q > %q \\&\\& mv %q %q/'%s' > '%s' \\&\\& mv '%s' '%s'/" \
+  drop_command_quoted \
+  2
+
+# H7: ADMITS ABOVE B -- every passing run appended, so B creeps up a band at a time.
+mut admits-above-b \
+  'if [ "$SRC" = history ] && [ "$OBS_SECS" -gt "$BL_SECS" ]; then' \
+  's/if \[ "\$SRC" = history \] && \[ "\$OBS_SECS" -gt "\$BL_SECS" \]; then/if false; then/' \
+  history_admission
+
+# H8: A TRUNCATING WRITE -- each record replaces the file, so history never holds more than one row.
+mut history-truncating-write \
+  '>> "$HIST" 2>/dev/null' \
+  's/>> "\$HIST" 2>\/dev\/null/> "$HIST" 2>\/dev\/null/' \
+  history_admission
+
+# H9: STALE HISTORY ROWS COUNTED -- a sharded-away pole's rows enter B.
+mut stale-history-counted \
+  'if [ ! -d "$ROOT/core/fixtures/$_hp" ]; then H_STALE=' \
+  's/if \[ ! -d "\$ROOT\/core\/fixtures\/\$_hp" \]; then H_STALE=/if false; then H_STALE=/' \
+  stale_history_ignored
+
+# H10: THE WIDTH SIDECAR NOT CHECKED -- a durations file another pool published is recorded here.
+mut sidecar-not-checked \
+  'if [ "$sj" != "$JOBS" ]; then' \
+  's/if \[ "\$sj" != "\$JOBS" \]; then/if false; then/' \
+  sidecar_mismatch
+
+# H15 (D2): HISTORY DOES NOT OUTRANK THE SEED -- history is the source only at a width with no
+# tracked row. The mkbase arms keep their tracked block at width 16 and drive other widths, so they
+# read history alone and cannot see this; history_precedence, with a seed AT both driven widths, can.
+mut history-prefers-seed \
+  'if [ "$H_N" -ge "$HIST_K" ]; then' \
+  's/^if \[ "\$H_N" -ge "\$HIST_K" \]; then$/if [ -z "$BL" ] \&\& [ "$H_N" -ge "$HIST_K" ]; then/' \
+  history_precedence
+
+# H16 (D1): THE NOTES' DROP COMMAND REMOVED -- the operator under history told to edit a row that is
+# not read. Both call sites, keyed on the predicate they share.
+mut notes-drop-hint-removed \
+  '[ "$SRC" = history ] && drop_hint' \
+  's/\[ "\$SRC" = history \] \&\& drop_hint/: # MUTANT-NO-HINT/' \
+  notes_name_drop_command \
+  2
+
+# THE MUTANT POOL RUNS HERE, after EVERY `mut` above has built, guarded and queued its copy, and
+# before the control. A `mut` placed below this line would be queued after the pool drained and
+# never scored -- the assertion-count check at the end is what reports that, as it did once.
+mut_pool
+mut_score
+
 # UNMUTATED CONTROL, WITH A POSITIVE CONJUNCT. A control asserting only "nothing went wrong"
 # passes against a subject replaced by `exit 0`, because rc=0 with nothing reported is exactly
 # what a clean copy looks like. This one demands a NAMED arm be affirmatively green, and it is
@@ -1158,7 +1829,8 @@ echo "  hook: ${PG_HOOK#"$ROOT"/}"
 } > "$PG_LIB"
 [ "$(grep -c '^[a-z_]*() {' "$PG_LIB")" -eq 3 ] && grep -q 'readset_lock_stale' "$PG_LIB" && grep -q 'READSET_TRACE_OVERLAP=1' "$PG_LIB" \
   || broken "could not extract readset_lock_stale, pole_guard_step and the overlap probe from $PG_HOOK"
-printf '#!/bin/bash\nprintf "%%s\\n" "$*" > "$PG_ARGS"\nexit 0\n' > "$PGW/scripts/validate-suite-pole.sh"
+# The stub's exit is PG_RC (default 0), so the key-record arms below can make the pole FAIL.
+printf '#!/bin/bash\nprintf "%%s\\n" "$*" > "$PG_ARGS"\nexit "${PG_RC:-0}"\n' > "$PGW/scripts/validate-suite-pole.sh"
 # pg_drive <lib> <lock: live|dead|none> -> "<overlap>|<argv>|<skip line: yes|no>"
 pg_drive() {
   local lib="$1" lk="$2" o="$PGW/o.$RANDOM"
@@ -1201,6 +1873,86 @@ pg_mut() { # <name> <from> <to> <lock> <arm's correct result>
 pg_mut noskip 'if [ "${READSET_TRACE_OVERLAP:-0}" = 1 ]; then' 'if false; then' live "$PG_SKIP"
 pg_mut nodetect '    READSET_TRACE_OVERLAP=1' '    :' live "$PG_SKIP"
 pg_mut nostale '[ -d "$READSET_LOCAL.lock" ] && ! readset_lock_stale "$READSET_LOCAL.lock"' '[ -d "$READSET_LOCAL.lock" ]' dead "$PG_COMPARE"
+# A POLE FAIL FORGETS THE CONTENT KEY (D3). fixture_suite_step records the key before the pole step
+# runs, so without this a push red on the pole alone is skipped on its re-push and the guard reads
+# /dev/null. Driven through the SAME extracted pole_guard_step, stub validator exiting PG_RC, with a
+# real key-record file: exit 1 must remove it and return 1; exit 0 must keep it and return 0.
+# kr_drive <lib> <validator-rc> -> "<step rc>|<key record: kept|gone>"
+kr_drive() {
+  local lib="$1" vrc="$2" o="$PGW/k.$RANDOM"
+  mkdir -p "$o"; printf 'somekey 9 2026-01-01T00:00:00Z\n' > "$o/key"
+  ( cd "$PGW" || exit 1
+    . "$lib"
+    READSET_LOCAL="$PGW/rl-none"; FIXTURE_JOBS=12; LASTRUN_RECORD=last.tsv; DURATIONS_RECORD=dur.tsv
+    SUITE_SKIPPED=0; READSET_TRACE_OVERLAP=0; KEY_RECORD="$o/key"
+    export PG_ARGS="$o/args" PG_RC="$vrc"
+    pole_guard_step > "$o/step" 2>&1; printf '%s' "$?" > "$o/rc"
+  )
+  printf '%s|%s' "$(cat "$o/rc" 2>/dev/null)" "$([ -e "$o/key" ] && echo kept || echo gone)"
+}
+pg_arm keyfail "$(kr_drive "$PG_LIB" 1)" "1|gone" \
+  "hook pole step: a pole FAIL returns 1 AND removes the content-key record, so the re-push re-runs the suite instead of skipping to /dev/null"
+pg_arm keypass "$(kr_drive "$PG_LIB" 0)" "0|kept" \
+  "hook pole step: a pole PASS returns 0 and keeps the content-key record"
+kr_mut() { # <name> <from> <to> <validator-rc> <correct result>
+  local m="$PGW/krm.$1.sh" n r
+  n="$(grep -cF -- "$2" "$PG_LIB")" || n=0
+  HOOK_ARMS=$((HOOK_ARMS + 1))
+  if [ "$n" != 1 ]; then bad "hook-key MUTANT $1: anchor matched $n time(s), not 1 -- DID NOT APPLY"; return; fi
+  MF="$2" MT="$3" awk '{ i = index($0, ENVIRON["MF"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["MT"] substr($0, i + length(ENVIRON["MF"])); print }' "$PG_LIB" > "$m"
+  if cmp -s "$PG_LIB" "$m"; then bad "hook-key MUTANT $1: the copy is unchanged"; return; fi
+  r="$(kr_drive "$m" "$4")"
+  if [ "$r" = "$5" ]; then bad "hook-key MUTANT $1 SURVIVED: '$r'"; else ok "hook-key MUTANT $1 is KILLED: '$r'"; fi
+}
+kr_mut norm 'rm -f "$KEY_RECORD"' ':' 1 "1|gone"
+
+# THE WIDTH SIDECAR (BL-465), extracted from fixture_suite_step the same way: from the line that
+# empties `$LASTRUN_RECORD.jobs` to the `fi` closing its write, driven with a stub run_fixtures in
+# three outcomes. Every world starts with a STALE sidecar reading 16 and a stale non-empty .last, so
+# "emptied" and "never written" are different results. green: the pool truncates .last, publishes
+# it, returns 0 -> the sidecar reads 12. red: truncates, returns 1 -> empty. no-change (the read-set
+# skip): truncates and returns 0 with nothing published -> empty.
+SC_LIB="$PGW/sc.sh"
+{ printf 'sidecar_probe() {\n'
+  awk '/^  : > "\$LASTRUN_RECORD\.jobs" 2>\/dev\/null$/ { p = 1 } p { print } p && /^  fi$/ { exit }' "$PG_HOOK"
+  printf '}\n'
+} > "$SC_LIB"
+grep -q 'run_fixtures || return 1' "$SC_LIB" && grep -qF '"$FIXTURE_JOBS" > "$LASTRUN_RECORD.jobs"' "$SC_LIB" \
+  || broken "could not extract the width-sidecar lines from fixture_suite_step in $PG_HOOK"
+sc_drive() { # <lib> <outcome: green|red|nochange> -> the sidecar's content, or <empty>
+  local lib="$1" oc="$2" d="$PGW/sc.$RANDOM"
+  mkdir -p "$d"
+  printf 'fx1 9\n' > "$d/last"; printf '16\n' > "$d/last.jobs"
+  ( . "$lib"
+    LASTRUN_RECORD="$d/last"; FIXTURE_JOBS=12
+    run_fixtures() {
+      : > "$LASTRUN_RECORD"
+      case "$oc" in green) printf 'fx1 5\n' > "$LASTRUN_RECORD"; return 0 ;; red) return 1 ;; *) return 0 ;; esac
+    }
+    sidecar_probe ) >/dev/null 2>&1
+  local v; v="$(cat "$d/last.jobs" 2>/dev/null)"
+  printf '%s' "${v:-<empty>}"
+}
+pg_arm scgreen "$(sc_drive "$SC_LIB" green)" "12" \
+  "hook sidecar: a green pool that published durations leaves .last.jobs reading the pool width"
+pg_arm scred "$(sc_drive "$SC_LIB" red)" "<empty>" \
+  "hook sidecar: a red pool leaves .last.jobs EMPTY, never the stale width from an earlier push"
+pg_arm scnochange "$(sc_drive "$SC_LIB" nochange)" "<empty>" \
+  "hook sidecar: a pool that published nothing (read-set no-change) leaves .last.jobs empty"
+sc_mut() { # <name> <from> <to> <outcome> <correct result>
+  local m="$PGW/scm.$1.sh" n r
+  n="$(grep -cF -- "$2" "$SC_LIB")" || n=0
+  HOOK_ARMS=$((HOOK_ARMS + 1))
+  if [ "$n" != 1 ]; then bad "hook-sidecar MUTANT $1: anchor matched $n time(s), not 1 -- DID NOT APPLY"; return; fi
+  MF="$2" MT="$3" awk '{ i = index($0, ENVIRON["MF"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["MT"] substr($0, i + length(ENVIRON["MF"])); print }' "$SC_LIB" > "$m"
+  if cmp -s "$SC_LIB" "$m"; then bad "hook-sidecar MUTANT $1: the copy is unchanged"; return; fi
+  r="$(sc_drive "$m" "$4")"
+  if [ "$r" = "$5" ]; then bad "hook-sidecar MUTANT $1 SURVIVED: '$r'"; else ok "hook-sidecar MUTANT $1 is KILLED: '$r'"; fi
+}
+sc_mut notruncate ': > "$LASTRUN_RECORD.jobs"' ':' red "<empty>"
+sc_mut nowrite 'printf '"'"'%s\n'"'"' "$FIXTURE_JOBS" > "$LASTRUN_RECORD.jobs"' ':' green "12"
+sc_mut nopublishgate 'if [ -s "$LASTRUN_RECORD" ]; then' 'if true; then' nochange "<empty>"
+
 # No mutant anywhere deletes the legacy branch (`[ -n "$s" ] || return 1`): one was built and moved
 # readset-skip's `legacylive` world AND the `live` hook-step arm above, whose seed is also a
 # two-field lock. That arm owns the regression (an upgrade turning every older lock stale) and kills
@@ -1214,7 +1966,7 @@ pg_mut nostale '[ -d "$READSET_LOCAL.lock" ] && ! readset_lock_stale "$READSET_L
 # cannot vary.
 EXPECTED_ASSERTIONS=$((ARM_COUNT + MUT_COUNT + 1 + HOOK_ARMS))
 # HOOK_WANT is derived from this file's own call lines: one assertion per pg_arm/pg_mut.
-HOOK_WANT="$(grep -cE '^(pg_arm|pg_mut) ' "$HERE/run.sh")" || HOOK_WANT=0
+HOOK_WANT="$(grep -cE '^(pg_arm|pg_mut|sc_mut|kr_mut) ' "$HERE/run.sh")" || HOOK_WANT=0
 [ "$HOOK_WANT" -ge 6 ] || broken "counted $HOOK_WANT hook-step call lines in $HERE/run.sh, expected at least 6"
 [ "$HOOK_ARMS" -eq "$HOOK_WANT" ] || { printf '  FAIL  %s hook-step assertions ran, %s expected\n' "$HOOK_ARMS" "$HOOK_WANT"; fails=$((fails + 1)); }
 if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then

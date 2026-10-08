@@ -10,7 +10,12 @@
 # every other fixture's entries alone, so refreshing one fixture costs its own runtime
 # rather than a full re-derivation.
 #
-# fixtures mapped: 236    entries: 29955
+# Each '# digest <fixture> <sha256>' line, after the rows, is the sha256 of that fixture's sorted
+# path<TAB>sha lines in the runner's universe as traced; the runner clears a stale key record when
+# it recomputes the same value over the tree it is pushing.
+#
+# fixtures mapped: 239    entries: 29992
+# OMITTED by the last run (always run): readset-skip-digest-mutants self-update-gate
 absorbed-specifics-survive	core/fixtures/absorbed-specifics-survive/run.sh
 absorbed-specifics-survive	core/skills/ai-dlc/SKILL.md
 absorbed-specifics-survive	core/skills/ai-dlc/rule-bodies/rule-13.md
@@ -20187,6 +20192,38 @@ push-drain-refusals	core/fixtures/lib/preamble.sh
 push-drain-refusals	core/fixtures/push-drain-refusals
 push-drain-refusals	core/fixtures/push-drain-refusals/run.sh
 push-drain-refusals	core/skills/ai-dlc-update/reconcile/push-drain.sh
+readset-sandbox-root-clause	core
+readset-sandbox-root-clause	core/core/scripts/derive-fixture-readsets.sh
+readset-sandbox-root-clause	core/fixtures
+readset-sandbox-root-clause	core/fixtures/core/scripts/derive-fixture-readsets.sh
+readset-sandbox-root-clause	core/fixtures/lib
+readset-sandbox-root-clause	core/fixtures/lib/preamble.sh
+readset-sandbox-root-clause	core/fixtures/readset-sandbox-root-clause
+readset-sandbox-root-clause	core/fixtures/readset-sandbox-root-clause/core/scripts/derive-fixture-readsets.sh
+readset-sandbox-root-clause	core/fixtures/readset-sandbox-root-clause/run.sh
+readset-sandbox-root-clause	core/scripts/derive-fixture-readsets.sh
+readset-skip	.git
+readset-skip	.git/HEAD
+readset-skip	.git/commondir
+readset-skip	.git/config
+readset-skip	.git/objects
+readset-skip	.git/refs
+readset-skip	.githooks/pre-push
+readset-skip	core
+readset-skip	core/fixtures
+readset-skip	core/fixtures/lib
+readset-skip	core/fixtures/lib/preamble.sh
+readset-skip	core/fixtures/readset-skip
+readset-skip	core/fixtures/readset-skip/run.sh
+readset-skip	core/git-hooks/pre-push
+readset-skip	core/scripts/derive-fixture-readsets.sh
+readset-skip	core/skills/ai-dlc-update/reconcile/setup-sites.md
+readset-skip	core/skills/ai-dlc/core-manifest.md
+readset-skip	core/skills/ai-dlc/enforcement-map.yaml
+readset-skip	core/skills/ai-dlc/steps/gate-validation.md
+readset-skip	scripts/ai-dlc/derive-fixture-readsets.sh
+readset-skip	scripts/render-invariant-index.sh
+readset-skip	scripts/validate-enforcement-map.sh
 readset-stage1-verdict	core
 readset-stage1-verdict	core/fixtures
 readset-stage1-verdict	core/fixtures/lib
@@ -29872,6 +29909,11 @@ vocabulary-index	scripts
 vocabulary-index	scripts/VERSION
 vocabulary-index	scripts/render-vocabulary-index.sh
 vocabulary-index	scripts/validate-enforcement-map.sh
+wait-beat-liveness	core
+wait-beat-liveness	core/fixtures
+wait-beat-liveness	core/fixtures/wait-beat-liveness
+wait-beat-liveness	core/fixtures/wait-beat-liveness/run.sh
+wait-beat-liveness	core/scripts/wait-for-deliverable.sh
 wait-stale-deliverable	.git/HEAD
 wait-stale-deliverable	.git/config
 wait-stale-deliverable	.git/index
@@ -29966,3 +30008,8 @@ write-format-steering-multiformat	core/scripts/.git
 write-format-steering-multiformat	core/scripts/core/skills/ai-dlc
 write-format-steering-multiformat	core/scripts/validate-write-format-steering.sh
 write-format-steering-multiformat	core/skills/ai-dlc-update/reconcile/lib.sh
+# digest readset-sandbox-root-clause 7f0b66fe31a68aca334bc40011603467659a08c2799dee31ae0d8b69575396cc
+# digest readset-skip c6a2be46cfd16847bc01971e9f5a49c9028a87a4146d5829690d5c5f5bffac46
+# digest readset-stage1-verdict b93137ba76a80cfe4f6f2e8b13cd89e89173e86f34533444641bd3df97da5c46
+# digest suite-pole-guard 14804f8745878f3c3bf12c514b5b04abb130bc80c2fde4486cbf2444f346006c
+# digest wait-beat-liveness b3831569f7ca7baf4eddeb40c255b41c5354519085722e343f308ab01dfa5685

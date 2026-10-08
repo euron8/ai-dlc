@@ -91,11 +91,11 @@ fmt_of() { # $1 file  $2 a fixed string the format line must also carry
   awk -v k="$2" 'index($0, "printf '"'"'(version 3)") && index($0, k) {
       s = substr($0, index($0, "'"'"'") + 1); print substr(s, 1, index(s, "'"'"'") - 1) }' "$1"
 }
-DFMT="$(fmt_of "$DERIVER" '"$TREE" "$MARKDIR" > "$PROFILE"')"
-SFMT="$(fmt_of "$SCORER" '"$1/t" "$1/m"')"
+DFMT="$(fmt_of "$DERIVER" '"$TREE" "$MARKDIR" "$TREE" > "$PROFILE"')"
+SFMT="$(fmt_of "$SCORER" '"$1/t" "$1/m" "$1/t"')"
 n="$(printf '%s\n' "$DFMT" | grep -c 'with report')" || n=0
 [ "$n" = 1 ] || broken "the deriver carries $n default-profile printf line(s) with a report clause, not 1"
-case "$DFMT" in *'(subpath "%s") (subpath "%s")'*) ;; *) broken "the deriver's default-profile format is not the two-subpath shape: $DFMT" ;; esac
+case "$DFMT" in *'(subpath "%s") (subpath "%s") (with report))\n(allow file-read-metadata file-test-existence (literal "%s"))\n') ;; *) broken "the deriver's default-profile format is not the two-subpath shape ending in the root-literal clause (BL-470): $DFMT" ;; esac
 [ "$DFMT" = "$SFMT" ] || broken "the scorer's default-profile format differs from the deriver's: [$SFMT] vs [$DFMT]"
 
 # relog <rd>: the deriver.log in real shape, its per-fixture counts taken from the .set files.
@@ -116,7 +116,7 @@ seed_run() {
   mkdir -p "$rd/root/w" "$rd/root/m" || return 1
   cp -R "$TPL" "$rd/root/t" || return 1
   rp="$(cd "$rd/root" && pwd -P)" || return 1
-  printf "$DFMT" "$rp/t" "$rp/m" > "$rd/root/w/sandbox.sb"
+  printf "$DFMT" "$rp/t" "$rp/m" "$rp/t" > "$rd/root/w/sandbox.sb"
   printf 'a\0b\0' > "$rd/root/w/copy.list"
   s="$(ts $((base + 10)))"; e="$(ts $((base + 50)))"
   for fx in $SUBJ; do
@@ -733,6 +733,82 @@ grep -q 'process tree survived' "$WORK/wr/m-single-pid-kill.why" 2>/dev/null \
   && ok "the single-pid-kill mutant died on the process-tree arm (orphans: $(grep 'process tree' "$WORK/wr/m-single-pid-kill.why" | sed 's/.*TERM://'))" \
   || bad "the single-pid-kill mutant did not die on the process-tree arm"
 reap
+
+# ------------------------------------------------------------------ the deriver's tracer reaping (BL-466) ----
+# The deriver reaps its fs_usage tracer with `pkill -P $$ -x fs_usage` at two sites. A bare
+# `pkill -x fs_usage` killed EVERY fs_usage on the box, so parallel runs captured nothing and wrote
+# rows that look like small read-sets. Each shipped line is extracted and EVALUATED in a deriver-shaped
+# shell whose pipeline's left element is a symlinked stub, with a decoy forked by THIS fixture outside
+# it: the child must die and the decoy must live. fs_usage needs root, so a real one is never started.
+# THE STUB CARRIES A UNIQUE NAME, substituted for `fs_usage` in the extracted line, because a stub
+# named `fs_usage` is killed by any other run's reaping on the same box -- measured, within 2.5 s --
+# and a mutant must never reach a tracer this fixture did not start. The probe does NOT `wait` on the
+# pipeline before the pkill: `wait` on a pipeline job blocks until its left element ends, which is
+# the stub's whole sleep, after which both stubs are dead for a reason that is not the pkill.
+echo " the deriver reaps only its own fs_usage (BL-466):"
+pk_lines() { # $1 deriver -> the uncommented lines carrying both `pkill` and `fs_usage`
+  awk 'index($0, "pkill") && index($0, "fs_usage") { l = $0; sub(/^[ \t]+/, "", l); if (substr(l, 1, 1) != "#") print l }' "$1"
+}
+PKN="fsux$$"; PKB="$WORK/pkbin"; mkdir -p "$PKB" && ln -s /bin/sleep "$PKB/$PKN" || broken "cannot build the fs_usage stub"
+# pk_probe <pkill line>: prints `child=<alive|dead> decoy=<alive|dead>`, or `child=none` if no child.
+pk_probe() {
+  local d="$WORK/pk.$$.$RANDOM" dec
+  mkdir -p "$d" || return 1
+  printf '%s\n' "${1//fs_usage/$PKN}" > "$d/line"
+  cat > "$d/deriver.sh" <<'PK_EOF'
+"$PKN" 60 2>/dev/null </dev/null | grep --line-buffered -F x > /dev/null &
+fs_pid=$!
+sleep 0.3
+child="$(pgrep -P $$ -x "$PKN")"
+[ -n "$child" ] || { echo "child=none"; exit 0; }
+echo "$child" >> "$ORPHANS"
+eval "$(cat "$PKD/line")"
+sleep 0.3
+if kill -0 "$child" 2>/dev/null; then printf 'child=alive '; else printf 'child=dead '; fi
+kill "$child" "$fs_pid" 2>/dev/null
+PK_EOF
+  PATH="$PKB:$PATH" "$PKN" 60 >/dev/null 2>&1 </dev/null & dec=$!
+  echo "$dec" >> "$ORPHANS"
+  PATH="$PKB:$PATH" PKN="$PKN" PKD="$d" ORPHANS="$ORPHANS" bash "$d/deriver.sh" </dev/null
+  if kill -0 "$dec" 2>/dev/null; then echo "decoy=alive"; else echo "decoy=dead"; fi
+  kill "$dec" 2>/dev/null; wait "$dec" 2>/dev/null
+}
+# pk_score <deriver> -> one verdict per extracted line, joined by `;`
+pk_score() { local l; pk_lines "$1" | while IFS= read -r l; do pk_probe "$l"; done | tr '\n' ';'; }
+n="$(pk_lines "$DERIVER" | grep -c .)" || n=0
+[ "$n" = 2 ] || broken "the deriver carries $n uncommented pkill fs_usage line(s), not the 2 reaping sites"
+got="$(pk_score "$DERIVER")"
+case "$got" in *none*) broken "the stub pipeline left no child of the deriver-shaped shell: $got" ;; esac
+if [ "$got" = 'child=dead decoy=alive;child=dead decoy=alive;' ]; then ok "both reaping lines kill the deriver's own stub tracer and leave a decoy outside it alive ($got)"; else bad "the deriver's reaping lines: $got (want child=dead decoy=alive at both sites)"; fi
+# Mutants: every site edited (a fix layered on one site only reverts at both), on a COPY.
+pkmut() { # pkmut <name> <awk gsub from> <awk gsub to>
+  local dst="$MD/pk-$1.sh" c g
+  awk -v f="$2" -v t="$3" -v CF="$dst.count" '{ c += gsub(f, t) } { print } END { print c + 0 > CF }' "$DERIVER" > "$dst" || { bad "pkill mutant $1 DID NOT APPLY"; return; }
+  c="$(cat "$dst.count")"
+  if [ "$c" != 2 ] || cmp -s "$DERIVER" "$dst"; then bad "pkill mutant $1 DID NOT APPLY ($c site(s))"; return; fi
+  g="$(pk_score "$dst")"
+  if [ "$g" = 'child=dead decoy=alive;child=dead decoy=alive;' ]; then bad "pkill mutant $1 SURVIVED ($g)"; else ok "pkill mutant $1 KILLED ($g)"; fi
+}
+pkmut bare 'pkill -P [$][$] -x fs_usage' 'pkill -x fs_usage'
+pkmut wrong-parent 'pkill -P [$][$] -x fs_usage' 'pkill -P $PPID -x fs_usage'
+
+# ------------------------------------------------------------------ the sandbox profile's root clause (BL-470) ----
+# TEXT ARMS ONLY. Every profile emitter ends with an allow clause on the tree ROOT literal carrying no
+# `(with report)`. Its BEHAVIOUR -- all three emitters rendered and run under sandbox-exec with
+# `log stream` watching -- is core/fixtures/readset-sandbox-root-clause, kept out of this file because
+# `log stream` refuses inside the sandbox tracer: an arm that SKIPs traced and passes untraced makes
+# this fixture's verdict differ under the trace, and every trace discarded it. Nothing here execs
+# `log` or `sandbox-exec`.
+echo " the sandbox profile's root-literal clause (BL-470), text:"
+CLAUSE='(allow file-read-metadata file-test-existence (literal "%s"))'
+cl_count() { awk -v k="$CLAUSE" '{ l = $0; sub(/^[ \t]+/, "", l) } substr(l, 1, 1) != "#" && index($0, k) { n++ } END { print n + 0 }' "$1"; }
+n="$(cl_count "$DERIVER")"
+if [ "$n" = 3 ]; then ok "the root-literal clause is emitted by all three profile emitters (3 uncommented lines)"; else bad "the root-literal clause is on $n uncommented emitter line(s), not 3"; fi
+OM="$MD/sb-one-emitter.sh"
+awk -v k="$CLAUSE" '{ l = $0; sub(/^[ \t]+/, "", l) } index($0, k) && !index($0, "> \"$PROFILE\" \\") && substr(l, 1, 1) != "#" { print "      :"; c++; next } { print } END { exit c != 2 }' "$DERIVER" > "$OM" && ! cmp -s "$DERIVER" "$OM" \
+  || bad "clause mutant one-emitter DID NOT APPLY"
+n="$(cl_count "$OM")"
+if [ "$n" != 3 ]; then ok "clause mutant one-emitter KILLED (the clause on $n emitter line(s))"; else bad "clause mutant one-emitter SURVIVED"; fi
 
 # NO STUB PROCESS OUTLIVES THE FIXTURE, counted from the pid file every arm appended to -- never from
 # the process table. The control is that the file holds pids at all. A just-killed pid can read alive

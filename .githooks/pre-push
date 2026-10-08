@@ -568,6 +568,14 @@ FAILLOG_KEEP=20
 #
 # `.git` is dropped here because it is already excluded, separately and on different grounds,
 # at both of the sites below.
+#
+# THE SENTINELS BELOW BOUND THE HOOK'S UNIVERSE, and derive-fixture-readsets.sh SOURCES this span
+# out of the runner it reads its fixture root from. The digest it writes for a traced fixture and
+# the digest this hook recomputes to clear a stale record are the SAME function over the SAME
+# universe filter, so the two sides cannot drift; `--reconcile` reads the key records through the
+# same parse. Nothing in the span reads a global but READSET_MAP and READSET_LOCAL, which the
+# deriver binds before it calls readset_manifest.
+# READSET_UNIVERSE_BEGIN
 readset_excluded_re() {
   local decl="scripts/suite-content-key.sh" tops t re=""
   [ -f "$decl" ] || return 0
@@ -614,6 +622,34 @@ readset_drop_ignored() { # <in> <res>
                                 !($1 in drop)' "$in" > "$res"
 }
 
+# ONE HELPER EMITS THE MERGED ROW SET, AND EVERY SITE THAT READ THE COMMITTED MAP CALLS IT. A missed
+# site turns a local-only path into an orphan and forces the full suite, or leaves a locally-mapped
+# fixture "unmapped" on one side of a join and mapped on the other.
+#   paths  committed paths plus EVERY local candidate path -- the manifest's universe. Validity is
+#          NOT applied here: the manifest is what validity is computed FROM.
+#   rows   `<fx>\t<path>` for selection. A fixture with VALID local rows (`$out/.local.valid`)
+#          uses only those; every other fixture uses its committed rows.
+# The local rows are read FIRST, so the committed rows of a locally-traced fixture are dropped.
+# Every `#` line of the committed map -- the header and each `# digest` line -- is dropped by the
+# `grep -v` before it can reach a row set.
+readset_rows() { # <out> <paths|rows>
+  local out="$1" mode="$2"
+  { if [ "$mode" = rows ]; then [ -s "$out/.local.valid" ] && sed 's/^/V	/' "$out/.local.valid"
+    else [ -s "$READSET_LOCAL" ] && sed 's/^/L	/' "$READSET_LOCAL"; fi
+    [ -s "$READSET_MAP" ] && grep -v '^#' "$READSET_MAP" | sed 's/^/C	/'
+    :
+  } | awk -F'\t' -v mode="$mode" '
+    $1 == "V" { loc[$2] = 1; print $2 "\t" $3; next }
+    $1 == "L" { if (substr($3, 1, 1) != "#") print $3; next }
+    $1 == "C" { if (mode != "rows") print $3; else print $2 "\t" $3 }'
+}
+
+# THE UNIVERSE FILTER ON A PATH STREAM: `.git` and `.git/**`, then the content key's excluded tops.
+# The manifest and the committed digest both call it, so the two cannot disagree on which paths count.
+readset_universe_paths() { # reads paths on stdin, writes the ones in the universe
+  grep -v '^\.git/' | grep -v '^\.git$' | readset_drop_excluded
+}
+
 readset_manifest() {
   local out="$1" hash_rc ign_rc
   # UNTRACKED-BUT-UNIGNORED FILES ARE IN THE UNIVERSE, AND THE WHOLE-SUITE SKIP BELOW IS WHY.
@@ -643,7 +679,7 @@ readset_manifest() {
   { git -c core.quotePath=false ls-files 2>/dev/null
     git -c core.quotePath=false ls-files --others --exclude-standard 2>/dev/null
     readset_rows "$out" paths
-  } | grep -v '^\.git/' | grep -v '^\.git$' | readset_drop_excluded | sort -u > "$out/.paths.all"
+  } | readset_universe_paths | sort -u > "$out/.paths.all"
   readset_drop_ignored "$out/.paths.all" "$out/.paths"; ign_rc=$?
   while IFS= read -r p; do [ -f "$p" ] && printf '%s\n' "$p"; done < "$out/.paths" > "$out/.files"
   tr '\n' '\000' < "$out/.files" | xargs -0 -n 200 shasum -a 256 -- > "$out/.sums" 2>/dev/null
@@ -654,6 +690,95 @@ readset_manifest() {
     : > "$out/.now"
   fi
 }
+
+# THE KEY RECORDS, ONE PARSE: `<fx>\t#state\t<state>`, `<fx>\t#tools\t<tools format>` and
+# `<fx>\t<key>\t<value>` for every record under <keys dir> whose first line is `#format k1`. readset_keys
+# and the deriver's `--reconcile` both read it. `#tools canonical` marks tool rows resolved against the
+# fixed tool dirs; any other value, or none, is a record written by the PATH-resolved hook.
+readset_key_records() { # <keys dir>
+  awk 'FNR == 1 { ok = ($0 == "#format k1"); f = FILENAME; sub(/.*\//, "", f); sub(/\.key$/, "", f); next }
+       !ok { next }
+       /^#state / { print f "\t#state\t" substr($0, 8); next }
+       /^#tools / { print f "\t#tools\t" substr($0, 8); next }
+       /^#/ { next }
+       { print f "\t" $0 }' "$1"/*.key 2>/dev/null
+}
+
+# THE READ-SET DIGEST: per fixture, the sha256 of its C-sorted `<path>\t<sha>` lines, kept to the paths in
+# <keep> and never <skip>. ONE function, called by the deriver when it writes `# digest <fx> <sha>` into
+# the committed map and by this hook when it recomputes that digest over this push's `.now`.
+#   <rows>  `<fx>\t<path>\t<sha256 or ->`   <keep>  the universe, one path per line
+#   <skip>  the committed map's own path: a fixture that reads the map would otherwise carry the sha of
+#           the map BEFORE its digest line was written, and could never match again
+#   <dir>   a scratch directory that must not exist yet
+# Prints `<fx>\t<digest>`. A fixture with no kept row gets no digest, which never matches one.
+readset_digests() { # <rows> <keep> <skip> <dir>
+  mkdir "$4" || return 1
+  RD_K="$2" awk -F'\t' -v skip="$3" 'FILENAME == ENVIRON["RD_K"] { k[$0] = 1; next }
+    ($2 in k) && $2 != skip { print $1 "\t" $2 "\t" $3 }' "$2" "$1" | LC_ALL=C sort -u \
+    | awk -F'\t' -v d="$4" '$1 != f { if (f != "") close(o); f = $1; o = d "/" f } { print $2 "\t" $3 > o }' || return 1
+  find "$4" -type f -print0 | xargs -0 shasum -a 256 -- 2>/dev/null \
+    | awk '{ f = $0; sub(/^[0-9a-f]+  /, "", f); sub(/.*\//, "", f); print f "\t" $1 }'
+}
+
+# THE COMMITTED DIGESTS, CHECKED AGAINST THIS TREE. Writes `$out/.cdig`, one `<fx>\t<status>` per
+# fixture with committed rows: `match`, `differs`, or `nodigest` (rows and no `# digest <fx> <sha>`
+# line -- a map written before digests existed). The recomputed digest reads each committed path's sha
+# off `.now`, `-` where no file of that name is in it, kept to `.paths` -- the universe the manifest
+# hashed. NO DERIVER SHA: a committed row set is judged by its content alone, and the deriver sha stays
+# a criterion of the local map only. Only `match` clears; `nodigest` rows still select their fixture.
+readset_committed_digests() { # <out>
+  local out="$1"
+  : > "$out/.cdig"
+  [ -s "$READSET_MAP" ] && [ -s "$out/.now" ] || return 0
+  awk '$1 == "#" && $2 == "digest" && NF == 4 { print $3 "\t" $4 }' "$READSET_MAP" > "$out/.cdig.want"
+  RC_W="$out/.cdig.want" RC_N="$out/.now" awk -F'\t' '
+    FILENAME == ENVIRON["RC_W"] { w[$1] = 1; next }
+    FILENAME == ENVIRON["RC_N"] { now[$1] = $2; next }
+    /^#/ { next }
+    ($1 in w) { print $1 "\t" $2 "\t" (($2 in now) ? now[$2] : "-") }' "$out/.cdig.want" "$out/.now" "$READSET_MAP" > "$out/.cdig.rows"
+  : > "$out/.cdig.got"
+  [ -s "$out/.cdig.rows" ] && { readset_dir_values "$out/.cdig.rows" "$out/.now" "$out/.paths" "$out/.cdig.rows2" && readset_digests "$out/.cdig.rows2" "$out/.cdig.rows2.keep" "$READSET_MAP" "$out/.dg" > "$out/.cdig.got" || : > "$out/.cdig.got"; }
+  RC_W="$out/.cdig.want" RC_G="$out/.cdig.got" awk -F'\t' '
+    FILENAME == ENVIRON["RC_W"] { w[$1] = $2; next }
+    FILENAME == ENVIRON["RC_G"] { g[$1] = $2; next }
+    /^#/ || $1 == "" { next }
+    { c[$1] = 1 }
+    END { for (f in c) print f "\t" (!(f in w) ? "nodigest" : (((f in g) && g[f] == w[f]) ? "match" : "differs")) }' \
+    "$out/.cdig.want" "$out/.cdig.got" "$READSET_MAP" | LC_ALL=C sort > "$out/.cdig"
+}
+# `<dir>/\t#listing:<sha256>` for every directory a path list implies, derived from the list alone and
+# never from readdir. A listing is the directory's immediate entry names, C-sorted, one per line.
+readset_listings() { # <path list> <out file>
+  local w="$2.d"
+  mkdir -p "$w" || { : > "$2"; return 1; }
+  awk '{ p = $0; while ((i = match(p, /\/[^\/]*$/)) > 0) { d = substr(p, 1, i - 1); print d "\t" substr(p, i + 1); p = d } }' "$1" \
+    | LC_ALL=C sort -u | awk -F'\t' -v w="$w" '
+      $1 != d { if (f != "") close(f); d = $1; n++; f = w "/" n; print n "\t" d "/" > (w "/.idx") }
+      { print $2 > f }'
+  find "$w" -type f ! -name .idx -print0 | xargs -0 shasum -a 256 -- 2>/dev/null \
+    | awk -v idx="$w/.idx" 'BEGIN { while ((getline l < idx) > 0) { t = index(l, "\t"); d[substr(l, 1, t - 1)] = substr(l, t + 1) } }
+      { n = $0; sub(/^[0-9a-f]+  /, "", n); sub(/.*\//, "", n); if (n in d) print d[n] "\t#listing:" $1 }' > "$2"
+}
+
+# A DIRECTORY ROW'S DIGEST VALUE IS ITS LISTING, NEVER `-`. `<rows>` is `<fx>\t<path>\t<value>`; a row whose
+# value is `-` and whose path names a directory <now> implies takes that directory's `#listing:<sha>` and its
+# path joins the keep list (the universe holds files only, so readset_digests would otherwise drop the row),
+# so a committed digest sees an entry added to or removed from a directory a fixture reads. The deriver
+# (writing the digest) and the hook (recomputing it) both call this, so the two cannot disagree.
+# Writes the rows to <out> and the widened keep list to <out>.keep.
+readset_dir_values() { # <rows> <now> <paths> <out>
+  local w="$4.ls"
+  cut -f1 "$2" > "$4.p" || return 1
+  readset_listings "$4.p" "$w" || return 1
+  RV_L="$w" RV_P="$3" RV_K="$4.keep" awk -F'\t' '
+    FILENAME == ENVIRON["RV_L"] { l[$1] = $2; next }
+    FILENAME == ENVIRON["RV_P"] { print > ENVIRON["RV_K"]; next }
+    $3 == "-" && (($2 "/") in l) { print $1 "\t" $2 "\t" l[$2 "/"]; print $2 > ENVIRON["RV_K"]; next }
+    { print }' "$w" "$3" "$1" > "$4" || return 1
+  [ -f "$4.keep" ] || : > "$4.keep"
+}
+# READSET_UNIVERSE_END
 
 # The deriver lands under a different parent on each side (install.sh copies core/scripts/<x>
 # to scripts/ai-dlc/<x>), so both are probed and neither is assumed. Consumer layout first,
@@ -671,26 +796,6 @@ readset_deriver_path() {
 # deriver records each clean trace here, under the git dir, never in the tree. `AI_DLC_READSET_LIVE_TRACE=0`
 # turns the trace off; the rows already recorded are still read.
 READSET_LOCAL="$GITDIR/ai-dlc-fixture-readsets.local"
-
-# ONE HELPER EMITS THE MERGED ROW SET, AND EVERY SITE THAT READ THE COMMITTED MAP CALLS IT. A missed
-# site turns a local-only path into an orphan and forces the full suite, or leaves a locally-mapped
-# fixture "unmapped" on one side of a join and mapped on the other.
-#   paths  committed paths plus EVERY local candidate path -- the manifest's universe. Validity is
-#          NOT applied here: the manifest is what validity is computed FROM.
-#   rows   `<fx>\t<path>` for selection. A fixture with VALID local rows (`$out/.local.valid`)
-#          uses only those; every other fixture uses its committed rows.
-# The local rows are read FIRST, so the committed rows of a locally-traced fixture are dropped.
-readset_rows() { # <out> <paths|rows>
-  local out="$1" mode="$2"
-  { if [ "$mode" = rows ]; then [ -s "$out/.local.valid" ] && sed 's/^/V	/' "$out/.local.valid"
-    else [ -s "$READSET_LOCAL" ] && sed 's/^/L	/' "$READSET_LOCAL"; fi
-    [ -s "$READSET_MAP" ] && grep -v '^#' "$READSET_MAP" | sed 's/^/C	/'
-    :
-  } | awk -F'\t' -v mode="$mode" '
-    $1 == "V" { loc[$2] = 1; print $2 "\t" $3; next }
-    $1 == "L" { if (substr($3, 1, 1) != "#") print $3; next }
-    $1 == "C" { if (mode != "rows") print $3; else print $2 "\t" $3 }'
-}
 
 # A LOCAL ROW SET IS VALID ONLY WHILE EVERY PATH IT RECORDED HASHES AS IT DID IN THE TRACE COPY, AND
 # THE DERIVER IS THE ONE THAT TRACED IT. Read off THIS run's `$out/.now`, so a set whose input moved
@@ -723,6 +828,18 @@ readset_local_validate() { # <list> <out>
       END { for (f in seen) if ((f in dok) && dok[f] && !(f in bad)) {
               n = split(rows[f], r, "\n"); for (i = 1; i < n; i++) print f "\t" r[i] } }' \
       "$rc_map" "$out/.paths" "$out/.now" "$rl_loc" | sort -u > "$out/.local.valid"
+  fi
+  # A COMMITTED ROW SET WHOSE DIGEST MATCHES THIS TREE IS VALID TOO, local map or none, and its rows are
+  # written beside the valid local ones -- for a fixture that has none -- so a stale record clears on it
+  # exactly as on a local trace. They ARE the committed rows, so selection does not move.
+  readset_committed_digests "$out"
+  if [ -s "$out/.cdig" ]; then
+    RL_D="$out/.cdig" RL_V="$out/.local.valid" awk -F'\t' '
+      FILENAME == ENVIRON["RL_D"] { if ($2 == "match") m[$1] = 1; next }
+      FILENAME == ENVIRON["RL_V"] { v[$1] = 1; next }
+      /^#/ { next }
+      ($1 in m) && !($1 in v) && $2 != "" { print $1 "\t" $2 }' "$out/.cdig" "$out/.local.valid" "$rc_map" > "$out/.cdig.valid"
+    sort -u "$out/.local.valid" "$out/.cdig.valid" > "$out/.local.valid.t" && mv "$out/.local.valid.t" "$out/.local.valid"
   fi
   readset_rows "$out" rows | cut -f1 | sort -u > "$out/.mapped.all"
   while IFS= read -r d; do
@@ -839,8 +956,19 @@ readset_live_trace() { # <out>
   for b in $names; do cp "$out/.log/$b" "$READSET_LOCAL.logs/$b" 2>/dev/null; done
   tr="${TMPDIR:-/tmp}"; tr="${tr%/}/ai-dlc-readset-live.$$"
   logf="$READSET_LOCAL.log"
+  # THE STATUS FILE, `<local map>.status`, IS WRITTEN BY THE TRACE SUBSHELL ALONE, twice, each time
+  # whole (temp + mv): `start`, `pid`, `list` when it starts, and the same plus `exit` and `finish`
+  # when the deriver returns -- before the lock is released, so a reader that finds the lock gone
+  # finds the exit too, or knows the trace died. Its pid is read from inside it (`$PPID` of a child
+  # it execs), the pid the lock records as `$!`. readset_trace_report reads it on the next push.
   ( trap '' HUP
+    sp="$(exec sh -c 'printf %s "$PPID"')"; t0="$(date +%s)"
+    printf 'start %s\npid %s\nlist %s\n' "$t0" "$sp" "$names" > "$READSET_LOCAL.status.tmp.$sp" 2>/dev/null \
+      && mv "$READSET_LOCAL.status.tmp.$sp" "$READSET_LOCAL.status" 2>/dev/null
     AI_DLC_READSET_TRACE_ROOT="$tr" bash "$dv" --list "$names" --tracer sandbox --local-map "$READSET_LOCAL"
+    rc=$?
+    printf 'start %s\npid %s\nlist %s\nexit %s\nfinish %s\n' "$t0" "$sp" "$names" "$rc" "$(date +%s)" > "$READSET_LOCAL.status.tmp.$sp" 2>/dev/null \
+      && mv "$READSET_LOCAL.status.tmp.$sp" "$READSET_LOCAL.status" 2>/dev/null
     rm -f "$lk/pid"; rmdir "$lk" 2>/dev/null || { sleep 1; rm -f "$lk/pid"; rmdir "$lk" 2>/dev/null; }
   ) </dev/null >"$logf" 2>&1 &
   tp="$!"
@@ -849,15 +977,191 @@ readset_live_trace() { # <out>
   return 0
 }
 
+readset_when() { # <epoch>: local wall-clock time, or the bare epoch where neither date spelling works
+  date -r "$1" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date -d "@$1" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || printf 'epoch %s' "$1"
+}
+
+# THE READ-SET TRACE REPORT, PRINTED ON EVERY PUSH BEFORE THE SUITE. The detached trace's outcomes reach
+# only the local map's `#discards` rows, its log and its status file, and before this nothing read
+# them back: a fixture was named once, on the push its third discard was recorded. Every line opens
+# with `trace-report <field>:`. Read from, and never written to:
+#   <local map>.status   written by the trace subshell (readset_live_trace): start, pid, list, exit
+#   <local map>.lock/pid the lock; held means the trace is running now
+#   <local map>.log      the last trace's own output, truncated when the NEXT trace starts. That start
+#                        is in readset_live_trace, after the suite, so this report has always read the
+#                        log and status of the trace before it -- the ordering is the guarantee.
+#   <local map>          the `#discards` rows: `<fx> #discards <n> <run.sh sha>:<deriver sha> <why>`
+#   <out>/.kdec .kl .mapped.all   this push's decisions; absent where no keys were built
+# HOLD SEMANTICS: a fixture whose last three traces were discarded on its CURRENT run.sh and deriver
+# is not re-traced, and runs on every push. It is named on every push until its key moves; `n` counts
+# consecutive discards on one key, so a release that edits the deriver resets every count and clears
+# every held line. A finished trace that recorded nothing, or one that died, is a WARN line.
+readset_trace_report() { # <out, or empty where this push built no keys>
+  local out="${1:-}" rl="$READSET_LOCAL" lg="$READSET_LOCAL.log" st="$READSET_LOCAL.status" lk="$READSET_LOCAL.lock"
+  local P='   ..    trace-report' dv dsha="-" k v s_start="" s_pid="" s_list="" s_exit="" s_fin="" now
+  local lp="" le="" run=0 died=0 state ck="" kd=/dev/null kl=/dev/null km=/dev/null
+  now="$(date +%s)"
+  if [ -f "$st" ]; then
+    while read -r k v; do
+      case "$k" in start) s_start="$v" ;; pid) s_pid="$v" ;; list) s_list="$v" ;; exit) s_exit="$v" ;; finish) s_fin="$v" ;; esac
+    done < "$st"
+  fi
+  case "$s_start" in ''|*[!0-9]*) s_start="" ;; esac
+  case "$s_fin" in ''|*[!0-9]*) s_fin="$s_start" ;; esac
+  if [ -d "$lk" ] && ! readset_lock_stale "$lk" >/dev/null; then
+    run=1
+    [ -f "$lk/pid" ] && read -r lp le < "$lk/pid"
+    case "$le" in ''|*[!0-9]*) le="$now" ;; esac
+  fi
+  if [ -n "$s_exit" ]; then
+    state="finished, exit $s_exit, at $(readset_when "${s_fin:-0}") ($(( ${s_fin:-0} - ${s_start:-0} ))s)"
+  elif [ -n "$s_start" ] && [ "$run" = 1 ] && [ "$lp" = "$s_pid" ]; then
+    state="RUNNING since $(readset_when "$s_start") ($(( now - s_start ))s), pid $s_pid"
+  elif [ -n "$s_start" ]; then
+    state="DIED without writing its exit (pid $s_pid no longer holds the lock and no exit was recorded)"; died=1
+  elif [ "$run" = 1 ]; then
+    state="RUNNING since $(readset_when "${le:-0}") ($(( now - ${le:-0} ))s), pid ${lp:-?}; no status file (started by a hook older than the status file)"
+  else
+    state="none recorded (no status file at $st)"
+  fi
+  if [ -n "$s_start" ]; then
+    printf '%s last trace: started %s, %s fixture(s); %s\n' "$P" "$(readset_when "$s_start")" "$(set -- $s_list; echo $#)" "$state"
+  else
+    printf '%s last trace: %s\n' "$P" "$state"
+  fi
+  if [ "$run" = 1 ] && [ -n "$s_start" ] && [ "$lp" != "$s_pid" ]; then
+    printf '%s lock: another trace holds %s (pid %s since %s); the status file is not its own\n' "$P" "$lk" "${lp:-?}" "$(readset_when "$le")"
+  fi
+  dv="$(readset_deriver_path)"
+  [ -n "$dv" ] && dsha="$(shasum -a 256 -- "$dv" 2>/dev/null | cut -d' ' -f1)"
+  if [ -s "$rl" ]; then
+    ck="$(awk -F'\t' -v r="$FXROOT" '$2 == "#discards" { print r $1 "/run.sh" }' "$rl" | tr '\n' '\000' | xargs -0 shasum -a 256 -- 2>/dev/null)"
+  else
+    printf '%s local map: none at %s -- no trace has recorded a row or a discard in this clone\n' "$P" "$rl"
+    rl=/dev/null
+  fi
+  [ -f "$lg" ] || lg=/dev/null
+  if [ -n "$out" ] && [ -s "$out/.kdec" ] && [ -s "$out/.kl" ] && [ "$(grep -c . "$out/.kdec")" = "$(grep -c . "$out/.kl")" ]; then
+    kd="$out/.kdec"; kl="$out/.kl"; [ -f "$out/.mapped.all" ] && km="$out/.mapped.all"
+  fi
+  RS_CK="$ck" RS_LIST="$s_list" RS_FIN="$s_exit" RS_DIED="$died" \
+  RS_LG="$lg" RS_RL="$rl" RS_KD="$kd" RS_KL="$kl" RS_KM="$km" RS_LOGP="$READSET_LOCAL.log" \
+  awk -F'\t' -v P="$P" -v r="$FXROOT" -v dsha="$dsha" '
+    function cls(c) {
+      if (index(c, "the stream dropped reports")) return "stream-drop"
+      if (index(c, "VERDICT:") == 1) return "verdict"
+      if (index(c, "LOSS CANARY:") == 1) return "loss-canary"
+      if (index(c, "TRIP:") == 1) return "trip"
+      if (c ~ /^fixture exited /) return "fixture-exit"
+      if (c == "tracing never settled") return "never-settled"
+      if (index(c, "no end sentinel")) return "no-end-sentinel"
+      if (index(c, "UNREAD CONTROL")) return "unread-control"
+      if (c == "empty read-set") return "empty-set"
+      if (c ~ /^fixture wrote /) return "wrote-tree"
+      if (index(c, "the set does not name its own")) return "no-own-run.sh"
+      return "other" }
+    function tally(why, arr,   n, part, i, c, u) {
+      n = split(why, part, "; ")
+      for (i = 1; i <= n; i++) { c = cls(part[i]); if (!(c in u)) { u[c] = 1; arr[c]++ } } }
+    function show(arr,   i, s) { s = ""
+      for (i = 1; i <= NC; i++) if (arr[C[i]] > 0) s = s (s == "" ? "" : ", ") C[i] " " arr[C[i]]
+      return s == "" ? "none" : s }
+    function names(arr,   f, s, n, a, i, j, t) { n = 0
+      for (f in arr) a[++n] = f
+      for (i = 2; i <= n; i++) { t = a[i]; for (j = i - 1; j >= 1 && a[j] > t; j--) a[j + 1] = a[j]; a[j + 1] = t }
+      s = ""; for (i = 1; i <= n; i++) s = s (s == "" ? "" : " ") a[i]
+      return s }
+    BEGIN {
+      NC = split("stream-drop verdict loss-canary trip fixture-exit never-settled no-end-sentinel unread-control empty-set wrote-tree no-own-run.sh not-hashed other", C, " ")
+      n = split(ENVIRON["RS_CK"], a, "\n")
+      for (i = 1; i <= n; i++) { j = index(a[i], "  "); if (j) { p = substr(a[i], j + 2); RK[p] = substr(a[i], 1, j - 1) } }
+      ng = split(ENVIRON["RS_LIST"], g, " ")
+      # THE LAST TRACE, from its log. `<fx>  N paths` is a CLEAN trace, not a recorded one: a following
+      # `could not hash <fx>...` line means its rows were never written.
+      while ((getline l < ENVIRON["RS_LG"]) > 0) {
+        if (index(l, "  could not hash ") == 1 && (q = index(l, "s set in the trace copy -- not recorded")) > 0) {
+          NH[substr(l, 18, q - 19)] = 1; continue }
+        if (substr(l, 1, 2) != "  " || substr(l, 3, 1) == " ") continue
+        m = split(substr(l, 3), w, " ")
+        if (m == 3 && w[3] == "paths" && w[2] ~ /^[0-9]+$/) { CLEAN[w[1]] = 1; seen[w[1]] = 1; continue }
+        if (m >= 3 && w[2] == "OMITTED") { y = substr(l, 3); sub(/^[^ ]+ +OMITTED \(/, "", y); sub(/\) -- will always run$/, "", y)
+          DROP[w[1]] = 1; seen[w[1]] = 1; tally(y, TC) } }
+      for (f in NH) { TC["not-hashed"]++ }
+      nrec = 0; for (f in CLEAN) if (!(f in NH)) nrec++
+      ndrop = 0; for (f in DROP) ndrop++
+      nnh = 0; for (f in NH) nnh++
+      nseen = 0; for (f in seen) nseen++
+      if (ng == 0) ng = nseen
+      if (ENVIRON["RS_LG"] == "/dev/null") printf "%s last trace outcome: no trace log at %s\n", P, ENVIRON["RS_LOGP"]
+      else printf "%s last trace outcome: %d given, %d recorded, %d discarded, %d traced cleanly but NOT recorded; causes %s\n", P, ng, nrec, ndrop, nnh, show(TC)
+      # THE STANDING STATE, from the #discards rows of the local map.
+      nd = 0
+      while ((getline l < ENVIRON["RS_RL"]) > 0) {
+        split(l, x, "\t"); if (x[2] != "#discards") continue
+        nd++; f = x[1]; c = x[3] + 0; tally(x[5], DC)
+        if (c >= 3) at3++; else if (c == 2) at2++; else at1++
+        cur = ((r f "/run.sh") in RK ? RK[r f "/run.sh"] : "-") ":" dsha
+        if (c >= 3 && x[4] == cur) HELD[f] = 1
+        else if (c == 2 && x[4] == cur) TWO[f] = 1 }
+      if (nd == 0) printf "%s discards: none recorded\n", P
+      else printf "%s discards: %d fixture(s) carry a #discards row (at 1: %d, at 2: %d, at 3 or more: %d); causes %s\n", P, nd, at1, at2, at3, show(DC)
+      s = names(TWO); printf "%s at 2 of 3: %s\n", P, (s == "" ? "none" : s " -- one more discard on the same key holds it")
+      s = names(HELD)
+      if (s == "") printf "%s held: none\n", P
+      else printf "%s held: %s -- discarded 3 times in a row on its current run.sh and deriver, so it is NOT re-traced and runs on every push until one of them changes; a release that edits the deriver resets every #discards count\n", P, s
+      s = names(NH); printf "%s not recorded: %s\n", P, (s == "" ? "none" : s " -- traced cleanly, then could not hash its set in the trace copy")
+      # THIS PUSH: what runs because no trace has cleared it.
+      if (ENVIRON["RS_KD"] == "/dev/null") printf "%s uncleared this push: unknown -- no fixture keys were built this push\n", P
+      else {
+        while ((getline l < ENVIRON["RS_KM"]) > 0) MAP[l] = 1
+        ns = 0; nu = 0
+        while ((getline l < ENVIRON["RS_KD"]) > 0) { split(l, x, "\t"); if (x[2] != "run") continue
+          if (x[4] == "s") ns++; else if (!(x[1] in MAP)) nu++ }
+        printf "%s uncleared this push: %d stale and %d unmapped fixture(s) run because no trace has cleared them\n", P, ns, nu }
+      if (ENVIRON["RS_DIED"] == "1") printf "   WARN  trace-report warning: the last trace DIED without writing its exit -- nothing it was given can be trusted as recorded; see %s\n", ENVIRON["RS_LOGP"]
+      else if (ENVIRON["RS_FIN"] != "" && ng > 0 && nrec == 0) {
+        b = ""; bn = 0; for (i = 1; i <= NC; i++) if (TC[C[i]] > bn) { bn = TC[C[i]]; b = C[i] }
+        printf "   WARN  trace-report warning: the last trace recorded NOTHING for the %d fixture(s) it was given; dominant cause %s (%d)\n", ng, (b == "" ? "unknown" : b), bn }
+    }'
+  return 0
+}
+
 # THE TOOLS, KEYED PER FIXTURE. One pass over the manifest's `.sh` files writes `<out>/.ftools`
-# (`<file>\t<tool path>`): every word of a non-comment line that names a command on $PATH, the first hit
-# on $PATH winning. Derived that way, never hand-listed. `<out>/.tools` is `<tool path>\t<sha256>` for
+# (`<file>\t<tool path>`): every word of a non-comment line that names a command in the TOOL DIRS below,
+# the first hit winning. Derived that way, never hand-listed. `<out>/.tools` is `<tool path>\t<sha256>` for
 # every tool named anywhere. F's tool keys are the tools its keyed files name, so a changed binary reruns
 # only the fixtures whose files name it. Keyed on the binary's CONTENT: nothing is EXECUTED to read a
 # version, because the derived name set includes commands such as `halt`, `yes` and `passwd`.
+#
+# THE TOOL DIRS ARE FIXED, NEVER THE INHERITED $PATH, so the key does not depend on who invoked the hook.
+# `git push` prepends git's exec-path to a hook's PATH; `self-update-push.sh` (`exec "$HOOK"`), a shell
+# and a fixture harness do not. Resolved on $PATH, `git` named a different binary per invoker, each
+# invocation's records read the other's tool rows as changed, and a self-update push followed by a
+# reconcile push reran nearly the whole suite on an unchanged tree. The list is git's REAL exec-path
+# first, then READSET_TOOL_DIRS. The exec-path is read once per decision from /usr/bin/git with
+# DEVELOPER_DIR and GIT_EXEC_PATH removed, so it names the binary behind the xcrun shim whatever the
+# environment says -- the binary a fixture's `git` runs under `git push`, and the one the shim forwards
+# to under any other invoker. The order of the dirs puts Homebrew ahead of the system, as a login PATH
+# does, so `jq`, `python3` and `timeout` key the copies fixtures execute.
+# A COMMAND FOUND ONLY OUTSIDE THESE DIRS -- node, npm or claude under ~/.nvm or ~/.local/bin -- IS NO
+# LONGER KEYED, and that is deliberate: any key that depends on PATH reintroduces the defect. Both
+# values are ASSIGNED here, so nothing inherited from the environment can set them; a fixture overrides
+# them after sourcing this block.
+READSET_TOOL_DIRS="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+READSET_TOOL_XP=""
+readset_git_exec_path() {
+  local g
+  for g in /usr/bin/git /usr/local/bin/git /opt/homebrew/bin/git; do
+    [ -x "$g" ] || continue
+    /usr/bin/env -u DEVELOPER_DIR -u GIT_EXEC_PATH "$g" --exec-path 2>/dev/null
+    return 0
+  done
+  return 0
+}
 readset_tools() { # <out>
-  local out="$1"
-  ( IFS=:; for p in $PATH; do
+  local out="$1" xp="$READSET_TOOL_XP"
+  [ -n "$xp" ] || xp="$(readset_git_exec_path)"
+  ( IFS=:; for p in $xp:$READSET_TOOL_DIRS; do
       [ -d "$p" ] && ls -1 "$p" 2>/dev/null | awk -v d="$p" '{ print d "\t" $0 }'
     done ) > "$out/.pathcmds"
   grep '\.sh$' "$out/.files" | tr '\n' '\000' | RT_CMDS="$out/.pathcmds" xargs -0 awk '
@@ -871,25 +1175,19 @@ readset_tools() { # <out>
     | awk '{ p = $0; sub(/^[0-9a-f]+  /, "", p); print p "\t" $1 }' > "$out/.tools"
 }
 
-# `<dir>/\t#listing:<sha256>` for every directory a path list implies, derived from the list alone and
-# never from readdir. A listing is the directory's immediate entry names, C-sorted, one per line.
-readset_listings() { # <path list> <out file>
-  local w="$2.d"
-  mkdir -p "$w" || { : > "$2"; return 1; }
-  awk '{ p = $0; while ((i = match(p, /\/[^\/]*$/)) > 0) { d = substr(p, 1, i - 1); print d "\t" substr(p, i + 1); p = d } }' "$1" \
-    | LC_ALL=C sort -u | awk -F'\t' -v w="$w" '
-      $1 != d { if (f != "") close(f); d = $1; n++; f = w "/" n; print n "\t" d "/" > (w "/.idx") }
-      { print $2 > f }'
-  find "$w" -type f ! -name .idx -print0 | xargs -0 shasum -a 256 -- 2>/dev/null \
-    | awk -v idx="$w/.idx" 'BEGIN { while ((getline l < idx) > 0) { t = index(l, "\t"); d[substr(l, 1, t - 1)] = substr(l, t + 1) } }
-      { n = $0; sub(/^[0-9a-f]+  /, "", n); sub(/.*\//, "", n); if (n in d) print d[n] "\t#listing:" $1 }' > "$2"
-}
-
-# THE RECORD, `$KEYS_DIR/<fx>.key`: `#format k1`, `#state ok|stale|seeded`, `#tools per-fixture`
-# (a constant; the tools are rows), then one row per key, C-sorted: `<path>\t<sha256>` for a file,
-# `<path>\t-` for an absent name, `<dir>/\t#listing:<sha256>` for a directory listing, and
-# `<tool path>\t<sha256>` for a tool (an absolute path). A changed tool row reruns F as `tools
-# changed` and never stales it.
+# THE RECORD, `$KEYS_DIR/<fx>.key`: `#format k1`, `#state ok|stale|seeded`, `#tools canonical`
+# (the tool rows were resolved against the fixed tool dirs of readset_tools), then one row per key,
+# C-sorted: `<path>\t<sha256>` for a file, `<path>\t-` for an absent name, `<dir>/\t#listing:<sha256>`
+# for a directory listing, and `<tool path>\t<sha256>` for a tool (an absolute path). A changed tool
+# row reruns F as `tools changed` and never stales it.
+#
+# THE ONE-TIME TOOL MIGRATION. A record whose `#tools` line is not `canonical` (the hook before the
+# fixed tool dirs wrote `per-fixture`) holds tool rows keyed on whatever PATH its writer inherited, so
+# they cannot be compared. For such a record ONLY its tool rows are ignored -- every file, absent-name
+# and listing key is still compared -- and a record that matches on those SKIPS and is republished
+# through `.k.always` (c `m`) with its tools keyed under the fixed dirs and `#tools canonical`, so the
+# amnesty fires once per record. A migrating record that runs drops its old tool rows from the carry.
+# A migrating stale record is the stale route's (c `v`). The seed never migrates: it reads no record.
 #
 # DECIDE EVERY FIXTURE IN <list> FROM ITS KEY RECORD. Writes `<out>/.kdec`, one line per fixture:
 # `<fx>\trun\t<reason>\t<k|u|s>\t<new state>` or `<fx>\tskip\t\t\t<state>`, and the prospective record
@@ -929,11 +1227,7 @@ readset_keys() { # <list> <out>
   readset_rows "$out" rows | awk -F'\t' -v u="$out/.paths" 'BEGIN { while ((getline l < u) > 0) in_u[l] = 1 } ($2 in in_u)' > "$out/.krows"
   : > "$out/.krecs"
   if [ "$seed" = 0 ]; then
-    awk 'FNR == 1 { ok = ($0 == "#format k1"); f = FILENAME; sub(/.*\//, "", f); sub(/\.key$/, "", f); next }
-         !ok { next }
-         /^#state / { print f "\t#state\t" substr($0, 8); next }
-         /^#/ { next }
-         { print f "\t" $0 }' "$KEYS_DIR"/*.key > "$out/.krecs" 2>/dev/null
+    readset_key_records "$KEYS_DIR" > "$out/.krecs"
   fi
   while IFS= read -r d; do b="${d%/}"; printf '%s\n' "${b##*/}"; done < "$list" > "$out/.kl"
   : > "$out/.khdr"; : > "$out/.kout"
@@ -999,23 +1293,28 @@ readset_keys() { # <list> <out>
         else if (f in RST) { has = 1; st = RST[f]
           n = split(RK[f], a, "\n"); for (j = 2; j <= n; j++) R[a[j]] = RV[f SUBSEP a[j]] }
         first = ""; fch = 0; tch = 0
+        mig = (!seed && (f in RST) && RTL[f] != "canonical")
         if (has) {
           for (k in R) { if (k ~ /\/$/) rl = 1
             if (cur(k) == R[k]) continue
-            if (substr(k, 1, 1) == "/") { tch = 1; continue }
+            if (substr(k, 1, 1) == "/") { if (!mig) tch = 1; continue }
             if (first == "" || k < first) first = k; if (k ~ /\/$/) LM[k] = 1; else fch = 1 }
-          for (k in K) if (!(k in R)) { if (substr(k, 1, 1) == "/") tch = 1; else if (first == "" || k < first) first = k } }
+          for (k in K) if (!(k in R)) { if (substr(k, 1, 1) == "/") { if (!mig) tch = 1 } else if (first == "" || k < first) first = k } }
         run = 1; why = ""; c = ""
         if (!has) { why = "unrecorded"; c = "u" }
-        else if (st == "stale") { why = "stale"; c = "s" }
+        else if (st == "stale" && !(f in LOC)) { why = "stale"; c = "s" }
         else if (tch) { why = "tools changed"; c = "k" }
         else if (first != "") { why = um ? "unmapped: closure changed" : "changed " first; c = "k" }
         else run = 0
-        if (!run) { if (!seed) { print f "\tskip\t\t\t" st; continue }; ns = "seeded" }
+        # A STALE RECORD WITH A VALID ROW SET AND NO MOVED KEY SKIPS, and its `ok` record is published
+        # on this push through `.k.always`, as a seeded one is: c `v` marks it.
+        if (!run) { if (!seed && st != "stale" && !mig) { print f "\tskip\t\t\t" st; continue }
+                    ns = seed ? "seeded" : ((st == "stale") ? "ok" : st); if (!seed) c = (st == "stale") ? "v" : "m"
+                    if (c == "m" && rl) for (k in R) if (substr(k, 1, 1) != "/") X[k] = 1 }
         else if (!has || um) ns = "ok"
         else if (st == "stale") ns = ((f in LOC) ? "ok" : "stale")
         else if (fch) ns = "stale"
-        else { ns = "ok"; if (rl) for (k in R) X[k] = 1
+        else { ns = "ok"; if (rl) for (k in R) if (!mig || substr(k, 1, 1) != "/") X[k] = 1
                for (k in LM) if (!grow(k)) ns = "stale" }
         for (k in K) X[k] = 1
         print f "\t" ns > ENVIRON["KH"]
@@ -1024,7 +1323,7 @@ readset_keys() { # <list> <out>
     }' > "$out/.kdec"
   LC_ALL=C sort -t "$tab" -k1,1 -k2 "$out/.kout" | awk -F'\t' -v kd="$out/.k" -v hdr="$out/.khdr" '
     BEGIN { while ((getline l < hdr) > 0) { t = index(l, "\t"); st[substr(l, 1, t - 1)] = substr(l, t + 1) } }
-    $1 != f { if (f != "") close(o); f = $1; o = kd "/" f; print "#format k1" > o; print "#state " st[f] > o; print "#tools per-fixture" > o }
+    $1 != f { if (f != "") close(o); f = $1; o = kd "/" f; print "#format k1" > o; print "#state " st[f] > o; print "#tools canonical" > o }
     { print substr($0, length(f) + 2) > o }'
 }
 
@@ -1095,7 +1394,7 @@ apply_readset_skip() {
   if ! readset_keys "$list" "$out" || [ "$(grep -c . "$out/.kdec" 2>/dev/null)" != "$n_all" ]; then
     printf '   ..    could not build the fixture keys -- running all %s\n' "$n_all"; return 0
   fi
-  awk -F'\t' '$2 == "skip" && $5 == "seeded" { print $1 }' "$out/.kdec" > "$out/.k.always"
+  awk -F'\t' '$2 == "skip" && ($5 == "seeded" || $4 == "v" || $4 == "m") { print $1 }' "$out/.kdec" > "$out/.k.always"
 
   if [ "${AI_DLC_FIXTURE_NO_SKIP:-}" = "1" ]; then
     : > "$out/.k.always"
@@ -1111,6 +1410,19 @@ apply_readset_skip() {
     "$(awk -F'\t' '$4 == "u"' "$out/.kdec" | grep -c .)" "$(awk -F'\t' '$4 == "s"' "$out/.kdec" | grep -c .)" \
     "$(( n_all - n_sel ))"
   awk -F'\t' '$2 == "run" && n < 10 { n++; print "   ..      " $1 ": " $3 }' "$out/.kdec"
+  awk -F'\t' '$4 == "m" { n++ } END { if (n) print "   ..    read-set tool keys: " n " record(s) written before the fixed tool dirs skipped on their tree keys alone and are republished with canonical tool keys (once per record)" }' "$out/.kdec"
+  # WHAT WOULD CLEAR EACH STALE FIXTURE: a committed trace whose `# digest` line matches this tree, or a
+  # valid local row. Every stale fixture is named under the reason its committed rows did not clear it.
+  RS_D="$out/.cdig" awk -F'\t' 'FILENAME == ENVIRON["RS_D"] { d[$1] = $2; next }
+    $2 == "run" && $4 == "s" { r = ($1 in d) ? d[$1] : "unmapped"; l[r] = l[r] " " $1; n[r]++ }
+    END { t["nodigest"] = "committed rows carry no # digest line (written before digests)"
+          t["differs"] = "committed # digest no longer matches this tree"
+          t["unmapped"] = "no committed rows"
+          for (r in l) print "   ..    stale, " n[r] " fixture(s): " t[r] " -- cleared by a committed trace whose # digest matches this tree, or a valid local row:" l[r] }' \
+    "$out/.cdig" "$out/.kdec" | LC_ALL=C sort
+  if grep -q '	run	stale	s	' "$out/.kdec" && [ -n "$(readset_deriver_path)" ]; then
+    printf '   ..    to trace every stale, changed and unmapped fixture, with no sudo: bash %s --reconcile\n' "$(readset_deriver_path)"
+  fi
 
   # A FIXTURE RECORDED STALE IS TRACED after a green run, beside the unmapped ones.
   dv="$(readset_deriver_path)"
@@ -1166,6 +1478,7 @@ run_fixtures() {
   # skip applied after the count would make every skipped fixture read as a dropped worker.
   READSET_NO_CHANGE=0
   apply_readset_skip "$out/list" "$out"
+  readset_trace_report "$out"
 
   # A WHOLE-SUITE SKIP CANNOT BE SIGNALLED BY AN EMPTY LIST, and the guard four lines down is
   # why: an empty list is a hard FAIL here, deliberately, because "an empty suite passes every
@@ -1479,6 +1792,7 @@ fixture_suite_step() {
       printf '     last green   %s of %s fixtures at %s\n' "$cached_n" "$n_now" "${cached_when:-unknown}"
       bash scripts/suite-content-key.sh --summary 2>/dev/null | sed 's/^/     /'
       printf '     force a run with AI_DLC_FIXTURE_NO_SKIP=1\n'
+      readset_trace_report ""
       SUITE_SKIPPED=1
       key_log HIT "$key"
       return 0
@@ -1501,7 +1815,21 @@ fixture_suite_step() {
     printf '   (a read-set live trace from an earlier push is still running -- the suite pole will not be compared this run)\n'
   fi
 
+  # THE WIDTH SIDECAR (BL-465). validate-suite-pole.sh appends this run's pole to a per-width history
+  # only when `<durations>.jobs` equals the --jobs it was given, so a durations file this push did
+  # not publish -- or one published at another width -- is never recorded under this width. It is
+  # emptied before the pool and written after a GREEN pool that published a non-empty durations
+  # file, which is exactly when the durations file itself is fresh. Sited HERE and not beside the
+  # durations truncate/publish inside run_fixtures, because that block is joined to
+  # core/git-hooks/pre-push by I66 and a consumer hook has no suite-pole step to read it.
+  # `-s` ALONE DECIDES: run_fixtures truncates the durations file at pool entry, before its
+  # read-set no-change return, and publishes it only from a green pool, so a non-empty file here
+  # is this push's green measurement and an empty one is every other outcome.
+  : > "$LASTRUN_RECORD.jobs" 2>/dev/null
   run_fixtures || return 1
+  if [ -s "$LASTRUN_RECORD" ]; then
+    printf '%s\n' "$FIXTURE_JOBS" > "$LASTRUN_RECORD.jobs" 2>/dev/null
+  fi
 
   # Recorded only after a full green run. A partial or red suite leaves the prior
   # record in place rather than blessing the tree that just failed.
@@ -1562,8 +1890,11 @@ step "fixture suite (${FIXTURE_JOBS}-way)" fixture_suite_step
 #     the time you wait tracks the single longest fixture DIRECTORY, not the sum over the
 #     pool. That figure grew 493 -> 573 across two releases with no mechanism able to see it,
 #     and three separate places went on citing a pole that had been displaced four releases
-#     earlier. The guard reads the record the block above publishes and compares it against a
-#     tracked baseline, failing only on growth beyond a calibrated band.
+#     earlier. The guard reads the record the block above publishes and compares it against the
+#     pole HISTORY recorded at this pool width (a tracked baseline row seeds a width with no
+#     history yet; a width with neither calibrates), failing only on growth beyond a band. A
+#     green pool RECORDS its pole there, keyed by the width sidecar fixture_suite_step writes,
+#     so every width the operator runs at is guarded without hand calibration (BL-465).
 #
 #     IT STANDS DOWN ON THE CONTENT-KEY SKIP RATHER THAN TRUSTING THE FILE'S AGE. A skip never
 #     enters the pool, so it neither truncates LASTRUN_RECORD nor writes it -- the PRIOR run's
@@ -1600,9 +1931,21 @@ pole_guard_step() {
   # --record IS THE MERGED CUMULATIVE FILE, already folded with this run by the pool above, and
   # it is what the guard's coverage denominator is read from: the share of the suite's cost
   # this run timed, not a row count one skipped fixture defeats.
+  #
+  # A POLE FAIL FORGETS THE CONTENT KEY. fixture_suite_step records the key of a green suite BEFORE
+  # this step runs, so a push red on the pole alone would otherwise leave a key that lets the next
+  # push of the same tree skip the suite -- and the skip branch above hands the guard /dev/null, so
+  # the re-push passes having measured nothing. Removing the record makes the next push measure again.
+  local prc
   bash scripts/validate-suite-pole.sh --durations "$LASTRUN_RECORD" --record "$DURATIONS_RECORD" --jobs "$FIXTURE_JOBS"
+  prc=$?
+  if [ "$prc" -eq 1 ]; then
+    rm -f "$KEY_RECORD"
+    printf '   (content-key record removed: the next push re-runs the suite and re-measures the pole)\n'
+  fi
+  return "$prc"
 }
-step "suite pole (this run's loaded cost of the longest fixture against docs/suite-pole-baseline.tsv)" pole_guard_step
+step "suite pole (this run's loaded cost of the longest fixture against the pole history at this pool width)" pole_guard_step
 
 # 4. A shipped script with a syntax error is a gate that cannot run at all.
 #    validate-enforcement-map.sh maps this glob set through map_consumer() and

@@ -171,11 +171,12 @@ LOG_BIN=/usr/bin/log
 die() { echo "ERROR: $*" >&2; exit "$DIE_RC"; }
 say() { echo "[$(date +%H:%M:%S)] $*"; }
 
-USAGE="usage: bash $0 [--all | --list \"<fixtures>\"] [--tracer fs_usage|sandbox|both] [--local-map <file>]   (fs_usage and both need sudo)"
-MODE=""; LIST_ARG=""; TRACER="fs_usage"; LOCAL_MAP=""
+USAGE="usage: bash $0 [--all | --list \"<fixtures>\" | --reconcile] [--tracer fs_usage|sandbox|both] [--local-map <file>]   (fs_usage and both need sudo)"
+MODE=""; LIST_ARG=""; TRACER="fs_usage"; LOCAL_MAP=""; RECONCILE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --all)       MODE="--all"; shift ;;
+    --reconcile) RECONCILE=1; shift ;;
     --list)      MODE="--list"; LIST_ARG="${2:-}"; shift; [ $# -gt 0 ] && shift ;;
     --tracer)    TRACER="${2:-}"; shift; [ $# -gt 0 ] && shift ;;
     --tracer=*)  TRACER="${1#--tracer=}"; shift ;;
@@ -183,6 +184,13 @@ while [ $# -gt 0 ]; do
     *)           die "$USAGE" ;;
   esac
 done
+# `--reconcile` TRACES WHAT THE MAP OWES, AND ONLY UNDER THE SANDBOX TRACER: it is the unprivileged
+# answer to "which fixtures need a trace", so it never takes sudo. It derives its own list below, once
+# the fixture root is known, and then runs exactly as `--list "<that list>" --tracer sandbox`.
+if [ "$RECONCILE" = 1 ]; then
+  [ -z "$MODE" ] && [ -z "$LOCAL_MAP" ] || die "--reconcile derives its own list; it takes no --all, --list or --local-map. $USAGE"
+  TRACER=sandbox; DIE_RC=1
+fi
 : "${MODE:=--all}"
 case "$TRACER" in fs_usage|sandbox|both) ;; *) die "unknown --tracer '$TRACER'. $USAGE" ;; esac
 
@@ -240,6 +248,81 @@ N_ROOT="$(printf '%s\n' "$FIXTURE_ROOT" | grep -c .)"
 [ "$N_ROOT" -eq 1 ] || die "read $N_ROOT fixture root(s) from $RUNNER, need exactly 1 (got: $(printf '%s' "$FIXTURE_ROOT" | tr '\n' ' ')). Zero means its fixture glob has changed shape and this producer is now guessing; more than one means a basename key cannot name a directory."
 [ -d "$REPO_ROOT/$FIXTURE_ROOT" ] || die "$RUNNER drives '$FIXTURE_ROOT/' and no such directory exists under $REPO_ROOT."
 
+# THE RUNNER'S OWN UNIVERSE, SOURCED, NEVER RESTATED. The `# digest <fx> <sha>` line this script writes
+# for a traced fixture is recomputed by the runner over its own `.now` to decide whether a stale record
+# clears, so both must be ONE function over ONE universe filter: readset_digests and the filter it is fed
+# are read out of the runner's READSET_UNIVERSE span. A runner with no such span (an older hook) gets no
+# digest lines -- its fixtures still select, they only cannot clear a stale record -- and `--reconcile`,
+# which needs the runner's verdict on the tree, refuses.
+MAP_REL=".ai-dlc-fixture-readsets.tsv"
+UNIVERSE_SPAN="$(mktemp "${TMPDIR:-/tmp}/readset-universe.XXXXXX")" || die "mktemp failed"
+sed -n '/^# READSET_UNIVERSE_BEGIN$/,/^# READSET_UNIVERSE_END$/p' "$RUNNER" > "$UNIVERSE_SPAN"
+HAVE_UNIVERSE=0
+if grep -q '^readset_digests() ' "$UNIVERSE_SPAN" && grep -q '^readset_committed_digests() ' "$UNIVERSE_SPAN"; then
+  # shellcheck disable=SC1090
+  . "$UNIVERSE_SPAN" && HAVE_UNIVERSE=1
+fi
+rm -f "$UNIVERSE_SPAN"
+READSET_MAP="$MAP_REL"
+GITCOMMON="$(cd "$REPO_ROOT" && git rev-parse --git-common-dir 2>/dev/null)"
+case "$GITCOMMON" in ''|/*) ;; *) GITCOMMON="$REPO_ROOT/$GITCOMMON" ;; esac
+READSET_LOCAL="${GITCOMMON:-$REPO_ROOT/.git}/ai-dlc-fixture-readsets.local"
+
+# READSET_RECONCILE_BEGIN
+# `--reconcile`'s list: one `<fx>\t<reason>` line per fixture that needs a trace, first reason wins.
+#   unmapped  a fixture directory with a run.sh and no row in the committed map;
+#   stale     a key record under <keys dir> reading `#state stale`;
+#   changed   a committed `# digest` that no longer matches this tree, judged by the runner's own
+#             readset_committed_digests over the runner's own manifest (a fixture whose rows carry no
+#             digest cannot be judged this way and is not listed for it).
+# Run from the repo root, with the runner's span sourced. <keys dir> absent means no record yet, so
+# nothing is stale; a keys dir that exists and cannot be read REFUSES (exit 2), because the glob would
+# stay literal and the parse, whose stderr is silenced, would read it as "no stale record".
+#   $1 fixture root (repo-relative)   $2 keys dir   $3 scratch dir (must not exist)
+readset_reconcile_list() {
+  local fxr="$1" kd="$2" s="$3" d b nk
+  mkdir "$s" || return 2
+  if [ -e "$kd" ]; then
+    [ -d "$kd" ] && [ -r "$kd" ] && [ -x "$kd" ] || { echo "--reconcile: cannot read the key records under $kd" >&2; return 2; }
+    set -- "$kd"/*.key; [ -e "$1" ] || set --
+    nk=$#
+    readset_key_records "$kd" > "$s/krecs"
+    [ "$nk" -eq 0 ] || [ -s "$s/krecs" ] || { echo "--reconcile: $nk key record(s) under $kd and none parsed" >&2; return 2; }
+    awk -F'\t' '$2 == "#state" && $3 == "stale" { print $1 }' "$s/krecs" | LC_ALL=C sort -u > "$s/stale"
+  else
+    : > "$s/stale"
+  fi
+  { [ -s "$READSET_MAP" ] && grep -v '^#' "$READSET_MAP" | cut -f1; :; } | LC_ALL=C sort -u > "$s/mapped"
+  readset_manifest "$s"
+  [ -s "$s/.now" ] || { echo "--reconcile: could not hash the working tree, so a changed read set cannot be told from an unchanged one" >&2; return 2; }
+  readset_committed_digests "$s"
+  awk -F'\t' '$2 == "differs" { print $1 }' "$s/.cdig" > "$s/changed"
+  for d in "$fxr"/*/; do
+    [ -f "${d}run.sh" ] || continue
+    d="${d%/}"; b="${d##*/}"
+    if ! grep -qxF "$b" "$s/mapped"; then printf '%s\tunmapped\n' "$b"
+    elif grep -qxF "$b" "$s/stale"; then printf '%s\tstale\n' "$b"
+    elif grep -qxF "$b" "$s/changed"; then printf '%s\tchanged\n' "$b"
+    fi
+  done
+  return 0
+}
+# READSET_RECONCILE_END
+
+if [ "$RECONCILE" = 1 ]; then
+  [ "$HAVE_UNIVERSE" = 1 ] || die "--reconcile needs the READSET_UNIVERSE span of $RUNNER to judge a changed read set, and it has none -- update the hook first"
+  RC_S="$(mktemp -d "${TMPDIR:-/tmp}/readset-reconcile.XXXXXX")" || die "mktemp failed"
+  ( cd "$REPO_ROOT" && readset_reconcile_list "$FIXTURE_ROOT" "${GITCOMMON:-.git}/ai-dlc-fixture-keys" "$RC_S/l" ) > "$RC_S/list" \
+    || die "--reconcile could not derive its list (see above); nothing traced"
+  if [ ! -s "$RC_S/list" ]; then
+    echo "nothing to reconcile"
+    exit 0
+  fi
+  echo "--reconcile: $(grep -c . "$RC_S/list") fixture(s) to trace:"
+  sed 's/^/  /' "$RC_S/list"
+  MODE="--list"; LIST_ARG="$(cut -f1 "$RC_S/list" | tr '\n' ' ' | sed 's/ $//')"
+fi
+
 # READSET_MERGE_BEGIN
 # Merge a run's newly-derived entries into the existing map and print the result.
 #   $1 existing map (may be absent or empty)
@@ -274,8 +357,12 @@ readset_merge_map() {
   # Normalised here rather than at the call site because this block is what the fixture
   # extracts and drives: a fix at the caller would leave the tested function still broken.
   traced="$(printf '%s' "$traced" | tr '\n' ' ')"
+  # A `# digest <fx> <sha>` LINE IS CARRIED WITH ITS FIXTURE'S ROWS: kept for a fixture this run did
+  # not trace, dropped for one it did (the caller adds the new one, or none for an omitted fixture).
+  # Every other `#` line is the header, which the writer regenerates.
   if [ -s "$old" ]; then
     awk -v traced=" $traced " '
+      $1 == "#" && $2 == "digest" && NF == 4 { if (index(traced, " " $3 " ") == 0) print; next }
       /^#/ { next }
       {
         fx = $0
@@ -655,11 +742,22 @@ readset_verdict_sig() {
 # readset_hash_rows <tree> <fx> <set file> -- prints `<fx>\t<path>\t<sha256>` for every path of the
 # set, `-` for one that is not a regular file in <tree> (a directory, a negative lookup). The hash is
 # the trace COPY's: the hook honours the row set only while every one of these still matches.
+# THE LOOP ENDS 0 WHATEVER ITS LAST PATH IS. Spelled `[ -f "$p" ] && printf`, a set whose LAST path
+# was a directory or an absent name ended the loop on the failed test, and under `pipefail` that
+# failed the whole hash: a clean trace was then dropped as `could not hash <fx>'s set in the trace
+# copy -- not recorded`. FAIL-CLOSED BY COUNT, not by the pipeline's status alone: the number of
+# hashed lines must equal the number of regular files fed to shasum, so an unreadable file (shasum
+# prints nothing for it) still refuses when the caller runs without `pipefail`.
 readset_hash_rows() {
-  local tree="$1" fx="$2" set="$3" p
+  local tree="$1" fx="$2" set="$3" p nsha
   ( cd "$tree" || exit 1
-    while IFS= read -r p; do [ -f "$p" ] && printf '%s\0' "$p"; done < "$set" | xargs -0 -n 200 shasum -a 256 -- 2>/dev/null
+    n=0
+    while IFS= read -r p; do if [ -f "$p" ]; then printf '%s\0' "$p"; n=$((n + 1)); fi; done < "$set" > "$set.reg" || exit 1
+    printf '%s\n' "$n" > "$set.nreg" || exit 1
+    xargs -0 -n 200 shasum -a 256 -- < "$set.reg" 2>/dev/null
   ) | awk '{ s = $1; p = $0; sub(/^[0-9a-f]+  /, "", p); print p "\t" s }' > "$set.sha" || return 1
+  nsha="$(grep -c . "$set.sha")" || nsha=0
+  [ "$(cat "$set.nreg" 2>/dev/null)" = "$nsha" ] || return 1
   awk -F'\t' -v fx="$fx" -v sha="$set.sha" '
     BEGIN { while ((getline l < sha) > 0) { i = index(l, "\t"); h[substr(l, 1, i - 1)] = substr(l, i + 1) } }
     $0 != "" { print fx "\t" $0 "\t" (($0 in h) ? h[$0] : "-") }' "$set"
@@ -750,6 +848,12 @@ fi
 # `(allow default)` reports every operation the fixture makes anywhere on the machine; measured,
 # that dropped 64,673 messages on one heavy fixture and lost paths. Reporting only file and exec
 # operations under the tree keeps the stream small enough to deliver.
+# EVERY EMITTER ENDS WITH A ROOT-LITERAL ALLOW CLAUSE CARRYING NO `(with report)`: it removes the
+# reports of `file-read-metadata` and `file-test-existence` on the tree ROOT ALONE -- every `bash`
+# `cd` and `[ -d ]` a fixture makes there, 4155 of 4399 report lines on one fixture, which drove its
+# stream into drops (BL-470). Those lines never entered the map (sandbox_paths keeps only paths under
+# `$TREE/`). `file-read-data` on the root (a directory listing, which IS a read) and every operation
+# below the root are still reported; core/fixtures/readset-sandbox-root-clause renders all three emitters and measures both.
 # AI_DLC_READSET_SANDBOX_PROFILE names a replacement profile file, `@TREE@` substituted -- it
 # exists so core/fixtures/readset-skip can force event loss with an unscoped profile and prove
 # the refusal below fires. It is not a tuning knob.
@@ -799,14 +903,16 @@ if [ "$TRACER" = sandbox ] || [ "$TRACER" = both ]; then
         while ((i = index($0, "@MARK@")) > 0) $0 = substr($0, 1, i - 1) m substr($0, i + 6)
         print }' \
       "$AI_DLC_READSET_SANDBOX_PROFILE" > "$PROFILE" || die "cannot write $PROFILE"
+    printf '(allow file-read-metadata file-test-existence (literal "%s"))\n' "$TREE" >> "$PROFILE" || die "cannot write $PROFILE"
   elif [ -n "$LOCAL_MAP" ]; then
     { printf '(version 3)\n(allow default)\n(allow file* process-exec* (subpath "%s") (subpath "%s") (with report) (with message (string-append "FXTAG=" (param "FXTAG") ";")))\n' "$TREE" "$MARKDIR"
       printf '(allow process-exec*'
       readset_trip_set | LC_ALL=C sort -u | awk 'NF { printf " (literal \"%s\")", $0 }'
       printf ' (with report) (with message (string-append "FXTAG=" (param "FXTAG") ";TRIP")))\n'
+      printf '(allow file-read-metadata file-test-existence (literal "%s"))\n' "$TREE"
     } > "$PROFILE" || die "cannot write $PROFILE"
   else
-    printf '(version 3)\n(allow default)\n(allow file* process-exec* (subpath "%s") (subpath "%s") (with report))\n' "$TREE" "$MARKDIR" > "$PROFILE" \
+    printf '(version 3)\n(allow default)\n(allow file* process-exec* (subpath "%s") (subpath "%s") (with report))\n(allow file-read-metadata file-test-existence (literal "%s"))\n' "$TREE" "$MARKDIR" "$TREE" > "$PROFILE" \
       || die "cannot write $PROFILE"
   fi
   sandboxed true 2>"$WORK/sandbox-probe.err" </dev/null \
@@ -946,6 +1052,7 @@ readset_both_verdict() {
 
 OMITTED=""; MAPPED=0; TOTAL_PATHS=0; DONE=""
 : > "$WORK/map"
+: > "$WORK/digest.rows"
 : > "$WORK/both.results"
 : > "$WORK/both.missed"
 
@@ -1080,6 +1187,14 @@ fi
 # guard below does not die on it -- its rows survive every `--all` run until removed by hand.
 MERGED="$WORK/merged"
 readset_merge_map "$MAP" "$WORK/map" "$LIST" | LC_ALL=C sort -u > "$MERGED"
+# THE DIGEST LINES CARRIED OVER ARE SPLIT OFF HERE, before anything counts fixtures: a `# digest` line
+# has no tab, so `cut -f1` would count it as a fixture of its own.
+# grep exits 1 on no match, which leaves the redirect's empty file -- correct; 2 is a failed read, which dies.
+SPLIT_RC=0; grep '^# digest ' "$MERGED" > "$WORK/digest.carried" || SPLIT_RC=$?
+[ "$SPLIT_RC" -le 1 ] || die "could not read the digest lines out of $MERGED"
+SPLIT_RC=0; grep -v '^#' "$MERGED" > "$MERGED.rows" || SPLIT_RC=$?
+[ "$SPLIT_RC" -le 1 ] || die "could not read the rows out of $MERGED"
+mv "$MERGED.rows" "$MERGED" || die "could not split the digest lines out of $MERGED"
 if [ "$MODE" = --list ]; then
   N_MERGED_FIX="$(cut -f1 "$MERGED" | LC_ALL=C sort -u | grep -c .)" || N_MERGED_FIX=0
   [ "$N_MERGED_FIX" -gt 0 ] || { echo "  FAIL  zero fixtures in the merged map -- an empty map would skip the whole suite"; FAIL=1; }
@@ -1110,6 +1225,33 @@ M_ENT="$(wc -l < "$MERGED" | tr -d ' ')"
 M_PATH="$(cut -f2 "$MERGED" | sort -u | wc -l | tr -d ' ')"
 [ "$M_ENT" -gt 0 ] || die "the merged map is empty -- refusing to write it"
 
+# THE DIGESTS ARE ATTACHED ONLY AT THE FINAL WRITE (RS_FINAL=1), over this run's accepted fixtures, from
+# the shas their paths had IN THE TRACE COPY -- the tree they were traced on, never the tree as it stands
+# when the map is written, so an edit made during the run can only make a digest fail to match. The keep
+# list is the runner's own manifest universe over the MERGED rows, which is the universe the runner will
+# hash once this map is committed. A per-fixture write carries old digests for untraced fixtures and
+# drops a traced fixture's old one, so an interrupted run leaves fixtures that select but cannot clear.
+: > "$WORK/digest.new"
+if [ "${RS_FINAL:-0}" = 1 ] && [ -s "$WORK/digest.rows" ]; then
+  if [ "$HAVE_UNIVERSE" = 1 ]; then
+    mkdir -p "$WORK/dgm" || die "cannot create $WORK/dgm"
+    ( cd "$REPO_ROOT" && READSET_MAP="$MERGED" READSET_LOCAL=/dev/null readset_manifest "$WORK/dgm" )
+    # A DIRECTORY'S LISTING IS TAKEN FROM THE TRACE COPY, the tree the row shas were taken on, so an edit made
+    # to the checkout during the run can only make a digest fail to match.
+    mkdir -p "$WORK/dgt" || die "cannot create $WORK/dgt"
+    ( cd "$TREE" && READSET_MAP="$MERGED" READSET_LOCAL=/dev/null readset_manifest "$WORK/dgt" )
+    if [ -s "$WORK/dgm/.paths" ] && [ -s "$WORK/dgt/.now" ] \
+       && ( cd "$REPO_ROOT" && readset_dir_values "$WORK/digest.rows" "$WORK/dgt/.now" "$WORK/dgm/.paths" "$WORK/dgm/rows2" \
+            && readset_digests "$WORK/dgm/rows2" "$WORK/dgm/rows2.keep" "$MAP_REL" "$WORK/dg" ) > "$WORK/digest.out"; then
+      awk -F'\t' 'NF == 2 { print "# digest " $1 " " $2 }' "$WORK/digest.out" > "$WORK/digest.new"
+    else
+      say "note: could not compute the runner's universe or the digests -- no # digest line written; the traced fixtures select but cannot clear a stale key record"
+    fi
+  else
+    say "note: $RUNNER carries no READSET_UNIVERSE span -- no # digest line written; the traced fixtures select but cannot clear a stale key record"
+  fi
+fi
+
 MAP_TMP="$MAP.tmp.$$"
 if [ -e "$MAP" ]; then cp -p "$MAP" "$MAP_TMP" || die "could not stage $MAP_TMP -- $MAP is unchanged"; fi
 {
@@ -1125,9 +1267,14 @@ if [ -e "$MAP" ]; then cp -p "$MAP" "$MAP_TMP" || die "could not stage $MAP_TMP 
   echo "# every other fixture's entries alone, so refreshing one fixture costs its own runtime"
   echo "# rather than a full re-derivation."
   echo "#"
+  echo "# Each '# digest <fixture> <sha256>' line, after the rows, is the sha256 of that fixture's sorted"
+  echo "# path<TAB>sha lines in the runner's universe as traced; the runner clears a stale key record when"
+  echo "# it recomputes the same value over the tree it is pushing."
+  echo "#"
   echo "# fixtures mapped: $M_FIX    entries: $M_ENT"
   [ -n "$OMITTED" ] && echo "# OMITTED by the last run (always run): $OMITTED"
   cat "$MERGED"
+  LC_ALL=C sort -u "$WORK/digest.carried" "$WORK/digest.new"
 } > "$MAP_TMP" || { rm -f "$MAP_TMP"; die "could not write $MAP_TMP -- $MAP is unchanged"; }
 mv -f "$MAP_TMP" "$MAP" || { rm -f "$MAP_TMP"; die "could not move $MAP_TMP over $MAP -- $MAP is unchanged"; }
 }
@@ -1232,8 +1379,12 @@ for fx in $LIST; do
     # `$!` names the LAST element of the pipeline -- grep, not fs_usage. Killing only that
     # orphans the tracer, and orphans accumulate across a hundred fixtures until every later
     # trace drops events. That failure looks like a small read-set, not like a fault.
+    # `-P $$` NAMES ONLY THIS RUN'S TRACER: the pipeline's left element is forked straight from this
+    # top-level shell. Matching on the name alone killed every other run's tracer on the box, and a
+    # killed tracer reads as a small read-set (BL-466). A pipeline moved inside `( ... ) &` would
+    # parent its tracer to that subshell and escape `-P $$`.
     kill "$fs_pid" 2>/dev/null; wait "$fs_pid" 2>/dev/null
-    pkill -x fs_usage 2>/dev/null; sleep 0.5
+    pkill -P $$ -x fs_usage 2>/dev/null; sleep 0.5
   else
     # THE END SENTINEL IS THE FLUSH CONTROL. The stream delivers asynchronously, so the fixture
     # exiting says nothing about whether its last reports have arrived. Its own tail is read
@@ -1250,7 +1401,7 @@ for fx in $LIST; do
       # Same reaping as the fs_usage mode: `$!` is grep, so the tracer itself is named too.
       sleep 1
       kill "$fsu_pid" 2>/dev/null; wait "$fsu_pid" 2>/dev/null
-      pkill -x fs_usage 2>/dev/null; sleep 0.5
+      pkill -P $$ -x fs_usage 2>/dev/null; sleep 0.5
     fi
   fi
 
@@ -1402,6 +1553,13 @@ for fx in $LIST; do
     if [ -n "$LOCAL_MAP" ]; then
       readset_hash_rows "$TREE" "$fx" "$WORK/$fx.set" >> "$WORK/local.ok" \
         || { echo "  could not hash $fx's set in the trace copy -- not recorded" >&2; }
+    elif [ "$TRACER" != both ]; then
+      # The digest's input, hashed in the trace copy now; the final write turns it into a `# digest` line.
+      if readset_hash_rows "$TREE" "$fx" "$WORK/$fx.set" > "$WORK/$fx.dig"; then
+        cat "$WORK/$fx.dig" >> "$WORK/digest.rows"
+      else
+        echo "  could not hash $fx's set in the trace copy -- no # digest line for it" >&2
+      fi
     fi
     if [ -z "$LOCAL_MAP" ] && [ "$TRACER" != both ]; then
       ( LIST="$DONE"; readset_write_map ) > "$WORK/$fx.write" 2>&1 \
@@ -1437,7 +1595,9 @@ if [ "$TRACER" = both ]; then
 fi
 
 # THE FINAL WRITE: the same function every accepted fixture called above, over the whole LIST and
-# NOT in a subshell, so its `die` ends the run exactly as the end-only write did.
+# NOT in a subshell, so its `die` ends the run exactly as the end-only write did. RS_FINAL attaches the
+# `# digest` lines, which only this write computes.
+RS_FINAL=1
 readset_write_map
 
 say "wrote $MAP -- $M_FIX fixtures, $M_ENT entries, $M_PATH distinct paths (this run traced $MAPPED)"

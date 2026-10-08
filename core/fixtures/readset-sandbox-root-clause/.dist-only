@@ -1,0 +1,7 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+It is a MUTATION BATTERY behind core/scripts/derive-fixture-readsets.sh: every arm renders a sandbox
+profile from the deriver's own emitter text, and four of its renderings come from edited copies of
+that core source. It also needs `log stream` outside any sandbox, which no traced run and no consumer
+gate guarantees, so on a consumer it could only report SKIP. It was split out of
+readset-stage1-verdict (itself dist-only) so that fixture stays traceable.

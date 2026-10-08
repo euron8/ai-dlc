@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # validate-suite-pole.sh -- a RATCHET on the fixture suite's POLE: the loaded cost of the
-# single longest fixture directory, read from the last full green run and compared against a
-# tracked baseline. Distribution-only; a consumer has no docs/ and no baseline to read.
+# single longest fixture directory, read from the last full green run and compared against
+# the RECORDED HISTORY of poles at the pool width that ran, seeded where a width has no history
+# yet by a tracked baseline row. Distribution-only; a consumer has no docs/ and no baseline.
 #
 # WHAT IT IS. The pre-push suite is pole-bound -- its wall clock tracks the longest DIRECTORY,
 # not the sum over the pool -- and until this existed nothing watched that number. It grew
@@ -23,9 +24,65 @@
 # another loaded cost taken the same way. A partial dispatch (the read-set skip narrows the
 # suite in place) leaves the pole scheduled beside thirty units instead of two hundred, which
 # is a near-solo figure and a guaranteed false green -- or, compared the other direction, a
-# false red. A different pool width is a different machine for this purpose. Every such state
-# is a SKIP with its reason on exit 0, never a FAIL: a false red here trains the operator to
-# `--no-verify`, which is strictly worse than no guard at all.
+# false red. Every such state is a SKIP with its reason on exit 0, never a FAIL: a false red
+# here trains the operator to `--no-verify`, which is strictly worse than no guard at all.
+#
+# A DIFFERENT POOL WIDTH IS A DIFFERENT MACHINE, AND EVERY WIDTH IS GUARDED BY ITS OWN HISTORY.
+# A loaded figure is only comparable to one taken at the same width, and the first cut compared
+# only at widths someone had hand-calibrated a tracked row for -- every other width printed a
+# SKIP, which reads exactly like a pass (BL-465). Now every gated green run RECORDS its pole in a
+# history file keyed by width, and the comparison at width W reads W's own rows:
+#   - W has K=3 or more usable history rows: compare against B(W), the MAX OF EVERY usable row at
+#     W since its rows were last dropped, under the file-level `# history-band:` of the tracked
+#     baseline. History is the source at EVERY width once it exists, 12 and 16 included.
+#   - fewer than K rows and a tracked row at W: CALIBRATING against the tracked SEED -- print the
+#     comparison, record, exit 0. A seed never FAILs: the hand-calibrated rows are what BL-465
+#     replaces, and a seed that could block would stop the history that replaces it from forming.
+#   - fewer than K rows and no tracked row: CALIBRATING (n/3) -- record, print the comparison
+#     against the max so far, exit 0. Nothing is enforced until K rows exist.
+#
+# B IS A MAX OVER ALL ROWS, NOT OVER A RECENT WINDOW, and the window is a measured defect. With
+# admission at or below B, a window of the K most recent rows ratchets ONE WAY: three quiet runs
+# are admitted, push the loud ones out of the window, and B falls to the quiet figure for good.
+# Measured: calibrated at 500/520/510, then three runs at 300, and every ordinary loaded figure
+# from 410 to 500 failed the push. Over all rows, admitted rows cannot lower B either -- B moves
+# only through the reviewed drop command, exactly as a tracked row only moves by a reviewed edit.
+# The output names which source was used. History rows are `<jobs>\t<pole>\t<secs>\t<fixture-
+# count>\t<epoch>`, appended by ONE `printf ... >> "$HIST"` per row: no temp file, no rename, so
+# two pushes recording at once interleave whole lines rather than one discarding the other.
+#
+# ADMISSION: B NEVER MOVES WITHOUT REVIEW. Once K rows exist a passing run is appended only if its
+# pole is at or below B; a run inside the band ABOVE B passes and is not recorded, so a slow creep
+# inside the band cannot ratchet the statistic up a band at a time. Before K rows exist B is
+# undefined and every calibrating run is recorded -- gating calibration on a B that does not exist
+# would freeze a width at its first row. Re-baselining is a reviewed act: drop the width's rows
+# (the FAIL text prints the exact command) and let it re-calibrate.
+#
+# ONE MEASUREMENT IS ONE ROW. A recorded run CONSUMES the width sidecar (empties it), so the same
+# published durations file re-read by a second invocation records nothing.
+#
+# A HISTORY ROW WHOSE POLE DIRECTORY IS GONE IS IGNORED, NOT REFUSED. A renamed or sharded fixture
+# leaves rows naming nothing; they do not count toward K and do not enter B, and a NOTE says how
+# many were ignored. If ignoring them drops a width below K, it is back in CALIBRATING, which is
+# deliberate: a statistic over a partition that no longer exists is not a measurement.
+#
+# THE RECORD POINT IS THE END OF THE PROGRAM, after the comparison, and ONLY on PASS or
+# CALIBRATING -- never on a SKIP (no measurement, low coverage, absent pole), a FAIL, a refusal,
+# or the hook's `--durations /dev/null` branches, which reach verdict 3 and exit. It also requires
+# the hook's WIDTH SIDECAR (`<durations>.jobs`, written beside the durations file only when a
+# green pool published it) to equal `--jobs`, so a stale durations file from a run at another
+# width is never recorded under this one. NOTE: "green" here is the POOL. A push whose fixture
+# suite was green and whose other gate failed still records, because the pole figure is a
+# property of the pool and the pool was complete.
+#
+# THE HISTORY FILE IS RESOLVED ON ITS OWN: `--history <file>`, else
+# `$(git rev-parse --path-format=absolute --git-common-dir)/ai-dlc-suite-pole.history` at the root.
+# In a root that is not a repository there is no default and nothing is created -- no mkdir, no
+# fallback under `$ROOT/.git` -- and the run says it did not record.
+#
+# THE HISTORY STATISTIC IS NOT IN THE SELF-PROBE, for the reason the width selector is not: a
+# probe seed on it converts a broken statistic into a refusal on every input, every fixture arm
+# dies at once and none owns it. The suite-pole-guard fixture's history arms own it instead.
 #
 # WHY THERE IS NO DOWNWARD FAIL. A pole below the baseline is the outcome this guard exists to
 # encourage, and failing on it would block the very push that improves the suite -- and would
@@ -45,11 +102,12 @@
 # directories on disk, that this run timed. The record is merged with this run before the
 # guard runs, so the observed pole sits on both sides of the ratio and cannot move it alone.
 #
-# Usage: validate-suite-pole.sh [--durations <file>] [--record <file>] [--baseline <file>] [--jobs <N>] [--root <dir>]
-#   --durations  this run's own costs (the hook's .last file)
+# Usage: validate-suite-pole.sh [--durations <file>] [--record <file>] [--baseline <file>] [--jobs <N>] [--root <dir>] [--history <file>]
+#   --durations  this run's own costs (the hook's .last file); its width sidecar is <file>.jobs
 #   --record     the cumulative merged record the coverage denominator is read from
+#   --history    the per-width pole history read and appended (default: in the git common dir)
 # Env:   AI_DLC_POLE_BASELINE=<file>   overrides the baseline path (same effect as --baseline)
-# Exit:  0 = pass, or SKIP on non-comparable input (both are "do not block this push")
+# Exit:  0 = pass, CALIBRATING, or SKIP on non-comparable input (all "do not block this push")
 #        1 = the pole has GROWN beyond the band
 #        2 = refusal: bad usage, unreadable/malformed baseline, or a self-probe miss
 set -uo pipefail
@@ -61,7 +119,7 @@ ME="validate-suite-pole"
 # against the root -- because the fixture and the filed receipt both hand this program files
 # under mktemp that exist nowhere near a repo.
 # ---------------------------------------------------------------------------------------
-OPT_DUR=""; OPT_REC=""; OPT_BASE=""; OPT_JOBS=""; OPT_ROOT=""; JOBS_GIVEN=0
+OPT_DUR=""; OPT_REC=""; OPT_BASE=""; OPT_JOBS=""; OPT_ROOT=""; JOBS_GIVEN=0; OPT_HIST=""; HIST_GIVEN=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --durations) [ "$#" -ge 2 ] || { printf '%s: REFUSE -- --durations needs a value\n' "$ME" >&2; exit 2; }; OPT_DUR="$2"; shift 2 ;;
@@ -69,7 +127,10 @@ while [ "$#" -gt 0 ]; do
     --baseline)  [ "$#" -ge 2 ] || { printf '%s: REFUSE -- --baseline needs a value\n'  "$ME" >&2; exit 2; }; OPT_BASE="$2"; shift 2 ;;
     --jobs)      [ "$#" -ge 2 ] || { printf '%s: REFUSE -- --jobs needs a value\n'      "$ME" >&2; exit 2; }; OPT_JOBS="$2"; JOBS_GIVEN=1; shift 2 ;;
     --root)      [ "$#" -ge 2 ] || { printf '%s: REFUSE -- --root needs a value\n'      "$ME" >&2; exit 2; }; OPT_ROOT="$2"; shift 2 ;;
-    -h|--help)   sed -n '2,54p' "$0"; exit 0 ;;
+    --history)   [ "$#" -ge 2 ] || { printf '%s: REFUSE -- --history needs a value\n'   "$ME" >&2; exit 2; }; OPT_HIST="$2"; HIST_GIVEN=1; shift 2 ;;
+    # The header ends at the `set -uo pipefail` line; the range is derived from it, so a header
+    # that grows cannot silently truncate the exit codes off the end of --help.
+    -h|--help)   awk 'NR > 1 && /^set -uo pipefail$/ { exit } NR > 1' "$0"; exit 0 ;;
     *) printf '%s: REFUSE -- unknown argument %s\n' "$ME" "$1" >&2; exit 2 ;;
   esac
 done
@@ -118,6 +179,12 @@ JOBS="$((10#$JOBS))"
 # 90 sits far above a near-solo dispatch (the 442s-loaded/112s-solo shard ran beside ~30 of
 # 200 units) and below the usual content-key dispatch (220 of 227 rows, 99.86% of the cost).
 COV_MIN=90
+
+# K, the number of usable history rows at a width before history replaces the tracked seed and B
+# is enforced. Three loaded readings is the same n the tracked rows were calibrated from; B is
+# then the MAX over every usable row, the same statistic they took (see the header for why not a
+# window of the most recent K).
+HIST_K=3
 
 # ---------------------------------------------------------------------------------------
 # THE COMPARATOR, factored out so the self-probe drives THE SAME CODE the corpus verdict does.
@@ -473,6 +540,26 @@ printf '   probe  comparator, parser and durations reader answered %s seeds in b
 # ---------------------------------------------------------------------------------------
 BL_ALL="$(parse_baseline "$BASE")" || exit 2
 
+# THE FILE-LEVEL `# history-band: <N>` DIRECTIVE. Invisible to parse_baseline -- its stripped key
+# is `history-band:...`, which no `band:*` prefix matches -- so it is read here in one pass and
+# held to the same 0 < band <= 1000 terms as a block's band. Given twice it is REFUSED. Absent is
+# legal until a comparison against history is actually reached, which refuses then by name.
+HBAND="$(awk '
+  { sub(/\r$/, "") }
+  /^#[ \t]*history-band:/ { v = $0; sub(/^#[ \t]*history-band:[ \t]*/, "", v); sub(/[ \t]+$/, "", v); n++; last = v }
+  END { if (n > 1) print "DUP"; else if (n == 1) print last }' "$BASE" 2>/dev/null)"
+case "$HBAND" in
+  '') : ;;
+  DUP) printf '%s: REFUSE -- "# history-band:" appears more than once in %s; it is one file-level figure.\n' "$ME" "$BASE" >&2; exit 2 ;;
+  *[!0-9]*) printf '%s: REFUSE -- baseline directive "# history-band:" has a non-integer value "%s" (%s)\n' "$ME" "$HBAND" "$BASE" >&2; exit 2 ;;
+  *)
+    if [ "${#HBAND}" -gt 4 ] || [ "$((10#$HBAND))" -le 0 ] || [ "$((10#$HBAND))" -gt 1000 ]; then
+      printf '%s: REFUSE -- "# history-band:" is %s%%; it must be above 0 and at most 1000 (%s).\n' "$ME" "$HBAND" "$BASE" >&2
+      exit 2
+    fi
+    HBAND="$((10#$HBAND))" ;;
+esac
+
 # EVERY ROW, NOT ONLY THE ONE THIS RUN SELECTS. A row for a width the hook is not running at
 # today is never compared, so a stale pole in it would otherwise rot until the width changed.
 STALE_SCAN="$BL_ALL"
@@ -488,6 +575,52 @@ $STALE_SCAN
 EOF
 
 # ---------------------------------------------------------------------------------------
+# THE RECORD POINT, defined here and called ONLY at the two verdicts that may record: a PASS and
+# a CALIBRATING run. Every SKIP, the FAIL and every refusal exit before reaching it.
+#
+# THE WIDTH SIDECAR MUST EQUAL --jobs. The hook writes `<durations>.jobs` beside the durations
+# file only when a green pool published it, and empties it where the durations file is emptied,
+# so a durations file left over from a run at another width -- or written by nothing this push --
+# cannot be recorded as this width's pole. A missing or mismatched sidecar records nothing and
+# says so, naming the path, so a hook that stopped writing it is visible on the first push.
+#
+# ONE `printf >>` PER ROW, never a temp file and a rename: two pushes recording at once then
+# interleave whole lines, where a rename would let one discard the other's row.
+# ---------------------------------------------------------------------------------------
+RECORDED=0
+record_pole() { # <admit: yes|no> <why-not>  -> sets RECORDED=1 when a row was appended
+  local side="$DUR.jobs" sj=""
+  if [ "$1" != yes ]; then
+    printf '   not recorded: %s\n' "$2"
+    return 0
+  fi
+  if [ -z "$HIST" ]; then
+    printf '   not recorded: %s is not a git repository and no --history was given, so there is no history file to append to\n' "$ROOT"
+    return 0
+  fi
+  [ -f "$side" ] && sj="$(sed -n 1p "$side" 2>/dev/null)"
+  case "$sj" in ''|*[!0-9]*) sj="" ;; *) sj="$((10#$sj))" ;; esac
+  if [ "$sj" != "$JOBS" ]; then
+    printf '   not recorded: the width sidecar %s reads "%s", not --jobs %s -- these durations were not published by a green pool at this width\n' "$side" "$sj" "$JOBS"
+    return 0
+  fi
+  if printf '%s\t%s\t%s\t%s\t%s\n' "$JOBS" "$OBS_POLE" "$OBS_SECS" "$fx_count" "$(date +%s)" >> "$HIST" 2>/dev/null; then
+    RECORDED=1
+    # CONSUME THE SIDECAR: one published measurement is one row, however often it is re-read.
+    : > "$side" 2>/dev/null
+    printf '   recorded: pool %s pole %s %ss in %s\n' "$JOBS" "$OBS_POLE" "$OBS_SECS" "$HIST"
+    # Said only when a row was really appended: a run whose sidecar did not match leaves the width
+    # at zero rows, and announcing a first pole there would name a record that does not exist.
+    if [ "$H_N" -eq 0 ]; then
+      printf '   RECORDED -- first pole at pool width %s: %ss (%s)\n' "$JOBS" "$OBS_SECS" "$OBS_POLE"
+    fi
+  else
+    printf '   not recorded: could not append to %s\n' "$HIST"
+  fi
+  return 0
+}
+
+# ---------------------------------------------------------------------------------------
 # VERDICT 3 -- NO FRESH MEASUREMENT. Exit 0. The hook writes the durations file only after a
 # fully green pool and truncates it at pool entry, so "absent or empty" is the normal state on
 # every push that did not run a complete suite. Failing here would fail those pushes.
@@ -498,22 +631,70 @@ if [ ! -s "$DUR" ]; then
 fi
 
 # ---------------------------------------------------------------------------------------
-# VERDICT 4 -- COMPARABILITY PRECONDITIONS. Each is a SKIP with its reason, never a FAIL.
-#
-# (a) POOL WIDTH. A different width is a different machine for a loaded figure, so the row
-#     compared against is the one taken at THIS width, and no row for it is a SKIP that names
-#     the widths that do have one.
+# THE HISTORY FILE, resolved only now: every branch above exits without reading or writing it,
+# including the hook's `--durations /dev/null` branches, so a push that measured nothing costs
+# no `git` call here. In a root that is not a repository there is NO default -- nothing is
+# created, no `.git` is invented under a probe root -- and the record point says so.
 # ---------------------------------------------------------------------------------------
-BL="$(select_width "$BL_ALL" "$JOBS")"
-if [ -z "$BL" ]; then
-  printf '   SKIP -- pool width %s has no baseline row (widths with a row: %s)\n' "$JOBS" \
-    "$(printf '%s\n' "$BL_ALL" | awk 'NF { printf "%s%s", s, $4; s = " " }')"
-  exit 0
+if [ "$HIST_GIVEN" -eq 1 ]; then
+  HIST="$OPT_HIST"
+  [ -n "$HIST" ] || { printf '%s: REFUSE -- --history needs a non-empty value\n' "$ME" >&2; exit 2; }
+else
+  _hgd="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || _hgd=""
+  if [ -n "$_hgd" ] && [ -d "$_hgd" ]; then HIST="$_hgd/ai-dlc-suite-pole.history"; else HIST=""; fi
 fi
-BL_POLE="$(printf '%s' "$BL" | cut -d' ' -f1)"
-BL_SECS="$(printf '%s' "$BL" | cut -d' ' -f2)"
-BL_BAND="$(printf '%s' "$BL" | cut -d' ' -f3)"
-BL_FIXT="$(printf '%s' "$BL" | cut -d' ' -f5)"
+
+# ---------------------------------------------------------------------------------------
+# VERDICT 4 -- COMPARABILITY PRECONDITIONS AND THE COMPARISON SOURCE.
+#
+# (a) POOL WIDTH AND SOURCE. A different width is a different machine for a loaded figure, so
+#     the figure compared against is one taken at THIS width: its own history once it holds K
+#     usable rows, else the tracked row as a seed, else nothing -- CALIBRATING, which records
+#     and passes. There is no SKIP for "no row at this width" any more (BL-465).
+#
+#     Usable rows are this width's rows whose pole directory still exists; the rest are counted
+#     and reported, never refused. B is the MAX of every usable row; with fewer than K rows it is
+#     only ever printed.
+# ---------------------------------------------------------------------------------------
+H_RAW=""
+if [ -n "$HIST" ] && [ -s "$HIST" ]; then
+  H_RAW="$(awk -F'\t' -v j="$JOBS" 'NF >= 5 && $1 == j && $3 ~ /^[0-9]+$/ && $3 > 0 { print $2, $3 + 0, $4 }' "$HIST" 2>/dev/null)"
+fi
+H_N=0; H_STALE=0; H_LIST=""
+while IFS=' ' read -r _hp _hs _hf; do
+  [ -n "$_hp" ] || continue
+  if [ ! -d "$ROOT/core/fixtures/$_hp" ]; then H_STALE=$((H_STALE + 1)); continue; fi
+  H_N=$((H_N + 1))
+  H_LIST="$H_LIST$_hp $_hs $_hf
+"
+done <<EOF
+$H_RAW
+EOF
+H_B=0; H_BPOLE=""; H_BFIXT=""
+while IFS=' ' read -r _hp _hs _hf; do
+  [ -n "$_hp" ] || continue
+  if [ "$_hs" -gt "$H_B" ]; then H_B="$_hs"; H_BPOLE="$_hp"; H_BFIXT="$_hf"; fi
+done <<EOF
+$H_LIST
+EOF
+
+BL="$(select_width "$BL_ALL" "$JOBS")"
+if [ "$H_N" -ge "$HIST_K" ]; then
+  SRC=history
+  if [ -z "$HBAND" ]; then
+    printf '%s: REFUSE -- pool width %s has %s usable history rows in %s, so history is the comparison source, and %s carries no "# history-band: <N>" directive to compare it under.\n' "$ME" "$JOBS" "$H_N" "$HIST" "$BASE" >&2
+    exit 2
+  fi
+  BL_POLE="$H_BPOLE"; BL_SECS="$H_B"; BL_BAND="$HBAND"; BL_FIXT="${H_BFIXT:-?}"
+elif [ -n "$BL" ]; then
+  SRC=seed
+  BL_POLE="$(printf '%s' "$BL" | cut -d' ' -f1)"
+  BL_SECS="$(printf '%s' "$BL" | cut -d' ' -f2)"
+  BL_BAND="$(printf '%s' "$BL" | cut -d' ' -f3)"
+  BL_FIXT="$(printf '%s' "$BL" | cut -d' ' -f5)"
+else
+  SRC=calibrating
+fi
 
 # (b) THE CUMULATIVE RECORD the coverage denominator is read from. Absent or empty is a SKIP
 #     by name: without it there is no statement of what the whole suite costs.
@@ -568,6 +749,20 @@ fi
 printf '   coverage %s (this run timed %ss of the record'"'"'s %ss over %s fixture directories; %s%% needed)\n' \
   "$COV_TXT" "$NUM" "$DEN" "$fx_count" "$COV_MIN"
 
+# ---------------------------------------------------------------------------------------
+# CALIBRATING -- this width has fewer than K usable history rows and no tracked seed. Nothing is
+# enforced: record, print the comparison against the max so far, pass.
+# ---------------------------------------------------------------------------------------
+if [ "$SRC" = calibrating ]; then
+  printf '   CALIBRATING (%s/%s) -- pool width %s has %s usable history row(s) and no tracked row; pole %s %ss' \
+    "$((H_N + 1))" "$HIST_K" "$JOBS" "$H_N" "$OBS_POLE" "$OBS_SECS"
+  if [ "$H_N" -gt 0 ]; then printf ' against the max so far %s %ss' "$H_BPOLE" "$H_B"; fi
+  printf '\n'
+  [ "$H_STALE" -gt 0 ] && printf '   NOTE  %s history row(s) at pool %s name a pole directory that no longer exists and were ignored\n' "$H_STALE" "$JOBS"
+  record_pole yes ""
+  exit 0
+fi
+
 # Whether the baseline's own pole was dispatched. Read only AFTER the ceiling below: growth
 # past it fails whichever unit grew, and absence alone is never a pass.
 BL_PRESENT="$(awk -v p="$BL_POLE" 'NF == 2 && $1 == p { print "y"; exit }' "$DUR" 2>/dev/null)"
@@ -583,14 +778,36 @@ BL_PRESENT="$(awk -v p="$BL_POLE" 'NF == 2 && $1 == p { print "y"; exit }' "$DUR
 # ---------------------------------------------------------------------------------------
 CEIL="$(pole_ceiling "$BL_SECS" "$BL_BAND")"
 
+if [ "$SRC" = history ]; then
+  printf '   source: history -- max of %s usable row(s) at pool %s in %s (band %s%% from # history-band:)\n' \
+    "$H_N" "$JOBS" "$HIST" "$BL_BAND"
+else
+  printf '   CALIBRATING (%s/%s) -- source: the tracked SEED row for pool %s in %s, compared and reported, never enforced; history at this width holds %s of the %s usable rows that replace it\n' \
+    "$((H_N + 1))" "$HIST_K" "$JOBS" "$BASE" "$H_N" "$HIST_K"
+fi
+[ "$H_STALE" -gt 0 ] && printf '   NOTE  %s history row(s) at pool %s name a pole directory that no longer exists and were ignored\n' "$H_STALE" "$JOBS"
+
 if ! pole_verdict "$OBS_SECS" "$BL_SECS" "$BL_BAND"; then
+  # A SEED NEVER BLOCKS. Above its ceiling the run is reported, recorded and passed: the operator
+  # ruled the hand-calibrated rows the defect, and a seed that could FAIL a push would also stop
+  # the history that replaces it from ever forming.
+  if [ "$SRC" = seed ]; then
+    printf '   ABOVE SEED  %s at %ss is above the tracked seed %s at %ss (band %s%%, ceiling %ss, pool %s) -- not enforced while pool %s calibrates\n' \
+      "$OBS_POLE" "$OBS_SECS" "$BL_POLE" "$BL_SECS" "$BL_BAND" "$CEIL" "$JOBS" "$JOBS"
+    record_pole yes ""
+    exit 0
+  fi
   printf '   FAIL  the suite pole has GROWN: %s at %ss against baseline %s at %ss (band %s%%, ceiling %ss, pool %s, baseline taken over %s fixtures)\n' \
     "$OBS_POLE" "$OBS_SECS" "$BL_POLE" "$BL_SECS" "$BL_BAND" "$CEIL" "$JOBS" "$BL_FIXT"
   printf '         The suite is POLE-BOUND -- its wall clock is this one number, not the sum over the pool.\n'
-  printf '         A LOADED BOX IS NOT A REASON TO RAISE THE ROW. Re-run the gate first; the band already\n'
+  printf '         A LOADED BOX IS NOT A REASON TO RAISE THE BASELINE. Re-run the gate first; the band already\n'
   printf '         covers the run-to-run spread this figure was calibrated against.\n'
-  printf '         A real change to %s or to what it exercises raises the row in %s IN THE SAME CHANGE,\n' "$OBS_POLE" "$BASE"
-  printf '         with the measurement and the load average beside it. The row moves DOWN freely.\n'
+  printf '         The baseline is the recorded history at pool %s in %s.\n' "$JOBS" "$HIST"
+  printf '         A real change to %s or to what it exercises re-calibrates this width by dropping its rows:\n' "$OBS_POLE"
+  # %q, never hand-written single quotes: a history path holding a quote would otherwise print a
+  # command that splits at it, in the one message an operator is told to paste.
+  printf "           awk -F'\\\\t' -v w=%s '\$1 != w' %q > %q && mv %q %q\n" "$JOBS" "$HIST" "$HIST.new" "$HIST.new" "$HIST"
+  printf '         after which the next %s green pushes at pool %s are CALIBRATING. Nothing is recorded by a failing run.\n' "$HIST_K" "$JOBS"
   exit 1
 fi
 
@@ -608,12 +825,29 @@ printf '   pole %s %ss against baseline %s %ss (band %s%%, ceiling %ss, pool %s)
 # The pole MOVING is not growth and must not be reported as it: the suite is as fast as its
 # longest unit whatever that unit is called. It is worth saying out loud because a baseline
 # pinned to a fixture that is no longer the pole is watching the wrong number while passing.
+#
+# UNDER A HISTORY SOURCE THE REMEDY IS THE DROP COMMAND, never "edit the row": the tracked row is not
+# read at a width with history, so an operator told to lower it edits a file that changes nothing.
+# The same %q-quoted command the FAIL text prints, so it is pasteable whatever the path holds.
+drop_hint() {
+  printf "         Re-baseline pool %s by dropping its rows: awk -F'\\\\t' -v w=%s '\$1 != w' %q > %q && mv %q %q\n" \
+    "$JOBS" "$JOBS" "$HIST" "$HIST.new" "$HIST.new" "$HIST"
+}
 if [ "$OBS_POLE" != "$BL_POLE" ]; then
-  printf '   NOTE  the pole has moved to %s; the baseline still names %s. Consider re-baselining -- a row pinned to a unit that is no longer longest passes while watching the wrong number.\n' "$OBS_POLE" "$BL_POLE"
+  printf '   NOTE  the pole has moved to %s; the baseline still names %s. Consider re-baselining -- a baseline pinned to a unit that is no longer longest passes while watching the wrong number.\n' "$OBS_POLE" "$BL_POLE"
+  [ "$SRC" = history ] && drop_hint
 fi
 # A baseline more than twice the observed figure is a ratchet that has stopped ratcheting: it
 # would take a 100%% regression to fire. NO DOWNWARD FAIL, deliberately -- see the header.
 if [ "$((OBS_SECS * 2))" -lt "$BL_SECS" ]; then
-  printf '   NOTE  the baseline is more than twice this run'"'"'s figure -- lower the row. A ceiling this far above the real cost would take a doubling to fire.\n'
+  printf '   NOTE  the baseline is more than twice this run'"'"'s figure -- lower the baseline. A ceiling this far above the real cost would take a doubling to fire.\n'
+  [ "$SRC" = history ] && drop_hint
+fi
+# ADMISSION. Under a tracked seed (fewer than K history rows) every pass records: B does not exist
+# yet. Under history a pass records only at or below B, so B never moves except by a reviewed drop.
+if [ "$SRC" = history ] && [ "$OBS_SECS" -gt "$BL_SECS" ]; then
+  record_pole no "${OBS_SECS}s is inside the band but above B=${BL_SECS}s; only a pole at or below B is admitted, so B moves only by a reviewed re-calibration"
+else
+  record_pole yes ""
 fi
 exit 0
