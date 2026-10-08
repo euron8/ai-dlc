@@ -950,15 +950,19 @@ M17_fence_closes_on_any_run() {
 }
 
 M18_settle_is_poll() {
-  # D1's defect restored: the window read from POLL, not SETTLE. With POLL=1 and SETTLE=4 a file
-  # changing every 2.5s settles under POLL and never under SETTLE.
+  # D1's defect restored: the window read from POLL, not SETTLE. With POLL=1 and SETTLE=10 a file
+  # changing every 4s settles under POLL and never under SETTLE. The settle test is STRICTLY greater
+  # over whole-second stamps, so a POLL window needs at least 2 quiet seconds between two polls:
+  # edits 2-2.5s apart left the mutant that by a hair, and it missed both unloaded and under a gate.
+  # 4s gaps give it 3 polls per gap; 10s keeps the subject 6s clear of any gap load can stretch; the
+  # edits outlast the 12s beat, so the subject never sees a quiet window at all.
   mutant settle-is-poll -e 's@-gt "\$SETTLE" \] && return 0@-gt "$POLL" ] \&\& return 0@' || return
   W="$(mk_work)"
   printf '%s\n%s\n' "$SKELETON" "$MARKER" > "$W/slow.md"
-  ( for i in 1 2 3; do sleep 2.5; printf '%s\n- slow edit %d\n%s\n' "$SKELETON" "$i" "$MARKER" > "$W/slow.md"; done ) &
+  ( for i in 1 2 3 4 5; do sleep 4; printf '%s\n- slow edit %d\n%s\n' "$SKELETON" "$i" "$MARKER" > "$W/slow.md"; done ) &
   sp_=$!
   for s in "$SUBJ" "$MUT"; do
-    ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=6 AI_DLC_WAIT_SETTLE_SECS=4 \
+    ( cd "$W" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_WAIT_BEAT_SECS=12 AI_DLC_WAIT_SETTLE_SECS=10 \
         AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS=3 \
         AI_DLC_STATE_DIR="_bmad-output/$(basename "$s")" AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
         bash "$s" --since "$(( $(date +%s) - 30 ))" --complete slow.md ) > "$BEATOUT.$(basename "$s")" 2>&1 &
@@ -967,7 +971,7 @@ M18_settle_is_poll() {
   OUT="$(cat "$BEATOUT.$(basename "$SUBJ")")"; o_s="$OUT"
   OUT="$(cat "$BEATOUT.$(basename "$MUT")")"
   if has "DELIVERED slow.md" && case "$o_s" in *"DELIVERED slow.md"*) false ;; *) true ;; esac; then
-    ok "MUTANT settle-is-poll: edits 2.5s apart deliver under a POLL window and not under SETTLE=4 — the window is SETTLE's"
+    ok "MUTANT settle-is-poll: edits 4s apart deliver under a POLL window and not under SETTLE=10 — the window is SETTLE's"
   else bad "MUTANT settle-is-poll: the settle window does not separate SETTLE from POLL (subject: $o_s) (mutant: $OUT)"; fi
   wait "$sp_" 2>/dev/null
   rm -rf "$W"

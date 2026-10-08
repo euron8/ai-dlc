@@ -3113,6 +3113,72 @@ printf '# fixture log, written after the commit\n' > "$PU_A/W/$PU_A_UNC.ctl"
 git -C "$PU_A/W" show "orig:$PU_A_UNC.ctl" > "$PU_A/W/$PU_A_UNC.ctl" 2>/dev/null
 ss_assert "pu-a1-restore-control" "bytes=$(wc -c < "$PU_A/W/$PU_A_UNC.ctl" | tr -d ' ')" "bytes=0" \
   "control: a bare redirect of git show straight onto a record the branch does not hold truncates it -- the hazard the temporary-file restore exists for is live here"
+
+# --- THE READ-SET SKIP DECIDES THE SAME WHOEVER STARTS THE HOOK ------------------------------
+# `git push` prepends git's exec-path to its hook's PATH and sets GIT_EXEC_PATH; this wrapper
+# `exec`s the hook with neither. The pre-push hook's tool keys used to resolve on that PATH, so the
+# same tree decided differently under the two, and each push reset the other's key records. The
+# world's hook sources the RESOLVED hook's FIXTURE_POOL block and records `apply_readset_skip`'s
+# decision; it runs once through the wrapper, under a plain PATH with no GIT_EXEC_PATH, and once
+# through a real `git push`. The two `.kdec` and `.ftools` must be byte-equal, with the fixture
+# skipped and its `git` row present. CONTROL, one property apart: the same drive with the block's
+# tool dirs replaced by the inherited PATH must DIFFER, so the equality is one that can fail. The
+# hook exits 0 so the wrapper writes no record into the tree it is judging.
+PU_TK_HOOK=""; PU_TK_TOP="$(git -C "$DIR" rev-parse --show-toplevel 2>/dev/null)"
+for _c in "$PU_TK_TOP/.githooks/pre-push" "$PU_TK_TOP/core/git-hooks/pre-push"; do
+  [ -n "$PU_TK_TOP" ] && [ -f "$_c" ] && { PU_TK_HOOK="$_c"; break; }
+done
+if [ -z "$PU_TK_HOOK" ] || ! grep -q '^readset_tools() ' "$PU_TK_HOOK"; then
+  printf '  SKIP  pu-readset-*   no pre-push hook with readset_tools in either layout yet\n'
+else
+  PU_TK_P="$PU_D/tk.pool.sh"
+  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$PU_TK_HOOK" > "$PU_TK_P"
+  PU_TK_X="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$PU_TK_P" | sort -u)"
+  PU_TK_PLAIN="/usr/bin:/bin:/usr/sbin:/sbin"
+  # pu_tk_world <name> <pool>: a pu world whose su commit adds fixture fa reading src/t.sh, a script
+  # that names git; its key record is written once by the pool under the plain PATH.
+  pu_tk_world() {
+    local d; d="$(pu_world "$1")"
+    mkdir -p "$d/W/$PU_TK_X/fa" "$d/W/src" \
+      && printf 'exit 0\n' > "$d/W/$PU_TK_X/fa/run.sh" && printf 'git status\n' > "$d/W/src/t.sh" \
+      && printf 'fa\tsrc/t.sh\n' > "$d/W/.ai-dlc-fixture-readsets.tsv" \
+      && git -C "$d/W" add -A && git -C "$d/W" commit -q -m fixtures \
+      || { printf 'FIXTURE ERROR: pu_tk_world %s did not build\n' "$1" >&2; exit 1; }
+    ( cd "$d/W" && env -u GIT_EXEC_PATH PATH="$PU_TK_PLAIN" AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_JOBS=1 \
+        bash -c '. "$1" 2>/dev/null; run_fixtures' _ "$2" ) >/dev/null 2>&1
+    { printf '#!/usr/bin/env bash\nD="%s"; P="%s"\n' "$d" "$2"
+      printf '%s\n' 'o="$D/tk.$(cat "$D/tag")"; mkdir -p "$o" || exit 1' 'printf "%s\n" "${PATH%%:*}" > "$o/path1"' \
+        'cd "$(git rev-parse --show-toplevel)" || exit 1' '. "$P" 2>/dev/null' \
+        'for f in "$FXROOT"*/; do [ -f "$f/run.sh" ] && printf "%s\n" "$f"; done > "$o/list"' \
+        'apply_readset_skip "$o/list" "$o" > "$o/ann" 2>&1' 'exit 0'; } > "$d/W/.git/hooks/pre-push"
+    chmod +x "$d/W/.git/hooks/pre-push"
+    printf '%s\n' "$d"
+  }
+  # pu_tk_drive <world>: the wrapper, then a real push; prints both runs' summary.
+  pu_tk_drive() {
+    local d="$1" w r
+    printf 'wrap\n' > "$d/tag"; w="$(pu_run "$PU_SRC" "$d" env -u GIT_EXEC_PATH PATH="$PU_TK_PLAIN")"
+    printf 'real\n' > "$d/tag"; r="$(pu_real "$d")"
+    printf 'rc=%s/%s first=%s kdec=%s ftools=%s fa=%s git=%s' "$w" "$r" \
+      "$([ "$(cat "$d/tk.wrap/path1" 2>/dev/null)" != "$(cat "$d/tk.real/path1" 2>/dev/null)" ] && echo differ || echo same)" \
+      "$(cmp -s "$d/tk.wrap/.kdec" "$d/tk.real/.kdec" && echo equal || echo differ)" \
+      "$(cmp -s "$d/tk.wrap/.ftools" "$d/tk.real/.ftools" && echo equal || echo differ)" \
+      "$(awk -F'\t' '$1 == "fa" { print $2 }' "$d/tk.real/.kdec" 2>/dev/null)" \
+      "$(cut -f2 "$d/tk.real/.ftools" 2>/dev/null | grep -c '/git$')"
+  }
+  PU_TK_W="$(pu_tk_world tkfix "$PU_TK_P")"
+  ss_assert "pu-readset-same" "$(pu_tk_drive "$PU_TK_W")" "rc=0/0 first=differ kdec=equal ftools=equal fa=skip git=1" \
+    "the hook run through the wrapper (plain PATH) and through git push (exec-path first) decides the same skip set from the same tool keys, and the fixture whose script names git skips"
+  PU_TK_M="$PU_D/tk.inherited.sh"
+  awk 'BEGIN { a = "for p in $xp:$READSET_TOOL_DIRS; do" }
+       { i = index($0, a); if (i) { $0 = substr($0, 1, i - 1) "for p in $PATH; do" substr($0, i + length(a)); n++ } print }
+       END { if (n != 1) exit 3 }' "$PU_TK_P" > "$PU_TK_M"
+  pu_tk_mrc=$?
+  PU_TK_C=""
+  [ "$pu_tk_mrc" = 0 ] && ! cmp -s "$PU_TK_P" "$PU_TK_M" && PU_TK_C="$(pu_tk_drive "$(pu_tk_world tkinh "$PU_TK_M")")"
+  ss_assert "pu-readset-ctl" "${PU_TK_C:-DID-NOT-APPLY}" "rc=0/0 first=differ kdec=differ ftools=differ fa=run git=1" \
+    "control: with the tool dirs replaced by the inherited PATH the two invocations key git differently and the git push reruns the fixture -- the equality above can fail"
+fi
 unset GIT_CONFIG_NOSYSTEM GIT_CONFIG_GLOBAL GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
 
 # --- A STAGING WRITE THAT FAILS IS UNDECIDED (BL-360) -------------------------------------

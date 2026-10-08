@@ -813,8 +813,8 @@ else
   NEW_ARMS=$((NEW_ARMS+1))
 fi
 NEW_ARMS=$((NEW_ARMS+1))
-if lit_mut aposdrop 1 '| readset_drop_excluded | sort -u > "$out/.paths.all"' \
-                         "| grep -v \"'\" | readset_drop_excluded | sort -u > \"\$out/.paths.all\""; then M="$LM"
+if lit_mut aposdrop 1 '| readset_universe_paths | sort -u > "$out/.paths.all"' \
+                         "| grep -v \"'\" | readset_universe_paths | sort -u > \"\$out/.paths.all\""; then M="$LM"
   if [ -n "$(drive "$M" m.aposdrop ':')" ] && ! hashed "$WORK/x.m.aposdrop"; then
     ok "MANIFEST MUTANT aposdrop is KILLED by the apostrophe-hashed arm: $(grep -cF "$APOS	" "$WORK/x.m.aposdrop/seed.now") apostrophe row(s) in the manifest"
   else
@@ -1470,6 +1470,141 @@ if lc1 "$R" && msg_of "$R" | grep -q 'read-set map: derived at'; then
   ok "CONTROL: the unmutated block, driven through lw_run, maps gamma locally and selects alpha alone — the kills above are attributable"
 else
   bad "CONTROL: the unmutated block did not reproduce (b) through lw_run — every local-map mutant is unattributable"
+fi
+
+# ----------------------------------------------------------- the read-set trace report ----
+# THE DETACHED TRACE'S OUTCOMES WERE NEVER READ BACK. readset_trace_report prints them on every push,
+# before the suite, from the local map's `#discards` rows, the last trace's log and its status file.
+# Each world below seeds those three files the way the deriver and the launcher write them and calls
+# the block's own function; every arm is a set of named lines that must APPEAR, so a report that
+# prints nothing fails all of them.
+#   (r1) a full world: discards at 1, 2, 3 on the current key and 3 on a moved key; a last trace
+#        holding a discard, a clean recorded fixture and the TWO-LINE shape (`<fx>  N paths`, then
+#        `could not hash <fx>'s set ... -- not recorded`). The held fixture is NOT in the last trace,
+#        because a held fixture is never re-traced: that is the input that separates a standing held
+#        line from one printed only on the push whose trace reached 3.
+#   (r2) nothing on disk: every line still prints and says so
+#   (r3) a running trace; (r4) one that died without its exit; (r5) a finished trace that recorded
+#        nothing; (r6) a running trace an older hook started, with no status file
+rp_world() { # <pool> <name> <setup, eval'd in the seeded tree with $o, $RL, key()>; prints the report
+  local p="$1" t="$WORK/rp.$2" o="$WORK/rp.$2.out"
+  seed_lt "$t" || { printf 'SEED FAILED'; return 1; }
+  if [ "$FXROOT" != core/fixtures ]; then
+    mkdir -p "$t/$(dirname "$FXROOT")" && cp -R "$t/core/fixtures" "$t/$FXROOT" \
+      && ( cd "$t" && git add -A && git -c user.email=f@f -c user.name=f commit -qm fxroot ) >/dev/null 2>&1 \
+      || { printf 'SEED FAILED'; return 1; }
+  fi
+  mkdir -p "$o"
+  ( cd "$t" || exit 1
+    # shellcheck disable=SC1090
+    . "$p" 2>/dev/null
+    RL="$READSET_LOCAL"
+    key() { printf '%s:%s' "$(sha_of "$FXROOT$1/run.sh")" "$(sha_of core/scripts/derive-fixture-readsets.sh)"; }
+    eval "$3"
+    readset_trace_report "$o" ) > "$o/rep" 2>&1
+  cat "$o/rep"
+}
+RP_T0=1791000000
+RP_FULL='printf "alpha\t#discards\t2\t%s\tthe stream dropped reports 5 time(s) in this window; VERDICT: the sandboxed run'"'"'s verdict lines differ from the normal run'"'"'s\n" "$(key alpha)" > "$RL"
+printf "beta\t#discards\t3\t%s\tLOSS CANARY: 2 path(s) the fixture read (atime) are absent from the stream; VERDICT: the sandboxed run'"'"'s verdict lines differ from the normal run'"'"'s\n" "$(key beta)" >> "$RL"
+printf "gamma\t#discards\t3\t0000:%s\tTRIP: 1 exec(s) of a refused binary (setuid/setgid, log, sandbox-exec)\n" "$(sha_of core/scripts/derive-fixture-readsets.sh)" >> "$RL"
+printf "delta\t#discards\t1\tx:y\tfixture exited 1\n" >> "$RL"
+printf "zeta\tcore/fixtures/zeta/run.sh\tabc\n" >> "$RL"
+printf "  alpha                            OMITTED (the stream dropped reports 5 time(s) in this window) -- will always run\n  eps                                 9 paths\n  could not hash eps'"'"'s set in the trace copy -- not recorded\n  zeta                                4 paths\n" > "$RL.log"
+printf "start %s\npid 1\nlist alpha eps zeta\nexit 0\nfinish %s\n" '"$RP_T0"' '"$((RP_T0 + 10))"' > "$RL.status"
+printf "alpha\trun\tstale\ts\tstale\nbeta\trun\tunrecorded\tu\tok\ngamma\tskip\t\t\tok\n" > "$o/.kdec"
+printf "alpha\nbeta\ngamma\n" > "$o/.kl"; printf "alpha\ngamma\n" > "$o/.mapped.all"'
+# The (r1) lines, each NAMED, so a mutant is scored on which of them it moved and nothing else.
+RP_N_OUTCOME='trace-report last trace outcome: 3 given, 1 recorded, 1 discarded, 1 traced cleanly but NOT recorded;'
+RP_N_OCAUSE='NOT recorded; causes stream-drop 1, not-hashed 1'
+RP_N_DISC='trace-report discards: 4 fixture(s) carry a #discards row (at 1: 1, at 2: 1, at 3 or more: 2); causes stream-drop 1, verdict 2, loss-canary 1, trip 1, fixture-exit 1'
+RP_N_TWO='trace-report at 2 of 3: alpha -- one more discard on the same key holds it'
+RP_N_HELD='trace-report held: beta -- discarded 3 times in a row on its current run.sh and deriver, so it is NOT re-traced and runs on every push until one of them changes; a release that edits the deriver resets every #discards count'
+RP_N_NOTREC='trace-report not recorded: eps -- traced cleanly, then could not hash its set in the trace copy'
+RP_N_UNCL='trace-report uncleared this push: 1 stale and 1 unmapped fixture(s) run because no trace has cleared them'
+RP_N_LAST='fixture(s); finished, exit 0'
+rp_score() { # <report>: the names of the (r1) lines MISSING from it, space separated
+  local r="$1" v miss=""
+  for v in OUTCOME OCAUSE DISC TWO HELD NOTREC UNCL LAST; do
+    eval "grep -qF -- \"\$RP_N_$v\" <<< \"\$r\"" || miss="$miss $v"
+  done
+  grep -q 'WARN' <<< "$r" && miss="$miss WARN"
+  printf '%s' "${miss# }"
+}
+RP_R1="$(rp_world "$POOL" r1 "$RP_FULL")"; lt_arm
+RP_R1_MISS="$(rp_score "$RP_R1")"
+[ -z "$RP_R1_MISS" ] && ok "(r1) the report names every count and fixture: the outcome of the last trace with the two-line hash failure counted as NOT recorded, the discard buckets and causes, alpha at 2 of 3, beta HELD on its current key (gamma's moved key is not held), eps not recorded, and this push's uncleared stale and unmapped" \
+  || bad "(r1) the report is missing line(s) [$RP_R1_MISS]: $(tr '\n' '|' <<< "$RP_R1")"
+RP_R2="$(rp_world "$POOL" r2 ':')"; lt_arm
+case "$RP_R2" in
+  *"trace-report last trace: none recorded (no status file at "*"trace-report local map: none at "*"trace-report last trace outcome: no trace log at "*"trace-report discards: none recorded"*"trace-report at 2 of 3: none"*"trace-report held: none"*"trace-report not recorded: none"*"trace-report uncleared this push: unknown -- no fixture keys were built this push"*)
+    ok "(r2) with no local map, no log, no status file and no keys built, every report line still prints and says what is absent" ;;
+  *) bad "(r2) an empty clone's report left a line out: $(tr '\n' '|' <<< "$RP_R2")" ;;
+esac
+RP_LIVE='mkdir "$RL.lock" && printf "%s %s\n" '"$LOCKPID"' "$(date +%s)" > "$RL.lock/pid"'
+RP_R3="$(rp_world "$POOL" r3 "$RP_LIVE; printf 'start %s\npid %s\nlist gamma\n' \"\$(date +%s)\" $LOCKPID > \"\$RL.status\"")"; lt_arm
+case "$RP_R3" in
+  *"trace-report last trace: started "*", 1 fixture(s); RUNNING since "*"pid $LOCKPID"*) grep -q WARN <<< "$RP_R3" && bad "(r3) a RUNNING trace raised a warning: $(tr '\n' '|' <<< "$RP_R3")" \
+      || ok "(r3) a trace whose status pid holds the lock reads RUNNING since its start, with its pid, and warns of nothing" ;;
+  *) bad "(r3) a running trace was not reported as running: $(tr '\n' '|' <<< "$RP_R3")" ;;
+esac
+RP_R4="$(rp_world "$POOL" r4 "printf 'start %s\npid %s\nlist gamma\n' \"\$(date +%s)\" $LOCKPID > \"\$RL.status\"")"; lt_arm
+case "$RP_R4" in
+  *"DIED without writing its exit"*"WARN  trace-report warning: the last trace DIED"*) ok "(r4) a status with no exit and no lock reads DIED, with a WARN line" ;;
+  *) bad "(r4) a trace that died without its exit was not reported: $(tr '\n' '|' <<< "$RP_R4")" ;;
+esac
+RP_R5="$(rp_world "$POOL" r5 "printf 'start 1791000000\npid 1\nlist alpha eps\nexit 0\nfinish 1791000100\n' > \"\$RL.status\"
+printf '  alpha                            OMITTED (the stream dropped reports 5 time(s) in this window) -- will always run\n  eps                              OMITTED (the stream dropped reports 2 time(s) in this window; VERDICT: the sandboxed run differs) -- will always run\n' > \"\$RL.log\"")"; lt_arm
+case "$RP_R5" in
+  *"WARN  trace-report warning: the last trace recorded NOTHING for the 2 fixture(s) it was given; dominant cause stream-drop (2)"*) ok "(r5) a finished trace that recorded nothing is a WARN line naming the dominant cause" ;;
+  *) bad "(r5) a trace that cleared nothing was silent: $(tr '\n' '|' <<< "$RP_R5")" ;;
+esac
+RP_R6="$(rp_world "$POOL" r6 "$RP_LIVE")"; lt_arm
+case "$RP_R6" in
+  *"trace-report last trace: RUNNING since "*"pid $LOCKPID; no status file"*) ok "(r6) a live lock with no status file (an older hook's trace) still reads RUNNING, and says the status file is absent" ;;
+  *) bad "(r6) a running trace with no status file was not reported: $(tr '\n' '|' <<< "$RP_R6")" ;;
+esac
+# THE CALL SITE: run_fixtures prints the report on a push that runs the suite, before the suite runs.
+rp_run() { # <pool> <name>; prints the run's output
+  local p="$1" t="$WORK/rpr.$2"
+  seed_lt "$t" || { printf 'SEED FAILED'; return 1; }
+  if [ "$FXROOT" != core/fixtures ]; then
+    mkdir -p "$t/$(dirname "$FXROOT")" && cp -R "$t/core/fixtures" "$t/$FXROOT" \
+      && ( cd "$t" && git add -A && git -c user.email=f@f -c user.name=f commit -qm fxroot ) >/dev/null 2>&1 \
+      || { printf 'SEED FAILED'; return 1; }
+  fi
+  ( cd "$t" || exit 1; export AI_DLC_READSET_LIVE_TRACE=0
+    # shellcheck disable=SC1090
+    . "$p" 2>/dev/null; run_fixtures ) 2>&1
+}
+rp_called() { awk '/trace-report last trace:/ { r = NR } /^  *ok  *(alpha|beta|gamma)/ && !f { f = NR } END { exit !(r && f && r < f) }' <<< "$1"; }
+RP_RUN="$(rp_run "$POOL" call)"; lt_arm
+rp_called "$RP_RUN" && ok "(r7) run_fixtures prints the trace report on every push that builds its list, BEFORE the first fixture verdict" \
+  || bad "(r7) run_fixtures printed no trace report before the suite: $(tr '\n' '|' <<< "$RP_RUN" | cut -c1-600)"
+# MUTANTS of the report, each scored on (r1)'s named lines (and the call site on r7): each must move
+# exactly its own line.
+rp_mut() { # <name> <want missing>
+  local r m; lt_arm
+  r="$(rp_world "$PM" "pm.$1" "$RP_FULL")"; m="$(rp_score "$r")"
+  if [ "$m" = "$2" ]; then ok "MUTANT $1 is KILLED by (r1), on exactly [$2]"
+  elif [ -z "$m" ]; then bad "MUTANT $1 SURVIVED (r1)"
+  else bad "MUTANT $1 moved [$m], not exactly [$2] -- entangled lines"; fi
+}
+# held only on the push that reaches 3 (the old behaviour): a held fixture must also be in the last
+# trace's discards, which a held fixture never is.
+pm_copy held3 1 'if (c >= 3 && x[4] == cur) HELD[f] = 1' 'if (c >= 3 && x[4] == cur && (f in DROP)) HELD[f] = 1' && rp_mut held3 HELD
+# the two-line parser: `<fx>  N paths` counted as recorded although `could not hash <fx>` follows it.
+pm_copy twoline 1 'nrec = 0; for (f in CLEAN) if (!(f in NH)) nrec++' 'nrec = 0; for (f in CLEAN) nrec++' && rp_mut twoline OUTCOME
+# a cause miscount: the hash failures are not counted as a cause of the last trace.
+pm_copy notcause 1 'for (f in NH) { TC["not-hashed"]++ }' 'for (f in NH) { }' && rp_mut notcause OCAUSE
+# a bucket miscount: a row at 2 counted at 3.
+pm_copy bucket 1 'if (c >= 3) at3++; else if (c == 2) at2++; else at1++' 'if (c >= 2) at3++; else at1++' && rp_mut bucket DISC
+# the report removed from run_fixtures.
+if pm_copy noreport 1 '  readset_trace_report "$out"' '  :'; then
+  lt_arm; R="$(rp_run "$PM" pm.noreport)"
+  if rp_called "$R"; then bad "MUTANT noreport SURVIVED (r7)"
+  elif grep -q '^  *ok  *alpha' <<< "$R"; then ok "MUTANT noreport is KILLED by (r7): the suite ran and no report preceded it"
+  else bad "MUTANT noreport: the copy never ran the suite -- NO VERDICT"; fi
 fi
 
 # ------------------------------------------------------- the deriver's map merge ----
@@ -3434,6 +3569,67 @@ STUB
     else
       bad "IDENTITY: expected '0|no|0|no|1|0|100010|2|0|1' and identical maps, got '$IU|$IUE|$IU_W|$IUE_W|$IUS|$IUH' cmp=$(cmp -s "$WORK/iw.full.tsv" "$WORK/iw.full.endonly.tsv" && echo same || echo DIFFER) — $(diff "$WORK/iw.full.tsv" "$WORK/iw.full.endonly.tsv" | head -4 | tr '\n' ' ')"
     fi
+
+    # THE DIGEST WRITER (BL-471), DRIVEN WHOLE. The BR runner carries only an FXROOT line, so it has no
+    # READSET_UNIVERSE span: a --list run there writes NO `# digest` line and says so -- the fail-soft
+    # direction, both arms of it. Then the runner gains the span, sed out of the resolved hook, and the
+    # same run must write fxa's digest and CARRY other fixtures' digests through the merge:
+    #   carried   a `# digest keep <sha>` line for an untraced fixture survives;
+    #   replaced  fxa's stale seeded digest is gone and exactly one fxa digest is written;
+    #   matches   the hook, sourced from the same span, recomputes fxa's digest over the tree and
+    #             reads it `match` -- the producer and the consumer agree on the value;
+    #   counted   the header's fixture count does not count a digest line as a fixture.
+    # Mutant nocarry deletes the merge's carry line, so the untraced digest is lost.
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    printf 'other\tsrc/other.sh\nother\tcore/fixtures/other/run.sh\nkeep\tsrc/other.sh\n# digest keep 1111111111111111111111111111111111111111111111111111111111111111\n# digest fxa 2222222222222222222222222222222222222222222222222222222222222222\n' > "$BR/.ai-dlc-fixture-readsets.tsv"
+    ( cd "$BR" && git add -A && git -c user.email=f@f -c user.name=f commit -qm digests ) >/dev/null 2>&1 || broken "could not seed the digest map"
+    dw_run() { # <deriver copy>; prints "<rc>|<keep digest>|<fxa digests>|<stale fxa digest>|<note>|<mapped count>"
+      local r k a s n c
+      cp "$1" "$STUB_DERIVER"
+      ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$SX/whole.list" \
+          AI_DLC_READSET_TRACE_ROOT="$SX_TR" bash core/scripts/derive-fixture-readsets.sh --list fxa --tracer sandbox ) > "$WORK/dw.out" 2>&1 </dev/null
+      r=$?
+      cp "$BR/.ai-dlc-fixture-readsets.tsv" "$WORK/dw.map"
+      k="$(grep -c '^# digest keep 1111' "$WORK/dw.map")" || k=0
+      a="$(grep -c '^# digest fxa [0-9a-f]\{64\}$' "$WORK/dw.map")" || a=0
+      s="$(grep -c '^# digest fxa 2222' "$WORK/dw.map")" || s=0
+      n="$(grep -c 'no # digest line written' "$WORK/dw.out")" || n=0
+      c="$(sed -n 's/^# fixtures mapped: \([0-9]*\) .*/\1/p' "$WORK/dw.map")"
+      ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
+      printf '%s|%s|%s|%s|%s|%s' "$r" "$k" "$a" "$s" "$n" "$c"
+    }
+    DW0="$(dw_run "$SB/deriver.sh")"
+    # mapped 3 (other, keep, fxa): a digest line counted as a fixture would read 5.
+    if [ "$DW0" = "0|1|0|0|1|3" ]; then
+      ok "DIGEST: under a runner with no READSET_UNIVERSE span a --list run writes NO # digest line, says so, drops fxa's stale digest and carries the untraced one"
+    else
+      bad "DIGEST: a span-less runner did not give rc 0, keep 1, fxa 0, stale 0, note 1, mapped 3: '$DW0' — $(tail -2 "$WORK/dw.out" | tr '\n' ' ')"
+    fi
+    sed -n '/^# READSET_UNIVERSE_BEGIN$/,/^# READSET_UNIVERSE_END$/p' "$HOOK" >> "$BR/.githooks/pre-push"
+    grep -q '^readset_digests() ' "$BR/.githooks/pre-push" || broken "the resolved hook carries no READSET_UNIVERSE span to seed the BR runner with"
+    ( cd "$BR" && git add -A && git -c user.email=f@f -c user.name=f commit -qm span ) >/dev/null 2>&1 || broken "could not commit the BR runner's span"
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    DW1="$(dw_run "$SB/deriver.sh")"
+    cp "$WORK/dw.map" "$WORK/dw.fix.map"
+    sed -n '/^# READSET_UNIVERSE_BEGIN$/,/^# READSET_UNIVERSE_END$/p' "$BR/.githooks/pre-push" > "$WORK/br.span"
+    DW_V="$( cd "$BR" && cp "$WORK/dw.fix.map" .ai-dlc-fixture-readsets.tsv && s="$(mktemp -d "$WORK/dwm.XXXXXX")" \
+      && READSET_MAP=.ai-dlc-fixture-readsets.tsv && READSET_LOCAL=/dev/null && . "$WORK/br.span" \
+      && readset_manifest "$s" && readset_committed_digests "$s" && awk -F'\t' '$1 == "fxa" { print $2 }' "$s/.cdig"; git checkout -q -- . 2>/dev/null )"
+    if [ "$DW1" = "0|1|1|0|0|3" ] && [ "$DW_V" = match ]; then
+      ok "DIGEST: with the hook's span the run writes ONE fxa digest the hook recomputes as 'match', replaces the stale one, carries the untraced one, and counts 3 fixtures, not digest lines"
+    else
+      bad "DIGEST: expected '0|1|1|0|0|3' and fxa 'match', got '$DW1' / '$DW_V' — $(tail -2 "$WORK/dw.out" | tr '\n' ' ')"
+    fi
+    sed '/^      \$1 == "#" && \$2 == "digest" && NF == 4 { if (index(traced, " " \$3 " ") == 0) print; next }$/d' "$SB/deriver.sh" > "$SX/deriver.nocarry.sh"
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    if cmp -s "$SB/deriver.sh" "$SX/deriver.nocarry.sh"; then bad "DIGEST MUTANT nocarry did not apply"
+    else
+      DWM="$(dw_run "$SX/deriver.nocarry.sh")"
+      case "$DWM" in
+        "0|0|1|0|0|3") ok "DIGEST MUTANT nocarry: with the merge's carry line deleted the untraced fixture's digest is LOST — the carried cell depends on it" ;;
+        *) bad "DIGEST MUTANT nocarry: expected '0|0|1|0|0|3', got '$DWM'" ;;
+      esac
+    fi
   fi
 fi
 
@@ -3459,6 +3655,8 @@ fi
 # killed one has no verdict -- which is the no-verdict half of (l), deterministic only serially.
 CK_ARMS=0
 CK_W="$WORK/ck"; mkdir -p "$CK_W" || broken "could not create the checksum-key worlds"
+# CK_HELPERS_BEGIN -- readset-skip-digest-mutants sources this span and the DG span below, so its
+# mutants are scored by the worlds this fixture ships, never by a restatement of them.
 ck_sha() { shasum -a 256 -- "$1" | cut -d' ' -f1; }
 ck_seed() { # <t> <fixture root> [extra fixture]: alpha, beta, delta mapped; the extra one unmapped
   local t="$1" x="$2" f
@@ -3490,6 +3688,9 @@ ck_push() { # <pool> <t> <tag>: one push's suite. Leaves <t>.o.<tag>/{out,rc,ran
     export CK_LOG="$o/log" CK_CTL="$2.ctl" AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_JOBS=1 PATH="$2.bin:$PATH"
     # shellcheck disable=SC1090
     . "$1" 2>/dev/null
+    # THE TOOL DIRS ARE THE BLOCK'S OWN FIXED LIST, NEVER PATH: the shim dir stands in for it, and an
+    # exec-path stand-in that does not exist keeps the real git out of these worlds.
+    READSET_TOOL_DIRS="$2.bin"; READSET_TOOL_XP="$2.xp"
     run_fixtures > "$o/out" 2>&1; echo "$?" > "$o/rc" )
   LC_ALL=C sort "$o/log" | tr '\n' ' ' | sed 's/ $//' > "$o/ran"
 }
@@ -3498,6 +3699,7 @@ ck_k()   { printf '%s/.git/ai-dlc-fixture-keys/%s.key' "$1" "$2"; }
 ck_st()  { sed -n 2p "$(ck_k "$1" "$2")" 2>/dev/null; }
 ck_has() { local f s=""; for f in alpha beta delta; do [ -f "$(ck_k "$1" "$f")" ] && s="$s $f"; done; printf '%s' "${s# }"; }
 ck_ln()  { grep -cxF -- "$3" "$1.o.$2/out" 2>/dev/null; }
+# CK_HELPERS_END
 CK_A0='   ..    read-set keys: 0 of 3 fixture(s) run (0 changed, 0 unrecorded, 0 stale); skipping 3'
 
 # (a) record on pass, then skip on an unchanged rerun. Pins the record format and the announce.
@@ -3514,7 +3716,7 @@ ck_w_a() { local p="$1" x="$2" t="$3" k
     "$( { [ -f "$k" ] && tail -n +4 "$k" | LC_ALL=C sort -c; } >/dev/null 2>&1 && echo y || echo n)" \
     "$(ck_ln "$t" 2 "$CK_A0")"
 }
-CK_WANT_a='p1=alpha beta delta|0 p2=|0 hdr=#format k1,#state ok,#tools per-fixture, tools=1 trow=y row=1 sorted=y ann=1'
+CK_WANT_a='p1=alpha beta delta|0 p2=|0 hdr=#format k1,#state ok,#tools canonical, tools=1 trow=y row=1 sorted=y ann=1'
 
 # (b) a read-set file change reruns F and skips the unrelated ones.
 ck_w_b() { local p="$1" x="$2" t="$3"
@@ -3597,13 +3799,14 @@ ck_w_h() { local p="$1" x="$2" t="$3" ds
   { printf 'alpha\tsrc/a.sh\t%s\n' "$(ck_sha "$t/src/a.sh")"
     printf 'alpha\tsrc/shared.sh\t%s\n' "$(ck_sha "$t/src/shared.sh")"
     printf 'alpha\t#deriver\t%s\n' "$ds"; } > "$t/.git/ai-dlc-fixture-readsets.local"
-  # The traced push still runs alpha once, rekeying its record on the local rows (lead ruling B), and
-  # writes it `#state ok`; the push after that skips it.
+  # The push straight after the trace SKIPS alpha (BL-471, D1): its local rows are valid and no key in
+  # its record moved, so the stale record is republished `#state ok` without a run; the push after that
+  # skips it too. Before BL-471 the traced push ran alpha once to rekey it.
   ck_push "$p" "$t" 4; local s4; s4="$(ck_st "$t" alpha)"; ck_push "$p" "$t" 5
   printf 'p2=%s s2=%s p3=%s why=%s s3=%s p4=%s s4=%s p5=%s' "$(ck_r "$t" 2)" "$s2" "$(ck_r "$t" 3)" \
     "$(ck_ln "$t" 3 '   ..      alpha: stale')" "$s3" "$(ck_r "$t" 4)" "$s4" "$(ck_r "$t" 5)"
 }
-CK_WANT_h='p2=alpha|0 s2=#state stale p3=alpha|0 why=1 s3=#state stale p4=alpha|0 s4=#state ok p5=|0'
+CK_WANT_h='p2=alpha|0 s2=#state stale p3=alpha|0 why=1 s3=#state stale p4=|0 s4=#state ok p5=|0'
 
 # (m) a walker that keys the fixture root reruns when a fixture X appears, is recorded `#state ok`
 # (a listing change never stales, lead ruling 2) with X's files added to its keys, and a later edit
@@ -3733,11 +3936,534 @@ if [ "$CK_N" -ge 1 ]; then
   ck_mut n globaltools 1 '        for (k in K) if (k in FT) {' '        for (k in FT) {'
 fi
 
+# ------------------------------------ tool keys do not depend on the invoker ----
+# THE DEFECT: tools were resolved on the inherited $PATH. `git push` prepends git's exec-path to a hook's
+# PATH and `self-update-push.sh`, a shell or a harness do not, so `git` keyed a different binary per
+# invoker and each invocation's records read the other's tool rows as changed -- measured on the
+# reference consumer, 57 against 149 of 199 fixtures on one tree, the two decisions differing in PATH
+# alone. The block now resolves against git's real exec-path plus a fixed dir list, and migrates a
+# record written the old way ONCE.
+#   inv     one tree, one set of records, the decision under four environments: git's hook PATH (a FAKE
+#           exec-path dir prepended, holding a `git` whose content differs, with GIT_EXEC_PATH naming
+#           it), a plain PATH in a different order, `env -i PATH=/usr/bin:/bin`, and DEVELOPER_DIR set
+#           (to an alternate developer dir where one exists). `.ftools`, `.tools` and `.kdec` must be
+#           byte-identical, with exactly one `git` row, at git's real exec-path, and every fixture skipped.
+#   pos     the positive arm: the block's tool dirs point at a stub dir that is NOT on PATH, and growing
+#           the one binary there that only alpha's files name reruns alpha alone, as `tools changed`.
+#   mig     records rewritten as the old hook wrote them (`#tools per-fixture`, tool rows at paths no
+#           tool dir holds) skip on their tree keys, are republished `#tools canonical` with honest tool
+#           rows and no old one, the next push migrates nothing, and a later binary change reruns alpha.
+#   migrun  the amnesty never covers a tree key: an old-format record whose FILE moved runs, for that file.
+# TK_WORLDS_BEGIN -- readset-skip-digest-mutants sources this span after CK_HELPERS, to score the tool-key mutants.
+TK_ARMS=0
+TK_FX="$WORK/tk.xp"; mkdir -p "$TK_FX" || broken "could not create the fake exec-path dir"
+TK_GIT="$(command -v git)" || broken "no git on PATH"
+printf '#!/bin/sh\n# readset-skip: a stand-in for the copy of git in an exec-path dir\nexec "%s" "$@"\n' "$TK_GIT" > "$TK_FX/git" && chmod +x "$TK_FX/git" \
+  || broken "could not write the fake exec-path git"
+cmp -s "$TK_FX/git" "$TK_GIT" && broken "the fake exec-path git is byte-identical to the real one, so no world could tell them apart"
+TK_PLAIN="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin"
+# THE EXPECTED git ROW, derived here from git itself rather than read off the block.
+TK_XPE=""
+for _g in /usr/bin/git /usr/local/bin/git /opt/homebrew/bin/git; do
+  [ -x "$_g" ] && { TK_XPE="$(/usr/bin/env -u DEVELOPER_DIR -u GIT_EXEC_PATH "$_g" --exec-path 2>/dev/null)"; break; }
+done
+TK_EXP=""
+[ -n "$TK_XPE" ] && [ -x "$TK_XPE/git" ] && TK_EXP="$TK_XPE/git"
+if [ -z "$TK_EXP" ]; then
+  for _d in /opt/homebrew/bin /usr/local/bin /usr/bin /bin /usr/sbin /sbin; do [ -x "$_d/git" ] && { TK_EXP="$_d/git"; break; }; done
+fi
+[ -n "$TK_EXP" ] || broken "no git in git's exec-path or in any fixed tool dir, so the invariance world has no row to expect"
+# AN ALTERNATE DEVELOPER DIR, where xcrun can switch to one: the only environment in which dropping
+# `-u DEVELOPER_DIR` changes the answer. Without one the world still runs with DEVELOPER_DIR set, and
+# that one mutant reports SKIP rather than a kill it could not earn.
+TK_DEV=""; TK_DEV_ALT=0
+if [ -x /usr/bin/xcrun ] && [ -n "$TK_XPE" ]; then
+  for _c in /Library/Developer/CommandLineTools /Applications/Xcode*.app/Contents/Developer; do
+    [ -d "$_c" ] || continue
+    _x="$(DEVELOPER_DIR="$_c" /usr/bin/env -u GIT_EXEC_PATH /usr/bin/git --exec-path 2>/dev/null)" || continue
+    if [ -n "$_x" ] && [ "$_x" != "$TK_XPE" ] && [ -x "$_x/git" ]; then TK_DEV="$_c"; TK_DEV_ALT=1; break; fi
+  done
+  [ -n "$TK_DEV" ] || TK_DEV="$(xcode-select -p 2>/dev/null)"
+fi
+[ -n "$TK_DEV" ] || TK_DEV="$WORK/tk.nodev"
+# THE DECISION ALONE, in a process of its own so each environment is the one it is started under.
+TK_DRV="$WORK/tk.drive.sh"
+printf '%s\n' 'cd "$2" || exit 1' '. "$1" 2>/dev/null' \
+  'for d in "$FXROOT"*/; do [ -f "$d/run.sh" ] && printf "%s\n" "$d"; done > "$3/list"' \
+  'apply_readset_skip "$3/list" "$3" > "$3/ann" 2>&1' > "$TK_DRV" || broken "could not write the decision driver"
+tk_push() { # <pool> <t> <tag> <canon|fixed>: ck_push with NO shim dir on PATH. `fixed` points the block's
+  # tool dirs at the shim dir and its exec-path at a dir that does not exist; `canon` keeps the block's own.
+  local o="$2.o.$3"
+  mkdir -p "$o" && : > "$o/log" || return 1
+  ( cd "$2" || exit 1
+    export CK_LOG="$o/log" CK_CTL="$2.ctl" AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_JOBS=1
+    # shellcheck disable=SC1090
+    . "$1" 2>/dev/null
+    if [ "$4" = fixed ]; then READSET_TOOL_DIRS="$2.bin"; READSET_TOOL_XP="$2.xp"; fi
+    run_fixtures > "$o/out" 2>&1; echo "$?" > "$o/rc" )
+  LC_ALL=C sort "$o/log" | tr '\n' ' ' | sed 's/ $//' > "$o/ran"
+}
+tk_same() { # <ref dir> <dir>: same | differ, over the three files the decision derives tools into
+  local f
+  for f in .ftools .tools .kdec; do cmp -s "$1/$f" "$2/$f" || { printf differ; return; }; done
+  printf same
+}
+tk_old() { # <t>: every record as the PATH-resolved hook wrote it, its tool rows at paths no tool dir holds
+  local k
+  for k in "$1/.git/ai-dlc-fixture-keys/"*.key; do
+    [ -f "$k" ] || return 1
+    awk -F'\t' 'NR == 3 { print "#tools per-fixture"; next }
+      /^\// { n = $1; sub(/.*\//, "", n); print "/tk-old-path/" n "\t" $2; next } { print }' "$k" > "$k.t" && mv "$k.t" "$k" || return 1
+  done
+}
+tk_w_inv() { local p="$1" x="$2" t="$3" e r=""
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  printf 'git status\njq . python3 timeout\n' >> "$t/src/all.sh"
+  ( cd "$t" && git add -A && git -c user.email=f@f -c user.name=f commit -qm tools ) >/dev/null 2>&1 || { printf SEED; return; }
+  tk_push "$p" "$t" 1 canon
+  mkdir -p "$t.d.ref" "$t.d.hook" "$t.d.envi" "$t.d.dev" || { printf SEED; return; }
+  env -u GIT_EXEC_PATH -u DEVELOPER_DIR PATH="$TK_PLAIN" bash "$TK_DRV" "$p" "$t" "$t.d.ref"
+  env -u DEVELOPER_DIR PATH="$TK_FX:$PATH" GIT_EXEC_PATH="$TK_FX" bash "$TK_DRV" "$p" "$t" "$t.d.hook"
+  env -i HOME="$HOME" PATH=/usr/bin:/bin bash "$TK_DRV" "$p" "$t" "$t.d.envi"
+  env -u GIT_EXEC_PATH DEVELOPER_DIR="$TK_DEV" bash "$TK_DRV" "$p" "$t" "$t.d.dev"
+  for e in hook envi dev; do r="$r $e=$(tk_same "$t.d.ref" "$t.d.$e")"; done
+  printf 'git=%s:%s tools=%s skip=%s%s' "$(cut -f1 "$t.d.ref/.tools" 2>/dev/null | grep -c '/git$')" \
+    "$(cut -f1 "$t.d.ref/.tools" 2>/dev/null | grep -cxF "$TK_EXP")" \
+    "$([ -s "$t.d.ref/.tools" ] && echo y || echo n)" "$(awk -F'\t' '$2 == "skip"' "$t.d.ref/.kdec" 2>/dev/null | grep -c .)" "$r"
+}
+TK_WANT_inv='git=1:1 tools=y skip=3 hook=same envi=same dev=same'
+tk_w_pos() { local p="$1" x="$2" t="$3"
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  tk_push "$p" "$t" 1 fixed; printf '# grown\n' >> "$t.bin/cktool"; tk_push "$p" "$t" 2 fixed
+  printf 'p2=%s why=%s' "$(ck_r "$t" 2)" "$(ck_ln "$t" 2 '   ..      alpha: tools changed')"
+}
+TK_WANT_pos='p2=alpha|0 why=1'
+TK_ANN3='   ..    read-set tool keys: 3 record(s) written before the fixed tool dirs skipped on their tree keys alone and are republished with canonical tool keys (once per record)'
+tk_w_mig() { local p="$1" x="$2" t="$3" kd
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  kd="$t/.git/ai-dlc-fixture-keys"
+  tk_push "$p" "$t" 1 fixed; tk_old "$t" || { printf OLDSEED; return; }
+  [ "$(grep -l '^/tk-old-path/' "$kd"/*.key 2>/dev/null | grep -c .)" = 3 ] || { printf OLDSEED; return; }
+  tk_push "$p" "$t" 2 fixed
+  local hdr old new
+  hdr="$(for k in "$kd"/*.key; do sed -n 3p "$k"; done | grep -cx '#tools canonical')"
+  old="$(grep -l '^/tk-old-path/' "$kd"/*.key 2>/dev/null | grep -c .)"
+  new="$(grep -lxF "$t.bin/ckall	$(ck_sha "$t.bin/ckall")" "$kd"/*.key 2>/dev/null | grep -c .)"
+  tk_push "$p" "$t" 3 fixed; printf '# grown\n' >> "$t.bin/cktool"; tk_push "$p" "$t" 4 fixed
+  printf 'p2=%s ann2=%s hdr=%s old=%s new=%s p3=%s ann3=%s p4=%s' "$(ck_r "$t" 2)" "$(ck_ln "$t" 2 "$TK_ANN3")" \
+    "$hdr" "$old" "$new" "$(ck_r "$t" 3)" "$(grep -c 'read-set tool keys:' "$t.o.3/out")" "$(ck_r "$t" 4)"
+}
+TK_WANT_mig='p2=|0 ann2=1 hdr=3 old=0 new=3 p3=|0 ann3=0 p4=alpha|0'
+tk_w_migrun() { local p="$1" x="$2" t="$3"
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  tk_push "$p" "$t" 1 fixed; tk_old "$t" || { printf OLDSEED; return; }
+  printf 'v2\n' > "$t/src/b.sh"; tk_push "$p" "$t" 2 fixed
+  printf 'beta=%s why=%s' "$(grep -cx beta "$t.o.2/log")" "$(ck_ln "$t" 2 '   ..      beta: changed src/b.sh')"
+}
+TK_WANT_migrun='beta=1 why=1'
+TK_WORLDS="inv pos mig migrun"
+tk_all() { local w; for w in $TK_WORLDS; do "tk_w_$w" "$1" "$2" "$CK_W/tk.$3.$w" > "$CK_W/tk.$3.$w.got" 2>/dev/null; done; }
+tk_want() { eval "printf '%s' \"\$TK_WANT_$1\""; }
+# TK_WORLDS_END
+
+TK_N=0
+for _h in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
+  [ -f "$_h" ] || continue
+  TK_N=$((TK_N+1)); TK_P="$CK_W/tkpool.$TK_N.sh"
+  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$_h" > "$TK_P"
+  TK_X="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$TK_P" | sort -u)"
+  tk_all "$TK_P" "$TK_X" "h$TK_N"
+  for _w in $TK_WORLDS; do
+    TK_ARMS=$((TK_ARMS+1)); _g="$(cat "$CK_W/tk.h$TK_N.$_w.got")"
+    if [ "$_g" = "$(tk_want "$_w")" ]; then ok "(tk-$_w) ${_h#"$ROOT"/}: $_g"
+    else bad "(tk-$_w) ${_h#"$ROOT"/}: want '$(tk_want "$_w")' got '$_g'"; fi
+  done
+  [ "$TK_N" -eq 1 ] && { TK_P1="$TK_P"; TK_X1="$TK_X"; }
+done
+TK_ARMS=$((TK_ARMS+1))
+[ "$TK_N" -ge 1 ] && ok "the tool-key worlds ran against $TK_N hook(s)" || bad "no pre-push hook was found for the tool-key worlds"
+
+# ------------------------------------- readset_hash_rows on a set's LAST path ----
+# A TRACE THAT SUCCEEDED AND THEN LOST ITS RESULT. Spelled `[ -f "$p" ] && printf` as its loop's last
+# command, the hash failed under `pipefail` whenever the set's LAST path was not a regular file, and
+# the deriver dropped a clean trace as `could not hash <fx>'s set in the trace copy -- not recorded`.
+#   (h1) a set ending on a directory hashes, under pipefail, with a `-` row for the directory
+#   (h2) a set holding an UNREADABLE regular file still refuses, under pipefail AND without it -- the
+#        second is the count assertion's own world: there the pipeline's status is awk's
+# Each arm is driven on the deriver's own READSET_LOCALMAP span; the mutants edit a copy of it.
+HR_SPAN="$WORK/hr.span.sh"
+hr_drive() { # <span> <pipefail|nopipefail> <last|unread>: prints "<rc>|<rows>"
+  local d; d="$(mktemp -d "$WORK/hr.XXXXXX")" || return 1
+  mkdir -p "$d/t/dir" && printf 'x\n' > "$d/t/a" && printf 'y\n' > "$d/t/b" || return 1
+  if [ "$3" = last ]; then printf 'a\nb\ndir\n' > "$d/set"; else chmod 000 "$d/t/b"; printf 'a\nb\n' > "$d/set"; fi
+  ( if [ "$2" = pipefail ]; then set -o pipefail; else set +o pipefail; fi
+    # shellcheck disable=SC1090
+    . "$1"; readset_hash_rows "$d/t" fx "$d/set" > "$d/rows" ); printf '%s|%s' "$?" "$(grep -c . "$d/rows")"
+  chmod 600 "$d/t/b" 2>/dev/null
+}
+if [ -z "$DERIVER" ]; then
+  printf '  SKIP  readset_hash_rows arms: no deriver in either layout\n'
+else
+  sed -n '/^# READSET_LOCALMAP_BEGIN$/,/^# READSET_LOCALMAP_END$/p' "$DERIVER" > "$HR_SPAN"
+  grep -q '^readset_hash_rows() {' "$HR_SPAN" || broken "no readset_hash_rows in the deriver's READSET_LOCALMAP span"
+  HR_UNREAD_CAN=1; HR_P="$(mktemp -d "$WORK/hrp.XXXXXX")"; printf 'z\n' > "$HR_P/f"; chmod 000 "$HR_P/f"
+  cat "$HR_P/f" >/dev/null 2>&1 && HR_UNREAD_CAN=0
+  hr_arms() { # <span> <label>: prints the cells "h1 h2p h2n", each ok or the drive's result
+    local a b c
+    a="$(hr_drive "$1" pipefail last)"; b="$(hr_drive "$1" pipefail unread)"; c="$(hr_drive "$1" nopipefail unread)"
+    printf '%s %s %s' "$([ "$a" = '0|3' ] && echo ok || echo "h1=$a")" "$([ "${b%%|*}" != 0 ] && echo ok || echo "h2p=$b")" "$([ "${c%%|*}" != 0 ] && echo ok || echo "h2n=$c")"
+  }
+  HR="$(hr_arms "$HR_SPAN")"; lt_arm
+  case "$HR" in "ok "*) ok "(h1) a set whose LAST path is a directory hashes under pipefail, its directory a '-' row: 3 rows" ;;
+    *) bad "(h1) a set ending on a directory did not hash: $HR" ;; esac
+  if [ "$HR_UNREAD_CAN" = 0 ]; then
+    printf '  SKIP  (h2) an unreadable regular file: chmod 000 does not stop this user reading it (root?)\n'
+  else
+    lt_arm
+    case "$HR" in *" ok ok") ok "(h2) a set holding an UNREADABLE regular file refuses, with pipefail and without it" ;;
+      *) bad "(h2) an unreadable file did not refuse in both shells: $HR" ;; esac
+    # MUTANTS: the base loop's spelling, and the count assertion removed. Each must move only its cell.
+    hr_mut() { # <name> <from> <to> <want cells>
+      local m="$WORK/hr.m.$1.sh" n r; lt_arm
+      MF="$2" MT="$3" awk 'BEGIN { f = ENVIRON["MF"]; t = ENVIRON["MT"] } { l = $0; o = ""; while ((p = index(l, f)) > 0) { o = o substr(l, 1, p - 1) t; l = substr(l, p + length(f)); n++ } print o l } END { print n + 0 > "/dev/stderr" }' "$HR_SPAN" > "$m" 2> "$m.n"
+      n="$(cat "$m.n")"
+      if [ "$n" != 1 ] || cmp -s "$HR_SPAN" "$m"; then bad "MUTANT $1: anchor matched ${n:-nothing} time(s), not 1 -- DID NOT APPLY"; return; fi
+      r="$(hr_arms "$m")"
+      [ "$r" = "$4" ] && ok "MUTANT $1 is KILLED, on exactly its own cell: $r" || bad "MUTANT $1 moved '$r', want '$4'"
+    }
+    hr_mut lastpath "if [ -f \"\$p\" ]; then printf '%s\\0' \"\$p\"; n=\$((n + 1)); fi" "[ -f \"\$p\" ] && printf '%s\\0' \"\$p\" && n=\$((n + 1))" 'h1=1|0 ok ok'
+    hr_mut nocount '  [ "$(cat "$set.nreg" 2>/dev/null)" = "$nsha" ] || return 1' '  :' 'ok ok h2n=0|2'
+  fi
+fi
+
+# ------------------------------------- committed digests clear a stale record (BL-471) ----
+# A STALE KEY RECORD CLEARS ON A COMMITTED TRACE, NOT ONLY ON A LOCAL ONE. The deriver writes one
+# `# digest <fx> <sha>` line per traced fixture into the committed map, and the hook recomputes that
+# digest over its own `.now`: a match makes the committed rows VALID, so a stale record skips and is
+# republished `ok`. A digest that predates the change, or rows with no digest at all (a map written
+# before digests), never clear. Every digest seeded here is computed by the SHIPPED producer: the
+# deriver's readset_hash_rows over the pool's own manifest, through the pool's readset_digests -- the
+# function the deriver sources out of the hook -- so the seed is what a real trace writes.
+# Each world is one vector against a want string, run against both hooks like the CK worlds. The
+# mutants that kill these worlds live in readset-skip-digest-mutants, which sources this span: run
+# here they would multiply the worlds onto this fixture, which is already the suite's pole.
+DG_ARMS=0
+# DG_WORLDS_BEGIN
+DG_HASH="$WORK/dg.hashrows.sh"
+if [ -n "$DERIVER" ]; then
+  sed -n '/^# READSET_LOCALMAP_BEGIN$/,/^# READSET_LOCALMAP_END$/p' "$DERIVER" > "$DG_HASH"
+  grep -q '^readset_hash_rows() {' "$DG_HASH" || broken "no readset_hash_rows in the deriver's READSET_LOCALMAP span, so no digest can be seeded the way the deriver writes one"
+fi
+dg_digest() { # <pool> <t> <fixture>...: append the deriver's `# digest` line for each, as a trace would
+  local p="$1" t="$2" s; shift 2
+  s="$(mktemp -d "$WORK/dgs.XXXXXX")" || return 1
+  ( cd "$t" || exit 1
+    # shellcheck disable=SC1090
+    . "$p" 2>/dev/null; . "$DG_HASH"
+    readset_manifest "$s"; [ -s "$s/.paths" ] || exit 1
+    for f in "$@"; do
+      awk -F'\t' -v f="$f" '!/^#/ && $1 == f { print $2 }' .ai-dlc-fixture-readsets.tsv > "$s/$f.set"
+      readset_hash_rows . "$f" "$s/$f.set" || exit 1
+    done > "$s/rows"
+    readset_dir_values "$s/rows" "$s/.now" "$s/.paths" "$s/rows2" || exit 1
+    readset_digests "$s/rows2" "$s/rows2.keep" .ai-dlc-fixture-readsets.tsv "$s/dg" ) > "$s/out" || return 1
+  [ "$(grep -c . "$s/out")" -eq "$#" ] || return 1
+  awk -F'\t' 'NF == 2 { print "# digest " $1 " " $2 }' "$s/out" >> "$t/.ai-dlc-fixture-readsets.tsv"
+  ( cd "$t" && git add -A && git -c user.email=f@f -c user.name=f commit -qm digest ) >/dev/null 2>&1
+}
+dg_deriver() { # <t>: a tracked deriver for readset_deriver_path to resolve and hash
+  mkdir -p "$1/core/scripts" && printf '#!/bin/bash\nexit 0\n' > "$1/core/scripts/derive-fixture-readsets.sh" \
+    && ( cd "$1" && git add -A && git -c user.email=f@f -c user.name=f commit -qm deriver ) >/dev/null 2>&1
+}
+dg_local() { # <t> <deriver sha>: alpha's valid local rows, as the deriver's --local-map writes them
+  { printf 'alpha\tsrc/a.sh\t%s\n' "$(ck_sha "$1/src/a.sh")"
+    printf 'alpha\tsrc/shared.sh\t%s\n' "$(ck_sha "$1/src/shared.sh")"
+    printf 'alpha\tsrc/all.sh\t%s\n' "$(ck_sha "$1/src/all.sh")"
+    printf 'alpha\t#deriver\t%s\n' "$2"; } > "$1/.git/ai-dlc-fixture-readsets.local"
+}
+DG_STALE='   ..      alpha: stale'
+DG_DIFFERS='   ..    stale, 1 fixture(s): committed # digest no longer matches this tree -- cleared by a committed trace whose # digest matches this tree, or a valid local row: alpha'
+DG_NODIGEST='   ..    stale, 1 fixture(s): committed rows carry no # digest line (written before digests) -- cleared by a committed trace whose # digest matches this tree, or a valid local row: alpha'
+
+# (w1) the motivating case: alpha goes stale, a committed trace lands for it (no local row, and a local
+# map that names only another fixture, so a guard on the local map's existence cannot hide), and the
+# push straight after skips alpha and republishes its record `ok`. No deriver in the tree: committed
+# validation carries no deriver sha.
+dg_w_w1() { local p="$1" x="$2" t="$3"
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  ck_push "$p" "$t" 1; printf 'v2\n' > "$t/src/a.sh"; ck_push "$p" "$t" 2; local s2; s2="$(ck_st "$t" alpha)"
+  printf 'other\t#discards\t1\tx:y\tz\n' > "$t/.git/ai-dlc-fixture-readsets.local"
+  dg_digest "$p" "$t" alpha || { printf DIGEST; return; }
+  ck_push "$p" "$t" 3; local s3; s3="$(ck_st "$t" alpha)"; ck_push "$p" "$t" 4
+  printf 'p2=%s s2=%s p3=%s s3=%s p4=%s' "$(ck_r "$t" 2)" "$s2" "$(ck_r "$t" 3)" "$s3" "$(ck_r "$t" 4)"
+}
+DG_WANT_w1='p2=alpha|0 s2=#state stale p3=|0 s3=#state ok p4=|0'
+
+# (w2) the digest PREDATES the change: it was taken over v1, so the push after the change finds it
+# differing, alpha stays stale and runs, and the hook says what would clear it.
+dg_w_w2() { local p="$1" x="$2" t="$3"
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  dg_digest "$p" "$t" alpha || { printf DIGEST; return; }
+  ck_push "$p" "$t" 1; printf 'v2\n' > "$t/src/a.sh"; ck_push "$p" "$t" 2; ck_push "$p" "$t" 3
+  printf 'p3=%s why=%s ann=%s s3=%s' "$(ck_r "$t" 3)" "$(ck_ln "$t" 3 "$DG_STALE")" "$(ck_ln "$t" 3 "$DG_DIFFERS")" "$(ck_st "$t" alpha)"
+}
+DG_WANT_w2='p3=alpha|0 why=1 ann=1 s3=#state stale'
+
+# (w3) a map written BEFORE digests: alpha and delta carry 2-field rows only, beta a digest. alpha's
+# rows are UNVALIDATED -- it stays stale -- but they still SELECT: delta is not keyed on the whole
+# tree, so the push after alpha's change runs alpha alone.
+dg_w_w3() { local p="$1" x="$2" t="$3"
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  dg_digest "$p" "$t" beta || { printf DIGEST; return; }
+  ck_push "$p" "$t" 1; printf 'v2\n' > "$t/src/a.sh"; ck_push "$p" "$t" 2; ck_push "$p" "$t" 3
+  printf 'p2=%s p3=%s ann=%s s3=%s' "$(ck_r "$t" 2)" "$(ck_r "$t" 3)" "$(ck_ln "$t" 3 "$DG_NODIGEST")" "$(ck_st "$t" alpha)"
+}
+DG_WANT_w3='p2=alpha|0 p3=alpha|0 ann=1 s3=#state stale'
+
+# (w4) a valid LOCAL row still clears, as before, even where the committed digest differs.
+dg_w_w4() { local p="$1" x="$2" t="$3"
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  dg_deriver "$t" || { printf SEED; return; }
+  dg_digest "$p" "$t" alpha || { printf DIGEST; return; }
+  ck_push "$p" "$t" 1; printf 'v2\n' > "$t/src/a.sh"; ck_push "$p" "$t" 2
+  dg_local "$t" "$(ck_sha "$t/core/scripts/derive-fixture-readsets.sh")"
+  ck_push "$p" "$t" 3; local s3; s3="$(ck_st "$t" alpha)"; ck_push "$p" "$t" 4
+  printf 'p3=%s s3=%s p4=%s' "$(ck_r "$t" 3)" "$s3" "$(ck_r "$t" 4)"
+}
+DG_WANT_w4='p3=|0 s3=#state ok p4=|0'
+
+# (w5) the push AFTER a clearing push: the digest lines in the map reach no row set, so a change to
+# delta's input runs delta alone -- alpha (cleared) and beta (unrelated, mapped) both skip.
+dg_w_w5() { local p="$1" x="$2" t="$3"
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  ck_push "$p" "$t" 1; printf 'v2\n' > "$t/src/a.sh"; ck_push "$p" "$t" 2
+  dg_digest "$p" "$t" alpha beta delta || { printf DIGEST; return; }
+  ck_push "$p" "$t" 3; printf 'v2\n' > "$t/src/c.sh"; ck_push "$p" "$t" 4
+  printf 'p4=%s' "$(ck_r "$t" 4)"
+}
+DG_WANT_w5='p4=delta|0'
+
+# (w6) a local row recorded by ANOTHER deriver is not valid: alpha stays stale with no committed digest.
+dg_w_w6() { local p="$1" x="$2" t="$3"
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  dg_deriver "$t" || { printf SEED; return; }
+  ck_push "$p" "$t" 1; printf 'v2\n' > "$t/src/a.sh"; ck_push "$p" "$t" 2
+  dg_local "$t" 0000000000000000000000000000000000000000000000000000000000000000
+  ck_push "$p" "$t" 3
+  printf 'p3=%s s3=%s' "$(ck_r "$t" 3)" "$(ck_st "$t" alpha)"
+}
+DG_WANT_w6='p3=alpha|0 s3=#state stale'
+
+# (w7) w1 with a deriver in the tree and NO local map at all: committed validation runs without one.
+dg_w_w7() { local p="$1" x="$2" t="$3"
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  dg_deriver "$t" || { printf SEED; return; }
+  ck_push "$p" "$t" 1; printf 'v2\n' > "$t/src/a.sh"; ck_push "$p" "$t" 2
+  dg_digest "$p" "$t" alpha || { printf DIGEST; return; }
+  ck_push "$p" "$t" 3
+  printf 'p3=%s s3=%s lm=%s' "$(ck_r "$t" 3)" "$(ck_st "$t" alpha)" "$([ -e "$t/.git/ai-dlc-fixture-readsets.local" ] && echo y || echo n)"
+}
+DG_WANT_w7='p3=|0 s3=#state ok lm=n'
+
+# (w8) THE MAP READS ITSELF (B2): alpha's read set names the committed map, so the commit that adds its
+# own digest moves a path alpha reads. The digest skips the map's path, so it still matches: alpha reruns
+# once on the moved map and is recorded `ok`, and the next push skips it.
+dg_w_w8() { local p="$1" x="$2" t="$3"
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  printf 'alpha\t.ai-dlc-fixture-readsets.tsv\n' >> "$t/.ai-dlc-fixture-readsets.tsv"
+  ( cd "$t" && git add -A && git -c user.email=f@f -c user.name=f commit -qm self ) >/dev/null 2>&1 || { printf SEED; return; }
+  ck_push "$p" "$t" 1; printf 'v2\n' > "$t/src/a.sh"; ck_push "$p" "$t" 2
+  dg_digest "$p" "$t" alpha || { printf DIGEST; return; }
+  ck_push "$p" "$t" 3; local s3; s3="$(ck_st "$t" alpha)"; ck_push "$p" "$t" 4
+  printf 'p3=%s s3=%s p4=%s' "$(ck_r "$t" 3)" "$s3" "$(ck_r "$t" 4)"
+}
+DG_WANT_w8='p3=alpha|0 s3=#state ok p4=|0'
+
+# (w9) A DIRECTORY ROW'S DIGEST VALUE IS ITS LISTING. beta reads the directory src/d. The digest is taken
+# over the seed, push 2 grows beta's key with a new file under src/d, the file is edited (push 3: stale,
+# the grown key dropped), and push 4 must NOT clear the record on the seed-time digest: a digest that gives
+# a directory the value `-` cannot see src/d gain an entry, so it matches, clears the record `ok` without
+# the new file's key, and push 5 SKIPS beta over an edit to that file.
+dg_w_w9() { local p="$1" x="$2" t="$3"
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  dg_digest "$p" "$t" beta || { printf DIGEST; return; }
+  ck_push "$p" "$t" 1
+  printf 'new v1\n' > "$t/src/d/new.sh"; ck_push "$p" "$t" 2
+  printf 'new v2\n' > "$t/src/d/new.sh"; ck_push "$p" "$t" 3
+  ck_push "$p" "$t" 4; local s4; s4="$(ck_st "$t" beta)"
+  printf 'new v3\n' > "$t/src/d/new.sh"; ck_push "$p" "$t" 5
+  printf 'p4=%s s4=%s p5=%s' "$(ck_r "$t" 4)" "$s4" "$(ck_r "$t" 5)"
+}
+DG_WANT_w9='p4=beta|0 s4=#state stale p5=beta|0'
+
+# (w10) LOCAL CLEARING SURVIVES A DIRECTORY ROW. beta reads the directory src/d; its valid local rows carry
+# the deriver's `-` for it. beta goes stale on an edit to src/b.sh and the local map clears it, as w4 does
+# for alpha (which has no directory row, so w4 cannot see this).
+dg_w_w10() { local p="$1" x="$2" t="$3"
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  dg_deriver "$t" || { printf SEED; return; }
+  ck_push "$p" "$t" 1; printf 'v2\n' > "$t/src/b.sh"; ck_push "$p" "$t" 2
+  { printf 'beta\tsrc/b.sh\t%s\n' "$(ck_sha "$t/src/b.sh")"
+    printf 'beta\tsrc/d\t-\n'
+    printf 'beta\tsrc/all.sh\t%s\n' "$(ck_sha "$t/src/all.sh")"
+    printf 'beta\t#deriver\t%s\n' "$(ck_sha "$t/core/scripts/derive-fixture-readsets.sh")"; } > "$t/.git/ai-dlc-fixture-readsets.local"
+  ck_push "$p" "$t" 3; local s3; s3="$(ck_st "$t" beta)"; ck_push "$p" "$t" 4
+  printf 'p3=%s s3=%s p4=%s' "$(ck_r "$t" 3)" "$s3" "$(ck_r "$t" 4)"
+}
+DG_WANT_w10='p3=|0 s3=#state ok p4=|0'
+
+DG_WORLDS="w1 w2 w3 w4 w5 w6 w7 w8 w9 w10"
+dg_all() { # <pool> <fixture root> <tag>
+  local w
+  for w in $DG_WORLDS; do "dg_w_$w" "$1" "$2" "$CK_W/dg.$3.$w" > "$CK_W/dg.$3.$w.got" 2>/dev/null; done
+}
+dg_want() { eval "printf '%s' \"\$DG_WANT_$1\""; }
+# DG_WORLDS_END
+
+DG_N=0
+[ -n "$DERIVER" ] || printf '  SKIP  committed-digest worlds: derive-fixture-readsets.sh is in neither layout yet, so no digest can be seeded the way it writes one\n'
+for _h in "$ROOT/.githooks/pre-push" "$ROOT/core/git-hooks/pre-push"; do
+  [ -n "$DERIVER" ] || break
+  [ -f "$_h" ] || continue
+  DG_N=$((DG_N+1)); DG_P="$CK_W/dgpool.$DG_N.sh"
+  sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$_h" > "$DG_P"
+  DG_X="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$DG_P" | sort -u)"
+  dg_all "$DG_P" "$DG_X" "h$DG_N"
+  for _w in $DG_WORLDS; do
+    DG_ARMS=$((DG_ARMS+1)); _g="$(cat "$CK_W/dg.h$DG_N.$_w.got")"
+    if [ "$_g" = "$(dg_want "$_w")" ]; then ok "($_w) ${_h#"$ROOT"/}: $_g"
+    else bad "($_w) ${_h#"$ROOT"/}: want '$(dg_want "$_w")' got '$_g'"; fi
+  done
+done
+if [ -n "$DERIVER" ]; then
+  DG_ARMS=$((DG_ARMS+1))
+  [ "$DG_N" -ge 1 ] && ok "the committed-digest worlds ran against $DG_N hook(s)" || bad "no pre-push hook was found for the committed-digest worlds"
+fi
+
+# ------------------------------------------------- `--reconcile` derives what to trace (BL-472) ----
+# Five fixtures in a seeded repo whose runner carries the resolved hook's READSET_UNIVERSE span:
+#   un  a run.sh and no committed row                         -> unmapped
+#   st  mapped, digest matching, key record `#state stale`    -> stale
+#   ch  mapped, digest taken BEFORE its input changed, record `#state ok` -> changed. NON-stale on
+#       purpose: a stale ch would be listed for the stale reason, and a build that dropped reason (c)
+#       would still name it.
+#   cl  mapped, digest matching, record ok                    -> the clean control, never listed
+#   nd  mapped, NO digest line, record ok, input changed      -> not listed: a digest-less row set cannot
+#       be judged changed, and listing it would trace every pre-digest fixture on every reconcile.
+# The list is driven from the deriver's READSET_RECONCILE span; the whole deriver is then driven through
+# the stub stream, and must name exactly those three and trace exactly those three. A clean repo prints
+# `nothing to reconcile`, exits 0 and never creates its trace root. Mutants drop reasons (c) and (b).
+RC_ARMS=0
+if [ -z "$DERIVER" ] || [ -z "${SX:-}" ]; then
+  printf '  SKIP  --reconcile arms: no deriver, or the stub-stream world did not run (root)\n'
+else
+  RCS="$WORK/rc.span"
+  { sed -n '/^# READSET_UNIVERSE_BEGIN$/,/^# READSET_UNIVERSE_END$/p' "$HOOK"
+    sed -n '/^# READSET_RECONCILE_BEGIN$/,/^# READSET_RECONCILE_END$/p' "$DERIVER"; } > "$RCS"
+  grep -q '^readset_reconcile_list() {' "$RCS" || broken "no readset_reconcile_list in the deriver's READSET_RECONCILE span"
+  # The span reads READSET_MAP and READSET_LOCAL, which the pool block binds; dg_digest sources this.
+  { printf 'READSET_MAP=.ai-dlc-fixture-readsets.tsv\nREADSET_LOCAL=/dev/null\n'; cat "$RCS"; } > "$WORK/rc.pool"
+  rc_seed() { # <repo> <change ch: yes|no> <stale st: yes|no> <unmapped un: yes|no>
+    local r="$1" f
+    mkdir -p "$r/.githooks" "$r/core/scripts" "$r/src" || return 1
+    { printf '#!/bin/bash\nFXROOT="core/fixtures/"\n'; sed -n '/^# READSET_UNIVERSE_BEGIN$/,/^# READSET_UNIVERSE_END$/p' "$HOOK"; } > "$r/.githooks/pre-push"
+    cp "$SB/deriver.sh" "$r/core/scripts/derive-fixture-readsets.sh" || return 1
+    : > "$r/.ai-dlc-fixture-readsets.tsv"
+    for f in ch cl nd st ${4:+un}; do
+      [ "$4" = no ] && [ "$f" = un ] && continue
+      mkdir -p "$r/core/fixtures/$f" && printf '#!/bin/bash\nexit 0\n' > "$r/core/fixtures/$f/run.sh" || return 1
+      [ "$f" = un ] && continue
+      printf 'v1\n' > "$r/src/$f.sh"
+      printf '%s\tsrc/%s.sh\n%s\tcore/fixtures/%s/run.sh\n' "$f" "$f" "$f" "$f" >> "$r/.ai-dlc-fixture-readsets.tsv"
+    done
+    ( cd "$r" && git init -q . && git add -A && git -c user.email=f@f -c user.name=f commit -qm seed ) >/dev/null 2>&1 || return 1
+    dg_digest "$WORK/rc.pool" "$r" ch cl st || return 1
+    mkdir -p "$r/.git/ai-dlc-fixture-keys" || return 1
+    for f in ch cl nd st; do printf '#format k1\n#state ok\n#tools per-fixture\n' > "$r/.git/ai-dlc-fixture-keys/$f.key"; done
+    [ "$3" = yes ] && printf '#format k1\n#state stale\n#tools per-fixture\n' > "$r/.git/ai-dlc-fixture-keys/st.key"
+    if [ "$2" = yes ]; then
+      printf 'v2\n' > "$r/src/ch.sh"; printf 'v2\n' > "$r/src/nd.sh"
+      ( cd "$r" && git add -A && git -c user.email=f@f -c user.name=f commit -qm change ) >/dev/null 2>&1 || return 1
+    fi
+  }
+  rc_list() { # <span> <repo>: the derived list, one `fx:reason` per line joined by spaces
+    ( cd "$2" && READSET_MAP=.ai-dlc-fixture-readsets.tsv && READSET_LOCAL=/dev/null && . "$1" \
+      && readset_reconcile_list core/fixtures .git/ai-dlc-fixture-keys "$(mktemp -d "$WORK/rcl.XXXXXX")/s" ) 2>/dev/null \
+      | tr '\t' ':' | tr '\n' ' ' | sed 's/ $//'
+  }
+  RC="$WORK/rcrepo"; rc_seed "$RC" yes yes yes || broken "could not seed the --reconcile repo"
+  RC_ARMS=$((RC_ARMS+1))
+  RL="$(rc_list "$RCS" "$RC")"
+  if [ "$RL" = "ch:changed st:stale un:unmapped" ]; then
+    ok "RECONCILE: the list names exactly the changed (ch, non-stale), stale (st) and unmapped (un) fixtures, and neither the clean control cl nor the digest-less nd"
+  else
+    bad "RECONCILE: expected 'ch:changed st:stale un:unmapped', got '$RL'"
+  fi
+  printf '%s\n' core/fixtures/ch/run.sh core/fixtures/st/run.sh core/fixtures/un/run.sh > "$WORK/rc.sb"
+  RC_TR="$(cd "$WORK" && pwd -P)/rc.tr"
+  rc_run() { # <repo> <trace root>; prints "<rc>|<announce>|<listed>|<traced>"
+    local r="$1" x
+    ( cd "$r" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$WORK/rc.sb" \
+        AI_DLC_READSET_TRACE_ROOT="$2" bash core/scripts/derive-fixture-readsets.sh --reconcile ) > "$WORK/rc.out" 2>&1 </dev/null
+    x=$?
+    ( cd "$r" && git checkout -q -- . ) >/dev/null 2>&1
+    printf '%s|%s|%s|%s' "$x" "$(grep -m1 -E '^(--reconcile: [0-9]+ fixture|nothing to reconcile)' "$WORK/rc.out")" \
+      "$(grep -E '^  [a-z]+[[:blank:]][a-z]+$' "$WORK/rc.out" | tr '\t' ':' | tr -d ' ' | tr '\n' ' ' | sed 's/ $//')" \
+      "$(grep -oE '^  (ch|cl|nd|st|un) ' "$WORK/rc.out" | tr -d ' ' | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')"
+  }
+  RC_ARMS=$((RC_ARMS+1))
+  RR="$(rc_run "$RC" "$RC_TR")"
+  if [ "$RR" = "0|--reconcile: 3 fixture(s) to trace:|ch:changed st:stale un:unmapped|ch st un" ]; then
+    ok "RECONCILE: the whole deriver prints the three with their reasons, traces exactly ch, st and un, and exits 0"
+  else
+    bad "RECONCILE: expected '0|--reconcile: 3 fixture(s) to trace:|ch:changed st:stale un:unmapped|ch st un', got '$RR' — $(tail -3 "$WORK/rc.out" | tr '\n' ' ')"
+  fi
+  RC2="$WORK/rcclean"; rc_seed "$RC2" no no no || broken "could not seed the clean --reconcile repo"
+  RC2_TR="$(cd "$WORK" && pwd -P)/rc2.tr"
+  RC_ARMS=$((RC_ARMS+1))
+  RR2="$(rc_run "$RC2" "$RC2_TR")"
+  if [ "$RR2" = "0|nothing to reconcile||" ] && [ ! -e "$RC2_TR" ]; then
+    ok "RECONCILE: a fully-mapped clean repo prints 'nothing to reconcile', exits 0, traces nothing and never creates its trace root"
+  else
+    bad "RECONCILE: a clean repo did not print 'nothing to reconcile' at 0 with no trace root: '$RR2' root $([ -e "$RC2_TR" ] && echo CREATED || echo absent)"
+  fi
+  if [ "$(id -u)" != 0 ]; then
+    RC_ARMS=$((RC_ARMS+1))
+    chmod 000 "$RC2/.git/ai-dlc-fixture-keys"
+    RR3="$(rc_run "$RC2" "$RC2_TR")"
+    chmod 755 "$RC2/.git/ai-dlc-fixture-keys"
+    case "$RR3" in
+      1*) if grep -q 'cannot read the key records' "$WORK/rc.out"; then ok "RECONCILE: an unreadable key-record directory REFUSES at 1 rather than reading as 'no stale record'"
+          else bad "RECONCILE: an unreadable keys dir exited 1 without naming it: $(tail -2 "$WORK/rc.out" | tr '\n' ' ')"; fi ;;
+      *) bad "RECONCILE: an unreadable keys dir did not refuse: '$RR3'" ;;
+    esac
+  fi
+  RC_ARMS=$((RC_ARMS+1))
+  printf '#!/bin/bash\nFXROOT="core/fixtures/"\n' > "$RC2/.githooks/pre-push"
+  RR4="$(rc_run "$RC2" "$RC2_TR")"
+  ( cd "$RC2" && git checkout -q -- .githooks/pre-push ) >/dev/null 2>&1
+  case "$RR4" in
+    1*) if grep -q 'needs the READSET_UNIVERSE span' "$WORK/rc.out"; then ok "RECONCILE: a runner with no READSET_UNIVERSE span REFUSES at 1, because a changed read set cannot be judged without it"
+        else bad "RECONCILE: a span-less runner exited 1 without naming the span: $(tail -2 "$WORK/rc.out" | tr '\n' ' ')"; fi ;;
+    *) bad "RECONCILE: a span-less runner did not refuse: '$RR4'" ;;
+  esac
+  # Two wrong builds of the list, each a cmp-guarded copy of the span, each dying on the list arm.
+  sed '/^    elif grep -qxF "\$b" "\$s\/changed"; then printf/d' "$RCS" > "$WORK/rc.nochanged.span"
+  sed '/^    elif grep -qxF "\$b" "\$s\/stale"; then printf/d' "$RCS" > "$WORK/rc.nostale.span"
+  for _m in nochanged:"st:stale un:unmapped" nostale:"ch:changed un:unmapped"; do
+    RC_ARMS=$((RC_ARMS+1)); _n="${_m%%:*}"; _w="${_m#*:}"
+    if cmp -s "$RCS" "$WORK/rc.$_n.span"; then bad "RECONCILE MUTANT $_n did not apply"; continue; fi
+    _g="$(rc_list "$WORK/rc.$_n.span" "$RC")"
+    if [ "$_g" = "$_w" ]; then ok "RECONCILE MUTANT $_n is KILLED by the list arm: it derives '$_g'"
+    else bad "RECONCILE MUTANT $_n: expected '$_w', got '$_g'"; fi
+  done
+fi
+
 # THE SUMMARY IS ALSO A COMPLETENESS CHECK. This fixture once ended mid-file after an editing
 # mistake: it printed two thirds of its arms, never reached a verdict line, and exited 0 --
 # which the suite's worker records as `ok`. A fixture that dies silently reads exactly like one
 # that passed, so the arm count is asserted against the number this file actually carries.
-EXPECTED=$(( 18 + IGN_ARMS + NEW_ARMS + MERGE_ARMS + CONTROL_ARMS + TRACE_ARMS + BOTH_ARMS + LT_ARMS + CK_ARMS ))
+EXPECTED=$(( 18 + IGN_ARMS + NEW_ARMS + MERGE_ARMS + CONTROL_ARMS + TRACE_ARMS + BOTH_ARMS + LT_ARMS + CK_ARMS + TK_ARMS + DG_ARMS + RC_ARMS ))
 if [ "$asserts" -lt "$EXPECTED" ]; then
   printf '  FAIL  only %s assertions ran; this fixture carries %s — it exited early and a short green run reads exactly like a passing one\n' "$asserts" "$EXPECTED"
   fails=$((fails+1))

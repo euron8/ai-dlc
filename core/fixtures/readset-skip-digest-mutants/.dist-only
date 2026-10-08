@@ -1,0 +1,8 @@
+MUTATION BATTERY behind a shipped fixture: it edits COPIES of the distribution's own
+`.githooks/pre-push` FIXTURE_POOL block and scores each against the committed-digest worlds of the
+shipped `readset-skip` fixture, which it sources from that fixture's DG_WORLDS span.
+
+Its subjects -- `.githooks/pre-push` and `core/fixtures/readset-skip/run.sh` by that path -- do not
+exist on a consumer, where the hook is the installed copy of core/git-hooks/pre-push and the fixture
+lands under tests/fixtures/. The property it proves reaches consumers through `readset-skip`, which
+ships and runs the same worlds against both hooks.

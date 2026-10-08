@@ -19,6 +19,63 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.745.0] - 2026-10-07
+
+Batch 204's third release, shipped alone because it edits both pre-push hooks. It discharges two consumer candidates,
+files and carries `BL-475` and `BL-476`, and carries `BL-465`, `BL-466`, `BL-470`, `BL-471` and `BL-472`. Its first push
+on any clone runs nearly every fixture once: two new fixture directories move the `core/fixtures/` listing key, and every
+key record migrates to the new tool-key format on that push.
+
+### Read-set tool keys no longer depend on who ran the hook (PC-S317-READSET-TOOL-KEYS-DEPEND-ON-WHO-INVOKED-THE-PRE-PUSH-HOOK)
+
+- `readset_tools` resolved every command word on the inherited `$PATH`. `git push` puts git's exec-path first and
+  `self-update-push.sh`, a shell or a harness do not, so `git` keyed a different binary per invoker and each invocation
+  reran the other's fixtures as `tools changed`. The reference consumer measured 57 against 149 of 199 fixtures on one tree.
+- Tools now resolve against git's real exec-path, read once as
+  `env -u DEVELOPER_DIR -u GIT_EXEC_PATH /usr/bin/git --exec-path`, then the fixed list
+  `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`. `/usr/bin/git` is an xcrun shim, so the exec-path is
+  what keys the git binary that actually runs.
+- **Tools found only outside those directories are no longer keyed** (`node`, `npm` and `claude` under `~/.nvm` or
+  `~/.local/bin`). Upgrading one does not rerun the fixtures that call it. Any key that depends on `$PATH` brings the
+  defect back.
+- Records are written `#tools canonical`. A record in the old format ignores its tool rows ONCE: if its file, listing and
+  absent-name keys match it skips and is republished in the new format, so the amnesty never fires twice and never
+  covers a file key.
+- `readset-skip` proves byte-identical decisions under the git-push PATH, a plain PATH, `env -i PATH=/usr/bin:/bin` and a
+  set `DEVELOPER_DIR`, and that a changed binary reruns exactly the fixtures naming it. `self-update-gate` proves a push
+  through `self-update-push.sh` and through `git push` skip the same set.
+
+### Every push reports the read-set trace's outcomes (PC-S317-READSET-LIVE-TRACE-FAILURES-NEVER-REACH-THE-OPERATOR)
+
+- The post-green trace runs detached and printed one `started` line; its outcomes reached only a log nobody read. Every
+  push now prints `trace-report` lines from a durable status file the detached trace writes: whether the last trace is
+  running, finished or died; how many fixtures it recorded, discarded and lost, by cause; the fixtures at 2 of 3
+  discards; the held fixtures on every push; and the stale and unmapped fixtures nothing has cleared. A trace that
+  recorded nothing, or died, prints `WARN`. A `#discards` count resets when the deriver changes, and the report says so.
+- `readset_hash_rows` dropped a cleanly traced fixture as `could not hash <fx>'s set in the trace copy -- not recorded`
+  whenever the set's last path was not a regular file. Fixed in the function, with a count assertion so an unreadable
+  file still refuses.
+
+### Committed traces clear stale fixtures, and `--reconcile` traces only what is owed (BL-471, BL-472)
+
+- The deriver writes one `# digest <fx> <sha>` line per traced fixture into the committed map, excluding the map's own
+  path. A stale key record whose committed digest matches the push's tree skips on the next push and is republished
+  `ok`; a digest that predates the change, or rows with no digest, never clear.
+- `derive-fixture-readsets.sh --reconcile` lists the unmapped, stale and changed-input fixtures with a reason each and
+  traces exactly those, or prints `nothing to reconcile`.
+
+### The suite-pole guard keeps a history per pool width (BL-465)
+
+- Every green gated run records its pole for the width it ran at; the guard compares against the slowest run since the
+  last reviewed drop. A tracked row only calibrates a width's first three runs and never fails one. A pole FAIL now
+  removes the content-key record, so re-pushing the same tree measures again instead of skipping the check.
+
+### Tracer fixes (BL-466, BL-470)
+
+- `--tracer fs_usage` reaps only its own `fs_usage` (`pkill -P $$`), not every one on the machine.
+- Every sandbox profile stops reporting metadata and existence checks on the trace tree's root, which flooded the log
+  stream; reads of the root and of everything below it are still recorded.
+
 ## [0.744.0] - 2026-10-07
 
 Batch 204's second release. It discharges one consumer candidate and files and carries `BL-464`.

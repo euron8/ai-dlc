@@ -92,12 +92,14 @@ window_load() { # $1 load.tsv  $2 start  $3 end
 # Each prints a reason and returns 1 when the run must be refused.
 
 # THE DERIVER'S DEFAULT PROFILE, rendered for a resolved trace root. This is the deriver's own
-# `printf` at :692 with "$TREE" "$MARKDIR" spelled as root/t and root/m (it resolves the root with
-# `pwd -P` at :620 first). It is a COPY of one format string, and the fixture binds the copy: it
-# extracts the format from both files and refuses unless they are byte-identical, and it seeds
-# every run's sandbox.sb from the DERIVER's format, so a drift fails the ALL-MET world.
+# default-profile `printf` with "$TREE" "$MARKDIR" "$TREE" spelled as root/t, root/m, root/t (it
+# resolves the root with `pwd -P` first). It is a COPY of one format string, and the fixture binds the
+# copy: it extracts the format from both files and refuses unless they are byte-identical, and it seeds
+# every run's sandbox.sb from the DERIVER's format, so a drift fails the ALL-MET world. The trailing
+# root-literal clause (BL-470) means R0 refuses every stage-1 run dir recorded before it landed: their
+# sandbox.sb lacks that line.
 render_profile() { # $1 resolved trace root
-  printf '(version 3)\n(allow default)\n(allow file* process-exec* (subpath "%s") (subpath "%s") (with report))\n' "$1/t" "$1/m"
+  printf '(version 3)\n(allow default)\n(allow file* process-exec* (subpath "%s") (subpath "%s") (with report))\n(allow file-read-metadata file-test-existence (literal "%s"))\n' "$1/t" "$1/m" "$1/t"
 }
 
 # R0 also refuses a SUBSTITUTED profile. AI_DLC_READSET_SANDBOX_PROFILE (:684) replaces the

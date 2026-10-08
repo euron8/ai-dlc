@@ -13,9 +13,22 @@
 # pole rot in place. But a loaded cost is a property of the pool width it was taken under --
 # `gate-adjudication-mutants` read 490-500s at 12 and 727-760s at 16 -- so each width carries
 # its OWN block: its `# band:`, `# jobs:` and `# fixtures:` lines followed by exactly one data
-# row. The guard selects the block whose `# jobs:` equals the running width, SKIPs naming the
-# widths present when none does, and refuses (exit 2) a width given twice, a directive repeated
-# before a row consumes its block, and a row whose block is missing a directive.
+# row. The guard refuses (exit 2) a width given twice, a directive repeated before a row consumes
+# its block, and a row whose block is missing a directive.
+#
+# THESE ROWS ARE SEEDS, NOT THE GUARD'S SOURCE (BL-465). Every green gated push records its pole in
+# a per-width history file in the git common dir (`ai-dlc-suite-pole.history`). At width W the guard
+# compares against W's own history once it holds 3 usable rows -- B(W) = the max of EVERY usable row
+# at W since its rows were last dropped, under the `# history-band:` below -- and that is so at 12
+# and 16 too. A tracked block is read only while its width has fewer than 3 history rows, and then
+# only as a CALIBRATING seed: compared and reported, recorded, never a FAIL. A width with neither is
+# CALIBRATING too. No width SKIPs for want of a row. At least one block must remain: the parser
+# refuses a file with none.
+#
+# `# history-band:` is ONE file-level figure, the percent tolerated above B(W) for every width
+# compared against history. 33 is the widest band any tracked block was calibrated to (pool 12,
+# taken over nine runs of an unchanged unit across loads 3.0 to 48.7).
+# history-band: 33
 #
 # THE RATCHET RULE. The row moves DOWN freely -- a faster suite needs no ceremony. It moves UP
 # only as a reviewed edit carrying a MEASUREMENT and the load average it was taken under, in
@@ -24,8 +37,9 @@
 #
 # `# band:` is the percent of growth tolerated above the row before the push fails. It is the
 # calibrated run-to-run spread plus stated headroom -- not a number chosen for comfort.
-# `# jobs:` is the pool width the figure was taken under; the guard compares only against the
-# block taken at the running width, because a different width is a different measurement.
+# `# jobs:` is the pool width the figure was taken under; the guard reads a block only at the
+# running width, because a different width is a different measurement, and only as a reported
+# seed while that width's history is still calibrating.
 # `# fixtures:` is the fixture-directory count of the tree the figure was taken on. It is
 # reported and never compared -- it is there so a later reader can see whether the suite has
 # grown under the figure.
