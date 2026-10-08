@@ -29,7 +29,7 @@
 #        nothing, 1 = an assertion failed, 2 = fixture broken.
 SHARDS="a b c d e"
 # A ratchet, raised when a mutant is added: lowering it is a visible edit, a lost mutant is not.
-MIN_MUTANTS=60
+MIN_MUTANTS=61
 set -uo pipefail
 
 # The pre-push gate exports AI_DLC_* tunables; none is read here, but scrub them all the same.
@@ -139,11 +139,12 @@ CTL="$(score "$MUT/hook-control.sh" "$W/failed.control")"
 
 # Expected sets are C-locale sorted, which is what score() prints.
 # 1. the whole subject replaced by silence: every arm holding a DENY, WARN or stderr cell fails.
-mut silence "BASHC BODY CLOSE DENIED DETACHED ENVELOPE FAILOPEN GATELOG GHREPO MATE MATEABSENT MATEPATH MATEREWRITE MCPNAME MERGE ORDER PATHGIT PERKIND PUSH QUOTEDC QUOTEDENV REARM REASON REDISPATCH SELF SELFLAST STACK TWRITE UNAV UPDATE UPDATECUT UPDATEREF WITHDRAWN WRAP" -e '2i\
+#    ENVELOPE holds only SILENT cells since batch 208 and survives it; FAILED and REREAD hold DENY cells.
+mut silence "BASHC BODY CLOSE DENIED DETACHED FAILED FAILOPEN GATELOG GHREPO MATE MATEABSENT MATEPATH MATEREWRITE MCPNAME MERGE ORDER PATHGIT PERKIND PUSH QUOTEDC QUOTEDENV REARM REASON REDISPATCH REREAD SELF SELFLAST STACK TWRITE UNAV UPDATE UPDATECUT UPDATEREF WITHDRAWN WRAP" -e '2i\
 exit 0'
 # 2. warn-only: the rejected design, the same text as context with no decision.
 #    UNAV survives it by design: the warn path is its own emission and this mutant leaves it intact.
-mut warn-only "BASHC BODY CLOSE DENIED DETACHED ENVELOPE GATELOG GHREPO MATE MATEPATH MATEREWRITE MCPNAME MERGE ORDER PATHGIT PERKIND PUSH QUOTEDC QUOTEDENV REARM REASON REDISPATCH SELF SELFLAST STACK TWRITE UPDATE UPDATECUT UPDATEREF WITHDRAWN WRAP" \
+mut warn-only "BASHC BODY CLOSE DENIED DETACHED FAILED GATELOG GHREPO MATE MATEPATH MATEREWRITE MCPNAME MERGE ORDER PATHGIT PERKIND PUSH QUOTEDC QUOTEDENV REARM REASON REDISPATCH REREAD SELF SELFLAST STACK TWRITE UPDATE UPDATECUT UPDATEREF WITHDRAWN WRAP" \
   -e 's/permissionDecision: "deny", permissionDecisionReason: \$m/additionalContext: $m/'
 # 3. no grant test: a hook with a knob-free default of ON.
 mut no-grant-test "NOGRANT WITHDRAWN" -e '/^\[ "\${GRANT:-none}" = on \] || exit 0$/d'
@@ -158,12 +159,13 @@ mut error-does-not-clear "ERRCLEAR" \
   -e 's/elif \$b\.type == "advisor_tool_result" then/elif $b.type == "advisor_tool_result" and ((($b.content | if type == "object" then .error_code else null end) \/\/ "unavailable") != "unavailable") then .adv = 0 elif $b.type == "advisor_tool_result" then/'
 # 8. any advisor call ever clears, whatever came after it. UNAV and REARM die too: both worlds
 #    hold an advisor call BEFORE the owed push, so the mutant allows where they warn and deny;
-#    so do ENVELOPE, REDISPATCH (a9) and SELFLAST, whose deny cells all sit after an older advisor.
-mut any-advisor-clears "DENIED ENVELOPE ORDER PERKIND REARM REDISPATCH SELF SELFLAST UNAV" -e 's/\[ "\${LAST_ADV:-0}" -gt "\${LAST_ACT:-0}" \]/[ "${LAST_ADV:-0}" -gt 0 ]/'
+#    so do FAILED, REDISPATCH (a9) and SELFLAST, whose deny cells all sit after an older advisor.
+#    REREAD's deny twin has no advisor at all, so it stands.
+mut any-advisor-clears "DENIED FAILED ORDER PERKIND REARM REDISPATCH SELF SELFLAST UNAV" -e 's/\[ "\${LAST_ADV:-0}" -gt "\${LAST_ACT:-0}" \]/[ "${LAST_ADV:-0}" -gt 0 ]/'
 # 9. a branch delete is gated.
 mut delete-gated "DELETE" -e 's/gitpush and (isdelete | not)/gitpush/'
-# 10. the MCP merge tool escapes.
-mut no-mcp-merge "MCPNAME MERGE" -e 's/startswith("mcp__") and endswith("__merge_pull_request")/startswith("mcp__NEVER")/'
+# 10. the MCP merge tool escapes. FAILED's f-merge-ok is an MCP merge deny too.
+mut no-mcp-merge "FAILED MCPNAME MERGE" -e 's/startswith("mcp__") and endswith("__merge_pull_request")/startswith("mcp__NEVER")/'
 # 11. `record` gated alongside `close`.
 mut record-gated "CLOSE" -e 's/\\\\sclose(\\\\s|\$)/\\\\s(close|record)(\\\\s|$)/'
 # 12. the push match loses its start anchor, so a mention is a push -- including the mentions
@@ -185,10 +187,13 @@ mut mate-any-write "MATEPATH" -e 's/then "verdict" else "" end/then "verdict" el
 # 19. a re-write of the agent's own deliverable is a new gated action. REDISPATCH dies too: its
 #     notification twins are re-writes that stay exempt only through the same exemption.
 mut no-rewrite-exemption "MATEREWRITE REDISPATCH" -e 's/\[ "\${SAME:-0}" -gt 0 \]/[ "${SAME:-0}" -gt 99999 ]/'
-# 20. a call this hook denied is counted as a gated action.
-mut denied-counted "DENIED" -e 's/\.g |= del(\.\[(\$b\.tool_use_id \/\/ "") | tostring\])/./'
+# 20. a call that did not ship is counted as a gated action: every SILENT cell resting on a
+#     failed call dies (DENIED, ENVELOPE, and FAILED's six).
+mut denied-counted "DENIED ENVELOPE FAILED" -e 's/\.g |= del(\.\[(\$b\.tool_use_id \/\/ "") | tostring\])/./'
 # 21. the incoming call, already on disk, is counted against itself.
-mut self-counted "SELF" -e 's/and ((\$b\.id | tostring) != \$tuid)/and true/'
+#     REREAD dies too, and both findings are true: rr-late's appended line IS the incoming call, so
+#     once a re-read sees it the mutant counts it as a gated action after the advisor and denies.
+mut self-counted "REREAD SELF" -e 's/and ((\$b\.id | tostring) != \$tuid)/and true/'
 # 22. the transcript-write deny is conditioned on the grant (deleting the grant line disables it).
 mut twrite-needs-grant "TWRITE" -e 's/^if \[ "\$KIND" = twrite \]; then$/if [ "$KIND" = twrite ] \&\& grep -q advisor_tool "$TP" 2>\/dev\/null; then/'
 # 23. the projects directory is assumed at ~/.claude/projects rather than derived.
@@ -198,8 +203,15 @@ mut twrite-any-redirect "TWRITEREAD" -e 's/((\$c | redirs | map(expand(\$home) |
 # 25. any Write to gate-log.md is Check 12, the header-only rotation included.
 mut gatelog-by-path "GATELOG" -e 's/then (if ((\.input\.content \/\/ "") | tostring | heads) > 0 then "gatelogw" else "" end)/then "gatelog"/'
 
-# 26. D1: any error result CONTAINING the token removes the call, so a push that ran is erased.
-mut envelope-unanchored "ENVELOPE" -e 's/| test("^PreToolUse:\[A-Za-z_\]+ hook error: ai-dlc-advisor-gate: DENIED")/| contains("ai-dlc-advisor-gate: DENIED")/'
+# 26. (m) BL-486: the ref-update guard dropped, so a push that SHIPPED with an error status (exit
+#     141 after the remote moved, or a later step failing) is erased and its consult re-used.
+#     Replaces `envelope-unanchored`: the anchored-envelope rule it mutated is subsumed by the
+#     failed-call rule, so that mutation no longer has an anchor or a cell that could see it.
+#     Anchored on the push branch of `shipped`, so the merge-text guard (26b) stands.
+mutc m-no-refupdate-guard "FAILED" "FAILED:f-141-newbranch FAILED:f-err-dots FAILED:f-err-forced" -e 's/^def shipped(\$k): if \$k == "push" then refupdate elif/def shipped($k): if $k == "push" then false elif/'
+# 26b. N1: the merge-text guard dropped, so an errored `gh pr merge --delete-branch` that MERGED
+#     (then failed to delete the local branch) is erased and its consult re-used. The 404 twin stands.
+mutc m-no-mergetext-guard "FAILED" "FAILED:f-merge-errdel" -e 's/elif \$k == "merge" then mergedtext else false end;$/elif $k == "merge" then false else false end;/'
 # 27. D4: a re-dispatch does not end the re-write exemption.
 mut no-redispatch "REDISPATCH" -e 's/then \.g |= map_values(\.\[1\] = "") else \. end)/then . else . end)/'
 # 28. D4 done wrong: a re-dispatch forgets the gated action itself, so an older advisor clears it.
@@ -253,8 +265,9 @@ mutc K-no-reviews-path "MATEPATH" "MATEPATH:k-cr MATEPATH:k-qa" -e 's/test("\/do
 mutc K-no-review-shards "MATEPATH" "MATEPATH:k-sh-cr MATEPATH:k-sh-qa" -e 's/test("\/docs\/reviews\/(\.+\/)?shards\/\[^\/\]\*(qa-validation|code-review)\[^\/\]\*\/\[^\/\]+\\\\.md\$")/false/'
 # 50. L: a verdict shard part is not gated.
 mutc L-no-part-jsonl "MATEPATH" "MATEPATH:l-part" -e 's/verdict\\\\.json|part-\[^\/\]+\\\\.jsonl|repair/verdict\\\\.json|repair/'
-# 51. A: the envelope matched as an unanchored regex, so a push that ran and printed it is erased.
-mutc A-envelope-unanchored-regex "ENVELOPE" "ENVELOPE:a-midline" -e 's/| test("^PreToolUse:\[A-Za-z_\]+ hook error: ai-dlc-advisor-gate: DENIED")/| test("PreToolUse:[A-Za-z_]+ hook error: ai-dlc-advisor-gate: DENIED")/'
+# 51. (r) THE RACE: the re-read reuses the first STATE, so the advisor line that lands after the
+#     hook's first scan is never judged. Replaces `A-envelope-unanchored-regex` (subsumed, as 26).
+mutc r-reread-reuses-state "REREAD" "REREAD:rr-late" -e 's/^  STATE2="\$(scan)" || STATE2="\$STATE"$/  STATE2="$STATE"/'
 # 52-55. B and C: one lead-kind pair collapsed into one kind.
 mutc B-collapse-gatelog-push "PERKIND" "PERKIND:pk-push-gatelog" -e 's/(\[\.g\[\] | select(\.\[2\] == \$kind) | \.\[0\]\] | max \/\/ 0) as \$act/([.g[] | select(.[2] == $kind or ((.[2] == "gatelog" or .[2] == "push") and ($kind == "gatelog" or $kind == "push"))) | .[0]] | max \/\/ 0) as $act/'
 mutc B-collapse-close-push "PERKIND" "PERKIND:pk-push-close" -e 's/(\[\.g\[\] | select(\.\[2\] == \$kind) | \.\[0\]\] | max \/\/ 0) as \$act/([.g[] | select(.[2] == $kind or ((.[2] == "close" or .[2] == "push") and ($kind == "close" or $kind == "push"))) | .[0]] | max \/\/ 0) as $act/'
@@ -262,8 +275,15 @@ mutc C-collapse-close-merge "PERKIND" "PERKIND:pk-merge-close" -e 's/(\[\.g\[\] 
 mutc C-collapse-gatelog-merge "PERKIND" "PERKIND:pk-merge-gatelog" -e 's/(\[\.g\[\] | select(\.\[2\] == \$kind) | \.\[0\]\] | max \/\/ 0) as \$act/([.g[] | select(.[2] == $kind or ((.[2] == "gatelog" or .[2] == "merge") and ($kind == "gatelog" or $kind == "merge"))) | .[0]] | max \/\/ 0) as $act/'
 # 56. F: the wrapper strip loop bounded at four.
 mutc F-strip-depth4 "STACK" "STACK:f-five" -e 's/^def strip: (sub(wrapre; "") | sub(envre; "")) as \$n$/def strip1: (sub(wrapre; "") | sub(envre; "")) as $n/' -e 's/^  | if \$n != \. then (\$n | strip) elif test(bashc) then (sub(bashc; "") | strip) else \. end;$/  | if $n != . then $n elif test(bashc) then sub(bashc; "") else . end; def strip: strip1 | strip1 | strip1 | strip1;/'
-# 57. H: any result opening with the envelope removes the call, error or not.
-mutc H-denied-ignores-iserror "DENIED" "DENIED:h-noerr" -e 's/elif (\$b\.type == "tool_result" and \$b\.is_error == true/elif ($b.type == "tool_result"/'
+# 57. (n) the is_error test dropped: every answered call that is not a push carrying a ref-update
+#     line (or a merge carrying a merged line) is removed, error or not. It dies on the ran-OK cells
+#     (f-ok-uptodate, pushed, h-noerr), and on every world whose owed action is an earlier call that RAN OK:
+#     the PERKIND re-actions, a9's re-dispatch, SELFLAST's answered push. MATEREWRITE's a5 and
+#     REDISPATCH's rd-sys and rd-task lose the re-write exemption with the earlier write it rests on.
+#     f-ok-ref stands: refupdate still holds a ran-OK push that moved a ref. f-merge-ok stands since
+#     N1: its `successfully merged` text holds it through `mergedtext`. n-pk-merge still dies: its
+#     result text `merged` carries none of the three merged phrases.
+mutc H-denied-ignores-iserror "DENIED FAILED MATEREWRITE PERKIND REDISPATCH SELFLAST" "DENIED:h-noerr DENIED:n-pushed FAILED:f-ok-uptodate MATEREWRITE:n-mate-same PERKIND:n-pk-close PERKIND:n-pk-merge PERKIND:n-pk-push REDISPATCH:rd-meta-adv REDISPATCH:rd-sys REDISPATCH:rd-task SELFLAST:n-selflast-answered" -e 's/elif (\$b\.type == "tool_result" and \$b\.is_error == true/elif ($b.type == "tool_result"/'
 # 58. I: a `tee` onto gate-log.md is not a Check 12 append.
 mutc I-no-tee-gatelog "GATELOG" "GATELOG:i-tee" -e 's/+ \[\$s\[\] | words | select(length > 0 and \.\[0\] == "tee") | \.\[1:\]\[\]\]//'
 # 59. J: a MultiEdit onto gate-log.md is not a Check 12 append.

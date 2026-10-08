@@ -960,7 +960,8 @@ blocks, delays or fails a step. The touchpoints:
 - **P -- a validation-cycle teammate is slow.** On the beat whose `WAITING` line reports
   `beat 2/` for a validation-cycle deliverable, re-arm the next beat (`run_in_background:
   true`) FIRST, then call the advisor in the same turn. Once per pass, never once per beat.
-- **I -- before an irreversible step.** Before a push, a merge or a deploy.
+- **I -- before an irreversible step.** Before a push, a merge or a deploy. Call the advisor
+  in a message of its own, read its answer, then issue the push or merge.
 
 Weigh what it returns. Where it contradicts evidence you hold, record the disagreement in the
 artifact you are writing rather than switching silently. An advisor call is a bounded

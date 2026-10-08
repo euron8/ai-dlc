@@ -12,7 +12,10 @@
 # ARMS. Each is presence-shaped where it can be (a decision or a message must APPEAR), so a
 # hook that emits nothing fails them rather than passing them:
 #   OVER        foreground, timeout 600000, default budget        -> deny
-#   REASON      that deny's reason names `run_in_background: true`
+#   REASON      that deny's reason names `run_in_background: true` and is NOT the push reason
+#   PUSHCHAIN   `git push -u origin HEAD > f 2>&1; echo rc=$?`, `git push ... 2>&1 | tail -5`,
+#               `git push ... & sleep 900` (a single `&`) and `git push ... && echo done` at 600000 -> deny with the push reason ("starts with a git push", "Drop the
+#               chained commands"), and WITHOUT `run_in_background` in it; twin: PUSH
 #   BG          the same call with run_in_background true         -> allow
 #   NOTIMEOUT   foreground, no timeout declared                   -> allow
 #   BOUNDARY    timeout exactly budget*1000 -> allow; one ms over -> deny
@@ -23,7 +26,8 @@
 #   NONBASH     a Read carrying timeout 600000                    -> allow
 #   NODETECTOR  no env, no detector, timeout 600000 -> allow, and stderr says why
 #   MALFORMED   unparseable stdin -> allow, and stderr says fail-open
-#   PUSH        `git push -u origin HEAD` and `cd /x && git push`, foreground at 600000 -> allow
+#   PUSH        `git push -u origin HEAD`, `cd /x && git push` and `git push -u origin HEAD 2>&1`
+#               (the `&` of a redirection is not a chain), foreground at 600000 -> allow
 #               (the pipeline requires a foreground push at that timeout)
 #   PUSHNEAR    `echo git push` and `git log --grep=push` at 600000 -> deny
 #   AGENT       a payload carrying `agent_id`, 600000 -> allow; the same payload without it
@@ -81,7 +85,29 @@ score() {
 
   call "$h" "$REAL" - "$(bash_call 600000 false)"; chk_rc
   [ "$DEC" = deny ] || note OVER
+  # The general (non-push) reason: names the background re-issue, and is not the push reason.
   case "$REASON_TXT" in *'run_in_background: true'*) ;; *) note REASON ;; esac
+  case "$REASON_TXT" in *'starts with a git push'*) note REASON ;; esac
+
+  # PUSHCHAIN: a push with something chained or piped after it is denied with the push reason,
+  # whose one remedy is to drop the rest; it never offers run_in_background (a backgrounded push
+  # loses the exit code the step reads). Twin: the bare push (PUSH, below) is allowed.
+  call "$h" "$REAL" - "$(cmd_call 'git push -u origin HEAD > /tmp/p.txt 2>&1; echo rc=$?' '')"; chk_rc
+  [ "$DEC" = deny ] || note PUSHCHAIN
+  case "$REASON_TXT" in *'starts with a git push'*'Drop the chained commands'*) ;; *) note PUSHCHAIN ;; esac
+  case "$REASON_TXT" in *run_in_background*) note PUSHCHAIN ;; esac
+  call "$h" "$REAL" - "$(cmd_call 'git push -u origin HEAD 2>&1 | tail -5' '')"; chk_rc
+  [ "$DEC" = deny ] || note PUSHCHAIN
+  case "$REASON_TXT" in *'starts with a git push'*) ;; *) note PUSHCHAIN ;; esac
+  case "$REASON_TXT" in *run_in_background*) note PUSHCHAIN ;; esac
+  # A single `&` backgrounds the push and blocks on what follows: a chain, with the push reason.
+  call "$h" "$REAL" - "$(cmd_call 'git push -u origin HEAD & sleep 900' '')"; chk_rc
+  [ "$DEC" = deny ] || note PUSHCHAIN
+  case "$REASON_TXT" in *'starts with a git push'*) ;; *) note PUSHCHAIN ;; esac
+  # `&&` after the push is still a chain with the push reason (the single-`&` clause did not move it).
+  call "$h" "$REAL" - "$(cmd_call 'git push -u origin HEAD && echo done' '')"; chk_rc
+  [ "$DEC" = deny ] || note PUSHCHAIN
+  case "$REASON_TXT" in *'starts with a git push'*) ;; *) note PUSHCHAIN ;; esac
 
   call "$h" "$REAL" - "$(bash_call 600000 true)"; chk_rc
   [ "$DEC" = allow ] || note BG
@@ -121,6 +147,9 @@ score() {
   [ "$DEC" = allow ] || note PUSH
   call "$h" "$REAL" - "$(cmd_call 'cd /x && git push' '')"; chk_rc
   [ "$DEC" = allow ] || note PUSH
+  # The near-miss of the single-`&` chain: the `&` of a redirection is not one.
+  call "$h" "$REAL" - "$(cmd_call 'git push -u origin HEAD 2>&1' '')"; chk_rc
+  [ "$DEC" = allow ] || note PUSH
 
   call "$h" "$REAL" - "$(cmd_call 'echo git push' '')"; chk_rc
   [ "$DEC" = deny ] || note PUSHNEAR
@@ -144,7 +173,7 @@ printf '  detector  %s\n' "$DETECTOR"
 [ -x "$HOOK" ] || bad "hook is not executable: $HOOK -- settings.json invokes it as a bare path"
 GOT="$(score "$HOOK")"
 if [ -z "$GOT" ]; then
-  ok "shipped hook passes every arm (OVER REASON BG NOTIMEOUT BOUNDARY ENV DEFAULT NONBASH NODETECTOR MALFORMED PUSH PUSHNEAR AGENT EXIT)"
+  ok "shipped hook passes every arm (OVER REASON PUSHCHAIN BG NOTIMEOUT BOUNDARY ENV DEFAULT NONBASH NODETECTOR MALFORMED PUSH PUSHNEAR AGENT EXIT)"
 else
   bad "shipped hook fails arm(s): $GOT"
 fi
@@ -182,9 +211,9 @@ CTL="$(score "$MUT/hook-control.sh")"
 
 # Expected sets are written in C-locale sorted order, which is what score() prints.
 # Mutants 1 and 12 remove the whole deny channel rather than one guard, so they fail every arm
-# holding a deny cell; each of the other thirteen fails its own arm alone.
+# holding a deny cell; each of the other fourteen fails its own arm alone.
 # 1. warning-only: the same text as context, no decision. The rejected design.
-mut warn-only "AGENT BOUNDARY DEFAULT ENV OVER PUSHNEAR REASON" \
+mut warn-only "AGENT BOUNDARY DEFAULT ENV OVER PUSHCHAIN PUSHNEAR REASON" \
   -e '/permissionDecision: "deny",/d' -e 's/permissionDecisionReason: \$reason/additionalContext: $reason/'
 # 2. denies a call already sent to the background.
 mut denies-background "BG" -e '/and \.tool_input\.run_in_background != true/d'
@@ -209,7 +238,7 @@ mut reason-drops-background "REASON" -e 's/Re-issue the same call with run_in_ba
 # 11. the deny path exits non-zero.
 mut deny-exits-nonzero "EXIT" -e '$s/^exit 0$/exit 2/'
 # 12. the whole subject replaced by silence: every presence-shaped arm must fail.
-mut silence "AGENT BOUNDARY DEFAULT ENV MALFORMED NODETECTOR OVER PUSHNEAR REASON" -e '2i\
+mut silence "AGENT BOUNDARY DEFAULT ENV MALFORMED NODETECTOR OVER PUSHCHAIN PUSHNEAR REASON" -e '2i\
 exit 0'
 # 13. no push allowance: the pipeline's required foreground push is denied.
 mut drop-push "PUSH" -e '/and (is_push | not)/d'
@@ -217,6 +246,8 @@ mut drop-push "PUSH" -e '/and (is_push | not)/d'
 mut push-unanchored "PUSHNEAR" -e 's/test("^\[ \\t\]\*(cd/test("(cd/'
 # 15. no agent_id exit: a teammate's call is denied though Check A never counts it.
 mut drop-agent "AGENT" -e '/and ((\.agent_id \/\/ "") | tostring) == ""/d'
+# 16. the PUSHCHAIN field dropped: a chained push gets the general reason, run_in_background and all.
+mut drop-pushchain "PUSHCHAIN" -e 's/^PUSHCHAIN="\${T##\* }"$/PUSHCHAIN=0/'
 
 [ "$n_mut" -gt 0 ] && [ "$n_kill" -eq "$n_mut" ] \
   && ok "$n_kill of $n_mut mutants killed" \

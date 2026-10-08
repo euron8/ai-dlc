@@ -28,7 +28,9 @@
 #   push runs the pre-push fixture suite and a backgrounded push loses the exit code the
 #   handoff reads. Both remedies a deny offers break that call, so a deny there is a wedge. The
 #   match is a command whose first word is `git` and whose subcommand is `push`, optionally
-#   after one leading `cd <path> &&` and `VAR=x` assignments, with nothing chained after it.
+#   after one leading `cd <path> &&` and `VAR=x` assignments, with nothing chained or piped
+#   after it (`;`, `&&`, `||`, `|`, a single `&`, a newline). A push WITH something after it is denied with a
+#   push-specific reason whose one remedy is to drop the rest (PUSHCHAIN, below).
 #   The exemption is the HOOK's only: validate-steering-budget.sh Check A still counts a
 #   foreground push that ran past the budget.
 #   A call carrying a non-empty `agent_id` -- a dispatched teammate or subagent. Check A reads
@@ -74,19 +76,32 @@ command -v jq >/dev/null 2>&1 || { say "jq not found, so the tool call cannot be
 # The push test anchors on the command START, after at most one leading `cd <path> &&` and any
 # `VAR=x` assignments, and requires `push` as a whole word. So `echo git push`,
 # `git log --grep=push` and `git pushx` stay in scope. After that prefix is stripped, a command
-# carrying `;`, `&&`, `||` or a newline is not a bare push either, so a long command chained
+# carrying `;`, `&&`, `||`, `|`, a single `&` or a newline is not a bare push either, so a long command chained
 # behind a push cannot ride the exemption.
+#
+# PUSHCHAIN, the second field. A command whose FIRST segment is a push but which fails the bare
+# test because something is chained or piped after it is still in scope -- measured on graph, a
+# lead's `git push ... > f 2>&1; echo "push_rc=$?"; tail -3 f` was denied here with a reason
+# whose two remedies both break the push. Such a call gets the push-specific reason instead:
+# drop what follows the push. A single `|` counts as a chain, because `git push ... | tail -5`
+# replaces the push's exit status with tail's, which is how a push lost its result on graph. A
+# single `&` counts too: `git push ... & sleep 900` backgrounds the push and blocks on the sleep.
+# The `&` of a redirection (`2>&1`, `>&2`, `&>`) is not a chain, so a bare push with `2>&1` stays exempt.
 T="$(jq -r '
+  def pushfirst: test("^[ \t]*(cd[ \t]+[^;&|\n]+&&[ \t]*)?([A-Za-z_][A-Za-z0-9_]*=[^ \t;&|\n]*[ \t]+)*git[ \t]+push([ \t]|$)");
+  def chained: sub("^[ \t]*cd[ \t]+[^;&|\n]+&&"; "") | test("[;\n|]|&&|(^|[^>&])&($|[^&>])");
   def is_push: ((.tool_input.command // "") | tostring) as $c
     | ($c | test("^[ \t]*(cd[ \t]+[^;&|\n]+&&[ \t]*)?([A-Za-z_][A-Za-z0-9_]*=[^ \t;&|\n]*[ \t]+)*git[ \t]+push([ \t]|$)"))
-      and ($c | sub("^[ \t]*cd[ \t]+[^;&|\n]+&&"; "") | test("[;\n]|&&|[|][|]") | not);
-  if .tool_name == "Bash"
+      and ($c | chained | not);
+  def pushchain: ((if (.tool_input | type) == "object" then .tool_input.command else "" end) // "") | tostring | pushfirst and chained;
+  pushchain as $pc
+  | if .tool_name == "Bash"
      and ((.agent_id // "") | tostring) == ""
      and (.tool_input | type) == "object"
      and .tool_input.run_in_background != true
      and (.tool_input.timeout | type) == "number"
      and (is_push | not)
-  then .tool_input.timeout | if . < 0 then 0 elif . > 1e9 then 1e9 else . end | -((-.) | floor) | tostring
+  then .tool_input.timeout | if . < 0 then 0 elif . > 1e9 then 1e9 else . end | -((-.) | floor) | tostring | . + " " + (if $pc then "1" else "0" end)
   else empty end' 2>/dev/null)"
 PARSE_RC=$?
 if [ "$PARSE_RC" -ne 0 ]; then
@@ -95,6 +110,8 @@ if [ "$PARSE_RC" -ne 0 ]; then
 fi
 
 [ -n "$T" ] || exit 0
+PUSHCHAIN="${T##* }"
+T="${T%% *}"
 case "$T" in
   *[!0-9]*) say "unreadable timeout value '$T'; allowing the call (fail-open)"; exit 0 ;;
 esac
@@ -133,6 +150,11 @@ case "$SRC" in
 esac
 
 REASON="AI/DLC steering budget: this FOREGROUND Bash call declares timeout ${T} ms, over the ${B}s steering budget (${WHERE}). A foreground call blocks the operator from steering until it returns, and validate-steering-budget.sh Check A counts every one that runs past the budget. Re-issue the same call with run_in_background: true and collect its result when it completes, or declare a timeout of at most ${LIMIT} ms."
+# The push reason carries neither general remedy: a backgrounded push loses the exit code the
+# step reads, and a push held under the budget is SIGKILLed while the pre-push suite runs.
+if [ "$PUSHCHAIN" = 1 ]; then
+  REASON="AI/DLC steering budget: this FOREGROUND Bash call starts with a git push and chains or pipes more commands after it, so it is not the bare push the pipeline exempts at timeout ${T} ms. Drop the chained commands: the push is the whole command, \`git push -u origin HEAD\` and nothing after it, at the same timeout and in the foreground. Read the push's exit code from the tool result; a \`; echo \$?\`, a \`| tail\` or a redirect-then-read is not needed, and a pipe replaces the push's exit code with the last command's."
+fi
 
 jq -n --arg reason "$REASON" \
   '{

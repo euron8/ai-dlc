@@ -31550,3 +31550,158 @@ re-wrapped, and the opener respelled "never in a single write". In every mutant,
 `core/team-roles/tea.md`.
 
 verify: sh v=scripts/validate-enforcement-map.sh; r=core/team-roles; p=ux-bl484-probe.md; [ -f "$v" ] && [ -f "$r/ux.md" ] || exit 9; [ ! -e "$r/$p" ] || exit 9; W="$(mktemp -d)" || exit 9; git ls-files -z | tar -c --null -T - -f - | tar -x -C "$W" -f - || exit 9; o="$(cd "$W" && bash "$v" --arms I123 2>&1)"; rc=$?; [ "$rc" -eq 0 ] || exit 1; awk '/^\*\*Write your deliverable in chunks and iteratively/{s=1} s&&/^$/{s=0; next} !s' "$W/$r/ux.md" > "$W/$r/$p" && mv "$W/$r/ux.md" "$W/ux.md.moved" || exit 9; grep -qF 'in chunks and iteratively' "$W/$r/$p" && exit 9; o="$(cd "$W" && bash "$v" --arms I123 2>&1)"; rc=$?; [ "$rc" -ne 0 ] || exit 2; grep -qF "$r/$p" <<<"$o" || exit 3; exit 0
+## BL-485 — `review-shard-merge-mutants` is the suite pole at 66 serial mutants in one unit
+
+**DEFECT, filed at batch 205 by operator instruction.** The pre-push suite is pole-bound: wall clock
+tracks the single longest DIRECTORY, and `core/fixtures/review-shard-merge-mutants/run.sh` is that
+directory at every width. The durations record in the main checkout reads 1481s loaded against 1094s
+for the next unit (`sort -k2 -nr .git/ai-dlc-fixture-durations | head -2`), so every push that selects
+it pays 22 minutes whatever else it selects, and a selective push that touches
+`merge-review-shards.sh` pays the same as a full one. The battery drives 66 `mutant` call sites
+serially through one `run.sh` (`/usr/bin/grep -c '^ *mutant ' core/fixtures/review-shard-merge-mutants/run.sh`
+= 66; the impossible-token control reads 0). Its own header records the shape: arms x mutants,
+serially, and a loaded cost that went 731s to 1738s in one change.
+
+The remedy is the one `fold-architect-ledger-join-mutants-{,b,c}` already carries: partition the
+mutant set across sibling directories, each a `run.sh` the pool dispatches as its own unit, with the
+partition declared once and joined against the `mutant` lines so a mutant added to the battery and
+dealt to no shard fails the join (that battery's `[J0] coverage join` arm). Three shards of 22
+bring the pole to roughly a third of 1481s loaded; the next pole is then
+`gate-adjudication-mutants` at 1094s, which is the same shape and the same remedy. Each shard
+carries its own unmutated control and the probe-bypass arm, exactly as the model does, and each is
+a new fixture directory (read `.claude/rules/fixture-ship-decl.md` before creating one; the model
+shards are `.dist-only`, so these will be too).
+
+**The receipt below replaces the one filed at batch 205, which could not go green on the fix it
+prescribed.** That receipt grepped every `review-shard-merge-mutants*/run.sh` for `coverage join|J0`,
+and it exits 1 on the model battery itself (`fold-architect-ledger-join-mutants{,-b,-c}`): a sibling
+shard is a `exec bash "$IMPL" --group b` wrapper carrying no join text, so only the base can hold it.
+It was also satisfiable by a comment. This one keys on the base's EMITTING lines (the `JOIN_LINE=`
+assignment that builds the `[J0]` coverage join, and the `ok "$JOIN_LINE"` call that prints it), both
+anchored at line start so a `#` comment cannot match, and on each sibling's `IMPL=` pointing at the
+base and its `exec bash "$IMPL" --group <shard>` line. Scored under `bash -c 'set -uo pipefail; …'`
+with the battery name substituted: `fold-architect-ledger-join-mutants` exits 0 (positive control),
+`review-shard-merge-mutants` at 7ab4d142, unsharded, exits 1.
+
+verify: sh [ -f core/fixtures/review-shard-merge-mutants/run.sh ] || exit 9; grep -qE '^[[:space:]]*JOIN_LINE="\[J0\] coverage join: ' core/fixtures/review-shard-merge-mutants/run.sh || exit 1; grep -qE '^[[:space:]]*ok "\$JOIN_LINE"' core/fixtures/review-shard-merge-mutants/run.sh || exit 1; grep -qE '^IMPL=.*/review-shard-merge-mutants/run\.sh"$' core/fixtures/review-shard-merge-mutants-b/run.sh || exit 1; grep -qE '^exec bash "\$IMPL" --group b$' core/fixtures/review-shard-merge-mutants-b/run.sh || exit 1; grep -qE '^IMPL=.*/review-shard-merge-mutants/run\.sh"$' core/fixtures/review-shard-merge-mutants-c/run.sh || exit 1; grep -qE '^exec bash "\$IMPL" --group c$' core/fixtures/review-shard-merge-mutants-c/run.sh || exit 1; exit 0
+
+**LANDED (v0.751.0, verified 58811239).**
+
+## BL-486 — the advisor gate has no escape hatch, and its `unavailable` WARN path did not fire
+
+**DEFECT, filed at batch 205 by operator instruction.** `~/.claude/hooks/ai-dlc-advisor-gate.sh`
+(operator-home, not shipped) DENIES a release push or PR merge when the session transcript records
+no advisor attempt after the last such action, and its header promises that once the most recent
+advisor result is an `unavailable` error it WARNS and lets the command through. Measured in one
+session, 2026-10-08, on PR #1056 of 0.748.0 (gate 53 of 53 green): the merge was denied four times
+in a row with two advisor consults in between, and the operator merged it by hand. Three faults,
+each from the transcript the hook reads:
+
+- **A failed action is scored as a completed one.** An `mcp__github__merge_pull_request` call that
+  returned `404 Not Found` (a short `expectedHeadSha`) was counted as the last merge, so a consult
+  made BEFORE it no longer cleared the gate. The hook drops only a `tool_result` carrying its own
+  DENIED text; any other error result is a merge that happened. The same shape would score a push
+  rejected by the remote, or a `gh` auth failure, as a release.
+- **The WARN path did not fire.** The transcript carries
+  `"advisor_tool_result" ... "error_code":"unavailable"` at line 3111 and the hook's own `jq` parser
+  reads it as `U 3111`, the latest result; the two merge attempts after it (lines 3112, 3152) were
+  still DENIED with the "Call the advisor now" text, never the WARN. Where the `U` branch is lost
+  between the parser and the verdict is the first thing to find.
+  **CORRECTED at batch 208: this claim does not reproduce, and the WARN path was never reached.**
+  Replaying the hook's parser at every cut of that transcript returns `3110 3088 U` (last advisor
+  attempt 3110, last merge 3088, last result `unavailable`), and the attempt-after-action test
+  ALLOWS on that state before the WARN branch is read. The deny at 3112 is the same-message race
+  the shipped hook also carried: the advisor result is stamped 10:09:04 and the hook ran at
+  10:09:06, inside the one assistant message whose lines are not yet on disk when PreToolUse fires.
+  The parser was right; it read a transcript that did not yet hold the advisor call.
+- **Two advisor tools, one recognised.** The session carried the built-in `advisor` (a
+  `server_tool_use` the hook keys on) and `mcp__advisor__consult` (an ordinary `tool_use`). The MCP
+  consult cleared two push denies earlier in the same session and nothing afterwards, so what the
+  hook counts as an attempt is not derivable from its header.
+
+The operator's ruling for the fix: there must be an ESCAPE HATCH an operator can pull without
+editing the hook — a one-command, session-scoped override that records itself in the transcript
+(so a later audit sees the gate was bypassed, by whom and when) and lets the next release action
+through. Alongside: a failed action must not consume a consult (score a merge only on a
+`tool_result` that is not an error, or on the ref actually moving), and the `unavailable` WARN must
+fire when the parser reads `U`. The hook's self-test (`ai-dlc-advisor-gate.test.sh`) seeds none of
+these three shapes; add all three.
+
+verify: manual -- close when, in a live session, (1) a release action after a FAILED merge or push attempt is allowed on the consult made before that attempt, (2) a release action after an `unavailable` advisor result prints the WARN and runs, and (3) the operator's override command lets one release action through and leaves a transcript line saying so.
+
+**What shipped (batch 208).** In the operator-home hook `~/.claude/hooks/ai-dlc-advisor-gate.sh`,
+which is not part of the distribution:
+
+- A gated action that ran and FAILED does not consume a consult. A merge counts as failed on an
+  `is_error: true` result. A push counts as failed on an `is_error: true` result that carries no
+  ref-update line, so a push whose transport dropped after the remote moved still counts.
+- A `tool_use` named `mcp__advisor__consult` counts as an attempt only when the transcript carries
+  no `advisor_tool` grant attachment, because the operator's instructions prefer the built-in
+  advisor wherever it is held.
+- The escape hatch is an operator `!` command. A `type: "user"` line whose content opens
+  `<bash-input>ai-dlc-advisor-gate --bypass` after the last gated action allows the next one once,
+  and the hook emits "advisor gate bypassed by operator: <reason>". A small
+  `~/.claude/hooks/ai-dlc-advisor-gate` script makes the `!` command well-formed. A subagent cannot
+  see the bypass, because its transcript is a separate file.
+- The shipped hook's transcript-write deny is ported, so an agent cannot forge the bypass line with a
+  Write.
+- The race behind claim 2 is handled by the same deny-path re-read the shipped hook gained in this
+  release.
+- The self-test `ai-dlc-advisor-gate.test.sh` seeds all three shapes plus the race and its twin,
+  and reads `pass=61 fail=0`.
+
+The shipped hook gained the failed-action rule and the re-read by the batch-200 ruling, and one
+knob, `ADVISOR_GATE_REREADS`, which is stricter-only: only `0` and `1` lower the re-read count,
+every other value including garbage falls through to 2, it exists so the fixture's deny cells do
+not each pay 2s, and it cannot acquit.
+
+**LANDED (v0.751.0, verified 7ab4d142).** The receipt above is `verify: manual` and its three
+conditions are live-session events that no tree commit carries, so this close does not rest on
+them. It rests on the operator-home hook's self-test (`ai-dlc-advisor-gate.test.sh`, `pass=61
+fail=0`), which seeds all three shapes, and on the replay of graph's transcript through that hook.
+`7ab4d142` is the tree the shipped twin (`core/hooks/ai-dlc-advisor-gate.sh`) landed in.
+
+## BL-477 — `tools.decl` cannot name `node`, which blocks plan action 3
+
+**LANDED (v0.750.0, verified 0cfaf4c7).** Both options the entry offered were rejected: 8 of 9 node fixtures ship, so a committed per-box absolute path is `declared tool absent` on every consumer, and adding the nvm directory reintroduces a per-user key. The fix is the `?name` grammar over the closed vocabulary `READSET_UNKEYED_TOOLS` (`node npm npx claude`): reachable on the invoker's PATH, not keyed. The receipt was replaced to drive that grammar; scored at base 4e2ad343 exit 1, at 0cfaf4c7 exit 0.
+
+**BLOCKER.** Carried from the 0.746.0 adversary passes. `readset_declared` in `.githooks/pre-push` resolves each `tools.decl` name against
+`READSET_TOOL_DIRS` (`/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`), and `core/scripts/hermetic-run.sh` refuses a
+name that resolves in none of them (exit 2). On this box `node` is `~/.nvm/versions/node/v24.14.0/bin/node`, outside every one of
+those directories, so a declaration naming `node` is unresolvable and the nine node fixtures of plan action 3 cannot be declared.
+**Waiting on an operator ruling.** Options: an absolute path in `tools.decl` keyed by content hash (recommended; the runner's
+bare-name rule and the hook's resolver both change), add the nvm directory to the fixed dirs (reintroduces a per-user key), or
+reorder action 3 so the node fixtures go last.
+
+The receipt seeds a repo with a probe fixture declaring `?b207tool`, a stub on the receipt's own PATH outside the fixed dirs, and the probe's copied hook lists it in `READSET_UNKEYED_TOOLS`. It runs the shipped runner (not `--key-only`), requires exit 0 and the stub's output line, and requires `--key-only` to carry no row ending in `/b207tool`. It exits 9 only when the hook or runner cannot be read. Scored at base 4e2ad343: exit 1; at 0cfaf4c7: exit 0.
+
+verify: sh H=.githooks/pre-push; S=core/scripts/hermetic-run.sh; [ -f "$H" ] && [ -f "$S" ] || exit 9; W="$(mktemp -d)" && W="$(cd "$W" && pwd -P)" || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; git init -q "$W" || exit 9; mkdir -p "$W/.githooks" "$W/core/fixtures/fx" "$W/stubbin" || exit 9; sed 's/^READSET_UNKEYED_TOOLS="/&b207tool /' "$H" > "$W/.githooks/pre-push" || exit 9; printf '#!/bin/sh\necho b207tool-ran\n' > "$W/stubbin/b207tool" && chmod +x "$W/stubbin/b207tool" || exit 9; printf 'b207tool\n' > "$W/core/fixtures/fx/run.sh"; echo x > "$W/x.txt"; printf 'x.txt\n' > "$W/core/fixtures/fx/inputs.decl"; printf '?b207tool\n' > "$W/core/fixtures/fx/tools.decl"; git -C "$W" add -A >/dev/null 2>&1; K="$(PATH="$W/stubbin:$PATH" bash "$S" --root "$W" --key-only fx 2>/dev/null)" || exit 1; O="$(PATH="$W/stubbin:$PATH" bash "$S" --root "$W" fx 2>&1)" || exit 1; printf '%s\n' "$O" | grep -qx 'b207tool-ran' || exit 1; printf '%s\n' "$K" | cut -f1 | grep -q '/b207tool$' && exit 1; exit 0
+
+## BL-478 — a declaration in distribution coordinates does not resolve on a consumer
+
+**LANDED (v0.750.0, verified 0cfaf4c7).** `core-paths.sh --map` and the layout detector (distribution iff `<root>/core/scripts` is a directory) map `core/` declarations onto a consumer in the hook and the runner. Receipt unchanged; scored at base 4e2ad343 exit 1, at 0cfaf4c7 exit 0.
+
+**DEFECT.** Carried from the 0.746.0 adversary passes. `inputs.decl` paths are project-root-relative and are copied from that root.
+The distribution holds `core/scripts/x.sh`; an installed consumer holds `scripts/ai-dlc/x.sh` (`install.sh` splits `core/scripts/` to
+`scripts/ai-dlc/`). A declaration written for this tree names a file absent on a consumer and the runner exits 2 `declared file
+absent`. Inert while zero declarations ship. A path-mapping rule, one table shared by the runner and the hook, must land before any
+real declaration ships.
+
+The receipt builds a consumer-layout tree holding only `scripts/ai-dlc/x.sh`, declares `core/scripts/x.sh`, and requires the
+runner's `--key-only` rows to carry `scripts/ai-dlc/x.sh`. Scored at 951678b5: exit 1.
+
+verify: sh H=.githooks/pre-push; S=core/scripts/hermetic-run.sh; [ -f "$H" ] && [ -f "$S" ] || exit 9; W="$(mktemp -d)" && W="$(cd "$W" && pwd -P)" || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; git init -q "$W" || exit 9; mkdir -p "$W/.githooks" "$W/core/fixtures/fx" "$W/scripts/ai-dlc" || exit 9; cp "$H" "$W/.githooks/pre-push" && printf 'exit 0\n' > "$W/core/fixtures/fx/run.sh" || exit 9; echo ok > "$W/scripts/ai-dlc/x.sh"; printf 'core/scripts/x.sh\n' > "$W/core/fixtures/fx/inputs.decl"; git -C "$W" add -A >/dev/null 2>&1; O="$(bash "$S" --root "$W" --key-only fx 2>/dev/null)" || exit 1; printf '%s\n' "$O" | cut -f1 | grep -qx 'scripts/ai-dlc/x.sh'
+
+## BL-479 — `tools.decl` naming `git` is keyed on the xcrun shim while the hook keys git's real exec-path
+
+**LANDED (v0.750.0, verified 0cfaf4c7).** A bare declared name resolves against `git --exec-path` first and then the fixed dirs, in the hook and the runner. Receipt unchanged; scored at base 4e2ad343 exit 1, at 0cfaf4c7 exit 0.
+
+**NOTE.** Carried from the 0.746.0 adversary passes. `readset_tools` keys git from `git --exec-path`, the binary that runs. The
+declared-tool resolver walks `READSET_TOOL_DIRS` in order and finds the `/usr/bin/git` xcrun shim first, so a fixture declaring `git`
+is keyed on the shim. Inert while zero declarations ship.
+
+The receipt runs the shipped runner with `--key-only` on a fixture declaring `git` and requires a row for the exec-path binary
+(`env -u DEVELOPER_DIR -u GIT_EXEC_PATH /usr/bin/git --exec-path`). Scored at 951678b5: exit 1, the row is `/usr/bin/git`.
+
+verify: sh H=.githooks/pre-push; S=core/scripts/hermetic-run.sh; [ -f "$H" ] && [ -f "$S" ] || exit 9; W="$(mktemp -d)" && W="$(cd "$W" && pwd -P)" || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; git init -q "$W" || exit 9; mkdir -p "$W/.githooks" "$W/core/fixtures/fx" "$W/scripts/ai-dlc" || exit 9; cp "$H" "$W/.githooks/pre-push" && printf 'exit 0\n' > "$W/core/fixtures/fx/run.sh" || exit 9; XP="$(/usr/bin/env -u DEVELOPER_DIR -u GIT_EXEC_PATH /usr/bin/git --exec-path)" && [ -x "$XP/git" ] || exit 9; echo x > "$W/x.txt"; printf 'x.txt\n' > "$W/core/fixtures/fx/inputs.decl"; printf 'git\n' > "$W/core/fixtures/fx/tools.decl"; git -C "$W" add -A >/dev/null 2>&1; O="$(bash "$S" --root "$W" --key-only fx 2>/dev/null)" || exit 1; printf '%s\n' "$O" | cut -f1 | grep -qxF "$XP/git"
+

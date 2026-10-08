@@ -14,8 +14,8 @@
 # path<TAB>sha lines in the runner's universe as traced; the runner clears a stale key record when
 # it recomputes the same value over the tree it is pushing.
 #
-# fixtures mapped: 239    entries: 29992
-# OMITTED by the last run (always run): readset-skip-digest-mutants self-update-gate
+# fixtures mapped: 241    entries: 30065
+# OMITTED by the last run (always run): foreground-budget-deny
 absorbed-specifics-survive	core/fixtures/absorbed-specifics-survive/run.sh
 absorbed-specifics-survive	core/skills/ai-dlc/SKILL.md
 absorbed-specifics-survive	core/skills/ai-dlc/rule-bodies/rule-13.md
@@ -163,26 +163,11 @@ adversarial-shard-merge	core/scripts/validate-provenance-block.sh
 adversarial-shard-merge	core/scripts/validate-steering-budget.sh
 adversarial-shard-merge	core/skills/ai-dlc/extensions/known-skills.json
 adversarial-shard-merge	skills/ai-dlc/extensions/known-skills.json
-advisor-gate-deny	@rpath/DVTSystemPrerequisites.framework/Versions/A
-advisor-gate-deny	@rpath/DVTSystemPrerequisites.framework/Versions/A/DVTSystemPrerequisites
-advisor-gate-deny	@rpath/ManagedBackgroundAssetsXPC.framework/Versions/A/ManagedBackgroundAssetsXPC
-advisor-gate-deny	@rpath/VFXBase.framework/Versions/A/VFXBase
-advisor-gate-deny	core
-advisor-gate-deny	core/fixtures
-advisor-gate-deny	core/fixtures/advisor-gate-deny
 advisor-gate-deny	core/fixtures/advisor-gate-deny/lib.sh
 advisor-gate-deny	core/fixtures/advisor-gate-deny/run.sh
 advisor-gate-deny	core/fixtures/advisor-gate-deny/seed.sh
 advisor-gate-deny	core/hooks/ai-dlc-advisor-gate.sh
 advisor-gate-deny	core/hooks/ai-dlc-context-provenance.sh
-advisor-gate-deny-mutants	@rpath/DVTSystemPrerequisites.framework/Versions/A
-advisor-gate-deny-mutants	@rpath/DVTSystemPrerequisites.framework/Versions/A/DVTSystemPrerequisites
-advisor-gate-deny-mutants	@rpath/ManagedBackgroundAssetsXPC.framework/Versions/A/ManagedBackgroundAssetsXPC
-advisor-gate-deny-mutants	@rpath/VFXBase.framework/Versions/A/VFXBase
-advisor-gate-deny-mutants	core
-advisor-gate-deny-mutants	core/fixtures
-advisor-gate-deny-mutants	core/fixtures/advisor-gate-deny
-advisor-gate-deny-mutants	core/fixtures/advisor-gate-deny-mutants
 advisor-gate-deny-mutants	core/fixtures/advisor-gate-deny-mutants-b/run.sh
 advisor-gate-deny-mutants	core/fixtures/advisor-gate-deny-mutants-c/run.sh
 advisor-gate-deny-mutants	core/fixtures/advisor-gate-deny-mutants-d/run.sh
@@ -12549,13 +12534,6 @@ fold-architect-ledger-join-mutants-c	scripts/validate-release-version.sh
 fold-architect-ledger-join-mutants-c	scripts/validate-shell-portability.sh
 fold-architect-ledger-join-mutants-c	scripts/validate-suite-pole.sh
 fold-architect-ledger-join-mutants-c	scripts/verify-backlog-bl056.py
-foreground-budget-deny	core
-foreground-budget-deny	core/fixtures
-foreground-budget-deny	core/fixtures/foreground-budget-deny
-foreground-budget-deny	core/fixtures/foreground-budget-deny/run.sh
-foreground-budget-deny	core/fixtures/foreground-budget-deny/seed.sh
-foreground-budget-deny	core/hooks/ai-dlc-foreground-budget.sh
-foreground-budget-deny	core/scripts/validate-steering-budget.sh
 gate-adjudication	.git
 gate-adjudication	.git/HEAD
 gate-adjudication	.git/config
@@ -21000,6 +20978,101 @@ review-shard-merge	core/skills/ai-dlc/steps/gate-validation.md
 review-shard-merge	core/skills/ai-dlc/steps/implementation.md
 review-shard-merge	core/team-roles/code-reviewer.md
 review-shard-merge	core/team-roles/qa.md
+review-shard-merge-mutants	.git
+review-shard-merge-mutants	core/fixtures/lib/preamble.sh
+review-shard-merge-mutants	core/fixtures/review-shard-merge-mutants-b/run.sh
+review-shard-merge-mutants	core/fixtures/review-shard-merge-mutants-c/run.sh
+review-shard-merge-mutants	core/fixtures/review-shard-merge-mutants/run.sh
+review-shard-merge-mutants	core/fixtures/review-shard-merge/lib.sh
+review-shard-merge-mutants	core/fixtures/review-shard-merge/run.sh
+review-shard-merge-mutants	core/scripts/artifact-path-config.sh
+review-shard-merge-mutants	core/scripts/merge-review-shards.sh
+review-shard-merge-mutants	core/scripts/partition-document.sh
+review-shard-merge-mutants	core/scripts/partition-review-diff.sh
+review-shard-merge-mutants	core/skills/ai-dlc/artifact-path-grammar.md
+review-shard-merge-mutants	core/skills/ai-dlc/steps/gate-validation.md
+review-shard-merge-mutants	core/team-roles/code-reviewer.md
+review-shard-merge-mutants	core/team-roles/qa.md
+review-shard-merge-mutants-b	.git
+review-shard-merge-mutants-b	core/fixtures/lib/preamble.sh
+review-shard-merge-mutants-b	core/fixtures/review-shard-merge-mutants-b/run.sh
+review-shard-merge-mutants-b	core/fixtures/review-shard-merge-mutants-c/run.sh
+review-shard-merge-mutants-b	core/fixtures/review-shard-merge-mutants/run.sh
+review-shard-merge-mutants-b	core/fixtures/review-shard-merge/lib.sh
+review-shard-merge-mutants-b	core/fixtures/review-shard-merge/run.sh
+review-shard-merge-mutants-b	core/scripts/artifact-path-config.sh
+review-shard-merge-mutants-b	core/scripts/merge-review-shards.sh
+review-shard-merge-mutants-b	core/scripts/partition-document.sh
+review-shard-merge-mutants-b	core/scripts/partition-review-diff.sh
+review-shard-merge-mutants-b	core/skills/ai-dlc/artifact-path-grammar.md
+review-shard-merge-mutants-b	core/skills/ai-dlc/steps/gate-validation.md
+review-shard-merge-mutants-b	core/team-roles/code-reviewer.md
+review-shard-merge-mutants-b	core/team-roles/qa.md
+review-shard-merge-mutants-c	.git
+review-shard-merge-mutants-c	core
+review-shard-merge-mutants-c	core/.claude/skills/ai-dlc/artifact-path-grammar.md
+review-shard-merge-mutants-c	core/.claude/skills/ai-dlc/steps/gate-validation.md
+review-shard-merge-mutants-c	core/.claude/skills/ai-dlc/steps/implementation.md
+review-shard-merge-mutants-c	core/.claude/team-roles/code-reviewer.md
+review-shard-merge-mutants-c	core/.claude/team-roles/qa.md
+review-shard-merge-mutants-c	core/core/scripts/merge-review-shards.sh
+review-shard-merge-mutants-c	core/core/scripts/partition-review-diff.sh
+review-shard-merge-mutants-c	core/core/skills/ai-dlc/artifact-path-grammar.md
+review-shard-merge-mutants-c	core/core/skills/ai-dlc/steps/gate-validation.md
+review-shard-merge-mutants-c	core/core/skills/ai-dlc/steps/implementation.md
+review-shard-merge-mutants-c	core/core/team-roles/code-reviewer.md
+review-shard-merge-mutants-c	core/core/team-roles/qa.md
+review-shard-merge-mutants-c	core/fixtures
+review-shard-merge-mutants-c	core/fixtures/.claude/skills/ai-dlc/artifact-path-grammar.md
+review-shard-merge-mutants-c	core/fixtures/.claude/skills/ai-dlc/steps/gate-validation.md
+review-shard-merge-mutants-c	core/fixtures/.claude/skills/ai-dlc/steps/implementation.md
+review-shard-merge-mutants-c	core/fixtures/.claude/team-roles/code-reviewer.md
+review-shard-merge-mutants-c	core/fixtures/.claude/team-roles/qa.md
+review-shard-merge-mutants-c	core/fixtures/core/scripts/merge-review-shards.sh
+review-shard-merge-mutants-c	core/fixtures/core/scripts/partition-review-diff.sh
+review-shard-merge-mutants-c	core/fixtures/core/skills/ai-dlc/artifact-path-grammar.md
+review-shard-merge-mutants-c	core/fixtures/core/skills/ai-dlc/steps/gate-validation.md
+review-shard-merge-mutants-c	core/fixtures/core/skills/ai-dlc/steps/implementation.md
+review-shard-merge-mutants-c	core/fixtures/core/team-roles/code-reviewer.md
+review-shard-merge-mutants-c	core/fixtures/core/team-roles/qa.md
+review-shard-merge-mutants-c	core/fixtures/lib
+review-shard-merge-mutants-c	core/fixtures/lib/preamble.sh
+review-shard-merge-mutants-c	core/fixtures/review-shard-merge
+review-shard-merge-mutants-c	core/fixtures/review-shard-merge-mutants
+review-shard-merge-mutants-c	core/fixtures/review-shard-merge-mutants-b/run.sh
+review-shard-merge-mutants-c	core/fixtures/review-shard-merge-mutants-c
+review-shard-merge-mutants-c	core/fixtures/review-shard-merge-mutants-c/run.sh
+review-shard-merge-mutants-c	core/fixtures/review-shard-merge-mutants/run.sh
+review-shard-merge-mutants-c	core/fixtures/review-shard-merge/.claude/skills/ai-dlc/artifact-path-grammar.md
+review-shard-merge-mutants-c	core/fixtures/review-shard-merge/.claude/skills/ai-dlc/steps/gate-validation.md
+review-shard-merge-mutants-c	core/fixtures/review-shard-merge/.claude/skills/ai-dlc/steps/implementation.md
+review-shard-merge-mutants-c	core/fixtures/review-shard-merge/.claude/team-roles/code-reviewer.md
+review-shard-merge-mutants-c	core/fixtures/review-shard-merge/.claude/team-roles/qa.md
+review-shard-merge-mutants-c	core/fixtures/review-shard-merge/core/scripts/merge-review-shards.sh
+review-shard-merge-mutants-c	core/fixtures/review-shard-merge/core/scripts/partition-review-diff.sh
+review-shard-merge-mutants-c	core/fixtures/review-shard-merge/core/skills/ai-dlc/artifact-path-grammar.md
+review-shard-merge-mutants-c	core/fixtures/review-shard-merge/core/skills/ai-dlc/steps/gate-validation.md
+review-shard-merge-mutants-c	core/fixtures/review-shard-merge/core/skills/ai-dlc/steps/implementation.md
+review-shard-merge-mutants-c	core/fixtures/review-shard-merge/core/team-roles/code-reviewer.md
+review-shard-merge-mutants-c	core/fixtures/review-shard-merge/core/team-roles/qa.md
+review-shard-merge-mutants-c	core/fixtures/review-shard-merge/lib.sh
+review-shard-merge-mutants-c	core/fixtures/review-shard-merge/run.sh
+review-shard-merge-mutants-c	core/fixtures/review-shard-merge/scripts/ai-dlc/merge-review-shards.sh
+review-shard-merge-mutants-c	core/fixtures/review-shard-merge/scripts/ai-dlc/partition-review-diff.sh
+review-shard-merge-mutants-c	core/fixtures/scripts/ai-dlc/merge-review-shards.sh
+review-shard-merge-mutants-c	core/fixtures/scripts/ai-dlc/partition-review-diff.sh
+review-shard-merge-mutants-c	core/scripts
+review-shard-merge-mutants-c	core/scripts/ai-dlc/merge-review-shards.sh
+review-shard-merge-mutants-c	core/scripts/ai-dlc/partition-review-diff.sh
+review-shard-merge-mutants-c	core/scripts/artifact-path-config.sh
+review-shard-merge-mutants-c	core/scripts/merge-review-shards.sh
+review-shard-merge-mutants-c	core/scripts/partition-document.sh
+review-shard-merge-mutants-c	core/scripts/partition-review-diff.sh
+review-shard-merge-mutants-c	core/skills/ai-dlc/artifact-path-grammar.md
+review-shard-merge-mutants-c	core/skills/ai-dlc/steps/gate-validation.md
+review-shard-merge-mutants-c	core/skills/ai-dlc/steps/implementation.md
+review-shard-merge-mutants-c	core/team-roles/code-reviewer.md
+review-shard-merge-mutants-c	core/team-roles/qa.md
 route-defect-classification	.git/HEAD
 route-defect-classification	.git/config
 route-defect-classification	.git/index
@@ -30008,8 +30081,13 @@ write-format-steering-multiformat	core/scripts/.git
 write-format-steering-multiformat	core/scripts/core/skills/ai-dlc
 write-format-steering-multiformat	core/scripts/validate-write-format-steering.sh
 write-format-steering-multiformat	core/skills/ai-dlc-update/reconcile/lib.sh
+# digest advisor-gate-deny 7aae9015403f15e6cb40fa5de43b2f93726b6ae0d3be9236f466c98d1483b123
+# digest advisor-gate-deny-mutants 9fd24773eb4caa10e92d74e9f3de0c329e5de75ec5d88e1770953c14434b781f
 # digest readset-sandbox-root-clause 7f0b66fe31a68aca334bc40011603467659a08c2799dee31ae0d8b69575396cc
 # digest readset-skip c6a2be46cfd16847bc01971e9f5a49c9028a87a4146d5829690d5c5f5bffac46
 # digest readset-stage1-verdict b93137ba76a80cfe4f6f2e8b13cd89e89173e86f34533444641bd3df97da5c46
+# digest review-shard-merge-mutants 8c89527b0816a9bd52fa6b7c67f3166b396945fc77d8cd7450b166014ce92d23
+# digest review-shard-merge-mutants-b 8c89527b0816a9bd52fa6b7c67f3166b396945fc77d8cd7450b166014ce92d23
+# digest review-shard-merge-mutants-c 8b48f5621eb15d303355d0875c4323bfb43ff85f457801f7270f6f05a306bf46
 # digest suite-pole-guard 14804f8745878f3c3bf12c514b5b04abb130bc80c2fde4486cbf2444f346006c
 # digest wait-beat-liveness b3831569f7ca7baf4eddeb40c255b41c5354519085722e343f308ab01dfa5685

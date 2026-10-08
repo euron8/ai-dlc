@@ -14,7 +14,8 @@
 # (additionalContext saying NOT blocked, no decision) or SILENT (no stdout at all).
 #   PUSH         grant, no advisor: `git push -u origin HEAD`, `git -C <d> push ...`,
 #                `cd <d> && git push`, `timeout 600 git push` -> DENY
-#   REASON       that deny names its remedy: "call the advisor tool, then retry the same command"
+#   REASON       that deny names its remedy: "call the advisor in a message of its own, read its
+#                answer, then retry the same command" (the one shape that never races; REREAD)
 #   NOGRANT      the same push with the grant line absent -> SILENT; a teammate whose own file has
 #                no grant while its parent's does -> SILENT
 #   WITHDRAWN    grant then `available:false` -> SILENT; twin: withdrawn then re-granted -> DENY
@@ -50,8 +51,23 @@
 #                kind) -> DENY, also when an advisor call preceded the FIRST write; twins: after
 #                only a background-task line (`origin.kind` "task-notification", both measured text
 #                forms) -> SILENT, and MATEREWRITE -> SILENT
-#   ENVELOPE     a push that ran and printed this hook's token in failing output -> still DENY,
-#                including the FULL `PreToolUse:... hook error:` envelope on an output's second line
+#   ENVELOPE     a push that ran, failed with NO ref-update line, and printed this hook's token in
+#                its output -> SILENT, including the FULL envelope on an output's second line. Both
+#                cells FLIPPED from DENY at batch 208: operator ruling BL-486 removes every gated
+#                call that did not ship, which subsumes the old anchored-envelope rule (FAILED)
+#   FAILED       BL-486 seeds, each an advisor call, a gated call that failed, then the retry:
+#                a 404 merge -> SILENT (twin: the merge succeeded -> DENY); an errored `gh pr merge
+#                --delete-branch` whose text carries `✓ Squashed and merged` (gh merged, then the
+#                local branch delete failed) -> DENY (twin: errored with a 404 -> SILENT); a user-rejected push, a
+#                safety-check deny, ANOTHER hook's PreToolUse deny envelope, a red-suite push with no
+#                ref-update line -> SILENT; twins, each a push that SHIPPED -> DENY: exit 141 whose
+#                text carries `* [new branch]`, an is_error push carrying `<old>..<new>`, one
+#                carrying `(forced update)`, a ran-OK push carrying `<old>..<new>`, and a ran-OK
+#                `Everything up-to-date` (the cell the is_error test alone holds)
+#   REREAD       THE RACE: the advisor line and the incoming push are appended to the transcript
+#                APPEND_DELAY after the hook starts -> SILENT; twin: nothing appended -> DENY. Both
+#                run with ADVISOR_GATE_REREADS unset (the default, two re-reads); every other cell
+#                runs with it 0, so a deny cell does not pay the 2s of re-reads
 #   SELFLAST     no tool_use_id, the incoming push is the last line after an advisor -> SILENT;
 #                twin: the same push already answered by a tool_result -> DENY
 #   DETACHED     cwd detached HEAD, cwd not a repository: push -> DENY
@@ -117,6 +133,7 @@ ERRRES='{"type":"assistant","message":{"content":[{"type":"advisor_tool_result",
 tu() { jq -cn --arg id "$1" --arg n "$2" --argjson i "$3" '{type:"assistant",message:{content:[{type:"tool_use",id:$id,name:$n,input:$i}]}}'; }
 # tr <id> <is_error> <text>
 tr_() { jq -cn --arg id "$1" --argjson e "$2" --arg t "$3" '{type:"user",message:{content:[{type:"tool_result",tool_use_id:$id,is_error:$e,content:$t}]}}'; }
+# The envelope an OLDER transcript carries (the deny text before batch 208): a seed, not an expectation.
 ENV9='PreToolUse:Bash hook error: ai-dlc-advisor-gate: DENIED -- call the advisor tool, then retry the same command.'
 PUSHL="$(tu t1 Bash '{"command":"git push -u origin HEAD"}')"
 PUSH9="$(tu t9 Bash '{"command":"git push -u origin HEAD"}')"
@@ -186,6 +203,47 @@ mk "$P1/ran.jsonl"      "$GRANT" "$ADV" "$PUSH9" "$RAN9"
 mk "$P1/ranfull.jsonl"  "$GRANT" "$ADV" "$PUSH9" "$RAN9F"
 mk "$P1/okenv.jsonl"    "$GRANT" "$ADV" "$PUSH9" "$OKENV9"
 mk "$P1/apok.jsonl"     "$GRANT" "$ADV" "$PUSHL" "$OK1"
+# FAILED (BL-486): advisor, a gated call that failed, then the retry. The result texts are the
+# shapes the fix hand measured (a 404 merge result on this repo's own transcript, exit 141 with the
+# ref moved, the harness's user-rejection text) and the PreToolUse envelope another hook produces.
+MERGE9="$(tu t9 mcp__github__merge_pull_request '{"owner":"o","repo":"r","pullNumber":1056}')"
+mk "$P1/f404.jsonl"     "$GRANT" "$ADV" "$OKRES" "$MERGE9" "$(tr_ t9 true 'failed to merge pull request: PUT https://api.github.com/repos/euron8/ai-dlc/pulls/1056/merge: 404 Not Found []')"
+mk "$P1/fmergeok.jsonl" "$GRANT" "$ADV" "$OKRES" "$MERGE9" "$(tr_ t9 false 'Pull request successfully merged')"
+# gh merged, then the local branch delete failed (retro.md:1252 instructs --delete-branch): the
+# result is is_error:true and the merge HAPPENED. Twin: an errored gh merge that did not (404).
+GHMERGE9="$(tu t9 Bash '{"command":"gh pr merge 1056 --squash --delete-branch"}')"
+mk "$P1/fmergedel.jsonl" "$GRANT" "$ADV" "$OKRES" "$GHMERGE9" "$(tr_ t9 true 'Exit code 1
+✓ Squashed and merged pull request euron8/ai-dlc#1056 (b208 r1)
+failed to delete local branch b208-r1: failed to run git: error: cannot delete branch '"'"'b208-r1'"'"' used by worktree')"
+mk "$P1/fmerge404.jsonl" "$GRANT" "$ADV" "$OKRES" "$GHMERGE9" "$(tr_ t9 true 'Exit code 1
+GraphQL: Could not resolve to a PullRequest with the number of 1056. (repository.pullRequest)
+HTTP 404: Not Found')"
+mk "$P1/f141.jsonl"     "$GRANT" "$ADV" "$OKRES" "$PUSH9" "$(tr_ t9 true 'Exit code 141
+pre-push: all gates green
+To github.com:euron8/ai-dlc.git
+ * [new branch]      HEAD -> b208-gate')"
+mk "$P1/fdots.jsonl"    "$GRANT" "$ADV" "$OKRES" "$PUSH9" "$(tr_ t9 true 'Exit code 1
+To github.com:x/y.git
+   2a6f5992..53c415ee  HEAD -> main
+error: something after')"
+mk "$P1/fforced.jsonl"  "$GRANT" "$ADV" "$OKRES" "$PUSH9" "$(tr_ t9 true 'Exit code 141
+To github.com:x/y.git
+ + 2a6f5992...53c415ee HEAD -> main (forced update)')"
+mk "$P1/frej.jsonl"     "$GRANT" "$ADV" "$OKRES" "$PUSH9" "$(tr_ t9 true "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed.")"
+mk "$P1/fsafe.jsonl"    "$GRANT" "$ADV" "$OKRES" "$PUSH9" "$(tr_ t9 true 'This command requires approval: safety check denied the push to a protected branch')"
+mk "$P1/fhook.jsonl"    "$GRANT" "$ADV" "$OKRES" "$PUSH9" "$(tr_ t9 true 'PreToolUse:Bash hook error: AI/DLC steering budget: this FOREGROUND Bash call declares timeout 600000 ms')"
+mk "$P1/fred.jsonl"     "$GRANT" "$ADV" "$OKRES" "$PUSH9" "$(tr_ t9 true 'Exit code 1
+FAIL  fixture x
+pre-push: 1 gate(s) failed
+error: failed to push some refs')"
+mk "$P1/fokref.jsonl"   "$GRANT" "$ADV" "$OKRES" "$PUSH9" "$(tr_ t9 false 'To github.com:x/y.git
+   2a6f5992..53c415ee  HEAD -> main')"
+mk "$P1/fokutd.jsonl"   "$GRANT" "$ADV" "$OKRES" "$PUSH9" "$OK9"
+# REREAD: a release already pushed, no advisor since. score() copies the template over the judged
+# transcript before EVERY run, so a line one score appended never leaks into the next.
+mk "$P1/rr.tmpl"        "$GRANT" "$PUSHL" "$(tr_ t1 false 'To x
+   1111111..2222222  HEAD -> main')"
+mk "$P1/rr.add"         "$ADV" "$(tu tNEW Bash '{"command":"git push -u origin HEAD"}')"
 # PER-KIND worlds: one advisor call, then gated actions of different kinds, each answered.
 MERGEL="$(tu t2 Bash '{"command":"gh pr merge 7 --squash --delete-branch"}')"
 CLOSEL="$(tu t3 Bash '{"command":"bash scripts/ai-dlc/gate-checkpoint.sh --nonce n close"}')"
@@ -210,10 +268,14 @@ mk "$P1/par/subagents/agent-a14.jsonl" "$GRANT" "$WV" "$(tr_ w1 false ok)" "$UPE
 mk "$P1/q.jsonl"        "$GRANT"
 mkdir -p "$P1/q/subagents"
 for _f in g none off regrant pa ap err unav rearm denied pushed deniedarr ran ranfull okenv apok apm amp ap1 ac par q \
+          f404 fmergeok fmergedel fmerge404 f141 fdots fforced frej fsafe fhook fred fokref fokutd \
           par/subagents/agent-a7 par/subagents/agent-a9 par/subagents/agent-a10 par/subagents/agent-a11 par/subagents/agent-a12 \
           par/subagents/agent-a13 par/subagents/agent-a14; do
   [ -s "$P1/$_f.jsonl" ] || { echo "FIXTURE BROKEN: world $_f was not written" >&2; exit 2; }
 done
+_nt="$(grep -c . "$P1/rr.tmpl")" || _nt=0
+_na="$(grep -c . "$P1/rr.add")" || _na=0
+[ "$_nt" -eq 3 ] && [ "$_na" -eq 2 ] || { echo "FIXTURE BROKEN: the REREAD template holds $_nt lines (want 3) and its append $_na (want 2)" >&2; exit 2; }
 
 # bash_in <transcript> <cwd> <command> [agent_id] [tool_use_id]
 #   tool_use_id `-` omits the key, the shape of a harness that does not send one
@@ -246,7 +308,7 @@ B()  { c "$1" "$2" "$(bash_in "$P1/g.jsonl" "$SPRINT" "$3")"; }
 for x in 'git push -u origin HEAD' "git -C $SPRINT push origin HEAD:refs/heads/release/1" "cd $SPRINT && git push" 'timeout 600 git push origin sprint/3'; do
   B PUSH DENY "$x"
 done
-cell REASON DENY 'R:call the advisor tool, then retry the same command' - "$(bash_in "$P1/g.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+cell REASON DENY 'R:call the advisor in a message of its own, read its answer, then retry the same command' - "$(bash_in "$P1/g.jsonl" "$SPRINT" 'git push -u origin HEAD')"
 
 c NOGRANT SILENT "$(bash_in "$P1/none.jsonl" "$SPRINT" 'git push -u origin HEAD')"
 c NOGRANT SILENT "$(write_in "$P1/par.jsonl" "$VERDICT" a4)"
@@ -358,7 +420,7 @@ ct MATEPATH DENY k-sh-cr "$(write_in "$P1/par.jsonl" "$REVSHC" a1)"
 ct MATEPATH SILENT k-summary "$(write_in "$P1/par.jsonl" "$REVX" a1)"
 ct MATEPATH SILENT k-sh-notes "$(write_in "$P1/par.jsonl" "$REVSHX" a1)"
 
-c MATEREWRITE SILENT "$(edit_in "$P1/par.jsonl" "$VERDICT" a b a5)"
+ct MATEREWRITE SILENT n-mate-same "$(edit_in "$P1/par.jsonl" "$VERDICT" a b a5)"
 c MATEREWRITE DENY "$(edit_in "$P1/par.jsonl" "$VERDICT" a b a6)"
 
 # D4: a re-dispatch (a user TEXT line, string or text block) ends the re-write exemption;
@@ -379,11 +441,45 @@ ct REDISPATCH DENY rd-peer "$(edit_in "$P1/par.jsonl" "$VERDICT" PASS FAIL a14)"
 
 c DENIED SILENT "$(bash_in "$P1/denied.jsonl" "$SPRINT" 'git push -u origin HEAD')"
 c DENIED SILENT "$(bash_in "$P1/deniedarr.jsonl" "$SPRINT" 'git push -u origin HEAD')"
-c DENIED DENY "$(bash_in "$P1/pushed.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+ct DENIED DENY n-pushed "$(bash_in "$P1/pushed.jsonl" "$SPRINT" 'git push -u origin HEAD')"
 ct DENIED DENY h-noerr "$(bash_in "$P1/okenv.jsonl" "$SPRINT" 'git push -u origin HEAD')"
-# D1: a push that RAN, failed, and printed the token mid-output is still a gated action.
-c ENVELOPE DENY "$(bash_in "$P1/ran.jsonl" "$SPRINT" 'git push -u origin HEAD')"
-ct ENVELOPE DENY a-midline "$(bash_in "$P1/ranfull.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+# A push that RAN, failed with no ref-update line, and printed the token mid-output did not ship.
+# FLIPPED from DENY at batch 208 (BL-486): the anchored-envelope rule these pinned is subsumed.
+ct ENVELOPE SILENT a-ran "$(bash_in "$P1/ran.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+ct ENVELOPE SILENT a-midline "$(bash_in "$P1/ranfull.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+
+# FAILED (BL-486): a gated call that did not ship does not consume the advisor call before it.
+# Each SILENT cell has a DENY cell one property apart: the call shipped.
+ct FAILED SILENT f-404 "$(tool_in "$P1/f404.jsonl" mcp__github__merge_pull_request '{"owner":"o","repo":"r","pullNumber":1056}')"
+ct FAILED DENY f-merge-ok "$(tool_in "$P1/fmergeok.jsonl" mcp__github__merge_pull_request '{"owner":"o","repo":"r","pullNumber":1056}')"
+# is_error, but the text shows gh merged before the branch delete failed: it SHIPPED -> DENY.
+# Twin one property apart: the errored gh merge whose text carries no merged line -> SILENT.
+ct FAILED DENY f-merge-errdel "$(bash_in "$P1/fmergedel.jsonl" "$SPRINT" 'gh pr merge 1057 --squash --delete-branch')"
+ct FAILED SILENT f-merge-err404 "$(bash_in "$P1/fmerge404.jsonl" "$SPRINT" 'gh pr merge 1057 --squash --delete-branch')"
+ct FAILED SILENT f-rejected "$(bash_in "$P1/frej.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+ct FAILED SILENT f-safety "$(bash_in "$P1/fsafe.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+ct FAILED SILENT f-hookdeny "$(bash_in "$P1/fhook.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+ct FAILED SILENT f-red "$(bash_in "$P1/fred.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+# is_error, but the text shows the remote moved: it SHIPPED (twins of f-red, one per ref-line form).
+ct FAILED DENY f-141-newbranch "$(bash_in "$P1/f141.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+ct FAILED DENY f-err-dots "$(bash_in "$P1/fdots.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+ct FAILED DENY f-err-forced "$(bash_in "$P1/fforced.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+# Ran OK (twins of f-rejected, f-safety, f-hookdeny): with a ref line, and without one.
+ct FAILED DENY f-ok-ref "$(bash_in "$P1/fokref.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+ct FAILED DENY f-ok-uptodate "$(bash_in "$P1/fokutd.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+
+# REREAD (THE RACE). The judged transcript is rebuilt from rr.tmpl before each score; a
+# `$CELLS/<n>.app` file tells score() to do that, to run the hook with ADVISOR_GATE_REREADS UNSET,
+# and (for the appender cell) to append rr.add APPEND_DELAY seconds after the hook starts. 1s,
+# measured: the hook's first scan returns 0.09-0.22s after start, solo at load ~36, so a 4x loaded
+# slowdown still lands it before the append, and the append lands well before the LAST re-read
+# (~2.1s); whichever re-read sees it first judges SILENT. Too short and the first scan sees it
+# (mutant r survives); too long and no re-read sees it (the SILENT cell goes red).
+APPEND_DELAY=1
+ct REREAD SILENT rr-late "$(bash_in "$P1/rr-late.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+printf '%s\t%s\t%s\n' "$P1/rr-late.jsonl" "$P1/rr.add" "$APPEND_DELAY" > "$CELLS/$nc.app"
+ct REREAD DENY rr-none "$(bash_in "$P1/rr-none.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+printf '%s\t%s\t%s\n' "$P1/rr-none.jsonl" - - > "$CELLS/$nc.app"
 
 c SELF SILENT "$(bash_in "$P1/ap.jsonl" "$SPRINT" 'git push -u origin HEAD' '' t1)"
 c SELF DENY "$(bash_in "$P1/ap.jsonl" "$SPRINT" 'git push -u origin HEAD' '' tY)"
@@ -391,7 +487,7 @@ c SELF DENY "$(bash_in "$P1/ap.jsonl" "$SPRINT" 'git push -u origin HEAD' '' tY)
 # input carries no tool_use_id -> ALLOW. Twin: the same push already ANSWERED (a tool_result
 # after it), so it is a recorded action, not the incoming one -> DENY.
 c SELFLAST SILENT "$(bash_in "$P1/ap.jsonl" "$SPRINT" 'git push -u origin HEAD' '' -)"
-c SELFLAST DENY "$(bash_in "$P1/apok.jsonl" "$SPRINT" 'git push -u origin HEAD' '' -)"
+ct SELFLAST DENY n-selflast-answered "$(bash_in "$P1/apok.jsonl" "$SPRINT" 'git push -u origin HEAD' '' -)"
 
 # PER-KIND (operator ruling): one advisor call covers the next action of each kind.
 GLADD="$(edit_in "$P1/ac.jsonl" "$GL" '| check | verdict |
@@ -401,10 +497,10 @@ GLADD="$(edit_in "$P1/ac.jsonl" "$GL" '| check | verdict |
 ')"
 c PERKIND SILENT "$(bash_in "$P1/ap1.jsonl" "$SPRINT" 'gh pr merge 7 --squash --delete-branch')"
 c PERKIND SILENT "$(bash_in "$P1/amp.jsonl" "$SPRINT" 'git push -u origin HEAD')"
-c PERKIND DENY "$(bash_in "$P1/apm.jsonl" "$SPRINT" 'git push -u origin HEAD')"
-c PERKIND DENY "$(bash_in "$P1/apm.jsonl" "$SPRINT" 'gh pr merge 8 --squash')"
+ct PERKIND DENY n-pk-push "$(bash_in "$P1/apm.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+ct PERKIND DENY n-pk-merge "$(bash_in "$P1/apm.jsonl" "$SPRINT" 'gh pr merge 8 --squash')"
 c PERKIND SILENT "$GLADD"
-c PERKIND DENY "$(bash_in "$P1/ac.jsonl" "$SPRINT" 'bash scripts/ai-dlc/gate-checkpoint.sh --nonce m close')"
+ct PERKIND DENY n-pk-close "$(bash_in "$P1/ac.jsonl" "$SPRINT" 'bash scripts/ai-dlc/gate-checkpoint.sh --nonce m close')"
 # The four lead-kind pairs no cell above separates: after a push, and after a merge, the next
 # close and the next Check 12 append each owe nothing.
 ct PERKIND SILENT pk-push-close "$(bash_in "$P1/ap1.jsonl" "$SPRINT" 'bash scripts/ai-dlc/gate-checkpoint.sh --nonce m close')"
@@ -460,8 +556,20 @@ DECIDE='.hookSpecificOutput as $h
 score() {
   local h="$1" log="$2" failed="" exitbad=0 n id check arm want V REASON_TXT ERR_TXT
   : > "$log"
+  local tgt add dly apid
   while IFS=$'\t' read -r n id check arm want <&3; do
-    HOME="$W" CLAUDE_PROJECT_DIR="$CPD" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
+    if [ -f "$CELLS/$n.app" ]; then
+      apid=""
+      IFS=$'\t' read -r tgt add dly < "$CELLS/$n.app"
+      if ! cp "$P1/rr.tmpl" "$tgt"; then
+        printf '%s\n' "$id" >> "$log"; case " $failed " in *" $arm "*) ;; *) failed="$failed $arm" ;; esac; continue
+      fi
+      if [ "$add" != - ]; then ( sleep "$dly"; cat "$add" >> "$tgt" ) & apid=$!; fi
+      env -u ADVISOR_GATE_REREADS HOME="$W" CLAUDE_PROJECT_DIR="$CPD" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
+      [ -z "$apid" ] || wait "$apid"
+    else
+      ADVISOR_GATE_REREADS=0 HOME="$W" CLAUDE_PROJECT_DIR="$CPD" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
+    fi
     if [ ! -s "$OUTF" ]; then V=SILENT; REASON_TXT=""
     else
       jq -r "$DECIDE" "$OUTF" > "$VF" 2>/dev/null || printf 'OTHER\t-\n' > "$VF"
