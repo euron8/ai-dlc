@@ -764,9 +764,31 @@ printf '%s\n' '# Pipeline Snapshot' '' '<!-- template:' '- pipeline_variant: bug
   '## Pipeline Position' '- pipeline_variant: carry-over' '- current_step_file: retro.md' > "$W/_bmad-output/pipeline-snapshot.md"
 drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" --route "$ROUTE"
 expect Dc-comment 1 "FAIL: no residue" "" 1 "HTML-commented 'pipeline_variant: bug' above the real carry-over line -> owed, FAIL"
+# A READER THAT FAILS is refused, never read as "no variant". The snapshot says carry-over
+# (owed) and sprint-status says bug (not owed). The reader prints nothing on a failure and on a
+# snapshot naming no line, and a discarded exit status made the two one: the fold took bug from
+# sprint-status alone and answered NOT-OWED. Measured under the pre-push pool, where a transient
+# reader failure was visible only through a mutant whose verdict an empty read moves. The
+# failure is forced with an awk on PATH that dies only when its operand is the snapshot, so the
+# file stays readable and the `-r` precheck cannot be what refuses it. Near-miss in the same
+# world with the real awk: the disagreement check is reached (exit 2 on a different first line).
+mkworld 313; oneshot "$SLOT/$ONE"; mkdir -p "$W/_bmad-output" "$W/shim"
+printf '%s\n' '# Pipeline Snapshot' '' '## Pipeline Position' '- pipeline_variant: carry-over' \
+  '- current_step_file: retro.md' > "$W/_bmad-output/pipeline-snapshot.md"
+sstatus "$W" bug 313
+printf '%s\n' '#!/bin/sh' 'for a in "$@"; do case "$a" in *pipeline-snapshot.md) kill -KILL $$ ;; esac; done' \
+  'exec /usr/bin/awk "$@"' > "$W/shim/awk" && chmod +x "$W/shim/awk"
+"$W/shim/awk" 'BEGIN { exit 0 }' /dev/null || { echo "FIXTURE BROKEN: the awk shim does not pass through" >&2; exit 2; }
+SHIM_PATH="$W/shim:$PATH"
+OUTF="$WORK/out.$WN.$RANDOM"
+( cd "$W" && PATH="$SHIM_PATH" bash "$VSL" --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" --route "$ROUTE" ) > "$OUTF" 2>&1; RC=$?
+FIRST="$(sed -n 1p "$OUTF")"; NPASS="$(grep -c '^PASS:' "$OUTF")" || NPASS=0
+expect Dc-reader-dies 2 "FAIL: could not read the pipeline snapshot" "reader rc=137" 1 "the snapshot reader killed mid-read -> exit 2 naming its status, never NOT-OWED from sprint-status"
+drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" --route "$ROUTE"
+expect Dc-reader-lives 2 "FAIL: variant disagreement: snapshot says carry-over, sprint-status says bug" "" 1 "the same world with the real awk reaches the disagreement check"
 
 # --- verdict ---------------------------------------------------------------------------------
-EXPECTED_ARMS=70
+EXPECTED_ARMS=72
 if [ $((asserted + stood)) -ne "$EXPECTED_ARMS" ]; then
   echo "FIXTURE BROKEN: $((asserted + stood)) arms reported, $EXPECTED_ARMS expected" >&2; exit 1
 fi

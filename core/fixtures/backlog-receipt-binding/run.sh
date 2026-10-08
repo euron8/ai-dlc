@@ -595,7 +595,7 @@ else
   printf '%s\n' "$m8b_out" | grep -E '^(FAIL|OK):' | sed 's/^/      /' | head -3; rc=1
 fi
 # ...and its mutant: the old condition restored, the same ledger must refuse as a zero.
-if mut "$TMP/m8b" 's|^if \[ "$SCORED" -eq 0 \] \&\& \[ "$N_PASS" -eq 0 \]; then|if [ "$SCORED" -eq 0 ]; then|'; then
+if mut "$TMP/m8b" 's|^if \[ "$SCORED" -eq 0 \] \&\& \[ "$N_PASS" -eq 0 \] \&\& \[ -z "$R2_ALLMANUAL" \]; then|if [ "$SCORED" -eq 0 ]; then|'; then
   # shellcheck disable=SC2086
   m8bm_out="$(run_v "" "$TMP/m8b" $M8B_ARGS)"; m8bm_rc=$?
   if [ "$m8bm_rc" -eq 1 ] && grep -qF "produced ZERO scored receipts" <<<"$m8bm_out"; then
@@ -603,6 +603,47 @@ if mut "$TMP/m8b" 's|^if \[ "$SCORED" -eq 0 \] \&\& \[ "$N_PASS" -eq 0 \]; then|
   else
     note "FAIL  m8b-mut SURVIVED: the old condition exited $m8bm_rc on the all-already-passing ledger"; rc=1
   fi
+fi
+
+# ===== M8c. EVERY LIVE ENTRY DECLARING `verify: manual` IS ACCOUNTED FOR, NOT A ZERO. ========
+# A release that closes the last `sh`-receipted entry leaves a ledger whose every live entry
+# says `verify: manual` by its own declaration: nothing CAN be scored, and each entry says why.
+# It must pass and say `R2 all-manual`. Near-miss: the same ledger with one entry carrying NO
+# receipt line is not accounted for entry by entry and must still refuse as a zero, so the
+# exemption cannot be reached by deleting a receipt line (the escape R5 exists for).
+seed "$TMP/m8c"
+printf '# Probe backlog\n\n## BL-806\n\nBody.\n\nverify: manual -- close when observed\n\n## BL-807\n\nBody.\n\nverify: manual\n\n' > "$TMP/m8c/docs/backlog.md"
+( cd "$TMP/m8c" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m allmanual >/dev/null 2>&1 )
+M8C_ARGS="--max-prose-closable 0 --max-unscorable 0 --max-out-of-population 0 --max-unstable 0 --min-sh-receipts 0 --min-entries 1"
+# shellcheck disable=SC2086
+m8c_out="$(run_v "" "$TMP/m8c" $M8C_ARGS)"; m8c_rc=$?
+if [ "$m8c_rc" -eq 0 ] && grep -q '^OK: validate-backlog-receipts.* R2 all-manual$' <<<"$m8c_out"; then
+  note "ok    m8c -- a ledger whose every live entry declares verify: manual is OK and says R2 all-manual"
+else
+  note "FAIL  m8c -- an all-manual ledger must pass and say so (rc=$m8c_rc)"
+  printf '%s\n' "$m8c_out" | grep -E '^(FAIL|OK):' | sed 's/^/      /' | head -3; rc=1
+fi
+seed "$TMP/m8cn"
+printf '# Probe backlog\n\n## BL-806\n\nBody.\n\nverify: manual -- close when observed\n\n## BL-807\n\nBody, and no receipt line.\n\n' > "$TMP/m8cn/docs/backlog.md"
+( cd "$TMP/m8cn" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m onemissing >/dev/null 2>&1 )
+# shellcheck disable=SC2086
+m8cn_out="$(run_v "" "$TMP/m8cn" $M8C_ARGS)"; m8cn_rc=$?
+if [ "$m8cn_rc" -eq 1 ] && grep -qF "produced ZERO scored receipts" <<<"$m8cn_out"; then
+  note "ok    m8c-near -- one live entry with no receipt line beside a manual one still refuses as a zero"
+else
+  note "FAIL  m8c-near -- a ledger not accounted for entry by entry exited $m8cn_rc instead of refusing as a zero"; rc=1
+fi
+# ...and the mutant: the exemption keyed on ANY manual receipt rather than on every entry.
+if mut "$TMP/m8cn" 's|\[ "${MANUAL_RECEIPTS:-0}" -eq "$ENTRIES" \] \&\& R2_ALLMANUAL=|[ "${MANUAL_RECEIPTS:-0}" -gt 0 ] \&\& R2_ALLMANUAL=|'; then
+  # shellcheck disable=SC2086
+  m8cm_out="$(run_v "" "$TMP/m8cn" $M8C_ARGS)"; m8cm_rc=$?
+  if [ "$m8cm_rc" -eq 0 ]; then
+    note "ok    m8c-mut -- KILLED: keyed on any manual receipt, the near-miss ledger passes (rc=0) where the shipped condition refuses"
+  else
+    note "FAIL  m8c-mut SURVIVED: the widened condition still exited $m8cm_rc on the near-miss ledger"; rc=1
+  fi
+else
+  note "FAIL  m8c-mut DID NOT APPLY"; rc=1
 fi
 
 # ===== THE RATCHETS THAT EXIST BECAUSE THE FIRST ONE IS ESCAPABLE. =========================

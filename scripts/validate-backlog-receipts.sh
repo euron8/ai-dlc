@@ -720,12 +720,13 @@ score_ledger() {
   _sl_ledger="$1"; _sl_root="$2"
   rm -rf "$WORK/out" "$WORK/rec" "$WORK/t"
   mkdir -p "$WORK/out" "$WORK/rec" "$WORK/t"
-  _sl_i=0; _sl_e=0
+  _sl_i=0; _sl_e=0; _sl_m=0
   while IFS="$(printf '\t')" read -r _l _c _r; do
     [ -n "$_l" ] || continue
     [ "$_c" = "1" ] && continue                 # annotated LANDED: awaiting rotation, not live
     _sl_e=$(( _sl_e + 1 ))
     [ "$_r" = "@NONE@" ] && continue
+    case "$_r" in "manual"|"manual "*) _sl_m=$(( _sl_m + 1 )); continue ;; esac
     case "$_r" in "sh "*|"sh") ;; *) continue ;; esac
     _sl_i=$(( _sl_i + 1 ))
     printf '%s\n%s\n' "$_l" "$_r" > "$WORK/rec/$(printf '%04d' "$_sl_i")"
@@ -735,7 +736,7 @@ EOF
   # THE COUNTS GO TO A FILE, NOT TO A VARIABLE. Every caller runs this in `$( )` to capture
   # its rows, and an assignment made inside a command substitution is lost to the subshell --
   # the caller would read an unbound variable, or worse, the PREVIOUS call's value.
-  printf '%s %s\n' "$_sl_i" "$_sl_e" > "$WORK/counts"
+  printf '%s %s %s\n' "$_sl_i" "$_sl_e" "$_sl_m" > "$WORK/counts"
   [ "$_sl_i" -eq 0 ] && return 0
 
   # THE COMPLETENESS SENTINEL IS DERIVED FROM THE SUBJECT, NEVER NAMED. A hardcoded path is
@@ -777,10 +778,10 @@ EOF
 # The counts score_ledger wrote, read back in the PARENT shell. A missing file is a refusal:
 # a defaulted zero here would read as an empty ledger, which is a different finding.
 read_counts() {
-  SH_RECEIPTS=""; ENTRIES=""
+  SH_RECEIPTS=""; ENTRIES=""; MANUAL_RECEIPTS=""
   [ -f "$WORK/counts" ] || { echo "$(me): FAIL -- the scorer wrote no population counts, so the ledger's size is unknown and no ratchet below could be read." >&2; exit 2; }
-  read -r SH_RECEIPTS ENTRIES < "$WORK/counts"
-  case "${SH_RECEIPTS:-}${ENTRIES:-}" in ''|*[!0-9]*) echo "$(me): FAIL -- the scorer's population counts did not parse." >&2; exit 2 ;; esac
+  read -r SH_RECEIPTS ENTRIES MANUAL_RECEIPTS < "$WORK/counts"
+  case "${SH_RECEIPTS:-}${ENTRIES:-}${MANUAL_RECEIPTS:-}" in ''|*[!0-9]*) echo "$(me): FAIL -- the scorer's population counts did not parse." >&2; exit 2 ;; esac
 }
 
 # ---------------------------------------------------------------------------
@@ -1001,8 +1002,15 @@ fi
 # observation, not an absence -- it is the state a release fixing the last live receipt leaves.
 R2_ALLPASS=""
 [ "$SCORED" -eq 0 ] && [ "$N_PASS" -gt 0 ] && R2_ALLPASS=" R2 all-already-passing"
-if [ "$SCORED" -eq 0 ] && [ "$N_PASS" -eq 0 ]; then
-  echo "FAIL: R2: $LEDGER produced ZERO scored receipts (entries $ENTRIES, sh receipts ${SH_RECEIPTS:-0}, unscorable $N_UNSC, unseeded $N_UNSEED, out of population $N_OOP, already passing $N_PASS). Nothing was observed, and an arm that observed nothing is not a clean corpus." >&2
+# AND WHEN EVERY LIVE ENTRY DECLARES `verify: manual`: there is no `sh` receipt to run, by each
+# entry's own declaration, and the ledger is accounted for entry by entry (entries == manual).
+# That is the state a release closing the last `sh`-receipted entry leaves, and it is not the
+# state m8 guards against: an empty parse counts no manual receipts either, so it still refuses.
+# The R5 floor (`--min-sh-receipts`) is lowered only when the entry count fell with it.
+R2_ALLMANUAL=""
+[ "$SCORED" -eq 0 ] && [ "$N_PASS" -eq 0 ] && [ "$ENTRIES" -gt 0 ] && [ "${MANUAL_RECEIPTS:-0}" -eq "$ENTRIES" ] && R2_ALLMANUAL=" R2 all-manual"
+if [ "$SCORED" -eq 0 ] && [ "$N_PASS" -eq 0 ] && [ -z "$R2_ALLMANUAL" ]; then
+  echo "FAIL: R2: $LEDGER produced ZERO scored receipts (entries $ENTRIES, sh receipts ${SH_RECEIPTS:-0}, manual ${MANUAL_RECEIPTS:-0}, unscorable $N_UNSC, unseeded $N_UNSEED, out of population $N_OOP, already passing $N_PASS). Nothing was observed, and an arm that observed nothing is not a clean corpus." >&2
   exit 1
 fi
 
@@ -1065,7 +1073,7 @@ fi
 _where="$LEDGER"
 [ "$DEFAULTED" = "1" ] && _where="docs/backlog.md"
 if [ "$QUIET" != "1" ]; then
-  echo "OK: validate-backlog-receipts -- R2 ${N_PC}/${MAX_PC} prose-closable, R3 ${UNSCORED}/${MAX_UNSC} unscored, R4 ${N_OOP}/${MAX_OOP} out of population, R6 ${N_UNSTABLE}/${MAX_UNSTABLE} unstable, R5 ${SH_RECEIPTS} sh receipts over ${ENTRIES} live entries in ${_where} (${N_BOUND} bound, ${N_FS} format-sensitive, ${N_PASS} already passing; R0 bound the path-split class to ${CLASS_SOURCE}; R1 fired both directions over 10 seeded receipts; every receipt ran in its own ${PROVENANCE}, ${WT_OWN_AFTER} of this run's own checkouts still registered, caller porcelain ${PORC_BEFORE} unchanged).${R2_ALLPASS}"
+  echo "OK: validate-backlog-receipts -- R2 ${N_PC}/${MAX_PC} prose-closable, R3 ${UNSCORED}/${MAX_UNSC} unscored, R4 ${N_OOP}/${MAX_OOP} out of population, R6 ${N_UNSTABLE}/${MAX_UNSTABLE} unstable, R5 ${SH_RECEIPTS} sh receipts over ${ENTRIES} live entries in ${_where} (${N_BOUND} bound, ${N_FS} format-sensitive, ${N_PASS} already passing; R0 bound the path-split class to ${CLASS_SOURCE}; R1 fired both directions over 10 seeded receipts; every receipt ran in its own ${PROVENANCE}, ${WT_OWN_AFTER} of this run's own checkouts still registered, caller porcelain ${PORC_BEFORE} unchanged).${R2_ALLPASS}${R2_ALLMANUAL}"
 else
   # `--quiet` SUPPRESSES THE FINDING ROWS, NEVER THE PROVENANCE. A caller that asks for quiet
   # still has to be able to tell this arm's silence from a stub's: a fifteen-line heuristic
@@ -1073,6 +1081,6 @@ else
   # output, and there would be nothing to distinguish them. This line reports what the run
   # actually DID -- how many receipts were checked out and scored -- which no implementation
   # that seeds nothing can emit truthfully.
-  echo "OK: validate-backlog-receipts -- ${SCORED} receipt(s) scored in ${_where}, each in its own ${PROVENANCE}; ${N_PC}/${MAX_PC} prose-closable.${R2_ALLPASS}"
+  echo "OK: validate-backlog-receipts -- ${SCORED} receipt(s) scored in ${_where}, each in its own ${PROVENANCE}; ${N_PC}/${MAX_PC} prose-closable.${R2_ALLPASS}${R2_ALLMANUAL}"
 fi
 exit 0
