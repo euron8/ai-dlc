@@ -140,3 +140,5 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I120 | the citation floor's bash measure is node's, member for member |
 | I121 | every role contract carries the verify-shape paragraph exactly once, byte-identical, and no other file carries it |
 | I122 | every role contract carries the advisor paragraph exactly once, byte-identical, and no other file carries it |
+| I123 | every role contract carries the chunked-write paragraph once, byte-identical, directly after the advisor paragraph, and no other file carries it |
+| I124 | the party-seat section is byte-identical across exactly architect, dev, pm and tea, and no other file carries it |
