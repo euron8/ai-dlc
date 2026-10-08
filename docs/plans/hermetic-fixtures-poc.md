@@ -22,11 +22,22 @@ nested directory copy, and a symlink reaching outside the declaration. The same 
 costs one unit, not the suite. `BL-485` files the suite pole (`review-shard-merge-mutants`, 66 serial
 mutants) for sharding.
 
-**What the next batch owes, in the order below.** Action 3 as written is BLOCKED: `tools.decl`
-cannot name `node`, because the hook keys tools only from the fixed dirs and the operator's node is
-under nvm (`BL-477`). Action 4 needs a path-mapping rule first: a declaration spelled
-`core/scripts/x.sh` does not resolve on a consumer, where the file is `scripts/ai-dlc/x.sh`
-(`BL-478`). Resolve both before declaring any real fixture.
+**Batch 207 shipped release 0.750.0 and unblocked actions 3 and 4.** `BL-477`, `BL-478` and `BL-479`
+are closed: a `tools.decl` line `?name` declares a tool that must be reachable in the sandbox and is
+not keyed, from the closed vocabulary `READSET_UNKEYED_TOOLS` (`node npm npx claude`) owned by the
+`READSET_TOOLS` span in both hooks; `inputs.decl` paths are spelled in distribution coordinates and
+mapped on a consumer by `core-paths.sh --map` (distribution layout iff `core/scripts/` is a
+directory); a bare tool name keys on git's exec-path first. Still zero declarations shipped; the
+four-state differential against 41ac5d25 was identical in every decision line except two fixtures
+whose machine-local trace this branch invalidated. Two facts for action 3: `VERSION` is outside the
+hook's path universe, so a declaration naming it yields no key row; and the key-row tool scanner keys
+prose words it finds in a fixture's closure files, so a declaration does not change that.
+
+**What the next batch owes.** Action 3 as rewritten below: declare the eight SHIPPING node fixtures
+(`gate-adjudication-mutants` is `.dist-only`) one release at a time, smallest map-row count first,
+each with `?node` in `tools.decl`, every validator and hook the fixture reads declared in distribution
+coordinates, and the 5a probe run and named in the release message. Batch 208 (`ai-dlc-cd`) rewrites
+`BL-485`'s receipt when it builds the shards; do not touch that entry.
 
 Your instructions are four sections. Read all four before acting: `## Start here` (the trees and
 the read/write boundary), `### NEXT ACTIONS — numbered, in order`, `### Ping the operator`, and
@@ -83,7 +94,7 @@ find core/fixtures -mindepth 1 -maxdepth 1 -type d | wc -l          # fixture di
 ls core/fixtures/*/run.sh | wc -l                                   # drivable fixtures (246)
 ls core/fixtures/*/.dist-only | wc -l                               # dist-only         (67)
 # declared fixtures. CONTROL: core/fixtures/hermetic-runner/run.sh exists (the runner's self-probe, undeclared by design).
-n=0; for d in core/fixtures/*/; do [ -f "$d/inputs.decl" ] && n=$((n+1)); done; echo "DECLARED $n"; ls core/fixtures/hermetic-runner/run.sh   # 0 at 0.747.0
+n=0; for d in core/fixtures/*/; do [ -f "$d/inputs.decl" ] && n=$((n+1)); done; echo "DECLARED $n"; ls core/fixtures/hermetic-runner/run.sh   # 0 at 0.750.0
 grep -v '^#' "$MAP" | cut -f1 | sort -u | wc -l                     # mapped fixtures   (236)
 grep -v '^#' "$MAP" | wc -l                                         # map rows          (29955)
 # drivable fixtures with NO map rows. CONTROL: absorbed-specifics-survive has 9 rows.
@@ -113,21 +124,27 @@ At authoring it read **247 records: 142 `ok`, 101 `stale`, 4 `seeded`; 229 of 24
 mid-batch, so it is a floor on staleness, not a typical push.
 ### NEXT ACTIONS — numbered, in order
 
-Nothing is owed until the operator rules on `docs/poc/hermetic-decision.md`. The actions below are
-what a GO ruling owes; a NO-GO ruling owes nothing, and this file is then archived by the plan
-rotator.
+The operator ruled GO. Actions 1 and 2 are COMPLETED (0.747.0, 0.748.0) and the blockers on
+actions 3 and 4 are COMPLETED (0.750.0); they are kept numbered so citations resolve.
 
-1. **MAKE THE CLONE AND PIN IT**, exactly as the retired action 1 did: a full clone under
-   `mktemp -d`, a `github` remote pointing at GitHub, this branch checked out, `PIN` recorded as
-   `github/main`. Never work in `/Users/n8/git/ai-dlc` or a linked worktree of it.
-2. **PROMOTE THE RUNNER.** Rebuild `scripts/poc/hermetic-run.sh` from the report's section 2 contract
-   (the clone that held it is gone) as `core/scripts/hermetic-run.sh` with its self-probe as a
-   fixture, add the REQUIRED-input marker (`!path` in `inputs.decl`; the runner FAILs unless the
-   fixture's log names it), and bind both pre-push hooks' dispatch branch under **I66**: a fixture
-   with `inputs.decl` is keyed by the runner, one without by the map, decided per fixture in
-   `run_fixtures`. Ship with ZERO declarations so the push changes no behaviour.
-3. **DECLARE THE NINE `node` FIXTURES FIRST** (`grep -lE '\bnode\b' core/fixtures/*/run.sh`), each
-   with a `tools.decl` naming node, and run 5a (drop one positive input; expect FAIL) on each.
+1. **MAKE THE CLONE AND PIN IT** — completed each batch; repeat: a full clone under `mktemp -d`, a
+   `github` remote pointing at GitHub, this branch checked out, `PIN` recorded as `github/main`.
+   Never work in `/Users/n8/git/ai-dlc` or a linked worktree of it.
+2. **PROMOTE THE RUNNER** — COMPLETED at 0.747.0 (`core/scripts/hermetic-run.sh`,
+   `core/fixtures/hermetic-runner`, dispatch under **I66**); 0.750.0 added `?name`, `--map` and
+   exec-path keying. Nothing to do.
+3. **DECLARE THE EIGHT SHIPPING `node` FIXTURES, ONE RELEASE EACH, SMALLEST FIRST.** The set is
+   `/usr/bin/grep -lE '\bnode\b' core/fixtures/*/run.sh` minus any carrying `.dist-only`
+   (`gate-adjudication-mutants`; control: `ls core/fixtures/plan-shape/.dist-only` exists). Order by
+   `grep -c "^<f>"$'\t' .ai-dlc-fixture-readsets.tsv`, smallest first. For each: `tools.decl` carries
+   `?node` plus a bare line per other tool the fixture runs that lives in the fixed dirs; `inputs.decl`
+   lists every path under `core/` the fixture or its `seed.sh` reads, in distribution coordinates,
+   with `!` on the validator under test and on any hook it copies; the fixture's own `$0` walk must
+   resolve inside the sandbox (candidate lists naming both `core/scripts/` and `scripts/ai-dlc/`
+   already do). Run `bash core/scripts/hermetic-run.sh <f>` from the clone root to PASS, then the 5a
+   probe (drop the `!` input; expect exit 1 naming it) and name both in the release message. Push
+   through the gate; the declared fixture is excluded from the trace queue, so no trace is owed.
+   A 5a probe that does not FAIL stops the batch and goes to the operator.
 4. **DECLARE THE DECLARATION-ONLY SET** in batches by map-row count, smallest first: every class-a
    row of `02-census.tsv` plus every class-b row whose `roots` column is a `$0` walk and whose
    `git_dep` is not `live`. One 5a probe per batch.
@@ -151,7 +168,7 @@ rotator.
 ### Ping the operator
 
 Report to the operator on every question, every decision, and on completion including an early
-stop. Specifically: when BL-477's option is needed (action 3) unless already ruled; when a 5a probe
+stop. Specifically: when a 5a probe
 returns anything but FAIL on a declared fixture (action 4 or 5), which is the finding the REQUIRED
 marker exists for and the operator decides whether the fixture gets a `!` or the batch stops; and
 when the release has landed on `origin/main`, confirmed by `ls-remote`. Present a stall as choices
@@ -181,8 +198,15 @@ branch shipped with zero declarations; `bash core/fixtures/hermetic-runner/run.s
 distribution root and from an `install.sh`-built consumer root; the zero-declaration differential
 against 0.745.0 was byte-identical with a one-declaration control that differed.
 
-For the next GO batch: actions 2-7 above, each with the 5a probe named in the batch's release
-message, and BL-477 and BL-478 closed before the first real declaration lands.
+For batch 207 (satisfied at 0.750.0): BL-477, BL-478 and BL-479 closed with receipts scoring 1/1/1 at
+base and 0/0/0 at tip; `?name`, `--map` and exec-path keying shipped with zero declarations; the
+four-state differential against 41ac5d25 identical in every decision line except the two fixtures
+whose local trace the branch invalidated; the fixture PASSes from the distribution root and from an
+`install.sh`-built consumer root.
+
+For the next batch: action 3 above for at least the smallest node fixture, its `hermetic-run.sh`
+PASS and 5a FAIL named in the release message, and `DECLARED` in the derive block reading one more
+than before with the control present.
 
 ## Hazards
 
