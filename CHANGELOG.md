@@ -19,6 +19,39 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.749.0] - 2026-10-08
+
+Batch 206's second release, cut behind the hermetic program's 0.747.0 and 0.748.0. It discharges one consumer candidate, files and carries `BL-484`. `BL-483` shipped in 0.746.0. Every role contract
+gains one paragraph, so a consumer's self-update gate sees all 18 `.claude/team-roles/*.md` files change on the pull
+that delivers it.
+
+### Role contracts write the deliverable in chunks, and consult the advisor at that cadence (PC-S317-ROLE-CONTRACTS-CARRY-NO-CHUNKED-WRITE-INSTRUCTION-AND-THE-ADVISOR-PARAGRAPH-FIRES-ONLY-AT-FIRST-WRITE)
+
+- All 18 role files carry one byte-identical paragraph directly after the advisor paragraph. It tells the agent to
+  write its deliverable in chunks and iteratively, starting with `Write` before it has verified anything. If an
+  `advisor` tool is available, the agent also calls it before the first chunk and before the final rewrite.
+- The deliverable is the result file the brief names, never a subject file the agent was asked to read or edit.
+- No joined path ever holds a partial. A role whose deliverable section names a completion signal writes that signal
+  last. A role whose section names none writes its chunks to `<result>.draft` and lands the result path with one final
+  whole-file `Write`.
+- A role whose deliverable section says the file is written once writes it once and chunks nothing.
+  `gate-adjudicator.md`'s constraint now reads "One write: the verdict JSON, complete, never a draft."
+- The party-seat section in `architect.md`, `dev.md`, `pm.md` and `tea.md` already wrote early (since 0.744.0). Its
+  first step now cites the new paragraph instead of restating it.
+
+### Plain joins stay safe under chunked writes (BL-484)
+
+- Without `--complete`, `wait-for-deliverable.sh` reports DELIVERED on the first non-empty write since the join armed.
+  Because no result path now carries a partial, the twelve plain join sites under `core/skills/ai-dlc/steps/`, the
+  parts join in `rule-24.md` and the non-seat call in `route.md` need no edit. The script is unchanged.
+
+### Role-contract paragraphs are bound by invariant (BL-484)
+
+- `I123` holds the chunked-write paragraph to exactly one byte-identical copy per role file, directly after the advisor
+  paragraph, and nowhere else under `core/` outside `core/fixtures/`. `I124` holds the party-seat section byte-identical
+  across exactly the four seat roles. Both probe their own scans in both directions before reading the corpus.
+- `derived-fence-binding` drops each of the three role paragraphs in turn and requires the other two arms to stay green.
+
 ## [0.748.0] - 2026-10-08
 
 Batch 205, second release: one hook change on top of 0.747.0, shipped the same night so the next
