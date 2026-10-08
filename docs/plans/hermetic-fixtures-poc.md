@@ -7,7 +7,7 @@ This section is the ONLY CURRENT STATUS RECORD in this file.** Every later statu
 file acquires is replaced by this block, which a batch rewrites at its close.
 
 **The operator ruled GO on `docs/poc/hermetic-decision.md`.** Batch 205 executed action 2 of the
-GO list as release **0.746.0**: `core/scripts/hermetic-run.sh` is the runner (declared inputs in
+GO list as release **0.747.0** (renumbered: batch 206 took 0.746.0 for the spawn-ledger harness fix): `core/scripts/hermetic-run.sh` is the runner (declared inputs in
 `inputs.decl`, `!path` marks a REQUIRED input that the fixture must consume by printing a whole
 line `HERMETIC-CONSUMED <path>`, `tools.decl` names tools resolved against the hook's fixed tool
 dirs); `core/fixtures/hermetic-runner` is its self-probe and ships; both pre-push hooks dispatch a
@@ -17,7 +17,10 @@ and **I66** holds. **Zero declarations shipped**, so that push changed no behavi
 differential against 0.745.0 over four tree states was byte-identical and a one-declaration control
 differed. Three adversary passes found and the release fixed: a vacuous substring REQUIRED check, a
 key population that ignored the content key's excluded tops, a sandbox with no HOME/TMPDIR, a
-nested directory copy, and a symlink reaching outside the declaration.
+nested directory copy, and a symlink reaching outside the declaration. The same release closes
+`BL-482`: a new fixture directory no longer reruns every mapped fixture, so the next declared fixture
+costs one unit, not the suite. `BL-485` files the suite pole (`review-shard-merge-mutants`, 66 serial
+mutants) for sharding.
 
 **What the next batch owes, in the order below.** Action 3 as written is BLOCKED: `tools.decl`
 cannot name `node`, because the hook keys tools only from the fixed dirs and the operator's node is
@@ -80,7 +83,7 @@ find core/fixtures -mindepth 1 -maxdepth 1 -type d | wc -l          # fixture di
 ls core/fixtures/*/run.sh | wc -l                                   # drivable fixtures (246)
 ls core/fixtures/*/.dist-only | wc -l                               # dist-only         (67)
 # declared fixtures. CONTROL: core/fixtures/hermetic-runner/run.sh exists (the runner's self-probe, undeclared by design).
-n=0; for d in core/fixtures/*/; do [ -f "$d/inputs.decl" ] && n=$((n+1)); done; echo "DECLARED $n"; ls core/fixtures/hermetic-runner/run.sh   # 0 at 0.746.0
+n=0; for d in core/fixtures/*/; do [ -f "$d/inputs.decl" ] && n=$((n+1)); done; echo "DECLARED $n"; ls core/fixtures/hermetic-runner/run.sh   # 0 at 0.747.0
 grep -v '^#' "$MAP" | cut -f1 | sort -u | wc -l                     # mapped fixtures   (236)
 grep -v '^#' "$MAP" | wc -l                                         # map rows          (29955)
 # drivable fixtures with NO map rows. CONTROL: absorbed-specifics-survive has 9 rows.
@@ -173,7 +176,7 @@ For the PoC batch (satisfied; the observation point is the clone at `PIN`):
 6. This block was re-derived after the report, the plan validator is green, and the docs branch is
    on GitHub, confirmed by `ls-remote`.
 
-For batch 205 (action 2, satisfied at 0.746.0): the runner, the self-probe fixture and the dispatch
+For batch 205 (action 2, satisfied at 0.747.0): the runner, the self-probe fixture and the dispatch
 branch shipped with zero declarations; `bash core/fixtures/hermetic-runner/run.sh` PASSes from the
 distribution root and from an `install.sh`-built consumer root; the zero-declaration differential
 against 0.745.0 was byte-identical with a one-declaration control that differed.

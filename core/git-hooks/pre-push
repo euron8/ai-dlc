@@ -1216,6 +1216,17 @@ readset_keys() { # <list> <out>
       X[q "/"] = 1
       for (p in NV) if (index(p, q "/") == 1) { X[p] = 1; r = substr(p, length(q) + 2)
         while ((i = match(r, /\/[^\/]*$/)) > 0) { r = substr(r, 1, i - 1); X[q "/" r "/"] = 1 } } }
+    function sibs_only(k,   d, rv, n, a, j, e, any) {
+      d = substr(k, 1, length(k) - 1); rv = R[k]; any = 0
+      if (!(d in DN) || rv == "-") return 0
+      n = split(KIDS[d], a, "\n")
+      for (j = 2; j <= n; j++) { e = a[j]
+        if ((k in LP) && LP[k] == rv) { if ((d SUBSEP e) in CP) continue }
+        else if ((k in LV) && LV[k] == rv) { if ((d SUBSEP e) in CV) continue }
+        else return 0
+        if (!((d "/" e) in DN)) return 0
+        any = 1 }
+      return any }
     function grow(k,   d, rv, src, n, a, j) {
       d = substr(k, 1, length(k) - 1); rv = R[k]
       if (!(d in DN)) return 1
@@ -1264,12 +1275,13 @@ readset_keys() { # <list> <out>
         if (seed) { has = 1; st = "seeded"; for (k in K) R[k] = sv(k); if (um) for (p in VV) if (!(p in R)) R[p] = VV[p] }
         else if (f in RST) { has = 1; st = RST[f]
           n = split(RK[f], a, "\n"); for (j = 2; j <= n; j++) R[a[j]] = RV[f SUBSEP a[j]] }
-        first = ""; fch = 0; tch = 0
+        first = ""; fch = 0; tch = 0; SB = 0
         mig = (!seed && (f in RST) && RTL[f] != "canonical")
         if (has) {
           for (k in R) { if (k ~ /\/$/) rl = 1
             if (cur(k) == R[k]) continue
             if (substr(k, 1, 1) == "/") { if (!mig) tch = 1; continue }
+            if (k == root && sibs_only(k)) { SB = 1; continue }
             if (first == "" || k < first) first = k; if (k ~ /\/$/) LM[k] = 1; else fch = 1 }
           for (k in K) if (!(k in R)) { if (substr(k, 1, 1) == "/") { if (!mig) tch = 1 } else if (first == "" || k < first) first = k } }
         run = 1; why = ""; c = ""
@@ -1281,8 +1293,9 @@ readset_keys() { # <list> <out>
         if (!run && (f in UN)) { run = 1; why = "tool unresolved " UN[f]; c = "k" }
         # A STALE RECORD WITH A VALID ROW SET AND NO MOVED KEY SKIPS, and its `ok` record is published
         # on this push through `.k.always`, as a seeded one is: c `v` marks it.
-        if (!run) { if (!seed && st != "stale" && !mig) { print f "\tskip\t\t\t" st; continue }
+        if (!run) { if (!seed && st != "stale" && !mig && !SB) { print f "\tskip\t\t\t" st; continue }
                     ns = seed ? "seeded" : ((st == "stale") ? "ok" : st); if (!seed) c = (st == "stale") ? "v" : "m"
+                    if (SB && !seed && st != "stale") { c = "b"; ns = "ok" }
                     if (c == "m" && rl) for (k in R) if (substr(k, 1, 1) != "/") X[k] = 1 }
         else if (!has || um) ns = "ok"
         else if (st == "stale") ns = ((f in LOC) ? "ok" : "stale")
@@ -1367,7 +1380,7 @@ apply_readset_skip() {
   if ! readset_keys "$list" "$out" || [ "$(grep -c . "$out/.kdec" 2>/dev/null)" != "$n_all" ]; then
     printf '   ..    could not build the fixture keys -- running all %s\n' "$n_all"; return 0
   fi
-  awk -F'\t' '$2 == "skip" && ($5 == "seeded" || $4 == "v" || $4 == "m") { print $1 }' "$out/.kdec" > "$out/.k.always"
+  awk -F'\t' '$2 == "skip" && ($5 == "seeded" || $4 == "v" || $4 == "m" || $4 == "b") { print $1 }' "$out/.kdec" > "$out/.k.always"
 
   if [ "${AI_DLC_FIXTURE_NO_SKIP:-}" = "1" ]; then
     : > "$out/.k.always"
@@ -1383,6 +1396,7 @@ apply_readset_skip() {
     "$(awk -F'\t' '$4 == "u"' "$out/.kdec" | grep -c .)" "$(awk -F'\t' '$4 == "s"' "$out/.kdec" | grep -c .)" \
     "$(( n_all - n_sel ))"
   awk -F'\t' '$2 == "run" && n < 10 { n++; print "   ..      " $1 ": " $3 }' "$out/.kdec"
+  awk -F'\t' '$4 == "b" { n++ } END { if (n) print "   ..    read-set listings: " n " record(s) skipped on a fixture-root listing moved only by new sibling fixture directories and republished with the new listing" }' "$out/.kdec"
   awk -F'\t' '$4 == "m" { n++ } END { if (n) print "   ..    read-set tool keys: " n " record(s) written before the fixed tool dirs skipped on their tree keys alone and are republished with canonical tool keys (once per record)" }' "$out/.kdec"
   # WHAT WOULD CLEAR EACH STALE FIXTURE: a committed trace whose `# digest` line matches this tree, or a
   # valid local row. Every stale fixture is named under the reason its committed rows did not clear it.

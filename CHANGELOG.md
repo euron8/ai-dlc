@@ -19,6 +19,25 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.748.0] - 2026-10-08
+
+Batch 205, second release: one hook change on top of 0.747.0, shipped the same night so the next
+fixture directory costs one unit rather than the suite. It also files `BL-485` (the suite pole,
+`review-shard-merge-mutants`, 66 serial mutants in one unit) and rotates `BL-482`, which this closes.
+
+- **A new fixture directory no longer reruns every mapped fixture.** Every mapped fixture carries the
+  `core/fixtures` DIRECTORY row, keyed as the directory's entry list, so adding one fixture directory
+  moved 229 listings and selected 229 fixtures (measured in `docs/poc/hermetic-decision.md`, and again on
+  every gate of this release: 231-234 stale of 249). Both hooks' `readset_keys` now treat a moved
+  fixture-root listing whose only new entries are DIRECTORIES as unmoved for every other fixture: a
+  sibling fixture directory changes nothing those fixtures read. The record is republished with the new
+  listing on that push (the `m` route), so the push after it is a plain skip. Probed in a two-fixture
+  repo: a new sibling skips both; an edited input selects one; a new directory INSIDE a fixture
+  selects it; a new plain FILE under the root still selects both (a file there is not a fixture).
+  `BL-482` is the entry this closes. Shipped as its own release the same night as 0.747.0 so the
+  push is gated on the fixtures a hook edit selects and no wider, now that 0.747.0's green run has
+  published a fresh record for every unit on this tree.
+
 ## [0.747.0] - 2026-10-08
 
 Batch 205's release, shipped alone because it edits both pre-push hooks. It executes action 2 of

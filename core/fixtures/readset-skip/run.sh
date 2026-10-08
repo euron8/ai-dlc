@@ -3808,22 +3808,42 @@ ck_w_h() { local p="$1" x="$2" t="$3" ds
 }
 CK_WANT_h='p2=alpha|0 s2=#state stale p3=alpha|0 why=1 s3=#state stale p4=|0 s4=#state ok p5=|0'
 
-# (m) a walker that keys the fixture root reruns when a fixture X appears, is recorded `#state ok`
-# (a listing change never stales, lead ruling 2) with X's files added to its keys, and a later edit
-# to X/run.sh alone reruns it again. X is unmapped, so it runs on both pushes too.
+# (m) THE SUBTREE WALK: a walker that keys the fixture root is republished `#state ok` when a sibling
+# fixture directory X appears (a listing change never stales, lead ruling 2), and the entries added
+# are NOT walked into its keys because X is a fixture, not an input (0.748.0, BL-482). The cell that
+# needs grow()'s subtree walk is a NON-fixture directory appearing under a directory the walker
+# lists: here `src/d/sub` under src/d, which beta lists. A new directory inside a listed directory is
+# walked into beta's keys so a later edit under it reruns beta; mutant `nosubtree` drops that walk
+# and p3 stays 0. Which fixtures run on the sibling push is (o)'s subject; which run on a plain new
+# file is (c)'s; neither is scored here.
 ck_w_m() { local p="$1" x="$2" t="$3" k
+  ck_seed "$t" "$x" || { printf SEED; return; }
+  ck_push "$p" "$t" 1
+  mkdir -p "$t/src/d/sub" && printf '1\n' > "$t/src/d/sub/n.txt"; ck_push "$p" "$t" 2
+  k="$(ck_k "$t" beta)"; local st row; st="$(ck_st "$t" beta)"; row="$(grep -cxF "src/d/sub/n.txt	$(ck_sha "$t/src/d/sub/n.txt")" "$k" 2>/dev/null)"
+  printf '2\n' > "$t/src/d/sub/n.txt"; ck_push "$p" "$t" 3
+  printf 'p2=%s st=%s row=%s p3=%s' "$(grep -cx beta "$t.o.2/log")" "$st" "$row" "$(grep -cx beta "$t.o.3/log")"
+}
+CK_WANT_m='p2=1 st=#state ok row=1 p3=1'
+
+# (o) THE SIBLING EXCLUSION, owned alone: a walker that keys the fixture root SKIPS on the push that
+# adds a sibling fixture directory X (p2=0), is republished `#state ok` with the new root listing
+# (sib=1, the hook's own message), does not carry X's files as keys (row=0), and stays skipped on a
+# later edit to X/run.sh alone (p4=0). Mutant `nosibs` deletes the exclusion: p2 flips to 1.
+ck_w_o() { local p="$1" x="$2" t="$3" k
   ck_seed "$t" "$x" walker || { printf SEED; return; }
   printf 'walker\t%s\n' "$x" >> "$t/.ai-dlc-fixture-readsets.tsv"
   ( cd "$t" && git add -A && git -c user.email=f@f -c user.name=f commit -qm walker ) >/dev/null 2>&1 || { printf SEED; return; }
   ck_push "$p" "$t" 1
   mkdir -p "$t/$x/newfx" && sed 's/walker/newfx/g' "$t/$x/walker/run.sh" > "$t/$x/newfx/run.sh"
   ck_push "$p" "$t" 2; k="$(ck_k "$t" walker)"
-  local st row; st="$(ck_st "$t" walker)"; row="$(grep -cxF "$x/newfx/run.sh	$(ck_sha "$t/$x/newfx/run.sh")" "$k" 2>/dev/null)"
-  printf '# edited\n' >> "$t/$x/newfx/run.sh"; ck_push "$p" "$t" 3
-  # Scored on walker alone: newfx is unmapped, so whether IT runs is (e)'s subject.
-  printf 'p2=%s st=%s row=%s p3=%s' "$(grep -cx walker "$t.o.2/log")" "$st" "$row" "$(grep -cx walker "$t.o.3/log")"
+  local st row sib; st="$(ck_st "$t" walker)"; row="$(grep -cxF "$x/newfx/run.sh	$(ck_sha "$t/$x/newfx/run.sh")" "$k" 2>/dev/null)"
+  sib="$(grep -c 'read-set listings: 1 record(s) skipped on a fixture-root listing' "$t.o.2/out" 2>/dev/null)"
+  ck_push "$p" "$t" 3
+  printf '# edited\n' >> "$t/$x/newfx/run.sh"; ck_push "$p" "$t" 4
+  printf 'p2=%s st=%s row=%s sib=%s p3=%s p4=%s' "$(grep -cx walker "$t.o.2/log")" "$st" "$row" "$sib" "$(grep -cx walker "$t.o.3/log")" "$(grep -cx walker "$t.o.4/log")"
 }
-CK_WANT_m='p2=1 st=#state ok row=1 p3=1'
+CK_WANT_o='p2=0 st=#state ok row=0 sib=1 p3=0 p4=0'
 
 # (i) seed: a v2 whole-tree record and no key files. The v2 record is what the hook's own manifest
 # writes on a green run -- `.now` copied, `v2` stamped. AFTER it is taken, alpha's input changes and
@@ -3869,7 +3889,7 @@ ck_w_l() { local p="$1" x="$2" t="$3"
 }
 CK_WANT_l='p1=alpha beta|1 bad=0'
 
-CK_WORLDS="a b c d e f g h i j k l m n"
+CK_WORLDS="a b c d e f g h i j k l m n o"
 ck_all() { # <pool> <fixture root> <tag>: every world, vectors at $CK_W/<tag>.<w>.got
   local w
   for w in $CK_WORLDS; do "ck_w_$w" "$1" "$2" "$CK_W/$3.$w" > "$CK_W/$3.$w.got" 2>/dev/null; done
@@ -3934,6 +3954,7 @@ if [ "$CK_N" -ge 1 ]; then
   ck_mut l notfail 1 '    if [ "$(cat "$out/$b" 2>/dev/null)" = ok ] ||' '    if [ "$(cat "$out/$b" 2>/dev/null)" != FAIL ] ||'
   ck_mut m nosubtree 1 '        subtree(d "/" a[j]) }' '        }'
   ck_mut n globaltools 1 '(!(f in DECL)) for (k in K) if (k in FT) {' '(!(f in DECL)) for (k in FT) {'
+  ck_mut o nosibs 1 'if (k == root && sibs_only(k)) { SB = 1; continue }' 'if (0) { SB = 1; continue }'
 fi
 
 # ------------------------------------ tool keys do not depend on the invoker ----

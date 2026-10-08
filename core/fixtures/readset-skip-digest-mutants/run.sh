@@ -93,7 +93,7 @@ dg_mut selfread "w8" 1 '($2 in k) && $2 != skip {' '($2 in k) {'
 # D1: a validated stale fixture still runs, as before this change.
 dg_mut stale_runs "w1 w4 w7 w10" 1 'else if (st == "stale" && !(f in LOC)) {' 'else if (st == "stale") {'
 # D1: the cleared record is not published, so it reads stale again on the next push.
-dg_mut nopublish "w1 w4 w7 w10" 1 '($5 == "seeded" || $4 == "v" || $4 == "m")' '($5 == "seeded" || $4 == "m")'
+dg_mut nopublish "w1 w4 w7 w10" 1 '($5 == "seeded" || $4 == "v" || $4 == "m" || $4 == "b")' '($5 == "seeded" || $4 == "m" || $4 == "b")'
 # BL-471 "deriver sha ignored": the LOCAL validator stops comparing the deriver sha.
 dg_mut deriver_ignored "w6" 1 '$2 == "#deriver" { dok[$1] = ($3 == dsha); next }' '$2 == "#deriver" { dok[$1] = 1; next }'
 # F471d: the per-stale explanation line gone.
@@ -153,7 +153,7 @@ if true; then
     printf '  SKIP  TK MUTANT devdir: no alternate developer dir on this machine, so DEVELOPER_DIR cannot move git --exec-path here\n'
   fi
   tk_mut "mig migrun" noamnesty 1 'mig = (!seed && (f in RST) && RTL[f] != "canonical")' 'mig = 0'
-  tk_mut "mig" nopublish 1 '$4 == "v" || $4 == "m")' '$4 == "v")'
+  tk_mut "mig" nopublish 1 '$4 == "v" || $4 == "m" || $4 == "b")' '$4 == "v" || $4 == "b")'
   tk_mut "migrun" filetoo 1 '            if (cur(k) == R[k]) continue' '            if (cur(k) == R[k] || mig) continue'
   tk_mut "mig" carrytools 1 'for (k in R) if (substr(k, 1, 1) != "/") X[k] = 1 }' 'for (k in R) X[k] = 1 }'
 fi
