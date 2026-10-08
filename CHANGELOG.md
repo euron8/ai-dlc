@@ -19,6 +19,108 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.750.0] - 2026-10-08
+
+Batch 207's release. It closes `BL-477`, `BL-478` and `BL-479`, the three defects the 0.746.0 adversary passes left blocking
+plan action 3 of `docs/plans/hermetic-fixtures-poc.md`: a declaration can now name `node`, can be written in distribution
+coordinates, and keys `git` on the binary that runs. It edits both pre-push hooks, so it ships alone.
+**ZERO fixtures carry a declaration, so this release changes no push's behaviour.** Measured by driving
+both hooks' FIXTURE_POOL block over all 249 drivable fixtures in two clean worktrees at the same depth
+(base 41ac5d25, tip 6906c4a3), four states: fresh records (249 run / 0 skip in both), records published
+and the tree unchanged (249 skip / 0 run in both, `.kdec` byte-identical), a probe fixture added
+(`run / unrecorded` in both), and one byte appended to a declared file (`run / changed` in both). The
+two hooks differ as files (`cmp`), and the probe declaring `?node` is the control that differs: tip
+accepts it and writes no tool row, base puts it in `.dunres`. The only decision lines that differ are
+`hermetic-runner` and `self-update-gate`, which base skips and tip runs as `unmapped: closure changed`,
+because this branch edits files in their machine-local trace read sets; that is the staleness response
+working, not a hook change. Key rows differ on 56 fixtures by the sha of a file this branch changed, and
+on 15 by the scanner NOTE below.
+
+### `tools.decl` can name a tool that is reachable but not keyed: `?name` (BL-477)
+
+- A `tools.decl` line `?name` declares a tool the fixture must be able to run and the key does not cover. `name` must be in
+  `READSET_UNKEYED_TOOLS`, a closed vocabulary (`node npm npx claude`) owned by the hook's new `READSET_TOOLS` span; any other
+  `?` line, or a malformed name, is unresolved (`tool unresolved ?name` in the hook, exit 2 in the runner). The runner
+  resolves it with `command -v` on the invoker's PATH, links it into the sandbox's tool farm, and exits 2 when it is not
+  on PATH or when two declared tools share a basename.
+- Which `node` RUNS depends on the invoker; the KEY does not. No row is written for a `?name` tool, so the key is
+  byte-identical with and without the line, and a changed `node` does not rerun the fixture. That is the price of not
+  keying on the invoker.
+- Both options the backlog entry offered were rejected. 8 of the 9 node fixtures ship (`ls core/fixtures/<f>/.dist-only`
+  finds only `gate-adjudication-mutants`), so a committed per-box absolute path such as the nvm one is `declared tool absent`
+  on every consumer. Adding the nvm directory to `READSET_TOOL_DIRS` reintroduces a per-user key.
+- Both hooks and the runner now share one `READSET_TOOLS_BEGIN`/`READSET_TOOLS_END` span (`READSET_TOOL_DIRS`,
+  `READSET_UNKEYED_TOOLS`, `readset_git_exec_path`). The runner sources it rather than carrying a copy, so a run with no
+  hook to source is exit 2, key-only or not. Previously only `--key-only` was.
+
+### A declaration written in distribution coordinates resolves on a consumer (BL-478)
+
+- `core-paths.sh --map` reads distribution-relative paths on stdin and prints consumer-relative ones in order:
+  `core/scripts/` to `scripts/ai-dlc/`, `core/fixtures/` to `tests/fixtures/`, `core/git-hooks/` to `.githooks/`, and
+  `team-roles`, `hooks`, `session-driver`, `schemas`, `rules` and `skills` through `to_consumer_glob`. A path outside
+  `core/` is unchanged. An unrecognised top, a bare `core` and `core/` are exit 2.
+- Layout detector, one rule in the hook and the runner: DISTRIBUTION iff `<root>/core/scripts` is a directory, else
+  CONSUMER. Only a consumer maps, and only a declaration holding a `core/` path.
+- A mapped path that is absent on an `install.sh`-built consumer is `declared file absent`, exit 2, there. That is intended:
+  the error names both spellings, and the declaration is correct for the distribution.
+- The hook is asymmetric on purpose. An absent declared file yields no row and no error in the hook; the runner reports it.
+  The hook's own refusals are a missing mapper (`mapper absent`) and a mapper that refuses a path
+  (`mapper refused a declared path`); both make the fixture run, with the reason named.
+
+### `git` in `tools.decl` is keyed on the binary that runs (BL-479)
+
+- Bare declared names resolve against `git --exec-path` first and then the fixed dirs, in `readset_tools` order, in the
+  hook and the runner. A declared `git` is keyed on the exec-path binary, not on the `/usr/bin/git` xcrun shim.
+
+### The tip adversary's findings are fixed
+
+- **`I66` binds the `READSET_TOOLS` span's sentinels.** Each hook must carry exactly one `# READSET_TOOLS_BEGIN` and one
+  `# READSET_TOOLS_END` line, END after BEGIN, with at least one code line between them, and `hermetic-run.sh` must extract
+  with the same two literals. The sentinels are comments, which `I66`'s code-line comparison strips, so renaming one in a
+  single hook was undetected while the consumer's runner exited 2 on every declared fixture. The arm probes itself in both
+  directions (a renamed, empty or swapped span is flagged, a moved one is not). Validator cost is unchanged: old 30/31/27s,
+  new 29/29/27s, at load 9-16.
+- **A tool declared twice is one tool when both resolve to one path.** Two different paths sharing a basename are exit 2 in
+  the runner and a `.dunres` row (`duplicate basename`) in the hook.
+- **A declared file or directory whose mapped path is missing on disk is a `.dunres` row in the hook** (so the decision is
+  `run`) and exit 2 in the runner. A path present on disk but outside the universe keeps the no-row behaviour, which is what
+  a path under an excluded top needs.
+- **The hook refuses an absolute or `..` declaration path** with a `.dunres` row before the mapper runs, matching the
+  runner, so `core/scripts/../x` can no longer map to a path the runner never sees.
+
+### The first gated push went 80 of 82 and both reds were the new I66 arm
+
+- `readset-skip` copies I66's declared read set into a scratch tree and drives `--arms I66` there; the arm
+  had grown a read of `core/scripts/hermetic-run.sh` that the copy list lacked, so the arm's own
+  could-not-read branch fired and the fixture's control went red. The copy list now carries the runner,
+  and the runner-literal check is a separate claim from the hook-sentinel check, erring only when the
+  hooks carry the span and the runner is absent.
+- `validator-fork-budget` measured 3360 forks against `FORK_BUDGET=3310`: the arm's self-probe spent
+  about fifty forks in per-file `grep`/`sed`/`cut` chains. Rewritten as one `awk` pass over the five probe
+  files and both hooks, the validator measures 3307-3308 over four reps and the budget is unchanged.
+
+### Notes
+
+- The key-row tool scanner keys command words found in a fixture's closure files, prose included. The new text in
+  `core-paths.sh` and the `hermetic-runner` fixture adds `/usr/bin/top` and the exec-path `git-upload-pack` rows to the key
+  records of 15 fixtures: adversarial-shard-merge-mutants, check-15-bypass, check-24-adversarial-convergence,
+  core-paths-audit-diff, hermetic-runner, implementation-join-yield, procsub-staged-refusal-boot,
+  readset-skip-digest-mutants, remediator-shard-join-mutants, retro-audit-scans, review-shard-merge-mutants,
+  self-update-fixture-log-mutants, self-update-gate, subject-partition, upstream-routing. Key rows only; the run decision is
+  unchanged. This is a pre-existing scanner property and is not fixed here.
+- `VERSION` is outside the hook's path universe, so a declaration naming it yields no key row (measured on a probe).
+
+### Measured
+
+- `readset_declared` cost, 3 declared fixtures, 5 interleaved reps at load about 9: base 0.049-0.080s, tip 0.068-0.091s.
+- The `hermetic-runner` fixture gains arms K (unkeyed tool), L (consumer mapping) and N (exec-path), extends J, and adds
+  mutants M4 and M5. Under the new arms its wall clock grew from 17-19s to 36-42s (load 24-29). It was then restructured
+  (main-pass arms in parallel subshells; each mutant runs only its expected arms plus one control arm) to 12-14s at load
+  33-37, and sits at 16s with 187 ok lines at the tip (base: 161 ok lines at 15s on the measurement hand's box). The ok-line
+  count never fell.
+- The three receipts score 1/1/1 at base 4e2ad343 and 0/0/0 at the branch tip. `BL-477`'s receipt was rewritten to drive
+  the `?name` grammar; the other two are unchanged.
+
 ## [0.749.0] - 2026-10-08
 
 Batch 206's second release, cut behind the hermetic program's 0.747.0 and 0.748.0. It discharges one consumer candidate, files and carries `BL-484`. `BL-483` shipped in 0.746.0. Every role contract

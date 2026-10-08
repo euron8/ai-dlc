@@ -834,7 +834,7 @@ else
   for _f in scripts/validate-enforcement-map.sh scripts/render-invariant-index.sh \
             core/skills/ai-dlc/steps/gate-validation.md core/skills/ai-dlc/enforcement-map.yaml \
             core/skills/ai-dlc/core-manifest.md core/skills/ai-dlc-update/reconcile/setup-sites.md \
-            .githooks/pre-push core/git-hooks/pre-push; do
+            .githooks/pre-push core/git-hooks/pre-push core/scripts/hermetic-run.sh; do
     mkdir -p "$I66T/$(dirname "$_f")" && cp -p "$ROOT/$_f" "$I66T/$_f" || broken "could not copy $_f for the I66 arm"
   done
   I66C="$(bash "$I66T/scripts/validate-enforcement-map.sh" --arms I66 2>&1)"; I66C_RC=$?

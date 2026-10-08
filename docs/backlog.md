@@ -182,7 +182,9 @@ carries its own unmutated control and the probe-bypass arm, exactly as the model
 a new fixture directory (read `.claude/rules/fixture-ship-decl.md` before creating one; the model
 shards are `.dist-only`, so these will be too).
 
-verify: sh d=core/fixtures; [ -f "$d/review-shard-merge-mutants/run.sh" ] || exit 9; n="$(ls -d "$d"/review-shard-merge-mutants*/ 2>/dev/null | wc -l | tr -d ' ')"; [ "$n" -ge 3 ] || exit 1; for s in "$d"/review-shard-merge-mutants*/; do grep -qE 'coverage join|J0' "$s/run.sh" || exit 1; done; exit 0
+verify: sh [ -f core/fixtures/review-shard-merge-mutants/run.sh ] || exit 9; n="$(ls -d core/fixtures/review-shard-merge-mutants*/ 2>/dev/null | wc -l | tr -d ' ')"; [ "$n" -ge 3 ] || exit 1; grep -qE 'coverage join|J0' core/fixtures/review-shard-merge-mutants/run.sh || exit 1; grep -qE 'coverage join|J0' core/fixtures/review-shard-merge-mutants-b/run.sh || exit 1; grep -qE 'coverage join|J0' core/fixtures/review-shard-merge-mutants-c/run.sh || exit 1; exit 0
+
+The receipt was respelled with literal paths so `scripts/validate-backlog-receipts.sh` can seed it; the predicate is unchanged, and the shard names mirror `fold-architect-ledger-join-mutants-{,b,c}`.
 
 ## BL-486 — the advisor gate has no escape hatch, and its `unavailable` WARN path did not fire
 
@@ -221,6 +223,8 @@ verify: manual -- close when, in a live session, (1) a release action after a FA
 
 ## BL-477 — `tools.decl` cannot name `node`, which blocks plan action 3
 
+**LANDED (v0.750.0, verified 0cfaf4c7).** Both options the entry offered were rejected: 8 of 9 node fixtures ship, so a committed per-box absolute path is `declared tool absent` on every consumer, and adding the nvm directory reintroduces a per-user key. The fix is the `?name` grammar over the closed vocabulary `READSET_UNKEYED_TOOLS` (`node npm npx claude`): reachable on the invoker's PATH, not keyed. The receipt was replaced to drive that grammar; scored at base 4e2ad343 exit 1, at 0cfaf4c7 exit 0.
+
 **BLOCKER.** Carried from the 0.746.0 adversary passes. `readset_declared` in `.githooks/pre-push` resolves each `tools.decl` name against
 `READSET_TOOL_DIRS` (`/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`), and `core/scripts/hermetic-run.sh` refuses a
 name that resolves in none of them (exit 2). On this box `node` is `~/.nvm/versions/node/v24.14.0/bin/node`, outside every one of
@@ -229,13 +233,13 @@ those directories, so a declaration naming `node` is unresolvable and the nine n
 bare-name rule and the hook's resolver both change), add the nvm directory to the fixed dirs (reintroduces a per-user key), or
 reorder action 3 so the node fixtures go last.
 
-The receipt seeds a one-fixture repo with `inputs.decl` = `x.txt` and `tools.decl` = `node`, runs the shipped runner with
-`--key-only`, and requires a key row whose path ends in `/node`. Scored at 951678b5: exit 1 (the runner exits 2, `declared tool node
-resolves in none of`). It exits 9 when `node` is not on the receipt's own PATH or the hook or runner cannot be read.
+The receipt seeds a repo with a probe fixture declaring `?b207tool`, a stub on the receipt's own PATH outside the fixed dirs, and the probe's copied hook lists it in `READSET_UNKEYED_TOOLS`. It runs the shipped runner (not `--key-only`), requires exit 0 and the stub's output line, and requires `--key-only` to carry no row ending in `/b207tool`. It exits 9 only when the hook or runner cannot be read. Scored at base 4e2ad343: exit 1; at 0cfaf4c7: exit 0.
 
-verify: sh H=.githooks/pre-push; S=core/scripts/hermetic-run.sh; [ -f "$H" ] && [ -f "$S" ] || exit 9; W="$(mktemp -d)" && W="$(cd "$W" && pwd -P)" || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; git init -q "$W" || exit 9; mkdir -p "$W/.githooks" "$W/core/fixtures/fx" "$W/scripts/ai-dlc" || exit 9; cp "$H" "$W/.githooks/pre-push" && printf 'exit 0\n' > "$W/core/fixtures/fx/run.sh" || exit 9; command -v node >/dev/null 2>&1 || exit 9; echo x > "$W/x.txt"; printf 'x.txt\n' > "$W/core/fixtures/fx/inputs.decl"; printf 'node\n' > "$W/core/fixtures/fx/tools.decl"; git -C "$W" add -A >/dev/null 2>&1; O="$(bash "$S" --root "$W" --key-only fx 2>/dev/null)" || exit 1; printf '%s\n' "$O" | cut -f1 | grep -q '/node$'
+verify: sh H=.githooks/pre-push; S=core/scripts/hermetic-run.sh; [ -f "$H" ] && [ -f "$S" ] || exit 9; W="$(mktemp -d)" && W="$(cd "$W" && pwd -P)" || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; git init -q "$W" || exit 9; mkdir -p "$W/.githooks" "$W/core/fixtures/fx" "$W/stubbin" || exit 9; sed 's/^READSET_UNKEYED_TOOLS="/&b207tool /' "$H" > "$W/.githooks/pre-push" || exit 9; printf '#!/bin/sh\necho b207tool-ran\n' > "$W/stubbin/b207tool" && chmod +x "$W/stubbin/b207tool" || exit 9; printf 'b207tool\n' > "$W/core/fixtures/fx/run.sh"; echo x > "$W/x.txt"; printf 'x.txt\n' > "$W/core/fixtures/fx/inputs.decl"; printf '?b207tool\n' > "$W/core/fixtures/fx/tools.decl"; git -C "$W" add -A >/dev/null 2>&1; K="$(PATH="$W/stubbin:$PATH" bash "$S" --root "$W" --key-only fx 2>/dev/null)" || exit 1; O="$(PATH="$W/stubbin:$PATH" bash "$S" --root "$W" fx 2>&1)" || exit 1; printf '%s\n' "$O" | grep -qx 'b207tool-ran' || exit 1; printf '%s\n' "$K" | cut -f1 | grep -q '/b207tool$' && exit 1; exit 0
 
 ## BL-478 — a declaration in distribution coordinates does not resolve on a consumer
+
+**LANDED (v0.750.0, verified 0cfaf4c7).** `core-paths.sh --map` and the layout detector (distribution iff `<root>/core/scripts` is a directory) map `core/` declarations onto a consumer in the hook and the runner. Receipt unchanged; scored at base 4e2ad343 exit 1, at 0cfaf4c7 exit 0.
 
 **DEFECT.** Carried from the 0.746.0 adversary passes. `inputs.decl` paths are project-root-relative and are copied from that root.
 The distribution holds `core/scripts/x.sh`; an installed consumer holds `scripts/ai-dlc/x.sh` (`install.sh` splits `core/scripts/` to
@@ -249,6 +253,8 @@ runner's `--key-only` rows to carry `scripts/ai-dlc/x.sh`. Scored at 951678b5: e
 verify: sh H=.githooks/pre-push; S=core/scripts/hermetic-run.sh; [ -f "$H" ] && [ -f "$S" ] || exit 9; W="$(mktemp -d)" && W="$(cd "$W" && pwd -P)" || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR; git init -q "$W" || exit 9; mkdir -p "$W/.githooks" "$W/core/fixtures/fx" "$W/scripts/ai-dlc" || exit 9; cp "$H" "$W/.githooks/pre-push" && printf 'exit 0\n' > "$W/core/fixtures/fx/run.sh" || exit 9; echo ok > "$W/scripts/ai-dlc/x.sh"; printf 'core/scripts/x.sh\n' > "$W/core/fixtures/fx/inputs.decl"; git -C "$W" add -A >/dev/null 2>&1; O="$(bash "$S" --root "$W" --key-only fx 2>/dev/null)" || exit 1; printf '%s\n' "$O" | cut -f1 | grep -qx 'scripts/ai-dlc/x.sh'
 
 ## BL-479 — `tools.decl` naming `git` is keyed on the xcrun shim while the hook keys git's real exec-path
+
+**LANDED (v0.750.0, verified 0cfaf4c7).** A bare declared name resolves against `git --exec-path` first and then the fixed dirs, in the hook and the runner. Receipt unchanged; scored at base 4e2ad343 exit 1, at 0cfaf4c7 exit 0.
 
 **NOTE.** Carried from the 0.746.0 adversary passes. `readset_tools` keys git from `git --exec-path`, the binary that runs. The
 declared-tool resolver walks `READSET_TOOL_DIRS` in order and finds the `/usr/bin/git` xcrun shim first, so a fixture declaring `git`
