@@ -4,7 +4,7 @@
 # `readset-skip`: this file sources that fixture's CK_HELPERS and DG_WORLDS spans, so a mutant is
 # judged by exactly the worlds the shipped fixture asserts, never by a restatement of them.
 #
-# WHY A SEPARATE FIXTURE. Each mutant drives all eight worlds (about thirty pushes); run inside
+# WHY A SEPARATE FIXTURE. Each mutant drives every DG world (about fifty pushes); run inside
 # `readset-skip` that cost lands on the suite's pole. Here it is a unit of its own.
 #
 # EVERY MUTANT DECLARES THE EXACT SET OF WORLDS IT MOVES. A mutant that moves one more world than it
@@ -47,11 +47,21 @@ FX="$(sed -n 's|^FXROOT="\([A-Za-z0-9_./-]*\)/"$|\1|p' "$POOL" | sort -u)"
 dg_all "$POOL" "$FX" ctl
 n_ok=0
 for w in $DG_WORLDS; do [ "$(cat "$CK_W/dg.ctl.$w.got")" = "$(dg_want "$w")" ] && n_ok=$((n_ok+1)); done
-if [ "$n_ok" -eq 10 ]; then ok "CONTROL: all 10 committed-digest worlds reach their want on the unmutated block"
-else broken "CONTROL: only $n_ok of 10 worlds reach their want on the unmutated block -- no mutant verdict below would be attributable"; fi
+if [ "$n_ok" -eq 13 ]; then ok "CONTROL: all 13 committed-digest and local-map worlds reach their want on the unmutated block"
+else broken "CONTROL: only $n_ok of 13 worlds reach their want on the unmutated block -- no mutant verdict below would be attributable"; fi
+
+# The occurrence counter every mutant below applies, run alone: prints how many times <anchor> occurs in <file>.
+dg_count() { MF="$2" awk 'BEGIN { f = ENVIRON["MF"]; n = 0 } { l = $0; while ((q = index(l, f)) > 0) { l = substr(l, q + length(f)); n++ } } END { print n }' "$1"; }
+# IMPOSSIBLE-ANCHOR CONTROL: the counter must answer 0 for a token the pool cannot carry, and 1 for a real
+# anchor in the same invocation, or a "matched 1 time" below is not a statement about the pool.
+DG_Z="$(dg_count "$POOL" 'bad[f] = 1 NEVER-IN-ANY-POOL-BL480')"
+DG_O="$(dg_count "$POOL" 'FILENAME == ENVIRON["RL_L"] { now[substr($1, 1, length($1) - 1)] = $2; next }')"
+if [ "$DG_Z" = 0 ] && [ "$DG_O" = 1 ]; then ok "CONTROL: the anchor counter reads 0 for an impossible anchor and 1 for the listings-load line in ${HOOK#"$ROOT"/}"
+else bad "CONTROL: the anchor counter read $DG_Z for an impossible anchor and $DG_O for the listings-load line, want 0 and 1"; fi
 
 dg_mut() { # <name> "<declared worlds>" then triples <count> <from> <to>
   local name="$1" want="$2" dst="$CK_W/dgmut.$1.sh" n o moved=""; shift 2
+  echo "  mutating: ${HOOK#"$ROOT"/} (pool extracted to ${POOL#"$WORK"/}) for $name"
   cp "$POOL" "$dst" || { bad "MUTANT $name: copy failed"; return; }
   while [ $# -ge 3 ]; do
     MF="$2" MT="$3" MC="$CK_W/dgmut.$name.n" awk '
@@ -76,10 +86,13 @@ dg_mut() { # <name> "<declared worlds>" then triples <count> <from> <to>
 # Committed validation bypassed: no committed digest ever clears.
 dg_mut bypass "w1 w5 w7 w8" 1 '{ if ($2 == "match") m[$1] = 1; next }' '{ next }'
 # D3 / BL-471 "2-field read as valid": a fixture with rows and no digest reads as matching.
-dg_mut nodigest_valid "w3 w6" 1 '(!(f in w) ? "nodigest" :' '(!(f in w) ? "match" :'
+# w11 w12 w13 seed no committed digest, so their fixture's committed rows read as matching and clear the
+# record the local rows must not: w11 and w13 skip at push 5, w12's beta clears at push 3.
+dg_mut nodigest_valid "w3 w6 w11 w12 w13" 1 '(!(f in w) ? "nodigest" :' '(!(f in w) ? "match" :'
 # D3: a fixture with no digest read as UNMAPPED -- its committed rows stop selecting it, so it is keyed
-# on the whole tree. w3 and w6 by their seed; w1, w7 and w8 on the pushes before their digest lands.
-dg_mut nodigest_unmapped "w1 w3 w6 w7 w8 w9" 1 '  readset_rows "$out" rows | cut -f1 | sort -u > "$out/.mapped.all"' \
+# on the whole tree. w3 and w6 by their seed; w1, w7 and w8 on the pushes before their digest lands; w11, w12
+# and w13 carry no digest at all, so their fixture is keyed on the whole tree on every push.
+dg_mut nodigest_unmapped "w1 w3 w6 w7 w8 w9 w11 w12 w13" 1 '  readset_rows "$out" rows | cut -f1 | sort -u > "$out/.mapped.all"' \
   '  readset_rows "$out" rows | cut -f1 | sort -u | awk -v c="$out/.cdig" '"'"'BEGIN { while ((getline l < c) > 0) { split(l, a, "\t"); if (a[2] == "nodigest") nd[a[1]] = 1 } } !($1 in nd)'"'"' > "$out/.mapped.all"'
 # D2: committed validation made to need the deriver -- w1, w5 and w8 have none in their tree. w2 and w3
 # move too, and rightly: with no committed verdict the stale explanation cannot name its reason.
@@ -90,20 +103,62 @@ dg_mut needs_localmap "w2 w3 w5 w7 w8" 1 '  readset_committed_digests "$out"' ' 
 dg_mut b1_hashleak "w1 w2 w3 w4 w5 w7 w8 w9" 1 "[ -s \"\$READSET_MAP\" ] && grep -v '^#' \"\$READSET_MAP\" | sed" "[ -s \"\$READSET_MAP\" ] && cat \"\$READSET_MAP\" | sed"
 # B2: the map's own path not skipped by the digest -- w8's alpha reads the map.
 dg_mut selfread "w8" 1 '($2 in k) && $2 != skip {' '($2 in k) {'
-# D1: a validated stale fixture still runs, as before this change.
-dg_mut stale_runs "w1 w4 w7 w10" 1 'else if (st == "stale" && !(f in LOC)) {' 'else if (st == "stale") {'
-# D1: the cleared record is not published, so it reads stale again on the next push.
-dg_mut nopublish "w1 w4 w7 w10" 1 '($5 == "seeded" || $4 == "v" || $4 == "m" || $4 == "b")' '($5 == "seeded" || $4 == "m" || $4 == "b")'
+# D1: a validated stale fixture still runs, as before this change. w13's alpha clears on local rows at push 3.
+dg_mut stale_runs "w1 w4 w7 w10 w13" 1 'else if (st == "stale" && !(f in LOC)) {' 'else if (st == "stale") {'
+# D1: the cleared record is not published, so it reads stale again on the next push (w13's s3 included).
+dg_mut nopublish "w1 w4 w7 w10 w13" 1 '($5 == "seeded" || $4 == "v" || $4 == "m" || $4 == "b")' '($5 == "seeded" || $4 == "m" || $4 == "b")'
 # BL-471 "deriver sha ignored": the LOCAL validator stops comparing the deriver sha.
 dg_mut deriver_ignored "w6" 1 '$2 == "#deriver" { dok[$1] = ($3 == dsha); next }' '$2 == "#deriver" { dok[$1] = 1; next }'
 # F471d: the per-stale explanation line gone.
 dg_mut noexplain "w2 w3" 1 '          for (r in l) print "   ..    stale, "' '          for (r in l) if (0) print "   ..    stale, "'
 # dirvalue: a directory row's digest value is `-` again (the listing never substituted), so w9's grown
-# src/d is invisible to the digest and the seed-time digest clears a record it must not.
-dg_mut dirvalue "w9" 1 '$3 == "-" && (($2 "/") in l) {' '$3 == "-" && 0 && (($2 "/") in l) {'
-# dirlocal: the local validator stops treating a `-` directory row as a match (equivalent to local rows
-# carrying `#listing:` values, which the deriver's --local-map path must not write): w10's beta cannot clear.
-dg_mut dirlocal "w10" 1 'if ($3 == "-") { if ($2 in now) bad[f] = 1 }' 'if (0) { if ($2 in now) bad[f] = 1 }'
+# src/d is invisible to the digest and the seed-time digest clears a record it must not. w10 too: its local
+# rows are seeded through dg_local_rows, which sources this pool's readset_dir_values, so src/d is seeded `-`
+# and refused. w11 cannot see it -- a `-` row for a directory is refused, which is w11's want.
+dg_mut dirvalue "w9 w10" 1 '$3 == "-" && (($2 "/") in l) {' '$3 == "-" && 0 && (($2 "/") in l) {'
+# dirlocal: the local validator's `-` branch gone, so a `-` row falls to the equality test and is refused
+# whatever exists. w13's ABSENT name (src/ghost.sh, recorded `-`) can then never clear alpha. w12's `-` row
+# is refused under the fix too, so w12 cannot see this mutant; w10's rows carry no `-` at all.
+dg_mut dirlocal "w13" 1 'if ($3 == "-") { if ($2 in now) bad[f] = 1 }' 'if (0) { if ($2 in now) bad[f] = 1 }'
+# dirdash: a `-` row accepted UNCONDITIONALLY -- the hole BL-480 closed. w12's `-` row for the directory src/d
+# clears beta, and w13's `-` row for a name that is now a FILE clears alpha at push 4, so push 5 skips it.
+dg_mut dirdash "w12 w13" 1 'if ($3 == "-") { if ($2 in now) bad[f] = 1 }' 'if ($3 == "-") { if (0) bad[f] = 1 }'
+# listload: the local validator's listings never loaded into now[]. One line owns both observables: w10's
+# `#listing:` row has nothing to equal and is refused, and w12's `-` row for src/d finds no such name and
+# is accepted.
+dg_mut listload "w10 w12" 1 'FILENAME == ENVIRON["RL_L"] { now[substr($1, 1, length($1) - 1)] = $2; next }' 'FILENAME == ENVIRON["RL_L"] { if (0) now[substr($1, 1, length($1) - 1)] = $2; next }'
+# listvalue: a recorded value accepted whenever its name exists, never compared. w11's src/d grew, its
+# listing moved, and the seed-time row still clears beta, so push 5 skips it over an edit to the new file.
+dg_mut listvalue "w11" 1 'else if (!(($2 in now) && now[$2] == $3)) bad[f] = 1' 'else if (!($2 in now)) bad[f] = 1'
+
+# ------------------------------------------------------------- deriver-side mutants ----
+# dg_mut_deriver: the same scoring on a mutated copy of the deriver's READSET_LOCALMAP span, which the DG
+# worlds source through $DG_HASH -- dg_local_rows calls its readset_local_rows. dg_digest sources the span
+# too but calls only readset_hash_rows, so a mutant of readset_local_rows reaches the local-map worlds alone.
+dg_mut_deriver() { # <name> "<declared worlds>" <count> <from> <to>
+  local name="$1" want="$2" dst="$CK_W/dgmutd.$1.sh" n o moved="" keep="$DG_HASH"
+  echo "  mutating: ${DERIVER#"$ROOT"/} READSET_LOCALMAP span (extracted to ${DG_HASH#"$WORK"/}) for $name"
+  cp "$DG_HASH" "$dst" || { bad "DERIVER MUTANT $name: copy failed"; return; }
+  MF="$4" MT="$5" MC="$CK_W/dgmutd.$name.n" awk '
+    BEGIN { f = ENVIRON["MF"]; t = ENVIRON["MT"]; n = 0 }
+    { line = $0; o = ""
+      while ((q = index(line, f)) > 0) { o = o substr(line, 1, q - 1) t; line = substr(line, q + length(f)); n++ }
+      print o line }
+    END { print n > ENVIRON["MC"] }' "$DG_HASH" > "$dst" || { bad "DERIVER MUTANT $name: awk failed -- DID NOT APPLY"; return; }
+  n="$(cat "$CK_W/dgmutd.$name.n" 2>/dev/null)"
+  [ "$n" = "$3" ] || { bad "DERIVER MUTANT $name: anchor matched ${n:-nothing} time(s), not $3 -- DID NOT APPLY"; return; }
+  cmp -s "$DG_HASH" "$dst" && { bad "DERIVER MUTANT $name: the copy is unchanged -- DID NOT APPLY"; return; }
+  DG_HASH="$dst"; dg_all "$POOL" "$FX" "md.$name"; DG_HASH="$keep"
+  for o in $DG_WORLDS; do
+    [ "$(cat "$CK_W/dg.md.$name.$o.got")" = "$(dg_want "$o")" ] || moved="$moved $o"
+  done
+  if [ "${moved# }" = "$want" ]; then ok "DERIVER MUTANT $name is KILLED by exactly ($want)"
+  else bad "DERIVER MUTANT $name moved '${moved# }', declared '$want'"; fi
+}
+# dirplain: --local-map records every directory as `-` again (readset_dir_values never consulted). w10's
+# beta then carries a `-` row for the directory src/d and cannot clear. w11 wants beta refused, and a `-`
+# row for a directory IS refused, so w11 cannot see this mutant -- listvalue is its killer.
+dg_mut_deriver dirplain "w10" 1 'if [ "$(type -t readset_dir_values 2>/dev/null)" = function ]' 'if false && [ "$(type -t readset_dir_values 2>/dev/null)" = function ]'
 
 # ------------------------------------------------------------------ tool-key mutants ----
 # The mutants of readset-skip's tool-key worlds (inv pos mig migrun), moved here so their re-runs of
@@ -162,7 +217,7 @@ if [ $((asserts - tkm_before)) -ne "$tkm_want" ]; then
   printf '  FAIL  the tool-key block ran %s assertions; it carries %s\n' "$((asserts - tkm_before))" "$tkm_want"; fails=$((fails+1))
 fi
 
-EXPECTED=$(( 14 + tkm_want ))
+EXPECTED=$(( 19 + tkm_want ))
 if [ "$asserts" -lt "$EXPECTED" ]; then
   printf '  FAIL  only %s assertions ran; this battery carries %s\n' "$asserts" "$EXPECTED"; fails=$((fails+1))
 fi
