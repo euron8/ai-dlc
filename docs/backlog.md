@@ -175,12 +175,3 @@ hermetic program's declared keys (`tools.decl`; see `BL-477`), not by widening t
 
 verify: manual -- close when adding one fixture directory to a tree reruns only the fixtures whose keys declare `core/fixtures/` itself.
 
-## BL-483 — `pre-push-wall-clock.md` sits 11 bytes under the plan ceiling and cannot be rotated
-
-**NOTE, filed at batch 204's close.** `docs/plans/pre-push-wall-clock.md` is 149989 bytes against `P8`'s 150000.
-`0.745.0`'s first gate failed on it at 150022, and the release trimmed one paragraph to pass. `scripts/plan-rotate.sh`
-refuses the file: its first `##` section declares no live sections in backticks inside a numbered list, so the
-rotator cannot tell what is spent. The next edit to that plan of any size blocks the push. Fix: add the live-section
-declaration, then rotate.
-
-verify: sh f=docs/plans/pre-push-wall-clock.md; [ -f "$f" ] || exit 0; o="$(bash scripts/plan-rotate.sh "$f" 2>&1)"; grep -qF 'REFUSING' <<<"$o" && exit 1; [ "$(wc -c < "$f")" -lt 140000 ]

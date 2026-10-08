@@ -19,6 +19,39 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.746.0] - 2026-10-08
+
+Batch 206's first release, cut ahead of the batch's own subject at the operator's direction so the hermetic-runner
+release could land behind it. It fixes the pool-only failures of `fold-architect-ledger-join` and its mutant shards, and
+carries `BL-483`. It discharges no consumer candidate.
+
+### `validate-spawn-ledger.sh` no longer fails under the pre-push pool, and a failed variant read fails closed
+
+- Six `printf '%s\n' "$q" | awk …` sites read the join query through here-strings. Four of those awk programs exit at
+  their first match while `printf` is still writing; once the rest of the query exceeded the pipe buffer, `printf` took
+  EPIPE, `printf: write error: Broken pipe` became the caller's first stderr line, and the self-probe's no-`tool_use_id`
+  world read rc=99 instead of SKIP. `fold-architect-ledger-join` went red on `D1-1` and `D4-arch` under the pool at load
+  about 60 and passed solo on the same tree.
+- A second, separate mechanism is made to fail closed rather than fixed. The snapshot and sprint-status readers print
+  nothing both on a file naming no variant and on a reader that died, and `fa_resolve_variant` discarded the reader's
+  exit status, so a killed or unforkable `awk` on the snapshot fell through to sprint-status alone, skipped the
+  disagreement check, and could answer `NOT-OWED` on a snapshot that says `carry-over`. It was visible only through
+  mutant `M26`, the one build on which an empty read changes a verdict; the pristine subject gave the same answer on a
+  failed read and a real one. The reader returned `carry-over` on the exact Dc-comment bytes under every locale, stdin
+  and PATH shape tried solo, so WHAT fails under load is not identified. Both resolvers now refuse a non-zero reader
+  status with `FAIL: could not read … (reader rc=N)`, and both readers lose their `2>/dev/null`, so the next pooled
+  run that hits it names its cause instead of flipping a verdict.
+- The self-probe gains a mode-000 snapshot beside a `bug` sprint-status (refused) with its readable near-miss. The
+  fixture gains `Dc-reader-dies` (an `awk` on PATH that dies only on the snapshot operand, so the file stays readable
+  and the `-r` precheck is not what refuses it) and `Dc-reader-lives`, 72 arms. Mutant `M28` reverts the status check
+  and is killed by exactly `Dc-reader-dies`, dealt to shard c; `M23` now also owns `Dc-reader-lives`.
+
+### `pre-push-wall-clock.md` declares its live sections and rotates under the ceiling (BL-483)
+
+- The plan's first section now declares its live sections in the shape `scripts/plan-rotate.sh` requires, and the
+  rotator moved its spent sections to `docs/plans/archive/pre-push-wall-clock.md` with byte conservation asserted. The
+  file is 90218 bytes against the 150000 ceiling, from 149989.
+
 ## [0.745.0] - 2026-10-07
 
 Batch 204's third release, shipped alone because it edits both pre-push hooks. It discharges two consumer candidates,

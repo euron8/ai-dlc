@@ -31451,3 +31451,16 @@ reverted to `[ -f ] &&` 1. It exits 9 when the hook, the deriver or a seed canno
 **LANDED (v0.745.0, verified f4849399).**
 
 verify: sh W="$(mktemp -d)" || exit 9; h=.githooks/pre-push; d=core/scripts/derive-fixture-readsets.sh; [ -f "$h" ] && [ -f "$d" ] || exit 9; sed -n '/# FIXTURE_POOL_BEGIN/,/# FIXTURE_POOL_END/p' "$h" > "$W/pool.sh"; grep -q 'run_fixtures()' "$W/pool.sh" || exit 9; sed -n '/^# READSET_LOCALMAP_BEGIN$/,/^# READSET_LOCALMAP_END$/p' "$d" > "$W/span.sh"; grep -q '^readset_hash_rows() {' "$W/span.sh" || exit 9; mkdir -p "$W/h/d" && echo x > "$W/h/a" && printf 'a\nd\n' > "$W/set" || exit 9; ( set -o pipefail; . "$W/span.sh"; readset_hash_rows "$W/h" fx "$W/set" > "$W/rows" ) || exit 1; [ "$(grep -c . "$W/rows")" = 2 ] || exit 1; mkdir -p "$W/t/core/fixtures/fb" "$W/t/core/fixtures/fc" "$W/t/core/scripts" || exit 9; printf 'exit 0\n' > "$W/t/core/fixtures/fb/run.sh"; printf 'exit 0 # c\n' > "$W/t/core/fixtures/fc/run.sh"; printf 'exit 0\n' > "$W/t/$d"; ( cd "$W/t" && git init -q . && git add -A && git -c user.email=r@r -c user.name=r commit -qm s ) >/dev/null 2>&1 || exit 9; s() { shasum -a 256 -- "$W/t/$1" | cut -d' ' -f1; }; ds="$(s "$d")"; printf 'fb\t#discards\t2\t%s:%s\tVERDICT: the sandboxed run differs\nfc\t#discards\t3\t%s:%s\tLOSS CANARY: 2 path(s) absent\n' "$(s core/fixtures/fb/run.sh)" "$ds" "$(s core/fixtures/fc/run.sh)" "$ds" > "$W/t/.git/ai-dlc-fixture-readsets.local"; printf '  fx2                                 9 paths\n  could not hash fx2'"'"'s set in the trace copy -- not recorded\n  fx1                                 4 paths\n' > "$W/t/.git/ai-dlc-fixture-readsets.local.log"; ( cd "$W/t" && export AI_DLC_READSET_LIVE_TRACE=0 && . "$W/pool.sh" 2>/dev/null && run_fixtures ) > "$W/out" 2>&1; grep -qF 'trace-report held: fc --' "$W/out" && grep -qF 'trace-report at 2 of 3: fb --' "$W/out" && grep -qF 'trace-report not recorded: fx2 --' "$W/out" && grep -qF 'trace-report last trace outcome: 2 given, 1 recorded' "$W/out" || exit 1; exit 0
+## BL-483 — `pre-push-wall-clock.md` sits 11 bytes under the plan ceiling and cannot be rotated
+
+**LANDED (v0.746.0, verified 71da5232).** The plan's first section declares its live sections, `plan-rotate.sh --apply`
+moved lines 1140..2117 (60277 bytes) to the archive with conservation `89970 + 60277 = 150247`, the file reads 90218
+bytes, and the receipt exits 0 (it exited 1 at 758c461d's parent as the control).
+
+**NOTE, filed at batch 204's close.** `docs/plans/pre-push-wall-clock.md` is 149989 bytes against `P8`'s 150000.
+`0.745.0`'s first gate failed on it at 150022, and the release trimmed one paragraph to pass. `scripts/plan-rotate.sh`
+refuses the file: its first `##` section declares no live sections in backticks inside a numbered list, so the
+rotator cannot tell what is spent. The next edit to that plan of any size blocks the push. Fix: add the live-section
+declaration, then rotate.
+
+verify: sh f=docs/plans/pre-push-wall-clock.md; [ -f "$f" ] || exit 0; o="$(bash scripts/plan-rotate.sh "$f" 2>&1)"; grep -qF 'REFUSING' <<<"$o" && exit 1; [ "$(wc -c < "$f")" -lt 140000 ]
