@@ -1,0 +1,26 @@
+older	newer	changed	fxdir_added_or_removed	docs_only	mapped_n	TRACED_mapped	DECLARED_approx_mapped	unmapped_n	TRACED_unmapped	exact_n	TRACED_exact	DECLARED_exact	exact_detail
+f0488e31	60b467dc	42	False	False	232	70	70	11	11	3	1	1	escalation-citation:T1D1 prepush-pool-depth:T0D0 whole-read-pool:T0D0
+6e9897bd	f0488e31	12	False	False	238	50	50	5	5	3	0	0	escalation-citation:T0D0 prepush-pool-depth:T0D0 whole-read-pool:T0D0
+6f73066d	6e9897bd	13	False	False	239	85	80	4	4	3	0	0	escalation-citation:T0D0 prepush-pool-depth:T0D0 whole-read-pool:T0D0
+65b4334c	6f73066d	8	False	False	236	30	30	7	7	3	1	0	escalation-citation:T0D0 prepush-pool-depth:T1D0 whole-read-pool:T0D0
+bc8bfed5	65b4334c	11	False	False	230	48	46	13	13	3	2	2	escalation-citation:T1D1 prepush-pool-depth:T1D1 whole-read-pool:T0D0
+4d8a6f64	bc8bfed5	8	False	False	229	75	75	14	14	3	1	0	escalation-citation:T0D0 prepush-pool-depth:T1D0 whole-read-pool:T0D0
+9bdbc311	4d8a6f64	14	True	False	229	223	82	14	14	3	3	2	escalation-citation:T1D1 prepush-pool-depth:T1D1 whole-read-pool:T1D0
+65e4d8fe	9bdbc311	51	True	False	229	226	111	14	14	2	2	1	escalation-citation:T1D1 whole-read-pool:T1D0
+6b936214	65e4d8fe	6	False	False	223	40	38	12	12	2	0	0	escalation-citation:T0D0 whole-read-pool:T0D0
+fba242e4	6b936214	23	True	False	223	219	53	12	12	2	2	0	escalation-citation:T1D0 whole-read-pool:T1D0
+199721b6	fba242e4	29	True	False	223	219	107	9	9	2	2	1	escalation-citation:T1D1 whole-read-pool:T1D0
+d94b19f0	199721b6	17	False	False	226	85	84	5	5	2	1	1	escalation-citation:T1D1 whole-read-pool:T0D0
+3f37d986	d94b19f0	13	True	False	229	225	67	2	2	2	2	1	escalation-citation:T1D1 whole-read-pool:T1D0
+35abd1c9	3f37d986	43	False	False	229	124	124	1	1	2	1	1	escalation-citation:T1D1 whole-read-pool:T0D0
+6692342c	35abd1c9	17	False	False	229	62	60	1	1	2	1	1	escalation-citation:T1D1 whole-read-pool:T0D0
+# CONTROL (fixture-dir-added-or-removed pairs must select >= the count of fixtures carrying the core/fixtures directory row at the NEWER sha):
+#   9bdbc311..4d8a6f64  TRACED_mapped 223 vs row-carriers 226: the 3 missing are escalation-citation + whole-read-pool (scored in the EXACT column, both T1) and notify-hook-channel (has map rows, no run.sh at that sha -> not drivable, not scored)
+#   65e4d8fe..9bdbc311  226 vs 226 ok
+#   fba242e4..6b936214  219 vs 220: escalation-citation + whole-read-pool in EXACT (T1 each), notify-hook-channel not drivable; 219 + 2 = 221 >= 220 - 1
+#   199721b6..fba242e4  219 vs 220: same accounting
+#   3f37d986..d94b19f0  225 vs 225 ok
+#   -> every row-carrying drivable fixture outside the EXACT column was selected under TRACED on every dir-changed pair. Control holds.
+# DOCS-ONLY CONTROL: no docs-only release pair exists in the last 60 first-parent releases on github/main (every pair touches a non-docs path), so the control was taken on a CONSTRUCTED diff {docs/backlog.md, docs/plans/x.md, CHANGELOG.md, VERSION}: DECLARED selects 0 of the 3 exact fixtures; positive control {core/scripts/sprint-status.sh} selects whole-read-pool=1 and escalation-citation=1.
+# TRACED semantics mirror .githooks/pre-push: .git/ rows dropped (:646), a directory row keys the directory's ENTRY LISTING (readset_listings :876) so it fires on an entry added/removed, never on an edit inside; a fixture with no rows always runs; a tools row change is not modelled (no tool changed across these pairs by construction).
+# The "origin/main" of plan action 6b is github/main here (the clone's origin is the local checkout).

@@ -1,0 +1,17 @@
+# key-record baseline, read with cat/grep only from /Users/n8/git/ai-dlc/.git (batch 204 held mid-batch; LOADED, mid-batch numbers)
+# taken 2026-10-07T20:13:02-0400; main checkout HEAD 67eae401 (release/0.745.0, held); github/main 60b467dc; PIN 60b467dc
+records 247
+## #state counts
+ 142 #state ok
+   4 #state seeded
+ 101 #state stale
+## records carrying the core/fixtures/ listing row (grep -l '^core/fixtures/<TAB>#listing')
+229
+## control: records carrying a core/fixtures/lib/ listing row
+110
+## durations file (.git/ai-dlc-fixture-durations), top four by cost (space-separated: name seconds, LOADED under the pool)
+review-shard-merge-mutants 1481
+gate-adjudication-mutants 1059
+readset-skip 1024
+enforcement-map-sites 740
+20:13  up 2 days,  3:20, 5 users, load averages: 3.70 4.75 13.00

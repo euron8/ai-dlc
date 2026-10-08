@@ -1,0 +1,27 @@
+## 5a. drop ONE positive input from a COPY of the declaration
+  escalation-citation    drop core/scripts/validate-escalation-resolution.sh   control=PASS  dropped=FAIL  log names the path: 1 lines
+  prepush-pool-depth     drop core/git-hooks/pre-push                          control=PASS  dropped=PASS  log names the path: 1 lines
+  !! NO-GO ARM: prepush-pool-depth reported PASS (control PASS)
+  whole-read-pool        drop core/scripts/sprint-status.sh                    control=PASS  dropped=FAIL  log names the path: 1 lines
+## 5b. the decoy mutant: plant a file in the LIVE clone at a path the fixture would read if it could, undeclared
+  escalation-citation    decoy core/fixtures/scripts/validate-escalation-resolution.sh verdict=PASS  absent-from-sandbox=yes  log-names-decoy=0  decoy-token-in-log=0  | control: declared -> present=yes
+  prepush-pool-depth     decoy core/fixtures/prepush-pool-depth/decoy-pre-push verdict=PASS  absent-from-sandbox=yes  log-names-decoy=0  decoy-token-in-log=0  | control: declared -> present=no
+  whole-read-pool        decoy scripts/ai-dlc/validate-artifact-budget.sh    verdict=PASS  absent-from-sandbox=yes  log-names-decoy=0  decoy-token-in-log=0  | control: declared -> present=yes
+clone status after decoys (expect 0 untracked): 2
+20:53  up 2 days,  4:01, 5 users, load averages: 4.42 4.08 4.38
+
+## 5a addendum: prepush-pool-depth's PASS under a dropped hook is the FIXTURE's either-layout tolerance (run.sh:37-40)
+full declaration:              verdict=PASS hooks-tested=2 asserts=48
+core/git-hooks/pre-push dropped: verdict=PASS hooks-tested=1 asserts=32
+The fixture tests whichever hooks it finds and reports nothing about the ones it did not find; a
+declaration that drops one silently halves its coverage. The runner cannot see this (the fixture's
+own verdict is PASS); only a floor on the fixture's assertion count, or a required-input marker in
+the declaration, could.
+## criterion 2: sandbox listing per fixture (files outside declaration + own dir + lib; control = total files)
+  escalation-citation: outside-set=0  total-files=65  .git-dirs=0
+  prepush-pool-depth: outside-set=0  total-files=5  .git-dirs=0
+  whole-read-pool: outside-set=0  total-files=6  .git-dirs=0
+## 5b redo for prepush-pool-depth with a decoy OUTSIDE the fixture dir (the --fixture-dir override replaces that dir, voiding the earlier arm)
+  prepush-pool-depth decoy core/git-hooks/decoy-pre-push: verdict=PASS absent-from-sandbox=yes log-names-decoy=0 | control declared -> present=yes
+clone status: ?? docs/poc/ ?? scripts/poc/ 
+21:22  up 2 days,  4:30, 5 users, load averages: 5.85 5.17 4.70

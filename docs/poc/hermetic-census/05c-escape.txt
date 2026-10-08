@@ -1,0 +1,16 @@
+control: cat VERSION under the profile -> 1 distinct clone path(s) reported (expect >=1): VERSION 
+escalation-citation: exit=0 PASS-lines=21 run_s=14 | LIVE-CLONE READS from inside the sandbox: 0 distinct path(s); decoy read: 0
+prepush-pool-depth: exit=0 PASS-lines=1 run_s=116 | LIVE-CLONE READS from inside the sandbox: 0 distinct path(s); decoy read: 0
+whole-read-pool: exit=0 PASS-lines=1 run_s=4 | LIVE-CLONE READS from inside the sandbox: 0 distinct path(s); decoy read: 0
+tracer: sandbox-exec (version 3) (allow default) + (allow file* process-exec* (subpath <clone>) (with report)), reports read by /usr/bin/log stream --predicate sender==Sandbox; no root. Mirrors derive-fixture-readsets.sh:810 and :958.
+clone untracked after probe (expect docs/poc and scripts/poc only): ?? docs/poc/ ?? scripts/poc/ 
+21:01  up 2 days,  4:09, 5 users, load averages: 5.15 4.40 4.36
+positive control: tracked whole-read-pool invoked by its CLONE path from an empty sandbox -> exit=0, LIVE-CLONE READS: 16 distinct path(s) (expect >0)
+    .git
+    core
+    core/.claude
+    core/.git
+    core/core/skills/ai-dlc
+    core/fixtures
+    core/fixtures/whole-read-pool
+    core/fixtures/whole-read-pool/run.sh
