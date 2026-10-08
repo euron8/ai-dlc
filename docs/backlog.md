@@ -124,25 +124,6 @@ record the operator's ruling. **Keep it open:** take a second sprint's measureme
 verify: manual -- close when the measurement above is recorded in this entry from a real consumer review and the operator has ruled on it.
 
 
-## BL-480 — the local read-set map cannot see a directory's listing grow
-
-**DEFECT, filed at batch 204's close.** `0.745.0` gives a directory row its `#listing:<sha>` value on the COMMITTED
-digest path only. The local map (`ai-dlc-fixture-readsets.local`, written by `derive-fixture-readsets.sh --local-map`
-through `readset_hash_rows`) still writes `-` for a directory, and `readset_local_validate` accepts a `-` row as a match
-whenever the path is present. So a local row clears a stale record for a fixture whose directory gained a file the
-trace never saw: the same false skip the tip adversary reproduced against the committed digest (`probe-grow.sh`,
-`p5=|0`), on the older route. It predates `0.745.0`; the release left it alone by ruling, because changing the local
-format without changing its validator in the same commit stops local clearing for every fixture with a directory row
-(229 of 236 mapped fixtures at `60b467dc`).
-
-Fix in one commit: the deriver's local path writes the listing, `readset_local_validate` compares it against `.now`,
-and a world shaped like `readset-skip`'s `w9` but seeded through the local map proves the clear is refused, with `w10`
-still clearing an unchanged directory. Build `w10`'s rows by calling the deriver's own `readset_hash_rows`, not by hand:
-the tip adversary noted that today's `dirlocal` mutant disables the validator's `-` test and so cannot catch a deriver
-that starts emitting listings on this path.
-
-verify: manual -- close when a local-map world in which a traced directory gains a file runs its fixture, and a mutant restoring `-` on the local path is killed by that world alone.
-
 ## BL-481 — two fixtures cannot be traced even on an idle box, and ten run on every push
 
 **DEFECT, filed at batch 204's close.** The `0.745.0` map trace, run in a full clone with nothing else on the machine

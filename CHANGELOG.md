@@ -19,6 +19,34 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.754.0] - 2026-10-08
+
+Batch 209, release 3. It closes `BL-480`. Both pre-push hooks change, along with the read-set deriver.
+
+### The local read-set map gives a directory row its listing, and a `-` row is refused while that name exists (BL-480)
+
+- The local map's directory rows now carry `#listing:<sha>` instead of `-`. The deriver's `readset_local_rows`, inside
+  the `READSET_LOCALMAP_BEGIN..END` span of `core/scripts/derive-fixture-readsets.sh`, runs `readset_hash_rows` and then
+  `readset_dir_values` over the rows. The tree manifest is taken once, in the trace copy, before the fixture loop. When
+  the runner has no UNIVERSE span the plain `-` rows are written and one note says so, once per run.
+- The hook's `readset_local_validate` (`.githooks/pre-push` and `core/git-hooks/pre-push`, byte-identical) loads the
+  tree's listings into the same table it compares against. A `#listing:` row is valid while the listing matches. A `-`
+  row is valid only for an ABSENT name: a `-` row whose name is now a directory or a file is stale. `readset_keys`
+  reuses the listing that validation built. The function keeps its two-argument signature.
+- New worlds `w11`, `w12` and `w13` in `core/fixtures/readset-skip/run.sh`, and a whole-deriver `--local-map` arm run
+  with the UNIVERSE span present, whose row value is recomputed through the runner's own span and compared byte for
+  byte. New mutants `listload`, `listvalue`, `dirplain` and `dirdash` in `core/fixtures/readset-skip-digest-mutants/run.sh`,
+  and `nolmt` beside the whole-deriver arm. `dirplain` is killed by `w10`, not by the grow world: a `-` directory row is
+  refused, which is the grow world's own expected outcome.
+- Rollout: every existing local row set carries `-` for its fixture-root directories, and the deriver's own sha changes,
+  so the first push after this lands retraces every locally-mapped fixture once. Each traced fixture now costs one
+  `readset_dir_values` call (about 1.2s on the reference consumer's 13.7k-path tree, 0.08s here); hoisting the listing
+  out of the trace loop is a follow-up.
+- Two corrections from batch 209's adjudication to the batch 208 notes: the validator awk is INSIDE the I66 span, so
+  the two hooks must be edited identically; and `readset_dir_values` lives in the hook's UNIVERSE span.
+- Known, not fixed: a gitlink's interior is hashed in the checkout's `.now` but lands as an empty directory in the
+  trace copy, so a listing for it never matches. A fixture that reads one is retraced on every green push. This fails
+  safe, and the graph consumer has no local rows on `hook/` today.
 ## [0.753.0] - 2026-10-08
 
 Batch 209's second release, plan action 4 of `docs/plans/hermetic-fixtures-poc.md`: **95 more fixtures
