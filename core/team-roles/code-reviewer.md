@@ -327,13 +327,17 @@ switching silently. If the tool is absent or returns an error, continue without 
 
 **Write your deliverable in chunks and iteratively, never in one write at the end.** The
 deliverable is the result file your brief names, never a subject file you were asked to read or
-edit. Create it with `Write` FIRST, before you have verified anything, carrying its header;
-append to it or rewrite it after each finding, and finish with one rewrite whose header matches
-its body. The file on disk is a draft until the completion signal your deliverable section names
-has been written. Where your deliverable section says the file is written once, write it once
-and complete, and chunk nothing. If an `advisor` tool is available to you, also call it before
-the first chunk and before the final rewrite, in addition to the calls the paragraph above
-names.
+edit; if your brief names no result file, you have nothing to chunk. Create it with `Write`
+FIRST, before you have verified anything, carrying its header; append to it or rewrite it after
+each finding, and finish with one rewrite whose header matches its body, before any completion
+line your deliverable section names. If your deliverable section names a completion signal,
+chunk at the result path and write that signal last. If it names none, chunk to the sibling
+draft path `<result>.draft` and land the result path only with your final whole-file `Write`,
+so no join ever reads a partial result; delete nothing. Where your deliverable section says the
+file is written once, write it once and complete, and chunk nothing. Where it says you append
+to an existing record, append, and never `Write` over it. If an `advisor` tool is available to
+you, also call it before the first chunk and before the final rewrite, in addition to the calls
+the paragraph above names.
 
 ### Return Type or Context-Shape Changes = Critical
 
