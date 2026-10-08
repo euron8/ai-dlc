@@ -184,6 +184,41 @@ shards are `.dist-only`, so these will be too).
 
 verify: sh d=core/fixtures; [ -f "$d/review-shard-merge-mutants/run.sh" ] || exit 9; n="$(ls -d "$d"/review-shard-merge-mutants*/ 2>/dev/null | wc -l | tr -d ' ')"; [ "$n" -ge 3 ] || exit 1; for s in "$d"/review-shard-merge-mutants*/; do grep -qE 'coverage join|J0' "$s/run.sh" || exit 1; done; exit 0
 
+## BL-486 — the advisor gate has no escape hatch, and its `unavailable` WARN path did not fire
+
+**DEFECT, filed at batch 205 by operator instruction.** `~/.claude/hooks/ai-dlc-advisor-gate.sh`
+(operator-home, not shipped) DENIES a release push or PR merge when the session transcript records
+no advisor attempt after the last such action, and its header promises that once the most recent
+advisor result is an `unavailable` error it WARNS and lets the command through. Measured in one
+session, 2026-10-08, on PR #1056 of 0.748.0 (gate 53 of 53 green): the merge was denied four times
+in a row with two advisor consults in between, and the operator merged it by hand. Three faults,
+each from the transcript the hook reads:
+
+- **A failed action is scored as a completed one.** An `mcp__github__merge_pull_request` call that
+  returned `404 Not Found` (a short `expectedHeadSha`) was counted as the last merge, so a consult
+  made BEFORE it no longer cleared the gate. The hook drops only a `tool_result` carrying its own
+  DENIED text; any other error result is a merge that happened. The same shape would score a push
+  rejected by the remote, or a `gh` auth failure, as a release.
+- **The WARN path did not fire.** The transcript carries
+  `"advisor_tool_result" ... "error_code":"unavailable"` at line 3111 and the hook's own `jq` parser
+  reads it as `U 3111`, the latest result; the two merge attempts after it (lines 3112, 3152) were
+  still DENIED with the "Call the advisor now" text, never the WARN. Where the `U` branch is lost
+  between the parser and the verdict is the first thing to find.
+- **Two advisor tools, one recognised.** The session carried the built-in `advisor` (a
+  `server_tool_use` the hook keys on) and `mcp__advisor__consult` (an ordinary `tool_use`). The MCP
+  consult cleared two push denies earlier in the same session and nothing afterwards, so what the
+  hook counts as an attempt is not derivable from its header.
+
+The operator's ruling for the fix: there must be an ESCAPE HATCH an operator can pull without
+editing the hook — a one-command, session-scoped override that records itself in the transcript
+(so a later audit sees the gate was bypassed, by whom and when) and lets the next release action
+through. Alongside: a failed action must not consume a consult (score a merge only on a
+`tool_result` that is not an error, or on the ref actually moving), and the `unavailable` WARN must
+fire when the parser reads `U`. The hook's self-test (`ai-dlc-advisor-gate.test.sh`) seeds none of
+these three shapes; add all three.
+
+verify: manual -- close when, in a live session, (1) a release action after a FAILED merge or push attempt is allowed on the consult made before that attempt, (2) a release action after an `unavailable` advisor result prints the WARN and runs, and (3) the operator's override command lets one release action through and leaves a transcript line saying so.
+
 ## BL-477 — `tools.decl` cannot name `node`, which blocks plan action 3
 
 **BLOCKER.** Carried from the 0.746.0 adversary passes. `readset_declared` in `.githooks/pre-push` resolves each `tools.decl` name against
