@@ -17340,3 +17340,58 @@ report the gap and write no runbook. **OPERATOR DECISIONS STILL OPEN:** the dev 
 
 Batch 198's block below is history: batch 199's block replaces its delivery gap and its decisions list.
 
+**BATCH 200 SHIPPED FOUR RELEASES, `v0.732.0` (`3f37d986`, #1032), `v0.733.0` (`d94b19f0`, #1033), `v0.734.0`
+(`199721b6`, #1034) AND `v0.735.0` (`fba242e4`, #1035), AND DISCHARGED THREE CONSUMER CANDIDATES.** It was handed the
+plan by peer session ai-dlc-bc at `origin/main` `d6e25229` (`VERSION` 0.731.0). The opening sweep read live 3 on 7
+qualifying refs, and graph's working tree held three uncommitted `PC-S317-*` filings. The closing sweep at `fba242e4`
+read live 3 on 8 qualifying refs (the consumer reconciled to 0.734.0 during the batch), archived 335, unfiled 1
+(`PC-S316-VACUOUS-VALIDATOR-FAILING-ON-EVERY-STORY-IS-A-FINDING`, the consumer's own by ruling below), TERMINAL 214, every
+control passing. The worklist join refuses as batch 199's did: no live backlog entry cites a candidate.
+- `v0.732.0`: `BL-453` and `BL-454`, carrying `PC-S317-TEAMMATE-VERIFICATION-COMMANDS-…` and
+  `PC-S317-CONSULT-THE-ADVISOR-TOOL-…`. Every role file carries a one-read-only-command-per-Bash-call paragraph (`I121`)
+  and an advisor paragraph (`I122`); SKILL.md Rule 32 names the lead's advisor touchpoints. Filed `BL-457`.
+- `v0.733.0`: `BL-455` (arm H matches repair records by name, stamp `H_RELEASE`), `partition-document.sh --scope-ref`,
+  and `BL-451`'s first instance: `review-shard-merge`'s mutant battery moved to the `.dist-only`
+  `review-shard-merge-mutants` (shipped fixture 2537s to 42s solo).
+- `v0.734.0`, shipped alone (it edits both pre-push hooks): `BL-452`. After a green suite the hook starts one detached
+  sandbox trace of the unmapped fixtures it ran, into a local map under git-common-dir. Filed `BL-456`.
+- `v0.735.0`: `BL-458`, carrying `PC-S317-REQUIREMENTS-STEP-CYCLE-IS-NEVER-SHARDED-…`. The requirements step reviews its
+  four-file subject sharded by `partition-subject.sh`, joined by `--subject` modes, held by Check 24 arm K3.
+
+Live backlog **2 -> 8 -> 3 -> 8** (the releases filed six; the close rotated five and filed five) (BL-451, BL-456, BL-457 open; BL-459 to BL-463 filed), archive **449 -> 454**.
+
+**OPERATOR RULINGS, BATCH 200:**
+- `PC-S316-REQUIRE-DONE-REFUSES-EXTENSION-DECLARED-STORY-STATUSES`: option A, the consumer's own; a brief item, and no
+  release names it.
+- `PC-S316-VACUOUS-VALIDATOR-FAILING-ON-EVERY-STORY-IS-A-FINDING`: option A, the consumer's own. Brief: its receipt keyed
+  on XVH can never close (re-anchor it or mark it `verify: manual`), and `[story]` scope never reaches gate 3.
+- The advisor gate hook (`~/.claude/hooks/ai-dlc-advisor-gate.sh`, this repo only) is a CONDITIONAL DENY. It denies a
+  release push or merge with no advisor attempt since the last one; any attempt clears it, even one that errors; once
+  the advisor answers `unavailable` it only warns. Branch deletes are not gated. Batch 201's block states its current
+  rules (per kind, two wedges fixed).
+- The shipped version of that hook is option A: `BL-459`, built in a later batch. **No config knob and no default**:
+  whether it applies is decided per agent from that agent's own transcript's `advisor_tool` grant line, because a lead
+  and its teammates can run any mix of local and Anthropic models.
+- A remote branch delete runs `git push --no-verify origin --delete <exact names>`; it never runs the suite.
+
+**THE ADVISOR RETURNED `unavailable` TWICE THIS BATCH, BOTH DEEP INTO A LARGE CONTEXT**, at 10:26Z (about 745k) and
+13:13Z. Each time the first call after an operator compaction succeeded. Not a rate limit (that code is
+`too_many_requests`); per-session; cause unknown, two data points. A subagent can call its own advisor meanwhile.
+
+**THREE FIRST GATES BLOCKED ON THE RELEASE'S OWN CODE.** 0.733.0 committed `lib.sh` without its executable bit
+(I77); 0.734.0 and 0.735.0 each added a `| while` loop in
+a shipped script, which `procsub-staged-refusal` r2 refuses; 0.735.0 also took `FORK_BUDGET` 3231 -> 3245 for
+`partition-subject.sh` in three per-file arms.
+
+**READ-SET TRACES:** sandbox traces committed for 0.733.0-0.735.0's changed fixtures. `subject-partition`, `adversarial-shard-merge`,
+`remediator-shard-join` and `check-24-adversarial-convergence` are OMITTED on dropped reports, and
+`review-shard-merge-mutants` is unmapped; all five run on every push; `BL-452`'s post-green trace retries them.
+
+**THE DELIVERY GAP IS ONE RELEASE.** graph's `.claude/.ai-dlc-version` reads 0.734.0 (`c9ef6323`, its reconcile #1173)
+against `VERSION` 0.735.0; 0.735.0 is not bootstrapping. PENDING is 1 (`PC-S317-REQUIREMENTS-…`). The banked ruling
+stands: report the gap and write no runbook. **OPERATOR DECISIONS STILL OPEN:** whether the dev role gets a setup row in
+the read-set mapping (from batch 199).
+
+Batch 199's block below is history: batch 200's block replaces its delivery gap, its decisions list and its advisor-gate
+paragraph.
+
