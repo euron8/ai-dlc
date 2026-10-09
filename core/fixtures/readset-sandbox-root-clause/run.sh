@@ -42,6 +42,7 @@ ok()     { printf '  ok    %s\n' "$1"; ASSERTS=$((ASSERTS + 1)); }
 bad()    { printf '  FAIL  %s\n' "$1"; FAILS=$((FAILS + 1)); ASSERTS=$((ASSERTS + 1)); }
 broken() { echo "readset-sandbox-root-clause: FIXTURE BROKEN: $*" >&2; echo "  (work kept at $WORK)" >&2; exit 2; }
 echo "readset-sandbox-root-clause:"
+echo "HERMETIC-CONSUMED core/scripts/derive-fixture-readsets.sh"
 
 CLAUSE='(allow file-read-metadata file-test-existence (literal "%s"))'
 cl_count() { awk -v k="$CLAUSE" '{ l = $0; sub(/^[ \t]+/, "", l) } substr(l, 1, 1) != "#" && index($0, k) { n++ } END { print n + 0 }' "$1"; }

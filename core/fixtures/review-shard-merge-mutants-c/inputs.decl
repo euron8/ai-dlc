@@ -1,0 +1,16 @@
+# Shard 'c' driver: execs the parent review-shard-merge-mutants/run.sh --group c, which copies partition-review-diff.sh and
+# merge-review-shards.sh (with their two script siblings) and rewrites one line of each copy. The predicates and seeds come from
+# review-shard-merge's lib.sh and run.sh (declared whole). The parent's coverage join (J0) reads the other shard drivers.
+!core/scripts/partition-review-diff.sh
+!core/scripts/merge-review-shards.sh
+core/scripts/artifact-path-config.sh
+core/scripts/partition-document.sh
+core/skills/ai-dlc/artifact-path-grammar.md
+core/skills/ai-dlc/steps/gate-validation.md
+core/skills/ai-dlc/steps/implementation.md
+core/team-roles/code-reviewer.md
+core/team-roles/qa.md
+core/fixtures/review-shard-merge/
+core/fixtures/lib/
+core/fixtures/review-shard-merge-mutants/run.sh
+core/fixtures/review-shard-merge-mutants-b/run.sh
